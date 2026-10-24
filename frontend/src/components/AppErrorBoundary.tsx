@@ -2,6 +2,7 @@
 import { Button, Result, Space, Typography } from "antd";
 import { Component } from "react";
 import type { ErrorInfo, ReactNode } from "react";
+import { t } from "../i18n";
 import { recordClientDiagnostic } from "../utils/clientDiagnostics";
 
 interface Props {
@@ -61,6 +62,18 @@ export default class AppErrorBoundary extends Component<Props, State> {
     window.location.reload();
   };
 
+  /**
+   * 就地重试：清掉错误态，让子树重新渲染。
+   *
+   * 这对"动态 import 失败"是**真的重试**而不是只把提示藏起来——`pages/registry.ts`
+   * 的 `lazyPage` 在失败时会换一个新的 `lazy()`，所以重新渲染会重新发起 chunk 请求。
+   * 普通渲染异常没有这条保证（同样的 props 再渲染一次大概率还是崩），因此「重试」只
+   * 出现在模块加载失败这一类，普通异常仍以刷新为主。
+   */
+  private retry = (): void => {
+    this.setState({ failed: false, message: "" });
+  };
+
   render(): ReactNode {
     if (!this.state.failed) return this.props.children;
 
@@ -72,12 +85,17 @@ export default class AppErrorBoundary extends Component<Props, State> {
         title={moduleLoadFailed ? "页面代码没能加载完整" : "页面暂时无法显示"}
         subTitle={
           moduleLoadFailed
-            ? "这通常是前端开发服务器缓存了已改名或已移动的文件。先刷新一次；若刷新后仍是这一屏，请重启前端开发服务器——关掉当前窗口后重新运行 start.cmd 即可。"
+            ? "这通常是页面代码没取到（网络抖动、前端开发服务器刚重启，或它缓存了已改名/已移动的文件）。先点「重试」——它会重新取一次；若仍失败，再刷新或重启前端开发服务器（关掉窗口后重新运行 start.cmd）。"
             : "界面运行时发生异常，请刷新后再试。"
         }
         extra={
           <Space orientation="vertical" size={8} style={{ width: "100%" }}>
-            <Button type="primary" onClick={this.reload}>
+            {moduleLoadFailed && (
+              <Button type="primary" onClick={this.retry}>
+                {t("common.retry")}
+              </Button>
+            )}
+            <Button type={moduleLoadFailed ? "default" : "primary"} onClick={this.reload}>
               刷新
             </Button>
             {this.state.message && (

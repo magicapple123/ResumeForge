@@ -19,6 +19,7 @@ from ...schemas.resume import (
     ResumeOut,
 )
 from ...services import trash
+from ...services.resume.document_identity import DocumentIdentityError, validate_document_ids
 from ...services.resume.resume_labels import normalize_language
 from ...services.resume.resume_templates import DEFAULT_FONT_SCALE, DEFAULT_TEMPLATE
 
@@ -79,6 +80,20 @@ def _format_sse(payload: dict) -> str:
     return f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
 
 
+def _validated_content(payload: ResumeContent) -> dict:
+    """把请求体转成落库字典，并按 W01 规则校验对象标识。
+
+    只在**写路径**调用：读取旧记录必须宽容（历史脏数据不能让详情接口 500），
+    而写入非法 id 会 422 而不是静默重生成——重生成等于把用户设备上的标识换掉。
+    """
+    data = payload.model_dump()
+    try:
+        validate_document_ids(data)
+    except DocumentIdentityError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return data
+
+
 def _to_resume_out(record: ResumeRecord) -> ResumeOut:
     return ResumeOut(
         id=record.id,
@@ -92,6 +107,8 @@ def _to_resume_out(record: ResumeRecord) -> ResumeOut:
         enhancement_enabled=record.enhancement_enabled,
         enhancement_level=_as_enhancement_level(record.enhancement_level),
         note=record.note or "",
+        # W14/0054：旧行 server_default 读作 resume。
+        document_mode=getattr(record, "document_mode", "resume") or "resume",
         template=record.template or DEFAULT_TEMPLATE,
         format_name=record.format_name or "",
         # 这个字段漏了不会报错，只会让保存成功却读不回来——界面上表现为"按了没反应"。
@@ -115,6 +132,9 @@ def _to_resume_out(record: ResumeRecord) -> ResumeOut:
         ],
         # 制作台靠它决定要不要把「保存」常驻（见 schema 里的说明）。
         draft=bool(record.draft),
+        # 保存次数（0052）：前端把它记成 ``expectedRevision``，下次条件写原样发回。
+        # ``or 0`` 兜住 0052 之前写入的旧行与"列刚加、还没 refresh"的实例。
+        revision=int(record.revision or 0),
     )
 
 

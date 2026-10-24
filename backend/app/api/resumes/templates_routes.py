@@ -12,12 +12,18 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from ...database import get_db
+from ...schemas.resume_generation import LONG_CV_DEFAULT_PAGE_LIMIT, MODE_PAGE_LIMITS
 from ...services.pdf_exporter import font_available
 from ...services.profile.profile_service import get_or_create_profile
 from ...services.resume.resume_sections import (
     DEFAULT_SECTION_ORDER,
     profile_to_resume_order,
     section_label,
+)
+from ...services.resume.resume_style_schema import (
+    STYLE_PROPS,
+    role_fields_catalog,
+    template_role_defaults,
 )
 from ...services.resume.resume_template_layout import TEMPLATE_LAYOUT_DEFAULTS
 from ...services.resume.resume_template_store import (
@@ -105,6 +111,9 @@ def read_resume_templates(db: Session = Depends(get_db)):
             }
             for item in custom_format_options(db)
         ],
+        # W14 长 CV：页数控件按模式取值（普通 [1,3] / 长 CV [1,10]），默认 2 页。
+        "mode_page_limits": {mode: list(bounds) for mode, bounds in MODE_PAGE_LIMITS.items()},
+        "long_cv_default_page_limit": LONG_CV_DEFAULT_PAGE_LIMIT,
         "defaults": {
             "template": DEFAULT_TEMPLATE,
             "font_scale": DEFAULT_FONT_SCALE,
@@ -114,4 +123,24 @@ def read_resume_templates(db: Session = Depends(get_db)):
         # 模板市场（R-19）：映射既有模板 + 版式 + 建议字号，不新建样式文件。
         "market": market_options(),
         "pdf_direct_available": font_available(),
+        # ===== W07 局部排版（角色/对象覆盖）的消费契约 =====
+        # 角色 → 可用属性（label_key 是 i18n 词条键，不下发中文；前端按它 t() 出文案）。
+        "role_fields": role_fields_catalog(),
+        # 每个模板的角色基准值：从 TEMPLATE_LAYOUT_DEFAULTS 既有比例字段投影
+        # （name_ratio → name.font_scale 等），与 PDF/Word 的解析同源，不新增第二份数字。
+        "template_role_defaults": {
+            name: template_role_defaults(name) for name in TEMPLATE_LAYOUT_DEFAULTS
+        },
+        # 属性元数据（类型/区间/步长/枚举），前端控件与后端 PROP_BOUNDS 逐键对拍。
+        "style_props": [
+            {
+                "key": prop["key"],
+                "type": prop["type"],
+                **({"min": prop["min"], "max": prop["max"], "step": prop["step"]}
+                   if prop["type"] == "number" else {}),
+                **({"options": list(prop["options"])} if prop["type"] == "enum" else {}),
+                **({"roles": list(prop["roles"])} if "roles" in prop else {}),
+            }
+            for prop in STYLE_PROPS
+        ],
     }

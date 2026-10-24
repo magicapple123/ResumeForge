@@ -29,7 +29,8 @@ export type ShortcutActionId =
   | "switchDataset"
   | "prevPage"
   | "nextPage"
-  | "focusAssistant";
+  | "focusAssistant"
+  | "commandPalette";
 
 export interface ShortcutAction {
   id: ShortcutActionId;
@@ -66,6 +67,15 @@ export const SHORTCUT_ACTIONS: readonly ShortcutAction[] = [
   { id: "prevPage", label: "上一页（列表）", defaultKeys: ["mod+["], scope: "page" },
   { id: "nextPage", label: "下一页（列表）", defaultKeys: ["mod+]"], scope: "page" },
   { id: "focusAssistant", label: "打开助手并聚焦输入", defaultKeys: ["mod+/"], scope: "global" },
+  // W15/D13 命令面板（制作台内）。mod+k 已被全站搜索占用（既有用户习惯与测试），
+  // 命令面板采用 VSCode 同款 mod+shift+p；两个动作都能在设置页改键。
+  {
+    id: "commandPalette",
+    // i18n-ok: 设置页快捷键表沿用既有 action.label 字面量口径（本表全部动作同型），统一迁移另立项
+    label: "打开命令面板（制作台）",
+    defaultKeys: ["mod+shift+p"],
+    scope: "page",
+  },
 ];
 
 export const SHORTCUT_ACTION_IDS: readonly ShortcutActionId[] = SHORTCUT_ACTIONS.map(

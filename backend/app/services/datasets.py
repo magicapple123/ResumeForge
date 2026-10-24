@@ -53,6 +53,7 @@ from .data_backup import (
     inspect_archive,
     inspect_extra_dataset,
 )
+from .data_backup.asset_categories import ASSET_CATEGORIES
 from .data_backup.asset_manifest import (
     manifest_asset_warnings,
     verify_database_rows,
@@ -161,9 +162,10 @@ def import_dataset(
         # 阶段一（续）：只校验，不落盘（附件）。每个段一份前缀/目的地口径：活动数据集
         # 用包根扁平前缀，随包数据集用 ``datasets/<id>/``，但**目的地是同一个共享目录**
         # ——正因如此，跨段的物理同名冲突也要在这里被拦住（以前是"后写的赢"）。
+        # 目的地从 ASSET_CATEGORIES 推导（唯一真相源）：新增资产类别自动参与恢复，
+        # 不需要再回来手写第二份名单（0059 的 export_archive 就是靠这条生效的）。
         asset_destinations = {
-            "user_files": assets_parent / "user_files",
-            "referral_images": assets_parent / "referral_images",
+            category: assets_parent / category for category in ASSET_CATEGORIES
         }
         main_assets = manifest.get("asset_manifest")
         if isinstance(main_assets, dict):
@@ -171,8 +173,8 @@ def import_dataset(
                 archive_path,
                 main_assets,
                 prefixes={
-                    "user_files": dataset_asset_prefix(None, "user_files"),
-                    "referral_images": dataset_asset_prefix(None, "referral_images"),
+                    category: dataset_asset_prefix(None, category)
+                    for category in ASSET_CATEGORIES
                 },
                 destinations=asset_destinations,
                 label="活动数据集",

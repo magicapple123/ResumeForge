@@ -34,6 +34,11 @@ from .drill import (
     DrillSession,
     DrillTurn,
 )
+from .glossary import (
+    GLOSSARY_CATEGORIES,
+    GLOSSARY_LANGUAGES,
+    ResumeGlossaryTerm,
+)
 from .interview import (
     INTERVIEW_DIFFICULTIES,
     INTERVIEW_STATUS_ACTIVE,
@@ -52,7 +57,9 @@ from .interview_review_record import InterviewReviewRecord
 from .job import Job
 from .job_match_batch import JobMatchBatch
 from .knowledge_entry import KnowledgeEntry
+from .llm_usage import LLMUsageRecord
 from .material import MATERIAL_CATEGORIES, CandidateJob, Material
+from .phrase import PHRASE_KINDS, PHRASE_LANGUAGES, ResumePhrase
 from .profile import (
     Award,
     CampusExperience,
@@ -62,6 +69,14 @@ from .profile import (
     Project,
     Skill,
     UserProfile,
+)
+from .provenance import (
+    FACT_LOCK_KINDS,
+    SOURCE_KINDS,
+    ResumeBlockSource,
+    ResumeFactLock,
+    ResumeSource,
+    ResumeSourceRevision,
 )
 from .question_bank_record import QuestionBankRecord
 from .referral import REFERRAL_STATUSES, Referral
@@ -79,11 +94,22 @@ from .resume_delivery import (
     DELIVERY_SOURCES,
     ResumeDeliveryRecord,
 )
+from .resume_export import (
+    EXPORT_ARTIFACT_KINDS,
+    ResumeExportArtifact,
+    ResumeExportPreset,
+)
 from .resume_template import (
     TEMPLATE_KIND_FORMAT,
     TEMPLATE_KIND_STYLE,
     TEMPLATE_KINDS,
     ResumeTemplate,
+)
+from .review_annotation import (
+    ANNOTATION_STATUSES,
+    REVIEW_FORMAT_VERSION,
+    REVIEW_KIND,
+    ResumeReviewAnnotation,
 )
 from .setting import AppSetting, LLMConfigRecord
 from .share_package import SHARE_PERMISSIONS, SharePackage
@@ -96,6 +122,13 @@ from .tracker import (
     ApplicationTrackEvent,
 )
 from .user_file import UserFile
+from .versions import (
+    VERSION_SOURCE_MANUAL,
+    VERSION_SOURCE_RESTORE,
+    VERSION_SOURCES,
+    ResumeVariant,
+    ResumeVersion,
+)
 from .web_form_profile import WebFormProfileEntry
 from .web_form_profile_record import WebFormProfileRecord
 from .web_form_record import SOURCE_BATCH, SOURCE_LIVE, WebFormFillRecord
@@ -193,4 +226,29 @@ __all__ = [
     "SOURCE_LIVE",
     "WebFormUrlHistory",
     "UserFile",
+    "LLMUsageRecord",
+    "ResumeSource",
+    "ResumeSourceRevision",
+    "ResumeBlockSource",
+    "ResumeFactLock",
+    "FACT_LOCK_KINDS",
+    "SOURCE_KINDS",
+    "ResumeVersion",
+    "ResumeVariant",
+    "VERSION_SOURCES",
+    "VERSION_SOURCE_MANUAL",
+    "VERSION_SOURCE_RESTORE",
+    "ResumePhrase",
+    "PHRASE_KINDS",
+    "PHRASE_LANGUAGES",
+    "ResumeReviewAnnotation",
+    "ANNOTATION_STATUSES",
+    "REVIEW_FORMAT_VERSION",
+    "REVIEW_KIND",
+    "ResumeGlossaryTerm",
+    "GLOSSARY_CATEGORIES",
+    "GLOSSARY_LANGUAGES",
+    "ResumeExportPreset",
+    "ResumeExportArtifact",
+    "EXPORT_ARTIFACT_KINDS",
 ]

@@ -20,6 +20,34 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 # 版式参数：最大篇幅（A4 页数）、字号档位、模板。默认 1 页 + 标准字号。
 MAX_RESUME_PAGES = 3
+# ===== W14 长 CV（独立文档模式）=====
+# 普通简历的 1–3 页约束**不变**；长 CV 是另一种文档模式，只放宽页数上限与默认值。
+LONG_CV_MAX_PAGES = 10
+LONG_CV_DEFAULT_PAGE_LIMIT = 2
+ResumeMode = Literal["resume", "long_cv"]
+RESUME_MODES: tuple[str, ...] = ("resume", "long_cv")
+# 模式 → (最小页数, 最大页数)。前后端与所有写路径共用这一份，禁止各自写 if。
+MODE_PAGE_LIMITS: dict[str, tuple[int, int]] = {
+    "resume": (1, MAX_RESUME_PAGES),
+    "long_cv": (1, LONG_CV_MAX_PAGES),
+}
+# 长 CV 的资源预算：超限**明确失败**，不静默截断、不缩字号（AGENTS 红线）。
+LONG_CV_RESOURCE_BUDGET: dict[str, int] = {
+    "max_pages": LONG_CV_MAX_PAGES,
+    "max_render_seconds": 20,
+    "max_content_chars": 200_000,
+    "max_section_items": 200,
+}
+
+
+def mode_page_limit(value: object, mode: str | None = None) -> int:
+    """按文档模式把页数上限夹紧（非法输入回落到最小页数，不抛异常）。"""
+    low, high = MODE_PAGE_LIMITS.get(str(mode or "resume"), MODE_PAGE_LIMITS["resume"])
+    try:
+        number = int(value)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        number = low
+    return max(low, min(number, high))
 ResumeFontScale = Literal["small", "standard", "large"]
 MIN_CUSTOM_INSTRUCTION_CHARS = 0
 MAX_CUSTOM_INSTRUCTION_CHARS = 2000

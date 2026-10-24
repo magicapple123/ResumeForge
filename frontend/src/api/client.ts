@@ -2,10 +2,15 @@
 /** 统一请求封装：JSON 解析、错误信息提取、请求预算（超时）、取消与友好报错。 */
 
 import { recordClientDiagnostic } from "../utils/clientDiagnostics";
+import { ApiError } from "./apiError";
 import { datasetScopeHeaders } from "./datasetScope";
+import { abortErrorOf, type RequestLifecycle, superviseBody } from "./requestLifecycle";
 
-/** 错误类别：http=后端有响应但非 2xx；network=fetch 失败；timeout=预算到期；cancelled=调用方中止。 */
-export type ApiErrorCode = "http" | "network" | "timeout" | "cancelled";
+// 错误类型拆到 `apiError.ts`、生命周期拆到 `requestLifecycle.ts`（都是为了绕开
+// client ↔ 模块之间的循环依赖与 500 行预算）。这里继续 re-export，既有的
+// `import { ApiError } from "../api/client"` 一行都不用改。
+export { ApiError, isCancellation } from "./apiError";
+export type { ApiErrorCode } from "./apiError";
 
 /**
  * 请求预算分类（毫秒）：文件上传/大文件导出给长预算，普通请求 15s，任务类 30s，
@@ -27,48 +32,6 @@ export const BUDGETS_MS: Record<RequestBudgetKind, number> = {
   stream: 0, // 0 表示不限时
 };
 
-export class ApiError extends Error {
-  readonly status?: number;
-  readonly code: ApiErrorCode;
-  /** 从响应头 x-request-id 读取（后端 request_context 中间件在每个响应上回写）；网络失败时 undefined。 */
-  readonly requestId?: string;
-  /**
-   * 后端在错误响应体里给的业务码（如 `dataset_scope_changed`）。与 `code`（传输层分类）
-   * 分开：`code` 是被广泛依赖的联合类型，加值会连锁影响所有 switch；调用方要区分
-   * "哪一种 409"只能靠这个字段。
-   */
-  readonly businessCode?: string;
-  /** 仅 GET 且 5xx/timeout/network 时 true；写方法一律 false。是否重试由调用方决定，client 不内置自动重试。 */
-  readonly retryable: boolean;
-  readonly cause?: unknown;
-
-  constructor(
-    message: string,
-    status?: number,
-    opts: {
-      code?: ApiErrorCode;
-      requestId?: string;
-      businessCode?: string;
-      retryable?: boolean;
-      cause?: unknown;
-    } = {},
-  ) {
-    super(message);
-    this.name = "ApiError";
-    this.status = status;
-    this.code = opts.code ?? "http";
-    this.requestId = opts.requestId;
-    this.businessCode = opts.businessCode;
-    this.retryable = opts.retryable ?? false;
-    if (opts.cause !== undefined) this.cause = opts.cause;
-  }
-}
-
-/** 是否为「调用方取消」导致的失败：调用方不应把它当错误展示，也不应记诊断。 */
-export function isCancellation(error: unknown): boolean {
-  return error instanceof ApiError && error.code === "cancelled";
-}
-
 /** 把 query 对象转成查询串，跳过空值 */
 export function buildQuery(params: object): string {
   const query = new URLSearchParams();
@@ -79,10 +42,11 @@ export function buildQuery(params: object): string {
   return text ? `?${text}` : "";
 }
 
-/** 非 2xx 响应体解析结果：用户可读文案 + 可选业务码。 */
+/** 非 2xx 响应体解析结果：用户可读文案 + 可选业务码 + 结构化原文（见 `ApiError.payload`）。 */
 interface ErrorPayload {
   message: string;
   businessCode?: string;
+  body?: unknown;
 }
 
 /**
@@ -94,11 +58,12 @@ async function readErrorPayload(resp: Response): Promise<ErrorPayload> {
     const data = await resp.json();
     const detail = data?.detail;
     const businessCode = typeof data?.code === "string" ? data.code : undefined;
-    if (typeof detail === "string") return { message: detail, businessCode };
+    if (typeof detail === "string") return { message: detail, businessCode, body: data };
     if (Array.isArray(detail) && detail.length > 0) {
       return {
         message: detail.map((item) => item?.msg ?? String(item)).join("；"),
         businessCode,
+        body: data,
       };
     }
     // 结构化 detail：投递台的 409 就是这种形状（`{message, unanalyzed, gaps, site_unsupported…}`）。
@@ -106,10 +71,13 @@ async function readErrorPayload(resp: Response): Promise<ErrorPayload> {
     // 用户拿到的是一句没信息量的话，而真正的原因（例如"来源不支持自动投递，请先移出队列"）
     // 就躺在响应体里。
     if (detail && typeof detail === "object" && typeof detail.message === "string") {
-      return { message: detail.message, businessCode };
+      return { message: detail.message, businessCode, body: data };
     }
-    return { message: `请求失败（HTTP ${resp.status}）`, businessCode };
-  } catch {
+    return { message: `请求失败（HTTP ${resp.status}）`, businessCode, body: data };
+  } catch (error) {
+    // 正文读取阶段的中止（预算到期 / 调用方取消）已经是 ApiError：不能在这里被吞成
+    // 「请求失败（HTTP xxx）」，否则传输层超时会被误报成"后端返回了一个坏响应"。
+    if (error instanceof ApiError) throw error;
     // 响应体不是 JSON 时退回状态码提示
     return { message: `请求失败（HTTP ${resp.status}）` };
   }
@@ -167,6 +135,10 @@ function networkFailure(
  * 预算化原始请求：与 request() 共用超时、取消与错误分类，但不解析响应体——供导出/下载
  * （blob）、渲染预览（text）这类非 JSON 响应使用。非 2xx 时抛出与 request() 相同形状的
  * ApiError（message 仍来自 extractError，语义不变）；成功时返回原始 Response 交调用方自行读取。
+ *
+ * **预算覆盖到正文读完为止**：timer 与调用方监听不在"拿到响应头"时就撤掉，而是由正文读取
+ * 的终态（读完 / 读失败 / 取消 / 超时）统一收尾。否则响应头秒回、正文挂起时预算永远不到期，
+ * 用户也取消不掉正在读的正文。
  */
 export async function requestRaw(path: string, options: RequestOptions = {}): Promise<Response> {
   const { budget = "default", signal, ...rest } = options;
@@ -187,9 +159,23 @@ export async function requestRaw(path: string, options: RequestOptions = {}): Pr
     else signal.addEventListener("abort", callerAbort);
   }
 
-  // 预算到期（>0 时）由本侧中止请求，catch 里据此与「调用方取消」区分开。
+  // 预算到期（>0 时）由本侧中止请求；读取阶段据此与「调用方取消」区分开。
   let timedOut = false;
+  let timeoutRecorded = false;
   let timer: number | undefined;
+  let cleaned = false;
+  const cleanup = (): void => {
+    if (cleaned) return;
+    cleaned = true;
+    if (timer !== undefined) {
+      window.clearTimeout(timer);
+      timer = undefined;
+    }
+    // 已结束的请求不再拖着一个 abort 监听：长命 signal（例如页面级 controller）会被复用，
+    // 不摘掉就会无限累积。
+    signal?.removeEventListener("abort", callerAbort);
+  };
+
   const limit = BUDGETS_MS[budget];
   if (limit > 0) {
     timer = window.setTimeout(() => {
@@ -197,6 +183,20 @@ export async function requestRaw(path: string, options: RequestOptions = {}): Pr
       controller.abort();
     }, limit);
   }
+
+  const lifecycle: RequestLifecycle = {
+    signal: controller.signal,
+    // RequestInit.signal 允许 null；内部统一用 undefined 表示"没传"。
+    callerSignal: signal ?? undefined,
+    isTimedOut: () => timedOut,
+    noteTimeout: () => {
+      if (timeoutRecorded) return;
+      timeoutRecorded = true;
+      recordClientDiagnostic("api.timeout", { path, method, budget });
+    },
+    cleanup,
+    retryable,
+  };
 
   try {
     const resp = await fetch(`/api${path}`, {
@@ -215,30 +215,32 @@ export async function requestRaw(path: string, options: RequestOptions = {}): Pr
         method,
         request_id: requestId,
       });
-      const payload = await readErrorPayload(resp);
+      // 错误正文同样在预算内读：`detail` 与 `x-request-id` 的语义不变，但读不完/被取消时
+      // 得到 timeout / cancelled 而不是一句没信息量的「请求失败（HTTP xxx）」。
+      const payload = await readErrorPayload(superviseBody(resp, lifecycle));
       throw new ApiError(payload.message, resp.status, {
         code: "http",
         requestId,
         businessCode: payload.businessCode,
+        payload: payload.body,
         retryable: retryable && resp.status >= 500,
       });
     }
-    return resp;
-  } catch (error) {
-    if (error instanceof ApiError) throw error;
-    if (timedOut) {
-      // 预算到期被本侧中止：对 GET 来说换一次时机再试大概率能成，标记为可重试。
-      recordClientDiagnostic("api.timeout", { path, method, budget });
-      throw new ApiError("请求超时，请重试", undefined, { code: "timeout", retryable });
+    // 没有正文可读（204/205 等）：生命周期当场结束，不必等一次不会发生的读取。
+    if (resp.body === null) {
+      cleanup();
+      return resp;
     }
+    return superviseBody(resp, lifecycle);
+  } catch (error) {
+    cleanup();
+    if (error instanceof ApiError) throw error;
+    if (timedOut) throw abortErrorOf(lifecycle);
     if (signal?.aborted) {
       // 调用方取消不是错误：不记诊断，message 固定为「已取消」，由 isCancellation 判别。
       throw new ApiError("已取消", undefined, { code: "cancelled" });
     }
     throw networkFailure(path, method, error, retryable);
-  } finally {
-    if (timer !== undefined) window.clearTimeout(timer);
-    if (signal) signal.removeEventListener("abort", callerAbort);
   }
 }
 
@@ -254,6 +256,10 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
   try {
     return (await resp.json()) as T;
   } catch (error) {
+    // 正文读取阶段的预算到期 / 取消已经被翻译成 ApiError（见 supervisedRead）：原样上交，
+    // 不能在这里被"JSON 解析失败"的兜底误判成 network——那样调用方就分不清"服务没起来"
+    // 和"响应太慢/我取消了"。
+    if (error instanceof ApiError) throw error;
     // 200 但响应体不是合法 JSON（如空响应）：保留旧行为——按网络类失败提示，
     // 不把英文的 SyntaxError 直接抛给用户；原始错误保留在 cause 上。
     throw networkFailure(path, options.method ?? "GET", error, isReadMethod(options.method));

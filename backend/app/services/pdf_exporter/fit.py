@@ -16,10 +16,14 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import time
 
-from ...schemas.resume import MAX_RESUME_PAGES, ResumeContent
+from ...schemas.resume import ResumeContent
+from ...schemas.resume_generation import LONG_CV_MAX_PAGES, LONG_CV_RESOURCE_BUDGET
 from ..resume.resume_labels import DEFAULT_RESUME_LANGUAGE, section_titles
+from ..resume.resume_render_overrides import resolve_render_overrides
 from ..resume.resume_template_format import FONT_KEY
+from ..resume.resume_visibility import visible_resume
 from . import font_subset
 from .canvas import _ResumePDF
 from .fonts import FONT_ENV_VAR, ResumePDFError, _resolve_font_paths, resolve_font_paths
@@ -36,12 +40,49 @@ from .truncate import truncate_pdf
 
 logger = logging.getLogger(__name__)
 
-# 渲染器自己写的装饰字符：列表项的「·」圆点、compact 模板标签之间的「·」分隔符。
-# 它们**不来自简历正文**，但对用到它们的模板是必需的；而字体字符集是按**内容**缓存的
-# （`_content_signature` 不含模板），所以"先用 classic 渲一遍、再切 compact 渲同一份内容"
-# 时，缓存的子集里没有「·」，分隔符会静默变成空白（fpdf2 只打一行 missing glyph 警告）。
-# 固定并进去即可——两个字符的成本可以忽略。
-_DECORATIVE_CHARS = frozenset("·")
+# 渲染器自己写的装饰字符 —— 它们**不来自简历正文**，但对纸面是必需的。
+#
+# 字体子集的缓存键是**内容签名**（`_content_signature`，不含模板），所以"先用 classic
+# 渲一遍、再切到另一个模板渲同一份内容"会复用第一趟的字符集：第一趟没用到的模板专属字符
+# 在第二趟就是空白，而 fpdf2 只打一行 missing glyph 警告、肉眼很难发现。
+#
+# 2026-10-24 的真实缺陷：先渲 classic 再渲 scholar，scholar 三列技能的项目符号「•」不在
+# classic 那趟的字符集里，整列圆点静默消失（W20 模板质量档案的发现）。因此这里**一次性**
+# 收全所有"纸面固定字符"，而不是每发现一个补一个：
+#   * 项目符号 / 分隔符：canvas 的「· 」列表圆点、compact 标签的「·」、scholar 网格的「•」、
+#     W07 角色覆盖可选的「–」项目符号（bullet=dash）；
+#   * 语言包里**两个语言**的全部小节标题、字段前缀、列表分隔符、等级/性别括号——
+#     渲染器会印它们，而签名只收了当前语言的小节标题；
+#   * 渲染器直接写死的标点：字段后的全角冒号、日期区间的连字符（「2021-03 - 2024-06」）；
+#   * W08 续页信息：「第 N 页 / 共 {nb} 页」的数字、斜杠、汉字与别名占位符（输出时才替换）。
+#
+# 各字符由语言包与渲染器常量推出（见 `_fixed_paper_chars`），改文案自动跟上；成本是每个
+# 子集字体多几十个字形，可忽略。
+_EXTRA_PAPER_CHARS = frozenset("·•–：-0123456789/第页共{}")
+
+
+def _fixed_paper_chars() -> frozenset[str]:
+    """纸面上由语言包/渲染器印出、不属于用户正文的字符全集（字体子集必须无条件包含）。"""
+    from ..resume.resume_labels import (
+        FIELD_LABELS,
+        GENDER_PAREN,
+        LEVEL_PAREN,
+        LIST_SEPARATOR,
+        RESUME_LANGUAGES,
+        SECTION_TITLES,
+    )
+
+    parts: list[str] = ["".join(_EXTRA_PAPER_CHARS)]
+    for language in RESUME_LANGUAGES:
+        parts.extend(SECTION_TITLES[language].values())
+        parts.extend(FIELD_LABELS[language].values())
+        parts.append(LIST_SEPARATOR[language])
+        parts.append(LEVEL_PAREN[language].replace("{level}", ""))
+        parts.append(GENDER_PAREN[language].replace("{gender}", ""))
+    return frozenset("".join(parts))
+
+
+_DECORATIVE_CHARS = _fixed_paper_chars()
 
 
 def measure_content_height(
@@ -58,6 +99,7 @@ def measure_content_height(
     accent_soft: tuple[int, int, int] | None = None,
     format_config: dict | None = None,
     language: str = DEFAULT_RESUME_LANGUAGE,
+    overrides=None,
 ) -> float:
     """量出这份简历在给定版式下的内容高度（mm）。
 
@@ -92,8 +134,17 @@ def measure_content_height(
         include_photo=include_photo,
         format_config=format_config,
         language=language,
+        overrides=overrides,
     )
     return pdf.get_y() - layout.margin_top
+
+
+def _continuation_of(overrides):
+    """续页信息只在用户真的开了 repeat_name / page_numbers 时启用（默认 None = 零变化）。"""
+    if overrides is None:
+        return None
+    plan = overrides.pagination
+    return None if plan.empty else plan
 
 
 def render_resume_pdf(
@@ -110,6 +161,7 @@ def render_resume_pdf(
     accent_soft: tuple[int, int, int] | None = None,
     format_config: dict | None = None,
     language: str = DEFAULT_RESUME_LANGUAGE,
+    overrides=None,
 ) -> ResumePDF:
     """按给定版式**真渲染一份 PDF**（返回产物本身，不只是页数）。
 
@@ -131,6 +183,8 @@ def render_resume_pdf(
         body_text=body_text or _BODY_TEXT,
         muted_text=muted_text or _MUTED_TEXT,
         accent_soft=accent_soft,
+        continuation=_continuation_of(overrides),
+        resume_name=resume.name,
     )
     _register_fonts(pdf, regular, bold)
     pdf.add_page()
@@ -140,11 +194,13 @@ def render_resume_pdf(
         include_photo=include_photo,
         format_config=format_config,
         language=language,
+        overrides=overrides,
     )
     return ResumePDF(
         content=bytes(pdf.output()),
         pages=pdf.pages_count,
         chars=frozenset(pdf.drawn_chars),
+        spans=tuple(pdf.spans),
     )
 
 
@@ -197,6 +253,7 @@ def _render_with_subset_font(
     muted_text: tuple[int, int, int] | None = None,
     accent_soft: tuple[int, int, int] | None = None,
     language: str = DEFAULT_RESUME_LANGUAGE,
+    overrides=None,
 ) -> ResumePDF:
     """优先用"上一趟同内容渲染收来的字符集"裁出的小字体，失败就用全量字体。
 
@@ -230,6 +287,7 @@ def _render_with_subset_font(
             muted_text=muted_text,
             accent_soft=accent_soft,
             language=language,
+            overrides=overrides,
         )
     except ResumePDFError:
         if render_fonts is fonts:
@@ -251,6 +309,7 @@ def _render_with_subset_font(
             muted_text=muted_text,
             accent_soft=accent_soft,
             language=language,
+            overrides=overrides,
         )
     # 记下这一趟画出去的字，并并上正文里的字：万一某个栏目这趟没被画到（照片关闭、
     # 空栏目），它的字下次也还在集合里，不会出现"少一个字"。
@@ -334,9 +393,20 @@ def build_resume_pdf(
     """
     from ..resume.resume_templates import FONT_SCALES, template_spec, validated_format_config
 
+    # 投递视角（W06）：隐藏条目在排版前剔除。页数、溢出标志与产物内容只反映纸面上真正
+    # 出现的东西；源内容不动，编辑态与内部快照仍保留隐藏正文。
+    resume = visible_resume(resume)
     # 格式覆盖要先于字体解析：字体本身也是 `format_config` 的一项（项 14），而且要用
     # **白名单化之后**的那一份——不存在的字体文件在到这里之前就被丢弃了。
     overrides = validated_format_config(format_config)
+    # W07/W08/W15：四域覆盖的唯一入口；照片裁剪用**派生**图，content 原图一个字节不动。
+    render_overrides = resolve_render_overrides(
+        template=template, format_config=format_config, photo=resume.photo
+    )
+    if render_overrides.photo_crop is not None:
+        resume = resume.model_copy(
+            update={"photo": render_overrides.photo_for_render(resume.photo)}
+        )
     fonts = resolve_font_paths(overrides.get(FONT_KEY))
     if fonts is None:
         raise ResumePDFError(
@@ -362,7 +432,8 @@ def build_resume_pdf(
     layout = resolve_layout(
         template=spec["name"], base_px=base, format_config=overrides, margin_mm=margin_mm
     )
-    limit = max(1, min(int(page_limit), MAX_RESUME_PAGES))
+    limit = max(1, min(int(page_limit), LONG_CV_MAX_PAGES))
+    started = time.monotonic()
     natural = _render_with_subset_font(
         resume,
         accent=accent,
@@ -375,7 +446,15 @@ def build_resume_pdf(
         muted_text=muted_text,
         accent_soft=accent_soft,
         language=language,
+        overrides=render_overrides,
     )
+    elapsed = time.monotonic() - started
+    if elapsed > LONG_CV_RESOURCE_BUDGET["max_render_seconds"]:
+        # 长 CV 资源预算：超时**明确失败**，不静默截断、不缩字号（AGENTS 红线）。
+        raise ResumePDFError(
+            f"按当前设置渲染耗时 {elapsed:.1f}s，超过长 CV 预算 "
+            f"{LONG_CV_RESOURCE_BUDGET['max_render_seconds']}s；请精简内容或减少页数后重试"
+        )
     pages_needed = natural.pages
     if pages_needed <= limit:
         # 本来就放得下：这一份就是最终产物。
@@ -385,6 +464,7 @@ def build_resume_pdf(
             pages_needed=pages_needed,
             overflow=False,
             chars=natural.chars,
+            spans=natural.spans,
         )
 
     # 超限：裁到上限（宁可截掉尾部，也不要悄悄多给一页）。
@@ -400,4 +480,5 @@ def build_resume_pdf(
         pages_needed=pages_needed,
         overflow=True,
         chars=natural.chars,
+        spans=natural.spans,
     )

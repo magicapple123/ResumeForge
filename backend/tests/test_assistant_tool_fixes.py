@@ -52,9 +52,9 @@ def test_capability_map_describes_the_relaxed_mode():
 
 
 def test_capability_map_dataset_wording_matches_readme():
-    """备份的 API Key 措辞要与 README.md「更新而不丢失数据」一致：默认不含、可勾选包含。"""
+    """备份的 API Key 措辞要与 README.md「更新而不丢失数据」一致：默认包含、可取消勾选。"""
     rendered = build_capability_map()
-    assert "备份默认不含大模型 API Key，导出前可勾选包含（密文绑定本机）" in rendered
+    assert "备份默认包含大模型 API Key，导出前可取消勾选剔除" in rendered
     assert "导入导出不含大模型 API Key" not in rendered
 
 

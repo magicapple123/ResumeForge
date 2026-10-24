@@ -1,0 +1,368 @@
+# SPDX-License-Identifier: Apache-2.0
+"""PDF 的四个"角色级"绘制原语（W07 从 canvas.py 拆出，消费 ResolvedStyle）。
+
+为什么拆出来：canvas.py 贴着 500 行预算，而 W07 要给区块标题 / 列表 / 条目头 / 副行
+四条绘制路径加"角色 + 对象覆盖"的取值，直接内联会超线。拆法与 W05 的 skill_tags 相同：
+几何与绘制在本模块，canvas 只保留**薄委托**，对外方法与签名不变。
+
+风格来源只有 ``ResolvedStyle``（经 RenderOverrides 传入）：本模块不读 format_config、
+不解析 CSS，只把 RoleStyle 里显式的值映射成绘制参数；None = 用模板值（默认路径零变化）。
+
+PDF 的能力边界（W05 矩阵已冻结）：没有真斜体字形（italic 忽略）、无字距 API
+（letter_spacing 忽略）；这两项不伪造，其它属性按值生效。
+"""
+
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+from fpdf.enums import XPos, YPos
+
+from .fonts import FONT_FAMILY
+from .layout import _PX_TO_MM, _PX_TO_PT
+
+if TYPE_CHECKING:  # pragma: no cover - 只为类型检查，运行期不能导入 canvas（会循环导入）
+    from ..resume.resume_style import RoleStyle
+    from .canvas import _ResumePDF
+
+# 列表项符号（与 canvas 之前的值逐字一致；canvas 仍 re-export 给既有测试/调用方）。
+_BULLET_MARK = "· "
+_BULLET_CHARS = {"dot": "· ", "dash": "– ", "none": ""}
+
+
+def parse_color(value: str | None) -> tuple[int, int, int] | None:
+    """#rrggbb / #rgb → RGB；非法返回 None（调用方回落到模板色）。"""
+    if not isinstance(value, str):
+        return None
+    text = value.strip().lstrip("#")
+    if len(text) == 3:
+        text = "".join(ch * 2 for ch in text)
+    if len(text) != 6:
+        return None
+    try:
+        return (int(text[0:2], 16), int(text[2:4], 16), int(text[4:6], 16))
+    except ValueError:
+        return None
+
+
+def _color(style: RoleStyle | None, fallback: tuple[int, int, int]) -> tuple[int, int, int]:
+    if style is None or style.color is None:
+        return fallback
+    return parse_color(style.color) or fallback
+
+
+def _scale(style: RoleStyle | None) -> float:
+    return float(style.font_scale) if style is not None and style.font_scale else 1.0
+
+
+def _line_height(pdf: _ResumePDF, style: RoleStyle | None, px: float) -> float:
+    ratio = style.line_height if style is not None and style.line_height else pdf.layout.line_height
+    return px * _PX_TO_MM * float(ratio)
+
+
+def _bold(pdf: _ResumePDF, style: RoleStyle | None, default: bool) -> bool:
+    if style is not None and style.bold is not None:
+        return bool(style.bold)
+    return default
+
+
+def _wrapmode_args(pdf: _ResumePDF, text: str, width: float, size_pt: float) -> dict:
+    """超长不可断词（长 URL / 长英文词）时启用 CHAR 断行；普通文本保持默认断行。
+
+    fpdf2 默认只按空格断行，一个比栏宽还长的 token 会**越过右边距**（W08 契约要求长链接
+    断行）。只在确实存在超宽 token 时切换 wrapmode，避免改变普通文本的既有折行。
+    """
+    saved = (pdf.font_family, pdf.font_style, pdf.font_size_pt)
+    pdf.set_font(FONT_FAMILY, "", size_pt)
+    try:
+        for token in str(text).split():
+            if pdf.get_string_width(token) > width:
+                return {"wrapmode": "CHAR"}
+    finally:
+        pdf.set_font(saved[0], saved[1], saved[2])
+    return {}
+
+
+def start_forced_page(pdf: _ResumePDF, plan, *, margin_top: float) -> None:
+    """强制新页（W08）：只在当前页已有内容时换页，测量模式不换页。
+
+    连续两条 break_before 不会吐出空白页（契约终止规则 1）；测量模式要的是"不限页数
+    连续排下来多高"，换页会毁掉这个口径。
+    """
+    forced = getattr(plan, "break_before_page", False)
+    if forced and not pdf.measuring and pdf.get_y() > margin_top + 0.5:
+        pdf.add_page()
+
+
+def draw_section_title(
+    pdf: _ResumePDF,
+    text: str,
+    base: float,
+    *,
+    leading_gap: float,
+    style: RoleStyle | None = None,
+    section: str = "",
+    keep_lines: int = 0,
+) -> None:
+    """区块标题：形状/颜色由模板决定；角色覆盖可改字号、字色、下边距与对齐。"""
+    layout = pdf.layout
+    size = base * layout.section_title_ratio * _scale(style)
+    title_height = pdf.line_advance(size)
+    pad_x = layout.gap_mm(layout.section_title_pad_x)
+    pad_y = layout.gap_mm(layout.section_title_pad_y)
+    gap_after = (
+        layout.gap_mm(float(style.space_after))
+        if style is not None and style.space_after is not None
+        else layout.gap_mm(layout.section_title_gap)
+    )
+    shape = layout.section_title_style
+    bar_w = 4 * _PX_TO_MM
+
+    if shape in ("soft_box", "accent_box"):
+        block_height = title_height + 2 * pad_y
+    elif shape == "underline":
+        block_height = title_height + pad_y
+    else:
+        block_height = title_height
+
+    keep_extra = max(0, keep_lines) * pdf.line_advance(base)
+    pdf.ensure_space(
+        layout.gap_mm(leading_gap) + block_height + gap_after + pdf.line_advance(base) + keep_extra
+    )
+    pdf.ln(layout.gap_mm(leading_gap))
+    top = pdf.get_y()
+
+    pdf.set_font(FONT_FAMILY, "B", size * _PX_TO_PT)
+    title_markdown = _has_bold(text)
+    text_width = pdf.get_string_width(text, markdown=title_markdown)
+    text_x = pdf.frame_left + pad_x
+
+    if shape == "left_bar":
+        text_x = pdf.frame_left + bar_w + pad_x
+        pdf.set_fill_color(*pdf.accent)
+        pdf.rect(pdf.frame_left, top, bar_w, title_height, style="F")
+    elif shape == "soft_box":
+        pdf.set_fill_color(*pdf.accent_soft)
+        pdf.rect(
+            pdf.frame_left,
+            top,
+            pdf.frame_width,
+            block_height,
+            style="F",
+            round_corners=True,
+            corner_radius=base * _PX_TO_MM * 0.4,
+        )
+    elif shape == "accent_box":
+        pdf.set_fill_color(*pdf.accent)
+        pdf.rect(pdf.frame_left, top, pdf.frame_width, block_height, style="F")
+
+    align = (
+        style.align if style is not None and style.align else None
+    ) or layout.section_title_align
+    if align == "center":
+        text_x = pdf.frame_left + max(0.0, (pdf.frame_width - text_width) / 2)
+    elif align == "right":
+        text_x = pdf.frame_left + max(0.0, pdf.frame_width - text_width - pad_x)
+
+    pdf.set_text_color(*_color(style, pdf._section_title_color()))
+    pdf.set_xy(text_x, top + pad_y)
+    pdf.cell(0, title_height, text, new_x=XPos.RIGHT, new_y=YPos.TOP, markdown=title_markdown)
+
+    if shape == "underline":
+        line_y = top + title_height + pad_y
+        pdf.set_draw_color(*pdf.line_color)
+        pdf.set_line_width(0.3)
+        pdf.line(pdf.frame_left, line_y, pdf.frame_left + pdf.frame_width, line_y)
+
+    pdf.set_y(top + block_height + gap_after)
+    pdf.set_x(pdf.frame_left)
+    pdf.set_text_color(*pdf.body_text)
+    if section:
+        pdf.record(kind="section", section=section, y_top=top, text=text)
+
+
+def draw_bullets(
+    pdf: _ResumePDF,
+    items: list[str],
+    base: float,
+    *,
+    style: RoleStyle | None = None,
+    section: str = "",
+    object_id: str | None = None,
+    split_ok: bool = False,
+) -> None:
+    """列表项：缩进/符号/行高/对齐可被角色（或对象）覆盖；分页口径与既有实现一致。"""
+    layout = pdf.layout
+    font_size = base * _scale(style)
+    line_height = _line_height(pdf, style, font_size)
+    indent = (
+        layout.gap_mm(float(style.indent))
+        if style is not None and style.indent is not None
+        else layout.gap_mm(layout.li_indent)
+    )
+    bullet = (
+        _BULLET_CHARS.get(style.bullet, _BULLET_MARK) if style and style.bullet else _BULLET_MARK
+    )
+    align = (style.align if style is not None and style.align else None) or "L"
+    color = _color(style, pdf.body_text)
+    li_gap = layout.gap_mm(layout.li_gap)
+    pdf.set_font(FONT_FAMILY, "", font_size * _PX_TO_PT)
+    marker_width = float(pdf.get_string_width(bullet)) if bullet else 0.0
+    text_left = pdf.frame_left + indent
+    width = max(1.0, pdf.frame_width - indent)
+    pad = float(pdf.c_margin)
+    max_fit = layout.usable_height_per_page - 2 * line_height
+    first = True
+    for item_index, item in enumerate(items):
+        text = str(item).strip()
+        if not text:
+            continue
+        height = pdf._dry_run_height(width, line_height, text, markdown=_has_bold(text))
+        gap = 0.0 if first else li_gap
+        if split_ok:
+            # allow_split=True：只预留一行，让 multi_cell 按行自然劈开（长要点可以跨页）。
+            pdf.ensure_space(gap + line_height)
+        elif height <= max_fit:
+            pdf.ensure_space(gap + height)
+        else:
+            pdf.ensure_space(gap + line_height)
+        if gap:
+            pdf.ln(gap)
+        first = False
+        top = pdf.get_y()
+        pdf.set_text_color(*color)
+        if bullet:
+            pdf.set_xy(text_left - marker_width - pad, top)
+            pdf.cell(marker_width + 2 * pad, line_height, bullet, new_x=XPos.LEFT, new_y=YPos.TOP)
+        pdf.set_x(text_left)
+        item_top = pdf.get_y()
+        pdf.multi_cell(
+            width,
+            line_height,
+            text,
+            align=align,
+            new_x=XPos.LMARGIN,
+            new_y=YPos.NEXT,
+            markdown=_has_bold(text),
+            **_wrapmode_args(pdf, text, width, font_size * _PX_TO_PT),
+        )
+        if section:
+            pdf.record(
+                kind="point",
+                section=section,
+                y_top=item_top,
+                object_id=object_id,
+                point_index=item_index,
+                text=text,
+            )
+    pdf.set_text_color(*pdf.body_text)
+
+
+def draw_entry_head(
+    pdf: _ResumePDF,
+    left: str,
+    right: str,
+    base: float,
+    *,
+    style: RoleStyle | None = None,
+    meta_style: RoleStyle | None = None,
+    section: str = "",
+    object_id: str | None = None,
+    keep_lines: int = 0,
+) -> None:
+    """条目头：左侧标题 + 右侧时间；可覆盖字号/颜色/粗体/对齐/段前距/日期形态。"""
+    layout = pdf.layout
+    size = base * layout.entry_title_ratio * _scale(style)
+    line_height = _line_height(pdf, style, size)
+    entry_top = pdf.get_y()
+    if style is not None and style.space_before is not None:
+        pdf.ln(layout.gap_mm(float(style.space_before)))
+    pdf.ensure_space(
+        line_height + pdf.line_advance(base) + max(0, keep_lines) * pdf.line_advance(base)
+    )
+    available = pdf.frame_width
+    inline_meta = meta_style is not None and meta_style.meta_align == "inline"
+    title_width = available if inline_meta else available * 0.68
+    pdf.set_font(FONT_FAMILY, "B" if _bold(pdf, style, True) else "", size * _PX_TO_PT)
+    pdf.set_text_color(*_color(style, pdf.body_text))
+    pdf.set_x(pdf.frame_left)
+    pdf.cell(
+        title_width,
+        line_height,
+        left,
+        new_x=XPos.RIGHT,
+        new_y=YPos.TOP,
+        markdown=_has_bold(left),
+    )
+    if not right:
+        pdf.ln(line_height)
+        pdf.set_text_color(*pdf.body_text)
+        return
+    meta_size = (
+        base
+        * layout.entry_meta_ratio
+        * (_scale(meta_style) if meta_style is not None and meta_style.font_scale else 1.0)
+    )
+    pdf.set_font(FONT_FAMILY, "", meta_size * _PX_TO_PT)
+    pdf.set_text_color(*_color(meta_style, pdf.muted_text))
+    if inline_meta:
+        pdf.cell(
+            0, line_height, right, new_x=XPos.LMARGIN, new_y=YPos.NEXT, markdown=_has_bold(right)
+        )
+    else:
+        pdf.cell(
+            available - title_width,
+            line_height,
+            right,
+            align="R",
+            new_x=XPos.LMARGIN,
+            new_y=YPos.NEXT,
+            markdown=_has_bold(right),
+        )
+    pdf.set_text_color(*pdf.body_text)
+    if section:
+        pdf.record(kind="entry", section=section, y_top=entry_top, object_id=object_id, text=left)
+
+
+def draw_meta_line(
+    pdf: _ResumePDF, text: str, base: float, *, style: RoleStyle | None = None
+) -> None:
+    """条目下的副行（绩点 / 课程 / 技术栈）：字号与颜色可被角色覆盖。"""
+    if not text.strip():
+        return
+    layout = pdf.layout
+    size = base * layout.entry_sub_ratio * _scale(style)
+    line_height = _line_height(pdf, style, size)
+    pdf.ensure_space(layout.gap_mm(layout.sub_gap_top) + line_height)
+    pdf.ln(layout.gap_mm(layout.sub_gap_top))
+    pdf.set_font(FONT_FAMILY, "", size * _PX_TO_PT)
+    pdf.set_text_color(*_color(style, pdf.muted_text))
+    pdf.set_x(pdf.frame_left)
+    pdf.multi_cell(
+        pdf.frame_width,
+        line_height,
+        text,
+        align="L",
+        new_x=XPos.LMARGIN,
+        new_y=YPos.NEXT,
+        markdown=_has_bold(text),
+        **_wrapmode_args(pdf, text, pdf.frame_width, size * _PX_TO_PT),
+    )
+    pdf.ln(layout.gap_mm(layout.sub_gap_bottom))
+    pdf.set_text_color(*pdf.body_text)
+
+
+def _has_bold(text: str) -> bool:
+    from ..resume.resume_rich_text import has_bold
+
+    return has_bold(text)
+
+
+__all__ = [
+    "_BULLET_MARK",
+    "parse_color",
+    "draw_bullets",
+    "draw_entry_head",
+    "draw_meta_line",
+    "draw_section_title",
+]

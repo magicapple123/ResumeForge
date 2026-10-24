@@ -20,6 +20,7 @@ import type { ComponentProps } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 import type { ProfileFillSources } from "../../features/profile/profileFillOptions";
 import { t } from "../../i18n";
+import { rt } from "../../features/resume-research/i18n";
 import type { ResumeContent } from "../../types";
 import ResumeWorkbenchEditorColumn from "./ResumeWorkbenchEditorColumn";
 
@@ -375,7 +376,7 @@ describe("中栏 · 栏目条与溢出三角下拉（需求 4）", () => {
     return screen.queryByRole("button", { name: t("workbench.tabs.more") });
   }
 
-  it("栏目宽度足够时不显示三角下拉按钮，8 个栏目全部露出", () => {
+  it("栏目宽度足够时不显示三角下拉按钮，全部栏目露出", () => {
     renderColumn();
 
     expect(strip()).toHaveAttribute("role", "tablist");
@@ -393,6 +394,10 @@ describe("中栏 · 栏目条与溢出三角下拉（需求 4）", () => {
       t("editor.tab.projects"),
       t("editor.tab.skills"),
       t("editor.tab.awards"),
+      // W14 科研三页签（researchTabItems 装配）。
+      rt("research.tab.publications"),
+      rt("research.tab.projects"),
+      rt("research.tab.patents"),
     ]);
     // 「写作增强」已搬到右键菜单（2026-10-24），不再是中栏的一个页签。
     expect(labels).not.toContain(t("editor.tab.writing"));
@@ -409,7 +414,7 @@ describe("中栏 · 栏目条与溢出三角下拉（需求 4）", () => {
     });
   });
 
-  it("三角下拉只列没有显示出来的栏目（不是全部 8 个）", async () => {
+  it("三角下拉只列没有显示出来的栏目（不是全部 10 个）", async () => {
     // 轨道 200px、每栏 60px、按钮预留 28px → 边界 172px：只有前两栏完整放得下。
     const restore = stubLayout(200, 60);
     try {
@@ -419,8 +424,8 @@ describe("中栏 · 栏目条与溢出三角下拉（需求 4）", () => {
       fireEvent.click(trigger);
 
       const menuItems = await screen.findAllByRole("menuitem");
-      // 只列没显示出来的：少于 8 个，且不含第一个栏目。
-      expect(menuItems.length).toBeLessThan(8);
+      // 只列没显示出来的：少于全部 10 个，且不含第一个栏目。
+      expect(menuItems.length).toBeLessThan(10);
       expect(menuItems.length).toBeGreaterThan(0);
       expect(menuItems.map((item) => item.textContent)).not.toContain(t("editor.tab.basic"));
 

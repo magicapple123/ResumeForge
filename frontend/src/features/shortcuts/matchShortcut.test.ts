@@ -165,7 +165,9 @@ describe("findConflict", () => {
 
   it("没人用时返回 null", () => {
     expect(findConflict(bindings, "mod+p")).toBeNull();
-    expect(findConflict(bindings, "mod+shift+p")).toBeNull();
+    // mod+shift+p 自 W15/D13 命令面板起有明确归属，改用真正没人用的组合。
+    expect(findConflict(bindings, "mod+shift+u")).toBeNull();
+    expect(findConflict(bindings, "mod+shift+p")).toBe("commandPalette");
   });
 });
 

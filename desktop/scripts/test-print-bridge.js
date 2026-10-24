@@ -27,6 +27,10 @@ test("print.js 用 A4 + 打印背景 + 无边距，并把 HTML 交给 Chromium",
   assert.match(source, /show:\s*false/);
   assert.match(source, /nodeIntegration:\s*false/);
   assert.match(source, /contextIsolation:\s*true/);
+  // A08：沙箱与能力收窄（导航 / 新窗口）同样是这条桥的前提，别在重构里漏掉。
+  assert.match(source, /sandbox:\s*true/);
+  assert.match(source, /will-navigate/);
+  assert.match(source, /setWindowOpenHandler\(\(\)\s*=>\s*\(\{\s*action:\s*"deny"\s*\}\)\)/);
   // 空内容要明确报错，而不是打印一张白纸。
   assert.match(source, /没有可打印的简历内容/);
 });
@@ -39,10 +43,11 @@ test("preload 暴露 resumeForge.printPdf，且只用一个固定通道", () => 
   assert.doesNotMatch(preload, /invoke\(\s*[a-zA-Z_$]/);
 });
 
-test("main.js 注册了打印通道，且通道名与 preload 一致", () => {
+test("main.js 注册了打印通道（并交出主窗口取值函数），通道名与 preload 一致", () => {
   const main = read("main.js");
   const print = read("print.js");
-  assert.match(main, /require\("\.\/print"\)\.registerPrintHandler\(\)/);
+  // A08：必须有 getter——打印桥只接受主窗口顶层 frame 的请求，没有窗口身份就无从校验。
+  assert.match(main, /require\("\.\/print"\)\.registerPrintHandler\(\{\s*getMainWindow:/);
 
   const channel = /PRINT_CHANNEL = "([^"]+)"/.exec(print)?.[1];
   assert.equal(channel, "resume:print-pdf");

@@ -34,6 +34,8 @@ import { formatErrorGuidance } from "../../api/errorGuidance";
 import type { ProfileFillSources } from "../../features/profile/profileFillOptions";
 import { useFormShortcutHistory } from "../../features/shortcuts/useFormShortcutHistory";
 import ResumeBasicInfoTab from "../resume/ResumeBasicInfoTab";
+import { researchTabItems } from "../resume/research/ResearchTabs";
+import { stripEmptyResearch } from "../../features/resume-research/real";
 import { useBeforeUnloadGuard } from "../resume/useBeforeUnloadGuard";
 import {
   AwardEditor,
@@ -99,6 +101,8 @@ export interface ResumeEditorPanelOptions {
    * 3. 保存成功（`handleFinish`）。
    */
   onDraftReset?: () => void;
+  /** W03：制作台由统一历史接管撤回/恢复时传 false（避免同一个组合键两套栈各退一步）。 */
+  keyboardHistory?: boolean;
 }
 
 export interface ResumeEditorPanelApi {
@@ -152,13 +156,11 @@ export interface ResumeEditorPanelApi {
   restoreDraft: () => void;
   /** 恢复条。 */
   discardDraft: () => void;
-  /**
-   * 「填入我的资料全部数据」的入口：`fillAll` 没传时为 `null`，视图据此完全不渲染。
-   *
-   * 这一条不在原始契约里，但 `fillAll` 的确认分支住在 `useEditorDraftBar` 里（`fill-all`），
-   * 只有 hook 才够得着；把它当 API 交出去，两个宿主都不必各自实现一遍"要不要先问"。
-   */
+  /** 「填入我的资料全部数据」的入口：`fillAll` 没传时为 `null`，视图据此完全不渲染。
+   * 确认分支住在 `useEditorDraftBar` 里，只有 hook 才够得着，所以当 API 交出去。 */
   fillAllData: (() => void) | null;
+  /** 外部整份替换（W06 大纲命令）：写回表单 + 标脏 + 记一次可撤回历史；不触发保存。 */
+  replaceContent: (next: ResumeContent) => void;
 }
 
 export function useResumeEditorPanel(options: ResumeEditorPanelOptions): ResumeEditorPanelApi {
@@ -177,6 +179,7 @@ export function useResumeEditorPanel(options: ResumeEditorPanelOptions): ResumeE
     onSaved,
     onDraftContent,
     onDraftReset,
+    keyboardHistory = true,
   } = options;
   const { message } = App.useApp();
   const [form] = Form.useForm<ResumeContent>();
@@ -200,7 +203,7 @@ export function useResumeEditorPanel(options: ResumeEditorPanelOptions): ResumeE
   const mergePartial = useCallback(
     (values: Partial<ResumeContent> | undefined): ResumeContent | null => {
       if (!content) return null;
-      return { ...content, ...(values ?? {}), photo: content.photo };
+      return stripEmptyResearch({ ...content, ...(values ?? {}), photo: content.photo });
     },
     [content],
   );
@@ -211,7 +214,7 @@ export function useResumeEditorPanel(options: ResumeEditorPanelOptions): ResumeE
   // R5：撤回/恢复作用于这份表单，保存与「保存内容」同走 `form.submit()`。
   const formHistory = useFormShortcutHistory(form, {
     onSave: () => form.submit(),
-    historyEnabled: active && !saving,
+    historyEnabled: active && !saving && keyboardHistory,
     saveEnabled: active && !saving,
   });
   // `reset` 是稳定引用：直接依赖 formHistory 会在 canUndo/canRedo 翻转时重跑载入 effect。
@@ -412,6 +415,9 @@ export function useResumeEditorPanel(options: ResumeEditorPanelOptions): ResumeE
       { key: "projects", label: t("editor.tab.projects"), children: <ProjectEditor /> },
       { key: "skills", label: t("editor.tab.skills"), children: <SkillEditor /> },
       { key: "awards", label: t("editor.tab.awards"), children: <AwardEditor /> },
+      // W14 科研三页签（论文 / 科研项目 / 专利）：key 与 content 字段名逐字一致，
+      // 由 ResearchTabs 一处定义；纸面点击映射见 ResumeEditorTarget.TAB_BY_SECTION。
+      ...researchTabItems(),
     ],
     // 原「写作增强」页签已搬到右键菜单（2026-10-24）：选中一段文字右键即可，
     // 不必"复制 → 切页签 → 粘贴"三步。入口见 `features/resume-writing/ResumeWritingModal`。
@@ -448,6 +454,17 @@ export function useResumeEditorPanel(options: ResumeEditorPanelOptions): ResumeE
     }
   };
 
+  /** 外部整份替换（W06 大纲命令）：写回表单 + 标脏 + 记一次可撤回的历史；不触发保存。 */
+  const replaceContent = useCallback(
+    (next: ResumeContent) => {
+      form.setFieldsValue(next as never);
+      setDirty(true);
+      formHistory.push();
+      onDraftContent?.(next);
+    },
+    [form, formHistory, onDraftContent],
+  );
+
   return {
     dirty,
     saving,
@@ -478,5 +495,6 @@ export function useResumeEditorPanel(options: ResumeEditorPanelOptions): ResumeE
     restoreDraft: draftBar.restoreDraft,
     discardDraft: draftBar.discardDraft,
     fillAllData,
+    replaceContent,
   };
 }

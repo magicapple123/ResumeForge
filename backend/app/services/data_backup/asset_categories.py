@@ -20,6 +20,6 @@
 from __future__ import annotations
 
 # 资产类别：目录名同时是磁盘目录名（相对数据库所在目录）与清单/包内前缀。
-ASSET_CATEGORIES: tuple[str, ...] = ("user_files", "referral_images")
+ASSET_CATEGORIES: tuple[str, ...] = ("user_files", "referral_images", "export_archive")
 
 __all__ = ["ASSET_CATEGORIES"]

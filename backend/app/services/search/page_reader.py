@@ -14,12 +14,21 @@
 - 限制响应体大小、单跳超时与**整次抓取的总墙钟预算**（``_TOTAL_BUDGET_SECONDS``，
   覆盖所有跳），只取文本类内容；
 - 只抽取正文标签的可见文字，不执行任何脚本。
+
+已知限制（如实说明，**不要**把它读成"已完全防御"）：上面每次校验检查的是**校验那一刻
+DNS 解析出来的地址**，而 httpx 真正建连时会**再解析一次**域名，两次解析之间存在时间窗
+（TOCTOU）。恶意域名可以"校验时答公网、连接时答内网"，也就是通常说的 DNS rebinding。
+彻底收口要求"连接的地址 == 校验过的地址"，即自定义 transport 按已校验 IP 直连并固定
+Host/SNI——本模块刻意没有这么做（那会引出自维护连接池与证书校验分支，对"本地单用户、
+正文抓取默认关闭"的场景收益不成比例）。因此当前承诺的边界只有：scheme、URL 用户信息、
+端口、**每个**解析结果、**每一跳**重定向、正文字节数与总超时逐项检查；DNS rebinding 仍然
+是一个已知、未关闭的窗口。6to4/NAT64 这类"IPv6 地址里编码了 IPv4"的形态同理按字面 IPv6
+判定，不做解封装。
 """
 
 from __future__ import annotations
 
 import asyncio
-import ipaddress
 import logging
 import socket
 from collections.abc import Callable
@@ -27,6 +36,8 @@ from html.parser import HTMLParser
 from urllib.parse import urlsplit
 
 import httpx
+
+from ..net_policy import ADDRESS_INVALID, ADDRESS_SHARED, non_public_address_reason
 
 logger = logging.getLogger(__name__)
 
@@ -100,8 +111,9 @@ def _sync_resolve(host: str) -> set[str]:
 def _policy_reason(url: str, resolve: Callable[[str], set[str]]) -> str | None:
     """URL 公网策略的**唯一实现**：放行返回 None，否则给出可读的拒绝原因。
 
-    scheme、用户信息、主机名、端口、DNS 解析出的**每一个** IP 都检查；首跳与重定向
-    的每一跳都走这一份（RF-04：一处逻辑一份实现，不存在"只有首跳查得严"的第二套）。
+    scheme、用户信息、主机名、端口都在这里判；"解析出的**每一个** IP 是否公网"交给
+    :mod:`app.services.net_policy`（与更新下载共用一份判定）。首跳与重定向的每一跳都走
+    这一份（RF-04：一处逻辑一份实现，不存在"只有首跳查得严"的第二套）。
     """
     try:
         parsed = urlsplit(url)
@@ -126,21 +138,17 @@ def _policy_reason(url: str, resolve: Callable[[str], set[str]]) -> str | None:
     if not addresses:
         return f"主机 {host} 解析不到任何地址"
     for address in addresses:
-        try:
-            parsed_ip = ipaddress.ip_address(address)
-        except ValueError:
+        # 地址段判定只有一份实现（`services/net_policy.py`），与更新下载共用：本机单用户
+        # 工具不追求抵抗 DNS rebinding（那要"校验地址与连接地址绑定"的传输策略，见模块
+        # docstring 的已知限制），但每一跳都重验已挡住"公网页跳内网"与"直接写内网地址"。
+        reason = non_public_address_reason(address)
+        if reason is None:
+            continue
+        if reason == ADDRESS_INVALID:
             return f"解析结果 {address!r} 不是合法 IP"
-        # 解析到内网/回环/保留地址一律拒绝。本机单用户工具不追求抵抗 DNS rebinding
-        # （那要"校验地址与连接地址绑定"的传输策略，见架构文档记录的后续项），
-        # 但每一跳都重验已挡住"公网页跳内网"与"直接写内网地址"两类。
-        if (
-            parsed_ip.is_private
-            or parsed_ip.is_loopback
-            or parsed_ip.is_link_local
-            or parsed_ip.is_reserved
-            or parsed_ip.is_multicast
-        ):
-            return f"主机 {host} 解析到非公网地址 {address}"
+        if reason == ADDRESS_SHARED:
+            return f"主机 {host} 解析到运营商级 NAT 共享地址段 {address}"
+        return f"主机 {host} 解析到非公网地址 {address}"
     return None
 
 

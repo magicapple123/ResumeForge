@@ -25,9 +25,14 @@ import {
   type ResumeDraftStore,
 } from "../../features/resume/resumeDraftContent";
 import { useResumeLivePreview } from "../../features/resume/useResumeLivePreview";
+import { contentSignature } from "../../utils/contentSignature";
 import type { ExactPreviewOptions, ResumePreviewHandle } from "../ResumePreview";
 import type { PreviewMode } from "../resume-preview/config";
 import type { RichTextEditAdapter } from "../resume-preview/richText";
+import {
+  ProviewProvider,
+  type ProviewShellConfig,
+} from "../../features/resume-proview/ProviewContext";
 import ResumeWorkbenchCanvas from "./ResumeWorkbenchCanvas";
 
 /** 让调用方（`ResumeZoomModal`）只多一条 import 就能拿到这个类型。 */
@@ -69,6 +74,14 @@ interface Props {
    * 字段后 overlay 自动作废——"加粗 + 改字"叠加时显示的是合并后的结果，不需要额外通知。
    */
   mergeLive?: (content: ResumeContent | null) => ResumeContent | null;
+  /**
+   * 专业视图（W15）的宿主能力：命令（保存/导出…）、工作区预设、照片裁剪通道。
+   *
+   * 不传时画布内置能力（缩放档位/页导航/辅助线/灰度校样/命令面板）照常可用——
+   * 这些只改视图状态；保存/导出命令、照片裁剪与工作区预设**必须**由宿主注入，
+   * 没有回调就不渲染对应入口（不做点了没反应的按钮）。
+   */
+  proview?: ProviewShellConfig;
 }
 
 export default function ResumeWorkbenchLiveCanvas({
@@ -86,6 +99,7 @@ export default function ResumeWorkbenchLiveCanvas({
   suspended = false,
   draftStore,
   mergeLive,
+  proview,
 }: Props) {
   const scrollRef = useRef<HTMLDivElement>(null);
   /**
@@ -130,6 +144,22 @@ export default function ResumeWorkbenchLiveCanvas({
   // 结果记下"生成它时宿主给的是哪一版"：宿主一换 html，这条结果自动失效。
   const handleHtml = useCallback((next: string) => setLive({ source: html, html: next }), [html]);
 
+  /**
+   * 精确预览用的上下文：把**还没保存**的正文一起带上（W04 / P0-03）。
+   *
+   * 只在这一层算：本组件本来就随每次草稿变化重渲染（订阅点在这里），而
+   * `ResumeZoomModal` 刻意不订阅草稿——在那一层订阅会让每键输入重渲染整个三栏。
+   * 签名同步改成这份草稿的签名，否则 `formatKey` 不变、请求根本不会重发。
+   */
+  const exactPreviewWithDraft = useMemo(() => {
+    if (!exactPreview || !mergedDraft) return exactPreview;
+    return {
+      ...exactPreview,
+      content: mergedDraft,
+      contentSignature: contentSignature(mergedDraft),
+    };
+  }, [exactPreview, mergedDraft]);
+
   const { state, retry, suspend, resume } = useResumeLivePreview({
     enabled: Boolean(previewContent) && previewMode !== "exact",
     content: previewContent,
@@ -161,18 +191,20 @@ export default function ResumeWorkbenchLiveCanvas({
     );
 
   return (
-    <ResumeWorkbenchCanvas
-      html={live && live.source === html ? live.html : html}
-      warnings={warnings}
-      pages={pages}
-      previewRef={previewRef}
-      previewMode={previewMode}
-      onPreviewModeChange={onPreviewModeChange}
-      exactPreview={exactPreview}
-      onPickField={onPickField}
-      richEdit={richEdit}
-      scrollRef={scrollRef}
-      status={status}
-    />
+    <ProviewProvider config={proview ?? {}}>
+      <ResumeWorkbenchCanvas
+        html={live && live.source === html ? live.html : html}
+        warnings={warnings}
+        pages={pages}
+        previewRef={previewRef}
+        previewMode={previewMode}
+        onPreviewModeChange={onPreviewModeChange}
+        exactPreview={exactPreviewWithDraft}
+        onPickField={onPickField}
+        richEdit={richEdit}
+        scrollRef={scrollRef}
+        status={status}
+      />
+    </ProviewProvider>
   );
 }

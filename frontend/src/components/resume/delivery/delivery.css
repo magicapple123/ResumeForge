@@ -1,0 +1,185 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/* 「导出交付包 / 交付原件」（W19 / D18–D20）样式。全部挂在 .resume-delivery* 自定义类名下，
+   颜色只用 --rf-* 语义 token，不覆写 antd 原生类名。 */
+
+.resume-delivery {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  color: var(--rf-text-body);
+  font-size: 13px;
+}
+
+.resume-delivery-label {
+  color: var(--rf-text-secondary);
+  font-size: 12px;
+}
+
+.resume-delivery-hint {
+  margin: 0;
+  color: var(--rf-text-tertiary);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.resume-delivery-preset-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.resume-delivery-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.resume-delivery-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.resume-delivery-fieldset {
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.resume-delivery-formats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  margin-top: 6px;
+}
+
+.resume-delivery-format {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.resume-delivery-capability {
+  margin: 0;
+  border-color: var(--rf-border);
+  background: var(--rf-surface-alt);
+  color: var(--rf-text-secondary);
+  font-size: 11px;
+}
+
+.resume-delivery-tokens {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+}
+
+.resume-delivery-preview {
+  margin: 0;
+  color: var(--rf-text-secondary);
+  font-size: 12px;
+}
+
+.resume-delivery-preview code {
+  padding: 0 4px;
+  border-radius: 4px;
+  background: var(--rf-surface-alt);
+  color: var(--rf-text-body);
+}
+
+.resume-delivery-switches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 20px;
+}
+
+.resume-delivery-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--rf-text-body);
+  font-size: 12px;
+}
+
+.resume-delivery-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+/* ===== 核对卡 ===== */
+.resume-delivery-check {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border: 1px solid var(--rf-border-subtle);
+  border-radius: var(--rf-radius-control);
+  padding: 10px;
+  background: var(--rf-surface);
+}
+
+.resume-delivery-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.resume-delivery-section-title {
+  font-weight: 600;
+}
+
+.resume-delivery-check-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+}
+
+.resume-delivery-check-row {
+  display: flex;
+  gap: 8px;
+}
+
+.resume-delivery-check-row dt {
+  flex: 0 0 84px;
+  color: var(--rf-text-secondary);
+  font-size: 12px;
+}
+
+.resume-delivery-check-row dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+/* ===== 交付原件 ===== */
+.resume-delivery-archive {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.resume-delivery-archive-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.resume-delivery-archive-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--rf-border-subtle);
+  border-radius: var(--rf-radius-control);
+  padding: 6px 8px;
+}
+
+.resume-delivery-archive-name {
+  flex: 1 1 200px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-weight: 500;
+}

@@ -28,12 +28,18 @@ from ...schemas.resume import (
     ResumeBatchRequest,
     ResumeBrief,
     ResumeContent,
+    ResumeContentSave,
     ResumeFavoriteUpdate,
     ResumeNoteUpdate,
     ResumeOut,
     ResumeTitleUpdate,
 )
 from ...services import trash
+from ...services.resume.document_save import (
+    RevisionConflict,
+    revision_conflict_response,
+    save_content,
+)
 from ...services.resume.resume_delivery import (
     get_delivery,
     list_deliveries,
@@ -42,7 +48,7 @@ from ...services.resume.resume_delivery import (
 from ...services.resume.resume_record import build_manual_title
 from ...services.resume.resume_sections import default_section_order_config
 from ...services.resume.resume_template_format import validated_format_config
-from ._shared import _mark_saved, _to_resume_out
+from ._shared import _get_live_resume, _mark_saved, _to_resume_out, _validated_content
 
 logger = logging.getLogger(__name__)
 
@@ -56,7 +62,7 @@ def create_manual_resume(payload: ManualResumeRequest, db: Session = Depends(get
     if payload.job_id is not None and (job is None or trash.is_deleted(job)):
         raise HTTPException(status_code=404, detail="关联岗位不存在或已被删除")
 
-    content = payload.content.model_dump()
+    content = _validated_content(payload.content)
     # P0-5：板块顺序在**创建时物化**，不再靠前端 UI 的默认值临时生效。
     #
     # 为什么不留给前端：卡片（「调整板块顺序」）与四个渲染器读的都是
@@ -273,20 +279,45 @@ def get_resume(resume_id: int, db: Session = Depends(get_db)):
 
 @router.put("/{resume_id}", response_model=ResumeOut)
 def update_resume(resume_id: int, payload: ResumeContent, db: Session = Depends(get_db)):
-    """保存用户对生成简历的手工修改。"""
-    record = db.get(ResumeRecord, resume_id)
-    if record is None or trash.is_deleted(record):
-        raise HTTPException(status_code=404, detail="简历记录不存在或已被删除")
+    """保存用户对生成简历的手工修改（**旧形状，一个字节都没变**）。
 
-    record.content = payload.model_dump()
-    # AI 生成阶段的告警不再适用于用户已手工确认过的内容。
-    record.warnings = []
-    record.parse_error = ""
-    # 保存成功 = 这份简历"存在了"：制作台草稿到这一步才进简历中心（0051）。
-    _mark_saved(record)
-    db.commit()
-    db.refresh(record)
-    return _to_resume_out(record)
+    内部等价于 ``expected_revision=None`` 的无条件写：老客户端不知道版本号，强行要求
+    它会直接 422。但它写完**仍然推进一版**，于是新客户端的下一次条件写必然 409——
+    用户因此看见"别处改过"，而不是被静默覆盖（审计 W02 / §4.3）。
+    """
+    record = _get_live_resume(db, resume_id)
+    outcome = save_content(
+        db,
+        record_id=record.id,
+        content=_validated_content(payload),
+        expected_revision=None,
+    )
+    if outcome is None:  # 读到之后被删（竞态）：与一开始就没有这一行同一口径。
+        raise HTTPException(status_code=404, detail="简历记录不存在或已被删除")
+    return _to_resume_out(outcome.record)
+
+
+@router.put("/{resume_id}/content", response_model=ResumeOut)
+def save_resume_content(resume_id: int, payload: ResumeContentSave, db: Session = Depends(get_db)):
+    """**条件写**正文（W02）：只有版本匹配才落库，否则 409 且一个字节都不动。
+
+    ``expected_revision`` 缺省（``None``）时退化成旧行为——无条件写并推进一版，方便
+    脚本与调试；制作台一定会带上它，用户因此不会在"两个窗口同时改"时被静默覆盖。
+    内容与库里完全一致时**不推进**版本：重复点保存不该把另一个窗口打成冲突。
+    """
+    record = _get_live_resume(db, resume_id)
+    try:
+        outcome = save_content(
+            db,
+            record_id=record.id,
+            content=_validated_content(payload.content),
+            expected_revision=payload.expected_revision,
+        )
+    except RevisionConflict as exc:
+        return revision_conflict_response(exc.current_revision)
+    if outcome is None:
+        raise HTTPException(status_code=404, detail="简历记录不存在或已被删除")
+    return _to_resume_out(outcome.record)
 
 
 @router.patch("/{resume_id}", response_model=ResumeOut)

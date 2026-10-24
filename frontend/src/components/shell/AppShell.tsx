@@ -135,7 +135,17 @@ export default function AppShell() {
     }),
     [],
   );
-  const preloadPage = useCallback((path: string) => preloaders[path]?.(), [preloaders]);
+  /**
+   * 预热只影响"快不快"，不影响"能不能"：真导航时 `lazy()` 会自己再取一次（失败缓存已在
+   * `pages/registry.ts` 里清掉），错误由 `AppErrorBoundary` 按"页面代码没能加载完整"报。
+   * 这里必须吞掉——空闲分批预热失败时没人 await，不吞就是一条没人处理的 rejection。
+   */
+  const preloadPage = useCallback(
+    (path: string) => {
+      void preloaders[path]?.().catch(() => {});
+    },
+    [preloaders],
+  );
   const menuItems = useMemo(
     () =>
       visiblePrimaryItems.map((item) => ({
@@ -179,7 +189,8 @@ export default function AppShell() {
       const end = Math.min(index + PRELOAD_BATCH_SIZE, paths.length);
       for (; index < end; index += 1) {
         const preload = preloaders[paths[index]];
-        if (typeof preload === "function") void preload();
+        // 预热失败不得产生未处理的 rejection：这条路径没有任何人 await。
+        if (typeof preload === "function") void preload().catch(() => {});
       }
       if (index < paths.length) {
         idleHandle = requestIdle(runNextBatch);
@@ -251,7 +262,8 @@ export default function AppShell() {
         <TouTouOrb
           isWebform={location.pathname === "/webform"}
           onOpen={() => {
-            void AssistantPage.preload();
+            // 同上：悬浮助手卡自己在 Suspense 里取模块，这里只是提前热一下，失败不该冒泡。
+            void AssistantPage.preload().catch(() => {});
             setFloatingAssistantOpen(true);
           }}
           onOpenClipboard={() => setClipboardOpen(true)}

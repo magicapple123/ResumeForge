@@ -3,8 +3,10 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+from typing import Literal
+
 from fpdf import FPDF
-from fpdf.enums import XPos, YPos
 
 from ..resume.resume_rich_text import has_bold
 from .fonts import FONT_FAMILY
@@ -13,15 +15,40 @@ from .layout import (
     _MUTED_TEXT,
     _PX_TO_MM,
     _PX_TO_PT,
+    PAGE_HEIGHT_MM,
     ResumeLayout,
 )
 from .skill_tags import draw_skill_tags, soft_accent
+from .style_blocks import (
+    _BULLET_MARK as _BULLET_MARK,
+)
+from .style_blocks import (
+    draw_bullets,
+    draw_entry_head,
+    draw_meta_line,
+    draw_section_title,
+)
 
-# 列表项符号（含它后面那个空格）。它由 `bullets()` **单独画一次 `cell`**（不拼进正文的
-# `multi_cell`）：拼进去只有首行能对齐缩进线，续行会跟着整块左移，而且 fpdf2 的 WORD 断行
-# 会把「· 」当成一个词、在正文贴着行宽时留下"一整行只有圆点"的怪行。它的宽度一律用
-# `get_string_width` 现量（随字号与字体变），不写死毫米数。
-_BULLET_MARK = "· "
+# 列表项符号（含它后面那个空格）现在定义在 `style_blocks`（与绘制在一起）；这里 re-export，
+# 既有测试与调用方 `canvas._BULLET_MARK` 的导入路径不变。
+
+
+@dataclass(frozen=True)
+class DrawnSpan:
+    """绘制日志的一段（W08/W11 共用）：语义对象在纸面上的位置。
+
+    只记**语义锚点**（section / entry / point / meta），不记像素 Y 作为持久定位——
+    y_top/y_bottom 只服务"这次渲染里被截断的是哪一段"的报告，不写回 format_config。
+    """
+
+    kind: Literal["section", "entry", "point", "meta"]
+    section: str
+    page: int
+    y_top: float
+    y_bottom: float
+    object_id: str | None = None
+    point_index: int | None = None
+    text: str = ""
 
 
 class _ResumePDF(FPDF):
@@ -37,6 +64,8 @@ class _ResumePDF(FPDF):
         muted_text: tuple[int, int, int] = _MUTED_TEXT,
         accent_soft: tuple[int, int, int] | None = None,
         measuring: bool = False,
+        continuation=None,
+        resume_name: str = "",
     ) -> None:
         super().__init__(orientation="P", unit="mm", format="A4")
         self.accent = accent
@@ -70,9 +99,65 @@ class _ResumePDF(FPDF):
         self.set_margins(layout.margin_left, layout.margin_top, layout.margin_right)
         self.set_title("简历")
         self.alias_nb_pages()
+        # ===== W08：分页绘制日志与续页信息（默认 None/False = 今天逐字节一致）=====
+        self.spans: list[DrawnSpan] = []
+        self.continuation = continuation
+        self.resume_name = resume_name or ""
         # 这一趟**真正画出去**的每一个字。字体预子集化靠它（见 `font_subset`）：
         # 只有从真实渲染里收，才不会漏掉渲染器自己写的标题与分隔符。
         self.drawn_chars: set[str] = set()
+
+    # ===== W08：绘制日志与续页信息 =====
+
+    def record(
+        self,
+        *,
+        kind: str,
+        section: str,
+        y_top: float,
+        object_id: str | None = None,
+        point_index: int | None = None,
+        text: str = "",
+    ) -> None:
+        """登记一段内容在纸面上的位置（测量模式也登记，W11 需要"量"的阶段结论）。"""
+        self.spans.append(
+            DrawnSpan(
+                kind=kind,  # type: ignore[arg-type]
+                section=section,
+                page=int(self.page),
+                y_top=round(float(y_top), 3),
+                y_bottom=round(float(self.get_y()), 3),
+                object_id=object_id,
+                point_index=point_index,
+                text=str(text)[:120],
+            )
+        )
+
+    def header(self) -> None:
+        """续页重复姓名（W08）：画在**上边距内**，不占正文流，不影响页数与高度。"""
+        plan = self.continuation
+        if self.measuring or plan is None or not getattr(plan, "repeat_name", False):
+            return
+        if self.page <= 1 or self.layout.margin_top < 8.0 or not self.resume_name:
+            return
+        self.set_font(FONT_FAMILY, "B", 8)
+        self.set_text_color(*self.muted_text)
+        self.set_xy(self.layout.margin_left, max(2.0, self.layout.margin_top - 5.5))
+        self.cell(self.content_width, 4.5, self.resume_name, align="R")
+        self.set_xy(self.layout.margin_left, self.layout.margin_top)
+
+    def footer(self) -> None:
+        """页码（W08）：画在**下边距内**；{nb} 由 fpdf2 在输出时替换为总页数。"""
+        plan = self.continuation
+        if self.measuring or plan is None or not getattr(plan, "page_numbers", False):
+            return
+        if self.page <= 1 and not getattr(plan, "page_numbers_first", False):
+            return
+        self.set_font(FONT_FAMILY, "", 8)
+        self.set_text_color(*self.muted_text)
+        text = f"第 {self.page} 页 / 共 {{nb}} 页"
+        self.set_xy(self.layout.margin_left, PAGE_HEIGHT_MM - self.layout.margin_bottom + 3.0)
+        self.cell(self.content_width, 4.5, text, align="C")
 
     # ===== 收集画出去的字（供字体预子集化）=====
 
@@ -213,218 +298,35 @@ class _ResumePDF(FPDF):
             return self.muted_text
         return self.body_text
 
-    def section_title(self, text: str, base: float, *, leading_gap: float) -> None:
-        """画一个区块标题——**形状与颜色由模板 `.section-title` 决定**，与预览同口径。
-
-        此前这里对所有模板统一画一条"贯穿正文宽度的横向下划线"，而预览其实各不相同：
-        classic 是**左侧竖条**、modern 是浅底色块、compact/elegant 是细下划线、technical
-        是实心底色块、minimal 什么装饰都没有。统一画下划线正是"PDF 与预览不一致"里最显眼
-        的一处。现在形状由 `section_title_style` 驱动，各模板各画各的。
-
-        ``leading_gap`` 是标题**之前**的留白系数（× 基准字号）：第一个区块之前是页头
-        `.header` 的 margin-bottom，之后是上一区块 `.section` 的 margin-bottom——预览里
-        `.section` 只有 bottom 边距，所以必须把"前一段的间距"显式带进来，否则第一段会比预览紧。
-        """
-        layout = self.layout
-        size = base * layout.section_title_ratio
-        title_height = self.line_advance(size)
-        pad_x = layout.gap_mm(layout.section_title_pad_x)
-        pad_y = layout.gap_mm(layout.section_title_pad_y)
-        gap_after = layout.gap_mm(layout.section_title_gap)
-        style = layout.section_title_style
-        bar_w = 4 * _PX_TO_MM  # classic 的左竖条是固定 4px（与预览 border-left 一致）
-
-        if style in ("soft_box", "accent_box"):
-            block_height = title_height + 2 * pad_y
-        elif style == "underline":
-            block_height = title_height + pad_y
-        else:
-            block_height = title_height
-
-        # 预留量 = 前导间距 + 标题块 + 标题下间距 + **一行正文**。最后这一行对应草稿的
-        # `body .section-title { break-after: avoid }`：标题后面必须至少跟一行正文，否则
-        # 标题会孤零零地落在页尾、它下面的内容全在下一页（PDF 侧此前就是这样）。
-        self.ensure_space(
-            layout.gap_mm(leading_gap) + block_height + gap_after + self.line_advance(base)
-        )
-        self.ln(layout.gap_mm(leading_gap))
-        top = self.get_y()
-
-        self.set_font(FONT_FAMILY, "B", size * _PX_TO_PT)
-        # 量宽与绘制同一个 markdown 口径：否则色块/居中会把 `**` 的宽度也算进去，
-        # 标题色块比文字宽出两个星号。
-        title_markdown = has_bold(text)
-        text_width = self.get_string_width(text, markdown=title_markdown)
-        # 区块标题**跟着列框走**：双栏模板里标题色块/竖条/下划线只覆盖所在那一栏。
-        text_x = self.frame_left + pad_x
-
-        if style == "left_bar":
-            text_x = self.frame_left + bar_w + pad_x
-            self.set_fill_color(*self.accent)
-            self.rect(self.frame_left, top, bar_w, title_height, style="F")
-        elif style == "soft_box":
-            # **铺满整个列框**，不是只包住文字：模板里 `.section-title` 是 block 元素
-            # （`background` + `padding`），浏览器把它画成一条通栏色带。此前按
-            # `text_width` 画，短标题（「个人总结」四个字）只得到一小块色块，
-            # 草稿与精确预览因此"绿色背景分布不一样"（2026-10-24 用户截图）。
-            self.set_fill_color(*self.accent_soft)
-            self.rect(
-                self.frame_left,
-                top,
-                self.frame_width,
-                block_height,
-                style="F",
-                round_corners=True,
-                corner_radius=base * _PX_TO_MM * 0.4,
-            )
-        elif style == "accent_box":
-            # 同 `soft_box`：CSS 里它也是 block 级通栏底色，不能只包住文字。
-            self.set_fill_color(*self.accent)
-            self.rect(self.frame_left, top, self.frame_width, block_height, style="F")
-
-        if layout.section_title_align == "center":
-            text_x = self.frame_left + max(0.0, (self.frame_width - text_width) / 2)
-
-        self.set_text_color(*self._section_title_color())
-        self.set_xy(text_x, top + pad_y)
-        self.cell(
-            0,
-            title_height,
-            text,
-            new_x=XPos.RIGHT,
-            new_y=YPos.TOP,
-            markdown=title_markdown,
+    def section_title(
+        self, text: str, base: float, *, leading_gap: float, style=None, section: str = "", keep_lines: int = 0
+    ) -> None:
+        """区块标题：绘制在 style_blocks（W07 起消费角色/对象覆盖），本方法保留原签名。"""
+        draw_section_title(
+            self, text, base, leading_gap=leading_gap, style=style, section=section, keep_lines=keep_lines
         )
 
-        if style == "underline":
-            line_y = top + title_height + pad_y
-            self.set_draw_color(*self.line_color)
-            self.set_line_width(0.3)
-            self.line(self.frame_left, line_y, self.frame_left + self.frame_width, line_y)
-
-        self.set_y(top + block_height + gap_after)
-        self.set_x(self.frame_left)
-        self.set_text_color(*self.body_text)
-
-    def bullets(self, items: list[str], base: float) -> None:
-        """画一段带圆点的列表项（缩进与项间留白都来自模板 `ul` / `li` 的 CSS）。
-
-        换页口径对齐草稿的 `body li { break-inside: avoid }`：**一条 li 不会被劈到两页**。
-        旧实现只 `ensure_space(line_height * 2)`——预留两行就去画，`multi_cell` 会按行自动
-        换页，于是任何超过两行的 li 都被劈开；而草稿永不劈开，两边"第 N 页显示到哪"因此对
-        不上。现在每条先 `dry_run` 量出整条（含折行）的真实高度，再决定是否换页。
-
-        **缩进对齐草稿的 `ul { padding-left: calc(var(--fs) * N) }`**（`layout.li_indent`，
-        逐模板不同）：列表**正文**从 ``frame_left + N × 字号`` 起、宽度取
-        ``frame_width − N × 字号``（即 CSS 里 `li` 内容盒的宽度），符号「·」**单独画一次**
-        `cell`，落在正文左侧的留白里——等价于 CSS 的 `list-style-position: outside`。
-        符号必须单独画：把它拼进同一个 `multi_cell` 就只有**首行**能对齐（整块得左移一个
-        符号宽，续行会跟着左移，比首行缩回去一个符号宽），而且 fpdf2 的 WORD 断行会把
-        「· 」当成一个"词"，正文贴着行宽时会出现"**一整行只有圆点**"的怪行。
-        量高也只用**纯文本**（宽度与那次 `multi_cell` 完全相同）：符号画在原地的第一行行盒
-        里，不占正文宽度，因此不会让这一条更高——预留值与"整条实际占地"仍然是同一个数。
-        """
-        layout = self.layout
-        line_height = self.line_advance(base)
-        li_gap = layout.gap_mm(layout.li_gap)
-        self.set_font(FONT_FAMILY, "", base * _PX_TO_PT)
-        # 符号宽度必须用**正文的字体与字号**量（`set_font` 已在上一行设好）。
-        marker_width = float(self.get_string_width(_BULLET_MARK))
-        indent_mm = layout.gap_mm(layout.li_indent)
-        text_left = self.frame_left + indent_mm
-        width = self.frame_width - indent_mm
-        # fpdf2 在 `cell` / `multi_cell` 内部左右各留 `c_margin`（默认 1mm）。画符号那次 cell
-        # 把这 1mm 补回来，符号的**字形右沿**才正好落在正文的设计左沿上（与正文那次
-        # multi_cell 同一个内边距口径），否则圆点会挤进正文 1mm。
-        pad = float(self.c_margin)
-        # 整条 li 最多能占的高度。超过它就说明"单条比一页还高"——此时不能强留整条，否则
-        # 每次换页后仍然放不下，会留出整页空白甚至陷进"换页—量高—再换页"的循环。浏览器对
-        # 这类元素也是这个兜底：`break-inside: avoid` 放不下时照常劈开。
-        max_fit = layout.usable_height_per_page - 2 * line_height
-        first = True
-        for item in items:
-            text = str(item).strip()
-            if not text:
-                continue
-            # 先量整条高度：**纯文本**、与下面绘制时同一个宽度（`dry_run` 只算不画）。
-            # markdown 与下面 multi_cell 同参：成对 `**` 不占行宽，量的时候少开一次就会
-            # "量一行、画两行"，页底溢出一行。
-            height = self._dry_run_height(width, line_height, text, markdown=has_bold(text))
-            # 列表项之间的留白 = 模板 `li { margin-bottom }`。gap 必须**并进预留量**里
-            # 一起算：先换页再补 gap，gap 就落到了新页顶端，段落之间凭空多一截空白。
-            gap = 0.0 if first else li_gap
-            if height <= max_fit:
-                self.ensure_space(gap + height)
-            else:
-                # 单条高于一页：不强留整条（那会留整页空白、甚至陷进"换页—量高—再换页"的
-                # 循环），但**符号与首行必须同页**——符号现在是单独画的，不跟着正文流走，
-                # 若页底只剩不到一行，圆点会孤零零留在上一页。预留一行不会死循环。
-                self.ensure_space(gap + line_height)
-            if gap:
-                self.ln(gap)
-            first = False
-            top = self.get_y()
-            # 符号：与正文首行同一个行盒（同 y、同 line_height，因而同一基线），右沿对齐
-            # 正文的设计左沿。颜色沿用正文色（上一段可能刚画过 muted 的副行）。
-            self.set_text_color(*self.body_text)
-            self.set_xy(text_left - marker_width - pad, top)
-            self.cell(
-                marker_width + 2 * pad,
-                line_height,
-                _BULLET_MARK,
-                new_x=XPos.LEFT,
-                new_y=YPos.TOP,
-            )
-            # 正文：**每一行**（首行与折行后的续行）都从 `text_left` 起，与 CSS 的 `li`
-            # 内容盒左沿一致。`multi_cell` 的续行起点就是它的 x，所以这里不需要别的处理。
-            self.set_x(text_left)
-            self.multi_cell(
-                width,
-                line_height,
-                text,
-                align="L",
-                new_x=XPos.LMARGIN,
-                new_y=YPos.NEXT,
-                markdown=has_bold(text),
-            )
-
-    def entry_head(self, left: str, right: str, base: float) -> None:
-        """画条目头（左标题加粗、右时间戳淡化右对齐）。"""
-        title_size = base * self.layout.entry_title_ratio
-        line_height = self.line_advance(title_size)
-        # 条目头 + **至少一行正文**：只留两行标题高时，条目头会和它的正文分处两页，读起来
-        # 是"一条没有内容的条目"。草稿的 `.entry` 不会这样。
-        self.ensure_space(line_height + self.line_advance(base))
-        available = self.frame_width
-        left_width = available * 0.68
-        right_width = available - left_width
-        self.set_font(FONT_FAMILY, "B", title_size * _PX_TO_PT)
-        self.set_x(self.frame_left)
-        self.cell(
-            left_width,
-            line_height,
-            left,
-            new_x=XPos.RIGHT,
-            new_y=YPos.TOP,
-            markdown=has_bold(left),
+    def bullets(
+        self, items: list[str], base: float, *, style=None, section: str = "", object_id=None, split_ok: bool = False
+    ) -> None:
+        """列表项：绘制在 style_blocks（缩进/符号/行高/对齐可被覆盖），分页口径不变。"""
+        draw_bullets(
+            self, items, base, style=style, section=section, object_id=object_id, split_ok=split_ok
         )
-        if right:
-            self.set_font(FONT_FAMILY, "", base * self.layout.entry_meta_ratio * _PX_TO_PT)
-            self.set_text_color(*self.muted_text)
-            self.cell(
-                right_width,
-                line_height,
-                right,
-                align="R",
-                new_x=XPos.LMARGIN,
-                new_y=YPos.NEXT,
-                markdown=has_bold(right),
-            )
-            self.set_text_color(*self.body_text)
-        else:
-            self.ln(line_height)
 
-    def skill_tags(self, labels: list[str], base: float) -> None:
+    def entry_head(
+        self, left: str, right: str, base: float, *, style=None, meta_style=None, section: str = "", object_id=None, keep_lines: int = 0
+    ) -> None:
+        """条目头：绘制在 style_blocks（字号/颜色/粗体/对齐/段前距可被覆盖）。"""
+        draw_entry_head(
+            self, left, right, base, style=style, meta_style=meta_style, section=section, object_id=object_id, keep_lines=keep_lines
+        )
+
+    def meta_line(self, text: str, base: float, *, style=None) -> None:
+        """条目副行：绘制在 style_blocks（字号/颜色可被覆盖）。"""
+        draw_meta_line(self, text, base, style=style)
+
+    def skill_tags(self, labels: list[str], base: float, *, style=None) -> None:
         """把专业技能画成**模板真实的标签形状**，与 HTML 预览一致。
 
         以前这里是用「、」连起来的**一行纯文本**（用户实测反馈："预览里是蓝色小框，导出 PDF
@@ -445,34 +347,5 @@ class _ResumePDF(FPDF):
             line_color=self.line_color,
             body_text=self.body_text,
             muted_text=self.muted_text,
+            style=style,
         )
-
-    def meta_line(self, text: str, base: float) -> None:
-        """条目下的副行（绩点 / 核心课程 / 技术栈）。
-
-        对应模板里的 `.entry .sub`，所以字号比例取 `entry_sub_ratio`——**不是**条目头右侧
-        `.entry-head .meta` 的 `entry_meta_ratio`（两者多数模板相同，technical 却是 0.9 vs 0.86）。
-        上下留白也取 `.entry .sub` 的 `margin`（`sub_gap_top` / `sub_gap_bottom`）——此前 PDF
-        完全没有这两段间距，是"被压扁"的一部分。
-        """
-        if not text.strip():
-            return
-        layout = self.layout
-        size = base * layout.entry_sub_ratio
-        line_height = self.line_advance(size)
-        self.ensure_space(layout.gap_mm(layout.sub_gap_top) + line_height)
-        self.ln(layout.gap_mm(layout.sub_gap_top))
-        self.set_font(FONT_FAMILY, "", size * _PX_TO_PT)
-        self.set_text_color(*self.muted_text)
-        self.set_x(self.frame_left)
-        self.multi_cell(
-            self.frame_width,
-            line_height,
-            text,
-            align="L",
-            new_x=XPos.LMARGIN,
-            new_y=YPos.NEXT,
-            markdown=has_bold(text),
-        )
-        self.ln(layout.gap_mm(layout.sub_gap_bottom))
-        self.set_text_color(*self.body_text)

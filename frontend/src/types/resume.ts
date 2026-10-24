@@ -3,74 +3,18 @@
 import type { ResumeFormatConfig } from "./resumeFormat";
 import type { TemplateMarketPreset } from "./templateMarket";
 
-export interface ResumeEducation {
-  school: string;
-  major: string;
-  degree: string;
-  start_date: string;
-  end_date: string;
-  gpa: string;
-  courses: string[];
-  achievements: string[];
-}
-
-export interface ResumeExperience {
-  company: string;
-  role: string;
-  start_date: string;
-  end_date: string;
-  description: string[];
-}
-
-export interface ResumeCampusExperience {
-  organization: string;
-  role: string;
-  start_date: string;
-  end_date: string;
-  description: string[];
-}
-
-export interface ResumeProject {
-  name: string;
-  role: string;
-  start_date: string;
-  end_date: string;
-  tech_stack: string[];
-  description: string[];
-  highlights: string[];
-}
-
-export interface ResumeSkill {
-  name: string;
-  level: string;
-}
-
-export interface ResumeAward {
-  name: string;
-  date: string;
-  description: string;
-}
-
-export interface ResumeContent {
-  photo: string;
-  name: string;
-  gender: string;
-  birth_year: string;
-  phone: string;
-  email: string;
-  city: string;
-  /** 公开作品链接：生成时从资料带入，可留空。 */
-  personal_website: string;
-  github: string;
-  job_intent: string;
-  summary: string;
-  education: ResumeEducation[];
-  experience: ResumeExperience[];
-  campus_experience: ResumeCampusExperience[];
-  projects: ResumeProject[];
-  skills: ResumeSkill[];
-  awards: ResumeAward[];
-}
+// 内容结构（六类条目 + ResumeContent）单列 resumeContent.ts 守住 500 行预算；
+// 既有从 "../types/resume" 或 "../types" 导入这些类型的路径由下面的 re-export 保持不变。
+export type {
+  ResumeEducation,
+  ResumeExperience,
+  ResumeCampusExperience,
+  ResumeProject,
+  ResumeSkill,
+  ResumeAward,
+  ResumeContent,
+} from "./resumeContent";
+import type { ResumeContent } from "./resumeContent";
 
 export type EnhancementLevel = "light" | "balanced" | "strong";
 
@@ -272,6 +216,17 @@ export interface ResumeBrief {
   created_at: string;
   /** 最近修改时间（R14-b）：列表「最近修改」列与默认排序 `updated_desc` 同源；旧数据可能缺失。 */
   updated_at?: string | null;
+  /**
+   * 保存次数（0052 / W02）：列表页记下它，进制作台保存时当 `expected_revision` 发回。
+   * 后端旧版本不返回该字段，前端按 0 兜底（"不知道版本"只影响乐观更新的起点，不影响旧接口可用）。
+   */
+  revision?: number;
+  /**
+   * 文档模式（W14）：普通简历 default `resume`（1–3 页）；`long_cv` 为独立长 CV 模式（1–10 页，默认 2）。
+   * 与后端 `resume_record.document_mode` 同名（snake_case，和既有 page_limit/format_name 一致）；
+   * 旧后端不返回时按 `resume` 处理。
+   */
+  document_mode?: "resume" | "long_cv";
 }
 
 /** 版本血缘（RF-17）：由哪份简历派生而来；null = 独立版本，不做推断。 */

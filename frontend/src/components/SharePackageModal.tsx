@@ -27,6 +27,10 @@ import {
 } from "../api/sharePackages";
 import { downloadResumeShareZip } from "../api/resumes";
 import type { SharePackageDetail } from "../types";
+import type { ResumeContent } from "../types/resume";
+import { t } from "../i18n";
+import { createReviewAnnotationApi } from "../features/resume-review";
+import ReviewAnnotationsPanel from "./resume/review/ReviewAnnotationsPanel";
 import {
   DEFAULT_REDACTION_OPTIONS,
   REDACTION_FIELDS,
@@ -41,7 +45,15 @@ interface Props {
   recordId: number;
   open: boolean;
   onClose: () => void;
+  /** 批注「定位」：宿主把当前对象路径交给画布/大纲（不传则只展示对象名）。 */
+  onLocateAnnotation?: (path: string) => void;
 }
+
+/**
+ * 批注接口适配器只创建一次（模块级单例）：面板的加载 effect 以 api 为依赖，
+ * 每次渲染新建对象会让它反复重新拉取。
+ */
+const reviewApi = createReviewAnnotationApi();
 
 /** 从文件清单的第一个文件路径反推分享包目录。 */
 function deriveDirectory(detail: SharePackageDetail | null): string {
@@ -50,7 +62,7 @@ function deriveDirectory(detail: SharePackageDetail | null): string {
   return first.replace(/[/\\][^/\\]*$/, "");
 }
 
-export default function SharePackageModal({ recordId, open, onClose }: Props) {
+export default function SharePackageModal({ recordId, open, onClose, onLocateAnnotation }: Props) {
   const { message } = App.useApp();
   const [permission, setPermission] = useState<SharePermission>("read_only");
   const [redactOptions, setRedactOptions] = useState<RedactionOptions>(DEFAULT_REDACTION_OPTIONS);
@@ -366,6 +378,20 @@ export default function SharePackageModal({ recordId, open, onClose }: Props) {
                 </Space>
               </div>
             )}
+
+            {/* W18：可评论分享包额外附带对象锚定的回传批注（评审包 sidecar）。 */}
+            {result.permission === "comment" ? (
+              <div>
+                <Typography.Text strong>{t("review.panel.title")}</Typography.Text>
+                <ReviewAnnotationsPanel
+                  sharePackageId={result.id}
+                  api={reviewApi}
+                  content={result.snapshot as unknown as ResumeContent}
+                  onLocate={onLocateAnnotation}
+                  showTitle={false}
+                />
+              </div>
+            ) : null}
 
             {/* 删除收进「···」菜单：不再以红按钮裸露（全局约定）。 */}
             <RowActions

@@ -115,6 +115,18 @@ def collect_referenced_names(database: Path) -> dict[str, set[str]]:
                 name = _referral_image_name(entry)
                 if name:
                     referenced["referral_images"].add(name)
+        # W19（0059）：交付原件归档 export_archive/。只认登记过的 disk_name，
+        # 与 user_files 同构（DB 列引用 → 清单收集）。
+        try:
+            rows = connection.execute(
+                "SELECT disk_name FROM resume_export_artifact"
+            ).fetchall()
+        except sqlite3.Error:
+            rows = []
+        for row in rows:
+            name = row[0] if row else None
+            if isinstance(name, str) and name:
+                referenced["export_archive"].add(safe_asset_name(name, "export_archive"))
     return referenced
 
 

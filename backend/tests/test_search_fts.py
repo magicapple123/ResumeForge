@@ -31,7 +31,7 @@ from app.services import search_fts, trash
 from sqlalchemy import text
 
 PREVIOUS_REVISION = "0045_delivery_ledger"
-HEAD_REVISION = "0051_resume_draft"
+HEAD_REVISION = "0059_resume_export"
 
 # 对照关键词：中文 ≥3 字（trigram 主场）、ASCII 大小写折叠、2 字（回退 LIKE）、
 # FTS5 操作符（AND/OR/NOT/引号——作为字面量匹配才与 LIKE 等价）、无命中，

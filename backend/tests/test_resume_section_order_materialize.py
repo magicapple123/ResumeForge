@@ -32,6 +32,7 @@ PROFILE_KEYS = [
 ]
 
 # 资料页把「项目经历」拖到最前 → 翻译过来项目第一，其余照资料里的先后。
+# W14：资料页没有科研三栏目 → 补齐时**追加在末尾**（不插进用户已排好的七项中间）。
 PROJECTS_FIRST = [
     "projects",
     "education",
@@ -40,6 +41,9 @@ PROJECTS_FIRST = [
     "campus_experience",
     "awards",
     "summary",
+    "publications",
+    "research_projects",
+    "patents",
 ]
 
 
@@ -65,8 +69,12 @@ def test_manual_resume_materializes_profile_order(client):
     assert record["format_config"]["section_order"] == PROJECTS_FIRST
 
 
-def test_manual_resume_omits_the_key_when_order_equals_default(client):
-    """资料顺序 == 内置默认 → **不写键**（"没调过"与"调成和默认一样"是同一种形态）。"""
+def test_manual_resume_materializes_ten_keys_when_profile_is_old_default(client):
+    """资料页仍是旧七分区默认顺序 → 物化成 10 键（科研三栏目追加在末尾）。
+
+    W14 之前"等于默认就不写键"；现在资料页无法表达科研板块，翻译结果不等于 10 键默认，
+    因此会物化一份显式顺序——旧七项的先后完全不变，科研板块排在最后。
+    """
     _set_profile_order(
         client,
         [
@@ -83,7 +91,18 @@ def test_manual_resume_omits_the_key_when_order_equals_default(client):
 
     record = _create_manual(client)
 
-    assert "section_order" not in record["format_config"]
+    assert record["format_config"]["section_order"] == [
+        "education",
+        "experience",
+        "projects",
+        "skills",
+        "campus_experience",
+        "awards",
+        "summary",
+        "publications",
+        "research_projects",
+        "patents",
+    ]
 
 
 def test_manual_resume_explicit_format_config_wins(client):
@@ -99,6 +118,9 @@ def test_manual_resume_explicit_format_config_wins(client):
         "education",
         "experience",
         "projects",
+        "publications",
+        "research_projects",
+        "patents",
         "skills",
         "campus_experience",
     ]

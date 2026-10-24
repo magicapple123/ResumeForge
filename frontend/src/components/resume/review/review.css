@@ -1,0 +1,143 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/* 「对象批注」面板（W18 / D17）样式。全部挂在 .resume-review* 自定义类名下，
+   颜色只用 --rf-* 语义 token；不覆写 antd 原生类名。 */
+
+.resume-review {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  color: var(--rf-text-body);
+  font-size: 13px;
+}
+
+.resume-review-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.resume-review-title {
+  font-weight: 600;
+}
+
+.resume-review-meta {
+  color: var(--rf-text-secondary);
+  font-size: 12px;
+}
+
+.resume-review-hint {
+  margin: 0;
+  color: var(--rf-text-tertiary);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.resume-review-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.resume-review-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.resume-review-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  border: 1px solid var(--rf-border-subtle);
+  border-radius: var(--rf-radius-control);
+  padding: 8px 10px;
+  background: var(--rf-surface);
+}
+
+.resume-review-row.is-stale {
+  border-color: var(--rf-warning-border);
+  background: var(--rf-warning-bg);
+}
+
+.resume-review-row.is-resolved {
+  background: var(--rf-surface-alt);
+}
+
+.resume-review-row-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.resume-review-status {
+  border: 1px solid var(--rf-border);
+  border-radius: 999px;
+  padding: 0 8px;
+  background: var(--rf-surface-alt);
+  color: var(--rf-text-secondary);
+  font-size: 11px;
+  line-height: 18px;
+}
+
+.resume-review-status.is-open {
+  border-color: var(--rf-info);
+  color: var(--rf-info-strong);
+}
+
+.resume-review-status.is-stale {
+  border-color: var(--rf-warning-border);
+  color: var(--rf-warning-text);
+}
+
+.resume-review-status.is-resolved {
+  border-color: var(--rf-success-text);
+  color: var(--rf-success-text);
+}
+
+.resume-review-status.is-dismissed {
+  border-color: var(--rf-border-strong);
+  color: var(--rf-text-tertiary);
+}
+
+.resume-review-body {
+  margin: 0;
+  overflow-wrap: anywhere;
+  line-height: 20px;
+}
+
+.resume-review-quote {
+  margin: 0;
+  border-left: 2px solid var(--rf-border);
+  padding-left: 8px;
+  color: var(--rf-text-secondary);
+  overflow-wrap: anywhere;
+}
+
+.resume-review-target {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.resume-review-import {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border: 1px dashed var(--rf-border);
+  border-radius: var(--rf-radius-control);
+  padding: 10px;
+  background: var(--rf-surface-alt);
+}
+
+.resume-review-issues {
+  margin: 0;
+  padding-left: 18px;
+}

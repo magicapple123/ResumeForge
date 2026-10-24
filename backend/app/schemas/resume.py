@@ -2,7 +2,7 @@
 """简历 Schema：生成请求、LLM 输出结构、历史记录。"""
 
 from datetime import datetime
-from typing import Annotated, Literal
+from typing import Annotated, ClassVar, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -26,15 +26,24 @@ from .resume_analysis import (  # noqa: F401  (re-export：保持既有导入路
 # ``schemas/resume_generation.py`` 以满足单文件 500 行预算；这里 re-export，
 # 保持 ``from app.schemas.resume import GenerateOptions`` 等既有导入路径不变。
 from .resume_generation import (  # noqa: F401  (re-export：保持既有导入路径)
+    LONG_CV_DEFAULT_PAGE_LIMIT,
+    LONG_CV_MAX_PAGES,
     MAX_CUSTOM_INSTRUCTION_CHARS,
     MAX_FORMAT_CONFIG_KEYS,
     MAX_RESUME_PAGES,
     MIN_CUSTOM_INSTRUCTION_CHARS,
+    MODE_PAGE_LIMITS,
+    RESUME_MODES,
     GenerateOptions,
     GenerateRequest,
     ResumeFontScale,
+    ResumeMode,
     _validate_format_config_shape,
+    mode_page_limit,
 )
+from .resume_identity import OptionalEmptyListMixin, OptionalIdentityMixin
+from .resume_research import ResumePatent, ResumePublication, ResumeResearchProject
+from .resume_visibility import OptionalVisibilityMixin
 
 # 简历语言（A 包）：只影响纸面固定文案（小节标题 / 字段前缀），**不翻译正文**。
 # 与 ``ResumeFontScale`` 同一种收口方式：schema 层用 Literal 限值，DB 层不建 CHECK 约束
@@ -52,8 +61,9 @@ MAX_RESUME_NOTE_CHARS = 2000
 
 
 # ===== 简历内容结构（LLM 输出的 JSON 必须符合此结构） =====
-# 与个人资料的差异：多行文本拆成了数组，更利于模型逐条输出与后续渲染。
-class ResumeEducation(BaseModel):
+# 六类条目都混入 W06 的 hidden / lock_content / lock_layout（可选字段，None 不输出）：
+# 字段声明与"没设置就整键省掉"的序列化规则在 schemas/resume_visibility.py，本文件只改基类。
+class ResumeEducation(OptionalVisibilityMixin, BaseModel):
     school: str = Field(default="", max_length=128)
     major: str = Field(default="", max_length=128)
     degree: str = Field(default="", max_length=32)
@@ -62,25 +72,32 @@ class ResumeEducation(BaseModel):
     gpa: str = Field(default="", max_length=64)
     courses: list[ResumeLine] = Field(default_factory=list, max_length=MAX_RESUME_LIST_ITEMS)
     achievements: list[ResumeLine] = Field(default_factory=list, max_length=MAX_RESUME_LIST_ITEMS)
+    # W01 稳定身份（可选）：旧记录没有就是没有——GET 不生成、不改写库；只有保存时
+    # 客户端带上来的值才原样落库。校验在 ``document_identity.validate_document_ids``。
+    id: str | None = Field(default=None, max_length=32)
+    point_ids: dict[str, list[str]] | None = None
 
-
-class ResumeExperience(BaseModel):
+class ResumeExperience(OptionalVisibilityMixin, BaseModel):
     company: str = Field(default="", max_length=128)
     role: str = Field(default="", max_length=128)
     start_date: str = Field(default="", max_length=32)
     end_date: str = Field(default="", max_length=32)
     description: list[ResumeLine] = Field(default_factory=list, max_length=MAX_RESUME_LIST_ITEMS)
+    id: str | None = Field(default=None, max_length=32)
+    point_ids: dict[str, list[str]] | None = None
 
 
-class ResumeCampusExperience(BaseModel):
+class ResumeCampusExperience(OptionalVisibilityMixin, BaseModel):
     organization: str = Field(default="", max_length=128)
     role: str = Field(default="", max_length=128)
     start_date: str = Field(default="", max_length=32)
     end_date: str = Field(default="", max_length=32)
     description: list[ResumeLine] = Field(default_factory=list, max_length=MAX_RESUME_LIST_ITEMS)
+    id: str | None = Field(default=None, max_length=32)
+    point_ids: dict[str, list[str]] | None = None
 
 
-class ResumeProject(BaseModel):
+class ResumeProject(OptionalVisibilityMixin, BaseModel):
     name: str = Field(default="", max_length=128)
     role: str = Field(default="", max_length=128)
     start_date: str = Field(default="", max_length=32)
@@ -88,20 +105,24 @@ class ResumeProject(BaseModel):
     tech_stack: list[ResumeLine] = Field(default_factory=list, max_length=MAX_RESUME_LIST_ITEMS)
     description: list[ResumeLine] = Field(default_factory=list, max_length=MAX_RESUME_LIST_ITEMS)
     highlights: list[ResumeLine] = Field(default_factory=list, max_length=MAX_RESUME_LIST_ITEMS)
+    id: str | None = Field(default=None, max_length=32)
+    point_ids: dict[str, list[str]] | None = None
 
 
-class ResumeSkill(BaseModel):
+class ResumeSkill(OptionalVisibilityMixin, BaseModel):
     name: str = Field(default="", max_length=128)
     level: str = Field(default="", max_length=64)
+    id: str | None = Field(default=None, max_length=32)
 
 
-class ResumeAward(BaseModel):
+class ResumeAward(OptionalVisibilityMixin, BaseModel):
     name: str = Field(default="", max_length=256)
     date: str = Field(default="", max_length=32)
     description: str = Field(default="", max_length=20_000)
+    id: str | None = Field(default=None, max_length=32)
 
 
-class ResumeContent(BaseModel):
+class ResumeContent(OptionalEmptyListMixin, BaseModel):
     name: str = Field(default="", max_length=128)
     photo: str = ""
     gender: str = Field(default="", max_length=64)
@@ -127,6 +148,11 @@ class ResumeContent(BaseModel):
     projects: list[ResumeProject] = Field(default_factory=list, max_length=MAX_RESUME_SECTION_ITEMS)
     skills: list[ResumeSkill] = Field(default_factory=list, max_length=MAX_RESUME_SECTION_ITEMS)
     awards: list[ResumeAward] = Field(default_factory=list, max_length=MAX_RESUME_SECTION_ITEMS)
+    # W14 科研三栏目：空列表不序列化（旧记录内容指纹逐字节不变，D11；见 OptionalEmptyListMixin）。
+    publications: list[ResumePublication] = Field(default_factory=list, max_length=MAX_RESUME_SECTION_ITEMS)
+    research_projects: list[ResumeResearchProject] = Field(default_factory=list, max_length=MAX_RESUME_SECTION_ITEMS)
+    patents: list[ResumePatent] = Field(default_factory=list, max_length=MAX_RESUME_SECTION_ITEMS)
+    _optional_empty_list_fields: ClassVar[tuple[str, ...]] = ("publications", "research_projects", "patents")
 
     @field_validator("photo")
     @classmethod
@@ -134,7 +160,7 @@ class ResumeContent(BaseModel):
         return validate_photo_data_url(value)
 
 
-class FactAnnotation(BaseModel):
+class FactAnnotation(OptionalIdentityMixin, BaseModel):
     """一条内容的事实来源标注（RF-13）：这段内容是从哪条资料事实来的。
 
     ``origin`` 三类由 grounding 收集（纯映射、不调模型）：
@@ -144,7 +170,13 @@ class FactAnnotation(BaseModel):
     ``ai_rewrite`` / ``user_added`` 只出现在审阅预检的待审变更里。
     """
 
+    _optional_identity_fields: ClassVar[tuple[str, ...]] = ("object_id", "point_id")
+
     path: str = Field(max_length=256)
+    # W01：稳定的对象定位。有 ``object_id`` 时路径按当前下标现算，排序后自动跟着走；
+    # 只有 ``path`` 的旧标注允许错位——这是明确的退化，界面要能看见（不猜测、不迁移）。
+    object_id: str | None = Field(default=None, max_length=32)
+    point_id: str | None = Field(default=None, max_length=32)
     origin: Literal["grounded", "restored", "enhanced_kept", "ai_rewrite", "user_added"]
     # 台账回指：生成时无法可靠回指（无 DB 上下文），预检/编辑链路可填。
     claim_id: int | None = None
@@ -177,6 +209,9 @@ class ResumeReviseRequest(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
     instructions: str = Field(default="", max_length=MAX_CUSTOM_INSTRUCTION_CHARS)
+    # 发起修订时的那一版（W02）：模型跑完回来用它做条件写。期间若别的窗口保存过，
+    # 落库会 409，这次模型结果直接丢弃——不覆盖别人刚写的内容。
+    base_revision: int | None = Field(default=None, ge=0)
 
 
 class ResumeBrief(BaseModel):
@@ -208,6 +243,11 @@ class ResumeBrief(BaseModel):
     # 最近修改时间（R14-b）：与默认排序 ``updated_desc`` 同源，由 ``ResumeRecord.updated_at``
     # （ORM ``onupdate``）经 ``from_attributes`` 读取；迁移 0047 已回填旧行，默认值只兼容缺属性。
     updated_at: datetime | None = None
+    # 保存次数（0052）：列表页要它才能做乐观更新——用户从列表点进制作台时记下的是这一版，
+    # 保存时把它当 ``expected_revision`` 发回去。旧后端没有这个字段，默认 0 不改变任何行为。
+    revision: int = 0
+    # 文档模式（W14/0054）：普通简历 1–3 页 / 长 CV 1–10 页。旧行 server_default 读作 resume。
+    document_mode: ResumeMode = "resume"
 
 
 class ResumeOut(ResumeBrief):
@@ -224,6 +264,24 @@ class ResumeOut(ResumeBrief):
     # 制作台草稿（0051）：还没保存过，所以不进任何列表；必须回传给详情接口，否则制作台
     # 顶部没有「保存」可点，草稿永远进不了简历中心。
     draft: bool = False
+
+
+class ResumeContentSave(BaseModel):
+    """内容保存的**条件写**请求（W02）：正文 + "我是基于哪一版改的"。
+
+    为什么把版本号放进 body 而不是 header：① 正文与版本必须同源同事务——同一次校验里
+    既认"要写什么"也认"基于哪版"，``extra="forbid"`` 保证版本号不会被静默忽略；
+    ② 冲突的业务码已经走响应体（``client.ts`` 的 ``extractError`` 读顶层 ``code``），
+    版本号再走 header 会分裂成两套错误契约；③ 旧端点 ``PUT /{id}`` 的 body 形状
+    一个字节都不改，旧客户端不受影响。
+
+    ``expected_revision=None`` 表示"不做版本比较"（等价旧行为：无条件写并推进一版）。
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    content: ResumeContent
+    expected_revision: int | None = Field(default=None, ge=0)
 
 
 class DeliverySummary(BaseModel):
@@ -352,7 +410,9 @@ class ResumeRenderRequest(BaseModel):
     content: ResumeContent
     template: str = Field(default="classic", max_length=64)
     format_name: str = Field(default="", max_length=64)
-    page_limit: int = Field(default=1, ge=1, le=MAX_RESUME_PAGES)
+    # W14：无记录的即时预览也要知道文档模式，否则长 CV 草稿的 10 页请求会被 422。
+    document_mode: ResumeMode = "resume"
+    page_limit: int = Field(default=1, ge=1)  # 路由按模式夹紧（W14）
     font_scale: ResumeFontScale = "standard"
     # 版式语言：只影响小节标题与字段前缀。None = 这次不涉及（用记录里的值）。
     # **必须收下这个字段**：本 schema 是 extra="forbid"，漏了它前端草稿渲染会直接 422。
@@ -369,7 +429,9 @@ class ResumeLayoutUpdate(BaseModel):
 
     template: str = Field(default="classic", max_length=64)
     format_name: str = Field(default="", max_length=64)
-    page_limit: int = Field(default=1, ge=1, le=MAX_RESUME_PAGES)
+    # W14：页数上限随文档模式变化；真正的夹紧在路由里用 mode_page_limit(value, mode)。
+    document_mode: ResumeMode | None = None
+    page_limit: int = Field(default=1, ge=1)  # 路由按模式夹紧（W14：4→3、11→10）
     font_scale: ResumeFontScale = "standard"
     # 语言：**None = 这次不涉及**，绝不能给 "zh-CN" 默认值——本接口是整体替换，
     # 带默认值就等于"拖动一次字号滑杆"静默把英文简历改回中文，而用户看不出发生了什么。
@@ -377,6 +439,10 @@ class ResumeLayoutUpdate(BaseModel):
     # 按简历的版式覆盖。「自动一页」把试出来的方案写在这里。
     # **None 表示不动它**（与空字典区分开）：空字典是"清掉覆盖"，None 是"这次不涉及"。
     format_config: dict | None = None
+    # 打开制作台时那一版（W02）：带上就条件写，不带就无条件写并推进一版（旧行为）。
+    # 版式与正文共用一个 ``revision``：拖动滑杆也是"改了这份简历"，两个窗口各自存一半
+    # 版式同样会互相覆盖，所以版式保存也要参与版本判定。
+    expected_revision: int | None = Field(default=None, ge=0)
 
 
 # ===== 待审变更预检（RF-13）：编辑器里的 AI 改写/手填，先过三把既有闸门再落表单 =====

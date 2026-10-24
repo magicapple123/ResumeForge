@@ -59,6 +59,8 @@ export interface RichTextOverridesApi {
   clear: () => void;
   /** 丢掉所有"base 已经对不上"的条目。 */
   dropStale: (content: ResumeContent | null) => void;
+  /** 结构重排后把键换成新下标（旧路径 → 新路径）；没动过的条目保持原键。 */
+  remapPaths: (mapping: Map<string, string>) => void;
 }
 
 /** 按点分路径取一个节点。取不到返回 `undefined`（数组下标也是字符串键，天然支持）。 */
@@ -189,6 +191,19 @@ export function useRichTextOverrides(content: ResumeContent | null): RichTextOve
     [overlays],
   );
 
+  const remapPaths = useCallback((mapping: Map<string, string>) => {
+    setOverlays((previous) => {
+      const next: RichTextOverlayMap = {};
+      let changed = false;
+      for (const [path, overlay] of Object.entries(previous)) {
+        const target = mapping.get(path) ?? path;
+        if (target !== path) changed = true;
+        next[target] = overlay;
+      }
+      return changed ? next : previous;
+    });
+  }, []);
+
   return {
     merged,
     dirty: Object.keys(overlays).length > 0,
@@ -197,5 +212,6 @@ export function useRichTextOverrides(content: ResumeContent | null): RichTextOve
     merge,
     clear,
     dropStale,
+    remapPaths,
   };
 }

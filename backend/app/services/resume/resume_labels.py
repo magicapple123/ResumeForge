@@ -46,6 +46,9 @@ SECTION_TITLES: dict[str, dict[str, str]] = {
         "education": "教育经历",
         "experience": "实习/工作经历",
         "projects": "项目经历",
+        "publications": "论文发表",
+        "research_projects": "科研项目",
+        "patents": "专利",
         "skills": "专业技能",
         "campus_experience": "校园经历",
         "awards": "荣誉奖项",
@@ -55,6 +58,9 @@ SECTION_TITLES: dict[str, dict[str, str]] = {
         "education": "Education",
         "experience": "Experience",
         "projects": "Projects",
+        "publications": "Publications",
+        "research_projects": "Research Projects",
+        "patents": "Patents",
         "skills": "Skills",
         "campus_experience": "Campus Activities",
         "awards": "Honors & Awards",
@@ -73,6 +79,11 @@ FIELD_LABELS: dict[str, dict[str, str]] = {
         "courses": "核心课程",
         "tech_stack": "技术栈/工具",
         "photo_alt": "个人照片",
+        # W14 科研栏目的字段前缀（中英两表同批，渲染器只取这份）。
+        "doi": "DOI",
+        "funding": "经费",
+        "filed": "申请",
+        "granted": "授权",
     },
     "en-US": {
         "intent": "Objective",
@@ -82,6 +93,10 @@ FIELD_LABELS: dict[str, dict[str, str]] = {
         "courses": "Core Courses",
         "tech_stack": "Tech Stack",
         "photo_alt": "Profile photo",
+        "doi": "DOI",
+        "funding": "Funding",
+        "filed": "Filed",
+        "granted": "Granted",
     },
 }
 
@@ -167,20 +182,106 @@ def level_parens(language: str | None = None) -> tuple[str, str]:
     return before, after
 
 
+# ===== W14 科研状态词（事实锁字段的唯一文案来源）=====
+# 正名口径（契约 §5.5）：under_review 必须显示为「在投」，禁止显示成「已发表」。
+PUBLICATION_STATUS_LABELS: dict[str, dict[str, str]] = {
+    "zh-CN": {
+        "published": "已发表",
+        "accepted": "已接收",
+        "in_press": "出版中",
+        "under_review": "在投",
+        "preprint": "预印本",
+        "other": "其他",
+    },
+    "en-US": {
+        "published": "Published",
+        "accepted": "Accepted",
+        "in_press": "In Press",
+        "under_review": "Under Review",
+        "preprint": "Preprint",
+        "other": "Other",
+    },
+}
+PATENT_STATUS_LABELS: dict[str, dict[str, str]] = {
+    "zh-CN": {"filed": "已申请", "pending": "审查中", "granted": "已授权", "expired": "已失效", "other": "其他"},
+    "en-US": {"filed": "Filed", "pending": "Pending", "granted": "Granted", "expired": "Expired", "other": "Other"},
+}
+
+
+def publication_status_text(status: str, language: str | None = None) -> str:
+    """论文状态的中文/英文正名；未知值回落到「其他」（绝不猜成已发表）。"""
+    return PUBLICATION_STATUS_LABELS[normalize_language(language)].get(status, "其他")
+
+
+def patent_status_text(status: str, language: str | None = None) -> str:
+    """专利状态的正名；未知值回落「其他」。"""
+    return PATENT_STATUS_LABELS[normalize_language(language)].get(status, "其他")
+
+
+def _join_detail(parts) -> str:
+    """把非空细节拼成" · " 分隔的一行（空项不产生多余分隔符）。"""
+    return " · ".join(str(part).strip() for part in parts if str(part or "").strip())
+
+
+def date_range(start_date: str, end_date: str) -> str:
+    """日期区间：只有一端时不留孤零零的连字符。"""
+    parts = [str(item).strip() for item in (start_date, end_date) if str(item or "").strip()]
+    return " - ".join(parts)
+
+
+def publication_detail(publication, language: str | None = None) -> str:
+    """论文细节行：卷期 / DOI / 链接 / 备注（中英前缀取自 ``FIELD_LABELS``）。"""
+    fields = field_labels(language)
+    doi = f"{fields['doi']}：{publication.doi}" if publication.doi else ""
+    return _join_detail([publication.volume_pages, doi, publication.url, publication.note])
+
+
+def patent_detail(patent, language: str | None = None) -> str:
+    """专利细节行：申请/授权日期与链接（中英前缀取自 ``FIELD_LABELS``）。"""
+    fields = field_labels(language)
+    filed = f"{fields['filed']} {patent.filed_date}" if patent.filed_date else ""
+    granted = f"{fields['granted']} {patent.granted_date}" if patent.granted_date else ""
+    return _join_detail([filed, granted, patent.url])
+
+
+def authors_text(authors, language: str | None = None) -> str:
+    """作者行：顺序即署名顺序；本人用 ``**加粗**`` 标记（结构化 is_self，不写进 name）。"""
+    parts: list[str] = []
+    for author in authors or []:
+        name = str(getattr(author, "name", "") or "").strip()
+        if not name:
+            continue
+        if getattr(author, "is_self", False):
+            name = f"**{name}**"
+        if getattr(author, "corresponding", False):
+            name += "*"
+        parts.append(name)
+    separator = LIST_SEPARATOR[normalize_language(language)]
+    return separator.join(parts)
+
+
 __all__ = [
     "DEFAULT_RESUME_LANGUAGE",
     "FIELD_LABELS",
     "GENDER_PAREN",
     "LEVEL_PAREN",
     "LIST_SEPARATOR",
+    "PATENT_STATUS_LABELS",
+    "PUBLICATION_STATUS_LABELS",
     "RESUME_LANGUAGES",
     "SECTION_TITLES",
+    "authors_text",
+    "date_range",
+    "patent_detail",
+    "publication_detail",
     "field_labels",
     "gender_text",
     "level_parens",
     "level_text",
     "list_separator",
     "normalize_language",
+    "patent_status_text",
+    "publication_status_text",
     "section_title",
     "section_titles",
 ]

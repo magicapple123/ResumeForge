@@ -16,17 +16,25 @@ from pathlib import Path
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 from jinja2.sandbox import SandboxedEnvironment
 
-from ..schemas.resume import MAX_RESUME_PAGES, ResumeContent
+from ..schemas.resume import ResumeContent
+from ..schemas.resume_generation import mode_page_limit
 from .resume.resume_labels import (
     DEFAULT_RESUME_LANGUAGE,
+    authors_text,
+    date_range,
     field_labels,
     gender_text,
     level_parens,
     level_text,
     list_separator,
     normalize_language,
+    patent_detail,
+    patent_status_text,
+    publication_detail,
+    publication_status_text,
     section_titles,
 )
+from .resume.resume_render_overrides import render_overrides_css, resolve_render_overrides
 from .resume.resume_rich_text import apply_rich_html, strip_markers
 from .resume.resume_sections import DEFAULT_SECTION_ORDER, resolved_section_order
 from .resume.resume_template_format import FONT_KEY
@@ -39,6 +47,7 @@ from .resume.resume_templates import (
     template_spec,
     validated_format_config,
 )
+from .resume.resume_visibility import visible_resume
 from .resume_font_embed import embed_css as embed_font_css
 
 TEMPLATES_DIR = Path(__file__).resolve().parent.parent / "templates"
@@ -75,7 +84,11 @@ def build_filename(resume: ResumeContent, suffix: str) -> str:
 
 def export_json(resume: ResumeContent) -> str:
     # 照片是内嵌 data URL，放进 JSON 会产生无意义的大字段；其他资料保持完整。
-    return json.dumps(resume.model_dump(exclude={"photo"}), ensure_ascii=False, indent=2)
+    # 「交付 JSON」是投递产物：隐藏条目按 W06 契约排除（内部快照/备份保留，见
+    # resume_visibility）。无隐藏条目时 visible_resume 原样返回，历史字节不变。
+    return json.dumps(
+        visible_resume(resume).model_dump(exclude={"photo"}), ensure_ascii=False, indent=2
+    )
 
 
 def _join_bullets(items: Iterable[str]) -> str:
@@ -99,6 +112,9 @@ def export_markdown(
     **不换标点风格**：英文产物里仍是 `Objective：…` 这种全角冒号，这是附录 A 已明确接受
     的已知瑕疵（本批不做标点本地化）。
     """
+    # 投递视角（W06）：隐藏条目在正文里一处都不出现。过滤在排版前做一次，
+    # 后面的 writers 只认过滤后的 resume（md 与 txt 共用本函数）。
+    resume = visible_resume(resume)
     lines: list[str] = []
     titles = section_titles(language)
     fields = field_labels(language)
@@ -189,6 +205,74 @@ def export_markdown(
             )
             lines.append("")
 
+    def write_publications() -> None:
+        if resume.publications:
+            lines.append(f"## {titles['publications']}\n")
+            for publication in resume.publications:
+                lines.append(f"### {publication.title}\n")
+                authors = authors_text(publication.authors, language)
+                if authors:
+                    lines.append(f"- {authors}")
+                meta = " · ".join(
+                    item
+                    for item in (
+                        publication.venue,
+                        publication.year,
+                        publication_status_text(publication.status, language),
+                        publication.volume_pages,
+                    )
+                    if item
+                )
+                if meta:
+                    lines.append(f"- {meta}")
+                if publication.doi:
+                    lines.append(f"- {fields['doi']}：{publication.doi}")
+                if publication.url:
+                    lines.append(f"- {publication.url}")
+                if publication.note:
+                    lines.append(f"- {publication.note}")
+                lines.append("")
+
+    def write_research_projects() -> None:
+        if resume.research_projects:
+            lines.append(f"## {titles['research_projects']}\n")
+            for project in resume.research_projects:
+                head = " · ".join(
+                    item for item in (project.name, project.role, project.organization) if item
+                )
+                span = date_range(project.start_date, project.end_date)
+                lines.append(f"### {head}" + (f"（{span}）" if span else "") + "\n")
+                if project.funding:
+                    lines.append(f"- {fields['funding']}：{project.funding}")
+                lines.append(_join_bullets(project.description))
+                lines.append(_join_bullets(project.outcomes))
+                lines.append("")
+
+    def write_patents() -> None:
+        if resume.patents:
+            lines.append(f"## {titles['patents']}\n")
+            for patent in resume.patents:
+                lines.append(f"### {patent.title}\n")
+                inventors = authors_text(patent.inventors, language)
+                if inventors:
+                    lines.append(f"- {inventors}")
+                meta = " · ".join(
+                    item
+                    for item in (
+                        patent.patent_number,
+                        patent.country,
+                        patent_status_text(patent.status, language),
+                        f"{fields['filed']} {patent.filed_date}" if patent.filed_date else "",
+                        f"{fields['granted']} {patent.granted_date}" if patent.granted_date else "",
+                    )
+                    if item
+                )
+                if meta:
+                    lines.append(f"- {meta}")
+                if patent.url:
+                    lines.append(f"- {patent.url}")
+                lines.append("")
+
     def write_awards() -> None:
         if resume.awards:
             lines.append(f"## {titles['awards']}\n")
@@ -207,6 +291,9 @@ def export_markdown(
         "experience": write_experience,
         "campus_experience": write_campus_experience,
         "projects": write_projects,
+        "publications": write_publications,
+        "research_projects": write_research_projects,
+        "patents": write_patents,
         "skills": write_skills,
         "awards": write_awards,
     }
@@ -219,8 +306,9 @@ def export_markdown(
     return "\n".join(lines).strip() + "\n"
 
 
-def normalize_page_limit(value: int) -> int:
-    return max(1, min(int(value or 1), MAX_RESUME_PAGES))
+def normalize_page_limit(value: int, mode: str = "resume") -> int:
+    """按文档模式夹紧页数（W14）：普通简历 1–3、长 CV 1–10；只有一份实现。"""
+    return mode_page_limit(value, mode)
 
 
 def _inject_before(html: str, block: str, marker: str) -> str:
@@ -272,9 +360,23 @@ def render_html(
     渲染成空串，也就是"整份简历没有分区标题"这种静默故障。自制模板通过
     ``{% include "_resume_sections.j2" %}`` 同样能取到它们。
     """
+    # 纸面视角（W06）：隐藏条目从所有 HTML 产物消失——下载的 HTML、分享包、草稿预览、
+    # 精确预览的 HTML 全是本函数渲染的，过滤放在这个唯一收口里，四条链路不可能各说各话。
+    # 内部快照/备份不经过这里（它们读 record.content），因此保留隐藏正文。
+    resume = visible_resume(resume)
     # A per-document nonce authorizes only the fixed A4 fitting script.
     csp_nonce = secrets.token_hex(16)
     spec = template_spec(template)
+    # W07/W08/W15：四个扩展域的唯一消费入口（角色/对象覆盖、分页、照片裁剪）。
+    # 默认全空 → 不产生任何 CSS、不换照片，产物与改动前逐字节一致。
+    render_overrides = resolve_render_overrides(
+        template=spec["name"], format_config=format_config, photo=resume.photo
+    )
+    if render_overrides.photo_crop is not None:
+        # 非破坏裁剪：只替换**本次渲染**的照片，content 与库里的原图一个字节都不动。
+        resume = resume.model_copy(
+            update={"photo": render_overrides.photo_for_render(resume.photo)}
+        )
     scale = font_scale_spec(font_scale)
     style_values = validated_style_config(style_config)
     if spec["name"] == "split" and "column_count" not in style_values:
@@ -308,6 +410,13 @@ def render_html(
         # 等级括号要拆成左右两半：模板得在括号中间放带 `data-resume-path` 的 `<span>`，
         # 前端靠它做「点纸面字段定位编辑」，所以这里不能直接用 `level_text` 的成品字符串。
         "level_parens": level_parens(language),
+        # W14 科研三栏目：状态正名与作者行由模板调用同一份函数（不硬编码中文）。
+        "publication_status_text": lambda status: publication_status_text(status, language),
+        "patent_status_text": lambda status: patent_status_text(status, language),
+        "authors_text": lambda authors: authors_text(authors, language),
+        "publication_detail": lambda publication: publication_detail(publication, language),
+        "patent_detail": lambda patent: patent_detail(patent, language),
+        "date_range": date_range,
     }
 
     if template_html:
@@ -324,6 +433,7 @@ def render_html(
         style_css(style_values),
         format_css(style_values),
         format_css(format_values),
+        render_overrides_css(render_overrides),
     ]
     css = "\n".join(block for block in css_blocks if block)
     if css:

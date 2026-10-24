@@ -38,6 +38,10 @@ DEFAULT_SECTION_ORDER: tuple[str, ...] = (
     "education",
     "experience",
     "projects",
+    # W14 科研三栏目插在项目之后、技能之前（空板块所有渲染器都不产生节点，旧产物不变）。
+    "publications",
+    "research_projects",
+    "patents",
     "skills",
     "campus_experience",
     "awards",

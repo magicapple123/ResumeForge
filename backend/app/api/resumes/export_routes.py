@@ -28,7 +28,7 @@ from ...schemas.export import (
 from ...schemas.export import (
     RedactionOptions as RedactionOptionsSchema,
 )
-from ...schemas.resume import ResumeContent
+from ...schemas.resume import ResumeContent, mode_page_limit
 from ...services.export_pipeline import (
     ExportRequest,
     RenderContext,
@@ -57,6 +57,7 @@ from ...services.resume.resume_template_store import (
     resolve_style_config,
     resolve_style_template,
 )
+from ...services.resume.resume_visibility import visible_resume
 from ...services.settings_service import get_export_save_location
 from ...services.watermark import WatermarkError
 from .. import settings as settings_api
@@ -93,6 +94,7 @@ def _export_record(
     template_override: str | None = None,
     format_name_override: str | None = None,
     cache_result: bool = False,
+    content_override: dict | None = None,
 ) -> Response:
     """导出闸门 + 管线委托 + 响应头，是 GET / POST 两条导出路径的共用出口。
 
@@ -113,19 +115,32 @@ def _export_record(
     **0ms**（见 ``services.pdf_preview_cache``）。只允许与 ``save_copy=False`` 同用——
     否则落盘副本会被缓存跳过。
 
+    ``content_override``（W04）：制作台里还没保存的正文。只在**精确预览**上使用，
+    管线拿到的是这份内容而不是记录里那一版，且缓存键本来就含内容指纹（见下方
+    ``canonical_content_sha256``），所以草稿改动不会命中旧产物。
+
     存档口径（PR-09 可信交付账本）：存档 content 与下载产物**同源**（脱敏导出存
     脱敏后内容）；``render_context`` / ``request_params`` 记录**实际生效**的请求
     参数（覆盖值按生效规则折算，不是记录默认值）；``source_content_sha256`` 与
     ``artifact_sha256`` 分开回答"存的是哪份内容"与"产出的文件是哪份"。
     """
-    resume = ResumeContent.model_validate(record.content)
+    resume = ResumeContent.model_validate(
+        content_override if content_override is not None else record.content
+    )
     # 导出闸门：正文里还留着【待补】之类的标记时拦下来。带占位符的简历投出去，
     # 用户往往直到面试被问起才发现——这道检查的价值全在"导出那一刻"。
     if not allow_incomplete:
-        incomplete = find_incomplete(resume)
+        # 导出闸门只看**纸面上会出现的内容**（W06）：隐藏条目里的【待补】不会被打出来，
+        # 拦下导出等于让用户为一个他明确隐藏掉的占位符白等一次。完整正文仍在库里。
+        incomplete = find_incomplete(visible_resume(resume))
         if incomplete:
             raise HTTPException(status_code=409, detail=incomplete_detail(incomplete))
-    # 模板解析一次，json/md 用不到也不多花一次查询；html/pdf/docx 复用同一份解析结果。
+    # W14：页数上限按文档模式夹紧（普通 1–3 / 长 CV 1–10）；请求给了就用请求值。
+    document_mode = getattr(record, "document_mode", "resume") or "resume"
+    page_limit = mode_page_limit(
+        request.page_limit if request.page_limit is not None else record.page_limit, document_mode
+    )
+    # 模板解析一次，json/md 用不到也不多查一次查询；html/pdf/docx 复用同一份解析结果。
     effective_style = template_override or record.template
     export_template, export_html = resolve_style_template(db, effective_style)
     if format_name_override is None:
@@ -142,7 +157,7 @@ def _export_record(
         template=export_template,
         template_html=export_html,
         style_config=resolve_style_config(db, effective_style),
-        page_limit=record.page_limit,
+        page_limit=page_limit,
         font_scale=record.font_scale,
         format_config=base_format_config,
         # 纸面固定文案的语言。旧记录该列为空时按 zh-CN 读（与历史输出逐字一致）。
@@ -353,6 +368,10 @@ def export_resume_with_options(
         # 会被缓存跳过），所以这里用同一个布尔量表达，不给它们各自传参的机会。
         save_copy=not payload.preview,
         cache_result=payload.preview,
+        # W19：草稿下载与精确预览同快照（W04 缺口）——内容覆盖交给同一出口。
+        content_override=(
+            payload.content.model_dump() if payload.content is not None else None
+        ),
     )
 
 
@@ -401,6 +420,8 @@ def preview_resume_pdf(
         format_name_override=payload.format_name,
         # 同一组参数（切口径 / 开大图 / 拖回原值）第二次进来直接给上一次的字节。
         cache_result=True,
+        # 中栏还没保存的正文（W04）：预览与"点保存后导出的那份"因此是同一份内容。
+        content_override=payload.content.model_dump() if payload.content is not None else None,
     )
 
 

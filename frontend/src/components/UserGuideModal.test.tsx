@@ -119,7 +119,8 @@ describe("UserGuideModal", () => {
     goToStep("制作简历");
 
     // 版式这块最容易被误以为是"猜的"，所以要说明它有明确的判断依据与顺序。
-    expect(screen.getByText(/版面诊断/)).toBeInTheDocument();
+    // 「版面诊断」在自动一页与按条件优化两步里都会出现，只要求至少一处解释。
+    expect(screen.getAllByText(/版面诊断/).length).toBeGreaterThan(0);
     expect(screen.getByText(/占了多少|占了页面/)).toBeInTheDocument();
     expect(screen.getByText(/够放下就停/)).toBeInTheDocument();
     expect(screen.getByText(/11px/)).toBeInTheDocument();

@@ -44,11 +44,13 @@ from sqlalchemy.orm import Session
 from ..models.apply import ApplyTaskItem
 from ..models.assistant import ChatConversation
 from ..models.claim import ClaimRecord
+from ..models.glossary import ResumeGlossaryTerm
 from ..models.interview_experience import InterviewExperience
 from ..models.interview_review_record import InterviewReviewRecord
 from ..models.job import Job
 from ..models.knowledge_entry import KnowledgeEntry
 from ..models.material import CandidateJob, Material
+from ..models.phrase import ResumePhrase
 from ..models.profile import utcnow
 from ..models.question_bank_record import QuestionBankRecord
 from ..models.referral import Referral
@@ -124,6 +126,10 @@ TRASH_SPECS: tuple[TrashSpec, ...] = (
     # （批次 ``ApplyTask`` 本身不删——删了列表会缺组、统计会跳变）。
     TrashSpec("apply_record", "投递记录", ApplyTaskItem, "job_title", "company"),
     TrashSpec("web_form_record", "网申填充记录", WebFormFillRecord, "page_title", "url"),
+    # 0056（W17）：私有表达资产。标题取正文首段，副标题是类型。
+    TrashSpec("phrase", "表达资产", ResumePhrase, "text", "kind"),
+    # 0058（W16）：数据集级术语表。标题取原文词，副标题是目标语言。
+    TrashSpec("glossary_term", "术语表", ResumeGlossaryTerm, "source_term", "language_to"),
 )
 
 TRASH_SPEC_BY_KEY: dict[str, TrashSpec] = {spec.key: spec for spec in TRASH_SPECS}

@@ -210,3 +210,56 @@ def test_an_empty_charset_is_not_remembered(text):
     """空字符集不该进缓存：那会让下一趟裁出一个空字体，什么都画不出来。"""
     font_subset.remember_charset("sig-empty", text)
     assert font_subset.charset_for("sig-empty") is None
+
+@needs_font
+def test_a_classic_first_render_does_not_lose_the_scholar_bullet(caplog):
+    """跨模板复用字符集时，模板专属装饰字符不能少（2026-10-24 真实缺陷）。
+
+    同一进程里先渲 classic、再渲 scholar（用户切模板的真实路径）：子集缓存的键是**内容
+    签名**、不含模板，classic 那趟没画过 scholar 三列技能的项目符号「•」，第二趟用子集
+    字体时整列圆点静默变空白（fpdf2 只打一行 missing glyph 警告）。
+    """
+    import logging
+
+    from app.schemas.resume import ResumeContent
+    from app.services.pdf_exporter.fit import _content_signature
+
+    resume = ResumeContent(
+        name="张三",
+        skills=[{"name": "Python", "level": "熟练"}, {"name": "Go", "level": "熟练"}],
+    )
+    with caplog.at_level(logging.WARNING):
+        _render(resume, template="classic")
+        charset = font_subset.charset_for(_content_signature(resume)[0])
+        assert charset is not None
+        assert "•" in charset, "模板专属项目符号「•」必须无条件进字符集，否则换模板后整列消失"
+        scholar = _render(resume, template="scholar")
+
+    assert "•" in _text(scholar.content)
+    assert "missing the following glyphs" not in caplog.text
+
+
+def test_every_paper_decorative_character_is_registered_for_the_subset():
+    """审计：模板 CSS / 渲染器常量里出现的**每个**装饰字符都必须在字符集里。
+
+    只补「•」能修这一次，但下一套模板换个符号（例如 ✦ / ▪ / ◦）会重演同一类缺陷——
+    所以这里拿"模板 ``content:"…"`` 的字符全集 + 渲染器的项目符号常量"反向核对字符集，
+    新增模板或换符号时立刻变红。
+    """
+    import re
+
+    from app.services.pdf_exporter.canvas import _BULLET_MARK
+    from app.services.pdf_exporter.fit import _DECORATIVE_CHARS
+    from app.services.pdf_exporter.skill_tags import _TAG_BULLET, _TAG_SEPARATOR
+    from app.services.pdf_exporter.style_blocks import _BULLET_CHARS
+    from app.services.resume.resume_templates import RESUME_TEMPLATES, TEMPLATES_DIR
+
+    required = set(_BULLET_MARK) | set(_TAG_BULLET) | set(_TAG_SEPARATOR)
+    for marker in _BULLET_CHARS.values():
+        required.update(marker)
+    for spec in RESUME_TEMPLATES.values():
+        css = (TEMPLATES_DIR / spec["file"]).read_text(encoding="utf-8")
+        for marker in re.findall(r'content:\s*"([^"]*)"', css):
+            required.update(marker)
+    missing = required - _DECORATIVE_CHARS
+    assert not missing, f"这些纸面装饰字符没进字体子集字符集：{sorted(missing)}"

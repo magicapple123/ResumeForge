@@ -18,9 +18,10 @@ dev 模式前端由 Vite 独立进程提供（5173 端口 + /api 代理）；发
 import json
 import logging
 import mimetypes
+from collections.abc import Awaitable, Callable
 from pathlib import Path
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -155,6 +156,30 @@ def _check_version_pairing(dist_dir: Path, app_version: str) -> None:
         )
 
 
+def _root_file_handler(file_path: Path, dist_root: Path) -> Callable[[], Awaitable[FileResponse]]:
+    """闭包工厂：把根文件路径固定在闭包里，返回**无参数**的处理函数。
+
+    处理函数签名里不能出现任何形参：FastAPI 会把带默认值的形参解释成同名查询参数，
+    于是 ``GET /resumeforge-icon.png?path=…`` 就能替换掉本该固定的路径，变成任意
+    文件读取（审计 F1/A01）。用工厂而不是在循环里直接定义闭包，是为了避开晚绑定
+    ——每个处理函数捕获的是自己的 ``file_path``，而不是循环结束时最后那个文件。
+    """
+
+    async def serve() -> FileResponse:
+        # 请求时再校验一遍：注册之后文件可能被删除、被替换成指向外部的符号链接。
+        # `FileResponse` 对不存在的文件会在发送阶段抛 RuntimeError（变成 500）,
+        # 所以这里先判，缺文件/越界一律 404。
+        try:
+            current = file_path.resolve()
+        except OSError:
+            raise HTTPException(status_code=404, detail="Not Found") from None
+        if not current.is_file() or current.parent != dist_root:
+            raise HTTPException(status_code=404, detail="Not Found")
+        return FileResponse(current, headers={"Cache-Control": "no-cache"})
+
+    return serve
+
+
 def _mount_dist_root_files(app: FastAPI, dist_dir: Path) -> None:
     """把 dist 根目录的散文件（favicon 等 Vite ``public/`` 资产）注册为 GET 路由。
 
@@ -163,18 +188,29 @@ def _mount_dist_root_files(app: FastAPI, dist_dir: Path) -> None:
     SPA 回退页面或 404，标签页图标永远是默认地球。逐文件注册而不挂整个根
     目录，是为了不引入 FULL-match 的 catch-all 路由、保住 405 语义（QA R1）。
     缓存用 ``no-cache``：文件名无内容哈希，靠 ETag 协商重验。
+
+    注册前做根目录约束（审计 F1/A01）：路径 ``resolve()`` 后必须仍是 dist 根下的
+    普通文件，否则跳过注册。这条约束与处理函数里的请求期校验互为补充——前者挡住
+    "一开始就指向外部"的链接，后者挡住"注册后才被换掉"的情况。
     """
+    dist_root = dist_dir.resolve()
     for item in sorted(dist_dir.iterdir()):
         if not item.is_file() or item.name == "index.html":
             continue
-        file_path: Path = item
-
-        async def serve_root_file(path: Path = file_path) -> FileResponse:
-            return FileResponse(path, headers={"Cache-Control": "no-cache"})
+        try:
+            resolved = item.resolve()
+        except OSError:
+            logger.debug("根文件路径无法解析，跳过注册：%s", item)
+            continue
+        if resolved.parent != dist_root or not resolved.is_file():
+            # 越界（如符号链接指向 dist 外）：不注册，也不要中断启动——一个坏链接
+            # 不该让整个应用起不来。
+            logger.debug("根文件越出静态根目录，跳过注册：%s", item)
+            continue
 
         app.add_api_route(
             f"/{item.name}",
-            serve_root_file,
+            _root_file_handler(resolved, dist_root),
             methods=["GET"],
             include_in_schema=False,
             name=f"spa_root_file_{item.stem}",

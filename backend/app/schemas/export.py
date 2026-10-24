@@ -14,7 +14,12 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from .resume import MAX_RESUME_PAGES, ResumeFontScale, ResumeLanguage
+from .resume import (
+    LONG_CV_MAX_PAGES,
+    ResumeContent,
+    ResumeFontScale,
+    ResumeLanguage,
+)
 
 ExportFormat = Literal["json", "md", "html", "pdf", "docx", "txt"]
 
@@ -52,7 +57,8 @@ class ExportRequest(BaseModel):
     margin_mm: float | None = Field(default=None, ge=4, le=40)
     # 字号 / 页数覆盖：None 表示沿用记录里存的值。
     font_scale: ResumeFontScale | None = None
-    page_limit: int | None = Field(default=None, ge=1, le=MAX_RESUME_PAGES)
+    # W14：页数上限由文档模式决定（普通 1–3 / 长 CV 1–10）；路由用 mode_page_limit 夹紧。
+    page_limit: int | None = Field(default=None, ge=1, le=LONG_CV_MAX_PAGES)
     # 这次导出用的版式覆盖（字号系数 / 行距 / 页边距 / 区块间距 / 强调色等）。
     # **缺省 = 沿用记录里存的版式**（旧前端兼容）；给值时按
     # ``validated_format_config`` 白名单化后**叠加**在记录值之上。这是"预览里把字号拖到
@@ -66,6 +72,9 @@ class ExportRequest(BaseModel):
     language: ResumeLanguage | None = None
     include_photo: bool = True
     allow_incomplete: bool = False
+    # W19：下载与预览同快照——请求可带当前草稿 content（未保存正文）。给定则不读库内
+    # 正文、不落库、不冻结交付；响应头 X-Content-Sha256 与预览是同一口径。
+    content: ResumeContent | None = None
     # 正式投递存档（RF-17）：为真时这次导出冻结一份投递快照；默认不落库（预览零膨胀）。
     record_delivery: bool = False
     # **预览请求**（2026-10-24）：简历中心每次点开一份简历都要取一次渲染产物（`format=html`），
@@ -98,13 +107,20 @@ class PreviewPdfRequest(BaseModel):
     # 精确预览不跟着变"）。``None`` 表示"这次不覆盖，用记录值"（旧客户端兼容）。
     template: str | None = Field(default=None, max_length=64)
     format_name: str | None = Field(default=None, max_length=64)
-    page_limit: int | None = Field(default=None, ge=1, le=MAX_RESUME_PAGES)
+    # W14：同上，长 CV 允许到 10 页；普通模式由记录 document_mode 夹紧。
+    page_limit: int | None = Field(default=None, ge=1, le=LONG_CV_MAX_PAGES)
     font_scale: ResumeFontScale | None = None
     # 纸面固定文案的语言（小节标题 / 字段前缀）。``None`` = 用记录里的语言。
     # 与上面几个字段同理：**必须收下**，否则草稿里选了英文、精确预览还是中文。
     language: ResumeLanguage | None = None
     format_config: dict | None = None
     include_photo: bool = True
+    # **未保存正文**（W04 / P0-03）：制作台里改了几句话还没点保存，精确预览也要按新内容排。
+    #
+    # 边界：只用于预览——不落库、不冻结交付、不触发 AI。整份内容走 schema 校验（与保存
+    # 同一条 `ResumeContent`），所以长度/图片/字段上限全部继承，不会变成"预览管道
+    # 可以塞任意 JSON"的后门。`None` = 用记录里已保存的那一版（旧客户端逐字不变）。
+    content: ResumeContent | None = None
 
 
 __all__ = ["ExportFormat", "ExportRequest", "PreviewPdfRequest", "RedactionOptions"]

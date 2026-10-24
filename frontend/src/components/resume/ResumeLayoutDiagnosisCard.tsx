@@ -13,10 +13,34 @@ import type { ResumeFormatConfig } from "../../types/resumeFormat";
 import { App, Alert, Button, Space, Spin, Tag, Typography } from "antd";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { analyzeResumeLayout, updateResumeLayout } from "../../api/resumes";
+import { ApiError } from "../../api/client";
+import { ot } from "../../features/resume-optimizer/i18n";
+import type { OptimizerCandidateView } from "../../features/resume-optimizer/types";
+import LayoutOptimizerPanel from "./optimizer/LayoutOptimizerPanel";
 import type { ResumeLayout, ResumeLayoutAnalysis, ResumeLayoutStatus } from "../../types";
 import { t } from "../../i18n";
 import type { ResumePreviewHandle } from "../ResumePreview";
 import type { LayoutMeasure } from "../../utils/resumeLayoutMeasure";
+
+/** 优化器要的"当前四项值"：由 layout.format_config 解析；缺省用经典模板基准（"未设过"）。 */
+const OPTIMIZER_FALLBACK_CURRENT = {
+  page_padding: 14,
+  section_gap: 1.3,
+  line_height: 1.7,
+  font_scale_adjust: 1,
+} as const;
+
+function optimizerCurrentOf(layout: ResumeLayout) {
+  const config = (layout.format_config ?? {}) as Record<string, unknown>;
+  const numberOr = (key: keyof typeof OPTIMIZER_FALLBACK_CURRENT) =>
+    typeof config[key] === "number" ? (config[key] as number) : OPTIMIZER_FALLBACK_CURRENT[key];
+  return {
+    page_padding: numberOr("page_padding"),
+    section_gap: numberOr("section_gap"),
+    line_height: numberOr("line_height"),
+    font_scale_adjust: numberOr("font_scale_adjust"),
+  };
+}
 
 const STATUS_COLORS: Record<ResumeLayoutStatus, string> = {
   overflow: "red",
@@ -83,6 +107,9 @@ export default function ResumeLayoutDiagnosisCard({
    * 用户看到的就是"点了没变"。所以这里记下基准，对不上就**先重新诊断**再试。
    */
   const [analysisKey, setAnalysisKey] = useState<string | null>(null);
+  // W09 优化器：应用候选 = 一次显式写回（与「自动一页」同一条 PATCH 路径）。
+  const [optimizerApplying, setOptimizerApplying] = useState(false);
+  const [optimizerConflict, setOptimizerConflict] = useState<string | null>(null);
   const [analyzing, setAnalyzing] = useState(false);
   const [fitting, setFitting] = useState<{ index: number; total: number; label: string } | null>(
     null,
@@ -240,6 +267,40 @@ export default function ResumeLayoutDiagnosisCard({
     );
   }, [analysis, analysisKey, layout, layoutKey, measure, message, onApplied, previewRef, resumeId]);
 
+  /**
+   * W09：把候选方案里的数值合并进用户已有版式覆盖后写回（整体替换，模板/版式/页数/字号原样回传）。
+   * 409（版本冲突）不自动重试：把业务码交给面板显示"先刷新再试"。
+   */
+  const applyOptimizer = useCallback(
+    async (candidate: OptimizerCandidateView) => {
+      setOptimizerApplying(true);
+      setOptimizerConflict(null);
+      try {
+        const saved = await updateResumeLayout(resumeId, {
+          template: layout.template,
+          format_name: layout.format_name,
+          page_limit: layout.page_limit,
+          font_scale: layout.font_scale,
+          language: layout.language,
+          format_config: { ...layout.format_config, ...candidate.config },
+        });
+        onApplied(saved.format_config ?? {});
+        message.success(ot("optimizer.applied"));
+      } catch (error) {
+        if (error instanceof ApiError && error.businessCode === "resume_revision_conflict") {
+          setOptimizerConflict(error.businessCode);
+        } else {
+          message.error(
+            error instanceof Error ? error.message : t("workbench.autofit.save-failed"),
+          );
+        }
+      } finally {
+        setOptimizerApplying(false);
+      }
+    },
+    [layout, message, onApplied, resumeId],
+  );
+
   const diagnosis = analysis?.diagnosis;
   const fitRoom = analysis?.fit_room;
 
@@ -315,6 +376,18 @@ export default function ResumeLayoutDiagnosisCard({
           ))}
         </ol>
       )}
+
+      {/* W09：按条件优化版面的候选方案（挂在诊断结论下方；应用=写回滑杆）。 */}
+      <LayoutOptimizerPanel
+        analysis={analysisKey === layoutKey ? analysis : null}
+        current={optimizerCurrentOf(layout)}
+        probe={(css) => previewRef.current?.measureWithProbe(css) ?? null}
+        before={measure}
+        disabled={disabled}
+        applying={optimizerApplying}
+        conflictCode={optimizerConflict}
+        onApply={applyOptimizer}
+      />
 
       {fitRoom && diagnosis?.status === "overflow" && (
         <Alert

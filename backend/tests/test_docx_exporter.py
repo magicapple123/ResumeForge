@@ -288,13 +288,27 @@ def test_entry_head_uses_a_right_aligned_tab_stop():
 
 
 def test_bullets_hang_so_wrapped_lines_align_with_the_text():
+    """悬挂缩进必须等于模板 li_indent 换算出的毫米（W07 修掉了写死 3.0mm）。
+
+    W07 之前 Word 固定 3.0mm、PDF/HTML 读模板值（classic 1.43 × 字号 ≈ 5.3mm），三种格式的
+    列表缩进不一致；现在 Word 也从 layout.li_indent 派生——**这是有意的可见变化**。
+    """
+    from app.services.pdf_exporter import resolve_layout
+    from app.services.resume.resume_templates import FONT_SCALES
+
+    layout = resolve_layout(
+        template="classic", base_px=float(FONT_SCALES["standard"]["base_px"]), format_config=None
+    )
+    expected_mm = layout.gap_mm(layout.li_indent)
+    assert expected_mm != 3.0, "classic 的模板缩进不是 3.0mm，这条断言才有效"
+
     document = Document(BytesIO(build_resume_docx(_resume(), page_limit=1).content))
     bullets = [p for p in document.paragraphs if p.text.startswith("• ")]
     assert bullets, "列表项没有用项目符号"
     for paragraph in bullets:
-        # twip 取整：3mm = 170.08 twip → Word 存 170，允许 1 twip 误差。
-        assert abs(paragraph.paragraph_format.first_line_indent.twips - Mm(-3).twips) <= 1
-        assert abs(paragraph.paragraph_format.left_indent.twips - Mm(3).twips) <= 1
+        # twip 取整：毫米换算成 twip 后允许 1 twip 误差。
+        assert abs(paragraph.paragraph_format.first_line_indent.twips + Mm(expected_mm).twips) <= 1
+        assert abs(paragraph.paragraph_format.left_indent.twips - Mm(expected_mm).twips) <= 1
 
 
 # ── 照片必须是「浮于文字上方」（2026-10-24 用户实测的解法）──────────────────

@@ -1,0 +1,314 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/* 「文档大纲」面板（W06 / P1-01、D01）的样式。
+ *
+ * 全部规则挂在自定义类名 `.resume-outline*` 下，不覆写 antd 原生语义；颜色只用
+ * `--rf-*` 语义 token（深色主题由 dark-tokens.css 提供同义值），因此这里没有任何
+ * 硬编码色值。唯一一处 `.ant-btn` 覆写带自定义类前缀（排序手柄的紧凑尺寸），符合
+ * antdOverrideGuard 的"自定义前缀"规则。 */
+
+.resume-outline {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 0;
+  height: 100%;
+  color: var(--rf-text-body);
+  font-size: 13px;
+}
+
+.resume-outline-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 2px;
+}
+
+.resume-outline-head-title {
+  font-weight: 600;
+}
+
+.resume-outline-head-count {
+  color: var(--rf-text-secondary);
+  font-size: 12px;
+}
+
+.resume-outline-hint {
+  margin: 0;
+  color: var(--rf-text-tertiary);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.resume-outline-readonly {
+  border-radius: var(--rf-radius-control);
+  padding: 6px 8px;
+  background: var(--rf-surface-alt);
+  color: var(--rf-text-secondary);
+  font-size: 12px;
+}
+
+/* ===== 批量多选栏（只在有选中项时出现）===== */
+.resume-outline-batch {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--rf-border);
+  border-radius: var(--rf-radius-control);
+  padding: 6px 8px;
+  background: var(--rf-brand-tint);
+}
+
+.resume-outline-batch-count {
+  font-size: 12px;
+  color: var(--rf-text-body);
+}
+
+/* ===== 树 ===== */
+.resume-outline-tree {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  border-radius: var(--rf-radius-control);
+  padding: 2px;
+  scrollbar-color: var(--rf-border) transparent;
+  scrollbar-width: thin;
+}
+
+.resume-outline-treeitem {
+  border-radius: 6px;
+}
+
+.resume-outline-treeitem:focus-visible {
+  outline: 2px solid var(--rf-focus-visible);
+  outline-offset: -2px;
+}
+
+.resume-outline-treeitem[aria-selected="true"] > .resume-outline-row,
+.resume-outline-treeitem[aria-selected="true"] > .resume-outline-section {
+  background: var(--rf-brand-tint);
+}
+
+.resume-outline-treeitem[aria-selected="true"]
+  > .resume-outline-section
+  .resume-outline-section-title {
+  font-weight: 600;
+}
+
+/* ===== 分组头 ===== */
+.resume-outline-section {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 28px;
+  border-radius: 6px;
+  padding: 4px 6px;
+  cursor: default;
+}
+
+.resume-outline-section:hover {
+  background: var(--rf-surface-alt);
+}
+
+.resume-outline-section-title {
+  font-weight: 600;
+}
+
+.resume-outline-section-count {
+  color: var(--rf-text-secondary);
+  font-size: 12px;
+}
+
+/* ===== 行（条目 / 要点）===== */
+.resume-outline-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  min-height: 28px;
+  border-radius: 6px;
+  padding: 4px 6px;
+  cursor: default;
+}
+
+.resume-outline-row:hover {
+  background: var(--rf-surface-alt);
+}
+
+.resume-outline-row.is-point {
+  min-height: 24px;
+  padding-left: 26px;
+}
+
+.resume-outline-row.is-hidden .resume-outline-title,
+.resume-outline-row.is-hidden .resume-outline-subtitle,
+.resume-outline-row.is-hidden .resume-outline-point-text {
+  color: var(--rf-text-tertiary);
+}
+
+.resume-outline-row.is-hidden .resume-outline-title {
+  text-decoration: line-through;
+}
+
+/* 键盘排序会话：正在移动的那一行；拖拽：落点行。两种反馈必须可区分。 */
+.resume-outline-row.is-moving {
+  background: var(--rf-brand-tint);
+  box-shadow: inset 0 0 0 1px var(--rf-brand);
+}
+
+.resume-outline-row.is-drop-target {
+  box-shadow: inset 0 0 0 1px var(--rf-focus-visible);
+}
+
+.resume-outline-main {
+  display: flex;
+  flex: 1 1 auto;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+  min-width: 0;
+}
+
+.resume-outline-title {
+  overflow: hidden;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.resume-outline-subtitle {
+  color: var(--rf-text-secondary);
+  font-size: 12px;
+}
+
+.resume-outline-point-count {
+  flex: 0 0 auto;
+  color: var(--rf-text-secondary);
+  font-size: 12px;
+}
+
+.resume-outline-point-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  line-height: 18px;
+}
+
+.resume-outline-point-text.is-empty {
+  color: var(--rf-text-tertiary);
+}
+
+/* ===== 展开箭头与排序手柄 ===== */
+.resume-outline-caret {
+  display: inline-flex;
+  flex: 0 0 14px;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 18px;
+  color: var(--rf-text-secondary);
+  font-size: 10px;
+  line-height: 18px;
+  cursor: pointer;
+  transition: transform var(--rf-motion-duration) ease;
+}
+
+.resume-outline-caret.is-empty {
+  cursor: default;
+}
+
+.resume-outline-caret.is-expanded {
+  transform: rotate(90deg);
+}
+
+/* 排序手柄：自定义类前缀 + .ant-btn 覆写（只为紧凑尺寸；颜色/背景交给 antd text 按钮）。 */
+.resume-outline-handle.ant-btn {
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  margin-top: 1px;
+  padding: 0;
+  color: var(--rf-text-secondary);
+  cursor: grab;
+}
+
+.resume-outline-handle.ant-btn:active {
+  cursor: grabbing;
+}
+
+/* ===== 徽标 ===== */
+.resume-outline-badge {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--rf-border);
+  border-radius: 999px;
+  padding: 0 6px;
+  background: var(--rf-surface-alt);
+  color: var(--rf-text-secondary);
+  font-size: 11px;
+  line-height: 16px;
+  white-space: nowrap;
+}
+
+.resume-outline-badge.is-hidden {
+  border-color: var(--rf-border-strong);
+  color: var(--rf-text-tertiary);
+}
+
+/* ===== 最小属性区 ===== */
+.resume-outline-inspector {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  gap: 6px;
+  border-top: 1px solid var(--rf-border-subtle);
+  padding-top: 10px;
+}
+
+.resume-outline-inspector-head {
+  color: var(--rf-text-secondary);
+  font-size: 12px;
+}
+
+.resume-outline-inspector-kind {
+  color: var(--rf-text-secondary);
+  font-size: 12px;
+}
+
+.resume-outline-inspector-title {
+  font-weight: 600;
+}
+
+.resume-outline-inspector-text {
+  margin: 0;
+  overflow-wrap: anywhere;
+  line-height: 18px;
+}
+
+.resume-outline-inspector-badges {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.resume-outline-inspector-group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.resume-outline-inspector-label {
+  flex: 0 0 100%;
+  color: var(--rf-text-secondary);
+  font-size: 12px;
+}
+
+.resume-outline-inspector-lock {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--rf-text-body);
+  font-size: 12px;
+}

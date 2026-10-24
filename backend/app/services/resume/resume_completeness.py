@@ -73,6 +73,22 @@ def find_incomplete(resume: ResumeContent) -> list[str]:
     for item in resume.awards:
         add(f"荣誉奖项「{item.name or '未填奖项'}」", item.description)
 
+    # ===== W14 科研三栏目（新增字段不加就静默不查，合同 §5.6）=====
+    for publication in resume.publications:
+        label = f"论文「{publication.title or '未填题目'}」"
+        add(f"{label} 题目", publication.title)
+        add(f"{label} 期刊/会议", publication.venue)
+        add(f"{label} 年份", publication.year)
+    for research in resume.research_projects:
+        label = f"科研项目「{research.name or '未填名称'}」"
+        add(f"{label} 名称", research.name)
+        add(f"{label} 起始时间", research.start_date)
+        add_lines(f"{label} 描述", research.description)
+    for patent in resume.patents:
+        label = f"专利「{patent.title or '未填名称'}」"
+        add(f"{label} 名称", patent.title)
+        add(f"{label} 专利号", patent.patent_number)
+
     return found
 
 

@@ -57,6 +57,8 @@ ARCHIVE_DATASETS_DIRNAME = "datasets"
 # 资产（不进数据库），此前备份包一直不带它们——换机器恢复后内推图片全丢。manifest
 # 格式不动（缺这些条目的旧包照常导入），导入侧只遍历实际存在的成员。
 ARCHIVE_REFERRAL_IMAGES_PREFIX = "referral_images/"
+# W19（0059）：交付原件归档，与 user_files/referral_images 同构的资产成员前缀。
+ARCHIVE_EXPORT_ARCHIVE_PREFIX = "export_archive/"
 
 # 备份包里用户上传文件的前缀：``user_files/<文件名>``。user_files 是"我的文件"
 # 页签的数据源（资料箱附件、照片、岗位备注图、备选截图、助手附件的落盘副本），

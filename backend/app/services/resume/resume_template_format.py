@@ -3,8 +3,7 @@
 
 from __future__ import annotations
 
-import re
-
+from .resume_config_domains import DOMAIN_KEYS, HEX_COLOR_RE, domain_version, is_supported
 from .resume_layout_overrides import (
     EXTRA_FORMAT_KEYS,
     PAGE_MARGIN_KEYS,
@@ -22,7 +21,10 @@ from .resume_layout_overrides import (
     resolve_photo_scale,
     scale_css_vars,
 )
+from .resume_pagination import validate_pagination_domain
+from .resume_photo_crop import validate_photo_crop_domain
 from .resume_sections import normalized_section_order
+from .resume_style_schema import validate_objects_domain, validate_roles_domain
 
 # ===== 每份简历选字体（项 14）=====
 #
@@ -92,7 +94,8 @@ FORMAT_FIELDS: tuple[dict, ...] = (
 )
 
 FORMAT_FIELD_KEYS = tuple(field["key"] for field in FORMAT_FIELDS)
-_HEX_COLOR_RE = re.compile(r"^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$")
+# 颜色正则的唯一来源：resume_config_domains（角色/对象/照片裁剪域共用同一口径）。
+_HEX_COLOR_RE = HEX_COLOR_RE
 
 # `page_padding`、四条支路、`photo_scale` 与三个"乘在模板基准上"的系数（`name_scale` /
 # `section_title_scale` / `entry_gap`）**不走** `css_rule` 通用循环：
@@ -100,6 +103,16 @@ _HEX_COLOR_RE = re.compile(r"^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$")
 # 照片与三个系数走 `:root` 的自定义变量（模板侧写 `* var(--x, 1)` 兜底）。
 # 它们由 `page_padding_rule` / `photo_scale_css_value` / `scale_css_vars` 在循环之后显式产出。
 _CSS_MANUAL_KEYS: frozenset[str] = frozenset({PAGE_PADDING_KEY, *EXTRA_FORMAT_KEYS})
+
+# ===== Wave2 扩展域的分派表（契约第 1 册 §1.2，全仓库唯一扩展点）=====
+# 严格白名单：只有这四个键会被当成"域"；每个域的自有校验在各自模块里，这里只负责
+# 把"合法且非空"的域写回 format_config。None = 空域/不可用域 → 键不落库（契约 R3）。
+_DOMAIN_VALIDATORS: dict[str, object] = {
+    "roles": validate_roles_domain,
+    "objects": validate_objects_domain,
+    "pagination": validate_pagination_domain,
+    "photo_crop": validate_photo_crop_domain,
+}
 
 
 def _format_field(key: str) -> dict | None:
@@ -158,6 +171,14 @@ def validated_format_config(raw: dict | None) -> dict:
             font_name = _validated_font_name(value)
             if font_name is not None:
                 result[FONT_KEY] = font_name
+            continue
+        if str(key) in _DOMAIN_VALIDATORS:
+            # R2：本端不认识的版本整域丢弃（不 422、不按旧语义误读）。
+            if not is_supported(str(key), domain_version(value)):
+                continue
+            domain = _DOMAIN_VALIDATORS[str(key)](value)  # type: ignore[operator]
+            if domain is not None:
+                result[str(key)] = domain
             continue
         if str(key) in EXTRA_FORMAT_KEYS:
             try:
@@ -266,6 +287,7 @@ def page_padding_bounds() -> tuple[float, float]:
 
 
 __all__ = [
+    "DOMAIN_KEYS",
     "EXTRA_FORMAT_KEYS",
     "FONT_KEY",
     "FORMAT_FIELDS",

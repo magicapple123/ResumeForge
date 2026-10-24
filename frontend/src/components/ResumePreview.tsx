@@ -8,8 +8,6 @@ import {
   A4_HEIGHT_PX,
   A4_WIDTH_PX,
   LIVE_PROBE_STYLE_ID,
-  MAX_ZOOM,
-  MAX_FIT_SCALE_DEFAULT,
   MIN_PREVIEW_HEIGHT,
   PREVIEW_BOTTOM_RESERVE,
   PREVIEW_HEIGHT_RATIO,
@@ -19,6 +17,9 @@ import {
   type PreviewMode,
   type ResumePreviewHandle,
 } from "./resume-preview/config";
+import { useProviewConfig } from "../features/resume-proview/ProviewContext";
+import { useMaxFitScale, usePreviewZoom } from "../features/resume-proview/usePreviewZoom";
+import ProviewLayer from "./resume/proview/ProviewLayer";
 import ExactPreviewPanel from "./resume-preview/ExactPreviewPanel";
 import type { ExactPreviewOptions } from "./resume-preview/exactPreviewOptions";
 import ResumePreviewCanvas from "./resume-preview/ResumePreviewCanvas";
@@ -103,19 +104,6 @@ interface Props {
  * 2026-11 补回**只挂 `click`** 的那一半（`resume-preview/useClickToEditPreview`）：不接管
  * 指针事件，拖动平移与 Ctrl+滚轮缩放照旧；命中区是后端模板已有的 `data-resume-path`。
  */
-/**
- * 读 `--rf-a4-max-fit`：大屏（≥1920）允许把纸放大到 1.35，其余档位保持"永不放大"。
- *
- * 放在模块级是为了给 `useState` 当惰性初始化——首帧就要有正确的上限，否则大屏会先画
- * 一张小纸、下一帧再跳大。jsdom 读不到自定义属性（返回空串）时兜底 1。
- */
-function readMaxFitScale(): number {
-  if (typeof document === "undefined") return MAX_FIT_SCALE_DEFAULT;
-  const raw = window.getComputedStyle(document.documentElement).getPropertyValue("--rf-a4-max-fit");
-  const value = Number.parseFloat(raw);
-  return Number.isFinite(value) && value > 0 ? value : MAX_FIT_SCALE_DEFAULT;
-}
-
 const ResumePreview = forwardRef<ResumePreviewHandle, Props>(function ResumePreview(
   {
     html,
@@ -149,17 +137,14 @@ const ResumePreview = forwardRef<ResumePreviewHandle, Props>(function ResumePrev
     width: 0,
     height: height ?? paperHeight,
   });
-  const [zoom, setZoom] = useState(1);
-  // 大屏放大上限读 CSS 变量 `--rf-a4-max-fit`（A 档 1.35）。
-  // 用惰性初始化而不是 effect：首帧就要有正确的上限，否则大屏会先画一张小纸再跳大。
-  // jsdom 里读不到变量（返回空串）→ 兜底 1，与既有断言完全一致。
-  const [maxFitScale, setMaxFitScale] = useState(readMaxFitScale);
-  useEffect(() => {
-    // 跨 1920 断点（外接屏 / 改窗口）后上限要跟着变；读的是同一个 CSS 变量，没有第二份数值。
-    const sync = () => setMaxFitScale(readMaxFitScale());
-    window.addEventListener("resize", sync);
-    return () => window.removeEventListener("resize", sync);
-  }, []);
+  // 缩放系数 + Ctrl 滚轮 + 大屏上限：W15 拆到 `usePreviewZoom`（行为逐字保留），
+  // 这样专业视图的缩放档位有一个独立测试面，不必整棵预览一起挂。
+  const { zoom, setZoom, adjustZoom, resetZoom, zoomByWheel } = usePreviewZoom();
+  const maxFitScale = useMaxFitScale();
+  /** iframe 每次加载/重排后自增：专业视图的覆盖层与页位置据此重新同步。 */
+  const [frameEpoch, setFrameEpoch] = useState(0);
+  // 专业视图能力由画布宿主注入；主预览（列表页）没有 Provider → 整块不渲染。
+  const proviewConfig = useProviewConfig();
   const [isPanning, setIsPanning] = useState(false);
   const [measure, setMeasure] = useState<LayoutMeasure | null>(null);
   const [overflow, setOverflow] = useState(false);
@@ -234,18 +219,18 @@ const ResumePreview = forwardRef<ResumePreviewHandle, Props>(function ResumePrev
     [onLayoutStatus, onMeasure, pageCount, paperHeight],
   );
 
-  const handleWheel = useCallback((event: globalThis.WheelEvent) => {
-    // 普通滚轮交给弹窗/页面的纵向滚动；只有 Ctrl/Cmd + 滚轮才缩放预览，避免用户
-    // 把鼠标放在简历上时误触发缩放，也避免 iframe 的独立文档吞掉外层滚动。
-    if (event.ctrlKey || event.metaKey) {
-      if (event.deltaY === 0) return;
-      event.preventDefault();
-      const direction = event.deltaY > 0 ? -1 : 1;
-      setZoom((current) => Math.min(MAX_ZOOM, Math.max(0.5, current + direction * 0.1)));
-      return;
-    }
-    if (forwardWheelToParent(containerRef.current, event)) event.preventDefault();
-  }, []);
+  const handleWheel = useCallback(
+    (event: globalThis.WheelEvent) => {
+      // 普通滚轮交给弹窗/页面的纵向滚动；只有 Ctrl/Cmd + 滚轮才缩放预览（夹取逻辑在
+      // usePreviewZoom，与拆分前逐字一致），避免鼠标停在简历上时误触发缩放。
+      if (zoomByWheel(event)) {
+        event.preventDefault();
+        return;
+      }
+      if (forwardWheelToParent(containerRef.current, event)) event.preventDefault();
+    },
+    [zoomByWheel],
+  );
 
   const { bindFrame } = useFrameInteractions({
     containerRef,
@@ -325,13 +310,16 @@ const ResumePreview = forwardRef<ResumePreviewHandle, Props>(function ResumePrev
       observer?.disconnect();
       window.removeEventListener("resize", updateAvailableSpace);
     };
-  }, [html, pageCount, updateAvailableSpace]);
+    // setZoom 来自 usePreviewZoom（稳定 useCallback）：换 html 时把用户缩放复位，
+    // 与拆分前的 useState setter 语义一致。
+  }, [html, pageCount, setZoom, updateAvailableSpace]);
 
   const handleFrameLoad = useCallback(
     (event: SyntheticEvent<HTMLIFrameElement>, index: number) => {
       const frame = event.currentTarget;
       bindFrame(frame);
       applyLayoutToFrame(frame, index);
+      setFrameEpoch((current) => current + 1);
       // 点击定位：每个 page 的文档都要挂一次（多页时 index 各自独立，重复调用由它自己判重）。
       bindClickToEdit(frame.contentDocument);
       // 立刻量一次"结构已就位"，下一帧再量一次"字体把行高撑开之后"。
@@ -358,10 +346,6 @@ const ResumePreview = forwardRef<ResumePreviewHandle, Props>(function ResumePrev
   // 纵向空间归外层弹窗/页面管理：多页竖排后整块会比一屏高，靠外层滚动看下一页，
   // 不再制造第二条内部纵向滚动条。
   const viewportHeight = Math.max(geometry.viewportHeightForPage, geometry.scaledHeight);
-
-  const adjustZoom = (delta: number) => {
-    setZoom((current) => Math.min(MAX_ZOOM, Math.max(0.5, current + delta)));
-  };
 
   /*
    * 精确模式下草稿画布**不卸载**，只是被裁成 0 高。
@@ -411,6 +395,22 @@ const ResumePreview = forwardRef<ResumePreviewHandle, Props>(function ResumePrev
         onClickToEditChange={setChecked}
         clickToEditAvailable={available}
       />
+      {/* 专业视图工具条（W15）：只在制作台（有 ProviewProvider）且草稿口径下出现；
+          主预览与精确模式一行 DOM 都不多。 */}
+      {proviewConfig && draftMode ? (
+        <ProviewLayer
+          viewportRef={containerRef}
+          pageCount={pageCount}
+          pageWidth={A4_WIDTH_PX}
+          pageHeight={A4_HEIGHT_PX}
+          zoom={zoom}
+          scale={geometry.scale}
+          fitScale={geometry.fitScale}
+          viewportWidth={geometry.viewportWidth}
+          onZoomChange={setZoom}
+          frameEpoch={frameEpoch}
+        />
+      ) : null}
       {/*
        * 精确面板**常驻**：草稿模式下只是把它藏起来（`hidden`），不卸载。
        *
@@ -431,6 +431,8 @@ const ResumePreview = forwardRef<ResumePreviewHandle, Props>(function ResumePrev
             language={exactPreview!.language}
             formatConfig={exactPreview!.formatConfig}
             contentSignature={exactPreview!.contentSignature}
+            // 制作台里还没保存的正文（W04）：没有这一项，精确预览就停在上一版内容。
+            content={exactPreview!.content}
             headingSerif={exactPreview!.headingSerif}
             height={Math.max(MIN_PREVIEW_HEIGHT, viewportHeight)}
             // 精确模式的缩放与草稿共用同一个 `zoom`：两边都从 100% 起，
@@ -478,7 +480,7 @@ const ResumePreview = forwardRef<ResumePreviewHandle, Props>(function ResumePrev
         clampedToMin={canExactPreview && activeMode === "exact" ? false : geometry.clampedToMin}
         onZoomOut={() => adjustZoom(-0.1)}
         onZoomIn={() => adjustZoom(0.1)}
-        onReset={() => setZoom(1)}
+        onReset={resetZoom}
       />
       {boldMenu ? <BoldContextMenu {...boldMenu} /> : null}
     </div>

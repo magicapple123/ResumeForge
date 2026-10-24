@@ -22,6 +22,7 @@ from typing import NamedTuple
 
 from ..schemas.ats import AtsIssue
 from ..schemas.resume import ResumeContent
+from .ats_research import research_section_texts
 from .resume.resume_rich_text import strip_markers
 
 _ATS_KEYWORDS_PATH = Path(__file__).resolve().parent.parent / "data" / "ats_keywords.json"
@@ -194,13 +195,16 @@ _PHRASE_NOISE_PREFIXES = (
 )
 _PHRASE_NOISE_CHARS = "的和与及在对为并或等有之其这那"
 
-# 三个分区（同时也是 ``keyword_hits[*].sections`` 的取值集合）。
+# 十个分区（同时也是 ``keyword_hits[*].sections`` 的取值集合；W14 加科研三栏目）。
 _SECTION_ORDER = (
     "summary",
     "education",
     "experience",
     "campus_experience",
     "projects",
+    "publications",
+    "research_projects",
+    "patents",
     "skills",
     "awards",
 )
@@ -245,7 +249,7 @@ def _join_parts(*parts: str) -> str:
 
 
 def _section_texts(resume: ResumeContent) -> dict[str, str]:
-    """七个分区的可检索文本（保持字段原貌，匹配时再转小写）。
+    """十个分区的可检索文本（保持字段原貌，匹配时再转小写）。
 
     分区的划分与简历模板一致：``sections`` 字段就是按这份清单报出来的，前端据此
     告诉用户"这个词出现在技能区"而不是笼统说"出现在简历里"。
@@ -289,6 +293,7 @@ def _section_texts(resume: ResumeContent) -> dict[str, str]:
                 for item in resume.projects
             ]
         ),
+        **research_section_texts(resume),
         "skills": _join_parts(*[_join_parts(item.name, item.level) for item in resume.skills]),
         "awards": _join_parts(
             *[_join_parts(item.name, item.description) for item in resume.awards]

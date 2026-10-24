@@ -15,7 +15,8 @@ import { ArrowDownOutlined, ArrowUpOutlined, PictureOutlined } from "@ant-design
 import { Button, Popover, Segmented, Select, Space, Tooltip, Typography } from "antd";
 import { useMemo, useState } from "react";
 import { RESUME_PAGE_LIMITS } from "../../types";
-import type { ResumeLayout, ResumeTemplateCatalog } from "../../types";
+import type { ResumeContent, ResumeLayout, ResumeTemplateCatalog } from "../../types";
+import type { ResumeFormatConfig } from "../../types/resumeFormat";
 import { useI18n } from "../../i18n/i18nContext";
 import { layoutWithFormatPreset } from "./layoutWithFormatPreset";
 import {
@@ -44,6 +45,15 @@ interface Props {
    * 跟着变，而"老简历不追溯改变"是这条功能的前提。
    */
   preferProfileOrder?: boolean;
+  /**
+   * W10 模板图库的试用能力（都可选；不传 = 试用只能看示例，行为与之前逐字相同）：
+   * - `resumeId`：启用「我的内容 + 真实页数/溢出」；
+   * - `content`：有未保存草稿时按它预览/测量（不落库）；
+   * - `onTrialAdopt`：传了才可清空覆盖；不传时采纳退回 `onSelect(template)`。
+   */
+  resumeId?: number | null;
+  content?: ResumeContent | null;
+  onTrialAdopt?: (request: { template: string; formatConfig: ResumeFormatConfig }) => void;
   onChange: (layout: ResumeLayout) => void;
 }
 
@@ -57,6 +67,9 @@ export default function ResumeTemplateControls({
   compact = false,
   catalog,
   preferProfileOrder = false,
+  resumeId,
+  content,
+  onTrialAdopt,
   onChange,
 }: Props) {
   const [galleryOpen, setGalleryOpen] = useState(false);
@@ -254,6 +267,9 @@ export default function ResumeTemplateControls({
         // 于是"在模板界面选字号"与"看到新字号"是同一次动作。
         onFontScaleChange={(font_scale) => onChange({ ...layout, font_scale })}
         onSelect={(template) => onChange({ ...layout, template })}
+        resumeId={resumeId}
+        content={content}
+        onTrialAdopt={onTrialAdopt}
         onClose={() => setGalleryOpen(false)}
       />
       <Space size={6}>

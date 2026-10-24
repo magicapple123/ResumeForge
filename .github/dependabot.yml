@@ -33,6 +33,23 @@ updates:
     commit-message:
       prefix: deps
 
+  # 桌面壳（Electron）是独立 package.json + lockfile，之前没有任何更新通道：
+  # 壳侧的 Electron / electron-builder / playwright-core 只会在"想起来时"手工升，
+  # 而供应链审计（A07）要求依赖变更可见、可回滚。与 frontend 分开列，是因为
+  # 两者的升级节奏与验证方式不同（壳要跑 `node --test "scripts/test-*.js"` 与打包冒烟）。
+  - package-ecosystem: npm
+    directory: /desktop
+    schedule:
+      interval: monthly
+      time: "03:00"
+      timezone: Asia/Shanghai
+    open-pull-requests-limit: 3
+    labels:
+      - dependencies
+      - desktop
+    commit-message:
+      prefix: deps
+
   - package-ecosystem: github-actions
     directory: /
     schedule:

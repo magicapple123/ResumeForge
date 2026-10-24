@@ -312,3 +312,87 @@ def test_assets_are_served_with_a_javascript_mime_type(tmp_path, name):
     assert r.status_code == 200
     declared = r.headers["content-type"].split(";")[0].strip()
     assert declared in _JS_MIME_TYPES, f"{name} 被当成 {declared}，浏览器不会执行它"
+
+
+# --- 审计 F1/A01：根文件路由的路径必须固定在闭包里 -------------------------------
+#
+# 原实现把路径写成处理函数的**带默认值形参**（`path: Path = file_path`），FastAPI 会
+# 把它解释成同名查询参数，于是 `GET /resumeforge-icon.png?path=…` 就能读到任意文件；
+# 而去掉默认值又会变成循环内的闭包晚绑定（所有路由指向最后一个文件）。下面四条
+# 分别钉住这两件事和请求期的边界/缺失语义。
+
+
+def test_each_root_file_serves_its_own_bytes(tmp_path):
+    """多个根文件各自返回自己的内容——防闭包晚绑定回归。"""
+    dist = build_dist(tmp_path)
+    (dist / "a-icon.png").write_bytes(b"PNG-A-CONTENT")
+    (dist / "b-icon.png").write_bytes(b"PNG-B-CONTENT")
+    app = build_app(dist)
+    client = use(app)
+    assert client.get("/a-icon.png").content == b"PNG-A-CONTENT"
+    assert client.get("/b-icon.png").content == b"PNG-B-CONTENT"
+
+
+def test_root_file_query_parameters_cannot_change_the_response(tmp_path):
+    """`?path=` / `?file=` 不能改变返回内容：路径不是查询参数，注入无从下手。"""
+    dist = build_dist(tmp_path, version="0.18.0")
+    (dist / "resumeforge-icon.png").write_bytes(b"\x89PNG-fake-icon")
+    app = build_app(dist)
+    client = use(app)
+    queries = (
+        "?path=version.json",
+        "?file=version.json",
+        "?path=../../etc/passwd",
+        "?path=/etc/passwd",
+        "?path=assets/entry-abc123.js&file=version.json",
+    )
+    for query in queries:
+        r = client.get("/resumeforge-icon.png" + query, headers={"accept": "*/*"})
+        assert r.status_code == 200, query
+        assert r.content == b"\x89PNG-fake-icon", query
+        # 被指向的真实文件内容绝不能混进来。
+        assert b"0.18.0" not in r.content, query
+        assert b"console.log(1)" not in r.content, query
+
+
+def test_root_file_routes_declare_no_query_parameters(tmp_path):
+    """直接钉住处理函数签名：注册出来的路由不得带任何查询参数。"""
+    dist = build_dist(tmp_path)
+    (dist / "resumeforge-icon.png").write_bytes(b"\x89PNG-fake-icon")
+    app = build_app(dist)
+    routes = [r for r in app.routes if getattr(r, "name", "") == "spa_root_file_resumeforge-icon"]
+    assert routes, "dist 根文件必须注册为路由"
+    assert routes[0].dependant.query_params == [], "根文件路由不允许声明任何查询参数"
+
+
+def test_root_file_symlink_outside_dist_is_not_served(tmp_path):
+    """越界文件不注册、也不服务：dist 内的符号链接指向 dist 外时拿不到内容。"""
+    dist = build_dist(tmp_path)
+    outside = tmp_path / "outside-secret.txt"
+    outside.write_bytes(b"OUTSIDE-SECRET-BYTES")
+    link = dist / "escape.txt"
+    try:
+        link.symlink_to(outside)
+    except (OSError, NotImplementedError):
+        # Windows 上创建符号链接需要开发者模式或提权；两条边界（注册期跳过 +
+        # 请求期 404）在代码里是同一份判定，这里只报告"本地无法验证"。
+        pytest.skip("当前环境不允许创建符号链接，越界用例无法在本机验证")
+
+    app = build_app(dist)
+    client = use(app)
+    r = client.get("/escape.txt", headers={"accept": "*/*"})
+    assert r.status_code != 200
+    assert b"OUTSIDE-SECRET-BYTES" not in r.content
+
+
+def test_root_file_deleted_after_registration_returns_404(tmp_path):
+    """注册后文件被删除：必须 404，而不是 FileResponse 的 RuntimeError(500)。"""
+    dist = build_dist(tmp_path)
+    icon = dist / "resumeforge-icon.png"
+    icon.write_bytes(b"\x89PNG-fake-icon")
+    app = build_app(dist)
+    client = use(app)
+    assert client.get("/resumeforge-icon.png").status_code == 200
+    icon.unlink()
+    r = client.get("/resumeforge-icon.png", headers={"accept": "*/*"})
+    assert r.status_code == 404

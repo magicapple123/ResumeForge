@@ -23,13 +23,7 @@
  *
  * 不许放 HTML/JSX（`<b>`、`{'\n'}`）。需要强调或换行时，由调用方拆成多段 `t()`。
  */
-import fontDownload from "./zh-CN.fontDownload";
-import fonts from "./zh-CN.fonts";
-import params from "./zh-CN.params";
-import preview from "./zh-CN.preview";
-import responsive from "./zh-CN.responsive";
-import rich from "./zh-CN.rich";
-import workbench from "./zh-CN.workbench";
+import namespaces from "./zh-CN.namespaces";
 
 const zhCN = {
   /** 版式下拉的无障碍名（视觉标签是同一句，见 `ResumeTemplateControls`）。 */
@@ -387,6 +381,8 @@ const zhCN = {
   // ── 通用动作（每个 ≤4 字，见 popupCopy.test.ts 的长度断言） ────────────
   /** 表单弹层左下角那颗按钮。 */
   "common.action.cancel": "取消",
+  /** 通用「重试」：页面代码没取到、请求失败等可恢复场景。 */
+  "common.retry": "重试",
   /** 只读弹层的语义动作（具体形态仍走右上角 ×）。 */
   "common.action.close": "关闭",
   /** 抽屉内视图切换的返回动作。 */
@@ -458,27 +454,9 @@ const zhCN = {
   /** 恢复后的告知：用户在设置页当场看不到公告条（hideOnPaths），所以要说"回到页面"。 */
   "toast.announcement.unmuted": "已恢复提醒，回到页面就能看到",
 
-  // ── 简历制作台（2026-10-23）────────────────────────────────
-  // 本轮新增的四十来条文案单独放在 `zh-CN.workbench.ts`：这个文件只剩几十行余量，
-  // 而单文件 500 行是零豁免的硬预算。spread 保持字面量类型，`MessageKey` 自动包含新 key。
-  ...workbench,
-
-  // ── 简历预览的缩放条（2026-10-23）────────────────────────
-  ...preview,
-
-  // ── 多分辨率适配（2026-10-23）────────────────────────────
-  ...responsive,
-
-  // ── 简历字体（内置思源黑体按需下载）与工作台「版式」页签（2026-11）
-  // 同上：`zh-CN.ts` 只剩几十行余量，新增文案放独立命名空间文件。
-  ...fonts,
-
-  // ── 字符级加粗（右键菜单）与制作台实时预览（R4 / R5）────────
-  ...rich,
-  // 本批（字体下载/取消/删除/样张 · 板块顺序 · 精确模式字族说明）的新句子。
-  ...fontDownload,
-  // 本批（模板一览口径 · 参数复位 · 写作增强提示 · 精确预览补页）的新句子。
-  ...params,
+  // 各领域新增文案放独立命名空间文件（本文件是 500 行零豁免硬预算）；
+  // 「有哪些命名空间、按什么顺序合并」统一登记在 `zh-CN.namespaces.ts`，本文件只展开一次。
+  ...namespaces,
 } as const;
 
 export type ZhCNMessages = typeof zhCN;

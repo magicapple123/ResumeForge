@@ -84,6 +84,11 @@ A2_ZH_LITERALS: tuple[str, ...] = (
 GUARDED_SOURCES: dict[str, bool] = {
     "services/pdf_exporter/render.py": True,
     "services/docx_exporter.py": True,
+    # W05 把七个分区渲染拆到 docx_sections；拆分后必须继续被这条守卫覆盖。
+    "services/docx_sections.py": True,
+    # W21 又把学术三节（论文 / 科研项目 / 专利）拆到 docx_academic_sections：
+    # 新文件同样画中文/英文字段前缀，必须一起被这条守卫覆盖。
+    "services/docx_academic_sections.py": True,
     "services/exporter.py": True,
     "templates/_resume_blocks.j2": False,
     "templates/_resume_sections.j2": False,
@@ -220,8 +225,9 @@ def test_an_unrecognised_language_falls_back_to_zh_cn(bogus: str):
 def test_an_unrecognised_language_falls_back_to_zh_cn_for_pdf_and_docx(bogus: str):
     """两条二进制链路同样回落，不抛异常、不印空标题。"""
     resume = _resume()
-    pdf_text = _plain(_pdf_text(build_resume_pdf(resume, language=bogus).content))
-    docx_text = _plain(_docx_text(build_resume_docx(resume, language=bogus).content))
+    # 10 个分区在一页内排不下：给 3 页上限，否则 PDF 截断会"少标题"（与语言回落无关）。
+    pdf_text = _plain(_pdf_text(build_resume_pdf(resume, page_limit=3, language=bogus).content))
+    docx_text = _plain(_docx_text(build_resume_docx(resume, page_limit=3, language=bogus).content))
     for title in ZH_TITLES:
         assert _plain(title) in pdf_text, f"PDF 缺少中文标题：{title}"
         assert _plain(title) in docx_text, f"Word 缺少中文标题：{title}"
@@ -311,7 +317,10 @@ def test_no_renderer_carries_its_own_chinese_labels(relative: str, drop_comments
 
 # ===== 6. HTML 不缺标题（防"忘了把 section_titles 放进 context"） =====
 
-_TITLE_DIV_RE = re.compile(r'<div class="section-title">([^<]*)</div>')
+# W07 起共享片段给标题加了 `data-role="section_title"`（角色覆盖的命中点）。守卫匹配
+# "带任意属性的 section-title div"，**仍然断言标题文本与数量**——不是放宽到不检查标题。
+_TITLE_DIV_RE = re.compile(r'<div class="section-title"[^>]*>([^<]*)</div>')
+_TITLE_WITH_ROLE_RE = re.compile(r'<div class="section-title" data-role="section_title"[^>]*>')
 
 
 @pytest.mark.parametrize("language", ["zh-CN", "en-US"])
@@ -326,12 +335,19 @@ def test_every_non_empty_section_has_a_non_empty_title_in_html(language: str):
 
     full = render_html(_resume(), language=language)
     # 标题里的 `&` 会被 Jinja 转义成 `&amp;`（autoescape 是刻意的），比较前还原。
-    assert [html.unescape(found) for found in _TITLE_DIV_RE.findall(full)] == expected
+    titles = _TITLE_DIV_RE.findall(full)
+    assert [html.unescape(found) for found in titles] == expected
+    # 标题元素的角色标记也必须真的产出（W07 的角色覆盖靠它命中）。
+    assert len(_TITLE_WITH_ROLE_RE.findall(full)) == len(expected)
     assert 'class="section-title"></div>' not in full
 
     partial = render_html(_resume_without_projects(), language=language)
     assert partial.count('class="section-title"') == len(SECTION_KEYS) - 1
-    assert section_titles(language)["projects"] not in partial
+    # 用"标题元素完全一致"判定：W14 的 "Research Projects" 里也含 "Projects" 子串。
+    assert (
+        f'class="section-title" data-role="section_title">{section_titles(language)["projects"]}<'
+        not in partial
+    )
 
 
 # ===== 7. 自制模板仍能取到标题（防 `with context` 写错） =====

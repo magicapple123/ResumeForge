@@ -148,3 +148,146 @@ export function colorProbeCss(key: string, value: string): string {
 export function sectionGapProbeCss(value: number): string {
   return `.section { margin-bottom: calc(var(--fs) * ${formatG(value)}) !important; }`;
 }
+
+// ── W07 局部排版：角色 / 对象覆盖的探针（D02 的直接反馈）────────────────────
+
+/** 探针作用目标：角色（同类段落）或对象（单条内容）。 */
+export interface StyleProbeTarget {
+  /** 角色名（`name` / `body` …）；与后端模板里的 `data-role` 同名。 */
+  role?: string;
+  /** 条目稳定 id（W00/W01 的 `document_identity` 形状）。 */
+  objectId?: string;
+}
+
+/** 探针可接受的属性值（未设过的键不出现，空对象 → 空串）。 */
+export type StyleProbeValues = Partial<Record<string, number | string | boolean>>;
+
+/** 探针选项：角色字号需要模板基准比例（后端语义是"系数 × 基准"）。 */
+export interface StyleProbeOptions {
+  /** 角色 → 模板基准比例（目录 `template_role_defaults[template][role].font_scale`）。 */
+  baseRatios?: Partial<Record<string, number>>;
+}
+
+/** 声明顺序与后端 `resume_style_schema.STYLE_PROPS` 一致（属性面板行序同源）。 */
+const PROBE_PROP_ORDER = [
+  "font_scale",
+  "color",
+  "bold",
+  "italic",
+  "space_before",
+  "space_after",
+  "line_height",
+  "indent",
+  "bullet",
+  "align",
+  "meta_align",
+  "letter_spacing",
+] as const;
+
+/** 对象 id 只允许稳定身份字符集：探针 CSS 的字符串里不接受任意用户输入。 */
+const PROBE_OBJECT_ID = /^[A-Za-z0-9_-]{8,32}$/;
+
+/** 给探针选一个选择器；对象优先于角色（对象覆盖在角色之上）。 */
+function styleProbeSelector(target: StyleProbeTarget): string | null {
+  if (target.objectId) {
+    return PROBE_OBJECT_ID.test(target.objectId) ? `[data-object-id="${target.objectId}"]` : null;
+  }
+  if (target.role) {
+    return /^[a-z_]+$/.test(target.role) ? `[data-role="${target.role}"]` : null;
+  }
+  return null;
+}
+
+/** 单个属性 → 一条 CSS 声明；不支持 / 值非法时返回 `null`（不产生半条规则）。 */
+function styleDeclaration(
+  prop: string,
+  value: number | string | boolean,
+  target: StyleProbeTarget,
+  options: StyleProbeOptions,
+): string | null {
+  if (typeof value === "boolean") {
+    if (prop === "bold") return `font-weight: ${value ? 700 : 400}`;
+    if (prop === "italic") return `font-style: ${value ? "italic" : "normal"}`;
+    return null;
+  }
+  if (prop === "color") {
+    const text = String(value).trim();
+    return /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(text) ? `color: ${text}` : null;
+  }
+  if (prop === "font_scale") {
+    // 后端语义（resume_style._role_rule）：calc(var(--fs) * 系数 * 基准)。
+    // 面板传入的是**显示值**（系数 × 基准），所以这里除回系数再保留两层结构。
+    if (typeof value !== "number" || !Number.isFinite(value)) return null;
+    const base = target.role ? options.baseRatios?.[target.role] : target.objectId ? 1 : undefined;
+    if (typeof base === "number" && Number.isFinite(base) && base > 0) {
+      return `font-size: calc(var(--fs) * ${formatG(value / base)} * ${formatG(base)})`;
+    }
+    // 目录没给基准（旧后端）：退回数值等价形式，拖动中看到的字号仍然正确。
+    return `font-size: calc(var(--fs) * ${formatG(value)})`;
+  }
+  if (prop === "bullet") {
+    // 与后端 \`_role_rule\` 的 bullet_css 逐字一致。
+    if (value === "dot") return "list-style-type: disc";
+    if (value === "dash") return "list-style-type: '–'";
+    if (value === "none") return "list-style-type: none";
+    return null;
+  }
+  if (prop === "align") {
+    return ["left", "center", "right", "justify"].includes(String(value))
+      ? `text-align: ${value}`
+      : null;
+  }
+  if (prop === "meta_align") {
+    // 后端：right → space-between，inline → flex-start（逐字一致）。
+    if (value === "right") return "justify-content: space-between";
+    if (value === "inline") return "justify-content: flex-start";
+    return null;
+  }
+  if (typeof value !== "number" || !Number.isFinite(value)) return null;
+  if (prop === "space_before") return `margin-top: calc(var(--fs) * ${formatG(value)})`;
+  if (prop === "space_after") return `margin-bottom: calc(var(--fs) * ${formatG(value)})`;
+  if (prop === "line_height") return `line-height: ${formatG(value)}`;
+  if (prop === "indent") return `padding-left: calc(var(--fs) * ${formatG(value)})`;
+  if (prop === "letter_spacing") return `letter-spacing: calc(var(--fs) * ${formatG(value)})`;
+  return null;
+}
+
+/**
+ * 局部排版的即时探针 CSS：拖动滑杆/步进时注入预览 iframe，零网络往返。
+ *
+ * 空覆盖 / 非法目标 → 空串（调用方据此清掉探针）。每条规则都带 `!important`：探针要
+ * 盖过模板自己的角色尺寸，否则拖了没反应。
+ *
+ * **它不是渲染契约**：落库后的真实渲染由后端 `role_style_css` / `format_css` 决定
+ * （wave2 契约 §2.5 的唯一实现）。两者数值等价，同一条值在"拖动中"与"松手后"看到的
+ * 几何一致；差异只在 CSS 写法的细节（选择器与声明顺序），值本身不做二次换算。
+ */
+export function styleProbeCss(
+  target: StyleProbeTarget,
+  style: StyleProbeValues,
+  options: StyleProbeOptions = {},
+): string {
+  const selector = styleProbeSelector(target);
+  if (!selector) return "";
+  const declarations: string[] = [];
+  for (const prop of PROBE_PROP_ORDER) {
+    const value = style[prop];
+    if (value === undefined) continue;
+    const declaration = styleDeclaration(prop, value, target, options);
+    if (declaration) declarations.push(`${declaration} !important;`);
+  }
+  if (declarations.length === 0) return "";
+  // 两空格缩进与后端 role_style_css 的规则行一致（探针与真实 CSS 更容易对照）。
+  return `  ${selector} { ${declarations.join(" ")} }`;
+}
+
+/**
+ * 一段文字里"斜体 / 链接"标记在各格式上的能力（机器可读）。
+ *
+ * 放在探针文件里而不是控件里：这句话是跨格式事实（PDF 没有真斜体、Word 有），
+ * 界面在角色面板底部与格式刷旁边引用同一份，避免两处各写一套"支持情况"。
+ */
+export const INLINE_MARK_CAPABILITY = {
+  italic: { html: "full", pdf: "approximate", word: "full" },
+  link: { html: "full", pdf: "text-only", word: "full" },
+} as const;

@@ -35,6 +35,23 @@ class ResumeRecord(Base):
     # 而内容写入（`PUT /resumes/{id}`）或版式写入（`PATCH /resumes/{id}/layout`）任一
     # 成功即置 False——用户点过保存，这份简历就"存在"了。
     draft: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, server_default="0")
+    # 保存次数（0052）：每成功写入一次正文/版式/AI 修订就 +1，供"条件写"判断这份简历
+    # 还是不是调用方手里那一版（``UPDATE ... WHERE id=? AND revision=?``）。
+    #
+    # 三个边界必须记住：
+    # 1. **不是撤销层级**——撤销走前端的历史栈，一次保存只推一版；
+    # 2. 改名/备注/收藏/软删/恢复**不推进**，它们不是文档内容，否则别的窗口只改个标题
+    #    就会让内容保存 409，那是假冲突；
+    # 3. 旧行（0052 之前写入的）一律是 0：它们在数据里没有"第几版"可考，0 只表示
+    #    "此前的保存次数不可知"，不是"没有内容"。旧备份包没有这一列，靠
+    #    ``server_default`` 才能照旧导入。
+    revision: Mapped[int] = mapped_column(Integer, default=0, nullable=False, server_default="0")
+    # 文档形态（0054，W14 长 CV 前置）：普通简历 = resume；长 CV 模式由后续批次
+    # 的 schema/导出链路决定具体取值。DB 层不建 CHECK 约束（与 language 同一取舍），
+    # 旧行靠 server_default 一律按 resume 读取——升级不会改变任何已存在简历的导出结果。
+    document_mode: Mapped[str] = mapped_column(
+        String(16), default="resume", nullable=False, server_default="resume"
+    )
     model: Mapped[str] = mapped_column(String(64), default="")
     # 旧数据库中的 tone 列为 NOT NULL 且没有服务端默认值。继续写入默认值仅为
     # 兼容历史表结构；API 和前端均不再暴露定制风格功能。

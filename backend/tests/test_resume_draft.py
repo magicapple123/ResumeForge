@@ -64,6 +64,9 @@ def test_saving_the_content_promotes_the_draft(client, db_session):
 
     db_session.expire_all()
     assert db_session.get(ResumeRecord, draft_id).draft is False
+    # 转正与 revision+1 在同一条 UPDATE 里（W02）：用户点过保存就该是新的一版，
+    # 不能出现"草稿转正了、版本号还停在 0"这种半状态。
+    assert db_session.get(ResumeRecord, draft_id).revision == 1
     assert [item["id"] for item in client.get("/api/resumes").json()["items"]] == [draft_id]
     # 响应体也要立刻改口：前端靠它把「保存到简历中心」换回普通的「保存修改」。
     assert response.json()["draft"] is False

@@ -13,25 +13,31 @@
  * `layoutSnapshot`）。只认前者，用户拖完字号会发现顶部没有「取消」；只认后者，改了一句措辞
  * 同样没反应。对用户而言只有一件事："我改了东西，现在想存下来或者作废"。
  *
+ * **W02 起 `dirty` 是唯一出口**：动作条的显隐、关闭确认（`needsCloseConfirm`）、保存按钮
+ * 的 loading 都消费这一个 `dirty`。纸面加粗（`richDirty`）由 `ResumeZoomModal` 并进
+ * `editorDirty` 再传进来，不在这里再算一遍——三处各算一次的产物就是"关闭时问、保存时又不问"。
+ *
  * ## 保存为什么先版式、后内容
  *
  * 版式 PATCH 会返回新的 `detail` 与重渲染的 html，先做它，后面内容保存失败时"版式这一半"已经
  * 是确定的；反过来会出现"内容已存、版式失败"，而用户看不出到底哪一半成功了。
  *
- * 快照只在版式**确认落库**（`onCommitLayout` 返回非 `false`）之后才对齐：提前对齐、或落库失败
- * 也对齐，都会让没存上的那一半看起来存上了——按钮收起，用户再也没有重试的入口。失败提示由
- * 各自的链路给（版式在宿主的 `onCommitLayout` 里已经 `message.error`，内容在编辑器的
- * `handleFinish` 里），这里只判断成败、不重复弹。
+ * 快照只在版式**确认落库**之后才对齐：提前对齐、或落库失败也对齐，都会让没存上的那一半看起来
+ * 存上了——按钮收起，用户再也没有重试的入口。失败提示由各自的链路给（版式在宿主的
+ * `commitLayout` 里已经 `message.error`，内容在编辑器的 `handleFinish` 里），这里只判断
+ * 成败、不重复弹。
  *
- * ## 三处"就地换态"的渲染期守卫
+ * ## W02：整体保存的串行化 / 冲突交给 `useDocumentSave`
  *
- * 快照与确认条的重置都用 `prev !== next` 的就地调整，不用 effect：它们描述的是"这个值刚变了"
- * 这一渲染期就能判定的事实，放进 effect 只会多一轮级联渲染（与本仓其它就地换态同一种写法）。
- * 注意 Compiler 禁止渲染期写 ref，所以"上一次"只能存在 state 里。
+ * 单飞、过时回包、失败保草稿、409 冲突态全在那个 hook 里（它只管状态，不认业务）。这里只负责
+ * **顺序**：版式 → 正文 → 草稿仅发布，每一步的终态决定下一步走不走。冲突时**停住**并把
+ * `conflict` 交给动作条换成"用最新的 / 比较 / 另存副本"，绝不自动重试——自动重试就是硬覆盖。
  */
 import { useMemo, useState } from "react";
 import type { RefObject } from "react";
 import type { ResumeLayout } from "../../types";
+import { useDocumentSave } from "../../features/resume-document/useDocumentSave";
+import type { ResumeDocumentPipeline, SaveOutcome } from "../../features/resume-document/types";
 import type { ResumeWorkbenchEditorHandle } from "./ResumeWorkbenchEditorColumn";
 
 /**
@@ -47,36 +53,48 @@ export interface WorkbenchOverallSaveOptions {
   open: boolean;
   /** 当前**草稿**版式：左栏控件即时改的就是它（不是记录里存的那份）。 */
   layout?: ResumeLayout;
-  /** 中栏内容脏值，即编辑器 `onDirtyChange` 上报的那一份。 */
+  /** 中栏内容脏值，即编辑器 `onDirtyChange` 上报的那一份（纸面加粗已由宿合并进来）。 */
   editorDirty: boolean;
   /** 这份记录还是制作台草稿（见 `onPublishDraft`）：保存按钮要常驻。 */
   isDraft?: boolean;
-  /** 中栏的命令式句柄：`save()` / `discard()` 都在那一层（判据全在中栏里）。 */
+  /** 中栏的命令式句柄：`saveAsync()` / `discard()` 都在那一层（判据全在中栏里）。 */
   editorRef: RefObject<ResumeWorkbenchEditorHandle | null>;
   /** 回滚版式的通道：**只重排、不落库**。 */
   onApplyLayout?: (next: ResumeLayout) => void;
-  /** 版式落库通道（`PATCH`）；`false` = 没落库。缺省时保存退化为"只存内容"。 */
+  /** 版式落库通道（老宿主，无版本条件写）；`false` = 没落库。缺省时保存退化为"只存内容"。 */
   onCommitLayout?: () => Promise<boolean>;
+  /**
+   * W02 条件写通道（宿主注入）：有它时版式/正文/发布三笔写入都带 `expectedRevision`。
+   * 缺省 = 旧的无条件写（生成流程那种只读宿主，没有冲突保护可言）。
+   */
+  documentPipeline?: ResumeDocumentPipeline;
   /**
    * 这份记录还是**制作台草稿**（0051）：内容与版式都没脏过，但用户点了「保存到简历中心」。
    *
    * 那条路径必须单独存在：`onCommitLayout` 在版式不脏时直接返回 `true`（什么都不发），
-   * 内容也不脏就不会调 `editorRef.save()`——两条写入都不发生，后端的 `draft` 标记就
-   * 永远清不掉，草稿也就永远进不了简历中心。宿主在这里发**一次内容 PATCH**（后端"内容
-   * 写入即转正"）。返回 `false` = 没发成。
+   * 内容也不脏就不会调 `editorRef.saveAsync()`——两条写入都不发生，后端的 `draft` 标记就
+   * 永远清不掉，草稿也就永远进不了简历中心。
    */
   onPublishDraft?: () => Promise<boolean>;
 }
 
 export interface WorkbenchOverallSave {
-  /** 有没有**任何**改动（内容脏 **或** 版式与基线不同）。 */
+  /** 有没有**任何**改动（内容脏 **或** 版式与基线不同）：全屏唯一的脏值出口。 */
   dirty: boolean;
   /** 只有版式脏：取消/关闭的措辞要据此换一句（丢的东西不一样）。 */
   layoutDirty: boolean;
-  /** 版式 PATCH 在飞：按钮上 loading，同一时刻不许再点、也不许点取消。 */
+  /** 整体保存正在跑（按钮 loading，同一时刻不许再点、也不许点取消）。 */
   saving: boolean;
-  /** 顶部「保存修改」：先落版式、后存内容。 */
+  /** 停在 409 冲突态：保存/取消禁用，正文上方换成三选一。 */
+  conflict: boolean;
+  /** 最近一次保存失败（非冲突）：动作条留一句"改动还留着"，保存按钮就是重试入口。 */
+  saveFailed: boolean;
+  /** 顶部「保存修改」：先落版式、后存内容、最后处理草稿发布。 */
   save: () => Promise<void>;
+  /** 冲突已解决（用最新的 / 另存副本成功）：恢复成可保存。 */
+  settleConflict: () => void;
+  /** 文档被替换/关闭：让在飞回包作废（晚到的成功不能把新文档标成已保存）。 */
+  invalidateDocument: () => void;
   /** 顶部确认条里的「放弃修改」：内容回填 + **仅当版式真的动过**时才回滚并重排。 */
   cancel: () => void;
   /** 「取消修改」被按过、确认条正亮着。 */
@@ -92,6 +110,7 @@ export function useWorkbenchOverallSave({
   editorRef,
   onApplyLayout,
   onCommitLayout,
+  documentPipeline,
   onPublishDraft,
 }: WorkbenchOverallSaveOptions): WorkbenchOverallSave {
   /**
@@ -107,7 +126,7 @@ export function useWorkbenchOverallSave({
     setLayoutSnapshot(open && layout ? cloneLayout(layout) : null);
   }
   // 有没有**任何**改动：比较用 `JSON.stringify`（`ResumeLayout` 是固定形状的对象，键序稳定，
-  // 结构比较足够）。
+  // 结构比较足够）。这是**唯一**的脏值出口，见文件头。
   const layoutDirty = useMemo(() => {
     if (!layout || !layoutSnapshot) return false;
     return JSON.stringify(layout) !== JSON.stringify(layoutSnapshot);
@@ -123,32 +142,76 @@ export function useWorkbenchOverallSave({
     if (!editorDirty) setDiscardConfirm(false);
   }
 
-  // 版式 PATCH 在飞：按钮上 loading，也挡住"保存还没落库就先取消"这种自我打脸的顺序。
-  const [saving, setSaving] = useState(false);
-
-  const save = async (): Promise<void> => {
-    if (saving) return;
-    setSaving(true);
-    try {
-      // 顺序与"失败不对齐快照"的理由见文件头。两种情况必须分开：**未传**这条链路 = 只读宿主，
-      // 静默退化为"只存内容"（不阻塞）；**拒绝** = 落库失败，必须拦住。用三元写出来，读的人
-      // 不必先在心里推一遍可选链的短路范围就知道未传那条路会走到哪。
-      const committed = onCommitLayout ? await onCommitLayout().catch(() => false) : undefined;
-      if (committed === false) return;
-      // 内容不脏时不调 `save()`：那会为"只改了一个排版参数"发一次内容没变的 PATCH。
-      if (editorDirty) editorRef.current?.save();
-      // 草稿的"仅发布"路径：两条写入都没发生（内容没改、版式没动），只有它能把 `draft`
-      // 清掉。放在 `save()` 之后而不是之前：真脏的时候前面那条 PATCH 已经会转正，
-      // 再发一次就是同一个请求走两遍。
-      if (isDraft && !editorDirty && !layoutDirty) {
-        const published = await onPublishDraft?.().catch(() => false);
-        if (published === false) return;
-      }
-      setLayoutSnapshot(layout ? cloneLayout(layout) : null);
-    } finally {
-      setSaving(false);
-    }
+  /** 老宿主的版式一步：boolean 语义折成保存终态（`false` = 没落库）。 */
+  const commitLayoutLegacy = async (): Promise<SaveOutcome> => {
+    // 两种情况必须分开：**未传**这条链路 = 只读宿主，静默退化为"只存内容"（不阻塞）；
+    // **拒绝** = 落库失败，必须拦住。
+    if (!onCommitLayout) return { status: "unchanged", revision: 0 };
+    const committed = await onCommitLayout().catch(() => false);
+    return committed === false
+      ? { status: "failed", error: null }
+      : { status: "saved", revision: 0 };
   };
+
+  /** 老宿主的草稿发布一步：`false` = 没发成。 */
+  const publishDraftLegacy = async (): Promise<SaveOutcome> => {
+    if (!onPublishDraft) return { status: "unchanged", revision: 0 };
+    const published = await onPublishDraft().catch(() => false);
+    return published === false
+      ? { status: "failed", error: null }
+      : { status: "saved", revision: 0 };
+  };
+
+  /**
+   * 一次完整保存。顺序与"失败不对齐快照"的理由见文件头；每一步的终态决定下一步走不走。
+   *
+   * `revision` 在两步之间**本地推进**：版式保存成功会返回新版本，正文条件写必须用新版本，
+   * 不能等宿主 `setDetail` 之后的下一轮渲染——那之间的 await 里还有一次网络往返。
+   */
+  const performSave = async (): Promise<SaveOutcome> => {
+    let written = false;
+    let revision = documentPipeline?.revision ?? 0;
+    if (layoutDirty) {
+      const outcome = documentPipeline
+        ? await documentPipeline.saveLayout(revision)
+        : await commitLayoutLegacy();
+      if (outcome.status === "conflict" || outcome.status === "failed") return outcome;
+      written = outcome.status === "saved" || written;
+      revision = outcome.revision;
+      // 版式**确认落库**之后才对快照对齐（见文件头的理由）。
+      setLayoutSnapshot(layout ? cloneLayout(layout) : null);
+    }
+    if (editorDirty) {
+      const contentOutcome = await editorRef.current?.saveAsync(
+        documentPipeline ? revision : undefined,
+      );
+      if (!contentOutcome || contentOutcome.status === "invalid") {
+        // 表单校验没过 = 没有发请求：既不是成功也不是失败，草稿与脏值全部原样保留，
+        // 错误提示由表单自己的校验态给。
+        return { status: "unchanged", revision };
+      }
+      if (contentOutcome.status === "conflict") {
+        return { status: "conflict", currentRevision: contentOutcome.currentRevision };
+      }
+      if (contentOutcome.status === "failed") {
+        return { status: "failed", error: contentOutcome.error };
+      }
+      if (contentOutcome.revision !== null) revision = contentOutcome.revision;
+      written = true;
+    }
+    // 草稿的"仅发布"路径：两条写入都没发生（内容没改、版式没动），只有它能把 `draft`
+    // 清掉。放在内容之后：真脏的时候前面那条写入已经会转正，再发一次就是同一个请求走两遍。
+    if (isDraft && !editorDirty && !layoutDirty) {
+      const published = documentPipeline
+        ? await documentPipeline.publishDraft(revision)
+        : await publishDraftLegacy();
+      if (published.status === "conflict" || published.status === "failed") return published;
+      written = written || published.status === "saved";
+    }
+    return written ? { status: "saved", revision } : { status: "unchanged", revision };
+  };
+
+  const documentSave = useDocumentSave({ perform: performSave });
 
   /**
    * 「放弃修改」：两件事都要做，只做一件都会留下"取消了一半"的界面。
@@ -166,5 +229,17 @@ export function useWorkbenchOverallSave({
     setDiscardConfirm(false);
   };
 
-  return { dirty, layoutDirty, saving, save, cancel, discardConfirm, setDiscardConfirm };
+  return {
+    dirty,
+    layoutDirty,
+    saving: documentSave.saving,
+    conflict: documentSave.conflict,
+    saveFailed: documentSave.status === "failed",
+    save: documentSave.save,
+    settleConflict: documentSave.settleConflict,
+    invalidateDocument: documentSave.invalidate,
+    cancel,
+    discardConfirm,
+    setDiscardConfirm,
+  };
 }

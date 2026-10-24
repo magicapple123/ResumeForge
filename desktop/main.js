@@ -484,7 +484,10 @@ if (!app.requestSingleInstanceLock()) {
   });
 }
 ipcMain.handle("splash:get-version", () => app.getVersion());
-require("./print").registerPrintHandler(); // R1：Chromium 打印
+// R1：Chromium 打印。A08：把主窗口的取值函数交给打印桥——它只接受来自这个窗口顶层
+// frame 的请求（iframe / webview / 被注入的页面一律拒绝），这里传 getter 而不是当前
+// 实例，因为本行在 createWindow() 之前执行。
+require("./print").registerPrintHandler({ getMainWindow: () => mainWindow });
 
 // 桌面前端的「退出」按钮（preload 暴露的 window.splash.quitApp()）：只发
 // app.quit()，让 before-quit 这个唯一停止点完成"停后端 → 必要时 spawn 安装器"

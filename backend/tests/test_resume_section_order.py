@@ -30,11 +30,25 @@ from app.services.txt_exporter import export_txt
 
 # 七个分区对应的标题文案。渲染器写的是文案，测试按文案找位置——文案本身在
 # resume_sections.py 的 SECTION_LABELS 里定义，这里只负责"顺序"这一件事。
-TITLES = ("个人总结", "教育经历", "实习/工作经历", "校园经历", "项目经历", "专业技能", "荣誉奖项")
+TITLES = (
+    "个人总结",
+    "教育经历",
+    "实习/工作经历",
+    "校园经历",
+    "项目经历",
+    "论文发表",
+    "科研项目",
+    "专利",
+    "专业技能",
+    "荣誉奖项",
+)
 
 # 挑一个与默认顺序差异最大的排列：默认是 教育 → 实习 → 项目 → 技能 → 校园 → 奖项 → 总结。
 CUSTOM_ORDER = [
     "projects",
+    "publications",
+    "research_projects",
+    "patents",
     "experience",
     "summary",
     "awards",
@@ -54,6 +68,9 @@ def _sample_resume() -> ResumeContent:
         experience=[{"company": "示例科技有限公司", "role": "示例岗位"}],
         campus_experience=[{"organization": "示例社团"}],
         projects=[{"name": "示例项目"}],
+        publications=[{"title": "示例论文", "venue": "示例期刊"}],
+        research_projects=[{"name": "示例科研项目"}],
+        patents=[{"title": "示例专利"}],
         skills=[{"name": "Python"}],
         awards=[{"name": "示例奖项"}],
     )
@@ -72,6 +89,9 @@ def _assert_follows_order(texts: dict[str, str]) -> None:
         order_in_output = [title for title, _ in sorted(positions, key=lambda item: item[1])]
         assert order_in_output == [
             "项目经历",
+            "论文发表",
+            "科研项目",
+            "专利",
             "实习/工作经历",
             "个人总结",
             "荣誉奖项",
@@ -92,6 +112,9 @@ def test_default_order_matches_the_product_decision():
         "education",
         "experience",
         "projects",
+        "publications",
+        "research_projects",
+        "patents",
         "skills",
         "campus_experience",
         "awards",
@@ -105,6 +128,9 @@ def test_normalized_order_is_always_a_complete_permutation():
         "projects",
         "experience",
         "education",
+        "publications",
+        "research_projects",
+        "patents",
         "skills",
         "campus_experience",
         "awards",
@@ -117,6 +143,9 @@ def test_normalized_order_is_always_a_complete_permutation():
         "summary",
         "education",
         "experience",
+        "publications",
+        "research_projects",
+        "patents",
         "skills",
         "campus_experience",
         "awards",
@@ -142,8 +171,13 @@ def test_resolved_order_reads_format_config_and_falls_back():
 
 
 def test_profile_keys_map_onto_every_resume_section():
-    """映射必须覆盖全部七个正文分区，且每个值都是合法的分区键。"""
-    assert set(PROFILE_SECTION_TO_RESUME.values()) == set(DEFAULT_SECTION_ORDER)
+    """映射覆盖资料页可排的分区；W14 科研三栏目**故意不在映射里**（资料页无对应子表）。"""
+    assert set(PROFILE_SECTION_TO_RESUME.values()) <= set(DEFAULT_SECTION_ORDER)
+    assert set(DEFAULT_SECTION_ORDER) - set(PROFILE_SECTION_TO_RESUME.values()) == {
+        "publications",
+        "research_projects",
+        "patents",
+    }
     for profile_key, resume_key in PROFILE_SECTION_TO_RESUME.items():
         assert isinstance(profile_key, str) and profile_key, "资料侧的键不能为空"
         assert resume_key in DEFAULT_SECTION_ORDER, resume_key
@@ -158,6 +192,9 @@ def test_profile_order_is_translated_kept_and_completed():
         "experience",
         "summary",
         "education",
+        "publications",
+        "research_projects",
+        "patents",
         "skills",
         "campus_experience",
         "awards",
@@ -173,7 +210,18 @@ def test_profile_order_is_translated_kept_and_completed():
             "awards",
             "summary",
         ]
-    ) == list(DEFAULT_SECTION_ORDER)
+    ) == [
+        "education",
+        "experience",
+        "projects",
+        "skills",
+        "campus_experience",
+        "awards",
+        "summary",
+        "publications",
+        "research_projects",
+        "patents",
+    ]
 
 
 def test_profile_order_drops_basic_info_and_duplicates():
@@ -209,6 +257,9 @@ def test_profile_order_to_section_order_appends_missing_at_the_end():
         "projects",
         "education",
         "experience",
+        "publications",
+        "research_projects",
+        "patents",
         "skills",
         "campus_experience",
         "awards",
@@ -218,8 +269,12 @@ def test_profile_order_to_section_order_appends_missing_at_the_end():
     assert sorted(order) == sorted(DEFAULT_SECTION_ORDER)
 
 
-def test_default_section_order_config_is_none_when_equal_to_default(db_session):
-    """资料顺序翻译后正好等于内置默认 → **不写键**（"没调过就不写"的口径）。"""
+def test_default_section_order_config_appends_research_after_old_sections(db_session):
+    """W14 后资料页仍只有旧七分区：补齐的三项科研板块**落在末尾**（契约 §5.3）。
+
+    因此"资料顺序 = 旧默认顺序"不再等于 10 键内置默认，会物化一份显式 section_order——
+    这是刻意的：科研板块不插进用户已排好的七项中间，旧记录的视觉顺序不变。
+    """
     profile = get_or_create_profile(db_session)
     profile.section_order = [
         "basic_info",
@@ -233,7 +288,20 @@ def test_default_section_order_config_is_none_when_equal_to_default(db_session):
     ]
     db_session.commit()
 
-    assert default_section_order_config(db_session) is None
+    assert default_section_order_config(db_session) == {
+        "section_order": [
+            "education",
+            "experience",
+            "projects",
+            "skills",
+            "campus_experience",
+            "awards",
+            "summary",
+            "publications",
+            "research_projects",
+            "patents",
+        ]
+    }
 
 
 def test_default_section_order_config_is_none_for_a_never_saved_profile(db_session):
@@ -271,6 +339,9 @@ def test_default_section_order_config_materializes_profile_order(db_session):
             "skills",
             "campus_experience",
             "awards",
+            "publications",
+            "research_projects",
+            "patents",
         ]
     }
 
@@ -306,6 +377,9 @@ def test_a_saved_custom_order_is_only_rewritten_by_an_explicit_put(client):
         "projects",
         "campus_experience",
         "summary",
+        "publications",
+        "research_projects",
+        "patents",
     ]
 
     # PUT 的整体替换语义（既有契约）：不带 section_order 时落回**默认值**。

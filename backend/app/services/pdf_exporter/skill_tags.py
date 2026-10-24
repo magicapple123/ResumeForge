@@ -22,6 +22,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from fpdf.enums import XPos, YPos
+
 from .fonts import FONT_FAMILY
 from .layout import _PX_TO_MM, _PX_TO_PT
 from .theme import _hex_to_rgb
@@ -44,6 +46,9 @@ PILL_RADIUS = "pill"
 
 # compact 模板的 `.skill-list li::after { content: "·" }`：标签之间的分隔符。
 _TAG_SEPARATOR = "·"
+
+# 多列网格（scholar）每个格子的项目符号：对应 CSS `.skill-list li::before { content: "•" }`。
+_TAG_BULLET = "•"
 
 
 @dataclass(frozen=True)
@@ -244,6 +249,62 @@ def _select_tag_font(pdf: _ResumePDF, metrics: SkillTagMetrics, *, mono: bool) -
         pdf.set_font(FONT_FAMILY, "", metrics.font_pt)
 
 
+
+def _draw_tag_grid(
+    pdf: _ResumePDF,
+    items: list[str],
+    metrics: SkillTagMetrics,
+    *,
+    columns: int,
+    text_color: tuple[int, int, int],
+    use_mono: list[bool],
+) -> None:
+    """把标签铺成 `columns` 列网格（scholar 的三列项目符号列表）。
+
+    与 CSS 的对应关系：`grid-template-columns: repeat(N, minmax(0, 1fr))` → 等宽单元格；
+    `.skill-list li::before { content: "•" }` → 每个格子以「• 」开头；`column-gap` →
+    `metrics.gap_x`。单元格里超宽的标签在格内折行（浏览器也是这么排的），行高取该行最高
+    格，因此"多行技能"（条目数 > 列数）与"单个长标签"都不会越界或互相压住。
+
+    **为什么量高与绘制必须同参**：折行算错不会报错，只会让最后一格压到下一行或越过右边距
+    ——这两种在渲染结果里几乎看不出来。宽度、字体、行高三者必须与下面的 `multi_cell` 一致。
+
+    只画「• 文本」而不画标签外框：当前唯一的多列模板 scholar 的 `tag_style` 是 `plain`
+    （CSS 里 没有底色/边框）。若将来出现"带框 + 多列"的模板，应当在这里补形状分支，而不是
+    悄悄丢掉框——`draw_skill_tags` 的多列分支只对 `plain` 生效，其余形态走原单列路径。
+    """
+    gap = metrics.gap_x
+    cell_width = max(1.0, (pdf.frame_width - gap * (columns - 1)) / columns)
+    tag_px = metrics.font_pt / _PX_TO_PT
+    for start in range(0, len(items), columns):
+        row = list(range(start, min(start + columns, len(items))))
+        # 先量这一行每格的高度：单行标签的高度就是标签行盒，长标签按单元格宽度折行。
+        heights = [
+            pdf.text_block_height(
+                f"{_TAG_BULLET} {items[index]}", width=cell_width, size_px=tag_px
+            )
+            for index in row
+        ]
+        row_height = max([metrics.height, *heights])
+        pdf.ensure_space(row_height)
+        top = pdf.get_y()
+        for offset, index in enumerate(row):
+            left = pdf.frame_left + offset * (cell_width + gap)
+            _select_tag_font(pdf, metrics, mono=use_mono[index])
+            pdf.set_text_color(*text_color)
+            pdf.set_xy(left, top)
+            pdf.multi_cell(
+                cell_width,
+                metrics.height,
+                f"{_TAG_BULLET} {items[index]}",
+                align="L",
+                new_x=XPos.LMARGIN,
+                new_y=YPos.NEXT,
+            )
+        pdf.set_y(top + row_height)
+        pdf.set_x(pdf.frame_left)
+
+
 def draw_skill_tags(
     pdf: _ResumePDF,
     labels: list[str],
@@ -254,8 +315,9 @@ def draw_skill_tags(
     line_color: tuple[int, int, int],
     body_text: tuple[int, int, int],
     muted_text: tuple[int, int, int],
+    style=None,
 ) -> None:
-    """把专业技能按**模板真实的标签形状**画出来。
+    """把专业技能按**模板真实的标签形状**画出来（W07：可被 body 角色覆盖缩放/字色）。
 
     形状、圆角、内边距、行内/行间间距全部来自 ``layout`` 的 `tag_*` 字段（模板 CSS 的结构化
     映射），本函数只负责"按形状画"与折行：
@@ -283,8 +345,10 @@ def draw_skill_tags(
     items = [str(label).strip() for label in labels if str(label).strip()]
     if not items:
         return
+    if style is not None:
+        base = base * (float(style.font_scale) if style.font_scale else 1.0)
 
-    style = layout.tag_style
+    tag_style = layout.tag_style
     metrics = skill_tag_metrics(
         base,
         line_height=layout.line_height,
@@ -300,20 +364,39 @@ def draw_skill_tags(
     text_color = _tag_text_color(
         layout.tag_fg, accent=accent, body_text=body_text, muted_text=muted_text
     )
+    if style is not None and style.color is not None:
+        text_color = _hex_to_rgb(style.color) or text_color
 
     # 逐标签选字体后量宽度：等宽字体的字宽与正文字体不同，混着量会让折行算错。
     # `str.isascii()` 对空串也返回 True，但空标签已在上面被过滤掉。
     use_mono = [layout.tag_mono and item.isascii() for item in items]
+
+    # ===== 多列网格（scholar 的三列技能）=====
+    # 三列是模板 CSS 真实存在的排版（`grid-template-columns`），不是"预览专属效果"。
+    # 只对 `plain` 形态生效：带框标签的多列模板尚未出现，出现时在 `_draw_tag_grid`
+    # 里补形状分支，而不是在这里静默丢掉框。
+    if layout.tag_columns > 1 and tag_style == "plain":
+        _draw_tag_grid(
+            pdf,
+            items,
+            metrics,
+            columns=layout.tag_columns,
+            text_color=text_color,
+            use_mono=use_mono,
+        )
+        pdf.set_text_color(*body_text)
+        return
+
     text_widths: list[float] = []
     for item, mono in zip(items, use_mono, strict=True):
         _select_tag_font(pdf, metrics, mono=mono)
         text_widths.append(pdf.get_string_width(item))
 
     # 标签外框宽度（**不含** dot 模板的分隔符）。居中对齐要按它算整行宽度。
-    box_widths = [_tag_box_width(text_width, metrics, style) for text_width in text_widths]
+    box_widths = [_tag_box_width(text_width, metrics, tag_style) for text_width in text_widths]
     widths = list(box_widths)
     separator_width = 0.0
-    if style == "dot":
+    if tag_style == "dot":
         # `.skill-list li::after{ content:"·"; margin-left: .7em }` + li 的 `margin-right`：
         # 分隔符 与 它右侧的间距都算进**前一项**的宽度里，折行才会和预览同口径
         # （分隔符跟着前一项走，不会单独漂到下一行行首）。
@@ -336,10 +419,10 @@ def draw_skill_tags(
             left += max(0.0, (available - row_width) / 2.0)
         for index in row:
             width = widths[index]
-            _draw_tag_shape(pdf, left, top, width, metrics, style=style, fill=fill, accent=accent)
+            _draw_tag_shape(pdf, left, top, width, metrics, style=tag_style, fill=fill, accent=accent)
             _select_tag_font(pdf, metrics, mono=use_mono[index])
             pdf.set_text_color(*text_color)
-            pdf.set_xy(left + _text_offset(metrics, style), top)
+            pdf.set_xy(left + _text_offset(metrics, tag_style), top)
             pdf.cell(text_widths[index], metrics.height, items[index])
 
             if style == "dot" and index < len(items) - 1:

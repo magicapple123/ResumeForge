@@ -333,7 +333,8 @@ export interface AutoBackupIntervalSetting {
 export interface BackupStatus {
   dataset_id: string;
   /**
-   * 上次成功备份存在且当前没有连续失败——"受保护"的唯一定义。
+   * 上次成功备份存在、当前没有连续失败**且当前目录里确有可用快照**——"受保护"的唯一定义。
+   * 只有 last_success 的快照已被移走/清理不算受保护。
    * 范围仅指**数据库快照**（不含附件文件，也不含异地灾备），UI 文案需注明。
    */
   protected: boolean;
@@ -344,6 +345,15 @@ export interface BackupStatus {
   interval_days: number;
   /** 有过成功但已超过间隔未再成功（调度线程还没跑到或被阻断）。 */
   overdue: boolean;
+  /**
+   * 快照目录的可判定状态（审计 F2/A02）：
+   * - `"ok"`：目录可读且至少有一份 `.db` 快照；
+   * - `"empty"`：目录可读但没有快照（没备份过，或被清理/移走）；
+   * - `"unreadable"`：目录读不了（权限/IO/路径断开）——**无法确认**，不等于没有。
+   *
+   * 旧后端没有这个字段（可选），此时按 `snapshot_count` 推断，界面不得因缺字段崩。
+   */
+  snapshot_state?: "ok" | "empty" | "unreadable";
   snapshot_count: number;
   snapshots: BackupStatusSnapshot[];
   /**

@@ -69,7 +69,27 @@ describe("previewResumeTemplate", () => {
     controller.abort();
     expect(forwarded.aborted).toBe(true);
 
+    // 4) 取消之后**正文读取**也必须被中断（A03）。以前 abort 只掐 fetch：响应头一旦到达，
+    //    这块正文照样被读完——关掉弹窗后仍在解析整页 HTML。这里的 fetch mock 在被 abort
+    //    之后依然会 resolve 出响应，正好用来钉住"读取阶段同样受控"。
     release?.();
-    await expect(pending).resolves.toContain("示例");
+    await expect(pending).rejects.toMatchObject({ code: "cancelled" });
+  });
+
+  it("未取消时正文照常读完（取消只影响被取消的那一条）", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response("<html><body>示例</body></html>", {
+          status: 200,
+          headers: { "Content-Type": "text/html; charset=utf-8" },
+        }),
+      ),
+    );
+    const controller = new AbortController();
+
+    await expect(
+      previewResumeTemplate({ template_name: "classic", signal: controller.signal }),
+    ).resolves.toContain("示例");
   });
 });

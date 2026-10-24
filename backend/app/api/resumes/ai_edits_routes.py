@@ -6,6 +6,7 @@
 命名空间**替换这两个符号，因此本模块对它们的读取必须是调用期的 ``_api.<name>`` 属性
 访问（``from app.api import resumes as _api``），**禁止** from-import 具名绑定。
 """
+
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -24,8 +25,16 @@ from ...schemas.resume import (
     ResumeSuggestionsOut,
 )
 from ...services import trash
+from ...services.llm import usage_ledger
 from ...services.llm.base import LLMError
 from ...services.profile.profile_service import get_profile_detail, to_profile_out
+from ...services.resume import fact_locks
+from ...services.resume.document_identity import sanitize_document_ids
+from ...services.resume.document_save import (
+    RevisionConflict,
+    revision_conflict_response,
+    save_ai_revision,
+)
 from ...services.resume.resume_revision import revise_resume
 from ...services.resume.resume_suggestions import generate_suggestions
 from ._shared import _to_resume_out
@@ -121,13 +130,50 @@ async def revise_existing_resume(
         logger.exception("简历修订发生内部错误")
         raise HTTPException(status_code=502, detail="修订简历失败") from exc
 
-    record.content = revised.model_dump()
-    record.warnings = []
-    # 修订后的内容不再对应"生成时"的筛选与来源状态：说明、未收录清单与事实来源
-    # 标注一并清空（标注描述的是生成时的锚定结果，修订后已失效）。
-    record.coverage_notes = []
-    record.fact_annotations = []
-    record.rationale = ""
-    db.commit()
-    db.refresh(record)
-    return _to_resume_out(record)
+    # 模型可能回显或臆造对象标识；这里**丢弃不合法的**而不是 422——AI 不是可以回
+    # 错误码的客户端，整份修订因为一个 id 被拒会让用户白等一次生成。
+    sanitized = sanitize_document_ids(revised.model_dump()) or {}
+
+    # W12 事实锁：AI 可以改表达，不能改姓名/机构/时间/数字/职责边界。校验在**落库前**
+    # 完成且是服务端硬校验（不是提示词约束）；有违规就一个字段都不写，返回 409 让
+    # 用户看见哪条被锁的值会被改动。翻译/片段插入/优化器走同一个门（enforce_ai_content）。
+    try:
+        fact_locks.enforce_ai_content(db, record, sanitized)
+    except fact_locks.FactLockError as exc:
+        logger.info(
+            "AI 修订被事实锁拒绝 record_id=%s locks=%s", record.id, len(exc.violations)
+        )
+        return fact_locks.fact_lock_conflict_response(exc.violations)
+
+    # 模型调用期间**不持写事务**（到这里才第一次写库）：条件写 + 版本推进 + 清空
+    # 与正文绑定的告警/来源标注，全在 ``save_ai_revision`` 的同一条 UPDATE 里。
+    #
+    # ``base_revision`` 没命中（期间别处保存过）→ 409，这次模型结果**直接丢弃**：
+    # 既不覆盖别人刚存的正文，也不清掉那份正文的 ``fact_annotations``——"内容没换、
+    # 标注被清了"是比覆盖更难解释的状态。
+    try:
+        outcome = save_ai_revision(
+            db,
+            record_id=record.id,
+            content=sanitized,
+            fact_annotations=[],
+            base_revision=payload.base_revision,
+        )
+    except RevisionConflict as exc:
+        logger.warning(
+            "AI 修订因版本冲突被丢弃 record_id=%s current=%s", resume_id, exc.current_revision
+        )
+        return revision_conflict_response(exc.current_revision)
+    if outcome is None:  # 竞态：模型跑完这一行已被删
+        raise HTTPException(status_code=404, detail="简历记录不存在或已被删除")
+    # R04：记录本次调用的用量（未知 token 落 NULL，不臆造）；失败不影响已提交的正文。
+    try:
+        usage_ledger.record_provider_usage(
+            db,
+            task=usage_ledger.TASK_RESUME_REVISE,
+            provider=provider,
+            resume_id=record.id,
+        )
+    except Exception:  # noqa: BLE001 - 账本不能反向破坏保存成功的结果
+        logger.warning("模型用量记录失败 record_id=%s", record.id, exc_info=True)
+    return _to_resume_out(outcome.record)

@@ -59,7 +59,22 @@ from .api import (
     fonts as fonts_api,
 )
 from .api import (
+    glossary_routes as glossary_api,
+)
+from .api import (
+    outbound as outbound_api,
+)
+from .api import (
+    provenance as provenance_api,
+)
+from .api import (
+    resume_phrases as resume_phrases_api,
+)
+from .api import (
     resume_templates as resume_templates_api,
+)
+from .api import (
+    review_annotations_routes as review_annotations_api,
 )
 from .api import (
     settings as settings_api,
@@ -69,6 +84,9 @@ from .api import (
 )
 from .api import (
     update as update_api,
+)
+from .api import (
+    usage as usage_api,
 )
 from .config import BACKEND_DIR, DATA_DIR, get_settings
 from .database import Base, ensure_sqlite_columns, run_sqlite_maintenance
@@ -443,6 +461,16 @@ def create_app() -> FastAPI:
         stats.router,
         system_api.router,
         update_api.router,
+        # W12/R04 后端契约：独立前缀 /api/provenance、/api/usage、/api/outbound。
+        provenance_api.router,
+        usage_api.router,
+        outbound_api.router,
+        # W17 私有表达资产：独立前缀 /api/resume-phrases（本地操作，不外发）。
+        resume_phrases_api.router,
+        # W18 离线对象批注：/api/share-packages/{id}/annotations 与 /api/resume-annotations。
+        review_annotations_api.router,
+        # W16 数据集级术语表：独立前缀 /api/glossary-terms。
+        glossary_api.router,
         assistant.router,
         assistant_proposals.router,
         trash.router,

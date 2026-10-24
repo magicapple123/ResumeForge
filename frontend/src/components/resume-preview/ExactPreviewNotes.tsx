@@ -66,6 +66,8 @@ interface StatusProps {
   headingSerif: boolean;
   /** 只有当前可见时才说字族的事（藏起来时说了也没人看）。 */
   active: boolean;
+  /** 这一版预览用的是**还没保存**的正文（制作台里改完没点保存）。 */
+  hasUnsavedContent?: boolean;
   onOpenInNewTab: () => void;
 }
 
@@ -81,6 +83,7 @@ export function ExactPreviewStatus({
   pageLimit,
   headingSerif,
   active,
+  hasUnsavedContent = false,
   onOpenInNewTab,
 }: StatusProps) {
   return (
@@ -92,6 +95,11 @@ export function ExactPreviewStatus({
           ? t("exact.status.busy")
           : t("exact.status.pages", { pages: current.pages ?? "?", limit: pageLimit })}
       </Typography.Text>
+      {hasUnsavedContent && active ? (
+        <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+          {t("exact.unsavedNote")}
+        </Typography.Text>
+      ) : null}
       {headingSerif && active ? (
         <Typography.Text type="secondary" style={{ fontSize: 12 }}>
           {t("exact.serifNote")}

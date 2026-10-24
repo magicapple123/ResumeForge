@@ -34,10 +34,12 @@
 import { SaveOutlined } from "@ant-design/icons";
 import { Button, Space } from "antd";
 import type { Ref } from "react";
-import { useCallback, useEffect, useImperativeHandle, useState } from "react";
+import { useCallback, useEffect, useImperativeHandle, useRef, useState } from "react";
 import type { ResumeContent } from "../../types";
 import { contentSignature } from "../../utils/contentSignature";
 import type { ResumeDraftStore } from "../../features/resume/resumeDraftContent";
+import { isRevisionConflict } from "../../features/resume-document/saveOutcome";
+import type { EditorSaveOutcome } from "../../features/resume-document/types";
 import type { ProfileFillSources } from "../../features/profile/profileFillOptions";
 import { t } from "../../i18n";
 import EditorFooterBar from "../resume-editor/EditorFooterBar";
@@ -54,6 +56,23 @@ import { useResumeEditorPanel } from "../resume-editor/useResumeEditorPanel";
 export interface ResumeWorkbenchEditorHandle {
   /** = `api.submit`：走表单校验 → `onSave`（与中栏底部「保存内容」同一条链路）。 */
   save: () => void;
+  /**
+   * 可等待的保存（W02 的整体保存用）：校验表单 → 提交 → 等宿主那一次写入**真的结算**。
+   *
+   * 与 `save` 的差别只有"能等到终态"：`save` 是"点了就走"，动作条要判断"这一步成功没、
+   * 是不是 409"，必须拿到终态才能决定收起按钮还是进冲突态。`invalid` 不是失败——表单
+   * 校验没通过时根本没发请求，草稿与脏值都不该被当作保存失败。
+   */
+  saveAsync: (expectedRevision?: number) => Promise<EditorSaveOutcome>;
+  /**
+   * 读"保存口径"的当前内容：表单值 + 服务端照片（口径与编辑器 `mergePartial` 一致）。
+   * 冲突时"比较 / 另存副本"要的是**本地这份**，不是服务端那份。
+   */
+  readContent: () => ResumeContent | null;
+  /** 清掉 sessionStorage 里的表单草稿（"用最新的"之后本地草稿必须作废）。 */
+  clearDraft: () => void;
+  /** 外部整份替换（W06 大纲命令）：写回表单并标脏，保存仍走整体动作条。 */
+  replaceContent: (next: ResumeContent) => void;
   /**
    * = `api.discardEdits`：立刻放弃，**不再二次确认**。
    *
@@ -82,8 +101,13 @@ interface Props {
   fillSources?: ProfileFillSources | null;
   /** 后端正在按新参数重排：状态条上说明一句，避免用户以为编辑器卡了。 */
   relayouting?: boolean;
-  /** 宿主负责 PATCH + 重渲染；resolve 即已落库。 */
-  onSave: (content: ResumeContent) => Promise<void>;
+  /**
+   * 宿主负责 PATCH + 重渲染；resolve 即已落库。
+   *
+   * 第二个参数是"这次写基于哪一版"（W02 条件写）：旧宿主忽略它即可，返回 `void`；
+   * 新宿主返回**保存后的 revision**，供后续步骤（草稿发布 / 下一轮保存）使用。
+   */
+  onSave: (content: ResumeContent, expectedRevision?: number) => Promise<number | void>;
   /** 脏值变化（宿主据此禁用底部「手动调整」，见设计 §9 Q6）。 */
   onDirtyChange?: (dirty: boolean) => void;
   /**
@@ -93,6 +117,10 @@ interface Props {
    * 各发一次 PATCH"。
    */
   onSavingChange?: (saving: boolean) => void;
+  /** W03：每键的整份草稿（宿主据此记历史；回调里不 setState，不引发重渲染）。 */
+  onDraftContent?: (content: ResumeContent) => void;
+  /** W03：制作台由统一历史接管撤回/恢复时传 false（原生撤销优先，不做双重回退）。 */
+  keyboardHistory?: boolean;
   /** 关闭制作台（无脏值时由弹窗直接调用）。缺省 = 这一栏不负责关闭。 */
   onRequestClose?: () => void;
   /**
@@ -146,6 +174,8 @@ export default function ResumeWorkbenchEditorColumn({
   onSave,
   onDirtyChange,
   onSavingChange,
+  onDraftContent,
+  keyboardHistory = true,
   onRequestClose,
   closeSignal = 0,
   pickTarget,
@@ -163,12 +193,45 @@ export default function ResumeWorkbenchEditorColumn({
   const handleDraftContent = useCallback(
     (next: ResumeContent) => {
       draftStore?.set(next, contentSignature(next));
+      onDraftContent?.(next);
     },
-    [draftStore],
+    [draftStore, onDraftContent],
   );
   const handleDraftReset = useCallback(() => {
     draftStore?.clear();
   }, [draftStore]);
+
+  // 一次性保存的"结算回调"：动作条要等这一次宿主写入真的落地（成功 / 409 / 失败）才能
+  // 决定收起按钮还是进冲突态。普通保存（底部按钮、快捷键）不设结算回调，行为不变。
+  const pendingSaveRef = useRef<((outcome: EditorSaveOutcome) => void) | null>(null);
+  // 这一次保存基于哪一版（W02 条件写）：由 `saveAsync(expectedRevision)` 在提交前写入。
+  const expectedRevisionRef = useRef<number | undefined>(undefined);
+  /**
+   * 包住宿主的 `onSave`：**先结算、再抛**。
+   *
+   * 抛是因为编辑器既有链路要靠异常做"失败保留草稿 + 错误指引"（`useResumeEditorPanel` 的
+   * `handleFinish`）；结算是给动作条的，用来区分"成功 / 409 冲突 / 普通失败"——只靠返回值
+   * 无法同时满足这两件事。
+   */
+  const handleHostSave = useCallback(
+    async (next: ResumeContent): Promise<void> => {
+      let outcome: EditorSaveOutcome = { status: "failed", error: null };
+      try {
+        const revision = await onSave(next, expectedRevisionRef.current);
+        outcome = { status: "saved", revision: typeof revision === "number" ? revision : null };
+      } catch (error) {
+        outcome = isRevisionConflict(error)
+          ? { status: "conflict", currentRevision: null }
+          : { status: "failed", error };
+        throw error;
+      } finally {
+        const settle = pendingSaveRef.current;
+        pendingSaveRef.current = null;
+        settle?.(outcome);
+      }
+    },
+    [onSave],
+  );
 
   const api = useResumeEditorPanel({
     active,
@@ -178,13 +241,14 @@ export default function ResumeWorkbenchEditorColumn({
     draftScopeKey: `resume.edit#${resumeId ?? "new"}#workbench`,
     fillSources,
     pickTarget,
-    onSave,
+    onSave: handleHostSave,
     // 保存成功**不关**制作台：用户刚改完一句措辞，下一步往往是接着调参数、看右栏排版。
     // 保存成功的提示由宿主（`saveEditedResume`）给，这里不重复弹。
     onSaved: () => undefined,
     // 只上行：签名用内容签名（同一份内容重复上报不会二次渲染，见 `resumeDraftContent`）。
     onDraftContent: handleDraftContent,
     onDraftReset: handleDraftReset,
+    keyboardHistory,
   });
 
   // 脏值上报：底部那一排动作里的「手动调整」在有未保存内容时要禁用（两个编辑器同时开
@@ -201,12 +265,63 @@ export default function ResumeWorkbenchEditorColumn({
   }, [api.saving, onSavingChange]);
   useEffect(() => () => onSavingChange?.(false), [onSavingChange]);
 
-  // 顶部动作条的两颗按钮经由这个句柄打到中栏的状态机上（见 `ResumeWorkbenchEditorHandle`）。
-  // 依赖写在这两个函数上而不是整个 `api`：`api` 每次渲染都是新对象，挂上去会让句柄失效。
-  useImperativeHandle(ref, () => ({ save: api.submit, discard: api.discardEdits }), [
-    api.submit,
-    api.discardEdits,
-  ]);
+  /**
+   * 可等待的保存（W02 整体保存）：先校验表单，再走**同一个** `onFinish`。
+   *
+   * 为什么不直接 `form.submit()`：它不返回 Promise，校验失败时 `onFinish` 根本不触发，
+   * 等终态会永远悬着。校验与提交之间用户没有机会改值（同一个事件循环），不存在
+   * "校验过了、提交时又变了"的窗口；提交仍走同一条 `handleFinish`，合并口径、草稿清理、
+   * 历史重置都只有那一份实现。
+   */
+  const saveAsync = useCallback(
+    async (expectedRevision?: number): Promise<EditorSaveOutcome> => {
+      if (!content || pendingSaveRef.current) return { status: "invalid" };
+      try {
+        await api.form.validateFields();
+      } catch {
+        return { status: "invalid" };
+      }
+      expectedRevisionRef.current = expectedRevision;
+      const settled = new Promise<EditorSaveOutcome>((resolve) => {
+        pendingSaveRef.current = resolve;
+      });
+      api.onFinish(api.form.getFieldsValue(true) as ResumeContent);
+      return settled;
+    },
+    [api, content],
+  );
+
+  // 顶部动作条经由这个句柄打到中栏的状态机上（见 `ResumeWorkbenchEditorHandle`）。
+  // 依赖逐项列出而不是整个 `api`：`api` 每次渲染都是新对象，挂上去会让句柄失效。
+  useImperativeHandle(
+    ref,
+    () => ({
+      save: api.submit,
+      discard: api.discardEdits,
+      saveAsync,
+      readContent: () =>
+        content
+          ? {
+              ...content,
+              ...(api.form.getFieldsValue(true) as Partial<ResumeContent>),
+              // 照片不在表单里（见 `useResumeEditorPanel.mergePartial`）：不补回来，冲突时
+              // "另存副本"建出来的新简历会丢照片。
+              photo: content.photo,
+            }
+          : null,
+      clearDraft: api.discardDraft,
+      replaceContent: api.replaceContent,
+    }),
+    [
+      api.submit,
+      api.discardEdits,
+      api.discardDraft,
+      api.form,
+      api.replaceContent,
+      content,
+      saveAsync,
+    ],
+  );
 
   // "关闭制作台"的内联确认：弹窗那侧只知道自己"想关"，脏值只有这里知道。
   //

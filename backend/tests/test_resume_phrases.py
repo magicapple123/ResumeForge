@@ -1,0 +1,191 @@
+# SPDX-License-Identifier: Apache-2.0
+"""W17 私有表达资产：CRUD/检索/收藏/插入新身份/计数/软删回收站/隔离/备份/隐私。"""
+
+from __future__ import annotations
+
+import logging
+import sqlite3
+from contextlib import closing
+from pathlib import Path
+
+from app import database
+from app.database_migrations import application_tables
+from app.dataset_registry import dataset_database_file
+from app.services.datasets import create_dataset
+
+
+def _content() -> dict:
+    return {
+        "name": "张示例",
+        "summary": "一段总结",
+        "experience": [
+            {
+                "id": "expobj0001",
+                "company": "示例科技有限公司",
+                "role": "后端实习生",
+                "description": ["负责合成数据接口"],
+                "point_ids": {"description": ["pnt0000001"]},
+            }
+        ],
+        "education": [{"id": "eduobj0001", "school": "示例大学"}],
+    }
+
+
+def _create_resume(client) -> int:
+    response = client.post(
+        "/api/resumes/manual", json={"title": "表达资产测试", "content": _content()}
+    )
+    assert response.status_code in (200, 201), response.text
+    return int(response.json()["id"])
+
+
+def _resume(client, resume_id: int) -> dict:
+    return client.get(f"/api/resumes/{resume_id}").json()
+
+
+def _create_phrase(client, **body) -> dict:
+    payload = {"text": "主导合成数据接口的设计与实现", "kind": "achievement", **body}
+    response = client.post("/api/resume-phrases", json=payload)
+    assert response.status_code == 201, response.text
+    return response.json()
+
+
+def test_phrase_crud_and_filters(client):
+    created = _create_phrase(client, job_tags=["后端", "数据"], language="zh-CN")
+    assert created["usage_count"] == 0
+    assert created["job_tags"] == ["后端", "数据"]
+
+    second = _create_phrase(client, text="把复盘写成可复用方法", kind="method")
+    assert second["kind"] == "method"
+
+    listed = client.get("/api/resume-phrases", params={"kind": "method"}).json()
+    assert [item["id"] for item in listed["items"]] == [second["id"]]
+    assert (
+        client.get("/api/resume-phrases", params={"tag": "后端"}).json()["items"][0]["id"]
+        == created["id"]
+    )
+    assert client.get("/api/resume-phrases", params={"keyword": "复盘"}).json()["items"]
+    page = client.get("/api/resume-phrases", params={"limit": 1}).json()
+    assert page["next_cursor"] == page["items"][0]["id"]
+    rest = client.get(
+        "/api/resume-phrases", params={"limit": 1, "cursor": page["next_cursor"]}
+    ).json()
+    assert rest["items"] and rest["items"][0]["id"] != page["items"][0]["id"]
+
+    updated = client.patch(
+        f"/api/resume-phrases/{created['id']}",
+        json={"text": "改成更精炼的表述", "job_tags": ["后端"]},
+    )
+    assert updated.status_code == 200
+    assert updated.json()["text"] == "改成更精炼的表述"
+
+    assert client.post("/api/resume-phrases", json={"text": "x" * 2001}).status_code == 422
+
+
+def test_collect_from_resume_and_rejects_unknown_path(client):
+    resume_id = _create_resume(client)
+
+    response = client.post(
+        "/api/resume-phrases/collect",
+        json={"resume_id": resume_id, "path": "experience.0.description.0"},
+    )
+
+    assert response.status_code == 201, response.text
+    phrase = response.json()
+    assert phrase["text"] == "负责合成数据接口"
+    assert phrase["kind"] == "achievement"
+    assert phrase["source_resume_id"] == resume_id
+    assert phrase["source_object_id"] == "expobj0001"
+
+    bad = client.post(
+        "/api/resume-phrases/collect",
+        json={"resume_id": resume_id, "path": "experience.9.description.0"},
+    )
+    assert bad.status_code == 422
+
+
+def test_insert_into_existing_entry_creates_new_identity_and_counts(client):
+    resume_id = _create_resume(client)
+    phrase = _create_phrase(client)
+
+    response = client.post(
+        f"/api/resume-phrases/{phrase['id']}/insert",
+        json={
+            "resume_id": resume_id,
+            "section": "experience",
+            "entry_id": "expobj0001",
+            "point_index": 0,
+            "expected_revision": 0,
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["inserted_object_id"] == "expobj0001"
+    assert body["inserted_point_id"] and body["inserted_point_id"] != "pnt0000001"
+    assert body["phrase"]["usage_count"] == 1
+    record = _resume(client, resume_id)
+    entry = record["content"]["experience"][0]
+    assert entry["description"][0] == phrase["text"]
+    assert len(entry["point_ids"]["description"]) == len(entry["description"])
+    # 来源关联复用 W12：插入的块来自 kind=phrase 的来源。
+    view = client.get(f"/api/provenance/resumes/{resume_id}").json()
+    assert view["sources"][0]["kind"] == "phrase"
+    assert view["sources"][0]["external_ref"] == f"resume_phrase:{phrase['id']}"
+
+
+def test_insert_new_entry_and_revision_conflict(client):
+    resume_id = _create_resume(client)
+    phrase = _create_phrase(client)
+    created = client.post(
+        f"/api/resume-phrases/{phrase['id']}/insert",
+        json={"resume_id": resume_id, "section": "education", "expected_revision": 0},
+    )
+    assert created.status_code == 200, created.text
+    record = _resume(client, resume_id)
+    new_entry = record["content"]["education"][-1]
+    assert new_entry["achievements"] == [phrase["text"]]
+    assert new_entry["id"] != "eduobj0001"
+
+    stale = client.post(
+        f"/api/resume-phrases/{phrase['id']}/insert",
+        json={"resume_id": resume_id, "section": "education", "expected_revision": 0},
+    )
+    assert stale.status_code == 409
+    assert stale.json()["code"] == "resume_revision_conflict"
+
+
+def test_soft_delete_enters_trash_and_restores(client):
+    phrase = _create_phrase(client)
+    assert client.delete(f"/api/resume-phrases/{phrase['id']}").status_code == 204
+    assert client.get("/api/resume-phrases").json()["items"] == []
+    assert client.post(f"/api/trash/phrase/{phrase['id']}/restore").status_code == 204
+    items = client.get("/api/resume-phrases").json()["items"]
+    assert [item["id"] for item in items] == [phrase["id"]]
+
+
+def test_phrase_is_dataset_scoped_and_backed_up(client):
+    _create_phrase(client)
+
+    def _count(database_file: Path, table: str) -> int:
+        with closing(sqlite3.connect(str(database_file))) as connection:
+            return connection.execute(f'SELECT COUNT(*) FROM "{table}"').fetchone()[0]
+
+    active_file = Path(database.engine.url.database)
+    assert _count(active_file, "resume_phrase") == 1
+    other = create_dataset("资产隔离检查", database.engine)
+    assert _count(dataset_database_file(other["id"]), "resume_phrase") == 0
+    assert "resume_phrase" in set(application_tables())
+    # 软删列已登记进回收站注册表（第 17 类），否则删了就永远找不回来。
+    from app.services.trash import TRASH_SPEC_BY_KEY
+
+    assert TRASH_SPEC_BY_KEY["phrase"].model.__tablename__ == "resume_phrase"
+
+
+def test_phrase_text_is_not_logged(client, caplog):
+    marker = "W17-PRIVATE-PHRASE-MARKER"
+    with caplog.at_level(logging.DEBUG):
+        created = _create_phrase(client, text=marker, quality_note="只在本地")
+        assert client.get("/api/resume-phrases").status_code == 200
+    assert created["text"] == marker
+    assert marker not in caplog.text

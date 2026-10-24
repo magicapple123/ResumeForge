@@ -53,7 +53,7 @@ describe("简历制作台 · 三栏结构", () => {
     expect(screen.getByTestId("workbench-preview")).toBeInTheDocument();
   });
 
-  it("左栏四个分组按 模板·版式 / 排版参数 / 层次与间距 / 外观 排列", () => {
+  it("左栏六个分组按 模板·版式 / 排版参数 / 层次与间距 / 外观 / 局部排版 / 分页 排列", () => {
     renderModal();
 
     const params = document.querySelector(".resume-wb-col-params") as HTMLElement;
@@ -62,6 +62,10 @@ describe("简历制作台 · 三栏结构", () => {
       t("workbench.group.measure"),
       t("workbench.group.spacing"),
       t("workbench.group.appearance"),
+      // W07：角色级局部排版（姓名 / 板块标题 / 条目 / 正文 / 元信息 / 重点文字）。
+      t("typography.group.title"),
+      // W08：分页意图（板块级先挂，条目级等选择状态上提）。
+      t("pagination.group.title"),
     ];
     // 按**DOM 顺序**比，不用 `innerHTML.indexOf` 找子串：子串定位会把"文案里恰好出现分组名"
     // 的任何节点也算进来（以后的按钮、aria-label、提示语），顺序一乱仍可能假通过。

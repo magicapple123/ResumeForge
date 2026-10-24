@@ -5,8 +5,22 @@ import { downloadDelivery, listDeliveryArchive } from "../../api/resumes";
 import { useApi } from "../../hooks/useApi";
 import type { DeliverySummary } from "../../types";
 import { downloadBlob } from "../../utils/download";
+import { createExportDeliveryApi } from "../../features/resume-delivery";
+import type { ExportDeliveryApi } from "../../features/resume-delivery";
+import ArchiveList from "./delivery/ArchiveList";
 
-export default function DeliveryArchiveModal({ onClose }: { onClose: () => void }) {
+/** 归档原件接口（模块级单例：列表 effect 以 api 为依赖，每次渲染新建会反复拉取）。 */
+const defaultArchiveApi = createExportDeliveryApi();
+
+interface Props {
+  onClose: () => void;
+  /** 指定简历后，在历史存档下方显示"这份简历的交付原件"（W19 / D19）。 */
+  resumeId?: number | null;
+  /** 测试/宿主注入用；缺省走真实接口。 */
+  archiveApi?: ExportDeliveryApi;
+}
+
+export default function DeliveryArchiveModal({ onClose, resumeId, archiveApi }: Props) {
   const { message } = App.useApp();
   const [page, setPage] = useState(1);
   const [keyword, setKeyword] = useState("");
@@ -127,6 +141,11 @@ export default function DeliveryArchiveModal({ onClose }: { onClose: () => void 
           },
         ]}
       />
+      {resumeId ? (
+        <div style={{ marginTop: 16 }}>
+          <ArchiveList api={archiveApi ?? defaultArchiveApi} resumeId={resumeId} />
+        </div>
+      ) : null}
     </Modal>
   );
 }

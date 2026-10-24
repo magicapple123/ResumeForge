@@ -14,7 +14,7 @@
  *
  * 全部走**草稿值**而不是记录值：换完模板还没点保存时，精确预览就得按新的排。
  */
-import type { ResumeDetail, ResumeLayout, ResumeTemplateCatalog } from "../../types";
+import type { ResumeContent, ResumeDetail, ResumeLayout, ResumeTemplateCatalog } from "../../types";
 
 /** 精确预览需要的那组上下文（与 `ResumeDetailPreview` 手里的草稿值一致）。 */
 export interface ExactPreviewOptions {
@@ -42,6 +42,14 @@ export interface ExactPreviewOptions {
    * 缺省 `false` = 不提示。
    */
   headingSerif?: boolean;
+  /**
+   * 这次预览要排的正文（W04）。
+   *
+   * 缺省 = 用记录里已保存的那一版。制作台里中栏改了正文还没保存时，宿主把草稿内容
+   * 塞进来——精确预览显示的就是导出产物本身，正文不一样，"预览"就没有意义了。
+   * 只走预览端点：不落库、不冻结交付、不触发 AI。
+   */
+  content?: ResumeContent;
 }
 
 export function buildExactPreviewOptions(

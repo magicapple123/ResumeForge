@@ -35,7 +35,12 @@ def test_asset_categories_is_one_shared_object() -> None:
 def test_asset_categories_shape_is_a_tuple_of_known_categories() -> None:
     """形状固定为 tuple 且内容就是两个已知类别（改动需同步磁盘目录与清单段名）。"""
     assert isinstance(asset_categories_module.ASSET_CATEGORIES, tuple)
-    assert asset_categories_module.ASSET_CATEGORIES == ("user_files", "referral_images")
+    # 0059（W19）：新增数据集资产目录 export_archive（交付原件归档，进备份）。
+    assert asset_categories_module.ASSET_CATEGORIES == (
+        "user_files",
+        "referral_images",
+        "export_archive",
+    )
     assert asset_categories_module.__all__ == ["ASSET_CATEGORIES"]
 
 

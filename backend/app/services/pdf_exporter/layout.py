@@ -118,6 +118,10 @@ class ResumeLayout:
     # `tag_mono`：technical 的 `.skill-list li` 用等宽字族。PDF 只有一套注册字体，
     # 纯 ASCII 标签改用 fpdf2 内置的 courier，含中文时退回正文（见 `skill_tags` docstring）。
     tag_mono: bool
+    # `tag_columns`：技能标签的**列数**（来自模板 `.skill-list` 的 CSS grid）——只有
+    # scholar 是三列（`repeat(3, minmax(0, 1fr))`），其余模板是流式列表（1）。此前 scholar
+    # 的三列只存在于 HTML，PDF 把同一批技能排成一行行文字，是最明显的"HTML/PDF 不一致"。
+    tag_columns: int
     # ===== 正文分栏（来自模板 `.resume-sections` 的 CSS）=====
     # 草稿侧 `split` 是两栏网格（`exporter.py` 把 `column_count` 置 2），其余模板单栏。
     # `column_gap` 是栏间距（× 基准字号，= CSS `column-gap: calc(var(--fs) * 1.2)`）。
@@ -312,6 +316,8 @@ def resolve_layout(
         # 它们决定"画在哪"与"用什么字体画"，都属于模板 CSS 的语义，不在这里另设默认。
         tag_align=str(defaults["tag_align"]),
         tag_mono=bool(defaults["tag_mono"]),
+        # 多列标签网格（scholar）：列数同样只来自模板 CSS，缺键时按 1 列（= 改动前的流式排法）。
+        tag_columns=int(defaults.get("tag_columns", 1)),
         # 正文分栏：栏数决定 `_draw_resume` 走 `columns.render_sections` 还是顺序路径；
         # 栏间距参与半栏宽度的计算（见 `columns.column_frames`）。
         column_count=int(defaults["column_count"]),

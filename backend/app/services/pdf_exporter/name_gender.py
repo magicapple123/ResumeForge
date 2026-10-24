@@ -77,6 +77,8 @@ def draw_name_gender(
     name_size: float,
     extra_size: float,
     align: str = "left",
+    name_color: tuple[int, int, int] | None = None,
+    name_bold: bool = True,
 ) -> None:
     """按 `plan` 画"姓名（+ 性别）"块：姓名用姓名字号/粗体/强调色，性别用 extra 口径。
 
@@ -95,9 +97,9 @@ def draw_name_gender(
     left = pdf.get_x()
     top = pdf.get_y()
     centered = align == "center"
-    pdf.set_text_color(*pdf.accent)
+    pdf.set_text_color(*(name_color or pdf.accent))
     if plan.same_line:
-        pdf.set_font(FONT_FAMILY, "B", name_size * _PX_TO_PT)
+        pdf.set_font(FONT_FAMILY, "B" if name_bold else "", name_size * _PX_TO_PT)
         name_width = pdf.get_string_width(name)
         if centered:
             # 整块宽度 = 姓名 + 性别（含前导空格）；超出可用宽度时不左移（max(0, ...)）。
@@ -120,7 +122,7 @@ def draw_name_gender(
         # 折行分支：两段各是一次 `multi_cell`，对齐交给它自己的 `align`——这里没有跨字号的
         # 相对定位，用 `"C"` 才是与草稿 `text-align: center` 等价的行为。
         line_align = "C" if centered else "L"
-        pdf.set_font(FONT_FAMILY, "B", name_size * _PX_TO_PT)
+        pdf.set_font(FONT_FAMILY, "B" if name_bold else "", name_size * _PX_TO_PT)
         pdf.multi_cell(
             width,
             pdf.line_advance(name_size),

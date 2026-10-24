@@ -8,6 +8,10 @@ const TAB_BY_SECTION: Record<string, string> = {
   projects: "projects",
   skills: "skills",
   awards: "awards",
+  // W14：科研三栏的 key 与 content 字段名一致（见 ResearchTabs.RESEARCH_TAB_KEYS）。
+  publications: "publications",
+  research_projects: "research_projects",
+  patents: "patents",
 };
 
 const MULTILINE_FIELDS = new Set([

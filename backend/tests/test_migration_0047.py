@@ -13,7 +13,8 @@ from app.database_migrations import build_alembic_config
 from sqlalchemy import create_engine, inspect, text
 
 PREVIOUS_REVISION = "0046_search_fts"
-HEAD_REVISION = "0051_resume_draft"
+MIGRATION_REVISION = "0047_resume_updated_at"
+HEAD_REVISION = "0059_resume_export"
 _FTS_PREFIXES = ("knowledge_fts", "search_fts")
 
 
@@ -34,7 +35,9 @@ def test_upgrade_adds_a_nullable_column_and_keeps_tables_untouched(tmp_path):
     before = _business_tables(engine)
     assert "updated_at" not in _columns(engine, "resume_record")
 
-    command.upgrade(config, HEAD_REVISION)
+    # 升到**本迁移**而不是全局 HEAD：HEAD 之后若有"只加表"迁移（0053），业务表
+    # 集合当然会变；本用例要证明的是 0047 自己只加列。
+    command.upgrade(config, MIGRATION_REVISION)
 
     # 只加列：表集合不变（旧备份导入依赖这一点）。
     assert _business_tables(engine) == before

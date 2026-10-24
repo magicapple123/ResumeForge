@@ -55,12 +55,13 @@ def _pipeline_products(record_language: str, request_language: str | None) -> di
     与 ``export_label_samples._products`` 不是一回事——后者直接调渲染器，根本证明不了
     "请求里的语言有没有传到渲染器"，而漏传正是本批缺陷本身。
     """
-    context = RenderContext(language=record_language)
+    # W14 起样本有 10 个分区：1 页会截断尾部分区，语言断言与页数无关，给 3 页。
+    context = RenderContext(language=record_language, page_limit=3)
     resume = _resume()
     products: dict[str, str] = {}
     for fmt in ("pdf", "docx", "html", "md", "txt"):
         artifact = build_export(
-            ExportRequest(format=fmt, language=request_language),
+            ExportRequest(format=fmt, language=request_language, page_limit=3),
             resume,
             context,
         )
@@ -153,7 +154,10 @@ def _create_resume_via_api(client, language: str) -> int:
     )
     assert created.status_code == 201, created.text
     resume_id = created.json()["id"]
-    patched = client.patch(f"/api/resumes/{resume_id}/layout", json={"language": language})
+    # 10 分区样本按 3 页导出：语言断言与页数无关，避免截断尾部分区。
+    patched = client.patch(
+        f"/api/resumes/{resume_id}/layout", json={"language": language, "page_limit": 3}
+    )
     assert patched.status_code == 200, patched.text
     return resume_id
 

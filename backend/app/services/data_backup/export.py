@@ -34,6 +34,7 @@ from .global_assets import build_global_assets_payload, write_global_assets_memb
 from .global_config import build_global_llm_payload, write_global_llm_member
 from .manifest import _snapshot_table_counts, build_manifest
 from .paths import (
+    ARCHIVE_EXPORT_ARCHIVE_PREFIX,
     ARCHIVE_REFERRAL_IMAGES_PREFIX,
     ARCHIVE_USER_FILES_PREFIX,
     DATABASE_MEMBER,
@@ -157,6 +158,7 @@ def create_backup_archive(
                 {
                     "user_files": ARCHIVE_USER_FILES_PREFIX,
                     "referral_images": ARCHIVE_REFERRAL_IMAGES_PREFIX,
+                    "export_archive": ARCHIVE_EXPORT_ARCHIVE_PREFIX,
                 },
             )
             for item, copy in extras:

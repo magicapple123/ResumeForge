@@ -14,9 +14,18 @@ import LoadingBlock from "../common/LoadingBlock";
 import A4PreviewFrame from "../templates/A4PreviewFrame";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { fetchResumeTemplates, previewResumeTemplate } from "../../api/resumes";
-import type { ResumeFontScale, ResumeLayout, ResumeTemplateOption } from "../../types";
+import type {
+  ResumeContent,
+  ResumeFontScale,
+  ResumeFormatConfig,
+  ResumeLayout,
+  ResumeTemplateCatalog,
+  ResumeTemplateOption,
+} from "../../types";
 import { t } from "../../i18n";
 import { withHiddenScrollbar } from "../../utils/iframeDocument";
+import { templateCapability } from "../../features/resume-template-trial/templateProfile";
+import TemplateTrialPanel from "./template-trial/TemplateTrialPanel";
 
 interface Props {
   open: boolean;
@@ -34,6 +43,16 @@ interface Props {
   onFontScaleChange: (scale: ResumeFontScale) => void;
   onSelect: (template: string) => void;
   onClose: () => void;
+  /**
+   * 试用采纳通道（W10）：提供时"采用模板默认"才可用——它需要把**清空后的**
+   * `format_config` 也交给宿主一次写回。不提供时退回 `onSelect(template)`（保留覆盖），
+   * 对比视图会如实禁用"采用模板默认"，不假装生效。
+   */
+  onTrialAdopt?: (request: { template: string; formatConfig: ResumeFormatConfig }) => void;
+  /** 当前简历 id：试用"我的内容 + 真实页数"需要。不传时只能看示例。 */
+  resumeId?: number | null;
+  /** 未保存的当前正文（W04 覆盖）：试用按它预览与测量，不落库。 */
+  content?: ResumeContent | null;
 }
 
 const FONT_SCALES: { value: ResumeFontScale; label: string }[] = [
@@ -56,9 +75,18 @@ export default function TemplateGalleryModal({
   onFontScaleChange,
   onSelect,
   onClose,
+  onTrialAdopt,
+  resumeId,
+  content,
 }: Props) {
   const { message } = App.useApp();
   const [templates, setTemplates] = useState<ResumeTemplateOption[]>([]);
+  /** 完整目录（对比视图要读 `template_layouts` 推篇幅档，不另发一次请求）。 */
+  const [catalog, setCatalog] = useState<ResumeTemplateCatalog | null>(null);
+  /** 图库 / 试用对比：同一弹窗内切视图，不叠第二个 Modal（叠层规则）。 */
+  const [view, setView] = useState<"gallery" | "compare">("gallery");
+  /** 从某张卡片点"试用"进来时，右侧默认就是那张卡。 */
+  const [trialSeed, setTrialSeed] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [previews, setPreviews] = useState<Record<string, string>>({});
   const [failed, setFailed] = useState<Record<string, string>>({});
@@ -82,10 +110,9 @@ export default function TemplateGalleryModal({
   const formatConfigKey = JSON.stringify(formatConfig ?? {});
 
   // 纯取数（不含 setState）：effect 内联调用时 Compiler 才能验证非同步更新。
-  const fetchTemplates = useCallback(async (): Promise<ResumeTemplateOption[] | null> => {
+  const fetchTemplates = useCallback(async (): Promise<ResumeTemplateCatalog | null> => {
     try {
-      const catalog = await fetchResumeTemplates();
-      return catalog.templates;
+      return await fetchResumeTemplates();
     } catch (error) {
       message.error(error instanceof Error ? error.message : "读取模板清单失败");
       return null;
@@ -102,9 +129,12 @@ export default function TemplateGalleryModal({
   useEffect(() => {
     if (!open) return;
     let cancelled = false;
-    void fetchTemplates().then((templates) => {
+    void fetchTemplates().then((nextCatalog) => {
       if (cancelled) return;
-      if (templates !== null) setTemplates(templates);
+      if (nextCatalog !== null) {
+        setCatalog(nextCatalog);
+        setTemplates(nextCatalog.templates);
+      }
       setLoading(false);
     });
     return () => {
@@ -198,6 +228,23 @@ export default function TemplateGalleryModal({
     [layout.format_name, formatConfigKey, previewScale, zoomPages, message],
   );
 
+  /** 一张卡片的能力摘要（纯展示；目录缺基准时只显示能证实的两项）。 */
+  const cardCapability = useCallback(
+    (item: ResumeTemplateOption): string => {
+      const capability = templateCapability(item, catalog);
+      const chips = [
+        capability.density === "roomy"
+          ? t("trial.density.roomy")
+          : capability.density === "regular"
+            ? t("trial.density.regular")
+            : null,
+        t(capability.photo === "custom" ? "trial.photo.custom" : "trial.photo.builtin"),
+      ].filter((chip): chip is string => Boolean(chip));
+      return chips.join(" · ");
+    },
+    [catalog],
+  );
+
   const selectedName = layout.template;
   const body = useMemo(
     () => (
@@ -205,6 +252,11 @@ export default function TemplateGalleryModal({
         <div className="template-gallery-toolbar">
           <Typography.Text type="secondary" className="template-gallery-note">
             {t("gallery.preview.demo")}；{t("gallery.fontScale.scope")}
+          </Typography.Text>
+          {/* 导出支持/格式差异是**格式级**事实，按 W11 矩阵在"试用与对比"里显示，
+              不在每张卡片上各写一句（那会是第二份能力判定）。 */}
+          <Typography.Text type="secondary" className="template-gallery-note">
+            {t("trial.capability.more")}
           </Typography.Text>
           {/* 档位是**写回这份简历**的入口（受控）：改它 = 改 `layout.font_scale`，
               制作台右栏会立刻按新字号重排。作用范围只有当前简历与之后新建的简历
@@ -216,6 +268,16 @@ export default function TemplateGalleryModal({
             aria-label={t("gallery.fontScale.label")}
             onChange={(value) => onFontScaleChange(value as ResumeFontScale)}
           />
+          {/* W10：进入"试用与对比"视图（同一弹窗内切视图，不叠第二个 Modal）。 */}
+          <Button
+            size="small"
+            onClick={() => {
+              setTrialSeed(null);
+              setView("compare");
+            }}
+          >
+            {t("trial.action.open")}
+          </Button>
         </div>
         <div className="template-gallery-grid">
           {templates.map((item) => (
@@ -266,9 +328,24 @@ export default function TemplateGalleryModal({
                 <Typography.Text type="secondary" className="template-gallery-desc">
                   {item.description || "你自制的模板"}
                 </Typography.Text>
+                {/* W10 能力卡片：篇幅（后端 density_group 同判据）/ 照片 / 栏目 / 导出。
+                    数据全部从目录投影，不写死第二份模板档案。 */}
+                <Typography.Text type="secondary" className="template-gallery-capability">
+                  {cardCapability(item)}
+                </Typography.Text>
                 <Space size={8}>
                   <Button size="small" onClick={() => void openZoom(item)}>
                     查看大图
+                  </Button>
+                  {/* W10：只试用这一套（右侧预填），不直接改这份简历。 */}
+                  <Button
+                    size="small"
+                    onClick={() => {
+                      setTrialSeed(item.name);
+                      setView("compare");
+                    }}
+                  >
+                    {t("trial.action.try")}
                   </Button>
                   <Button
                     size="small"
@@ -294,6 +371,7 @@ export default function TemplateGalleryModal({
       onSelect,
       onFontScaleChange,
       openZoom,
+      cardCapability,
     ],
   );
 
@@ -309,7 +387,30 @@ export default function TemplateGalleryModal({
       }}
       destroyOnHidden
     >
-      {templates.length === 0 && !loading ? <Empty description="还没有可选模板" /> : body}
+      {view === "compare" ? (
+        <TemplateTrialPanel
+          layout={layout}
+          catalog={catalog ?? undefined}
+          resumeId={resumeId}
+          content={content}
+          initialTemplate={trialSeed}
+          canResetOverrides={Boolean(onTrialAdopt)}
+          onBack={() => setView("gallery")}
+          onAdopt={(request) => {
+            if (onTrialAdopt) {
+              onTrialAdopt(request);
+            } else {
+              // 宿主没接试用通道：退回原有 onSelect（保留覆盖），不假装"采用模板默认"。
+              onSelect(request.template);
+            }
+            setView("gallery");
+          }}
+        />
+      ) : templates.length === 0 && !loading ? (
+        <Empty description="还没有可选模板" />
+      ) : (
+        body
+      )}
       {/* 大图：整页缩放到窗口宽度（`fit="width"`，纸张按「最大篇幅」给足 1–3 页）。
           这里**不再**用固定 794×1123 的 iframe —— 那是"大图界面三个滚动条"的成因：
           弹窗窄于 794px 时出横向滚动条，文档比一页高时 iframe 内部再出一条竖向滚动条，

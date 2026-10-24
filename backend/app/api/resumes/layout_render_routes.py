@@ -4,6 +4,7 @@
 从原 ``api/resumes.py`` 原样搬运（纯切片，无 patch 读取点）；`_to_resume_out` 改从
 ``_shared`` 导入。
 """
+
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -12,6 +13,7 @@ from sqlalchemy.orm import Session
 
 from ...database import get_db
 from ...models.resume import ResumeRecord
+from ...schemas.export import PreviewPdfRequest
 from ...schemas.resume import (
     LayoutAnalyzeOut,
     LayoutAnalyzeRequest,
@@ -20,12 +22,22 @@ from ...schemas.resume import (
     LayoutFitRoomOut,
     LayoutPageOut,
     LayoutSuggestionOut,
+    ResumeContent,
     ResumeLayoutUpdate,
     ResumeOut,
     ResumeRenderRequest,
+    mode_page_limit,
 )
 from ...services import trash
+from ...services.export_pipeline import ExportRequest, RenderContext, render_config_fingerprint
 from ...services.exporter import normalize_page_limit, render_html
+from ...services.resume.document_pagination import build_pagination_report
+from ...services.resume.document_save import (
+    RevisionConflict,
+    revision_conflict_response,
+    save_layout,
+)
+from ...services.resume.resume_delivery import canonical_content_sha256
 from ...services.resume.resume_labels import DEFAULT_RESUME_LANGUAGE
 from ...services.resume.resume_layout import (
     STATUS_OVERFLOW,
@@ -47,7 +59,7 @@ from ...services.resume.resume_templates import (
     font_scale_spec,
     validated_format_config,
 )
-from ._shared import _mark_saved, _to_resume_out
+from ._shared import _get_live_resume, _to_resume_out
 
 logger = logging.getLogger(__name__)
 
@@ -61,31 +73,47 @@ def update_resume_layout(
     """只调整版式参数（模板/页数/字号/按简历的覆盖），不重新生成内容。
 
     生成后内容偏多时，用户可以先增大页数或缩小字号再渲染，不必重跑模型。
+
+    **版本（W02）**：带 ``expected_revision`` 就条件写（不匹配 → 409，一个字节都不动），
+    不带就无条件写并推进一版（旧行为）。版式与正文共用同一个 ``revision``——拖动滑杆
+    也是"改了这份简历"，两个窗口各存一半版式同样会互相覆盖。
     """
     record = db.get(ResumeRecord, resume_id)
     if record is None or trash.is_deleted(record):
         raise HTTPException(status_code=404, detail="简历记录不存在或已被删除")
     # 模板名按"内置优先，其次用户自制"解析；版式单独存一份名字，渲染时再解析成
     # 具体的覆盖配置——这样用户改了版式，引用它的简历跟着变。
-    record.template = resolved_style_name(db, payload.template)
-    record.format_name = resolved_format_name(db, payload.format_name)
+    # W14：文档模式先定，页数上限按模式夹紧（普通 1–3 / 长 CV 1–10；切回普通不静默丢页数）。
+    document_mode = payload.document_mode or getattr(record, "document_mode", "resume") or "resume"
+    values = {
+        "template": resolved_style_name(db, payload.template),
+        "format_name": resolved_format_name(db, payload.format_name),
+        "page_limit": mode_page_limit(payload.page_limit, document_mode),
+        "font_scale": font_scale_spec(payload.font_scale)["name"],
+        "document_mode": document_mode,
+    }
     # None = 这次不涉及这一项，保持原样；空字典 = 明确清掉覆盖。
     if payload.format_config is not None:
-        record.format_config = validated_format_config(payload.format_config)
-    record.page_limit = normalize_page_limit(payload.page_limit)
-    record.font_scale = font_scale_spec(payload.font_scale)["name"]
+        values["format_config"] = validated_format_config(payload.format_config)
     # 语言与本接口的其它字段一样是"整体替换"语义，所以**必须先判 None**：给默认值
     # 就等于"拖动一次字号滑杆把英文简历静默改回中文"，而用户完全看不出发生了什么。
     # None = 这次不涉及，保持原样（见 §9.1 R1）。
     if payload.language is not None:
-        record.language = payload.language
+        values["language"] = payload.language
     # 版式保存成功 = 这份简历"存在了"：制作台草稿到这一步才进简历中心（0051）。
-    # 与内容保存同一条规则——用户点过「保存修改」，无论那一刻脏的是内容还是排版，
-    # 都说明他认了这一份。
-    _mark_saved(record)
-    db.commit()
-    db.refresh(record)
-    return _to_resume_out(record)
+    # 转正与 revision+1 在 ``save_layout`` 的同一条 UPDATE 里，不会拆成两次写。
+    try:
+        outcome = save_layout(
+            db,
+            record_id=record.id,
+            values=values,
+            expected_revision=payload.expected_revision,
+        )
+    except RevisionConflict as exc:
+        return revision_conflict_response(exc.current_revision)
+    if outcome is None:  # 竞态：读到之后被删
+        raise HTTPException(status_code=404, detail="简历记录不存在或已被删除")
+    return _to_resume_out(outcome.record)
 
 
 def _analyzed_format_config(
@@ -162,9 +190,7 @@ def analyze_resume_layout(
             ],
         ),
         fit_ladder=[
-            LayoutFitCandidateOut(
-                key=item.key, label=item.label, config=item.config, css=item.css
-            )
+            LayoutFitCandidateOut(key=item.key, label=item.label, config=item.config, css=item.css)
             for item in ladder
         ],
         fit_room=LayoutFitRoomOut(**room),
@@ -186,7 +212,7 @@ def render_resume(payload: ResumeRenderRequest, db: Session = Depends(get_db)):
         render_html(
             payload.content,
             template=template_name,
-            page_limit=payload.page_limit,
+            page_limit=normalize_page_limit(payload.page_limit, payload.document_mode),
             font_scale=payload.font_scale,
             format_config=config,
             style_config=resolve_style_config(db, payload.template),
@@ -196,4 +222,68 @@ def render_resume(payload: ResumeRenderRequest, db: Session = Depends(get_db)):
             language=payload.language or DEFAULT_RESUME_LANGUAGE,
         ),
         media_type="text/html; charset=utf-8",
+    )
+
+
+@router.post("/{resume_id}/pagination/report")
+def pagination_report(
+    resume_id: int, payload: PreviewPdfRequest, db: Session = Depends(get_db)
+):
+    """分页报告（W08 §3.6）：复用真实 PDF 渲染的绘制日志，回答页数/截断定位/手动分页。
+
+    与精确预览**同一条边界**：可以带未保存正文（不落库、不冻结交付、不触发 AI），
+    snapshot 两个指纹让前端丢弃过时响应（W11 同一机制）。导出响应头不变。
+    """
+    record = _get_live_resume(db, resume_id)
+    resume = (
+        payload.content
+        if payload.content is not None
+        else ResumeContent.model_validate(record.content)
+    )
+    effective_style = payload.template or record.template
+    export_template, export_html = resolve_style_template(db, effective_style)
+    # 版式解析与精确预览/_export_record 同一条规则：草稿给了版式就只从"模板默认+预设"起步。
+    if payload.format_name is None:
+        base_format_config = record_format_config(db, record)
+    else:
+        base_format_config = dict(
+            validated_format_config(resolve_style_config(db, effective_style))
+        )
+        base_format_config.update(resolve_format_config(db, payload.format_name))
+    base_format_config.update(validated_format_config(payload.format_config))
+    page_limit = payload.page_limit or record.page_limit or 1
+    font_scale = payload.font_scale or record.font_scale or "standard"
+    language = payload.language or record.language or DEFAULT_RESUME_LANGUAGE
+    context = RenderContext(
+        template=export_template,
+        template_html=export_html,
+        style_config=resolve_style_config(db, effective_style),
+        page_limit=page_limit,
+        font_scale=font_scale,
+        format_config=base_format_config,
+        language=language,
+        include_photo=payload.include_photo,
+    )
+    return build_pagination_report(
+        resume,
+        template=export_template,
+        format_config=base_format_config,
+        page_limit=page_limit,
+        font_scale=font_scale,
+        include_photo=payload.include_photo,
+        language=language,
+        snapshot={
+            "content_sha256": canonical_content_sha256(resume.model_dump()),
+            "render_config_sha256": render_config_fingerprint(
+                ExportRequest(
+                    format="pdf",
+                    page_limit=page_limit,
+                    font_scale=font_scale,
+                    format_config=base_format_config,
+                    language=language,
+                    include_photo=payload.include_photo,
+                ),
+                context,
+            ),
+        },
     )

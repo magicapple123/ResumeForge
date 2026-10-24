@@ -7,21 +7,43 @@ name: Cross-engine parity
 # `data-overflow`。它们回答的是同一个问题——"用户看到的那一页，和下载到的那份 PDF，
 # 是不是同一份东西"。
 #
-# **触发条件：push 到 main + 手动触发（2026-10-22 首次跑绿后打开）**
+# **触发条件：push 到 main + 手动触发 + 改动排版链路的 PR（2026-10-24 起）**
 # - 2026-10-22 在 ubuntu-latest 上首次跑绿（run 39645064902，13 passed / 1 xfailed），
 #   字体统一已验证：`fc-match "Microsoft YaHei" / "Noto Sans CJK SC" / "Georgia"` 三行
 #   全部解析到 `wqy-zenhei.ttc: "WenQuanYi Zen Hei"`，与 PDF 侧同一款字体。
 # - 读数与 Windows 几乎逐位相同（compact +2.21mm / elegant +2.59mm / editorial +2.64mm），
 #   说明字体统一后两套引擎的字宽一致，`max(2.5mm, 1.5%)` 这组阈值可以跨平台通用，
 #   **不需要给 Linux 单独放宽**。
-# - 每个 PR 都跑要额外下载 Chromium（~170MB）+ apt 依赖，并给 PR 增加数分钟，而跨引擎
-#   漂移的源头（模板 CSS、`pdf_exporter` 版式、前端 `layout.ts`）都不是"每天改十次"的
-#   东西，所以只挂 push: main；将来这条链路改动变频繁，可再加 `pull_request` 与其
-#   `paths` 过滤。
+# - 每个 PR 都跑要额外下载 Chromium（~170MB）+ apt 依赖，并给 PR 增加数分钟。所以只在
+#   **PR 改到真正的排版源头**时触发（`paths` 过滤，见下）；其余 PR 仍由 push: main 兜底。
+#   漏了某个源头路径的代价是"该 PR 不合、合并后 main 变红"，所以 paths 宁宽勿窄。
 on:
   workflow_dispatch:
   push:
     branches: [main]
+  pull_request:
+    paths:
+      # 前端排版/预览链路：草稿多列切分、页高测量、字宽探针都在这里
+      - "frontend/src/components/resume-preview/**"
+      - "frontend/src/components/resume/**"
+      - "frontend/src/features/fonts/**"
+      - "frontend/src/utils/layout.ts"
+      - "frontend/src/styles/**"
+      # 服务端排版与两条导出引擎
+      - "backend/app/services/pdf_exporter/**"
+      - "backend/app/services/docx_exporter.py"
+      - "backend/app/services/docx_blocks.py"
+      - "backend/app/services/resume/resume_layout*.py"
+      - "backend/app/services/resume/resume_fit.py"
+      - "backend/app/services/resume/resume_template_*.py"
+      - "backend/app/services/resume/resume_sections.py"
+      - "backend/app/services/resume/resume_rich_text.py"
+      - "backend/app/templates/**"
+      # 对拍用例自身与依赖清单（改了它们等于改了判定标准）
+      - "backend/tests/**cross_engine**"
+      - "backend/tests/**page_parity**"
+      - "backend/requirements*.txt"
+      - ".github/workflows/cross-engine.yml"
 
 permissions:
   contents: read

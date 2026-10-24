@@ -38,6 +38,10 @@
               （`FONT_FAMILY`），**不为它引入新的字体包**：标签文本全为 ASCII 时改用
               fpdf2 内置的 `courier`（真等宽），含中文时退回 `FONT_FAMILY`（fpdf2 没有
               逐字形回退能力，而等宽对中文本来就无意义）。细节见 `skill_tags` 的 docstring。
+  tag_columns：int。来自 ``.skill-list { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)) }``
+              ——只有 scholar 写它（3）；其余模板是普通流式标签列表（1）。HTML 里是三列网格，
+              PDF 侧在 `skill_tags.draw_skill_tags` 的网格分支里按同样列数铺格子：单元格宽
+              =（可用宽 −（列数−1）× 横向间距）÷ 列数，单元格内画「• 标签」，超宽时格内折行。
 
 ===== 二、正文分栏（来自模板 ``.resume-sections`` 的 CSS）=====
 split 模板的正文是**两栏网格**，其余 7 个模板是单栏。草稿侧由
@@ -68,7 +72,7 @@ split 两栏每栏只有 81.7mm，一条 li 少折一行就是 5.9mm 的整份�
 from __future__ import annotations
 
 # 技能标签：形状 + 几何 + 两个排版开关。键的来处见模块 docstring 第一节。
-TEMPLATE_TAG_DEFAULTS: dict[str, dict[str, float | str | bool]] = {
+TEMPLATE_TAG_DEFAULTS: dict[str, dict[str, float | str | bool | int]] = {
     "classic": {
         "tag_style": "fill",
         "tag_bg": "#eef2f7",
@@ -81,6 +85,7 @@ TEMPLATE_TAG_DEFAULTS: dict[str, dict[str, float | str | bool]] = {
         "accent_soft": "none",
         "tag_align": "left",
         "tag_mono": False,
+        "tag_columns": 1,
     },
     "modern": {
         "tag_style": "outline",
@@ -94,6 +99,7 @@ TEMPLATE_TAG_DEFAULTS: dict[str, dict[str, float | str | bool]] = {
         "accent_soft": "#e6f4f1",
         "tag_align": "left",
         "tag_mono": False,
+        "tag_columns": 1,
     },
     "compact": {
         "tag_style": "dot",
@@ -107,6 +113,7 @@ TEMPLATE_TAG_DEFAULTS: dict[str, dict[str, float | str | bool]] = {
         "accent_soft": "none",
         "tag_align": "left",
         "tag_mono": False,
+        "tag_columns": 1,
     },
     "elegant": {
         "tag_style": "fill",
@@ -121,6 +128,7 @@ TEMPLATE_TAG_DEFAULTS: dict[str, dict[str, float | str | bool]] = {
         # `.skill-list { text-align: center }`——8 个模板里唯一的居中。
         "tag_align": "center",
         "tag_mono": False,
+        "tag_columns": 1,
     },
     "technical": {
         "tag_style": "left_bar",
@@ -135,6 +143,7 @@ TEMPLATE_TAG_DEFAULTS: dict[str, dict[str, float | str | bool]] = {
         "tag_align": "left",
         # `.skill-list li { font-family: Consolas, "Cascadia Mono", Menlo, monospace }`。
         "tag_mono": True,
+        "tag_columns": 1,
     },
     "minimal": {
         "tag_style": "plain",
@@ -148,10 +157,12 @@ TEMPLATE_TAG_DEFAULTS: dict[str, dict[str, float | str | bool]] = {
         "accent_soft": "#f4f4f4",
         "tag_align": "left",
         "tag_mono": False,
+        "tag_columns": 1,
     },
     "scholar": {
         # 纯文字标签：三列并排的项目符号列表（`li::before` 画「•」），没有底色也没有边框。
-        # PDF 侧按 plain 绘制——分栏靠 CSS grid，PDF 只排成一行行文字，这是已知差异。
+        # 三列由 `tag_columns` 表达：PDF 侧按同样列数铺格子（`skill_tags` 的网格分支），
+        # 不再是"HTML 三列 / PDF 一行行"的已知差异。
         "tag_style": "plain",
         "tag_bg": "none",
         "tag_fg": "body",
@@ -164,6 +175,7 @@ TEMPLATE_TAG_DEFAULTS: dict[str, dict[str, float | str | bool]] = {
         "accent_soft": "#f1f1f1",
         "tag_align": "left",
         "tag_mono": False,
+        "tag_columns": 3,
     },
     "editorial": {
         "tag_style": "plain",
@@ -177,6 +189,7 @@ TEMPLATE_TAG_DEFAULTS: dict[str, dict[str, float | str | bool]] = {
         "accent_soft": "none",
         "tag_align": "left",
         "tag_mono": False,
+        "tag_columns": 1,
     },
     "split": {
         "tag_style": "outline",
@@ -190,6 +203,7 @@ TEMPLATE_TAG_DEFAULTS: dict[str, dict[str, float | str | bool]] = {
         "accent_soft": "#f3eee6",
         "tag_align": "left",
         "tag_mono": False,
+        "tag_columns": 1,
     },
 }
 

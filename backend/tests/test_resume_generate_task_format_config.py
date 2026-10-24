@@ -60,7 +60,7 @@ def test_generation_persists_validated_format_config(client, monkeypatch):
     config = record["format_config"]
     # 顺序归一化成完整排列（缺的键由默认顺序补齐），而不是只存用户动过的那两项。
     assert config["section_order"][:2] == ["projects", "summary"]
-    assert len(config["section_order"]) == 7
+    assert len(config["section_order"]) == 10
     assert config["font_scale_adjust"] == 0.455
     # 未知键与越界值在落库前就被丢掉：存下来的必须是"渲染时真的生效"的那一份。
     assert "page_padding" not in config
@@ -118,16 +118,18 @@ def test_generation_without_format_config_materializes_the_profile_order(client,
             "campus_experience",
             "awards",
             "summary",
+            "publications",
+            "research_projects",
+            "patents",
         ]
     }
 
 
-def test_generation_omits_section_order_when_profile_matches_the_default(client, monkeypatch):
-    """资料顺序 == 内置默认 → **不写**这个键（"没调过"与"调成一样"同一种形态）。
+def test_generation_materializes_ten_keys_when_profile_matches_the_old_default(client, monkeypatch):
+    """资料页（旧七分区）默认顺序 → 物化成 10 键（科研三栏目追加末尾）。
 
-    资料页的默认值与简历正文的默认值现在是同一口径（教育优先），所以从没排过顺序的
-    用户生成出来的简历不该多出一条恰好等于默认值的覆盖——那会让以后调整默认顺序对这批
-    简历失效（它们被钉在旧默认上）。
+    W14 之前"资料顺序 == 内置默认就不写键"；现在资料页无法表达科研板块，翻译结果不再等于
+    10 键默认，因此会写一份显式顺序——旧七项先后不变，科研板块在最后。
     """
     _seed_profile(client)
     _configure(client)
@@ -140,7 +142,18 @@ def test_generation_omits_section_order_when_profile_matches_the_default(client,
     started = client.post("/api/resumes/generate/tasks", json={"job_id": job["id"]})
     final = _wait_terminal(client, started.json()["id"])
     record = client.get(f"/api/resumes/{final['resume_id']}").json()
-    assert "section_order" not in record["format_config"]
+    assert record["format_config"]["section_order"] == [
+        "education",
+        "experience",
+        "projects",
+        "skills",
+        "campus_experience",
+        "awards",
+        "summary",
+        "publications",
+        "research_projects",
+        "patents",
+    ]
 
 
 @pytest.mark.parametrize(

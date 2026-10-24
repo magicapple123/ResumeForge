@@ -93,6 +93,9 @@ export function updateResume(id: number, content: ResumeContent): Promise<Resume
   return request(`/resumes/${id}`, { method: "PUT", body: JSON.stringify(content) });
 }
 
+/** W02 条件写见 `resumeDocument.ts`（分文件也避免本文件越 500 行）；re-export 保持既有导入路径。 */
+export { saveResumeContent, saveResumeLayout } from "./resumeDocument";
+
 /** 单独更新收藏状态，不上传或覆盖简历正文。 */
 export function updateResumeFavorite(id: number, favorite: boolean): Promise<ResumeDetail> {
   return request(`/resumes/${id}/favorite`, {
@@ -217,8 +220,7 @@ export function cancelResumeGenerateTask(taskId: number): Promise<ResumeGenerate
 /**
  * 渲染模板预览为 HTML。
  *
- * 传 `html` 时渲染这段（工作台里未保存的编辑内容）；传模板名/格式名时用已保存的
- * 模板；都不传就用内置示例简历内容——新用户没有任何简历记录也能看到效果。
+ * 传 `html`/`content` 时渲染这份草稿；传模板名/格式名用已保存模板；都不传用内置示例。
  */
 export async function previewResumeTemplate(payload: {
   template_id?: number;
@@ -230,7 +232,9 @@ export async function previewResumeTemplate(payload: {
   page_limit?: number;
   font_scale?: ResumeFontScale;
   resume_id?: number;
-  /** 调用方取消：换字号 / 关弹窗时把还在飞的渲染掐掉，别让它一直占着那张卡。 */
+  /** 未保存正文（W10 试用按它渲染/量页数）；不传 = resume_id 已保存版，再缺省用示例。 */
+  content?: ResumeContent;
+  /** 调用方取消：把还在飞的渲染掐掉（防换字号/关弹窗后白占连接）。 */
   signal?: AbortSignal;
 }): Promise<string> {
   // `signal` 只属于 fetch 选项，**不能**随请求体发出去：后端 `TemplatePreviewRequest`
@@ -354,6 +358,14 @@ export async function fetchResumePreviewPdf(
     language?: string;
     format_config?: Record<string, unknown>;
     include_photo?: boolean;
+    /**
+     * 还没保存的正文（W04）。
+     *
+     * 只在制作台里"改了几句、还没点保存"时给：精确预览显示的就是导出产物本身，
+     * 正文停在上一版的话，用户看到的不是自己正在写的那份。不传 = 用记录里的值。
+     * 服务端只把它用于这一趟渲染（不落库、不冻结交付）。
+     */
+    content?: ResumeContent;
   },
   signal?: AbortSignal,
 ): Promise<{

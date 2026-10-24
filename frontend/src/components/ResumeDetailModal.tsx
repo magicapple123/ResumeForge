@@ -7,20 +7,21 @@
  */
 import { CloseOutlined } from "@ant-design/icons";
 import { Alert, App, Button, Modal, Popconfirm, Space, Typography } from "antd";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import {
-  fetchResumeHtml,
-  fetchResumeTemplates,
-  getResume,
-  renderResume,
-  updateResume,
-  updateResumeLayout,
-} from "../api/resumes";
-import type { ResumeContent, ResumeDetail, ResumeLayout } from "../types";
+import { fetchResumeHtml, fetchResumeTemplates, getResume, renderResume } from "../api/resumes";
+import type { ResumeDetail, ResumeLayout } from "../types";
 import type { LayoutMeasure } from "../utils/resumeLayoutMeasure";
 import { t } from "../i18n";
-import { bumpResumeList } from "../features/resume/resumeListEvents";
+import {
+  createResumeDocumentHost,
+  DEFAULT_RESUME_LAYOUT,
+  layoutFromDetail,
+} from "../features/resume-document/resumeDocumentHost";
+import { revisionOf } from "../features/resume-document/saveOutcome";
+import { remapAnnotationPaths } from "../features/resume-outline";
+import type { PathRemap } from "../features/resume-outline/paths";
+import type { ResumeDocumentPipeline } from "../features/resume-document/types";
 import { setActiveWritingResume } from "../features/resume-writing/activeResume";
 import { useResumeRelayout } from "../features/resume/useResumeRelayout";
 import { useRichTextOverrides } from "../features/resume/useRichTextOverrides";
@@ -37,22 +38,13 @@ interface Props {
   autoOpenWorkbench?: boolean;
 }
 
-const DEFAULT_LAYOUT: ResumeLayout = {
-  template: "classic",
-  format_name: "",
-  page_limit: 1,
-  font_scale: "standard",
-  // 草稿的初始语言：新记录/还没选过时就是中文（后端旧记录同样是中文）。
-  language: "zh-CN",
-};
-
 export default function ResumeDetailModal({ recordId, onClose, autoOpenWorkbench = false }: Props) {
   const { message } = App.useApp();
   const [detail, setDetail] = useState<ResumeDetail | null>(null);
   const [html, setHtml] = useState("");
   const [error, setError] = useState("");
-  const [layout, setLayout] = useState<ResumeLayout>(DEFAULT_LAYOUT);
-  const [savedLayout, setSavedLayout] = useState<ResumeLayout>(DEFAULT_LAYOUT);
+  const [layout, setLayout] = useState<ResumeLayout>(DEFAULT_RESUME_LAYOUT);
+  const [savedLayout, setSavedLayout] = useState<ResumeLayout>(DEFAULT_RESUME_LAYOUT);
   const [layoutStatus, setLayoutStatus] = useState<{
     pages: number;
     overflow: boolean;
@@ -76,6 +68,34 @@ export default function ResumeDetailModal({ recordId, onClose, autoOpenWorkbench
    * 用户都可能选中文字右键，而它们是同一个弹窗的三个子视图。关掉弹窗即注销，
    * 免得在岗位页右键时冒出一个属于上一份简历的写作增强。
    */
+  /**
+   * W06 大纲结构命令之后：加粗 overlay 与事实标注的 path 跟着对象换到新下标。
+   * 不做这一步，把第二个项目移到第一位后，experience.1.* 的加粗会绑到别的项目上。
+   */
+  const handleRemapPaths = useCallback(
+    (remap: PathRemap) => {
+      overlays.remapPaths(remap);
+      setDetail((previous) =>
+        previous
+          ? {
+              ...previous,
+              fact_annotations: remapAnnotationPaths(previous.fact_annotations ?? [], remap),
+            }
+          : previous,
+      );
+    },
+    [overlays],
+  );
+
+  /** 服务端已有新版本（表达资产插入等）：刷新 detail 并重渲染预览（不写库）。 */
+  const handleDocumentSynced = useCallback(
+    (synced: ResumeDetail) => {
+      setDetail({ ...synced, draft: false });
+      void renderResume(synced.content, layout).then((rendered) => setHtml(rendered));
+    },
+    [layout],
+  );
+
   const activeResumeId = detail?.id ?? null;
   useEffect(() => {
     setActiveWritingResume(activeResumeId);
@@ -173,18 +193,8 @@ export default function ResumeDetailModal({ recordId, onClose, autoOpenWorkbench
         if (currentRequest !== requestVersion.current) return;
         setDetail(data);
         setHtml(rendered);
-        // 版式跟着记录走：上次用的是哪套，这次打开还是哪套。
-        const nextLayout = {
-          template: data.template || DEFAULT_LAYOUT.template,
-          format_name: data.format_name ?? DEFAULT_LAYOUT.format_name,
-          // 必须带上按简历的覆盖：后面每次重渲染都从这份 layout 出发，
-          // 漏了它就会出现"导出用新方案、预览用旧方案"这种最难看的不一致。
-          format_config: data.format_config ?? {},
-          page_limit: data.page_limit || DEFAULT_LAYOUT.page_limit,
-          font_scale: data.font_scale || DEFAULT_LAYOUT.font_scale,
-          // 语言跟着记录走：打开一份英文简历，排版栏里显示的必须是 English。
-          language: data.language ?? DEFAULT_LAYOUT.language,
-        } satisfies ResumeLayout;
+        // 版式跟着记录走：上次用的是哪套，这次打开还是哪套（字段兜底只在 layoutFromDetail 一处）。
+        const nextLayout = layoutFromDetail(data);
         setLayout(nextLayout);
         setSavedLayout(nextLayout);
       })
@@ -207,34 +217,63 @@ export default function ResumeDetailModal({ recordId, onClose, autoOpenWorkbench
       });
   }, []);
 
-  const saveEditedResume = async (content: ResumeContent) => {
-    if (!detail) return;
-    const requestAtStart = requestVersion.current;
-    const saveAtStart = ++saveRequestVersion.current;
-    // overlay 里**仍然有效**的那几条叠在表单值上：`base` 对得上的说明用户没在中栏改过这个
-    // 字段（改了 base 就变了，overlay 自动失效）。合并只在这一处做，另一处不再重复。
-    const merged = overlays.merge(content) ?? content;
-    const updated = await updateResume(detail.id, merged);
-    if (requestAtStart !== requestVersion.current || saveAtStart !== saveRequestVersion.current) {
-      return;
-    }
-    const rendered = await renderResume(updated.content, layout);
-    if (requestAtStart !== requestVersion.current || saveAtStart !== saveRequestVersion.current) {
-      return;
-    }
-    // 保存成功 = 这份简历"存在了"（0051）：制作台草稿要到这里才出现在简历中心。
-    // `draft: false` 显式写上（后端也会这么返回，但旧后端不返回该字段时不能把按钮留在
-    // 「保存到简历中心」的形态上）。
-    setDetail({ ...updated, draft: false });
-    setHtml(rendered);
-    // 内容已经落到服务端：overlay 再留着就会"盖住"刚存下去的值。
-    overlays.clear();
+  /** 旧建议 / 风险扫描结论在正文变化后过期：保存成功与"用最新的"都要重置。 */
+  const resetSuggestionState = () => {
     setSuggestionsGenerated(false);
     setSuggestionsResetKey((value) => value + 1);
-    // 刷新广播放在**保存成功之后**：进制作台、点开预览都不该让列表白跑一次请求。
-    bumpResumeList();
-    message.success("简历修改已保存");
   };
+
+  // 请求序号读写的**稳定闭包**：ref 本身不进渲染期执行的对象，规则要求只能经由
+  // useCallback 暴露（真正的读写都发生在保存回调里）。
+  const readRequestVersion = useCallback(() => requestVersion.current, []);
+  const readSaveRequestVersion = useCallback(() => saveRequestVersion.current, []);
+  const nextSaveRequestVersion = useCallback(() => {
+    saveRequestVersion.current += 1;
+    return saveRequestVersion.current;
+  }, []);
+
+  /**
+   * 文档写入层（W02）：条件写、冲突终态、草稿发布、"用最新的 / 另存副本"全在那一份实现里
+   * （`features/resume-document/resumeDocumentHost.ts`），本组件只负责接 UI。
+   */
+  // eslint-disable-next-line react-hooks/refs -- 交给宿主的是"读请求序号"的稳定闭包，只在保存回调里调用
+  const hostDocument = createResumeDocumentHost({
+    detail,
+    layout,
+    layoutDirty,
+    layoutSaving,
+    overlays,
+    message,
+    readRequestVersion,
+    readSaveRequestVersion,
+    nextSaveRequestVersion,
+    setDetail,
+    setHtml,
+    setLayout,
+    setSavedLayout,
+    setLayoutSaving,
+    resetSuggestions: resetSuggestionState,
+    render: renderResume,
+  });
+  // 老入口别名：主预览底部「保存」与「手动调整」弹窗继续走无版本条件的写（行为逐字不变）。
+  const saveEditedResume = hostDocument.saveEditedResume;
+  const saveLayout = hostDocument.saveLayout;
+  const publishDraft = hostDocument.publishDraft;
+  /**
+   * W02 条件写通道：制作台整体保存消费它。`revision` 取**当前 detail** 的版本——保存成功后
+   * 宿主 `setDetail` 会带来新值，下一轮保存自然用新版本。
+   */
+  const documentPipeline: ResumeDocumentPipeline | undefined = detail
+    ? {
+        revision: revisionOf(detail),
+        saveLayout: hostDocument.commitLayout,
+        saveContent: hostDocument.saveEditedResumeConditional,
+        publishDraft: hostDocument.publishDraftConditional,
+        fetchLatest: () => getResume(detail.id),
+        adoptLatest: hostDocument.adoptLatest,
+        saveAsCopy: hostDocument.saveAsCopy,
+      }
+    : undefined;
 
   /**
    * AI 修订（AI 修改 / 采纳建议）成功后的刷新：修订接口已在服务端落库，这里只需
@@ -248,90 +287,6 @@ export default function ResumeDetailModal({ recordId, onClose, autoOpenWorkbench
     setHtml(rendered);
     setSuggestionsGenerated(false);
     setSuggestionsResetKey((value) => value + 1);
-  };
-
-  /**
-   * 「保存到简历中心」（0051）：这份记录还是草稿，而用户什么都没改就点了保存。
-   *
-   * 实现只发**一次内容 PATCH**——后端"内容写入即转正"，不需要新接口。宿主里另外两个
-   * 保存分支（内容 / 版式）都会顺带转正，但它们在"什么都没脏"时一个请求都不发，所以
-   * 草稿要现身只能靠这一条。
-   */
-  const publishDraft = async (): Promise<boolean> => {
-    if (!detail) return false;
-    // 已经不是草稿：没什么可发布（按钮本就不会出现，这里只是把契约写清）。
-    if (!detail.draft) return true;
-    try {
-      // 纸面上加过的粗体也要一起落库：`merged` 在没有 overlay 时**就是** `detail.content`
-      // （同一引用），所以"什么都没改"的路径一个字节都没变。
-      const merged = overlays.merge(detail.content) ?? detail.content;
-      const updated = await updateResume(detail.id, merged);
-      // 正文一个字节都没变：不重渲染 html（省一次 /render），也**保留 `content` 的旧引用**
-      // ——编辑器靠内容签名判断要不要回填，换一个等值的新引用虽不会误判，但没必要。
-      // 真有 overlay 时就必须换成 `merged` 并重渲染，否则粗体只存在于这一次点击里。
-      const changed = merged !== detail.content;
-      if (changed) setHtml(await renderResume(merged, layout));
-      setDetail((prev) =>
-        prev ? { ...updated, content: merged, draft: false } : { ...updated, draft: false },
-      );
-      overlays.clear();
-      bumpResumeList();
-      message.success(t("workbench.draft.published"));
-      return true;
-    } catch (err) {
-      message.error(err instanceof Error ? err.message : t("workbench.draft.publish-failed"));
-      return false;
-    }
-  };
-
-  /**
-   * 换模板 / 加页数 / 改字号：**只重排不落库**的是 `requestLayout`，真正写回记录的是本函数
-   * （`PATCH /resumes/{id}/layout`）。
-   *
-   * 返回值是"版式有没有落库"，两个调用点都要用它：底部「保存」按钮不看，制作台顶部的
-   * 「保存修改」必须看——它要靠这个结果决定"要不要把版式快照对齐"，而对齐等于告诉用户
-   * "已经存上了"。失败提示只在这里弹一次，调用点只看返回值，不重复弹。
-   */
-  const saveLayout = async (): Promise<boolean> => {
-    // 没改动 = 已经与记录一致（对齐快照是安全的）；上一次还在飞则既不能再发，
-    // 也不能声称已存——两种情况必须分开，合成一个 `return` 就分不出真假了。
-    if (!detail) return false;
-    if (!layoutDirty) return true;
-    if (layoutSaving) return false;
-    setLayoutSaving(true);
-    try {
-      const updated = await updateResumeLayout(detail.id, layout);
-      const nextLayout: ResumeLayout = {
-        template: updated.template || layout.template,
-        format_name: updated.format_name ?? layout.format_name,
-        format_config: updated.format_config ?? layout.format_config ?? {},
-        page_limit: updated.page_limit || layout.page_limit,
-        font_scale: updated.font_scale || layout.font_scale,
-        // 逐字段重建最容易漏这一行：漏了会让本地草稿变回 undefined（界面上显示中文），
-        // 与记录里真实的语言不一致——下一次保存又把英文写回中文（§9.1 R1）。
-        language: updated.language ?? layout.language,
-      };
-      // 版式 PATCH 返回的 `content` 是 JSON 重新解析出来的**新引用**，但正文一个字节都没变。
-      // 直接 `setDetail(updated)` 会让编辑器的"内容换了"守卫命中，把用户还没保存的正文覆盖掉。
-      // `draft: false`：版式写入同样让草稿转正（0051）。
-      setDetail((prev) => ({
-        ...updated,
-        content: prev?.content ?? updated.content,
-        draft: false,
-      }));
-      setLayout(nextLayout);
-      setSavedLayout(nextLayout);
-      setHtml(await renderResume(updated.content, nextLayout));
-      // 同上：版式保存成功也让草稿转正（用户没改内容、只把版面排好了也算）。
-      bumpResumeList();
-      message.success("排版设置已保存");
-      return true;
-    } catch (err) {
-      message.error(err instanceof Error ? err.message : "保存排版设置失败");
-      return false;
-    } finally {
-      setLayoutSaving(false);
-    }
   };
 
   const cancelLayout = () => {
@@ -441,6 +396,10 @@ export default function ResumeDetailModal({ recordId, onClose, autoOpenWorkbench
             // 底部那颗「保存」按钮仍在（定位不同：它只存版式，不动内容），两者共用本函数
             // 内部的 `layoutDirty / layoutSaving` 守卫，谁先点都不会发两次请求。
             onCommitLayout={saveLayout}
+            // W02 条件写 + 409 冲突三选一：见 `documentPipeline`。
+            documentPipeline={documentPipeline}
+            onRemapPaths={handleRemapPaths}
+            onDocumentSynced={handleDocumentSynced}
             // 草稿且什么都没脏时点「保存到简历中心」：见 `publishDraft`。
             onPublishDraft={publishDraft}
             // 版式 PATCH 在飞时制作台顶部的「保存修改」必须禁用：这条链路此刻返回 `false`

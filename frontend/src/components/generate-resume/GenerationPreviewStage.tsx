@@ -80,6 +80,8 @@ export default function GenerationPreviewStage({
       onSaveEditedResume={saveEditedResume}
       onResumeRevised={applyRevisedDetail}
       showReviseAction={false}
+      // W19 入口迁移：生成流程/未保存预览仍走旧导出面板（内容尚未定稿落库）。
+      exportFlow="legacy"
       suggestionsGenerated={suggestionsGenerated}
       suggestionsResetKey={suggestionsResetKey}
       onSuggestionsGenerated={() => setSuggestionsGenerated(true)}

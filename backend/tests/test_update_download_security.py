@@ -145,6 +145,28 @@ async def test_allowlisted_host_resolving_to_a_private_ip_is_rejected(downloads,
     assert log == []
 
 
+@pytest.mark.asyncio
+async def test_allowlisted_host_resolving_to_cgnat_space_is_rejected(downloads, monkeypatch):
+    """A09 收敛收益：地址判定改为与网页抓取共用 `services/net_policy.py` 后，白名单域名
+    解析到运营商级 NAT 共享段（100.64.0.0/10）也被拒绝——收敛前这段会被放行。
+
+    `ipaddress` 对 100.64.0.0/10 既不判 private 也不判 reserved，是原两份判定链共同
+    看不到的空档；判定的唯一实现在 net_policy，`tests/test_net_policy.py` 另有段边界用例。
+    """
+
+    def _cgnat_dns(host, port, *args, **kwargs):  # noqa: ARG001
+        return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("100.64.7.9", port or 0))]
+
+    monkeypatch.setattr(socket, "getaddrinfo", _cgnat_dns)
+    log: list[str] = []
+    with pytest.raises(RuntimeError, match="非公网地址"):
+        await update_download._download_archive(
+            ZIP_URL, None, downloads.target, SHA_URL, transport=_transport({}, log)
+        )
+    assert log == []  # 拒绝发生在发出请求之前
+    assert not downloads.target.exists()
+
+
 # ===== 重定向逐跳校验（§12.5 #2）=====
 
 

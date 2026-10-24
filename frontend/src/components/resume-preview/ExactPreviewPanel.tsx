@@ -34,6 +34,7 @@
 import { Alert, Button, Space, Typography } from "antd";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { fetchResumePreviewPdf } from "../../api/resumes";
+import type { ResumeContent } from "../../types/resume";
 import LoadingBlock from "../common/LoadingBlock";
 import { ExactPreviewAlerts, ExactPreviewStatus } from "./ExactPreviewNotes";
 import { readCachedPreview, writeCachedPreview, type PreviewShot } from "./exactPreviewCache";
@@ -88,6 +89,14 @@ interface Props {
    * （矢量，放大不糊），而不是把位图拉大。
    */
   scale?: number;
+  /**
+   * 这次要排的正文（W04）。
+   *
+   * 缺省 = 服务端用记录里已保存的那一版。制作台里中栏改了几句还没保存时，宿主把
+   * 草稿内容传进来；`contentSignature` 必须同步换成这份内容的签名，否则缓存键不变、
+   * 请求根本不会重发。
+   */
+  content?: ResumeContent;
 }
 
 /**
@@ -114,6 +123,7 @@ export default function ExactPreviewPanel({
   active = true,
   headingSerif = false,
   scale = 1,
+  content,
 }: Props) {
   /** 当前**可见**的那一份（旧图，双缓冲里留在下面）。 */
   const [shown, setShown] = useState<PreviewShot | null>(null);
@@ -255,6 +265,7 @@ export default function ExactPreviewPanel({
           font_scale: fontScale,
           language,
           format_config: normalizedConfig,
+          content,
         },
         controller.signal,
       )
@@ -455,6 +466,7 @@ export default function ExactPreviewPanel({
           pageLimit={pageLimit}
           headingSerif={headingSerif}
           active={active}
+          hasUnsavedContent={Boolean(content)}
           onOpenInNewTab={() => window.open(current.url, "_blank", "noopener,noreferrer")}
         />
       ) : null}

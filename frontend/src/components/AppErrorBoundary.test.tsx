@@ -1,7 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { Suspense } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import AppErrorBoundary from "./AppErrorBoundary";
+import { lazyPage } from "../pages/registry";
+import { t } from "../i18n";
 
 function BrokenView(): never {
   throw new Error("render failed");
@@ -64,5 +67,53 @@ describe("AppErrorBoundary", () => {
     expect(screen.getByText("页面代码没能加载完整")).toBeInTheDocument();
     expect(screen.getByText(/重启前端开发服务器/)).toBeInTheDocument();
     expect(screen.queryByText("页面暂时无法显示")).not.toBeInTheDocument();
+  });
+
+  it("模块加载失败后点「重试」会真的重新取一次页面（渲染层证明，不只清提示）", async () => {
+    // React 会把边界捕获的异常转发到 console.error；这里只关心可恢复性。
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    let calls = 0;
+    // 用显式开关而不是"第一次失败、第二次成功"：React 在错误路径上可能重渲染不止一次，
+    // 按调用次数判断会让用例的成败取决于框架内部重试了几次。
+    let allowSuccess = false;
+    const Page = lazyPage(async () => {
+      calls += 1;
+      if (!allowSuccess) {
+        // 与浏览器里 chunk 取不到时的文案一致，错误边界才会认成"模块加载失败"。
+        throw new TypeError(
+          "Failed to fetch dynamically imported module: http://127.0.0.1:5173/src/pages/ApplyPage.tsx",
+        );
+      }
+      return { default: () => <div>page-ready</div> };
+    });
+
+    render(
+      <AppErrorBoundary>
+        <Suspense fallback={<div>loading</div>}>
+          <Page />
+        </Suspense>
+      </AppErrorBoundary>,
+    );
+
+    // antd 会在两个汉字之间插一个空格（"重 试"），所以比较前先把空格去掉。
+    // 先等错误边界落屏（懒加载的 reject 要走完一轮微任务），再放开重试。
+    const retryLabel = t("common.retry");
+    const findRetry = () =>
+      screen
+        .getAllByRole("button")
+        .find((button) => button.textContent?.split(" ").join("") === retryLabel);
+    const retryButton = await waitFor(() => {
+      const found = findRetry();
+      expect(found, "错误边界应给出可重试的按钮").toBeTruthy();
+      return found as HTMLElement;
+    });
+    const before = calls;
+    allowSuccess = true;
+    fireEvent.click(retryButton);
+
+    // 关键断言：页面真的出现了，且 factory 在点击之后又被执行过——只重置 failed 状态
+    // 是不够的，React.lazy 自己会永久缓存第一次的 rejection（这条用例就是那次回归的证据）。
+    expect(await screen.findByText("page-ready")).toBeInTheDocument();
+    expect(calls).toBeGreaterThan(before);
   });
 });

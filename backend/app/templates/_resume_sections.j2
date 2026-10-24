@@ -9,9 +9,9 @@
 {% import "_resume_blocks.j2" as blocks with context %}
 <div class="header">
   <div class="header-main">
-    <div class="name"><span data-resume-path="name">{{ resume.name }}</span>{% if resume.gender %} <span data-resume-path="gender" class="name-extra">{{ resume.gender }}</span>{% endif %}</div>
-    {% if resume.job_intent %}<div class="intent">{{ field_labels.intent }}：<span data-resume-path="job_intent">{{ resume.job_intent }}</span></div>{% endif %}
-  <div class="contact">
+    <div class="name" data-role="name"><span data-resume-path="name">{{ resume.name }}</span>{% if resume.gender %} <span data-resume-path="gender" class="name-extra" data-role="meta">{{ resume.gender }}</span>{% endif %}</div>
+    {% if resume.job_intent %}<div class="intent" data-role="meta">{{ field_labels.intent }}：<span data-resume-path="job_intent">{{ resume.job_intent }}</span></div>{% endif %}
+  <div class="contact" data-role="meta">
       {%- if resume.phone -%}<span data-resume-path="phone">{{ resume.phone }}</span>{%- endif -%}
       {%- if resume.email -%}<span data-resume-path="email">{{ resume.email }}</span>{%- endif -%}
       {%- if resume.city -%}<span data-resume-path="city">{{ resume.city }}</span>{%- endif -%}
@@ -41,6 +41,9 @@
 {%- elif section_key == "experience" %}{{ blocks.experience_block(resume) }}
 {%- elif section_key == "campus_experience" %}{{ blocks.campus_block(resume) }}
 {%- elif section_key == "projects" %}{{ blocks.projects_block(resume) }}
+{%- elif section_key == "publications" %}{{ blocks.publications_block(resume) }}
+{%- elif section_key == "research_projects" %}{{ blocks.research_projects_block(resume) }}
+{%- elif section_key == "patents" %}{{ blocks.patents_block(resume) }}
 {%- elif section_key == "skills" %}{{ blocks.skills_block(resume) }}
 {%- elif section_key == "awards" %}{{ blocks.awards_block(resume) }}
 {%- endif %}

@@ -25,6 +25,7 @@ function status(overrides: Partial<BackupStatus>): BackupStatus {
     last_error: "",
     interval_days: 7,
     overdue: false,
+    snapshot_state: "ok",
     snapshot_count: 2,
     snapshots: [
       { name: "resume_forge-20261010-a.db", size_bytes: 1024, modified_at: 1_000_000 },
@@ -134,5 +135,86 @@ describe("BackupStatusCard", () => {
     await waitFor(() => {
       expect(screen.getByText("读取备份状态失败")).toBeTruthy();
     });
+  });
+});
+
+/**
+ * 快照目录的可判定状态（审计 F2/A02）。
+ *
+ * 这五态是本轮新增的状态模型：`protected` 不再是"有过成功"的同义词，目录读不了也
+ * 不能再被当成"没有快照"。每条用例都断言「不显示受保护」——绿色标签是这里唯一
+ * 不可退让的性质。
+ */
+describe("BackupStatusCard 快照状态", () => {
+  it("目录读不了：显示「无法确认」并说明原因，不显示受保护", async () => {
+    getBackupStatus.mockResolvedValue(
+      status({
+        protected: false,
+        snapshot_state: "unreadable",
+        snapshot_count: 0,
+        snapshots: [],
+      }),
+    );
+    renderCard();
+    // i18n-ok: 本卡文案尚未迁 t()，与既有状态断言同批
+    await waitFor(() => expect(screen.getByText("无法确认")).toBeTruthy());
+    // i18n-ok: 同上
+    expect(screen.getByText(/无法读取快照目录，请检查磁盘权限/)).toBeTruthy();
+    // i18n-ok: 同上
+    expect(screen.queryByText("受保护")).toBeNull();
+  });
+
+  it("快照缺失：有成功记录但没有快照文件时不显示受保护", async () => {
+    getBackupStatus.mockResolvedValue(
+      status({ protected: false, snapshot_state: "empty", snapshot_count: 0, snapshots: [] }),
+    );
+    renderCard();
+    // i18n-ok: 同上
+    await waitFor(() => expect(screen.getByText("快照缺失")).toBeTruthy());
+    // i18n-ok: 同上
+    expect(screen.getByText(/上次成功记录存在，但当前找不到快照文件/)).toBeTruthy();
+    // i18n-ok: 同上
+    expect(screen.queryByText("受保护")).toBeNull();
+  });
+
+  it("旧后端没有 snapshot_state：按快照份数推断，缺字段不崩", async () => {
+    getBackupStatus.mockResolvedValue(
+      status({
+        protected: false,
+        snapshot_state: undefined,
+        snapshot_count: 0,
+        snapshots: [],
+      }),
+    );
+    renderCard();
+    // i18n-ok: 同上
+    await waitFor(() => expect(screen.getByText("快照缺失")).toBeTruthy());
+  });
+
+  it("已到期未备份：受保护但超过间隔，标签如实提示", async () => {
+    getBackupStatus.mockResolvedValue(status({ overdue: true }));
+    renderCard();
+    // i18n-ok: 同上
+    await waitFor(() => expect(screen.getByText("已到期未备份")).toBeTruthy());
+    // i18n-ok: 同上
+    expect(screen.queryByText("受保护")).toBeNull();
+  });
+
+  it("「无法确认」优先于「保护中断」：目录读不了时说不出到底发生了什么", async () => {
+    getBackupStatus.mockResolvedValue(
+      status({
+        protected: false,
+        snapshot_state: "unreadable",
+        consecutive_failures: 1,
+        last_error: "备份失败",
+        snapshot_count: 0,
+        snapshots: [],
+      }),
+    );
+    renderCard();
+    // i18n-ok: 同上
+    await waitFor(() => expect(screen.getByText("无法确认")).toBeTruthy());
+    // i18n-ok: 同上
+    expect(screen.queryByText("保护中断")).toBeNull();
   });
 });

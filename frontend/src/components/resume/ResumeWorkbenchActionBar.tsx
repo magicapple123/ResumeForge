@@ -39,6 +39,10 @@ interface Props {
   dirty: boolean;
   /** 这还是一份没保存过的草稿。 */
   isDraft: boolean;
+  /** W02：停在 409 冲突态。保存/取消都禁用——正文上方的三选一才是唯一出口。 */
+  conflict: boolean;
+  /** 上一次保存失败（非冲突）：留一句"改动还留着"，保存按钮就是重试入口。 */
+  saveFailed: boolean;
   /** 版式 PATCH 在飞。 */
   layoutSaving: boolean;
   /** 内容 PATCH 在飞。 */
@@ -57,6 +61,10 @@ interface Props {
   /** 确认放弃本次修改（内容回填 + 版式回滚）。 */
   onDiscard: () => void;
   onExport?: () => void;
+  /** W11 统一检查入口；不传 = 只读宿主，不渲染按钮。 */
+  onOpenPreflight?: () => void;
+  /** W13 版本入口；不传不渲染。 */
+  onOpenVersions?: () => void;
   /**
    * 内容栏不在栅格里时（两栏 / 单栏）的入口。不传 = 三栏，不渲染按钮——
    * 常驻的按钮会让"内容栏在哪"变成一个需要判断的问题。
@@ -75,6 +83,8 @@ export default function ResumeWorkbenchActionBar({
   editorEnabled,
   dirty,
   isDraft,
+  conflict,
+  saveFailed,
   layoutSaving,
   editorSaving,
   saving,
@@ -85,6 +95,8 @@ export default function ResumeWorkbenchActionBar({
   onRequestDiscardConfirm,
   onDiscard,
   onExport,
+  onOpenPreflight,
+  onOpenVersions,
   onOpenContent,
   onOpenParams,
   onCloseRequest,
@@ -100,6 +112,13 @@ export default function ResumeWorkbenchActionBar({
       {isDraft && !dirty ? (
         <Typography.Text type="secondary" className="resume-wb-actionbar-hint">
           {t("workbench.draft.hint")}
+        </Typography.Text>
+      ) : null}
+      {/* 保存失败：动作条是用户刚才点的地方，把"改动还在"这句话放在这里；重试入口就是
+          保存按钮本身（不禁用它——失败后用户最需要的就是再点一次）。 */}
+      {saveFailed && !conflict ? (
+        <Typography.Text type="danger" className="resume-wb-actionbar-hint">
+          {t("workbench.conflict.save-failed")}
         </Typography.Text>
       ) : null}
       <span className="resume-wb-actionbar-spacer" />
@@ -132,7 +151,8 @@ export default function ResumeWorkbenchActionBar({
             loading={editorSaving || saving}
             // 版式 PATCH 在飞时禁用：那段时间落库只会返回 `false`，点得下去就等于
             // "点了没反应、内容也没存"，不如直接不给点。
-            disabled={saving || layoutSaving}
+            // 冲突态也禁用：再点一次保存 = 硬覆盖，正是 W02 要消灭的那条路。
+            disabled={saving || layoutSaving || conflict}
             onClick={onSave}
           >
             {/* 一个字都没改时写「保存修改」会让人以为按钮坏了：这次点击做的事是
@@ -144,7 +164,9 @@ export default function ResumeWorkbenchActionBar({
           {dirty ? (
             <Button
               size="small"
-              disabled={editorSaving || saving}
+              // 冲突态连"取消修改"也禁用：本地这份是基于旧版本改的，丢弃之后编辑器会回填
+              // 服务端**旧**内容（不是最新版），用户会以为放弃成功了、其实看到的是过期数据。
+              disabled={editorSaving || saving || conflict}
               onClick={() => onRequestDiscardConfirm(true)}
             >
               {t("workbench.action.cancel-changes")}
@@ -165,6 +187,16 @@ export default function ResumeWorkbenchActionBar({
       {onExport ? (
         <Button size="small" icon={<DownloadOutlined />} onClick={onExport}>
           {t("export.action.export")}
+        </Button>
+      ) : null}
+      {onOpenPreflight ? (
+        <Button size="small" onClick={onOpenPreflight} aria-label={t("preflight.action.openAria")}>
+          {t("preflight.action.open")}
+        </Button>
+      ) : null}
+      {onOpenVersions ? (
+        <Button size="small" onClick={onOpenVersions} aria-label={t("versions.action.openAria")}>
+          {t("versions.action.open")}
         </Button>
       ) : null}
       {/* 自绘的 ×：弹窗 `closable={false}` 之后这是唯一能"就地"问一句的地方——卡片就长在

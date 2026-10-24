@@ -29,16 +29,8 @@ from app.services.txt_exporter import export_txt
 
 needs_font = pytest.mark.skipif(not font_available(), reason="本机没有可用的中文字体")
 
-# 分区键顺序 = `resume_sections.DEFAULT_SECTION_ORDER`，与 `SECTION_TITLES` 的排列一致。
-SECTION_KEYS: tuple[str, ...] = (
-    "education",
-    "experience",
-    "projects",
-    "skills",
-    "campus_experience",
-    "awards",
-    "summary",
-)
+# 分区键从语言包推导（W14：10 键），不在这里硬编码数量——加板块时只改 SECTION_TITLES。
+SECTION_KEYS: tuple[str, ...] = tuple(SECTION_TITLES["zh-CN"])
 ZH_TITLES: tuple[str, ...] = tuple(SECTION_TITLES["zh-CN"][key] for key in SECTION_KEYS)
 EN_TITLES: tuple[str, ...] = tuple(SECTION_TITLES["en-US"][key] for key in SECTION_KEYS)
 
@@ -47,7 +39,7 @@ EN_TITLES: tuple[str, ...] = tuple(SECTION_TITLES["en-US"][key] for key in SECTI
 
 
 def _resume() -> ResumeContent:
-    """七个分区**全部非空**的样本（正文刻意不含任何标题词，见模块 docstring）。"""
+    """全部 10 个分区（含 W14 科研三栏目）都非空的样本；正文刻意不含任何标题词。"""
     return ResumeContent(
         name="林致远",
         phone="13800001234",
@@ -96,6 +88,43 @@ def _resume() -> ResumeContent:
                 "tech_stack": ["Python", "MySQL"],
                 "description": ["面向全公司的统一接入与配额管理。"],
                 "highlights": ["灰度放量与回滚预案覆盖全部核心服务。"],
+            }
+        ],
+        publications=[
+            {
+                "title": "高并发交易链路稳定性实践",
+                "authors": [
+                    {"name": "林致远", "is_self": True},
+                    {"name": "合作者乙"},
+                ],
+                "venue": "软件工程实践",
+                "year": "2023",
+                "status": "under_review",
+                "doi": "10.1000/example",
+                "url": "https://doi.example.org/10.1000/example",
+            }
+        ],
+        research_projects=[
+            {
+                "name": "分布式交易一致性研究",
+                "role": "负责人",
+                "organization": "星辰理工大学实验室",
+                "start_date": "2019-09",
+                "end_date": "2021-06",
+                "funding": "国家自然科学基金",
+                "description": ["研究跨库事务的一致性协议。"],
+                "outcomes": ["形成一套可复用的补偿框架。"],
+            }
+        ],
+        patents=[
+            {
+                "title": "一种交易幂等补偿方法",
+                "inventors": [{"name": "林致远", "is_self": True}],
+                "patent_number": "CN202310000001",
+                "country": "中国",
+                "status": "granted",
+                "filed_date": "2021-03",
+                "granted_date": "2023-08",
             }
         ],
         skills=[{"name": "Python", "level": "精通"}, {"name": "MySQL", "level": "熟练"}],
@@ -150,8 +179,9 @@ def _products(language: str, resume: ResumeContent | None = None) -> dict[str, s
     """
     resume = _resume() if resume is None else resume
     return {
-        "pdf": _pdf_text(build_resume_pdf(resume, language=language).content),
-        "docx": _docx_text(build_resume_docx(resume, language=language).content),
+        # 10 个分区在一页内排不下：给 3 页上限，否则 PDF 截断会"少标题"（与内容无关）。
+        "pdf": _pdf_text(build_resume_pdf(resume, page_limit=3, language=language).content),
+        "docx": _docx_text(build_resume_docx(resume, page_limit=3, language=language).content),
         "html": _html_text(render_html(resume, language=language)),
         "md": export_markdown(resume, language=language),
         "txt": export_txt(resume, language=language),

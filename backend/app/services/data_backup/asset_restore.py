@@ -106,8 +106,12 @@ class AssetRestorePlan:
             validate_archive(archive)
             members = set(archive.namelist())
             for category in ASSET_CATEGORIES:
-                prefix = prefixes[category]
-                destination = destinations[category]
+                # 旧包/旧调用方可能只提供既有两类的前缀与目的地（0059 新增
+                # export_archive 后，缺省类别按"没有该段"处理，保持旧包可导入）。
+                prefix = prefixes.get(category)
+                destination = destinations.get(category)
+                if prefix is None or destination is None:
+                    continue
                 for entry in section.get(category) or []:
                     if not isinstance(entry, dict):
                         self.integrity_issues.append(

@@ -18,6 +18,7 @@ import ExportSaveCard from "../components/settings/ExportSaveCard";
 import SearchCard from "../components/settings/SearchCard";
 import AssistantRelaxedModeCard from "../components/settings/AssistantRelaxedModeCard";
 import SkillsCard from "../components/settings/SkillsCard";
+import SettingsProvenanceSection from "../components/settings/SettingsProvenanceSection";
 import AnnouncementSettingsCard from "../components/settings/AnnouncementSettingsCard";
 import UpdateCard from "../components/settings/UpdateCard";
 import HelpDiagnosticsCard from "../components/settings/HelpDiagnosticsCard";
@@ -216,6 +217,16 @@ export default function SettingsPage() {
                     setSkillEditorId(skill.id);
                     setSkillEditorOpen(true);
                   }}
+                />
+
+                {/* 外发与用量（R04）：目标服务取当前生效模型配置的摘要（不造清单）；
+                    外发预览正文只留在组件 state，不落盘。 */}
+                <SettingsProvenanceSection
+                  targetService={
+                    configSummary
+                      ? configSummary.presetLabel + " · " + configSummary.model
+                      : undefined
+                  }
                 />
               </>
             ),

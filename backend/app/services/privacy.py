@@ -100,6 +100,13 @@ def redact(resume_content: ResumeContent, options: RedactionOptions | None = Non
 
     if opts.mask_name:
         resume.name = _mask(resume.name)
+        # W14 科研：作者/发明人姓名按同一 mask_name 口径处理（合同 §5.6）。
+        for publication in resume.publications:
+            for author in publication.authors:
+                author.name = _mask(author.name)
+        for patent in resume.patents:
+            for inventor in patent.inventors:
+                inventor.name = _mask(inventor.name)
     if opts.mask_phone:
         resume.phone = _mask(resume.phone)
     if opts.mask_email:
@@ -114,9 +121,21 @@ def redact(resume_content: ResumeContent, options: RedactionOptions | None = Non
     if opts.mask_school:
         for education in resume.education:
             education.school = _mask(education.school)
+        # W14 科研：期刊/会议与实验室同样可能反查身份（合同 §5.6）。
+        for publication in resume.publications:
+            publication.venue = _mask(publication.venue)
+        for research in resume.research_projects:
+            research.organization = _mask(research.organization)
     if opts.mask_project:
         for project in resume.projects:
             project.name = _mask(project.name)
+        # W14：论文/科研项目/专利标题按"项目名"口径遮（合同 §5.6）。
+        for publication in resume.publications:
+            publication.title = _mask(publication.title)
+        for research in resume.research_projects:
+            research.name = _mask(research.name)
+        for patent in resume.patents:
+            patent.title = _mask(patent.title)
     if opts.mask_product:
         resume.summary = _mask_tokens(resume.summary, product_tokens)
         for experience in resume.experience:

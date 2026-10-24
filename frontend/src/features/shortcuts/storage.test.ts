@@ -77,6 +77,7 @@ describe("默认值与坏数据", () => {
     expect(Object.keys(settings.bindings).sort()).toEqual(
       [
         "assistant",
+        "commandPalette",
         "exportPdf",
         "focusAssistant",
         "newJob",

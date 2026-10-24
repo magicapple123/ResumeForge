@@ -25,11 +25,14 @@ from . import (
     ai_edits_routes,
     crud_routes,
     delivery_archive_routes,
+    export_bundle_routes,
     export_routes,
     generate_routes,
     layout_render_routes,
+    preflight_routes,
     review_routes,
     templates_routes,
+    versions_routes,
 )
 from ._shared import (
     PDF_ENGINE_HEADER as PDF_ENGINE_HEADER,
@@ -56,10 +59,16 @@ router = APIRouter(tags=["resumes"])
 # 该校验不参考父 router 自身的 prefix，因此原 ``APIRouter(prefix="/api/resumes")`` 写法无法通过。
 # 最终路径拼接公式为 父链 prefix + route.path，两种写法产出的 URL 与 OpenAPI 路径逐字符一致。
 router.include_router(templates_routes.router, prefix="/api/resumes")
+# W19：/export-presets 是字面量段，必须先于 crud 的 /{resume_id} 注册。
+router.include_router(export_bundle_routes.router, prefix="/api/resumes")
 router.include_router(generate_routes.router, prefix="/api/resumes")
 router.include_router(delivery_archive_routes.router, prefix="/api/resumes")
 router.include_router(crud_routes.router, prefix="/api/resumes")
 router.include_router(ai_edits_routes.router, prefix="/api/resumes")
+# W13：/{resume_id}/versions 与 /{resume_id}/variants（段数更深，与 GET /{resume_id} 不冲突）。
+router.include_router(versions_routes.router, prefix="/api/resumes")
 router.include_router(review_routes.router, prefix="/api/resumes")
 router.include_router(layout_render_routes.router, prefix="/api/resumes")
 router.include_router(export_routes.router, prefix="/api/resumes")
+# W11 统一检查：路径含 /{resume_id}/preflight，与既有端点不冲突；放最后保持原顺序不变量。
+router.include_router(preflight_routes.router, prefix="/api/resumes")

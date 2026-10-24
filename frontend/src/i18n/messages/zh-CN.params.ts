@@ -91,6 +91,13 @@ const params = {
   "exact.status.busy": "正在按新设置重新排版…",
   "exact.status.pages": "精确预览 · 实际 {pages} 页（上限 {limit} 页）",
   "exact.openNewTab": "在新标签打开",
+  /**
+   * W04：预览里含还没保存的正文。
+   *
+   * 必须说出来：精确预览显示的是"如果现在导出会得到什么"，而下载仍按已保存的记录走。
+   * 不说清楚，用户拖完正文直接导出，会以为导出漏了他的修改。
+   */
+  "exact.unsavedNote": "这份预览含还没保存的修改，导出前请先保存",
 } as const;
 
 export default params;

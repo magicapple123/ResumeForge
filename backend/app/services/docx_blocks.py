@@ -22,30 +22,98 @@
 
 from __future__ import annotations
 
-from docx.enum.text import WD_TAB_ALIGNMENT
+from dataclasses import dataclass
+from functools import partial
+
+from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_TAB_ALIGNMENT
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 from docx.shared import Mm, Pt, RGBColor
 
+from .docx_fonts import DOCX_FONT, resolve_docx_font_name
 from .docx_rich import add_rich_runs
 from .pdf_exporter import _PX_TO_MM, _PX_TO_PT, PAGE_WIDTH_MM
-
-# Word 里写的是字体名，最终由用户机器上的 Word 解析；用微软雅黑与 PDF 首选字体一致。
-DOCX_FONT = "微软雅黑"
+from .resume.resume_template_format import FONT_KEY
 
 # 正文 / 辅助文字颜色与 PDF 的 `set_text_color` 保持一致（强调色另从模板解析）。
+# 字体族名只在 `docx_fonts` 里解析（读字体 name 表），本模块只消费结果。
 _BODY_COLOR = (31, 41, 55)
 _MUTED_COLOR = (107, 114, 128)
 
 
+@dataclass(frozen=True)
+class DocxTheme:
+    """一次 Word 导出的字体族与正文/辅助色（与 PDF 同一份解析结果）。
+
+    放在一个不可变对象里而不是往每个 block 函数塞三个参数：段级原语只关心"用哪一族字、
+    哪种灰"，而这三个值在一次导出内是常量；显式传递避免模块级全局状态（并发导出时
+    两个请求会互相污染字体）。
+    """
+
+    font_name: str = DOCX_FONT
+    body_text: tuple[int, int, int] = _BODY_COLOR
+    muted_text: tuple[int, int, int] = _MUTED_COLOR
+
+
+DEFAULT_DOCX_THEME = DocxTheme()
+
+_ALIGN = {
+    "left": WD_ALIGN_PARAGRAPH.LEFT,
+    "center": WD_ALIGN_PARAGRAPH.CENTER,
+    "right": WD_ALIGN_PARAGRAPH.RIGHT,
+    "justify": WD_ALIGN_PARAGRAPH.JUSTIFY,
+}
+
+
+def _style_scale(style) -> float:
+    """角色/对象覆盖的字号系数（None = 1.0，即模板基准）。"""
+    return float(style.font_scale) if style is not None and style.font_scale else 1.0
+
+
+def _style_color(style, fallback: tuple[int, int, int]) -> tuple[int, int, int]:
+    """角色/对象覆盖的字色（#rrggbb）；未设或非法回落到模板色。"""
+    value = style.color if style is not None else None
+    if not isinstance(value, str):
+        return fallback
+    text = value.strip().lstrip("#")
+    if len(text) == 3:
+        text = "".join(ch * 2 for ch in text)
+    if len(text) != 6:
+        return fallback
+    try:
+        return (int(text[0:2], 16), int(text[2:4], 16), int(text[4:6], 16))
+    except ValueError:
+        return fallback
+
+def resolve_docx_theme(template: str, format_config: dict | None) -> DocxTheme:
+    """一次导出的主题：字体族 + 正文/辅助色（颜色与 PDF 同一条解析：版式覆盖 → 模板 → 兜底）。"""
+    from .pdf_exporter import resolve_muted, resolve_text
+
+    overrides = format_config if isinstance(format_config, dict) else {}
+    return DocxTheme(
+        font_name=resolve_docx_font_name(overrides.get(FONT_KEY)),
+        body_text=resolve_text(template, format_config),
+        muted_text=resolve_muted(template, format_config),
+    )
+
+
 def set_run_font(
-    run, *, size_pt: float, bold: bool = False, color: tuple[int, int, int] | None = None
+    run,
+    *,
+    size_pt: float,
+    bold: bool = False,
+    color: tuple[int, int, int] | None = None,
+    font_name: str = DOCX_FONT,
 ) -> None:
-    """统一设置 run 的字体 / 字号 / 颜色，并补上 east-asian 字体（否则中文会回退默认字体）。"""
-    run.font.name = DOCX_FONT
+    """统一设置 run 的字体 / 字号 / 颜色，并补上 east-asian 字体（否则中文会回退默认字体）。
+
+    `font_name` 由调用方从 DocxTheme 取（= 这份简历所选字体的真实族名）；缺省保持历史
+    默认值，所以既有调用点（测试、其它导出）行为不变。
+    """
+    run.font.name = font_name
     run.font.size = Pt(size_pt)
     run.font.bold = bold
-    run._element.get_or_add_rPr().get_or_add_rFonts().set(qn("w:eastAsia"), DOCX_FONT)
+    run._element.get_or_add_rPr().get_or_add_rFonts().set(qn("w:eastAsia"), font_name)
     if color is not None:
         run.font.color.rgb = RGBColor(color[0], color[1], color[2])
 
@@ -154,15 +222,21 @@ def decorate_paragraph(
         pPr.insert_element_before(shd, *_PPR_AFTER_SHD)
 
 
-def _title_text_color(layout, accent: tuple[int, int, int]) -> tuple[int, int, int]:
-    """区块标题的文字色，与模板 `section_title_text` 同一口径。"""
+def _title_text_color(
+    layout, accent: tuple[int, int, int], theme: DocxTheme
+) -> tuple[int, int, int]:
+    """区块标题的文字色，与模板 `section_title_text` 同一口径。
+
+    `body` / `muted` 读 `theme` 里解析后的真实颜色——此前写死常量，模板 :root 与用户的
+    「正文颜色 / 辅助文字颜色」对 Word 完全不生效（与 PDF 修这条之前的根因相同）。
+    """
     choice = getattr(layout, "section_title_text", "accent")
     if choice == "white":
         return (255, 255, 255)
     if choice == "body":
-        return _BODY_COLOR
+        return theme.body_text
     if choice == "muted":
-        return _MUTED_COLOR
+        return theme.muted_text
     return accent
 
 
@@ -173,6 +247,8 @@ def section_title(
     layout,
     accent: tuple[int, int, int],
     accent_soft: tuple[int, int, int],
+    theme: DocxTheme = DEFAULT_DOCX_THEME,
+    style=None,
 ) -> None:
     """区块标题：字号用 ``section_title_ratio``、形状用 ``section_title_style``。
 
@@ -181,12 +257,17 @@ def section_title(
     那一条条色带——这是"Word 版和预览差别很大"的一部分。现在按 `section_title_style`
     补上底纹 / 左竖条（圆角表达不出来，见 `decorate_paragraph`）。
     """
-    size = base * layout.section_title_ratio
-    gap_mm = base * _PX_TO_MM * layout.section_gap
+    size = base * layout.section_title_ratio * _style_scale(style)
+    gap_ratio = (
+        float(style.space_after)
+        if style is not None and style.space_after is not None
+        else layout.section_gap
+    )
+    gap_mm = base * _PX_TO_MM * gap_ratio
     node = paragraph(doc, space_before_mm=gap_mm, space_after_mm=base * _PX_TO_MM * 0.4)
 
-    style = getattr(layout, "section_title_style", "plain")
-    if style == "soft_box":
+    title_style = getattr(layout, "section_title_style", "plain")
+    if title_style == "soft_box":
         # 浅底色块：四边画同色细框把底纹撑开，模拟 CSS 的 padding。
         decorate_paragraph(
             node,
@@ -196,7 +277,7 @@ def section_title(
             border_sz=4,
             space_pt=5,
         )
-    elif style == "accent_box":
+    elif title_style == "accent_box":
         decorate_paragraph(
             node,
             fill=accent,
@@ -205,32 +286,57 @@ def section_title(
             border_sz=4,
             space_pt=5,
         )
-    elif style == "left_bar":
+    elif title_style == "left_bar":
         # classic 的左竖条：4px ≈ 3pt ≈ 24 个八分之一磅。
         decorate_paragraph(node, edges=("left",), border_color=accent, border_sz=24, space_pt=6)
 
+    if style is not None and style.align is not None:
+        node.paragraph_format.alignment = _ALIGN.get(style.align)
     add_rich_runs(
         node,
         text,
-        set_run_font,
+        partial(set_run_font, font_name=theme.font_name),
         bold=True,
         size_pt=size * _PX_TO_PT,
-        color=_title_text_color(layout, accent),
+        color=_style_color(style, _title_text_color(layout, accent, theme)),
     )
 
 
-def bullets(doc, items: list[str], *, base: float, indent_mm: float = 3.0) -> None:
+def bullets(
+    doc,
+    items: list[str],
+    *,
+    base: float,
+    indent_mm: float = 3.0,
+    theme: DocxTheme = DEFAULT_DOCX_THEME,
+    style=None,
+) -> None:
     """项目符号列表：与预览 ``<ul><li>`` 一样**悬挂缩进**（圆点挂左、文字对齐到 3mm）。"""
+    size = base * _style_scale(style)
+    color = _style_color(style, theme.body_text)
+    bullet = {"dot": "•", "dash": "–", "none": ""}.get(
+        style.bullet if style is not None and style.bullet else "dot", "•"
+    )
     for item in items:
         text = str(item).strip()
         if not text:
             continue
         node = paragraph(doc, indent_mm=indent_mm)
         node.paragraph_format.first_line_indent = Mm(-indent_mm)
-        add_rich_runs(node, f"• {text}", set_run_font, size_pt=base * _PX_TO_PT, color=_BODY_COLOR)
+        if style is not None and style.line_height:
+            node.paragraph_format.line_spacing = float(style.line_height)
+        add_rich_runs(
+            node,
+            f"{bullet} {text}" if bullet else text,
+            partial(set_run_font, font_name=theme.font_name),
+            size_pt=size * _PX_TO_PT,
+            color=color,
+        )
 
 
-def meta_line(doc, text: str, *, base: float, layout) -> None:
+def meta_line(
+    doc, text: str, *, base: float, layout, theme: DocxTheme = DEFAULT_DOCX_THEME, style=None
+) -> None:
     """条目下的副行（绩点 / 核心课程 / 技术栈）：小一号的灰字。"""
     if not text.strip():
         return
@@ -238,20 +344,55 @@ def meta_line(doc, text: str, *, base: float, layout) -> None:
     add_rich_runs(
         node,
         text,
-        set_run_font,
-        size_pt=base * layout.entry_sub_ratio * _PX_TO_PT,
-        color=_MUTED_COLOR,
+        partial(set_run_font, font_name=theme.font_name),
+        size_pt=base * layout.entry_sub_ratio * _PX_TO_PT * _style_scale(style),
+        color=_style_color(style, theme.muted_text),
     )
 
 
-def entry_head(doc, left: str, right: str, *, base: float, layout) -> None:
-    """条目标题：左侧加粗、右侧辅助信息**右对齐**（与预览 ``.entry-head`` 同效）。"""
-    title_size = base * layout.entry_title_ratio
-    node = paragraph(doc, space_before_mm=base * _PX_TO_MM * 0.2)
+def entry_head(
+    doc,
+    left: str,
+    right: str,
+    *,
+    base: float,
+    layout,
+    theme: DocxTheme = DEFAULT_DOCX_THEME,
+    space_before_extra_mm: float = 0.0,
+    style=None,
+    meta_style=None,
+) -> None:
+    """条目标题：左侧加粗、右侧辅助信息**右对齐**（与预览 ``.entry-head`` 同效）。
+
+    `space_before_extra_mm` 是"同分区内上一条与这一条之间"的留白：预览里由
+    ``.entry { margin-bottom: calc(var(--fs) * entry_gap) }`` 表达，Word 没有 CSS，改成本条
+    段前距——两个条目贴在一起是"Word 版和预览差别很大"里很容易看出来的一条。
+    """
+    title_size = base * layout.entry_title_ratio * _style_scale(style)
+    extra = (
+        base * _PX_TO_MM * float(style.space_before)
+        if style is not None and style.space_before is not None
+        else 0.0
+    )
+    node = paragraph(doc, space_before_mm=base * _PX_TO_MM * 0.2 + space_before_extra_mm + extra)
     add_rich_runs(
-        node, left, set_run_font, bold=True, size_pt=title_size * _PX_TO_PT, color=_BODY_COLOR
+        node,
+        left,
+        partial(set_run_font, font_name=theme.font_name),
+        bold=style.bold if style is not None and style.bold is not None else True,
+        size_pt=title_size * _PX_TO_PT,
+        color=_style_color(style, theme.body_text),
     )
     if not right:
+        return
+    if meta_style is not None and meta_style.meta_align == "inline":
+        add_rich_runs(
+            node,
+            f" · {right}",
+            partial(set_run_font, font_name=theme.font_name),
+            size_pt=base * layout.entry_meta_ratio * _PX_TO_PT * _style_scale(meta_style),
+            color=_style_color(meta_style, theme.muted_text),
+        )
         return
     # 制表位定在版心右边缘：无论左边标题多长，日期都停在同一列。
     node.paragraph_format.tab_stops.add_tab_stop(
@@ -260,9 +401,9 @@ def entry_head(doc, left: str, right: str, *, base: float, layout) -> None:
     add_rich_runs(
         node,
         f"\t{right}",
-        set_run_font,
-        size_pt=base * layout.entry_meta_ratio * _PX_TO_PT,
-        color=_MUTED_COLOR,
+        partial(set_run_font, font_name=theme.font_name),
+        size_pt=base * layout.entry_meta_ratio * _PX_TO_PT * _style_scale(meta_style),
+        color=_style_color(meta_style, theme.muted_text),
     )
 
 

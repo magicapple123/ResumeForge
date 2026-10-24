@@ -19,7 +19,6 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
-import ipaddress
 import logging
 import re
 import zipfile
@@ -29,6 +28,7 @@ from urllib.parse import urlsplit
 import httpx
 
 from ..config import get_settings
+from .net_policy import ADDRESS_INVALID, non_public_address_reason
 from .search.page_reader import _sync_resolve as _resolve_host
 from .update_check import _is_newer, _version_tuple
 
@@ -50,8 +50,8 @@ def _publish_source_reason(url: str) -> str | None:
     """发布源白名单策略的**唯一实现**：首跳与重定向的每一跳都走这一份。
 
     放行返回 ``None``，否则给出可读的拒绝原因。校验四件事：scheme、URL 凭据、端口、
-    主机在 `update_allowed_hosts` 白名单（或其子域）内；IP 部分与
-    `page_reader._policy_reason` 同源（一处逻辑一份实现）。
+    主机在 `update_allowed_hosts` 白名单（或其子域）内；"解析出的每个 IP 是否公网"交给
+    :mod:`app.services.net_policy`（与 `page_reader._policy_reason` 同一份实现，含 CGNAT）。
     """
     try:
         parsed = urlsplit(url)
@@ -74,18 +74,14 @@ def _publish_source_reason(url: str) -> str | None:
     if not any(host == item or host.endswith(f".{item}") for item in allowed):
         return f"主机 {host} 不在允许的发布源内"
     for address in _resolve_host(host):
-        try:
-            parsed_ip = ipaddress.ip_address(address)
-        except ValueError:
+        # 地址段判定只有一份实现（`services/net_policy.py`），与网页抓取共用：白名单域名
+        # 解析到内网/CGNAT 段时在这里拒绝，且拒绝发生在发出请求之前。
+        reason = non_public_address_reason(address)
+        if reason is None:
+            continue
+        if reason == ADDRESS_INVALID:
             return f"解析结果 {address!r} 不是合法 IP"
-        if (
-            parsed_ip.is_private
-            or parsed_ip.is_loopback
-            or parsed_ip.is_link_local
-            or parsed_ip.is_reserved
-            or parsed_ip.is_multicast
-        ):
-            return f"主机 {host} 解析到非公网地址 {address}"
+        return f"主机 {host} 解析到非公网地址 {address}"
     return None
 
 

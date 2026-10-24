@@ -22,10 +22,35 @@ import { formatDateTime } from "../../utils/format";
 import LoadingBlock from "../common/LoadingBlock";
 import { ListyItem } from "../common/ListyItem";
 
-/** 状态 → 展示标签（保护缺口优先如实暴露）。 */
+/** 快照目录状态：旧后端没有 `snapshot_state` 字段时按快照份数推断，缺字段不得崩。 */
+type SnapshotState = NonNullable<BackupStatus["snapshot_state"]>;
+
+function resolveSnapshotState(status: BackupStatus): SnapshotState {
+  if (status.snapshot_state) return status.snapshot_state;
+  return status.snapshot_count === 0 ? "empty" : "ok";
+}
+
+// i18n-ok: 新增状态标签，待随本卡片统一迁 t()
+const UNREADABLE_LABEL = "无法确认";
+// i18n-ok: 新增状态标签，待随本卡片统一迁 t()
+const SNAPSHOT_MISSING_LABEL = "快照缺失";
+// i18n-ok: 新增状态说明（目录读不了时必须说清"无法确认"而不是"没有"）
+const UNREADABLE_HINT = "无法读取快照目录，请检查磁盘权限；当前无法确认快照是否存在。";
+// i18n-ok: 新增状态说明（历史成功记录还在，但快照文件不在了）
+const SNAPSHOT_MISSING_HINT = "上次成功记录存在，但当前找不到快照文件；请重新备份一次。";
+
+/**
+ * 状态 → 展示标签（保护缺口优先如实暴露）。
+ *
+ * 优先级（高→低）：无法确认 → 保护中断 → 尚无备份 → 快照缺失 → 已到期 → 受保护。
+ * 「无法确认」必须压过其他一切：目录读不了时，后面每一条判断都缺依据。
+ */
 function statusMeta(status: BackupStatus): { label: string; color: string } {
+  const state = resolveSnapshotState(status);
+  if (state === "unreadable") return { label: UNREADABLE_LABEL, color: "warning" };
   if (status.consecutive_failures > 0) return { label: "保护中断", color: "error" };
   if (!status.last_success) return { label: "尚无备份", color: "warning" };
+  if (state === "empty") return { label: SNAPSHOT_MISSING_LABEL, color: "warning" };
   if (status.overdue) return { label: "已到期未备份", color: "warning" };
   return { label: "受保护", color: "success" };
 }
@@ -39,6 +64,7 @@ export default function BackupStatusCard() {
   const [savingInterval, setSavingInterval] = useState(false);
 
   const meta = status ? statusMeta(status) : null;
+  const state = status ? resolveSnapshotState(status) : null;
 
   const changeInterval = async (days: number) => {
     if (!status || days === status.interval_days || savingInterval) return;
@@ -123,7 +149,11 @@ export default function BackupStatusCard() {
               title={`连续 ${status.consecutive_failures} 次备份失败：${status.last_error}。系统会按短间隔自动重试。`}
             />
           )}
-          {status.snapshot_count > 0 ? (
+          {state === "unreadable" && <Alert type="warning" showIcon title={UNREADABLE_HINT} />}
+          {state === "empty" && status.last_success && (
+            <Alert type="warning" showIcon title={SNAPSHOT_MISSING_HINT} />
+          )}
+          {state !== "unreadable" && status.snapshot_count > 0 && (
             <Listy
               items={status.snapshots}
               rowKey={(item) => item.name}
@@ -140,7 +170,8 @@ export default function BackupStatusCard() {
                 </ListyItem>
               )}
             />
-          ) : (
+          )}
+          {state !== "unreadable" && status.snapshot_count === 0 && (
             <Typography.Text type="secondary">
               暂无自动快照；首次成功备份后会在这里列出。
             </Typography.Text>

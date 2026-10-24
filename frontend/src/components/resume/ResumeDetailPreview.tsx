@@ -1,16 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * 简历详情预览（B3）：简历中心与「生成简历」预览阶段共用的统一界面。
+ * 简历详情预览（B3）：简历中心与「生成简历」预览阶段共用的统一界面——头部元信息、版式控件、
+ * 版面诊断卡、预览、底部操作与各自挂载的子弹窗。导出只有一个入口（统一导出面板），
+ * 脱敏/水印/页数/字号/行距都在面板里；W19 起制作台「导出」另开「导出交付包」弹层。
  *
- * 此前同一套预览有两份实现（`ResumeDetailModal` 的完整预览、`GenerateResumeModal` 的
- * preview 阶段各写一遍），按钮、诊断卡与导出项都各自维护，改一处漏一处。现在把它们
- * 收进这一个组件：头部元信息 Tags + 版式控件（compact）+ 版面诊断卡 + 简历预览 + 底部
- * 完整操作（手动调整 / 岗位建议 / 查看岗位 / 咨询助手 / 质量检测 / 离线分享）+ 导出按钮，
- * 以及这些操作各自挂载的子弹窗。导出只有一个入口（`ExportButtons` → 统一导出面板）：
- * 脱敏、水印、页数、字号、行距都在面板里，不再各占一个按钮。
- *
- * 只依赖子组件与 `api/resumes`，**不** import `ResumeDetailModal` / `GenerateResumeModal`，
- * 避免循环依赖（设计 §9 ⑨）。
+ * 只依赖子组件与 `api/resumes`，不 import 两个宿主 Modal，避免循环依赖（设计 §9 ⑨）。
  */
 import type { ResumeFormatConfig } from "../../types/resumeFormat";
 import { Collapse, Space, Tag, Tooltip, Typography } from "antd";
@@ -22,6 +16,9 @@ import type { ResumeContent, ResumeDetail, ResumeLayout } from "../../types";
 import type { LayoutMeasure } from "../../utils/resumeLayoutMeasure";
 import { contentSignature } from "../../utils/contentSignature";
 import ExportOptionsModal from "../ExportOptionsModal";
+import ExportConfigModal from "./delivery/ExportConfigModal";
+import { createExportDeliveryApi } from "../../features/resume-delivery";
+import { getResume } from "../../api/resumes";
 import ResumeZoomModal from "./ResumeZoomModal";
 import ResumeEditorModal from "../ResumeEditorModal";
 import { useResumeTemplateCatalog } from "../../hooks/useResumeTemplateCatalog";
@@ -44,6 +41,8 @@ import ResumeCoverageNotes from "./ResumeCoverageNotes";
 import ResumeDetailFooter from "./ResumeDetailFooter";
 import EvidencePanel from "./EvidencePanel";
 import { useProfileFillSources } from "./useProfileFillSources";
+import type { ResumeDocumentPipeline } from "../../features/resume-document/types";
+import type { PathRemap } from "../../features/resume-outline/paths";
 
 interface LayoutStatus {
   pages: number;
@@ -64,14 +63,16 @@ interface Props {
   onLayoutStatus: (status: LayoutStatus | null) => void;
   onMeasure: (measure: LayoutMeasure | null) => void;
   onApplyLayout: (next: ResumeLayout) => void;
-  /**
-   * 版式落库：`PATCH /resumes/{id}/layout`。`onApplyLayout` 只重排不落库，缺了这根线就
-   * 只存内容、版式静默丢掉。返回 `false` = 没落库（宿主已弹过原因），保存流程据此不对齐快照。
-   */
+  /** 版式落库：onApplyLayout 只重排不落库，缺这根线版式会静默丢；false=没落库（宿主已弹原因）。 */
   onCommitLayout?: () => Promise<boolean>;
   /** 版式 PATCH 在飞：顶部「保存修改」据此禁用。 */ layoutSaving?: boolean;
   /** 草稿发布（0051）：什么都没脏时点「保存到简历中心」，宿主发一次内容 PATCH 清掉 draft。 */
   onPublishDraft?: () => Promise<boolean>;
+  /**
+   * W02 条件写通道：制作台整体保存 / 409 冲突三选一（用最新的、比较、另存副本）都靠它。
+   * 缺省 = 旧的无条件写（生成流程那种宿主没有版本保护，行为不变）。
+   */
+  documentPipeline?: ResumeDocumentPipeline;
   /** 「自动一页」试出方案并保存后的重渲染（只重渲染，不再写回版式）。 */
   onApplyFittedFormat: (formatConfig: ResumeFormatConfig) => void;
   onSaveEditedResume: (content: ResumeContent) => Promise<void>;
@@ -101,7 +102,22 @@ interface Props {
    * 中栏草稿里没有 overlay，不合并就会"改了字、纸面上的加粗消失"。
    */
   mergeLive?: (content: ResumeContent | null) => ResumeContent | null;
+  /** W06 大纲结构命令后：宿主重映射加粗 overlay 与事实标注的 path。 */
+  onRemapPaths?: (remap: PathRemap) => void;
+  /** 服务端已有新版本（表达资产插入等）：宿主刷新 detail/html/revision。 */
+  onDocumentSynced?: (detail: ResumeDetail) => void;
+  /**
+   * 导出入口走哪条链路（W19 入口迁移）：
+   * - `delivery`（默认）：已保存简历 → 新的「导出交付包」面板（命名配置 / 成套导出 /
+   *   目标核对 / 原件归档）；
+   * - `legacy`：**生成流程/未保存预览**（内容还没落库定稿）→ 保留旧的导出选项面板，
+   *   避免把"还没保存的草稿"当成已保存简历去做交付配置与核对。
+   */
+  exportFlow?: "delivery" | "legacy";
 }
+
+/** W19 导出交付包：模块级单例（与 DeliveryArchiveModal 同一注入模式，测试可替换）。 */
+const deliveryApi = createExportDeliveryApi();
 
 export default function ResumeDetailPreview({
   detail,
@@ -118,6 +134,7 @@ export default function ResumeDetailPreview({
   onCommitLayout,
   layoutSaving = false,
   onPublishDraft,
+  documentPipeline,
   onApplyFittedFormat,
   onSaveEditedResume,
   autoOpenWorkbench = false,
@@ -132,6 +149,9 @@ export default function ResumeDetailPreview({
   richDirty,
   onDiscardRichText,
   mergeLive,
+  onRemapPaths,
+  onDocumentSynced,
+  exportFlow = "delivery",
 }: Props) {
   const navigate = useNavigate();
   const [editorOpen, setEditorOpen] = useState(false);
@@ -141,6 +161,13 @@ export default function ResumeDetailPreview({
   const [reviseInstructions, setReviseInstructions] = useState("");
   const [qualityOpen, setQualityOpen] = useState(false);
   const [exportOptionsOpen, setExportOptionsOpen] = useState(false);
+  // W19：制作台动作条的「导出」打开「导出交付包」弹层（旧面板仍留给主预览入口）。
+  const [deliveryExportOpen, setDeliveryExportOpen] = useState(false);
+  // 导出入口按内容是否已定稿分流：已保存 → 交付包；生成/未保存预览 → 旧导出选项。
+  const openExportByFlow = () => {
+    if (exportFlow === "legacy") setExportOptionsOpen(true);
+    else setDeliveryExportOpen(true);
+  };
   // R8：预览打开时按 Ctrl/⌘+Shift+E 直接拉起导出面板——导出是这一步最常做的事。
   useShortcut("exportPdf", (event) => {
     event.preventDefault();
@@ -168,11 +195,7 @@ export default function ResumeDetailPreview({
   )?.label;
   // 风险扫描的"内容签名"：只随 content 变化重算，用来判断"扫描之后正文是不是改过了"。
   const riskContentSignature = useMemo(() => contentSignature(detail.content), [detail.content]);
-  /**
-   * 警告分级（#3）：「疑似虚构」与「岗位筛选没选上」性质完全不同，不该共用一面
-   * 红墙。新生成的记录直接用结构化 coverage_notes；旧记录的未收录警告混在
-   * warnings 文本里，按特征句拆出来（那句措辞由 resume_coverage 写死，稳定）。
-   */
+  /** 警告分级（#3）：疑似虚构与岗位未选上性质不同；新记录用 coverage_notes，旧记录按特征句拆。 */
   const { fabricationWarnings, legacyCoverageWarnings } = useMemo(() => {
     const legacy = detail.warnings.filter((warning) => warning.includes("没有出现在这份简历里"));
     const rest = detail.warnings.filter((warning) => !warning.includes("没有出现在这份简历里"));
@@ -270,14 +293,10 @@ export default function ResumeDetailPreview({
       )}
       <ResumePreview
         ref={resolvedPreviewRef}
-        // 两个具名插槽（P2 / D4）：结构类在工具栏第一行，度量类在第二行。
-        // 目录由本组件取**一次**（`useResumeTemplateCatalog`），两组共用——各取一次就是两个请求。
-        // 渲染中**不禁用**（D12）：禁用是"丢弃"的另一种写法（用户拖不动 → 以为坏了），
-        // 边距合并已经保证"最后一次一定生效"，禁用只会制造"卡"的体感。
+        // 具名插槽（P2/D4）：结构类第一行、度量类第二行；目录本组件取一次两组共用。
+        // 渲染中不禁用（D12）：禁用会让用户以为坏了；边距合并保证最后一次生效。
         templateControls={
-          // 与「岗位详情 → AI 生成」用**同一套**版式控件（非 compact）：两处的
-          // 分组标签、控件尺寸、两行两列的排布必须一致，否则同一件事在两条入口里
-          // 长得不一样（2026-10-20 用户反馈）。
+          // 与「岗位详情 → AI 生成」同一套控件（非 compact）：分组/尺寸/排布必须一致。
           <ResumeTemplateControls
             layout={layout}
             catalog={catalog}
@@ -346,7 +365,7 @@ export default function ResumeDetailPreview({
         onOpenAssistant={() => navigate(`/assistant?resume_id=${detail.id}&new=1`)}
         onOpenQuality={() => setQualityOpen(true)}
         onOpenSharePackage={() => setSharePackageOpen(true)}
-        onOpenExportOptions={() => setExportOptionsOpen(true)}
+        onOpenExportOptions={openExportByFlow}
       />
 
       <ResumeEditorModal
@@ -374,9 +393,7 @@ export default function ResumeDetailPreview({
         onGenerated={onSuggestionsGenerated}
         onApplied={(detail) => onResumeRevised?.(detail)}
       />
-      {/* 修订弹窗（承载「AI 补上这段」与「采纳建议」）只看 onResumeRevised 是否传入：
-          生成弹窗的预览阶段虽然藏起底部「AI 修改 / 重新生成」按钮（showReviseAction=false，
-          避免与它自己的「重新生成」向导重复），但「AI 补上这段」仍要能弹出修订窗口。 */}
+      {/* 修订弹窗只看 onResumeRevised：生成预览虽藏底部按钮，但「AI 补上这段」仍要能弹出。 */}
       {onResumeRevised ? (
         <ResumeReviseModal
           open={reviseOpen}
@@ -393,20 +410,39 @@ export default function ResumeDetailPreview({
         jobId={detail.job_id ?? undefined}
         onClose={() => setQualityOpen(false)}
       />
-      <ExportOptionsModal
-        recordId={detail.id}
-        open={exportOptionsOpen}
-        // 页数/字号/版式草稿全部带上：否则导出弹窗发的是"不指定"，由后端取记录里存的旧值——
-        // 用户在预览里把字号拖到 7px、页数改成 2、还没保存就导出，就会得到与眼前不同的文件。
-        initialPageLimit={layout.page_limit}
-        initialFontScale={layout.font_scale}
-        initialFormatConfig={layout.format_config}
-        // 语言也是草稿：预览里切成 English 还没保存时，导出必须印英文标题。
-        // 回落值与预览发给 /render 的那份一致（zh-CN），否则两边会各说各的。
-        initialLanguage={layout.language ?? "zh-CN"}
-        pdfDirectAvailable={pdfDirectAvailable}
-        onClose={() => setExportOptionsOpen(false)}
-      />
+      {exportFlow === "delivery" ? (
+        <ExportConfigModal
+          open={deliveryExportOpen}
+          onClose={() => setDeliveryExportOpen(false)}
+          api={deliveryApi}
+          resumeId={detail.id}
+          content={liveContent ?? detail.content ?? null}
+          revision={documentPipeline?.revision ?? null}
+          resumeTitle={detail.title}
+          company={detail.company}
+          jobTitle={detail.job_title}
+          template={layout.template}
+          language={layout.language}
+          documentMode={detail.document_mode}
+          // 未保存的草稿版式也进同快照（不传则后端用记录里那份）。
+          pageLimit={layout.page_limit}
+          fontScale={layout.font_scale}
+          formatConfig={layout.format_config}
+          onReloadRevision={async () => (await getResume(detail.id)).revision ?? null}
+        />
+      ) : null}
+      {exportFlow === "legacy" ? (
+        <ExportOptionsModal
+          recordId={detail.id}
+          open={exportOptionsOpen}
+          initialPageLimit={layout.page_limit}
+          initialFontScale={layout.font_scale}
+          initialFormatConfig={layout.format_config}
+          initialLanguage={layout.language ?? "zh-CN"}
+          pdfDirectAvailable={pdfDirectAvailable}
+          onClose={() => setExportOptionsOpen(false)}
+        />
+      ) : null}
       <ResumeZoomModal
         open={zoomOpen}
         html={html}
@@ -416,12 +452,16 @@ export default function ResumeDetailPreview({
         resumeId={detail.id}
         relayouting={relayouting}
         hasPhoto={Boolean(detail.content?.photo)}
+        documentMode={detail.document_mode}
+        pagesNeeded={layoutStatus?.pages ?? null}
         onApplyLayout={onApplyLayout}
         onCommitLayout={onCommitLayout}
         layoutSaving={layoutSaving}
         // 草稿靠这两个把「保存」常驻（刚建出来的草稿内容与版式都没动过，0051）。
         isDraft={Boolean(detail.draft)}
         onPublishDraft={onPublishDraft}
+        documentPipeline={documentPipeline}
+        resumeTitle={detail.title}
         previewMode={previewMode}
         onPreviewModeChange={setPreviewMode}
         exactPreview={exactPreview}
@@ -430,6 +470,8 @@ export default function ResumeDetailPreview({
         // 右栏实时预览要按"加上还没保存的粗体"那一版重排。
         liveContent={liveContent}
         mergeLive={mergeLive}
+        onRemapPaths={onRemapPaths}
+        onDocumentSynced={onDocumentSynced}
         richDirty={richDirty}
         onDiscardRichText={onDiscardRichText}
         onSaveContent={onSaveEditedResume}
@@ -443,12 +485,7 @@ export default function ResumeDetailPreview({
           // 制作台关掉后中栏已经销毁，它的脏值不再有出口——不清掉会永久禁用「手动调整」。
           setWorkbenchDirty(false);
         }}
-        onExport={() => {
-          // 只开导出弹窗，**不**关制作台（用户 2026-10-23：导出后不该被踢回主预览界面）。
-          // 关掉会同时丢掉中栏未保存的内容与"导出完还要接着调"的位置；层级由 antd 解决
-          // （`ExportOptionsModal` 是 `.resume-wb-body` 之外的兄弟，后打开的拿到更高 z-index）。
-          setExportOptionsOpen(true);
-        }}
+        onExport={openExportByFlow}
       />
       <SharePackageModal
         recordId={detail.id}
