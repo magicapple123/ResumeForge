@@ -40,6 +40,8 @@ POINT_FIELDS: dict[str, tuple[str, ...]] = {
     "publications": (),
     "research_projects": ("description", "outcomes"),
     "patents": (),
+    # A4 资格证照（没有要点数组：一条证照就是一个对象）
+    "credentials": (),
     "skills": (),
     "awards": (),
 }
@@ -165,6 +167,64 @@ def resolve_object_path(content: dict[str, Any] | None, object_id: str) -> str |
     return None
 
 
+def restore_entry_identity(
+    old_content: dict[str, Any] | None, content: dict[str, Any] | None
+) -> None:
+    """把旧正文的条目 id / point_ids 回填到新正文（模型输出通常不回显身份）。
+
+    为什么必须回填：id 是事实锁、来源标注、批注、局部排版的锚点。模型看不见旧 id
+    或看到了也不回显是常态，若听任修订结果覆盖正文，**一次 AI 修订就让全部锚点断链**
+    ——锁变成"锁定对象已不存在"，来源定位全部漂移。
+
+    匹配规则与 ``content_locks.restore_lock_flags`` 完全一致（同一类问题只有一份匹配
+    语义）：先按 id 找，找不到再退同一数组下标；只补"新条目缺失"的身份，不覆盖模型
+    合法回显的 id。要点 id 只在要点数组长度相同时回填（长度不等必然错位，宁可不锚）。
+    """
+    for field in ENTRY_FIELDS:
+        old_entries = (old_content or {}).get(field) or []
+        new_entries = (content or {}).get(field)
+        if not isinstance(old_entries, list) or not isinstance(new_entries, list):
+            continue
+        for index, old_entry in enumerate(old_entries):
+            if not isinstance(old_entry, dict):
+                continue
+            old_id = old_entry.get("id")
+            target: dict[str, Any] | None = None
+            if is_object_id(old_id):
+                target = next(
+                    (
+                        entry
+                        for entry in new_entries
+                        if isinstance(entry, dict) and entry.get("id") == old_id
+                    ),
+                    None,
+                )
+            if target is None and 0 <= index < len(new_entries):
+                candidate = new_entries[index]
+                if isinstance(candidate, dict):
+                    target = candidate
+            if target is None:
+                continue
+            if not is_object_id(target.get("id")) and is_object_id(old_id):
+                target["id"] = old_id
+            if target.get("point_ids") is None:
+                old_point_ids = old_entry.get("point_ids")
+                if isinstance(old_point_ids, dict):
+                    restored: dict[str, list[str]] = {}
+                    for key, values in old_point_ids.items():
+                        source = target.get(key)
+                        if (
+                            key in POINT_FIELDS[field]
+                            and isinstance(values, list)
+                            and isinstance(source, list)
+                            and len(source) == len(values)
+                            and all(is_object_id(value) for value in values)
+                        ):
+                            restored[key] = list(values)
+                    if restored:
+                        target["point_ids"] = restored
+
+
 def resolve_point_path(content: dict[str, Any] | None, object_id: str, point_id: str) -> str | None:
     """按条目 id + 要点 id 找 ``field.index.key.point_index``；找不到返回 ``None``。"""
     entry_path = resolve_object_path(content, object_id)
@@ -188,6 +248,7 @@ __all__ = [
     "is_object_id",
     "resolve_object_path",
     "resolve_point_path",
+    "restore_entry_identity",
     "sanitize_document_ids",
     "validate_document_ids",
 ]

@@ -54,6 +54,11 @@ interface Props {
   resumeId?: number | null;
   content?: ResumeContent | null;
   onTrialAdopt?: (request: { template: string; formatConfig: ResumeFormatConfig }) => void;
+  /**
+   * 页数选项：缺省用内置 `RESUME_PAGE_LIMITS`（1–3 页）。
+   * 生成配置的长 CV 模式传 1–10（契约 §5）；其他宿主不传，行为与此前逐字一致。
+   */
+  pageLimitOptions?: readonly number[];
   onChange: (layout: ResumeLayout) => void;
 }
 
@@ -70,6 +75,7 @@ export default function ResumeTemplateControls({
   resumeId,
   content,
   onTrialAdopt,
+  pageLimitOptions,
   onChange,
 }: Props) {
   const [galleryOpen, setGalleryOpen] = useState(false);
@@ -359,7 +365,7 @@ export default function ResumeTemplateControls({
             size="small"
             value={layout.page_limit}
             disabled={disabled}
-            options={RESUME_PAGE_LIMITS.map((value) => ({
+            options={(pageLimitOptions ?? RESUME_PAGE_LIMITS).map((value) => ({
               value,
               label: `${value} 页`,
             }))}

@@ -2,6 +2,10 @@
 /** W13 命名版本 / 岗位变体接口（真实端点，契约见 ResumeForge-w13-versions-contract）。 */
 import { request } from "../../api/client";
 import type {
+  ScenarioVariantAdoptRequest,
+  ScenarioVariantCreateRequest,
+  ScenarioVariantPreviewOut,
+  ScenarioVariantPreviewRequest,
   VariantCreateRequest,
   VariantOut,
   VariantDetailOut,
@@ -84,6 +88,43 @@ export function createVariant(
 
 export function getVariant(resumeId: number, variantId: number): Promise<VariantDetailOut> {
   return request(`${base(resumeId)}/variants/${variantId}`);
+}
+
+// ===== A5：按职业场景派生变体（创建 → 预览候选 → 采纳）=====
+
+/** 先派生独立变体；source 简历零写入。 */
+export function createScenarioVariant(
+  resumeId: number,
+  payload: ScenarioVariantCreateRequest,
+): Promise<VariantOut> {
+  return request(`${base(resumeId)}/scenario-variants`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+/** 生成候选（不落库）；采纳前用户先看差异。 */
+export function previewScenarioVariant(
+  resumeId: number,
+  variantId: number,
+  payload: ScenarioVariantPreviewRequest,
+): Promise<ScenarioVariantPreviewOut> {
+  return request(`${base(resumeId)}/variants/${variantId}/scenario-preview`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+/** 采纳候选到这条变体（双条件写；源简历零写入）。 */
+export function adoptScenarioVariant(
+  resumeId: number,
+  variantId: number,
+  payload: ScenarioVariantAdoptRequest,
+): Promise<VariantDetailOut> {
+  return request(`${base(resumeId)}/variants/${variantId}/scenario-adopt`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
 }
 
 export function syncVariants(

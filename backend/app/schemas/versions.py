@@ -42,6 +42,9 @@ class VersionOut(BaseModel):
     parent_version_id: int | None = None
     frozen: bool = False
     source: str = "manual"
+    # A5：这份版本生成时的职业场景上下文快照（0061）。NULL = 未记录（旧版本/手写），
+    # 读侧原样返回 null，**不按当前场景回填**；页面只做只读说明。
+    context_snapshot: dict[str, Any] | None = None
     created_at: datetime | None = None
 
 
@@ -122,6 +125,8 @@ class VariantOut(BaseModel):
     language: str = ""
     variant_group_id: int | None = None
     has_layout: bool = False
+    # A5：派生变体继承的生成上下文（命名版本优先，否则当前简历）；NULL = 未记录。
+    context_snapshot: dict[str, Any] | None = None
     created_at: datetime | None = None
     updated_at: datetime | None = None
 

@@ -13,6 +13,7 @@ import BackgroundTasksIndicator from "./BackgroundTasksIndicator";
 import ExitAppButton from "./common/ExitAppButton";
 import ModelProfileSelect from "./ModelProfileSelect";
 import MySpaceMenu from "./navigation/MySpaceMenu";
+import ScenarioSelector from "../features/career-scenarios/ScenarioSelector";
 import ThemeSwitch from "./ThemeSwitch";
 import { APP_NAME, GITHUB_REPO } from "../config";
 
@@ -31,6 +32,8 @@ export default function AppHeaderActions({ hiddenKeys, onStarClick }: Props) {
           「我的空间」不在这里，而是走 AppHeaderContext 的 beforeAvatar 插槽——视觉顺序
           要的是 `[数据集][我的空间][头像]`，而它们是两个 flex 容器，`order` 跨不过去。 */}
       <ModelProfileSelect />
+      {/* A2：职业场景是"本窗口的引导建议"，与数据集（在哪份数据里）语义分开、并排但成组。 */}
+      <ScenarioSelector />
       <AppHeaderContext beforeAvatar={<MySpaceMenu hiddenKeys={hiddenKeys} />} />
       {/* 有任务在跑时才出现：平时页头不该多一个空按钮。 */}
       <BackgroundTasksIndicator />

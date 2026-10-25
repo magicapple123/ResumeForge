@@ -14,6 +14,7 @@ from .profile_relevance_constants import (
     _MIN_PROFILE_CONTEXT_CHARS,
     _OPTIONAL_TOP_LEVEL_FIELDS,
     _REFERENCE_SECTIONS,
+    FACT_STANDALONE_SECTIONS,
     SECTION_LIMITS,
 )
 
@@ -104,6 +105,24 @@ def _drop_one_detail(data: dict[str, Any]) -> bool:
                 if not item.get("reference_excerpt"):
                     item.pop("reference_file_name", None)
             return True
+    # 补充事实（A3）的独立 section：先裁它们的要点列表，再动简历主栏目。
+    # 论文/科研的候选通常只是资料库里的长尾证据，不该为了它们先砍用户的核心经历；
+    # 旧数据没有这些键，此循环是零成本。
+    for section in FACT_STANDALONE_SECTIONS:
+        for item in reversed(data.get(section) or []):
+            for field in ("description", "outcomes"):
+                values = item.get(field)
+                if not isinstance(values, list) or not values:
+                    continue
+                if len(values) > 1:
+                    values.pop()
+                    return True
+                if len(values[0]) > 240:
+                    # 裁剪目标要明显小于触发阈值：_trim_text 会保留 max_chars+1 个字符
+                    # （截断后补省略号），若按 240 裁会得到 241 字符，下一轮仍 >240，
+                    # 在 while 循环里永远消不掉。200 -> 最多 201 字符，稳定收敛。
+                    values[0] = _trim_text(values[0], 200)
+                    return True
     for section in ("awards", "campus_experiences", "experiences", "projects", "educations"):
         entries = data.get(section) or []
         for item in reversed(entries):
@@ -115,7 +134,8 @@ def _drop_one_detail(data: dict[str, Any]) -> bool:
                     values.pop()
                     return True
                 if len(values[0]) > 240:
-                    values[0] = _trim_text(values[0], 240)
+                    # 同上：200 -> 最多 201 字符，保证 _drop_one_detail 一定会收敛。
+                    values[0] = _trim_text(values[0], 200)
                     return True
     return False
 
@@ -186,7 +206,13 @@ def serialize_profile_prompt_data(data: dict[str, Any], max_chars: int) -> str:
             "target_city": "",
             "job_intent": _trim_text(str(candidate.get("job_intent", "")), 64),
             "summary": "",
-            **{section: (candidate.get(section) or [])[:1] for section in SECTION_LIMITS},
+            # 只保留 candidate 里真的有的 section：旧数据没有补充事实键，兜底结果的
+            # 键集合与改动前完全一致；有新事实时它们参与兜底而不是被静默丢掉。
+            **{
+                section: (candidate.get(section) or [])[:1]
+                for section in SECTION_LIMITS
+                if section in candidate
+            },
         }
         candidate = _trim_all_strings(candidate, 32)
         serialized = _dump(candidate)

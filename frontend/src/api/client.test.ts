@@ -299,6 +299,8 @@ describe("BUDGETS_MS", () => {
       recognition: 90_000,
       // 岗位解读（T1）：整段生成 10–60s，长 JD 更久，15s 必然误超时。
       analysis: 180_000,
+      // 翻译候选：几十段按块翻译仍是 1–3 次模型调用，默认 15s 必然误超时。
+      translate: 180_000,
       stream: 0,
     });
   });

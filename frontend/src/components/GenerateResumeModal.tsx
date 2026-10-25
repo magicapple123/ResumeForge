@@ -16,6 +16,7 @@ import {
   updateResumeLayout,
 } from "../api/resumes";
 import { getLLMConfig } from "../api/settings";
+import { useGenerationExtras } from "../features/career-scenarios/useGenerationExtras";
 import { formatErrorGuidance } from "../api/errorGuidance";
 import type {
   EnhancementLevel,
@@ -63,6 +64,8 @@ export default function GenerateResumeModal({ job, open, initialTitle = "", onCl
     font_scale: "standard",
   });
   const [customInstruction, setCustomInstruction] = useState("");
+  // 文档模式 / 本次生成场景（契约 §5、§2.5）：默认都不发送，关闭弹窗时复位。
+  const generation = useGenerationExtras();
   const [layoutStatus, setLayoutStatus] = useState<{
     pages: number;
     overflow: boolean;
@@ -205,7 +208,8 @@ export default function GenerateResumeModal({ job, open, initialTitle = "", onCl
     setLayoutStatus(null);
     setMeasure(null);
     setCustomInstruction("");
-  }, [initialTitle]);
+    generation.resetExtras();
+  }, [generation, initialTitle]);
 
   const loadPreview = useCallback(async (resumeId: number) => {
     try {
@@ -245,6 +249,9 @@ export default function GenerateResumeModal({ job, open, initialTitle = "", onCl
           // 只影响"这次预览"，关掉弹窗再从简历中心打开就变回去了。
           format_config: layout.format_config ?? {},
           custom_instruction: customInstruction.trim(),
+          // 默认不发送新字段：两个条件展开保证"未启用场景 + 普通简历"的请求体与旧版逐字节相同。
+          ...(generation.documentMode === "long_cv" ? { document_mode: "long_cv" as const } : {}),
+          ...(generation.careerContext ? { career_context: generation.careerContext } : {}),
         },
       });
       setTaskId(started.id);
@@ -430,6 +437,7 @@ export default function GenerateResumeModal({ job, open, initialTitle = "", onCl
           job={job}
           title={title}
           setTitle={setTitle}
+          generation={generation}
           enhance={enhance}
           setEnhance={setEnhance}
           enhancementLevel={enhancementLevel}

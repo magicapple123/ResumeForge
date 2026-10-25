@@ -28,6 +28,8 @@ export interface OutlineStateOptions {
   pickTarget?: { path: string; nonce: number } | null;
   onSelectionChange?: (selection: OutlineSelection | null) => void;
   treeRef: RefObject<HTMLElement | null>;
+  /** 排序结构预览出口（拖动中给右栏画布的新顺序；null = 结束）。缺省 = 不预览。 */
+  onStructurePreview?: (content: ResumeContent | null) => void;
 }
 
 export interface OutlineStateApi extends OutlineCoreApi, OutlineSortApi, OutlineActionsApi {
@@ -44,6 +46,7 @@ export function useOutlineState({
   pickTarget,
   onSelectionChange,
   treeRef,
+  onStructurePreview,
 }: OutlineStateOptions): OutlineStateApi {
   const [announcement, setAnnouncement] = useState("");
   const announce = useCallback((text: string) => setAnnouncement(text), []);
@@ -58,6 +61,9 @@ export function useOutlineState({
     announce,
     notifyBlocked: actions.notifyBlocked,
     enabled: Boolean(onCommand && baseContent),
+    // 预览基准 = 面板渲染/命令用的同一份内容（含未保存编辑）：id 一一对上，预览与提交同源。
+    previewBase: baseContent,
+    onStructurePreview,
   });
 
   const batchSetHidden = useCallback(

@@ -7,5 +7,9 @@
 @import "./resume-editor.css";
 @import "./resume-panels.css";
 @import "./resume-workbench-controls.css";
+/* 2026-10-25 新增的「局部排版面板：行布局」从 controls 拆出（单文件 500 行预算）；
+   排位保持在 controls 之后、resume-workbench 之前，与拆分前的相对顺序一致。 */
+@import "./resume-workbench-typography.css";
 @import "./resume-workbench.css";
 @import "./resume-workbench-tabs.css";
+@import "./workbench-left-tabs.css";

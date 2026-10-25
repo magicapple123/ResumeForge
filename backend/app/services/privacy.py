@@ -11,6 +11,11 @@
 handle 就足以反查到人，与"遮住姓名和手机"的目的直接矛盾。它们能被 HTML / Markdown / Word
 渲染出来，PDF 自 2026-10-21 起也会渲染（页头联系方式补齐字段），所以必须一并遮。
 
+**A4 资格证照的证号（credential_number）不在 ResumeCredential 模型里**：证号是私密值，
+解析层（coerce_resume / ResumeContent 校验）会直接丢弃未知键，因此脱敏、导出、日志与
+模型上下文这几条链路**根本拿不到它**——"不输出"由数据形状保证，而不是靠这里再遮一次。
+本模块只处理确实存在于模型里的字段。
+
 ``mask_product`` 的语义说明：``ResumeContent`` 里没有独立的"产品名"字段，产品名通常就是
 项目名 / 公司名，并以叙事文本的形式出现在总结与描述里。所以这里做**正文级替换**——把
 已知的项目名与公司名在总结 / 描述文本里遮罩，避免产品名从正文漏出。更细的产品名词表
@@ -126,6 +131,9 @@ def redact(resume_content: ResumeContent, options: RedactionOptions | None = Non
             publication.venue = _mask(publication.venue)
         for research in resume.research_projects:
             research.organization = _mask(research.organization)
+        # A4 证照：颁发机构同样可能反查身份（与学校/实验室同一口径）。
+        for credential in resume.credentials:
+            credential.issuer = _mask(credential.issuer)
     if opts.mask_project:
         for project in resume.projects:
             project.name = _mask(project.name)
@@ -136,6 +144,9 @@ def redact(resume_content: ResumeContent, options: RedactionOptions | None = Non
             research.name = _mask(research.name)
         for patent in resume.patents:
             patent.title = _mask(patent.title)
+        # A4 证照名称按"项目名"口径遮；证号本来就不在模型里（见下方说明）。
+        for credential in resume.credentials:
+            credential.name = _mask(credential.name)
     if opts.mask_product:
         resume.summary = _mask_tokens(resume.summary, product_tokens)
         for experience in resume.experience:

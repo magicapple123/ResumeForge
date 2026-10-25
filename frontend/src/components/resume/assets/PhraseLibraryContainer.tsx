@@ -184,15 +184,13 @@ export default function PhraseLibraryContainer({
         onCollectCurrent={canCollect ? () => void handleCollect() : undefined}
       />
       {lastInserted ? (
-        <div style={{ marginTop: 6, fontSize: 12, color: "var(--rf-text-secondary)" }}>
+        <div className="resume-assets-footnote">
           {at("assets.insert.done")} ·{" "}
           {at("assets.insert.newObject", { id: lastInserted.inserted_object_id })}
         </div>
       ) : null}
       {resolveTargetError() ? (
-        <div style={{ marginTop: 6, fontSize: 12, color: "var(--rf-text-secondary)" }}>
-          {resolveTargetError()}
-        </div>
+        <div className="resume-assets-footnote">{resolveTargetError()}</div>
       ) : null}
       {editing ? (
         <PhraseEditorModal

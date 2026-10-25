@@ -17,7 +17,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from .ats import MAX_JD_TEXT_CHARS
 from .export import ExportFormat
-from .resume import MAX_RESUME_PAGES, ResumeContent, ResumeLanguage
+from .resume import ResumeContent, ResumeLanguage
 from .resume_generation import LONG_CV_MAX_PAGES, ResumeFontScale, _validate_format_config_shape
 
 PreflightLayer = Literal["content", "layout", "product"]
@@ -49,7 +49,9 @@ class PreflightLayoutInput(BaseModel):
 
     template: str | None = Field(default=None, max_length=64)
     format_name: str | None = Field(default=None, max_length=64)
-    page_limit: int | None = Field(default=None, ge=1, le=MAX_RESUME_PAGES)
+    # A4 长 CV：上限由文档模式决定（普通 1–3 / 长 CV 1–10）；路由按记录/变体的
+    # document_mode 用 mode_page_limit 夹紧。这里放宽到 10，否则长 CV 草稿预检会 422。
+    page_limit: int | None = Field(default=None, ge=1, le=LONG_CV_MAX_PAGES)
     font_scale: ResumeFontScale | None = None
     language: Literal["zh-CN", "en-US"] | None = None
     # 形状/键数上限与生成、保存两条路径共用同一个校验（不重写一份规则）。

@@ -55,6 +55,12 @@ def restore_selected_sections(
             "projects": fallback_source.get("projects", []),
             "skills": fallback_source.get("skills", []),
             "awards": fallback_source.get("awards", []),
+            # A4：扩展事实的候选键与简历栏目同名（由 fact_context / Lead 合并进
+            # selected_data）。候选里没有这些键时原样跳过，旧行为逐字不变。
+            "publications": fallback_source.get("publications", []),
+            "research_projects": fallback_source.get("research_projects", []),
+            "patents": fallback_source.get("patents", []),
+            "credentials": fallback_source.get("credentials", []),
         }
     )
     sections = {
@@ -64,6 +70,11 @@ def restore_selected_sections(
         "projects": "projects",
         "skills": "skills",
         "awards": "awards",
+        # 扩展栏目：候选键与简历栏目同名（见 schemas/profile_facts 与 fact_context）。
+        "publications": "publications",
+        "research_projects": "research_projects",
+        "patents": "patents",
+        "credentials": "credentials",
     }
     updates = {
         output_field: getattr(fallback, output_field)

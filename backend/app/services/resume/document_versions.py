@@ -30,7 +30,7 @@ from ...models.versions import (
     VERSION_SOURCE_RESTORE,
     ResumeVersion,
 )
-from ...schemas.resume import MAX_RESUME_PAGES
+from ...schemas.resume_generation import mode_page_limit
 from .document_save import _conditional_update
 from .resume_delivery import canonical_content_sha256, default_render_context
 from .resume_diff import build_resume_diff
@@ -137,6 +137,9 @@ def version_brief(version: ResumeVersion) -> dict[str, Any]:
         "parent_version_id": version.parent_version_id,
         "frozen": version.frozen,
         "source": version.source,
+        # A5：这份版本生成时的职业场景上下文快照（0061）。NULL = 未记录（旧版本/手写），
+        # 读侧原样返回 None，**不按当前场景回填**。版本不可变，这里只做只读展示。
+        "context_snapshot": copy.deepcopy(version.context_snapshot),
         "created_at": version.created_at,
     }
 
@@ -184,6 +187,8 @@ def create_version(
         source_revision=int(record.revision or 0),
         parent_version_id=parent.id if parent is not None else None,
         source=VERSION_SOURCE_MANUAL,
+        # A5：版本快照同时冻结生成时上下文（与 content/render_context 一起不可变）。
+        context_snapshot=copy.deepcopy(getattr(record, "context_snapshot", None)),
     )
     db.add(version)
     db.commit()
@@ -269,8 +274,13 @@ def compare_versions(
 
 def _restore_values(version: ResumeVersion, record: ResumeRecord) -> dict[str, Any]:
     context = version.render_context or {}
+    # A4 长 CV：页数上限按这版快照自己的文档模式（旧版本没有该键 → resume → 1–3，
+    # 旧行为不变；长 CV 版本的 10 页不再被固定 3 页规则判成非法并回落）。
+    document_mode = context.get("document_mode") or getattr(record, "document_mode", None) or "resume"
     page_limit = context.get("page_limit")
-    if not isinstance(page_limit, int) or not 1 <= page_limit <= MAX_RESUME_PAGES:
+    if isinstance(page_limit, int):
+        page_limit = mode_page_limit(page_limit, document_mode)
+    else:
         page_limit = int(record.page_limit or 1)
     return {
         "content": _snapshot_content(version.content),
@@ -285,6 +295,9 @@ def _restore_values(version: ResumeVersion, record: ResumeRecord) -> dict[str, A
         "font_scale": context.get("font_scale") or record.font_scale or "standard",
         "language": context.get("language") or record.language or "zh-CN",
         "document_mode": context.get("document_mode") or "resume",
+        # A5：从版本恢复 = 内容 / 排版 / 生成上下文一起写成新的当前修订；
+        # 历史版本行本身不动（NULL 的快照恢复出来仍是 NULL，不按当前场景回填）。
+        "context_snapshot": copy.deepcopy(version.context_snapshot),
     }
 
 
@@ -320,6 +333,8 @@ def restore_version(
         source_revision=int(saved.revision or 0),
         parent_version_id=version.id,
         source=VERSION_SOURCE_RESTORE,
+        # 恢复动作本身产生的那条版本也带着被恢复版本的上下文（可追溯）。
+        context_snapshot=copy.deepcopy(version.context_snapshot),
     )
     db.add(record_version)
     db.commit()

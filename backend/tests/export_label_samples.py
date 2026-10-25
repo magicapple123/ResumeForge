@@ -29,7 +29,7 @@ from app.services.txt_exporter import export_txt
 
 needs_font = pytest.mark.skipif(not font_available(), reason="本机没有可用的中文字体")
 
-# 分区键从语言包推导（W14：10 键），不在这里硬编码数量——加板块时只改 SECTION_TITLES。
+# 分区键从语言包推导（W14：10 键 / A4：11 键），不在这里硬编码数量——加板块时只改 SECTION_TITLES。
 SECTION_KEYS: tuple[str, ...] = tuple(SECTION_TITLES["zh-CN"])
 ZH_TITLES: tuple[str, ...] = tuple(SECTION_TITLES["zh-CN"][key] for key in SECTION_KEYS)
 EN_TITLES: tuple[str, ...] = tuple(SECTION_TITLES["en-US"][key] for key in SECTION_KEYS)
@@ -39,7 +39,7 @@ EN_TITLES: tuple[str, ...] = tuple(SECTION_TITLES["en-US"][key] for key in SECTI
 
 
 def _resume() -> ResumeContent:
-    """全部 10 个分区（含 W14 科研三栏目）都非空的样本；正文刻意不含任何标题词。"""
+    """全部 11 个分区（含 W14 科研三栏目、A4 资格证照）都非空的样本；正文刻意不含任何标题词。"""
     return ResumeContent(
         name="林致远",
         phone="13800001234",
@@ -125,6 +125,17 @@ def _resume() -> ResumeContent:
                 "status": "granted",
                 "filed_date": "2021-03",
                 "granted_date": "2023-08",
+            }
+        ],
+        credentials=[
+            {
+                "name": "注册信息安全专业人员",
+                "issuer": "中国信息安全测评中心",
+                "issue_date": "2021-06",
+                "expiry_date": "2027-06",
+                "status": "active",
+                "verify_url": "https://verify.example.org/cisp",
+                "note": "证书状态以颁证机构查询结果为准。",
             }
         ],
         skills=[{"name": "Python", "level": "精通"}, {"name": "MySQL", "level": "熟练"}],

@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 from ...profile.profile_service import get_profile_detail
 from .. import extra_profile, repeated_profile
 from ..extra_profile import list_entries
+from ..facts import fact_catalog_entries
 from ..fields import FORM_FIELDS
 from .profile_map import _as_block_text, profile_to_form_data
 
@@ -207,6 +208,9 @@ def build_catalog(db: Session, *, job_title: str = "") -> list[dict[str, str]]:
     """返回完整可挑选目录，并把已记住的网申字段也放进来。"""
     entries = catalog_from_profile(get_profile_detail(db), job_title=job_title)
     entries.extend(repeated_profile.catalog_entries(db))
+    # 补充事实（含自定义字段）也放进人工挑选清单；key 以 CUSTOM_FACT_ 开头，
+    # 与网申自定义字段同在自定义语义族、但库内 key 空间不冲突。
+    entries.extend(fact_catalog_entries(db))
     values = list_entries(db)
     details = extra_profile.list_details(db)
     known_keys = {entry.get("key", "") for entry in entries}

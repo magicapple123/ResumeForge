@@ -302,6 +302,12 @@ export interface ResumeDetail extends ResumeBrief {
    * `false`（不是草稿）处理，行为与此前逐字一致。
    */
   draft?: boolean;
+  /**
+   * 这份简历生成时冻结的职业场景快照（契约 §2.5）：null = 未记录（旧简历/未启用）。
+   *
+   * 只读展示用——**不得按当前场景回填**，历史记录 NULL 就是"当时没有记录"。
+   */
+  context_snapshot?: GenerationContextSnapshot | null;
 }
 
 /** 一条"没写进这份简历"的分区级清单。 */
@@ -373,6 +379,44 @@ export interface ResumeSuggestions {
   suggestions: ResumeSuggestion[];
 }
 
+/**
+ * 「用于本次生成」的职业场景上下文（契约 §2.5，字段名与后端逐字一致）。
+ *
+ * **缺省 / null = 不启用**：请求体里不出现 `career_context` 键，生成路径与旧版本
+ * 逐字节一致。`scenario_id` 与 `preset_key` 二选一：已保存场景必须带
+ * `expected_revision`，内置快捷场景必须带与目录一致的 `catalog_version`。
+ */
+export interface CareerContextRequest {
+  scenario_id?: number;
+  preset_key?: string;
+  catalog_version?: string;
+  expected_revision?: number;
+  include_employment_status?: boolean;
+}
+
+/**
+ * 生成上下文快照（服务端写进 `context_snapshot` 列的结构，契约 §2.5）。
+ *
+ * 制作台只读展示用：`display_name` 是「本次场景」的名字，`disclosure` 说明就业状态
+ * 是否被允许发送。**不包含姓名/联系方式等私密数据**（服务端裁剪）。
+ */
+export interface GenerationContextSnapshot {
+  schema_version: number;
+  scenario_origin: "preset" | "saved";
+  scenario_id: number | null;
+  preset_key: string | null;
+  scenario_revision: number | null;
+  catalog_version: string | null;
+  display_name: string;
+  resolved_dimensions: Record<string, unknown>;
+  approved_guidance: string[];
+  disclosure: { include_employment_status: boolean };
+  resolver_version?: string;
+  prompt_fragment_version?: string;
+  context_sha256?: string;
+  captured_at?: string;
+}
+
 export interface GenerateOptions {
   enhance: boolean;
   enhancement_level: EnhancementLevel;
@@ -389,6 +433,18 @@ export interface GenerateOptions {
   format_config?: ResumeFormatConfig;
   /** 用户自己补充的生成要求（≤2000 字），作为附加上下文交给模型。 */
   custom_instruction: string;
+  /**
+   * 长 CV 文档模式（契约 §5）：`resume`（默认）/ `long_cv`。
+   *
+   * **默认不发送该字段**（保持旧请求逐字节兼容）；只有用户显式选了长 CV 才带上。
+   */
+  document_mode?: "resume" | "long_cv";
+  /**
+   * 本次生成显式选用的职业场景（契约 §2.5）。
+   *
+   * 缺省 / null = 不启用：**不要**发空对象——后端按"没有这个键"保持旧行为。
+   */
+  career_context?: CareerContextRequest | null;
 }
 
 /** 生成接口 SSE 事件（与后端 generator 事件一一对应）。 */

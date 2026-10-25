@@ -2,6 +2,7 @@
 /** 「简历制作台」整屏外壳：三栏编排、动作条、窄屏降级与各领域挂载点（W02–W17）的接线。 */
 import { useCallback, useRef, useState } from "react";
 import type { RefObject } from "react";
+import type { GenerationContextSnapshot } from "../../features/career-scenarios/types";
 import type { ResumeContent, ResumeDetail, ResumeLayout } from "../../types";
 import type { ProfileFillSources } from "../../features/profile/profileFillOptions";
 import { createResumeDraftStore } from "../../features/resume/resumeDraftContent";
@@ -12,6 +13,8 @@ import { useResumeTemplateCatalog } from "../../hooks/useResumeTemplateCatalog";
 import type { ExactPreviewOptions, ResumePreviewHandle } from "../ResumePreview";
 import type { PreviewMode } from "../resume-preview/config";
 import ResumeWorkbenchActionBar from "./ResumeWorkbenchActionBar";
+import WorkbenchColumnsBody from "./WorkbenchColumnsBody";
+import ScenarioContextBar from "./ScenarioContextBar";
 import ResumeWorkbenchConflict from "./ResumeWorkbenchConflict";
 import ResumeWorkbenchEditorColumn from "./ResumeWorkbenchEditorColumn";
 import type { ResumeWorkbenchEditorHandle } from "./ResumeWorkbenchEditorColumn";
@@ -20,7 +23,6 @@ import WorkbenchModalFrame from "./WorkbenchModalFrame";
 import WorkbenchPanelsDrawer from "./WorkbenchPanelsDrawer";
 import WorkbenchParamsColumn from "./WorkbenchParamsColumn";
 import PreflightModal from "./preflight/PreflightModal";
-import WorkbenchResizer from "./WorkbenchResizer";
 import { useWorkbenchCloseGuard } from "./useWorkbenchCloseGuard";
 import { useWorkbenchContextPanels } from "./useWorkbenchContextPanels";
 import { useWorkbenchColumns } from "./useWorkbenchColumns";
@@ -128,6 +130,8 @@ interface Props {
   onRemapPaths?: (remap: PathRemap) => void;
   /** 服务端已有新版本（如表达资产插入）：宿主用它刷新 detail/html 与 revision。 */
   onDocumentSynced?: (detail: ResumeDetail) => void;
+  /** A6：这份简历生成时冻结的职业场景快照（只读展示；旧记录为 null = 未记录）。 */
+  contextSnapshot?: GenerationContextSnapshot | null;
 }
 
 export default function ResumeZoomModal({
@@ -166,6 +170,7 @@ export default function ResumeZoomModal({
   canvasContainerRef,
   onRemapPaths,
   onDocumentSynced,
+  contextSnapshot,
 }: Props) {
   // 制作台有自己的预览实例：字号滑块要即时作用在**这一个** iframe 上（调用方给了 ref 就用它）。
   const fallbackPreviewRef = useRef<ResumePreviewHandle>(null);
@@ -178,13 +183,10 @@ export default function ResumeZoomModal({
   // 目录**只取一次**，四个分组共用（`useApi` 没有跨实例缓存，各取一次就是四个请求）。
   const { catalog } = useResumeTemplateCatalog();
   /**
-   * 中栏 → 右栏的**单向**草稿通道（P0-7）。
-   *
-   * 在**这一层**创建、只往下传，**这一层自己不订阅**——订阅放在
-   * `ResumeWorkbenchLiveCanvas` 那个薄壳里，否则每键输入都会重渲染整个三栏弹窗。
-   * 用 `useState` 的惰性初始化（而不是 `useRef(...).current`）：ref 的值不允许在渲染期读取
-   * （`react-hooks/refs`），而这里就是要在渲染期把它传给子组件。惰性初始化同样只执行一次，
-   * 生命周期跟随弹窗实例：关掉再开是一份新的（不会带上次的残留草稿）。
+   * 中栏 → 右栏的**单向**草稿通道（P0-7）：在这一层创建、只往下传，**自己不订阅**
+   * （订阅在 `ResumeWorkbenchLiveCanvas` 薄壳里，否则每键输入都会重渲染整个三栏弹窗）。
+   * 用 `useState` 惰性初始化（ref 不允许在渲染期读取，`react-hooks/refs`）；生命周期
+   * 跟随弹窗实例：关掉再开是一份新的（不会带上次的残留草稿）。
    */
   const [draftStore] = useState(createResumeDraftStore);
   // 中栏**不再可折叠**（2026-10-23 用户口径："去掉右上角的收起内容栏按钮"）。理由不只是
@@ -231,7 +233,7 @@ export default function ResumeZoomModal({
     setPickTarget((previous) => ({ path, nonce: (previous?.nonce ?? 0) + 1 }));
   // 三栏宽度：拖动 / 键盘 / 复位 / 持久化都在这个 hook 里（渲染仍归这个文件）。
   const columns = useWorkbenchColumns();
-  const { containerRef: bodyRef, style: bodyStyle } = columns;
+  const { containerRef: bodyRef } = columns;
   const editorEnabled = Boolean(onSaveContent);
   const { handleContentSave, readLocalContent, adoptLatest } = useWorkbenchDocumentBridge({
     documentPipeline,
@@ -267,7 +269,7 @@ export default function ResumeZoomModal({
     history,
     onDocumentSynced,
   });
-  const handleOutlineCommand = useWorkbenchOutline({
+  const outline = useWorkbenchOutline({
     editorRef,
     onRemapPaths,
     commit: (next, remap) => history.commitContent(next, undefined, remap),
@@ -280,7 +282,6 @@ export default function ResumeZoomModal({
   /** 两个抽屉互斥（同一个状态）：768 宽时两个 378 会把画布全盖住。 */
   const [openPanel, setOpenPanel] = useState<"params" | "content" | null>(null);
   const hasSettings = Boolean(layout && onApplyLayout);
-  // 有冲突通道时右栏容器 ref 交给大纲用；没有 W06 挂载前它只是保留出口。
   // 预设只对三栏档生效：两栏/单栏是响应式降级，再叠一层工作区预设会互相打架。
   const presetPanels = tier === "three" ? panels : { params: true, editor: true };
   const showParamsColumn = hasSettings && tier !== "one" && presetPanels.params;
@@ -356,7 +357,8 @@ export default function ResumeZoomModal({
       draftContent={mergeLive?.(history.content) ?? history.content}
       pickTarget={pickTarget}
       canvasContainer={canvasNode}
-      onOutlineCommand={editorEnabled ? handleOutlineCommand : undefined}
+      onOutlineCommand={editorEnabled ? outline.command : undefined}
+      onStructurePreview={outline.handleStructurePreview}
       outlineReadOnly={!editorEnabled}
       history={editorEnabled ? history.historyTab : undefined}
       resumeId={resumeId ?? null}
@@ -366,10 +368,7 @@ export default function ResumeZoomModal({
     />
   ) : null;
 
-  /**
-   * 内容栏本体：三栏时常驻中栏，两栏/单栏时搬进抽屉。
-   * 只写一份 JSX —— 两处各写一遍必然分叉（隐藏动作条、pickTarget 这些细节很容易漏）。
-   */
+  // 内容栏本体：三栏常驻中栏，两栏/单栏搬进抽屉；只写一份 JSX（两处各写一遍必然分叉）。
   const editorColumn = editorEnabled ? (
     <div className="resume-wb-col resume-wb-col-editor">
       <ResumeWorkbenchEditorColumn
@@ -394,6 +393,53 @@ export default function ResumeZoomModal({
       />
     </div>
   ) : null;
+
+  const body = (
+    <WorkbenchColumnsBody
+      bodyRef={bodyRef}
+      columns={columns}
+      hasSettings={hasSettings}
+      editorEnabled={editorEnabled}
+      showParamsColumn={showParamsColumn}
+      showEditorColumn={showEditorColumn}
+      paramsColumn={paramsColumn}
+      editorColumn={editorColumn}
+      conflictBar={
+        conflict && documentPipeline && resumeId != null ? (
+          <ResumeWorkbenchConflict
+            resumeId={resumeId}
+            resumeTitle={resumeTitle ?? content?.name ?? ""}
+            readLocalContent={readLocalContent}
+            onAdoptLatest={adoptLatest}
+            onResolved={settleConflict}
+          />
+        ) : null
+      }
+    >
+      <WorkbenchCanvasColumn
+        html={html}
+        warnings={warnings}
+        pages={pages}
+        previewRef={workbenchPreviewRef}
+        previewMode={previewMode}
+        onPreviewModeChange={onPreviewModeChange}
+        exactPreview={exactPreview}
+        // 勾上「草稿模式编辑」后，右栏纸面点哪里，中栏就跳到哪一栏的输入框。
+        onPickField={editorEnabled ? pickFromPaper : undefined}
+        // 实时预览优先级在画布里定：结构预览（拖动中）→ 草稿（叠加加粗）→ 宿主已保存 / 已加粗。
+        content={outline.preview ?? liveContent ?? content ?? null}
+        draftStore={draftStore}
+        mergeLive={mergeLive}
+        layout={layout}
+        richEdit={richEdit}
+        suspended={saving || editorSaving}
+        containerRef={resolvedCanvasRef}
+        onContainerReady={setCanvasNode}
+        banner={contextPanels.canvasBanner}
+        proview={proview}
+      />
+    </WorkbenchColumnsBody>
+  );
 
   return (
     <WorkbenchModalFrame
@@ -421,6 +467,10 @@ export default function ResumeZoomModal({
           onExport={onExport}
           onOpenPreflight={editorEnabled ? preflight.openPreflight : undefined}
           onOpenVersions={serverSync.versions.openVersions}
+          // 两栏/单栏档的分隔条本来就不渲染，这里不给一颗无作用的复位图标。
+          onResetColumnWidths={
+            tier === "three" && showParamsColumn && showEditorColumn ? columns.reset : undefined
+          }
           // 两栏及以下：内容栏不在栅格里，必须给一个入口（否则「编辑内容」不可达）。
           onOpenContent={
             editorEnabled && tier !== "three" ? () => setOpenPanel("content") : undefined
@@ -432,50 +482,7 @@ export default function ResumeZoomModal({
         />
       }
     >
-      <div
-        ref={bodyRef}
-        style={bodyStyle}
-        className={`resume-wb-body${hasSettings ? "" : " is-preview-only"}${
-          editorEnabled ? "" : " is-editor-hidden"
-        }`}
-      >
-        {/* W02 冲突条：`.resume-wb-body` 是 relative，它浮在正文上方，不新增第二层弹窗。 */}
-        {conflict && documentPipeline && resumeId != null ? (
-          <ResumeWorkbenchConflict
-            resumeId={resumeId}
-            resumeTitle={resumeTitle ?? content?.name ?? ""}
-            readLocalContent={readLocalContent}
-            onAdoptLatest={adoptLatest}
-            onResolved={settleConflict}
-          />
-        ) : null}
-        {showParamsColumn ? paramsColumn : null}
-        {showEditorColumn ? editorColumn : null}
-        {showEditorColumn ? <WorkbenchResizer columns={columns} /> : null}
-        <WorkbenchCanvasColumn
-          html={html}
-          warnings={warnings}
-          pages={pages}
-          previewRef={workbenchPreviewRef}
-          previewMode={previewMode}
-          onPreviewModeChange={onPreviewModeChange}
-          exactPreview={exactPreview}
-          // 勾上「草稿模式编辑」后，右栏纸面点哪里，中栏就跳到哪一栏的输入框。
-          onPickField={editorEnabled ? pickFromPaper : undefined}
-          // 实时预览：中栏一改右栏就重排；保存期间让路给宿主返回的 html。
-          // 优先级在画布里定：草稿（叠加加粗）→ 这里这一版（宿主已保存 / 已加粗）。
-          content={liveContent ?? content ?? null}
-          draftStore={draftStore}
-          mergeLive={mergeLive}
-          layout={layout}
-          richEdit={richEdit}
-          suspended={saving || editorSaving}
-          containerRef={resolvedCanvasRef}
-          onContainerReady={setCanvasNode}
-          banner={contextPanels.canvasBanner}
-          proview={proview}
-        />
-      </div>
+      <ScenarioContextBar snapshot={contextSnapshot}>{body}</ScenarioContextBar>
       <WorkbenchPanelsDrawer
         openPanel={openPanel}
         onClose={() => setOpenPanel(null)}

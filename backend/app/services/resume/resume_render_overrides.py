@@ -16,6 +16,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from .document_identity import ENTRY_FIELDS
 from .resume_config_domains import DOMAIN_KEYS
 from .resume_pagination import PaginationPlan, pagination_css, resolve_pagination
 from .resume_photo_crop import (
@@ -26,15 +27,11 @@ from .resume_photo_crop import (
 )
 from .resume_style import ResolvedStyle, entry_style_css, resolve_style, role_style_css
 
-# 六个条目数组（id 校验与可见性过滤共用同一份定义来源）。
-_ENTRY_FIELDS: tuple[str, ...] = (
-    "education",
-    "experience",
-    "campus_experience",
-    "projects",
-    "skills",
-    "awards",
-)
+# 条目数组（id 校验与可见性过滤共用同一份定义来源）。**不要再手写第二份清单**：
+# A4 的资格证照与 W14 科研三栏目都已经在 document_identity.ENTRY_FIELDS 里登记，
+# 手写清单会让"对象/分页覆盖指向科研/证照条目"在保存时被 prune_overrides 当成
+# 死数据裁掉——那正是"新栏目在某个环节静默失效"的一类 bug。
+_ENTRY_FIELDS: tuple[str, ...] = ENTRY_FIELDS
 
 
 @dataclass(frozen=True)

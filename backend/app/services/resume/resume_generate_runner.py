@@ -46,6 +46,7 @@ from ...services.claims import build_baseline
 from ...services.llm import create_provider
 from ...services.llm.base import LLMError
 from ...services.llm.client_pool import aclose_clients_for_current_loop
+from ...services.profile.fact_context import build_fact_sections, load_fact_context
 from ...services.profile.profile_service import get_profile_detail, to_profile_out
 from ...services.resume.resume_generator import ResumeGenerator
 from ...services.resume.resume_task_state import (
@@ -53,6 +54,7 @@ from ...services.resume.resume_task_state import (
     finalize_task,
     set_cancelled,
 )
+from ...services.resume.scenario_context import build_scenario_prompt_block
 from ...services.settings_service import get_llm_config
 from .resume_generate_support import log_generation_usage
 from .resume_runner_loop import RunnerEventLoopHandle
@@ -191,7 +193,7 @@ class ResumeGenerateRunner:
             )
 
             try:
-                job_out, profile_out, baseline, provider = self._snapshot(session, task)
+                job_out, profile_out, baseline, provider, fact_sections = self._snapshot(session, task)
             except Exception as exc:  # noqa: BLE001 - 快照失败转为可读的失败状态
                 logger.warning("简历生成任务快照失败 task_id=%s：%s", task_id, exc)
                 self._finalize(
@@ -207,6 +209,12 @@ class ResumeGenerateRunner:
             session.commit()
 
             options = GenerateOptions.model_validate(task.options or {})
+            # A5：只读创建任务时冻结的快照；运行中不查当前场景（改名/归档/切窗口均不影响）。
+            try:
+                career_block = build_scenario_prompt_block(task.context_snapshot)
+            except Exception:  # noqa: BLE001 - 历史/损坏快照不得让生成整体失败
+                logger.warning("生成任务场景快照无法解释，按未使用场景继续 task_id=%s", task_id)
+                career_block = ""
             generator = ResumeGenerator(provider)
             resume: dict | None = None
             warnings: list[str] = []
@@ -228,7 +236,13 @@ class ResumeGenerateRunner:
                     # 器——GeneratorExit 逐层展开，generator/provider 各层的 finally
                     # （段复位、usage 补记、response 关闭）才真正执行。
                     stream = generator.generate(
-                        profile_out, job_out, options, baseline=baseline, budget=budget
+                        profile_out,
+                        job_out,
+                        options,
+                        baseline=baseline,
+                        budget=budget,
+                        career_context_block=career_block,
+                        fact_sections=fact_sections,
                     )
                     try:
                         async for event in stream:
@@ -371,6 +385,8 @@ class ResumeGenerateRunner:
                     coverage_notes=coverage_notes,
                     rationale=rationale,
                     fact_annotations=fact_annotations,
+                    document_mode=options.document_mode,
+                    context_snapshot=task.context_snapshot,
                     commit=False,
                 )
             except Exception:  # noqa: BLE001 - 落库失败不能让任务停在 running
@@ -403,7 +419,7 @@ class ResumeGenerateRunner:
 
     def _snapshot(
         self, session: Any, task: ResumeGenerateTask
-    ) -> tuple[JobOut | None, Any, Any, Any]:
+    ) -> tuple[JobOut | None, Any, Any, Any, dict[str, Any]]:
         """在后台线程里重建生成所需的只读快照，返回 ``(job_out, profile_out, baseline, provider)``。
 
         快照在流开始前一次性取齐，随后立即释放请求会话——生成本身是纯计算 + 模型调用，
@@ -416,11 +432,13 @@ class ResumeGenerateRunner:
         profile = get_profile_detail(session)
         profile_out = to_profile_out(profile)
         baseline = build_baseline(session)
+        # A3/A4：补充事实只读快照（去私密、顺序稳定）；六类全空时等价于旧行为。
+        fact_sections = build_fact_sections(load_fact_context(session))
         config = get_llm_config(session)
         if not config.base_url or not config.model:
             raise ResumeGenerateRunnerError("尚未配置大模型 API")
         provider = create_provider(config)
-        return job_out, profile_out, baseline, provider
+        return job_out, profile_out, baseline, provider, fact_sections
 
     # ===== 状态写入 =====
     # 终态仲裁三件套的实现拆在 resume_task_state.py（RF-02 纪律：条件 UPDATE +

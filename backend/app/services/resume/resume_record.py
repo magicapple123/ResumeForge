@@ -22,6 +22,7 @@ from ...models.job import Job
 from ...models.resume import ResumeRecord
 from ...schemas.job import JobOut
 from ...schemas.resume import ResumeContent
+from ...schemas.resume_generation import RESUME_MODES
 from ..exporter import normalize_page_limit
 from .resume_sections import default_section_order_config
 from .resume_template_store import (
@@ -97,6 +98,8 @@ def save_record(
     rationale: str = "",
     fact_annotations: list[dict] | None = None,
     format_config: dict | None = None,
+    document_mode: str = "resume",
+    context_snapshot: dict | None = None,
     commit: bool = True,
 ) -> ResumeRecord:
     """生成结果落库（在流结束后的同一请求内调用）。
@@ -117,6 +120,12 @@ def save_record(
     调用点，是因为生成有两条链路（SSE 与后台任务 runner）都走本函数，而"卡片显示的顺序
     必须等于渲染顺序"这条不变量对两条链路同样成立；前端已经写好快照时这个键存在，
     **原样保留、绝不覆盖**。
+
+    ``document_mode`` 是本次生成的文档形态（W14：普通简历 1–3 页 / 长 CV 1–10 页）；
+    页数上限按模式夹紧，**不自动切换模式**——缺省 resume 与旧行为逐字一致。
+
+    ``context_snapshot`` 是本次生成冻结的职业场景上下文（A5）：server-owned 独立列，
+    不塞进 content / format_config / render_context；None = 未使用（旧调用方不变）。
     """
     name = str(content.get("name") or "简历").strip()[:48]
     timestamp = datetime.now().strftime("%Y%m%d%H%M")
@@ -132,6 +141,7 @@ def save_record(
         job_title = job.title.strip()[:80]
         title = f"{name}-{company}-{job_title}-{timestamp}"
     title = requested_title.strip()[:256] or title
+    mode = document_mode if document_mode in RESUME_MODES else "resume"
     record = ResumeRecord(
         title=title,
         job_id=job.id if job is not None else None,
@@ -145,13 +155,15 @@ def save_record(
         enhancement_level=enhancement_level,
         template=resolved_style_name(db, template),
         format_name=resolved_format_name(db, format_name),
-        page_limit=normalize_page_limit(page_limit),
+        page_limit=normalize_page_limit(page_limit, mode),
+        document_mode=mode,
         font_scale=font_scale_spec(font_scale)["name"],
         format_config=validated_format_config(merged_config),
         custom_instruction=custom_instruction.strip()[:2000],
         coverage_notes=coverage_notes or [],
         rationale=rationale or "",
         fact_annotations=fact_annotations or [],
+        context_snapshot=context_snapshot,
     )
     db.add(record)
     if commit:

@@ -24,6 +24,7 @@ from .api import (
     ats,
     attachments,
     candidate_jobs,
+    career_scenarios,
     claims,
     datasets,
     drill,
@@ -37,6 +38,7 @@ from .api import (
     manual_backups,
     materials,
     profile,
+    profile_facts,
     referrals,
     reminders,
     resume_risk,
@@ -425,6 +427,9 @@ def create_app() -> FastAPI:
         jobs_analysis.router,
         resumes.router,
         resume_writing.router,
+        # A1/A3：职业场景与补充事实（独立前缀，不与 /api/resumes、/api/profile 抢路径）。
+        career_scenarios.router,
+        profile_facts.router,
         # 全局 AI 润色：前缀是 /api/writing，与上面那条 /api/resumes 不冲突。
         resume_writing.selection_router,
         resume_risk.router,

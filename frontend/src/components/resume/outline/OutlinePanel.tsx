@@ -13,10 +13,11 @@
  *
  * ```tsx
  * <OutlinePanel
- *   content={content}                       // 当前内容（含 id；没有 id 时面板内部 ensureIds）
+ *   content={content}                       // 当前内容（含未保存编辑；没有 id 时面板内部 ensureIds）
  *   onCommand={(command, baseContent) => …} // 结构命令；baseContent 是命令基于的快照
  *   pickTarget={pickTarget}                 // 纸面点击目标（反向选中）
  *   canvasContainer={canvasNode}            // 右栏画布节点（向 iframe 注入高亮）
+ *   onStructurePreview={(next) => …}        // 拖动中的临时内容（右栏画布实时重排；只读）
  * />
  * ```
  *
@@ -39,7 +40,6 @@ import {
 } from "../../../features/resume-outline/model";
 import { resolveHighlightTargets } from "../../../features/resume-outline/highlight";
 import { selectionPath } from "../../../features/resume-outline/model";
-import type { EntryField } from "../../../features/resume-document/types";
 import type { OutlineCommand, OutlineSelection } from "../../../features/resume-outline/types";
 import type { ResumeContent } from "../../../types/resume";
 import OutlineInspector from "./OutlineInspector";
@@ -47,27 +47,24 @@ import { EntryRowContent, PointRowContent, SectionHeaderContent } from "./Outlin
 import OutlineSearchBar from "./OutlineSearchBar";
 import { pointTreeKey } from "./outlineTree";
 import { useOutlineCanvasHighlight } from "./useOutlineCanvasHighlight";
+import { useOutlineHostBridge } from "./useOutlineHostBridge";
+import type { OutlineMultiEntry, OutlineMultiSelectionApi } from "./useOutlineHostBridge";
 import { useOutlineSearch } from "./useOutlineSearch";
 import { useOutlineState } from "./useOutlineState";
+import "./outline.css";
 
-/** W07 多选工具条消费的最小形状（id 是稳定 objectId，不是下标）。 */
-export interface OutlineMultiEntry {
-  id: string;
-  label: string;
-  meta: string;
-  field: EntryField;
-}
-
-/** 多选工具的宿主句柄（目前只有清空；应用样式仍走 onCommand/宿主保存链路）。 */
-export interface OutlineMultiSelectionApi {
-  clearMultiSelect: () => void;
-}
+export type { OutlineMultiEntry, OutlineMultiSelectionApi };
 
 export interface OutlinePanelProps {
-  /** 当前简历内容；缺 id 时面板内部 ensureIds（只补内存，不发请求）。 */
+  /** 当前简历内容（制作台传含未保存编辑的草稿版）；缺 id 时面板内部 ensureIds（只补内存）。 */
   content?: ResumeContent | null;
   /** 结构命令出口。缺省 = 只读。 */
   onCommand?: (command: OutlineCommand, baseContent: ResumeContent) => void;
+  /**
+   * 排序结构预览出口：拖动中按新顺序算出的内容（右栏画布实时重排用）。
+   * 只读不写——松手时仍走 `onCommand` 提交；结束（松手 / 取消 / 拖出条目）时回调 null。
+   */
+  onStructurePreview?: (content: ResumeContent | null) => void;
   /** 纸面点击的 `{path, nonce}`（与制作台现有 pickTarget 同型）：用来反选大纲对象。 */
   pickTarget?: { path: string; nonce: number } | null;
   /** 右栏画布容器节点：给了就向其中 iframe 注入选中高亮。 */
@@ -114,6 +111,7 @@ function pointSelectionOf(entry: OutlineEntry, point: OutlinePoint): OutlineSele
 export default function OutlinePanel({
   content,
   onCommand,
+  onStructurePreview,
   pickTarget,
   canvasContainer,
   canvasContainerRef,
@@ -147,6 +145,7 @@ export default function OutlinePanel({
     pickTarget,
     onSelectionChange,
     treeRef,
+    onStructurePreview,
   });
   const targets = useMemo(
     () => resolveHighlightTargets(baseContent, state.selection),
@@ -159,33 +158,13 @@ export default function OutlinePanel({
     reveal: search.reveal,
   });
 
-  // 多选集合上报（W07 多选工具条）：形状按工具条需要摊平；按稳定 id 拼签名去重。
-  const multiEntries = useMemo<OutlineMultiEntry[]>(
-    () =>
-      state.multiSelectedEntries.map((entry) => ({
-        id: entry.objectId,
-        label: entry.title || t("outline.entry.untitled"),
-        meta: entry.subtitle,
-        field: entry.field,
-      })),
-    [state.multiSelectedEntries],
-  );
-  const multiSignature = multiEntries.map((entry) => `${entry.field}:${entry.id}`).join("|");
-  const lastMultiSignature = useRef("");
-  useEffect(() => {
-    if (lastMultiSignature.current === multiSignature) return;
-    lastMultiSignature.current = multiSignature;
-    onMultiSelectionChange?.(multiEntries);
-  }, [multiEntries, multiSignature, onMultiSelectionChange]);
-
-  // 宿主句柄：清空多选（工具条"取消选择"/应用后收起）。
-  useEffect(() => {
-    if (!multiSelectionApiRef) return;
-    multiSelectionApiRef.current = { clearMultiSelect: state.clearMultiSelect };
-    return () => {
-      multiSelectionApiRef.current = null;
-    };
-  }, [multiSelectionApiRef, state.clearMultiSelect]);
+  // 多选集合上报 + 「清空多选」宿主句柄（拆到 hook，见文件头）。
+  useOutlineHostBridge({
+    entries: state.multiSelectedEntries,
+    onMultiSelectionChange,
+    multiSelectionApiRef,
+    clearMultiSelect: state.clearMultiSelect,
+  });
 
   // 纸面点击跳进大纲：先记住"跳之前"的位置，用户可用「回到之前位置」复原。
   const lastPickNonce = useRef<number | null>(null);

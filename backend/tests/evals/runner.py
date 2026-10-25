@@ -106,3 +106,30 @@ def evaluate_all(
             continue
         results.append(evaluate_sample(sample, recording))
     return results
+
+# ===== 行业矩阵（A4/A9，计划 §9.4）：24 案例真实执行 =====
+#
+# 与上面的 recordings 回放不同：行业案例的检查是**确定性、无模型**的（事实保留 /
+# 候选双路径 / coerce+revise 模拟管线 / 负例检出），所以不存在"没有录制就跳过"；
+# 24 份案例全部 execution、executed 计数即交付证据。import 延迟到函数里，保持
+# 既有 evaluate_all/load_samples 的行为与零额外依赖不变。
+
+
+def evaluate_industry_cases(cases_dir: Path | None = None) -> list[dict]:
+    """执行 backend/tests/evals/industry 下全部跨行业案例的四条确定性检查。
+
+    返回每份案例的执行结果（含 checks / findings / gaps），结构见
+    industry/checks.py::run_case。**不写仓库内任何路径**，纯 CPU、可并行。
+    """
+    from industry.checks import run_all_cases
+    from industry.loader import load_cases
+
+    return run_all_cases(load_cases(cases_dir))
+
+
+def summarize_industry_execution(results: list[dict]) -> dict[str, int]:
+    """available / executed / skipped / failed（executed == 要求数即 A4 退出证据）。"""
+    from industry.checks import executed_counts
+
+    return executed_counts(results)
+

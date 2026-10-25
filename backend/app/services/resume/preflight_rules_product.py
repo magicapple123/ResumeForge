@@ -25,6 +25,7 @@ from .product_text import (
     extract_pdf_text,
     tokens_of,
 )
+from .resume_sections import DEFAULT_SECTION_ORDER
 from .resume_visibility import is_hidden_entry
 
 _MAX_EVIDENCE = 20
@@ -34,14 +35,15 @@ _MAX_PAGE_CHARS = 50_000
 
 def _hidden_lines(content: ResumeContent) -> list[str]:
     lines: list[str] = []
-    for section in (
-        content.education,
-        content.experience,
-        content.campus_experience,
-        content.projects,
-        content.skills,
-        content.awards,
-    ):
+    # 从正文分区表推导条目数组，**不要再手写第二份栏目清单**：W14 科研三栏目与
+    # A4 资格证照都在 DEFAULT_SECTION_ORDER 里登记过，手写清单会让"隐藏的科研/证照
+    # 条目泄漏到产物"这类 blocker 静默漏检。
+    sections = [
+        getattr(content, key, None)
+        for key in DEFAULT_SECTION_ORDER
+        if isinstance(getattr(content, key, None), list)
+    ]
+    for section in sections:
         for item in section:
             if not is_hidden_entry(item):
                 continue

@@ -55,6 +55,10 @@ export default function AppHeaderContext({ beforeAvatar }: Props = {}) {
   const navigate = useNavigate();
   const location = useLocation();
   const { message, modal } = App.useApp();
+  // 切换成功后要整页重载；250ms 只是让"已切换"提示先渲染一帧。**卸载时必须取消这个
+  // 定时器**：否则组件已卸载（例如测试清理或路由离开）仍会触发 reloadPage，时序敏感测试
+  // 会出现"上个用例的定时器打到下个用例"的假失败。
+  const reloadTimerRef = useRef<number | null>(null);
   const [dataset, setDataset] = useState<DatasetInfo | null>(null);
   const [datasets, setDatasets] = useState<DatasetInfo[]>([]);
   const [, setDatasetCount] = useState(0); // 计数原先只用于悬停提示，提示移除后仅保留写入
@@ -70,6 +74,21 @@ export default function AppHeaderContext({ beforeAvatar }: Props = {}) {
   const datasetChipRef = useRef<HTMLButtonElement | null>(null);
   const [createName, setCreateName] = useState("");
   const [creating, setCreating] = useState(false);
+
+  // 卸载时取消待执行的整页重载（见 reloadTimerRef 的说明）。
+  useEffect(
+    () => () => {
+      if (reloadTimerRef.current !== null) {
+        window.clearTimeout(reloadTimerRef.current);
+        reloadTimerRef.current = null;
+      }
+    },
+    [],
+  );
+  const scheduleReload = useCallback(() => {
+    if (reloadTimerRef.current !== null) window.clearTimeout(reloadTimerRef.current);
+    reloadTimerRef.current = window.setTimeout(reloadPage, 250);
+  }, []);
 
   // R8：把「打开数据集下拉」登记给快捷键系统。下拉的开关只有本组件知道，
   // 让 App 直接 import 这里的状态会把页头变成一个全局单例，登记-注销更干净。
@@ -127,13 +146,13 @@ export default function AppHeaderContext({ beforeAvatar }: Props = {}) {
         // active id 必须在 reload 前落盘：重载后的首帧（如网申草稿恢复）只能读到它。
         setDataset(next);
         saveActiveDatasetId(next.id);
-        window.setTimeout(reloadPage, 250);
+        scheduleReload();
       } catch (error) {
         setSwitchError(error instanceof Error ? error.message : "切换数据集失败");
         setSwitchingId(null);
       }
     },
-    [dataset?.id, datasets, switchingId],
+    [dataset?.id, datasets, switchingId, scheduleReload],
   );
 
   // 「示例」徽标 + 一键回到主数据：示例数据集（source === "sample"）与用户的真实
@@ -175,7 +194,7 @@ export default function AppHeaderContext({ beforeAvatar }: Props = {}) {
             // active id 必须在 reload 前落盘（与下拉切换同一套收尾）：重载后的首帧
             // 只有 localStorage 可读。
             saveActiveDatasetId(created.id);
-            window.setTimeout(reloadPage, 250);
+            scheduleReload();
           } catch (error) {
             message.error(error instanceof Error ? error.message : "切换数据集失败");
           }

@@ -3,7 +3,9 @@
 
 import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { PUBLICATION_FACT } from "../features/profile-facts/testFixtures";
 import { getProfileEditControl } from "../features/tou-tou/profileSaveBridge";
+import { t } from "../i18n";
 import { TEMPLATE_CATALOG } from "../test/resumeFixtures";
 import {
   cleanupProfilePage,
@@ -57,6 +59,16 @@ vi.mock("../api/settings", async (importOriginal) => ({
   getLLMConfig: vi.fn().mockResolvedValue({}),
   listResumeFonts: vi.fn().mockResolvedValue({ items: [], active: null, max_bytes: 1 }),
 }));
+// 「补充事实」区块走独立 CRUD；本文件守的是页面行为，把它的请求假掉，
+// 免得每条用例都去发一次真请求（失败态会让页面多出一块错误提示）。
+const factsMocks = vi.hoisted(() => ({
+  listProfileFacts: vi.fn(),
+  createProfileFact: vi.fn(),
+  updateProfileFact: vi.fn(),
+  deleteProfileFact: vi.fn(),
+  PROFILE_FACTS_PAGE_SIZE: 200,
+}));
+vi.mock("../features/profile-facts/api", () => factsMocks);
 
 // 渲染次数探针（透传真实组件，只多记一次数）：
 // - `ProfilePageHeader` 在页面顶层、`Form` 之外——它重渲即"整页重渲"。
@@ -103,6 +115,10 @@ async function waitForProfileReady() {
 
 beforeEach(() => {
   resetProfileApiMocks(apiMocks);
+  factsMocks.listProfileFacts.mockReset().mockResolvedValue({ items: [], total: 0 });
+  factsMocks.createProfileFact.mockReset();
+  factsMocks.updateProfileFact.mockReset();
+  factsMocks.deleteProfileFact.mockReset();
 });
 
 afterEach(() => {
@@ -376,5 +392,50 @@ describe("ProfilePage 「网申资料」输入性能", () => {
     expect(renderProbes.header).toBe(headerAfterFirst);
     // 含第一次在内：网申资料打字一次都不该把简历资料的日期字段带着重渲。
     expect(renderProbes.dateSelect).toBe(dateRenders);
+  });
+});
+
+/**
+ * 「补充事实」（A3）在页面里的接线：区块可达、随分页切换隐藏、旧资料保存不碰新事实。
+ */
+describe("ProfilePage 补充事实区块", () => {
+  it("简历资料分页内可到达补充事实区块（空态）", async () => {
+    renderProfilePage();
+    await waitForProfileReady();
+    expect(await screen.findByText(t("profileFacts.section.title"))).toBeInTheDocument();
+    expect(screen.getByText(t("profileFacts.empty.description"))).toBeInTheDocument();
+    expect(factsMocks.listProfileFacts).toHaveBeenCalledTimes(1);
+  });
+
+  it("切到网申资料时隐藏，切回简历资料后仍在", async () => {
+    renderProfilePage();
+    await waitForProfileReady();
+    const title = await screen.findByText(t("profileFacts.section.title"));
+    expect(title).toBeVisible();
+    fireEvent.click(screen.getByRole("tab", { name: "网申资料" }));
+    expect(title).not.toBeVisible();
+    fireEvent.click(screen.getByRole("tab", { name: "简历资料" }));
+    expect(title).toBeVisible();
+  });
+
+  it("保存旧资料不会把补充事实混进旧 PUT，也不触发事实写入", async () => {
+    factsMocks.listProfileFacts.mockResolvedValue({ items: [PUBLICATION_FACT], total: 1 });
+    renderProfilePage();
+    await waitForProfileReady();
+    expect(await screen.findByText(PUBLICATION_FACT.payload.title)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /编辑资料/ }));
+    fireEvent.click(await screen.findByRole("button", { name: /保存全部资料/ }));
+
+    await waitFor(() => expect(apiMocks.saveProfile).toHaveBeenCalled());
+    const payload = apiMocks.saveProfile.mock.calls[0][0] as Record<string, unknown>;
+    // 旧 PUT 的请求体只含旧资料字段：新事实施加不了"清空"（它们本来就不在这条协议里）。
+    expect(payload).not.toHaveProperty("facts");
+    expect(payload).not.toHaveProperty("profile_facts");
+    expect(factsMocks.createProfileFact).not.toHaveBeenCalled();
+    expect(factsMocks.updateProfileFact).not.toHaveBeenCalled();
+    expect(factsMocks.deleteProfileFact).not.toHaveBeenCalled();
+    // 保存资料没有重载/改写事实列表：仍是首屏那一次读取。
+    expect(factsMocks.listProfileFacts).toHaveBeenCalledTimes(1);
   });
 });

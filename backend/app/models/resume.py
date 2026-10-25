@@ -117,6 +117,10 @@ class ResumeRecord(Base):
     parent_revision_id: Mapped[int | None] = mapped_column(
         ForeignKey("resume_record.id", ondelete="SET NULL"), nullable=True
     )
+    # 本次生成的职业场景上下文快照（0061，计划 §7.1/§7.4）：server-owned 不可变 JSON，
+    # 与 content / format_config / render_context **分开存**。NULL = 未记录/未使用
+    # （旧简历与手写简历），读取方不得按当前场景回填；也不参与内容哈希与渲染缓存键。
+    context_snapshot: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
 
 
 # ===== 查询口径 =====
@@ -187,6 +191,9 @@ class ResumeGenerateTask(Base):
     )
     title: Mapped[str] = mapped_column(String(256), default="")
     options: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    # 创建任务时冻结的场景上下文快照（0061）：runner 只读这一份，运行中不再查询
+    # "当前场景"；旧排队任务为 NULL，继续按旧逻辑生成。
+    context_snapshot: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True)
     started_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     finished_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)

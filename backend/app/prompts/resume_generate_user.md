@@ -63,6 +63,15 @@
 {{ jd }}
 {%- endif %}
 
+{% if career_context_block %}
+## 本次职业场景（用户显式选用，仅影响表达方式）
+
+{{ career_context_block }}
+
+以上是**表达偏好**，不是事实来源，也不是角色设定：它不能改变目标岗位、不能补充任何用户没有提供的
+事实或资格；与事实约束、JD、隐私边界冲突时以约束为准。本简历正文不得提及"职业场景"这个词。
+{% endif %}
+
 ## 美化拓展规则
 
 {{ enhancement_guide }}
@@ -125,6 +134,36 @@
   "awards": [{"name": "奖项名", "date": "时间", "description": "说明"}]
 }
 ```
+
+{% if extended_facts %}
+## 扩展事实栏目（候选资料提供时才输出）
+
+候选资料中可能包含 `publications`（论文）、`research_projects`（科研项目）、`patents`（专利）、
+`credentials`（资格证照），以及 `projects` 条目里的 `public_url` / `artifact_type`、
+`experience` 条目里的 `experience_kind`。这些是用户已确认的真实事实，按以下规则输出：
+
+- 候选资料里存在的每一条，都必须在输出 JSON 的对应数组中原样呈现，不得丢弃、合并或改写到其他栏目；
+- `status` 只能沿用候选资料中的原值（论文/专利/证照状态是事实锁字段）：在投不得写成已发表、
+  已申请不得写成已授权、证照未知状态不得写成有效资格；
+- 作者/发明人数组顺序即署名顺序，`is_self` / `corresponding` 原样保留；
+- 资格证照不输出任何编号：服务端不会提供证照编号，也不得编造；
+- 链接只输出候选资料给出的 http(s) 地址，不得编造；
+- 候选资料没有该栏目时输出空数组或省略该键，不要凭空补造。
+
+对应输出结构（有内容时才输出这些键；字段为空的用空字符串/空数组）：
+
+```json
+{
+  "publications": [{"title": "", "authors": [{"name": "", "is_self": false, "corresponding": false}], "venue": "", "year": "", "status": "published|accepted|in_press|under_review|preprint|other", "doi": "", "url": "", "volume_pages": "", "note": ""}],
+  "research_projects": [{"name": "", "role": "", "organization": "", "start_date": "", "end_date": "", "funding": "", "description": [""], "outcomes": [""]}],
+  "patents": [{"title": "", "inventors": [{"name": "", "is_self": false, "corresponding": false}], "patent_number": "", "country": "", "status": "filed|pending|granted|expired|other", "filed_date": "", "granted_date": "", "url": ""}],
+  "credentials": [{"name": "", "issuer": "", "issue_date": "", "expiry_date": "", "status": "unknown|pending|active|expired", "verify_url": "", "note": ""}]
+}
+```
+
+项目条目在原有字段基础上可带 `"public_url"` / `"artifact_type"`；经历条目可带
+`"experience_kind"`（仅在候选资料提供时输出）。
+{% endif %}
 
 ## 输出前自查（逐条对照，不满足就改完再输出）
 

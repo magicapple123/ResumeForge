@@ -76,6 +76,13 @@ A2_ZH_LITERALS: tuple[str, ...] = (
     "技术栈/工具",
     "个人照片",
     "个人主页",
+    # A4 扩展栏目字段前缀（证照/作品/实践）：同样只许出现在 resume_labels 的表里。
+    "颁发机构",
+    "签发",
+    "到期",
+    "核验链接",
+    "成果类型",
+    "关系类型",
 )
 
 # 负责画这些文案的源码 → 是否按"去掉注释与 docstring 后的代码"来判定。
@@ -90,6 +97,8 @@ GUARDED_SOURCES: dict[str, bool] = {
     # 新文件同样画中文/英文字段前缀，必须一起被这条守卫覆盖。
     "services/docx_academic_sections.py": True,
     "services/exporter.py": True,
+    # A4 从 exporter 拆出的 Markdown 正文渲染器：同样画中英文字段前缀。
+    "services/resume/markdown_export.py": True,
     "templates/_resume_blocks.j2": False,
     "templates/_resume_sections.j2": False,
 }

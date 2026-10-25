@@ -46,6 +46,7 @@
       <span class="title" data-role="entry_title"><span data-resume-path="experience.{{ exp_index }}.company">{{ exp.company }}</span>{% if exp.role %} · <span data-resume-path="experience.{{ exp_index }}.role">{{ exp.role }}</span>{% endif %}</span>
       <span class="meta" data-role="meta"><span data-resume-path="experience.{{ exp_index }}.start_date">{{ exp.start_date }}</span> - <span data-resume-path="experience.{{ exp_index }}.end_date">{{ exp.end_date }}</span></span>
     </div>
+    {% if exp.experience_kind %}<div class="sub" data-role="meta">{{ field_labels.experience_kind }}：<span data-resume-path="experience.{{ exp_index }}.experience_kind">{{ experience_kind_text(exp.experience_kind) }}</span></div>{% endif %}
     {% if exp.description %}<ul>{% for item in exp.description %}<li data-role="body" data-resume-path="experience.{{ exp_index }}.description.{{ loop.index0 }}">{{ item }}</li>{% endfor %}</ul>{% endif %}
   </div>
   {% endfor %}
@@ -83,6 +84,7 @@
       <span class="meta" data-role="meta">{% if project.role %}<span data-resume-path="projects.{{ project_index }}.role">{{ project.role }}</span> · {% endif %}<span data-resume-path="projects.{{ project_index }}.start_date">{{ project.start_date }}</span> - <span data-resume-path="projects.{{ project_index }}.end_date">{{ project.end_date }}</span></span>
     </div>
     {% if project.tech_stack %}<div class="sub" data-role="meta">{{ field_labels.tech_stack }}：{% for item in project.tech_stack %}<span data-resume-path="projects.{{ project_index }}.tech_stack.{{ loop.index0 }}">{{ item }}</span>{% if not loop.last %}{{ list_separator }}{% endif %}{% endfor %}</div>{% endif %}
+    {% if project.artifact_type or project.public_url %}<div class="sub" data-role="meta">{% if project.artifact_type %}{{ field_labels.artifact_type }}：<span data-resume-path="projects.{{ project_index }}.artifact_type">{{ project.artifact_type }}</span>{% endif %}{% if project.artifact_type and project.public_url %} · {% endif %}{% if project.public_url %}<span data-resume-path="projects.{{ project_index }}.public_url">{{ project.public_url }}</span>{% endif %}</div>{% endif %}
     {% if project.description %}<ul>{% for item in project.description %}<li data-role="body" data-resume-path="projects.{{ project_index }}.description.{{ loop.index0 }}">{{ item }}</li>{% endfor %}</ul>{% endif %}
     {% if project.highlights %}<ul>{% for item in project.highlights %}<li data-role="body" data-resume-path="projects.{{ project_index }}.highlights.{{ loop.index0 }}">{{ item }}</li>{% endfor %}</ul>{% endif %}
   </div>
@@ -152,6 +154,26 @@
     {% if project.funding %}<div class="sub" data-role="meta">{{ field_labels.funding }}：{{ project.funding }}</div>{% endif %}
     {% if project.description %}<ul>{% for item in project.description %}<li data-role="body" data-resume-path="research_projects.{{ research_index }}.description.{{ loop.index0 }}">{{ item }}</li>{% endfor %}</ul>{% endif %}
     {% if project.outcomes %}<ul>{% for item in project.outcomes %}<li data-role="body" data-resume-path="research_projects.{{ research_index }}.outcomes.{{ loop.index0 }}">{{ item }}</li>{% endfor %}</ul>{% endif %}
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+{% endmacro %}
+
+{% macro credentials_block(resume) %}
+{% if resume.credentials %}
+<div class="section" data-section="credentials">
+  <div class="section-title" data-role="section_title">{{ section_titles.credentials }}</div>
+  {% for credential in resume.credentials %}
+  {% set credential_index = loop.index0 %}
+  <div class="entry"{% if credential.id %} data-object-id="{{ credential.id }}"{% endif %}>
+    <div class="entry-head">
+      <span class="title" data-role="entry_title"><span data-resume-path="credentials.{{ credential_index }}.name">{{ credential.name }}</span></span>
+      <span class="meta" data-role="meta">{% if credential.issuer %}<span data-resume-path="credentials.{{ credential_index }}.issuer">{{ credential.issuer }}</span>{% endif %}{% if credential.issuer and credential.status != "unknown" %} · {% endif %}{% if credential.status != "unknown" %}{{ credential_status_text(credential.status) }}{% endif %}</span>
+    </div>
+    {% if credential.issue_date or credential.expiry_date or credential.verify_url or credential.note %}
+    {% set credential_extra = credential_detail(credential) %}{% if credential_extra %}<div class="sub" data-role="meta">{{ credential_extra }}</div>{% endif %}
+    {% endif %}
   </div>
   {% endfor %}
 </div>

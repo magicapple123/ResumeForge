@@ -90,3 +90,111 @@ def compare_with_baseline(current: dict, baseline: dict) -> dict:
         "improvements": dict(sorted(improvements.items())),
         "has_regression": bool(regressions),
     }
+
+# ===== 行业矩阵汇总（A4/A9，计划 §9.4）=====
+#
+# 与 summarize（录制回放）刻意分开：行业案例没有 skipped 这一说，available 必须
+# 等于 executed；报告要同时列 available/executed/skipped 与失败明细（计划 §9.4），
+# 以及"现有规则捕获不到的已知缺口"（不掩盖、供 A8 报告引用）。
+
+
+def summarize_industry(results: list[dict]) -> dict:
+    """把 evaluate_industry_cases 的结果汇总成 A8 报告可引用的结构。"""
+    available = len(results)
+    executed = sum(1 for item in results if item.get("executed") and not item.get("skipped"))
+    skipped = sum(1 for item in results if item.get("skipped"))
+    check_stats: dict[str, dict[str, int]] = {}
+    findings: list[dict] = []
+    passed_cases = 0
+    for item in results:
+        case_failed = False
+        for check_id, outcome in (item.get("checks") or {}).items():
+            stats = check_stats.setdefault(check_id, {"executed": 0, "passed": 0, "failed": 0})
+            stats["executed"] += 1
+            if outcome.get("passed"):
+                stats["passed"] += 1
+            else:
+                stats["failed"] += 1
+                case_failed = True
+                findings.append(
+                    {
+                        "case_id": item.get("case_id", ""),
+                        "check": check_id,
+                        "detail": outcome.get("detail", ""),
+                    }
+                )
+        if not case_failed:
+            passed_cases += 1
+    rule_gaps: dict[str, int] = {}
+    for item in results:
+        for gap in item.get("gaps") or []:
+            rule_gaps[gap] = rule_gaps.get(gap, 0) + 1
+    integration_gaps: dict[str, str] = {}
+    for item in results:
+        integration_gaps.update(item.get("integration_gaps") or {})
+    return {
+        "total": available,
+        "available": available,
+        "executed": executed,
+        "skipped": skipped,
+        "failed_cases": available - passed_cases if available else 0,
+        "passed_cases": passed_cases,
+        "pass_rate": round(passed_cases / available, 4) if available else None,
+        "checks": dict(sorted(check_stats.items())),
+        "findings": findings,
+        "rule_gaps": dict(sorted(rule_gaps.items())),
+        "integration_gaps": dict(sorted(integration_gaps.items())),
+        "cases": [
+            {
+                "case_id": item.get("case_id", ""),
+                "industry_group": item.get("industry_group", ""),
+                "density": item.get("density", ""),
+                "persona": item.get("persona", ""),
+                "passed": not item.get("findings"),
+            }
+            for item in results
+        ],
+        "scoring": "deterministic-checks",
+    }
+
+
+def format_industry_report(summary: dict) -> str:
+    """渲染成可直接贴进 A8 交付报告的文本（含 available/executed/skipped）。"""
+    lines = ["# A4/A9 跨行业 24 案例执行报告", ""]
+    lines.append(
+        f"案例：available {summary['available']}，executed {summary['executed']}，"
+        f"skipped {summary['skipped']}（要求 executed == available == 24）"
+    )
+    if summary.get("pass_rate") is not None:
+        lines.append(
+            f"通过：{summary['passed_cases']}/{summary['available']}"
+            f"（通过率 {summary['pass_rate']:.1%}；失败案例 {summary['failed_cases']}）"
+        )
+    lines.append("")
+    lines.append("逐检查执行数：")
+    for check_id, stats in (summary.get("checks") or {}).items():
+        lines.append(
+            f"  - {check_id}: executed {stats['executed']}，passed {stats['passed']}，"
+            f"failed {stats['failed']}"
+        )
+    if summary.get("findings"):
+        lines.append("")
+        lines.append("失败明细：")
+        for finding in summary["findings"]:
+            lines.append(f"  - {finding['case_id']} / {finding['check']}: {finding['detail']}")
+    lines.append("")
+    lines.append("已知规则缺口（现有检查捕获不到，报告列明，不用 xfail 掩盖）：")
+    if summary.get("rule_gaps"):
+        for gap_id, count in (summary.get("rule_gaps") or {}).items():
+            lines.append(f"  - {gap_id}: {count} 份案例记录")
+    else:
+        lines.append("  （无）")
+    if summary.get("integration_gaps"):
+        lines.append("")
+        lines.append("生产集成缺口（待对应 agent 修复后自动消失）：")
+        for gap_id, description in (summary.get("integration_gaps") or {}).items():
+            lines.append(f"  - {gap_id}: {description}")
+    lines.append("")
+    lines.append("说明：全部判据为确定性检查（不调模型）；executed==24 即 A4 退出证据。")
+    return "\n".join(lines)
+

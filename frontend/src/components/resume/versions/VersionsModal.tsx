@@ -10,6 +10,7 @@ import { t } from "../../../i18n";
 import { useVariants } from "../../../features/resume-versions/useVariants";
 import { useVersions } from "../../../features/resume-versions/useVersions";
 import type { VersionRestoreOut } from "../../../features/resume-versions/types";
+import ScenarioVariantSection from "./ScenarioVariantSection";
 import VariantsPanel from "./VariantsPanel";
 import VersionList from "./VersionList";
 
@@ -61,18 +62,26 @@ export default function VersionsModal({
       key: "variants",
       label: t("versions.tab.variants"),
       children: (
-        <VariantsPanel
-          variants={variants.variants}
-          loading={variants.loading}
-          error={variants.error}
-          actionError={variants.actionError}
-          syncing={variants.syncing}
-          versions={versions.versions}
-          currentContent={currentContent}
-          onCreate={variants.create}
-          onSync={variants.sync}
-          onRefresh={() => void variants.reload()}
-        />
+        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          {/* A5：先派生场景变体、生成候选并采纳；源简历只读，不经过本弹窗写回。 */}
+          <ScenarioVariantSection
+            resumeId={resumeId ?? null}
+            variants={variants.variants}
+            onChanged={() => void variants.reload()}
+          />
+          <VariantsPanel
+            variants={variants.variants}
+            loading={variants.loading}
+            error={variants.error}
+            actionError={variants.actionError}
+            syncing={variants.syncing}
+            versions={versions.versions}
+            currentContent={currentContent}
+            onCreate={variants.create}
+            onSync={variants.sync}
+            onRefresh={() => void variants.reload()}
+          />
+        </div>
       ),
     },
   ];

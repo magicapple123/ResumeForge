@@ -12,6 +12,7 @@
 
 import assets from "./zh-CN.assets";
 import bilingual from "./zh-CN.bilingual";
+import careerScenarios from "./zh-CN.careerScenarios";
 import conflict from "./zh-CN.conflict";
 import delivery from "./zh-CN.delivery";
 import fontDownload from "./zh-CN.fontDownload";
@@ -22,6 +23,7 @@ import pagination from "./zh-CN.pagination";
 import params from "./zh-CN.params";
 import preflight from "./zh-CN.preflight";
 import preview from "./zh-CN.preview";
+import profileFacts from "./zh-CN.profileFacts";
 import provenance from "./zh-CN.provenance";
 import proview from "./zh-CN.proview";
 import research from "./zh-CN.research";
@@ -78,6 +80,10 @@ const namespaces = {
   ...delivery,
   /** W09 有约束版面优化。 */
   ...optimizer,
+  /** A2 职业场景（选择/编辑/本次生成披露）。 */
+  ...careerScenarios,
+  /** A3 补充事实（论文/科研/专利/证照/作品/实践）。 */
+  ...profileFacts,
 } as const;
 
 export default namespaces;

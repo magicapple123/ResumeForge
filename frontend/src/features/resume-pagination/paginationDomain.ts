@@ -168,6 +168,72 @@ export function setSectionBreak(
   return writeDomain(config, domain);
 }
 
+/**
+ * 全局「板块分页方式」的派生值。
+ *
+ * 只有**列出的板块全部**显式 `break_before = "page"` 才算「每板块新页」；任何一个没设
+ * （或只有一部分设了）都显示「自然填充」——后者正是把「部分板块有断页」这个隐藏状态
+ * 变可见的地方（界面另有「N 个板块从新页开始」的小结）。
+ *
+ * 为什么由 `sectionKeys`（宿主给的板块清单）而不是 `domain.sections` 推导：域里可能残留
+ * 指向已删板块的键，拿它当分母会出现"设置了 4 个、显示已是全部"的假完成态。
+ */
+export type SectionPaginationMode = "flow" | "page";
+
+export function sectionPaginationMode(
+  domain: PaginationDomain | null,
+  sectionKeys: readonly string[],
+): SectionPaginationMode {
+  if (sectionKeys.length === 0) return "flow";
+  const sections = domain?.sections ?? {};
+  return sectionKeys.every((key) => sections[key]?.break_before === "page") ? "page" : "flow";
+}
+
+/**
+ * 全局「每板块新页」：给列出的板块写 `break_before = "page"`。
+ *
+ * 只加断页、不动各自已有的其它意图（标题跟随等）；不在清单里的板块（含已删板块的残留键）
+ * 原样保留，由「自然填充」统一清。
+ *
+ * 空板块写断页是无害的：后端只在**真的渲染出内容**的板块上应用断页（PDF/Word 的断页
+ * 规则挂在渲染出来的节点上，`document_pagination._manual_breaks` 也只统计落进产物的板块），
+ * 所以这里不需要（也拿不到）"哪些板块有内容"的信息。
+ */
+export function setSectionsBreakBefore(
+  config: ResumeFormatConfig | undefined | null,
+  sectionKeys: readonly string[],
+): ResumeFormatConfig {
+  const domain = readPaginationDomain(config) ?? emptyDomain();
+  for (const sectionKey of sectionKeys) {
+    if (!SECTION_KEY.test(sectionKey)) continue;
+    domain.sections[sectionKey] = {
+      ...(domain.sections[sectionKey] ?? {}),
+      break_before: "page",
+    };
+  }
+  return writeDomain(config, domain);
+}
+
+/**
+ * 全局「自然填充」/「恢复自然分页」：清掉**所有板块**的 `break_before`。
+ *
+ * 条目级意图（`entries`）与续页信息一律不动——"板块是否按模块断开"和"这一条从新页开始"
+ * 是两个层级的决定，全局开关不该越权清掉用户逐条设置的结果。
+ * 板块条目里其它意图（如标题跟随）保留；只删了断页后条目变空才移除该板块键。
+ */
+export function clearSectionsBreakBefore(
+  config: ResumeFormatConfig | undefined | null,
+): ResumeFormatConfig {
+  const domain = readPaginationDomain(config) ?? emptyDomain();
+  for (const [sectionKey, value] of Object.entries(domain.sections)) {
+    const next: EntryBreak = { ...value };
+    delete next.break_before;
+    if (Object.keys(next).length === 0) delete domain.sections[sectionKey];
+    else domain.sections[sectionKey] = next;
+  }
+  return writeDomain(config, domain);
+}
+
 function applyChanges(
   target: EntryBreak,
   changes: Partial<Record<keyof EntryBreak, unknown>>,

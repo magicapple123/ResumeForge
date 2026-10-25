@@ -11,9 +11,12 @@
  *
  * 资产库列表是**预览**，不是渲染：用户要判断"这句表达值不值得用"，标记符号只会干扰阅读。
  * 剥标记复用预览链路已有的 `stripMarkers`（与后端 `resume_rich_text` 同口径），不写第二份解析。
+ *
+ * 2026-10-25（任务 C2）：排版从内联样式搬进 `assets.css`（正文 13px/1.6、标签行与动作行
+ * 间距 8px、动作右对齐）。回调、aria-label 与文案 key 一律不动。
  */
 import { CopyOutlined, DeleteOutlined, DownloadOutlined, EditOutlined } from "@ant-design/icons";
-import { Button, Space, Tag, Tooltip, Typography } from "antd";
+import { Button, Tag, Tooltip } from "antd";
 import { stripMarkers } from "../../resume-preview/richText";
 import { at } from "../../../features/resume-assets/i18n";
 import { phraseSourceKind, type ResumePhrase } from "../../../features/resume-assets/types";
@@ -30,13 +33,6 @@ interface Props {
   /** 打开编辑弹窗（正文/类型/语言/岗位标签）；不传 = 不渲染入口。 */
   onEdit?: (phrase: ResumePhrase) => void;
 }
-
-const CARD_STYLE = {
-  border: "1px solid var(--rf-border-subtle)",
-  borderRadius: 8,
-  background: "var(--rf-surface-alt)",
-  padding: "10px 12px",
-} as const;
 
 function kindLabel(phrase: ResumePhrase): string {
   return at(("assets.kind." + phrase.kind) as Parameters<typeof at>[0]);
@@ -73,9 +69,9 @@ export default function PhraseCard({
 }: Props) {
   const plainText = stripMarkers(phrase.text);
   return (
-    <div data-phrase-id={phrase.id} style={CARD_STYLE}>
-      <Typography.Paragraph style={{ marginBottom: 6 }}>{plainText}</Typography.Paragraph>
-      <Space size={4} wrap style={{ marginBottom: 6 }}>
+    <div data-phrase-id={phrase.id} className="resume-phrase-card">
+      <p className="resume-phrase-card-text">{plainText}</p>
+      <div className="resume-phrase-card-tags">
         <Tag>{kindLabel(phrase)}</Tag>
         <Tag>{languageLabel(phrase)}</Tag>
         <Tag color="blue">{sourceLabel(phrase)}</Tag>
@@ -84,11 +80,9 @@ export default function PhraseCard({
             {tag}
           </Tag>
         ))}
-        <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-          {usageLabel(phrase)}
-        </Typography.Text>
-      </Space>
-      <Space size={4} wrap>
+        <span className="resume-phrase-card-usage">{usageLabel(phrase)}</span>
+      </div>
+      <div className="resume-phrase-card-actions">
         <Tooltip title={insertEnabled ? undefined : at("assets.action.insertUnavailable")}>
           <Button
             size="small"
@@ -136,7 +130,7 @@ export default function PhraseCard({
             />
           </Tooltip>
         ) : null}
-      </Space>
+      </div>
     </div>
   );
 }

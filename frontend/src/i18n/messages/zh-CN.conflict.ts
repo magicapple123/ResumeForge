@@ -68,6 +68,8 @@ const conflict = {
   "workbench.history.empty": "还没有可以撤销的操作",
   /** 说明：点一步看它当时的摘要（只读预览，不直接改文档）。 */
   "workbench.history.preview.hint": "点一步查看当时的摘要",
+  /** 预览条前缀：明确下面这行是"当时"的快照，不是列表里又多出的一步。 */
+  "workbench.history.preview.label": "当时：",
   /** 分组标题：已发生 / 可恢复。 */
   "workbench.history.past": "已进行",
   "workbench.history.future": "可恢复",

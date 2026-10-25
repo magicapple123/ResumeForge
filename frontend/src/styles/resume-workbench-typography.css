@@ -1,0 +1,204 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/* 从 `resume-workbench-controls.css` 拆出（单文件 500 行预算零豁免）：2026-10-25 新增的
+   「局部排版面板：行布局」整段原样搬到这里——选择器 / 声明 / 层叠顺序逐字未改。
+   `resume.css` 的 @import 把它排在 controls 之后、resume-workbench 之前，
+   与拆分前的相对顺序完全一致。 */
+
+/* ===== 局部排版面板：行布局（2026-10-25 / 用户截图 2） ===== */
+/* 这一段只作用于「局部排版」面板（`RoleStylePanel` / `ObjectStylePanel` 共用的
+   `StyleValueRow`）。2026-10-25 用户截图里的三处症状与改法：
+
+   ① 数字行（字号比例 / 字距 / 段前距 / 段后距 / 行距…）高 67.9px：`<Space wrap>` 在
+      控件行 + 尾部放不下时把尾部整段折到第二行，尾部左缘回到标签列（x=33）。
+      改法：根节点换成 grid，数字类属性排两行——第一行标签 + 控件行，第二行在控件列内
+      排尾部；非数字类（颜色 / 加粗 / 斜体 / 对齐 / 项目符号 / 日期位置）单行三列。
+   ② 尾部里的 `.resume-measure-value` 被参数栏规则钉成 44px 宽，读数「1× · 约 10pt」
+      被压成 44px 后溢出，压在右边「来自模板」胶囊下面（截图里的「2× · 约 1 已调整」）。
+      改法：只在本面板把读数改回内容宽（`flex/width: auto` + `nowrap`），全局 44px 不动。
+   ③ 标签列是内容宽（「字号比例」48 /「颜色」34），第二列起点在 73 / 87 / 115 之间漂移。
+      改法：所有行共用参数栏的 `--resume-wb-label-w`（72px，与上面几组参数行同一条
+      竖线），六组角色的标签左缘、控件左缘、尾部右缘因此全部对齐。
+
+   行高预算：数字行 = 控件行 30 + 行内间距 4 + 尾部 20 = 54（设计目标 52–56），
+   其它行 = 控件行 30；行与行之间 8px。 */
+
+.resume-typography-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+/* 面板头 / 尾的两句 secondary 说明：12px、行高 20；与控件的间距由上一层的 gap 给。 */
+.resume-typography-panel > .ant-typography {
+  font-size: 12px;
+  line-height: 20px;
+}
+
+/* 一组角色里的行容器：行间距 8px（数字行**体内**两行只隔 4px）。 */
+.resume-typography-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+/* 一行 = 一个 grid；标签列与上面几组参数行共用 72px 变量（变量定义在
+   `.resume-wb-col-params` 上；本面板单独挂载时回落到 72px）。 */
+.resume-typography-row {
+  display: grid;
+  grid-template-columns: var(--resume-wb-label-w, 72px) minmax(0, 1fr);
+  align-items: center;
+  column-gap: 8px;
+  width: 100%;
+  min-width: 0;
+}
+
+/* 数字类属性：两行。标签只在第一行（与控件行垂直居中），尾部落在控件列的第二行。 */
+.resume-typography-row.is-numeric {
+  row-gap: 4px;
+}
+
+.resume-typography-row.is-numeric > .resume-typography-label {
+  grid-column: 1;
+  grid-row: 1;
+  min-width: 0;
+}
+
+.resume-typography-controls {
+  display: flex;
+  grid-column: 2;
+  grid-row: 1;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+/* 非数字类：单行「72px 标签 + auto 控件 + 尾部吃剩余」，尾部贴行右缘。
+   控件列用 `auto` 而不是固定宽度：开关 / 取色器 / 下拉的宽度本来就不同，定成同一列
+   只会在取色器那行留一大截空白。 */
+.resume-typography-row.is-inline {
+  grid-template-columns: var(--resume-wb-label-w, 72px) auto minmax(0, 1fr);
+  /* 其它行统一 30：开关 / 取色器本体只有 20，不给下限时这一行会比下拉行矮一截，
+     六组角色展开后行高参差（设计目标「其它行约 30」）。 */
+  min-height: 30px;
+}
+
+.resume-typography-row.is-inline > .resume-typography-label {
+  grid-column: 1;
+  grid-row: 1;
+  min-width: 0;
+}
+
+.resume-typography-row.is-inline > .resume-typography-tail {
+  grid-column: 3;
+  grid-row: 1;
+  justify-content: flex-end;
+}
+
+/* 尾部（生效值 + 来源胶囊 + ↺）：一行 flex、高 20（与胶囊同高；数字行第二行的
+   高度预算就是它）。 */
+.resume-typography-tail {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  min-height: 20px;
+}
+
+.resume-typography-row.is-numeric > .resume-typography-tail {
+  grid-column: 2;
+  grid-row: 2;
+}
+
+/* 读数改回内容宽：全局参数栏把它钉成 `flex: 0 0 44px; width: 44px`（那是给不带
+   pt 对照的单值行）；本面板的读数要显示「1.86× · 约 26pt」，44px 里放不下就溢出到
+   来源胶囊下面。只改本面板，全局那条保留。 */
+.resume-typography-panel .resume-measure-value {
+  flex: 0 0 auto;
+  width: auto;
+  min-width: 0;
+  line-height: 20px;
+  white-space: nowrap;
+}
+
+/* 数字行的读数靠左、胶囊 / ↺ 靠右：`margin-left: auto` 落在胶囊上（与参数栏其它行
+   同一个收口方式），所以读数左缘 = 控件列左缘。 */
+.resume-typography-row.is-numeric > .resume-typography-tail .resume-measure-source {
+  margin-left: auto;
+}
+
+/* 非数字行整条尾部靠右，读数（如色值）紧跟胶囊，不贴行左缘。 */
+.resume-typography-row.is-inline > .resume-typography-tail .resume-measure-source {
+  margin-left: 0;
+}
+
+/* 滑杆：全局参数栏把它钉成 `flex: 0 0 88px !important`（给「层次与间距」那种一栏
+   放四件的行）；本面板的 ± 与输入框要和滑杆挤在同一行里，滑杆吃剩余宽度（88–140）。
+   两条都是 `!important`，靠多一层 `.resume-typography-row` 提高特异性胜出；
+   `margin-block: 0` 去掉 antd 自带的 14px 上下外边距——不清零时控件行是 40 而不是
+   30，数字行会胖到 64（设计目标 52–56）。 */
+.resume-wb-col-params .resume-typography-row .ant-slider {
+  flex: 1 1 88px !important;
+  width: auto !important;
+  min-width: 88px !important;
+  max-width: 140px !important;
+  margin-block: 0 !important;
+}
+
+/* 直接输入框定宽 76（原来是内联 88）。算式：
+   标签 72 + 列间距 8 + [− 30 + 6 + 滑杆 + 6 + + 30 + 6 + 输入 76]；
+   参数栏内容宽 380 → 控件列 278 → 滑杆 124（落在 88–140 区间内），一行放下。 */
+.resume-typography-row .resume-typography-number {
+  flex: 0 0 76px;
+  width: 76px;
+}
+
+/* Collapse 收紧：默认 small 的 header 是 8/12、body 12，六个角色一屏放不下。
+   `.ant-*` 覆写理由：antd 的 Collapse token 是组件级的，没有"只改这个面板"的出口
+   （布局无 token），已用 `.resume-typography-panel` 限定作用域。 */
+.resume-typography-panel .ant-collapse-header {
+  padding: 6px 10px !important;
+  /* 默认 `flex-start` 在标题两行时顶到箭头上面；这里只有一行标题，居中更稳。 */
+  align-items: center !important;
+}
+
+.resume-typography-panel .ant-collapse-body {
+  padding: 6px 10px 10px !important;
+}
+
+/* 角色名 13px/600；胶囊与右侧的「恢复这个段落类型」不跟着加粗 / 放大。 */
+.resume-typography-role-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.resume-typography-role-name {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 13px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.resume-typography-panel .ant-collapse-extra {
+  font-size: 12px;
+}
+
+/* 覆盖计数做成弱化小胶囊（原来是裸数字）：surface-alt 背景 + tertiary 文字，
+   12px / 18px，与来源胶囊同一族。 */
+.resume-typography-own-count {
+  flex: none;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--rf-surface-alt);
+  color: var(--rf-text-tertiary);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 18px;
+  white-space: nowrap;
+}

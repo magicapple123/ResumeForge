@@ -428,6 +428,10 @@ def learnable(db: Session, items: Iterable[Any], known: Mapping[str, str]) -> li
         key = str(getattr(item, "field", "") or "").strip()
         if not key or key in seen or key in known:
             continue
+        # 补充事实派生的 CUSTOM_FACT_ 键已经存在用户资料里，不是"简历通里没有的信息"；
+        # 若提案保存会生成一个以事实 id 为基础、用户看不懂的自定义字段。
+        if key.startswith("CUSTOM_FACT_"):
+            continue
         if not _accepts(key):
             continue
         value = str(getattr(item, "value", "") or "").strip()[:MAX_VALUE_CHARS]

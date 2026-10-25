@@ -33,6 +33,7 @@ from sqlalchemy.orm import Session
 from ...config import get_settings
 from ...models.resume import ResumeRecord
 from ...schemas.resume import ResumeContent
+from ...schemas.resume_generation import mode_page_limit
 from ...services.export_pipeline import (
     RenderContext,
     build_export_delivery,
@@ -297,13 +298,20 @@ def build_bundle(db: Session, record: ResumeRecord, payload) -> dict[str, Any]: 
     first_config_sha = ""
     with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as archive:
         for doc_format in formats:
+            # A4 长 CV：成套导出的页数按记录的文档模式夹紧（普通 1–3 / 长 CV 1–10），
+            # 与单格式导出共用 mode_page_limit，长 CV 的 10 页不再被旧 3 页规则误拦。
+            requested_page_limit = variant_options.get("page_limit", payload.page_limit)
+            if requested_page_limit is not None:
+                requested_page_limit = mode_page_limit(
+                    requested_page_limit, getattr(record, "document_mode", None) or "resume"
+                )
             request = ExportRequest(
                 format=doc_format,
                 watermark=watermark,
                 redact=redact,
                 margin_mm=payload.margin_mm,
                 font_scale=variant_options.get("font_scale", payload.font_scale),
-                page_limit=variant_options.get("page_limit", payload.page_limit),
+                page_limit=requested_page_limit,
                 format_config=variant_options.get("format_config", payload.format_config),
                 language=variant_options.get("language", payload.language),
                 include_photo=include_photo,

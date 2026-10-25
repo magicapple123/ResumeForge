@@ -89,6 +89,17 @@ def find_incomplete(resume: ResumeContent) -> list[str]:
         add(f"{label} 名称", patent.title)
         add(f"{label} 专利号", patent.patent_number)
 
+    # ===== A4 资格证照（状态是枚举、不参与占位符扫描；名称/机构/日期逐个查）=====
+    # 注意：**不把 status=="unknown" 当成"未完成"**——unknown 是来源事实（未核实），
+    # 不是用户忘了填；把它当缺失会逼用户为了消警告去编一个状态，正是"不自动认定资格"的反面。
+    for credential in resume.credentials:
+        label = f"资格证照「{credential.name or '未填名称'}」"
+        add(f"{label} 名称", credential.name)
+        add(f"{label} 颁发机构", credential.issuer)
+        add(f"{label} 签发日期", credential.issue_date)
+        add(f"{label} 到期日期", credential.expiry_date)
+        add(f"{label} 说明", credential.note)
+
     return found
 
 

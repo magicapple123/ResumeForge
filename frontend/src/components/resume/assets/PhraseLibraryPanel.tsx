@@ -14,13 +14,14 @@
  * 筛选后为空 → `EmptyState inline` + "清空筛选"（与"真的没有资产"是两件事，不能共用一句话）。
  */
 import { StarOutlined } from "@ant-design/icons";
-import { Button, Space, Tooltip, Typography } from "antd";
+import { Button, Tooltip } from "antd";
 import { useMemo, useState } from "react";
 import EmptyState from "../../common/EmptyState";
 import ErrorState from "../../common/ErrorState";
 import LoadingBlock from "../../common/LoadingBlock";
 import PhraseCard from "./PhraseCard";
 import PhraseFilters from "./PhraseFilters";
+import "./assets.css";
 import { at } from "../../../features/resume-assets/i18n";
 import {
   DEFAULT_PHRASE_FILTER,
@@ -76,21 +77,13 @@ export default function PhraseLibraryPanel({
 
   return (
     <div className={className} data-resume-assets="library">
-      <div
-        style={{
-          display: "flex",
-          alignItems: "baseline",
-          justifyContent: "space-between",
-          gap: 8,
-          marginBottom: 8,
-        }}
-      >
-        <Space size={6} align="baseline">
-          <Typography.Text strong>{at("assets.panel.title")}</Typography.Text>
-          <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+      <div className="resume-assets-head">
+        <div className="resume-assets-head-main">
+          <span className="resume-assets-head-title">{at("assets.panel.title")}</span>
+          <span className="resume-assets-head-count">
             {at("assets.list.count", { count: phrases.length })}
-          </Typography.Text>
-        </Space>
+          </span>
+        </div>
         {onCollectCurrent ? (
           <Tooltip title={at("assets.action.collect")}>
             <Button
@@ -120,40 +113,36 @@ export default function PhraseLibraryPanel({
             <span>
               {at("assets.empty")}
               <br />
-              <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                {at("assets.empty.hint")}
-              </Typography.Text>
+              <span className="resume-assets-empty-hint">{at("assets.empty.hint")}</span>
             </span>
           }
         />
       ) : (
         <>
           <PhraseFilters value={filter} onChange={setFilter} tags={tags} languages={languages} />
-          <div style={{ marginTop: 8 }}>
-            {visible.length === 0 ? (
-              <EmptyState
-                inline
-                description={at("assets.empty.filtered")}
-                actionLabel={at("assets.empty.filteredAction")}
-                onAction={() => setFilter(normalizeFilter(null))}
-              />
-            ) : (
-              <Space orientation="vertical" size={8} style={{ width: "100%" }}>
-                {visible.map((phrase, index) => (
-                  <PhraseCard
-                    key={phrase.id}
-                    phrase={phrase}
-                    index={index + 1}
-                    insertEnabled={insertEnabled}
-                    onInsert={onInsert}
-                    onRequestDelete={onRequestDelete}
-                    onCopy={onCopy}
-                    onEdit={onEdit}
-                  />
-                ))}
-              </Space>
-            )}
-          </div>
+          {visible.length === 0 ? (
+            <EmptyState
+              inline
+              description={at("assets.empty.filtered")}
+              actionLabel={at("assets.empty.filteredAction")}
+              onAction={() => setFilter(normalizeFilter(null))}
+            />
+          ) : (
+            <div className="resume-assets-list">
+              {visible.map((phrase, index) => (
+                <PhraseCard
+                  key={phrase.id}
+                  phrase={phrase}
+                  index={index + 1}
+                  insertEnabled={insertEnabled}
+                  onInsert={onInsert}
+                  onRequestDelete={onRequestDelete}
+                  onCopy={onCopy}
+                  onEdit={onEdit}
+                />
+              ))}
+            </div>
+          )}
         </>
       )}
     </div>

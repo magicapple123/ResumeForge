@@ -49,6 +49,7 @@ SECTION_TITLES: dict[str, dict[str, str]] = {
         "publications": "论文发表",
         "research_projects": "科研项目",
         "patents": "专利",
+        "credentials": "资格证照",
         "skills": "专业技能",
         "campus_experience": "校园经历",
         "awards": "荣誉奖项",
@@ -61,6 +62,7 @@ SECTION_TITLES: dict[str, dict[str, str]] = {
         "publications": "Publications",
         "research_projects": "Research Projects",
         "patents": "Patents",
+        "credentials": "Certifications",
         "skills": "Skills",
         "campus_experience": "Campus Activities",
         "awards": "Honors & Awards",
@@ -84,6 +86,13 @@ FIELD_LABELS: dict[str, dict[str, str]] = {
         "funding": "经费",
         "filed": "申请",
         "granted": "授权",
+        # A4 扩展栏目的字段前缀（中英两表同批，渲染器只取这份）。
+        "issuer": "颁发机构",
+        "issued": "签发",
+        "expiry": "到期",
+        "verify": "核验链接",
+        "artifact_type": "成果类型",
+        "experience_kind": "关系类型",
     },
     "en-US": {
         "intent": "Objective",
@@ -97,6 +106,12 @@ FIELD_LABELS: dict[str, dict[str, str]] = {
         "funding": "Funding",
         "filed": "Filed",
         "granted": "Granted",
+        "issuer": "Issuer",
+        "issued": "Issued",
+        "expiry": "Expiry",
+        "verify": "Verify",
+        "artifact_type": "Artifact Type",
+        "experience_kind": "Relationship",
     },
 }
 
@@ -206,6 +221,46 @@ PATENT_STATUS_LABELS: dict[str, dict[str, str]] = {
     "zh-CN": {"filed": "已申请", "pending": "审查中", "granted": "已授权", "expired": "已失效", "other": "其他"},
     "en-US": {"filed": "Filed", "pending": "Pending", "granted": "Granted", "expired": "Expired", "other": "Other"},
 }
+# A4 资格证照状态正名。**绝不出现"有效资格"这类认定**：active 只表示"有效期内"
+# （来源状态事实），unknown 是"待核实"而不是"没有"；未知取值一律回落「待核实」，
+# 宁可显示未核实，也不把待核实写成已取得。
+CREDENTIAL_STATUS_LABELS: dict[str, dict[str, str]] = {
+    "zh-CN": {
+        "unknown": "待核实",
+        "pending": "办理中",
+        "active": "有效期内",
+        "expired": "已过期",
+    },
+    "en-US": {
+        "unknown": "Unverified",
+        "pending": "Pending",
+        "active": "Active",
+        "expired": "Expired",
+    },
+}
+_CREDENTIAL_STATUS_FALLBACK: dict[str, str] = {"zh-CN": "待核实", "en-US": "Unverified"}
+
+# A4 实践/服务经历的关系类型词（不属于"关系类型"的取值不打印，宁可少一行也不猜）。
+EXPERIENCE_KIND_LABELS: dict[str, dict[str, str]] = {
+    "zh-CN": {
+        "full_time": "全职",
+        "part_time": "兼职",
+        "contract": "合同制",
+        "self_employed": "自雇",
+        "internship": "实习",
+        "volunteer": "志愿",
+        "other": "其他",
+    },
+    "en-US": {
+        "full_time": "Full-time",
+        "part_time": "Part-time",
+        "contract": "Contract",
+        "self_employed": "Self-employed",
+        "internship": "Internship",
+        "volunteer": "Volunteer",
+        "other": "Other",
+    },
+}
 
 
 def publication_status_text(status: str, language: str | None = None) -> str:
@@ -216,6 +271,21 @@ def publication_status_text(status: str, language: str | None = None) -> str:
 def patent_status_text(status: str, language: str | None = None) -> str:
     """专利状态的正名；未知值回落「其他」。"""
     return PATENT_STATUS_LABELS[normalize_language(language)].get(status, "其他")
+
+
+def credential_status_text(status: str, language: str | None = None) -> str:
+    """资格证照状态的正名；未知值回落「待核实」——绝不把未核实写成已取得。"""
+    normalized = normalize_language(language)
+    return CREDENTIAL_STATUS_LABELS[normalized].get(
+        status, _CREDENTIAL_STATUS_FALLBACK[normalized]
+    )
+
+
+def experience_kind_text(kind: str, language: str | None = None) -> str:
+    """实践/服务经历的关系类型词；空值/未知值返回空串（不打印猜测的关系）。"""
+    if not kind:
+        return ""
+    return EXPERIENCE_KIND_LABELS[normalize_language(language)].get(kind, "")
 
 
 def _join_detail(parts) -> str:
@@ -244,6 +314,22 @@ def patent_detail(patent, language: str | None = None) -> str:
     return _join_detail([filed, granted, patent.url])
 
 
+def credential_detail(credential, language: str | None = None) -> str:
+    """证照细节行：签发/到期日期、核验链接、说明（中英前缀取自 FIELD_LABELS）。
+
+    刻意**不含 credential_number**：证号是私密值，纸面与任何导出都不出现（模型里也没有
+    这个字段，见 schemas/resume_credentials.py）。
+    """
+    fields = field_labels(language)
+    issued = f"{fields['issued']} {credential.issue_date}" if credential.issue_date else ""
+    expiry = f"{fields['expiry']} {credential.expiry_date}" if credential.expiry_date else ""
+    # 核验链接带字段名前缀（与 DOI 同一口径）：读者一眼知道这个 URL 是干什么的。
+    verify = (
+        f"{fields['verify']}：{credential.verify_url}" if credential.verify_url else ""
+    )
+    return _join_detail([issued, expiry, verify, credential.note])
+
+
 def authors_text(authors, language: str | None = None) -> str:
     """作者行：顺序即署名顺序；本人用 ``**加粗**`` 标记（结构化 is_self，不写进 name）。"""
     parts: list[str] = []
@@ -270,8 +356,13 @@ __all__ = [
     "PUBLICATION_STATUS_LABELS",
     "RESUME_LANGUAGES",
     "SECTION_TITLES",
+    "CREDENTIAL_STATUS_LABELS",
+    "EXPERIENCE_KIND_LABELS",
     "authors_text",
+    "credential_detail",
+    "credential_status_text",
     "date_range",
+    "experience_kind_text",
     "patent_detail",
     "publication_detail",
     "field_labels",

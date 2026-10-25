@@ -26,6 +26,8 @@ SECTION_KEYS: tuple[str, ...] = (
     "publications",
     "research_projects",
     "patents",
+    # A4：资格证照（与 DEFAULT_SECTION_ORDER 逐项一致）。
+    "credentials",
     "skills",
     "campus_experience",
     "awards",

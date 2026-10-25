@@ -16,7 +16,12 @@ from __future__ import annotations
 from functools import partial
 
 from ..schemas.resume import ResumeContent
-from .docx_academic_sections import section_patents, section_publications, section_research_projects
+from .docx_academic_sections import (
+    section_credentials,
+    section_patents,
+    section_publications,
+    section_research_projects,
+)
 from .docx_blocks import (
     DocxTheme,
 )
@@ -48,6 +53,7 @@ from .docx_rich import add_rich_runs
 from .docx_section_shared import _apply_break, _break_plan, _join, _role
 from .pdf_exporter import _PX_TO_PT
 from .resume.resume_labels import (
+    experience_kind_text,
     field_labels,
     level_text,
     list_separator,
@@ -206,6 +212,17 @@ def section_experience(
             meta_style=_meta_style,
         )
         _apply_break(doc, _break_plan(overrides, "entry", _object_id))
+        # A4：实践/服务经历的关系类型（没设置就不多一行，旧产物不变）。
+        kind = experience_kind_text(exp.experience_kind, language)
+        if kind:
+            _meta_line(
+                doc,
+                f"{field_labels(language)['experience_kind']}：{kind}",
+                base=base,
+                layout=layout,
+                theme=theme,
+                style=_meta_style,
+            )
         _bullets(
             doc,
             exp.description,
@@ -322,6 +339,17 @@ def section_projects(
                 layout=layout,
                 theme=theme,
             )
+        # A4 作品项目：成果类型 + 公开链接（空值不产生空行，旧产物不变）。
+        project_meta = _join(
+            [
+                f"{fields['artifact_type']}：{project.artifact_type}"
+                if project.artifact_type
+                else "",
+                project.public_url,
+            ]
+        )
+        if project_meta:
+            _meta_line(doc, project_meta, base=base, layout=layout, theme=theme)
         _bullets(
             doc,
             project.description,
@@ -422,6 +450,7 @@ SECTION_RENDERERS = {
     "publications": section_publications,
     "research_projects": section_research_projects,
     "patents": section_patents,
+    "credentials": section_credentials,
     "skills": section_skills,
     "awards": section_awards,
 }

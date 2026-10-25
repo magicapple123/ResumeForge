@@ -63,4 +63,27 @@ def research_section_texts(resume: Any) -> dict[str, str]:
     }
 
 
-__all__ = ["research_section_texts"]
+def credential_section_texts(resume: Any) -> dict[str, str]:
+    """A4 资格证照的可检索文本（名称/颁发机构/日期/状态/说明）。
+
+    **不含 credential_number**：模型与导出里都没有这个字段（见
+    schemas/resume_credentials.py），ATS 文本自然也不该凭空找它。
+    """
+    return {
+        "credentials": _join(
+            *(
+                _join(
+                    credential.name,
+                    credential.issuer,
+                    credential.issue_date,
+                    credential.expiry_date,
+                    credential.verify_url,
+                    credential.note,
+                )
+                for credential in resume.credentials
+            )
+        )
+    }
+
+
+__all__ = ["credential_section_texts", "research_section_texts"]

@@ -35,6 +35,12 @@ _SECTION_BY_PREFIX: tuple[tuple[str, str], ...] = (
     ("实习/工作经历", "experience"),
     ("校园经历", "campus_experience"),
     ("项目经历", "projects"),
+    # W14 科研三栏目 + A4 资格证照：完整性问题要能定位到具体板块（否则检查面板
+    # 只能显示"文档级"，用户不知道该去改哪儿）。
+    ("论文", "publications"),
+    ("科研项目", "research_projects"),
+    ("专利", "patents"),
+    ("资格证照", "credentials"),
     ("专业技能", "skills"),
     ("荣誉奖项", "awards"),
 )

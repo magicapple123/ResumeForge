@@ -12,7 +12,13 @@
  *   键盘等价物是树上的 ←/→；
  * - 徽标是可见文字徽标（不是只有颜色的圆点），色盲用户也能读出来。
  */
-import { CopyOutlined, EyeInvisibleOutlined, EyeOutlined, HolderOutlined } from "@ant-design/icons";
+import {
+  CopyOutlined,
+  EyeInvisibleOutlined,
+  EyeOutlined,
+  HolderOutlined,
+  MenuOutlined,
+} from "@ant-design/icons";
 import { Button, Tooltip } from "antd";
 import type { DragEvent, KeyboardEvent, ReactNode } from "react";
 import { t } from "../../../i18n";
@@ -128,6 +134,7 @@ function Caret({
 }
 
 function SortHandle({
+  kind,
   label,
   hint,
   draggable,
@@ -138,6 +145,8 @@ function SortHandle({
   onDragStart,
   onDragEnd,
 }: {
+  /** 条目行还是要点行：两类手柄的图标/尺寸/颜色必须一眼可分（见 outline.css）。 */
+  kind: "entry" | "point";
   label: string;
   hint: string;
   draggable: boolean;
@@ -152,10 +161,12 @@ function SortHandle({
   return (
     <Tooltip title={hint}>
       <Button
-        className="resume-outline-handle"
+        className={`resume-outline-handle is-${kind}`}
         type="text"
         size="small"
-        icon={<HolderOutlined />}
+        // 条目 = 六点手柄（"整行大件"），要点 = 三横线（"条目里的一个小点"）：
+        // 图标不同才让用户在密集树里扫一眼就能区分，而不用先读 aria-label。
+        icon={kind === "entry" ? <HolderOutlined /> : <MenuOutlined />}
         aria-label={label}
         aria-pressed={active}
         draggable={draggable}
@@ -209,6 +220,7 @@ export function EntryRowContent({
       <Caret expanded={expanded} hasChildren={hasPoints} onToggle={onToggle} />
       {readOnly ? null : (
         <SortHandle
+          kind="entry"
           label={t("outline.sort.handle", { name: displayName })}
           hint={sortBlockedReason ?? t("outline.sort.handle.hint")}
           draggable={!sortBlockedReason}
@@ -312,6 +324,7 @@ export function PointRowContent({
     >
       {readOnly ? null : (
         <SortHandle
+          kind="point"
           label={t("outline.sort.pointHandle")}
           hint={sortBlockedReason ?? t("outline.sort.handle.hint")}
           draggable={!sortBlockedReason}

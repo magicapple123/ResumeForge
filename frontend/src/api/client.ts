@@ -14,10 +14,10 @@ export type { ApiErrorCode } from "./apiError";
 
 /**
  * 请求预算分类（毫秒）：文件上传/大文件导出给长预算，普通请求 15s，任务类 30s，
- * AI 解读 180s，stream 不限时（SSE 流式路径不走 request()，此档供显式豁免的调用方使用）。
+ * AI 解读/翻译候选 180s，stream 不限时（SSE 流式路径不走 request()，此档供显式豁免的调用方使用）。
  */
 export type RequestBudgetKind =
-  "default" | "upload" | "export" | "task" | "recognition" | "analysis" | "stream";
+  "default" | "upload" | "export" | "task" | "recognition" | "analysis" | "translate" | "stream";
 
 export const BUDGETS_MS: Record<RequestBudgetKind, number> = {
   default: 15_000,
@@ -29,6 +29,10 @@ export const BUDGETS_MS: Record<RequestBudgetKind, number> = {
   recognition: 90_000,
   // 岗位解读（T1）：整段生成 10–60s 是常态，长 JD 更久；15s 必然误超时。
   analysis: 180_000,
+  // 翻译候选：几十个可译段按块翻译后仍是 1–3 次模型调用（每次十几到几十秒），
+  // 默认 15s 必然误超时（用户反馈的「请求超时，请重试」）。数值与 analysis 同档，
+  // 单独一档是为了以后能按这条链路实测再独立调参。
+  translate: 180_000,
   stream: 0, // 0 表示不限时
 };
 

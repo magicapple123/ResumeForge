@@ -131,6 +131,30 @@ def check_consistency(
             warnings.append(
                 f"荣誉奖项中出现{label}未包含的奖项「{award.name}」，请核对是否为虚构"
             )
+    # ===== A4 扩展栏目（论文/科研项目/专利/资格证照）=====
+    # 只有候选资料**确实带了这个键**时才比对：旧链路（个人资料 prompt data）没有这些键，
+    # 若无条件比对，所有带科研/证照的旧简历都会被冤枉成"虚构"。键存在 = 本次确实给了模型。
+    extended_sections = (
+        ("publications", "title", "论文", resume.publications),
+        ("research_projects", "name", "科研项目", resume.research_projects),
+        ("patents", "title", "专利", resume.patents),
+        ("credentials", "name", "资格证照", resume.credentials),
+    )
+    for source_key, identity_field, section_label, entries in extended_sections:
+        candidates = source_data.get(source_key)
+        if not isinstance(candidates, list) or not candidates:
+            continue
+        known = [
+            str(candidate.get(identity_field) or "").strip()
+            for candidate in candidates
+            if isinstance(candidate, dict)
+        ]
+        for entry in entries:
+            value = str(getattr(entry, identity_field, "") or "").strip()
+            if value and not any(_similar(value, known_value) for known_value in known):
+                warnings.append(
+                    f"{section_label}中出现{label}未包含的「{value}」，请核对是否为虚构"
+                )
     unsupported_summary = _unsupported_quantified_values(
         resume.summary, json.dumps(source_data, ensure_ascii=False)
     )

@@ -110,7 +110,7 @@ export default function ObjectStylePanel({
           </Tooltip>
         ) : null}
       </Space>
-      <Space direction="vertical" size={2} style={{ width: "100%" }}>
+      <div className="resume-typography-rows">
         {OBJECT_STYLE_PROPS.map((prop) => (
           <StyleValueRow
             key={prop}
@@ -134,7 +134,7 @@ export default function ObjectStylePanel({
             testId={`style-row-object-${prop}`}
           />
         ))}
-      </Space>
+      </div>
       <Space size={8} wrap>
         <Typography.Link
           role="button"

@@ -12,6 +12,8 @@ from .profile_relevance_constants import (
     _LLM_PROFILE_FIELDS,
     _REFERENCE_CONTENT_KEY,
     _REFERENCE_FILE_KEY,
+    FACT_MERGE_TARGETS,
+    FACT_STANDALONE_SECTIONS,
     SECTION_LIMITS,
 )
 
@@ -46,11 +48,36 @@ def _reference_fields(item: Any, include_references: bool) -> dict[str, str]:
     }
 
 
+def _merge_fact_sections(data: dict[str, Any], fact_sections: dict[str, Any]) -> None:
+    """把补充事实的九个 section 并入候选资料（灵活化契约 §5）。
+
+    只在 section 非空时才加键：没有任何事实时输出必须与改动前逐字节一致
+    （旧请求/旧备份/旧提示词契约不变）。四个独立事实 section 原样加新键；
+    其余按 FACT_MERGE_TARGETS 追加到既有栏目（作品/培训进 projects、实践进
+    experiences、荣誉进 awards、语言进 skills）——复用既有输出 schema，不新增栏目。
+    """
+    for section in FACT_STANDALONE_SECTIONS:
+        items = fact_sections.get(section)
+        if isinstance(items, list) and items:
+            data[section] = list(items)
+    for section, target in FACT_MERGE_TARGETS.items():
+        items = fact_sections.get(section)
+        if isinstance(items, list) and items:
+            data[target] = [*data.get(target, []), *items]
+
+
 def build_profile_prompt_data(
-    profile: ProfileOut, *, include_references: bool = False
+    profile: ProfileOut,
+    *,
+    include_references: bool = False,
+    fact_sections: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """把完整资料规范化为模型可读结构；默认不携带参考文件。"""
-    return {
+    """把完整资料规范化为模型可读结构；默认不携带参考文件。
+
+    fact_sections 是 fact_context.prompt_sections 的输出；None/空时返回结构与历史
+    行为完全一致，非空时按契约 §3.3 合并六个补充事实 section。
+    """
+    data = {
         "name": profile.name,
         "gender": profile.gender,
         "birth_year": profile.birth_year,
@@ -117,6 +144,9 @@ def build_profile_prompt_data(
             for item in profile.awards
         ],
     }
+    if fact_sections:
+        _merge_fact_sections(data, fact_sections)
+    return data
 
 
 def build_llm_profile_prompt_data(
@@ -132,10 +162,13 @@ def build_llm_profile_prompt_data(
     if include_identity:
         # 身份字段插在最前：与用户在「我的资料」里看到的顺序一致（姓名最先）。
         keys = ["name", "gender", "birth_year", "phone", "email"] + keys
-    result = {
-        key: deepcopy(data.get(key, [] if key in SECTION_LIMITS else ""))
-        for key in keys
-    }
+    result = {}
+    for key in keys:
+        # 补充事实的独立 section 只在**本次候选真的有这个键**时才出现：没有新事实时
+        # 提示词结构与改动前逐字节一致（旧请求/旧备份不受影响），而不是多出四个空数组。
+        if key in FACT_STANDALONE_SECTIONS and key not in data:
+            continue
+        result[key] = deepcopy(data.get(key, [] if key in SECTION_LIMITS else ""))
     # 公开链接字段的私密值兜底：github / personal_website 属于用户主动填写的
     # 公开作品链接，正常值要随候选资料提供给模型；但值里出现 token 或 private
     # 标记时（如带访问凭证的地址、私有仓库路径），它实际是私密资源——发进模型

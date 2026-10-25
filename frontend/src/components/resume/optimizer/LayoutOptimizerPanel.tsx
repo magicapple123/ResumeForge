@@ -54,6 +54,7 @@ import type {
 import type { ResumeContent } from "../../../types/resume";
 import type { LayoutMeasure } from "../../../utils/resumeLayoutMeasure";
 import type { ResumeLayoutAnalysis } from "../../../types/resumeLayout";
+import "./optimizer.css";
 
 interface Props {
   /** 版面诊断结果（来自既有 `/layout/analyze`，含 fit_ladder）。 */
@@ -218,8 +219,8 @@ export default function LayoutOptimizerPanel({
     !disabled && (hasAnalysis && Boolean(before) && Boolean(probe) ? true : Boolean(content));
 
   return (
-    <div data-layout-optimizer="1">
-      <Space size={8} align="center" style={{ marginBottom: 6 }} wrap>
+    <div data-layout-optimizer="1" className="resume-optimizer">
+      <div className="resume-optimizer-head">
         <Typography.Text strong>{ot("optimizer.title")}</Typography.Text>
         <Tooltip title={ot("optimizer.hint")}>
           <Button
@@ -229,7 +230,7 @@ export default function LayoutOptimizerPanel({
             aria-label={ot("optimizer.hint")}
           />
         </Tooltip>
-      </Space>
+      </div>
 
       {conflictCode === "resume_revision_conflict" ? (
         <Alert
@@ -241,9 +242,10 @@ export default function LayoutOptimizerPanel({
         />
       ) : null}
 
-      <Card size="small" style={{ marginBottom: 8 }}>
-        <Space orientation="vertical" size={6} style={{ width: "100%" }}>
-          <Space size={12} wrap>
+      <Card size="small" className="resume-optimizer-card">
+        <div className="resume-optimizer-constraints">
+          {/* 两个复选框是同一组"硬约束"，跨满两列；不参与下面的标签/控件列对齐。 */}
+          <div className="resume-optimizer-checks">
             <Checkbox
               checked={constraints.lockFont}
               disabled={disabled || undefined}
@@ -258,50 +260,63 @@ export default function LayoutOptimizerPanel({
             >
               {ot("optimizer.keepEntries")}
             </Checkbox>
-          </Space>
-          <Space size={8} wrap>
-            <Typography.Text style={{ fontSize: 12 }}>{ot("optimizer.minMargin")}</Typography.Text>
-            <InputNumber
-              size="small"
-              min={0}
-              max={26}
-              step={0.5}
-              style={{ width: 90 }}
-              value={constraints.minMarginMm ?? undefined}
-              placeholder={ot("optimizer.minMargin.off")}
-              aria-label={ot("optimizer.minMargin")}
-              disabled={disabled || undefined}
-              onChange={(value) => patch({ minMarginMm: typeof value === "number" ? value : null })}
-            />
-            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-              {ot("optimizer.minMargin.hint")}
+          </div>
+          <div className="resume-optimizer-field is-margin">
+            <Typography.Text className="resume-optimizer-label">
+              {ot("optimizer.minMargin")}
             </Typography.Text>
-          </Space>
-          <Space size={8} wrap>
-            <Typography.Text style={{ fontSize: 12 }}>{ot("optimizer.target")}</Typography.Text>
-            <Segmented
-              size="small"
-              value={constraints.targetPages}
-              disabled={disabled || undefined}
-              aria-label={ot("optimizer.target")}
-              options={[
-                { value: 1, label: ot("optimizer.target.pages", { count: 1 }) },
-                { value: 2, label: ot("optimizer.target.pages", { count: 2 }) },
-              ]}
-              onChange={(value) => patch({ targetPages: value === 2 ? 2 : 1 })}
-            />
-          </Space>
-          <Button
-            type="primary"
-            icon={<ThunderboltOutlined />}
-            loading={generating}
-            disabled={!canGenerate || undefined}
-            aria-label={candidates ? ot("optimizer.regenerate") : ot("optimizer.generate")}
-            onClick={generate}
-          >
-            {candidates ? ot("optimizer.regenerate") : ot("optimizer.generate")}
-          </Button>
-        </Space>
+            <div className="resume-optimizer-control">
+              <InputNumber
+                size="small"
+                className="resume-optimizer-margin"
+                min={0}
+                max={26}
+                step={0.5}
+                value={constraints.minMarginMm ?? undefined}
+                placeholder={ot("optimizer.minMargin.off")}
+                aria-label={ot("optimizer.minMargin")}
+                disabled={disabled || undefined}
+                onChange={(value) =>
+                  patch({ minMarginMm: typeof value === "number" ? value : null })
+                }
+              />
+              <Typography.Text type="secondary" className="resume-optimizer-hint">
+                {ot("optimizer.minMargin.hint")}
+              </Typography.Text>
+            </div>
+          </div>
+          <div className="resume-optimizer-field is-target">
+            <Typography.Text className="resume-optimizer-label">
+              {ot("optimizer.target")}
+            </Typography.Text>
+            <div className="resume-optimizer-control">
+              <Segmented
+                size="small"
+                value={constraints.targetPages}
+                disabled={disabled || undefined}
+                aria-label={ot("optimizer.target")}
+                options={[
+                  { value: 1, label: ot("optimizer.target.pages", { count: 1 }) },
+                  { value: 2, label: ot("optimizer.target.pages", { count: 2 }) },
+                ]}
+                onChange={(value) => patch({ targetPages: value === 2 ? 2 : 1 })}
+              />
+            </div>
+          </div>
+          <div className="resume-optimizer-actions">
+            <Button
+              type="primary"
+              icon={<ThunderboltOutlined />}
+              className="resume-optimizer-generate"
+              loading={generating}
+              disabled={!canGenerate || undefined}
+              aria-label={candidates ? ot("optimizer.regenerate") : ot("optimizer.generate")}
+              onClick={generate}
+            >
+              {candidates ? ot("optimizer.regenerate") : ot("optimizer.generate")}
+            </Button>
+          </div>
+        </div>
       </Card>
 
       {conflictCode !== "resume_revision_conflict" && noReason ? (

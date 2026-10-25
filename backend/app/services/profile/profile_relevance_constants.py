@@ -15,7 +15,41 @@ SECTION_LIMITS = {
     "projects": 3,
     "skills": 14,
     "awards": 3,
+    # 补充事实（A3）：论文/科研/专利/证照各 20 条。资料库允许更多，但一份简历的
+    # 候选区不应该被同类事实铺满；超出的部分由预算压缩与覆盖度说明交代。
+    # 作品项目/实践经历不单独占额度——分别并入 projects / experiences 的既有上限。
+    "publications": 20,
+    "research_projects": 20,
+    "patents": 20,
+    "credentials": 20,
 }
+
+# 补充事实的候选 section 白名单（灵活化契约 §5）。
+# STANDALONE：原样作为新键加入候选资料；MERGED：并进既有栏目（复用既有输出 schema）。
+FACT_STANDALONE_SECTIONS: tuple[str, ...] = (
+    "publications",
+    "research_projects",
+    "patents",
+    "credentials",
+)
+FACT_MERGED_SECTIONS: tuple[str, ...] = (
+    "work_projects",
+    "practices",
+    "awards",
+    "skills",
+    "trainings",
+)
+# 补充事实 section → 候选资料的既有栏目。作品/培训都并进 projects（项目内容/编辑器复用），
+# 实践并进 experiences，荣誉并进 awards，语言并进 skills；"九个 section"对外仍是事实
+# 快照的完整形状，候选链路只认这张表，不写第二套映射。
+FACT_MERGE_TARGETS: dict[str, str] = {
+    "work_projects": "projects",
+    "practices": "experiences",
+    "awards": "awards",
+    "skills": "skills",
+    "trainings": "projects",
+}
+FACT_SECTION_KEYS: tuple[str, ...] = FACT_STANDALONE_SECTIONS + FACT_MERGED_SECTIONS
 
 SECTION_PRIMARY_FIELDS = {
     "educations": "school",
@@ -24,6 +58,11 @@ SECTION_PRIMARY_FIELDS = {
     "projects": "name",
     "skills": "name",
     "awards": "name",
+    # 补充事实主字段：论文/专利用标题，科研/证照用名称（映射后候选的键名）。
+    "publications": "title",
+    "research_projects": "name",
+    "patents": "title",
+    "credentials": "name",
 }
 
 # 岗位方向词只用于低权重的语义补充；硬技能仍然优先使用 JD 技能解析结果。
@@ -168,6 +207,10 @@ _LLM_PROFILE_FIELDS = (
     "projects",
     "skills",
     "awards",
+    # 补充事实（A3）的独立 section。它们**只在本次候选真的带上这些 section 时才出现**
+    # （见 build_llm_profile_prompt_data 的跳过规则）：没有新事实时提示词结构与改动前
+    # 逐字节一致，旧请求/旧备份不受影响。
+    *FACT_STANDALONE_SECTIONS,
 )
 _MIN_PROFILE_CONTEXT_CHARS = 1_000
 _REFERENCE_SECTIONS = ("educations", "experiences", "campus_experiences", "projects")
@@ -218,3 +261,6 @@ class ProfileSelection:
     selected_counts: dict[str, int]
     omitted_counts: dict[str, int]
     entry_names: dict[str, tuple[str, ...]]
+    # A4/§8.5：哪些分区用了"信号不足时的最小候选兜底"（仅岗位路径可能非空）。
+    # 生成说明据此如实告知用户"交集较少、资料中未提供的要求不会编写"。
+    fallback_sections: tuple[str, ...] = ()

@@ -228,7 +228,9 @@ describe("ResumeDetailModal 版式重排（P3）", () => {
     fireEvent.click(screen.getByRole("button", { name: "改版式·3 页" }));
 
     // 第一次还在飞：第二次只进"待渲染"，不重复发请求。
-    expect(apiMocks.renderResume).toHaveBeenCalledTimes(1);
+    // 用 waitFor 只等"首帧渲染请求已发出"这一个异步边界（断言内容不变）：全量并行跑时
+    // React effect 的冲刷可能晚于同步断言，直接同步断言会偶发假失败（2026-10-25 实测）。
+    await waitFor(() => expect(apiMocks.renderResume).toHaveBeenCalledTimes(1));
     // 草稿没有前进：读数仍是旧值（渲染中不谎报"已生效"）。
     expect(screen.getByTestId("resume-preview-stub")).toHaveAttribute("data-page-limit", "1");
 

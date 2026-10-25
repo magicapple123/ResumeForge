@@ -1,0 +1,476 @@
+{
+  "version": 1,
+  "total": 24,
+  "required_per_group": 2,
+  "industry_groups": [
+    "软件/数据/产品",
+    "制造/工程/质量",
+    "医疗/护理/健康服务",
+    "教育/培训",
+    "财务/金融/法务",
+    "销售/客户成功",
+    "运营/行政/人力",
+    "零售/餐饮/酒店/物流",
+    "设计/内容/传媒",
+    "科研/学术",
+    "自雇/顾问/创业",
+    "公共服务/社会组织/技能工种"
+  ],
+  "cases": [
+    {
+      "id": "industry_design-content-media_sparse",
+      "industry_group": "设计/内容/传媒",
+      "density": "sparse",
+      "persona": "转行",
+      "fact_kinds": [
+        "award",
+        "credential",
+        "language",
+        "training",
+        "work_project"
+      ]
+    },
+    {
+      "id": "industry_design-content-media_sufficient",
+      "industry_group": "设计/内容/传媒",
+      "density": "sufficient",
+      "persona": "自雇",
+      "fact_kinds": [
+        "award",
+        "credential",
+        "language",
+        "practice",
+        "training",
+        "work_project"
+      ]
+    },
+    {
+      "id": "industry_education-training_sparse",
+      "industry_group": "教育/培训",
+      "density": "sparse",
+      "persona": "兼职并行",
+      "fact_kinds": [
+        "award",
+        "credential",
+        "language",
+        "practice",
+        "training"
+      ]
+    },
+    {
+      "id": "industry_education-training_sufficient",
+      "industry_group": "教育/培训",
+      "density": "sufficient",
+      "persona": "转行",
+      "fact_kinds": [
+        "award",
+        "credential",
+        "language",
+        "practice",
+        "research_project",
+        "training",
+        "work_project"
+      ]
+    },
+    {
+      "id": "industry_finance-legal_sparse",
+      "industry_group": "财务/金融/法务",
+      "density": "sparse",
+      "persona": "待业",
+      "fact_kinds": [
+        "award",
+        "credential",
+        "language",
+        "practice",
+        "training"
+      ]
+    },
+    {
+      "id": "industry_finance-legal_sufficient",
+      "industry_group": "财务/金融/法务",
+      "density": "sufficient",
+      "persona": "在职换岗",
+      "fact_kinds": [
+        "award",
+        "credential",
+        "language",
+        "practice",
+        "training",
+        "work_project"
+      ]
+    },
+    {
+      "id": "industry_healthcare-nursing-health_sparse",
+      "industry_group": "医疗/护理/健康服务",
+      "density": "sparse",
+      "persona": "在职换岗",
+      "fact_kinds": [
+        "award",
+        "credential",
+        "language",
+        "practice",
+        "training"
+      ]
+    },
+    {
+      "id": "industry_healthcare-nursing-health_sufficient",
+      "industry_group": "医疗/护理/健康服务",
+      "density": "sufficient",
+      "persona": "内部转岗",
+      "fact_kinds": [
+        "award",
+        "credential",
+        "language",
+        "practice",
+        "publication",
+        "training",
+        "work_project"
+      ]
+    },
+    {
+      "id": "industry_manufacturing-engineering-quality_sparse",
+      "industry_group": "制造/工程/质量",
+      "density": "sparse",
+      "persona": "长期间歇回归",
+      "fact_kinds": [
+        "award",
+        "credential",
+        "language",
+        "practice",
+        "training"
+      ]
+    },
+    {
+      "id": "industry_manufacturing-engineering-quality_sufficient",
+      "industry_group": "制造/工程/质量",
+      "density": "sufficient",
+      "persona": "资深再就业",
+      "fact_kinds": [
+        "award",
+        "credential",
+        "language",
+        "patent",
+        "practice",
+        "training",
+        "work_project"
+      ]
+    },
+    {
+      "id": "industry_operations-admin-hr_sparse",
+      "industry_group": "运营/行政/人力",
+      "density": "sparse",
+      "persona": "在校无实习",
+      "fact_kinds": [
+        "award",
+        "credential",
+        "language",
+        "training",
+        "work_project"
+      ]
+    },
+    {
+      "id": "industry_operations-admin-hr_sufficient",
+      "industry_group": "运营/行政/人力",
+      "density": "sufficient",
+      "persona": "自雇",
+      "fact_kinds": [
+        "award",
+        "credential",
+        "language",
+        "practice",
+        "training",
+        "work_project"
+      ]
+    },
+    {
+      "id": "industry_public-service-social-org_sparse",
+      "industry_group": "公共服务/社会组织/技能工种",
+      "density": "sparse",
+      "persona": "待业",
+      "fact_kinds": [
+        "award",
+        "credential",
+        "language",
+        "training"
+      ]
+    },
+    {
+      "id": "industry_public-service-social-org_sufficient",
+      "industry_group": "公共服务/社会组织/技能工种",
+      "density": "sufficient",
+      "persona": "内部转岗",
+      "fact_kinds": [
+        "award",
+        "credential",
+        "language",
+        "practice",
+        "training",
+        "work_project"
+      ]
+    },
+    {
+      "id": "industry_research-academia_sparse",
+      "industry_group": "科研/学术",
+      "density": "sparse",
+      "persona": "资深再就业",
+      "fact_kinds": [
+        "award",
+        "credential",
+        "language",
+        "publication",
+        "training"
+      ]
+    },
+    {
+      "id": "industry_research-academia_sufficient",
+      "industry_group": "科研/学术",
+      "density": "sufficient",
+      "persona": "在校无实习",
+      "fact_kinds": [
+        "award",
+        "credential",
+        "language",
+        "patent",
+        "publication",
+        "research_project",
+        "training"
+      ]
+    },
+    {
+      "id": "industry_retail-hospitality-logistics_sparse",
+      "industry_group": "零售/餐饮/酒店/物流",
+      "density": "sparse",
+      "persona": "长期间歇回归",
+      "fact_kinds": [
+        "award",
+        "credential",
+        "language",
+        "practice",
+        "training"
+      ]
+    },
+    {
+      "id": "industry_retail-hospitality-logistics_sufficient",
+      "industry_group": "零售/餐饮/酒店/物流",
+      "density": "sufficient",
+      "persona": "兼职并行",
+      "fact_kinds": [
+        "award",
+        "credential",
+        "language",
+        "practice",
+        "training",
+        "work_project"
+      ]
+    },
+    {
+      "id": "industry_sales-customer-success_sparse",
+      "industry_group": "销售/客户成功",
+      "density": "sparse",
+      "persona": "转行",
+      "fact_kinds": [
+        "award",
+        "credential",
+        "language",
+        "practice",
+        "training"
+      ]
+    },
+    {
+      "id": "industry_sales-customer-success_sufficient",
+      "industry_group": "销售/客户成功",
+      "density": "sufficient",
+      "persona": "创业后求职",
+      "fact_kinds": [
+        "award",
+        "credential",
+        "language",
+        "practice",
+        "training",
+        "work_project"
+      ]
+    },
+    {
+      "id": "industry_self-employed-consulting-startup_sparse",
+      "industry_group": "自雇/顾问/创业",
+      "density": "sparse",
+      "persona": "自雇",
+      "fact_kinds": [
+        "award",
+        "credential",
+        "language",
+        "practice",
+        "training"
+      ]
+    },
+    {
+      "id": "industry_self-employed-consulting-startup_sufficient",
+      "industry_group": "自雇/顾问/创业",
+      "density": "sufficient",
+      "persona": "创业后求职",
+      "fact_kinds": [
+        "award",
+        "credential",
+        "language",
+        "practice",
+        "training",
+        "work_project"
+      ]
+    },
+    {
+      "id": "industry_software-data-product_sparse",
+      "industry_group": "软件/数据/产品",
+      "density": "sparse",
+      "persona": "在校无实习",
+      "fact_kinds": [
+        "award",
+        "credential",
+        "language",
+        "training",
+        "work_project"
+      ]
+    },
+    {
+      "id": "industry_software-data-product_sufficient",
+      "industry_group": "软件/数据/产品",
+      "density": "sufficient",
+      "persona": "在职换岗",
+      "fact_kinds": [
+        "award",
+        "credential",
+        "language",
+        "publication",
+        "training",
+        "work_project"
+      ]
+    }
+  ],
+  "dimension_stats": {
+    "density": {
+      "sufficient": 12,
+      "sparse": 12
+    },
+    "persona": {
+      "在校无实习": 3,
+      "在职换岗": 3,
+      "待业": 2,
+      "转行": 3,
+      "兼职并行": 2,
+      "自雇": 3,
+      "创业后求职": 2,
+      "长期间歇回归": 2,
+      "内部转岗": 2,
+      "资深再就业": 2
+    },
+    "industry_group": {
+      "软件/数据/产品": 2,
+      "制造/工程/质量": 2,
+      "医疗/护理/健康服务": 2,
+      "教育/培训": 2,
+      "财务/金融/法务": 2,
+      "销售/客户成功": 2,
+      "运营/行政/人力": 2,
+      "零售/餐饮/酒店/物流": 2,
+      "设计/内容/传媒": 2,
+      "科研/学术": 2,
+      "自雇/顾问/创业": 2,
+      "公共服务/社会组织/技能工种": 2
+    },
+    "fact_kind": {
+      "publication": 4,
+      "research_project": 2,
+      "patent": 2,
+      "credential": 24,
+      "work_project": 14,
+      "practice": 17,
+      "award": 24,
+      "training": 24,
+      "language": 24
+    }
+  },
+  "fictional_names": [
+    "何俊",
+    "何敏",
+    "冯宇",
+    "刘洋",
+    "吴静",
+    "周涛",
+    "唐磊",
+    "孙悦",
+    "宋佳",
+    "曹阳",
+    "李娜",
+    "杨帆",
+    "林晓",
+    "梁爽",
+    "王芳",
+    "程峰",
+    "罗琳",
+    "董洁",
+    "袁媛",
+    "许文",
+    "许晴",
+    "赵敏",
+    "郑凯",
+    "陈晨",
+    "韩雪",
+    "马强",
+    "高远"
+  ],
+  "fictional_organizations": [
+    "一叶教育科技",
+    "东湖师范学院",
+    "东湖师范学院附属教研中心",
+    "东湖教师发展中心",
+    "东湖省教师资格认定中心",
+    "东湖省语言文字工作中心",
+    "云帆创业孵化器",
+    "云帆职业认证中心",
+    "云杉数据",
+    "仁和社区卫生服务中心",
+    "北岭理工大学",
+    "匠心机电维修部",
+    "半山民宿",
+    "南江医科大学",
+    "南江省卫生健康人才服务中心",
+    "南江省护理学会",
+    "南江省版权服务中心",
+    "南江省财政人才服务中心",
+    "南江职业技能培训中心",
+    "南江财经学院",
+    "向阳实验中学",
+    "启明职业培训学校",
+    "启明职业技能鉴定中心",
+    "启明职业认证中心",
+    "安泰保险经纪",
+    "康宁护理院",
+    "微光文化工作室",
+    "微光职业认证中心",
+    "恒准检测",
+    "恒准检测培训中心",
+    "拾光咖啡",
+    "拾味餐饮管理",
+    "星桥科技",
+    "星野动画",
+    "晨光志愿服务中心",
+    "暖阳社会工作学院",
+    "暖阳社会工作服务中心",
+    "求真数据研究院",
+    "求真数据研究院培训部",
+    "海川职业技术学院",
+    "清源环保设备",
+    "溪谷管理咨询",
+    "社区养老服务中心",
+    "立新机械制造",
+    "织梦设计工作室",
+    "育才职业教育中心",
+    "衡平会计师事务所",
+    "西林职业学院",
+    "视界传媒",
+    "远航销售服务",
+    "锦程汽车零部件",
+    "长风物流",
+    "青禾运营工作室"
+  ],
+  "description": "A4/A9 跨行业 24 案例清单：12 行业组 × (sufficient/sparse)。虚构姓名与机构清单用于纯虚构扫描（test_industry_matrix.py）；改案例后必须同步重算本文件（维度统计与清单对不上会变红）。"
+}

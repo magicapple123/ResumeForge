@@ -455,6 +455,7 @@ export default function ResumeDetailPreview({
         relayouting={relayouting}
         hasPhoto={Boolean(detail.content?.photo)}
         documentMode={detail.document_mode}
+        contextSnapshot={detail.context_snapshot ?? null}
         pagesNeeded={layoutStatus?.pages ?? null}
         onApplyLayout={onApplyLayout}
         onCommitLayout={onCommitLayout}

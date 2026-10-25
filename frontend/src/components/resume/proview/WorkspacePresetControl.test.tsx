@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 import { App as AntdApp } from "antd";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { t } from "../../../i18n";
 import WorkspacePresetControl from "./WorkspacePresetControl";
@@ -53,6 +53,24 @@ describe("工作区预设切换（D14）", () => {
         t("proview.workspace.switched", { name: t("proview.workspace.typography") }),
       ),
     ).toBeInTheDocument();
+  });
+
+  it("悬停预设选项只弹一个提示（外层与选项两层 Tooltip 不叠加）", async () => {
+    renderControl();
+    const option = screen.getByText(t("proview.workspace.default"));
+    fireEvent.mouseEnter(option);
+    // antd Tooltip 默认 0.1s 延迟；等它真的出现后再数，避免把"还没弹出来"当成"只有一个"。
+    const visibleTip = () =>
+      [...document.querySelectorAll(".ant-tooltip")].filter(
+        (node) => !node.classList.contains("ant-tooltip-hidden"),
+      );
+    await waitFor(() => expect(visibleTip()).toHaveLength(1), { timeout: 2000 });
+    // 再等一小会儿，确认没有第二个提示随后加入。
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    expect(visibleTip()).toHaveLength(1);
+    const text = visibleTip()[0]?.textContent ?? "";
+    expect(text).toContain(t("proview.workspace.hint"));
+    expect(text).toContain(t("proview.workspace.persistHint"));
   });
 
   it("恢复默认布局是独立入口（不占预设列表一格）", async () => {

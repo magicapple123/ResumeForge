@@ -20,6 +20,8 @@ import ErrorState from "../components/common/ErrorState";
 import { useBatchSelection } from "../hooks/useBatchSelection";
 import ManualResumeModal from "../components/ManualResumeModal";
 import ResumeDetailModal from "../components/ResumeDetailModal";
+import ResumeCenterAiEntry from "../features/career-scenarios/ResumeCenterAiEntry";
+import ResumeScenarioSuggestion from "../features/career-scenarios/ResumeScenarioSuggestion";
 import { registerNewResumeHandler } from "../features/shortcuts/runtimeTargets";
 import { computeFieldDiff } from "../utils/resumeFieldDiff";
 import { useResumeListVersion } from "../features/resume/resumeListEvents";
@@ -339,6 +341,7 @@ export default function ResumesPage() {
         <Button type="primary" onClick={() => setManualOpen(true)}>
           新建简历
         </Button>
+        <ResumeCenterAiEntry />
         <Button onClick={() => setArchiveOpen(true)}>交付存档</Button>
         {jobId && (
           <Space size={4} align="center">
@@ -397,6 +400,8 @@ export default function ResumesPage() {
           </Button>
         </Tooltip>
       </Space>
+      {/* A2 场景建议卡：只提供入口，不调用模型、不按场景过滤任何已有简历。 */}
+      <ResumeScenarioSuggestion />
       {batch.selecting && (
         <BatchActionBar count={batch.selectedCount} onExit={batch.exitSelecting}>
           {(data?.total ?? 0) > 0 && (

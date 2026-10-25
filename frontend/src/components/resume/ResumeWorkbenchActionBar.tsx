@@ -21,12 +21,13 @@
  */
 import {
   CloseOutlined,
+  ColumnWidthOutlined,
   DownloadOutlined,
   EditOutlined,
   SaveOutlined,
   SettingOutlined,
 } from "@ant-design/icons";
-import { Button, Popconfirm, Typography } from "antd";
+import { Button, Popconfirm, Tooltip, Typography } from "antd";
 import type { MessageKey } from "../../i18n";
 import { t } from "../../i18n";
 
@@ -72,6 +73,11 @@ interface Props {
   onOpenContent?: () => void;
   /** 参数栏也不在栅格里时（单栏）的入口。 */
   onOpenParams?: () => void;
+  /**
+   * 「一键恢复默认列宽」：把参数栏与内容栏两条分隔条的宽度一起复位（2026-10-25 用户要求）。
+   * 不传 = 当前形态没有可调列宽（两栏/单栏档），不渲染这颗按钮。
+   */
+  onResetColumnWidths?: () => void;
   /** × 的开关信号：`true` = 有人想关，`false` = 卡片被取消。 */
   onCloseRequest: (next: boolean) => void;
   /** 卡片里点了「放弃并关闭」。 */
@@ -99,6 +105,7 @@ export default function ResumeWorkbenchActionBar({
   onOpenVersions,
   onOpenContent,
   onOpenParams,
+  onResetColumnWidths,
   onCloseRequest,
   onCloseConfirmed,
 }: Props) {
@@ -198,6 +205,20 @@ export default function ResumeWorkbenchActionBar({
         <Button size="small" onClick={onOpenVersions} aria-label={t("versions.action.openAria")}>
           {t("versions.action.open")}
         </Button>
+      ) : null}
+      {/* 列宽复位：双击分隔条也能复位，但双击是"知道才找得到"的隐藏操作；用户明确要
+          一个"全界面一键恢复默认宽度"的显式入口，所以放在动作条上。 */}
+      {onResetColumnWidths ? (
+        <Tooltip title={t("workbench.widths.reset")}>
+          <Button
+            size="small"
+            type="text"
+            icon={<ColumnWidthOutlined />}
+            onClick={onResetColumnWidths}
+          >
+            {t("workbench.widths.reset")}
+          </Button>
+        </Tooltip>
       ) : null}
       {/* 自绘的 ×：弹窗 `closable={false}` 之后这是唯一能"就地"问一句的地方——卡片就长在
           用户刚点的那颗按钮上。干净时它就是个普通关闭，不弹任何东西。 */}

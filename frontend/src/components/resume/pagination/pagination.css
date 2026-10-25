@@ -1,14 +1,142 @@
 /* SPDX-License-Identifier: Apache-2.0 */
-/* 「页缩略图」（W08）：实际页数 / 末页占用 / 溢出与手动分页位置。
- * 全部挂在自定义类名下，颜色只用 --rf-* 语义 token（深色主题由 dark-tokens 提供同义值）。 */
+/* 分页设置区（W08）与「页缩略图」的样式。
+ *
+ * 2026-10-25 重排：分组标题 12px/600 secondary、辅助说明 12px、组间距统一 12px；
+ * 颜色 / 间距只用 --rf-* 语义 token（深色主题由 dark-tokens 提供同义值）。
+ * 页缩略图仍然保留（实际页数 / 末页占用 / 溢出与手动分页位置），只收紧内边距与行距，
+ * 让它在 380 宽左栏里只占「标题行 + 一行状态」。 */
 
-.resume-page-thumbnails {
+/* ===== 面板节奏与文字层级 ===== */
+.resume-pagination-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+.resume-pagination-group {
   display: flex;
   flex-direction: column;
   gap: 6px;
+  min-width: 0;
+}
+
+.resume-pagination-label {
+  color: var(--rf-text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 18px;
+}
+
+.resume-pagination-sublabel {
+  color: var(--rf-text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 18px;
+}
+
+/* 辅助说明：380 宽下长句/长板块名要能换行，不能把面板撑出横向滚动。 */
+.resume-pagination-help {
+  min-width: 0;
+  color: var(--rf-text-tertiary);
+  font-size: 12px;
+  line-height: 18px;
+  overflow-wrap: anywhere;
+}
+
+/* 草稿说明：原来是一条信息蓝底 Alert，和真正的错误/危险信息抢注意力；
+ * 它只是"草稿里看不到断页"的常驻解释，降成一行弱提示即可。 */
+.resume-pagination-note {
+  color: var(--rf-text-tertiary);
+}
+
+.resume-pagination-note-icon {
+  flex: 0 0 auto;
+  margin-top: 2px;
+  color: var(--rf-text-tertiary);
+  font-size: 12px;
+}
+
+.resume-pagination-note-text {
+  color: var(--rf-text-tertiary);
+  font-size: 12px;
+  line-height: 18px;
+  overflow-wrap: anywhere;
+}
+
+.resume-pagination-info {
+  color: var(--rf-text-tertiary);
+  font-size: 12px;
+  cursor: help;
+}
+
+/* ===== 已设置的板块断页：芯片列表 ===== */
+.resume-pagination-break-list {
+  min-width: 0;
+}
+
+.resume-pagination-break-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  height: 24px;
+  padding: 0 2px 0 8px;
+  border: 1px solid var(--rf-border);
+  border-radius: 999px;
+  background: var(--rf-surface-alt);
+  color: var(--rf-text-body);
+  font-size: 12px;
+  line-height: 1;
+}
+
+.resume-pagination-break-label {
+  white-space: nowrap;
+}
+
+/* 「恢复自然分页」是链接型按钮：跟芯片区标题同一行，不再独占一行高度。 */
+.resume-pagination-restore.ant-btn {
+  height: 20px;
+  padding: 0;
+  font-size: 12px;
+}
+
+/* antd-override: 私有形态 —— 芯片里的「×」要压到 20×20，antd small 按钮最小 24px 会把芯片撑高 */
+.resume-pagination-break-clear.ant-btn {
+  width: 20px;
+  min-width: 20px;
+  height: 20px;
+  padding: 0;
+  color: var(--rf-text-tertiary);
+  font-size: 10px;
+}
+
+.resume-pagination-break-clear.ant-btn:hover {
+  color: var(--rf-text-body) !important;
+  background: var(--rf-border-subtle) !important;
+}
+
+/* 可折叠小分组：ghost 只保留标题行；标题/内容的默认内边距在 380 宽左栏里过松。
+   antd-override: 私有形态 —— 左栏分组已经提供了一层内边距，这里只做标题行紧排 */
+.resume-pagination-subgroup.ant-collapse > .ant-collapse-item > .ant-collapse-header {
+  padding: 2px 0;
+  color: var(--rf-text-secondary);
+}
+
+.resume-pagination-subgroup.ant-collapse
+  > .ant-collapse-item
+  > .ant-collapse-content
+  > .ant-collapse-content-box {
+  padding: 6px 0 0;
+}
+
+/* ===== 页缩略图（紧凑） ===== */
+.resume-page-thumbnails {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
   border: 1px solid var(--rf-border-subtle);
   border-radius: var(--rf-radius-control);
-  padding: 8px;
+  padding: 6px 8px;
 }
 
 .resume-page-thumbnails-head {
@@ -21,6 +149,7 @@
 .resume-page-thumbnails-title {
   font-weight: 600;
   font-size: 12px;
+  line-height: 18px;
 }
 
 .resume-page-thumbnails-summary,
@@ -34,7 +163,7 @@
 .resume-page-thumbnails-list {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 4px;
   margin: 0;
   padding: 0;
   list-style: none;
@@ -43,11 +172,11 @@
 .resume-page-thumbnail {
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  min-width: 64px;
+  gap: 1px;
+  min-width: 56px;
   border: 1px solid var(--rf-border);
   border-radius: 6px;
-  padding: 4px 6px;
+  padding: 3px 6px;
   background: var(--rf-surface-alt);
 }
 
@@ -63,6 +192,7 @@
 .resume-page-thumbnail-index {
   font-size: 12px;
   font-weight: 600;
+  line-height: 16px;
 }
 
 .resume-page-thumbnail-badge {
@@ -83,11 +213,13 @@
 .resume-page-thumbnail-fill {
   color: var(--rf-text-secondary);
   font-size: 11px;
+  line-height: 16px;
 }
 
 .resume-page-thumbnail-issue {
   color: var(--rf-text-secondary);
   font-size: 11px;
+  line-height: 16px;
 }
 
 .resume-page-thumbnail-issue.is-blocker {

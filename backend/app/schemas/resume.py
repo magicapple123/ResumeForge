@@ -22,6 +22,24 @@ from .resume_analysis import (  # noqa: F401  (re-export：保持既有导入路
     ResumeLayoutMeasure,
 )
 
+# 六类旧条目模型与正文常量已迁至 `schemas/resume_entries.py`：A4 给项目/经历补可选
+# 字段（public_url / artifact_type / experience_kind）后本文件到了 500 行硬预算。
+# 这里 re-export，保持 `from app.schemas.resume import ResumeProject` 等既有导入路径不变。
+from .resume_credentials import ResumeCredential
+from .resume_entries import (  # noqa: F401  (re-export：保持既有导入路径)
+    EXPERIENCE_KINDS,
+    MAX_RESUME_LIST_ITEMS,
+    MAX_RESUME_SECTION_ITEMS,
+    MAX_RESUME_TEXT_CHARS,
+    ResumeAward,
+    ResumeCampusExperience,
+    ResumeEducation,
+    ResumeExperience,
+    ResumeLine,
+    ResumeProject,
+    ResumeSkill,
+)
+
 # 生成参数（版式常量 + ``GenerateOptions``/``GenerateRequest``）已迁至
 # ``schemas/resume_generation.py`` 以满足单文件 500 行预算；这里 re-export，
 # 保持 ``from app.schemas.resume import GenerateOptions`` 等既有导入路径不变。
@@ -43,83 +61,14 @@ from .resume_generation import (  # noqa: F401  (re-export：保持既有导入�
 )
 from .resume_identity import OptionalEmptyListMixin, OptionalIdentityMixin
 from .resume_research import ResumePatent, ResumePublication, ResumeResearchProject
-from .resume_visibility import OptionalVisibilityMixin
 
 # 简历语言（A 包）：只影响纸面固定文案（小节标题 / 字段前缀），**不翻译正文**。
 # 与 ``ResumeFontScale`` 同一种收口方式：schema 层用 Literal 限值，DB 层不建 CHECK 约束
 # （SQLite 加约束要重建表）；读取侧另有 ``resume_labels.normalize_language`` 兜底。
 ResumeLanguage = Literal["zh-CN", "en-US"]
 
-MAX_RESUME_SECTION_ITEMS = 200
-MAX_RESUME_LIST_ITEMS = 500
-MAX_RESUME_TEXT_CHARS = 50_000
-ResumeLine = Annotated[str, Field(max_length=20_000)]
-
-
 # 简历备注的上限：列表默认可见（ellipsis + tooltip）、详情可编辑。
 MAX_RESUME_NOTE_CHARS = 2000
-
-
-# ===== 简历内容结构（LLM 输出的 JSON 必须符合此结构） =====
-# 六类条目都混入 W06 的 hidden / lock_content / lock_layout（可选字段，None 不输出）：
-# 字段声明与"没设置就整键省掉"的序列化规则在 schemas/resume_visibility.py，本文件只改基类。
-class ResumeEducation(OptionalVisibilityMixin, BaseModel):
-    school: str = Field(default="", max_length=128)
-    major: str = Field(default="", max_length=128)
-    degree: str = Field(default="", max_length=32)
-    start_date: str = Field(default="", max_length=32)
-    end_date: str = Field(default="", max_length=32)
-    gpa: str = Field(default="", max_length=64)
-    courses: list[ResumeLine] = Field(default_factory=list, max_length=MAX_RESUME_LIST_ITEMS)
-    achievements: list[ResumeLine] = Field(default_factory=list, max_length=MAX_RESUME_LIST_ITEMS)
-    # W01 稳定身份（可选）：旧记录没有就是没有——GET 不生成、不改写库；只有保存时
-    # 客户端带上来的值才原样落库。校验在 ``document_identity.validate_document_ids``。
-    id: str | None = Field(default=None, max_length=32)
-    point_ids: dict[str, list[str]] | None = None
-
-class ResumeExperience(OptionalVisibilityMixin, BaseModel):
-    company: str = Field(default="", max_length=128)
-    role: str = Field(default="", max_length=128)
-    start_date: str = Field(default="", max_length=32)
-    end_date: str = Field(default="", max_length=32)
-    description: list[ResumeLine] = Field(default_factory=list, max_length=MAX_RESUME_LIST_ITEMS)
-    id: str | None = Field(default=None, max_length=32)
-    point_ids: dict[str, list[str]] | None = None
-
-
-class ResumeCampusExperience(OptionalVisibilityMixin, BaseModel):
-    organization: str = Field(default="", max_length=128)
-    role: str = Field(default="", max_length=128)
-    start_date: str = Field(default="", max_length=32)
-    end_date: str = Field(default="", max_length=32)
-    description: list[ResumeLine] = Field(default_factory=list, max_length=MAX_RESUME_LIST_ITEMS)
-    id: str | None = Field(default=None, max_length=32)
-    point_ids: dict[str, list[str]] | None = None
-
-
-class ResumeProject(OptionalVisibilityMixin, BaseModel):
-    name: str = Field(default="", max_length=128)
-    role: str = Field(default="", max_length=128)
-    start_date: str = Field(default="", max_length=32)
-    end_date: str = Field(default="", max_length=32)
-    tech_stack: list[ResumeLine] = Field(default_factory=list, max_length=MAX_RESUME_LIST_ITEMS)
-    description: list[ResumeLine] = Field(default_factory=list, max_length=MAX_RESUME_LIST_ITEMS)
-    highlights: list[ResumeLine] = Field(default_factory=list, max_length=MAX_RESUME_LIST_ITEMS)
-    id: str | None = Field(default=None, max_length=32)
-    point_ids: dict[str, list[str]] | None = None
-
-
-class ResumeSkill(OptionalVisibilityMixin, BaseModel):
-    name: str = Field(default="", max_length=128)
-    level: str = Field(default="", max_length=64)
-    id: str | None = Field(default=None, max_length=32)
-
-
-class ResumeAward(OptionalVisibilityMixin, BaseModel):
-    name: str = Field(default="", max_length=256)
-    date: str = Field(default="", max_length=32)
-    description: str = Field(default="", max_length=20_000)
-    id: str | None = Field(default=None, max_length=32)
 
 
 class ResumeContent(OptionalEmptyListMixin, BaseModel):
@@ -152,7 +101,15 @@ class ResumeContent(OptionalEmptyListMixin, BaseModel):
     publications: list[ResumePublication] = Field(default_factory=list, max_length=MAX_RESUME_SECTION_ITEMS)
     research_projects: list[ResumeResearchProject] = Field(default_factory=list, max_length=MAX_RESUME_SECTION_ITEMS)
     patents: list[ResumePatent] = Field(default_factory=list, max_length=MAX_RESUME_SECTION_ITEMS)
-    _optional_empty_list_fields: ClassVar[tuple[str, ...]] = ("publications", "research_projects", "patents")
+    # A4 资格证照（零新表：存在 content JSON 内）。**没有 credential_number**：证号默认
+    # 不进模型/纸面/导出（见 schemas/resume_credentials.py）。空列表不序列化 → 旧指纹不变。
+    credentials: list[ResumeCredential] = Field(default_factory=list, max_length=MAX_RESUME_SECTION_ITEMS)
+    _optional_empty_list_fields: ClassVar[tuple[str, ...]] = (
+        "publications",
+        "research_projects",
+        "patents",
+        "credentials",
+    )
 
     @field_validator("photo")
     @classmethod
@@ -264,6 +221,10 @@ class ResumeOut(ResumeBrief):
     # 制作台草稿（0051）：还没保存过，所以不进任何列表；必须回传给详情接口，否则制作台
     # 顶部没有「保存」可点，草稿永远进不了简历中心。
     draft: bool = False
+    # 本次生成的职业场景上下文快照（0061）：server-owned 只读元数据；NULL = 未记录
+    # （旧简历/手写简历）。**不参与内容哈希、不自动印到纸面**；前端只做"这份简历当时
+    # 采用了什么场景"的只读说明，不得据此回填或改写任何内容。
+    context_snapshot: dict | None = None
 
 
 class ResumeContentSave(BaseModel):

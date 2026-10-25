@@ -67,6 +67,9 @@ class ResumeVersion(Base):
     source: Mapped[str] = mapped_column(
         String(16), default=VERSION_SOURCE_MANUAL, server_default=VERSION_SOURCE_MANUAL
     )
+    # 这份命名版本生成时的职业场景上下文快照（0061）：与内容一起不可变；NULL = 未记录。
+    # 从版本恢复时把内容、排版与上下文一起写成新的当前修订，历史版本本身不动。
+    context_snapshot: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True)
 
 
@@ -106,6 +109,9 @@ class ResumeVariant(Base):
     # 多语言变体分组（NULL = 独立变体）。两列 nullable 语义 + server_default，旧数据零影响。
     language: Mapped[str] = mapped_column(String(16), default="", server_default="")
     variant_group_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # 派生变体继承来源记录/版本的场景上下文快照（0061）；为变体另选场景时新建变体并写
+    # 新的来源元数据，不回写旧快照。
+    context_snapshot: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
 

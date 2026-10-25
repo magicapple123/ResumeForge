@@ -16,8 +16,8 @@
  * 顶部先放 W14 的文档模式（普通 / 长 CV）：先**只读挂载**——保存出口要等后端
  * `document_mode` 写入打通再接 `onChange`；只读态由组件自己说明"由整屏动作条统一保存"。
  */
-import { App, Segmented } from "antd";
-import { useState } from "react";
+import { App } from "antd";
+import { useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import type { RefObject } from "react";
 import type { ResumeContent, ResumeLayout, ResumeTemplateCatalog } from "../../types";
@@ -33,12 +33,14 @@ import PhraseLibraryContainer from "./assets/PhraseLibraryContainer";
 import ObjectStylePanel from "./typography/ObjectStylePanel";
 import { modeLimitsFromCatalog, saveDocumentMode } from "../../features/resume-research/api";
 import type { ResumeDetail } from "../../types";
+import { nonEmptySectionKeys } from "../../features/resume-pagination/sectionPresence";
 import PaginationControls from "./pagination/PaginationControls";
 import { pt } from "../../features/resume-provenance/i18n";
 import type { OutlineSelection } from "../../features/resume-outline/types";
 import HistoryPanel from "./history/HistoryPanel";
 import type { WorkbenchHistoryTab } from "./useWorkbenchHistory";
 import BilingualWorkspace from "./bilingual/BilingualWorkspace";
+import WorkbenchLeftTabs, { type WorkbenchLeftTabItem } from "./WorkbenchLeftTabs";
 
 import ResumeColorControls from "./ResumeColorControls";
 import ResumeMeasureControls from "./ResumeMeasureControls";
@@ -78,10 +80,15 @@ interface Props {
   documentMode?: "resume" | "long_cv";
   /** 当前排版结果页数（超上限时给一句说明）；null = 还没量到。 */
   pagesNeeded?: number | null;
-  /** 当前内容（W06 大纲用；最好含 id，缺 id 时面板内部 ensureIds）。 */
+  /** 已保存内容（表达资产/双语页签用；W06 大纲优先用 draftContent，见下方 OutlinePanel）。 */
   content?: ResumeContent | null;
-  /** 未保存正文（W10 试用预览/测量按"用户眼前这一版"；缺省退回 content）。 */
+  /** 未保存正文（W10 试用预览/测量按"用户眼前这一版"；大纲也用它，缺省退回 content）。 */
   draftContent?: ResumeContent | null;
+  /**
+   * 大纲排序预览出口：拖动中把按新顺序算出的内容交给右栏画布实时重排。
+   * 不落库、不进历史——松手时仍由 `onOutlineCommand` 走既有提交链路。
+   */
+  onStructurePreview?: (content: ResumeContent | null) => void;
   /** 纸面点击目标：大纲用来反向选中（与中栏定位是同一份 `{path, nonce}`）。 */
   pickTarget?: { path: string; nonce: number } | null;
   /** 右栏画布节点（大纲向其中 iframe 注入选中高亮）。 */
@@ -140,6 +147,7 @@ export default function WorkbenchParamsColumn({
   pickTarget,
   canvasContainer,
   onOutlineCommand,
+  onStructurePreview,
   outlineReadOnly = false,
   history,
   resumeId,
@@ -184,28 +192,39 @@ export default function WorkbenchParamsColumn({
       setModeSaving(false);
     }
   };
+  // 页签项只算一次：窄栏时它们要换行，但"有哪些页签"由目录/宿主能力决定、与宽度无关。
+  const leftTabs: WorkbenchLeftTabItem<LeftTab>[] = [
+    { value: "params", label: t("responsive.action.params") },
+    { value: "outline", label: t("outline.panel.title") },
+    { value: "phrases", label: t("assets.panel.title") },
+    { value: "bilingual", label: t("bilingual.panel.title") },
+    ...(sourcesPanel ? [{ value: "sources" as const, label: pt("provenance.panel.title") }] : []),
+    ...(history ? [{ value: "history" as const, label: t("workbench.history.title") }] : []),
+  ];
+  // 分页面板的「每板块新页」派生只看有内容的板块：空板块没设断页不该把整份判成
+  // "自然填充"（写入/清除仍由面板按 sections 全量执行，空板块断页对导出无害）。
+  const sectionOptionKeys = useMemo(
+    () => (catalog?.section_options ?? []).map((item) => item.key),
+    [catalog],
+  );
+  const activeSections = useMemo(
+    () => nonEmptySectionKeys(draftContent ?? content ?? null, sectionOptionKeys),
+    [content, draftContent, sectionOptionKeys],
+  );
   return (
     <div className="resume-wb-col resume-wb-col-params">
-      <Segmented
-        block
-        size="small"
+      {/* 页签条：可换行的 chip 页签（见 `WorkbenchLeftTabs` 头注释）。
+          窄栏两行、宽栏一行；不横向滚动，标签永远读得全。 */}
+      <WorkbenchLeftTabs<LeftTab>
+        ariaLabel={t("workbench.leftTabs.label")}
         value={tab}
         onChange={(value) => {
           // 大纲面板切走就卸载了，它的多选集合随之清零；shell 那份也要同步清掉，
           // 否则回到参数页还能对"树上已不存在的高亮"批量应用格式。
           if (value === "outline" && tab !== "outline") onClearMultiSelect?.();
-          setTab(value as LeftTab);
+          setTab(value);
         }}
-        options={[
-          { value: "params", label: t("responsive.action.params") },
-          { value: "outline", label: t("outline.panel.title") },
-          { value: "phrases", label: t("assets.panel.title") },
-          { value: "bilingual", label: t("bilingual.panel.title") },
-          ...(sourcesPanel
-            ? [{ value: "sources" as const, label: pt("provenance.panel.title") }]
-            : []),
-          ...(history ? [{ value: "history" as const, label: t("workbench.history.title") }] : []),
-        ]}
+        items={leftTabs}
       />
       {tab === "params" ? (
         <>
@@ -327,6 +346,7 @@ export default function WorkbenchParamsColumn({
               onChange={onChange}
               disabled={relayouting}
               sections={catalog?.section_options}
+              activeSections={activeSections}
               section={paginationSection}
               onSectionChange={setPaginationSection}
               entry={paginationEntry ?? null}
@@ -335,9 +355,12 @@ export default function WorkbenchParamsColumn({
         </>
       ) : tab === "outline" ? (
         <div style={{ display: "flex", flexDirection: "column", minHeight: 0, flex: "1 1 auto" }}>
+          {/* 用含未保存编辑的那一版：命令与预览都基于"用户眼前这一版"，否则松手后
+              树会退回服务端顺序（未保存编辑也会被结构命令一并丢掉）。 */}
           <OutlinePanel
-            content={content}
+            content={draftContent ?? content}
             onCommand={onOutlineCommand}
+            onStructurePreview={onStructurePreview}
             onSelectionChange={onOutlineSelectionChange}
             onMultiSelectionChange={onMultiSelectionChange}
             multiSelectionApiRef={multiSelectionApiRef}

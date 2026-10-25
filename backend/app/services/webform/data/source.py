@@ -16,6 +16,7 @@ from ....models.web_form_profile import CUSTOM_KEY_PREFIX
 from ...profile.profile_service import get_profile_detail
 from .. import extra_profile, repeated_profile
 from ..extra_profile import list_entries
+from ..facts import merge_fact_data
 from ..fields import FIELD_SYNONYMS, FORM_FIELDS, SOURCE_EXTRA
 from .profile_map import profile_to_form_data
 
@@ -31,7 +32,9 @@ def _combine_profile_and_extra_data(
         # 同一序号既有简历记录又有网申记录时，简历里的基础内容优先；独有的
         # 网申经历仍能补齐简历资料里没有的学校、单位或项目字段。
         profile_data.setdefault(key, value)
-    return {**profile_data, **list_entries(db, reusable_only=reusable_only)}
+    merged = {**profile_data, **list_entries(db, reusable_only=reusable_only)}
+    # 补充事实作为第三层来源：简历资料与网申资料优先，事实只补空缺（详见 facts.py）。
+    return merge_fact_data(db, merged)
 
 
 def _custom_label_values_for_batch(db: Session, data: dict[str, str]) -> dict[str, str]:

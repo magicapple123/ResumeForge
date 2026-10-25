@@ -30,7 +30,15 @@ from .layout import (
 )
 from .media import _join, _photo_bytes, crop_image_to_cover
 from .name_gender import draw_name_gender, plan_name_gender
-from .research_render import draw_patents, draw_publications, draw_research_projects
+from .research_render import (
+    draw_credentials,
+    draw_patents,
+    draw_publications,
+    draw_research_projects,
+    experience_kind_line,
+    project_extra_line,
+)
+from .section_presence import section_has_content
 from .style_blocks import parse_color, start_forced_page
 
 logger = logging.getLogger(__name__)
@@ -67,27 +75,7 @@ def _register_fonts(pdf: FPDF, regular: str, bold: str) -> None:
         raise ResumePDFError(f"加载中文字体失败（{Path(regular).name}）：{exc}") from exc
 
 
-def _section_has_content(resume: ResumeContent, key: str) -> bool:
-    """这个分区有没有内容可画（空分区在草稿里不产生节点）。
 
-    双栏模板把分区两两一行并排（columns.plan_rows）：只有"会画出来的分区"参与配对，
-    否则空板块会占掉网格格位、把后面的分区整体错位（实测整份简历凭空高出 40mm）。
-    """
-    table = {
-        "summary": lambda: bool(resume.summary.strip()),
-        "education": lambda: bool(resume.education),
-        "experience": lambda: bool(resume.experience),
-        "campus_experience": lambda: bool(resume.campus_experience),
-        "projects": lambda: bool(resume.projects),
-        "publications": lambda: bool(resume.publications),
-        "research_projects": lambda: bool(resume.research_projects),
-        "patents": lambda: bool(resume.patents),
-        "skills": lambda: bool(resume.skills),
-        "awards": lambda: bool(resume.awards),
-    }
-    # 未知键（`resolved_section_order` 已保证是七个键之一）按空处理：宁可少画一段，
-    # 也不要为了一个不认识的键让整份导出抛错。
-    return bool(table[key]()) if key in table else False
 
 
 def _draw_resume(
@@ -388,6 +376,10 @@ def _draw_resume(
                 style=role_style("entry_title", exp.id),
                 meta_style=role_style("meta", exp.id), section="experience", object_id=exp.id, keep_lines=pagination.entry(exp.id).keep_with_next,
             )
+            # A4：实践/服务经历的关系类型（空值不画，旧产物不变）。
+            kind_line = experience_kind_line(exp.experience_kind, language)
+            if kind_line:
+                pdf.meta_line(kind_line, base, style=role_style("meta", exp.id))
             pdf.bullets(exp.description, base, style=role_style("body", exp.id), section="experience", object_id=exp.id, split_ok=pagination.entry(exp.id).allow_split)
         return True
 
@@ -427,6 +419,10 @@ def _draw_resume(
             )
             if project.tech_stack:
                 pdf.meta_line(f"{fields['tech_stack']}：{sep.join(project.tech_stack)}", base, style=role_style("meta", project.id))
+            # A4 作品项目：成果类型 + 公开链接（空值不画，旧产物不变）。
+            project_meta = project_extra_line(project, language)
+            if project_meta:
+                pdf.meta_line(project_meta, base, style=role_style("meta", project.id))
             project_body = role_style("body", project.id)
             pdf.bullets(project.description, base, style=project_body, section="projects", object_id=project.id, split_ok=pagination.entry(project.id).allow_split)
             pdf.bullets(project.highlights, base, style=project_body, section="projects", object_id=project.id, split_ok=pagination.entry(project.id).allow_split)
@@ -474,12 +470,15 @@ def _draw_resume(
         "patents": lambda pdf, leading: draw_patents(
             pdf, resume, base=base, leading=leading, labels=labels, language=language
         ),
+        "credentials": lambda pdf, leading: draw_credentials(
+            pdf, resume, base=base, leading=leading, labels=labels, language=language
+        ),
         "projects": draw_projects,
         "skills": draw_skills,
         "awards": draw_awards,
     }
     section_keys = [
-        key for key in resolved_section_order(format_config) if _section_has_content(resume, key)
+        key for key in resolved_section_order(format_config) if section_has_content(resume, key)
     ]
 
     if layout.column_count > 1:

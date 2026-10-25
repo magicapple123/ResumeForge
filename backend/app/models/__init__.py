@@ -19,6 +19,7 @@ from .apply import (
     JobMatchAnalysis,
 )
 from .assistant import AssistantSkill, AssistantSkillFile, ChatConversation, ChatMessage
+from .career_scenario import CareerScenario
 from .claim import (
     CLAIM_CATEGORIES,
     RESPONSIBILITY_LEVELS,
@@ -70,6 +71,8 @@ from .profile import (
     Skill,
     UserProfile,
 )
+from .profile_fact import PROFILE_FACT_KINDS, ProfileFact
+from .profile_fact_field_pref import ProfileFactFieldPref
 from .provenance import (
     FACT_LOCK_KINDS,
     SOURCE_KINDS,
@@ -143,6 +146,10 @@ __all__ = [
     "AssistantSkillFile",
     "UserProfile",
     "ProfilePhoto",
+    "ProfileFact",
+    "ProfileFactFieldPref",
+    "PROFILE_FACT_KINDS",
+    "CareerScenario",
     "Education",
     "Experience",
     "CampusExperience",

@@ -1,0 +1,164 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/* 「按条件优化版面」（W09）约束卡的布局：两列网格 + 窄容器退化成单列。
+ *
+ * 为什么用容器查询而不是视口断点：这张卡挂在预览弹窗的版面诊断卡里，宽度由弹窗与
+ * 宿主列决定（1728 视口下约 886，窄屏/小弹窗下会明显更窄），与视口宽度没有稳定对应
+ * 关系；用 md= 之类断点会出现"卡片明明很窄、两列还硬撑"的错位。
+ *
+ * 改动前（2026-10-25 截图 diagnosis-card.png）：四行 Space 各自定宽，复选框 x=28、
+ * 最小页边距标签 x=28 / 输入 x=104、目标篇幅标签 x=28、生成按钮在最后一行左缘——
+ * 宽卡里四行左缘各自为政、松散，窄卡里又挤。
+ * 现在：内容宽 >= 520 时 84px 标签列 + 控件列，复选框行跨两列，生成按钮与控件列左缘
+ * 对齐；更窄时单列（标签落在控件上方），不出现"标签被压成竖排/控件被挤出卡外"。
+ */
+.resume-optimizer {
+  /* 容器查询的锚点：宽度由父级（诊断卡 / 预览弹窗）决定。 */
+  container-type: inline-size;
+}
+
+.resume-optimizer-head {
+  display: flex;
+  align-items: center;
+  gap: var(--rf-space-2);
+  /* 标题行到约束卡的间距与卡片内边距同为 12px（同一视觉节奏）。 */
+  margin-bottom: 12px;
+}
+
+.resume-optimizer-card {
+  margin-bottom: var(--rf-space-2);
+}
+
+/* antd-override: 布局无 token —— small 卡的内边距随 antd 版本在 8/12/16 之间变，
+   而本卡标题行间距就是按 12px 排的，两者必须是同一个数才不显得"标题浮着"。 */
+.resume-optimizer-card > .ant-card-body {
+  padding: 12px;
+}
+
+/* 单列是**默认**（也是容器查询不受支持时的兜底）：标签在上、控件在下。
+   宽容器下由下面的 @container 升级成两列。 */
+.resume-optimizer-constraints {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 10px 12px;
+  align-items: start;
+}
+
+.resume-optimizer-checks {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 16px;
+}
+
+/* 一个约束行：单列时是"标签 + 控件"两段；宽容器下 display: contents 把两段直接
+   交给父级网格，标签列宽 84 因此在行与行之间对齐。 */
+.resume-optimizer-field {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 4px;
+}
+
+.resume-optimizer-label {
+  font-size: 12px;
+  line-height: 20px;
+}
+
+.resume-optimizer-control {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--rf-space-2);
+  min-width: 0;
+}
+
+/* 输入框旁的说明与输入同列；容器再窄时整段换行，不挤压输入框。 */
+.resume-optimizer-hint {
+  font-size: 12px;
+}
+
+/* 页边距输入：90px 够放「26」与步进按钮，又与目标篇幅的 Segmented 左缘对齐。 */
+.resume-optimizer-margin {
+  width: 90px;
+}
+
+.resume-optimizer-actions {
+  display: flex;
+  align-items: center;
+}
+
+.resume-optimizer-generate {
+  min-width: 132px;
+}
+
+@container (min-width: 520px) {
+  .resume-optimizer-constraints {
+    grid-template-columns: 84px minmax(0, 1fr);
+    align-items: center;
+  }
+
+  /* 复选框行不参与列对齐：两个复选框都跨满两列，靠左成组。 */
+  .resume-optimizer-checks {
+    grid-column: 1 / -1;
+  }
+
+  .resume-optimizer-field {
+    display: contents;
+  }
+
+  .resume-optimizer-label {
+    /* 与 32px 高的控件行垂直居中（labels 列宽固定后，逐行中线才对得齐）。 */
+    line-height: 32px;
+  }
+
+  /* 生成按钮独立一行，左缘与控件列对齐（控件列第 2 列）。 */
+  .resume-optimizer-actions {
+    grid-column: 2;
+  }
+}
+
+/* 宽容器（>= 640px）：把卡片的右半张用起来（2026-10-25 用户截图："右边太空了"）。
+   布局改成两行 + 右侧动作列：
+     [✓ 不动字号] [✓ 保持条目完整]                              [生成候选]
+     最小页边距 [不限制] hint          目标篇幅 [1 页 | 2 页]        ↑（跨两行，垂直居中）
+   生成按钮贴右缘且跨两行，是最直接的"填满右侧"；两行约束仍按列对齐（84px 标签列），
+   复选框行横跨前四列。容器更窄时由上面的 520px / 默认两档兜底，不会把控件挤出卡外。 */
+@container (min-width: 640px) {
+  .resume-optimizer-constraints {
+    /* 第 2 / 第 4 列是控件列：1.6fr 给「输入框 + 说明」，1fr 给目标页数分段控件
+       （最窄 130px = Segmented 两个选项的宽度）。 */
+    grid-template-columns: 84px minmax(0, 1.6fr) 84px minmax(130px, 1fr) auto;
+    grid-template-areas:
+      "checks checks checks checks actions"
+      "margin-label margin-control target-label target-control actions";
+    column-gap: 12px;
+    row-gap: 8px;
+  }
+
+  .resume-optimizer-checks {
+    grid-area: checks;
+  }
+
+  .resume-optimizer-field.is-margin > .resume-optimizer-label {
+    grid-area: margin-label;
+  }
+
+  .resume-optimizer-field.is-margin > .resume-optimizer-control {
+    grid-area: margin-control;
+  }
+
+  .resume-optimizer-field.is-target > .resume-optimizer-label {
+    grid-area: target-label;
+  }
+
+  .resume-optimizer-field.is-target > .resume-optimizer-control {
+    grid-area: target-control;
+  }
+
+  /* 按钮跨两行、贴右缘、垂直居中：它是这张卡唯一的主操作，放在显式动作列里，
+     右侧不再是一大片空白。 */
+  .resume-optimizer-actions {
+    grid-area: actions;
+    align-self: center;
+    justify-self: end;
+  }
+}

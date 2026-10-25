@@ -9,7 +9,6 @@ HTML 渲染在这里，同时负责把模板、页数与字号档位写进版式
 import json
 import re
 import secrets
-from collections.abc import Iterable
 from datetime import datetime
 from pathlib import Path
 
@@ -18,14 +17,19 @@ from jinja2.sandbox import SandboxedEnvironment
 
 from ..schemas.resume import ResumeContent
 from ..schemas.resume_generation import mode_page_limit
+
+# Markdown 正文导出（含 TXT 复用的 writers）已迁至 services/resume/markdown_export.py；
+# 这里 re-export，保持 "from app.services.exporter import export_markdown" 等既有导入路径不变。
+from .resume.markdown_export import export_markdown  # noqa: F401  (re-export：保持既有导入路径)
 from .resume.resume_labels import (
     DEFAULT_RESUME_LANGUAGE,
     authors_text,
+    credential_detail,
+    credential_status_text,
     date_range,
+    experience_kind_text,
     field_labels,
-    gender_text,
     level_parens,
-    level_text,
     list_separator,
     normalize_language,
     patent_detail,
@@ -36,7 +40,7 @@ from .resume.resume_labels import (
 )
 from .resume.resume_render_overrides import render_overrides_css, resolve_render_overrides
 from .resume.resume_rich_text import apply_rich_html, strip_markers
-from .resume.resume_sections import DEFAULT_SECTION_ORDER, resolved_section_order
+from .resume.resume_sections import resolved_section_order
 from .resume.resume_template_format import FONT_KEY
 from .resume.resume_template_style import style_css, validated_style_config
 from .resume.resume_templates import (
@@ -89,221 +93,6 @@ def export_json(resume: ResumeContent) -> str:
     return json.dumps(
         visible_resume(resume).model_dump(exclude={"photo"}), ensure_ascii=False, indent=2
     )
-
-
-def _join_bullets(items: Iterable[str]) -> str:
-    return "\n".join(f"- {item}" for item in items)
-
-
-def export_markdown(
-    resume: ResumeContent,
-    *,
-    section_order: list[str] | None = None,
-    language: str = DEFAULT_RESUME_LANGUAGE,
-) -> str:
-    """导出不包含照片的 Markdown 文本。
-
-    照片是**唯一**的例外（内嵌 data URL，放进文本导出没有意义）。除此之外，凡是预览里会
-    出现的内容这里都要有——以前漏掉了性别与出生年：预览页眉显示它们、md 里却查无此项，
-    属于"同一份简历两个输出说得不一样"（用户报告的正是这类差异，只是发生在别的输出上）。
-
-    ``language`` 决定七个分区标题与字段前缀的文案，与 PDF / Word / HTML 同源
-    （``resume_labels``）；缺省 ``zh-CN``，与历史输出**逐字一致**。语言只换词与分隔符，
-    **不换标点风格**：英文产物里仍是 `Objective：…` 这种全角冒号，这是附录 A 已明确接受
-    的已知瑕疵（本批不做标点本地化）。
-    """
-    # 投递视角（W06）：隐藏条目在正文里一处都不出现。过滤在排版前做一次，
-    # 后面的 writers 只认过滤后的 resume（md 与 txt 共用本函数）。
-    resume = visible_resume(resume)
-    lines: list[str] = []
-    titles = section_titles(language)
-    fields = field_labels(language)
-    sep = list_separator(language)
-    header = resume.name
-    # 性别在预览里是姓名后缀（与 `_resume_sections.j2` 的位置一致）。
-    if resume.gender:
-        header += gender_text(resume.gender, language)
-    if resume.job_intent:
-        header += f" · {resume.job_intent}"
-    lines.append(f"# {header}")
-    contacts = " | ".join(
-        item
-        for item in [
-            resume.phone,
-            resume.email,
-            resume.city,
-            resume.birth_year,
-            # 主页与 GitHub 在预览/PDF/Word 的页眉里都带字段名前缀印出来，md 少这两项就是
-            # "同一份简历两个输出说得不一样"（与性别/出生年那次漏字段同一类问题）。
-            f"{fields['github']}：{resume.github}" if resume.github else "",
-            f"{fields['website']}：{resume.personal_website}" if resume.personal_website else "",
-        ]
-        if item
-    )
-    if contacts:
-        lines.append(f"{contacts}\n")
-
-    def write_summary() -> None:
-        if resume.summary:
-            lines.append(f"## {titles['summary']}\n")
-            lines.append(f"{resume.summary}\n")
-
-    def write_education() -> None:
-        if resume.education:
-            lines.append(f"## {titles['education']}\n")
-            for edu in resume.education:
-                lines.append(
-                    f"### {edu.school} · {edu.major} · {edu.degree}（{edu.start_date} - {edu.end_date}）\n"
-                )
-                if edu.gpa:
-                    lines.append(f"- {fields['gpa']}：{edu.gpa}")
-                if edu.courses:
-                    lines.append(f"- {fields['courses']}：{sep.join(edu.courses)}")
-                lines.append(_join_bullets(edu.achievements))
-                lines.append("")
-
-    def write_experience() -> None:
-        if resume.experience:
-            lines.append(f"## {titles['experience']}\n")
-            for exp in resume.experience:
-                lines.append(
-                    f"### {exp.company} · {exp.role}（{exp.start_date} - {exp.end_date}）\n"
-                )
-                lines.append(_join_bullets(exp.description))
-                lines.append("")
-
-    def write_campus_experience() -> None:
-        if resume.campus_experience:
-            lines.append(f"## {titles['campus_experience']}\n")
-            for item in resume.campus_experience:
-                lines.append(
-                    f"### {item.organization} · {item.role}（{item.start_date} - {item.end_date}）\n"
-                )
-                lines.append(_join_bullets(item.description))
-                lines.append("")
-
-    def write_projects() -> None:
-        if resume.projects:
-            lines.append(f"## {titles['projects']}\n")
-            for project in resume.projects:
-                lines.append(
-                    f"### {project.name} · {project.role}（{project.start_date} - {project.end_date}）\n"
-                )
-                if project.tech_stack:
-                    lines.append(f"**{fields['tech_stack']}**：{sep.join(project.tech_stack)}")
-                lines.append(_join_bullets(project.description))
-                lines.append(_join_bullets(project.highlights))
-                lines.append("")
-
-    def write_skills() -> None:
-        if resume.skills:
-            lines.append(f"## {titles['skills']}\n")
-            lines.append(
-                _join_bullets(
-                    level_text(skill.name, skill.level, language) for skill in resume.skills
-                )
-            )
-            lines.append("")
-
-    def write_publications() -> None:
-        if resume.publications:
-            lines.append(f"## {titles['publications']}\n")
-            for publication in resume.publications:
-                lines.append(f"### {publication.title}\n")
-                authors = authors_text(publication.authors, language)
-                if authors:
-                    lines.append(f"- {authors}")
-                meta = " · ".join(
-                    item
-                    for item in (
-                        publication.venue,
-                        publication.year,
-                        publication_status_text(publication.status, language),
-                        publication.volume_pages,
-                    )
-                    if item
-                )
-                if meta:
-                    lines.append(f"- {meta}")
-                if publication.doi:
-                    lines.append(f"- {fields['doi']}：{publication.doi}")
-                if publication.url:
-                    lines.append(f"- {publication.url}")
-                if publication.note:
-                    lines.append(f"- {publication.note}")
-                lines.append("")
-
-    def write_research_projects() -> None:
-        if resume.research_projects:
-            lines.append(f"## {titles['research_projects']}\n")
-            for project in resume.research_projects:
-                head = " · ".join(
-                    item for item in (project.name, project.role, project.organization) if item
-                )
-                span = date_range(project.start_date, project.end_date)
-                lines.append(f"### {head}" + (f"（{span}）" if span else "") + "\n")
-                if project.funding:
-                    lines.append(f"- {fields['funding']}：{project.funding}")
-                lines.append(_join_bullets(project.description))
-                lines.append(_join_bullets(project.outcomes))
-                lines.append("")
-
-    def write_patents() -> None:
-        if resume.patents:
-            lines.append(f"## {titles['patents']}\n")
-            for patent in resume.patents:
-                lines.append(f"### {patent.title}\n")
-                inventors = authors_text(patent.inventors, language)
-                if inventors:
-                    lines.append(f"- {inventors}")
-                meta = " · ".join(
-                    item
-                    for item in (
-                        patent.patent_number,
-                        patent.country,
-                        patent_status_text(patent.status, language),
-                        f"{fields['filed']} {patent.filed_date}" if patent.filed_date else "",
-                        f"{fields['granted']} {patent.granted_date}" if patent.granted_date else "",
-                    )
-                    if item
-                )
-                if meta:
-                    lines.append(f"- {meta}")
-                if patent.url:
-                    lines.append(f"- {patent.url}")
-                lines.append("")
-
-    def write_awards() -> None:
-        if resume.awards:
-            lines.append(f"## {titles['awards']}\n")
-            lines.append(
-                _join_bullets(
-                    f"{award.name} · {award.date}"
-                    + (f" · {award.description}" if award.description else "")
-                    for award in resume.awards
-                )
-            )
-            lines.append("")
-
-    writers = {
-        "summary": write_summary,
-        "education": write_education,
-        "experience": write_experience,
-        "campus_experience": write_campus_experience,
-        "projects": write_projects,
-        "publications": write_publications,
-        "research_projects": write_research_projects,
-        "patents": write_patents,
-        "skills": write_skills,
-        "awards": write_awards,
-    }
-
-    # 分区顺序与预览 / PDF / Word 共用同一份定义（见 services/resume/resume_sections.py）。
-    # Markdown 与 txt 都从这里出，所以两者的顺序天然一致。
-    for section_key in section_order or DEFAULT_SECTION_ORDER:
-        writers[section_key]()
-
-    return "\n".join(lines).strip() + "\n"
 
 
 def normalize_page_limit(value: int, mode: str = "resume") -> int:
@@ -391,7 +180,12 @@ def render_html(
     context = {
         "resume": resume,
         "csp_nonce": csp_nonce,
-        "page_limit": normalize_page_limit(page_limit),
+        # 页数上限只做**最后一道**防御性夹紧：记录/导出路由已按文档模式夹过一次
+        # （普通 1–3 / 长 CV 1–10，见 resume_record.default_render_context 与
+        # export_routes）。此前这里固定按 resume 模式夹到 3 页，会让 10 页长 CV 的
+        # HTML 导出被误截成 3 页高度（A4 §8.6 的"旧 3 页校验误拦"）；改成按长 CV
+        # 上限兜底后，普通简历的 1–3 页路径逐字节不变。
+        "page_limit": normalize_page_limit(page_limit, "long_cv"),
         "base_px": base_px,
         # `<html lang="{{ language }}">` 的唯一取值点。**无条件注入**（与下面四个文案上下文
         # 同理）：缺键会让自制模板渲染出 `lang=""`，而内置模板会直接报 Undefined。
@@ -413,6 +207,10 @@ def render_html(
         # W14 科研三栏目：状态正名与作者行由模板调用同一份函数（不硬编码中文）。
         "publication_status_text": lambda status: publication_status_text(status, language),
         "patent_status_text": lambda status: patent_status_text(status, language),
+        # A4 资格证照与关系类型：同一份正名表（模板不硬编码状态词）。
+        "credential_status_text": lambda status: credential_status_text(status, language),
+        "credential_detail": lambda credential: credential_detail(credential, language),
+        "experience_kind_text": lambda kind: experience_kind_text(kind, language),
         "authors_text": lambda authors: authors_text(authors, language),
         "publication_detail": lambda publication: publication_detail(publication, language),
         "patent_detail": lambda patent: patent_detail(patent, language),

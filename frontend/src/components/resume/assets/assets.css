@@ -1,0 +1,150 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/* 「表达资产库」面板（W17 / D16）的排版样式。
+ *
+ * 2026-10-25 UI 排版优化（任务 C2）：面板挂在制作台左栏，宽度由用户拖动决定（380–640），
+ * 因此不能用视口断点——筛选条从 antd Row/Col 改成"搜索通栏 + auto-fit 网格"，
+ * 380 宽 2×2、≥600 宽一行 4 个；每个 Select 都显示完整选中文案。
+ * 颜色 / 圆角 / 间距只走 --rf-* token；.ant-* 只出现在自定义类限定的小修正里。 */
+
+.resume-assets-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 0;
+  color: var(--rf-text-body);
+  font-size: 13px;
+}
+
+/* ===== 面板头：标题 13/600 + 计数 12 secondary + 右侧 small 动作 ===== */
+.resume-assets-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.resume-assets-head-main {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+
+.resume-assets-head-title {
+  font-weight: 600;
+}
+
+.resume-assets-head-count {
+  color: var(--rf-text-secondary);
+  font-size: 12px;
+}
+
+.resume-assets-empty-hint {
+  color: var(--rf-text-secondary);
+  font-size: 12px;
+}
+
+/* ===== 筛选条 ===== */
+.resume-phrase-filters {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* 搜索框通栏：Input.Search 的 group wrapper 默认就是 100% 宽。 */
+.resume-phrase-filters-search {
+  width: 100%;
+}
+
+/* 宽度只跟容器走：380 内容宽 → 2×2；≥600 → 一行 4 个。minmax(140px) 保证
+   「全部岗位标签」「最近使用」这类选中文案整词显示，不会截成单字。 */
+.resume-phrase-filters-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 8px;
+}
+
+.resume-phrase-filters-select {
+  width: 100%;
+  min-width: 0;
+}
+
+/* 第三行：清空筛选 + 生效条件数，弱化。 */
+.resume-phrase-filters-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+/* antd-override: 私有形态 —— 清空筛选是弱化 link，压到 12px 且不带左右内边距。 */
+.resume-phrase-filters-reset.ant-btn {
+  padding: 0;
+  font-size: 12px;
+}
+
+.resume-phrase-filters-active {
+  color: var(--rf-text-secondary);
+  font-size: 12px;
+}
+
+/* ===== 卡片列表：卡片间距 8px ===== */
+.resume-assets-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.resume-phrase-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border: 1px solid var(--rf-border-subtle);
+  border-radius: var(--rf-radius-control);
+  padding: 10px 12px;
+  background: var(--rf-surface-alt);
+}
+
+.resume-phrase-card-text {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.resume-phrase-card-tags {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}
+
+/* antd Tag 默认 margin-inline-end: 8px；行内已用 gap，去掉它才能让徽标间距一致。
+   antd-override: 布局无 token —— Tag 没有"由父级 gap 管间距"的配置项。 */
+.resume-phrase-card-tags .ant-tag {
+  margin-inline-end: 0;
+}
+
+.resume-phrase-card-usage {
+  color: var(--rf-text-secondary);
+  font-size: 12px;
+}
+
+/* 动作按钮小号、右对齐。 */
+.resume-phrase-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+}
+
+/* 面板下方的一行状态说明（插入成功 / 插入不可用原因）：12px secondary。 */
+.resume-assets-footnote {
+  margin-top: 6px;
+  color: var(--rf-text-secondary);
+  font-size: 12px;
+  line-height: 18px;
+}

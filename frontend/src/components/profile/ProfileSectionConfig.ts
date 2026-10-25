@@ -45,6 +45,17 @@ export const SECTION_LABELS: Record<ProfileSectionKey, string> = {
   summary: "个人总结 / 自我评价",
 };
 
+/**
+ * 「补充事实」区块的页内键（A3，2026-10）。
+ *
+ * 它不是旧资料的第 9 个分区：事实存独立表、走独立 CRUD（`/api/profile/facts`），
+ * 不参与旧 PUT 的 `section_order`，后端 `PROFILE_SECTION_KEYS` 也不认识它。混进
+ * `DEFAULT_SECTION_ORDER` 的后果是保存资料时被后端静默丢弃，而页面上「全部收起」
+ * 会多出一项永远对不上的状态。因此这里只登记为页内锚点键（`data-profile-section`
+ * 与 id），**不进** `DEFAULT_SECTION_ORDER`，也不改变既有分区的默认顺序。
+ */
+export const PROFILE_FACTS_SECTION_KEY = "profile_facts";
+
 export function normalizeSectionOrder(value: string[] | undefined): ProfileSectionKey[] {
   const supported = new Set<ProfileSectionKey>(DEFAULT_SECTION_ORDER);
   const normalized = (value ?? []).filter(

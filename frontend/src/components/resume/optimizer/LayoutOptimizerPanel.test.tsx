@@ -112,6 +112,12 @@ describe("LayoutOptimizerPanel", () => {
     expect(
       screen.getAllByText(ot("optimizer.candidate.overflow", { value: 160 })).length,
     ).toBeGreaterThan(0);
+    // 布局契约：约束区是两列网格容器，生成按钮带自己的类（min-width / 与控件列对齐
+    // 都由 optimizer.css 的这条类名收敛，删掉类名 CSS 就静默失效）。
+    expect(document.querySelector(".resume-optimizer-constraints")).not.toBeNull();
+    expect(screen.getByRole("button", { name: ot("optimizer.regenerate") })).toHaveClass(
+      "resume-optimizer-generate",
+    );
   });
 
   it("锁定不动字号：字号候选被排除，测量也不会注入它", () => {

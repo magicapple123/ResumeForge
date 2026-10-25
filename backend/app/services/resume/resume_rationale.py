@@ -34,6 +34,7 @@ def build_generation_rationale(
     coverage_details: list[dict[str, Any]],
     baseline_confirmed: list[str],
     skill_limit: int = 14,
+    fallback_sections: tuple[str, ...] | list[str] = (),
 ) -> str:
     """拼装生成说明。输入全部来自生成流程的确定性中间产物。"""
     general = job is None
@@ -51,6 +52,17 @@ def build_generation_rationale(
             f"岗位方向判断为「{domains_text}」。"
         )
         lines.append(f"候选资料组成：{_compose_counts(selection_counts)}。")
+        if fallback_sections:
+            # A4/§8.5：岗位关键词与资料的直接交集不足，这些分区是按资料顺序保守保留
+            # 的候选，不是"系统认为它们匹配"。资料里没写的岗位要求不会被编造。
+            labels = "、".join(
+                "实习/工作" if section == "experiences" else "项目"
+                for section in fallback_sections
+            )
+            lines.append(
+                f"岗位关键词与你的{labels}没有直接同词交集：系统保留了少量原始条目作为"
+                "参考候选，避免资料被筛空；资料里没有的岗位要求不会编写。"
+            )
         total_omitted = sum(omitted_counts.values())
         if total_omitted:
             lines.append(

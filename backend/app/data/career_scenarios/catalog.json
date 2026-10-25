@@ -1,0 +1,147 @@
+{
+  "catalog_version": "1",
+  "schema_version": 1,
+  "presets": [
+    {
+      "key": "general",
+      "name": "通用",
+      "config": {},
+      "suggested_sections": [],
+      "guidance": [
+        "按资料中的真实事实陈述，不预设行业或身份",
+        "信息不足时写资料中未提供，不补写经历"
+      ]
+    },
+    {
+      "key": "student_entry",
+      "name": "在校与应届",
+      "config": {
+        "career_stage": "student",
+        "purpose": "job_search"
+      },
+      "suggested_sections": [
+        "education",
+        "projects",
+        "campus_experience",
+        "experience",
+        "skills",
+        "awards",
+        "summary"
+      ],
+      "guidance": [
+        "优先展示课程项目、校园实践与实习中的实际参与",
+        "没有工作经历时用项目与课程证据表达能力"
+      ]
+    },
+    {
+      "key": "career_growth",
+      "name": "职场发展",
+      "config": {
+        "career_stage": "experienced",
+        "purpose": "job_search"
+      },
+      "suggested_sections": [
+        "experience",
+        "projects",
+        "skills",
+        "awards",
+        "summary"
+      ],
+      "guidance": [
+        "突出职责变化与可核实的交付结果",
+        "只写资料中出现的团队规模与职责范围"
+      ]
+    },
+    {
+      "key": "career_change",
+      "name": "跨行转岗",
+      "config": {
+        "purpose": "career_change"
+      },
+      "suggested_sections": [
+        "skills",
+        "projects",
+        "experience",
+        "summary"
+      ],
+      "guidance": [
+        "解释可转移技能与跨领域项目经验",
+        "不把未修读的课程或未取得的资格写成已具备"
+      ]
+    },
+    {
+      "key": "freelance",
+      "name": "自由职业",
+      "config": {
+        "cooperation_form": "self_employed"
+      },
+      "suggested_sections": [
+        "projects",
+        "skills",
+        "experience",
+        "summary"
+      ],
+      "guidance": [
+        "用项目交付、客户类型与合作关系描述经历",
+        "不把客户关系写成雇佣关系，不补收入数据"
+      ]
+    },
+    {
+      "key": "research_academic",
+      "name": "科研学术",
+      "config": {
+        "purpose": "research_application"
+      },
+      "suggested_sections": [
+        "publications",
+        "research_projects",
+        "patents",
+        "education",
+        "awards",
+        "skills",
+        "summary"
+      ],
+      "guidance": [
+        "按作者顺序与发表状态如实呈现论文",
+        "区分在投、录用与已发表，不把申请写成授权"
+      ]
+    },
+    {
+      "key": "career_return",
+      "name": "职业回归",
+      "config": {
+        "purpose": "career_return",
+        "employment_status": "career_break"
+      },
+      "suggested_sections": [
+        "experience",
+        "skills",
+        "projects",
+        "summary"
+      ],
+      "guidance": [
+        "用事实说明职业间歇期间的技能保持与准备",
+        "不猜测离职原因，不编造空窗期解释"
+      ]
+    },
+    {
+      "key": "senior_management",
+      "name": "资深管理",
+      "config": {
+        "career_stage": "senior",
+        "purpose": "job_search"
+      },
+      "suggested_sections": [
+        "summary",
+        "experience",
+        "awards",
+        "skills",
+        "education"
+      ],
+      "guidance": [
+        "突出团队规模、管理职责与业务结果中的真实数据",
+        "没有记录管理人数时不代为推断"
+      ]
+    }
+  ]
+}

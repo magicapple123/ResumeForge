@@ -2,12 +2,15 @@
 /** 分页意图域：语义锚点键、三态删键、版本丢弃、死数据裁剪。 */
 import { describe, expect, it } from "vitest";
 import {
+  clearSectionsBreakBefore,
   countManualBreaks,
   pruneStalePagination,
   readPaginationDomain,
+  sectionPaginationMode,
   setContinuation,
   setEntryBreak,
   setSectionBreak,
+  setSectionsBreakBefore,
 } from "./paginationDomain";
 
 const EXP = "exp_12345678";
@@ -86,6 +89,63 @@ describe("paginationDomain · 写入", () => {
     expect(pagination(config).entries).toEqual({ [EXP]: { allow_split: true } });
     config = setEntryBreak(config, EXP, { allow_split: false });
     expect(config).toEqual({});
+  });
+});
+
+describe("paginationDomain · 全局板块分页方式", () => {
+  const KEYS = ["education", "experience", "projects"];
+
+  it("派生值：列出的板块全部断页才算「每板块新页」，否则「自然填充」", () => {
+    expect(sectionPaginationMode(null, KEYS)).toBe("flow");
+    expect(sectionPaginationMode(null, [])).toBe("flow");
+    let config = setSectionsBreakBefore({}, KEYS);
+    expect(sectionPaginationMode(readPaginationDomain(config), KEYS)).toBe("page");
+    // 只有一部分设了 → 自然填充（界面会用小结说明"N 个板块从新页开始"）。
+    config = setSectionsBreakBefore({}, ["experience", "projects"]);
+    expect(sectionPaginationMode(readPaginationDomain(config), KEYS)).toBe("flow");
+  });
+
+  it("每板块新页：只写列出的板块，保留各自其它意图与条目级意图", () => {
+    const base = setEntryBreak(
+      setSectionBreak({ accent: "#123456" }, "experience", { keep_with_next: 2 }),
+      EXP,
+      { break_before: "page" },
+    );
+    const config = setSectionsBreakBefore(base, ["experience", "projects"]);
+    expect(pagination(config)).toEqual({
+      version: 1,
+      entries: { [EXP]: { break_before: "page" } },
+      sections: {
+        experience: { keep_with_next: 2, break_before: "page" },
+        projects: { break_before: "page" },
+      },
+    });
+  });
+
+  it("自然填充：清掉所有板块断页，但条目级断页与续页信息不动", () => {
+    let config = setSectionsBreakBefore({}, KEYS);
+    config = setSectionBreak(config, "experience", { keep_with_next: 1 });
+    config = setEntryBreak(config, EXP, { break_before: "page" });
+    config = setContinuation(config, { page_numbers: true });
+    const next = clearSectionsBreakBefore(config);
+    expect(pagination(next)).toEqual({
+      version: 1,
+      entries: { [EXP]: { break_before: "page" } },
+      sections: { experience: { keep_with_next: 1 } },
+      continuation: { page_numbers: true },
+    });
+  });
+
+  it("自然填充：没有板块断页时原样返回（不凭空造域）", () => {
+    expect(clearSectionsBreakBefore({ accent: "#123456" })).toEqual({ accent: "#123456" });
+    // 只剩续页信息时，清完板块断页的后缀信息仍在。
+    const config = setContinuation(setSectionsBreakBefore({}, ["experience"]), {
+      repeat_name: true,
+    });
+    expect(pagination(clearSectionsBreakBefore(config))).toEqual({
+      version: 1,
+      continuation: { repeat_name: true },
+    });
   });
 });
 

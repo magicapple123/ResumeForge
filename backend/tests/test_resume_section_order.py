@@ -39,6 +39,7 @@ TITLES = (
     "论文发表",
     "科研项目",
     "专利",
+    "资格证照",
     "专业技能",
     "荣誉奖项",
 )
@@ -49,6 +50,7 @@ CUSTOM_ORDER = [
     "publications",
     "research_projects",
     "patents",
+    "credentials",
     "experience",
     "summary",
     "awards",
@@ -71,6 +73,7 @@ def _sample_resume() -> ResumeContent:
         publications=[{"title": "示例论文", "venue": "示例期刊"}],
         research_projects=[{"name": "示例科研项目"}],
         patents=[{"title": "示例专利"}],
+        credentials=[{"name": "示例证照", "status": "active"}],
         skills=[{"name": "Python"}],
         awards=[{"name": "示例奖项"}],
     )
@@ -92,6 +95,7 @@ def _assert_follows_order(texts: dict[str, str]) -> None:
             "论文发表",
             "科研项目",
             "专利",
+            "资格证照",
             "实习/工作经历",
             "个人总结",
             "荣誉奖项",
@@ -115,6 +119,7 @@ def test_default_order_matches_the_product_decision():
         "publications",
         "research_projects",
         "patents",
+        "credentials",
         "skills",
         "campus_experience",
         "awards",
@@ -131,6 +136,7 @@ def test_normalized_order_is_always_a_complete_permutation():
         "publications",
         "research_projects",
         "patents",
+        "credentials",
         "skills",
         "campus_experience",
         "awards",
@@ -146,6 +152,7 @@ def test_normalized_order_is_always_a_complete_permutation():
         "publications",
         "research_projects",
         "patents",
+        "credentials",
         "skills",
         "campus_experience",
         "awards",
@@ -177,6 +184,7 @@ def test_profile_keys_map_onto_every_resume_section():
         "publications",
         "research_projects",
         "patents",
+        "credentials",
     }
     for profile_key, resume_key in PROFILE_SECTION_TO_RESUME.items():
         assert isinstance(profile_key, str) and profile_key, "资料侧的键不能为空"
@@ -195,6 +203,7 @@ def test_profile_order_is_translated_kept_and_completed():
         "publications",
         "research_projects",
         "patents",
+        "credentials",
         "skills",
         "campus_experience",
         "awards",
@@ -221,6 +230,7 @@ def test_profile_order_is_translated_kept_and_completed():
         "publications",
         "research_projects",
         "patents",
+        "credentials",
     ]
 
 
@@ -260,6 +270,7 @@ def test_profile_order_to_section_order_appends_missing_at_the_end():
         "publications",
         "research_projects",
         "patents",
+        "credentials",
         "skills",
         "campus_experience",
         "awards",
@@ -300,6 +311,7 @@ def test_default_section_order_config_appends_research_after_old_sections(db_ses
             "publications",
             "research_projects",
             "patents",
+            "credentials",
         ]
     }
 
@@ -342,6 +354,7 @@ def test_default_section_order_config_materializes_profile_order(db_session):
             "publications",
             "research_projects",
             "patents",
+            "credentials",
         ]
     }
 
@@ -380,6 +393,7 @@ def test_a_saved_custom_order_is_only_rewritten_by_an_explicit_put(client):
         "publications",
         "research_projects",
         "patents",
+        "credentials",
     ]
 
     # PUT 的整体替换语义（既有契约）：不带 section_order 时落回**默认值**。

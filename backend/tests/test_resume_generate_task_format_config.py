@@ -11,6 +11,7 @@
 
 import pytest
 from app.services.resume.resume_generate_runner import reset_resume_generate_runner
+from app.services.resume.resume_sections import DEFAULT_SECTION_ORDER
 from tests.resume_generate_task_support import (
     SuccessfulProvider,
     _configure,
@@ -19,6 +20,14 @@ from tests.resume_generate_task_support import (
     _start_with_options,
     _wait_terminal,
 )
+
+
+def _materialized_order(translated: list[str]) -> list[str]:
+    """资料顺序翻译结果 + 未被资料覆盖的分区按内置默认顺序追加（与实现同向的推导）。
+
+    不在这里钉死分区数量：新增板块只要登记进 DEFAULT_SECTION_ORDER，期望值自动跟上。
+    """
+    return translated + [key for key in DEFAULT_SECTION_ORDER if key not in translated]
 
 
 @pytest.fixture(autouse=True)
@@ -60,7 +69,8 @@ def test_generation_persists_validated_format_config(client, monkeypatch):
     config = record["format_config"]
     # 顺序归一化成完整排列（缺的键由默认顺序补齐），而不是只存用户动过的那两项。
     assert config["section_order"][:2] == ["projects", "summary"]
-    assert len(config["section_order"]) == 10
+    # 数量从分区表推导：以后再加板块不会把这条断言变红（守卫在各分区的渲染测试里）。
+    assert len(config["section_order"]) == len(DEFAULT_SECTION_ORDER)
     assert config["font_scale_adjust"] == 0.455
     # 未知键与越界值在落库前就被丢掉：存下来的必须是"渲染时真的生效"的那一份。
     assert "page_padding" not in config
@@ -110,26 +120,20 @@ def test_generation_without_format_config_materializes_the_profile_order(client,
     final = _wait_terminal(client, started.json()["id"])
     record = client.get(f"/api/resumes/{final['resume_id']}").json()
     assert record["format_config"] == {
-        "section_order": [
-            "projects",
-            "education",
-            "experience",
-            "skills",
-            "campus_experience",
-            "awards",
-            "summary",
-            "publications",
-            "research_projects",
-            "patents",
-        ]
+        "section_order": _materialized_order(
+            ["projects", "education", "experience", "skills", "campus_experience", "awards", "summary"]
+        )
     }
 
 
-def test_generation_materializes_ten_keys_when_profile_matches_the_old_default(client, monkeypatch):
-    """资料页（旧七分区）默认顺序 → 物化成 10 键（科研三栏目追加末尾）。
+def test_generation_materializes_missing_sections_at_the_end_when_profile_matches_the_old_default(
+    client, monkeypatch
+):
+    """资料页（旧七分区）默认顺序 → 物化时把资料页无法表达的板块补在末尾。
 
-    W14 之前"资料顺序 == 内置默认就不写键"；现在资料页无法表达科研板块，翻译结果不再等于
-    10 键默认，因此会写一份显式顺序——旧七项先后不变，科研板块在最后。
+    W14/A4 之前"资料顺序 == 内置默认就不写键"；现在资料页无法表达科研三栏目与资格证照，
+    翻译结果不再等于内置默认，因此会写一份显式顺序——旧七项先后不变，新板块按默认顺序
+    补在最后（期望值用 _materialized_order 推导，不在这里钉死板块数量）。
     """
     _seed_profile(client)
     _configure(client)
@@ -142,18 +146,9 @@ def test_generation_materializes_ten_keys_when_profile_matches_the_old_default(c
     started = client.post("/api/resumes/generate/tasks", json={"job_id": job["id"]})
     final = _wait_terminal(client, started.json()["id"])
     record = client.get(f"/api/resumes/{final['resume_id']}").json()
-    assert record["format_config"]["section_order"] == [
-        "education",
-        "experience",
-        "projects",
-        "skills",
-        "campus_experience",
-        "awards",
-        "summary",
-        "publications",
-        "research_projects",
-        "patents",
-    ]
+    assert record["format_config"]["section_order"] == _materialized_order(
+        ["education", "experience", "projects", "skills", "campus_experience", "awards", "summary"]
+    )
 
 
 @pytest.mark.parametrize(

@@ -27,7 +27,6 @@ import {
   InputNumber,
   Select,
   Slider,
-  Space,
   Switch,
   Tooltip,
   Typography,
@@ -161,11 +160,17 @@ export default function StyleValueRow({
       ? t("typography.value.pt", { pt: ptComparison(value, basePx) })
       : null;
 
+  // 根节点是 grid 而不是 antd `Space`：数字类属性要排两行（控件行 + 值/来源行），
+  // `Space` 的 wrap 只会在放不下时把尾部整段折下去、左缘回到标签列（用户截图 2）。
+  // 行结构见 `styles/resume-workbench-controls.css` 的「局部排版面板：行布局」段。
   return (
-    <Space size={6} wrap className="resume-wb-row resume-typography-row" data-testid={testId}>
+    <div
+      className={`resume-wb-row resume-typography-row${bounds ? " is-numeric" : " is-inline"}`}
+      data-testid={testId}
+    >
       <Tooltip title={t("typography.row.resetHint")}>
         <span
-          className="resume-measure-label"
+          className="resume-measure-label resume-typography-label"
           role="button"
           tabIndex={0}
           aria-label={t("typography.row.resetAria", { label })}
@@ -181,7 +186,7 @@ export default function StyleValueRow({
       </Tooltip>
 
       {kind === "number" && bounds ? (
-        <Space size={2} align="center" className="resume-wb-row-controls">
+        <div className="resume-typography-controls">
           <Button
             size="small"
             type="text"
@@ -224,7 +229,6 @@ export default function StyleValueRow({
             <InputNumber
               size="small"
               className="resume-typography-number"
-              style={{ width: 88 }}
               min={bounds.min}
               max={bounds.max}
               step={bounds.step}
@@ -239,7 +243,7 @@ export default function StyleValueRow({
               onPressEnter={() => commitTyped(draft ?? numeric)}
             />
           </Tooltip>
-        </Space>
+        </div>
       ) : kind === "bool" ? (
         <Switch
           size="small"
@@ -271,7 +275,7 @@ export default function StyleValueRow({
         />
       )}
 
-      <span className="resume-measure-tail">
+      <span className="resume-measure-tail resume-typography-tail">
         <Typography.Text type="secondary" className="resume-measure-value">
           {kind === "number"
             ? `${formatStyleNumber(prop, shown)}${ptText ? ` · ${ptText}` : ""}`
@@ -282,6 +286,6 @@ export default function StyleValueRow({
         <StyleSourceTag source={source} />
         {own !== undefined ? <ParamResetButton label={label} onReset={reset} /> : null}
       </span>
-    </Space>
+    </div>
   );
 }

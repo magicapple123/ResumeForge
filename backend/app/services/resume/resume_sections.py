@@ -42,6 +42,8 @@ DEFAULT_SECTION_ORDER: tuple[str, ...] = (
     "publications",
     "research_projects",
     "patents",
+    # A4 资格证照插在专利之后、技能之前（空板块所有渲染器都不产生节点，旧产物不变）。
+    "credentials",
     "skills",
     "campus_experience",
     "awards",

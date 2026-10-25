@@ -78,6 +78,22 @@ function makePipeline() {
   return { pipeline, saveLayout };
 }
 
+/** 展开「逐板块设置」折叠分组（默认收起，避免默认占满左栏高度）。 */
+function openSectionSettings() {
+  fireEvent.click(screen.getByText(t("pagination.sections.settings")));
+}
+
+/** 点全局「板块分页方式」分段（antd Segmented 的 radio 输入与点标签同一条 onChange 链）。 */
+function pickMode(label: string) {
+  const group = document.querySelector<HTMLElement>('[data-testid="pagination-mode"]');
+  expect(group).not.toBeNull();
+  const item = Array.from(group!.querySelectorAll(".ant-segmented-item")).find(
+    (el) => el.textContent?.trim() === label,
+  );
+  expect(item).toBeTruthy();
+  fireEvent.click((item!.querySelector("input") ?? item!) as Element);
+}
+
 /** 选板块（antd Select 在 jsdom 里按 .ant-select-item-option 点选）。 */
 async function pickSection(label: string) {
   fireEvent.mouseDown(screen.getByRole("combobox", { name: t("pagination.scope.sectionAria") }));
@@ -102,8 +118,10 @@ afterEach(() => {
 });
 
 describe("W08-INT · 分页控件真实挂载与保存通道", () => {
-  it("板块级控件真实可达（选板块后出现断页意图开关）", async () => {
+  it("板块级控件真实可达（展开逐板块设置、选板块后出现断页意图开关）", async () => {
     render(<Harness />);
+    await screen.findByText(t("pagination.sections.settings"));
+    openSectionSettings();
     const select = await screen.findByRole("combobox", {
       name: t("pagination.scope.sectionAria"),
     });
@@ -117,6 +135,8 @@ describe("W08-INT · 分页控件真实挂载与保存通道", () => {
   it("勾「从新页开始」→ onApplyLayout 收到 pagination.sections 域", async () => {
     const onApplyLayout = vi.fn();
     render(<Harness onApplyLayout={onApplyLayout} />);
+    await screen.findByText(t("pagination.sections.settings"));
+    openSectionSettings();
     await screen.findByRole("combobox", { name: t("pagination.scope.sectionAria") });
     await pickSection("实习/工作经历");
     fireEvent.click(await screen.findByRole("switch", { name: t("pagination.breakBefore") }));
@@ -133,6 +153,8 @@ describe("W08-INT · 分页控件真实挂载与保存通道", () => {
   it("有分页改动时顶部进脏态，点「保存修改」走统一保存通道", async () => {
     const { pipeline, saveLayout } = makePipeline();
     render(<Harness pipeline={pipeline} />);
+    await screen.findByText(t("pagination.sections.settings"));
+    openSectionSettings();
     await screen.findByRole("combobox", { name: t("pagination.scope.sectionAria") });
     await pickSection("实习/工作经历");
     fireEvent.click(await screen.findByRole("switch", { name: t("pagination.breakBefore") }));
@@ -142,5 +164,29 @@ describe("W08-INT · 分页控件真实挂载与保存通道", () => {
       }),
     );
     await waitFor(() => expect(saveLayout).toHaveBeenCalledWith(3));
+  });
+
+  it("全局「每板块新页」写全部板块断页；切回自然填充清掉（条目级不动）", async () => {
+    const onApplyLayout = vi.fn();
+    render(<Harness onApplyLayout={onApplyLayout} />);
+    await screen.findByText(t("pagination.sections.settings"));
+
+    pickMode(t("pagination.mode.page"));
+    await waitFor(() => expect(onApplyLayout).toHaveBeenCalled());
+    const first = onApplyLayout.mock.calls[0][0] as {
+      format_config: { pagination?: { sections?: Record<string, unknown> } };
+    };
+    const sections = first.format_config.pagination?.sections ?? {};
+    // 模板目录里的板块：全局「每板块新页」必须逐个写入断页（不是只写当前选中的）。
+    expect(Object.keys(sections)).toHaveLength(TEMPLATE_CATALOG.section_options.length);
+    expect(sections["experience"]).toEqual({ break_before: "page" });
+    expect(sections["education"]).toEqual({ break_before: "page" });
+
+    pickMode(t("pagination.mode.flow"));
+    await waitFor(() => expect(onApplyLayout.mock.calls.length).toBeGreaterThan(1));
+    const latest = onApplyLayout.mock.calls[onApplyLayout.mock.calls.length - 1][0] as {
+      format_config: { pagination?: unknown };
+    };
+    expect(latest.format_config.pagination).toBeUndefined();
   });
 });

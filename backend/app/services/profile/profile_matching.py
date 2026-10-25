@@ -28,6 +28,14 @@ from .profile_relevance_constants import (
 # 一致性检查（会被误报成"候选资料未包含"）。
 _MIN_SKILL_CANDIDATES = 3
 
+# A4/§8.5 跨行业 fallback：岗位信号与资料条目**没有直接交集**时，仍保留少量原始
+# 经历/项目作为候选。没有这条兜底，非技术简历遇到"技能词与描述不完全同字"
+# （如 JD 写「排班管理」、经历写「排班、库存」）或未识别领域（会计/教师）时会被
+# 全部筛空，模型只能凭空编——这正是计划要求修复的"把经历筛空"缺陷。
+# 保留数量取 2：足以让模型看到真实经历，又不会把完全不相关的资料整库塞进提示词。
+_MIN_ENTRY_CANDIDATES = 2
+_FALLBACK_ENTRY_SECTIONS = ("experiences", "projects")
+
 
 def _unique(values: list[str]) -> list[str]:
     result: list[str] = []
@@ -191,7 +199,11 @@ def _select_summary(summary: str, focus: JobFocus) -> str:
 
 
 def _select_entries(
-    items: list[dict[str, Any]], section: str, focus: JobFocus
+    items: list[dict[str, Any]],
+    section: str,
+    focus: JobFocus,
+    *,
+    fallback_allowed: bool = False,
 ) -> list[dict[str, Any]]:
     primary_field = SECTION_PRIMARY_FIELDS[section]
     valid_items = [item for item in items if str(item.get(primary_field, "")).strip()]
@@ -222,14 +234,26 @@ def _select_entries(
         # 教育背景是校招简历的基础信息，即使 JD 未命中课程也保留一条。
         return [ranked[0][1]]
     if focus.skills or focus.domains or focus.terms:
-        # 已经能识别岗位要求时，不用资料录入顺序填充无关经历/项目。
+        # A4/§8.5：**未识别出岗位领域**（DOMAIN_SIGNALS 为空，如护理/会计/教师/
+        # 门店运营等非技术岗位）、且没有任何条目直接命中时，不能返回空列表。保留少量
+        # 原始事实作为候选（按资料顺序），并在生成说明里如实标注"交集较少、资料中未
+        # 提供的岗位要求不会编写"。
+        # 识别出领域但资料确实没有对应证据时仍返回空：此时空候选是诚实的筛选结果，
+        # 把无关经历硬塞进提示词反而会诱导模型跑题（既有回归
+        # test_context_does_not_fill_unrelated_entries_when_job_has_clear_signals 守着）。
+        if fallback_allowed and section in _FALLBACK_ENTRY_SECTIONS:
+            return [item for _, item, _, _ in ranked[: min(limit, _MIN_ENTRY_CANDIDATES)]]
         return []
     # 排名顺序本身传给模型，首项就是最值得优先呈现的事实。
     return [item for _, item, _, _ in ranked[:limit]]
 
 
 def _select_skills(
-    items: list[dict[str, Any]], evidence: dict[str, Any], focus: JobFocus
+    items: list[dict[str, Any]],
+    evidence: dict[str, Any],
+    focus: JobFocus,
+    *,
+    fallback_allowed: bool = False,
 ) -> list[dict[str, Any]]:
     evidence_text = _item_text(evidence)
     ranked: list[tuple[int, int, dict[str, Any]]] = []
@@ -254,6 +278,10 @@ def _select_skills(
                 padded.append(item)
         return padded[: SECTION_LIMITS["skills"]]
     if focus.skills or focus.domains or focus.terms:
+        # A4/§8.5：未识别领域（非技术岗位）且技能名没有直接命中时，保留少量用户技能
+        # 作候选，避免空技能区导致模型自拟；识别出领域时不填充无关技能。
+        if fallback_allowed:
+            return [item for _, _, item in ranked[:_MIN_SKILL_CANDIDATES]]
         return []
     # JD 未给出可识别信号时保留有限技能作为兜底，避免生成空技能区。
     return [item for _, _, item in ranked[: SECTION_LIMITS["skills"]]]

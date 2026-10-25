@@ -31,6 +31,7 @@ from . import (
     layout_render_routes,
     preflight_routes,
     review_routes,
+    scenario_variant_routes,
     templates_routes,
     versions_routes,
 )
@@ -67,6 +68,8 @@ router.include_router(crud_routes.router, prefix="/api/resumes")
 router.include_router(ai_edits_routes.router, prefix="/api/resumes")
 # W13：/{resume_id}/versions 与 /{resume_id}/variants（段数更深，与 GET /{resume_id} 不冲突）。
 router.include_router(versions_routes.router, prefix="/api/resumes")
+# A5：按职业场景派生变体（/scenario-variants 与 /variants/{id}/scenario-*，段数更深）。
+router.include_router(scenario_variant_routes.router, prefix="/api/resumes")
 router.include_router(review_routes.router, prefix="/api/resumes")
 router.include_router(layout_render_routes.router, prefix="/api/resumes")
 router.include_router(export_routes.router, prefix="/api/resumes")

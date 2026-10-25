@@ -50,6 +50,11 @@ interface Props {
    * 跟着变，而"老简历不追溯改变"是这条功能的前提。
    */
   preferProfileOrder?: boolean;
+  /**
+   * 页数选项：缺省 1–3（`RESUME_PAGE_LIMITS`）。生成配置的长 CV 模式传 1–10；
+   * 其他宿主不传，行为与拆出前逐字一致。
+   */
+  pageLimitOptions?: readonly number[];
 }
 
 export default function ResumeLayoutControls({
@@ -60,6 +65,7 @@ export default function ResumeLayoutControls({
   previewRef,
   hasPhoto,
   preferProfileOrder = false,
+  pageLimitOptions,
 }: Props) {
   // 目录只在这里取一次：两组的默认值（行距 / 页边距 / 字号档位）都吃这一份数据。
   // 取数走 `useResumeTemplateCatalog`（唯一加载入口），这样"一个宿主一次请求"是有出处的。
@@ -73,6 +79,7 @@ export default function ResumeLayoutControls({
         compact={compact}
         catalog={catalog}
         preferProfileOrder={preferProfileOrder}
+        pageLimitOptions={pageLimitOptions}
         onChange={onChange}
       />
       <ResumeMeasureControls

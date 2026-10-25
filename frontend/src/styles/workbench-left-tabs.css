@@ -1,0 +1,48 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/* 简历制作台 · 左栏页签条（2026-10-25）。
+ *
+ * 为什么不用 antd Segmented：6 个页签（排版参数 / 文档大纲 / 表达资产库 / 双语版本 /
+ * 来源核对 / 历史）在 380 内容宽里每个只能分到 62.7px，四字标签直接进省略号；而
+ * Segmented 的选中指示器是绝对定位的动画 thumb，换行布局下会错位。2026-10-25 起第一列
+ * 可拖动改宽，页签条必须在 360（窄）与 640（宽）下都读得全——所以改成可换行的 chip
+ * 页签：窄时两行、宽时一行。
+ *
+ * 尺寸按"内容宽 360 时仍能一行放下"校准：4 字 48 + 左右 4px = 56，5 字 68，2 字 32，
+ * 六项 56+56+68+56+56+32 = 324，加 5 个 2px 间隙 = 334 ≤ 360（还留 26px 余量防字体度量
+ * 的取整差异）。字号 12px 与左栏一致。 */
+.resume-wb-left-tabs {
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  gap: 2px;
+  min-width: 0;
+}
+
+/* 高度 / 内边距 / 圆角没有对应 token（chip 形态本身），归在"布局无 token"这一类；
+   颜色仍只走 --rf-*。自定义类前缀 .resume-wb-left-tab 保证不会误伤其它 antd 按钮。 */
+.resume-wb-left-tab.ant-btn {
+  flex: 0 0 auto;
+  height: 24px;
+  padding: 0 4px;
+  border-radius: 6px;
+  color: var(--rf-text-secondary);
+  font-size: 12px;
+  line-height: 22px;
+}
+
+.resume-wb-left-tab.ant-btn:hover {
+  color: var(--rf-text-body) !important;
+  background: var(--rf-surface-alt) !important;
+}
+
+.resume-wb-left-tab.ant-btn.is-active,
+.resume-wb-left-tab.ant-btn.is-active:hover {
+  color: var(--rf-brand) !important;
+  background: var(--rf-brand-tint) !important;
+  font-weight: 600;
+}
+
+.resume-wb-left-tab.ant-btn:focus-visible {
+  outline: 2px solid var(--rf-focus-visible);
+  outline-offset: -2px;
+}

@@ -54,18 +54,16 @@ export interface WorkbenchColumnWidths {
 }
 
 /**
- * **参数栏是固定宽**（2026-10-23 用户口径："第一列没必要调整宽度"）。
+ * 参数栏**默认宽**（2026-10-25 起可拖动改宽；用户口径："第一列也支持调整宽度"）。
  *
  * 380 是算出来的，不是拍的：去掉两侧 20px 内边距剩 340，最长的一行「页边距」需要
- * 「标签 44 + 6 + 控件列（两枚 30px 图标按钮 + 100px 滑杆 + 4px 外边距 = 164）+ 6 +
- * 尾部 114」= 334，还剩 6px。
+ * 「标签 72 + 6 + 控件列 152 + 6 + 尾部 102」= 338，还剩 2px（见
+ * `workbenchLayoutContract.test.ts` 的算式）。这也是参数栏的**默认**宽：用户拖动时
+ * 只在这个值的基础上变宽/变窄，不再回到 2026-10-23 那次"固定宽"的取舍。
  *
- * 滑杆宽度 100 由 `resume-workbench-controls.css` 的 `--resume-wb-slider-w` 统一钉住
- * （用户 2026-10-23："统一一下这里滑杆的长度"）—— 改动那个变量就要回来重算这一行，
- * 否则最后一行的读数会顶到栏外。
- *
- * 上一版是 400：那时滑杆 112/132 各组不一，行宽要 388。统一到 100 之后 380 就够，
- * 所以同时按用户要求收窄了 20px。
+ * 为什么下限取 360 而不是更小：内容宽 340 是那套三列参数行的硬下限，再窄一行就装不下
+ * （滚动条还占 6px）。为什么上限 640：再宽左栏就喧宾夺主，预览栏会先被挤到画布最小宽
+ * （`WORKBENCH_CANVAS_MIN_WIDTH`）之下——容器 clamp 也会在窗口不够宽时自动降上限。
  */
 export const WORKBENCH_PARAMS_WIDTH = 380;
 
@@ -78,12 +76,14 @@ export const WORKBENCH_DEFAULT_WIDTHS: WorkbenchColumnWidths = {
 };
 
 /**
- * 各栏的下限与上限（px）。**参数栏的 min === max**，这是"不可拖动"的机器可读表达：
- * `clampWorkbenchWidth` / `clampWidthForContainer` 一并把它夹成常量，所以即使别处
- * 误调 `nudge("params", ±16)` 也不会改变宽度（分隔条本身已经不再渲染）。
+ * 各栏的下限与上限（px）。
+ *
+ * 参数栏 2026-10-25 起可调：`min` 是"三列参数行不溢出"的硬下限（内容宽 340 再减滚动条
+ * 6px 的余量），`max` 是"别把预览挤没"的软上限（容器不够宽时 `clampWidthForContainer`
+ * 还会继续往下压）。内容栏的 380–760 保持不变。
  */
 export const WORKBENCH_WIDTH_LIMITS: Record<WorkbenchColumnKind, { min: number; max: number }> = {
-  params: { min: WORKBENCH_PARAMS_WIDTH, max: WORKBENCH_PARAMS_WIDTH },
+  params: { min: 360, max: 640 },
   editor: { min: 380, max: 760 },
 };
 
@@ -173,7 +173,7 @@ export interface WorkbenchColumnsApi {
   startDrag: (kind: WorkbenchColumnKind, event: ReactMouseEvent<HTMLElement>) => void;
   /** 键盘 ←/→ 与将来的按钮共用；正值变宽。 */
   nudge: (kind: WorkbenchColumnKind, delta: number) => void;
-  /** 双击复位（两条分隔条都回到默认宽度）。 */
+  /** 复位：两条分隔条都回到默认宽度（双击分隔条与动作条上的「恢复默认列宽」共用）。 */
   reset: () => void;
 }
 

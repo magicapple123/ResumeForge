@@ -8,11 +8,15 @@
  * 组件本身**不持有历史**：`past/future` 由宿主的 `useResumeDocument` 给出（唯一状态源），
  * 这里只负责把"第几步、叫什么、当时长什么样"画出来。点步骤只切换预览，**不改文档**——
  * 真正的回退由「撤销」按钮执行，避免"点一下就跳到那一步"这种不可逆的误操作。
+ *
+ * 2026-10-25（任务 C3）：去掉内联样式与裸 `<button>`，步骤行改用 antd Button
+ * （type=text + block，保留 aria-pressed 与两条文字层级），样式集中在 history.css。
  */
 import { Button } from "antd";
 import { useState } from "react";
 import EmptyState from "../../common/EmptyState";
 import { t } from "../../../i18n";
+import "./history.css";
 
 export interface HistoryPanelStep {
   /** 给用户看的动作名（"编辑正文" / "调整排版" / "结构操作"）。 */
@@ -61,11 +65,8 @@ export default function HistoryPanel({
   };
 
   return (
-    <div
-      className={className}
-      style={{ display: "flex", flexDirection: "column", gap: 10, minHeight: 0 }}
-    >
-      <div style={{ display: "flex", gap: 8 }}>
+    <div className={`resume-history${className ? ` ${className}` : ""}`}>
+      <div className="resume-history-actions">
         <Button size="small" onClick={onUndo} disabled={!canUndo || undefined}>
           {t("workbench.history.undo")}
         </Button>
@@ -76,10 +77,19 @@ export default function HistoryPanel({
       {past.length === 0 && future.length === 0 ? (
         <EmptyState inline description={t("workbench.history.empty")} />
       ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-          <span style={{ fontSize: 12, color: "var(--rf-text-secondary)" }}>
-            {t("workbench.history.preview.hint")}
-          </span>
+        <div className="resume-history-body">
+          <p className="resume-history-hint">{t("workbench.history.preview.hint")}</p>
+          {previewed ? (
+            // 预览条放在列表**上方**、紧挨说明句：它是"当前选中的快照"，不是列表里的一步；
+            // 继续放底部会与刚点的行逐字重复，看起来像多出一行。
+            <div role="status" className="resume-history-preview">
+              <span className="resume-history-preview-label">
+                {t("workbench.history.preview.label")}
+              </span>
+              <strong>{previewed.label}</strong>
+              <span className="resume-history-preview-summary"> · {previewed.summary}</span>
+            </div>
+          ) : null}
           {pastSteps.length > 0 ? (
             <StepGroup
               title={t("workbench.history.past")}
@@ -97,21 +107,6 @@ export default function HistoryPanel({
               active={preview}
               onToggle={toggle}
             />
-          ) : null}
-          {previewed ? (
-            <div
-              role="status"
-              style={{
-                padding: "6px 8px",
-                borderRadius: 6,
-                background: "var(--rf-surface-alt, var(--rf-surface))",
-                border: "1px solid var(--rf-border-subtle)",
-                fontSize: 12,
-              }}
-            >
-              <strong>{previewed.label}</strong>
-              <span style={{ color: "var(--rf-text-secondary)" }}> · {previewed.summary}</span>
-            </div>
           ) : null}
         </div>
       )}
@@ -133,35 +128,24 @@ function StepGroup({
   onToggle: (group: "past" | "future", index: number) => void;
 }) {
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-      <span style={{ fontSize: 12, fontWeight: 600 }}>{title}</span>
+    <div className="resume-history-group">
+      <span className="resume-history-group-title">{title}</span>
       {steps.map((step, index) => {
         // past 在界面上是倒序展示的：显示下标要换算回数据下标，预览才点得对。
         const dataIndex = group === "past" ? steps.length - 1 - index : index;
         const selected = active?.group === group && active.index === dataIndex;
         return (
-          <button
+          <Button
             key={`${group}-${dataIndex}`}
-            type="button"
+            type="text"
+            block
+            className={`resume-history-step${selected ? " is-selected" : ""}`}
             aria-pressed={selected}
             onClick={() => onToggle(group, dataIndex)}
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              alignItems: "flex-start",
-              gap: 2,
-              padding: "4px 8px",
-              borderRadius: 6,
-              border: `1px solid ${selected ? "var(--rf-primary)" : "var(--rf-border-subtle)"}`,
-              background: "transparent",
-              color: "inherit",
-              textAlign: "left",
-              cursor: "pointer",
-            }}
           >
-            <span style={{ fontSize: 12 }}>{step.label}</span>
-            <span style={{ fontSize: 12, color: "var(--rf-text-secondary)" }}>{step.summary}</span>
-          </button>
+            <span className="resume-history-step-label">{step.label}</span>
+            <span className="resume-history-step-summary">{step.summary}</span>
+          </Button>
         );
       })}
     </div>

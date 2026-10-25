@@ -9,7 +9,8 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict, Field
 
 from .export import ExportFormat
-from .resume import MAX_RESUME_PAGES, ResumeContent, ResumeFontScale, ResumeLanguage
+from .resume import ResumeContent, ResumeFontScale, ResumeLanguage
+from .resume_generation import LONG_CV_MAX_PAGES
 
 ALL_FORMATS: tuple[str, ...] = ("json", "md", "html", "pdf", "docx", "txt")
 MAX_PRESET_NAME = 64
@@ -61,7 +62,8 @@ class ExportBundleRequest(BaseModel):
     content: ResumeContent | None = None
     margin_mm: float | None = Field(default=None, ge=4, le=40)
     font_scale: ResumeFontScale | None = None
-    page_limit: int | None = Field(default=None, ge=1, le=MAX_RESUME_PAGES)
+    # A4 长 CV：请求可带到 10；服务层按记录的 document_mode 用 mode_page_limit 夹紧。
+    page_limit: int | None = Field(default=None, ge=1, le=LONG_CV_MAX_PAGES)
     format_config: dict[str, Any] | None = None
     language: ResumeLanguage | None = None
     allow_incomplete: bool = False

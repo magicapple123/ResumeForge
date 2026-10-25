@@ -92,6 +92,10 @@ const workbench = {
   "workbench.resizer.params": "参数栏宽度（拖动或方向键调整，双击复位）",
   /** 三栏分隔条的无障碍名（内容栏那一侧）。 */
   "workbench.resizer.editor": "内容栏宽度（拖动或方向键调整，双击复位）",
+  /** 动作条上的「一键恢复默认列宽」（参数栏 + 内容栏一起复位）。 */
+  "workbench.widths.reset": "恢复默认列宽",
+  /** 左栏页签条的读屏区域名（role=tablist）。 */
+  "workbench.leftTabs.label": "制作台左栏面板",
   /** 自绘栏目条右侧三角按钮的无障碍名（纯图标，没有可见文字）。 */
   "workbench.tabs.more": "更多栏目",
   /** 栏目条的读屏区域名（`role="tablist"`）。 */

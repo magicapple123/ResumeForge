@@ -68,8 +68,11 @@ export function QueueTable({
       dataIndex: "job_title",
       width: 220,
       render: (title: string, item) => (
-        <Tooltip title={`加入队列于 ${formatDateTime(item.created_at)}`}>
-          <Space orientation="vertical" size={0} style={{ width: "100%" }}>
+        // 外层 Tooltip 只包**岗位标题按钮**，不再包整个单元格：单元格里的「来源不支持」
+        // 标签有自己的提示，两层 Tooltip 叠在同一个触发区上会同时弹出两句
+        // （2026-10-25 用户截图：鼠标悬停时提示叠在一起）。
+        <Space orientation="vertical" size={0} style={{ width: "100%" }}>
+          <Tooltip title={`加入队列于 ${formatDateTime(item.created_at)}`}>
             <Button
               type="link"
               className="table-text-link"
@@ -78,23 +81,23 @@ export function QueueTable({
             >
               {title || "（岗位已删除）"}
             </Button>
-            <Space size={4} wrap>
-              {item.company && (
-                <Typography.Text type="secondary" ellipsis>
-                  {item.company}
-                </Typography.Text>
-              )}
-              {item.apply_supported === false && (
-                // 和岗位广场上的「采集 / 手动」同一个位置放来源类标签：用户看来源就看这里。
-                <Tooltip title="来源不在投递台支持的招聘网站内，无法自动投递；移出队列或到原网站自行投递">
-                  <Tag color="red" style={{ marginInlineEnd: 0 }}>
-                    来源不支持
-                  </Tag>
-                </Tooltip>
-              )}
-            </Space>
+          </Tooltip>
+          <Space size={4} wrap>
+            {item.company && (
+              <Typography.Text type="secondary" ellipsis>
+                {item.company}
+              </Typography.Text>
+            )}
+            {item.apply_supported === false && (
+              // 和岗位广场上的「采集 / 手动」同一个位置放来源类标签：用户看来源就看这里。
+              <Tooltip title="来源不在投递台支持的招聘网站内，无法自动投递；移出队列或到原网站自行投递">
+                <Tag color="red" style={{ marginInlineEnd: 0 }}>
+                  来源不支持
+                </Tag>
+              </Tooltip>
+            )}
           </Space>
-        </Tooltip>
+        </Space>
       ),
     },
     {

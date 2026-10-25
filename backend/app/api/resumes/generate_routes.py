@@ -11,7 +11,7 @@ patch 静默断开（部分用例靠真实配置兜底仍会绿，是最危险�
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException
-from fastapi.responses import StreamingResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from sqlalchemy.orm import Session
 
 from app.api import resumes as _api  # patch 锚点：调用期从包命名空间读取
@@ -25,8 +25,10 @@ from ...runtime.log_redact import log_exception_redacted
 from ...schemas.job import JobOut
 from ...schemas.resume import GenerateRequest, GenerateTaskOut
 from ...services import trash
+from ...services.career_scenarios.resolve import CareerContextError, resolve_context
 from ...services.claims import build_baseline
 from ...services.llm.base import LLMError
+from ...services.profile.fact_context import build_fact_sections, load_fact_context
 from ...services.profile.profile_service import get_profile_detail, to_profile_out
 from ...services.resume.resume_generate_runner import (
     ResumeGenerateRunnerError,
@@ -34,9 +36,33 @@ from ...services.resume.resume_generate_runner import (
 )
 from ...services.resume.resume_generator import ResumeGenerator
 from ...services.resume.resume_record import save_record
+from ...services.resume.scenario_context import build_scenario_prompt_block
 from ._shared import _format_sse
 
 logger = logging.getLogger(__name__)
+
+
+def _log_frozen_context(snapshot, *, transport: str, task_id: int | None = None) -> None:
+    """记录"本次生成用了哪一版上下文"——只记标识与哈希，不记场景正文/就业状态。
+
+    计划 §15.3 要求日志能回答"这条任务用的是哪版场景"，同时禁止记录完整场景正文、
+    就业状态等用户私有信息。context_sha256 是快照的规范化哈希：既能与后续问题单对上，
+    又不能反推正文。
+    """
+    if snapshot is None:
+        return
+    logger.info(
+        "简历生成上下文已冻结 transport=%s task_id=%s origin=%s scenario_id=%s "
+        "preset_key=%s revision=%s catalog_version=%s context_sha256=%s",
+        transport,
+        task_id if task_id is not None else "-",
+        snapshot.scenario_origin,
+        snapshot.scenario_id if snapshot.scenario_id is not None else "-",
+        snapshot.preset_key or "-",
+        snapshot.scenario_revision if snapshot.scenario_revision is not None else "-",
+        snapshot.catalog_version or "-",
+        (snapshot.context_sha256 or "")[:16],
+    )
 
 router = APIRouter()
 
@@ -73,11 +99,15 @@ async def generate_resume(payload: GenerateRequest, db: Session = Depends(get_db
             raise HTTPException(status_code=404, detail="岗位不存在或已被删除")
 
         profile = get_profile_detail(db)
+        # A3/A4：补充事实也属于"用户资料"。判定资料是否为空时必须把它们算进来，
+        # 否则"只有论文/证照、没有姓名与旧经历"的有效资料会被旧条件误拒（G23）。
+        fact_sections = build_fact_sections(load_fact_context(db))
         if (
             not profile.name
             and not profile.projects
             and not profile.experiences
             and not profile.campus_experiences
+            and not any(fact_sections.values())
         ):
             raise HTTPException(status_code=400, detail="个人资料为空，无法生成简历")
 
@@ -86,6 +116,21 @@ async def generate_resume(payload: GenerateRequest, db: Session = Depends(get_db
         config = _api.get_llm_config(db)
         if not config.base_url or not config.model:
             raise HTTPException(status_code=400, detail="尚未配置大模型 API")
+
+        # A5：显式选用的职业场景在**取租约之后、流开始之前**解析并冻结。缺省/null
+        # 不解析（旧请求零差异）；引用非法/归档/版本不符时明确失败，不创建流。
+        try:
+            snapshot = resolve_context(db, payload.options.career_context)
+        except CareerContextError as exc:
+            db.close()
+            lease.release()
+            return JSONResponse(
+                status_code=exc.status_code,
+                content={"detail": exc.detail, "code": exc.code},
+            )
+        _log_frozen_context(snapshot, transport="sse")
+        career_block = build_scenario_prompt_block(snapshot)
+        context_snapshot = snapshot.model_dump() if snapshot is not None else None
 
         # 经包命名空间调用期读取，保住 test_api_resume / test_resume_general 对
         # app.api.resumes.create_provider 的 patch 契约。
@@ -114,7 +159,12 @@ async def generate_resume(payload: GenerateRequest, db: Session = Depends(get_db
         done_event: dict | None = None
         try:
             async for event in generator.generate(
-                profile_out, job_out, payload.options, baseline=baseline
+                profile_out,
+                job_out,
+                payload.options,
+                baseline=baseline,
+                career_context_block=career_block,
+                fact_sections=fact_sections,
             ):
                 if event["type"] == "delta":
                     raw_parts.append(event["text"])
@@ -145,6 +195,8 @@ async def generate_resume(payload: GenerateRequest, db: Session = Depends(get_db
                         coverage_notes=done_event.get("coverage_notes") or [],
                         rationale=done_event.get("rationale") or "",
                         fact_annotations=done_event.get("fact_annotations") or [],
+                        document_mode=payload.options.document_mode,
+                        context_snapshot=context_snapshot,
                     )
                 # 只有持久化成功后才宣布完成；断流不会留下“成功但无历史记录”的状态。
                 yield _format_sse({"type": "saved", "record_id": record.id})
@@ -186,11 +238,13 @@ def start_resume_generation(payload: GenerateRequest, db: Session = Depends(get_
         raise HTTPException(status_code=404, detail="岗位不存在或已被删除")
 
     profile = get_profile_detail(db)
+    # G23：补充事实同样算"有资料"——只有论文/证照的用户也能生成（不因旧六栏为空被拒）。
     if (
         not profile.name
         and not profile.projects
         and not profile.experiences
         and not profile.campus_experiences
+        and not any(build_fact_sections(load_fact_context(db)).values())
     ):
         raise HTTPException(status_code=400, detail="个人资料为空，无法生成简历")
 
@@ -198,6 +252,16 @@ def start_resume_generation(payload: GenerateRequest, db: Session = Depends(get_
     config = _api.get_llm_config(db)
     if not config.base_url or not config.model:
         raise HTTPException(status_code=400, detail="尚未配置大模型 API")
+
+    # A5：任务创建时解析并**冻结**场景快照（计划 §6.4）：runner 只读 task.context_snapshot，
+    # 运行中不再查询"当前场景"。失败明确返回，不创建任务。
+    try:
+        snapshot = resolve_context(db, payload.options.career_context)
+    except CareerContextError as exc:
+        return JSONResponse(
+            status_code=exc.status_code,
+            content={"detail": exc.detail, "code": exc.code},
+        )
 
     # 防重复：已有进行中的任务就拒绝，绝不因用户连点两次而产生两条任务/两份简历。
     active = (
@@ -212,10 +276,12 @@ def start_resume_generation(payload: GenerateRequest, db: Session = Depends(get_
         job_id=payload.job_id,
         title=payload.title,
         options=payload.options.model_dump(),
+        context_snapshot=snapshot.model_dump() if snapshot is not None else None,
     )
     db.add(task)
     db.commit()
     db.refresh(task)
+    _log_frozen_context(snapshot, transport="task", task_id=task.id)
 
     runner = get_resume_generate_runner()
     try:

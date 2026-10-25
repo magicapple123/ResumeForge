@@ -44,6 +44,7 @@ PROJECTS_FIRST = [
     "publications",
     "research_projects",
     "patents",
+    "credentials",
 ]
 
 
@@ -102,6 +103,7 @@ def test_manual_resume_materializes_ten_keys_when_profile_is_old_default(client)
         "publications",
         "research_projects",
         "patents",
+        "credentials",
     ]
 
 
@@ -121,6 +123,7 @@ def test_manual_resume_explicit_format_config_wins(client):
         "publications",
         "research_projects",
         "patents",
+        "credentials",
         "skills",
         "campus_experience",
     ]

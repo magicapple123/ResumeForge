@@ -52,6 +52,7 @@ from ..models.knowledge_entry import KnowledgeEntry
 from ..models.material import CandidateJob, Material
 from ..models.phrase import ResumePhrase
 from ..models.profile import utcnow
+from ..models.profile_fact import ProfileFact
 from ..models.question_bank_record import QuestionBankRecord
 from ..models.referral import Referral
 from ..models.reminder import Reminder
@@ -82,6 +83,24 @@ class TrashSpec:
     title_field: str
     subtitle_field: str = ""
     title_builder: Callable[[Any], str] | None = None
+
+
+def _profile_fact_title(item: Any) -> str:
+    """补充事实的展示标题：按 kind 取最像"名字"的字段（缺项时如实显示无标题）。"""
+    payload = item.payload if isinstance(item.payload, dict) else {}
+    for key in ("title", "name", "organization"):
+        value = str(payload.get(key) or "").strip()
+        if value:
+            return value
+    kind_labels = {
+        "publication": "论文",
+        "research_project": "科研项目",
+        "patent": "专利",
+        "credential": "资格证照",
+        "work_project": "作品项目",
+        "practice": "实践/服务经历",
+    }
+    return kind_labels.get(item.kind, "补充事实")
 
 
 def _referral_title(item: Any) -> str:
@@ -130,6 +149,8 @@ TRASH_SPECS: tuple[TrashSpec, ...] = (
     TrashSpec("phrase", "表达资产", ResumePhrase, "text", "kind"),
     # 0058（W16）：数据集级术语表。标题取原文词，副标题是目标语言。
     TrashSpec("glossary_term", "术语表", ResumeGlossaryTerm, "source_term", "language_to"),
+    # 0062（A3）：补充事实。标题按 kind 从 payload 取，副标题是事实种类。
+    TrashSpec("profile_fact", "补充事实", ProfileFact, "kind", title_builder=_profile_fact_title),
 )
 
 TRASH_SPEC_BY_KEY: dict[str, TrashSpec] = {spec.key: spec for spec in TRASH_SPECS}

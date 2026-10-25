@@ -61,10 +61,18 @@ class OptionalVisibilityMixin(OptionalIdentityMixin):
         "lock_content",
         "lock_layout",
     )
+    # A4：可选字符串字段（空串 = "没设置"）。子类声明要处理的字段名。
+    #
+    # 为什么空串也必须省略：ResumeProject.public_url / artifact_type、
+    # ResumeExperience.experience_kind 是"新功能才有的可选字段"，旧记录的 content JSON
+    # 里根本没有这些键。若让 pydantic 默认把 "" 吐出来，**所有旧记录的内容指纹
+    # （交付快照的 source_content_sha256）都会变**，与历史交付不可比。这里让
+    # "空串"与"字段不存在"在序列化后等价——与 OptionalEmptyListMixin 的空列表规则同一思路。
+    _optional_empty_string_fields: ClassVar[tuple[str, ...]] = ()
 
     @model_serializer(mode="wrap")
     def _drop_unset_visibility(self, handler):  # noqa: ANN001, ANN201 - pydantic handler 无公开类型
-        """省略"没设置"的可见性字段：None，以及 hidden_points 的空列表。
+        """省略"没设置"的可见性字段：None；hidden_points 与可选字符串的空串同理。
 
         覆盖父类 OptionalIdentityMixin 的同型序列化器（本类所有模型共用它），
         FactAnnotation 等只用父类的模型行为不变。
@@ -73,6 +81,10 @@ class OptionalVisibilityMixin(OptionalIdentityMixin):
         if isinstance(data, dict):
             for key in getattr(self, "_optional_identity_fields", ()):
                 if key in data and data[key] is None:
+                    data.pop(key, None)
+            for key in getattr(self, "_optional_empty_string_fields", ()):
+                # None 与空串都算"没设置"：旧客户端/旧内容两种形态都会出现。
+                if key in data and data[key] in (None, ""):
                     data.pop(key, None)
             if not data.get("hidden_points"):
                 data.pop("hidden_points", None)

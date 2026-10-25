@@ -23,7 +23,15 @@ MAX_RESUME_CHARS = 12_000
 MAX_PROFILE_CHARS = 24_000
 MAX_JD_CHARS = 6_000
 MAX_SUGGESTIONS = 8
-_RESUME_DETAIL_FIELDS = ("courses", "achievements", "description", "highlights", "tech_stack")
+_RESUME_DETAIL_FIELDS = (
+    "courses",
+    "achievements",
+    "description",
+    "highlights",
+    "tech_stack",
+    # A4 科研项目成果（旧六类条目没有这个键，压缩逻辑对旧内容零影响）。
+    "outcomes",
+)
 _RESUME_SECTION_FIELDS = (
     "projects",
     "experience",
@@ -31,6 +39,11 @@ _RESUME_SECTION_FIELDS = (
     "education",
     "skills",
     "awards",
+    # A4 扩展栏目：只有内容非空时才出现在提示词数据里（见 _resume_prompt_data）。
+    "publications",
+    "research_projects",
+    "patents",
+    "credentials",
 )
 _FALSE_PROJECT_ABSENCE_RE = re.compile(
     r"(?:没有|无|缺少|缺乏|未有|未体现|未展示|未呈现|不存在).{0,16}(?:项目经历|项目经验|相关项目|项目)|"
@@ -101,11 +114,13 @@ def _resume_prompt_data(resume: ResumeContent) -> dict[str, Any]:
         exclude={"name", "photo", "gender", "birth_year", "phone", "email", "city"}
     )
     # 项目和经历优先，极端长内容压缩时仍尽量保留岗位证据。
-    return {
-        "job_intent": data["job_intent"],
-        "summary": data["summary"],
-        **{field: data[field] for field in _RESUME_SECTION_FIELDS},
-    }
+    result: dict[str, Any] = {"job_intent": data["job_intent"], "summary": data["summary"]}
+    for field in _RESUME_SECTION_FIELDS:
+        # 旧六栏永远在 dump 里（空列表也照旧传给模型，历史提示词不变）；
+        # A4 扩展栏目是"空列表不序列化"的可选字段，只有非空时才出现。
+        if field in data:
+            result[field] = data[field]
+    return result
 
 
 def _drop_resume_detail(data: dict[str, Any]) -> bool:
@@ -152,7 +167,18 @@ def serialize_resume_prompt_data(resume: ResumeContent, max_chars: int = MAX_RES
         candidate["summary"] = _trim_prompt_strings(candidate.get("summary", ""), 400)
         serialized = dump()
 
-    for section in ("awards", "campus_experience", "education", "experience", "projects"):
+    for section in (
+        "awards",
+        "campus_experience",
+        "education",
+        "experience",
+        "projects",
+        # A4：超预算时扩展栏目也按同一顺序让步（旧内容没有这些键，循环体不执行）。
+        "publications",
+        "research_projects",
+        "patents",
+        "credentials",
+    ):
         entries = candidate.get(section) or []
         while len(serialized) > max_chars and len(entries) > 1:
             entries.pop()

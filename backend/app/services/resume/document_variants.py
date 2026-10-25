@@ -22,7 +22,7 @@ from sqlalchemy.orm import Session
 
 from ...models.resume import ResumeRecord
 from ...models.versions import ResumeVariant, ResumeVersion
-from ...schemas.resume import MAX_RESUME_PAGES
+from ...schemas.resume_generation import MODE_PAGE_LIMITS
 from .document_versions import (
     VersionNotFound,
     _get_version,
@@ -61,8 +61,14 @@ def _normalize_layout(layout: Any) -> dict[str, Any] | None:
     if page_limit is not None:
         if isinstance(page_limit, bool) or not isinstance(page_limit, int):
             raise ValueError("page_limit 必须是整数")
-        if not 1 <= page_limit <= MAX_RESUME_PAGES:
-            raise ValueError(f"page_limit 必须在 1 到 {MAX_RESUME_PAGES} 之间")
+        # A4 长 CV：上限按这份排版自己的 document_mode 判定（旧变体没有该键 →
+        # resume → 仍是 1–3 页，旧行为不变）。此前固定按 MAX_RESUME_PAGES 校验会把
+        # 10 页的长 CV 变体当成非法输入——那是"模式切换后旧页数规则误拦"。
+        low, high = MODE_PAGE_LIMITS.get(
+            str(cleaned.get("document_mode") or "resume"), MODE_PAGE_LIMITS["resume"]
+        )
+        if not low <= page_limit <= high:
+            raise ValueError(f"page_limit 必须在 {low} 到 {high} 之间")
     for key in _LAYOUT_STRING_KEYS:
         value = cleaned.get(key)
         if value is not None and not isinstance(value, str):
@@ -82,6 +88,9 @@ def variant_brief(variant: ResumeVariant) -> dict[str, Any]:
         "job_title": variant.job_title,
         "company": variant.company,
         "content_sha256": variant.content_sha256,
+        # A5：派生变体继承的生成上下文（命名版本优先，否则当前简历）。NULL = 未记录。
+        # 变体另选场景不在本批：这里只做继承与只读展示，不提供改写入参。
+        "context_snapshot": copy.deepcopy(variant.context_snapshot),
         "base_version_id": variant.base_version_id,
         "last_synced_version_id": variant.last_synced_version_id,
         "synced_at": variant.synced_at,
@@ -119,10 +128,14 @@ def create_variant(
     job_id: int | None = None,
     base_version_id: int | None = None,
     layout: dict[str, Any] | None = None,
+    context_snapshot: dict[str, Any] | None = None,
 ) -> ResumeVariant:
     """派生岗位变体：内容/排版取自当前简历或指定命名版本，之后与它们互不影响。
 
     ``layout``（W16）：创建时就带一份独立排版覆盖；None = 继承基底快照，行为与旧版一致。
+
+    ``context_snapshot``（A5）：显式给定时作为这条变体自己的生成上下文（用于"按职业
+    场景派生变体"）；None = 沿用来源（命名版本优先，否则当前简历）的快照，旧行为不变。
     """
     cleaned = name.strip()
     if not cleaned:
@@ -141,6 +154,17 @@ def create_variant(
         if base is not None
         else layout_snapshot(db, record)
     )
+    # A5：显式给定的上下文优先（按职业场景派生变体）；否则继承"哪个来源的上下文"与
+    # 内容/排版同源——指定命名版本时用版本的冻结快照，否则用当前简历的。之后
+    # **互不影响**（同步/翻译都不改它）。
+    if context_snapshot is None:
+        context_snapshot = copy.deepcopy(
+            base.context_snapshot
+            if base is not None
+            else getattr(record, "context_snapshot", None)
+        )
+    else:
+        context_snapshot = copy.deepcopy(context_snapshot)
     variant = ResumeVariant(
         resume_id=record.id,
         name=cleaned,
@@ -152,6 +176,7 @@ def create_variant(
         layout=_normalize_layout(layout),
         content_sha256=canonical_content_sha256(content),
         base_version_id=base.id if base is not None else None,
+        context_snapshot=context_snapshot,
     )
     db.add(variant)
     db.commit()
@@ -270,6 +295,8 @@ def sync_variants(
             if _write_path(content, path, value):
                 applied.append(path)
         if applied:
+            # 选择性同步只写勾选路径：content_snapshot 是"派生时的场景上下文"，
+            # 不是内容路径的一部分，**同步不覆盖它**（目标变体的上下文保持原样）。
             variant.content = content
             variant.content_sha256 = canonical_content_sha256(content)
             variant.last_synced_version_id = (

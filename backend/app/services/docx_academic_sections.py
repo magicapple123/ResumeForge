@@ -20,6 +20,8 @@ from .docx_blocks import section_title as _section_title
 from .docx_section_shared import _apply_break, _break_plan, _join, _role
 from .resume.resume_labels import (
     authors_text,
+    credential_detail,
+    credential_status_text,
     field_labels,
     patent_status_text,
     publication_status_text,
@@ -134,6 +136,58 @@ def section_research_projects(
             _meta_line(doc, funding, base=base, layout=layout, theme=theme)
         _bullets(doc, project.description, base=base, theme=theme)
         _bullets(doc, project.outcomes, base=base, theme=theme)
+
+
+def section_credentials(
+    doc,
+    resume,
+    *,
+    base: float,
+    layout,
+    accent,
+    accent_soft,
+    theme: DocxTheme,
+    language: str,
+    overrides=None,
+) -> None:
+    """资格证照（A4）：名称/颁发机构/状态/签发到期/核验链接/说明。
+
+    状态用正名表（unknown 不打印：默认"未标注"不该在纸面上占位；active 显示
+    "有效期内"而不是"有效资格"，见 resume_labels 的正名口径）。
+    """
+    if not resume.credentials:
+        return
+    labels = section_titles(language)
+    _section_title(
+        doc,
+        labels["credentials"],
+        base,
+        layout,
+        accent,
+        accent_soft,
+        theme=theme,
+        style=_role(overrides, "section_title"),
+    )
+    _apply_break(doc, _break_plan(overrides, "section", "credentials"))
+    for _index, credential in enumerate(resume.credentials):
+        _object_id = credential.id
+        status = (
+            credential_status_text(credential.status, language)
+            if credential.status != "unknown"
+            else ""
+        )
+        _entry_head(
+            doc,
+            credential.name,
+            _join([credential.issuer, status]),
+            base=base,
+            layout=layout,
+            theme=theme,
+        )
+        _apply_break(doc, _break_plan(overrides, "entry", _object_id))
+        detail = credential_detail(credential, language)
+        if detail:
+            _meta_line(doc, detail, base=base, layout=layout, theme=theme)
 
 
 def section_patents(

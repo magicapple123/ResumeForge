@@ -37,6 +37,13 @@ from .resume_coverage import (
     confirmed_claims_about,
     find_unwritten_details,
 )
+from .resume_generation_helpers import (
+    begin_budget_segment,
+    end_budget_segment,
+    has_extended_facts,
+    parse_resume,
+    record_call_usage,
+)
 from .resume_generator_prompts import (
     _ENHANCEMENT_DISABLED_GUIDE,
     ENHANCEMENT_LEVEL_GUIDES,
@@ -93,17 +100,6 @@ class ResumeGenerator:
         # 在余下的调用里继续生效。
         self._total_budget: OperationBudget | None = None
 
-    def _record_call_usage(self) -> None:
-        """把 provider 刚结束的这一次调用用量补进本链汇总（PR-07-6）。
-
-        provider 只保留 ``last_usage``（跨轮累计是调用方责任）；在每段的
-        finally 里调用——失败与取消轮次同样能拿到多少算多少。测试假 Provider
-        可能不写甚至没有该属性，用 getattr 容忍缺失。
-        """
-        usage = getattr(self.provider, "last_usage", None)
-        if usage is not None:
-            self.usage_records.append(usage)
-
     async def generate(
         self,
         profile: ProfileOut,
@@ -112,6 +108,8 @@ class ResumeGenerator:
         *,
         baseline: ClaimDigestOut | None = None,
         budget: OperationBudget | None = None,
+        career_context_block: str = "",
+        fact_sections: dict[str, Any] | None = None,
     ) -> AsyncGenerator[dict[str, Any], None]:
         """执行生成流程，依次产出进度、增量、完成或错误事件。
 
@@ -121,6 +119,13 @@ class ResumeGenerator:
 
         ``baseline`` 是事实台账已确认的条目。**不传、或台账为空时渲染出的提示词与
         以前逐字节相同**——没启用台账的用户不该因为这次改动而拿到不一样的简历。
+
+        ``career_context_block`` 是调用方（API/runner）用服务端 resolver 解析并裁剪过的
+        职业场景表达指南（A5）。**缺省空串时模板整块不渲染，提示词与旧行为逐字节一致**；
+        本模块不读数据库、不读 UI 当前选择，只消费已冻结的文本。
+
+        ``fact_sections`` 是补充事实快照（``profile.fact_context.build_fact_sections`` 的输出）：
+        六类事实并入同一份候选资料，``None``/六类全空时输出与旧行为逐字节一致。
 
         ``budget`` 是整链总预算（RF-14 §2.1.a，可选，None 时行为与以前逐字节一致）。
         三段模型调用的分段规则：
@@ -145,9 +150,14 @@ class ResumeGenerator:
             "type": "progress",
             "message": "正在整理完整资料…" if general else "正在分析岗位要求与资料匹配度…",
         }
+        # 空快照（六类都为空）等价于"没有新增事实"：传 None 保证旧提示词逐字节不变。
+        active_facts = fact_sections if fact_sections and any(fact_sections.values()) else None
         selection = (
             build_general_profile_context(
-                profile, max_chars=MAX_PROFILE_CHARS, include_references=options.enhance
+                profile,
+                max_chars=MAX_PROFILE_CHARS,
+                include_references=options.enhance,
+                fact_sections=active_facts,
             )
             if general
             else build_targeted_profile_context(
@@ -155,6 +165,7 @@ class ResumeGenerator:
                 job,
                 max_chars=MAX_PROFILE_CHARS,
                 include_references=options.enhance,
+                fact_sections=active_facts,
             )
         )
         counts = selection.selected_counts
@@ -210,6 +221,11 @@ class ResumeGenerator:
             # 台账为空时传空串，模板里的 {% if claim_baseline %} 整块不渲染。
             claim_baseline=baseline.baseline_text if baseline else "",
             blocked_wording=baseline.blocked_wording if baseline else [],
+            # A5：已经解析冻结的受限表达指南；空串时模板块不渲染（旧提示词不变）。
+            career_context_block=career_context_block.strip(),
+            # A4：候选资料里出现扩展事实栏目时才在提示词里给出扩展输出结构；
+            # 旧资料/无新增事实时保持旧提示词逐字节不变（C2）。
+            extended_facts=has_extended_facts(selection.data),
         )
         messages = [
             {"role": "system", "content": system_prompt},
@@ -248,7 +264,7 @@ class ResumeGenerator:
             # GeneratorExit 逐层展开，provider 的 finally 才能写 last_usage、
             # response 才能及时关闭；随后补记本段用量（失败轮次也收集）。
             await stream.aclose()
-            self._record_call_usage()
+            record_call_usage(self.provider, self.usage_records)
 
         raw = "".join(parts)
         resume = self._parse(raw)
@@ -264,7 +280,7 @@ class ResumeGenerator:
             if segment is not None:
                 segment.raise_if_stopped()
             try:
-                self._begin_segment(segment)
+                begin_budget_segment(self.provider, segment)
                 fixed = await self.provider.chat(
                     [{"role": "user", "content": fix_prompt}], thinking=False
                 )
@@ -279,9 +295,9 @@ class ResumeGenerator:
                 }
                 return
             finally:
-                self._end_segment()
+                end_budget_segment(self.provider, self._total_budget)
                 # 修复段的用量（含失败轮次）也进汇总（PR-07-6）。
-                self._record_call_usage()
+                record_call_usage(self.provider, self.usage_records)
             resume = self._parse(fixed)
 
         if resume is None:
@@ -332,15 +348,15 @@ class ResumeGenerator:
             if segment is not None:
                 segment.raise_if_stopped()
             try:
-                self._begin_segment(segment)
+                begin_budget_segment(self.provider, segment)
                 retry_raw = await self.provider.chat(retry_messages)
                 retry_resume = self._parse(retry_raw)
             except Exception as exc:  # noqa: BLE001 - 质量重试失败应保留首轮结果
                 logger.warning("简历质量重试失败，将沿用首轮结果，异常类型=%s", type(exc).__name__)
             finally:
-                self._end_segment()
+                end_budget_segment(self.provider, self._total_budget)
                 # 重试段的用量（含失败轮次）也进汇总（PR-07-6）。
-                self._record_call_usage()
+                record_call_usage(self.provider, self.usage_records)
 
             retry_content_shortfalls = (
                 _quality_shortfalls(retry_resume, selection.data, job)
@@ -414,6 +430,7 @@ class ResumeGenerator:
             focus_domains=selection.focus.domains,
             coverage_details=coverage_details,
             baseline_confirmed=confirmed_names,
+            fallback_sections=selection.fallback_sections,
         )
         done_event = {
             "type": "done",
@@ -430,28 +447,8 @@ class ResumeGenerator:
 
     # ===== 预算分段（RF-14 §2.1.c）=====
 
-    def _begin_segment(self, segment: OperationBudget | None) -> None:
-        """把 child 段的剩余注入 provider 的请求级 deadline。
-
-        静态 ``request_deadline_seconds`` 压缩该段 read timeout（deadline 只能收紧，
-        provider 的 ``_timeout`` 取 ``min(配置值, 本值)`` 并夹正）；活预算
-        ``request_budget`` 注入 child 段本身——provider 的每次传输尝试/重试决策用
-        ``remaining()`` 重算剩余，退避与硬墙钟都随时间递减（PR-07-1/2）。provider
-        实例不复用，这里设置后由调用方在 ``finally`` 里 ``_end_segment`` 复位——
-        复位是防御性纪律，不是正确性依赖。
-        """
-        if segment is not None:
-            self.provider.request_deadline_seconds = segment.remaining()
-            self.provider.request_budget = segment
-
-    def _end_segment(self) -> None:
-        self.provider.request_deadline_seconds = None
-        # 恢复整链总预算（主生成流的硬墙钟继续生效）；budget=None 的旧路径保持 None。
-        self.provider.request_budget = self._total_budget
-
     def _parse(self, raw: str) -> ResumeContent | None:
-        data = extract_json(raw)
-        return coerce_resume(data) if data is not None else None
+        return parse_resume(raw)
 
 
 __all__ = [

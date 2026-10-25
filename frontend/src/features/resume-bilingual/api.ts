@@ -125,6 +125,9 @@ export function translateVariant(
   return request(variantBase(resumeId) + "/" + variantId + "/translate", {
     method: "POST",
     body: JSON.stringify(payload),
+    // 翻译候选要等后端把整份简历的可译段翻完（几十段、1–3 次模型调用）：
+    // 默认 15s 预算必然误报「请求超时，请重试」。
+    budget: "translate",
   });
 }
 

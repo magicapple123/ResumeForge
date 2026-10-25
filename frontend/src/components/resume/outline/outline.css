@@ -1,10 +1,15 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 /* 「文档大纲」面板（W06 / P1-01、D01）的样式。
  *
- * 全部规则挂在自定义类名 `.resume-outline*` 下，不覆写 antd 原生语义；颜色只用
- * `--rf-*` 语义 token（深色主题由 dark-tokens.css 提供同义值），因此这里没有任何
- * 硬编码色值。唯一一处 `.ant-btn` 覆写带自定义类前缀（排序手柄的紧凑尺寸），符合
- * antdOverrideGuard 的"自定义前缀"规则。 */
+ * 全部规则挂在自定义类名 `.resume-outline*` 下；颜色只用 `--rf-*` 语义 token
+ * （深色主题由 dark-tokens.css 提供同义值），因此这里没有任何硬编码色值。
+ * `.ant-*` 只出现在自定义类限定的小尺寸修正（排序手柄 / 行内动作 / 搜索框）里，
+ * 符合 antdOverrideGuard 的"自定义前缀作用域"规则。
+ *
+ * 2026-10-25 UI 排版优化（任务 C1）：这份文件此前**没有被 import**（"写了样式但没生效"），
+ * 本次补上 import 并重排行布局：**单行优先**——caret + 排序手柄固定左轨（约 32px），
+ * 标题与副标题同行，徽标与「N 条要点」靠行尾；条目行 28px、要点行 24px，
+ * 只有要点正文这种长文本才允许自然折行（caret 不会单独留在上一行）。 */
 
 .resume-outline {
   display: flex;
@@ -17,10 +22,12 @@
   font-size: 13px;
 }
 
+/* ===== 面板头：标题 13/600 + 计数 12 secondary，两者间隔 8px ===== */
 .resume-outline-head {
   display: flex;
+  flex-wrap: wrap;
   align-items: baseline;
-  justify-content: space-between;
+  justify-content: flex-start;
   gap: 8px;
   padding: 0 2px;
 }
@@ -98,11 +105,14 @@
 }
 
 /* ===== 分组头 ===== */
+/* 本仓没有全局 box-sizing 重置：行高必须显式 border-box，否则 min-height 会再叠一层 padding。 */
 .resume-outline-section {
+  box-sizing: border-box;
   display: flex;
   align-items: center;
   gap: 6px;
   min-height: 28px;
+  line-height: 18px;
   border-radius: 6px;
   padding: 4px 6px;
   cursor: default;
@@ -113,19 +123,25 @@
 }
 
 .resume-outline-section-title {
+  flex: 0 0 auto;
   font-weight: 600;
 }
 
 .resume-outline-section-count {
+  flex: 0 0 auto;
   color: var(--rf-text-secondary);
   font-size: 12px;
 }
 
-/* ===== 行（条目 / 要点）===== */
+/* ===== 行（条目 / 要点）：单行优先 ===== */
+/* 条目：padding(6) + caret(12) + 间隙(4) + 手柄(18) + 间隙(4)；要点：padding-left(26) + 手柄(14)
+   + 间隙(4) = 44 —— 两者正文都从同一条竖线开始（与下面的手柄尺寸成对，改一处要改两处）。 */
 .resume-outline-row {
+  box-sizing: border-box;
   display: flex;
-  align-items: flex-start;
-  gap: 6px;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 4px;
   min-height: 28px;
   border-radius: 6px;
   padding: 4px 6px;
@@ -136,6 +152,7 @@
   background: var(--rf-surface-alt);
 }
 
+/* 要点行：内容（16px 手柄/动作按钮、16px 行高） + 上下 padding 4 = 24px 行高。 */
 .resume-outline-row.is-point {
   min-height: 24px;
   padding-left: 26px;
@@ -161,16 +178,20 @@
   box-shadow: inset 0 0 0 1px var(--rf-focus-visible);
 }
 
+/* 标题 / 副标题 / 徽标同一行：放不下时各自省略，行本身不换行。 */
 .resume-outline-main {
   display: flex;
   flex: 1 1 auto;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 4px 8px;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 6px;
   min-width: 0;
+  line-height: 18px;
 }
 
 .resume-outline-title {
+  flex: 0 1 auto;
+  min-width: 0;
   overflow: hidden;
   font-weight: 500;
   text-overflow: ellipsis;
@@ -178,21 +199,33 @@
 }
 
 .resume-outline-subtitle {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
   color: var(--rf-text-secondary);
   font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 行内第一个徽标接手剩余空间：徽标组整体靠行尾（后面的「N 条要点」在 main 之外）。 */
+.resume-outline-title + .resume-outline-badge,
+.resume-outline-subtitle + .resume-outline-badge {
+  margin-left: auto;
 }
 
 .resume-outline-point-count {
   flex: 0 0 auto;
   color: var(--rf-text-secondary);
   font-size: 12px;
+  white-space: nowrap;
 }
 
 .resume-outline-point-text {
   flex: 1 1 auto;
   min-width: 0;
   overflow-wrap: anywhere;
-  line-height: 18px;
+  line-height: 16px;
 }
 
 .resume-outline-point-text.is-empty {
@@ -202,10 +235,10 @@
 /* ===== 展开箭头与排序手柄 ===== */
 .resume-outline-caret {
   display: inline-flex;
-  flex: 0 0 14px;
+  flex: 0 0 12px;
   align-items: center;
   justify-content: center;
-  width: 14px;
+  width: 12px;
   height: 18px;
   color: var(--rf-text-secondary);
   font-size: 10px;
@@ -222,14 +255,14 @@
   transform: rotate(90deg);
 }
 
-/* 排序手柄：自定义类前缀 + .ant-btn 覆写（只为紧凑尺寸；颜色/背景交给 antd text 按钮）。 */
+/* 排序手柄：**条目与要点必须一眼可分**（用户 2026-10-25 截图：两者都是同一个六点手柄）。
+ * 条目 = 六点（HolderOutlined）18px + secondary；要点 = 三横线（MenuOutlined）14px + muted。
+ * 图标 / 尺寸 / 颜色三者同时不同——只改其一，在密集的树里仍会被认成同一个控件。
+ * antd-override: 私有形态 —— 两类手柄没有可用的组件 token（小号 text 按钮默认 24px 见方）。 */
 .resume-outline-handle.ant-btn {
   flex: 0 0 auto;
-  width: 18px;
-  height: 18px;
-  margin-top: 1px;
+  margin: 0;
   padding: 0;
-  color: var(--rf-text-secondary);
   cursor: grab;
 }
 
@@ -237,9 +270,34 @@
   cursor: grabbing;
 }
 
+/* antd-override: 私有形态 —— 条目手柄 18×18（图标 15px），对齐条目行的左轨。 */
+.resume-outline-handle.is-entry.ant-btn {
+  width: 18px;
+  min-width: 18px;
+  height: 18px;
+  color: var(--rf-text-secondary);
+}
+
+.resume-outline-handle.is-entry .anticon {
+  font-size: 15px;
+}
+
+/* antd-override: 私有形态 —— 要点手柄 14×14（图标 12px）+ tertiary 文字色，比条目更小更淡。 */
+.resume-outline-handle.is-point.ant-btn {
+  width: 14px;
+  min-width: 14px;
+  height: 14px;
+  color: var(--rf-text-tertiary);
+}
+
+.resume-outline-handle.is-point .anticon {
+  font-size: 12px;
+}
+
 /* ===== 徽标 ===== */
 .resume-outline-badge {
   display: inline-flex;
+  flex: 0 0 auto;
   align-items: center;
   border: 1px solid var(--rf-border);
   border-radius: 999px;
@@ -247,7 +305,7 @@
   background: var(--rf-surface-alt);
   color: var(--rf-text-secondary);
   font-size: 11px;
-  line-height: 16px;
+  line-height: 14px;
   white-space: nowrap;
 }
 
@@ -256,12 +314,12 @@
   color: var(--rf-text-tertiary);
 }
 
-/* ===== 最小属性区 ===== */
+/* ===== 最小属性区：label / value 统一两列 ===== */
 .resume-outline-inspector {
   display: flex;
   flex: 0 0 auto;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
   border-top: 1px solid var(--rf-border-subtle);
   padding-top: 10px;
 }
@@ -269,6 +327,7 @@
 .resume-outline-inspector-head {
   color: var(--rf-text-secondary);
   font-size: 12px;
+  font-weight: 600;
 }
 
 .resume-outline-inspector-kind {
@@ -292,17 +351,36 @@
   gap: 4px;
 }
 
+/* 每组 = 72px 标签列 + 值列：可见性 / 锁定内容 / 锁定排版三个开关都靠值列右缘对齐。 */
 .resume-outline-inspector-group {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr);
   align-items: center;
-  gap: 8px;
+  gap: 6px 8px;
 }
 
-.resume-outline-inspector-label {
-  flex: 0 0 100%;
+.resume-outline-inspector-group > .resume-outline-inspector-label {
+  grid-column: 1;
+  align-self: start;
   color: var(--rf-text-secondary);
   font-size: 12px;
+  line-height: 18px;
+}
+
+.resume-outline-inspector-group > :not(.resume-outline-inspector-label) {
+  grid-column: 2;
+}
+
+/* 开关统一贴值列右缘：三个开关的 x 坐标一致，扫一眼能看出"都关着"。
+   两条都是 antd-override: 布局无 token —— 组件自身没有"靠右/按内容宽"的布局属性。 */
+.resume-outline-inspector-group > .ant-switch {
+  justify-self: end;
+}
+
+/* 操作行按钮按内容宽度（默认会被 grid 拉满整列，"复制条目"看起来像主按钮）。
+   antd-override: 布局无 token。 */
+.resume-outline-inspector-group > .ant-btn {
+  justify-self: start;
 }
 
 .resume-outline-inspector-lock {
@@ -313,33 +391,72 @@
   font-size: 12px;
 }
 
+/* antd-override: 布局无 token —— 锁定行的开关贴该行右缘，与上面可见性开关对齐。 */
+.resume-outline-inspector-lock > .ant-switch {
+  margin-left: auto;
+}
+
 /* ── D01 大纲搜索 / 命中高亮 / 恢复滚动位置 ────────────────────────
  * 命中底色走 --rf-warning-*（与全站提示同一套 token，深浅主题都不另造颜色）；
  * 图标动作按钮在行尾，视觉上弱化为 secondary，但仍是可聚焦的 antd Button。
- */
+ *
+ * 2026-10-25（任务 C1）：输入框与 ↑↓ 同处第一行（input 占 minmax(0,1fr)、nav 不换行），
+ * 搜索状态 / 回车提示换到第二行整行显示，避免 380 宽时把输入框挤成一条缝。 */
 .resume-outline-search {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  flex-wrap: wrap;
-  gap: 4px 6px;
-  padding: 4px 8px 6px;
+  gap: 2px 6px;
+  padding: 0 2px 8px;
   border-bottom: 1px solid var(--rf-border-subtle);
 }
 
-.resume-outline-search .ant-input-affix-wrapper {
-  flex: 1 1 160px;
-  min-width: 120px;
-}
-
-.resume-outline-search-status,
-.resume-outline-search-hint {
-  font-size: 12px;
-  color: var(--rf-text-muted);
-  white-space: nowrap;
+/* antd-override: 布局无 token —— 输入框在网格里占第一列并允许收缩（flex/grid 需要）。 */
+.resume-outline-search > .ant-input-affix-wrapper {
+  grid-column: 1;
+  grid-row: 1;
+  min-width: 0;
 }
 
 .resume-outline-search-nav {
-  flex: 0 0 auto;
+  grid-column: 2;
+  grid-row: 1;
+  flex-wrap: nowrap;
+}
+
+/* 第二行整行：状态 + 按键提示。meta 自己是一行 flex，提示靠右；窗口很窄时允许换行。 */
+.resume-outline-search-meta {
+  display: flex;
+  flex-wrap: wrap;
+  grid-column: 1 / -1;
+  grid-row: 2;
+  align-items: baseline;
+  gap: 2px 8px;
+}
+
+.resume-outline-search-status {
+  min-width: 0;
+  color: var(--rf-text-tertiary);
+  font-size: 12px;
+  line-height: 16px;
+}
+
+.resume-outline-search-hint {
+  margin-left: auto;
+  color: var(--rf-text-tertiary);
+  font-size: 12px;
+  line-height: 16px;
+}
+
+/* 「回到之前位置」独占第三行，不与搜索框、状态行抢宽度。
+   antd-override: 布局无 token —— 链接按钮需要压到 20px 高、去掉默认内边距。 */
+.resume-outline-search > .ant-btn {
+  grid-column: 1 / -1;
+  grid-row: 3;
+  justify-self: start;
+  height: 20px;
+  padding: 0;
+  font-size: 12px;
 }
 
 .resume-outline-hit {
@@ -349,9 +466,14 @@
   color: inherit;
 }
 
-.resume-outline-row-action {
-  flex: 0 0 auto;
-  color: var(--rf-text-muted);
+/* 行内动作（要点隐藏 / 复制）：16×16 只为把要点行压到 24px 高，键盘可达性不变。 */
+.resume-outline-row-action.ant-btn {
+  flex: 0 0 16px;
+  width: 16px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0;
+  color: var(--rf-text-tertiary);
 }
 
 .resume-outline-row-action:hover {

@@ -28,8 +28,8 @@ from jinja2 import Environment, FileSystemLoader, StrictUndefined, select_autoes
 from ...schemas.job import JobOut
 from ...schemas.resume import ResumeContent
 from ..llm.base import BaseLLMProvider, LLMError
-from .document_identity import ENTRY_FIELDS
-from .resume_content import coerce_resume, extract_json
+from .document_identity import ENTRY_FIELDS, restore_entry_identity
+from .resume_content import coerce_resume, extract_json, resume_has_content
 
 PROMPTS_DIR = Path(__file__).resolve().parent.parent.parent / "prompts"
 MAX_INSTRUCTION_CHARS = 2_000
@@ -50,6 +50,7 @@ _SECTION_LABELS = {
     "publications": "论文",
     "research_projects": "科研项目",
     "patents": "专利",
+    "credentials": "资格证照",
     "skills": "专业技能",
     "awards": "荣誉奖项",
 }
@@ -103,6 +104,22 @@ _ENV = Environment(
 )
 
 
+def has_extended_sections(resume: ResumeContent) -> bool:
+    """这份简历是否含 A4 扩展栏目（论文/科研项目/专利/资格证照）。
+
+    只用于决定修订提示词是否追加"扩展栏目保真"块：没有扩展字段时提示词逐字节保持不变
+    （旧提示词契约不变），有扩展字段时才要求模型逐字保留并禁止状态升级/补造证号。
+    """
+    return any(
+        (
+            resume.publications,
+            resume.research_projects,
+            resume.patents,
+            resume.credentials,
+        )
+    )
+
+
 def _resume_prompt_json(resume: ResumeContent) -> str:
     """去掉身份字段后的完整简历 JSON（修订需要全文，不做建议生成那种压缩）。"""
     data = resume.model_dump(exclude=set(_IDENTITY_FIELDS))
@@ -119,6 +136,8 @@ async def revise_resume(
     resume: ResumeContent,
     job: JobOut | None,
     instructions: str,
+    *,
+    career_context_block: str = "",
 ) -> ResumeContent:
     """按用户指令修订简历；``instructions`` 为空表示整体重新生成。
 
@@ -135,6 +154,10 @@ async def revise_resume(
             company=(job.company or "-") if job else "",
             resume_json=_resume_prompt_json(resume),
             locked_entries=locked_entry_locators(resume),
+            has_extended_sections=has_extended_sections(resume),
+            # A5：按职业场景派生变体时注入受限表达指南；缺省空串时模板整块不渲染，
+            # 既有 /revise 端点的提示词逐字节不变。
+            career_context_block=career_context_block.strip(),
             full_regenerate=full_regenerate,
             instructions=trimmed,
         )
@@ -157,25 +180,18 @@ async def revise_resume(
     revised = coerce_resume(data)
     # coerce_resume 对缺失字段全部补默认值，模型输出一个空 JSON 也会"成功"解析成
     # 一份只剩身份字段的空简历——落库等于毁掉这份简历，必须在这里拦住。
-    if not (
-        revised.summary.strip()
-        or revised.job_intent.strip()
-        or any(
-            getattr(revised, section)
-            for section in (
-                "education",
-                "experience",
-                "campus_experience",
-                "projects",
-                "skills",
-                "awards",
-            )
-        )
-    ):
+    # 判据是**全部栏目**（含科研/证照等新增栏目）：只查旧六栏会把"只有论文的有效
+    # 简历"误判成空简历（G24），而真正空输出仍然在这里被拒绝。
+    if not resume_has_content(revised):
         raise LLMError("模型返回了空简历内容，请重试或更换模型")
     # 身份字段强制回填：模型输出里这些字段不可信（它也没见过原值）。
     identity = {field: getattr(resume, field) for field in _IDENTITY_FIELDS}
     revised = revised.model_copy(update=identity)
+    # 条目级身份（id / point_ids）也回填：模型通常不回显它们，丢了就等于把事实锁、
+    # 来源标注与局部排版的锚点全部断链（A0 回归的第二个缺陷）。
+    merged = revised.model_dump()
+    restore_entry_identity(resume.model_dump(), merged)
+    revised = ResumeContent.model_validate(merged)
     logger.info(
         "简历修订完成 mode=%s instructions_chars=%s",
         "full" if full_regenerate else "targeted",
@@ -184,4 +200,9 @@ async def revise_resume(
     return revised
 
 
-__all__ = ["MAX_INSTRUCTION_CHARS", "locked_entry_locators", "revise_resume"]
+__all__ = [
+    "MAX_INSTRUCTION_CHARS",
+    "has_extended_sections",
+    "locked_entry_locators",
+    "revise_resume",
+]

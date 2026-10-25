@@ -11,6 +11,7 @@
 | `material:<id>` | 资料箱 | 正文 content，空则 note；删除条目按不存在 |
 | `profile:<field>` | 个人资料 | 只接受 UserProfile 上的字符串字段（photo/section_order 等非文本字段不可解析） |
 | `resume_phrase:<id>` | 表达资产 | 资产 text（W17 来源关联同构） |
+| `profile_fact:<fact_id>` | 补充事实（A4） | 按 payload 的文本字段拼出的正文（见下面 profile_fact_payload_text） |
 | 其它/手工来源 | - | 不可解析：manual_source_has_no_body / external_ref_unresolvable |
 
 为什么返回"候选列表"而不是单一正文：历史来源的指纹可能是用"简历表述"也可能是用
@@ -104,6 +105,62 @@ def _profile_texts(db: Session, field_name: str) -> tuple[str, ...] | None:
     return (value.strip(),)
 
 
+# 补充事实 payload 里参与"来源正文"的文本字段（按固定顺序拼接，键序与语言无关）。
+# 顺序决定候选文本的形态，改动它等于让所有历史指纹失效——新增字段只能追加。
+_PROFILE_FACT_TEXT_KEYS: tuple[str, ...] = (
+    "name",
+    "title",
+    "organization",
+    "issuer",
+    "venue",
+    "role",
+    "note",
+    "description",
+    "outcomes",
+    "highlights",
+)
+
+
+def profile_fact_payload_text(payload: dict | None) -> str:
+    """把一条补充事实的 payload 转成"来源正文"文本（全仓库唯一实现）。
+
+    创建来源与解析来源都用它算指纹：两边各写一套拼接顺序，指纹必然对不上。
+    **不含 credential_number**：证照的私密证号既不进模型也不进导出（A4 契约），
+    这里按 payload 只取白名单文本字段，私密键天然被排除。
+    """
+    if not isinstance(payload, dict):
+        return ""
+    parts: list[str] = []
+    for key in _PROFILE_FACT_TEXT_KEYS:
+        value = payload.get(key)
+        if isinstance(value, str):
+            text = value.strip()
+            if text:
+                parts.append(text)
+        elif isinstance(value, list):
+            parts.extend(
+                str(item).strip()
+                for item in value
+                if isinstance(item, str) and item.strip()
+            )
+    return "；".join(parts)[:MAX_SOURCE_TEXT_CHARS]
+
+
+def _profile_fact_texts(db: Session, fact_id: str) -> tuple[str, ...] | None:
+    """按稳定 fact_id 解析补充事实的来源正文；已软删按不存在处理（不猜）。"""
+    from ...models.profile_fact import ProfileFact
+
+    record = (
+        db.execute(select(ProfileFact).where(ProfileFact.fact_id == fact_id))
+        .scalars()
+        .first()
+    )
+    if record is None or record.deleted_at is not None:
+        return None
+    text = profile_fact_payload_text(record.payload)
+    return (text,) if text else None
+
+
 def _phrase_texts(db: Session, phrase_id: str) -> tuple[str, ...] | None:
     from .resume_assets import get_phrase
 
@@ -135,6 +192,10 @@ def resolve_source_texts(db: Session, source: ResumeSource) -> SourceTextLookup:
         texts = _profile_texts(db, remainder)
     elif source.kind == "phrase" and prefix in {"resume_phrase", "phrase"}:
         texts = _phrase_texts(db, remainder)
+    elif prefix in {"profile_fact", "profile-fact"}:
+        # A4：补充事实的来源定位写法是 profile-fact:<fact_id>（模型层 kind 仍用受限枚举
+        # 里的既有成员，这里按 external_ref 前缀解析，不新增 kind 枚举）。
+        texts = _profile_fact_texts(db, remainder)
     else:
         return SourceTextLookup(reason=REASON_UNRESOLVABLE)
     if texts is None:
@@ -190,6 +251,7 @@ __all__ = [
     "SourceTextLookup",
     "list_revisions",
     "pick_text_for_fingerprint",
+    "profile_fact_payload_text",
     "resolve_current_source_text",
     "resolve_source_texts",
 ]

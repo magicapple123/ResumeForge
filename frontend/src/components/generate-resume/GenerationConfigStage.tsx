@@ -1,12 +1,22 @@
 // SPDX-License-Identifier: Apache-2.0
-/** 生成配置阶段：模型状态提示 + 简历名称 + 美化档位 + 篇幅版式 + 补充要求。
+/** 生成配置阶段：模型状态提示 + 简历名称 + 文档模式 + 美化档位 + 篇幅版式 + 职业场景 + 补充要求。
  *
  * 纯展示受控组件——全部配置状态与开始动作由 GenerateResumeModal 持有，经 props 回传；
- * 零 api 导入。
+ * 零 api 导入（职业场景区块自己加载目录，失败只降级不阻断）。
  */
 import { Alert, Button, Input, Segmented, Space, Switch, Tooltip, Typography } from "antd";
 import type { EnhancementLevel, Job, ResumeLayout } from "../../types";
 import { RESUME_ENHANCEMENT_LEVELS, enhancementLevelDescription } from "../../config";
+import { t } from "../../i18n";
+import {
+  pageLimitOnModeSwitch,
+  pageLimitOptions,
+} from "../../features/resume-research/documentMode";
+import GenerationScenarioControl from "../../features/career-scenarios/GenerationScenarioControl";
+import type {
+  GenerationExtras,
+  GenerationDocumentMode,
+} from "../../features/career-scenarios/useGenerationExtras";
 import { MaxLengthHint } from "../common/MaxLengthHint";
 import ResumeLayoutControls from "../ResumeLayoutControls";
 
@@ -17,6 +27,8 @@ interface Props {
   job: Job | null;
   title: string;
   setTitle: (value: string) => void;
+  /** 本次生成专属上下文（契约 §5 文档模式 + §2.5 职业场景）：默认都不发送。 */
+  generation: GenerationExtras;
   enhance: boolean;
   setEnhance: (value: boolean) => void;
   enhancementLevel: EnhancementLevel;
@@ -35,6 +47,7 @@ export default function GenerationConfigStage({
   job,
   title,
   setTitle,
+  generation,
   enhance,
   setEnhance,
   enhancementLevel,
@@ -48,6 +61,14 @@ export default function GenerationConfigStage({
   onClose,
   onStart,
 }: Props) {
+  /** 切换文档模式：只夹紧页数（不转换内容、不改模板），切回普通简历时 >3 页会被夹到 3。 */
+  const changeDocumentMode = (next: GenerationDocumentMode) => {
+    generation.setDocumentMode(next);
+    const current = typeof layout.page_limit === "number" ? layout.page_limit : 1;
+    const { pageLimit } = pageLimitOnModeSwitch(current, next);
+    if (pageLimit !== current) setLayout({ ...layout, page_limit: pageLimit });
+  };
+
   return (
     <div>
       {!llmReady ? (
@@ -120,6 +141,24 @@ export default function GenerationConfigStage({
       <Typography.Title level={5} style={{ marginTop: 20 }}>
         篇幅与版式
       </Typography.Title>
+      <Space size={10} align="center" style={{ marginBottom: 10 }} wrap>
+        <Typography.Text type="secondary">{t("research.mode.label")}</Typography.Text>
+        <Segmented
+          size="small"
+          aria-label={t("research.mode.label")}
+          value={generation.documentMode}
+          onChange={(value) => changeDocumentMode(value as GenerationDocumentMode)}
+          options={[
+            { value: "resume", label: t("research.mode.resume") },
+            { value: "long_cv", label: t("research.mode.longCv") },
+          ]}
+        />
+        <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+          {generation.documentMode === "long_cv"
+            ? t("research.mode.budget")
+            : t("careerScenarios.generate.documentModeNote")}
+        </Typography.Text>
+      </Space>
       <ResumeLayoutControls
         layout={layout}
         disabled={!llmReady}
@@ -127,11 +166,24 @@ export default function GenerationConfigStage({
         // 生成场景：默认板块顺序跟随「我的资料」里排好的顺序。预览 / 编辑已保存简历
         // 时不传（它们读这份简历自己的 section_order，老简历外观因此不被追溯改变）。
         preferProfileOrder
+        // 长 CV 时页数上限放宽到 10（后端按 MODE_PAGE_LIMITS 再校验一次）。
+        pageLimitOptions={
+          generation.documentMode === "long_cv" ? pageLimitOptions("long_cv") : undefined
+        }
       />
       <Typography.Text type="secondary" style={{ display: "block", marginTop: 8 }}>
         默认 1 页 A4 +
         标准字号。生成后如果内容塞不下，可以在预览里一键增加页数或缩小字号，不必重新生成。
       </Typography.Text>
+
+      <Typography.Title level={5} style={{ marginTop: 20 }}>
+        {t("careerScenarios.generate.title")}
+      </Typography.Title>
+      <GenerationScenarioControl
+        value={generation.careerContext}
+        onChange={generation.setCareerContext}
+        disabled={!llmReady}
+      />
 
       <Typography.Title level={5} style={{ marginTop: 20 }}>
         补充要求（选填）

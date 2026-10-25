@@ -108,14 +108,14 @@ def expected_lines(content: ResumeContent, *, language: str | None = None) -> li
     ):
         add(getattr(content, field, ""))
 
-    sections: dict[str, list] = {
-        "education": list(content.education),
-        "experience": list(content.experience),
-        "campus_experience": list(content.campus_experience),
-        "projects": list(content.projects),
-        "skills": list(content.skills),
-        "awards": list(content.awards),
-    }
+    # 从正文分区表推导条目数组（A4：科研三栏目 + 资格证照都已在
+    # DEFAULT_SECTION_ORDER 登记；summary 是字符串，按"不是 list"排除）。
+    # 手写第二份清单会让新栏目的可见正文不参与"产物是否缺字"的比对。
+    sections: dict[str, list] = {}
+    for key in DEFAULT_SECTION_ORDER:
+        value = getattr(content, key, None)
+        if isinstance(value, list):
+            sections[key] = value
     for key in DEFAULT_SECTION_ORDER:
         items = sections.get(key, [])
         for item in items:

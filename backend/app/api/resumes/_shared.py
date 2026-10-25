@@ -135,6 +135,8 @@ def _to_resume_out(record: ResumeRecord) -> ResumeOut:
         # 保存次数（0052）：前端把它记成 ``expectedRevision``，下次条件写原样发回。
         # ``or 0`` 兜住 0052 之前写入的旧行与"列刚加、还没 refresh"的实例。
         revision=int(record.revision or 0),
+        # A5：这份简历生成时冻结的职业场景快照（旧行/手写简历为 None，不按当前场景回填）。
+        context_snapshot=getattr(record, "context_snapshot", None),
     )
 
 

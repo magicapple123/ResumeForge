@@ -101,17 +101,18 @@ export default function OutlineSearchBar({
         </Tooltip>
       </Space>
       {searching ? (
-        <span className="resume-outline-search-status" role="status" aria-live="polite">
-          {matchCount === 0
-            ? t("outline.search.noMatch")
-            : t("outline.search.count", {
-                current: Math.max(0, activeIndex) + 1,
-                total: matchCount,
-              })}
-        </span>
-      ) : null}
-      {searching ? (
-        <span className="resume-outline-search-hint">{t("outline.search.navigateHint")}</span>
+        // 状态与按键提示同一行、整行显示（第二行）：输入框与 ↑↓ 占第一行时不再抢宽度。
+        <div className="resume-outline-search-meta">
+          <span className="resume-outline-search-status" role="status" aria-live="polite">
+            {matchCount === 0
+              ? t("outline.search.noMatch")
+              : t("outline.search.count", {
+                  current: Math.max(0, activeIndex) + 1,
+                  total: matchCount,
+                })}
+          </span>
+          <span className="resume-outline-search-hint">{t("outline.search.navigateHint")}</span>
+        </div>
       ) : null}
       {canRestore && onRestore ? (
         <Tooltip title={t("outline.search.restoreHint")}>

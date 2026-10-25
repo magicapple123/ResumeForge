@@ -35,7 +35,7 @@
 | 求职统计 | `pages/AnalyticsPage.tsx` | `analytics.ts` | `/api/analytics` | `analytics.py` `ratios.py` `resume/resume_health.py` | 只读派生 |
 | 模拟面试 | `pages/InterviewPage.tsx` | `interview.ts` `interviewExperiences.ts` | `/api/interview` `/api/interview-experiences` | `interview/interview.py` `interview/interview_questions.py` `interview/interview_experience_service.py` | `interview.py` `interview_experience.py` `question_bank_record.py` `interview_review_record.py` |
 | 求职助手 | `pages/AssistantPage.tsx` + `features/assistant/*` | `assistant.ts` | `/api/assistant*` | `assistant/assistant_service.py` `assistant_tools/` `assistant/assistant_skills.py` `assistant/assistant_web_search.py` `feature_catalog.py` | `assistant.py`(ChatConversation/ChatMessage/AssistantSkill) |
-| 我的资料 | `pages/ProfilePage.tsx` + `features/profile/*` | `profile.ts` `photo.ts` | `/api/profile` | `profile/profile_service.py` `profile_text_parser.py` `services/profile_parser/*` | `profile.py` |
+| 我的资料 | `pages/ProfilePage.tsx` + `features/profile/*` `features/profile-facts/*`（含 `MaterialPickView.tsx` 资料箱草稿、`FieldSettingsView.tsx` 字段设置/恢复默认） | `profile.ts` `photo.ts` `features/profile-facts/api.ts` `api/material.ts` | `/api/profile` `/api/profile/facts` `/api/profile/facts/schema` `/api/materials` | `profile/profile_service.py` `profile_text_parser.py` `services/profile_parser/*` `profile/fact_store.py`（补充事实 CRUD） `profile/fact_context.py` `profile/fact_mapping.py`（生成候选、去私密） `profile/fact_field_schema.py`（九类字段定义/隐藏/自定义字段） `webform/facts.py`（网申取数） | `profile.py` `profile_fact.py` `profile_fact_field_pref.py` |
 | 资料箱 | `pages/MaterialsPage.tsx` | `material.ts` | `/api/materials` | `materials.py` `document_text.py` `text_extraction.py` | `material.py` |
 | 知识库 | `pages/KnowledgePage.tsx` | `knowledge.ts` | `/api/knowledge` | `knowledge_service.py` | `knowledge_entry.py` |
 | 工作台（技能） | `pages/SkillsPage.tsx` | `skill.ts` | `/api/assistant/skills` | `assistant/assistant_skills.py` `skill_archive.py` | `assistant.py`(AssistantSkill) |
@@ -54,13 +54,14 @@
 | ATS 检测 | `components/AtsCheckPanel.tsx` | `ats.ts` | `/api/resumes/...` | `ats_check.py` |
 | 匹配度分析 | `components/JobMatchModal.tsx` | `jobs.ts` | `/api/jobs/.../match` | `job/job_match.py` |
 | 投投悬浮球 | `features/tou-tou/*` + `App.tsx` 的 `MainLayout` | `settings.ts` `assistant.ts` | `/api/settings/assistant-orb` `/api/assistant*?surface=floating` | `settings_service.py`（`AppSetting` 键值）`assistant_conversations.py` `assistant_stream.py` | `setting.py` `assistant.py`（surface 隔离） |
+| 职业场景 | `features/career-scenarios/*`（页头选择器 + 生成弹窗控制 + 制作台上下文条 + `components/resume/versions/ScenarioVariantSection.tsx`：派生/候选/采纳） | `features/career-scenarios/api.ts` `features/resume-versions/versionsApi.ts` | `/api/career-scenarios` `/api/resumes/{id}/scenario-variants` `…/scenario-preview` `…/scenario-adopt` | `career_scenarios/catalog.py`（内置目录）`career_scenarios/store.py`（条件写/归档/限额）`career_scenarios/resolve.py`（冻结快照/裁剪/哈希）`resume/scenario_context.py`（提示词区块）`resume/scenario_variant.py`（变体候选/双条件写） | `career_scenario.py`；快照另存于 `resume_generate_task/record/version/variant.context_snapshot` |
 
 ## 后端目录速览（backend/app/）
 
 | 目录 | 职责 | 一句话 |
 | ---- | ---- | ---- |
 | `api/` | 路由层（44 个文件） | 只做参数校验与编排，不写业务 |
-| `models/` | ORM 模型（27 个文件） | 一张表一个文件；**新增表必须注册进 `models/__init__.py`** |
+| `models/` | ORM 模型（29 个文件） | 一张表一个文件；**新增表必须注册进 `models/__init__.py`** |
 | `schemas/` | Pydantic 契约 | 前后端共用的请求/响应结构 |
 | `services/` | 业务层（最大） | 核心逻辑，与框架解耦、可离线测试 |
 | `services/resume/` `services/profile/` | 简历域 / 资料域 | 生成落地、一致性、版式、模板；读写、相关性、上下文、照片 |

@@ -52,6 +52,8 @@ const typography = {
   "typography.role.body": "正文",
   "typography.role.meta": "日期与元信息",
   "typography.role.emphasis": "重点文字",
+  /** 角色 header 上的覆盖计数胶囊：不写裸数字（读屏与视觉都要能自解释）。 */
+  "typography.role.ownCount": "{count} 项已调整",
   /** 恢复某个角色的全部覆盖。 */
   "typography.role.clear": "恢复这个段落类型",
   "typography.role.clearAria": "把「{role}」全部属性恢复到继承",

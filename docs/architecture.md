@@ -118,6 +118,65 @@ backend/app/
 
 SQLite 启动升级以 Alembic 为唯一结构来源：空库执行完整 revision 链，已版本化数据库只执行待应用 revision。仅当检测到早期未版本化业务表时，才先执行 `create_all` 和 `ensure_sqlite_columns` 补齐历史兼容结构，再标记为基线并交给 `run_database_migrations`。有用户数据且存在待执行 revision 时，使用 SQLite backup API 在数据库同级 `backups/` 目录创建一致性备份，然后升级到 `head`。`0003_job_additional_info`、`0004_resume_favorite`、`0005_chat_assistant`、`0006_chat_conversation_flags`、`0007_assistant_skills` 依次增加岗位其他信息、简历收藏状态、助手会话/消息表、会话置顶和收藏字段以及助手技能表；`0006` 使用原生新增列操作，避免 SQLite 重建会话父表时触发外键级联并删除消息。升级保留既有业务记录并为新增字段提供默认值。降级会按 revision 移除对应的新字段或表，因此执行降级前必须另外备份。后续新增/删除列、改类型、约束变化和数据回填都必须新增 revision，不再扩大临时兼容层。
 
+## 核心数据流：职业场景与补充事实（A1–A5）
+
+职业场景（`career_scenario`）与简历排版对象的 `ROLES`（姓名/正文/元信息等渲染分区）、面试 persona、
+工作区预设、数据集是**五个互不相干的层**。场景只回答"本窗口给什么引导与可选表达建议"，不能写简历正文；
+它的定义保存在当前数据集的 SQLite 里（每数据集独立），当前窗口选中的场景 id 只存 `sessionStorage`。
+
+```mermaid
+flowchart LR
+    UI["本窗口场景选择 / 场景编辑"] -->|"仅GET（零业务写入）"| API["/api/career-scenarios"]
+    UI -->|"显式：用于本次生成"| GEN["生成请求 options.career_context"]
+    GEN --> RESOLVE["services/career_scenarios/resolve.py<br/>校验 revision / 裁剪隐私 / context_sha256"]
+    RESOLVE --> SNAP["不可变快照（server-owned）"]
+    SNAP --> TASK["resume_generate_task.context_snapshot"]
+    SNAP --> PROMPT["scenario_context.build_scenario_prompt_block<br/>≤900 字、默认不含就业状态"]
+    TASK --> RUNNER["runner 只读任务快照，运行中不再查当前场景"]
+    RUNNER --> RECORD["resume_record.context_snapshot"]
+    RECORD --> VERSION["命名版本深拷贝 / 变体继承 / 从版本恢复一起写回"]
+```
+
+硬约束（回归见 `tests/test_generation_context_wiring.py` 与 `tests/test_generation_context.py`）：
+
+- 切换/编辑场景不写任何业务数据；不重置筛选、表单、选中简历与后台任务；不改模型/权限/数据集。
+- `career_context` 缺省/null 时两条生成传输（SSE 与后台任务）的候选资料与提示词逐字节不变。
+- 任务创建时解析并冻结快照；失败/取消不落简历；历史记录 NULL = 未记录，不按当前场景回填。
+- 上下文只放独立列，**不进 content / render_context / format_config**，不参与内容哈希与渲染缓存键。
+- 就业状态默认不发送；证号等私密字段永远不进模型、日志与纸面。
+- 任务创建与 `runner.start` 之间切换数据集由 **HTTP 请求租约 + 长任务租约的交接**封住：
+  请求未结束时切换会 409（排空超时），runner 拿到租约后切换要等任务结束；回归见
+  `tests/test_task_start_dataset_race.py`。场景切换的零业务写入同时有网络断言
+  （`ScenarioSelector.test.tsx`）与 DB 逐表内容哈希证据（`tests/test_scenario_switch_zero_write.py`）。
+- 冻结上下文时只记结构化版本日志（origin / scenario_id / revision / catalog_version /
+  context_sha256 前缀），不记录场景正文与就业状态。
+
+**按职业场景派生变体（A5）**：`POST /api/resumes/{id}/scenario-variants` 先派生独立变体
+（`resume_variant.context_snapshot` 由 resolver 冻结）；`POST …/variants/{vid}/scenario-preview`
+调用 `revise_resume(..., career_context_block=…)` 输出候选且**不落库**；`POST …/scenario-adopt`
+以「变体内容指纹 + 场景上下文哈希」双条件写只改变体。改动基准是这条变体的旧内容（不是母版），
+`lock_content` 违规 409 且一个字段都不写；源简历的内容、revision、锁与来源标注全程不变。
+实现见 `services/resume/scenario_variant.py`、`api/resumes/scenario_variant_routes.py`，
+前端 `components/resume/versions/ScenarioVariantSection.tsx`。
+
+补充事实（`profile_fact`，0062；2026-10-25 灵活化）是**九类补充资料容器**，与旧资料表隔离：旧
+`PUT /api/profile` 是"整体替换"，新事实只由 `/api/profile/facts` 写入，因此旧客户端保存资料不会清空它们。
+每条事实有稳定 `fact_id` 与 `revision`（条件写），`deleted_at` 软删并登记回收站。
+
+**字段设置（`profile_fact_field_pref`，0063）**：每类事实可隐藏默认字段、增加自定义字段定义；事实 payload
+里保存 `custom_fields` 值快照（key+label+value）。隐藏字段只在读写/导出层剔除，旧值保留在 payload，
+恢复默认后重新出现。生成入口用 `fact_context.py` 读快照 + `fact_field_schema.mapping_payload` 剔除隐藏/未定义
+自定义字段；`fact_mapping.py` 纯映射：论文/科研项目/专利/资格证照独立栏目，作品项目并入 `projects`、实践
+并入 `experiences`，荣誉并入 `awards`、语言并入 `skills`、培训并入 `projects`（artifact_type=培训）；
+资格证照编号永不进候选，链接只留 http(s)。网申侧 `services/webform/facts.py` 把可见字段作为
+`CUSTOM_FACT_` 条目并入 catalog/data/custom_labels（私密与隐藏字段排除，已有资料优先），供人工挑选、
+批量预填与放宽匹配使用。
+
+**跨行业筛选兜底（A4/§8.5）**：非技术岗位（DOMAIN_SIGNALS 未识别）且没有任何条目直接命中时，
+`profile_matching` 会按资料顺序保留少量真实经历/项目/技能作为候选，并在生成说明里如实标注
+"交集较少、资料中未提供的岗位要求不会编写"；识别出领域但资料确实无证据时仍返回空候选（诚实筛选）。
+回归见 `tests/test_profile_matching_cross_industry.py`。
+
 ## 核心数据流：AI 生成简历
 
 ```mermaid

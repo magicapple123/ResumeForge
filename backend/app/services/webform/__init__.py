@@ -37,6 +37,15 @@ from .data import (
 )
 from .engine import ApplyOutcome, Control, FieldMapping, FormEngine, MatchResult, SkipNote
 from .extra_profile import EXTRA_FIELD_KEYS, list_entries, save_entries
+from .facts import (
+    fact_catalog_entries as fact_catalog_entries,
+)
+from .facts import (
+    fact_custom_labels as fact_custom_labels,
+)
+from .facts import (
+    merge_fact_data as merge_fact_data,
+)
 from .fields import (
     FIELD_KEYS,
     FIELD_LABELS,
@@ -133,6 +142,9 @@ __all__ = [
     "delete_record",
     "EXTRA_FIELD_KEYS",
     "enrich_preview_with_ai",
+    "fact_catalog_entries",
+    "fact_custom_labels",
+    "merge_fact_data",
     "format_date",
     "get_snapshot_store",
     "is_apply_running",

@@ -14,9 +14,10 @@
  * jsdom 里测不了，也会让"落点提示"与"实际插入"两套算法分叉）。精确的首尾控制由键盘
  * 的 Home/End 负责。
  */
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { DragEvent, KeyboardEvent } from "react";
 import { t } from "../../../i18n";
+import type { ResumeContent } from "../../../types/resume";
 import { canMoveEntry, canMovePoint } from "../../../features/resume-outline/commands";
 import {
   entryKey,
@@ -40,6 +41,7 @@ import {
   sortSessionCommand,
   sortSessionForSelection,
 } from "./outlineTree";
+import { structurePreviewContent } from "./outlinePreview";
 
 export interface OutlineSortOptions {
   model: OutlineModel;
@@ -50,6 +52,13 @@ export interface OutlineSortOptions {
   notifyBlocked: (reason: OutlineBlockReason) => void;
   /** 只读宿主（没有 onCommand）不排序；面板也不会渲染排序手柄，这里再兜一层。 */
   enabled: boolean;
+  /**
+   * 预览基准内容（含未保存编辑）：拖动/键盘排序时按它算出"只给画布看"的重排结果。
+   * 它必须与 `model` 来自同一份内容（id 对得上），否则命令按 id 找不到对象、预览会静默消失。
+   */
+  previewBase: ResumeContent | null;
+  /** 结构预览出口：排序会话改变时给出新内容，结束（松手 / 取消 / 提交）时给 null。 */
+  onStructurePreview?: (content: ResumeContent | null) => void;
 }
 
 /** 一次拖拽携带的信息（只记身份；落点按目标行当前下标算）。 */
@@ -92,6 +101,24 @@ function entryName(entry: OutlineEntry | null): string {
   return entry && entry.title ? entry.title : t("outline.entry.untitled");
 }
 
+/** 目标行在**基准模型**里的下标：命令的 `toIndex` 也是这个口径（预览树已重排，下标不能现算）。 */
+function entryIndexInModel(model: OutlineModel, field: OutlineEntry["field"], objectId: string) {
+  const section = model.sections.find((item) => item.field === field);
+  return section?.entries.find((item) => item.objectId === objectId)?.index ?? -1;
+}
+
+/** 要点在它那个 pointField 分组里的基准下标（`reorder-point` 的 toIndex 口径）。 */
+function pointIndexInModel(model: OutlineModel, entry: OutlineEntry, point: OutlinePoint) {
+  const found = findOutlinePoint(model, {
+    kind: "point",
+    field: entry.field,
+    objectId: entry.objectId,
+    pointField: point.pointField,
+    pointId: point.pointId,
+  });
+  return found?.index ?? -1;
+}
+
 export function useOutlineSort({
   model,
   selection,
@@ -100,6 +127,8 @@ export function useOutlineSort({
   announce,
   notifyBlocked,
   enabled,
+  previewBase,
+  onStructurePreview,
 }: OutlineSortOptions): OutlineSortApi {
   const [sortSession, setSortSession] = useState<OutlineSortSession | null>(null);
   const [dragPayload, setDragPayload] = useState<OutlineDragPayload | null>(null);
@@ -146,6 +175,8 @@ export function useOutlineSort({
   const startSort = useCallback(
     (target: OutlineSelection) => {
       if (!enabled) return;
+      // 拖动中不再开键盘会话：两者共用同一条 sortSession，后开的会把拖动预览顶掉。
+      if (dragPayload) return;
       if (target.kind === "entry") {
         const entry = findOutlineEntry(model, target);
         if (!entry) return notifyBlocked("not-found");
@@ -167,7 +198,7 @@ export function useOutlineSort({
       setSortSession(session);
       announceSort(session);
     },
-    [announceSort, enabled, model, notifyBlocked, select],
+    [announceSort, dragPayload, enabled, model, notifyBlocked, select],
   );
 
   const moveSort = useCallback(
@@ -244,19 +275,43 @@ export function useOutlineSort({
   );
 
   // ── 拖拽 ───────────────────────────────────────────────────────
+  // 拖拽与键盘共用同一个 `sortSession`：开拖即建立会话，dragOver 只挪 `currentIndex`，
+  // 松手（drop）才派发**一条**命令。于是"拖动中看到的顺序"与"提交的顺序"是同一条命令
+  // 算出来的，两套算法不可能分叉；拖到条目外由 dragend 清会话，不留任何历史。
   const endDrag = useCallback(() => {
     setDragPayload(null);
     setDropTargetKey(null);
+    // 松手 = 拖动会话结束（预览内容由下面的 effect 一并清掉）；键盘会话不经过这里。
+    setSortSession((previous) => (previous ? null : previous));
   }, []);
+
+  /** 拖拽落点：提交会话里最后一步（一条命令），然后收起拖动状态。 */
+  const commitDrag = useCallback(() => {
+    const session = sortSession;
+    if (session && session.currentIndex !== session.startIndex) {
+      const name = nameOfSession(session);
+      if (dispatch(sortSessionCommand(session))) {
+        announce(t("outline.sort.committed", { name, position: session.currentIndex + 1 }));
+      }
+    }
+    endDrag();
+  }, [announce, dispatch, endDrag, nameOfSession, sortSession]);
 
   const beginEntryDrag = useCallback(
     (entry: OutlineEntry) => {
       if (!enabled) return;
       if (!canMoveEntry(entry)) return notifyBlocked("locked-layout");
-      select({ kind: "entry", field: entry.field, objectId: entry.objectId });
+      const target: OutlineSelection = {
+        kind: "entry",
+        field: entry.field,
+        objectId: entry.objectId,
+      };
+      select(target);
       setDragPayload({ kind: "entry", field: entry.field, objectId: entry.objectId });
+      // 拖动会话与键盘会话互斥：开拖即接管（两者共用同一条 sortSession）。
+      setSortSession(sortSessionForSelection(model, target));
     },
-    [enabled, notifyBlocked, select],
+    [enabled, model, notifyBlocked, select],
   );
 
   const beginPointDrag = useCallback(
@@ -264,13 +319,14 @@ export function useOutlineSort({
       if (!enabled) return;
       if (!canMovePoint(entry)) return notifyBlocked("locked-layout");
       if (!point.pointId) return;
-      select({
+      const target: OutlineSelection = {
         kind: "point",
         field: entry.field,
         objectId: entry.objectId,
         pointField: point.pointField,
         pointId: point.pointId,
-      });
+      };
+      select(target);
       setDragPayload({
         kind: "point",
         field: entry.field,
@@ -278,48 +334,41 @@ export function useOutlineSort({
         pointField: point.pointField,
         pointId: point.pointId,
       });
+      setSortSession(sortSessionForSelection(model, target));
     },
-    [enabled, notifyBlocked, select],
+    [enabled, model, notifyBlocked, select],
   );
 
   const dragOverEntry = useCallback(
     (entry: OutlineEntry, event: DragEvent<HTMLDivElement>) => {
       if (dragPayload?.kind !== "entry" || dragPayload.field !== entry.field) return;
-      if (dragPayload.objectId === entry.objectId) return;
+      // 指针可能正停在"已经被预览挪到身下"的被拖行上：允许落点（drop 时提交最后一步），
+      // 但顺序不再变——否则指针每帧都把自己算成新目标，树会来回抖。
       event.preventDefault();
-      setDropTargetKey(entryKey(entry.field, entry.objectId));
+      if (dragPayload.objectId === entry.objectId) return;
+      const key = entryKey(entry.field, entry.objectId);
+      // dragOver 高频：目标没变就什么都不做（同目标不重复 setState / 不重建大对象）。
+      if (key === dropTargetKey) return;
+      setDropTargetKey(key);
+      const targetIndex = entryIndexInModel(model, entry.field, entry.objectId);
+      if (targetIndex < 0) return;
+      setSortSession((previous) => {
+        if (!previous || previous.kind !== "entry" || previous.currentIndex === targetIndex) {
+          return previous;
+        }
+        return { ...previous, currentIndex: targetIndex };
+      });
     },
-    [dragPayload],
+    [dragPayload, dropTargetKey, model],
   );
 
   const dropOnEntry = useCallback(
     (entry: OutlineEntry, event: DragEvent<HTMLDivElement>) => {
       if (dragPayload?.kind !== "entry" || dragPayload.field !== entry.field) return;
       event.preventDefault();
-      const section = previewTree.sections.find((item) => item.field === entry.field);
-      const targetIndex =
-        section?.entries.findIndex((item) => item.objectId === entry.objectId) ?? -1;
-      const draggedName = entryName(
-        findOutlineEntry(model, {
-          kind: "entry",
-          field: dragPayload.field,
-          objectId: dragPayload.objectId,
-        }),
-      );
-      if (targetIndex >= 0 && dragPayload.objectId !== entry.objectId) {
-        const command: OutlineCommand = {
-          type: "reorder-entry",
-          field: dragPayload.field,
-          objectId: dragPayload.objectId,
-          toIndex: targetIndex,
-        };
-        if (dispatch(command)) {
-          announce(t("outline.sort.committed", { name: draggedName, position: targetIndex + 1 }));
-        }
-      }
-      endDrag();
+      commitDrag();
     },
-    [announce, dispatch, dragPayload, endDrag, model, previewTree],
+    [commitDrag, dragPayload],
   );
 
   const dragOverPoint = useCallback(
@@ -327,11 +376,21 @@ export function useOutlineSort({
       if (dragPayload?.kind !== "point") return;
       if (dragPayload.objectId !== entry.objectId || dragPayload.pointField !== point.pointField)
         return;
-      if (dragPayload.pointId === point.pointId) return;
       event.preventDefault();
-      setDropTargetKey(pointTreeKey(entry.field, entry.objectId, point.pointField, point.pointId));
+      if (dragPayload.pointId === point.pointId) return;
+      const key = pointTreeKey(entry.field, entry.objectId, point.pointField, point.pointId);
+      if (key === dropTargetKey) return;
+      setDropTargetKey(key);
+      const targetIndex = pointIndexInModel(model, entry, point);
+      if (targetIndex < 0) return;
+      setSortSession((previous) => {
+        if (!previous || previous.kind !== "point" || previous.currentIndex === targetIndex) {
+          return previous;
+        }
+        return { ...previous, currentIndex: targetIndex };
+      });
     },
-    [dragPayload],
+    [dragPayload, dropTargetKey, model],
   );
 
   const dropOnPoint = useCallback(
@@ -340,35 +399,24 @@ export function useOutlineSort({
       if (dragPayload.objectId !== entry.objectId || dragPayload.pointField !== point.pointField)
         return;
       event.preventDefault();
-      const sourcePoint = findOutlinePoint(model, {
-        kind: "point",
-        field: dragPayload.field,
-        objectId: dragPayload.objectId,
-        pointField: dragPayload.pointField,
-        pointId: dragPayload.pointId,
-      });
-      if (point.pointId && dragPayload.pointId !== point.pointId) {
-        const command: OutlineCommand = {
-          type: "reorder-point",
-          field: dragPayload.field,
-          objectId: dragPayload.objectId,
-          pointField: dragPayload.pointField,
-          pointId: dragPayload.pointId,
-          toIndex: point.index,
-        };
-        if (dispatch(command)) {
-          announce(
-            t("outline.sort.committed", {
-              name: sourcePoint?.text || t("outline.point.label"),
-              position: point.index + 1,
-            }),
-          );
-        }
-      }
-      endDrag();
+      commitDrag();
     },
-    [announce, dispatch, dragPayload, endDrag, model],
+    [commitDrag, dragPayload],
   );
+
+  // ── 结构预览（只给右栏画布，不落库、不进历史）──────────────────
+  // 只服务**拖动**：键盘会话是"逐键改 currentIndex"，每一步都推右栏重排只会让纸面闪；
+  // 拖动是一次持续手势，用户期待纸面跟着手走。会话对象只在目标下标变化时换新引用，
+  // 所以 applyOutlineCommand 不会在每帧 dragOver 里重算。
+  const structurePreview = useMemo(
+    () => (dragPayload ? structurePreviewContent(previewBase, sortSession) : null),
+    [dragPayload, previewBase, sortSession],
+  );
+  useEffect(() => {
+    onStructurePreview?.(structurePreview);
+  }, [onStructurePreview, structurePreview]);
+  // 面板卸载（切页签 / 关制作台）时收起预览：右栏不能停在"会话已不存在"的顺序上。
+  useEffect(() => () => onStructurePreview?.(null), [onStructurePreview]);
 
   // 内容里已经找不到被排序的对象（并发保存/切记录）时，会话自动作废，不留悬空预览。
   if (

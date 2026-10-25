@@ -58,18 +58,20 @@ from .document_identity import is_object_id, resolve_object_path, resolve_point_
 _MISSING = object()
 
 
-# 路径 → 事实锁类型的识别表（W14 科研字段纳入同一份清单；按叶子字段名匹配，
-# publications.0.status / patents.2.status 都命中 status）。
+# 路径 → 事实锁类型的识别表（W14 科研字段 + A4 证照/作品/实践字段纳入同一份清单；
+# 按叶子字段名匹配，publications.0.status / credentials.1.status 都命中 status）。
+# 新增字段只复用既有锁类型（不新造）：证照核验链接与作品公开链接是"标识符"，
+# 关系类型/成果类型是"分类状态"（AI 不得把它们升级成更有利的取值）。
 _FIELD_KIND_HINTS: tuple[tuple[tuple[str, ...], str], ...] = (
-    (("status",), FACT_LOCK_STATUS),
-    (("doi", "patent_number", "isbn", "arxiv_id"), FACT_LOCK_IDENTIFIER),
+    (("status", "experience_kind", "artifact_type"), FACT_LOCK_STATUS),
+    (("doi", "patent_number", "isbn", "arxiv_id", "verify_url", "public_url", "url"), FACT_LOCK_IDENTIFIER),
     (("is_self", "corresponding", "author_order", "author_position"), FACT_LOCK_AUTHORSHIP),
     (("year", "start_date", "end_date", "date", "published_at", "filed_at"), FACT_LOCK_TIME),
     (("company", "school", "organization", "institution", "issuer"), FACT_LOCK_INSTITUTION),
     (("boundary", "responsibility", "responsibility_boundary"), FACT_LOCK_RESPONSIBILITY),
     (("name",), FACT_LOCK_NAME),
 )
-_RESEARCH_PREFIXES = ("publications", "patents", "publication", "patent")
+_RESEARCH_PREFIXES = ("publications", "patents", "publication", "patent", "credentials", "credential")
 
 
 def infer_fact_lock_kind(path: str) -> str:

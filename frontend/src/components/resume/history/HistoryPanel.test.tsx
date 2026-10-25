@@ -61,8 +61,12 @@ describe("HistoryPanel", () => {
     });
     fireEvent.click(newest);
     const preview = screen.getByRole("status");
+    expect(preview).toHaveTextContent(t("workbench.history.preview.label"));
     expect(preview).toHaveTextContent(t("workbench.history.label.layout"));
     expect(preview).toHaveTextContent("Alex · 0 条 · 2 页");
+    // 预览条必须在列表之前（DOM 顺序）：放在底部会与刚点的那一行逐字重复，
+    // 视觉上像"列表里多出一行"，也丢掉了"这是预览"的语义。
+    expect(preview.compareDocumentPosition(newest) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     // 点步骤不触发回退。
     expect(onUndo).not.toHaveBeenCalled();
   });

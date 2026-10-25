@@ -1,0 +1,107 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/* 制作台「历史」页签（W03）的样式。
+ *
+ * 2026-10-25 UI 排版优化（任务 C3）：去掉内联样式与裸 <button>，步骤行改成 antd Button
+ * （type=text + block），选中态用 --rf-brand-tint 背景 + --rf-brand 1px 描边；
+ * 预览摘要块（role=status）做成底部信息条。颜色 / 圆角 / 间距只走 --rf-* token。 */
+
+.resume-history {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 0;
+  color: var(--rf-text-body);
+  font-size: 13px;
+}
+
+.resume-history-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.resume-history-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 0;
+}
+
+.resume-history-hint {
+  margin: 0;
+  color: var(--rf-text-secondary);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+/* 分组标题：12/600 secondary，与步骤列表 4px。 */
+.resume-history-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.resume-history-group-title {
+  color: var(--rf-text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+/* 步骤行：antd text 按钮改成"两行、左对齐、通栏"，行高由内容决定。
+   这里是 antd-override: 私有形态 —— 按钮要当"可选中的两行步骤卡"用，antd 没有等价形态。 */
+.resume-history-step.ant-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  height: auto;
+  border: 1px solid var(--rf-border-subtle);
+  border-radius: var(--rf-radius-control);
+  padding: 4px 8px;
+  background: transparent;
+  color: var(--rf-text-body);
+  text-align: left;
+  white-space: normal;
+}
+
+.resume-history-step.ant-btn:hover {
+  background: var(--rf-surface-alt);
+}
+
+.resume-history-step-label {
+  font-size: 13px;
+  line-height: 18px;
+}
+
+.resume-history-step-summary {
+  color: var(--rf-text-secondary);
+  font-size: 12px;
+  line-height: 16px;
+}
+
+/* 选中态：淡品牌底 + 品牌描边（不只用边框颜色区分）。antd text 按钮的 hover
+   选择器权重更高，所以这两条加 !important，否则鼠标划过时选中底色会被盖掉。
+   antd-override: 私有形态 —— 选中态表达由 aria-pressed 驱动，antd 无对应样式槽。 */
+.resume-history-step.is-selected.ant-btn {
+  border-color: var(--rf-brand) !important;
+  background: var(--rf-brand-tint) !important;
+}
+
+/* 预览摘要：底部信息条（surface-alt + 12px）。 */
+.resume-history-preview {
+  border: 1px solid var(--rf-border-subtle);
+  border-radius: var(--rf-radius-control);
+  padding: 6px 8px;
+  background: var(--rf-surface-alt);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.resume-history-preview strong {
+  font-weight: 600;
+}
+
+/* 「当时：」前缀与摘要同为 12px secondary：读起来是"快照"，而不是列表里的一行。 */
+.resume-history-preview-label,
+.resume-history-preview-summary {
+  color: var(--rf-text-secondary);
+}

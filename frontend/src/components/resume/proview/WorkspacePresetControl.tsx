@@ -22,11 +22,12 @@ interface Props {
 
 export default function WorkspacePresetControl({ value, onChange, onReset }: Props) {
   const { message } = App.useApp();
+  // 选项标签必须是**纯文本**：外层 Tooltip 已经把「只切换面板可见性…」解释了一遍，
+  // 再给每个选项套一层同样的 Tooltip 会在悬停时同时弹出两个（2026-10-25 用户截图：
+  // 两句话叠在一起）。一个触发区只留一个提示。
   const options = WORKSPACE_PRESET_IDS.map((id) => ({
     value: id,
-    label: (
-      <Tooltip title={t("proview.workspace.hint")}>{t(WORKSPACE_PRESET_LABEL_KEY[id])}</Tooltip>
-    ),
+    label: t(WORKSPACE_PRESET_LABEL_KEY[id]),
   }));
   return (
     <Space size={4}>

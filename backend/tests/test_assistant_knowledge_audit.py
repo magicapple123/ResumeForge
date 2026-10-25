@@ -53,6 +53,8 @@ README_FEATURE_KEYS: dict[str, tuple[str, ...]] = {
     "试用与对比": ("template_trial",),
     "个人资料库": ("profile",),
     "简历照片": ("profile_photo",),
+    "补充事实": ("profile_facts",),
+    "职业场景": ("career_scenario",),
     "事实台账": ("claims",),
     "面试深挖": ("drill",),
     "资料箱": ("materials",),

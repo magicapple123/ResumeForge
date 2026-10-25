@@ -31,6 +31,7 @@ from ...schemas.preflight import (
     PreflightSnapshot,
 )
 from ...schemas.resume import ResumeContent
+from ...schemas.resume_generation import mode_page_limit
 from ...services import trash
 from ...services.export_pipeline import (
     ExportRequest,
@@ -106,6 +107,8 @@ def _resolve_display_layout(db: Session, record, payload: PreflightRequest, vari
         or variant.get("page_limit")
         or record.page_limit
     )
+    # A4 长 CV：草稿页数按记录的文档模式夹紧（普通 1–3 / 长 CV 1–10），与保存路径同源。
+    page_limit = mode_page_limit(page_limit, getattr(record, "document_mode", None) or "resume")
     font_scale = (
         payload.font_scale
         or (layout.font_scale if layout and layout.font_scale else None)

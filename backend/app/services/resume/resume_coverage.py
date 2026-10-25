@@ -33,6 +33,12 @@ _SECTION_MAP: tuple[tuple[str, str, str, str], ...] = (
     ("campus_experience", "campus_experiences", "organization", "校园经历"),
     ("awards", "awards", "name", "荣誉奖项"),
     ("education", "educations", "school", "教育经历"),
+    # A4 扩展栏目：身份字段与候选键同名（entry_names 里没有这些键时自然跳过，
+    # 旧链路行为逐字不变）。
+    ("publications", "publications", "title", "论文"),
+    ("research_projects", "research_projects", "name", "科研项目"),
+    ("patents", "patents", "title", "专利"),
+    ("credentials", "credentials", "name", "资格证照"),
 )
 
 # 一次最多报几条，避免一份资料特别厚的用户收到一面墙的警告。

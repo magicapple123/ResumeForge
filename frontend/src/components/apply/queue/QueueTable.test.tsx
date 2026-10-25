@@ -11,7 +11,7 @@
  * 容器"这件事在结构上钉住，等真实浏览器的冒烟（tests/smoke/a11y.spec.ts）去验规则本身。
  */
 import { App as AntdApp } from "antd";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { expectNoUnfocusableScroller } from "../../../test/a11yScrollRegion";
 import type { ApplyQueueItem } from "../../../types";
@@ -80,6 +80,22 @@ describe("QueueTable 横向滚动区（a11y）", () => {
       container.querySelector(".ant-table")?.classList.contains("ant-table-scroll-horizontal"),
     ).toBe(true);
     expect(container.querySelector<HTMLElement>(".ant-table table")?.style.width).toBe("880px");
+  });
+
+  it("悬停「来源不支持」标签只弹一个提示，不与岗位提示叠在一起", async () => {
+    const { container } = renderTable([{ ...BASE_ITEM, apply_supported: false }]);
+    const tag = container.querySelector<HTMLElement>(".ant-tag");
+    expect(tag).not.toBeNull();
+    fireEvent.mouseEnter(tag as HTMLElement);
+    const visibleTips = () =>
+      [...document.querySelectorAll(".ant-tooltip")].filter(
+        (node) => !node.classList.contains("ant-tooltip-hidden"),
+      );
+    await waitFor(() => expect(visibleTips()).toHaveLength(1), { timeout: 2000 });
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    // 修复前：岗位提示（外层）与来源提示（标签自己）会同时出现 = 2 条。
+    expect(visibleTips()).toHaveLength(1);
+    expect(visibleTips()[0]?.textContent ?? "").toContain("来源不在投递台支持");
   });
 
   it("有数据时滚动区里有可聚焦元素（行内「查看详情」链接按钮），规则不会命中", async () => {

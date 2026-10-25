@@ -28,6 +28,7 @@ import {
 } from "../features/tou-tou/profileSaveBridge";
 import { useProfilePage } from "../features/profile/useProfilePage";
 import { useWebformParse } from "../features/profile/useWebformParse";
+import ProfileFactsSection from "../features/profile-facts/ProfileFactsSection";
 import { useFormShortcutHistory } from "../features/shortcuts/useFormShortcutHistory";
 import type { WebFormExtraProfile } from "../types";
 
@@ -437,6 +438,16 @@ export default function ProfilePage() {
       />
 
       {workspaceTabs}
+
+      {/*
+        补充事实（A3）：独立 CRUD 的新资料区块，**不放进上面的 Form** —— 事实编辑有自己的
+        保存动作，不能被整页「编辑资料」的禁用态罩住；也不能混进「保存全部资料」的 PUT。
+        切到「网申资料」时用 display:none 隐藏而不是卸载：保留已加载列表与编辑中的输入，
+        回到「简历资料」不用重新请求。
+      */}
+      <div style={{ display: activeWorkspace === "resume" ? undefined : "none" }}>
+        <ProfileFactsSection />
+      </div>
 
       {/* 粘贴识别两个弹窗抽到 `ProfilePageModals`（P5b 预算前置）：本文件守在 500 行内。 */}
       <ProfilePageModals profileText={profileTextModal} webformText={webformParse.modalProps} />

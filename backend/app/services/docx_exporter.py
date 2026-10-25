@@ -31,7 +31,8 @@ from io import BytesIO
 from docx import Document
 from docx.shared import Mm
 
-from ..schemas.resume import MAX_RESUME_PAGES, ResumeContent
+from ..schemas.resume import ResumeContent
+from ..schemas.resume_generation import LONG_CV_MAX_PAGES
 from .docx_blocks import (
     DOCX_FONT,
     decorate_paragraph,
@@ -330,7 +331,9 @@ def build_resume_docx(
     layout = resolve_layout(
         template=spec["name"], base_px=base_px, format_config=overrides, margin_mm=margin_mm
     )
-    limit = max(1, min(int(page_limit), MAX_RESUME_PAGES))
+    # A4 长 CV：Word 只按 page_limit 估算 overflow、不截断内容，所以防御性上限用
+    # 长 CV 的 10 页（普通简历的 1–3 在调用方已按文档模式夹紧，行为不变）。
+    limit = max(1, min(int(page_limit), LONG_CV_MAX_PAGES))
 
     pages, overflow = _estimate_pages(
         resume,

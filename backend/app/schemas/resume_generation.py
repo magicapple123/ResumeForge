@@ -16,7 +16,9 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+
+from .generation_context import CareerContextRequest
 
 # 版式参数：最大篇幅（A4 页数）、字号档位、模板。默认 1 页 + 标准字号。
 MAX_RESUME_PAGES = 3
@@ -78,8 +80,11 @@ class GenerateOptions(BaseModel):
     model_config = ConfigDict(extra="forbid")
     enhance: bool = False
     enhancement_level: Literal["light", "balanced", "strong"] = "balanced"
-    # 目标篇幅：默认 1 页 A4。塞不下时用户可在预览页加大页数或缩小字号后重新渲染。
-    page_limit: int = Field(default=1, ge=1, le=MAX_RESUME_PAGES)
+    # 文档形态（W14/A4）：普通简历 1–3 页；长 CV 1–10 页。**缺省 resume**，旧请求逐字兼容。
+    # 长 CV 只在用户显式选择时生效（选择器不会自动切模式）。
+    document_mode: ResumeMode = "resume"
+    # 目标篇幅：默认 1 页 A4。上限随文档模式变化（见 _check_page_limit_for_mode）。
+    page_limit: int = Field(default=1, ge=1, le=LONG_CV_MAX_PAGES)
     font_scale: ResumeFontScale = "standard"
     template: str = Field(default="classic", max_length=64)
     # 版式（一组排版覆盖）的名字：内置预设或用户自制版式；空串表示用模板默认的版式。
@@ -89,6 +94,23 @@ class GenerateOptions(BaseModel):
     format_config: dict = Field(default_factory=dict)
     # 用户自己补充的生成要求；只作为附加上下文，不会覆盖系统提示里的防虚构规则。
     custom_instruction: str = Field(default="", max_length=MAX_CUSTOM_INSTRUCTION_CHARS)
+    # 本次显式选用的职业场景（A5）。**缺省/null = 不启用**：请求与提示词保持旧行为；
+    # 实际解析与冻结由服务端 resolver 完成，客户端不能上传快照/系统指南正文。
+    career_context: CareerContextRequest | None = None
+
+    @model_validator(mode="after")
+    def _check_page_limit_for_mode(self) -> GenerateOptions:
+        """页数上限按文档模式校验。
+
+        为什么不在 schema 层直接 le=3：长 CV 是另一种文档形态，需要 1–10；但普通简历模式
+        下超过 3 仍应像以前一样 422（旧协议语义不变），所以这里按模式抛校验错误。
+        """
+        low, high = MODE_PAGE_LIMITS[self.document_mode]
+        if not low <= self.page_limit <= high:
+            raise ValueError(
+                f"page_limit 超出当前文档模式的范围（{low}–{high} 页）"
+            )
+        return self
 
     @field_validator("format_config", mode="before")
     @classmethod

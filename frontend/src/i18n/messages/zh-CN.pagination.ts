@@ -25,6 +25,37 @@ const pagination = {
   /** 板块选择器的无障碍名。 */
   "pagination.scope.sectionAria": "选择要设置的板块",
 
+  // ── 板块分页方式（全局显式选择，2026-10-25）───────────────────
+  /** 全局控件：整份简历的板块之间默认怎么排。 */
+  "pagination.mode.title": "板块分页方式",
+  "pagination.mode.aria": "板块分页方式",
+  /** 默认：板块自然续排（不是按模块断开）。 */
+  "pagination.mode.flow": "自然填充",
+  /** 每个板块都从新页开始。 */
+  "pagination.mode.page": "每板块新页",
+  /** 如实说明默认行为：避免用户以为精确模式默认按模块断开。 */
+  "pagination.mode.note": "板块默认自然续排，只有设了「从新页开始」的板块才从新页开始",
+  /** 部分板块有断页时的小结（自然填充模式下显示，把隐藏状态变可见）。 */
+  "pagination.mode.partial": "{count} 个板块从新页开始",
+
+  // ── 已设置的板块断页（可见 / 可清除）──────────────────────────
+  "pagination.breaks.title": "已设置断页",
+  /** 芯片上的清除按钮：动作写清对象。 */
+  "pagination.breaks.clearOne": "清除「{label}」的断页",
+  /** 一键恢复默认：清全部板块断页（条目级不动）。 */
+  "pagination.breaks.restore": "恢复自然分页",
+  "pagination.breaks.restoreHint": "清除所有板块的断页设置，条目级断页不受影响",
+
+  // ── 逐板块设置（可折叠，不默认占满高度）──────────────────────
+  "pagination.sections.settings": "逐板块设置",
+  /** 还没选板块时的提示。 */
+  "pagination.sections.pick": "选一个板块后可微调它的分页",
+  /** 折叠头右侧的已设断页计数。 */
+  "pagination.sections.summary": "{count} 个板块已设断页",
+
+  // ── 条目级分页（选中条目时出现）──────────────────────────────
+  "pagination.entry.title": "这一条的断页",
+
   // ── 三种分页意图 ───────────────────────────────────────────
   "pagination.breakBefore": "从新页开始",
   /** 说明：只在打印/导出生效。 */

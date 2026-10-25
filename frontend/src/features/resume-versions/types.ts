@@ -5,6 +5,7 @@
  * 契约：deliverables/software-company/ResumeForge-w13-versions-contract-20261024.md。
  * 后端字段改名 = 这里改；组件不临时补形状。
  */
+import type { CareerContextRequest } from "../../types/resume";
 import type { ResumeDiff } from "../../types/resumeWriting";
 
 /** 一条命名版本（不可变快照；frozen 只是显式标记）。 */
@@ -82,6 +83,8 @@ export interface VariantOut {
   base_version_id: number | null;
   last_synced_version_id: number | null;
   synced_at: string | null;
+  /** A5：派生/生成时冻结的职业场景上下文；旧变体为 null。 */
+  context_snapshot?: Record<string, unknown> | null;
   created_at: string | null;
   updated_at: string | null;
   /** W16 语言标签（旧变体为空串；be-prov 契约）。 */
@@ -127,4 +130,39 @@ export interface VariantSyncItemOut {
 export interface VariantSyncOut {
   source_version_id: number | null;
   items: VariantSyncItemOut[];
+}
+
+// ===== A5：按职业场景派生变体（创建 → 预览候选 → 采纳）=====
+
+export interface ScenarioVariantCreateRequest {
+  name: string;
+  career_context: CareerContextRequest;
+  base_version_id?: number | null;
+}
+
+export interface ScenarioVariantPreviewRequest {
+  career_context: CareerContextRequest;
+  /** 空 = 按场景表达偏好整体改写表达（不新增事实）。 */
+  instructions?: string;
+}
+
+/**
+ * 候选预览：只存在于这次响应里，采纳前不落库。
+ * content_diff 复用后端唯一的三态差异实现（与版本对比同源）。
+ */
+export interface ScenarioVariantPreviewOut {
+  variant: VariantOut;
+  candidate_content: Record<string, unknown>;
+  base_content_sha256: string;
+  candidate_content_sha256: string;
+  context_snapshot: Record<string, unknown>;
+  context_sha256: string;
+  content_diff: ResumeDiff;
+}
+
+export interface ScenarioVariantAdoptRequest {
+  content: Record<string, unknown>;
+  expected_content_sha256: string;
+  expected_context_sha256: string;
+  career_context: CareerContextRequest;
 }

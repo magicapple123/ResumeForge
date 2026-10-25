@@ -1,0 +1,236 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/* 「补充事实」区块（A3）：区块头动作层级、事实分组列表、编辑表单节奏。
+ *
+ * 2026-10-25 UI 排版优化（截图 3/4）：
+ * - 区块头此前「编辑字段」与「新建事实」同为默认按钮，主 CTA 不显眼，计数 Tag 贴着
+ *   标题、与动作行不在同一视觉节奏上；
+ * - 事实列表每组只有 1px 分隔线，"分组"在视觉上读不出来，条目行标题/次要信息同色同号；
+ * - 编辑表单的 Item 底距是 antd 默认 24px，作者行输入框与复选框基线各歪各的，
+ *   自定义字段没有小节边界，「保存」按钮直接贴在最后一个输入框下面。
+ *
+ * 只作用于本目录下的自定义类名；颜色只用 --rf-* 语义 token，间距用 4/8/12/16 刻度。
+ */
+
+/* ===== 区块头（截图 3） ===== */
+.profile-facts-head-title {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--rf-space-2);
+}
+
+.profile-facts-head-name {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+/* 计数弱化成 secondary 的胶囊：它只是补充信息，不该和右侧主 CTA 抢注意力。 */
+/* antd-override: 私有形态 —— Tag 的尺寸是组件内部 token（字号 12 / 行高 20），
+   这里只需要"更小的胶囊"这一种形态，用自定义类名限定作用域。 */
+.profile-facts-count.ant-tag {
+  margin-inline-end: 0;
+  color: var(--rf-text-secondary);
+  font-size: 12px;
+  line-height: 18px;
+  padding-inline: var(--rf-space-2);
+}
+
+/* antd-override: 布局无 token —— 头部与说明段落的间距收到 8px（Card body 的
+   上内边距没有对应 token），这样「头部 → 说明 → 列表」是 8 / 12 的节奏。 */
+.profile-facts-section > .ant-card-body {
+  padding-top: var(--rf-space-2);
+}
+
+/* 本主题 controlHeight = 40、antd 6 的卡头垂直内边距为 0：默认高度下 40px 的
+   动作按钮会上下贴住卡头边框。给卡头留 4px 余量，按钮不贴边。 */
+/* antd-override: 布局无 token —— Card 的 small 卡头高度由组件内部 min-height 决定。 */
+.profile-facts-section > .ant-card-head {
+  min-height: 48px;
+}
+
+/* 说明段落：12px secondary，与下方列表 / 编辑器留 12px。 */
+.profile-facts-hint {
+  margin: 0 0 12px;
+  font-size: 12px;
+  line-height: 20px;
+}
+
+/* ===== 事实列表（分组 + 条目行） ===== */
+/* 每组做成独立小卡、组间 12px：antd Collapse 默认是一条连续边框，组间只有 1px 线，
+   分组标题的层级会被压平（截图 3 里六组看起来像一整块表格）。 */
+/* antd-override: 私有形态 —— Collapse 是外部组件的结构类名，这里只在自定义容器内
+   把"每组独立成块 + 组间 12px"的形态定下来，颜色全部走 --rf-*。 */
+.profile-facts-groups.ant-collapse {
+  border: 0;
+  background: transparent;
+}
+
+/* 选择器统一写成「自定义容器 + antd 结构」：antd 6 的规则是三级
+   （`.ant-collapse-small > .ant-collapse-item > .ant-collapse-header`），同级的覆盖
+   会被 cssinjs（注入更晚）盖掉。注意 antd 6 的 DOM 是 header / title / panel / body，
+   v5 的 content / content-box 类名已经不存在。 */
+.profile-facts-groups.ant-collapse > .ant-collapse-item {
+  border: 1px solid var(--rf-border-subtle);
+  border-radius: var(--rf-radius-control);
+  background: var(--rf-surface);
+  overflow: hidden;
+}
+
+/* 首 / 末组的圆角由 antd 单独声明（首组只有上圆角、末组只有下圆角），
+   要一并覆盖，否则分组卡四个角不一致。 */
+.profile-facts-groups.ant-collapse > .ant-collapse-item:first-child,
+.profile-facts-groups.ant-collapse > .ant-collapse-item:last-child {
+  border-radius: var(--rf-radius-control);
+}
+
+.profile-facts-groups.ant-collapse > .ant-collapse-item + .ant-collapse-item {
+  margin-top: 12px;
+}
+
+.profile-facts-groups.ant-collapse .ant-collapse-item > .ant-collapse-header {
+  align-items: center;
+  min-height: 32px;
+  /* 上下各 5px：组头实际内容行盒 22px（13px 组名 + 18px 胶囊 + 图标行高），
+     5 + 22 + 5 = 32，正好是设计稿的组头行高。 */
+  padding: 5px 16px;
+  line-height: 20px;
+  /* 组头浅底：与内容行（白）区分，长列表里"这一组从哪开始"靠色带就能扫到。 */
+  background: var(--rf-surface-alt);
+}
+
+/* 组头文字行高：标题本身是 13px/600，行盒由外层 14px 的默认行高撑到 22.4px，
+   会让 min-height 32 的组头实际变成 34——这里逐层压回 20px。 */
+.profile-facts-groups.ant-collapse .ant-collapse-item > .ant-collapse-header .ant-collapse-title {
+  line-height: 20px;
+}
+
+.profile-facts-groups.ant-collapse .ant-collapse-item > .ant-collapse-panel {
+  border-top: 1px solid var(--rf-border-subtle);
+}
+
+/* 行内边距由 Listy 自己给（8px 16px），正文区不再叠一层——否则组头文字与条目标题
+   相差 16px、行尾按钮也比组头缩进更多，长列表里左缘会呈锯齿。 */
+.profile-facts-groups.ant-collapse .ant-collapse-item > .ant-collapse-panel > .ant-collapse-body {
+  padding: 0;
+}
+
+.profile-facts-group-label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--rf-space-2);
+  line-height: 20px;
+}
+
+.profile-facts-group-name {
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 20px;
+}
+
+/* 分组计数胶囊：与组名同一行，弱化成 secondary。 */
+/* antd-override: 私有形态 —— 同 .profile-facts-count，组头的胶囊要比 13px 组名更小。 */
+.profile-facts-group-count.ant-tag {
+  margin-inline-end: 0;
+  color: var(--rf-text-secondary);
+  font-size: 11px;
+  line-height: 16px;
+  padding-inline: 6px;
+}
+
+/* 条目行：标题 13px + 状态徽标同一行；次行 12px secondary。 */
+.profile-facts-row-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--rf-space-2);
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.profile-facts-row-secondary {
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--rf-text-secondary);
+}
+
+/* 行尾编辑 / 删除：同一行、间距 8px（ListyItem 内部动作区是 4px，这里单独一组按钮）。 */
+.profile-facts-row-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--rf-space-2);
+}
+
+/* ===== 编辑表单（截图 4） ===== */
+/* 单行字段在 1120 宽卡里会被拉成一条长带（标签与控件离得远、两列字段比例失衡），
+   表单内容限宽 960；容器更窄时自然收窄。 */
+.profile-facts-form {
+  max-width: 960px;
+}
+
+/* 表单节奏：Item 底距 16px（antd 默认 24 偏松），标签与控件之间 4px。 */
+/* antd-override: 布局无 token —— Form.Item 的 margin / label padding 是组件内部
+   token（24 / 8），本表单要的是 16 / 4 的更紧节奏。 */
+.profile-facts-editor .ant-form-item {
+  margin-bottom: 16px;
+}
+
+.profile-facts-editor .ant-form-item-label {
+  padding-bottom: 4px;
+}
+
+/* 底部动作与表单留 16px，不要贴在最后一个输入框下面。
+   这 16px 由表单最后一个 Form.Item 的 margin-bottom 提供（margin 折叠后正好
+   16px）；这里不要再加 margin-top，否则两段叠加成 32px。 */
+.profile-facts-editor-actions {
+  margin-top: 0;
+}
+
+/* 作者 / 发明人行：输入框 + 本人 / 通讯复选框 + 上移 / 下移 / 删除同一行、垂直居中；
+   「添加作者」是独立一行、与作者行间距 8px。 */
+.profile-facts-people-empty {
+  display: block;
+  margin-bottom: var(--rf-space-2);
+  font-size: 12px;
+}
+
+.profile-facts-people-rows {
+  display: flex;
+  flex-direction: column;
+  gap: var(--rf-space-2);
+}
+
+.profile-facts-person-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--rf-space-2);
+  min-width: 0;
+}
+
+.profile-facts-person-name {
+  width: 180px;
+}
+
+.profile-facts-person-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--rf-space-1);
+  margin-left: auto;
+}
+
+.profile-facts-person-add {
+  margin-top: var(--rf-space-2);
+}
+
+/* 自定义字段：独立小节（上边框 + 12px/600 标题），标签在输入框上方。 */
+.profile-facts-custom-fields {
+  margin-top: var(--rf-space-1);
+  padding-top: 12px;
+  border-top: 1px solid var(--rf-border-subtle);
+}
+
+.profile-facts-custom-fields-title {
+  display: block;
+  margin-bottom: var(--rf-space-2);
+  font-size: 12px;
+  font-weight: 600;
+}

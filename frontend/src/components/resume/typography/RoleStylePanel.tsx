@@ -19,7 +19,7 @@
  * 本组件只接收 `layout / catalog / previewRef / onChange`；挂载到左栏由 wb-core 落笔
  * （契约 §2.5 的挂载点约定），这里不 import 任何 shell 文件。
  */
-import { Collapse, Space, Typography } from "antd";
+import { Collapse, Typography } from "antd";
 import type { RefObject } from "react";
 import type { ResumeLayout, ResumeTemplateCatalog } from "../../../types";
 import type { ResumePreviewHandle } from "../../ResumePreview";
@@ -107,11 +107,17 @@ export default function RoleStylePanel({
     ));
     return {
       key: role,
+      // 角色名 + 「N 项已调整」小胶囊：裸数字脱离上下文读不通，也分不清是"几项"
+      // （2026-10-25 截图 2：header 里只有一个 3）。胶囊样式见 controls.css 同名段。
       label: (
-        <Space size={6}>
-          <span>{t(ROLE_LABELS[role])}</span>
-          {ownCount > 0 ? <Typography.Text type="secondary">{ownCount}</Typography.Text> : null}
-        </Space>
+        <span className="resume-typography-role-label">
+          <span className="resume-typography-role-name">{t(ROLE_LABELS[role])}</span>
+          {ownCount > 0 ? (
+            <span className="resume-typography-own-count">
+              {t("typography.role.ownCount", { count: ownCount })}
+            </span>
+          ) : null}
+        </span>
       ),
       extra:
         ownCount > 0 ? (
@@ -129,11 +135,8 @@ export default function RoleStylePanel({
             {t("typography.role.clear")}
           </Typography.Link>
         ) : null,
-      children: (
-        <Space direction="vertical" size={2} style={{ width: "100%" }}>
-          {rows}
-        </Space>
-      ),
+      // 行间距由容器的 8px gap 给（数字行自身体内两行只隔 4px，见 controls.css）。
+      children: <div className="resume-typography-rows">{rows}</div>,
     };
   });
 
