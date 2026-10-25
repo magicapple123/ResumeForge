@@ -59,7 +59,7 @@ test.describe.serial("核心链路（第 2 条载入示例，第 3 条依赖它�
     await expect(page.getByText("示例简历 · 市场运营").first()).toBeVisible();
   });
 
-  test("示例简历可以真实导出为 PDF", async ({ page }) => {
+  test("示例简历可以真实导出交付包", async ({ page }) => {
     // 自带准备：顺序执行时示例已由上一条载入；单独跑本条（-g / 重试）时补载。
     // 重复载入是幂等的：后端会复用已有的「体验示例」数据集并切换过去
     // （sample/load 返回 reused=true），不会累积多份示例。
@@ -80,33 +80,29 @@ test.describe.serial("核心链路（第 2 条载入示例，第 3 条依赖它�
     // 打开示例简历的预览详情。
     await page.getByText("示例简历 · 市场运营").first().click();
     const downloadPromise = page.waitForEvent("download");
-    // 导出入口已经收敛成预览里唯一的「导出」按钮 + 统一面板（默认就勾着 PDF），
-    // 旧用例找的「下载 PDF」已被移除。两个坑：
-    //   1) 带图标的 antd 按钮，可访问名是「export 导出」（图标自带 aria-label），
-    //      所以只能按正则匹配，`exact: "导出"` 永远等不到；
-    //   2) 列表行里还有「预览 / 导出」按钮，必须先用预览 dialog 的标题把范围收窄。
+    // W19 起**已保存**简历的导出入口是「导出交付包」面板（旧导出选项只留给
+    // 生成/未保存草稿）。示例简历已保存，点「导出」打开的是交付包弹层。
     const detailDialog = page.getByRole("dialog", { name: "示例简历 · 市场运营" });
     await expect(detailDialog).toBeVisible();
     await detailDialog.getByRole("button", { name: /导出/ }).click();
 
-    // 统一面板自己就是一个名为「导出」的 dialog，直接按名字取最稳（不必靠文本过滤，
-    // 那会连外层预览一起命中）。
-    const optionsDialog = page.getByRole("dialog", { name: "导出" });
+    // 交付包弹层标题就是「导出交付包」；底部确认按钮同名（5 字中文 antd 不插空格）。
+    const optionsDialog = page.getByRole("dialog", { name: "导出交付包" });
     await expect(optionsDialog).toBeVisible();
-    // 底部确认按钮的可访问名是「导 出」——antd 会给两字中文按钮插一个空格。
-    await optionsDialog.getByRole("button", { name: /^导\s*出$/ }).click();
+    await optionsDialog.getByRole("button", { name: "导出交付包" }).click();
     const download = await downloadPromise;
-    expect(download.suggestedFilename()).toMatch(/\.pdf$/i);
+    // 交付包是成套 zip（内含 PDF / DOCX 等原件与 manifest），不再是单个 PDF。
+    expect(download.suggestedFilename()).toMatch(/\.zip$/i);
 
     const stream = await download.createReadStream();
     const chunks: Buffer[] = [];
     for await (const chunk of stream) chunks.push(chunk as Buffer);
     const size = chunks.reduce((sum, chunk) => sum + chunk.length, 0);
-    // fpdf2 产出的最小 PDF 也有几百字节；收到非空文件即认为导出链路完整。
+    // 成套交付包至少要装下 PDF 原件与清单；收到非空文件即认为导出链路完整。
     expect(size).toBeGreaterThan(200);
 
-    // RF-16 内容级校验：下载流前缀必须是 PDF magic bytes（只加断言，不改下载流程）。
-    const head = Buffer.concat(chunks).subarray(0, 5).toString("latin1");
-    expect(head).toBe("%PDF-");
+    // RF-16 内容级校验：下载流前缀必须是 zip magic bytes（只加断言，不改下载流程）。
+    const head = Buffer.concat(chunks).subarray(0, 2).toString("latin1");
+    expect(head).toBe("PK");
   });
 });

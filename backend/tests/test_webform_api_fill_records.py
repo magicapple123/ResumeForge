@@ -4,7 +4,7 @@
 预览的 404/默认勾选、填充的快照一致性校验、"不存在提交路由"的接口层守卫，以及
 填充必须留下记录、落记录失败不拖垮填充。共享桩见 ``test_webform_api.py``。
 """
-from app.models.profile import UserProfile
+from app.services.profile import entry_store
 from app.services.webform import FormEngine, get_snapshot_store
 from test_webform_api import RAW_CONTROLS, browser_port
 
@@ -23,8 +23,11 @@ def test_preview_of_an_unknown_snapshot_is_not_found(client, browser_port):
 
 
 def test_preview_returns_items_and_the_default_checked_indexes(client, browser_port, db_session):
-    db_session.add(UserProfile(name="张三", phone="13800000000"))
-    db_session.commit()
+    entry_store.upsert_entry(
+        db_session,
+        "basic_info",
+        values={"basic_info.name": "张三", "basic_info.phone": "13800000000"},
+    )
     snapshot = get_snapshot_store().save(
         FormEngine().snapshot_controls(RAW_CONTROLS), url="https://x/apply", title="网申"
     )
@@ -37,8 +40,7 @@ def test_preview_returns_items_and_the_default_checked_indexes(client, browser_p
 
 
 def test_preview_lists_a_required_field_without_data(client, browser_port, db_session):
-    db_session.add(UserProfile(name="张三"))
-    db_session.commit()
+    entry_store.upsert_entry(db_session, "basic_info", values={"basic_info.name": "张三"})
     snapshot = get_snapshot_store().save(FormEngine().snapshot_controls(RAW_CONTROLS))
 
     body = client.post("/api/webform/preview", json={"snapshot_id": snapshot.id}).json()

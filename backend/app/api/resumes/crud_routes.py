@@ -5,24 +5,17 @@
 ``_shared`` 导入。
 """
 
-import hashlib
-import json
 import logging
 from typing import Literal
-from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from fastapi.responses import Response
 from sqlalchemy import String, cast, func, or_
 from sqlalchemy.orm import Session
 
 from ...database import get_db
-from ...models.job import Job
 from ...models.resume import ResumeRecord, saved_only
 from ...schemas.common import Page
 from ...schemas.resume import (
-    DeliveryDetail,
-    DeliverySummary,
     ManualResumeRequest,
     ResumeBatchDeleteResult,
     ResumeBatchRequest,
@@ -40,14 +33,12 @@ from ...services.resume.document_save import (
     revision_conflict_response,
     save_content,
 )
-from ...services.resume.resume_delivery import (
-    get_delivery,
-    list_deliveries,
-    replay_delivery_export,
+from ...services.resume.manual_creation import (
+    ProfileSnapshotStale,
+    create_manual_resume_record,
+    profile_snapshot_stale_response,
 )
-from ...services.resume.resume_record import build_manual_title
-from ...services.resume.resume_sections import default_section_order_config
-from ...services.resume.resume_template_format import validated_format_config
+from ...services.resume.profile_usage import profile_usage_for_resume
 from ._shared import _get_live_resume, _mark_saved, _to_resume_out, _validated_content
 
 logger = logging.getLogger(__name__)
@@ -57,40 +48,16 @@ router = APIRouter()
 
 @router.post("/manual", response_model=ResumeOut, status_code=201)
 def create_manual_resume(payload: ManualResumeRequest, db: Session = Depends(get_db)):
-    """保存用户自行编写的简历，并可选关联岗位。"""
-    job = db.get(Job, payload.job_id) if payload.job_id is not None else None
-    if payload.job_id is not None and (job is None or trash.is_deleted(job)):
-        raise HTTPException(status_code=404, detail="关联岗位不存在或已被删除")
+    """保存用户自行编写的简历，并可选关联岗位。
 
-    content = _validated_content(payload.content)
-    # P0-5：板块顺序在**创建时物化**，不再靠前端 UI 的默认值临时生效。
-    #
-    # 为什么不留给前端：卡片（「调整板块顺序」）与四个渲染器读的都是
-    # ``format_config.section_order``；前端 UI 的默认值只是"显示成什么"，渲染器看不见它，
-    # 于是老简历会出现"卡片显示资料顺序、PDF 按内置默认排"的两套结果。落库之后只有一个来源。
-    #
-    # 两处顺序：先铺``默认``（资料顺序；与内置默认相同时 ``default_section_order_config``
-    # 返回 ``None``，即**不写键**），再叠请求体里显式给的那份——显式值永远赢。
-    format_config = {
-        **(default_section_order_config(db) or {}),
-        **validated_format_config(payload.format_config),
-    }
-    record = ResumeRecord(
-        title=build_manual_title(payload.content, job, payload.title),
-        job_id=job.id if job else None,
-        job_title=job.title if job else payload.content.job_intent,
-        company=job.company if job else "",
-        content=content,
-        warnings=[],
-        source="manual",
-        model="",
-        enhancement_enabled=False,
-        enhancement_level="balanced",
-        parse_error="",
-        format_config=format_config,
-        draft=payload.draft,
-    )
-    db.add(record)
+    创建流程与事务编排在 services/resume/manual_creation.py（F4 等价提取）；本端点只保留
+    HTTP 编排：过期投影 token → 409 profile_snapshot_stale，其余沿用旧的提交/响应形状。
+    """
+    try:
+        record = create_manual_resume_record(db, payload)
+    except ProfileSnapshotStale:
+        return profile_snapshot_stale_response()
+    # 提交点保持在原处：快照行与简历行同事务落库（服务层不自行 commit）。
     db.commit()
     db.refresh(record)
     logger.info("用户手写简历已保存 record_id=%s job=%s", record.id, record.job_title)
@@ -274,7 +241,10 @@ def get_resume(resume_id: int, db: Session = Depends(get_db)):
     record = db.get(ResumeRecord, resume_id)
     if record is None or trash.is_deleted(record):
         raise HTTPException(status_code=404, detail="简历记录不存在或已被删除")
-    return _to_resume_out(record)
+    detail = _to_resume_out(record)
+    # R-33 追溯元数据：只在详情端点补（列表不需要；独立 GET /profile-usage 还带过时判定）。
+    detail.profile_usage = profile_usage_for_resume(db, record.id)
+    return detail
 
 
 @router.put("/{resume_id}", response_model=ResumeOut)
@@ -368,106 +338,6 @@ def update_resume_favorite(
     db.commit()
     db.refresh(record)
     return _to_resume_out(record)
-
-
-@router.get("/{resume_id}/deliveries", response_model=list[DeliverySummary])
-def list_resume_deliveries(resume_id: int, db: Session = Depends(get_db)):
-    """一份简历的交付记录摘要（RF-17）：这一版投给了谁、什么时候、指纹是什么。
-
-    只返回摘要（不含 ``content`` 全文，见 ``DeliverySummary``）；简历不存在/已删
-    时 404，与详情接口同一口径。证据不可删，列表不过滤任何行。
-    """
-    record = db.get(ResumeRecord, resume_id)
-    if record is None or trash.is_deleted(record):
-        raise HTTPException(status_code=404, detail="简历记录不存在或已被删除")
-    return [DeliverySummary.model_validate(item) for item in list_deliveries(db, resume_id)]
-
-
-def _delivery_detail(item) -> DeliveryDetail:
-    """ORM 快照 → 详情响应：replayable 与 destination_recorded 是派生结论，不落库。"""
-    detail = DeliveryDetail.model_validate(item)
-    detail.replayable = bool(item.export_format) and bool(item.request_params)
-    detail.destination_recorded = bool(item.company) or bool(item.job_title)
-    return detail
-
-
-@router.get("/deliveries/{delivery_id}", response_model=DeliveryDetail)
-def get_delivery_detail(delivery_id: int, db: Session = Depends(get_db)):
-    """一条交付记录的详情（PR-09）：**不依赖原简历存活**的独立访问入口。
-
-    旧入口 ``/resumes/{id}/deliveries`` 要求原简历记录存活；而快照外键 SET NULL 后
-    数据库证据还在——删了简历却查不到证据是业务上的不可达。本端点按快照 id 直接
-    取，原简历/岗位/进度是否被删都不影响读取。旧快照缺新列时如实返回
-    ``request_params=None`` / ``destination_recorded=False``，前端标注「不可还原」。
-    """
-    item = get_delivery(db, delivery_id)
-    if item is None:
-        raise HTTPException(status_code=404, detail="交付记录不存在")
-    return _delivery_detail(item)
-
-
-@router.get("/deliveries/{delivery_id}/download")
-def download_delivery(delivery_id: int, db: Session = Depends(get_db)):
-    """从交付快照下载（PR-09）：原简历删除后产物仍可取，证据可达才有意义。
-
-    - ``export`` 快照：凭存档内容 + render_context + 实际生效的请求参数**重放导出**
-      （同内容同参数的确定性渲染；脱敏存档不再二次脱敏）。旧快照没有请求参数时
-      409「不可还原」——不假装能重放出同一份文件。
-    - ``apply``/``track`` 快照：没有导出产物，返回冻结的内容 JSON（当时那份简历正文）。
-
-    **哈希口径（RR-04）**：``X-Content-Sha256`` 永远是**本次响应真实字节**的 sha256
-    （用户拿到文件后自己算一遍就能对上）。历史指纹另开响应头：
-
-    - ``X-Artifact-Sha256``：当初导出时产物的 sha256（``artifact_sha256`` 列）；
-    - ``X-Source-Content-Sha256``：apply/track 存档里冻结**内容**的规范化 sha256；
-    - ``X-Delivery-Replay: true``：这份字节是**重新生成**的，不保证与当初下载的
-      源文件逐字节相同——HTML 每次渲染都换 CSP nonce，PDF 还可能带时间戳。要判断
-      "是否与原件一致"，把 ``X-Content-Sha256`` 与 ``X-Artifact-Sha256`` 比一下即可。
-    """
-    item = get_delivery(db, delivery_id)
-    if item is None:
-        raise HTTPException(status_code=404, detail="交付记录不存在")
-    if item.export_format:
-        try:
-            artifact = replay_delivery_export(item)
-        except ValueError as exc:
-            raise HTTPException(status_code=409, detail=str(exc)) from exc
-        except Exception as exc:  # noqa: BLE001 - 重放失败要给可解释的响应而不是 500 堆栈
-            raise HTTPException(status_code=409, detail=f"从存档重放导出失败：{exc}") from exc
-        headers = {
-            "Content-Disposition": (
-                f"attachment; filename*=UTF-8''{quote(artifact.filename, safe='')}"
-            ),
-            # 实际本次字节的哈希：以前这里放的是**存档里**的旧产物哈希，HTML 重放
-            # 每次 nonce 不同，用户永远核对不上。
-            "X-Content-Sha256": hashlib.sha256(artifact.content).hexdigest(),
-            "X-Delivery-Replay": "true",
-        }
-        original = item.artifact_sha256 or item.content_sha256
-        if original:
-            headers["X-Artifact-Sha256"] = original
-        return Response(artifact.content, media_type=artifact.media_type, headers=headers)
-    content = json.dumps(
-        {
-            "说明": "投递快照的内容存档（apply/track 路径没有导出产物，这是冻结的简历正文）",
-            "resume_title": item.resume_title,
-            "company": item.company,
-            "job_title": item.job_title,
-            "content": item.content,
-        },
-        ensure_ascii=False,
-        indent=2,
-    ).encode("utf-8")
-    filename = f"{item.resume_title or 'delivery'}-{item.id}.json"
-    headers = {
-        "Content-Disposition": f"attachment; filename*=UTF-8''{quote(filename, safe='')}",
-        # 返回的是**封装后的 JSON 字节**，哈希就按这些字节算。
-        "X-Content-Sha256": hashlib.sha256(content).hexdigest(),
-    }
-    source_hash = item.source_content_sha256 or item.content_sha256
-    if source_hash:
-        headers["X-Source-Content-Sha256"] = source_hash
-    return Response(content, media_type="application/json; charset=utf-8", headers=headers)
 
 
 @router.delete("/{resume_id}", status_code=204)

@@ -21,7 +21,7 @@ from __future__ import annotations
 
 import copy
 import re
-from typing import Any
+from typing import Any, TypeGuard
 
 # 8–32 位：够短（URL/JSON 友好）、够长（随机碰撞概率可忽略）。
 OBJECT_ID_PATTERN = re.compile(r"^[A-Za-z0-9_-]{8,32}$")
@@ -53,7 +53,8 @@ class DocumentIdentityError(ValueError):
     """对象标识不合法。路由把它翻成 422，不做静默修复。"""
 
 
-def is_object_id(value: object) -> bool:
+def is_object_id(value: object) -> TypeGuard[str]:
+    # TypeGuard：判定通过即"这是 W01 稳定 id（str）"，调用点的窄化与运行时语义一致。
     return isinstance(value, str) and bool(OBJECT_ID_PATTERN.fullmatch(value))
 
 

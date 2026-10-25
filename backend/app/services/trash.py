@@ -1,14 +1,14 @@
 # SPDX-License-Identifier: Apache-2.0
-"""回收站：十六类内容的软删除、恢复与彻底删除。
+"""回收站：二十三类内容的软删除、恢复与彻底删除。
 
 **为什么是软删除**（一个 ``deleted_at`` 时间戳）而不是把行搬到另一张表：搬表意味着外键、快照
 字段、去重判据全部要重建一遍，而这些现在都是好的。软删除只多一句"什么时候删的"，列表查询加
 ``IS NULL``、回收站看非 NULL、恢复就是清空时间戳——三处都极难写错。
 
-**范围克制**：只覆盖用户真正会心疼的十六类——岗位、备选岗位、简历记录、投递记录、事实台账
+**范围克制**：只覆盖用户真正会心疼的二十三类——岗位、备选岗位、简历记录、投递记录、事实台账
 条目、资料箱材料、助手会话、面经、内推、提醒、分享包、题库历史、复盘历史、知识库、网申填充
-记录。列级别、模板副本、数据集这类要么有明确的沿用关系、要么本来就能重建，不做回收站；
-每个可删项都进回收站，只会让回收站自己变成垃圾场。
+记录、资料组/自建大字段/自建小字段/资料条目。列级别、模板副本、数据集这类要么有明确的沿用
+关系、要么本来就能重建，不做回收站；每个可删项都进回收站，只会让回收站自己变成垃圾场。
 
 **完整性红线**：凡是模型里带 ``deleted_at`` 列的表，都必须在这里登记（``TRASH_SPECS``），否则
 就会出现"半软删"——列表里消失、回收站里也找不到、既不能恢复也无法彻底删除，形成永久僵尸行。
@@ -52,7 +52,10 @@ from ..models.knowledge_entry import KnowledgeEntry
 from ..models.material import CandidateJob, Material
 from ..models.phrase import ResumePhrase
 from ..models.profile import utcnow
+from ..models.profile_definition import ProfileCustomField, ProfileCustomSection
+from ..models.profile_entry import ProfileEntry
 from ..models.profile_fact import ProfileFact
+from ..models.profile_group import ProfileGroup
 from ..models.question_bank_record import QuestionBankRecord
 from ..models.referral import Referral
 from ..models.reminder import Reminder
@@ -61,6 +64,7 @@ from ..models.share_package import SharePackage
 from ..models.tracker import ApplicationTrack
 from ..models.web_form_record import WebFormFillRecord
 from ..runtime.log_fields import safe_log_text
+from .trash_snapshot_refs import release_snapshot_references
 
 logger = logging.getLogger(__name__)
 
@@ -103,6 +107,20 @@ def _profile_fact_title(item: Any) -> str:
     return kind_labels.get(item.kind, "补充事实")
 
 
+def _profile_entry_title(item: Any) -> str:
+    """条目的展示标题：values 里第一个非空文本（条目没有固定的"标题列"）。
+
+    用保存顺序（JSON 对象的插入顺序）而不是字段定义顺序：回收站只需要"让我认出这是哪一条"，
+    用户填的第一项通常最能认出它；全部为空时如实显示无标题，不猜内容。
+    """
+    values = item.values if isinstance(item.values, dict) else {}
+    for value in values.values():
+        text = str(value or "").strip()
+        if text:
+            return text
+    return "（无标题）"
+
+
 def _referral_title(item: Any) -> str:
     """内推的展示标题：内推人 · 岗位（缺项时逐段省略）。"""
     parts = [
@@ -114,8 +132,9 @@ def _referral_title(item: Any) -> str:
 
 # 顺序即回收站的展示顺序（越靠前越常用）。
 # 前六类来自迁移 0016，中四类来自迁移 0018，后三类来自迁移 0019，再两类来自迁移 0027
-# （``apply_record`` / ``web_form_record``），最后是 0050 的 ``candidate_job``
-# ——**全部含 ``deleted_at`` 列**，缺一类就是"半软删"。
+# （``apply_record`` / ``web_form_record``），最后是 0050 的 ``candidate_job``、0062 的
+# ``profile_fact`` 与 0064 的资料组/自建定义/条目——**全部含 ``deleted_at`` 列**，
+# 缺一类就是"半软删"。
 TRASH_SPECS: tuple[TrashSpec, ...] = (
     TrashSpec("job", "岗位", Job, "title", "company"),
     # 备选岗位紧挨着岗位：两者只差一步导入，用户在回收站里找它们时想的是同一件事
@@ -151,11 +170,24 @@ TRASH_SPECS: tuple[TrashSpec, ...] = (
     TrashSpec("glossary_term", "术语表", ResumeGlossaryTerm, "source_term", "language_to"),
     # 0062（A3）：补充事实。标题按 kind 从 payload 取，副标题是事实种类。
     TrashSpec("profile_fact", "补充事实", ProfileFact, "kind", title_builder=_profile_fact_title),
+    # 0064（F1）：新资料模型的四类用户内容。组名/自建大字段名/自建字段标签直接取列；
+    # 条目没有固定标题列，取 values 里第一个非空文本（``_profile_entry_title``）。
+    TrashSpec("profile_group", "组", ProfileGroup, "name"),
+    TrashSpec("profile_custom_section", "自建大字段", ProfileCustomSection, "name"),
+    TrashSpec("profile_custom_field", "自建小字段", ProfileCustomField, "label", "section_key"),
+    TrashSpec(
+        "profile_entry",
+        "资料条目",
+        ProfileEntry,
+        "entry_id",
+        "section_key",
+        title_builder=_profile_entry_title,
+    ),
 )
 
 TRASH_SPEC_BY_KEY: dict[str, TrashSpec] = {spec.key: spec for spec in TRASH_SPECS}
 
-# 六张表的表名。**由注册表推导**而不是再写一份清单：迁移（``0016``）也要声明"给哪些表加了
+# 注册表里的表名。**由注册表推导**而不是再写一份清单：迁移（``0016``）也要声明"给哪些表加了
 # deleted_at"，两处各写一份必然漂移——漂移的后果是某张表有列却没进回收站（删了就直接消失），
 # 或者进了回收站却没有列（一删就报错）。有测试把两边对齐。
 TRASHED_TABLES: tuple[str, ...] = tuple(spec.model.__tablename__ for spec in TRASH_SPECS)
@@ -258,14 +290,77 @@ def list_trashed(
     return items[: max(1, limit)]
 
 
+class RestoreConflict(Exception):
+    """恢复会撞上活动行唯一约束时拒绝：给出具体原因，而不是 500 / IntegrityError。
+
+    partial unique index 只在**活动行**之间生效，所以回收站里的同名行可以并存；一旦恢复，
+    它就可能和"外面那条活动行"撞名（组/自建大字段的名称、同分区自建字段的标签、同分区
+    条目的排序位）。直接写库会抛 IntegrityError——API 层拿不到可读原因，用户只看到 500。
+    这里在写库前先查一遍，把冲突翻译成 `detail`（发生了什么 + 怎么办）；
+    `api/trash.py` 再映射成 409 `{"detail", "code": "trash_restore_conflict"}`。
+    """
+
+    def __init__(self, detail: str) -> None:
+        super().__init__(detail)
+        self.detail = detail
+
+
+def _restore_conflict_detail(db: Session, spec: TrashSpec, item: Any) -> str | None:
+    """检查恢复这一条会不会撞上活动行唯一约束；返回 None = 可以恢复。
+
+    **鸭子类型**判断（不按具体模型 isinstance 分支）：有 `name_key` 的是"活动名称唯一"
+    类（组 / 自建大字段）；有 `label_key` 的是"同分区活动标签唯一"类（自建小字段）；
+    有 `values` 的是条目，靠 `(section_key, sort_order)` 活动位唯一。以后同类软删表
+    只要列语义一致就自动获得守卫，不必在恢复路径里再加分支。
+    """
+    model = type(item)
+    active = db.query(model).filter(model.deleted_at.is_(None))
+    name_key = getattr(item, "name_key", None)
+    if name_key is not None:
+        same = active.filter(model.name_key == name_key).first()
+        if same is not None:
+            return (
+                f"回收站外已有同名{spec.label}「{same.name}」，"
+                "请先给它改名或删除它，再恢复这条"
+            )
+    label_key = getattr(item, "label_key", None)
+    if label_key is not None:
+        same = active.filter(
+            model.section_key == item.section_key, model.label_key == label_key
+        ).first()
+        if same is not None:
+            return (
+                f"同一大字段下已有同名字段「{same.label}」，"
+                "请先给它改名或删除它，再恢复这条"
+            )
+    if hasattr(item, "values"):
+        same = active.filter(
+            model.section_key == item.section_key, model.sort_order == item.sort_order
+        ).first()
+        if same is not None:
+            return (
+                f"这一条原来的位置（第 {item.sort_order + 1} 位）已被其他条目占用，"
+                "请先调整排序或删除占位条目，再恢复这条"
+            )
+    return None
+
+
 def restore(db: Session, key: str, item_id: int) -> bool:
-    """把一条内容从回收站恢复（清空时间戳）。找不到返回 False。"""
+    """把一条内容从回收站恢复（清空时间戳）。找不到返回 False。
+
+    恢复前先检查活动行唯一性：撞名/撞排序位时抛 `RestoreConflict`（API 映射 409），
+    不让数据库的 IntegrityError 变成 500，也不留下"删得掉、恢复不回来"的死角。
+    """
     spec = spec_or_none(key)
     if spec is None:
         return False
     item = db.get(spec.model, item_id)
     if item is None or not is_deleted(item):
         return False
+    conflict = _restore_conflict_detail(db, spec, item)
+    if conflict is not None:
+        logger.info("恢复被拒绝（活动行冲突） type=%s id=%s", safe_log_text(key), int(item_id))
+        raise RestoreConflict(conflict)
     item.deleted_at = None
     db.commit()
     logger.info("已从回收站恢复 type=%s id=%s", safe_log_text(key), int(item_id))
@@ -273,10 +368,13 @@ def restore(db: Session, key: str, item_id: int) -> bool:
 
 
 def restore_many(db: Session, items: list[dict[str, Any]]) -> dict[str, Any]:
-    """批量恢复（单事务提交）；逐条复用 ``restore`` 的 "在回收站里才算数" 语义。
+    """批量恢复（单事务提交）；逐条复用 `restore` 的 "在回收站里才算数" 语义。
 
-    与单条 ``restore`` 一样**只认已在回收站里的记录**：不在回收站里（已被恢复/彻底删除/
-    类型未知）的逐条记 ``ok=False``，不拖累同批其它条目。
+    与单条 `restore` 一样**只认已在回收站里的记录**：不在回收站里（已被恢复/彻底删除/
+    类型未知）的逐条记 `ok=False`，不拖累同批其它条目。
+
+    **活动行冲突按整批拒绝**：任一选中条目恢复后会撞名/撞排序位就抛 `RestoreConflict`
+    （API 映射 409），已清掉的时间戳随 `rollback()` 回滚——不出现"恢复了一半"的中间态。
     """
     restored = 0
     results: list[dict[str, Any]] = []
@@ -288,6 +386,15 @@ def restore_many(db: Session, items: list[dict[str, Any]]) -> dict[str, Any]:
         if spec is not None and isinstance(item_id, int):
             candidate = db.get(spec.model, item_id)
             if candidate is not None and is_deleted(candidate):
+                conflict = _restore_conflict_detail(db, spec, candidate)
+                if conflict is not None:
+                    db.rollback()
+                    logger.info(
+                        "批量恢复被拒绝（活动行冲突） type=%s id=%s",
+                        safe_log_text(key),
+                        int(item_id),
+                    )
+                    raise RestoreConflict(conflict)
                 candidate.deleted_at = None
                 restored += 1
                 ok = True
@@ -309,6 +416,8 @@ def purge(db: Session, key: str, item_id: int) -> bool:
     item = db.get(spec.model, item_id)
     if item is None or not is_deleted(item):
         return False
+    # 同事务内先解除快照引用，再删行：不留下"指向已删简历"的悬空快照。
+    release_snapshot_references(db, key, [int(item.id)])
     db.delete(item)
     db.commit()
     logger.info("已彻底删除 type=%s id=%s", safe_log_text(key), int(item_id))
@@ -327,6 +436,7 @@ def purge_many(db: Session, items: list[dict[str, Any]]) -> dict[str, Any]:
         if spec is not None and isinstance(item_id, int):
             candidate = db.get(spec.model, item_id)
             if candidate is not None and is_deleted(candidate):
+                release_snapshot_references(db, key, [int(candidate.id)])
                 db.delete(candidate)
                 purged += 1
                 ok = True
@@ -343,6 +453,7 @@ def empty(db: Session, *, key: str = "") -> int:
     removed = 0
     for one in specs:
         rows = db.query(one.model).filter(trash_only(one.model)).all()
+        release_snapshot_references(db, one.key, [int(row.id) for row in rows])
         for row in rows:
             db.delete(row)
             removed += 1
@@ -365,6 +476,7 @@ __all__ = [
     "live_only",
     "purge",
     "purge_many",
+    "RestoreConflict",
     "restore",
     "restore_many",
     "soft_delete",

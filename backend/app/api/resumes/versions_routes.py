@@ -10,6 +10,7 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
 from ...database import get_db
@@ -226,9 +227,7 @@ def get_variant(resume_id: int, variant_id: int, db: Session = Depends(get_db)) 
     return VariantDetailOut.model_validate(variants.variant_detail(variant))
 
 
-@router.get(
-    "/{resume_id}/variants/{variant_id}/export-input", response_model=VariantExportInputOut
-)
+@router.get("/{resume_id}/variants/{variant_id}/export-input", response_model=VariantExportInputOut)
 def variant_export_input(
     resume_id: int, variant_id: int, db: Session = Depends(get_db)
 ) -> VariantExportInputOut:
@@ -312,7 +311,7 @@ def adopt_translation(
     variant_id: int,
     payload: AdoptTranslationRequest,
     db: Session = Depends(get_db),
-) -> AdoptTranslationOut:
+) -> AdoptTranslationOut | JSONResponse:
     """逐项采纳翻译到该变体（不覆盖当前简历/岗位定制）；任一项失败整批不落库。"""
     record = _resume_or_404(db, resume_id)
     try:

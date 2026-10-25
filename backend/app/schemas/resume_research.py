@@ -14,7 +14,7 @@
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import ClassVar, Literal
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -68,8 +68,15 @@ class ResumePublication(OptionalVisibilityMixin, BaseModel):
     url: str = Field(default="", max_length=MAX_URL_CHARS)
     volume_pages: str = Field(default="", max_length=64)
     note: str = Field(default="", max_length=2000)
+    # F8（R-81）：资料页"成果类型/我的署名位次"现在可手写/直编（自由文本）。
+    outcome_type: str = Field(default="", max_length=128)
+    my_rank: str = Field(default="", max_length=64)
     # W01 稳定身份（可选；None 不序列化，见 OptionalVisibilityMixin 的字段表）
     id: str | None = Field(default=None, max_length=32)
+    _optional_empty_string_fields: ClassVar[tuple[str, ...]] = (
+        "outcome_type",
+        "my_rank",
+    )
 
     _validate_url = field_validator("url")(_validate_http_url)
 
@@ -85,9 +92,12 @@ class ResumeResearchProject(OptionalVisibilityMixin, BaseModel):
     funding: str = Field(default="", max_length=256)
     description: list[str] = Field(default_factory=list, max_length=500)
     outcomes: list[str] = Field(default_factory=list, max_length=500)
+    # F8（R-81）：项目级别（自由文本，如"国家级"；funding 复用已有属性）。
+    level: str = Field(default="", max_length=64)
     # W01 稳定身份 + 要点伴随映射（与六类旧条目同一机制）
     id: str | None = Field(default=None, max_length=32)
     point_ids: dict[str, list[str]] | None = None
+    _optional_empty_string_fields: ClassVar[tuple[str, ...]] = ("level",)
 
 
 class ResumePatent(OptionalVisibilityMixin, BaseModel):

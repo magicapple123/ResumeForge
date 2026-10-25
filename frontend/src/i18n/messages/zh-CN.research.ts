@@ -9,17 +9,18 @@
  * ## 边界
  *
  * - 只放本批新增的 key。已有的「教育」「技能」「板块」等一律复用。
- * - 术语按 `docs/ui-copy-guide.md`：**板块 / 条目 / 要点**；「论文」「科研项目」「专利」是三个
- *   板块名（与后端 `resume_labels.SECTION_TITLES` 的中文逐字一致：论文发表 / 科研项目 / 专利）。
+ * - 术语按 `docs/ui-copy-guide.md`：**板块 / 条目 / 要点**；三个板块名与后端
+ *   `resume_labels.SECTION_TITLES` 逐字一致（R-70 起：学术成果 / 科研项目 / 知识产权；
+ *   论文、专利是内容类型词，不再作板块名）。
  * - 发表状态严格区分：**在投 ≠ 已发表**（plan §P2-02）；专利状态同理。
  * - 按钮写具体动作；不用「确定」「是」「否」。
  */
 
 const research = {
   // ── 三个板块（页签名 / 分组名） ───────────────────────────────
-  "research.tab.publications": "论文发表",
+  "research.tab.publications": "学术成果",
   "research.tab.projects": "科研项目",
-  "research.tab.patents": "专利",
+  "research.tab.patents": "知识产权",
   "research.section.count": "共 {count} 条",
   "research.section.hint": "顺序即展示顺序；上移/下移可用键盘",
 
@@ -54,6 +55,12 @@ const research = {
   "research.publications.volumePages": "卷期页码",
   "research.publications.volumePagesPlaceholder": "Vol 12, 1-15",
   "research.publications.note": "备注",
+  "research.publications.outcomeType": "成果类型",
+  "research.publications.outcomeTypePlaceholder": "如：期刊论文 / 会议论文",
+  "research.publications.myRank": "我的署名位次",
+  "research.publications.myRankPlaceholder": "如：第一作者 / 二作",
+  "research.projects.level": "项目级别",
+  "research.projects.levelPlaceholder": "如：国家级 / 省部级",
 
   // ── 作者 / 发明人（列表顺序即署名顺序） ───────────────────────
   "research.authors.label": "作者",

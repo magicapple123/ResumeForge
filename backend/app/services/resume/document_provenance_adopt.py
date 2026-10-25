@@ -34,6 +34,9 @@ from .document_save import save_content
 
 _MISSING = object()
 SOURCE_REVISION_STALE_CODE = "source_revision_stale"
+# 409 响应的 detail 用这条**静态文案**（与异常消息同源）；直接 str(exc) 会被
+# CodeQL py/stack-trace-exposure 认成把异常内容透给客户端。
+SOURCE_REVISION_STALE_DETAIL = "来源在查看之后又更新了，请先刷新来源再采纳"
 
 
 class AdoptError(ValueError):
@@ -46,7 +49,7 @@ class SourceRevisionStale(ValueError):
     code = SOURCE_REVISION_STALE_CODE
 
     def __init__(self, expected_fingerprint: str) -> None:
-        super().__init__("来源在查看之后又更新了，请先刷新来源再采纳")
+        super().__init__(SOURCE_REVISION_STALE_DETAIL)
         self.expected_fingerprint = expected_fingerprint
 
 

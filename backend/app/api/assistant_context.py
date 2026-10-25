@@ -4,20 +4,23 @@
 import json
 from typing import Any
 
-from sqlalchemy.orm import Session, selectinload
+from sqlalchemy.orm import Session
 
 from ..models.job import Job
-from ..models.profile import UserProfile
 from ..models.resume import ResumeRecord
 from ..schemas.assistant import AssistantMessageCreate
 from ..schemas.job import JobOut
-from ..schemas.profile import ProfileOut
 from ..services.assistant.assistant_sources import SourceNumberer
+from ..services.profile.profile_reader import load_all_consumed_profile
 from ..services.profile.profile_relevance import (
     build_job_prompt_text,
     build_llm_profile_prompt_data,
     build_profile_prompt_data,
     serialize_profile_prompt_data,
+)
+from ..services.profile.profile_service import (
+    legacy_profile_has_entries,
+    project_legacy_profile_from_consumed,
 )
 
 MAX_JOB_CONTEXT_CHARS = 8_000
@@ -47,25 +50,16 @@ def resume_context(record: ResumeRecord) -> str:
 def profile_context(db: Session, *, relaxed: bool = False) -> str:
     """个人资料上下文；``relaxed``（助手放宽模式）时携带姓名/电话/邮箱等身份字段。
 
+    F2 起资料来源改成新模型的消费快照（``load_all_consumed_profile``，**不按当前组
+    限制**，R-64）：hidden 字段已由 reader 剔除，旧资料六表不再读取。三链外消费者只
+    替换来源，提示词形状不变。
     放宽模式由用户在设置里显式开启（默认关），这里只做展示层的放行——私密链接
     兜底（token/private 标记）在任何模式下都生效；照片二进制任何模式都不发送。
     """
-    profile = (
-        db.query(UserProfile)
-        .options(
-            selectinload(UserProfile.educations),
-            selectinload(UserProfile.experiences),
-            selectinload(UserProfile.campus_experiences),
-            selectinload(UserProfile.projects),
-            selectinload(UserProfile.skills),
-            selectinload(UserProfile.awards),
-        )
-        .first()
-    )
-    if profile is None:
+    if not legacy_profile_has_entries(db):
         return "[已选个人资料]\n当前尚未保存个人资料。"
-    profile_out = ProfileOut.model_validate(profile)
-    prompt_data = build_profile_prompt_data(profile_out)
+    consumed = load_all_consumed_profile(db)
+    prompt_data = build_profile_prompt_data(project_legacy_profile_from_consumed(consumed))
     serialized = serialize_profile_prompt_data(
         build_llm_profile_prompt_data(prompt_data, include_identity=relaxed),
         MAX_PROFILE_CONTEXT_CHARS,

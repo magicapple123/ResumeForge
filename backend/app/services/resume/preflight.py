@@ -16,15 +16,20 @@ from __future__ import annotations
 
 import hashlib
 import time
+from typing import cast
 
 from ...models.claim import ClaimRecord
 from ...schemas.ats import ATS_DISCLAIMER
 from ...schemas.preflight import (
     CheckIssue,
     CheckLocator,
+    FontCoverageOut,
+    MachineTextPage,
     PreflightOut,
     PreflightRequest,
+    PreflightRequestLayer,
     PreflightSnapshot,
+    TextOrderDiff,
 )
 from ...schemas.resume import ResumeContent
 from .format_capabilities import matrix
@@ -78,10 +83,12 @@ def run_preflight(
     started = time.perf_counter()
     layers = set(request.layers)
     issues: list[CheckIssue] = []
-    font_coverage: dict | None = None
-    machine_text: list[dict] = []
-    order_diffs: list[dict] = []
-    layers_run: list[str] = []
+    # 规则层产出的是松散 dict（PreflightOut 构造时由 pydantic 统一校验成模型），
+    # 这里按 Out 模型声明局部类型；cast 只收窄，不改任何运行时值。
+    font_coverage: FontCoverageOut | None = None
+    machine_text: list[MachineTextPage] = []
+    order_diffs: list[TextOrderDiff] = []
+    layers_run: list[PreflightRequestLayer] = []
 
     if "content" in layers:
         issues.extend(
@@ -113,17 +120,18 @@ def run_preflight(
                 )
 
     if "layout" in layers:
-        layout_list, font_coverage = layout_issues(
+        layout_list, raw_font_coverage = layout_issues(
             content,
             page_limit=page_limit,
             measure=request.measure.model_dump() if request.measure else None,
             font_name=format_config.get(FONT_KEY),
         )
         issues.extend(layout_list)
+        font_coverage = cast("FontCoverageOut | None", raw_font_coverage)
         layers_run.append("layout")
 
     if "product" in layers:
-        product_list, machine_text, order_diffs = product_issues(
+        product_list, raw_machine_text, raw_order_diffs = product_issues(
             content,
             template=template,
             page_limit=page_limit,
@@ -133,6 +141,8 @@ def run_preflight(
             formats=list(request.product_formats),
         )
         issues.extend(product_list)
+        machine_text = cast("list[MachineTextPage]", raw_machine_text)
+        order_diffs = cast("list[TextOrderDiff]", raw_order_diffs)
         layers_run.append("product")
 
     finalized = _finalize(issues)

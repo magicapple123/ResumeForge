@@ -1,27 +1,26 @@
 // SPDX-License-Identifier: Apache-2.0
-/** 个人资料大分区的稳定顺序、标签和归一化规则。 */
+/**
+ * 大字段的稳定顺序与兜底标签（F6）。
+ *
+ * 唯一真相在服务端：workspace.section_order（全局顺序）与 SectionOut.name（中文名）才是
+ * 渲染依据；本文件的 DEFAULT_SECTION_ORDER 只是排序 store 的初始兜底（旧 8 项顺序），
+ * 页面加载后立即被服务端顺序覆盖，**不是第二份定义清单**。
+ *
+ * 标签用 t() 从语言包取（不再在源码里写中文字面量），服务端 name 到达后以它为准。
+ */
+import { t } from "../../i18n";
 
-export type ProfileSectionKey =
-  | "basic_info"
-  | "educations"
-  | "experiences"
-  | "campus_experiences"
-  | "projects"
-  | "skills"
-  | "awards"
-  | "summary";
+/** 分区 key：内置 13 项 + 自建 custom:<section_id>，统一按不透明字符串处理。 */
+export type ProfileSectionKey = string;
+
+/** 拖拽激活阈值（像素）。 */
+export const SECTION_DRAG_THRESHOLD_PX = 6;
 
 /**
- * 资料大分区的默认顺序（2026-10 起，与简历正文默认顺序同一口径）。
- *
- * 这是**有意的产品决策**，不是随手排列：默认值唯一的可见语义是"新建资料 / 新建简历
- * 长什么样"。校招场景下读者先确认学历与专业，再往工作与项目看，所以教育经历排在最前；
- * 「个人总结」是概括性文字，读完经历再看更顺，排在最后。后端 `PROFILE_SECTION_KEYS`
- * 必须与本数组逐项一致（`PROFILE_SECTION_KEYS` 决定旧数据缺失分区时的补位顺序）。
- *
- * 只改默认值：用户资料里已有的 `section_order` 是显式 JSON，不得迁移或覆盖。
+ * 排序 store 的初始兜底顺序（保留既有 8 项语义，旧排序用例依赖它）。
+ * 资料页真正渲染一律以 GET /workspace 的 section_order（13 项 + 自建）为准。
  */
-export const DEFAULT_SECTION_ORDER: ProfileSectionKey[] = [
+export const DEFAULT_SECTION_ORDER: string[] = [
   "basic_info",
   "educations",
   "experiences",
@@ -32,39 +31,48 @@ export const DEFAULT_SECTION_ORDER: ProfileSectionKey[] = [
   "summary",
 ];
 
-export const SECTION_DRAG_THRESHOLD_PX = 6;
-
-export const SECTION_LABELS: Record<ProfileSectionKey, string> = {
-  basic_info: "基本信息",
-  educations: "教育经历",
-  experiences: "实习/工作经历",
-  campus_experiences: "校园经历",
-  projects: "项目经历",
-  skills: "专业技能",
-  awards: "荣誉奖项",
-  summary: "个人总结 / 自我评价",
+/** 兜底中文名（正常渲染用服务端 SectionOut.name；这里只防"定义还没到"的空白）。 */
+export const SECTION_LABELS: Record<string, string> = {
+  basic_info: t("profileLibrary.sectionFallback.basic_info"),
+  educations: t("profileLibrary.sectionFallback.educations"),
+  experiences: t("profileLibrary.sectionFallback.experiences"),
+  projects: t("profileLibrary.sectionFallback.projects"),
+  skills: t("profileLibrary.sectionFallback.skills"),
+  campus_experiences: t("profileLibrary.sectionFallback.campus_experiences"),
+  awards: t("profileLibrary.sectionFallback.awards"),
+  summary: t("profileLibrary.sectionFallback.summary"),
+  publications: t("profileLibrary.sectionFallback.publications"),
+  research_projects: t("profileLibrary.sectionFallback.research_projects"),
+  patents: t("profileLibrary.sectionFallback.patents"),
+  credentials: t("profileLibrary.sectionFallback.credentials"),
+  languages: t("profileLibrary.sectionFallback.languages"),
 };
 
 /**
- * 「补充事实」区块的页内键（A3，2026-10）。
- *
- * 它不是旧资料的第 9 个分区：事实存独立表、走独立 CRUD（`/api/profile/facts`），
- * 不参与旧 PUT 的 `section_order`，后端 `PROFILE_SECTION_KEYS` 也不认识它。混进
- * `DEFAULT_SECTION_ORDER` 的后果是保存资料时被后端静默丢弃，而页面上「全部收起」
- * 会多出一项永远对不上的状态。因此这里只登记为页内锚点键（`data-profile-section`
- * 与 id），**不进** `DEFAULT_SECTION_ORDER`，也不改变既有分区的默认顺序。
+ * 已退役的「补充事实」区块页内键（F6-C 会删除 facts 目录与所有引用）：
+ * 保留导出只为让尚未同步的 facts 模块在迁移窗口内继续编译，新代码不得使用。
+ * @deprecated 补充事实入口已下线（R-50/R-54），改用 13 个大字段与自建大字段。
  */
 export const PROFILE_FACTS_SECTION_KEY = "profile_facts";
 
-export function normalizeSectionOrder(value: string[] | undefined): ProfileSectionKey[] {
-  const supported = new Set<ProfileSectionKey>(DEFAULT_SECTION_ORDER);
-  const normalized = (value ?? []).filter(
-    (key): key is ProfileSectionKey =>
-      key !== "basic_info" && supported.has(key as ProfileSectionKey),
-  );
-  return [
-    "basic_info",
-    ...normalized,
-    ...DEFAULT_SECTION_ORDER.filter((key) => key !== "basic_info" && !normalized.includes(key)),
-  ];
+/**
+ * 规范化为「basic_info 首位 + 服务端顺序 + 缺失项按兜底顺序补齐」。
+ *
+ * available 传当前活动分区 key（内置 + 自建）；服务端已经保证顺序，这里只防御
+ * 旧备份/异常数据缺 basic_info 或含未知 key 的情况。
+ */
+export function normalizeSectionOrder(
+  value: string[] | undefined,
+  available: readonly string[] = DEFAULT_SECTION_ORDER,
+): string[] {
+  const supported = new Set(available);
+  const seen = new Set<string>();
+  const middle: string[] = [];
+  for (const key of value ?? []) {
+    if (key === "basic_info" || !supported.has(key) || seen.has(key)) continue;
+    seen.add(key);
+    middle.push(key);
+  }
+  const rest = available.filter((key) => key !== "basic_info" && !seen.has(key));
+  return ["basic_info", ...middle, ...rest];
 }

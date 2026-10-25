@@ -39,6 +39,8 @@ export type ProfileSectionPointerDownHandler = (
 
 interface SortableProfileSectionProps {
   sectionKey: ProfileSectionKey;
+  /** 分区显示名：服务端 SectionOut.name（自建大字段也用它）；缺省回落内置兜底标签。 */
+  label?: string;
   order: number;
   editable: boolean;
   /**
@@ -84,16 +86,17 @@ interface SortableProfileSectionProps {
  */
 function SectionNudgeButtons({
   sectionKey,
+  label,
   canMoveUp,
   canMoveDown,
   onMoveByOffset,
 }: {
   sectionKey: ProfileSectionKey;
+  label: string;
   canMoveUp: boolean;
   canMoveDown: boolean;
   onMoveByOffset: (sectionKey: ProfileSectionKey, offset: -1 | 1) => void;
 }) {
-  const label = SECTION_LABELS[sectionKey];
   const guardPointerDown = (event: ReactPointerEvent<HTMLButtonElement>) => {
     // 防御性阻止冒泡：微调按钮绝不能开启拖拽。
     event.stopPropagation();
@@ -134,6 +137,7 @@ function SectionNudgeButtons({
  */
 export const SortableProfileSection = memo(function SortableProfileSection({
   sectionKey,
+  label,
   order,
   editable,
   reordering,
@@ -147,24 +151,25 @@ export const SortableProfileSection = memo(function SortableProfileSection({
   onMoveByOffset,
   children,
 }: SortableProfileSectionProps) {
+  const displayLabel = label && label.trim() ? label : (SECTION_LABELS[sectionKey] ?? sectionKey);
   // 标题栏是每张卡唯一的标题：卡片本体不再自带标题（否则展开时会和标题栏重复）。
   // 查看态是可点的折叠开关；编辑态只是普通标题，折叠由「全部展开/收起」在查看态接管。
   const titleBar = editable ? (
     <div className="profile-section-titlebar">
-      <Typography.Text strong>{SECTION_LABELS[sectionKey]}</Typography.Text>
+      <Typography.Text strong>{displayLabel}</Typography.Text>
     </div>
   ) : (
     <button
       type="button"
       className="profile-section-collapse-toggle"
       aria-expanded={!collapsed}
-      aria-label={`${collapsed ? "展开" : "收起"}${SECTION_LABELS[sectionKey]}`}
+      aria-label={`${collapsed ? "展开" : "收起"}${displayLabel}`}
       onClick={() => onToggleCollapsed(sectionKey)}
     >
       <span className="profile-section-collapse-icon">
         {collapsed ? <RightOutlined /> : <DownOutlined />}
       </span>
-      <Typography.Text strong>{SECTION_LABELS[sectionKey]}</Typography.Text>
+      <Typography.Text strong>{displayLabel}</Typography.Text>
     </button>
   );
 
@@ -195,19 +200,20 @@ export const SortableProfileSection = memo(function SortableProfileSection({
           {/* 键盘换位没有视觉反馈的替代品：读屏用户需要被告知"现在排第几"。
               内容随 order 变化而变化，aria-live 才会播报（挂载时的初始内容不播报）。 */}
           <span role="status" aria-live="polite" style={VISUALLY_HIDDEN_STYLE}>
-            {`${SECTION_LABELS[sectionKey]} 已移到第 ${order + 1} 位`}
+            {`${displayLabel} 已移到第 ${order + 1} 位`}
           </span>
           <SectionNudgeButtons
             sectionKey={sectionKey}
+            label={displayLabel}
             canMoveUp={canMoveUp}
             canMoveDown={canMoveDown}
             onMoveByOffset={onMoveByOffset}
           />
-          <Tooltip title={`拖动调整“${SECTION_LABELS[sectionKey]}”顺序`}>
+          <Tooltip title={`拖动调整“${displayLabel}”顺序`}>
             <button
               type="button"
               className="profile-section-drag-handle"
-              aria-label={`拖动调整${SECTION_LABELS[sectionKey]}顺序`}
+              aria-label={`拖动调整${displayLabel}顺序`}
               onPointerDown={(event) => onHandlePointerDown(event, sectionKey)}
               onKeyDown={(event) => {
                 if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return;

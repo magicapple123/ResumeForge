@@ -13,6 +13,11 @@ export type {
   ResumeSkill,
   ResumeAward,
   ResumeContent,
+  ResumeCredential,
+  ResumeCredentialStatus,
+  ResumeCustomEntry,
+  ResumeCustomLine,
+  ResumeCustomSection,
 } from "./resumeContent";
 import type { ResumeContent } from "./resumeContent";
 
@@ -281,6 +286,14 @@ export type {
   ResumeLayoutStatus,
   ResumeLayoutSuggestion,
 } from "./resumeLayout";
+
+/** 新建/生成的请求契约（F4-BE）：从 `types/resumeCreation` 提取，此处 re-export 兼容。 */
+export type {
+  ManualResumeCreatePayload,
+  ProfileCreationContext,
+  ProfileCreationLayoutItem,
+  StartResumeGenerationPayload,
+} from "./resumeCreation";
 
 export interface ResumeDetail extends ResumeBrief {
   content: ResumeContent;

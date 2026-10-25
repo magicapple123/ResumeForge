@@ -175,6 +175,56 @@ def explicit_foreign_family(control: Control, field_name: str) -> bool:
     return bool(expected and detected and (expected not in detected or len(detected) > 1))
 
 
+# 旁文里出现这么多个**不同字段**的同义词时，基本可以断定它是容器文本（整块 / 整表
+# 标签清单），而不是这个控件自己的标签。
+LABEL_LIST_MIN_FIELD_LABELS = 3
+
+
+@lru_cache(maxsize=8192)
+def looks_like_label_list(nearby_text: str) -> bool:
+    """这段旁文是不是把**多个**字段的标签串在了一起（区块标题 + 整块标签、整表标签清单）。
+
+    判据刻意只看"命中字段的个数"：真标签（「手机号码 *」「GPA / 成绩排名」）通常只对应
+    一个字段；一段文本里同时出现三个不同字段的同义词时，它要么是容器把整块标签都收了
+    进来，要么是整表标签清单——两种情况都不该让其中单个字段的词去认领这个框。
+
+    为什么必须在这里拦：match_fields 对整页控件还能靠 pollution.strip_shared_nearby
+    把整表标签串减掉，但**实时填表一次只拿到当前控件**（match_fields([control], …)），
+    没有别的控件可比对；不按单个控件判，实时面板就会把「实习时间」认成区块里别的字段
+    （2026-10-26 网申假表单实测：批量把项目名写进了实习时间，实时同样认错）。
+    """
+    hay = nearby_text.casefold()
+    if len(hay) < 12:
+        return False
+    matched = 0
+    for synonyms in FIELD_SYNONYMS.values():
+        if any(len(synonym) >= 2 and synonym.casefold() in hay for synonym in synonyms):
+            matched += 1
+            if matched >= LABEL_LIST_MIN_FIELD_LABELS:
+                return True
+    return False
+
+
+
+@lru_cache(maxsize=8192)
+def _label_list_has_high_risk_conflict(nearby_text: str) -> bool:
+    """标签清单里同时出现两个及以上高风险字段（姓名 / 手机 / 邮箱…）时不猜。
+
+    "整表标签清单"里同时列着姓名和手机号码，和"某一段旁文里混进了邻居的标签"是同一类
+    风险：**选谁都是猜**。真实表单里这种控件常常是「联系信息」整块的一个容器，或者根本
+    不是输入框；宁可如实说"认不出"，也不把张三填进手机号框。
+    """
+    hay = nearby_text.casefold()
+    matched = 0
+    for field_name in _HIGH_RISK_AMBIGUOUS_FIELDS:
+        synonyms = FIELD_SYNONYMS.get(field_name, ())
+        if any(len(synonym) >= 2 and synonym.casefold() in hay for synonym in synonyms):
+            matched += 1
+            if matched >= 2:
+                return True
+    return False
+
+
 # evidence_key 是纯函数（控件快照 frozen 不可变、同义词目录固定），按
 # (控件, 字段, 同义词元组) 记忆化。为什么值得：_rank_controls 对每个字段把全部控件
 # 重问一遍，_is_low_confidence 又把整个 rank 重跑一遍，has_ambiguous_field_evidence
@@ -285,11 +335,29 @@ def evidence_key(
         best = _longest_synonym(placeholder, synonyms)
         if best > 0:
             return (2, best)
-    for tier, hay in ((1, tier1), (0, control.nearby_text.casefold())):
-        best = _longest_synonym(hay, synonyms)
-        if best > 0:
-            return (tier, best)
-    return None
+    best = _longest_synonym(tier1, synonyms)
+    if best > 0:
+        return (1, best)
+    # 旁文兜底（档位 0）之前先看一眼这段旁文本身是不是**标签清单**：父级容器把
+    # 整块/整表的字段标签都收进来的情况，单个字段的词不能拿来认领控件——否则同区块
+    # 里每个框都「看起来命中所有字段」，最后只能按 DOM 顺序乱分。2026-10-26 网申
+    # 假表单实测：区块级旁文把「项目名称」带进了「实习时间」框，项目名被写进了
+    # 实习时间；实时面板同样会把实习时间认成别的字段。清单只认开头那一段（真标签），
+    # 与光杆占位符的回退同一条判据。
+    if looks_like_label_list(control.nearby_text):
+        # 清单里同时列着姓名/手机/邮箱这类高风险字段时仍然不猜——这是"整表标签清单"
+        # 最典型的形态，和"邻居标签混进来"是同一类风险。
+        #
+        # **年 / 月 / 日组件豁免**（与 has_ambiguous_field_evidence 同一条口径）：
+        # 它们的语义由 date_part 拆分机制锚定，每个组件只接受日期值里属于自己的那一段，
+        # 而表单级标签清单里的「姓名/手机号」对它们只是噪声、不是候选项。不豁免的话，
+        # 同一个月的「年 / 月」文本框会因为旁边列着姓名手机号而整对失去匹配。
+        if not control.date_part() and _label_list_has_high_risk_conflict(control.nearby_text):
+            return None
+        best = _longest_synonym(_leading_label_segment(control.nearby_text).casefold(), synonyms)
+        return (0, best) if best > 0 else None
+    best = _longest_synonym(control.nearby_text.casefold(), synonyms)
+    return (0, best) if best > 0 else None
 
 
 def competing_fields(

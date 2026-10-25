@@ -1,5 +1,12 @@
 # SPDX-License-Identifier: Apache-2.0
-"""生成简历与候选资料之间的一致性检查。"""
+"""生成简历与候选资料之间的一致性检查。
+
+**F3 取数口径**：生成链路只读本次冻结的消费快照——新入口 check_consistency(resume,
+consumed, selection_data, source_label=...) 的 source_data 来自 selection_data["data"]
+（已按当前组过滤的候选），不再从全量资料或旧表补 hidden/组外值。旧入口
+check_consistency(resume, ProfileOut, selected_data) 保留给既有单元测试，行为不变
+（两参分派，见下）。
+"""
 
 from __future__ import annotations
 
@@ -7,6 +14,7 @@ import json
 import re
 
 from ...schemas.profile import ProfileOut
+from ...schemas.profile_projection import ConsumedProfile
 from ...schemas.resume import ResumeContent
 from ..profile.profile_context import build_profile_prompt_data
 from .resume_grounding import (
@@ -39,31 +47,33 @@ def _skill_visible_in_candidates(skill_name: str, source_data: dict) -> bool:
     return needle in text
 
 
-def check_consistency(
-    resume: ResumeContent,
-    profile: ProfileOut,
-    selected_data: dict | None = None,
-    *,
-    source_label: str | None = None,
-) -> list[str]:
-    """校验生成结果是否出现候选资料中不存在的信息（防 AI 虚构）。
+def _items(source_data: dict, key: str) -> list[dict]:
+    """候选分区列表；未参与分区整键不出现（R-29/R-30）→ 返回空列表，不 KeyError。"""
+    value = source_data.get(key)
+    return value if isinstance(value, list) else []
 
-    ``source_label`` 用于替换警告里的资料来源说法：通用简历没有岗位，说"本岗位候选资料"
-    会让用户以为简历是针对某个岗位筛过的。
+
+def _known_names(source_data: dict, key: str, field: str) -> list[str]:
+    return [item[field] for item in _items(source_data, key) if item.get(field)]
+
+
+def _check_source_data(
+    resume: ResumeContent, source_data: dict, label: str
+) -> list[str]:
+    """一致性检查的唯一实现：只依赖候选数据（本次实际发给模型的那份）。
+
+    未参与分区整键不出现，因此所有分区都必须按 .get(key) or [] 访问
+    （R-29/R-30：七项组不能因为 skills 不在候选里就抛 KeyError）。
     """
     warnings: list[str] = []
-    source_data = selected_data or build_profile_prompt_data(profile)
-    label = source_label or ("本岗位候选资料" if selected_data is not None else "个人资料")
-    known_schools = [item["school"] for item in source_data["educations"] if item.get("school")]
-    known_companies = [item["company"] for item in source_data["experiences"] if item.get("company")]
-    known_campus_organizations = [
-        item["organization"]
-        for item in source_data["campus_experiences"]
-        if item.get("organization")
-    ]
-    known_projects = [item["name"] for item in source_data["projects"] if item.get("name")]
-    known_skills = [item["name"] for item in source_data["skills"] if item.get("name")]
-    known_awards = [item["name"] for item in source_data["awards"] if item.get("name")]
+    known_schools = _known_names(source_data, "educations", "school")
+    known_companies = _known_names(source_data, "experiences", "company")
+    known_campus_organizations = _known_names(
+        source_data, "campus_experiences", "organization"
+    )
+    known_projects = _known_names(source_data, "projects", "name")
+    known_skills = _known_names(source_data, "skills", "name")
+    known_awards = _known_names(source_data, "awards", "name")
 
     for edu in resume.education:
         if edu.school and not any(_similar(edu.school, s) for s in known_schools):
@@ -75,7 +85,7 @@ def check_consistency(
             warnings.append(
                 f"实习/工作经历中出现{label}未包含的公司「{exp.company}」，请核对是否为虚构"
             )
-        source = _find_source(exp, source_data["experiences"], "company", "role")
+        source = _find_source(exp, _items(source_data, "experiences"), "company", "role")
         if source:
             unsupported = _unsupported_quantified_values(
                 exp.description, _source_evidence_text(source, ("description",))
@@ -92,7 +102,9 @@ def check_consistency(
             warnings.append(
                 f"校园经历中出现{label}未包含的组织「{item.organization}」，请核对是否为虚构"
             )
-        source = _find_source(item, source_data["campus_experiences"], "organization", "role")
+        source = _find_source(
+            item, _items(source_data, "campus_experiences"), "organization", "role"
+        )
         if source:
             unsupported = _unsupported_quantified_values(
                 item.description, _source_evidence_text(source, ("description",))
@@ -106,7 +118,7 @@ def check_consistency(
             warnings.append(
                 f"项目经历中出现{label}未包含的项目「{project.name}」，请核对是否为虚构"
             )
-        source = _find_source(project, source_data["projects"], "name", "role")
+        source = _find_source(project, _items(source_data, "projects"), "name", "role")
         if source:
             source_text = _source_evidence_text(source, ("description", "highlights"))
             unsupported = _unsupported_quantified_values(
@@ -131,14 +143,14 @@ def check_consistency(
             warnings.append(
                 f"荣誉奖项中出现{label}未包含的奖项「{award.name}」，请核对是否为虚构"
             )
-    # ===== A4 扩展栏目（论文/科研项目/专利/资格证照）=====
+    # ===== A4 扩展栏目（学术成果/科研项目/知识产权/证书资质）=====
     # 只有候选资料**确实带了这个键**时才比对：旧链路（个人资料 prompt data）没有这些键，
     # 若无条件比对，所有带科研/证照的旧简历都会被冤枉成"虚构"。键存在 = 本次确实给了模型。
     extended_sections = (
-        ("publications", "title", "论文", resume.publications),
+        ("publications", "title", "学术成果", resume.publications),
         ("research_projects", "name", "科研项目", resume.research_projects),
-        ("patents", "title", "专利", resume.patents),
-        ("credentials", "name", "资格证照", resume.credentials),
+        ("patents", "title", "知识产权", resume.patents),
+        ("credentials", "name", "证书资质", resume.credentials),
     )
     for source_key, identity_field, section_label, entries in extended_sections:
         candidates = source_data.get(source_key)
@@ -163,6 +175,30 @@ def check_consistency(
             f"个人总结出现资料未提供的量化结果「{'、'.join(unsupported_summary)}」"
         )
     return warnings
+
+
+def check_consistency(
+    resume: ResumeContent,
+    profile: ProfileOut | ConsumedProfile,
+    selected_data: dict | None = None,
+    *,
+    source_label: str | None = None,
+) -> list[str]:
+    """校验生成结果是否出现候选资料中不存在的信息（防 AI 虚构）。
+
+    第二参是 ConsumedProfile 时走 F3 新路径：候选数据取 selection_data["data"]
+    （已按当前组过滤），不读全量资料；source_label 用于替换"资料来源"的说法
+    （通用简历没有岗位，说"本岗位候选资料"会让用户误会）。
+    第二参是 ProfileOut/dict 时保持旧行为（既有单元测试）。
+    """
+    if isinstance(profile, ConsumedProfile):
+        candidate = selected_data.get("data") if isinstance(selected_data, dict) else None
+        source_data = candidate if isinstance(candidate, dict) else {}
+        label = source_label or "本岗位候选资料"
+        return _check_source_data(resume, source_data, label)
+    source_data = selected_data or build_profile_prompt_data(profile)
+    label = source_label or ("本岗位候选资料" if selected_data is not None else "个人资料")
+    return _check_source_data(resume, source_data, label)
 
 
 __all__ = ["check_consistency"]

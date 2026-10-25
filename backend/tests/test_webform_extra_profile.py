@@ -17,13 +17,20 @@ from __future__ import annotations
 
 from app.models.profile import UserProfile
 from app.services.webform import extra_profile
-from app.services.webform.data import build_form_data, profile_to_form_data
+from app.services.webform.data import build_form_data
 from app.services.webform.fields import FORM_FIELDS, SOURCE_EXTRA
 
 
 def _seed_profile(db) -> None:
     db.add(UserProfile(name="张三", phone="13800000000", city="天津"))
     db.commit()
+
+
+def _seed_resume_profile(db) -> None:
+    """新的简历资料来源（F5 起网申读消费 DTO，不读旧 user_profile 简历列）。"""
+    from app.services.profile import entry_store
+
+    entry_store.upsert_entry(db, "basic_info", values={"basic_info.name": "张三"})
 
 
 def _string_values(node) -> list[str]:
@@ -176,13 +183,13 @@ def test_stale_rows_outside_the_catalog_are_not_returned(db_session):
 
 def test_build_form_data_merges_the_extras_in(db_session):
     """网申填表的取数入口要能看到这批资料——不然录了也白录。"""
-    _seed_profile(db_session)
+    _seed_resume_profile(db_session)
     extra_profile.save_entries(db_session, {"student_id": "2022012345"})
 
     data = build_form_data(db_session)
 
     assert data["student_id"] == "2022012345"
-    # 简历资料那部分照旧在（合并不是替换）。
+    # 组内简历资料那部分照旧在（合并不是替换）。
     assert data["name"] == "张三"
 
 
@@ -220,16 +227,18 @@ def test_the_resume_generation_path_never_sees_this_table(db_session):
         assert key not in profile, f"简历资料里多出了网申资料的字段 {key!r}"
 
 
-def test_profile_to_form_data_alone_does_not_include_the_extras(db_session):
-    """``profile_to_form_data`` 是**纯函数**（只看传进去的资料），不该知道这张表。
+def test_defined_fields_alone_do_not_include_the_extras(db_session):
+    """定义目录 → data 是纯函数（只消费消费 DTO），不该知道「网申资料」这张表。
 
-    合并发生在 ``build_form_data`` 那一层——这样单独测资料展开时不会被库里的网申资料干扰。
+    合并发生在 build_form_data 那一层——这样单独测资料展开时不会被库里的网申资料干扰。
     """
-    _seed_profile(db_session)
+    from app.services.profile.profile_reader import load_all_consumed_profile
+    from app.services.webform.data.defined_fields import data_from_consumed
+
+    _seed_resume_profile(db_session)
     extra_profile.save_entries(db_session, {"student_id": "2022012345"})
 
-    from app.services.profile.profile_service import get_profile_detail
-
-    flat = profile_to_form_data(get_profile_detail(db_session))
+    flat = data_from_consumed(load_all_consumed_profile(db_session))
 
     assert "student_id" not in flat
+    assert flat["name"] == "张三"

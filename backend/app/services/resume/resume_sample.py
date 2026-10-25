@@ -25,6 +25,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import TypedDict
 
 from ...schemas.resume import (
     ResumeAward,
@@ -37,6 +38,7 @@ from ...schemas.resume import (
 )
 from .resume_sample_photo import SAMPLE_PHOTO_DATA_URL
 from .resume_template_layout import TEMPLATE_LAYOUT_DEFAULTS
+from .resume_template_scalars import template_float
 
 # 与 ``schemas.resume_generation.ResumeFontScale`` 同值；这里不 import 它，
 # 是因为 services 依赖 schemas 的方向更自然（且它只是三个字符串）。
@@ -198,7 +200,19 @@ _SUMMARY_SENTENCES: tuple[str, ...] = (
     "习惯用数据解释结论，而不是凭感觉拍板。",
 )
 
-_EDUCATION = {
+
+class _EducationSample(TypedDict):
+    """教育条目的示例键值（键都是字面量，`**_EDUCATION` 才能逐键对上构造器参数类型）。"""
+
+    school: str
+    major: str
+    degree: str
+    start_date: str
+    end_date: str
+    gpa: str
+
+
+_EDUCATION: _EducationSample = {
     "school": "示例大学",
     "major": "市场营销",
     "degree": "本科",
@@ -315,7 +329,7 @@ def density_group(template_name: str | None) -> str:
     宁可显得空一点，也不会因为内容过长把页面顶到第二页。
     """
     layout = TEMPLATE_LAYOUT_DEFAULTS.get((template_name or "").strip())
-    if layout is not None and float(layout.get("line_height", 0.0)) < _ROOMY_LINE_HEIGHT:
+    if layout is not None and template_float(layout.get("line_height", 0.0)) < _ROOMY_LINE_HEIGHT:
         return "roomy"
     return "regular"
 

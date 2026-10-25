@@ -127,6 +127,100 @@ EOF
     return 0
 }
 
+# 兜底：没有运行记录时，按「监听端口 + 命令行特征 + HTTP 自报身份」找简历通并停掉。
+#
+# 记录缺失并不等于服务没在跑：被别的窗口/脚本直接拉起、记录文件被清理，都会留下一个
+# 没有记录的实例；这时只靠记录会出现「双击 stop.command、输出"没有找到运行记录"，后端
+# 却还在跑」。兜底的安全边界比记录校验只多不少：
+#   1. 监听端口的进程命令行必须匹配本仓库的启动特征（后端 uvicorn app.main:app；
+#      前端带 --strictPort——这是启动器自己传的，普通 Vite 项目默认没有）；
+#   2. 该端口必须自报 ResumeForge：/api/health 的 name 字段；前端在后端已退出、
+#      代理不可用时退回检查首页标题里的 ResumeForge。
+# 任一条件不满足就不动，绝不按进程名批量杀。
+rf_port_looks_like_resumeforge() {
+    display_name=$1
+    port=$2
+    health=$(curl -fsS --max-time 2 "http://127.0.0.1:${port}/api/health" 2>/dev/null || true)
+    case "$health" in
+        *'"name":"ResumeForge"'*) return 0 ;;
+    esac
+    if [ "$display_name" = "frontend" ]; then
+        page=$(curl -fsS --max-time 2 "http://127.0.0.1:${port}/" 2>/dev/null || true)
+        case "$page" in
+            *ResumeForge*) return 0 ;;
+        esac
+    fi
+    return 1
+}
+
+# 从监听端口的进程往上找匹配到的最外层祖先：前端监听的是 Vite 的 node 进程，
+# 记录/启动的是 npm / sh 包装层，停整棵树要从最外层动手，否则子进程会留下、端口仍被占。
+rf_find_process_tree_root() {
+    target=$1
+    pattern=$2
+    current=$target
+    depth=0
+    while [ "$depth" -lt 6 ]; do
+        parent=$(ps -o ppid= -p "$current" 2>/dev/null | tr -d ' ' || true)
+        case "$parent" in
+            '' | *[!0-9]*) break ;;
+        esac
+        [ "$parent" -gt 1 ] || break
+        parent_command=$(ps -p "$parent" -o command= 2>/dev/null || true)
+        if printf '%s\n' "$parent_command" | grep -Eq "$pattern"; then
+            target=$parent
+        fi
+        [ "$parent" = "$current" ] && break
+        current=$parent
+        depth=$((depth + 1))
+    done
+    printf '%s\n' "$target"
+}
+
+# rf_stop_unrecorded DISPLAY_NAME COMMAND_PATTERN
+rf_stop_unrecorded() {
+    display_name=$1
+    pattern=$2
+    command -v lsof >/dev/null 2>&1 || return 0
+    command -v curl >/dev/null 2>&1 || return 0
+    lsof_output=$(lsof -nP -iTCP -sTCP:LISTEN -Fpn 2>/dev/null || true)
+    [ -n "$lsof_output" ] || return 0
+    listener_pid=""
+    while IFS= read -r line; do
+        case "$line" in
+            p*) listener_pid=${line#p} ;;
+            n*)
+                case "$listener_pid" in
+                    '' | *[!0-9]*) continue ;;
+                esac
+                port=${line##*:}
+                case "$port" in
+                    '' | *[!0-9]*) continue ;;
+                esac
+                command_line=$(ps -p "$listener_pid" -o command= 2>/dev/null || true)
+                printf '%s\n' "$command_line" | grep -Eq "$pattern" || continue
+                rf_port_looks_like_resumeforge "$display_name" "$port" || continue
+                kill_target=$(rf_find_process_tree_root "$listener_pid" "$pattern")
+                log_info "${display_name}：没有运行记录，按端口 ${port} 识别为简历通，正在停止..."
+                stop_process_tree "$kill_target" TERM
+                waited=0
+                while [ "$waited" -lt 10 ] && kill -0 "$kill_target" 2>/dev/null; do
+                    sleep 1
+                    waited=$((waited + 1))
+                done
+                if kill -0 "$kill_target" 2>/dev/null; then
+                    stop_process_tree "$kill_target" KILL
+                fi
+                log_info "已停止 ${display_name}（没有运行记录，按端口与健康检查识别）。"
+                return 0
+                ;;
+        esac
+    done <<EOF
+${lsof_output}
+EOF
+    return 0
+}
+
 RF_SKIP_BACKEND=0
 for rf_argument in "$@"; do
     case "$rf_argument" in
@@ -136,11 +230,15 @@ for rf_argument in "$@"; do
 done
 
 log_info "正在停止 ResumeForge..."
+RF_STOP_BACKEND_FALLBACK_PATTERN='uvicorn app.main:app'
+RF_STOP_FRONTEND_FALLBACK_PATTERN='vite.*--strictPort|run dev.*--strictPort'
 if [ "$RF_SKIP_BACKEND" -eq 0 ]; then
     rf_stop_one "backend" "$RF_BACKEND_RECORD_NAME" "$RF_BACKEND_COMMAND_PATTERN"
+    rf_stop_unrecorded "backend" "$RF_STOP_BACKEND_FALLBACK_PATTERN"
 else
     log_info "backend：按请求跳过（应用自己在退出）。"
 fi
 rf_stop_one "frontend" "$RF_FRONTEND_RECORD_NAME" "$RF_FRONTEND_COMMAND_PATTERN"
+rf_stop_unrecorded "frontend" "$RF_STOP_FRONTEND_FALLBACK_PATTERN"
 printf '\n'
 log_ok "已完成。数据都在 data/ 目录里，没有被动过。"

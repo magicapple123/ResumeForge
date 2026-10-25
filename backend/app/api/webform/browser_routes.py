@@ -86,6 +86,12 @@ def delete_url_history(item_id: int, db: Session = Depends(get_db)):
 
 @router.post("/browser/stop", status_code=204)
 def browser_stop(db: Session = Depends(get_db)):
-    webform_service.browser.stop_browser(db)
+    try:
+        webform_service.browser.stop_browser(db)
+    except (ValueError, webform_service.browser.BrowserError) as exc:
+        # 只关「本次运行拉起的」浏览器窗口：上一个进程留下的窗口关不掉时，如实告诉
+        # 用户去点窗口 ×，而不是让 BrowserError 冒成 500（与 start / open-url 同一套
+        # 错误映射，2026-10-26 复核时补上这一处漏网）。
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     webform_service.stop_live()
 

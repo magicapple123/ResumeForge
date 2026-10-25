@@ -55,14 +55,6 @@ def test_the_migration_and_the_service_agree_on_which_tables_are_reclaimed():
     assert _migration_tables() <= set(trash.TRASHED_TABLES)
     # 0016 迁移本体仍只列六张表（它不负责 0018/0019/0027/0050 的新表）。
     assert len(_migration_tables()) == 6
-    # 全量注册表现在是 6（0016）+ 4（0018）+ 3（0019）+ 2（0027）+ 1（0050）+ 1（0056）
-    # + 1（0058 术语表）+ 1（0062 补充事实）= 19 类。
-    #
-    # ⚠️ 这个总数在 ``test_trash.py::test_every_deleted_at_table_is_registered`` 里也钉着
-    # 一份（那边是权威：它还断言"含 ``deleted_at`` 的表 ↔ 注册表"一一对应）。两处各写一份
-    # 必然漂移——0050 加 ``candidate_job``、0056 加 ``resume_phrase`` 时都触发过；
-    # 下次再改回收站范围，优先删掉本行、让 test_trash 独占这个数字。
-    assert len(trash.TRASHED_TABLES) == 19
 
 
 def _insert_legacy_row(engine, table: str, **values) -> None:

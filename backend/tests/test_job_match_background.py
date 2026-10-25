@@ -6,11 +6,17 @@ import threading
 from types import SimpleNamespace
 
 from app.models.job import JOB_STATUS_OPEN, Job
-from app.models.profile import UserProfile
 from app.schemas.job_match_batch import JobMatchBatchItem
 from app.schemas.setting import LLMConfig
 from app.services.job import job_match_background as background
 from app.services.job.job_match_batch import BatchMatchCancelled, BatchMatchInput, BatchMatchRun
+from app.services.profile.entry_store import upsert_entry
+
+
+def _seed_profile(db_session) -> None:
+    """资料自 F2 起落在新模型：批量匹配读全量新资料（旧 user_profile 已退役）。"""
+    upsert_entry(db_session, "basic_info", values={"basic_info.name": "张示例"})
+    upsert_entry(db_session, "summary", values={"summary.content": "Python 后端开发"})
 
 
 def _job(db_session) -> Job:
@@ -42,8 +48,7 @@ def _input(job_id: int) -> BatchMatchInput:
 
 def test_background_runner_completes_and_persists_progress(db_session, monkeypatch):
     job = _job(db_session)
-    db_session.add(UserProfile(name="张示例", summary="Python 后端开发"))
-    db_session.commit()
+    _seed_profile(db_session)
     task = background.create_job_match_background_task(db_session, [job.id], force=False)
     runner = background.JobMatchBackgroundRunner()
     completed = JobMatchBatchItem(
@@ -88,8 +93,7 @@ def test_background_runner_completes_and_persists_progress(db_session, monkeypat
 
 def test_background_runner_cancel_keeps_completed_items(db_session, monkeypatch):
     job = _job(db_session)
-    db_session.add(UserProfile(name="张示例", summary="Python 后端开发"))
-    db_session.commit()
+    _seed_profile(db_session)
     task = background.create_job_match_background_task(db_session, [job.id], force=False)
     runner = background.JobMatchBackgroundRunner()
     completed = JobMatchBatchItem(
@@ -154,8 +158,7 @@ def test_orphaned_background_task_is_marked_failed(db_session):
 
 
 def test_background_api_creates_task_and_starts_runner(client, db_session, monkeypatch):
-    db_session.add(UserProfile(name="张示例", summary="Python 后端开发"))
-    db_session.commit()
+    _seed_profile(db_session)
     job = _job(db_session)
     started: list[str] = []
 

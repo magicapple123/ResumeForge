@@ -17,9 +17,10 @@
 from __future__ import annotations
 
 import copy
-from typing import Any
+from typing import Any, cast
 
 from sqlalchemy import update
+from sqlalchemy.engine import CursorResult
 from sqlalchemy.orm import Session
 
 from ...models.profile import utcnow
@@ -129,19 +130,23 @@ def adopt_scenario_candidate(
         )
     restore_lock_flags(variant.content or {}, payload)
     new_sha = canonical_content_sha256(payload)
-    result = db.execute(
-        update(ResumeVariant)
-        .where(
-            ResumeVariant.id == variant.id,
-            ResumeVariant.resume_id == record.id,
-            ResumeVariant.content_sha256 == expected_content_sha256,
-        )
-        .values(
-            content=payload,
-            content_sha256=new_sha,
-            context_snapshot=copy.deepcopy(snapshot.model_dump()),
-            updated_at=utcnow(),
-        )
+    # 条件写必须读 `rowcount`；显式收窄成 DML 的运行时真实类型（同 document_save.py）。
+    result = cast(
+        "CursorResult[Any]",
+        db.execute(
+            update(ResumeVariant)
+            .where(
+                ResumeVariant.id == variant.id,
+                ResumeVariant.resume_id == record.id,
+                ResumeVariant.content_sha256 == expected_content_sha256,
+            )
+            .values(
+                content=payload,
+                content_sha256=new_sha,
+                context_snapshot=copy.deepcopy(snapshot.model_dump()),
+                updated_at=utcnow(),
+            )
+        ),
     )
     if result.rowcount == 0:
         db.rollback()

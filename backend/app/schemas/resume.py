@@ -21,11 +21,21 @@ from .resume_analysis import (  # noqa: F401  (re-export：保持既有导入路
     LayoutSuggestionOut,
     ResumeLayoutMeasure,
 )
+from .resume_creation import ProfileContextIn
 
 # 六类旧条目模型与正文常量已迁至 `schemas/resume_entries.py`：A4 给项目/经历补可选
 # 字段（public_url / artifact_type / experience_kind）后本文件到了 500 行硬预算。
 # 这里 re-export，保持 `from app.schemas.resume import ResumeProject` 等既有导入路径不变。
 from .resume_credentials import ResumeCredential
+
+# C2/R-79 自建分区结构已迁至 `schemas/resume_custom_sections.py`（resume.py 贴着 500 行
+# 硬预算）；这里 re-export，保持 `from app.schemas.resume import ResumeCustomSection` 等
+# 既有导入路径不变。
+from .resume_custom_sections import (  # noqa: F401  (re-export：保持既有导入路径)
+    ResumeCustomEntry,
+    ResumeCustomLine,
+    ResumeCustomSection,
+)
 from .resume_entries import (  # noqa: F401  (re-export：保持既有导入路径)
     EXPERIENCE_KINDS,
     MAX_RESUME_LIST_ITEMS,
@@ -60,6 +70,7 @@ from .resume_generation import (  # noqa: F401  (re-export：保持既有导入�
     mode_page_limit,
 )
 from .resume_identity import OptionalEmptyListMixin, OptionalIdentityMixin
+from .resume_profile_usage import ProfileUsageOut
 from .resume_research import ResumePatent, ResumePublication, ResumeResearchProject
 
 # 简历语言（A 包）：只影响纸面固定文案（小节标题 / 字段前缀），**不翻译正文**。
@@ -104,11 +115,18 @@ class ResumeContent(OptionalEmptyListMixin, BaseModel):
     # A4 资格证照（零新表：存在 content JSON 内）。**没有 credential_number**：证号默认
     # 不进模型/纸面/导出（见 schemas/resume_credentials.py）。空列表不序列化 → 旧指纹不变。
     credentials: list[ResumeCredential] = Field(default_factory=list, max_length=MAX_RESUME_SECTION_ITEMS)
+    # C2/R-79 自建大字段独立成栏：顺序由投影层冻结（13 个系统分区之后、资料页全局顺序），
+    # 渲染端不再排序。两个硬边界：①空列表不序列化 → 没有自建分区的旧内容指纹/字节不变；
+    # ②它只是「纸面要画什么」，title/lines 已在 schema 侧校验，模板不猜业务。
+    custom_sections: list[ResumeCustomSection] = Field(
+        default_factory=list, max_length=MAX_RESUME_SECTION_ITEMS
+    )
     _optional_empty_list_fields: ClassVar[tuple[str, ...]] = (
         "publications",
         "research_projects",
         "patents",
         "credentials",
+        "custom_sections",
     )
 
     @field_validator("photo")
@@ -159,6 +177,8 @@ class ManualResumeRequest(BaseModel):
     # （``default_section_order_config``）。**缺省是"不涉及"而不是"清空"**：请求体里没有这个
     # 字段的既有调用方（手写保存、通用简历）行为逐字不变，只是多得到一份默认板块顺序。
     format_config: dict | None = None
+    # F4：创建态资料快照（可选）。缺省 = 旧客户端，不写 profile_usage_snapshot。
+    profile_context: ProfileContextIn | None = None
 
 
 class ResumeReviseRequest(BaseModel):
@@ -225,6 +245,9 @@ class ResumeOut(ResumeBrief):
     # （旧简历/手写简历）。**不参与内容哈希、不自动印到纸面**；前端只做"这份简历当时
     # 采用了什么场景"的只读说明，不得据此回填或改写任何内容。
     context_snapshot: dict | None = None
+    # 「本次使用」追溯快照（R-33）：生成/新建时冻结的组名与参与大字段；NULL = 旧简历或
+    # 未带来源信息的手写简历。**只由详情端点填充**（列表不带它，也不需要多一次快照查询）。
+    profile_usage: ProfileUsageOut | None = None
 
 
 class ResumeContentSave(BaseModel):

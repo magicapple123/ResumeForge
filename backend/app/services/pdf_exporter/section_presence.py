@@ -23,4 +23,16 @@ def section_has_content(resume: ResumeContent, key: str) -> bool:
     return bool(value) if isinstance(value, list) else False
 
 
-__all__ = ["section_has_content"]
+def custom_section_has_content(section) -> bool:
+    """自建分区有没有画得出来的内容（C2/R-79）。
+
+    与系统分区同一口径：只有"会画出来"的内容才占位——模板/Word/Markdown 都跳过空条目，
+    PDF 若照 entries 列表盲目画标题，就会出现"只有标题、下面什么都没有"的空板块。
+    """
+    return any(
+        entry.text.strip() or any(line.value.strip() for line in entry.lines)
+        for entry in section.entries
+    )
+
+
+__all__ = ["custom_section_has_content", "section_has_content"]

@@ -14,6 +14,7 @@ import assets from "./zh-CN.assets";
 import bilingual from "./zh-CN.bilingual";
 import careerScenarios from "./zh-CN.careerScenarios";
 import conflict from "./zh-CN.conflict";
+import credentials from "./zh-CN.credentials";
 import delivery from "./zh-CN.delivery";
 import fontDownload from "./zh-CN.fontDownload";
 import fonts from "./zh-CN.fonts";
@@ -22,8 +23,11 @@ import outline from "./zh-CN.outline";
 import pagination from "./zh-CN.pagination";
 import params from "./zh-CN.params";
 import preflight from "./zh-CN.preflight";
-import preview from "./zh-CN.preview";
 import profileFacts from "./zh-CN.profileFacts";
+import profileFactsLegacy from "./zh-CN.profileFactsLegacy";
+import profileGroups from "./zh-CN.profileGroups";
+import profileLibrary from "./zh-CN.profileLibrary";
+import preview from "./zh-CN.preview";
 import provenance from "./zh-CN.provenance";
 import proview from "./zh-CN.proview";
 import research from "./zh-CN.research";
@@ -82,8 +86,23 @@ const namespaces = {
   ...optimizer,
   /** A2 职业场景（选择/编辑/本次生成披露）。 */
   ...careerScenarios,
-  /** A3 补充事实（论文/科研/专利/证照/作品/实践）。 */
+  /** F6 资料组与当前组（2026-10-25）。 */
+  ...profileGroups,
+  /** F6 资料库 / 资料页 / 字段管理（2026-10-25）。 */
+  ...profileLibrary,
+  /** F6 证书资质编辑槽（2026-10-25 从补充事实文案迁移，R-70）。 */
+  ...credentials,
+  /**
+   * 补充事实（已退役）的旧键：**临时兼容注册**。
+   *
+   * F6-C 已解除生产挂载/入口，但 features/profile-facts/** 的源码与测试仍在 tsconfig 内
+   * （物理删除/回收站需单独授权）。保留本注册只为让该目录在迁移窗口内通过 tsc；
+   * 删除 facts 目录时必须同时删掉这一行 import 与 spread（Lead 2026-10-25 裁决 B）。
+   * 新代码禁止使用 profileFacts.* 任何 key。
+   */
   ...profileFacts,
+  /** 旧前缀兼容别名（临时；facts 目录删除时一并删除，见 zh-CN.profileFactsLegacy.ts）。 */
+  ...profileFactsLegacy,
 } as const;
 
 export default namespaces;

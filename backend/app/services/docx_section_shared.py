@@ -13,6 +13,30 @@
 
 from __future__ import annotations
 
+from .docx_blocks import DocxTheme
+from .docx_blocks import meta_line as _meta_line
+from .resume.profile_field_lines import profile_field_lines
+from .resume.resume_labels import field_labels
+
+
+def profile_meta_lines(
+    doc,
+    item,
+    section_key: str,
+    *,
+    base: float,
+    layout,
+    theme: DocxTheme,
+    language: str,
+    style=None,
+) -> None:
+    """F8：条目既有内容之后的「标签：值」副行（空值跳过，字段顺序由单一来源给）。"""
+    labels = field_labels(language)
+    for label, value in profile_field_lines(item, section_key, labels):
+        _meta_line(
+            doc, f"{label}：{value}", base=base, layout=layout, theme=theme, style=style
+        )
+
 
 def _join(values: list[str], separator: str = " · ") -> str:
     return separator.join(str(item).strip() for item in values if str(item).strip())

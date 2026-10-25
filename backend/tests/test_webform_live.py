@@ -541,3 +541,62 @@ def test_custom_field_suggestion_reports_unmatched_when_the_custom_field_has_no_
     assert suggestion is not None
     assert suggestion.status == "unmatched"
     assert suggestion.field == "CUSTOM_导师姓名"
+
+
+def test_a_section_level_nearby_list_does_not_make_a_text_box_suggest_a_sibling_field():
+    """**回归守卫（2026-10-26 网申假表单实机测得）**：区块级旁文里有整块标签时，
+    不能按"最长同义词"把别的字段的建议塞给当前框。
+
+    现场形态（标准 div.row + label 的表单，且区块标题一起被收进旁文）：
+
+        实习时间 实习与项目经历 实习公司 实习岗位 实习时间 项目名称 项目描述 掌握技能
+
+    修复前，实时面板把这个"实习时间"框认成区块里别的字段，点「填入」会把项目名称之类
+    写进实习时间；批量模式同源，值被写进了错误的框。判据：旁文像标签清单时只认开头那段
+    真标签，且清单里并列着高风险字段（姓名/手机/邮箱）时仍然不猜。
+    """
+    from app.services.webform.engine import Control
+    from app.services.webform.service import suggest_for
+
+    data = {
+        "name": "林晓航",
+        "company": "星河数据科技有限公司",
+        "job_title": "数据分析实习生",
+        "project_1_name": "城市共享单车骑行数据分析",
+        "project_1_description": "基于公开骑行数据做时段与站点热力分析，输出可视化报告。",
+    }
+    nearby = "实习时间 实习与项目经历 实习公司 实习岗位 实习时间 项目名称 项目描述 掌握技能"
+
+    suggestion = suggest_for(Control(index=0, type="text", nearby_text=nearby), data)
+
+    assert suggestion.status == "unmatched", (
+        "区块级旁文把别的字段塞给了实习时间框：" + suggestion.field
+    )
+
+
+def test_a_section_level_nearby_list_still_recognises_its_own_leading_label():
+    """同一条判据不能把真标签一起杀掉：开头写着「项目名称」的框照常认出项目名称。"""
+    from app.services.webform.engine import Control
+    from app.services.webform.service import suggest_for
+
+    data = {"project_1_name": "城市共享单车骑行数据分析"}
+    nearby = "项目名称 实习与项目经历 实习公司 实习岗位 实习时间 项目名称 项目描述 掌握技能"
+
+    suggestion = suggest_for(Control(index=0, type="text", nearby_text=nearby), data)
+
+    assert suggestion.status == "matched"
+    assert suggestion.field == "project_1_name"
+    assert suggestion.value == "城市共享单车骑行数据分析"
+
+
+def test_a_label_list_with_two_high_risk_fields_is_still_not_guessed():
+    """整段旁文同时列着姓名/手机号时仍然不猜——与既有的"高风险并列"纪律一致。"""
+    from app.services.webform.engine import Control
+    from app.services.webform.service import suggest_for
+
+    suggestion = suggest_for(
+        Control(index=0, type="text", nearby_text="姓名* 手机号* 邮箱*"),
+        {"name": "张三", "phone": "13800000000", "email": "z@example.com"},
+    )
+
+    assert suggestion.status == "unmatched"

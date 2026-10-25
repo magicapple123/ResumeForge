@@ -20,7 +20,9 @@ from sqlalchemy.orm import Session
 from ...config import DATA_DIR, DEFAULT_WEBFORM_BROWSER_PORT
 from ...schemas.apply import BrowserStatusOut
 from ..apply._config import get_apply_config
+from ..browser.browser_inputs import validated_browser_url
 from ..browser.browser_manager import BrowserError, BrowserManager, BrowserStatus
+from ..browser.cdp_client import CdpError
 
 WEBFORM_PROFILE_DIR_NAME = "webform-browser-profile"
 
@@ -87,16 +89,42 @@ def start_browser(db: Session) -> BrowserStatusOut:
         return _status_out(manager.start(url=None))
 
 
+# 导航失败时给用户看的一句话。不能沿用底层异常的中文：CDP 的「Page.navigate 被页面拒绝」
+# 「打开新标签页失败（HTTP 500）」这类措辞对用户没有可操作的下一步。
+OPEN_URL_FAILED = "无法打开网页，请检查地址或网络后重试"
+
+
+def _navigate_error_text(result: Any) -> str:
+    """从 CDP Page.navigate 的返回里取出导航错误；正常导航返回空串。
+
+    CDP 对 DNS 解析失败 / 连接被拒 / 无效端口 这类失败**不会抛异常**，而是在 result 里
+    给 errorText（如 net::ERR_NAME_NOT_RESOLVED）。不读它就会把打不开的网页报成
+    「已打开」——2026-10-26 实机：不存在的域名与拒绝连接的端口都拿到 200。
+    """
+    if not isinstance(result, dict):
+        return ""
+    if not result.get("errorText") or result.get("isDownload"):
+        return ""
+    return str(result.get("errorText"))
+
+
 def open_url(db: Session, url: str) -> dict[str, Any]:
     """打开网址但不覆盖现有标签页；相同 URL 直接复用。
 
     这里必须把「检查 → 启动/复用 → 导航」串成一个临界区：前端快速连点时，
     两个请求若同时看到浏览器未启动，就会各自拉起一次或各自新建标签页。
-    首次有目标地址时直接把它交给浏览器进程，避免先闪出一个 ``about:blank``。
+    首次有目标地址时直接把它交给浏览器进程，避免先闪出一个 about:blank。
+
+    **浏览器已经在跑时同样要过地址校验与导航错误检查**：启动路径复用
+    BrowserManager.start 里的 validated_browser_url，而「复用/新开标签页」这条路径
+    以前既没校验也没看 errorText，于是端口 99999、不存在的域名都会被报成打开成功
+    （2026-10-26 实机复现）。两条路径的失败语义必须一致。
     """
     wanted = str(url or "").strip()
     if not wanted:
         raise BrowserError("目标网址不能为空")
+    # 协议 / 端口 / 长度 / 反斜杠：与应用内所有导航入口共用同一套校验。
+    wanted = validated_browser_url(wanted)
 
     with _browser_operation_lock:
         manager = get_browser_manager(db)
@@ -117,7 +145,10 @@ def open_url(db: Session, url: str) -> dict[str, Any]:
             target_id = str(existing["id"])
             client = manager.client_for_target(target_id)
             try:
-                client.ensure_page_visible()
+                try:
+                    client.ensure_page_visible()
+                except CdpError as exc:
+                    raise BrowserError(OPEN_URL_FAILED) from exc
             finally:
                 client.close()
             return {"target_id": target_id, "url": wanted}
@@ -133,14 +164,27 @@ def open_url(db: Session, url: str) -> dict[str, Any]:
         try:
             if blank is not None:
                 target_id = str(blank["id"])
-                client.navigate(wanted)
             else:
-                target_id = client.new_tab(wanted)
-            client.ensure_page_visible()
+                # 没有空白页时**先开一个空白标签页、再用 Page.navigate 过去**，而不是把
+                # 目标地址直接交给 /json/new：后者拿不到导航结果，打不开的网址会静默
+                # 变成"已打开"；Page.navigate 的 errorText 才是唯一能判定的信号。
+                try:
+                    target_id = client.new_tab("about:blank")
+                except CdpError as exc:
+                    raise BrowserError(OPEN_URL_FAILED) from exc
+            try:
+                result = client.navigate(wanted)
+            except CdpError as exc:
+                raise BrowserError(OPEN_URL_FAILED) from exc
+            if _navigate_error_text(result):
+                raise BrowserError(OPEN_URL_FAILED)
+            try:
+                client.ensure_page_visible()
+            except CdpError as exc:
+                raise BrowserError(OPEN_URL_FAILED) from exc
             return {"target_id": target_id, "url": wanted}
         finally:
             client.close()
-
 
 def stop_browser(db: Session) -> None:
     """只关闭本次后端进程实际拉起的网申浏览器。"""
@@ -155,8 +199,18 @@ def stop_browser(db: Session) -> None:
 
 
 def list_page_targets(db: Session) -> list[dict[str, Any]]:
-    """读取网申浏览器当前所有页面目标。"""
-    return get_browser_manager(db).list_page_targets()
+    """读取网申浏览器当前所有页面目标。
+
+    浏览器没启动时底层抛的是 BrowserError；浏览器刚被关掉的那一瞬可能抛 CdpError
+    （HTTP 端点连不上）。两种都要收敛成可展示的 BrowserError，否则路由只能回 500
+    ——前端轮询这个接口时会看到一条无信息的内部错误
+    （2026-10-26 实机：停止状态下 GET /browser/targets 是 500）。
+    """
+    try:
+        return get_browser_manager(db).list_page_targets()
+    except CdpError as exc:
+        raise BrowserError("无法读取网申浏览器的页面列表，请确认浏览器仍在运行") from exc
+
 
 
 def client_for_target(db: Session, target_id: str):

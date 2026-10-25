@@ -74,6 +74,12 @@ const LIST_SUBFIELD_LABELS: Record<string, Record<string, string>> = {
     gpa: "GPA",
     courses: "核心课程",
     achievements: "成就",
+    study_form: "学习形式",
+    degree_type: "学位类型",
+    department: "院系",
+    rank: "成绩排名",
+    advisor: "导师",
+    research_direction: "研究方向",
   },
   experience: {
     company: "公司",
@@ -81,6 +87,8 @@ const LIST_SUBFIELD_LABELS: Record<string, Record<string, string>> = {
     start_date: "开始时间",
     end_date: "结束时间",
     description: "工作描述",
+    team_size: "团队规模",
+    experience_kind: "工作类型",
   },
   campus_experience: {
     organization: "组织",
@@ -88,6 +96,7 @@ const LIST_SUBFIELD_LABELS: Record<string, Record<string, string>> = {
     start_date: "开始时间",
     end_date: "结束时间",
     description: "经历描述",
+    activity_type: "活动类型",
   },
   projects: {
     name: "项目名称",
@@ -97,9 +106,18 @@ const LIST_SUBFIELD_LABELS: Record<string, Record<string, string>> = {
     tech_stack: "技术栈",
     description: "项目描述",
     highlights: "项目亮点",
+    project_size: "项目规模",
+    artifact_type: "成果类型",
   },
-  skills: { name: "技能", level: "熟练度" },
-  awards: { name: "奖项", date: "获得时间", description: "奖项描述" },
+  skills: { name: "技能", level: "熟练度", category: "技能分类" },
+  awards: {
+    name: "奖项",
+    date: "获得时间",
+    description: "奖项描述",
+    issuer: "颁发机构",
+    level: "奖项级别",
+    ratio: "获奖比例",
+  },
 };
 
 function str(value: unknown): string {

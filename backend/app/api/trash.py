@@ -10,6 +10,7 @@
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
 from ..database import get_db
@@ -35,6 +36,18 @@ def _require_spec(type_key: str) -> trash.TrashSpec:
     return spec
 
 
+def _restore_conflict_response(exc: trash.RestoreConflict) -> JSONResponse:
+    """恢复撞上活动行唯一约束 → 409（带具体原因与稳定 code）。
+
+    不用 @@BT@@HTTPException(detail=...)@@BT@@：那会把 @@BT@@{"detail","code"}@@BT@@ 再包一层
+    @@BT@@detail@@BT@@，前端按 code 分支的路径与其它接口不一致；这里直接给顶层两个键。
+    """
+    return JSONResponse(
+        status_code=409,
+        content={"detail": exc.detail, "code": "trash_restore_conflict"},
+    )
+
+
 @router.get("", response_model=TrashSummaryOut)
 def read_trash(
     type: str = Query(default="", description="按类型筛选；留空表示全部"),
@@ -54,9 +67,13 @@ def read_trash(
 
 @router.post("/{type_key}/{item_id}/restore", status_code=204)
 def restore_item(type_key: str, item_id: int, db: Session = Depends(get_db)):
-    """把一条内容从回收站恢复。"""
+    """把一条内容从回收站恢复；撞上活动行唯一约束（重名/排序位被占）时返回 409。"""
     _require_spec(type_key)
-    if not trash.restore(db, type_key, item_id):
+    try:
+        restored = trash.restore(db, type_key, item_id)
+    except trash.RestoreConflict as exc:
+        return _restore_conflict_response(exc)
+    if not restored:
         raise HTTPException(status_code=404, detail="回收站里没有这条内容（可能已被恢复或彻底删除）")
 
 
@@ -85,8 +102,15 @@ def empty_trash(
 
 @router.post("/restore", response_model=TrashRestoreBatchOut)
 def restore_items(payload: TrashBatchRequest, db: Session = Depends(get_db)):
-    """批量恢复（安全，无需二次确认）。逐条反馈哪几条成功、哪几条没成。"""
-    return trash.restore_many(db, [item.model_dump() for item in payload.items])
+    """批量恢复（安全，无需二次确认）。逐条反馈哪几条成功、哪几条没成。
+
+    任一选中条目恢复后会撞上活动行唯一约束（重名/排序位被占）时整批拒绝：409 含具体原因，
+    已恢复的条目随事务回滚，不出现"恢复了一半"。
+    """
+    try:
+        return trash.restore_many(db, [item.model_dump() for item in payload.items])
+    except trash.RestoreConflict as exc:
+        return _restore_conflict_response(exc)
 
 
 @router.post("/purge", response_model=TrashPurgeBatchOut)

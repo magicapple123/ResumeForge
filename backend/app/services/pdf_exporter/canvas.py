@@ -4,7 +4,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Literal
+from typing import Any, Literal
 
 from fpdf import FPDF
 
@@ -172,7 +172,9 @@ class _ResumePDF(FPDF):
 
     # ===== W07：行内标记收口 + 收集画出去的字（供字体预子集化）=====
 
-    def _rich_text_args(self, args: tuple, kwargs: dict) -> tuple[tuple, dict]:
+    def _rich_text_args(
+        self, args: tuple[Any, ...], kwargs: dict[str, Any]
+    ) -> tuple[tuple[Any, ...], dict[str, Any]]:
         """把 `cell` / `multi_cell` 的正文换成 fpdf2 markdown 口径。
 
         **唯一收口**：PDF 的每个文字绘制点（页头 / 区块标题 / 条目头 / 要点 / 副行 /
@@ -191,8 +193,10 @@ class _ResumePDF(FPDF):
         if not isinstance(text, str) or not text:
             return args, kwargs
         markup, markdown = to_fpdf_markup(text)
-        if keyword == "pos":
-            args = (args[0], args[1], markup, *args[3:])
+        # len() 再判一次：keyword == "pos" 与上面的 len(args) > 2 是同一条路径，但
+        # pyright 不会跨分支关联这两个条件；不补这个判断，args 会被收窄出空元组成员。
+        if keyword == "pos" and len(args) > 2:
+            args = (*args[:2], markup, *args[3:])
         elif keyword:
             kwargs = {**kwargs, keyword: markup}
         kwargs = {**kwargs, "markdown": markdown}
@@ -224,12 +228,18 @@ class _ResumePDF(FPDF):
         if self.measuring:
             return
         body_size = base * (
-            float(body_style.font_scale) if body_style is not None and body_style.font_scale else 1.0
+            float(body_style.font_scale)
+            if body_style is not None and body_style.font_scale
+            else 1.0
         )
-        body_line = base * _PX_TO_MM * (
-            float(body_style.line_height)
-            if body_style is not None and body_style.line_height
-            else self.layout.line_height
+        body_line = (
+            base
+            * _PX_TO_MM
+            * (
+                float(body_style.line_height)
+                if body_style is not None and body_style.line_height
+                else self.layout.line_height
+            )
         )
         # 量高必须先把字体切到**正文自己的字号**：fpdf2 的 dry_run 读当前字体度量，
         # 沿用上一个区块的字体（可能是标题的粗体大字号）会量出偏高的块，把整段顶到下一页。
@@ -382,15 +392,35 @@ class _ResumePDF(FPDF):
         return self.body_text
 
     def section_title(
-        self, text: str, base: float, *, leading_gap: float, style=None, section: str = "", keep_lines: int = 0
+        self,
+        text: str,
+        base: float,
+        *,
+        leading_gap: float,
+        style=None,
+        section: str = "",
+        keep_lines: int = 0,
     ) -> None:
         """区块标题：绘制在 style_blocks（W07 起消费角色/对象覆盖），本方法保留原签名。"""
         draw_section_title(
-            self, text, base, leading_gap=leading_gap, style=style, section=section, keep_lines=keep_lines
+            self,
+            text,
+            base,
+            leading_gap=leading_gap,
+            style=style,
+            section=section,
+            keep_lines=keep_lines,
         )
 
     def bullets(
-        self, items: list[str], base: float, *, style=None, section: str = "", object_id=None, split_ok: bool = False
+        self,
+        items: list[str],
+        base: float,
+        *,
+        style=None,
+        section: str = "",
+        object_id=None,
+        split_ok: bool = False,
     ) -> None:
         """列表项：绘制在 style_blocks（缩进/符号/行高/对齐可被覆盖），分页口径不变。"""
         draw_bullets(
@@ -398,11 +428,28 @@ class _ResumePDF(FPDF):
         )
 
     def entry_head(
-        self, left: str, right: str, base: float, *, style=None, meta_style=None, section: str = "", object_id=None, keep_lines: int = 0
+        self,
+        left: str,
+        right: str,
+        base: float,
+        *,
+        style=None,
+        meta_style=None,
+        section: str = "",
+        object_id=None,
+        keep_lines: int = 0,
     ) -> None:
         """条目头：绘制在 style_blocks（字号/颜色/粗体/对齐/段前距可被覆盖）。"""
         draw_entry_head(
-            self, left, right, base, style=style, meta_style=meta_style, section=section, object_id=object_id, keep_lines=keep_lines
+            self,
+            left,
+            right,
+            base,
+            style=style,
+            meta_style=meta_style,
+            section=section,
+            object_id=object_id,
+            keep_lines=keep_lines,
         )
 
     def meta_line(self, text: str, base: float, *, style=None) -> None:

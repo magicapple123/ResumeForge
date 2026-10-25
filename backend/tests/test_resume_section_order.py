@@ -16,7 +16,7 @@ from app.schemas.profile import PROFILE_SECTION_KEYS
 from app.schemas.resume import ResumeContent
 from app.services.docx_exporter import build_resume_docx
 from app.services.exporter import export_markdown, render_html
-from app.services.profile.profile_service import get_or_create_profile
+from app.services.profile import group_store
 from app.services.resume.resume_sections import (
     DEFAULT_SECTION_ORDER,
     PROFILE_SECTION_TO_RESUME,
@@ -28,18 +28,18 @@ from app.services.resume.resume_sections import (
 )
 from app.services.txt_exporter import export_txt
 
-# 七个分区对应的标题文案。渲染器写的是文案，测试按文案找位置——文案本身在
-# resume_sections.py 的 SECTION_LABELS 里定义，这里只负责"顺序"这一件事。
+# 各分区对应的标题文案。渲染器写的是文案，测试按文案找位置——文案本身在
+# resume_labels.py 的 SECTION_TITLES 里定义，这里只负责"顺序"这一件事。
 TITLES = (
     "个人总结",
     "教育经历",
     "实习/工作经历",
     "校园经历",
     "项目经历",
-    "论文发表",
+    "学术成果",
     "科研项目",
-    "专利",
-    "资格证照",
+    "知识产权",
+    "证书资质",
     "专业技能",
     "荣誉奖项",
 )
@@ -92,10 +92,10 @@ def _assert_follows_order(texts: dict[str, str]) -> None:
         order_in_output = [title for title, _ in sorted(positions, key=lambda item: item[1])]
         assert order_in_output == [
             "项目经历",
-            "论文发表",
+            "学术成果",
             "科研项目",
-            "专利",
-            "资格证照",
+            "知识产权",
+            "证书资质",
             "实习/工作经历",
             "个人总结",
             "荣誉奖项",
@@ -249,6 +249,14 @@ def test_profile_order_falls_back_on_dirty_input():
         assert profile_to_resume_order(dirty) == list(DEFAULT_SECTION_ORDER), dirty
 
 
+def _set_workspace_section_order(db_session, order: list[str]) -> None:
+    """资料顺序的唯一来源是新模型的全局顺序（旧 user_profile.section_order 已退役）。"""
+    state = group_store.read_state(db_session)
+    group_store.set_section_order(
+        db_session, order, expected_revision=int(state.revision or 1)
+    )
+
+
 # ===== 新建简历时"物化"的默认顺序（P0-5）=====
 # 卡片（「调整板块顺序」）与四个渲染器必须读同一份 `format_config.section_order`；靠前端 UI 的
 # 默认值临时生效会出现"卡片显示资料顺序、PDF 按内置默认排"的两套结果。落库之后只有一个来源。
@@ -286,18 +294,24 @@ def test_default_section_order_config_appends_research_after_old_sections(db_ses
     因此"资料顺序 = 旧默认顺序"不再等于 10 键内置默认，会物化一份显式 section_order——
     这是刻意的：科研板块不插进用户已排好的七项中间，旧记录的视觉顺序不变。
     """
-    profile = get_or_create_profile(db_session)
-    profile.section_order = [
-        "basic_info",
-        "educations",
-        "experiences",
-        "projects",
-        "skills",
-        "campus_experiences",
-        "awards",
-        "summary",
-    ]
-    db_session.commit()
+    _set_workspace_section_order(
+        db_session,
+        [
+            "basic_info",
+            "educations",
+            "experiences",
+            "projects",
+            "skills",
+            "campus_experiences",
+            "awards",
+            "summary",
+            "publications",
+            "research_projects",
+            "patents",
+            "credentials",
+            "languages",
+        ],
+    )
 
     assert default_section_order_config(db_session) == {
         "section_order": [
@@ -317,28 +331,30 @@ def test_default_section_order_config_appends_research_after_old_sections(db_ses
 
 
 def test_default_section_order_config_is_none_for_a_never_saved_profile(db_session):
-    """从没在资料页排过顺序（数据库里还是空列表）→ 等于内置默认 → 不写键。"""
-    profile = get_or_create_profile(db_session)
-    profile.section_order = []
-    db_session.commit()
-
+    """新模型还没有工作区状态（读接口不 bootstrap）→ 回退内置默认 → 不写键。"""
     assert default_section_order_config(db_session) is None
 
 
 def test_default_section_order_config_materializes_profile_order(db_session):
     """资料里把「项目经历」拖到最前 → 落库片段里项目在最前，其余照资料里的先后。"""
-    profile = get_or_create_profile(db_session)
-    profile.section_order = [
-        "basic_info",
-        "projects",
-        "summary",
-        "educations",
-        "experiences",
-        "skills",
-        "campus_experiences",
-        "awards",
-    ]
-    db_session.commit()
+    _set_workspace_section_order(
+        db_session,
+        [
+            "basic_info",
+            "projects",
+            "summary",
+            "educations",
+            "experiences",
+            "skills",
+            "campus_experiences",
+            "awards",
+            "publications",
+            "research_projects",
+            "patents",
+            "credentials",
+            "languages",
+        ],
+    )
 
     assert default_section_order_config(db_session) == {
         "section_order": [

@@ -47,7 +47,7 @@ ResumeForge/
 - 先读 `AGENTS.md`；本手册只做速查。
 - 用 Grep 定位到文件与行号，再读最小必要片段。
 - **改之前先确认"这份逻辑是否已有唯一实现"**——投递准入（`models/apply.py::admission_of`）、
-  状态白名单等都是刻意单份的；求职助手的功能清单以 `services/feature_catalog.py` 为单一事实来源。
+  状态白名单等都是刻意单份的；求职助手的功能清单以 `services/feature_catalog.py` 门面（数据在 `feature_catalog_{profile,resume,workflow}.py`）为单一事实来源。
 
 ### ② 改动
 
@@ -91,7 +91,7 @@ ResumeForge/
 |---|---|
 | 任何用户可见行为 | `CHANGELOG.md` 的 Unreleased 段 |
 | 功能增删 | `README.md` 功能表（第一列逐字锁定）+ `docs/user-guide.md` |
-| 界面/流程 | `frontend/src/components/userGuideSteps.ts` + `feature_catalog.py`（四方被测试钉着） |
+| 界面/流程 | `frontend/src/components/userGuideSteps.ts` + `feature_catalog*.py`（门面 + 数据段，四方被测试钉着） |
 | 架构/模块 | `docs/architecture.md` / `docs/PROJECT_MAP.md` |
 
 ### ⑤ 提交
@@ -145,7 +145,7 @@ ResumeForge/
   真的取一次前端入口模块——"端口活着但页面一片空白"只有它们捕得到（2026-09-29 用户在虚拟机
   上解压新版本后只看到空白页，当时 Windows 侧没有这个作业）。改了启动链要跑它们。
 - **提交不写 AI trailer**；数据/密钥/简历不进 git。
-- 单一事实来源：`feature_catalog.py`（功能清单）、README 功能表、版本号 5 处、
+- 单一事实来源：`feature_catalog*.py`（功能清单：门面 + 三个数据段）、README 功能表、版本号 5 处、
   投递准入与状态白名单（各只有一份实现）。
 
 ## 4. 专项流程

@@ -8,7 +8,7 @@
  *
  * ## 判定方式
  *
- * 1. 从 `components/userGuideSteps.ts` 抽出所有 `「…」`（U+300C / U+300D）引号内的文本；
+ * 1. 从 components/user-guide/ 下的**全部步骤数据文件**抽出所有「…」（U+300C / U+300D）引号内的文本；
  * 2. 过滤掉明显不是单个控件名的（规则集中在 `isCheckableCitation`，见那里的逐条理由）；
  * 3. 断言每一条作为**字面量**出现在 `src/**\/*.ts`、`src/**\/*.tsx`（排除 `*.test.*`）里。
  *
@@ -42,6 +42,7 @@ import { dirname, join, relative, resolve, sep } from "node:path";
 // @ts-expect-error 同上：@types/node 未安装。
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import zhCN from "../i18n/messages/zh-CN";
 import { stripComments } from "../i18n/cjkScan";
 
 /** 换行符常量：模板里直接写它最容易被编辑器转义吃掉。 */
@@ -50,8 +51,14 @@ const CH_NEWLINE = String.fromCharCode(10);
 /** `src/` 根目录：本文件在 `src/components/` 下，向上一层即是。 */
 const SRC_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
-/** 指南本体：被检查的一方。 */
-const GUIDE_FILE = join(SRC_ROOT, "components", "userGuideSteps.ts");
+/** 指南数据目录：拆分后正文分在 user-guide/ 的多个数据文件里（门面不再含文案）。 */
+const GUIDE_DIR = join(SRC_ROOT, "components", "user-guide");
+
+/** 指南正文来源：全部 *.ts 数据文件（排除测试）。 */
+const GUIDE_FILES: string[] = readdirSync(GUIDE_DIR)
+  .filter((name: string) => name.endsWith(".ts") && !/\.(test|spec)\./.test(name))
+  .sort()
+  .map((name: string) => join(GUIDE_DIR, name));
 
 /** 不扫的目录：测试目录与构建产物。 */
 const SKIP_DIRECTORIES = new Set(["__tests__", "node_modules", "dist", "coverage"]);
@@ -107,8 +114,16 @@ const CITATION_EXEMPTIONS: Record<string, string> = {
 interface Citation {
   /** 拆开并列写法之后的单个名字。 */
   name: string;
-  /** 在指南里的行号（1 起），便于报错时直接定位。 */
+  /** 在指南数据文件里的行号（1 起），便于报错时直接定位。 */
   line: number;
+  /** 来源数据文件（相对 src/ 的路径）。 */
+  file: string;
+}
+
+/** 一份指南数据源（拆分后的子模块）。 */
+interface GuideSource {
+  file: string;
+  text: string;
 }
 
 interface UiSource {
@@ -142,8 +157,12 @@ function readUiSources(root: string = SRC_ROOT): UiSource[] {
         file: relative(root, absolute).split(sep).join("/"),
         text: stripComments(readFileSync(absolute, "utf8")),
       }))
-      // 指南自己不是界面：不排除的话，它引用的每个字符串都能在自己身上找到，守卫恒绿。
-      .filter((source) => source.file !== "components/userGuideSteps.ts")
+      // 指南数据不是界面：不排除的话，它引用的每个字符串都能在自己身上找到，守卫恒绿。
+      .filter(
+        (source) =>
+          source.file !== "components/userGuideSteps.ts" &&
+          !source.file.startsWith("components/user-guide/"),
+      )
   );
 }
 
@@ -168,18 +187,20 @@ function isCheckableCitation(raw: string): boolean {
   return true;
 }
 
-/** 从指南文本里抽出待校验的引用（去重、保留首次出现的行号）。 */
-function extractCitations(guideText: string): Citation[] {
-  const withoutComments = stripComments(guideText);
+/** 从指南数据文件里抽出待校验的引用（去重、保留首次出现的文件 + 行号）。 */
+function extractCitations(guideSources: GuideSource[]): Citation[] {
   const citations = new Map<string, Citation>();
-  for (const match of withoutComments.matchAll(QUOTE_PATTERN)) {
-    const raw = match[1];
-    const line = withoutComments.slice(0, match.index ?? 0).split(CH_NEWLINE).length;
-    // 并列写法拆成单个名字：`全部展开 / 全部收起` 是两个按钮，各自都要存在。
-    for (const part of raw.replace(/\*\*/g, "").split(COMPOUND_SEPARATOR)) {
-      const name = part.trim();
-      if (!isCheckableCitation(name)) continue;
-      if (!citations.has(name)) citations.set(name, { name, line });
+  for (const source of guideSources) {
+    const withoutComments = stripComments(source.text);
+    for (const match of withoutComments.matchAll(QUOTE_PATTERN)) {
+      const raw = match[1];
+      const line = withoutComments.slice(0, match.index ?? 0).split(CH_NEWLINE).length;
+      // 并列写法拆成单个名字：「全部展开 / 全部收起」是两个按钮，各自都要存在。
+      for (const part of raw.replace(/\*\*/g, "").split(COMPOUND_SEPARATOR)) {
+        const name = part.trim();
+        if (!isCheckableCitation(name)) continue;
+        if (!citations.has(name)) citations.set(name, { name, line, file: source.file });
+      }
     }
   }
   return [...citations.values()];
@@ -192,34 +213,71 @@ function extractCitations(guideText: string): Citation[] {
  * 看起来是绿的，那比没有守卫更危险（本仓 `antdStaticGuard` 的自测也是这个目的）。
  */
 function findMissingCitations(
-  guideText: string,
+  guideSources: GuideSource[],
   sources: UiSource[],
   exemptions: Record<string, string> = CITATION_EXEMPTIONS,
 ): Citation[] {
   const haystack = sources.map((source) => source.text).join(CH_NEWLINE);
-  return extractCitations(guideText).filter((citation) => {
+  return extractCitations(guideSources).filter((citation) => {
     if (citation.name in exemptions) return false;
     return !haystack.includes(citation.name);
   });
 }
 
+/** 指南里静态 t("消息 key") 的 key（拆分后指南可能把正文迁进语言包）。 */
+const T_CALL_PATTERN = /\bt\(\s*["']([^"']+)["']/g;
+
+function extractGuideMessageKeys(guideSources: GuideSource[]): string[] {
+  const keys: string[] = [];
+  for (const source of guideSources) {
+    for (const match of source.text.matchAll(T_CALL_PATTERN)) {
+      if (!keys.includes(match[1])) keys.push(match[1]);
+    }
+  }
+  return keys;
+}
+
+/** 解析不到的 t() key（文案移位后 key 写错/删掉时直接变红）。 */
+function missingMessageKeys(keys: string[]): string[] {
+  const catalog = zhCN as Record<string, string | undefined>;
+  return keys.filter((key) => typeof catalog[key] !== "string" || !catalog[key]);
+}
+
 describe("使用指南引用守卫", () => {
-  const guideText = readFileSync(GUIDE_FILE, "utf8");
+  const guideSources: GuideSource[] = GUIDE_FILES.map((file: string) => ({
+    file: relative(SRC_ROOT, file).split(sep).join("/"),
+    text: readFileSync(file, "utf8"),
+  }));
   const sources = readUiSources();
 
+  it("指南数据拆分后仍有正文（防止读错路径空跑）", () => {
+    expect(GUIDE_FILES.length).toBeGreaterThanOrEqual(5);
+    const files = guideSources.map((source) => source.file);
+    expect(files).toContain("components/user-guide/setupProfileSteps.ts");
+    expect(files).toContain("components/user-guide/resumeSteps.ts");
+    expect(extractCitations(guideSources).length).toBeGreaterThan(100);
+  });
+
   it("指南里提到的每个控件名，源码里都存在", () => {
-    const missing = findMissingCitations(guideText, sources);
+    const missing = findMissingCitations(guideSources, sources);
     expect(
       missing,
-      `指南引用了源码里找不到的字符串。改指南，或确认按钮已被改名/删除：` +
+      "指南引用了源码里找不到的字符串。改指南，或确认按钮已被改名/删除：" +
         CH_NEWLINE +
-        missing.map((item) => `userGuideSteps.ts:${item.line}  「${item.name}」`).join(CH_NEWLINE),
+        missing.map((item) => `${item.file}:${item.line}  「${item.name}」`).join(CH_NEWLINE),
     ).toEqual([]);
+  });
+
+  it("指南里的静态 t() 消息 key 都能在语言包解析（文案移位不空跑）", () => {
+    const keys = extractGuideMessageKeys(guideSources);
+    expect(missingMessageKeys(keys), missingMessageKeys(keys).join(CH_NEWLINE)).toEqual([]);
+    // 自测：解析器本身能抓到不存在的 key（否则这条会因"指南目前没有 t()"而假绿）。
+    expect(missingMessageKeys(["definitely.missing.key"])).toEqual(["definitely.missing.key"]);
   });
 
   it("校验集合不是空壳（正则或过滤写错时，上一条会假绿）", () => {
     // 实测 150 条上下；阈值只用来发现"抽取整体失效"，不是给人卡的配额。
-    expect(extractCitations(guideText).length).toBeGreaterThan(100);
+    expect(extractCitations(guideSources).length).toBeGreaterThan(100);
   });
 
   it("守卫自身能抓到人造缺口，也会跳过非控件名的引用", () => {
@@ -235,12 +293,16 @@ describe("使用指南引用守卫", () => {
       "计数标签「参考来源（N）」不校验。",
     ].join(CH_NEWLINE);
 
-    const missing = findMissingCitations(sampleGuide, sampleSources, {}).map((item) => item.name);
+    const missing = findMissingCitations(
+      [{ file: "sample", text: sampleGuide }],
+      sampleSources,
+      {},
+    ).map((item) => item.name);
     expect(missing).toEqual(["拿去深挖", "全部展开", "全部收起"]);
   });
 
   it("豁免项不过期：还在指南里，且确实不在源码里", () => {
-    const cited = new Set(extractCitations(guideText).map((citation) => citation.name));
+    const cited = new Set(extractCitations(guideSources).map((citation) => citation.name));
     const haystack = sources.map((source) => source.text).join(CH_NEWLINE);
     const problems: string[] = [];
     for (const [name, reason] of Object.entries(CITATION_EXEMPTIONS)) {

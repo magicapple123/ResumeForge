@@ -16,7 +16,7 @@ from __future__ import annotations
 import json
 import logging
 import re
-from typing import Any
+from typing import Any, cast
 
 from annotated_types import MaxLen
 from pydantic import BaseModel, ValidationError
@@ -239,10 +239,15 @@ def _coerce_entry(section: str, entry: dict) -> dict[str, Any]:
     return item
 
 
-def _validated_entries(section: str, raw) -> list[BaseModel]:
-    """逐条校验；单条不合法只丢弃该条并留日志，不拖垮整份简历。"""
+def _validated_entries(section: str, raw) -> list[Any]:
+    """逐条校验；单条不合法只丢弃该条并留日志，不拖垮整份简历。
+
+    返回 ``list[Any]`` 而不是 ``list[BaseModel]``：结果要 ``**`` 进 ``ResumeContent``，
+    而它的条目参数是 ``list[ResumeXxx]`` 这类具体列表——``list[BaseModel]`` 因列表
+    不变型对不上；这里的元素已通过对应模型校验，``Any`` 只是给类型系统让路。
+    """
     model, _ = _ENTRY_MODELS[section]
-    entries: list[BaseModel] = []
+    entries: list[Any] = []
     for index, entry in enumerate(_entry_dicts(raw)):
         normalized = _coerce_entry(section, entry)
         try:
@@ -264,7 +269,9 @@ def coerce_resume(data: dict | None) -> ResumeContent:
     def as_str(value) -> str:
         return value if isinstance(value, str) else ""
 
-    sections = {section: _validated_entries(section, data.get(section)) for section in _ENTRY_MODELS}
+    sections = {
+        section: _validated_entries(section, data.get(section)) for section in _ENTRY_MODELS
+    }
     return ResumeContent(
         name=as_str(data.get("name")),
         gender=as_str(data.get("gender")),
@@ -276,7 +283,10 @@ def coerce_resume(data: dict | None) -> ResumeContent:
         github=as_str(data.get("github")),
         job_intent=as_str(data.get("job_intent")),
         summary=as_str(data.get("summary")),
-        **sections,
+        # **sections 的键只会是 _ENTRY_MODELS 里的分区名（都对应 ResumeContent 的
+        # list 字段）；dict[str, Any] 让 pyright 不再把 list 值试到 photo: str 这类
+        # 非列表参数上。运行时 pydantic 仍逐字段校验。
+        **cast("dict[str, Any]", sections),
     )
 
 

@@ -25,9 +25,10 @@ import copy
 import re
 import uuid
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, cast
 
 from sqlalchemy import update
+from sqlalchemy.engine import CursorResult
 from sqlalchemy.orm import Session
 
 from ...models.profile import utcnow
@@ -354,19 +355,23 @@ def update_field_schema(
             db.commit()
             db.refresh(row)
         else:
-            result = db.execute(
-                update(ProfileFactFieldPref)
-                .where(
-                    ProfileFactFieldPref.id == row.id,
-                    ProfileFactFieldPref.revision == current,
-                )
-                .values(
-                    hidden_fields=list(hidden),
-                    custom_fields=[dict(item) for item in custom],
-                    revision=current + 1,
-                    updated_at=utcnow(),
-                )
-                .execution_options(synchronize_session=False)
+            # 条件写必须读 `rowcount`；显式收窄成 DML 的运行时真实类型（同 document_save.py）。
+            result = cast(
+                "CursorResult[Any]",
+                db.execute(
+                    update(ProfileFactFieldPref)
+                    .where(
+                        ProfileFactFieldPref.id == row.id,
+                        ProfileFactFieldPref.revision == current,
+                    )
+                    .values(
+                        hidden_fields=list(hidden),
+                        custom_fields=[dict(item) for item in custom],
+                        revision=current + 1,
+                        updated_at=utcnow(),
+                    )
+                    .execution_options(synchronize_session=False)
+                ),
             )
             if result.rowcount != 1:
                 db.rollback()
@@ -394,16 +399,19 @@ def reset_field_schema(db: Session, kind: str, *, expected_revision: int) -> Kin
         raise SchemaRevisionConflict(current)
     if row is None:
         return KindFieldSchema(kind=normalized, revision=0, hidden_fields=(), custom_fields=())
-    result = db.execute(
-        update(ProfileFactFieldPref)
-        .where(ProfileFactFieldPref.id == row.id, ProfileFactFieldPref.revision == current)
-        .values(
-            hidden_fields=[],
-            custom_fields=[],
-            revision=current + 1,
-            updated_at=utcnow(),
-        )
-        .execution_options(synchronize_session=False)
+    result = cast(
+        "CursorResult[Any]",
+        db.execute(
+            update(ProfileFactFieldPref)
+            .where(ProfileFactFieldPref.id == row.id, ProfileFactFieldPref.revision == current)
+            .values(
+                hidden_fields=[],
+                custom_fields=[],
+                revision=current + 1,
+                updated_at=utcnow(),
+            )
+            .execution_options(synchronize_session=False)
+        ),
     )
     if result.rowcount != 1:
         db.rollback()

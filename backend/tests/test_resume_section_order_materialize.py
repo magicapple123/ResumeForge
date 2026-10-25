@@ -16,6 +16,7 @@
 
 from __future__ import annotations
 
+from app.services.profile import group_store
 from app.services.resume.resume_record import save_record
 from app.services.resume.resume_sections import DEFAULT_SECTION_ORDER
 
@@ -148,11 +149,20 @@ def _save_generated(db_session, format_config):
 
 def test_generated_resume_gets_the_default_order_when_absent(db_session):
     """生成链路没带顺序（旧前端 / 兜底）→ 补上资料顺序，与卡片显示的一致。"""
-    from app.services.profile.profile_service import get_or_create_profile
-
-    profile = get_or_create_profile(db_session)
-    profile.section_order = ["basic_info", *PROFILE_KEYS[1:]]
-    db_session.commit()
+    state = group_store.read_state(db_session)
+    group_store.set_section_order(
+        db_session,
+        [
+            "basic_info",
+            *PROFILE_KEYS[1:],
+            "publications",
+            "research_projects",
+            "patents",
+            "credentials",
+            "languages",
+        ],
+        expected_revision=int(state.revision or 1),
+    )
 
     record = _save_generated(db_session, None)
 

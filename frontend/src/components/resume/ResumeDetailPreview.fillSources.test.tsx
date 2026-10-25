@@ -14,7 +14,10 @@ import { App as AntdApp } from "antd";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { t } from "../../i18n";
+import { legacyProfileToProjection } from "../../test/profileProjectionFixture";
 import { TEMPLATE_CATALOG } from "../../test/resumeFixtures";
+import { invalidateProjectionCache } from "../../features/profile-library/projectionCache";
 import type { ResumeDetail, ResumeLayout } from "../../types";
 import ResumeDetailPreview from "./ResumeDetailPreview";
 
@@ -30,8 +33,12 @@ vi.mock("../../hooks/useResumeTemplateCatalog", () => ({
 }));
 
 /** `/profile`：既要钉住"什么时候请求"，也要钉住"请求失败不挡编辑器"。 */
-const profileMocks = vi.hoisted(() => ({ getProfile: vi.fn() }));
+const profileMocks = vi.hoisted(() => ({ getProfile: vi.fn(), getCurrentProjection: vi.fn() }));
 vi.mock("../../api/profile", () => ({ getProfile: profileMocks.getProfile }));
+// F4：候选改读当前组投影（共享缓存），不再读旧资料接口。
+vi.mock("../../features/profile-library/api", () => ({
+  getCurrentProjection: profileMocks.getCurrentProjection,
+}));
 
 /** 只要让 `profileToResumeContent` 走得通：六个列表空数组 + 一句个人总结。 */
 const PROFILE = {
@@ -142,7 +149,14 @@ function fillSummaryButton(): HTMLButtonElement | null {
 }
 
 beforeEach(() => {
-  profileMocks.getProfile.mockResolvedValue(PROFILE);
+  // 投影缓存是模块级的：每个用例换一个数据集作用域 + 主动失效，避免上一条用例的缓存/在飞
+  // 请求影响"什么时候请求"的断言（真实应用切数据集是整页 reload）。
+  window.localStorage.setItem("resumeforge:active-dataset", `test-${Math.random()}`);
+  profileMocks.getCurrentProjection.mockReset();
+  profileMocks.getCurrentProjection.mockResolvedValue(
+    legacyProfileToProjection(PROFILE as unknown as import("../../types").Profile),
+  );
+  invalidateProjectionCache();
 });
 
 afterEach(() => {
@@ -153,22 +167,25 @@ afterEach(() => {
 describe("「手动调整」的资料填入候选", () => {
   it("资料只在打开编辑器之后才取一次，不在页面挂载时请求", async () => {
     renderPreview();
-    expect(profileMocks.getProfile).not.toHaveBeenCalled();
+    expect(profileMocks.getCurrentProjection).not.toHaveBeenCalled();
 
     fireEvent.click(await screen.findByRole("button", { name: /手动调整/ }));
 
-    await waitFor(() => expect(profileMocks.getProfile).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(profileMocks.getCurrentProjection).toHaveBeenCalledTimes(1));
     // 入口出现 = `fillSources` 真的传到了编辑器。
     await waitFor(() => expect(fillSummaryButton()).not.toBeNull());
+    // F9/R1：页签也按同一份参与清单过滤（这份投影的当前组只有基本信息；简历正文为空，
+    // 没有"已有内容"需要保留的教育栏）。
+    expect(screen.queryByRole("tab", { name: t("editor.tab.education") })).not.toBeInTheDocument();
   });
 
   it("资料接口失败时编辑器照常打开，只是没有这条入口（静默降级）", async () => {
-    profileMocks.getProfile.mockRejectedValueOnce(new Error("profile down"));
+    profileMocks.getCurrentProjection.mockRejectedValueOnce(new Error("profile down"));
     renderPreview();
 
     fireEvent.click(await screen.findByRole("button", { name: /手动调整/ }));
 
-    await waitFor(() => expect(profileMocks.getProfile).toHaveBeenCalled());
+    await waitFor(() => expect(profileMocks.getCurrentProjection).toHaveBeenCalled());
     // 编辑器本体可用：`Form.Item name="name"` 渲染出的输入框 id 就是字段名。
     await waitFor(() => expect(document.getElementById("name")).not.toBeNull());
     expect(fillSummaryButton()).toBeNull();
@@ -182,7 +199,7 @@ describe("制作台中栏的资料填入候选", () => {
     fireEvent.click(screen.getByRole("button", { name: /简历制作台/ }));
     await screen.findByRole("dialog", { name: "简历制作台" });
 
-    await waitFor(() => expect(profileMocks.getProfile).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(profileMocks.getCurrentProjection).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(fillSummaryButton()).not.toBeNull());
     // 入口出现在中栏里，而不是落在外面的弹窗里。
     const column = document.querySelector(".resume-wb-col-editor");

@@ -1,6 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
 """网申资料多条补充记录的存储与填表展开。"""
-from app.models.profile import Education, UserProfile
 from app.services.webform import repeated_profile
 from app.services.webform.data import build_form_data
 from app.services.webform.fields import FORM_FIELDS, SOURCE_EXTRA
@@ -83,8 +82,13 @@ def test_repeated_catalog_entries_keep_the_record_number(db_session):
 
 
 def test_web_only_second_education_does_not_override_first_resume_education(db_session):
-    db_session.add(UserProfile(name="测试者", educations=[Education(school="简历学校", major="信息工程")]))
-    db_session.commit()
+    from app.services.profile import entry_store
+
+    entry_store.upsert_entry(
+        db_session,
+        "educations",
+        values={"educations.school": "简历学校", "educations.major": "信息工程"},
+    )
     repeated_profile.save_groups(
         db_session,
         {

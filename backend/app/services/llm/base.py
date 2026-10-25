@@ -95,6 +95,9 @@ class BaseLLMProvider(ABC):
         # 责任。注意：测试假 Provider 可能不经本构造器、也从不写它——读取方必须容忍
         # 属性缺失（用 getattr 兜底），缺用量展示「未知」。
         self.last_usage: LLMUsage | None = None
+        # 本次请求内**全部**调用的用量（跨多段生成/多轮助手逐次追加）。R04 账本在每次
+        # 调用结束时通过环境任务自动落账；last_usage 只保留既有"最后一次"契约。
+        self.usage_records: list[LLMUsage] = []
         # 请求级 read deadline（RF-14 §2.1.c）：调用方在发起前设置为"本次请求允许的
         # read 上限秒数"（如格式修复段的 child 剩余），_timeout() 取
         # min(配置值, 本值)——deadline 只能收紧、不能放宽配置值。None 表示未接预算。
@@ -185,6 +188,12 @@ class BaseLLMProvider(ABC):
             completion_tokens=completion_tokens,
             retries=retries,
         )
+        self.usage_records.append(self.last_usage)
+        # R04：把"这次调用发生过"统一上报用量账本。任务名由 HTTP 中间件/后台上下文
+        # 给出；没有环境任务时是空操作（llm 层单测直接构造 provider 不写库）。
+        from .usage_ledger import record_ambient_usage
+
+        record_ambient_usage(self)
 
     @abstractmethod
     async def chat(self, messages: list[dict], *, thinking: bool = True) -> str:

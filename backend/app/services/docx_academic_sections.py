@@ -17,7 +17,13 @@ from .docx_blocks import bullets as _bullets
 from .docx_blocks import entry_head as _entry_head
 from .docx_blocks import meta_line as _meta_line
 from .docx_blocks import section_title as _section_title
-from .docx_section_shared import _apply_break, _break_plan, _join, _role
+from .docx_section_shared import (
+    _apply_break,
+    _break_plan,
+    _join,
+    _role,
+    profile_meta_lines,
+)
 from .resume.resume_labels import (
     authors_text,
     credential_detail,
@@ -86,6 +92,9 @@ def section_publications(
         )
         if detail:
             _meta_line(doc, detail, base=base, layout=layout, theme=theme)
+        profile_meta_lines(
+            doc, publication, "publications", base=base, layout=layout, theme=theme, language=language
+        )
 
 
 def section_research_projects(
@@ -136,6 +145,15 @@ def section_research_projects(
             _meta_line(doc, funding, base=base, layout=layout, theme=theme)
         _bullets(doc, project.description, base=base, theme=theme)
         _bullets(doc, project.outcomes, base=base, theme=theme)
+        profile_meta_lines(
+            doc,
+            project,
+            "research_projects",
+            base=base,
+            layout=layout,
+            theme=theme,
+            language=language,
+        )
 
 
 def section_credentials(
@@ -188,6 +206,9 @@ def section_credentials(
         detail = credential_detail(credential, language)
         if detail:
             _meta_line(doc, detail, base=base, layout=layout, theme=theme)
+        profile_meta_lines(
+            doc, credential, "credentials", base=base, layout=layout, theme=theme, language=language
+        )
 
 
 def section_patents(

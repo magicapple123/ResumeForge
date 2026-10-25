@@ -2,8 +2,9 @@
 import { App as AntdApp } from "antd";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-// 路由表就在 App.tsx 里，读它的源码即可——再维护一份页面清单只会多一处会过期的真相。
-import appSource from "../App.tsx?raw";
+// 路由表唯一来源是 appRoutes.tsx（App.tsx 只是 <Routes>{APP_ROOT_ROUTE}</Routes> 的壳），
+// 读它的源码即可——再维护一份页面清单只会多一处会过期的真相。
+import appRoutesSource from "../appRoutes.tsx?raw";
 import UserGuideModal from "./UserGuideModal";
 import { QUICK_START_PATHS } from "./quickStartPaths";
 import { GUIDE_STEPS } from "./userGuideSteps";
@@ -58,10 +59,19 @@ describe("UserGuideModal", () => {
     expect(screen.getByText("选择预设或自定义模型")).toBeInTheDocument();
     expect(screen.getByText(/纯手动配置/)).toBeInTheDocument();
 
-    goToStep("完善资料与事实台账");
-    expect(screen.getByText("建立你的事实资料库")).toBeInTheDocument();
+    goToStep("完善资料");
+    expect(screen.getByText("建立你的个人资料库")).toBeInTheDocument();
+    // 13 大字段 / 当前组 / 字段设置 / 判定表 / 升级告知 是这一轮的用户可见能力，
+    // 指南不说清楚，用户不会知道"当前组决定生成读什么"。
+    expect(screen.getAllByText(/13 个大字段/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/「当前组」决定生成/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/默认收起/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/同一段经历只填一个大字段/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/旧资料不再显示/).length).toBeGreaterThan(0);
+    // 补充事实已下线：指南里不允许再出现旧入口（L 验收）。
+    expect(screen.queryByText(/补充事实/)).toBeNull();
     // 文档识别是用户看得见的能力，指南必须提到，否则用户不会想到可以传 PDF。
-    expect(screen.getByText(/pdf\/docx 简历文档/)).toBeInTheDocument();
+    expect(screen.getAllByText(/pdf\/docx 简历文档/).length).toBeGreaterThan(0);
     // 事实台账是这一轮新增的用户可见能力：不说清楚，用户不会知道"哪些话能说"
     // 是在这里维护的，也就用不上"导出被拦下"那条保护。
     expect(screen.getAllByText(/事实台账/).length).toBeGreaterThan(0);
@@ -281,7 +291,7 @@ describe("QUICK_START_PATHS 文案口径", () => {
       expect(item.text.length).toBeLessThanOrEqual(160);
     }
     // 除示例数据走既有载入流程（path 为空）外，其余路径必须指向真实路由。
-    const routes = [...appSource.matchAll(/<Route\s+path="([^"]+)"/g)].map((m) => m[1]);
+    const routes = [...appRoutesSource.matchAll(/<Route\s+path="([^"]+)"/g)].map((m) => m[1]);
     for (const item of QUICK_START_PATHS) {
       if (item.key === "sample") {
         expect(item.path).toBe("");
@@ -294,7 +304,7 @@ describe("QUICK_START_PATHS 文案口径", () => {
 
 describe("GUIDE_STEPS", () => {
   function appRoutes(): string[] {
-    return [...appSource.matchAll(/<Route\s+path="([^"]+)"/g)].map((match) => match[1]);
+    return [...appRoutesSource.matchAll(/<Route\s+path="([^"]+)"/g)].map((match) => match[1]);
   }
 
   it("only points at pages that exist", () => {

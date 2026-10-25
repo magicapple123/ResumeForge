@@ -17,7 +17,7 @@
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import ClassVar, Literal
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -46,8 +46,11 @@ class ResumeCredential(OptionalVisibilityMixin, BaseModel):
     status: CredentialStatus = "unknown"
     verify_url: str = Field(default="", max_length=MAX_URL_CHARS)
     note: str = Field(default="", max_length=MAX_NOTE_CHARS)
+    # F8（R-81）：证书类型（自由文本，如"职业资格"）。证号仍刻意不声明。
+    credential_type: str = Field(default="", max_length=128)
     # W01 稳定身份（可选；None 不序列化，见 OptionalVisibilityMixin 的字段表）
     id: str | None = Field(default=None, max_length=32)
+    _optional_empty_string_fields: ClassVar[tuple[str, ...]] = ("credential_type",)
 
     _validate_verify_url = field_validator("verify_url")(_validate_http_url)
 

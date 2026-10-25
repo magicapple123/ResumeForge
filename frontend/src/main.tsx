@@ -2,10 +2,11 @@
 import NotifyHostBridge from "./components/NotifyHostBridge";
 import React from "react";
 import ReactDOM from "react-dom/client";
-import { BrowserRouter } from "react-router-dom";
-import App from "./App";
-import DatasetScopeBoundary from "./components/DatasetScopeBoundary";
+import { createBrowserRouter, createRoutesFromElements, RouterProvider } from "react-router-dom";
+import { Route } from "react-router-dom";
+import { APP_ROOT_ROUTE } from "./appRoutes";
 import AppErrorBoundary from "./components/AppErrorBoundary";
+import RootLayout from "./components/shell/RootLayout";
 import ThemeProvider from "./components/ThemeProvider";
 import I18nProvider from "./i18n/I18nProvider";
 import "./index.css";
@@ -31,6 +32,13 @@ async function start() {
     }
   }
 
+  // **必须是 data router**：资料页的未保存离开守卫用 `useBlocker`，声明式
+  // `<BrowserRouter>` 下会抛 "useBlocker must be used within a data router" 并落到
+  // 错误页。根路由表来自 appRoutes.tsx，与测试里的 `<Routes>` 共用同一份。
+  const router = createBrowserRouter(
+    createRoutesFromElements(<Route element={<RootLayout />}>{APP_ROOT_ROUTE}</Route>),
+  );
+
   ReactDOM.createRoot(document.getElementById("root")!).render(
     <React.StrictMode>
       {/* 语言在最外层：`ThemeProvider` 里的 antd `locale` 与界面文案必须同源，
@@ -41,15 +49,7 @@ async function start() {
               需要一个能在任何模块里调用的出口，而 useApp() 只能在组件里用。 */}
           <NotifyHostBridge />
           <AppErrorBoundary>
-            <BrowserRouter>
-              {import.meta.env.VITE_DEMO_MODE === "1" ? (
-                <App />
-              ) : (
-                <DatasetScopeBoundary>
-                  <App />
-                </DatasetScopeBoundary>
-              )}
-            </BrowserRouter>
+            <RouterProvider router={router} />
           </AppErrorBoundary>
         </ThemeProvider>
       </I18nProvider>

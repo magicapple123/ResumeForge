@@ -5,7 +5,6 @@
 保留原有公共入口，并负责把各步骤编排为 API 使用的异步事件流。
 """
 
-import json
 import logging
 from collections.abc import AsyncGenerator
 from pathlib import Path
@@ -18,8 +17,9 @@ from ...runtime.operation_budget import OperationBudget
 from ...schemas.claim import ClaimDigestOut
 from ...schemas.job import JobOut
 from ...schemas.profile import ProfileOut
+from ...schemas.profile_projection import ConsumedProfile
 from ...schemas.resume import GenerateOptions, ResumeContent
-from ..llm.base import BaseLLMProvider, LLMError
+from ..llm.base import BaseLLMProvider
 from ..llm.token_estimate import estimate_tokens
 from ..llm.usage import LLMUsage
 from ..profile.profile_relevance import (
@@ -38,9 +38,6 @@ from .resume_coverage import (
     find_unwritten_details,
 )
 from .resume_generation_helpers import (
-    begin_budget_segment,
-    end_budget_segment,
-    has_extended_facts,
     parse_resume,
     record_call_usage,
 )
@@ -49,7 +46,16 @@ from .resume_generator_prompts import (
     ENHANCEMENT_LEVEL_GUIDES,
     MAX_JD_CHARS,
     MAX_PROFILE_CHARS,
-    build_layout_guide,
+    append_generation_warnings,
+    build_profile_selection,
+    build_progress_events,
+    build_rationale,
+    consumed_photo,
+    legacy_postprocess_resume,
+    render_generation_messages,
+    repair_resume_json,
+    run_quality_retry,
+    selection_data_for,
 )
 from .resume_grounding import (
     _REFERENCE_FALLBACK_LIMITS,
@@ -75,8 +81,7 @@ from .resume_quality import (
     _quality_reference_points,
     _quality_shortfalls,
 )
-from .resume_rationale import build_generation_rationale
-from .resume_wording import cliche_shortfalls, find_cliches
+from .resume_wording import cliche_shortfalls
 
 PROMPTS_DIR = Path(__file__).resolve().parent.parent.parent / "prompts"
 logger = logging.getLogger(__name__)
@@ -102,7 +107,7 @@ class ResumeGenerator:
 
     async def generate(
         self,
-        profile: ProfileOut,
+        profile: ProfileOut | None,
         job: JobOut | None,
         options: GenerateOptions,
         *,
@@ -110,12 +115,17 @@ class ResumeGenerator:
         budget: OperationBudget | None = None,
         career_context_block: str = "",
         fact_sections: dict[str, Any] | None = None,
+        consumed: ConsumedProfile | None = None,
     ) -> AsyncGenerator[dict[str, Any], None]:
         """执行生成流程，依次产出进度、增量、完成或错误事件。
 
         ``job is None`` 表示**通用简历**：不针对任何岗位，候选资料是完整资料库，
         筛选层换成 ``build_general_profile_context``（见那里的说明——不能靠"传空岗位"
         让岗位路径自己退化，那条路径会丢掉校园经历、奖项、技能与总结）。
+
+        consumed 是 F2 冻结的**当前组消费快照**（F3/R-28）：非空时只走消费层候选，
+        profile 可以传 None（新链路不读旧资料表）。按组过滤发生在任何评分/名额/
+        预算之前；未参与分区整键不出现（R-29），参与但无数据的分区保留空数组（C1）。
 
         ``baseline`` 是事实台账已确认的条目。**不传、或台账为空时渲染出的提示词与
         以前逐字节相同**——没启用台账的用户不该因为这次改动而拿到不一样的简历。
@@ -140,109 +150,45 @@ class ResumeGenerator:
         ``_stop``，generator 只接受预算检查、不接触取消信号。
         """
         general = job is None
-        enhancement_guide = (
-            ENHANCEMENT_LEVEL_GUIDES[options.enhancement_level]
-            if options.enhance
-            else _ENHANCEMENT_DISABLED_GUIDE
-        )
-
         yield {
             "type": "progress",
             "message": "正在整理完整资料…" if general else "正在分析岗位要求与资料匹配度…",
         }
-        # 空快照（六类都为空）等价于"没有新增事实"：传 None 保证旧提示词逐字节不变。
-        active_facts = fact_sections if fact_sections and any(fact_sections.values()) else None
-        selection = (
-            build_general_profile_context(
-                profile,
-                max_chars=MAX_PROFILE_CHARS,
-                include_references=options.enhance,
-                fact_sections=active_facts,
-            )
-            if general
-            else build_targeted_profile_context(
-                profile,
-                job,
-                max_chars=MAX_PROFILE_CHARS,
-                include_references=options.enhance,
-                fact_sections=active_facts,
-            )
-        )
-        counts = selection.selected_counts
-        reference_count = sum(
-            1
-            for section in ("educations", "experiences", "campus_experiences", "projects")
-            for item in selection.data.get(section, [])
-            if item.get("reference_facts") or item.get("reference_excerpt")
-        )
-        if general:
-            reference_message = (
-                f"；已从 {reference_count} 份总结文件中提取可用事实"
-                if options.enhance and reference_count
-                else ""
-            )
-            yield {
-                "type": "progress",
-                "message": (
-                    "已整理 "
-                    f"{counts['experiences']} 段实习/工作、{counts['projects']} 个项目、"
-                    f"{counts['campus_experiences']} 段校园经历和 {counts['skills']} 项技能"
-                    f"{reference_message}"
-                ),
-            }
-        else:
-            reference_message = (
-                f"；已提取 {reference_count} 份总结文件中的岗位相关事实"
-                if options.enhance and reference_count
-                else ""
-            )
-            yield {
-                "type": "progress",
-                "message": (
-                    "已从完整资料中筛选 "
-                    f"{counts['experiences']} 段实习/工作、{counts['projects']} 个项目、"
-                    f"{counts['campus_experiences']} 段校园经历和 {counts['skills']} 项技能"
-                    f"{reference_message}"
-                ),
-            }
-        # 渲染会吃掉模板文件末尾的换行；补回来，让岗位模式的系统提示与改动前逐字节一致。
-        system_prompt = self._env.get_template("resume_generate_system.md").render(job=job) + "\n"
-        user_prompt = self._env.get_template("resume_generate_user.md").render(
-            profile_json=selection.serialized,
+        # F3/R-28：consumed 非空即"冻结的当前组消费快照"路径——候选只含参与分区，
+        # 且构造发生在任何评分/名额/预算之前。旧 ProfileOut 路径保留给既有调用方与
+        # 三链外消费者，输出与改造前逐字节一致。
+        scoped = consumed is not None
+        selection = build_profile_selection(
+            consumed=consumed,
+            profile=profile,
             job=job,
-            jd=build_job_prompt_text(job, MAX_JD_CHARS) if job else "",
-            enhancement_guide=enhancement_guide,
-            enhancement_enabled=options.enhance,
-            focus_skills="、".join(selection.focus.skills) or "未识别到明确技能，请以 JD 原文为准",
-            focus_domains="、".join(selection.focus.domains) or "通用岗位",
-            omitted_count=sum(selection.omitted_counts.values()),
-            layout_guide=build_layout_guide(options.page_limit, options.font_scale),
-            custom_instruction=options.custom_instruction.strip(),
-            # 台账为空时传空串，模板里的 {% if claim_baseline %} 整块不渲染。
-            claim_baseline=baseline.baseline_text if baseline else "",
-            blocked_wording=baseline.blocked_wording if baseline else [],
-            # A5：已经解析冻结的受限表达指南；空串时模板块不渲染（旧提示词不变）。
-            career_context_block=career_context_block.strip(),
-            # A4：候选资料里出现扩展事实栏目时才在提示词里给出扩展输出结构；
-            # 旧资料/无新增事实时保持旧提示词逐字节不变（C2）。
-            extended_facts=has_extended_facts(selection.data),
+            general=general,
+            options=options,
+            fact_sections=fact_sections,
+            max_chars=MAX_PROFILE_CHARS,
         )
-        messages = [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt},
-        ]
+        selection_data = selection_data_for(selection)
+        for event in build_progress_events(
+            general, selection, enhance=options.enhance, scoped=scoped
+        ):
+            yield event
+        messages = render_generation_messages(
+            self._env,
+            selection,
+            job,
+            options,
+            baseline=baseline,
+            career_context_block=career_context_block,
+            general=general,
+            scoped=scoped,
+        )
 
         if budget is not None:
-            # 流开始前的预算检查（§2.1.a-2）：防御"上一段耗尽后才进流"。
+            # 流开始前检查预算（§2.1.a-2）；并把整链硬墙钟接给 provider（PR-07-3）。
             budget.raise_if_stopped()
-            # 整链硬墙钟接线（审计 PR-07-3）：主生成流没有 child，但 provider 的每次
-            # 传输尝试都以总预算剩余做 asyncio.timeout 上限——首字前静默、只发心跳
-            # 的流同样会被硬切（此前只有 runner 的逐事件检查，事件之间是盲区）。
             self._total_budget = budget
             self.provider.request_budget = budget
-        # token 估算遥测（RF-14 §2.5）：默认关。开启时把估算写进 done 事件
-        # （estimated_* 命名），由 runner 并进用量结构化日志——它不改请求体，
-        # 也不作为截断依据（按 token 截断属 RF-13/RF-17 的产品决策，本批明确不做）。
+        # token 估算遥测（RF-14 §2.5）：默认关；只进 done 事件，不改请求体、不作截断依据。
         estimated_prompt_tokens: int | None = None
         if get_settings().llm_token_estimate_enabled:
             estimated_prompt_tokens = sum(
@@ -272,33 +218,17 @@ class ResumeGenerator:
         # 输出不是合法 JSON：用修复 Prompt 重试一次，仍然失败则降级报错。
         if resume is None:
             yield {"type": "progress", "message": "输出格式不符合要求，正在自动修复…"}
-            fix_prompt = self._env.get_template("resume_fix_json.md").render(raw=raw[:6000])
-            # 格式修复段取 child 预算（§2.1.a）：它是事件之间的完整 provider.chat，
-            # runner 的事件检查对进行中的调用不可见。child 剩余经 provider 的
-            # request_deadline_seconds 压缩该段 read timeout；调用后 finally 复位。
-            segment = budget.child() if budget is not None else None
-            if segment is not None:
-                segment.raise_if_stopped()
-            try:
-                begin_budget_segment(self.provider, segment)
-                fixed = await self.provider.chat(
-                    [{"role": "user", "content": fix_prompt}], thinking=False
-                )
-            except LLMError:
-                if budget is not None and budget.is_expired():
-                    # 预算耗尽不得伪装成网络超时（§2.1.a-3）：与 runner 的预算语义一致。
-                    yield {"type": "error", "message": "生成超出时间预算，已终止"}
-                    return
-                yield {
-                    "type": "error",
-                    "message": "自动修复调用失败：模型服务暂时不可用，请稍后重试",
-                }
+            resume, repair_error = await repair_resume_json(
+                env=self._env,
+                provider=self.provider,
+                raw=raw,
+                budget=budget,
+                total_budget=self._total_budget,
+                usage_records=self.usage_records,
+            )
+            if repair_error is not None:
+                yield {"type": "error", "message": repair_error}
                 return
-            finally:
-                end_budget_segment(self.provider, self._total_budget)
-                # 修复段的用量（含失败轮次）也进汇总（PR-07-6）。
-                record_call_usage(self.provider, self.usage_records)
-            resume = self._parse(fixed)
 
         if resume is None:
             yield {"type": "error", "message": "模型输出未能解析为有效 JSON，请更换模型或重试"}
@@ -326,111 +256,100 @@ class ResumeGenerator:
                 if content_shortfalls
                 else "生成结果里有空话或套话，正在改写…",
             }
-            reference_facts = [
-                {
-                    "name": _source_value(source, "name"),
-                    "facts": _quality_reference_points(source),
-                }
-                for source in selection.data.get("projects", [])
-                if _quality_reference_points(source)
-            ]
-            retry_prompt = self._env.get_template("resume_quality_retry.md").render(
-                shortfalls="\n".join(
-                    f"- {item}" for item in [*content_shortfalls, *wording_shortfalls]
-                ),
-                reference_facts=json.dumps(reference_facts, ensure_ascii=False),
+            retry_resume = await run_quality_retry(
+                env=self._env,
+                provider=self.provider,
+                messages=messages,
+                selection_data=selection_data,
+                shortfalls=[*content_shortfalls, *wording_shortfalls],
+                job=job,
+                options=options,
+                budget=budget,
+                total_budget=self._total_budget,
+                usage_records=self.usage_records,
             )
-            retry_messages = [*messages, {"role": "user", "content": retry_prompt}]
-            retry_resume: ResumeContent | None = None
-            # 质量重试段同取 child（§2.1.a-2）；重试失败沿用首轮结果（现状语义保留，
-            # 不因预算改变——预算耗尽由 runner 的下一个事件检查兜底）。
-            segment = budget.child() if budget is not None else None
-            if segment is not None:
-                segment.raise_if_stopped()
-            try:
-                begin_budget_segment(self.provider, segment)
-                retry_raw = await self.provider.chat(retry_messages)
-                retry_resume = self._parse(retry_raw)
-            except Exception as exc:  # noqa: BLE001 - 质量重试失败应保留首轮结果
-                logger.warning("简历质量重试失败，将沿用首轮结果，异常类型=%s", type(exc).__name__)
-            finally:
-                end_budget_segment(self.provider, self._total_budget)
-                # 重试段的用量（含失败轮次）也进汇总（PR-07-6）。
-                record_call_usage(self.provider, self.usage_records)
-
-            retry_content_shortfalls = (
-                _quality_shortfalls(retry_resume, selection.data, job)
-                if retry_resume is not None and quality_enabled
-                else []
-            )
-            retry_wording_shortfalls = (
-                cliche_shortfalls(retry_resume)
-                if retry_resume is not None and wording_enabled
-                else []
-            )
-            if (
-                retry_resume is not None
-                and not retry_content_shortfalls
-                and not retry_wording_shortfalls
-            ):
+            if retry_resume is not None:
                 resume = retry_resume
 
-        warnings = check_consistency(
-            resume, profile, selection.data, source_label="完整资料" if general else None
+        if scoped:
+            # 一致性/覆盖度/说明都只读本次消费快照（R-30：不出现未参与分区）。
+            warnings = check_consistency(
+                resume, consumed, selection_data, source_label="完整资料" if general else None
+            )
+        else:
+            # legacy 路径必须持有 ProfileOut：build_profile_selection 在 profile 与
+            # consumed 双空时已抛 ValueError，走到这里 profile 一定非 None。
+            assert profile is not None
+            warnings = check_consistency(
+                resume,
+                profile,
+                selection.data,
+                source_label="完整资料" if general else None,
+            )
+        warnings = append_generation_warnings(
+            warnings, resume, selection_data, general=general, wording_enabled=wording_enabled
         )
-        if wording_enabled:
-            # 重试用过之后仍然命中（或重试失败沿用首轮）时如实告知，不静默留下黑话。
-            remaining_cliches = find_cliches(resume)
-            if remaining_cliches:
-                warnings.append(
-                    "生成结果里仍有空话或黑话（"
-                    + "、".join(remaining_cliches)
-                    + "）：可以在「手动调整」里改掉，或重新生成一次。"
-                )
-        if general:
-            omitted_total = sum(selection.omitted_counts.values())
-            if omitted_total:
-                # 措辞要同时成立于两种丢弃来源：栏目上限与序列化时的预算压缩，
-                # 代码目前分不出是哪一种，所以只说"超出篇幅预算"。
-                warnings.append(
-                    f"这是通用简历（不按岗位筛选）：完整资料中有 {omitted_total} 条内容"
-                    "超出单份简历的篇幅预算，已按资料顺序优先保留靠前的条目；"
-                    "需要补充的内容可以在「手动调整」里手动加上。"
-                )
-        # 锚定（RF-13）：标注是锚定过程的副产品（纯收集，不调模型），随 done 事件
-        # 带给调用方落库，让前端能说明"这段内容是从哪条资料事实来的"。
-        resume, fact_annotations = ground_resume_facts_with_annotations(
-            resume,
-            profile,
-            job,
-            selection.data,
-            enhance=options.enhance,
-            enhancement_level=options.enhancement_level,
+        # 后处理顺序（F3 §3 / store-owner 定稿）：grounding → 扩展栏目回填 → C5-B →
+        # C2 自建分区 → R-73 语言补位 → 诊断 → done。
+        if scoped:
+            from .generation_postprocess import (
+                apply_profile_field_backfill,
+                attach_custom_sections,
+                ensure_custom_field_lines_in_resume,
+            )
+            from .grounding_entries import (
+                ground_resume_facts_with_annotations as ground_consumed_facts,
+            )
+            from .language_restore import LanguageCapacityError, restore_language_skills
+
+            resume, fact_annotations = ground_consumed_facts(
+                resume,
+                consumed,
+                job,
+                selection_data,
+                enhance=options.enhance,
+                enhancement_level=options.enhancement_level,
+            )
+            # 扩展栏目（论文/科研/知识产权/证书）的整段回填仍由旧实现负责：
+            # 新 grounding 只做旧六分区 + 身份/summary（store-owner 的定稿边界）。
+            resume = restore_selected_sections(
+                resume,
+                selection_data["data"],
+                enhance=options.enhance,
+                enhancement_level=options.enhancement_level,
+            )
+            resume, custom_field_annotations = ensure_custom_field_lines_in_resume(resume, consumed)
+            resume = attach_custom_sections(resume, consumed)
+            # F8（R-81）：资料有值、结果槽位空 → 确定性回填；不改 AI 已写值、不阻断保存。
+            resume = apply_profile_field_backfill(resume, consumed)
+            try:
+                resume, language_annotations = restore_language_skills(resume, consumed)
+            except LanguageCapacityError as exc:
+                # C14：技能 + 语言合并超过 200 条是结构化超限，不静默截断。
+                yield {"type": "error", "message": exc.detail}
+                return
+            resume = resume.model_copy(update={"photo": consumed_photo(consumed)})
+            annotations = [
+                *fact_annotations,
+                *custom_field_annotations,
+                *language_annotations,
+            ]
+        else:
+            # 旧链路：ProfileOut + 旧 grounding 语义（三链外调用方与既有测试依赖）。
+            resume, annotation_items = legacy_postprocess_resume(
+                resume, profile, job, selection_data, options
+            )
+            annotations = annotation_items
+        # 覆盖度检查必须在所有修复/回填之后（比对用户最终看到的内容）；它是中性的
+        # coverage_notes，不混进"疑似虚构"的 warnings 红墙。
+        coverage_details = (
+            find_unwritten_details(resume, consumed, selection_data)
+            if scoped
+            else find_unwritten_details(resume, selection.entry_names, selection.data)
         )
-        resume = resume.model_copy(update={"photo": profile.photo})
-        resume = restore_selected_sections(
-            resume,
-            selection.data,
-            enhance=options.enhance,
-            enhancement_level=options.enhancement_level,
-        )
-        # 覆盖度检查放在**所有**修复/回填之后：它比对的必须是用户最终看到的那份内容，
-        # 否则"资料里有 X、简历里没有 X"可能只是中间状态的假象。
-        #
-        # "没写进简历"是岗位导向筛选的正常结果，与"疑似虚构"性质完全不同——所以它
-        # **不再混进 warnings**（那面红墙），而是作为结构化的 coverage_notes 单独
-        # 落库，前端用中性分组展示并配处理按钮。
-        coverage_details = find_unwritten_details(resume, selection.entry_names, selection.data)
         confirmed_names = confirmed_claims_about(all_entry_names(selection.entry_names), baseline)
-        rationale = build_generation_rationale(
-            job=job,
-            selection_counts=selection.selected_counts,
-            omitted_counts=selection.omitted_counts,
-            focus_skills=selection.focus.skills,
-            focus_domains=selection.focus.domains,
-            coverage_details=coverage_details,
-            baseline_confirmed=confirmed_names,
-            fallback_sections=selection.fallback_sections,
+        rationale = build_rationale(
+            job, selection, selection_data, coverage_details, confirmed_names
         )
         done_event = {
             "type": "done",
@@ -438,7 +357,7 @@ class ResumeGenerator:
             "warnings": warnings,
             "coverage_notes": coverage_details,
             "rationale": rationale,
-            "fact_annotations": fact_annotations,
+            "fact_annotations": annotations,
         }
         if estimated_prompt_tokens is not None:
             # 遥测字段只占位在估算开启时（§2.5-2）；runner 把它并进用量结构化日志。

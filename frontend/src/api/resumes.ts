@@ -6,23 +6,29 @@ import type {
   DeliverySummary,
   ExportFormat,
   ExportRequest,
-  GenerateOptions,
   Page,
   RedactionOptions,
   ResumeBrief,
   ResumeContent,
   ResumeDetail,
   ResumeFontScale,
-  ResumeGenerateTask,
   ResumePendingChange,
+  ResumeProfileUsage,
   ResumeReviewResult,
   ResumeSuggestions,
   ResumeSort,
   ResumeTemplateCatalog,
-  StreamEvent,
 } from "../types";
 import { buildQuery, getFilenameFromDisposition, request, requestRaw } from "./client";
-import { consumeSSE } from "./stream";
+
+// 新建 / 后台生成接口已等价提取到 `resumeCreation.ts`（500 行预算 + F4 快照字段）。
+// re-export 保持既有导入路径与 `vi.mock("../api/resumes")` 的落点不变。
+export {
+  cancelResumeGenerateTask,
+  createManualResume,
+  getResumeGenerateTask,
+  startResumeGeneration,
+} from "./resumeCreation";
 
 // 版式三件套（调整 / 诊断 / 渲染）已迁至 `resumeLayout.ts`（单文件 500 行预算）。
 // 这里 re-export 保持既有导入路径不变——调用方与 `vi.mock("../api/resumes")` 都不用改。
@@ -73,6 +79,16 @@ export function getResume(id: number): Promise<ResumeDetail> {
   return request(`/resumes/${id}`);
 }
 
+/**
+ * 一份简历保存/生成时的「本次使用」快照 + 是否过时（R-33）。
+ *
+ * 只读：不重新生成、不改正文。旧简历没有快照时 `profile_usage=null`、
+ * `freshness.changed=false`，调用方据此隐藏整条元信息。
+ */
+export function getResumeProfileUsage(id: number): Promise<ResumeProfileUsage> {
+  return request(`/resumes/${id}/profile-usage`);
+}
+
 export function deleteResume(id: number): Promise<void> {
   return request(`/resumes/${id}`, { method: "DELETE" });
 }
@@ -101,25 +117,6 @@ export function updateResumeFavorite(id: number, favorite: boolean): Promise<Res
   return request(`/resumes/${id}/favorite`, {
     method: "PATCH",
     body: JSON.stringify({ favorite }),
-  });
-}
-
-/**
- * 保存用户自行编写的简历，可选关联岗位。
- *
- * `draft` = 建一份**制作台草稿**（0051）：它不出现在简历中心/搜索/统计里，只有用户在
- * 制作台里保存过（内容或版式任一）才会转正。目前只有「前往简历制作台」这一个入口传它——
- * 那个入口的意图是"我要去里面排版"，不是"我现在就要这份简历"。
- */
-export function createManualResume(payload: {
-  job_id?: number | null;
-  title?: string;
-  content: ResumeContent;
-  draft?: boolean;
-}): Promise<ResumeDetail> {
-  return request("/resumes/manual", {
-    method: "POST",
-    body: JSON.stringify(payload),
   });
 }
 
@@ -176,45 +173,9 @@ export function prepareResumeReview(
   }).then((payload) => (payload as { results: ResumeReviewResult[] }).results);
 }
 
-/** 流式生成简历，事件定义见 types/StreamEvent；job_id 为 null 表示生成通用简历。 */
-export function generateResume(
-  payload: { job_id: number | null; title?: string; options: GenerateOptions },
-  onEvent: (event: StreamEvent) => void,
-  signal?: AbortSignal,
-): Promise<void> {
-  // SSE 不经过 request()；这里也必须保留 /api 前缀，才能走 Vite 开发代理。
-  return consumeSSE("/api/resumes/generate", payload, onEvent, signal);
-}
-
 /** 可选的简历模板与字号档位；顺带告诉前端服务端能否直接生成 PDF。 */
 export function fetchResumeTemplates(): Promise<ResumeTemplateCatalog> {
   return request("/resumes/templates");
-}
-
-// ===== 后台生成任务（轮询模型，替代弹窗里的同步 SSE 等待）=====
-// 生成改成后台任务后，前端流程是：start → 拿到 task_id → 关不关弹窗都轮询 status。
-// SSE 的 POST /generate 仍保留，这里只新增一套任务接口，不破坏既有流式语义。
-
-/** 启动一次后台简历生成，返回可轮询的任务；job_id 为 null 表示生成通用简历。 */
-export function startResumeGeneration(payload: {
-  job_id: number | null;
-  title?: string;
-  options: GenerateOptions;
-}): Promise<ResumeGenerateTask> {
-  return request("/resumes/generate/tasks", {
-    method: "POST",
-    body: JSON.stringify(payload),
-  });
-}
-
-/** 查询一次生成任务的状态（前端 1.5s 轮询）。 */
-export function getResumeGenerateTask(taskId: number): Promise<ResumeGenerateTask> {
-  return request(`/resumes/generate/tasks/${taskId}`);
-}
-
-/** 取消进行中的生成任务；取消后不落库简历，任务标为 cancelled。 */
-export function cancelResumeGenerateTask(taskId: number): Promise<ResumeGenerateTask> {
-  return request(`/resumes/generate/tasks/${taskId}/cancel`, { method: "POST" });
 }
 
 /**

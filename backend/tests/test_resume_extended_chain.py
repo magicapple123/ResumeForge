@@ -84,7 +84,7 @@ def test_consistency_flags_credentials_missing_from_candidates():
         None,
         {**_BASE_CANDIDATES, "credentials": [{"name": "注册会计师"}], "publications": []},
     )
-    assert any("资格证照" in message and "注册信息安全专业人员" in message for message in warnings)
+    assert any("证书资质" in message and "注册信息安全专业人员" in message for message in warnings)
     # 候选里确实有"注册会计师"，不应冤枉成虚构。
     assert not any("注册会计师" in message for message in warnings)
 
@@ -92,7 +92,7 @@ def test_consistency_flags_credentials_missing_from_candidates():
 def test_consistency_keeps_old_behaviour_without_extended_candidates():
     """候选资料没有新栏目键时，带科研/证照的旧简历不会被新检查冤枉成虚构。"""
     warnings = check_consistency(_extended_resume(), None, dict(_BASE_CANDIDATES))
-    assert not any("资格证照" in message or "论文" in message for message in warnings)
+    assert not any("证书资质" in message or "学术成果" in message for message in warnings)
 
 
 # ===== 3. coverage：extended 分区 → 身份字段映射 =====
@@ -107,7 +107,7 @@ def test_coverage_maps_extended_sections():
     )
     assert len(details) == 1
     assert details[0]["section"] == "credentials"
-    assert details[0]["section_label"] == "资格证照"
+    assert details[0]["section_label"] == "证书资质"
     # 这条没有进入候选资料（筛选/预算拦下）：按"filtered"报，而不是"模型没写"。
     assert details[0]["filtered"] == ["注册信息安全专业人员"]
 

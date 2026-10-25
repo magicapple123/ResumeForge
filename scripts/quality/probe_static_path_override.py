@@ -24,7 +24,7 @@ from fastapi import FastAPI  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
 
 ICON = b"ICON-BYTES"
-SECRET = "SECRET-CONTENT"
+CANARY = "CANARY-CONTENT"
 
 
 def main() -> int:
@@ -34,17 +34,17 @@ def main() -> int:
         (dist / "assets").mkdir(parents=True)
         (dist / "index.html").write_text("<html>INDEX</html>", encoding="utf-8")
         (dist / "resumeforge-icon.png").write_bytes(ICON)
-        secret = root / "secret.txt"
-        secret.write_text(SECRET, encoding="utf-8")
+        canary = root / "canary.txt"
+        canary.write_text(CANARY, encoding="utf-8")
 
         app = FastAPI()
         mount_static_spa(app, dist)
         leaked = False
         with TestClient(app) as client:
             for params in (
-                {"path": str(secret)},
-                {"file": str(secret)},
-                {"path": "../../secret.txt"},
+                {"path": str(canary)},
+                {"file": str(canary)},
+                {"path": "../../canary.txt"},
             ):
                 response = client.get("/resumeforge-icon.png", params=params)
                 body = response.content
@@ -54,7 +54,7 @@ def main() -> int:
                 )
                 assert response.status_code == 200, response.text
                 assert body == ICON, "查询参数改变了返回内容（越界读取）"
-                leaked = leaked or SECRET.encode() in body
+                leaked = leaked or CANARY.encode() in body
 
             root_response = client.get("/", headers={"accept": "text/html"})
             print(f"GET / -> {root_response.status_code} index={b'INDEX' in root_response.content}")

@@ -60,9 +60,13 @@ export default function ProfileFillBar({
   // 候选为空时连控件都不出现。
   if (items.length === 0) return null;
 
+  // 候选身份是资料 entry_id（稳定），"是否已在表单里"用形状键 matchKey 比对：
+  // 用户手抄过同样的内容时也应算"已加入"，否则下拉里会再出现一条。
+  const matchKeyOf = (item: ProfileFillItem): string => item.matchKey ?? item.key;
   const options = items.map((item) => {
-    const isCurrent = isEntry && currentKey != null && item.key === currentKey;
-    const inOthers = existingKeys.has(item.key);
+    const matchKey = matchKeyOf(item);
+    const isCurrent = isEntry && currentKey != null && matchKey === currentKey;
+    const inOthers = existingKeys.has(matchKey);
     // 后缀优先级：先说自己，再说别人——"当前条目"比"已在其他条目"更贴近用户当下正在看的东西。
     const suffix = isCurrent
       ? " 当前条目"
@@ -82,11 +86,13 @@ export default function ProfileFillBar({
   });
 
   const selected = items.find((item) => item.key === selectedKey) ?? null;
+  const selectedMatchKey = selected ? matchKeyOf(selected) : "";
   const selectedBlocked =
-    !selected || existingKeys.has(selected.key) || (isEntry && selected.key === currentKey);
-  const allBlocked = items.every(
-    (item) => existingKeys.has(item.key) || (isEntry && item.key === currentKey),
-  );
+    !selected || existingKeys.has(selectedMatchKey) || (isEntry && selectedMatchKey === currentKey);
+  const allBlocked = items.every((item) => {
+    const matchKey = matchKeyOf(item);
+    return existingKeys.has(matchKey) || (isEntry && matchKey === currentKey);
+  });
 
   const fill = () => {
     if (selectedBlocked || !selected) return;

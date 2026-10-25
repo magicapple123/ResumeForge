@@ -106,6 +106,12 @@ CASES: list[GoldenCase] = [
     # 这两条钉的是"语言真的贯穿到产物里"，而不是"渲染器接受了这个参数"。
     GoldenCase("pdf-classic-en-language", "pdf", "classic", "short_en", language="en-US"),
     GoldenCase("docx-classic-en-language", "docx", "classic", "short_en", language="en-US"),
+    # C2/R-79 自建大字段（custom_sections）：四格式各一条，钉住"自建分区真的上纸"。
+    # 既有 18 条 case 不带 custom_sections，同时守着"没有自建分区时旧产物逐字节不变"。
+    GoldenCase("pdf-classic-zh-custom", "pdf", "classic", "custom_zh"),
+    GoldenCase("html-classic-zh-custom", "html", "classic", "custom_zh"),
+    GoldenCase("docx-classic-zh-custom", "docx", "classic", "custom_zh"),
+    GoldenCase("md-classic-zh-custom", "md", "classic", "custom_zh"),
 ]
 
 CASE_IDS = [case.case_id for case in CASES]
@@ -184,6 +190,9 @@ def _probes(case: GoldenCase) -> list[str]:
     probes = [name, skill, url, head, tail]
     if company:
         probes.append(company)
+    if case.sample == "custom_zh":
+        # C2/R-79：自建分区的标题、主文本与「标签：值」行必须真的出现在纸面上。
+        probes.extend(["开源贡献", "维护统一网关平台", "维护者"])
     return [p for p in probes if p]
 
 

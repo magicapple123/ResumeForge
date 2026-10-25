@@ -5,6 +5,11 @@
       "text_chars": 648,
       "text_sha256": "343990bde12833d93bcfd5af7563eda53896ecef9d81731a4010b1c7a1d72e3e"
     },
+    "docx-classic-zh-custom": {
+      "pages": 1,
+      "text_chars": 525,
+      "text_sha256": "d4faa941054ea07d5949b0a916e68f23c626cbd0313e8940995efdf02c798a58"
+    },
     "docx-classic-zh-redact": {
       "pages": 1,
       "text_chars": 383,
@@ -14,6 +19,11 @@
       "pages": 1,
       "text_chars": 418,
       "text_sha256": "1aaa7defec894c4749adfeb8b367d6b22954568e260c3f0843e1a873f37e24a7"
+    },
+    "html-classic-zh-custom": {
+      "pages": null,
+      "text_chars": 607,
+      "text_sha256": "f812308f570bba2916d1aacd0f36f14af14534c825925f69158bda90921b6f10"
     },
     "html-classic-zh-watermark-redact": {
       "pages": null,
@@ -34,6 +44,11 @@
       "pages": null,
       "text_chars": 518,
       "text_sha256": "76ba19535fde3f209b6bea4d23bff10a437419c3365d5efc671bed633a89ba07"
+    },
+    "md-classic-zh-custom": {
+      "pages": null,
+      "text_chars": 629,
+      "text_sha256": "38cf1ea11eda06b35f77e0792732b86fceec4cb048524ec2179ce16cd4325730"
     },
     "pdf-classic-en-1p-baseline": {
       "pages": 1,
@@ -69,6 +84,11 @@
       "pages": 3,
       "text_chars": 2566,
       "text_sha256": "0d181584e70cde1b481af5e03d9a89ff6174d08f70b9b17fc3b346d39910c076"
+    },
+    "pdf-classic-zh-custom": {
+      "pages": 1,
+      "text_chars": 594,
+      "text_sha256": "00476f5bb9bba4625d7562b15b4fe5b392cbb194f2f362a03b7d2de468feef29"
     },
     "pdf-modern-en-3p-watermark": {
       "pages": 3,

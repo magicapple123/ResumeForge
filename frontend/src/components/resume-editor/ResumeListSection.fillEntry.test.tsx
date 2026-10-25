@@ -377,4 +377,33 @@ describe("ResumeListSection 条目级填入（fillEntry）", () => {
     // 只通知一次：填入是一次编辑动作，不是逐字段各通知一遍。
     expect(onFilled).toHaveBeenCalledTimes(1);
   });
+  it("F8：条目级填入把导师/研究方向/成绩排名写进空字段", async () => {
+    const f8Education: ResumeEducation = {
+      ...BLANK_EDUCATION,
+      school: "示例大学",
+      major: "软件工程",
+      degree: "本科",
+      start_date: "2023.09",
+      end_date: "2027.06",
+      study_form: "全日制",
+      advisor: "张伟",
+      research_direction: "联邦学习",
+      rank: "前 10%",
+    };
+    const item = itemOf(f8Education, "软件工程 · 本科 · 2023.09 ~ 2027.06");
+    const { form } = renderHarness({
+      education: [{ ...BLANK_EDUCATION }],
+      sources: sourcesOf([item]),
+    });
+
+    await pickAndFill(entrySelect(0), item.label + "（" + item.hint + "）", entryFillButton(0));
+
+    // F8（R-81）：资料小字段已写进投影 content 槽位，条目级填入必须把它们带进表单。
+    await waitFor(() => expect(screen.getByLabelText("导师")).toHaveValue("张伟"));
+    expect(screen.getByLabelText("研究方向")).toHaveValue("联邦学习");
+    expect(screen.getByLabelText("成绩排名")).toHaveValue("前 10%");
+    expect(screen.getByLabelText("学习形式")).toHaveValue("全日制");
+    // 仍然是"填进这一条"，不新增条目。
+    expect(form.getFieldValue("education")).toHaveLength(1);
+  });
 });

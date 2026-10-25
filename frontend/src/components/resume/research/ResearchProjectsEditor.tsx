@@ -56,6 +56,11 @@ export default function ResearchProjectsEditor() {
               <Input />
             </Form.Item>
           </Col>
+          <Col xs={12} md={6}>
+            <Form.Item name={[field.name, "level"]} label={rt("research.projects.level")}>
+              <Input placeholder={rt("research.projects.levelPlaceholder")} />
+            </Form.Item>
+          </Col>
           <Col span={24}>
             <Form.Item name={[field.name, "funding"]} label={rt("research.projects.funding")}>
               <Input placeholder={rt("research.projects.fundingPlaceholder")} />

@@ -62,7 +62,7 @@ def create_scenario_variant(
     resume_id: int,
     payload: ScenarioVariantCreateRequest,
     db: Session = Depends(get_db),
-) -> VariantOut:
+) -> VariantOut | JSONResponse:
     """先派生独立变体（源简历零写入）。场景未知/版本不符 → 明确 4xx。"""
     record = _get_live_resume(db, resume_id)
     try:

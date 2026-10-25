@@ -12,6 +12,7 @@ export * from "./profile";
 export * from "./job";
 export * from "./apply";
 export * from "./resume";
+export * from "./resumeProfileUsage";
 export * from "./resumeTemplate";
 export * from "./resumeWriting";
 export * from "./resumeRisk";

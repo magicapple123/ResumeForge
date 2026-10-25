@@ -15,10 +15,10 @@ from app.models.apply import (
     JobMatchAnalysis,
 )
 from app.models.job import JOB_STATUS_OPEN, Job
-from app.models.profile import UserProfile
 from app.schemas.job_match import JobMatchResult, MatchCondition
 from app.services.apply import _site_browser, apply_service, task_runner
 from app.services.job.job_match import finalize_match_result
+from app.services.profile.entry_store import upsert_entry
 
 
 class FakeRunner:
@@ -104,11 +104,13 @@ def _job(db_session, **overrides) -> Job:
     return job
 
 
-def _profile(db_session) -> UserProfile:
-    profile = UserProfile(name="张三", job_intent="后端开发")
-    db_session.add(profile)
-    db_session.commit()
-    return profile
+def _profile(db_session) -> None:
+    """资料自 F2 起落在新模型：匹配分析读全量新资料（旧 user_profile 已退役）。"""
+    upsert_entry(
+        db_session,
+        "basic_info",
+        values={"basic_info.name": "张三", "basic_info.job_intention": "后端开发"},
+    )
 
 
 def _blocked_match(db_session, job_id: int) -> None:

@@ -27,7 +27,7 @@ from ...schemas.resume import (
 )
 from ...services.claims import build_baseline
 from ...services.profile.profile_context import build_profile_prompt_data
-from ...services.profile.profile_service import get_profile_detail, to_profile_out
+from ...services.profile.profile_service import project_legacy_profile
 from ...services.resume.resume_grounding_helpers import _unsupported_quantified_values
 from ._shared import _get_live_resume
 
@@ -90,7 +90,7 @@ def prepare_resume_review(
     """对一批待审变更做审阅预检，返回每条的三态结论；不落库、不改简历内容。"""
     # 记录必须存在且未删除：预检是针对"这份简历的这一栏"的编辑动作。
     _get_live_resume(db, resume_id)
-    profile = to_profile_out(get_profile_detail(db))
+    profile = project_legacy_profile(db)
     # 来源证据与生成链路同一份资料结构：量化结果校验的口径保持一致。
     profile_evidence = json.dumps(build_profile_prompt_data(profile), ensure_ascii=False)
     baseline = build_baseline(db)

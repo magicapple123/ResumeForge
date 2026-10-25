@@ -66,16 +66,10 @@ async def preview(payload: WebFormPreviewIn, db: Session = Depends(get_db)):
         # build_form_data/build_preview（规则匹配是纯计算热路径）都是同步重活，
         # 下沉线程池避免阻塞事件循环；db 会话按 resume_template_import 的既有
         # 模式直接作为参数传入线程池。
-        data = await run_in_threadpool(webform_service.build_form_data, db)
-        details = await run_in_threadpool(webform_service.extra_profile.list_details, db)
-        custom_labels = {
-            key: str(detail.get("label") or "")
-            for key, detail in details.items()
-            if key.startswith("CUSTOM_") and str(detail.get("label") or "").strip()
-        }
-        # 补充事实的可见字段也会出现在 data 里（key 以 CUSTOM_FACT_ 开头）；把标签
-        # 一并交给放宽模式，页面控件才可能按用户自己的字段名匹配到这些事实值。
-        custom_labels.update(webform_service.fact_custom_labels(db))
+        # 一次取数冻结一份快照：data / 自定义标签同源（F5 契约 §2），旧补充事实已退出取数。
+        view = await run_in_threadpool(webform_service.build_webform_view, db)
+        data = view.data
+        custom_labels = view.custom_labels
         # 「放宽模式」是用户设置（默认关）：开着时，点选类控件若匹配到字段+值会以
         # 「放宽代选」/「需你确认」进预览行。关着时 build_preview 行为与从前一致。
         relaxed = await run_in_threadpool(get_webform_relaxed_mode, db)

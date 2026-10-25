@@ -17,6 +17,8 @@
 
 from __future__ import annotations
 
+from typing import cast
+
 from fastapi import APIRouter, Depends, Path, Query
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
@@ -24,6 +26,7 @@ from sqlalchemy.orm import Session
 from ..database import get_db
 from ..schemas.career_scenario import (
     CareerScenarioCatalogOut,
+    CareerScenarioConfig,
     CareerScenarioCreate,
     CareerScenarioListOut,
     CareerScenarioOut,
@@ -53,9 +56,7 @@ def read_catalog():
     try:
         builtin = catalog.load_catalog()
     except catalog.CatalogError as exc:
-        return JSONResponse(
-            status_code=503, content={"detail": exc.detail, "code": exc.code}
-        )
+        return JSONResponse(status_code=503, content={"detail": exc.detail, "code": exc.code})
     return CareerScenarioCatalogOut(
         catalog_version=builtin.catalog_version,
         schema_version=builtin.schema_version,
@@ -64,7 +65,10 @@ def read_catalog():
             CatalogPresetOut(
                 key=preset.key,
                 name=preset.name,
-                config=preset.config,
+                # preset.config 在目录构建期已过 CareerScenarioConfig 校验（catalog._build_preset
+                # 从 model_dump 出来、只覆写过模型自有的 preferred_sections），这里只是把
+                # dict 形状收回模型形状，不再二次校验。
+                config=cast("CareerScenarioConfig", preset.config),
                 suggested_sections=list(preset.suggested_sections),
                 guidance=list(preset.guidance),
             )

@@ -19,7 +19,7 @@ from typing import Any
 from urllib.parse import urlsplit
 
 from ...models.claim import ClaimRecord
-from ...schemas.preflight import CheckFix, CheckIssue, CheckLocator
+from ...schemas.preflight import CheckFix, CheckIssue, CheckLocator, PreflightSeverity
 from ...schemas.resume import ResumeContent
 from ..ats_check import check_ats
 from .document_identity import ENTRY_FIELDS
@@ -35,12 +35,13 @@ _SECTION_BY_PREFIX: tuple[tuple[str, str], ...] = (
     ("实习/工作经历", "experience"),
     ("校园经历", "campus_experience"),
     ("项目经历", "projects"),
-    # W14 科研三栏目 + A4 资格证照：完整性问题要能定位到具体板块（否则检查面板
-    # 只能显示"文档级"，用户不知道该去改哪儿）。
-    ("论文", "publications"),
+    # W14 科研三栏目 + A4 证书资质：完整性问题要能定位到具体板块（否则检查面板
+    # 只能显示"文档级"，用户不知道该去改哪儿）。前缀与 resume_completeness 的
+    # findings 同批维护（R-70：学术成果 / 知识产权 / 证书资质）。
+    ("学术成果", "publications"),
     ("科研项目", "research_projects"),
-    ("专利", "patents"),
-    ("资格证照", "credentials"),
+    ("知识产权", "patents"),
+    ("证书资质", "credentials"),
     ("专业技能", "skills"),
     ("荣誉奖项", "awards"),
 )
@@ -78,7 +79,11 @@ def _incomplete_issues(content: ResumeContent) -> list[CheckIssue]:
 
 
 # ATS 严重度 → 统一严重度。
-_ATS_SEVERITY = {"high": "verify", "medium": "suggestion", "low": "suggestion"}
+_ATS_SEVERITY: dict[str, PreflightSeverity] = {
+    "high": "verify",
+    "medium": "suggestion",
+    "low": "suggestion",
+}
 
 _ATS_TITLE_KEY = {
     "format": "preflight.issue.ats_format",
@@ -113,7 +118,11 @@ def _ats_issues(content: ResumeContent, jd_text: str) -> list[CheckIssue]:
 
 
 # 本地风险规则严重度（RiskPoint.severity 是 high/medium/low）→ 统一严重度。
-_RISK_SEVERITY = {"high": "verify", "medium": "suggestion", "low": "suggestion"}
+_RISK_SEVERITY: dict[str, PreflightSeverity] = {
+    "high": "verify",
+    "medium": "suggestion",
+    "low": "suggestion",
+}
 
 
 def _risk_issues(content: ResumeContent, claims: list[ClaimRecord]) -> list[CheckIssue]:
@@ -158,9 +167,7 @@ def content_issues(
     visible = content.model_copy(
         update={
             field: [
-                item
-                for item in (getattr(content, field, None) or [])
-                if not is_hidden_entry(item)
+                item for item in (getattr(content, field, None) or []) if not is_hidden_entry(item)
             ]
             for field in ENTRY_FIELDS
         }
@@ -254,7 +261,9 @@ _LINK_TITLE_KEY = {
 }
 
 
-def _entry_text_slots(entry: Any, section: str, index: int) -> list[tuple[str, Any, str, str | None]]:
+def _entry_text_slots(
+    entry: Any, section: str, index: int
+) -> list[tuple[str, Any, str, str | None]]:
     """一条条目里所有可能含链接的文本位：字段、值、路径、要点 id。
 
     只取字符串与字符串数组（链接只会出现在这些形态里）；排除身份/锁字段，避免把
@@ -266,7 +275,8 @@ def _entry_text_slots(entry: Any, section: str, index: int) -> list[tuple[str, A
         entry = entry.model_dump()
     if not isinstance(entry, dict):
         return []
-    point_ids = entry.get("point_ids") if isinstance(entry.get("point_ids"), dict) else {}
+    raw_point_ids = entry.get("point_ids")
+    point_ids = raw_point_ids if isinstance(raw_point_ids, dict) else {}
     slots: list[tuple[str, Any, str, str | None]] = []
     for field, value in entry.items():
         if field in {"id", "point_ids", "hidden", "lock_content", "lock_layout"}:

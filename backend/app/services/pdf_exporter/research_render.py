@@ -9,6 +9,7 @@
 
 from __future__ import annotations
 
+from ..resume.profile_field_lines import profile_field_lines
 from ..resume.resume_labels import (
     authors_text,
     credential_detail,
@@ -25,6 +26,12 @@ from ..resume.resume_labels import (
 
 def _join(values, separator: str = " · ") -> str:
     return separator.join(str(item).strip() for item in values if str(item).strip())
+
+
+def _profile_meta(pdf, item, section_key: str, base: float, language: str) -> None:
+    """F8：条目既有内容之后的新增字段「标签：值」行（空值跳过，顺序单源）。"""
+    for label, value in profile_field_lines(item, section_key, field_labels(language)):
+        pdf.meta_line(f"{label}：{value}", base)
 
 
 def experience_kind_line(kind: str, language: str) -> str:
@@ -69,6 +76,7 @@ def draw_publications(pdf, resume, *, base: float, leading: float, labels, langu
         detail = publication_detail(publication, language)
         if detail:
             pdf.meta_line(detail, base)
+        _profile_meta(pdf, publication, "publications", base, language)
     return True
 
 
@@ -93,6 +101,7 @@ def draw_research_projects(
             pdf.meta_line(f"{field_labels(language)['funding']}：{project.funding}", base)
         pdf.bullets(project.description, base, section="research_projects", object_id=project.id)
         pdf.bullets(project.outcomes, base, section="research_projects", object_id=project.id)
+        _profile_meta(pdf, project, "research_projects", base, language)
     return True
 
 
@@ -149,6 +158,7 @@ def draw_credentials(pdf, resume, *, base: float, leading: float, labels, langua
         detail = credential_detail(credential, language)
         if detail:
             pdf.meta_line(detail, base)
+        _profile_meta(pdf, credential, "credentials", base, language)
     return True
 
 

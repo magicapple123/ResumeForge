@@ -398,6 +398,8 @@ describe("中栏 · 栏目条与溢出三角下拉（需求 4）", () => {
       rt("research.tab.publications"),
       rt("research.tab.projects"),
       rt("research.tab.patents"),
+      // F2-C/F4-FE：证书资质成为可编辑栏目（CredentialsEditor），栏目条按全局顺序多一个。
+      t("editor.tab.credentials"),
     ]);
     // 「写作增强」已搬到右键菜单（2026-10-24），不再是中栏的一个页签。
     expect(labels).not.toContain(t("editor.tab.writing"));
@@ -474,5 +476,23 @@ describe("中栏 · 从我的资料追加一条", () => {
 
     expect(fillSummaryButton()).toBeNull();
     expect(nameInput()).not.toBeNull();
+  });
+
+  it("fillSources 带当前组参与清单时，中栏页签按同一规则过滤", () => {
+    // 当前组只有基本信息 + 技能：实习/项目等空分区不该再占一栏（与弹窗同一条规则）。
+    renderColumn({
+      fillSources: {
+        ...SOURCES,
+        participatingKeys: ["basic_info", "skills"],
+      },
+    });
+
+    // 自绘栏目条本身（antd 的隐藏导航里也有一份 role=tab，按 role 全局查会撞上）。
+    const strip = document.querySelector<HTMLElement>(".resume-wb-tabstrip");
+    expect(strip).not.toBeNull();
+    const labels = within(strip as HTMLElement)
+      .getAllByRole("tab")
+      .map((tab) => tab.textContent);
+    expect(labels).toEqual([t("editor.tab.basic"), t("editor.tab.skills")]);
   });
 });

@@ -75,7 +75,7 @@ def find_incomplete(resume: ResumeContent) -> list[str]:
 
     # ===== W14 科研三栏目（新增字段不加就静默不查，合同 §5.6）=====
     for publication in resume.publications:
-        label = f"论文「{publication.title or '未填题目'}」"
+        label = f"学术成果「{publication.title or '未填题目'}」"
         add(f"{label} 题目", publication.title)
         add(f"{label} 期刊/会议", publication.venue)
         add(f"{label} 年份", publication.year)
@@ -85,15 +85,15 @@ def find_incomplete(resume: ResumeContent) -> list[str]:
         add(f"{label} 起始时间", research.start_date)
         add_lines(f"{label} 描述", research.description)
     for patent in resume.patents:
-        label = f"专利「{patent.title or '未填名称'}」"
+        label = f"知识产权「{patent.title or '未填名称'}」"
         add(f"{label} 名称", patent.title)
         add(f"{label} 专利号", patent.patent_number)
 
-    # ===== A4 资格证照（状态是枚举、不参与占位符扫描；名称/机构/日期逐个查）=====
+    # ===== A4 证书资质（状态是枚举、不参与占位符扫描；名称/机构/日期逐个查）=====
     # 注意：**不把 status=="unknown" 当成"未完成"**——unknown 是来源事实（未核实），
     # 不是用户忘了填；把它当缺失会逼用户为了消警告去编一个状态，正是"不自动认定资格"的反面。
     for credential in resume.credentials:
-        label = f"资格证照「{credential.name or '未填名称'}」"
+        label = f"证书资质「{credential.name or '未填名称'}」"
         add(f"{label} 名称", credential.name)
         add(f"{label} 颁发机构", credential.issuer)
         add(f"{label} 签发日期", credential.issue_date)

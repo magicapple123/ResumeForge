@@ -87,6 +87,8 @@ export function emptyPublication(): ResumePublication {
     url: "",
     volume_pages: "",
     note: "",
+    outcome_type: "",
+    my_rank: "",
   };
 }
 
@@ -99,6 +101,7 @@ export function emptyResearchProject(): ResumeResearchProject {
     start_date: "",
     end_date: "",
     funding: "",
+    level: "",
     description: [],
     outcomes: [],
   };

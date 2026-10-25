@@ -51,7 +51,13 @@ def set_live_enabled(payload: WebFormLiveEnabledIn):
 
 @router.get("/browser/targets")
 def browser_targets(db: Session = Depends(get_db)):
-    targets = webform_service.browser.list_page_targets(db)
+    try:
+        targets = webform_service.browser.list_page_targets(db)
+    except webform_service.browser.BrowserError as exc:
+        # 浏览器没启动（或刚被用户关掉）：给可读的 409，而不是让异常冒成 500 内部错误。
+        # 前端会在页面里轮询这个接口，500 只会让用户看到一条没有任何信息的错误提示
+        # （2026-10-26 实机：停止状态下 GET /browser/targets 返回 500）。
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     states = webform_service.live_targets.snapshot({str(item["id"]) for item in targets})
     return {
         "items": [
@@ -98,18 +104,17 @@ def _start_live_session(
     # **不报错**：没配模型照样能用规则填，那是这个功能本来的样子。
     use_ai = True if want_ai is None else want_ai
     provider = webform_service.ai.build_provider(db) if use_ai else None
-    data = webform_service.build_live_form_data(db)
-    catalog = webform_service.build_catalog(db)
+    # 一份快照同时产出 data 与 catalog：两者必须来自同一次组/资料解析（F5 契约 §2）。
+    view = webform_service.build_webform_view(db, live=True)
+    data, catalog = view.data, view.catalog
     memory_targets = webform_service.profile_targets.build_memory_targets(db)
 
     def load_live_data() -> tuple[dict[str, str], list[dict[str, str]]]:
         """每次聚焦新控件时读取最新资料，避免实时会话持有旧快照。"""
         session = SessionLocal()
         try:
-            return (
-                webform_service.build_live_form_data(session),
-                webform_service.build_catalog(session),
-            )
+            view = webform_service.build_webform_view(session, live=True)
+            return view.data, view.catalog
         finally:
             session.close()
 

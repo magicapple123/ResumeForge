@@ -40,7 +40,11 @@ logger = logging.getLogger(__name__)
 
 # 端口默认值的唯一来源是 config.DEFAULT_BROWSER_PORT；此处保留 DEFAULT_PORT 名字兼容现有引用。
 DEFAULT_PORT = DEFAULT_BROWSER_PORT
-READY_TIMEOUT_SECONDS = 20.0
+# 浏览器冷启动到调试端口可用的等待上限。20s 在真机上不够稳：2026-10-26 网申专用浏览器实测
+# stop 后立即 start，Chrome 冷启动 16.3 / 19.1 / 18.5s 已贴到 20s 上限，偶发被判超时并回
+# 「浏览器已启动但调试端口未就绪」——正是用户报障的文案形态。Chrome 仍在启动时不该报失败：
+# 等待是幂等的，失败重来却要用户再点一次。45s 覆盖冷启动 + 安全软件扫描的常见尾延迟。
+READY_TIMEOUT_SECONDS = 45.0
 READY_POLL_INTERVAL = 0.4
 PROFILE_DIR_NAME = "browser-profile"
 

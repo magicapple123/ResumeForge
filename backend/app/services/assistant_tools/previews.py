@@ -8,6 +8,7 @@ schema 校验（那会在执行时发生）。守卫测试钉住"writes=True 必
 预览是**尽力而为**的展示：目标记录读不到（不存在/已软删）时仍返回差异清单，
 并在 scope 里注明"目标可能不存在"——诚实优于静默。
 """
+
 from __future__ import annotations
 
 from typing import Any
@@ -69,7 +70,13 @@ _PROFILE_FIELDS = {
     "github": "GitHub",
     "summary": "个人总结",
 }
-_MATERIAL_FIELDS = {"title": "标题", "category": "分类", "content": "正文", "url": "链接", "note": "备注"}
+_MATERIAL_FIELDS = {
+    "title": "标题",
+    "category": "分类",
+    "content": "正文",
+    "url": "链接",
+    "note": "备注",
+}
 _CLAIM_FIELDS = {
     "title": "标题",
     "subject": "主体",
@@ -80,7 +87,13 @@ _CLAIM_FIELDS = {
     "risk_notes": "风险点",
 }
 _CANDIDATE_FIELDS = {"title": "岗位名称", "company": "公司", "raw_text": "原文", "note": "备注"}
-_SKILL_FIELDS = {"name": "名称", "description": "适用场景", "prompt": "提示词", "enabled": "启用", "files": "知识文件"}
+_SKILL_FIELDS = {
+    "name": "名称",
+    "description": "适用场景",
+    "prompt": "提示词",
+    "enabled": "启用",
+    "files": "知识文件",
+}
 _TEMPLATE_FIELDS = {
     "name": "版式名称",
     "description": "说明",
@@ -88,7 +101,13 @@ _TEMPLATE_FIELDS = {
     "page_limit": "页数上限",
     "font_scale": "字号系数",
 }
-_KNOWLEDGE_FIELDS = {"title": "标题", "category": "分类", "tags": "标签", "content": "正文", "source": "来源"}
+_KNOWLEDGE_FIELDS = {
+    "title": "标题",
+    "category": "分类",
+    "tags": "标签",
+    "content": "正文",
+    "source": "来源",
+}
 
 
 def _text(value: Any) -> str | None:
@@ -105,11 +124,14 @@ def _create_changes(arguments: dict[str, Any], labels: dict[str, str]) -> list[F
     return [
         FieldChange(field=labels.get(key, key), before=None, after=_text(value))
         for key, value in arguments.items()
-        if value not in (None, "") and (key in labels or isinstance(value, (str, int, float, bool, list)))
+        if value not in (None, "")
+        and (key in labels or isinstance(value, (str, int, float, bool, list)))
     ]
 
 
-def _update_changes(db: Session, model: type, record_id: int, arguments: dict, labels: dict[str, str]):
+def _update_changes(
+    db: Session, model: type, record_id: int, arguments: dict, labels: dict[str, str]
+):
     """修改类工具：读当前记录取 before 值（读不到按新增处理，scope 里注明）。"""
     record = trash.get_live(db, model, record_id) if record_id else None
     changes = []
@@ -136,12 +158,15 @@ def _update_preview(target: str, record: Any, changes: list[FieldChange]) -> Wri
 # 岗位 / 个人资料 / 求职进度（core）
 # ---------------------------------------------------------------------------
 
+
 def preview_create_job(db: Session, arguments: dict) -> WritePreview:
     return _create_preview("岗位广场新岗位", _create_changes(arguments, _JOB_FIELDS))
 
 
 def preview_update_job(db: Session, arguments: dict) -> WritePreview:
-    record, changes = _update_changes(db, Job, int(arguments.get("job_id") or 0), arguments, _JOB_FIELDS)
+    record, changes = _update_changes(
+        db, Job, int(arguments.get("job_id") or 0), arguments, _JOB_FIELDS
+    )
     title = getattr(record, "title", None)
     return _update_preview(f"岗位「{title or arguments.get('job_id')}」", record, changes)
 
@@ -152,7 +177,11 @@ def preview_update_profile(db: Session, arguments: dict[str, Any]) -> WritePrevi
         for key, value in arguments.items()
         if value not in (None, "")
     ]
-    return WritePreview(target="个人资料基础字段", scope=f"修改 {len(changes)} 个字段（其余字段保留）", changes=changes)
+    return WritePreview(
+        target="个人资料基础字段",
+        scope=f"修改 {len(changes)} 个字段（其余字段保留）",
+        changes=changes,
+    )
 
 
 def preview_create_application_track(db: Session, arguments: dict) -> WritePreview:
@@ -174,24 +203,33 @@ def preview_add_profile_entry(db: Session, arguments: dict) -> WritePreview:
         for key, value in arguments.items()
         if key != "section" and value not in (None, "")
     ]
-    return WritePreview(target=f"个人资料「{section}」分区", scope="追加 1 条（现有条目不受影响）", changes=changes)
+    return WritePreview(
+        target=f"个人资料「{section}」分区", scope="追加 1 条（现有条目不受影响）", changes=changes
+    )
 
 
 # ---------------------------------------------------------------------------
 # 资料域（data_tools）
 # ---------------------------------------------------------------------------
 
+
 def preview_create_material(db: Session, arguments: dict) -> WritePreview:
     return _create_preview("资料箱新资料", _create_changes(arguments, _MATERIAL_FIELDS))
 
 
 def preview_update_material(db: Session, arguments: dict) -> WritePreview:
-    record, changes = _update_changes(db, Material, int(arguments.get("material_id") or 0), arguments, _MATERIAL_FIELDS)
-    return _update_preview(f"资料「{getattr(record, 'title', '') or arguments.get('material_id')}」", record, changes)
+    record, changes = _update_changes(
+        db, Material, int(arguments.get("material_id") or 0), arguments, _MATERIAL_FIELDS
+    )
+    return _update_preview(
+        f"资料「{getattr(record, 'title', '') or arguments.get('material_id')}」", record, changes
+    )
 
 
 def preview_create_claim(db: Session, arguments: dict) -> WritePreview:
-    preview = _create_preview("事实台账新条目（状态一律为待确认）", _create_changes(arguments, _CLAIM_FIELDS))
+    preview = _create_preview(
+        "事实台账新条目（状态一律为待确认）", _create_changes(arguments, _CLAIM_FIELDS)
+    )
     return preview
 
 
@@ -205,9 +243,15 @@ def preview_update_claim(db: Session, arguments: dict) -> WritePreview:
         if key not in _CLAIM_FIELDS or value is None:
             continue
         changes.append(
-            FieldChange(field=_CLAIM_FIELDS[key], before=_text(getattr(record, key, None)), after=_text(value))
+            FieldChange(
+                field=_CLAIM_FIELDS[key],
+                before=_text(getattr(record, key, None)),
+                after=_text(value),
+            )
         )
-    return _update_preview(f"台账条目「{getattr(record, 'title', '') or arguments.get('claim_id')}」", record, changes)
+    return _update_preview(
+        f"台账条目「{getattr(record, 'title', '') or arguments.get('claim_id')}」", record, changes
+    )
 
 
 def preview_create_candidate_job(db: Session, arguments: dict) -> WritePreview:
@@ -219,7 +263,9 @@ def preview_update_candidate_job(db: Session, arguments: dict) -> WritePreview:
         db, CandidateJob, int(arguments.get("candidate_id") or 0), arguments, _CANDIDATE_FIELDS
     )
     return _update_preview(
-        f"备选岗位「{getattr(record, 'title', '') or arguments.get('candidate_id')}」", record, changes
+        f"备选岗位「{getattr(record, 'title', '') or arguments.get('candidate_id')}」",
+        record,
+        changes,
     )
 
 
@@ -244,7 +290,11 @@ def preview_update_skill(db: Session, arguments: dict) -> WritePreview:
         if key not in _SKILL_FIELDS or value is None:
             continue
         changes.append(
-            FieldChange(field=_SKILL_FIELDS[key], before=_text(getattr(record, key, None)), after=_text(value))
+            FieldChange(
+                field=_SKILL_FIELDS[key],
+                before=_text(getattr(record, key, None)),
+                after=_text(value),
+            )
         )
     return _update_preview(
         f"助手技能「{getattr(record, 'name', '') or arguments.get('skill_id')}」"
@@ -255,7 +305,9 @@ def preview_update_skill(db: Session, arguments: dict) -> WritePreview:
 
 
 def preview_create_format_template(db: Session, arguments: dict) -> WritePreview:
-    return _create_preview("自制版式新记录（只调排版参数）", _create_changes(arguments, _TEMPLATE_FIELDS))
+    return _create_preview(
+        "自制版式新记录（只调排版参数）", _create_changes(arguments, _TEMPLATE_FIELDS)
+    )
 
 
 def preview_update_format_template(db: Session, arguments: dict[str, Any]) -> WritePreview:
@@ -270,28 +322,43 @@ def preview_update_format_template(db: Session, arguments: dict[str, Any]) -> Wr
             .first()
         )
     changes = [
-        FieldChange(field=_TEMPLATE_FIELDS.get(key, key), before=_text(getattr(record, key, None)), after=_text(value))
+        FieldChange(
+            field=_TEMPLATE_FIELDS.get(key, key),
+            before=_text(getattr(record, key, None)),
+            after=_text(value),
+        )
         for key, value in arguments.items()
         if key not in {"template_id", "template_name"} and value is not None
     ]
-    return _update_preview(f"版式「{getattr(record, 'name', '') or arguments.get('template_id')}」", record, changes)
+    return _update_preview(
+        f"版式「{getattr(record, 'name', '') or arguments.get('template_id')}」", record, changes
+    )
 
 
 # ---------------------------------------------------------------------------
 # 报告域（report_tools / reminder_tools）
 # ---------------------------------------------------------------------------
 
+
 def preview_update_resume(db: Session, arguments: dict) -> WritePreview:
     labels = {"favorite": "收藏", "note": "备注"}
-    record, changes = _update_changes(db, ResumeRecord, int(arguments.get("resume_id") or 0), arguments, labels)
-    return _update_preview(f"简历「{getattr(record, 'title', '') or arguments.get('resume_id')}」", record, changes)
+    record, changes = _update_changes(
+        db, ResumeRecord, int(arguments.get("resume_id") or 0), arguments, labels
+    )
+    return _update_preview(
+        f"简历「{getattr(record, 'title', '') or arguments.get('resume_id')}」", record, changes
+    )
 
 
 def preview_update_resume_layout(db: Session, arguments: dict) -> WritePreview:
     labels = {"template": "模板", "page_limit": "页数上限", "font_scale": "字号系数"}
-    record, changes = _update_changes(db, ResumeRecord, int(arguments.get("resume_id") or 0), arguments, labels)
+    record, changes = _update_changes(
+        db, ResumeRecord, int(arguments.get("resume_id") or 0), arguments, labels
+    )
     return _update_preview(
-        f"简历「{getattr(record, 'title', '') or arguments.get('resume_id')}」的排版设置", record, changes
+        f"简历「{getattr(record, 'title', '') or arguments.get('resume_id')}」的排版设置",
+        record,
+        changes,
     )
 
 
@@ -308,13 +375,27 @@ def preview_update_knowledge(db: Session, arguments: dict) -> WritePreview:
         if key not in _KNOWLEDGE_FIELDS or value is None:
             continue
         changes.append(
-            FieldChange(field=_KNOWLEDGE_FIELDS[key], before=_text(getattr(record, key, None)), after=_text(value))
+            FieldChange(
+                field=_KNOWLEDGE_FIELDS[key],
+                before=_text(getattr(record, key, None)),
+                after=_text(value),
+            )
         )
-    return _update_preview(f"知识库条目「{getattr(record, 'title', '') or arguments.get('knowledge_id')}」", record, changes)
+    return _update_preview(
+        f"知识库条目「{getattr(record, 'title', '') or arguments.get('knowledge_id')}」",
+        record,
+        changes,
+    )
 
 
 def preview_create_reminder(db: Session, arguments: dict) -> WritePreview:
-    labels = {"title": "标题", "remind_at": "提醒时间", "kind": "类型", "status": "状态", "note": "备注"}
+    labels = {
+        "title": "标题",
+        "remind_at": "提醒时间",
+        "kind": "类型",
+        "status": "状态",
+        "note": "备注",
+    }
     return _create_preview("日历提醒新提醒", _create_changes(arguments, labels))
 
 
@@ -328,7 +409,11 @@ def preview_update_reminder(db: Session, arguments: dict) -> WritePreview:
         target=f"提醒「{getattr(record, 'title', '') or arguments.get('reminder_id')}」",
         scope=f"状态改为「{labels.get(status, status or '未指定')}」（不改提醒时间/绑定/备注）",
         changes=[
-            FieldChange(field="状态", before=_text(getattr(record, "status", None)), after=_text(status or None))
+            FieldChange(
+                field="状态",
+                before=_text(getattr(record, "status", None)),
+                after=_text(status or None),
+            )
         ],
     )
 
@@ -336,6 +421,7 @@ def preview_update_reminder(db: Session, arguments: dict) -> WritePreview:
 # ---------------------------------------------------------------------------
 # p3（面经 / 内推）
 # ---------------------------------------------------------------------------
+
 
 def preview_create_interview_experience(db: Session, arguments: dict) -> WritePreview:
     labels = {
@@ -369,4 +455,33 @@ def preview_create_referral(db: Session, arguments: dict) -> WritePreview:
     return _create_preview("内推记录新记录", _create_changes(arguments, labels))
 
 
-__all__ = [name for name in globals() if name.startswith("preview_")]
+# __all__ 必须是静态清单：`globals()` 推导式让 pyright 无法静态解析导出面（P3 工具
+# 注册表靠显式引用取函数，这里的清单只服务 `from previews import *` 与可读性）。
+# 新增 preview_ 函数时同步登记在这里。
+__all__ = [
+    "preview_add_profile_entry",
+    "preview_create_application_track",
+    "preview_create_candidate_job",
+    "preview_create_claim",
+    "preview_create_format_template",
+    "preview_create_interview_experience",
+    "preview_create_job",
+    "preview_create_knowledge",
+    "preview_create_material",
+    "preview_create_referral",
+    "preview_create_reminder",
+    "preview_create_skill",
+    "preview_import_candidate_job",
+    "preview_update_application_track",
+    "preview_update_candidate_job",
+    "preview_update_claim",
+    "preview_update_format_template",
+    "preview_update_job",
+    "preview_update_knowledge",
+    "preview_update_material",
+    "preview_update_profile",
+    "preview_update_reminder",
+    "preview_update_resume",
+    "preview_update_resume_layout",
+    "preview_update_skill",
+]

@@ -73,25 +73,6 @@ const profileFacts = {
   "profileFacts.toast.deleted": "已删除这条{label}，移入回收站",
   "profileFacts.toast.deleteFailed": "没能删除这条{label}，请重试",
 
-  // ── 资格证照 ───────────────────────────────────────────────
-  "profileFacts.credentialStatus.unknown": "未知",
-  "profileFacts.credentialStatus.pending": "待核验",
-  "profileFacts.credentialStatus.active": "有效期内",
-  "profileFacts.credentialStatus.expired": "已过期",
-  "profileFacts.credential.name": "证照名称",
-  "profileFacts.credential.namePlaceholder": "如：护士执业资格证",
-  "profileFacts.credential.issuer": "颁发机构",
-  "profileFacts.credential.issuerPlaceholder": "如：省级卫生健康委员会",
-  "profileFacts.credential.issueDate": "签发日期",
-  "profileFacts.credential.expiryDate": "到期日期",
-  "profileFacts.credential.status": "状态",
-  "profileFacts.credential.statusHint": "状态由你自己填写，系统不会自动判断资格是否有效",
-  "profileFacts.credential.number": "证号",
-  "profileFacts.credential.numberPlaceholder": "选填，仅保存在本地",
-  "profileFacts.credential.numberHint": "只保存在本地，默认不发送给 AI，也不会印到简历上",
-  "profileFacts.credential.verifyUrl": "核验链接",
-  "profileFacts.credential.note": "说明",
-
   // ── 实践 / 服务经历 ─────────────────────────────────────────
   "profileFacts.experienceKind.unset": "未设置",
   "profileFacts.experienceKind.full_time": "全职",

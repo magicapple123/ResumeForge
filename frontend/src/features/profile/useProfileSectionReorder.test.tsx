@@ -11,9 +11,10 @@
  * 共用脚手架在同目录 `profileReorderHarness.testkit.tsx`（行数预算）。
  */
 
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, renderHook, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { DEFAULT_SECTION_ORDER } from "../../components/profile/ProfileSectionConfig";
+import { useProfileSectionReorder } from "./useProfileSectionReorder";
 import {
   currentOrder,
   dragTo,
@@ -368,5 +369,31 @@ describe("useProfileSectionReorder（order 外部 store 化）", () => {
     expect(currentOrder()).toEqual(DEFAULT_SECTION_ORDER);
     const dragged = document.querySelector<HTMLElement>('[data-profile-section-key="projects"]');
     expect(dragged?.style.transform).toBe("");
+  });
+
+  it("store 是唯一全局顺序：服务端 13 键顺序原样接收、自建在末尾", () => {
+    const { result } = renderHook(() =>
+      useProfileSectionReorder({ editing: true, saving: false, photoReading: false }),
+    );
+    // 服务端数据未到时的兜底顺序（8 键，旧排序用例兼容用），不是第二份清单。
+    expect(result.current.getSectionOrder()).toEqual(DEFAULT_SECTION_ORDER);
+    // 单一出口：hook 暴露的 setSectionOrder 就是 store.commitOrder，别处不另存顺序。
+    expect(result.current.setSectionOrder).toBe(result.current.sectionOrderStore.commitOrder);
+
+    const serverOrder = [
+      ...DEFAULT_SECTION_ORDER,
+      "publications",
+      "research_projects",
+      "patents",
+      "credentials",
+      "languages",
+      "custom:abc123",
+    ];
+    act(() => result.current.setSectionOrder(serverOrder));
+    expect(result.current.getSectionOrder()).toEqual(serverOrder);
+    expect(result.current.sectionOrderStore.getSnapshot().sectionOrder).toEqual(serverOrder);
+    expect(result.current.getSectionOrder()[0]).toBe("basic_info");
+    const order = result.current.getSectionOrder();
+    expect(order[order.length - 1]).toBe("custom:abc123");
   });
 });

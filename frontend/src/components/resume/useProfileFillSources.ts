@@ -1,67 +1,55 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * 「从我的资料追加一条」的候选：**按需取一次，之后复用**。
+ * 「从我的资料追加一条」的候选：由**当前组投影**派生（F4 §5.5）。
+ *
+ * ## 为什么改成投影
+ *
+ * 旧实现直接读旧资料接口（getProfile → 前端字段映射），既会绕过"当前组"过滤，也会让
+ * 「追加的条目」与纸面生成两套映射各说各话。现在候选来自 `projectionCache`（新建/编辑/
+ * 生成三处共享），`profileFillOptions` 按服务端给的 `paper_content_path` 从投影 content
+ * 里取现成条目——追加的正是纸面上那一条。
  *
  * ## 为什么不在页面挂载时就请求
  *
- * 简历中心/详情页的主要工作是"看这份简历"，`/profile` 只在用户真的打开「手动调整」或
- * 制作台中栏时才用得上。挂载就取意味着每打开一份简历都多一个与当前动作无关的请求，
- * 而这个接口在资料里存了照片/附件时并不便宜。
+ * 简历中心/详情页的主要工作是"看这份简历"；资料投影只在用户真的打开编辑器/制作台时才
+ * 用得上（调用方传 `wanted`）。共享缓存让第二次打开不再发请求。
  *
- * ## 为什么失败要静默
+ * ## 失败可重试
  *
- * 这条入口是**加分项**：资料接口挂了就没有「从我的资料追加一条」，但编辑器本身必须照常
- * 打开（用户要改的是这份简历，不是资料）。所以 `catch` 之后把状态标成"取过了、没有候选"，
- * 既不弹错、也不阻塞渲染——与 `ResumeEditorModal` 的"不传 `fillSources` 就完全不渲染
- * 这条入口"是同一套降级语义。
- *
- * ## 只取一次（含失败）
- *
- * 用一个 ref 而不是 state 记录"取过没有"：它决定的是"要不要发请求"，属于事件处理器之间
- * 的事实；写在 state 里会让 `ensure` 的回调身份随状态变化，调用方的 effect 因此反复重跑。
- * 失败后同样标记为已取过：一次失败不该变成每次打开都再撞一次的超时等待。
+ * 旧实现"失败一次永久空"：资料接口偶发失败后这条入口整场会话都不再出现。现在失败只写
+ * 进 error，`reload()` 或重新打开 editor 都会重取；入口本身仍然静默降级（编辑器照常开）。
  */
-import { useCallback, useEffect, useRef, useState } from "react";
-import { getProfile } from "../../api/profile";
+import { useMemo } from "react";
 import {
   buildProfileFillSources,
   type ProfileFillSources,
 } from "../../features/profile/profileFillOptions";
-
-type LoadState = "idle" | "loading" | "done";
+import { useCurrentProjection } from "../../features/profile-library/useCurrentProjection";
 
 export interface ProfileFillSourcesApi {
-  /** 还没取到（或资料接口失败）时是 `null`：调用方据此完全不渲染这条入口。 */
+  /** 还没取到（或加载失败）时是 `null`：调用方据此完全不渲染这条入口。 */
   fillSources: ProfileFillSources | null;
+  loading: boolean;
+  /** 读取失败（不阻塞编辑器）；调用方可据此显示「重新读取资料候选」。 */
+  error: Error | null;
+  /** 失败后重试（会重新读取当前组投影）。 */
+  reload: () => void;
 }
 
 /**
  * @param wanted 现在是"需要这条入口"吗（例如编辑弹窗打开、或制作台开着）。
- *   第一次变成 `true` 时发一次请求；之后一直是 `true`/`false` 都不会再发。
+ *   第一次变成 `true` 时读投影（命中共享缓存则不发请求）。
  */
 export function useProfileFillSources(wanted: boolean): ProfileFillSourcesApi {
-  const [fillSources, setFillSources] = useState<ProfileFillSources | null>(null);
-  const stateRef = useRef<LoadState>("idle");
-
-  const ensure = useCallback(() => {
-    if (stateRef.current !== "idle") return;
-    stateRef.current = "loading";
-    void getProfile()
-      .then((profile) => {
-        stateRef.current = "done";
-        setFillSources(buildProfileFillSources(profile));
-      })
-      .catch(() => {
-        // 静默降级：没有这条入口，但编辑器照常可开。
-        stateRef.current = "done";
-        setFillSources(null);
-      });
-  }, []);
-
-  useEffect(() => {
-    if (!wanted) return;
-    ensure();
-  }, [ensure, wanted]);
-
-  return { fillSources };
+  const projection = useCurrentProjection(wanted);
+  const fillSources = useMemo(
+    () => (projection.data ? buildProfileFillSources(projection.data) : null),
+    [projection.data],
+  );
+  return {
+    fillSources,
+    loading: projection.loading,
+    error: projection.error,
+    reload: projection.reload,
+  };
 }

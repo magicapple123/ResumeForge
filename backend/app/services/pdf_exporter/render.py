@@ -11,10 +11,10 @@ from fpdf import FPDF
 from fpdf.enums import XPos, YPos
 
 from ...schemas.resume import ResumeContent
+from ..resume.profile_field_lines import profile_field_lines
 from ..resume.resume_labels import (
     DEFAULT_RESUME_LANGUAGE,
     field_labels,
-    level_text,
     list_separator,
     section_titles,
 )
@@ -22,14 +22,12 @@ from ..resume.resume_pagination import PaginationPlan
 from ..resume.resume_sections import resolved_section_order
 from .canvas import _ResumePDF
 from .columns import SectionDrawer, render_sections
+from .custom_sections import draw_custom
 from .fonts import FONT_FAMILY, ResumePDFError
-from .layout import (
-    _PX_TO_MM,
-    _PX_TO_PT,
-    PAGE_WIDTH_MM,
-)
+from .layout import _PX_TO_MM, _PX_TO_PT, PAGE_WIDTH_MM
 from .media import _join, _photo_bytes, crop_image_to_cover
 from .name_gender import draw_name_gender, plan_name_gender
+from .profile_fields import draw_bullets_with_profile_fields, draw_profile_meta, skill_tag_text
 from .research_render import (
     draw_credentials,
     draw_patents,
@@ -73,9 +71,6 @@ def _register_fonts(pdf: FPDF, regular: str, bold: str) -> None:
         pdf.add_font(FONT_FAMILY, "B", bold)
     except Exception as exc:  # noqa: BLE001 - 字体解析失败要变成可读提示
         raise ResumePDFError(f"加载中文字体失败（{Path(regular).name}）：{exc}") from exc
-
-
-
 
 
 def _draw_resume(
@@ -359,6 +354,7 @@ def _draw_resume(
             if edu.courses:
                 pdf.meta_line(f"{fields['courses']}：{sep.join(edu.courses)}", base, style=role_style("meta", edu.id))
             pdf.bullets(edu.achievements, base, style=role_style("body", edu.id), section="education", object_id=edu.id, split_ok=pagination.entry(edu.id).allow_split)
+            draw_profile_meta(pdf, edu, "education", base=base, fields=fields, style=role_style("meta", edu.id))
         return True
 
     def draw_experience(pdf: _ResumePDF, leading: float) -> bool:
@@ -381,6 +377,7 @@ def _draw_resume(
             if kind_line:
                 pdf.meta_line(kind_line, base, style=role_style("meta", exp.id))
             pdf.bullets(exp.description, base, style=role_style("body", exp.id), section="experience", object_id=exp.id, split_ok=pagination.entry(exp.id).allow_split)
+            draw_profile_meta(pdf, exp, "experience", base=base, fields=fields, style=role_style("meta", exp.id))
         return True
 
     def draw_campus(pdf: _ResumePDF, leading: float) -> bool:
@@ -399,6 +396,7 @@ def _draw_resume(
                 meta_style=role_style("meta", item.id), section="campus_experience", object_id=item.id, keep_lines=pagination.entry(item.id).keep_with_next,
             )
             pdf.bullets(item.description, base, style=role_style("body", item.id), section="campus_experience", object_id=item.id, split_ok=pagination.entry(item.id).allow_split)
+            draw_profile_meta(pdf, item, "campus_experience", base=base, fields=fields, style=role_style("meta", item.id))
         return True
 
     def draw_projects(pdf: _ResumePDF, leading: float) -> bool:
@@ -426,6 +424,7 @@ def _draw_resume(
             project_body = role_style("body", project.id)
             pdf.bullets(project.description, base, style=project_body, section="projects", object_id=project.id, split_ok=pagination.entry(project.id).allow_split)
             pdf.bullets(project.highlights, base, style=project_body, section="projects", object_id=project.id, split_ok=pagination.entry(project.id).allow_split)
+            draw_profile_meta(pdf, project, "projects", base=base, fields=fields, style=role_style("meta", project.id))
         return True
 
     def draw_skills(pdf: _ResumePDF, leading: float) -> bool:
@@ -435,7 +434,7 @@ def _draw_resume(
         # 标签文案与预览一致（`level_text`：技能名 + 本语言的等级括号）。用标签绘制而不是
         # 用分隔符连成一行文本——后者在预览里是带底色的小框，导出后却看不出任何标签形状。
         pdf.skill_tags(
-            [level_text(skill.name, skill.level, language) for skill in resume.skills],
+            [skill_tag_text(skill, language, fields) for skill in resume.skills],
             base,
             style=role_style("body"),
         )
@@ -445,11 +444,10 @@ def _draw_resume(
         if not resume.awards:
             return False
         pdf.section_title(labels["awards"], base, leading_gap=leading, style=role_style("section_title"), section="awards", keep_lines=pagination.section("awards").keep_with_next)
-        pdf.bullets(
-            [_join([award.name, award.date, award.description]) for award in resume.awards],
-            base,
-            style=role_style("body"),
-            section="awards",
+        award_lines = [_join([award.name, award.date, award.description]) for award in resume.awards]
+        draw_bullets_with_profile_fields(
+            pdf, award_lines, [profile_field_lines(a, "awards", fields) for a in resume.awards],
+            base=base, style=role_style("body"), section="awards",
         )
         return True
 
@@ -485,6 +483,7 @@ def _draw_resume(
         # 双栏（split）：两两一行并排，行级分页。绘制逻辑与单栏**完全是同一批 drawer**——
         # `columns.render_sections` 只负责"切行 / 量高 / 分页 / 并排放"，见该模块 docstring。
         render_sections(pdf, section_keys, drawers)
+        draw_custom(pdf, resume, base, layout, not section_keys, role_style, body)
         return
 
     # 单栏：顺序排下来。第一个**非空**分区之前用 `header_gap`（页头的 margin-bottom），
@@ -495,3 +494,6 @@ def _draw_resume(
         leading = layout.header_gap if first_section else layout.section_gap
         if drawers[section_key](pdf, leading):
             first_section = False
+
+    # C2/R-79：自建分区排在 13 个系统分区之后；没有自建分区时零绘制、零字节变化。
+    draw_custom(pdf, resume, base, layout, first_section, role_style, body)

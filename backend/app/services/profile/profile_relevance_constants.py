@@ -9,20 +9,34 @@ from typing import Any
 
 # 这些上限是"一份简历"的候选上限，不是资料库的存储上限。
 SECTION_LIMITS = {
+    # 13 个大字段里"多条"的 11 个（基本信息 / 个人总结是单例，不进列表循环，计划 §6.3）。
+    # 旧六分区的名额保持改造前的对应值；学术/科研/知识产权/证书各 20。
     "educations": 2,
     "experiences": 3,
     "campus_experiences": 2,
     "projects": 3,
     "skills": 14,
     "awards": 3,
-    # 补充事实（A3）：论文/科研/专利/证照各 20 条。资料库允许更多，但一份简历的
-    # 候选区不应该被同类事实铺满；超出的部分由预算压缩与覆盖度说明交代。
-    # 作品项目/实践经历不单独占额度——分别并入 projects / experiences 的既有上限。
     "publications": 20,
     "research_projects": 20,
     "patents": 20,
     "credentials": 20,
+    # 语言能力从专业技能拆回独立后单列名额（R-72/§6.3）；仍受总预算控制。
+    "languages": 20,
 }
+
+# 自建大字段的定义在库里，不能预先枚举；每个自建分区同样 20 条（§6.3）。
+CUSTOM_SECTION_LIMIT = 20
+
+
+def is_custom_section_key(key: str) -> bool:
+    """自建大字段的分区键固定为 custom:<section_id>（契约 §2.1）。"""
+    return str(key).startswith("custom:")
+
+
+def section_limit(key: str) -> int:
+    """某分区的候选名额：内置 13 项查表，自建分区统一 20（未知 key 也按 20 兜底）。"""
+    return SECTION_LIMITS.get(str(key), CUSTOM_SECTION_LIMIT)
 
 # 补充事实的候选 section 白名单（灵活化契约 §5）。
 # STANDALONE：原样作为新键加入候选资料；MERGED：并进既有栏目（复用既有输出 schema）。
@@ -63,6 +77,8 @@ SECTION_PRIMARY_FIELDS = {
     "research_projects": "name",
     "patents": "title",
     "credentials": "name",
+    # v3 新增大字段：语言条目的身份字段就是语言名（R-72 映射 name=语言）。
+    "languages": "language",
 }
 
 # 岗位方向词只用于低权重的语义补充；硬技能仍然优先使用 JD 技能解析结果。
@@ -211,6 +227,14 @@ _LLM_PROFILE_FIELDS = (
     # （见 build_llm_profile_prompt_data 的跳过规则）：没有新事实时提示词结构与改动前
     # 逐字节一致，旧请求/旧备份不受影响。
     *FACT_STANDALONE_SECTIONS,
+    # v3 新增大字段：语言能力进模型素材（R-73 要求模型知道有语言，纸面再映射 skills）。
+    "languages",
+    # v3 新增基本信息的合法素材字段。**只增不改**：旧资料没有这些值时不出现，
+    # 因此默认组在"新字段全空"时的模型输入仍是改造前基线（C1/R-31）。
+    "portfolio_url",
+    "political_status",
+    "driver_license",
+    "available_date",
 )
 _MIN_PROFILE_CONTEXT_CHARS = 1_000
 _REFERENCE_SECTIONS = ("educations", "experiences", "campus_experiences", "projects")
@@ -264,3 +288,108 @@ class ProfileSelection:
     # A4/§8.5：哪些分区用了"信号不足时的最小候选兜底"（仅岗位路径可能非空）。
     # 生成说明据此如实告知用户"交集较少、资料中未提供的要求不会编写"。
     fallback_sections: tuple[str, ...] = ()
+# ===== 生成候选的提示词形状与枚举映射（F3-A profile_context 使用） =====
+# 13 个大字段里进入列表的分区由消费 DTO 的 participating_keys 决定；这里只放
+# "字段 key → 旧提示词键/枚举"的纯数据，供 profile_context 落成旧形状候选。
+
+# 旧六分区的提示词形状：(输出键, 新模型字段 key, 变换)。
+# 变换：text=原样字符串；lines=按换行拆要点；commas=按中英文逗号拆技术栈。
+_LEGACY_SECTION_SHAPES: dict[str, tuple[tuple[str, str, str], ...]] = {
+    "educations": (
+        ("school", "school", "text"),
+        ("major", "major", "text"),
+        ("degree", "degree", "text"),
+        ("start_date", "start_date", "text"),
+        ("end_date", "end_date", "text"),
+        ("gpa", "gpa", "text"),
+        ("courses", "core_courses", "lines"),
+        ("achievements", "achievements", "lines"),
+    ),
+    "experiences": (
+        ("company", "company", "text"),
+        ("role", "title", "text"),
+        ("start_date", "start_date", "text"),
+        ("end_date", "end_date", "text"),
+        ("description", "description", "lines"),
+    ),
+    "campus_experiences": (
+        ("organization", "organization", "text"),
+        ("role", "role", "text"),
+        ("start_date", "start_date", "text"),
+        ("end_date", "end_date", "text"),
+        ("description", "description", "lines"),
+    ),
+    "projects": (
+        ("name", "name", "text"),
+        ("role", "role", "text"),
+        ("start_date", "start_date", "text"),
+        ("end_date", "end_date", "text"),
+        ("tech_stack", "tech_stack", "commas"),
+        ("description", "description", "lines"),
+        ("highlights", "highlights", "lines"),
+    ),
+    "skills": (("name", "name", "text"), ("level", "level", "text")),
+    "awards": (
+        ("name", "title", "text"),
+        ("date", "awarded_at", "text"),
+        ("description", "description", "text"),
+    ),
+}
+
+# 旧六分区里 v3 才暴露给模型的字段：输出键优先对齐 ResumeContent 已有槽位，
+# 避免模型把新键塞进不存在的输出字段；空值不出现（只增不改）。
+_INCREMENT_ALIASES: dict[str, dict[str, str]] = {
+    "experiences": {"work_type": "experience_kind"},
+    "projects": {"outcome_type": "artifact_type"},
+}
+
+# 基本信息：旧提示词的平铺键保持旧名（等价基线要求），v3 新字段只在有值时追加。
+_BASIC_INFO_LEGACY: tuple[tuple[str, str], ...] = (
+    ("name", "name"),
+    ("gender", "gender"),
+    ("birth_year", "birth_month"),
+    ("phone", "phone"),
+    ("email", "email"),
+    ("city", "city"),
+    ("target_city", "target_city"),
+    ("job_intent", "job_intention"),
+    ("personal_website", "homepage"),
+    ("github", "github"),
+)
+_BASIC_INFO_EXTRA: tuple[str, ...] = (
+    "portfolio_url",
+    "political_status",
+    "driver_license",
+    "available_date",
+)
+
+# 新资料目录里的状态是自由文本（建议值多为中文），而 ResumeContent 的状态是英文枚举。
+# 候选必须给出能解析的枚举值，否则会被解析层清空——映射集中在这里，不在提示词里让模型猜。
+_WORK_TYPE_KINDS = {
+    "全职": "full_time",
+    "实习": "internship",
+    "兼职": "part_time",
+    "志愿服务": "volunteer",
+    "社会实践": "other",
+}
+_PUBLICATION_STATUS = {
+    "published": "published", "已发表": "published",
+    "accepted": "accepted", "已录用": "accepted", "录用": "accepted",
+    "in_press": "in_press", "已见刊": "in_press", "排印中": "in_press",
+    "under_review": "under_review", "在投": "under_review", "审稿中": "under_review",
+    "preprint": "preprint", "预印本": "preprint",
+    "other": "other", "其他": "other",
+}
+_PATENT_STATUS = {
+    "filed": "filed", "已申请": "filed",
+    "pending": "pending", "审查中": "pending", "实审中": "pending",
+    "granted": "granted", "已授权": "granted",
+    "expired": "expired", "已过期": "expired",
+    "other": "other", "其他": "other",
+}
+_CREDENTIAL_STATUS = {
+    "active": "active", "已取得": "active", "有效": "active",
+    "pending": "pending", "办理中": "pending", "待取得": "pending",
+    "expired": "expired", "已过期": "expired",
+    "unknown": "unknown", "未知": "unknown", "其他": "unknown",
+}

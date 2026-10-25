@@ -336,8 +336,9 @@ def test_every_deleted_at_table_is_registered():
     }
     assert soft_deleted == set(trash.TRASHED_TABLES)
     # 6（0016）+ 4（0018）+ 3（0019）+ 2（0027）+ 1（0050，备选岗位）
-    # + 1（0056，私有表达资产）+ 1（0058，术语表）+ 1（0062，补充事实）= 19 类。
-    assert len(trash.TRASHED_TABLES) == 19
+    # + 1（0056，私有表达资产）+ 1（0058，术语表）+ 1（0062，补充事实）
+    # + 4（0064，资料组/自建大字段/自建小字段/资料条目）= 23 类。
+    assert len(trash.TRASHED_TABLES) == 23
     assert "job" in trash.TRASHED_TABLES and "chat_conversation" in trash.TRASHED_TABLES
     # 0050：备选岗位也进回收站，而且**必须紧挨着岗位**（回收站的展示顺序即注册表顺序，
     # 用户在回收站里找"刚才删的那个岗位"时这两类想的是同一件事）。
@@ -362,6 +363,13 @@ def test_every_deleted_at_table_is_registered():
     assert "resume_phrase" in trash.TRASHED_TABLES
     # 0058（W16）：数据集级术语表（软删可恢复）。
     assert "resume_glossary_term" in trash.TRASHED_TABLES
+    # 0064（F1）：新资料模型的 4 类用户内容（组 / 自建大字段 / 自建小字段 / 资料条目）。
+    assert {
+        "profile_group",
+        "profile_custom_section",
+        "profile_custom_field",
+        "profile_entry",
+    } <= set(trash.TRASHED_TABLES)
 
 
 def test_interview_experience_full_trash_cycle(client):

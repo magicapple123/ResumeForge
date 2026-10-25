@@ -12,6 +12,7 @@ from typing import Any
 
 from ...schemas.job import JobOut
 from ...schemas.profile import ProfileOut
+from ...schemas.profile_projection import ConsumedProfile
 from .profile_budget import (
     _drop_one_detail,
     _dump,
@@ -23,12 +24,14 @@ from .profile_budget import (
 )
 from .profile_context import (
     _reference_fields,
+    build_consumed_data,
     build_llm_profile_prompt_data,
     build_profile_prompt_data,
     split_commas,
     split_lines,
 )
 from .profile_matching import (
+    _FALLBACK_ENTRY_SECTIONS,
     _contains,
     _item_text,
     _job_text,
@@ -173,18 +176,23 @@ _IDENTITY_FIELDS: dict[str, str] = {
 }
 
 
-def collect_entry_names(full: dict[str, Any]) -> dict[str, tuple[str, ...]]:
+def collect_entry_names(
+    full: dict[str, Any], sections: tuple[str, ...] | None = None
+) -> dict[str, tuple[str, ...]]:
     """筛选前每段经历类分区里"都有谁"（按条目的身份字段）。
 
     生成结束后，覆盖度检查用它回答"我的某段经历为什么没写进简历"：
     没有这份清单，data 里就只剩被留下来的条目，说不清是"没被选中"还是"模型没写"。
 
-    补充事实的独立 section 只在候选里真的有这个键时才登记：没有新事实时 entry_names
-    的键集合与改动前完全一致（旧链路诊断文案不变）。
+    sections 非空时只登记这些分区（生成链路传参与清单，R-30：诊断只含参与分区）。
+    候选里没有该分区键就跳过：旧链路没有 v3 新键，entry_names 的键集合与改动前一致。
     """
     names: dict[str, tuple[str, ...]] = {}
+    allowed = set(sections) if sections is not None else None
     for section, field in _IDENTITY_FIELDS.items():
-        if section in FACT_STANDALONE_SECTIONS and section not in full:
+        if allowed is not None and section not in allowed:
+            continue
+        if section not in full:
             continue
         values: list[str] = []
         for item in full.get(section) or []:
@@ -203,19 +211,22 @@ def _assemble_selection(
     max_chars: int,
     *,
     fallback_sections: tuple[str, ...] = (),
+    counted_sections: tuple[str, ...] | None = None,
 ) -> ProfileSelection:
     """把已选好的候选资料做预算压缩并统计，供岗位与通用两条路径共用。"""
     serialized = serialize_profile_prompt_data(selected, max_chars)
     # serialize_profile_prompt_data 会在副本上做预算压缩；对外暴露的
     # data 必须与实际发送给模型的 JSON 完全一致，避免诊断和生成出现偏差。
     packed_data = json.loads(serialized)
-    # 只统计**本次候选实际带上**的 section。没有补充事实时不出现新键，
-    # selected_counts / omitted_counts 与改动前逐键相等（生成说明也不变）。
-    counted_sections = [section for section in SECTION_LIMITS if section in packed_data]
-    selected_counts = {section: len(packed_data[section]) for section in counted_sections}
+    # 只统计**本次候选实际带上**的 section。不传 counted_sections 时沿用旧行为
+    # （按 SECTION_LIMITS 顺序扫），旧链路的 selected_counts / omitted_counts 逐键不变；
+    # 生成链路传参与清单，未参与分区不会以 0 出现在诊断里（R-30）。
+    counted_order = counted_sections if counted_sections is not None else tuple(SECTION_LIMITS)
+    counted = [section for section in counted_order if section in packed_data]
+    selected_counts = {section: len(packed_data[section]) for section in counted}
     omitted_counts = {
         section: max(0, len(full.get(section) or []) - selected_counts[section])
-        for section in counted_sections
+        for section in counted
     }
     return ProfileSelection(
         data=packed_data,
@@ -224,7 +235,7 @@ def _assemble_selection(
         selected_counts=selected_counts,
         omitted_counts=omitted_counts,
         # 筛选前的"都有谁"。生成结束后用它回答"我的某段经历为什么没写进简历"。
-        entry_names=collect_entry_names(full),
+        entry_names=collect_entry_names(full, counted_sections),
         fallback_sections=fallback_sections,
     )
 
@@ -270,6 +281,133 @@ def build_general_profile_context(
     return _assemble_selection(full, selected, _EMPTY_FOCUS, max_chars)
 
 
+# ===== 按当前组构建候选（F3 / R-28 / N） =====
+#
+# 与旧 ProfileOut 版本（上面的两个函数）并存：旧版本服务于非生成消费者与旧测试；
+# 本组函数只消费 F2 的 ConsumedProfile（已按当前组裁剪），因此"按组过滤"发生在任何
+# 评分 / 名额 / 预算之前——本文件收到的 full 里就没有未参与分区，诊断也不会出现它们。
+
+_CONSUMED_VALUE_SECTIONS: tuple[str, ...] = (
+    "educations",
+    "experiences",
+    "campus_experiences",
+    "projects",
+)
+
+
+def _consumed_list_sections(consumed: ConsumedProfile) -> tuple[str, ...]:
+    """当前组参与清单里进入列表循环的分区（顺序 = 全局顺序，单例不进列表）。"""
+    return tuple(key for key in consumed.participating_keys if key in SECTION_LIMITS)
+
+
+def _select_consumed_entries(
+    full: dict[str, Any],
+    selected: dict[str, Any],
+    participating: tuple[str, ...],
+    focus: JobFocus,
+    *,
+    fallback_allowed: bool,
+) -> dict[str, Any]:
+    """按参与清单逐分区选条目；返回用于技能跨分区证据的旧四分区候选。"""
+    evidence: dict[str, Any] = {}
+    for section in participating:
+        items = list(full.get(section) or [])
+        if section in _CONSUMED_VALUE_SECTIONS or section == "awards":
+            chosen = [
+                _prioritize_item_details(item, section, focus)
+                for item in _select_entries(
+                    items, section, focus, fallback_allowed=fallback_allowed
+                )
+            ]
+            selected[section] = chosen
+            if section in _CONSUMED_VALUE_SECTIONS:
+                evidence[section] = chosen
+        elif section == "skills":
+            # 技能要用上面四个分区的证据来打分，循环结束后统一选。
+            continue
+        else:
+            # 扩展栏目（论文/科研/知识产权/证书/语言）：沿用旧补充事实的语义——
+            # 不参与岗位相关性排序，按资料顺序保留到各自名额（仍受总预算控制）。
+            selected[section] = _take_entries(items, section)
+    return evidence
+
+
+def build_targeted_consumed_profile_context(
+    consumed: ConsumedProfile,
+    job: JobOut,
+    max_chars: int = 12_000,
+) -> ProfileSelection:
+    """当前组 + 岗位 → 岗位专属候选（F3 的唯一岗位入口）。"""
+    full = build_consumed_data(consumed)
+    skill_items = list(full.get("skills") or [])
+    focus = build_job_focus(
+        job, skill_names=[str(item.get("name", "")) for item in skill_items]
+    )
+    participating = _consumed_list_sections(consumed)
+    selected: dict[str, Any] = {
+        key: value for key, value in full.items() if key not in SECTION_LIMITS
+    }
+    # 当前岗位是本份简历的唯一求职意向；个人总结只保留有岗位交集的句子。
+    if "job_intent" in selected:
+        selected["job_intent"] = job.title or str(full.get("job_intent", ""))
+    if "summary" in full:
+        selected["summary"] = _select_summary(str(full["summary"]), focus)
+    has_matched_skill = any(
+        _score_item(item, "skills", focus) > 0
+        for item in skill_items
+        if str(item.get("name", "")).strip()
+    )
+    fallback_allowed = not focus.domains and (not focus.skills or has_matched_skill)
+    evidence = _select_consumed_entries(
+        full, selected, participating, focus, fallback_allowed=fallback_allowed
+    )
+    if "skills" in full:
+        selected["skills"] = _select_skills(
+            skill_items, evidence, focus, fallback_allowed=fallback_allowed
+        )
+    selected = build_llm_profile_prompt_data(selected)
+    fallback_sections: tuple[str, ...] = ()
+    if fallback_allowed:
+        fallback_sections = tuple(
+            section
+            for section in _FALLBACK_ENTRY_SECTIONS
+            if section in selected
+            and any(_score_item(item, section, focus) == 0 for item in selected[section])
+        )
+    return _assemble_selection(
+        full,
+        selected,
+        focus,
+        max_chars,
+        fallback_sections=fallback_sections,
+        counted_sections=participating,
+    )
+
+
+def build_general_consumed_profile_context(
+    consumed: ConsumedProfile,
+    max_chars: int = 12_000,
+) -> ProfileSelection:
+    """当前组 → 通用简历候选（不按岗位取舍；只做名额与预算压缩）。"""
+    full = build_consumed_data(consumed)
+    participating = _consumed_list_sections(consumed)
+    selected: dict[str, Any] = {
+        key: value for key, value in full.items() if key not in SECTION_LIMITS
+    }
+    if "summary" in full:
+        selected["summary"] = full["summary"]
+    for section in participating:
+        selected[section] = _take_entries(list(full.get(section) or []), section)
+    selected = build_llm_profile_prompt_data(selected)
+    return _assemble_selection(
+        full,
+        selected,
+        _EMPTY_FOCUS,
+        max_chars,
+        counted_sections=participating,
+    )
+
+
 def build_targeted_profile_prompt_data(
     profile: ProfileOut,
     job: JobOut,
@@ -294,7 +432,9 @@ __all__ = [
     "build_job_focus",
     "build_job_prompt_text",
     "build_general_profile_context",
+    "build_general_consumed_profile_context",
     "build_targeted_profile_context",
+    "build_targeted_consumed_profile_context",
     "build_targeted_profile_prompt_data",
     "serialize_profile_prompt_data",
     "split_lines",

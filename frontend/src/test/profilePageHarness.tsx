@@ -13,7 +13,7 @@
  */
 import { App as AntdApp } from "antd";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
+import { RouterProvider, createMemoryRouter } from "react-router-dom";
 import type { Mock } from "vitest";
 import { expect } from "vitest";
 import {
@@ -70,15 +70,19 @@ export const DEFAULT_PROFILE: Profile = {
   awards: [],
 };
 
-/** 渲染整页（与拆分前逐字节等价的挂载方式）。 */
+/** 渲染整页：ProfilePage 的离开守卫用 useBlocker，必须是 data router。 */
 export function renderProfilePage() {
-  return render(
-    <MemoryRouter>
-      <AntdApp>
-        <ProfilePage />
-      </AntdApp>
-    </MemoryRouter>,
-  );
+  const router = createMemoryRouter([
+    {
+      path: "/",
+      element: (
+        <AntdApp>
+          <ProfilePage />
+        </AntdApp>
+      ),
+    },
+  ]);
+  return render(<RouterProvider router={router} />);
 }
 
 /** 打开「网申资料」分页，并等它的说明文案出现（面板内容加载完成的信号）。 */

@@ -214,6 +214,77 @@ const workbench = {
   "workbench.draft.published": "已保存到简历中心",
   /** 同一条路失败：说清动作与去处，别让用户以为"什么都没发生"。 */
   "workbench.draft.publish-failed": "保存到简历中心失败，请重试",
+
+  // ── F4 投影消费：新建来源面板 / 资料候选 / 编辑器新栏目（2026-10-25）──
+  // 全部来自当前组投影（投影消费 DTO），不提供选组器；「去切换组」跳资料页。
+  "editor.sources.title": "资料来源",
+  "editor.sources.hint": "只显示当前组参与的大字段",
+  "editor.sources.switch": "去切换组",
+  "editor.sources.append": "追加本分区",
+  "editor.sources.appended": "本分区已全部加入",
+  "editor.sources.fill-basic": "带入基本信息",
+  "editor.sources.fill-summary": "带入个人总结",
+  "editor.sources.material-only": "仅素材",
+  "editor.sources.custom": "自建栏目",
+  "editor.sources.custom-hint": "在「自定义栏目」页签里编辑",
+  "editor.sources.languages-hint": "语言按规则写入技能",
+  "editor.sources.singleton": "单条",
+  "editor.sources.entry-count": "{count} 条",
+  "editor.sources.empty": "当前组还没有参与的大字段",
+  "editor.tab.credentials": "证书资质",
+  "editor.tab.custom-sections": "自定义栏目",
+  "resume.manual.loading": "正在读取当前组资料…",
+  "resume.manual.snapshot-stale": "资料已更新，请重新打开新建面板",
+  "resume.manual.load-failed": "读取当前组资料失败",
+  "resume.manual.retry": "重新读取",
+  "resume.manual.close": "关闭",
+  "resume.generate.group-title": "本次使用",
+  "resume.generate.group-members": "{count} 个大字段",
+  "resume.generate.group-failed": "当前组信息读取失败",
+  "resume.generate.group-retry": "重试",
+  "resume.generate.switch-group": "去切换组",
+  // 简历详情「本次使用」追溯（R-33）：组已删除仍显示快照；资料/定义变了提示需重新生成。
+  "resume.detail.group-usage.deleted": "组已删除",
+  "resume.detail.group-usage.deleted-hint": "该组已删除；以下信息来自这份简历保存时的快照",
+  "resume.detail.group-usage.stale-title": "资料或组定义已更新",
+  "resume.detail.group-usage.stale-body": "已保存简历不会自动变化，需重新生成才会体现在纸面上",
+  "editor.credentials.name-required": "请填写证照名称",
+  "editor.custom-sections.empty": "还没有自建栏目",
+  "editor.custom-sections.add-entry": "添加条目",
+  "editor.custom-sections.remove-entry": "删除这个条目",
+  "editor.custom-sections.add-line": "添加标签行",
+  "editor.custom-sections.remove-line": "删除这一行",
+  "editor.custom-sections.remove-section": "删除这个栏目",
+  "editor.custom-sections.text": "主文本",
+  "editor.custom-sections.lines": "标签行",
+  "editor.custom-sections.label": "标签",
+  "editor.custom-sections.value": "值",
+
+  // ── F9（R1）：新建简历与"我的资料"当前组同步（2026-10-26）────────────
+  // 初始内容 = 当前组投影内容（两种模式一致）；页签按当前组参与清单过滤；打开期间
+  // 资料被别的窗口改掉时，未编辑自动重同步、已编辑给内联提示二选一。
+  /** 新建简历弹窗标题：岗位模式带岗位名插值。 */
+  "resume.manual.title.job": "自行编写「{title}」简历",
+  "resume.manual.title.general": "从头编写通用简历",
+  /** 编辑器说明行：已按当前组预填 + 可改 + 改动不回写资料（三件事都要说清）。 */
+  "resume.manual.description.job": "已按当前组资料预填；可照岗位要求修改，改动不会写回我的资料",
+  "resume.manual.description.general": "已按当前组资料预填；可在此基础上修改，改动不会写回我的资料",
+  /** 简历名称输入框（留空由后端按「姓名-自定义简历-时间」命名）。 */
+  "resume.manual.name.aria": "简历名称",
+  "resume.manual.name.placeholder": "简历名称（留空自动命名）",
+  /** 保存按钮（原「保存手写简历」）。 */
+  "resume.manual.save": "保存手写简历",
+  /** 保存成功的 Toast：成功提示必须含对象。 */
+  "resume.manual.saved.job": "手写简历已保存到简历中心",
+  "resume.manual.saved.general": "通用简历已保存，可在简历中心查看",
+  /** 「前往简历制作台」在有未保存修改时禁用：那条入口用初始内容建草稿，会丢当前编辑。 */
+  "resume.manual.workbench-blocked": "有未保存的修改，先保存再前往制作台",
+
+  /** 资料刷新提示（表单上方内联 Alert，不开第二个弹层、不用 modal.confirm）。 */
+  "editor.profile-refresh.title": "我的资料已更新",
+  "editor.profile-refresh.body": "有未保存的修改，没有自动覆盖",
+  "editor.profile-refresh.apply": "用最新资料覆盖",
+  "editor.profile-refresh.keep": "保留当前编辑",
 } as const;
 
 export default workbench;

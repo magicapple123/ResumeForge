@@ -7,9 +7,24 @@
 
 from __future__ import annotations
 
+import json
+import time
+
+from app.models.job import Job
 from app.models.llm_usage import LLMUsageRecord
+from app.models.resume import ResumeRecord
+from app.schemas.setting import LLMConfig
 from app.services.llm import usage_ledger
-from app.services.llm.usage import build_usage, summarize_usages
+from app.services.llm.base import BaseLLMProvider
+from app.services.llm.usage import FINISH_STOP, build_usage, summarize_usages
+from app.services.resume.resume_generate_runner import reset_resume_generate_runner
+from tests.resume_generate_task_support import (
+    SuccessfulProvider,
+    _configure,
+    _job,
+    _seed_profile,
+    _wait_terminal,
+)
 
 # 可能出现用户正文/凭据的列名；账本一张都不许有。
 FORBIDDEN_COLUMNS = {
@@ -301,3 +316,173 @@ def test_revise_endpoint_records_provider_usage(client, monkeypatch, db_session)
     assert len(rows) == 1
     assert rows[0].resume_id == resume_id
     assert rows[0].total_tokens == 150
+
+# ===== R04 补全：端点级守卫——真实 provider 每调用一次，账本必须 +1 =====
+#
+# 上一轮验收发现 27 次真实 AI 调用只落了 1 条账（只有 /revise 手工记账）。这里守的是
+# "任务名从请求路径下发、provider 调用即落账"这条新机制：每个用例都走真实 HTTP 路由
+# （TestClient）→ 中间件写环境任务 → provider._record_usage → 账本自动 +1，
+# 不 sleep、不联网，provider 是纯内存假实现。
+
+
+class _UsageRecordingProvider(BaseLLMProvider):
+    """纯内存 provider：每次调用都走基类 _record_usage（等价真实 provider 的收尾）。"""
+
+    def __init__(self, reply: str) -> None:
+        super().__init__(LLMConfig(base_url="http://fake", api_key="fake", model="fake-model"))
+        self.reply = reply
+
+    async def chat(self, messages, *, thinking: bool = True):
+        self._record_usage(
+            started=time.monotonic(),
+            finish_reason=FINISH_STOP,
+            prompt_tokens=10,
+            completion_tokens=5,
+        )
+        return self.reply
+
+    async def stream_chat(self, messages):
+        self._record_usage(
+            started=time.monotonic(),
+            finish_reason=FINISH_STOP,
+            prompt_tokens=10,
+            completion_tokens=5,
+        )
+        yield self.reply
+
+
+def _usage_rows(db_session, task: str) -> list[LLMUsageRecord]:
+    """读账本前先结束本会话事务，否则看不到另一条连接刚提交的自动记账行。"""
+    db_session.rollback()
+    return (
+        db_session.query(LLMUsageRecord)
+        .filter(LLMUsageRecord.task == task)
+        .order_by(LLMUsageRecord.id)
+        .all()
+    )
+
+
+def test_writing_endpoint_records_usage(client, db_session, monkeypatch):
+    record = ResumeRecord(title="用量验收-写作", content={"name": "张三"})
+    db_session.add(record)
+    db_session.commit()
+    db_session.refresh(record)
+    provider = _UsageRecordingProvider(json.dumps({"result": "负责后端服务开发"}, ensure_ascii=False))
+    monkeypatch.setattr("app.api.resume_writing.get_llm_config", lambda _db: provider.config)
+    monkeypatch.setattr("app.api.resume_writing.create_provider", lambda _config: provider)
+
+    response = client.post(
+        f"/api/resumes/{record.id}/writing/polish",
+        json={"text": "负责后端开发。", "style": "concise_tech"},
+    )
+
+    assert response.status_code == 200, response.text
+    rows = _usage_rows(db_session, usage_ledger.TASK_RESUME_WRITING)
+    assert len(rows) == 1
+    assert rows[0].total_tokens == 15
+    assert rows[0].finish_reason == FINISH_STOP
+
+
+def test_job_match_endpoint_records_usage(client, db_session, monkeypatch):
+    job = Job(
+        title="后端开发工程师",
+        company="示例公司",
+        description="负责后端服务开发",
+        requirements="本科及以上；熟悉 Python",
+    )
+    db_session.add(job)
+    db_session.commit()
+    db_session.refresh(job)
+    resume = ResumeRecord(
+        title="后端简历",
+        job_id=job.id,
+        content={
+            "name": "张三",
+            "education": [{"school": "示例大学", "degree": "本科"}],
+            "skills": [{"name": "Python"}],
+        },
+    )
+    db_session.add(resume)
+    db_session.commit()
+    result = {
+        "hard_conditions": [
+            {"label": "本科及以上", "jd_quote": "本科及以上", "status": "matched", "evidence": "本科"}
+        ],
+        "core_abilities": [
+            {"label": "熟悉 Python", "jd_quote": "熟悉 Python", "status": "matched", "evidence": "Python"}
+        ],
+        "bonus_items": [],
+        "hard_gate": "met",
+        "admission": "allow",
+        "advice": "建议投递。",
+        "notes": [],
+    }
+    provider = _UsageRecordingProvider(json.dumps(result, ensure_ascii=False))
+    monkeypatch.setattr("app.api.job_match.get_llm_config", lambda _db: provider.config)
+    monkeypatch.setattr("app.api.job_match.create_provider", lambda _config: provider)
+
+    response = client.post(f"/api/jobs/{job.id}/match-analysis")
+
+    assert response.status_code == 200, response.text
+    rows = _usage_rows(db_session, usage_ledger.TASK_JOB_MATCH)
+    assert len(rows) == 1
+    assert rows[0].total_tokens == 15
+
+
+def test_assistant_endpoint_records_usage(client, db_session, monkeypatch):
+    provider = _UsageRecordingProvider("你好，这是用量验收回复。")
+    monkeypatch.setattr("app.api.assistant.get_llm_config", lambda _db: provider.config)
+    monkeypatch.setattr("app.api.assistant.create_provider", lambda _config: provider)
+    conversation = client.post("/api/assistant/conversations", json={})
+    assert conversation.status_code == 201, conversation.text
+    conversation_id = conversation.json()["id"]
+
+    with client.stream(
+        "POST",
+        f"/api/assistant/conversations/{conversation_id}/messages",
+        json={"content": "你好"},
+    ) as response:
+        assert response.status_code == 200, response.text
+        response.read()
+
+    rows = _usage_rows(db_session, usage_ledger.TASK_ASSISTANT)
+    assert len(rows) == 1
+    assert rows[0].total_tokens == 15
+
+
+class _RecordingSuccessfulProvider(SuccessfulProvider):
+    """生成任务用的合法 JSON provider，额外走一次基类 _record_usage。"""
+
+    async def stream_chat(self, messages):
+        self._record_usage(
+            started=time.monotonic(),
+            finish_reason=FINISH_STOP,
+            prompt_tokens=30,
+            completion_tokens=20,
+        )
+        async for chunk in super().stream_chat(messages):
+            yield chunk
+
+
+def test_generation_task_records_usage(client, db_session, monkeypatch):
+    reset_resume_generate_runner()
+    try:
+        _seed_profile(client)
+        _configure(client)
+        job = _job(client)
+        monkeypatch.setattr(
+            "app.services.resume.resume_generate_runner.create_provider",
+            lambda resolved: _RecordingSuccessfulProvider(resolved),
+        )
+
+        started = client.post("/api/resumes/generate/tasks", json={"job_id": job["id"]})
+        assert started.status_code == 201, started.text
+        final = _wait_terminal(client, started.json()["id"])
+
+        assert final["status"] == "completed", final
+        rows = _usage_rows(db_session, usage_ledger.TASK_RESUME_GENERATE)
+        assert len(rows) == 1
+        assert rows[0].total_tokens == 50
+    finally:
+        reset_resume_generate_runner()
+

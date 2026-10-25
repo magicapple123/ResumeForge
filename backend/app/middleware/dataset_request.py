@@ -57,6 +57,12 @@ class DatasetRequestMiddleware:
         ):
             await self.app(scope, receive, send)
             return
+        # R04：AI 任务名随请求上下文下发（provider 每次调用自动落用量账）。
+        # 必须在 app 调用之前写入：sync 端点在线程池里跑（复制 context）、
+        # SSE/后台线程由各自的上下文复制机制继承。
+        from ..services.llm import usage_ledger
+
+        usage_ledger.set_ambient_task(usage_ledger.task_for_path(path))
         headers = Headers(scope=scope)
         expected = headers.get("X-Dataset-Scope")
         method = scope.get("method", "GET")

@@ -1,0 +1,78 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/*
+ * 「我的资料」布局分片（F9，2026-10-26）。
+ *
+ * 为什么单独成文件：profile.css 已贴单文件 500 行预算，本轮新增规则纯增量放这里
+ * （与 tracker.css 拆片同一做法：聚合文件按 @import 顺序生效）。
+ *
+ * 两块内容：
+ * 1) 大字段「在资料页显示」开关与「已隐藏的大字段」列表（F9 需求 1/2）；
+ * 2) 小字段响应式网格（F9 需求 5）：单行文本 2–3 列，多行文本/日期区间整行，
+ *    窄屏自然退化成 1 列；禁止 .ant-* 覆写，宽度/间距全部走自定义类 + --rf-* 变量。
+ */
+
+.profile-visibility-switch,
+.profile-visibility-switch-locked {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-right: 4px;
+  white-space: nowrap;
+}
+
+.profile-hidden-sections-bar {
+  display: flex;
+  justify-content: flex-end;
+  margin: 0 0 8px;
+}
+
+.profile-hidden-sections-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 220px;
+  max-width: 320px;
+}
+
+.profile-hidden-section-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+/* ===== 小字段响应式网格 ===== */
+
+.profile-field-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 16px;
+  align-items: start;
+}
+
+/* 标准断点（theme/breakpoints.ts）：1366 起 3 列，767 以下 1 列。 */
+@media (min-width: 1366px) {
+  .profile-field-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 767px) {
+  .profile-field-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.profile-field-grid-item {
+  min-width: 0;
+}
+
+/* 多行文本 / 日期区间等需要整行宽度的字段。 */
+.profile-field-grid-item.is-wide {
+  grid-column: 1 / -1;
+}
+
+/* 「更多字段」「已隐藏 N 个字段」「收起更多字段」这类行内动作占整行。 */
+.profile-field-grid-actions {
+  grid-column: 1 / -1;
+}

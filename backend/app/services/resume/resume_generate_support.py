@@ -18,6 +18,7 @@ import logging
 from typing import Any
 
 from ...services.llm.usage import summarize_usages
+from .generation_postprocess import enforce_material_only_echo
 
 logger = logging.getLogger(__name__)
 
@@ -54,4 +55,16 @@ def log_generation_usage(
     logger.info("简历生成任务模型用量 task_id=%s %s", task_id, " ".join(fields))
 
 
-__all__ = ["log_generation_usage"]
+def material_only_echo_error(resume: dict[str, Any], frozen: Any) -> str | None:
+    """C6 保存前检查：仅素材字段值被抄进纸面正文时返回可展示错误。
+
+    真实实现（``generation_postprocess.enforce_material_only_echo``）要求
+    ``ResumeContent``，而运行器手里是已落库的 dict 快照，这里收口转换；
+    迟到导入放在原实现模块（避免导入环），本模块只做形状适配。
+    """
+    from ...schemas.resume import ResumeContent
+
+    return enforce_material_only_echo(ResumeContent.model_validate(resume), frozen.consumed)
+
+
+__all__ = ["log_generation_usage", "material_only_echo_error"]

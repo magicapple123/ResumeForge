@@ -163,6 +163,10 @@ export function createExportDeliveryApi(): ExportDeliveryApi {
     async exportBundle(resumeId, body) {
       const resp = await requestRaw(`/resumes/${resumeId}/export-bundle`, {
         method: "POST",
+        // requestRaw 不像 request() 那样补 Content-Type：这里是 JSON body，
+        // 缺这个头后端会把 body 当原始字符串解析，直接 422
+        // "Input should be a valid dictionary or object to extract fields from"。
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
         budget: "export",
       });

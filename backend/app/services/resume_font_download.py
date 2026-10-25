@@ -29,6 +29,7 @@ import logging
 import threading
 from collections.abc import Callable
 from pathlib import Path
+from types import TracebackType
 from typing import Any, Protocol
 
 logger = logging.getLogger(__name__)
@@ -48,7 +49,13 @@ written: list[Path] = []
 
 
 class Client(Protocol):
-    """下载用得到的 ``httpx.Client`` 子集——真实客户端与测试替身可以互换。"""
+    """下载用得到的 ``httpx.Client`` 子集——真实客户端与测试替身可以互换。
+
+    ``__exit__`` 按 httpx.Client 的真实形状声明（三个可选入参、返回 None）：
+    写成 ``(*exc: object)`` 的话，真实 httpx.Client 反而对不上协议（它最多收 3 个
+    定位参数，协议却允许任意个），``fetch(new_client=httpx.Client)`` 会被 pyright 拒收。
+    测试替身更宽松（``*exc``），仍然可互换。
+    """
 
     def stream(self, method: str, url: str) -> Any: ...
 
@@ -56,7 +63,12 @@ class Client(Protocol):
 
     def __enter__(self) -> Any: ...
 
-    def __exit__(self, *exc: object) -> Any: ...
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None = None,
+        exc_value: BaseException | None = None,
+        traceback: TracebackType | None = None,
+    ) -> None: ...
 
 
 # 在飞连接：只置 ``stop`` 不够——线程会卡在 ``iter_bytes()`` 上直到读超时，用户等不了。

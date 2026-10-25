@@ -20,7 +20,7 @@ from ...models.profile import utcnow
 from ...models.resume import ResumeRecord, saved_only
 from ...schemas.apply import ApplyConfigIn, ApplyQueueItemOut, QueueStatus
 from .. import trash
-from ..profile.profile_service import get_profile_detail
+from ..profile.profile_service import project_legacy_profile
 from ..sites.base import SiteAdapter
 from ..sites.registry import get_registry
 from ._base import ApplyConflict, ApplyNotFound, ApplyServiceError, _clip_greeting
@@ -287,7 +287,7 @@ def resolve_greeting(item: ApplyQueueItem | None, config: ApplyConfigIn) -> str:
 
 def build_apply_data(db: Session, resume: ResumeRecord | None) -> dict[str, Any]:
     """构造供通用表单引擎映射的字段数据（只取投递必需的展示字段，不含完整资料）。"""
-    profile = get_profile_detail(db)
+    profile = project_legacy_profile(db)
     data: dict[str, Any] = {
         "name": profile.name,
         "phone": profile.phone,

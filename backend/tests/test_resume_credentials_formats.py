@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-"""A4 资格证照与扩展可选字段的六格式产物 + 模板渲染（从 test_resume_credentials 拆出）。
+"""A4 证书资质与扩展可选字段的六格式产物 + 模板渲染（从 test_resume_credentials 拆出）。
 
 为什么单独成文件：主文件已到 500 行测试预算（行数守卫）。本文件只回答"纸面/文件里
 有没有这些栏目与字段、隐藏条目是否被排除、历史模板是否都能渲染"，口径与
@@ -12,6 +12,7 @@ from __future__ import annotations
 import io
 import json
 import zipfile
+from html import unescape
 
 import pytest
 from app.schemas.resume import ResumeContent
@@ -77,7 +78,7 @@ def test_pdf_includes_credentials_and_new_fields():
         page.extract_text() or "" for page in pypdf.PdfReader(io.BytesIO(pdf.content)).pages
     )
     for probe in (
-        "资格证照",
+        "证书资质",
         CREDENTIAL_NAME,
         ISSUER,
         "有效期内",
@@ -106,12 +107,13 @@ def test_en_us_credentials_exports_use_translated_labels():
     from app.services.exporter import export_markdown, render_html
 
     resume = _resume()
-    html = render_html(resume, language="en-US")
+    # HTML 会把 & 转义成 &amp;，断言看的是纸面文字，先把实体还原再比。
+    html = unescape(render_html(resume, language="en-US"))
     markdown = export_markdown(resume, language="en-US")
     for text in (html, markdown):
-        for english in ("Certifications", "Active", "Issued", "Expiry", "Verify"):
+        for english in ("Certifications & Qualifications", "Active", "Issued", "Expiry", "Verify"):
             assert english in text, english
-        for chinese in ("资格证照", "颁发机构", "有效期内"):
+        for chinese in ("证书资质", "颁发机构", "有效期内"):
             assert chinese not in text, chinese
 
 
@@ -131,5 +133,5 @@ def test_html_credentials_have_resume_paths():
 def test_every_builtin_template_renders_credentials(template):
     """所有可见模板共用两个共享片段：历史模板继续能渲染新栏目（不报错、不丢标题）。"""
     html = render_html(_resume(), template=template)
-    assert "资格证照" in html
+    assert "证书资质" in html
     assert CREDENTIAL_NAME in html

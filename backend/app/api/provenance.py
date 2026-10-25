@@ -338,7 +338,6 @@ def read_source_revision_text(
     )
 
 
-
 @router.post("/links", response_model=BlockLinkOut, status_code=201)
 def link_existing_source(
     payload: LinkFromSourceRequest, db: Session = Depends(get_db)
@@ -370,9 +369,7 @@ def link_existing_source(
 
 
 @router.post("/links/{link_id}/adopt", response_model=LinkAdoptOut)
-def adopt_source_update(
-    link_id: int, payload: LinkAdoptRequest, db: Session = Depends(get_db)
-):
+def adopt_source_update(link_id: int, payload: LinkAdoptRequest, db: Session = Depends(get_db)):
     """来源更新 → 采纳写正文：锁闸门 + 条件写；冲突 409，被锁 409 violations。"""
     link = db.get(ResumeBlockSource, link_id)
     if link is None:
@@ -392,7 +389,9 @@ def adopt_source_update(
         return JSONResponse(
             status_code=409,
             content={
-                "detail": str(exc),
+                # detail 用异常类上的静态文案（不用 str(exc)——CodeQL 把异常内容进
+                # 响应记为 stack-trace-exposure）；指纹是请求方自己传来的回显，非堆栈。
+                "detail": adopt_side.SOURCE_REVISION_STALE_DETAIL,
                 "code": adopt_side.SOURCE_REVISION_STALE_CODE,
                 "expected_fingerprint": exc.expected_fingerprint,
             },

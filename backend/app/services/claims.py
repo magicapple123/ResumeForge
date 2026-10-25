@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 import logging
+from collections.abc import Iterable
 from typing import Any
 
 from sqlalchemy import func
@@ -320,22 +321,58 @@ def claim_detail_text(record: ClaimRecord, max_chars: int = MAX_CLAIM_TOOL_CHARS
     return json.dumps(payload, ensure_ascii=False)[:max_chars]
 
 
-def build_baseline(db: Session) -> ClaimDigestOut:
+def _claim_linked_to_entries(record: ClaimRecord, allowed: set[str]) -> bool:
+    """这条主张的来源是否能关联到本次消费快照里的条目 ID。
+
+    台账来源是自由结构（type/location/note），新模型资料条目没有反向引用列；
+    生成入口用"来源 location 命中本次快照 entry_id"作为唯一可证明的关联判据。
+    关联不上就不自动带入——宁可让用户重新核对，也不把组外/旧资料写进新简历。
+    """
+    for source in record.sources or []:
+        if not isinstance(source, dict):
+            continue
+        location = str(source.get("location") or "").strip()
+        if location and location in allowed:
+            return True
+    return False
+
+
+def build_baseline(
+    db: Session,
+    *,
+    source_entry_ids: Iterable[str] | None = None,
+) -> ClaimDigestOut:
     """构造生成简历用的事实基线。
 
     只有 ``已确认`` 的条目会作为事实进入提示词；其余状态的候选表述会被列进
     ``blocked_wording``，生成时要求模型避开。台账为空时返回空基线——这样没启用
     台账的用户，生成行为与以前一字不差。
+
+    source_entry_ids 是**仅生成入口使用**的来源筛选（F3 契约 §4）：
+    - 不传（默认）= 全量语义，既有调用方与旧测试逐字节不变；
+    - 传本次消费快照的 entry_id 集合时，已确认正向事实只保留能关联到这些条目的；
+      关联不上新资料的旧正向事实不自动带入，并在 warnings 里提示用户重新核对；
+    - 禁止措辞（blocked_wording）仍然是抑制约束，不因筛选而放行。
+    过滤发生在拼 baseline_text 之前（不是先摘要再丢 sources）。
     """
     records = db.query(ClaimRecord).order_by(ClaimRecord.id.asc()).all()
     if not records:
         return ClaimDigestOut(confirmed_count=0, baseline_text="")
+    allowed = (
+        {str(item).strip() for item in source_entry_ids if str(item).strip()}
+        if source_entry_ids is not None
+        else None
+    )
 
     confirmed_lines: list[str] = []
     blocked: list[str] = []
     warnings: list[str] = []
+    excluded: list[ClaimRecord] = []
     for record in records:
         if can_enter_final(record.verification_status):
+            if allowed is not None and not _claim_linked_to_entries(record, allowed):
+                excluded.append(record)
+                continue
             entry = {
                 "subject": record.subject or record.title,
                 "category": record.category,
@@ -354,6 +391,15 @@ def build_baseline(db: Session) -> ClaimDigestOut:
                 f"{verification_label(record.verification_status)}"
             )
 
+    if excluded:
+        names = "、".join(
+            f"「{record.title or record.subject or f'#{record.id}'}」"
+            for record in excluded[:3]
+        )
+        warnings.append(
+            f"{names} 等 {len(excluded)} 条已确认主张来自旧资料，本次未自动带入："
+            "请在新资料里重新核对并关联后再使用"
+        )
     baseline_text = "\n".join(confirmed_lines)[:MAX_BASELINE_CHARS]
     return ClaimDigestOut(
         confirmed_count=len(confirmed_lines),

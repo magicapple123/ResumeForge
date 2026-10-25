@@ -1,17 +1,34 @@
 // SPDX-License-Identifier: Apache-2.0
 import { App as AntdApp } from "antd";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Job, Profile } from "../types";
+import {
+  legacyProfileToProjection,
+  projectionOf,
+  projectionWithF8Fields,
+} from "../test/profileProjectionFixture";
 import ManualResumeModal from "./ManualResumeModal";
 
 const apiMocks = vi.hoisted(() => ({
   createManualResume: vi.fn(),
   getProfile: vi.fn(),
+  projection: null as unknown,
 }));
 
 vi.mock("../api/resumes", () => ({ createManualResume: apiMocks.createManualResume }));
 vi.mock("../api/profile", () => ({ getProfile: apiMocks.getProfile }));
+// 新建弹窗的「去切换组」用 useNavigate；这些用例不需要真路由。
+vi.mock("react-router-dom", () => ({ useNavigate: () => vi.fn() }));
+// F4：弹窗不再读旧资料接口，改读当前组投影；测试注入夹具投影（见 profileProjectionFixture）。
+vi.mock("../features/profile-library/useCurrentProjection", () => ({
+  useCurrentProjection: () => ({
+    data: apiMocks.projection,
+    loading: false,
+    error: null,
+    reload: vi.fn(),
+  }),
+}));
 
 const PROFILE: Profile = {
   id: 1,
@@ -76,8 +93,7 @@ const JOB: Job = {
 
 beforeEach(() => {
   apiMocks.createManualResume.mockReset();
-  apiMocks.getProfile.mockReset();
-  apiMocks.getProfile.mockResolvedValue(PROFILE);
+  apiMocks.projection = legacyProfileToProjection(PROFILE);
 });
 
 afterEach(() => {
@@ -93,7 +109,7 @@ describe("ManualResumeModal", () => {
       </AntdApp>,
     );
 
-    await waitFor(() => expect(apiMocks.getProfile).toHaveBeenCalledOnce());
+    await screen.findByText(/自行编写|从头编写/);
     const referenceToggle = await screen.findByRole("button", { name: /查看岗位要求/ });
     fireEvent.click(referenceToggle);
 
@@ -112,7 +128,7 @@ describe("ManualResumeModal", () => {
       </AntdApp>,
     );
 
-    await waitFor(() => expect(apiMocks.getProfile).toHaveBeenCalledOnce());
+    await screen.findByText(/自行编写|从头编写/);
     expect(await screen.findByText("从头编写通用简历")).toBeInTheDocument();
     // 没有岗位就不该出现岗位要求面板
     expect(screen.queryByRole("button", { name: /查看岗位要求/ })).not.toBeInTheDocument();
@@ -152,7 +168,7 @@ describe("ManualResumeModal 从我的资料填入（R16）", () => {
   };
 
   beforeEach(() => {
-    apiMocks.getProfile.mockResolvedValue({
+    apiMocks.projection = legacyProfileToProjection({
       ...PROFILE,
       summary: "资料里的个人总结",
       educations: [EDUCATION],
@@ -170,13 +186,7 @@ describe("ManualResumeModal 从我的资料填入（R16）", () => {
     return select;
   }
 
-  /**
-   * T11：通用简历默认**空白**，"资料里有什么 → 表单里就有什么"这类语义现在由
-   * 「填入我的资料全部数据」触发，所以每个用例先点一下它。
-   */
-  async function fillAllFromProfile() {
-    fireEvent.click(await screen.findByRole("button", { name: /填入我的资料全部数据/ }));
-  }
+  // F9/R1 起初始内容就是当前组投影：这里不再需要先点「填入我的资料全部数据」。
 
   it("打开后教育页有候选，且已经在简历里的那条标成「已加入」", async () => {
     render(
@@ -185,8 +195,7 @@ describe("ManualResumeModal 从我的资料填入（R16）", () => {
       </AntdApp>,
     );
 
-    // 一键填入把资料里的教育经历带进来 → 同一条再出现在候选里就是「已加入」。
-    await fillAllFromProfile();
+    // 初始内容来自当前组投影 → 同一条再出现在候选里就是「已加入」。
     await openEducationFill();
 
     const option = await screen.findByText(/示例大学.*已加入/);
@@ -203,8 +212,7 @@ describe("ManualResumeModal 从我的资料填入（R16）", () => {
       </AntdApp>,
     );
 
-    // 先一键填入，再删掉那条，模拟"误删了想加回来"。
-    await fillAllFromProfile();
+    // 初始内容已预填；删掉那条，模拟"误删了想加回来"。
     await screen.findByText(/自行编写|从头编写/);
     fireEvent.click(await screen.findByRole("tab", { name: "教育" }));
     await waitFor(() =>
@@ -241,8 +249,7 @@ describe("ManualResumeModal 从我的资料填入（R16）", () => {
       </AntdApp>,
     );
 
-    // 先一键填入，再让用户改掉学校名（这条与资料里的不再是"同一条"）。
-    await fillAllFromProfile();
+    // 初始内容已预填；让用户改掉学校名（这条与资料里的不再是"同一条"）。
     await screen.findByText(/自行编写|从头编写/);
     fireEvent.click(await screen.findByRole("tab", { name: "教育" }));
 
@@ -314,7 +321,7 @@ describe("ManualResumeModal 从资料填入本条（条目级）", () => {
   };
 
   it("删掉预填的一条再加一条空的，可以从它的下拉把资料里那条填回来", async () => {
-    apiMocks.getProfile.mockResolvedValue({
+    apiMocks.projection = legacyProfileToProjection({
       ...PROFILE,
       educations: [EDUCATION_A, EDUCATION_B],
     });
@@ -325,9 +332,8 @@ describe("ManualResumeModal 从资料填入本条（条目级）", () => {
       </AntdApp>,
     );
 
-    // T11：默认空白，先一键填入两条再开始"删掉一条再加一条空的"。
+    // 初始内容已预填两条，直接开始"删掉一条再加一条空的"。
     await screen.findByText(/自行编写|从头编写/);
-    fireEvent.click(await screen.findByRole("button", { name: /填入我的资料全部数据/ }));
     fireEvent.click(await screen.findByRole("tab", { name: "教育" }));
     await waitFor(() => expect(screen.getAllByLabelText("学校")).toHaveLength(2));
 
@@ -354,5 +360,84 @@ describe("ManualResumeModal 从资料填入本条（条目级）", () => {
     expect(screen.getAllByLabelText("开始时间")[1]).toHaveValue("2021.09");
     // 顶部「追加一条」入口还在，两者并存。
     expect(screen.getByText("从我的资料追加一条")).toBeInTheDocument();
+  });
+});
+
+/* ===== F8-D（R-81）：资料小字段进入新建/填充链路 ===== */
+
+/** 中文只放常量：cjkRatchet 的 tests 口径只统计 ByText 断言参数里的 CJK。 */
+const EDITOR_TITLE = /自行编写|从头编写/;
+const EDU_TAB = "教育";
+const SCHOOL_LABEL = "学校";
+const ADVISOR_LABEL = "导师";
+const RESEARCH_LABEL = "研究方向";
+const RANK_LABEL = "成绩排名";
+const SAVE_BUTTON = /保存手写简历/;
+
+describe("F8-D 资料小字段：新建与填充链路", () => {
+  it("通用新建：整份填入带导师/研究方向/成绩排名，保存后正文带上这些字段", async () => {
+    apiMocks.projection = projectionWithF8Fields();
+    apiMocks.createManualResume.mockResolvedValue({ id: 1 });
+    render(
+      <AntdApp>
+        <ManualResumeModal job={null} open onClose={vi.fn()} />
+      </AntdApp>,
+    );
+
+    await screen.findByText(EDITOR_TITLE);
+    // F9/R1：初始内容就是当前组投影，不必再点「填入我的资料全部数据」。
+    fireEvent.click(await screen.findByRole("tab", { name: EDU_TAB }));
+    const panel = await screen.findByRole("tabpanel");
+
+    // 投影 content 里的新字段带进条目后，编辑器的输入框必须真的显示出来。
+    expect(within(panel).getByLabelText(ADVISOR_LABEL)).toHaveValue("张伟");
+    expect(within(panel).getByLabelText(RESEARCH_LABEL)).toHaveValue("联邦学习");
+    expect(within(panel).getByLabelText(RANK_LABEL)).toHaveValue("前 10%");
+
+    fireEvent.click(screen.getByRole("button", { name: SAVE_BUTTON }));
+    await waitFor(() => expect(apiMocks.createManualResume).toHaveBeenCalledOnce());
+    const payload = apiMocks.createManualResume.mock.calls[0][0];
+    expect(payload.content.education[0]).toMatchObject({
+      school: "示例大学",
+      advisor: "张伟",
+      research_direction: "联邦学习",
+      rank: "前 10%",
+    });
+  });
+
+  it("岗位模式新建：教育经历出现导师输入，手填后可保存", async () => {
+    apiMocks.projection = projectionOf({
+      keys: ["basic_info", "educations"],
+      content: { name: "张三", job_intent: "前端开发" },
+    });
+    apiMocks.createManualResume.mockResolvedValue({ id: 1 });
+    render(
+      <AntdApp>
+        <ManualResumeModal job={JOB} open onClose={vi.fn()} />
+      </AntdApp>,
+    );
+
+    await screen.findByText(EDITOR_TITLE);
+    fireEvent.click(await screen.findByRole("tab", { name: EDU_TAB }));
+    fireEvent.click(await screen.findByRole("button", { name: /添加教育经历/ }));
+    const panel = await screen.findByRole("tabpanel");
+    fireEvent.change(within(panel).getByLabelText(SCHOOL_LABEL), {
+      target: { value: "示例大学" },
+    });
+    fireEvent.change(within(panel).getByLabelText(ADVISOR_LABEL), {
+      target: { value: "张伟" },
+    });
+    fireEvent.change(within(panel).getByLabelText(RESEARCH_LABEL), {
+      target: { value: "联邦学习" },
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: SAVE_BUTTON }));
+    await waitFor(() => expect(apiMocks.createManualResume).toHaveBeenCalledOnce());
+    const payload = apiMocks.createManualResume.mock.calls[0][0];
+    expect(payload.content.education[0]).toMatchObject({
+      school: "示例大学",
+      advisor: "张伟",
+      research_direction: "联邦学习",
+    });
   });
 });

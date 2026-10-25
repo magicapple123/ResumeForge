@@ -113,10 +113,10 @@ def _task_count() -> int:
         db.close()
 
 
-# ===== G01 / C2：旧请求完全不变 =====
+# ===== G01：旧请求（不传职业场景）仍走同一生成编排 =====
 
 
-def test_request_without_context_keeps_old_prompt_and_null_snapshot(client, monkeypatch):
+def test_request_without_context_keeps_scoped_prompt_and_null_snapshot(client, monkeypatch):
     _seed_profile(client)
     _configure(client)
     job = _job(client)
@@ -129,7 +129,8 @@ def test_request_without_context_keeps_old_prompt_and_null_snapshot(client, monk
 
     prompt = _prompt_text(holder[0])
     assert "本次职业场景" not in prompt
-    assert "扩展事实栏目" not in prompt
+    # F3/R-28：提示词只描述当前组参与的大字段（不再走旧"补充事实"口径）。
+    assert "当前组参与的大字段" in prompt
     record = client.get(f"/api/resumes/{final['resume_id']}").json()
     assert record["context_snapshot"] is None
     # 旧请求的岗位关联不变。
@@ -347,37 +348,38 @@ def test_sse_and_background_share_the_same_semantic_snapshot(client, monkeypatch
         assert bg_snapshot[field] == sse_snapshot[field], field
 
 
-# ===== A3：补充事实进入候选提示词，证号不外发 =====
+# ===== F3：只有新资料模型进入候选提示词；证书编号不外发 =====
 
 
-def _create_fact(client, kind, payload):
-    response = client.post("/api/profile/facts", json={"kind": kind, "payload": payload})
+def _create_entry(client, section_key: str, values: dict) -> dict:
+    response = client.post(
+        f"/api/profile/sections/{section_key}/entries", json={"values": values}
+    )
     assert response.status_code == 201, response.text
     return response.json()
 
 
-def test_profile_facts_reach_candidate_prompt_without_private_number(client, monkeypatch):
+def test_new_model_entries_reach_candidate_prompt_without_private_number(client, monkeypatch):
+    """A3/H 的新口径：新资料模型（学术成果/证书资质）进入候选，证书编号永不外发。"""
     _seed_profile(client)
     _configure(client)
     job = _job(client)
-    _create_fact(
+    _create_entry(
         client,
-        "publication",
+        "publications",
         {
-            "title": "跨库事务一致性研究",
-            "authors": [{"name": "张三", "is_self": True}],
-            "venue": "软件工程实践",
-            "status": "under_review",
+            "publications.title": "跨库事务一致性研究",
+            "publications.authors": "张三",
+            "publications.venue": "软件工程实践",
         },
     )
-    _create_fact(
+    _create_entry(
         client,
-        "credential",
+        "credentials",
         {
-            "name": "注册质量工程师",
-            "issuer": "示例认证机构",
-            "status": "pending",
-            "credential_number": "SECRET-NUMBER-123",
+            "credentials.title": "注册质量工程师",
+            "credentials.issuer": "示例认证机构",
+            "credentials.credential_number": "SECRET-NUMBER-123",
         },
     )
     holder = _capture(monkeypatch, "app.services.resume.resume_generate_runner")
@@ -390,35 +392,33 @@ def test_profile_facts_reach_candidate_prompt_without_private_number(client, mon
     prompt = _prompt_text(holder[0])
     assert "跨库事务一致性研究" in prompt
     assert "注册质量工程师" in prompt
-    # 扩展输出结构块出现（有新增事实），但证号绝不出现。
-    assert "扩展事实栏目" in prompt
+    # 私密证书编号（catalog private/llm_allowed=False）绝不进入提示词。
     assert "SECRET-NUMBER-123" not in prompt
-    assert "under_review" in prompt
 
 
-# ===== G23：只有新事实的资料也能生成 =====
+# ===== R-54/F3：旧"补充事实"模块退役，不再作为生成输入 =====
 
 
-def test_only_profile_facts_can_generate(client, monkeypatch):
-    """没有姓名、没有旧六栏，只有一条论文事实：旧"资料为空"条件不得误拒。"""
+def test_retired_profile_facts_do_not_count_as_content(client, db_session, monkeypatch):
+    """只有旧事实、新模型为空 → 明确 400；生成不再读旧事实表（R-46/R-54）。"""
+    from app.services.profile import fact_store
+
     _configure(client)
     job = _job(client)
-    holder = _capture(monkeypatch, "app.services.resume.resume_generate_runner")
-    _create_fact(
-        client,
-        "publication",
-        {
-            "title": "只有论文的用户",
+    _capture(monkeypatch, "app.services.resume.resume_generate_runner")
+    fact_store.create_fact(
+        db_session,
+        kind="publication",
+        payload={
+            "title": "只有旧论文的用户",
             "authors": [{"name": "匿名作者", "is_self": True}],
             "status": "under_review",
         },
     )
 
     started = client.post("/api/resumes/generate/tasks", json={"job_id": job["id"]})
-    assert started.status_code == 201, started.text
-    final = _wait_terminal(client, started.json()["id"])
-    assert final["status"] == "completed"
-    assert holder and "只有论文的用户" in _prompt_text(holder[0])
+    assert started.status_code == 400, started.text
+    assert "个人资料为空" in started.json()["detail"]
 
 
 def test_truly_empty_profile_still_rejected(client):

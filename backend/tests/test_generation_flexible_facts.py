@@ -1,10 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
-"""灵活补充事实（9 类 + 自定义字段 + 隐藏字段）进入真实生成候选提示词。
+"""新资料模型（13 大字段 + 自定义小字段 + 隐藏偏好）进入真实生成候选提示词。
 
-守 Lead 集成层：
-- 新类型 award/training/language 与自定义字段确实进入模型提示词；
-- 被隐藏的默认字段、以及 credential_number 永远不进入提示词；
-- 旧事实类型行为不变（由既有 test_generation_context_wiring 守着）。
+F3/R-54 后"补充事实"模块退役，生成输入只来自当前组的新资料模型。守 Lead 集成层：
+- 新类型（学术成果/知识产权/证书资质/语言能力）与自定义小字段确实进入模型提示词；
+- 被用户隐藏的默认字段、以及 credential_number 永远不进入提示词。
 """
 
 from __future__ import annotations
@@ -22,82 +21,77 @@ def _isolate_runner(clean_db):
     reset_resume_generate_runner()
 
 
-def _create_fact(client, kind: str, payload: dict) -> dict:
-    response = client.post("/api/profile/facts", json={"kind": kind, "payload": payload})
+def _create_entry(client, section_key: str, values: dict) -> dict:
+    response = client.post(
+        f"/api/profile/sections/{section_key}/entries", json={"values": values}
+    )
     assert response.status_code == 201, response.text
     return response.json()
 
 
-def _schema(client) -> dict:
-    response = client.get("/api/profile/facts/schema")
-    assert response.status_code == 200
-    return {item["kind"]: item for item in response.json()["kinds"]}
-
-
-def _set_schema(client, kind: str, *, hidden_fields, custom_fields) -> None:
-    current = _schema(client)[kind]
-    response = client.put(
-        f"/api/profile/facts/schema/{kind}",
-        json={
-            "hidden_fields": hidden_fields,
-            "custom_fields": custom_fields,
-            "expected_revision": current["revision"],
-        },
+def _hide_field(client, section_key: str, field_id: str) -> None:
+    response = client.patch(
+        f"/api/profile/field-preferences/{field_id}",
+        json={"section_key": section_key, "hidden": True},
     )
     assert response.status_code == 200, response.text
 
 
-def test_flexible_facts_reach_generation_prompt_without_private_fields(client, monkeypatch):
+def test_new_model_fields_reach_generation_prompt_without_private_fields(
+    client, monkeypatch
+):
     _seed_profile(client)
     _configure(client)
-    job = client.post(
-        "/api/jobs",
-        json={
-            "title": "护理培训师",
-            "company": "示例医疗机构",
-            "requirements": "护理经验；慢病管理培训；健康宣教；英语 CET-6；技能竞赛获奖优先",
-        },
+    field = client.post(
+        "/api/profile/sections/projects/fields",
+        json={"label": "合作方", "field_type": "single_line"},
     ).json()
-    _set_schema(
+    _create_entry(
         client,
-        "credential",
-        hidden_fields=[],
-        custom_fields=[{"key": "cf_aaaaaaaaaaaa", "label": "证书编号后四位"}],
-    )
-    _create_fact(
-        client,
-        "credential",
+        "projects",
         {
-            "name": "示例注册护理师",
-            "issuer": "示例卫生健康委员会",
-            "status": "active",
-            "credential_number": "SECRET-REAL-0001",
-            "custom_fields": [
-                {"key": "cf_aaaaaaaaaaaa", "label": "证书编号后四位", "value": "0001"}
-            ],
+            "projects.name": "示例合作项目",
+            "projects.description": "示例合作描述",
+            field["field_id"]: "示例合作方",
         },
     )
-    _create_fact(
+    _create_entry(
         client,
-        "award",
-        {"name": "示例护理技能竞赛二等奖", "issuer": "示例护理学会", "date": "2023-10"},
+        "publications",
+        {
+            "publications.title": "示例跨库事务一致性研究",
+            "publications.authors": "张三",
+            "publications.venue": "示例软件工程实践",
+        },
     )
-    _create_fact(
+    _create_entry(
         client,
-        "training",
-        {"name": "慢病管理培训", "organization": "示例继续教育学院", "hours": "32"},
+        "credentials",
+        {
+            "credentials.title": "示例注册护理师",
+            "credentials.issuer": "示例卫生健康委员会",
+            "credentials.credential_number": "SECRET-REAL-0001",
+        },
     )
-    _create_fact(
+    _create_entry(
         client,
-        "language",
-        {"name": "英语", "level": "熟练", "certificate": "CET-6", "score": "560"},
+        "awards",
+        {"awards.title": "示例护理技能竞赛二等奖", "awards.issuer": "示例护理学会"},
+    )
+    _create_entry(
+        client,
+        "languages",
+        {
+            "languages.language": "英语",
+            "languages.level": "熟练",
+            "languages.certificate": "CET-6",
+            "languages.score": "560",
+        },
     )
     holder = _capture(monkeypatch, "app.services.resume.resume_generate_runner")
 
-    started = client.post(
-        "/api/resumes/generate/tasks",
-        json={"job_id": job["id"], "options": {}},
-    )
+    # 通用简历（不按岗位筛选）：所有参与分区都进入候选，验证的是"内容进提示词"。
+    started = client.post("/api/resumes/generate/tasks", json={})
     assert started.status_code == 201, started.text
     final = _wait_terminal(client, started.json()["id"])
     assert final["status"] == "completed", final
@@ -105,38 +99,34 @@ def test_flexible_facts_reach_generation_prompt_without_private_fields(client, m
     prompt = _prompt_text(holder[0])
     for expected in (
         "示例注册护理师",
-        "证书编号后四位",
-        "0001",
         "示例护理技能竞赛二等奖",
-        "慢病管理培训",
+        "示例跨库事务一致性研究",
+        "合作方",
+        "示例合作方",
         "CET-6",
     ):
         assert expected in prompt, expected
-    # 私密证号与没有定义的隐藏字段绝不出现。
+    # 私密证号（catalog private / llm_allowed=False）绝不进入提示词。
     assert "SECRET-REAL-0001" not in prompt
 
 
 def test_hidden_default_field_does_not_reach_generation_prompt(client, monkeypatch):
     _seed_profile(client)
     _configure(client)
-    job = _job(client)
-    _create_fact(
+    _job(client)  # 岗位存在与否不影响通用简历路径；这里只复用脚手架
+    _create_entry(
         client,
-        "award",
-        {"name": "示例优秀员工", "issuer": "示例单位", "date": "2024-01"},
+        "awards",
+        {"awards.title": "示例优秀员工", "awards.issuer": "示例不出现单位"},
     )
-    current = _schema(client)["award"]
-    _set_schema(
-        client,
-        "award",
-        hidden_fields=["issuer"],
-        custom_fields=list(current["custom_fields"]),
-    )
+    _hide_field(client, "awards", "awards.issuer")
     holder = _capture(monkeypatch, "app.services.resume.resume_generate_runner")
-    started = client.post("/api/resumes/generate/tasks", json={"job_id": job["id"], "options": {}})
+
+    started = client.post("/api/resumes/generate/tasks", json={})
     assert started.status_code == 201, started.text
     final = _wait_terminal(client, started.json()["id"])
     assert final["status"] == "completed", final
     prompt = _prompt_text(holder[0])
     assert "示例优秀员工" in prompt
-    assert "示例单位" not in prompt
+    # 用户隐藏的默认字段既不进候选、也不进提示词（值仍保留在库内，另行由 Q 验收守护）。
+    assert "示例不出现单位" not in prompt

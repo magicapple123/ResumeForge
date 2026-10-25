@@ -3,9 +3,9 @@
 import json
 
 import pytest
-from app.schemas.profile import EducationIn, ProfileOut, ProfileUpdate
+from app.schemas.profile import EducationIn, ProfileUpdate
 from app.services.assistant_tools import execute_tool, tool_definitions, tool_names
-from app.services.profile.profile_service import get_profile_detail, update_profile
+from app.services.profile.profile_service import project_legacy_profile, update_profile
 
 PHOTO = (
     "data:image/png;base64,"
@@ -28,7 +28,8 @@ def _seed_profile(db_session) -> None:
 
 
 def _profile_snapshot(db_session) -> dict:
-    return ProfileOut.model_validate(get_profile_detail(db_session)).model_dump()
+    # 资料自 F2 起落在新模型：帮助工具写入后要用同一来源读回（旧 user_profile 不再写）。
+    return project_legacy_profile(db_session).model_dump()
 
 
 def test_update_profile_preserves_everything_the_model_did_not_touch(db_session):

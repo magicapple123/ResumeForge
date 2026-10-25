@@ -1,126 +1,247 @@
 // SPDX-License-Identifier: Apache-2.0
-/** 个人资料各大分区的排序布局。 */
-
-import { Card, Form, Input } from "antd";
-import { useMemo, useSyncExternalStore } from "react";
+/**
+ * 资料页分区布局（F6）：按「服务端定义 + 当前组参与清单 + 全局顺序」渲染。
+ *
+ * 顺序不通过 props 传入：它住在 sectionOrderStore（useSyncExternalStore），拖拽实时重排
+ * 只重渲本组件，不换 antd Form 的 context（否则 13 分区全部 Form.Item 陪跑）。
+ * 参与清单来自 workspace.current_group.participating_keys；basic_info 恒在首位。
+ * 内容整体 useMemo：内容引用稳定，memo 化的分区壳才能在无关渲染时真正跳过。
+ */
+import { useMemo, useState, useSyncExternalStore } from "react";
 import type { ReactNode } from "react";
-import { AwardSection } from "./AwardSection";
-import { CampusExperienceSection } from "./CampusExperienceSection";
-import { EducationSection } from "./EducationSection";
-import { ExperienceSection } from "./ExperienceSection";
+import { Button, ConfigProvider, Popover, Typography } from "antd";
+import EmptyState from "../common/EmptyState";
+import { t } from "../../i18n";
+import type { ProfileSectionOrderStore } from "../../features/profile/sectionOrderStore";
+import type { FieldOut, LimitsOut, SectionOut } from "../../features/profile-library/types";
+import ProfileEntrySection from "../../features/profile-library/ProfileEntrySection";
+import ProfileBasicSection from "./ProfileBasicSection";
 import { SortableProfileSection } from "./ProfileSectionShell";
 import type { ProfileSectionPointerDownHandler } from "./ProfileSectionShell";
-import { DEFAULT_SECTION_ORDER } from "./ProfileSectionConfig";
-import type { ProfileSectionKey } from "./ProfileSectionConfig";
-import ProfileBasicSection from "./ProfileBasicSection";
-import { ProjectSection } from "./ProjectSection";
-import { SkillSection } from "./SkillSection";
-import type { ProfileSectionOrderStore } from "../../features/profile/sectionOrderStore";
 
 interface Props {
-  /**
-   * 顺序与排序模式的外部 store（见 `useProfileSectionReorder` 的说明）。
-   *
-   * 顺序**不走 props**：拖拽实时重排每次 splice 都换数组，若经 props 传入，页面级
-   * `resumeContent`/`workspaceTabs` 的 useMemo 会被打穿，antd `Form` 换 context 让
-   * 全部 Form.Item 陪跑（拖拽卡顿的根因）。订阅 store 后每次 splice 只重渲本组件。
-   */
+  /** 全部活动定义（13 内置 + 自建；按服务端 sections 原序）。 */
+  sections: SectionOut[];
+  /** 当前组参与清单（basic_info 恒首位）。 */
+  participatingKeys: string[];
   reorderStore: ProfileSectionOrderStore;
   editing: boolean;
   saving: boolean;
   photo: string;
-  /** 查看态下被折叠的分区；编辑态忽略（永远展开）。 */
-  collapsedSections: Set<ProfileSectionKey>;
-  onToggleCollapsed: (sectionKey: ProfileSectionKey) => void;
+  limits: LimitsOut;
+  collapsedSections: Set<string>;
+  onToggleCollapsed: (sectionKey: string) => void;
   onPhotoSelect: (dataUrl: string) => void;
   onHandlePointerDown: ProfileSectionPointerDownHandler;
-  onMoveByOffset: (sectionKey: ProfileSectionKey, offset: -1 | 1) => void;
+  onMoveByOffset: (sectionKey: string, offset: -1 | 1) => void;
+  onAddEntry: (sectionKey: string) => void;
+  onRemoveEntry: (sectionKey: string, entryKey: string, title: string) => void;
+  onSetPreference: (
+    field: FieldOut,
+    patch: { hidden?: boolean; collapsed_override?: boolean | null },
+  ) => void;
+  onOpenFieldSettings: (sectionKey: string) => void;
+  onOpenGuide: () => void;
+  onRequestEdit: () => void;
+  onOpenGroupManager: () => void;
+  /** F9「显示」：把大字段加回当前组参与清单（不进入编辑态）。 */
+  onSetSectionVisible: (sectionKey: string, visible: boolean) => void;
+  /** 参与清单写请求进行中：禁用「显示」按钮，避免连续点击互相覆盖。 */
+  sectionVisibilityBusy?: boolean;
 }
 
-export default function ProfileSectionStack({
-  reorderStore,
-  editing,
-  saving,
-  photo,
-  collapsedSections,
-  onToggleCollapsed,
-  onPhotoSelect,
-  onHandlePointerDown,
-  onMoveByOffset,
-}: Props) {
+export default function ProfileSectionStack(props: Props) {
+  const {
+    sections,
+    participatingKeys,
+    reorderStore,
+    editing,
+    saving,
+    photo,
+    limits,
+    collapsedSections,
+    onToggleCollapsed,
+    onPhotoSelect,
+    onHandlePointerDown,
+    onMoveByOffset,
+    onAddEntry,
+    onRemoveEntry,
+    onSetPreference,
+    onOpenFieldSettings,
+    onOpenGuide,
+    onRequestEdit,
+    onOpenGroupManager,
+    onSetSectionVisible,
+    sectionVisibilityBusy = false,
+  } = props;
   const { sectionOrder, reordering, draggingKey, compact } = useSyncExternalStore(
     reorderStore.subscribe,
     reorderStore.getSnapshot,
   );
 
-  // 分区内容整体 memo：内容引用稳定后，memo 化的 SortableProfileSection 才能在
-  // 排序重排 / 无关渲染时真正跳过未变化的分区子树（T05 防全页重渲的另一半）。
-  const sectionContent: Record<ProfileSectionKey, ReactNode> = useMemo(
-    () => ({
-      basic_info: (
-        <ProfileBasicSection
-          photo={photo}
+  const sectionByKey = useMemo(
+    () => new Map(sections.map((section) => [section.key, section])),
+    [sections],
+  );
+  const visibleSections = useMemo(() => {
+    const keys = participatingKeys.filter((key) => sectionByKey.has(key));
+    const ordered = sectionOrder.filter((key) => keys.includes(key));
+    const rest = keys.filter((key) => !ordered.includes(key));
+    return [...ordered, ...rest]
+      .map((key) => sectionByKey.get(key))
+      .filter((section): section is SectionOut => Boolean(section));
+  }, [participatingKeys, sectionByKey, sectionOrder]);
+
+  const sectionContent = useMemo(() => {
+    const content = new Map<string, ReactNode>();
+    visibleSections.forEach((section) => {
+      if (section.key === "basic_info") {
+        content.set(
+          section.key,
+          <ProfileBasicSection
+            section={section}
+            photo={photo}
+            editing={editing}
+            saving={saving}
+            limits={limits}
+            onPhotoSelect={onPhotoSelect}
+            onSetPreference={onSetPreference}
+          />,
+        );
+        return;
+      }
+      content.set(
+        section.key,
+        <ProfileEntrySection
+          section={section}
           editing={editing}
           saving={saving}
-          onPhotoSelect={onPhotoSelect}
-        />
+          entryLimit={limits.max_entries_per_section}
+          singleLineMax={limits.single_line_chars}
+          multiLineMax={limits.multi_line_chars}
+          onRequestEdit={onRequestEdit}
+          onAddEntry={onAddEntry}
+          onRemoveEntry={onRemoveEntry}
+          onSetPreference={onSetPreference}
+          onOpenFieldSettings={onOpenFieldSettings}
+          onOpenGuide={onOpenGuide}
+        />,
+      );
+    });
+    return content;
+  }, [
+    editing,
+    limits,
+    onAddEntry,
+    onOpenFieldSettings,
+    onOpenGuide,
+    onPhotoSelect,
+    onRemoveEntry,
+    onRequestEdit,
+    onSetPreference,
+    photo,
+    saving,
+    visibleSections,
+  ]);
+
+  const onlyBasicInfo = visibleSections.length <= 1 && participatingKeys.length <= 1;
+
+  // F9：隐藏 = 不在当前组参与清单里（basic_info 恒参与，不算隐藏）。
+  const participatingSet = useMemo(() => new Set(participatingKeys), [participatingKeys]);
+  const hiddenSections = useMemo(
+    () =>
+      sections.filter(
+        (section) => section.key !== "basic_info" && !participatingSet.has(section.key),
       ),
-      educations: <EducationSection editable={editing} />,
-      experiences: <ExperienceSection editable={editing} />,
-      campus_experiences: <CampusExperienceSection editable={editing} />,
-      projects: <ProjectSection editable={editing} />,
-      skills: <SkillSection editable={editing} />,
-      awards: <AwardSection editable={editing} />,
-      summary: (
-        <Card size="small" style={{ marginBottom: 16 }}>
-          <Form.Item name="summary" style={{ marginBottom: 0 }}>
-            <Input.TextArea
-              rows={4}
-              placeholder="几句话概括你的优势与特点，AI 会结合目标岗位进行润色"
-            />
-          </Form.Item>
-        </Card>
-      ),
-    }),
-    [editing, onPhotoSelect, photo, saving],
+    [participatingSet, sections],
+  );
+  const [hiddenListOpen, setHiddenListOpen] = useState(false);
+
+  const hiddenList = (
+    <div className="profile-hidden-sections-list">
+      <Typography.Paragraph type="secondary" style={{ marginTop: 0 }}>
+        {t("profileLibrary.hiddenSections.hint")}
+      </Typography.Paragraph>
+      {hiddenSections.map((section) => (
+        <div key={section.key} className="profile-hidden-section-row">
+          <Typography.Text>{section.name}</Typography.Text>
+          <Button
+            size="small"
+            aria-label={t("profileLibrary.hiddenSections.showAria", { name: section.name })}
+            disabled={sectionVisibilityBusy || undefined}
+            onClick={() => onSetSectionVisible(section.key, true)}
+          >
+            {t("profileLibrary.hiddenSections.show")}
+          </Button>
+        </div>
+      ))}
+    </div>
   );
 
-  const section = (sectionKey: ProfileSectionKey, children: ReactNode) => {
-    const order = sectionOrder.indexOf(sectionKey);
-    return (
-      <SortableProfileSection
-        key={sectionKey}
-        sectionKey={sectionKey}
-        order={order}
-        editable={editing}
-        reordering={reordering}
-        dragging={draggingKey === sectionKey}
-        // 拖动激活期全部折叠成紧凑条：一个开关驱动所有分区（含未被拖的），这正是
-        // 「一开始拖就全部收起来」的实现点（见 profileCompactDrag.ts）。
-        compact={compact}
-        collapsed={!editing && collapsedSections.has(sectionKey)}
-        // 微调按钮边界：`basic_info` 固定首位（order 0），第 1 个可拖分区（order 1）
-        // 的上移禁用；末位（order = 总数 − 1）的下移禁用。与键盘排序的钳制一致。
-        canMoveUp={order > 1}
-        canMoveDown={order >= 0 && order < sectionOrder.length - 1}
-        onToggleCollapsed={onToggleCollapsed}
-        onHandlePointerDown={onHandlePointerDown}
-        onMoveByOffset={onMoveByOffset}
-      >
-        {children}
-      </SortableProfileSection>
-    );
-  };
-
   return (
-    <div className={`profile-section-stack${reordering ? " is-section-reordering" : ""}`}>
-      {/*
-       * DOM 顺序固定为默认序，视觉顺序完全交给每个分区的 CSS `order` 样式。
-       * 之前按 sectionOrder 渲染，实时重排的每次 splice 都让 React 按 key 移动
-       * 大表单的 DOM 子树（含 antd Form 大片结构），移动即触发整栈 relayout；
-       * 现在重排只更新两三个分区的 order 内联样式，DOM 节点全程不动、不重挂。
-       */}
-      {DEFAULT_SECTION_ORDER.map((sectionKey) => section(sectionKey, sectionContent[sectionKey]))}
+    <div className={"profile-section-stack" + (reordering ? " is-section-reordering" : "")}>
+      {/* 这两个入口在查看态也要能点：它们只是写参与清单，不进入编辑态。
+          资料页的输入控件整体包在 <Form disabled> 里（disabled 会经 DisabledContext
+          传导给 Button），所以这里就地覆盖成可交互，不改 Form 的语义。 */}
+      <ConfigProvider componentDisabled={false}>
+        {hiddenSections.length > 0 ? (
+          <div className="profile-hidden-sections-bar">
+            <Popover
+              content={hiddenList}
+              trigger="click"
+              open={hiddenListOpen}
+              onOpenChange={setHiddenListOpen}
+            >
+              <Button size="small">
+                {t("profileLibrary.hiddenSections.button", { count: hiddenSections.length })}
+              </Button>
+            </Popover>
+          </div>
+        ) : null}
+        {onlyBasicInfo ? (
+          <EmptyState
+            description={
+              <span>
+                <strong>{t("profileLibrary.empty.groupTitle")}</strong>
+                <br />
+                <span>{t("profileLibrary.empty.groupHint")}</span>
+              </span>
+            }
+          >
+            <div className="profile-section-empty-actions">
+              <Button type="primary" onClick={() => setHiddenListOpen(true)}>
+                {t("profileLibrary.empty.showHidden")}
+              </Button>
+              <Button type="link" size="small" onClick={onOpenGroupManager}>
+                {t("profileGroups.control.manage")}
+              </Button>
+            </div>
+          </EmptyState>
+        ) : null}
+      </ConfigProvider>
+      {visibleSections.map((section) => {
+        const order = sectionOrder.indexOf(section.key);
+        return (
+          <SortableProfileSection
+            key={section.key}
+            sectionKey={section.key}
+            label={section.name}
+            order={order >= 0 ? order : 0}
+            editable={editing}
+            reordering={reordering}
+            dragging={draggingKey === section.key}
+            compact={compact}
+            collapsed={!editing && collapsedSections.has(section.key)}
+            canMoveUp={order > 1}
+            canMoveDown={order >= 0 && order < sectionOrder.length - 1}
+            onToggleCollapsed={onToggleCollapsed}
+            onHandlePointerDown={onHandlePointerDown}
+            onMoveByOffset={onMoveByOffset}
+          >
+            {sectionContent.get(section.key)}
+          </SortableProfileSection>
+        );
+      })}
     </div>
   );
 }

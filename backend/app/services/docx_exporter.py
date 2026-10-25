@@ -35,6 +35,7 @@ from ..schemas.resume import ResumeContent
 from ..schemas.resume_generation import LONG_CV_MAX_PAGES
 from .docx_blocks import (
     DOCX_FONT,
+    DocxTheme,
     decorate_paragraph,
     float_picture,
     resolve_docx_theme,
@@ -45,6 +46,7 @@ from .docx_blocks import (
 from .docx_blocks import (
     set_run_font as _set_run_font,
 )
+from .docx_custom_sections import section_custom
 from .docx_sections import SECTION_RENDERERS
 from .pdf_exporter import (
     _PX_TO_PT,
@@ -186,9 +188,7 @@ def _header(
         intent_run = intent_paragraph.add_run(
             f"{field_labels(language)['intent']}：{resume.job_intent}"
         )
-        set_font(
-            intent_run, size_pt=base * layout.intent_ratio * _PX_TO_PT, color=theme.muted_text
-        )
+        set_font(intent_run, size_pt=base * layout.intent_ratio * _PX_TO_PT, color=theme.muted_text)
 
     contact = _join([resume.phone, resume.email, resume.city, resume.birth_year], "　　")
     if contact:
@@ -223,7 +223,9 @@ def _build_document(
     include_photo: bool,
     section_order: list[str],
     language: str = DEFAULT_RESUME_LANGUAGE,
-    theme=None,
+    # 唯一调用方 build_resume_docx 一定先 resolve_docx_theme；不再保留 None 默认值，
+    # 否则这个 None 会顺着传进 section_custom（DocxTheme 参数）把类型弄脏。
+    theme: DocxTheme,
     overrides=None,
 ) -> bytes:
     base = layout.base_px
@@ -266,6 +268,19 @@ def _build_document(
             language=language,
             overrides=overrides,
         )
+
+    # C2/R-79：自建大字段在系统分区之后独立成栏（空列表零输出，旧产物逐字节不变）。
+    section_custom(
+        doc,
+        resume,
+        base=base,
+        layout=layout,
+        accent=accent,
+        accent_soft=accent_soft,
+        theme=theme,
+        language=language,
+        overrides=overrides,
+    )
 
     _apply_continuation(doc, overrides, resume.name)
 

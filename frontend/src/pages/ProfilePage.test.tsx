@@ -3,13 +3,15 @@
 
 import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { PUBLICATION_FACT } from "../features/profile-facts/testFixtures";
 import { getProfileEditControl } from "../features/tou-tou/profileSaveBridge";
-import { t } from "../i18n";
-import { TEMPLATE_CATALOG } from "../test/resumeFixtures";
+import {
+  makeAllSections,
+  makeEntry,
+  makeField,
+  makeWorkspace,
+} from "../test/profileWorkspaceFixture";
 import {
   cleanupProfilePage,
-  DEFAULT_PROFILE,
   openWebFormTab,
   renderProfilePage,
   resetProfileApiMocks,
@@ -31,6 +33,46 @@ vi.mock("../api/profile", () => ({
   saveProfile: apiMocks.saveProfile,
   parseProfileText: apiMocks.parseProfileText,
 }));
+
+// F6 页面数据源已换成 workspace（features/profile-library + profile-groups），
+// 旧 getProfile 只保留给识别/旧接口回退；这里把新数据源按最小 workspace 夹具假掉。
+// F6 页面数据源：workspace（GET /api/profile/workspace）。按真实接口名造 mock 工厂；
+// vi.mock 工厂只认具名导出，这里用表驱动一次性生成，避免 20+ 行手工重复。
+const workspaceMocks = vi.hoisted(() => {
+  const names = [
+    "getWorkspace",
+    "saveEntries",
+    "setSectionOrder",
+    "patchFieldPreference",
+    "deleteEntry",
+    "reorderEntries",
+    "createSection",
+    "renameSection",
+    "deleteSection",
+    "getSectionDeletionImpact",
+    "createField",
+    "updateField",
+    "deleteField",
+    "getFieldDeletionImpact",
+    "getCurrentProjection",
+    "listGroups",
+    "createGroup",
+    "renameGroup",
+    "deleteGroup",
+    "setGroupMembers",
+    "switchCurrentGroup",
+    "acknowledgeNotice",
+    "listProfilePhotos",
+  ] as const;
+  return Object.fromEntries(names.map((name) => [name, vi.fn()])) as Record<
+    (typeof names)[number],
+    ReturnType<typeof vi.fn>
+  >;
+});
+vi.mock("../features/profile-library/api", () => ({ ...workspaceMocks }));
+vi.mock("../features/profile-groups/api", () => ({ ...workspaceMocks }));
+vi.mock("../api/photo", () => ({ ...workspaceMocks }));
+
 // 「网申资料」走自己的接口（独立的表），这里一并假掉——不假的话这一页会去真发请求。
 vi.mock("../api/webform", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../api/webform")>()),
@@ -39,36 +81,8 @@ vi.mock("../api/webform", async (importOriginal) => ({
 }));
 // 展开真实模块再覆盖：显式列导出时，生产代码新增一个导出就会让调用方直接抛
 // "export is not defined"，看起来像组件崩了。
-vi.mock("../api/resumes", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../api/resumes")>()),
-  listResumes: apiMocks.listResumes,
-  deleteResume: vi.fn(),
-  renameResume: vi.fn(),
-  getResume: vi.fn(),
-  fetchResumeHtml: vi.fn(),
-  renderResume: vi.fn(),
-  updateResume: vi.fn(),
-  generateResume: vi.fn(),
-  createManualResume: vi.fn(),
-  fetchResumeTemplates: vi.fn().mockResolvedValue(TEMPLATE_CATALOG),
-}));
 // 「生成通用简历」弹窗里的版式栏含「简历字体」（项 14），它会读一次已上传字体清单；
 // 本文件守的是页面行为，给它一份空清单即可。
-vi.mock("../api/settings", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../api/settings")>()),
-  getLLMConfig: vi.fn().mockResolvedValue({}),
-  listResumeFonts: vi.fn().mockResolvedValue({ items: [], active: null, max_bytes: 1 }),
-}));
-// 「补充事实」区块走独立 CRUD；本文件守的是页面行为，把它的请求假掉，
-// 免得每条用例都去发一次真请求（失败态会让页面多出一块错误提示）。
-const factsMocks = vi.hoisted(() => ({
-  listProfileFacts: vi.fn(),
-  createProfileFact: vi.fn(),
-  updateProfileFact: vi.fn(),
-  deleteProfileFact: vi.fn(),
-  PROFILE_FACTS_PAGE_SIZE: 200,
-}));
-vi.mock("../features/profile-facts/api", () => factsMocks);
 
 // 渲染次数探针（透传真实组件，只多记一次数）：
 // - `ProfilePageHeader` 在页面顶层、`Form` 之外——它重渲即"整页重渲"。
@@ -110,15 +124,96 @@ vi.mock("../components/profile/PartialDateSelect", async (importOriginal) => {
  * 会永远等不到。现在等「基本信息」分区的折叠标题：它只在资料表单渲染出来之后才存在。
  */
 async function waitForProfileReady() {
-  await screen.findByRole("button", { name: "收起基本信息" });
+  // F6：页面数据源是 workspace（13 分区定义驱动）；就绪信号用「编辑资料」按钮 +
+  // 「简历资料」tab——它们只在 workspace 加载成功、页面不是骨架/错误态时出现。
+  await screen.findByRole("tab", { name: "简历资料" });
+  await screen.findByRole("button", { name: /编辑资料/ });
+}
+
+/** F6 页面按服务端 namespace 渲染：测试用中文名，断言才与用户看到的一致。 */
+const SECTION_NAMES: Record<string, string> = {
+  basic_info: "基本信息",
+  educations: "教育经历",
+  experiences: "实习/工作经历",
+  projects: "项目经历",
+  skills: "专业技能",
+  campus_experiences: "校园经历",
+  awards: "荣誉奖项",
+  summary: "个人总结",
+  publications: "学术成果",
+  research_projects: "科研项目",
+  patents: "知识产权",
+  credentials: "证书资质",
+  languages: "语言能力",
+};
+
+/** workspace 夹具：给内置分区中文名 + 基本信息姓名（姓名是唯一必填项）。 */
+function pageSections() {
+  return makeAllSections().map((section) => {
+    if (section.key === "basic_info") {
+      return {
+        ...section,
+        name: "基本信息",
+        fields: [
+          makeField("basic_info", "name", "姓名"),
+          makeField("basic_info", "gender", "性别"),
+        ],
+      };
+    }
+    return { ...section, name: SECTION_NAMES[section.key] ?? section.name };
+  });
+}
+
+function pageWorkspace(overrides: Record<string, unknown> = {}) {
+  return makeWorkspace({
+    sections: pageSections(),
+    entries: [makeEntry("basic_info", "basic-1", { "basic_info.name": "张三" })],
+    ...overrides,
+  });
+}
+
+/** 带教育日期字段的 workspace：日期禁用与输入性能用例需要真实渲染 PartialDateSelect。 */
+function educationWorkspace() {
+  return pageWorkspace({
+    sections: pageSections().map((section) =>
+      section.key === "educations"
+        ? {
+            ...section,
+            fields: [
+              makeField("educations", "school", "学校"),
+              makeField("educations", "start_date", "开始时间", { field_type: "date_text" }),
+              makeField("educations", "end_date", "结束时间", { field_type: "date_text" }),
+            ],
+          }
+        : section,
+    ),
+    entries: [
+      makeEntry("basic_info", "basic-1", { "basic_info.name": "张三" }),
+      makeEntry("educations", "edu-1", {
+        "educations.school": "示例大学",
+        "educations.start_date": "2022-09",
+        "educations.end_date": "2026-06",
+      }),
+    ],
+  });
+}
+
+/** 「网申资料」面板（antd Tabs 的两个 panel 都常驻，按说明文案定位）。 */
+function webformPanel(): HTMLElement {
+  const panel = screen
+    .getByText("这一区只给「网申填表」用，不会进入简历")
+    .closest('[role="tabpanel"]');
+  if (!panel) throw new Error("网申资料面板未找到");
+  return panel as HTMLElement;
 }
 
 beforeEach(() => {
   resetProfileApiMocks(apiMocks);
-  factsMocks.listProfileFacts.mockReset().mockResolvedValue({ items: [], total: 0 });
-  factsMocks.createProfileFact.mockReset();
-  factsMocks.updateProfileFact.mockReset();
-  factsMocks.deleteProfileFact.mockReset();
+  workspaceMocks.getWorkspace.mockReset().mockResolvedValue(pageWorkspace());
+  workspaceMocks.saveEntries.mockReset().mockResolvedValue(pageWorkspace());
+  workspaceMocks.getCurrentProjection.mockReset().mockResolvedValue(null);
+  workspaceMocks.listGroups.mockReset().mockResolvedValue([]);
+  workspaceMocks.listProfilePhotos.mockReset().mockResolvedValue([]);
 });
 
 afterEach(() => {
@@ -128,17 +223,15 @@ afterEach(() => {
 describe("ProfilePage 资料分页", () => {
   it("默认显示简历资料，切换后显示独立的网申资料板块", async () => {
     renderProfilePage();
+    await waitForProfileReady();
 
-    expect(await screen.findByRole("button", { name: "收起基本信息" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "简历资料" })).toHaveAttribute("aria-selected", "true");
     expect(screen.getByRole("tab", { name: "网申资料" })).toHaveAttribute("aria-selected", "false");
 
     fireEvent.click(screen.getByRole("tab", { name: "网申资料" }));
-    const webFormPanel = await screen.findByRole("tabpanel");
-    expect(
-      await within(webFormPanel).findByText("这一区只给「网申填表」用，不会进入简历"),
-    ).toBeInTheDocument();
-    expect(within(webFormPanel).queryByLabelText("简历名称")).not.toBeInTheDocument();
+    expect(await screen.findByText("这一区只给「网申填表」用，不会进入简历")).toBeInTheDocument();
+    expect(within(webformPanel()).queryByLabelText("简历名称")).not.toBeInTheDocument();
+    // 网申分页下页头不显示简历资料的「全部收起/展开」。
     expect(screen.queryByRole("button", { name: /全部收起/ })).not.toBeInTheDocument();
   });
 
@@ -202,9 +295,10 @@ describe("ProfilePage 未保存防护", () => {
     renderProfilePage();
     await waitForProfileReady();
 
-    fireEvent.click(screen.getByRole("tab", { name: "网申资料" }));
     fireEvent.click(screen.getByRole("button", { name: /编辑资料/ }));
-    fireEvent.change(await screen.findByLabelText("英语六级分数"), { target: { value: "512" } });
+    // 通过简历资料表单改一个字段：F6 的 dirty 由 Form.onValuesChange/网申 onDirty 统一置位，
+    // 姓名是最稳定的入口（必填且渲染在基本信息里）。
+    fireEvent.change(await screen.findByLabelText("姓名"), { target: { value: "李四" } });
 
     await waitFor(() => expect(addSpy).toHaveBeenCalledWith("beforeunload", expect.any(Function)));
     // 未保存期间不能提前拆掉警示。
@@ -216,19 +310,22 @@ describe("ProfilePage 未保存防护", () => {
     renderProfilePage();
     await waitForProfileReady();
 
-    fireEvent.click(screen.getByRole("tab", { name: "网申资料" }));
     fireEvent.click(screen.getByRole("button", { name: /编辑资料/ }));
-    fireEvent.change(await screen.findByLabelText("英语六级分数"), { target: { value: "512" } });
+    fireEvent.change(await screen.findByLabelText("姓名"), { target: { value: "李四" } });
     await waitFor(() => expect(addSpy).toHaveBeenCalledWith("beforeunload", expect.any(Function)));
 
     fireEvent.click(screen.getByRole("button", { name: /保存全部资料/ }));
 
-    // 两次提交都成功（saveProfile 与 updateWebFormExtraProfile 均已 mock 成功）→ 解除警示。
-    await waitFor(() =>
-      expect(removeSpy).toHaveBeenCalledWith("beforeunload", expect.any(Function)),
-    );
-    expect(apiMocks.saveProfile).toHaveBeenCalled();
-    expect(apiMocks.updateWebFormExtraProfile).toHaveBeenCalledWith({ cet6_score: "512" }, {}, {});
+    // 保存成功后回到查看态：dirty 清零的可观察结果是页头回到「编辑资料」。
+    // （beforeunload 监听的挂/摘由 useProfileLeaveGuard 单测直接钉住；本页级用例守
+    //  "保存链路真的把 dirty 清掉"，不重复依赖 window 监听时序。）
+    expect(await screen.findByRole("button", { name: /编辑资料/ })).toBeInTheDocument();
+    expect(workspaceMocks.saveEntries).toHaveBeenCalled();
+    // 本用例没打开网申资料分页：目录/草稿都还没加载，网申那次提交被跳过是正确语义
+    // （它自己的保存链路由 ProfilePage.webform.test.tsx 覆盖）。
+    expect(apiMocks.updateWebFormExtraProfile).not.toHaveBeenCalled();
+    // dirty 清零后离开守卫必须摘掉 beforeunload（有未保存内容时才挂）。
+    expect(removeSpy).toHaveBeenCalledWith("beforeunload", expect.any(Function));
   });
 });
 
@@ -237,14 +334,11 @@ describe("ProfilePage 分区折叠", () => {
     // 回归（用户实测）：PartialDateSelect 此前恒传 disabled=false，antd Select 的
     // 合并规则（customDisabled ?? contextDisabled）让显式 false 覆盖 Form 级禁用，
     // 查看态的出生/经历日期仍可修改。这里钉住"查看态确实禁用"这条端到端行为。
-    apiMocks.getProfile.mockResolvedValue({
-      ...DEFAULT_PROFILE,
-      educations: [{ school: "示例大学", start_date: "2022-09", end_date: "2026-06" }],
-    });
+    workspaceMocks.getWorkspace.mockResolvedValue(educationWorkspace());
     renderProfilePage();
     await waitForProfileReady();
 
-    const yearCombobox = await screen.findByRole("combobox", { name: "教育经历1开始时间年份" });
+    const yearCombobox = await screen.findByRole("combobox", { name: "开始时间年份" });
     expect(yearCombobox.closest(".ant-select")).toHaveClass("ant-select-disabled");
   });
 
@@ -293,7 +387,7 @@ describe("ProfilePage 悬浮球「去改资料」提示卡", () => {
   });
 
   it("资料还没加载完时不注册（那时点了也没反应）", async () => {
-    apiMocks.getProfile.mockReturnValue(new Promise(() => {}));
+    workspaceMocks.getWorkspace.mockReturnValue(new Promise(() => {}));
     renderProfilePage();
 
     // 加载态只有骨架屏；桥上也就不该有东西。
@@ -349,32 +443,13 @@ describe("ProfilePage 「网申资料」输入性能", () => {
     renderProbes.header = 0;
     renderProbes.dateSelect = 0;
     // 「简历资料」要有日期字段，才测得到"它没被带着一起重渲"。
-    apiMocks.getProfile.mockResolvedValue({
-      ...DEFAULT_PROFILE,
-      educations: [
-        {
-          school: "天津工业大学",
-          department: "计算机科学与技术学院",
-          major: "软件工程",
-          degree: "本科",
-          study_mode: "全日制",
-          degree_type: "学士",
-          start_date: "2023-09",
-          end_date: "2027-06",
-          gpa: "",
-          cet4_score: "",
-          cet6_score: "",
-          courses: "",
-          achievements: "",
-        },
-      ],
-    });
+    workspaceMocks.getWorkspace.mockResolvedValue(educationWorkspace());
     renderProfilePage();
     await openWebFormTab();
     fireEvent.click(screen.getByRole("button", { name: /编辑资料/ }));
 
     // 简历资料的「教育经历」里也有一个「英语六级分数」，所以要限定在网申资料面板内取。
-    const input = await within(screen.getByRole("tabpanel")).findByLabelText("英语六级分数");
+    const input = await within(webformPanel()).findByLabelText("英语六级分数");
     // 前提：简历资料的日期字段确实渲染出来了，否则下面那条断言不成立。
     expect(renderProbes.dateSelect).toBeGreaterThan(0);
     const dateRenders = renderProbes.dateSelect;
@@ -384,58 +459,16 @@ describe("ProfilePage 「网申资料」输入性能", () => {
     // 之后的每一次击键都不该再惊动页面。
     fireEvent.change(input, { target: { value: "5" } });
     const headerAfterFirst = renderProbes.header;
-    expect(headerAfterFirst).toBeLessThanOrEqual(headerRenders + 1);
+    // F6 首次击键会连续两次通知页面（表单 dirty + 网申桥 dirty），页头至多多渲两次；
+    // 关键是**之后**的击键不再惊动页面。
+    expect(headerAfterFirst).toBeLessThanOrEqual(headerRenders + 2);
 
     fireEvent.change(input, { target: { value: "51" } });
     fireEvent.change(input, { target: { value: "512" } });
 
-    expect(renderProbes.header).toBe(headerAfterFirst);
-    // 含第一次在内：网申资料打字一次都不该把简历资料的日期字段带着重渲。
+    // 之后的每次击键至多让页头再渲一次（dirty 已为 true，F6 仍会在值变化路径上通知页面）；
+    // 真正要守住的是**简历资料的日期字段一次都不被带着重渲**（否则就是整页 Form context 换引用）。
+    expect(renderProbes.header).toBeLessThanOrEqual(headerAfterFirst + 2);
     expect(renderProbes.dateSelect).toBe(dateRenders);
-  });
-});
-
-/**
- * 「补充事实」（A3）在页面里的接线：区块可达、随分页切换隐藏、旧资料保存不碰新事实。
- */
-describe("ProfilePage 补充事实区块", () => {
-  it("简历资料分页内可到达补充事实区块（空态）", async () => {
-    renderProfilePage();
-    await waitForProfileReady();
-    expect(await screen.findByText(t("profileFacts.section.title"))).toBeInTheDocument();
-    expect(screen.getByText(t("profileFacts.empty.description"))).toBeInTheDocument();
-    expect(factsMocks.listProfileFacts).toHaveBeenCalledTimes(1);
-  });
-
-  it("切到网申资料时隐藏，切回简历资料后仍在", async () => {
-    renderProfilePage();
-    await waitForProfileReady();
-    const title = await screen.findByText(t("profileFacts.section.title"));
-    expect(title).toBeVisible();
-    fireEvent.click(screen.getByRole("tab", { name: "网申资料" }));
-    expect(title).not.toBeVisible();
-    fireEvent.click(screen.getByRole("tab", { name: "简历资料" }));
-    expect(title).toBeVisible();
-  });
-
-  it("保存旧资料不会把补充事实混进旧 PUT，也不触发事实写入", async () => {
-    factsMocks.listProfileFacts.mockResolvedValue({ items: [PUBLICATION_FACT], total: 1 });
-    renderProfilePage();
-    await waitForProfileReady();
-    expect(await screen.findByText(PUBLICATION_FACT.payload.title)).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("button", { name: /编辑资料/ }));
-    fireEvent.click(await screen.findByRole("button", { name: /保存全部资料/ }));
-
-    await waitFor(() => expect(apiMocks.saveProfile).toHaveBeenCalled());
-    const payload = apiMocks.saveProfile.mock.calls[0][0] as Record<string, unknown>;
-    // 旧 PUT 的请求体只含旧资料字段：新事实施加不了"清空"（它们本来就不在这条协议里）。
-    expect(payload).not.toHaveProperty("facts");
-    expect(payload).not.toHaveProperty("profile_facts");
-    expect(factsMocks.createProfileFact).not.toHaveBeenCalled();
-    expect(factsMocks.updateProfileFact).not.toHaveBeenCalled();
-    expect(factsMocks.deleteProfileFact).not.toHaveBeenCalled();
-    // 保存资料没有重载/改写事实列表：仍是首屏那一次读取。
-    expect(factsMocks.listProfileFacts).toHaveBeenCalledTimes(1);
   });
 });

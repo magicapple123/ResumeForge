@@ -35,6 +35,9 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 FRONTEND_DIR = REPO_ROOT / "frontend"
 NAVIGATION_CONFIG_TSX = FRONTEND_DIR / "src" / "components" / "navigation" / "navigationConfig.ts"
 GUIDE_STEPS_TS = FRONTEND_DIR / "src" / "components" / "userGuideSteps.ts"
+# FE3（2026-10-25）把指南步骤数据拆到 components/user-guide/*.ts，userGuideSteps.ts 只剩
+# ≤100 行门面（类型再导出 + 组装）。标题从分域模块提取；门面里已没有 title 字面量。
+GUIDE_MODULES_DIR = FRONTEND_DIR / "src" / "components" / "user-guide"
 README_MD = REPO_ROOT / "README.md"
 
 # README「功能特性」表每一行 → 目录里覆盖它的功能 key（可一对多）。
@@ -51,9 +54,10 @@ README_FEATURE_KEYS: dict[str, tuple[str, ...]] = {
     "个性化题库": ("question_bank", "interview_review"),
     "工作台": ("skills", "style_format_template", "template_import"),
     "试用与对比": ("template_trial",),
-    "个人资料库": ("profile",),
+    "个人资料库": ("profile", "profile_library"),
     "简历照片": ("profile_photo",),
-    "补充事实": ("profile_facts",),
+    "资料组与当前组": ("profile_groups",),
+    "旧资料升级说明": ("profile_upgrade_notice",),
     "职业场景": ("career_scenario",),
     "事实台账": ("claims",),
     "面试深挖": ("drill",),
@@ -170,7 +174,7 @@ DOMAIN_READ_TOOLS = {
 # 指南步骤标题 → 它讲授的功能域（用于「目录 ↔ 指南标题」双向守卫）。
 GUIDE_TITLE_DOMAINS = {
     "配置 AI": "设置",
-    "完善资料与事实台账": "我的资料",
+    "完善资料": "我的资料",
     "导入岗位与投递": "岗位广场",
     "跟进求职进度": "求职进度",
     "制作简历": "简历中心",
@@ -186,8 +190,11 @@ def _menu_labels() -> set[str]:
 
 
 def _guide_titles() -> set[str]:
-    text = GUIDE_STEPS_TS.read_text(encoding="utf-8")
-    return set(re.findall(r'title:\s*"([^"]+)"', text))
+    """指南步骤标题：FE3 起从 components/user-guide/ 的分域数据模块提取。"""
+    titles: set[str] = set()
+    for path in sorted(GUIDE_MODULES_DIR.glob("*.ts")):
+        titles.update(re.findall(r'title:\s*"([^"]+)"', path.read_text(encoding="utf-8")))
+    return titles
 
 
 def _catalog_write_tools() -> set[str]:

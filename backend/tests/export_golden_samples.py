@@ -10,7 +10,12 @@
 
 from __future__ import annotations
 
-from app.schemas.resume import ResumeContent
+from app.schemas.resume import (
+    ResumeContent,
+    ResumeCustomEntry,
+    ResumeCustomLine,
+    ResumeCustomSection,
+)
 
 # ===== 黄金样本（纯虚构；对抗性内容：长公司名 / 长链接 / 极长 bullet / 中文） =====
 
@@ -179,4 +184,45 @@ def long_en() -> ResumeContent:
     )
 
 
-SAMPLES = {"short_zh": short_zh, "short_en": short_en, "long_zh": long_zh, "long_en": long_en}
+def custom_zh() -> ResumeContent:
+    """1 页中文样本 + 一个自建大字段分区（C2/R-79）：主文本与「标签：值」行都要上纸。
+
+    在 short_zh 之上只增加 custom_sections：黄金矩阵用它钉住"四格式都画得出自建分区，
+    且空 custom_sections 的旧样本指纹一个字节都不变"（后者由既有的 18 条 case 守着）。
+    """
+    return short_zh().model_copy(
+        update={
+            "custom_sections": [
+                ResumeCustomSection(
+                    key="custom:open-source",
+                    title="开源贡献",
+                    entries=[
+                        ResumeCustomEntry(
+                            entry_id="os-1",
+                            text="维护统一网关平台的开源插件生态，累计合入 120 个外部贡献。",
+                            lines=[
+                                ResumeCustomLine(label="角色", value="维护者"),
+                                ResumeCustomLine(
+                                    label="仓库",
+                                    value="https://github.com/example/gateway-plugins",
+                                ),
+                            ],
+                        ),
+                        ResumeCustomEntry(
+                            entry_id="os-2",
+                            text="主导插件契约评审流程，线上兼容性问题下降四成。",
+                        ),
+                    ],
+                )
+            ]
+        }
+    )
+
+
+SAMPLES = {
+    "short_zh": short_zh,
+    "short_en": short_en,
+    "long_zh": long_zh,
+    "long_en": long_en,
+    "custom_zh": custom_zh,
+}

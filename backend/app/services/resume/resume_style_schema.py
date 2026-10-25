@@ -20,6 +20,7 @@ from __future__ import annotations
 from typing import Any
 
 from .resume_config_domains import HEX_COLOR_RE, is_object_id
+from .resume_template_scalars import template_float
 
 # 六个固定角色。顺序就是契约 §2.2 的顺序，也是 catalog role_fields 的下发顺序。
 ROLES: tuple[str, ...] = (
@@ -210,11 +211,11 @@ def template_role_defaults(template: str) -> dict[str, dict[str, float]]:
 
     defaults = template_layout_defaults(template_spec(template)["name"])
     return {
-        "name": {"font_scale": float(defaults["name_ratio"])},
-        "section_title": {"font_scale": float(defaults["section_title_ratio"])},
-        "entry_title": {"font_scale": float(defaults["entry_title_ratio"])},
-        "body": {"font_scale": 1.0, "line_height": float(defaults["line_height"])},
-        "meta": {"font_scale": float(defaults["entry_meta_ratio"])},
+        "name": {"font_scale": template_float(defaults["name_ratio"])},
+        "section_title": {"font_scale": template_float(defaults["section_title_ratio"])},
+        "entry_title": {"font_scale": template_float(defaults["entry_title_ratio"])},
+        "body": {"font_scale": 1.0, "line_height": template_float(defaults["line_height"])},
+        "meta": {"font_scale": template_float(defaults["entry_meta_ratio"])},
         "emphasis": {"font_scale": 1.0},
     }
 

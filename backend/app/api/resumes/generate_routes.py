@@ -1,11 +1,19 @@
 # SPDX-License-Identifier: Apache-2.0
 """简历生成端点（域③④）：同步 SSE 生成 + 后台生成任务三端点。
 
-从原 ``api/resumes.py`` 原样搬运。**patch 锚点契约**：测试通过
-``monkeypatch.setattr("app.api.resumes.create_provider" / "…get_llm_config", …)`` 在**包
-命名空间**替换这两个符号，因此本模块对它们的读取必须是调用期的 ``_api.<name>`` 属性
-访问（``from app.api import resumes as _api``），**禁止** from-import 具名绑定——绑定会把
+从原 api/resumes.py 原样搬运。**patch 锚点契约**：测试通过
+monkeypatch.setattr("app.api.resumes.create_provider" / "…get_llm_config", …) 在**包
+命名空间**替换这两个符号，因此本模块对它们的读取必须是调用期的 _api.<name> 属性
+访问（from app.api import resumes as _api），**禁止** from-import 具名绑定——绑定会把
 patch 静默断开（部分用例靠真实配置兜底仍会绿，是最危险的假绿形态）。
+
+**F3 快照冻结（F3 §1）**：两条链路都在**创建/开始生成时**冻结当前组消费快照
+（resolve scope + load consumed），并把追溯元数据写进 profile_usage_snapshot：
+- SSE：请求线程冻结后把 consumed 内存快照交给生成器，保存段把 resume_id 回写快照行；
+- 后台任务：建任务前后同一事务写快照（task_id），worker 只消费冻结的 consumed，
+  完成时与简历记录同事务回写 resume_id。
+因此排队/运行期间切组、改参与清单、删组或改名都不会改变本次生成的来源（R-24/R-33），
+组改名/删除后历史仍能从快照行读到"本次使用"的组名与参与清单。
 """
 
 import logging
@@ -23,13 +31,19 @@ from ...runtime import dataset_scope
 from ...runtime.dataset_scope import DatasetScopeError
 from ...runtime.log_redact import log_exception_redacted
 from ...schemas.job import JobOut
-from ...schemas.resume import GenerateRequest, GenerateTaskOut
+from ...schemas.resume import GenerateRequest, GenerateTaskOut, ResumeContent
 from ...services import trash
 from ...services.career_scenarios.resolve import CareerContextError, resolve_context
 from ...services.claims import build_baseline
 from ...services.llm.base import LLMError
-from ...services.profile.fact_context import build_fact_sections, load_fact_context
-from ...services.profile.profile_service import get_profile_detail, to_profile_out
+from ...services.resume.generate_snapshot import (
+    consumed_has_content,
+    delete_generation_snapshot,
+    freeze_generation_snapshot,
+    persist_generation_snapshot,
+    snapshot_entry_ids,
+)
+from ...services.resume.generation_postprocess import enforce_material_only_echo
 from ...services.resume.resume_generate_runner import (
     ResumeGenerateRunnerError,
     get_resume_generate_runner,
@@ -64,6 +78,30 @@ def _log_frozen_context(snapshot, *, transport: str, task_id: int | None = None)
         (snapshot.context_sha256 or "")[:16],
     )
 
+
+def _log_frozen_profile(frozen, *, transport: str, task_id: int | None = None) -> None:
+    """记录"本次生成用了哪个组/哪份快照"——只记标识与计数，不记任何资料内容。"""
+    consumed = frozen.consumed
+    logger.info(
+        "简历生成资料快照已冻结 transport=%s task_id=%s group_id=%s is_default=%s "
+        "sections=%s entries=%s definition_revision=%s data_revision=%s",
+        transport,
+        task_id if task_id is not None else "-",
+        consumed.group_id,
+        consumed.is_default,
+        len(consumed.participating_keys),
+        sum(len(section.entries) for section in consumed.sections.values()),
+        frozen.definition_revision,
+        frozen.data_revision,
+    )
+
+
+def _ensure_profile_not_empty(frozen) -> None:
+    """资料是否为空必须按**本次快照**判断（不读旧资料表，R-46）。"""
+    if not consumed_has_content(frozen.consumed):
+        raise HTTPException(status_code=400, detail="个人资料为空，无法生成简历")
+
+
 router = APIRouter()
 
 
@@ -71,7 +109,7 @@ router = APIRouter()
 async def generate_resume(payload: GenerateRequest, db: Session = Depends(get_db)):
     """流式生成简历（SSE）。
 
-    ``job_id`` 为空表示生成**通用简历**（不针对任何岗位）。事件类型见
+    job_id 为空表示生成**通用简历**（不针对任何岗位）。事件类型见
     services/resume/resume_generator.py 文档；生成结果成功落库后，依次发送携带记录 id 的
     saved 事件和最终 done 事件。
 
@@ -79,6 +117,9 @@ async def generate_resume(payload: GenerateRequest, db: Session = Depends(get_db
     与保存段因此同属一个数据集身份；此前"快照在先、建流才取租约"留有一个入口
     窗口（两次时刻之间切换数据集，快照与保存会分属两库）。切换持锁期间租约取
     不到，仍以 SSE error 事件报错（与既有行为一致，不抛 500）。
+
+    F3：当前组消费快照在本请求内冻结（租约内），生成器与保存段都只消费这份内存快照；
+    快照追溯行在本请求内写入，保存成功时同事务回写 resume_id。
     """
     try:
         lease = dataset_scope.acquire_lease("resume-generate-sse")
@@ -97,19 +138,6 @@ async def generate_resume(payload: GenerateRequest, db: Session = Depends(get_db
         job = db.get(Job, payload.job_id) if payload.job_id is not None else None
         if payload.job_id is not None and (job is None or trash.is_deleted(job)):
             raise HTTPException(status_code=404, detail="岗位不存在或已被删除")
-
-        profile = get_profile_detail(db)
-        # A3/A4：补充事实也属于"用户资料"。判定资料是否为空时必须把它们算进来，
-        # 否则"只有论文/证照、没有姓名与旧经历"的有效资料会被旧条件误拒（G23）。
-        fact_sections = build_fact_sections(load_fact_context(db))
-        if (
-            not profile.name
-            and not profile.projects
-            and not profile.experiences
-            and not profile.campus_experiences
-            and not any(fact_sections.values())
-        ):
-            raise HTTPException(status_code=400, detail="个人资料为空，无法生成简历")
 
         # 经包命名空间调用期读取，保住 test_api_resume / test_resume_general 对
         # app.api.resumes.get_llm_config 的 patch 契约。
@@ -132,14 +160,22 @@ async def generate_resume(payload: GenerateRequest, db: Session = Depends(get_db
         career_block = build_scenario_prompt_block(snapshot)
         context_snapshot = snapshot.model_dump() if snapshot is not None else None
 
+        # F3 §1：冻结当前组消费快照（租约内、db 仍打开）；随后立即写追溯行，
+        # 生成段不再读"当前组"。
+        frozen = freeze_generation_snapshot(db)
+        _ensure_profile_not_empty(frozen)
+        _log_frozen_profile(frozen, transport="sse")
+        snapshot_row = persist_generation_snapshot(db, frozen)
+        db.commit()
+        snapshot_pk = int(snapshot_row.id)
+
         # 经包命名空间调用期读取，保住 test_api_resume / test_resume_general 对
         # app.api.resumes.create_provider 的 patch 契约。
         generator = ResumeGenerator(_api.create_provider(config))
         job_out = JobOut.model_validate(job) if job is not None else None
-        profile_out = to_profile_out(profile)
-        # 事实台账里已确认的条目作为事实基线交给模型；台账为空时它就是空基线，
-        # 生成行为与没有这个功能时完全一致。
-        baseline = build_baseline(db)
+        # 事实台账里已确认的条目作为事实基线交给模型；台账为空时它就是空基线。
+        # F3 契约 §4：只带入能关联到本次快照条目的正向事实（组外/旧资料台账不自动带入）。
+        baseline = build_baseline(db, source_entry_ids=snapshot_entry_ids(frozen.consumed))
         # 流式模型调用可能持续数分钟；快照完成后立即释放请求 Session，避免占满连接池。
         db.close()
     except Exception:
@@ -159,12 +195,13 @@ async def generate_resume(payload: GenerateRequest, db: Session = Depends(get_db
         done_event: dict | None = None
         try:
             async for event in generator.generate(
-                profile_out,
+                None,
                 job_out,
                 payload.options,
                 baseline=baseline,
                 career_context_block=career_block,
-                fact_sections=fact_sections,
+                fact_sections=None,
+                consumed=frozen.consumed,
             ):
                 if event["type"] == "delta":
                     raw_parts.append(event["text"])
@@ -175,6 +212,13 @@ async def generate_resume(payload: GenerateRequest, db: Session = Depends(get_db
                     continue
                 yield _format_sse(event)
             if parsed is not None and done_event is not None:
+                # C6/R-43：仅素材字段被抄进纸面正文 → error 事件，不写库。
+                echo_error = enforce_material_only_echo(
+                    ResumeContent.model_validate(parsed), frozen.consumed
+                )
+                if echo_error:
+                    yield _format_sse({"type": "error", "message": echo_error})
+                    return
                 with factory() as save_db:
                     record = save_record(
                         save_db,
@@ -197,7 +241,18 @@ async def generate_resume(payload: GenerateRequest, db: Session = Depends(get_db
                         fact_annotations=done_event.get("fact_annotations") or [],
                         document_mode=payload.options.document_mode,
                         context_snapshot=context_snapshot,
+                        commit=False,
                     )
+                    # F3 §1：简历记录与快照行同事务提交（resume_id 回写）。
+                    from ...services.resume.generate_snapshot import (
+                        attach_snapshot_resume,
+                    )
+
+                    attach_snapshot_resume(
+                        save_db, snapshot_id=snapshot_pk, resume_id=record.id
+                    )
+                    save_db.commit()
+                    save_db.refresh(record)
                 # 只有持久化成功后才宣布完成；断流不会留下“成功但无历史记录”的状态。
                 yield _format_sse({"type": "saved", "record_id": record.id})
                 yield _format_sse(done_event)
@@ -221,32 +276,25 @@ async def generate_resume(payload: GenerateRequest, db: Session = Depends(get_db
 
 # ===== 生成后台任务（轮询模型，替代弹窗里的同步 SSE 等待）=====
 #
-# 为什么保留上面的 ``POST /generate``（SSE）又新增这套任务接口：SSE 是"请求期间持续
+# 为什么保留上面的 POST /generate（SSE）又新增这套任务接口：SSE 是"请求期间持续
 # 连接"的旧形态，无法满足"关掉弹窗后生成继续在后台跑"；而直接改掉 SSE 会破坏既有
 # 流式语义与一批测试。所以新增一套任务接口，前端生成弹窗改走这里，SSE 路径保持不变。
 
 
 @router.post("/generate/tasks", response_model=GenerateTaskOut, status_code=201)
 def start_resume_generation(payload: GenerateRequest, db: Session = Depends(get_db)):
-    """启动一次后台简历生成，返回可轮询的任务（``task_id`` 即任务 id）。
+    """启动一次后台简历生成，返回可轮询的任务（task_id 即任务 id）。
 
-    前置校验与 ``POST /generate`` 完全一致（岗位存在、资料非空、LLM 已配置），
+    前置校验与 POST /generate 完全一致（岗位存在、资料非空、LLM 已配置），
     保证任务一旦建起来，后台线程就能拿到完整输入。
+
+    F3 §1：创建任务时（入队前）冻结当前组消费快照，并在**同一事务**里写
+    profile_usage_snapshot（task_id）——worker 不再读当前组；排队/运行中切组、删组
+    不改变任务来源（R-24/R-33）。
     """
     job = db.get(Job, payload.job_id) if payload.job_id is not None else None
     if payload.job_id is not None and (job is None or trash.is_deleted(job)):
         raise HTTPException(status_code=404, detail="岗位不存在或已被删除")
-
-    profile = get_profile_detail(db)
-    # G23：补充事实同样算"有资料"——只有论文/证照的用户也能生成（不因旧六栏为空被拒）。
-    if (
-        not profile.name
-        and not profile.projects
-        and not profile.experiences
-        and not profile.campus_experiences
-        and not any(build_fact_sections(load_fact_context(db)).values())
-    ):
-        raise HTTPException(status_code=400, detail="个人资料为空，无法生成简历")
 
     # 经包命名空间调用期读取，与 generate_resume 的 get_llm_config patch 锚点同源。
     config = _api.get_llm_config(db)
@@ -272,6 +320,11 @@ def start_resume_generation(payload: GenerateRequest, db: Session = Depends(get_
     if active is not None:
         raise HTTPException(status_code=409, detail="已有简历生成任务正在进行中")
 
+    # F3 §1：冻结当前组消费快照（入队前），并随任务一起提交。
+    frozen = freeze_generation_snapshot(db)
+    _ensure_profile_not_empty(frozen)
+    _log_frozen_profile(frozen, transport="task")
+
     task = ResumeGenerateTask(
         job_id=payload.job_id,
         title=payload.title,
@@ -279,15 +332,23 @@ def start_resume_generation(payload: GenerateRequest, db: Session = Depends(get_
         context_snapshot=snapshot.model_dump() if snapshot is not None else None,
     )
     db.add(task)
+    db.flush()
+    snapshot_row = persist_generation_snapshot(db, frozen, task_id=task.id)
     db.commit()
     db.refresh(task)
     _log_frozen_context(snapshot, transport="task", task_id=task.id)
 
     runner = get_resume_generate_runner()
     try:
-        runner.start(task.id)
+        runner.start(
+            task.id,
+            generation_snapshot=frozen,
+            snapshot_id=int(snapshot_row.id),
+        )
     except ResumeGenerateRunnerError as exc:
-        # 启动失败（极端竞态：恰好有另一条任务刚被创建）：回滚这条空任务，不留孤儿。
+        # 启动失败（极端竞态：恰好有另一条任务刚被创建）：回滚这条空任务与空快照，
+        # 不留孤儿。
+        delete_generation_snapshot(db, int(snapshot_row.id))
         db.delete(task)
         db.commit()
         raise HTTPException(status_code=409, detail=str(exc)) from exc

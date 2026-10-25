@@ -24,6 +24,11 @@ def _dump(data: dict[str, Any]) -> str:
     return json.dumps(data, ensure_ascii=False, separators=(",", ":"))
 
 
+def _list_sections(data: dict[str, Any]) -> list[str]:
+    """候选里所有列表分区（按插入顺序）。预算压缩只改已存在的键（R-29/C1）。"""
+    return [key for key, value in data.items() if isinstance(value, list)]
+
+
 def _trim_text(value: str, max_chars: int) -> str:
     if len(value) <= max_chars:
         return value
@@ -105,12 +110,26 @@ def _drop_one_detail(data: dict[str, Any]) -> bool:
                 if not item.get("reference_excerpt"):
                     item.pop("reference_file_name", None)
             return True
-    # 补充事实（A3）的独立 section：先裁它们的要点列表，再动简历主栏目。
-    # 论文/科研的候选通常只是资料库里的长尾证据，不该为了它们先砍用户的核心经历；
-    # 旧数据没有这些键，此循环是零成本。
-    for section in FACT_STANDALONE_SECTIONS:
-        for item in reversed(data.get(section) or []):
-            for field in ("description", "outcomes"):
+    # 裁剪顺序固定：先补充事实（旧 A3 栏目 + v3 新增五个大字段的列表字段），再旧六
+    # 分区，最后其余参与分区。论文/科研的候选通常只是资料库里的长尾证据，不该为了
+    # 它们先砍用户的核心经历；同一顺序也保证"删掉无关分区不会挤掉共有分区"（N）。
+    detail_sections = [section for section in FACT_STANDALONE_SECTIONS if section in data]
+    detail_sections += [
+        section
+        for section in ("awards", "campus_experiences", "experiences", "projects", "educations")
+        if section in data
+    ]
+    detail_sections += [
+        section
+        for section in reversed(_list_sections(data))
+        if section not in detail_sections
+    ]
+    for section in detail_sections:
+        entries = data.get(section) or []
+        for item in reversed(entries):
+            if not isinstance(item, dict):
+                continue
+            for field in ("description", "outcomes", *_LIST_DETAIL_FIELDS):
                 values = item.get(field)
                 if not isinstance(values, list) or not values:
                     continue
@@ -121,20 +140,6 @@ def _drop_one_detail(data: dict[str, Any]) -> bool:
                     # 裁剪目标要明显小于触发阈值：_trim_text 会保留 max_chars+1 个字符
                     # （截断后补省略号），若按 240 裁会得到 241 字符，下一轮仍 >240，
                     # 在 while 循环里永远消不掉。200 -> 最多 201 字符，稳定收敛。
-                    values[0] = _trim_text(values[0], 200)
-                    return True
-    for section in ("awards", "campus_experiences", "experiences", "projects", "educations"):
-        entries = data.get(section) or []
-        for item in reversed(entries):
-            for field in _LIST_DETAIL_FIELDS:
-                values = item.get(field)
-                if not isinstance(values, list) or not values:
-                    continue
-                if len(values) > 1:
-                    values.pop()
-                    return True
-                if len(values[0]) > 240:
-                    # 同上：200 -> 最多 201 字符，保证 _drop_one_detail 一定会收敛。
                     values[0] = _trim_text(values[0], 200)
                     return True
     return False
@@ -172,25 +177,40 @@ def serialize_profile_prompt_data(data: dict[str, Any], max_chars: int) -> str:
             candidate[field] = _trim_text(value, 400)
             serialized = _dump(candidate)
 
+    trim_sections = [section for section in _list_sections(candidate)]
+    # 旧六分区按既有顺序先压（旧链路行为不变），其余参与分区按插入顺序随后。
+    old_order = ("educations", "experiences", "campus_experiences", "projects", "awards")
+    trim_sections = [section for section in old_order if section in trim_sections] + [
+        section for section in trim_sections if section not in old_order
+    ]
     for limit in (800, 400, 200):
         if len(serialized) <= max_chars:
             break
-        for section in ("educations", "experiences", "campus_experiences", "projects", "awards"):
+        for section in trim_sections:
             for item in candidate.get(section, []):
-                for field in _LIST_DETAIL_FIELDS:
+                if not isinstance(item, dict):
+                    continue
+                for field in ("description", "outcomes", *_LIST_DETAIL_FIELDS):
                     values = item.get(field)
                     if isinstance(values, list):
                         item[field] = [_trim_text(value, limit) for value in values if value]
         serialized = _dump(candidate)
 
+    for field in ("summary", "github", "personal_website", "target_city"):
+        if len(serialized) <= max_chars:
+            break
+        if field in candidate:
+            candidate[field] = ""
+            serialized = _dump(candidate)
     if len(serialized) > max_chars:
-        candidate["summary"] = ""
-        candidate["github"] = ""
-        candidate["personal_website"] = ""
-        candidate["target_city"] = ""
-        serialized = _dump(candidate)
-    if len(serialized) > max_chars:
-        for section in ("awards", "campus_experiences", "experiences", "projects", "educations"):
+        # 先减少 v3 新增分区的条目（尾部优先），再动旧六分区：这样把无关分区从组里
+        # 删掉不会降低共有分区的入选数量（N 的预算单调性）。
+        pop_sections = [
+            section
+            for section in reversed(_list_sections(candidate))
+            if section not in old_order
+        ] + [section for section in old_order if section in candidate]
+        for section in pop_sections:
             entries = candidate.get(section) or []
             while len(serialized) > max_chars and len(entries) > 1:
                 entries.pop()
@@ -206,16 +226,32 @@ def serialize_profile_prompt_data(data: dict[str, Any], max_chars: int) -> str:
             "target_city": "",
             "job_intent": _trim_text(str(candidate.get("job_intent", "")), 64),
             "summary": "",
-            # 只保留 candidate 里真的有的 section：旧数据没有补充事实键，兜底结果的
-            # 键集合与改动前完全一致；有新事实时它们参与兜底而不是被静默丢掉。
+            # 只保留 candidate 里真的有的 section：旧数据没有新增分区键，兜底结果的
+            # 键集合与改动前完全一致；有新增分区时它们参与兜底而不是被静默丢掉。
             **{
                 section: (candidate.get(section) or [])[:1]
-                for section in SECTION_LIMITS
+                for section in [
+                    *SECTION_LIMITS,
+                    *(
+                        section
+                        for section in _list_sections(candidate)
+                        if section not in SECTION_LIMITS
+                    ),
+                ]
                 if section in candidate
             },
         }
         candidate = _trim_all_strings(candidate, 32)
         serialized = _dump(candidate)
+    if len(serialized) > max_chars:
+        # 参与分区的**键要保留**（C1：在组里就出现，没数据就是空数组）。预算极端不足时
+        # 从尾部（v3 新增分区优先、旧六分区最后）逐分区清空数组，而不是丢掉键或静默截断。
+        for section in reversed(_list_sections(candidate)):
+            if len(serialized) <= max_chars:
+                break
+            if candidate.get(section):
+                candidate[section] = []
+                serialized = _dump(candidate)
     if len(serialized) > max_chars:
         raise ValueError("个人资料基础字段过长，无法在安全预算内生成简历")
     return serialized

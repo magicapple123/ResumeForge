@@ -4,6 +4,7 @@
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 
@@ -33,11 +34,11 @@ from ..services.profile.profile_photos import (
     set_primary_photo,
 )
 from ..services.profile.profile_service import (
-    get_profile_detail,
     patch_profile,
-    to_profile_out,
+    project_legacy_profile,
     update_profile,
 )
+from ..services.profile_catalog_draft import build_profile_draft_sections
 from ..services.profile_text_parser import parse_profile_text
 from ..services.settings_service import get_llm_config
 from ..services.text_extraction import (
@@ -52,6 +53,42 @@ from ..services.user_files import save_from_data_url
 
 router = APIRouter(prefix="/api/profile", tags=["profile"])
 logger = logging.getLogger(__name__)
+
+
+class ProfileDraftFieldOut(BaseModel):
+    """新目录草稿里的一个默认小字段（F4 §6：前端按目录校对，不自己映射）。"""
+
+    field_id: str
+    label: str
+    value: str = ""
+
+
+class ProfileDraftEntryOut(BaseModel):
+    """多条目分区里的一条解析结果（条目数 > 1 时才出现）。"""
+
+    fields: list[ProfileDraftFieldOut] = Field(default_factory=list)
+
+
+class ProfileDraftSectionOut(BaseModel):
+    """一个内置大字段的草稿；fields 是第一条，entries 承载其余条目。"""
+
+    key: str
+    name: str
+    fields: list[ProfileDraftFieldOut] = Field(default_factory=list)
+    entries: list[ProfileDraftEntryOut] | None = None
+
+
+class ProfileTextParseDraftOut(ProfileTextParseResult):
+    """旧响应形状 + 新目录草稿 sections（**只追加**，旧字段完整保留向前兼容）。"""
+
+    sections: list[ProfileDraftSectionOut] = Field(default_factory=list)
+
+
+def _with_catalog_draft(result: ProfileTextParseResult) -> ProfileTextParseDraftOut:
+    """给识别结果补上新目录草稿；旧字段一个都不动（前端逐批迁移）。"""
+    return ProfileTextParseDraftOut.model_validate(
+        {**result.model_dump(), "sections": build_profile_draft_sections(result)}
+    )
 
 
 def _save_photo_copy(db: Session, data_url: str, source_ref: str, fallback_name: str) -> None:
@@ -70,15 +107,17 @@ def _save_photo_copy(db: Session, data_url: str, source_ref: str, fallback_name:
 
 @router.get("", response_model=ProfileOut)
 def get_profile(db: Session = Depends(get_db)):
-    return to_profile_out(get_profile_detail(db))
+    """旧协议读：从新模型条目全量投影出旧 ProfileOut（形状不变，不读旧六表）。"""
+    return project_legacy_profile(db)
 
 
 @router.put("", response_model=ProfileOut)
 def save_profile(payload: ProfileUpdate, db: Session = Depends(get_db)):
+    """旧协议 PUT：映射后整体替换新模型条目，不再重建旧六表（F2 契约 §5.1）。"""
     profile = update_profile(db, payload)
     if payload.photo:
         _save_photo_copy(db, payload.photo, f"profile:{profile.id}", f"profile-{profile.id}")
-    return to_profile_out(profile)
+    return profile
 
 
 @router.patch("", response_model=ProfileOut)
@@ -96,11 +135,12 @@ def patch_profile_fields(payload: ProfilePatch, db: Session = Depends(get_db)):
     整份写回去——中间任何一次并发编辑都会互相覆盖（"我在改手机号，另一处把简历教育经历
     存空了"）。PATCH 让"只改这一项"变成一个原子请求。
     """
+    # PATCH 只写 model_fields_set 里出现过的键；同样映射到新条目而非旧子表。
     profile = patch_profile(db, payload)
     # 只有真的传了 photo 且非空才落磁盘副本（没传时 payload.photo 是默认空串，不会命中）。
     if payload.photo:
         _save_photo_copy(db, payload.photo, f"profile:{profile.id}", f"profile-{profile.id}")
-    return to_profile_out(profile)
+    return profile
 
 
 @router.get("/photos", response_model=list[ProfilePhotoOut])
@@ -146,7 +186,11 @@ def remove_photo(photo_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="照片不存在或已被删除")
 
 
-@router.post("/parse-text", response_model=ProfileTextParseResult)
+@router.post(
+    "/parse-text",
+    response_model=ProfileTextParseDraftOut,
+    response_model_exclude_none=True,
+)
 async def parse_profile_text_draft(payload: ProfileTextParseRequest, db: Session = Depends(get_db)):
     """把用户粘贴的个人资料（或截图、文档）拆成可编辑草稿，不写入数据库。"""
     try:
@@ -171,10 +215,12 @@ async def parse_profile_text_draft(payload: ProfileTextParseRequest, db: Session
     local_draft = parse_profile_text(source_text)
     config = get_llm_config(db)
     if not llm_is_configured(config):
-        return finalize_recognition_result(
-            mark_local_fallback(local_draft, no_model_warning(has_images, has_documents)),
-            has_images=has_images,
-            document_warnings=documents.warnings,
+        return _with_catalog_draft(
+            finalize_recognition_result(
+                mark_local_fallback(local_draft, no_model_warning(has_images, has_documents)),
+                has_images=has_images,
+                document_warnings=documents.warnings,
+            )
         )
     provider = create_provider(config)
     db.close()
@@ -190,6 +236,8 @@ async def parse_profile_text_draft(payload: ProfileTextParseRequest, db: Session
         result = mark_local_fallback(
             local_draft, ai_failed_warning(has_images, has_documents=has_documents)
         )
-    return finalize_recognition_result(
-        result, has_images=has_images, document_warnings=documents.warnings
+    return _with_catalog_draft(
+        finalize_recognition_result(
+            result, has_images=has_images, document_warnings=documents.warnings
+        )
     )

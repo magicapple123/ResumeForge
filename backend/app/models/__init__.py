@@ -71,8 +71,16 @@ from .profile import (
     Skill,
     UserProfile,
 )
+from .profile_definition import (
+    ProfileCustomField,
+    ProfileCustomSection,
+    ProfileFieldPreference,
+)
+from .profile_entry import ProfileEntry
 from .profile_fact import PROFILE_FACT_KINDS, ProfileFact
 from .profile_fact_field_pref import ProfileFactFieldPref
+from .profile_group import ProfileGroup, ProfileGroupMember, ProfileWorkspaceState
+from .profile_usage_snapshot import ProfileUsageSnapshot
 from .provenance import (
     FACT_LOCK_KINDS,
     SOURCE_KINDS,
@@ -149,6 +157,14 @@ __all__ = [
     "ProfileFact",
     "ProfileFactFieldPref",
     "PROFILE_FACT_KINDS",
+    "ProfileCustomSection",
+    "ProfileCustomField",
+    "ProfileFieldPreference",
+    "ProfileEntry",
+    "ProfileGroup",
+    "ProfileGroupMember",
+    "ProfileWorkspaceState",
+    "ProfileUsageSnapshot",
     "CareerScenario",
     "Education",
     "Experience",

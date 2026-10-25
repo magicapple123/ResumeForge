@@ -7,12 +7,16 @@ import json
 import logging
 from typing import Any
 
-from sqlalchemy.orm import Session, selectinload
+from sqlalchemy.orm import Session
 
 from ...models.job import Job
-from ...models.profile import UserProfile
 from ...schemas.profile import ProfileOut
-from ..profile.profile_service import get_profile_detail
+from ..profile.profile_reader import load_all_consumed_profile
+from ..profile.profile_service import (
+    legacy_profile_has_entries,
+    project_legacy_profile,
+    project_legacy_profile_from_consumed,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -99,22 +103,20 @@ def _job_brief(job: Job) -> dict:
     }
 
 
-def _load_profile(db: Session) -> UserProfile | None:
-    # 必须 selectinload：异步/延迟加载会在会话外炸掉。
-    return (
-        db.query(UserProfile)
-        .options(
-            selectinload(UserProfile.educations),
-            selectinload(UserProfile.experiences),
-            selectinload(UserProfile.campus_experiences),
-            selectinload(UserProfile.projects),
-            selectinload(UserProfile.skills),
-            selectinload(UserProfile.awards),
-        )
-        .first()
-    )
+def _load_profile(db: Session) -> ProfileOut | None:
+    """read-modify-write 用的旧形状全量快照（含 hidden/未映射字段的值）。
+
+    工具写入口是旧 PUT 协议：拿不到隐藏字段的值，"只改一个字段"的 read-modify-write
+    就会把隐藏值清空（R-67 要求值保留）。所以这里读**编辑视图**（project_legacy_profile）
+    而不是消费快照；它不是发给模型的内容，不构成 AI 取数。
+    """
+    if not legacy_profile_has_entries(db):
+        return None
+    return project_legacy_profile(db)
 
 
 def _profile_snapshot(db: Session) -> ProfileOut | None:
-    profile = get_profile_detail(db)
-    return ProfileOut.model_validate(profile) if profile is not None else None
+    """AI 可读资料快照：消费 DTO（hidden 已剔除）+ 不按组限制（R-64）→ 旧形状。"""
+    if not legacy_profile_has_entries(db):
+        return None
+    return project_legacy_profile_from_consumed(load_all_consumed_profile(db))

@@ -82,13 +82,6 @@ _PR18_MULTI_PR_GROWTH = "2026-11-15"
 
 # 测试文件书面豁免清单（路径相对仓库根；理由必须具体，禁止「暂缓拆分」式空话）
 _TEST_EXEMPTIONS: dict[str, Exemption] = {
-    # 2026-10-05 网申自定义字段修复批新增 3 条别名守卫（+58 行）后 515 行，超线 15 行；
-    # 用例与既有别名边界测试共置同一 db_session fixture 与资料构造辅助，拆出文件需整份
-    # 复制这套脚手架，重复成本大于收益。
-    # 触发条件：>600 行或下批再增用例（届时拆 test_webform_data.py）。
-    "backend/tests/test_webform_data.py": Exemption(
-        "过线 15 行，fixture 脚手架复制成本大于收益", _STRUCTURED_BACKSTOP
-    ),
     # 2026-10-05 网申自定义字段修复批新增 4 条逐框建议守卫（+63 行）后 527 行，超线 27 行；
     # 本文件还被 test_file_size_budget 之外的哨兵用例以模块命名空间 monkeypatch 钉死
     # （见生产豁免中 live.py 条目说明），拆文件会分散哨兵落点。
@@ -122,11 +115,6 @@ _EXEMPTIONS: dict[str, Exemption] = {
     "backend/app/services/webform/engine/core.py": Exemption(
         "单一类内聚，无拆分缝", _STRUCTURED_BACKSTOP
     ),
-    # preflight.py::_REQUIRED_FILES 以字面路径把它钉进发行包必需清单，
-    # 转包会破坏打包链；~90% 是声明式数据。触发条件：FEATURES ~1000 行。
-    "backend/app/services/feature_catalog.py": Exemption(
-        "preflight 字面路径钉死 + 纯数据", _STRUCTURED_BACKSTOP
-    ),
     # 3 个端点编排函数被 test_interview 以模块属性 patch
     # （_require_provider/_ask_next_question/generate_report），读取方
     # 必须留在本模块。触发条件：>700 行且先把 patch 改依赖注入。
@@ -140,11 +128,6 @@ _EXEMPTIONS: dict[str, Exemption] = {
     # patch。触发条件：>650 行或新增批次类型时迁出 StopAwareCdpClient。
     "backend/app/services/apply/task_runner.py": Exemption(
         "编排核心 + 两类模块属性 patch", _STRUCTURED_BACKSTOP
-    ),
-    # 后端 test_assistant_knowledge_audit.py:37 以字面路径读取本文件提取
-    # title 做四向交叉验证，另有 4 处治理文档按路径引用。触发条件：~1200 行。
-    "frontend/src/components/userGuideSteps.ts": Exemption(
-        "后端守卫字面路径锚定 + 纯文案数据", _STRUCTURED_BACKSTOP
     ),
     # Wave3 拆分后的页面组合层（handlers + 会话持久化 + busy 联合态 +
     # 弹层组合），与 live.py 同等待遇的组合层豁免。

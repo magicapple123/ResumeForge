@@ -379,7 +379,7 @@ export default function ResumeDetailPreview({
           setEditorTarget(null);
         }}
         // 「从我的资料追加一条」：编辑**已有**简历也要这条入口（新建简历那边一直有）。
-        // 只给候选项，不给 `fillAll`——那是"从空白开始"的捷径，编辑已有简历时会把整份
+        // 只给候选项，不给 `fillAll`——那是"整份重新带入"，编辑已有简历时会把整份
         // 内容替换掉；`entryFill` 用缺省 true（条目级填进本条同样需要）。
         fillSources={fillSources}
         onSave={onSaveEditedResume}

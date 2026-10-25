@@ -49,4 +49,4 @@
 {%- elif section_key == "awards" %}{{ blocks.awards_block(resume) }}
 {%- endif %}
 {% endfor -%}
-{% if use_section_grid %}</div>{% endif %}
+{% if use_section_grid %}</div>{% endif %}{{ blocks.custom_sections_block(resume) }}

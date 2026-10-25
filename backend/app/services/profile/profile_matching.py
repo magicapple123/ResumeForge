@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 import re
+from collections.abc import Iterable
 from copy import deepcopy
 from typing import Any
 
@@ -17,10 +18,10 @@ from .profile_relevance_constants import (
     _TITLE_SPLIT_RE,
     DOMAIN_CONTEXT_SIGNALS,
     DOMAIN_SIGNALS,
-    SECTION_LIMITS,
     SECTION_PRIMARY_FIELDS,
     SKILL_DOMAIN_HINTS,
     JobFocus,
+    section_limit,
 )
 
 # 技能候选的下限：低于这个数就按分数补足零分条目。设 3 是因为一份简历的技能区
@@ -69,8 +70,18 @@ def _job_text(job: JobOut) -> str:
     )
 
 
-def build_job_focus(job: JobOut, profile: ProfileOut | None = None) -> JobFocus:
-    """提取岗位技能、方向和标题短语；所有信号都来自岗位文本。"""
+def build_job_focus(
+    job: JobOut,
+    profile: ProfileOut | None = None,
+    *,
+    skill_names: Iterable[str] | None = None,
+) -> JobFocus:
+    """提取岗位技能、方向和标题短语；所有信号都来自岗位文本。
+
+    skill_names 是**当前组参与清单里**的技能名（F3/R-28）：生成链路只能看到本次
+    候选里出现过的用户技能，不能借全量 profile.skills 把组外技能提升成 JD 硬信号。
+    profile 参数只为旧 ProfileOut 路径保留；两者都传时 skill_names 优先。
+    """
     text = _job_text(job)
     parsed = parse_jd(text)
     parsed_skills = [item.name for item in parsed["skills"]]
@@ -81,7 +92,11 @@ def build_job_focus(job: JobOut, profile: ProfileOut | None = None) -> JobFocus:
     skills = _unique(parsed_skills + saved_skills)
 
     # 用户自定义技能不一定在内置词典中；若其名称出现在 JD，就把它作为硬信号。
-    if profile is not None:
+    # 生成链路传当前组内的技能名；旧路径退回完整 profile（非生成消费者，不受组约束）。
+    if skill_names is not None:
+        skills.extend(name for name in skill_names if name and _contains(text, name))
+        skills = _unique(skills)
+    elif profile is not None:
         skills.extend(
             item.name for item in profile.skills if item.name and _contains(text, item.name)
         )
@@ -213,7 +228,7 @@ def _select_entries(
         # 奖项不参与岗位相关性筛选。它的作用是背书，用词与 JD 几乎不会重合——"国家
         # 励志奖学金"里没有任何岗位技能词，按相关度打分等于每份定向简历都静默丢掉全部
         # 奖项。按资料录入顺序取到栏目上限；超出上限的部分交给用户自己排序决定去留。
-        return valid_items[: SECTION_LIMITS[section]]
+        return valid_items[: section_limit(section)]
     ranked = sorted(
         (
             (index, item, _score_item(item, section, focus), _matched_skills(item, focus))
@@ -221,7 +236,7 @@ def _select_entries(
         ),
         key=lambda item: (-item[2], item[0]),
     )
-    limit = SECTION_LIMITS[section]
+    limit = section_limit(section)
     matching = [item for item in ranked if item[2] > 0]
     if matching:
         # 有明确匹配时不混入零分条目，避免"资料库越全，简历越跑题"。
@@ -266,7 +281,7 @@ def _select_skills(
     matching = [item for score, _, item in ranked if score > 0]
     if matching:
         if len(matching) >= _MIN_SKILL_CANDIDATES:
-            return matching[: SECTION_LIMITS["skills"]]
+            return matching[: section_limit("skills")]
         # 匹配数低于下限时按分数补足：技能候选太少，模型只能从项目描述里自拟技能区，
         # 而自拟的技能会被一致性检查误报成"候选资料未包含"。补足的高分零分项仍然
         # 来自用户资料，不存在虚构风险。
@@ -276,7 +291,7 @@ def _select_skills(
                 break
             if item not in padded:
                 padded.append(item)
-        return padded[: SECTION_LIMITS["skills"]]
+        return padded[: section_limit("skills")]
     if focus.skills or focus.domains or focus.terms:
         # A4/§8.5：未识别领域（非技术岗位）且技能名没有直接命中时，保留少量用户技能
         # 作候选，避免空技能区导致模型自拟；识别出领域时不填充无关技能。
@@ -284,7 +299,7 @@ def _select_skills(
             return [item for _, _, item in ranked[:_MIN_SKILL_CANDIDATES]]
         return []
     # JD 未给出可识别信号时保留有限技能作为兜底，避免生成空技能区。
-    return [item for _, _, item in ranked[: SECTION_LIMITS["skills"]]]
+    return [item for _, _, item in ranked[: section_limit("skills")]]
 
 
 def _take_entries(items: list[dict[str, Any]], section: str) -> list[dict[str, Any]]:
@@ -301,4 +316,4 @@ def _take_entries(items: list[dict[str, Any]], section: str) -> list[dict[str, A
     """
     primary_field = SECTION_PRIMARY_FIELDS[section]
     valid_items = [item for item in items if str(item.get(primary_field, "")).strip()]
-    return valid_items[: SECTION_LIMITS[section]]
+    return valid_items[: section_limit(section)]

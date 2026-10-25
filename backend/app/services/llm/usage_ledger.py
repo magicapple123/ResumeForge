@@ -27,17 +27,35 @@ from sqlalchemy.orm import Session
 from ...models.llm_usage import LLMUsageRecord
 from ...models.setting import AppSetting
 from .usage import FINISH_STOP, LLMUsage, summarize_usages
+from .usage_tasks import (
+    TASK_APPLY,
+    TASK_ASSISTANT,
+    TASK_CLAIMS,
+    TASK_DRILL,
+    TASK_INTERVIEW,
+    TASK_JOB_ANALYSIS,
+    TASK_JOB_MATCH,
+    TASK_JOB_PARSE,
+    TASK_PROFILE_PARSE,
+    TASK_RESUME_GENERATE,
+    TASK_RESUME_OPTIMIZE,
+    TASK_RESUME_REVISE,
+    TASK_RESUME_RISK,
+    TASK_RESUME_SCENARIO,
+    TASK_RESUME_SUGGESTIONS,
+    TASK_RESUME_TRANSLATE,
+    TASK_RESUME_WRITING,
+    TASK_TEMPLATE,
+    TASK_TRACKER,
+    TASK_UNKNOWN,
+    TASK_WEBFORM,
+    ambient_task,
+    record_ambient_usage,
+    set_ambient_task,
+    task_for_path,
+)
 
 logger = logging.getLogger(__name__)
-
-# 任务类别（前端按这些值做分组；未知任务原样保留，不丢数据）。
-TASK_RESUME_GENERATE = "resume_generate"
-TASK_RESUME_REVISE = "resume_revise"
-TASK_RESUME_SUGGESTIONS = "resume_suggestions"
-TASK_RESUME_TRANSLATE = "resume_translate"
-TASK_RESUME_OPTIMIZE = "resume_optimize"
-TASK_ASSISTANT = "assistant"
-TASK_UNKNOWN = "unknown"
 
 FINISH_UNKNOWN = "unknown"
 _MAX_TASK_LENGTH = 32
@@ -237,6 +255,7 @@ def record_llm_usage(
     return record
 
 
+
 def record_provider_usage(
     db: Session,
     *,
@@ -424,22 +443,40 @@ __all__ = [
     "PRICING_KEY_CURRENCY",
     "PRICING_KEY_INPUT",
     "PRICING_KEY_OUTPUT",
+    "TASK_APPLY",
     "TASK_ASSISTANT",
+    "TASK_CLAIMS",
+    "TASK_DRILL",
+    "TASK_INTERVIEW",
+    "TASK_JOB_ANALYSIS",
+    "TASK_JOB_MATCH",
+    "TASK_JOB_PARSE",
+    "TASK_PROFILE_PARSE",
     "TASK_RESUME_GENERATE",
     "TASK_RESUME_OPTIMIZE",
     "TASK_RESUME_REVISE",
+    "TASK_RESUME_RISK",
+    "TASK_RESUME_SCENARIO",
     "TASK_RESUME_SUGGESTIONS",
     "TASK_RESUME_TRANSLATE",
+    "TASK_RESUME_WRITING",
+    "TASK_TEMPLATE",
+    "TASK_TRACKER",
     "TASK_UNKNOWN",
+    "TASK_WEBFORM",
     "UsagePricing",
+    "ambient_task",
     "estimate_cost",
     "list_recent_records",
     "load_pricing",
     "pricing_payload",
+    "record_ambient_usage",
     "record_llm_usage",
     "record_provider_usage",
     "save_pricing",
     "serialize_usage_record",
+    "set_ambient_task",
     "summarize_app_usages",
     "summarize_usage",
+    "task_for_path",
 ]

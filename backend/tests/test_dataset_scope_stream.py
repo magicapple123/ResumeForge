@@ -222,24 +222,27 @@ def test_sse_generate_acquires_the_lease_before_reading_snapshots(client, monkey
         order.append("lease")
         return real_acquire(owner)
 
-    real_profile = __import__(
-        "app.api.resumes.generate_routes", fromlist=["get_profile_detail"]
-    ).get_profile_detail
+    # F3：SSE 不再读旧资料表，改为在租约内冻结当前组消费快照（freeze_generation_snapshot）。
+    real_freeze = __import__(
+        "app.api.resumes.generate_routes", fromlist=["freeze_generation_snapshot"]
+    ).freeze_generation_snapshot
 
-    def spy_profile(db):
+    def spy_freeze(db):
         order.append("profile-snapshot")
-        return real_profile(db)
+        return real_freeze(db)
 
     real_baseline = __import__(
         "app.api.resumes.generate_routes", fromlist=["build_baseline"]
     ).build_baseline
 
-    def spy_baseline(db):
+    def spy_baseline(db, **kwargs):
         order.append("baseline-snapshot")
-        return real_baseline(db)
+        return real_baseline(db, **kwargs)
 
     monkeypatch.setattr(dataset_scope, "acquire_lease", spy_acquire)
-    monkeypatch.setattr("app.api.resumes.generate_routes.get_profile_detail", spy_profile)
+    monkeypatch.setattr(
+        "app.api.resumes.generate_routes.freeze_generation_snapshot", spy_freeze
+    )
     monkeypatch.setattr("app.api.resumes.generate_routes.build_baseline", spy_baseline)
 
     class SuccessfulProvider(BaseLLMProvider):

@@ -19,9 +19,7 @@ from __future__ import annotations
 
 from sqlalchemy.orm import Session
 
-# `default_section_order_config` 需要读「我的资料」那一行。放在模块级是因为依赖方向
-# 是单向的（profile_service 不 import 本模块，见它的 import 清单），不会成环。
-from ..profile.profile_service import get_or_create_profile
+from ...models.profile_group import ProfileWorkspaceState
 from .resume_labels import DEFAULT_RESUME_LANGUAGE, SECTION_TITLES, section_title
 
 # 默认顺序（2026-10 起）= 「教育优先」：教育 → 实习/工作 → 项目 → 专业技能 →
@@ -149,6 +147,27 @@ def profile_order_to_section_order(profile_keys: list[str]) -> list[str]:
     return normalized_section_order(ordered)
 
 
+def profile_section_order_keys(db: Session) -> list[str]:
+    """「我的资料」当前的全局顺序（新模型）；库还没有工作区状态时返回空列表。
+
+    F2 起资料页的顺序落在 profile_workspace_state.section_order（唯一一份全局顺序），
+    旧 user_profile.section_order 不再读取。空列表只表示"新模型还没初始化过工作区"
+    （读接口不 bootstrap），调用方据此回退既有默认；已初始化的默认顺序是 13 个分区，
+    翻译成简历顺序后本就与简历内置默认不同（科研四栏的落位），必须按它物化。
+    """
+    state = db.query(ProfileWorkspaceState).filter(ProfileWorkspaceState.id == 1).first()
+    return [str(key) for key in (state.section_order or [])] if state is not None else []
+
+
+def sortable_profile_section_keys(keys: list[str]) -> list[str]:
+    """资料页里"参与正文排序"的 key（保留 basic_info 供前端自行过滤，与旧形状一致）。"""
+    return [
+        str(key)
+        for key in keys
+        if str(key) == "basic_info" or str(key) in PROFILE_SECTION_TO_RESUME
+    ]
+
+
 def default_section_order_config(db: Session) -> dict | None:
     """新建简历时应当落库的默认板块顺序片段：``{"section_order": [...]}``。
 
@@ -161,8 +180,10 @@ def default_section_order_config(db: Session) -> dict | None:
     ``format_config.section_order``。靠前端 UI 的默认值临时生效，就会出现"卡片显示资料
     顺序、PDF 按内置默认排"的两套结果；落库之后两者只有一个来源，不可能分叉。
     """
-    profile = get_or_create_profile(db)
-    order = profile_order_to_section_order(list(profile.section_order or []))
+    keys = profile_section_order_keys(db)
+    if not keys:
+        return None
+    order = profile_order_to_section_order(keys)
     if order == list(DEFAULT_SECTION_ORDER):
         return None
     return {"section_order": order}
@@ -192,7 +213,9 @@ __all__ = [
     "default_section_order_config",
     "normalized_section_order",
     "profile_order_to_section_order",
+    "profile_section_order_keys",
     "profile_to_resume_order",
+    "sortable_profile_section_keys",
     "resolved_section_order",
     "section_label",
 ]

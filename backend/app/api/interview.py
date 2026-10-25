@@ -58,7 +58,7 @@ from ..services.llm import create_provider
 from ..services.llm.base import LLMError
 from ..services.materials import create_material as create_material_record
 from ..services.profile.profile_relevance import build_job_prompt_text
-from ..services.profile.profile_service import get_profile_detail, to_profile_out
+from ..services.profile.profile_service import project_legacy_profile
 from ..services.resume.resume_suggestions import serialize_resume_prompt_data
 from ..services.settings_service import get_llm_config
 
@@ -91,7 +91,7 @@ def _profile_text(db: Session) -> str:
     会留下 datetime 对象，``json.dumps`` 会直接抛 TypeError 让整个开场请求 500。
     """
     try:
-        profile = to_profile_out(get_profile_detail(db)).model_dump(mode="json", exclude={"photo"})
+        profile = project_legacy_profile(db).model_dump(mode="json", exclude={"photo"})
     except Exception:  # noqa: BLE001 - 没有资料不该阻断面试
         logger.warning("读取个人资料失败，模拟面试将不携带资料", exc_info=True)
         return ""

@@ -17,7 +17,7 @@ from __future__ import annotations
 import hashlib
 import json
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Literal
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -429,5 +429,7 @@ def delete_link(db: Session, *, resume_id: int, link_id: int) -> bool:
     return True
 
 
-def link_status(source: ResumeSource, link: ResumeBlockSource) -> str:
+def link_status(source: ResumeSource, link: ResumeBlockSource) -> Literal["linked", "stale"]:
+    # 返回值只有这两种（Literal 与 schemas.provenance.LinkStatus 同口径），
+    # API 层直接把它填进 BlockLinkOut.status，不需要运行时转换。
     return "linked" if link.source_fingerprint == source.current_fingerprint else "stale"

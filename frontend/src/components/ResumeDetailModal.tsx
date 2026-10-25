@@ -29,6 +29,7 @@ import type { RichTextOverlayMap } from "../features/resume/useRichTextOverrides
 import type { RichTextEditAdapter } from "./resume-preview/richText";
 import ResumeDeliveryInfo from "./resume/ResumeDeliveryInfo";
 import ResumeDetailPreview from "./resume/ResumeDetailPreview";
+import ResumeProfileUsage from "./resume/ResumeProfileUsage";
 import PageSkeleton from "./common/PageSkeleton";
 import type { ResumePreviewHandle } from "./ResumePreview";
 
@@ -373,6 +374,9 @@ export default function ResumeDetailModal({ recordId, onClose, autoOpenWorkbench
               <Link to={`/interview?job_id=${detail.job_id}`}>模拟面试</Link>
             </Space>
           ) : null}
+          {/* 本次使用（R-33）：保存/生成时的组与参与大字段；资料/定义变了提示需重新生成。
+              纯只读，读取失败时整块隐藏（不阻断下面的正文预览）。 */}
+          <ResumeProfileUsage recordId={detail.id} />
           {/* 版本信息位（RF-17）：血缘 + 投递记录，弹窗打开时按需拉取一次。 */}
           <div style={{ marginBottom: 12 }}>
             <ResumeDeliveryInfo

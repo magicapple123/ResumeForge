@@ -1,18 +1,10 @@
 # SPDX-License-Identifier: Apache-2.0
 """简历生成后台任务运行器：进程内单例线程 + 状态落库 + 前端轮询。
 
-为什么自建而不用 Celery/RQ：与 ``services/apply/task_runner.py`` 同一条理由——本项目是
-单用户本地应用，生成是"几秒到几分钟的阻塞工艺"，一个 ``threading.Thread`` 足够。但
-**不复用** ``apply/task_runner.py`` 的 CDP 内核：那是给采集/投递的浏览器驱动、暂停/熔断/
-限速用的；简历生成只有"跑一个 async 生成器 + 完成才落库 + 可取消"，两者没有共享的
-执行骨架，硬复用反而要把无关的 CDP 依赖拉进来。
-
-纪律（照抄 apply 运行器踩过的坑）：
-- 工作线程自己建、自己关 ``SessionLocal()``，会话绝不跨线程共享；
-- 流式循环里**每一块 chunk / 事件之后**检查停止信号（用户点取消要真的停得下来）；
-- 异常**不许被吞**：兜底把任务置 failed 并写中文 error；
-- **完成才落库**：取消/失败不写 ``resume_record``，只更新任务本身——因此中断不产生
-  半成品，但结果整体丢失（与 SSE 时代的旧行为一致，进程重启丢进行中任务也接受）。
+为什么不自建通用任务队列：单用户本地应用，生成是"几秒到几分钟的阻塞工艺"，一个
+threading.Thread 足够；不复用 apply 的 CDP 内核（采集/投递的浏览器驱动与限速）。
+纪律：工作线程自建自关 SessionLocal；流式循环每块事件后检查停止信号；异常不许被吞
+（兜底 failed + 中文 error）；完成才落库（取消/失败不写 resume_record）。
 """
 
 from __future__ import annotations
@@ -40,6 +32,7 @@ from ...runtime.dataset_scope import DatasetLease, DatasetScopeError
 from ...runtime.log_context import run_with_bound_context
 from ...runtime.operation_budget import OperationBudget, OperationCancelled
 from ...schemas.job import JobOut
+from ...schemas.profile_projection import ConsumedProfile
 from ...schemas.resume import GenerateOptions
 from ...services import trash
 from ...services.claims import build_baseline
@@ -48,6 +41,12 @@ from ...services.llm.base import LLMError
 from ...services.llm.client_pool import aclose_clients_for_current_loop
 from ...services.profile.fact_context import build_fact_sections, load_fact_context
 from ...services.profile.profile_service import get_profile_detail, to_profile_out
+from ...services.resume.generate_snapshot import (
+    GenerationSnapshot,
+    attach_snapshot_resume,
+    consumed_has_content,
+    snapshot_entry_ids,
+)
 from ...services.resume.resume_generator import ResumeGenerator
 from ...services.resume.resume_task_state import (
     claim_completed,
@@ -56,7 +55,7 @@ from ...services.resume.resume_task_state import (
 )
 from ...services.resume.scenario_context import build_scenario_prompt_block
 from ...services.settings_service import get_llm_config
-from .resume_generate_support import log_generation_usage
+from .resume_generate_support import log_generation_usage, material_only_echo_error
 from .resume_runner_loop import RunnerEventLoopHandle
 
 logger = logging.getLogger(__name__)
@@ -87,6 +86,8 @@ class ResumeGenerateRunner:
         # resume_runner_loop 模块 docstring）：cancel()/shutdown() 借它跨线程
         # 中止挂起的模型调用。
         self._loop_handle = RunnerEventLoopHandle(self._stop)
+        self._generation_snapshot: GenerationSnapshot | None = None
+        self._snapshot_id: int | None = None
 
     def is_running(self) -> bool:
         return self._thread is not None and self._thread.is_alive()
@@ -94,13 +95,18 @@ class ResumeGenerateRunner:
     def current_task_id(self) -> int | None:
         return self._current_task_id
 
-    def start(self, task_id: int) -> None:
-        """启动一个后台简历生成任务；已有任务在跑则抛 ResumeGenerateRunnerError。"""
+    def start(
+        self,
+        task_id: int,
+        *,
+        generation_snapshot: GenerationSnapshot | None = None,
+        snapshot_id: int | None = None,
+    ) -> None:
+        """启动后台生成任务；generation_snapshot=创建时冻结的消费快照（F3 §1）。"""
         with self._lock:
             if self._thread is not None and self._thread.is_alive():
                 raise ResumeGenerateRunnerError("已有简历生成任务正在进行中")
-            # 先取租约再起线程（RF-03 TOCTOU）：切换持锁期间直接失败，调用方回滚
-            # 刚建的空任务；只要租约登记成功，切换的排空就一定会等到本任务结束。
+            # 先取租约再起线程（RF-03 TOCTOU）：切换持锁期间直接失败并回滚空任务。
             try:
                 lease = dataset_scope.acquire_lease("resume-generate")
             except DatasetScopeError as exc:
@@ -115,6 +121,8 @@ class ResumeGenerateRunner:
             )
             self._stop.clear()
             self._current_task_id = task_id
+            self._generation_snapshot = generation_snapshot
+            self._snapshot_id = snapshot_id
             self._thread = threading.Thread(
                 # RF-20：复制启动方 contextvars 并绑定 task_id/dataset_id（同 apply 运行器）。
                 target=run_with_bound_context(
@@ -140,15 +148,8 @@ class ResumeGenerateRunner:
         # 先落"取消"信号：若线程已跑完并提交终态，终态守卫会拒绝改写（apply 同款纪律）。
         self._require_current(task_id)
         self._stop.set()
-        # 主动中止挂起的模型调用：_stop 的检查点轮询不到挂在 socket read 上的流，
-        # 线程要等 read timeout（~5s）才退出、租约迟迟不归还，此窗口内切换数据集
-        # 会撞 409。跨线程取消主 task 让线程亚秒级退出；join 保留作兜底。
+        # 主动中止挂起的模型调用；终态晚于租约归还，避免紧随的切换在排空窗撞 409。
         self._loop_handle.cancel_main_task()
-        # 终态必须在线程归还租约**之后**才可见：否则"已取消"先出现在任务查询里，
-        # 而租约要等线程退出才归还，紧随其后的切换在排空窗内撞 409（e2e 恢复用例
-        # 的真实翻车路径）。join 2s 与取消可见收尾的预算一致；
-        # 线程卡死（如模型连接不响应）时超时后照常写终态，此刻切换的排空等待会如实
-        # 409，用户稍候重试即可，租约最终仍由线程退出归还。
         thread = self._thread
         if thread is not None:
             thread.join(timeout=2.0)
@@ -156,8 +157,7 @@ class ResumeGenerateRunner:
 
     def shutdown(self) -> None:
         self._stop.set()
-        # 与 cancel 同一机制：进程收拢时也主动中止挂起的模型调用，别让 join(5)
-        # 白等一个 read timeout。
+        # 与 cancel 同一机制：进程收拢时也主动中止挂起的模型调用（别白等 read timeout）。
         self._loop_handle.cancel_main_task()
         thread = self._thread
         if thread is not None:
@@ -185,15 +185,15 @@ class ResumeGenerateRunner:
                 self._finalize(session, task, GENERATE_STATUS_CANCELLED, error="已取消")
                 return
 
-            # 总预算（RF-02）：从任务开始到结果落库全程生效。取消事件与 ``_stop`` 是
-            # **同一个** ``threading.Event``——用户取消与预算到期共用一条信号线，原因
-            # 由 :class:`OperationCancelled` 的 message 区分（取消→cancelled，超时→failed）。
+            # 总预算（RF-02）：取消事件与 _stop 共用同一 threading.Event；预算到期与用户
+            # 取消由 OperationCancelled 的 message 区分（取消→cancelled，超时→failed）。
             budget = OperationBudget.start(
                 get_settings().resume_generate_budget_seconds, cancel_event=self._stop
             )
 
             try:
-                job_out, profile_out, baseline, provider, fact_sections = self._snapshot(session, task)
+                inputs = self._snapshot(session, task)
+                job_out, profile_out, baseline, provider, fact_sections, consumed = inputs
             except Exception as exc:  # noqa: BLE001 - 快照失败转为可读的失败状态
                 logger.warning("简历生成任务快照失败 task_id=%s：%s", task_id, exc)
                 self._finalize(
@@ -230,11 +230,9 @@ class ResumeGenerateRunner:
 
                 async def consume() -> None:
                     nonlocal resume, warnings, coverage_notes, rationale, fact_annotations
-                    nonlocal last_char_commit, received_chars_total
-                    nonlocal estimated_prompt_tokens
-                    # aclosing 纪律（审计 PR-07-4）：取消/超时/异常路径也显式关闭生成
-                    # 器——GeneratorExit 逐层展开，generator/provider 各层的 finally
-                    # （段复位、usage 补记、response 关闭）才真正执行。
+                    nonlocal last_char_commit, received_chars_total, estimated_prompt_tokens
+                    # aclosing 纪律（PR-07-4）：取消/超时/异常路径也显式关闭生成器，让
+                    # GeneratorExit 逐层展开、各层 finally（段复位/usage/response）执行。
                     stream = generator.generate(
                         profile_out,
                         job_out,
@@ -243,6 +241,7 @@ class ResumeGenerateRunner:
                         budget=budget,
                         career_context_block=career_block,
                         fact_sections=fact_sections,
+                        consumed=consumed,
                     )
                     try:
                         async for event in stream:
@@ -346,15 +345,15 @@ class ResumeGenerateRunner:
                     session, task, GENERATE_STATUS_FAILED, error="模型输出未能解析为有效 JSON"
                 )
                 return
+            # C6/R-43：仅素材字段被抄进纸面正文 → 阻断保存（不写库），错误可直接展示。
+            if self._generation_snapshot is not None:
+                echo_error = material_only_echo_error(resume, self._generation_snapshot)
+                if echo_error:
+                    self._finalize(session, task, GENERATE_STATUS_FAILED, error=echo_error)
+                    return
 
-            # 完成才落库：先原子认领 completed（与 cancel 的 running→cancelled 互斥仲裁），
-            # 认领失败说明 cancel 已抢先，直接按 cancelled 收尾、不落简历。认领成功后，把
-            # 结果整体写成一条 ResumeRecord，并与任务的 completed 终态在**同一个事务**里
-            # 提交。旧实现把"认领 completed"单独 commit、之后再在另一个事务里回填
-            # resume_id，中间会暴露"completed 已可见、resume_id 仍为空"的窗口（轮询恰好
-            # 落进去就会读到空指针）。这里把仲裁 UPDATE 提前、且不提交：任何观察者要么
-            # 看到"未完成"，要么看到"completed + resume_id"；cancel 抢先时更不会留下
-            # 孤儿简历记录。仲裁先于 INSERT，也让取消路径不必等待简历写入持有的写锁。
+            # 完成才落库：先原子认领 completed（与 cancel 互斥仲裁），认领失败按 cancelled
+            # 收尾、不落简历；认领与简历/终态同事务提交，观察者看不到半成品窗口。
             if not self._claim_completed(session, task.id):
                 # cancel 已抢先（running→cancelled）：尚未建简历，按 cancelled 收尾即可。
                 self._finalize(session, task, GENERATE_STATUS_CANCELLED, error="已取消")
@@ -389,18 +388,21 @@ class ResumeGenerateRunner:
                     context_snapshot=task.context_snapshot,
                     commit=False,
                 )
+                if self._snapshot_id is not None:
+                    # F3 §1：resume_id 与简历记录同事务回写到创建态快照行。
+                    attach_snapshot_resume(
+                        session, snapshot_id=self._snapshot_id, resume_id=record.id
+                    )
             except Exception:  # noqa: BLE001 - 落库失败不能让任务停在 running
                 logger.exception("简历生成结果落库失败 task_id=%s", task_id)
-                # 回滚丢弃已执行的认领 UPDATE（running→completed）与半成品记录，再按
-                # failed 收尾，避免把"completed 却没有简历"的脏终态提交出去。
+                # 回滚认领 UPDATE 与半成品记录，避免"completed 却没有简历"的脏终态。
                 session.rollback()
                 self._finalize(
                     session, task, GENERATE_STATUS_FAILED, error="生成结果保存失败，请查看后端日志"
                 )
                 return
 
-            # 终态字段写进任务对象（未提交）；下面这一次 commit 会把 resume_id 与
-            # status=completed 一起提交。
+            # 终态字段写进任务对象（未提交）；下面一次 commit 连 resume_id 一起提交。
             task.resume_id = record.id
             task.received_chars = len(raw)
             task.message = "简历已生成"
@@ -415,44 +417,42 @@ class ResumeGenerateRunner:
                 self._thread = None
                 self._lease = None
                 self._frozen_factory = None
+                self._generation_snapshot = None
+                self._snapshot_id = None
             self._stop.clear()
 
     def _snapshot(
         self, session: Any, task: ResumeGenerateTask
-    ) -> tuple[JobOut | None, Any, Any, Any, dict[str, Any]]:
-        """在后台线程里重建生成所需的只读快照，返回 ``(job_out, profile_out, baseline, provider)``。
-
-        快照在流开始前一次性取齐，随后立即释放请求会话——生成本身是纯计算 + 模型调用，
-        不持有数据库连接（与 SSE 路径 ``db.close()`` 的做法一致）。
-        """
+    ) -> tuple[JobOut | None, Any, Any, Any, dict[str, Any] | None, ConsumedProfile | None]:
+        """重建生成输入；有冻结快照时只消费它（F3 §1：worker 不再解析当前组）。"""
         job = session.get(Job, task.job_id) if task.job_id is not None else None
         if task.job_id is not None and (job is None or trash.is_deleted(job)):
             raise ResumeGenerateRunnerError("岗位不存在或已被删除")
         job_out = JobOut.model_validate(job) if job is not None else None
-        profile = get_profile_detail(session)
-        profile_out = to_profile_out(profile)
-        baseline = build_baseline(session)
-        # A3/A4：补充事实只读快照（去私密、顺序稳定）；六类全空时等价于旧行为。
-        fact_sections = build_fact_sections(load_fact_context(session))
         config = get_llm_config(session)
         if not config.base_url or not config.model:
             raise ResumeGenerateRunnerError("尚未配置大模型 API")
         provider = create_provider(config)
-        return job_out, profile_out, baseline, provider, fact_sections
+        frozen = self._generation_snapshot
+        if frozen is not None:
+            if not consumed_has_content(frozen.consumed):
+                raise ResumeGenerateRunnerError("个人资料为空，无法生成简历")
+            # F3 契约 §4：台账基线只带入能关联本次快照条目的正向事实。
+            baseline = build_baseline(session, source_entry_ids=snapshot_entry_ids(frozen.consumed))
+            return job_out, None, baseline, provider, None, frozen.consumed
+        # 旧 ProfileOut 路径（legacy 兼容；生产链路始终有冻结快照）。
+        baseline = build_baseline(session)
+        profile_out = to_profile_out(get_profile_detail(session))
+        fact_sections = build_fact_sections(load_fact_context(session))
+        return job_out, profile_out, baseline, provider, fact_sections, None
 
     # ===== 状态写入 =====
-    # 终态仲裁三件套的实现拆在 resume_task_state.py（RF-02 纪律：条件 UPDATE +
-    # 先到者赢）；这里保留薄方法委托，调用点与测试锚点（``runner._finalize`` 直接
-    # 调用、``ResumeGenerateRunner._claim_completed`` monkeypatch）保持不变。
+    # 终态仲裁三件套拆在 resume_task_state.py；这里保留薄委托（测试 monkeypatch 锚点）。
 
     def _log_generation_usage(
-        self,
-        task_id: int,
-        generator: Any,
-        *,
-        estimated_prompt_tokens: int | None,
+        self, task_id: int, generator: Any, *, estimated_prompt_tokens: int | None
     ) -> None:
-        """多段用量汇总日志；实现搬在 ``resume_generate_support.py``（薄委托保留锚点）。"""
+        """多段用量汇总日志（实现搬在 resume_generate_support.py，薄委托保留锚点）。"""
         log_generation_usage(task_id, generator, estimated_prompt_tokens=estimated_prompt_tokens)
 
     def _finalize(

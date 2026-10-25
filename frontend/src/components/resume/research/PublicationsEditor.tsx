@@ -96,6 +96,19 @@ export default function PublicationsEditor() {
             </Form.Item>
           </Col>
           <Col xs={24} md={12}>
+            <Form.Item
+              name={[field.name, "outcome_type"]}
+              label={rt("research.publications.outcomeType")}
+            >
+              <Input placeholder={rt("research.publications.outcomeTypePlaceholder")} />
+            </Form.Item>
+          </Col>
+          <Col xs={24} md={12}>
+            <Form.Item name={[field.name, "my_rank"]} label={rt("research.publications.myRank")}>
+              <Input placeholder={rt("research.publications.myRankPlaceholder")} />
+            </Form.Item>
+          </Col>
+          <Col xs={24} md={12}>
             <Form.Item name={[field.name, "note"]} label={rt("research.publications.note")}>
               <Input.TextArea rows={2} />
             </Form.Item>

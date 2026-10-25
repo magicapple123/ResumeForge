@@ -1,8 +1,19 @@
 // SPDX-License-Identifier: Apache-2.0
 /** 简历编辑器的分区字段表单。 */
-import { Col, Form, Input, Row } from "antd";
+import { Col, Form, Input, Row, Select } from "antd";
 import ResumeListSection from "./ResumeListSection";
 import { multilineItemProps } from "./resumeFieldUtils";
+
+/** 工作类型（A4 白名单 code：后端存 code，界面显示中文；与资料页同一组枚举）。 */
+const EXPERIENCE_KIND_OPTIONS = [
+  { value: "full_time", label: "全职" },
+  { value: "part_time", label: "兼职" },
+  { value: "contract", label: "合同" },
+  { value: "self_employed", label: "自雇" },
+  { value: "internship", label: "实习" },
+  { value: "volunteer", label: "志愿" },
+  { value: "other", label: "其他" },
+];
 
 export function EducationEditor() {
   return (
@@ -19,6 +30,12 @@ export function EducationEditor() {
         gpa: "",
         courses: [],
         achievements: [],
+        study_form: "",
+        degree_type: "",
+        department: "",
+        rank: "",
+        advisor: "",
+        research_direction: "",
       }}
     >
       {(field) => (
@@ -57,6 +74,36 @@ export function EducationEditor() {
               <Input />
             </Form.Item>
           </Col>
+          <Col xs={12} md={6}>
+            <Form.Item name={[field.name, "study_form"]} label="学习形式">
+              <Input />
+            </Form.Item>
+          </Col>
+          <Col xs={12} md={6}>
+            <Form.Item name={[field.name, "degree_type"]} label="学位类型">
+              <Input />
+            </Form.Item>
+          </Col>
+          <Col xs={24} md={12}>
+            <Form.Item name={[field.name, "department"]} label="院系">
+              <Input />
+            </Form.Item>
+          </Col>
+          <Col xs={12} md={6}>
+            <Form.Item name={[field.name, "rank"]} label="成绩排名">
+              <Input placeholder="如：前 10%" />
+            </Form.Item>
+          </Col>
+          <Col xs={24} md={9}>
+            <Form.Item name={[field.name, "advisor"]} label="导师">
+              <Input />
+            </Form.Item>
+          </Col>
+          <Col xs={24} md={15}>
+            <Form.Item name={[field.name, "research_direction"]} label="研究方向">
+              <Input />
+            </Form.Item>
+          </Col>
           <Col xs={24} md={12}>
             <Form.Item {...multilineItemProps} name={[field.name, "courses"]} label="核心课程">
               <Input.TextArea rows={3} placeholder="每行一项" />
@@ -79,7 +126,15 @@ export function ExperienceEditor() {
       title="实习/工作经历"
       name="experience"
       fillSection="experience"
-      emptyValue={{ company: "", role: "", start_date: "", end_date: "", description: [] }}
+      emptyValue={{
+        company: "",
+        role: "",
+        start_date: "",
+        end_date: "",
+        description: [],
+        team_size: "",
+        experience_kind: "",
+      }}
     >
       {(field) => (
         <Row gutter={12}>
@@ -107,6 +162,16 @@ export function ExperienceEditor() {
               <Input placeholder="2025.08" />
             </Form.Item>
           </Col>
+          <Col xs={12} md={6}>
+            <Form.Item name={[field.name, "team_size"]} label="团队规模">
+              <Input placeholder="如：8 人" />
+            </Form.Item>
+          </Col>
+          <Col xs={12} md={6}>
+            <Form.Item name={[field.name, "experience_kind"]} label="工作类型">
+              <Select allowClear options={EXPERIENCE_KIND_OPTIONS} />
+            </Form.Item>
+          </Col>
           <Col span={24}>
             <Form.Item {...multilineItemProps} name={[field.name, "description"]} label="工作内容">
               <Input.TextArea rows={5} placeholder="每行一个要点" />
@@ -124,7 +189,14 @@ export function CampusEditor() {
       title="校园经历"
       name="campus_experience"
       fillSection="campusExperience"
-      emptyValue={{ organization: "", role: "", start_date: "", end_date: "", description: [] }}
+      emptyValue={{
+        organization: "",
+        role: "",
+        start_date: "",
+        end_date: "",
+        description: [],
+        activity_type: "",
+      }}
     >
       {(field) => (
         <Row gutter={12}>
@@ -149,6 +221,11 @@ export function CampusEditor() {
           </Col>
           <Col xs={12} md={4}>
             <Form.Item name={[field.name, "end_date"]} label="结束">
+              <Input />
+            </Form.Item>
+          </Col>
+          <Col xs={24} md={8}>
+            <Form.Item name={[field.name, "activity_type"]} label="活动类型">
               <Input />
             </Form.Item>
           </Col>
@@ -177,6 +254,8 @@ export function ProjectEditor() {
         tech_stack: [],
         description: [],
         highlights: [],
+        project_size: "",
+        artifact_type: "",
       }}
     >
       {(field) => (
@@ -202,6 +281,16 @@ export function ProjectEditor() {
           </Col>
           <Col xs={12} md={4}>
             <Form.Item name={[field.name, "end_date"]} label="结束">
+              <Input />
+            </Form.Item>
+          </Col>
+          <Col xs={12} md={6}>
+            <Form.Item name={[field.name, "project_size"]} label="项目规模">
+              <Input />
+            </Form.Item>
+          </Col>
+          <Col xs={24} md={10}>
+            <Form.Item name={[field.name, "artifact_type"]} label="成果类型">
               <Input />
             </Form.Item>
           </Col>
@@ -232,7 +321,7 @@ export function SkillEditor() {
       title="专业技能"
       name="skills"
       fillSection="skills"
-      emptyValue={{ name: "", level: "" }}
+      emptyValue={{ name: "", level: "", category: "" }}
     >
       {(field) => (
         <Row gutter={12}>
@@ -250,6 +339,11 @@ export function SkillEditor() {
               <Input placeholder="熟练 / 掌握 / 了解" />
             </Form.Item>
           </Col>
+          <Col xs={24} md={12}>
+            <Form.Item name={[field.name, "category"]} label="技能分类">
+              <Input placeholder="如：编程语言 / 工具" />
+            </Form.Item>
+          </Col>
         </Row>
       )}
     </ResumeListSection>
@@ -262,7 +356,7 @@ export function AwardEditor() {
       title="荣誉奖项"
       name="awards"
       fillSection="awards"
-      emptyValue={{ name: "", date: "", description: "" }}
+      emptyValue={{ name: "", date: "", description: "", issuer: "", level: "", ratio: "" }}
     >
       {(field) => (
         <Row gutter={12}>
@@ -278,6 +372,21 @@ export function AwardEditor() {
           <Col xs={24} md={12}>
             <Form.Item name={[field.name, "date"]} label="获奖时间">
               <Input placeholder="2025.10" />
+            </Form.Item>
+          </Col>
+          <Col xs={24} md={12}>
+            <Form.Item name={[field.name, "issuer"]} label="颁发机构">
+              <Input />
+            </Form.Item>
+          </Col>
+          <Col xs={12} md={6}>
+            <Form.Item name={[field.name, "level"]} label="奖项级别">
+              <Input />
+            </Form.Item>
+          </Col>
+          <Col xs={12} md={6}>
+            <Form.Item name={[field.name, "ratio"]} label="获奖比例">
+              <Input placeholder="如：前 5%" />
             </Form.Item>
           </Col>
           <Col span={24}>

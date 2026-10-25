@@ -21,6 +21,7 @@ from .resume_layout import (
     _round,
 )
 from .resume_layout_overrides import PAGE_MARGIN_KEYS, resolve_page_margins
+from .resume_template_scalars import template_float
 from .resume_templates import (
     font_scale_spec,
     format_css,
@@ -73,15 +74,19 @@ def _effective_layout(template: str, format_config: dict | None) -> dict[str, fl
     config = validated_format_config(format_config or {})
     # 与 PDF/Word 同一个解析口径（分边支路 > page_padding > 模板默认）。
     margin_top, margin_right, margin_bottom, margin_left = resolve_page_margins(
-        config, float(defaults["padding_mm"])
+        config, template_float(defaults["padding_mm"])
     )
     line_height = config.get("line_height")
     section_gap = config.get("section_gap")
     font_adjust = config.get("font_scale_adjust")
     return {
         "page_padding": min(margin_top, margin_right, margin_bottom, margin_left),
-        "line_height": float(line_height) if line_height else float(defaults["line_height"]),
-        "section_gap": float(section_gap) if section_gap else float(defaults["section_gap"]),
+        "line_height": (
+            template_float(line_height) if line_height else template_float(defaults["line_height"])
+        ),
+        "section_gap": (
+            template_float(section_gap) if section_gap else template_float(defaults["section_gap"])
+        ),
         # 没设过系数就等于 1（渲染时 base_px 不做任何缩放）。
         "font_scale_adjust": float(font_adjust) if font_adjust else 1.0,
     }

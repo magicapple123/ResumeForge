@@ -23,9 +23,10 @@ from __future__ import annotations
 
 import logging
 import uuid
-from typing import Any
+from typing import Any, cast
 
 from sqlalchemy import func, select, update
+from sqlalchemy.engine import CursorResult
 from sqlalchemy.orm import Session
 
 from ...models.profile import UserProfile, utcnow
@@ -223,15 +224,19 @@ def update_fact(
         raise RevisionConflict(current_revision)
 
     values = {**updates, "revision": current_revision + 1, "updated_at": utcnow()}
-    result = db.execute(
-        update(ProfileFact)
-        .where(
-            ProfileFact.id == fact.id,
-            ProfileFact.revision == current_revision,
-            ProfileFact.deleted_at.is_(None),
-        )
-        .values(**values)
-        .execution_options(synchronize_session=False)
+    # 条件写必须读 `rowcount`；显式收窄成 DML 的运行时真实类型（同 document_save.py）。
+    result = cast(
+        "CursorResult[Any]",
+        db.execute(
+            update(ProfileFact)
+            .where(
+                ProfileFact.id == fact.id,
+                ProfileFact.revision == current_revision,
+                ProfileFact.deleted_at.is_(None),
+            )
+            .values(**values)
+            .execution_options(synchronize_session=False)
+        ),
     )
     if result.rowcount != 1:
         db.rollback()

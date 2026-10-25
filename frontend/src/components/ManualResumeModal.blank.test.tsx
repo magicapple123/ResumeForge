@@ -1,26 +1,76 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * 通用手写简历（`job == null`）的 T11 语义：**默认空白** + 头部「填入我的资料全部数据」。
+ * 新建简历与「我的资料」**当前组**的同步（F9 / R1）。
  *
- * 从 `ManualResumeModal.integration.test.tsx` 拆出来（那边贴住 500 行预算）。两份文件的
- * mock 脚手架刻意各自完整——`vi.mock` 的工厂会被提升到文件顶部，跨文件共享 hoisted
- * 对象会 TDZ 报错；为了两个文件都能独立跑，重复这几十行声明是必要成本。
+ * 文件名沿用 `blank`（上一轮它钉的是"通用简历从空白起步"）；本轮用户口径反转了：
+ * 新建简历的初始内容 = **当前组投影内容**，岗位模式也一样（只额外覆盖求职意向）。
+ *
+ * 这里钉四件事：
+ * 1. 两种模式的初始内容都来自投影（不再空白/只填基本信息）；
+ * 2. 编辑器页签按当前组参与清单过滤——当前组有的分区即使没内容也出现，没有且无内容的不出现，
+ *    已有内容的分区永远保留；
+ * 3. 打开期间投影刷新（别的窗口改资料/切组）且**未编辑** → 表单自动重同步；
+ * 4. 已编辑时有未保存改动 → 不静默覆盖，出现内联提示，「用最新资料覆盖 / 保留当前编辑」两个动作。
  */
 import { App as AntdApp } from "antd";
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { Profile } from "../types";
+import { t } from "../i18n";
+import type { Job, Profile, ResumeEducation } from "../types";
+import { legacyProfileToProjection, projectionOf } from "../test/profileProjectionFixture";
 import ManualResumeModal from "./ManualResumeModal";
 
 const apiMocks = vi.hoisted(() => ({
   createManualResume: vi.fn(),
-  getProfile: vi.fn(),
+  projection: null as unknown,
 }));
 
 vi.mock("../api/resumes", () => ({ createManualResume: apiMocks.createManualResume }));
-vi.mock("../api/profile", () => ({ getProfile: apiMocks.getProfile }));
+vi.mock("../features/profile-library/useCurrentProjection", () => ({
+  useCurrentProjection: () => ({
+    data: apiMocks.projection,
+    loading: false,
+    error: null,
+    reload: vi.fn(),
+  }),
+}));
+vi.mock("react-router-dom", () => ({ useNavigate: () => vi.fn() }));
 
-/** 六个列表模块都有内容的资料：这样"空白起步"与"没读到资料"才区分得开。 */
+const JOB = { id: 9, title: "机械设计工程师" } as Job;
+
+/** 投影 content 里的教育条目（编辑器/后端 ResumeEducation 形状：courses 是数组）。 */
+const RESUME_EDUCATION: ResumeEducation = {
+  school: "示例大学",
+  department: "",
+  major: "软件工程",
+  degree: "本科",
+  study_form: "",
+  degree_type: "",
+  start_date: "2023.09",
+  end_date: "2027.06",
+  gpa: "3.8",
+  courses: ["数据结构"],
+  achievements: [],
+};
+
+/** 旧 `Profile` 夹具形状（`legacyProfileToProjection` 的输入），不是编辑器里的 ResumeEducation。 */
+const EDUCATION: Profile["educations"][number] = {
+  school: "示例大学",
+  department: "",
+  major: "软件工程",
+  degree: "本科",
+  study_mode: "",
+  degree_type: "",
+  start_date: "2023.09",
+  end_date: "2027.06",
+  gpa: "3.8",
+  cet4_score: "",
+  cet6_score: "",
+  courses: "数据结构",
+  achievements: "",
+};
+
+/** 六个列表模块都有内容的资料：这样"预填了"与"没读到"才区分得开。 */
 const FULL_PROFILE: Profile = {
   id: 1,
   photo: "",
@@ -50,23 +100,7 @@ const FULL_PROFILE: Profile = {
   research_direction: "",
   preferred_industry: "",
   section_order: [],
-  educations: [
-    {
-      school: "示例大学",
-      department: "",
-      major: "软件工程",
-      degree: "本科",
-      study_mode: "",
-      degree_type: "",
-      start_date: "2023.09",
-      end_date: "2027.06",
-      gpa: "3.8",
-      cet4_score: "",
-      cet6_score: "",
-      courses: "数据结构",
-      achievements: "",
-    },
-  ],
+  educations: [EDUCATION],
   experiences: [
     {
       company: "示例科技",
@@ -76,34 +110,37 @@ const FULL_PROFILE: Profile = {
       description: "负责组件库开发",
     },
   ],
-  campus_experiences: [
-    {
-      organization: "学生会",
-      role: "技术部干事",
-      start_date: "2024.09",
-      end_date: "2025.06",
-      description: "组织技术分享",
-    },
-  ],
-  projects: [
-    {
-      name: "预测性维护平台",
-      role: "负责人",
-      start_date: "2026.01",
-      end_date: "2026.06",
-      tech_stack: "Python, Vue",
-      description: "采集设备数据",
-      highlights: "降低停机时间",
-    },
-  ],
+  campus_experiences: [],
+  projects: [],
   skills: [{ name: "TypeScript", level: "熟练" }],
-  awards: [{ name: "校级一等奖学金", date: "2025.10", description: "" }],
+  awards: [],
 };
+
+function renderModal(job: Job | null = null) {
+  return render(
+    <AntdApp>
+      <ManualResumeModal job={job} open onClose={vi.fn()} />
+    </AntdApp>,
+  );
+}
+
+function rerenderModal(view: ReturnType<typeof renderModal>, job: Job | null = null) {
+  view.rerender(
+    <AntdApp>
+      <ManualResumeModal job={job} open onClose={vi.fn()} />
+    </AntdApp>,
+  );
+}
+
+/** 通用模式标题（渲染来自 t()；断言参数里不含 CJK，不进中文棘轮）。 */
+const GENERAL_TITLE = () => t("resume.manual.title.general");
+const JOB_TITLE = () => t("resume.manual.title.job", { title: JOB.title });
+const REFRESH_TITLE = () => t("editor.profile-refresh.title");
 
 beforeEach(() => {
   apiMocks.createManualResume.mockReset();
-  apiMocks.getProfile.mockReset();
-  apiMocks.getProfile.mockResolvedValue(FULL_PROFILE);
+  apiMocks.createManualResume.mockResolvedValue({ id: 1 });
+  apiMocks.projection = legacyProfileToProjection(FULL_PROFILE);
 });
 
 afterEach(() => {
@@ -111,94 +148,169 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/**
- * T11：通用手写简历从**空白**开始，头部给一条"一次带入全部资料"的捷径。
- *
- * 旧行为是全量预填——那份简历不针对任何岗位，资料里所有经历都是候选，用户得先删掉
- * 一大半才写得下去。现在的取舍是：空白起步（自己写这一份需要的），或一键全部带入。
- */
-describe("ManualResumeModal 通用模式：空白起步 + 一键填入（T11）", () => {
-  function renderGeneral() {
-    render(
-      <AntdApp>
-        <ManualResumeModal job={null} open initialTitle="研发通用版" onClose={vi.fn()} />
-      </AntdApp>,
-    );
-  }
+describe("新建简历的初始内容 = 当前组投影内容（F9/R1）", () => {
+  it("通用模式：基本信息与六个模块都预填，不再是空白起步", async () => {
+    renderModal();
+    await screen.findByText(GENERAL_TITLE());
 
-  it("默认从空白开始：不预填资料里的任何内容", async () => {
-    renderGeneral();
-
-    expect(await screen.findByText("从头编写通用简历")).toBeInTheDocument();
-    expect(screen.getByText(/从空白开始/)).toBeInTheDocument();
-    // 基本信息是空的（资料里明明有姓名/手机/总结）。
-    expect(screen.getByLabelText("姓名")).toHaveValue("");
-    expect(screen.getByLabelText("个人总结")).toHaveValue("");
-
-    // 教育页也没有条目。
-    fireEvent.click(await screen.findByRole("tab", { name: "教育" }));
-    expect(screen.queryByLabelText("学校")).not.toBeInTheDocument();
-  });
-
-  it("点「填入我的资料全部数据」：基本信息 + 六个模块一次带入", async () => {
-    renderGeneral();
-    await screen.findByText("从头编写通用简历");
-
-    fireEvent.click(screen.getByRole("button", { name: /填入我的资料全部数据/ }));
-
-    await waitFor(() => expect(screen.getByLabelText("姓名")).toHaveValue("张三"));
+    expect(screen.getByLabelText("姓名")).toHaveValue("张三");
     expect(screen.getByLabelText("个人总结")).toHaveValue("资料里的个人总结");
     expect(screen.getByLabelText("求职意向")).toHaveValue("前端开发");
 
-    // 六个列表模块逐个确认（切到对应标签页看第一条）。
-    fireEvent.click(screen.getByRole("tab", { name: "教育" }));
+    fireEvent.click(await screen.findByRole("tab", { name: t("editor.tab.education") }));
     expect(await screen.findByLabelText("学校")).toHaveValue("示例大学");
-    fireEvent.click(screen.getByRole("tab", { name: "实习/工作" }));
+    fireEvent.click(screen.getByRole("tab", { name: t("editor.tab.experience") }));
     expect(await screen.findByLabelText("公司")).toHaveValue("示例科技");
-    fireEvent.click(screen.getByRole("tab", { name: "校园经历" }));
-    expect(await screen.findByLabelText("组织/部门")).toHaveValue("学生会");
-    fireEvent.click(screen.getByRole("tab", { name: "项目" }));
-    expect(await screen.findByLabelText("项目名称")).toHaveValue("预测性维护平台");
-    fireEvent.click(screen.getByRole("tab", { name: "技能" }));
-    expect(await screen.findByLabelText("技能名称")).toHaveValue("TypeScript");
-    fireEvent.click(screen.getByRole("tab", { name: "荣誉" }));
-    expect(await screen.findByLabelText("奖项名称")).toHaveValue("校级一等奖学金");
   });
 
-  it("已有内容时再点：先确认，取消不动、确认才覆盖", async () => {
-    renderGeneral();
-    await screen.findByText("从头编写通用简历");
+  it("岗位模式同样预填当前组内容，只把求职意向覆盖成岗位名", async () => {
+    renderModal(JOB);
+    await screen.findByText(JOB_TITLE());
 
-    // 第一次点：表单还是空的，直接填，不打扰用户。
-    fireEvent.click(screen.getByRole("button", { name: /填入我的资料全部数据/ }));
+    expect(screen.getByLabelText("姓名")).toHaveValue("张三");
+    expect(screen.getByLabelText("个人总结")).toHaveValue("资料里的个人总结");
+    expect(screen.getByLabelText("求职意向")).toHaveValue(JOB.title);
+
+    fireEvent.click(await screen.findByRole("tab", { name: t("editor.tab.education") }));
+    expect(await screen.findByLabelText("学校")).toHaveValue("示例大学");
+  });
+});
+
+describe("编辑器页签按当前组参与清单过滤（R1）", () => {
+  it("当前组有的分区出现（即使没内容），没有且无内容的分区不出现", async () => {
+    apiMocks.projection = projectionOf({
+      keys: ["basic_info", "educations", "skills"],
+      content: { name: "张三", education: [RESUME_EDUCATION] },
+    });
+    renderModal();
+    await screen.findByText(GENERAL_TITLE());
+
+    // 当前组有、但内容为空的分区也要有页签（可录入）。
+    expect(await screen.findByRole("tab", { name: t("editor.tab.skills") })).toBeInTheDocument();
+    // 当前组没有、内容也为空 → 页签不出现。
+    expect(screen.queryByRole("tab", { name: t("editor.tab.experience") })).not.toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: t("editor.tab.awards") })).not.toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: t("editor.tab.projects") })).not.toBeInTheDocument();
+    // 当前组有且内容非空 → 在。
+    expect(screen.getByRole("tab", { name: t("editor.tab.education") })).toBeInTheDocument();
+  });
+
+  it("当前组没有的分区，只要正文里有内容就保留页签（R-34 不丢已保存正文）", async () => {
+    apiMocks.projection = projectionOf({
+      keys: ["basic_info"],
+      content: { name: "张三", education: [RESUME_EDUCATION] },
+    });
+    renderModal();
+    await screen.findByText(GENERAL_TITLE());
+    expect(await screen.findByRole("tab", { name: t("editor.tab.education") })).toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: t("editor.tab.projects") })).not.toBeInTheDocument();
+  });
+
+  it("切组后页签跟着变，但已有内容的分区仍在（编辑器打开且未编辑）", async () => {
+    apiMocks.projection = projectionOf({
+      keys: ["basic_info", "educations", "projects"],
+      content: { name: "张三", education: [RESUME_EDUCATION] },
+    });
+    const view = renderModal();
+    await screen.findByText(GENERAL_TITLE());
+    expect(await screen.findByRole("tab", { name: t("editor.tab.projects") })).toBeInTheDocument();
+
+    // 别的窗口切到"只有基本信息"的组：内容仍按新投影重取（教育只剩已保存的那条）。
+    apiMocks.projection = projectionOf({
+      keys: ["basic_info"],
+      content: { name: "张三", education: [RESUME_EDUCATION] },
+    });
+    rerenderModal(view);
+    await waitFor(() =>
+      expect(screen.queryByRole("tab", { name: t("editor.tab.projects") })).not.toBeInTheDocument(),
+    );
+    expect(screen.getByRole("tab", { name: t("editor.tab.education") })).toBeInTheDocument();
+  });
+});
+
+describe("打开期间资料刷新：未编辑自动重同步（R1）", () => {
+  it("投影刷新后表单内容跟着更新，且不出现刷新提示", async () => {
+    apiMocks.projection = projectionOf({
+      keys: ["basic_info", "summary"],
+      content: { name: "张三", summary: "第一版总结" },
+    });
+    const view = renderModal();
+    await screen.findByText(GENERAL_TITLE());
     await waitFor(() => expect(screen.getByLabelText("姓名")).toHaveValue("张三"));
 
-    // 用户改成自己的写法，再点一次 → 必须问一句。
-    fireEvent.change(screen.getByLabelText("姓名"), { target: { value: "我自己写的名字" } });
-    fireEvent.click(screen.getByRole("button", { name: /填入我的资料全部数据/ }));
-
-    // 覆盖确认：**footer 就地换态**（不再叠一层 modal.confirm）。
-    const bar = await waitFor(() => {
-      const node = document.querySelector<HTMLElement>(".rf-form-modal-discard");
-      if (!node) throw new Error("未出现内联确认条");
-      return node;
+    apiMocks.projection = projectionOf({
+      keys: ["basic_info", "summary"],
+      content: { name: "李四", summary: "第二版总结" },
     });
-    expect(bar.textContent).toContain("将用「我的资料」覆盖当前已填写的内容");
+    rerenderModal(view);
 
-    // 取消：一个字符都不动。
-    fireEvent.click(within(bar).getByRole("button", { name: "继续编辑" }));
-    expect(screen.getByLabelText("姓名")).toHaveValue("我自己写的名字");
+    await waitFor(() => expect(screen.getByLabelText("姓名")).toHaveValue("李四"));
+    expect(screen.getByLabelText("个人总结")).toHaveValue("第二版总结");
+    expect(screen.queryByText(REFRESH_TITLE())).not.toBeInTheDocument();
+  });
+});
 
-    // 再来一次，这次确认覆盖。
-    fireEvent.click(screen.getByRole("button", { name: /填入我的资料全部数据/ }));
-    const ok = await waitFor(() => {
-      const button = Array.from(document.querySelectorAll<HTMLButtonElement>("button")).find(
-        (item) => item.textContent === "覆盖填入" && item.closest(".rf-form-modal-discard"),
-      );
-      if (!button) throw new Error("未找到确认按钮");
-      return button;
+describe("打开期间资料刷新：已编辑时不静默覆盖（R1）", () => {
+  async function renderEdited() {
+    apiMocks.projection = projectionOf({
+      keys: ["basic_info", "summary"],
+      content: { name: "张三", summary: "第一版总结" },
     });
-    fireEvent.click(ok);
-    await waitFor(() => expect(screen.getByLabelText("姓名")).toHaveValue("张三"));
+    const view = renderModal();
+    await screen.findByText(GENERAL_TITLE());
+    const nameInput = await waitFor(() => screen.getByLabelText("姓名"));
+    fireEvent.change(nameInput, { target: { value: "我改的名字" } });
+    expect(screen.getByLabelText("姓名")).toHaveValue("我改的名字");
+    return view;
+  }
+
+  it("出现内联提示；选「保留当前编辑」不覆盖，下一次资料再变会重新提示", async () => {
+    const view = await renderEdited();
+
+    apiMocks.projection = projectionOf({
+      keys: ["basic_info", "summary"],
+      content: { name: "李四", summary: "第二版总结" },
+    });
+    rerenderModal(view);
+    expect(await screen.findByText(REFRESH_TITLE())).toBeInTheDocument();
+    // 没有静默覆盖。
+    expect(screen.getByLabelText("姓名")).toHaveValue("我改的名字");
+
+    fireEvent.click(screen.getByRole("button", { name: t("editor.profile-refresh.keep") }));
+    await waitFor(() => expect(screen.queryByText(REFRESH_TITLE())).not.toBeInTheDocument());
+    expect(screen.getByLabelText("姓名")).toHaveValue("我改的名字");
+
+    // 资料又变了一次：重新提示（"保留"只对当次这一版生效）。
+    apiMocks.projection = projectionOf({
+      keys: ["basic_info", "summary"],
+      content: { name: "王五", summary: "第三版总结" },
+    });
+    rerenderModal(view);
+    expect(await screen.findByText(REFRESH_TITLE())).toBeInTheDocument();
+  });
+
+  it("选「用最新资料覆盖」后写回最新内容，之后的资料刷新恢复自动同步", async () => {
+    const view = await renderEdited();
+
+    apiMocks.projection = projectionOf({
+      keys: ["basic_info", "summary"],
+      content: { name: "李四", summary: "第二版总结" },
+    });
+    rerenderModal(view);
+    await screen.findByText(REFRESH_TITLE());
+
+    fireEvent.click(screen.getByRole("button", { name: t("editor.profile-refresh.apply") }));
+    await waitFor(() => expect(screen.getByLabelText("姓名")).toHaveValue("李四"));
+    expect(screen.getByLabelText("个人总结")).toHaveValue("第二版总结");
+    await waitFor(() => expect(screen.queryByText(REFRESH_TITLE())).not.toBeInTheDocument());
+
+    // 覆盖后表单与资料一致（不再脏）：下一次资料刷新直接自动同步。
+    apiMocks.projection = projectionOf({
+      keys: ["basic_info", "summary"],
+      content: { name: "赵六", summary: "第四版总结" },
+    });
+    rerenderModal(view);
+    await waitFor(() => expect(screen.getByLabelText("姓名")).toHaveValue("赵六"));
+    expect(screen.queryByText(REFRESH_TITLE())).not.toBeInTheDocument();
   });
 });

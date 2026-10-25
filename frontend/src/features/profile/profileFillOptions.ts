@@ -1,38 +1,42 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * 「从我的资料填入」的候选数据（纯函数，便于单测）。
+ * 「从我的资料填入」的候选数据（F4 §5.4，纯函数，便于单测）。
  *
- * **为什么复用 `profileToResumeContent` 而不是再写一套字段转换**：手写简历的初始值就是
- * 由它从资料映射出来的，填入的候选项必须是**同一种形状**——否则"预填进来的那条"和
- * "从下拉填进来的那条"字段名会不一样，用户会在表单里看到两条长得不同、行为也不同的
- * 记录，而两者的来源其实是同一份资料。所以这里只做"分组 + 去重 + 取标题"，映射本身
- * 一律走那一份实现。
+ * **输入是服务端投影（PaperProjectionOut），不是旧 Profile**：候选必须只来自当前组
+ * （C），而且"追加这一条"必须追加与纸面完全相同的那个 content 条目——服务端已经用
+ * `paper_content_path` 指明它在 `content` 里的位置，前端按路径取现成对象即可，
+ * **禁止按标题猜**（R-37 单源、R-16）。承载区「标签：值」也早已由服务端拼好，
+ * 前端不重新拼任何标签。
  *
- * 去重键刻意只用**能认出"是不是同一条"的最小字段集**（学校/公司/项目名…）：
- * 用户可能改过分数、补充过描述，那还是同一条经历，不该在下拉里又出现一次。
+ * 候选身份用 `entry_id`（改过分数学分、补过描述仍是同一条资料）；`matchKey` 是
+ * 形状键，只用来和"表单里已经有的条目"比对（用户可能手抄过同样的内容）。
  */
-
+import type { PaperProjectionOut, ProjectionCandidateOut } from "../profile-library/types";
 import type {
-  Profile,
   ResumeAward,
   ResumeCampusExperience,
+  ResumeContent,
   ResumeEducation,
   ResumeExperience,
   ResumeProject,
   ResumeSkill,
 } from "../../types";
-import { profileToResumeContent } from "../../utils/profileToResume";
 
-/** 下拉里的一条候选。`value` 直接就是表单里那一条的形状。 */
+/** 下拉里的一条候选。`value` 直接就是表单里那一条的形状（来自投影 content）。 */
 export interface ProfileFillItem {
-  /** 去重键，见下面各 `*FillKey`。 */
+  /** 稳定身份：当前组里那条资料的 entry_id（去重/禁用判定用）。 */
   key: string;
   /** 下拉里显示的主标题。 */
   label: string;
   /** 次要说明（时间、角色等），可为空。 */
   hint?: string;
-  /** 原样写进表单数组的那一条。 */
+  /** 原样写进表单数组的那一条（服务端投影 content 里的现成对象）。 */
   value: unknown;
+  /**
+   * 与表单现有条目比对用的形状键（详见各 `*FillKey`）。
+   * 可选：既有测试夹具只给 `key` 时退回 `key` 比对。
+   */
+  matchKey?: string;
 }
 
 /** 六个列表模块的候选 + 个人总结（基本信息里唯一能被"填入"的字段）。 */
@@ -45,10 +49,24 @@ export interface ProfileFillSources {
   awards: ProfileFillItem[];
   /** 资料里的个人总结；空串表示没写过。 */
   summary: string;
+  /**
+   * 当前组参与的大字段 key（按全局顺序，服务端 scope.participating_keys）。
+   *
+   * 与候选同源、一起返回是刻意的：编辑器页签的过滤规则就是"当前组有什么就显示什么"，
+   * 两处各取一次投影会出现"页签按新组刷新了、候选还是旧组"的中间态。缺省（旧宿主/
+   * 夹具没给）表示**还不知道当前组**——此时退回显示全部页签（旧行为），不做过滤。
+   */
+  participatingKeys?: string[];
 }
 
-/** 列表模块名：`ResumeListSection` 用它挑候选，`ResumeEditorModal` 用它做类型约束。 */
-export type ProfileFillSection = Exclude<keyof ProfileFillSources, "summary">;
+/**
+ * 列表模块名：`ResumeListSection` 用它挑候选，`ResumeEditorModal` 用它做类型约束。
+ *
+ * 显式列出而不是从 `keyof ProfileFillSources` 推导：`participatingKeys` 与 summary 一样
+ * 不是"可填入的分区"，漏排一次就会让 `PROFILE_FILL_KEYS` 多出一个没有键函数的成员。
+ */
+export type ProfileFillSection =
+  "education" | "experience" | "campusExperience" | "projects" | "skills" | "awards";
 
 /** 统一取值：非字符串（表单里可能是 undefined）当成空串，并折叠多余空白。 */
 function text(value: unknown): string {
@@ -60,7 +78,7 @@ function joinKey(parts: unknown[]): string {
   return parts.map(text).join("|");
 }
 
-/** 整条都没写内容时键里不会有任何非分隔符字符——这种条目不该出现在候选里。 */
+/** 整条都没写内容时键里不会有任何非分隔符字符。 */
 function isBlankKey(key: string): boolean {
   return key.split("|").every((part) => part.length === 0);
 }
@@ -97,7 +115,7 @@ export function awardFillKey(item: Partial<ResumeAward> | null | undefined): str
   return joinKey([item?.name, item?.date]);
 }
 
-/** 各模块的去重键实现，供 `ResumeListSection` 计算"已加入"集合时复用。 */
+/** 各模块的形状键实现，供 `ResumeListSection` 计算"已加入"集合时复用。 */
 export const PROFILE_FILL_KEYS: Record<ProfileFillSection, (item: unknown) => string> = {
   education: (item) => educationFillKey(item as Partial<ResumeEducation>),
   experience: (item) => experienceFillKey(item as Partial<ResumeExperience>),
@@ -107,85 +125,117 @@ export const PROFILE_FILL_KEYS: Record<ProfileFillSection, (item: unknown) => st
   awards: (item) => awardFillKey(item as Partial<ResumeAward>),
 };
 
-/** 日期区间文案：只写有值的那一端，两端都有时用 `~` 连接。 */
-function dateRange(start: unknown, end: unknown): string {
-  const from = text(start);
-  const to = text(end);
-  if (from && to) return `${from} ~ ${to}`;
-  return from || to;
+/** 消费分区键 → 简历正文数组字段 + 下拉模块名；语言/科研/证照/自建不进"追加一条"。 */
+const SECTION_BY_CONSUMED_KEY: Record<
+  string,
+  { contentField: keyof ResumeContent; section: ProfileFillSection }
+> = {
+  educations: { contentField: "education", section: "education" },
+  experiences: { contentField: "experience", section: "experience" },
+  campus_experiences: { contentField: "campus_experience", section: "campusExperience" },
+  projects: { contentField: "projects", section: "projects" },
+  skills: { contentField: "skills", section: "skills" },
+  awards: { contentField: "awards", section: "awards" },
+};
+
+/** 按服务端给的 paper_content_path（如 `projects/2`）取 content 里的现成条目。 */
+function contentEntryAt(content: ResumeContent, path: string): Record<string, unknown> | null {
+  const [field, indexText] = path.split("/");
+  if (!field || indexText === undefined) return null;
+  const list = (content as unknown as Record<string, unknown>)[field];
+  const index = Number(indexText);
+  if (!Array.isArray(list) || !Number.isInteger(index) || index < 0) return null;
+  const value = list[index];
+  return value !== null && typeof value === "object" ? (value as Record<string, unknown>) : null;
 }
 
-/** 用「标题 + 次要说明」把一条记录描述给人看。 */
-function describe(
-  label: string,
-  ...hints: (string | undefined)[]
-): {
-  label: string;
-  hint?: string;
-} {
-  const hint = hints.filter((item): item is string => Boolean(item && item.trim())).join(" · ");
+function describeCandidate(candidate: ProjectionCandidateOut): { label: string; hint?: string } {
+  const label = text(candidate.title);
+  const hint = text(candidate.subtitle);
   return hint ? { label, hint } : { label };
 }
 
-/** 把一组表单值转成候选：保持原顺序、按键去重、丢掉整条空白。 */
-function toFillItems<T>(
-  list: T[],
-  keyOf: (item: T) => string,
-  describeItem: (item: T) => { label: string; hint?: string },
+function buildBucket(
+  projection: PaperProjectionOut,
+  section: ProfileFillSection,
+  contentField: keyof ResumeContent,
 ): ProfileFillItem[] {
   const seen = new Set<string>();
   const items: ProfileFillItem[] = [];
-  for (const value of list) {
-    const key = keyOf(value);
-    if (isBlankKey(key) || seen.has(key)) continue;
-    seen.add(key);
-    const { label, hint } = describeItem(value);
-    items.push(hint ? { key, label, hint, value } : { key, label, value });
+  // 运行时防御：投影端点被旧 mock / 旧后端按非投影形状返回时，降级成"没有候选"，
+  // 绝不把异常抛进编辑器渲染（否则一次资料读取失败会连带打不开简历）。
+  const candidates = Array.isArray(projection?.candidates) ? projection.candidates : [];
+  for (const candidate of candidates) {
+    const rule = SECTION_BY_CONSUMED_KEY[candidate.section_key];
+    if (!rule || rule.section !== section || rule.contentField !== contentField) continue;
+    const value = contentEntryAt(projection.content, candidate.paper_content_path);
+    if (value === null) continue; // 空条目在投影里没有位置：没有可追加的东西
+    const matchKey = PROFILE_FILL_KEYS[section](value);
+    if (isBlankKey(matchKey)) continue;
+    const identity = text(candidate.entry_id) || matchKey;
+    if (seen.has(identity)) continue;
+    seen.add(identity);
+    items.push({ key: identity, ...describeCandidate(candidate), value, matchKey });
   }
   return items;
 }
 
-/**
- * 从个人资料造出各模块的填入候选。
- *
- * 每条 `value` 的形状与简历编辑器里的表单值逐字相同（都来自 `profileToResumeContent`），
- * 所以填入就是一次 `[...current, value]`，不需要任何转换或字段补全。
- */
-export function buildProfileFillSources(profile: Profile): ProfileFillSources {
-  const content = profileToResumeContent(profile);
+/** 某个来源分区（服务端 source_layout 的行）对应的一组候选；供新建流程的 13 来源面板用。 */
+export interface ProjectionSectionFill {
+  /** 简历正文字段（= 编辑器表单里的数组名）。 */
+  contentField: keyof ResumeContent;
+  section: ProfileFillSection;
+  items: ProfileFillItem[];
+}
 
+/** 按消费分区键（educations/projects/…）取该分区的可追加候选；非追加类分区返回 null。 */
+export function projectionSectionFill(
+  projection: PaperProjectionOut,
+  sectionKey: string,
+): ProjectionSectionFill | null {
+  const rule = SECTION_BY_CONSUMED_KEY[sectionKey];
+  if (!rule) return null;
   return {
-    education: toFillItems(content.education, educationFillKey, (item) =>
-      describe(
-        text(item.school) || "（未填写学校）",
-        text(item.major),
-        text(item.degree),
-        dateRange(item.start_date, item.end_date),
-      ),
-    ),
-    experience: toFillItems(content.experience, experienceFillKey, (item) =>
-      describe(
-        text(item.company) || "（未填写公司）",
-        text(item.role),
-        dateRange(item.start_date, item.end_date),
-      ),
-    ),
-    campusExperience: toFillItems(content.campus_experience, campusExperienceFillKey, (item) =>
-      describe(
-        text(item.organization) || "（未填写组织）",
-        text(item.role),
-        dateRange(item.start_date, item.end_date),
-      ),
-    ),
-    projects: toFillItems(content.projects, projectFillKey, (item) =>
-      describe(text(item.name) || "（未填写项目名）", text(item.role)),
-    ),
-    skills: toFillItems(content.skills, skillFillKey, (item) =>
-      describe(text(item.name) || "（未填写技能）", text(item.level)),
-    ),
-    awards: toFillItems(content.awards, awardFillKey, (item) =>
-      describe(text(item.name) || "（未填写奖项）", text(item.date)),
-    ),
+    contentField: rule.contentField,
+    section: rule.section,
+    items: buildBucket(projection, rule.section, rule.contentField),
+  };
+}
+
+/**
+ * 从**当前组投影**造出各模块的填入候选。
+ *
+ * 顺序沿用 candidates（= 全局顺序 + 条目 sort_order），前端不再排序；每条 `value` 都是
+ * 投影 content 里的现成对象，与纸面逐字相同，所以"填入"就是一次 `[...current, value]`。
+ * 语言条目已经按 R-72 并进 content.skills，因此 languages 候选**不再单独出现**；
+ * 科研三栏/证照/自建分区有各自的编辑面板，不进"追加一条"下拉。
+ */
+export function buildProfileFillSources(projection: PaperProjectionOut): ProfileFillSources {
+  const content = projection?.content;
+  // 参与清单与候选同源（见 participatingKeys 的注释）；旧夹具没有 scope 时保持 undefined，
+  // 让编辑器退回"不过滤"的旧行为，而不是把页签全藏掉。
+  const scopeKeys = projection?.scope?.participating_keys;
+  const participatingKeys = Array.isArray(scopeKeys) ? [...scopeKeys] : undefined;
+  if (!content) {
+    return {
+      education: [],
+      experience: [],
+      campusExperience: [],
+      projects: [],
+      skills: [],
+      awards: [],
+      summary: "",
+      ...(participatingKeys ? { participatingKeys } : {}),
+    };
+  }
+  return {
+    education: buildBucket(projection, "education", "education"),
+    experience: buildBucket(projection, "experience", "experience"),
+    campusExperience: buildBucket(projection, "campusExperience", "campus_experience"),
+    projects: buildBucket(projection, "projects", "projects"),
+    skills: buildBucket(projection, "skills", "skills"),
+    awards: buildBucket(projection, "awards", "awards"),
     summary: text(content.summary),
+    ...(participatingKeys ? { participatingKeys } : {}),
   };
 }

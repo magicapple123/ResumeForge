@@ -22,9 +22,10 @@ from ...models.job import Job
 from ...models.resume import ResumeRecord
 from ...schemas.job import JobOut
 from ...schemas.resume import ResumeContent
+from ...schemas.resume_analysis import ContentHint
 from .. import trash
 from ..profile.profile_relevance import _score_item, build_job_focus
-from ..profile.profile_service import get_profile_detail, to_profile_out
+from ..profile.profile_service import project_legacy_profile
 from .document_identity import ENTRY_FIELDS, POINT_FIELDS, is_object_id
 from .resume_visibility import is_hidden_entry
 
@@ -72,20 +73,20 @@ def _hint(
     point_id: str | None,
     text: str,
     focus,
-) -> dict[str, Any]:
+) -> ContentHint:
     evidence = [text.strip()[:160]]
     terms_line = _focus_terms_line(focus)
     if terms_line:
         evidence.append(terms_line)
-    return {
-        "kind": "low_relevance",
-        "section": section,
-        "object_id": object_id,
-        "point_field": point_field,
-        "point_id": point_id,
-        "reason": "这条内容没有命中目标岗位的关键词，可考虑精简或换一种更相关的表达",
-        "evidence": evidence[:10],
-    }
+    return ContentHint(
+        kind="low_relevance",
+        section=section,
+        object_id=object_id,
+        point_field=point_field,
+        point_id=point_id,
+        reason="这条内容没有命中目标岗位的关键词，可考虑精简或换一种更相关的表达",
+        evidence=evidence[:10],
+    )
 
 
 def _entry_point_ids(entry: Any) -> dict[str, list[str]]:
@@ -93,7 +94,7 @@ def _entry_point_ids(entry: Any) -> dict[str, list[str]]:
     return point_ids if isinstance(point_ids, dict) else {}
 
 
-def build_content_hints(db: Session, record: ResumeRecord) -> list[dict[str, Any]]:
+def build_content_hints(db: Session, record: ResumeRecord) -> list[ContentHint]:
     """当前简历的"低相关要点"提示（最多 MAX_CONTENT_HINTS 条）。
 
     判据：与岗位相关性筛选同一个打分函数，得分 0 视为"没有命中岗位关键词"。
@@ -108,7 +109,7 @@ def build_content_hints(db: Session, record: ResumeRecord) -> list[dict[str, Any
         # JobOut 会把 keywords 的历史 dict 形状归一成模型；直接拿 ORM 对象去打分会在
         # job.keywords 上碰到 dict（相关性筛选全程按 JobOut 写，这里必须走同一入口）。
         job_out = JobOut.model_validate(job)
-        profile = to_profile_out(get_profile_detail(db))
+        profile = project_legacy_profile(db)
         focus = build_job_focus(job_out, profile)
     except Exception:  # noqa: BLE001 - 提示是锦上添花，读资料失败不能拖垮版面诊断
         return []
@@ -117,7 +118,7 @@ def build_content_hints(db: Session, record: ResumeRecord) -> list[dict[str, Any
         return []
 
     content = ResumeContent.model_validate(record.content or {})
-    hints: list[dict[str, Any]] = []
+    hints: list[ContentHint] = []
     for section in ENTRY_FIELDS:
         for entry in getattr(content, section, None) or []:
             if is_hidden_entry(entry):

@@ -449,6 +449,136 @@ try {
         -Condition ("cmd.exe /d /s /c `"C:\Program Files\nodejs\npm.cmd`" run dev -- --host 127.0.0.1" -match (Get-ResumeForgeProcessPattern -Service "frontend")) `
         -Message "The frontend pattern must match the cmd.exe wrapper PowerShell builds around npm.cmd."
 
+    # --- stop.cmd 兜底：没有启动记录时也要能停掉"确实是简历通"的实例（2026-10-26） ---
+    #
+    # 记录缺失并不等于服务没在跑：实际出现过"后端在 8005 上跑着、runtime\backend.json
+    # 不存在，双击 stop.cmd 静默退出"的形态。兜底只认两个条件：命令行匹配本仓库启动特征
+    # + 监听端口自报 ResumeForge，任一不符就不动。下面同时钉住正例与反例。
+
+    $fallbackBackendPattern = Get-ResumeForgeFallbackCommandPattern -Service "backend"
+    $fallbackFrontendPattern = Get-ResumeForgeFallbackCommandPattern -Service "frontend"
+    Assert-LauncherTest `
+        -Condition ("python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8005" -match $fallbackBackendPattern) `
+        -Message "兜底的后端特征必须匹配启动器真实命令行。"
+    Assert-LauncherTest `
+        -Condition ("node C:\site\node_modules\vite\bin\vite.js --host 127.0.0.1 --port 5173 --strictPort" -match $fallbackFrontendPattern) `
+        -Message "兜底的前端特征必须匹配 Vite 自己的命令行。"
+    Assert-LauncherTest `
+        -Condition (-not ("python -m http.server 8000" -match $fallbackBackendPattern)) `
+        -Message "兜底不能把任意 Python 进程当成简历通后端。"
+    Assert-LauncherTest `
+        -Condition (-not ("node C:\site\node_modules\vite\bin\vite.js --port 5173" -match $fallbackFrontendPattern)) `
+        -Message "没有 --strictPort 的普通 Vite 项目不能被当成本仓库前端。"
+    Assert-LauncherTest `
+        -Condition (-not (Test-ResumeForgeHealthPayload -Health ([pscustomobject]@{ status = "ok"; name = "OtherApp" }))) `
+        -Message "健康检查的 name 不是 ResumeForge 时兜底必须拒绝动手。"
+    Assert-LauncherTest `
+        -Condition (Test-ResumeForgeHealthPayload -Health ([pscustomobject]@{ status = "ok"; name = "ResumeForge" })) `
+        -Message "健康检查明确自报 ResumeForge 时必须认出来。"
+
+    Assert-LauncherTest `
+        -Condition (Test-ResumeForgeFallbackOwnedByProject -ProcessChain @(
+            [pscustomobject]@{ ExecutablePath = "C:\x\python.exe"; CommandLine = "" },
+            [pscustomobject]@{ ExecutablePath = ""; CommandLine = (Join-Path $ProjectRoot "backend\app\main.py") }
+        ) -ProjectRoot $ProjectRoot) `
+        -Message "健康检查不可用时，进程来自当前项目目录必须被认作本目录的简历通。"
+    Assert-LauncherTest `
+        -Condition (-not (Test-ResumeForgeFallbackOwnedByProject -ProcessChain @(
+            [pscustomobject]@{ ExecutablePath = "C:\x\python.exe"; CommandLine = "D:\other\site\uvicorn app.main:app" }
+        ) -ProjectRoot $ProjectRoot)) `
+        -Message "其它目录的进程不能被认成本目录的简历通（否则会误停别人）。"
+    $stopScriptContent = Get-Content -LiteralPath (Join-Path $ProjectRoot "scripts\Stop-ResumeForge.ps1") -Raw -Encoding utf8
+    Assert-LauncherTest `
+        -Condition ($stopScriptContent -match 'Stop-UnrecordedResumeForgeService -Service "backend"' -and
+            $stopScriptContent -match 'Stop-UnrecordedResumeForgeService -Service "frontend"') `
+        -Message "stop.cmd 必须在记录缺失/过期时调用兜底识别（否则无记录实例停不掉）。"
+    Assert-LauncherTest `
+        -Condition ($stopScriptContent -match "SkipBackend" -and $stopScriptContent.Contains('-ProjectRoot $ProjectRoot')) `
+        -Message "兜底也必须尊重 --skip-backend（应用内退出时不能把后端一起停掉）。"
+
+    # 真实进程正例：能通过健康校验、命令行带后端特征、但没有启动记录的"假简历通"。
+    $fakeServerPath = Join-Path $RuntimeDirectory "fake-resumeforge-server.ps1"
+    $fakeServerScript = @'
+param([int]$Port, [string]$HealthName, [string]$Marker, [string]$DataDir)
+$null = $Marker
+$null = $DataDir
+$listener = New-Object System.Net.Sockets.TcpListener([System.Net.IPAddress]::Loopback, $Port)
+$listener.Start()
+while ($true) {
+    $client = $listener.AcceptTcpClient()
+    try {
+        $stream = $client.GetStream()
+        $reader = New-Object System.IO.StreamReader($stream)
+        $null = $reader.ReadLine()
+        while ($true) { $line = $reader.ReadLine(); if ($null -eq $line -or $line -eq "") { break } }
+        $body = '{"status":"ok","name":"' + $HealthName + '"}'
+        $bytes = [System.Text.Encoding]::UTF8.GetBytes($body)
+        $header = "HTTP/1.1 200 OK" + [char]13 + [char]10 + "Content-Type: application/json" + [char]13 + [char]10 + "Content-Length: $($bytes.Length)" + [char]13 + [char]10 + "Connection: close" + [char]13 + [char]10 + [char]13 + [char]10
+        $headerBytes = [System.Text.Encoding]::ASCII.GetBytes($header)
+        $stream.Write($headerBytes, 0, $headerBytes.Length)
+        $stream.Write($bytes, 0, $bytes.Length)
+        $stream.Flush()
+    }
+    finally { $client.Close() }
+}
+'@
+    Set-Content -LiteralPath $fakeServerPath -Encoding utf8 -Value $fakeServerScript
+
+    $getFreePort = {
+        $probe = New-Object System.Net.Sockets.TcpListener([System.Net.IPAddress]::Loopback, 0)
+        $probe.Start()
+        $freePort = ([System.Net.IPEndPoint]$probe.LocalEndpoint).Port
+        $probe.Stop()
+        return $freePort
+    }
+    $fakePort = & $getFreePort
+    $fakeProcess = Start-Process -FilePath "powershell.exe" -ArgumentList @(
+        "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $fakeServerPath,
+        "-Port", "$fakePort", "-HealthName", "ResumeForge", "-Marker", "uvicorn app.main:app"
+    ) -WindowStyle Hidden -PassThru
+    $fakeReady = Wait-ForCondition -Condition { Test-TcpPortInUse -Port $fakePort } -TimeoutSeconds 15
+    Assert-LauncherTest -Condition $fakeReady -Message "测试用假简历通服务没有按时监听端口 $fakePort。"
+    $fallbackStopped = Stop-UnrecordedResumeForgeService -Service "backend" -Ports @($fakePort)
+    $fakeGone = Wait-ForCondition -Condition {
+        $fakeProcess.HasExited -or -not (Test-TcpPortInUse -Port $fakePort)
+    } -TimeoutSeconds 15
+    Assert-LauncherTest `
+        -Condition ($fallbackStopped -and $fakeGone) `
+        -Message "没有启动记录但命令行+健康检查都匹配的简历通后端必须被兜底停掉。"
+    Stop-StartedProcess -Process $fakeProcess
+
+    # 正例（启动中/卡死形态）：健康检查自报别的名字、但进程来自当前目录 → 仍要停。
+    # 覆盖用户实际遇到的时序：端口已被拉起、健康检查还没就绪时点 stop，旧实现会"什么都没发现"。
+    $startingPort = & $getFreePort
+    $startingProcess = Start-Process -FilePath "powershell.exe" -ArgumentList @(
+        "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $fakeServerPath,
+        "-Port", "$startingPort", "-HealthName", "OtherApp", "-Marker", "uvicorn app.main:app",
+        "-DataDir", ('"' + (Join-Path $ProjectRoot "backend") + '"')
+    ) -WindowStyle Hidden -PassThru
+    $null = Wait-ForCondition -Condition { Test-TcpPortInUse -Port $startingPort } -TimeoutSeconds 15
+    $startingStopped = Stop-UnrecordedResumeForgeService -Service "backend" -Ports @($startingPort) -ProjectRoot $ProjectRoot -IdentityWaitSeconds 1
+    $startingGone = Wait-ForCondition -Condition {
+        $startingProcess.HasExited -or -not (Test-TcpPortInUse -Port $startingPort)
+    } -TimeoutSeconds 15
+    Assert-LauncherTest `
+        -Condition ($startingStopped -and $startingGone) `
+        -Message "健康检查暂时不可用但进程来自当前目录时，兜底仍必须停掉它（启动窗口内 stop 不能失效）。"
+    Stop-StartedProcess -Process $startingProcess
+    # 反例：命令行带同样特征、但健康检查自报别的应用 → 一个进程都不能动。
+    $otherHealthPort = & $getFreePort
+    $otherHealthProcess = Start-Process -FilePath "powershell.exe" -ArgumentList @(
+        "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $fakeServerPath,
+        "-Port", "$otherHealthPort", "-HealthName", "OtherApp", "-Marker", "uvicorn app.main:app"
+    ) -WindowStyle Hidden -PassThru
+    $null = Wait-ForCondition -Condition { Test-TcpPortInUse -Port $otherHealthPort } -TimeoutSeconds 15
+    $otherStopped = Stop-UnrecordedResumeForgeService -Service "backend" -Ports @($otherHealthPort)
+    $otherAlive = $null -ne (Get-Process -Id $otherHealthProcess.Id -ErrorAction SilentlyContinue)
+    Assert-LauncherTest `
+        -Condition (-not $otherStopped -and $otherAlive) `
+        -Message "健康检查不是 ResumeForge 时兜底绝不能停任何进程（误杀风险）。"
+    Stop-StartedProcess -Process $otherHealthProcess
+
+
     # --- failure messages must carry the cause ---
 
     # A real report: an incomplete zip made the backend die at import time, and the
@@ -622,8 +752,9 @@ try {
     # 停止链面对"没有 node 进程"必须安静成功：升级用户（旧版有 vite、新版没有）
     # 两个方向都不能让 stop.cmd 变红。记录缺失时它应当直接返回。
     $missingRecordError = $null
+    $missingRecordStatus = $null
     try {
-        Stop-RecordedProcess -DisplayName "frontend" -RecordPath (Join-Path $RuntimeDirectory "missing-record.json") -CommandPattern "npm"
+        $missingRecordStatus = Stop-RecordedProcess -DisplayName "frontend" -RecordPath (Join-Path $RuntimeDirectory "missing-record.json") -CommandPattern "npm"
     }
     catch {
         $missingRecordError = $_.Exception.Message
@@ -631,6 +762,17 @@ try {
     Assert-LauncherTest `
         -Condition ($null -eq $missingRecordError) `
         -Message "没有运行记录时 Stop-RecordedProcess 必须安静成功（升级路径上 stop.cmd 不能报错）。"
+    Assert-LauncherTest `
+        -Condition ($missingRecordStatus -eq "missing") `
+        -Message "没有记录时必须返回 missing 状态，stop.cmd 才能据此决定是否走无记录兜底。"
+
+    # 记录指向已退出的进程：清理记录并返回 not-running，随后同样允许走兜底。
+    $deadRecordPath = Join-Path $RuntimeDirectory "dead-backend.json"
+    Set-Content -LiteralPath $deadRecordPath -Encoding utf8 -Value '{"process_id": 999999, "started_at_unix": 1}'
+    $deadRecordStatus = Stop-RecordedProcess -DisplayName "backend" -RecordPath $deadRecordPath -CommandPattern "uvicorn"
+    Assert-LauncherTest `
+        -Condition ($deadRecordStatus -eq "not-running" -and -not (Test-Path -LiteralPath $deadRecordPath)) `
+        -Message "记录指向已死进程时必须返回 not-running 并删除过期记录。"
 
     # ---- 一台什么都没装的电脑：引导分支 -----------------------------------------
     # 覆盖参与判断的函数，断言"找不到 Python / Node 时"走的是哪条路。**真下载**由

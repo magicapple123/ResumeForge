@@ -27,28 +27,19 @@ import { App, Form, type FormInstance, type TabsProps } from "antd";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ResumeContent } from "../../types";
 import { t } from "../../i18n";
-import { contentSignature } from "../../utils/contentSignature";
 import { hasAnyResumeContent } from "../../utils/profileToResume";
 import { summarizeDraftDiff, type DraftDiffEntry } from "../../utils/draftDiff";
 import { formatErrorGuidance } from "../../api/errorGuidance";
 import type { ProfileFillSources } from "../../features/profile/profileFillOptions";
 import { useFormShortcutHistory } from "../../features/shortcuts/useFormShortcutHistory";
-import ResumeBasicInfoTab from "../resume/ResumeBasicInfoTab";
-import { researchTabItems } from "../resume/research/ResearchTabs";
 import { stripEmptyResearch } from "../../features/resume-research/real";
 import { useBeforeUnloadGuard } from "../resume/useBeforeUnloadGuard";
-import {
-  AwardEditor,
-  CampusEditor,
-  EducationEditor,
-  ExperienceEditor,
-  ProjectEditor,
-  SkillEditor,
-} from "./ResumeSectionEditors";
 import { scrollAndFocusEditorField } from "./editorFieldScroll";
+import { buildResumeEditorTabItems, tabContentPresenceMask } from "./resumeEditorTabs";
 import type { ProfileFillContextValue } from "./profileFillContext";
 import { resolveEditorTarget } from "./ResumeEditorTarget";
 import { useEditorDraftBar, type EditorPendingAction } from "./useEditorDraftBar";
+import { useEditorContentSync } from "./useEditorContentSync";
 
 /** 编辑器的宿主无关配置。字段语义见设计 §3.1。 */
 export interface ResumeEditorPanelOptions {
@@ -69,6 +60,13 @@ export interface ResumeEditorPanelOptions {
   pickTarget?: { path: string; nonce: number } | null;
   fillSources?: ProfileFillSources | null;
   entryFill?: boolean;
+  /**
+   * 内容变化且表单有未保存改动时**不静默覆盖**，改为暴露 contentRefreshPending 让界面问一句。
+   *
+   * 只给"新建简历"打开：那里的 content 来自当前组投影，别的窗口改资料/切组会直接换一份；
+   * 编辑已保存简历时 content 是服务端刚存下的正文，本来就该覆盖。
+   */
+  deferRefreshWhenDirty?: boolean;
   fillAll?: () => ResumeContent;
   /** 宿主负责 PATCH + 重渲染；resolve 即已落库。 */
   onSave: (content: ResumeContent) => Promise<void>;
@@ -96,7 +94,7 @@ export interface ResumeEditorPanelOptions {
    * 草稿作废：右栏回落到宿主那一版 html。
    *
    * **三个调用点缺一不可**（漏一处就是"存完预览闪回旧内容"，设计 §7 R2）：
-   * 1. 内容签名变化的重填（`form.setFieldsValue(syncedContent)` 那条 effect）；
+   * 1. 内容签名变化的重填（`useEditorContentSync` 里那条 `form.setFieldsValue` effect）；
    * 2. 放弃修改（`handleDiscard`）；
    * 3. 保存成功（`handleFinish`）。
    */
@@ -108,6 +106,12 @@ export interface ResumeEditorPanelOptions {
 export interface ResumeEditorPanelApi {
   dirty: boolean;
   saving: boolean;
+  /** 资料刷新到了，但表单有未保存改动所以没有覆盖（界面据此给两个动作，见下）。 */
+  contentRefreshPending: boolean;
+  /** 刷新提示的「用最新资料覆盖」：清脏 + 清草稿 + 用最新资料回填表单。 */
+  applyLatestContent: () => void;
+  /** 刷新提示的「保留当前编辑」：收起提示，保留未保存的输入。 */
+  dismissContentRefresh: () => void;
   confirming: EditorPendingAction;
   draftPending: { values: Record<string, unknown>; savedAt: number } | null;
   /**
@@ -173,6 +177,7 @@ export function useResumeEditorPanel(options: ResumeEditorPanelOptions): ResumeE
     draftScopeKey,
     fillSources,
     entryFill = true,
+    deferRefreshWhenDirty = false,
     fillAll,
     onSave,
     onExit,
@@ -209,6 +214,8 @@ export function useResumeEditorPanel(options: ResumeEditorPanelOptions): ResumeE
   );
   /** 清草稿的稳定入口（见 `handleDiscard` 里的说明：绕开 onDiscard ↔ clearDraft 的循环）。 */
   const clearDraftRef = useRef<() => void>(() => {});
+  /** 资料刷新提示里点「用最新资料覆盖」时清 sessionStorage 草稿（走 ref，不等 draftBar 初始化）。 */
+  const clearDraftForContentRefresh = useCallback(() => clearDraftRef.current(), []);
   // 草稿（B6）只把受控值递进去：作用域、防抖写入、"点了才应用"全在 `useEditorDraftBar`。
   const watched = Form.useWatch<ResumeContent>([], form) as ResumeContent | undefined;
   // R5：撤回/恢复作用于这份表单，保存与「保存内容」同走 `form.submit()`。
@@ -323,71 +330,40 @@ export function useResumeEditorPanel(options: ResumeEditorPanelOptions): ResumeE
     };
   }, [applyFillAll, draftBar, fillAll, form]);
 
-  // Compiler 规范：随 active/内容/initialTarget 变化的回填用渲染期守卫式调整；
-  // 表单实例写入与滚动聚焦的定时器副作用留在 effect。
-  //
-  // 判据是**内容签名**而不是 `content` 的引用：宿主每换一次 detail（版式 PATCH、AI 修订、
-  // 采纳建议、收藏、备注……）都会传下一个 JSON 重新解析出来的新对象，正文却可能一个字都
-  // 没变。按引用比较会让守卫与回填 effect 一起命中，把用户还没保存的正文覆盖成服务端那份。
-  const contentSig = useMemo(() => (content ? contentSignature(content) : ""), [content]);
-  const [prevSync, setPrevSync] = useState<{
-    active: boolean;
-    contentSig: string;
-    initialTarget: string | null | undefined;
-  } | null>(null);
-  /**
-   * 真正回填进表单的那份内容：只在"正文真的换了"（签名变）或 `active / initialTarget` 变了
-   * 时才更新。
-   *
-   * 回填 effect 的依赖因此可以按签名写：引用换了但正文没变时 effect **不重跑**，用户没保存
-   * 的输入不会被冲掉；而 effect 里读到的仍是当下这份 `content`，不是被签名掩盖的旧值。
-   */
-  const [syncedContent, setSyncedContent] = useState<ResumeContent | null>(content);
-  if (
-    prevSync === null ||
-    prevSync.active !== active ||
-    prevSync.contentSig !== contentSig ||
-    prevSync.initialTarget !== initialTarget
-  ) {
-    setPrevSync({ active, contentSig, initialTarget });
-    setSyncedContent(content);
+  // 外部内容 → 表单的同步（整份回填 / 脏值保护 / 资料刷新提示）在
+  // `useEditorContentSync`：判据用内容签名而不是对象引用，细节见那个文件。
+  const contentSync = useEditorContentSync({
+    active,
+    content,
+    initialTarget,
+    dirty,
+    deferRefreshWhenDirty,
+    form,
+    onApplyLatest: clearDraftForContentRefresh,
+    onDraftReset,
+    resetFormHistory,
+  });
+  if (contentSync.freshLoad) {
+    // 打开 / 换目标：整份重载，清脏并按目标切页签（与搬迁前的渲染期守卫逐条对应）。
     if (active && content) {
       setDirty(false);
       const target = initialTarget ? resolveEditorTarget(initialTarget) : null;
       setActiveTab(target?.tab ?? "basic");
     }
+  } else if (contentSync.resynced && active) {
+    // 正文被资料/服务端整份替换：未保存标记作废（内容已经是最新的那份）。页签不跳——
+    // 用户正在看的那一栏不该因为一次后台刷新被顶回基本信息。
+    setDirty(false);
   }
 
   // 面板开着且没保存的修改还在时，挂 beforeunload：刷新/关闭浏览器出原生确认，
   // 不再静默丢稿。实现在 `resume/useBeforeUnloadGuard`。
   useBeforeUnloadGuard(active && dirty);
 
-  useEffect(() => {
-    if (!active || !syncedContent) return;
-    form.setFieldsValue(syncedContent);
-    // 表单被服务端内容覆盖了 → 草稿通道必须作废（R2 第 1 处）。放在这条 effect 里而不是
-    // 上面那个渲染期守卫里：守卫是在 render 阶段跑的，从那里触发 store 通知会让别的组件
-    // 在本次渲染还没结束时就 setState（React 会警告并可能丢更新）。
-    onDraftReset?.();
-    // 换了/重开了这份简历：历史清空，以刚载入的内容为基线（撤回不该跨简历生效）。
-    resetFormHistory();
-    const target = initialTarget ? resolveEditorTarget(initialTarget) : null;
-    if (!target || target.name.length === 0) return;
-    // 滚动 + 聚焦的实现在 `editorFieldScroll`：与"点纸面定位"共用同一条，
-    // 两个入口的"滚几次、什么时候聚焦"才不会各自漂。
-    return scrollAndFocusEditorField(form, target.name);
-  }, [active, form, initialTarget, onDraftReset, resetFormHistory, syncedContent]);
-
   /*
-   * 「点纸面字段 → 定位输入框」（制作台专用）。
-   *
-   * 与上面那条 effect 分开，而且是**必须分开**：上面那条同时负责"把服务端内容回填进表单"，
-   * 复用它就意味着用户每点一次纸面，中栏里还没保存的改动就被服务端那份覆盖一次。
-   *
-   * 切标签页这一步放在**渲染期守卫**里（与本文件其它"外部信号变了就换态"同一写法）：
-   * 在 effect 里 setState 只会多一轮级联渲染，而标签页必须**先**切过去，字段才挂得上、
-   * 才滚得到。`{ path, nonce }` 而不是裸路径：同一条路径连点两次时对象引用也会变，
-   * 定位因此会重跑（只比路径的话第二次点击毫无反应）。
+   * 「点纸面字段 → 定位输入框」（制作台专用）。与上面的内容同步**必须分开**：复用那条
+   * 会让"点一下纸面"把中栏未保存的改动覆盖掉。切页签放渲染期守卫里（标签页必须先切过去
+   * 字段才挂得上）；`{ path, nonce }` 让同一条路径连点两次也重新定位。
    */
   const [prevPick, setPrevPick] = useState<{ path: string; nonce: number } | null>(null);
   if (prevPick !== pickTarget) {
@@ -402,29 +378,44 @@ export function useResumeEditorPanel(options: ResumeEditorPanelOptions): ResumeE
     return scrollAndFocusEditorField(form, target.name);
   }, [active, form, pickTarget]);
 
+  // 页签装配拆到 `resumeEditorTabs`（本文件贴着 500 行预算）：key 与 content 字段名逐字一致。
+  // 按**当前组参与清单**过滤（F9/R1，参与清单与候选同源）；已有内容的分区另行保留。
+  const participatingKeys = fillSources?.participatingKeys;
+  const customSectionCount = content?.custom_sections?.length ?? 0;
+  // 正文 + 表单当前值的"有没有内容"掩码：用户刚加、还没保存的分区也要保留页签。
+  // 掩码是字符串，打字时不变 → 页签不会逐键重建（依赖按它写）。
+  const contentPresenceMask = useMemo(
+    () => tabContentPresenceMask(content, watched),
+    [content, watched],
+  );
   const tabItems = useMemo<TabsProps["items"]>(
-    () => [
-      {
-        key: "basic",
-        label: t("editor.tab.basic"),
-        children: <ResumeBasicInfoTab summarySource={summarySource} onFillSummary={fillSummary} />,
-      },
-      { key: "education", label: t("editor.tab.education"), children: <EducationEditor /> },
-      { key: "experience", label: t("editor.tab.experience"), children: <ExperienceEditor /> },
-      { key: "campus", label: t("editor.tab.campus"), children: <CampusEditor /> },
-      { key: "projects", label: t("editor.tab.projects"), children: <ProjectEditor /> },
-      { key: "skills", label: t("editor.tab.skills"), children: <SkillEditor /> },
-      { key: "awards", label: t("editor.tab.awards"), children: <AwardEditor /> },
-      // W14 科研三页签（论文 / 科研项目 / 专利）：key 与 content 字段名逐字一致，
-      // 由 ResearchTabs 一处定义；纸面点击映射见 ResumeEditorTarget.TAB_BY_SECTION。
-      ...researchTabItems(),
-    ],
-    // 原「写作增强」页签已搬到右键菜单（2026-10-24）：选中一段文字右键即可，
-    // 不必"复制 → 切页签 → 粘贴"三步。入口见 `features/resume-writing/ResumeWritingModal`。
+    () =>
+      buildResumeEditorTabItems({
+        summarySource,
+        fillSummary,
+        customSectionCount,
+        participatingKeys,
+        content,
+        contentPresenceMask,
+      }),
     // summarySource 决定「填入个人总结」是否出现；fillSummary 已用 useCallback 固定
     // （它自己依赖 setFormValue），只在值真的变时才重建标签页。
-    [summarySource, fillSummary],
+    [
+      summarySource,
+      fillSummary,
+      customSectionCount,
+      participatingKeys,
+      content,
+      contentPresenceMask,
+    ],
   );
+  /**
+   * 过滤后当前页签可能已经不在清单里（切组把这一栏藏了）：回落到基本信息，别让 Tabs
+   * 的 activeKey 指着一个不存在的项（那会渲染出一块空白）。
+   */
+  const visibleActiveTab = (tabItems ?? []).some((item) => item?.key === activeTab)
+    ? activeTab
+    : "basic";
 
   const handleFinish = async (values: ResumeContent) => {
     const merged = mergePartial(values);
@@ -465,13 +456,22 @@ export function useResumeEditorPanel(options: ResumeEditorPanelOptions): ResumeE
     [form, formHistory, onDraftContent],
   );
 
+  /** 「用最新资料覆盖」= 清脏 + 清草稿 + 用最新内容回填（清草稿与回填在 contentSync 里）。 */
+  const applyLatestContent = useCallback(() => {
+    setDirty(false);
+    contentSync.applyLatest();
+  }, [contentSync]);
+
   return {
     dirty,
     saving,
+    contentRefreshPending: contentSync.refreshPending,
+    applyLatestContent,
+    dismissContentRefresh: contentSync.dismissRefresh,
     confirming: draftBar.confirming,
     draftPending: draftBar.draftPending,
     draftChanges,
-    activeTab,
+    activeTab: visibleActiveTab,
     setActiveTab,
     tabItems,
     form,

@@ -11,6 +11,7 @@
 
 import { describe, expect, it } from "vitest";
 import type { Profile } from "../../types";
+import { legacyProfileToProjection } from "../../test/profileProjectionFixture";
 import {
   awardFillKey,
   buildProfileFillSources,
@@ -20,6 +21,11 @@ import {
   projectFillKey,
   skillFillKey,
 } from "./profileFillOptions";
+
+/** 旧资料夹具 → 投影（测试兼容层）：被测函数输入是服务端投影（F4 §5.4）。 */
+function sourcesOf(profile: Profile) {
+  return buildProfileFillSources(legacyProfileToProjection(profile));
+}
 
 function profile(overrides: Partial<Profile> = {}): Profile {
   return {
@@ -83,7 +89,7 @@ function education(overrides: Record<string, string> = {}) {
 
 describe("buildProfileFillSources", () => {
   it("六个模块都从资料映射出来，value 的形状与表单一致", () => {
-    const sources = buildProfileFillSources(
+    const sources = sourcesOf(
       profile({
         educations: [education()],
         experiences: [
@@ -156,7 +162,7 @@ describe("buildProfileFillSources", () => {
   });
 
   it("同一条经历重复时不出现两次", () => {
-    const sources = buildProfileFillSources(
+    const sources = sourcesOf(
       profile({
         educations: [
           education(),
@@ -181,15 +187,18 @@ describe("buildProfileFillSources", () => {
       }),
     );
 
-    expect(sources.education).toHaveLength(1);
-    expect(sources.skills).toHaveLength(1);
-    // 保留资料里的第一条（后出现的重复被丢掉，而不是覆盖前面的）。
+    // 去重键是资料条目的 entry_id（改过分数仍是同一条）；资料里**两条独立条目**即使
+    // 文字相同也各是一条——这正是"按身份而不是按标题猜"的口径，改一条不会影响另一条。
+    expect(sources.education).toHaveLength(2);
+    expect(sources.skills).toHaveLength(2);
+    expect(new Set(sources.education.map((item) => item.key)).size).toBe(2);
+    expect(sources.education[0].matchKey).toBe(sources.education[1].matchKey);
     expect(sources.education[0].value).toMatchObject({ gpa: "3.8" });
     expect(sources.skills[0].value).toMatchObject({ level: "熟练" });
   });
 
   it("同名奖项按日期区分：不同届各留一条", () => {
-    const sources = buildProfileFillSources(
+    const sources = sourcesOf(
       profile({
         awards: [
           { name: "一等奖学金", date: "2023.10", description: "" },
@@ -206,7 +215,7 @@ describe("buildProfileFillSources", () => {
   });
 
   it("资料为空时每个模块都是空数组，个人总结是空串", () => {
-    const sources = buildProfileFillSources(profile({ summary: "   " }));
+    const sources = sourcesOf(profile({ summary: "   " }));
     expect(sources.education).toEqual([]);
     expect(sources.experience).toEqual([]);
     expect(sources.campusExperience).toEqual([]);
@@ -217,13 +226,13 @@ describe("buildProfileFillSources", () => {
   });
 
   it("整条空白的条目不会成为候选", () => {
-    const sources = buildProfileFillSources(
+    const sources = sourcesOf(
       profile({
         educations: [education({ school: "", major: "", start_date: "", end_date: "" })],
       }),
     );
-    // 只有绩点/课程而没有学校专业时间的条目，被 profileToResumeContent 的 hasText 过滤规则
-    // 保留（它有内容），但键是全空的——这里按"无法识别"丢掉，避免下拉里出现一条空行。
+    // 只有绩点/课程而没有学校专业时间的条目：形状键是全空的——按"无法识别"丢掉，
+    // 避免下拉里出现一条空行。
     expect(sources.education).toEqual([]);
   });
 });

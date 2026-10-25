@@ -3,8 +3,14 @@
 
 import pytest
 from app.models.job import JOB_STATUS_OPEN, Job
-from app.models.profile import UserProfile
 from app.schemas.setting import LLMConfig
+from app.services.profile.entry_store import upsert_entry
+
+
+def _seed_profile(db_session) -> None:
+    """资料自 F2 起落在新模型：批量匹配读全量新资料（旧 user_profile 已退役）。"""
+    upsert_entry(db_session, "basic_info", values={"basic_info.name": "张示例"})
+    upsert_entry(db_session, "summary", values={"summary.content": "Python 后端开发"})
 
 
 def _job(db_session, title: str, description: str, requirements: str) -> Job:
@@ -22,8 +28,7 @@ def _job(db_session, title: str, description: str, requirements: str) -> Job:
 
 
 def test_local_batch_returns_sorted_items_and_keeps_a_history_record(client, db_session):
-    db_session.add(UserProfile(name="张示例", summary="Python 后端开发"))
-    db_session.commit()
+    _seed_profile(db_session)
     first = _job(db_session, "后端开发", "负责 Python 服务开发", "熟悉 Python；本科及以上")
     second = _job(db_session, "产品助理", "负责用户访谈与需求整理", "具备沟通能力")
 
@@ -65,8 +70,7 @@ def test_batch_requires_profile_or_resume(client, db_session):
 
 
 def test_batch_missing_job_returns_404(client, db_session):
-    db_session.add(UserProfile(name="张示例"))
-    db_session.commit()
+    _seed_profile(db_session)
 
     response = client.post("/api/jobs/match-batches", json={"job_ids": [999999]})
 

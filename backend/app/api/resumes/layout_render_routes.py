@@ -235,9 +235,7 @@ def render_resume(payload: ResumeRenderRequest, db: Session = Depends(get_db)):
 
 
 @router.post("/{resume_id}/pagination/report")
-def pagination_report(
-    resume_id: int, payload: PreviewPdfRequest, db: Session = Depends(get_db)
-):
+def pagination_report(resume_id: int, payload: PreviewPdfRequest, db: Session = Depends(get_db)):
     """分页报告（W08 §3.6）：复用真实 PDF 渲染的绘制日志，回答页数/截断定位/手动分页。
 
     与精确预览**同一条边界**：可以带未保存正文（不落库、不冻结交付、不触发 AI），

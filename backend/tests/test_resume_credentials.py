@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-"""A4 资格证照栏目与扩展可选字段：序列化不变性、往返、身份、锁、六格式、模板与质量链路。
+"""A4 证书资质栏目与扩展可选字段：序列化不变性、往返、身份、锁、六格式、模板与质量链路。
 
 **硬要求**（契约 §4）：旧记录没有 credentials / public_url / artifact_type /
 experience_kind 这些键 → 序列化后也**不出现键**，否则所有历史交付记录的
@@ -302,8 +302,8 @@ def test_credential_status_labels_never_claim_a_valid_qualification():
 
 
 def test_credential_and_new_field_labels_are_localized():
-    assert section_title("credentials", "zh-CN") == "资格证照"
-    assert section_title("credentials", "en-US") == "Certifications"
+    assert section_title("credentials", "zh-CN") == "证书资质"
+    assert section_title("credentials", "en-US") == "Certifications & Qualifications"
     assert experience_kind_text("contract", "zh-CN") == "合同制"
     assert experience_kind_text("contract", "en-US") == "Contract"
     assert experience_kind_text("bogus", "zh-CN") == ""
@@ -347,7 +347,7 @@ def test_completeness_flags_unfinished_credential_fields():
     data = _content()
     data["credentials"][0]["issuer"] = "颁发机构【待补：机构全称】"
     found = find_incomplete(ResumeContent.model_validate(data))
-    assert any("资格证照" in message and "颁发机构" in message for message in found)
+    assert any("证书资质" in message and "颁发机构" in message for message in found)
 
 
 def test_pagination_domain_accepts_credentials_section():
@@ -391,8 +391,8 @@ def test_redact_masks_credential_name_and_issuer():
 def test_preflight_maps_credential_completeness_to_section():
     from app.services.resume.preflight_rules_content import _section_for
 
-    assert _section_for("资格证照「注册会计师」 颁发机构 里还有「【待补】」") == "credentials"
-    assert _section_for("论文「论文 A」 题目 里还有「【待补】」") == "publications"
+    assert _section_for("证书资质「注册会计师」 颁发机构 里还有「【待补】」") == "credentials"
+    assert _section_for("学术成果「论文 A」 题目 里还有「【待补】」") == "publications"
 
 
 # ===== 7. 长 CV 不被旧 3 页校验误拦（A4 §8.6）=====

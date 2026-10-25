@@ -2,7 +2,8 @@
 """W19 交付原件归档：export_archive/ 资产目录 + resume_export_artifact 行。
 
 - 字节落数据集资产目录 export_archive/（ASSET_CATEGORIES 已登记，进备份）；
-- disk_name = sha256 前缀 + 安全化文件名，**不使用**用户命名模板直接做磁盘名；
+- disk_name = sha256 前缀 + 白名单扩展名，**只由服务端侧的值构成**（用户文件名仅存
+  DB 展示列，不进路径）；
 - 显式删除（先删文件再删行），永不自动清理；每个简历上限 20 份，超限拒绝新增；
 - 隐私：不写正文日志、导出响应头不带路径；删除前校验路径在 export_archive/ 内。
 """
@@ -11,6 +12,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import re
 from pathlib import Path
 from typing import Any
 
@@ -25,7 +27,6 @@ from ...models.resume_export import (
     ResumeExportArtifact,
 )
 from ..data_backup.asset_categories import ASSET_CATEGORIES
-from ..data_backup.asset_safety import safe_asset_name
 from .document_provenance import canonical_fingerprint
 from .resume_delivery import canonical_content_sha256
 
@@ -44,13 +45,18 @@ def archive_root(bind: Any) -> Path:
     return Path(database_path(bind)).parent / ARCHIVE_DIRNAME
 
 
-def _safe_disk_name(content: bytes, filename: str) -> str:
-    digest = hashlib.sha256(content).hexdigest()
-    safe = safe_asset_name(filename, ARCHIVE_DIRNAME)
-    while ".." in safe:
-        safe = safe.replace("..", ".")
-    safe = safe.strip(". ") or "artifact"
-    return f"{digest[:16]}-{safe}"[:128]
+def _safe_disk_name(content: bytes, export_format: str) -> str:
+    """磁盘名只由**服务端侧**的值构成：内容 sha256 前缀 + 白名单扩展名。
+
+    用户文件名（可能含任意字符）只存 DB 的 ``filename`` 列做展示，不进任何路径——
+    路径构造点与用户输入没有拼接关系，path-injection 没有可追踪的污点流；扩展名
+    对 ``export_format`` 走 ``[a-z0-9]{1,8}`` 白名单，其余一律 ``bin``。内容寻址
+    （同一份字节 + 同一格式 → 同一个盘上文件）由 sha256 保证，去重语义不变。
+    """
+    digest = hashlib.sha256(content).hexdigest()[:16]
+    normalized = export_format.strip().lower()
+    ext = normalized if re.fullmatch(r"[a-z0-9]{1,8}", normalized) else "bin"
+    return f"{digest}.{ext}"
 
 
 def list_artifacts(db: Session, resume_id: int) -> list[ResumeExportArtifact]:
@@ -87,7 +93,7 @@ def save_artifact(
         raise ValueError("归档数量已达上限，请先删除旧原件再归档")
     root = archive_root(db.get_bind())
     root.mkdir(parents=True, exist_ok=True)
-    disk_name = _safe_disk_name(content, filename)
+    disk_name = _safe_disk_name(content, export_format)
     target = (root / disk_name).resolve()
     if root.resolve() not in target.parents:
         raise ValueError("归档路径不安全")

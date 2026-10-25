@@ -15,8 +15,10 @@
 from __future__ import annotations
 
 import logging
+from typing import Any, cast
 
 from sqlalchemy import func, select, update
+from sqlalchemy.engine import CursorResult
 from sqlalchemy.orm import Session
 
 from ...models.career_scenario import CareerScenario
@@ -91,9 +93,7 @@ def get_scenario(db: Session, scenario_id: int) -> CareerScenario | None:
 def active_scenario_count(db: Session) -> int:
     """未归档场景数（限额口径；归档行不占新名额，但也不会被删除）。"""
     count = db.scalar(
-        select(func.count())
-        .select_from(CareerScenario)
-        .where(CareerScenario.archived.is_(False))
+        select(func.count()).select_from(CareerScenario).where(CareerScenario.archived.is_(False))
     )
     return int(count or 0)
 
@@ -116,9 +116,7 @@ def create_scenario(db: Session, payload: CareerScenarioCreate) -> CareerScenari
     return row
 
 
-def update_scenario(
-    db: Session, scenario_id: int, payload: CareerScenarioUpdate
-) -> CareerScenario:
+def update_scenario(db: Session, scenario_id: int, payload: CareerScenarioUpdate) -> CareerScenario:
     """条件 PATCH：只写显式给出的字段，并原子地推进 revision。
 
     `expected_revision` 不匹配时返回库里**现在**的 revision（前端据此比较/刷新），
@@ -135,14 +133,18 @@ def update_scenario(
     if payload.archived is not None:
         values["archived"] = payload.archived
 
-    result = db.execute(
-        update(CareerScenario)
-        .where(
-            CareerScenario.id == scenario_id,
-            CareerScenario.revision == payload.expected_revision,
-        )
-        .values(**values)
-        .execution_options(synchronize_session=False)
+    # 条件写必须读 `rowcount`；显式收窄成 DML 的运行时真实类型（同 document_save.py）。
+    result = cast(
+        "CursorResult[Any]",
+        db.execute(
+            update(CareerScenario)
+            .where(
+                CareerScenario.id == scenario_id,
+                CareerScenario.revision == payload.expected_revision,
+            )
+            .values(**values)
+            .execution_options(synchronize_session=False)
+        ),
     )
     if result.rowcount == 0:
         db.rollback()
@@ -156,9 +158,7 @@ def update_scenario(
     row = get_scenario(db, scenario_id)
     if row is None:  # pragma: no cover - 条件更新刚命中，行不可能消失
         raise ScenarioNotFound(NOT_FOUND_DETAIL)
-    logger.info(
-        "已更新职业场景 id=%s revision=%s archived=%s", row.id, row.revision, row.archived
-    )
+    logger.info("已更新职业场景 id=%s revision=%s archived=%s", row.id, row.revision, row.archived)
     return row
 
 

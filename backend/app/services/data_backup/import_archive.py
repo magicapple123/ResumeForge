@@ -268,6 +268,21 @@ def _check_candidate_revision(database: Path, bind: Engine, manifest: dict[str, 
         raise BackupError("备份包的清单与实际数据库内容不一致，已拒绝恢复")
 
 
+def _invalidate_legacy_table_cache() -> None:
+    """导入/恢复会重建 schema：让升级检测（R-47）的表存在性缓存失效。
+
+    该缓存只记"库里有哪几张旧表"，schema 被迁移/替换后必须重算，否则升级提示可能
+    一直按旧结构判断。幂等；失效本身失败也绝不能挡住恢复——它只影响下一次提示的
+    准确度，导入数据才是主线。
+    """
+    try:
+        from ..profile import legacy_status
+
+        legacy_status.invalidate_table_cache()
+    except Exception:  # noqa: BLE001 - 缓存失效失败不阻断导入/恢复
+        logger.warning("资料升级检测的表缓存失效失败（不阻断导入）", exc_info=True)
+
+
 def _upgrade_candidate(database: Path) -> None:
     """把解出来的候选库升到当前 head，再交给表结构校验。
 
@@ -285,6 +300,8 @@ def _upgrade_candidate(database: Path) -> None:
         run_database_migrations(engine, backup=False)
     finally:
         engine.dispose()
+        # 迁移可能补出新表：让升级检测的表存在性缓存失效（幂等、失败不阻断）。
+        _invalidate_legacy_table_cache()
 
 
 def _database_info(database: Path, bind: Engine) -> dict[str, Any]:
@@ -363,6 +380,8 @@ def inspect_archive(archive_path: Path, bind: Engine, staging_dir: Path) -> dict
         info = _database_info(candidate, bind)
     finally:
         _remove_candidate_files(candidate)
+        # 导入校验完成（无论成败）都让升级检测的缓存按当前结构重算。
+        _invalidate_legacy_table_cache()
 
     return {
         "manifest": manifest,

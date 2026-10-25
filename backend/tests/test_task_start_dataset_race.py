@@ -75,11 +75,12 @@ def test_switching_between_task_commit_and_runner_start_never_crosses_datasets(
     reached_start = threading.Event()
     allow_start = threading.Event()
 
-    def delayed_start(task_id: int) -> None:
+    def delayed_start(task_id: int, **kwargs) -> None:
         """卡在「task 已 commit、租约尚未交接」的瞬间。"""
         reached_start.set()
         assert allow_start.wait(timeout=10), "测试自身的放行事件超时"
-        original_start(task_id)
+        # F3：路由把创建时冻结的消费快照随 start 传给 runner，这里原样转发。
+        original_start(task_id, **kwargs)
 
     monkeypatch.setattr(runner, "start", delayed_start)
 

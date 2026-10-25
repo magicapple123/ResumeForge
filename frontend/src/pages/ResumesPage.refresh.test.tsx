@@ -8,6 +8,8 @@
  * 这里不真的走一遍弹窗表单（那条链路由 ManualResumeModal 自己的用例铺开），只钉
  * 页面这一侧的契约：收到广播 → 重取；关弹窗但没保存 → 什么都不发生。
  */
+import { projectionOf } from "../test/profileProjectionFixture";
+import { invalidateProjectionCache } from "../features/profile-library/projectionCache";
 import { App as AntdApp } from "antd";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
@@ -28,6 +30,7 @@ const apiMocks = vi.hoisted(() => ({
   renderResume: vi.fn(),
   createManualResume: vi.fn(),
   getProfile: vi.fn(),
+  getCurrentProjection: vi.fn(),
 }));
 
 vi.mock("../api/resumes", async (importOriginal) => ({
@@ -45,8 +48,11 @@ vi.mock("../api/resumes", async (importOriginal) => ({
   fetchResumeTemplates: vi.fn().mockResolvedValue(TEMPLATE_CATALOG),
 }));
 
-// 手写简历弹窗一打开就读资料；不桩掉会在 jsdom 里真发 fetch。
+// 手写简历弹窗一打开就读**当前组投影**（F4 起不再读旧资料接口）；不桩掉会在 jsdom 里真发 fetch。
 vi.mock("../api/profile", () => ({ getProfile: apiMocks.getProfile }));
+vi.mock("../features/profile-library/api", () => ({
+  getCurrentProjection: apiMocks.getCurrentProjection,
+}));
 
 vi.mock("../components/resume/ResumeDetailPreview", () => ({
   default: () => <div data-testid="resume-preview-stub" />,
@@ -134,6 +140,12 @@ beforeEach(() => {
   apiMocks.listResumeIds.mockReset().mockResolvedValue([RESUME.id]);
   apiMocks.createManualResume.mockReset().mockResolvedValue({ id: 9 });
   apiMocks.getProfile.mockReset().mockResolvedValue(PROFILE);
+  apiMocks.getCurrentProjection
+    .mockReset()
+    .mockResolvedValue(
+      projectionOf({ content: { name: "张三", phone: "13800000000", email: "a@b.c" } }),
+    );
+  invalidateProjectionCache();
   apiMocks.getResume.mockReset().mockResolvedValue({ ...RESUME, content: {} });
   apiMocks.deleteResume.mockReset().mockResolvedValue(undefined);
   apiMocks.batchDeleteResumes.mockReset().mockResolvedValue({ deleted: 1 });
@@ -167,7 +179,7 @@ describe("ResumesPage 列表刷新（T12）", () => {
     expect(apiMocks.listResumes).toHaveBeenCalledOnce();
 
     fireEvent.click(screen.getByRole("button", { name: /新建简历/ }));
-    await waitFor(() => expect(apiMocks.getProfile).toHaveBeenCalled());
+    await waitFor(() => expect(apiMocks.getCurrentProjection).toHaveBeenCalled());
 
     // 直接关掉编辑器（未改动 → 不弹未保存确认）。
     fireEvent.click(await screen.findByRole("button", { name: /取\s*消/ }));

@@ -12,6 +12,9 @@ const TAB_BY_SECTION: Record<string, string> = {
   publications: "publications",
   research_projects: "research_projects",
   patents: "patents",
+  // F4：资格证照与自建栏目（C2）各有独立页签；纸面点击定位必须落到它们上。
+  credentials: "credentials",
+  custom_sections: "custom-sections",
 };
 
 const MULTILINE_FIELDS = new Set([

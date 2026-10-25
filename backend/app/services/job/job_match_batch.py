@@ -23,7 +23,7 @@ from ..apply import apply_service
 from ..llm import create_provider
 from ..llm.base import LLMError
 from ..match_scoring import score_match_result
-from ..profile.profile_service import get_profile_detail
+from ..profile.profile_service import project_legacy_profile
 from .job_match import analyze_match, finalize_match_result, job_payload, local_match_result
 from .job_match_context import profile_is_empty, profile_text
 
@@ -64,7 +64,7 @@ class BatchMatchCancelled(Exception):
 
 def build_batch_inputs(db: Session, jobs: list[Job], *, force: bool) -> list[BatchMatchInput]:
     """在数据库连接仍可用时准备所有匹配输入，随后即可安全释放连接等待模型。"""
-    profile = get_profile_detail(db)
+    profile = project_legacy_profile(db)
     personal_text = profile_text(profile)
     inputs: list[BatchMatchInput] = []
     for job in jobs:

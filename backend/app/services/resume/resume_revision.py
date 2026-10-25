@@ -47,10 +47,10 @@ _SECTION_LABELS = {
     "experience": "实习/工作经历",
     "campus_experience": "校园经历",
     "projects": "项目经历",
-    "publications": "论文",
+    "publications": "学术成果",
     "research_projects": "科研项目",
-    "patents": "专利",
-    "credentials": "资格证照",
+    "patents": "知识产权",
+    "credentials": "证书资质",
     "skills": "专业技能",
     "awards": "荣誉奖项",
 }

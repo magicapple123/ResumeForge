@@ -10,6 +10,8 @@ import ResumeDetailModal from "./ResumeDetailModal";
 
 const apiMocks = vi.hoisted(() => ({
   getResume: vi.fn(),
+  // R-33「本次使用」块：本文件不测它，默认"无快照"保持既有断言不变。
+  getResumeProfileUsage: vi.fn(),
   fetchResumeHtml: vi.fn(),
   fetchResumeTemplates: vi.fn(),
   renderResume: vi.fn(),
@@ -102,6 +104,10 @@ beforeEach(() => {
   for (const mock of Object.values(apiMocks)) mock.mockReset();
   apiMocks.fetchResumeTemplates.mockResolvedValue({ pdf_direct_available: true });
   apiMocks.listResumeDeliveries.mockResolvedValue([]);
+  apiMocks.getResumeProfileUsage.mockResolvedValue({
+    profile_usage: null,
+    freshness: { changed: false, reasons: [] },
+  });
 });
 
 afterEach(() => {

@@ -40,7 +40,9 @@ class UsageSummaryOut(BaseModel):
     since: datetime | None = None
     tasks: list[UsageBucketOut] = Field(default_factory=list)
     models: list[UsageBucketOut] = Field(default_factory=list)
-    totals: UsageBucketOut = Field(default_factory=UsageBucketOut)
+    # UsageBucketOut.key 是必填字段：默认桶用空 key（现状没有任何构造点省略 totals，
+    # 这个默认值只是让"缺省可用"为真，而不是在第一次触发时抛 ValidationError）。
+    totals: UsageBucketOut = Field(default_factory=lambda: UsageBucketOut(key=""))
     unknown_token_records: int = 0
     cost: UsageCostOut = Field(default_factory=UsageCostOut)
 

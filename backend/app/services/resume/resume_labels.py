@@ -12,8 +12,9 @@ Word、HTML 模板、Markdown），每处各写一份中文字面量。一个字
 一条刻意的边界：语言**只影响纸面固定文案**，不翻译正文内容（用户写的句子、
 项目描述一律原样输出），也不参与生成链路（LLM prompt 不看这个值）。
 
-``zh-CN`` 那张表必须与历史输出**逐字相同**（含 ``实习/工作经历`` 里的半角斜杠与
-``、`` 分隔符）：默认语言的产物零变化是黄金基线不动的前提。
+``zh-CN`` 那张表以历史输出为基线（含 ``实习/工作经历`` 里的半角斜杠与 ``、`` 分隔符），
+**2026-10 的 R-70 改名是唯一一次有意的标题变更**：论文发表→学术成果、专利→知识产权、
+资格证照→证书资质（英文同步），同批连同 golden 断言逐项审查更新；改名之外仍要求默认语言产物零变化。
 
 取值收口只有 ``normalize_language`` 一处：未知值、空值、非字符串一律回落到
 ``zh-CN``，不抛异常——一份被外部工具改过的库不该让导出整条挂掉。
@@ -46,10 +47,10 @@ SECTION_TITLES: dict[str, dict[str, str]] = {
         "education": "教育经历",
         "experience": "实习/工作经历",
         "projects": "项目经历",
-        "publications": "论文发表",
+        "publications": "学术成果",
         "research_projects": "科研项目",
-        "patents": "专利",
-        "credentials": "资格证照",
+        "patents": "知识产权",
+        "credentials": "证书资质",
         "skills": "专业技能",
         "campus_experience": "校园经历",
         "awards": "荣誉奖项",
@@ -59,10 +60,10 @@ SECTION_TITLES: dict[str, dict[str, str]] = {
         "education": "Education",
         "experience": "Experience",
         "projects": "Projects",
-        "publications": "Publications",
+        "publications": "Academic Achievements",
         "research_projects": "Research Projects",
-        "patents": "Patents",
-        "credentials": "Certifications",
+        "patents": "Intellectual Property",
+        "credentials": "Certifications & Qualifications",
         "skills": "Skills",
         "campus_experience": "Campus Activities",
         "awards": "Honors & Awards",
@@ -92,7 +93,26 @@ FIELD_LABELS: dict[str, dict[str, str]] = {
         "expiry": "到期",
         "verify": "核验链接",
         "artifact_type": "成果类型",
-        "experience_kind": "关系类型",
+        "experience_kind": "工作类型",
+        # F8（R-81）：资料页小字段 → 简历条目可选字段的纸面前缀。
+        # 注意 issuer/artifact_type/experience_kind/funding 是复用属性，沿用上面已有标签；
+        # level 同时服务 awards.level 与 research_projects.level——单一"键=属性名"的
+        # FIELD_LABELS 装不下两个不同文案，取通用「级别」（渲染层不再按分区派生第二份表）。
+        "study_form": "学习形式",
+        "degree_type": "学位类型",
+        "department": "院系",
+        "rank": "成绩排名",
+        "advisor": "导师",
+        "research_direction": "研究方向",
+        "team_size": "团队规模",
+        "project_size": "项目规模",
+        "category": "技能分类",
+        "activity_type": "活动类型",
+        "level": "级别",
+        "ratio": "获奖比例",
+        "my_rank": "我的署名位次",
+        "outcome_type": "成果类型",
+        "credential_type": "证书类型",
     },
     "en-US": {
         "intent": "Objective",
@@ -111,7 +131,23 @@ FIELD_LABELS: dict[str, dict[str, str]] = {
         "expiry": "Expiry",
         "verify": "Verify",
         "artifact_type": "Artifact Type",
-        "experience_kind": "Relationship",
+        "experience_kind": "Work Type",
+        # F8（R-81）：与中文表同批；issuer 复用上面的 "Issuer"（证书资质既有文案）。
+        "study_form": "Study Mode",
+        "degree_type": "Degree Type",
+        "department": "Department",
+        "rank": "Rank",
+        "advisor": "Advisor",
+        "research_direction": "Research Direction",
+        "team_size": "Team Size",
+        "project_size": "Project Scale",
+        "category": "Skill Category",
+        "activity_type": "Activity Type",
+        "level": "Level",
+        "ratio": "Award Ratio",
+        "my_rank": "My Authorship Rank",
+        "outcome_type": "Outcome Type",
+        "credential_type": "Credential Type",
     },
 }
 
@@ -221,7 +257,7 @@ PATENT_STATUS_LABELS: dict[str, dict[str, str]] = {
     "zh-CN": {"filed": "已申请", "pending": "审查中", "granted": "已授权", "expired": "已失效", "other": "其他"},
     "en-US": {"filed": "Filed", "pending": "Pending", "granted": "Granted", "expired": "Expired", "other": "Other"},
 }
-# A4 资格证照状态正名。**绝不出现"有效资格"这类认定**：active 只表示"有效期内"
+# A4 证书资质状态正名。**绝不出现"有效资格"这类认定**：active 只表示"有效期内"
 # （来源状态事实），unknown 是"待核实"而不是"没有"；未知取值一律回落「待核实」，
 # 宁可显示未核实，也不把待核实写成已取得。
 CREDENTIAL_STATUS_LABELS: dict[str, dict[str, str]] = {
@@ -240,7 +276,7 @@ CREDENTIAL_STATUS_LABELS: dict[str, dict[str, str]] = {
 }
 _CREDENTIAL_STATUS_FALLBACK: dict[str, str] = {"zh-CN": "待核实", "en-US": "Unverified"}
 
-# A4 实践/服务经历的关系类型词（不属于"关系类型"的取值不打印，宁可少一行也不猜）。
+# A4 实践/服务经历的工作类型词（不属于"工作类型"的取值不打印，宁可少一行也不猜）。
 EXPERIENCE_KIND_LABELS: dict[str, dict[str, str]] = {
     "zh-CN": {
         "full_time": "全职",
@@ -274,7 +310,7 @@ def patent_status_text(status: str, language: str | None = None) -> str:
 
 
 def credential_status_text(status: str, language: str | None = None) -> str:
-    """资格证照状态的正名；未知值回落「待核实」——绝不把未核实写成已取得。"""
+    """证书资质状态的正名；未知值回落「待核实」——绝不把未核实写成已取得。"""
     normalized = normalize_language(language)
     return CREDENTIAL_STATUS_LABELS[normalized].get(
         status, _CREDENTIAL_STATUS_FALLBACK[normalized]
@@ -282,7 +318,7 @@ def credential_status_text(status: str, language: str | None = None) -> str:
 
 
 def experience_kind_text(kind: str, language: str | None = None) -> str:
-    """实践/服务经历的关系类型词；空值/未知值返回空串（不打印猜测的关系）。"""
+    """实践/服务经历的工作类型词；空值/未知值返回空串（不打印猜测的关系）。"""
     if not kind:
         return ""
     return EXPERIENCE_KIND_LABELS[normalize_language(language)].get(kind, "")

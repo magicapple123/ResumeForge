@@ -16,7 +16,7 @@
  * 自己的壳。**注释里不要写出尖括号形式的标签名**：扫描器读的是原文，写了就会被当成真的
  * 弹层标签（本文件正是这么被误报过一次）。
  */
-import { Collapse, Form, Grid, Tabs } from "antd";
+import { Alert, Button, Collapse, Form, Grid, Space, Tabs } from "antd";
 import type { ReactNode } from "react";
 import { t } from "../../i18n";
 import DraftRestoreBar from "../common/DraftRestoreBar";
@@ -34,6 +34,11 @@ export interface ResumeEditorPanelProps {
   onFillAll?: () => void;
   /** `modal` = 弹窗 body（整块滚动）；`inline` = 中栏（Tabs 自己滚，无左右分栏）。 */
   variant: "modal" | "inline";
+  /**
+   * 表单上方的额外区块（F4：新建简历的「资料来源」面板）。放在 `<Form>` **内部**，
+   * 因为区块要写表单值；它自身不注册 Form.Item，不会给提交值添字段。
+   */
+  sourcePanel?: ReactNode;
 }
 
 export default function ResumeEditorPanel({
@@ -43,6 +48,7 @@ export default function ResumeEditorPanel({
   referencePanel,
   onFillAll,
   variant,
+  sourcePanel,
 }: ResumeEditorPanelProps) {
   // "两栏独立滚动"：要有参考栏且屏幕够宽。这一个布尔值同时决定 body 的滚动方式与 grid
   // 的 class——判两次会出现"body 不滚 + grid 不是双栏"，内容是滚不动的。
@@ -59,6 +65,29 @@ export default function ResumeEditorPanel({
       onRestore={api.restoreDraft}
       onDiscard={api.discardDraft}
       changes={api.draftChanges}
+    />
+  ) : null;
+
+  // 资料刷新提示（F9/R1）：打开新建简历期间别的窗口改了资料/切了组，而表单里已经有未保存
+  // 的改动——不静默覆盖，就地给两个出口。用页内 Alert（不再是第二个弹层/确认框）。
+  const profileRefreshBar = api.contentRefreshPending ? (
+    <Alert
+      className="resume-editor-profile-refresh"
+      type="info"
+      showIcon
+      title={t("editor.profile-refresh.title")}
+      description={t("editor.profile-refresh.body")}
+      action={
+        <Space size={8} wrap>
+          <Button size="small" type="primary" onClick={api.applyLatestContent}>
+            {t("editor.profile-refresh.apply")}
+          </Button>
+          <Button size="small" onClick={api.dismissContentRefresh}>
+            {t("editor.profile-refresh.keep")}
+          </Button>
+        </Space>
+      }
+      style={{ marginBottom: 12 }}
     />
   ) : null;
 
@@ -80,6 +109,7 @@ export default function ResumeEditorPanel({
       onValuesChange={api.onValuesChange}
       onFinish={(values) => void api.onFinish(values)}
     >
+      {sourcePanel}
       <Tabs
         className={tabsClassName}
         activeKey={api.activeTab}
@@ -99,6 +129,7 @@ export default function ResumeEditorPanel({
       <ProfileFillProvider value={api.fillContextValue}>
         <div className="resume-editor-inline">
           {draftBar}
+          {profileRefreshBar}
           <EditorHeader description={description} onFillAll={onFillAll} headerExtra={headerExtra} />
           {tabStrip}
           {form}
@@ -110,6 +141,7 @@ export default function ResumeEditorPanel({
   return (
     <ProfileFillProvider value={api.fillContextValue}>
       {draftBar}
+      {profileRefreshBar}
       <div
         className={`resume-editor-layout${referencePanel ? " resume-editor-layout--with-reference" : ""}`}
       >

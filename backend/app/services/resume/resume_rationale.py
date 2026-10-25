@@ -98,6 +98,7 @@ def build_generation_rationale(
 
 
 def _compose_counts(selection_counts: dict[str, int]) -> str:
+    # F3：候选组成扩展到 13 个大字段（新键只在有候选时出现，旧输出逐字不变）。
     labels = {
         "projects": "项目",
         "experiences": "实习/工作",
@@ -105,6 +106,11 @@ def _compose_counts(selection_counts: dict[str, int]) -> str:
         "educations": "教育",
         "skills": "技能",
         "awards": "奖项",
+        "publications": "学术成果",
+        "research_projects": "科研项目",
+        "patents": "知识产权",
+        "credentials": "证书资质",
+        "languages": "语言能力",
     }
     parts = [
         f"{label} {selection_counts.get(key, 0)} 条"

@@ -361,6 +361,30 @@ rf_check_shared_runtime_dir_resolution() {
         "1" "update.sh 用 common.sh 的解析函数定位运行期目录"
 }
 
+# stop.sh 的兜底：没有运行记录时也必须能停掉「确实是简历通」的实例（2026-10-26）。
+# 这段是纯静态断言：真正按端口停进程需要 macOS 环境（CI 的 macOS 作业会走到）。
+rf_check_stop_fallback() {
+    stop_script="$RF_TEST_ROOT/scripts/macos/stop.sh"
+    if grep -q 'rf_stop_unrecorded' "$stop_script"; then
+        rf_check 0 "stop.sh 在记录缺失时会走端口+健康检查兜底"
+    else
+        rf_check 1 "stop.sh 没有兜底：无记录实例会停不掉（双击 stop.command 表现为无效）"
+    fi
+    if grep -q 'rf_port_looks_like_resumeforge' "$stop_script" &&
+        grep -q '"name":"ResumeForge"' "$stop_script"; then
+        rf_check 0 "兜底只停自报 ResumeForge 的进程（健康检查 name 字段）"
+    else
+        rf_check 1 "兜底缺少 ResumeForge 身份校验（可能误停无关进程）"
+    fi
+    if grep -q 'rf_stop_unrecorded "backend"' "$stop_script" &&
+        grep -q 'rf_stop_unrecorded "frontend"' "$stop_script"; then
+        rf_check 0 "stop.sh 对后端与前端都调用兜底"
+    else
+        rf_check 1 "stop.sh 没有对两个服务都调用兜底"
+    fi
+}
+rf_check_stop_fallback
+
 # chmod 能不能真正取消写权限，是环境能力而不是代码性质：Windows 的 Git Bash 上
 # chmod 基本是空操作（管理员身份更是如此），所以先探测再决定跑还是跳过。
 rf_probe_readonly_capability() {

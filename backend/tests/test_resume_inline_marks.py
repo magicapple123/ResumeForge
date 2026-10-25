@@ -86,7 +86,9 @@ def _docx_text_and_xml(content: bytes) -> tuple[str, str]:
 
 def _html_body(html: str) -> str:
     body = html.split("<body", 1)[1]
-    return re.sub(r"<script\b[\s\S]*?</script\s*>", "", body)
+    # 结束标签允许带属性（`</script attr>`）——CodeQL py/bad-tag-filter 的两轮口径
+    # 都落在这一处（先 `</script\s*>`，后 `</script[^>]*>`）。
+    return re.sub(r"<script\b[\s\S]*?</script[^>]*>", "", body)
 
 
 # ===== 1. 解析：分层切分与字面保留 =====

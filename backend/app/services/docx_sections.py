@@ -50,8 +50,15 @@ from .docx_blocks import (
     set_run_font as _set_run_font,
 )
 from .docx_rich import add_rich_runs
-from .docx_section_shared import _apply_break, _break_plan, _join, _role
+from .docx_section_shared import (
+    _apply_break,
+    _break_plan,
+    _join,
+    _role,
+    profile_meta_lines,
+)
 from .pdf_exporter import _PX_TO_PT
+from .resume.profile_field_lines import profile_field_lines, profile_field_text
 from .resume.resume_labels import (
     experience_kind_text,
     field_labels,
@@ -167,6 +174,10 @@ def section_education(
             indent_mm=layout.gap_mm(layout.li_indent),
             style=_role(overrides, "body", edu.id),
         )
+        profile_meta_lines(
+            doc, edu, "education", base=base, layout=layout, theme=theme,
+            language=language, style=_meta_style,
+        )
 
 
 def section_experience(
@@ -231,6 +242,10 @@ def section_experience(
             indent_mm=layout.gap_mm(layout.li_indent),
             style=_role(overrides, "body", exp.id),
         )
+        profile_meta_lines(
+            doc, exp, "experience", base=base, layout=layout, theme=theme,
+            language=language, style=_meta_style,
+        )
 
 
 def section_campus(
@@ -283,6 +298,10 @@ def section_campus(
             theme=theme,
             indent_mm=layout.gap_mm(layout.li_indent),
             style=_role(overrides, "body", item.id),
+        )
+        profile_meta_lines(
+            doc, item, "campus_experience", base=base, layout=layout, theme=theme,
+            language=language, style=_meta_style,
         )
 
 
@@ -366,6 +385,10 @@ def section_projects(
             indent_mm=layout.gap_mm(layout.li_indent),
             style=_role(overrides, "body", project.id),
         )
+        profile_meta_lines(
+            doc, project, "projects", base=base, layout=layout, theme=theme,
+            language=language, style=_meta_style,
+        )
 
 
 def section_skills(
@@ -394,7 +417,12 @@ def section_skills(
         style=_role(overrides, "section_title"),
     )
     _apply_break(doc, _break_plan(overrides, "section", "skills"))
-    skill_labels = [level_text(skill.name, skill.level, language) for skill in resume.skills]
+    fields = field_labels(language)
+    skill_labels = []
+    for skill in resume.skills:
+        label = level_text(skill.name, skill.level, language)
+        extra = profile_field_text(skill, "skills", fields)
+        skill_labels.append(f"{label} · {extra}" if extra else label)
     if skill_labels:
         # W08：技能行不跨页（与 PDF 的整行标签一致）。
         paragraph = _paragraph(doc, keep_together=True)
@@ -430,12 +458,18 @@ def section_awards(
         style=_role(overrides, "section_title"),
     )
     _apply_break(doc, _break_plan(overrides, "section", "awards"))
-    _bullets(
-        doc,
-        [_join([award.name, award.date, award.description]) for award in resume.awards],
-        base=base,
-        theme=theme,
-    )
+    fields = field_labels(language)
+    award_lines = [_join([award.name, award.date, award.description]) for award in resume.awards]
+    # F8：有新增字段时逐条渲染并在该 award 行之后追加「标签：值」；无新增字段保持原
+    # 一次 bullets 的调用形状（旧产物逐字节不变）。
+    award_extras = [profile_field_lines(award, "awards", fields) for award in resume.awards]
+    if any(award_extras):
+        for line, rows in zip(award_lines, award_extras, strict=True):
+            _bullets(doc, [line], base=base, theme=theme)
+            for label, value in rows:
+                _meta_line(doc, f"{label}：{value}", base=base, layout=layout, theme=theme)
+    else:
+        _bullets(doc, award_lines, base=base, theme=theme)
 
 
 # 分区键 → 渲染函数。**刻意不用 if/elif 链**：链子里漏掉一个键的表现是"那个分区

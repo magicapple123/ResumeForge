@@ -17,7 +17,7 @@ from sqlalchemy import create_engine, inspect, text
 
 PREVIOUS_REVISION = "0060_variant_layout"
 MIGRATION_REVISION = "0061_career_scenarios"
-HEAD_REVISION = "0063_profile_fact_field_pref"
+HEAD_REVISION = "0065_snapshot_dangling_refs"
 _FTS_PREFIXES = ("knowledge_fts", "search_fts")
 _SNAPSHOT_TABLES = ("resume_generate_task", "resume_record", "resume_version", "resume_variant")
 

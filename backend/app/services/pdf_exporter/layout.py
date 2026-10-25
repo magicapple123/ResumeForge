@@ -4,6 +4,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import cast
+
+from ..resume.resume_template_scalars import template_float, template_int
 
 # 1 px = 0.75 pt = 0.2646 mm。行推进量统一按 `字号(px) × _PX_TO_MM × 行高系数` 计算。
 _PX_TO_PT = 0.75
@@ -196,7 +199,7 @@ def _resolve_page_margins(
 
     return resolve_page_margins(
         overrides,
-        float(defaults["padding_mm"]),
+        template_float(defaults["padding_mm"]),
         margin_mm,
         defaults.get("padding_sides_mm"),
     )
@@ -236,7 +239,7 @@ def resolve_layout(
         value = overrides.get(key)
         # 只有用户**确实设过**才覆盖默认；没设过时保持模板自带的值，
         # 否则存量简历的 PDF 会因为"凭空多了一个默认值"而无端跳变。
-        return float(value) if value is not None else float(defaults[default_key])
+        return template_float(value) if value is not None else template_float(defaults[default_key])
 
     margin_top, margin_right, margin_bottom, margin_left = _resolve_page_margins(
         overrides, defaults, margin_mm
@@ -259,70 +262,71 @@ def resolve_layout(
         # `calc(var(--fs) * 1.86 * var(--name-scale, 1))`。只改模板不改这里，就会重现
         # "预览缩小了、导出的 PDF 没变"——本轮 T02 与 T03 必须同批发布的原因。
         # `resolve_scale` 缺键返回 1.0（= 模板基准原样），所以不传新键时 PDF 字节不变。
-        name_ratio=float(defaults["name_ratio"]) * resolve_scale(overrides, "name_scale"),
-        name_extra_ratio=float(defaults["name_extra_ratio"]),
-        intent_ratio=float(defaults["intent_ratio"]),
-        contact_ratio=float(defaults["contact_ratio"]),
-        section_title_ratio=float(defaults["section_title_ratio"])
+        name_ratio=template_float(defaults["name_ratio"]) * resolve_scale(overrides, "name_scale"),
+        name_extra_ratio=template_float(defaults["name_extra_ratio"]),
+        intent_ratio=template_float(defaults["intent_ratio"]),
+        contact_ratio=template_float(defaults["contact_ratio"]),
+        section_title_ratio=template_float(defaults["section_title_ratio"])
         * resolve_scale(overrides, "section_title_scale"),
-        entry_title_ratio=float(defaults["entry_title_ratio"]),
+        entry_title_ratio=template_float(defaults["entry_title_ratio"]),
         # `.entry-head .meta`（条目头右侧）与 `.entry .sub`（条目下副行）是**两个**选择器，
         # 比例多数模板相同、technical 却是 0.86 / 0.9，所以各取各的，不合并。
-        entry_meta_ratio=float(defaults["entry_meta_ratio"]),
-        entry_sub_ratio=float(defaults["entry_sub_ratio"]),
-        tag_font_ratio=float(defaults["tag_font_ratio"]),
+        entry_meta_ratio=template_float(defaults["entry_meta_ratio"]),
+        entry_sub_ratio=template_float(defaults["entry_sub_ratio"]),
+        tag_font_ratio=template_float(defaults["tag_font_ratio"]),
         # 垂直间距、区块标题形状与照片尺寸同样只来自模板——这些此前只存在于模板 CSS，
         # PDF 侧没有，于是排得比预览紧（"被压扁"的主要来源）。
         # `entry_gap` 是唯一的例外：模板里它是 `calc(var(--fs) * 0.86 * var(--entry-gap, 1))`，
         # 所以这里也要乘同一个系数（缺键 = 1.0）。
-        header_gap=float(defaults["header_gap"]),
-        intent_gap=float(defaults["intent_gap"]),
-        contact_gap=float(defaults["contact_gap"]),
-        entry_gap=float(defaults["entry_gap"]) * resolve_scale(overrides, "entry_gap"),
-        sub_gap_top=float(defaults["sub_gap_top"]),
-        sub_gap_bottom=float(defaults["sub_gap_bottom"]),
-        li_gap=float(defaults["li_gap"]),
+        header_gap=template_float(defaults["header_gap"]),
+        intent_gap=template_float(defaults["intent_gap"]),
+        contact_gap=template_float(defaults["contact_gap"]),
+        entry_gap=template_float(defaults["entry_gap"]) * resolve_scale(overrides, "entry_gap"),
+        sub_gap_top=template_float(defaults["sub_gap_top"]),
+        sub_gap_bottom=template_float(defaults["sub_gap_bottom"]),
+        li_gap=template_float(defaults["li_gap"]),
         # 页头的对齐与照片侧：模板 `.header` 的 `text-align` / `flex-direction` 的结构化映射。
         # `left` / `right` 是**原行为**（改动前 PDF 恒为左对齐、照片恒在右），所以缺键或
         # 非 elegant 模板读到的就是"什么都不变"。
         header_align=str(defaults.get("header_align", "left")),
         header_photo_side=str(defaults.get("header_photo_side", "right")),
-        header_border_width=float(defaults["header_border_width"]),
+        header_border_width=template_float(defaults["header_border_width"]),
         header_border_color=str(defaults["header_border_color"]),
-        header_pad_bottom=float(defaults["header_pad_bottom"]),
+        header_pad_bottom=template_float(defaults["header_pad_bottom"]),
         header_bg=str(defaults["header_bg"]),
-        header_pad_x=float(defaults["header_pad_x"]),
-        header_pad_y=float(defaults["header_pad_y"]),
-        header_radius=float(defaults["header_radius"]),
+        header_pad_x=template_float(defaults["header_pad_x"]),
+        header_pad_y=template_float(defaults["header_pad_y"]),
+        header_radius=template_float(defaults["header_radius"]),
         section_title_style=str(defaults["section_title_style"]),
         section_title_text=str(defaults["section_title_text"]),
         section_title_align=str(defaults["section_title_align"]),
-        section_title_gap=float(defaults["section_title_gap"]),
-        section_title_pad_x=float(defaults["section_title_pad_x"]),
-        section_title_pad_y=float(defaults["section_title_pad_y"]),
-        photo_width_ratio=float(defaults["photo_width_ratio"]) * photo_scale,
-        photo_height_ratio=float(defaults["photo_height_ratio"]) * photo_scale,
+        section_title_gap=template_float(defaults["section_title_gap"]),
+        section_title_pad_x=template_float(defaults["section_title_pad_x"]),
+        section_title_pad_y=template_float(defaults["section_title_pad_y"]),
+        photo_width_ratio=template_float(defaults["photo_width_ratio"]) * photo_scale,
+        photo_height_ratio=template_float(defaults["photo_height_ratio"]) * photo_scale,
         # 技能标签的形态与几何同样只来自模板：`tag_radius` 保留注册表原值（可能是 `"pill"`），
-        # 不在这一层把哨兵解释成数字——"怎么画"是 `skill_tags` 的事。
+        # 不在这一层把哨兵解释成数字——"怎么画"是 `skill_tags` 的事。注册表值联合里的
+        # tuple/bool 形状只属于别的键，这里显式收窄成字段声明的 `float | str`。
         tag_style=str(defaults["tag_style"]),
         tag_bg=str(defaults["tag_bg"]),
         tag_fg=str(defaults["tag_fg"]),
-        tag_border_px=float(defaults["tag_border_px"]),
-        tag_radius=defaults["tag_radius"],
-        tag_pad_x=float(defaults["tag_pad_x"]),
-        tag_gap_x=float(defaults["tag_gap_x"]),
-        tag_gap_y=float(defaults["tag_gap_y"]),
+        tag_border_px=template_float(defaults["tag_border_px"]),
+        tag_radius=cast("float | str", defaults["tag_radius"]),
+        tag_pad_x=template_float(defaults["tag_pad_x"]),
+        tag_gap_x=template_float(defaults["tag_gap_x"]),
+        tag_gap_y=template_float(defaults["tag_gap_y"]),
         # 标签的"整段排版"两个开关（居中 / 等宽）与正文分栏同样只来自模板：
         # 它们决定"画在哪"与"用什么字体画"，都属于模板 CSS 的语义，不在这里另设默认。
         tag_align=str(defaults["tag_align"]),
         tag_mono=bool(defaults["tag_mono"]),
         # 多列标签网格（scholar）：列数同样只来自模板 CSS，缺键时按 1 列（= 改动前的流式排法）。
-        tag_columns=int(defaults.get("tag_columns", 1)),
+        tag_columns=template_int(defaults.get("tag_columns", 1)),
         # 正文分栏：栏数决定 `_draw_resume` 走 `columns.render_sections` 还是顺序路径；
         # 栏间距参与半栏宽度的计算（见 `columns.column_frames`）。
-        column_count=int(defaults["column_count"]),
-        column_gap=float(defaults["column_gap"]),
+        column_count=template_int(defaults["column_count"]),
+        column_gap=template_float(defaults["column_gap"]),
         # 列表缩进同样只来自模板 `ul { padding-left }`：写死 3.0mm 会让每条 li 的行宽
         # 比草稿宽 1.6~2.3mm，窄栏里少折一行 —— 就是 split 比草稿矮、单栏偏紧的主要来源。
-        li_indent=float(defaults["li_indent"]),
+        li_indent=template_float(defaults["li_indent"]),
     )

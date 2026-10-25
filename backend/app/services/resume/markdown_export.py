@@ -15,6 +15,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 
 from ...schemas.resume import ResumeContent
+from .profile_field_lines import profile_field_lines
 from .resume_labels import (
     DEFAULT_RESUME_LANGUAGE,
     authors_text,
@@ -62,6 +63,11 @@ def export_markdown(
     titles = section_titles(language)
     fields = field_labels(language)
     sep = list_separator(language)
+
+    def profile_lines(item, section_key: str, indent: str = "") -> None:
+        """F8：条目既有内容之后的新增字段「标签：值」行（空值跳过，顺序单源）。"""
+        for label, value in profile_field_lines(item, section_key, fields):
+            lines.append(f"{indent}- {label}：{value}")
     header = resume.name
     # 性别在预览里是姓名后缀（与 `_resume_sections.j2` 的位置一致）。
     if resume.gender:
@@ -103,6 +109,7 @@ def export_markdown(
                 if edu.courses:
                     lines.append(f"- {fields['courses']}：{sep.join(edu.courses)}")
                 lines.append(_join_bullets(edu.achievements))
+                profile_lines(edu, "education")
                 lines.append("")
 
     def write_experience() -> None:
@@ -117,6 +124,7 @@ def export_markdown(
                 if kind:
                     lines.append(f"- {fields['experience_kind']}：{kind}")
                 lines.append(_join_bullets(exp.description))
+                profile_lines(exp, "experience")
                 lines.append("")
 
     def write_campus_experience() -> None:
@@ -127,6 +135,7 @@ def export_markdown(
                     f"### {item.organization} · {item.role}（{item.start_date} - {item.end_date}）\n"
                 )
                 lines.append(_join_bullets(item.description))
+                profile_lines(item, "campus_experience")
                 lines.append("")
 
     def write_projects() -> None:
@@ -153,16 +162,21 @@ def export_markdown(
                     lines.append(f"- {project_meta}")
                 lines.append(_join_bullets(project.description))
                 lines.append(_join_bullets(project.highlights))
+                profile_lines(project, "projects")
                 lines.append("")
 
     def write_skills() -> None:
         if resume.skills:
             lines.append(f"## {titles['skills']}\n")
-            lines.append(
-                _join_bullets(
-                    level_text(skill.name, skill.level, language) for skill in resume.skills
+            skill_lines = []
+            for skill in resume.skills:
+                text = level_text(skill.name, skill.level, language)
+                extra = " ｜ ".join(
+                    f"{label}：{value}"
+                    for label, value in profile_field_lines(skill, "skills", fields)
                 )
-            )
+                skill_lines.append(f"{text} ｜ {extra}" if extra else text)
+            lines.append(_join_bullets(skill_lines))
             lines.append("")
 
     def write_publications() -> None:
@@ -191,6 +205,7 @@ def export_markdown(
                     lines.append(f"- {publication.url}")
                 if publication.note:
                     lines.append(f"- {publication.note}")
+                profile_lines(publication, "publications")
                 lines.append("")
 
     def write_research_projects() -> None:
@@ -206,6 +221,7 @@ def export_markdown(
                     lines.append(f"- {fields['funding']}：{project.funding}")
                 lines.append(_join_bullets(project.description))
                 lines.append(_join_bullets(project.outcomes))
+                profile_lines(project, "research_projects")
                 lines.append("")
 
     def write_patents() -> None:
@@ -253,19 +269,48 @@ def export_markdown(
                 detail = credential_detail(credential, language)
                 if detail:
                     lines.append(f"- {detail}")
+                profile_lines(credential, "credentials")
                 lines.append("")
 
     def write_awards() -> None:
         if resume.awards:
             lines.append(f"## {titles['awards']}\n")
-            lines.append(
-                _join_bullets(
-                    f"{award.name} · {award.date}"
-                    + (f" · {award.description}" if award.description else "")
-                    for award in resume.awards
-                )
-            )
+            award_lines = [
+                f"{award.name} · {award.date}"
+                + (f" · {award.description}" if award.description else "")
+                for award in resume.awards
+            ]
+            award_extras = [
+                profile_field_lines(award, "awards", fields) for award in resume.awards
+            ]
+            if any(award_extras):
+                # F8：新字段行挂在各自 award 行下（两空格缩进），旧产物仍走一次拼接。
+                for line, rows in zip(award_lines, award_extras, strict=True):
+                    lines.append(f"- {line}")
+                    for label, value in rows:
+                        lines.append(f"  - {label}：{value}")
+            else:
+                lines.append(_join_bullets(award_lines))
             lines.append("")
+
+    def write_custom_sections() -> None:
+        """C2/R-79 自建分区：系统分区之后独立成小节，标题=大字段名（不查语言包）。"""
+        for section in resume.custom_sections:
+            entries = [
+                entry
+                for entry in section.entries
+                if entry.text.strip() or any(line.value.strip() for line in entry.lines)
+            ]
+            if not entries:
+                continue
+            lines.append(f"## {section.title}\n")
+            for entry in entries:
+                if entry.text.strip():
+                    lines.append(f"{entry.text.strip()}\n")
+                for line in entry.lines:
+                    if line.value.strip():
+                        lines.append(f"- {line.label}：{line.value.strip()}")
+                lines.append("")
 
     writers = {
         "summary": write_summary,
@@ -285,5 +330,8 @@ def export_markdown(
     # Markdown 与 txt 都从这里出，所以两者的顺序天然一致。
     for section_key in section_order or DEFAULT_SECTION_ORDER:
         writers[section_key]()
+
+    # C2/R-79：自建大字段在 13 个系统分区之后独立成小节；空列表不输出（旧产物不变）。
+    write_custom_sections()
 
     return "\n".join(lines).strip() + "\n"

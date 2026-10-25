@@ -27,7 +27,7 @@ from ...schemas.resume import (
 from ...services import trash
 from ...services.llm import usage_ledger
 from ...services.llm.base import LLMError
-from ...services.profile.profile_service import get_profile_detail, to_profile_out
+from ...services.profile.profile_service import project_legacy_profile
 from ...services.resume import fact_locks
 from ...services.resume.document_identity import sanitize_document_ids
 from ...services.resume.document_save import (
@@ -62,7 +62,7 @@ async def suggest_resume_edits(resume_id: int, db: Session = Depends(get_db)):
     if not config.base_url or not config.model:
         raise HTTPException(status_code=400, detail="尚未配置大模型 API")
     try:
-        profile = to_profile_out(get_profile_detail(db))
+        profile = project_legacy_profile(db)
         resume = ResumeContent.model_validate(record.content)
         job_out = JobOut.model_validate(job)
         # 经包命名空间调用期读取，保住 test_resume_suggestions 对
@@ -167,6 +167,8 @@ async def revise_existing_resume(
     if outcome is None:  # 竞态：模型跑完这一行已被删
         raise HTTPException(status_code=404, detail="简历记录不存在或已被删除")
     # R04：记录本次调用的用量（未知 token 落 NULL，不臆造）；失败不影响已提交的正文。
+    # 修订是**唯一保留手工记账**的端点：它需要把 resume_id 关联到用量行；自动记账
+    # （中间件 + provider 上报）对 /revise 路径已关闭，避免同一次调用落两条。
     try:
         usage_ledger.record_provider_usage(
             db,

@@ -191,14 +191,18 @@ def list_phrases(
 
 
 def update_phrase(db: Session, phrase: ResumePhrase, **fields: Any) -> ResumePhrase:
+    # fields.get(...) 不能在同一表达式里调两次：`x if x.get(k) is not None else fallback`
+    # 的窄化只作用于第一次调用，第二次仍是 Any|None。取一次再选。
+    def _pick(key: str, fallback: Any) -> Any:
+        value = fields.get(key)
+        return value if value is not None else fallback
+
     text, kind, language, tags, note = _validate_phrase(
-        text=fields.get("text") if fields.get("text") is not None else phrase.text,
-        kind=fields.get("kind") if fields.get("kind") is not None else phrase.kind,
-        language=fields.get("language") if fields.get("language") is not None else phrase.language,
-        job_tags=fields.get("job_tags") if fields.get("job_tags") is not None else phrase.job_tags,
-        quality_note=fields.get("quality_note")
-        if fields.get("quality_note") is not None
-        else phrase.quality_note,
+        text=_pick("text", phrase.text),
+        kind=_pick("kind", phrase.kind),
+        language=_pick("language", phrase.language),
+        job_tags=_pick("job_tags", phrase.job_tags),
+        quality_note=_pick("quality_note", phrase.quality_note),
     )
     phrase.text = text
     phrase.kind = kind
@@ -227,7 +231,7 @@ def _read_path(payload: Any, path: str) -> Any:
     return current
 
 
-def _collect_target(record: ResumeRecord, path: str) -> tuple[str, str | None, str, str]:
+def _collect_target(record: ResumeRecord, path: str) -> tuple[str, str | None, str | None, str]:
     """解析 data-resume-path → (文本, object_id, point_id, kind)；解析不到抛 ValueError。"""
     segments = [segment for segment in (path or "").split(".") if segment != ""]
     if len(segments) < 2 or segments[0] not in ENTRY_FIELDS:
@@ -246,7 +250,8 @@ def _collect_target(record: ResumeRecord, path: str) -> tuple[str, str | None, s
     value = _read_path(record.content, path)
     if not isinstance(value, str) or not value.strip():
         raise ValueError("只能收藏一段非空文本")
-    object_id = entry.get("id") if is_object_id(entry.get("id")) else None
+    raw_id = entry.get("id")
+    object_id = raw_id if is_object_id(raw_id) else None
     point_id: str | None = None
     if len(segments) == 4:
         key, raw_point = segments[2], segments[3]
@@ -256,8 +261,10 @@ def _collect_target(record: ResumeRecord, path: str) -> tuple[str, str | None, s
             point_index = int(raw_point)
         except ValueError:
             point_index = -1
-        if isinstance(ids, list) and 0 <= point_index < len(ids) and is_object_id(ids[point_index]):
-            point_id = ids[point_index]
+        if isinstance(ids, list) and 0 <= point_index < len(ids):
+            candidate = ids[point_index]
+            if is_object_id(candidate):
+                point_id = candidate
     kind = _FIELD_KIND.get(segments[2] if len(segments) >= 3 else "", PHRASE_KIND_CUSTOM)
     return value.strip(), object_id, point_id, kind
 

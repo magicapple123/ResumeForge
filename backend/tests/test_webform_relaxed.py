@@ -400,10 +400,11 @@ def test_relaxed_mode_setting_defaults_to_off_and_survives_a_save(client, db_ses
 
 
 def test_the_preview_route_reads_the_setting(client, browser_port, db_session):
-    from app.models.profile import UserProfile
+    from app.services.profile import entry_store
 
-    db_session.add(UserProfile(target_city="天津"))
-    db_session.commit()
+    entry_store.upsert_entry(
+        db_session, "basic_info", values={"basic_info.target_city": "天津"}
+    )
     snapshot = get_snapshot_store().save(
         FormEngine().snapshot_controls([_popup()]), url="https://x/apply", title="网申"
     )

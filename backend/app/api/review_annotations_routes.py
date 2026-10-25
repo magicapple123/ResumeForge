@@ -17,7 +17,7 @@ from ..schemas.review_annotations import (
     ImportAnnotationsRequest,
     ReattachRequest,
 )
-from ..services.resume import review_annotations as annotations
+from ..services.resume import review_annotations
 from ..services.share_package import share_package_or_none
 
 router = APIRouter(tags=["review-annotations"])
@@ -30,7 +30,7 @@ def _package_or_404(db: Session, share_id: int):
     return package
 
 
-def _error(exc: annotations.ReviewAnnotationError) -> HTTPException:
+def _error(exc: review_annotations.ReviewAnnotationError) -> HTTPException:
     return HTTPException(status_code=exc.status_code, detail=str(exc))
 
 
@@ -39,8 +39,8 @@ def download_review_package(share_id: int, db: Session = Depends(get_db)) -> Res
     """生成评审包 zip（既有 HTML/PDF + annotations.json 模板 + 说明.txt）。"""
     package = _package_or_404(db, share_id)
     try:
-        content, filename = annotations.build_review_package_zip(db, package)
-    except annotations.ReviewAnnotationError as exc:
+        content, filename = review_annotations.build_review_package_zip(db, package)
+    except review_annotations.ReviewAnnotationError as exc:
         raise _error(exc) from exc
     return Response(
         content=content,
@@ -59,8 +59,8 @@ def import_annotations(
     """导入外部回传的 annotations.json；格式/上限/版本有问题整批拒收，锚点失联单条标 stale。"""
     package = _package_or_404(db, share_id)
     try:
-        result = annotations.import_annotations(db, package, payload.content)
-    except annotations.ReviewAnnotationError as exc:
+        result = review_annotations.import_annotations(db, package, payload.content)
+    except review_annotations.ReviewAnnotationError as exc:
         raise _error(exc) from exc
     return ImportAnnotationsOut.model_validate(result)
 
@@ -68,37 +68,39 @@ def import_annotations(
 @router.get("/api/share-packages/{share_id}/annotations", response_model=AnnotationListOut)
 def list_annotations(share_id: int, db: Session = Depends(get_db)) -> AnnotationListOut:
     package = _package_or_404(db, share_id)
-    rows = annotations.list_annotations(db, package.id)
+    rows = review_annotations.list_annotations(db, package.id)
     return AnnotationListOut(
-        items=[AnnotationOut.model_validate(annotations.annotation_brief(row)) for row in rows]
+        items=[
+            AnnotationOut.model_validate(review_annotations.annotation_brief(row)) for row in rows
+        ]
     )
 
 
 @router.post("/api/resume-annotations/{annotation_id}/resolve", response_model=AnnotationOut)
 def resolve_annotation(annotation_id: int, db: Session = Depends(get_db)) -> AnnotationOut:
     try:
-        row = annotations.resolve_annotation(db, annotation_id)
-    except annotations.ReviewAnnotationError as exc:
+        row = review_annotations.resolve_annotation(db, annotation_id)
+    except review_annotations.ReviewAnnotationError as exc:
         raise _error(exc) from exc
-    return AnnotationOut.model_validate(annotations.annotation_brief(row))
+    return AnnotationOut.model_validate(review_annotations.annotation_brief(row))
 
 
 @router.post("/api/resume-annotations/{annotation_id}/reopen", response_model=AnnotationOut)
 def reopen_annotation(annotation_id: int, db: Session = Depends(get_db)) -> AnnotationOut:
     try:
-        row = annotations.reopen_annotation(db, annotation_id)
-    except annotations.ReviewAnnotationError as exc:
+        row = review_annotations.reopen_annotation(db, annotation_id)
+    except review_annotations.ReviewAnnotationError as exc:
         raise _error(exc) from exc
-    return AnnotationOut.model_validate(annotations.annotation_brief(row))
+    return AnnotationOut.model_validate(review_annotations.annotation_brief(row))
 
 
 @router.post("/api/resume-annotations/{annotation_id}/dismiss", response_model=AnnotationOut)
 def dismiss_annotation(annotation_id: int, db: Session = Depends(get_db)) -> AnnotationOut:
     try:
-        row = annotations.dismiss_annotation(db, annotation_id)
-    except annotations.ReviewAnnotationError as exc:
+        row = review_annotations.dismiss_annotation(db, annotation_id)
+    except review_annotations.ReviewAnnotationError as exc:
         raise _error(exc) from exc
-    return AnnotationOut.model_validate(annotations.annotation_brief(row))
+    return AnnotationOut.model_validate(review_annotations.annotation_brief(row))
 
 
 @router.post("/api/resume-annotations/{annotation_id}/reattach", response_model=AnnotationOut)
@@ -107,9 +109,9 @@ def reattach_annotation(
 ) -> AnnotationOut:
     """把失联批注显式重挂到当前对象（锚点必须存在；绝不对下标做隐式回退）。"""
     try:
-        row = annotations.reattach_annotation(
+        row = review_annotations.reattach_annotation(
             db, annotation_id, object_id=payload.object_id, point_id=payload.point_id
         )
-    except annotations.ReviewAnnotationError as exc:
+    except review_annotations.ReviewAnnotationError as exc:
         raise _error(exc) from exc
-    return AnnotationOut.model_validate(annotations.annotation_brief(row))
+    return AnnotationOut.model_validate(review_annotations.annotation_brief(row))

@@ -14,6 +14,7 @@
  * **制作台中栏要挂同一份主体**：两份实现迟早在"能不能改照片、有没有草稿"上分叉。
  */
 import { Grid, Modal, Space } from "antd";
+import { useEffect } from "react";
 import type { ReactNode } from "react";
 import type { ResumeContent } from "../types";
 import type { ProfileFillSources } from "../features/profile/profileFillOptions";
@@ -52,10 +53,20 @@ interface Props {
   /**
    * 「从我的资料填入」的候选；不传则这条入口完全不渲染。
    *
-   * 手写简历会传（"预填之后我又补了一段实习，想加进这份简历"）；编辑已保存简历时不传
-   * ——那时用户要的是改这一份，不是从资料里再抓一条进来。
+   * 新建简历与编辑已保存简历（预览页「手动调整」/制作台中栏）都会传：两处都是"在现有
+   * 正文上补一条资料里的经历"，不是替换。候选对象同时携带当前组参与清单，编辑器页签
+   * 按它过滤（见 `resumeEditorTabs`）。
    */
   fillSources?: ProfileFillSources | null;
+  /**
+   * 内容变化且表单有未保存改动时**不静默覆盖**，改为在表单上方给一条内联提示 + 两个动作。
+   *
+   * 只给新建简历（内容来自当前组投影、会被别的窗口改资料影响）打开；编辑已保存简历时
+   * `content` 是服务端刚存下的正文，本来就该覆盖。
+   */
+  deferRefreshWhenDirty?: boolean;
+  /** 表单脏值变化（新建简历据此决定"前往制作台"这类入口能不能用）。 */
+  onDirtyChange?: (dirty: boolean) => void;
   /**
    * 是否渲染**条目级**的「从资料填入本条」，默认 `true`。
    *
@@ -67,21 +78,26 @@ interface Props {
   /**
    * 「填入我的资料全部数据」（T11）。
    *
-   * 提供后头部多一个次按钮：把整份「我的资料」一次性带进表单。手写通用简历会传
-   * （它从空白开始，需要一条"要么自己写、要么全部带入"的捷径）；岗位模式与编辑已保存
-   * 简历都不传——前者会替用户做决定，后者要的是改这一份而不是换成资料里的内容。
+   * 提供后头部多一个次按钮：把当前组投影内容重新整份带进表单（有内容时先内联确认）。
+   * 通用手写简历会传（"我把资料改完整了，重新带一遍"）；岗位模式与编辑已保存简历都不传
+   * ——前者有来源面板逐条加，后者要的是改这一份而不是换成资料里的内容。
    */
   fillAll?: () => ResumeContent;
   /**
    * footer 左侧的额外动作（「前往简历制作台」）。
    *
    * 只在**新建**场景由 `ManualResumeModal` 传入：那条入口的语义是"先落库、再去制作台
-   * 从空白开始排版"，没有这份简历的 id 就无从进制作台。编辑已保存简历时不传——
-   * 那里本来就能从预览页直达制作台。
+   * 从当前组预填内容开始排版"，没有这份简历的 id 就无从进制作台。编辑已保存简历时不传
+   * ——那里本来就能从预览页直达制作台。
    *
    * 确认态（`api.confirming`）下不渲染：那一行整条让给确认句与两颗按钮。
    */
   footerExtra?: ReactNode;
+  /**
+   * 表单上方的额外区块（F4）：新建简历的「资料来源」面板。只由 `ManualResumeModal`
+   * 传入（它持有当前组投影）；编辑已保存简历时不传。
+   */
+  sourcePanel?: ReactNode;
 }
 
 export default function ResumeEditorModal({
@@ -98,9 +114,12 @@ export default function ResumeEditorModal({
   resumeId,
   draftScopeKey,
   fillSources,
+  deferRefreshWhenDirty = false,
+  onDirtyChange,
   entryFill = true,
   fillAll,
   footerExtra,
+  sourcePanel,
 }: Props) {
   // 弹窗形态 = 「面板可见」跟着 open 走：关掉时既不读也不写草稿、也不挂 beforeunload。
   // `onExit` 就是关窗：保存成功、放弃修改、无脏值关闭都汇到这一个出口。
@@ -111,11 +130,19 @@ export default function ResumeEditorModal({
     initialTarget,
     draftScopeKey,
     fillSources,
+    deferRefreshWhenDirty,
     entryFill,
     fillAll,
     onSave,
     onExit: onClose,
   });
+
+  // 把脏值上报给宿主：新建简历的"前往简历制作台"读不到表单内容，有未保存改动时不能用
+  // 初始内容建草稿（那会把用户刚写的东西丢掉），所以宿主必须知道现在脏不脏。
+  useEffect(() => {
+    onDirtyChange?.(api.dirty);
+  }, [api.dirty, onDirtyChange]);
+  useEffect(() => () => onDirtyChange?.(false), [onDirtyChange]);
 
   // "两栏独立滚动"：要有参考栏、且屏幕够宽（两处判据必须一致，见 `ResumeEditorPanel`：
   // 判两次不一致会出现"body 不滚 + grid 不是双栏"，内容就滚不动了）。
@@ -186,6 +213,7 @@ export default function ResumeEditorModal({
         headerExtra={headerExtra}
         referencePanel={referencePanel}
         onFillAll={api.fillAllData ?? undefined}
+        sourcePanel={sourcePanel}
       />
     </Modal>
   );
