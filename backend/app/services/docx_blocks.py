@@ -30,6 +30,8 @@ from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 from docx.shared import Mm, Pt, RGBColor
 
+# 段落底纹/边框（纯 OOXML 拼装）拆到 docx_decorate；本模块 re-export 维持既有导入路径。
+from .docx_decorate import decorate_paragraph
 from .docx_fonts import DOCX_FONT, resolve_docx_font_name
 from .docx_rich import add_rich_runs
 from .pdf_exporter import _PX_TO_MM, _PX_TO_PT, PAGE_WIDTH_MM
@@ -102,6 +104,7 @@ def set_run_font(
     *,
     size_pt: float,
     bold: bool = False,
+    italic: bool = False,
     color: tuple[int, int, int] | None = None,
     font_name: str = DOCX_FONT,
 ) -> None:
@@ -113,114 +116,39 @@ def set_run_font(
     run.font.name = font_name
     run.font.size = Pt(size_pt)
     run.font.bold = bold
+    # W07 协议 v2：斜体只在为真时写属性（显式 False 会在 OOXML 落 w:i val="0"，
+    # 让所有旧产物平白多一层属性）。加粗仍按历史口径显式写。
+    if italic:
+        run.font.italic = True
     run._element.get_or_add_rPr().get_or_add_rFonts().set(qn("w:eastAsia"), font_name)
     if color is not None:
         run.font.color.rgb = RGBColor(color[0], color[1], color[2])
 
 
 def paragraph(
-    doc, *, indent_mm: float = 0.0, space_after_mm: float = 0.0, space_before_mm: float = 0.0
+    doc,
+    *,
+    indent_mm: float = 0.0,
+    space_after_mm: float = 0.0,
+    space_before_mm: float = 0.0,
+    keep_together: bool = False,
+    keep_with_next: bool = False,
 ):
-    """新建一个段落，并把"缩进 / 段前 / 段后"一次性设成版式要求的毫米值。"""
+    """新建一个段落，并把"缩进 / 段前 / 段后"一次性设成版式要求的毫米值。
+
+    W08 的分页意图也在这里落成 OOXML 属性（Word 没有 CSS 的 break-inside / break-after）：
+    `keep_together` → `w:keepLines`（整段不跨页），`keep_with_next` → `w:keepNext`
+    （标题/条目头跟着后续内容走）。**为 False 时不写属性**——旧产物逐字节不变。
+    """
     result = doc.add_paragraph()
     result.paragraph_format.left_indent = Mm(indent_mm)
     result.paragraph_format.space_after = Mm(space_after_mm)
     result.paragraph_format.space_before = Mm(space_before_mm)
+    if keep_together:
+        result.paragraph_format.keep_together = True
+    if keep_with_next:
+        result.paragraph_format.keep_with_next = True
     return result
-
-
-# pPr 里各子元素的**顺序由 schema 固定**：底纹必须排在 `w:pBdr` 之后、`w:tabs` 之前，
-# 边框必须排在 `w:spacing` / `w:ind` 之前。顺序错了 Word 会判定文件损坏——python-docx
-# 的 `insert_element_before` 就是干这件事的，这里把"在它后面的那些标签"一次写全。
-_PPR_AFTER_BDR = (
-    "w:shd",
-    "w:tabs",
-    "w:suppressAutoHyphens",
-    "w:kinsoku",
-    "w:wordWrap",
-    "w:overflowPunct",
-    "w:topLinePunct",
-    "w:autoSpaceDE",
-    "w:autoSpaceDN",
-    "w:bidi",
-    "w:adjustRightInd",
-    "w:snapToGrid",
-    "w:spacing",
-    "w:ind",
-    "w:contextualSpacing",
-    "w:mirrorIndents",
-    "w:suppressOverlap",
-    "w:jc",
-    "w:textDirection",
-    "w:textAlignment",
-    "w:textboxTightWrap",
-    "w:outlineLvl",
-    "w:divId",
-    "w:cnfStyle",
-    "w:rPr",
-    "w:sectPr",
-    "w:pPrChange",
-)
-_PPR_AFTER_SHD = _PPR_AFTER_BDR[1:]
-
-# `w:pBdr` 的子元素顺序同样是固定的：top → left → bottom → right。
-_BORDER_ORDER = ("top", "left", "bottom", "right")
-
-
-def _rgb_hex(color: tuple[int, int, int]) -> str:
-    """(r, g, b) → OOXML 要的 `RRGGBB`（不带 `#`）。"""
-    return "".join(f"{max(0, min(255, int(channel))):02X}" for channel in color)
-
-
-def decorate_paragraph(
-    paragraph,
-    *,
-    fill: tuple[int, int, int] | None = None,
-    edges: tuple[str, ...] | None = None,
-    border_color: tuple[int, int, int] | None = None,
-    border_sz: int = 4,
-    space_pt: float = 4.0,
-) -> None:
-    """给段落加**底纹 / 边框**——Word 里唯一能表达"色块"的手段。
-
-    ## 为什么需要 `space_pt`
-
-    Word 的段落底纹只铺到"文字所在的行盒"，不像 CSS 的 `padding` 会把背景撑开。所以
-    底色块要配一圈**与底色同色**的边框，`w:space` 把边框推离文字几个磅——底纹一直铺到
-    边框，看起来就是有内边距的色带。边框颜色等于底色时它自己看不见。
-
-    ## 与 CSS 的差距（如实说）
-
-    - **没有圆角**：OOXML 的段落边框/底纹都是矩形，`border-radius` 表达不出来。
-      modern 那种胶囊形标题在 Word 里会变成直角色带。
-    - 底纹高度由"行高 + 上下 space"决定，与 CSS 的 `line-height + padding` 会差 1–2pt。
-
-    :param fill: 底纹颜色；``None`` = 不填底纹。
-    :param edges: 要画的边框边（top/left/bottom/right 的子集）；``None`` = 不画边框。
-    :param border_color: 边框颜色，缺省跟随底纹。
-    :param border_sz: 边框粗细，单位是**八分之一磅**（4px ≈ 3pt ≈ 24）。
-    :param space_pt: 边框与文字之间的距离（磅），用来模拟 CSS 的 padding。
-    """
-    pPr = paragraph._p.get_or_add_pPr()
-    if edges:
-        pBdr = OxmlElement("w:pBdr")
-        for edge in _BORDER_ORDER:
-            if edge not in edges:
-                continue
-            node = OxmlElement(f"w:{edge}")
-            node.set(qn("w:val"), "single")
-            node.set(qn("w:sz"), str(border_sz))
-            node.set(qn("w:space"), str(int(round(space_pt))))
-            node.set(qn("w:color"), _rgb_hex(border_color or fill or (0, 0, 0)))
-            pBdr.append(node)
-        pPr.insert_element_before(pBdr, *_PPR_AFTER_BDR)
-    if fill is not None:
-        shd = OxmlElement("w:shd")
-        shd.set(qn("w:val"), "clear")
-        shd.set(qn("w:color"), "auto")
-        shd.set(qn("w:fill"), _rgb_hex(fill))
-        pPr.insert_element_before(shd, *_PPR_AFTER_SHD)
-
 
 def _title_text_color(
     layout, accent: tuple[int, int, int], theme: DocxTheme
@@ -264,7 +192,13 @@ def section_title(
         else layout.section_gap
     )
     gap_mm = base * _PX_TO_MM * gap_ratio
-    node = paragraph(doc, space_before_mm=gap_mm, space_after_mm=base * _PX_TO_MM * 0.4)
+    # W08：板块标题跟随后续内容（Word 的 w:keepNext；PDF 同语义用预留行数）。
+    node = paragraph(
+        doc,
+        space_before_mm=gap_mm,
+        space_after_mm=base * _PX_TO_MM * 0.4,
+        keep_with_next=True,
+    )
 
     title_style = getattr(layout, "section_title_style", "plain")
     if title_style == "soft_box":
@@ -321,7 +255,8 @@ def bullets(
         text = str(item).strip()
         if not text:
             continue
-        node = paragraph(doc, indent_mm=indent_mm)
+        # W08：一条要点不跨页（Word 的 w:keepLines）；超高条目由 Word 自己劈开。
+        node = paragraph(doc, indent_mm=indent_mm, keep_together=True)
         node.paragraph_format.first_line_indent = Mm(-indent_mm)
         if style is not None and style.line_height:
             node.paragraph_format.line_spacing = float(style.line_height)
@@ -340,7 +275,8 @@ def meta_line(
     """条目下的副行（绩点 / 核心课程 / 技术栈）：小一号的灰字。"""
     if not text.strip():
         return
-    node = paragraph(doc)
+    # W08：副行（绩点/课程/技术栈）不跨页。
+    node = paragraph(doc, keep_together=True)
     add_rich_runs(
         node,
         text,
@@ -374,7 +310,12 @@ def entry_head(
         if style is not None and style.space_before is not None
         else 0.0
     )
-    node = paragraph(doc, space_before_mm=base * _PX_TO_MM * 0.2 + space_before_extra_mm + extra)
+    # W08：条目头跟着它下面的副行/要点走（Word 的 w:keepNext）。
+    node = paragraph(
+        doc,
+        space_before_mm=base * _PX_TO_MM * 0.2 + space_before_extra_mm + extra,
+        keep_with_next=True,
+    )
     add_rich_runs(
         node,
         left,

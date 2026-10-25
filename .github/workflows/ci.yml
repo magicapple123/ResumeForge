@@ -641,6 +641,13 @@ jobs:
         # is treated as a module and fails to load.
         run: node --test "scripts/test-*.js"
 
+      - name: Print bridge electron smoke (A08 real IPC + Chromium PDF)
+        working-directory: desktop
+        # 真实 Electron 运行时冒烟（不打包、不联网）：真实 ipcMain 通道 + 隐藏 BrowserWindow
+        # + Chromium printToPDF 产出 PDF；同时验证非主窗口 sender 拒绝、非法/超大 payload
+        # 拒绝、超预算快速失败。--disable-gpu：runner 无 GPU 时避免 Chromium 初始化抖动。
+        run: npx electron scripts/smoke-print-bridge-electron.js
+
       - name: Desktop supply-chain audit gate (audit PR-06)
         working-directory: desktop
         # Read-only `npm audit --json` + baseline comparison: fails on any

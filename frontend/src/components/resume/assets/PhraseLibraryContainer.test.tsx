@@ -41,6 +41,7 @@ const PHRASE: ResumePhrase = {
 beforeEach(() => {
   apiMocks.listPhrases.mockResolvedValue({ items: [PHRASE], next_cursor: null });
   apiMocks.deletePhrase.mockResolvedValue(undefined);
+  apiMocks.updatePhrase.mockResolvedValue({ ...PHRASE, text: "New wording." });
   apiMocks.collectPhrase.mockResolvedValue(PHRASE);
   apiMocks.insertPhrase.mockResolvedValue({
     resume: { id: 3 },
@@ -89,6 +90,10 @@ describe("PhraseLibraryContainer", () => {
     fireEvent.click(
       screen.getByRole("button", { name: at("assets.action.insertAria", { index: 1 }) }),
     );
+    // 插入前确认层：确认后才真正写库。
+    await screen.findByText(at("assets.insert.previewHint"));
+    expect(apiMocks.insertPhrase).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: at("assets.insert.confirm") }));
     await waitFor(() => expect(apiMocks.insertPhrase).toHaveBeenCalledTimes(1));
     expect(apiMocks.insertPhrase.mock.calls[0][0]).toBe(PHRASE.id);
     expect(apiMocks.insertPhrase.mock.calls[0][1]).toMatchObject({
@@ -103,6 +108,25 @@ describe("PhraseLibraryContainer", () => {
         exact: false,
       }),
     ).toBeTruthy();
+  });
+
+  it("编辑：正文改动先看差异，确认后 PATCH 且状态刷新", async () => {
+    renderContainer();
+    await screen.findByText(PHRASE.text);
+    fireEvent.click(
+      screen.getByRole("button", { name: at("assets.action.editAria", { index: 1 }) }),
+    );
+    const textarea = await screen.findByLabelText(at("assets.editor.text"));
+    fireEvent.change(textarea, { target: { value: "New wording." } });
+    fireEvent.click(screen.getByRole("button", { name: at("assets.editor.save") }));
+    expect(apiMocks.updatePhrase).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: at("assets.editor.confirm") }));
+    await waitFor(() => expect(apiMocks.updatePhrase).toHaveBeenCalledTimes(1));
+    expect(apiMocks.updatePhrase.mock.calls[0][0]).toBe(PHRASE.id);
+    expect(apiMocks.updatePhrase.mock.calls[0][1]).toMatchObject({
+      text: "New wording.",
+      job_tags: ["backend"],
+    });
   });
 
   it("删除：软删 + Toast 撤销 → 撤销调用回收站恢复", async () => {

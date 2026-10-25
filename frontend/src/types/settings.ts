@@ -362,4 +362,16 @@ export interface BackupStatus {
    * 旧后端没有这个字段（可选），此时界面按既有文案不倒推范围。
    */
   coverage?: "database_only";
+  /**
+   * 自动备份是否被**部署配置**启用（A02 扩展；旧后端没有这个字段）。
+   * 无 UI 开关：关闭只由部署配置决定，界面只能如实说明，不能给用户一个点不动的假开关。
+   */
+  auto_backup_enabled?: boolean;
+  /** 与 auto_backup_enabled 等价的显式禁用标记（任一为真即禁用；后端同时下发）。 */
+  disabled?: boolean;
+  /**
+   * 后端统一给的状态枚举（A02）：protected/overdue/never/empty/unreadable/failing/disabled。
+   * 旧后端没有这个字段，界面按旧字段推断；disabled 时 protected 必须为假。
+   */
+  state?: "protected" | "overdue" | "never" | "empty" | "unreadable" | "failing" | "disabled";
 }

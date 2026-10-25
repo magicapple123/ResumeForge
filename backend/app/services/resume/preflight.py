@@ -67,8 +67,14 @@ def run_preflight(
     format_config: dict,
     claims: list[ClaimRecord] | None = None,
     model_configured: bool = False,
+    purpose: str = "edit",
+    redact: bool = False,
 ) -> PreflightOut:
-    """按请求的层跑检查并合并。调用方负责解析记录/草稿与快照指纹。"""
+    """按请求的层跑检查并合并。调用方负责解析记录/草稿与快照指纹。
+
+    purpose / redact 只影响内容层的 R03 规则：导出视角（purpose=export）才提示
+    "联系方式脱敏未开启"；编辑态检查保持原样。
+    """
     started = time.perf_counter()
     layers = set(request.layers)
     issues: list[CheckIssue] = []
@@ -84,6 +90,8 @@ def run_preflight(
                 jd_text=request.jd_text,
                 claims=claims,
                 include_risk="risk" in layers,
+                purpose=purpose,
+                redact=redact,
             )
         )
         layers_run.append("content")

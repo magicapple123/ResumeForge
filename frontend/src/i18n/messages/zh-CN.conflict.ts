@@ -75,6 +75,8 @@ const conflict = {
   "workbench.history.label.text": "编辑正文",
   "workbench.history.label.layout": "调整排版",
   "workbench.history.label.structure": "结构操作",
+  /** 纸面加粗（overlay）单独成步：用户要看得出"这一步改的是粗体，不是正文"。 */
+  "workbench.history.label.bold": "加粗",
   /** 摘要：内容 + 版式的可读快照（姓名 / 条目数 / 页数 / 版式名）。 */
   "workbench.history.summary": "{name} · {entries} 条 · {pages} 页",
   /** 当前状态行。 */

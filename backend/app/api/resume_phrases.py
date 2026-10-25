@@ -18,6 +18,7 @@ from ..schemas.resume_assets import (
     PhraseListOut,
     PhraseOut,
     PhraseUpdate,
+    PhraseUpdateOut,
 )
 from ..services import trash
 from ..services.resume import resume_assets
@@ -72,7 +73,12 @@ def create_phrase(payload: PhraseIn, db: Session = Depends(get_db)) -> PhraseOut
 def collect_phrase(payload: PhraseCollectRequest, db: Session = Depends(get_db)) -> PhraseOut:
     """从简历选中一句收藏成资产；path 解析不到就 422（不猜）。"""
     try:
-        phrase = resume_assets.collect_phrase(db, resume_id=payload.resume_id, path=payload.path)
+        phrase = resume_assets.collect_phrase(
+            db,
+            resume_id=payload.resume_id,
+            path=payload.path,
+            job_tags=payload.job_tags,
+        )
     except LookupError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except ValueError as exc:
@@ -80,16 +86,21 @@ def collect_phrase(payload: PhraseCollectRequest, db: Session = Depends(get_db))
     return PhraseOut.model_validate(resume_assets.phrase_brief(phrase))
 
 
-@router.patch("/{phrase_id}", response_model=PhraseOut)
+@router.patch("/{phrase_id}", response_model=PhraseUpdateOut)
 def update_phrase(
     phrase_id: int, payload: PhraseUpdate, db: Session = Depends(get_db)
-) -> PhraseOut:
+) -> PhraseUpdateOut:
+    """更新资产；响应带**更新前快照**（previous），供「更新先看差异」本地对比。"""
     phrase = _phrase_or_404(db, phrase_id)
+    previous = PhraseOut.model_validate(resume_assets.phrase_brief(phrase))
     try:
         phrase = resume_assets.update_phrase(db, phrase, **payload.model_dump(exclude_unset=True))
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    return PhraseOut.model_validate(resume_assets.phrase_brief(phrase))
+    return PhraseUpdateOut(
+        **resume_assets.phrase_brief(phrase),
+        previous=previous,
+    )
 
 
 @router.delete("/{phrase_id}", status_code=204)

@@ -41,6 +41,7 @@ import ResumeCoverageNotes from "./ResumeCoverageNotes";
 import ResumeDetailFooter from "./ResumeDetailFooter";
 import EvidencePanel from "./EvidencePanel";
 import { useProfileFillSources } from "./useProfileFillSources";
+import { useVariants } from "../../features/resume-versions/useVariants";
 import type { ResumeDocumentPipeline } from "../../features/resume-document/types";
 import type { PathRemap } from "../../features/resume-outline/paths";
 
@@ -107,11 +108,8 @@ interface Props {
   /** 服务端已有新版本（表达资产插入等）：宿主刷新 detail/html/revision。 */
   onDocumentSynced?: (detail: ResumeDetail) => void;
   /**
-   * 导出入口走哪条链路（W19 入口迁移）：
-   * - `delivery`（默认）：已保存简历 → 新的「导出交付包」面板（命名配置 / 成套导出 /
-   *   目标核对 / 原件归档）；
-   * - `legacy`：**生成流程/未保存预览**（内容还没落库定稿）→ 保留旧的导出选项面板，
-   *   避免把"还没保存的草稿"当成已保存简历去做交付配置与核对。
+   * 导出入口走哪条链路（W19）：`delivery`（默认，已保存简历 → 导出交付包）/
+   * `legacy`（生成流程/未保存预览 → 旧导出选项面板，避免把草稿当已保存简历核对）。
    */
   exportFlow?: "delivery" | "legacy";
 }
@@ -188,6 +186,7 @@ export default function ResumeDetailPreview({
   const resolvedPreviewRef = previewRef ?? fallbackRef;
   // 版式目录：**只取一次**，工具栏两行的两组控件共用（见 `useResumeTemplateCatalog`）。
   const { catalog } = useResumeTemplateCatalog();
+  const variantsState = useVariants({ resumeId: detail.id }); // W16 导出变体选择器数据源
   // 缺省跟随 onResumeRevised：能刷新预览就有意义，不能刷新就不该摆出这个入口。
   const showRevise = showReviseAction ?? Boolean(onResumeRevised);
   const enhancementLabel = RESUME_ENHANCEMENT_LEVELS.find(
@@ -261,6 +260,7 @@ export default function ResumeDetailPreview({
           style={{ marginBottom: 12 }}
         />
       ) : null}
+      {/* W09：诊断卡在制作台弹层背后，正文取这一页看到的版本；应用走宿主写入链路。 */}
       <ResumeLayoutDiagnosisCard
         resumeId={detail.id}
         measure={measure}
@@ -270,10 +270,10 @@ export default function ResumeDetailPreview({
         disabled={relayouting}
         onApplied={(formatConfig) => onApplyFittedFormat(formatConfig)}
         onAddPage={() => onApplyLayout({ ...layout, page_limit: layout.page_limit + 1 })}
+        content={liveContent ?? detail.content}
+        onApplyContent={onSaveEditedResume}
       />
-      {/* 「没写进这份简历」的中性分组（#3/#5）：与"疑似虚构"分开呈现，并给出处理入口。
-          展示细节搬到了 `ResumeCoverageNotes`（本文件贴着 500 行预算），两类数据都空时它自己
-          不渲染——调用方不需要再判一次。 */}
+      {/* 「没写进这份简历」的中性分组（#3/#5）：与"疑似虚构"分开；细节在 ResumeCoverageNotes。 */}
       <ResumeCoverageNotes
         notes={coverageNotes}
         legacyWarnings={legacyCoverageWarnings}
@@ -286,8 +286,7 @@ export default function ResumeDetailPreview({
           setEditorOpen(true);
         }}
       />
-      {/* 事实来源展示（RF-13）：与"没写进简历"分开——它回答的是"写进去的内容
-          从哪来"，挂在 coverage Alert 之后、预览之前，先看筛选结果再看来源。 */}
+      {/* 事实来源展示（RF-13）：回答"写进去的内容从哪来"，挂在 coverage Alert 之后、预览之前。 */}
       {factAnnotations.length > 0 && (
         <EvidencePanel annotations={factAnnotations} content={detail.content} />
       )}
@@ -422,8 +421,11 @@ export default function ResumeDetailPreview({
           company={detail.company}
           jobTitle={detail.job_title}
           template={layout.template}
+          formatName={layout.format_name}
           language={layout.language}
           documentMode={detail.document_mode}
+          variants={variantsState.variants}
+          variantLoading={variantsState.loading}
           // 未保存的草稿版式也进同快照（不传则后端用记录里那份）。
           pageLimit={layout.page_limit}
           fontScale={layout.font_scale}

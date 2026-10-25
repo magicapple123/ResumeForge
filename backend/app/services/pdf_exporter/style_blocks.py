@@ -20,6 +20,7 @@ from fpdf.enums import XPos, YPos
 
 from .fonts import FONT_FAMILY
 from .layout import _PX_TO_MM, _PX_TO_PT
+from .rich_text import drawn_text
 
 if TYPE_CHECKING:  # pragma: no cover - 只为类型检查，运行期不能导入 canvas（会循环导入）
     from ..resume.resume_style import RoleStyle
@@ -75,7 +76,8 @@ def _wrapmode_args(pdf: _ResumePDF, text: str, width: float, size_pt: float) -> 
     saved = (pdf.font_family, pdf.font_style, pdf.font_size_pt)
     pdf.set_font(FONT_FAMILY, "", size_pt)
     try:
-        for token in str(text).split():
+        # 按**纸面上真正出现**的字符判断（斜体/链接标记不占宽度，链接的 URL 会展成文字）。
+        for token in drawn_text(str(text)).split():
             if pdf.get_string_width(token) > width:
                 return {"wrapmode": "CHAR"}
     finally:
@@ -94,6 +96,58 @@ def start_forced_page(pdf: _ResumePDF, plan, *, margin_top: float) -> None:
         pdf.add_page()
 
 
+def _title_metrics(
+    pdf: _ResumePDF, base: float, *, leading_gap: float, style: RoleStyle | None = None
+) -> tuple[float, float, float, float, float, float]:
+    """区块标题的几何量：(字号, 标题行高, 纵向内边距, 与正文间距, 标题块高, 前导留白)。
+
+    抽出来是为了让"画标题"与"W08 预告标题+正文的总高"用**同一份算式**——两处各写一遍
+    迟早漂移，而漂移的表现是"预留 10mm、实际画了 12mm"，页尾正好差一行。
+    """
+    layout = pdf.layout
+    size = base * layout.section_title_ratio * _scale(style)
+    title_height = pdf.line_advance(size)
+    pad_y = layout.gap_mm(layout.section_title_pad_y)
+    gap_after = (
+        layout.gap_mm(float(style.space_after))
+        if style is not None and style.space_after is not None
+        else layout.gap_mm(layout.section_title_gap)
+    )
+    shape = layout.section_title_style
+    if shape in ("soft_box", "accent_box"):
+        block_height = title_height + 2 * pad_y
+    elif shape == "underline":
+        block_height = title_height + pad_y
+    else:
+        block_height = title_height
+    return size, title_height, pad_y, gap_after, block_height, layout.gap_mm(leading_gap)
+
+
+def section_title_total_height(
+    pdf: _ResumePDF,
+    base: float,
+    *,
+    leading_gap: float,
+    style: RoleStyle | None = None,
+    keep_lines: int = 0,
+) -> float:
+    """区块标题占用的总高度（前导留白 + 标题块 + 与正文间距 + 预留正文行）。
+
+    W08 的"标题跟随后续内容"与"标题+整段正文保持同页"都从这一个数出发：前者在
+    draw_section_title 里自用，后者由 render 的摘要分支在落笔前调用。
+    """
+    _, _, _, gap_after, block_height, gap_before = _title_metrics(
+        pdf, base, leading_gap=leading_gap, style=style
+    )
+    return (
+        gap_before
+        + block_height
+        + gap_after
+        + pdf.line_advance(base)
+        + max(0, keep_lines) * pdf.line_advance(base)
+    )
+
+
 def draw_section_title(
     pdf: _ResumePDF,
     text: str,
@@ -106,35 +160,21 @@ def draw_section_title(
 ) -> None:
     """区块标题：形状/颜色由模板决定；角色覆盖可改字号、字色、下边距与对齐。"""
     layout = pdf.layout
-    size = base * layout.section_title_ratio * _scale(style)
-    title_height = pdf.line_advance(size)
-    pad_x = layout.gap_mm(layout.section_title_pad_x)
-    pad_y = layout.gap_mm(layout.section_title_pad_y)
-    gap_after = (
-        layout.gap_mm(float(style.space_after))
-        if style is not None and style.space_after is not None
-        else layout.gap_mm(layout.section_title_gap)
+    size, title_height, pad_y, gap_after, block_height, gap_before = _title_metrics(
+        pdf, base, leading_gap=leading_gap, style=style
     )
+    pad_x = layout.gap_mm(layout.section_title_pad_x)
     shape = layout.section_title_style
     bar_w = 4 * _PX_TO_MM
-
-    if shape in ("soft_box", "accent_box"):
-        block_height = title_height + 2 * pad_y
-    elif shape == "underline":
-        block_height = title_height + pad_y
-    else:
-        block_height = title_height
-
-    keep_extra = max(0, keep_lines) * pdf.line_advance(base)
     pdf.ensure_space(
-        layout.gap_mm(leading_gap) + block_height + gap_after + pdf.line_advance(base) + keep_extra
+        section_title_total_height(pdf, base, leading_gap=leading_gap, style=style, keep_lines=keep_lines)
     )
-    pdf.ln(layout.gap_mm(leading_gap))
+    pdf.ln(gap_before)
     top = pdf.get_y()
 
     pdf.set_font(FONT_FAMILY, "B", size * _PX_TO_PT)
-    title_markdown = _has_bold(text)
-    text_width = pdf.get_string_width(text, markdown=title_markdown)
+    # 宽度按**投影后**的正文量：斜体/链接标记不占纸面宽度，加粗字形可能更宽。
+    text_width = pdf.rich_text_width(text)
     text_x = pdf.frame_left + pad_x
 
     if shape == "left_bar":
@@ -166,7 +206,7 @@ def draw_section_title(
 
     pdf.set_text_color(*_color(style, pdf._section_title_color()))
     pdf.set_xy(text_x, top + pad_y)
-    pdf.cell(0, title_height, text, new_x=XPos.RIGHT, new_y=YPos.TOP, markdown=title_markdown)
+    pdf.cell(0, title_height, text, new_x=XPos.RIGHT, new_y=YPos.TOP)
 
     if shape == "underline":
         line_y = top + title_height + pad_y
@@ -217,7 +257,7 @@ def draw_bullets(
         text = str(item).strip()
         if not text:
             continue
-        height = pdf._dry_run_height(width, line_height, text, markdown=_has_bold(text))
+        height = pdf._dry_run_height(width, line_height, text)
         gap = 0.0 if first else li_gap
         if split_ok:
             # allow_split=True：只预留一行，让 multi_cell 按行自然劈开（长要点可以跨页）。
@@ -243,7 +283,6 @@ def draw_bullets(
             align=align,
             new_x=XPos.LMARGIN,
             new_y=YPos.NEXT,
-            markdown=_has_bold(text),
             **_wrapmode_args(pdf, text, width, font_size * _PX_TO_PT),
         )
         if section:
@@ -292,7 +331,6 @@ def draw_entry_head(
         left,
         new_x=XPos.RIGHT,
         new_y=YPos.TOP,
-        markdown=_has_bold(left),
     )
     if not right:
         pdf.ln(line_height)
@@ -306,9 +344,7 @@ def draw_entry_head(
     pdf.set_font(FONT_FAMILY, "", meta_size * _PX_TO_PT)
     pdf.set_text_color(*_color(meta_style, pdf.muted_text))
     if inline_meta:
-        pdf.cell(
-            0, line_height, right, new_x=XPos.LMARGIN, new_y=YPos.NEXT, markdown=_has_bold(right)
-        )
+        pdf.cell(0, line_height, right, new_x=XPos.LMARGIN, new_y=YPos.NEXT)
     else:
         pdf.cell(
             available - title_width,
@@ -317,7 +353,6 @@ def draw_entry_head(
             align="R",
             new_x=XPos.LMARGIN,
             new_y=YPos.NEXT,
-            markdown=_has_bold(right),
         )
     pdf.set_text_color(*pdf.body_text)
     if section:
@@ -345,17 +380,13 @@ def draw_meta_line(
         align="L",
         new_x=XPos.LMARGIN,
         new_y=YPos.NEXT,
-        markdown=_has_bold(text),
         **_wrapmode_args(pdf, text, pdf.frame_width, size * _PX_TO_PT),
     )
     pdf.ln(layout.gap_mm(layout.sub_gap_bottom))
     pdf.set_text_color(*pdf.body_text)
 
 
-def _has_bold(text: str) -> bool:
-    from ..resume.resume_rich_text import has_bold
 
-    return has_bold(text)
 
 
 __all__ = [

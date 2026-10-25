@@ -33,6 +33,7 @@ import {
   LEVEL_LABEL_KEY,
   parseCapabilities,
 } from "../../../features/resume-preflight/capabilities";
+import PageThumbnailStrip from "./PageThumbnailStrip";
 
 /** 跟随行数候选：0（不跟随）/1–3（与后端 keep_with_next 0–3 同域）。 */
 const KEEP_OPTIONS = [0, 1, 2, 3] as const;
@@ -171,6 +172,8 @@ export default function PaginationControls({
   return (
     <section className="resume-pagination-panel" aria-label={t("pagination.group.title")}>
       <Alert type="info" showIcon title={t("pagination.draft.note")} />
+      {/* 页缩略图自包含：订阅 W08 报告快照，不需要 shell 额外传参。 */}
+      <PageThumbnailStrip />
 
       {entryBreak ? (
         <Flex vertical gap={4} data-testid="pagination-entry">

@@ -173,8 +173,10 @@ def test_one_page_fit_trusts_the_real_page_count_not_the_continuous_height():
     layout = resolve_layout(template="minimal", base_px=14.0, format_config=None)
     usable = layout.usable_height_per_page
 
-    # (填充字数, 是否应当溢出)。数字取自实测：边界落在 1415~1430 之间。
-    cases = ((1400, False), (1430, True))
+    # (填充字数, 是否应当溢出)。数字取自实测：W08 让"摘要+标题"整段不跨页后，真实分页
+    # 边界提前到 1400 附近（连续高边界仍在 1430+），取 1350 / 1440 让两组样本同时满足
+    # "真实分页"与"连续高"两个对照条件（否则本用例的自检会先红）。
+    cases = ((1350, False), (1440, True))
     for filler_chars, expect_overflow in cases:
         resume = _one_page_boundary_resume(filler_chars)
         continuous = measure_content_height(resume, accent=_MINIMAL_ACCENT, layout=layout)

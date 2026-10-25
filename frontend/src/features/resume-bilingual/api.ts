@@ -16,7 +16,28 @@ export interface VariantListOut {
 }
 export interface VariantDetailOut extends LanguageVariant {
   content: Record<string, unknown>;
+  /** 派生时的基底排版快照（0060 之前字段；导出以 layout/export-input 为准）。 */
   render_context?: Record<string, unknown>;
+  /** W16 独立排版覆盖（0060）：null/缺省 = 继承。 */
+  layout?: Record<string, unknown> | null;
+}
+
+/** W16 独立排版：PATCH layout=null 表示恢复继承。 */
+export interface VariantLayoutPatchPayload {
+  layout: Record<string, unknown> | null;
+}
+
+/** GET /variants/{id}/export-input：导出/预览取变体的唯一入口（be-prov 冻结契约）。 */
+export interface VariantExportInputOut {
+  resume_id: number;
+  variant_id: number;
+  name: string;
+  language: string;
+  content: Record<string, unknown>;
+  layout: Record<string, unknown>;
+  /** 生效排版来源：variant = 独立覆盖；其它 = 继承。 */
+  layout_source: string;
+  content_sha256: string;
 }
 export interface TranslateVariantOut {
   variant_id: number;
@@ -54,6 +75,46 @@ export function listVariants(resumeId: number): Promise<VariantListOut> {
 
 export function getVariant(resumeId: number, variantId: number): Promise<VariantDetailOut> {
   return request(variantBase(resumeId) + "/" + variantId);
+}
+
+/**
+ * 为某个语言创建版本：POST variants 带 language（schema 已支持），
+ * 旧后端忽略 language 时再 PATCH 一次语言标签（失败不吞错，由调用方提示）。
+ */
+export async function createLanguageVariant(
+  resumeId: number,
+  language: "zh-CN" | "en-US",
+  name: string,
+): Promise<VariantDetailOut> {
+  const created = await request<VariantDetailOut>(variantBase(resumeId), {
+    method: "POST",
+    body: JSON.stringify({ name, language }),
+  });
+  if (created.language) return created;
+  return request(variantBase(resumeId) + "/" + created.id, {
+    method: "PATCH",
+    body: JSON.stringify({ language }),
+  });
+}
+
+/** 独立排版：PATCH layout；传 null = 清空覆盖、恢复继承。 */
+export function patchVariantLayout(
+  resumeId: number,
+  variantId: number,
+  payload: VariantLayoutPatchPayload,
+): Promise<VariantDetailOut> {
+  return request(variantBase(resumeId) + "/" + variantId, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
+}
+
+/** 变体导出输入（含生效排版与 layout_source）；预览/排版显示的唯一数据源。 */
+export function fetchVariantExportInput(
+  resumeId: number,
+  variantId: number,
+): Promise<VariantExportInputOut> {
+  return request(variantBase(resumeId) + "/" + variantId + "/export-input");
 }
 
 export function translateVariant(

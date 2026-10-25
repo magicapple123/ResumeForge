@@ -98,6 +98,46 @@ const outline = {
   /** 取消后的播报。 */
   "outline.sort.cancelled": "已取消移动「{name}」",
 
+  // ── 要点级显隐与复制（W06）─────────────────────────────────
+  /** 要点行内"隐藏这条要点"按钮的读屏名（可见形态是图标按钮）。 */
+  "outline.point.hide": "隐藏这条要点",
+  "outline.point.show": "显示这条要点",
+  /** 要点行内"复制这条要点"按钮的读屏名。 */
+  "outline.point.clone": "复制要点",
+  /** 被隐藏要点的行内徽标。 */
+  "outline.point.hiddenBadge": "要点已隐藏",
+  /** 条目行尾：该条目下有多少条要点被单独隐藏。 */
+  "outline.hiddenPoints.badge": "{count} 条要点已隐藏",
+  /** 操作后的播报（带数量，读屏可确认这次生效了）。 */
+  "outline.point.hidden": "已隐藏 {count} 条要点",
+  "outline.point.shown": "已显示 {count} 条要点",
+  "outline.point.cloned": "已复制这条要点",
+  /** 要点级隐藏的说明（Tooltip）：编辑区保留原文、正式导出排除。 */
+  "outline.point.hiddenHint": "已隐藏：编辑区仍保留原文，正式导出会排除",
+
+  // ── 大纲搜索与定位（D01）─────────────────────────────────────
+  /** 搜索框的读屏名。 */
+  "outline.search.label": "搜索大纲",
+  "outline.search.placeholder": "搜姓名、板块、条目或要点",
+  /** 有查询时清空按钮的读屏名。 */
+  "outline.search.clear": "清除搜索",
+  /** 命中计数（当前 / 总数）。 */
+  "outline.search.count": "第 {current} / {total} 条命中",
+  /** 没有命中时的行内说明（不摆大空态）。 */
+  "outline.search.noMatch": "没有匹配的内容",
+  /** 搜索框旁的键盘说明（Tooltip + 常驻小字）。 */
+  "outline.search.navigateHint": "↑↓ 选择，Enter 定位，Esc 清除",
+  /** 命中列表的上一条/下一条（鼠标等价物；键盘用 ↑↓）。 */
+  "outline.search.prev": "上一条命中",
+  "outline.search.next": "下一条命中",
+  /** "定位后恢复原滚动位置"的恢复按钮。 */
+  "outline.search.restore": "回到之前位置",
+  "outline.search.restored": "已回到之前的位置",
+  /** 定位完成后的播报（对象名是用户数据）。 */
+  "outline.search.located": "已定位「{name}」",
+  /** 点画布字段跳进大纲后，复原入口的说明。 */
+  "outline.search.restoreHint": "刚才是从纸面点进来的，可以回到原来的滚动位置",
+
   // ── 多选与批量显隐 ──────────────────────────────────────────
   /** 多选工具栏的读屏区域名。 */
   "outline.batch.toolbar": "大纲多选操作",

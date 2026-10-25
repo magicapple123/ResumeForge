@@ -12,7 +12,7 @@
  * 资产库列表是**预览**，不是渲染：用户要判断"这句表达值不值得用"，标记符号只会干扰阅读。
  * 剥标记复用预览链路已有的 `stripMarkers`（与后端 `resume_rich_text` 同口径），不写第二份解析。
  */
-import { CopyOutlined, DeleteOutlined, DownloadOutlined } from "@ant-design/icons";
+import { CopyOutlined, DeleteOutlined, DownloadOutlined, EditOutlined } from "@ant-design/icons";
 import { Button, Space, Tag, Tooltip, Typography } from "antd";
 import { stripMarkers } from "../../resume-preview/richText";
 import { at } from "../../../features/resume-assets/i18n";
@@ -27,6 +27,8 @@ interface Props {
   onInsert?: (phrase: ResumePhrase) => void;
   onRequestDelete?: (phrase: ResumePhrase) => void;
   onCopy?: (phrase: ResumePhrase) => void;
+  /** 打开编辑弹窗（正文/类型/语言/岗位标签）；不传 = 不渲染入口。 */
+  onEdit?: (phrase: ResumePhrase) => void;
 }
 
 const CARD_STYLE = {
@@ -67,6 +69,7 @@ export default function PhraseCard({
   onInsert,
   onRequestDelete,
   onCopy,
+  onEdit,
 }: Props) {
   const plainText = stripMarkers(phrase.text);
   return (
@@ -107,6 +110,17 @@ export default function PhraseCard({
               icon={<CopyOutlined />}
               aria-label={at("assets.action.copyAria", { index })}
               onClick={() => onCopy(phrase)}
+            />
+          </Tooltip>
+        ) : null}
+        {onEdit ? (
+          <Tooltip title={at("assets.action.edit")}>
+            <Button
+              size="small"
+              type="text"
+              icon={<EditOutlined />}
+              aria-label={at("assets.action.editAria", { index })}
+              onClick={() => onEdit(phrase)}
             />
           </Tooltip>
         ) : null}

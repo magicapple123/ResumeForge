@@ -29,6 +29,7 @@ import {
 import {
   adoptTranslation,
   createGlossaryTerm,
+  createLanguageVariant,
   deleteGlossaryTerm,
   getVariant,
   listGlossaryTerms,
@@ -46,6 +47,7 @@ import BilingualCompareView from "./BilingualCompareView";
 import GlossaryTable from "./GlossaryTable";
 import TranslationCandidatePanel from "./TranslationCandidatePanel";
 import VariantBar from "./VariantBar";
+import VariantLayoutSection from "./VariantLayoutSection";
 
 type WorkspaceTab = "compare" | "candidates" | "glossary";
 
@@ -210,6 +212,19 @@ export default function BilingualWorkspace({
     }
   };
 
+  const handleCreateVariant = async (language: "zh-CN" | "en-US") => {
+    if (!resumeId) return;
+    try {
+      const name =
+        language === "en-US" ? bt("bilingual.variant.name.en") : bt("bilingual.variant.name.zh");
+      await createLanguageVariant(resumeId, language, name);
+      await loadVariants();
+      toast.success(bt("bilingual.variant.created"));
+    } catch (caught) {
+      toast.error(errorText(caught) || bt("bilingual.variant.createFailed"));
+    }
+  };
+
   const handleSaveTerm = async (term: GlossaryTerm) => {
     setSavingTerm(true);
     try {
@@ -282,6 +297,7 @@ export default function BilingualWorkspace({
             const next = variants.find((item) => item.language === language);
             if (next) setSelectedId(next.id);
           }}
+          onCreate={(language) => void handleCreateVariant(language)}
         />
         <Button
           type="primary"
@@ -303,6 +319,16 @@ export default function BilingualWorkspace({
           onChange={(value) => setTab(value as WorkspaceTab)}
         />
       </Space>
+      {detail ? (
+        <VariantLayoutSection
+          resumeId={resumeId}
+          variant={detail}
+          onChanged={(next) => {
+            setDetail(next);
+            onVariantApplied?.(next);
+          }}
+        />
+      ) : null}
       {tab === "compare" ? (
         detail ? (
           <BilingualCompareView pairs={pairs} />

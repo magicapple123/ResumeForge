@@ -15,8 +15,9 @@
    不会字节相同，拿它当判据只会得到一条永远红的用例）；
 2. **不是导出**：不写「生成内容保存位置」、不冻结交付快照、响应是 ``inline`` + ``no-store``；
 3. **草稿可看**：正文里还有【待补】时导出 409、预览仍要 200（预览的对象就是草稿）；
-4. **不许夹带导出专有字段**：水印/脱敏/格式在 schema 层就被拒（422），免得"预览突然
-   带了水印"这种只在特定调用方下出现的漂移；
+4. **W04 起允许最终交付配置**：水印/脱敏按与导出相同的语义收下并从同一条管线生效
+   （见 test_preview_pdf_export_config.py）；``format``/``record_delivery`` 等真正的
+   导出专有字段仍在 schema 层被拒（422）；
 5. **同一组输入只排一趟**：往返切口径 / 开大图 / 拖回原值都命中缓存（0ms），参数或正文
    一变就必须重排。命中与未命中给的是同一份字节、同一套响应头——两套口径迟早会漂。
 """
@@ -216,14 +217,12 @@ def test_preview_pdf_shows_incomplete_drafts_while_export_refuses(client):
 
 
 @needs_font
-def test_preview_pdf_rejects_export_only_fields(client):
-    """水印/脱敏/格式不属于预览：在 schema 层就拒，别让它静默生效。"""
+def test_preview_pdf_rejects_export_only_envelope_fields(client):
+    """W04 只放开 watermark/redact；格式与落库开关仍属导出专有，在 schema 层拒（422）。"""
     resume_id = _create_resume(client)
 
     for payload in (
-        {"page_limit": 1, "watermark": "内部资料"},
         {"page_limit": 1, "format": "html"},
-        {"page_limit": 1, "redact": True},
         {"page_limit": 1, "record_delivery": True},
     ):
         response = client.post(PREVIEW.format(id=resume_id), json=payload)

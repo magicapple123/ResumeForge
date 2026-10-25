@@ -2,9 +2,9 @@
 /**
  * 来源更新影响面（W12 后半）：一条来源被更新后，哪些简历的哪些块受影响。
  *
- * 采纳 = 对该块**重链到来源最新修订**（fetchSource 取来源描述 → createBlockLink 按
- * path/object_id/point_id upsert），不写正文、不进 W03 历史；保持原稿只是本地标记；
- * 解除关联才 deleteBlockLink。失败给通用错误 + 重试，不假装成功。
+ * 采纳 = 打开 SourceAdoptModal 让用户粘贴/确认新文本，再调 `POST /links/{id}/adopt`
+ * 把文本写回该块（服务端事实锁 + 版本条件写；source_revision_stale 提示先刷新）；
+ * 保持原稿只是本地标记；解除关联才 deleteBlockLink。失败给原因 + 重试，不假装成功。
  */
 import { Alert, Button, Space, Table, Tag, Typography } from "antd";
 import type { TableColumnsType } from "antd";
@@ -13,17 +13,12 @@ import EmptyState from "../../common/EmptyState";
 import LoadingBlock from "../../common/LoadingBlock";
 import { useToast } from "../../../hooks/useToast";
 import { pt } from "../../../features/resume-provenance/i18n";
-import {
-  createBlockLink,
-  deleteBlockLink,
-  fetchSource,
-  fetchSourceImpact,
-} from "../../../features/resume-provenance/api";
+import { deleteBlockLink, fetchSourceImpact } from "../../../features/resume-provenance/api";
 import type {
   SourceImpactEntryOut,
   SourceImpactOut,
 } from "../../../features/resume-provenance/types";
-import { ApiError } from "../../../api/client";
+import SourceAdoptModal from "./SourceAdoptModal";
 
 interface Props {
   /** 要查看影响面的来源 id；null = 还没选来源。 */
@@ -33,12 +28,6 @@ interface Props {
   /** 采纳成功后回传被重链的 path 列表（宿主刷新 chain/provenance）。 */
   onAdopted?: (paths: string[]) => void;
   className?: string;
-}
-
-const SOURCE_KINDS = new Set(["claim", "material", "job", "profile", "manual"]);
-
-function businessCodeOf(error: unknown): string | null {
-  return error instanceof ApiError ? (error.businessCode ?? null) : null;
 }
 
 function errorText(error: unknown): string {
@@ -52,6 +41,7 @@ export default function SourceImpactPanel({ sourceId, revision, onAdopted, class
   const [error, setError] = useState<string | null>(null);
   const [kept, setKept] = useState<Set<number>>(() => new Set());
   const [busyLink, setBusyLink] = useState<number | null>(null);
+  const [adoptEntry, setAdoptEntry] = useState<SourceImpactEntryOut | null>(null);
 
   const load = useCallback(async () => {
     if (sourceId == null) {
@@ -75,32 +65,10 @@ export default function SourceImpactPanel({ sourceId, revision, onAdopted, class
     queueMicrotask(() => void load());
   }, [load]);
 
-  const adopt = async (entry: SourceImpactEntryOut) => {
-    if (sourceId == null || entry.resume_deleted) return;
-    setBusyLink(entry.link_id);
-    try {
-      const source = await fetchSource(sourceId);
-      const kind = SOURCE_KINDS.has(String(source.kind)) ? source.kind : "manual";
-      await createBlockLink(entry.resume_id, {
-        source: { kind: kind as never, external_ref: source.external_ref, title: source.title },
-        object_id: entry.object_id,
-        point_id: entry.point_id,
-        path: entry.path,
-        field: entry.field,
-      });
-      onAdopted?.([entry.path]);
-      toast.success(pt("provenance.impact.adopted", { count: 1 }));
-      await load();
-    } catch (caught) {
-      const code = businessCodeOf(caught);
-      toast.error(
-        code === "resume_revision_conflict"
-          ? pt("provenance.impact.revisionConflict")
-          : errorText(caught) || pt("provenance.impact.actionFailed"),
-      );
-    } finally {
-      setBusyLink(null);
-    }
+  const handleAdopted = (appliedPath: string) => {
+    toast.success(pt("provenance.adopt.success"));
+    onAdopted?.([appliedPath]);
+    void load();
   };
 
   const keep = (entry: SourceImpactEntryOut) => {
@@ -187,7 +155,7 @@ export default function SourceImpactPanel({ sourceId, revision, onAdopted, class
               undefined
             }
             loading={busyLink === entry.link_id || undefined}
-            onClick={() => void adopt(entry)}
+            onClick={() => setAdoptEntry(entry)}
           >
             {pt("provenance.impact.adopt")}
           </Button>
@@ -225,6 +193,12 @@ export default function SourceImpactPanel({ sourceId, revision, onAdopted, class
         dataSource={rows}
         pagination={false}
         locale={{ emptyText: <EmptyState inline description={pt("provenance.impact.empty")} /> }}
+      />
+      <SourceAdoptModal
+        open={adoptEntry !== null}
+        entry={adoptEntry}
+        onCancel={() => setAdoptEntry(null)}
+        onAdopted={handleAdopted}
       />
     </div>
   );

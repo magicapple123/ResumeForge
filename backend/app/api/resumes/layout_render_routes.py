@@ -31,6 +31,7 @@ from ...schemas.resume import (
 from ...services import trash
 from ...services.export_pipeline import ExportRequest, RenderContext, render_config_fingerprint
 from ...services.exporter import normalize_page_limit, render_html
+from ...services.resume.content_relevance_hints import build_content_hints
 from ...services.resume.document_pagination import build_pagination_report
 from ...services.resume.document_save import (
     RevisionConflict,
@@ -175,6 +176,13 @@ def analyze_resume_layout(
         if diagnosis.status == STATUS_OVERFLOW
         else []
     )
+    # W09 内容精简候选：本地确定性计算（不调模型、不落库）。没有岗位/没有稳定 id 时
+    # 返回空列表；诊断本身不依赖它，读失败也不能拖垮版面诊断。
+    try:
+        content_hints = build_content_hints(db, record)
+    except Exception:  # noqa: BLE001 - 提示是锦上添花，不能拖垮版面诊断
+        logger.warning("内容精简候选计算失败 record_id=%s", resume_id, exc_info=True)
+        content_hints = []
     return LayoutAnalyzeOut(
         diagnosis=LayoutDiagnosisOut(
             status=diagnosis.status,
@@ -194,6 +202,7 @@ def analyze_resume_layout(
             for item in ladder
         ],
         fit_room=LayoutFitRoomOut(**room),
+        content_hints=content_hints,
     )
 
 

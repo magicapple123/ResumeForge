@@ -304,6 +304,68 @@ def resolve_target(
     raise ValueError("需要 object_id 或 path 指定要关联的块")
 
 
+def get_source(db: Session, source_id: int) -> ResumeSource | None:
+    return db.get(ResumeSource, source_id)
+
+
+def get_revision(db: Session, revision_id: int) -> ResumeSourceRevision | None:
+    return db.get(ResumeSourceRevision, revision_id)
+
+
+def _upsert_link(
+    db: Session,
+    *,
+    record: ResumeRecord,
+    source: ResumeSource,
+    revision: ResumeSourceRevision | None,
+    object_id: str | None = None,
+    point_id: str | None = None,
+    path: str | None = None,
+    field: str | None = None,
+) -> ResumeBlockSource:
+    """建立（或刷新）一个块 → 来源的关联；同一来源 + 同一块只保留一条。
+
+    关联时记的来源指纹 = 所选修订的指纹（缺修订时回退来源当前指纹）。这样
+    ``link_status`` 才能如实区分"关联的就是最新版"与"关联的是旧版"。
+    """
+    resolved_path, resolved_field = resolve_target(
+        record.content or {}, object_id=object_id, point_id=point_id, path=path
+    )
+    fingerprint = revision.fingerprint if revision is not None else source.current_fingerprint
+    revision_id = revision.id if revision is not None else None
+    existing = db.execute(
+        select(ResumeBlockSource).where(
+            ResumeBlockSource.resume_id == record.id,
+            ResumeBlockSource.source_id == source.id,
+            ResumeBlockSource.object_id == object_id,
+            ResumeBlockSource.point_id == point_id,
+            ResumeBlockSource.path == resolved_path,
+        )
+    ).scalar_one_or_none()
+    if existing is not None:
+        existing.path = resolved_path
+        existing.field = resolved_field if field is None else field
+        existing.source_revision_id = revision_id
+        existing.source_fingerprint = fingerprint
+        db.commit()
+        db.refresh(existing)
+        return existing
+    link = ResumeBlockSource(
+        resume_id=record.id,
+        source_id=source.id,
+        source_revision_id=revision_id,
+        object_id=object_id,
+        point_id=point_id,
+        path=resolved_path,
+        field=resolved_field if field is None else field,
+        source_fingerprint=fingerprint,
+    )
+    db.add(link)
+    db.commit()
+    db.refresh(link)
+    return link
+
+
 def create_link(
     db: Session,
     *,
@@ -314,41 +376,48 @@ def create_link(
     path: str | None = None,
     field: str | None = None,
 ) -> ResumeBlockSource:
-    """建立（或刷新）一个块 → 来源的关联；同一来源 + 同一块只保留一条。"""
-    resolved_path, resolved_field = resolve_target(
-        record.content or {}, object_id=object_id, point_id=point_id, path=path
-    )
-    existing = db.execute(
-        select(ResumeBlockSource).where(
-            ResumeBlockSource.resume_id == record.id,
-            ResumeBlockSource.source_id == snapshot.source.id,
-            ResumeBlockSource.object_id == object_id,
-            ResumeBlockSource.point_id == point_id,
-            ResumeBlockSource.path == resolved_path,
-        )
-    ).scalar_one_or_none()
-    if existing is not None:
-        existing.path = resolved_path
-        existing.field = resolved_field if field is None else field
-        existing.source_revision_id = snapshot.revision.id
-        existing.source_fingerprint = snapshot.source.current_fingerprint
-        db.commit()
-        db.refresh(existing)
-        return existing
-    link = ResumeBlockSource(
-        resume_id=record.id,
-        source_id=snapshot.source.id,
-        source_revision_id=snapshot.revision.id,
+    """建立/刷新关联（内嵌来源描述路径：先 upsert 来源再关联）。"""
+    return _upsert_link(
+        db,
+        record=record,
+        source=snapshot.source,
+        revision=snapshot.revision,
         object_id=object_id,
         point_id=point_id,
-        path=resolved_path,
-        field=resolved_field if field is None else field,
-        source_fingerprint=snapshot.source.current_fingerprint,
+        path=path,
+        field=field,
     )
-    db.add(link)
-    db.commit()
-    db.refresh(link)
-    return link
+
+
+def link_source(
+    db: Session,
+    *,
+    record: ResumeRecord,
+    source: ResumeSource,
+    revision: ResumeSourceRevision | None = None,
+    object_id: str | None = None,
+    point_id: str | None = None,
+    path: str | None = None,
+    field: str | None = None,
+) -> ResumeBlockSource:
+    """把已有来源（可选指定某版修订）关联到简历块；重复关联去重/刷新。
+
+    来源/修订的存在性与归属由调用方（路由）先校验；修订不属于来源时这里拒绝。
+    """
+    if revision is None:
+        revision = _latest_revision(db, source.id)
+    if revision is not None and revision.source_id != source.id:
+        raise ValueError("来源修订不属于这条来源")
+    return _upsert_link(
+        db,
+        record=record,
+        source=source,
+        revision=revision,
+        object_id=object_id,
+        point_id=point_id,
+        path=path,
+        field=field,
+    )
 
 
 def delete_link(db: Session, *, resume_id: int, link_id: int) -> bool:

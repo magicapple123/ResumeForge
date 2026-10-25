@@ -21,6 +21,11 @@
  *
  * `merge` 只写到路径指向的字段，`photo`（base64 图片）这类非字符串字段连读都不读：
  * 一条算错的路径不该把整份内容改成空对象。
+ *
+ * ## 受控模式（W02/W03 收口）
+ *
+ * 默认仍由本 hook 自己持有 overlay；传入 `overlays + onChange` 即交给宿主持有——制作台要把
+ * 粗体并进统一历史时必须用受控模式，否则"撤销"只退得回正文，退不回纸面上的粗体。
  */
 import { useCallback, useMemo, useState } from "react";
 import type { ResumeContent } from "../../types";
@@ -138,8 +143,47 @@ export function readOverlay(
   return current === overlay.base ? overlay.raw : current;
 }
 
-export function useRichTextOverrides(content: ResumeContent | null): RichTextOverridesApi {
-  const [overlays, setOverlays] = useState<RichTextOverlayMap>({});
+export interface RichTextOverridesOptions {
+  /**
+   * 受控模式的当前值。传了它（哪怕是空对象）就不再使用 hook 内部 state——这是 W02/W03
+   * 收口要求的"唯一状态"：宿主同时要拿 overlay 去合并保存、判脏值、做撤销/恢复。
+   */
+  overlays?: RichTextOverlayMap;
+  /** 受控模式的写回口；与 `overlays` 成对提供。 */
+  onChange?: (next: RichTextOverlayMap) => void;
+}
+
+/** 结构重排：把 path → overlay 的键换成新下标；没有键变化时返回入参本身。 */
+function remapOverlayKeys(
+  overlays: RichTextOverlayMap,
+  mapping: Map<string, string>,
+): RichTextOverlayMap {
+  const next: RichTextOverlayMap = {};
+  let changed = false;
+  for (const [path, overlay] of Object.entries(overlays)) {
+    const target = mapping.get(path) ?? path;
+    if (target !== path) changed = true;
+    next[target] = overlay;
+  }
+  return changed ? next : overlays;
+}
+
+export function useRichTextOverrides(
+  content: ResumeContent | null,
+  options: RichTextOverridesOptions = {},
+): RichTextOverridesApi {
+  const [ownOverlays, setOwnOverlays] = useState<RichTextOverlayMap>({});
+  const controlled = options.overlays !== undefined;
+  const overlays = options.overlays ?? ownOverlays;
+  const { onChange } = options;
+
+  const commit = useCallback(
+    (next: RichTextOverlayMap) => {
+      if (controlled) onChange?.(next);
+      else setOwnOverlays(next);
+    },
+    [controlled, onChange],
+  );
 
   const merged = useMemo(() => mergeOverlays(content, overlays), [content, overlays]);
 
@@ -153,20 +197,20 @@ export function useRichTextOverrides(content: ResumeContent | null): RichTextOve
       // 这里 setState 不会撞上渲染期）。
       const rest = { ...overlays };
       delete rest[path];
-      setOverlays(rest);
+      commit(rest);
       return current;
     },
-    [content, overlays],
+    [commit, content, overlays],
   );
 
   const apply = useCallback(
     (path: string, next: string, base: string) => {
       if (!content) return null;
       const nextOverlays: RichTextOverlayMap = { ...overlays, [path]: { raw: next, base } };
-      setOverlays(nextOverlays);
+      commit(nextOverlays);
       return mergeOverlays(content, nextOverlays);
     },
-    [content, overlays],
+    [commit, content, overlays],
   );
 
   const merge = useCallback(
@@ -174,35 +218,35 @@ export function useRichTextOverrides(content: ResumeContent | null): RichTextOve
     [overlays],
   );
 
-  const clear = useCallback(() => setOverlays({}), []);
+  const clear = useCallback(() => {
+    if (Object.keys(overlays).length === 0) return;
+    commit({});
+  }, [commit, overlays]);
 
   const dropStale = useCallback(
     (target: ResumeContent | null) => {
       if (!target) {
-        setOverlays({});
+        if (Object.keys(overlays).length === 0) return;
+        commit({});
         return;
       }
       const kept: RichTextOverlayMap = {};
       for (const [path, overlay] of Object.entries(overlays)) {
         if (readStringAt(target, path) === overlay.base) kept[path] = overlay;
       }
-      setOverlays(kept);
+      if (Object.keys(kept).length === Object.keys(overlays).length) return;
+      commit(kept);
     },
-    [overlays],
+    [commit, overlays],
   );
 
-  const remapPaths = useCallback((mapping: Map<string, string>) => {
-    setOverlays((previous) => {
-      const next: RichTextOverlayMap = {};
-      let changed = false;
-      for (const [path, overlay] of Object.entries(previous)) {
-        const target = mapping.get(path) ?? path;
-        if (target !== path) changed = true;
-        next[target] = overlay;
-      }
-      return changed ? next : previous;
-    });
-  }, []);
+  const remapPaths = useCallback(
+    (mapping: Map<string, string>) => {
+      const next = remapOverlayKeys(overlays, mapping);
+      if (next !== overlays) commit(next);
+    },
+    [commit, overlays],
+  );
 
   return {
     merged,

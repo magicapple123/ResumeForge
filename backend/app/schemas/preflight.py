@@ -16,8 +16,9 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from .ats import MAX_JD_TEXT_CHARS
-from .resume import MAX_RESUME_PAGES, ResumeContent
-from .resume_generation import ResumeFontScale, _validate_format_config_shape
+from .export import ExportFormat
+from .resume import MAX_RESUME_PAGES, ResumeContent, ResumeLanguage
+from .resume_generation import LONG_CV_MAX_PAGES, ResumeFontScale, _validate_format_config_shape
 
 PreflightLayer = Literal["content", "layout", "product"]
 # 请求里的层可以额外点名 risk（事实风险，用户显式触发；默认层必须全本地确定性）。
@@ -93,6 +94,39 @@ class PreflightRequest(BaseModel):
     measure: PreflightMeasure | None = None
     # ATS 关键词可选：提供后才检查 JD 覆盖，不提供不发起额外规则。
     jd_text: str = Field(default="", max_length=MAX_JD_TEXT_CHARS)
+
+    # ===== D20 导出前核对（purpose=export）=====
+    #
+    # edit（缺省）= 原来的编辑态检查，行为逐字不变；export = 从"导出前核对"视角检查，
+    # 响应多一个 export_summary（目标岗位/文件名/联系方式/版本/隐藏条目/文档模式）。
+    purpose: Literal["edit", "export"] = "edit"
+    # 岗位变体（W16）：给定时正文与排版快照取自这条变体（唯一解析入口
+    # document_variants.resolve_variant_export，与导出路由同一实现）。
+    variant_id: int | None = Field(default=None, ge=1)
+    # 以下字段是前端导出配置（ExportBundleRequest）的投影：前端会把同一份请求体直接
+    # 发给 preflight 做核对。**必须收下**（本模型 extra="forbid"），否则核对请求会 422。
+    # 语义与导出完全相同（由 preflight 路由按 export_bundle 的口径折算）。
+    preset_id: int | None = Field(default=None, ge=1)
+    formats: list[ExportFormat] | None = Field(default=None, min_length=1, max_length=6)
+    watermark: str | None = Field(default=None, max_length=200)
+    redact: bool | None = None
+    include_photo: bool | None = None
+    archive_original: bool | None = None
+    resume_revision: int | None = Field(default=None, ge=0)
+    strict_revision: bool = False
+    margin_mm: float | None = Field(default=None, ge=4, le=40)
+    font_scale: ResumeFontScale | None = None
+    page_limit: int | None = Field(default=None, ge=1, le=LONG_CV_MAX_PAGES)
+    format_config: dict | None = None
+    language: ResumeLanguage | None = None
+    allow_incomplete: bool = False
+
+    @field_validator("format_config", mode="before")
+    @classmethod
+    def _check_export_format_config_shape(cls, value: object) -> object:
+        if value is None:
+            return None
+        return _validate_format_config_shape(value)
 
 
 class CheckLocator(BaseModel):
@@ -178,6 +212,23 @@ class TextOrderDiff(BaseModel):
     expected_index: int | None = None
 
 
+class ExportCheckSummary(BaseModel):
+    """D20 导出前核对摘要（purpose=export 时随 preflight 响应返回）。
+
+    字段与前端 ExportCheckSummary 逐字对应（fe-delivery 已按此实现）；数值都取自
+    **这次核对使用的同一份快照**（变体/草稿正文 + 生效版式），不另算一份。
+    """
+
+    target_company: str = ""
+    target_job_title: str = ""
+    resume_title: str = ""
+    contact_present: bool = False
+    document_mode: Literal["resume", "long_cv"] = "resume"
+    revision: int = 0
+    revision_changed: bool = False
+    hidden_count: int = 0
+
+
 class PreflightOut(BaseModel):
     snapshot: PreflightSnapshot
     issues: list[CheckIssue] = Field(default_factory=list, max_length=200)
@@ -198,12 +249,16 @@ class PreflightOut(BaseModel):
     font_coverage: FontCoverageOut | None = None
     # D11：结构化正文与产物文本的差异（missing / out_of_order / garbled）。
     order_diffs: list[TextOrderDiff] = Field(default_factory=list, max_length=50)
+    # D20：导出前核对摘要；只有 purpose=export 时才有值（编辑态检查为 None，
+    # 旧客户端读不到这个键也不受影响）。
+    export_summary: ExportCheckSummary | None = None
 
 
 __all__ = [
     "CheckFix",
     "CheckIssue",
     "CheckLocator",
+    "ExportCheckSummary",
     "FontCoverageOut",
     "MachineTextPage",
     "TextOrderDiff",

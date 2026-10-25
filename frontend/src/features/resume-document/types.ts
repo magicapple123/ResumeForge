@@ -2,6 +2,7 @@
 /** 简历文档的编辑状态与命令类型（W01/W02 的稳定契约，W03 起由统一历史消费）。 */
 
 import type { ResumeContent, ResumeDetail } from "../../types/resume";
+import type { RichTextOverlayMap } from "../resume/useRichTextOverrides";
 
 /** 选项"基于哪一版"的整数。0 = 0052 之前写入的旧记录。 */
 export interface ResumeDocumentState {
@@ -76,4 +77,14 @@ export interface ResumeDocumentPipeline {
   adoptLatest: (latest: ResumeDetail) => Promise<void> | void;
   /** 冲突时"另存副本"：宿主用本地内容建一份新简历（draft=false，标题带（副本））。 */
   saveAsCopy: (content: ResumeContent) => Promise<ResumeDetail>;
+  /**
+   * 纸面加粗（W02/W03）：宿主持有唯一一份，制作台把它并进统一历史快照。
+   *
+   * 挂在这条通道上而不是再加一根 prop：宿主 ↔ 制作台之间关于"这份文档现在是什么"的
+   * 状态本来就只走这里，加粗 overlay 与 content/layout 是同一层级的状态。缺省 =
+   * 这个宿主没有加粗能力（生成预览等只读宿主），历史里 overlays 恒为空。
+   */
+  overlays?: RichTextOverlayMap;
+  /** 撤销/恢复时把快照里的 overlay 写回宿主；与 `overlays` 成对出现。 */
+  onOverlaysChange?: (next: RichTextOverlayMap) => void;
 }

@@ -97,3 +97,21 @@ def test_preview_request_validation(client):
     extra = dict(_request())
     extra["unknown_field"] = 1
     assert client.post("/api/outbound/preview", json=extra).status_code == 422
+
+def test_preview_does_not_persist_usage_or_echo_pricing_config(client, db_session, caplog):
+    """R04：外发预览不产生用量记录，也不回显单价配置（预览只回答"发什么"）。"""
+    client.put(
+        "/api/usage/pricing",
+        json={"input_per_1k": 0.123456, "output_per_1k": 0.654321, "currency": "USD"},
+    )
+    before = db_session.query(LLMUsageRecord).count()
+    marker = "R04-PREVIEW-PRICING-MARKER"
+    with caplog.at_level(logging.DEBUG):
+        response = client.post("/api/outbound/preview", json=_request(marker))
+    assert response.status_code == 200, response.text
+    preview = response.json()
+    for key in ("cost", "estimated", "pricing", "price_per_1k", "usage"):
+        assert key not in preview
+    assert "0.123456" not in response.text
+    assert db_session.query(LLMUsageRecord).count() == before
+    assert marker not in caplog.text

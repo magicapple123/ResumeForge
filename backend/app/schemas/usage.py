@@ -5,7 +5,9 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+MAX_PRICE_PER_1K = 1_000_000.0
 
 
 class UsageBucketOut(BaseModel):
@@ -19,6 +21,8 @@ class UsageBucketOut(BaseModel):
     total_tokens: int | None = None
     duration_ms: int | None = None
     unknown_token_calls: int = 0
+    # 结束原因计数（stop/length/cancelled/error/unknown…）；R04 要求按任务/模型汇总。
+    finish_reasons: dict[str, int] = Field(default_factory=dict)
 
 
 class UsageCostOut(BaseModel):
@@ -54,4 +58,42 @@ class UsageRecordOut(BaseModel):
     duration_ms: int | None = None
     finish_reason: str = ""
     retries: int = 0
+    # 记录时的费用快照（未配置单价时为 None/空串）；不含任何正文。
+    cost_estimate: float | None = None
+    cost_currency: str = ""
     created_at: datetime | None = None
+
+
+class UsageRecordListOut(BaseModel):
+    items: list[UsageRecordOut] = Field(default_factory=list)
+    count: int = 0
+
+
+class UsagePricingIn(BaseModel):
+    """用户配置的每千 token 单价（输入/输出分开）；两项同时给或同时清空。
+
+    费用只在配置后估算（R04）；不配置时接口保持 estimated=False，不臆造金额。
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    input_per_1k: float | None = Field(default=None, ge=0, le=MAX_PRICE_PER_1K)
+    output_per_1k: float | None = Field(default=None, ge=0, le=MAX_PRICE_PER_1K)
+    currency: str = Field(default="CNY", min_length=1, max_length=8)
+
+    @model_validator(mode="after")
+    def _require_both_prices(self) -> UsagePricingIn:
+        if (self.input_per_1k is None) != (self.output_per_1k is None):
+            raise ValueError("输入与输出单价必须同时配置或同时清除")
+        return self
+
+
+class UsagePricingOut(BaseModel):
+    """当前生效的单价配置；configured=False 表示未配置（费用一律未知）。"""
+
+    configured: bool = False
+    input_per_1k: float | None = None
+    output_per_1k: float | None = None
+    currency: str = ""
+    # settings = 用户保存在设置里的值；environment = 环境变量兜底。
+    source: str = ""

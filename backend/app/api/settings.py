@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
 from ..database import get_db, session_engine
+from ..schemas.backup_status import BackupStatusOut
 from ..schemas.setting import (
     AssistantOrbSetting,
     AssistantRelaxedModeSetting,
@@ -299,9 +300,13 @@ async def test_llm(payload: LLMTestRequest, db: Session = Depends(get_db)):
     )
 
 
-@router.get("/backup-status")
+@router.get("/backup-status", response_model=BackupStatusOut)
 def read_backup_status(db: Session = Depends(get_db)) -> dict:
-    """当前数据集的自动备份保护摘要（RF-05）：是否被保护、最近成功、快照清单。"""
+    """当前数据集的自动备份保护摘要（RF-05 / A02）：是否被保护、最近成功、快照清单。
+
+    响应契约见 schemas/backup_status.py：auto_backup_enabled 来自部署配置（无 UI 开关），
+    disabled/state 让前端能把"自动备份被关掉"如实展示，而不是显示成"受保护"。
+    """
     from ..services.data_backup.status import backup_status
 
     return backup_status(session_engine(db))

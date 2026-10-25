@@ -57,6 +57,33 @@ const optimizer = {
   "optimizer.change.sectionGap": "区块间距 {from} → {to}",
   "optimizer.change.lineHeight": "行高 {from} → {to}",
   "optimizer.change.fontScale": "字号系数 {from} → {to}",
+
+  // ── 内容精简候选（P1-04：先给差异候选，用户采纳才改；不自动删）──────
+  "optimizer.content.title": "内容精简候选",
+  "optimizer.content.hint": "删掉重复或过短内容，应用后重新诊断页数",
+  "optimizer.content.kind.duplicate-entries": "合并重复条目",
+  "optimizer.content.kind.duplicate-points": "删除重复要点",
+  "optimizer.content.kind.merge-short-points": "合并短要点",
+  "optimizer.content.kind.low-relevance-points": "精简低相关要点",
+  "optimizer.content.stats.entries": "删 {count} 条条目",
+  "optimizer.content.stats.points": "删 {count} 条要点",
+  "optimizer.content.stats.merged": "合并 {count} 组短要点",
+  "optimizer.content.stats.chars": "省 {count} 字",
+  "optimizer.content.itemCount": "等 {count} 条",
+  "optimizer.content.untitled": "未命名条目",
+  "optimizer.content.measure.reduced": "溢出减少 {value}",
+  "optimizer.content.measure.fits": "放得下",
+  "optimizer.content.measure.pages": "预计 {pages} 页",
+  "optimizer.content.measure.after": "合并类改动无法预量，应用后重新诊断",
+  "optimizer.content.hiddenOnly": "被删的都是隐藏条目，页数不会变化",
+  "optimizer.content.apply": "精简并写回",
+  "optimizer.content.apply.aria": "应用第 {index} 个内容候选",
+  "optimizer.content.applied": "已精简，可撤销",
+  /** 宿主写回失败：行内错误态（不能读成已精简）。 */
+  "optimizer.content.applyFailed": "精简没有生效",
+  "optimizer.content.applyFailed.hint": "内容未改动，可以重试",
+  /** 宿主把采纳记进 W03 统一历史时的动作名。 */
+  "optimizer.content.historyLabel": "精简内容",
 } as const;
 
 export default optimizer;

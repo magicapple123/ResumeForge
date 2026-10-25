@@ -84,6 +84,33 @@ export interface ExportBundleRequest {
   page_limit?: number;
   format_config?: Record<string, unknown>;
   language?: string;
+  /**
+   * 岗位变体（W16）：选择后由后端按该变体的内容与排版导出。
+   *
+   * 变体的 content/layout 只走后端唯一入口 `GET /resumes/{id}/variants/{variant_id}/export-input`，
+   * 前端不自己拼一份"变体快照"（那样会与后端解析出两份真相）。
+   */
+  variant_id?: number | null;
+}
+
+/**
+ * D20 服务端核对请求（复用 W11 preflight 的 `purpose:"export"`）。
+ *
+ * 按已批准契约：content + layout（与 preflight 的 PreflightLayoutInput 同形）。
+ * 不摊平导出字段——preflight 是 extra="forbid"，多一个键就 422。
+ */
+export interface ExportCheckRequest {
+  content?: ResumeContent | null;
+  layout?: {
+    template?: string | null;
+    format_name?: string | null;
+    page_limit?: number | null;
+    font_scale?: string | null;
+    format_config?: Record<string, unknown> | null;
+    language?: string | null;
+  } | null;
+  /** 选中的岗位变体；服务端按变体的导出输入算摘要。 */
+  variant_id?: number | null;
 }
 
 /** zip 内 manifest 的逐文件摘要（契约 §6.5）。 */

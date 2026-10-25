@@ -17,6 +17,7 @@ import type { ResumeContent } from "../../types";
 import type { ProvenanceLocator } from "../../features/resume-provenance/selection";
 import {
   createFactLock,
+  createSourceLink,
   deleteBlockLink,
   deleteFactLock,
   fetchProvenance,
@@ -24,8 +25,10 @@ import {
   listFactLocks,
   rewriteField,
 } from "../../features/resume-provenance/api";
+import type { LinkTargetInput } from "../../features/resume-provenance/linkInput";
 import {
   CANDIDATE_MODES,
+  type BlockLinkOut,
   type FactLockOut,
   type FactLockViolationOut,
   type ResumeProvenanceOut,
@@ -41,6 +44,7 @@ import {
 } from "../../features/resume-provenance/helpers";
 import { ApiError } from "../../api/client";
 import SourceChainPanel from "./sources/SourceChainPanel";
+import SourceLinkModal from "./sources/SourceLinkModal";
 import SourceImpactPanel from "./sources/SourceImpactPanel";
 import FactLockPanel from "./sources/FactLockPanel";
 import WritingCandidatesPanel from "./sources/WritingCandidatesPanel";
@@ -110,6 +114,17 @@ export function useWorkbenchProvenancePanels({
   );
   const [candidateConflict, setCandidateConflict] = useState<string | null>(null);
   const chainGeneration = useRef(0);
+  // W12 建立关联：目标块与弹窗开关住在宿主（面板只发起"我要关联这个对象"）。
+  const [linkTarget, setLinkTarget] = useState<LinkTargetInput | null>(null);
+  const [linkOpen, setLinkOpen] = useState(false);
+
+  // 整份来源视图（含覆盖数）：换简历时取一次；建立/解除关联后也靠它刷新覆盖数。
+  const refreshProvenance = useCallback(() => {
+    if (resumeId == null) return;
+    void fetchProvenance(resumeId)
+      .then((next) => setProvenance(next))
+      .catch(() => undefined);
+  }, [resumeId]);
 
   // 整份来源视图 + 事实锁：只在换简历时取（切选中不重复拉全量）。
   useEffect(() => {
@@ -248,6 +263,45 @@ export function useWorkbenchProvenancePanels({
     [reloadChain, resumeId],
   );
 
+  /** 打开"关联到来源"弹窗：目标块来自链表面板当前选中的对象。 */
+  const openLink = useCallback((target: LinkTargetInput) => {
+    setLinkTarget(target);
+    setLinkOpen(true);
+  }, []);
+
+  /**
+   * "采纳最新来源"：用同一个来源重新建一次关联（不带 source_revision_id = 指到最新修订）。
+   * 不自动改正文——正文要用户再用「采纳来源更新」显式写一次。
+   */
+  const relink = useCallback(
+    async (link: BlockLinkOut) => {
+      if (resumeId == null) return;
+      setChainError(null);
+      try {
+        await createSourceLink({
+          resume_id: resumeId,
+          source_id: link.source_id,
+          object_id: link.object_id ?? undefined,
+          point_id: link.point_id ?? undefined,
+          path: link.path || undefined,
+          field: link.field || undefined,
+        });
+        reloadChain();
+        refreshProvenance();
+      } catch (error) {
+        setChainError(errorMessage(error));
+      }
+    },
+    [refreshProvenance, reloadChain, resumeId],
+  );
+
+  const handleLinked = useCallback(() => {
+    setLinkOpen(false);
+    // 来源链与覆盖数各刷新一次：新建的关联要立刻出现在"已关联/未关联"里。
+    reloadChain();
+    refreshProvenance();
+  }, [refreshProvenance, reloadChain]);
+
   const generate = useCallback(
     async (mode: (typeof CANDIDATE_MODES)[number]) => {
       if (resumeId == null || !locator.path) return;
@@ -304,8 +358,15 @@ export function useWorkbenchProvenancePanels({
           error={chainError}
           onRetry={reloadChain}
           onUnlink={(link) => void unlink(link)}
-          onLink={undefined}
-          onRelink={undefined}
+          onLink={(object) =>
+            openLink({
+              object_id: object.object_id,
+              point_id: object.point_id,
+              path: object.path,
+              field: object.field,
+            })
+          }
+          onRelink={(link) => void relink(link)}
         />
         {/* 来源更新影响：受影响目标块逐条采纳（重链到最新修订）/保持原稿/解除。 */}
         <SourceImpactPanel
@@ -334,6 +395,14 @@ export function useWorkbenchProvenancePanels({
           onAdopt={onApplyContent ? adopt : undefined}
           onDiscard={discard}
           conflictCode={candidateConflict}
+        />
+        {/* W12：新建/选择来源 → POST /provenance/links（弹窗自己提交，宿主只负责刷新）。 */}
+        <SourceLinkModal
+          open={linkOpen}
+          resumeId={resumeId}
+          target={linkTarget}
+          onClose={() => setLinkOpen(false)}
+          onLinked={handleLinked}
         />
       </div>
     );

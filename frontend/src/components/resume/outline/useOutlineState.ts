@@ -32,6 +32,8 @@ export interface OutlineStateOptions {
 
 export interface OutlineStateApi extends OutlineCoreApi, OutlineSortApi, OutlineActionsApi {
   announcement: string;
+  /** 统一播报出口（搜索/定位等面板级动作也走同一个 aria-live）。 */
+  announce: (text: string) => void;
   batchSetHidden: (hidden: boolean) => void;
 }
 
@@ -72,6 +74,7 @@ export function useOutlineState({
     ...actions,
     ...sort,
     announcement,
+    announce,
     batchSetHidden,
   };
 }

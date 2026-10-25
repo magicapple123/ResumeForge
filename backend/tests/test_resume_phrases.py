@@ -189,3 +189,99 @@ def test_phrase_text_is_not_logged(client, caplog):
         assert client.get("/api/resume-phrases").status_code == 200
     assert created["text"] == marker
     assert marker not in caplog.text
+
+# ===== W17 岗位标签：collect 写入 / PATCH 旧值对比 / 标签过滤 / 备份兼容 =====
+
+
+def test_collect_with_job_tags_writes_and_filters(client):
+    resume_id = _create_resume(client)
+    response = client.post(
+        "/api/resume-phrases/collect",
+        json={
+            "resume_id": resume_id,
+            "path": "experience.0.description.0",
+            "job_tags": ["后端", " 数据 ", "后端"],
+        },
+    )
+    assert response.status_code == 201, response.text
+    phrase = response.json()
+    # 去空白 + 去重，顺序按用户给定。
+    assert phrase["job_tags"] == ["后端", "数据"]
+    listed = client.get("/api/resume-phrases", params={"tag": "数据"}).json()
+    assert [item["id"] for item in listed["items"]] == [phrase["id"]]
+    assert client.get("/api/resume-phrases", params={"tag": "后端"}).json()["items"]
+    assert client.get("/api/resume-phrases", params={"tag": "不存在"}).json()["items"] == []
+
+
+def test_patch_returns_previous_snapshot_for_diff(client):
+    created = _create_phrase(client, job_tags=["后端"], quality_note="旧备注")
+    response = client.patch(
+        f"/api/resume-phrases/{created['id']}",
+        json={"text": "更精炼的成果表述", "job_tags": ["后端", "平台"]},
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["text"] == "更精炼的成果表述"
+    assert body["job_tags"] == ["后端", "平台"]
+    assert body["previous"] is not None
+    assert body["previous"]["text"] == created["text"]
+    assert body["previous"]["job_tags"] == ["后端"]
+    assert body["previous"]["quality_note"] == "旧备注"
+    # 旧值只用于对比，不需要在改后仍与当前行相同。
+    assert body["previous"]["id"] == created["id"]
+
+
+def test_job_tag_validation_rejects_oversize(client):
+    too_long = "x" * 33
+    response = client.post(
+        "/api/resume-phrases", json={"text": "一条表达", "job_tags": [too_long]}
+    )
+    assert response.status_code == 400, response.text
+    too_many = client.post(
+        "/api/resume-phrases",
+        json={"text": "一条表达", "job_tags": [f"t{index}" for index in range(21)]},
+    )
+    assert too_many.status_code == 422
+    # collect 走同一条服务层校验（该端点既有契约：服务层 ValueError → 422）。
+    resume_id = _create_resume(client)
+    collected = client.post(
+        "/api/resume-phrases/collect",
+        json={
+            "resume_id": resume_id,
+            "path": "experience.0.description.0",
+            "job_tags": [too_long],
+        },
+    )
+    assert collected.status_code == 422
+
+
+def test_phrase_job_tags_survive_dataset_backup_shape(client):
+    phrase = _create_phrase(client, job_tags=["后端", "数据"])
+    import sqlite3
+    from contextlib import closing
+
+    from app import database
+    from app.dataset_registry import dataset_database_file
+    from app.services.datasets import create_dataset
+
+    # 标签是 JSON 列：读回仍是字符串数组（旧行默认 []），备份按同一 schema 带走。
+    with closing(sqlite3.connect(str(Path(database.engine.url.database)))) as connection:
+        row = connection.execute(
+            "SELECT job_tags FROM resume_phrase WHERE id = ?", (phrase["id"],)
+        ).fetchone()
+        columns = {
+            item[1] for item in connection.execute('PRAGMA table_info("resume_phrase")')
+        }
+    import json
+
+    assert "job_tags" in columns
+    # SQLAlchemy 的 JSON 序列化默认 ensure_ascii（中文存成 \uXXXX），按 JSON 解码比较。
+    assert row is not None and json.loads(row[0]) == ["后端", "数据"]
+    other = create_dataset("标签隔离检查", database.engine)
+    with closing(sqlite3.connect(str(dataset_database_file(other["id"])))) as connection:
+        other_columns = {
+            item[1] for item in connection.execute('PRAGMA table_info("resume_phrase")')
+        }
+        count = connection.execute("SELECT COUNT(*) FROM resume_phrase").fetchone()[0]
+    assert "job_tags" in other_columns
+    assert count == 0

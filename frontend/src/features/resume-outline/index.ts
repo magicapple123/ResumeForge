@@ -14,3 +14,5 @@ export * from "./model";
 export * from "./commands";
 export * from "./paths";
 export * from "./highlight";
+export * from "./search";
+export * from "./scrollMemory";

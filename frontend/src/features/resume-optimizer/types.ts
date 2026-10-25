@@ -8,6 +8,8 @@
  */
 import type { LayoutMeasure } from "../../utils/resumeLayoutMeasure";
 import type { ResumeFitCandidate } from "../../types/resumeLayout";
+import type { ResumeContent } from "../../types/resume";
+import type { EntryField } from "../resume-document/types";
 
 /** 参与优化的四个排版参数键（与后端 `_effective_layout` 的四个旋钮一一对应）。 */
 export type OptimizerParamKey =
@@ -79,3 +81,53 @@ export interface MeasuredCandidate extends OptimizerCandidateView {
 /** 不可行原因（用于明确说明"为什么没有方案"，不许假装成功）。 */
 export type NoFeasibleReason =
   "no_ladder" | "locked_out" | "still_overflow" | "no_room" | "no_measure";
+
+/** 后端可选下发的"内容提示"（W09 低相关要点）。缺省 = 前端不生成该类候选（fail-soft）。 */
+export interface OptimizerContentHint {
+  kind: "low_relevance";
+  /** 条目族字段名（education / experience / projects …）。 */
+  section: string;
+  object_id: string;
+  point_field?: string;
+  point_id?: string;
+  reason: string;
+  evidence: string[];
+}
+
+/** 内容精简候选的种类（界面按它选标题与说明文案）。 */
+export type ContentCandidateKind =
+  "duplicate-entries" | "duplicate-points" | "merge-short-points" | "low-relevance-points";
+
+/** 一个被删/被并的对象（卡片上逐条列出，让人看见改了哪几处）。 */
+export interface ContentCandidateItem {
+  field: EntryField;
+  objectId: string;
+  label: string;
+  pointField?: string;
+  pointIndex?: number;
+}
+
+export interface ContentCandidateStats {
+  entriesRemoved: number;
+  pointsRemoved: number;
+  pointsMerged: number;
+  charsSaved: number;
+  /** 被删对象里"可见"（未隐藏）的数量：隐藏条目本来就不进产物，删了不会减少页数。 */
+  visibleRemoved: number;
+}
+
+/**
+ * 一个内容精简候选：自带写回用的新 `content`；不修改入参。
+ *
+ * `measureCss` 只在"删条目/删要点"这类能用 `display:none` 表达时给（预览里真实量一次）；
+ * `null` = 这类改动无法用 CSS 表达（如合并短要点），界面必须如实说"应用后重新诊断"。
+ */
+export interface OptimizerContentCandidate {
+  key: string;
+  kind: ContentCandidateKind;
+  content: ResumeContent;
+  stats: ContentCandidateStats;
+  items: ContentCandidateItem[];
+  itemCount: number;
+  measureCss: string | null;
+}

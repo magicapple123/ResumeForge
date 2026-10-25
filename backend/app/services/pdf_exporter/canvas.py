@@ -18,6 +18,7 @@ from .layout import (
     PAGE_HEIGHT_MM,
     ResumeLayout,
 )
+from .rich_text import disable_markdown_links, drawn_text, to_fpdf_markup
 from .skill_tags import draw_skill_tags, soft_accent
 from .style_blocks import (
     _BULLET_MARK as _BULLET_MARK,
@@ -27,10 +28,17 @@ from .style_blocks import (
     draw_entry_head,
     draw_meta_line,
     draw_section_title,
+    section_title_total_height,
 )
 
 # 列表项符号（含它后面那个空格）现在定义在 `style_blocks`（与绘制在一起）；这里 re-export，
 # 既有测试与调用方 `canvas._BULLET_MARK` 的导入路径不变。
+
+# W08：标题 + 段落整体预留时，最多为正文预留多少行（含标题块自带的那一行）。
+# 短于这个行数的段落整段同页；更长的段落只保证"标题 + 前几行"同页，其余自然续页。
+# 取值权衡：4 行足以让常见的 1–3 行摘要/导语整段贴住标题，又不会把长段落的尾部
+# 整段顶到下一页（整段预留会让刚好一页的内容凭空多出一页）。
+_MAX_RESERVED_BODY_LINES = 4
 
 
 @dataclass(frozen=True)
@@ -68,6 +76,9 @@ class _ResumePDF(FPDF):
         resume_name: str = "",
     ) -> None:
         super().__init__(orientation="P", unit="mm", format="A4")
+        # W07：关掉 fpdf2 markdown 的自动链接（非法 scheme 的链接按字面文本保留，
+        # 不能被它变成可点击 URI 注释；PDF 链接能力本来就标"不可点击"）。
+        disable_markdown_links(self)
         self.accent = accent
         # 分隔线颜色（区块标题的下划线用它），来自模板 `--line`。
         self.line_color = line
@@ -159,27 +170,99 @@ class _ResumePDF(FPDF):
         self.set_xy(self.layout.margin_left, PAGE_HEIGHT_MM - self.layout.margin_bottom + 3.0)
         self.cell(self.content_width, 4.5, text, align="C")
 
-    # ===== 收集画出去的字（供字体预子集化）=====
+    # ===== W07：行内标记收口 + 收集画出去的字（供字体预子集化）=====
 
-    def _remember_text(self, args: tuple, kwargs: dict) -> None:
-        """记下 `cell` / `multi_cell` 的正文参数。
+    def _rich_text_args(self, args: tuple, kwargs: dict) -> tuple[tuple, dict]:
+        """把 `cell` / `multi_cell` 的正文换成 fpdf2 markdown 口径。
 
-        只认第一个 `str` 形参：fpdf2 的签名是 ``(w, h, text="", ...)``，但历史上允许
-        位置/关键字两种写法，返回 `output=...` 等模式时也可能没有文本。取不到就跳过——
-        这是一条"顺手记录"，不该因为签名细节挡住绘制。
+        **唯一收口**：PDF 的每个文字绘制点（页头 / 区块标题 / 条目头 / 要点 / 副行 /
+        技能标签）都经过这两个方法，所以协议 v2 只在这里投影一次，绘制函数不需要各写
+        一套。取不到文本（`dry_run` 量高、`output=...`）时原样返回——量高与绘制因此
+        用同一个投影结果。
         """
-        text = kwargs.get("text")
-        if text is None and len(args) > 2:
-            text = args[2]
-        if isinstance(text, str) and text:
-            self.drawn_chars.update(text)
+        text = None
+        keyword = ""
+        if "text" in kwargs:
+            keyword, text = "text", kwargs["text"]
+        elif "txt" in kwargs:
+            keyword, text = "txt", kwargs["txt"]
+        elif len(args) > 2:
+            keyword, text = "pos", args[2]
+        if not isinstance(text, str) or not text:
+            return args, kwargs
+        markup, markdown = to_fpdf_markup(text)
+        if keyword == "pos":
+            args = (args[0], args[1], markup, *args[3:])
+        elif keyword:
+            kwargs = {**kwargs, keyword: markup}
+        kwargs = {**kwargs, "markdown": markdown}
+        # 字体子集只收"真正画出来的字"：加粗标记与转义反斜杠不进集合。
+        self.drawn_chars.update(drawn_text(text))
+        return args, kwargs
 
-    def cell(self, *args, **kwargs):  # noqa: ANN002, ANN003 - 只是转发并记录，签名随 fpdf2
-        self._remember_text(args, kwargs)
+    # ===== W08：孤行/寡行控制 =====
+
+    def ensure_title_paragraph(
+        self,
+        text: str,
+        base: float,
+        *,
+        leading_gap: float,
+        style=None,
+        body_style=None,
+        keep_lines: int = 0,
+    ) -> None:
+        """把"区块标题 + 紧随其后的一整段正文"作为整体预留（keep_together 语义）。
+
+        只量不画：调用方随后按正常顺序画标题与正文，两者必然落在同一页。解决的是
+        **首尾孤行**——页尾只剩一行、或下一页页首只剩一行；也不制造"只有标题的空页"：
+        整块比一页还高时 ensure_space 只换一次页，正文仍按行自然劈开（兜底不丢内容）。
+
+        字号/行距与正文绘制走同一份公式（body 角色覆盖 → 模板行距），否则量出来的是
+        "另一段文本"，预留再多也可能差一行。
+        """
+        if self.measuring:
+            return
+        body_size = base * (
+            float(body_style.font_scale) if body_style is not None and body_style.font_scale else 1.0
+        )
+        body_line = base * _PX_TO_MM * (
+            float(body_style.line_height)
+            if body_style is not None and body_style.line_height
+            else self.layout.line_height
+        )
+        # 量高必须先把字体切到**正文自己的字号**：fpdf2 的 dry_run 读当前字体度量，
+        # 沿用上一个区块的字体（可能是标题的粗体大字号）会量出偏高的块，把整段顶到下一页。
+        self.set_font(FONT_FAMILY, "", body_size * _PX_TO_PT)
+        body_height = self._dry_run_height(self.frame_width, body_line, text)
+        # 只整块保护**短段落**：标题块本身已经含"至少一行正文"，这里补的是超出一行的部分。
+        # 长段落按"标题 + 有界行数"预留（其余自然续页）——整段预留会把本来刚好一页的
+        # 内容顶出空白、多出一页（modern/standard 回归的根因）。
+        reserved_body = min(body_height, _MAX_RESERVED_BODY_LINES * body_line)
+        needed = section_title_total_height(
+            self, base, leading_gap=leading_gap, style=style, keep_lines=keep_lines
+        ) + max(0.0, reserved_body - self.line_advance(base))
+        if needed > self.layout.usable_height_per_page:
+            # 连有界预留都高于一页：预留在任何一页都放不下，提前换页只会白扔一页（甚至
+            # 因为截断把正文整段挤没）。交给 multi_cell 按行自然分页——终止保护优先。
+            return
+        self.ensure_space(needed)
+
+    def rich_text_width(self, text: str) -> float:
+        """一段带行内标记的正文在**纸面上**的宽度（mm）：斜体/链接标记不占宽度。
+
+        居中对齐/右对齐的标题不能拿源串直接量：`*斜体*` 的星号与 `[label](url)` 的
+        方括号都不会画出来，多算宽度会让标题偏离版心。
+        """
+        markup, markdown = to_fpdf_markup(text)
+        return float(self.get_string_width(markup, markdown=markdown))
+
+    def cell(self, *args, **kwargs):  # noqa: ANN002, ANN003 - 只是转发并投影，签名随 fpdf2
+        args, kwargs = self._rich_text_args(args, kwargs)
         return super().cell(*args, **kwargs)
 
     def multi_cell(self, *args, **kwargs):  # noqa: ANN002, ANN003 - 同上
-        self._remember_text(args, kwargs)
+        args, kwargs = self._rich_text_args(args, kwargs)
         return super().multi_cell(*args, **kwargs)
 
     @property

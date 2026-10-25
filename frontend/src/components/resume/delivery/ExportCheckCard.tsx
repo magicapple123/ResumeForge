@@ -9,7 +9,7 @@ import { Alert, Button } from "antd";
 import { t } from "../../../i18n";
 import type { MessageKey } from "../../../i18n";
 import { collectExportWarnings, type ExportCheckWarning } from "../../../features/resume-delivery";
-import type { ExportCheckSummary } from "../../../features/resume-delivery";
+import type { ExportCheckSource, ExportCheckSummary } from "../../../features/resume-delivery";
 
 const WARNING_KEY: Record<ExportCheckWarning, MessageKey> = {
   "no-target": "delivery.check.warning.no-target",
@@ -21,6 +21,11 @@ const WARNING_KEY: Record<ExportCheckWarning, MessageKey> = {
 
 export interface ExportCheckCardProps {
   summary: ExportCheckSummary;
+  /**
+   * 摘要来源：`server` = 服务端按导出同一快照算的 `export_summary`；
+   * `local` = 后端尚未就绪时按同一份导出输入在本机核对。必须如实标注。
+   */
+  source?: ExportCheckSource;
   checking?: boolean;
   checkFailed?: boolean;
   onRefresh?: () => void;
@@ -37,6 +42,7 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
 
 export default function ExportCheckCard({
   summary,
+  source = "local",
   checking = false,
   checkFailed = false,
   onRefresh,
@@ -65,6 +71,9 @@ export default function ExportCheckCard({
         />
       ))}
       {checkFailed ? <Alert type="warning" showIcon title={t("delivery.check.failed")} /> : null}
+      <p className="resume-delivery-hint">
+        {source === "server" ? t("delivery.check.source.server") : t("delivery.check.source.local")}
+      </p>
       <dl className="resume-delivery-check-list">
         <Row label={t("delivery.check.target")}>
           {summary.target_company || summary.target_job_title

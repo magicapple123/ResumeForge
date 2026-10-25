@@ -10,18 +10,28 @@
  */
 import { request } from "../../api/client";
 import type {
+  AdoptLinkOut,
+  AdoptLinkRequest,
   BlockLinkOut,
   FactLockCreateRequest,
   FactLockListOut,
   FactLockOut,
   LinkCreateRequest,
   OutboundPreviewOut,
+  ProvenanceSourceListOut,
+  UsagePricingIn,
+  UsagePricingOut,
+  UsageRecordListOut,
   OutboundPreviewRequest,
   ResumeProvenanceOut,
   RewriteFieldOut,
   SourceChainOut,
   SourceImpactOut,
+  ManualSourceOut,
+  SourceLinkCreateRequest,
   SourceOut,
+  RevisionTextViewOut,
+  SourceRevisionsOut,
   UsageSummaryOut,
 } from "./types";
 
@@ -46,6 +56,66 @@ export function createBlockLink(
 /** 解除关联（拒绝采纳最新来源）。 */
 export function deleteBlockLink(resumeId: number, linkId: number): Promise<void> {
   return request(PROVENANCE + "/resumes/" + resumeId + "/links/" + linkId, { method: "DELETE" });
+}
+
+// ===== W12 冻结契约：数据集来源列表 / 手工来源 / 建立关联 / 采纳写正文 =====
+
+/** 数据集级来源列表（GET /api/provenance/sources；SourceLinkModal 的选择器数据源）。 */
+export function listProvenanceSources(
+  params: { kind?: string; keyword?: string; limit?: number } = {},
+): Promise<ProvenanceSourceListOut> {
+  const query = new URLSearchParams();
+  if (params.kind) query.set("kind", params.kind);
+  if (params.keyword) query.set("keyword", params.keyword);
+  if (params.limit) query.set("limit", String(params.limit));
+  const suffix = query.toString();
+  return request(PROVENANCE + "/sources" + (suffix ? "?" + suffix : ""));
+}
+
+/** 新建手工来源（POST /api/provenance/sources；只有 title 与 kind=manual，正文不进来源表）。 */
+export function createManualSource(title: string): Promise<ManualSourceOut> {
+  return request(PROVENANCE + "/sources", {
+    method: "POST",
+    body: JSON.stringify({ title, kind: "manual" }),
+  });
+}
+
+/** 某来源的修订列表（GET /sources/{id}/revisions）。 */
+export function listSourceRevisions(sourceId: number): Promise<SourceRevisionsOut> {
+  return request(PROVENANCE + "/sources/" + sourceId + "/revisions");
+}
+
+/**
+ * 来源某版修订的原文（GET /sources/{id}/revision-text；adopt 预填用）。
+ * `revisionNo` 缺省 = 最新修订；resolvable=false 表示来源无可读取正文。
+ */
+export function fetchRevisionText(
+  sourceId: number,
+  revisionNo?: number | null,
+): Promise<RevisionTextViewOut> {
+  const query = new URLSearchParams();
+  if (typeof revisionNo === "number" && revisionNo > 0)
+    query.set("revision_no", String(revisionNo));
+  const suffix = query.toString();
+  return request(
+    PROVENANCE + "/sources/" + sourceId + "/revision-text" + (suffix ? "?" + suffix : ""),
+  );
+}
+
+/** 建立/刷新块 → 来源关联（新契约：只带 source_id，不 upsert）。 */
+export function createSourceLink(payload: SourceLinkCreateRequest): Promise<BlockLinkOut> {
+  return request(PROVENANCE + "/links", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+/** 采纳来源更新：把新文本写回一个块（服务端事实锁/版本条件写，冲突返回 409）。 */
+export function adoptSourceLink(linkId: number, payload: AdoptLinkRequest): Promise<AdoptLinkOut> {
+  return request(PROVENANCE + "/links/" + linkId + "/adopt", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
 }
 
 /** 某块的来源链（object_id / point_id / path 至少给一个）。 */
@@ -99,6 +169,27 @@ export function fetchUsageSummary(
   if (params.since) query.set("since", params.since);
   const suffix = query.toString();
   return request("/usage/summary" + (suffix ? "?" + suffix : ""));
+}
+
+/** 读取用户配置的单价（未配置 = input/output null）。 */
+export function fetchUsagePricing(): Promise<UsagePricingOut> {
+  return request("/usage/pricing");
+}
+
+/** 保存单价（只影响费用估算；未知 token 仍不会当 0 算）。 */
+export function saveUsagePricing(payload: UsagePricingIn): Promise<UsagePricingOut> {
+  return request("/usage/pricing", {
+    method: "PUT",
+    body: JSON.stringify(payload),
+  });
+}
+
+/** 调用记录（含 finish_reason；无正文，隐私边界由后端保证）。 */
+export function fetchUsageRecords(params: { limit?: number } = {}): Promise<UsageRecordListOut> {
+  const query = new URLSearchParams();
+  if (params.limit) query.set("limit", String(params.limit));
+  const suffix = query.toString();
+  return request("/usage/records" + (suffix ? "?" + suffix : ""));
 }
 
 export function previewOutbound(payload: OutboundPreviewRequest): Promise<OutboundPreviewOut> {

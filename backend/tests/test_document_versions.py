@@ -258,3 +258,132 @@ def test_versions_are_dataset_scoped_and_backed_up(client, db_session):
     assert _count(other_file, "resume_variant") == 0
     # 新表自动进入备份清单（清单从 Base.metadata 推导）。
     assert {"resume_version", "resume_variant"} <= set(application_tables())
+
+
+# ===== W16：变体独立排版（0060 resume_variant.layout）+ 导出/预览快照 =====
+
+
+def _export_input(client, resume_id: int, variant_id: int) -> dict:
+    response = client.get(
+        f"/api/resumes/{resume_id}/variants/{variant_id}/export-input"
+    )
+    assert response.status_code == 200, response.text
+    return response.json()
+
+
+def test_variant_layout_is_independent_from_current_resume(client, db_session):
+    resume_id = _create_resume(client)
+    variant = client.post(
+        f"/api/resumes/{resume_id}/variants", json={"name": "英文排版变体"}
+    ).json()
+    # 旧行为：不传 layout = 继承；列表用 has_layout 标记，详情给原始 None。
+    assert variant["has_layout"] is False
+    detail = client.get(f"/api/resumes/{resume_id}/variants/{variant['id']}").json()
+    assert detail["layout"] is None
+    baseline = _export_input(client, resume_id, variant["id"])
+    assert baseline["layout_source"] == "snapshot"
+    assert baseline["content"]["summary"] == "版本 A"
+
+    # PATCH 独立排版：只改变体，不动当前简历。
+    layout = {"template": "classic", "format_config": {"font_size": 11}, "page_limit": 2}
+    patched = client.patch(
+        f"/api/resumes/{resume_id}/variants/{variant['id']}", json={"layout": layout}
+    )
+    assert patched.status_code == 200, patched.text
+    assert patched.json()["layout"] == layout
+    assert patched.json()["has_layout"] is True
+    assert _resume(client, resume_id)["page_limit"] == 1  # 当前简历未被改
+
+    # 当前简历随后改了内容与页数：导出快照仍取变体自己的内容 + 独立排版。
+    _save_content(client, resume_id, _content("版本 B", "B"))
+    from app.models.resume import ResumeRecord
+
+    record = db_session.get(ResumeRecord, resume_id)
+    record.page_limit = 3
+    db_session.commit()
+    snapshot = _export_input(client, resume_id, variant["id"])
+    assert snapshot["layout_source"] == "variant"
+    assert snapshot["content"]["summary"] == "版本 A"
+    assert snapshot["layout"]["page_limit"] == 2
+    assert snapshot["layout"]["format_config"] == {"font_size": 11}
+    assert len(snapshot["content_sha256"]) == 64
+
+    # 显式传 null = 清除独立排版、回到继承（旧变体兼容路径）。
+    cleared = client.patch(
+        f"/api/resumes/{resume_id}/variants/{variant['id']}", json={"layout": None}
+    )
+    assert cleared.status_code == 200, cleared.text
+    assert cleared.json()["layout"] is None
+    assert cleared.json()["has_layout"] is False
+    assert _export_input(client, resume_id, variant["id"])["layout_source"] == "snapshot"
+
+
+def test_variant_created_with_layout_keeps_it(client):
+    resume_id = _create_resume(client)
+    layout = {"format_name": "compact", "page_limit": 2, "language": "en-US"}
+    created = client.post(
+        f"/api/resumes/{resume_id}/variants",
+        json={"name": "直接带排版", "layout": layout},
+    )
+    assert created.status_code == 201, created.text
+    assert created.json()["has_layout"] is True
+    detail = client.get(f"/api/resumes/{resume_id}/variants/{created.json()['id']}").json()
+    assert detail["layout"] == layout
+    snapshot = _export_input(client, resume_id, created.json()["id"])
+    assert snapshot["layout_source"] == "variant"
+    assert snapshot["layout"]["format_name"] == "compact"
+
+
+def test_legacy_variant_without_layout_or_snapshot_falls_back_to_resume(client, db_session):
+    """旧变体无 layout（0060 之前）：优先用派生时的 render_context 快照，不报错。"""
+    resume_id = _create_resume(client)
+    variant = client.post(f"/api/resumes/{resume_id}/variants", json={"name": "旧变体"}).json()
+    from app.models.resume import ResumeRecord
+    from app.models.versions import ResumeVariant
+
+    # 更老的数据连 render_context 都是空 {}：按当前简历排版兜底。
+    row = db_session.get(ResumeVariant, variant["id"])
+    row.render_context = {}
+    record = db_session.get(ResumeRecord, resume_id)
+    record.template = "scholar"
+    record.page_limit = 2
+    db_session.commit()
+
+    snapshot = _export_input(client, resume_id, variant["id"])
+    assert snapshot["layout_source"] == "resume"
+    assert snapshot["layout"]["template"] == "scholar"
+    assert snapshot["layout"]["page_limit"] == 2
+
+
+def test_variant_export_input_rejects_bad_layout_and_404s(client):
+    resume_id = _create_resume(client)
+    variant = client.post(f"/api/resumes/{resume_id}/variants", json={"name": "校验"}).json()
+    bad_page = client.patch(
+        f"/api/resumes/{resume_id}/variants/{variant['id']}", json={"layout": {"page_limit": 99}}
+    )
+    assert bad_page.status_code == 400
+    bad_shape = client.patch(
+        f"/api/resumes/{resume_id}/variants/{variant['id']}", json={"layout": [1, 2]}
+    )
+    assert bad_shape.status_code == 422
+    assert (
+        client.get(f"/api/resumes/{resume_id}/variants/9999/export-input").status_code == 404
+    )
+    other = _create_resume(client, "另一份")
+    foreign = client.post(f"/api/resumes/{other}/variants", json={"name": "别人的变体"}).json()
+    assert (
+        client.get(
+            f"/api/resumes/{resume_id}/variants/{foreign['id']}/export-input"
+        ).status_code
+        == 404
+    )
+
+
+def test_variant_export_input_rejects_deleted_resume(client):
+    resume_id = _create_resume(client)
+    variant = client.post(f"/api/resumes/{resume_id}/variants", json={"name": "已删"}).json()
+    assert client.delete(f"/api/resumes/{resume_id}").status_code in (200, 204)
+    assert (
+        client.get(f"/api/resumes/{resume_id}/variants/{variant['id']}/export-input").status_code
+        == 404
+    )

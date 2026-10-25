@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-"""W12 来源读侧：聚合视图 / 影响反查 / 块来源链。
+"""W12 来源读侧：聚合视图 / 影响反查 / 块来源链 / 来源列表。
 
 从 document_provenance.py 拆出（行数预算）：写侧（来源 upsert 与关联建立）与读侧
 （给界面的视图）各自内聚，读写两侧不共享可变状态。
@@ -7,14 +7,15 @@
 约定：
 - 未关联 = objects[].link 为 None，**不是**一种猜测出来的状态；
 - status 是算出来的：关联时的来源指纹与来源当前指纹不同即 stale；
-- 影响反查按"简历块"给出，不推测文本相似度。
+- 影响反查按"简历块"给出，不推测文本相似度；
+- 来源列表只返回展示用元信息（title/metadata/修订号），**不返回任何正文**。
 """
 
 from __future__ import annotations
 
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from ...models.provenance import (
@@ -28,6 +29,9 @@ from .document_provenance import (
     link_status,
     resolve_target,
 )
+
+MAX_SOURCE_LIST_LIMIT = 200
+DEFAULT_SOURCE_LIST_LIMIT = 50
 
 
 def _revisions_by_source(
@@ -101,6 +105,7 @@ def provenance_view(db: Session, record: ResumeRecord) -> dict[str, Any]:
                 "latest_revision_no": revision_rows[-1].revision_no if revision_rows else 0,
                 "revisions": [
                     {
+                        "id": revision.id,
                         "revision_no": revision.revision_no,
                         "fingerprint": revision.fingerprint,
                         "summary": revision.summary,
@@ -268,6 +273,7 @@ def source_detail(db: Session, source_id: int) -> dict[str, Any] | None:
         "latest_revision_no": revisions[-1].revision_no if revisions else 0,
         "revisions": [
             {
+                "id": revision.id,
                 "revision_no": revision.revision_no,
                 "fingerprint": revision.fingerprint,
                 "summary": revision.summary,
@@ -287,5 +293,79 @@ def source_detail(db: Session, source_id: int) -> dict[str, Any] | None:
                 "status": link_status(source, link),
             }
             for link in links
+        ],
+    }
+
+
+def list_sources(
+    db: Session,
+    *,
+    kind: str | None = None,
+    keyword: str | None = None,
+    limit: int = DEFAULT_SOURCE_LIST_LIMIT,
+) -> dict[str, Any]:
+    """来源列表（供"建立来源关联"时挑选已有来源）：只给展示元信息，不返回正文。
+
+    按 updated_at desc（没有 updated_at 的旧行回退 created_at），同时间按 id desc；
+    total 是**过滤后**的总数（limit 只影响 items）。
+    """
+    statement = select(ResumeSource)
+    if kind:
+        statement = statement.where(ResumeSource.kind == kind)
+    cleaned_keyword = (keyword or "").strip()
+    if cleaned_keyword:
+        statement = statement.where(ResumeSource.title.like(f"%{cleaned_keyword}%"))
+    total = db.execute(
+        select(func.count()).select_from(statement.subquery())
+    ).scalar_one()
+    safe_limit = max(1, min(int(limit), MAX_SOURCE_LIST_LIMIT))
+    rows = (
+        db.execute(
+            statement.order_by(
+                func.coalesce(ResumeSource.updated_at, ResumeSource.created_at).desc(),
+                ResumeSource.id.desc(),
+            ).limit(safe_limit)
+        )
+        .scalars()
+        .all()
+    )
+    revisions = _revisions_by_source(db, [row.id for row in rows])
+    return {
+        "total": int(total),
+        "items": [
+            {
+                "id": row.id,
+                "kind": row.kind,
+                "external_ref": row.external_ref,
+                "title": row.title,
+                "current_fingerprint": row.current_fingerprint,
+                "metadata": row.metadata_json or {},
+                "latest_revision_no": (
+                    revisions[row.id][-1].revision_no if revisions.get(row.id) else 0
+                ),
+                "created_at": row.created_at,
+                "updated_at": row.updated_at,
+            }
+            for row in rows
+        ],
+    }
+
+
+def source_revisions(db: Session, source_id: int) -> dict[str, Any] | None:
+    """一条来源的修订列表（id / revision_no / summary / captured_at）。"""
+    source = db.get(ResumeSource, source_id)
+    if source is None:
+        return None
+    revisions = _revisions_by_source(db, [source.id]).get(source.id, [])
+    return {
+        "source_id": source.id,
+        "revisions": [
+            {
+                "id": revision.id,
+                "revision_no": revision.revision_no,
+                "summary": revision.summary,
+                "captured_at": revision.captured_at,
+            }
+            for revision in revisions
         ],
     }

@@ -86,7 +86,11 @@
 
 - 版式：18mm 四边（最宽）；行高 1.8；页头无装饰线；分区标题纯文字（muted 色）；
   技能标签纯文字。
-- 页数：§4 实测 **2 页**（standard 档）。
+- 页数：§4 实测按字号档不同——**small 档 1 页**（样例 `bound-069`，page_limit=1）、
+  **standard 档 2 页**（样例 `iter-05`，page_limit=2）、**large 档 2 页**
+  （样例 `iter-20`，page_limit=2）。standard 档与 modern/elegant/editorial 同档
+  （18mm 宽边距 + 1.8 行高），比 classic 多占约 1 页；small 档仍为 1 页。
+  **引用页数时必须同时写明字号档与样例**，不能把两个档位的数字互换。
 - 字体：同 classic（HTML 与 PDF 一致：都是无衬线）。
 - 已知差异：无特有差异；它的"少装饰"让它成为"内容可读性"的对照样本。
 - 验证证据：`test_template_colors_match_the_template_files`、样例 `bound-069` /
@@ -152,11 +156,17 @@
      见 D12 研究 §5。
 - 验证证据：`test_pdf_exporter_columns.py`（11 条）、样例 `bound-073` / `iter-18`。
 
-## 4. 实测页数总表（2026-10-24，本机 SourceHanSansSC）
+## 4. 实测页数总表（2026-10-24 首测，2026-10-25 复核；本机 SourceHanSansSC）
 
 命令：`backend/.venv/Scripts/python.exe scripts/quality/generate_resume_samples.py check
 --json-out <tmp>/check-report.json`；页数取 `template-matrix` 样例的自然页数
 （`pages_needed`）。
+
+**测量条件**（结论只在这个条件下成立）：Windows 10.0.26200 本机、Python 3.12.2、
+PDF 字体 SourceHanSansSC（CFF 轮廓）、样例库 `CORPUS_VERSION=2026-10-24.1`、
+PDF 文本提取器 `pdftotext`、页数为服务端 PDF 的自然页数（未按 `page_limit` 截断）。
+2026-10-25 复核：`write` + `check` 均 exit 0，**120/120 份样例 PASS**（120 份全部
+由 pdftotext 提取，失败 0）；下表与 §3 各模板页数在复核中逐项一致。
 
 | 模板 | 样例 | 字号档 | 自然页数 | 样例 page_limit | 是否溢出 |
 | --- | --- | --- | --- | --- | --- |
@@ -171,11 +181,19 @@
 | split | bound-073 | small | 1 | 1 | 否 |
 
 （2026-10-24 全量 check 的 120 份里：自然 1 页 76 份、2 页 42 份、3 页 2 份；
-5 份故意超页样例按声明截断并标 overflow。）
+5 份故意超页样例按声明截断并标 overflow。2026-10-25 复核同样是 120/120。）
+
+> **minimal 两处数字的对应关系**：上表 `bound-069` 是 **small 档**、自然 1 页；
+> §3.5 所写的 standard 档 2 页对应迭代样例 `iter-05`（page_limit=2），large 档
+> `iter-20` 也是 2 页。这两个样例属于 20 份迭代样例，不在 `template-matrix`
+> 边界组，所以上表只列 `bound-069`。此前 §3.5 把 "standard 档 2 页" 的出处
+> 写成了 §4 的 `bound-069`（small 档），是把**档位**与**样例**错配，不是实测页数
+> 有第二个值。
 
 结论：**同一份内容在 standard 档、宽边距/大行高模板（modern/elegant/editorial/minimal）
-会多占约 1 页**。这是模板默认版式的真实差异，不是缺陷；界面上的页数提示与
-`page_limit` 行为必须按此解释。
+会多占约 1 页**；这里的 "1 页" 只在 standard 档成立——minimal 的 small 档仍是 1 页，
+large 档是 2 页。这是模板默认版式的真实差异，不是缺陷；界面上的页数提示与
+`page_limit` 行为必须按此解释，不能把不同字号档的页数混用。
 
 ## 5. 复现命令
 
@@ -207,3 +225,4 @@ backend/.venv/Scripts/python.exe scripts/quality/repro_scholar_bullet_glyph.py
 | 日期 | 版本 | 变化 |
 | --- | --- | --- |
 | 2026-10-24 | v1 | 首版：九套模板（6 可见 + 3 下线）逐套档案 + 实测页数 + 已知差异（含 scholar「•」缺陷登记） |
+| 2026-10-25 | v1.1 | 修正 minimal 页数的档位/样例错配（§3.5 与 §4）：small=1 页（bound-069）、standard=2 页（iter-05）、large=2 页（iter-20）；补测量条件与 2026-10-25 120/120 复核结果 |

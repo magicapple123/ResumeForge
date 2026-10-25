@@ -26,6 +26,8 @@ import type { OutlineCommand } from "../../features/resume-outline";
 import { t } from "../../i18n";
 import DocumentModeSwitch from "./research/DocumentModeSwitch";
 import OutlinePanel from "./outline/OutlinePanel";
+import type { OutlineMultiEntry, OutlineMultiSelectionApi } from "./outline/OutlinePanel";
+import WorkbenchTypographyTools from "./WorkbenchTypographyTools";
 import RoleStylePanel from "./typography/RoleStylePanel";
 import PhraseLibraryContainer from "./assets/PhraseLibraryContainer";
 import ObjectStylePanel from "./typography/ObjectStylePanel";
@@ -109,6 +111,14 @@ interface Props {
   /** W07 对象级排版：选中对象 id / 显示名。 */
   selectedObjectId?: string | null;
   selectedObjectLabel?: string;
+  /**
+   * W07 多选（大纲空格键勾选，经 `useWorkbenchContextPanels` 上提到 shell）。
+   * 集合住在 shell 而不是大纲面板里：切到参数页签时大纲会卸载，集合不能跟着丢。
+   */
+  multiSelectedEntries?: OutlineMultiEntry[];
+  onMultiSelectionChange?: (entries: OutlineMultiEntry[]) => void;
+  multiSelectionApiRef?: RefObject<OutlineMultiSelectionApi | null>;
+  onClearMultiSelect?: () => void;
   /** W12 来源页签内容（宿主 hook 构建；不传 = 不显示该页签）。 */
   sourcesPanel?: ReactNode;
 }
@@ -142,6 +152,10 @@ export default function WorkbenchParamsColumn({
   onOutlineSelectionChange,
   selectedObjectId,
   selectedObjectLabel,
+  multiSelectedEntries = [],
+  onMultiSelectionChange,
+  multiSelectionApiRef,
+  onClearMultiSelect,
   sourcesPanel,
 }: Props) {
   const [tab, setTab] = useState<LeftTab>("params");
@@ -176,7 +190,12 @@ export default function WorkbenchParamsColumn({
         block
         size="small"
         value={tab}
-        onChange={(value) => setTab(value as LeftTab)}
+        onChange={(value) => {
+          // 大纲面板切走就卸载了，它的多选集合随之清零；shell 那份也要同步清掉，
+          // 否则回到参数页还能对"树上已不存在的高亮"批量应用格式。
+          if (value === "outline" && tab !== "outline") onClearMultiSelect?.();
+          setTab(value as LeftTab);
+        }}
         options={[
           { value: "params", label: t("responsive.action.params") },
           { value: "outline", label: t("outline.panel.title") },
@@ -289,6 +308,19 @@ export default function WorkbenchParamsColumn({
               onChange={onChange}
             />
           ) : null}
+          {/* W07 批量：多选批量调整（D03）+ 格式刷。每次应用 = 一次 onChange = 一步历史。 */}
+          {multiSelectedEntries.length > 0 || selectedObjectId ? (
+            <WorkbenchTypographyTools
+              layout={layout}
+              catalog={catalog}
+              selectedObjectId={selectedObjectId ?? null}
+              selectedObjectLabel={selectedObjectLabel}
+              selected={multiSelectedEntries}
+              disabled={relayouting || layoutSaving || undefined}
+              onChange={onChange}
+              onClearSelection={() => onClearMultiSelect?.()}
+            />
+          ) : null}
           <ResumeParamGroup title={t("pagination.group.title")} storageKey="pagination">
             <PaginationControls
               layout={layout}
@@ -307,6 +339,8 @@ export default function WorkbenchParamsColumn({
             content={content}
             onCommand={onOutlineCommand}
             onSelectionChange={onOutlineSelectionChange}
+            onMultiSelectionChange={onMultiSelectionChange}
+            multiSelectionApiRef={multiSelectionApiRef}
             pickTarget={pickTarget}
             canvasContainer={canvasContainer}
             readOnly={outlineReadOnly}

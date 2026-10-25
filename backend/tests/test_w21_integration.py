@@ -7,6 +7,8 @@
 - E01 旧记录完整编辑：POST /manual 造**旧形状**（无 id/point_ids）→ GET（不得在读取时
   生成身份字段、不得写库）→ PUT /content（带 expected_revision）→ GET 一致 →
   POST /preview-pdf 传未保存 content（不得落库、不得推进 revision、PDF 里有新内容）。
+  导出的两条分支都要钉住：**带 content** 时 PDF 用草稿、库内记录与 revision 不动
+  （W19 同快照口径）；**不带 content** 时仍走已保存记录（"不传就不猜"的反向回归）。
 - E04 并发冲突：两个"窗口"基于同一 revision 条件写；后到的那个 409 + 业务码 +
   当前 revision，库内保留先写者的内容。
 - E06 备份状态：隔离库里存在成功 marker 但快照不存在 → protected=False /
@@ -24,6 +26,7 @@
 from __future__ import annotations
 
 import copy
+import hashlib
 import json
 import os
 import subprocess
@@ -169,9 +172,9 @@ def test_e01_unsaved_preview_does_not_persist_or_bump_revision(client, db_sessio
     assert plain.status_code == 200, plain.text
     assert "还没保存，只出现在预览里" not in _pdf_text(plain.content)
 
-    # 下载（导出）走**已保存记录**：当前口径下草稿只进预览、不进下载。这是 W04
-    # 执行台账已登记的剩余项（W19 把 content 接进 ExportRequest 后才统一）；本场景
-    # 如实按当前口径断言，不把"预览=下载"写成已验证。
+    # 反向回归（W19 之后仍然成立的那一半）：**不带 content** 的导出按已保存记录走，
+    # 不拿预览草稿去猜。带 content 的同快照分支由下一条用例钉住——两条必须同时在场，
+    # 否则"预览=下载"与"下载忽略草稿"都可能在没人发现的情况下被改回去。
     exported = client.post(
         f"/api/resumes/{record_id}/export",
         json={"format": "pdf", "page_limit": 1},
@@ -180,6 +183,55 @@ def test_e01_unsaved_preview_does_not_persist_or_bump_revision(client, db_sessio
     export_text = _pdf_text(exported.content)
     assert "旧形状记录的原始总结" in export_text
     assert "还没保存，只出现在预览里" not in export_text
+
+
+@needs_font
+def test_e01_export_with_draft_content_keeps_library_untouched(client, db_session):
+    """W19 同快照口径：导出带未保存 content → PDF 含草稿，库内记录与版本一个字节不动。
+
+    与上一条互补：上一条守"不传 content 就按已保存记录导"，这一条守"传了就按草稿导"。
+    两条同时钉住，才能同时防住两种回归——"预览是草稿、下载是旧记录"（W04 的原始缺口）
+    与"导出把草稿顺手落库/推 revision"（预览与下载共用一条管线后新增的风险）。
+    """
+    from app.models.resume_delivery import ResumeDeliveryRecord
+
+    record_id = _create_legacy_resume(client)
+    before = _row(db_session, record_id)
+    content_before = copy.deepcopy(before.content)
+    revision_before = before.revision
+    updated_before = before.updated_at
+
+    draft = copy.deepcopy(content_before)
+    draft["summary"] = "W21 E01：这条总结只存在于草稿，下载到的 PDF 应当带上它。"
+    exported = client.post(
+        f"/api/resumes/{record_id}/export",
+        json={"format": "pdf", "page_limit": 1, "content": draft},
+    )
+    assert exported.status_code == 200, exported.text
+    text = _pdf_text(exported.content)
+    assert "只存在于草稿" in text  # 下载到的就是草稿那一版
+    assert "旧形状记录的原始总结" not in text  # 不是库里已保存的那一版
+    # 交付指纹必须就是本次响应体的字节：缓存/重算都不能让头与文件指向两份内容。
+    assert exported.headers["X-Content-Sha256"] == hashlib.sha256(exported.content).hexdigest()
+
+    # 库内记录不动：revision / 正文 / updated_at 全都不变。
+    after = _row(db_session, record_id)
+    assert after.revision == revision_before
+    assert after.content == content_before
+    assert after.updated_at == updated_before
+    # 默认不冻结投递快照：一次草稿下载不是"正式投递存档"，不该在账本里留下证据行。
+    assert db_session.query(ResumeDeliveryRecord).count() == 0
+
+    # 紧接着再导一次"不带 content"：回到已保存记录那一版——草稿没有被上一次导出留住。
+    saved = client.post(
+        f"/api/resumes/{record_id}/export",
+        json={"format": "pdf", "page_limit": 1},
+    )
+    assert saved.status_code == 200, saved.text
+    saved_text = _pdf_text(saved.content)
+    assert "旧形状记录的原始总结" in saved_text
+    assert "只存在于草稿" not in saved_text
+    assert saved.headers["X-Content-Sha256"] != exported.headers["X-Content-Sha256"]
 
 
 # ===== E04：并发条件写冲突 =====

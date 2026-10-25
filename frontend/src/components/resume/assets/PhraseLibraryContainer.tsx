@@ -10,7 +10,9 @@
  *   成功后把 `PhraseInsertOut` 交回宿主（宿主刷新编辑器/预览，并记为一步历史）；
  * - **收藏**：POST `/collect`（需要当前选中的 `data-resume-path`；没有选中就不显示入口）；
  * - **删除**：软删进回收站第 17 类，随后用 `toast.undo` 给 5 秒撤销（撤销调既有
- *   `restoreTrashItem("phrase", id)`）。
+ *   `restoreTrashItem("phrase", id)`）；
+ * - **编辑**：正文有改动时先在弹窗里看词级 diff（更新先看差异），确认才 PATCH；
+ * - **插入**：先展示"当前文本 → 将插入文本"的确认层，确认后才写库。
  *
  * 失败一律给错误 Toast，不假装成功；没有简历上下文时插入按钮禁用并说明原因。
  */
@@ -21,9 +23,15 @@ import { copyText } from "../../../utils/clipboard";
 import { restoreTrashItem } from "../../../api/trash";
 import { stripMarkers } from "../../resume-preview/richText";
 import PhraseLibraryPanel from "./PhraseLibraryPanel";
+import PhraseEditorModal from "./PhraseEditorModal";
+import PhraseInsertPreviewModal from "./PhraseInsertPreviewModal";
 import { at } from "../../../features/resume-assets/i18n";
 import { usePhraseLibrary } from "../../../features/resume-assets/usePhraseLibrary";
-import type { PhraseInsertOut, ResumePhrase } from "../../../features/resume-assets/types";
+import type {
+  PhraseInsertOut,
+  PhraseUpdatePayload,
+  ResumePhrase,
+} from "../../../features/resume-assets/types";
 
 /** 插入目标：宿主告诉容器"插到哪一栏、哪一条、哪个位置"。 */
 export interface PhraseInsertTarget {
@@ -37,6 +45,8 @@ interface Props {
   resumeId?: number | null;
   /** 当前选中的要点路径（收藏入口用）；空 = 不显示收藏按钮。 */
   selectedPath?: string | null;
+  /** 选中要点的当前文本（插入确认层里的"当前文本"）；缺省只展示新增。 */
+  selectedText?: string | null;
   /** 插入目标；空 = 插入按钮禁用并说明原因。 */
   insertTarget?: PhraseInsertTarget | null;
   /**
@@ -58,6 +68,7 @@ function messageOf(error: unknown): string {
 export default function PhraseLibraryContainer({
   resumeId = null,
   selectedPath = null,
+  selectedText = null,
   insertTarget = null,
   insertLocked = false,
   expectedRevision = null,
@@ -67,6 +78,9 @@ export default function PhraseLibraryContainer({
   const toast = useToast();
   const library = usePhraseLibrary();
   const [lastInserted, setLastInserted] = useState<PhraseInsertOut | null>(null);
+  const [pendingInsert, setPendingInsert] = useState<ResumePhrase | null>(null);
+  const [editing, setEditing] = useState<ResumePhrase | null>(null);
+  const [savingEdit, setSavingEdit] = useState(false);
 
   // 插入锁优先：宿主有未保存草稿时，插入会覆盖服务端内容，必须先保存。
   const canInsert = Boolean(resumeId && insertTarget && !insertLocked);
@@ -87,6 +101,32 @@ export default function PhraseLibraryContainer({
       toast.success(at("assets.insert.done"));
     } catch (error) {
       toast.error(messageOf(error) || at("assets.insert.failed"));
+    }
+  };
+
+  const requestInsert = (phrase: ResumePhrase) => {
+    if (!canInsert) return;
+    setPendingInsert(phrase);
+  };
+
+  const confirmInsert = async () => {
+    if (!pendingInsert) return;
+    const phrase = pendingInsert;
+    setPendingInsert(null);
+    await handleInsert(phrase);
+  };
+
+  const handleSaveEdit = async (payload: PhraseUpdatePayload) => {
+    if (!editing) return;
+    setSavingEdit(true);
+    try {
+      await library.update(editing.id, payload);
+      toast.success(at("assets.editor.saved"));
+      setEditing(null);
+    } catch (error) {
+      toast.error(messageOf(error) || at("assets.editor.saveFailed"));
+    } finally {
+      setSavingEdit(false);
     }
   };
 
@@ -137,7 +177,8 @@ export default function PhraseLibraryContainer({
         retrying={library.loading}
         onRetry={() => void library.reload()}
         insertEnabled={canInsert}
-        onInsert={(phrase) => void handleInsert(phrase)}
+        onInsert={requestInsert}
+        onEdit={(phrase) => setEditing(phrase)}
         onRequestDelete={(phrase) => void handleDelete(phrase)}
         onCopy={(phrase) => void handleCopy(phrase)}
         onCollectCurrent={canCollect ? () => void handleCollect() : undefined}
@@ -152,6 +193,30 @@ export default function PhraseLibraryContainer({
         <div style={{ marginTop: 6, fontSize: 12, color: "var(--rf-text-secondary)" }}>
           {resolveTargetError()}
         </div>
+      ) : null}
+      {editing ? (
+        <PhraseEditorModal
+          key={editing.id}
+          open
+          phrase={editing}
+          saving={savingEdit}
+          onCancel={() => setEditing(null)}
+          onSave={(payload) => void handleSaveEdit(payload)}
+        />
+      ) : null}
+      {pendingInsert ? (
+        <PhraseInsertPreviewModal
+          open
+          phrase={pendingInsert}
+          targetLabel={
+            insertTarget
+              ? insertTarget.section + (insertTarget.entryId ? " · " + insertTarget.entryId : "")
+              : ""
+          }
+          currentText={selectedText ?? ""}
+          onCancel={() => setPendingInsert(null)}
+          onConfirm={() => void confirmInsert()}
+        />
       ) : null}
     </div>
   );

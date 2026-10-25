@@ -10,6 +10,7 @@
  * 为什么放在 feature 目录：task-25 写入范围是 `features/resume-delivery/**` +
  * `components/resume/delivery/**` + i18n；`api/` 与 `types/` 由 lead 统一登记。
  */
+import { ApiError } from "../../api/apiError";
 import type { ResumeContent } from "../../types/resume";
 import { buildExportCheckSummary } from "./check";
 import {
@@ -17,6 +18,7 @@ import {
   EXPORT_REVISION_CHANGED_CODE,
   type ExportArtifactRecord,
   type ExportBundleRequest,
+  type ExportCheckRequest,
   type ExportCheckSummary,
   type ExportPreset,
   type ExportPresetConfig,
@@ -76,11 +78,65 @@ export interface ExportDeliveryApi {
   deletePreset(id: number): Promise<void>;
   /** 成套导出 zip（文件名由服务端 Content-Disposition 给）。 */
   exportBundle(resumeId: number, body: ExportBundleRequest): Promise<ExportBundleDownload>;
-  /** D20 核对摘要（复用 W11 preflight 的 `export_summary`）。 */
-  checkExport(resumeId: number, body: ExportBundleRequest): Promise<ExportCheckSummary>;
+  /**
+   * D20 核对摘要：走 W11 preflight 的 `purpose:"export"`。
+   *
+   * 返回 `null` = 当前后端还没有这项能力（feature-detect，旧后端 extra="forbid" 会 422）——
+   * 调用方必须回退到"同一份导出输入本地核对"并如实标注来源；网络/超时/5xx 等真失败
+   * 仍然抛错，不能静默降级成一份看起来没问题的本地摘要。
+   */
+  checkExport(resumeId: number, body: ExportCheckRequest): Promise<ExportCheckSummary | null>;
   listArtifacts(resumeId: number): Promise<ExportArtifactRecord[]>;
   /** 删除原件：后端路径必须带 resume_id（契约 §6）。 */
   deleteArtifact(resumeId: number, artifactId: number): Promise<void>;
+}
+
+/** 后端还没有 `purpose:"export"` 能力时的 HTTP 状态（feature-detect 用，不是业务失败）。 */
+const CHECK_UNAVAILABLE_STATUSES = new Set([400, 404, 422]);
+
+function isCheckUnavailable(error: unknown): boolean {
+  return (
+    error instanceof ApiError &&
+    typeof error.status === "number" &&
+    CHECK_UNAVAILABLE_STATUSES.has(error.status)
+  );
+}
+
+/**
+ * 只接受**完整**的 `export_summary`：缺一个字段就当作"后端未就绪"返回 null。
+ *
+ * 为什么不给缺字段补默认值：核对卡会把 target/contact/revision 直接展示给用户，
+ * 补出来的"未关联 / 无联系方式"会被当成真实结论——那正是 D20 要避免的误导。
+ */
+function normalizeExportSummary(raw: unknown): ExportCheckSummary | null {
+  if (!raw || typeof raw !== "object") return null;
+  const value = raw as Record<string, unknown>;
+  const revision = value.revision;
+  const hidden = value.hidden_count;
+  if (
+    typeof value.target_company !== "string" ||
+    typeof value.target_job_title !== "string" ||
+    typeof value.resume_title !== "string" ||
+    typeof value.contact_present !== "boolean" ||
+    typeof value.document_mode !== "string" ||
+    typeof value.revision_changed !== "boolean" ||
+    typeof revision !== "number" ||
+    !Number.isFinite(revision) ||
+    typeof hidden !== "number" ||
+    !Number.isFinite(hidden)
+  ) {
+    return null;
+  }
+  return {
+    target_company: value.target_company,
+    target_job_title: value.target_job_title,
+    resume_title: value.resume_title,
+    contact_present: value.contact_present,
+    document_mode: value.document_mode,
+    revision,
+    revision_changed: value.revision_changed,
+    hidden_count: hidden,
+  };
 }
 
 export function createExportDeliveryApi(): ExportDeliveryApi {
@@ -118,15 +174,19 @@ export function createExportDeliveryApi(): ExportDeliveryApi {
       };
     },
     async checkExport(resumeId, body) {
-      const data = await request<{ export_summary?: ExportCheckSummary }>(
-        `/resumes/${resumeId}/preflight`,
-        {
+      let data: { export_summary?: unknown };
+      try {
+        data = await request<{ export_summary?: unknown }>(`/resumes/${resumeId}/preflight`, {
           method: "POST",
-          body: JSON.stringify({ ...body, purpose: "export" }),
-        },
-      );
-      if (!data.export_summary) throw new Error("preflight response is missing export_summary");
-      return data.export_summary;
+          body: JSON.stringify({ purpose: "export", ...body }),
+        });
+      } catch (caught) {
+        // 能力缺失（旧后端 400/404/422）→ null 由调用方回退本地核对；其余照抛。
+        if (isCheckUnavailable(caught)) return null;
+        throw caught;
+      }
+      // 字段缺失 = 仍是旧后端（或契约未对齐）→ 当能力缺失处理，而不是把半份摘要当真。
+      return normalizeExportSummary(data.export_summary);
     },
     async listArtifacts(resumeId) {
       const data = await request<{ items: ExportArtifactRecord[] }>(
@@ -154,11 +214,22 @@ export interface MockExportApiOptions {
   resumeTitle?: string;
   /** `strict_revision` 时模拟"服务端版本已前进"。 */
   currentRevision?: number;
+  /**
+   * 模拟服务端 D20 核对能力的三种形态：
+   * - `ok`（缺省）：返回与本地同形的摘要（服务端已就绪）；
+   * - `unavailable`：返回 null（旧后端 422 → feature-detect 回退本地）；
+   * - `error`：抛 502（真失败，UI 要显示"核对失败"而不是假装核对过）。
+   */
+  serverCheck?: "ok" | "unavailable" | "error";
 }
 
 export interface MockExportDeliveryApi extends ExportDeliveryApi {
   presetsSnapshot(): ExportPreset[];
   artifactsSnapshot(): ExportArtifactRecord[];
+  /** 已发出的成套导出请求体（断言 variant_id / content 等同快照字段）。 */
+  bundleRequests: ExportBundleRequest[];
+  /** 已发出的 D20 核对请求体。 */
+  checkRequests: ExportCheckRequest[];
   calls: string[];
 }
 
@@ -174,6 +245,8 @@ export function createMockExportDeliveryApi(
   }));
   let artifacts = (options.artifacts ?? []).map((artifact) => ({ ...artifact }));
   const calls: string[] = [];
+  const bundleRequests: ExportBundleRequest[] = [];
+  const checkRequests: ExportCheckRequest[] = [];
   const currentRevision = options.currentRevision ?? 0;
   const summary = (): ExportCheckSummary =>
     buildExportCheckSummary({
@@ -197,6 +270,8 @@ export function createMockExportDeliveryApi(
 
   return {
     calls,
+    bundleRequests,
+    checkRequests,
     presetsSnapshot: () => presets.map((preset) => ({ ...preset, config: { ...preset.config } })),
     artifactsSnapshot: () => artifacts.map((artifact) => ({ ...artifact })),
     async listPresets() {
@@ -223,6 +298,7 @@ export function createMockExportDeliveryApi(
     },
     async exportBundle(resumeId, body) {
       calls.push("export-bundle");
+      bundleRequests.push({ ...body });
       const requested = body.resume_revision;
       if (body.strict_revision && requested !== undefined && requested !== currentRevision) {
         throw new ExportRevisionChangedError(currentRevision);
@@ -247,8 +323,14 @@ export function createMockExportDeliveryApi(
       }
       return { blob: new Blob(["zip"]), filename: "delivery-bundle.zip" };
     },
-    async checkExport() {
+    async checkExport(_resumeId, body) {
       calls.push("check-export");
+      checkRequests.push({ ...body });
+      if (options.serverCheck === "unavailable") return null;
+      if (options.serverCheck === "error") {
+        // i18n-ok: 传输层错误文案（ApiError.message 兜底，不是界面常驻文案）
+        throw new ApiError("核对服务暂时不可用", 502, { code: "http" });
+      }
       return summary();
     },
     async listArtifacts() {

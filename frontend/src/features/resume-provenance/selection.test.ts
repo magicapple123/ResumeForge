@@ -3,11 +3,13 @@
 import { describe, expect, it } from "vitest";
 import {
   EMPTY_LOCATOR,
+  candidatePathFromSelection,
   isEmptyLocator,
   isSameLocator,
   locatorFromPath,
   locatorFromSelection,
   locatorKey,
+  locatorWithCandidatePath,
 } from "./selection";
 
 describe("locatorFromSelection", () => {
@@ -86,5 +88,84 @@ describe("locatorKey / isEmptyLocator / isSameLocator", () => {
     const a = { object_id: "x", point_id: null, path: null, label: "旧" };
     const b = { object_id: "x", point_id: null, path: null, label: "新" };
     expect(locatorKey(a)).toBe(locatorKey(b));
+  });
+});
+
+const CONTENT = {
+  experience: [
+    {
+      id: "exp_1",
+      company: "Cloud",
+      description: ["First bullet.", "Second bullet."],
+      point_ids: { description: ["pt_1", "pt_2"] },
+    },
+  ],
+  summary: "A summary.",
+};
+
+describe("candidatePathFromSelection（W12 局部写作候选）", () => {
+  it("要点选择用 object_id/point_id 现算路径，不按数组下标猜", () => {
+    const result = candidatePathFromSelection(
+      {
+        kind: "point",
+        field: "experience",
+        objectId: "exp_1",
+        pointField: "description",
+        pointId: "pt_2",
+      },
+      CONTENT,
+    );
+    expect(result).toEqual({ path: "experience.0.description.1", reason: "ok" });
+  });
+
+  it("条目级选择返回 not-a-point（一条条目有多个字段，不能替用户挑）", () => {
+    expect(
+      candidatePathFromSelection(
+        { kind: "entry", field: "experience", objectId: "exp_1" },
+        CONTENT,
+      ),
+    ).toEqual({ path: null, reason: "not-a-point" });
+  });
+
+  it("要点 id 在当前内容里找不到 → not-found（不猜）", () => {
+    expect(
+      candidatePathFromSelection(
+        {
+          kind: "point",
+          field: "experience",
+          objectId: "exp_1",
+          pointField: "description",
+          pointId: "pt_missing",
+        },
+        CONTENT,
+      ),
+    ).toEqual({ path: null, reason: "not-found" });
+  });
+
+  it("显式 path 只在指向字符串时接受（纸面/fe-outline 新契约）", () => {
+    expect(candidatePathFromSelection({ kind: "entry", path: "summary" }, CONTENT)).toEqual({
+      path: "summary",
+      reason: "ok",
+    });
+    expect(candidatePathFromSelection({ kind: "entry", path: "experience" }, CONTENT)).toEqual({
+      path: null,
+      reason: "not-found",
+    });
+  });
+
+  it("locatorWithCandidatePath 把现算 path 补进 locator", () => {
+    const locator = locatorWithCandidatePath(
+      {
+        kind: "point",
+        field: "experience",
+        objectId: "exp_1",
+        pointField: "description",
+        pointId: "pt_1",
+      },
+      CONTENT,
+    );
+    expect(locator.object_id).toBe("exp_1");
+    expect(locator.point_id).toBe("pt_1");
+    expect(locator.path).toBe("experience.0.description.0");
   });
 });

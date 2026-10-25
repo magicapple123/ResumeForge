@@ -16,6 +16,9 @@ const apiMocks = vi.hoisted(() => ({
   createGlossaryTerm: vi.fn(),
   updateGlossaryTerm: vi.fn(),
   deleteGlossaryTerm: vi.fn(),
+  createLanguageVariant: vi.fn(),
+  fetchVariantExportInput: vi.fn(),
+  patchVariantLayout: vi.fn(),
 }));
 const trashMocks = vi.hoisted(() => ({ restoreTrashItem: vi.fn() }));
 vi.mock("../../../features/resume-bilingual/api", () => apiMocks);
@@ -40,6 +43,18 @@ const CURRENT = { basic_info: { name: "张三" }, summary: "负责后端服务�
 
 beforeEach(() => {
   apiMocks.listVariants.mockResolvedValue({ items: [VARIANT] });
+  apiMocks.fetchVariantExportInput.mockResolvedValue({
+    resume_id: 5,
+    variant_id: 8,
+    name: "英文版",
+    language: "en-US",
+    content: {},
+    layout: { template: "classic", page_limit: 1, font_scale: "standard" },
+    layout_source: "render_context",
+    content_sha256: "sha",
+  });
+  apiMocks.createLanguageVariant.mockResolvedValue(VARIANT);
+  apiMocks.patchVariantLayout.mockResolvedValue(VARIANT);
   apiMocks.getVariant.mockResolvedValue(VARIANT);
   apiMocks.listGlossaryTerms.mockResolvedValue({
     items: [
@@ -112,6 +127,15 @@ describe("BilingualWorkspace", () => {
     await waitFor(() => expect(apiMocks.adoptTranslation).toHaveBeenCalledTimes(1));
     const items = apiMocks.adoptTranslation.mock.calls[0][2] as { path: string }[];
     expect(items.map((item) => item.path)).toEqual(["summary"]);
+  });
+
+  it("缺另一种语言版本时显示创建入口并调用真实 API", async () => {
+    renderWorkspace();
+    await screen.findByText("Built backend services.");
+    fireEvent.click(screen.getByRole("button", { name: bt("bilingual.variant.create") }));
+    await waitFor(() =>
+      expect(apiMocks.createLanguageVariant).toHaveBeenCalledWith(5, "zh-CN", "中文版"),
+    );
   });
 
   it("术语表：软删 + Toast 撤销 → 调回收站恢复", async () => {

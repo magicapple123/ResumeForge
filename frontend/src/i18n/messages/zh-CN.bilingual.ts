@@ -137,6 +137,32 @@ const bilingual = {
   "bilingual.glossary.saved": "术语已保存",
   "bilingual.glossary.deleteFailed": "删除没有成功",
   "bilingual.glossary.loadFailed": "术语表没加载出来",
+
+  // ── W16 变体创建与独立排版（0060 / export-input） ───────────
+  "bilingual.variant.created": "已创建语言版本",
+  "bilingual.variant.createFailed": "创建语言版本没有成功",
+  "bilingual.variant.name.zh": "中文版",
+  "bilingual.variant.name.en": "英文版",
+  "bilingual.layout.title": "这份版本的排版",
+  "bilingual.layout.hint": "独立保存；不改当前语言正文，也不影响另一份版本",
+  "bilingual.layout.inherited": "当前继承简历排版",
+  "bilingual.layout.own": "这份版本使用独立排版",
+  "bilingual.layout.template": "模板",
+  "bilingual.layout.pages": "页数上限",
+  "bilingual.layout.fontScale": "字号档位",
+  "bilingual.layout.font.small": "小字号",
+  "bilingual.layout.font.standard": "标准",
+  "bilingual.layout.font.large": "大字号",
+  "bilingual.layout.save": "保存排版",
+  "bilingual.layout.saving": "正在保存排版",
+  "bilingual.layout.saved": "这份版本的排版已保存",
+  "bilingual.layout.failed": "排版没有保存成功",
+  "bilingual.layout.reset": "恢复继承简历排版",
+  "bilingual.layout.loading": "正在加载这份版本的排版",
+  "bilingual.layout.error": "排版没加载出来",
+  "bilingual.layout.retry": "重新加载",
+  "bilingual.layout.unchanged": "还没有改动",
+  "bilingual.layout.templateHint": "模板在版本派生时确定，这里只调页数与字号",
 } as const;
 
 export default bilingual;

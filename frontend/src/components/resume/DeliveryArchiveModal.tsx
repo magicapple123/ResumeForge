@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import { Alert, App, Button, Input, Modal, Select, Space, Table, Tag } from "antd";
 import { useState } from "react";
+import { t } from "../../i18n";
 import { downloadDelivery, listDeliveryArchive } from "../../api/resumes";
 import { useApi } from "../../hooks/useApi";
 import type { DeliverySummary } from "../../types";
@@ -16,12 +17,32 @@ interface Props {
   onClose: () => void;
   /** 指定简历后，在历史存档下方显示"这份简历的交付原件"（W19 / D19）。 */
   resumeId?: number | null;
+  /**
+   * 可选的简历清单：宿主传当前列表项后，用户能在弹层里**选一份简历**查看交付原件。
+   *
+   * 为什么需要它：全局「交付存档」入口平时没有"当前简历"上下文，只靠 resumeId prop
+   * 的话 ArchiveList 永远是死路径（真实页面没有地方传）。列表页把当前页的简历传进来，
+   * 用户才能从这里看到并删除某份简历归档的原件。
+   */
+  resumeOptions?: { value: number; label: string }[];
   /** 测试/宿主注入用；缺省走真实接口。 */
   archiveApi?: ExportDeliveryApi;
 }
 
-export default function DeliveryArchiveModal({ onClose, resumeId, archiveApi }: Props) {
+export default function DeliveryArchiveModal({
+  onClose,
+  resumeId,
+  resumeOptions,
+  archiveApi,
+}: Props) {
   const { message } = App.useApp();
+  // 宿主给的初始简历（如深链 ?resume_id=）；用户可在弹层里改选。换 prop 时同步。
+  const [selectedResumeId, setSelectedResumeId] = useState<number | null>(resumeId ?? null);
+  const [prevResumeId, setPrevResumeId] = useState<number | null>(resumeId ?? null);
+  if (prevResumeId !== (resumeId ?? null)) {
+    setPrevResumeId(resumeId ?? null);
+    setSelectedResumeId(resumeId ?? null);
+  }
   const [page, setPage] = useState(1);
   const [keyword, setKeyword] = useState("");
   const [source, setSource] = useState("");
@@ -141,9 +162,23 @@ export default function DeliveryArchiveModal({ onClose, resumeId, archiveApi }: 
           },
         ]}
       />
-      {resumeId ? (
+      {resumeOptions && resumeOptions.length > 0 ? (
+        <Space wrap style={{ marginTop: 16 }}>
+          <span>{t("delivery.archive.resumePicker")}</span>
+          <Select
+            aria-label={t("delivery.archive.resumePicker")}
+            style={{ minWidth: 240 }}
+            allowClear
+            placeholder={t("delivery.archive.resumePickerPlaceholder")}
+            value={selectedResumeId ?? undefined}
+            options={resumeOptions}
+            onChange={(value?: number) => setSelectedResumeId(value ?? null)}
+          />
+        </Space>
+      ) : null}
+      {selectedResumeId !== null ? (
         <div style={{ marginTop: 16 }}>
-          <ArchiveList api={archiveApi ?? defaultArchiveApi} resumeId={resumeId} />
+          <ArchiveList api={archiveApi ?? defaultArchiveApi} resumeId={selectedResumeId} />
         </div>
       ) : null}
     </Modal>

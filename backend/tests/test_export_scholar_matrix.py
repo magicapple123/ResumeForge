@@ -52,7 +52,16 @@ PHOTO = (
 # 缺字用例用：合成字体里**不含**这个字。
 MISSING_GLYPH = "龘"
 # 各用例里刻意构造的长文本（长姓名 / 长技能 / 超页的公司名），必须一起进字体。
-_EXTRA_TEXT = ("欧阳" + "长姓名测试" * 4, "超长技能名称" * 6, "公司", "正常文字")
+# W07 的协议 v2 用例还会画链接 URL，所以把 URL 里常见的 ASCII 标点也收进合成字体——
+# 缺字形的表现是"纸面上少一个字符"，不会报错，只能从这里堵。
+_EXTRA_TEXT = (
+    "欧阳" + "长姓名测试" * 4,
+    "超长技能名称" * 6,
+    "公司",
+    "正常文字",
+    "高并发官网可查",
+    "：:/?=&._~@#%+",
+)
 
 
 def _test_font_text() -> str:
@@ -316,6 +325,43 @@ def test_scholar_word_keeps_every_skill_in_order_and_declares_the_real_font_fami
     assert FONT_FAMILY in xml, "Word 应声明所选字体的真实族名"
     assert "<w:b" in xml, "粗体片段应落成 bold run"
     assert document.pages is not None
+
+
+# ===== 5. W07 协议 v2：斜体 / 链接在 PDF 与 Word 上的真实结果 =====
+
+
+def test_scholar_pdf_renders_italic_text_and_link_as_visible_label_and_url() -> None:
+    """PDF 没有真斜体（近似不倾斜），但文字必须在；链接以 "label (URL)" 可见文本出现。"""
+    resume = _resume()
+    resume.summary = "**负责** *高并发* 系统，[官网](https://example.com/x) 可查。"
+    artifact = _pdf(resume, page_limit=2)
+    text = _text(artifact.content)
+
+    assert artifact.content[:5] == b"%PDF-"
+    assert "高并发" in text, "斜体近似渲染不能丢字"
+    assert "**" not in text and "*高并发*" not in text
+    # 合成字体的 CID 抽取会在字符间插 NUL：先去掉再查连续片段。
+    compact = "".join(text.replace("\x00", "").split())
+    assert "官网(https://example.com/x)" in compact, "链接应输出可见的 label (URL)"
+    assert "](https://" not in compact, "链接标记不能作为字面量印出来"
+
+
+def test_scholar_word_renders_italic_run_and_link_as_visible_text() -> None:
+    """Word 用 run.font.italic 表达真斜体；链接按 "label (URL)" 可见文本输出。"""
+    resume = _resume()
+    resume.summary = "**负责** *高并发* 系统，[官网](https://example.com/x) 可查。"
+    document = build_resume_docx(resume, template="scholar", page_limit=2, format_config=_format())
+    text = _docx_text(document.content)
+    compact = "".join(text.replace("&amp;", "&").split())
+
+    assert "官网(https://example.com/x)" in compact
+    assert "**" not in text and "*高并发*" not in text
+    assert "<w:i" in _docx_xml(document.content), "斜体应落成 run.font.italic"
+
+
+def _docx_xml(content: bytes) -> str:
+    with zipfile.ZipFile(io.BytesIO(content)) as bundle:
+        return bundle.read("word/document.xml").decode("utf-8")
 
 
 def test_scholar_layout_exposes_tag_columns_and_keeps_single_column_body():

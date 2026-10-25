@@ -16,6 +16,7 @@ import { t } from "../../../i18n";
 import { ensureIds } from "../../../features/resume-document/identity";
 import { buildOutline, entriesOf, entryIdOf } from "../../../features/resume-outline/model";
 import type { ResumeContent } from "../../../types/resume";
+import type { ResumeLayout } from "../../../types";
 import { TEMPLATE_CATALOG } from "../../../test/resumeFixtures";
 import { renderModal } from "../ResumeZoomModal.testkit";
 
@@ -214,5 +215,49 @@ describe("结构命令 → 保存 payload（W06 硬要求）", () => {
     const hiddenEntry = entriesOf(saved, "projects").find((entry) => entry.name === PROJECT_B);
     expect(hiddenEntry?.hidden).toBe(true);
     expect(hiddenEntry?.description).toEqual(["乙一", "乙二"]);
+  });
+});
+
+describe("多选 → 参数栏批量应用 → 返回大纲（fe-mount 接线验证）", () => {
+  it("大纲空格多选 → 参数栏出现批量条并应用一次 layout；回大纲多选已清、无残留目标", async () => {
+    const onApplyLayout = vi.fn();
+    renderWorkbench({ onApplyLayout });
+    openOutlineTab();
+    const tree = await screen.findByRole("tree", { name: t("outline.tree.label") });
+    const entries = Array.from(
+      tree.querySelectorAll<HTMLElement>('[data-tree-key^="entry:projects:"]'),
+    );
+    expect(entries).toHaveLength(2);
+    fireEvent.keyDown(entries[0], { key: " " });
+    fireEvent.keyDown(entries[1], { key: " " });
+    expect(screen.getByText(t("outline.batch.selected", { count: 2 }))).toBeInTheDocument();
+
+    // 切到「排版参数」页签：大纲卸载，但 shell 已把多选上提，批量条仍在且是 2 条。
+    fireEvent.click(screen.getByText(t("responsive.action.params")));
+    expect(await screen.findByText(t("typography.multi.title"))).toBeInTheDocument();
+    expect(screen.getByText(t("typography.multi.count", { count: 2 }))).toBeInTheDocument();
+
+    // 批量应用一次 = 一次 layout 提交，两条目标对象都写到 format_config.objects。
+    const lineHeight = screen.getByRole("spinbutton", { name: t("typography.prop.line_height") });
+    fireEvent.change(lineHeight, { target: { value: "1.6" } });
+    fireEvent.blur(lineHeight);
+    fireEvent.click(screen.getByRole("button", { name: t("typography.multi.apply") }));
+    expect(onApplyLayout).toHaveBeenCalledTimes(1);
+    const nextLayout = onApplyLayout.mock.calls[0][0] as ResumeLayout;
+    const objects = (
+      nextLayout.format_config as unknown as {
+        objects?: Record<string, Record<string, unknown>>;
+      }
+    ).objects;
+    const ids = entries.map((element) => (element.dataset.treeKey ?? "").split(":")[2]);
+    for (const id of ids) expect(objects?.[id]).toMatchObject({ line_height: 1.6 });
+
+    // 回「文档大纲」：进大纲页签会清空多选（避免对已卸载树上的高亮应用格式）。
+    fireEvent.click(screen.getByText(t("outline.panel.title")));
+    await screen.findByRole("tree", { name: t("outline.tree.label") });
+    expect(screen.queryByText(t("outline.batch.selected", { count: 2 }))).toBeNull();
+    // 再回参数栏：批量条不再出现（多选已清，不会对"树上已不存在的高亮"继续应用）。
+    fireEvent.click(screen.getByText(t("responsive.action.params")));
+    expect(screen.queryByText(t("typography.multi.title"))).toBeNull();
   });
 });

@@ -183,3 +183,22 @@
   overflow-wrap: anywhere;
   font-weight: 500;
 }
+
+/* 配置预览（W04-config）：内联 iframe 显示带水印/脱敏的产物，不新开弹层。 */
+.resume-delivery-config-preview {
+  margin-top: 12px;
+  border-top: 1px solid var(--rf-border-subtle);
+  padding-top: 10px;
+}
+
+.resume-delivery-config-preview-body {
+  margin-top: 6px;
+}
+
+.resume-delivery-config-preview-frame {
+  width: 100%;
+  height: 420px;
+  border: 1px solid var(--rf-border);
+  border-radius: var(--rf-radius-control);
+  background: #fff;
+}

@@ -22,10 +22,12 @@ from xml.etree import ElementTree
 from ...schemas.resume import ResumeContent
 from .resume_labels import normalize_language
 from .resume_sections import DEFAULT_SECTION_ORDER
-from .resume_visibility import is_hidden_entry
+from .resume_visibility import hidden_point_ids, is_hidden_entry
 
 _TOKEN_RE = re.compile(r"[A-Za-z0-9]+|[\u4e00-\u9fff]+")
 _MAX_DIFFS = 50
+# 可见性/身份元数据不是"纸面上该出现的正文"：既不该当文本比较，也不该参与缺字判定。
+_VISIBILITY_KEYS = frozenset({"id", "point_ids", "hidden", "hidden_points", "lock_content", "lock_layout"})
 
 
 def normalize_text(text: str) -> str:
@@ -120,9 +122,19 @@ def expected_lines(content: ResumeContent, *, language: str | None = None) -> li
             if is_hidden_entry(item):
                 continue
             data = item.model_dump(exclude_none=True) if hasattr(item, "model_dump") else {}
-            for value in data.values():
+            hidden = hidden_point_ids(item)
+            point_ids = data.get("point_ids")
+            mapping = point_ids if isinstance(point_ids, dict) else {}
+            for key, value in data.items():
+                if key in _VISIBILITY_KEYS:
+                    continue
                 if isinstance(value, list):
-                    for entry in value:
+                    ids = mapping.get(key)
+                    ids = ids if isinstance(ids, list) else []
+                    for index, entry in enumerate(value):
+                        # 隐藏要点不参与产物比较；id 与数组不等长时按"未隐藏"保守处理。
+                        if index < len(ids) and ids[index] in hidden:
+                            continue
                         add(entry)
                 else:
                     add(value)

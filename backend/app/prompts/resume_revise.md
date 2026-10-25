@@ -8,6 +8,18 @@
 {{ resume_json }}
 ```
 
+{% if locked_entries %}
+## 已锁定正文的条目（不得改动）
+
+下列条目由用户锁定正文：无论整体重新生成还是局部修改，都**不得修改这些条目的任何正文内容**
+（措辞、数字、时间、标点与顺序一律逐字保留），也不得删除或清空它们；只能按用户要求调整
+其它条目的表达。
+
+{% for item in locked_entries %}
+- {{ item.section }} · {{ item.label }}（{{ item.locator }}）
+{% endfor %}
+{% endif %}
+
 ## 修改要求
 {% if full_regenerate %}
 用户没有给出具体修改点，要求**整体重新生成**：保持简历中的全部事实（经历、项目、技能、

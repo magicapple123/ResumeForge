@@ -21,6 +21,7 @@ from ...schemas.versions import (
     TranslateVariantRequest,
     VariantCreateRequest,
     VariantDetailOut,
+    VariantExportInputOut,
     VariantListOut,
     VariantOut,
     VariantPatchRequest,
@@ -165,6 +166,7 @@ def create_variant(
             name=payload.name,
             job_id=payload.job_id,
             base_version_id=payload.base_version_id,
+            layout=payload.layout,
         )
         if payload.language or payload.variant_group_id is not None:
             variant = bilingual_variants.patch_variant(
@@ -224,6 +226,25 @@ def get_variant(resume_id: int, variant_id: int, db: Session = Depends(get_db)) 
     return VariantDetailOut.model_validate(variants.variant_detail(variant))
 
 
+@router.get(
+    "/{resume_id}/variants/{variant_id}/export-input", response_model=VariantExportInputOut
+)
+def variant_export_input(
+    resume_id: int, variant_id: int, db: Session = Depends(get_db)
+) -> VariantExportInputOut:
+    """导出/预览一条变体所需的快照：variant 自己的内容 + 生效排版（W16 唯一入口）。
+
+    ``layout_source`` 说明排版来自哪里：variant = 变体独立覆盖；snapshot = 派生时的
+    基底快照（旧变体兼容）；resume = 旧变体没有快照时按当前简历排版兜底。
+    """
+    record = _resume_or_404(db, resume_id)
+    try:
+        data = variants.resolve_variant_export(db, record, variant_id)
+    except versions.VersionNotFound as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return VariantExportInputOut.model_validate(data)
+
+
 @router.patch("/{resume_id}/variants/{variant_id}", response_model=VariantDetailOut)
 def patch_variant(
     resume_id: int,
@@ -231,8 +252,12 @@ def patch_variant(
     payload: VariantPatchRequest,
     db: Session = Depends(get_db),
 ) -> VariantDetailOut:
-    """改变体名称/语言标签/分组（内容与排版各自独立，不改当前简历）。"""
+    """改变体名称/语言标签/分组/独立排版（内容与排版各自独立，不改当前简历）。
+
+    ``layout`` 显式传 null = 清除独立排版、回到继承；不传 = 不修改。
+    """
     record = _resume_or_404(db, resume_id)
+    provided = payload.model_dump(exclude_unset=True)
     try:
         variant = variants.get_variant(db, record.id, variant_id)
         variant = bilingual_variants.patch_variant(
@@ -242,6 +267,8 @@ def patch_variant(
             language=payload.language,
             variant_group_id=payload.variant_group_id,
         )
+        if "layout" in provided:
+            variant = variants.set_variant_layout(db, variant, payload.layout)
     except versions.VersionNotFound as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except ValueError as exc:

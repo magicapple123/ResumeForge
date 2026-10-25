@@ -15,9 +15,17 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { analyzeResumeLayout, updateResumeLayout } from "../../api/resumes";
 import { ApiError } from "../../api/client";
 import { ot } from "../../features/resume-optimizer/i18n";
-import type { OptimizerCandidateView } from "../../features/resume-optimizer/types";
+import type {
+  OptimizerCandidateView,
+  OptimizerContentHint,
+} from "../../features/resume-optimizer/types";
 import LayoutOptimizerPanel from "./optimizer/LayoutOptimizerPanel";
-import type { ResumeLayout, ResumeLayoutAnalysis, ResumeLayoutStatus } from "../../types";
+import type {
+  ResumeContent,
+  ResumeLayout,
+  ResumeLayoutAnalysis,
+  ResumeLayoutStatus,
+} from "../../types";
 import { t } from "../../i18n";
 import type { ResumePreviewHandle } from "../ResumePreview";
 import type { LayoutMeasure } from "../../utils/resumeLayoutMeasure";
@@ -84,6 +92,15 @@ interface Props {
   /** 保存了新方案之后让父组件重新渲染预览。 */
   onApplied: (formatConfig: ResumeFormatConfig) => void;
   onAddPage: () => void;
+  /**
+   * 当前正文（含还没保存的加粗叠加）：内容精简候选从"用户眼前这一版"生成。
+   *
+   * 制作台弹层打开时这张卡在它后面（点不到），所以这里拿不到也不需要中栏的未保存草稿；
+   * 缺省 = 不生成内容候选（旧宿主行为逐字不变）。
+   */
+  content?: ResumeContent | null;
+  /** 应用内容候选：宿主写回正文（成功后才 toast；失败不假装成功）。 */
+  onApplyContent?: (next: ResumeContent) => void | Promise<void>;
 }
 
 export default function ResumeLayoutDiagnosisCard({
@@ -95,6 +112,8 @@ export default function ResumeLayoutDiagnosisCard({
   disabled = false,
   onApplied,
   onAddPage,
+  content = null,
+  onApplyContent,
 }: Props) {
   const { message } = App.useApp();
   const [analysis, setAnalysis] = useState<ResumeLayoutAnalysis | null>(null);
@@ -301,8 +320,34 @@ export default function ResumeLayoutDiagnosisCard({
     [layout, message, onApplied, resumeId],
   );
 
+  /**
+   * 内容候选写回正文的**唯一出口**：成功后由面板自己 toast，失败必须在这里说话。
+   *
+   * 失败后仍然抛出：面板靠"这次 await 是否成功"决定要不要显示成功提示，吞掉错误就会
+   * 出现"没写进去却提示已精简"。原稿不受影响（写回是整份替换，失败即未改）。
+   */
+  const applyContent = useCallback(
+    async (next: ResumeContent) => {
+      if (!onApplyContent) return;
+      try {
+        await onApplyContent(next);
+      } catch (error) {
+        message.error(
+          error instanceof Error && error.message
+            ? error.message
+            : t("workbench.conflict.save-failed"),
+        );
+        throw error;
+      }
+    },
+    [message, onApplyContent],
+  );
+
   const diagnosis = analysis?.diagnosis;
   const fitRoom = analysis?.fit_room;
+  // W09：后端可选下发的"低相关"提示（后端未合入时字段缺省 = 不生成该类候选，fail-soft）。
+  const contentHints: readonly OptimizerContentHint[] =
+    (analysis as { content_hints?: OptimizerContentHint[] } | null)?.content_hints ?? [];
 
   const suggestions = useMemo(() => diagnosis?.suggestions ?? [], [diagnosis]);
 
@@ -387,6 +432,9 @@ export default function ResumeLayoutDiagnosisCard({
         applying={optimizerApplying}
         conflictCode={optimizerConflict}
         onApply={applyOptimizer}
+        content={content}
+        contentHints={contentHints}
+        onApplyContent={onApplyContent ? applyContent : undefined}
       />
 
       {fitRoom && diagnosis?.status === "overflow" && (

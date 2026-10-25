@@ -6,7 +6,7 @@
  * 不另加「关闭」；版本冲突用**页内 Alert + 刷新按钮**，不新开第二个弹层。
  */
 import { Alert, App, Button, Input, Modal, Select, Space, Switch } from "antd";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { ResumeContent } from "../../../types";
 import { t } from "../../../i18n";
 import {
@@ -19,6 +19,8 @@ import {
 import { downloadBlob } from "../../../utils/download";
 import ExportCheckCard from "./ExportCheckCard";
 import ExportConfigForm from "./ExportConfigForm";
+import ConfigPreviewPanel from "./ConfigPreviewPanel";
+import VariantPicker, { type VariantOption } from "./VariantPicker";
 import { useExportBundle } from "../../../features/resume-delivery/useExportBundle";
 import { useExportPresets } from "../../../features/resume-delivery/useExportPresets";
 import "./delivery.css";
@@ -42,6 +44,8 @@ export interface ExportConfigModalProps {
   company: string;
   jobTitle: string;
   template?: string;
+  /** 具名版式（服务端核对 / 配置预览按它解析；缺省 = 记录值）。 */
+  formatName?: string;
   language?: string;
   documentMode?: string;
   /** 草稿版式：给了才随请求发，保证"导出 = 眼前这一版排版"。 */
@@ -49,6 +53,9 @@ export interface ExportConfigModalProps {
   fontScale?: string;
   formatConfig?: Record<string, unknown>;
   marginMm?: number;
+  /** W16 岗位变体列表（宿主用 useVariants 取）；空列表 = 不显示选择器。 */
+  variants?: VariantOption[];
+  variantLoading?: boolean;
   /** 版本冲突后重新取服务端 revision（宿主提供；不提供则只重新核对）。 */
   onReloadRevision?: () => Promise<number | null>;
   onExported?: (file: ExportBundleDownload, config: ExportPresetConfig) => void;
@@ -65,17 +72,21 @@ export default function ExportConfigModal({
   company,
   jobTitle,
   template = "",
+  formatName = "",
   language = "",
   documentMode,
   pageLimit,
   fontScale,
   formatConfig,
   marginMm,
+  variants = [],
+  variantLoading = false,
   onReloadRevision,
   onExported,
 }: ExportConfigModalProps) {
   const { message } = App.useApp();
   const presets = useExportPresets(api);
+  const [selectedVariantId, setSelectedVariantId] = useState<number | null>(null);
   const bundle = useExportBundle({
     api,
     resumeId,
@@ -86,12 +97,24 @@ export default function ExportConfigModal({
     jobTitle,
     documentMode,
     language,
+    template,
+    formatName,
     pageLimit,
     fontScale,
     formatConfig,
     marginMm,
+    variantId: selectedVariantId,
   });
   const [today] = useState(todayStamp);
+  // 打开弹层就按"导出同一快照"取一次服务端核对（后端未就绪时自动回退本地并标注）。
+  // 用 ref 持有 refreshCheck，避免把它（随输入变化的 useCallback）放进 effect 依赖导致循环刷新。
+  const refreshCheckRef = useRef(bundle.refreshCheck);
+  useEffect(() => {
+    refreshCheckRef.current = bundle.refreshCheck;
+  }, [bundle.refreshCheck]);
+  useEffect(() => {
+    if (open && resumeId !== null) void refreshCheckRef.current();
+  }, [open, resumeId]);
   const [selectedPresetId, setSelectedPresetId] = useState<number | null>(null);
   const [presetName, setPresetName] = useState("");
   const [presetDefault, setPresetDefault] = useState(false);
@@ -178,7 +201,7 @@ export default function ExportConfigModal({
 
   const refreshAfterConflict = async () => {
     if (onReloadRevision) await onReloadRevision().catch(() => null);
-    bundle.refreshCheck();
+    await bundle.refreshCheck();
   };
 
   return (
@@ -255,6 +278,32 @@ export default function ExportConfigModal({
           disabled={bundle.exporting}
         />
 
+        {variants.length > 0 || variantLoading ? (
+          <VariantPicker
+            variants={variants}
+            loading={variantLoading}
+            value={selectedVariantId}
+            onChange={setSelectedVariantId}
+            disabled={bundle.exporting}
+          />
+        ) : null}
+
+        <ConfigPreviewPanel
+          resumeId={resumeId}
+          disabled={bundle.exporting}
+          template={template || undefined}
+          formatName={formatName || undefined}
+          pageLimit={pageLimit}
+          fontScale={fontScale}
+          language={language || undefined}
+          formatConfig={formatConfig}
+          includePhoto={bundle.config.include_photo}
+          content={content}
+          watermark={bundle.config.watermark}
+          redact={bundle.config.redact}
+          variantId={selectedVariantId}
+        />
+
         <p className="resume-delivery-hint">{t("delivery.export.snapshotKept")}</p>
         {bundle.config.archive_original ? (
           <p className="resume-delivery-hint">{t("delivery.export.archiveKept")}</p>
@@ -276,9 +325,10 @@ export default function ExportConfigModal({
 
         <ExportCheckCard
           summary={bundle.summary}
+          source={bundle.checkSource}
           checking={bundle.checking}
           checkFailed={bundle.checkFailed}
-          onRefresh={bundle.refreshCheck}
+          onRefresh={() => void bundle.refreshCheck()}
         />
 
         <Space className="resume-delivery-actions">

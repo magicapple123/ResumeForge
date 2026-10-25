@@ -45,6 +45,8 @@ import { t } from "../../i18n";
 import EditorFooterBar from "../resume-editor/EditorFooterBar";
 import ResumeEditorPanel from "../resume-editor/ResumeEditorPanel";
 import { useResumeEditorPanel } from "../resume-editor/useResumeEditorPanel";
+import InlineMarkButtons from "./typography/InlineMarkButtons";
+import { useWorkbenchInlineMarks } from "./useWorkbenchInlineMarks";
 
 /**
  * 中栏交给宿主的两个出口（2026-11：整屏顶部动作条的「保存修改 / 取消修改」要用）。
@@ -200,6 +202,12 @@ export default function ResumeWorkbenchEditorColumn({
   const handleDraftReset = useCallback(() => {
     draftStore?.clear();
   }, [draftStore]);
+  /**
+   * W07 字符级标记（斜体/链接/加粗）：工具条只服务**中栏最近聚焦的那个文本域**。
+   * 写回走 DOM input 事件（与手打同一条表单 onChange 链路），所以脏值、草稿、W03 历史一致。
+   * 换 resumeId 时 hook 自动把旧 textarea 作废；只读宿主根本不渲染这一栏。
+   */
+  const inlineMarks = useWorkbenchInlineMarks(resumeId);
 
   // 一次性保存的"结算回调"：动作条要等这一次宿主写入真的落地（成功 / 409 / 失败）才能
   // 决定收起按钮还是进冲突态。普通保存（底部按钮、快捷键）不设结算回调，行为不变。
@@ -391,7 +399,7 @@ export default function ResumeWorkbenchEditorColumn({
   );
 
   return (
-    <div className="resume-wb-editor">
+    <div className="resume-wb-editor" onFocusCapture={inlineMarks.onFocusCapture}>
       <div className="resume-wb-editor-head">
         <span className="resume-wb-editor-title">{t("workbench.column.editor")}</span>
         {relayouting ? (
@@ -399,6 +407,19 @@ export default function ResumeWorkbenchEditorColumn({
         ) : api.dirty ? (
           <span className="resume-wb-editor-status">{t("workbench.status.unsaved")}</span>
         ) : null}
+      </div>
+      {/* 工具条放在滚动区之外：它始终可见，且点按钮时不会把刚选好的文本滚走。 */}
+      <div
+        className="resume-wb-editor-marks"
+        role="toolbar"
+        aria-label={t("typography.inline.groupAria")}
+        style={{ display: "flex", alignItems: "center", paddingBottom: 6 }}
+      >
+        <InlineMarkButtons
+          getTarget={inlineMarks.getTarget}
+          onCommit={inlineMarks.commit}
+          disabled={api.saving || relayouting || undefined}
+        />
       </div>
       <div className="resume-wb-editor-body">
         <ResumeEditorPanel api={api} variant="inline" />

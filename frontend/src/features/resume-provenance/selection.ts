@@ -22,6 +22,9 @@
  * 领域，反过来依赖大纲会让"来源面板能单独复用"这件事失效（也容易成环）。
  */
 
+import { readResumeValueByPath } from "../../utils/resumeFieldPath";
+import type { ResumeContent } from "../../types";
+
 /** 一次来源查询的定位；三项都可空，但至少一项非空才有意义。 */
 export interface ProvenanceLocator {
   object_id: string | null;
@@ -102,4 +105,84 @@ export function isSameLocator(
   right: ProvenanceLocator | null | undefined,
 ): boolean {
   return locatorKey(left) === locatorKey(right);
+}
+
+// ===== 局部写作候选的 path 解析（W12 / P1-06） =====
+
+/** 一条选择能否落到"可改写的具体字段"上；不能时给出可解释原因。 */
+export type CandidatePathReason = "ok" | "no-selection" | "not-a-point" | "not-found";
+
+export interface CandidatePathResult {
+  path: string | null;
+  reason: CandidatePathReason;
+}
+
+/** 大纲选择的最小形状（含 fe-outline 新契约可能补上的 path）。 */
+export interface CandidateSelectionLike extends SelectionLike {
+  /** 要点所在数组字段（description / highlights ...）。 */
+  pointField?: string | null;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/**
+ * 大纲/纸面选中 → 可改写的字段路径（局部写作候选按 path 调后端）。
+ *
+ * 候选针对的是**一条要点**：要点选择用 object_id/point_id 在当前内容上**现算**
+ * field.index.pointField.pointIndex，不按下标猜；只有纸面/fe-outline 显式给出 path
+ * 时才接受（且必须指向字符串）。条目级选择返回 not-a-point——一条条目有多个字段，
+ * 不能替用户挑一个。
+ */
+export function candidatePathFromSelection(
+  selection: CandidateSelectionLike | null | undefined,
+  content: unknown,
+): CandidatePathResult {
+  if (!selection) return { path: null, reason: "no-selection" };
+  const explicitPath = typeof selection.path === "string" && selection.path ? selection.path : null;
+  if (selection.kind === "point") {
+    const field = typeof selection.field === "string" ? selection.field : "";
+    const pointField = typeof selection.pointField === "string" ? selection.pointField : "";
+    const objectId = typeof selection.objectId === "string" ? selection.objectId : "";
+    const pointId = typeof selection.pointId === "string" ? selection.pointId : "";
+    if (!field || !pointField || !objectId || !pointId) {
+      return { path: null, reason: "not-found" };
+    }
+    const sections = isRecord(content) ? content[field] : undefined;
+    if (!Array.isArray(sections)) return { path: null, reason: "not-found" };
+    const index = sections.findIndex((entry) => isRecord(entry) && entry.id === objectId);
+    if (index < 0) return { path: null, reason: "not-found" };
+    const entry = sections[index] as Record<string, unknown>;
+    const values = entry[pointField];
+    const pointIds = isRecord(entry.point_ids) ? entry.point_ids[pointField] : undefined;
+    if (!Array.isArray(values) || !Array.isArray(pointIds)) {
+      return { path: null, reason: "not-found" };
+    }
+    const pointIndex = pointIds.indexOf(pointId);
+    if (pointIndex < 0 || typeof values[pointIndex] !== "string") {
+      return { path: null, reason: "not-found" };
+    }
+    return { path: field + "." + index + "." + pointField + "." + pointIndex, reason: "ok" };
+  }
+  if (explicitPath) {
+    const value = readResumeValueByPath(content as ResumeContent | null, explicitPath);
+    return typeof value === "string"
+      ? { path: explicitPath, reason: "ok" }
+      : { path: null, reason: "not-found" };
+  }
+  return { path: null, reason: selection.kind === "entry" ? "not-a-point" : "no-selection" };
+}
+
+/**
+ * 候选用的定位：在现有 locator 上补 path（fe-outline 给选择补 path 之前的兼容层，
+ * 也是 UI 只认一个 locator 的单一出口）。
+ */
+export function locatorWithCandidatePath(
+  selection: CandidateSelectionLike | null | undefined,
+  content: unknown,
+): ProvenanceLocator {
+  const locator = locatorFromSelection(selection);
+  const candidate = candidatePathFromSelection(selection, content);
+  return candidate.path ? { ...locator, path: candidate.path } : locator;
 }

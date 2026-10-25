@@ -83,18 +83,24 @@ class ExportRequest(BaseModel):
     # 为真时只做两件事：不落盘副本 + 结果进预览缓存（同一组输入第二次 0ms）。
     # 产物字节与从前的预览请求**完全一致**，所以前端可以无感切换。
     preview: bool = False
+    # W16 岗位变体（2026-10-25）：按 variant_id 用变体的内容 + 版式快照导出。
+    # 解析委托 `services.resume.document_variants.resolve_variant_export`（be-prov 契约），
+    # 解析失败/不属于本简历 → 404。None = 沿用记录（旧调用方零变化）。
+    variant_id: int | None = Field(default=None, ge=1)
 
 
 class PreviewPdfRequest(BaseModel):
-    """精确预览请求体：只决定"这份 PDF 怎么排"，不做任何后处理。
+    """精确预览请求体：决定"这份 PDF 怎么排"，并可按最终交付配置叠加后处理（W04）。
 
     为什么单独建一个而不是复用 ``ExportRequest``：预览**不是导出**——它不落盘、不记交付、
-    不允许水印/脱敏（那些会让预览与屏幕上看到的草稿不是同一份内容）。``extra="forbid"``
-    让"顺手加个 watermark"在 422 就被挡住，而不是静默生效。
+    不落库。但 W04 要求"支持水印/脱敏的最终配置预览"：用户需要在**下载之前**看到带水印
+    与脱敏的最终版式，所以 ``watermark`` / ``redact`` / ``redact_options`` 按与
+    ``ExportRequest`` 相同的语义收下，并走同一条管线（脱敏是前置、水印是渲染后叠加）。
+    仍属导出专有的字段（``format``、``record_delivery``）继续由 ``extra="forbid"`` 在 422 挡住。
 
     **版式字段必须与 ``POST /api/resumes/render`` 对齐**：草稿靠这几个参数排版，少任何一个
     精确预览都会回落到记录里的旧值——那正是"改完模板 / 版式 / 板块顺序，预览不跟着变"的
-    根因。导出专有的字段（格式、水印、脱敏、落库）一个都不收。
+    根因。
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -121,6 +127,13 @@ class PreviewPdfRequest(BaseModel):
     # 同一条 `ResumeContent`），所以长度/图片/字段上限全部继承，不会变成"预览管道
     # 可以塞任意 JSON"的后门。`None` = 用记录里已保存的那一版（旧客户端逐字不变）。
     content: ResumeContent | None = None
+    # 最终交付配置预览（W04）：与 `ExportRequest` 同字段名、同语义；预览管线里脱敏是
+    # 渲染前置、水印是渲染后叠加，仍是"不落库/不冻结交付/不写副本"的一次查看。
+    watermark: str = Field(default="", max_length=200)
+    redact: bool = False
+    redact_options: RedactionOptions = Field(default_factory=RedactionOptions)
+    # W16 岗位变体：用变体的内容 + 版式快照预览（解析契约同 `ExportRequest.variant_id`）。
+    variant_id: int | None = Field(default=None, ge=1)
 
 
 __all__ = ["ExportFormat", "ExportRequest", "PreviewPdfRequest", "RedactionOptions"]

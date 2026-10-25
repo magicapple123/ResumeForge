@@ -12,13 +12,15 @@
 - 比对用规范化文本（strip 后逐字比较）。数字/日期的"换个写法"也算改值，
   因此不做宽松归一：宁可拒绝并让用户确认，也不静默改掉事实。
 - 用户自己手写保存（PUT content）不经过这里：锁的是 AI 行为。AI 改写/翻译/片段插入/
-  优化器统一调用 enforce_ai_content，这是唯一入口。
+  优化器/来源采纳统一调用 enforce_ai_content，这是唯一入口。
+- **W06 lock_content**（条目内 ``lock_content=true``）也在这里校验：锁正文的条目只能调
+  排版/隐藏，不能改正文；锁定条目被删同样拒绝。violations 复用同一形状（lock_id=0、
+  kind="lock_content"），因此调用方只需要处理一种 409 + fact_lock_conflict。
 """
 
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
 from typing import Any
 
 from fastapi.responses import JSONResponse
@@ -38,6 +40,19 @@ from ...models.provenance import (
     ResumeFactLock,
 )
 from ...models.resume import ResumeRecord
+
+# 正文锁实现拆在 content_locks（行数预算）；这里既有 re-export 保持外部 import 不变：
+#   fact_locks.validate_content_locks / FactLockViolation / LOCK_CONTENT_*（be-doc 的集成
+#   测试仍从本模块取这些名字）。
+from .content_locks import (  # noqa: F401 - re-export
+    LOCK_CONTENT_CHANGED_REASON,
+    LOCK_CONTENT_KIND,
+    LOCK_CONTENT_MISSING_REASON,
+    FactLockViolation,
+    restore_lock_flags,
+    validate_content_locks,
+    validate_content_locks_for,
+)
 from .document_identity import is_object_id, resolve_object_path, resolve_point_path
 
 _MISSING = object()
@@ -70,7 +85,8 @@ def infer_fact_lock_kind(path: str) -> str:
 
 
 FACT_LOCK_CONFLICT_CODE = "fact_lock_conflict"
-FACT_LOCK_CONFLICT_DETAIL = "本次 AI 修改会改动已锁定的事实，已拒绝写入"
+# 同时覆盖事实锁与 W06 正文锁；detail 用同一句话，前端只处理一种业务码。
+FACT_LOCK_CONFLICT_DETAIL = "本次修改会改动已锁定的事实或正文，已拒绝写入"
 _MAX_LOCK_VALUE = 500
 
 
@@ -105,30 +121,6 @@ def normalize_lock_value(value: Any) -> str:
         ]
     except (TypeError, ValueError):
         return str(value)[:_MAX_LOCK_VALUE]
-
-
-@dataclass(frozen=True)
-class FactLockViolation:
-    lock_id: int
-    kind: str
-    label: str
-    path: str
-    field: str
-    reason: str
-    locked_value: str
-    current_value: str
-
-    def to_dict(self) -> dict[str, Any]:
-        return {
-            "lock_id": self.lock_id,
-            "kind": self.kind,
-            "label": self.label,
-            "path": self.path,
-            "field": self.field,
-            "reason": self.reason,
-            "locked_value": self.locked_value,
-            "current_value": self.current_value,
-        }
 
 
 class FactLockError(ValueError):
@@ -291,6 +283,15 @@ def _current_path_for_lock(content: dict[str, Any], lock: ResumeFactLock) -> str
     return None
 
 
+def validate_document_locks(
+    db: Session, record: ResumeRecord, content: dict[str, Any]
+) -> list[FactLockViolation]:
+    """事实锁 + 正文锁的合并校验（409 一次说清全部违规）。"""
+    return validate_fact_locks(db, record, content) + validate_content_locks_for(
+        record.content or {}, content
+    )
+
+
 def validate_fact_locks(
     db: Session, record: ResumeRecord, content: dict[str, Any]
 ) -> list[FactLockViolation]:
@@ -330,7 +331,12 @@ def validate_fact_locks(
 
 
 def enforce_ai_content(db: Session, record: ResumeRecord, content: dict[str, Any]) -> None:
-    """AI 落库前的唯一闸门：有违规就抛 FactLockError，调用方不得继续写库。"""
-    violations = validate_fact_locks(db, record, content)
+    """AI/来源采纳落库前的唯一闸门：有违规就抛 FactLockError，调用方不得继续写库。
+
+    通过校验后会把旧正文的锁标记带回新正文（见 :func:`content_locks.restore_lock_flags`）：
+    模型没有回显锁字段，不补就会"改写一次 = 锁没了"。
+    """
+    violations = validate_document_locks(db, record, content)
     if violations:
         raise FactLockError(violations)
+    restore_lock_flags(record.content or {}, content)

@@ -25,6 +25,7 @@ import type { ResumeDocumentPipeline } from "../features/resume-document/types";
 import { setActiveWritingResume } from "../features/resume-writing/activeResume";
 import { useResumeRelayout } from "../features/resume/useResumeRelayout";
 import { useRichTextOverrides } from "../features/resume/useRichTextOverrides";
+import type { RichTextOverlayMap } from "../features/resume/useRichTextOverrides";
 import type { RichTextEditAdapter } from "./resume-preview/richText";
 import ResumeDeliveryInfo from "./resume/ResumeDeliveryInfo";
 import ResumeDetailPreview from "./resume/ResumeDetailPreview";
@@ -56,10 +57,15 @@ export default function ResumeDetailModal({ recordId, onClose, autoOpenWorkbench
   const previewRef = useRef<ResumePreviewHandle>(null);
   /**
    * 「右键加粗」的乐观叠加层：把还没保存的粗体记在 `detail.content` 之外（见
-   * `useRichTextOverrides` 文件头）。这里是它唯一合适的宿主——只有这一层同时握着
-   * `detail.content`、`setHtml` 与保存链路。
+   * `useRichTextOverrides` 文件头）。这里是它**唯一**的持有者——只有这一层同时握着
+   * `detail.content`、`setHtml`、保存链路与制作台的历史。受控模式把 state 放在这里，
+   * 制作台只是读取并回写，于是撤销/恢复能连粗体一起退回去（W02/W03）。
    */
-  const overlays = useRichTextOverrides(detail?.content ?? null);
+  const [overlayMap, setOverlayMap] = useState<RichTextOverlayMap>({});
+  const overlays = useRichTextOverrides(detail?.content ?? null, {
+    overlays: overlayMap,
+    onChange: setOverlayMap,
+  });
 
   /**
    * 把"正在看哪份简历"登记给全局右键菜单（写作增强的四个动作都要 `resume_id`）。
@@ -272,6 +278,9 @@ export default function ResumeDetailModal({ recordId, onClose, autoOpenWorkbench
         fetchLatest: () => getResume(detail.id),
         adoptLatest: hostDocument.adoptLatest,
         saveAsCopy: hostDocument.saveAsCopy,
+        // 纸面加粗的唯一状态：制作台的统一历史把它并进快照，撤销/恢复经这里回写。
+        overlays: overlayMap,
+        onOverlaysChange: setOverlayMap,
       }
     : undefined;
 

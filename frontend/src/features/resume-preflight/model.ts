@@ -163,6 +163,9 @@ const ISSUE_TITLE_KEY: Record<string, MessageKey> = {
   product_pdf_render_failed: "preflight.issue.product_pdf_render_failed",
   product_docx_render_failed: "preflight.issue.product_docx_render_failed",
   model_not_configured: "preflight.issue.model_not_configured",
+  link_invalid: "preflight.issue.link_invalid",
+  link_scheme_unsupported: "preflight.issue.link_scheme_unsupported",
+  contact_masking_off: "preflight.issue.contact_masking_off",
 };
 
 /** 定位的一句话说明（供行内显示；不含方向词，避免视口变化后失效）。 */

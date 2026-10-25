@@ -178,6 +178,16 @@ export default function SourceChainPanel({
           {sources.map((source) => (
             <SourceRow key={source.id} source={source} onRelink={onRelink} onUnlink={onUnlink} />
           ))}
+          {unlinkedObject && onLink ? (
+            <Button
+              size="small"
+              icon={<LinkOutlined />}
+              aria-label={pt("provenance.chain.link")}
+              onClick={() => onLink(unlinkedObject)}
+            >
+              {pt("provenance.chain.link")}
+            </Button>
+          ) : null}
           {linkedObject?.link && linkedObject.link.status === "stale" && onRelink ? (
             <Alert
               type="warning"

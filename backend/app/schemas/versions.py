@@ -103,6 +103,8 @@ class VariantCreateRequest(BaseModel):
     # W16：语言标签与分组（空串 = 未标注；group 为空 = 独立变体）。
     language: LanguageTag = ""
     variant_group_id: int | None = Field(default=None, ge=1)
+    # W16 独立排版覆盖（0060）：null = 继承（与旧版行为一致）。
+    layout: dict[str, Any] | None = None
 
 
 class VariantOut(BaseModel):
@@ -116,9 +118,10 @@ class VariantOut(BaseModel):
     base_version_id: int | None = None
     last_synced_version_id: int | None = None
     synced_at: datetime | None = None
-    # W16：语言变体字段（旧变体为 ""/None）。
+    # W16：语言变体字段（旧变体为 ""/None）与独立排版覆盖标记。
     language: str = ""
     variant_group_id: int | None = None
+    has_layout: bool = False
     created_at: datetime | None = None
     updated_at: datetime | None = None
 
@@ -126,6 +129,26 @@ class VariantOut(BaseModel):
 class VariantDetailOut(VariantOut):
     content: dict[str, Any] = Field(default_factory=dict)
     render_context: dict[str, Any] = Field(default_factory=dict)
+    # 原始独立排版覆盖；None = 继承（生效排版见 export-input）。
+    layout: dict[str, Any] | None = None
+
+
+class VariantExportInputOut(BaseModel):
+    """导出/预览一条变体所需的快照：内容 + 生效排版（W16 唯一入口）。
+
+    ``layout_source``：variant = 变体自己的独立排版；snapshot = 派生时的基底快照；
+    resume = 旧变体没有排版快照时按当前简历排版兜底。
+    """
+
+    resume_id: int
+    variant_id: int
+    name: str = ""
+    language: str = ""
+    content: dict[str, Any] = Field(default_factory=dict)
+    layout: dict[str, Any] = Field(default_factory=dict)
+    layout_source: Literal["variant", "snapshot", "resume"] = "snapshot"
+    content_sha256: str = ""
+    variant_updated_at: datetime | None = None
 
 
 class VariantListOut(BaseModel):
@@ -163,6 +186,8 @@ class VariantPatchRequest(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=MAX_VERSION_NAME)
     language: LanguageTag | None = None
     variant_group_id: int | None = Field(default=None, ge=1)
+    # 显式传 null = 清除独立排版、回到继承；不传 = 不修改（路由用 model_fields_set 区分）。
+    layout: dict[str, Any] | None = None
 
 
 class GlossaryHitOut(BaseModel):

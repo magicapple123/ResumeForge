@@ -253,10 +253,17 @@ describe("W19 制作台导出交付包端到端（真实 shell + HTTP 适配层�
     renderPreview();
     const dialog = await openExportDialog();
 
-    // D20 核对用与导出同一份输入本地算（W19-BE 契约 §8：preflight export_summary 留 W11/W21），
-    // 所以核对卡直接显示宿主 revision，不发 preflight 请求。
+    // D20：打开弹层即按导出同一快照请求服务端核对（purpose:"export"）。本桩没有返回
+    // export_summary（模拟旧后端），适配层 feature-detect 回退本地，并在卡片如实标注来源。
+    await waitFor(() => {
+      const check = calls.find((call) => call.url.includes("/preflight"));
+      expect(check?.body).toMatchObject({
+        purpose: "export",
+        layout: { template: "classic", page_limit: 1 },
+      });
+    });
+    expect(await within(dialog).findByText(t("delivery.check.source.local"))).toBeInTheDocument();
     expect(await within(dialog).findByText("#7")).toBeInTheDocument();
-    expect(calls.some((call) => call.url.includes("/preflight"))).toBe(false);
 
     fireEvent.click(button(dialog, t("delivery.export.action")));
     await waitFor(() => {

@@ -19,6 +19,7 @@ import {
   type PageMarkersStore,
 } from "../resume-proview/pageMarkers";
 import type { PaginationReport } from "./paginationReport";
+import { syncPaginationReport } from "./paginationReportStore";
 
 /**
  * 报告的驼峰形状 → 画布侧聚合器的输入形状（契约 §3.6 的 snake_case 键）。
@@ -74,6 +75,11 @@ export function usePaginationReportMarkers(
 ): void {
   useEffect(() => {
     syncPageMarkers(report, store);
-    return () => store.set([]);
+    // 页缩略图与页标记同一份来源：报告写入即刷新（PaginationControls 内部订阅）。
+    syncPaginationReport(report);
+    return () => {
+      store.set([]);
+      syncPaginationReport(null);
+    };
   }, [report, store]);
 }

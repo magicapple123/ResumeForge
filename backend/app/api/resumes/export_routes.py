@@ -44,6 +44,7 @@ from ...services.pdf_preview_cache import get as get_cached_preview
 from ...services.pdf_preview_cache import put as put_cached_preview
 from ...services.privacy import RedactionOptions as PrivacyRedactionOptions
 from ...services.privacy import redact
+from ...services.resume.export_bundle import resolve_variant_export_options
 from ...services.resume.resume_completeness import find_incomplete, incomplete_detail
 from ...services.resume.resume_delivery import (
     canonical_content_sha256,
@@ -102,27 +103,14 @@ def _export_record(
     的投递快照（「正式投递存档」语义）。**默认不落**——预览导出零膨胀。新调用方
     请走 ``POST /export``（GET 上的该参数仅为兼容保留，见 ADR-0002）。
 
-    ``save_copy`` / ``inline`` 只服务**精确预览**（2026-10-21）：预览要拿到与导出逐字节
-    相同的 PDF，但绝不能把每敲一次版式就生成的文件堆进「生成内容保存位置」，也不该让
-    浏览器把它当下载。所以这两个开关默认保持导出的原行为，预览显式传 ``False`` / ``True``。
+    ``save_copy`` / ``inline`` / ``cache_result`` / ``template_override`` /
+    ``format_name_override`` 只服务**精确预览**：不落盘副本、内联 no-store、同输入命中预览缓存、
+    按草稿模板/版式排版；默认值保持导出的原行为。``content_override``（W04）让预览与草稿下载
+    使用未保存正文，缓存键本就含内容指纹，草稿改动不会命中旧产物。
 
-    ``template_override`` / ``format_name_override`` 同样只服务预览：草稿里换了模板或
-    版式、还没点保存时，预览必须按**草稿**排版而不是记录里的旧值。给 ``None`` 时
-    行为与导出完全一致（用记录值）。
-
-    ``cache_result`` 也只服务预览：同一组输入（内容 + 生效参数）第二次进来直接回上一次的
-    字节与响应头。命中发生在渲染之前，所以"来回切口径 / 开大图 / 拖回原值"这类重复是
-    **0ms**（见 ``services.pdf_preview_cache``）。只允许与 ``save_copy=False`` 同用——
-    否则落盘副本会被缓存跳过。
-
-    ``content_override``（W04）：制作台里还没保存的正文。只在**精确预览**上使用，
-    管线拿到的是这份内容而不是记录里那一版，且缓存键本来就含内容指纹（见下方
-    ``canonical_content_sha256``），所以草稿改动不会命中旧产物。
-
-    存档口径（PR-09 可信交付账本）：存档 content 与下载产物**同源**（脱敏导出存
-    脱敏后内容）；``render_context`` / ``request_params`` 记录**实际生效**的请求
-    参数（覆盖值按生效规则折算，不是记录默认值）；``source_content_sha256`` 与
-    ``artifact_sha256`` 分开回答"存的是哪份内容"与"产出的文件是哪份"。
+    存档口径（PR-09）：存档 content 与下载产物**同源**（脱敏导出存脱敏后内容）；
+    ``render_context`` / ``request_params`` 记录**实际生效**的参数（覆盖值按生效规则折算）；
+    ``source_content_sha256`` 与 ``artifact_sha256`` 分开回答"存的是哪份内容"与"产出的文件是哪份"。
     """
     resume = ResumeContent.model_validate(
         content_override if content_override is not None else record.content
@@ -344,17 +332,20 @@ def export_resume_with_options(
     _require_local_export_request(request)
     record = _get_live_resume(db, resume_id)
     privacy_options = PrivacyRedactionOptions(**payload.redact_options.model_dump())
+    # W16：variant_id 的解析由 be-prov 的 resolve_variant_export 统一提供（helper 内按名调用）。
+    variant_options = resolve_variant_export_options(db, record, payload)
+    explicit_content = payload.content.model_dump() if payload.content is not None else None
     export_options = ExportRequest(
         format=payload.format,
         watermark=payload.watermark,
         redact=payload.redact,
         redact_options=privacy_options,
         margin_mm=payload.margin_mm,
-        font_scale=payload.font_scale,
-        page_limit=payload.page_limit,
-        format_config=payload.format_config,
+        font_scale=variant_options.get("font_scale", payload.font_scale),
+        page_limit=variant_options.get("page_limit", payload.page_limit),
+        format_config=variant_options.get("format_config", payload.format_config),
         # 草稿语言（预览里切的那一个）：与 format_config 同一条覆盖路径——不给就回落记录值。
-        language=payload.language,
+        language=variant_options.get("language", payload.language),
         include_photo=payload.include_photo,
     )
     return _export_record(
@@ -369,9 +360,10 @@ def export_resume_with_options(
         save_copy=not payload.preview,
         cache_result=payload.preview,
         # W19：草稿下载与精确预览同快照（W04 缺口）——内容覆盖交给同一出口。
-        content_override=(
-            payload.content.model_dump() if payload.content is not None else None
-        ),
+        content_override=variant_options.get("content") if variant_options else explicit_content,
+        # W16：变体快照的模板/版式覆盖（变体自带 layout 时生效；None = 用记录值）。
+        template_override=variant_options.get("template"),
+        format_name_override=variant_options.get("format_name"),
     )
 
 
@@ -385,43 +377,46 @@ def preview_resume_pdf(
     """精确预览：返回**与导出逐字节相同**的 PDF，供前端用浏览器原生查看器渲染。
 
     为什么要有这条端点：预览此前用 CSS 多列模拟分页（`column-count`），而导出的 PDF 由
-    `pdf_exporter`（fpdf2）另排一遍。两套引擎的断点规则不同，"预览 2 页、导出 3 页"是
-    结构性的，不是 bug。要"严格相同"，唯一可靠的口径是**让预览显示的就是导出产物本身**。
+    `pdf_exporter`（fpdf2）另排一遍，断点规则不同。要"严格相同"，唯一可靠的口径是
+    **让预览显示的就是导出产物本身**（同一条管线、同一组参数）。
 
-    三个"不是导出"的差别（都通过 `_export_record` 的开关表达，管线仍是同一条）：
-    - `allow_incomplete=True`：预览的是草稿，正文里还有【待补】也该能看；
-    - `save_copy=False`：不写「生成内容保存位置」——拖一次滑块就多一个文件是不可接受的；
-    - `inline=True` + `no-store`：浏览器内联显示，且不缓存（改了版式必须立刻变）。
-
-    `X-Resume-Pages` / `X-Resume-Overflow` 照常返回：界面据此说"实际排了 N 页"，
-    这个数字与用户点「导出 PDF」得到的完全一致。
+    三个"不是导出"的差别（都通过 `_export_record` 的开关表达）：`allow_incomplete=True`
+    草稿也能看；`save_copy=False` 不写「生成内容保存位置」；`inline=True` + no-store 内联且不缓存。
+    W04 起可按最终交付配置预览：水印/脱敏走与导出相同的管线（脱敏前置、水印后叠加），
+    但仍不落库、不冻结交付。`X-Resume-Pages` / `X-Resume-Overflow` 照常返回。
     """
     _require_local_export_request(request)
     record = _get_live_resume(db, resume_id)
+    variant_options = resolve_variant_export_options(db, record, payload)
+    explicit_content = payload.content.model_dump() if payload.content is not None else None
     return _export_record(
         db,
         record,
         ExportRequest(
             format="pdf",
-            page_limit=payload.page_limit,
-            font_scale=payload.font_scale,
-            format_config=payload.format_config,
+            # W04：最终交付配置预览——脱敏是渲染前置、水印是渲染后叠加（同一条管线）。
+            watermark=payload.watermark,
+            redact=payload.redact,
+            redact_options=PrivacyRedactionOptions(**payload.redact_options.model_dump()),
+            page_limit=variant_options.get("page_limit", payload.page_limit),
+            font_scale=variant_options.get("font_scale", payload.font_scale),
+            format_config=variant_options.get("format_config", payload.format_config),
             # 草稿语言同样必须走这一条：预览显示的就是导出产物，漏掉它就会出现
             # "预览是 Summary、下载到的 PDF 是「个人总结」"。
-            language=payload.language,
+            language=variant_options.get("language", payload.language),
             include_photo=payload.include_photo,
         ),
         allow_incomplete=True,
         record_delivery=False,
         save_copy=False,
         inline=True,
-        # 模板 / 版式是草稿值：换完还没保存也要按新的排（见 `_export_record`）。
-        template_override=payload.template,
-        format_name_override=payload.format_name,
+        # 模板 / 版式是草稿值：换完还没保存也要按新的排（见 `_export_record`）；W16 变体优先。
+        template_override=variant_options.get("template") or payload.template,
+        format_name_override=variant_options.get("format_name") or payload.format_name,
         # 同一组参数（切口径 / 开大图 / 拖回原值）第二次进来直接给上一次的字节。
         cache_result=True,
         # 中栏还没保存的正文（W04）：预览与"点保存后导出的那份"因此是同一份内容。
-        content_override=payload.content.model_dump() if payload.content is not None else None,
+        content_override=variant_options.get("content") if variant_options else explicit_content,
     )
 
 

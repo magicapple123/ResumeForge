@@ -179,7 +179,15 @@ def test_unreadable_directory_is_not_reported_as_empty(tmp_path, monkeypatch):
 
 
 def test_interval_zero_is_never_overdue(tmp_path, monkeypatch):
-    """interval 读不到时回退 0——0 表示未启用/未配置，不能把任意历史成功判成到期。"""
+    """interval 读不到时回退 0——0 表示未启用/未配置，不能把任意历史成功判成到期。
+
+    A02 之后「受保护」还要求自动备份处于启用状态：本用例用 monkeypatch 明确部署配置为
+    启用，避免依赖 conftest 的 AUTO_BACKUP_ENABLED=false（那是测试隔离，不是这个语义）。
+    """
+    monkeypatch.setattr(
+        "app.config.get_settings",
+        lambda: SimpleNamespace(auto_backup_interval_days=7, auto_backup_enabled=True),
+    )
     monkeypatch.setattr("app.services.data_backup.status.runtime_interval_days", lambda bind: 0)
     engine = _engine(tmp_path)
     try:
@@ -275,3 +283,152 @@ def test_interval_days_reads_the_runtime_setting(tmp_path):
         assert status["interval_days"] == 30
     finally:
         engine.dispose()
+
+
+# ===== A02：禁用自动备份与显式状态枚举 =====
+
+
+def _enabled_settings(enabled: bool):
+    return lambda: SimpleNamespace(auto_backup_interval_days=7, auto_backup_enabled=enabled)
+
+
+def _healthy_marker() -> dict:
+    return {
+        "last_attempt": 1_000,
+        "last_success": 1_000,
+        "consecutive_failures": 0,
+        "last_error": "",
+    }
+
+
+def test_auto_backup_disabled_is_explicit_and_clears_protected(tmp_path, monkeypatch):
+    """部署配置关掉自动备份时：state=disabled、protected=false，历史 marker/快照保留。
+
+    审计 A02 的核心：不能因为"以前成功过"就在自动备份已关闭时继续显示绿色"受保护"——
+    那会让用户以为后台还在保护他。历史事实（last_success/快照清单）仍要如实给出，
+    用户还得靠它们恢复。
+    """
+    monkeypatch.setattr("app.config.get_settings", _enabled_settings(False))
+    engine = _engine(tmp_path)
+    try:
+        _write_snapshot(engine, mtime=1_000)
+        _write_marker(engine, _healthy_marker())
+        status = backup_status(engine, now=1_000 + 3600)
+        assert status["auto_backup_enabled"] is False
+        assert status["disabled"] is True
+        assert status["state"] == "disabled"
+        assert status["protected"] is False
+        # 历史事实不被抹掉：marker 与快照仍然原样返回，恢复入口还靠它们。
+        assert status["last_success"] == 1_000
+        assert status["snapshot_state"] == "ok"
+        assert status["snapshot_count"] == 1
+    finally:
+        engine.dispose()
+
+
+def test_auto_backup_enabled_by_default_keeps_protected(tmp_path, monkeypatch):
+    """既有环境（没有显式开关的旧配置对象）仍按启用处理，行为逐字不变。"""
+    monkeypatch.setattr("app.config.get_settings", _enabled_settings(True))
+    engine = _engine(tmp_path)
+    try:
+        _write_snapshot(engine, mtime=1_000)
+        _write_marker(engine, _healthy_marker())
+        status = backup_status(engine, now=1_000 + 3600)
+        assert status["auto_backup_enabled"] is True
+        assert status["disabled"] is False
+        assert status["state"] == "protected"
+        assert status["protected"] is True
+    finally:
+        engine.dispose()
+
+
+def test_state_enum_covers_the_protection_situations(tmp_path, monkeypatch):
+    """state 枚举覆盖 A02 要求的六种情形（从未/受保护/快照丢失/不可读/到期/失败）。"""
+    monkeypatch.setattr("app.config.get_settings", _enabled_settings(True))
+    engine = _engine(tmp_path)
+    try:
+        # 从未备份。
+        assert backup_status(engine, now=1_000)["state"] == "never"
+
+        # 有 marker 有快照 + 未到期 → protected。
+        _write_snapshot(engine, mtime=1_000)
+        _write_marker(engine, _healthy_marker())
+        assert backup_status(engine, now=1_000 + 3600)["state"] == "protected"
+
+        # 有 marker 有快照 + 超过间隔 → overdue。
+        assert backup_status(engine, now=1_000 + 86400 * 8)["state"] == "overdue"
+    finally:
+        engine.dispose()
+
+
+def test_state_reports_empty_when_snapshot_is_gone(tmp_path, monkeypatch):
+    """marker 说成功过、但快照已经不在 → empty（不是 never，也不是 protected）。"""
+    monkeypatch.setattr("app.config.get_settings", _enabled_settings(True))
+    engine = _engine(tmp_path)
+    try:
+        _write_marker(engine, _healthy_marker())
+        status = backup_status(engine, now=1_100)
+        assert status["state"] == "empty"
+        assert status["protected"] is False
+    finally:
+        engine.dispose()
+
+
+def test_state_reports_failing_while_failures_are_pending(tmp_path, monkeypatch):
+    """连续失败时 state=failing：失败原因要能被界面看见，不能显示成受保护。"""
+    monkeypatch.setattr("app.config.get_settings", _enabled_settings(True))
+    engine = _engine(tmp_path)
+    try:
+        marker = _healthy_marker()
+        marker.update({"last_attempt": 5_000, "consecutive_failures": 2, "last_error": "备份失败"})
+        _write_marker(engine, marker)
+        status = backup_status(engine, now=5_100)
+        assert status["state"] == "failing"
+        assert status["protected"] is False
+    finally:
+        engine.dispose()
+
+
+def test_state_reports_unreadable_directory(tmp_path, monkeypatch):
+    """目录读不了时 state=unreadable：无法确认不等于"没有备份"。"""
+    import pathlib
+
+    monkeypatch.setattr("app.config.get_settings", _enabled_settings(True))
+    engine = _engine(tmp_path)
+    try:
+        _write_snapshot(engine, mtime=1_000)
+        _write_marker(engine, _healthy_marker())
+
+        def _denied(self, pattern):
+            raise PermissionError(13, "Permission denied")
+
+        monkeypatch.setattr(pathlib.Path, "glob", _denied)
+        status = backup_status(engine, now=1_100)
+        assert status["state"] == "unreadable"
+        assert status["protected"] is False
+    finally:
+        engine.dispose()
+
+
+def test_protection_state_constants_match_the_response_schema():
+    """state 常量与响应 schema 的 Literal 枚举逐项一致（防两处漂移）。"""
+    from typing import get_args
+
+    from app.schemas.backup_status import ProtectionState
+    from app.services.data_backup.status import PROTECTION_STATES
+
+    assert set(PROTECTION_STATES) == set(get_args(ProtectionState))
+
+
+def test_api_backup_status_serializes_the_new_fields(client, monkeypatch):
+    """HTTP 契约：GET /api/settings/backup-status 带上 A02 新字段（旧字段仍在）。"""
+    monkeypatch.setattr("app.config.get_settings", _enabled_settings(False))
+    response = client.get("/api/settings/backup-status")
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["auto_backup_enabled"] is False
+    assert payload["disabled"] is True
+    assert payload["state"] == "disabled"
+    assert payload["protected"] is False
+    for legacy in ("last_success", "last_attempt", "snapshot_state", "snapshots", "coverage"):
+        assert legacy in payload

@@ -30,7 +30,9 @@ import {
 } from "antd";
 import { useState } from "react";
 import EmptyState from "../../common/EmptyState";
+import ContentCandidateList from "./ContentCandidateList";
 import { ot } from "../../../features/resume-optimizer/i18n";
+import { buildContentCandidates } from "../../../features/resume-optimizer/contentCandidates";
 import {
   evaluateCandidate,
   filterCandidates,
@@ -44,9 +46,12 @@ import type {
   NoFeasibleReason,
   OptimizerCandidateView,
   OptimizerConstraints,
+  OptimizerContentCandidate,
+  OptimizerContentHint,
   OptimizerCurrentValues,
   ParameterChange,
 } from "../../../features/resume-optimizer/types";
+import type { ResumeContent } from "../../../types/resume";
 import type { LayoutMeasure } from "../../../utils/resumeLayoutMeasure";
 import type { ResumeLayoutAnalysis } from "../../../types/resumeLayout";
 
@@ -66,6 +71,12 @@ interface Props {
   applying?: boolean;
   /** PATCH 409 的业务码（参数被其他窗口改过）。 */
   conflictCode?: string | null;
+  /** 当前草稿正文：给了才生成"内容精简"候选（不落库、不改内容）。 */
+  content?: ResumeContent | null;
+  /** 后端可选下发的低相关提示（`/layout/analyze` 的 content_hints）；缺省 = 不生成该类候选。 */
+  contentHints?: readonly OptimizerContentHint[];
+  /** 应用内容候选：宿主写回正文并记为一步历史（撤销可整体回退）。 */
+  onApplyContent?: (next: ResumeContent) => void | Promise<void>;
 }
 
 const DEFAULT_CONSTRAINTS: OptimizerConstraints = {
@@ -118,6 +129,9 @@ export default function LayoutOptimizerPanel({
   disabled = false,
   applying = false,
   conflictCode = null,
+  content = null,
+  contentHints = [],
+  onApplyContent,
 }: Props) {
   const { message } = App.useApp();
   const [constraints, setConstraints] = useState<OptimizerConstraints>(DEFAULT_CONSTRAINTS);
@@ -128,11 +142,13 @@ export default function LayoutOptimizerPanel({
   const [generating, setGenerating] = useState(false);
   const [appliedKey, setAppliedKey] = useState<string | null>(null);
   const [applyingKey, setApplyingKey] = useState<string | null>(null);
+  const [contentCandidates, setContentCandidates] = useState<OptimizerContentCandidate[]>([]);
 
   const patch = (next: Partial<OptimizerConstraints>) => {
     setConstraints((values) => ({ ...values, ...next }));
     // 约束一变，旧候选就不再代表当前条件——清掉，避免用户按旧结论应用。
     setCandidates(null);
+    setContentCandidates([]);
     setNoReason(null);
     setAlreadyFits(false);
     setAppliedKey(null);
@@ -143,11 +159,16 @@ export default function LayoutOptimizerPanel({
     setNoReason(null);
     setAlreadyFits(false);
     setAppliedKey(null);
+    // 内容精简候选只依赖正文本身；没有版面诊断也能生成（无法预量时界面如实说明）。
+    const trims = buildContentCandidates(content, contentHints);
+    setContentCandidates(trims);
     if (!analysis || !before || !probe) {
-      setNoReason("no_measure");
+      if (trims.length === 0) setNoReason("no_measure");
       return;
     }
     if (fitsAlready(before, constraints.targetPages)) {
+      // 已经放得下就不建议删内容；只剩参数候选没有意义。
+      setContentCandidates([]);
       setAlreadyFits(true);
       return;
     }
@@ -192,7 +213,9 @@ export default function LayoutOptimizerPanel({
   };
 
   const hasAnalysis = Boolean(analysis);
-  const canGenerate = hasAnalysis && Boolean(before) && Boolean(probe) && !disabled;
+  // 有正文就能生成内容精简候选；参数候选仍要求诊断 + 实测。
+  const canGenerate =
+    !disabled && (hasAnalysis && Boolean(before) && Boolean(probe) ? true : Boolean(content));
 
   return (
     <div data-layout-optimizer="1">
@@ -362,6 +385,26 @@ export default function LayoutOptimizerPanel({
             </Card>
           ))}
         </Space>
+      ) : null}
+      {contentCandidates.length > 0 ? (
+        <div style={{ marginTop: 8 }}>
+          <ContentCandidateList
+            candidates={contentCandidates}
+            probe={probe}
+            before={before}
+            targetPages={constraints.targetPages}
+            disabled={disabled}
+            applying={applying}
+            onApply={
+              onApplyContent
+                ? async (candidate) => {
+                    await onApplyContent(candidate.content);
+                    message.success(ot("optimizer.content.applied"));
+                  }
+                : undefined
+            }
+          />
+        </div>
       ) : null}
     </div>
   );

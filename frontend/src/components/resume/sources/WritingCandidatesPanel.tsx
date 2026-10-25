@@ -33,6 +33,8 @@ interface Props {
   onDiscard?: (mode: CandidateMode) => void;
   /** 服务端 409 业务码：事实锁 / 版本过期，分别给专门说明。 */
   conflictCode?: string | null;
+  /** 缺少可改写的字段路径时的禁用原因（如只选中了条目、没选中要点）。 */
+  disabledReason?: string | null;
 }
 
 const MODE_LABEL_KEYS: Record<CandidateMode, Parameters<typeof pt>[0]> = {
@@ -56,6 +58,7 @@ export default function WritingCandidatesPanel({
   onAdopt,
   onDiscard,
   conflictCode = null,
+  disabledReason = null,
 }: Props) {
   const anyContent = states.some((state) => state.status !== "idle");
   return (
@@ -66,6 +69,16 @@ export default function WritingCandidatesPanel({
           {pt("provenance.candidate.hint")}
         </Typography.Text>
       </Space>
+
+      {disabledReason ? (
+        <Alert
+          type="info"
+          showIcon
+          style={{ marginBottom: 8 }}
+          title={pt("provenance.candidate.generateDisabled")}
+          description={disabledReason}
+        />
+      ) : null}
 
       {conflictCode === "fact_lock_conflict" ? (
         <Alert
@@ -110,6 +123,7 @@ export default function WritingCandidatesPanel({
                     size="small"
                     type="link"
                     icon={<ReloadOutlined />}
+                    disabled={Boolean(disabledReason) || undefined}
                     aria-label={pt(
                       state.status === "ready"
                         ? "provenance.candidate.regenerate"

@@ -80,7 +80,8 @@ def section_summary(
             theme=theme,
             style=_role(overrides, "section_title"),
         )
-        paragraph = _paragraph(doc)
+        # W08：总结段不跨页（Word 的 w:keepLines）。
+        paragraph = _paragraph(doc, keep_together=True)
         add_rich_runs(
             paragraph,
             resume.summary.strip(),
@@ -367,7 +368,8 @@ def section_skills(
     _apply_break(doc, _break_plan(overrides, "section", "skills"))
     skill_labels = [level_text(skill.name, skill.level, language) for skill in resume.skills]
     if skill_labels:
-        paragraph = _paragraph(doc)
+        # W08：技能行不跨页（与 PDF 的整行标签一致）。
+        paragraph = _paragraph(doc, keep_together=True)
         set_font = partial(_set_run_font, font_name=theme.font_name)
         for index, label in enumerate(skill_labels):
             run = paragraph.add_run(("　" if index else "") + label)

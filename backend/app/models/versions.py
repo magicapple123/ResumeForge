@@ -11,8 +11,9 @@
   内容与排版上下文（render_context），与母版/当前简历互不影响，只有用户显式"选择性
   同步"时才会被改动指定路径。
 
-W16 会在这张变体表上补 language / variant_group_id 两列（wave3 契约），所以本迁移
-**不预置**它们：一张表只由引入它的迁移建列，扩展列由对应迁移加，责任链清晰。
+W16 会在这张变体表上补 language / variant_group_id 两列（0058）与 layout 独立排版覆盖
+（0060），所以本迁移**不预置**它们：一张表只由引入它的迁移建列，扩展列由对应迁移加，
+责任链清晰。
 
 数据集隔离结构上成立：每份数据集独立 SQLite 库，表里不存 dataset_id。版本与变体都会
 随数据集备份走（表在 Base.metadata 中，清单自动推导）。
@@ -86,6 +87,11 @@ class ResumeVariant(Base):
     company: Mapped[str] = mapped_column(String(128), default="", server_default="")
     content: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
     render_context: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, server_default="{}")
+    # W16 独立排版覆盖（0060）：NULL = 继承（旧变体零影响）；非空 = 这条变体自己的排版
+    # 上下文（结构同 layout_snapshot：template/format_name/format_config/page_limit/…）。
+    # 与 render_context 的分工：render_context 是派生时的基底快照，layout 是用户显式改过
+    # 的独立排版；resolve_variant_export 用 layout 作为导出/预览的生效排版。
+    layout: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     content_sha256: Mapped[str] = mapped_column(String(64), default="", server_default="")
     # 派生自哪个命名版本（可选）；null = 从创建时的当前简历派生。
     base_version_id: Mapped[int | None] = mapped_column(

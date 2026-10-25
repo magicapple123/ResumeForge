@@ -163,6 +163,57 @@ def test_oversized_resume_is_rejected_before_calling_the_model():
         _resume_prompt_json(huge)
 
 
+# ===== W06 正文锁：提示词显式声明锁定条目 =====
+
+
+def _locked_content() -> ResumeContent:
+    content = _content()
+    content.experience[0].lock_content = True
+    return content
+
+
+@pytest.mark.asyncio
+async def test_locked_entries_are_declared_in_the_prompt():
+    captured: dict[str, str] = {}
+
+    class FakeProvider:
+        async def chat(self, messages, *, thinking: bool = True):
+            captured["prompt"] = messages[-1]["content"]
+            return _revised_payload()
+
+    await revise_resume(FakeProvider(), _locked_content(), None, "把总结改得更精炼")
+
+    prompt = captured["prompt"]
+    assert "已锁定正文的条目（不得改动）" in prompt
+    # 点名栏目 + locator + 条目标题；不出现正文内容之外的额外隐私字段。
+    assert "实习/工作经历" in prompt
+    assert "experience.0" in prompt
+    assert "示例科技有限公司" in prompt
+
+
+@pytest.mark.asyncio
+async def test_prompt_has_no_lock_section_when_nothing_is_locked():
+    captured: dict[str, str] = {}
+
+    class FakeProvider:
+        async def chat(self, messages, *, thinking: bool = True):
+            captured["prompt"] = messages[-1]["content"]
+            return _revised_payload()
+
+    await revise_resume(FakeProvider(), _content(), None, "把总结改得更精炼")
+    assert "已锁定正文的条目" not in captured["prompt"]
+
+
+def test_locked_entry_locators_cover_all_entry_sections():
+    from app.services.resume.resume_revision import locked_entry_locators
+
+    content = _locked_content()
+    content.skills[0].lock_content = True
+    locators = locked_entry_locators(content)
+    assert {item["locator"] for item in locators} == {"experience.0", "skills.0"}
+    assert {item["section"] for item in locators} == {"实习/工作经历", "专业技能"}
+
+
 # ===== API 集成：/resumes/{id}/revise =====
 
 

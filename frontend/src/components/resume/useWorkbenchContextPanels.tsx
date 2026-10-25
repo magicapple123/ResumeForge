@@ -14,20 +14,24 @@
  * 溢出定位（OverflowLocator）也在这里接：报告是**用户手动点才取**（不自动请求），
  * 页标记经 `usePaginationReportMarkers` 写进画布既有 store（PageNavigator 已订阅）。
  */
-import { useCallback, useMemo, useState } from "react";
-import type { ReactNode } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
+import type { ReactNode, RefObject } from "react";
 import type { ResumeContent, ResumeLayout } from "../../types";
 import { t } from "../../i18n";
 import type { OutlineSelection } from "../../features/resume-outline/types";
 import { ENTRY_POINT_FIELDS, type EntryField } from "../../features/resume-document/types";
 import { resolvePathAt } from "../../features/resume-document/identity";
-import { locatorFromSelection } from "../../features/resume-provenance/selection";
+import {
+  locatorWithCandidatePath,
+  type ProvenanceLocator,
+} from "../../features/resume-provenance/selection";
 import type { LocateTarget } from "../../features/resume-pagination/paginationReport";
 import { usePaginationReport } from "../../features/resume-pagination/usePaginationReport";
 import { usePaginationReportMarkers } from "../../features/resume-pagination/paginationPageMarkers";
 import OverflowLocator from "./pagination/OverflowLocator";
 import { useWorkbenchProvenancePanels } from "./useWorkbenchProvenancePanels";
 import type { PaginationSectionOption } from "./pagination/PaginationControls";
+import type { OutlineMultiEntry, OutlineMultiSelectionApi } from "./outline/OutlinePanel";
 
 type AnyEntry = Record<string, unknown>;
 
@@ -98,9 +102,14 @@ export interface WorkbenchContextPanels {
     selectedObjectId: string | null;
     selectedObjectLabel: string;
     sourcesPanel: ReactNode;
+    /** W07 多选（大纲空格键勾选）：批量调整与格式刷的目标。 */
+    multiSelectedEntries: OutlineMultiEntry[];
+    onMultiSelectionChange: (entries: OutlineMultiEntry[]) => void;
+    multiSelectionApiRef: RefObject<OutlineMultiSelectionApi | null>;
+    onClearMultiSelect: () => void;
   };
   /** W12 后续消费：`{object_id, point_id, path}`。 */
-  locator: ReturnType<typeof locatorFromSelection>;
+  locator: ProvenanceLocator;
   /** 画布顶部横幅：溢出定位（用户点「获取分页报告」才请求）。 */
   canvasBanner: ReactNode;
 }
@@ -115,7 +124,27 @@ export function useWorkbenchContextPanels({
   onApplyContent,
 }: Options): WorkbenchContextPanels {
   const [selection, setSelection] = useState<OutlineSelection | null>(null);
-  const locator = useMemo(() => locatorFromSelection(selection), [selection]);
+  // 定位 = 大纲选择 + 可改写字段路径：要点选择用它现算出 path（W12 写候选要这个 path），
+  // 纸面/fe-outline 若已在选择里给出 path 则原样采用。条目级选择保持"不替用户挑字段"。
+  const locator = useMemo(
+    () => locatorWithCandidatePath(selection, content ?? null),
+    [content, selection],
+  );
+  // W07 多选集合由大纲上报、这里持有：大纲面板在"排版参数 / 文档大纲"切页签时会卸载，
+  // 集合若只住在大纲里，用户一切到参数栏就丢了——那就永远点不到批量调整。
+  const [multiSelected, setMultiSelected] = useState<OutlineMultiEntry[]>([]);
+  const multiSelectionApiRef = useRef<OutlineMultiSelectionApi | null>(null);
+  const clearMultiSelect = useCallback(() => {
+    multiSelectionApiRef.current?.clearMultiSelect();
+    setMultiSelected([]);
+  }, []);
+  // 换简历：上一条的多选不能跟过来（对象 id 属于另一份文档）。仓库既有写法——
+  // 随入参变化的重置用渲染期守卫，而不是 effect 里同步 setState（避免级联渲染告警）。
+  const [multiResumeId, setMultiResumeId] = useState(resumeId);
+  if (multiResumeId !== resumeId) {
+    setMultiResumeId(resumeId);
+    setMultiSelected([]);
+  }
 
   const selectedEntry = useMemo(() => {
     const objectId =
@@ -196,6 +225,10 @@ export function useWorkbenchContextPanels({
       selectedObjectId: selectedEntry?.id ?? null,
       selectedObjectLabel: selectedEntry?.label ?? "",
       sourcesPanel: provenance.sourcesPanel,
+      multiSelectedEntries: multiSelected,
+      onMultiSelectionChange: setMultiSelected,
+      multiSelectionApiRef,
+      onClearMultiSelect: clearMultiSelect,
     },
     locator,
     canvasBanner,

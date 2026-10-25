@@ -33,10 +33,16 @@ const LAYOUT: ResumeLayout = {
   language: "zh-CN",
 };
 
+/** 这一组用例只验证 content+layout；overlay 为空即"没有未保存的粗体"。 */
+const OVERLAYS = {};
+
 function setup(resetKey?: unknown) {
   return renderHook(
     ({ key }: { key?: unknown }) =>
-      useResumeDocument({ initial: { content: CONTENT, layout: LAYOUT }, resetKey: key }),
+      useResumeDocument({
+        initial: { content: CONTENT, layout: LAYOUT, overlays: OVERLAYS },
+        resetKey: key,
+      }),
     { initialProps: { key: resetKey } },
   );
 }
@@ -163,7 +169,11 @@ describe("useResumeDocument · 换记录", () => {
       vi.advanceTimersByTime(300);
     });
     act(() => {
-      result.current.reset({ content: { ...CONTENT, name: "Server" }, layout: LAYOUT });
+      result.current.reset({
+        content: { ...CONTENT, name: "Server" },
+        layout: LAYOUT,
+        overlays: OVERLAYS,
+      });
     });
     expect(result.current.content.name).toBe("Server");
     expect(result.current.canUndo).toBe(false);
@@ -178,6 +188,7 @@ describe("useResumeDocument · 换记录", () => {
       result.current.replaceDocument({
         content: { ...CONTENT, name: "Bob", summary: "structure" },
         layout: LAYOUT,
+        overlays: OVERLAYS,
       });
       vi.advanceTimersByTime(300);
     });
@@ -187,5 +198,31 @@ describe("useResumeDocument · 换记录", () => {
     // 结构步骤被撤销后，打字那一步仍在（两次编辑没有合并）。
     expect(result.current.content.summary).toBe("");
     expect(result.current.content.name).toBe("Bob");
+  });
+
+  it("overlay 与正文一起进快照：撤销清空、恢复还原（W02/W03）", () => {
+    const { result } = setup();
+    const overlays = { name: { raw: "**Bob**", base: "Bob" } };
+    act(() => {
+      result.current.replaceDocument({
+        content: { ...CONTENT, name: "Bob" },
+        layout: LAYOUT,
+        overlays,
+      });
+      vi.advanceTimersByTime(300);
+    });
+    expect(result.current.overlays).toEqual(overlays);
+
+    act(() => {
+      result.current.undo();
+    });
+    expect(result.current.content.name).toBe("Alex");
+    expect(result.current.overlays).toEqual({});
+
+    act(() => {
+      result.current.redo();
+    });
+    expect(result.current.content.name).toBe("Bob");
+    expect(result.current.overlays).toEqual(overlays);
   });
 });

@@ -1,14 +1,19 @@
 # SPDX-License-Identifier: Apache-2.0
-"""W13 岗位变体的业务编排（从 document_versions.py 拆出：单文件行数预算）。
+"""W13/W16 岗位变体的业务编排（从 document_versions.py 拆出：单文件行数预算）。
 
 版本（不可变快照）与变体（独立表达）是两类对象，拆分只按职责、不改语义：
 变体有自己的 content/render_context；只有用户显式"选择性同步"时才会改指定路径，
 其余岗位定制原样保留。
+
+W16「两份独立排版」（0060）：变体新增 ``layout`` —用户显式保存的独立排版上下文；
+NULL = 继承（render_context 基底快照 → 当前简历 layout_snapshot）。导出/预览统一走
+:func:`resolve_variant_export` 取"这一份变体的内容 + 生效排版"，不在导出路由里另拼一套。
 """
 
 from __future__ import annotations
 
 import copy
+import json
 from datetime import UTC, datetime
 from typing import Any
 
@@ -17,6 +22,7 @@ from sqlalchemy.orm import Session
 
 from ...models.resume import ResumeRecord
 from ...models.versions import ResumeVariant, ResumeVersion
+from ...schemas.resume import MAX_RESUME_PAGES
 from .document_versions import (
     VersionNotFound,
     _get_version,
@@ -27,6 +33,44 @@ from .document_versions import (
 from .resume_delivery import canonical_content_sha256
 
 _MISSING = object()
+
+# 变体独立排版的大小上限：排版上下文只有模板名/版式名/页数/字号/语言与 format_config，
+# 64KB 足够且能拦住"把整份正文塞进 layout"的误用（layout 不是第二个 content）。
+MAX_LAYOUT_BYTES = 64 * 1024
+_LAYOUT_STRING_KEYS = ("template", "format_name", "font_scale", "language", "document_mode")
+
+
+def _normalize_layout(layout: Any) -> dict[str, Any] | None:
+    """校验并复制变体排版；None 表示"清除独立排版、回到继承"。
+
+    只校验会影响渲染的类型（页数/字符串键/format_config），未知顶层键原样保留：
+    渲染层新增参数时不需要同步改这里（与 format_config 的扩展机制同一思路）。
+    """
+    if layout is None:
+        return None
+    if not isinstance(layout, dict):
+        raise ValueError("排版配置必须是对象")
+    try:
+        serialized = json.dumps(layout, ensure_ascii=False, sort_keys=True)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("排版配置包含无法序列化的值") from exc
+    if len(serialized.encode("utf-8")) > MAX_LAYOUT_BYTES:
+        raise ValueError("排版配置过大")
+    cleaned = copy.deepcopy(layout)
+    page_limit = cleaned.get("page_limit")
+    if page_limit is not None:
+        if isinstance(page_limit, bool) or not isinstance(page_limit, int):
+            raise ValueError("page_limit 必须是整数")
+        if not 1 <= page_limit <= MAX_RESUME_PAGES:
+            raise ValueError(f"page_limit 必须在 1 到 {MAX_RESUME_PAGES} 之间")
+    for key in _LAYOUT_STRING_KEYS:
+        value = cleaned.get(key)
+        if value is not None and not isinstance(value, str):
+            raise ValueError(f"{key} 必须是字符串")
+    format_config = cleaned.get("format_config")
+    if format_config is not None and not isinstance(format_config, dict):
+        raise ValueError("format_config 必须是对象")
+    return cleaned
 
 
 def variant_brief(variant: ResumeVariant) -> dict[str, Any]:
@@ -41,9 +85,10 @@ def variant_brief(variant: ResumeVariant) -> dict[str, Any]:
         "base_version_id": variant.base_version_id,
         "last_synced_version_id": variant.last_synced_version_id,
         "synced_at": variant.synced_at,
-        # W16 语言变体字段（旧变体为 ""/None）。
+        # W16 语言变体字段（旧变体为 ""/None）与独立排版覆盖标记。
         "language": variant.language or "",
         "variant_group_id": variant.variant_group_id,
+        "has_layout": variant.layout is not None,
         "created_at": variant.created_at,
         "updated_at": variant.updated_at,
     }
@@ -54,6 +99,8 @@ def variant_detail(variant: ResumeVariant) -> dict[str, Any]:
         **variant_brief(variant),
         "content": variant.content or {},
         "render_context": variant.render_context or {},
+        # 原始覆盖值（None = 继承）；生效排版走 resolve_variant_export。
+        "layout": copy.deepcopy(variant.layout) if variant.layout is not None else None,
     }
 
 
@@ -71,8 +118,12 @@ def create_variant(
     name: str,
     job_id: int | None = None,
     base_version_id: int | None = None,
+    layout: dict[str, Any] | None = None,
 ) -> ResumeVariant:
-    """派生岗位变体：内容/排版取自当前简历或指定命名版本，之后与它们互不影响。"""
+    """派生岗位变体：内容/排版取自当前简历或指定命名版本，之后与它们互不影响。
+
+    ``layout``（W16）：创建时就带一份独立排版覆盖；None = 继承基底快照，行为与旧版一致。
+    """
     cleaned = name.strip()
     if not cleaned:
         raise ValueError("变体名称不能为空")
@@ -98,6 +149,7 @@ def create_variant(
         company=company,
         content=content,
         render_context=context,
+        layout=_normalize_layout(layout),
         content_sha256=canonical_content_sha256(content),
         base_version_id=base.id if base is not None else None,
     )
@@ -235,11 +287,69 @@ def sync_variants(
     return results
 
 
+def set_variant_layout(
+    db: Session, variant: ResumeVariant, layout: dict[str, Any] | None
+) -> ResumeVariant:
+    """保存/清除变体的独立排版覆盖（None = 清除，回到继承）。"""
+    variant.layout = _normalize_layout(layout)
+    db.commit()
+    db.refresh(variant)
+    return variant
+
+
+def _load_resume(db: Session, record: ResumeRecord | int) -> ResumeRecord:
+    resume = db.get(ResumeRecord, record) if isinstance(record, int) else record
+    if resume is None or getattr(resume, "deleted_at", None) is not None:
+        raise VersionNotFound("简历记录不存在或已被删除")
+    return resume
+
+
+def resolve_variant_export(
+    db: Session, record: ResumeRecord | int, variant_id: int
+) -> dict[str, Any]:
+    """解析"导出/预览这条变体"所需的内容与生效排版（W16 唯一入口）。
+
+    - content 恒取变体自己的内容（**不是**当前简历的）；
+    - layout 的优先级：变体独立覆盖（source="variant"）→ 派生时的 render_context 基底
+      快照（source="snapshot"，旧变体兼容路径）→ 当前简历 layout_snapshot（source="resume"，
+      旧变体没有 render_context 时的兜底）；
+    - 非法/跨简历/已删 variant 抛 :class:`VersionNotFound`，路由转 404。
+    """
+    resume = _load_resume(db, record)
+    variant = _get_variant(db, resume.id, variant_id)
+    snapshot_layout = variant.render_context if isinstance(variant.render_context, dict) else {}
+    stored_layout = variant.layout if isinstance(variant.layout, dict) else None
+    if stored_layout is not None:
+        layout = copy.deepcopy(stored_layout)
+        layout_source = "variant"
+    elif snapshot_layout:
+        layout = copy.deepcopy(snapshot_layout)
+        layout_source = "snapshot"
+    else:
+        layout = layout_snapshot(db, resume)
+        layout_source = "resume"
+    content = copy.deepcopy(variant.content or {})
+    return {
+        "resume_id": resume.id,
+        "variant_id": variant.id,
+        "name": variant.name,
+        "language": variant.language or "",
+        "content": content,
+        "layout": layout,
+        "layout_source": layout_source,
+        "content_sha256": variant.content_sha256 or "",
+        "variant_updated_at": variant.updated_at,
+    }
+
+
 __all__ = [
+    "MAX_LAYOUT_BYTES",
     "VersionNotFound",
     "create_variant",
     "get_variant",
     "list_variants",
+    "resolve_variant_export",
+    "set_variant_layout",
     "sync_variants",
     "variant_brief",
     "variant_detail",

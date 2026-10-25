@@ -30,6 +30,76 @@ SNAPSHOT_STATE_OK = "ok"
 SNAPSHOT_STATE_EMPTY = "empty"
 SNAPSHOT_STATE_UNREADABLE = "unreadable"
 
+# 保护状态的单一枚举（A02 审计要求"显式禁用态"）：界面按 state 读主文案，不再自己
+# 从 protected/overdue/snapshot_state 三个布尔值反推。旧字段全部保留——旧客户端读旧布尔，
+# 新客户端读 state，两者不冲突，也不改变任何既有语义。
+PROTECTION_STATE_PROTECTED = "protected"
+PROTECTION_STATE_OVERDUE = "overdue"
+PROTECTION_STATE_NEVER = "never"
+PROTECTION_STATE_EMPTY = "empty"
+PROTECTION_STATE_UNREADABLE = "unreadable"
+PROTECTION_STATE_FAILING = "failing"
+PROTECTION_STATE_DISABLED = "disabled"
+
+PROTECTION_STATES: tuple[str, ...] = (
+    PROTECTION_STATE_PROTECTED,
+    PROTECTION_STATE_OVERDUE,
+    PROTECTION_STATE_NEVER,
+    PROTECTION_STATE_EMPTY,
+    PROTECTION_STATE_UNREADABLE,
+    PROTECTION_STATE_FAILING,
+    PROTECTION_STATE_DISABLED,
+)
+
+
+def _auto_backup_enabled() -> bool:
+    """自动备份的真实开关：来自部署配置 Settings.auto_backup_enabled。
+
+    **没有 UI 开关**（设置页只能调间隔）：这个值由部署配置决定，界面必须如实标注
+    "由部署配置控制"，不能给一个改了不生效的开关。配置读取失败时按"启用"处理——
+    与 auto_backup.run_auto_backup_if_due 的缺省一致，不让状态接口因为一次读配置
+    失败，把"受保护"误报成"已禁用"。
+    """
+    try:
+        # 调用期从 app.config 取（而不是模块级具名导入）：这是可注入的边界，
+        # 测试用 monkeypatch 替换 app.config.get_settings 即可模拟部署配置。
+        from ...config import get_settings
+
+        return bool(getattr(get_settings(), "auto_backup_enabled", True))
+    except Exception:  # noqa: BLE001 - 状态展示不应因配置读取失败而抛
+        logger.warning("读取自动备份开关失败，按启用处理", exc_info=True)
+        return True
+
+
+def _protection_state(
+    *,
+    enabled: bool,
+    protected: bool,
+    overdue: bool,
+    last_success: Any,
+    failures: int,
+    snapshot_state: str,
+) -> str:
+    """把若干事实收敛成一个可展示的状态（优先级：禁用 > 无法确认 > 失败 > 到期 > ...）。
+
+    "disabled" 必须压过一切：用户先要知道"自动备份根本没开"，再去关心历史快照
+    还在不在；把历史快照的"受保护"顶在最前面会让人以为后台还在继续备份。
+    """
+    if not enabled:
+        return PROTECTION_STATE_DISABLED
+    if snapshot_state == SNAPSHOT_STATE_UNREADABLE:
+        return PROTECTION_STATE_UNREADABLE
+    if failures > 0:
+        return PROTECTION_STATE_FAILING
+    if protected and overdue:
+        return PROTECTION_STATE_OVERDUE
+    if protected:
+        return PROTECTION_STATE_PROTECTED
+    if last_success:
+        # marker 说成功过，但当前目录里没有可用快照（被移走/清理/替换）。
+        return PROTECTION_STATE_EMPTY
+    return PROTECTION_STATE_NEVER
+
 
 def _collect_snapshots(directory: Path) -> tuple[list[dict[str, Any]], str]:
     """读取快照清单，并给出目录状态（``ok`` / ``empty`` / ``unreadable``）。
@@ -91,9 +161,26 @@ def backup_status(bind: Engine, *, now: float | None = None) -> dict[str, Any]:
         interval_days = runtime_interval_days(bind)
     except Exception:  # noqa: BLE001 - 状态展示不应因配置读取失败而抛
         interval_days = 0
-    # 收紧后的「受保护」：有成功记录 + 当前没有连续失败 + **当前目录里确实有快照**。
-    # 只有 last_success 而没有快照（被移走/被清理/目录读不了）不得算受保护。
-    protected = bool(last_success) and failures == 0 and snapshot_state == SNAPSHOT_STATE_OK
+    enabled = _auto_backup_enabled()
+    overdue = _is_overdue(last_success, interval_days, current)
+    # 收紧后的「受保护」：**自动备份处于启用状态** + 有成功记录 + 当前没有连续失败 +
+    # 当前目录里确实有快照。只有 last_success 而没有快照（被移走/被清理/目录读不了）
+    # 不得算受保护；自动备份被部署配置关掉时同样不算"当前受保护"——历史快照仍能用来
+    # 恢复，但"后台还会继续保护你"这句话已经不成立（A02 审计要求显式禁用态）。
+    protected = (
+        enabled
+        and bool(last_success)
+        and failures == 0
+        and snapshot_state == SNAPSHOT_STATE_OK
+    )
+    state = _protection_state(
+        enabled=enabled,
+        protected=protected,
+        overdue=overdue,
+        last_success=last_success,
+        failures=failures,
+        snapshot_state=snapshot_state,
+    )
     return {
         "dataset_id": getattr(bind, "dataset_id", "") or "",
         "protected": protected,
@@ -105,11 +192,17 @@ def backup_status(bind: Engine, *, now: float | None = None) -> dict[str, Any]:
         "consecutive_failures": failures,
         "last_error": str(marker.get("last_error") or ""),
         "interval_days": interval_days,
-        "overdue": _is_overdue(last_success, interval_days, current),
+        "overdue": overdue,
         # 供 UI 区分"没备份过"(empty)、"确有一份可用快照"(ok) 与"读不了目录"(unreadable)。
         "snapshot_state": snapshot_state,
         "snapshot_count": len(snapshots),
         "snapshots": snapshots[:10],
+        # A02：自动备份的真实开关来自部署配置（无 UI 开关）。disabled 是 enabled 的反面，
+        # 单独给一个布尔是为了旧客户端不必自己取反；state 是给新 UI 的单一枚举
+        # （disabled 时优先于其它一切状态）。
+        "auto_backup_enabled": enabled,
+        "disabled": not enabled,
+        "state": state,
     }
 
 

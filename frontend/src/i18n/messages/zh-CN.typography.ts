@@ -148,6 +148,24 @@ const typography = {
   "typography.capability.pdf": "精确 PDF：斜体与字距按模板值，其余已支持",
   "typography.capability.word": "Word 与 HTML 支持全部属性",
   "typography.capability.draft": "草稿预览为 CSS 近似，以精确 PDF 为准",
+
+  // ── 字符级标记（斜体 / 链接；加粗沿用右键菜单的既有语义）────────
+  "typography.inline.groupAria": "字符格式",
+  "typography.inline.bold": "加粗",
+  "typography.inline.italic": "斜体",
+  "typography.inline.link": "链接",
+  "typography.inline.boldAria": "加粗所选文字",
+  "typography.inline.italicAria": "斜体所选文字",
+  "typography.inline.linkAria": "给所选文字加链接",
+  /** 链接输入弹层的标题（≤7 字）。 */
+  "typography.inline.linkTitle": "插入链接",
+  "typography.inline.linkPlaceholder": "https://example.com",
+  "typography.inline.linkApply": "插入链接",
+  "typography.inline.linkCancel": "取消",
+  /** 三个"没反应"的原因：说清下一步，不静默。 */
+  "typography.inline.noTarget": "先点中要修改的文本框",
+  "typography.inline.selectFirst": "先选要修改的文字",
+  "typography.inline.invalidUrl": "链接要用 http(s) 地址",
 } as const;
 
 export default typography;

@@ -43,6 +43,7 @@ describe("parsePaginationReport", () => {
       pagesNeeded: 3,
       pageLimit: 2,
       overflow: true,
+      lastPageFill: null,
       truncatedAt: {
         kind: "entry",
         section: "projects",

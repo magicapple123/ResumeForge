@@ -25,9 +25,16 @@ import type { ResumeContent } from "../../types/resume";
 import {
   cloneEntryWithNewIds,
   isObjectId,
+  newObjectId,
   reorderPreservingIds,
 } from "../resume-document/identity";
-import { flagMatches, readEntryFlags, writeEntryFlag } from "./flags";
+import {
+  flagMatches,
+  readEntryFlags,
+  readHiddenPoints,
+  writeEntryFlag,
+  writeHiddenPoints,
+} from "./flags";
 import { entriesOf, entryIdOf, findEntryIndex, pointIdsOf, pointFieldsFor } from "./model";
 import type {
   EntryField,
@@ -84,6 +91,11 @@ export function canMovePoint(entry: unknown): boolean {
 
 /** 这条目能不能复制（锁正文时不能，见文件头第 3 条）。 */
 export function canCloneEntry(entry: unknown): boolean {
+  return !flagIsOn(entry, "lock_content");
+}
+
+/** 这条要点能不能复制：与条目同一把锁（复制正文 = 绕开"这段已定稿"）。 */
+export function canClonePoint(entry: unknown): boolean {
   return !flagIsOn(entry, "lock_content");
 }
 
@@ -162,6 +174,86 @@ function cloneEntry(
   return { ok: true, content: withField(content, command.field, nextEntries), changed: true };
 }
 
+function clonePoint(
+  content: ResumeContent,
+  command: Extract<OutlineCommand, { type: "clone-point" }>,
+): OutlineApplyResult {
+  const entries = entriesOf(content, command.field);
+  const entryIndex = findEntryIndex(content, command.field, command.objectId);
+  if (entryIndex < 0) return { ok: false, reason: "not-found" };
+  const entry = entries[entryIndex];
+  if (!canClonePoint(entry)) return { ok: false, reason: "locked-content" };
+  if (!pointFieldsFor(command.field).includes(command.pointField))
+    return { ok: false, reason: "not-found" };
+  const rawPoints = entry[command.pointField];
+  const points = Array.isArray(rawPoints) ? [...(rawPoints as unknown[])] : [];
+  const ids = pointIdsOf(entry, command.pointField);
+  // 身份不完整（旧记录没物化 id / 长度对不上）时拒绝：按下标复制会把新身份挂到别的要点。
+  if (points.length === 0 || ids.length !== points.length)
+    return { ok: false, reason: "not-found" };
+  const from = ids.indexOf(command.pointId);
+  if (from < 0) return { ok: false, reason: "not-found" };
+  const newPointId = newObjectId();
+  const sourcePointIds =
+    entry.point_ids && typeof entry.point_ids === "object"
+      ? (entry.point_ids as Record<string, unknown>)
+      : {};
+  let nextEntry: RawEntry = {
+    ...entry,
+    [command.pointField]: [...points.slice(0, from + 1), points[from], ...points.slice(from + 1)],
+    point_ids: {
+      ...sourcePointIds,
+      [command.pointField]: [...ids.slice(0, from + 1), newPointId, ...ids.slice(from + 1)],
+    },
+  };
+  // 复制是"忠实副本"：原要点被隐藏时，副本同样隐藏（与 clone-entry 带 hidden 一致）。
+  const hidden = readHiddenPoints(entry);
+  if (hidden.has(command.pointId)) {
+    hidden.add(newPointId);
+    nextEntry = writeHiddenPoints(nextEntry, hidden);
+  }
+  const nextEntries = entries.slice();
+  nextEntries[entryIndex] = nextEntry;
+  return { ok: true, content: withField(content, command.field, nextEntries), changed: true };
+}
+
+function setHiddenPoints(
+  content: ResumeContent,
+  command: Extract<OutlineCommand, { type: "set-hidden-points" }>,
+): OutlineApplyResult {
+  const targetIds = command.points
+    .map((point) => point.pointId)
+    .filter((pointId) => pointId !== "");
+  if (targetIds.length === 0) return { ok: false, reason: "not-found" };
+  const entries = entriesOf(content, command.field);
+  const entryIndex = findEntryIndex(content, command.field, command.objectId);
+  if (entryIndex < 0) return { ok: false, reason: "not-found" };
+  const entry = entries[entryIndex];
+  const known = new Set<string>();
+  for (const pointField of pointFieldsFor(command.field)) {
+    for (const pointId of pointIdsOf(entry, pointField)) known.add(pointId);
+  }
+  const targets = targetIds.filter((pointId) => known.has(pointId));
+  if (targets.length === 0) return { ok: false, reason: "not-found" };
+  // 要点级显隐是可见性操作：内容锁/排版锁都不阻止（与条目级 set-hidden 同口径）。
+  const hidden = readHiddenPoints(entry);
+  let changed = false;
+  for (const pointId of targets) {
+    if (command.hidden) {
+      if (!hidden.has(pointId)) {
+        hidden.add(pointId);
+        changed = true;
+      }
+    } else if (hidden.delete(pointId)) {
+      changed = true;
+    }
+  }
+  if (!changed) return { ok: true, content, changed: false };
+  const nextEntries = entries.slice();
+  nextEntries[entryIndex] = writeHiddenPoints(entry, hidden);
+  return { ok: true, content: withField(content, command.field, nextEntries), changed: true };
+}
+
 function setHidden(
   content: ResumeContent,
   command: Extract<OutlineCommand, { type: "set-hidden" }>,
@@ -224,8 +316,12 @@ export function applyOutlineCommand(
       return reorderPoint(content, command);
     case "clone-entry":
       return cloneEntry(content, command);
+    case "clone-point":
+      return clonePoint(content, command);
     case "set-hidden":
       return setHidden(content, command);
+    case "set-hidden-points":
+      return setHiddenPoints(content, command);
     case "set-lock":
       return setLock(content, command);
   }

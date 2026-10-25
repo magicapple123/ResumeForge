@@ -28,6 +28,21 @@ interface Props {
 
 const UNKNOWN = "provenance.usage.unknown" as const;
 
+/** finish_reason → 文案（未知值显示原码，不编造解释）。 */
+function finishReasonLabel(reason: string): string {
+  const known: Record<string, string> = {
+    stop: "provenance.usage.finishReason.stop",
+    length: "provenance.usage.finishReason.length",
+    cancelled: "provenance.usage.finishReason.cancelled",
+    error: "provenance.usage.finishReason.error",
+    budget_exhausted: "provenance.usage.finishReason.budget",
+    tool_calls: "provenance.usage.finishReason.toolCalls",
+    unknown: "provenance.usage.finishReason.unknown",
+  };
+  const key = known[reason];
+  return key ? pt(key as Parameters<typeof pt>[0]) : reason;
+}
+
 function bucketColumns(): TableColumnsType<UsageBucketOut> {
   return [
     { title: "", dataIndex: "key", ellipsis: true },
@@ -62,6 +77,10 @@ export default function UsageSummaryCard({
   }
 
   const amount = costAmount(summary.cost);
+  const finishReasons = Object.entries(summary.totals.finish_reasons ?? {}).map(([key, calls]) => ({
+    key,
+    calls,
+  }));
   return (
     <div data-usage-summary="1">
       <Typography.Text strong>{pt("provenance.usage.title")}</Typography.Text>
@@ -84,14 +103,43 @@ export default function UsageSummaryCard({
         ) : null}
         <div style={{ marginTop: 2, fontSize: 12 }}>
           {pt("provenance.usage.costColon")}
-          {amount === null
-            ? pt("provenance.usage.cost.none")
-            : pt("provenance.usage.cost.value", {
-                amount: amount,
-                currency: summary.cost.currency,
-              })}
+          <Typography.Text>
+            {amount === null
+              ? pt("provenance.usage.costUnavailable")
+              : pt("provenance.usage.cost.value", {
+                  amount: amount,
+                  currency: summary.cost.currency,
+                })}
+          </Typography.Text>
+          {amount !== null ? (
+            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+              {pt("provenance.usage.costEstimated")}
+            </Typography.Text>
+          ) : null}
         </div>
       </div>
+      {finishReasons.length > 0 ? (
+        <div data-usage-finish-reasons="1" style={{ marginBottom: 6 }}>
+          <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+            {pt("provenance.usage.finishReasons")}
+          </Typography.Text>
+          <Table
+            size="small"
+            rowKey="key"
+            pagination={false}
+            dataSource={finishReasons}
+            columns={[
+              {
+                title: "",
+                dataIndex: "key",
+                render: (value: string) => finishReasonLabel(value),
+              },
+              { title: pt("provenance.usage.calls"), dataIndex: "calls", width: 80 },
+            ]}
+            locale={{ emptyText: "-" }}
+          />
+        </div>
+      ) : null}
       <Typography.Text type="secondary" style={{ fontSize: 12 }}>
         {pt("provenance.usage.byTask")}
       </Typography.Text>

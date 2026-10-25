@@ -77,6 +77,14 @@ export interface PhraseUpdatePayload {
   quality_note?: string;
 }
 
+/**
+ * PATCH 响应：更新后的资产 + `previous`（旧快照，be-prov 契约）。
+ * `previous` 供「更新先看差异」做核对/审计；本地 diff 不依赖它（旧后端缺省也不报错）。
+ */
+export interface PhraseUpdateOut extends ResumePhrase {
+  previous?: ResumePhrase | null;
+}
+
 /** POST /api/resume-phrases/{id}/insert。 */
 export interface PhraseInsertPayload {
   resume_id: number;

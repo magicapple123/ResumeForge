@@ -23,7 +23,7 @@
  * 没有 `onCommand` = 只读（生成流程预览等宿主）：结构按钮/手柄不渲染，键盘导航仍可用。
  */
 import { Button } from "antd";
-import { useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import type { RefObject } from "react";
 import EmptyState from "../../common/EmptyState";
 import { t } from "../../../i18n";
@@ -38,13 +38,30 @@ import {
   type OutlineSection,
 } from "../../../features/resume-outline/model";
 import { resolveHighlightTargets } from "../../../features/resume-outline/highlight";
+import { selectionPath } from "../../../features/resume-outline/model";
+import type { EntryField } from "../../../features/resume-document/types";
 import type { OutlineCommand, OutlineSelection } from "../../../features/resume-outline/types";
 import type { ResumeContent } from "../../../types/resume";
 import OutlineInspector from "./OutlineInspector";
 import { EntryRowContent, PointRowContent, SectionHeaderContent } from "./OutlineRows";
+import OutlineSearchBar from "./OutlineSearchBar";
 import { pointTreeKey } from "./outlineTree";
 import { useOutlineCanvasHighlight } from "./useOutlineCanvasHighlight";
+import { useOutlineSearch } from "./useOutlineSearch";
 import { useOutlineState } from "./useOutlineState";
+
+/** W07 多选工具条消费的最小形状（id 是稳定 objectId，不是下标）。 */
+export interface OutlineMultiEntry {
+  id: string;
+  label: string;
+  meta: string;
+  field: EntryField;
+}
+
+/** 多选工具的宿主句柄（目前只有清空；应用样式仍走 onCommand/宿主保存链路）。 */
+export interface OutlineMultiSelectionApi {
+  clearMultiSelect: () => void;
+}
 
 export interface OutlinePanelProps {
   /** 当前简历内容；缺 id 时面板内部 ensureIds（只补内存，不发请求）。 */
@@ -61,6 +78,22 @@ export interface OutlinePanelProps {
   readOnly?: boolean;
   /** 选中对象变化（宿主可用于联动属性区；大纲自己的高亮/属性区不依赖它）。 */
   onSelectionChange?: (selection: OutlineSelection | null) => void;
+  /**
+   * 多选集合变化（W07 多选工具条消费）：每次按条目的稳定 id 变化时上报一次。
+   * 宿主据此挂载 MultiStyleBar（格式刷/批量应用间距），本面板不实现那套 UI。
+   * 形状是工具条直接用的小对象：id=稳定 objectId、label=条目标题、meta=次行信息。
+   */
+  onMultiSelectionChange?: (entries: OutlineMultiEntry[]) => void;
+  /**
+   * 让宿主拿到"清空多选"的动作（工具条关掉/应用完一批后调用），避免把 clear 也塞进
+   * 每次变化的回调里。面板卸载时自动置回 null。
+   */
+  multiSelectionApiRef?: RefObject<OutlineMultiSelectionApi | null>;
+  /**
+   * 显式"定位到对象"（搜索 Enter / 点定位）：宿主可据此把中栏表单滚到对应字段。
+   * 画布高亮/滚动已在面板内完成；path 是当前下标路径，找不到对象时为 null。
+   */
+  onLocateSelection?: (selection: OutlineSelection, path: string | null) => void;
   className?: string;
 }
 
@@ -86,16 +119,30 @@ export default function OutlinePanel({
   canvasContainerRef,
   readOnly = false,
   onSelectionChange,
+  onMultiSelectionChange,
+  multiSelectionApiRef,
+  onLocateSelection,
   className,
 }: OutlinePanelProps) {
   const treeRef = useRef<HTMLDivElement>(null);
   // 读取/编辑都基于"补齐过 id"的内存副本；不写库、不覆盖入参（W01 的读取适配）。
   const baseContent = useMemo(() => (content ? ensureIds(content) : null), [content]);
   const model = useMemo(() => buildOutline(baseContent), [baseContent]);
+  const sectionLabel = useCallback((section: OutlineSection) => t(section.titleKey), []);
+  const search = useOutlineSearch({
+    model,
+    baseContent,
+    treeRef,
+    canvasContainer,
+    canvasContainerRef,
+    sectionLabel,
+  });
+  // 搜索时只画命中行（+祖先）；选中/命令仍按 id 指向原对象（模型只是"显示哪些行"）。
+  const displayedModel = search.query ? search.result.model : model;
   const readonly = readOnly || !onCommand || !baseContent;
   const state = useOutlineState({
     baseContent,
-    model,
+    model: displayedModel,
     onCommand,
     pickTarget,
     onSelectionChange,
@@ -109,7 +156,100 @@ export default function OutlinePanel({
     targets,
     container: canvasContainer,
     containerRef: canvasContainerRef,
+    reveal: search.reveal,
   });
+
+  // 多选集合上报（W07 多选工具条）：形状按工具条需要摊平；按稳定 id 拼签名去重。
+  const multiEntries = useMemo<OutlineMultiEntry[]>(
+    () =>
+      state.multiSelectedEntries.map((entry) => ({
+        id: entry.objectId,
+        label: entry.title || t("outline.entry.untitled"),
+        meta: entry.subtitle,
+        field: entry.field,
+      })),
+    [state.multiSelectedEntries],
+  );
+  const multiSignature = multiEntries.map((entry) => `${entry.field}:${entry.id}`).join("|");
+  const lastMultiSignature = useRef("");
+  useEffect(() => {
+    if (lastMultiSignature.current === multiSignature) return;
+    lastMultiSignature.current = multiSignature;
+    onMultiSelectionChange?.(multiEntries);
+  }, [multiEntries, multiSignature, onMultiSelectionChange]);
+
+  // 宿主句柄：清空多选（工具条"取消选择"/应用后收起）。
+  useEffect(() => {
+    if (!multiSelectionApiRef) return;
+    multiSelectionApiRef.current = { clearMultiSelect: state.clearMultiSelect };
+    return () => {
+      multiSelectionApiRef.current = null;
+    };
+  }, [multiSelectionApiRef, state.clearMultiSelect]);
+
+  // 纸面点击跳进大纲：先记住"跳之前"的位置，用户可用「回到之前位置」复原。
+  const lastPickNonce = useRef<number | null>(null);
+  useEffect(() => {
+    const nonce = pickTarget?.nonce ?? null;
+    if (nonce === null || nonce === lastPickNonce.current) return;
+    lastPickNonce.current = nonce;
+    search.rememberBeforeJump();
+  }, [pickTarget?.nonce, search]);
+
+  /** 展开命中的板块/条目，保证定位的树行真的在 DOM 里。 */
+  const ensureExpanded = (target: { selection: OutlineSelection }) => {
+    if (target.selection.kind === "personal") return;
+    const field = target.selection.field;
+    if (state.collapsedSections.has(field)) state.toggleSection(field);
+    if (target.selection.kind === "point") {
+      const key = entryKey(field, target.selection.objectId);
+      if (!state.expandedEntries.has(key)) state.toggleEntry(key);
+    }
+  };
+
+  /** 搜索命中 → 选中 + 展开 + 滚到树行（上下键与 Enter 共用）。 */
+  const goToMatch = (match: ReturnType<typeof search.currentMatch>) => {
+    if (!match) return;
+    ensureExpanded(match);
+    state.select(match.selection);
+    // 展开状态在本次渲染之后才生效；下一帧再滚，避免行还不存在时滚不到。
+    if (typeof window.requestAnimationFrame === "function") {
+      window.requestAnimationFrame(() => search.scrollMatchIntoView(match));
+    } else {
+      search.scrollMatchIntoView(match);
+    }
+  };
+
+  const stepMatch = (delta: number) => {
+    const match = search.step(delta);
+    if (match) goToMatch(match);
+  };
+
+  const locateMatch = () => {
+    const match = search.currentMatch();
+    if (!match) return;
+    ensureExpanded(match);
+    state.select(match.selection);
+    // 树行也要滚到可视区（与上下键同一套；展开后下一帧再滚）。
+    if (typeof window.requestAnimationFrame === "function") {
+      window.requestAnimationFrame(() => search.scrollMatchIntoView(match));
+    } else {
+      search.scrollMatchIntoView(match);
+    }
+    const path = selectionPath(baseContent, match.selection);
+    search.requestReveal(path);
+    if (path) onLocateSelection?.(match.selection, path);
+    state.announce(t("outline.search.located", { name: match.text || t("outline.panel.title") }));
+  };
+
+  const restoreScroll = () => {
+    if (search.restore()) state.announce(t("outline.search.restored"));
+  };
+
+  const clearSearch = () => {
+    search.clear();
+    state.announce(t("outline.search.restored"));
+  };
 
   const selectedKind = state.selection?.kind ?? null;
   const inspectorEntry = selectedKind === "entry" ? state.selectedEntry : null;
@@ -141,8 +281,11 @@ export default function OutlinePanel({
           moving={Boolean(moving)}
           dropTarget={state.dropTargetKey === key}
           readOnly={readonly}
+          query={search.query || undefined}
           sortBlockedReason={entry.lockLayout ? t("outline.blocked.locked-layout") : undefined}
           onSelect={() => state.select(pointSelection)}
+          onToggleHidden={() => state.setHiddenPoints(entry, [point], !point.hidden)}
+          onClone={() => state.clonePoint(entry, point)}
           onSortFocus={() => state.select(pointSelection)}
           onSortStart={() => state.startSort(pointSelection)}
           onSortKeyDown={state.handleSortKeyDown}
@@ -162,7 +305,8 @@ export default function OutlinePanel({
   const renderEntry = (entry: OutlineEntry) => {
     const key = entryKey(entry.field, entry.objectId);
     const entrySelection = entrySelectionOf(entry);
-    const expanded = state.expandedEntries.has(key);
+    // 搜索时让命中条目的要点直接展开：命中就在要点里，不展开等于没显示结果。
+    const expanded = searching ? entry.points.length > 0 : state.expandedEntries.has(key);
     const selected = selectedKey === selectionKey(entrySelection);
     const moving =
       state.sortSession?.kind === "entry" &&
@@ -185,6 +329,8 @@ export default function OutlinePanel({
           dropTarget={state.dropTargetKey === key}
           readOnly={readonly}
           displayName={entry.title || t("outline.entry.untitled")}
+          query={search.query || undefined}
+          hiddenPointCount={entry.points.filter((point) => point.hidden).length}
           sortBlockedReason={entry.lockLayout ? t("outline.blocked.locked-layout") : undefined}
           onSelect={() => state.select(entrySelection)}
           onToggle={() => state.toggleEntry(key)}
@@ -227,6 +373,7 @@ export default function OutlinePanel({
             expanded={false}
             collapsible={false}
             subtitle={personalSubtitle(baseContent)}
+            query={search.query || undefined}
             onToggle={() => state.select({ kind: "personal" })}
           />
         </div>
@@ -234,7 +381,8 @@ export default function OutlinePanel({
     }
     const field = section.field;
     const sectionKey = `section:${field}`;
-    const expanded = !state.collapsedSections.has(field);
+    // 搜索时板块恒展开（过滤后的树只有命中行，收起会让用户看不到结果）。
+    const expanded = searching ? true : !state.collapsedSections.has(field);
     return (
       <div
         key={sectionKey}
@@ -249,6 +397,7 @@ export default function OutlinePanel({
           count={section.entries.length}
           expanded={expanded}
           collapsible
+          query={search.query || undefined}
           onToggle={() => state.toggleSection(field)}
         />
         {expanded ? (
@@ -260,14 +409,37 @@ export default function OutlinePanel({
     );
   };
 
+  const searching = search.query !== "";
+  // 搜索时"没有命中"与"这份简历还没有条目"是两种空：前者说明换个词，后者引导去中栏添加。
+  const showEmpty = searching
+    ? displayedModel.entryCount === 0 &&
+      !displayedModel.sections.some((section) => section.field === null)
+    : model.entryCount === 0;
   return (
     <div className={`resume-outline${className ? ` ${className}` : ""}`}>
       <div className="resume-outline-head">
         <span className="resume-outline-head-title">{t("outline.panel.title")}</span>
         <span className="resume-outline-head-count">
-          {t("outline.count.summary", { entries: model.entryCount, points: model.pointCount })}
+          {t("outline.count.summary", {
+            entries: displayedModel.entryCount,
+            points: displayedModel.pointCount,
+          })}
         </span>
       </div>
+      {baseContent ? (
+        <OutlineSearchBar
+          value={search.query}
+          matchCount={search.result.matchCount}
+          activeIndex={search.activeIndex}
+          onChange={search.setQuery}
+          onStep={stepMatch}
+          onLocate={locateMatch}
+          onClear={clearSearch}
+          canRestore={search.canRestore}
+          onRestore={restoreScroll}
+          onFocus={search.rememberBeforeSearch}
+        />
+      ) : null}
       {readonly && baseContent ? (
         <div className="resume-outline-readonly">{t("outline.readonly")}</div>
       ) : null}
@@ -288,8 +460,11 @@ export default function OutlinePanel({
           </Button>
         </div>
       ) : null}
-      {model.entryCount === 0 ? (
-        <EmptyState inline description={t("outline.empty")} />
+      {showEmpty ? (
+        <EmptyState
+          inline
+          description={t(searching ? "outline.search.noMatch" : "outline.empty")}
+        />
       ) : (
         <div
           role="tree"
@@ -297,6 +472,7 @@ export default function OutlinePanel({
           aria-multiselectable="true"
           className="resume-outline-tree"
           ref={treeRef}
+          onScroll={search.onTreeScroll}
           onKeyDown={state.handleTreeKeyDown}
         >
           {state.previewTree.sections.map(renderSection)}

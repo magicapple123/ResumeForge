@@ -12,11 +12,61 @@
  *   键盘等价物是树上的 ←/→；
  * - 徽标是可见文字徽标（不是只有颜色的圆点），色盲用户也能读出来。
  */
-import { HolderOutlined } from "@ant-design/icons";
+import { CopyOutlined, EyeInvisibleOutlined, EyeOutlined, HolderOutlined } from "@ant-design/icons";
 import { Button, Tooltip } from "antd";
-import type { DragEvent, KeyboardEvent } from "react";
+import type { DragEvent, KeyboardEvent, ReactNode } from "react";
 import { t } from "../../../i18n";
 import type { OutlineEntry, OutlinePoint } from "../../../features/resume-outline/model";
+import { splitHighlight } from "../../../features/resume-outline/search";
+
+/** 搜索命中文本：把 query 命中的片段包成 `<mark>`（大小写不敏感；无 query 时零包装）。 */
+function HighlightedText({ text, query }: { text: string; query?: string }) {
+  const segments = splitHighlight(text, query ?? "");
+  if (segments.length === 1 && !segments[0].hit) return <>{text}</>;
+  return (
+    <>
+      {segments.map((segment, index) =>
+        segment.hit ? (
+          <mark key={`hit-${index}`} className="resume-outline-hit">
+            {segment.text}
+          </mark>
+        ) : (
+          <span key={`plain-${index}`}>{segment.text}</span>
+        ),
+      )}
+    </>
+  );
+}
+
+/** 行内小图标动作按钮（Tooltip 说清动作；按钮本身可聚焦，键盘可达）。 */
+function RowActionButton({
+  label,
+  hint,
+  icon,
+  onClick,
+}: {
+  label: string;
+  hint: string;
+  icon: ReactNode;
+  onClick: () => void;
+}) {
+  return (
+    <Tooltip title={hint}>
+      <Button
+        className="resume-outline-row-action"
+        type="text"
+        size="small"
+        icon={icon}
+        aria-label={label}
+        onClick={(event) => {
+          // 行动作不改变选中：点"隐藏/复制"就只做那件事，避免顺带把属性区切走。
+          event.stopPropagation();
+          onClick();
+        }}
+      />
+    </Tooltip>
+  );
+}
 
 /** 条目行需要的外壳状态（面板算好，行只照画）。 */
 export interface EntryRowContentProps {
@@ -28,6 +78,10 @@ export interface EntryRowContentProps {
   dropTarget: boolean;
   readOnly: boolean;
   displayName: string;
+  /** 搜索命中的查询串（仅用于把命中片段标出来，不改变行数据）。 */
+  query?: string;
+  /** 该条目下被单独隐藏的要点数（>0 时行尾给一个徽标）。 */
+  hiddenPointCount?: number;
   /** 锁排版等原因导致不能排序时的说明；有值 = 手柄不 draggable、激活时播报原因。 */
   sortBlockedReason?: string;
   onSelect: () => void;
@@ -125,6 +179,8 @@ export function EntryRowContent({
   dropTarget,
   readOnly,
   displayName,
+  query,
+  hiddenPointCount = 0,
   sortBlockedReason,
   onSelect,
   onToggle,
@@ -165,10 +221,21 @@ export function EntryRowContent({
         />
       )}
       <div className="resume-outline-main">
-        <span className="resume-outline-title">{displayName}</span>
-        {entry.subtitle ? <span className="resume-outline-subtitle">{entry.subtitle}</span> : null}
+        <span className="resume-outline-title">
+          <HighlightedText text={displayName} query={query} />
+        </span>
+        {entry.subtitle ? (
+          <span className="resume-outline-subtitle">
+            <HighlightedText text={entry.subtitle} query={query} />
+          </span>
+        ) : null}
         {entry.hidden ? (
           <span className="resume-outline-badge is-hidden">{t("outline.hidden.badge")}</span>
+        ) : null}
+        {hiddenPointCount > 0 ? (
+          <span className="resume-outline-badge is-hidden">
+            {t("outline.hiddenPoints.badge", { count: hiddenPointCount })}
+          </span>
         ) : null}
         {entry.lockContent ? (
           <span className="resume-outline-badge">{t("outline.lock.content.badge")}</span>
@@ -191,6 +258,8 @@ export interface PointRowContentProps {
   moving: boolean;
   dropTarget: boolean;
   readOnly: boolean;
+  /** 搜索命中的查询串（把命中片段标出来）。 */
+  query?: string;
   sortBlockedReason?: string;
   onSelect: () => void;
   /** 手柄获得焦点即选中这一行（见 EntryRowContentProps.onSortFocus）。 */
@@ -201,6 +270,10 @@ export interface PointRowContentProps {
   onDragEnd: () => void;
   onDragOver: (event: DragEvent<HTMLDivElement>) => void;
   onDrop: (event: DragEvent<HTMLDivElement>) => void;
+  /** W06 要点级显隐：action 是真正的按钮（Tooltip + aria-label，键盘可达）。 */
+  onToggleHidden?: () => void;
+  /** W06 要点复制：复制生成新 point id、相邻插入。 */
+  onClone?: () => void;
 }
 
 export function PointRowContent({
@@ -208,6 +281,7 @@ export function PointRowContent({
   moving,
   dropTarget,
   readOnly,
+  query,
   sortBlockedReason,
   onSelect,
   onSortFocus,
@@ -217,12 +291,21 @@ export function PointRowContent({
   onDragEnd,
   onDragOver,
   onDrop,
+  onToggleHidden,
+  onClone,
 }: PointRowContentProps) {
   const displayText = point.text || t("outline.point.empty");
+  const canHide = !readOnly && point.pointId !== "" && typeof onToggleHidden === "function";
+  const canClone = !readOnly && point.pointId !== "" && typeof onClone === "function";
   return (
     // biome-ignore lint/a11y/useKeyWithClickEvents: 键盘等价物在外层 treeitem 上（Enter/Space 选中）
     <div
-      className={rowClassNames("resume-outline-row is-point", moving, dropTarget)}
+      className={rowClassNames(
+        "resume-outline-row is-point",
+        moving,
+        dropTarget,
+        point.hidden ? "is-hidden" : "",
+      )}
       onClick={onSelect}
       onDragOver={onDragOver}
       onDrop={onDrop}
@@ -241,8 +324,29 @@ export function PointRowContent({
         />
       )}
       <span className={"resume-outline-point-text" + (point.text ? "" : " is-empty")}>
-        {displayText}
+        <HighlightedText text={displayText} query={query} />
       </span>
+      {point.hidden ? (
+        <Tooltip title={t("outline.point.hiddenHint")}>
+          <span className="resume-outline-badge is-hidden">{t("outline.point.hiddenBadge")}</span>
+        </Tooltip>
+      ) : null}
+      {canHide ? (
+        <RowActionButton
+          label={point.hidden ? t("outline.point.show") : t("outline.point.hide")}
+          hint={t("outline.point.hiddenHint")}
+          icon={point.hidden ? <EyeOutlined /> : <EyeInvisibleOutlined />}
+          onClick={onToggleHidden}
+        />
+      ) : null}
+      {canClone ? (
+        <RowActionButton
+          label={t("outline.point.clone")}
+          hint={t("outline.point.clone")}
+          icon={<CopyOutlined />}
+          onClick={onClone}
+        />
+      ) : null}
     </div>
   );
 }
@@ -253,6 +357,8 @@ export interface SectionHeaderContentProps {
   expanded: boolean;
   collapsible: boolean;
   subtitle?: string;
+  /** 搜索命中的查询串（板块标题也是可搜索文本）。 */
+  query?: string;
   onToggle: () => void;
 }
 
@@ -262,13 +368,16 @@ export function SectionHeaderContent({
   expanded,
   collapsible,
   subtitle,
+  query,
   onToggle,
 }: SectionHeaderContentProps) {
   return (
     // 整行点击只在这里处理（外层 treeitem 不挂 onClick）：否则点条目行会冒泡到分组把整组收起。
     <div className="resume-outline-section" onClick={() => (collapsible ? onToggle() : undefined)}>
       <Caret expanded={expanded} hasChildren={collapsible} onToggle={onToggle} />
-      <span className="resume-outline-section-title">{title}</span>
+      <span className="resume-outline-section-title">
+        <HighlightedText text={title} query={query} />
+      </span>
       {typeof count === "number" ? (
         <span className="resume-outline-section-count">{count}</span>
       ) : null}

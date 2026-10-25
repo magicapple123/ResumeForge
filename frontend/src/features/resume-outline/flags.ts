@@ -60,3 +60,45 @@ export function flagMatches(entry: unknown, flag: EntryFlag, value: boolean): bo
   const source = (entry ?? {}) as FlagCarrier;
   return (source[flag] === true) === value;
 }
+
+// ── 要点级隐藏（W06：hidden_points: list[str] | None，backend 由 be-render 落地）──
+//
+// 为什么是"条目上的一个 id 数组"而不是每个要点变成一个对象：正文里要点仍然是字符串
+// （description: list[str]），身份在 point_ids 里；再加一层对象会改掉整份内容形状，
+// 旧记录/导出/备份都要跟着迁移。数组只登记"哪些 point id 不可见"，空数组 = 没有。
+// 与条目级 hidden 同一条取键规则：**取消时删键**，不写 hidden_points: []。
+
+interface HiddenPointsCarrier {
+  hidden_points?: unknown;
+}
+
+/** 读出条目的隐藏要点 id 集合（字段缺失/形状不对/非法 id 一律忽略）。 */
+export function readHiddenPoints(entry: unknown): Set<string> {
+  const source = (entry ?? {}) as HiddenPointsCarrier;
+  const value = source.hidden_points;
+  if (!Array.isArray(value)) return new Set();
+  const ids = new Set<string>();
+  for (const item of value) {
+    if (typeof item === "string" && item.length > 0) ids.add(item);
+  }
+  return ids;
+}
+
+/**
+ * 不可变地写回隐藏要点集合，返回**新对象**（不改入参）。
+ *
+ * 空集合 = 删除 hidden_points（见上）；保留传入顺序、去重，避免同一份内容因
+ * "先隐藏 A 再隐藏 B"与"先 B 后 A"产出不同 JSON（快照指纹要稳定）。
+ */
+export function writeHiddenPoints<T extends object>(entry: T, pointIds: Iterable<string>): T {
+  const source = entry as Record<string, unknown>;
+  const next: Record<string, unknown> = { ...source };
+  const unique: string[] = [];
+  for (const id of pointIds) {
+    if (typeof id !== "string" || id.length === 0 || unique.includes(id)) continue;
+    unique.push(id);
+  }
+  if (unique.length > 0) next.hidden_points = unique;
+  else delete next.hidden_points;
+  return next as T;
+}

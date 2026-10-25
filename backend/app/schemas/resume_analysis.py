@@ -13,6 +13,8 @@
 
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic import BaseModel, ConfigDict, Field
 
 from .resume_generation import MAX_RESUME_PAGES, ResumeFontScale
@@ -91,14 +93,35 @@ class LayoutAnalyzeRequest(BaseModel):
     format_config: dict | None = None
 
 
+class ContentHint(BaseModel):
+    """W09 内容精简候选的一条提示（本地确定性计算结果，不调模型）。
+
+    kind 目前只有 low_relevance（要点没命中目标岗位关键词）；保留 Literal 是为了以后
+    扩项时不破坏前端（前端按 kind 展示不同文案）。object_id / point_id 是 W01 稳定
+    身份，前端据此定位到具体条目/要点；没有稳定身份的条目不产生提示。
+    """
+
+    kind: Literal["low_relevance"] = "low_relevance"
+    section: str = Field(max_length=32)
+    object_id: str = Field(max_length=32)
+    point_field: str | None = Field(default=None, max_length=32)
+    point_id: str | None = Field(default=None, max_length=32)
+    reason: str = Field(default="", max_length=300)
+    evidence: list[str] = Field(default_factory=list, max_length=10)
+
+
 class LayoutAnalyzeOut(BaseModel):
     diagnosis: LayoutDiagnosisOut
     # 逐档收紧的版式清单。内容本来就放得下时为空。
     fit_ladder: list[LayoutFitCandidateOut] = Field(default_factory=list)
     fit_room: LayoutFitRoomOut
+    # W09 内容精简候选：低相关要点提示（可选字段，旧后端/旧客户端读到缺省都不受影响）。
+    # 信息不足（没有岗位/没有稳定 id）时是空列表——"没有提示"不等于"内容都相关"。
+    content_hints: list[ContentHint] | None = None
 
 
 __all__ = [
+    "ContentHint",
     "LayoutAnalyzeOut",
     "LayoutAnalyzeRequest",
     "LayoutDiagnosisOut",

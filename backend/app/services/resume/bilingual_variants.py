@@ -22,6 +22,8 @@ from ...models.resume import ResumeRecord
 from ...models.versions import ResumeVariant
 from ..llm.base import BaseLLMProvider
 from . import fact_locks, resume_glossary
+from .content_locks import entry_content_payload, validate_content_locks_for
+from .document_identity import ENTRY_FIELDS, is_object_id
 from .resume_delivery import canonical_content_sha256
 from .resume_diff import build_resume_diff
 from .resume_writing import translate
@@ -169,6 +171,7 @@ async def build_translation_candidate(
         else:
             _write_path(candidate, path, translated)
     blocked.extend(_fact_lock_blocked(db, variant, candidate))
+    blocked.extend(_restore_locked_entries(variant, candidate))
     for path in blocked:
         original_value = _read_path(original, path)
         if isinstance(original_value, str):
@@ -200,10 +203,57 @@ def _fact_lock_blocked(db: Session, variant: ResumeVariant, candidate: dict[str,
     return [item.path for item in violations]
 
 
+def _restore_locked_entries(
+    variant: ResumeVariant, candidate: dict[str, Any]
+) -> list[str]:
+    """正文锁在候选里也不展示改动：锁定条目整条回填原文，并记入 blocked_fields。
+
+    基准是**变体自己的旧内容**（候选与采纳都写变体），不能用当前简历的 lock 标记：
+    变体是独立表达对象，母版的锁/未锁状态与它无关。
+    """
+    old_content = variant.content or {}
+    blocked: list[str] = []
+    for field in ENTRY_FIELDS:
+        old_entries = old_content.get(field) or []
+        new_entries = candidate.get(field)
+        if not isinstance(old_entries, list) or not isinstance(new_entries, list):
+            continue
+        for index, old_entry in enumerate(old_entries):
+            if not isinstance(old_entry, dict) or not old_entry.get("lock_content"):
+                continue
+            target_index: int | None = None
+            object_id = old_entry.get("id")
+            if is_object_id(object_id):
+                for candidate_index, entry in enumerate(new_entries):
+                    if isinstance(entry, dict) and entry.get("id") == object_id:
+                        target_index = candidate_index
+                        break
+            if target_index is None and index < len(new_entries):
+                candidate_entry = new_entries[index]
+                other_id = candidate_entry.get("id") if isinstance(candidate_entry, dict) else None
+                same_object = not (
+                    is_object_id(object_id) and is_object_id(other_id) and other_id != object_id
+                )
+                if same_object:
+                    target_index = index
+            if target_index is None:
+                continue
+            if entry_content_payload(old_entry) != entry_content_payload(
+                new_entries[target_index]
+            ):
+                blocked.append(f"{field}.{target_index}")
+            new_entries[target_index] = copy.deepcopy(old_entry)
+    return blocked
+
+
 def adopt_translation(
     db: Session, variant: ResumeVariant, items: list[dict[str, str]]
 ) -> tuple[ResumeVariant, list[str]]:
-    """逐项采纳：只写列出的路径；任何一条不合法/触发事实锁 → 整批不落库。"""
+    """逐项采纳：只写列出的路径；任何一条不合法/触发事实锁/正文锁 → 整批不落库。
+
+    锁校验的两个基准必须分开：事实锁挂在当前简历上（按路径比对锁定值），正文锁挂在
+    **变体自己的旧内容**上（变体是独立表达对象，母版的 lock_content 标记与它无关）。
+    """
     content = copy.deepcopy(variant.content or {})
     applied: list[str] = []
     for item in items:
@@ -217,11 +267,12 @@ def adopt_translation(
         if not _write_path(content, path, text.strip()):
             raise BilingualError(f"采纳路径写入失败：{path}")
         applied.append(path)
+    violations = validate_content_locks_for(variant.content or {}, content)
     record = db.get(ResumeRecord, variant.resume_id) if variant.resume_id else None
     if record is not None:
-        violations = fact_locks.validate_fact_locks(db, record, content)
-        if violations:
-            raise fact_locks.FactLockError(violations)
+        violations = fact_locks.validate_fact_locks(db, record, content) + violations
+    if violations:
+        raise fact_locks.FactLockError(violations)
     variant.content = content
     variant.content_sha256 = canonical_content_sha256(content)
     db.commit()

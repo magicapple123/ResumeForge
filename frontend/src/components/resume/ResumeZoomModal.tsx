@@ -31,6 +31,7 @@ import { useWorkbenchPreflight } from "./useWorkbenchPreflight";
 import { useWorkbenchProview } from "./useWorkbenchProview";
 import { useWorkbenchServerSync } from "./useWorkbenchServerSync";
 import { useWorkbenchOverallSave } from "./useWorkbenchOverallSave";
+import { useOpenLayoutBaseline } from "../../features/resume-document/useOpenLayoutBaseline";
 import type { RichTextEditAdapter } from "./ResumeWorkbenchLiveCanvas";
 
 interface Props {
@@ -192,19 +193,8 @@ export default function ResumeZoomModal({
   // 中栏脏值同时上报给宿主（底部「手动调整」要用），这里再留一份，好让关闭前的那次
   // 判断（Esc / × / 遮罩）自己就能决定"要不要问"。
   const [editorDirty, setEditorDirty] = useState(false);
-  /**
-   * 「刚打开这份简历时」的版式快照：左栏每个参数右侧那颗 ↺ 恢复的就是它。
-   *
-   * 与"随模板"（删掉覆盖、回到模板默认）是**两件事**：用户要的是"我刚才调坏了，
-   * 退回我进来时看到的那个样子"。所以这里存着一份完整 layout，且在每次打开时重取
-   * （保存后再打开，基线就是保存后的那一版）。
-   */
-  const [baseline, setBaseline] = useState<ResumeLayout | null>(layout ?? null);
-  const [prevOpenState, setPrevOpenState] = useState(open);
-  if (prevOpenState !== open) {
-    setPrevOpenState(open);
-    if (open) setBaseline(layout ?? null);
-  }
+  // 「刚打开这份简历时」的版式快照：左栏每个参数右侧那颗 ↺ 恢复的就是它（实现见 hook）。
+  const baseline = useOpenLayoutBaseline(open, layout);
   // 保存中：顶部「保存修改」上 loading，同一时刻「取消修改」禁用（避免保存还没落库就先清掉）。
   const [editorSaving, setEditorSaving] = useState(false);
   // 顶部动作条上的两颗按钮靠这个句柄打到中栏的状态机上（表单实例、脏值、内联确认都在那一层）。
@@ -257,6 +247,8 @@ export default function ResumeZoomModal({
     onApplyLayout,
     editorRef,
     onRemapPaths,
+    overlays: documentPipeline?.overlays,
+    onOverlaysChange: documentPipeline?.onOverlaysChange,
   });
   // W15 专业视图：命令 / 工作区预设 / 照片入口；裁剪落点复用 history.recordLayout（进历史 + 既有保存链路）。
   const { proview, panels } = useWorkbenchProview({
@@ -278,7 +270,7 @@ export default function ResumeZoomModal({
   const handleOutlineCommand = useWorkbenchOutline({
     editorRef,
     onRemapPaths,
-    commit: history.commitContent,
+    commit: (next, remap) => history.commitContent(next, undefined, remap),
   });
   // 三档形态（方案 §4.5.6）：three=参数+内容常驻；two=参数常驻+内容进抽屉；one=画布独占+两个抽屉。
   // jsdom 的 `matchMedia` 桩恒 false ⇒ 三栏，既有断言的 DOM 一字不变。

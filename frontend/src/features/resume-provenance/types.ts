@@ -96,7 +96,7 @@ export interface SourceChainOut {
   sources: SourceOut[];
 }
 
-/** 建立/刷新关联的请求体（POST /provenance/resumes/{id}/links）。 */
+/** 建立/刷新关联的请求体（旧契约 POST /provenance/resumes/{id}/links，保留兼容）。 */
 export interface LinkCreateRequest {
   source: {
     kind: SourceKind;
@@ -109,6 +109,95 @@ export interface LinkCreateRequest {
   point_id?: string | null;
   path?: string | null;
   field?: string | null;
+}
+
+// ===== W12 冻结契约（be-prov）：来源列表 + 关联 + 采纳写正文 =====
+
+/** 数据集级来源（GET /api/provenance/sources 的列表项，be-prov 最终实现）。 */
+export interface ProvenanceSourceBriefOut {
+  id: number;
+  kind: string;
+  external_ref: string | null;
+  title: string;
+  current_fingerprint: string;
+  metadata: Record<string, unknown>;
+  latest_revision_no: number;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+/** 来源修订列表项（GET /sources/{id}/revisions；只有展示信息，无正文/指纹）。 */
+export interface SourceRevisionItemOut {
+  id: number;
+  revision_no: number;
+  summary: string;
+  captured_at: string | null;
+}
+
+export interface SourceRevisionsOut {
+  source_id: number;
+  revisions: SourceRevisionItemOut[];
+}
+
+/**
+ * GET /sources/{id}/revision-text：来源修订原文（只读，供 adopt 预填）。
+ * resolvable=false 表示这条来源没有可读取的正文（如手工来源），reason 说明原因。
+ */
+export interface RevisionTextViewOut {
+  source_id: number;
+  kind: string;
+  external_ref: string | null;
+  /** 历史修订可能没有 revision_no（不可解析时）。 */
+  revision_no: number | null;
+  text: string;
+  fingerprint: string;
+  resolvable: boolean;
+  /** 原文是否是算指纹用的那份（false 时界面提示核对）。 */
+  fingerprint_matched: boolean;
+  is_latest: boolean;
+  /** 稳定码：manual_source_has_no_body / external_ref_unresolvable / ... */
+  reason: string;
+}
+
+/** POST /sources 的响应（手工来源：来源 + 首条修订）。 */
+export interface ManualSourceOut {
+  id: number;
+  kind: string;
+  title: string;
+  revision: SourceRevisionItemOut;
+}
+
+export interface ProvenanceSourceListOut {
+  items: ProvenanceSourceBriefOut[];
+  total: number;
+}
+
+/** POST /api/provenance/links（新契约）：只引用已有 source_id，不 upsert。 */
+export interface SourceLinkCreateRequest {
+  resume_id: number;
+  source_id: number;
+  source_revision_id?: number | null;
+  object_id?: string | null;
+  point_id?: string | null;
+  path?: string | null;
+  field?: string | null;
+}
+
+/** POST /api/provenance/links/{link_id}/adopt：把来源新文本写回一个块。 */
+export interface AdoptLinkRequest {
+  text: string;
+  expected_revision?: number;
+  source_revision_id?: number | null;
+  path?: string | null;
+}
+
+export interface AdoptLinkOut {
+  resume_id: number;
+  revision: number;
+  content: Record<string, unknown>;
+  applied_path: string;
+  link: BlockLinkOut;
+  source_revision_no: number;
 }
 
 // ===== 事实锁 =====
@@ -177,6 +266,8 @@ export interface UsageBucketOut {
   total_tokens: number | null;
   duration_ms: number | null;
   unknown_token_calls: number;
+  /** R04：按 finish_reason 的调用计数（be-prov 契约，逐桶下发）。 */
+  finish_reasons?: Record<string, number>;
 }
 
 export interface UsageCostOut {
@@ -195,6 +286,39 @@ export interface UsageSummaryOut {
   totals: UsageBucketOut;
   unknown_token_records: number;
   cost: UsageCostOut;
+}
+
+/** GET|PUT /api/usage/pricing 的写入形状（两项单价必须同时给或同时清空）。 */
+export interface UsagePricingIn {
+  input_per_1k: number | null;
+  output_per_1k: number | null;
+  currency: string;
+}
+
+/** GET|PUT /api/usage/pricing：当前生效的单价配置（configured=false = 未配置）。 */
+export interface UsagePricingOut extends UsagePricingIn {
+  configured?: boolean;
+  /** settings = 用户设置保存的值；environment = 环境变量兜底。 */
+  source?: string;
+}
+
+/** GET /api/usage/records 的单条记录（含 finish_reason，无正文）。 */
+export interface UsageRecordOut {
+  id: number;
+  task: string;
+  model: string;
+  finish_reason: string;
+  prompt_tokens: number | null;
+  completion_tokens: number | null;
+  total_tokens: number | null;
+  duration_ms: number | null;
+  retries: number;
+  created_at: string | null;
+}
+
+export interface UsageRecordListOut {
+  items: UsageRecordOut[];
+  count: number;
 }
 
 // ===== 外发预览（R04） =====

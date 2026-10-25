@@ -9,9 +9,9 @@ import SourceImpactPanel from "./SourceImpactPanel";
 
 const apiMocks = vi.hoisted(() => ({
   fetchSourceImpact: vi.fn(),
-  fetchSource: vi.fn(),
-  createBlockLink: vi.fn(),
+  adoptSourceLink: vi.fn(),
   deleteBlockLink: vi.fn(),
+  fetchRevisionText: vi.fn(),
 }));
 vi.mock("../../../features/resume-provenance/api", () => apiMocks);
 
@@ -41,17 +41,22 @@ const IMPACT = {
 
 beforeEach(() => {
   apiMocks.fetchSourceImpact.mockResolvedValue(IMPACT);
-  apiMocks.fetchSource.mockResolvedValue({
-    id: 9,
-    kind: "claim",
-    external_ref: "claim:12",
-    title: "事实台账·云商科技",
-    current_fingerprint: "fp-2",
-    latest_revision_no: 2,
-    revisions: [],
-    blocks: [],
+  apiMocks.fetchRevisionText.mockResolvedValue({
+    source_id: 9,
+    revision_no: 2,
+    text: "",
+    fingerprint: "fp-2",
+    resolvable: false,
+    reason: "manual source has no body",
   });
-  apiMocks.createBlockLink.mockResolvedValue({});
+  apiMocks.adoptSourceLink.mockResolvedValue({
+    resume_id: 5,
+    revision: 6,
+    content: {},
+    applied_path: "experience.0.company",
+    link: {},
+    source_revision_no: 2,
+  });
   apiMocks.deleteBlockLink.mockResolvedValue(undefined);
 });
 afterEach(() => {
@@ -76,17 +81,21 @@ describe("SourceImpactPanel", () => {
     expect(apiMocks.fetchSourceImpact).toHaveBeenCalledWith(9);
   });
 
-  it("采纳最新：用来源描述重链到最新修订（path/object_id 原样带上），并回调宿主", async () => {
+  it("采纳：先粘贴新文本并确认，再写回这一个块并回调宿主", async () => {
     const { onAdopted } = renderPanel();
     await screen.findByText("Backend Engineer Resume");
     fireEvent.click(screen.getByRole("button", { name: pt("provenance.impact.adopt") }));
-    await waitFor(() => expect(apiMocks.createBlockLink).toHaveBeenCalledTimes(1));
-    expect(apiMocks.createBlockLink.mock.calls[0][0]).toBe(5);
-    expect(apiMocks.createBlockLink.mock.calls[0][1]).toMatchObject({
+    expect(await screen.findByText(pt("provenance.adopt.title"))).toBeTruthy();
+    expect(apiMocks.adoptSourceLink).not.toHaveBeenCalled();
+    fireEvent.change(screen.getByLabelText(pt("provenance.adopt.text")), {
+      target: { value: "Cloud Commerce Ltd" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: pt("provenance.adopt.submit") }));
+    await waitFor(() => expect(apiMocks.adoptSourceLink).toHaveBeenCalledTimes(1));
+    expect(apiMocks.adoptSourceLink.mock.calls[0][0]).toBe(71);
+    expect(apiMocks.adoptSourceLink.mock.calls[0][1]).toMatchObject({
+      text: "Cloud Commerce Ltd",
       path: "experience.0.company",
-      object_id: "exp_1",
-      field: "company",
-      source: { kind: "claim", external_ref: "claim:12" },
     });
     await waitFor(() => expect(onAdopted).toHaveBeenCalledWith(["experience.0.company"]));
   });
@@ -95,9 +104,8 @@ describe("SourceImpactPanel", () => {
     renderPanel();
     await screen.findByText("Backend Engineer Resume");
     fireEvent.click(screen.getByRole("button", { name: pt("provenance.impact.keep") }));
-    expect(apiMocks.createBlockLink).not.toHaveBeenCalled();
+    expect(apiMocks.adoptSourceLink).not.toHaveBeenCalled();
     expect(apiMocks.deleteBlockLink).not.toHaveBeenCalled();
-    expect(apiMocks.fetchSource).not.toHaveBeenCalled();
   });
 
   it("解除关联：调用 deleteBlockLink 后重新拉影响面", async () => {
@@ -108,14 +116,18 @@ describe("SourceImpactPanel", () => {
     await waitFor(() => expect(apiMocks.fetchSourceImpact).toHaveBeenCalledTimes(2));
   });
 
-  it("采纳失败（409 版本冲突）：提示刷新后重试，不假装成功", async () => {
-    apiMocks.createBlockLink.mockRejectedValue(
-      new ApiError("conflict", 409, { businessCode: "resume_revision_conflict" }),
+  it("采纳失败（来源又更新）：提示先刷新，不假装成功", async () => {
+    apiMocks.adoptSourceLink.mockRejectedValue(
+      new ApiError("stale", 409, { businessCode: "source_revision_stale" }),
     );
     const { onAdopted } = renderPanel();
     await screen.findByText("Backend Engineer Resume");
     fireEvent.click(screen.getByRole("button", { name: pt("provenance.impact.adopt") }));
-    expect(await screen.findByText(pt("provenance.impact.revisionConflict"))).toBeTruthy();
+    fireEvent.change(await screen.findByLabelText(pt("provenance.adopt.text")), {
+      target: { value: "new text" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: pt("provenance.adopt.submit") }));
+    expect(await screen.findByText(pt("provenance.adopt.stale"))).toBeTruthy();
     expect(onAdopted).not.toHaveBeenCalled();
   });
 });

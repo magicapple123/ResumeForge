@@ -63,13 +63,27 @@ class PhraseListOut(BaseModel):
     next_cursor: int | None = None
 
 
+class PhraseUpdateOut(PhraseOut):
+    """PATCH 的响应：更新后的资产 + **更新前快照**（供「更新先看差异」本地对比）。
+
+    差异由前端算（文本/标签），服务端只保证"旧值和新值同时可拿到"，不替用户决定
+    哪一版更好；previous=null 表示更新前记录不可读（正常路径不会出现）。
+    """
+
+    previous: PhraseOut | None = None
+
+
 class PhraseCollectRequest(BaseModel):
-    """从简历里选中的一句收藏成资产（path 是 data-resume-path）。"""
+    """从简历里选中的一句收藏成资产（path 是 data-resume-path）。
+
+    ``job_tags`` 可选：收藏时顺手打岗位/技能标签（W17 列表按 tag 过滤的数据来源）。
+    """
 
     model_config = ConfigDict(extra="forbid")
 
     resume_id: int = Field(ge=1)
     path: str = Field(min_length=1, max_length=256)
+    job_tags: list[str] = Field(default_factory=list, max_length=MAX_PHRASE_TAGS)
 
 
 class PhraseInsertRequest(BaseModel):

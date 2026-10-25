@@ -27,6 +27,11 @@ export interface OutlineCanvasHighlightOptions {
   container?: HTMLElement | null;
   /** 兼容传 ref 的宿主；容器晚于首次渲染就绪时会有界重试。 */
   containerRef?: RefObject<HTMLElement | null>;
+  /**
+   * 显式"定位"请求（D01）：只在用户按 Enter/点定位时把纸面对应元素滚进可视区；
+   * 普通选中变化只换高亮、不滚动画布（否则每点一行纸面就跳一下）。
+   */
+  reveal?: { path: string; nonce: number } | null;
 }
 
 /** 往一个 iframe 文档里写/更新高亮样式；`css` 为空时删除。 */
@@ -65,12 +70,40 @@ export function clearOutlineHighlight(host: HTMLElement | null | undefined): voi
   paintOutlineHighlight(host, "");
 }
 
+/**
+ * 把纸面上某个 `data-resume-path` 滚进可视区（D01 显式定位用）。
+ *
+ * 精确路径优先，匹配不到时退到"前缀"（条目级定位：整条内容都在可视区附近）。返回是否
+ * 找到了元素——找不到不是错误（预览还没渲染这一版），调用方不弹失败提示。
+ */
+export function revealPathInDocument(doc: Document | null | undefined, path: string): boolean {
+  if (!doc || !path) return false;
+  const safe = path.replace(/"/g, "");
+  const node =
+    doc.querySelector<HTMLElement>(`[data-resume-path="${safe}"]`) ??
+    doc.querySelector<HTMLElement>(`[data-resume-path^="${safe}."]`);
+  if (!node || typeof node.scrollIntoView !== "function") return false;
+  node.scrollIntoView({ block: "center", behavior: "smooth" });
+  return true;
+}
+
+/** 把定位请求应用到容器内所有 iframe（返回是否至少一帧命中）。 */
+export function revealPathInHost(host: HTMLElement | null | undefined, path: string): boolean {
+  if (!host) return false;
+  let revealed = false;
+  for (const frame of framesOf(host)) {
+    if (revealPathInDocument(frame.contentDocument, path)) revealed = true;
+  }
+  return revealed;
+}
+
 const RETRY_LIMIT = 60;
 
 export function useOutlineCanvasHighlight({
   targets,
   container,
   containerRef,
+  reveal,
 }: OutlineCanvasHighlightOptions): void {
   const css = useMemo(() => buildOutlineHighlightCss(targets), [targets]);
 
@@ -113,4 +146,13 @@ export function useOutlineCanvasHighlight({
       clearOutlineHighlight(resolve());
     };
   }, [container, containerRef, css]);
+
+  // 显式定位：只跟 nonce 走（同一路径再按一次 Enter 也要能重新滚回来）。
+  const revealNonce = reveal?.nonce ?? 0;
+  const revealPath = reveal?.path ?? "";
+  useEffect(() => {
+    if (!revealNonce || !revealPath) return;
+    const host = container ?? containerRef?.current ?? null;
+    revealPathInHost(host, revealPath);
+  }, [container, containerRef, revealNonce, revealPath]);
 }

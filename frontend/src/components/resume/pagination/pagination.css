@@ -1,0 +1,95 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/* 「页缩略图」（W08）：实际页数 / 末页占用 / 溢出与手动分页位置。
+ * 全部挂在自定义类名下，颜色只用 --rf-* 语义 token（深色主题由 dark-tokens 提供同义值）。 */
+
+.resume-page-thumbnails {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border: 1px solid var(--rf-border-subtle);
+  border-radius: var(--rf-radius-control);
+  padding: 8px;
+}
+
+.resume-page-thumbnails-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.resume-page-thumbnails-title {
+  font-weight: 600;
+  font-size: 12px;
+}
+
+.resume-page-thumbnails-summary,
+.resume-page-thumbnails-hint {
+  margin: 0;
+  color: var(--rf-text-tertiary);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.resume-page-thumbnails-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.resume-page-thumbnail {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 64px;
+  border: 1px solid var(--rf-border);
+  border-radius: 6px;
+  padding: 4px 6px;
+  background: var(--rf-surface-alt);
+}
+
+.resume-page-thumbnail.is-last {
+  border-color: var(--rf-border-strong);
+}
+
+.resume-page-thumbnail.is-truncated {
+  border-color: var(--rf-warning-border);
+  background: var(--rf-warning-bg);
+}
+
+.resume-page-thumbnail-index {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.resume-page-thumbnail-badge {
+  border: 1px solid var(--rf-border);
+  border-radius: 999px;
+  padding: 0 6px;
+  color: var(--rf-text-secondary);
+  font-size: 11px;
+  line-height: 16px;
+  white-space: nowrap;
+}
+
+.resume-page-thumbnail-badge.is-warning {
+  border-color: var(--rf-warning-border);
+  color: var(--rf-warning-text);
+}
+
+.resume-page-thumbnail-fill {
+  color: var(--rf-text-secondary);
+  font-size: 11px;
+}
+
+.resume-page-thumbnail-issue {
+  color: var(--rf-text-secondary);
+  font-size: 11px;
+}
+
+.resume-page-thumbnail-issue.is-blocker {
+  color: var(--rf-warning-text);
+}

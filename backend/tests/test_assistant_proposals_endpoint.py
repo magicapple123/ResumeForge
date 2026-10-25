@@ -12,6 +12,7 @@
 - 冻结工厂从租约身份派生：切换尝试期间写入仍落原库。
 """
 
+import time
 from datetime import datetime
 
 from app import database
@@ -51,6 +52,21 @@ def _create_dataset(client, name: str) -> str:
 
 def _activate(client, dataset_id: str):
     return client.post(f"/api/settings/datasets/{dataset_id}/activate")
+
+
+def _activate_after_drain(client, dataset_id: str):
+    """切换数据集；若 10s 排空窗口内仍被"有任务在跑"挡回，则短暂等待后重试。
+
+    产品语义是 fail-closed：排空超时返回 409 让用户重试。coverage/慢盘下前一步的
+    后台线程可能晚于 10s 才归还连接，这不改变本用例要验证的"数据集代次语义"，
+    因此这里做有界重试——最终仍必须 200，超时仍会失败。
+    """
+    deadline = time.monotonic() + 30
+    while True:
+        response = _activate(client, dataset_id)
+        if response.status_code != 409 or time.monotonic() >= deadline:
+            return response
+        time.sleep(0.2)
 
 
 # ===== PR-02：真实 POST 批准路径 =====
@@ -154,13 +170,13 @@ def test_stale_proposal_after_a_b_a_switch_is_rejected(client):
     # 在 A（主数据）上创建提案。
     proposal_on_a = _proposal()
     # 切到 B 再创建一条针对 B 的提案。（失败带响应体：detail 点名残留租约 owner）
-    activate_b_first = _activate(client, other)
+    activate_b_first = _activate_after_drain(client, other)
     assert activate_b_first.status_code == 200, activate_b_first.text
     proposal_on_b = _proposal()
     # A → B → A（主数据）→ B：dataset_id 回到 B，代次已前进了两步。
-    activate_main = _activate(client, "main")
+    activate_main = _activate_after_drain(client, "main")
     assert activate_main.status_code == 200, activate_main.text
-    activate_back = _activate(client, other)
+    activate_back = _activate_after_drain(client, other)
     # 失败时带响应体：detail 里点名残留的租约 owner，便于定位排空窗的阻塞者。
     assert activate_back.status_code == 200, activate_back.text
 

@@ -28,6 +28,7 @@ from jinja2 import Environment, FileSystemLoader, StrictUndefined, select_autoes
 from ...schemas.job import JobOut
 from ...schemas.resume import ResumeContent
 from ..llm.base import BaseLLMProvider, LLMError
+from .document_identity import ENTRY_FIELDS
 from .resume_content import coerce_resume, extract_json
 
 PROMPTS_DIR = Path(__file__).resolve().parent.parent.parent / "prompts"
@@ -39,6 +40,60 @@ MAX_RESUME_CHARS = 12_000
 _IDENTITY_FIELDS = ("name", "photo", "gender", "birth_year", "phone", "email", "city")
 
 logger = logging.getLogger(__name__)
+
+# 栏目名（只用于提示词里点名"哪一条锁了"，不进任何数据结构）。
+_SECTION_LABELS = {
+    "education": "教育经历",
+    "experience": "实习/工作经历",
+    "campus_experience": "校园经历",
+    "projects": "项目经历",
+    "publications": "论文",
+    "research_projects": "科研项目",
+    "patents": "专利",
+    "skills": "专业技能",
+    "awards": "荣誉奖项",
+}
+_ENTRY_LABEL_KEYS = (
+    "company",
+    "school",
+    "organization",
+    "title",
+    "name",
+    "role",
+    "position",
+)
+
+
+def locked_entry_locators(resume: ResumeContent) -> list[dict[str, str]]:
+    """把 ``lock_content=true`` 的条目渲染成提示词里的"不得改动"清单。
+
+    只给栏目名 + 条目标题/定位符：锁标记是服务端状态，模型只需要知道"哪几条不能动"；
+    这些标题本来就在简历 JSON 里，不额外暴露任何正文。
+    """
+    data = resume.model_dump()
+    items: list[dict[str, str]] = []
+    for field in ENTRY_FIELDS:
+        entries = data.get(field) or []
+        if not isinstance(entries, list):
+            continue
+        for index, entry in enumerate(entries):
+            if not isinstance(entry, dict) or not entry.get("lock_content"):
+                continue
+            label = ""
+            for key in _ENTRY_LABEL_KEYS:
+                value = entry.get(key)
+                if isinstance(value, str) and value.strip():
+                    label = value.strip()[:60]
+                    break
+            items.append(
+                {
+                    "section": _SECTION_LABELS.get(field, field),
+                    "label": label or f"第 {index + 1} 条",
+                    "locator": f"{field}.{index}",
+                }
+            )
+    return items
+
 
 # StrictUndefined：模板变量缺失时立即报错，而不是静默渲染成空（与生成器同一取舍）。
 _ENV = Environment(
@@ -79,6 +134,7 @@ async def revise_resume(
             job_title=job.title if job else "",
             company=(job.company or "-") if job else "",
             resume_json=_resume_prompt_json(resume),
+            locked_entries=locked_entry_locators(resume),
             full_regenerate=full_regenerate,
             instructions=trimmed,
         )
@@ -128,4 +184,4 @@ async def revise_resume(
     return revised
 
 
-__all__ = ["MAX_INSTRUCTION_CHARS", "revise_resume"]
+__all__ = ["MAX_INSTRUCTION_CHARS", "locked_entry_locators", "revise_resume"]

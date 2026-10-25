@@ -65,6 +65,10 @@ class ExportBundleRequest(BaseModel):
     format_config: dict[str, Any] | None = None
     language: ResumeLanguage | None = None
     allow_incomplete: bool = False
+    # W16 岗位变体（2026-10-25）：按变体的内容 + 版式快照做整套导出；解析契约与
+    # `ExportRequest.variant_id` 相同（`document_variants.resolve_variant_export`），
+    # 解析失败/不属于本简历 → 404。None = 沿用当前记录（旧调用方零变化）。
+    variant_id: int | None = Field(default=None, ge=1)
 
 
 class ExportArtifactOut(BaseModel):

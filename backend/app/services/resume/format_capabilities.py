@@ -11,7 +11,11 @@
 
 * PDF 只有 regular + bold 两个字形（`pdf_exporter/render.py` 的 `_register_fonts`），
   没有斜体文件 → `italic` 只能标 `approx`（不倾斜）；链接不可点击 → `link_clickable`
-  标 `unsupported`，替代是纸面上可见的 URL 文本。
+  标 `unsupported`，替代是纸面上可见的 URL 文本（W07 协议 v2：`[label](url)` 画成
+  "label (URL)" 可见文本，并且禁用 fpdf2 markdown 的自动链接，见
+  `pdf_exporter/rich_text.py`）。
+* Word 的斜体是真斜体（`run.font.italic`）；链接同样画成 "label (URL)" 可见文本，
+  不创建 OOXML 超链接关系，所以 `link_clickable` 维持 `approx`（可见 URL 文本替代点击）。
 * 手动分页/续页信息（W08）与科研三栏目/长 CV（W14）均已落地；后续新增能力项仍必须
   在完成时同步改这里（任务书里已写成完成条件）。
 * Word 的条目间距/正文色由 `docx_blocks` 自己的常量表达（与 HTML/PDF 同源化是 W05 的范围）。
@@ -86,7 +90,7 @@ CAPABILITIES: dict[str, dict[str, CapabilityLevel]] = {
     "pdf": {
         "bold": "supported",
         "italic": "approx",  # 无斜体字形：不倾斜（D6）
-        "link_clickable": "unsupported",  # 纸面可见 URL 文本替代
+        "link_clickable": "unsupported",  # W07：画成 "label (URL)" 可见文本，不可点击
         "custom_font": "supported",
         "section_order": "supported",
         "hidden_entries": "supported",
@@ -102,7 +106,7 @@ CAPABILITIES: dict[str, dict[str, CapabilityLevel]] = {
     "docx": {
         "bold": "supported",
         "italic": "supported",
-        "link_clickable": "approx",  # 关系链接可见，点击行为依赖查看器
+        "link_clickable": "approx",  # W07：可见 "label (URL)" 文本，不承诺点击
         "custom_font": "approx",  # 写入所选字体的真实族名，但 python-docx 不嵌入字体（查看端替代）
         "section_order": "supported",
         "hidden_entries": "supported",

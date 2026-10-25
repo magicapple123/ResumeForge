@@ -312,3 +312,52 @@
   color: var(--rf-text-body);
   font-size: 12px;
 }
+
+/* ── D01 大纲搜索 / 命中高亮 / 恢复滚动位置 ────────────────────────
+ * 命中底色走 --rf-warning-*（与全站提示同一套 token，深浅主题都不另造颜色）；
+ * 图标动作按钮在行尾，视觉上弱化为 secondary，但仍是可聚焦的 antd Button。
+ */
+.resume-outline-search {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 6px;
+  padding: 4px 8px 6px;
+  border-bottom: 1px solid var(--rf-border-subtle);
+}
+
+.resume-outline-search .ant-input-affix-wrapper {
+  flex: 1 1 160px;
+  min-width: 120px;
+}
+
+.resume-outline-search-status,
+.resume-outline-search-hint {
+  font-size: 12px;
+  color: var(--rf-text-muted);
+  white-space: nowrap;
+}
+
+.resume-outline-search-nav {
+  flex: 0 0 auto;
+}
+
+.resume-outline-hit {
+  padding: 0 1px;
+  border-radius: 2px;
+  background: var(--rf-warning-bg);
+  color: inherit;
+}
+
+.resume-outline-row-action {
+  flex: 0 0 auto;
+  color: var(--rf-text-muted);
+}
+
+.resume-outline-row-action:hover {
+  color: var(--rf-text);
+}
+
+.resume-outline-row.is-point.is-hidden .resume-outline-point-text {
+  opacity: 0.65;
+}

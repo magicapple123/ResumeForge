@@ -80,6 +80,16 @@ const versions = {
   "versions.variants.syncedPaths": "已写入 {count} 条路径",
   "versions.variants.group.other": "其它内容",
 
+  // ── 导出弹窗的变体选项（fe-delivery 只读消费 buildVariantExportOptions） ──
+  "versions.variants.exportOption": "{name}{job}{layout}",
+  "versions.variants.exportOption.job": " · {job}",
+  "versions.variants.exportOption.layout": " · 独立排版",
+  "versions.variants.exportOption.inherited": " · 继承排版",
+  "versions.variants.hasLayout": "独立排版",
+  "versions.variants.exportSelect": "导出版本",
+  "versions.variants.exportSelectHint": "选中的版本会连同它自己的排版一起导出",
+  "versions.variants.exportCurrent": "当前简历（不选版本）",
+
   // ── 通用 ───────────────────────────────────────────────────
   "versions.action.cancel": "取消",
   /** 动作条入口按钮（打开「版本与变体」）。 */

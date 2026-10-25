@@ -44,6 +44,8 @@ export interface PhraseLibraryPanelProps {
   onInsert?: (phrase: ResumePhrase) => void;
   onRequestDelete?: (phrase: ResumePhrase) => void;
   onCopy?: (phrase: ResumePhrase) => void;
+  /** 编辑这条资产（正文/类型/语言/岗位标签）；不传 = 不渲染入口。 */
+  onEdit?: (phrase: ResumePhrase) => void;
   /** 把"当前选中的要点"收藏成资产；不传 = 不渲染这个入口。 */
   onCollectCurrent?: () => void;
   initialFilter?: Partial<PhraseFilterState>;
@@ -60,6 +62,7 @@ export default function PhraseLibraryPanel({
   onInsert,
   onRequestDelete,
   onCopy,
+  onEdit,
   onCollectCurrent,
   initialFilter,
   className,
@@ -145,6 +148,7 @@ export default function PhraseLibraryPanel({
                     onInsert={onInsert}
                     onRequestDelete={onRequestDelete}
                     onCopy={onCopy}
+                    onEdit={onEdit}
                   />
                 ))}
               </Space>

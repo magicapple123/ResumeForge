@@ -114,6 +114,12 @@ def save_artifact(
 
 
 def delete_artifact(db: Session, resume_id: int, artifact_id: int) -> bool:
+    """删除一条归档：先删行，**最后一条引用该文件时才删盘**。
+
+    磁盘名是「sha256 前缀 + 文件名」（内容寻址）：同一份字节的两次导出会指向同一个
+    文件。若删一条行就 unlink，另一条仍存在的归档会变成"有行无文件"的悬空记录——
+    用户看到的列表还在，点开却 404。所以只有盘上文件不再被任何行引用时才真正删除。
+    """
     artifact = db.get(ResumeExportArtifact, artifact_id)
     if artifact is None or artifact.resume_id != resume_id:
         return False
@@ -121,8 +127,14 @@ def delete_artifact(db: Session, resume_id: int, artifact_id: int) -> bool:
     target = (root / artifact.disk_name).resolve()
     if root not in target.parents:
         raise ValueError("归档路径不安全")
-    target.unlink(missing_ok=True)
+    disk_name = artifact.disk_name
     db.delete(artifact)
+    db.flush()
+    still_referenced = db.execute(
+        select(ResumeExportArtifact.id).where(ResumeExportArtifact.disk_name == disk_name)
+    ).first()
+    if still_referenced is None:
+        target.unlink(missing_ok=True)
     db.commit()
     return True
 

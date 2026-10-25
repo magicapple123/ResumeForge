@@ -262,7 +262,9 @@ def _collect_target(record: ResumeRecord, path: str) -> tuple[str, str | None, s
     return value.strip(), object_id, point_id, kind
 
 
-def collect_phrase(db: Session, *, resume_id: int, path: str) -> ResumePhrase:
+def collect_phrase(
+    db: Session, *, resume_id: int, path: str, job_tags: list[str] | None = None
+) -> ResumePhrase:
     record = db.get(ResumeRecord, resume_id)
     if record is None or record.deleted_at is not None:
         raise LookupError("简历记录不存在或已被删除")
@@ -271,6 +273,7 @@ def collect_phrase(db: Session, *, resume_id: int, path: str) -> ResumePhrase:
         db,
         text=text,
         kind=kind,
+        job_tags=job_tags,
         source_resume_id=record.id,
         source_object_id=object_id,
     )

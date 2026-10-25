@@ -200,6 +200,28 @@ describe("BackupStatusCard 快照状态", () => {
     expect(screen.queryByText("受保护")).toBeNull();
   });
 
+  it("部署配置禁用自动备份：显示禁用态、说明由部署配置控制，间隔选择不可点", async () => {
+    getBackupStatus.mockResolvedValue(
+      status({
+        protected: false,
+        auto_backup_enabled: false,
+        disabled: true,
+        state: "disabled",
+        snapshot_count: 0,
+        snapshots: [],
+      }),
+    );
+    renderCard();
+    // i18n-ok: 本卡文案尚未迁 t()，与既有状态断言同批
+    await waitFor(() => expect(screen.getByText("自动备份已禁用")).toBeTruthy());
+    // 标签说明与禁用提示各出现一次（两个容器都写清了"由部署配置控制"）。
+    // i18n-ok: 本卡文案尚未迁 t()，与既有状态断言同批
+    expect(screen.getAllByText(/由部署配置控制/).length).toBeGreaterThan(0);
+    expect(screen.getByLabelText("自动备份间隔（天）")).toBeDisabled();
+    // i18n-ok: 同上
+    expect(screen.queryByText("受保护")).toBeNull();
+  });
+
   it("「无法确认」优先于「保护中断」：目录读不了时说不出到底发生了什么", async () => {
     getBackupStatus.mockResolvedValue(
       status({

@@ -8,6 +8,8 @@ import SettingsProvenanceSection from "./SettingsProvenanceSection";
 
 const apiMocks = vi.hoisted(() => ({
   fetchUsageSummary: vi.fn(),
+  fetchUsagePricing: vi.fn(),
+  saveUsagePricing: vi.fn(),
   previewOutbound: vi.fn(),
 }));
 vi.mock("../../features/resume-provenance/api", () => apiMocks);
@@ -34,6 +36,12 @@ const USAGE = {
 
 beforeEach(() => {
   apiMocks.fetchUsageSummary.mockResolvedValue(USAGE);
+  apiMocks.fetchUsagePricing.mockResolvedValue({
+    input_per_1k: null,
+    output_per_1k: null,
+    currency: "USD",
+  });
+  apiMocks.saveUsagePricing.mockImplementation((payload: unknown) => Promise.resolve(payload));
   apiMocks.previewOutbound.mockResolvedValue({
     target_service: "本地 Ollama",
     material_categories: ["简历正文"],
@@ -65,6 +73,28 @@ describe("SettingsProvenanceSection", () => {
     fireEvent.click(screen.getByRole("button", { name: pt("settings.provenance.loadUsage") }));
     await waitFor(() => expect(apiMocks.fetchUsageSummary).toHaveBeenCalledTimes(1));
     expect(await screen.findByText(pt("provenance.usage.title"))).toBeTruthy();
+  });
+
+  it("单价配置：保存后回显并调用 PUT /usage/pricing", async () => {
+    render(
+      <AntdApp>
+        <SettingsProvenanceSection targetService="本地 Ollama" />
+      </AntdApp>,
+    );
+    await waitFor(() => expect(apiMocks.fetchUsagePricing).toHaveBeenCalledTimes(1));
+    fireEvent.change(screen.getByLabelText(pt("settings.provenance.pricing.input")), {
+      target: { value: "1.5" },
+    });
+    fireEvent.change(screen.getByLabelText(pt("settings.provenance.pricing.output")), {
+      target: { value: "6" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: pt("settings.provenance.pricing.save") }));
+    await waitFor(() => expect(apiMocks.saveUsagePricing).toHaveBeenCalledTimes(1));
+    expect(apiMocks.saveUsagePricing.mock.calls[0][0]).toMatchObject({
+      input_per_1k: 1.5,
+      output_per_1k: 6,
+      currency: "USD",
+    });
   });
 
   it("外发预览用真实接口，带上目标服务与正文；正文不写任何存储", async () => {

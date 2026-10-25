@@ -305,7 +305,19 @@ export default function ResumesPage() {
 
   return (
     <div>
-      {archiveOpen && <DeliveryArchiveModal onClose={() => setArchiveOpen(false)} />}
+      {archiveOpen && (
+        <DeliveryArchiveModal
+          onClose={() => setArchiveOpen(false)}
+          // 深链 ?resume_id= / 刚打开的详情：直接展示这份简历的交付原件。
+          resumeId={previewId}
+          // 全局入口没有"当前简历"上下文：把当前页列表交给弹层，用户可在这里选任意
+          // 一份简历查看/删除归档的原件（W19 真实入口，不再只靠测试传 resumeId）。
+          resumeOptions={(data?.items ?? []).map((item) => ({
+            value: item.id,
+            label: item.title,
+          }))}
+        />
+      )}
       <ManualResumeModal
         job={null}
         open={manualOpen}

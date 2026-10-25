@@ -407,3 +407,50 @@ def test_classic_word_section_title_has_a_left_bar_and_no_fill():
     assert '<w:left w:val="single"' in xml
     # 竖条是"只画左边"：不连底边一起画，否则会变成一条下划线。
     assert "<w:bottom w:val" not in xml
+
+
+# ===== W08：孤行/寡行控制的 OOXML 落点 =====
+#
+# Word 没有 CSS 的 break-inside / break-after，对应的 OOXML 属性是 w:keepLines（整段不跨页）
+# 与 w:keepNext（跟随后续内容）。这里直接看 pPr 的子元素名，而不是只看"文档能打开"——
+# 少一个属性不会报错，只会在打印时把一条要点劈成两页。
+
+
+def _pPr_flags(paragraph) -> set[str]:
+    """段落属性里出现的 OOXML 标签名（不含命名空间）。"""
+    pPr = paragraph._p.find(qn("w:pPr"))
+    if pPr is None:
+        return set()
+    return {child.tag.split("}")[-1] for child in pPr}
+
+
+def test_docx_lands_keep_flags_for_titles_and_paragraphs():
+    from app.services.resume.resume_labels import section_titles
+
+    result = build_resume_docx(_resume(), template="classic", page_limit=1)
+    document = Document(BytesIO(result.content))
+    paragraphs = document.paragraphs
+
+    title_text = section_titles("zh-CN")["experience"]
+    title = next(paragraph for paragraph in paragraphs if paragraph.text == title_text)
+    assert "keepNext" in _pPr_flags(title), "板块标题必须跟随后续内容（w:keepNext）"
+
+    entry_head = next(paragraph for paragraph in paragraphs if "字节跳动" in paragraph.text)
+    assert "keepNext" in _pPr_flags(entry_head), "条目头必须跟着它的正文（w:keepNext）"
+
+    bullet = next(paragraph for paragraph in paragraphs if "实现检索接口" in paragraph.text)
+    assert "keepLines" in _pPr_flags(bullet), "一条要点不跨页（w:keepLines）"
+
+    summary = next(paragraph for paragraph in paragraphs if "负责后端服务" in paragraph.text)
+    assert "keepLines" in _pPr_flags(summary), "摘要段不跨页（w:keepLines）"
+
+
+def test_docx_keep_flags_are_not_written_for_plain_header_paragraphs():
+    """默认不写属性：页头的姓名段不该长出 keepNext/keepLines（旧产物不被动过）。"""
+    result = build_resume_docx(_resume(), template="classic", page_limit=1)
+    document = Document(BytesIO(result.content))
+    name = next(paragraph for paragraph in document.paragraphs if paragraph.text.startswith("张三"))
+
+    flags = _pPr_flags(name)
+    assert "keepNext" not in flags
+    assert "keepLines" not in flags

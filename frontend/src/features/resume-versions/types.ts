@@ -84,11 +84,17 @@ export interface VariantOut {
   synced_at: string | null;
   created_at: string | null;
   updated_at: string | null;
+  /** W16 语言标签（旧变体为空串；be-prov 契约）。 */
+  language?: string;
+  /** W16 是否有独立排版覆盖（0060，layout 非空）。 */
+  has_layout?: boolean;
 }
 
 export interface VariantDetailOut extends VariantOut {
   content: Record<string, unknown>;
   render_context: Record<string, unknown>;
+  /** W16 独立排版覆盖：null = 继承。 */
+  layout?: Record<string, unknown> | null;
 }
 
 export interface VariantListOut {
@@ -99,6 +105,10 @@ export interface VariantCreateRequest {
   name: string;
   job_id?: number | null;
   base_version_id?: number | null;
+  /** W16：语言标签（be-prov 契约）。 */
+  language?: string;
+  /** W16：派生时直接给独立排版覆盖（可选）。 */
+  layout?: Record<string, unknown> | null;
 }
 
 /** 选择性同步：只有列出的变体 + 列出的路径会被改。 */

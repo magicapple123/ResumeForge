@@ -73,6 +73,13 @@ export interface OutlineEntryRef {
   objectId: string;
 }
 
+/** 命令里指向一个要点（按 id + 它所在的数组字段，不按下标）。 */
+export interface OutlinePointRef {
+  /** 要点所在数组字段（`description` / `highlights` …）。 */
+  pointField: string;
+  pointId: string;
+}
+
 export type OutlineLockName = "content" | "layout";
 
 /**
@@ -92,7 +99,25 @@ export type OutlineCommand =
       toIndex: number;
     }
   | { type: "clone-entry"; field: EntryField; objectId: string }
+  | {
+      type: "clone-point";
+      field: EntryField;
+      objectId: string;
+      pointField: string;
+      pointId: string;
+    }
   | { type: "set-hidden"; entries: readonly OutlineEntryRef[]; hidden: boolean }
+  | {
+      /**
+       * 要点级显隐（W06 / `hidden_points`）：只在条目内按 point id 切换，不改条目本身的
+       * `hidden`。数组变空时**删键**（与条目级 hidden 同一口径：旧内容指纹不变）。
+       */
+      type: "set-hidden-points";
+      field: EntryField;
+      objectId: string;
+      points: readonly OutlinePointRef[];
+      hidden: boolean;
+    }
   | {
       type: "set-lock";
       field: EntryField;

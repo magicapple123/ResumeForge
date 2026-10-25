@@ -118,6 +118,12 @@ const preflight = {
   "preflight.issue.product_pdf_render_failed": "PDF 渲染失败",
   "preflight.issue.product_docx_render_failed": "Word 渲染失败",
   "preflight.issue.model_not_configured": "未配置模型",
+  /** R03 关键链接：格式非法（blocker）。 */
+  "preflight.issue.link_invalid": "链接格式有误",
+  /** R03 关键链接：协议不在白名单（blocker）。 */
+  "preflight.issue.link_scheme_unsupported": "链接协议不支持",
+  /** R03 导出脱敏状态：含联系方式但未开脱敏（verify，仅导出用途）。 */
+  "preflight.issue.contact_masking_off": "导出未脱敏",
 
   // ── 定位作用域 ─────────────────────────────────────────────
   "preflight.scope.document": "整份文档",

@@ -102,6 +102,30 @@ describe("mock 导出适配器", () => {
     ).toBeNull();
   });
 
+  it("checkExport 记录请求体；serverCheck=unavailable 时返回 null（feature-detect 回退）", async () => {
+    const api = createMockExportDeliveryApi({ serverCheck: "unavailable" });
+    const result = await api.checkExport(3, {
+      layout: { template: "classic", page_limit: 1 },
+      variant_id: 7,
+    });
+    expect(result).toBeNull();
+    expect(api.checkRequests[0]).toMatchObject({
+      layout: { template: "classic", page_limit: 1 },
+      variant_id: 7,
+    });
+  });
+
+  it("checkExport 的 serverCheck=error 会把真失败抛给调用方（不静默降级）", async () => {
+    const api = createMockExportDeliveryApi({ serverCheck: "error" });
+    await expect(api.checkExport(3, {})).rejects.toMatchObject({ status: 502 });
+  });
+
+  it("导出请求体记录 variant_id（W16 按变体导出）", async () => {
+    const api = createMockExportDeliveryApi();
+    await api.exportBundle(3, { formats: ["pdf"], variant_id: 11 });
+    expect(api.bundleRequests[0].variant_id).toBe(11);
+  });
+
   it("归档原件：archive_original=true 时列表多一条，可删除", async () => {
     const api = createMockExportDeliveryApi();
     await api.exportBundle(3, { formats: ["pdf"], archive_original: true });

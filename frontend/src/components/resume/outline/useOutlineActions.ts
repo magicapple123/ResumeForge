@@ -10,8 +10,12 @@
 import { useCallback } from "react";
 import { t } from "../../../i18n";
 import type { ResumeContent } from "../../../types/resume";
-import { BLOCKED_REASON_KEY, canCloneEntry } from "../../../features/resume-outline/commands";
-import type { OutlineEntry } from "../../../features/resume-outline/model";
+import {
+  BLOCKED_REASON_KEY,
+  canCloneEntry,
+  canClonePoint,
+} from "../../../features/resume-outline/commands";
+import type { OutlineEntry, OutlinePoint } from "../../../features/resume-outline/model";
 import type {
   OutlineBlockReason,
   OutlineCommand,
@@ -28,8 +32,12 @@ export interface OutlineActionsApi {
   dispatch: (command: OutlineCommand) => boolean;
   notifyBlocked: (reason: OutlineBlockReason) => void;
   setHidden: (entries: readonly OutlineEntry[], hidden: boolean) => void;
+  /** W06：按 point id 显隐单条/多条要点（不改条目自身的 hidden）。 */
+  setHiddenPoints: (entry: OutlineEntry, points: readonly OutlinePoint[], hidden: boolean) => void;
   setLock: (entry: OutlineEntry, lock: "content" | "layout", value: boolean) => void;
   cloneEntry: (entry: OutlineEntry) => void;
+  /** W06：复制一条要点（新 point id、相邻插入）。 */
+  clonePoint: (entry: OutlineEntry, point: OutlinePoint) => void;
 }
 
 function refsOf(entries: readonly OutlineEntry[]): OutlineEntryRef[] {
@@ -68,6 +76,25 @@ export function useOutlineActions({
     [announce, dispatch],
   );
 
+  const setHiddenPoints = useCallback(
+    (entry: OutlineEntry, points: readonly OutlinePoint[], hidden: boolean) => {
+      const targets = points.filter((point) => point.pointId !== "");
+      if (targets.length === 0) return;
+      const ok = dispatch({
+        type: "set-hidden-points",
+        field: entry.field,
+        objectId: entry.objectId,
+        points: targets.map((point) => ({ pointField: point.pointField, pointId: point.pointId })),
+        hidden,
+      });
+      if (ok)
+        announce(
+          t(hidden ? "outline.point.hidden" : "outline.point.shown", { count: targets.length }),
+        );
+    },
+    [announce, dispatch],
+  );
+
   const setLock = useCallback(
     (entry: OutlineEntry, lock: "content" | "layout", value: boolean) => {
       dispatch({ type: "set-lock", field: entry.field, objectId: entry.objectId, lock, value });
@@ -84,5 +111,20 @@ export function useOutlineActions({
     [dispatch, notifyBlocked],
   );
 
-  return { dispatch, notifyBlocked, setHidden, setLock, cloneEntry };
+  const clonePoint = useCallback(
+    (entry: OutlineEntry, point: OutlinePoint) => {
+      if (!canClonePoint(entry)) return notifyBlocked("locked-content");
+      const ok = dispatch({
+        type: "clone-point",
+        field: entry.field,
+        objectId: entry.objectId,
+        pointField: point.pointField,
+        pointId: point.pointId,
+      });
+      if (ok) announce(t("outline.point.cloned"));
+    },
+    [announce, dispatch, notifyBlocked],
+  );
+
+  return { dispatch, notifyBlocked, setHidden, setHiddenPoints, setLock, cloneEntry, clonePoint };
 }

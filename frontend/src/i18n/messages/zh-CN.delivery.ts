@@ -87,11 +87,30 @@ const delivery = {
   "delivery.check.refresh": "重新核对",
   "delivery.check.checking": "正在核对",
   "delivery.check.failed": "核对失败，请重试",
+  "delivery.check.source.server": "核对基于导出同一快照（服务端）",
+  "delivery.check.source.local": "服务端核对未启用，按同一份导出输入在本机核对",
   "delivery.check.warning.no-target": "未关联目标岗位，导出前请确认用途",
   "delivery.check.warning.no-contact": "简历里没有电话或邮箱，对方可能联系不上",
   "delivery.check.warning.has-hidden": "有隐藏条目，正式导出会排除它们",
   "delivery.check.warning.revision-changed": "版本已更新，请刷新后再导出",
   "delivery.check.warning.long-cv": "长 CV 模式：页数与资源预算独立",
+
+  // ── 配置预览（W04：水印/脱敏配置预览，不是编辑预览）──────────
+  "delivery.preview.action": "预览这份配置",
+  "delivery.preview.loading": "正在生成配置预览",
+  "delivery.preview.title": "配置预览",
+  "delivery.preview.notEditPreview": "这是配置预览（水印/脱敏），不是编辑预览",
+  "delivery.preview.failed": "配置预览生成失败，请重试",
+  "delivery.preview.unsupported": "当前后端还不支持带水印/脱敏的预览；正式导出仍会按这份配置生成",
+  "delivery.preview.pages": "按当前配置约需 {pages} 页（上限 {limit} 页）",
+  "delivery.preview.overflow": "超出页数上限，内容会被截断",
+  "delivery.preview.hide": "收起预览",
+
+  // ── 岗位变体（W16：按变体导出）─────────────────────────────
+  "delivery.variant.label": "岗位变体",
+  "delivery.variant.none": "当前简历（不选变体）",
+  "delivery.variant.hint": "选择后导出使用该变体的内容与排版",
+  "delivery.variant.loadFailed": "变体列表加载失败，仍可导出当前简历",
 
   // ── 版本冲突（strict_revision 409）─────────────────────────
   "delivery.revision.title": "版本已更新",
@@ -110,6 +129,8 @@ const delivery = {
 
   // ── 交付原件列表 ──────────────────────────────────────────
   "delivery.archive.title": "交付原件",
+  "delivery.archive.resumePicker": "查看这份简历的交付原件",
+  "delivery.archive.resumePickerPlaceholder": "选择一份简历",
   "delivery.archive.count": "{count} 份",
   "delivery.archive.empty": "还没有归档的原件",
   "delivery.archive.emptyHint": "导出时勾选「归档原件」才会保留文件字节",

@@ -19,7 +19,6 @@ from ..resume.resume_labels import (
     section_titles,
 )
 from ..resume.resume_pagination import PaginationPlan
-from ..resume.resume_rich_text import has_bold
 from ..resume.resume_sections import resolved_section_order
 from .canvas import _ResumePDF
 from .columns import SectionDrawer, render_sections
@@ -278,7 +277,6 @@ def _draw_resume(
             align=header_text_align,
             new_x=XPos.LMARGIN,
             new_y=YPos.NEXT,
-            markdown=has_bold(intent_text),
         )
     if contact:
         contact_size = base * layout.contact_ratio * meta_scale
@@ -294,7 +292,6 @@ def _draw_resume(
             align=header_text_align,
             new_x=XPos.LMARGIN,
             new_y=YPos.NEXT,
-            markdown=has_bold(contact),
         )
     pdf.set_text_color(*pdf.body_text)
 
@@ -337,7 +334,6 @@ def _draw_resume(
             align=align.get(str(body_style.align) if body_style is not None else "left", "L"),
             new_x=XPos.LMARGIN,
             new_y=YPos.NEXT,
-            markdown=has_bold(text),
         )
         if body_style is not None and body_style.space_after is not None:
             pdf.ln(layout.gap_mm(float(body_style.space_after)))
@@ -347,6 +343,8 @@ def _draw_resume(
         text = resume.summary.strip()
         if not text:
             return False
+        # W08：标题 + 整段摘要整体预留（keep_together）——页尾不留一行孤行，下一页页首也不留。
+        pdf.ensure_title_paragraph(text, base, leading_gap=leading, style=role_style("section_title"), body_style=role_style("body"), keep_lines=pagination.section("summary").keep_with_next)
         pdf.section_title(labels["summary"], base, leading_gap=leading, style=role_style("section_title"), section="summary", keep_lines=pagination.section("summary").keep_with_next)
         body(pdf, text)
         return True

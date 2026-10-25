@@ -13,25 +13,39 @@ GET /api/resumes/{resume_id} 的整数路径参数互相抢路由，也不动既
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
+from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
 from ..database import get_db
+from ..models.provenance import ResumeBlockSource
 from ..models.resume import ResumeRecord
 from ..schemas.provenance import (
     BlockLinkOut,
     FactLockCreateRequest,
     FactLockListOut,
     FactLockOut,
+    LinkAdoptOut,
+    LinkAdoptRequest,
     LinkCreateRequest,
+    LinkFromSourceRequest,
+    ManualSourceCreateRequest,
+    ManualSourceOut,
     ResumeProvenanceOut,
     SourceChainOut,
     SourceImpactOut,
+    SourceListOut,
     SourceOut,
+    SourceRevisionItemOut,
+    SourceRevisionsOut,
+    SourceRevisionTextOut,
 )
 from ..services import trash
 from ..services.resume import document_provenance as write_side
+from ..services.resume import document_provenance_adopt as adopt_side
+from ..services.resume import document_provenance_source_text as source_text_side
 from ..services.resume import document_provenance_view as view_side
 from ..services.resume import fact_locks
+from ..services.resume.document_save import RevisionConflict, revision_conflict_response
 
 router = APIRouter(prefix="/api/provenance", tags=["provenance"])
 
@@ -198,3 +212,205 @@ def delete_fact_lock(resume_id: int, lock_id: int, db: Session = Depends(get_db)
     if not fact_locks.delete_fact_lock(db, resume_id=record.id, lock_id=lock_id):
         raise HTTPException(status_code=404, detail="事实锁不存在")
     return Response(status_code=204)
+
+
+# ===== W12 可达性补充：已有来源的列表 / 手工登记 / 修订 / 关联 / 采纳 =====
+
+
+@router.get("/sources", response_model=SourceListOut)
+def list_sources(
+    kind: str | None = Query(default=None, max_length=16),
+    keyword: str | None = Query(default=None, max_length=128),
+    limit: int = Query(default=view_side.DEFAULT_SOURCE_LIST_LIMIT, ge=1, le=200),
+    db: Session = Depends(get_db),
+) -> SourceListOut:
+    """可挑选的来源清单（建立来源关联时用）：只有展示元信息，不含任何正文。"""
+    return SourceListOut.model_validate(
+        view_side.list_sources(db, kind=kind, keyword=keyword, limit=limit)
+    )
+
+
+@router.post("/sources", response_model=ManualSourceOut, status_code=201)
+def create_manual_source(
+    payload: ManualSourceCreateRequest, db: Session = Depends(get_db)
+) -> ManualSourceOut:
+    """手工登记一条外部资料（没有稳定业务行可复用，每次新建一条来源）。"""
+    title = payload.title.strip()
+    if not title:
+        raise HTTPException(status_code=400, detail="来源标题不能为空")
+    snapshot = write_side.upsert_source(
+        db,
+        kind=payload.kind,
+        external_ref=None,
+        title=title,
+        payload={"title": title},
+        metadata={},
+    )
+    return ManualSourceOut(
+        id=snapshot.source.id,
+        kind=snapshot.source.kind,
+        title=snapshot.source.title,
+        revision=SourceRevisionItemOut(
+            id=snapshot.revision.id,
+            revision_no=snapshot.revision.revision_no,
+            summary=snapshot.revision.summary,
+            captured_at=snapshot.revision.captured_at,
+        ),
+    )
+
+
+@router.get("/sources/{source_id}/revisions", response_model=SourceRevisionsOut)
+def read_source_revisions(source_id: int, db: Session = Depends(get_db)) -> SourceRevisionsOut:
+    """一条来源的修订列表（界面显示「来源第 N 版」，不返回正文）。"""
+    data = view_side.source_revisions(db, source_id)
+    if data is None:
+        raise HTTPException(status_code=404, detail="来源不存在")
+    return SourceRevisionsOut.model_validate(data)
+
+
+@router.get("/sources/{source_id}/revision-text", response_model=SourceRevisionTextOut)
+def read_source_revision_text(
+    source_id: int,
+    revision_no: int | None = Query(default=None, ge=1),
+    db: Session = Depends(get_db),
+) -> SourceRevisionTextOut:
+    """按 external_ref 现场解析来源原文（只读、不落库、不写日志）。
+
+    采纳前前端用它预填文本：``resolvable=true`` 时 text 是业务表当前正文、fingerprint 是
+    所选修订的真实指纹；``fingerprint_matched=false`` 说明正文与建立关联时的 payload 表示
+    不一致（例如台账用"原始事实"建的关系、这里回退到"简历表述"），界面应提示核对。
+    历史修订的正文无法回溯，返回 ``historical_revision_not_stored`` 而不是现正文伪装。
+    """
+    source = write_side.get_source(db, source_id)
+    if source is None:
+        raise HTTPException(status_code=404, detail="来源不存在")
+    revisions = source_text_side.list_revisions(db, source.id)
+    if not revisions:
+        return SourceRevisionTextOut(
+            source_id=source.id,
+            kind=source.kind,
+            external_ref=source.external_ref,
+            resolvable=False,
+            reason=source_text_side.REASON_NO_REVISION,
+        )
+    if revision_no is None:
+        revision = revisions[-1]
+    else:
+        revision = next((item for item in revisions if item.revision_no == revision_no), None)
+        if revision is None:
+            raise HTTPException(status_code=404, detail="来源修订不存在")
+    is_latest = revision.id == revisions[-1].id
+    if not is_latest:
+        return SourceRevisionTextOut(
+            source_id=source.id,
+            kind=source.kind,
+            external_ref=source.external_ref,
+            revision_no=revision.revision_no,
+            fingerprint=revision.fingerprint,
+            resolvable=False,
+            is_latest=False,
+            reason=source_text_side.REASON_HISTORICAL,
+        )
+    lookup = source_text_side.resolve_source_texts(db, source)
+    if not lookup.resolvable:
+        # 不可解析时不给 revision_no（Lead 契约为 null）：这是"没有可对照的正文"，
+        # 给出修订号只会让前端以为拿到了某一版。
+        return SourceRevisionTextOut(
+            source_id=source.id,
+            kind=source.kind,
+            external_ref=source.external_ref,
+            revision_no=None,
+            is_latest=True,
+            resolvable=False,
+            reason=lookup.reason or source_text_side.REASON_UNRESOLVABLE,
+        )
+    text, matched = source_text_side.pick_text_for_fingerprint(lookup, revision.fingerprint or "")
+    return SourceRevisionTextOut(
+        source_id=source.id,
+        kind=source.kind,
+        external_ref=source.external_ref,
+        revision_no=revision.revision_no,
+        text=text,
+        fingerprint=revision.fingerprint,
+        resolvable=True,
+        fingerprint_matched=matched,
+        is_latest=True,
+    )
+
+
+
+@router.post("/links", response_model=BlockLinkOut, status_code=201)
+def link_existing_source(
+    payload: LinkFromSourceRequest, db: Session = Depends(get_db)
+) -> BlockLinkOut:
+    """把**已有的**来源（可选某一版修订）关联到简历块；同一来源 + 同一块去重刷新。"""
+    record = _resume_or_404(db, payload.resume_id)
+    source = write_side.get_source(db, payload.source_id)
+    if source is None:
+        raise HTTPException(status_code=404, detail="来源不存在")
+    revision = None
+    if payload.source_revision_id is not None:
+        revision = write_side.get_revision(db, payload.source_revision_id)
+        if revision is None or revision.source_id != source.id:
+            raise HTTPException(status_code=404, detail="来源修订不存在或不属于这条来源")
+    try:
+        link = write_side.link_source(
+            db,
+            record=record,
+            source=source,
+            revision=revision,
+            object_id=payload.object_id,
+            point_id=payload.point_id,
+            path=payload.path,
+            field=payload.field,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return _link_out(link, source)
+
+
+@router.post("/links/{link_id}/adopt", response_model=LinkAdoptOut)
+def adopt_source_update(
+    link_id: int, payload: LinkAdoptRequest, db: Session = Depends(get_db)
+):
+    """来源更新 → 采纳写正文：锁闸门 + 条件写；冲突 409，被锁 409 violations。"""
+    link = db.get(ResumeBlockSource, link_id)
+    if link is None:
+        raise HTTPException(status_code=404, detail="来源关联不存在")
+    record = _resume_or_404(db, link.resume_id)
+    try:
+        result = adopt_side.adopt_source_text(
+            db,
+            record=record,
+            link=link,
+            text=payload.text,
+            expected_revision=payload.expected_revision,
+            source_revision_id=payload.source_revision_id,
+            path=payload.path,
+        )
+    except adopt_side.SourceRevisionStale as exc:
+        return JSONResponse(
+            status_code=409,
+            content={
+                "detail": str(exc),
+                "code": adopt_side.SOURCE_REVISION_STALE_CODE,
+                "expected_fingerprint": exc.expected_fingerprint,
+            },
+        )
+    except fact_locks.FactLockError as exc:
+        return fact_locks.fact_lock_conflict_response(exc.violations)
+    except RevisionConflict as exc:
+        return revision_conflict_response(exc.current_revision)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    source = write_side.get_source(db, link.source_id)
+    return LinkAdoptOut(
+        resume_id=result["resume_id"],
+        revision=result["revision"],
+        content=result["content"],
+        applied_path=result["applied_path"],
+        source_revision_no=result["source_revision_no"],
+        link=_link_out(link, source),
+    )

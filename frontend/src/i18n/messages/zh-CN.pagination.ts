@@ -60,6 +60,42 @@ const pagination = {
   "pagination.capability.keepWithNext": "标题跟随",
   "pagination.capability.pageNumbers": "页码/续页",
 
+  // ── 页缩略图（W08：实际页数 / 末页占用 / 问题位置）────────────
+  /** 缩略图区标题。 */
+  "pagination.thumbnails.title": "页缩略图",
+  /** 还没有分页报告时的空态（不编页数）。 */
+  "pagination.thumbnails.empty": "还没有分页报告",
+  /** 空态指引：点名真实的「获取分页报告」按钮（用户指南引用必须逐字一致）。 */
+  "pagination.thumbnails.hint": "点「获取分页报告」后按真实 PDF 排版测量",
+  /** 单页的读屏名。 */
+  "pagination.thumbnails.page": "第 {page} 页",
+  /** 末页徽标。 */
+  "pagination.thumbnails.last": "末页",
+  /** 有页数上限时的汇总。 */
+  "pagination.thumbnails.summary": "实际 {pages} 页（上限 {limit} 页）",
+  /** 没有页数上限时的汇总。 */
+  "pagination.thumbnails.summaryNoLimit": "实际 {pages} 页",
+  /** 自然排版需要的页数（溢出时补一句）。 */
+  "pagination.thumbnails.needed": "自然排版约需 {pages} 页",
+  /** 末页占用（有实测比例时）。 */
+  "pagination.thumbnails.fill": "末页占用 {percent}%",
+  /** 溢出但后端未给末页比例：只能确定"满页被截断"，不编百分比。 */
+  "pagination.thumbnails.fillTruncated": "末页已截断（满页）",
+  /** 后端未提供末页占用时的如实说明。 */
+  "pagination.thumbnails.fillUnknown": "末页占用未测量",
+  /** 溢出页徽标。 */
+  "pagination.thumbnails.truncatedBadge": "溢出",
+  /** 手动分页落点徽标。 */
+  "pagination.thumbnails.manualBreakBadge": "新页起",
+  /** 页级问题数（严重度由颜色 + 文案共同表达）。 */
+  "pagination.thumbnails.issue": "{count} 个问题",
+  /** 全局注意事项（不属于某一页）。 */
+  "pagination.thumbnails.warnings": "{count} 条注意事项",
+  /** 单页读屏名后缀：这一页有几条问题。 */
+  "pagination.thumbnails.pageIssues": "，{count} 个问题",
+  /** 读屏名多段拼接用的分隔符（全角逗号；放在语言包里，源码里不写中文标点）。 */
+  "pagination.thumbnails.ariaJoin": "，",
+
   // ── 分页报告与溢出定位 ──────────────────────────────────────
   /** 报告区的标题。 */
   "pagination.report.title": "分页报告",

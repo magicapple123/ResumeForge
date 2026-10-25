@@ -18,7 +18,7 @@ import type { MessageKey } from "../../i18n";
 import type { ResumeContent } from "../../types/resume";
 import { isObjectId } from "../resume-document/identity";
 import { ENTRY_POINT_FIELDS, type EntryField } from "../resume-document/types";
-import { readEntryFlags } from "./flags";
+import { readEntryFlags, readHiddenPoints } from "./flags";
 import { OUTLINE_SECTIONS, type OutlineSectionKey, type OutlineSelection } from "./types";
 
 /** 旧记录允许字段缺失：读的时候一律按 `unknown` 收窄，不用 `any`。 */
@@ -56,6 +56,8 @@ export interface OutlinePoint {
   /** 当前下标（仅展示用；命令里不准用它定位）。 */
   index: number;
   text: string;
+  /** W06 要点级隐藏（entry.hidden_points 里登记了它）。导出过滤由 W06-BE 负责。 */
+  hidden: boolean;
 }
 
 export interface OutlineEntry {
@@ -161,12 +163,20 @@ function subtitleOf(entry: RawEntry, field: EntryField): string {
 
 function pointsOf(entry: RawEntry, field: EntryField): OutlinePoint[] {
   const points: OutlinePoint[] = [];
+  const hiddenPoints = readHiddenPoints(entry);
   for (const pointField of pointFieldsFor(field)) {
     const values = Array.isArray(entry[pointField]) ? (entry[pointField] as unknown[]) : [];
     if (values.length === 0) continue;
     const ids = pointIdsOf(entry, pointField);
     values.forEach((item, index) => {
-      points.push({ pointField, pointId: ids[index] ?? "", index, text: asText(item) });
+      const pointId = ids[index] ?? "";
+      points.push({
+        pointField,
+        pointId,
+        index,
+        text: asText(item),
+        hidden: pointId !== "" && hiddenPoints.has(pointId),
+      });
     });
   }
   return points;
@@ -271,6 +281,29 @@ export function selectionFromPath(
     }
   }
   return { kind: "entry", field, objectId };
+}
+
+/**
+ * 稳定对象 → 纸面路径（`data-resume-path` 写法：`projects.1.description.0`）。
+ *
+ * 给 W12 的候选/来源定位用：`OutlineSelection` 本身只有 id，没有下标；这里按 id **现算**
+ * 当前下标，所以排序/复制之后路径仍指向同一个对象（不要把它缓存成选择的一部分）。
+ *
+ * - 个人信息没有单一路径（由多个标量字段组成）→ `null`，调用方需要具体字段时自己取；
+ * - 对象已不存在（并发删除/旧内容）→ `null`，调用方据此显示"已失效"而不是挂到同下标。
+ */
+export function selectionPath(
+  content: ResumeContent | null | undefined,
+  selection: OutlineSelection | null | undefined,
+): string | null {
+  if (!content || !selection || selection.kind === "personal") return null;
+  const index = findEntryIndex(content, selection.field, selection.objectId);
+  if (index < 0) return null;
+  if (selection.kind === "entry") return `${selection.field}.${index}`;
+  const entry = entriesOf(content, selection.field)[index];
+  const pointIndex = pointIdsOf(entry, selection.pointField).indexOf(selection.pointId);
+  if (pointIndex < 0) return null;
+  return `${selection.field}.${index}.${selection.pointField}.${pointIndex}`;
 }
 
 /** 从当前模型里找到选择对应的条目（找不到 = 内容已变/已删除）。 */

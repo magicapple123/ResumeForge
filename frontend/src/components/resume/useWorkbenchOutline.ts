@@ -23,8 +23,13 @@ interface Options {
   editorRef: RefObject<ResumeWorkbenchEditorHandle | null>;
   /** 宿主把 overlay / 事实标注的 path 改到新下标（由 `ResumeDetailModal` 实现）。 */
   onRemapPaths?: (remap: PathRemap) => void;
-  /** 新内容的落点（缺省=直接写回编辑器表单；W03 传历史接线实现）。 */
-  commit?: (next: ResumeContent) => void;
+  /**
+   * 新内容的落点（缺省=直接写回编辑器表单；W03 传历史接线实现）。
+   *
+   * 第二个参数是"旧下标 → 新下标"的映射：历史快照里的加粗 overlay 必须与内容**同一步**
+   * 换键，否则撤销会先退一个"只换了键"的空步骤。
+   */
+  commit?: (next: ResumeContent, remap: PathRemap) => void;
 }
 
 export function useWorkbenchOutline({ editorRef, onRemapPaths, commit }: Options) {
@@ -34,7 +39,7 @@ export function useWorkbenchOutline({ editorRef, onRemapPaths, commit }: Options
       if (!applied.ok) return;
       const remap = buildPathRemap(baseContent, applied.content);
       onRemapPaths?.(remap);
-      if (commit) commit(applied.content);
+      if (commit) commit(applied.content, remap);
       else editorRef.current?.replaceContent(applied.content);
     },
     [commit, editorRef, onRemapPaths],

@@ -38,6 +38,12 @@ const SNAPSHOT_MISSING_LABEL = "快照缺失";
 const UNREADABLE_HINT = "无法读取快照目录，请检查磁盘权限；当前无法确认快照是否存在。";
 // i18n-ok: 新增状态说明（历史成功记录还在，但快照文件不在了）
 const SNAPSHOT_MISSING_HINT = "上次成功记录存在，但当前找不到快照文件；请重新备份一次。";
+// i18n-ok: A02 新增禁用态标签（设置域尚未有 i18n 命名空间，待统一迁移）
+const DISABLED_LABEL = "自动备份已禁用";
+// i18n-ok: A02 新增禁用态说明（由部署配置控制，界面不能假装有开关）
+const DISABLED_HINT = "自动备份已禁用（由部署配置控制）；仍可手动导出备份包。";
+// i18n-ok: A02 禁用态下的间隔说明（设置域 i18n 迁移前临时硬编码）
+const DISABLED_INTERVAL_HINT = "天自动快照次数由部署配置控制；手动导出的备份包仍包含附件。";
 
 /**
  * 状态 → 展示标签（保护缺口优先如实暴露）。
@@ -45,8 +51,28 @@ const SNAPSHOT_MISSING_HINT = "上次成功记录存在，但当前找不到快�
  * 优先级（高→低）：无法确认 → 保护中断 → 尚无备份 → 快照缺失 → 已到期 → 受保护。
  * 「无法确认」必须压过其他一切：目录读不了时，后面每一条判断都缺依据。
  */
+/** 后端显式禁用（A02）：新字段任一为真，或统一 state 枚举为 disabled。 */
+function isAutoBackupDisabled(status: BackupStatus): boolean {
+  return (
+    status.disabled === true || status.auto_backup_enabled === false || status.state === "disabled"
+  );
+}
+
 function statusMeta(status: BackupStatus): { label: string; color: string } {
   const state = resolveSnapshotState(status);
+  // 禁用压过其它：部署配置关掉自动备份时，不能显示"受保护/保护中断"这些需要调度才能得出的结论。
+  if (isAutoBackupDisabled(status)) return { label: DISABLED_LABEL, color: "default" };
+  if (status.state === "unreadable") return { label: UNREADABLE_LABEL, color: "warning" };
+  // A02：后端 state 枚举 → 既有标签（设置域 i18n 迁移前临时硬编码，见 i18n-ok）。
+  // i18n-ok: A02 状态枚举复用既有标签
+  if (status.state === "failing") return { label: "保护中断", color: "error" };
+  // i18n-ok: A02 状态枚举复用既有标签
+  if (status.state === "never") return { label: "尚无备份", color: "warning" };
+  if (status.state === "empty") return { label: SNAPSHOT_MISSING_LABEL, color: "warning" };
+  // i18n-ok: A02 状态枚举复用既有标签
+  if (status.state === "overdue") return { label: "已到期未备份", color: "warning" };
+  // i18n-ok: A02 状态枚举复用既有标签
+  if (status.state === "protected") return { label: "受保护", color: "success" };
   if (state === "unreadable") return { label: UNREADABLE_LABEL, color: "warning" };
   if (status.consecutive_failures > 0) return { label: "保护中断", color: "error" };
   if (!status.last_success) return { label: "尚无备份", color: "warning" };
@@ -65,6 +91,7 @@ export default function BackupStatusCard() {
 
   const meta = status ? statusMeta(status) : null;
   const state = status ? resolveSnapshotState(status) : null;
+  const disabled = status ? isAutoBackupDisabled(status) : false;
 
   const changeInterval = async (days: number) => {
     if (!status || days === status.interval_days || savingInterval) return;
@@ -119,13 +146,16 @@ export default function BackupStatusCard() {
                 value={status.interval_days}
                 options={intervalOptions}
                 loading={savingInterval}
-                disabled={savingInterval}
+                disabled={savingInterval || disabled}
                 onChange={(days) => void changeInterval(days)}
               />
-              天自动快照一次（仅数据库快照，不含附件文件）；手动导出的备份包才包含附件。
+              {disabled
+                ? DISABLED_INTERVAL_HINT
+                : "天自动快照一次（仅数据库快照，不含附件文件）；手动导出的备份包才包含附件。"}
               只保留最近几份，手动备份不受影响。
             </Typography.Text>
           </Space>
+          {disabled ? <Alert type="info" showIcon title={DISABLED_HINT} /> : null}
           {status.last_success ? (
             <Typography.Text>
               最近一次成功备份：

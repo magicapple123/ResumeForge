@@ -11,6 +11,7 @@ import type {
   PhraseInsertPayload,
   PhraseInPayload,
   PhraseListOut,
+  PhraseUpdateOut,
   PhraseUpdatePayload,
   ResumePhrase,
 } from "./types";
@@ -44,11 +45,11 @@ export function createPhrase(payload: PhraseInPayload): Promise<ResumePhrase> {
   return request(BASE, { method: "POST", body: JSON.stringify(payload) });
 }
 
-/** 更新一条资产（只提交给出的字段）。 */
+/** 更新一条资产（只提交给出的字段）；响应带 previous 旧快照（be-prov 契约）。 */
 export function updatePhrase(
   phraseId: number,
   payload: PhraseUpdatePayload,
-): Promise<ResumePhrase> {
+): Promise<PhraseUpdateOut> {
   return request(BASE + "/" + phraseId, { method: "PATCH", body: JSON.stringify(payload) });
 }
 
@@ -57,11 +58,20 @@ export function deletePhrase(phraseId: number): Promise<void> {
   return request(BASE + "/" + phraseId, { method: "DELETE" });
 }
 
-/** 把简历里选中一句收藏成资产；path 解析不到服务端会 422（不猜）。 */
-export function collectPhrase(resumeId: number, path: string): Promise<ResumePhrase> {
+/**
+ * 把简历里选中一句收藏成资产；path 解析不到服务端会 422（不猜）。
+ * `jobTags` 可选（be-prov 契约新增）：在收藏入口直接打岗位标签。
+ */
+export function collectPhrase(
+  resumeId: number,
+  path: string,
+  jobTags?: string[],
+): Promise<ResumePhrase> {
+  const body: Record<string, unknown> = { resume_id: resumeId, path };
+  if (jobTags && jobTags.length > 0) body.job_tags = jobTags;
   return request(BASE + "/collect", {
     method: "POST",
-    body: JSON.stringify({ resume_id: resumeId, path }),
+    body: JSON.stringify(body),
   });
 }
 

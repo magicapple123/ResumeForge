@@ -4,7 +4,7 @@
  * 交付原件"（ArchiveList）；不传 resumeId 时行为与之前逐字相同（全局存档页不显示原件区）。
  */
 import { App as AntdApp } from "antd";
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { t } from "../../../i18n";
 import { createMockExportDeliveryApi } from "../../../features/resume-delivery";
@@ -63,5 +63,25 @@ describe("DeliveryArchiveModal × 交付原件挂载", () => {
     );
     // 等全局存档表加载完再断言"原件区不存在"。
     await waitFor(() => expect(screen.queryByText(t("delivery.archive.title"))).toBeNull());
+  });
+
+  it("宿主给 resumeOptions：在弹层里选简历后加载该简历的原件（全局入口也能用）", async () => {
+    const api = mockArchiveApi();
+    render(
+      <AntdApp>
+        <DeliveryArchiveModal
+          onClose={() => undefined}
+          resumeOptions={[{ value: 3, label: "后端简历" }]}
+          archiveApi={api}
+        />
+      </AntdApp>,
+    );
+    // 初始没有简历上下文 → 不加载原件。
+    expect(screen.queryByText(t("delivery.archive.title"))).toBeNull();
+    fireEvent.mouseDown(screen.getByRole("combobox", { name: t("delivery.archive.resumePicker") }));
+    // i18n-ok: 合成简历标题（测试数据，非界面文案）
+    fireEvent.click(await screen.findByText("后端简历"));
+    expect(await screen.findByText(ARTIFACT_FILENAME)).toBeInTheDocument();
+    await waitFor(() => expect(api.calls).toContain("list-artifacts"));
   });
 });

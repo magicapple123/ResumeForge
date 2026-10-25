@@ -183,3 +183,78 @@ def test_adopt_respects_fact_locks_and_writes_nothing_on_failure(client):
     assert response.json()["code"] == "fact_lock_conflict"
     detail = client.get(f"/api/resumes/{resume_id}/variants/{variant['id']}").json()
     assert detail["content"]["summary"] == _content()["summary"]
+
+# ===== W06 正文锁：翻译候选/采纳以**变体旧内容**为基准 =====
+
+
+def test_locked_variant_entry_blocks_translation_candidate_and_adopt(
+    client, monkeypatch, db_session
+):
+    import copy
+
+    from app.models.versions import ResumeVariant
+
+    resume_id = _create_resume(client)
+    variant = _create_variant(client, resume_id)
+    row = db_session.get(ResumeVariant, variant["id"])
+    locked_content = copy.deepcopy(row.content)
+    locked_content["experience"][0]["lock_content"] = True
+    row.content = locked_content
+    db_session.commit()
+    _install(monkeypatch, "Engineer at Example Tech")
+
+    preview = client.post(
+        f"/api/resumes/{resume_id}/variants/{variant['id']}/translate",
+        json={"target_language": "en-US"},
+    )
+    assert preview.status_code == 200, preview.text
+    body = preview.json()
+    # 锁定条目的候选保留原文，并出现在 blocked_fields（不展示会被拒绝的改写）。
+    assert body["candidate"]["experience"][0]["description"] == ["负责合成数据接口"]
+    assert "experience.0" in body["blocked_fields"]
+
+    adopted = client.post(
+        f"/api/resumes/{resume_id}/variants/{variant['id']}/adopt",
+        json={
+            "items": [
+                {"path": "experience.0.description.0", "text": "Engineer at Example Tech"}
+            ]
+        },
+    )
+    assert adopted.status_code == 409, adopted.text
+    rejected = adopted.json()
+    assert rejected["code"] == "fact_lock_conflict"
+    violation = rejected["violations"][0]
+    assert violation["kind"] == "lock_content"
+    assert violation["path"] == "experience.0"
+    detail = client.get(f"/api/resumes/{resume_id}/variants/{variant['id']}").json()
+    assert detail["content"]["experience"][0]["description"] == ["负责合成数据接口"]
+
+
+def test_translation_adopt_uses_variant_baseline_not_current_resume(client, db_session):
+    """当前简历锁了条目 ≠ 变体锁了条目：采纳基准必须是变体自己的旧内容。"""
+    resume_id = _create_resume(client)
+    variant = _create_variant(client, resume_id)
+    # 变体创建之后再锁当前简历的同一条目（变体内容保持不变、也没有锁标记）。
+    record = client.get(f"/api/resumes/{resume_id}").json()
+    locked = record["content"]
+    locked["experience"][0]["lock_content"] = True
+    saved = client.put(
+        f"/api/resumes/{resume_id}/content",
+        json={"content": locked, "expected_revision": record["revision"]},
+    )
+    assert saved.status_code == 200, saved.text
+    assert saved.json()["content"]["experience"][0]["lock_content"] is True
+
+    adopted = client.post(
+        f"/api/resumes/{resume_id}/variants/{variant['id']}/adopt",
+        json={
+            "items": [
+                {"path": "experience.0.description.0", "text": "Engineer at Example Tech"}
+            ]
+        },
+    )
+    assert adopted.status_code == 200, adopted.text
+    assert adopted.json()["variant"]["content"]["experience"][0]["description"] == [
+        "Engineer at Example Tech"
+    ]

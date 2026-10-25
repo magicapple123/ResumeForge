@@ -57,6 +57,11 @@ export interface PaginationReport {
   pagesNeeded: number | null;
   pageLimit: number | null;
   overflow: boolean;
+  /**
+   * 末页占用（0–1 比例）。后端分页报告目前**不返回**这个字段；解析层容忍它缺席
+   * （旧后端/未升级时为 null），缩略图据此显示"未测量"而不是编一个百分比。
+   */
+  lastPageFill: number | null;
   truncatedAt: TruncatedAt | null;
   manualBreaks: ManualBreak[];
   warnings: PaginationWarning[];
@@ -71,6 +76,13 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function intOrNull(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) ? Math.trunc(value) : null;
+}
+
+/** 0–1 的占用比例；越界/非数字一律 null（不猜、不夹成一个假值）。 */
+function ratioOrNull(value: unknown): number | null {
+  if (typeof value !== "number" || !Number.isFinite(value)) return null;
+  if (value < 0 || value > 1) return null;
+  return value;
 }
 
 const KINDS: readonly TruncationKind[] = ["section", "entry", "point", "meta"];
@@ -120,6 +132,7 @@ export function parsePaginationReport(raw: unknown): PaginationReport | null {
     pagesNeeded: intOrNull(raw["pages_needed"]),
     pageLimit: intOrNull(raw["page_limit"]),
     overflow: raw["overflow"] === true,
+    lastPageFill: ratioOrNull(raw["last_page_fill"]),
     truncatedAt: readTruncatedAt(raw["truncated_at"]),
     manualBreaks: readManualBreaks(raw["manual_breaks"]),
     warnings: readWarnings(raw["warnings"]),

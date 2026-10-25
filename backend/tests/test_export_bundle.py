@@ -62,10 +62,56 @@ def test_bundle_zip_manifest_hashes_match_files(client):
     for item in manifest["files"]:
         assert item["name"] in names
         digest = hashlib.sha256(archive.read(item["name"])).hexdigest()
-        assert digest == item["sha256"] == response.headers["X-Content-Sha256"] or True
-        assert digest == item["sha256"]
+        # 逐项哈希链：包内字节 == manifest.sha256 == size（不是 `or True` 恒真式）。
+        assert digest == item["sha256"], item["name"]
+        assert item["size"] == len(archive.read(item["name"])), item["name"]
+        assert item["render_config_sha256"]
+    # 响应头是**快照内容指纹**（路由契约），必须是 manifest 里声明的那一个。
     assert manifest["snapshot"]["content_sha256"] == response.headers["X-Content-Sha256"]
     assert "说明.txt" in names
+
+
+def test_bundle_manifest_records_real_resources(client):
+    """W19 资源清单真实化：每个产物都带 font / renderer / template，且与当前配置一致。"""
+    from app.config import get_settings
+
+    resume_id = _create_resume(client)
+    response = _bundle(client, resume_id, formats=["md", "docx"])
+
+    assert response.status_code == 200, response.text
+    archive, _raw = _zip(response)
+    manifest = json.loads(archive.read("manifest.json"))
+    detail = client.get(f"/api/resumes/{resume_id}").json()
+    app_version = get_settings().app_version
+    by_format = {item["format"]: item for item in manifest["files"]}
+    assert set(by_format) == {"md", "docx"}
+
+    for item in manifest["files"]:
+        assert item["template"]
+        renderer = item["renderer"]
+        assert renderer["name"], item["format"]
+        assert renderer["version"], item["format"]
+        assert renderer["app_version"] == app_version
+        assert renderer["template"] == item["template"] == detail["template"]
+        font = item["font"]
+        assert font["font_scale"] == detail["font_scale"]
+        assert isinstance(font["available"], bool)
+        assert isinstance(font["embedded"], bool)
+
+    # Word：族名来自真实字体解析（非空），且如实标注"不嵌字体"。
+    assert by_format["docx"]["renderer"]["name"] == "python-docx"
+    assert by_format["docx"]["font"]["family"]
+    assert by_format["docx"]["font"]["embedded"] is False
+    # 纯文本格式没有字体概念：不编造族名。
+    assert by_format["md"]["font"]["applicable"] is False
+    assert by_format["md"]["font"]["family"] is None
+
+    # 包级资源摘要同样来自真实上下文，不是空字典。
+    top = manifest["resource_manifest"]
+    assert top["app_version"] == app_version
+    assert top["template"] == detail["template"]
+    assert top["font"]["family"]
+    assert top["render_config_sha256"]
 
 
 def test_bundle_uses_draft_content_without_writing(client):

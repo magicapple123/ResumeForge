@@ -17,14 +17,18 @@
  * - `resetKey` 用 `Object.is` 比较（与 `useFormHistory` 同口径）：换记录 / 用最新的必须清栈，
  *   否则撤销会把上一份数据填进新文档。
  *
- * ## 边界
+ * ## 边界（W02/W03 收口后）
  *
- * 加粗 overlay 暂不在快照里：它当前由宿主 `useRichTextOverrides` 持有，迁移进本容器属于
- * W03 的接入步骤（需同步改 `ResumeDetailModal` 与保存合并口径）。本文件先把 content+layout
- * 的撤销/恢复钉住，overlay 的历史点由宿主在接入时并入同一快照。
+ * 文档编辑状态 = `content` + `layout` + `overlays` 三者。overlay 的**唯一持有者**仍是宿主
+ * （`ResumeDetailModal` 里的 useState）——只有那一层同时握着 detail、保存合并与主预览；本容器
+ * 把三者一起放进快照，撤销/恢复才能同时回写正文、排版与"纸面上还没保存的粗体"。
+ *
+ * 宿主单方面改 overlay（保存成功清空 / 用最新的 / 结构重排换下标）不在这里凭空造历史点：
+ * 接入层（`useWorkbenchHistory`）负责对齐容器里的副本，并把用户的加粗动作记成一步。
  */
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import type { ResumeContent, ResumeLayout } from "../../types/resume";
+import type { RichTextOverlayMap } from "../resume/useRichTextOverrides";
 import { applyDocumentCommand, mergeKeyOf, type DocumentCommand } from "./commands";
 import {
   createDocumentHistory,
@@ -33,10 +37,12 @@ import {
   type DocumentHistory,
 } from "./history";
 
-/** 一个历史快照：撤销/恢复要同时还原正文与排版参数。 */
+/** 一个历史快照：撤销/恢复要同时还原正文、排版参数与纸面上的加粗 overlay。 */
 export interface ResumeDocumentSnapshot {
   content: ResumeContent;
   layout: ResumeLayout;
+  /** `path → {raw, base}`；空对象 = 没有未保存的粗体（普通记录/旧记录都是空）。 */
+  overlays: RichTextOverlayMap;
 }
 
 export interface UseResumeDocumentOptions {
@@ -51,6 +57,8 @@ export interface UseResumeDocumentOptions {
 export interface ResumeDocumentApi {
   content: ResumeContent;
   layout: ResumeLayout;
+  /** 纸面加粗 overlay（与 content/layout 一起进快照；撤销/恢复由接入层回写宿主）。 */
+  overlays: RichTextOverlayMap;
   /** 执行一条内容命令；返回 false = no-op（同值 / 越界 / 锁阻止），不制造历史点。 */
   dispatch: (command: DocumentCommand, label?: string) => boolean;
   /** 整份替换（W06 大纲结构命令 / AI 采纳）：默认独立成一步。 */
@@ -184,6 +192,7 @@ export function useResumeDocument({
   return {
     content: document.content,
     layout: document.layout,
+    overlays: document.overlays,
     dispatch,
     replaceDocument,
     setLayout,
