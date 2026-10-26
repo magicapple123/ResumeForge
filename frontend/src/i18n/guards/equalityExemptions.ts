@@ -1,0 +1,28 @@
+// SPDX-License-Identifier: Apache-2.0
+/** Append-only exceptions for values whose spelling is independent of locale. */
+export const EQUALITY_EXEMPT_KEYS = {
+  // A language selector displays the language's native self-name in every locale.
+  "resume.language.en-US": "The native language name is English",
+  // This is a separator between user-provided values, not a sentence.
+  "jobs.candidate.import.preview-meta": "Company and filename interpolation format",
+  // Existing consumers use this value as CSS, not as rendered text.
+  "outline.canvas.highlight.style": "Canvas highlight CSS declaration",
+  // A DOI example is an identifier with an invariant syntax.
+  "research.publications.doiPlaceholder": "DOI example identifier",
+  // This is a conventional bibliography volume and page-range example.
+  "research.publications.volumePagesPlaceholder": "Bibliography volume and pages syntax",
+  // A sample URL must remain a valid URL in both languages.
+  "typography.inline.linkPlaceholder": "Example URL",
+  // These placeholders concatenate labels that have already been translated.
+  "versions.variants.exportOption": "Translated variant label interpolation format",
+  // The middle dot is a separator before a user-provided job title.
+  "versions.variants.exportOption.job": "Job title interpolation separator",
+  // Model usage uses the technical accounting unit, rather than English prose.
+  "provenance.usage.tokens": "Model accounting unit token",
+  // These are official export format names separated by slashes.
+  "trial.export.all": "Official export format names",
+} as const satisfies Readonly<Record<string, string>>;
+
+export function isEqualityExempt(key: string): boolean {
+  return Object.prototype.hasOwnProperty.call(EQUALITY_EXEMPT_KEYS, key);
+}

@@ -1,0 +1,90 @@
+// SPDX-License-Identifier: Apache-2.0
+const optimizer = {
+  "optimizer.title": "Optimize page layout with constraints",
+  "optimizer.hint":
+    "Find Plans that preserve what you want to keep: no unlocking and no hidden font shrinking",
+  "optimizer.constraints": "Constraints",
+  "optimizer.lockFont": "Keep font size",
+  "optimizer.lockFont.hint": "Tighten only margins, Section spacing and line height",
+  "optimizer.minMargin": "Minimum margin",
+  "optimizer.minMargin.hint": "Margins will not be reduced below this value",
+  "optimizer.minMargin.off": "No limit",
+  "optimizer.keepEntries": "Keep Entries intact",
+  "optimizer.keepEntries.hint":
+    "Tighten spacing and font size only; keep pagination and Entry structure unchanged",
+  "optimizer.target": "Target length",
+  "optimizer.target.pages": "{count} pages",
+  "optimizer.generate": "Generate candidates",
+  "optimizer.generating": "Measuring candidates",
+  "optimizer.regenerate": "Regenerate candidates",
+  "optimizer.candidates": "Candidate Plans",
+  "optimizer.candidates.hint":
+    "{count} distinct Plans, ordered from least to greatest readability impact",
+  "optimizer.candidate.changes": "What changes",
+  "optimizer.candidate.changesColon": "What changes:",
+  "optimizer.candidate.overflow": "Overflow reduced by {value}",
+  "optimizer.candidate.overflow.none": "No reduction in overflow",
+  "optimizer.candidate.pages": "Estimated {pages} pages",
+  "optimizer.candidate.fits": "Fits",
+  "optimizer.candidate.notFits": "Still does not fit",
+  "optimizer.candidate.readability.none": "Barely noticeable",
+  "optimizer.candidate.readability.mild": "Minor",
+  "optimizer.candidate.readability.noticeable": "Noticeable",
+  "optimizer.candidate.fontNote": "Font size reduced by {percent} (minimum {floor}px)",
+  "optimizer.apply": "Apply this Plan",
+  "optimizer.apply.aria": "Apply candidate Plan {index}",
+  "optimizer.applied": "Settings written to sliders; you can undo",
+  "optimizer.applied.hint":
+    "The Plan's values now appear in the settings sliders, where you can review and adjust them",
+  "optimizer.measuring": "Measuring this setting",
+  "optimizer.empty": "The content already fits; no optimization is needed",
+  "optimizer.empty.hint": "Continue adjusting manually or shorten the content first",
+  "optimizer.noFeasible": "No feasible Plan under the current constraints",
+  "optimizer.noFeasible.locked":
+    "Your locked constraints exclude every candidate; relax one and try again",
+  "optimizer.noFeasible.stillOverflow":
+    "All candidates were tried and none fits; shorten the content or add pages",
+  "optimizer.noFeasible.noRoom":
+    "Typography settings are already at their tightest; nothing can be tightened further",
+  "optimizer.noMeasure":
+    "The current page layout has not been measured; wait for the preview to load and try again",
+  "optimizer.conflict": "Settings were changed in another window",
+  "optimizer.conflict.hint": "Refresh to the latest version, then regenerate candidates",
+  "optimizer.cannotShrink": "Font size will not shrink automatically",
+  "optimizer.cannotShrink.hint":
+    "For a tighter layout, adjust the font size slider manually or turn off Keep font size",
+  "optimizer.readability": "Readability impact",
+  "optimizer.tried": "Tried {count} Plans",
+  "optimizer.change.padding": "Margins {from} → {to} mm",
+  "optimizer.change.sectionGap": "Section spacing {from} → {to}",
+  "optimizer.change.lineHeight": "Line height {from} → {to}",
+  "optimizer.change.fontScale": "Font size factor {from} → {to}",
+  "optimizer.content.title": "Content reduction candidates",
+  "optimizer.content.hint":
+    "Remove duplicate or overly short content, then check the page count again after applying",
+  "optimizer.content.kind.duplicate-entries": "Merge duplicate Entries",
+  "optimizer.content.kind.duplicate-points": "Delete duplicate bullet points",
+  "optimizer.content.kind.merge-short-points": "Merge short bullet points",
+  "optimizer.content.kind.low-relevance-points": "Trim less relevant bullet points",
+  "optimizer.content.stats.entries": "Delete {count} Entries",
+  "optimizer.content.stats.points": "Delete {count} bullet points",
+  "optimizer.content.stats.merged": "Merge {count} groups of short bullet points",
+  "optimizer.content.stats.chars": "Save {count} characters",
+  "optimizer.content.itemCount": "{count} entries total",
+  "optimizer.content.untitled": "Untitled Entry",
+  "optimizer.content.measure.reduced": "Overflow reduced by {value}",
+  "optimizer.content.measure.fits": "Fits",
+  "optimizer.content.measure.pages": "Estimated {pages} pages",
+  "optimizer.content.measure.after":
+    "Merge changes cannot be measured in advance; check the layout again after applying",
+  "optimizer.content.hiddenOnly":
+    "All removed Entries are hidden, so the page count will not change",
+  "optimizer.content.apply": "Shorten and save",
+  "optimizer.content.apply.aria": "Apply content candidate {index}",
+  "optimizer.content.applied": "Content shortened; you can undo",
+  "optimizer.content.applyFailed": "The content reduction was not applied",
+  "optimizer.content.applyFailed.hint": "The content is unchanged; you can try again",
+  "optimizer.content.historyLabel": "Shorten content",
+} as const;
+
+export default optimizer;

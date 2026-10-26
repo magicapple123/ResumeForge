@@ -2,9 +2,8 @@
 /**
  * 存量中文棘轮守卫：**只降不升**。
  *
- * 本文件不判断"哪句话该迁到 `t()`"，它只回答一个问题：这次改动之后，`src/` 里含中文的
- * 行数、以及测试里用中文做 `*ByText` 断言的条数，有没有比基线**更多**。多了就红，
- * 并把多出来的文件与行数直接指出来。
+ * AST identifies product copy independently of its language. Legacy CJK ceilings
+ * remain in force while fingerprint budgets reject new English or Chinese copy.
  *
  * ## 为什么是"行数"和"逐文件"两个口径
  *
@@ -24,14 +23,15 @@
  * Remove-Item Env:CJK_BASELINE_WRITE
  * ```
  *
- * 生成模式下 `it()` **只写文件、不做比较**，并打印新旧 total 差。写完必须 `git diff`
- * 人工看一遍。生成模式**不在任何 npm script / CI 里**——它是一次有意识的动作。
+ * Maintenance validates every ceiling and fingerprint before writing. It cannot
+ * register new copy or skip the normal guard assertions. Initial AST capture is
+ * explicit and only available when the AST baseline does not exist yet.
  *
  * ## 豁免
  *
- * 只有行内注释一种形式：`// i18n-ok: 理由`（写在那一行行尾，或单独写在上一行）。
- * **必须写理由**；空理由不算豁免。没有文件级开关，也没有白名单文件——见
- * `cjkScan.EXCLUDED_DIRECTORY_PREFIXES` 的说明（那里只有两个"内容目录"，不是豁免）。
+ * Legacy CJK counters retain historical inline markers for compatibility.
+ * The product-copy AST ignores those markers; they cannot authorize new copy.
+ * Technical strings are classified by their syntax and consumption sites.
  */
 // @ts-expect-error Node 内置模块：@types/node 未安装，但 vitest 运行在 Node 里。
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
@@ -40,6 +40,18 @@ import { dirname, join, resolve } from "node:path";
 // @ts-expect-error 同上：@types/node 未安装。
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import {
+  countBudgetProblems,
+  tightenBaseline,
+  type I18nBaseline,
+} from "./guards/baselineMaintenance";
+import { scanProductCopy } from "./guards/productCopyAst";
+import {
+  diffProductCopyBudget,
+  fingerprintFindings,
+  type ProductCopyBudget,
+} from "./guards/productCopyBaseline";
+import { collectInventoryFiles, validateSourceInventory } from "./guards/sourceInventory";
 import {
   collectSourceFiles,
   countCjkAssertions,
@@ -69,18 +81,24 @@ const BASELINE_FILE = join(I18N_DIR, "i18nBaseline.json");
  */
 const SAVE = "\u4fdd\u5b58";
 
-interface BaselineShape {
-  version: number;
-  generatedAt: string;
-  rule: string;
-  src: ScanResult;
-  tests: ScanResult;
+function readBaseline(): I18nBaseline | null {
+  if (!existsSync(BASELINE_FILE)) return null;
+  return JSON.parse(readFileSync(BASELINE_FILE, "utf8")) as I18nBaseline;
 }
 
-function readBaseline(): BaselineShape | null {
-  if (!existsSync(BASELINE_FILE)) return null;
-  return JSON.parse(readFileSync(BASELINE_FILE, "utf8")) as BaselineShape;
-}
+const sourceFiles = collectSourceFiles(SRC_ROOT);
+const relativeKey = (absolute: string) =>
+  absolute.replace(/\\/g, "/").slice(SRC_ROOT.replace(/\\/g, "/").length + 1);
+const productFiles = Object.fromEntries(
+  sourceFiles.map((absolute) => [
+    relativeKey(absolute),
+    fingerprintFindings(scanProductCopy(readFileSync(absolute, "utf8"), absolute)),
+  ]),
+);
+const currentProductCopy: ProductCopyBudget = {
+  total: Object.values(productFiles).reduce((sum, file) => sum + file.count, 0),
+  files: productFiles,
+};
 
 /**
  * 当前值与基线的差异（空数组 = 达标）。
@@ -104,7 +122,7 @@ function diffAgainstBaseline(current: ScanResult, baseline: ScanResult): string[
 }
 
 /** 生成模式开关。只在人手动 `CJK_BASELINE_WRITE=1` 时打开，CI 里永远为假。 */
-const WRITE_MODE = Boolean(process.env.CJK_BASELINE_WRITE);
+const WRITE_MODE = process.env.CJK_BASELINE_WRITE === "1";
 
 // ===== 自测：夹具不依赖仓库现状，守卫本身错了必须能被看到 =====
 
@@ -204,18 +222,25 @@ describe("排除清单就是 demo 与语言包", () => {
   });
 });
 
-// ===== 生成模式：只写文件，不比较 =====
+// Maintenance runs before, and never disables, the ordinary guard assertions.
 
 describe.skipIf(!WRITE_MODE)("生成基线（CJK_BASELINE_WRITE=1）", () => {
   it("写入 i18nBaseline.json 并打印新旧差", () => {
     const previous = readBaseline();
-    const next: BaselineShape = {
-      version: 1,
-      generatedAt: new Date().toISOString().slice(0, 10),
-      rule: "CJK lines after stripping comments / ByText args containing CJK",
-      src: scanTree(SRC_ROOT, "src"),
-      tests: scanTree(SRC_ROOT, "tests"),
-    };
+    if (!previous) throw new Error("Legacy baseline is required");
+    const inventoryProblems = validateSourceInventory(
+      sourceFiles.map(relativeKey),
+      Object.keys(previous.src.files),
+    );
+    expect(inventoryProblems).toEqual([]);
+    expect(collectInventoryFiles(SRC_ROOT)).toEqual(sourceFiles.map(relativeKey).sort());
+    const next = tightenBaseline(
+      previous,
+      scanTree(SRC_ROOT, "src"),
+      scanTree(SRC_ROOT, "tests"),
+      currentProductCopy,
+      process.env.I18N_AST_BASELINE_INIT === "1",
+    );
     writeFileSync(BASELINE_FILE, `${JSON.stringify(next, null, 2)}\n`, "utf8");
 
     const before = `src ${previous?.src.total ?? "（无基线）"} / tests ${previous?.tests.total ?? "（无基线）"}`;
@@ -234,12 +259,12 @@ describe.skipIf(!WRITE_MODE)("生成基线（CJK_BASELINE_WRITE=1）", () => {
 
 // ===== 三条断言：只降不升 =====
 
-describe.skipIf(WRITE_MODE)("棘轮：存量中文只许下降", () => {
-  it("基线存在（缺失时先跑生成模式，不要手写）", () => {
+describe("棘轮：存量中文只许下降", () => {
+  it("requires the tracked baseline; maintenance cannot recreate a missing baseline", () => {
     const baseline = readBaseline();
     expect(
       baseline,
-      "缺少 src/i18n/i18nBaseline.json。用 `CJK_BASELINE_WRITE=1 npx vitest run src/i18n/cjkRatchet` 生成，",
+      "Missing src/i18n/i18nBaseline.json. Restore the tracked baseline before running maintenance.",
     ).not.toBeNull();
   });
 
@@ -247,18 +272,30 @@ describe.skipIf(WRITE_MODE)("棘轮：存量中文只许下降", () => {
     const baseline = readBaseline();
     if (!baseline) throw new Error("基线缺失");
     const current = scanTree(SRC_ROOT, "src");
+    expect(countBudgetProblems(current, baseline.src)).toEqual([]);
     const problems = diffAgainstBaseline(current, baseline.src);
     expect(
       problems,
-      '存量中文只许下降。新写的界面文案请走 `t("...")`；确实无法迁移时在该行加 `// i18n-ok: <理由>`。' +
+      "Legacy CJK budgets can only decrease. Move product copy to t(); inline markers cannot exempt AST findings." +
         `（当前 ${current.total} / 基线 ${baseline.src.total}）`,
     ).toEqual([]);
+  });
+
+  it("has a complete source inventory and no new product copy in either language", () => {
+    const baseline = readBaseline();
+    if (!baseline?.productCopy) throw new Error("AST product-copy baseline is required");
+    expect(
+      validateSourceInventory(sourceFiles.map(relativeKey), Object.keys(baseline.src.files)),
+    ).toEqual([]);
+    expect(collectInventoryFiles(SRC_ROOT).sort()).toEqual(sourceFiles.map(relativeKey).sort());
+    expect(diffProductCopyBudget(currentProductCopy, baseline.productCopy)).toEqual([]);
   });
 
   it("tests 的中文 ByText 断言行数不超过基线", () => {
     const baseline = readBaseline();
     if (!baseline) throw new Error("基线缺失");
     const current = scanTree(SRC_ROOT, "tests");
+    expect(countBudgetProblems(current, baseline.tests)).toEqual([]);
     const problems = diffAgainstBaseline(current, baseline.tests);
     expect(
       problems,
