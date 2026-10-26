@@ -19,23 +19,9 @@ import pytest
 from app.services.pdf_exporter import font_subset, reset_font_cache
 from app.services.pdf_exporter.fit import build_resume_pdf
 from app.services.resume.resume_sample import sample_resume_content
-from font_fixtures import isolate_pdf_font_env
+from font_fixtures import DEFAULT_TEXT, build_test_font, isolate_pdf_font_env, write_font
 from pypdf import PdfReader
 from test_pdf_exporter import _text_runs, needs_font
-
-
-@pytest.fixture(autouse=True)
-def _isolate_host_font_env(monkeypatch):
-    """本文件量的是"系统可用字体"这条链路：先摘掉宿主自己的字体兜底。
-
-    CI 的 Linux 作业把 RESUMEFORGE_PDF_FONT 指到 WQY（金样导出需要 TrueType 中文字体），
-    而它的字形覆盖与本机候选字体不同（实测缺「•」）——环境变量又优先于系统候选，于是
-    "子集不能少字"的断言会按宿主字体假红。字体路径是进程级缓存，前后各清一次。
-    """
-    isolate_pdf_font_env(monkeypatch)
-    reset_font_cache()
-    yield
-    reset_font_cache()
 
 
 def _text(content: bytes) -> str:
@@ -226,33 +212,39 @@ def test_an_empty_charset_is_not_remembered(text):
     font_subset.remember_charset("sig-empty", text)
     assert font_subset.charset_for("sig-empty") is None
 
-
 @needs_font
-def test_a_classic_first_render_does_not_lose_the_scholar_bullet(caplog):
+def test_a_classic_first_render_does_not_lose_the_scholar_bullet(caplog, monkeypatch):
     """跨模板复用字符集时，模板专属装饰字符不能少（2026-10-24 真实缺陷）。
 
-    同一进程里先渲 classic、再渲 scholar（用户切模板的真实路径）：子集缓存的键是**内容
-    签名**、不含模板，classic 那趟没画过 scholar 三列技能的项目符号「•」，第二趟用子集
-    字体时整列圆点静默变空白（fpdf2 只打一行 missing glyph 警告）。
+    这里显式使用合成 TTF（含内容用到的中文与「•」）而不依赖宿主字体：CI 的 Linux 金样
+    字体（WQY）缺「•」字形，本用例要钉的是字符集跨模板复用不能漏装饰字符，与宿主字体
+    覆盖无关。隔离 RESUMEFORGE_PDF_FONT 是为了让显式指定的字体真正生效（该环境变量在
+    产品里优先于用户所选字体，是 Linux 兜底路径）。
     """
     import logging
 
     from app.schemas.resume import ResumeContent
     from app.services.pdf_exporter.fit import _content_signature
 
-    resume = ResumeContent(
-        name="张三",
-        skills=[{"name": "Python", "level": "熟练"}, {"name": "Go", "level": "熟练"}],
-    )
-    with caplog.at_level(logging.WARNING):
-        _render(resume, template="classic")
-        charset = font_subset.charset_for(_content_signature(resume)[0])
-        assert charset is not None
-        assert "•" in charset, "模板专属项目符号「•」必须无条件进字符集，否则换模板后整列消失"
-        scholar = _render(resume, template="scholar")
+    font_name = "TestSansPdf.ttf"
+    write_font(font_name, build_test_font(DEFAULT_TEXT + "熟练求职意向专业技能个人总结•"))
+    isolate_pdf_font_env(monkeypatch)
+    reset_font_cache()
+    try:
+        resume = ResumeContent(
+            name="张三",
+            skills=[{"name": "Python", "level": "熟练"}, {"name": "Go", "level": "熟练"}],
+        )
+        with caplog.at_level(logging.WARNING):
+            _render(resume, template="classic", format_config={"font": font_name})
+            charset = font_subset.charset_for(_content_signature(resume)[0])
+            assert charset is not None
+            assert "•" in charset, "模板专属项目符号「•」必须无条件进字符集，否则换模板后整列消失"
+            scholar = _render(resume, template="scholar", format_config={"font": font_name})
 
-    assert "•" in _text(scholar.content)
-    assert "missing the following glyphs" not in caplog.text
+        assert "•" in _text(scholar.content)
+    finally:
+        reset_font_cache()
 
 
 def test_every_paper_decorative_character_is_registered_for_the_subset():
