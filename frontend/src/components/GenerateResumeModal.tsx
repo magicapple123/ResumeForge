@@ -18,6 +18,7 @@ import {
 import { getLLMConfig } from "../api/settings";
 import { useGenerationExtras } from "../features/career-scenarios/useGenerationExtras";
 import { newResumeLayout, withCreationLanguage } from "../features/resume-document/newResumeLayout";
+import { t } from "../i18n";
 import { useLocale } from "../i18n/i18nContext";
 import { formatErrorGuidance } from "../api/errorGuidance";
 import type {
@@ -104,12 +105,12 @@ export default function GenerateResumeModal({ job, open, initialTitle = "", onCl
         await updateResumeLayout(detail.id, next);
       } catch (err) {
         // 只提示、不回滚：版式本身已经渲染成功，弹出旧版式会让"我刚调好的"凭空消失。
-        message.error(err instanceof Error ? err.message : "保存排版设置失败");
+        message.error(err instanceof Error ? err.message : t("generate.modal.saveLayoutFailed"));
       }
     },
     onRendered: (next) => setLayout(next),
     onError: (err) => {
-      message.error(err instanceof Error ? err.message : "按新设置重新排版失败");
+      message.error(err instanceof Error ? err.message : t("generate.modal.relayoutFailed"));
       // D13：探针是"我看到的"，渲染失败就必须清掉，不能继续呈现一个不存在的状态。
       previewRef.current?.setLiveProbe("");
     },
@@ -219,7 +220,7 @@ export default function GenerateResumeModal({ job, open, initialTitle = "", onCl
       setStage("preview");
     } catch (err) {
       setStage("error");
-      setErrorMsg(err instanceof Error ? err.message : "生成完成，但加载结果失败");
+      setErrorMsg(err instanceof Error ? err.message : t("generate.modal.loadResultFailed"));
     }
   }, []);
 
@@ -257,11 +258,16 @@ export default function GenerateResumeModal({ job, open, initialTitle = "", onCl
       setTaskId(started.id);
       setTask(started);
       // 登记到模块级登记表：关掉弹窗后仍会被追踪，完成时统一弹窗 + 响铃。
-      watchResumeTask(started, job ? `为「${job.title}」生成简历` : "生成通用简历");
+      watchResumeTask(
+        started,
+        job
+          ? t("generate.modal.taskTitle", { job: job.title })
+          : t("generate.modal.taskTitleGeneral"),
+      );
     } catch (err) {
       setStage("error");
       // RF-20：失败不只显示原始异常——给「原因 + 建议 + 编号」指引。
-      setErrorMsg(formatErrorGuidance(err, "启动生成失败，请重试"));
+      setErrorMsg(formatErrorGuidance(err, t("generate.modal.startFailed")));
     }
   };
 
@@ -333,7 +339,7 @@ export default function GenerateResumeModal({ job, open, initialTitle = "", onCl
       if (resumeId == null) {
         // 完成却没回填记录 id：理论上不会发生（完成一定先落库），防御性当作失败处理，
         // 避免卡在"完成"状态却永远拿不到预览。
-        setErrorMsg("生成完成，但结果记录缺失，请重试");
+        setErrorMsg(t("generate.modal.resultMissing"));
         setStage("error");
         return;
       }
@@ -344,10 +350,10 @@ export default function GenerateResumeModal({ job, open, initialTitle = "", onCl
       setTaskId(null);
       setTask(null);
       setStage("config");
-      message.info("已取消生成");
+      message.info(t("generate.modal.cancelled"));
     } else if (task.status === "failed") {
       setTaskId(null);
-      setErrorMsg(task.error || "生成失败，请重试");
+      setErrorMsg(task.error || t("generate.modal.failed"));
       setStage("error");
     }
   }, [task, notification, message, navigate, loadPreview]);
@@ -359,7 +365,7 @@ export default function GenerateResumeModal({ job, open, initialTitle = "", onCl
       const cancelled = await cancelResumeGenerateTask(taskId);
       setTask(cancelled);
     } catch (err) {
-      message.error(err instanceof Error ? err.message : "取消失败，请重试");
+      message.error(err instanceof Error ? err.message : t("generate.modal.cancelFailed"));
     }
   };
 
@@ -376,7 +382,7 @@ export default function GenerateResumeModal({ job, open, initialTitle = "", onCl
   const saveEditedResume = async (content: ResumeContent) => {
     const recordId = result?.detail.id;
     if (!recordId) {
-      throw new Error("简历记录尚未保存完成，请稍后再试");
+      throw new Error(t("generate.modal.recordNotSaved"));
     }
     const updated = await updateResume(recordId, content);
     const html = await renderResume(updated.content, layout);
@@ -384,7 +390,7 @@ export default function GenerateResumeModal({ job, open, initialTitle = "", onCl
     setPreviewHtml(html);
     setSuggestionsGenerated(false);
     setSuggestionsResetKey((value) => value + 1);
-    message.success("简历修改已保存");
+    message.success(t("generate.modal.changesSaved"));
   };
 
   /**
@@ -411,7 +417,11 @@ export default function GenerateResumeModal({ job, open, initialTitle = "", onCl
 
   return (
     <Modal
-      title={job ? `为「${job.title}」生成简历` : "生成通用简历"}
+      title={
+        job
+          ? t("generate.modal.taskTitle", { job: job.title })
+          : t("generate.modal.taskTitleGeneral")
+      }
       open={open}
       onCancel={handleClose}
       // 宽度与 body 限高对齐简历中心的预览弹窗（ResumeDetailModal）：预览阶段渲染的是

@@ -160,6 +160,18 @@ const workbench = {
   "editor.profile-refresh.body": "Your unsaved changes were not overwritten automatically",
   "editor.profile-refresh.apply": "Replace with latest Profile content",
   "editor.profile-refresh.keep": "Keep current edits",
+  "generate.modal.saveLayoutFailed": "Could not save typography settings; try again",
+  "generate.modal.relayoutFailed": "Could not re-layout with the new settings; try again",
+  "generate.modal.loadResultFailed": "Generation finished but the result could not be loaded",
+  "generate.modal.taskTitle": "Generating a Resume for “{job}”",
+  "generate.modal.taskTitleGeneral": "Generating a General Resume",
+  "generate.modal.startFailed": "Could not start generation; try again",
+  "generate.modal.resultMissing": "Generation finished but the record is missing; try again",
+  "generate.modal.cancelled": "Generation cancelled",
+  "generate.modal.failed": "Generation failed; try again",
+  "generate.modal.cancelFailed": "Could not cancel; try again",
+  "generate.modal.recordNotSaved": "The Resume is still being saved; try again shortly",
+  "generate.modal.changesSaved": "Resume changes saved",
 } as const;
 
 export default workbench;
