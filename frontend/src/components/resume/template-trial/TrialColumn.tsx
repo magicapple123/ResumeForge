@@ -103,7 +103,7 @@ export default function TrialColumn({
             pages={pageLimit}
           />
         ) : state.htmlError ? (
-          <Space direction="vertical" size={6}>
+          <Space orientation="vertical" size={6}>
             <Typography.Text type="danger">
               {state.htmlError || t("trial.preview.failed")}
             </Typography.Text>
@@ -145,7 +145,7 @@ export default function TrialColumn({
             </Button>
           </Space>
         ) : state.measurement ? (
-          <Space direction="vertical" size={2}>
+          <Space orientation="vertical" size={2}>
             <Typography.Text>{measurementText(state.measurement)}</Typography.Text>
             {state.measurement.overflow ? (
               <Typography.Text type="warning">{t("trial.measure.overflow")}</Typography.Text>

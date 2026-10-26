@@ -15,6 +15,7 @@ import { RowActions, RowContextMenu, type RowActionItem } from "../../components
 import { TRASH_RECOVERY_NOTE } from "../../components/common/rowActionMenu";
 import type { BatchSelection } from "../../hooks/useBatchSelection";
 import { RESUME_ENHANCEMENT_LEVELS, enhancementLevelDescription } from "../../config";
+import { t } from "../../i18n";
 import type { Page } from "../../types";
 import type { ResumeBrief } from "../../types";
 import type { DiffViewData } from "../../types/resumeFieldDiff";
@@ -84,6 +85,9 @@ function secondaryActionsFor(record: ResumeBrief, deps: RowActionDeps): RowActio
       danger: true,
       confirm: "删除这份简历？",
       confirmBody: `这份简历${TRASH_RECOVERY_NOTE}`, // i18n-ok: 正文补「对象」段（§4.4 三段式），后果句引用 TRASH_RECOVERY_NOTE 常量，不重写
+      // 按钮写具体动作（AGENTS：禁用「确定/取消」泛动词；QA R.07 实测为默认「取 消 / 确 定」）。
+      confirmOkText: t("resumes.remove.confirm.ok"),
+      confirmCancelText: t("resumes.remove.confirm.cancel"),
       onClick: () => void deps.remove(record.id),
     },
   ];

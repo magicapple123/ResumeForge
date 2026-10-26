@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 /** 简历中心：生成历史列表、收藏、预览与导出。 */
 import { UndoOutlined } from "@ant-design/icons";
-import { App, Button, Input, Select, Space, Tag, Tooltip } from "antd";
+import { App, Button, Select, Space, Tag, Tooltip } from "antd";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import {
@@ -42,6 +42,7 @@ import ResumeRenameModal from "./resumes/ResumeRenameModal";
 import ResumeNoteModal from "./resumes/ResumeNoteModal";
 import ResumeDiffModal from "./resumes/ResumeDiffModal";
 import JobFilterSelect from "./resumes/JobFilterSelect";
+import ResumeSearchInput from "./resumes/ResumeSearchInput";
 import { useSelectAllResumes } from "./resumes/useSelectAllResumes";
 
 export default function ResumesPage() {
@@ -59,14 +60,6 @@ export default function ResumesPage() {
     return undefined;
   };
   const [keyword, setKeyword] = useState(searchParams.get("keyword") ?? "");
-  // 搜索框受控镜像（同 JobFilterBar 的处理）：点 × 清空时立即清筛选。
-  // Compiler 规范：镜像同步用渲染期守卫式调整。
-  const [searchText, setSearchText] = useState(keyword);
-  const [prevKeyword, setPrevKeyword] = useState(keyword);
-  if (prevKeyword !== keyword) {
-    setPrevKeyword(keyword);
-    setSearchText(keyword);
-  }
   const [page, setPage] = useState(Number(searchParams.get("page")) || 1);
   const [pageSize, setPageSize] = useState(Number(searchParams.get("page_size")) || 10);
   const [hasJobFilter, setHasJobFilter] = useState<boolean | undefined>(() => boolParam("has_job"));
@@ -139,6 +132,12 @@ export default function ResumesPage() {
     },
     [setSearchParams],
   );
+
+  /** 关键词提交（Enter / 防抖 / 清空共用）：回到第 1 页，不动岗位、排序等其它筛选。 */
+  const applyKeyword = useCallback((value: string) => {
+    setKeyword(value);
+    setPage(1);
+  }, []);
 
   // T12：手写简历保存成功后广播版本号，放进 useApi 依赖里让列表自动重取。
   const resumeListVersion = useResumeListVersion();
@@ -352,26 +351,7 @@ export default function ResumesPage() {
           </Space>
         )}
         <JobFilterSelect value={jobId} onChange={applyJobFilter} onLabelChange={setJobLabel} />
-        <Input.Search
-          placeholder="搜索简历记录"
-          allowClear
-          style={{ width: 300 }}
-          // 受控镜像：URL 恢复的关键词能回填输入框；点 × 清空时立即把筛选也清掉。
-          value={searchText}
-          onChange={(event) => {
-            const value = event.target.value;
-            setSearchText(value);
-            if (value === "" && keyword !== "") {
-              setKeyword("");
-              setPage(1);
-            }
-          }}
-          onSearch={(value) => {
-            setSearchText(value);
-            setKeyword(value);
-            setPage(1);
-          }}
-        />
+        <ResumeSearchInput keyword={keyword} onCommit={applyKeyword} />
         <Select
           allowClear
           placeholder="岗位关联"

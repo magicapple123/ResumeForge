@@ -6,6 +6,7 @@
 import { App as AntdApp } from "antd";
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { t } from "../i18n";
 import { projectionOf } from "../test/profileProjectionFixture";
 import GenerationConfigStage, {
   MAX_CUSTOM_INSTRUCTION,
@@ -118,6 +119,19 @@ describe("GenerateResumeModal 组摘要（F4-D）", () => {
     // antd 会给两字中文按钮加空格（"重 试"），按正则可访问名断言。
     expect(screen.getByRole("button", { name: /重\s?试/ })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: START_TEXT })).toBeInTheDocument();
+  });
+
+  it("生成时长文案如实：几秒到几十秒（不再写死与实测不符的 1-2 分钟）", () => {
+    render(
+      <AntdApp>
+        <GenerationConfigStage {...baseProps} />
+      </AntdApp>,
+    );
+    expect(
+      screen.getByText(t("generate.config.model-hint", { model: "deepseek-chat" })),
+    ).toBeInTheDocument();
+    // 旧文案「生成过程约需 1-2 分钟」与实际数秒不符，已删除（/1-2/ 无中文，不新增 CJK 断言）。
+    expect(screen.queryByText(/1-2/)).toBeNull();
   });
 
   it("自定义提示词上限常量仍与后端一致（不漏生成参数）", () => {

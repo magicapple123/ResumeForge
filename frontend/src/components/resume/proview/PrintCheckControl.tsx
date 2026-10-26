@@ -52,7 +52,7 @@ export default function PrintCheckControl({ viewportRef }: Props) {
   };
 
   const content = (
-    <Space direction="vertical" size={8} style={{ maxWidth: 320 }}>
+    <Space orientation="vertical" size={8} style={{ maxWidth: 320 }}>
       <Typography.Text type="secondary" style={{ fontSize: 12 }}>
         {t("proview.diagnostics.hint")}
       </Typography.Text>

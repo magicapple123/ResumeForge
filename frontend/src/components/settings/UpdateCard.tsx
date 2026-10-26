@@ -44,7 +44,7 @@ function formatBytes(value: number | null): string {
 }
 
 export default function UpdateCard() {
-  const { modal } = App.useApp();
+  const { modal, message } = App.useApp();
   const [result, setResult] = useState<UpdateCheckResult | null>(null);
   const { status, statusError, setStatus, refreshStatus } = useUpdateDownloadStatus();
   const [checking, setChecking] = useState(false);
@@ -119,7 +119,16 @@ export default function UpdateCard() {
     setChecking(true);
     setError("");
     try {
-      setResult(await checkForUpdate(refresh));
+      const next = await checkForUpdate(refresh);
+      setResult(next);
+      // 结果 Alert 在卡片底部，用户点完按钮时看不到（QA ST.04：8 秒内"无任何反馈"）。
+      // 检查完成必须**立刻**给出结论：有新版 / 已是最新；失败沿用上面的 error Alert。
+      const version = next.latest_version || next.current_version;
+      if (next.update_available) {
+        message.success(t("update.check.available", { version }));
+      } else {
+        message.info(t("update.check.latest", { version }));
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "检查更新失败");
     } finally {

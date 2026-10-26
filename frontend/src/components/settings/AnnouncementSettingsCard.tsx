@@ -43,7 +43,7 @@ export default function AnnouncementSettingsCard() {
           description={t("announcement.settings.empty")}
         />
       ) : (
-        <Space direction="vertical" size={8} style={{ width: "100%" }}>
+        <Space orientation="vertical" size={8} style={{ width: "100%" }}>
           {muted.map((code) => (
             <div key={code} className="announcement-settings-row">
               <Typography.Text>{CODE_LABELS[code] ?? code}</Typography.Text>

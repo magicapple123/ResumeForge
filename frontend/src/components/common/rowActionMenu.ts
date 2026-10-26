@@ -37,6 +37,13 @@ export interface RowActionItem {
    */
   confirmBody?: string;
   /**
+   * 二次确认的**确认按钮**文案：写具体动作与对象（如「删除这份简历」）。
+   * 缺省不传时保持 antd 默认「确定」——存量列表不动，只有被明确修到的调用点才给。
+   */
+  confirmOkText?: string;
+  /** 二次确认的**取消按钮**文案（如「先不删」）；缺省保持 antd 默认。 */
+  confirmCancelText?: string;
+  /**
    * 子菜单（如「复制」下面的一组字段）。
    *
    * 加了它之后行操作可以「一类动作一个入口」：右键菜单本来就窄，把"复制标题 / 复制岗位 /
@@ -98,8 +105,20 @@ export function useRowActionMenu() {
       return { key: item.key, type: "divider" as const };
     }
     // 解构成 const：嵌套 onClick 闭包里拿不到参数的收窄类型，解构后没问题。
-    const { key, danger, disabled, icon, label, confirm, confirmBody, undo, onClick, children } =
-      item;
+    const {
+      key,
+      danger,
+      disabled,
+      icon,
+      label,
+      confirm,
+      confirmBody,
+      confirmOkText,
+      confirmCancelText,
+      undo,
+      onClick,
+      children,
+    } = item;
     return {
       key,
       danger,
@@ -121,6 +140,9 @@ export function useRowActionMenu() {
             title: confirm,
             // 正文放后果与可逆性（§4.4 三段式的第三段）；没有就不传，别输出空段落。
             content: confirmBody,
+            // 按钮写具体动作（AGENTS 禁用「确定/取消」泛动词）；未指定时沿用 antd 默认。
+            okText: confirmOkText,
+            cancelText: confirmCancelText,
             // confirm 的 holder 挂在根 <AntdApp>，不经过卡片内的局部 ConfigProvider，
             // 默认 z（3100）落在投投卡（3400/3500）与简历编辑器 Modal（3110）之后，
             // 看起来就是"点了删除没反应"。统一抬到卡片内弹层基准 3550。

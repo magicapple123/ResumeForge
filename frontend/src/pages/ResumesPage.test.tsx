@@ -247,6 +247,33 @@ describe("ResumesPage 行操作（三点菜单已移除）", () => {
     fireEvent.keyDown(title.closest("tr") as HTMLElement, { key: "ContextMenu", bubbles: true });
     expect(await screen.findByRole("menuitem", { name: "重命名" })).toBeInTheDocument();
   });
+
+  it("删除确认按钮写具体动作：确认「删除这份简历」、取消「先不删」", async () => {
+    renderPage();
+    const title = await screen.findByText(RESUME.title);
+    fireEvent.contextMenu(title.closest("tr") as HTMLElement);
+    fireEvent.click(await screen.findByRole("menuitem", { name: "删除" }));
+
+    const confirmRoot = await waitFor(
+      () => {
+        const root = document.querySelector(".ant-modal-confirm");
+        expect(root).not.toBeNull();
+        return root as HTMLElement;
+      },
+      { timeout: 5000 },
+    );
+    // 存量缺陷（QA R.07）：按钮是默认「取 消 / 确 定」。改为具体动作后，点确认也确实删除。
+    const okButton = within(confirmRoot).getByRole("button", {
+      name: t("resumes.remove.confirm.ok"),
+    });
+    expect(
+      within(confirmRoot).getByRole("button", { name: t("resumes.remove.confirm.cancel") }),
+    ).toBeInTheDocument();
+    expect(apiMocks.deleteResume).not.toHaveBeenCalled();
+
+    fireEvent.click(okButton);
+    await waitFor(() => expect(apiMocks.deleteResume).toHaveBeenCalledWith(RESUME.id));
+  });
 });
 
 describe("ResumesPage URL 状态化", () => {

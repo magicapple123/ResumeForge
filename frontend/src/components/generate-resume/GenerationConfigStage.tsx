@@ -86,7 +86,9 @@ export default function GenerationConfigStage({
           type="info"
           showIcon
           style={{ marginBottom: 16 }}
-          title={`当前模型：${modelName || "未知"}。生成过程约需 1-2 分钟，生成在后台进行，期间可关闭弹窗，完成后会自动提醒。`}
+          title={t("generate.config.model-hint", {
+            model: modelName || t("generate.config.model-unknown"),
+          })}
           description={
             job
               ? "系统会根据目标岗位的 JD，从完整个人资料与经历总结文件中筛选并排序相关信息；原始资料不会被修改。"

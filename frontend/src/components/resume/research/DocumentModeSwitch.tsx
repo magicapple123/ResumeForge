@@ -95,7 +95,7 @@ export default function DocumentModeSwitch({
   };
 
   return (
-    <Space direction="vertical" size={8} style={{ width: "100%" }}>
+    <Space orientation="vertical" size={8} style={{ width: "100%" }}>
       <Row gutter={8} align="middle">
         <Col flex="none">
           <Space size={4}>

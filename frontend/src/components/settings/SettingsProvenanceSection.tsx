@@ -138,7 +138,7 @@ export default function SettingsProvenanceSection({ targetService, className }: 
 
   return (
     <Card className={className} data-settings-provenance="1">
-      <Space direction="vertical" size={10} style={{ width: "100%" }}>
+      <Space orientation="vertical" size={10} style={{ width: "100%" }}>
         <div>
           <Typography.Title level={5} style={{ margin: 0 }}>
             {pt("settings.provenance.title")}

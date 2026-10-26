@@ -11,9 +11,10 @@
  * （批量选择工具栏），共用同一套断言形态；为了不再多一个几乎重复的夹具文件，
  * 两个 describe 放在一起。
  */
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { App as AntdApp, Form } from "antd";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { t } from "../../i18n";
 import BatchDeleteButton from "./BatchDeleteButton";
 import { RowActions } from "./RowActions";
 import { TRASH_RECOVERY_NOTE, useRowActionMenu, type RowMenuItem } from "./rowActionMenu";
@@ -94,6 +95,39 @@ describe("二次确认的正文", () => {
     // 标题说动作与对象，正文说后果与可逆性——两段都在，才算 §4.4 的三段式。
     expect(dialog.textContent).toContain("删除这条记录？");
     expect(dialog.textContent).toContain(TRASH_RECOVERY_NOTE);
+  });
+
+  it("确认按钮写具体动作：传了 confirmOkText/confirmCancelText 就不再是默认「确定/取消」", async () => {
+    render(
+      <AntdApp>
+        <ConfirmHarness
+          items={[
+            {
+              key: "delete",
+              label: "删除",
+              danger: true,
+              confirm: "删除这份简历？",
+              confirmBody: TRASH_RECOVERY_NOTE,
+              confirmOkText: t("resumes.remove.confirm.ok"),
+              confirmCancelText: t("resumes.remove.confirm.cancel"),
+              onClick: vi.fn(),
+            },
+          ]}
+        />
+      </AntdApp>,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "打开确认" }));
+
+    const dialog = await screen.findByRole("dialog");
+    // 断言用 t() 取文案：测试里不新增中文 ByText 兜底字面量（cjkRatchet 口径）。
+    expect(
+      within(dialog).getByRole("button", { name: t("resumes.remove.confirm.ok") }),
+    ).toBeInTheDocument();
+    expect(
+      within(dialog).getByRole("button", { name: t("resumes.remove.confirm.cancel") }),
+    ).toBeInTheDocument();
+    expect(within(dialog).queryByRole("button", { name: "确 定" })).toBeNull();
   });
 });
 

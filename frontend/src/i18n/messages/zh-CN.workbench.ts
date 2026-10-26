@@ -243,6 +243,10 @@ const workbench = {
   "resume.generate.group-failed": "当前组信息读取失败",
   "resume.generate.group-retry": "重试",
   "resume.generate.switch-group": "去切换组",
+  // 生成配置页顶部提示（QA：旧文案「生成过程约需 1-2 分钟」与实测 6s 不符）。
+  "generate.config.model-hint":
+    "当前模型：{model}。生成通常几秒到几十秒，取决于模型与篇幅；生成在后台进行，期间可关闭弹窗，完成后会自动提醒。",
+  "generate.config.model-unknown": "未知",
   // 简历详情「本次使用」追溯（R-33）：组已删除仍显示快照；资料/定义变了提示需重新生成。
   "resume.detail.group-usage.deleted": "组已删除",
   "resume.detail.group-usage.deleted-hint": "该组已删除；以下信息来自这份简历保存时的快照",

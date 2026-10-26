@@ -380,4 +380,50 @@ describe("UpdateCard", () => {
     expect(screen.queryByText("SYNTHETIC_FORM_ERROR")).not.toBeInTheDocument();
     expect(screen.queryByText(t("update.desktop.title"))).not.toBeInTheDocument();
   });
+
+  it("点检查更新发现新版本：立刻给出含版本号的反馈（QA ST.04）", async () => {
+    renderCard();
+    fireEvent.click(screen.getByRole("button", { name: "检查更新" }));
+
+    expect(
+      await screen.findByText(
+        t("update.check.available", { version: "0.12.0" }),
+        {},
+        {
+          timeout: 5000,
+        },
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("点检查更新且已是最新：给出「已是最新版本」反馈，不出现下载入口", async () => {
+    apiMocks.checkForUpdate.mockResolvedValue({
+      ...latest,
+      current_version: "1.0.2",
+      latest_version: "1.0.2",
+      update_available: false,
+      message: "",
+    });
+    renderCard();
+    fireEvent.click(screen.getByRole("button", { name: "检查更新" }));
+
+    expect(
+      await screen.findByText(
+        t("update.check.latest", { version: "1.0.2" }),
+        {},
+        { timeout: 5000 },
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "下载更新" })).not.toBeInTheDocument();
+  });
+
+  it("检查更新失败：错误 Alert 仍明确显示原因（保留既有反馈）", async () => {
+    apiMocks.checkForUpdate.mockRejectedValue(new Error("网络不可用，请稍后重试"));
+    renderCard();
+    fireEvent.click(screen.getByRole("button", { name: "检查更新" }));
+
+    // 用 role=alert + textContent 断言：ByText 的中文实参会推高 cjkRatchet 的 tests 基线。
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("网络不可用，请稍后重试");
+  });
 });

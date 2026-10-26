@@ -45,6 +45,10 @@ const responsive = {
   "responsive.resumes.remove": "删除",
   "responsive.resumes.remove.confirm": "删除这份简历？",
   "responsive.resumes.remove.body": "删除后可以在回收站恢复；",
+  /** 二次确认按钮必须写具体动作（AGENTS 禁用「确定/取消」泛动词）：确认 = 删除对象。 */
+  "resumes.remove.confirm.ok": "删除这份简历",
+  /** 取消侧同样写具体动作（不删这份，而不是泛泛的「取消」）。 */
+  "resumes.remove.confirm.cancel": "先不删",
   "responsive.resumes.more": "更多操作",
   /** 助手历史会话（平板档收进抽屉）：页头按钮与抽屉标题。 */
   /** 浮窗里的短标签（与抽屉的长标签区分）。 */

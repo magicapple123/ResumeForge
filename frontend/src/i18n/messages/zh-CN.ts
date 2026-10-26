@@ -47,6 +47,10 @@ const zhCN = {
   "update.desktop.description": "下载 Setup.exe 后双击安装，应用会自动退出并覆盖旧版本。",
   /** 安装包已下载完成（Alert 标题）。 */
   "update.downloaded.title": "更新包已下载完成",
+  /** 检查更新后「有新版」的反馈（Toast；成功提示必须含对象：版本号）。 */
+  "update.check.available": "发现新版本 {version}",
+  /** 检查更新后「已是最新」的反馈（Toast；对应 QA 观察项 ST.04 的缺失反馈）。 */
+  "update.check.latest": "已是最新版本 {version}",
 
   /** 版式来源标签：值来自模板自带的默认值（四个度量控件共用这一条）。 */
   "resume.measure.hintTemplate": "随模板",

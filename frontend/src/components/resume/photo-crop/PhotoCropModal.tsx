@@ -240,7 +240,7 @@ export default function PhotoCropModal({
           </Typography.Text>
         </div>
         <div style={{ flex: "1 1 260px", minWidth: 240 }}>
-          <Space direction="vertical" size={10} style={{ width: "100%" }}>
+          <Space orientation="vertical" size={10} style={{ width: "100%" }}>
             <div>
               <Typography.Text style={{ fontSize: 12 }}>
                 {t("proview.photo.aspect")}

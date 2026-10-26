@@ -31,7 +31,7 @@ interface Props {
 export default function GuidesControl({ value, onChange }: Props) {
   const count = enabledGuideCount(value);
   const content = (
-    <Space direction="vertical" size={6} style={{ maxWidth: 260 }}>
+    <Space orientation="vertical" size={6} style={{ maxWidth: 260 }}>
       {GUIDE_ITEMS.map((item) => (
         <Checkbox
           key={item.key}

@@ -2,9 +2,9 @@
 /** 识别 hook（F6）：只消费服务端新目录草稿；不维护旧→新映射。 */
 import { App as AntdApp } from "antd";
 import type { FormInstance } from "antd";
-import { act, renderHook } from "@testing-library/react";
+import { act, cleanup, renderHook } from "@testing-library/react";
 import type { ReactNode } from "react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const parseProfileText = vi.hoisted(() => vi.fn());
 vi.mock("../../api/profile", () => ({ parseProfileText }));
@@ -60,6 +60,16 @@ async function parseWith(result: { current: ReturnType<typeof useProfileRecognit
     await result.current.modal.onParse();
   });
 }
+
+// 每个用例结束必须卸载。apply 会调用 App 的 message.success / message.warning，
+// 每条通知都挂着一个「到点自动关闭」的 requestAnimationFrame 循环，只有卸载组件才会取消。
+// 不卸载时循环在文件跑完后还会继续 setState；CI 上若这次更新落在 worker 拆除 jsdom
+// （window 已被删除）之后，React 调度器读 window.event 就会抛
+// "ReferenceError: window is not defined"（CI run 40241568883 的两个 Unhandled Error）。
+// 仓库里其余渲染测试同样依赖显式 cleanup 保持这条隔离边界。
+afterEach(() => {
+  cleanup();
+});
 
 describe("useProfileRecognition", () => {
   beforeEach(() => {
