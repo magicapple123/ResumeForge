@@ -90,7 +90,6 @@ export default function GenerateResumeModal({ job, open, initialTitle = "", onCl
 
   /**
    * 版式重排：尾随合并（`useResumeRelayout`，项 6 / D11）。
-   *
    * 与 `ResumeDetailModal` 的差异只有 `render` 里的最后一步：这里记录已经落库，所以
    * 重渲染成功后还要把版式写回记录。但**写回失败不回滚 layout**——画面与记录的一致性是
    * "下次打开才看得见"的问题，此刻把版面弹回旧值只会让用户更困惑；失败用 message 说明。
@@ -105,12 +104,12 @@ export default function GenerateResumeModal({ job, open, initialTitle = "", onCl
         await updateResumeLayout(detail.id, next);
       } catch (err) {
         // 只提示、不回滚：版式本身已经渲染成功，弹出旧版式会让"我刚调好的"凭空消失。
-        message.error(err instanceof Error ? err.message : t("generate.modal.saveLayoutFailed"));
+        message.error(err instanceof Error ? err.message : t("generate.saveLayoutFailed"));
       }
     },
     onRendered: (next) => setLayout(next),
     onError: (err) => {
-      message.error(err instanceof Error ? err.message : t("generate.modal.relayoutFailed"));
+      message.error(err instanceof Error ? err.message : t("generate.relayoutFailed"));
       // D13：探针是"我看到的"，渲染失败就必须清掉，不能继续呈现一个不存在的状态。
       previewRef.current?.setLiveProbe("");
     },
@@ -220,7 +219,7 @@ export default function GenerateResumeModal({ job, open, initialTitle = "", onCl
       setStage("preview");
     } catch (err) {
       setStage("error");
-      setErrorMsg(err instanceof Error ? err.message : t("generate.modal.loadResultFailed"));
+      setErrorMsg(err instanceof Error ? err.message : t("generate.loadResultFailed"));
     }
   }, []);
 
@@ -260,19 +259,16 @@ export default function GenerateResumeModal({ job, open, initialTitle = "", onCl
       // 登记到模块级登记表：关掉弹窗后仍会被追踪，完成时统一弹窗 + 响铃。
       watchResumeTask(
         started,
-        job
-          ? t("generate.modal.taskTitle", { job: job.title })
-          : t("generate.modal.taskTitleGeneral"),
+        job ? t("generate.taskTitle", { job: job.title }) : t("generate.taskTitleGeneral"),
       );
     } catch (err) {
       setStage("error");
       // RF-20：失败不只显示原始异常——给「原因 + 建议 + 编号」指引。
-      setErrorMsg(formatErrorGuidance(err, t("generate.modal.startFailed")));
+      setErrorMsg(formatErrorGuidance(err, t("generate.startFailed")));
     }
   };
 
   // 轮询后台任务：进入终态前每 1.5s 拉一次状态（弹窗内的进度显示用它）。
-  //
   // 与 `utils/backgroundTasks` 的分工：**这一份只管弹窗里的进度显示**，"关掉弹窗之后
   // 仍然被追踪、并在完成时统一提醒"由登记表的轮询负责。两边各拉一次是有意的取舍——
   // 共享同一份 React 状态会让"完成时把任务从列表里删掉"和"弹窗还要读终态"互相打架
@@ -306,7 +302,6 @@ export default function GenerateResumeModal({ job, open, initialTitle = "", onCl
   }, [taskId]);
 
   // 弹窗开着时声明"界面在看这个任务"：完成后用右上角卡片提醒，不弹居中弹窗打断用户。
-  //
   // detach 只跟随弹窗关闭，不跟随 taskId 置空：任务进入终态时弹窗收尾会把 taskId
   // 置空（见下面的完成分支），但弹窗仍开着展示预览——若跟着 detach，registry 稍后
   // 的完成通知会误判"用户已经走开"，给正看着预览的用户升级成居中弹窗。React 19 的
@@ -339,7 +334,7 @@ export default function GenerateResumeModal({ job, open, initialTitle = "", onCl
       if (resumeId == null) {
         // 完成却没回填记录 id：理论上不会发生（完成一定先落库），防御性当作失败处理，
         // 避免卡在"完成"状态却永远拿不到预览。
-        setErrorMsg(t("generate.modal.resultMissing"));
+        setErrorMsg(t("generate.resultMissing"));
         setStage("error");
         return;
       }
@@ -350,10 +345,10 @@ export default function GenerateResumeModal({ job, open, initialTitle = "", onCl
       setTaskId(null);
       setTask(null);
       setStage("config");
-      message.info(t("generate.modal.cancelled"));
+      message.info(t("generate.cancelled"));
     } else if (task.status === "failed") {
       setTaskId(null);
-      setErrorMsg(task.error || t("generate.modal.failed"));
+      setErrorMsg(task.error || t("generate.failed"));
       setStage("error");
     }
   }, [task, notification, message, navigate, loadPreview]);
@@ -365,7 +360,7 @@ export default function GenerateResumeModal({ job, open, initialTitle = "", onCl
       const cancelled = await cancelResumeGenerateTask(taskId);
       setTask(cancelled);
     } catch (err) {
-      message.error(err instanceof Error ? err.message : t("generate.modal.cancelFailed"));
+      message.error(err instanceof Error ? err.message : t("generate.cancelFailed"));
     }
   };
 
@@ -382,7 +377,7 @@ export default function GenerateResumeModal({ job, open, initialTitle = "", onCl
   const saveEditedResume = async (content: ResumeContent) => {
     const recordId = result?.detail.id;
     if (!recordId) {
-      throw new Error(t("generate.modal.recordNotSaved"));
+      throw new Error(t("generate.recordNotSaved"));
     }
     const updated = await updateResume(recordId, content);
     const html = await renderResume(updated.content, layout);
@@ -390,7 +385,7 @@ export default function GenerateResumeModal({ job, open, initialTitle = "", onCl
     setPreviewHtml(html);
     setSuggestionsGenerated(false);
     setSuggestionsResetKey((value) => value + 1);
-    message.success(t("generate.modal.changesSaved"));
+    message.success(t("generate.changesSaved"));
   };
 
   /**
@@ -408,7 +403,6 @@ export default function GenerateResumeModal({ job, open, initialTitle = "", onCl
 
   /**
    * 「自动一页」已由诊断卡写回配置，这里只需按新配置重渲染一次（同一条重排通道）。
-   *
    * 换模板/加页数/改字号直接走 `requestLayout`（不再需要包装函数）。
    */
   const applyFittedFormat = (formatConfig: ResumeFormatConfig) => {
@@ -417,11 +411,7 @@ export default function GenerateResumeModal({ job, open, initialTitle = "", onCl
 
   return (
     <Modal
-      title={
-        job
-          ? t("generate.modal.taskTitle", { job: job.title })
-          : t("generate.modal.taskTitleGeneral")
-      }
+      title={job ? t("generate.taskTitle", { job: job.title }) : t("generate.taskTitleGeneral")}
       open={open}
       onCancel={handleClose}
       // 宽度与 body 限高对齐简历中心的预览弹窗（ResumeDetailModal）：预览阶段渲染的是

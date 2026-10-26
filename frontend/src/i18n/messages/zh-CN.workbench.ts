@@ -292,18 +292,18 @@ const workbench = {
   "editor.profile-refresh.keep": "保留当前编辑",
 
   /** AI 生成弹窗：失败/取消/保存提示。 */
-  "generate.modal.saveLayoutFailed": "保存排版设置失败",
-  "generate.modal.relayoutFailed": "按新设置重新排版失败",
-  "generate.modal.loadResultFailed": "生成完成，但加载结果失败",
-  "generate.modal.taskTitle": "为「{job}」生成简历",
-  "generate.modal.taskTitleGeneral": "生成通用简历",
-  "generate.modal.startFailed": "启动生成失败，请重试",
-  "generate.modal.resultMissing": "生成完成，但结果记录缺失，请重试",
-  "generate.modal.cancelled": "已取消生成",
-  "generate.modal.failed": "生成失败，请重试",
-  "generate.modal.cancelFailed": "取消失败，请重试",
-  "generate.modal.recordNotSaved": "简历记录尚未保存完成，请稍后再试",
-  "generate.modal.changesSaved": "简历修改已保存",
+  "generate.saveLayoutFailed": "保存排版设置失败",
+  "generate.relayoutFailed": "按新设置重新排版失败",
+  "generate.loadResultFailed": "生成完成，但加载结果失败",
+  "generate.taskTitle": "为「{job}」生成简历",
+  "generate.taskTitleGeneral": "生成通用简历",
+  "generate.startFailed": "启动生成失败，请重试",
+  "generate.resultMissing": "生成完成，但结果记录缺失，请重试",
+  "generate.cancelled": "已取消生成",
+  "generate.failed": "生成失败，请重试",
+  "generate.cancelFailed": "取消失败，请重试",
+  "generate.recordNotSaved": "简历记录尚未保存完成，请稍后再试",
+  "generate.changesSaved": "简历修改已保存",
 } as const;
 
 export default workbench;
