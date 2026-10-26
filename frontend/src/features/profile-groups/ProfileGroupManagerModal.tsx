@@ -8,7 +8,7 @@
  * （mask.closable=false）；提交中禁 Esc/×，其余 Esc 与 × 同义（子视图先退一层）。
  */
 import { App, Button, Divider, Input, Modal, Tag, Tooltip, Typography } from "antd";
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import { t } from "../../i18n";
 import ProfileFieldSettings from "../profile-library/ProfileFieldSettings";
 import ProfileSectionSettings from "../profile-library/ProfileSectionSettings";
@@ -25,6 +25,11 @@ interface Props {
   onChanged: () => Promise<void>;
   initialView?: "groups" | "sections";
   /**
+   * 从资料页某张卡的齿轮进来时带上该大字段 key：弹层直接落到「字段设置」视图。
+   * 只在挂载时消费一次（宿主关闭即卸载），所以不需要在 effect 里同步。
+   */
+  initialSectionKey?: string;
+  /**
    * 资料页是否处于编辑态。新建组成功后：非编辑态自动设为当前组（立刻能在资料页看到
    * 「全部大字段已隐藏」的效果）；编辑态不切组（R-26 未保存改动不能被绕过），
    * 只提示先保存或取消编辑。
@@ -38,13 +43,15 @@ export default function ProfileGroupManagerModal({
   workspace,
   onChanged,
   initialView = "groups",
+  initialSectionKey,
   editing = false,
 }: Props) {
   const { message } = App.useApp();
   const groupApi = useCurrentProfileGroup(workspace, onChanged);
-  const [view, setView] = useState<View>(initialView);
+  // 带着大字段 key 进来时直接落到「字段设置」（齿轮入口），否则按调用方给的初始视图。
+  const [view, setView] = useState<View>(initialSectionKey ? "fields" : initialView);
   const [editingGroupId, setEditingGroupId] = useState("");
-  const [fieldsKey, setFieldsKey] = useState("");
+  const [fieldsKey, setFieldsKey] = useState(initialSectionKey ?? "");
   const [deletingGroupId, setDeletingGroupId] = useState("");
   const [newGroupName, setNewGroupName] = useState("");
 
@@ -148,81 +155,90 @@ export default function ProfileGroupManagerModal({
         {t("profileGroups.manager.createVisibilityHint")}
       </Typography.Paragraph>
       <Divider style={{ margin: "12px 0" }} />
-      {groupApi.groups.map((group) => {
-        const isCurrent = groupApi.current?.group_id === group.group_id;
-        const isDeleting = deletingGroupId === group.group_id;
-        return (
-          <div key={group.group_id} className="profile-settings-row" data-testid="group-row">
-            <span className="profile-settings-row-main">
-              {group.name}
-              {group.is_default ? (
-                <Tag style={{ marginLeft: 8 }}>{t("profileGroups.manager.default")}</Tag>
-              ) : null}
-              {isCurrent ? (
-                <Tag color="blue" style={{ marginLeft: 8 }}>
-                  {t("profileGroups.manager.current")}
-                </Tag>
-              ) : null}
-            </span>
-            <span className="profile-settings-row-actions">
-              {isCurrent ? null : (
-                <Button
-                  size="small"
-                  disabled={groupApi.busy}
-                  onClick={() => void groupApi.switchTo(group.group_id)}
-                >
-                  {t("profileGroups.manager.setCurrent")}
-                </Button>
-              )}
-              <Button
-                size="small"
-                disabled={groupApi.busy}
-                onClick={() => {
-                  setEditingGroupId(group.group_id);
-                  setView("group-edit");
-                }}
-              >
-                {t("profileGroups.manager.rename")}
-              </Button>
-              {group.is_default ? (
-                <Tooltip title={t("profileGroups.manager.defaultProtected")}>
-                  <Typography.Text type="secondary">
-                    {t("profileGroups.manager.defaultProtected")}
-                  </Typography.Text>
-                </Tooltip>
-              ) : (
-                <Button
-                  size="small"
-                  danger
-                  disabled={groupApi.busy}
-                  onClick={() => setDeletingGroupId(group.group_id)}
-                >
-                  {t("profileGroups.manager.delete")}
-                </Button>
-              )}
-            </span>
-            {isDeleting ? (
-              <div className="profile-settings-confirm" role="alertdialog">
-                <Typography.Text strong>
-                  {t("profileGroups.manager.deleteTitle", { name: group.name })}
-                </Typography.Text>
-                <Typography.Paragraph>{t("profileGroups.manager.deleteBody")}</Typography.Paragraph>
-                <Typography.Paragraph type="secondary">
-                  {t("profileGroups.manager.deleteRestore")}
-                </Typography.Paragraph>
-                <div className="profile-settings-confirm-actions">
-                  <Button danger loading={groupApi.busy} onClick={() => void confirmDeleteGroup()}>
-                    {t("profileGroups.manager.deleteConfirm", { name: group.name })}
+      {/* 一行一个组：名称/Tag 在左，动作按钮在右（.profile-settings-* 见 profile-layout.css）。
+          删除确认条是行**之外**的兄弟节点——行本身是 flex 横排，塞第三个子元素会被压扁。 */}
+      <div className="profile-settings-list">
+        {groupApi.groups.map((group) => {
+          const isCurrent = groupApi.current?.group_id === group.group_id;
+          const isDeleting = deletingGroupId === group.group_id;
+          return (
+            <Fragment key={group.group_id}>
+              <div className="profile-settings-row" data-testid="group-row">
+                <span className="profile-settings-row-main">
+                  <span className="profile-settings-row-title">{group.name}</span>
+                  {group.is_default ? <Tag>{t("profileGroups.manager.default")}</Tag> : null}
+                  {isCurrent ? <Tag color="blue">{t("profileGroups.manager.current")}</Tag> : null}
+                </span>
+                <span className="profile-settings-row-actions">
+                  {isCurrent ? null : (
+                    <Button
+                      size="small"
+                      type="text"
+                      disabled={groupApi.busy}
+                      onClick={() => void groupApi.switchTo(group.group_id)}
+                    >
+                      {t("profileGroups.manager.setCurrent")}
+                    </Button>
+                  )}
+                  <Button
+                    size="small"
+                    type="text"
+                    disabled={groupApi.busy}
+                    onClick={() => {
+                      setEditingGroupId(group.group_id);
+                      setView("group-edit");
+                    }}
+                  >
+                    {t("profileGroups.manager.rename")}
                   </Button>
-                  <Button onClick={() => setDeletingGroupId("")}>
-                    {t("profileGroups.manager.back")}
-                  </Button>
-                </div>
+                  {group.is_default ? (
+                    <Tooltip title={t("profileGroups.manager.defaultProtected")}>
+                      <span className="profile-settings-row-meta">
+                        {t("profileGroups.manager.defaultProtected")}
+                      </span>
+                    </Tooltip>
+                  ) : (
+                    <Button
+                      size="small"
+                      type="text"
+                      danger
+                      disabled={groupApi.busy}
+                      onClick={() => setDeletingGroupId(group.group_id)}
+                    >
+                      {t("profileGroups.manager.delete")}
+                    </Button>
+                  )}
+                </span>
               </div>
-            ) : null}
-          </div>
-        );
-      })}
+              {isDeleting ? (
+                <div className="profile-settings-confirm" role="alertdialog">
+                  <Typography.Text strong>
+                    {t("profileGroups.manager.deleteTitle", { name: group.name })}
+                  </Typography.Text>
+                  <Typography.Paragraph>
+                    {t("profileGroups.manager.deleteBody")}
+                  </Typography.Paragraph>
+                  <Typography.Paragraph type="secondary">
+                    {t("profileGroups.manager.deleteRestore")}
+                  </Typography.Paragraph>
+                  <div className="profile-settings-confirm-actions">
+                    <Button
+                      danger
+                      loading={groupApi.busy}
+                      onClick={() => void confirmDeleteGroup()}
+                    >
+                      {t("profileGroups.manager.deleteConfirm", { name: group.name })}
+                    </Button>
+                    <Button onClick={() => setDeletingGroupId("")}>
+                      {t("profileGroups.manager.back")}
+                    </Button>
+                  </div>
+                </div>
+              ) : null}
+            </Fragment>
+          );
+        })}
+      </div>
     </div>
   );
 
@@ -230,7 +246,7 @@ export default function ProfileGroupManagerModal({
     view === "sections" || view === "fields"
       ? t("profileLibrary.sectionSettings.title")
       : view === "group-edit"
-        ? t("profileGroups.manager.membersTitle")
+        ? t("profileGroups.manager.editTitle")
         : t("profileGroups.manager.title");
 
   return (
@@ -239,7 +255,7 @@ export default function ProfileGroupManagerModal({
       open={open}
       onCancel={handleCancel}
       footer={null}
-      width={760}
+      width={820}
       mask={{ closable: false }}
       keyboard={!groupApi.busy}
       closable={!groupApi.busy}

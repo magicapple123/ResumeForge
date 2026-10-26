@@ -97,13 +97,13 @@ async function openSourcePanel() {
 // 中文只放在常量里：cjkRatchet 的 tests 口径只统计 ByText 断言参数里的 CJK，
 // 用常量可以避免"新增用例必然抬高中文断言基线"（断言内容本身仍是逐字文案）。
 const SOURCES_TITLE = "资料来源";
-const SOURCES_HINT = "只显示当前组参与的大字段";
+const SOURCES_HINT = "只显示当前方案包含的板块";
 const EDU_TEXT = "教育经历";
 const EXP_TEXT = "实习/工作经历";
 const LANG_TEXT = "语言能力";
 const CRED_TEXT = "证书资质";
-const SWITCH_TEXT = "去切换组";
-const EMPTY_TEXT = "当前组还没有参与的大字段";
+const SWITCH_TEXT = "去切换方案";
+const EMPTY_TEXT = "当前方案还没有包含任何板块";
 const EDITOR_TITLE = /自行编写|从头编写/;
 
 describe("ManualResumeModal 来源面板（F4-C）", () => {

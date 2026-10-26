@@ -193,4 +193,32 @@ describe("ProfilePage 当前组与分区渲染", () => {
       await screen.findByRole("button", { name: new RegExp(t("profileLibrary.action.save")) }),
     ).toBeInTheDocument();
   });
+
+  it("点分区标题栏的齿轮，弹层直接落到该大字段的字段设置", async () => {
+    const sections = makeAllSections();
+    const group = makeGroup("group-default", "Default", {
+      is_default: true,
+      participating_keys: ["basic_info", "educations"],
+    });
+    apiMocks.getWorkspace
+      .mockReset()
+      .mockResolvedValue(makeWorkspace({ sections, current_group: group, groups: [group] }));
+    renderPage();
+
+    const gear = await screen.findByRole("button", {
+      name: t("profileLibrary.section.fieldSettingsAria", { name: "Education" }),
+    });
+    // 查看态整页在 <Form disabled> 里，齿轮靠就地覆盖 DisabledContext 保持可点。
+    expect(gear).toBeEnabled();
+    fireEvent.click(gear);
+
+    // 「字段设置」视图独有的两处内容：默认字段说明 + 该分区内置字段（educations 只有 Title）。
+    // 改前页面丢掉了 sectionKey，弹层只能停在组列表，这两条都拿不到。
+    expect(
+      await screen.findByText(t("profileLibrary.fieldSettings.defaultHint")),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Title")).toBeInTheDocument();
+    // 不是「管理组」视图：新建组的说明文案不出现。
+    expect(screen.queryByText(t("profileGroups.manager.createHint"))).not.toBeInTheDocument();
+  });
 });

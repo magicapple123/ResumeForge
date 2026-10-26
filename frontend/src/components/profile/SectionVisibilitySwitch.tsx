@@ -20,6 +20,11 @@ interface Props {
   /** 基本信息：恒参与、不可隐藏。 */
   locked?: boolean;
   busy?: boolean;
+  /**
+   * 隐藏开关左侧的「在资料页显示」文字。列表行里同一列全是这个开关时，
+   * 每行重复一遍会把动作列吃掉一半宽度；此时只留开关（aria-label 不变）。
+   */
+  hideLabel?: boolean;
   onChange: (visible: boolean) => void;
 }
 
@@ -28,11 +33,14 @@ export default function SectionVisibilitySwitch({
   visible,
   locked = false,
   busy = false,
+  hideLabel = false,
   onChange,
 }: Props) {
   const control = (
     <span className="profile-visibility-switch">
-      <Typography.Text type="secondary">{t("profileLibrary.section.visible")}</Typography.Text>
+      {hideLabel ? null : (
+        <Typography.Text type="secondary">{t("profileLibrary.section.visible")}</Typography.Text>
+      )}
       <Switch
         size="small"
         checked={locked ? true : visible}

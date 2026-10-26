@@ -7,7 +7,7 @@
  * - 列表加载失败只把 Select 标成 warning 并在下拉里给出重试，不阻断其他功能；
  * - 独立组件：也可以挂到页面内（如简历中心的场景建议卡）。
  */
-import { PlusOutlined, SettingOutlined } from "@ant-design/icons";
+import { EditOutlined, PlusOutlined } from "@ant-design/icons";
 import { Button, Divider, Select, Space, Tooltip, Typography } from "antd";
 import { useState } from "react";
 import { t } from "../../i18n";
@@ -29,22 +29,30 @@ interface Props {
 interface EditorTarget {
   scenario: CareerScenario | null;
   preset: CareerScenarioPreset | null;
+  /** 保存后是否切到这条场景：新建、或编辑的正是当前场景时为真。 */
+  selectAfterSave: boolean;
 }
 
 export default function ScenarioSelector({ showLabel = false, className }: Props) {
-  const {
-    scenarios,
-    loading,
-    error,
-    selectedScenarioId,
-    selectedScenario,
-    selectScenario,
-    reload,
-  } = useScenarioSelection();
+  const { scenarios, loading, error, selectedScenarioId, selectScenario, reload } =
+    useScenarioSelection();
   const [editor, setEditor] = useState<EditorTarget | null>(null);
+  // 下拉展开态由本组件持有：点某个选项右侧的编辑按钮时要先把下拉收起来，
+  // 否则编辑器弹层关掉之后下拉还挂在那里。
+  const [open, setOpen] = useState(false);
 
-  const openCreate = () => setEditor({ scenario: null, preset: null });
-  const openEdit = () => setEditor({ scenario: selectedScenario, preset: null });
+  const openCreate = () => {
+    setOpen(false);
+    setEditor({ scenario: null, preset: null, selectAfterSave: true });
+  };
+  const openEdit = (scenario: CareerScenario) => {
+    setOpen(false);
+    setEditor({
+      scenario,
+      preset: null,
+      selectAfterSave: scenario.id === selectedScenarioId,
+    });
+  };
 
   /**
    * 加载失败且一条都没拿到时把下拉留空：空列表才会渲染 notFoundContent，
@@ -79,6 +87,34 @@ export default function ScenarioSelector({ showLabel = false, className }: Props
         status={error ? "warning" : undefined}
         onChange={(value: number) => selectScenario(value === UNSET_VALUE ? null : value)}
         options={options}
+        open={open}
+        onOpenChange={setOpen}
+        // 每条场景右侧一个编辑入口：编辑的是**这一条**，不是「当前场景」。
+        // 选项本身仍是「点击即选中」，所以按钮要吃掉 mousedown/click，避免连带选中。
+        optionRender={(option) => {
+          const scenario = scenarios.find((item) => item.id === option.value);
+          if (!scenario) return option.label;
+          return (
+            <span className="scenario-option">
+              <span className="scenario-option-name">{option.label}</span>
+              <Tooltip title={t("careerScenarios.selector.edit")}>
+                <Button
+                  type="text"
+                  size="small"
+                  className="scenario-option-edit"
+                  icon={<EditOutlined />}
+                  aria-label={t("careerScenarios.selector.editAria", { name: scenario.name })}
+                  onMouseDown={(event) => event.stopPropagation()}
+                  onClick={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    openEdit(scenario);
+                  }}
+                />
+              </Tooltip>
+            </span>
+          );
+        }}
         popupRender={(menu) => (
           <>
             {menu}
@@ -87,11 +123,6 @@ export default function ScenarioSelector({ showLabel = false, className }: Props
               <Button type="link" size="small" icon={<PlusOutlined />} onClick={openCreate}>
                 {t("careerScenarios.selector.create")}
               </Button>
-              {selectedScenario ? (
-                <Button type="link" size="small" onClick={openEdit}>
-                  {t("careerScenarios.selector.editCurrent")}
-                </Button>
-              ) : null}
             </Space>
           </>
         )}
@@ -107,21 +138,16 @@ export default function ScenarioSelector({ showLabel = false, className }: Props
           )
         }
       />
-      <Tooltip title={t("careerScenarios.selector.manage")}>
-        <Button
-          icon={<SettingOutlined />}
-          aria-label={t("careerScenarios.selector.manageAria")}
-          onClick={selectedScenario ? openEdit : openCreate}
-        />
-      </Tooltip>
       <ScenarioEditor
         open={editor !== null}
         scenario={editor?.scenario ?? null}
         initialPreset={editor?.preset ?? null}
         onClose={() => setEditor(null)}
         onSaved={(saved) => {
+          const selectAfterSave = editor?.selectAfterSave ?? false;
           void reload();
-          selectScenario(saved.id);
+          // 编辑别人那条时不要顺手把当前场景换掉。
+          if (selectAfterSave) selectScenario(saved.id);
         }}
       />
     </Space>

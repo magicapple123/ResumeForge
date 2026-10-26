@@ -17,6 +17,8 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from .profile_editor import EditorSchemaOut
+
 # 快照之后发生的、会导致"纸面需要重新生成才体现"的变化类别（顺序即响应里的顺序）。
 FreshnessReason = Literal["content_changed", "group_changed", "definition_changed"]
 
@@ -38,6 +40,9 @@ class ProfileUsageOut(BaseModel):
     # 按全局顺序排列的参与大字段。
     participating: list[ProfileUsageParticipating] = Field(default_factory=list)
     section_order: list[str] = Field(default_factory=list)
+    # F10/R-82 编辑器视图：创建/生成时冻结的可见板块与字段。旧快照没有这个键 → None，
+    # 详情与独立端点都不得因此报错（只读追溯字段是可选的）。
+    editor_schema: EditorSchemaOut | None = None
     definition_revision: int = 0
     data_revision: int = 0
     created_at: datetime

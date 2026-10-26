@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 /** 简历内容、生成选项和简历建议类型。 */
 import type { ResumeFormatConfig } from "./resumeFormat";
+import type { ResumeProfileUsageSnapshot } from "./resumeProfileUsage";
 import type { TemplateMarketPreset } from "./templateMarket";
 
 // 内容结构（六类条目 + ResumeContent）单列 resumeContent.ts 守住 500 行预算；
@@ -309,18 +310,17 @@ export interface ResumeDetail extends ResumeBrief {
   fact_annotations?: FactAnnotation[];
   /**
    * 这是**制作台草稿**（0051）：还没保存过，所以不在简历中心的任何列表里。
-   *
-   * 制作台靠它把「保存」常驻——一份刚建出来、内容与版式都没动过的草稿没有别的
-   * 保存入口，只能靠这个标志知道"有一件事必须被做"。旧后端不返回该字段时按
-   * `false`（不是草稿）处理，行为与此前逐字一致。
+   * 制作台靠它把「保存」常驻——一份刚建出来、内容与版式都没动过的草稿没有别的保存
+   * 入口，只能靠这个标志知道"有一件事必须被做"。旧后端不返回该字段时按 `false` 处理。
    */
   draft?: boolean;
   /**
    * 这份简历生成时冻结的职业场景快照（契约 §2.5）：null = 未记录（旧简历/未启用）。
-   *
    * 只读展示用——**不得按当前场景回填**，历史记录 NULL 就是"当时没有记录"。
    */
   context_snapshot?: GenerationContextSnapshot | null;
+  /** 「本次使用」快照（详情端点填充）：含创建时冻结的编辑器视图；旧简历为 null。 */
+  profile_usage?: ResumeProfileUsageSnapshot | null;
 }
 
 /** 一条"没写进这份简历"的分区级清单。 */

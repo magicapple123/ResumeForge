@@ -63,7 +63,7 @@ async function renderAndSave(content: ResumeContent) {
 
 // 同前：中文只放常量，避免新增 ByText 断言抬高 tests 棘轮。
 const BASIC_TAB = "基本信息";
-const CUSTOM_TAB = "自定义栏目";
+const CUSTOM_TAB = "自建板块";
 const SAVE_BUTTON = /保存并更新预览/;
 const CRED_TAB = "证书资质";
 

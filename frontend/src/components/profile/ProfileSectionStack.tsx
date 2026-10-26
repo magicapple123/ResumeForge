@@ -9,7 +9,8 @@
  */
 import { useMemo, useState, useSyncExternalStore } from "react";
 import type { ReactNode } from "react";
-import { Button, ConfigProvider, Popover, Typography } from "antd";
+import { SettingOutlined } from "@ant-design/icons";
+import { Button, ConfigProvider, Popover, Tooltip, Typography } from "antd";
 import EmptyState from "../common/EmptyState";
 import { t } from "../../i18n";
 import type { ProfileSectionOrderStore } from "../../features/profile/sectionOrderStore";
@@ -123,7 +124,6 @@ export default function ProfileSectionStack(props: Props) {
           onAddEntry={onAddEntry}
           onRemoveEntry={onRemoveEntry}
           onSetPreference={onSetPreference}
-          onOpenFieldSettings={onOpenFieldSettings}
           onOpenGuide={onOpenGuide}
         />,
       );
@@ -133,7 +133,6 @@ export default function ProfileSectionStack(props: Props) {
     editing,
     limits,
     onAddEntry,
-    onOpenFieldSettings,
     onOpenGuide,
     onPhotoSelect,
     onRemoveEntry,
@@ -143,6 +142,35 @@ export default function ProfileSectionStack(props: Props) {
     saving,
     visibleSections,
   ]);
+
+  /**
+   * 每个分区的「字段设置」齿轮（常驻在标题栏右侧）。
+   *
+   * 此前它渲染在内容区的同名标题行里，与外部标题栏重复；挪到标题栏后由本组件按
+   * section.key 直接生成。basic_info 没有字段设置入口（照片不是可配置字段）。
+   * 查看态整页在 <Form disabled> 里，DisabledContext 会连坐按钮：就地放开。
+   */
+  const sectionActions = useMemo(() => {
+    const actions = new Map<string, ReactNode>();
+    visibleSections.forEach((section) => {
+      if (section.key === "basic_info") return;
+      actions.set(
+        section.key,
+        <ConfigProvider componentDisabled={false}>
+          <Tooltip title={t("profileLibrary.section.fieldSettings")}>
+            <Button
+              size="small"
+              type="text"
+              icon={<SettingOutlined />}
+              aria-label={t("profileLibrary.section.fieldSettingsAria", { name: section.name })}
+              onClick={() => onOpenFieldSettings(section.key)}
+            />
+          </Tooltip>
+        </ConfigProvider>,
+      );
+    });
+    return actions;
+  }, [onOpenFieldSettings, visibleSections]);
 
   const onlyBasicInfo = visibleSections.length <= 1 && participatingKeys.length <= 1;
 
@@ -237,6 +265,7 @@ export default function ProfileSectionStack(props: Props) {
             onToggleCollapsed={onToggleCollapsed}
             onHandlePointerDown={onHandlePointerDown}
             onMoveByOffset={onMoveByOffset}
+            actions={sectionActions.get(section.key)}
           >
             {sectionContent.get(section.key)}
           </SortableProfileSection>

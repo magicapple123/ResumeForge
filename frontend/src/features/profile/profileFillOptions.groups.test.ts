@@ -4,6 +4,7 @@
  * 取 content 现成条目——不按标题猜、不在前端重拼承载区。
  */
 import { describe, expect, it } from "vitest";
+import { editorSchema, editorSection } from "../../test/editorSchemaFixture";
 import { projectionOf } from "../../test/profileProjectionFixture";
 import type { PaperProjectionOut } from "../profile-library/types";
 import { buildProfileFillSources, projectionSectionFill } from "./profileFillOptions";
@@ -135,5 +136,25 @@ describe("buildProfileFillSources（投影输入）", () => {
     expect(sources.skills).toEqual([]);
     expect(sources.awards).toEqual([]);
     expect(sources.summary).toBe("三年后端开发经验。");
+  });
+});
+
+describe("编辑器视图（F10）", () => {
+  it("投影带 editor_schema 时候选对象同时携带冻结视图（板块清单 + 字段）", () => {
+    const data = projection();
+    const schema = editorSchema(
+      editorSection("basic_info", "basic", ["name"], { form: "singleton", resume_field: null }),
+      editorSection("custom:22333", "22333", [], { resume_field: "custom_sections" }),
+    );
+    const sources = buildProfileFillSources({ ...data, editor_schema: schema });
+    expect(sources.editorView?.sections.map((section) => section.key)).toEqual([
+      "basic_info",
+      "custom:22333",
+    ]);
+    expect(sources.editorView?.schema).toBe(schema);
+  });
+
+  it("没有 editor_schema（旧后端/旧夹具）时不带视图：页签退回旧行为", () => {
+    expect(buildProfileFillSources(projection()).editorView).toBeUndefined();
   });
 });

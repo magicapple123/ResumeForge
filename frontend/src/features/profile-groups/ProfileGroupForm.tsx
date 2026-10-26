@@ -42,29 +42,26 @@ export default function ProfileGroupForm({ group, sections, busy, onSubmit, onCa
 
   return (
     <div className="profile-group-form">
-      <Typography.Title level={5} style={{ marginTop: 0 }}>
-        {group.is_default ? t("profileGroups.manager.default") : group.name}
-      </Typography.Title>
-      <Typography.Text type="secondary">{t("profileGroups.manager.createHint")}</Typography.Text>
+      {/* 顶部不再重复组名与「基本信息恒参与」：弹层标题已给「编辑组」，
+          参与清单的显示语义由 membersVisibilityHint 单独说明（不与 membersHint 叠两句）。 */}
+      <Typography.Text type="secondary">{t("profileGroups.manager.nameLabel")}</Typography.Text>
       <Input
         value={name}
         maxLength={40}
         aria-label={t("profileGroups.manager.nameLabel")}
-        placeholder={t("profileGroups.manager.nameLabel")}
+        placeholder={t("profileGroups.manager.namePlaceholder")}
         onChange={(event) => setName(event.target.value)}
         onPressEnter={() => void submit()}
-        style={{ marginTop: 8 }}
+        style={{ marginTop: 6 }}
       />
       <Typography.Title level={5} style={{ marginTop: 16 }}>
         {t("profileGroups.manager.membersTitle")}
       </Typography.Title>
       <Typography.Paragraph type="secondary" style={{ marginTop: 0 }}>
-        {t("profileGroups.manager.membersHint")}
-      </Typography.Paragraph>
-      <Typography.Paragraph type="secondary" style={{ marginTop: 0 }}>
         {t("profileGroups.manager.membersVisibilityHint")}
       </Typography.Paragraph>
       <Checkbox.Group
+        className="profile-group-form-members"
         value={memberKeys}
         options={options}
         onChange={(values) => {

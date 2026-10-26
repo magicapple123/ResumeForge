@@ -4,9 +4,12 @@
  *
  * 描述/成果是**多行文本 ↔ 字符串数组**的既有转换（复用 `resumeFieldUtils.multilineItemProps`），
  * 与教育/经历的"每行一项"完全同一套行为——不做第二种换行语义。
+ * F10：当前方案里隐藏的字段不显示（仍有值的保留）。
  */
-import { Col, Form, Input, Row } from "antd";
+import { Form, Input, Row } from "antd";
 import ResearchListSection from "./ResearchListSection";
+import EditorFieldCol from "../../resume-editor/EditorFieldCol";
+import { useEditorFieldVisibility } from "../../resume-editor/editorSchemaContext";
 import { multilineItemProps } from "../../resume-editor/resumeFieldUtils";
 import { rt } from "../../../features/resume-research/i18n";
 import { emptyResearchProject } from "../../../features/resume-research/researchFields";
@@ -14,6 +17,7 @@ import { emptyResearchProject } from "../../../features/resume-research/research
 const LABEL = rt("research.tab.projects");
 
 export default function ResearchProjectsEditor() {
+  const visible = useEditorFieldVisibility("research_projects");
   return (
     <ResearchListSection
       name="research_projects"
@@ -24,49 +28,53 @@ export default function ResearchProjectsEditor() {
     >
       {(field) => (
         <Row gutter={12}>
-          <Col xs={24} md={12}>
+          <EditorFieldCol xs={24} md={12} show={visible.show("name")}>
             <Form.Item
               name={[field.name, "name"]}
               label={rt("research.projects.name")}
-              rules={[{ required: true, message: rt("research.required.name") }]}
+              rules={
+                visible.show("name")
+                  ? [{ required: true, message: rt("research.required.name") }]
+                  : undefined
+              }
             >
               <Input placeholder={rt("research.projects.namePlaceholder")} />
             </Form.Item>
-          </Col>
-          <Col xs={24} md={12}>
+          </EditorFieldCol>
+          <EditorFieldCol xs={24} md={12} show={visible.show("role")}>
             <Form.Item name={[field.name, "role"]} label={rt("research.projects.role")}>
               <Input placeholder={rt("research.projects.rolePlaceholder")} />
             </Form.Item>
-          </Col>
-          <Col xs={24} md={12}>
+          </EditorFieldCol>
+          <EditorFieldCol xs={24} md={12} show={visible.show("organization")}>
             <Form.Item
               name={[field.name, "organization"]}
               label={rt("research.projects.organization")}
             >
               <Input />
             </Form.Item>
-          </Col>
-          <Col xs={12} md={6}>
+          </EditorFieldCol>
+          <EditorFieldCol xs={12} md={6} show={visible.show("start_date")}>
             <Form.Item name={[field.name, "start_date"]} label={rt("research.projects.start")}>
               <Input />
             </Form.Item>
-          </Col>
-          <Col xs={12} md={6}>
+          </EditorFieldCol>
+          <EditorFieldCol xs={12} md={6} show={visible.show("end_date")}>
             <Form.Item name={[field.name, "end_date"]} label={rt("research.projects.end")}>
               <Input />
             </Form.Item>
-          </Col>
-          <Col xs={12} md={6}>
+          </EditorFieldCol>
+          <EditorFieldCol xs={12} md={6} show={visible.show("level")}>
             <Form.Item name={[field.name, "level"]} label={rt("research.projects.level")}>
               <Input placeholder={rt("research.projects.levelPlaceholder")} />
             </Form.Item>
-          </Col>
-          <Col span={24}>
+          </EditorFieldCol>
+          <EditorFieldCol span={24} show={visible.show("funding")}>
             <Form.Item name={[field.name, "funding"]} label={rt("research.projects.funding")}>
               <Input placeholder={rt("research.projects.fundingPlaceholder")} />
             </Form.Item>
-          </Col>
-          <Col xs={24} md={12}>
+          </EditorFieldCol>
+          <EditorFieldCol xs={24} md={12} show={visible.show("description")}>
             <Form.Item
               {...multilineItemProps}
               name={[field.name, "description"]}
@@ -77,8 +85,8 @@ export default function ResearchProjectsEditor() {
                 placeholder={rt("research.projects.descriptionPlaceholder")}
               />
             </Form.Item>
-          </Col>
-          <Col xs={24} md={12}>
+          </EditorFieldCol>
+          <EditorFieldCol xs={24} md={12} show={visible.show("outcomes")}>
             <Form.Item
               {...multilineItemProps}
               name={[field.name, "outcomes"]}
@@ -86,7 +94,7 @@ export default function ResearchProjectsEditor() {
             >
               <Input.TextArea rows={4} placeholder={rt("research.projects.outcomesPlaceholder")} />
             </Form.Item>
-          </Col>
+          </EditorFieldCol>
         </Row>
       )}
     </ResearchListSection>

@@ -214,6 +214,8 @@ export default function ResumeEditorModal({
         referencePanel={referencePanel}
         onFillAll={api.fillAllData ?? undefined}
         sourcePanel={sourcePanel}
+        editorSchema={fillSources?.editorView?.schema}
+        editorContent={content}
       />
     </Modal>
   );

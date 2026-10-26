@@ -11,7 +11,12 @@
  * 候选身份用 `entry_id`（改过分数学分、补过描述仍是同一条资料）；`matchKey` 是
  * 形状键，只用来和"表单里已经有的条目"比对（用户可能手抄过同样的内容）。
  */
-import type { PaperProjectionOut, ProjectionCandidateOut } from "../profile-library/types";
+import type {
+  EditorView,
+  PaperProjectionOut,
+  ProjectionCandidateOut,
+} from "../profile-library/types";
+import { editorViewFromSchema } from "./editorView";
 import type {
   ResumeAward,
   ResumeCampusExperience,
@@ -57,6 +62,11 @@ export interface ProfileFillSources {
    * 夹具没给）表示**还不知道当前组**——此时退回显示全部页签（旧行为），不做过滤。
    */
   participatingKeys?: string[];
+  /**
+   * 编辑器视图（F10）：新简历 = 当前方案投影冻结的板块/字段可见性；已保存简历由宿主用
+   * 创建时的快照覆盖（见 `withSavedResumeEditorView`）。缺省 = 不知道方案 → 页签不过滤。
+   */
+  editorView?: EditorView;
 }
 
 /**
@@ -216,6 +226,7 @@ export function buildProfileFillSources(projection: PaperProjectionOut): Profile
   // 让编辑器退回"不过滤"的旧行为，而不是把页签全藏掉。
   const scopeKeys = projection?.scope?.participating_keys;
   const participatingKeys = Array.isArray(scopeKeys) ? [...scopeKeys] : undefined;
+  const editorView = editorViewFromSchema(projection?.editor_schema);
   if (!content) {
     return {
       education: [],
@@ -226,6 +237,7 @@ export function buildProfileFillSources(projection: PaperProjectionOut): Profile
       awards: [],
       summary: "",
       ...(participatingKeys ? { participatingKeys } : {}),
+      ...(editorView ? { editorView } : {}),
     };
   }
   return {
@@ -237,5 +249,6 @@ export function buildProfileFillSources(projection: PaperProjectionOut): Profile
     awards: buildBucket(projection, "awards", "awards"),
     summary: text(content.summary),
     ...(participatingKeys ? { participatingKeys } : {}),
+    ...(editorView ? { editorView } : {}),
   };
 }

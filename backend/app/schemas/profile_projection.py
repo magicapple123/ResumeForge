@@ -28,6 +28,7 @@ from dataclasses import dataclass
 
 from pydantic import BaseModel, Field
 
+from .profile_editor import EditorSchemaOut
 from .resume import ResumeContent
 
 
@@ -137,6 +138,9 @@ class PaperProjectionOut(BaseModel):
     content: ResumeContent
     candidates: list[ProjectionCandidateOut] = Field(default_factory=list)
     source_layout: list[ProjectionSourceSectionOut] = Field(default_factory=list)
+    # F10/R-82 编辑器视图：参与分区的可见板块 + 每个板块的可见字段（按当前方案投影）。
+    # 新建简历时由快照冻结一份副本；之后方案再改不影响已保存简历。
+    editor_schema: EditorSchemaOut | None = None
     warnings: list[ProjectionWarningOut] = Field(default_factory=list)
     # 内容 + scope + 定义/资料修订的指纹，供新建态快照与迟到响应校验（F4）。
     snapshot_token: str = ""

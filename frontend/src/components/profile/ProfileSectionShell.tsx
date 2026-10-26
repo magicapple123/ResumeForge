@@ -73,6 +73,11 @@ interface SortableProfileSectionProps {
   onToggleCollapsed: (sectionKey: ProfileSectionKey) => void;
   onHandlePointerDown: ProfileSectionPointerDownHandler;
   onMoveByOffset: (sectionKey: ProfileSectionKey, offset: -1 | 1) => void;
+  /**
+   * 标题栏右侧的常驻动作槽（如「字段设置」齿轮）。必须渲染在折叠按钮**之外**——
+   * 按钮里嵌按钮是非法结构，点击也会连带触发折叠。
+   */
+  actions?: ReactNode;
   children: ReactNode;
 }
 
@@ -149,28 +154,35 @@ export const SortableProfileSection = memo(function SortableProfileSection({
   onToggleCollapsed,
   onHandlePointerDown,
   onMoveByOffset,
+  actions,
   children,
 }: SortableProfileSectionProps) {
   const displayLabel = label && label.trim() ? label : (SECTION_LABELS[sectionKey] ?? sectionKey);
   // 标题栏是每张卡唯一的标题：卡片本体不再自带标题（否则展开时会和标题栏重复）。
   // 查看态是可点的折叠开关；编辑态只是普通标题，折叠由「全部展开/收起」在查看态接管。
-  const titleBar = editable ? (
+  // 动作槽始终在折叠按钮之外：按钮里嵌按钮是非法结构（点齿轮会连带折叠整卡）。
+  const titleBar = (
     <div className="profile-section-titlebar">
-      <Typography.Text strong>{displayLabel}</Typography.Text>
+      {editable ? (
+        <span className="profile-section-title">
+          <Typography.Text strong>{displayLabel}</Typography.Text>
+        </span>
+      ) : (
+        <button
+          type="button"
+          className="profile-section-collapse-toggle"
+          aria-expanded={!collapsed}
+          aria-label={`${collapsed ? "展开" : "收起"}${displayLabel}`}
+          onClick={() => onToggleCollapsed(sectionKey)}
+        >
+          <span className="profile-section-collapse-icon">
+            {collapsed ? <RightOutlined /> : <DownOutlined />}
+          </span>
+          <Typography.Text strong>{displayLabel}</Typography.Text>
+        </button>
+      )}
+      {actions ? <div className="profile-section-titlebar-actions">{actions}</div> : null}
     </div>
-  ) : (
-    <button
-      type="button"
-      className="profile-section-collapse-toggle"
-      aria-expanded={!collapsed}
-      aria-label={`${collapsed ? "展开" : "收起"}${displayLabel}`}
-      onClick={() => onToggleCollapsed(sectionKey)}
-    >
-      <span className="profile-section-collapse-icon">
-        {collapsed ? <RightOutlined /> : <DownOutlined />}
-      </span>
-      <Typography.Text strong>{displayLabel}</Typography.Text>
-    </button>
   );
 
   return (

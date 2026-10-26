@@ -107,7 +107,7 @@ describe("ProfileFieldInputs 的收起与隐藏", () => {
     expect(patch).toEqual({ hidden: false });
   });
 
-  it("单行文本进多列网格；多行文本/日期整行，行距收紧", () => {
+  it("单行文本进多列网格；只有多行文本整行（日期与短字段同格），行距收紧", () => {
     const gridSection = makeSection("basic_info", "Basic Info", "singleton", [
       makeField("basic_info", "name", "Name"),
       makeField("basic_info", "nickname", "Nickname"),
@@ -121,10 +121,14 @@ describe("ProfileFieldInputs 的收起与隐藏", () => {
     // 四个字段都在网格里，DOM 顺序 = 字段顺序（不改变顺序与收起逻辑）。
     const items = grid!.querySelectorAll(":scope > .profile-field-grid-item");
     expect(items).toHaveLength(4);
-    // 多行文本 / 日期区间必须占整行（否则日期选择器会被压成细条）。
+    // 只有多行文本占整行。日期不再整行：年/月/日三个下拉收在一格里，
+    // 「姓名 / 性别 / 出生年月」「开始 / 结束」才能落在同一行。
     const wide = grid!.querySelectorAll(":scope > .profile-field-grid-item.is-wide");
-    expect(wide).toHaveLength(2);
+    expect(wide).toHaveLength(1);
     expect(screen.getByLabelText("Bio").closest(".profile-field-grid-item")).toHaveClass("is-wide");
+    expect(screen.getByLabelText("Start").closest(".profile-field-grid-item")).not.toHaveClass(
+      "is-wide",
+    );
     expect(screen.getByLabelText("Name").closest(".profile-field-grid-item")).not.toHaveClass(
       "is-wide",
     );

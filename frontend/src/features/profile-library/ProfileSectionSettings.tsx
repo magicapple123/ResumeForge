@@ -111,70 +111,86 @@ export default function ProfileSectionSettings({
       <Typography.Paragraph type="secondary" style={{ marginTop: 0 }}>
         {t("profileLibrary.sectionSettings.customHint")}
       </Typography.Paragraph>
+      {/* 每行只剩开关后「在资料页显示」这句话没了着落：收成一条图例，两个列表各一次。 */}
+      <div className="profile-settings-row-meta" style={{ marginBottom: 8 }}>
+        {t("profileLibrary.sectionSettings.visibilityLegend")}
+      </div>
       {customSections.length === 0 ? (
         <Typography.Paragraph type="secondary">
           {t("profileLibrary.sectionSettings.empty")}
         </Typography.Paragraph>
       ) : null}
-      {customSections.map((section) => (
-        <div key={section.key} className="profile-settings-row">
-          {renamingKey === section.key ? (
-            <Input
-              value={renameDraft}
-              maxLength={40}
-              onChange={(event) => setRenameDraft(event.target.value)}
-              onPressEnter={() => submitRename(section.key)}
-              style={{ maxWidth: 240 }}
-            />
-          ) : (
-            <span className="profile-settings-row-main">
-              {section.name}
-              <Typography.Text type="secondary" style={{ marginLeft: 12 }}>
-                {t("profileLibrary.sectionSettings.fields")} · {section.fields.length}
-              </Typography.Text>
-            </span>
-          )}
-          <span className="profile-settings-row-actions">
-            <SectionVisibilitySwitch
-              sectionName={section.name}
-              visible={visibleKeys.has(section.key)}
-              busy={visibilityBusy}
-              onChange={(visible) => onSetSectionVisible(section.key, visible)}
-            />
+      <div className="profile-settings-list">
+        {customSections.map((section) => (
+          <div key={section.key} className="profile-settings-row">
             {renamingKey === section.key ? (
-              <Button
-                size="small"
-                type="primary"
-                loading={busy}
-                onClick={() => submitRename(section.key)}
-              >
-                {t("profileLibrary.sectionSettings.saveName")}
-              </Button>
+              <Input
+                value={renameDraft}
+                maxLength={40}
+                onChange={(event) => setRenameDraft(event.target.value)}
+                onPressEnter={() => submitRename(section.key)}
+                style={{ maxWidth: 240 }}
+              />
             ) : (
+              <span className="profile-settings-row-main">
+                <span className="profile-settings-row-title">{section.name}</span>
+                <span className="profile-settings-row-meta">
+                  {t("profileLibrary.sectionSettings.fieldsCount", {
+                    count: section.fields.length,
+                  })}
+                </span>
+                <span className="profile-settings-row-meta">
+                  {t("profileLibrary.sectionSettings.entriesCount", {
+                    count: entryCountByKey.get(section.key) ?? 0,
+                  })}
+                </span>
+              </span>
+            )}
+            <span className="profile-settings-row-actions">
+              <SectionVisibilitySwitch
+                sectionName={section.name}
+                visible={visibleKeys.has(section.key)}
+                busy={visibilityBusy}
+                hideLabel
+                onChange={(visible) => onSetSectionVisible(section.key, visible)}
+              />
+              {renamingKey === section.key ? (
+                <Button
+                  size="small"
+                  type="primary"
+                  loading={busy}
+                  onClick={() => submitRename(section.key)}
+                >
+                  {t("profileLibrary.sectionSettings.saveName")}
+                </Button>
+              ) : (
+                <Button
+                  size="small"
+                  type="text"
+                  onClick={() => {
+                    setRenamingKey(section.key);
+                    setRenameDraft(section.name);
+                  }}
+                >
+                  {t("profileLibrary.sectionSettings.rename")}
+                </Button>
+              )}
+              <Button size="small" type="text" onClick={() => onOpenFields(section.key)}>
+                {t("profileLibrary.sectionSettings.fields")}
+              </Button>
               <Button
                 size="small"
-                onClick={() => {
-                  setRenamingKey(section.key);
-                  setRenameDraft(section.name);
-                }}
+                type="text"
+                danger
+                disabled={busy}
+                onClick={() => requestDelete(section.key, section.name)}
               >
-                {t("profileLibrary.sectionSettings.rename")}
+                {t("profileLibrary.sectionSettings.delete")}
               </Button>
-            )}
-            <Button size="small" onClick={() => onOpenFields(section.key)}>
-              {t("profileLibrary.sectionSettings.fields")}
-            </Button>
-            <Button
-              size="small"
-              danger
-              disabled={busy}
-              onClick={() => requestDelete(section.key, section.name)}
-            >
-              {t("profileLibrary.sectionSettings.delete")}
-            </Button>
-          </span>
-        </div>
-      ))}
+            </span>
+          </div>
+        ))}
+      </div>
 
       {deleting ? (
         <div className="profile-settings-confirm" role="alertdialog">
@@ -216,32 +232,39 @@ export default function ProfileSectionSettings({
       <Typography.Paragraph type="secondary" style={{ marginTop: 0 }}>
         {t("profileLibrary.sectionSettings.builtinHint")}
       </Typography.Paragraph>
-      {builtinSections.map((section) => (
-        <div key={section.key} className="profile-settings-row">
-          <span className="profile-settings-row-main">
-            {section.name}
-            <Typography.Text type="secondary" style={{ marginLeft: 12 }}>
-              {t("profileLibrary.sectionSettings.fields")} · {section.fields.length}
-            </Typography.Text>
-          </span>
-          <span className="profile-settings-row-actions">
-            <SectionVisibilitySwitch
-              sectionName={section.name}
-              visible={section.key === "basic_info" || visibleKeys.has(section.key)}
-              locked={section.key === "basic_info"}
-              busy={visibilityBusy}
-              onChange={(visible) => onSetSectionVisible(section.key, visible)}
-            />
-            <Button size="small" onClick={() => onOpenFields(section.key)}>
-              {t("profileLibrary.sectionSettings.fields")}
-            </Button>
-          </span>
-        </div>
-      ))}
-      <Typography.Text type="secondary" style={{ display: "block", marginTop: 12 }}>
-        {t("profileLibrary.sectionSettings.customHint")}
-      </Typography.Text>
-      <span hidden>{entryCountByKey.size}</span>
+      <div className="profile-settings-row-meta" style={{ marginBottom: 8 }}>
+        {t("profileLibrary.sectionSettings.visibilityLegend")}
+      </div>
+      <div className="profile-settings-list">
+        {builtinSections.map((section) => (
+          <div key={section.key} className="profile-settings-row">
+            <span className="profile-settings-row-main">
+              <span className="profile-settings-row-title">{section.name}</span>
+              <span className="profile-settings-row-meta">
+                {t("profileLibrary.sectionSettings.fieldsCount", { count: section.fields.length })}
+              </span>
+              <span className="profile-settings-row-meta">
+                {t("profileLibrary.sectionSettings.entriesCount", {
+                  count: entryCountByKey.get(section.key) ?? 0,
+                })}
+              </span>
+            </span>
+            <span className="profile-settings-row-actions">
+              <SectionVisibilitySwitch
+                sectionName={section.name}
+                visible={section.key === "basic_info" || visibleKeys.has(section.key)}
+                locked={section.key === "basic_info"}
+                busy={visibilityBusy}
+                hideLabel
+                onChange={(visible) => onSetSectionVisible(section.key, visible)}
+              />
+              <Button size="small" type="text" onClick={() => onOpenFields(section.key)}>
+                {t("profileLibrary.sectionSettings.fields")}
+              </Button>
+            </span>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

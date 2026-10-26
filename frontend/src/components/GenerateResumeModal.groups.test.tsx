@@ -74,11 +74,11 @@ beforeEach(() => {
 // 同 ManualResumeModal.groups.test：中文只放常量，ByText 断言参数不计入棘轮。
 const TITLE_TEXT = "本次使用";
 const GROUP_NAME = /默认组/;
-const GROUP_COUNT = /7 个大字段/;
+const GROUP_COUNT = /7 个板块/;
 const OLD_COPY = /完整使用你的资料/;
-const CURRENT_GROUP_COPY = /当前组参与的大字段/;
-const SWITCH_TEXT = "去切换组";
-const FAILED_TEXT = "当前组信息读取失败";
+const CURRENT_GROUP_COPY = /当前方案包含的板块/;
+const SWITCH_TEXT = "去切换方案";
+const FAILED_TEXT = "当前方案信息读取失败";
 const START_TEXT = "开始生成";
 
 describe("GenerateResumeModal 组摘要（F4-D）", () => {
@@ -92,7 +92,7 @@ describe("GenerateResumeModal 组摘要（F4-D）", () => {
     expect(screen.getByText(GROUP_NAME)).toBeInTheDocument();
     expect(screen.getByText(GROUP_COUNT)).toBeInTheDocument();
     // 没有选组器：页面里没有以"组"为名的下拉（条目候选下拉只在编辑器里）。
-    expect(screen.queryByRole("combobox", { name: /组/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("combobox", { name: /方案/ })).not.toBeInTheDocument();
     // 旧文案「完整使用你的资料」必须消失，改成当前组口径。
     expect(screen.queryByText(OLD_COPY)).not.toBeInTheDocument();
     expect(screen.getByText(CURRENT_GROUP_COPY)).toBeInTheDocument();

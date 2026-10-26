@@ -19,9 +19,10 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-function renderStack(participatingKeys: string[], onSetSectionVisible = vi.fn()) {
+function renderStack(participatingKeys: string[], onSetSectionVisible = vi.fn(), editing = false) {
   const store = createSectionOrderStore();
   const noop = vi.fn();
+  const onOpenFieldSettings = vi.fn();
   render(
     <AntdApp>
       <Form>
@@ -29,7 +30,7 @@ function renderStack(participatingKeys: string[], onSetSectionVisible = vi.fn())
           sections={makeAllSections()}
           participatingKeys={participatingKeys}
           reorderStore={store}
-          editing={false}
+          editing={editing}
           saving={false}
           photo=""
           limits={LIMITS}
@@ -41,7 +42,7 @@ function renderStack(participatingKeys: string[], onSetSectionVisible = vi.fn())
           onAddEntry={noop}
           onRemoveEntry={noop}
           onSetPreference={noop}
-          onOpenFieldSettings={noop}
+          onOpenFieldSettings={onOpenFieldSettings}
           onOpenGuide={noop}
           onRequestEdit={noop}
           onOpenGroupManager={noop}
@@ -50,7 +51,7 @@ function renderStack(participatingKeys: string[], onSetSectionVisible = vi.fn())
       </Form>
     </AntdApp>,
   );
-  return { onSetSectionVisible };
+  return { onSetSectionVisible, onOpenFieldSettings };
 }
 
 describe("ProfileSectionStack 的大字段隐藏/显示", () => {
@@ -104,5 +105,40 @@ describe("ProfileSectionStack 的大字段隐藏/显示", () => {
       }),
     ).not.toBeInTheDocument();
     expect(screen.queryByText(t("profileLibrary.empty.groupTitle"))).not.toBeInTheDocument();
+  });
+});
+
+describe("ProfileSectionStack 的标题唯一性与字段设置入口", () => {
+  // 改前这里必然失败（2 个）：分区壳的标题栏 + ProfileEntrySection 内容区的
+  // `.profile-entry-section-header` 各渲染一次同名大字段标题。
+  it("参与清单含 educations 时，分区标题在查看态只出现一次", () => {
+    renderStack(["basic_info", "educations"]);
+    expect(screen.getAllByText("Education")).toHaveLength(1);
+  });
+
+  it("编辑态同样只出现一次（标题栏是每张卡唯一的标题）", () => {
+    renderStack(["basic_info", "educations"], vi.fn(), true);
+    expect(screen.getAllByText("Education")).toHaveLength(1);
+  });
+
+  it("标题栏齿轮直达该大字段的字段设置，basic_info 没有齿轮", () => {
+    const { onOpenFieldSettings } = renderStack(["basic_info", "educations"]);
+    const gear = screen.getByRole("button", {
+      name: t("profileLibrary.section.fieldSettingsAria", { name: "Education" }),
+    });
+    // 齿轮必须渲染在折叠按钮**之外**：按钮嵌按钮是非法结构，点齿轮会连带折叠整卡。
+    expect(gear.closest(".profile-section-collapse-toggle")).toBeNull();
+    expect(gear).toBeEnabled();
+
+    fireEvent.click(gear);
+    // 页面此前忽略了这个 key，弹层只能落到组/大字段列表；现在必须带上分区 key。
+    expect(onOpenFieldSettings).toHaveBeenCalledWith("educations");
+
+    // 照片不是可配置字段：基本信息卡片不提供字段设置入口。
+    expect(
+      screen.queryByRole("button", {
+        name: t("profileLibrary.section.fieldSettingsAria", { name: "Basic Info" }),
+      }),
+    ).not.toBeInTheDocument();
   });
 });

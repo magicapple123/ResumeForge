@@ -140,8 +140,9 @@ export default function ProfileFieldInputs({
 
   const renderField = (field: FieldOut) => {
     const required = field.section_key === "basic_info" && field.key === "name";
-    // 多行文本与日期区间需要整行宽度：半列里日期选择器会被压成细条、多行文本失去可读宽度。
-    const wide = field.field_type === "multi_line" || field.field_type === "date_text";
+    // 只有多行文本需要整行（半列里失去可读宽度）。日期不再整行：年/月/日三个下拉
+    // 排在一格里，相邻字段（姓名 / 性别 / 出生年月、开始 / 结束）才能落在同一行。
+    const wide = field.field_type === "multi_line";
     return (
       <div key={field.field_id} className={"profile-field-grid-item" + (wide ? " is-wide" : "")}>
         <Form.Item
@@ -200,7 +201,7 @@ export default function ProfileFieldInputs({
             {hiddenFields.length > 0 ? (
               <Popover
                 content={hiddenList}
-                title={t("profileLibrary.field.hiddenHint")}
+                title={t("profileLibrary.field.hiddenTitle")}
                 trigger="click"
               >
                 <Button type="link" size="small">

@@ -422,7 +422,12 @@ export default function ResumeWorkbenchEditorColumn({
         />
       </div>
       <div className="resume-wb-editor-body">
-        <ResumeEditorPanel api={api} variant="inline" />
+        <ResumeEditorPanel
+          api={api}
+          variant="inline"
+          editorSchema={fillSources?.editorView?.schema}
+          editorContent={content}
+        />
       </div>
       {/* 底部这一行整行都可以不渲染：只藏按钮会留下一条空白的条。 */}
       {actions ? <div className="resume-wb-editor-actions">{actions}</div> : null}

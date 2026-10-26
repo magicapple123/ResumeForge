@@ -18,10 +18,13 @@
  */
 import { Alert, Button, Collapse, Form, Grid, Space, Tabs } from "antd";
 import type { ReactNode } from "react";
+import type { EditorSchemaOut } from "../../features/profile-library/types";
 import { t } from "../../i18n";
+import type { ResumeContent } from "../../types";
 import DraftRestoreBar from "../common/DraftRestoreBar";
 import EditorHeader from "./EditorHeader";
 import EditorTabStrip from "./EditorTabStrip";
+import { EditorFieldProvider } from "./editorSchemaContext";
 import { ProfileFillProvider } from "./profileFillContext";
 import type { ResumeEditorPanelApi } from "./useResumeEditorPanel";
 
@@ -39,6 +42,10 @@ export interface ResumeEditorPanelProps {
    * 因为区块要写表单值；它自身不注册 Form.Item，不会给提交值添字段。
    */
   sourcePanel?: ReactNode;
+  /** F10：当前简历的编辑器视图（板块/字段可见性）；缺省 = 不过滤（旧行为）。 */
+  editorSchema?: EditorSchemaOut | null;
+  /** 表单对应的服务端内容：「字段有值就保留输入框」的判据用。 */
+  editorContent?: ResumeContent | null;
 }
 
 export default function ResumeEditorPanel({
@@ -49,6 +56,8 @@ export default function ResumeEditorPanel({
   onFillAll,
   variant,
   sourcePanel,
+  editorSchema,
+  editorContent,
 }: ResumeEditorPanelProps) {
   // "两栏独立滚动"：要有参考栏且屏幕够宽。这一个布尔值同时决定 body 的滚动方式与 grid
   // 的 class——判两次会出现"body 不滚 + grid 不是双栏"，内容是滚不动的。
@@ -126,48 +135,60 @@ export default function ResumeEditorPanel({
   // 表单更新影响，也天然成为滚动容器里的第一个壳。
   if (variant === "inline") {
     return (
-      <ProfileFillProvider value={api.fillContextValue}>
-        <div className="resume-editor-inline">
-          {draftBar}
-          {profileRefreshBar}
-          <EditorHeader description={description} onFillAll={onFillAll} headerExtra={headerExtra} />
-          {tabStrip}
-          {form}
-        </div>
-      </ProfileFillProvider>
+      <EditorFieldProvider schema={editorSchema ?? undefined} content={editorContent}>
+        <ProfileFillProvider value={api.fillContextValue}>
+          <div className="resume-editor-inline">
+            {draftBar}
+            {profileRefreshBar}
+            <EditorHeader
+              description={description}
+              onFillAll={onFillAll}
+              headerExtra={headerExtra}
+            />
+            {tabStrip}
+            {form}
+          </div>
+        </ProfileFillProvider>
+      </EditorFieldProvider>
     );
   }
 
   return (
-    <ProfileFillProvider value={api.fillContextValue}>
-      {draftBar}
-      {profileRefreshBar}
-      <div
-        className={`resume-editor-layout${referencePanel ? " resume-editor-layout--with-reference" : ""}`}
-      >
-        {referencePanel && (
-          <div className="resume-editor-reference">
-            {wideLayout ? (
-              referencePanel
-            ) : (
-              <Collapse
-                size="small"
-                items={[
-                  {
-                    key: "job-reference",
-                    label: t("editor.reference.toggle"),
-                    children: referencePanel,
-                  },
-                ]}
-              />
-            )}
+    <EditorFieldProvider schema={editorSchema ?? undefined} content={editorContent}>
+      <ProfileFillProvider value={api.fillContextValue}>
+        {draftBar}
+        {profileRefreshBar}
+        <div
+          className={`resume-editor-layout${referencePanel ? " resume-editor-layout--with-reference" : ""}`}
+        >
+          {referencePanel && (
+            <div className="resume-editor-reference">
+              {wideLayout ? (
+                referencePanel
+              ) : (
+                <Collapse
+                  size="small"
+                  items={[
+                    {
+                      key: "job-reference",
+                      label: t("editor.reference.toggle"),
+                      children: referencePanel,
+                    },
+                  ]}
+                />
+              )}
+            </div>
+          )}
+          <div className="resume-editor-main">
+            <EditorHeader
+              description={description}
+              onFillAll={onFillAll}
+              headerExtra={headerExtra}
+            />
+            {form}
           </div>
-        )}
-        <div className="resume-editor-main">
-          <EditorHeader description={description} onFillAll={onFillAll} headerExtra={headerExtra} />
-          {form}
         </div>
-      </div>
-    </ProfileFillProvider>
+      </ProfileFillProvider>
+    </EditorFieldProvider>
   );
 }

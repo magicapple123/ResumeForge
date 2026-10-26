@@ -127,16 +127,16 @@ function PartialDateSelectImpl({
       </Space.Compact>
       {allowOngoing ? (
         <Checkbox
+          className="profile-partial-date-select__ongoing"
           checked={selected.ongoing}
           disabled={disabled || undefined}
-          style={{ marginTop: 6 }}
           onChange={(event) => onChange?.(event.target.checked ? "至今" : "")}
         >
           至今
         </Checkbox>
       ) : null}
       {unsupported ? (
-        <Typography.Text type="warning" style={{ display: "block", marginTop: 4 }}>
+        <Typography.Text type="warning" style={{ flexBasis: "100%", marginTop: 4 }}>
           当前日期格式无法识别；请选择日期后保存，旧值暂时保留。
         </Typography.Text>
       ) : null}

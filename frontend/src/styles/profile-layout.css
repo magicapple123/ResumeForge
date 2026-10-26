@@ -50,8 +50,10 @@
   align-items: start;
 }
 
-/* 标准断点（theme/breakpoints.ts）：1366 起 3 列，767 以下 1 列。 */
-@media (min-width: 1366px) {
+/* 标准断点（theme/breakpoints.ts）：1092 起 3 列，767 以下 1 列。
+ * 1092（而不是 1366）起 3 列：常见笔记本窗口（1280/1440 含侧栏）也要能一行放下
+ * 「姓名 / 性别 / 出生年月」这类短字段，否则日期只能另起一行。 */
+@media (min-width: 1092px) {
   .profile-field-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
@@ -67,7 +69,7 @@
   min-width: 0;
 }
 
-/* 多行文本 / 日期区间等需要整行宽度的字段。 */
+/* 多行文本等需要整行宽度的字段（日期不再整行，见文件末尾）。 */
 .profile-field-grid-item.is-wide {
   grid-column: 1 / -1;
 }
@@ -75,4 +77,220 @@
 /* 「更多字段」「已隐藏 N 个字段」「收起更多字段」这类行内动作占整行。 */
 .profile-field-grid-actions {
   grid-column: 1 / -1;
+}
+
+/* ===== 资料管理面（组 / 大字段 / 字段）布局补齐 =====
+ * 2026-10-26：这批类此前只出现在 JSX、样式表里一条都没有，行退化成裸 inline 流，
+ * 按钮与说明挤在一起。这里只做容器级布局，不碰 antd 内部类，尺寸全走 --rf-* 令牌。 */
+
+.profile-page-header {
+  flex-wrap: wrap;
+}
+
+.profile-page-header-group {
+  margin-top: 12px;
+}
+
+.profile-group-control {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.profile-group-control-label {
+  color: var(--rf-text-description);
+  font-size: 13px;
+}
+
+/* 分区标题栏右侧动作槽（齿轮等常驻入口）：标题与动作同一行，内容区不再重复标题。 */
+.profile-section-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.profile-section-titlebar-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+}
+
+/* 编辑态右侧被拖动把手占用（right 38/66/94px，各 28px 宽）：动作退到把手左侧。 */
+.profile-page.is-editing .profile-section-titlebar {
+  padding-right: 132px;
+}
+
+.profile-section-sortable.is-compact .profile-section-titlebar-actions {
+  display: none;
+}
+
+/* 设置列表：一行一条，左右两栏，行间只用 1px 分隔线。 */
+.profile-settings-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.profile-settings-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 44px;
+  padding: 6px 2px;
+  border-bottom: 1px solid var(--rf-border-subtle);
+}
+
+.profile-settings-list > .profile-settings-row:last-child {
+  border-bottom: 0;
+}
+
+.profile-settings-row-main {
+  display: flex;
+  flex: 1 1 auto;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  min-width: 0;
+}
+
+.profile-settings-row-title {
+  color: var(--rf-text-body);
+  font-weight: 500;
+}
+
+.profile-settings-row-meta {
+  color: var(--rf-text-description);
+  font-size: 12px;
+}
+
+.profile-settings-row-actions {
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+}
+
+.profile-settings-add {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.profile-settings-header {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.profile-settings-confirm {
+  margin: 8px 0 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--rf-border);
+  border-radius: 8px;
+  background: var(--rf-surface-alt);
+}
+
+.profile-settings-confirm-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* 组编辑：参与清单从「一行挤 12 个复选框」改成网格。 */
+.profile-group-form-members {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 16px;
+  margin-top: 8px;
+}
+
+@media (min-width: 1092px) {
+  .profile-group-form-members {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 767px) {
+  .profile-group-form-members {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.profile-group-form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+/* 已隐藏字段的恢复列表（Popover 内）。 */
+.profile-hidden-field-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 240px;
+  max-width: 320px;
+}
+
+.profile-hidden-field-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+/* 填写规则判定表：此前是零样式的裸 table，列宽与分隔线全靠浏览器默认。 */
+.profile-placement-guide-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.profile-placement-guide-table th,
+.profile-placement-guide-table td {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--rf-border-subtle);
+  text-align: left;
+  vertical-align: top;
+}
+
+.profile-placement-guide-table th {
+  font-weight: 500;
+  color: var(--rf-text-description);
+  background: var(--rf-surface-alt);
+}
+
+.profile-placement-guide-table th:first-child {
+  width: 46%;
+}
+
+/* 日期区间：整块不再占满一行——年/月/日 + 「至今」排成一列宽内的紧凑组，
+   这样「开始 / 结束」「技能名称 / 熟练度 / 获得日期」才能在同一行收齐。
+   260px 是三个下拉 + 箭头的可用下限；更窄的列（手机 1 列）仍按 100% 自适应。 */
+.profile-partial-date-select {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+}
+
+.profile-partial-date-select__controls {
+  flex: 1 1 180px;
+  max-width: 260px;
+}
+
+/* 「至今」不参与压缩：列窄时宁可整块换到下一行，也不要把这三个字挤断。 */
+.profile-partial-date-select__ongoing {
+  flex: 0 0 auto;
+  white-space: nowrap;
 }

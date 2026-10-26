@@ -50,7 +50,7 @@ def _require_active_section(db: Session, section_key: str) -> str:
     key = str(section_key or "").strip()
     if key in SECTION_BY_KEY or active_custom_section(db, key) is not None:
         return key
-    raise NotFound(f"大字段「{key or '空'}」不存在或已删除：请刷新页面后重试")
+    raise NotFound(f"板块「{key or '空'}」不存在或已删除：请刷新页面后重试")
 
 
 def _field_types(db: Session, section_key: str) -> dict[str, str]:
@@ -286,7 +286,7 @@ def _apply_upsert(
     count = _active_count(db, section_key)
     if count >= _MAX_ENTRIES:
         raise LimitReached(
-            f"每个大字段最多只能有 {_MAX_ENTRIES} 条记录（当前已有 {count} 条）："
+            f"每个板块最多只能有 {_MAX_ENTRIES} 条记录（当前已有 {count} 条）："
             "请先删除不用的记录后再添加"
         )
     target = _next_sort_order(db, section_key) if sort_order is None else int(sort_order)
@@ -378,12 +378,12 @@ def bulk_save_entries(
     for item in items:
         if not isinstance(item, dict):
             raise ValidationError(
-                "批量保存的每一项必须包含大字段与字段值：请刷新页面后重试",
+                "批量保存的每一项必须包含板块与字段值：请刷新页面后重试",
                 code="invalid_bulk",
             )
         section_key = str(item.get("section_key") or "").strip()
         if not section_key:
-            raise ValidationError("批量保存缺少大字段 key：请刷新页面后重试", code="invalid_bulk")
+            raise ValidationError("批量保存缺少板块 key：请刷新页面后重试", code="invalid_bulk")
         values = item.get("values")
         if values is not None and not isinstance(values, dict):
             raise ValidationError(
@@ -451,7 +451,7 @@ def reorder_entries(
     requested = [str(item or "").strip() for item in (entry_ids or [])]
     if len(requested) != len(set(requested)) or set(requested) != {row.entry_id for row in rows}:
         raise ValidationError(
-            "排序清单必须恰好包含该大字段下全部记录（不能缺少、多出或重复）：请刷新页面后重试",
+            "排序清单必须恰好包含该板块下全部记录（不能缺少、多出或重复）：请刷新页面后重试",
             code="invalid_reorder",
         )
     by_id = {row.entry_id: row for row in rows}

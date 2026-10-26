@@ -34,7 +34,7 @@ from . import paper_policy
 from .language_projection import project_language_skills
 from .paper_content_builder import clean_values, is_http_url, project_content
 from .paper_limits import PhotoResolver
-from .projection_views import candidates, scope_out, source_layout
+from .projection_views import candidates, editor_schema, scope_out, source_layout
 
 # 归一化时额外去掉的符号：区间的"～"、连字符类与间隔号不是文字，匹配时应忽略。
 _IGNORED_SYMBOLS = frozenset("~～·—…")
@@ -184,6 +184,7 @@ def build_projection(
         content=content,
         candidates=candidates(consumed, assembly.entry_paths),
         source_layout=source_layout(consumed),
+        editor_schema=editor_schema(consumed),
         warnings=warnings,
         snapshot_token=snapshot_token(consumed, content),
     )

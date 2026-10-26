@@ -8,8 +8,8 @@
  * - 空态：查看态且本分区没有有效值时显示，主按钮直接进入编辑（禁方位词指路）；
  * - 字段输入与折叠/隐藏逻辑在 ProfileFieldInputs。
  */
-import { Button, ConfigProvider, Form, Input, Tooltip } from "antd";
-import { DeleteOutlined, HolderOutlined, PlusOutlined, SettingOutlined } from "@ant-design/icons";
+import { Button, Form, Input, Tooltip } from "antd";
+import { DeleteOutlined, HolderOutlined, PlusOutlined } from "@ant-design/icons";
 import { useMemo } from "react";
 import EmptyState from "../../components/common/EmptyState";
 import { useProfileItemListDrag } from "../../components/profile/useProfileItemListDrag";
@@ -31,7 +31,6 @@ interface Props {
     field: FieldOut,
     patch: { hidden?: boolean; collapsed_override?: boolean | null },
   ) => void;
-  onOpenFieldSettings: (sectionKey: string) => void;
   onOpenGuide: () => void;
 }
 
@@ -75,41 +74,12 @@ export default function ProfileEntrySection(props: Props) {
     onAddEntry,
     onRemoveEntry,
     onSetPreference,
-    onOpenFieldSettings,
     onOpenGuide,
   } = props;
   const disabled = !editing || saving;
   const form = Form.useFormInstance();
   const watched = Form.useWatch(["sections", section.key], form) as ProfileEntryDraft[] | undefined;
   const entries = watched ?? [];
-
-  // 资料页输入控件整体在 <Form disabled> 里（查看态禁编辑），但「字段设置」只是打开
-  // 偏好视图（组管理弹层），不属于表单编辑：就地恢复可点击，其余按钮自带 disabled 语义。
-  const headerActions = (
-    <ConfigProvider componentDisabled={false}>
-      <div className="profile-entry-section-actions">
-        <Tooltip title={t("profileLibrary.section.fieldSettings")}>
-          <Button
-            size="small"
-            type="text"
-            icon={<SettingOutlined />}
-            aria-label={t("profileLibrary.section.fieldSettings")}
-            onClick={() => onOpenFieldSettings(section.key)}
-          />
-        </Tooltip>
-        {section.form === "multi" ? (
-          <Button
-            size="small"
-            icon={<PlusOutlined />}
-            disabled={disabled || entries.length >= entryLimit}
-            onClick={() => onAddEntry(section.key)}
-          >
-            {t("profileLibrary.section.addEntry")}
-          </Button>
-        ) : null}
-      </div>
-    </ConfigProvider>
-  );
 
   const emptyState = (multi: boolean) => (
     <EmptyState
@@ -150,10 +120,6 @@ export default function ProfileEntrySection(props: Props) {
     const showEmpty = !editing && !hasAnyValue(section, entries);
     return (
       <div className="profile-entry-section">
-        <div className="profile-entry-section-header">
-          <span className="profile-entry-section-name">{section.name}</span>
-          {headerActions}
-        </div>
         <Form.Item name={["sections", section.key, 0, "entry_key"]} hidden>
           <Input />
         </Form.Item>
@@ -193,7 +159,6 @@ export default function ProfileEntrySection(props: Props) {
             operations={operations}
             listDrag={listDrag}
             entries={entries}
-            headerActions={headerActions}
             emptyState={emptyState(true)}
             onRemoveEntry={onRemoveEntry}
             onSetPreference={onSetPreference}
@@ -217,7 +182,6 @@ interface MultiEntryListProps {
   operations: FormListOperation;
   listDrag: { enabled: boolean; itemCount: number; onMove: (from: number, to: number) => void };
   entries: ProfileEntryDraft[];
-  headerActions: React.ReactNode;
   emptyState: React.ReactNode;
   onRemoveEntry: (sectionKey: string, entryKey: string, title: string) => void;
   onSetPreference: (
@@ -237,7 +201,6 @@ function MultiEntryList({
   operations,
   listDrag,
   entries,
-  headerActions,
   emptyState,
   onRemoveEntry,
   onSetPreference,
@@ -251,10 +214,6 @@ function MultiEntryList({
 
   return (
     <div className="profile-entry-section">
-      <div className="profile-entry-section-header">
-        <span className="profile-entry-section-name">{section.name}</span>
-        {headerActions}
-      </div>
       {listFields.length === 0 ? emptyState : null}
       <div className="profile-list-items">
         {listFields.map((item, index) => {

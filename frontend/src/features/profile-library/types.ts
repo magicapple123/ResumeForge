@@ -158,6 +158,50 @@ export interface ProjectionWarningOut {
   message: string;
 }
 
+/* ===== F10：编辑器视图（创建时冻结的板块/字段可见性） ===== */
+
+/** 一个可见字段；`resume_attr` 是它在 ResumeContent 里的属性名（null = 无独立输入框）。 */
+export interface EditorFieldOut {
+  field_id: string;
+  key: string;
+  label: string;
+  field_type: ProfileFieldType;
+  resume_attr: string | null;
+}
+
+/** 一个可见板块；`resume_field` 是正文数组字段名（标量分区为 null）。 */
+export interface EditorSectionOut {
+  section_key: string;
+  section_name: string;
+  form: ProfileSectionForm;
+  resume_field: string | null;
+  material_only: boolean;
+  fields: EditorFieldOut[];
+}
+
+/** 服务端冻结的编辑器视图（只读、不含资料值；随投影与创建态快照下发）。 */
+export interface EditorSchemaOut {
+  sections: EditorSectionOut[];
+  workspace_revision: number;
+}
+
+/** 编辑器页签的一个板块（key = 消费分区键，name = 当时的显示名，自建板块即用户起的名字）。 */
+export interface EditorViewSection {
+  key: string;
+  name: string;
+}
+
+/**
+ * 编辑器视图来源：板块清单必填；`schema` 缺省 = 字段不过滤（旧简历/旧快照）。
+ *
+ * 新简历取自当前方案投影；已保存简历取自创建时冻结的快照——方案后来再改也不影响它
+ * （用户口径 2026-10-26：只影响此后新增的简历）。
+ */
+export interface EditorView {
+  sections: EditorViewSection[];
+  schema?: EditorSchemaOut;
+}
+
 export interface PaperProjectionOut {
   scope: ProjectionScopeOut;
   content: import("../../types/resumeContent").ResumeContent;
@@ -165,6 +209,8 @@ export interface PaperProjectionOut {
   source_layout: ProjectionSourceSectionOut[];
   warnings: ProjectionWarningOut[];
   snapshot_token: string;
+  /** 当前方案的编辑器视图（隐藏字段不在 fields 里；自建板块带真实名字）。 */
+  editor_schema?: EditorSchemaOut | null;
 }
 
 /* ===== 表单模型 ===== */

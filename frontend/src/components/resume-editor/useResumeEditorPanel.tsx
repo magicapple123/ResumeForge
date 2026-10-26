@@ -28,11 +28,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ResumeContent } from "../../types";
 import { t } from "../../i18n";
 import { hasAnyResumeContent } from "../../utils/profileToResume";
-import { summarizeDraftDiff, type DraftDiffEntry } from "../../utils/draftDiff";
+import type { DraftDiffEntry } from "../../utils/draftDiff";
 import { formatErrorGuidance } from "../../api/errorGuidance";
 import type { ProfileFillSources } from "../../features/profile/profileFillOptions";
 import { useFormShortcutHistory } from "../../features/shortcuts/useFormShortcutHistory";
 import { stripEmptyResearch } from "../../features/resume-research/real";
+import { stripEmptyCustomSections } from "../../utils/stripEmptyCustomSections";
 import { useBeforeUnloadGuard } from "../resume/useBeforeUnloadGuard";
 import { scrollAndFocusEditorField } from "./editorFieldScroll";
 import { buildResumeEditorTabItems, tabContentPresenceMask } from "./resumeEditorTabs";
@@ -40,6 +41,7 @@ import type { ProfileFillContextValue } from "./profileFillContext";
 import { resolveEditorTarget } from "./ResumeEditorTarget";
 import { useEditorDraftBar, type EditorPendingAction } from "./useEditorDraftBar";
 import { useEditorContentSync } from "./useEditorContentSync";
+import { useEditorDraftDiff } from "./useEditorDraftDiff";
 
 /** 编辑器的宿主无关配置。字段语义见设计 §3.1。 */
 export interface ResumeEditorPanelOptions {
@@ -208,7 +210,9 @@ export function useResumeEditorPanel(options: ResumeEditorPanelOptions): ResumeE
   const mergePartial = useCallback(
     (values: Partial<ResumeContent> | undefined): ResumeContent | null => {
       if (!content) return null;
-      return stripEmptyResearch({ ...content, ...(values ?? {}), photo: content.photo });
+      return stripEmptyCustomSections(
+        stripEmptyResearch({ ...content, ...(values ?? {}), photo: content.photo }),
+      );
     },
     [content],
   );
@@ -299,25 +303,8 @@ export function useResumeEditorPanel(options: ResumeEditorPanelOptions): ResumeE
     clearDraftRef.current = clearDraft;
   }, [clearDraft]);
 
-  /**
-   * 草稿 vs 当前表单内容的差异。
-   *
-   * 方向是 `summarizeDraftDiff(现在, 草稿)`：用户展开差异是想知道"点恢复会改掉什么"，
-   * 所以左侧必须是当前值。`draftPending.values` 只是**被改过的那几个字段**（表单值快照），
-   * 叠到当前值上就得到"草稿若恢复会变成的内容"。
-   *
-   * 依赖 `watched` 而不是 `form`：`getFieldsValue` 不是响应式的，靠表单值订阅来触发重算。
-   */
-  const draftChanges = useMemo<DraftDiffEntry[] | null>(() => {
-    const pending = draftBar.draftPending;
-    if (!pending) return null;
-    // `watched` 优先：它是订阅来的表单值快照，值一变这个 memo 就必须重算。
-    // 首帧 `watched` 还是 `undefined` 时退回一次性读取（`getFieldsValue(true)` 拿全量，
-    // 包括未注册的字段）。
-    const current = (watched ?? form.getFieldsValue(true) ?? {}) as ResumeContent;
-    const drafted = { ...current, ...pending.values } as ResumeContent;
-    return summarizeDraftDiff(current, drafted);
-  }, [draftBar.draftPending, form, watched]);
+  // 草稿 vs 当前表单内容的差异（纯展示逻辑，拆到 `useEditorDraftDiff` 守 500 行预算）。
+  const draftChanges = useEditorDraftDiff(draftBar.draftPending, form, watched);
 
   const fillAllData = useMemo(() => {
     if (!fillAll) return null;
@@ -379,8 +366,11 @@ export function useResumeEditorPanel(options: ResumeEditorPanelOptions): ResumeE
   }, [active, form, pickTarget]);
 
   // 页签装配拆到 `resumeEditorTabs`（本文件贴着 500 行预算）：key 与 content 字段名逐字一致。
-  // 按**当前组参与清单**过滤（F9/R1，参与清单与候选同源）；已有内容的分区另行保留。
+  // 视图优先级（F10）：冻结的编辑器视图（已保存简历 / 新简历的方案投影）> 当前组参与清单
+  // （F9/R1 的既有行为）；已有内容的分区另行保留（R-34）。视图搭在 fillSources 上，两个宿主
+  // 共用同一条链路，不需要再各传一个参数。
   const participatingKeys = fillSources?.participatingKeys;
+  const editorView = fillSources?.editorView ?? null;
   const customSectionCount = content?.custom_sections?.length ?? 0;
   // 正文 + 表单当前值的"有没有内容"掩码：用户刚加、还没保存的分区也要保留页签。
   // 掩码是字符串，打字时不变 → 页签不会逐键重建（依赖按它写）。
@@ -395,6 +385,7 @@ export function useResumeEditorPanel(options: ResumeEditorPanelOptions): ResumeE
         fillSummary,
         customSectionCount,
         participatingKeys,
+        editorView,
         content,
         contentPresenceMask,
       }),
@@ -405,6 +396,7 @@ export function useResumeEditorPanel(options: ResumeEditorPanelOptions): ResumeE
       fillSummary,
       customSectionCount,
       participatingKeys,
+      editorView,
       content,
       contentPresenceMask,
     ],

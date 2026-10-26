@@ -72,7 +72,7 @@ export default function GenerationConfigStage({
 
   return (
     <div>
-      {/* F4：生成只用当前组（无选组器）；摘要只读，失败不阻断生成。 */}
+      {/* F4：生成只用当前方案（无选组器）；摘要只读，失败不阻断生成。 */}
       <GenerationGroupSummary />
       {!llmReady ? (
         <Alert
@@ -92,7 +92,7 @@ export default function GenerationConfigStage({
           description={
             job
               ? "系统会根据目标岗位的 JD，从完整个人资料与经历总结文件中筛选并排序相关信息；原始资料不会被修改。"
-              : "通用简历不针对任何岗位：系统会使用当前组参与的大字段（只受篇幅预算限制），保留各方向的经历与技能；原始资料不会被修改。"
+              : "通用简历不针对任何岗位：系统会使用当前方案包含的板块（只受篇幅预算限制），保留各方向的经历与技能；原始资料不会被修改。"
           }
         />
       )}

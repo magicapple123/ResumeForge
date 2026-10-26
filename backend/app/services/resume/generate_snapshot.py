@@ -63,7 +63,11 @@ class GenerationSnapshot:
 
 
 def build_snapshot_layout(consumed: ConsumedProfile) -> dict[str, Any]:
-    """创建态来源布局（F4 用）：参与分区 + 条目数 + 全局顺序的冻结副本。"""
+    """创建态来源布局（F4 用）：参与分区 + 条目数 + 全局顺序 + 编辑器视图的冻结副本。"""
+    # 延迟导入：本模块在 application 的 import 链上，而 projection_views 依赖投影 schema；
+    # 与 freeze_generation_snapshot 里的 group_scope/profile_reader 延迟导入同一理由。
+    from ..profile.projection_views import editor_schema
+
     participating: list[dict[str, Any]] = []
     for key in consumed.participating_keys:
         section = consumed.section(key)
@@ -84,6 +88,9 @@ def build_snapshot_layout(consumed: ConsumedProfile) -> dict[str, Any]:
         "is_default": consumed.is_default,
         "section_order": list(consumed.section_order),
         "participating": participating,
+        # F10/R-82：新建简历时把当前方案的「板块 + 可见字段」冻结进快照 layout；
+        # 制作台按这份副本渲染，资料方案之后再改也不影响已保存简历。
+        "editor_schema": editor_schema(consumed).model_dump(mode="json"),
     }
 
 

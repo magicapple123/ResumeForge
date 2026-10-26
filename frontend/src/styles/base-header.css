@@ -283,3 +283,29 @@
 
 /* 原来的 700px 档已并入上面这一档：700 与 767 只差 67px，两级规则几乎完全重叠，
    而 ≤767 的形态由 mobile.css 的两行网格 + 48px 触控目标接管，不需要在这里再写一遍。 */
+
+/* 职业场景下拉的选项行：名称占满剩余宽度，编辑入口贴右。
+   编辑按钮只对**这一条**生效（此前是页头齿轮 + 下拉底部「编辑当前场景」）。 */
+.scenario-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.scenario-option-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.scenario-option-edit {
+  flex: 0 0 auto;
+  color: var(--rf-text-description);
+}
+
+.scenario-option-edit:hover {
+  color: var(--rf-info);
+}

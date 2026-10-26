@@ -62,10 +62,6 @@ export default function ProfilePlacementGuide({ open, onClose }: Props) {
       <Typography.Paragraph strong style={{ marginTop: 16 }}>
         {t("profileLibrary.guide.total")}
       </Typography.Paragraph>
-      <Typography.Title level={5}>{t("profileLibrary.guide.trainingTitle")}</Typography.Title>
-      <Typography.Paragraph type="secondary">
-        {t("profileLibrary.guide.trainingBody")}
-      </Typography.Paragraph>
     </Modal>
   );
 }

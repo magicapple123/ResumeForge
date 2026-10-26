@@ -45,7 +45,7 @@ export default function ProfileGroupControl({
           options={options}
           loading={busy}
           disabled={editing || busy}
-          style={{ minWidth: 160 }}
+          style={{ width: 200 }}
           onChange={(value) => onSwitch(String(value))}
         />
       </Tooltip>

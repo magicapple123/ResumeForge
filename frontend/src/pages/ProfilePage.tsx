@@ -39,6 +39,9 @@ export default function ProfilePage() {
   const [guideOpen, setGuideOpen] = useState(false);
   const [managerOpen, setManagerOpen] = useState(false);
   const [managerView, setManagerView] = useState<"groups" | "sections">("groups");
+  // 点某一卡的齿轮时要直达那个大字段的「字段设置」：key 只在弹层挂载时被消费，
+  // 所以它不进 resumeContent 的依赖数组（改它不重建分区子树，只影响弹层初始视图）。
+  const [managerSectionKey, setManagerSectionKey] = useState("");
   const [promptDismissed, setPromptDismissed] = useState(false);
 
   const profile = useProfilePage({
@@ -225,9 +228,9 @@ export default function ProfilePage() {
           }
           onSetPreference={(field, patch) => void profile.setPreference(field, patch)}
           onOpenFieldSettings={(sectionKey) => {
+            setManagerSectionKey(sectionKey);
             setManagerView("sections");
             setManagerOpen(true);
-            void sectionKey;
           }}
           onOpenGuide={() => setGuideOpen(true)}
           onRequestEdit={handleStartEditing}
@@ -397,10 +400,14 @@ export default function ProfilePage() {
       {managerOpen ? (
         <ProfileGroupManagerModal
           open
-          onClose={() => setManagerOpen(false)}
+          onClose={() => {
+            setManagerOpen(false);
+            setManagerSectionKey("");
+          }}
           workspace={workspace}
           onChanged={profile.reloadWorkspace}
           initialView={managerView}
+          initialSectionKey={managerSectionKey}
           editing={profile.editing}
         />
       ) : null}

@@ -73,7 +73,7 @@ def _custom_fields_by_section(db: Session) -> dict[str, list[ProfileCustomField]
 def _custom_specs(
     custom_fields: list[ProfileCustomField], hidden: frozenset[str], *, start_order: int
 ) -> tuple[ConsumedFieldSpec, ...]:
-    """活动自定义小字段的消费定义（R-11：13 个内置分区也允许自建字段）。
+    """活动自定义字段的消费定义（R-11：13 个内置分区也允许自建字段）。
 
     hidden 的整条不出现（定义与值一起裁掉）；order 接在该分区默认字段之后，
     与编辑 DTO 的"默认字段在前、自建字段在后"保持同一口径。
@@ -131,7 +131,7 @@ def _builtin_section(
 def _custom_section(
     row: ProfileCustomSection, hidden: frozenset[str], custom_fields: list[ProfileCustomField]
 ) -> ConsumedSection:
-    """自建大字段：形态恒为多条；主文本字段（primary_field_id）随定义带入纸面策略。"""
+    """自建板块：形态恒为多条；主文本字段（primary_field_id）随定义带入纸面策略。"""
     return ConsumedSection(
         key=row.key,
         name=row.name,
@@ -159,7 +159,7 @@ def _sections(db: Session, scope: ProfileScope) -> dict[str, ConsumedSection]:
         if row is None:
             # scope 来自 repair_group_members（只会给活动 key），走到这里说明定义在读的
             # 间隙被删掉；如实报"定义变了"，不静默少一节（否则 C1 的键集合会破）。
-            raise Conflict("大字段定义已变化：请刷新页面后重试")
+            raise Conflict("板块定义已变化：请刷新页面后重试")
         sections[key] = _custom_section(row, hidden, custom_fields.get(key, []))
     return sections
 
@@ -219,7 +219,7 @@ def load_consumed_profile(db: Session, scope: ProfileScope) -> ConsumedProfile:
 
 
 def load_all_consumed_profile(db: Session) -> ConsumedProfile:
-    """三链外全量读：不按当前组裁剪（R-64 非目标：助手/评分/审阅仍读全部资料）。"""
+    """三链外全量读：不按当前方案裁剪（R-64 非目标：助手/评分/审阅仍读全部资料）。"""
     return load_consumed_profile(db, all_sections_scope(db))
 
 

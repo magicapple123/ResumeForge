@@ -112,7 +112,6 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  width: 100%;
   padding: 8px 4px;
   border: 0;
   background: transparent;
@@ -121,6 +120,8 @@
 }
 
 .profile-section-collapse-toggle {
+  flex: 1 1 auto;
+  min-width: 0;
   cursor: pointer;
   border-radius: 6px;
 }
@@ -452,8 +453,7 @@
   line-height: 1.7;
 }
 
-/* 日期控件在经历卡片里常常同时出现年/月/日三个下拉；让它们按可用宽度分配，
-   不再因为外层日期列偏窄而把选择器压成难以点击的细条。 */
+/* 年/月/日三个下拉按可用宽度分配，不因日期列偏窄被压成细条；宽度上限见 profile-layout.css。 */
 .profile-partial-date-select {
   width: 100%;
   min-width: 0;

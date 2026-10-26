@@ -23,6 +23,7 @@
  */
 import type { TabsProps } from "antd";
 import type { ReactNode } from "react";
+import type { EditorView } from "../../features/profile-library/types";
 import { t } from "../../i18n";
 import type { ResumeContent } from "../../types";
 import CredentialsEditor from "../resume/CredentialsEditor";
@@ -58,6 +59,13 @@ export interface ResumeEditorTabsOptions {
    * 会从界面上消失。传字符串而不是对象：宿主每次按键都能算出同一个掩码，页签不会重建。
    */
   contentPresenceMask?: string;
+  /**
+   * 编辑器视图（F10）：板块清单与顺序的来源。
+   *
+   * 新简历 = 当前方案投影；已保存简历 = 创建时冻结的快照（方案后来再改也不影响它）。
+   * 缺省回退到 `participatingKeys`（旧宿主/旧测试），两者都没有时显示完整规范列表。
+   */
+  editorView?: EditorView | null;
 }
 
 /** 一个页签 + 它和"资料分区 / 正文字段"的关系。 */
@@ -201,11 +209,11 @@ function buildTabSpecs(summarySource: string, fillSummary: () => void): EditorTa
   ];
 }
 
-/** 自建栏目页签：只在当前组有自建分区或正文里已有自建分区时出现。 */
-function buildCustomSectionsTab(): EditorTabSpec {
+/** 自建栏目页签：只在方案有自建板块或正文里已有自建分区时出现。 */
+function buildCustomSectionsTab(label: ReactNode): EditorTabSpec {
   return {
     key: "custom-sections",
-    label: t("editor.tab.custom-sections"),
+    label,
     contentField: "custom_sections",
     children: <CustomSectionsEditor />,
   };
@@ -232,9 +240,18 @@ export function buildResumeEditorTabItems({
   participatingKeys,
   content,
   contentPresenceMask,
+  editorView = null,
 }: ResumeEditorTabsOptions): NonNullable<TabsProps["items"]> {
   const standardSpecs = buildTabSpecs(summarySource, fillSummary);
-  const customSpec = buildCustomSectionsTab();
+  const viewSections = editorView?.sections ?? [];
+  const hasEditorView = viewSections.length > 0;
+  // 方案里的自建板块不再是"一个泛称页签"：名字是用户自己起的（如 22333），页签直接用它。
+  const customNames = viewSections
+    .filter((section) => section.key.startsWith("custom:"))
+    .map((section) => section.name);
+  const customSpec = buildCustomSectionsTab(
+    customNames.length > 0 ? customNames.join(" / ") : t("editor.tab.custom-sections"),
+  );
   const allSpecs = [...standardSpecs, customSpec];
   const byKey = new Map(allSpecs.map((spec) => [spec.key, spec]));
 
@@ -247,11 +264,14 @@ export function buildResumeEditorTabItems({
   };
 
   const participating = participatingKeys ?? null;
-  if (participating === null) {
-    // 不知道当前组：保持完整的规范列表（旧行为）。
+  if (hasEditorView) {
+    // 视图的板块顺序就是页签顺序（服务端已按全局顺序排好，basic_info 在首位）。
+    for (const section of viewSections) push(tabKeyForProfileSection(section.key));
+  } else if (participating === null) {
+    // 不知道当前方案：保持完整的规范列表（旧行为）。
     for (const spec of standardSpecs) push(spec.key);
   } else {
-    // 当前组的全局顺序就是页签顺序（服务端已把 basic_info 排首位）。
+    // 当前方案的全局顺序就是页签顺序（服务端已把 basic_info 排首位）。
     for (const sectionKey of participating) push(tabKeyForProfileSection(sectionKey));
   }
 
@@ -263,9 +283,11 @@ export function buildResumeEditorTabItems({
   // 基本信息恒参与（R-21）；服务端一定给，这里只是防御异常投影/旧 mock 把页签全藏掉。
   push("basic");
 
-  // 自建栏目：当前组里有自建分区时即使正文还没内容也要有录入入口；
-  // 未知当前组时沿用旧判据（正文里已有自建分区才出现）。
-  if (participating === null) {
+  // 自建栏目：方案里有自建板块时即使正文还没内容也要有录入入口；
+  // 没有视图也没有参与清单时沿用旧判据（正文里已有自建分区才出现）。
+  if (hasEditorView) {
+    if (viewSections.some((section) => section.key.startsWith("custom:"))) push("custom-sections");
+  } else if (participating === null) {
     if (customSectionCount > 0) push("custom-sections");
   } else if (participating.some((sectionKey) => sectionKey.startsWith("custom:"))) {
     push("custom-sections");

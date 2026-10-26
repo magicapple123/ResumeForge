@@ -40,7 +40,7 @@ import ResumeLayoutDiagnosisCard from "./ResumeLayoutDiagnosisCard";
 import ResumeCoverageNotes from "./ResumeCoverageNotes";
 import ResumeDetailFooter from "./ResumeDetailFooter";
 import EvidencePanel from "./EvidencePanel";
-import { useProfileFillSources } from "./useProfileFillSources";
+import { useResumeEditorFillSources } from "./useResumeEditorFillSources";
 import { useVariants } from "../../features/resume-versions/useVariants";
 import type { ResumeDocumentPipeline } from "../../features/resume-document/types";
 import type { PathRemap } from "../../features/resume-outline/paths";
@@ -180,7 +180,7 @@ export default function ResumeDetailPreview({
   const [sharePackageOpen, setSharePackageOpen] = useState(false);
   // 「从我的资料追加一条」的候选：**打开编辑器/制作台时才取一次**（`useProfileFillSources`），
   // 资料接口失败则静默降级成"没有这条入口"，编辑器照常可开。中栏与弹窗共用同一份。
-  const { fillSources } = useProfileFillSources(editorOpen || zoomOpen);
+  const { fillSources } = useResumeEditorFillSources(editorOpen || zoomOpen, detail);
   // 内部再包一层引用：父组件可能传 null（尚未量到），子组件需要一份稳定的 ref 传入 ResumePreview。
   const fallbackRef = useRef<ResumePreviewHandle>(null);
   const resolvedPreviewRef = previewRef ?? fallbackRef;

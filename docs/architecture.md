@@ -57,7 +57,7 @@ backend/app/
 ├── middleware/        # 请求关联 ID 与请求体大小限制
 ├── services/          # 业务层：核心逻辑，与框架解耦
 │   ├── resume/         # 简历域：生成/落地/一致性/版式/模板/写作增强/风险/建议/分享
-│   ├── profile/        # 资料域：13 大字段定义/条目/组/消费快照/纸面投影/升级检测 + 读写/相关性/上下文/预算/照片/引用/匹配
+│   ├── profile/        # 资料域：13 板块定义/条目/方案/消费快照/纸面投影/升级检测 + 读写/相关性/上下文/预算/照片/引用/匹配
 │   ├── job/            # 岗位域：服务/匹配/多源解析/需求解读
 │   ├── jd/             # JD 规则：常量/匹配/过滤/要求提取
 │   ├── assistant/      # 助手域：服务/技能/来源/联网搜索
@@ -122,7 +122,7 @@ SQLite 启动升级以 Alembic 为唯一结构来源：空库执行完整 revisi
 
 > **2026-10-25 更新**：补充事实（`profile_fact` / `profile_fact_field_pref`）已按 v3 裁决**从界面下线**
 > （R-54）。旧表与旧数据继续保留、继续进备份、回收站里仍可见历史条目，但新的资料页不再读取它们；
-> 论文/科研/专利/证照/语言等改由「资料大字段」录入，培训不再提供内置入口。本节的映射描述只作为历史实现记录。
+> 论文/科研/专利/证照/语言等改由「资料板块」录入，培训不再提供内置入口。本节的映射描述只作为历史实现记录。
 
 职业场景（`career_scenario`）与简历排版对象的 `ROLES`（姓名/正文/元信息等渲染分区）、面试 persona、
 工作区预设、数据集是**五个互不相干的层**。场景只回答"本窗口给什么引导与可选表达建议"，不能写简历正文；
@@ -181,46 +181,57 @@ flowchart LR
 "交集较少、资料中未提供的岗位要求不会编写"；识别出领域但资料确实无证据时仍返回空候选（诚实筛选）。
 回归见 `tests/test_profile_matching_cross_industry.py`。
 
-## 核心数据流：资料大字段、组与当前组（F1–F3）
+## 核心数据流：资料板块与方案（F1–F3）
 
-2026-10-25 起「我的资料」改为**大字段 + 组 + 消费快照**三层（迁移 `0064_profile_groups`，只加表）：
+2026-10-25 起「我的资料」改为**板块 + 方案 + 消费快照**三层（迁移 `0064_profile_groups`，只加表）：
 
-- **定义**：13 个内置大字段与 106 个默认小字段是**代码目录**（`services/profile/definition_catalog.py` 汇总
-  `catalog_basic/experience/research.py`，导入期自检 key/顺序/计数）；用户自建大字段与自定义小字段落
+- **定义**：13 个内置板块与 106 个默认字段是**代码目录**（`services/profile/definition_catalog.py` 汇总
+  `catalog_basic/experience/research.py`，导入期自检 key/顺序/计数）；用户自建板块与自定义字段落
   `profile_custom_section` / `profile_custom_field`，软删只改可见性、不删行。
 - **值**：条目在 `profile_entry`，`values` 是 `{field_id: text}` JSON——**缺键 = 本次未提交**（合并保存），
   显式空串才是清空；单例（`basic_info` / `summary`）由 CHECK 与部分唯一索引保证至多一条。
-- **组**：`profile_group` 只记录名称 + `profile_group_member` 参与清单，**不拥有任何资料副本**；
-  `profile_workspace_state` 单行保存当前组 / 默认组 / 全局顺序；默认组不可删，当前组被删时同事务回落默认组
+- **方案**：`profile_group` 只记录名称 + `profile_group_member` 板块清单，**不拥有任何资料副本**；
+  `profile_workspace_state` 单行保存当前方案 / 默认方案 / 全局顺序；默认方案不可删，当前方案被删时同事务回落默认方案
   并写 `pending_notice`（R-20/R-24/R-25）。
 - **偏好**：`profile_field_preference` 是两个独立状态——`hidden` 排除参与，`collapsed_override` 只是展示记忆；
   把两者合成一个布尔即返工（R-66/R-67）。
-- **快照**：`profile_usage_snapshot` 在任务/简历创建时冻结当时组名、参与清单、顺序与修订，父行删除后仍可追溯（F3）。
+- **快照**：`profile_usage_snapshot` 在任务/简历创建时冻结当时方案名称、板块清单、顺序与修订，父行删除后仍可追溯（F3）。
 
-**读取边界只有一条路**：`group_scope.resolve_current_group_scope(db)`（唯一读「当前组 → 参与 key」的地方，
-请求体不能指定另一个组）→ `profile_reader.load_consumed_profile(db, scope)` 产出 `ConsumedProfile`
+**读取边界只有一条路**：`group_scope.resolve_current_group_scope(db)`（唯一读「当前方案 → 参与 key」的地方，
+请求体不能指定另一个方案）→ `profile_reader.load_consumed_profile(db, scope)` 产出 `ConsumedProfile`
 （`schemas/profile_projection.py`）。消费 DTO 的 sections 键集合恒等于 `scope.participating_keys`
-（C1：在组里就出现、没数据就是空元组），hidden 字段的定义与值都被裁掉，**类型里没有 collapsed**；
-已软删定义、软删条目、空壳条目不出现。三链外（助手/评分/审阅）走 `load_all_consumed_profile`，不受组限制
+（C1：在方案里就出现、没数据就是空元组），hidden 字段的定义与值都被裁掉，**类型里没有 collapsed**；
+已软删定义、软删条目、空壳条目不出现。三链外（助手/评分/审阅）走 `load_all_consumed_profile`，不受方案限制
 （R-64 非目标）。
 
 | 链路 | 过滤位置 | 行为 |
 | --- | --- | --- |
 | ① 按岗位 / 通用生成 | 资料 → 候选字典最前端 | 未参与分区整键不出现，不占名额与预算；诊断不误报 |
 | ② 新建简历 / 从资料填充 | 资料 → `ResumeContent` 映射入口 | 候选只含参与分区；语言能力映射为 skills 尾部条目 |
-| ③ 网申填表 | 网申取数最前端 | 简历侧按组裁剪；网申专用项不受组过滤（R-39） |
+| ③ 网申填表 | 网申取数最前端 | 简历侧按方案裁剪；网申专用项不受方案过滤（R-39） |
 
-**F9（2026-10-26）起前端消费者与当前组实时同步**：「新建简历 / 手动调整 / 制作台中栏」的编辑页签由
-`projection.scope.participating_keys` 过滤——当前组有的分区即使没内容也出现、没有且无内容的不出现、
-正文里已有内容的分区始终保留（R-34），顺序取当前组全局顺序；新建简历初始内容 = 当前组投影（岗位模式仅覆盖求职意向），
-页签与内容在资料保存/切组后自动刷新；表单有未保存编辑时改为内联「我的资料已更新」二选一，不静默覆盖。
+**F9（2026-10-26）起前端消费者与当前方案实时同步**：「新建简历 / 手动调整 / 制作台中栏」的编辑页签由
+`projection.scope.participating_keys` 过滤——当前方案有的分区即使没内容也出现、没有且无内容的不出现、
+正文里已有内容的分区始终保留（R-34），顺序取当前方案全局顺序；新建简历初始内容 = 当前方案投影（岗位模式仅覆盖求职意向），
+页签与内容在资料保存/切换方案后自动刷新；表单有未保存编辑时改为内联「我的资料已更新」二选一，不静默覆盖。
 `projectionCache` 的失效通过 BroadcastChannel（不支持时退回 localStorage 的 storage 事件）广播给同源其它窗口，
 接收端只本地失效并让已挂载消费者重取（不回环），预览「手动调整」/制作台/网申候选因此跟着资料变化。
-大字段的「在资料页显示/隐藏」写当前组参与清单（隐藏 = 移出当前组），不新增第二套存储。
+板块的「在资料页显示/隐藏」写当前方案板块清单（隐藏 = 移出当前方案），不新增第二套存储。
+
+**F10（2026-10-26）起编辑器视图随简历冻结**：`EditorSchemaOut`（`schemas/profile_editor.py`）由
+`projection_views.editor_schema(consumed)` 从消费快照派生（唯一实现）：可见板块按 `participating_keys`
+顺序，每个板块给出可见字段与它在 `ResumeContent` 里的属性名（`resume_attr` = 槽位属性；隐藏字段在消费
+DTO 读取时已被裁掉）。`GET /api/profile/current/projection` 带 `editor_schema` 供新建简历直接使用；创建 /
+生成时同一份 JSON 冻结进 `profile_usage_snapshot.layout.editor_schema`，简历详情与独立
+`GET /api/resumes/{id}/profile-usage` 原样返回（旧快照没有该键 / 坏数据 → null，不 500）。前端编辑器
+（新建弹窗 / 手动调整 / 制作台中栏）据此渲染页签、页签名（自建板块显示用户起的名字）与字段可见性：
+新简历按当前方案投影，已保存简历按冻结副本——之后改方案只影响此后新增的简历，已保存简历的板块与字段
+不变。写端点（PUT/PATCH）的 `ResumeOut` 有意仍不带 `profile_usage`，前端按 resume id 黏住首次读到的
+快照，保存一次不会跳回当前方案；没有快照的旧简历保持原有完整字段显示。
 
 **纸面投影唯一来源**：`services/profile/paper_policy.py` 是 13 个系统分区的承载区映射与「仅素材」标志的
 唯一数据表；`paper_projection.py` 做确定性转换（`GET /api/profile/current/projection` 与生成链路共用）：
-C1 空分区不产生占位；自建大字段**独立成栏**（`ResumeContent.custom_sections`，排在 13 个系统分区之后，C2/R-79）；
+C1 空分区不产生占位；自建板块**独立成栏**（`ResumeContent.custom_sections`，排在 13 个系统分区之后，C2/R-79）；
 自定义字段以「标签：值」追加到承载区，空值跳过、超长如实 warning（R-44）；`ensure_custom_field_lines` 是
 C5-B 的唯一实现（正文可被 AI 改写，逐字段检测、缺失则按定义顺序补回，不拒绝保存）；语言能力按
 `language_projection.py` 映射为 skills 条目（R-72）。证书编号等私密字段在承载区投影前就被跳过。
@@ -230,12 +241,13 @@ C5-B 的唯一实现（正文可被 AI 改写，逐字段检测、缺失则按�
 `GET /api/profile/upgrade-status` 与 `GET /api/profile/workspace` 的 `upgrade` 槽位据此提示「旧资料不再显示、
 可从备份取出后手动重填」（R-47）；表存在性按进程缓存，读取异常如实报错而不是冒充「没有旧资料」。
 
-API 增量：`/api/profile/workspace`（编辑视图）、`/api/profile/sections[...]`（自建大字段/小字段/条目光标）、
+API 增量：`/api/profile/workspace`（编辑视图）、`/api/profile/sections[...]`（自建板块/字段/条目光标）、
 `/api/profile/section-order`、`/api/profile/groups` + `/api/profile/current-group`、`/api/profile/field-preferences`、
 `/api/profile/current/projection`、`/api/profile/upgrade-status`。工作区读取是**编辑 DTO**（含 hidden /
 collapsed_override），投影响应**不得出现 collapsed**。
 
 回归：`test_profile_definition_catalog.py`、`test_profile_*_store.py`、`test_profile_scope_boundaries.py`、
+`test_profile_editor_schema.py`（编辑器视图：可见字段派生 / 自建板块名 / 创建冻结 / 旧快照降级）、
 `test_profile_group_projection.py`、`test_profile_group_paper_contract.py`、`test_profile_upgrade_status.py`、
 `test_profile_legacy_compat.py`、`test_migration_0064.py`。
 
@@ -291,8 +303,8 @@ sequenceDiagram
 
     U->>F: 在岗位页选择“自行编写”
     F->>B: GET /api/profile/current/projection
-    B-->>F: 当前组投影（纸面内容 + 候选 + 参与清单 + snapshot_token）
-    F->>F: 按当前组预填 ResumeContent；页签按参与清单过滤
+    B-->>F: 当前方案投影（纸面内容 + 候选 + 板块清单 + snapshot_token）
+    F->>F: 按当前方案预填 ResumeContent；页签按板块清单过滤
     U->>F: 选择、调整或补充简历内容（修改不回写资料）
     F->>B: POST /api/resumes/manual（可带 profile_context 创建态快照）
     B->>B: 校验内容、可选 job_id 与快照 token
@@ -301,7 +313,7 @@ sequenceDiagram
     F->>U: 在简历中心展示“用户编写”来源
 ```
 
-AI 生成与用户编写最终使用相同的 `ResumeContent`、预览、编辑和导出链路，避免维护两套简历格式。用户编写路径不调用大模型；打开期间若资料在其它窗口被修改或切组，前端通过投影缓存失效广播自动刷新（已有未保存编辑时提示二选一，不静默覆盖）。
+AI 生成与用户编写最终使用相同的 `ResumeContent`、预览、编辑和导出链路，避免维护两套简历格式。用户编写路径不调用大模型；打开期间若资料在其它窗口被修改或切换方案，前端通过投影缓存失效广播自动刷新（已有未保存编辑时提示二选一，不静默覆盖）。
 
 ## 岗位需求解读与求职助手
 
@@ -713,8 +725,8 @@ score_match_result(result, job_payload, profile_text, resume_text)
 | 离线分享包不带敏感信息         | 分享包由脱敏 HTML/PDF + 只读快照 + 评论回传文件 + 本地 token 组成，token 仅离线校验、不做在线鉴权；删除走回收站软删除、磁盘产物不清理 |
 | ATS 检测带免责                 | `ats_check` 只做格式 / JD 关键词覆盖 / 信息位置三类静态规则检查，**不连接、不模拟真实招聘系统**，结果仅供参考、不构成通过保证 |
 | 内推转化口径派生               | `referral.converted` 是迁移 0018 的历史占位列；真实口径由关联 `ApplicationTrack` 后置位派生（进入面试及以上才算转化），写入侧不接受 `converted`、读取侧覆盖，避免表里手算第二份口径 |
-| 回收站覆盖二十三类内容         | 岗位 / 备选岗位 / 简历 / 投递 / 台账 / 资料 / 会话 + 内推 / 提醒 / 面经 / 分享包 / 题库 / 复盘 / 知识库 / 网申填充 / 表达资产 / 术语表 / 补充事实历史，以及 0064 起新增的组 / 自建大字段 / 自建小字段 / 资料条目，全部由 `trash.TRASH_SPECS` 注册表描述；新增一类只加一行，注册表驱动的 `live_only` / `trash_only` 让"哪张表用哪个列名"只写一次 |
-| 组不拥有数据 / 当前组唯一       | 组只记「名称 + 参与清单」，共享同一份 `profile_entry`；当前组是单行状态表 + `CHECK(id = 1)`，默认组由 CHECK 保证不可软删。这样"每组副本"与"无当前组"在结构上就写不进库，不靠调用方自觉（R-17/R-24/R-25） |
+| 回收站覆盖二十三类内容         | 岗位 / 备选岗位 / 简历 / 投递 / 台账 / 资料 / 会话 + 内推 / 提醒 / 面经 / 分享包 / 题库 / 复盘 / 知识库 / 网申填充 / 表达资产 / 术语表 / 补充事实历史，以及 0064 起新增的方案 / 自建板块 / 自建字段 / 资料条目，全部由 `trash.TRASH_SPECS` 注册表描述；新增一类只加一行，注册表驱动的 `live_only` / `trash_only` 让"哪张表用哪个列名"只写一次 |
+| 方案不拥有数据 / 当前方案唯一       | 方案只记「名称 + 板块清单」，共享同一份 `profile_entry`；当前方案是单行状态表 + `CHECK(id = 1)`，默认方案由 CHECK 保证不可软删。这样"每个方案一份副本"与"无当前方案"在结构上就写不进库，不靠调用方自觉（R-17/R-24/R-25） |
 | 消费 DTO 与折叠态物理隔离       | 资料页编辑 DTO 含 hidden / collapsed_override；投影、生成、网申只吃 `ConsumedProfile`（类型里没有 collapsed）。否则"收起"迟早被某条取数链当成"不参与"，而它只该影响输入框展不展示（R-66/R-67） |
 | 旧资料不迁移、不删除           | 迁移 0064 只加表；旧六表与旧事实表继续存在并进备份，新界面不读；资料页用"旧表有内容且新模型为空"的探测给出重填说明。迁移工具看起来省事，但会改写用户历史且无法回退（R-46/R-47/R-49） |
 | 纸面承载区只有一份定义         | 承载区映射、仅素材分区、自定义字段追加顺序全在 `paper_policy.py`；`paper_projection.py` 与生成链路共用它。第二份映射必然漂移成"生成有、填充没有"（R-37/R-42/R-77） |
@@ -965,15 +977,15 @@ score_match_result(result, job_payload, profile_text, resume_text)
     改这条要同时动：`skip_reason` / `relaxed_kind` 共用的判据表、
     `tests/test_webform_engine_*` 的放宽用例与用户侧两份文档。
 
-29. **新增/调整内置资料大字段或默认小字段**：改 `services/profile/catalog_{basic,experience,research}.py` 的数据行
+29. **新增/调整内置资料板块或默认字段**：改 `services/profile/catalog_{basic,experience,research}.py` 的数据行
     （字段 id 固定为 `<section>.<key>`），`definition_catalog.py` 的导入期自检会核对 13 条 key/顺序/计数/枚举/私密标志，
     漏改计数会直接 import 失败；承载区映射只在 `paper_policy.py`（一处），新字段要上纸面时再补槽位或追加策略，
     并补 `test_profile_definition_catalog.py` / `test_profile_group_projection.py` 的契约用例。**用户级扩展不要改代码**：
-    自建大字段与自定义小字段走 `/api/profile/sections`，软删与恢复由回收站策略处理。
+    自建板块与自定义字段走 `/api/profile/sections`，软删与恢复由回收站策略处理。
 
 ## 测试策略
 
-- 资料大字段 / 组 / 当前组按层拆测试：`test_profile_definition_catalog.py` 钉住 13 项与 106 个默认字段契约；`test_profile_*_store.py` 钉住定义/条目/组/偏好的语义与上限；`test_profile_scope_boundaries.py` 钉住消费 DTO 无折叠态、hidden 与 collapsed 的差异、三链外全量读；`test_profile_group_projection.py` / `test_profile_group_paper_contract.py` / `test_profile_group_languages.py` 钉住纸面投影、自建栏目与语言映射；`test_profile_upgrade_status.py` 钉住旧表探测与升级提示分支；`test_profile_legacy_compat.py` 钉住旧 /api/profile 适配；`test_migration_0064.py` 钉住只加表、旧表集合与内容不变、downgrade 可用。
+- 资料板块 / 方案 / 当前方案按层拆测试：`test_profile_definition_catalog.py` 钉住 13 项与 106 个默认字段契约；`test_profile_*_store.py` 钉住定义/条目/方案/偏好的语义与上限；`test_profile_scope_boundaries.py` 钉住消费 DTO 无折叠态、hidden 与 collapsed 的差异、三链外全量读；`test_profile_group_projection.py` / `test_profile_group_paper_contract.py` / `test_profile_group_languages.py` 钉住纸面投影、自建板块与语言映射；`test_profile_upgrade_status.py` 钉住旧表探测与升级提示分支；`test_profile_legacy_compat.py` 钉住旧 /api/profile 适配；`test_migration_0064.py` 钉住只加表、旧表集合与内容不变、downgrade 可用。
 - 后端核心业务（跨行业岗位文本/JD 解析、资料参考文件、岗位相关片段筛选、分级生成、照片校验与渲染、岗位解读、助手附件/历史/搜索摘要解析、导出、防虚构校验）有单元测试；模型链路使用模拟传输或假 Provider，默认不依赖真实网络。较长测试已按主题拆分为 `test_job_text_parser_edge_cases.py`、`test_job_text_parser_metadata.py`、`test_profile_text_parser_inference.py`、`test_assistant_search.py` 和 `test_resume_quality_retry.py`，岗位元数据/英文标题/分隔符规则与核心字段测试分别维护，便于定向回归。
 - 技能链路的测试按层拆开：`test_skill_archive.py` 只管解包与解析（zip bomb、路径穿越、加密成员、非法扩展名、成员数超限都要被拒），`test_assistant_skills.py` 管持久化、系统提示拼装与知识读取（含"知识文件里的注入指令被清洗掉"），`test_skills_api.py` 管 HTTP 面（类型白名单、覆盖更新、临时文件清理、`IMPORT_PATH` 与中间件豁免绑定）。
 - 图片识别同样分单元与接口两层：`test_extraction_images.py` 钉住锚点行为（字段必须出现在抄录里、发了图却无抄录即失败、文本+图片取并集、抄录截断不产生"字段截断"警告），`test_api_extraction_images.py` 钉住接口面（图片以 `image_url` parts 下发、伪造魔数与文本附件被拒、张数与体积上限、超出请求体上限由中间件 413 而服务端的合计校验仍是 422）。

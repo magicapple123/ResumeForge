@@ -20,10 +20,12 @@
  * 进 error，`reload()` 或重新打开 editor 都会重取；入口本身仍然静默降级（编辑器照常开）。
  */
 import { useMemo } from "react";
+import type { ResumeProfileUsageSnapshot } from "../../types/resumeProfileUsage";
 import {
   buildProfileFillSources,
   type ProfileFillSources,
 } from "../../features/profile/profileFillOptions";
+import { withSavedResumeEditorView } from "../../features/profile/editorView";
 import { useCurrentProjection } from "../../features/profile-library/useCurrentProjection";
 
 export interface ProfileFillSourcesApi {
@@ -39,13 +41,21 @@ export interface ProfileFillSourcesApi {
 /**
  * @param wanted 现在是"需要这条入口"吗（例如编辑弹窗打开、或制作台开着）。
  *   第一次变成 `true` 时读投影（命中共享缓存则不发请求）。
+ * @param profileUsage 已保存简历的「本次使用」快照：给了就用**创建时冻结**的编辑器视图
+ *   （F10），方案后来改了也不影响板块/字段；新建简历不传，直接按当前方案投影。
  */
-export function useProfileFillSources(wanted: boolean): ProfileFillSourcesApi {
+export function useProfileFillSources(
+  wanted: boolean,
+  profileUsage?: ResumeProfileUsageSnapshot | null,
+  savedResume = false,
+): ProfileFillSourcesApi {
   const projection = useCurrentProjection(wanted);
-  const fillSources = useMemo(
-    () => (projection.data ? buildProfileFillSources(projection.data) : null),
-    [projection.data],
-  );
+  const fillSources = useMemo(() => {
+    const base = projection.data ? buildProfileFillSources(projection.data) : null;
+    if (!base) return null;
+    // 新建流程（无已保存简历）用当前方案投影的视图；编辑已保存简历只用它自己的快照。
+    return savedResume ? withSavedResumeEditorView(base, profileUsage) : base;
+  }, [projection.data, profileUsage, savedResume]);
   return {
     fillSources,
     loading: projection.loading,

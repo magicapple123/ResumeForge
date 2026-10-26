@@ -6,7 +6,7 @@
  * 一旦出现 POST/PATCH/PUT/DELETE 就会失败（这是 A2 验收的核心性质）。
  */
 import { App as AntdApp } from "antd";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { t } from "../../i18n";
 import { TEMPLATE_CATALOG } from "../../test/resumeFixtures";
@@ -171,17 +171,42 @@ describe("ScenarioSelector", () => {
     await waitFor(() => expect(fetchMock.mock.calls.length).toBeGreaterThanOrEqual(2));
   });
 
-  it("管理入口打开场景编辑器（新建）", async () => {
+  it("下拉底部的「新建场景」打开场景编辑器（新建）", async () => {
     stubFetch();
     renderSelector();
     await waitFor(() => expect(calls.length).toBe(1));
 
-    fireEvent.click(screen.getByRole("button", { name: t("careerScenarios.selector.manageAria") }));
+    fireEvent.mouseDown(combobox(), { button: 0 });
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: new RegExp(t("careerScenarios.selector.create")),
+      }),
+    );
 
-    expect(await screen.findByText(t("careerScenarios.editor.createTitle"))).toBeInTheDocument();
+    // 弹层标题与下拉里的「新建场景」同字：按 dialog 作用域取，避免命中两处。
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByText(t("careerScenarios.editor.createTitle"))).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: t("careerScenarios.editor.saveCreate") }),
     ).toBeInTheDocument();
+  });
+
+  it("每条场景右侧可编辑该条：编辑不误选中、也不写库", async () => {
+    stubFetch();
+    renderSelector();
+    await waitFor(() => expect(calls.length).toBe(1));
+
+    fireEvent.mouseDown(combobox(), { button: 0 });
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: t("careerScenarios.selector.editAria", { name: SCENARIO.name }),
+      }),
+    );
+
+    expect(await screen.findByText(t("careerScenarios.editor.editTitle"))).toBeInTheDocument();
+    // 只是改名，不该顺手把当前场景切过去。
+    expect(window.sessionStorage.getItem("resumeforge:career-scenario:v1:main")).toBeNull();
+    expect(calls.filter((call) => call.method !== "GET")).toEqual([]);
   });
 
   it("选择后回到「不指定场景」同样只读不写", async () => {

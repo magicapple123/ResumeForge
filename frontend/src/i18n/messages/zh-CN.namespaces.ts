@@ -86,7 +86,7 @@ const namespaces = {
   ...optimizer,
   /** A2 职业场景（选择/编辑/本次生成披露）。 */
   ...careerScenarios,
-  /** F6 资料组与当前组（2026-10-25）。 */
+  /** F6 资料方案与当前方案（2026-10-25）。 */
   ...profileGroups,
   /** F6 资料库 / 资料页 / 字段管理（2026-10-25）。 */
   ...profileLibrary,

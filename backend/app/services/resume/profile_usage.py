@@ -17,9 +17,11 @@ from __future__ import annotations
 
 import logging
 
+from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
 from ...models.profile_usage_snapshot import ProfileUsageSnapshot
+from ...schemas.profile_editor import EditorSchemaOut
 from ...schemas.resume_profile_usage import (
     FreshnessReason,
     ProfileUsageFreshness,
@@ -48,6 +50,25 @@ def _participating(snapshot: ProfileUsageSnapshot) -> list[ProfileUsageParticipa
     return items
 
 
+def _editor_schema(snapshot: ProfileUsageSnapshot) -> EditorSchemaOut | None:
+    """读取快照 layout 里冻结的编辑器视图（F10/R-82）；旧快照/坏数据一律 None。
+
+    旧快照的 layout 没有这个键；外部写入或历史版本也可能留下非 dict / 不合法的结构。
+    它只是展示用的辅助信息，不能因为一条可疑数据让简历详情或独立端点 500（R-33 的
+    只读追溯口径：没有就如实返回 null）。
+    """
+    layout = snapshot.layout
+    if not isinstance(layout, dict):
+        return None
+    raw = layout.get("editor_schema")
+    if not isinstance(raw, dict):
+        return None
+    try:
+        return EditorSchemaOut.model_validate(raw)
+    except ValidationError:
+        return None
+
+
 def _group_deleted(db: Session, group_id: str | None) -> bool:
     """快照里的组是否已不在活动组里（删除/在回收站）。``group_id`` 空 = 未记录。"""
     if not group_id:
@@ -68,6 +89,7 @@ def build_profile_usage(db: Session, snapshot: ProfileUsageSnapshot) -> ProfileU
         data_revision=int(snapshot.data_revision or 0),
         created_at=snapshot.created_at,
         group_deleted=_group_deleted(db, group_id),
+        editor_schema=_editor_schema(snapshot),
     )
 
 

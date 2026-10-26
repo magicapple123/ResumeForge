@@ -46,6 +46,12 @@ export default function ProfileBasicSection({
           <Form.Item name={["sections", "basic_info", 0, "entry_key"]} hidden>
             <Input />
           </Form.Item>
+          {/* 照片不是普通文本输入（ProfileFieldInputs 按 field_type 过滤掉了 photo），
+              但保存走 form.validateFields()，只回注册过的字段——不注册等于没保存：
+              切换主照片后重取 workspace 会回到旧照片，简历也用旧图。 */}
+          <Form.Item name={["sections", "basic_info", 0, "values", "basic_info.photo"]} hidden>
+            <Input />
+          </Form.Item>
           {section ? (
             <ProfileFieldInputs
               section={section}

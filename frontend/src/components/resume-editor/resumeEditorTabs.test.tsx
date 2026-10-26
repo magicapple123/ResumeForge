@@ -7,6 +7,7 @@
  */
 import { describe, expect, it } from "vitest";
 import type { ResumeContent } from "../../types";
+import { editorSchema, editorSection } from "../../test/editorSchemaFixture";
 import { makeResumeContent } from "../ResumeEditorModal.testkit";
 import { buildResumeEditorTabItems, tabContentPresenceMask } from "./resumeEditorTabs";
 
@@ -156,5 +157,83 @@ describe("buildResumeEditorTabItems：当前组过滤（R1）", () => {
 
   it("参与清单为空（异常投影）时至少保留基本信息页签", () => {
     expect(tabKeys({ participatingKeys: [] })).toEqual(["basic"]);
+  });
+});
+
+/** F10：冻结的编辑器视图（新简历 = 当前方案投影；旧简历 = 创建时快照）。 */
+function view(
+  sections: { key: string; name: string }[],
+  schemaSections: Parameters<typeof editorSchema>[0][] = [],
+) {
+  return { sections, schema: editorSchema(...schemaSections) };
+}
+
+describe("buildResumeEditorTabItems：冻结的编辑器视图（F10）", () => {
+  it("板块顺序与名称来自视图；自建板块页签显示用户起的名字", () => {
+    const items = buildResumeEditorTabItems({
+      ...baseOptions,
+      editorView: view(
+        [
+          { key: "basic_info", name: "basic" },
+          { key: "educations", name: "edu" },
+          { key: "custom:22333", name: "22333" },
+        ],
+        [
+          editorSection("basic_info", "basic", ["name"], {
+            form: "singleton",
+            resume_field: null,
+          }),
+          editorSection("educations", "edu", ["school"], { resume_field: "education" }),
+          editorSection("custom:22333", "22333", [], { resume_field: "custom_sections" }),
+        ],
+      ),
+    });
+    expect(items.map((item) => item.key)).toEqual(["basic", "education", "custom-sections"]);
+    expect(items.find((item) => item.key === "custom-sections")?.label).toBe("22333");
+  });
+
+  it("视图优先于参与清单：已保存简历的页签不受当前方案影响", () => {
+    const items = buildResumeEditorTabItems({
+      ...baseOptions,
+      editorView: view([
+        { key: "basic_info", name: "basic" },
+        { key: "skills", name: "skills" },
+      ]),
+      participatingKeys: ["basic_info", "educations", "projects"],
+    });
+    expect(items.map((item) => item.key)).toEqual(["basic", "skills"]);
+  });
+
+  it("多个自建板块：仍是一条页签，名称用 / 连接", () => {
+    const items = buildResumeEditorTabItems({
+      ...baseOptions,
+      editorView: view([
+        { key: "basic_info", name: "basic" },
+        { key: "custom:22333", name: "22333" },
+        { key: "custom:oss", name: "oss" },
+      ]),
+    });
+    expect(items.find((item) => item.key === "custom-sections")?.label).toBe("22333 / oss");
+  });
+
+  it("正文里已有内容的分区仍然保留页签（视图里没有它也不藏内容，R-34）", () => {
+    const items = buildResumeEditorTabItems({
+      ...baseOptions,
+      editorView: view([{ key: "basic_info", name: "basic" }]),
+      content: contentWith({
+        projects: [
+          {
+            name: "ResumeForge",
+            role: "开发者",
+            start_date: "2026.01",
+            end_date: "至今",
+            tech_stack: [],
+            description: [],
+            highlights: [],
+          },
+        ],
+      }),
+    });
+    expect(items.map((item) => item.key)).toEqual(["basic", "projects"]);
   });
 });

@@ -8,7 +8,8 @@
    不改旧资料子表行数（R-46：旧数据不迁移、新界面不读旧表）；
 3. 条目：新增、局部 PATCH（未提交键保留、显式空串清空）、软删后 workspace 不再返回、
    显式序号重排、200 条上限（R-02/R-03/R-06、§6 铁律 10）；
-4. 批量保存：单事务原子性（一项非法则整体不写）与 workspace revision 过期 409（R-15）。
+4. 批量保存：单事务原子性（一项非法则整体不写）与 workspace revision 过期 409（R-15）；
+5. 照片值：data URL 形态（base64 膨胀后仍在上限内）能随资料保存并原样读回，超限给可读文案。
 
 断言全部走 HTTP；错误契约固定 {detail, code}，revision 冲突额外带 revision（契约 §5）。
 每个用例只通过 conftest 的临时测试库夹具隔离，不写固定路径、不读真实库。
@@ -347,3 +348,36 @@ def test_bulk_save_is_atomic_and_rejects_stale_workspace_revision(client):
     )
     conflict = _assert_error(stale, 409, code="revision_conflict")
     assert conflict["revision"] == workspace["workspace_revision"]  # 409 带当前 revision
+
+
+def test_basic_info_photo_of_200kb_is_saved_and_read_back(client):
+    """照片要能随资料一起落库：data URL 的 base64 膨胀必须落在上限之内。
+
+    回归（2026-10-26）：photos 曾被按「引用」限到 2048 字符，而资料条目里的
+    `basic_info.photo` 存的是 data URL（纸面投影原样透传、AI 生成直接当 img src）。
+    库里现成的一张 146 KB PNG 转 base64 就约 195 K 字符 —— 照片一旦真正进入表单并
+    随「保存全部资料」提交，保存必然被这条上限打死。这里钉住「200 KB 照片能存能读」。
+    """
+    photo = "data:image/png;base64," + "A" * 200_000
+    _create_entry(client, "basic_info", {"basic_info.photo": photo})
+
+    stored = _entries_of(_workspace(client), "basic_info")
+    assert len(stored) == 1
+    assert stored[0]["values"]["basic_info.photo"] == photo
+
+
+def test_basic_info_photo_over_limit_is_rejected_with_readable_detail(client):
+    """超限时给的是"照片太大、换一张小的"，不是"引用不能超过 N 个字符"。
+
+    `validate_value` 对 photo 只校验长度、不校验图片签名，所以合成串可以直接过校验层。
+    上限 7_000_000 字符对应上传侧 5 MB 的 base64 膨胀（≈6.99 M），再长就只可能是
+    绕过上传入口的伪造值 —— 拒掉，并且整条条目不入库（§6 铁律 10 的单事务原子性）。
+    """
+    too_long = "data:image/png;base64," + "A" * 7_000_001
+    response = client.post(
+        ENTRIES_API.format(section_key="basic_info"),
+        json={"values": {"basic_info.photo": too_long}},
+    )
+    body = _assert_error(response, 400, code="photo_reference_too_long")
+    assert "照片太大" in body["detail"]
+    assert _entries_of(_workspace(client), "basic_info") == []

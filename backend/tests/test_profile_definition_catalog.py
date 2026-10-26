@@ -427,7 +427,9 @@ def test_validate_value_by_field_type():
         ("single_line", "字" * 201),
         ("multi_line", "字" * 2001),
         ("date_text", "字" * 201),
-        ("photo", "a" * 2049),
+        # 照片上限覆盖 data URL 的 base64 膨胀（见 value_validation.MAX_PHOTO_REFERENCE_CHARS），
+        # 边界跟着常量走，不再写死旧的 2048 引用长度。
+        ("photo", "a" * (vv.MAX_PHOTO_REFERENCE_CHARS + 1)),
         ("date_text", {"a": 1}),
     ):
         with pytest.raises(vv.ValidationFailure):

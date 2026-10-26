@@ -18,11 +18,17 @@ from __future__ import annotations
 from collections.abc import Mapping
 
 from ...schemas.date_format import normalize_partial_date
+from ...schemas.profile import MAX_PROFILE_PHOTO_BYTES
 from .definition_catalog import get_field
 
 MAX_SINGLE_LINE_CHARS = 200
 MAX_MULTI_LINE_CHARS = 2000
-MAX_PHOTO_REFERENCE_CHARS = 2048
+# 照片值同时承载两种形态：资源引用（`profile_photo:<id>`）与 data URL（纸面投影原样
+# 透传、AI 生成直接把 resume.photo 当 img src 用）。上限必须覆盖上传侧
+# MAX_PROFILE_PHOTO_BYTES 的 base64 膨胀（5 MB → 约 6.99 M 字符，见
+# schemas.profile 的 _encoded_char_limit）；2048 只够存引用，照片一旦真的进了条目值，
+# 保存就会被拒——比"照片不显示"更糟。
+MAX_PHOTO_REFERENCE_CHARS = 7_000_000
 MAX_FIELD_LABEL_CHARS = 40
 MAX_SECTION_NAME_CHARS = 40
 MAX_CUSTOM_FIELDS_PER_SECTION = 20
@@ -117,9 +123,11 @@ def validate_value(field_type: str, raw: object) -> str:
     if normalized_type == PHOTO_FIELD_TYPE:
         reference = text.strip()
         if len(reference) > MAX_PHOTO_REFERENCE_CHARS:
+            # 文案不再报"字符数"：用户看不懂 7 位数字，他要的是"照片太大，换一张小的"。
             raise ValidationFailure(
                 "photo_reference_too_long",
-                f"照片引用不能超过 {MAX_PHOTO_REFERENCE_CHARS} 个字符，请重新上传照片",
+                f"照片太大（超过 {MAX_PROFILE_PHOTO_BYTES // (1024 * 1024)} MB），"
+                "请换一张更小的照片后重试",
             )
         return reference
     if normalized_type == "date_text":
