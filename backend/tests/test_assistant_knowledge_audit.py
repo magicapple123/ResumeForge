@@ -205,10 +205,21 @@ def _catalog_write_tools() -> set[str]:
     return {name for name in re.split(r"[、，\s]+", segment) if name}
 
 
-def test_catalog_renders_every_tool_name():
+def test_catalog_indexes_every_ui_feature():
+    """能力地图是功能索引：登记过的界面功能名必须全部出现。
+
+    2026-10-26 方案 A（Lead 批准）：能力地图不再逐字重复工具清单（「可用工具」清单与
+    每条功能的「可配合工具」提示），因为工具名/参数/描述已经由 function calling 的
+    tools 声明逐字下发给模型——重复一份只会让每轮固定 prompt 多烧约 5 千字符。
+    因此完整性断言从"每个工具名都在地图里"改为"每个界面功能/功能域都在地图里"，
+    并单独守住写入类行为指引仍在（模型要知道哪些操作会改数据）。
+    """
     rendered = build_capability_map()
-    missing = [name for name in tool_names() if name not in rendered]
-    assert not missing, f"能力地图漏了这些已注册工具：{missing}"
+    missing = [feature.name for feature in FEATURES if feature.name not in rendered]
+    assert not missing, f"能力地图漏了这些界面功能：{missing}"
+    assert "写入类工具：" in rendered, "写入类工具的行为指引不能被删掉"
+    assert "可配合工具" not in rendered, "工具名不应在地图里重复渲染"
+    assert "## 可用工具" not in rendered, "工具清单不应在地图里重复渲染"
 
 
 def test_catalog_renders_every_domain():

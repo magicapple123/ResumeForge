@@ -55,6 +55,24 @@ def build_test_font(text: str = DEFAULT_TEXT, family: str = "Test Sans") -> byte
     return buffer.getvalue()
 
 
+def isolate_pdf_font_env(monkeypatch) -> None:
+    """摘掉 ``RESUMEFORGE_PDF_FONT``，让用例只看"这份简历选的字体"。
+
+    CI 的 Linux 作业把这个变量指向系统 TrueType 中文字体（金样导出依赖它），而
+    ``pdf_exporter.fonts._probe_font_paths`` 里环境变量**优先于**用户所选字体。于是同一批
+    用例在没设变量的开发机上是绿的、在 CI 上被换成另一个字体：族名（Word 的 w:ascii）、
+    字形覆盖（「•」「龘」）都不是 ``build_test_font`` 合成的那份，断言随之失败
+    （2026-10-25 CI run 40241568883 实证：6 条用例）。
+
+    环境变量优先生效本身是 Linux 发行版字体路径不一致时的兜底，不该为测试改掉；正确做法
+    是让"断言所选字体生效"的用例显式隔离宿主环境。调用方要同时 ``reset_font_cache()``：
+    字体路径是进程级缓存，同进程里前面的用例可能已经把环境变量指向的字体缓存进来了。
+    """
+    from app.services.pdf_exporter.fonts import FONT_ENV_VAR
+
+    monkeypatch.delenv(FONT_ENV_VAR, raising=False)
+
+
 def write_font(name: str, data: bytes) -> Path:
     """把字体字节直接写进字体目录，返回文件路径。
 

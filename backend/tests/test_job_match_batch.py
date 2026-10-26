@@ -156,7 +156,7 @@ async def test_retryable_failure_is_retried_once_and_can_succeed(monkeypatch):
             raise LLMError("模型返回的匹配证据无法在资料或简历中核对，请重试", retryable=True)
         return _ok_result()
 
-    monkeypatch.setattr(job_match_batch, "analyze_match", fake_analyze)
+    monkeypatch.setattr("app.services.job.job_match.analyze_match", fake_analyze)
     monkeypatch.setattr(job_match_batch, "create_provider", lambda _config: object())
 
     run = await job_match_batch.run_batch_match(
@@ -181,7 +181,7 @@ async def test_non_retryable_failure_is_not_retried(monkeypatch):
         calls["count"] += 1
         raise LLMError("模型返回错误：model not found")
 
-    monkeypatch.setattr(job_match_batch, "analyze_match", fake_analyze)
+    monkeypatch.setattr("app.services.job.job_match.analyze_match", fake_analyze)
     monkeypatch.setattr(job_match_batch, "create_provider", lambda _config: object())
 
     run = await job_match_batch.run_batch_match(
@@ -207,7 +207,7 @@ async def test_retry_stops_when_cancelled(monkeypatch):
         state["cancel"] = True
         raise LLMError("模型返回的匹配证据无法在资料或简历中核对，请重试", retryable=True)
 
-    monkeypatch.setattr(job_match_batch, "analyze_match", fake_analyze)
+    monkeypatch.setattr("app.services.job.job_match.analyze_match", fake_analyze)
     monkeypatch.setattr(job_match_batch, "create_provider", lambda _config: object())
 
     run = await job_match_batch.run_batch_match(
@@ -277,7 +277,7 @@ async def test_retry_is_per_item_not_per_batch(monkeypatch):
             raise LLMError("模型未返回有效的匹配结果 JSON，请重试", retryable=True)
         return _ok_result()
 
-    monkeypatch.setattr(job_match_batch, "analyze_match", fake_analyze)
+    monkeypatch.setattr("app.services.job.job_match.analyze_match", fake_analyze)
     monkeypatch.setattr(job_match_batch, "create_provider", lambda _config: object())
 
     # payload 里塞一个"这是第几条"的标记，用来分别统计每个岗位自己的调用次数。
@@ -352,7 +352,7 @@ async def test_retry_is_capped_at_two_attempts(monkeypatch):
         calls["count"] += 1
         raise LLMError("模型返回的匹配证据无法在资料或简历中核对，请重试", retryable=True)
 
-    monkeypatch.setattr(job_match_batch, "analyze_match", always_retryable)
+    monkeypatch.setattr("app.services.job.job_match.analyze_match", always_retryable)
     monkeypatch.setattr(job_match_batch, "create_provider", lambda _config: object())
 
     run = await job_match_batch.run_batch_match(
@@ -369,8 +369,8 @@ async def test_retry_is_capped_at_two_attempts(monkeypatch):
 async def test_evidence_check_failure_is_retried_end_to_end(monkeypatch):
     """D14 的端到端版：可重试标记来自**真实的证据核对**，不是用例手写的标记。
 
-    前两条用例把 ``analyze_match`` 整个换掉了，所以它们只证明"``retryable=True`` 会被
-    重试"，证明不了"真实失败路径上真的带着这个标记"。这里只换最底层的
+    前两条用例把底层的单次匹配调用（``job_match.analyze_match``）整个换掉了，所以它们
+    只证明"``retryable=True`` 会被重试"，证明不了"真实失败路径上真的带着这个标记"。这里只换最底层的
     ``provider.chat``：第一次让模型编造证据（资料里根本没有 Kubernetes），
     ``validate_evidence`` 会抛可重试的 ``LLMError``；第二次如实返回 → 一次重试即成。
     """

@@ -56,8 +56,9 @@ NON_PUBLIC_CASES = [
     ("fc00::1", ADDRESS_PRIVATE),  # 唯一本地地址 ULA
     ("fd12:3456:789a::1", ADDRESS_PRIVATE),
     ("ff02::1", ADDRESS_MULTICAST),
-    # IPv4-mapped：按字面 IPv6 判定（不解封装）。命中哪个键可能因 Python 版本而异
-    # （reserved / private），但结论必须一致：**拒绝**。解封装是已记录的限制，不是这里的承诺。
+    # IPv4-mapped：**整类拒绝**，键固定为 reserved。标准库对映射地址的判定随 Python
+    # 小版本漂移（3.12.2 → reserved；3.12.10 → ::ffff:127.0.0.1 判 loopback、
+    # ::ffff:93.184.216.34 直接当公网放行），实现里显式收口成"整类拒绝"来消除漂移。
     ("::ffff:127.0.0.1", ADDRESS_RESERVED),
 ]
 
@@ -108,8 +109,8 @@ def test_ipv6_never_matches_the_ipv4_shared_space():
 def test_ipv4_mapped_addresses_are_rejected_whatever_the_key(address):
     """IPv4-mapped 形式也必须被拒；具体命中哪个键不是契约，拒绝才是。
 
-    当前实现按字面 IPv6 判定、不做 4-in-6 解封装（已记录的限制），所以这里只断言
-    "有原因"，不把 ``private`` / ``reserved`` 的归属钉死到某个 Python 版本的行为上。
+    实现把 4-in-6 整类收口成 ``reserved``（消除标准库的版本漂移），所以这里只断言
+    "有原因"，不把归属钉死到某个 Python 版本的行为上。
     """
     assert non_public_address_reason(address) is not None
 

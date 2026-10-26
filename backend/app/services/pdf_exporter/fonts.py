@@ -114,6 +114,9 @@ def _probe_font_paths(font_name: str | None = None) -> tuple[str, str] | None:
         except FontError:
             logger.warning("简历选用的字体「%s」已不存在，回落到当前字体", font_name)
         except Exception:  # noqa: BLE001 - 字体探测失败不该让导出整条链路崩掉
+            # 静默吞掉会让"为什么 Linux CI 上字体选择失效"这类问题无从排查：这里
+            # 记录一次（带堆栈），调用方仍然拿到回落行为。
+            logger.warning("简历选用的字体「%s」探测失败，回落到当前字体", font_name, exc_info=True)
             chosen = None
         else:
             return _pair_paths(chosen)

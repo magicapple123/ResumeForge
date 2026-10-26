@@ -263,6 +263,43 @@ def test_filter_redacts_precached_exc_text_without_exc_info() -> None:
     assert REDACTED_PLACEHOLDER in record.exc_text
 
 
+def test_asyncio_style_exc_info_false_does_not_trigger_redact_failure() -> None:
+    """**回归（2026-10-26 实机日志）**：asyncio 的 loop.default_exception_handler
+    以 exc_info=False（布尔假，不是 None）调用 logger.error。旧 filter 用
+    "exc_info is not None" 判断"这条 record 有异常文本"，把 False 当成异常三元组去
+    format_exception → TypeError → 落占位符 [日志脱敏失败，异常文本已丢弃]。
+    结果是**每条 asyncio 事件循环错误日志**（如本批修的 pending task ERROR）都被误加
+    这行"脱敏失败"，把排障信息误导成安全问题。修复后：布尔假 exc_info 不碰 exc_text，
+    消息原样保留、脱敏器也不该被调用。
+    """
+    log = logging.getLogger("test.log_redact.asyncio")
+    message = "Task was destroyed but it is pending!\ntask: <Task pending name='Task-9'>"
+    with _production_style_capture("test.log_redact.asyncio") as capture:
+        log.error(message, exc_info=False)
+
+    text = "\n".join(capture.lines)
+    assert "Task was destroyed but it is pending" in text
+    assert REDACT_FAILURE_PLACEHOLDER not in text
+    assert capture.records[0].exc_info is False
+    assert capture.records[0].exc_text is None
+
+
+def test_exc_info_true_still_redacts_real_exception() -> None:
+    """布尔 True 是 logging 的"取当前异常"约定：仍必须脱敏（不能因修 False 而削弱）。"""
+    log = logging.getLogger("test.log_redact.exc-info-true")
+    with _production_style_capture("test.log_redact.exc-info-true") as capture:
+        try:
+            raise _chained_sensitive_error()
+        except RuntimeError:
+            log.error("布尔 True 的异常日志", exc_info=True)
+
+    text = "\n".join(capture.lines)
+    assert RESUME_MARKER not in text
+    assert ID_CARD not in text
+    assert "已脱敏" in text
+    assert "RuntimeError" in text
+
+
 def test_redactor_failure_falls_back_to_discarding_exception_text(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

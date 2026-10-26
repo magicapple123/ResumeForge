@@ -23,7 +23,9 @@ IPv4/IPv6 一律按 `ipaddress` 的标准属性判定，并额外点名 ``100.64
 
 已知边界（详见 `page_reader` 模块 docstring）：本模块只看**给定的地址字面量**，不负责
 "DNS 校验结果与真实建连地址是否同一个"（TOCTOU / DNS rebinding）；6to4、NAT64 这类
-"IPv6 地址里编码了 IPv4"的形态按字面 IPv6 判定，不做解封装。
+"IPv6 地址里编码了 IPv4"的形态按字面 IPv6 判定，不做解封装；**IPv4-mapped（::ffff:0:0/96）
+例外——整类拒绝**，因为标准库对它的判定随 Python 小版本漂移（3.12.2 视为 reserved，
+3.12.10 却把 ::ffff:93.184.216.34 当公网放行），规则的确定性优先于"少拒一个映射形式"。
 """
 
 from __future__ import annotations
@@ -74,6 +76,12 @@ def non_public_address_reason(address: str) -> str | None:
         parsed = ipaddress.ip_address(address)
     except ValueError:
         return ADDRESS_INVALID
+    if isinstance(parsed, ipaddress.IPv6Address) and parsed.ipv4_mapped is not None:
+        # 4-in-6 形态整类拒绝：不同 Python 小版本对映射地址的 is_loopback / is_reserved
+        # 判定并不一致——3.12.2 视作 reserved，3.12.10 却把 ::ffff:127.0.0.1 判成
+        # loopback、把 ::ffff:93.184.216.34 当公网放行（实测），而连接落到的就是那个
+        # IPv4。规则只收不放：整类拒绝，不随解释器版本漂移。
+        return ADDRESS_RESERVED
     if parsed.is_loopback:
         return ADDRESS_LOOPBACK
     if parsed.is_link_local:

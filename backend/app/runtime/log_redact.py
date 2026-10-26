@@ -155,9 +155,19 @@ class RedactExceptionFilter(logging.Filter):
         if getattr(record, self._REDACTED_FLAG, False):
             return True
         try:
-            if record.exc_info is not None and not record.exc_text:
+            if record.exc_info and not record.exc_text:
+                # exc_info 有两种合法形态：元组（真实异常）与布尔 True（logging 约定：
+                # 取当前 sys.exc_info()）。asyncio 的 loop.default_exception_handler 还会
+                # 传 exc_info=False（布尔假）表示"这条日志没有异常文本"——旧实现用
+                # "is not None" 判断，把 False 当成三元组去 format_exception，TypeError
+                # 后落 [日志脱敏失败，异常文本已丢弃]（2026-10-26 实机：每条 asyncio
+                # 事件循环错误日志都被误加这行）。改成与 logging.Formatter 同口径的真值
+                # 判断，并把布尔 True 还原成当前异常三元组——脱敏语义不削弱。
+                exc_info = record.exc_info
+                if not isinstance(exc_info, tuple):
+                    exc_info = sys.exc_info()
                 record.exc_text = redact_sensitive_text(
-                    "".join(traceback.format_exception(*record.exc_info))
+                    "".join(traceback.format_exception(*exc_info))
                 )
             elif record.exc_text:
                 # 无 exc_info 但带预渲染 traceback（跨进程队列等来源）：原地清洗。

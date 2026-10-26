@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import os
 import re
 from pathlib import Path
 from typing import Any
@@ -59,6 +60,23 @@ def _safe_disk_name(content: bytes, export_format: str) -> str:
     return f"{digest}.{ext}"
 
 
+def _archive_target(root: Path, disk_name: str) -> Path:
+    """把服务端生成的磁盘名收敛到归档根目录内，返回可安全落盘的绝对路径。
+
+    路径注入的防线不能只靠"``root in target.parents``"：CodeQL 的 path-injection 查询
+    只认两类收敛点——``os.path.abspath`` 这类**归一化**，与 ``str.startswith`` 这类按
+    根目录前缀的**安全检查**（同一写法见 ``data_backup/asset_safety.safe_asset_path``）。
+    这里先归一化消掉 ``..``，再要求结果以「根目录 + 分隔符」开头（顺带挡掉
+    「base-sibling」这种同前缀目录），不通过就拒绝。``disk_name`` 上游仍由 sha256 +
+    白名单扩展名生成，这里是第二道防线而不是唯一一道。
+    """
+    base = os.path.abspath(root)
+    target = os.path.abspath(os.path.join(base, disk_name))
+    if not target.startswith(os.path.join(base, "")):
+        raise ValueError("归档路径不安全")
+    return Path(target)
+
+
 def list_artifacts(db: Session, resume_id: int) -> list[ResumeExportArtifact]:
     return list(
         db.execute(
@@ -94,9 +112,7 @@ def save_artifact(
     root = archive_root(db.get_bind())
     root.mkdir(parents=True, exist_ok=True)
     disk_name = _safe_disk_name(content, export_format)
-    target = (root / disk_name).resolve()
-    if root.resolve() not in target.parents:
-        raise ValueError("归档路径不安全")
+    target = _archive_target(root, disk_name)
     temporary = target.with_suffix(target.suffix + ".partial")
     temporary.write_bytes(content)
     temporary.replace(target)
@@ -129,10 +145,8 @@ def delete_artifact(db: Session, resume_id: int, artifact_id: int) -> bool:
     artifact = db.get(ResumeExportArtifact, artifact_id)
     if artifact is None or artifact.resume_id != resume_id:
         return False
-    root = archive_root(db.get_bind()).resolve()
-    target = (root / artifact.disk_name).resolve()
-    if root not in target.parents:
-        raise ValueError("归档路径不安全")
+    root = archive_root(db.get_bind())
+    target = _archive_target(root, artifact.disk_name)
     disk_name = artifact.disk_name
     db.delete(artifact)
     db.flush()

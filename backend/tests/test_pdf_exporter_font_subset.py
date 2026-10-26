@@ -16,11 +16,26 @@ from __future__ import annotations
 from io import BytesIO
 
 import pytest
-from app.services.pdf_exporter import font_subset
+from app.services.pdf_exporter import font_subset, reset_font_cache
 from app.services.pdf_exporter.fit import build_resume_pdf
 from app.services.resume.resume_sample import sample_resume_content
+from font_fixtures import isolate_pdf_font_env
 from pypdf import PdfReader
 from test_pdf_exporter import _text_runs, needs_font
+
+
+@pytest.fixture(autouse=True)
+def _isolate_host_font_env(monkeypatch):
+    """本文件量的是"系统可用字体"这条链路：先摘掉宿主自己的字体兜底。
+
+    CI 的 Linux 作业把 RESUMEFORGE_PDF_FONT 指到 WQY（金样导出需要 TrueType 中文字体），
+    而它的字形覆盖与本机候选字体不同（实测缺「•」）——环境变量又优先于系统候选，于是
+    "子集不能少字"的断言会按宿主字体假红。字体路径是进程级缓存，前后各清一次。
+    """
+    isolate_pdf_font_env(monkeypatch)
+    reset_font_cache()
+    yield
+    reset_font_cache()
 
 
 def _text(content: bytes) -> str:
@@ -210,6 +225,7 @@ def test_an_empty_charset_is_not_remembered(text):
     """空字符集不该进缓存：那会让下一趟裁出一个空字体，什么都画不出来。"""
     font_subset.remember_charset("sig-empty", text)
     assert font_subset.charset_for("sig-empty") is None
+
 
 @needs_font
 def test_a_classic_first_render_does_not_lose_the_scholar_bullet(caplog):

@@ -94,6 +94,45 @@ def test_open_url_reuses_an_existing_blank_page_before_creating_a_tab(monkeypatc
     assert result == {"target_id": "blank", "url": "https://example.com/apply"}
 
 
+def test_open_url_renavigates_same_url_tab_and_reports_navigation_error(monkeypatch) -> None:
+    """**回归守卫（2026-10-26 实机）**：同一个 URL 已经停在错误页时再打开，旧实现命中
+    "existing = url 相同" 就直接 return——不重新 Page.navigate、也不看 errorText，于是
+    打不开的页面被假报成 200「已打开」。同 URL 复用必须重新导航并检查导航错误。"""
+    url = "https://example.com/apply"
+    manager = _FakeManager(
+        active=True,
+        targets=[{"id": "same", "type": "page", "url": url}],
+    )
+    manager.navigate_result = {"frameId": "F", "errorText": "net::ERR_CONNECTION_REFUSED"}
+    monkeypatch.setattr(webform_browser, "get_browser_manager", lambda _db: manager)
+
+    with pytest.raises(webform_browser.BrowserError) as error:
+        webform_browser.open_url(None, url)
+
+    assert "无法打开网页" in str(error.value)
+    # 真的重新导航了（而不是命中 existing 就直接返回），且仍然复用那一个标签页。
+    assert manager.navigated == [("same", url)]
+    assert manager.new_tabs == []
+
+
+def test_open_url_reuses_same_url_tab_without_opening_a_new_tab(monkeypatch) -> None:
+    """同 URL 复用语义不变：重新导航成功时仍然返回同一个 target_id、不新增标签页。"""
+    url = "https://example.com/apply"
+    manager = _FakeManager(
+        active=True,
+        targets=[{"id": "same", "type": "page", "url": url}],
+    )
+    manager.navigate_result = {"frameId": "F", "loaderId": "L"}
+    monkeypatch.setattr(webform_browser, "get_browser_manager", lambda _db: manager)
+
+    result = webform_browser.open_url(None, url)
+
+    assert result == {"target_id": "same", "url": url}
+    assert manager.navigated == [("same", url)]
+    assert manager.new_tabs == []
+    assert manager.activated == ["same"]
+
+
 def test_batch_mapping_is_not_shifted_by_section_level_nearby_labels() -> None:
     """**回归守卫（2026-10-26 网申假表单实机测得）**：区块级旁文把整块标签串进来时，
     批量匹配不能靠 DOM 顺序硬分——那会让项目名称被写进"实习时间"框。
@@ -190,7 +229,9 @@ def test_open_url_checked_navigation_errors_even_when_it_must_open_a_tab(monkeyp
     """没有空白页时要走"新开标签页"分支：先开 about:blank、再用 Page.navigate 走到
     目标地址，这样 errorText 才读得到（直接交给 /json/new 的话打不开的网址会静默
     变成"已打开"）。"""
-    manager = _FakeManager(active=True, targets=[{"id": "form", "type": "page", "url": "http://x/y"}])
+    manager = _FakeManager(
+        active=True, targets=[{"id": "form", "type": "page", "url": "http://x/y"}]
+    )
     manager.navigate_result = {"frameId": "F", "errorText": "net::ERR_CONNECTION_REFUSED"}
     monkeypatch.setattr(webform_browser, "get_browser_manager", lambda _db: manager)
 
@@ -204,7 +245,9 @@ def test_open_url_checked_navigation_errors_even_when_it_must_open_a_tab(monkeyp
 
 def test_open_url_maps_new_tab_cdp_failure_to_a_readable_browser_error(monkeypatch) -> None:
     """连空白标签页都开不出来（浏览器半死）时也要收敛成可读的 BrowserError，不能 500。"""
-    manager = _FakeManager(active=True, targets=[{"id": "form", "type": "page", "url": "http://x/y"}])
+    manager = _FakeManager(
+        active=True, targets=[{"id": "form", "type": "page", "url": "http://x/y"}]
+    )
     manager.new_tab_error = CdpError("打开新标签页失败（HTTP 500）")
     monkeypatch.setattr(webform_browser, "get_browser_manager", lambda _db: manager)
 
@@ -216,6 +259,7 @@ def test_open_url_maps_new_tab_cdp_failure_to_a_readable_browser_error(monkeypat
 
 def test_list_page_targets_converts_cdp_errors_to_browser_errors(monkeypatch) -> None:
     """浏览器刚被关掉时底层抛 CdpError；上层只处理 BrowserError，不转换就是 500。"""
+
     class _BrokenManager:
         def list_page_targets(self) -> list[dict[str, Any]]:
             raise CdpError("无法连接投递专用浏览器")

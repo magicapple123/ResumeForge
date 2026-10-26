@@ -195,3 +195,73 @@ def test_section_order_uses_supported_keys(demo_db: Path):
     unknown = [key for key in stored if key not in PROFILE_SECTION_KEYS]
     assert not unknown, f"section_order 里有不存在的键：{unknown}"
     assert "basic_info" not in stored, "basic_info 固定在最前，不该写进存起来的顺序里"
+
+
+def test_new_profile_model_is_populated(demo_db: Path):
+    """R-46 之后新界面不读旧六表：演示数据必须把同一份虚构资料写进 F1 新模型。
+
+    背景（真实故障）：demo_data/profile.py 只写旧六表，而新资料模型按产品决定不读旧表，
+    于是展示库打开资料页是空的、AI 生成直接 400「个人资料为空」。这条守卫同时钉住：
+
+    - 默认组 + 工作区状态 + 参与清单（新资料页的骨架）；
+    - profile_entry 里真有条目，且姓名是虚构的「张示例」（不是空表或真实姓名）；
+    - 自建大字段/小字段（profile_custom_section / profile_custom_field）与条目值也写进去了，
+      否则「资料页截图」会看不到 F3 的自建分区能力。
+    """
+    assert _rows(demo_db, "select count(*) from profile_group")[0][0] == 1
+    group = _rows(demo_db, "select name, is_default, group_id from profile_group")[0]
+    assert group[0] == "默认组" and group[1] == 1
+
+    state = _rows(demo_db, "select current_group_id, default_group_id from profile_workspace_state")
+    assert len(state) == 1, state
+    assert state[0][0] == state[0][1] == group[2]
+
+    member_count = _rows(demo_db, "select count(*) from profile_group_member")[0][0]
+    assert member_count >= 13, f"默认组只参与了 {member_count} 个分区"
+
+    entries = [
+        (section_key, json.loads(raw_values))
+        for section_key, raw_values in _rows(
+            demo_db, 'select section_key, "values" from profile_entry'
+        )
+    ]
+    assert len(entries) >= 10, f"新资料模型只有 {len(entries)} 条条目"
+    section_keys = {row[0] for row in entries}
+    assert {"basic_info", "educations", "experiences", "projects", "skills"} <= section_keys, (
+        section_keys
+    )
+
+    basic = next(values for key, values in entries if key == "basic_info")
+    assert "张示例" in basic.values(), basic
+    experience_values = " ".join(
+        str(value) for key, values in entries if key == "experiences" for value in values.values()
+    )
+    assert "示例科技有限公司" in experience_values, experience_values
+
+    sections = _rows(demo_db, "select key, name from profile_custom_section")
+    assert sections, "自建大字段没有写进演示数据"
+    custom_keys = {row[0] for row in sections}
+    custom_entries = [values for key, values in entries if key in custom_keys]
+    assert custom_entries, "自建大字段下没有任何条目"
+    custom_text = " ".join(str(value) for values in custom_entries for value in values.values())
+    assert "example.com" in custom_text, custom_entries
+
+    fields = _rows(demo_db, "select section_key, label from profile_custom_field")
+    assert any(row[1] == "作品链接" for row in fields), fields
+
+
+def test_profiles_two_models_share_the_same_fictional_persona(demo_db: Path):
+    """新旧两套资料必须同源：旧六表与 profile_entry 的姓名/经历一致，不能各写一份。"""
+    old_name = _rows(demo_db, "select name from user_profile")[0][0]
+    entries = [
+        (section_key, json.loads(raw_values))
+        for section_key, raw_values in _rows(
+            demo_db, 'select section_key, "values" from profile_entry'
+        )
+    ]
+    basic = next(values for key, values in entries if key == "basic_info")
+    assert old_name in basic.values()
+    experience_text = " ".join(
+        str(value) for key, values in entries if key == "experiences" for value in values.values()
+    )
+    assert "示例科技有限公司" in experience_text

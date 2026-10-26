@@ -9,6 +9,8 @@
   "归档满了"丢掉这次交付，也不会静默少存一份。
 - 列表按 id 倒序（最新在前）；删除 API 先删文件再删行；删不存在/跨简历的 id → 404。
 - 预设里的 ``max_artifacts_per_resume`` 只允许 1–20（越界 422）。
+- 路径收敛：磁盘名只由 sha256 + 白名单扩展名构成；``export_format`` / ``filename`` 里的
+  穿越片段既进不了磁盘名，也走不出归档根目录（恶意输入用例从服务层直接打，绕开路由层）。
 """
 
 from __future__ import annotations
@@ -200,3 +202,86 @@ def test_preset_archive_limit_is_bounded_to_1_20(client):
     allowed = create_preset(max_artifacts_per_resume=1)
     assert allowed.status_code == 201, allowed.text
     assert allowed.json()["config"]["max_artifacts_per_resume"] == 1
+
+
+# ===== 路径收敛：恶意文件名 / 格式不能把文件写到归档根之外 =====
+
+
+@pytest.mark.parametrize(
+    "export_format",
+    ["../escape", "..\\..\\escape", "/etc/passwd", "C:/Windows/evil", "md/../../x", "a" * 64],
+)
+def test_hostile_export_format_stays_inside_the_archive_root(
+    client, db_session, archive_dir, export_format
+):
+    """``export_format`` 是唯一进路径的用户输入：必须被收敛在归档根目录内。
+
+    内容寻址把"非法扩展名"映射成 ``.bin``；这里从**服务层**直接打，绕过路由层可能
+    存在的格式白名单——"路径由谁拼"这件事的真相在 ``save_artifact`` 里。
+    """
+    resume_id = _create_resume(client)
+    record = db_session.get(ResumeRecord, resume_id)
+    content = b"hostile format archive bytes"
+    artifact = archive_service.save_artifact(
+        db_session,
+        record=record,
+        content=content,
+        filename="../../escape.md",
+        export_format=export_format,
+    )
+
+    stored = archive_dir / artifact.disk_name
+    assert stored.is_file()
+    assert stored.read_bytes() == content
+    assert stored.parent == archive_dir
+    assert "/" not in artifact.disk_name and "\\" not in artifact.disk_name
+    # 归档根之外没有凭空多出文件（``..`` / 绝对路径若生效会落在上一级或系统目录）。
+    assert sorted(path.name for path in archive_dir.iterdir()) == [artifact.disk_name]
+    assert not (archive_dir.parent / "escape.md").exists()
+
+
+def test_containment_check_rejects_a_disk_name_that_would_escape(
+    client, db_session, archive_dir, monkeypatch
+):
+    """即使命名环节以后退化成"可被输入影响"，根目录收敛也必须兜底拒绝。
+
+    ``_safe_disk_name`` 现在只产出 sha256 + 白名单扩展名，正常永远走不到这里；改用
+    monkeypatch 直接给它一个穿越名，验证的是**第二道防线本身**。
+    """
+    resume_id = _create_resume(client)
+    record = db_session.get(ResumeRecord, resume_id)
+    monkeypatch.setattr(
+        archive_service, "_safe_disk_name", lambda content, export_format: "../escaped.md"
+    )
+
+    with pytest.raises(ValueError, match="归档路径不安全"):
+        archive_service.save_artifact(
+            db_session,
+            record=record,
+            content=b"x",
+            filename="x.md",
+            export_format="md",
+        )
+
+    assert not (archive_dir.parent / "escaped.md").exists()
+
+
+def test_normal_archive_bytes_are_readable_back(client, db_session, archive_dir):
+    """正常路径没被收敛逻辑弄丢：落盘文件存在、字节一致、扩展名跟着格式走。"""
+    resume_id = _create_resume(client)
+    record = db_session.get(ResumeRecord, resume_id)
+    content = b"%PDF-1.7 synthetic archive"
+
+    artifact = archive_service.save_artifact(
+        db_session,
+        record=record,
+        content=content,
+        filename="简历.pdf",
+        export_format="pdf",
+    )
+
+    stored = archive_dir / artifact.disk_name
+    assert stored.is_file()
+    assert stored.read_bytes() == content
+    assert artifact.disk_name.endswith(".pdf")
+    assert artifact.filename == "简历.pdf"

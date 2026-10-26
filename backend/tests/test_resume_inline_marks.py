@@ -84,11 +84,17 @@ def _docx_text_and_xml(content: bytes) -> tuple[str, str]:
     return text.replace("&amp;", "&").replace("&lt;", "<").replace("&gt;", ">"), xml
 
 
+# 结束标签允许带属性（`</script attr>`）；大小写不敏感必须显式声明——CodeQL
+# py/bad-tag-filter 会逐条检查"这个过滤正则漏了哪种 HTML 写法"，不做忽略大小写就漏
+# <SCRIPT>/<sCrIpT>（2026-10-25 重新分析命中的 #112 正是这一条；兄弟文件
+# test_rich_export_consistency.py 的 `_SCRIPT_RE` 用的是同一份已被认可的口径）。
+# 这里只负责让断言不被模板注入的页数自适应脚本干扰，不承担生产环境消毒职责。
+_SCRIPT_RE = re.compile(r"<script\b[\s\S]*?</script[^>]*>", re.IGNORECASE)
+
+
 def _html_body(html: str) -> str:
     body = html.split("<body", 1)[1]
-    # 结束标签允许带属性（`</script attr>`）——CodeQL py/bad-tag-filter 的两轮口径
-    # 都落在这一处（先 `</script\s*>`，后 `</script[^>]*>`）。
-    return re.sub(r"<script\b[\s\S]*?</script[^>]*>", "", body)
+    return _SCRIPT_RE.sub("", body)
 
 
 # ===== 1. 解析：分层切分与字面保留 =====
@@ -233,6 +239,21 @@ def test_rendered_html_consumes_the_shared_parser() -> None:
     # 标记字面量不许泄漏到纸面（模板 CSS 注释在 style 里，不在此断言范围）。
     assert "**" not in body
     assert "](https://" not in body
+
+
+def test_html_body_helper_strips_script_blocks_case_insensitively() -> None:
+    """``_html_body`` 的语义是"去掉 script 标签与内容"：大小写混写也必须去掉。
+
+    CodeQL py/bad-tag-filter 只看这一条过滤正则是否漏掉某种 HTML 写法；大小写不敏感
+    是 #112 的判定口径，用一条最小的语义断言钉住（模板产物的脚本标签在小写这一侧）。
+    """
+    html = '<html><body><p>正文</p><sCrIpT>var leak = "**";</ScRiPt><p>尾</p></body></html>'
+
+    body = _html_body(html)
+
+    assert "正文" in body and "尾" in body
+    assert "script" not in body.lower()
+    assert "**" not in body
 
 
 # ===== 3. Word：真斜体 + 可见 URL 文本 =====

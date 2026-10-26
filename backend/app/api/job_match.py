@@ -27,7 +27,7 @@ from ..schemas.job_match_batch import (
 from ..services import trash
 from ..services.apply import apply_service
 from ..services.job.job_match import (
-    analyze_match,
+    analyze_match_with_retry,
     finalize_match_result,
     job_payload,
     local_match_result,
@@ -180,9 +180,7 @@ async def create_match_analysis(
 
     profile, profile_text, resume_text = match_source_texts(db, job)
     if profile_is_empty(profile) and not resume_text.strip():
-        raise HTTPException(
-            status_code=400, detail="个人资料为空，无法做匹配分析"
-        )
+        raise HTTPException(status_code=400, detail="个人资料为空，无法做匹配分析")
 
     payload = job_payload(job)
     config = get_llm_config(db)
@@ -196,7 +194,9 @@ async def create_match_analysis(
     else:
         provider = create_provider(config)
         try:
-            result = await analyze_match(provider, payload, profile_text, resume_text)
+            # 与批量匹配共用"可重试失败再试一次"的收口：模型这一次证据跑偏时
+            # 服务端自动重试一次，别让用户看到"请重试"后还得自己再点一遍。
+            result = await analyze_match_with_retry(provider, payload, profile_text, resume_text)
         except LLMError as exc:
             logger.warning("岗位匹配分析失败：%s", exc)
             raise HTTPException(status_code=502, detail=f"生成匹配分析失败：{exc}") from exc

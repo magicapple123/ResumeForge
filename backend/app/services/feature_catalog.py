@@ -1,8 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
 """求职助手"了如指掌"的单一事实来源：机器可读的功能目录（门面）。
 
-能力地图由 ``build_capability_map()`` 在运行时渲染，并与工具注册表、前端菜单/指南、
-README 功能表三方对齐（守卫测试 ``tests/test_assistant_knowledge_audit.py``）。
+能力地图由 ``build_capability_map()`` 在运行时渲染，并与前端菜单/指南、README 功能表
+三方对齐（守卫测试 ``tests/test_assistant_knowledge_audit.py``）。工具名/参数不逐字渲染：
+它们由 function calling 的 tools 声明下发，能力地图只保留功能索引与写入类行为指引。
 
 **目录数据按原始顺序切成三段放在三个数据文件里**（单文件预算）：profile（共用类型/功能域/
 我的资料/投递网申/资料箱）、resume（简历中心/写作增强/收口新增）、workflow（岗位/记录/
@@ -42,13 +43,6 @@ FEATURES: tuple[FeatureEntry, ...] = (
 )
 
 
-def _tool_names() -> list[str]:
-    """从工具注册表取全部工具名；延迟导入避免把重型依赖拉到模块加载期。"""
-    from .assistant_tools import tool_names
-
-    return tool_names()
-
-
 def _write_tools() -> list[str]:
     """从工具注册表推导写入类工具名单（``Tool.writes`` 为人工置位、与注册同处）。"""
     from .assistant_tools import _TOOLS as registry
@@ -65,7 +59,11 @@ def build_write_tools_line() -> str:
 def build_capability_map() -> str:
     """渲染能力地图 markdown 段落，供 ``_system_prompt()`` 每次请求动态注入。
 
-    覆盖三层事实：功能域（菜单）、界面功能（FEATURES）、后端工具清单（``_TOOLS``）。
+    能力地图是**功能索引**：功能域（菜单）+ 界面功能（在哪个菜单、怎么用）+ 写入类工具的
+    行为指引。具体工具的名字/参数/描述**不在这里重复**——它们已经由 function calling 的
+    tools 声明逐字下发给模型，能力地图再抄一份（旧版有「可配合工具」提示与「可用工具」
+    清单）只会让每轮固定 prompt 多烧约 5 千字符，功能上没有任何增益。
+
     用户问"某功能在哪"时，助手据此如实指路，而不是凭记忆里的旧清单回答。
     """
     lines: list[str] = [
@@ -80,12 +78,10 @@ def build_capability_map() -> str:
     lines.append("")
     lines.append("## 界面功能（这些是 UI 功能，不是后端工具；括号里是它在哪个菜单、怎么用）")
     for feature in FEATURES:
-        tool_hint = f"（可配合工具：{'、'.join(feature.tools)}）" if feature.tools else ""
-        lines.append(f"- {feature.name}（{feature.domain}：{feature.where}）{tool_hint}")
+        lines.append(f"- {feature.name}（{feature.domain}：{feature.where}）")
     lines.append("")
-    lines.append("## 可用工具")
-    lines.extend(f"- {name}" for name in _tool_names())
-    lines.append("")
+    # 写入类工具的行为指引必须保留：模型要知道哪些操作会改数据、需要按授权流程确认。
+    # 但逐个工具名不再重复列出——tools 声明里都有。
     lines.append(build_write_tools_line())
     return "\n".join(lines)
 

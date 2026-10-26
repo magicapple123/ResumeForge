@@ -7,8 +7,10 @@ import sys
 from contextlib import asynccontextmanager
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
+from typing import Any
 
 from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
@@ -245,9 +247,86 @@ async def _store_error_handler(_request: Request, exc: Exception) -> JSONRespons
         "code": getattr(exc, "code", "profile_store_error"),
     }
     content.update(getattr(exc, "extra", None) or {})
-    return JSONResponse(
-        status_code=int(getattr(exc, "status_code", 400)), content=content
-    )
+    return JSONResponse(status_code=int(getattr(exc, "status_code", 400)), content=content)
+
+
+# 422 参数校验的中文化词表：只翻译 Pydantic 的内置英文文案，自定义校验器写的中文原样保留。
+# 文案口径：说清"哪里错 + 限制是多少"，不回显输入原文（超长正文不该出现在错误响应里）。
+_VALIDATION_TYPE_MESSAGES = {
+    "missing": "缺少必填字段",
+    "string_type": "应为文本",
+    "int_type": "应为整数",
+    "float_type": "应为数字",
+    "bool_type": "应为布尔值",
+    "list_type": "应为列表",
+    "dict_type": "应为对象",
+    "string_too_short": "内容太短",
+    "string_too_long": "内容过长",
+    "too_short": "数量太少",
+    "too_long": "数量太多",
+    "literal_error": "取值不在允许范围内",
+    "enum": "取值不在允许范围内",
+    "extra_forbidden": "包含不支持的字段",
+    "json_invalid": "请求体不是合法的 JSON",
+    "bool_parsing": "布尔值格式不正确",
+    "int_parsing": "整数格式不正确",
+    "float_parsing": "数字格式不正确",
+    "date_parsing": "日期格式不正确",
+    "datetime_parsing": "日期时间格式不正确",
+    "time_parsing": "时间格式不正确",
+    "url_parsing": "链接格式不正确",
+    "string_pattern_mismatch": "格式不符合要求",
+}
+_VALIDATION_MESSAGE_MAX_CHARS = 300
+
+
+def _validation_message(error: dict[str, Any]) -> str:
+    """单条校验错误的中文文案；自定义校验器（value_error）保留其原始中文。"""
+    type_ = str(error.get("type") or "")
+    context = error.get("ctx") or {}
+    raw_message = str(error.get("msg") or "").strip()
+    if type_ in {"value_error", "assertion_error"}:
+        message = raw_message.removeprefix("Value error, ").strip()
+        return message or "参数不合法"
+    if type_ == "string_too_short":
+        minimum = context.get("min_length")
+        return f"内容至少需要 {minimum} 个字符" if minimum else "内容不能为空"
+    if type_ == "string_too_long":
+        maximum = context.get("max_length")
+        return f"内容不能超过 {maximum} 个字符" if maximum else "内容超出长度上限"
+    if type_ == "too_short":
+        minimum = context.get("min_length")
+        return f"至少需要 {minimum} 项" if minimum else "数量太少"
+    if type_ == "too_long":
+        maximum = context.get("max_length")
+        return f"最多允许 {maximum} 项" if maximum else "数量太多"
+    if type_ in {"literal_error", "enum"}:
+        expected = str(context.get("expected") or "").strip()
+        return f"取值不在允许范围内（可选值：{expected}）" if expected else "取值不在允许范围内"
+    return _VALIDATION_TYPE_MESSAGES.get(type_) or "参数格式不正确"
+
+
+async def _validation_error_handler(_request: Request, exc: Exception) -> JSONResponse:
+    """把 422 校验错误统一成中文、且**不回显输入原文**的 {detail: [...]} 契约。
+
+    为什么用全局 handler：AI 与其它写入端点共享同一套 Pydantic 校验，逐端点翻译必然漏；
+    这里只改文案与载荷形状（保留 detail 数组与 type/loc/msg 三个键），不动状态码与业务语义。
+    刻意不返回 input/ctx：前者会整段回显用户正文（超长输入时响应体失控），后者可能带
+    异常对象。自定义校验器的中文文案保留（它们是产品文案，不是 Pydantic 内置英文）。
+
+    形参收宽到 Exception 是为了匹配 FastAPI 的 ExceptionHandler 契约（pyright 逆变检查）；
+    本函数只注册在 RequestValidationError 上，运行时不会收到别的类型。
+    """
+    assert isinstance(exc, RequestValidationError)
+    items = [
+        {
+            "type": str(error.get("type") or ""),
+            "loc": list(error.get("loc") or ()),
+            "msg": _validation_message(error)[:_VALIDATION_MESSAGE_MAX_CHARS],
+        }
+        for error in exc.errors()
+    ]
+    return JSONResponse(status_code=422, content={"detail": items})
 
 
 async def unhandled_exception(_request: Request, exc: Exception):
@@ -365,6 +444,8 @@ def create_app() -> FastAPI:
     # allow_origins 列表管的是"响应头是否放行"，与这道防线互补、职责不同。
     app.add_middleware(LoopbackOriginGuardMiddleware)
     install_routers(app)
+    # 422 参数校验统一中文文案 + 不回显输入原文（AI 端点与其它写入端点共用）。
+    app.add_exception_handler(RequestValidationError, _validation_error_handler)
     app.add_exception_handler(Exception, unhandled_exception)
     # 资料大字段/组的存储层异常（F1）：统一映射为 {detail, code, **extra}。
     # Starlette 按异常 MRO 挑最近的处理器，子类（ValidationError / RevisionConflict…）

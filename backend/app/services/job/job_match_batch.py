@@ -24,15 +24,16 @@ from ..llm import create_provider
 from ..llm.base import LLMError
 from ..match_scoring import score_match_result
 from ..profile.profile_service import project_legacy_profile
-from .job_match import analyze_match, finalize_match_result, job_payload, local_match_result
+from .job_match import (
+    MAX_MATCH_ATTEMPTS_PER_JOB,
+    analyze_match_with_retry,
+    finalize_match_result,
+    job_payload,
+    local_match_result,
+)
 from .job_match_context import profile_is_empty, profile_text
 
 logger = logging.getLogger(__name__)
-
-# 单个岗位在一次批量里最多尝试几次（首次 + 1 次重试）。上限写成常量而不是魔数：
-# "再试一次"的收益递减得很快，第二次还跑偏基本说明这条岗位的 JD 与资料本来就对不上，
-# 继续重试只会烧钱，还可能把用户按在进度条前等。
-MAX_MATCH_ATTEMPTS_PER_JOB = 2
 
 
 @dataclass(frozen=True)
@@ -138,39 +139,26 @@ async def _analyze_with_retry(
     item: BatchMatchInput,
     should_cancel: Callable[[], bool] | None,
 ) -> tuple[JobMatchResult | None, str]:
-    """单个岗位最多尝试 ``MAX_MATCH_ATTEMPTS_PER_JOB`` 次；返回（结论, 失败原因）。
+    """单个岗位的匹配（含一次可重试失败重试）：返回（结论, 失败原因）。
 
-    重试的三条边界：
-
-    - 只重试可重试的失败（见 :func:`is_retryable_failure`），其余第一次就判失败；
-    - 每一次尝试都是一次真实的模型请求，**照样吃 provider 的请求预算**（同一个 provider
-      实例，预算耗尽时下一次会直接抛"请求预算已耗尽"并就此停手）——不会因为"重试免费"
-      就把账单翻倍；
-    - 取消信号优先：收到取消就不再重试，把已经拿到的失败原因如实交回去。
+    重试策略的唯一实现在 job_match.analyze_match_with_retry（单岗端点与批量共用）：
+    只重试可重试失败、每次尝试都吃 provider 请求预算、取消信号优先。
     """
-    error = ""
-    for attempt in range(1, MAX_MATCH_ATTEMPTS_PER_JOB + 1):
-        try:
-            result = await analyze_match(
-                provider, item.payload, item.profile_text, item.resume_text
-            )
-            return result, ""
-        except LLMError as exc:
-            error = str(exc)
-            if attempt >= MAX_MATCH_ATTEMPTS_PER_JOB or not is_retryable_failure(exc):
-                break
-            if should_cancel is not None and should_cancel():
-                break
-            logger.info(
-                "批量岗位匹配将重试 job_id=%s 第 %s 次尝试失败：%s",
-                item.job_id,
-                attempt,
-                exc,
-            )
-        except Exception:  # noqa: BLE001 - 单个岗位失败不影响其余岗位
-            logger.exception("批量岗位匹配发生内部错误 job_id=%s", item.job_id)
-            return None, "模型分析失败，请稍后重试"
-    return None, error
+    try:
+        result = await analyze_match_with_retry(
+            provider,
+            item.payload,
+            item.profile_text,
+            item.resume_text,
+            max_attempts=MAX_MATCH_ATTEMPTS_PER_JOB,
+            should_cancel=should_cancel,
+        )
+        return result, ""
+    except LLMError as exc:
+        return None, str(exc)
+    except Exception:  # noqa: BLE001 - 单个岗位失败不影响其余岗位
+        logger.exception("批量岗位匹配发生内部错误 job_id=%s", item.job_id)
+        return None, "模型分析失败，请稍后重试"
 
 
 async def run_batch_match(

@@ -13,9 +13,11 @@
 from __future__ import annotations
 
 import json
+import math
 import re
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import date
 from typing import Any
 
 from ..schemas.job_match import JobMatchResult, MatchReferenceScore, MatchScoreDimension
@@ -122,39 +124,118 @@ def _required_years(job_payload: dict[str, Any]) -> int | None:
     return max(int(value) for value in matches)
 
 
-def _year(value: str) -> int | None:
-    match = re.search(r"(\d{4})", str(value or ""))
-    return int(match.group(1)) if match else None
+def _round_half_up(value: float, digits: int) -> float:
+    """四舍五入（不用 Python 的银行家舍入）：年限展示要“3.25 → 3.3”这类直觉结果。"""
+    factor = 10**digits
+    return math.floor(value * factor + 0.5) / factor
 
 
-def _estimate_years(profile_text: str, resume_text: str) -> float:
-    """粗略估算工作年限：从资料 / 简历 JSON 里取经历起止年份求和。"""
-    entries: list[tuple[int, int | None]] = []
-    for text in (profile_text, resume_text):
-        try:
-            data = json.loads(text)
-        except (json.JSONDecodeError, TypeError):
-            continue
-        if not isinstance(data, dict):
-            continue
-        candidates: list[Any] = list(data.get("experiences") or [])
-        content = data.get("content")
-        if isinstance(content, dict):
-            candidates.extend(content.get("experience") or [])
-        for item in candidates:
-            if not isinstance(item, dict):
+_MONTH_RE = re.compile(r"(\d{4})[\s\-./年]?(\d{1,2})?")
+_ONGOING_END_MARKERS = ("至今", "今", "现在", "present", "now", "current")
+
+
+def _year_month(value: Any, *, default_month: int) -> tuple[int, int] | None:
+    """把 “2023.07”/“2023-7”/“2023年7月”/“2023” 解析为 (年, 月)；解析不到返回 None。
+
+    只写年份时按 default_month 补齐：起始月补 1（年初）、结束月补 12（年末），
+    避免“只有年份”的旧资料被算成 0 个月。
+    """
+    text = str(value or "").strip()
+    match = _MONTH_RE.search(text)
+    if match is None:
+        return None
+    year = int(match.group(1))
+    month = int(match.group(2)) if match.group(2) else default_month
+    if month < 1 or month > 12:
+        month = default_month
+    return year, month
+
+
+def _month_index(year_month: tuple[int, int]) -> int:
+    """(年, 月) → 单调月序号，便于做差与合并。"""
+    year, month = year_month
+    return year * 12 + (month - 1)
+
+
+def _is_ongoing_end(value: Any) -> bool:
+    """进行中（至今/现在/present/缺失结束月）按当前月计算。"""
+    text = str(value or "").strip().lower()
+    if not text:
+        return True
+    return any(marker in text for marker in _ONGOING_END_MARKERS)
+
+
+def _experience_items(text: str) -> list[dict[str, Any]]:
+    """从资料 / 简历 JSON 里取经历条目；形状不对的一律跳过（估算不能因此报错）。"""
+    try:
+        data = json.loads(text)
+    except (json.JSONDecodeError, TypeError):
+        return []
+    if not isinstance(data, dict):
+        return []
+    candidates: list[Any] = list(data.get("experiences") or [])
+    content = data.get("content")
+    if isinstance(content, dict):
+        candidates.extend(content.get("experience") or [])
+    return [item for item in candidates if isinstance(item, dict)]
+
+
+def _merged_month_intervals(
+    profile_text: str, resume_text: str, *, now: date
+) -> list[tuple[int, int]]:
+    """去重 + 合并后的工作月区间 [start, end)。
+
+    口径与选择理由：
+    - 按 (年, 月) 计算，进行中（至今/缺结束）算到 now 所在月；同月内只有 1 个月；
+    - 同一段经历只算一次：资料与简历里同 company+role+起始月视为同一段（resume 优先）。
+      选 resume 优先是因为简历是用户挑选后要投出去的版本，资料里可能有更早/未整理的条目；
+    - 重叠区间合并：并行经历（兼职/顾问）不重复累计，避免把 1.5 年算成 2 年。
+    """
+    now_index = now.year * 12 + (now.month - 1)
+    seen: set[tuple[str, str, int]] = set()
+    intervals: list[tuple[int, int]] = []
+    for _source, text in (("resume", resume_text), ("profile", profile_text)):
+        for item in _experience_items(text):
+            start_ym = _year_month(item.get("start_date", ""), default_month=1)
+            if start_ym is None:
                 continue
-            start = _year(item.get("start_date", ""))
-            if start is None:
+            start_index = _month_index(start_ym)
+            if start_index > now_index:
+                continue  # 未来才入职的经历不计入当前年限
+            if _is_ongoing_end(item.get("end_date", "")):
+                end_index = now_index
+            else:
+                end_ym = _year_month(item.get("end_date", ""), default_month=12)
+                end_index = now_index if end_ym is None else _month_index(end_ym)
+            end_index = max(end_index, start_index)
+            months = max(1, end_index - start_index)  # 同月经历也算 1 个月
+            dedupe_key = (
+                _normalize(item.get("company", "")),
+                _normalize(item.get("role", "")),
+                start_index,
+            )
+            if dedupe_key in seen:
                 continue
-            entries.append((start, _year(item.get("end_date", ""))))
-    total = 0.0
-    for start, end in entries:
-        if end is not None and end > start:
-            total += end - start
+            seen.add(dedupe_key)
+            intervals.append((start_index, start_index + months))
+    merged: list[tuple[int, int]] = []
+    for start, end in sorted(intervals):
+        if merged and start <= merged[-1][1]:
+            merged[-1] = (merged[-1][0], max(merged[-1][1], end))
         else:
-            total += 0.5
-    return round(total, 1)
+            merged.append((start, end))
+    return merged
+
+
+def _estimate_years(profile_text: str, resume_text: str, *, now: date | None = None) -> float:
+    """估算工作年限：按年月计算、进行中算到今天、同一段经历去重、重叠区间合并。"""
+    today = now or date.today()
+    total_months = sum(
+        end - start for start, end in _merged_month_intervals(profile_text, resume_text, now=today)
+    )
+    if total_months <= 0:
+        return 0.0
+    return _round_half_up(total_months / 12, 1)
 
 
 def _project_tokens(resume_text: str) -> set[str]:
@@ -201,9 +282,11 @@ def _score_experience_years(
     job_payload: dict[str, Any],
     profile_text: str,
     resume_text: str,
+    *,
+    now: date | None = None,
 ) -> tuple[int, str]:
     required = _required_years(job_payload)
-    actual = _estimate_years(profile_text, resume_text)
+    actual = _estimate_years(profile_text, resume_text, now=now)
     if required is None:
         return _NEUTRAL_SCORE, "JD 未写明年限要求，无法比较"
     if actual <= 0:

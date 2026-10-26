@@ -108,8 +108,27 @@ def _navigate_error_text(result: Any) -> str:
     return str(result.get("errorText"))
 
 
+def _navigate_and_focus(client: Any, url: str) -> None:
+    """把已绑定的标签页导航到 url、检查导航错误、并带到前台。
+
+    CDP 的 Page.navigate 对 DNS 解析失败 / 连接被拒这类失败**不抛异常**，只在 result
+    里给 errorText；不读它就会把打不开的网页报成「已打开」（2026-10-26 实机）。CDP
+    异常与 errorText 统一收敛成可读的 BrowserError，调用方只需要处理"成功返回"。
+    """
+    try:
+        result = client.navigate(url)
+    except CdpError as exc:
+        raise BrowserError(OPEN_URL_FAILED) from exc
+    if _navigate_error_text(result):
+        raise BrowserError(OPEN_URL_FAILED)
+    try:
+        client.ensure_page_visible()
+    except CdpError as exc:
+        raise BrowserError(OPEN_URL_FAILED) from exc
+
+
 def open_url(db: Session, url: str) -> dict[str, Any]:
-    """打开网址但不覆盖现有标签页；相同 URL 直接复用。
+    """打开网址但不覆盖现有标签页；相同 URL 复用同一标签页并重新导航。
 
     这里必须把「检查 → 启动/复用 → 导航」串成一个临界区：前端快速连点时，
     两个请求若同时看到浏览器未启动，就会各自拉起一次或各自新建标签页。
@@ -119,6 +138,10 @@ def open_url(db: Session, url: str) -> dict[str, Any]:
     BrowserManager.start 里的 validated_browser_url，而「复用/新开标签页」这条路径
     以前既没校验也没看 errorText，于是端口 99999、不存在的域名都会被报成打开成功
     （2026-10-26 实机复现）。两条路径的失败语义必须一致。
+
+    **相同 URL 已存在时也要重新导航**：命中的标签页可能停在上一次失败的 Chrome 错误页
+    上，旧实现命中 existing 就直接 return，把"仍然打不开"假报成 200；重新 Page.navigate
+    并读 errorText 才能给出可读失败。复用语义不变——仍用同一个 target_id，不新增标签页。
     """
     wanted = str(url or "").strip()
     if not wanted:
@@ -145,10 +168,11 @@ def open_url(db: Session, url: str) -> dict[str, Any]:
             target_id = str(existing["id"])
             client = manager.client_for_target(target_id)
             try:
-                try:
-                    client.ensure_page_visible()
-                except CdpError as exc:
-                    raise BrowserError(OPEN_URL_FAILED) from exc
+                # 同 URL 复用同样要重新导航并检查 errorText：那个标签页可能停在上次
+                # 失败的 Chrome 错误页上，直接 return 会把"仍然打不开"假报成已打开
+                # （2026-10-26 实机）。重新导航还让用户再点一次就是重试，且**不新增
+                # 标签页**——同 URL 复用语义不变。
+                _navigate_and_focus(client, wanted)
             finally:
                 client.close()
             return {"target_id": target_id, "url": wanted}
@@ -172,19 +196,11 @@ def open_url(db: Session, url: str) -> dict[str, Any]:
                     target_id = client.new_tab("about:blank")
                 except CdpError as exc:
                     raise BrowserError(OPEN_URL_FAILED) from exc
-            try:
-                result = client.navigate(wanted)
-            except CdpError as exc:
-                raise BrowserError(OPEN_URL_FAILED) from exc
-            if _navigate_error_text(result):
-                raise BrowserError(OPEN_URL_FAILED)
-            try:
-                client.ensure_page_visible()
-            except CdpError as exc:
-                raise BrowserError(OPEN_URL_FAILED) from exc
+            _navigate_and_focus(client, wanted)
             return {"target_id": target_id, "url": wanted}
         finally:
             client.close()
+
 
 def stop_browser(db: Session) -> None:
     """只关闭本次后端进程实际拉起的网申浏览器。"""
@@ -210,7 +226,6 @@ def list_page_targets(db: Session) -> list[dict[str, Any]]:
         return get_browser_manager(db).list_page_targets()
     except CdpError as exc:
         raise BrowserError("无法读取网申浏览器的页面列表，请确认浏览器仍在运行") from exc
-
 
 
 def client_for_target(db: Session, target_id: str):

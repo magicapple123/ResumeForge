@@ -36,7 +36,7 @@ from app.services.resume.resume_labels import (
     SECTION_TITLES,
     section_titles,
 )
-from font_fixtures import build_test_font, write_font
+from font_fixtures import build_test_font, isolate_pdf_font_env, write_font
 from pypdf import PdfReader
 from test_pdf_exporter import _text_runs, needs_font
 
@@ -99,8 +99,13 @@ def _test_font_text() -> str:
 
 
 @pytest.fixture(autouse=True)
-def fixed_test_font():
-    """每个用例一份"现场合成、族名固定"的字体，并通过 format_config.font 选中它。"""
+def fixed_test_font(monkeypatch):
+    """每个用例一份"现场合成、族名固定"的字体，并通过 format_config.font 选中它。
+
+    先摘掉宿主的 RESUMEFORGE_PDF_FONT 兜底（CI 的 Linux 作业会设它）：环境变量优先于
+    所选字体，不隔离的话族名与字形覆盖都不是这份合成字体，几何断言会按宿主字体漂移。
+    """
+    isolate_pdf_font_env(monkeypatch)
     write_font(FONT_FILE, build_test_font(_test_font_text(), family=FONT_FAMILY))
     reset_font_cache()
     yield

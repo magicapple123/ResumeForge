@@ -11,6 +11,9 @@ CHECKS = [
     "/api/health",
     "/api/profile",
     "/api/profile/photos",
+    # F1 新资料模型（组/当前组/条目/自建字段）：演示数据必须让这些页面有内容可读。
+    "/api/profile/workspace",
+    "/api/profile/groups",
     "/api/jobs?page=1&page_size=10",
     "/api/jobs/1",
     "/api/jobs/1/match-analysis",

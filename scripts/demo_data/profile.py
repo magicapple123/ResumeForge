@@ -169,3 +169,95 @@ def seed() -> None:
             row(profile_id=1, name="校级优秀学生干部", date="2021.05", description=""),
         ],
     )
+
+    # 旧六表写完后，把同一份虚构资料再写进 F1 新模型（组/工作区/条目/自建字段）。
+    _seed_new_profile_model()
+
+
+def _legacy_rows(table: str) -> list[dict]:
+    """读回刚写入的旧六表数据：新旧两份数据必须同源，避免两处各写一份会漂移的文案。"""
+    from sqlalchemy import select
+
+    from demo_data.base import T, engine
+
+    with engine.connect() as conn:
+        return [dict(item) for item in conn.execute(select(T[table])).mappings().all()]
+
+
+def _allowed(model: type, payload: dict) -> dict:
+    """只保留目标 Pydantic 模型认识的字段（旧表列比新模型字段多，例如 project.highlights）。"""
+    return {key: value for key, value in payload.items() if key in model.model_fields}
+
+
+def _seed_new_profile_model() -> None:
+    """把演示人物写进 R-46 之后的新资料模型，让资料页/AI 生成能读到同一份虚构资料。
+
+    为什么两套都要写：新资料模型**按产品决定不读旧六表**（R-46），而演示数据是 README
+    截图与 AI 功能验收的唯一数据源。旧六表保留用于兼容旧接口/对照；新模型（profile_group /
+    profile_group_member / profile_workspace_state / profile_entry / 自建字段定义）保证
+    「打开资料页」「直接生成简历」看到的是同一个张示例，而不是空资料。
+
+    为什么走服务层而不是手写 SQL：默认组 bootstrap、单例分区、字段快照、自建字段上限都在
+    services/profile 里，seed 再写一份 SQL 必然与线上语义漂移。
+    """
+    from app.database import SessionLocal
+    from app.schemas.profile import (
+        AwardIn,
+        EducationIn,
+        ExperienceIn,
+        ProfileUpdate,
+        ProjectIn,
+        SkillIn,
+    )
+    from app.services.profile import definition_store, entry_store
+    from app.services.profile.profile_service import update_profile
+
+    profile_row = _legacy_rows("user_profile")[0]
+    project_rows = _legacy_rows("project")
+    projects = []
+    for item in project_rows:
+        payload = _allowed(ProjectIn, item)
+        # 旧表的 highlights 是独立一列，新模型只有 description：合并进描述，避免内容丢失。
+        highlights = str(item.get("highlights") or "").strip()
+        if highlights:
+            payload["description"] = (
+                str(payload.get("description") or "").rstrip() + "\n" + highlights
+            ).strip()
+        projects.append(ProjectIn(**payload))
+
+    payload = ProfileUpdate(
+        name=profile_row.get("name") or "",
+        gender=profile_row.get("gender") or "",
+        birth_year=profile_row.get("birth_year") or "",
+        phone=profile_row.get("phone") or "",
+        email=profile_row.get("email") or "",
+        city=profile_row.get("city") or "",
+        target_city=profile_row.get("target_city") or "",
+        job_intent=profile_row.get("job_intent") or "",
+        personal_website=profile_row.get("personal_website") or "",
+        github=profile_row.get("github") or "",
+        summary=profile_row.get("summary") or "",
+        section_order=list(profile_row.get("section_order") or []),
+        educations=[
+            EducationIn(**_allowed(EducationIn, item)) for item in _legacy_rows("education")
+        ],
+        experiences=[
+            ExperienceIn(**_allowed(ExperienceIn, item)) for item in _legacy_rows("experience")
+        ],
+        campus_experiences=[],
+        projects=projects,
+        skills=[SkillIn(**_allowed(SkillIn, item)) for item in _legacy_rows("skill")],
+        awards=[AwardIn(**_allowed(AwardIn, item)) for item in _legacy_rows("award")],
+    )
+
+    with SessionLocal() as db:
+        update_profile(db, payload)
+        # 自建大字段 + 自定义小字段 + 一条条目：覆盖 F1 的 profile_definition 链路，
+        # 让「资料页截图」能看到自建分区，也让自检接口真的读到自建定义。
+        section = definition_store.create_custom_section(db, "证书与作品")
+        field_row = definition_store.create_custom_field(db, section.key, "作品链接", "single_line")
+        entry_store.upsert_entry(
+            db,
+            section.key,
+            values={field_row.field_id: "https://example.com/zhang-portfolio"},
+        )

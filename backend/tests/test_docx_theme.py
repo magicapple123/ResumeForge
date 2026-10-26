@@ -28,7 +28,7 @@ from app.services.pdf_exporter.layout import _PX_TO_MM as _PX_TO_MM_LAYOUT
 from app.services.resume.resume_templates import FONT_SCALES
 from docx import Document
 from docx.shared import RGBColor
-from font_fixtures import build_test_font, write_font
+from font_fixtures import build_test_font, isolate_pdf_font_env, write_font
 
 FONT_FILE = "TestSans.ttf"
 FONT_FAMILY = "Test Sans"
@@ -36,7 +36,9 @@ MM_TO_TWIPS = 1440 / 25.4
 
 
 @pytest.fixture(autouse=True)
-def fixed_font():
+def fixed_font(monkeypatch):
+    """合成字体就是这份简历选的字体：先摘掉宿主的 RESUMEFORGE_PDF_FONT 兜底。"""
+    isolate_pdf_font_env(monkeypatch)
     write_font(FONT_FILE, build_test_font())
     reset_font_cache()
     yield
