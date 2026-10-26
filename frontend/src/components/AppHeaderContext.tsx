@@ -216,7 +216,9 @@ export default function AppHeaderContext({ beforeAvatar }: Props = {}) {
           {item.is_active ? `${item.name}（当前）` : item.name}
           {item.source === "sample" && (
             <Tooltip title="体验数据，与你的真实资料相互独立">
-              <span className="app-dataset-sample-tag" aria-hidden="true">示例</span>
+              <span className="app-dataset-sample-tag" aria-hidden="true">
+                示例
+              </span>
             </Tooltip>
           )}
         </span>
