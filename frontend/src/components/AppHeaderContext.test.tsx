@@ -78,7 +78,7 @@ describe("AppHeaderContext", () => {
     stylesheet.textContent = baseStyles;
     container.appendChild(stylesheet);
 
-    fireEvent.click(await screen.findByRole("button", { name: "当前数据集：体验示例（示例数据）" }));
+    fireEvent.click(await screen.findByRole("button", { name: "当前数据集：体验示例，示例数据" }));
     const badges = await screen.findAllByText("示例");
     expect(badges).toHaveLength(2);
 
@@ -271,7 +271,7 @@ describe("AppHeaderContext", () => {
     await waitFor(() => expect(screen.getAllByText("示例").length).toBeGreaterThan(0));
 
     // 打开下拉：示例条目带徽标，「回到我的数据」在列。
-    fireEvent.click(screen.getByRole("button", { name: "当前数据集：体验示例（示例数据）" }));
+    fireEvent.click(screen.getByRole("button", { name: "当前数据集：体验示例，示例数据" }));
     expect(await screen.findByText("回到我的数据")).toBeInTheDocument();
 
     // 点击它走既有切换流程，目标是主数据。
