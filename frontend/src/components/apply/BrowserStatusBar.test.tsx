@@ -164,7 +164,7 @@ describe("BrowserStatusBar", () => {
     apiState.data = RUNNING_WITH_ENTRY;
     renderBar();
 
-    fireEvent.click(screen.getByRole("button", { name: "刷新浏览器状态" }));
+    fireEvent.click(screen.getByRole("button", { name: "刷新状态" }));
 
     expect(apiState.reload).toHaveBeenCalledTimes(1);
   });

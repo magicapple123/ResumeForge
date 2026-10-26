@@ -199,7 +199,7 @@ describe("WebFormPage", () => {
     renderPage();
     await waitFor(() => expect(apiMocks.getWebFormBrowserStatus).toHaveBeenCalled());
 
-    fireEvent.click(screen.getByRole("button", { name: "刷新浏览器状态" }));
+    fireEvent.click(screen.getByRole("button", { name: "刷新状态" }));
 
     await waitFor(() =>
       expect(screen.getByRole("button", { name: "开启专用浏览器" })).toBeInTheDocument(),

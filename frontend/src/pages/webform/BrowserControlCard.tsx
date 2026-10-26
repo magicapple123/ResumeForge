@@ -125,7 +125,7 @@ export const BrowserControlCard = memo(function BrowserControlCard({
               loading={busy === "refresh"}
               disabled={anyBusy}
               onClick={() => void onRefreshStatus()}
-              aria-label="刷新浏览器状态"
+              aria-label="刷新状态"
             >
               刷新状态
             </Button>

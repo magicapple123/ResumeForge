@@ -40,6 +40,9 @@ export const LiveModeCard = memo(function LiveModeCard({
       title="智能逐项填表"
       extra={
         <Button
+          // 中文两字按钮默认会被 antd 插成「开 启」，与 aria-label 的连续文案不一致，
+          // 触发 axe label-content-name-mismatch（WCAG 2.5.3）。关掉自动空格。
+          autoInsertSpace={false}
           aria-label={liveEnabled ? "关闭智能逐项填表" : "开启智能逐项填表"}
           type={liveEnabled ? "default" : "primary"}
           loading={busy === "live"}

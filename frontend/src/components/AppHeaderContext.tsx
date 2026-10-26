@@ -296,7 +296,7 @@ export default function AppHeaderContext({ beforeAvatar }: Props = {}) {
                 ref={datasetChipRef}
                 type="button"
                 className="app-dataset-chip"
-                aria-label={`当前数据集：${dataset.name}`}
+                aria-label={`当前数据集：${dataset.name}${isSampleActive ? "（示例数据）" : ""}`}
                 aria-haspopup="menu"
               >
                 <DatabaseOutlined />

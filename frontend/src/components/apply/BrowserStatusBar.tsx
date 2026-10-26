@@ -134,7 +134,7 @@ export default function BrowserStatusBar() {
               icon={<ReloadOutlined />}
               disabled={busy}
               onClick={() => void reload()}
-              aria-label="刷新浏览器状态"
+              aria-label="刷新状态"
             >
               刷新状态
             </Button>
