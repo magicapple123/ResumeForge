@@ -28,6 +28,7 @@ import {
 } from "antd";
 import type { TableColumnsType } from "antd";
 import { bt } from "../../../features/resume-bilingual/i18n";
+import { useLocale } from "../../../i18n/i18nContext";
 import {
   GLOSSARY_CATEGORIES,
   type GlossaryCategory,
@@ -47,12 +48,12 @@ function categoryLabel(category: GlossaryCategory): string {
   return bt(("bilingual.glossary.category." + category) as Parameters<typeof bt>[0]);
 }
 
-const CATEGORY_OPTIONS = GLOSSARY_CATEGORIES.map((category) => ({
-  value: category,
-  label: categoryLabel(category),
-}));
-
 export default function GlossaryTable({ terms, onSaveTerm, onDeleteTerm, saving = false }: Props) {
+  useLocale();
+  const categoryOptions = GLOSSARY_CATEGORIES.map((category) => ({
+    value: category,
+    label: categoryLabel(category),
+  }));
   const readOnly = !onSaveTerm;
   const [form] = Form.useForm<{
     source_term: string;
@@ -175,7 +176,7 @@ export default function GlossaryTable({ terms, onSaveTerm, onDeleteTerm, saving 
                 label={bt("bilingual.glossary.category")}
                 initialValue="term"
               >
-                <Select options={CATEGORY_OPTIONS} aria-label={bt("bilingual.glossary.category")} />
+                <Select options={categoryOptions} aria-label={bt("bilingual.glossary.category")} />
               </Form.Item>
             </Col>
             <Col xs={12} md={3}>

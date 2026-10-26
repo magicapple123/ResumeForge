@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import { Button, Input, Space, Tag, Typography } from "antd";
+import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 
 interface Props {
   editing: boolean;
@@ -21,6 +23,7 @@ export default function WebFormProfileToolbar({
   onSearchChange,
   onToggleShowOnlyFilled,
 }: Props) {
+  useLocale();
   return (
     <div
       style={{
@@ -38,10 +41,10 @@ export default function WebFormProfileToolbar({
     >
       <Space size="small" wrap>
         <Tag color={filledCount ? "blue" : "default"}>
-          已填写 {filledCount} / {totalCount}
+          {t("profileLibrary.webform.filledCount", { count: filledCount, total: totalCount })}
         </Tag>
         <Typography.Text type="secondary">
-          {editing ? "可直接编辑，保存全部资料时一起保存" : "只显示已经填写的资料"}
+          {t(editing ? "profileLibrary.webform.editingHint" : "profileLibrary.webform.viewingHint")}
         </Typography.Text>
       </Space>
       <Space size="small" wrap>
@@ -49,8 +52,8 @@ export default function WebFormProfileToolbar({
           allowClear
           value={searchTerm}
           onChange={(event) => onSearchChange(event.target.value)}
-          placeholder="搜索字段名或内容"
-          aria-label="搜索网申资料"
+          placeholder={t("profileLibrary.webform.toolbarSearchPlaceholder")}
+          aria-label={t("profileLibrary.webform.toolbarSearchLabel")}
           style={{ width: 220 }}
         />
         {editing ? (
@@ -59,7 +62,11 @@ export default function WebFormProfileToolbar({
             type={showOnlyFilled ? "primary" : "default"}
             onClick={onToggleShowOnlyFilled}
           >
-            {showOnlyFilled ? "显示全部字段" : "只看已填写"}
+            {t(
+              showOnlyFilled
+                ? "profileLibrary.webform.showAllFields"
+                : "profileLibrary.webform.showFilledFields",
+            )}
           </Button>
         ) : null}
         {/* 「粘贴文本识别」已移到页头（与简历资料侧同一个位置，切换分页即换目标），

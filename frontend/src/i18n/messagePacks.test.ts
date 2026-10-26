@@ -5,6 +5,11 @@ import zhCN from "./messages/zh-CN";
 import { EQUALITY_EXEMPT_KEYS } from "./guards/equalityExemptions";
 import { validateMessageContract } from "./guards/messageContract";
 
+const namespacePacks = import.meta.glob<Record<string, string>>("./messages/zh-CN.*.ts", {
+  eager: true,
+  import: "default",
+});
+
 describe("complete real language packs", () => {
   it("has exactly the same complete key set in both languages", () => {
     const chineseKeys = Object.keys(zhCN).sort();
@@ -52,5 +57,17 @@ describe("complete real language packs", () => {
     expect(validateMessageContract(zhCN, { ...enUS, [key]: changed })).toContainEqual(
       expect.objectContaining({ code: "placeholder-mismatch", key }),
     );
+  });
+
+  it("does not define a key in more than one Chinese namespace", () => {
+    const owners = new Map<string, string>();
+    const duplicateKeys = Object.entries(namespacePacks)
+      .filter(([path]) => !path.endsWith(".namespaces.ts"))
+      .flatMap(([path, pack]) => {
+        const duplicates = Object.keys(pack).filter((key) => owners.has(key));
+        for (const key of Object.keys(pack)) owners.set(key, path);
+        return duplicates;
+      });
+    expect(duplicateKeys).toEqual([]);
   });
 });

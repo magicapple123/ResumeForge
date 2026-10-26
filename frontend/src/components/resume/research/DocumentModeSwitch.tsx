@@ -25,6 +25,7 @@ import {
   normalizeDocumentMode,
   type DocumentMode,
 } from "../../../features/resume-research/documentMode";
+import { useLocale } from "../../../i18n/i18nContext";
 
 interface Props {
   /** 当前模式（后端 `document_mode`，未知/缺省按普通简历）。 */
@@ -54,6 +55,7 @@ export default function DocumentModeSwitch({
   defaultLongCvPageLimit,
   pagesNeeded,
 }: Props) {
+  useLocale();
   const [notice, setNotice] = useState<"clamped" | null>(null);
   const current = normalizeDocumentMode(mode);
   const readOnly = !onChange;

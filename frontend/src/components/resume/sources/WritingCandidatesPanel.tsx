@@ -21,6 +21,7 @@ import {
   type CandidateMode,
   type WritingCandidateState,
 } from "../../../features/resume-provenance/types";
+import { useLocale } from "../../../i18n/i18nContext";
 
 interface Props {
   /** 三条候选的状态（由宿主 hook 维护）。 */
@@ -60,6 +61,7 @@ export default function WritingCandidatesPanel({
   conflictCode = null,
   disabledReason = null,
 }: Props) {
+  useLocale();
   const anyContent = states.some((state) => state.status !== "idle");
   return (
     <div data-writing-candidates="1">

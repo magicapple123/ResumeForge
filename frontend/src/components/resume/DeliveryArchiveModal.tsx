@@ -2,6 +2,7 @@
 import { Alert, App, Button, Input, Modal, Select, Space, Table, Tag } from "antd";
 import { useState } from "react";
 import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 import { downloadDelivery, listDeliveryArchive } from "../../api/resumes";
 import { useApi } from "../../hooks/useApi";
 import type { DeliverySummary } from "../../types";
@@ -35,6 +36,7 @@ export default function DeliveryArchiveModal({
   resumeOptions,
   archiveApi,
 }: Props) {
+  useLocale();
   const { message } = App.useApp();
   // 宿主给的初始简历（如深链 ?resume_id=）；用户可在弹层里改选。换 prop 时同步。
   const [selectedResumeId, setSelectedResumeId] = useState<number | null>(resumeId ?? null);

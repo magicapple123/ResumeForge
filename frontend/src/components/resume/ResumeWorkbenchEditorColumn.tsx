@@ -47,6 +47,7 @@ import ResumeEditorPanel from "../resume-editor/ResumeEditorPanel";
 import { useResumeEditorPanel } from "../resume-editor/useResumeEditorPanel";
 import InlineMarkButtons from "./typography/InlineMarkButtons";
 import { useWorkbenchInlineMarks } from "./useWorkbenchInlineMarks";
+import { useLocale } from "../../i18n/i18nContext";
 
 /**
  * 中栏交给宿主的两个出口（2026-11：整屏顶部动作条的「保存修改 / 取消修改」要用）。
@@ -185,6 +186,7 @@ export default function ResumeWorkbenchEditorColumn({
   closeConfirmBody,
   draftStore,
 }: Props) {
+  useLocale();
   /**
    * 两个草稿回调必须是**稳定引用**。
    *

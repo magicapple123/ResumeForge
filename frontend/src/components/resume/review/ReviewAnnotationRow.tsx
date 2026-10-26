@@ -17,6 +17,7 @@ import { Button, Select, Space, Tag } from "antd";
 import { t } from "../../../i18n";
 import type { ReviewAnnotationRecord, ReviewResolution } from "../../../features/resume-review";
 import { STATUS_LABEL_KEY } from "./reviewLabels";
+import { useLocale } from "../../../i18n/i18nContext";
 
 export interface ReattachOption {
   value: string;
@@ -65,6 +66,7 @@ export default function ReviewAnnotationRow({
   onCancelReattach,
   onPickReattach,
 }: ReviewAnnotationRowProps) {
+  useLocale();
   const status = annotation.status;
   const canLocate = Boolean(resolution.path && onLocate);
   return (

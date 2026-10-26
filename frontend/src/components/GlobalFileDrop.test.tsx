@@ -113,6 +113,7 @@ describe("GlobalFileDrop", () => {
     expect(apiMocks.createManualResume).toHaveBeenCalledWith({
       title: "张三-后端",
       content: { name: "张三", summary: "关注后端。" },
+      language: "zh-CN",
     });
   });
 

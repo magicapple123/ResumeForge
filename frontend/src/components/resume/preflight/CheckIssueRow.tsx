@@ -9,6 +9,7 @@
 import { Button, Tag, Typography } from "antd";
 import type { MessageKey } from "../../../i18n";
 import { t } from "../../../i18n";
+import { useLocale } from "../../../i18n/i18nContext";
 import {
   fixLabelKey,
   issueTitleKey,
@@ -34,12 +35,12 @@ const SEVERITY_COLOR: Record<CheckSeverity, string> = {
 };
 
 /**
- * 问题标题：后端 `title_key` 的词条表由 W11-BE 与前端约定，落地前先用 `detail` 的
- * 第一句（已本地化）兜底；两者都空时给一句"待处理问题"。绝不显示空标题。
+ * The title key is stable protocol identity. Unknown keys use detail's first sentence;
+ * display text never controls whether detail is shown.
  */
 function issueTitle(issue: CheckIssue): string {
-  const key = issueTitleKey(issue.code);
-  if (key) return t(key);
+  const titleKey = issueTitleKey(issue.code);
+  if (titleKey) return t(titleKey);
   // 未知机器码：退回已本地化的 detail 首句；都没有才用兜底标题（不显示 code 当文案）。
   const detail = issue.detail.trim();
   if (detail) {
@@ -59,13 +60,18 @@ interface Props {
 }
 
 export default function CheckIssueRow({ issue, onFix, availableFixActions }: Props) {
+  useLocale();
+  const stableTitleKey = issueTitleKey(issue.code);
   const title = issueTitle(issue);
   const location = locatorSummary(issue);
   const fix = issue.fix;
   const fixAvailable = Boolean(
     fix && onFix && (!availableFixActions || availableFixActions.has(fix.action)),
   );
-  const detailLines = issue.detail.trim() && issue.detail.trim() !== title ? issue.detail : "";
+  const rawDetail = issue.detail.trim();
+  const fallbackTitle = stableTitleKey ? "" : rawDetail.split(/[\u3002\uff1b\n]/)[0]?.trim();
+  const detailLines =
+    rawDetail && (stableTitleKey !== null || rawDetail !== fallbackTitle) ? issue.detail : "";
   return (
     <li
       style={{

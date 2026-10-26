@@ -13,6 +13,7 @@
 import { CopyOutlined, LockOutlined } from "@ant-design/icons";
 import { Button, Switch, Tooltip } from "antd";
 import { t } from "../../../i18n";
+import { useLocale } from "../../../i18n/i18nContext";
 import { canCloneEntry } from "../../../features/resume-outline/commands";
 import type { OutlineEntry, OutlinePoint } from "../../../features/resume-outline/model";
 import type { OutlineSelection } from "../../../features/resume-outline/types";
@@ -34,6 +35,7 @@ function entryName(entry: OutlineEntry | null): string {
 }
 
 function Badges({ entry }: { entry: OutlineEntry }) {
+  useLocale();
   return (
     <span className="resume-outline-inspector-badges">
       {entry.hidden ? (
@@ -59,6 +61,7 @@ export default function OutlineInspector({
   onSetLock,
   onClone,
 }: OutlineInspectorProps) {
+  useLocale();
   // 禁用语义只传 true/undefined（显式 false 会短路 ConfigProvider 的 componentDisabled）。
   const disabled = readOnly || undefined;
   return (

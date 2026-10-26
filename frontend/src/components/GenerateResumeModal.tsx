@@ -17,6 +17,8 @@ import {
 } from "../api/resumes";
 import { getLLMConfig } from "../api/settings";
 import { useGenerationExtras } from "../features/career-scenarios/useGenerationExtras";
+import { newResumeLayout, withCreationLanguage } from "../features/resume-document/newResumeLayout";
+import { useLocale } from "../i18n/i18nContext";
 import { formatErrorGuidance } from "../api/errorGuidance";
 import type {
   EnhancementLevel,
@@ -49,6 +51,7 @@ interface Props {
 }
 
 export default function GenerateResumeModal({ job, open, initialTitle = "", onClose }: Props) {
+  useLocale();
   const { message, notification } = App.useApp();
   const navigate = useNavigate();
 
@@ -57,12 +60,7 @@ export default function GenerateResumeModal({ job, open, initialTitle = "", onCl
   const [enhance, setEnhance] = useState(false);
   const [enhancementLevel, setEnhancementLevel] = useState<EnhancementLevel>("balanced");
   // 默认 1 页 A4 + 标准字号：绝大多数简历就该是一页。
-  const [layout, setLayout] = useState<ResumeLayout>({
-    template: "classic",
-    format_name: "",
-    page_limit: 1,
-    font_scale: "standard",
-  });
+  const [layout, setLayout] = useState<ResumeLayout>(newResumeLayout);
   const [customInstruction, setCustomInstruction] = useState("");
   // 文档模式 / 本次生成场景（契约 §5、§2.5）：默认都不发送，关闭弹窗时复位。
   const generation = useGenerationExtras();
@@ -137,6 +135,7 @@ export default function GenerateResumeModal({ job, open, initialTitle = "", onCl
     prevTitleSync.open !== open ||
     prevTitleSync.initialTitle !== initialTitle
   ) {
+    if (open && !prevTitleSync?.open && !generatingInBackground) setLayout(withCreationLanguage);
     setPrevTitleSync({ open, initialTitle });
     if (open) setTitle(initialTitle);
   }
@@ -243,6 +242,7 @@ export default function GenerateResumeModal({ job, open, initialTitle = "", onCl
           enhancement_level: enhancementLevel,
           page_limit: layout.page_limit,
           font_scale: layout.font_scale,
+          language: layout.language,
           template: layout.template,
           format_name: layout.format_name,
           // 生成时定下的版式覆盖必须跟着请求走：不然用户在配置页调的顺序 / 字号

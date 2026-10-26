@@ -32,6 +32,7 @@ from ...services.llm import create_provider
 from ...services.llm.base import LLMError
 from ...services.settings_service import get_llm_config
 from ...services.text_extraction import ai_failed_warning, llm_is_configured, no_model_warning
+from ...services.webform.field_types import normalize_group_id, normalize_grouped_payload
 
 router = APIRouter(prefix="/api/webform", tags=["webform"])
 
@@ -44,7 +45,7 @@ logger = logging.getLogger(__name__)
 @router.get("/fields", response_model=WebFormFieldsOut)
 def list_fields():
     """网申字段目录。界面由它驱动渲染——加字段只改后端常量表，不用动前端。"""
-    return webform_service.list_fields()
+    return normalize_grouped_payload(webform_service.list_fields())
 
 
 # ===== 「网申资料」=====
@@ -59,12 +60,12 @@ def list_fields():
 @router.get("/extra-profile", response_model=WebFormExtraProfileOut)
 def read_extra_profile(db: Session = Depends(get_db)):
     """字段清单 + 已填的值 + 每条的来源与档位（清单由后端下发，前端不写死字段名）。"""
-    return {
+    return normalize_grouped_payload({
         **webform_service.list_extra_fields(db),
         "values": webform_service.extra_profile.list_entries(db),
         "details": webform_service.extra_profile.list_details(db),
         "repeated_groups": webform_service.repeated_profile.list_groups(db),
-    }
+    })
 
 
 @router.put("/extra-profile", response_model=WebFormExtraProfileOut)
@@ -96,18 +97,23 @@ def write_extra_profile(payload: WebFormExtraProfileIn, db: Session = Depends(ge
     except Exception:
         db.rollback()
         raise
-    return {
+    return normalize_grouped_payload({
         **webform_service.list_extra_fields(db),
         "values": webform_service.extra_profile.list_entries(db),
         "details": webform_service.extra_profile.list_details(db),
         "repeated_groups": webform_service.repeated_profile.list_groups(db),
-    }
+    })
 
 
 @router.get("/memory-targets", response_model=WebFormMemoryTargetsOut)
 def list_memory_targets(db: Session = Depends(get_db)):
     """返回「记住这条」可以写入的目标。**只有「网申资料」**（理由见 profile_targets）。"""
-    return {"targets": webform_service.profile_targets.build_memory_targets(db)}
+    return {
+        "targets": [
+            {**target, "group": normalize_group_id(str(target.get("group") or ""))}
+            for target in webform_service.profile_targets.build_memory_targets(db)
+        ]
+    }
 
 
 # ===== 「网申资料」粘贴识别（项 12 / D20 / D21 / D22 / D32）=====

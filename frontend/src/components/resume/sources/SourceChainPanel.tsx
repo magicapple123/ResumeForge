@@ -23,6 +23,7 @@ import type {
   SourceChainOut,
   SourceOut,
 } from "../../../features/resume-provenance/types";
+import { useLocale } from "../../../i18n/i18nContext";
 
 interface Props {
   /** 选中对象对应的目标块（可能多个：条目与其字段）。 */
@@ -57,6 +58,7 @@ function SourceRow({
   onRelink?: (link: BlockLinkOut) => void;
   onUnlink?: (link: BlockLinkOut) => void;
 }) {
+  useLocale();
   const link = source.blocks[0] ?? null;
   const stale = link?.status === "stale";
   return (
@@ -120,6 +122,7 @@ export default function SourceChainPanel({
   onUnlink,
   onLink,
 }: Props) {
+  useLocale();
   if (error) {
     return <ErrorState description={error} onRetry={onRetry} />;
   }

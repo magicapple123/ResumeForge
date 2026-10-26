@@ -17,6 +17,7 @@ import {
 import { Button, Typography } from "antd";
 import type { ReactNode } from "react";
 import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 import type { ProfileWorkspaceKey } from "./ProfileWorkspaceTabs";
 
 interface Props {
@@ -55,6 +56,7 @@ export default function ProfilePageHeader({
   onStartEditing,
   onOpenGuide,
 }: Props) {
+  useLocale();
   return (
     <div className="profile-page-header">
       <div>

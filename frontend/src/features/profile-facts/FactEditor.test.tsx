@@ -4,9 +4,11 @@
  * 自定义字段按 schema 渲染并保存值快照（含已删定义的旧值保留）。
  */
 import { App as AntdApp } from "antd";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { t } from "../../i18n";
+import { selectLocale } from "../../i18n/localeStore";
+import I18nProvider from "../../i18n/I18nProvider";
 import { FACT_SAVE_LABEL_KEYS } from "./constants";
 import FactEditor from "./editors/FactEditor";
 import { CUSTOM_FIELD_DEF, PUBLICATION_FACT, makeSchemaMap } from "./testFixtures";
@@ -30,7 +32,9 @@ function renderEditor(overrides: Partial<React.ComponentProps<typeof FactEditor>
   };
   render(
     <AntdApp>
-      <FactEditor {...props} />
+      <I18nProvider>
+        <FactEditor {...props} />
+      </I18nProvider>
     </AntdApp>,
   );
   return { onSave };
@@ -183,5 +187,17 @@ describe("新建时切换类型", () => {
     fireEvent.mouseDown(screen.getByLabelText(t("profileFacts.editor.kind")));
     fireEvent.click(await screen.findByText(t("profileFacts.kind.language")));
     expect(await screen.findByLabelText(t("profileFacts.language.level"))).toBeInTheDocument();
+  });
+
+  it("keeps the kind selector labels current when the locale changes", async () => {
+    renderEditor({ initialKind: "award" });
+    const kindSelect = screen.getByLabelText(t("profileFacts.editor.kind"));
+    fireEvent.mouseDown(kindSelect);
+    expect(await screen.findByText(t("profileFacts.kind.publication"))).toBeInTheDocument();
+
+    act(() => selectLocale("en-US"));
+
+    expect(screen.getByRole("button", { name: t(FACT_SAVE_LABEL_KEYS.award) })).toBeInTheDocument();
+    expect(await screen.findByText(t("profileFacts.kind.publication"))).toBeInTheDocument();
   });
 });

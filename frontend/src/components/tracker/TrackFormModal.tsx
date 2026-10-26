@@ -11,6 +11,7 @@ import FormModal from "../common/FormModal";
 import { useFormDraft } from "../../hooks/useFormDraft";
 import { useToast } from "../../hooks/useToast";
 import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 import dayjs from "dayjs";
 import type { Dayjs } from "dayjs";
 import { useEffect, useState } from "react";
@@ -111,6 +112,7 @@ interface Props {
 }
 
 export default function TrackFormModal({ open, track, onClose, onSaved }: Props) {
+  useLocale();
   const { message } = App.useApp();
   const [form] = Form.useForm<FormValues>();
   // 岗位 / 简历下拉改为远程搜索（P0-1）：不再由页面预拉"前 100 条"当全量，

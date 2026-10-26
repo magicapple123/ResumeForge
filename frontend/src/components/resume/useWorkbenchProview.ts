@@ -22,6 +22,7 @@ import { formatShortcut } from "../../features/shortcuts/matchShortcut";
 import { useShortcutSettings } from "../../features/shortcuts/useShortcutKeymap";
 import { shortcutKeysOf } from "../../features/shortcuts/storage";
 import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 
 interface Options {
   resumeId?: number;
@@ -53,10 +54,13 @@ export function useWorkbenchProview({
   layout,
   onApplyLayout,
 }: Options): WorkbenchProview {
+  const locale = useLocale();
   const { preset, panels, setPreset, reset } = useWorkspacePreset();
   const settings = useShortcutSettings();
 
   const commands = useMemo<ProviewCommand[]>(() => {
+    // Command labels are translated inside this memo.
+    void locale;
     const list: ProviewCommand[] = [
       {
         id: "save",
@@ -76,7 +80,7 @@ export function useWorkbenchProview({
       });
     }
     return list;
-  }, [onExport, save, settings]);
+  }, [locale, onExport, save, settings]);
 
   const photo = useMemo<ProviewShellConfig["photo"]>(() => {
     if (!content?.photo) return undefined;

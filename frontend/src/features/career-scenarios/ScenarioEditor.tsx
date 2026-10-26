@@ -15,6 +15,7 @@ import { fetchResumeTemplates } from "../../api/resumes";
 import FormModal from "../../components/common/FormModal";
 import { useApi } from "../../hooks/useApi";
 import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 import {
   createCareerScenario,
   isCareerScenarioRevisionConflict,
@@ -48,6 +49,7 @@ export default function ScenarioEditor({
   onClose,
   onSaved,
 }: Props) {
+  useLocale();
   const { message } = App.useApp();
   const { catalog, error: catalogError } = useScenarioCatalog(open);
   // 偏好栏目的可选项来自简历模板目录：只在编辑器打开时取一次（不增加常驻请求）。

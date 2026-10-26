@@ -10,6 +10,7 @@ import { useCallback, useEffect, useState } from "react";
 import ErrorState from "../../common/ErrorState";
 import LoadingBlock from "../../common/LoadingBlock";
 import { bt } from "../../../features/resume-bilingual/i18n";
+import { useLocale } from "../../../i18n/i18nContext";
 import {
   fetchVariantExportInput,
   patchVariantLayout,
@@ -33,6 +34,7 @@ interface Props {
 }
 
 export default function VariantLayoutSection({ resumeId, variant, onChanged }: Props) {
+  useLocale();
   const { message } = App.useApp();
   const [input, setInput] = useState<VariantExportInputOut | null>(null);
   const [fields, setFields] = useState<VariantLayoutFields>(() =>

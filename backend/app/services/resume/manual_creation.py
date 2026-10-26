@@ -90,6 +90,7 @@ def create_manual_resume_record(db: Session, payload: ManualResumeRequest) -> Re
         parse_error="",
         format_config=format_config,
         draft=payload.draft,
+        language=payload.language,
     )
     db.add(record)
     db.flush()  # 先拿到 record.id，快照行的 resume_id 才能在同一事务里回写

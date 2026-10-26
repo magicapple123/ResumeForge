@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { t } from "../../i18n";
+import I18nProvider from "../../i18n/I18nProvider";
+import { selectLocale } from "../../i18n/localeStore";
 import type { WebFormExtraProfile } from "../../types";
 import WebFormProfileSection from "./WebFormProfileSection";
 
@@ -15,6 +18,7 @@ vi.mock("../../api/webform", () => ({
 afterEach(() => {
   cleanup();
   document.body.innerHTML = "";
+  selectLocale("zh-CN");
 });
 
 const PROFILE: WebFormExtraProfile = {
@@ -49,19 +53,22 @@ beforeEach(() => {
 
 function renderSection(props: Partial<React.ComponentProps<typeof WebFormProfileSection>> = {}) {
   return render(
-    <WebFormProfileSection
-      editing
-      saving={false}
-      values={PROFILE.values}
-      details={{}}
-      onChange={vi.fn()}
-      onFieldLabelChange={vi.fn()}
-      onFieldDelete={vi.fn()}
-      repeatedGroups={[]}
-      onRepeatedGroupsChange={vi.fn()}
-      onLoaded={vi.fn()}
-      {...props}
-    />,
+    <I18nProvider>
+      <WebFormProfileSection
+        editing
+        saving={false}
+        values={PROFILE.values}
+        details={{}}
+        onChange={vi.fn()}
+        onFieldLabelChange={vi.fn()}
+        onFieldDelete={vi.fn()}
+        repeatedGroups={[]}
+        onRepeatedGroupsChange={vi.fn()}
+        onLoaded={vi.fn()}
+        onRequestEdit={vi.fn()}
+        {...props}
+      />
+    </I18nProvider>,
   );
 }
 
@@ -73,15 +80,21 @@ describe("WebFormProfileSection 只看已填写", () => {
     expect(await screen.findByLabelText("出生日期年份")).toBeInTheDocument();
     expect(screen.getByLabelText("备注")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "只看已填写" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: t("profileLibrary.webform.showFilledFields") }),
+    );
 
     // 没填过的「备注」被过滤；有值的出生日期保留，开关变为可切回的「显示全部字段」。
-    expect(await screen.findByRole("button", { name: "显示全部字段" })).toBeInTheDocument();
+    expect(
+      await screen.findByRole("button", { name: t("profileLibrary.webform.showAllFields") }),
+    ).toBeInTheDocument();
     expect(screen.getByLabelText("出生日期年份")).toBeInTheDocument();
     expect(screen.queryByLabelText("备注")).not.toBeInTheDocument();
 
     // 切回「显示全部字段」：备注回来。
-    fireEvent.click(screen.getByRole("button", { name: "显示全部字段" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: t("profileLibrary.webform.showAllFields") }),
+    );
     expect(await screen.findByLabelText("备注")).toBeInTheDocument();
     view.unmount();
   });
@@ -93,6 +106,45 @@ describe("WebFormProfileSection 只看已填写", () => {
     expect(await screen.findByText("出生日期")).toBeInTheDocument();
     expect(screen.getByText("2000-01-01")).toBeInTheDocument();
     expect(screen.queryByText("备注")).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "只看已填写" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: t("profileLibrary.webform.showFilledFields") }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("updates Web form labels when the interface locale changes", async () => {
+    const onRequestEdit = vi.fn();
+    renderSection({ editing: false, values: {}, onRequestEdit });
+    const notice = await screen.findByRole("alert");
+    expect(
+      within(notice).getByText(t("profileLibrary.webform.sectionAlertTitle")),
+    ).toBeInTheDocument();
+
+    const editButton = screen.getByRole("button", { name: t("profileLibrary.action.edit") });
+    fireEvent.click(editButton);
+    expect(onRequestEdit).toHaveBeenCalledOnce();
+
+    act(() => selectLocale("en-US"));
+
+    expect(
+      screen.getByRole("button", { name: t("profileLibrary.action.edit") }),
+    ).toBeInTheDocument();
+  });
+
+  it("localizes the directory load error and lets the user retry", async () => {
+    apiMocks.getWebFormExtraProfile
+      .mockRejectedValueOnce(new Error("offline"))
+      .mockResolvedValueOnce(PROFILE);
+    renderSection();
+
+    expect(
+      await screen.findByText(t("profileLibrary.webform.sectionLoadFailed")),
+    ).toBeInTheDocument();
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: new RegExp(t("common.retry").split("").join("\\s*")),
+      }),
+    );
+    expect(await screen.findByLabelText("出生日期年份")).toBeInTheDocument();
+    expect(apiMocks.getWebFormExtraProfile).toHaveBeenCalledTimes(2);
   });
 });

@@ -3,6 +3,7 @@ import { Button, Result, Space, Typography } from "antd";
 import { Component } from "react";
 import type { ErrorInfo, ReactNode } from "react";
 import { t } from "../i18n";
+import { useLocale } from "../i18n/i18nContext";
 import { recordClientDiagnostic } from "../utils/clientDiagnostics";
 
 interface Props {
@@ -37,7 +38,7 @@ function isModuleLoadFailure(message: string): boolean {
   return MODULE_LOAD_FAILURE_PATTERNS.some((pattern) => pattern.test(message));
 }
 
-export default class AppErrorBoundary extends Component<Props, State> {
+class AppErrorBoundaryImpl extends Component<Props, State> {
   state: State = { failed: false, message: "" };
 
   static getDerivedStateFromError(error: unknown): State {
@@ -110,4 +111,10 @@ export default class AppErrorBoundary extends Component<Props, State> {
       />
     );
   }
+}
+
+/** Subscribe at a function boundary so the class fallback refreshes translated labels. */
+export default function AppErrorBoundary(props: Props) {
+  useLocale();
+  return <AppErrorBoundaryImpl {...props} />;
 }

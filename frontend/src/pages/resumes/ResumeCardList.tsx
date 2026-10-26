@@ -17,6 +17,7 @@ import LoadingBlock from "../../components/common/LoadingBlock";
 import { TRASH_RECOVERY_NOTE } from "../../components/common/rowActionMenu";
 import type { BatchSelection } from "../../hooks/useBatchSelection";
 import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 import type { Page } from "../../types";
 import type { ResumeBrief } from "../../types";
 import { formatDateTime } from "../../utils/format";
@@ -80,6 +81,7 @@ export default function ResumeCardList({
   sortState,
   onSortChange,
 }: Props) {
+  useLocale();
   const items = data?.items ?? [];
   const total = data?.total ?? 0;
 

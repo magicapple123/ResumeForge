@@ -26,6 +26,7 @@ import PagePaddingControl from "./PagePaddingControl";
 import PhotoScaleControl from "./PhotoScaleControl";
 import ResumeFontControl from "./ResumeFontControl";
 import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 import ParamResetButton from "./ParamResetButton";
 import {
   configuredPhotoScale,
@@ -127,6 +128,7 @@ export default function ResumeMeasureControls({
   showPhotoScale = true,
   onChange,
 }: Props) {
+  useLocale();
   const tiers = useMemo(() => fontTiers(catalog?.font_scales ?? []), [catalog?.font_scales]);
   const pxBounds = useMemo(() => fontPxBounds(tiers), [tiers]);
   // 当前「版式」预设的配置：换版式时它盖掉模板默认（模板 < 版式 < 手动微调）。

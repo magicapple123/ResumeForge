@@ -7,6 +7,7 @@
  */
 import { Alert, Button, Space } from "antd";
 import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 
 interface Props {
   hasLegacyData: boolean;
@@ -21,6 +22,7 @@ export default function ProfileUpgradeNotice({
   onOpenBackup,
   onStartFill,
 }: Props) {
+  useLocale();
   if (!hasLegacyData || newProfileHasEntries) return null;
   return (
     <Alert

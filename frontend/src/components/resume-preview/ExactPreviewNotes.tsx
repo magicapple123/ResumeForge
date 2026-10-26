@@ -13,6 +13,7 @@ import { Alert, Button, Typography } from "antd";
 import { t } from "../../i18n";
 import { EXACT_OVERFLOW_NOTE } from "./config";
 import type { PreviewShot } from "./exactPreviewCache";
+import { useLocale } from "../../i18n/i18nContext";
 
 interface AlertsProps {
   current: PreviewShot | null;
@@ -28,6 +29,7 @@ interface AlertsProps {
  *   不点破的话用户只会看到"滑杆 18px、PDF 明显更小"。
  */
 export function ExactPreviewAlerts({ current, busy, pageLimit }: AlertsProps) {
+  useLocale();
   if (!current) return null;
   return (
     <>
@@ -86,6 +88,7 @@ export function ExactPreviewStatus({
   hasUnsavedContent = false,
   onOpenInNewTab,
 }: StatusProps) {
+  useLocale();
   return (
     <div className="exact-preview-status" aria-busy={busy}>
       <Typography.Text type="secondary" style={{ fontSize: 12 }}>

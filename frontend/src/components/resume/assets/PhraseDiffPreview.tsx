@@ -9,6 +9,7 @@ import { Space, Typography } from "antd";
 import { DiffTokenText } from "../../ResumeDiffView";
 import { wordDiff } from "../../../utils/resumeFieldDiff";
 import { at } from "../../../features/resume-assets/i18n";
+import { useLocale } from "../../../i18n/i18nContext";
 
 interface Props {
   before: string;
@@ -18,6 +19,7 @@ interface Props {
 }
 
 export default function PhraseDiffPreview({ before, after, beforeLabel, afterLabel }: Props) {
+  useLocale();
   if (before === after) {
     return <Typography.Text type="secondary">{at("assets.diff.noChange")}</Typography.Text>;
   }

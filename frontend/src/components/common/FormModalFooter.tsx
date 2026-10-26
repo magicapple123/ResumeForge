@@ -8,6 +8,7 @@
 import { Button, Space } from "antd";
 import type { ReactNode, RefObject } from "react";
 import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 
 export interface FormModalFooterProps {
   /** 是否显示「放弃未保存的修改？」那一条。 */
@@ -39,6 +40,7 @@ export default function FormModalFooter({
   onKeepEditing,
   onSubmit,
 }: FormModalFooterProps) {
+  useLocale();
   if (confirming) {
     // L2：确认条就地出现。**不新开 modal.confirm**——那会是第二层容器（3300）。
     return (

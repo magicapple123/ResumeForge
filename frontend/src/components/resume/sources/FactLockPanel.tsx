@@ -19,6 +19,7 @@ import {
   type FactLockOut,
   type FactLockViolationOut,
 } from "../../../features/resume-provenance/types";
+import { useLocale } from "../../../i18n/i18nContext";
 
 interface Props {
   locks: FactLockOut[];
@@ -39,11 +40,6 @@ interface Props {
   onDelete?: (lock: FactLockOut) => void;
 }
 
-const KIND_OPTIONS = FACT_LOCK_KINDS.map((kind) => ({
-  value: kind,
-  label: pt(factLockKindKey(kind) ?? "provenance.lock.kind.number"),
-}));
-
 export default function FactLockPanel({
   locks,
   selection,
@@ -54,6 +50,11 @@ export default function FactLockPanel({
   onCreate,
   onDelete,
 }: Props) {
+  useLocale();
+  const kindOptions = FACT_LOCK_KINDS.map((kind) => ({
+    value: kind,
+    label: pt(factLockKindKey(kind) ?? "provenance.lock.kind.number"),
+  }));
   const readOnly = !onCreate;
   const hasTarget = Boolean(selection?.object_id || selection?.point_id || selection?.path);
 
@@ -180,7 +181,7 @@ export default function FactLockPanel({
                 label={pt("provenance.lock.kind")}
                 rules={[{ required: true }]}
               >
-                <Select options={KIND_OPTIONS} aria-label={pt("provenance.lock.kind")} />
+                <Select options={kindOptions} aria-label={pt("provenance.lock.kind")} />
               </Form.Item>
             </Col>
             <Col xs={24} md={10}>

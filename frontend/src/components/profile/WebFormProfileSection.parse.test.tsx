@@ -10,10 +10,11 @@
  *
  * 这里直接对 ref 暴露的句柄下断言（不去点整页），把这三条契约钉在组件边界上。
  */
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { App as AntdApp } from "antd";
 import { createRef, type RefObject } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from "vitest";
+import { t } from "../../i18n";
 import type { WebFormExtraProfile, WebFormRepeatedGroup } from "../../types";
 import type { RecognitionReviewRow } from "./RecognitionReviewList";
 import WebFormProfileSection from "./WebFormProfileSection";
@@ -94,11 +95,15 @@ async function mountSection(): Promise<Handles> {
         repeatedGroups={REPEATED_GROUPS}
         onRepeatedGroupsChange={onRepeatedGroupsChange}
         onLoaded={onLoaded}
+        onRequestEdit={vi.fn()}
       />
     </AntdApp>,
   );
   // 说明条出现 = 目录已取回，句柄里的 `profileRef` 才是可用的。
-  await screen.findByText("这一区只给「网申填表」用，不会进入简历");
+  const notice = await screen.findByRole("alert");
+  expect(
+    within(notice).getByText(t("profileLibrary.webform.sectionAlertTitle")),
+  ).toBeInTheDocument();
   await waitFor(() => expect(apiMocks.getWebFormExtraProfile).toHaveBeenCalled());
   expect(handleRef.current).not.toBeNull();
   return { handleRef, onChange, onFieldLabelChange, onFieldDelete, onRepeatedGroupsChange };

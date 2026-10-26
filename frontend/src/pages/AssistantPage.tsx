@@ -11,6 +11,7 @@ import AssistantWorkspaceHeader from "../features/assistant/components/Assistant
 import ConversationSidebar from "../features/assistant/components/ConversationSidebar";
 import { useMediaQuery } from "../hooks/useMediaQuery";
 import { t } from "../i18n";
+import { useLocale } from "../i18n/i18nContext";
 import { mqMax } from "../theme/breakpoints";
 import { readStoredReasoningEffort } from "../features/assistant/readStoredReasoningEffort";
 import type { StarterPrompt } from "../features/assistant/assistantTypes";
@@ -43,6 +44,7 @@ export default function AssistantPage({
   compact = false,
   surface: surfaceProp,
 }: AssistantPageProps = {}) {
+  useLocale();
   const { message } = App.useApp();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();

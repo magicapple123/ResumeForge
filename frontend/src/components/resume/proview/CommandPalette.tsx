@@ -18,6 +18,7 @@ import { App, Empty, Input, Modal, Typography } from "antd";
 import type { InputRef } from "antd";
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { t } from "../../../i18n";
+import { useLocale } from "../../../i18n/i18nContext";
 import {
   cycleActiveIndex,
   filterCommands,
@@ -63,6 +64,7 @@ function buildEntries(
 }
 
 export default function CommandPalette({ open, onClose, commands }: Props) {
+  useLocale();
   const { message } = App.useApp();
   const inputRef = useRef<InputRef | null>(null);
   const [query, setQuery] = useState("");

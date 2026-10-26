@@ -29,6 +29,7 @@ import { downloadResumeShareZip } from "../api/resumes";
 import type { SharePackageDetail } from "../types";
 import type { ResumeContent } from "../types/resume";
 import { t } from "../i18n";
+import { useLocale } from "../i18n/i18nContext";
 import { createReviewAnnotationApi } from "../features/resume-review";
 import ReviewAnnotationsPanel from "./resume/review/ReviewAnnotationsPanel";
 import {
@@ -63,6 +64,7 @@ function deriveDirectory(detail: SharePackageDetail | null): string {
 }
 
 export default function SharePackageModal({ recordId, open, onClose, onLocateAnnotation }: Props) {
+  useLocale();
   const { message } = App.useApp();
   const [permission, setPermission] = useState<SharePermission>("read_only");
   const [redactOptions, setRedactOptions] = useState<RedactionOptions>(DEFAULT_REDACTION_OPTIONS);

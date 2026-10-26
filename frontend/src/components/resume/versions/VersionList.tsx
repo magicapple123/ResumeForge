@@ -20,6 +20,7 @@ import type {
   VersionRestoreOut,
 } from "../../../features/resume-versions/types";
 import VersionComparePanel from "./VersionComparePanel";
+import { useLocale } from "../../../i18n/i18nContext";
 
 interface Props {
   versions: VersionOut[];
@@ -53,6 +54,7 @@ export default function VersionList({
   onCompare,
   onRefresh,
 }: Props) {
+  useLocale();
   const [name, setName] = useState("");
   const [summary, setSummary] = useState("");
   const [creating, setCreating] = useState(false);

@@ -7,10 +7,12 @@
  * 表单打开后全站切换场景不改写这里已选的内容。
  */
 import { App as AntdApp } from "antd";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useState } from "react";
 import { t } from "../../i18n";
+import I18nProvider from "../../i18n/I18nProvider";
+import { selectLocale } from "../../i18n/localeStore";
 import type { MessageKey } from "../../i18n";
 import type { CareerContextRequest, CareerScenario, CareerScenarioCatalog } from "./types";
 import { saveScenarioSelection } from "./scenarioSelectionStorage";
@@ -83,10 +85,12 @@ const CATALOG: CareerScenarioCatalog = {
 function Harness({ initial = null }: { initial?: CareerContextRequest | null }) {
   const [value, setValue] = useState<CareerContextRequest | null>(initial);
   return (
-    <AntdApp>
-      <GenerationScenarioControl value={value} onChange={setValue} />
-      <pre data-testid="context-value">{JSON.stringify(value)}</pre>
-    </AntdApp>
+    <I18nProvider>
+      <AntdApp>
+        <GenerationScenarioControl value={value} onChange={setValue} />
+        <pre data-testid="context-value">{JSON.stringify(value)}</pre>
+      </AntdApp>
+    </I18nProvider>
   );
 }
 
@@ -96,6 +100,11 @@ function contextValue(): CareerContextRequest | null {
 
 function switchControl() {
   return screen.getByRole("switch", { name: t("careerScenarios.generate.switch") });
+}
+
+function copyPattern(value: string): RegExp {
+  const escaped = value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(escaped);
 }
 
 async function pick(labelKey: MessageKey, optionLabel: string) {
@@ -121,6 +130,27 @@ afterEach(() => {
 });
 
 describe("GenerationScenarioControl", () => {
+  it("refreshes the cached dimension labels after a UI locale change", async () => {
+    render(
+      <Harness
+        initial={{ scenario_id: 7, expected_revision: 3, include_employment_status: false }}
+      />,
+    );
+    await waitFor(() => expect(apiMocks.listCareerScenarios).toHaveBeenCalled());
+
+    const labelKey = "careerScenarios.field.careerStage" as const;
+    const previousLabel = t(labelKey);
+    const hasLabel = (label: string) => screen.getByText(copyPattern(label), { exact: false });
+    expect(hasLabel(previousLabel)).toBeInTheDocument();
+
+    act(() => selectLocale("en-US"));
+
+    expect(hasLabel(t(labelKey))).toBeInTheDocument();
+    expect(
+      screen.queryByText(copyPattern(previousLabel), { exact: false }),
+    ).not.toBeInTheDocument();
+  });
+
   it("默认关闭：不发 career_context，也不展示维度清单", async () => {
     render(<Harness />);
     await waitFor(() => expect(apiMocks.listCareerScenarios).toHaveBeenCalled());

@@ -9,6 +9,7 @@ import { ArrowDownOutlined, ArrowUpOutlined, SearchOutlined } from "@ant-design/
 import { Button, Input, Space, Tooltip } from "antd";
 import type { KeyboardEvent } from "react";
 import { t } from "../../../i18n";
+import { useLocale } from "../../../i18n/i18nContext";
 
 export interface OutlineSearchBarProps {
   value: string;
@@ -42,6 +43,7 @@ export default function OutlineSearchBar({
   onRestore,
   onFocus,
 }: OutlineSearchBarProps) {
+  useLocale();
   const searching = value.trim() !== "";
   const handleKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
     if (event.key === "ArrowDown") {

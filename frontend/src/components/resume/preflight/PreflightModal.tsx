@@ -8,6 +8,7 @@
 import { Modal, Tabs } from "antd";
 import { useEffect, useMemo } from "react";
 import { t } from "../../../i18n";
+import { useLocale } from "../../../i18n/i18nContext";
 import type { runPreflight } from "../../../features/resume-preflight/preflightApi";
 import type {
   CheckFix,
@@ -49,6 +50,7 @@ export default function PreflightModal({
   onOpenAts,
   fetcher,
 }: Props) {
+  const locale = useLocale();
   const preflight = usePreflight({
     resumeId: open ? resumeId : null,
     currentKey,
@@ -109,6 +111,7 @@ export default function PreflightModal({
       preflight.run,
       preflight.stale,
       preflight.status,
+      locale,
     ],
   );
 

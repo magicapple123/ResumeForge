@@ -8,6 +8,7 @@
 import { LeftOutlined, RightOutlined } from "@ant-design/icons";
 import { Button, InputNumber, Space, Tooltip, Typography } from "antd";
 import { t } from "../../../i18n";
+import { useLocale } from "../../../i18n/i18nContext";
 import type { PageMarker, PageMarkerSeverity } from "../../../features/resume-proview/pageMarkers";
 import type { PageNavigation } from "../../../features/resume-proview/usePageNavigation";
 
@@ -25,6 +26,7 @@ interface Props {
 }
 
 export default function PageNavigator({ navigation, markers = [] }: Props) {
+  useLocale();
   const { currentPage, totalPages, goToPage, nextPage, previousPage } = navigation;
   const single = totalPages <= 1;
   // 只显示页码落在当前文档范围内的标记：切换简历/改页数后旧标记自动失效。

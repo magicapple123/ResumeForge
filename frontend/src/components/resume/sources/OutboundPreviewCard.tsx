@@ -17,6 +17,7 @@ import ErrorState from "../../common/ErrorState";
 import LoadingBlock from "../../common/LoadingBlock";
 import { pt } from "../../../features/resume-provenance/i18n";
 import type { OutboundPreviewOut } from "../../../features/resume-provenance/types";
+import { useLocale } from "../../../i18n/i18nContext";
 
 interface Props {
   preview: OutboundPreviewOut | null;
@@ -38,6 +39,7 @@ export default function OutboundPreviewCard({
   onRetry,
   onConfirm,
 }: Props) {
+  useLocale();
   if (error) {
     return <ErrorState description={error} onRetry={onRetry} />;
   }

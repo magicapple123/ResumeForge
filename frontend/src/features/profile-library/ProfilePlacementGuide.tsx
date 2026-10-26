@@ -7,6 +7,7 @@
  */
 import { Modal, Typography } from "antd";
 import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 
 /** 判定表行：文案里用 | 分隔「素材特征」与「该填哪里」。 */
 const RULE_KEYS = [
@@ -28,6 +29,7 @@ interface Props {
 }
 
 export default function ProfilePlacementGuide({ open, onClose }: Props) {
+  useLocale();
   const rows = RULE_KEYS.map((key) => {
     const [feature, target] = t(key).split("|");
     return { feature, target };

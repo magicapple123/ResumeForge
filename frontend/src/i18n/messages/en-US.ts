@@ -5,6 +5,7 @@ import assets from "./en-US.assets";
 import bilingual from "./en-US.bilingual";
 import careerScenarios from "./en-US.careerScenarios";
 import conflict from "./en-US.conflict";
+import common from "./en-US.common";
 import core from "./en-US.core";
 import credentials from "./en-US.credentials";
 import delivery from "./en-US.delivery";
@@ -30,6 +31,8 @@ import trial from "./en-US.trial";
 import typography from "./en-US.typography";
 import versions from "./en-US.versions";
 import workbench from "./en-US.workbench";
+import webformGroups from "./en-US.webformGroups";
+import webformFields from "./en-US.webformFields";
 
 const enUS = {
   ...core,
@@ -37,6 +40,7 @@ const enUS = {
   ...bilingual,
   ...careerScenarios,
   ...conflict,
+  ...common,
   ...credentials,
   ...delivery,
   ...fontDownload,
@@ -61,6 +65,8 @@ const enUS = {
   ...typography,
   ...versions,
   ...workbench,
+  ...webformGroups,
+  ...webformFields,
 } as const satisfies Record<keyof ZhCNMessages, string>;
 
 export default enUS;

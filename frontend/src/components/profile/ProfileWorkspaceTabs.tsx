@@ -2,6 +2,8 @@
 import { Tabs } from "antd";
 import { memo } from "react";
 import type { ReactNode } from "react";
+import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 
 interface Props {
   resumeContent: ReactNode;
@@ -32,6 +34,7 @@ function ProfileWorkspaceTabsImpl({
   activeKey,
   onActiveKeyChange,
 }: Props) {
+  useLocale();
   return (
     <Tabs
       className="profile-workspace-tabs"
@@ -43,12 +46,12 @@ function ProfileWorkspaceTabsImpl({
       items={[
         {
           key: "resume",
-          label: "简历资料",
+          label: t("profileLibrary.tab.resume"),
           children: resumeContent,
         },
         {
           key: "web-form",
-          label: "网申资料",
+          label: t("profileLibrary.tab.webform"),
           children: webFormContent,
         },
       ]}

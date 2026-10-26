@@ -31,6 +31,7 @@ import {
   visiblePhrases,
 } from "../../../features/resume-assets/filters";
 import type { PhraseFilterState, ResumePhrase } from "../../../features/resume-assets/types";
+import { useLocale } from "../../../i18n/i18nContext";
 
 export interface PhraseLibraryPanelProps {
   /** 已加载的资产（宿主负责请求；本组件不发网络请求）。 */
@@ -68,6 +69,7 @@ export default function PhraseLibraryPanel({
   initialFilter,
   className,
 }: PhraseLibraryPanelProps) {
+  useLocale();
   const [filter, setFilter] = useState<PhraseFilterState>(() =>
     normalizeFilter({ ...DEFAULT_PHRASE_FILTER, ...(initialFilter ?? {}) }),
   );

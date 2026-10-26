@@ -24,7 +24,7 @@
  * 统一触发。**不用独立按钮**——但数据是另一次请求，所以那次保存要**两次都成功才算成功**
  * （见 ProfilePage 的 `submit`）。
  */
-import { Alert, Card, Tag, Typography } from "antd";
+import { Card, Tag } from "antd";
 import EmptyState from "../common/EmptyState";
 import {
   forwardRef,
@@ -36,6 +36,8 @@ import {
   useState,
 } from "react";
 import { getWebFormExtraProfile } from "../../api/webform";
+import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 import type {
   WebFormExtraEntry,
   WebFormExtraProfile,
@@ -48,6 +50,13 @@ import WebFormProfileCustomFieldAdder from "./WebFormProfileCustomFieldAdder";
 import WebFormProfileGroup from "./WebFormProfileGroup";
 import { customFieldKey, isCustomField, normalizeFieldLabel } from "./WebFormProfileFieldUtils";
 import WebFormProfileRecords from "./WebFormProfileRecords";
+import {
+  WebFormProfileEmpty,
+  WebFormProfileLoadError,
+  WebFormProfileNotice,
+} from "./WebFormProfileStates";
+import { WEBFORM_CUSTOM_GROUP } from "../../features/webform/groupIdentity";
+import { webformFieldLabel } from "../../features/webform/webformFieldLabels";
 import WebFormProfileToolbar from "./WebFormProfileToolbar";
 
 /** 编辑态的值由父组件持有（这样它能和资料表单一起提交）。 */
@@ -73,6 +82,7 @@ interface Props {
   onRepeatedGroupsChange: (groups: WebFormRepeatedGroup[]) => void;
   /** 目录加载完成时把字段清单交回父组件（父组件据此渲染与提交）。 */
   onLoaded: (profile: WebFormExtraProfile) => void;
+  onRequestEdit: () => void;
   /** 打开「粘贴文本识别」（项 12）。只有编辑态会渲染入口。 */
 }
 
@@ -89,24 +99,25 @@ const WebFormProfileSection = forwardRef<WebFormProfileSectionHandle, Props>(
       repeatedGroups,
       onRepeatedGroupsChange,
       onLoaded,
+      onRequestEdit,
     }: Props,
     ref,
   ) {
+    const locale = useLocale();
     const [profile, setProfile] = useState<WebFormExtraProfile | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
+    const [loadAttempt, setLoadAttempt] = useState(0);
     const [customLabel, setCustomLabel] = useState("");
     const [searchTerm, setSearchTerm] = useState("");
     // 搜索防抖：输入静置 300ms 才提交。搜索会改变字段集合（remount），每敲一个字符
     // 重挂载一批控件的代价太高；输入框仍即时回显（searchTerm），只是过滤动作延后。
     const [committedSearchTerm, setCommittedSearchTerm] = useState("");
-
     useEffect(() => {
       const timer = window.setTimeout(() => setCommittedSearchTerm(searchTerm.trim()), 300);
       return () => window.clearTimeout(timer);
     }, [searchTerm]);
     const [showOnlyFilled, setShowOnlyFilled] = useState(false);
-
     useEffect(() => {
       let cancelled = false;
       void getWebFormExtraProfile()
@@ -115,9 +126,9 @@ const WebFormProfileSection = forwardRef<WebFormProfileSectionHandle, Props>(
           setProfile(data);
           onLoaded(data);
         })
-        .catch((err: unknown) => {
+        .catch(() => {
           if (cancelled) return;
-          setError(err instanceof Error ? err.message : "「网申资料」加载失败");
+          setError(t("profileLibrary.webform.sectionLoadFailed"));
         })
         .finally(() => {
           if (!cancelled) setLoading(false);
@@ -125,33 +136,38 @@ const WebFormProfileSection = forwardRef<WebFormProfileSectionHandle, Props>(
       return () => {
         cancelled = true;
       };
-      // 只在挂载时拉一次；`onLoaded` 是稳定回调（父组件 useCallback）。
-      // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
-
+      // The directory loads on mount and retries only after an explicit user action.
+    }, [loadAttempt, onLoaded]);
+    const retryLoad = () => {
+      setError("");
+      setLoading(true);
+      setLoadAttempt((attempt) => attempt + 1);
+    };
     // **前端可能比后端新**（后端没重启时这个字段还不存在），所以这里兜一下：
     // 缺了它只该少显示一个标记，不该让整页崩掉。
     const entries = useMemo(() => details ?? {}, [details]);
-
     /**
      * 展示名按 field.key 先算好一张表：字段名同时被「过滤 haystack」与「渲染」两处读，
      * 缓存后每字段只算一次，也顺带让 `displayLabel` 在击键时保持同一引用（entries / profile
      * 不变时），Group 的自定义比较器才不会被它打穿。
      */
     const displayLabels = useMemo(() => {
+      void locale;
       const map = new Map<string, string>();
       for (const field of profile?.fields ?? []) {
-        map.set(field.key, entries[field.key]?.label?.trim() || field.label);
+        map.set(
+          field.key,
+          entries[field.key]?.label?.trim() || webformFieldLabel(field.key, field.label),
+        );
       }
       return map;
-    }, [entries, profile]);
-
+    }, [entries, locale, profile]);
     const displayLabel = useCallback(
       (field: WebFormField): string =>
-        displayLabels.get(field.key) ?? (entries[field.key]?.label?.trim() || field.label),
+        displayLabels.get(field.key) ??
+        (entries[field.key]?.label?.trim() || webformFieldLabel(field.key, field.label)),
       [displayLabels, entries],
     );
-
     /** 按分组切分，供分区展示（分组顺序来自后端目录）。 */
     const grouped = useMemo(() => {
       if (!profile) return [];
@@ -162,7 +178,6 @@ const WebFormProfileSection = forwardRef<WebFormProfileSectionHandle, Props>(
         }))
         .filter((entry) => entry.fields.length > 0);
     }, [profile]);
-
     /**
      * 查看态只显示**已填**的项——否则一屏空标签，用户找不到自己填过什么。
      *
@@ -195,7 +210,6 @@ const WebFormProfileSection = forwardRef<WebFormProfileSectionHandle, Props>(
 
     const totalCount = profile?.fields.length ?? 0;
     const normalizedSearch = committedSearchTerm.toLocaleLowerCase();
-
     // 每个分组的全量字段清单：按 profile 一次建好（数组引用稳定），
     // Group 的 memo 才不会被「每 render 重建的 groupAllFields 数组」打穿。
     const fieldsByGroup = useMemo(() => {
@@ -208,14 +222,12 @@ const WebFormProfileSection = forwardRef<WebFormProfileSectionHandle, Props>(
       }
       return map;
     }, [profile]);
-
     /**
      * 是否需要真正过滤。查看态永远要隐藏空字段；编辑态只有开了「只看已填」或输入了搜索词才需要。
      * 都不需要时，`filteredGrouped` 直接复用 `fieldsByGroup` 里**引用稳定**的数组，
      * Group 的自定义比较器才能对未编辑的组整体 bail。
      */
     const needsFilter = !editing || showOnlyFilled || Boolean(normalizedSearch);
-
     /** 先筛选再渲染，避免每个分组里重复写一套查看态/编辑态判断。 */
     const filteredGrouped = useMemo(() => {
       return grouped
@@ -246,7 +258,6 @@ const WebFormProfileSection = forwardRef<WebFormProfileSectionHandle, Props>(
       showOnlyFilled,
       values,
     ]);
-
     // 编辑态默认展示全部字段时，输入值变化不需要重新构造分组列表。
     // 这条快路径避免每次按键都执行 map/filter，并保持各组 fields 引用稳定。
     const visibleGroups =
@@ -255,14 +266,15 @@ const WebFormProfileSection = forwardRef<WebFormProfileSectionHandle, Props>(
     const handleRenameCustomField = useCallback(
       (key: string, nextLabel: string): string | undefined => {
         const label = nextLabel.trim();
-        if (!label) return "字段名不能为空";
+        if (!label) return t("profileLibrary.webform.fieldNameEmpty");
         const duplicate = profile?.fields.some(
           (field) =>
             field.key !== key &&
             isCustomField(field) &&
             normalizeFieldLabel(displayLabel(field)) === normalizeFieldLabel(label),
         );
-        if (duplicate) return "已经有同名自定义字段，请换一个名称";
+        if (duplicate) return t("profileLibrary.webform.duplicateName");
+        setError("");
 
         setProfile((current) => {
           if (!current) return current;
@@ -279,7 +291,6 @@ const WebFormProfileSection = forwardRef<WebFormProfileSectionHandle, Props>(
       },
       [displayLabel, onFieldLabelChange, profile],
     );
-
     const handleDeleteCustomField = useCallback(
       (key: string) => {
         setProfile((current) => {
@@ -347,16 +358,16 @@ const WebFormProfileSection = forwardRef<WebFormProfileSectionHandle, Props>(
         const field: WebFormField = {
           key,
           label: name,
-          group: "自定义",
+          group: WEBFORM_CUSTOM_GROUP,
           kind: "text",
           sensitive: false,
           matchable: true,
         };
         const nextProfile: WebFormExtraProfile = {
           ...(current as WebFormExtraProfile),
-          groups: current?.groups.includes("自定义")
+          groups: current?.groups.includes(WEBFORM_CUSTOM_GROUP)
             ? current.groups
-            : [...(current?.groups ?? []), "自定义"],
+            : [...(current?.groups ?? []), WEBFORM_CUSTOM_GROUP],
           fields: [...(current?.fields ?? []), field],
         };
         profileRef.current = nextProfile;
@@ -375,7 +386,7 @@ const WebFormProfileSection = forwardRef<WebFormProfileSectionHandle, Props>(
       const label = customLabel.trim();
       if (!label) return;
       if (findExistingCustomField(label)) {
-        setError("这个自定义字段已经存在");
+        setError(t("profileLibrary.webform.duplicateField"));
         return;
       }
       const key = addCustomField(label);
@@ -415,17 +426,11 @@ const WebFormProfileSection = forwardRef<WebFormProfileSectionHandle, Props>(
     return (
       <Card
         size="small"
-        title="网申资料"
-        extra={<Tag color="blue">网申填表专用</Tag>}
+        title={t("profileLibrary.tab.webform")}
+        extra={<Tag color="blue">{t("profileLibrary.webform.sectionTag")}</Tag>}
         style={{ marginTop: 16 }}
       >
-        <Alert
-          type="info"
-          showIcon
-          style={{ marginBottom: 12 }}
-          title="这一区只给「网申填表」用，不会进入简历"
-          description="这里补充简历资料中没有的网申字段；网申填表会合并读取简历资料和这里的补充资料，但生成简历不会读取这里。证件、家庭与健康信息只存本机。"
-        />
+        <WebFormProfileNotice />
 
         <WebFormProfileToolbar
           editing={editing}
@@ -437,7 +442,9 @@ const WebFormProfileSection = forwardRef<WebFormProfileSectionHandle, Props>(
           onToggleShowOnlyFilled={toggleShowOnlyFilled}
         />
 
-        {error ? <Typography.Text type="danger">{error}</Typography.Text> : null}
+        {error ? (
+          <WebFormProfileLoadError description={error} onRetry={retryLoad} retrying={loading} />
+        ) : null}
 
         <WebFormProfileRecords
           groups={repeatedGroups}
@@ -449,14 +456,11 @@ const WebFormProfileSection = forwardRef<WebFormProfileSectionHandle, Props>(
         />
 
         {!loading && !error && filledCount === 0 && !hasRepeatedValues && !editing ? (
-          <EmptyState
-            inline
-            description="还没有填过。点「编辑资料」即可补上网申表单常问的那些栏目"
-          />
+          <WebFormProfileEmpty onEdit={onRequestEdit} />
         ) : null}
 
         {(editing || filledCount > 0) && visibleGroups.length === 0 && searchTerm.trim() ? (
-          <EmptyState inline description="没有匹配的网申资料" />
+          <EmptyState inline description={t("profileLibrary.webform.sectionEmptySearch")} />
         ) : null}
 
         {visibleGroups.map(({ group, fields }) => {

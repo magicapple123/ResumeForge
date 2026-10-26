@@ -13,6 +13,7 @@ import { fetchResumeHtml, fetchResumeTemplates, getResume, renderResume } from "
 import type { ResumeDetail, ResumeLayout } from "../types";
 import type { LayoutMeasure } from "../utils/resumeLayoutMeasure";
 import { t } from "../i18n";
+import { useLocale } from "../i18n/i18nContext";
 import {
   createResumeDocumentHost,
   DEFAULT_RESUME_LAYOUT,
@@ -41,6 +42,7 @@ interface Props {
 }
 
 export default function ResumeDetailModal({ recordId, onClose, autoOpenWorkbench = false }: Props) {
+  useLocale();
   const { message } = App.useApp();
   const [detail, setDetail] = useState<ResumeDetail | null>(null);
   const [html, setHtml] = useState("");

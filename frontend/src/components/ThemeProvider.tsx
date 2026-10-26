@@ -13,7 +13,7 @@
  * **antd 的组件文案语言与界面语言同源**：antd 自带的分页「上一页」、日期选择器的月份名、
  * `Modal` 的按钮都来自它自己的语言包，与 `src/i18n` 的语言包是两套数据。所以这里不再
  * 直接 import `antd/locale/zh_CN`，而是取 `useLocale()` 再经 `antdLocale()` 映射——
- * 映射只留一处，将来加 `en-US` 时不会出现"界面切了、分页还是中文"。
+ * 映射只留一处，切到 `en-US` 时分页与日期控件也会一起切换。
  */
 import { App as AntdApp, ConfigProvider } from "antd";
 import { useEffect } from "react";
@@ -32,7 +32,7 @@ import {
 
 export default function ThemeProvider({ children }: { children: ReactNode }) {
   const mode = useThemeMode();
-  // 界面语言（没有 I18nProvider 时是默认 `zh-CN`），antd 的组件文案跟它走。
+  // antd 的组件文案跟随当前界面语言。
   const locale = useLocale();
 
   useEffect(() => {

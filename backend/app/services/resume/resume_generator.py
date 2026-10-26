@@ -40,6 +40,7 @@ from .resume_coverage import (
 from .resume_generation_helpers import (
     parse_resume,
     record_call_usage,
+    with_output_language,
 )
 from .resume_generator_prompts import (
     _ENHANCEMENT_DISABLED_GUIDE,
@@ -182,6 +183,8 @@ class ResumeGenerator:
             general=general,
             scoped=scoped,
         )
+        # 英文简历的正文必须用英文写：只看 resume.language，界面语言不参与判断。
+        messages[0]["content"] = with_output_language(messages[0]["content"], options.language)
 
         if budget is not None:
             # 流开始前检查预算（§2.1.a-2）；并把整链硬墙钟接给 provider（PR-07-3）。

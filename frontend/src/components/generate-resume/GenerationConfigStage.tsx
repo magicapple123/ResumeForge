@@ -8,6 +8,7 @@ import { Alert, Button, Input, Segmented, Space, Switch, Tooltip, Typography } f
 import type { EnhancementLevel, Job, ResumeLayout } from "../../types";
 import { RESUME_ENHANCEMENT_LEVELS, enhancementLevelDescription } from "../../config";
 import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 import {
   pageLimitOnModeSwitch,
   pageLimitOptions,
@@ -62,6 +63,7 @@ export default function GenerationConfigStage({
   onClose,
   onStart,
 }: Props) {
+  useLocale();
   /** 切换文档模式：只夹紧页数（不转换内容、不改模板），切回普通简历时 >3 页会被夹到 3。 */
   const changeDocumentMode = (next: GenerationDocumentMode) => {
     generation.setDocumentMode(next);

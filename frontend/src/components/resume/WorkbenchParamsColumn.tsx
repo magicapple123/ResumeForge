@@ -47,6 +47,7 @@ import ResumeMeasureControls from "./ResumeMeasureControls";
 import ResumeParamGroup from "./ResumeParamGroup";
 import ResumeSpacingControls from "./ResumeSpacingControls";
 import ResumeTemplateControls from "./ResumeTemplateControls";
+import { useLocale } from "../../i18n/i18nContext";
 
 /** 左栏页签：排版参数 / 文档大纲（W06）/ 表达资产（W17）/ 双语版本（W16）。 */
 type LeftTab = "params" | "outline" | "phrases" | "bilingual" | "sources" | "history";
@@ -166,6 +167,7 @@ export default function WorkbenchParamsColumn({
   onClearMultiSelect,
   sourcesPanel,
 }: Props) {
+  useLocale();
   const [tab, setTab] = useState<LeftTab>("params");
   // W08：板块级分页意图作用在哪一栏（条目级等 W03 选择状态上提后再接）。
   const [paginationSection, setPaginationSection] = useState<string | null>(null);

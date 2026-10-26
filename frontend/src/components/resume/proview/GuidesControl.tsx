@@ -8,6 +8,7 @@
 import { BorderOutlined } from "@ant-design/icons";
 import { Button, Checkbox, Popover, Space, Tooltip, Typography } from "antd";
 import { t } from "../../../i18n";
+import { useLocale } from "../../../i18n/i18nContext";
 import type { MessageKey } from "../../../i18n";
 import { enabledGuideCount, type GuideFlags } from "../../../features/resume-proview/types";
 
@@ -29,6 +30,7 @@ interface Props {
 }
 
 export default function GuidesControl({ value, onChange }: Props) {
+  useLocale();
   const count = enabledGuideCount(value);
   const content = (
     <Space orientation="vertical" size={6} style={{ maxWidth: 260 }}>

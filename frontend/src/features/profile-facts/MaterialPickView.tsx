@@ -14,6 +14,7 @@ import { Button, Input, Select, Space, Typography } from "antd";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { listMaterials } from "../../api/material";
 import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 import { splitLines } from "./factModel";
 import { FACT_KINDS, FACT_KIND_LABEL_KEYS } from "./constants";
 import type { FactKind, FactPayload } from "./types";
@@ -155,6 +156,7 @@ export function defaultKindForCategory(category: string): FactKind {
 }
 
 export default function MaterialPickView({ onPick, onCancel }: Props) {
+  useLocale();
   const [materials, setMaterials] = useState<MaterialSummary[]>([]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [kind, setKind] = useState<FactKind>("practice");

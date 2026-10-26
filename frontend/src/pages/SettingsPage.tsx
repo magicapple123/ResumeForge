@@ -24,6 +24,7 @@ import UpdateCard from "../components/settings/UpdateCard";
 import HelpDiagnosticsCard from "../components/settings/HelpDiagnosticsCard";
 import PrivacyCard from "../components/settings/PrivacyCard";
 import NavigationSettingsCard from "../components/settings/NavigationSettingsCard";
+import LocaleSettingsCard from "../components/settings/LocaleSettingsCard";
 import ResumeFontCard from "../components/settings/ResumeFontCard";
 import ShortcutSettingsCard from "../components/settings/ShortcutSettingsCard";
 import SkillEditorModal from "../components/skills/SkillEditorModal";
@@ -315,6 +316,7 @@ export default function SettingsPage() {
                   主题用「主题」开关切换；深色只作用于应用界面，简历预览、导出 PDF 与打印结果
                   仍是白纸。
                 </Typography.Paragraph>
+                <LocaleSettingsCard />
                 <ResumeFontCard />
                 <NavigationSettingsCard />
                 <ShortcutSettingsCard />

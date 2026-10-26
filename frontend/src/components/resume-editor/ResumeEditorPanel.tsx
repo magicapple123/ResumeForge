@@ -20,6 +20,7 @@ import { Alert, Button, Collapse, Form, Grid, Space, Tabs } from "antd";
 import type { ReactNode } from "react";
 import type { EditorSchemaOut } from "../../features/profile-library/types";
 import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 import type { ResumeContent } from "../../types";
 import DraftRestoreBar from "../common/DraftRestoreBar";
 import EditorHeader from "./EditorHeader";
@@ -59,6 +60,7 @@ export default function ResumeEditorPanel({
   editorSchema,
   editorContent,
 }: ResumeEditorPanelProps) {
+  useLocale();
   // "两栏独立滚动"：要有参考栏且屏幕够宽。这一个布尔值同时决定 body 的滚动方式与 grid
   // 的 class——判两次会出现"body 不滚 + grid 不是双栏"，内容是滚不动的。
   // 中栏形态永远不是两栏。

@@ -9,6 +9,7 @@
  * 标签用 t() 从语言包取（不再在源码里写中文字面量），服务端 name 到达后以它为准。
  */
 import { t } from "../../i18n";
+import type { MessageKey } from "../../i18n";
 
 /** 分区 key：内置 13 项 + 自建 custom:<section_id>，统一按不透明字符串处理。 */
 export type ProfileSectionKey = string;
@@ -31,22 +32,30 @@ export const DEFAULT_SECTION_ORDER: string[] = [
   "summary",
 ];
 
-/** 兜底中文名（正常渲染用服务端 SectionOut.name；这里只防"定义还没到"的空白）。 */
-export const SECTION_LABELS: Record<string, string> = {
-  basic_info: t("profileLibrary.sectionFallback.basic_info"),
-  educations: t("profileLibrary.sectionFallback.educations"),
-  experiences: t("profileLibrary.sectionFallback.experiences"),
-  projects: t("profileLibrary.sectionFallback.projects"),
-  skills: t("profileLibrary.sectionFallback.skills"),
-  campus_experiences: t("profileLibrary.sectionFallback.campus_experiences"),
-  awards: t("profileLibrary.sectionFallback.awards"),
-  summary: t("profileLibrary.sectionFallback.summary"),
-  publications: t("profileLibrary.sectionFallback.publications"),
-  research_projects: t("profileLibrary.sectionFallback.research_projects"),
-  patents: t("profileLibrary.sectionFallback.patents"),
-  credentials: t("profileLibrary.sectionFallback.credentials"),
-  languages: t("profileLibrary.sectionFallback.languages"),
-};
+/** Fallback label keys. Resolve on property access so imports never freeze a language. */
+const SECTION_LABEL_KEYS = new Map<string, MessageKey>([
+  ["basic_info", "profileLibrary.sectionFallback.basic_info"],
+  ["educations", "profileLibrary.sectionFallback.educations"],
+  ["experiences", "profileLibrary.sectionFallback.experiences"],
+  ["projects", "profileLibrary.sectionFallback.projects"],
+  ["skills", "profileLibrary.sectionFallback.skills"],
+  ["campus_experiences", "profileLibrary.sectionFallback.campus_experiences"],
+  ["awards", "profileLibrary.sectionFallback.awards"],
+  ["summary", "profileLibrary.sectionFallback.summary"],
+  ["publications", "profileLibrary.sectionFallback.publications"],
+  ["research_projects", "profileLibrary.sectionFallback.research_projects"],
+  ["patents", "profileLibrary.sectionFallback.patents"],
+  ["credentials", "profileLibrary.sectionFallback.credentials"],
+  ["languages", "profileLibrary.sectionFallback.languages"],
+]);
+
+/** Fallback labels remain locale-aware for stores and helpers that import this module. */
+export const SECTION_LABELS: Record<string, string> = new Proxy({} as Record<string, string>, {
+  get: (_target, property: string) => {
+    const key = SECTION_LABEL_KEYS.get(property);
+    return key ? t(key) : undefined;
+  },
+});
 
 /**
  * 已退役的「补充事实」区块页内键（F6-C 会删除 facts 目录与所有引用）：

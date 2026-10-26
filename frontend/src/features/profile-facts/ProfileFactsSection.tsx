@@ -23,6 +23,7 @@ import ErrorState from "../../components/common/ErrorState";
 import LoadingBlock from "../../components/common/LoadingBlock";
 import { PROFILE_FACTS_SECTION_KEY } from "../../components/profile/ProfileSectionConfig";
 import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 import { useToast } from "../../hooks/useToast";
 import { FACT_KINDS, FACT_KIND_LABEL_KEYS } from "./constants";
 import { fallbackKindSchema, fallbackSchema } from "./factFieldSchema";
@@ -49,6 +50,7 @@ type EditorState =
   | { mode: "settings" };
 
 export default function ProfileFactsSection() {
+  useLocale();
   const toast = useToast();
   const facts = useProfileFacts();
   const schemaState = useFactSchema();

@@ -34,6 +34,7 @@ import {
   type ProviewShellConfig,
 } from "../../features/resume-proview/ProviewContext";
 import ResumeWorkbenchCanvas from "./ResumeWorkbenchCanvas";
+import { useLocale } from "../../i18n/i18nContext";
 
 /** 让调用方（`ResumeZoomModal`）只多一条 import 就能拿到这个类型。 */
 export type { RichTextEditAdapter } from "../resume-preview/richText";
@@ -101,6 +102,7 @@ export default function ResumeWorkbenchLiveCanvas({
   mergeLive,
   proview,
 }: Props) {
+  useLocale();
   const scrollRef = useRef<HTMLDivElement>(null);
   /**
    * 中栏正在编辑的那一版（`null` = 没有草稿，用宿主那一版）。

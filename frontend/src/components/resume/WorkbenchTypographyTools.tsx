@@ -32,6 +32,7 @@ import {
   freezeObjectStyle,
   painterPatch,
 } from "../../features/resume-layout/stylePainter";
+import { useLocale } from "../../i18n/i18nContext";
 
 /** 对象面板用的段落角色：与 ObjectStylePanel 的缺省一致（条目正文/要点都按 body 继承）。 */
 const OBJECT_ROLE = "body";
@@ -59,6 +60,7 @@ export default function WorkbenchTypographyTools({
   onChange,
   onClearSelection,
 }: Props) {
+  useLocale();
   const { message } = App.useApp();
   const [painter, setPainter] = useState<ResumeRoleStyle | null>(null);
   const domains = readStyleDomains(layout.format_config);

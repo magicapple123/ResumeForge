@@ -20,6 +20,7 @@ import { Button, Tag, Tooltip } from "antd";
 import { stripMarkers } from "../../resume-preview/richText";
 import { at } from "../../../features/resume-assets/i18n";
 import { phraseSourceKind, type ResumePhrase } from "../../../features/resume-assets/types";
+import { useLocale } from "../../../i18n/i18nContext";
 
 interface Props {
   phrase: ResumePhrase;
@@ -67,6 +68,7 @@ export default function PhraseCard({
   onCopy,
   onEdit,
 }: Props) {
+  useLocale();
   const plainText = stripMarkers(phrase.text);
   return (
     <div data-phrase-id={phrase.id} className="resume-phrase-card">

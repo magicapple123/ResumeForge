@@ -36,9 +36,13 @@ import ReviewAnnotationRow, { type ReattachOption } from "./ReviewAnnotationRow"
 import { FILTER_LABEL_KEY } from "./reviewLabels";
 import ReviewImportForm from "./ReviewImportForm";
 import "./review.css";
+import { useLocale } from "../../../i18n/i18nContext";
 
 /** 重新关联选项的编码：`entry:field:objectId` / `point:field:objectId:pointField:pointId`。 */
-function buildReattachOptions(content: ResumeContent | null | undefined): ReattachOption[] {
+function buildReattachOptions(
+  content: ResumeContent | null | undefined,
+  untitledLabel: string,
+): ReattachOption[] {
   if (!content) return [];
   const model = buildOutline(content);
   const options: ReattachOption[] = [];
@@ -46,7 +50,7 @@ function buildReattachOptions(content: ResumeContent | null | undefined): Reatta
     if (!section.field) continue;
     for (const entry of section.entries) {
       if (!entry.objectId) continue;
-      const name = entry.title || t("outline.entry.untitled");
+      const name = entry.title || untitledLabel;
       options.push({ value: `entry:${section.field}:${entry.objectId}`, label: name });
       for (const point of entry.points) {
         if (!point.pointId) continue;
@@ -92,6 +96,7 @@ export default function ReviewAnnotationsPanel({
   showTitle = true,
   className,
 }: ReviewAnnotationsPanelProps) {
+  useLocale();
   const { message } = App.useApp();
   const [loadStatus, setLoadStatus] = useState<"loading" | "ready" | "error">("loading");
   const [annotations, setAnnotations] = useState<ReviewAnnotationRecord[]>([]);
@@ -129,7 +134,11 @@ export default function ReviewAnnotationsPanel({
     () => filterAnnotationsByStatus(annotations, filter),
     [annotations, filter],
   );
-  const reattachOptions = useMemo(() => buildReattachOptions(content), [content]);
+  const untitledLabel = t("outline.entry.untitled");
+  const reattachOptions = useMemo(
+    () => buildReattachOptions(content, untitledLabel),
+    [content, untitledLabel],
+  );
 
   const retry = useCallback(() => {
     setLoadStatus("loading");

@@ -16,6 +16,7 @@ import type {
   SourceImpactEntryOut,
 } from "../../../features/resume-provenance/types";
 import { ApiError } from "../../../api/client";
+import { useLocale } from "../../../i18n/i18nContext";
 
 interface Props {
   open: boolean;
@@ -55,6 +56,7 @@ export default function SourceAdoptModal({
   onCancel,
   onAdopted,
 }: Props) {
+  useLocale();
   const [text, setText] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);

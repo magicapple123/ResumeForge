@@ -51,6 +51,7 @@ def mode_page_limit(value: object, mode: str | None = None) -> int:
         number = low
     return max(low, min(number, high))
 ResumeFontScale = Literal["small", "standard", "large"]
+ResumeLanguage = Literal["zh-CN", "en-US"]
 MIN_CUSTOM_INSTRUCTION_CHARS = 0
 MAX_CUSTOM_INSTRUCTION_CHARS = 2000
 # 版式覆盖的键数上限。真实用到的键只有十来个（分区顺序 + 若干格式字段），32 是"足够
@@ -86,6 +87,7 @@ class GenerateOptions(BaseModel):
     # 目标篇幅：默认 1 页 A4。上限随文档模式变化（见 _check_page_limit_for_mode）。
     page_limit: int = Field(default=1, ge=1, le=LONG_CV_MAX_PAGES)
     font_scale: ResumeFontScale = "standard"
+    language: ResumeLanguage = "zh-CN"
     template: str = Field(default="classic", max_length=64)
     # 版式（一组排版覆盖）的名字：内置预设或用户自制版式；空串表示用模板默认的版式。
     format_name: str = Field(default="", max_length=64)

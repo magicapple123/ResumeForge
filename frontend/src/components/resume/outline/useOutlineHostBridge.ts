@@ -9,6 +9,7 @@
 import { useEffect, useMemo, useRef } from "react";
 import type { RefObject } from "react";
 import { t } from "../../../i18n";
+import { useLocale } from "../../../i18n/i18nContext";
 import type { EntryField } from "../../../features/resume-document/types";
 import type { OutlineEntry } from "../../../features/resume-outline/model";
 
@@ -40,17 +41,20 @@ export function useOutlineHostBridge({
   multiSelectionApiRef,
   clearMultiSelect,
 }: OutlineHostBridgeOptions): void {
-  const multiEntries = useMemo<OutlineMultiEntry[]>(
-    () =>
-      entries.map((entry) => ({
-        id: entry.objectId,
-        label: entry.title || t("outline.entry.untitled"),
-        meta: entry.subtitle,
-        field: entry.field,
-      })),
-    [entries],
-  );
-  const signature = multiEntries.map((entry) => `${entry.field}:${entry.id}`).join("|");
+  const locale = useLocale();
+  const multiEntries = useMemo<OutlineMultiEntry[]>(() => {
+    // Untitled entries use a translated fallback label.
+    void locale;
+    return entries.map((entry) => ({
+      id: entry.objectId,
+      label: entry.title || t("outline.entry.untitled"),
+      meta: entry.subtitle,
+      field: entry.field,
+    }));
+  }, [entries, locale]);
+  const signature = multiEntries
+    .map((entry) => `${entry.field}:${entry.id}:${entry.label}`)
+    .join("|");
   const lastSignature = useRef("");
   useEffect(() => {
     if (lastSignature.current === signature) return;

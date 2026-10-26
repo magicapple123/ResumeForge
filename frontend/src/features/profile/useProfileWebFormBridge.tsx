@@ -15,12 +15,14 @@ import WebFormProfileWorkspace, {
 } from "../../components/profile/WebFormProfileWorkspace";
 import { t } from "../../i18n";
 import type { WebFormExtraProfile } from "../../types";
+import { WEBFORM_CUSTOM_GROUP } from "../../features/webform/groupIdentity";
 import { useWebformParse } from "./useWebformParse";
 
 interface Options {
   editing: boolean;
   saving: boolean;
   onDirty: () => void;
+  onRequestEdit: () => void;
 }
 
 export type WebFormSubmitOutcome = "saved" | "skipped" | "failed";
@@ -38,6 +40,7 @@ export function useProfileWebFormBridge({
   editing,
   saving,
   onDirty,
+  onRequestEdit,
 }: Options): ProfileWebFormBridgeApi {
   const { message } = App.useApp();
   const [extraProfile, setExtraProfile] = useState<WebFormExtraProfile | null>(null);
@@ -65,9 +68,7 @@ export function useProfileWebFormBridge({
       if (!current) return current;
       const fields = current.fields.filter((field) => field.key !== key);
       const groups = current.groups.filter(
-        (group) =>
-          group !== t("profileLibrary.webform.customGroupName") ||
-          fields.some((field) => field.group === group),
+        (group) => group !== WEBFORM_CUSTOM_GROUP || fields.some((field) => field.group === group),
       );
       return { ...current, fields, groups };
     });
@@ -88,6 +89,7 @@ export function useProfileWebFormBridge({
         onCatalogLoaded={handleCatalogLoaded}
         onCatalogFieldLabelChange={handleCatalogFieldLabelChange}
         onCatalogFieldDelete={handleCatalogFieldDelete}
+        onRequestEdit={onRequestEdit}
       />
     ),
     [
@@ -97,6 +99,7 @@ export function useProfileWebFormBridge({
       handleCatalogFieldLabelChange,
       handleCatalogLoaded,
       onDirty,
+      onRequestEdit,
       saving,
     ],
   );

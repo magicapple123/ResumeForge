@@ -11,6 +11,7 @@ import { DiffTokenText } from "../../ResumeDiffView";
 import ErrorState from "../../common/ErrorState";
 import LoadingBlock from "../../common/LoadingBlock";
 import { bt } from "../../../features/resume-bilingual/i18n";
+import { useLocale } from "../../../i18n/i18nContext";
 import type { TranslationCandidate } from "../../../features/resume-bilingual/types";
 
 interface Props {
@@ -33,6 +34,7 @@ export default function TranslationCandidatePanel({
   onCancel,
   onRetry,
 }: Props) {
+  useLocale();
   const [selected, setSelected] = useState<string[]>([]);
 
   if (error) {
@@ -133,5 +135,6 @@ export default function TranslationCandidatePanel({
 }
 
 function EmptyHint() {
+  useLocale();
   return <Alert type="info" showIcon title={bt("bilingual.candidate.empty")} />;
 }

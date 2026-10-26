@@ -382,20 +382,6 @@ const zhCN = {
   /** 导出面板的主按钮。 */
   "export.action.export": "导出",
 
-  // ── 通用动作（每个 ≤4 字，见 popupCopy.test.ts 的长度断言） ────────────
-  /** 表单弹层左下角那颗按钮。 */
-  "common.action.cancel": "取消",
-  /** 通用「重试」：页面代码没取到、请求失败等可恢复场景。 */
-  "common.retry": "重试",
-  /** 只读弹层的语义动作（具体形态仍走右上角 ×）。 */
-  "common.action.close": "关闭",
-  /** 抽屉内视图切换的返回动作。 */
-  "common.action.back": "返回",
-  /** 内联确认条上的危险动作：放弃这次修改。 */
-  "common.action.discard": "放弃修改",
-  /** 内联确认条上的安全动作（默认焦点落在它上面）。 */
-  "common.action.keep-editing": "继续编辑",
-
   // ── 未保存内容（footer 内联确认条） ──────────────────────────────
   /** 内联确认条的标题；同时替换弹窗标题。 */
   "common.discard.title": "放弃未保存的修改？",
@@ -457,6 +443,10 @@ const zhCN = {
   "announcement.settings.restore": "恢复提醒",
   /** 恢复后的告知：用户在设置页当场看不到公告条（hideOnPaths），所以要说"回到页面"。 */
   "toast.announcement.unmuted": "已恢复提醒，回到页面就能看到",
+
+  // 通用动作优先复用；不要在领域包复制「取消 / 保存 / 关闭 / 确认 / 删除」。
+  "settings.locale.label": "界面语言",
+  "settings.locale.saveFailed": "界面语言已在本机切换，但未能保存到当前数据集设置",
 
   // 各领域新增文案放独立命名空间文件（本文件是 500 行零豁免硬预算）；
   // 「有哪些命名空间、按什么顺序合并」统一登记在 `zh-CN.namespaces.ts`，本文件只展开一次。

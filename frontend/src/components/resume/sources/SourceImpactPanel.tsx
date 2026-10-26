@@ -19,6 +19,7 @@ import type {
   SourceImpactOut,
 } from "../../../features/resume-provenance/types";
 import SourceAdoptModal from "./SourceAdoptModal";
+import { useLocale } from "../../../i18n/i18nContext";
 
 interface Props {
   /** 要查看影响面的来源 id；null = 还没选来源。 */
@@ -35,6 +36,7 @@ function errorText(error: unknown): string {
 }
 
 export default function SourceImpactPanel({ sourceId, revision, onAdopted, className }: Props) {
+  useLocale();
   const toast = useToast();
   const [impact, setImpact] = useState<SourceImpactOut | null>(null);
   const [loading, setLoading] = useState(false);

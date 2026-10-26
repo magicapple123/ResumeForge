@@ -18,6 +18,7 @@ import {
   tokenText,
 } from "../../../features/resume-provenance/helpers";
 import type { UsageBucketOut, UsageSummaryOut } from "../../../features/resume-provenance/types";
+import { useLocale } from "../../../i18n/i18nContext";
 
 interface Props {
   summary: UsageSummaryOut | null;
@@ -70,6 +71,7 @@ export default function UsageSummaryCard({
   error = null,
   onRetry,
 }: Props) {
+  useLocale();
   if (error) return <ErrorState description={error} onRetry={onRetry} />;
   if (loading) return <LoadingBlock tip={pt("provenance.usage.title")} />;
   if (!summary || summary.records === 0) {

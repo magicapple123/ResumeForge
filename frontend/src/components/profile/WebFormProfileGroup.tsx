@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 import { Row, Typography } from "antd";
 import { memo, type CSSProperties } from "react";
+import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
+import { webformGroupLabel } from "../../features/webform/groupIdentity";
 import WebFormProfileField from "./WebFormProfileField";
 import { areGroupPropsEqual, type WebFormProfileGroupProps } from "./webFormProfileGroupMemo";
 export type { WebFormProfileGroupProps } from "./webFormProfileGroupMemo";
@@ -46,12 +49,16 @@ function WebFormProfileGroupImpl({
   onRename,
   onDelete,
 }: WebFormProfileGroupProps) {
+  useLocale();
   return (
     <div style={CONTAINER_STYLE}>
       <div style={HEADER_STYLE}>
-        <Typography.Text strong>{group}</Typography.Text>
+        <Typography.Text strong>{webformGroupLabel(group)}</Typography.Text>
         <Typography.Text type="secondary" style={COUNT_TEXT_STYLE}>
-          已填写 {filledCount} / {groupAllFields.length}
+          {t("profileLibrary.webform.filledCount", {
+            count: filledCount,
+            total: groupAllFields.length,
+          })}
         </Typography.Text>
       </div>
       <Row gutter={[12, 12]}>

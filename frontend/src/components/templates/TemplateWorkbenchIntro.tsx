@@ -8,8 +8,10 @@
  */
 import { Card, Typography } from "antd";
 import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 
 export default function TemplateWorkbenchIntro() {
+  useLocale();
   return (
     <Card size="small" className="settings-card">
       <Typography.Title level={5} style={{ marginTop: 0 }}>

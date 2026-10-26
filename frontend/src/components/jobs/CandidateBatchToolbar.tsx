@@ -20,6 +20,7 @@
  */
 import { Checkbox, Button, Popconfirm, Space, Tooltip, Typography } from "antd";
 import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 
 interface Props {
   /** 当前页条数 > 0 时才渲染（调用方控制）。 */
@@ -64,6 +65,7 @@ export default function CandidateBatchToolbar({
   exporting = false,
   onExportCsv,
 }: Props) {
+  useLocale();
   const hasSelection = selectedCount > 0;
   const busy = batchAction !== null;
   // 工具栏整套（含选择区）只在多选模式有意义：普通模式没有勾选框（CandidateCardGrid

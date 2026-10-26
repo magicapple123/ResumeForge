@@ -1,6 +1,57 @@
 // SPDX-License-Identifier: Apache-2.0
 import "@testing-library/jest-dom/vitest";
+import { createElement } from "react";
+import type { ComponentType, ReactNode } from "react";
+import { beforeEach, vi } from "vitest";
+
+// Existing component tests stay on a fixed zh-CN provider. Locale-specific tests
+// may pass their own wrapper, which is nested inside this baseline provider.
+vi.mock("@testing-library/react", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@testing-library/react")>();
+  const { default: I18nProvider } = await import("../i18n/I18nProvider");
+
+  type WrapperProps = { children: ReactNode };
+  const withZhProvider = (Nested?: ComponentType<WrapperProps>): ComponentType<WrapperProps> => {
+    return function ZhCnTestProvider({ children }: { children: ReactNode }) {
+      const content = Nested ? createElement(Nested, { children }) : children;
+      return createElement(I18nProvider, { locale: "zh-CN", children: content });
+    };
+  };
+
+  return {
+    ...actual,
+    render: (
+      ui: Parameters<typeof actual.render>[0],
+      options?: Parameters<typeof actual.render>[1],
+    ) =>
+      actual.render(ui, {
+        ...options,
+        wrapper: withZhProvider(options?.wrapper as ComponentType<WrapperProps> | undefined),
+      }),
+    renderHook: (
+      callback: Parameters<typeof actual.renderHook>[0],
+      options?: Parameters<typeof actual.renderHook>[1],
+    ) =>
+      actual.renderHook(callback, {
+        ...options,
+        wrapper: withZhProvider(options?.wrapper as ComponentType<WrapperProps> | undefined),
+      }),
+  };
+});
+
 import { configure } from "@testing-library/react";
+
+// Existing component tests exercise the established zh-CN behavior. Module-level
+// t() reads the same store as React hooks, so reset both before each legacy case.
+beforeEach(async () => {
+  // Load the active module instance after any `vi.resetModules()` isolation.
+  const [{ DEFAULT_LOCALE }, store] = await Promise.all([
+    import("../i18n/localeTypes"),
+    import("../i18n/localeStore"),
+  ]);
+  store.selectLocale(DEFAULT_LOCALE);
+  store.applyDocumentLocale(DEFAULT_LOCALE);
+});
 
 // `findBy*` 的默认等待窗口只有 1 秒，而这些页面要挂载 antd 的整套组件、再等几个 mock 接口
 // 依次 resolve；机器一忙就会在"还没渲染完"的时候超时，表现为随机失败（同一个文件里不同的用例

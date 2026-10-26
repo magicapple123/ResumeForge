@@ -39,6 +39,7 @@ import {
   type ResumeFonts,
 } from "../../api/settings";
 import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 import { ListyItem } from "../common/ListyItem";
 import BuiltinFontRow from "./BuiltinFontRow";
 import FontSampleModal from "./FontSampleModal";
@@ -76,6 +77,7 @@ async function fetchBuiltinFont(): Promise<BuiltinFontStatus | null> {
 }
 
 export default function ResumeFontCard() {
+  useLocale();
   const { message, modal } = App.useApp();
   const [data, setData] = useState<ResumeFonts | null>(null);
   /** 内置（按需下载）字体状态；`null` = 该后端没有这个接口，整行不渲染。 */

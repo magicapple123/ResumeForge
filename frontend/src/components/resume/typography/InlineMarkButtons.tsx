@@ -27,6 +27,7 @@ import {
   type InlineEdit,
   type InlineRange,
 } from "../../../features/resume-layout/inlineMarks";
+import { useLocale } from "../../../i18n/i18nContext";
 
 export interface InlineMarkCommit {
   text: string;
@@ -66,6 +67,7 @@ function MarkButton({
   onClick: () => void;
   disabled: boolean;
 }) {
+  useLocale();
   return (
     <Tooltip title={t(labelKey)}>
       <Button
@@ -86,6 +88,7 @@ export default function InlineMarkButtons({
   disabled = false,
   className,
 }: Props) {
+  useLocale();
   const { message } = App.useApp();
   const [linkSnapshot, setLinkSnapshot] = useState<{
     text: string;

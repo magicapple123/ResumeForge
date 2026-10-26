@@ -126,7 +126,7 @@ def parse_candidate_csv(
     用户能直接在 Excel 里定位到那一行。解析骨架与岗位 CSV 共用
     :func:`csv_io.parse_csv_table`。
     """
-    return parse_csv_table(
+    rows, errors = parse_csv_table(
         text,
         header_to_field=HEADER_TO_FIELD,
         header_aliases=HEADER_ALIASES,
@@ -134,6 +134,7 @@ def parse_candidate_csv(
         title_field="title",
         title_missing_message="缺少「岗位名称」列，无法识别哪一列是岗位名",
     )
+    return rows, [{**error, "code": "invalid"} for error in errors]
 
 
 def import_candidate_rows(
@@ -149,7 +150,13 @@ def import_candidate_rows(
             company = clean.get("company", "")
             source_url = clean.get("source_url", "")
             if find_duplicate(db, title, company, source_url) is not None:
-                failed.append({"line": line, "message": "备选岗位里已有这一条，已跳过"})
+                failed.append(
+                    {
+                        "line": line,
+                        "message": "备选岗位里已有这一条，已跳过",
+                        "code": "duplicate",
+                    }
+                )
                 continue
             create_candidate_job(
                 db,
@@ -165,9 +172,14 @@ def import_candidate_rows(
                 ),
             )
             imported += 1
+        except ValueError as exc:
+            db.rollback()
+            failed.append(
+                {"line": line, "message": str(exc) or "这一行导入失败", "code": "invalid"}
+            )
         except Exception as exc:  # noqa: BLE001 - 单行失败不拖垮整批，逐行给原因
             db.rollback()
-            failed.append({"line": line, "message": str(exc) or "这一行导入失败"})
+            failed.append({"line": line, "message": str(exc) or "这一行导入失败", "code": "error"})
     return imported, failed
 
 

@@ -11,8 +11,9 @@
  *   （提交时也不重新读全局选择）。
  */
 import { Alert, Checkbox, Select, Space, Switch, Tag, Typography } from "antd";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 import { configuredDimensionLines, hasEmploymentStatus } from "./dimensions";
 import { loadScenarioSelection } from "./scenarioSelectionStorage";
 import type { CareerContextRequest, CareerScenario } from "./types";
@@ -27,6 +28,7 @@ interface Props {
 }
 
 export default function GenerationScenarioControl({ value, onChange, disabled = false }: Props) {
+  useLocale();
   const { scenarios, loading: scenariosLoading, error: scenariosError } = useScenarioSelection();
   const { catalog, loading: catalogLoading, error: catalogError } = useScenarioCatalog(true);
   // 当前窗口选择只在挂载时读一次：之后全站切换不回流（本区块的已选内容优先）。
@@ -37,13 +39,9 @@ export default function GenerationScenarioControl({ value, onChange, disabled = 
   const preset = catalog?.presets.find((item) => item.key === value?.preset_key) ?? null;
   const selectedConfig = savedScenario?.config ?? preset?.config ?? null;
 
-  const dimensions = useMemo(
-    () =>
-      configuredDimensionLines(selectedConfig, {
-        includeEmploymentStatus: value?.include_employment_status === true,
-      }),
-    [selectedConfig, value?.include_employment_status],
-  );
+  const dimensions = configuredDimensionLines(selectedConfig, {
+    includeEmploymentStatus: value?.include_employment_status === true,
+  });
 
   const toggleEnabled = (next: boolean) => {
     setEnabled(next);

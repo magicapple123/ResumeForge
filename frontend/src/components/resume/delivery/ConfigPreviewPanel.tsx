@@ -8,6 +8,7 @@
 import { Button } from "antd";
 import { useEffect, useRef, useState } from "react";
 import { t } from "../../../i18n";
+import { useLocale } from "../../../i18n/i18nContext";
 import {
   ConfigPreviewUnsupportedError,
   previewExportConfig,
@@ -32,6 +33,7 @@ export default function ConfigPreviewPanel({
   disabled = false,
   ...input
 }: ConfigPreviewPanelProps) {
+  useLocale();
   const [state, setState] = useState<PreviewState>({ status: "idle" });
   const urlRef = useRef<string | null>(null);
   const requestRef = useRef(0);

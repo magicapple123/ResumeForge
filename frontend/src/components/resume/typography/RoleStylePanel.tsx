@@ -48,6 +48,7 @@ import {
   type ResumeStyleValue,
 } from "../../../features/resume-layout/styleOverrides";
 import StyleValueRow from "./StyleValueRow";
+import { useLocale } from "../../../i18n/i18nContext";
 
 interface Props {
   layout: ResumeLayout;
@@ -67,6 +68,7 @@ export default function RoleStylePanel({
   onChange,
   defaultOpenRoles,
 }: Props) {
+  useLocale();
   const config = layout.format_config;
   const domains = readStyleDomains(config);
   const styleCatalog = readStyleCatalog(catalog);

@@ -8,6 +8,7 @@
  */
 import { Flex, Select, Space, Switch, Tooltip, Typography } from "antd";
 import { t } from "../../../i18n";
+import { useLocale } from "../../../i18n/i18nContext";
 import type { EntryBreak } from "../../../features/resume-pagination/paginationDomain";
 
 /** 跟随行数候选：0（不跟随）/1–3（与后端 keep_with_next 0–3 同域）。 */
@@ -33,6 +34,7 @@ export function BreakControls({
     next: Partial<Record<"break_before" | "keep_with_next" | "allow_split", unknown>>,
   ) => void;
 }) {
+  useLocale();
   return (
     <Flex gap={12} wrap align="center">
       <Space size={4}>

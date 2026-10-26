@@ -7,6 +7,7 @@
  */
 import { Button, Select, Space, Tag, Typography } from "antd";
 import { bt } from "../../../features/resume-bilingual/i18n";
+import { useLocale } from "../../../i18n/i18nContext";
 import {
   VARIANT_FONT_SCALES,
   variantPageLimitOptions,
@@ -42,6 +43,7 @@ export default function VariantLayoutEditor({
   onSave,
   onResetInherit,
 }: Props) {
+  useLocale();
   const fontOptions = VARIANT_FONT_SCALES.map((scale) => ({
     value: scale,
     label: fontLabel(scale),

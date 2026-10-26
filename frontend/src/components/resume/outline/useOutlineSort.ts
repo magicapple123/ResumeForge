@@ -17,6 +17,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { DragEvent, KeyboardEvent } from "react";
 import { t } from "../../../i18n";
+import { useLocale } from "../../../i18n/i18nContext";
 import type { ResumeContent } from "../../../types/resume";
 import { canMoveEntry, canMovePoint } from "../../../features/resume-outline/commands";
 import {
@@ -130,6 +131,7 @@ export function useOutlineSort({
   previewBase,
   onStructurePreview,
 }: OutlineSortOptions): OutlineSortApi {
+  useLocale();
   const [sortSession, setSortSession] = useState<OutlineSortSession | null>(null);
   const [dragPayload, setDragPayload] = useState<OutlineDragPayload | null>(null);
   const [dropTargetKey, setDropTargetKey] = useState<string | null>(null);

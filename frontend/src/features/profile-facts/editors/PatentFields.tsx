@@ -2,18 +2,19 @@
 /** 专利编辑字段（payload 见契约 §3.1 patent）。 */
 import { Col, Row } from "antd";
 import { t } from "../../../i18n";
+import { useLocale } from "../../../i18n/i18nContext";
 import { PATENT_STATUS_OPTIONS } from "../constants";
 import { isFieldHidden, translateOptions, type HiddenFields } from "./fieldHelpers";
 import { FactDateField, FactSelectField, FactTextField, FactUrlField } from "./fields";
 import PersonRows from "./PersonRows";
-
-const STATUS_OPTIONS = translateOptions(PATENT_STATUS_OPTIONS);
 
 interface Props {
   hiddenFields: HiddenFields;
 }
 
 export default function PatentFields({ hiddenFields }: Props) {
+  useLocale();
+  const statusOptions = translateOptions(PATENT_STATUS_OPTIONS);
   const hidden = (key: string) => isFieldHidden(hiddenFields, key);
   return (
     <>
@@ -54,7 +55,7 @@ export default function PatentFields({ hiddenFields }: Props) {
             <FactSelectField
               name="status"
               labelKey="research.patents.status"
-              options={STATUS_OPTIONS}
+              options={statusOptions}
             />
           )}
         </Col>

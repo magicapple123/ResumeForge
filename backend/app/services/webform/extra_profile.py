@@ -57,6 +57,7 @@ from ...models.web_form_profile import (
     WebFormProfileEntry,
 )
 from ...schemas.date_format import normalize_partial_date
+from .field_types import GROUP_CUSTOM, normalize_group_id
 from .fields import FIELD_LABELS, FORM_FIELDS, SOURCE_EXTRA
 
 # 目录里 ``source="extra"`` 的那些 key。**目录内的**合法 key 就是这一批。
@@ -150,7 +151,7 @@ def display_label(field_key: str, label: str = "") -> str:
 
 
 # 自定义字段在「网申资料」里的分组名。放最后——它们没有目录里的归类信息。
-CUSTOM_GROUP = "自定义"
+CUSTOM_GROUP = GROUP_CUSTOM
 
 
 def custom_fields_of(db: Session, groups: list[str]) -> list[dict[str, Any]]:
@@ -166,6 +167,8 @@ def custom_fields_of(db: Session, groups: list[str]) -> list[dict[str, Any]]:
     ``matchable=True`` 是给界面看的信号：普通模式做唯一精确标签对应；放宽模式开启时，
     参与受约束的文本标签/上下文匹配。
     """
+    # Normalize cached legacy labels before they leave the API layer.
+    groups[:] = list(dict.fromkeys(normalize_group_id(group) for group in groups))
     rows = (
         db.query(WebFormProfileEntry)
         .filter(WebFormProfileEntry.field_key.like(f"{CUSTOM_KEY_PREFIX}%"))

@@ -12,6 +12,7 @@
 import { Alert, Button, Card, Space, Tag, Typography } from "antd";
 import { useMemo, useState } from "react";
 import { ot } from "../../../features/resume-optimizer/i18n";
+import { useLocale } from "../../../i18n/i18nContext";
 import { overflowForTarget } from "../../../features/resume-optimizer/constraints";
 import type {
   ContentCandidateKind,
@@ -101,6 +102,7 @@ export default function ContentCandidateList({
   applying = false,
   onApply,
 }: Props) {
+  useLocale();
   const measured = useMemo(
     () => measureCandidates(candidates, probe, before, targetPages),
     [candidates, probe, before, targetPages],

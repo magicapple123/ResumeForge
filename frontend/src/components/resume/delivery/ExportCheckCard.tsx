@@ -7,6 +7,7 @@
  */
 import { Alert, Button } from "antd";
 import { t } from "../../../i18n";
+import { useLocale } from "../../../i18n/i18nContext";
 import type { MessageKey } from "../../../i18n";
 import { collectExportWarnings, type ExportCheckWarning } from "../../../features/resume-delivery";
 import type { ExportCheckSource, ExportCheckSummary } from "../../../features/resume-delivery";
@@ -47,6 +48,7 @@ export default function ExportCheckCard({
   checkFailed = false,
   onRefresh,
 }: ExportCheckCardProps) {
+  useLocale();
   const warnings = collectExportWarnings(summary);
   const modeKey: MessageKey =
     summary.document_mode === "long_cv"

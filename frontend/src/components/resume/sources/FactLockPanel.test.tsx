@@ -1,10 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 /** 事实锁面板：列出、新建（带选中定位）、解除、冲突说明。 */
 import { App as AntdApp } from "antd";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { pt } from "../../../features/resume-provenance/i18n";
 import type { FactLockOut, FactLockViolationOut } from "../../../features/resume-provenance/types";
+import { t } from "../../../i18n";
+import I18nProvider from "../../../i18n/I18nProvider";
+import { selectLocale } from "../../../i18n/localeStore";
 import FactLockPanel from "./FactLockPanel";
 
 afterEach(() => {
@@ -43,6 +46,19 @@ describe("FactLockPanel", () => {
       </AntdApp>,
     );
     expect(screen.queryByRole("button", { name: pt("provenance.lock.add") })).toBeNull();
+  });
+
+  it("updates kind options after the interface locale changes", () => {
+    render(
+      <AntdApp>
+        <I18nProvider>
+          <FactLockPanel locks={[]} selection={{ object_id: "exp_1" }} onCreate={vi.fn()} />
+        </I18nProvider>
+      </AntdApp>,
+    );
+    act(() => selectLocale("en-US"));
+    fireEvent.mouseDown(screen.getByRole("combobox", { name: t("provenance.lock.kind") }));
+    expect(screen.getByRole("option", { name: t("provenance.lock.kind.name") })).toBeTruthy();
   });
 
   it("没有选中对象时新建按钮禁用", () => {

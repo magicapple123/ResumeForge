@@ -1,15 +1,15 @@
 // SPDX-License-Identifier: Apache-2.0
 import { Col, Input, Select, Space, Tag, Tooltip, Typography } from "antd";
 import { memo, useCallback, useMemo, type CSSProperties } from "react";
+import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
+import { webformOptionLabel } from "../../features/webform/groupIdentity";
 import WebFormCustomFieldControls from "./WebFormCustomFieldControls";
 import PartialDateSelect from "./PartialDateSelect";
 import { isCustomField } from "./WebFormProfileFieldUtils";
 import type { WebFormExtraEntry, WebFormField } from "../../types";
 
 const { TextArea } = Input;
-
-const CUSTOM_HINT =
-  "标签与唯一预设字段精确对应时可自动匹配；放宽模式会尝试受约束的文本匹配，歧义项不猜、请复核";
 
 const FIELD_STYLE: CSSProperties = {
   height: "100%",
@@ -56,10 +56,14 @@ function FieldInput({
   onChange: (value: string) => void;
   label: string;
 }) {
-  const selectOptions = useMemo(
-    () => (field.options ?? []).map((option) => ({ label: option, value: option })),
-    [field.options],
-  );
+  const locale = useLocale();
+  const selectOptions = useMemo(() => {
+    void locale;
+    return (field.options ?? []).map((option) => ({
+      label: webformOptionLabel(field.key, option),
+      value: option,
+    }));
+  }, [field.key, field.options, locale]);
   if (field.kind === "longtext") {
     return (
       <TextArea
@@ -117,6 +121,8 @@ export default memo(function WebFormProfileField({
   onRename,
   onDelete,
 }: Props) {
+  useLocale();
+  const customHint = t("profileLibrary.webform.fieldCustomHint");
   const handleChange = useCallback(
     (nextValue: string) => onChange(field.key, nextValue),
     [field.key, onChange],
@@ -130,6 +136,9 @@ export default memo(function WebFormProfileField({
     [field.key, onRename],
   );
   const handleDelete = useCallback(() => onDelete(field.key), [field.key, onDelete]);
+  const displayValue = field.options?.includes(value)
+    ? webformOptionLabel(field.key, value)
+    : value;
   return (
     <Col xs={24} lg={12}>
       <div style={fieldStyle}>
@@ -153,19 +162,19 @@ export default memo(function WebFormProfileField({
                   whiteSpace: "nowrap",
                 }}
               >
-                {field.label}
+                {displayLabel}
               </Typography.Text>
             )}
           </div>
           <Space size={4} wrap>
             {entry?.source === "learned" ? (
-              <Tooltip title="填表时你填了这个框、而简历通里没有，于是问你要不要记住">
-                <Tag color="purple">学到</Tag>
+              <Tooltip title={t("profileLibrary.webform.fieldLearnedHint")}>
+                <Tag color="purple">{t("profileLibrary.webform.fieldLearnedTag")}</Tag>
               </Tooltip>
             ) : null}
             {isCustomField(field) ? (
-              <Tooltip title={CUSTOM_HINT}>
-                <Tag color="cyan">自定义</Tag>
+              <Tooltip title={customHint}>
+                <Tag color="cyan">{t("profileLibrary.webform.fieldCustomTag")}</Tag>
               </Tooltip>
             ) : null}
           </Space>
@@ -188,7 +197,7 @@ export default memo(function WebFormProfileField({
                 color: value.trim() ? undefined : "var(--rf-text-tertiary)",
               }}
             >
-              {value || "未填写"}
+              {displayValue || t("profileLibrary.webform.fieldEmptyValue")}
             </Typography.Text>
           )}
         </div>

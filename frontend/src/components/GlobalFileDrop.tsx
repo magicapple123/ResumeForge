@@ -18,6 +18,7 @@ import { useNavigate } from "react-router-dom";
 import { createManualResume } from "../api/resumes";
 import { importDataset } from "../api/settings";
 import { describeImportIssues } from "../features/settings/datasetImportFeedback";
+import { getSnapshot } from "../i18n/localeStore";
 
 const ACCEPTED = [".zip", ".csv", ".json"] as const;
 
@@ -86,6 +87,7 @@ export default function GlobalFileDrop() {
           const created = await createManualResume({
             title: stemOf(file.name),
             content: parsed as never,
+            language: getSnapshot().locale,
           });
           message.success(`已新建简历「${created.title}」`);
           navigate("/resumes");

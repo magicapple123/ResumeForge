@@ -8,6 +8,8 @@
  */
 import { Alert, Button, Input, Modal, Select, Space, Typography } from "antd";
 import { useMemo, useState } from "react";
+import { t } from "../../../i18n";
+import { useLocale } from "../../../i18n/i18nContext";
 import { at } from "../../../features/resume-assets/i18n";
 import {
   MAX_PHRASE_TAG_LENGTH,
@@ -38,14 +40,14 @@ const KIND_LABEL_KEYS: Record<PhraseKind, Parameters<typeof at>[0]> = {
   custom: "assets.kind.custom",
 };
 
+const LANGUAGE_OPTIONS: readonly { value: string; label: Parameters<typeof at>[0] }[] = [
+  { value: "", label: "assets.language.unknown" },
+  { value: "zh-CN", label: "assets.language.zh-CN" },
+  { value: "en-US", label: "assets.language.en-US" },
+];
+
 // i18n-ok: 全角逗号/顿号是标签输入分隔符（输入法常用），不是界面文案
 const TAG_SEPARATORS = [",", "，", "、"];
-
-const LANGUAGE_OPTIONS = [
-  { value: "", label: at("assets.language.unknown") },
-  { value: "zh-CN", label: at("assets.language.zh-CN") },
-  { value: "en-US", label: at("assets.language.en-US") },
-];
 
 export default function PhraseEditorModal({
   open,
@@ -54,6 +56,7 @@ export default function PhraseEditorModal({
   onCancel,
   onSave,
 }: Props) {
+  useLocale();
   const [phase, setPhase] = useState<"edit" | "diff">("edit");
   const [text, setText] = useState(phrase.text);
   const [kind, setKind] = useState<PhraseKind>(phrase.kind);
@@ -159,7 +162,7 @@ export default function PhraseEditorModal({
                 size="small"
                 value={language}
                 aria-label={at("assets.editor.language")}
-                options={LANGUAGE_OPTIONS}
+                options={LANGUAGE_OPTIONS.map(({ value, label }) => ({ value, label: t(label) }))}
                 onChange={(value) => setLanguage(value)}
               />
             </label>

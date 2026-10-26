@@ -32,6 +32,7 @@ from sqlalchemy.orm import Session
 
 from ...models.web_form_profile import REUSE_GENERAL
 from . import extra_profile
+from .field_types import normalize_group_id
 from .fields import FORM_FIELDS, SOURCE_EXTRA
 
 MAX_MEMORY_VALUE_CHARS = 100_000
@@ -52,7 +53,7 @@ def _target(
     return {
         "target_id": target_id,
         "source": SOURCE_EXTRA_ONLY,
-        "group": group,
+        "group": normalize_group_id(group),
         "label": label,
         "value": str(value or ""),
         "kind": kind,

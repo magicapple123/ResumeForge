@@ -23,6 +23,7 @@ import { Alert, Button, Modal } from "antd";
 import { useEffect, useMemo, useState } from "react";
 import { resumeFontPreviewUrl } from "../../api/fonts";
 import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 
 /** 样张用的 CSS 家族名：每次打开都从文件 URL 现挂一份，关掉就摘掉。 */
 const SAMPLE_FAMILY = "rf-font-sample";
@@ -48,6 +49,7 @@ export default function FontSampleModal({
   onActivate,
   onClose,
 }: Props) {
+  useLocale();
   /** 最近一次加载结果，带上"是哪一款"：换一款字体时旧结果不能冒充新结果。 */
   const [result, setResult] = useState<{ name: string; load: LoadState } | null>(null);
 

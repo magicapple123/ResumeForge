@@ -10,6 +10,7 @@ import { Form, Input, Select } from "antd";
 import type { ReactNode } from "react";
 import PartialDateSelect from "../../../components/profile/PartialDateSelect";
 import { t } from "../../../i18n";
+import { useLocale } from "../../../i18n/i18nContext";
 import type { MessageKey } from "../../../i18n";
 import { httpUrlRule } from "./fieldHelpers";
 
@@ -30,6 +31,7 @@ export function FactTextField({
   maxLength,
   extra,
 }: TextFieldProps) {
+  useLocale();
   return (
     <Form.Item
       name={name}
@@ -55,6 +57,7 @@ export function FactTextAreaField({
   rows = 3,
   extra,
 }: TextFieldProps & { rows?: number }) {
+  useLocale();
   return (
     <Form.Item name={name} label={t(labelKey)} extra={extra}>
       <Input.TextArea
@@ -75,6 +78,7 @@ export function FactDateField({
   labelKey: MessageKey;
   allowOngoing?: boolean;
 }) {
+  useLocale();
   return (
     <Form.Item name={name} label={t(labelKey)}>
       <PartialDateSelect label={t(labelKey)} allowOngoing={allowOngoing} />
@@ -83,6 +87,7 @@ export function FactDateField({
 }
 
 export function FactUrlField({ name, labelKey, placeholderKey }: Omit<TextFieldProps, "extra">) {
+  useLocale();
   return (
     <Form.Item name={name} label={t(labelKey)} rules={[httpUrlRule()]}>
       <Input placeholder={placeholderKey ? t(placeholderKey) : undefined} />
@@ -101,6 +106,7 @@ export function FactSelectField<T extends string>({
   options: { value: T; label: string }[];
   extra?: ReactNode;
 }) {
+  useLocale();
   return (
     <Form.Item name={name} label={t(labelKey)} extra={extra}>
       <Select options={options} />

@@ -1,7 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 import { App as AntdApp } from "antd";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { t } from "../../i18n";
+import I18nProvider from "../../i18n/I18nProvider";
+import { selectLocale } from "../../i18n/localeStore";
 import type { WebFormMemoryTarget, WebFormRememberPending } from "../../types";
 import WebFormMemoryDialog from "./WebFormMemoryDialog";
 
@@ -39,15 +42,17 @@ const TARGETS: WebFormMemoryTarget[] = [
 function renderDialog(onSubmit = vi.fn()) {
   render(
     <AntdApp>
-      <WebFormMemoryDialog
-        open
-        pending={PENDING}
-        targets={TARGETS}
-        loading={false}
-        saving={false}
-        onCancel={() => undefined}
-        onSubmit={onSubmit}
-      />
+      <I18nProvider>
+        <WebFormMemoryDialog
+          open
+          pending={PENDING}
+          targets={TARGETS}
+          loading={false}
+          saving={false}
+          onCancel={() => undefined}
+          onSubmit={onSubmit}
+        />
+      </I18nProvider>
     </AntdApp>,
   );
   return onSubmit;
@@ -56,19 +61,28 @@ function renderDialog(onSubmit = vi.fn()) {
 afterEach(() => {
   cleanup();
   document.body.innerHTML = "";
+  selectLocale("zh-CN");
 });
 
 describe("WebFormMemoryDialog", () => {
   it("按模块展示网申资料，并支持非连续字符的模糊搜索", () => {
     renderDialog();
 
-    expect(screen.getByRole("button", { name: /网申资料 · 学籍与档案/ })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /网申资料 · 身体情况/ })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", {
+        name: new RegExp(`${t("profileLibrary.tab.webform")} · ${t("webformGroups.school")}`),
+      }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", {
+        name: new RegExp(`${t("profileLibrary.tab.webform")} · ${t("webformGroups.health")}`),
+      }),
+    ).toBeInTheDocument();
     expect(screen.queryByText("专业")).not.toBeInTheDocument();
     // **简历资料不是落点**：界面上不该再出现「我的资料」这一区。
-    expect(screen.queryByText("我的资料")).not.toBeInTheDocument();
+    expect(screen.queryByText(t("profileLibrary.page.title"))).not.toBeInTheDocument();
 
-    fireEvent.change(screen.getByPlaceholderText(/搜索字段、模块或当前值/), {
+    fireEvent.change(screen.getByPlaceholderText(t("profileLibrary.webform.searchPlaceholder")), {
       target: { value: "学档" },
     });
 
@@ -79,11 +93,13 @@ describe("WebFormMemoryDialog", () => {
   it("默认收起已有模块，搜索时展开，清空后恢复收起状态", () => {
     renderDialog();
 
-    const group = screen.getByRole("button", { name: /网申资料 · 学籍与档案/ });
+    const group = screen.getByRole("button", {
+      name: new RegExp(`${t("profileLibrary.tab.webform")} · ${t("webformGroups.school")}`),
+    });
     expect(group).toHaveAttribute("aria-expanded", "false");
     expect(screen.queryByText("学号")).not.toBeInTheDocument();
 
-    const search = screen.getByPlaceholderText(/搜索字段、模块或当前值/);
+    const search = screen.getByPlaceholderText(t("profileLibrary.webform.searchPlaceholder"));
     fireEvent.change(search, { target: { value: "学号" } });
     expect(screen.getByText("学号")).toBeInTheDocument();
     expect(group).toHaveAttribute("aria-expanded", "true");
@@ -99,7 +115,7 @@ describe("WebFormMemoryDialog", () => {
     expect(screen.queryByRole("radio", { name: "场景" })).not.toBeInTheDocument();
     expect(screen.queryByText("下次怎么复用", { exact: true })).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "保存到选中的资料" }));
+    fireEvent.click(screen.getByRole("button", { name: t("profileLibrary.webform.rememberSave") }));
     expect(onSubmit).toHaveBeenCalledWith({
       target_id: "custom",
       value: "王教授",
@@ -115,7 +131,7 @@ describe("WebFormMemoryDialog", () => {
     // 顺序：搜索框、自定义字段名、要保存的值。
     fireEvent.change(inputs[1], { target: { value: "导师姓名" } });
     fireEvent.change(inputs[2], { target: { value: "王教授" } });
-    fireEvent.click(screen.getByRole("button", { name: "保存到选中的资料" }));
+    fireEvent.click(screen.getByRole("button", { name: t("profileLibrary.webform.rememberSave") }));
 
     expect(onSubmit).toHaveBeenCalledWith({
       target_id: "custom",
@@ -123,5 +139,19 @@ describe("WebFormMemoryDialog", () => {
       label: "导师姓名",
       reuse: "general",
     });
+  });
+
+  it("refreshes visible labels when the UI locale changes", () => {
+    renderDialog();
+    act(() => selectLocale("en-US"));
+    expect(
+      screen.getByRole("dialog", { name: t("profileLibrary.webform.rememberTitle") }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: t("profileLibrary.webform.rememberSave") }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByPlaceholderText(t("profileLibrary.webform.searchPlaceholder")),
+    ).toBeInTheDocument();
   });
 });

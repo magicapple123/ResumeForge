@@ -31,6 +31,7 @@ import {
 import type { UpdateCheckResult } from "../../types";
 import { useUpdateDownloadStatus } from "../../hooks/useUpdateDownloadStatus";
 import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 import { renderReleaseNotes } from "./updateNotesRenderer";
 
 const UPDATE_COMPLETED_KEY = "resumeforge.update.completed";
@@ -44,6 +45,7 @@ function formatBytes(value: number | null): string {
 }
 
 export default function UpdateCard() {
+  useLocale();
   const { modal, message } = App.useApp();
   const [result, setResult] = useState<UpdateCheckResult | null>(null);
   const { status, statusError, setStatus, refreshStatus } = useUpdateDownloadStatus();

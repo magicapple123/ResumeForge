@@ -7,6 +7,7 @@ import { Table, Tag, Typography } from "antd";
 import type { TableColumnsType } from "antd";
 import EmptyState from "../../common/EmptyState";
 import { t } from "../../../i18n";
+import { useLocale } from "../../../i18n/i18nContext";
 import {
   FORMAT_LABEL_KEY,
   LEVEL_LABEL_KEY,
@@ -27,6 +28,7 @@ interface Props {
 }
 
 export default function CapabilitiesTable({ capabilities }: Props) {
+  useLocale();
   const matrix = parseCapabilities(capabilities);
   if (matrix.rows.length === 0) {
     return <EmptyState inline description={t("preflight.capabilities.empty")} />;

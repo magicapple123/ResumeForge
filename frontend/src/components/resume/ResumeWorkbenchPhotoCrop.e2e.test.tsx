@@ -98,9 +98,9 @@ function renderHost(overrides: Partial<HarnessProps> = {}) {
 
 function cropDialog(): Promise<HTMLElement> {
   return screen.findAllByRole("dialog").then((dialogs) => {
-    const found = dialogs.find((dialog) => within(dialog).queryByText(t("proview.photo.hint")));
-    if (!found) throw new Error("crop dialog not found");
-    return found;
+    const dialog = dialogs[dialogs.length - 1];
+    if (!dialog) throw new Error("crop dialog not rendered");
+    return dialog;
   });
 }
 

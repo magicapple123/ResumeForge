@@ -77,9 +77,9 @@ describe("PageThumbnailStrip", () => {
   it("溢出：截断页有「溢出」标记；末页占用按确定事实显示已截断", () => {
     renderStrip(OVERFLOW);
     const page = screen.getByRole("listitem", {
-      name: (name) =>
-        name.includes(t("pagination.thumbnails.page", { page: 1 })) &&
-        name.includes(t("pagination.thumbnails.truncatedBadge")),
+      name: new RegExp(
+        `${t("pagination.thumbnails.page", { page: 1 })}.*${t("pagination.thumbnails.truncatedBadge")}`,
+      ),
     });
     expect(page).toBeInTheDocument();
     expect(screen.getByText(t("pagination.thumbnails.fillTruncated"))).toBeInTheDocument();

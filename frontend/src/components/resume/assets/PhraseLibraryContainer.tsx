@@ -32,6 +32,7 @@ import type {
   PhraseUpdatePayload,
   ResumePhrase,
 } from "../../../features/resume-assets/types";
+import { useLocale } from "../../../i18n/i18nContext";
 
 /** 插入目标：宿主告诉容器"插到哪一栏、哪一条、哪个位置"。 */
 export interface PhraseInsertTarget {
@@ -75,6 +76,7 @@ export default function PhraseLibraryContainer({
   onInserted,
   className,
 }: Props) {
+  useLocale();
   const toast = useToast();
   const library = usePhraseLibrary();
   const [lastInserted, setLastInserted] = useState<PhraseInsertOut | null>(null);

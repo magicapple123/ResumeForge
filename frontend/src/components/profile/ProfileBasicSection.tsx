@@ -10,6 +10,7 @@ import { Card, Col, Form, Input, Row, Typography } from "antd";
 import ProfilePhotoPanel from "./ProfilePhotoPanel";
 import ProfileFieldInputs from "../../features/profile-library/ProfileFieldInputs";
 import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 import type { FieldOut, LimitsOut, SectionOut } from "../../features/profile-library/types";
 
 interface Props {
@@ -35,6 +36,7 @@ export default function ProfileBasicSection({
   onPhotoSelect,
   onSetPreference,
 }: Props) {
+  useLocale();
   const singleLineMax = limits?.single_line_chars ?? 200;
   const multiLineMax = limits?.multi_line_chars ?? 2000;
   return (

@@ -17,6 +17,7 @@ import { Alert, Button, Card, Form, Select, Space } from "antd";
 import { useMemo, useState } from "react";
 import { formatErrorGuidance } from "../../../api/errorGuidance";
 import { t } from "../../../i18n";
+import { useLocale } from "../../../i18n/i18nContext";
 import { FACT_KINDS, FACT_KIND_LABEL_KEYS, FACT_SAVE_LABEL_KEYS } from "../constants";
 import { isRevisionConflict } from "../errors";
 import { emptyFormValues, formToPayload, payloadToForm } from "../factModel";
@@ -61,11 +62,6 @@ function KindFields({ kind, hiddenFields }: KindFieldsProps) {
   }
 }
 
-const KIND_OPTIONS = FACT_KINDS.map((kind) => ({
-  value: kind,
-  label: t(FACT_KIND_LABEL_KEYS[kind]),
-}));
-
 interface Props {
   mode: "create" | "edit";
   /** 新建时的默认类型；编辑时就是该事实的类型。 */
@@ -95,11 +91,16 @@ export default function FactEditor({
   onCancel,
   onConflictRefresh,
 }: Props) {
+  useLocale();
   const [kind, setKind] = useState<FactKind>(initialKind);
   const [saving, setSaving] = useState(false);
   const [conflict, setConflict] = useState(false);
   const [errorText, setErrorText] = useState<string | null>(null);
   const [form] = Form.useForm();
+  const kindOptions = FACT_KINDS.map((item) => ({
+    value: item,
+    label: t(FACT_KIND_LABEL_KEYS[item]),
+  }));
 
   // 初始值只算一次：调用方用 key 保证"编辑另一条 / 重新打开"时整块重新挂载。
   const initialValues = useMemo(() => {
@@ -194,7 +195,7 @@ export default function FactEditor({
             <Select
               aria-label={t("profileFacts.editor.kind")}
               value={kind}
-              options={KIND_OPTIONS}
+              options={kindOptions}
               onChange={(next) => switchKind(next as FactKind)}
             />
           </Form.Item>

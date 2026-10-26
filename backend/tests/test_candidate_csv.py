@@ -88,7 +88,7 @@ def test_import_preview_reports_line_numbers(client):
     assert response.status_code == 200, response.text
     preview = response.json()
     assert [row["line"] for row in preview["rows"]] == [2]
-    assert preview["errors"] == [{"line": 4, "message": "岗位名称不能为空"}]
+    assert preview["errors"] == [{"line": 4, "message": "岗位名称不能为空", "code": "invalid"}]
 
 
 def test_import_commit_creates_candidates_and_skips_duplicates(client, db_session):
@@ -109,7 +109,11 @@ def test_import_commit_creates_candidates_and_skips_duplicates(client, db_sessio
     again = client.post("/api/candidate-jobs/csv/import", json={"rows": preview["rows"]})
     assert again.json() == {
         "imported": 0,
-        "failed": [{"line": 2, "message": "备选岗位里已有这一条，已跳过"}],
+        "failed": [{
+            "line": 2,
+            "message": "备选岗位里已有这一条，已跳过",
+            "code": "duplicate",
+        }],
     }
 
     listing = client.get("/api/candidate-jobs").json()
@@ -131,7 +135,11 @@ def test_import_rejects_non_http_links(client):
     )
     preview = response.json()
     assert [row["line"] for row in preview["rows"]] == [2]
-    assert preview["errors"] == [{"line": 3, "message": "岗位链接必须以 http:// 或 https:// 开头"}]
+    assert preview["errors"] == [{
+        "line": 3,
+        "message": "岗位链接必须以 http:// 或 https:// 开头",
+        "code": "invalid",
+    }]
 
 
 def test_missing_title_column_is_a_header_error():
@@ -139,7 +147,11 @@ def test_missing_title_column_is_a_header_error():
 
     rows, errors = parse_candidate_csv("公司名称,工作地点\n示例科技,北京\n")
     assert rows == []
-    assert errors == [{"line": 1, "message": "缺少「岗位名称」列，无法识别哪一列是岗位名"}]
+    assert errors == [{
+        "line": 1,
+        "message": "缺少「岗位名称」列，无法识别哪一列是岗位名",
+        "code": "invalid",
+    }]
 
 
 def test_ids_matches_list_filter_across_pages(client, db_session):

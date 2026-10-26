@@ -32,6 +32,7 @@ import { useState } from "react";
 import EmptyState from "../../common/EmptyState";
 import ContentCandidateList from "./ContentCandidateList";
 import { ot } from "../../../features/resume-optimizer/i18n";
+import { useLocale } from "../../../i18n/i18nContext";
 import { buildContentCandidates } from "../../../features/resume-optimizer/contentCandidates";
 import {
   evaluateCandidate,
@@ -134,6 +135,7 @@ export default function LayoutOptimizerPanel({
   contentHints = [],
   onApplyContent,
 }: Props) {
+  useLocale();
   const { message } = App.useApp();
   const [constraints, setConstraints] = useState<OptimizerConstraints>(DEFAULT_CONSTRAINTS);
   const [candidates, setCandidates] = useState<MeasuredCandidate[] | null>(null);

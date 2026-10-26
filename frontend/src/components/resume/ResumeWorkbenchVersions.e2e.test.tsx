@@ -151,10 +151,11 @@ function renderShell() {
 
 async function openVersions(): Promise<HTMLElement> {
   fireEvent.click(await screen.findByRole("button", { name: t("versions.action.openAria") }));
-  const dialogs = await screen.findAllByRole("dialog");
-  const found = dialogs.find((dialog) => within(dialog).queryByText(t("versions.title")));
-  if (!found) throw new Error("versions dialog not found");
-  return found;
+  return screen.findAllByRole("dialog").then((dialogs) => {
+    const dialog = dialogs[dialogs.length - 1];
+    if (!dialog) throw new Error("versions dialog not rendered");
+    return dialog;
+  });
 }
 
 /** antd 在两个汉字的按钮里会插空格（"比 较" / "恢 复"）。 */

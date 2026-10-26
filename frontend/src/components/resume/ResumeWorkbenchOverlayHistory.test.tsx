@@ -111,11 +111,9 @@ function paramsColumn(): HTMLElement {
 }
 
 function undoButton(): HTMLButtonElement {
-  const button = [...paramsColumn().querySelectorAll("button")].find(
-    (node) => (node.textContent ?? "").replace(/\s+/g, "") === t("workbench.history.undo"),
-  );
-  if (!(button instanceof HTMLButtonElement)) throw new Error("undo button not rendered");
-  return button;
+  return within(paramsColumn()).getByRole("button", {
+    name: new RegExp(t("workbench.history.undo").split("").join("\\s*")),
+  }) as HTMLButtonElement;
 }
 
 function topSaveButton(): HTMLElement {
@@ -152,12 +150,11 @@ describe("制作台 · 纸面加粗进入统一历史（真实外壳）", () => 
     const params = document.querySelector<HTMLElement>(".resume-wb-col-params") as HTMLElement;
     expect(within(params).getByText(t("workbench.history.label.bold"))).toBeInTheDocument();
 
-    const undo = [...params.querySelectorAll("button")].find(
-      (node) => (node.textContent ?? "").replace(/\s+/g, "") === t("workbench.history.undo"),
-    );
-    expect(undo).toBeInstanceOf(HTMLButtonElement);
+    const undo = within(params).getByRole("button", {
+      name: new RegExp(t("workbench.history.undo").split("").join("\\s*")),
+    });
     act(() => {
-      fireEvent.click(undo as HTMLButtonElement);
+      fireEvent.click(undo);
     });
     expect(holder.overlays).toEqual({});
   });

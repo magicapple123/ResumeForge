@@ -29,6 +29,7 @@ import type { TrialAdoptRequest } from "../../../features/resume-template-trial/
 import { runPreflight } from "../../../features/resume-preflight/preflightApi";
 import TrialCapabilityStrip from "./TrialCapabilityStrip";
 import TrialColumn from "./TrialColumn";
+import { useLocale } from "../../../i18n/i18nContext";
 
 interface Props {
   layout: ResumeLayout;
@@ -61,6 +62,7 @@ export default function TemplateTrialPanel({
   onBack,
   onAdopt,
 }: Props) {
+  useLocale();
   const { message } = App.useApp();
   const trial = useTemplateTrial({
     open: true,

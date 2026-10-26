@@ -12,20 +12,21 @@
 import { Button, Card, Empty, Space, Typography } from "antd";
 import { useState } from "react";
 import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 import { useToast } from "../../hooks/useToast";
 import type { AnnouncementCode } from "../../features/announcements/announcementCodes";
 import { listMutedCodes, unmuteAnnouncement } from "../../features/announcements/announcementMute";
 import { notifyAnnouncements } from "../../features/announcements/announcementStore";
 
 /** 静音项在界面上的名字复用公告自己的文案，**不另造一套 code 名称**（否则翻译两份、必然漂移）。 */
-const CODE_LABELS: Partial<Record<AnnouncementCode, string>> = {
-  "update.ready": t("announcement.update.ready"),
-  "update.downloaded": t("announcement.update.downloaded"),
-};
-
 export default function AnnouncementSettingsCard() {
+  useLocale();
   const toast = useToast();
   const [muted, setMuted] = useState<AnnouncementCode[]>(() => listMutedCodes());
+  const codeLabels: Partial<Record<AnnouncementCode, string>> = {
+    "update.ready": t("announcement.update.ready"),
+    "update.downloaded": t("announcement.update.downloaded"),
+  };
 
   const restore = (code: AnnouncementCode): void => {
     unmuteAnnouncement(code);
@@ -46,7 +47,7 @@ export default function AnnouncementSettingsCard() {
         <Space orientation="vertical" size={8} style={{ width: "100%" }}>
           {muted.map((code) => (
             <div key={code} className="announcement-settings-row">
-              <Typography.Text>{CODE_LABELS[code] ?? code}</Typography.Text>
+              <Typography.Text>{codeLabels[code] ?? code}</Typography.Text>
               <Button size="small" onClick={() => restore(code)}>
                 {t("announcement.settings.restore")}
               </Button>

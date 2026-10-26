@@ -2,6 +2,7 @@
 /** 当前组只读摘要（R-27/R-58）：生成/新建面板显示「本次使用：组名（N 个大字段）」。 */
 import { Tooltip, Typography } from "antd";
 import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 
 interface Props {
   name: string | null;
@@ -10,6 +11,7 @@ interface Props {
 }
 
 export default function CurrentGroupSummary({ name, participatingKeys, sectionNames }: Props) {
+  useLocale();
   if (!name) {
     return <Typography.Text type="secondary">{t("profileGroups.summary.loading")}</Typography.Text>;
   }

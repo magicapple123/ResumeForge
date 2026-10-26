@@ -16,6 +16,7 @@ import { Button } from "antd";
 import { useState } from "react";
 import EmptyState from "../../common/EmptyState";
 import { t } from "../../../i18n";
+import { useLocale } from "../../../i18n/i18nContext";
 import "./history.css";
 
 export interface HistoryPanelStep {
@@ -48,6 +49,7 @@ export default function HistoryPanel({
   onRedo,
   className,
 }: Props) {
+  useLocale();
   const [preview, setPreview] = useState<PreviewTarget>(null);
   const pastSteps = [...past].reverse();
   const futureSteps = [...future];

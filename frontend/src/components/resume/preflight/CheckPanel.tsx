@@ -13,6 +13,7 @@ import ErrorState from "../../common/ErrorState";
 import LoadingBlock from "../../common/LoadingBlock";
 import type { MessageKey } from "../../../i18n";
 import { t } from "../../../i18n";
+import { useLocale } from "../../../i18n/i18nContext";
 import {
   compareRecheck,
   countBySeverity,
@@ -67,6 +68,7 @@ export default function CheckPanel({
   onOpenAts,
   fontCoverage,
 }: Props) {
+  useLocale();
   const { message } = App.useApp();
   const [blockersOnly, setBlockersOnly] = useState(false);
   const pendingRef = useRef<ReadonlySet<string>>(new Set());

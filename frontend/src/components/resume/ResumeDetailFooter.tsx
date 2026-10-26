@@ -27,6 +27,7 @@ import type { ReactNode } from "react";
 import type { ResumeLayout } from "../../types";
 import { t } from "../../i18n";
 import ExportButtons from "../ExportButtons";
+import { useLocale } from "../../i18n/i18nContext";
 
 interface Props {
   /** 简历 id：导出面板与「导出」按钮都按它取数。 */
@@ -79,6 +80,7 @@ export default function ResumeDetailFooter({
   onOpenSharePackage,
   onOpenExportOptions,
 }: Props) {
+  useLocale();
   return (
     // 固定在弹窗底部：内容长（版面诊断 + 预览）时不必一路翻到最后才够得着这些按钮。
     // 按钮区是 CSS Grid：每个按钮独占一格、block 拉满整格，自动铺满整行不留右侧空当。

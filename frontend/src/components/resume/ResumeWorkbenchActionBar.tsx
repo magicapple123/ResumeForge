@@ -30,6 +30,7 @@ import {
 import { Button, Popconfirm, Tooltip, Typography } from "antd";
 import type { MessageKey } from "../../i18n";
 import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 
 interface Props {
   /** 这份简历的名字（没有名字时不渲染那一段）。 */
@@ -109,6 +110,7 @@ export default function ResumeWorkbenchActionBar({
   onCloseRequest,
   onCloseConfirmed,
 }: Props) {
+  useLocale();
   // 有东西可做：有改动，或这是一份还没保存的草稿。
   const hasWork = editorEnabled && (dirty || isDraft);
   return (

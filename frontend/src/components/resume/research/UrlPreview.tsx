@@ -16,6 +16,7 @@
 import { Form, Typography } from "antd";
 import { doiHref, linkText, safeExternalHref } from "../../../features/resume-research/links";
 import { rt } from "../../../features/resume-research/i18n";
+import { useLocale } from "../../../i18n/i18nContext";
 
 interface Props {
   /** 该字段在表单里的完整路径，例如 ["publications", 0, "url"]。 */
@@ -27,6 +28,7 @@ interface Props {
 const HINT_STYLE = { fontSize: 12 } as const;
 
 export default function UrlPreview({ path, kind }: Props) {
+  useLocale();
   const form = Form.useFormInstance();
   return (
     <Form.Item noStyle shouldUpdate>

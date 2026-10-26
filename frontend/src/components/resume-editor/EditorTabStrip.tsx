@@ -38,6 +38,7 @@ import type { TabsProps } from "antd";
 import type { KeyboardEvent, ReactNode } from "react";
 import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 import { computeTabOverflow } from "./tabOverflow";
 
 /**
@@ -87,6 +88,7 @@ function tabNodes(track: HTMLElement): HTMLElement[] {
 }
 
 export default function EditorTabStrip({ items, activeKey, onSelect }: Props) {
+  useLocale();
   const entries = useMemo(() => toEntries(items), [items]);
   const trackRef = useRef<HTMLDivElement>(null);
   // 首次挂载用 `auto`，之后才用 `smooth`：见文件头第 1 点。

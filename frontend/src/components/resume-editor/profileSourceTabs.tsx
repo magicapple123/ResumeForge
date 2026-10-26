@@ -19,6 +19,7 @@ import {
   projectionSectionFill,
 } from "../../features/profile/profileFillOptions";
 import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 import type { ResumeContent } from "../../types";
 import { useProfileFill } from "./profileFillContext";
 
@@ -54,6 +55,7 @@ function copyEntry(value: unknown): unknown {
 }
 
 export default function ProfileSourceTabs({ projection, onSwitchGroup }: Props) {
+  useLocale();
   const form = Form.useFormInstance<ResumeContent>();
   const fill = useProfileFill();
   const rows = Array.isArray(projection?.source_layout) ? projection.source_layout : [];

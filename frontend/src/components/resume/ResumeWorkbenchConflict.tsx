@@ -21,14 +21,16 @@ import { Alert, Button, Space, Typography } from "antd";
 import { App } from "antd";
 import { useCallback, useState } from "react";
 import { createManualResume, getResume } from "../../api/resumes";
-import type { ResumeContent, ResumeDetail } from "../../types";
+import type { ResumeContent, ResumeDetail, ResumeLanguage } from "../../types";
 import { summarizeDraftDiff, type DraftDiffEntry } from "../../utils/draftDiff";
 import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 
 interface Props {
   resumeId: number;
   /** 记录原标题：另存副本的标题 = 原标题 +（副本）。 */
   resumeTitle: string;
+  resumeLanguage?: ResumeLanguage;
   /** 本地还没保存的内容（比较与另存副本取它）；返回 null = 没有可比较的内容。 */
   readLocalContent: () => ResumeContent | null;
   /** 「用最新的」：把服务端最新交给宿主（替换 detail/html/layout、清 overlay 与草稿）。 */
@@ -44,11 +46,13 @@ type Busy = "latest" | "compare" | "copy" | null;
 export default function ResumeWorkbenchConflict({
   resumeId,
   resumeTitle,
+  resumeLanguage = "zh-CN",
   readLocalContent,
   onAdoptLatest,
   onResolved,
   onCopyCreated,
 }: Props) {
+  useLocale();
   const { message } = App.useApp();
   const [busy, setBusy] = useState<Busy>(null);
   const [diff, setDiff] = useState<DraftDiffEntry[] | null>(null);
@@ -104,6 +108,7 @@ export default function ResumeWorkbenchConflict({
         title: t("workbench.conflict.copy.title", { title: resumeTitle }),
         content: local,
         draft: false,
+        language: resumeLanguage,
       });
       onCopyCreated?.(copy);
       message.success(t("workbench.conflict.copy.done", { title: copy.title }));

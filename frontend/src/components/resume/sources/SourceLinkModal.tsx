@@ -27,6 +27,7 @@ import type {
   ProvenanceSourceBriefOut,
   SourceRevisionItemOut,
 } from "../../../features/resume-provenance/types";
+import { useLocale } from "../../../i18n/i18nContext";
 
 interface Props {
   open: boolean;
@@ -51,6 +52,7 @@ function kindLabel(kind: string): string {
 }
 
 export default function SourceLinkModal({ open, resumeId, target, onClose, onLinked }: Props) {
+  useLocale();
   const [sources, setSources] = useState<ProvenanceSourceBriefOut[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);

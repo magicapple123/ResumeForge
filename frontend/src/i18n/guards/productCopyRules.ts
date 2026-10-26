@@ -44,6 +44,7 @@ const NOTIFICATION_METHODS = new Set([
   "open",
   "confirm",
 ]);
+const NAMESPACE_TRANSLATION_HELPERS = new Set(["at", "bt", "ot", "pt", "rt"]);
 
 function accessParts(expression: ts.Expression): string[] {
   if (ts.isIdentifier(expression)) return [expression.text];
@@ -78,7 +79,10 @@ export function isCopyCall(expression: ts.Expression, construct = false): boolea
 export function isTranslationCall(expression: ts.Expression): boolean {
   const parts = accessParts(expression);
   const name = parts[parts.length - 1];
-  return name === "t" || name === "translate";
+  if (name === "t" || name === "translate") return true;
+  // Namespace helpers are thin wrappers around module-level t(). Their first
+  // argument is a compile-time message key, never product copy.
+  return parts.length === 1 && NAMESPACE_TRANSLATION_HELPERS.has(name ?? "");
 }
 
 /** CSS/script bodies and console payloads are technical even if a field is named title. */

@@ -1,6 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 import { Typography } from "antd";
 import { memo } from "react";
+import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
+import { webformRepeatedGroupLabel } from "../../features/webform/groupIdentity";
+import { webformFieldLabel } from "../../features/webform/webformFieldLabels";
 import type { WebFormRepeatedGroup, WebFormRepeatedRecord } from "../../types";
 import WebFormProfileRecordGroup from "./WebFormProfileRecordGroup";
 
@@ -34,6 +38,8 @@ export default memo(function WebFormProfileRecords({
   searchTerm,
   onChange,
 }: Props) {
+  useLocale();
+  useLocale();
   const updateGroup = (
     groupKey: string,
     update: (group: WebFormRepeatedGroup) => WebFormRepeatedGroup,
@@ -76,22 +82,31 @@ export default memo(function WebFormProfileRecords({
   return (
     <div>
       <Typography.Text type="secondary" style={{ display: "block", margin: "0 0 10px" }}>
-        下面这些资料可以按教育、经历或成果分别新增多条；学校、单位、项目名称等基础内容会按
-        条序自动用于填表，不需要重复录入。
+        {t("profileLibrary.webform.repeatedIntro")}
       </Typography.Text>
-      {groups.map((group) => (
-        <WebFormProfileRecordGroup
-          key={group.key}
-          group={group}
-          editing={editing}
-          saving={saving}
-          showOnlyFilled={showOnlyFilled}
-          searchTerm={searchTerm}
-          onAdd={() => addRecord(group)}
-          onDelete={(index) => deleteRecord(group, index)}
-          onChange={(index, fieldKey, value) => changeRecord(group, index, fieldKey, value)}
-        />
-      ))}
+      {groups.map((sourceGroup) => {
+        const group = {
+          ...sourceGroup,
+          label: webformRepeatedGroupLabel(sourceGroup.family, sourceGroup.label),
+          fields: sourceGroup.fields.map((field) => ({
+            ...field,
+            label: webformFieldLabel(field.key, field.label),
+          })),
+        };
+        return (
+          <WebFormProfileRecordGroup
+            key={group.key}
+            group={group}
+            editing={editing}
+            saving={saving}
+            showOnlyFilled={showOnlyFilled}
+            searchTerm={searchTerm}
+            onAdd={() => addRecord(group)}
+            onDelete={(index) => deleteRecord(group, index)}
+            onChange={(index, fieldKey, value) => changeRecord(group, index, fieldKey, value)}
+          />
+        );
+      })}
     </div>
   );
 });

@@ -20,7 +20,9 @@ import { buildProfileFillSources } from "../features/profile/profileFillOptions"
 import { useCurrentProjection } from "../features/profile-library/useCurrentProjection";
 import { bumpResumeList } from "../features/resume/resumeListEvents";
 import { t } from "../i18n";
-import type { Job, ProfileCreationContext, ResumeContent } from "../types";
+import { useLocale } from "../i18n/i18nContext";
+import { getSnapshot } from "../i18n/localeStore";
+import type { Job, ProfileCreationContext, ResumeContent, ResumeLanguage } from "../types";
 import { projectionToResumeContent } from "../utils/profileToResume";
 import LoadingBlock from "./common/LoadingBlock";
 import JobRequirementPanel from "./JobRequirementPanel";
@@ -45,10 +47,12 @@ export default function ManualResumeModal({
   onClose,
   onOpenWorkbench,
 }: Props) {
+  useLocale();
   const { message } = App.useApp();
   const navigate = useNavigate();
   const projection = useCurrentProjection(open);
   const [title, setTitle] = useState(initialTitle);
+  const [creationLanguage, setCreationLanguage] = useState<ResumeLanguage>(getSnapshot().locale);
   const [startingInWorkbench, setStartingInWorkbench] = useState(false);
   /** 编辑器里有没有未保存的修改（"前往简历制作台"用初始内容建草稿，脏时不能用）。 */
   const [editorDirty, setEditorDirty] = useState(false);
@@ -58,7 +62,10 @@ export default function ManualResumeModal({
   if (prevOpen !== open) {
     setPrevOpen(open);
     // 每次打开都从初始名称重新开始：上一次改了一半的名字不该留到下一份简历。
-    if (open) setTitle(initialTitle);
+    if (open) {
+      setTitle(initialTitle);
+      setCreationLanguage(getSnapshot().locale);
+    }
   }
 
   /**
@@ -113,6 +120,7 @@ export default function ManualResumeModal({
         job_id: job?.id ?? null,
         title: job ? "" : title.trim(),
         content: nextContent,
+        language: creationLanguage,
         profile_context: profileContext,
       });
     } catch (error) {
@@ -139,6 +147,7 @@ export default function ManualResumeModal({
         title: job ? "" : title.trim(),
         content,
         draft: true,
+        language: creationLanguage,
         profile_context: profileContext,
       });
       onOpenWorkbench(created.id);

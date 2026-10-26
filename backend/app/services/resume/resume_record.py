@@ -22,7 +22,7 @@ from ...models.job import Job
 from ...models.resume import ResumeRecord
 from ...schemas.job import JobOut
 from ...schemas.resume import ResumeContent
-from ...schemas.resume_generation import RESUME_MODES
+from ...schemas.resume_generation import RESUME_MODES, ResumeLanguage
 from ..exporter import normalize_page_limit
 from .resume_sections import default_section_order_config
 from .resume_template_store import (
@@ -101,6 +101,7 @@ def save_record(
     document_mode: str = "resume",
     context_snapshot: dict | None = None,
     commit: bool = True,
+    language: ResumeLanguage = "zh-CN",
 ) -> ResumeRecord:
     """生成结果落库（在流结束后的同一请求内调用）。
 
@@ -164,6 +165,7 @@ def save_record(
         rationale=rationale or "",
         fact_annotations=fact_annotations or [],
         context_snapshot=context_snapshot,
+        language=language,
     )
     db.add(record)
     if commit:

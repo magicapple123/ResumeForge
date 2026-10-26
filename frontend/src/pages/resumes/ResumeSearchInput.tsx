@@ -16,6 +16,7 @@
 import { Input } from "antd";
 import { useEffect, useState } from "react";
 import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 
 /** 输入停顿多久后自动提交（毫秒）：打字节奏的停顿与"感知不到延迟"之间的常用值。 */
 export const SEARCH_DEBOUNCE_MS = 350;
@@ -33,6 +34,7 @@ export default function ResumeSearchInput({
   onCommit,
   debounceMs = SEARCH_DEBOUNCE_MS,
 }: Props) {
+  useLocale();
   const [draft, setDraft] = useState(keyword);
   // 外部 keyword 变化（URL 深链恢复 / 页面重置）同步回输入框：渲染期守卫，避免 effect 级联。
   const [prevKeyword, setPrevKeyword] = useState(keyword);

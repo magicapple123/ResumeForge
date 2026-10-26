@@ -10,6 +10,7 @@
 import { App, Button, Divider, Input, Modal, Tag, Tooltip, Typography } from "antd";
 import { Fragment, useState } from "react";
 import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 import ProfileFieldSettings from "../profile-library/ProfileFieldSettings";
 import ProfileSectionSettings from "../profile-library/ProfileSectionSettings";
 import type { WorkspaceOut } from "../profile-library/types";
@@ -46,6 +47,7 @@ export default function ProfileGroupManagerModal({
   initialSectionKey,
   editing = false,
 }: Props) {
+  useLocale();
   const { message } = App.useApp();
   const groupApi = useCurrentProfileGroup(workspace, onChanged);
   // 带着大字段 key 进来时直接落到「字段设置」（齿轮入口），否则按调用方给的初始视图。

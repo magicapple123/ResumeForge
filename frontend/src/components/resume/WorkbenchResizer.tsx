@@ -20,6 +20,7 @@ import {
   type WorkbenchColumnKind,
   type WorkbenchColumnsApi,
 } from "./useWorkbenchColumns";
+import { useLocale } from "../../i18n/i18nContext";
 
 /** 两条分隔条的无障碍名（参数栏 / 内容栏各一条）。 */
 const RESIZER_LABEL_KEY = {
@@ -33,6 +34,7 @@ interface Props {
 }
 
 export default function WorkbenchResizer({ columns, kind }: Props) {
+  useLocale();
   const { widths, draggingKind, startDrag, nudge, reset } = columns;
   const limit = WORKBENCH_WIDTH_LIMITS[kind];
   return (

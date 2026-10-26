@@ -18,6 +18,7 @@ interface Row {
 interface RowError {
   line: number;
   message: string;
+  code?: "duplicate" | "invalid" | "error";
 }
 
 function row(line: number, title: string, company = "示例科技", url = ""): Row {
@@ -249,5 +250,19 @@ describe("分块提交", () => {
     expect(outcome.imported).toBe(1);
     expect(outcome.failed).toHaveLength(1);
     expect(outcome.failedChunk).toBeUndefined();
+  });
+
+  it("keeps machine-readable error codes intact across chunk commits", async () => {
+    const failure: RowError = {
+      line: 9,
+      message: "Localized duplicate message",
+      code: "duplicate",
+    };
+    const outcome = await commitRowsInChunks<Row, RowError>({
+      rows: [row(2, "Backend")],
+      commitRows: vi.fn().mockResolvedValue({ imported: 0, failed: [failure] }),
+    });
+    expect(outcome.failed).toEqual([failure]);
+    expect(outcome.failed[0]?.code).toBe("duplicate");
   });
 });

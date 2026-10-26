@@ -11,12 +11,14 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import GenerateResumeModal from "../../components/GenerateResumeModal";
 import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 import {
   registerResumeCenterAiGenerateHandler,
   triggerResumeCenterAiGenerate,
 } from "./resumeCenterAiBus";
 
 export default function ResumeScenarioSuggestion() {
+  useLocale();
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   useEffect(() => {

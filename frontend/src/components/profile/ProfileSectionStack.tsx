@@ -13,6 +13,7 @@ import { SettingOutlined } from "@ant-design/icons";
 import { Button, ConfigProvider, Popover, Tooltip, Typography } from "antd";
 import EmptyState from "../common/EmptyState";
 import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 import type { ProfileSectionOrderStore } from "../../features/profile/sectionOrderStore";
 import type { FieldOut, LimitsOut, SectionOut } from "../../features/profile-library/types";
 import ProfileEntrySection from "../../features/profile-library/ProfileEntrySection";
@@ -52,6 +53,7 @@ interface Props {
 }
 
 export default function ProfileSectionStack(props: Props) {
+  useLocale();
   const {
     sections,
     participatingKeys,

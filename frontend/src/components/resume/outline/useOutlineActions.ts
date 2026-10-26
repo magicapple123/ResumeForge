@@ -9,6 +9,7 @@
  */
 import { useCallback } from "react";
 import { t } from "../../../i18n";
+import { useLocale } from "../../../i18n/i18nContext";
 import type { ResumeContent } from "../../../types/resume";
 import {
   BLOCKED_REASON_KEY,
@@ -49,6 +50,7 @@ export function useOutlineActions({
   onCommand,
   announce,
 }: OutlineActionsOptions): OutlineActionsApi {
+  useLocale();
   const notifyBlocked = useCallback(
     (reason: OutlineBlockReason) => announce(t(BLOCKED_REASON_KEY[reason])),
     [announce],

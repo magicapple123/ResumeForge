@@ -322,11 +322,21 @@ class CandidateCsvRow(BaseModel):
     data: dict[str, str]
 
 
+class CandidateCsvImportFailure(BaseModel):
+    """A CSV row issue with a stable machine-readable classification."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    line: int
+    message: str
+    code: Literal["duplicate", "invalid", "error"] = "error"
+
+
 class CandidateCsvPreview(BaseModel):
     """CSV 上传后的预览：可导入行与逐行错误（不落库，等用户确认）。"""
 
     rows: list[CandidateCsvRow] = Field(default_factory=list)
-    errors: list[dict[str, object]] = Field(default_factory=list)
+    errors: list[CandidateCsvImportFailure] = Field(default_factory=list)
 
 
 class CandidateCsvImportRequest(BaseModel):
@@ -339,7 +349,7 @@ class CandidateCsvImportRequest(BaseModel):
 
 class CandidateCsvImportResult(BaseModel):
     imported: int = 0
-    failed: list[dict[str, object]] = Field(default_factory=list)
+    failed: list[CandidateCsvImportFailure] = Field(default_factory=list)
 
 
 class MaterialBatchRequest(BaseModel):

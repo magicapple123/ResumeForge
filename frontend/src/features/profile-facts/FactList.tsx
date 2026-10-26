@@ -15,6 +15,7 @@ import { useMemo } from "react";
 import { ListyItem, ListyMeta } from "../../components/common/ListyItem";
 import { LISTY_ITEM_PADDING_SMALL } from "../../components/common/listyPadding";
 import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 import { FACT_KINDS, FACT_KIND_LABEL_KEYS } from "./constants";
 import { factBadge, factCustomLines, factSecondary, factTitle } from "./factDisplay";
 import type { FactCustomFieldDef, FactKind, ProfileFact } from "./types";
@@ -28,6 +29,7 @@ interface RowProps {
 }
 
 function FactRow({ fact, hiddenFields, customFieldDefs, onEdit, onDelete }: RowProps) {
+  useLocale();
   const label = t(FACT_KIND_LABEL_KEYS[fact.kind]);
   const title = factTitle(fact, hiddenFields) || t("profileFacts.list.untitled");
   const secondary = factSecondary(fact, hiddenFields);
@@ -109,6 +111,7 @@ export default function FactList({
   onDelete,
   onLoadMore,
 }: Props) {
+  useLocale();
   const groups = useMemo(
     () =>
       FACT_KINDS.map((kind) => ({

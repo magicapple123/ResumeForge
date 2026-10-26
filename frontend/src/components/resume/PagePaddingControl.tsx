@@ -30,6 +30,7 @@ import { MinusOutlined, PlusOutlined } from "@ant-design/icons";
 import { Button, Slider, Space, Tooltip, Typography } from "antd";
 import { useEffect, useRef, useState } from "react";
 import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 import type { PageMargins } from "../../utils/pageMargins";
 import {
   MAX_PAGE_MARGIN,
@@ -96,6 +97,7 @@ export default function PagePaddingControl({
   onChange,
   onProbe,
 }: Props) {
+  useLocale();
   const [dragging, setDragging] = useState<number | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 

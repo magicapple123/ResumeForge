@@ -15,6 +15,7 @@ import { t } from "../../../i18n";
 import { parseReviewPack, REVIEW_PACK_MAX_BYTES } from "../../../features/resume-review";
 import type { ReviewPackIssue } from "../../../features/resume-review";
 import { reviewIssueText } from "./reviewImportIssue";
+import { useLocale } from "../../../i18n/i18nContext";
 
 export interface ReviewImportFormProps {
   /** 原始 JSON 文本（受控，便于测试与"粘贴/选文件"共用一条路径）。 */
@@ -33,6 +34,7 @@ export default function ReviewImportForm({
   submitting,
   onCancel,
 }: ReviewImportFormProps) {
+  useLocale();
   const [issues, setIssues] = useState<ReviewPackIssue[] | null>(null);
   const [error, setError] = useState("");
 

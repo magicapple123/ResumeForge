@@ -32,6 +32,7 @@ import { RowActions, RowContextMenu } from "../components/common/RowActions";
 import SkillEditorModal, { type SkillDraft } from "../components/skills/SkillEditorModal";
 import TemplateWorkbench from "../components/templates/TemplateWorkbench";
 import { t } from "../i18n";
+import { useLocale } from "../i18n/i18nContext";
 import type { AssistantSkill } from "../types";
 import { formatDateTime } from "../utils/format";
 
@@ -88,6 +89,7 @@ const SKILL_TEMPLATES: { label: string; hint: string; draft: SkillDraft }[] = [
 const ACCEPT = ".md,.zip";
 
 export default function SkillsPage() {
+  useLocale();
   const { message } = App.useApp();
   const [tab, setTab] = useState<"skills" | "templates">("skills");
   const { data, loading, error, reload: load, setData: setSkills } = useApi(listSkills);

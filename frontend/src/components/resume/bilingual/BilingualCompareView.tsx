@@ -12,6 +12,7 @@ import { LockOutlined } from "@ant-design/icons";
 import { Button, Tag, Tooltip, Typography } from "antd";
 import EmptyState from "../../common/EmptyState";
 import { bt } from "../../../features/resume-bilingual/i18n";
+import { useLocale } from "../../../i18n/i18nContext";
 import { changedPairs } from "../../../features/resume-bilingual/fieldPairs";
 import type { BilingualGroup, BilingualPair } from "../../../features/resume-bilingual/types";
 
@@ -47,6 +48,7 @@ export default function BilingualCompareView({
   primaryLabel,
   secondaryLabel,
 }: Props) {
+  useLocale();
   const visible = changedPairs(pairs);
   if (visible.length === 0) {
     return <EmptyState inline description={bt("bilingual.compare.nothing")} />;
@@ -99,6 +101,7 @@ function Row({
   showGroup: boolean;
   onAdopt?: (path: string) => void;
 }) {
+  useLocale();
   return (
     <>
       {showGroup ? (

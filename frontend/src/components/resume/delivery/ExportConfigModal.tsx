@@ -9,6 +9,7 @@ import { Alert, App, Button, Input, Modal, Select, Space, Switch } from "antd";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ResumeContent } from "../../../types";
 import { t } from "../../../i18n";
+import { useLocale } from "../../../i18n/i18nContext";
 import {
   validatePresetConfig,
   type ExportBundleDownload,
@@ -84,6 +85,7 @@ export default function ExportConfigModal({
   onReloadRevision,
   onExported,
 }: ExportConfigModalProps) {
+  useLocale();
   const { message } = App.useApp();
   const presets = useExportPresets(api);
   const [selectedVariantId, setSelectedVariantId] = useState<number | null>(null);

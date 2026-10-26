@@ -3,6 +3,7 @@
 import { Button, Checkbox, Input, Select, Space, Typography } from "antd";
 import type { ReactNode } from "react";
 import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 import {
   careerPurposeOptions,
   careerStageOptions,
@@ -38,6 +39,7 @@ export default function ScenarioEditorFields({
   expressionMaxLength,
   disabled = false,
 }: Props) {
+  useLocale();
   const [presetKey, setPresetKey] = useState<string | undefined>(undefined);
   const patch = (next: Partial<CareerScenarioConfig>) => setConfig({ ...config, ...next });
   const applyPreset = () => {

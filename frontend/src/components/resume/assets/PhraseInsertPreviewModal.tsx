@@ -4,6 +4,7 @@ import { Button, Modal, Typography } from "antd";
 import { at } from "../../../features/resume-assets/i18n";
 import type { ResumePhrase } from "../../../features/resume-assets/types";
 import PhraseDiffPreview from "./PhraseDiffPreview";
+import { useLocale } from "../../../i18n/i18nContext";
 
 interface Props {
   open: boolean;
@@ -26,6 +27,7 @@ export default function PhraseInsertPreviewModal({
   onCancel,
   onConfirm,
 }: Props) {
+  useLocale();
   return (
     <Modal
       open={open}

@@ -10,10 +10,16 @@
 import { Outlet } from "react-router-dom";
 import DatasetScopeBoundary from "../DatasetScopeBoundary";
 import { useSliderDragGuard } from "../../hooks/useSliderDragGuard";
+import LocaleBootstrap from "../../i18n/LocaleBootstrap";
 
 export default function RootLayout() {
   useSliderDragGuard();
   const outlet = <Outlet />;
   if (import.meta.env.VITE_DEMO_MODE === "1") return outlet;
-  return <DatasetScopeBoundary>{outlet}</DatasetScopeBoundary>;
+  return (
+    <DatasetScopeBoundary>
+      <LocaleBootstrap />
+      {outlet}
+    </DatasetScopeBoundary>
+  );
 }

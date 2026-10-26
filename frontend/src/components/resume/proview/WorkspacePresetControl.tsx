@@ -8,6 +8,7 @@
 import { ReloadOutlined } from "@ant-design/icons";
 import { App, Button, Segmented, Space, Tooltip } from "antd";
 import { t } from "../../../i18n";
+import { useLocale } from "../../../i18n/i18nContext";
 import { WORKSPACE_PRESET_IDS } from "../../../features/resume-proview/workspacePresets";
 import {
   WORKSPACE_PRESET_LABEL_KEY,
@@ -21,6 +22,7 @@ interface Props {
 }
 
 export default function WorkspacePresetControl({ value, onChange, onReset }: Props) {
+  useLocale();
   const { message } = App.useApp();
   // 选项标签必须是**纯文本**：外层 Tooltip 已经把「只切换面板可见性…」解释了一遍，
   // 再给每个选项套一层同样的 Tooltip 会在悬停时同时弹出两个（2026-10-25 用户截图：

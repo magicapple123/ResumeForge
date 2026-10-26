@@ -8,6 +8,7 @@
 import { PlusOutlined } from "@ant-design/icons";
 import { Button, Segmented, Space, Typography } from "antd";
 import { bt } from "../../../features/resume-bilingual/i18n";
+import { useLocale } from "../../../i18n/i18nContext";
 import type { LanguageVariant } from "../../../features/resume-bilingual/types";
 
 interface Props {
@@ -20,6 +21,7 @@ interface Props {
 }
 
 export default function VariantBar({ variants, current, onSwitch, onCreate }: Props) {
+  useLocale();
   const zh = variants.find((item) => item.language === "zh-CN");
   const en = variants.find((item) => item.language === "en-US");
   const missing = !zh || !en;

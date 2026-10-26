@@ -3,7 +3,7 @@
 import { useCallback, useRef, useState } from "react";
 import type { RefObject } from "react";
 import type { GenerationContextSnapshot } from "../../features/career-scenarios/types";
-import type { ResumeContent, ResumeDetail, ResumeLayout } from "../../types";
+import type { ResumeContent, ResumeDetail, ResumeLanguage, ResumeLayout } from "../../types";
 import type { ProfileFillSources } from "../../features/profile/profileFillOptions";
 import { createResumeDraftStore } from "../../features/resume/resumeDraftContent";
 import type { ResumeDocumentPipeline } from "../../features/resume-document/types";
@@ -48,6 +48,7 @@ interface Props {
   resumeId?: number;
   /** 记录标题：冲突时"另存副本"以它为基准加（副本）。 */
   resumeTitle?: string;
+  resumeLanguage?: ResumeLanguage;
   relayouting?: boolean;
   /** 这份简历有没有照片：没有时照片滑杆禁用并说明原因（与外面的主预览一致）。 */
   hasPhoto?: boolean;
@@ -143,6 +144,7 @@ export default function ResumeZoomModal({
   layout,
   resumeId,
   resumeTitle,
+  resumeLanguage,
   relayouting = false,
   hasPhoto,
   documentMode,
@@ -393,7 +395,6 @@ export default function ResumeZoomModal({
       />
     </div>
   ) : null;
-
   const body = (
     <WorkbenchColumnsBody
       bodyRef={bodyRef}
@@ -409,6 +410,7 @@ export default function ResumeZoomModal({
           <ResumeWorkbenchConflict
             resumeId={resumeId}
             resumeTitle={resumeTitle ?? content?.name ?? ""}
+            resumeLanguage={resumeLanguage ?? layout?.language}
             readLocalContent={readLocalContent}
             onAdoptLatest={adoptLatest}
             onResolved={settleConflict}
@@ -440,7 +442,6 @@ export default function ResumeZoomModal({
       />
     </WorkbenchColumnsBody>
   );
-
   return (
     <WorkbenchModalFrame
       // Esc / 遮罩与关闭按钮都由外壳统一转发；"直接关还是问一句"的判断在本文件。

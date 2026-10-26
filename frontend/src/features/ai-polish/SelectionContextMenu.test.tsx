@@ -116,9 +116,11 @@ describe("SelectionContextMenu", () => {
 
     const onWriting = vi.fn();
     renderMenu(makeTarget(field), onWriting);
-    const items = screen.getAllByRole("menuitem").map((item) => item.textContent);
-    expect(items).toContain(t("writing.menu.entry"));
-    expect(items.indexOf(t("writing.menu.entry"))).toBeLessThan(items.indexOf("AI 润色"));
+    const entryItem = screen.getByRole("menuitem", { name: t("writing.menu.entry") });
+    const polishItem = screen.getByRole("menuitem", { name: "AI 润色" });
+    expect(
+      entryItem.compareDocumentPosition(polishItem) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
 
     fireEvent.click(screen.getByRole("menuitem", { name: t("writing.menu.entry") }));
     expect(onWriting).toHaveBeenCalledTimes(1);

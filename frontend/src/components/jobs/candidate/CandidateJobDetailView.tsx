@@ -12,6 +12,7 @@ import { App, Button, Descriptions, Image, Space, Tag, Typography } from "antd";
 import { useState } from "react";
 import { lookupUserFiles, openUserFile } from "../../../api/userFiles";
 import { t } from "../../../i18n";
+import { useLocale } from "../../../i18n/i18nContext";
 import type { CandidateJobDetail } from "../../../types";
 
 interface Props {
@@ -35,6 +36,7 @@ function bodyItems(candidate: CandidateJobDetail) {
 }
 
 export default function CandidateJobDetailView({ candidate, onEdit, onImport }: Props) {
+  useLocale();
   const { message } = App.useApp();
   const [openingIndex, setOpeningIndex] = useState<number | null>(null);
 

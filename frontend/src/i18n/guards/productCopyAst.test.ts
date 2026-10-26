@@ -128,6 +128,12 @@ describe("technical syntax is not a translation task", () => {
     expect(scan(source)).toEqual([]);
   });
 
+  it("recognizes namespace translation wrappers while preserving literal copy checks", () => {
+    expect(scan('<Button>{at("assets.editor.save")}</Button>')).toEqual([]);
+    expect(scan('<Button>{rt("research.tab.patents")}</Button>')).toEqual([]);
+    expect(scan('<Button>{at("assets.editor.save") || "Save"}</Button>')).toEqual(["Save"]);
+  });
+
   it("ignores string operands used only to compute boolean output", () => {
     expect(scan('<span>{state === "ready"}</span>')).toEqual([]);
     expect(scan('<span>{state !== "ready"}</span>')).toEqual([]);

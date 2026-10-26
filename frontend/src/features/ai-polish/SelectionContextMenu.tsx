@@ -16,6 +16,7 @@
 import { useCallback, useEffect, useRef } from "react";
 import type { KeyboardEvent as ReactKeyboardEvent, MouseEvent as ReactMouseEvent } from "react";
 import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 import { layer } from "../../theme/tokens";
 import { replaceSelection } from "./replaceSelection";
 import { elementRect, getCaretInsertion, type SelectionTarget } from "./selectionTarget";
@@ -86,6 +87,7 @@ export default function SelectionContextMenu({
   onAiPolish,
   onWriting,
 }: SelectionContextMenuProps) {
+  useLocale();
   const menuRef = useRef<HTMLDivElement | null>(null);
 
   // 打开即接管焦点：Esc 与方向键才有落点。

@@ -12,6 +12,7 @@ import ErrorState from "../../common/ErrorState";
 import EmptyState from "../../common/EmptyState";
 import LoadingBlock from "../../common/LoadingBlock";
 import { t } from "../../../i18n";
+import { useLocale } from "../../../i18n/i18nContext";
 import type { ExportArtifactRecord, ExportDeliveryApi } from "../../../features/resume-delivery";
 import { formatBytes } from "../../../utils/format";
 import "./delivery.css";
@@ -24,6 +25,7 @@ export interface ArchiveListProps {
 }
 
 export default function ArchiveList({ api, resumeId, refreshToken = 0 }: ArchiveListProps) {
+  useLocale();
   const { message } = App.useApp();
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
   const [artifacts, setArtifacts] = useState<ExportArtifactRecord[]>([]);

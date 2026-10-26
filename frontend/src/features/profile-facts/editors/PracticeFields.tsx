@@ -6,17 +6,18 @@
  * 不会把客户强行写成"雇主"。关系类型只有用户显式选择时才记录。
  */
 import { Col, Row } from "antd";
+import { useLocale } from "../../../i18n/i18nContext";
 import { PRACTICE_KIND_OPTIONS } from "../constants";
 import { isFieldHidden, translateOptions, type HiddenFields } from "./fieldHelpers";
 import { FactDateField, FactSelectField, FactTextAreaField, FactTextField } from "./fields";
-
-const KIND_OPTIONS = translateOptions(PRACTICE_KIND_OPTIONS);
 
 interface Props {
   hiddenFields: HiddenFields;
 }
 
 export default function PracticeFields({ hiddenFields }: Props) {
+  useLocale();
+  const kindOptions = translateOptions(PRACTICE_KIND_OPTIONS);
   const hidden = (key: string) => isFieldHidden(hiddenFields, key);
   return (
     <>
@@ -59,7 +60,7 @@ export default function PracticeFields({ hiddenFields }: Props) {
             <FactSelectField
               name="experience_kind"
               labelKey="profileFacts.practice.kind"
-              options={KIND_OPTIONS}
+              options={kindOptions}
             />
           )}
         </Col>

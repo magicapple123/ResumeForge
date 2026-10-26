@@ -11,12 +11,13 @@
  * "界面中文、朗读按英文念"这种只在无障碍场景才暴露的错。`index.html` 里已有的
  * `<html lang="zh-CN">` 与本处的首帧值一致，因此不会闪。
  */
-import { useEffect, useMemo } from "react";
+import { useLayoutEffect, useMemo, useSyncExternalStore } from "react";
 import type { ReactNode } from "react";
-import { DEFAULT_LOCALE, translate } from "./index";
+import { translate } from "./index";
 import type { Locale } from "./index";
 import { I18nContext } from "./i18nContext";
 import type { I18nContextValue } from "./i18nContext";
+import { applyDocumentLocale, getServerSnapshot, getSnapshot, subscribe } from "./localeStore";
 
 interface Props {
   /** 当前语言；缺省默认语言。将来做语言切换时由上层状态喂进来。 */
@@ -24,10 +25,12 @@ interface Props {
   children: ReactNode;
 }
 
-export default function I18nProvider({ locale = DEFAULT_LOCALE, children }: Props) {
-  useEffect(() => {
+export default function I18nProvider({ locale: fixedLocale, children }: Props) {
+  const snapshot = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
+  const locale = fixedLocale ?? snapshot.locale;
+  useLayoutEffect(() => {
     // 无障碍与断行都看它：界面语言变了，文档语言必须跟着变。
-    document.documentElement.lang = locale;
+    applyDocumentLocale(locale);
   }, [locale]);
 
   // 值随 locale 变：包一层 useMemo，免得每次渲染都让所有消费者重渲染一遍。

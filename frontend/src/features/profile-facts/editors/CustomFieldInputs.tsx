@@ -7,6 +7,7 @@
  */
 import { Form, Input, Typography } from "antd";
 import { t } from "../../../i18n";
+import { useLocale } from "../../../i18n/i18nContext";
 import type { FactCustomFieldDef } from "../types";
 
 interface Props {
@@ -15,6 +16,7 @@ interface Props {
 }
 
 export default function CustomFieldInputs({ defs, maxLength }: Props) {
+  useLocale();
   if (defs.length === 0) return null;
   return (
     // 自定义字段是与九类默认字段不同来源的内容，单独成小节（上边框 + 12px 标题）。

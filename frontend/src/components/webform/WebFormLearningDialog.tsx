@@ -15,7 +15,10 @@
  */
 import { Modal, Space, Table, Tag, Typography } from "antd";
 import { useState } from "react";
+import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 import type { WebFormLearningCandidate } from "../../types";
+import { webformFieldLabel } from "../../features/webform/webformFieldLabels";
 
 export interface LearningSelection {
   candidate: WebFormLearningCandidate;
@@ -38,6 +41,7 @@ export default function WebFormLearningDialog({
   onCancel,
   onSubmit,
 }: Props) {
+  useLocale();
   // 默认全勾，用户仍可逐条取消。
   const [checked, setChecked] = useState<Set<string>>(
     () => new Set(candidates.map((item) => item.key)),
@@ -47,9 +51,9 @@ export default function WebFormLearningDialog({
   return (
     <Modal
       open={open}
-      title={`本次填的 ${candidates.length} 项简历通里没有，要记住吗？`}
-      okText={`记住选中的 ${selected.length} 项`}
-      cancelText="这次算了"
+      title={t("profileLibrary.webform.learningTitle", { count: candidates.length })}
+      okText={t("profileLibrary.webform.learningConfirm", { count: selected.length })}
+      cancelText={t("profileLibrary.webform.learningCancel")}
       okButtonProps={{ disabled: selected.length === 0 }}
       confirmLoading={saving}
       onCancel={onCancel}
@@ -61,8 +65,7 @@ export default function WebFormLearningDialog({
       }}
     >
       <Typography.Paragraph type="secondary" style={{ marginBottom: 8 }}>
-        记住之后，下次遇到同一个框会自动填。所有记住的字段都按通用资料保存，你随时可以在 「我的资料
-        → 网申资料」里改掉或删掉。
+        {t("profileLibrary.webform.learningBody")}
       </Typography.Paragraph>
       <Table<WebFormLearningCandidate>
         size="small"
@@ -76,19 +79,21 @@ export default function WebFormLearningDialog({
         }}
         columns={[
           {
-            title: "字段",
+            title: t("profileLibrary.webform.learningFieldHeader"),
             dataIndex: "label",
             width: 180,
             render: (label: string, record) => (
               <Space size={4}>
-                <Typography.Text>{label}</Typography.Text>
+                <Typography.Text>{webformFieldLabel(record.key, label)}</Typography.Text>
                 {/* AI 认出来的必须单独标：它比规则更可能认错字段。 */}
-                {record.from === "ai" ? <Tag color="purple">AI 认的</Tag> : null}
+                {record.from === "ai" ? (
+                  <Tag color="purple">{t("profileLibrary.webform.learningAiTag")}</Tag>
+                ) : null}
               </Space>
             ),
           },
           {
-            title: "填入的值",
+            title: t("profileLibrary.webform.learningValueHeader"),
             dataIndex: "value",
             ellipsis: true,
             render: (value: string) => <Typography.Text>{value}</Typography.Text>,
@@ -96,7 +101,7 @@ export default function WebFormLearningDialog({
         ]}
       />
       <Typography.Paragraph type="secondary" style={{ marginTop: 8, marginBottom: 0 }}>
-        已选字段会按通用资料保存，下次遇到相同类型的网申字段时自动参与匹配。
+        {t("profileLibrary.webform.learningFooterHint")}
       </Typography.Paragraph>
     </Modal>
   );

@@ -20,6 +20,7 @@ import { App, Alert, Button, Modal, Popconfirm, Segmented, Slider, Space, Typogr
 import { useEffect, useState } from "react";
 import type { RefObject } from "react";
 import { t } from "../../../i18n";
+import { useLocale } from "../../../i18n/i18nContext";
 import {
   computeCropRect,
   createPhotoCropParams,
@@ -88,6 +89,7 @@ export default function PhotoCropModal({
   onApply,
   onRemove,
 }: Props) {
+  useLocale();
   const { message } = App.useApp();
   const dimensions = usePhotoDimensions(open ? photo : null);
   // 纸面宽度从这个 iframe 实测：裁剪参数是相对原图的，清晰度提示却取决于"纸上多大"。

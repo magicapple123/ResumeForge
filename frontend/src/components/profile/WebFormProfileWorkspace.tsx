@@ -57,6 +57,7 @@ interface Props {
   onCatalogLoaded: (profile: WebFormExtraProfile) => void;
   onCatalogFieldLabelChange: (key: string, label: string) => void;
   onCatalogFieldDelete: (key: string) => void;
+  onRequestEdit: () => void;
   /** 打开「粘贴文本识别」（项 12）：透传给 Section 的入口按钮。 */
 }
 
@@ -84,7 +85,15 @@ function cloneDraft(draft: WebFormProfileDraft): WebFormProfileDraft {
 
 const WebFormProfileWorkspace = forwardRef<WebFormProfileWorkspaceHandle, Props>(
   function WebFormProfileWorkspace(
-    { editing, saving, onDirty, onCatalogLoaded, onCatalogFieldLabelChange, onCatalogFieldDelete },
+    {
+      editing,
+      saving,
+      onDirty,
+      onCatalogLoaded,
+      onCatalogFieldLabelChange,
+      onCatalogFieldDelete,
+      onRequestEdit,
+    },
     ref,
   ) {
     const [values, setValues] = useState<Record<string, string>>({});
@@ -228,6 +237,7 @@ const WebFormProfileWorkspace = forwardRef<WebFormProfileWorkspaceHandle, Props>
         repeatedGroups={repeatedGroups}
         onRepeatedGroupsChange={handleRepeatedGroupsChange}
         onLoaded={handleLoaded}
+        onRequestEdit={onRequestEdit}
       />
     );
   },

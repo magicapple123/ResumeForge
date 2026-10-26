@@ -14,6 +14,7 @@
 import { Drawer } from "antd";
 import type { ReactNode } from "react";
 import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 
 interface Props {
   openPanel: "params" | "content" | null;
@@ -32,6 +33,7 @@ export default function WorkbenchPanelsDrawer({
   editor,
   params,
 }: Props) {
+  useLocale();
   return (
     <>
       <Drawer

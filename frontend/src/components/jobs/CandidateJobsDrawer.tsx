@@ -14,6 +14,7 @@ import { App, Button, Drawer, Empty, Input, Pagination, Space, Typography } from
 import { useCallback, useEffect, useRef, useState } from "react";
 import { deleteCandidateJob, getCandidateJob, listCandidateJobsPage } from "../../api/candidateJob";
 import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 import type { CandidateJob, CandidateJobDetail } from "../../types";
 import FormModalFooter from "../common/FormModalFooter";
 import LoadingBlock from "../common/LoadingBlock";
@@ -55,6 +56,7 @@ export default function CandidateJobsDrawer({
   importedCandidateId = null,
   collectTaskIds = [],
 }: Props) {
+  useLocale();
   const { message } = App.useApp();
   const [items, setItems] = useState<CandidateJob[]>([]);
   const [loading, setLoading] = useState(true);

@@ -1,10 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 /** 术语表（W16）：行渲染、锁定开关、软删回调、只读态、新增表单校验。 */
 import { App as AntdApp } from "antd";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { bt } from "../../../features/resume-bilingual/i18n";
 import { MOCK_GLOSSARY } from "../../../features/resume-bilingual/mock";
+import { t } from "../../../i18n";
+import I18nProvider from "../../../i18n/I18nProvider";
+import { selectLocale } from "../../../i18n/localeStore";
 import GlossaryTable from "./GlossaryTable";
 
 afterEach(() => cleanup());
@@ -52,6 +55,21 @@ describe("GlossaryTable", () => {
     );
     expect(screen.queryByRole("button", { name: bt("bilingual.glossary.add") })).toBeNull();
     expect(screen.getAllByRole("switch")[0]).toBeDisabled();
+  });
+
+  it("updates category options after the interface locale changes", () => {
+    render(
+      <AntdApp>
+        <I18nProvider>
+          <GlossaryTable terms={[]} onSaveTerm={vi.fn()} />
+        </I18nProvider>
+      </AntdApp>,
+    );
+    act(() => selectLocale("en-US"));
+    fireEvent.mouseDown(screen.getByRole("combobox", { name: t("bilingual.glossary.category") }));
+    expect(
+      screen.getByRole("option", { name: t("bilingual.glossary.category.term") }),
+    ).toBeTruthy();
   });
 
   it("新增术语：必填校验通过后回传整理过的值", async () => {

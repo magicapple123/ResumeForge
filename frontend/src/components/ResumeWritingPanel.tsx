@@ -19,6 +19,7 @@ import {
   translateResumeText,
 } from "../api/resumeWriting";
 import { t, type MessageKey } from "../i18n";
+import { useLocale } from "../i18n/i18nContext";
 import type {
   PhraseMode,
   PhrasesResult,
@@ -73,6 +74,7 @@ interface Props {
 }
 
 export default function ResumeWritingPanel({ resumeId, initialText = "", onApply }: Props) {
+  useLocale();
   const { message } = App.useApp();
   const [text, setText] = useState(initialText);
   const [operation, setOperation] = useState<Operation>("star");
@@ -250,6 +252,7 @@ function ResultBlock({
   onCopy: () => void;
   children: React.ReactNode;
 }) {
+  useLocale();
   const run = onApply ?? onCopy;
   return (
     <div style={{ border: "1px solid var(--rf-border)", borderRadius: 8, padding: 12 }}>

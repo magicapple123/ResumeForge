@@ -16,6 +16,7 @@ import { Typography } from "antd";
 import type { CSSProperties, ReactNode } from "react";
 import { t } from "../../i18n";
 import type { GenerationContextSnapshot } from "../../types";
+import { useLocale } from "../../i18n/i18nContext";
 
 /** 上下文条 + 三栏容器的纵向堆叠（条占一行，三栏吃满剩余高度）。 */
 const STACK_STYLE: CSSProperties = {
@@ -33,6 +34,7 @@ interface Props {
 }
 
 export default function ScenarioContextBar({ snapshot, children }: Props) {
+  useLocale();
   const name = snapshot?.display_name?.trim() || t("careerScenarios.context.unused");
   return (
     <div className="resume-wb-stack" style={STACK_STYLE}>

@@ -18,6 +18,7 @@ import { useCallback, useMemo, useRef, useState } from "react";
 import type { ReactNode, RefObject } from "react";
 import type { ResumeContent, ResumeLayout } from "../../types";
 import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 import type { OutlineSelection } from "../../features/resume-outline/types";
 import { ENTRY_POINT_FIELDS, type EntryField } from "../../features/resume-document/types";
 import { resolvePathAt } from "../../features/resume-document/identity";
@@ -54,13 +55,13 @@ function findEntry(
   return null;
 }
 
-function entryLabel(entry: AnyEntry | null): string {
+function entryLabel(entry: AnyEntry | null, fallbackLabel: string): string {
   if (!entry) return "";
   for (const key of LABEL_KEYS) {
     const value = entry[key];
     if (typeof value === "string" && value.trim()) return value.trim();
   }
-  return t("workbench.selection.entry");
+  return fallbackLabel;
 }
 
 /** 要点选择：按 point_ids 找文本，给对象面板/分页一个可读名字。 */
@@ -123,6 +124,7 @@ export function useWorkbenchContextPanels({
   onLocateField,
   onApplyContent,
 }: Options): WorkbenchContextPanels {
+  useLocale();
   const [selection, setSelection] = useState<OutlineSelection | null>(null);
   // 定位 = 大纲选择 + 可改写字段路径：要点选择用它现算出 path（W12 写候选要这个 path），
   // 纸面/fe-outline 若已在选择里给出 path 则原样采用。条目级选择保持"不替用户挑字段"。
@@ -146,13 +148,17 @@ export function useWorkbenchContextPanels({
     setMultiSelected([]);
   }
 
+  const entryFallbackLabel = t("workbench.selection.entry");
   const selectedEntry = useMemo(() => {
     const objectId =
       selection?.kind === "entry" || selection?.kind === "point" ? selection.objectId : null;
     const found = findEntry(content, objectId);
-    const label = pointLabel(content, selection) || entryLabel(found?.entry ?? null);
-    return found && objectId ? { id: objectId, label: label || entryLabel(found.entry) } : null;
-  }, [content, selection]);
+    const label =
+      pointLabel(content, selection) || entryLabel(found?.entry ?? null, entryFallbackLabel);
+    return found && objectId
+      ? { id: objectId, label: label || entryLabel(found.entry, entryFallbackLabel) }
+      : null;
+  }, [content, selection, entryFallbackLabel]);
 
   const provenance = useWorkbenchProvenancePanels({
     resumeId,

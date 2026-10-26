@@ -43,6 +43,7 @@ import {
 import { scaleProbeCss, sectionGapProbeCss } from "../../utils/resumeFormatProbe";
 import { formatKeysDiffer, restoreFormatKeys } from "../../utils/paramRestore";
 import ParamResetButton from "./ParamResetButton";
+import { useLocale } from "../../i18n/i18nContext";
 
 /** 提交防抖（毫秒）：与行距 / 页边距同一档，一次拖动折叠成一次重渲染请求。 */
 const COMMIT_DEBOUNCE_MS = 120;
@@ -94,6 +95,7 @@ function SpacingRow({
   onCommit,
   onReset,
 }: RowProps) {
+  useLocale();
   const [dragging, setDragging] = useState<number | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -215,6 +217,7 @@ export default function ResumeSpacingControls({
   previewRef,
   onChange,
 }: Props) {
+  useLocale();
   // 与 `ResumeMeasureControls` 同一个理由：防抖回调在松手之后才跑，提交时必须读
   // "提交那一刻"的 layout，否则会把这段时间里父组件改的其它版式（页数、模板）覆盖回去。
   const layoutRef = useRef(layout);

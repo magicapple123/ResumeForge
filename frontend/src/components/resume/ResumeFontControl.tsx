@@ -44,6 +44,7 @@ import { useBuiltinFontDownload } from "../../features/fonts/useBuiltinFontDownl
 import { useApi } from "../../hooks/useApi";
 import { t } from "../../i18n";
 import type { ResumeLayout } from "../../types";
+import { useLocale } from "../../i18n/i18nContext";
 
 /** 与后端 `resume_template_format.SYSTEM_FONT` **逐字一致**（两处只有一个含义）。 */
 export const SYSTEM_FONT_VALUE = "__system__";
@@ -105,6 +106,7 @@ export default function ResumeFontControl({
   alignWithSlider = false,
   disabled = false,
 }: Props) {
+  useLocale();
   const { message } = App.useApp();
   const { data, reload } = useApi(listResumeFonts, []);
   const items = useMemo(() => data?.items ?? [], [data]);

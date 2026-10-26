@@ -16,6 +16,7 @@
 import { Modal, Typography } from "antd";
 import ResumeWritingPanel from "../../components/ResumeWritingPanel";
 import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 import { layer } from "../../theme/tokens";
 
 interface Props {
@@ -34,6 +35,7 @@ interface Props {
 }
 
 export default function ResumeWritingModal({ open, resumeId, text, onApply, onClose }: Props) {
+  useLocale();
   return (
     <Modal
       open={open}

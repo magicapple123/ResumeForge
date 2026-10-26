@@ -8,6 +8,7 @@
  */
 import { Col, Form, Input, Row } from "antd";
 import { t } from "../../../i18n";
+import { useLocale } from "../../../i18n/i18nContext";
 import { CREDENTIAL_STATUS_OPTIONS } from "../constants";
 import { isFieldHidden, translateOptions, type HiddenFields } from "./fieldHelpers";
 import {
@@ -18,13 +19,13 @@ import {
   FactUrlField,
 } from "./fields";
 
-const STATUS_OPTIONS = translateOptions(CREDENTIAL_STATUS_OPTIONS);
-
 interface Props {
   hiddenFields: HiddenFields;
 }
 
 export default function CredentialFields({ hiddenFields }: Props) {
+  useLocale();
+  const statusOptions = translateOptions(CREDENTIAL_STATUS_OPTIONS);
   const hidden = (key: string) => isFieldHidden(hiddenFields, key);
   return (
     <>
@@ -67,7 +68,7 @@ export default function CredentialFields({ hiddenFields }: Props) {
             <FactSelectField
               name="status"
               labelKey="profileFacts.credential.status"
-              options={STATUS_OPTIONS}
+              options={statusOptions}
               extra={t("profileFacts.credential.statusHint")}
             />
           )}

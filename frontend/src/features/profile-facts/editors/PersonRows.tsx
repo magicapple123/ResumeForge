@@ -16,6 +16,7 @@ import {
 } from "@ant-design/icons";
 import { Button, Checkbox, Form, Input, Typography } from "antd";
 import { t } from "../../../i18n";
+import { useLocale } from "../../../i18n/i18nContext";
 
 interface Props {
   /** 表单字段名：`authors`（论文）或 `inventors`（专利）。 */
@@ -24,6 +25,7 @@ interface Props {
 }
 
 export default function PersonRows({ name, role }: Props) {
+  useLocale();
   const isAuthor = role === "author";
   const label = t(isAuthor ? "research.authors.label" : "research.inventors.label");
   const addLabel = t(isAuthor ? "research.authors.add" : "research.inventors.add");

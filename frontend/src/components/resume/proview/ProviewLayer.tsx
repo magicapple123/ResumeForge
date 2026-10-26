@@ -15,6 +15,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { RefObject } from "react";
 import { t } from "../../../i18n";
+import { useLocale } from "../../../i18n/i18nContext";
 import { useProviewConfig } from "../../../features/resume-proview/ProviewContext";
 import { useProviewPreferences } from "../../../features/resume-proview/preferences";
 import { photoSha256, type PhotoCropParams } from "../../../features/resume-proview/photoCrop";
@@ -72,6 +73,7 @@ export default function ProviewLayer({
   onZoomChange,
   frameEpoch,
 }: ProviewLayerProps) {
+  useLocale();
   const config = useProviewConfig();
   const { preferences, setGuides, setProof } = useProviewPreferences();
   const navigation = usePageNavigation({

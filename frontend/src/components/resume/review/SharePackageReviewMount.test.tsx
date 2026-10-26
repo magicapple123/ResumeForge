@@ -143,8 +143,7 @@ describe("SharePackageModal × 对象批注挂载", () => {
     await screen.findByText(ANNOTATION_TEXT);
     fireEvent.click(
       screen.getByRole("button", {
-        name: (accessibleName: string) =>
-          accessibleName.replace(/\s/g, "").includes(t("review.action.locate")),
+        name: new RegExp(t("review.action.locate").split("").join("\\s*")),
       }),
     );
     expect(onLocate).toHaveBeenCalledWith("projects.0");

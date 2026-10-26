@@ -73,6 +73,27 @@ def end_budget_segment(provider: Any, total_budget: Any) -> None:
     provider.request_budget = total_budget
 
 
+_EN_OUTPUT_RULE = """
+## 输出语言（与上文规则冲突时以本节为准）
+
+成稿语言是 **English**。description、highlights、summary 与自定义字段的值一律用英文书写；
+公司、学校、项目、产品等专有名词保留原文，不音译、不改写；数值、日期、链接、DOI、专利号
+逐字保留。小节标题与字段前缀由排版层按 `resume.language` 提供，不要自己写标题。
+"""
+
+
+def with_output_language(system_prompt: str, language: str | None) -> str:
+    """给英文简历的 system 提示词补一段输出语言约束。
+
+    只对 ``en-US`` 生效：中文链路的提示词必须逐字节不变（既有 golden 与导出基线都以它为
+    输入），所以这不是"把模板翻译一遍"，而是"额外追加一段"。界面语言不参与判断——同一份
+    中文界面下也可以生成英文简历。
+    """
+    if language != "en-US":
+        return system_prompt
+    return f"{system_prompt}{_EN_OUTPUT_RULE}"
+
+
 __all__ = [
     "begin_budget_segment",
     "end_budget_segment",

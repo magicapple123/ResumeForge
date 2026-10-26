@@ -10,14 +10,18 @@
  * - 取消勾选/选「本次」要真的传到提交结果里，否则用户以为改了其实没改。
  */
 import { App as AntdApp } from "antd";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { t } from "../../i18n";
+import I18nProvider from "../../i18n/I18nProvider";
+import { selectLocale } from "../../i18n/localeStore";
 import WebFormLearningDialog from "./WebFormLearningDialog";
 import type { WebFormLearningCandidate } from "../../types";
 
 afterEach(() => {
   cleanup();
   document.body.innerHTML = "";
+  selectLocale("zh-CN");
 });
 
 const CANDIDATES: WebFormLearningCandidate[] = [
@@ -48,13 +52,15 @@ function rowCheckbox(rowIndex: number): HTMLElement {
 function renderDialog(candidates: WebFormLearningCandidate[] = CANDIDATES, onSubmit = vi.fn()) {
   render(
     <AntdApp>
-      <WebFormLearningDialog
-        open
-        candidates={candidates}
-        saving={false}
-        onCancel={() => undefined}
-        onSubmit={onSubmit}
-      />
+      <I18nProvider>
+        <WebFormLearningDialog
+          open
+          candidates={candidates}
+          saving={false}
+          onCancel={() => undefined}
+          onSubmit={onSubmit}
+        />
+      </I18nProvider>
     </AntdApp>,
   );
   return onSubmit;
@@ -123,5 +129,20 @@ describe("WebFormLearningDialog", () => {
     fireEvent.click(rowCheckbox(1));
 
     expect(screen.getByRole("button", { name: /记住选中的 0 项/ })).toBeDisabled();
+  });
+
+  it("updates the dialog copy when the interface locale changes", () => {
+    renderDialog();
+    act(() => selectLocale("en-US"));
+    expect(
+      screen.getByRole("dialog", {
+        name: t("profileLibrary.webform.learningTitle", { count: CANDIDATES.length }),
+      }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", {
+        name: t("profileLibrary.webform.learningConfirm", { count: CANDIDATES.length }),
+      }),
+    ).toBeInTheDocument();
   });
 });

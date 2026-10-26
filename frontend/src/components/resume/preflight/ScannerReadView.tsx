@@ -11,6 +11,7 @@ import { App, Button, Space, Tag, Typography } from "antd";
 import EmptyState from "../../common/EmptyState";
 import type { MessageKey } from "../../../i18n";
 import { t } from "../../../i18n";
+import { useLocale } from "../../../i18n/i18nContext";
 import {
   diffKindsPresent,
   highlightSegments,
@@ -42,6 +43,7 @@ interface Props {
 }
 
 export default function ScannerReadView({ pages = [], diffs = [] }: Props) {
+  useLocale();
   const { message } = App.useApp();
   const usablePages = (pages ?? []).filter((page) => page.text.trim().length > 0);
   if (usablePages.length === 0) {

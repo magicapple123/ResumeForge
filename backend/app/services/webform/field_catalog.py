@@ -23,6 +23,9 @@ from .field_types import (
     FormField,
 )
 from .field_types import (
+    GROUP_CUSTOM as GROUP_CUSTOM,
+)
+from .field_types import (
     SOURCE_PROFILE as SOURCE_PROFILE,
 )
 from .repeated_profile_catalog import REPEATED_FIELD_LABELS

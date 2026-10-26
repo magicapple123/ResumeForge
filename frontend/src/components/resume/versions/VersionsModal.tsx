@@ -13,6 +13,7 @@ import type { VersionRestoreOut } from "../../../features/resume-versions/types"
 import ScenarioVariantSection from "./ScenarioVariantSection";
 import VariantsPanel from "./VariantsPanel";
 import VersionList from "./VersionList";
+import { useLocale } from "../../../i18n/i18nContext";
 
 export interface VersionsModalProps {
   open: boolean;
@@ -34,6 +35,7 @@ export default function VersionsModal({
   currentContent,
   onRestored,
 }: VersionsModalProps) {
+  useLocale();
   const versions = useVersions({ resumeId: open ? resumeId : null, onRestored });
   const variants = useVariants({ resumeId: open ? resumeId : null });
 

@@ -11,6 +11,7 @@
  */
 import { Switch, Tooltip, Typography } from "antd";
 import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 
 interface Props {
   /** 大字段名：给无障碍名做区分（一屏里会有多个同名开关）。 */
@@ -36,6 +37,7 @@ export default function SectionVisibilitySwitch({
   hideLabel = false,
   onChange,
 }: Props) {
+  useLocale();
   const control = (
     <span className="profile-visibility-switch">
       {hideLabel ? null : (

@@ -11,9 +11,10 @@
  */
 import { Alert, Button, Checkbox, Input, Select, Space, Tag, Typography } from "antd";
 import { DeleteOutlined, PlusOutlined } from "@ant-design/icons";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { formatErrorGuidance } from "../../api/errorGuidance";
 import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 import { FACT_KINDS, FACT_KIND_LABEL_KEYS } from "./constants";
 import { isSchemaRevisionConflict } from "./errors";
 import {
@@ -63,6 +64,7 @@ export default function FieldSettingsView({
   onRefresh,
   onBack,
 }: Props) {
+  useLocale();
   const [kind, setKind] = useState<FactKind>(FACT_KINDS[0]);
   const [buffer, setBuffer] = useState<Buffer>(() => bufferFrom(kindSchemas[FACT_KINDS[0]]));
   const [saving, setSaving] = useState(false);
@@ -74,14 +76,10 @@ export default function FieldSettingsView({
   const currentSchema = kindSchemas[kind];
   const label = t(FACT_KIND_LABEL_KEYS[kind]);
   const maxCustomFields = currentSchema?.max_custom_fields ?? 20;
-  const fieldOptions = useMemo(
-    () =>
-      (currentSchema?.default_fields ?? []).map((key) => ({
-        label: defaultFieldLabel(kind, key),
-        value: key,
-      })),
-    [currentSchema, kind],
-  );
+  const fieldOptions = (currentSchema?.default_fields ?? []).map((key) => ({
+    label: defaultFieldLabel(kind, key),
+    value: key,
+  }));
 
   const applySchema = (next: ProfileFactKindSchema) => {
     setBuffer(bufferFrom(next));

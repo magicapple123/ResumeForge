@@ -245,12 +245,12 @@ export interface CandidateCsvRow {
 
 export interface CandidateCsvPreview {
   rows: CandidateCsvRow[];
-  errors: { line: number; message: string }[];
+  errors: { line: number; message: string; code: "invalid" }[];
 }
 
 export interface CandidateCsvImportResult {
   imported: number;
-  failed: { line: number; message: string }[];
+  failed: { line: number; message: string; code: "duplicate" | "invalid" | "error" }[];
 }
 
 export interface ParsedJobDraft extends Required<

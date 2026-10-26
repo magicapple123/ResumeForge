@@ -10,6 +10,7 @@
  * 本文件在批 3 只提供映射，**不改 `ThemeProvider`**（接线在批 5）。
  */
 import zhCN from "antd/locale/zh_CN";
+import enUS from "antd/locale/en_US";
 import type { Locale as AntdLocale } from "antd/es/locale";
 import { DEFAULT_LOCALE } from "./index";
 import type { Locale } from "./index";
@@ -20,6 +21,7 @@ import type { Locale } from "./index";
  */
 const ANTD_LOCALES: Record<Locale, AntdLocale> = {
   "zh-CN": zhCN,
+  "en-US": enUS,
 };
 
 /**

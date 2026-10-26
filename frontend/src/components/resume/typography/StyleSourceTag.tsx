@@ -13,6 +13,7 @@ import { Tooltip } from "antd";
 import type { MessageKey } from "../../../i18n";
 import { t } from "../../../i18n";
 import type { ResumeStyleSource } from "../../../features/resume-layout/styleOverrides";
+import { useLocale } from "../../../i18n/i18nContext";
 
 /** 胶囊上显示的字。 */
 const SOURCE_LABEL: Record<ResumeStyleSource, MessageKey> = {
@@ -35,6 +36,7 @@ interface Props {
 }
 
 export default function StyleSourceTag({ source }: Props) {
+  useLocale();
   return (
     <Tooltip title={t(SOURCE_HINT[source])}>
       <span

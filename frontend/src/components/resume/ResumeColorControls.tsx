@@ -30,6 +30,7 @@ import { t, type MessageKey } from "../../i18n";
 import { colorProbeCss } from "../../utils/resumeFormatProbe";
 import { formatKeysDiffer, restoreFormatKeys } from "../../utils/paramRestore";
 import ParamResetButton from "./ParamResetButton";
+import { useLocale } from "../../i18n/i18nContext";
 
 /** 四个颜色键（顺序即左栏里的行序，与目录 `FORMAT_FIELDS` 同序）。 */
 const COLOR_KEYS = ["accent", "text_color", "muted_color", "line_color"] as const;
@@ -72,6 +73,7 @@ export default function ResumeColorControls({
   previewRef,
   onChange,
 }: Props) {
+  useLocale();
   // 防抖/即时提交要读"提交那一刻"的 layout：与度量控件同一个理由（父组件可能在
   // 这期间改了页数或模板，用旧快照会把那些改动覆盖回去）。
   const layoutRef = useRef(layout);

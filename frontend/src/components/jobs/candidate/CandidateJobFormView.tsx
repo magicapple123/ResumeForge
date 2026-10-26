@@ -11,6 +11,7 @@ import { Button, Form, Image, Input, Space, Typography, Upload } from "antd";
 import FileDropZone from "../../common/FileDropZone";
 import { MaxLengthHint } from "../../common/MaxLengthHint";
 import { t } from "../../../i18n";
+import { useLocale } from "../../../i18n/i18nContext";
 import { MAX_JOB_TEXT_CHARS } from "../../../config";
 import type { FormState } from "./candidateShared";
 import { MAX_CANDIDATE_IMAGES } from "./candidateShared";
@@ -30,6 +31,7 @@ export function CandidateJobFormView({
   onAddImages,
   onRejected,
 }: Props) {
+  useLocale();
   const sourceLabel =
     formState.images.length > 0
       ? t("jobs.candidate.form.source-image")

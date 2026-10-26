@@ -9,6 +9,7 @@
 import type { ResumeFormatConfig } from "../../types/resumeFormat";
 import { Collapse, Space, Tag, Tooltip, Typography } from "antd";
 import { useMemo, useRef, useState } from "react";
+import { useLocale } from "../../i18n/i18nContext";
 import type { ReactNode, RefObject } from "react";
 import { useNavigate } from "react-router-dom";
 import { RESUME_ENHANCEMENT_LEVELS } from "../../config";
@@ -44,7 +45,6 @@ import { useResumeEditorFillSources } from "./useResumeEditorFillSources";
 import { useVariants } from "../../features/resume-versions/useVariants";
 import type { ResumeDocumentPipeline } from "../../features/resume-document/types";
 import type { PathRemap } from "../../features/resume-outline/paths";
-
 interface LayoutStatus {
   pages: number;
   overflow: boolean;
@@ -113,10 +113,8 @@ interface Props {
    */
   exportFlow?: "delivery" | "legacy";
 }
-
 /** W19 导出交付包：模块级单例（与 DeliveryArchiveModal 同一注入模式，测试可替换）。 */
 const deliveryApi = createExportDeliveryApi();
-
 export default function ResumeDetailPreview({
   detail,
   html,
@@ -151,6 +149,7 @@ export default function ResumeDetailPreview({
   onDocumentSynced,
   exportFlow = "delivery",
 }: Props) {
+  useLocale();
   const navigate = useNavigate();
   const [editorOpen, setEditorOpen] = useState(false);
   const [editorTarget, setEditorTarget] = useState<string | null>(null);
@@ -452,6 +451,7 @@ export default function ResumeDetailPreview({
         pages={layout.page_limit}
         layout={layout}
         resumeId={detail.id}
+        resumeLanguage={detail.language}
         relayouting={relayouting}
         hasPhoto={Boolean(detail.content?.photo)}
         documentMode={detail.document_mode}

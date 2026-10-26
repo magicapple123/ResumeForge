@@ -22,6 +22,7 @@ import {
 import { Button, Tooltip } from "antd";
 import type { DragEvent, KeyboardEvent, ReactNode } from "react";
 import { t } from "../../../i18n";
+import { useLocale } from "../../../i18n/i18nContext";
 import type { OutlineEntry, OutlinePoint } from "../../../features/resume-outline/model";
 import { splitHighlight } from "../../../features/resume-outline/search";
 
@@ -203,6 +204,7 @@ export function EntryRowContent({
   onDragOver,
   onDrop,
 }: EntryRowContentProps) {
+  useLocale();
   const hasPoints = entry.points.length > 0;
   return (
     // biome-ignore lint/a11y/useKeyWithClickEvents: 键盘等价物在外层 treeitem 上（Enter/Space 选中）
@@ -306,6 +308,7 @@ export function PointRowContent({
   onToggleHidden,
   onClone,
 }: PointRowContentProps) {
+  useLocale();
   const displayText = point.text || t("outline.point.empty");
   const canHide = !readOnly && point.pointId !== "" && typeof onToggleHidden === "function";
   const canClone = !readOnly && point.pointId !== "" && typeof onClone === "function";

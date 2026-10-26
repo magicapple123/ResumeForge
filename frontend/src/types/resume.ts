@@ -431,6 +431,7 @@ export interface GenerationContextSnapshot {
 }
 
 export interface GenerateOptions {
+  language?: ResumeLanguage;
   enhance: boolean;
   enhancement_level: EnhancementLevel;
   page_limit: number;

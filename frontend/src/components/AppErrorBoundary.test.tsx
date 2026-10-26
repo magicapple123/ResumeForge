@@ -97,15 +97,10 @@ describe("AppErrorBoundary", () => {
 
     // antd 会在两个汉字之间插一个空格（"重 试"），所以比较前先把空格去掉。
     // 先等错误边界落屏（懒加载的 reject 要走完一轮微任务），再放开重试。
-    const retryLabel = t("common.retry");
-    const findRetry = () =>
-      screen
-        .getAllByRole("button")
-        .find((button) => button.textContent?.split(" ").join("") === retryLabel);
     const retryButton = await waitFor(() => {
-      const found = findRetry();
-      expect(found, "错误边界应给出可重试的按钮").toBeTruthy();
-      return found as HTMLElement;
+      return screen.getByRole("button", {
+        name: new RegExp(t("common.retry").split("").join("\\s*")),
+      });
     });
     const before = calls;
     allowSuccess = true;

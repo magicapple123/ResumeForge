@@ -14,6 +14,7 @@ import { useMemo } from "react";
 import EmptyState from "../../components/common/EmptyState";
 import { useProfileItemListDrag } from "../../components/profile/useProfileItemListDrag";
 import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 import ProfileFieldInputs from "./ProfileFieldInputs";
 import type { FieldOut, ProfileEntryDraft, SectionOut } from "./types";
 
@@ -63,6 +64,7 @@ function hasAnyValue(section: SectionOut, entries: ProfileEntryDraft[] | undefin
 }
 
 export default function ProfileEntrySection(props: Props) {
+  useLocale();
   const {
     section,
     editing,
@@ -205,6 +207,7 @@ function MultiEntryList({
   onRemoveEntry,
   onSetPreference,
 }: MultiEntryListProps) {
+  useLocale();
   const drag = useProfileItemListDrag({
     enabled: listDrag.enabled,
     itemCount: listDrag.itemCount,

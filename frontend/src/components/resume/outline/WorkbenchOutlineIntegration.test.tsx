@@ -77,10 +77,8 @@ const PROJECT_B_ID = entryIdOf(entriesOf(CONTENT, "projects")[1]);
 const PROJECT_B_POINT_IDS = entriesOf(CONTENT, "projects")[1].point_ids;
 
 function button(label: string): HTMLElement {
-  const target = label.replace(/\s/g, "");
-  return screen.getByRole("button", {
-    name: (accessibleName: string) => accessibleName.replace(/\s/g, "").includes(target),
-  });
+  const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return screen.getByRole("button", { name: new RegExp(escaped.split("").join("\\s*")) });
 }
 
 function openOutlineTab(): void {
@@ -115,8 +113,7 @@ describe("W06 真实挂载", () => {
     expect(screen.getByText(t("outline.readonly"))).toBeInTheDocument();
     expect(
       screen.queryByRole("button", {
-        name: (accessibleName: string) =>
-          accessibleName.includes(t("outline.sort.handle", { name: PROJECT_B })),
+        name: new RegExp(t("outline.sort.handle", { name: PROJECT_B }).split("").join("\\s*")),
       }),
     ).toBeNull();
   });

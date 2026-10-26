@@ -10,6 +10,7 @@
  */
 import { AutoComplete, Button, Form, Input, Popover, Typography } from "antd";
 import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 import PartialDateSelect from "../../components/profile/PartialDateSelect";
 import type { FieldOut, SectionOut } from "./types";
 
@@ -60,6 +61,7 @@ function InputForField({
   singleLineMax: number;
   multiLineMax: number;
 } & ControlProps) {
+  useLocale();
   if (field.field_type === "multi_line") {
     return (
       <Input.TextArea
@@ -121,6 +123,7 @@ export default function ProfileFieldInputs({
   multiLineMax,
   onSetPreference,
 }: Props) {
+  useLocale();
   const hiddenFields = section.fields.filter((field) => field.hidden);
   const visibleFields = section.fields.filter(
     (field) => !field.hidden && field.field_type !== "photo",

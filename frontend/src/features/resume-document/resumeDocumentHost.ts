@@ -275,6 +275,7 @@ export function createResumeDocumentHost(options: ResumeDocumentHostOptions): Re
       }),
       content: merged,
       draft: false,
+      language: detail?.language ?? layout.language ?? "zh-CN",
     });
     bumpResumeList();
     return copy;

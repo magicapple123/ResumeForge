@@ -65,6 +65,7 @@ from .resume_generation import (  # noqa: F401  (re-export：保持既有导入�
     GenerateOptions,
     GenerateRequest,
     ResumeFontScale,
+    ResumeLanguage,
     ResumeMode,
     _validate_format_config_shape,
     mode_page_limit,
@@ -72,11 +73,6 @@ from .resume_generation import (  # noqa: F401  (re-export：保持既有导入�
 from .resume_identity import OptionalEmptyListMixin, OptionalIdentityMixin
 from .resume_profile_usage import ProfileUsageOut
 from .resume_research import ResumePatent, ResumePublication, ResumeResearchProject
-
-# 简历语言（A 包）：只影响纸面固定文案（小节标题 / 字段前缀），**不翻译正文**。
-# 与 ``ResumeFontScale`` 同一种收口方式：schema 层用 Literal 限值，DB 层不建 CHECK 约束
-# （SQLite 加约束要重建表）；读取侧另有 ``resume_labels.normalize_language`` 兜底。
-ResumeLanguage = Literal["zh-CN", "en-US"]
 
 # 简历备注的上限：列表默认可见（ellipsis + tooltip）、详情可编辑。
 MAX_RESUME_NOTE_CHARS = 2000
@@ -173,6 +169,7 @@ class ManualResumeRequest(BaseModel):
     # 建**草稿**（见 ``models.resume`` 的 ``draft`` 说明）：只有「前往简历制作台」传 true，
     # 缺省 false 让手写保存与通用简历的调用方逐字不变；草稿在制作台里保存过才进列表。
     draft: bool = Field(default=False)
+    language: ResumeLanguage = "zh-CN"
     # 这份简历自己的版式覆盖（P0-5）：缺省时后端用「我的资料」的顺序物化一次
     # （``default_section_order_config``）。**缺省是"不涉及"而不是"清空"**：请求体里没有这个
     # 字段的既有调用方（手写保存、通用简历）行为逐字不变，只是多得到一份默认板块顺序。

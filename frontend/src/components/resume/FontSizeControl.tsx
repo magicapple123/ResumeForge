@@ -26,6 +26,7 @@ import { useEffect, useRef, useState } from "react";
 import type { RefObject } from "react";
 import type { ResumePreviewHandle } from "../ResumePreview";
 import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 import { SMALL_FONT_WARNING_PX, fontProbeCss } from "../../utils/resumeFontScale";
 import ParamResetButton from "./ParamResetButton";
 
@@ -83,6 +84,7 @@ export default function FontSizeControl({
   onCommit,
   onReset,
 }: Props) {
+  useLocale();
   // 拖动过程中的即时值：非 null 时覆盖 value，让滑块与读数跟着手指走。
   const [draggingPx, setDraggingPx] = useState<number | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);

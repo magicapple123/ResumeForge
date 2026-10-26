@@ -7,6 +7,7 @@
 import { Button, Select, Tooltip } from "antd";
 import { SettingOutlined } from "@ant-design/icons";
 import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 import type { GroupBriefOut } from "./types";
 
 interface Props {
@@ -28,6 +29,7 @@ export default function ProfileGroupControl({
   onSwitch,
   onManage,
 }: Props) {
+  useLocale();
   const editingHint = editing ? t("profileGroups.control.locked") : undefined;
   const options = groups.map((group) => {
     const names = group.participating_keys

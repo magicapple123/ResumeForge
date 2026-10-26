@@ -15,6 +15,7 @@ import type { ClipboardEvent } from "react";
 import { importCandidatesCsv, previewCandidateImport } from "../../../api/candidateJob";
 import { commitRowsInChunks, useCsvFileBatch } from "../../../features/import/useCsvFileBatch";
 import { t } from "../../../i18n";
+import { useLocale } from "../../../i18n/i18nContext";
 import type { CandidateCsvRow } from "../../../types";
 import { downloadCsvTemplate } from "../../../utils/download";
 import { ListyItem } from "../../common/ListyItem";
@@ -22,6 +23,7 @@ import { ListyItem } from "../../common/ListyItem";
 interface CsvRowError {
   line: number;
   message: string;
+  code: "duplicate" | "invalid" | "error";
 }
 
 interface Props {
@@ -29,11 +31,6 @@ interface Props {
   /** 导入成功后由抽屉刷新列表并回到列表视图。 */
   onImported: (imported: number) => void;
 }
-
-/** 后端在重复行上给的措辞：只用来把「重复跳过」从「失败」里分出来。 */
-const SKIP_TOKEN = t("jobs.candidate.import.skip-token");
-/** 从剪贴板粘贴的纯文本会被包装成一个 CSV 文件：名字要像用户自己的文件。 */
-const PASTED_FILE = t("jobs.candidate.import.pasted-file");
 
 /** 候选的判重身份：岗位名 + 岗位链接（归一化后逐字比较）。 */
 function candidateRowKey(row: CandidateCsvRow): string {
@@ -44,6 +41,9 @@ function candidateRowKey(row: CandidateCsvRow): string {
 
 export function CandidateImportView({ onClose, onImported }: Props) {
   const { message } = App.useApp();
+  useLocale();
+  /** Clipboard text is wrapped as a CSV file; its filename follows the active UI locale. */
+  const pastedFileName = t("jobs.candidate.import.pasted-file");
   const [committing, setCommitting] = useState(false);
   const batch = useCsvFileBatch<CandidateCsvRow, CsvRowError>({
     parseFile: async (file) => {
@@ -68,7 +68,7 @@ export function CandidateImportView({ onClose, onImported }: Props) {
     if (files.length === 0 && !text.trim()) return;
     event.preventDefault();
     void batch.addFiles(
-      files.length > 0 ? files : [new File([text], PASTED_FILE, { type: "text/csv" })],
+      files.length > 0 ? files : [new File([text], pastedFileName, { type: "text/csv" })],
     );
   };
 
@@ -92,7 +92,7 @@ export function CandidateImportView({ onClose, onImported }: Props) {
         );
         return;
       }
-      const skipped = outcome.failed.filter((item) => item.message.includes(SKIP_TOKEN)).length;
+      const skipped = outcome.failed.filter((item) => item.code === "duplicate").length;
       const detail = t("jobs.candidate.import.done-detail", {
         imported: outcome.imported,
         skipped,

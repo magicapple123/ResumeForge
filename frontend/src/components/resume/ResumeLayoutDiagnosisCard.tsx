@@ -27,6 +27,7 @@ import type {
   ResumeLayoutStatus,
 } from "../../types";
 import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 import type { ResumePreviewHandle } from "../ResumePreview";
 import type { LayoutMeasure } from "../../utils/resumeLayoutMeasure";
 
@@ -115,6 +116,7 @@ export default function ResumeLayoutDiagnosisCard({
   content = null,
   onApplyContent,
 }: Props) {
+  useLocale();
   const { message } = App.useApp();
   const [analysis, setAnalysis] = useState<ResumeLayoutAnalysis | null>(null);
   /**

@@ -14,6 +14,7 @@ import assets from "./zh-CN.assets";
 import bilingual from "./zh-CN.bilingual";
 import careerScenarios from "./zh-CN.careerScenarios";
 import conflict from "./zh-CN.conflict";
+import common from "./zh-CN.common";
 import credentials from "./zh-CN.credentials";
 import delivery from "./zh-CN.delivery";
 import fontDownload from "./zh-CN.fontDownload";
@@ -38,6 +39,8 @@ import trial from "./zh-CN.trial";
 import typography from "./zh-CN.typography";
 import versions from "./zh-CN.versions";
 import workbench from "./zh-CN.workbench";
+import webformGroups from "./zh-CN.webformGroups";
+import webformFields from "./zh-CN.webformFields";
 
 const namespaces = {
   /** 简历制作台（2026-10-23）。 */
@@ -58,6 +61,7 @@ const namespaces = {
   ...outline,
   /** W02 保存冲突三选一。 */
   ...conflict,
+  ...common,
   /** W15/D04/D05/D09/D10/D13/D14 专业视图。 */
   ...proview,
   /** W14 科研栏目与长 CV 模式。 */
@@ -103,6 +107,9 @@ const namespaces = {
   ...profileFacts,
   /** 旧前缀兼容别名（临时；facts 目录删除时一并删除，见 zh-CN.profileFactsLegacy.ts）。 */
   ...profileFactsLegacy,
+  /** 网申资料目录使用稳定分组 ID；这里是分组显示名。 */
+  ...webformGroups,
+  ...webformFields,
 } as const;
 
 export default namespaces;

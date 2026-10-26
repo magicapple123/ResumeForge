@@ -1,7 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { t } from "../../i18n";
+import I18nProvider from "../../i18n/I18nProvider";
+import { selectLocale } from "../../i18n/localeStore";
 import type { WebFormRepeatedGroup } from "../../types";
 import WebFormProfileRecords from "./WebFormProfileRecords";
 
@@ -183,5 +186,33 @@ describe("WebFormProfileRecords", () => {
     // 无匹配：整组隐藏。
     render(<Harness searchTerm="不存在的词" />);
     expect(screen.queryByLabelText(/教育经历补充第\d+条/)).not.toBeInTheDocument();
+  });
+
+  it("localizes repeated group and field labels while retaining field keys", () => {
+    render(
+      <I18nProvider>
+        <WebFormProfileRecords
+          groups={[{ ...EDUCATION_GROUP, records: [{ values: {} }] }]}
+          editing
+          saving={false}
+          showOnlyFilled={false}
+          searchTerm=""
+          onChange={vi.fn()}
+        />
+      </I18nProvider>,
+    );
+
+    act(() => selectLocale("en-US"));
+
+    expect(screen.getByText(t("webformGroups.repeat.education"))).toBeInTheDocument();
+    expect(
+      screen.getByLabelText(
+        t("profileLibrary.webform.recordFieldAria", {
+          group: t("webformGroups.repeat.education"),
+          index: 1,
+          field: t("webformFields.education_class_rank"),
+        }),
+      ),
+    ).toBeInTheDocument();
   });
 });

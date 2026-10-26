@@ -10,6 +10,7 @@
 import { InfoCircleOutlined } from "@ant-design/icons";
 import { Button, Popover, Space, Tag, Tooltip, Typography } from "antd";
 import { t } from "../../../i18n";
+import { useLocale } from "../../../i18n/i18nContext";
 import type { MessageKey } from "../../../i18n";
 import {
   diagnoseColors,
@@ -42,6 +43,7 @@ interface Props {
 }
 
 export default function PrintCheckControl({ viewportRef }: Props) {
+  useLocale();
   const [result, setResult] = useState<DiagnosticResult | null>(null);
   const [open, setOpen] = useState(false);
 

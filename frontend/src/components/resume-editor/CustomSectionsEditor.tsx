@@ -13,6 +13,7 @@
 import { DeleteOutlined, PlusOutlined } from "@ant-design/icons";
 import { Button, Form, Input, Space, Tooltip, Typography } from "antd";
 import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 import type { ResumeCustomSection } from "../../types";
 import type { EditorSectionOut } from "../../features/profile-library/types";
 import { useEditorSchemaSections } from "./editorSchemaContext";
@@ -28,6 +29,7 @@ function EmptyCustomSection({
   section: EditorSectionOut;
   onAdd: (section: EditorSectionOut) => void;
 }) {
+  useLocale();
   return (
     <div
       style={{
@@ -49,6 +51,7 @@ function EmptyCustomSection({
 }
 
 export default function CustomSectionsEditor() {
+  useLocale();
   const form = Form.useFormInstance();
   const watched = Form.useWatch("custom_sections", form) as ResumeCustomSection[] | undefined;
   // Form.useWatch 首帧恒为 undefined（订阅在 mount 后建立）。首帧直接读表单值，否则

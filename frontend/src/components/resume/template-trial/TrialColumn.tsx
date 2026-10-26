@@ -16,6 +16,7 @@ import type {
 } from "../../../features/resume-template-trial/types";
 import type { TemplateCapability } from "../../../features/resume-template-trial/templateProfile";
 import { withHiddenScrollbar } from "../../../utils/iframeDocument";
+import { useLocale } from "../../../i18n/i18nContext";
 
 interface Props {
   /** 侧名（左侧/右侧）。 */
@@ -68,6 +69,7 @@ export default function TrialColumn({
   onRetry,
   onAdopt,
 }: Props) {
+  useLocale();
   const isCurrent = state.template === currentTemplate;
   const templateLabel =
     templates.find((item) => item.name === state.template)?.label ?? state.template;

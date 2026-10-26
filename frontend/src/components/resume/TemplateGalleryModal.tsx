@@ -23,6 +23,7 @@ import type {
   ResumeTemplateOption,
 } from "../../types";
 import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 import { withHiddenScrollbar } from "../../utils/iframeDocument";
 import { templateCapability } from "../../features/resume-template-trial/templateProfile";
 import TemplateTrialPanel from "./template-trial/TemplateTrialPanel";
@@ -79,6 +80,7 @@ export default function TemplateGalleryModal({
   resumeId,
   content,
 }: Props) {
+  const locale = useLocale();
   const { message } = App.useApp();
   const [templates, setTemplates] = useState<ResumeTemplateOption[]>([]);
   /** 完整目录（对比视图要读 `template_layouts` 推篇幅档，不另发一次请求）。 */
@@ -246,8 +248,10 @@ export default function TemplateGalleryModal({
   );
 
   const selectedName = layout.template;
-  const body = useMemo(
-    () => (
+  const body = useMemo(() => {
+    // The gallery body contains translated labels and must rebuild on locale changes.
+    void locale;
+    return (
       <div className="template-gallery">
         <div className="template-gallery-toolbar">
           <Typography.Text type="secondary" className="template-gallery-note">
@@ -361,19 +365,19 @@ export default function TemplateGalleryModal({
           ))}
         </div>
       </div>
-    ),
-    [
-      templates,
-      previews,
-      failed,
-      selectedName,
-      previewScale,
-      onSelect,
-      onFontScaleChange,
-      openZoom,
-      cardCapability,
-    ],
-  );
+    );
+  }, [
+    templates,
+    previews,
+    failed,
+    selectedName,
+    previewScale,
+    onSelect,
+    onFontScaleChange,
+    openZoom,
+    cardCapability,
+    locale,
+  ]);
 
   return (
     <Modal

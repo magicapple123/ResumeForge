@@ -48,6 +48,7 @@ import {
 } from "../../../utils/resumeStyleParams";
 import ParamResetButton from "../ParamResetButton";
 import StyleSourceTag from "./StyleSourceTag";
+import { useLocale } from "../../../i18n/i18nContext";
 
 export type StyleValue = number | string | boolean;
 
@@ -85,6 +86,7 @@ export default function StyleValueRow({
   onCommit,
   testId,
 }: Props) {
+  useLocale();
   const kind = STYLE_PROP_KINDS[prop];
   const bounds = isNumberStyleProp(prop) ? STYLE_PROP_BOUNDS[prop] : null;
   const [draft, setDraft] = useState<number | null>(null);

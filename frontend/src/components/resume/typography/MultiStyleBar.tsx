@@ -30,6 +30,7 @@ import {
   withObjectProps,
   type ResumeRoleStyle,
 } from "../../../features/resume-layout/styleOverrides";
+import { useLocale } from "../../../i18n/i18nContext";
 
 export type StyleTarget = EntryIdentity;
 
@@ -60,6 +61,7 @@ export default function MultiStyleBar({
   onClearSelection,
   onApplied,
 }: Props) {
+  useLocale();
   const [patch, setPatch] = useState<Patch>(EMPTY_PATCH);
   const duplicates = useMemo(() => findDuplicateTargets(selected), [selected]);
 

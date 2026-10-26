@@ -15,7 +15,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { TEMPLATE_CATALOG } from "../../test/resumeFixtures";
 import { t } from "../../i18n";
 import { ApiError } from "../../api/client";
-import type { ResumeContent, ResumeDetail } from "../../types";
+import type { ResumeContent, ResumeDetail, ResumeLanguage } from "../../types";
 import type { ResumeDocumentPipeline } from "../../features/resume-document/types";
 import { DEFAULT_LAYOUT } from "../ResumeLayoutControls.testkit";
 import ResumeZoomModal from "./ResumeZoomModal";
@@ -112,7 +112,7 @@ function actionbar(): HTMLElement {
   return node as HTMLElement;
 }
 
-function renderWorkbench() {
+function renderWorkbench(language: ResumeLanguage = "zh-CN") {
   const saveContent = vi.fn(async () => {
     throw CONFLICT;
   });
@@ -142,6 +142,7 @@ function renderWorkbench() {
           layout={LAYOUT}
           resumeId={42}
           resumeTitle={"我的简历"}
+          resumeLanguage={language}
           content={content}
           onApplyLayout={vi.fn()}
           onSaveContent={vi.fn(async () => 3)}
@@ -219,9 +220,10 @@ describe("制作台 · 409 冲突三选一", () => {
       id: 77,
       title: "\u6211\u7684\u7b80\u5386\uff08\u526f\u672c\uff09",
       revision: 0,
+      language: "en-US" as const,
     };
     createManualResumeMock.mockResolvedValue(copy);
-    renderWorkbench();
+    renderWorkbench("en-US");
     await triggerConflict();
 
     await act(async () => {
@@ -234,11 +236,13 @@ describe("制作台 · 409 冲突三选一", () => {
       title: string;
       content: ResumeContent;
       draft: boolean;
+      language: string;
     };
     expect(payload.title).toBe(
       t("workbench.conflict.copy.title", { title: "\u6211\u7684\u7b80\u5386" }),
     );
     expect(payload.draft).toBe(false);
+    expect(payload.language).toBe("en-US");
     // 内容取的是**本地那份**（李四），不是服务端已保存的 Alex。
     expect(payload.content.name).toBe("\u674e\u56db");
 

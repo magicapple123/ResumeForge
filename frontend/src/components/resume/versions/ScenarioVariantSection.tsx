@@ -28,6 +28,7 @@ import {
   previewScenarioVariant,
 } from "../../../features/resume-versions/versionsApi";
 import { t } from "../../../i18n";
+import { useLocale } from "../../../i18n/i18nContext";
 import type { CareerContextRequest } from "../../../types";
 import ResumeDiffView from "../../ResumeDiffView";
 
@@ -92,11 +93,12 @@ function conflictMessage(error: unknown, fallbackKey: I18nKey): string {
 }
 
 export default function ScenarioVariantSection({ resumeId, onChanged, variants }: Props) {
+  const locale = useLocale();
   const { message } = App.useApp();
   const [catalog, setCatalog] = useState<CareerScenarioCatalog | null>(null);
   const [scenarios, setScenarios] = useState<CareerScenario[]>([]);
   const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState("");
+  const [loadError, setLoadError] = useState(false);
   const [name, setName] = useState("");
   const [selected, setSelected] = useState("");
   const [creating, setCreating] = useState(false);
@@ -108,7 +110,7 @@ export default function ScenarioVariantSection({ resumeId, onChanged, variants }
 
   const loadOptions = useCallback(async () => {
     setLoading(true);
-    setLoadError("");
+    setLoadError(false);
     const [catalogResult, scenariosResult] = await Promise.allSettled([
       fetchCareerScenarioCatalog(),
       listCareerScenarios(),
@@ -121,7 +123,7 @@ export default function ScenarioVariantSection({ resumeId, onChanged, variants }
     }
     // 目录失败不阻断已保存场景；两者都失败才提示（旧生成流程也不应被这里卡住）。
     if (catalogResult.status === "rejected" && scenariosResult.status === "rejected") {
-      setLoadError(t("careerScenarios.variant.loadFailed"));
+      setLoadError(true);
     }
     setLoading(false);
   }, []);
@@ -131,6 +133,8 @@ export default function ScenarioVariantSection({ resumeId, onChanged, variants }
   }, [loadOptions]);
 
   const options = useMemo(() => {
+    // Group labels are translated inside this memo.
+    void locale;
     const saved = scenarios.map((scenario) => ({
       value: SAVED_PREFIX + String(scenario.id),
       label: scenario.name,
@@ -145,7 +149,7 @@ export default function ScenarioVariantSection({ resumeId, onChanged, variants }
         ? [{ label: t("careerScenarios.selector.preset"), options: presets }]
         : []),
     ];
-  }, [catalog, scenarios]);
+  }, [catalog, scenarios, locale]);
 
   const selectedContext = useCallback((): CareerContextRequest | null => {
     if (selected.startsWith(SAVED_PREFIX)) {
@@ -276,7 +280,9 @@ export default function ScenarioVariantSection({ resumeId, onChanged, variants }
         </Button>
         <Button onClick={() => void loadOptions()}>{t("careerScenarios.variant.refresh")}</Button>
       </Space>
-      {loadError ? <Typography.Text type="danger">{loadError}</Typography.Text> : null}
+      {loadError ? (
+        <Typography.Text type="danger">{t("careerScenarios.variant.loadFailed")}</Typography.Text>
+      ) : null}
       {contextVariants.length === 0 ? (
         <Typography.Text type="secondary" style={{ fontSize: 12 }}>
           {t("careerScenarios.variant.empty")}

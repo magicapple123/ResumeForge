@@ -18,6 +18,7 @@ import type {
   VariantSyncRequest,
   VersionOut,
 } from "../../../features/resume-versions/types";
+import { useLocale } from "../../../i18n/i18nContext";
 
 interface Props {
   variants: VariantOut[];
@@ -44,6 +45,7 @@ export default function VariantsPanel({
   onSync,
   onRefresh,
 }: Props) {
+  useLocale();
   const { message } = App.useApp();
   const [name, setName] = useState("");
   const [baseVersionId, setBaseVersionId] = useState<number | undefined>(undefined);

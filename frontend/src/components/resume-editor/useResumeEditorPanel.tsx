@@ -27,6 +27,7 @@ import { App, Form, type FormInstance, type TabsProps } from "antd";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ResumeContent } from "../../types";
 import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 import { hasAnyResumeContent } from "../../utils/profileToResume";
 import type { DraftDiffEntry } from "../../utils/draftDiff";
 import { formatErrorGuidance } from "../../api/errorGuidance";
@@ -170,6 +171,7 @@ export interface ResumeEditorPanelApi {
 }
 
 export function useResumeEditorPanel(options: ResumeEditorPanelOptions): ResumeEditorPanelApi {
+  const locale = useLocale();
   const {
     active,
     content,
@@ -379,8 +381,10 @@ export function useResumeEditorPanel(options: ResumeEditorPanelOptions): ResumeE
     [content, watched],
   );
   const tabItems = useMemo<TabsProps["items"]>(
-    () =>
-      buildResumeEditorTabItems({
+    () => {
+      // Tab labels are translated inside the builder; locale invalidates this memo.
+      void locale;
+      return buildResumeEditorTabItems({
         summarySource,
         fillSummary,
         customSectionCount,
@@ -388,7 +392,8 @@ export function useResumeEditorPanel(options: ResumeEditorPanelOptions): ResumeE
         editorView,
         content,
         contentPresenceMask,
-      }),
+      });
+    },
     // summarySource 决定「填入个人总结」是否出现；fillSummary 已用 useCallback 固定
     // （它自己依赖 setFormValue），只在值真的变时才重建标签页。
     [
@@ -399,6 +404,7 @@ export function useResumeEditorPanel(options: ResumeEditorPanelOptions): ResumeE
       editorView,
       content,
       contentPresenceMask,
+      locale,
     ],
   );
   /**

@@ -96,7 +96,9 @@ def test_fields_endpoint_returns_the_catalog_with_groups(client, browser_port):
 
     keys = [item["key"] for item in body["fields"]]
     assert "name" in keys and "id_number" in keys
-    assert body["groups"][0] == "身份信息"
+    assert body["groups"][0] == "identity"
+    assert all(group.isascii() and group.islower() for group in body["groups"])
+    assert {field["group"] for field in body["fields"]} <= set(body["groups"])
     # 高敏感字段要被标出来，界面据此提示"只存本机、不进简历导出"。
     sensitive = {item["key"] for item in body["fields"] if item["sensitive"]}
     assert {"id_number", "political_status", "birth_date"} <= sensitive

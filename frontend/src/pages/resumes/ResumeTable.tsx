@@ -16,8 +16,8 @@ import { TRASH_RECOVERY_NOTE } from "../../components/common/rowActionMenu";
 import type { BatchSelection } from "../../hooks/useBatchSelection";
 import { RESUME_ENHANCEMENT_LEVELS, enhancementLevelDescription } from "../../config";
 import { t } from "../../i18n";
-import type { Page } from "../../types";
-import type { ResumeBrief } from "../../types";
+import { useLocale } from "../../i18n/i18nContext";
+import type { Page, ResumeBrief } from "../../types";
 import type { DiffViewData } from "../../types/resumeFieldDiff";
 import { formatDateTime } from "../../utils/format";
 import {
@@ -46,7 +46,6 @@ interface RowActionDeps {
 function primaryActionsFor(record: ResumeBrief, deps: RowActionDeps): RowActionItem[] {
   return [{ key: "preview", label: "预览 / 导出", onClick: () => deps.setPreviewId(record.id) }];
 }
-
 function secondaryActionsFor(record: ResumeBrief, deps: RowActionDeps): RowActionItem[] {
   return [
     {
@@ -102,7 +101,6 @@ function batchSelectAction(enterSelecting: () => void): RowActionItem {
     onClick: enterSelecting,
   };
 }
-
 interface ContextMenuRowProps extends HTMLAttributes<HTMLTableRowElement> {
   record?: ResumeBrief;
   /** 批量选择模式下右键菜单收起，与行内操作保持一致。 */
@@ -123,6 +121,7 @@ const ContextMenuRow = memo(function ContextMenuRow({
 }: ContextMenuRowProps) {
   // 必须在提前 return 之前调用（Hook 顺序），`record` 为空时用不上也无妨。
   const { message } = App.useApp();
+  useLocale();
   if (!record) return <tr {...rest} />;
   return (
     <RowContextMenu

@@ -25,7 +25,8 @@ def test_extra_profile_starts_empty_with_the_catalog(client, browser_port):
     assert "cet4_score" not in keys and "cet6_score" not in keys
     assert body["values"] == {}
     # 分区标题来自后端，界面不写死。
-    assert "语言与证书" in body["groups"]
+    assert "language" in body["groups"]
+    assert all(group.isascii() and group.islower() for group in body["groups"])
 
 
 def test_extra_profile_round_trips(client, browser_port):

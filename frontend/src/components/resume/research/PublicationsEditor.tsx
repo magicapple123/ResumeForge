@@ -11,6 +11,7 @@
  * F10：当前方案里隐藏的字段不显示（仍有值的保留）。
  */
 import { Form, Input, Row, Select } from "antd";
+import { useLocale } from "../../../i18n/i18nContext";
 import AuthorListEditor from "./AuthorListEditor";
 import ResearchListSection from "./ResearchListSection";
 import UrlPreview from "./UrlPreview";
@@ -23,21 +24,18 @@ import {
   publicationStatusKey,
 } from "../../../features/resume-research/researchFields";
 
-const LABEL = rt("research.tab.publications");
-
-const STATUS_OPTIONS = PUBLICATION_STATUSES.map((status) => ({
-  value: status,
-  label: rt(publicationStatusKey(status)),
-}));
+const LABEL = "research.tab.publications";
 
 export default function PublicationsEditor() {
+  useLocale();
+  const label = rt(LABEL);
   const visible = useEditorFieldVisibility("publications");
   return (
     <ResearchListSection
       name="publications"
-      label={LABEL}
+      label={label}
       emptyDescription={rt("research.empty.publications")}
-      addLabel={rt("research.list.add", { label: LABEL })}
+      addLabel={rt("research.list.add", { label })}
       makeEmpty={emptyPublication}
     >
       {(field) => (
@@ -80,7 +78,13 @@ export default function PublicationsEditor() {
               label={rt("research.publications.status")}
               tooltip={rt("research.status.hint")}
             >
-              <Select options={STATUS_OPTIONS} aria-label={rt("research.publications.status")} />
+              <Select
+                options={PUBLICATION_STATUSES.map((status) => ({
+                  value: status,
+                  label: rt(publicationStatusKey(status)),
+                }))}
+                aria-label={rt("research.publications.status")}
+              />
             </Form.Item>
           </EditorFieldCol>
           <EditorFieldCol xs={24} md={12} show={visible.show("doi")}>

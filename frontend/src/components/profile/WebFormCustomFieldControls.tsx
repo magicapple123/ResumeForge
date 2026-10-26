@@ -3,6 +3,8 @@
 import { CheckOutlined, CloseOutlined, DeleteOutlined, EditOutlined } from "@ant-design/icons";
 import { Button, Input, Popconfirm, Space, Typography } from "antd";
 import { useState } from "react";
+import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 
 interface Props {
   label: string;
@@ -23,6 +25,7 @@ export default function WebFormCustomFieldControls({
   onRename,
   onDelete,
 }: Props) {
+  useLocale();
   const [renaming, setRenaming] = useState(false);
   const [draft, setDraft] = useState(label);
   const [error, setError] = useState("");
@@ -57,7 +60,7 @@ export default function WebFormCustomFieldControls({
             value={draft}
             disabled={saving}
             maxLength={40}
-            aria-label={"编辑字段名：" + label}
+            aria-label={t("profileLibrary.webform.customEditAria", { label })}
             onChange={(event) => {
               setDraft(event.target.value);
               if (error) setError("");
@@ -68,13 +71,13 @@ export default function WebFormCustomFieldControls({
             type="primary"
             icon={<CheckOutlined />}
             disabled={saving}
-            aria-label="保存字段名"
+            aria-label={t("profileLibrary.webform.customSaveAria")}
             onClick={commit}
           />
           <Button
             icon={<CloseOutlined />}
             disabled={saving}
-            aria-label="取消修改字段名"
+            aria-label={t("profileLibrary.webform.customCancelAria")}
             onClick={() => {
               setDraft(label);
               setError("");
@@ -99,20 +102,20 @@ export default function WebFormCustomFieldControls({
         size="small"
         icon={<EditOutlined />}
         disabled={saving}
-        aria-label={"修改字段名：" + label}
+        aria-label={t("profileLibrary.webform.customRenameAria", { label })}
         onClick={() => {
           setDraft(label);
           setError("");
           setRenaming(true);
         }}
       >
-        修改名称
+        {t("profileLibrary.webform.customRename")}
       </Button>
       <Popconfirm
-        title={"删除「" + label + "」？"}
-        description="保存后将从网申资料和实时识别中移除。"
-        okText="确定"
-        cancelText="取消"
+        title={t("profileLibrary.webform.customDeleteTitle", { label })}
+        description={t("profileLibrary.webform.customDeleteDescription")}
+        okText={t("profileLibrary.webform.customDelete")}
+        cancelText={t("common.action.cancel")}
         disabled={saving}
         onConfirm={onDelete}
       >
@@ -122,9 +125,9 @@ export default function WebFormCustomFieldControls({
           size="small"
           icon={<DeleteOutlined />}
           disabled={saving}
-          aria-label={"删除自定义字段：" + label}
+          aria-label={t("profileLibrary.webform.customDeleteAria", { label })}
         >
-          删除
+          {t("profileLibrary.webform.customDelete")}
         </Button>
       </Popconfirm>
     </Space>

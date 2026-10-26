@@ -14,6 +14,7 @@
 import { BgColorsOutlined, FormatPainterOutlined } from "@ant-design/icons";
 import { Button, Space, Tooltip, Typography } from "antd";
 import { t } from "../../../i18n";
+import { useLocale } from "../../../i18n/i18nContext";
 
 interface Props {
   /** 源对象显示名（arm 之后告诉用户"来源是哪一条"）。 */
@@ -45,6 +46,7 @@ export default function FormatPainterButton({
   onApply,
   onFreeze,
 }: Props) {
+  useLocale();
   const canCopy = hasSource && hasDiff;
 
   if (armed) {

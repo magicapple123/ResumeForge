@@ -28,6 +28,7 @@ import { useCallback, useEffect, useMemo, useRef } from "react";
 import type { RefObject } from "react";
 import EmptyState from "../../common/EmptyState";
 import { t } from "../../../i18n";
+import { useLocale } from "../../../i18n/i18nContext";
 import { ensureIds } from "../../../features/resume-document/identity";
 import {
   buildOutline,
@@ -122,6 +123,7 @@ export default function OutlinePanel({
   onLocateSelection,
   className,
 }: OutlinePanelProps) {
+  useLocale();
   const treeRef = useRef<HTMLDivElement>(null);
   // 读取/编辑都基于"补齐过 id"的内存副本；不写库、不覆盖入参（W01 的读取适配）。
   const baseContent = useMemo(() => (content ? ensureIds(content) : null), [content]);

@@ -4,6 +4,7 @@
 import { HistoryOutlined } from "@ant-design/icons";
 import { Button, Space, Typography } from "antd";
 import { t } from "../../../i18n";
+import { useLocale } from "../../../i18n/i18nContext";
 import AssistantSelectBar from "./AssistantSelectBar";
 
 interface Props {
@@ -33,6 +34,7 @@ export default function AssistantWorkspaceHeader({
   exitSelecting,
   title,
 }: Props) {
+  useLocale();
   return (
     <>
       <header className="assistant-header">

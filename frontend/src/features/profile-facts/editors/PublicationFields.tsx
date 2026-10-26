@@ -1,18 +1,19 @@
 // SPDX-License-Identifier: Apache-2.0
 /** 论文编辑字段（payload 见契约 §3.1 publication）。隐藏字段由字段设置决定，不渲染。 */
 import { Col, Row } from "antd";
+import { useLocale } from "../../../i18n/i18nContext";
 import { PUBLICATION_STATUS_OPTIONS } from "../constants";
 import { isFieldHidden, translateOptions, type HiddenFields } from "./fieldHelpers";
 import { FactSelectField, FactTextAreaField, FactTextField, FactUrlField } from "./fields";
 import PersonRows from "./PersonRows";
-
-const STATUS_OPTIONS = translateOptions(PUBLICATION_STATUS_OPTIONS);
 
 interface Props {
   hiddenFields: HiddenFields;
 }
 
 export default function PublicationFields({ hiddenFields }: Props) {
+  useLocale();
+  const statusOptions = translateOptions(PUBLICATION_STATUS_OPTIONS);
   const hidden = (key: string) => isFieldHidden(hiddenFields, key);
   return (
     <>
@@ -47,7 +48,7 @@ export default function PublicationFields({ hiddenFields }: Props) {
             <FactSelectField
               name="status"
               labelKey="research.publications.status"
-              options={STATUS_OPTIONS}
+              options={statusOptions}
             />
           )}
         </Col>

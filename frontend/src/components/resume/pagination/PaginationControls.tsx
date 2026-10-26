@@ -44,6 +44,7 @@ import {
 } from "antd";
 import { useState } from "react";
 import { t } from "../../../i18n";
+import { useLocale } from "../../../i18n/i18nContext";
 import type { ResumeLayout } from "../../../types";
 import {
   clearSectionsBreakBefore,
@@ -103,6 +104,7 @@ export default function PaginationControls({
   capabilities,
   onChange,
 }: Props) {
+  useLocale();
   const domain = readPaginationDomain(layout.format_config);
   const entryBreak = entry ? (domain?.entries[entry.id] ?? {}) : null;
   const sectionBreak = section ? (domain?.sections[section] ?? {}) : null;

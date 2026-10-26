@@ -15,6 +15,7 @@ import { useEffect, useState } from "react";
 import { getResumeProfileUsage } from "../../api/resumes";
 import type { ProfileUsageFreshness, ResumeProfileUsageSnapshot } from "../../types";
 import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 
 interface Props {
   /** 简历记录 id；详情弹窗换记录时重新取快照。 */
@@ -32,6 +33,7 @@ function fieldNamesText(snapshot: ResumeProfileUsageSnapshot): string {
 }
 
 export default function ResumeProfileUsage({ recordId }: Props) {
+  useLocale();
   const [snapshot, setSnapshot] = useState<ResumeProfileUsageSnapshot | null>(null);
   const [freshness, setFreshness] = useState<ProfileUsageFreshness | null>(null);
   // 换一份简历：清掉上一份的快照（渲染期守卫，避免 effect 里同步 setState 级联渲染）。

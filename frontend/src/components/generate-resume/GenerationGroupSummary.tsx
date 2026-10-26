@@ -12,8 +12,10 @@ import { Button, Space, Tooltip, Typography } from "antd";
 import { useNavigate } from "react-router-dom";
 import { useCurrentProjection } from "../../features/profile-library/useCurrentProjection";
 import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 
 export default function GenerationGroupSummary() {
+  useLocale();
   const navigate = useNavigate();
   const { data, loading, error, reload } = useCurrentProjection(true);
 

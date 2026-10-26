@@ -34,10 +34,8 @@ const CONTENT: ResumeContent = ensureIds({
 });
 
 function button(label: string): HTMLElement {
-  const target = label.replace(/\s/g, "");
-  return screen.getByRole("button", {
-    name: (accessibleName: string) => accessibleName.replace(/\s/g, "").includes(target),
-  });
+  const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return screen.getByRole("button", { name: new RegExp(escaped.split("").join("\\s*")) });
 }
 
 function renderModal(options: { currentRevision?: number; revision?: number } = {}) {

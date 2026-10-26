@@ -53,8 +53,7 @@ describe("交付原件列表", () => {
     await screen.findByText(ARCHIVE_FILENAME);
     const deleteButtons = () =>
       screen.getAllByRole("button", {
-        name: (accessibleName: string) =>
-          accessibleName.replace(/\s/g, "").includes(t("delivery.archive.delete")),
+        name: new RegExp(t("delivery.archive.delete").split("").join("\\s*")),
       });
     fireEvent.click(deleteButtons()[0]);
     expect(await screen.findByText(t("delivery.archive.deleteBody"))).toBeInTheDocument();

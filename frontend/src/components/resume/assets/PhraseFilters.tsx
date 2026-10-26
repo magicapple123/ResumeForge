@@ -14,6 +14,8 @@
  * `grid auto-fit minmax(140px, 1fr)`（380 → 2×2，≥600 → 一行 4 个），布局只跟容器宽度走。
  */
 import { Button, Input, Select } from "antd";
+import { t } from "../../../i18n";
+import { useLocale } from "../../../i18n/i18nContext";
 import { at } from "../../../features/resume-assets/i18n";
 import {
   activeFilterCount,
@@ -36,12 +38,6 @@ interface Props {
   languages: string[];
 }
 
-const SORT_OPTIONS: { value: PhraseSort; label: string }[] = [
-  { value: "recent", label: at("assets.filter.sort.recent") },
-  { value: "usage", label: at("assets.filter.sort.usage") },
-  { value: "created", label: at("assets.filter.sort.created") },
-];
-
 function kindOptions() {
   return [
     { value: "all", label: at("assets.filter.kind.all") },
@@ -55,10 +51,18 @@ function kindOptions() {
 /** 四个下拉共用同一份"占满一格"的宽度语义；具体列数由 CSS grid 决定。 */
 const SELECT_CLASS = "resume-phrase-filters-select";
 
+const SORT_OPTIONS: { value: PhraseSort; label: Parameters<typeof at>[0] }[] = [
+  { value: "recent", label: "assets.filter.sort.recent" },
+  { value: "usage", label: "assets.filter.sort.usage" },
+  { value: "created", label: "assets.filter.sort.created" },
+];
+
 export default function PhraseFilters({ value, onChange, tags, languages }: Props) {
+  useLocale();
   const filter = normalizeFilter(value);
   const patch = (next: Partial<PhraseFilterState>) => onChange({ ...filter, ...next });
   const activeCount = activeFilterCount(filter);
+  const sortOptions = SORT_OPTIONS.map(({ value, label }) => ({ value, label: t(label) }));
 
   return (
     <div className="resume-phrase-filters">
@@ -111,7 +115,7 @@ export default function PhraseFilters({ value, onChange, tags, languages }: Prop
         <Select
           className={SELECT_CLASS}
           value={filter.sort}
-          options={SORT_OPTIONS}
+          options={sortOptions}
           aria-label={at("assets.filter.sort")}
           onChange={(sort) => patch({ sort })}
         />

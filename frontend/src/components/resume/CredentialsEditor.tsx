@@ -11,18 +11,13 @@
  */
 import { Col, Form, Input, Row, Select } from "antd";
 import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 import ResumeListSection from "../resume-editor/ResumeListSection";
 import EditorFieldCol from "../resume-editor/EditorFieldCol";
 import { useEditorFieldVisibility } from "../resume-editor/editorSchemaContext";
 
-const STATUS_OPTIONS = [
-  { value: "unknown", label: t("credentials.credentialStatus.unknown") },
-  { value: "pending", label: t("credentials.credentialStatus.pending") },
-  { value: "active", label: t("credentials.credentialStatus.active") },
-  { value: "expired", label: t("credentials.credentialStatus.expired") },
-];
-
 export default function CredentialsEditor() {
+  useLocale();
   const visible = useEditorFieldVisibility("credentials");
   return (
     <ResumeListSection
@@ -72,7 +67,14 @@ export default function CredentialsEditor() {
           </EditorFieldCol>
           <EditorFieldCol xs={24} md={6} show={visible.show("status")}>
             <Form.Item name={[field.name, "status"]} label={t("credentials.credential.status")}>
-              <Select options={STATUS_OPTIONS} />
+              <Select
+                options={[
+                  { value: "unknown", label: t("credentials.credentialStatus.unknown") },
+                  { value: "pending", label: t("credentials.credentialStatus.pending") },
+                  { value: "active", label: t("credentials.credentialStatus.active") },
+                  { value: "expired", label: t("credentials.credentialStatus.expired") },
+                ]}
+              />
             </Form.Item>
           </EditorFieldCol>
           <EditorFieldCol xs={12} md={5} show={visible.show("issue_date")}>

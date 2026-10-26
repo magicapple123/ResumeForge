@@ -12,6 +12,7 @@ import { App } from "antd";
 import { useCallback, useState } from "react";
 import { createCandidateJob, updateCandidateJob } from "../../../api/candidateJob";
 import { t } from "../../../i18n";
+import { useLocale } from "../../../i18n/i18nContext";
 import { readAsDataUrl } from "../../../utils/attachments";
 import type { CandidateJob, CandidateJobPayload, CandidateJobSource } from "../../../types";
 import type { FormState } from "./candidateShared";
@@ -48,6 +49,7 @@ export interface CandidateFormApi {
 
 /** @param onSaved 保存成功后的收尾（抽屉据此回列表并重拉列表）。 */
 export function useCandidateForm(onSaved: () => Promise<void>): CandidateFormApi {
+  useLocale();
   const { message } = App.useApp();
   const [editing, setEditing] = useState<CandidateJob | null>(null);
   const [formState, setFormState] = useState<FormState>(EMPTY_FORM);

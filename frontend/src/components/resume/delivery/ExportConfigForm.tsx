@@ -11,6 +11,7 @@ import { Alert, Button, Checkbox, Input, Switch, Tag, Tooltip } from "antd";
 import type { ReactNode } from "react";
 import type { MessageKey } from "../../../i18n";
 import { t } from "../../../i18n";
+import { useLocale } from "../../../i18n/i18nContext";
 import {
   DEFAULT_NAMING,
   MAX_FILENAME_STEM,
@@ -83,6 +84,7 @@ export default function ExportConfigForm({
   namingContext,
   disabled = false,
 }: ExportConfigFormProps) {
+  useLocale();
   const patch = (next: Partial<ExportPresetConfig>) => onChange({ ...config, ...next });
   const previewFormat = config.formats[0] ?? "pdf";
   const preview = renderFilenamePreview(config.naming, namingContext, previewFormat);

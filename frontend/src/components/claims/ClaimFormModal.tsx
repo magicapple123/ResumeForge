@@ -18,6 +18,7 @@ import FormModal from "../common/FormModal";
 import { useFormDraft } from "../../hooks/useFormDraft";
 import { useToast } from "../../hooks/useToast";
 import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 import { createClaim, updateClaim } from "../../api/claims";
 import type { Claim, ClaimPayload, ClaimSource, SourceType } from "../../types";
 import { HintedTextArea } from "../common/MaxLengthHint";
@@ -159,6 +160,7 @@ interface Props {
 }
 
 export default function ClaimFormModal({ open, claim, onClose, onSaved }: Props) {
+  useLocale();
   const { message } = App.useApp();
   const [form] = Form.useForm<FormValues>();
   const editing = claim !== null;

@@ -37,6 +37,7 @@ import ResumePreview, {
 import type { PreviewMode } from "../resume-preview/config";
 import type { RichTextEditAdapter } from "../resume-preview/richText";
 import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 
 interface Props {
   html: string;
@@ -92,6 +93,7 @@ export default function ResumeWorkbenchCanvas({
   scrollRef: externalScrollRef,
   status,
 }: Props) {
+  useLocale();
   const internalScrollRef = useRef<HTMLDivElement>(null);
   // 宿主给了句柄就用它（实时预览靠它恢复滚动位置），没给时这一层自管。
   const scrollRef = externalScrollRef ?? internalScrollRef;

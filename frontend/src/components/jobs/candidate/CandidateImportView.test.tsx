@@ -34,10 +34,10 @@ function pickFiles(files: File[]) {
   fireEvent.change(input!, { target: { files } });
 }
 
-function renderView(onImported = vi.fn()) {
+function renderView(onImported = vi.fn(), onClose = vi.fn()) {
   return render(
     <AntdApp>
-      <CandidateImportView onClose={vi.fn()} onImported={onImported} />
+      <CandidateImportView onClose={onClose} onImported={onImported} />
     </AntdApp>,
   );
 }
@@ -71,7 +71,7 @@ describe("CandidateImportView 多文件", () => {
           { line: 2, data: { title: "后端开发", company: "示例科技", source_url: "" } },
           { line: 4, data: { title: "数据工程师", company: "第三家", source_url: "" } },
         ],
-        errors: [{ line: 5, message: LINK_ERROR }],
+        errors: [{ line: 5, message: LINK_ERROR, code: "invalid" }],
       } satisfies CandidateCsvPreview);
     });
     importCandidatesCsv.mockResolvedValue({ imported: 3, failed: [] });
@@ -99,6 +99,48 @@ describe("CandidateImportView 多文件", () => {
     // 只提交去重后的 3 行（坏文件一行都没混进来）。
     expect(submitted).toHaveLength(3);
     await waitFor(() => expect(onImported).toHaveBeenCalledWith(3));
+  });
+
+  it("does not classify an old duplicate message without a stable code", async () => {
+    previewCandidateImport.mockResolvedValue({
+      rows: [{ line: 2, data: { title: "Backend", company: "Example" } }],
+      errors: [],
+    } satisfies CandidateCsvPreview);
+    importCandidatesCsv.mockResolvedValue({
+      imported: 0,
+      failed: [{ line: 2, message: t("jobs.candidate.import.skip-token") }],
+    });
+    const onClose = vi.fn();
+    renderView(vi.fn(), onClose);
+    pickFiles([csvFile("a.csv")]);
+    fireEvent.click(
+      await screen.findByRole("button", { name: t("jobs.candidate.import.confirm", { count: 1 }) }),
+    );
+    await waitFor(() => expect(importCandidatesCsv).toHaveBeenCalledTimes(1));
+    expect(onClose).not.toHaveBeenCalled();
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /确认导入 1 条/ })).not.toHaveClass(
+        "ant-btn-loading",
+      );
+    });
+  });
+
+  it("classifies a duplicate row by stable code regardless of its display message", async () => {
+    previewCandidateImport.mockResolvedValue({
+      rows: [{ line: 2, data: { title: "Backend", company: "Example" } }],
+      errors: [],
+    } satisfies CandidateCsvPreview);
+    importCandidatesCsv.mockResolvedValue({
+      imported: 0,
+      failed: [{ line: 2, message: "Backend already exists", code: "duplicate" }],
+    });
+    const onClose = vi.fn();
+    renderView(vi.fn(), onClose);
+    pickFiles([csvFile("a.csv")]);
+    fireEvent.click(
+      await screen.findByRole("button", { name: t("jobs.candidate.import.confirm", { count: 1 }) }),
+    );
+    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
   });
 
   it("粘贴纯文本当作一个 CSV 文件解析", async () => {

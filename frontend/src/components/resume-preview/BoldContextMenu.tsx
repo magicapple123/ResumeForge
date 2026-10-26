@@ -22,6 +22,7 @@ import { useEffect, useRef } from "react";
 import type { KeyboardEvent as ReactKeyboardEvent, MouseEvent as ReactMouseEvent } from "react";
 import { layer } from "../../theme/tokens";
 import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 
 /** 调用方（`ResumePreview`）通过这一条 import 同时拿到菜单与契约类型，省一行行数预算。 */
 export type { RichTextEditAdapter } from "./richText";
@@ -48,6 +49,7 @@ export default function BoldContextMenu({
   onPick,
   onClose,
 }: BoldContextMenuProps) {
+  useLocale();
   const menuRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {

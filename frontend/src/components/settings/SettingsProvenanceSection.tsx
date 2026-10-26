@@ -11,6 +11,7 @@ import { Alert, Button, Card, Divider, Input, InputNumber, Space, Typography } f
 import { useEffect, useState } from "react";
 import { useToast } from "../../hooks/useToast";
 import { pt } from "../../features/resume-provenance/i18n";
+import { useLocale } from "../../i18n/i18nContext";
 import {
   fetchUsagePricing,
   fetchUsageSummary,
@@ -36,6 +37,7 @@ function errorText(error: unknown): string {
 }
 
 export default function SettingsProvenanceSection({ targetService, className }: Props) {
+  useLocale();
   const toast = useToast();
   const [summary, setSummary] = useState<UsageSummaryOut | null>(null);
   const [usageLoading, setUsageLoading] = useState(false);

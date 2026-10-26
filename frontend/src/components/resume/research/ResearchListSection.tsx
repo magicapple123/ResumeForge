@@ -28,6 +28,7 @@ import type { FormListFieldData } from "antd";
 import type { ReactNode } from "react";
 import EmptyState from "../../common/EmptyState";
 import { rt } from "../../../features/resume-research/i18n";
+import { useLocale } from "../../../i18n/i18nContext";
 
 interface Props<T extends object> {
   /** content 里的字段名：publications / research_projects / patents。 */
@@ -61,6 +62,7 @@ export default function ResearchListSection<T extends object>({
   makeEmpty,
   children,
 }: Props<T>) {
+  useLocale();
   return (
     <div data-research-section={name}>
       <Form.List name={name}>

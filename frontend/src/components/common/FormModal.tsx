@@ -16,6 +16,7 @@ import { Modal } from "antd";
 import { useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 import DraftRestoreBar from "./DraftRestoreBar";
 import FormModalFooter from "./FormModalFooter";
 import type { DraftRestoreBarProps } from "./DraftRestoreBar";
@@ -76,6 +77,7 @@ export default function FormModal({
   extra,
   destroyOnHidden = true,
 }: FormModalProps) {
+  useLocale();
   // 契约：okText 缺失必须当场炸。兜底成「确定」等于把错误藏到 review 之外。
   // 开发者报错用英文：它是给写代码的人看的，不属于界面文案（也就不该进语言包）。
   if (!okText || okText.trim().length === 0) {

@@ -28,6 +28,7 @@ import {
 } from "../../api/fonts";
 import { useBuiltinFontDownload } from "../../features/fonts/useBuiltinFontDownload";
 import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 import FontSampleModal from "./FontSampleModal";
 
 /**
@@ -70,6 +71,7 @@ interface Props {
 }
 
 export default function BuiltinFontRow({ status, onChanged, activeName = null }: Props) {
+  useLocale();
   const { message, modal } = App.useApp();
   const [activating, setActivating] = useState(false);
   const [sampleOpen, setSampleOpen] = useState(false);

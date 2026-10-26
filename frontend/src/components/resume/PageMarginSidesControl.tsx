@@ -27,6 +27,7 @@ import { DownOutlined, MinusOutlined, PlusOutlined, UndoOutlined } from "@ant-de
 import { Button, Slider, Space, Tooltip, Typography } from "antd";
 import { useEffect, useId, useRef, useState } from "react";
 import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 import type { PageMargins } from "../../utils/pageMargins";
 import {
   MARGIN_SIDES,
@@ -99,6 +100,7 @@ export default function PageMarginSidesControl({
   onResetSide,
   onProbe,
 }: Props) {
+  useLocale();
   const [dragging, setDragging] = useState<Dragging | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // 折叠标题与面板的关联（读屏用）；`useId` 保证同一页出现两次也不会撞。

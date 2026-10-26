@@ -22,6 +22,7 @@ import {
   LEVEL_LABEL_KEY,
   parseCapabilities,
 } from "../../../features/resume-preflight/capabilities";
+import { useLocale } from "../../../i18n/i18nContext";
 
 /** 与"换模板"最相关的几项（键名是后端 CAPABILITY_KEYS 的字面量）。 */
 const RELEVANT_CAPABILITIES = [
@@ -42,6 +43,7 @@ interface Props {
 }
 
 export default function TrialCapabilityStrip({ capabilities }: Props) {
+  useLocale();
   const matrix = parseCapabilities(capabilities);
   const lines: string[] = [];
   for (const capability of RELEVANT_CAPABILITIES) {

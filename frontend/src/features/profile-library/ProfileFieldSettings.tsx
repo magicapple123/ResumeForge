@@ -11,6 +11,7 @@ import { ArrowLeftOutlined } from "@ant-design/icons";
 import { useState } from "react";
 import SectionVisibilitySwitch from "../../components/profile/SectionVisibilitySwitch";
 import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 import {
   createField,
   deleteField,
@@ -52,6 +53,7 @@ export default function ProfileFieldSettings({
   onChanged,
   onBack,
 }: Props) {
+  useLocale();
   const { message } = App.useApp();
   const [busy, setBusy] = useState(false);
   const [addLabel, setAddLabel] = useState("");

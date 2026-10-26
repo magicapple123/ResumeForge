@@ -14,6 +14,7 @@
  */
 import { Alert, Button, Flex, Space, Tooltip, Typography } from "antd";
 import { t } from "../../../i18n";
+import { useLocale } from "../../../i18n/i18nContext";
 import type { MessageKey } from "../../../i18n";
 import {
   manualBreakLocateTarget,
@@ -66,6 +67,7 @@ export default function OverflowLocator({
   onLocate,
   sectionLabels,
 }: Props) {
+  useLocale();
   const truncatedTarget = truncationLocateTarget(report);
   const limit = report?.pageLimit ?? null;
   const pages = report?.pagesNeeded ?? report?.pages ?? null;

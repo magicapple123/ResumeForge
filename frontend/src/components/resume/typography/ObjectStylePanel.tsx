@@ -45,6 +45,7 @@ import {
   type ResumeStyleValue,
 } from "../../../features/resume-layout/styleOverrides";
 import StyleValueRow from "./StyleValueRow";
+import { useLocale } from "../../../i18n/i18nContext";
 
 interface Props {
   layout: ResumeLayout;
@@ -72,6 +73,7 @@ export default function ObjectStylePanel({
   onChange,
   onClose,
 }: Props) {
+  useLocale();
   if (!objectId) {
     return <Typography.Text type="secondary">{t("typography.object.empty")}</Typography.Text>;
   }

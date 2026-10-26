@@ -15,6 +15,7 @@
 import { UndoOutlined } from "@ant-design/icons";
 import { Button, Tooltip } from "antd";
 import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 
 interface Props {
   /** 参数名（行距 / 页边距 / 字号…）：只用于无障碍名与气泡，不显示在按钮上。 */
@@ -23,6 +24,7 @@ interface Props {
 }
 
 export default function ParamResetButton({ label, onReset }: Props) {
+  useLocale();
   return (
     <Tooltip title={t("workbench.param.restoreToOpened")}>
       <Button

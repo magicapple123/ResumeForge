@@ -16,6 +16,7 @@ from .._base import WebFormBadRequest, WebFormConflict
 from ..engine import ApplyOutcome, Control, FieldMapping, FormEngine
 from ..engine.recovery import REASON_VALUE_MISMATCH
 from ..extra_profile import custom_fields_of
+from ..field_types import normalize_group_id
 from ..fields import FORM_FIELDS, SOURCE_EXTRA
 from ..matching import (
     date_component,
@@ -98,14 +99,15 @@ def list_fields() -> dict[str, Any]:
     """字段目录（供界面渲染录入表单）。"""
     groups: list[str] = []
     for field_item in FORM_FIELDS:
-        if field_item.group not in groups:
-            groups.append(field_item.group)
+        group_id = normalize_group_id(field_item.group)
+        if group_id not in groups:
+            groups.append(group_id)
     return {
         "fields": [
             {
                 "key": field_item.key,
                 "label": field_item.label,
-                "group": field_item.group,
+                "group": normalize_group_id(field_item.group),
                 "kind": field_item.kind,
                 "options": list(field_item.options),
                 "sensitive": field_item.sensitive,
@@ -134,14 +136,15 @@ def list_extra_fields(db: Session | None = None) -> dict[str, Any]:
     for field_item in FORM_FIELDS:
         if field_item.source != SOURCE_EXTRA:
             continue
-        if field_item.group not in groups:
-            groups.append(field_item.group)
+        group_id = normalize_group_id(field_item.group)
+        if group_id not in groups:
+            groups.append(group_id)
 
     fields: list[dict[str, Any]] = [
         {
             "key": field_item.key,
             "label": field_item.label,
-            "group": field_item.group,
+            "group": normalize_group_id(field_item.group),
             "kind": field_item.kind,
             "options": list(field_item.options),
             "sensitive": field_item.sensitive,

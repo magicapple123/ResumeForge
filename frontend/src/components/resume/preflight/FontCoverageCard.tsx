@@ -7,6 +7,7 @@
  */
 import { Alert, Space, Tag, Typography } from "antd";
 import { t } from "../../../i18n";
+import { useLocale } from "../../../i18n/i18nContext";
 import type { FontCoveragePayload } from "../../../features/resume-preflight/types";
 
 interface Props {
@@ -22,6 +23,7 @@ function missingLine(chars: string[]): string {
 }
 
 export default function FontCoverageCard({ coverage }: Props) {
+  useLocale();
   if (!coverage || !coverage.checked) {
     return (
       <Alert

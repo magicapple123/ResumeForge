@@ -6,6 +6,10 @@ import EmptyState from "../common/EmptyState";
 import { useMemo, useState } from "react";
 import type { WebFormMemoryTarget, WebFormRememberPending } from "../../types";
 import { useGroupTone } from "./webFormGroupTones";
+import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
+import { WEBFORM_CUSTOM_GROUP, webformGroupLabel } from "../../features/webform/groupIdentity";
+import { webformFieldLabel } from "../../features/webform/webformFieldLabels";
 
 export interface WebFormMemorySelection {
   target_id: string;
@@ -39,11 +43,6 @@ function fuzzyIncludes(text: string, keyword: string): boolean {
   return false;
 }
 
-// 「记住这条」的落点**只有「网申资料」**（见 services/webform/profile_targets.py）。
-// 以前这里还会渲染「我的资料」，也就是按一下就能改简历资料——2026-09-28 收掉了，
-// 所以不再需要按来源分支的标签。
-const SOURCE_LABEL = "网申资料";
-
 function inputKind(target: WebFormMemoryTarget | undefined): "text" | "textarea" {
   return target?.kind === "longtext" ? "textarea" : "text";
 }
@@ -58,6 +57,8 @@ export default function WebFormMemoryDialog({
   onSubmit,
 }: Props) {
   const { message } = App.useApp();
+  const locale = useLocale();
+  const webformProfileLabel = t("profileLibrary.tab.webform");
   // 分组色调跟随主题（R18）：深色下浅底 chip 会变成一块白砖。
   const groupTone = useGroupTone();
   const [search, setSearch] = useState("");
@@ -87,22 +88,29 @@ export default function WebFormMemoryDialog({
       setCustomLabel(preferred ? "" : pending.field_label || pending.control_label || "");
       setValue(pending.value);
       setCollapsedGroups(
-        new Set(targets.map((target) => target.group).filter((group) => group !== "自定义")),
+        new Set(
+          targets.map((target) => target.group).filter((group) => group !== WEBFORM_CUSTOM_GROUP),
+        ),
       );
     }
   }
 
   const selectedTarget = targets.find((target) => target.target_id === selectedId);
-  const filteredTargets = useMemo(
-    () =>
-      targets.filter((target) =>
-        fuzzyIncludes(
-          [target.group, target.label, target.value, target.field_key].join(" "),
-          search.trim(),
-        ),
+  const filteredTargets = useMemo(() => {
+    void locale;
+    return targets.filter((target) =>
+      fuzzyIncludes(
+        [
+          webformGroupLabel(target.group),
+          target.group,
+          webformFieldLabel(target.field_key, target.label),
+          target.value,
+          target.field_key,
+        ].join(" "),
+        search.trim(),
       ),
-    [search, targets],
-  );
+    );
+  }, [locale, search, targets]);
 
   const groupedTargets = useMemo(() => {
     const groups = new Map<string, WebFormMemoryTarget[]>();
@@ -137,7 +145,11 @@ export default function WebFormMemoryDialog({
 
   const handleSubmit = () => {
     if (!canSubmit) {
-      message.warning(selectedId === "custom" ? "请先填写自定义字段名称" : "请先填写要记住的值");
+      message.warning(
+        selectedId === "custom"
+          ? t("profileLibrary.webform.fieldNameRequired")
+          : t("profileLibrary.webform.valueRequired"),
+      );
       return;
     }
     onSubmit({
@@ -152,9 +164,9 @@ export default function WebFormMemoryDialog({
     <Modal
       open={open}
       width={760}
-      title="记住这条：选择要更新的资料"
-      okText="保存到选中的资料"
-      cancelText="暂不保存"
+      title={t("profileLibrary.webform.rememberTitle")}
+      okText={t("profileLibrary.webform.rememberSave")}
+      cancelText={t("profileLibrary.webform.rememberCancel")}
       confirmLoading={saving}
       okButtonProps={{ disabled: !canSubmit }}
       onCancel={onCancel}
@@ -169,13 +181,19 @@ export default function WebFormMemoryDialog({
         <Space orientation="vertical" size="middle" style={{ width: "100%" }}>
           <Card size="small" style={{ background: "var(--rf-brand-wash)" }}>
             <Space orientation="vertical" size={4}>
-              <Typography.Text type="secondary">当前浏览器字段</Typography.Text>
-              <Typography.Text strong>
-                {pending.control_label || pending.field_label || "未命名字段"}
-              </Typography.Text>
-              <Typography.Text>本次要记住：{pending.value}</Typography.Text>
               <Typography.Text type="secondary">
-                已有相同字段时，系统会优先帮你定位到对应目标；是否写入仍由你最后确认。
+                {t("profileLibrary.webform.browserField")}
+              </Typography.Text>
+              <Typography.Text strong>
+                {pending.control_label ||
+                  pending.field_label ||
+                  t("profileLibrary.webform.untitledField")}
+              </Typography.Text>
+              <Typography.Text>
+                {t("profileLibrary.webform.rememberValue", { value: pending.value })}
+              </Typography.Text>
+              <Typography.Text type="secondary">
+                {t("profileLibrary.webform.rememberHint")}
               </Typography.Text>
             </Space>
           </Card>
@@ -183,7 +201,7 @@ export default function WebFormMemoryDialog({
           <Input
             allowClear
             prefix={<SearchOutlined />}
-            placeholder="搜索字段、模块或当前值；支持模糊搜索"
+            placeholder={t("profileLibrary.webform.searchPlaceholder")}
             value={search}
             onChange={(event) => setSearch(event.target.value)}
           />
@@ -204,18 +222,24 @@ export default function WebFormMemoryDialog({
                 <PlusOutlined style={{ color: "var(--rf-info)", marginTop: 4 }} />
                 <Space orientation="vertical" size={2}>
                   <Space wrap size={6}>
-                    <Typography.Text strong>新增一条网申自定义字段</Typography.Text>
-                    <Tag color="blue">网申资料 · 自定义</Tag>
+                    <Typography.Text strong>
+                      {t("profileLibrary.webform.addCustom")}
+                    </Typography.Text>
+                    <Tag color="blue">
+                      {t("profileLibrary.tab.webform")} · {webformGroupLabel(WEBFORM_CUSTOM_GROUP)}
+                    </Tag>
                   </Space>
                   <Typography.Text type="secondary">
-                    网申资料里没有对应字段时使用；以后可在「我的资料 → 网申资料」里编辑。
+                    {t("profileLibrary.webform.addCustomHint")}
                   </Typography.Text>
                 </Space>
               </Space>
             </Card>
 
             {loading ? (
-              <Typography.Text type="secondary">正在读取完整资料目录…</Typography.Text>
+              <Typography.Text type="secondary">
+                {t("profileLibrary.webform.directoryLoading")}
+              </Typography.Text>
             ) : groupedTargets.length ? (
               groupedTargets.map(([group, items]) => {
                 const expanded = searching || !collapsedGroups.has(group);
@@ -254,7 +278,7 @@ export default function WebFormMemoryDialog({
                           whiteSpace: "nowrap",
                         }}
                       >
-                        网申资料 · {group}
+                        {t("profileLibrary.tab.webform")} · {webformGroupLabel(group)}
                       </span>
                       <Tag
                         style={{
@@ -264,7 +288,7 @@ export default function WebFormMemoryDialog({
                           background: "var(--rf-surface)",
                         }}
                       >
-                        {items.length} 条
+                        {t("profileLibrary.webform.itemCount", { count: items.length })}
                       </Tag>
                     </Button>
                     {expanded ? (
@@ -295,14 +319,18 @@ export default function WebFormMemoryDialog({
                                   style={{ minWidth: 0, flex: 1 }}
                                 >
                                   <Space wrap size={6}>
-                                    <Typography.Text strong>{target.label}</Typography.Text>
-                                    <Tag color="orange">{SOURCE_LABEL}</Tag>
+                                    <Typography.Text strong>
+                                      {webformFieldLabel(target.field_key, target.label)}
+                                    </Typography.Text>
+                                    <Tag color="orange">{webformProfileLabel}</Tag>
                                     {selected ? (
                                       <CheckCircleFilled style={{ color: "var(--rf-info)" }} />
                                     ) : null}
                                   </Space>
                                   <Typography.Text type="secondary" ellipsis>
-                                    当前值：{target.value || "（尚未填写）"}
+                                    {t("profileLibrary.webform.currentValue", {
+                                      value: target.value || t("profileLibrary.webform.notFilled"),
+                                    })}
                                   </Typography.Text>
                                 </Space>
                               </Space>
@@ -315,17 +343,17 @@ export default function WebFormMemoryDialog({
                 );
               })
             ) : (
-              <EmptyState inline description="没有匹配的已有资料" />
+              <EmptyState inline description={t("profileLibrary.webform.noMatch")} />
             )}
           </div>
 
           {selectedId === "custom" ? (
             /* addonBefore 已废弃（v6）：按官方指引以 Space.Compact + Space.Addon 重组。 */
             <Space.Compact block>
-              <Space.Addon>字段名称</Space.Addon>
+              <Space.Addon>{t("profileLibrary.webform.fieldName")}</Space.Addon>
               <Input
                 autoFocus
-                placeholder="如：实验室、导师姓名、家庭住址补充"
+                placeholder={t("profileLibrary.webform.fieldNamePlaceholder")}
                 value={customLabel}
                 onChange={(event) => setCustomLabel(event.target.value)}
                 maxLength={40}
@@ -334,7 +362,7 @@ export default function WebFormMemoryDialog({
           ) : null}
 
           <Space orientation="vertical" size={6} style={{ width: "100%" }}>
-            <Typography.Text strong>要保存的值</Typography.Text>
+            <Typography.Text strong>{t("profileLibrary.webform.valueToSave")}</Typography.Text>
             {inputKind(selectedTarget) === "textarea" ? (
               <Input.TextArea
                 rows={3}
@@ -347,7 +375,7 @@ export default function WebFormMemoryDialog({
           </Space>
 
           <Typography.Text type="secondary">
-            保存后会按通用资料复用，下次遇到相同类型的网申字段时自动参与匹配。
+            {t("profileLibrary.webform.reuseHint")}
           </Typography.Text>
         </Space>
       ) : null}

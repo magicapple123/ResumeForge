@@ -2,6 +2,9 @@
 import { Button, Card, Col, Input, Row, Select, Space, Tag, Typography } from "antd";
 import EmptyState from "../common/EmptyState";
 import { memo, useCallback, useEffect, useRef, type ComponentProps } from "react";
+import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
+import { webformOptionLabel } from "../../features/webform/groupIdentity";
 import type { WebFormRepeatedGroup, WebFormRepeatedRecord } from "../../types";
 import PartialDateSelect from "./PartialDateSelect";
 
@@ -65,7 +68,10 @@ function RecordInput({
         value={value || undefined}
         disabled={disabled}
         allowClear
-        options={field.options.map((option) => ({ label: option, value: option }))}
+        options={field.options.map((option) => ({
+          label: webformOptionLabel(field.key, option),
+          value: option,
+        }))}
         aria-label={label}
         style={{ width: "100%" }}
         onChange={(nextValue) => onChange(nextValue ?? "")}
@@ -102,14 +108,16 @@ function RecordCard({
   onDelete: () => void;
   onChange: (fieldKey: string, value: string) => void;
 }) {
-  const recordLabel = `${groupLabel}第${index + 1}条`;
+  useLocale();
   return (
     <Card
       size="small"
       title={
         <Space size={8}>
-          <Typography.Text strong>{`第${index + 1}条`}</Typography.Text>
-          {index === 0 ? <Tag color="blue">第一条</Tag> : null}
+          <Typography.Text strong>
+            {t("profileLibrary.webform.recordTitle", { index: index + 1 })}
+          </Typography.Text>
+          {index === 0 ? <Tag color="blue">{t("profileLibrary.webform.recordFirst")}</Tag> : null}
         </Space>
       }
       extra={
@@ -118,10 +126,13 @@ function RecordCard({
             type="text"
             danger
             disabled={saving}
-            aria-label={`删除${recordLabel}`}
+            aria-label={t("profileLibrary.webform.recordDeleteAria", {
+              group: groupLabel,
+              index: index + 1,
+            })}
             onClick={onDelete}
           >
-            删除
+            {t("profileLibrary.webform.recordDelete")}
           </Button>
         ) : null
       }
@@ -139,7 +150,11 @@ function RecordCard({
                   field={field}
                   value={record?.values[field.key] ?? ""}
                   disabled={saving}
-                  label={`${recordLabel}${field.label}`}
+                  label={t("profileLibrary.webform.recordFieldAria", {
+                    group: groupLabel,
+                    index: index + 1,
+                    field: field.label,
+                  })}
                   onChange={(value) => onChange(field.key, value)}
                 />
               </div>
@@ -157,7 +172,7 @@ function RecordCard({
                   {field.label}
                 </Typography.Text>
                 <Typography.Text style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>
-                  {value}
+                  {field.options?.includes(value) ? webformOptionLabel(field.key, value) : value}
                 </Typography.Text>
               </Col>
             );
@@ -199,6 +214,7 @@ export default memo(function WebFormProfileRecordGroup({
   onDelete,
   onChange,
 }: Props) {
+  useLocale();
   // memo 的比较器忽略 onAdd/onDelete/onChange（内联箭头、引用每渲染必变）。忽略的前提
   // 是**行为恒定**：这些回调的闭包各自捕获了自己那次渲染的 group / 外层回调——bail 的
   // 渲染间隙里它们是旧的，直接绑会把「后来新增 / 修改的数据」用旧快照整个覆盖回去。
@@ -245,12 +261,15 @@ export default memo(function WebFormProfileRecordGroup({
         title={group.label}
         extra={
           <Button type="link" disabled={!editing || saving} onClick={stableOnAdd}>
-            {`新增${group.label}`}
+            {t("profileLibrary.webform.recordAdd", { group: group.label })}
           </Button>
         }
         style={{ marginBottom: 14 }}
       >
-        <EmptyState inline description={`还没有${group.label}`} />
+        <EmptyState
+          inline
+          description={t("profileLibrary.webform.recordEmpty", { group: group.label })}
+        />
       </Card>
     );
   }
@@ -261,7 +280,7 @@ export default memo(function WebFormProfileRecordGroup({
       title={group.label}
       extra={
         <Button type="link" disabled={!editing || saving} onClick={stableOnAdd}>
-          {`新增${group.label}`}
+          {t("profileLibrary.webform.recordAdd", { group: group.label })}
         </Button>
       }
       style={{ marginBottom: 14 }}

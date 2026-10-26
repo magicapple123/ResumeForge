@@ -9,6 +9,7 @@ import ResumeDiffView from "../../ResumeDiffView";
 import { t } from "../../../i18n";
 import { summarizeCompare } from "../../../features/resume-versions/model";
 import type { VersionCompareOut } from "../../../features/resume-versions/types";
+import { useLocale } from "../../../i18n/i18nContext";
 
 interface Props {
   compare: VersionCompareOut;
@@ -16,6 +17,7 @@ interface Props {
 }
 
 export default function VersionComparePanel({ compare, onClose }: Props) {
+  useLocale();
   const digest = summarizeCompare(compare);
   const againstLabel =
     compare.against_id === 0

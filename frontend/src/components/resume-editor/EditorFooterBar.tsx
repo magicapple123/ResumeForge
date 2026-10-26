@@ -11,6 +11,7 @@
 import { SaveOutlined } from "@ant-design/icons";
 import { Button, Space } from "antd";
 import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 import type { EditorPendingAction } from "./useEditorDraftBar";
 
 export interface EditorFooterBarProps {
@@ -35,6 +36,7 @@ export default function EditorFooterBar({
   onKeepEditing,
   onSubmit,
 }: EditorFooterBarProps) {
+  useLocale();
   if (confirming) {
     // 就地换态：**不新开 `modal.confirm`**——那会是第二层容器（编辑器已在 3110）。
     return (

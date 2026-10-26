@@ -87,10 +87,8 @@ const CONTENT = content();
 const PROJECT_IDS = entriesOf(CONTENT, "projects").map((entry) => entryIdOf(entry));
 
 function button(label: string): HTMLElement {
-  const target = label.replace(/\s/g, "");
-  return screen.getByRole("button", {
-    name: (accessibleName: string) => accessibleName.replace(/\s/g, "").includes(target),
-  });
+  const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return screen.getByRole("button", { name: new RegExp(escaped.split("").join("\\s*")) });
 }
 
 function treeitem(key: string): HTMLElement {

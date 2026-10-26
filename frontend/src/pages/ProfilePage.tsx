@@ -26,8 +26,10 @@ import {
   setProfileSaveControl,
 } from "../features/tou-tou/profileSaveBridge";
 import { t } from "../i18n";
+import { useLocale } from "../i18n/i18nContext";
 
 export default function ProfilePage() {
+  useLocale();
   const { message } = App.useApp();
   const toast = useToast();
   const navigate = useNavigate();
@@ -50,10 +52,15 @@ export default function ProfilePage() {
     onDirty: markDirty,
   });
   const workspace = profile.workspace;
+  const profileSetEditing = profile.setEditing;
+  const handleStartEditing = useCallback(() => {
+    if (!profile.loading && !profile.loadError) profileSetEditing(true);
+  }, [profile.loadError, profile.loading, profileSetEditing]);
   const webform = useProfileWebFormBridge({
     editing: profile.editing,
     saving: profile.saving,
     onDirty: markDirty,
+    onRequestEdit: handleStartEditing,
   });
   const groupApi = useCurrentProfileGroup(
     workspace,
@@ -140,12 +147,8 @@ export default function ProfilePage() {
 
   // 依赖只列真正用到的稳定切片：写成 [profile] 会让本回调每次页面重渲都换引用，
   // 进而把 resumeContent（依赖它作为 onRequestEdit）的 memo 打穿。
-  const profileSetEditing = profile.setEditing;
   const profileCancelEditing = profile.cancelEditing;
   const webformCancel = webform.cancel;
-  const handleStartEditing = useCallback(() => {
-    if (!profile.loading && !profile.loadError) profileSetEditing(true);
-  }, [profile.loadError, profile.loading, profileSetEditing]);
 
   /** 真正执行"取消编辑"（确认放弃后才走到这里）。 */
   const performCancelEditing = useCallback(() => {

@@ -7,6 +7,7 @@
 import { Button, Checkbox, Input, Typography } from "antd";
 import { useEffect, useState } from "react";
 import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 import type { SectionOut } from "../profile-library/types";
 import type { GroupBriefOut } from "./types";
 
@@ -19,6 +20,7 @@ interface Props {
 }
 
 export default function ProfileGroupForm({ group, sections, busy, onSubmit, onCancel }: Props) {
+  useLocale();
   const [name, setName] = useState(group.name);
   const [memberKeys, setMemberKeys] = useState<string[]>(group.participating_keys);
 

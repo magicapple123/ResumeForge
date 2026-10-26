@@ -23,6 +23,7 @@ import {
 import { Button, Checkbox, Col, Form, Input, Row, Space, Tooltip } from "antd";
 import EmptyState from "../../common/EmptyState";
 import { rt } from "../../../features/resume-research/i18n";
+import { useLocale } from "../../../i18n/i18nContext";
 
 interface Props {
   /** 外层条目在 Form.List 里的下标（论文/专利第几条）。 */
@@ -40,6 +41,7 @@ export default function AuthorListEditor({
   addLabel,
   emptyDescription,
 }: Props) {
+  useLocale();
   return (
     <Form.List name={[entryIndex, listKey]}>
       {(fields, operations) => (

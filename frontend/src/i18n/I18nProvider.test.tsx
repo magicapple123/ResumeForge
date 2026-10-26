@@ -2,21 +2,20 @@
 /**
  * i18n 运行时与 Provider 的行为。
  *
- * 这里最要紧的一条是**没有 Provider 也必须能用**：全仓 290 多个测试文件都是单独渲染
- * 一个组件的，如果 `useLocale()` / `useI18n()` 在没有 Provider 时抛错或返回 `undefined`，
- * 每个测试都得包一层 wrapper——那等于把一次文案改造摊派给整条测试链，以后每加一个
- * 测试都会再踩一次。所以这条不是"顺手补的断言"，它是"测试不用改"的唯一机器证据。
+ * 这里验证 Provider 对 locale、文案和文档语言的同步；共享测试 setup 会给旧组件测试固定
+ * 包一层 zh-CN Provider，避免断言受运行时默认语言影响。
  *
  * 其余几条盯的是同一条链上的小坑：`<html lang>` 要跟着 locale 走（无障碍与断行都看它）、
  * 缺 key 时返回 key 本身（界面上出现 `resume.language.label` 这种字样，比出现空白更容易
  * 被发现）、以及 antd 的语言包映射只有一个入口。
  */
-import { cleanup, render, screen } from "@testing-library/react";
+import { act, cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { antdLocale } from "./antdLocale";
 import I18nProvider from "./I18nProvider";
 import { useI18n, useLocale } from "./i18nContext";
 import { DEFAULT_LOCALE, SUPPORTED_LOCALES, t, translate } from "./index";
+import { selectLocale } from "./localeStore";
 import type { MessageKey } from "./index";
 
 /** 探针：把 hooks 取到的值渲染出来，断言只看 DOM。 */
@@ -33,13 +32,16 @@ function Probe() {
 
 afterEach(() => {
   cleanup();
-  // Provider 会改 `<html lang>`：不还原就会把上一个用例的副作用留给下一个。
+  // Provider 会改 `<html lang>`、`selectLocale` 会改全局 store：不还原就会把上一个
+  // 用例的副作用留给下一个（后续用例断言的中文文案会变成英文）。
+  act(() => {
+    selectLocale(DEFAULT_LOCALE);
+  });
   document.documentElement.lang = DEFAULT_LOCALE;
 });
 
-describe("没有 Provider 时也能用（测试不用加 wrapper 的证据）", () => {
-  it("useLocale() 回落默认语言，useI18n().t 仍能取到文案", () => {
-    // 刻意**不**包 I18nProvider：这就是 290 多个既有测试文件的渲染方式。
+describe("I18nProvider locale", () => {
+  it("把 locale 与文案下发给消费者", () => {
     render(<Probe />);
 
     expect(screen.getByTestId("locale")).toHaveTextContent(DEFAULT_LOCALE);
@@ -66,8 +68,22 @@ describe("I18nProvider", () => {
     expect(document.documentElement.lang).toBe(DEFAULT_LOCALE);
   });
 
-  it("只支持一种语言：SUPPORTED_LOCALES 只有 zh-CN，界面上不该有切换入口", () => {
-    expect(SUPPORTED_LOCALES).toEqual(["zh-CN"]);
+  it("reactively updates the rendered language and <html lang>", () => {
+    render(
+      <I18nProvider>
+        <Probe />
+      </I18nProvider>,
+    );
+
+    act(() => selectLocale("en-US"));
+
+    expect(screen.getByTestId("locale")).toHaveTextContent("en-US");
+    expect(screen.getByTestId("label")).toHaveTextContent(t("resume.language.label"));
+    expect(document.documentElement.lang).toBe("en-US");
+  });
+
+  it("registers both UI locales while keeping the legacy default", () => {
+    expect(SUPPORTED_LOCALES).toEqual(["zh-CN", "en-US"]);
     expect(DEFAULT_LOCALE).toBe("zh-CN");
   });
 });

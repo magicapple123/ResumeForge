@@ -16,6 +16,7 @@ import {
 import { Button, Segmented, Tooltip, Typography } from "antd";
 import type { KeyboardEvent, RefObject } from "react";
 import { t } from "../../../i18n";
+import { useLocale } from "../../../i18n/i18nContext";
 import type { PageMarker } from "../../../features/resume-proview/pageMarkers";
 import type {
   GuideFlags,
@@ -83,6 +84,7 @@ export default function ProviewBar({
   onOpenPalette,
   paletteShortcut,
 }: ProviewBarProps) {
+  useLocale();
   /** PageUp / PageDown 翻页：焦点在工具条上时生效；输入框里不抢键。 */
   const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (event.key !== "PageUp" && event.key !== "PageDown") return;

@@ -10,6 +10,7 @@ import { App, Button, Divider, Input, Typography } from "antd";
 import { useState } from "react";
 import SectionVisibilitySwitch from "../../components/profile/SectionVisibilitySwitch";
 import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 import { createSection, deleteSection, getSectionDeletionImpact, renameSection } from "./api";
 import { profileErrorMessage } from "./errors";
 import { invalidateProjectionCache } from "./projectionCache";
@@ -32,6 +33,7 @@ export default function ProfileSectionSettings({
   onSetSectionVisible,
   visibilityBusy = false,
 }: Props) {
+  useLocale();
   const { message } = App.useApp();
   const [busy, setBusy] = useState(false);
   const [newName, setNewName] = useState("");

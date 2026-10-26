@@ -23,6 +23,7 @@ import { Button } from "antd";
 import { useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 import { muteAnnouncement } from "../../features/announcements/announcementMute";
 import {
   dismissAnnouncement,
@@ -40,6 +41,7 @@ export interface AnnouncementBarProps {
 }
 
 export default function AnnouncementBar({ announcements }: AnnouncementBarProps) {
+  useLocale();
   const fromStore = useAnnouncements();
   const list = announcements ?? fromStore;
   const navigate = useNavigate();

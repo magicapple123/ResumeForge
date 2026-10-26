@@ -20,6 +20,7 @@
 import { Button, Space, Typography } from "antd";
 import { useState } from "react";
 import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 import type { DraftDiffEntry } from "../../utils/draftDiff";
 
 export interface FormDraftBarState {
@@ -59,6 +60,7 @@ export default function DraftRestoreBar({
   onDiscard,
   changes,
 }: DraftRestoreBarProps) {
+  useLocale();
   const [showDiff, setShowDiff] = useState(false);
   const time = formatTime(savedAt);
   // 有草稿就有入口：`[]` 是"草稿与现在一样"，那也值得点开确认一次（见文件头）。

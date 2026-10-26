@@ -12,6 +12,7 @@
  */
 import { useMemo } from "react";
 import { t } from "../../../i18n";
+import { useLocale } from "../../../i18n/i18nContext";
 import type { PaginationReport } from "../../../features/resume-pagination/paginationReport";
 import {
   buildPageThumbnails,
@@ -57,6 +58,7 @@ export interface PageThumbnailStripProps {
 }
 
 export default function PageThumbnailStrip({ report }: PageThumbnailStripProps) {
+  useLocale();
   const stored = usePaginationReportSnapshot();
   const model = useMemo(() => buildPageThumbnails(report ?? stored), [report, stored]);
 

@@ -7,6 +7,7 @@
  * F10：当前方案里隐藏的字段不显示（仍有值的保留）。
  */
 import { Form, Input, Row, Select } from "antd";
+import { useLocale } from "../../../i18n/i18nContext";
 import AuthorListEditor from "./AuthorListEditor";
 import ResearchListSection from "./ResearchListSection";
 import UrlPreview from "./UrlPreview";
@@ -19,21 +20,18 @@ import {
   patentStatusKey,
 } from "../../../features/resume-research/researchFields";
 
-const LABEL = rt("research.tab.patents");
-
-const STATUS_OPTIONS = PATENT_STATUSES.map((status) => ({
-  value: status,
-  label: rt(patentStatusKey(status)),
-}));
+const LABEL = "research.tab.patents";
 
 export default function PatentsEditor() {
+  useLocale();
+  const label = rt(LABEL);
   const visible = useEditorFieldVisibility("patents");
   return (
     <ResearchListSection
       name="patents"
-      label={LABEL}
+      label={label}
       emptyDescription={rt("research.empty.patents")}
-      addLabel={rt("research.list.add", { label: LABEL })}
+      addLabel={rt("research.list.add", { label })}
       makeEmpty={emptyPatent}
     >
       {(field) => (
@@ -80,7 +78,13 @@ export default function PatentsEditor() {
               label={rt("research.patents.status")}
               tooltip={rt("research.status.hint")}
             >
-              <Select options={STATUS_OPTIONS} aria-label={rt("research.patents.status")} />
+              <Select
+                options={PATENT_STATUSES.map((status) => ({
+                  value: status,
+                  label: rt(patentStatusKey(status)),
+                }))}
+                aria-label={rt("research.patents.status")}
+              />
             </Form.Item>
           </EditorFieldCol>
           <EditorFieldCol xs={12} md={6} show={visible.show("filed_date")}>

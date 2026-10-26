@@ -8,9 +8,11 @@
  * 中文只出现在夹具常量里；断言一律走 `t()` / role / 常量，避免 `cjkRatchet` tests 口径。
  */
 import { App as AntdApp } from "antd";
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { t } from "../../../i18n";
+import I18nProvider from "../../../i18n/I18nProvider";
+import { selectLocale } from "../../../i18n/localeStore";
 import { ensureIds } from "../../../features/resume-document/identity";
 import { entriesOf, entryIdOf } from "../../../features/resume-outline/model";
 import {
@@ -98,24 +100,28 @@ function record(overrides: Partial<ReviewAnnotationRecord> = {}): ReviewAnnotati
 function renderPanel(
   options: {
     api?: ReturnType<typeof createMockReviewAnnotationApi>;
+    content?: ResumeContent;
     readOnly?: boolean;
     onLocate?: (path: string) => void;
     showTitle?: boolean;
   } = {},
 ) {
+  const panelContent = options.content ?? CONTENT;
   const api =
-    options.api ?? createMockReviewAnnotationApi({ initial: [record()], content: CONTENT });
+    options.api ?? createMockReviewAnnotationApi({ initial: [record()], content: panelContent });
   const utils = render(
-    <AntdApp>
-      <ReviewAnnotationsPanel
-        sharePackageId={7}
-        api={api}
-        content={CONTENT}
-        readOnly={options.readOnly}
-        onLocate={options.onLocate}
-        showTitle={options.showTitle}
-      />
-    </AntdApp>,
+    <I18nProvider>
+      <AntdApp>
+        <ReviewAnnotationsPanel
+          sharePackageId={7}
+          api={api}
+          content={panelContent}
+          readOnly={options.readOnly}
+          onLocate={options.onLocate}
+          showTitle={options.showTitle}
+        />
+      </AntdApp>
+    </I18nProvider>,
   );
   return { ...utils, api };
 }
@@ -129,16 +135,14 @@ function annotationItems(): HTMLElement[] {
  * 还有图标名（"import 导入回传批注"）。统一归一化后做子串匹配，避免为每个按钮写正则。
  */
 function button(label: string): HTMLElement {
-  const target = label.replace(/\s/g, "");
-  return screen.getByRole("button", {
-    name: (accessibleName: string) => accessibleName.replace(/\s/g, "").includes(target),
-  });
+  const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return screen.getByRole("button", { name: new RegExp(escaped.split("").join("\\s*")) });
 }
 
 function queryButton(label: string): HTMLElement | null {
-  const target = label.replace(/\s/g, "");
+  const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   return screen.queryByRole("button", {
-    name: (accessibleName: string) => accessibleName.replace(/\s/g, "").includes(target),
+    name: new RegExp(escaped.split("").join("\\s*")),
   });
 }
 
@@ -243,6 +247,32 @@ describe("状态筛选与状态操作", () => {
 });
 
 describe("stale 批注：只允许显式重新关联或忽略", () => {
+  it("refreshes untitled reattach options after a UI locale change", async () => {
+    const untitledContent = {
+      ...CONTENT,
+      projects: CONTENT.projects.map((project, index) =>
+        index === 0 ? { ...project, name: "" } : project,
+      ),
+    };
+    const api = createMockReviewAnnotationApi({
+      content: untitledContent,
+      initial: [record({ status: "stale", object_id: "ob_missing" })],
+    });
+    renderPanel({ api, content: untitledContent });
+    await screen.findByText(ANNOTATION_TEXT);
+
+    fireEvent.click(button(t("review.action.reattach")));
+    const combobox = screen.getByRole("combobox", { name: t("review.reattach.title") });
+    fireEvent.mouseDown(combobox);
+    const previousLabel = t("outline.entry.untitled");
+    expect(await screen.findByText(previousLabel)).toBeInTheDocument();
+
+    act(() => selectLocale("en-US"));
+
+    expect(screen.getByText(t("outline.entry.untitled"))).toBeInTheDocument();
+    expect(screen.queryByText(previousLabel)).not.toBeInTheDocument();
+  });
+
   it("显示失联提醒；从当前对象里选一个后调 reattach 并恢复 open", async () => {
     const api = createMockReviewAnnotationApi({
       content: CONTENT,

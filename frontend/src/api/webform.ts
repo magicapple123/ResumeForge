@@ -23,9 +23,18 @@ import type {
 } from "../types";
 import type { Page } from "../types/common";
 import { buildQuery, request, uploadWithProgress } from "./client";
+import { normalizeWebformGroupId } from "../features/webform/groupIdentity";
+
+function normalizeGroupedItems<T extends { group: string }>(items: T[]): T[] {
+  return items.map((item) => ({ ...item, group: normalizeWebformGroupId(item.group) }));
+}
 
 export function listWebFormFields(): Promise<WebFormFields> {
-  return request("/webform/fields");
+  return request<WebFormFields>("/webform/fields").then((profile) => ({
+    ...profile,
+    groups: profile.groups.map(normalizeWebformGroupId),
+    fields: normalizeGroupedItems(profile.fields),
+  }));
 }
 
 /**
@@ -35,12 +44,18 @@ export function listWebFormFields(): Promise<WebFormFields> {
  * 从结构保证退化成一个需要靠人记住的约定。
  */
 export function getWebFormExtraProfile(): Promise<WebFormExtraProfile> {
-  return request("/webform/extra-profile");
+  return request<WebFormExtraProfile>("/webform/extra-profile").then((profile) => ({
+    ...profile,
+    groups: profile.groups.map(normalizeWebformGroupId),
+    fields: normalizeGroupedItems(profile.fields),
+  }));
 }
 
 /** 「记住这条」的完整可编辑资料目录。 */
 export function getWebFormMemoryTargets(): Promise<WebFormMemoryTargets> {
-  return request("/webform/memory-targets");
+  return request<WebFormMemoryTargets>("/webform/memory-targets").then((result) => ({
+    targets: normalizeGroupedItems(result.targets),
+  }));
 }
 
 /** 整份覆盖写入：没提到的 key 会被删除（这一屏就是「网申资料」的全部）。
@@ -57,10 +72,14 @@ export function updateWebFormExtraProfile(
     repeated?: Record<string, WebFormRepeatedRecord[]>;
   } = { values, details: details ?? {} };
   if (repeated !== undefined) body.repeated = repeated;
-  return request("/webform/extra-profile", {
+  return request<WebFormExtraProfile>("/webform/extra-profile", {
     method: "PUT",
     body: JSON.stringify(body),
-  });
+  }).then((profile) => ({
+    ...profile,
+    groups: profile.groups.map(normalizeWebformGroupId),
+    fields: normalizeGroupedItems(profile.fields),
+  }));
 }
 
 /** 网申专用浏览器状态；它与投递台使用不同窗口、端口和登录态。 */

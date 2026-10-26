@@ -9,6 +9,7 @@
 import { ReloadOutlined, ZoomInOutlined, ZoomOutOutlined } from "@ant-design/icons";
 import { Button, Tooltip, Typography } from "antd";
 import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 
 interface Props {
   /** 当前实际缩放（已含可读下限与大屏上限的夹取）。 */
@@ -27,6 +28,7 @@ export default function PreviewZoomBar({
   onZoomIn,
   onReset,
 }: Props) {
+  useLocale();
   return (
     <div className="resume-preview-zoom-row">
       <Tooltip title={t("preview.zoom.out")}>

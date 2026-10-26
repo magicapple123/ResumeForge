@@ -15,6 +15,7 @@ import ErrorState from "../../common/ErrorState";
 import LoadingBlock from "../../common/LoadingBlock";
 import { useToast } from "../../../hooks/useToast";
 import { t } from "../../../i18n";
+import { useLocale } from "../../../i18n/i18nContext";
 import { restoreTrashItem } from "../../../api/trash";
 import { bt } from "../../../features/resume-bilingual/i18n";
 import { buildBilingualPairs } from "../../../features/resume-bilingual/fieldPairs";
@@ -74,6 +75,7 @@ export default function BilingualWorkspace({
   onVariantApplied,
   className,
 }: Props) {
+  useLocale();
   const toast = useToast();
   const [tab, setTab] = useState<WorkspaceTab>("compare");
   const [variants, setVariants] = useState<LanguageVariant[]>([]);

@@ -7,6 +7,7 @@
  * F10：当前方案里隐藏的字段不显示（仍有值的保留）。
  */
 import { Form, Input, Row } from "antd";
+import { useLocale } from "../../../i18n/i18nContext";
 import ResearchListSection from "./ResearchListSection";
 import EditorFieldCol from "../../resume-editor/EditorFieldCol";
 import { useEditorFieldVisibility } from "../../resume-editor/editorSchemaContext";
@@ -14,16 +15,18 @@ import { multilineItemProps } from "../../resume-editor/resumeFieldUtils";
 import { rt } from "../../../features/resume-research/i18n";
 import { emptyResearchProject } from "../../../features/resume-research/researchFields";
 
-const LABEL = rt("research.tab.projects");
+const LABEL = "research.tab.projects";
 
 export default function ResearchProjectsEditor() {
+  useLocale();
+  const label = rt(LABEL);
   const visible = useEditorFieldVisibility("research_projects");
   return (
     <ResearchListSection
       name="research_projects"
-      label={LABEL}
+      label={label}
       emptyDescription={rt("research.empty.projects")}
-      addLabel={rt("research.list.add", { label: LABEL })}
+      addLabel={rt("research.list.add", { label })}
       makeEmpty={emptyResearchProject}
     >
       {(field) => (

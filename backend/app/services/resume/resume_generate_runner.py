@@ -379,6 +379,7 @@ class ResumeGenerateRunner:
                     format_name=options.format_name,
                     page_limit=options.page_limit,
                     font_scale=options.font_scale,
+                    language=options.language,
                     format_config=options.format_config,
                     custom_instruction=options.custom_instruction,
                     coverage_notes=coverage_notes,

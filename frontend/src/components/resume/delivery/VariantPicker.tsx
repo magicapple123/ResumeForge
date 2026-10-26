@@ -8,6 +8,7 @@
  */
 import { Select } from "antd";
 import { t } from "../../../i18n";
+import { useLocale } from "../../../i18n/i18nContext";
 
 export interface VariantOption {
   id: number;
@@ -31,6 +32,7 @@ export default function VariantPicker({
   onChange,
   disabled = false,
 }: VariantPickerProps) {
+  useLocale();
   return (
     <div className="resume-delivery-preset-bar">
       <span className="resume-delivery-label">{t("delivery.variant.label")}</span>

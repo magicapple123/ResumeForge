@@ -26,6 +26,7 @@
 import { Checkbox, Segmented, Tooltip, Typography } from "antd";
 import type { ReactNode } from "react";
 import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 
 interface Props {
   /** 第一行右侧：结构类版式控件（模板 / 版式 / 板块顺序 / 最大篇幅）。 */
@@ -61,6 +62,7 @@ export default function ResumePreviewToolbar({
   onClickToEditChange,
   clickToEditAvailable = false,
 }: Props) {
+  useLocale();
   const draftMode = previewMode === "draft";
   // 一句还是两句：草稿模式下解释"勾了能干什么"，精确模式下解释"为什么点不了"。
   const clickToEditHint = draftMode

@@ -11,6 +11,7 @@ import { EditOutlined, PlusOutlined } from "@ant-design/icons";
 import { Button, Divider, Select, Space, Tooltip, Typography } from "antd";
 import { useState } from "react";
 import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 import EmptyState from "../../components/common/EmptyState";
 import ErrorState from "../../components/common/ErrorState";
 import ScenarioEditor from "./ScenarioEditor";
@@ -34,6 +35,7 @@ interface EditorTarget {
 }
 
 export default function ScenarioSelector({ showLabel = false, className }: Props) {
+  useLocale();
   const { scenarios, loading, error, selectedScenarioId, selectScenario, reload } =
     useScenarioSelection();
   const [editor, setEditor] = useState<EditorTarget | null>(null);
