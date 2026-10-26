@@ -243,8 +243,17 @@ def test_new_profile_model_is_populated(demo_db: Path):
     custom_keys = {row[0] for row in sections}
     custom_entries = [values for key, values in entries if key in custom_keys]
     assert custom_entries, "自建大字段下没有任何条目"
-    custom_text = " ".join(str(value) for values in custom_entries for value in values.values())
-    assert "example.com" in custom_text, custom_entries
+    # 用 hostname 等值判断而不是子串匹配：CodeQL py/incomplete-url-substring-sanitization
+    # 会把任何 `"example.com" in <文本>` 当成不完整的 URL 校验（即使这里只是测试断言）。
+    custom_links = [
+        str(value)
+        for values in custom_entries
+        for value in values.values()
+        if "://" in str(value)
+    ]
+    assert custom_links, custom_entries
+    custom_hosts = {urlsplit(link).hostname for link in custom_links}
+    assert "example.com" in custom_hosts, custom_entries
 
     fields = _rows(demo_db, "select section_key, label from profile_custom_field")
     assert any(row[1] == "作品链接" for row in fields), fields
