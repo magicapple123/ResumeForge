@@ -32,7 +32,7 @@
   },
   "dependencies": {
     "@ant-design/icons": "^6.3.4",
-    "antd": "^6.6.5",
+    "antd": "^6.6.7",
     "dayjs": "^1.11.23",
     "jszip": "^3.10.2",
     "pdfjs-dist": "^6.4.299",
