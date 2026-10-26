@@ -51,7 +51,11 @@ if [ -n "$STAGED_P" ] || [ -n "$STAGED_TS" ]; then
   if [ -z "$PY" ]; then PY=$(command -v python || true); fi
   if [ -n "$PY" ]; then
     echo "[pre-commit] structural guards (file size budget / import direction)..."
-    (cd backend && "$ROOT/$PY" -m pytest tests/test_file_size_budget.py tests/test_import_direction.py -q -x --no-header -p no:cacheprovider 2>&1 | tail -3) || FAIL=1
+    # 退出码必须先落到变量上：`pytest ... | tail -3` 的退出码是 tail 的（恒为 0），
+    # 于是 `|| FAIL=1` 永远不会触发——2026-10-27 实测，超 500 行预算的文件一路
+    # commit 成功，日志里只有一行 FAILED 而没有 abort。输出仍只留最后 3 行。
+    GUARD_OUT=$(cd backend && "$ROOT/$PY" -m pytest tests/test_file_size_budget.py tests/test_import_direction.py -q -x --no-header -p no:cacheprovider 2>&1) || FAIL=1
+    printf '%s\n' "$GUARD_OUT" | tail -3
   fi
 fi
 
