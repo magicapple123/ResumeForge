@@ -26,6 +26,10 @@ rf_build_*/
 frontend/rf_build_*/
 # 审计验收时的一次性构建输出（2026-10-19 快照），同样不该被提交。
 frontend/rf_audit_build/
+# 手动导出的前端产物包（如 `frontend/dist-1.0.2-20261026.zip`）：`dist/` 只忽略目录，
+# 这类打好的 zip 会以未跟踪文件一直挂在 `git status` 里。产物可由 `npm run build` 重建，
+# 要分发请走 Release 资产，不进仓库。
+frontend/dist-*.zip
 
 # ===== 环境与本地数据 =====
 .env
