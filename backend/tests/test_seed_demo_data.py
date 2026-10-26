@@ -252,8 +252,8 @@ def test_new_profile_model_is_populated(demo_db: Path):
         if "://" in str(value)
     ]
     assert custom_links, custom_entries
-    custom_hosts = {urlsplit(link).hostname for link in custom_links}
-    assert "example.com" in custom_hosts, custom_entries
+    custom_hosts = [urlsplit(link).hostname for link in custom_links]
+    assert all(host == "example.com" for host in custom_hosts), custom_entries
 
     fields = _rows(demo_db, "select section_key, label from profile_custom_field")
     assert any(row[1] == "作品链接" for row in fields), fields
