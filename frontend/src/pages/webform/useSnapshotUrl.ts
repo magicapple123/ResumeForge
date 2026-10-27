@@ -9,6 +9,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import type { App } from "antd";
 import { previewWebForm } from "../../api/webform";
+import { t } from "../../i18n";
 import type { WebFormPreview, WebFormSnapshot } from "../../types";
 import type { WebFormBusyState } from "./constants";
 import { AI_PARAM, SNAPSHOT_PARAM } from "./constants";
@@ -103,12 +104,12 @@ export function useSnapshotUrl({
         if (cancelled) return;
         setSnapshot({ snapshot_id: snapshotId, page: report.page });
         applyPreview(report);
-        message.info("已恢复上次读取的表单；勾选已重置为默认，请核对后再填充");
+        message.info(t("webFormPage.toast.restored"));
       } catch (error) {
         if (cancelled) return;
         forgetSnapshot();
         message.warning(
-          error instanceof Error ? error.message : "上次读取的表单已失效，请重新读取",
+          error instanceof Error ? error.message : t("webFormPage.error.restoreFailed"),
         );
       } finally {
         if (!cancelled) {
