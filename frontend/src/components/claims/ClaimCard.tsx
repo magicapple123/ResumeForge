@@ -9,6 +9,8 @@
 import { DeleteOutlined, EditOutlined, MoreOutlined } from "@ant-design/icons";
 import { Button, Checkbox, Dropdown, Space, Tag, Tooltip, Typography } from "antd";
 import { useState } from "react";
+import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 import type { Claim, ClaimSummary } from "../../types";
 import { SOURCE_TYPE_LABELS, hasPlaceholder } from "../../types";
 import { useRowActionMenu } from "../common/rowActionMenu";
@@ -28,7 +30,10 @@ interface Props {
 
 /** 把含占位符的文本切出来单独高亮，让"哪里还没写"一眼可见。 */
 function Wording({ text }: { text: string }) {
-  if (!text) return <Typography.Text type="secondary">（未填写）</Typography.Text>;
+  useLocale();
+  if (!text) {
+    return <Typography.Text type="secondary">{t("claimCard.wording.empty")}</Typography.Text>;
+  }
   if (!hasPlaceholder(text)) return <span>{text}</span>;
   const parts = text.split(/(【[^】]*】)/g);
   return (
@@ -55,6 +60,7 @@ export default function ClaimCard({
   selected = false,
   onToggleSelected,
 }: Props) {
+  useLocale();
   const buildMenu = useRowActionMenu();
   // 「标记已确认」点击后确认流程就开始了，提示不该继续挂在按钮上（受控开关）。
   const [confirmTipOpen, setConfirmTipOpen] = useState(false);
@@ -78,7 +84,7 @@ export default function ClaimCard({
       <header className="claim-card-head">
         <Space size={6} wrap>
           <Typography.Text strong>
-            {claim.title || claim.subject || `条目 ${claim.id}`}
+            {claim.title || claim.subject || t("claimCard.header.fallbackTitle", { id: claim.id })}
           </Typography.Text>
           <Tag>{claim.category}</Tag>
           <Tag color={claimResponsibilityColor(claim.responsibility_level)}>
@@ -87,28 +93,30 @@ export default function ClaimCard({
           <Tag color={claimStatusColor(claim.verification_status)}>{claim.verification_status}</Tag>
           {claim.last_verified && (
             <Typography.Text type="secondary" className="claim-card-verified">
-              最近核实 {claim.last_verified}
+              {t("claimCard.header.lastVerified", { date: claim.last_verified })}
             </Typography.Text>
           )}
         </Space>
         <Space size={4}>
           {selecting && onToggleSelected ? (
             <Checkbox
-              aria-label={`选择台账条目 ${claim.title || claim.subject || claim.id}`}
+              aria-label={t("claimCard.header.selectAria", {
+                name: claim.title || claim.subject || claim.id,
+              })}
               checked={selected}
               onChange={(event) => onToggleSelected(event.target.checked)}
             />
           ) : (
             <>
-              {claim.verification_status !== "已确认" && (
+              {claim.verification_status !== "已确认" && ( // i18n-ok: 协议值（后端枚举中文值，不能翻译）
                 <Tooltip
                   open={confirmTipOpen}
                   onOpenChange={setConfirmTipOpen}
-                  title="确认后这条才会作为事实进入简历生成"
+                  title={t("claimCard.action.confirmTooltip")}
                 >
                   <span onClick={() => setConfirmTipOpen(false)}>
                     <Button size="small" type="link" onClick={onConfirm}>
-                      标记已确认
+                      {t("claimCard.action.confirm")}
                     </Button>
                   </span>
                 </Tooltip>
@@ -117,10 +125,15 @@ export default function ClaimCard({
                 trigger={["click"]}
                 menu={{
                   items: buildMenu([
-                    { key: "edit", label: "编辑", icon: <EditOutlined />, onClick: onEdit },
+                    {
+                      key: "edit",
+                      label: t("claimCard.action.edit"),
+                      icon: <EditOutlined />,
+                      onClick: onEdit,
+                    },
                     {
                       key: "delete",
-                      label: "删除",
+                      label: t("claimCard.action.delete"),
                       danger: true,
                       icon: <DeleteOutlined />,
                       // 软删由父级用 useDeleteUndo 兜：这里**不再问**，撤销入口在 Toast 上。
@@ -134,7 +147,9 @@ export default function ClaimCard({
                   size="small"
                   type="text"
                   icon={<MoreOutlined />}
-                  aria-label={`更多操作 ${claim.title || claim.subject || claim.id}`}
+                  aria-label={t("claimCard.action.moreAria", {
+                    name: claim.title || claim.subject || claim.id,
+                  })}
                 />
               </Dropdown>
             </>
@@ -144,20 +159,20 @@ export default function ClaimCard({
 
       <div className="claim-card-body">
         <div className="claim-card-row">
-          <span className="claim-card-label">原始事实</span>
+          <span className="claim-card-label">{t("claimCard.field.sourceFact")}</span>
           <div className="claim-card-value">
             <Wording text={sourceFact} />
           </div>
         </div>
         <div className="claim-card-row">
-          <span className="claim-card-label">简历表述</span>
+          <span className="claim-card-label">{t("claimCard.field.wording")}</span>
           <div className="claim-card-value">
             <Wording text={wording} />
           </div>
         </div>
         {boundary && (
           <div className="claim-card-row">
-            <span className="claim-card-label">个人边界</span>
+            <span className="claim-card-label">{t("claimCard.field.boundary")}</span>
             <div className="claim-card-value">{boundary}</div>
           </div>
         )}
@@ -167,11 +182,11 @@ export default function ClaimCard({
         <footer className="claim-card-foot">
           {sources.length > 0 && (
             <Space size={4} wrap>
-              <span className="claim-card-label">证据</span>
+              <span className="claim-card-label">{t("claimCard.evidence.title")}</span>
               {sources.map((source, index) => (
                 <Tooltip
                   key={index}
-                  title={`${source.location}${source.public ? "" : "（不公开）"}`}
+                  title={`${source.location}${source.public ? "" : t("claimCard.evidence.privateSuffix")}`}
                 >
                   <Tag>{SOURCE_TYPE_LABELS[source.type] ?? source.type}</Tag>
                 </Tooltip>
@@ -180,7 +195,7 @@ export default function ClaimCard({
           )}
           {allowedUses.length > 0 && (
             <Space size={4} wrap>
-              <span className="claim-card-label">可用范围</span>
+              <span className="claim-card-label">{t("claimCard.field.allowedUses")}</span>
               {allowedUses.map((use) => (
                 <Tag key={use}>{use}</Tag>
               ))}
@@ -188,7 +203,7 @@ export default function ClaimCard({
           )}
           {hasInterviewDetail && (
             <Typography.Text type="secondary" className="claim-card-interview">
-              已备面试细节（决策 / 难点 / 验证 / 结果）
+              {t("claimCard.interview.prepared")}
             </Typography.Text>
           )}
         </footer>
