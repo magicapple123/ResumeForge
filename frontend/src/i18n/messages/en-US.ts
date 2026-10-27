@@ -70,6 +70,7 @@ import jobMatchBatch from "./en-US.jobMatchBatch";
 import assistantComposer from "./en-US.assistantComposer";
 import webFormPage from "./en-US.webFormPage";
 import collectResult from "./en-US.collectResult";
+import webFormLegacy from "./en-US.webFormLegacy";
 
 const enUS = {
   ...core,
@@ -141,6 +142,7 @@ const enUS = {
   ...assistantComposer,
   ...webFormPage,
   ...collectResult,
+  ...webFormLegacy,
 } as const satisfies Record<keyof ZhCNMessages, string>;
 
 export default enUS;

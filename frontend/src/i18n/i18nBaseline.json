@@ -3,7 +3,7 @@
   "generatedAt": "2026-10-27",
   "rule": "Legacy CJK ceilings plus language-independent AST product-copy fingerprints",
   "src": {
-    "total": 3829,
+    "total": 3812,
     "files": {
       "App.tsx": 0,
       "api/analytics.ts": 0,
@@ -222,7 +222,7 @@
       "components/profile/WebFormProfileField.tsx": 0,
       "components/profile/WebFormProfileFieldUtils.ts": 1,
       "components/profile/WebFormProfileGroup.tsx": 0,
-      "components/profile/WebFormProfileLegacyFields.tsx": 32,
+      "components/profile/WebFormProfileLegacyFields.tsx": 15,
       "components/profile/WebFormProfileRecordGroup.tsx": 0,
       "components/profile/WebFormProfileRecords.tsx": 0,
       "components/profile/WebFormProfileSection.tsx": 0,
