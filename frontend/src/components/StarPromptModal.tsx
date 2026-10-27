@@ -2,7 +2,9 @@
 /** GitHub Star 提示弹窗（从 App.tsx 抽出，守住单文件行数预算）。 */
 import { Button, Modal, Typography } from "antd";
 import promoPlane from "../assets/toutou/promo-plane.webp";
-import { APP_NAME, GITHUB_REPO } from "../config";
+import { GITHUB_REPO } from "../config";
+import { t } from "../i18n";
+import { useLocale } from "../i18n/i18nContext";
 
 interface Props {
   open: boolean;
@@ -10,16 +12,15 @@ interface Props {
 }
 
 export default function StarPromptModal({ open, onClose }: Props) {
+  useLocale();
   return (
     <Modal open={open} onCancel={onClose} footer={null} width={380}>
       <div style={{ textAlign: "center", paddingBlock: 8 }}>
         <img src={promoPlane} alt="" style={{ height: 72, width: "auto", objectFit: "contain" }} />
         <Typography.Title level={5} style={{ marginTop: 12, marginBottom: 4 }}>
-          如果 {APP_NAME} 对你有帮助
+          {t("appConfig.star.title", { name: t("appConfig.brand.name") })}
         </Typography.Title>
-        <Typography.Text type="secondary">
-          欢迎去 GitHub 给项目点一个 Star ⭐——这是对独立开发最实在的支持。
-        </Typography.Text>
+        <Typography.Text type="secondary">{t("appConfig.star.body")}</Typography.Text>
         <div style={{ marginTop: 16 }}>
           <Button
             type="primary"
@@ -28,7 +29,7 @@ export default function StarPromptModal({ open, onClose }: Props) {
             rel="noopener noreferrer"
             onClick={onClose}
           >
-            去点 Star
+            {t("appConfig.star.action")}
           </Button>
         </div>
       </div>
