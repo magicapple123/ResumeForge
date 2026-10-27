@@ -5,9 +5,10 @@
  * `record` 为 null 时抽屉关闭；打开/关闭由主组件 state 驱动，这里只渲染。
  */
 import { Descriptions, Drawer } from "antd";
-import { TASK_ITEM_STATUS_META, failureLabel, type ApplyRecord } from "../../types";
+import { failureLabel, type ApplyRecord } from "../../types";
 import { formatDateTime } from "../../utils/format";
 import { t } from "../../i18n";
+import { TASK_ITEM_STATUS_LABEL_KEYS, failureCategoryKey } from "../../i18n/enum/apply";
 import { useLocale } from "../../i18n/i18nContext";
 
 interface Props {
@@ -18,6 +19,12 @@ interface Props {
 export default function ApplyRecordDetailDrawer({ record, onClose }: Props) {
   // 本组件用模块级 t()：必须订阅语言变化，否则切语言后抽屉停在旧文案。
   useLocale();
+  // 已知失败分类走语言包；后端新增、尚未登记的分类回退后端文案 / 原码（旧行为）。
+  const failureText = (item: ApplyRecord): string => {
+    if (!item.failure_category) return "-";
+    const key = failureCategoryKey(item.failure_category);
+    return key ? t(key) : failureLabel(item.failure_category, item.failure_label);
+  };
   return (
     <Drawer
       title={t("applyUi.recordDetail.title")}
@@ -40,12 +47,10 @@ export default function ApplyRecordDetailDrawer({ record, onClose }: Props) {
             {record.greeting || t("applyUi.recordDetail.defaultGreeting")}
           </Descriptions.Item>
           <Descriptions.Item label={t("applyRecords.column.result")}>
-            {TASK_ITEM_STATUS_META[record.status].label}
+            {t(TASK_ITEM_STATUS_LABEL_KEYS[record.status])}
           </Descriptions.Item>
           <Descriptions.Item label={t("applyRecords.column.failureKind")}>
-            {record.failure_category
-              ? failureLabel(record.failure_category, record.failure_label)
-              : "-"}
+            {failureText(record)}
           </Descriptions.Item>
           <Descriptions.Item label={t("applyUi.recordDetail.failureDetail")}>
             {record.failure_detail || "-"}
