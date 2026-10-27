@@ -15,7 +15,9 @@ import ModelProfileSelect from "./ModelProfileSelect";
 import MySpaceMenu from "./navigation/MySpaceMenu";
 import ScenarioSelector from "../features/career-scenarios/ScenarioSelector";
 import ThemeSwitch from "./ThemeSwitch";
-import { APP_NAME, GITHUB_REPO } from "../config";
+import { GITHUB_REPO } from "../config";
+import { t } from "../i18n";
+import { useLocale } from "../i18n/i18nContext";
 
 interface Props {
   hiddenKeys: readonly string[];
@@ -24,6 +26,7 @@ interface Props {
 }
 
 export default function AppHeaderActions({ hiddenKeys, onStarClick }: Props) {
+  useLocale();
   return (
     <div className="app-header-actions">
       {/* 主题三档（A3）：放在最前，与语言/空间等"显示偏好"类动作归在一组。 */}
@@ -40,7 +43,7 @@ export default function AppHeaderActions({ hiddenKeys, onStarClick }: Props) {
       <span className="app-header-divider" aria-hidden="true" />
       {/* GitHub 入口在页头右上角：与「退出」并排，符合"关于本项目"这类低频入口的习惯。 */}
       {GITHUB_REPO && (
-        <Tooltip title="在 GitHub 上查看源码 / 反馈问题">
+        <Tooltip title={t("appConfig.header.repoTooltip")}>
           <Button
             className="app-repo-button"
             type="text"
@@ -48,7 +51,7 @@ export default function AppHeaderActions({ hiddenKeys, onStarClick }: Props) {
             href={GITHUB_REPO}
             target="_blank"
             rel="noopener noreferrer"
-            aria-label={`在 GitHub 上查看 ${APP_NAME} 源码`}
+            aria-label={t("appConfig.header.repoAria", { name: t("appConfig.brand.name") })}
             onClick={onStarClick}
           />
         </Tooltip>
