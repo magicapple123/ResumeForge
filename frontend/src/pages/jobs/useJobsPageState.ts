@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { getJob, listJobs } from "../../api/jobs";
 import { useApi } from "../../hooks/useApi";
+import { t } from "../../i18n";
 import type { Job, JobList } from "../../types";
 import { DEFAULT_JOB_SORT_STATE, type JobSortState } from "../../utils/jobSort";
 
@@ -162,7 +163,7 @@ export function useJobsPageState() {
         if (seq !== detailRequestSeq.current) return;
         // 失败不锁死：清空锁存，用户再点一次这一行（或重新点开）就会重新拉取。
         openedLinkedJobId.current = null;
-        message.error(err instanceof Error ? err.message : "岗位不存在或已被删除");
+        message.error(err instanceof Error ? err.message : t("jobsPage.detail.loadFailed"));
       });
   }, [detailRequestTick, jobs, linkedJobId, loading, message]);
 
