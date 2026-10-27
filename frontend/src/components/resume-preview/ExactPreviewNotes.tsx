@@ -11,7 +11,7 @@
  */
 import { Alert, Button, Typography } from "antd";
 import { t } from "../../i18n";
-import { EXACT_OVERFLOW_NOTE } from "./config";
+import { EXACT_OVERFLOW_NOTE_KEY } from "./config";
 import type { PreviewShot } from "./exactPreviewCache";
 import { useLocale } from "../../i18n/i18nContext";
 
@@ -43,7 +43,7 @@ export function ExactPreviewAlerts({ current, busy, pageLimit }: AlertsProps) {
             needed: current.pagesNeeded ?? current.pages ?? "?",
             limit: pageLimit,
           })}
-          description={EXACT_OVERFLOW_NOTE}
+          description={t(EXACT_OVERFLOW_NOTE_KEY)}
         />
       ) : null}
       {current.pagesNeeded == null ? (
