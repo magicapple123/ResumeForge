@@ -28,6 +28,7 @@ import { useNavigate } from "react-router-dom";
 import { fetchResumeTemplates } from "../../api/resumes";
 import { deleteResumeTemplate, listResumeTemplates } from "../../api/resumeTemplates";
 import { t } from "../../i18n";
+import { RESUME_CATALOG_FORMAT_LABEL_KEYS } from "../../i18n/enum/resumeCatalog";
 import { useLocale } from "../../i18n/i18nContext";
 import type { ResumeTemplateCatalog, ResumeTemplateDetail } from "../../types";
 import FormatTemplateEditorModal from "./FormatTemplateEditorModal";
@@ -164,11 +165,15 @@ export default function TemplateWorkbench({ onChanged }: Props) {
           {t("templatesUi.workbench.builtinLabel")}
           {(catalog?.format_presets ?? [])
             .filter((item) => !item.custom)
-            .map((item) => (
-              <Tag key={item.name} className="template-chip">
-                {item.label}
-              </Tag>
-            ))}
+            .map((item) => {
+              // 内置版式的展示名按稳定的 `name` 走语言包；后端新增的预设回退它下发的原文。
+              const labelKey = RESUME_CATALOG_FORMAT_LABEL_KEYS[item.name];
+              return (
+                <Tag key={item.name} className="template-chip">
+                  {labelKey ? t(labelKey) : item.label}
+                </Tag>
+              );
+            })}
         </Typography.Paragraph>
         {formatTemplates.length === 0 ? (
           <Typography.Text type="secondary">{t("templatesUi.workbench.empty")}</Typography.Text>
