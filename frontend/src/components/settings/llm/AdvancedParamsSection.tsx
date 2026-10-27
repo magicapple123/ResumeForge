@@ -121,7 +121,12 @@ export function AdvancedParamsSection() {
             label={t("advancedParams.field.thinkingStyle")}
             tooltip={t("advancedParams.tooltip.thinkingStyle")}
           >
-            <Select options={THINKING_STYLE_OPTIONS} />
+            <Select
+              options={THINKING_STYLE_OPTIONS.map((option) => ({
+                value: option.value,
+                label: t(option.labelKey),
+              }))}
+            />
           </Form.Item>
         </Col>
         <Col xs={24} md={12}>
