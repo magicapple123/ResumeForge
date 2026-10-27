@@ -6,6 +6,8 @@
  */
 import { Button, Card, Space, Tag, Tooltip, Typography } from "antd";
 import { memo } from "react";
+import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 import type { WebFormLive } from "../../types";
 import { LIVE_STATUS_META } from "./constants";
 import type { WebFormBusyState } from "./constants";
@@ -33,17 +35,21 @@ export const LiveModeCard = memo(function LiveModeCard({
   onToggle: () => void;
   onRequestMemoryDialog: () => void;
 }) {
+  // 本组件用模块级 t()：订阅语言变化，否则切语言后这一块不重渲染。
+  useLocale();
   return (
     <Card
       size="small"
       className="live-mode-card"
-      title="智能逐项填表"
+      title={t("liveModeCard.title")}
       extra={
         <Button
           // 中文两字按钮默认会被 antd 插成「开 启」，与 aria-label 的连续文案不一致，
           // 触发 axe label-content-name-mismatch（WCAG 2.5.3）。关掉自动空格。
           autoInsertSpace={false}
-          aria-label={liveEnabled ? "关闭智能逐项填表" : "开启智能逐项填表"}
+          aria-label={
+            liveEnabled ? t("liveModeCard.toggle.ariaOff") : t("liveModeCard.toggle.ariaOn")
+          }
           type={liveEnabled ? "default" : "primary"}
           loading={busy === "live"}
           // `live.running` 为真时后端一定已经开着浏览器（会话起不来会报 409），
@@ -51,25 +57,27 @@ export const LiveModeCard = memo(function LiveModeCard({
           disabled={!running && !live?.running}
           onClick={onToggle}
         >
-          {liveEnabled ? "关闭" : "开启"}
+          {liveEnabled ? t("liveModeCard.toggle.off") : t("liveModeCard.toggle.on")}
         </Button>
       }
     >
       <Typography.Paragraph type="secondary" style={{ marginBottom: 8 }}>
-        开启后回到浏览器窗口，
-        <Typography.Text strong>点到哪个框，就在框旁边给出资料里对应的值</Typography.Text>
-        ，你点「填入」才写进去。认不出来的时候点
-        <Typography.Text strong>「换个资料…」</Typography.Text>
-        会列出你填过的全部资料（按分区、可搜索），
-        <Typography.Text strong>你自己挑一条填</Typography.Text>
-        ——所以不必依赖它认得出这个框。适合逐项核对，也能帮到批量填不了的框。
+        {t("liveModeCard.intro.lead")}
+        <Typography.Text strong>{t("liveModeCard.intro.focusHint")}</Typography.Text>
+        {t("liveModeCard.intro.writeHint")}
+        <Typography.Text strong>{t("liveModeCard.intro.profilePickerHint")}</Typography.Text>
+        {t("liveModeCard.intro.profileListHint")}
+        <Typography.Text strong>{t("liveModeCard.intro.pickHint")}</Typography.Text>
+        {t("liveModeCard.intro.tail")}
       </Typography.Paragraph>
       {live?.running ? (
         <Space size="middle" wrap>
           <Tag
             color={liveEnabled ? (LIVE_STATUS_META[live.status]?.color ?? "processing") : "default"}
           >
-            {liveEnabled ? (LIVE_STATUS_META[live.status]?.label ?? "等待你点某个框") : "已关闭"}
+            {liveEnabled
+              ? (LIVE_STATUS_META[live.status]?.label ?? t("liveModeCard.status.waiting"))
+              : t("liveModeCard.tag.off")}
           </Tag>
           {liveEnabled && live.field_label ? (
             <Typography.Text>
@@ -77,11 +85,22 @@ export const LiveModeCard = memo(function LiveModeCard({
               {live.value ? ` → ${live.value}` : ""}
             </Typography.Text>
           ) : null}
-          {liveEnabled && live.source === "ai" ? <Tag color="blue">AI 建议</Tag> : null}
+          {liveEnabled && live.source === "ai" ? (
+            <Tag color="blue">{t("liveModeCard.tag.ai")}</Tag>
+          ) : null}
           {liveEnabled && alternatives.length ? (
-            <Tooltip title={alternatives.map((item) => `${item.label}：${item.value}`).join("\n")}>
+            <Tooltip
+              title={alternatives
+                .map((item) =>
+                  t("liveModeCard.alternatives.tooltipEntry", {
+                    label: item.label,
+                    value: item.value,
+                  }),
+                )
+                .join("\n")}
+            >
               <Typography.Text type="secondary">
-                另有 {alternatives.length} 个候选（在浏览器窗口里点选）
+                {t("liveModeCard.alternatives.count", { count: alternatives.length })}
               </Typography.Text>
             </Tooltip>
           ) : null}
@@ -90,24 +109,24 @@ export const LiveModeCard = memo(function LiveModeCard({
           ) : null}
           {liveEnabled && rememberPending ? (
             <>
-              <Tag color="warning">等待选择资料目标</Tag>
+              <Tag color="warning">{t("liveModeCard.remember.tag")}</Tag>
               <Button size="small" onClick={onRequestMemoryDialog}>
-                选择保存位置
+                {t("liveModeCard.remember.choose")}
               </Button>
             </>
           ) : null}
           <Typography.Text type="secondary">
-            {liveEnabled ? `本次已填 ${live.filled} 个` : "悬浮球仍在浏览器中，可随时重新开启"}
+            {liveEnabled
+              ? t("liveModeCard.progress.filled", { count: live.filled })
+              : t("liveModeCard.progress.keepRunning")}
           </Typography.Text>
         </Space>
       ) : live?.stop_reason === "browser_closed" ? (
         // 浏览器被关掉后本次填写自动结束：这是正常流程，不是故障——沿用结束态的展示
         // 路径给一条中性说明，不弹错误样式。
-        <Typography.Text type="secondary">
-          浏览器已关闭，本次填写已自动结束。重新打开浏览器后会再次自动开启。
-        </Typography.Text>
+        <Typography.Text type="secondary">{t("liveModeCard.ended.browserClosed")}</Typography.Text>
       ) : (
-        <Typography.Text type="secondary">未开启</Typography.Text>
+        <Typography.Text type="secondary">{t("liveModeCard.status.off")}</Typography.Text>
       )}
     </Card>
   );
