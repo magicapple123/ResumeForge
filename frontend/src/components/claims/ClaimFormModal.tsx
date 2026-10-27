@@ -18,7 +18,14 @@ import FormModal from "../common/FormModal";
 import { useFormDraft } from "../../hooks/useFormDraft";
 import { useToast } from "../../hooks/useToast";
 import { t } from "../../i18n";
-import type { MessageKey } from "../../i18n";
+import {
+  CLAIM_CATEGORY_LABEL_KEYS,
+  RESPONSIBILITY_LEVEL_HINT_KEYS,
+  RESPONSIBILITY_LEVEL_LABEL_KEYS,
+  SOURCE_TYPE_LABEL_KEYS,
+  VERIFICATION_STATUS_HINT_KEYS,
+  VERIFICATION_STATUS_LABEL_KEYS,
+} from "../../i18n/enum/claims";
 import { useLocale } from "../../i18n/i18nContext";
 import { createClaim, updateClaim } from "../../api/claims";
 import type { Claim, ClaimPayload, ClaimSource, SourceType } from "../../types";
@@ -27,34 +34,9 @@ import {
   CLAIM_CATEGORIES,
   RESPONSIBILITY_LEVELS,
   SOURCE_TYPES,
-  SOURCE_TYPE_LABELS,
   VERIFICATION_STATUSES,
-  VERIFICATION_STATUS_HINTS,
   emptyClaim,
 } from "../../types";
-
-/**
- * 一句话讲清每个承担程度，用户不必猜"负责模块"和"主导交付"差在哪。
- *
- * i18n-ok: 这里的**键**是协议值（中文枚举，直接提交后端并参与校验），翻译会写坏数据；
- * 说明文字已进语言包（`claimForm.responsibility.hint.*`），渲染期用 t() 取。
- */
-const RESPONSIBILITY_HINT_KEYS: Record<string, MessageKey> = {
-  参与: "claimForm.responsibility.hint.participate",
-  负责模块: "claimForm.responsibility.hint.ownModule",
-  主导方案或交付: "claimForm.responsibility.hint.leadDelivery",
-  项目负责人: "claimForm.responsibility.hint.owner",
-};
-
-const STATUS_OPTIONS = VERIFICATION_STATUSES.map((value) => ({
-  value,
-  label: `${value}——${VERIFICATION_STATUS_HINTS[value]}`,
-}));
-
-const RESPONSIBILITY_OPTIONS = RESPONSIBILITY_LEVELS.map((value) => ({
-  value,
-  hintKey: RESPONSIBILITY_HINT_KEYS[value],
-}));
 
 interface FormValues {
   title: string;
@@ -215,10 +197,24 @@ export default function ClaimFormModal({ open, claim, onClose, onSaved }: Props)
     }
   };
 
-  // 选项标签里的枚举值是协议值（提交后端），说明文字按当前语言取。
-  const responsibilityOptions = RESPONSIBILITY_OPTIONS.map(({ value, hintKey }) => ({
+  // 选项的 value 仍是协议值（提交后端），只有显示名与解释走语言包。
+  const responsibilityOptions = RESPONSIBILITY_LEVELS.map((value) => ({
     value,
-    label: `${value}——${t(hintKey)}`,
+    label: t("enumsClaims.optionWithHint", {
+      label: t(RESPONSIBILITY_LEVEL_LABEL_KEYS[value]),
+      hint: t(RESPONSIBILITY_LEVEL_HINT_KEYS[value]),
+    }),
+  }));
+  const statusOptions = VERIFICATION_STATUSES.map((value) => ({
+    value,
+    label: t("enumsClaims.optionWithHint", {
+      label: t(VERIFICATION_STATUS_LABEL_KEYS[value]),
+      hint: t(VERIFICATION_STATUS_HINT_KEYS[value]),
+    }),
+  }));
+  const categoryOptions = CLAIM_CATEGORIES.map((value) => ({
+    value,
+    label: t(CLAIM_CATEGORY_LABEL_KEYS[value]),
   }));
 
   return (
@@ -267,7 +263,7 @@ export default function ClaimFormModal({ open, claim, onClose, onSaved }: Props)
             label={t("claimForm.field.category")}
             className="claim-form-fixed"
           >
-            <Select options={CLAIM_CATEGORIES.map((value) => ({ value, label: value }))} />
+            <Select options={categoryOptions} />
           </Form.Item>
         </div>
 
@@ -319,7 +315,7 @@ export default function ClaimFormModal({ open, claim, onClose, onSaved }: Props)
             label={t("claimForm.field.verification")}
             className="claim-form-grow"
           >
-            <Select options={STATUS_OPTIONS} />
+            <Select options={statusOptions} />
           </Form.Item>
           {/* 日期用固定宽度；DatePicker 值走 Dayjs，表单里仍存 YYYY-MM-DD 字符串（E12）。 */}
           <Form.Item
@@ -367,7 +363,7 @@ export default function ClaimFormModal({ open, claim, onClose, onSaved }: Props)
                       className="claim-source-type"
                       options={SOURCE_TYPES.map((value: SourceType) => ({
                         value,
-                        label: SOURCE_TYPE_LABELS[value],
+                        label: t(SOURCE_TYPE_LABEL_KEYS[value]),
                       }))}
                     />
                   </Form.Item>
