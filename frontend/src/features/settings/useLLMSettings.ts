@@ -18,6 +18,7 @@ import {
   getLLMConfig,
   listLLMConfigRecords,
 } from "../../api/settings";
+import { t } from "../../i18n";
 import {
   configFromRecord,
   summaryFromConfig,
@@ -45,7 +46,9 @@ export function useLLMSettings() {
         setActiveRecordId(config.record_id ?? null);
         setConfigSummary(summaryFromConfig(config));
       })
-      .catch((err) => message.error(err instanceof Error ? err.message : "加载配置失败"))
+      .catch((err) =>
+        message.error(err instanceof Error ? err.message : t("appConfig.llmSettings.loadFailed")),
+      )
       .finally(() => setRecordsLoading(false));
   }, [message]);
 
@@ -62,9 +65,9 @@ export function useLLMSettings() {
       setConfigSummary(summaryFromConfig(configFromRecord(record)));
       // 页头下拉与这里是两棵独立的子树：不广播的话它要等下一次路由变化才更新。
       bumpLLMConfig();
-      message.success(`已切换到配置「${record.name}」`);
+      message.success(t("appConfig.llmSettings.switched", { name: record.name }));
     } catch (err) {
-      message.error(err instanceof Error ? err.message : "切换配置失败");
+      message.error(err instanceof Error ? err.message : t("appConfig.llmSettings.switchFailed"));
     } finally {
       setRecordApplyingId(null);
     }
@@ -89,15 +92,15 @@ export function useLLMSettings() {
           setActiveRecordId(null);
           message.warning(
             refreshError instanceof Error
-              ? `配置记录已删除，但当前配置刷新失败：${refreshError.message}`
-              : "配置记录已删除，但当前配置刷新失败",
+              ? t("appConfig.llmSettings.refreshFailedDetail", { message: refreshError.message })
+              : t("appConfig.llmSettings.refreshFailed"),
           );
         }
       }
-      message.success("配置记录已删除");
+      message.success(t("appConfig.llmSettings.deleted"));
       bumpLLMConfig();
     } catch (err) {
-      message.error(err instanceof Error ? err.message : "删除配置记录失败");
+      message.error(err instanceof Error ? err.message : t("appConfig.llmSettings.deleteFailed"));
     } finally {
       setRecordDeletingId(null);
     }
