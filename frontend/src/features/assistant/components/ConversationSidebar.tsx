@@ -41,7 +41,6 @@ import { formatDateTime } from "../../../utils/format";
 import BatchActionBar from "../../../components/common/BatchActionBar";
 import LoadingBlock from "../../../components/common/LoadingBlock";
 import { RowContextMenu, type RowActionItem } from "../../../components/common/RowActions";
-import { TRASH_RECOVERY_NOTE } from "../../../components/common/rowActionMenu";
 import { useBatchSelection } from "../../../hooks/useBatchSelection";
 import { useDeleteUndo } from "../../trash/useDeleteUndo";
 import { ListyItem } from "../../../components/common/ListyItem";
@@ -268,10 +267,10 @@ function ConversationSidebar({
     modal.confirm({
       title: t("assistantUi.sidebar.confirm.deleteSelectedTitle"),
       // 与单条删除同措辞的后果段：批量删除同样是软删除，能恢复。条数进正文（§4.4 例外）。
-      // TRASH_RECOVERY_NOTE 是软删后果的唯一出口；迁出语言包前先按原文拼接。
+      // 软删后果的唯一出处是 common.note.trashRecovery（语言包），这里只做拼接。
       content: t("assistantUi.sidebar.confirm.deleteSelectedContent", {
         count: ids.length,
-        note: TRASH_RECOVERY_NOTE,
+        note: t("common.note.trashRecovery"),
       }),
       okText: t("common.action.delete"),
       okButtonProps: { danger: true },
