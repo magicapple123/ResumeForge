@@ -7,6 +7,8 @@ import {
   parsePartialDate,
   type PartialDateSelectProps as Props,
 } from "./partialDate";
+import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 import "../../styles/partialDate.css";
 
 function daysInMonth(year: string, month: string): number {
@@ -29,6 +31,8 @@ function PartialDateSelectImpl({
   allowOngoing = false,
   yearOnly = false,
 }: Props) {
+  // 本组件用模块级 t()：必须订阅语言变化，否则切语言后这一块不重渲染。
+  const locale = useLocale();
   const parts = parsePartialDate(value);
   const selected = parts ?? { year: "", month: "", day: "", ongoing: false };
   /**
@@ -49,10 +53,11 @@ function PartialDateSelectImpl({
   // 年份范围几乎恒定（1900 → 当前年+5，已选年份更大时才外扩），分两组渲染。这个组件在
   // 「我的资料」里同时存在十几个、每次渲染重建 ~130 项 options 是编辑态卡顿的放大器之一
   // （见 deliverables/profile-input-perf-audit-2026-10-09.md），useMemo 掉。
-  const years = useMemo(
-    () => buildYearGroups(new Date().getFullYear(), Number(selected.year) || 0),
-    [selected.year],
-  );
+  // 分组标题来自语言包：locale 进依赖（只订阅不读取会漏掉重建）。
+  const years = useMemo(() => {
+    void locale;
+    return buildYearGroups(new Date().getFullYear(), Number(selected.year) || 0);
+  }, [selected.year, locale]);
   const dayOptions = useMemo(
     () =>
       Array.from({ length: daysInMonth(selected.year, selected.month) }, (_, index) => {
@@ -82,11 +87,11 @@ function PartialDateSelectImpl({
       <Space.Compact block className="profile-partial-date-select__controls">
         <Select
           id={id}
-          aria-label={yearOnly ? label : `${label}年份`}
+          aria-label={yearOnly ? label : t("dateFields.aria.year", { label })}
           value={selected.year || undefined}
           disabled={yearDisabled}
           allowClear
-          placeholder="年"
+          placeholder={t("dateFields.placeholder.year")}
           options={years}
           // 弹层高度给足：过去一组（今年 → 1900）很长，"未来年份"在它后面。320px 大致能
           // 一屏看到当前年附近十几项，滚一下就能摸到未来 5 年，不必盲滚。
@@ -111,11 +116,11 @@ function PartialDateSelectImpl({
         {!yearOnly && (
           <>
             <Select
-              aria-label={`${label}月份`}
+              aria-label={t("dateFields.aria.month", { label })}
               value={selected.month || undefined}
               disabled={monthDayDisabled}
               allowClear
-              placeholder="月"
+              placeholder={t("dateFields.placeholder.month")}
               options={MONTH_OPTIONS}
               popupMatchSelectWidth={false}
               onChange={(month?: string) => {
@@ -128,11 +133,11 @@ function PartialDateSelectImpl({
               }}
             />
             <Select
-              aria-label={`${label}日期`}
+              aria-label={t("dateFields.aria.day", { label })}
               value={selected.day || undefined}
               disabled={monthDayDisabled || !selected.month || undefined}
               allowClear
-              placeholder="日"
+              placeholder={t("dateFields.placeholder.day")}
               options={dayOptions}
               popupMatchSelectWidth={false}
               onChange={(day?: string) => commit(selected.year, selected.month, day ?? "")}
@@ -147,15 +152,16 @@ function PartialDateSelectImpl({
           disabled={disabled || undefined}
           onChange={(event) =>
             // 取消勾选恢复勾选前的具体日期（不是置空）：见 `lastConcreteRef` 的说明。
+            // i18n-ok: 勾选值是存储协议值（ongoing 的中文写法），不能翻译
             onChange?.(event.target.checked ? "至今" : lastConcreteRef.current)
           }
         >
-          至今
+          {t("dateFields.ongoing")}
         </Checkbox>
       ) : null}
       {unsupported ? (
         <Typography.Text type="warning" style={{ flexBasis: "100%", marginTop: 4 }}>
-          当前日期格式无法识别；请选择日期后保存，旧值暂时保留。
+          {t("dateFields.parseUnsupported")}
         </Typography.Text>
       ) : null}
     </div>
