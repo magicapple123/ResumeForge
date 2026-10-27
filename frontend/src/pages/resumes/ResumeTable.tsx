@@ -4,7 +4,7 @@
  * 受控组件——数据、批量选择、收藏防连点与各入口的打开动作全部由 ResumesPage 经 props
  * 传入（navigate 留页面）；行操作清单（primary/secondary/context）随表格一起下沉。
  */
-import { CheckSquareOutlined, StarFilled, StarOutlined } from "@ant-design/icons";
+import { StarFilled, StarOutlined } from "@ant-design/icons";
 import { App, Button, Space, Table, Tag, Tooltip, Typography } from "antd";
 import type { TableColumnsType } from "antd";
 import type { SortOrder } from "antd/es/table/interface";
@@ -12,7 +12,6 @@ import { memo, useEffect, useMemo, useRef } from "react";
 import type { HTMLAttributes } from "react";
 import type { Dispatch, SetStateAction } from "react";
 import { RowActions, RowContextMenu, type RowActionItem } from "../../components/common/RowActions";
-import { TRASH_RECOVERY_NOTE } from "../../components/common/rowActionMenu";
 import type { BatchSelection } from "../../hooks/useBatchSelection";
 import { RESUME_ENHANCEMENT_LEVELS, enhancementLevelDescription } from "../../config";
 import { t } from "../../i18n";
@@ -27,80 +26,13 @@ import {
   type ResumeSortState,
 } from "../../utils/resumeSort";
 import { copyMenuFor } from "./resumeRowCopyActions";
+import {
+  batchSelectAction,
+  primaryActionsFor,
+  secondaryActionsFor,
+  type RowActionDeps,
+} from "./resumeTableActions";
 
-/** 行操作动作的依赖集：全部是 setState 与 useCallback 回调，引用跨渲染稳定，
- * 行组件据此做 memo——页面其它 state 变化时已渲染的行不必重跑。 */
-interface RowActionDeps {
-  setPreviewId: (id: number | null) => void;
-  setRenameTarget: (target: ResumeBrief | null) => void;
-  setRenameValue: (value: string) => void;
-  setNoteTarget: (target: ResumeBrief | null) => void;
-  setNoteValue: (value: string) => void;
-  setDiffBase: (target: ResumeBrief | null) => void;
-  setDiffAgainstId: (id: number | null) => void;
-  setDiffResult: (result: DiffViewData | null) => void;
-  toggleFavorite: (record: ResumeBrief) => Promise<void>;
-  remove: (id: number) => Promise<void>;
-}
-
-function primaryActionsFor(record: ResumeBrief, deps: RowActionDeps): RowActionItem[] {
-  return [{ key: "preview", label: "预览 / 导出", onClick: () => deps.setPreviewId(record.id) }];
-}
-function secondaryActionsFor(record: ResumeBrief, deps: RowActionDeps): RowActionItem[] {
-  return [
-    {
-      key: "rename",
-      label: "重命名",
-      onClick: () => {
-        deps.setRenameTarget(record);
-        deps.setRenameValue(record.title);
-      },
-    },
-    {
-      key: "note",
-      label: "编辑备注",
-      onClick: () => {
-        deps.setNoteTarget(record);
-        deps.setNoteValue(record.note ?? "");
-      },
-    },
-    {
-      key: "diff",
-      label: "版本对比",
-      onClick: () => {
-        deps.setDiffBase(record);
-        deps.setDiffAgainstId(null);
-        deps.setDiffResult(null);
-      },
-    },
-    {
-      key: "favorite",
-      label: record.favorite ? "取消收藏" : "收藏",
-      onClick: () => void deps.toggleFavorite(record),
-    },
-    {
-      key: "delete",
-      label: "删除",
-      danger: true,
-      confirm: "删除这份简历？",
-      confirmBody: `这份简历${TRASH_RECOVERY_NOTE}`, // i18n-ok: 正文补「对象」段（§4.4 三段式），后果句引用 TRASH_RECOVERY_NOTE 常量，不重写
-      // 按钮写具体动作（AGENTS：禁用「确定/取消」泛动词；QA R.07 实测为默认「取 消 / 确 定」）。
-      confirmOkText: t("resumes.remove.confirm.ok"),
-      confirmCancelText: t("resumes.remove.confirm.cancel"),
-      onClick: () => void deps.remove(record.id),
-    },
-  ];
-}
-
-/** 右键菜单顶部的「批量选择」入口：工具栏按钮已收进这里（R8），点它进入多选模式。 */
-function batchSelectAction(enterSelecting: () => void): RowActionItem {
-  return {
-    key: "batch_select",
-    label: "批量选择",
-    icon: <CheckSquareOutlined />,
-    onClick: enterSelecting,
-  };
-}
 interface ContextMenuRowProps extends HTMLAttributes<HTMLTableRowElement> {
   record?: ResumeBrief;
   /** 批量选择模式下右键菜单收起，与行内操作保持一致。 */
@@ -193,6 +125,7 @@ export default function ResumeTable({
   onSortChange,
   navigate,
 }: Props) {
+  useLocale(); // 本组件用模块级 t()，必须订阅语言变化，否则切语言后列头与菜单不重渲染
   const tableWrapRef = useRef<HTMLDivElement>(null);
 
   // 列宽加起来会超过容器（标题固定 220 + 最近修改列），antd 因此把表格放进一个
@@ -205,7 +138,7 @@ export default function ResumeTable({
     if (!node || node.hasAttribute("tabindex")) return;
     node.tabIndex = 0;
     node.setAttribute("role", "region");
-    node.setAttribute("aria-label", "简历列表（可横向滚动）");
+    node.setAttribute("aria-label", t("resumes.list.scrollRegion"));
   });
 
   /**
@@ -258,19 +191,23 @@ export default function ResumeTable({
    * "点击排序，再点反向，第三次取消"讲的是**机制**，但用户在一列表头上的疑问是**语义**
    * （尤其"目标岗位"与"简历标题"容易混）。机制一眼可见，语义不写就没人知道，所以按列名生成。
    */
-  const sortTooltip = (label: string) => ({ title: `按${label}排序` });
+  const sortTooltip = (label: string) => ({ title: t("resumes.list.sort", { label }) });
 
   const columns: TableColumnsType<ResumeBrief> = [
     {
-      title: "收藏",
+      title: t("resumes.list.column.favorite"),
       key: "favorite",
       width: 64,
       align: "center",
       render: (_, record) => (
-        <Tooltip title={record.favorite ? "取消收藏" : "收藏简历"}>
+        <Tooltip
+          title={record.favorite ? t("resumes.list.unfavorite") : t("resumes.list.favoriteAdd")}
+        >
           <Button
             type="text"
-            aria-label={record.favorite ? "取消收藏简历" : "收藏简历"}
+            aria-label={
+              record.favorite ? t("resumes.list.favoriteRemove") : t("resumes.list.favoriteAdd")
+            }
             loading={favoriteResumeId === record.id}
             disabled={favoriteResumeId !== null}
             icon={
@@ -286,14 +223,14 @@ export default function ResumeTable({
       ),
     },
     {
-      title: "简历标题",
+      title: t("resumes.list.column.title"),
       dataIndex: "title",
       // 1080px 宽下无宽度的标题列会被压到约一个字宽：给一个下限再让它在窄屏内省略。
       width: 220,
       sorter: true,
       sortOrder: sortOrderFor("title", sortState),
       sortDirections: sortDirectionsFor("title"),
-      showSorterTooltip: sortTooltip("简历标题"),
+      showSorterTooltip: sortTooltip(t("resumes.list.column.title")),
       // 自定义 render 返回的是按钮，列级 ellipsis 截不到按钮里的文字（按钮自带样式），
       // 所以省略号由按钮自己带（见下）；这里关掉 antd 的原生 title，避免和 Tooltip 弹两次。
       ellipsis: { showTitle: false },
@@ -311,7 +248,7 @@ export default function ResumeTable({
       ),
     },
     {
-      title: "目标岗位",
+      title: t("resumes.list.column.job"),
       key: "job",
       // T3：这一列原本没有宽度，长岗位名/公司名会把整表撑宽，其它列被挤成一字宽。
       // 固定 200 + 列级 ellipsis（整表切 table-layout: fixed）+ 单元格内 Tag 自己省略。
@@ -319,7 +256,7 @@ export default function ResumeTable({
       sorter: true,
       sortOrder: sortOrderFor("job", sortState),
       sortDirections: sortDirectionsFor("job"),
-      showSorterTooltip: sortTooltip("目标岗位"),
+      showSorterTooltip: sortTooltip(t("resumes.list.column.job")),
       ellipsis: { showTitle: false },
       render: (_, record) => (
         <Space wrap size={[4, 4]}>
@@ -337,11 +274,13 @@ export default function ResumeTable({
             // 无岗位记录的 job_title 存的是求职意向，不能当岗位名显示，
             // 否则通用简历看起来就是一份岗位简历。
             <>
-              <Tooltip title="不关联岗位、可投递多个方向的简历">
-                <Tag color="purple">通用简历</Tag>
+              <Tooltip title={t("resumes.list.generalHint")}>
+                <Tag color="purple">{t("resumes.list.general")}</Tag>
               </Tooltip>
               {record.job_title && (
-                <Tag className="resume-job-tag">求职意向：{record.job_title}</Tag>
+                <Tag className="resume-job-tag">
+                  {t("resumes.list.intent", { job: record.job_title })}
+                </Tag>
               )}
             </>
           )}
@@ -350,18 +289,23 @@ export default function ResumeTable({
       ),
     },
     {
-      title: "来源",
+      title: t("resumes.list.column.source"),
       dataIndex: "source",
       width: 100,
       render: (value: ResumeBrief["source"]) => (
         <Tag color={value === "manual" ? "purple" : "blue"}>
-          {value === "manual" ? "用户编写" : "AI 生成"}
+          {value === "manual" ? t("resumes.list.sourceManual") : t("resumes.list.sourceAi")}
         </Tag>
       ),
     },
-    { title: "模型", dataIndex: "model", width: 150, render: (value) => value || "-" },
     {
-      title: "备注",
+      title: t("resumes.list.column.model"),
+      dataIndex: "model",
+      width: 150,
+      render: (value) => value || "-",
+    },
+    {
+      title: t("resumes.list.column.note"),
       dataIndex: "note",
       width: 180,
       render: (value: string) =>
@@ -374,12 +318,12 @@ export default function ResumeTable({
         ),
     },
     {
-      title: "美化拓展",
+      title: t("resumes.list.column.enhancement"),
       key: "enhancement",
       width: 110,
       render: (_, record) => {
         if (!record.enhancement_enabled)
-          return <Typography.Text type="secondary">未开启</Typography.Text>;
+          return <Typography.Text type="secondary">{t("resumes.list.off")}</Typography.Text>;
         const level = RESUME_ENHANCEMENT_LEVELS.find(
           (item) => item.value === record.enhancement_level,
         );
@@ -390,38 +334,38 @@ export default function ResumeTable({
             title={
               record.enhancement_level
                 ? enhancementLevelDescription(record.enhancement_level, !record.job_id)
-                : "已开启经历美化拓展"
+                : t("resumes.list.enhancementOn")
             }
           >
-            <Tag color="green">{level?.label ?? "已开启"}</Tag>
+            <Tag color="green">{level?.label ?? t("resumes.list.on")}</Tag>
           </Tooltip>
         );
       },
     },
     {
-      title: "创建时间",
+      title: t("resumes.list.column.created"),
       dataIndex: "created_at",
       width: 160,
       sorter: true,
       sortOrder: sortOrderFor("created_at", sortState),
       sortDirections: sortDirectionsFor("created_at"),
-      showSorterTooltip: sortTooltip("创建时间"),
+      showSorterTooltip: sortTooltip(t("resumes.list.column.created")),
       render: (value) => formatDateTime(value),
     },
     {
       // 默认排序就是「最近修改」，这一列让排序结果可解释：改完备注/版式后时间会往前走。
-      title: "最近修改",
+      title: t("resumes.list.column.updated"),
       dataIndex: "updated_at",
       width: 160,
       sorter: true,
       sortOrder: sortOrderFor("updated_at", sortState),
       sortDirections: sortDirectionsFor("updated_at"),
-      showSorterTooltip: sortTooltip("最近修改"),
+      showSorterTooltip: sortTooltip(t("resumes.list.column.updated")),
       render: (value: string | null | undefined) =>
         value ? formatDateTime(value) : <Typography.Text type="secondary">—</Typography.Text>,
     },
     {
-      title: "操作",
+      title: t("resumes.list.column.actions"),
       key: "actions",
       width: 150,
       // 钉在右侧：窄屏（≤1536）表格要横滚 216–660px，不钉住的话「预览 / 导出」整列在首屏外，
@@ -480,7 +424,7 @@ export default function ResumeTable({
           pageSize,
           total: data?.total ?? 0,
           showSizeChanger: true,
-          showTotal: (total) => `共 ${total} 条记录`,
+          showTotal: (total) => t("resumes.list.total", { total }),
           onChange: (nextPage, nextPageSize) => {
             setPage(nextPage);
             setPageSize(nextPageSize);
