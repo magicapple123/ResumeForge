@@ -21,20 +21,23 @@ import {
 } from "../../api/userFiles";
 import { canPreviewImage } from "../../utils/attachments";
 import { formatDateTime } from "../../utils/format";
+import { t, type MessageKey } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 
-/** 来源标注 → 界面文案（与后端 user_files 服务的 source_type 一致）。 */
-const SOURCE_LABELS: Record<string, string> = {
-  material: "资料箱",
-  photo: "个人照片",
-  job_note: "岗位备注图",
-  candidate_image: "备选岗位截图",
-  chat_attachment: "助手附件",
+/** 来源标注 → 界面文案 key（与后端 user_files 服务的 source_type 一致）。 */
+const SOURCE_LABEL_KEYS: Record<string, MessageKey> = {
+  material: "materials.files.source.material",
+  photo: "materials.files.source.photo",
+  job_note: "materials.files.source.jobNote",
+  candidate_image: "materials.files.source.candidateImage",
+  chat_attachment: "materials.files.source.chatAttachment",
 };
 
 const PAGE_SIZE = 20;
 
 function sourceLabel(item: UserFileItem): string {
-  return SOURCE_LABELS[item.source_type] ?? (item.source_type || "未知来源");
+  const key = SOURCE_LABEL_KEYS[item.source_type];
+  return key ? t(key) : item.source_type || t("materials.files.source.unknown");
 }
 
 function formatSize(bytes: number): string {
@@ -48,6 +51,7 @@ function isPdf(item: UserFileItem): boolean {
 }
 
 export default function UserFilesPanel() {
+  useLocale();
   const { message } = App.useApp();
   const [rows, setRows] = useState<UserFileItem[]>([]);
   const [total, setTotal] = useState(0);
@@ -62,7 +66,7 @@ export default function UserFilesPanel() {
     try {
       return await listUserFiles({ page, page_size: PAGE_SIZE, keyword });
     } catch (error) {
-      message.error(error instanceof Error ? error.message : "加载文件列表失败");
+      message.error(error instanceof Error ? error.message : t("materials.files.toast.loadFailed"));
       return null;
     }
   }, [keyword, message, page]);
@@ -87,9 +91,11 @@ export default function UserFilesPanel() {
     setOpeningId(item.id);
     try {
       await revealUserFile(item.id);
-      message.success("已打开所在文件夹");
+      message.success(t("materials.files.toast.revealed"));
     } catch (error) {
-      message.error(error instanceof Error ? error.message : "打开文件夹失败");
+      message.error(
+        error instanceof Error ? error.message : t("materials.files.toast.revealFailed"),
+      );
     } finally {
       setOpeningId(null);
     }
@@ -97,7 +103,7 @@ export default function UserFilesPanel() {
 
   const columns: TableColumnsType<UserFileItem> = [
     {
-      title: "名称",
+      title: t("materials.files.column.name"),
       dataIndex: "original_name",
       ellipsis: true,
       render: (_: unknown, item: UserFileItem) => (
@@ -105,12 +111,14 @@ export default function UserFilesPanel() {
           {canPreviewImage(item.mime) ? (
             <Image src={userFileRawUrl(item.id)} alt={item.original_name} width={40} height={40} />
           ) : null}
-          <Typography.Text ellipsis>{item.original_name || "（未命名）"}</Typography.Text>
+          <Typography.Text ellipsis>
+            {item.original_name || t("materials.files.untitled")}
+          </Typography.Text>
         </div>
       ),
     },
     {
-      title: "类型",
+      title: t("materials.files.column.type"),
       dataIndex: "mime",
       width: 180,
       render: (mime: string) => (
@@ -120,19 +128,19 @@ export default function UserFilesPanel() {
       ),
     },
     {
-      title: "大小",
+      title: t("materials.files.column.size"),
       dataIndex: "size",
       width: 90,
       render: (size: number) => formatSize(size),
     },
     {
-      title: "来源",
+      title: t("materials.files.column.source"),
       dataIndex: "source_type",
       width: 150,
       render: (_: unknown, item: UserFileItem) => <Tag color="blue">{sourceLabel(item)}</Tag>,
     },
     {
-      title: "保存时间",
+      title: t("materials.files.column.savedAt"),
       dataIndex: "created_at",
       width: 160,
       render: (value: string | null) => (
@@ -140,14 +148,14 @@ export default function UserFilesPanel() {
       ),
     },
     {
-      title: "操作",
+      title: t("materials.files.column.actions"),
       key: "actions",
       width: 170,
       render: (_: unknown, item: UserFileItem) => (
         <div style={{ display: "flex", gap: 4 }}>
           {isPdf(item) && (
             <Button type="link" size="small" onClick={() => setPdfPreview(item)}>
-              预览
+              {t("materials.files.action.preview")}
             </Button>
           )}
           <Button
@@ -157,7 +165,7 @@ export default function UserFilesPanel() {
             loading={openingId === item.id}
             onClick={() => void revealInFolder(item)}
           >
-            打开文件夹
+            {t("materials.files.action.openFolder")}
           </Button>
         </div>
       ),
@@ -169,7 +177,7 @@ export default function UserFilesPanel() {
     pageSize: PAGE_SIZE,
     total,
     showSizeChanger: false,
-    showTotal: (count) => `共 ${count} 份`,
+    showTotal: (count) => t("materials.files.total", { count }),
     onChange: (next) => setPage(next),
   };
 
@@ -178,7 +186,7 @@ export default function UserFilesPanel() {
       <div style={{ marginBottom: 16 }}>
         <Input.Search
           allowClear
-          placeholder="搜索文件名"
+          placeholder={t("materials.files.searchPlaceholder")}
           prefix={<SearchOutlined />}
           style={{ width: 260 }}
           onSearch={(value) => {
@@ -191,7 +199,7 @@ export default function UserFilesPanel() {
       {loading ? (
         <LoadingBlock />
       ) : rows.length === 0 ? (
-        <Empty description="还没有保存过文件" />
+        <Empty description={t("materials.files.empty")} />
       ) : (
         <Table
           rowKey="id"
@@ -203,7 +211,7 @@ export default function UserFilesPanel() {
       )}
 
       <Drawer
-        title={pdfPreview?.original_name || "PDF 预览"}
+        title={pdfPreview?.original_name || t("materials.files.pdfPreviewTitle")}
         open={pdfPreview !== null}
         size={720}
         onClose={() => setPdfPreview(null)}
