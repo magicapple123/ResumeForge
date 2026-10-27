@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * 助手技能{t("skills.breadcrumb")}：创建、导入和管理助手技能。
+ * 助手技能工作台：创建、导入和管理助手技能。
  *
  * 「技能」= 一段长期生效的提示词 + 若干知识文件。它改变的是助手怎么回答问题，
  * 所以这一页的重点不是"管理列表"，而是让用户明白自己能造出什么样的助手。
@@ -31,19 +31,28 @@ import { deleteSkill, importSkill, listSkills, setSkillEnabled } from "../api/sk
 import { RowActions, RowContextMenu } from "../components/common/RowActions";
 import SkillEditorModal, { type SkillDraft } from "../components/skills/SkillEditorModal";
 import TemplateWorkbench from "../components/templates/TemplateWorkbench";
-import { t } from "../i18n";
+import { t, type MessageKey } from "../i18n";
 import { useLocale } from "../i18n/i18nContext";
 import type { AssistantSkill } from "../types";
 import { formatDateTime } from "../utils/format";
 
-/** 内置模板：给"不知道技能能写成什么样"的用户一个可直接改的起点。 */
-const SKILL_TEMPLATES: { label: string; hint: string; draft: SkillDraft }[] = [
+/**
+ * 内置模板：给"不知道技能能写成什么样"的用户一个可直接改的起点。
+ *
+ * 界面上的名称与提示走 `labelKey` / `hintKey`（渲染处再 `t()`，模块作用域不求值）；
+ * `name` / `description` / `prompt` 会随技能一起保存并交给模型，属于「喂给模型的内容」，
+ * 保持中文（见各自上一行的 i18n-ok）。
+ */
+const SKILL_TEMPLATES: { labelKey: MessageKey; hintKey: MessageKey; draft: SkillDraft }[] = [
   {
-    label: "简历要点精炼",
-    hint: "把经历压成 3 条以内的简历要点",
+    labelKey: "skills.builtin.digest.label",
+    hintKey: "skills.builtin.digest.hint",
     draft: {
+      // i18n-ok: 技能名会随技能提交，并作为技能元数据喂给模型，不随界面语言变
       name: "简历要点精炼",
+      // i18n-ok: 适用场景是模型判断「何时用这个技能」的依据，不是界面文案
       description: "用户贴出一段经历、要求改写成简历要点时使用",
+      // i18n-ok: prompt 正文是喂给模型的系统指令，翻译会改变助手的生成行为
       prompt: [
         "改写简历要点时遵守以下要求：",
         "1. 每条不超过 35 个汉字，以强动作动词开头；",
@@ -55,11 +64,14 @@ const SKILL_TEMPLATES: { label: string; hint: string; draft: SkillDraft }[] = [
     },
   },
   {
-    label: "面试问题预测",
-    hint: "按岗位 JD 预测面试问题并给出回答思路",
+    labelKey: "skills.builtin.interview.label",
+    hintKey: "skills.builtin.interview.hint",
     draft: {
+      // i18n-ok: 技能名会随技能提交，并作为技能元数据喂给模型，不随界面语言变
       name: "面试问题预测",
+      // i18n-ok: 适用场景是模型判断「何时用这个技能」的依据，不是界面文案
       description: "用户准备面试、要求模拟提问时使用",
+      // i18n-ok: prompt 正文是喂给模型的系统指令，翻译会改变助手的生成行为
       prompt: [
         "预测面试问题时：",
         "1. 先从岗位 JD 里挑出 3 个最关键的能力要求，说明为什么它重要；",
@@ -70,11 +82,14 @@ const SKILL_TEMPLATES: { label: string; hint: string; draft: SkillDraft }[] = [
     },
   },
   {
-    label: "岗位匹配分析",
-    hint: "对照 JD 与资料说明匹配点、差距与补强建议",
+    labelKey: "skills.builtin.match.label",
+    hintKey: "skills.builtin.match.hint",
     draft: {
+      // i18n-ok: 技能名会随技能提交，并作为技能元数据喂给模型，不随界面语言变
       name: "岗位匹配分析",
+      // i18n-ok: 适用场景是模型判断「何时用这个技能」的依据，不是界面文案
       description: "用户问「这个岗位我能不能投」「匹配度如何」时使用",
+      // i18n-ok: prompt 正文是喂给模型的系统指令，翻译会改变助手的生成行为
       prompt: [
         "做岗位匹配分析时：",
         "1. 先列出 JD 的硬性要求（学历、年限、必备技能），逐条标注「已具备 / 部分具备 / 缺失」，并引用用户资料中的证据；",
@@ -247,7 +262,7 @@ export default function SkillsPage() {
       <div className="profile-page-header">
         <div>
           <Typography.Title level={3} style={{ margin: 0 }}>
-            工作台
+            {t("skills.breadcrumb")}
           </Typography.Title>
           <Typography.Text type="secondary">{t("skills.page.subtitle")}</Typography.Text>
         </div>
@@ -290,7 +305,7 @@ export default function SkillsPage() {
         <>
           <Card size="small" className="settings-card skills-intro-card">
             <Typography.Title level={5} style={{ marginTop: 0 }}>
-              技能是什么
+              {t("skills.guide.whatTitle")}
             </Typography.Title>
             <Typography.Paragraph type="secondary" style={{ marginBottom: 8 }}>
               {t("skills.guide.whatBody")}
@@ -304,9 +319,9 @@ export default function SkillsPage() {
             <Space wrap>
               <Typography.Text type="secondary">{t("skills.guide.templates")}</Typography.Text>
               {SKILL_TEMPLATES.map((template) => (
-                <Tooltip key={template.label} title={template.hint}>
+                <Tooltip key={template.labelKey} title={t(template.hintKey)}>
                   <Button size="small" onClick={() => openCreate(template.draft)}>
-                    {template.label}
+                    {t(template.labelKey)}
                   </Button>
                 </Tooltip>
               ))}
