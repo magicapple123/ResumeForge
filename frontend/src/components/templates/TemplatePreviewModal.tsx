@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { previewResumeTemplate } from "../../api/resumes";
 import { t } from "../../i18n";
 import type { MessageKey } from "../../i18n";
+import { RESUME_CATALOG_FORMAT_LABEL_KEYS } from "../../i18n/enum/resumeCatalog";
 import { useLocale } from "../../i18n/i18nContext";
 import type { ResumeFontScale, ResumeFormatPreset, ResumeTemplateDetail } from "../../types";
 import A4PreviewFrame from "./A4PreviewFrame";
@@ -96,7 +97,13 @@ export default function TemplatePreviewModal({ template, formatPresets, onClose 
             value={formatName || ""}
             options={[
               { value: "", label: t("templatesUi.preview.followTemplate") },
-              ...formatPresets.map((item) => ({ value: item.name, label: item.label })),
+              ...formatPresets.map((item) => {
+                // 内置版式按稳定的 `name` 走语言包；自制版式的名字是用户输入，原样显示。
+                const labelKey = item.custom
+                  ? undefined
+                  : RESUME_CATALOG_FORMAT_LABEL_KEYS[item.name];
+                return { value: item.name, label: labelKey ? t(labelKey) : item.label };
+              }),
             ]}
             onChange={(value) => setFormatName(String(value))}
           />
