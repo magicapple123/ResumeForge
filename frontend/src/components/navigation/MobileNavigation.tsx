@@ -3,6 +3,8 @@ import { Button, Drawer, Menu } from "antd";
 import { QuestionCircleOutlined } from "@ant-design/icons";
 import type { MenuProps } from "antd";
 import { useEffect, useLayoutEffect, useRef } from "react";
+import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 
 interface Props {
   open: boolean;
@@ -28,6 +30,7 @@ export default function MobileNavigation({
   onNavigate,
   onOpenGuide,
 }: Props) {
+  useLocale();
   const focusAfterClose = useRef<"trigger" | "content" | null>("trigger");
   const previouslyOpen = useRef(false);
   // A quick close can skip the animation's afterOpenChange(false) callback.
@@ -51,7 +54,7 @@ export default function MobileNavigation({
 
   return (
     <Drawer
-      title="功能导航"
+      title={t("navigation.mobile.title")}
       placement="left"
       size={288}
       open={open}
@@ -80,11 +83,11 @@ export default function MobileNavigation({
             onOpenGuide();
           }}
         >
-          使用指南
+          {t("navigation.guide.open")}
         </Button>
       }
     >
-      <nav aria-label="移动端主导航" id="mobile-navigation">
+      <nav aria-label={t("navigation.mobile.aria")} id="mobile-navigation">
         <Menu
           mode="inline"
           selectedKeys={[selectedKey]}
