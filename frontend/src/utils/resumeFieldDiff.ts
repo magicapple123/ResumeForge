@@ -19,28 +19,30 @@ import type {
   StringSectionDiff,
   SubFieldDiff,
 } from "../types/resumeFieldDiff";
+import { t } from "../i18n";
+import type { MessageKey } from "../i18n";
 
 const PHOTO_PLACEHOLDER = "[图片]";
 
 type RawItem = Record<string, unknown>;
 
 /** 顶层字段 → 中文标签（以 schema 实际字段为准，勿漏）。 */
-const FIELD_LABELS: Record<string, string> = {
-  name: "姓名",
-  photo: "照片",
-  gender: "性别",
-  birth_year: "出生年份",
-  phone: "电话",
-  email: "邮箱",
-  city: "城市",
-  job_intent: "求职意向",
-  summary: "个人总结",
-  education: "教育经历",
-  experience: "工作/实习经历",
-  campus_experience: "校园经历",
-  projects: "项目经历",
-  skills: "专业技能",
-  awards: "荣誉奖项",
+const FIELD_LABELS: Record<string, MessageKey> = {
+  name: "editor.field.personName",
+  photo: "editor.field.photo",
+  gender: "editor.field.gender",
+  birth_year: "editor.field.birthYear",
+  phone: "editor.field.phone",
+  email: "editor.field.email",
+  city: "editor.field.city",
+  job_intent: "editor.field.jobIntent",
+  summary: "editor.field.summary",
+  education: "editor.section.education",
+  experience: "editor.section.experience",
+  campus_experience: "editor.section.campus",
+  projects: "editor.section.projects",
+  skills: "editor.section.skills",
+  awards: "editor.section.awards",
 };
 
 const STRING_FIELDS = [
@@ -64,59 +66,63 @@ const LIST_FIELDS = [
 ];
 
 /** 列表条目子字段 → 中文标签。 */
-const LIST_SUBFIELD_LABELS: Record<string, Record<string, string>> = {
+const LIST_SUBFIELD_LABELS: Record<string, Record<string, MessageKey>> = {
   education: {
-    school: "学校",
-    major: "专业",
-    degree: "学历",
-    start_date: "开始时间",
-    end_date: "结束时间",
-    gpa: "GPA",
-    courses: "核心课程",
-    achievements: "成就",
-    study_form: "学习形式",
-    degree_type: "学位类型",
-    department: "院系",
-    rank: "成绩排名",
-    advisor: "导师",
-    research_direction: "研究方向",
+    school: "editor.field.school",
+    major: "editor.field.major",
+    degree: "editor.field.degree",
+    start_date: "editor.field.startDate",
+    end_date: "editor.field.endDate",
+    gpa: "editor.field.gpa",
+    courses: "editor.field.courses",
+    achievements: "editor.field.studyAchievements",
+    study_form: "editor.field.studyForm",
+    degree_type: "editor.field.degreeType",
+    department: "editor.field.department",
+    rank: "editor.field.classRank",
+    advisor: "editor.field.advisor",
+    research_direction: "editor.field.researchDirection",
   },
   experience: {
-    company: "公司",
-    role: "岗位",
-    start_date: "开始时间",
-    end_date: "结束时间",
-    description: "工作描述",
-    team_size: "团队规模",
-    experience_kind: "工作类型",
+    company: "editor.field.company",
+    role: "editor.field.expRole",
+    start_date: "editor.field.startDate",
+    end_date: "editor.field.endDate",
+    description: "editor.field.expDescription",
+    team_size: "editor.field.teamSize",
+    experience_kind: "editor.field.jobKind",
   },
   campus_experience: {
-    organization: "组织",
-    role: "岗位",
-    start_date: "开始时间",
-    end_date: "结束时间",
-    description: "经历描述",
-    activity_type: "活动类型",
+    organization: "editor.field.organization",
+    role: "editor.field.expRole",
+    start_date: "editor.field.startDate",
+    end_date: "editor.field.endDate",
+    description: "editor.field.campusDescription",
+    activity_type: "editor.field.activityType",
   },
   projects: {
-    name: "项目名称",
-    role: "角色",
-    start_date: "开始时间",
-    end_date: "结束时间",
-    tech_stack: "技术栈",
-    description: "项目描述",
-    highlights: "项目亮点",
-    project_size: "项目规模",
-    artifact_type: "成果类型",
+    name: "editor.field.projectName",
+    role: "editor.field.projectRole",
+    start_date: "editor.field.startDate",
+    end_date: "editor.field.endDate",
+    tech_stack: "editor.field.techStack",
+    description: "editor.field.projectDescription",
+    highlights: "editor.field.highlights",
+    project_size: "editor.field.projectSize",
+    artifact_type: "editor.field.artifactType",
   },
-  skills: { name: "技能", level: "熟练度", category: "技能分类" },
+  skills: {
+    name: "editor.field.skillName",
+    level: "editor.field.skillLevel",
+    category: "editor.field.skillCategory",
+  },
   awards: {
-    name: "奖项",
-    date: "获得时间",
-    description: "奖项描述",
-    issuer: "颁发机构",
-    level: "奖项级别",
-    ratio: "获奖比例",
+    name: "editor.field.awardName",
+    date: "editor.field.awardDate",
+    description: "editor.field.notes",
+    issuer: "editor.field.issuer",
+    level: "editor.field.awardLevel",
+    ratio: "editor.field.awardRatio",
   },
 };
 
@@ -246,7 +252,15 @@ function stringFieldDiff(key: string, oldVal: unknown, newVal: unknown): StringS
   const newText = key === "photo" ? sanitizePhoto(newVal) : str(newVal);
   if (oldText === newText) return null;
   const { oldTokens, newTokens } = wordDiff(oldText, newText);
-  return { type: "string", key, label: FIELD_LABELS[key], oldText, newText, oldTokens, newTokens };
+  return {
+    type: "string",
+    key,
+    label: t(FIELD_LABELS[key]),
+    oldText,
+    newText,
+    oldTokens,
+    newTokens,
+  };
 }
 
 function compareItemSubfields(
@@ -355,7 +369,7 @@ function listFieldDiff(key: string, oldList: unknown, newList: unknown): ListSec
   return {
     type: "list",
     key,
-    label: FIELD_LABELS[key],
+    label: t(FIELD_LABELS[key]),
     removed,
     added,
     modified,
@@ -376,7 +390,7 @@ export function computeFieldDiff(
   const againstObj = against as unknown as RawItem;
   const order = [...STRING_FIELDS, ...LIST_FIELDS];
   for (const key of order) {
-    const label = FIELD_LABELS[key];
+    const label = t(FIELD_LABELS[key]);
     if (STRING_FIELDS.includes(key)) {
       const sec = stringFieldDiff(key, baseObj[key], againstObj[key]);
       if (sec) changed.push(sec);
