@@ -14,10 +14,27 @@ import type { ReferralPayload, ReferralStatus } from "../../types";
 import { referralImageUrl } from "../../types";
 import { useJobSearchSelect, useTrackSearchSelect } from "../../hooks/remoteSearchOptions";
 import { IMAGE_ACCEPT } from "../../utils/attachments";
-import { REFERRAL_STATUS_LABELS } from "../../types";
+import { t } from "../../i18n";
+import type { MessageKey } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 
 /** 与后端 ``schemas/referral.MAX_NOTE_IMAGES`` 保持一致。 */
 export const MAX_NOTE_IMAGES = 9;
+
+/**
+ * 内推状态的显示名：**键是协议值**（`active` / `submitted` / `closed` / `invalid`，
+ * 提交后端并参与校验），值指向语言包 key。
+ *
+ * 模块作用域不能调 `t()`（切语言不会重渲染），所以这里只存 key，取值处统一
+ * `t(STATUS_LABEL_KEYS[value])`。`types/referral.ts` 的 `REFERRAL_STATUS_LABELS`
+ * 一个字都没动——它另有消费者（`ReferralListItem` / `ReferralDetailDrawer`）。
+ */
+const STATUS_LABEL_KEYS: Record<ReferralStatus, MessageKey> = {
+  active: "referralForm.status.active",
+  submitted: "referralForm.status.submitted",
+  closed: "referralForm.status.closed",
+  invalid: "referralForm.status.invalid",
+};
 
 interface Props {
   form: FormInstance<ReferralPayload>;
@@ -43,6 +60,8 @@ export default function ReferralFormFields({
   beforeImageUpload,
   removeImage,
 }: Props) {
+  // 本文件用模块级 t()：必须订阅语言变化，否则切语言后表单文案不重渲染。
+  useLocale();
   // 关联岗位 / 漏斗下拉改为远程搜索（P0-1）：不再由页面预拉"前 100 条"当全量。
   const jobSelect = useJobSearchSelect();
   const trackSelect = useTrackSearchSelect();
@@ -61,51 +80,63 @@ export default function ReferralFormFields({
   return (
     <Form form={form} layout="vertical" initialValues={{ status: "active" }}>
       <Space style={{ display: "flex" }} align="start">
-        <Form.Item label="公司" name="company" style={{ flex: 1 }}>
-          <Input maxLength={128} placeholder="公司名" />
+        <Form.Item label={t("referralForm.field.company")} name="company" style={{ flex: 1 }}>
+          <Input maxLength={128} placeholder={t("referralForm.placeholder.company")} />
         </Form.Item>
-        <Form.Item label="内推岗位" name="position" style={{ flex: 1 }}>
-          <Input maxLength={128} placeholder="岗位名" />
+        <Form.Item label={t("referralForm.field.position")} name="position" style={{ flex: 1 }}>
+          <Input maxLength={128} placeholder={t("referralForm.placeholder.position")} />
         </Form.Item>
       </Space>
-      <Form.Item label="内推人" name="referrer_name">
-        <Input maxLength={128} placeholder="姓名 / 称呼" />
+      <Form.Item label={t("referralForm.field.referrer")} name="referrer_name">
+        <Input maxLength={128} placeholder={t("referralForm.placeholder.referrer")} />
       </Form.Item>
       <Space style={{ display: "flex" }} align="start">
-        <Form.Item label="联系方式" name="referrer_contact" style={{ flex: 1 }}>
-          <Input maxLength={128} placeholder="微信 / 邮箱等" />
+        <Form.Item
+          label={t("referralForm.field.contact")}
+          name="referrer_contact"
+          style={{ flex: 1 }}
+        >
+          <Input maxLength={128} placeholder={t("referralForm.placeholder.contact")} />
         </Form.Item>
-        <Form.Item label="关系" name="relation" style={{ flex: 1 }}>
-          <Input maxLength={64} placeholder="朋友 / 前同事 / 网友…" />
+        <Form.Item label={t("referralForm.field.relation")} name="relation" style={{ flex: 1 }}>
+          <Input maxLength={64} placeholder={t("referralForm.placeholder.relation")} />
         </Form.Item>
       </Space>
       <Space style={{ display: "flex" }} align="start">
-        <Form.Item label="渠道" name="channel" style={{ flex: 1 }}>
-          <Input maxLength={32} placeholder="牛客 / 脉脉 / 熟人直递…" />
+        <Form.Item label={t("referralForm.field.channel")} name="channel" style={{ flex: 1 }}>
+          <Input maxLength={32} placeholder={t("referralForm.placeholder.channel")} />
         </Form.Item>
-        <Form.Item label="内推码" name="referral_code" style={{ flex: 1 }}>
-          <Input maxLength={64} placeholder="官网内推码（选填）" />
+        <Form.Item label={t("referralForm.field.code")} name="referral_code" style={{ flex: 1 }}>
+          <Input maxLength={64} placeholder={t("referralForm.placeholder.code")} />
         </Form.Item>
       </Space>
-      <Form.Item label="状态" name="status">
+      <Form.Item label={t("referralForm.field.status")} name="status">
         <Select options={REFERRAL_STATUS_LABELS_OPTIONS()} />
       </Form.Item>
-      <Form.Item label="关联岗位（选填，删除岗位不影响内推）" name="job_id">
-        <Select allowClear placeholder="输入关键词搜索岗位" {...jobSelect.selectProps} />
+      <Form.Item label={t("referralForm.field.job")} name="job_id">
+        <Select
+          allowClear
+          placeholder={t("referralForm.placeholder.job")}
+          {...jobSelect.selectProps}
+        />
       </Form.Item>
-      <Form.Item label="转化关联漏斗（选填，进入面试及以上即视为转化）" name="track_id">
-        <Select allowClear placeholder="输入关键词搜索进度" {...trackSelect.selectProps} />
+      <Form.Item label={t("referralForm.field.track")} name="track_id">
+        <Select
+          allowClear
+          placeholder={t("referralForm.placeholder.track")}
+          {...trackSelect.selectProps}
+        />
       </Form.Item>
       <Form.Item
-        label="投递日期"
+        label={t("referralForm.field.submittedAt")}
         name="submitted_at"
-        extra="留空表示未知"
+        extra={t("referralForm.hint.submittedAt")}
         getValueProps={(value: string) => ({ value: value ? dayjs(value) : null })}
         normalize={(value: Dayjs | null) => (value ? value.format("YYYY-MM-DD") : "")}
       >
         <DatePicker style={{ width: "100%" }} />
       </Form.Item>
-      <Form.Item label="图片备注（选填，最多 9 张）">
+      <Form.Item label={t("referralForm.field.images", { count: MAX_NOTE_IMAGES })}>
         <Upload
           accept={IMAGE_ACCEPT}
           multiple
@@ -118,12 +149,12 @@ export default function ReferralFormFields({
             loading={uploadingImages}
             disabled={noteImages.length >= MAX_NOTE_IMAGES}
           >
-            上传备注图
+            {t("referralForm.action.uploadImage")}
           </Button>
         </Upload>
         {imageUploadPercent !== null && (
           <Progress
-            aria-label="备注图上传进度"
+            aria-label={t("referralForm.aria.uploadProgress")}
             percent={imageUploadPercent}
             size="small"
             status={imageUploadPercent >= 100 ? "success" : "active"}
@@ -139,7 +170,7 @@ export default function ReferralFormFields({
               >
                 <img
                   src={referralImageUrl(path)}
-                  alt={`备注图 ${index + 1}`}
+                  alt={t("referralForm.imageAlt", { index: index + 1 })}
                   style={{ width: 56, height: 56, objectFit: "cover", borderRadius: 4 }}
                 />
                 <Button
@@ -147,7 +178,7 @@ export default function ReferralFormFields({
                   size="small"
                   danger
                   icon={<CloseOutlined />}
-                  aria-label={`移除备注图 ${index + 1}`}
+                  aria-label={t("referralForm.removeImage", { index: index + 1 })}
                   style={{ position: "absolute", top: -10, right: -10 }}
                   onClick={() => removeImage(path)}
                 />
@@ -156,17 +187,20 @@ export default function ReferralFormFields({
           </Space>
         )}
       </Form.Item>
-      <Form.Item label="备注" name="note">
-        <Input.TextArea autoSize={{ minRows: 2, maxRows: 4 }} placeholder="补充说明（选填）" />
+      <Form.Item label={t("referralForm.field.note")} name="note">
+        <Input.TextArea
+          autoSize={{ minRows: 2, maxRows: 4 }}
+          placeholder={t("referralForm.placeholder.note")}
+        />
       </Form.Item>
     </Form>
   );
 }
 
-/** 状态选项：分色在列表 Tag 上体现，这里只给标签。 */
+/** 状态选项：分色在列表 Tag 上体现，这里只给标签（运行期 `t()`，随语言变化）。 */
 export function REFERRAL_STATUS_LABELS_OPTIONS(): { value: ReferralStatus; label: string }[] {
-  return (Object.keys(REFERRAL_STATUS_LABELS) as ReferralStatus[]).map((value) => ({
+  return (Object.keys(STATUS_LABEL_KEYS) as ReferralStatus[]).map((value) => ({
     value,
-    label: REFERRAL_STATUS_LABELS[value],
+    label: t(STATUS_LABEL_KEYS[value]),
   }));
 }

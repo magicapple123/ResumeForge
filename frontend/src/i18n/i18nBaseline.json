@@ -3,7 +3,7 @@
   "generatedAt": "2026-10-27",
   "rule": "Legacy CJK ceilings plus language-independent AST product-copy fingerprints",
   "src": {
-    "total": 3608,
+    "total": 3580,
     "files": {
       "App.tsx": 0,
       "api/analytics.ts": 0,
@@ -239,7 +239,7 @@
       "components/questionbank/QuestionGroupCards.tsx": 4,
       "components/quickStartPaths.ts": 6,
       "components/referral/ReferralDetailDrawer.tsx": 18,
-      "components/referral/ReferralFormFields.tsx": 28,
+      "components/referral/ReferralFormFields.tsx": 0,
       "components/referral/ReferralFormModal.tsx": 3,
       "components/referral/ReferralListItem.tsx": 11,
       "components/referral/ReferralStatsCard.tsx": 4,
