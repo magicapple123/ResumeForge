@@ -13,6 +13,8 @@ import { PlayCircleOutlined, SaveOutlined } from "@ant-design/icons";
 import { Button, Checkbox, Form, Input, InputNumber, Select, Space, Typography } from "antd";
 import type { FormInstance } from "antd";
 import type { CollectConfig } from "../../../types";
+import { t } from "../../../i18n";
+import { useLocale } from "../../../i18n/i18nContext";
 import CollectSiteFilters from "../CollectSiteFilters";
 
 interface Props {
@@ -39,17 +41,23 @@ export default function CollectConfigForm({
   onSave,
   onStart,
 }: Props) {
+  // 本组件用模块级 t()：必须订阅语言变化，否则切语言后这一块不重渲染。
+  useLocale();
   return (
     <Form form={form} layout="vertical">
-      <Form.Item name="keywords" label="关键词" extra="最多 10 个；与城市至少要填一个。">
-        <Select mode="tags" placeholder="例如：市场营销、财务会计" open={false} />
+      <Form.Item
+        name="keywords"
+        label={t("applyCollect.field.keywords")}
+        extra={t("applyCollect.hint.keywords")}
+      >
+        <Select mode="tags" placeholder={t("applyCollect.placeholder.keywords")} open={false} />
       </Form.Item>
       {/* align="start"：让各列的控件顶边对齐，避免某项说明较长时把旁边的输入框挤得高低不齐。 */}
       <Space size={16} wrap align="start">
-        <Form.Item name="city" label="城市">
-          <Input placeholder="例如：北京" style={{ width: 180 }} />
+        <Form.Item name="city" label={t("applyCollect.field.city")}>
+          <Input placeholder={t("applyCollect.placeholder.city")} style={{ width: 180 }} />
         </Form.Item>
-        <Form.Item name="per_task_limit" label="单批上限">
+        <Form.Item name="per_task_limit" label={t("applyCollect.field.perTaskLimit")}>
           <InputNumber min={1} max={200} style={{ width: 140 }} />
         </Form.Item>
       </Space>
@@ -59,10 +67,10 @@ export default function CollectConfigForm({
       <CollectSiteFilters disabled={disabled} getFilters={getFilters} />
 
       <Space size={16} wrap align="start">
-        <Form.Item name="interval_seconds" label="岗位间隔（秒）">
+        <Form.Item name="interval_seconds" label={t("applyCollect.field.intervalSeconds")}>
           <InputNumber min={1} max={600} style={{ width: 140 }} />
         </Form.Item>
-        <Form.Item name="interval_jitter_seconds" label="随机抖动（秒）">
+        <Form.Item name="interval_jitter_seconds" label={t("applyCollect.field.jitterSeconds")}>
           <InputNumber min={1} max={300} style={{ width: 140 }} />
         </Form.Item>
       </Space>
@@ -74,19 +82,18 @@ export default function CollectConfigForm({
         <Checkbox
           checked={saveSamples}
           onChange={(event) => onSaveSamplesChange(event.target.checked)}
-          aria-label="保存本次抓到的站点原文（用于排查解析问题）"
+          aria-label={t("applyCollect.field.saveSamples")}
         >
-          保存本次抓到的站点原文（用于排查解析问题）
+          {t("applyCollect.field.saveSamples")}
         </Checkbox>
         <Typography.Text type="secondary" style={{ display: "block", marginTop: 4 }}>
-          会保存搜索与详情两个接口的响应原文；只存到本机
-          backend/data/captures/，不进仓库、不进备份。
+          {t("applyCollect.hint.saveSamples")}
         </Typography.Text>
       </Form.Item>
 
       <Space>
         <Button icon={<SaveOutlined />} loading={saving} onClick={onSave}>
-          保存条件
+          {t("applyCollect.action.save")}
         </Button>
         <Button
           type="primary"
@@ -95,7 +102,7 @@ export default function CollectConfigForm({
           disabled={disabled}
           onClick={onStart}
         >
-          开始采集
+          {t("applyCollect.action.start")}
         </Button>
       </Space>
     </Form>
