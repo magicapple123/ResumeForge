@@ -10,6 +10,8 @@
  */
 import { Form, Input, Select, Space } from "antd";
 import { BROWSER_CHOICE_META, type BrowserChoice } from "../../types";
+import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 
 const BROWSER_CHOICE_OPTIONS = (Object.keys(BROWSER_CHOICE_META) as BrowserChoice[]).map(
   (value) => ({
@@ -25,25 +27,27 @@ interface Props {
   compact?: boolean;
 }
 
-export default function BrowserChoiceFields({ label = "受控浏览器", compact = false }: Props) {
+export default function BrowserChoiceFields({ label, compact = false }: Props) {
+  // 本组件用模块级 t()：必须订阅语言变化，否则切语言后字段标签停在旧文案。
+  useLocale();
   // 只有选了「自定义路径」才需要填路径。
   const browserChoice = Form.useWatch("browser_choice") as BrowserChoice | undefined;
   return (
     <Space size={compact ? 8 : 16} wrap>
       <Form.Item
         name="browser_choice"
-        label={label}
+        label={label ?? t("applyUi.browserChoice.label")}
         extra={browserChoice ? BROWSER_CHOICE_META[browserChoice]?.hint : undefined}
       >
         <Select options={BROWSER_CHOICE_OPTIONS} style={{ width: 220 }} />
       </Form.Item>
       <Form.Item
         name="browser_path"
-        label="自定义浏览器路径"
-        extra="仅在「自定义路径」时生效；必须是真实存在的可执行文件。"
+        label={t("applyUi.browserChoice.pathLabel")}
+        extra={t("applyUi.browserChoice.pathExtra")}
       >
         <Input
-          placeholder="例如：C:\\Program Files\\MyBrowser\\browser.exe"
+          placeholder={t("applyUi.browserChoice.pathPlaceholder")}
           disabled={browserChoice !== "custom"}
           style={{ width: 320 }}
         />
