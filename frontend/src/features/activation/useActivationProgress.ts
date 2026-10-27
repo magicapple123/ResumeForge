@@ -14,6 +14,8 @@
  *   时该阶段不得显示完成，改以真实进度呈现（"台账为空"/"已核实 N/M 条主张"）。
  */
 import { useMemo } from "react";
+import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 import type { Profile } from "../../types/profile";
 import type { Stats } from "../../types/search";
 
@@ -81,21 +83,26 @@ function deliverProgressAndCta(stats: Stats): {
   const verified = stats.claim_count - stats.pending_claim_count;
   if (stats.claim_count === 0) {
     return {
-      progress: "台账为空：还没有可核实的主张",
+      progress: t("activationUi.deliver.progressEmpty"),
       cta: {
-        label: "去事实台账录入主张",
-        hint: "把要写进简历的话先记成一条，才谈得上核实",
+        label: t("activationUi.deliver.cta.labelEmpty"),
+        hint: t("activationUi.deliver.cta.hintEmpty"),
         path: "/claims",
       },
     };
   }
-  const progress = `已核实 ${verified}/${stats.claim_count} 条主张`;
+  const progress = t("activationUi.deliver.progressVerified", {
+    verified,
+    total: stats.claim_count,
+  });
   if (stats.pending_claim_count > 0) {
     return {
       progress,
       cta: {
-        label: `核实 ${stats.pending_claim_count} 条待确认事实`,
-        hint: "没核实的说法不会进简历",
+        label: t("activationUi.deliver.cta.labelPending", {
+          count: stats.pending_claim_count,
+        }),
+        hint: t("activationUi.deliver.cta.hintPending"),
         path: "/claims",
       },
     };
@@ -104,8 +111,8 @@ function deliverProgressAndCta(stats: Stats): {
     return {
       progress,
       cta: {
-        label: "去简历中心生成或关联简历",
-        hint: "事实都核实了，还差一份对着岗位的简历",
+        label: t("activationUi.deliver.cta.labelNoResume"),
+        hint: t("activationUi.deliver.cta.hintNoResume"),
         path: "/resumes",
       },
     };
@@ -113,7 +120,8 @@ function deliverProgressAndCta(stats: Stats): {
   return { progress };
 }
 
-/** 由 stats 与 profile 计算三阶段（含未完成时的 CTA）。纯函数，可独立测试。 */
+/** 由 stats 与 profile 计算三阶段（含未完成时的 CTA）。不依赖 React，可独立测试；
+ * 文案在函数体内从语言包取（`t()` 不在模块作用域求值）。 */
 export function computeActivationStages(stats: Stats, profile?: Profile | null): ActivationStage[] {
   const factsDone = isFactsDone(stats, profile);
   const targetDone = isTargetDone(stats);
@@ -123,38 +131,42 @@ export function computeActivationStages(stats: Stats, profile?: Profile | null):
   return [
     {
       key: "facts",
-      title: "准备事实",
-      description: "填好「我的资料」关键字段（姓名与联系方式），或先有台账/简历事实",
+      title: t("activationUi.facts.title"),
+      description: t("activationUi.facts.description"),
       done: factsDone,
       cta: factsDone
         ? undefined
         : {
-            label: "去我的资料录入",
+            label: t("activationUi.facts.cta.label"),
             hint: isProfileFactsReady(profile)
-              ? "手动填写不需要模型"
-              : "姓名与联系方式是生成简历的关键字段，先补全这两项",
+              ? t("activationUi.facts.cta.hintReady")
+              : t("activationUi.facts.cta.hintMissing"),
             path: "/profile",
           },
     },
     {
       key: "target",
-      title: "选择目标岗位",
-      description: "收一个岗位，为它生成或关联一份简历",
+      title: t("activationUi.target.title"),
+      description: t("activationUi.target.description"),
       done: targetDone,
       cta: targetDone
         ? undefined
         : stats.job_count === 0
-          ? { label: "去岗位广场收岗位", hint: "手动录入或自动采集都行", path: "/jobs" }
+          ? {
+              label: t("activationUi.target.cta.labelNoJobs"),
+              hint: t("activationUi.target.cta.hintNoJobs"),
+              path: "/jobs",
+            }
           : {
-              label: "为岗位生成或关联简历",
-              hint: "有岗位了，还差一份对着它的简历",
+              label: t("activationUi.target.cta.labelWithJob"),
+              hint: t("activationUi.target.cta.hintWithJob"),
               path: "/resumes",
             },
     },
     {
       key: "deliver",
-      title: "核实并交付",
-      description: "把台账里的主张逐条核实，有简历后导出或投出",
+      title: t("activationUi.deliver.title"),
+      description: t("activationUi.deliver.description"),
       done: deliverDone,
       progress: deliver.progress,
       cta: deliverDone ? undefined : deliver.cta,
@@ -174,9 +186,12 @@ export function useActivationProgress(
   stages: ActivationStage[];
   allDone: boolean;
 } {
+  const locale = useLocale();
   return useMemo(() => {
+    // 阶段文案随界面语言重算：t() 读 localeStore，locale 必须进依赖。
+    void locale;
     if (!stats) return { stages: [], allDone: false };
     const stages = computeActivationStages(stats, profile);
     return { stages, allDone: stages.every((stage) => stage.done) };
-  }, [stats, profile]);
+  }, [stats, profile, locale]);
 }
