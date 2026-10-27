@@ -8,6 +8,7 @@
  */
 import { App } from "antd";
 import { useEffect, useRef } from "react";
+import { t } from "../../../i18n";
 import type { AssistantConversationBrief } from "../../../types";
 import { markAssistantWelcomeShown } from "../welcomeGate";
 
@@ -54,7 +55,7 @@ export function useAssistantUrlBootstrap({
     if (!conversations.some((item) => item.id === requestedConversationId)) {
       // 链接指向的会话不在已加载的列表里（列表只取最近 100 条）。静默不响应会让用户
       // 以为链接坏了，所以明说一次。
-      message.info("链接里的对话不在当前列表中，可能超出了最近 100 条对话的范围。");
+      message.info(t("assistantHooks.url.info.outOfRange"));
       return;
     }
     selectConversation(requestedConversationId);
