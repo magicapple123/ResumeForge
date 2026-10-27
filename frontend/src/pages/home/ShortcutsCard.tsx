@@ -84,7 +84,7 @@ export function ShortcutsCard() {
           {shortcuts.map((item) => (
             <Link key={item.key} to={item.key} className="home-shortcut">
               <span className="home-shortcut-icon">{item.icon}</span>
-              <span className="home-shortcut-label">{item.label}</span>
+              <span className="home-shortcut-label">{t(item.labelKey)}</span>
             </Link>
           ))}
         </div>
@@ -117,7 +117,7 @@ export function ShortcutsCard() {
             marginTop: 12,
           }}
           value={shortcutDraft}
-          options={MENU_ITEMS.map((item) => ({ value: item.key, label: item.label }))}
+          options={MENU_ITEMS.map((item) => ({ value: item.key, label: t(item.labelKey) }))}
           onChange={(values) => setShortcutDraft(values as string[])}
         />
       </Modal>
