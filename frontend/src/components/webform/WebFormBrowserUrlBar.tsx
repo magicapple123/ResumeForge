@@ -5,6 +5,8 @@ import { Button, Dropdown, Input, Space, Tooltip, Typography, theme } from "antd
 import type { MenuProps } from "antd";
 import { useState } from "react";
 import type { WebFormUrlHistory } from "../../types";
+import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 
 interface Props {
   value: string;
@@ -25,6 +27,8 @@ export default function WebFormBrowserUrlBar({
   onSelectHistory,
   onDeleteHistory,
 }: Props) {
+  // 本组件用模块级 t()：必须订阅语言变化，否则切语言后这一块不重渲染。
+  useLocale();
   const { modal } = App.useApp();
   const { token } = theme.useToken();
   // 点击「打开目标页」后提示就该收掉，而不是等鼠标移开才消失（受控开关）。
@@ -33,9 +37,9 @@ export default function WebFormBrowserUrlBar({
   // 触发器，页面滚动时逐个做定位计算，整页滚动明显卡顿。
   const confirmDelete = (item: WebFormUrlHistory) => {
     modal.confirm({
-      title: "删除这条历史网址？",
-      okText: "删除",
-      cancelText: "取消",
+      title: t("webFormPage.urlBar.confirmDeleteTitle"),
+      okText: t("common.action.delete"),
+      cancelText: t("common.action.cancel"),
       okButtonProps: { danger: true },
       onOk: () => onDeleteHistory(item),
     });
@@ -54,7 +58,7 @@ export default function WebFormBrowserUrlBar({
           size="small"
           danger
           icon={<DeleteOutlined />}
-          aria-label={`删除网址 ${item.url}`}
+          aria-label={t("webFormPage.urlBar.deleteAria", { url: item.url })}
           onClick={(event) => {
             event.stopPropagation();
             confirmDelete(item);
@@ -70,20 +74,20 @@ export default function WebFormBrowserUrlBar({
         className="webform-url-input"
         value={value}
         prefix={<LinkOutlined />}
-        placeholder="输入要填写网申的目标网址（http:// 或 https://）"
+        placeholder={t("webFormPage.urlBar.placeholder")}
         onChange={(event) => onChange(event.target.value)}
         onPressEnter={onOpen}
-        aria-label="网申投递网址"
+        aria-label={t("webFormPage.urlBar.inputAria")}
       />
       <Space className="webform-url-actions" size={8} wrap>
         <Tooltip
           open={openTip}
           onOpenChange={setOpenTip}
-          title="在网申专用浏览器中打开，不会覆盖已有网页"
+          title={t("webFormPage.urlBar.openTooltip")}
         >
           <span onClick={() => setOpenTip(false)}>
             <Button type="primary" loading={busy} disabled={busy} onClick={onOpen}>
-              打开目标页
+              {t("webFormPage.urlBar.open")}
             </Button>
           </span>
         </Tooltip>
@@ -116,7 +120,7 @@ export default function WebFormBrowserUrlBar({
             </div>
           )}
         >
-          <Button disabled={busy || history.length === 0}>历史网址</Button>
+          <Button disabled={busy || history.length === 0}>{t("webFormPage.urlBar.history")}</Button>
         </Dropdown>
       </Space>
     </div>
