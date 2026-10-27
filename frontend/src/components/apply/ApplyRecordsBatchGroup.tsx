@@ -15,7 +15,8 @@ import { isFromInnerControl } from "../common/recordDetailCore";
 import { formatDateTime } from "../../utils/format";
 import { TASK_STATUS_META, type ApplyRecord, type ApplyRecordBatch } from "../../types";
 import { BATCH_ITEM_PAGE_SIZE, type BatchItemsState } from "../../types/applyBatchItems";
-import { TRASH_RECOVERY_NOTE } from "../common/rowActionMenu";
+import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 
 interface BatchGroupProps {
   batch: ApplyRecordBatch;
@@ -53,6 +54,8 @@ export default function BatchGroup({
   onEnterSelecting,
   batchToolbar,
 }: BatchGroupProps) {
+  // 本组件用模块级 t()：必须订阅语言变化，否则切语言后组头停在旧文案。
+  useLocale();
   const statusMeta = TASK_STATUS_META[batch.status];
   // 组头展示命中当前筛选的记录数（轻量分页不携带明细，这个数由后端给出）。
   const matchedCount = batch.matched_count ?? batch.items.length;
@@ -67,22 +70,31 @@ export default function BatchGroup({
           onClick={onToggle}
         >
           {expanded ? <DownOutlined /> : <RightOutlined />}
-          <Typography.Text strong>批次 #{batch.id}</Typography.Text>
+          <Typography.Text strong>{t("applyUi.batch.heading", { id: batch.id })}</Typography.Text>
           <Typography.Text type="secondary">
             {formatDateTime(batch.finished_at || batch.created_at)}
           </Typography.Text>
           <Tag color={statusMeta.color}>{statusMeta.label}</Tag>
           <span className="apply-records-batch-stats">
             <Typography.Text type="secondary">
-              {`${matchedCount} 条记录`}
+              {t("applyUi.batch.recordCount", { count: matchedCount })}
               {batch.succeeded > 0 && (
-                <Typography.Text type="success"> · 成功 {batch.succeeded}</Typography.Text>
+                <Typography.Text type="success">
+                  {" · "}
+                  {t("applyUi.batch.succeeded", { count: batch.succeeded })}
+                </Typography.Text>
               )}
               {batch.failed > 0 && (
-                <Typography.Text type="danger"> · 失败 {batch.failed}</Typography.Text>
+                <Typography.Text type="danger">
+                  {" · "}
+                  {t("applyUi.batch.failed", { count: batch.failed })}
+                </Typography.Text>
               )}
               {batch.skipped > 0 && (
-                <Typography.Text type="secondary"> · 跳过 {batch.skipped}</Typography.Text>
+                <Typography.Text type="secondary">
+                  {" · "}
+                  {t("applyUi.batch.skipped", { count: batch.skipped })}
+                </Typography.Text>
               )}
             </Typography.Text>
           </span>
@@ -94,17 +106,17 @@ export default function BatchGroup({
               : [
                   {
                     key: "batch_select",
-                    label: "批量选择",
+                    label: t("applyUi.batch.selectMode"),
                     icon: <CheckSquareOutlined />,
                     onClick: onEnterSelecting,
                   },
                   {
                     key: "delete-batch",
-                    label: `删除本批（${matchedCount} 条）`,
+                    label: t("applyUi.batch.deleteBatch", { count: matchedCount }),
                     danger: true,
-                    confirm: "删除这一批的记录？",
-                    // i18n-ok: 标题与正文拆开（§4.4 例外），这里的中文就是确认正文本身
-                    confirmBody: `这 ${matchedCount} 条投递记录${TRASH_RECOVERY_NOTE}统计与每日上限也会一并扣减。`,
+                    confirm: t("applyUi.batch.deleteConfirm"),
+                    // 标题与正文拆开（§4.4 例外）：条数只在正文里出现，标题只写动作 + 对象。
+                    confirmBody: t("applyUi.batch.deleteConfirmBody", { count: matchedCount }),
                     onClick: () => onDeleteBatch(batch),
                   },
                 ]
@@ -152,7 +164,9 @@ export default function BatchGroup({
                   style: { cursor: "pointer" },
                 })}
                 locale={{
-                  emptyText: itemsState?.loading ? "正在加载明细…" : "该批次没有命中的记录",
+                  emptyText: itemsState?.loading
+                    ? t("applyUi.batch.loadingItems")
+                    : t("applyUi.batch.emptyItems"),
                 }}
               />
             </>
