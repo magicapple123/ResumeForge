@@ -7,8 +7,13 @@
  */
 import { Button } from "antd";
 import { useState } from "react";
+import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 
 export function useCollapsedList<T>(items: T[], limit = 5) {
+  // 本 hook 的折叠按钮文案必须随语言更新，而消费方组件不在本批清单内：
+  // 在 hook 内订阅一次，调用方渲染时就会跟着重新执行（无需各自加 useLocale）。
+  useLocale();
   const [expanded, setExpanded] = useState(false);
   const hiddenCount = Math.max(0, items.length - limit);
   return {
@@ -22,7 +27,9 @@ export function useCollapsedList<T>(items: T[], limit = 5) {
           style={{ paddingInline: 0, marginTop: 4 }}
           onClick={() => setExpanded((current) => !current)}
         >
-          {expanded ? "收起列表" : `显示全部 ${items.length} 条`}
+          {expanded
+            ? t("common.collapsedList.collapse")
+            : t("common.collapsedList.expand", { count: items.length })}
         </Button>
       ) : null,
   };
