@@ -5,6 +5,8 @@
  */
 import { Alert, Card, Space, Tag, Typography } from "antd";
 import { memo } from "react";
+import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 import type { WebFormFillResult } from "../../types";
 import { FillRateTag } from "./FillRateTag";
 
@@ -14,12 +16,24 @@ export const FillResultCard = memo(function FillResultCard({
 }: {
   result: WebFormFillResult;
 }) {
+  // 本组件用模块级 t()：订阅语言变化，否则切语言后这张卡不重渲染。
+  useLocale();
   return (
-    <Card size="small" title="填充结果">
+    <Card size="small" title={t("webFormPage.fillResult.title")}>
       <Space size="middle" wrap>
-        <Tag color="success">已填 {result.filled}</Tag>
-        {result.unverified ? <Tag color="warning">待确认 {result.unverified}</Tag> : null}
-        {result.failed ? <Tag color="error">失败 {result.failed}</Tag> : null}
+        <Tag color="success">
+          {t("webFormPage.fillResult.tag.filled", { count: result.filled })}
+        </Tag>
+        {result.unverified ? (
+          <Tag color="warning">
+            {t("webFormPage.fillResult.tag.unverified", { count: result.unverified })}
+          </Tag>
+        ) : null}
+        {result.failed ? (
+          <Tag color="error">
+            {t("webFormPage.fillResult.tag.failed", { count: result.failed })}
+          </Tag>
+        ) : null}
         <FillRateTag filled={result.filled} total={result.form_control_total} />
       </Space>
       {result.unverified || result.failed ? (
@@ -29,7 +43,10 @@ export const FillResultCard = memo(function FillResultCard({
             .map((outcome) => (
               <li key={outcome.index}>
                 <Typography.Text type="secondary">
-                  第 {outcome.index + 1} 个控件：{outcome.detail || outcome.status}
+                  {t("webFormPage.fillResult.outcome", {
+                    index: outcome.index + 1,
+                    detail: outcome.detail || outcome.status,
+                  })}
                 </Typography.Text>
               </li>
             ))}
@@ -39,7 +56,7 @@ export const FillResultCard = memo(function FillResultCard({
         style={{ marginTop: 12 }}
         type="info"
         showIcon
-        title="请回到浏览器窗口核对，确认无误后由你自己点击提交"
+        title={t("webFormPage.fillResult.verifyHint")}
       />
     </Card>
   );
