@@ -31,7 +31,6 @@ import type { QuestionAnswer, QuestionBankOut, QuestionBankRecord } from "../typ
 import { t } from "../i18n";
 import { useLocale } from "../i18n/i18nContext";
 import QuestionGroupCards from "./questionbank/QuestionGroupCards";
-import { TRASH_RECOVERY_NOTE } from "./common/rowActionMenu";
 import BankHistoryCard from "./questionbank/BankHistoryCard";
 
 interface Props {
@@ -193,7 +192,7 @@ export default function QuestionBankPanel({
       title: t("questionBankPanel.confirm.bulkDeleteTitle"),
       content: t("questionBankPanel.confirm.bulkDeleteBody", {
         count: ids.length,
-        note: TRASH_RECOVERY_NOTE,
+        note: t("common.note.trashRecovery"),
       }),
       okText: t("common.action.delete"),
       okButtonProps: { danger: true },
