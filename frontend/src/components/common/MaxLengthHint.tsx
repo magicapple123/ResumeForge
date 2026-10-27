@@ -14,6 +14,8 @@
  *   不引入额外订阅，击键重渲仍只发生在 rc-field-form 的 Field 内部。
  */
 import { Input, Typography } from "antd";
+import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 // 类型从 antd 根导出取（`GetProps` + 组件本身）：`antd/es/input` 的 `TextAreaProps`
 // 是深路径内部类型，antd 升级时不保证保留。
 import type { GetProps } from "antd";
@@ -31,10 +33,11 @@ function lengthOf(value: MaxLengthHintProps["value"]): number {
 
 /** 达到 maxLength 时渲染一行小号红字，否则什么都不渲染。 */
 export function MaxLengthHint({ value, maxLength }: MaxLengthHintProps) {
+  useLocale();
   if (maxLength <= 0 || lengthOf(value) < maxLength) return null;
   return (
     <Typography.Text type="danger" style={{ fontSize: 12, display: "block", marginTop: 4 }}>
-      已达 {maxLength} 字上限
+      {t("common.maxLength.reached", { count: maxLength })}
     </Typography.Text>
   );
 }
