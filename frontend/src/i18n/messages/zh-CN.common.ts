@@ -9,6 +9,8 @@ const common = {
   "common.action.discard": "放弃修改",
   "common.action.keep-editing": "继续编辑",
   "common.retry": "重试",
+  "common.required": "必填",
+  "common.placeholder.select": "请选择",
 } as const;
 
 export default common;

@@ -9,6 +9,8 @@ const common = {
   "common.action.discard": "Discard changes",
   "common.action.keep-editing": "Keep editing",
   "common.retry": "Retry",
+  "common.required": "Required",
+  "common.placeholder.select": "Select",
 } as const;
 
 export default common;

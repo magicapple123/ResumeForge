@@ -57,6 +57,7 @@ import fieldPath from "./en-US.fieldPath";
 import applyProgress from "./en-US.applyProgress";
 import collectFilters from "./en-US.collectFilters";
 import llmRecord from "./en-US.llmRecord";
+import educationSection from "./en-US.educationSection";
 
 const enUS = {
   ...core,
@@ -115,6 +116,7 @@ const enUS = {
   ...applyProgress,
   ...collectFilters,
   ...llmRecord,
+  ...educationSection,
 } as const satisfies Record<keyof ZhCNMessages, string>;
 
 export default enUS;

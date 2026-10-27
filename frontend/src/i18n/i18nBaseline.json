@@ -3,7 +3,7 @@
   "generatedAt": "2026-10-27",
   "rule": "Legacy CJK ceilings plus language-independent AST product-copy fingerprints",
   "src": {
-    "total": 4218,
+    "total": 4198,
     "files": {
       "App.tsx": 0,
       "api/analytics.ts": 0,
@@ -199,7 +199,7 @@
       "components/navigation/navigationConfig.ts": 19,
       "components/profile/AwardSection.tsx": 8,
       "components/profile/CampusExperienceSection.tsx": 11,
-      "components/profile/EducationSection.tsx": 32,
+      "components/profile/EducationSection.tsx": 12,
       "components/profile/ExperienceSection.tsx": 12,
       "components/profile/PartialDateSelect.tsx": 9,
       "components/profile/ProfileBasicSection.tsx": 0,
