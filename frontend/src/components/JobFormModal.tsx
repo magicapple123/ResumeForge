@@ -5,6 +5,8 @@ import { useEffect, useRef, useState } from "react";
 import { createJob, parseJobsMultiple, updateJob } from "../api/jobs";
 import { attachmentInputs, useRecognitionFiles } from "../hooks/useRecognitionFiles";
 import { readAsDataUrl } from "../utils/attachments";
+import { t } from "../i18n";
+import { useLocale } from "../i18n/i18nContext";
 import MultiJobDraftList from "./jobs/MultiJobDraftList";
 import JobFormFields from "./jobs/form/JobFormFields";
 import NoteImagesField from "./jobs/form/NoteImagesField";
@@ -55,6 +57,7 @@ export default function JobFormModal({
   onClose,
   onSaved,
 }: Props) {
+  useLocale();
   const [form] = Form.useForm<JobPayload>();
   const { message } = App.useApp();
   const [rawText, setRawText] = useState("");
@@ -134,18 +137,18 @@ export default function JobFormModal({
 
   const addNoteImage = async (file: File) => {
     if (file.size > MAX_NOTE_IMAGE_BYTES) {
-      message.error("单张图片不能超过 2 MB");
+      message.error(t("jobForm.images.tooLarge"));
       return;
     }
     if (noteImages.length >= MAX_NOTE_IMAGES) {
-      message.warning(`备注最多放 ${MAX_NOTE_IMAGES} 张图片`);
+      message.warning(t("jobForm.images.limit", { count: MAX_NOTE_IMAGES }));
       return;
     }
     try {
       const dataUrl = await readAsDataUrl(file);
       setNoteImages((current) => [...current, dataUrl]);
     } catch {
-      message.error("读取图片失败，请重试");
+      message.error(t("jobForm.images.readFailed"));
     }
   };
 
@@ -156,7 +159,7 @@ export default function JobFormModal({
     if (submittingRef.current) return;
     const value = rawText.trim();
     if (!value && files.length === 0) {
-      message.warning("请先粘贴招聘信息，或添加截图、上传文档");
+      message.warning(t("jobForm.parse.needMaterial"));
       return;
     }
 
@@ -179,7 +182,7 @@ export default function JobFormModal({
         setParseWarnings(result.warnings ?? []);
         setRecognizedText("");
         setRecognitionSource(null);
-        message.warning("没有识别到内容，请检查资料或稍后重试");
+        message.warning(t("jobForm.parse.noContent"));
         return;
       }
       if (result.items.length > 1) {
@@ -188,7 +191,7 @@ export default function JobFormModal({
         setDrafts(result.items);
         setDraftsEngine(result.parse_engine);
         setParseWarnings(result.warnings ?? []);
-        message.success(`识别出 ${result.items.length} 份招聘信息，请确认后保存`);
+        message.success(t("jobForm.parse.multiFound", { count: result.items.length }));
         return;
       }
       const {
@@ -204,21 +207,21 @@ export default function JobFormModal({
       if (RECOGNIZED_CONTENT_FIELDS.some((field) => draft[field].trim())) {
         form.setFieldsValue(draft);
       } else {
-        message.warning("没有识别到内容，表单未改动");
+        message.warning(t("jobForm.parse.noFields"));
       }
       setParseWarnings(warnings);
       setRecognizedText(recognized ?? "");
       // 提示条几秒后就没了，但"是 AI 还是本地规则"要一直留在表单上。
       setRecognitionSource(recognitionSource);
       message.success(
-        `${recognitionSource === "ai" ? "已使用 AI" : "已使用本地规则"}识别并填入表单，请核对后再保存`,
+        t(recognitionSource === "ai" ? "jobForm.parse.filledByAi" : "jobForm.parse.filledByRule"),
       );
     } catch (err) {
       if (requestId !== parseRequestId.current) return;
       setParseWarnings([]);
       setRecognizedText("");
       setRecognitionSource(null);
-      message.error(err instanceof Error ? err.message : "识别招聘信息失败");
+      message.error(err instanceof Error ? err.message : t("jobForm.parse.failed"));
     } finally {
       if (requestId === parseRequestId.current) setParsing(false);
     }
@@ -234,7 +237,7 @@ export default function JobFormModal({
     for (const draft of chosen) {
       try {
         await createJob({
-          title: draft.title.trim() || "待补充岗位",
+          title: draft.title.trim() || t("jobForm.drafts.fallbackTitle"),
           company: draft.company,
           location: draft.location,
           salary: draft.salary,
@@ -250,19 +253,24 @@ export default function JobFormModal({
         created += 1;
       } catch (err) {
         failures.push(
-          `${draft.title.trim() || "未命名岗位"}：${err instanceof Error ? err.message : "保存失败"}`,
+          t("jobForm.drafts.failure", {
+            title: draft.title.trim() || t("jobForm.drafts.unnamed"),
+            reason: err instanceof Error ? err.message : t("jobForm.save.failed"),
+          }),
         );
       }
     }
     submittingRef.current = false;
     setSavingDrafts(false);
     if (created > 0) {
-      message.success(`已保存 ${created} 个岗位`);
+      message.success(t("jobForm.drafts.saved", { count: created }));
       onSaved();
     }
     if (failures.length > 0) {
       // 部分失败时留在面板上，用户能看到哪几条没成功、原文也还在。
-      message.error(`有 ${failures.length} 条未保存：${failures[0]}`);
+      message.error(
+        t("jobForm.drafts.partialFailed", { count: failures.length, message: failures[0] }),
+      );
       return;
     }
     close(true);
@@ -281,14 +289,14 @@ export default function JobFormModal({
 
   /** 输入方式 → 溯源标注（多份导入时也要按同一套规则标注）。 */
   const sourceForInputKind = (kind: RecognitionInputKind): JobRecognitionSource => {
-    if (kind === "image") return "图片识别";
-    if (kind === "document") return "文档识别";
-    return "粘贴文本识别";
+    if (kind === "image") return "图片识别"; // i18n-ok: 录入方式是提交后端的协议值
+    if (kind === "document") return "文档识别"; // i18n-ok: 同上
+    return "粘贴文本识别"; // i18n-ok: 同上
   };
 
   /** 按"这次识别用了什么输入"决定溯源标注；没做过识别就是手动填写。 */
   const recognitionSourceValue = (): JobRecognitionSource => {
-    if (!recognitionSource) return "手动填写";
+    if (!recognitionSource) return "手动填写"; // i18n-ok: 同上（手动填写也是录入方式）
     return sourceForInputKind(inputKind);
   };
 
@@ -326,16 +334,16 @@ export default function JobFormModal({
     try {
       if (isEdit && initial) {
         await updateJob(initial.id, payload);
-        message.success("岗位已更新");
+        message.success(t("jobForm.save.updated"));
         onSaved(initial.id);
       } else {
         const created = await createJob(payload);
-        message.success("岗位已添加");
+        message.success(t("jobForm.save.created"));
         onSaved(created.id);
       }
       close(true);
     } catch (err) {
-      message.error(err instanceof Error ? err.message : "保存失败");
+      message.error(err instanceof Error ? err.message : t("jobForm.save.failed"));
     } finally {
       submittingRef.current = false;
       setSubmitting(false);
@@ -344,12 +352,18 @@ export default function JobFormModal({
 
   return (
     <Modal
-      title={multiMode ? "确认要导入的招聘信息" : isEdit ? "编辑岗位" : "手动添加岗位"}
+      title={
+        multiMode
+          ? t("jobForm.title.confirmImport")
+          : isEdit
+            ? t("jobForm.title.edit")
+            : t("jobForm.title.create")
+      }
       open={open}
       onOk={() => void submit()}
       onCancel={() => close()}
-      okText="保存"
-      cancelText="取消"
+      okText={t("common.action.save")}
+      cancelText={t("common.action.cancel")}
       confirmLoading={submitting}
       okButtonProps={{ disabled: parsing || submitting }}
       cancelButtonProps={{ disabled: submitting }}
@@ -372,7 +386,9 @@ export default function JobFormModal({
         <MultiJobDraftList
           drafts={drafts}
           saving={savingDrafts}
-          engineLabel={draftsEngine === "ai" ? "AI 拆分" : "按分隔符拆分"}
+          engineLabel={
+            draftsEngine === "ai" ? t("jobForm.drafts.engineAi") : t("jobForm.drafts.engineRule")
+          }
           onSave={(chosen) => void saveDrafts(chosen)}
           onEditSingle={editSingleDraft}
           onCancel={() => setDrafts([])}
@@ -382,7 +398,10 @@ export default function JobFormModal({
           form={form}
           layout="vertical"
           disabled={submitting}
-          initialValues={{ job_type: "校招", status: "开放中" }}
+          initialValues={{
+            job_type: "校招", // i18n-ok: 岗位类型是落库的数据值（types/job.ts）
+            status: "开放中", // i18n-ok: 岗位状态是落库的数据值（types/job.ts）
+          }}
         >
           {!isEdit && (
             <RecognitionSourceSection
