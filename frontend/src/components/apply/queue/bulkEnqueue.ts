@@ -8,8 +8,15 @@
  *
  * 两条显式确认直接带上（`confirm_unanalyzed` / `confirm_real_gap`）：用户点的是
  * 「加入投递队列」这个明确动作，等于知情选择跳过逐条弹窗——投递前仍有准入核对兜底。
+ *
+ * ## 界面文案在 `bulkEnqueue.*` 语言包里
+ *
+ * 本模块是纯函数、不在 React 组件里，因此拿不到 `useLocale()`；用模块级 `t()` 即可，
+ * 它在**事件处理时**被调用，每次重新读当前语言，不存在"切语言后还留着旧文案"的问题。
+ * 反过来，模块作用域直接求值 `t()` 是错的（交接单 §8.1）：那会在模块求值时把语言钉死。
  */
 import { addToQueue, QueueConflictError } from "../../../api/apply";
+import { t } from "../../../i18n";
 
 export interface BulkEnqueueOutcome {
   /** 成功加入队列的条数。 */
@@ -23,6 +30,7 @@ export interface BulkEnqueueOutcome {
 }
 
 export function isAlreadyQueued(err: unknown): boolean {
+  // i18n-ok: 这里匹配的是后端返回的错误文案（协议耦合），不是界面文案；翻译了永远匹配不上。
   return err instanceof QueueConflictError && err.detail.message.includes("已在投递队列中");
 }
 
@@ -42,18 +50,31 @@ export async function bulkEnqueueJobs(jobIds: number[]): Promise<BulkEnqueueOutc
       else
         outcome.failed.push({
           jobId,
-          message: err instanceof Error ? err.message : "加入投递队列失败",
+          // `err.message` 是后端原文，原样透传；只有拿不到 Error 时才用兜底文案。
+          message: err instanceof Error ? err.message : t("bulkEnqueue.error.enqueueFailed"),
         });
     }
   }
   return outcome;
 }
 
-/** 把聚合账目写成给用户看的一句话（失败明细由调用方按需展开）。 */
+/**
+ * 把聚合账目写成给用户看的一句话（失败明细由调用方按需展开）。
+ *
+ * 每个分句都是一条完整的 key（不做词块拼接），分句之间的分隔符也来自语言包：
+ * 中文是全角逗号、英文是半角逗号加空格。`t()` 在函数体内调用，切语言后下一次入队
+ * 就会用新语言（见文件头的 §8.1 说明）。
+ */
 export function bulkEnqueueSummary(outcome: BulkEnqueueOutcome): string {
-  const parts = [`已加入投递队列 ${outcome.enqueued} 个`];
-  if (outcome.alreadyQueued) parts.push(`${outcome.alreadyQueued} 个已在队列`);
-  if (outcome.unsupported) parts.push(`${outcome.unsupported} 个来源不支持自动投递`);
-  if (outcome.failed.length) parts.push(`${outcome.failed.length} 个失败`);
-  return parts.join("，");
+  const parts = [t("bulkEnqueue.summary.enqueued", { count: outcome.enqueued })];
+  if (outcome.alreadyQueued) {
+    parts.push(t("bulkEnqueue.summary.alreadyQueued", { count: outcome.alreadyQueued }));
+  }
+  if (outcome.unsupported) {
+    parts.push(t("bulkEnqueue.summary.unsupported", { count: outcome.unsupported }));
+  }
+  if (outcome.failed.length) {
+    parts.push(t("bulkEnqueue.summary.failed", { count: outcome.failed.length }));
+  }
+  return parts.join(t("bulkEnqueue.summary.separator"));
 }

@@ -14,10 +14,10 @@
  * ReactNode（i18n 没有富文本插值），拆成「前半句」+「，」再拼按钮会把标点留在代码里。
  * 因此把句尾的顿号并进这个 key，按钮另起一条 `…Action`。英文同理保留逗号+空格。
  *
- * ## `{summary}` 是一条仍然中文的聚合账目
+ * ## `{summary}` 是另一条语言包拼出来的聚合账目
  *
- * 它来自 `components/apply/queue/bulkEnqueue.ts::bulkEnqueueSummary()`（尚未迁移）。
- * 这里当参数接收，等那个文件迁移时不改本文件。
+ * 它来自 `components/apply/queue/bulkEnqueue.ts::bulkEnqueueSummary()`，分句与分隔符都在
+ * `bulkEnqueue.*` 语言包里（2026-10-27 已迁移）。这里当参数接收，不重复存一份。
  */
 const collectResult = {
   "collectResult.title": "本次采集结果",
