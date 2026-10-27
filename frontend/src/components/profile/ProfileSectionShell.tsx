@@ -13,6 +13,8 @@ import { memo } from "react";
 import type { CSSProperties, PointerEvent as ReactPointerEvent, ReactNode } from "react";
 import { SECTION_LABELS } from "./ProfileSectionConfig";
 import type { ProfileSectionKey } from "./ProfileSectionConfig";
+import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 
 export type { ProfileSectionKey } from "./ProfileSectionConfig";
 
@@ -102,17 +104,19 @@ function SectionNudgeButtons({
   canMoveDown: boolean;
   onMoveByOffset: (sectionKey: ProfileSectionKey, offset: -1 | 1) => void;
 }) {
+  // 本组件用模块级 t()：必须订阅语言变化，否则切语言后这两个按钮不重渲染。
+  useLocale();
   const guardPointerDown = (event: ReactPointerEvent<HTMLButtonElement>) => {
     // 防御性阻止冒泡：微调按钮绝不能开启拖拽。
     event.stopPropagation();
   };
   return (
     <>
-      <Tooltip title={`上移“${label}”`}>
+      <Tooltip title={t("profileUi.section.moveUpTooltip", { label })}>
         <button
           type="button"
           className="profile-section-nudge profile-section-nudge-up"
-          aria-label={`上移${label}`}
+          aria-label={t("profileUi.section.moveUpAria", { label })}
           disabled={!canMoveUp}
           onPointerDown={guardPointerDown}
           onClick={() => onMoveByOffset(sectionKey, -1)}
@@ -120,11 +124,11 @@ function SectionNudgeButtons({
           <ArrowUpOutlined />
         </button>
       </Tooltip>
-      <Tooltip title={`下移“${label}”`}>
+      <Tooltip title={t("profileUi.section.moveDownTooltip", { label })}>
         <button
           type="button"
           className="profile-section-nudge profile-section-nudge-down"
-          aria-label={`下移${label}`}
+          aria-label={t("profileUi.section.moveDownAria", { label })}
           disabled={!canMoveDown}
           onPointerDown={guardPointerDown}
           onClick={() => onMoveByOffset(sectionKey, 1)}
@@ -157,6 +161,8 @@ export const SortableProfileSection = memo(function SortableProfileSection({
   actions,
   children,
 }: SortableProfileSectionProps) {
+  // 本组件用模块级 t()：必须订阅语言变化，否则切语言后这一块不重渲染。
+  useLocale();
   const displayLabel = label && label.trim() ? label : (SECTION_LABELS[sectionKey] ?? sectionKey);
   // 标题栏是每张卡唯一的标题：卡片本体不再自带标题（否则展开时会和标题栏重复）。
   // 查看态是可点的折叠开关；编辑态只是普通标题，折叠由「全部展开/收起」在查看态接管。
@@ -172,7 +178,12 @@ export const SortableProfileSection = memo(function SortableProfileSection({
           type="button"
           className="profile-section-collapse-toggle"
           aria-expanded={!collapsed}
-          aria-label={`${collapsed ? "展开" : "收起"}${displayLabel}`}
+          aria-label={t(
+            collapsed ? "profileUi.section.expandAria" : "profileUi.section.collapseAria",
+            {
+              label: displayLabel,
+            },
+          )}
           onClick={() => onToggleCollapsed(sectionKey)}
         >
           <span className="profile-section-collapse-icon">
@@ -212,7 +223,7 @@ export const SortableProfileSection = memo(function SortableProfileSection({
           {/* 键盘换位没有视觉反馈的替代品：读屏用户需要被告知"现在排第几"。
               内容随 order 变化而变化，aria-live 才会播报（挂载时的初始内容不播报）。 */}
           <span role="status" aria-live="polite" style={VISUALLY_HIDDEN_STYLE}>
-            {`${displayLabel} 已移到第 ${order + 1} 位`}
+            {t("profileUi.section.movedTo", { label: displayLabel, order: order + 1 })}
           </span>
           <SectionNudgeButtons
             sectionKey={sectionKey}
@@ -221,11 +232,11 @@ export const SortableProfileSection = memo(function SortableProfileSection({
             canMoveDown={canMoveDown}
             onMoveByOffset={onMoveByOffset}
           />
-          <Tooltip title={`拖动调整“${displayLabel}”顺序`}>
+          <Tooltip title={t("profileUi.section.dragTooltip", { label: displayLabel })}>
             <button
               type="button"
               className="profile-section-drag-handle"
-              aria-label={`拖动调整${displayLabel}顺序`}
+              aria-label={t("profileUi.section.dragAria", { label: displayLabel })}
               onPointerDown={(event) => onHandlePointerDown(event, sectionKey)}
               onKeyDown={(event) => {
                 if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return;
