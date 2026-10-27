@@ -4,6 +4,8 @@ import { DeleteOutlined, EditOutlined, EyeOutlined, RobotOutlined } from "@ant-d
 import { Space, Table, Tag, Typography } from "antd";
 import type { TableColumnsType } from "antd";
 import type { ResumeTemplateDetail } from "../../types";
+import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 import { RowActions } from "../common/RowActions";
 
 interface Props {
@@ -23,24 +25,27 @@ export default function TemplateCustomTable({
   onAsk,
   onDelete,
 }: Props) {
+  useLocale();
   const columns: TableColumnsType<ResumeTemplateDetail> = [
     {
-      title: "模板",
+      title: t("templatesUi.table.column.template"),
       dataIndex: "name",
       render: (value: string, row) => (
         <Space orientation="vertical" size={0}>
           <Space size={6}>
             <b>{value}</b>
-            {row.source_name ? <Tag>来自 {row.source_name}</Tag> : null}
+            {row.source_name ? (
+              <Tag>{t("templatesUi.table.source", { name: row.source_name })}</Tag>
+            ) : null}
           </Space>
           <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-            {row.description || "（无说明）"}
+            {row.description || t("templatesUi.table.noDescription")}
           </Typography.Text>
         </Space>
       ),
     },
     {
-      title: "操作",
+      title: t("templatesUi.table.column.actions"),
       key: "actions",
       width: 96,
       render: (_, row) => (
@@ -48,13 +53,13 @@ export default function TemplateCustomTable({
           more={[
             {
               key: "preview",
-              label: "预览效果",
+              label: t("templatesUi.table.action.preview"),
               icon: <EyeOutlined />,
               onClick: () => onPreview(row),
             },
             {
               key: "edit",
-              label: "编辑",
+              label: t("templatesUi.table.action.edit"),
               icon: <EditOutlined />,
               onClick: () => onEdit(row),
             },
@@ -62,7 +67,7 @@ export default function TemplateCustomTable({
               ? [
                   {
                     key: "ask",
-                    label: "找助手改这个模板",
+                    label: t("templatesUi.table.action.ask"),
                     icon: <RobotOutlined />,
                     onClick: () => onAsk(row),
                   },
@@ -70,10 +75,10 @@ export default function TemplateCustomTable({
               : []),
             {
               key: "delete",
-              label: "删除",
+              label: t("templatesUi.table.action.delete"),
               icon: <DeleteOutlined />,
               danger: true,
-              confirm: "删除模板「" + row.name + "」？引用它的简历会退回默认模板。",
+              confirm: t("templatesUi.table.confirm.delete", { name: row.name }),
               onClick: () => onDelete(row),
             },
           ]}
