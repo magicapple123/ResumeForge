@@ -1,9 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 /** 会话列表对外的接线契约（2026-10-28 从 ConversationSidebar 拆出，压 500 行预算）。 */
-import type {
-  AssistantConversationBrief,
-  AssistantSurface,
-} from "../../../types";
+import type { AssistantConversationBrief, AssistantSurface } from "../../../types";
 
 export interface Props {
   className?: string;

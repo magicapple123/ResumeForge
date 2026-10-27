@@ -138,7 +138,9 @@ export default function UserGuideModal({
       onClose();
       onSampleLoaded();
     } catch (err) {
-      message.error(err instanceof Error ? err.message : t("userGuideFlow.modal.toast.sampleFailed"));
+      message.error(
+        err instanceof Error ? err.message : t("userGuideFlow.modal.toast.sampleFailed"),
+      );
       setLoadingSample(false);
     }
   };
@@ -220,7 +222,9 @@ export default function UserGuideModal({
           /* 首启动首屏：三条都通向"第一份可交付简历"，选一条顺的走；
            完整 8 步保留在「查看完整指南」后面，一步不少。 */
           <section className="user-guide-quickstart" aria-live="polite">
-            <Typography.Title level={4}>{t("userGuideFlow.modal.quickStart.heading")}</Typography.Title>
+            <Typography.Title level={4}>
+              {t("userGuideFlow.modal.quickStart.heading")}
+            </Typography.Title>
             <Typography.Paragraph className="user-guide-description">
               {t("userGuideFlow.modal.quickStart.description")}
             </Typography.Paragraph>

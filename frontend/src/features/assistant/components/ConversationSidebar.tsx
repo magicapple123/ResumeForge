@@ -32,10 +32,7 @@ import {
 } from "antd";
 import EmptyState from "../../../components/common/EmptyState";
 import { memo, useState } from "react";
-import type {
-  AssistantConversationBrief,
-  ConversationFilter,
-} from "../../../types";
+import type { AssistantConversationBrief, ConversationFilter } from "../../../types";
 import type { Props } from "./ConversationSidebar.types";
 import { conversationToMaterial, exportConversation } from "../../../api/assistant";
 import { copyText } from "../../../utils/clipboard";

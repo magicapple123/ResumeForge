@@ -5,11 +5,7 @@
  */
 import type { ReactNode, RefObject } from "react";
 import type { ResumeFormatConfig } from "../../types/resumeFormat";
-import type {
-  ResumeContent,
-  ResumeDetail,
-  ResumeLayout,
-} from "../../types";
+import type { ResumeContent, ResumeDetail, ResumeLayout } from "../../types";
 import type { LayoutMeasure } from "../../utils/resumeLayoutMeasure";
 import type { ResumePreviewHandle } from "../ResumePreview";
 import type { RichTextEditAdapter } from "../resume-preview/richText";

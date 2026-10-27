@@ -29,7 +29,8 @@ export const EQUALITY_EXEMPT_KEYS = {
   "appConfig.preset.xai": "Provider brand name spelled identically",
   "appConfig.preset.mistral": "Provider brand name spelled identically",
   // The API key label is the same technical term in Chinese UI (original copy used "API Key").
-  "userGuide.setupProfile.step1.point9.lead": "Technical term used verbatim in the original Chinese copy",
+  "userGuide.setupProfile.step1.point9.lead":
+    "Technical term used verbatim in the original Chinese copy",
 } as const satisfies Readonly<Record<string, string>>;
 
 export function isEqualityExempt(key: string): boolean {
