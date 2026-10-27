@@ -127,11 +127,11 @@ export default function ResumeFontCard() {
       // 先乐观改本地值再刷新：按钮与「当前使用」标签必须当场变，不能让用户对着
       // 一颗没反应的按钮猜"到底生效没生效"。
       setPendingActive({ value: name });
-      message.success(name ? `已切换到「${name}」` : "已回到系统字体");
+      message.success(name ? t("fonts.card.activated", { name }) : t("fonts.card.reset-to-system"));
       setPreviewName(null);
       await load();
     } catch (err) {
-      message.error(err instanceof Error ? err.message : "切换字体失败");
+      message.error(err instanceof Error ? err.message : t("fonts.card.activate-failed"));
     } finally {
       // 清单已经是服务端的新结果，覆盖值完成使命（失败时也要清，界面回到真实状态）。
       setPendingActive(null);
@@ -140,15 +140,15 @@ export default function ResumeFontCard() {
 
   const remove = (name: string) => {
     modal.confirm({
-      title: `删除字体「${name}」？`,
+      title: t("fonts.card.delete-title", { name }),
       // 直删，没有回收站：这句话必须写明"没有恢复入口"，否则用户会按"删除先进回收站"的
       // 既有印象去找，而字体文件不在回收站里。
       content: t("fonts.card.delete-body"),
-      okText: "删除",
-      cancelText: "取消",
+      okText: t("common.action.delete"),
+      cancelText: t("common.action.cancel"),
       onOk: async () => {
         await deleteResumeFont(name);
-        message.success("已删除这个字体");
+        message.success(t("fonts.card.deleted"));
         await load();
       },
     });
@@ -159,17 +159,17 @@ export default function ResumeFontCard() {
     if (!renameTarget) return;
     const label = renameTarget.value.trim();
     if (!label) {
-      message.warning("字体名称不能为空");
+      message.warning(t("fonts.card.name-required"));
       return;
     }
     setRenameBusy(true);
     try {
       await renameResumeFont(renameTarget.name, label);
-      message.success("已重命名字体");
+      message.success(t("fonts.card.renamed"));
       setRenameTarget(null);
       await load();
     } catch (err) {
-      message.error(err instanceof Error ? err.message : "重命名字体失败");
+      message.error(err instanceof Error ? err.message : t("fonts.card.rename-failed"));
     } finally {
       setRenameBusy(false);
     }
@@ -183,7 +183,7 @@ export default function ResumeFontCard() {
   const activeName = pendingActive ? pendingActive.value : (data?.active ?? null);
 
   return (
-    <Card className="settings-card settings-font-card" title="简历字体">
+    <Card className="settings-card settings-font-card" title={t("fonts.card.title")}>
       <Typography.Paragraph type="secondary" className="settings-font-intro">
         {t("fonts.card.description")}
       </Typography.Paragraph>
@@ -212,7 +212,7 @@ export default function ResumeFontCard() {
                   icon={item.name === activeName ? <CheckOutlined /> : undefined}
                   onClick={() => void activate(item.name)}
                 >
-                  设为当前
+                  {t("fonts.builtin.activate")}
                 </Button>,
                 // 删除收进「···」：原来是一颗裸露的红色垃圾桶，密集列表里既抢眼又容易误点。
                 <Dropdown
@@ -220,12 +220,16 @@ export default function ResumeFontCard() {
                   trigger={["click"]}
                   menu={{
                     items: [
-                      { key: "preview", icon: <EyeOutlined />, label: "预览字体" },
-                      { key: "rename", icon: <EditOutlined />, label: "重命名" },
+                      {
+                        key: "preview",
+                        icon: <EyeOutlined />,
+                        label: t("fonts.card.menu-preview"),
+                      },
+                      { key: "rename", icon: <EditOutlined />, label: t("fonts.card.menu-rename") },
                       {
                         key: "delete",
                         icon: <DeleteOutlined />,
-                        label: "删除",
+                        label: t("common.action.delete"),
                         danger: true,
                       },
                     ],
@@ -240,7 +244,7 @@ export default function ResumeFontCard() {
                   <Button
                     size="small"
                     icon={<MoreOutlined />}
-                    aria-label={`更多字体操作（${item.name}）`}
+                    aria-label={t("fonts.card.more-aria", { name: item.name })}
                   />
                 </Dropdown>,
               ]}
@@ -273,7 +277,7 @@ export default function ResumeFontCard() {
           读起来像按钮的说明文字（2026-10-24 用户截图）。现在两者各归各位。 */}
       <div className="settings-font-footer">
         <Button disabled={!activeName || undefined} onClick={() => void activate(null)}>
-          回到系统字体
+          {t("fonts.card.reset")}
         </Button>
         <Typography.Text type="secondary" className="settings-font-footnote">
           {t("fonts.card.reset-hint")}
@@ -282,19 +286,19 @@ export default function ResumeFontCard() {
 
       <Modal
         open={renameTarget !== null}
-        title="重命名字体"
+        title={t("fonts.card.rename-title")}
         onCancel={() => setRenameTarget(null)}
         onOk={() => void submitRename()}
         confirmLoading={renameBusy}
-        okText="保存"
-        cancelText="取消"
+        okText={t("common.action.save")}
+        cancelText={t("common.action.cancel")}
         destroyOnHidden
       >
         <Input
-          aria-label="字体名称"
+          aria-label={t("fonts.card.name-aria")}
           value={renameTarget?.value ?? ""}
           maxLength={40}
-          placeholder="给这款字体起个名字"
+          placeholder={t("fonts.card.name-placeholder")}
           onChange={(event) =>
             setRenameTarget((current) =>
               current ? { ...current, value: event.target.value } : current,
@@ -303,7 +307,7 @@ export default function ResumeFontCard() {
           onPressEnter={() => void submitRename()}
         />
         <Typography.Paragraph type="secondary" style={{ margin: "8px 0 0", fontSize: 12 }}>
-          只改显示名。原文件名保持不变：{renameTarget?.name}
+          {t("fonts.card.rename-hint", { name: renameTarget?.name ?? "" })}
         </Typography.Paragraph>
       </Modal>
 
