@@ -6,6 +6,8 @@ import { Button, Form, Tooltip } from "antd";
 import type { FormListFieldData } from "antd";
 import { memo, useRef } from "react";
 import type { ReactNode } from "react";
+import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 import {
   PROFILE_FILL_KEYS,
   type ProfileFillItem,
@@ -72,6 +74,7 @@ export default function ResumeListSection({
   children,
   fillSection,
 }: Props) {
+  useLocale();
   const fill = useProfileFill();
   const form = Form.useFormInstance();
   const rootRef = useRef<HTMLDivElement | null>(null);
@@ -199,9 +202,9 @@ export default function ResumeListSection({
                     />
                   )}
                 </div>
-                <Tooltip title={`删除这一条${title}`}>
+                <Tooltip title={t("editor.listSection.removeEntry", { label: title })}>
                   <Button
-                    aria-label={`删除${title}`}
+                    aria-label={t("editor.listSection.removeEntryAria", { label: title })}
                     type="text"
                     danger
                     size="small"
@@ -222,7 +225,7 @@ export default function ResumeListSection({
               icon={<PlusOutlined />}
               onClick={() => add({ ...emptyValue })}
             >
-              添加{title}
+              {t("editor.listSection.addEntry", { label: title })}
             </Button>
           </div>
         )}
