@@ -10,6 +10,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Button } from "antd";
+import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 import type { ProfileSaveControl } from "./profileSaveBridge";
 import { usePrefersReducedMotion } from "./usePrefersReducedMotion";
 
@@ -22,6 +24,7 @@ export interface TouTouSaveCardProps {
 }
 
 export default function TouTouSaveCard({ control }: TouTouSaveCardProps) {
+  useLocale();
   const prefersReducedMotion = usePrefersReducedMotion();
   // 退场要留住最后一份 control：control 归 null 后仍需多留 EXIT_MS 播完反向动画。
   const [shown, setShown] = useState<ProfileSaveControl | null>(control);
@@ -59,12 +62,12 @@ export default function TouTouSaveCard({ control }: TouTouSaveCardProps) {
     <div
       className={`tt-card tt-save-card${leaving ? " is-leaving" : ""}`}
       role="group"
-      aria-label="保存简历资料"
+      aria-label={t("touTou.save.ariaLabel")}
     >
       <p className="tt-save-card-title">
         {/* 脏状态提示点：含义由标题文字承载，圆点纯装饰（读屏隐藏）。 */}
         <span className="tt-save-card-dot" aria-hidden="true" />
-        资料有未保存的修改
+        {t("touTou.save.title")}
       </p>
       <div className="tt-save-card-actions">
         <Button
@@ -78,7 +81,7 @@ export default function TouTouSaveCard({ control }: TouTouSaveCardProps) {
             shown.onSave();
           }}
         >
-          保存资料
+          {t("touTou.save.save")}
         </Button>
         <Button
           size="small"
@@ -87,7 +90,7 @@ export default function TouTouSaveCard({ control }: TouTouSaveCardProps) {
             shown.onCancel();
           }}
         >
-          取消
+          {t("touTou.save.cancel")}
         </Button>
       </div>
       {/* 指向悬浮球的小尾巴（球在卡片右下方，尾巴水平对齐球心）。 */}
