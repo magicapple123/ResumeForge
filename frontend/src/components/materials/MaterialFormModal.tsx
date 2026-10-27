@@ -17,6 +17,7 @@ import {
 } from "../../utils/attachments";
 import { t } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
+import { materialCategoryLabel } from "../../i18n/enum/knowledge";
 
 /** 与后端 MAX_MATERIAL_* 保持一致（服务端仍是权威校验）。 */
 const MAX_FILES = 10;
@@ -189,7 +190,7 @@ export default function MaterialFormModal({
             // tags 模式的取值是数组，这里始终只放一项，对外仍当单个字符串用。
             value={category ? [category] : []}
             showSearch
-            options={options.map((item) => ({ value: item, label: item }))}
+            options={options.map((item) => ({ value: item, label: materialCategoryLabel(item) }))}
             // 允许输入新分类：资料类型很个人化，固定的那几个只能算起点。
             // 不加 maxCount={1}：antd 在已选数达到 maxCount 时会把下拉里所有
             // 未选中项置灰禁用，导致编辑时改选不了其他分类；onChange 只取
