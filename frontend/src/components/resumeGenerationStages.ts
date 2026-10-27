@@ -10,22 +10,48 @@
  *   整理资料 → 筛选资料 → 调用模型 → [修复 / 改写] → 完成。
  * 「修复 / 改写」是同一阶段（都是生成之后的二次修正，且不一定会发生），合并成一个
  * 「校验修复」；映射不上的 `progress` 文案返回 null，前端只显示文字、不硬凑一个阶段。
+ *
+ * 阶段表只存**语言包 key**（渲染处 `t()`，模块作用域不求值）；`stageForProgressMessage`
+ * 里的中文是后端 `progress` 事件原文，属于协议值，永远不翻。
  */
+import type { MessageKey } from "../i18n";
 
 export type ResumeGenerationStageKey = "prepare" | "select" | "generate" | "repair" | "done";
 
 export interface ResumeGenerationStage {
   key: ResumeGenerationStageKey;
-  title: string;
-  description: string;
+  /** 阶段标题（语言包 key；渲染处 `t(stage.titleKey)`）。 */
+  titleKey: MessageKey;
+  /** 阶段说明（语言包 key）。 */
+  descriptionKey: MessageKey;
 }
 
 export const RESUME_GENERATION_STAGES: ResumeGenerationStage[] = [
-  { key: "prepare", title: "整理资料", description: "读取个人资料与岗位要求" },
-  { key: "select", title: "筛选资料", description: "按篇幅预算挑选相关内容" },
-  { key: "generate", title: "调用模型生成", description: "模型正在撰写简历正文" },
-  { key: "repair", title: "校验修复", description: "修正格式或改写空话套话" },
-  { key: "done", title: "完成", description: "结果已保存" },
+  {
+    key: "prepare",
+    titleKey: "appConfig.progressStage.prepare.title",
+    descriptionKey: "appConfig.progressStage.prepare.description",
+  },
+  {
+    key: "select",
+    titleKey: "appConfig.progressStage.select.title",
+    descriptionKey: "appConfig.progressStage.select.description",
+  },
+  {
+    key: "generate",
+    titleKey: "appConfig.progressStage.generate.title",
+    descriptionKey: "appConfig.progressStage.generate.description",
+  },
+  {
+    key: "repair",
+    titleKey: "appConfig.progressStage.repair.title",
+    descriptionKey: "appConfig.progressStage.repair.description",
+  },
+  {
+    key: "done",
+    titleKey: "appConfig.progressStage.done.title",
+    descriptionKey: "appConfig.progressStage.done.description",
+  },
 ];
 
 const STAGE_INDEX = new Map<ResumeGenerationStageKey, number>(
@@ -46,11 +72,15 @@ export function stageIndexOf(key: ResumeGenerationStageKey | null): number {
  */
 export function stageForProgressMessage(message: string): ResumeGenerationStageKey | null {
   const text = message.trim();
+  // i18n-ok: 后端 progress 事件原文，按短语匹配，属于协议值
   if (text.includes("正在调用模型")) return "generate";
+  // i18n-ok: 后端 progress 事件原文，按短语匹配，属于协议值
   if (text.includes("修复") || text.includes("改写") || text.includes("重新生成")) {
     return "repair";
   }
+  // i18n-ok: 后端 progress 事件原文，按短语匹配，属于协议值
   if (text.startsWith("已整理") || text.startsWith("已从完整资料中筛选")) return "select";
+  // i18n-ok: 后端 progress 事件原文，按短语匹配，属于协议值
   if (text.includes("整理") || text.includes("分析岗位要求")) return "prepare";
   return null;
 }
