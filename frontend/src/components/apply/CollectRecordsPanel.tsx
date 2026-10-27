@@ -19,6 +19,7 @@ import { TASK_STATUS_META, type ApplyTask } from "../../types";
 import { formatDateTime } from "../../utils/format";
 import CollectResultPanel from "./CollectResultPanel";
 import { t } from "../../i18n";
+import { TASK_STATUS_LABEL_KEYS } from "../../i18n/enum/apply";
 import { useLocale } from "../../i18n/i18nContext";
 
 /** 采集批次持续累积，一页 20 条走服务端分页（/api/apply/tasks/page）。 */
@@ -123,6 +124,8 @@ export default function CollectRecordsPanel({ disabled = false, refreshKey = 0 }
         className="apply-collect-records"
         items={records.map((record) => {
           const meta = TASK_STATUS_META[record.status];
+          // 未登记的状态码（后端新增）回退原码，与旧行为一致。
+          const statusKey = TASK_STATUS_LABEL_KEYS[record.status];
           const condition = conditionText(record);
           return {
             key: String(record.id),
@@ -132,7 +135,7 @@ export default function CollectRecordsPanel({ disabled = false, refreshKey = 0 }
                 <Typography.Text strong>
                   {formatDateTime(record.finished_at || record.created_at)}
                 </Typography.Text>
-                <Tag color={meta?.color}>{meta?.label ?? record.status}</Tag>
+                <Tag color={meta?.color}>{statusKey ? t(statusKey) : record.status}</Tag>
                 {condition && <Typography.Text type="secondary">{condition}</Typography.Text>}
                 <Typography.Text>{resultText(record)}</Typography.Text>
               </Space>
