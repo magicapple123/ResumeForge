@@ -78,6 +78,7 @@ import searchCard from "./en-US.searchCard";
 import interviewReview from "./en-US.interviewReview";
 import resumeSuggestions from "./en-US.resumeSuggestions";
 import manualBackups from "./en-US.manualBackups";
+import storageStats from "./en-US.storageStats";
 
 const enUS = {
   ...core,
@@ -157,6 +158,7 @@ const enUS = {
   ...interviewReview,
   ...resumeSuggestions,
   ...manualBackups,
+  ...storageStats,
 } as const satisfies Record<keyof ZhCNMessages, string>;
 
 export default enUS;

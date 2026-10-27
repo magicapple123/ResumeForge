@@ -33,11 +33,19 @@ import {
 } from "../../api/storage";
 import LoadingBlock from "../common/LoadingBlock";
 import { ListyItem } from "../common/ListyItem";
+import { t, type MessageKey } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 
 /** 与后端默认保留期一致：界面上固定展示的就是这一档。 */
 const CLEANUP_DAYS = 30;
-/** 固定提示语：保留策略在后端，文案跟着它走（改了常量也要改这句）。 */
-const RECENT_BACKUPS_HINT = "最近 3 份备份不会出现在清单里";
+/**
+ * 固定提示语的**词表 key**。
+ *
+ * 保留策略在后端，文案跟着它走（改了常量也要改那句）。模块作用域里不能调 `t()`
+ * ——那会把语言固定在模块求值那一刻（交接单 §8.1），所以这里只存 key，用它的两处
+ * 都 `t(...)`。
+ */
+const RECENT_BACKUPS_HINT_KEY: MessageKey = "storageStats.recentBackupsHint";
 /** 清单里最多列多少个文件：更多时只说个数，确认后一并移走。 */
 const CANDIDATE_PREVIEW_LIMIT = 20;
 
@@ -55,6 +63,8 @@ function percentColor(percent: number): string {
 }
 
 export default function StorageStatsCard() {
+  // 本组件用模块级 t()：必须订阅语言变化，否则切语言后这一块不重渲染。
+  useLocale();
   const { message, modal } = App.useApp();
   const [stats, setStats] = useState<StorageStats | null>(null);
   const [loading, setLoading] = useState(true);
@@ -71,7 +81,7 @@ export default function StorageStatsCard() {
     try {
       setStats(await getStorageStats());
     } catch (err) {
-      setError(err instanceof Error ? err.message : "读取存储占用失败");
+      setError(err instanceof Error ? err.message : t("storageStats.loadFailed"));
     } finally {
       setLoading(false);
     }
@@ -88,7 +98,7 @@ export default function StorageStatsCard() {
       })
       .catch((err) => {
         if (cancelled) return;
-        setError(err instanceof Error ? err.message : "读取存储占用失败");
+        setError(err instanceof Error ? err.message : t("storageStats.loadFailed"));
         setLoading(false);
       });
     return () => {
@@ -102,14 +112,14 @@ export default function StorageStatsCard() {
       // 不传 categories = 全部类别：弹窗里再按类别勾选。
       const plan = await previewCleanup(CLEANUP_DAYS);
       if (plan.totals.files === 0) {
-        message.success(`没有超过 ${CLEANUP_DAYS} 天的旧备份或日志，暂时不用清理`);
+        message.success(t("storageStats.cleanup.nothing", { days: CLEANUP_DAYS }));
         return;
       }
       setSelectedCategories(plan.categories.map((item) => item.key));
       setCleanupPlan(plan);
       setCleanupOpen(true);
     } catch (err) {
-      message.error(err instanceof Error ? err.message : "读取清理清单失败");
+      message.error(err instanceof Error ? err.message : t("storageStats.cleanup.planFailed"));
     }
   };
 
@@ -124,7 +134,7 @@ export default function StorageStatsCard() {
     try {
       setCleanupPlan(await previewCleanup(CLEANUP_DAYS, next));
     } catch (err) {
-      message.error(err instanceof Error ? err.message : "读取清理清单失败");
+      message.error(err instanceof Error ? err.message : t("storageStats.cleanup.planFailed"));
     }
   };
 
@@ -136,22 +146,28 @@ export default function StorageStatsCard() {
       setCleanupOpen(false);
       const failed = result.failed.length;
       modal.success({
-        title: `已移走 ${result.moved} 个文件`,
+        title: t("storageStats.cleanup.done.title", { count: result.moved }),
         content: (
           <Space orientation="vertical" size={4} style={{ width: "100%" }}>
             <span>
-              释放 {formatSize(result.freed_bytes)}，已移到本地数据目录下的回收目录，不会彻底删除。
+              {t("storageStats.cleanup.done.freed", { size: formatSize(result.freed_bytes) })}
             </span>
             <span>
-              {RECENT_BACKUPS_HINT}；本次保留 {result.skipped.length} 份。
+              {t("storageStats.cleanup.done.kept", {
+                hint: t(RECENT_BACKUPS_HINT_KEY),
+                count: result.skipped.length,
+              })}
             </span>
-            {failed > 0 ? <span>另有 {failed} 个文件被占用，未能移动。</span> : null}
+            {/* 条件片段单独一条 key：只在有文件被占用时出现，句式与上面两句无关。 */}
+            {failed > 0 ? (
+              <span>{t("storageStats.cleanup.done.busy", { count: failed })}</span>
+            ) : null}
           </Space>
         ),
       });
       void load();
     } catch (err) {
-      message.error(err instanceof Error ? err.message : "清理失败");
+      message.error(err instanceof Error ? err.message : t("storageStats.cleanup.failed"));
     } finally {
       setCleanupRunning(false);
     }
@@ -163,20 +179,20 @@ export default function StorageStatsCard() {
 
   return (
     <Card
-      title="存储占用"
+      title={t("storageStats.title")}
       className="settings-card"
       extra={
         <Space size={4}>
           {/* 清理旧文件（R19）：移到数据目录下的回收目录，不彻底删除；清单先给用户看。 */}
           <Button size="small" icon={<DeleteOutlined />} onClick={() => void openCleanup()}>
-            清理旧文件
+            {t("storageStats.cleanup.action")}
           </Button>
           <Button
             size="small"
             type="text"
             icon={<ReloadOutlined />}
             onClick={() => void load()}
-            aria-label="刷新存储占用"
+            aria-label={t("storageStats.refresh.aria")}
           />
         </Space>
       }
@@ -188,9 +204,10 @@ export default function StorageStatsCard() {
       ) : stats ? (
         <Space orientation="vertical" style={{ width: "100%" }} size={8}>
           <Typography.Text type="secondary">
-            数据目录共占用 {formatSize(stats.total_bytes)}（{stats.total_file_count} 个文件）。
-            这里只显示体积，不会读取或改动任何文件内容；占用大的目录（如投递浏览器的用户目录）
-            属于正常现象。
+            {t("storageStats.summary", {
+              size: formatSize(stats.total_bytes),
+              count: stats.total_file_count,
+            })}
           </Typography.Text>
           {top.some((item) => item.size_bytes > 0) ? (
             <Listy
@@ -216,16 +233,20 @@ export default function StorageStatsCard() {
               )}
             />
           ) : (
-            <Typography.Text type="secondary">还没有产生本地文件</Typography.Text>
+            <Typography.Text type="secondary">{t("storageStats.empty")}</Typography.Text>
           )}
         </Space>
       ) : null}
 
       <Modal
-        title="清理旧文件"
+        title={t("storageStats.cleanup.title")}
         open={cleanupOpen}
-        okText={cleanupPlan ? `移走 ${cleanupPlan.totals.files} 个文件` : "移走"}
-        cancelText="取消"
+        okText={
+          cleanupPlan
+            ? t("storageStats.cleanup.okCount", { count: cleanupPlan.totals.files })
+            : t("storageStats.cleanup.ok")
+        }
+        cancelText={t("common.action.cancel")}
         confirmLoading={cleanupRunning}
         okButtonProps={{ disabled: (cleanupPlan?.totals.files ?? 0) === 0 }}
         onOk={() => void confirmCleanup()}
@@ -246,13 +267,18 @@ export default function StorageStatsCard() {
             <Alert
               type="info"
               showIcon
-              title={`以下文件超过 ${cleanupPlan.older_than_days} 天没有变动，选中类别共 ${formatSize(
-                cleanupPlan.totals.bytes,
-              )}（${cleanupPlan.totals.files} 个）`}
-              description="清理会把它们移到本地数据目录下的回收目录（按时间分文件夹），不会彻底删除；确认无误后可自行在文件管理器里删除那个目录。"
+              title={t("storageStats.cleanup.plan.title", {
+                days: cleanupPlan.older_than_days,
+                size: formatSize(cleanupPlan.totals.bytes),
+                count: cleanupPlan.totals.files,
+              })}
+              description={t("storageStats.cleanup.plan.description")}
             />
             <Typography.Text type="secondary">
-              {RECENT_BACKUPS_HINT}（本次已保留 {cleanupPlan.skipped.length} 份）。
+              {t("storageStats.cleanup.plan.kept", {
+                hint: t(RECENT_BACKUPS_HINT_KEY),
+                count: cleanupPlan.skipped.length,
+              })}
             </Typography.Text>
             {/* 按类别分组勾选：名称 / 文件数 / 体积都在同一行，默认全选。 */}
             <Checkbox.Group
@@ -269,7 +295,10 @@ export default function StorageStatsCard() {
                     <Checkbox key={category.key} value={category.key}>
                       <span>{category.label}</span>
                       <Typography.Text type="secondary">
-                        {` ${stat?.files ?? 0} 个文件 · ${formatSize(stat?.bytes ?? 0)}`}
+                        {` ${t("storageStats.category.files", {
+                          files: stat?.files ?? 0,
+                          size: formatSize(stat?.bytes ?? 0),
+                        })}`}
                       </Typography.Text>
                     </Checkbox>
                   );
@@ -293,8 +322,9 @@ export default function StorageStatsCard() {
               />
               {listedCandidates.length > CANDIDATE_PREVIEW_LIMIT ? (
                 <Typography.Text type="secondary">
-                  还有 {listedCandidates.length - CANDIDATE_PREVIEW_LIMIT}{" "}
-                  个文件未列出，确认后一并移走。
+                  {t("storageStats.cleanup.more", {
+                    count: listedCandidates.length - CANDIDATE_PREVIEW_LIMIT,
+                  })}
                 </Typography.Text>
               ) : null}
             </div>
