@@ -33,6 +33,8 @@
  */
 import { Alert, Button, Space, Typography } from "antd";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 import { fetchResumePreviewPdf } from "../../api/resumes";
 import type { ResumeContent } from "../../types/resume";
 import LoadingBlock from "../common/LoadingBlock";
@@ -125,6 +127,8 @@ export default function ExactPreviewPanel({
   scale = 1,
   content,
 }: Props) {
+  useLocale();
+
   /** 当前**可见**的那一份（旧图，双缓冲里留在下面）。 */
   const [shown, setShown] = useState<PreviewShot | null>(null);
   /** 正在加载、完全透明的那一份；`onLoad` 后顶替成 `shown`。 */
@@ -293,7 +297,7 @@ export default function ExactPreviewPanel({
           // 取消不是错误：用户还在拖滑块，这次请求本来就该被丢弃。
           if (controller.signal.aborted || !isCurrent()) return;
           setLoading(false);
-          setError(err instanceof Error ? err.message : "精确预览生成失败");
+          setError(err instanceof Error ? err.message : t("preview.exact.errorTitle"));
         });
     }, DEBOUNCE_MS);
 
@@ -366,13 +370,12 @@ export default function ExactPreviewPanel({
       <Alert
         type="error"
         showIcon
-        title="精确预览生成失败"
+        title={t("preview.exact.errorTitle")}
         description={
           <Space orientation="vertical" size={4}>
             <Typography.Text>{error}</Typography.Text>
             <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-              草稿预览不受影响，切换回「草稿」即可继续编辑。导出 PDF 很可能是同一个原因
-              （最常见的是本机缺少中文字体）。
+              {t("preview.exact.errorHint")}
             </Typography.Text>
           </Space>
         }
@@ -388,7 +391,7 @@ export default function ExactPreviewPanel({
         {/* 只在这个口径可见时才摆加载占位：草稿模式下这块是隐藏的，占位没有意义
             （而且会让每份简历的弹窗里都多一个空壳）。 */}
         {active && busy && !current ? (
-          <LoadingBlock tip="正在按导出引擎排版…" minHeight={height} />
+          <LoadingBlock tip={t("preview.exact.typesetting")} minHeight={height} />
         ) : null}
 
         {current && INLINE_PDF_OK ? (
@@ -408,7 +411,7 @@ export default function ExactPreviewPanel({
               <iframe
                 // 与导出的 PDF 是同一份字节。`#zoom=page-width` 是相框高度的契约（见 `withPageWidthZoom`）。
                 src={withPageWidthZoom(current.url)}
-                title="简历精确预览（导出 PDF）"
+                title={t("preview.exact.frameTitle")}
                 className="exact-preview-frame"
                 style={{ height: frameHeight }}
               />
@@ -416,7 +419,7 @@ export default function ExactPreviewPanel({
                 // 透明的预加载层：`onLoad` 前谁也看不见它，但浏览器已经在解析新 PDF。
                 <iframe
                   src={withPageWidthZoom(pending.url)}
-                  title="正在加载的精确预览"
+                  title={t("preview.exact.pendingFrameTitle")}
                   aria-hidden="true"
                   tabIndex={-1}
                   className="exact-preview-frame exact-preview-frame-pending"
@@ -426,7 +429,7 @@ export default function ExactPreviewPanel({
               ) : null}
               {busy ? (
                 <div className="exact-preview-overlay" aria-busy="true">
-                  <span className="exact-preview-overlay-text">正在按新设置重新排版…</span>
+                  <span className="exact-preview-overlay-text">{t("exact.status.busy")}</span>
                 </div>
               ) : null}
             </div>
@@ -438,18 +441,15 @@ export default function ExactPreviewPanel({
             <Alert
               type="info"
               showIcon
-              title="当前环境没有内置 PDF 查看器"
+              title={t("preview.exact.noViewerTitle")}
               description={
                 <Space orientation="vertical" size={6}>
-                  <Typography.Text>
-                    PDF 已经按导出引擎排好了，但这里没法直接嵌在页面里显示。点下面的按钮用系统的 PDF
-                    阅读器打开——内容与点「导出」下载到的完全一样。
-                  </Typography.Text>
+                  <Typography.Text>{t("preview.exact.noViewerBody")}</Typography.Text>
                   <Button
                     type="primary"
                     onClick={() => window.open(current.url, "_blank", "noopener,noreferrer")}
                   >
-                    用系统阅读器打开
+                    {t("preview.exact.openInSystemViewer")}
                   </Button>
                 </Space>
               }
