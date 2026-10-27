@@ -116,6 +116,16 @@ export function isTechnicalContext(node: ts.Node): boolean {
   return false;
 }
 
+/**
+ * 形如 `editor.field.school` 的 locale key：全小写开头、点分或连字符分段、无空格。
+ *
+ * 这类字符串是**指向语言包的引用**，本身不是要显示给用户的文案。不排除它们，
+ * 从字面量改写成 key 的迁移会被判成"新增产品文案"——2026-10-27 迁 `profileText`
+ * 的三张字段表时就是这样撞上的：值换成了 `editor.field.xxx`，指纹反而多出两条。
+ */
+const LOCALE_KEY = /^[a-z][a-zA-Z0-9]*(?:[._-][a-zA-Z0-9]+)+$/;
+
 export function hasCopyText(value: string): boolean {
+  if (LOCALE_KEY.test(value.trim())) return false;
   return /[\p{L}\p{N}]/u.test(value);
 }
