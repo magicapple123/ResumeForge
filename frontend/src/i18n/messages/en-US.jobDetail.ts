@@ -37,6 +37,7 @@ const jobDetail = {
   "jobDetail.field.status": "Status",
   "jobDetail.field.postedAt": "Posted",
   "jobDetail.field.source": "Source",
+  "jobDetail.field.recognitionSource": "Entry method",
   "jobDetail.section.skills": "Skill tags",
   "jobDetail.section.description": "Job description",
   "jobDetail.section.requirements": "Requirements",

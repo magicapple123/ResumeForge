@@ -34,6 +34,7 @@ const jobDetail = {
   "jobDetail.field.status": "状态",
   "jobDetail.field.postedAt": "发布时间",
   "jobDetail.field.source": "来源",
+  "jobDetail.field.recognitionSource": "录入方式",
   "jobDetail.section.skills": "岗位技能标签",
   "jobDetail.section.description": "岗位描述",
   "jobDetail.section.requirements": "任职要求",

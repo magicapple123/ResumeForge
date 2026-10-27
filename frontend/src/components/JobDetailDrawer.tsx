@@ -256,7 +256,8 @@ export default function JobDetailDrawer({
             </Descriptions.Item>
             {/* 「录入方式」是系统记录的这条岗位怎么进来的（手动填写/粘贴识别/采集…），
                 与用户可编辑的「来源」是两回事；标签分开写，避免两个"来源"互相打架。 */}
-            <Descriptions.Item label="录入方式">
+            <Descriptions.Item label={t("jobDetail.field.recognitionSource")}>
+              {/* i18n-ok: 录入方式的值是后端返回的协议值（RECOGNITION_SOURCES），不随界面语言变 */}
               {job.recognition_source || "手动"}
             </Descriptions.Item>
             {/* 0042 起「来源」是用户可编辑的独立字段（不再追加进备注）；没填就不占一行，
