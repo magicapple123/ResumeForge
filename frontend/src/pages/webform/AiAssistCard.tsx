@@ -5,6 +5,8 @@
  */
 import { Card, Space, Switch, Typography } from "antd";
 import { memo } from "react";
+import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 
 /** **memo**：props 在击键路径上稳定，打字时整块跳过重渲。 */
 export const AiAssistCard = memo(function AiAssistCard({
@@ -18,31 +20,32 @@ export const AiAssistCard = memo(function AiAssistCard({
   liveRunning: boolean | undefined;
   onAiEnabledChange: (enabled: boolean) => void;
 }) {
+  // 本组件用模块级 t()：订阅语言变化，否则切语言后这张卡的文案不重渲染。
+  useLocale();
   return (
-    <Card size="small" title="未识别字段智能辅助">
+    <Card size="small" title={t("webFormPage.aiAssist.title")}>
       <Space size="middle" wrap>
         <Switch
           checked={aiOn}
           disabled={aiAvailable !== true}
           onChange={onAiEnabledChange}
-          aria-label="AI 字段识别辅助"
+          aria-label={t("webFormPage.aiAssist.toggleAria")}
         />
         {aiAvailable === true ? (
           <Typography.Text type="secondary">
-            规则未识别的字段，可交由你在「设置」里配置的模型辅助判断。
-            <Typography.Text strong>
-              只发页面上本来就有的文字与字段名，不发你的资料内容
-            </Typography.Text>
-            ；命中的行会标上「AI 建议」并且默认不勾选。
+            {t("webFormPage.aiAssist.body.lead")}
+            <Typography.Text strong>{t("webFormPage.aiAssist.body.strong")}</Typography.Text>
+            {t("webFormPage.aiAssist.body.tail")}
           </Typography.Text>
         ) : (
           <Typography.Text type="secondary">
-            尚未配置大模型，暂时无法使用。到「设置」页填好 Base URL
-            与模型名之后，规则认不出的框就能交给 AI 识别。
+            {t("webFormPage.aiAssist.unavailable")}
           </Typography.Text>
         )}
         {liveRunning ? (
-          <Typography.Text type="warning">改动会在下次「开启」时生效</Typography.Text>
+          <Typography.Text type="warning">
+            {t("webFormPage.aiAssist.pendingRestart")}
+          </Typography.Text>
         ) : null}
       </Space>
     </Card>
