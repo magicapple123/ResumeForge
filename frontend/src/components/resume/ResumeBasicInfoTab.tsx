@@ -7,6 +7,7 @@
  */
 import { ImportOutlined } from "@ant-design/icons";
 import { Button, Form, Input, Row, Space, Tooltip } from "antd";
+import { useI18n } from "../../i18n/i18nContext";
 import EditorFieldCol from "../resume-editor/EditorFieldCol";
 import { useEditorFieldVisibility } from "../resume-editor/editorSchemaContext";
 
@@ -18,64 +19,65 @@ interface Props {
 }
 
 export default function ResumeBasicInfoTab({ summarySource, onFillSummary }: Props) {
+  const { t } = useI18n();
   // basic_info 与 summary 都落在「基本信息」页签，可见字段取两者并集。
   const visible = useEditorFieldVisibility("basic_info", "summary");
   return (
     <Row gutter={12}>
       <EditorFieldCol xs={24} md={8} show={visible.show("name")}>
-        <Form.Item name="name" label="姓名">
+        <Form.Item name="name" label={t("editor.field.personName")}>
           <Input />
         </Form.Item>
       </EditorFieldCol>
       <EditorFieldCol xs={12} md={8} show={visible.show("gender")}>
-        <Form.Item name="gender" label="性别">
+        <Form.Item name="gender" label={t("editor.field.gender")}>
           <Input />
         </Form.Item>
       </EditorFieldCol>
       <EditorFieldCol xs={12} md={8} show={visible.show("birth_year")}>
-        <Form.Item name="birth_year" label="出生年份">
+        <Form.Item name="birth_year" label={t("editor.field.birthYear")}>
           <Input />
         </Form.Item>
       </EditorFieldCol>
       <EditorFieldCol xs={24} md={8} show={visible.show("phone")}>
-        <Form.Item name="phone" label="手机">
+        <Form.Item name="phone" label={t("editor.field.phone")}>
           <Input />
         </Form.Item>
       </EditorFieldCol>
       <EditorFieldCol xs={24} md={8} show={visible.show("email")}>
-        <Form.Item name="email" label="邮箱">
+        <Form.Item name="email" label={t("editor.field.email")}>
           <Input />
         </Form.Item>
       </EditorFieldCol>
       <EditorFieldCol xs={24} md={8} show={visible.show("city")}>
-        <Form.Item name="city" label="所在城市">
+        <Form.Item name="city" label={t("resume.basicInfo.city")}>
           <Input />
         </Form.Item>
       </EditorFieldCol>
       <EditorFieldCol xs={24} md={8} show={visible.show("github")}>
-        <Form.Item name="github" label="GitHub 主页">
-          <Input placeholder="https://github.com/用户名" />
+        <Form.Item name="github" label={t("fieldPath.githubProfile")}>
+          <Input placeholder={t("resume.basicInfo.githubPlaceholder")} />
         </Form.Item>
       </EditorFieldCol>
       <EditorFieldCol xs={24} md={8} show={visible.show("personal_website")}>
-        <Form.Item name="personal_website" label="个人主页">
+        <Form.Item name="personal_website" label={t("editor.field.website")}>
           <Input placeholder="https://example.com" />
         </Form.Item>
       </EditorFieldCol>
       <EditorFieldCol span={24} show={visible.show("job_intent")}>
-        <Form.Item name="job_intent" label="求职意向">
+        <Form.Item name="job_intent" label={t("editor.field.jobIntent")}>
           <Input />
         </Form.Item>
       </EditorFieldCol>
       <EditorFieldCol span={24} show={visible.show("summary")}>
-        <Form.Item name="summary" label="个人总结">
+        <Form.Item name="summary" label={t("editor.field.summary")}>
           <Input.TextArea rows={5} />
         </Form.Item>
         {summarySource && (
           <Space size={6} style={{ marginTop: -8, marginBottom: 12 }}>
-            <Tooltip title="把「我的资料」里的个人总结写到这一栏（会覆盖当前内容，可再用撤销前的原文改回）">
+            <Tooltip title={t("resume.basicInfo.fillSummaryHint")}>
               <Button size="small" icon={<ImportOutlined />} onClick={onFillSummary}>
-                从我的资料填入个人总结
+                {t("resume.basicInfo.fillSummary")}
               </Button>
             </Tooltip>
           </Space>
