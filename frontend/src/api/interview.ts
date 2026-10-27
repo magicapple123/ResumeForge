@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 /** 模拟面试接口。 */
+import { t } from "../i18n";
 import type {
   InterviewAnalysis,
   InterviewAnalysisPayload,
@@ -68,10 +69,11 @@ export async function submitInterviewAnswerStream(
     (event) => {
       if (event.type === "question_delta" && event.text) onQuestionDelta(event.text);
       else if (event.type === "done" && event.result) result = event.result;
-      else if (event.type === "error") throw new Error(event.detail || "面试官开不了口，请重试");
+      else if (event.type === "error")
+        throw new Error(event.detail || t("apiErrors.interview.streamFailed"));
     },
   );
-  if (!result) throw new Error("面试官开不了口，请重试");
+  if (!result) throw new Error(t("apiErrors.interview.streamFailed"));
   return result;
 }
 
