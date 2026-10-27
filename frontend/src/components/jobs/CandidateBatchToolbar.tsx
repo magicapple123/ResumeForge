@@ -78,7 +78,7 @@ export default function CandidateBatchToolbar({
       wrap
       size={16}
       style={{ marginTop: 12, marginBottom: 12, rowGap: 8 }}
-      aria-label="备选岗位批量工具栏"
+      aria-label={t("jobs.candidate.batchToolbar.aria")}
     >
       {/* 选择区：全选本页 + 计数 + 全选全部。 */}
       <Space wrap size={8}>
@@ -88,13 +88,16 @@ export default function CandidateBatchToolbar({
           disabled={busy}
           onChange={(event) => onToggleAll(event.target.checked)}
         >
-          全选本页
+          {t("jobs.candidate.batchToolbar.selectPage")}
         </Checkbox>
         <Typography.Text type="secondary">
-          已选 {selectedCount} / {totalCount > 0 ? totalCount : pageCount} 条
+          {t("jobs.candidate.batchToolbar.selectedCount", {
+            selected: selectedCount,
+            total: totalCount > 0 ? totalCount : pageCount,
+          })}
         </Typography.Text>
         {onSelectAllPages && totalCount > 0 && (
-          <Tooltip title={`按当前筛选，一键选中全部 ${totalCount} 条候选（跨页，不止当前页）`}>
+          <Tooltip title={t("jobs.candidate.batchToolbar.selectAllTooltip", { count: totalCount })}>
             <Button
               type="link"
               size="small"
@@ -103,7 +106,7 @@ export default function CandidateBatchToolbar({
               loading={selectAllPagesLoading}
               onClick={onSelectAllPages}
             >
-              全选全部
+              {t("jobs.candidate.batchToolbar.selectAll")}
             </Button>
           </Tooltip>
         )}
@@ -117,7 +120,7 @@ export default function CandidateBatchToolbar({
             loading={exporting}
             onClick={onExportCsv}
           >
-            导出 CSV
+            {t("jobs.candidate.batchToolbar.exportCsv")}
           </Button>
         )}
         {/* 批量删除的二次确认是**就地 Popconfirm**（Popover 形态，不占容器层）：
@@ -138,17 +141,17 @@ export default function CandidateBatchToolbar({
             disabled={!hasSelection || busy}
             loading={batchAction === "delete"}
           >
-            批量删除
+            {t("jobs.candidate.batchToolbar.delete")}
           </Button>
         </Popconfirm>
         {/* 一键全清（含跨页选中）；「全选本页」再点一次只清本页。 */}
         <Button size="small" disabled={!hasSelection || busy} onClick={onClear}>
-          清空选择
+          {t("jobs.candidate.batchToolbar.clear")}
         </Button>
       </Space>
       {/* 退出区：即使什么都没选，也要能退出去。 */}
       <Button size="small" disabled={busy} onClick={onExit}>
-        退出多选
+        {t("jobs.candidate.batchToolbar.exit")}
       </Button>
     </Space>
   );
