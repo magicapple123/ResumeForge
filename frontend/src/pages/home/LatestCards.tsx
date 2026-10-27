@@ -8,15 +8,22 @@ import { ListyItem } from "../../components/common/ListyItem";
 import { Link } from "react-router-dom";
 import type { Stats } from "../../types";
 import { formatDateTime } from "../../utils/format";
+import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 
 export function LatestCards({ stats }: { stats: Stats | undefined }) {
+  // 本组件用模块级 t()，必须订阅语言变化。
+  useLocale();
   return (
     <>
       <Row gutter={[16, 16]} style={{ marginTop: 16 }}>
         <Col xs={24} lg={12}>
-          <Card title="最近岗位" extra={<Link to="/jobs">查看全部</Link>}>
+          <Card
+            title={t("homePage.latest.jobs.title")}
+            extra={<Link to="/jobs">{t("homePage.action.viewAll")}</Link>}
+          >
             {(stats?.latest_jobs.length ?? 0) === 0 ? (
-              <Empty description="暂无岗位，去「岗位广场」手动添加" />
+              <Empty description={t("homePage.latest.jobs.empty")} />
             ) : (
               <Listy
                 items={stats?.latest_jobs ?? []}
@@ -37,9 +44,12 @@ export function LatestCards({ stats }: { stats: Stats | undefined }) {
           </Card>
         </Col>
         <Col xs={24} lg={12}>
-          <Card title="最近生成的简历" extra={<Link to="/resumes">查看全部</Link>}>
+          <Card
+            title={t("homePage.latest.resumes.title")}
+            extra={<Link to="/resumes">{t("homePage.action.viewAll")}</Link>}
+          >
             {(stats?.latest_resumes.length ?? 0) === 0 ? (
-              <Empty description="暂无简历记录，去「岗位广场」选个岗位试试" />
+              <Empty description={t("homePage.latest.resumes.empty")} />
             ) : (
               <Listy
                 items={stats?.latest_resumes ?? []}
@@ -63,8 +73,8 @@ export function LatestCards({ stats }: { stats: Stats | undefined }) {
       {(stats?.latest_applications.length ?? 0) > 0 && (
         <Card
           style={{ marginTop: 16 }}
-          title="最近投出去的"
-          extra={<Link to="/tracker">看进度</Link>}
+          title={t("homePage.latest.applications.title")}
+          extra={<Link to="/tracker">{t("homePage.action.viewProgress")}</Link>}
         >
           <Listy
             items={stats?.latest_applications ?? []}
@@ -72,7 +82,7 @@ export function LatestCards({ stats }: { stats: Stats | undefined }) {
             itemRender={(item) => (
               <ListyItem>
                 <Space>
-                  <Link to="/tracker">{item.job_title || "未命名岗位"}</Link>
+                  <Link to="/tracker">{item.job_title || t("homePage.latest.untitledJob")}</Link>
                   <Tag>{item.company}</Tag>
                   <Typography.Text type="secondary">
                     {formatDateTime(item.updated_at)}
