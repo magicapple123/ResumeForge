@@ -45,15 +45,10 @@ import {
 } from "../../../types/assistant";
 import { useJobSearchSelect, useResumeSearchSelect } from "../../../hooks/remoteSearchOptions";
 import FileDropZone from "../../../components/common/FileDropZone";
-import { t } from "../../../i18n";
-import type { MessageKey } from "../../../i18n";
+import { t, type MessageKey } from "../../../i18n";
 import { useLocale } from "../../../i18n/i18nContext";
 
-/**
- * 思考强度的显示名：键是协议值（""/none/low/medium/high）。档位清单仍由
- * `types/assistant.ts` 的 `REASONING_EFFORT_OPTIONS` 单一提供；模块作用域不能调
- * `t()`，渲染处 `t(EFFORT_LABEL_KEYS[value])`。
- */
+/** 思考强度显示名：键是协议值，值是 key；档位清单仍由 types/assistant.ts 单一提供。 */
 const EFFORT_LABEL_KEYS: Record<string, MessageKey> = {
   "": "assistantComposer.effort.default",
   none: "assistantComposer.effort.off",
