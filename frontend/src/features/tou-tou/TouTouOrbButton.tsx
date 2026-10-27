@@ -3,6 +3,8 @@
 
 import { Tooltip } from "antd";
 import type { KeyboardEvent, PointerEvent, RefObject } from "react";
+import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 import { layer } from "../../theme/tokens";
 import { TOU_TOU_FACE_SOURCES, type TouTouFaceKey } from "./touTouFaces";
 
@@ -29,9 +31,10 @@ export function TouTouOrbButton({
   onMouseEnter,
   onMouseMove,
 }: Props) {
+  useLocale();
   return (
     <Tooltip
-      title="单击：打开求职助手；双击：打开投递剪贴板"
+      title={t("touTou.orb.tooltip")}
       placement="top"
       /*
        * 球（.tt-shell）已提到 3650，antd Tooltip 默认的 1070 会被盖住；
@@ -44,7 +47,7 @@ export function TouTouOrbButton({
         ref={buttonRef}
         type="button"
         className={buttonClasses}
-        aria-label="打开求职助手"
+        aria-label={t("touTou.orb.ariaLabel")}
         onPointerDown={onPointerDown}
         onClick={onClick}
         onKeyDown={onKeyDown}
