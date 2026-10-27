@@ -7,14 +7,10 @@
  */
 import { MoreOutlined } from "@ant-design/icons";
 import { Button, Dropdown, Space, Tag, Typography } from "antd";
-import type { Track } from "../../types";
-import {
-  FUNNEL_STATUSES,
-  TRACK_SOURCE_LABELS,
-  TRACK_STATUS_COLORS,
-  TRACK_STATUS_LABELS,
-  isActiveStatus,
-} from "../../types";
+import { t, type MessageKey } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
+import type { Track, TrackSource, TrackStatus } from "../../types";
+import { FUNNEL_STATUSES, TRACK_STATUS_COLORS, isActiveStatus } from "../../types";
 import { useRowActionMenu } from "../common/rowActionMenu";
 
 interface Props {
@@ -22,6 +18,30 @@ interface Props {
   onEdit: () => void;
   onDelete: () => void;
 }
+
+/**
+ * 进度状态的显示名：键是协议值（与后端逐字对应），值指向语言包 key。
+ *
+ * 七个名字与「求职进度」页、进度表单共用 `trackerForm.status.*` 词表——同一个协议值
+ * 在两处必须是同一个名字，各写一份迟早会漂。`types/tracker.ts` 的中文表不翻，也
+ * 一个字都没动（界面显示名一律从这里取 key）。
+ */
+const STATUS_LABEL_KEYS: Record<TrackStatus, MessageKey> = {
+  applied: "trackerForm.status.applied",
+  screening: "trackerForm.status.screening",
+  assessment: "trackerForm.status.assessment",
+  interview: "trackerForm.status.interview",
+  offer: "trackerForm.status.offer",
+  rejected: "trackerForm.status.rejected",
+  unknown: "trackerForm.status.unknown",
+};
+
+/** 记录来源的显示名：同一个协议值的名字只在本包写一份。 */
+const SOURCE_LABEL_KEYS: Record<TrackSource, MessageKey> = {
+  apply: "trackerUi.source.apply",
+  manual: "trackerUi.source.manual",
+  recognized: "trackerUi.source.recognized",
+};
 
 /** 截止日期是不是已经过了（只看日期，不管当天）。 */
 function isOverdue(dateText: string): boolean {
@@ -34,6 +54,8 @@ function isOverdue(dateText: string): boolean {
 }
 
 export default function TrackCard({ track, onEdit, onDelete }: Props) {
+  // 本组件用模块级 t()：必须订阅语言变化，否则切语言后卡片停在旧文案。
+  useLocale();
   const buildMenu = useRowActionMenu();
   const overdue = isOverdue(track.next_action_date);
 
@@ -47,9 +69,13 @@ export default function TrackCard({ track, onEdit, onDelete }: Props) {
     >
       <header className="track-card-head">
         <Space size={6} wrap>
-          <Typography.Text strong>{track.company || "（未填公司）"}</Typography.Text>
-          <Typography.Text type="secondary">{track.title || "（未填岗位）"}</Typography.Text>
-          <Tag color={TRACK_STATUS_COLORS[track.status]}>{TRACK_STATUS_LABELS[track.status]}</Tag>
+          <Typography.Text strong>
+            {track.company || t("trackerUi.card.emptyCompany")}
+          </Typography.Text>
+          <Typography.Text type="secondary">
+            {track.title || t("trackerUi.card.emptyTitle")}
+          </Typography.Text>
+          <Tag color={TRACK_STATUS_COLORS[track.status]}>{t(STATUS_LABEL_KEYS[track.status])}</Tag>
           {track.stage_note && <Tag>{track.stage_note}</Tag>}
         </Space>
         <Space size={4}>
@@ -57,10 +83,10 @@ export default function TrackCard({ track, onEdit, onDelete }: Props) {
             trigger={["click"]}
             menu={{
               items: buildMenu([
-                { key: "edit", label: "编辑", onClick: onEdit },
+                { key: "edit", label: t("trackerUi.card.action.edit"), onClick: onEdit },
                 {
                   key: "delete",
-                  label: "删除",
+                  label: t("trackerUi.card.action.delete"),
                   danger: true,
                   // 软删由父级用 useDeleteUndo 兜：这里**不再问**，撤销入口在 Toast 上。
                   undo: true,
@@ -73,7 +99,9 @@ export default function TrackCard({ track, onEdit, onDelete }: Props) {
               size="small"
               type="text"
               icon={<MoreOutlined />}
-              aria-label={`更多操作 ${track.company || track.title || "进度"}`}
+              aria-label={t("trackerUi.card.aria.more", {
+                name: track.company || track.title || t("trackerUi.card.fallbackName"),
+              })}
             />
           </Dropdown>
         </Space>
@@ -81,29 +109,35 @@ export default function TrackCard({ track, onEdit, onDelete }: Props) {
 
       <div className="track-card-meta">
         {track.applied_at && (
-          <Typography.Text type="secondary">投递于 {track.applied_at}</Typography.Text>
+          <Typography.Text type="secondary">
+            {t("trackerUi.card.appliedAt", { date: track.applied_at })}
+          </Typography.Text>
         )}
         {track.status_date && (
-          <Typography.Text type="secondary">状态更新 {track.status_date}</Typography.Text>
+          <Typography.Text type="secondary">
+            {t("trackerUi.card.statusDate", { date: track.status_date })}
+          </Typography.Text>
         )}
-        <Typography.Text type="secondary">{TRACK_SOURCE_LABELS[track.source]}</Typography.Text>
+        <Typography.Text type="secondary">{t(SOURCE_LABEL_KEYS[track.source])}</Typography.Text>
         {/* 使用的简历版本（RF-17）：有活关联显示名字；只剩标题快照（简历已删、
             resume_id 被 SET NULL）时如实标注"历史关联"，不臆造还关联着。 */}
         {(track.resume_id || track.resume_title) && (
           <Typography.Text type="secondary">
-            简历：{track.resume_title || `#${track.resume_id}`}
-            {!track.resume_id && "（历史关联）"}
+            {t("trackerUi.card.resume", {
+              title: track.resume_title || `#${track.resume_id}`,
+            })}
+            {!track.resume_id && t("trackerUi.card.resumeHistorical")}
           </Typography.Text>
         )}
       </div>
 
       {(track.next_action || track.next_action_date) && (
         <div className={`track-card-next${overdue ? " is-overdue" : ""}`}>
-          <span className="track-card-next-label">下一步</span>
+          <span className="track-card-next-label">{t("trackerUi.card.nextStep")}</span>
           <span>
-            {track.next_action || "（未填写内容）"}
+            {track.next_action || t("trackerUi.card.emptyNextAction")}
             {track.next_action_date && ` · ${track.next_action_date}`}
-            {overdue && " · 已过期"}
+            {overdue && ` · ${t("trackerUi.card.overdue")}`}
           </span>
         </div>
       )}
@@ -114,7 +148,7 @@ export default function TrackCard({ track, onEdit, onDelete }: Props) {
 
       {track.evidence && (
         <Typography.Text type="secondary" className="track-card-evidence">
-          依据：{track.evidence}
+          {t("trackerUi.card.evidence", { evidence: track.evidence })}
         </Typography.Text>
       )}
     </article>
