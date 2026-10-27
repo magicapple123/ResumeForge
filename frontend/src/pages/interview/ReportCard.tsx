@@ -8,6 +8,8 @@ import { Alert, Button, Card, Listy, Progress, Tag, Typography } from "antd";
 import { ListyItem } from "../../components/common/ListyItem";
 import { LISTY_ITEM_PADDING_SMALL } from "../../components/common/listyPadding";
 import type { InterviewDetail } from "../../types";
+import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 import { JANE_FACE_SOURCES, janeFaceForScore } from "./janeFaces";
 
 export function ReportCard({
@@ -19,18 +21,18 @@ export function ReportCard({
   onSaveToMaterial: () => void;
   saving: boolean;
 }) {
+  // 本卡用模块级 t()：必须订阅语言变化，否则切语言后报告文案不重渲染。
+  useLocale();
   const report = session.report ?? {};
   const failed = report.error || (!report.dimensions?.length && !report.summary);
   return (
-    <Card size="small" className="interview-report" title="面试评分报告">
+    <Card size="small" className="interview-report" title={t("interviewPage.report.cardTitle")}>
       {failed ? (
         <Alert
           type="warning"
           showIcon
-          title="报告没有生成成功"
-          description={
-            report.summary || "可以在资料箱里找到这场面试的问答记录，重新体验一次也可以。"
-          }
+          title={t("interviewPage.report.failedTitle")}
+          description={report.summary || t("interviewPage.report.failedBody")}
         />
       ) : (
         <>
@@ -39,12 +41,12 @@ export function ReportCard({
               type="dashboard"
               size={120}
               percent={Math.round(report.score ?? 0)}
-              format={(value) => `${value} 分`}
+              format={(value) => t("interviewPage.report.score", { score: value ?? 0 })}
             />
             <img
               className="jane-avatar jane-avatar--report"
               src={JANE_FACE_SOURCES[janeFaceForScore(report.score)]}
-              alt="面试官 Jane"
+              alt={t("interviewPage.avatarAlt")}
             />
             <Typography.Paragraph type="secondary" style={{ marginBottom: 0 }}>
               {report.summary}
@@ -60,7 +62,7 @@ export function ReportCard({
                   <div className="interview-dimension-head">
                     <b>{item.name}</b>
                     <Tag color={item.score >= 80 ? "green" : item.score >= 60 ? "gold" : "red"}>
-                      {item.score} 分
+                      {t("interviewPage.report.score", { score: item.score })}
                     </Tag>
                   </div>
                   <Typography.Text type="secondary">{item.comment}</Typography.Text>
@@ -70,7 +72,7 @@ export function ReportCard({
           />
           <div className="interview-report-lists">
             <div>
-              <Typography.Title level={5}>做得好的地方</Typography.Title>
+              <Typography.Title level={5}>{t("interviewPage.report.strengths")}</Typography.Title>
               <ul>
                 {(report.strengths ?? []).map((text) => (
                   <li key={text}>{text}</li>
@@ -78,7 +80,9 @@ export function ReportCard({
               </ul>
             </div>
             <div>
-              <Typography.Title level={5}>下次可以改进</Typography.Title>
+              <Typography.Title level={5}>
+                {t("interviewPage.report.improvements")}
+              </Typography.Title>
               <ul>
                 {(report.improvements ?? []).map((text) => (
                   <li key={text}>{text}</li>
@@ -89,7 +93,7 @@ export function ReportCard({
         </>
       )}
       <Button onClick={onSaveToMaterial} loading={saving} icon={<PlusOutlined />}>
-        把这场面试存进资料箱
+        {t("interviewPage.report.saveToMaterial")}
       </Button>
     </Card>
   );
