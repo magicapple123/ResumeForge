@@ -1,7 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
-const KIND_LABEL: Record<string, string> = {
-  apply: "投递",
-  collect: "采集",
+import { t } from "../i18n";
+import type { MessageKey } from "../i18n";
+
+/** 批次类型（后端协议值）→ 展示名 key；模块作用域只存 key，渲染时才求值。 */
+const KIND_LABEL: Record<string, MessageKey> = {
+  apply: "backgroundTasks.batch.kindApply",
+  collect: "backgroundTasks.batch.kindCollect",
 };
 
 /** Convert a terminal task state into a notification without UI dependencies. */
@@ -18,28 +22,35 @@ export function buildTaskNotification(detail: {
   message: string;
   description: string;
 } | null {
-  const kindLabel = KIND_LABEL[detail.kind] ?? "任务";
+  const kindLabel = t(KIND_LABEL[detail.kind] ?? "backgroundTasks.batch.kindFallback");
   const stats =
     detail.kind === "apply"
-      ? `成功 ${detail.succeeded} · 失败 ${detail.failed} · 跳过 ${detail.skipped}`
-      : `已暂存 ${detail.succeeded} 个岗位 · 跳过 ${detail.skipped} 个`;
+      ? t("backgroundTasks.batch.statsApply", {
+          succeeded: detail.succeeded,
+          failed: detail.failed,
+          skipped: detail.skipped,
+        })
+      : t("backgroundTasks.batch.statsCollect", {
+          succeeded: detail.succeeded,
+          skipped: detail.skipped,
+        });
   switch (detail.status) {
     case "completed":
       return {
         type: "success",
-        message: `${kindLabel}批次 #${detail.id} 已完成`,
+        message: t("backgroundTasks.batch.completed", { kind: kindLabel, id: detail.id }),
         description: stats,
       };
     case "failed":
       return {
         type: "error",
-        message: `${kindLabel}批次 #${detail.id} 失败`,
-        description: detail.message || "请到投递台查看失败原因",
+        message: t("backgroundTasks.batch.failed", { kind: kindLabel, id: detail.id }),
+        description: detail.message || t("backgroundTasks.batch.failed.hint"),
       };
     case "stopped":
       return {
         type: "warning",
-        message: `${kindLabel}批次 #${detail.id} 已停止`,
+        message: t("backgroundTasks.batch.stopped", { kind: kindLabel, id: detail.id }),
         description: stats,
       };
     default:
