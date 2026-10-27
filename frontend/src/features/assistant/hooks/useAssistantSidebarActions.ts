@@ -7,6 +7,7 @@
  */
 import { App } from "antd";
 import { useCallback, type Dispatch, type SetStateAction } from "react";
+import { t } from "../../../i18n";
 import type { AssistantConversationBrief, AssistantSkill } from "../../../types";
 import type { useAssistantConversations } from "./useAssistantConversations";
 
@@ -53,9 +54,18 @@ export function useAssistantSidebarActions({
     async (skill: AssistantSkill, enabled: boolean) => {
       try {
         await toggleSkill(skill, enabled);
-        message.success(`已${enabled ? "启用" : "停用"}技能「${skill.name}」`);
+        message.success(
+          t(
+            enabled
+              ? "assistantHooks.sidebar.success.skillEnabled"
+              : "assistantHooks.sidebar.success.skillDisabled",
+            { name: skill.name },
+          ),
+        );
       } catch (error) {
-        message.error(error instanceof Error ? error.message : "切换技能失败");
+        message.error(
+          error instanceof Error ? error.message : t("assistantHooks.sidebar.error.toggleSkill"),
+        );
         await reloadSkills();
       }
     },
@@ -125,7 +135,11 @@ export function useAssistantSidebarActions({
     if (!groupTarget) return;
     const updated = await updateConversation(groupTarget.id, { group_name: groupValue.trim() });
     if (updated) {
-      message.success(groupValue.trim() ? `已移动到「${groupValue.trim()}」` : "已移出分组");
+      message.success(
+        groupValue.trim()
+          ? t("assistantHooks.sidebar.success.movedToGroup", { name: groupValue.trim() })
+          : t("assistantHooks.sidebar.success.removedFromGroup"),
+      );
       setGroupTarget(null);
     }
   };
