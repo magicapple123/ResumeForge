@@ -59,6 +59,16 @@ if [ -n "$STAGED_P" ] || [ -n "$STAGED_TS" ]; then
   fi
 fi
 
+# 4) Frontend i18n guards（cjkRatchet / 订阅 / key 契约 / product-copy 指纹）
+# 2026-10-27：此前这里只守后端，前端四条 i18n 守卫一条都不跑。实测一次
+# `cjkRatchet` 明确的红测试被提交成功——"pre-commit OK" 因此不可信。
+# 约 10 秒，值得。
+if [ -n "$STAGED_TS" ] && [ -x "frontend/node_modules/.bin/vitest" ]; then
+  echo "[pre-commit] frontend i18n guards (cjkRatchet / locale subscription / key contract)..."
+  I18N_OUT=$(cd frontend && ./node_modules/.bin/vitest run src/i18n --reporter=dot 2>&1) || FAIL=1
+  printf '%s\n' "$I18N_OUT" | tail -4
+fi
+
 if [ $FAIL -ne 0 ]; then
   echo ""
   echo "[pre-commit] FAILED - commit aborted."
