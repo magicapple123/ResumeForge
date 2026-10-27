@@ -9,6 +9,8 @@
 import { FileTextOutlined } from "@ant-design/icons";
 import { Alert, Button, Card, Checkbox, Space, Tag, Tooltip, Typography } from "antd";
 import { useState } from "react";
+import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 import type { ParsedJobDraft } from "../../types";
 
 interface Props {
@@ -22,7 +24,9 @@ interface Props {
 }
 
 function draftTitle(draft: ParsedJobDraft, index: number): string {
-  return draft.title?.trim() || draft.company?.trim() || `未命名岗位 ${index + 1}`;
+  return (
+    draft.title?.trim() || draft.company?.trim() || t("jobsUi.draft.untitled", { index: index + 1 })
+  );
 }
 
 function excerpt(text: string): string {
@@ -38,6 +42,7 @@ export default function MultiJobDraftList({
   onEditSingle,
   onCancel,
 }: Props) {
+  useLocale();
   const [selected, setSelected] = useState<number[]>(() => drafts.map((_, index) => index));
 
   // 识别结果换了（用户又点了一次识别）就重置勾选，避免沿用上一次的下标。
@@ -63,8 +68,8 @@ export default function MultiJobDraftList({
       <Alert
         type="info"
         showIcon
-        title={`识别出 ${drafts.length} 份招聘信息（${engineLabel}）`}
-        description="确认拆分是否正确，取消勾选不想保存的那些。保存后它们会各自成为岗位广场里的一条岗位。"
+        title={t("jobsUi.alert.title", { count: drafts.length, engine: engineLabel })}
+        description={t("jobsUi.alert.description")}
       />
 
       <Space orientation="vertical" style={{ width: "100%", marginTop: 12 }}>
@@ -81,9 +86,9 @@ export default function MultiJobDraftList({
               >
                 <span className="multi-draft-title">{draftTitle(draft, index)}</span>
               </Checkbox>
-              <Tooltip title="只把这一份填进表单，方便逐字段修改后再保存">
+              <Tooltip title={t("jobsUi.card.editHint")}>
                 <Button type="link" size="small" onClick={() => onEditSingle(draft)}>
-                  单独编辑
+                  {t("jobsUi.card.editSingle")}
                 </Button>
               </Tooltip>
             </div>
@@ -92,11 +97,14 @@ export default function MultiJobDraftList({
               {draft.location ? <Tag>{draft.location}</Tag> : null}
               {draft.salary ? <Tag color="gold">{draft.salary}</Tag> : null}
               {draft.job_type ? <Tag color="purple">{draft.job_type}</Tag> : null}
-              {!draft.description?.trim() ? <Tag color="orange">缺少岗位描述</Tag> : null}
+              {!draft.description?.trim() ? (
+                <Tag color="orange">{t("jobsUi.card.missingDescription")}</Tag>
+              ) : null}
             </Space>
             {draft.recognized_text ? (
               <Typography.Paragraph type="secondary" className="multi-draft-excerpt">
-                <FileTextOutlined /> 原文：{excerpt(draft.recognized_text)}
+                <FileTextOutlined />{" "}
+                {t("jobsUi.card.excerpt", { excerpt: excerpt(draft.recognized_text) })}
               </Typography.Paragraph>
             ) : null}
             {draft.warnings.length > 0 ? (
@@ -115,10 +123,10 @@ export default function MultiJobDraftList({
           disabled={chosen.length === 0}
           onClick={() => onSave(chosen)}
         >
-          保存勾选的 {chosen.length} 份为岗位
+          {t("jobsUi.action.saveSelected", { count: chosen.length })}
         </Button>
         <Button disabled={saving} onClick={onCancel}>
-          返回修改原文
+          {t("jobsUi.action.backToEdit")}
         </Button>
       </Space>
     </div>
