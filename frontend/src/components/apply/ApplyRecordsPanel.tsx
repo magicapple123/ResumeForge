@@ -43,6 +43,7 @@ import {
   type Page,
 } from "../../types";
 import { t } from "../../i18n";
+import { TASK_ITEM_STATUS_LABEL_KEYS, failureCategoryKey } from "../../i18n/enum/apply";
 import { useLocale } from "../../i18n/i18nContext";
 
 interface Props {
@@ -198,19 +199,23 @@ export default function ApplyRecordsPanel({ disabled, onRetried }: Props) {
       width: 80,
       render: (value: ApplyRecord["status"]) => {
         const meta = TASK_ITEM_STATUS_META[value];
-        return <Tag color={meta.color}>{meta.label}</Tag>;
+        return <Tag color={meta.color}>{t(TASK_ITEM_STATUS_LABEL_KEYS[value])}</Tag>;
       },
     },
     {
       title: t("applyRecords.column.failureKind"),
       key: "failure",
       ellipsis: true,
-      render: (_, record) =>
-        record.failure_category ? (
-          <Tag color="red">{failureLabel(record.failure_category, record.failure_label)}</Tag>
-        ) : (
-          "-"
-        ),
+      render: (_, record) => {
+        if (!record.failure_category) return "-";
+        // 已知分类走语言包；后端新增、尚未登记的分类回退后端文案 / 原码（旧行为）。
+        const key = failureCategoryKey(record.failure_category);
+        return (
+          <Tag color="red">
+            {key ? t(key) : failureLabel(record.failure_category, record.failure_label)}
+          </Tag>
+        );
+      },
     },
     {
       title: t("applyRecords.column.resume"),
