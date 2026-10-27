@@ -2,10 +2,12 @@
 /** 设置页的预设、脱敏和表单值转换逻辑。 */
 
 import { LLM_PRESETS } from "../../config";
+import type { MessageKey } from "../../i18n";
 import type { LLMConfig, LLMConfigRecord } from "../../types";
 
 export const CUSTOM_PRESET = "custom";
-export const CUSTOM_PRESET_LABEL = "自定义模型（OpenAI 兼容）";
+/** 「自定义模型」的显示名 key（渲染处 `t(CUSTOM_PRESET_LABEL_KEY)`）。 */
+export const CUSTOM_PRESET_LABEL_KEY: MessageKey = "appConfig.preset.custom";
 /**
  * 不套用任何预设：选中后清空 Base URL 与模型名，由用户从空白开始填。
  *
@@ -14,7 +16,8 @@ export const CUSTOM_PRESET_LABEL = "自定义模型（OpenAI 兼容）";
  * 两者都只影响表单，保存与否仍由用户决定。
  */
 export const MANUAL_PRESET = "manual";
-export const MANUAL_PRESET_LABEL = "纯手动配置（不套用任何预设）";
+/** 「纯手动配置」的显示名 key（渲染处 `t(MANUAL_PRESET_LABEL_KEY)`）。 */
+export const MANUAL_PRESET_LABEL_KEY: MessageKey = "appConfig.preset.manual";
 export const API_KEY_MASK = "********";
 
 /** max_tokens 取该值表示“不限制”：请求体里不发送该字段，由服务商决定上限。 */
@@ -30,10 +33,11 @@ export const DEFAULT_MAX_TOKENS = 4096;
 export const MIN_MAX_TOKENS = 256;
 export const MAX_MAX_TOKENS = 65536;
 
+/** 预设下拉的选项。`labelKey` 由渲染处 `t()`——本模块不在渲染期，不取文案。 */
 export const PRESET_OPTIONS = [
-  ...LLM_PRESETS.map((preset) => ({ value: preset.provider, label: preset.label })),
-  { value: CUSTOM_PRESET, label: CUSTOM_PRESET_LABEL },
-  { value: MANUAL_PRESET, label: MANUAL_PRESET_LABEL },
+  ...LLM_PRESETS.map((preset) => ({ value: preset.provider, labelKey: preset.labelKey })),
+  { value: CUSTOM_PRESET, labelKey: CUSTOM_PRESET_LABEL_KEY },
+  { value: MANUAL_PRESET, labelKey: MANUAL_PRESET_LABEL_KEY },
 ];
 
 /** session_only 是前端专用开关（密钥走会话通道、不落库），不属于 LLMConfig。 */
@@ -93,7 +97,8 @@ export function configFromRecord(record: LLMConfigRecord): LLMConfig {
 
 /** 当前配置卡片折叠态的摘要（脱敏：只带"是否配置了密钥"，不带密钥本体）。 */
 export interface LLMConfigSummary {
-  presetLabel: string;
+  /** 预设显示名的语言包 key（渲染处 `t(summary.presetLabelKey)`）。 */
+  presetLabelKey: MessageKey;
   baseUrl: string;
   model: string;
   hasKey: boolean;
@@ -103,7 +108,7 @@ export interface LLMConfigSummary {
 
 export function summaryFromConfig(config: LLMConfig): LLMConfigSummary {
   return {
-    presetLabel: matchingPreset(config)?.label ?? CUSTOM_PRESET_LABEL,
+    presetLabelKey: matchingPreset(config)?.labelKey ?? CUSTOM_PRESET_LABEL_KEY,
     baseUrl: config.base_url,
     model: config.model,
     hasKey: config.api_key.trim() !== "",
