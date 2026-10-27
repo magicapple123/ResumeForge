@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * 一个条目内的字段输入（F6）：三种文本形态 + 默认收起 + 用户隐藏恢复。
+ * 一个条目内的字段输入（F6）：三种文本形态 + 用户隐藏恢复。
  *
  * - 输入只使用三种文本形态（单行/多行/日期）；照片走资料页的专门入口，不在这里；
  * - 枚举只是**输入建议**（AutoComplete，可自由输入），不做校验拦截；
- * - default_collapsed 字段默认收进「更多字段」，展开/收起写 preference 的
- *   collapsed_override（刷新后仍记住）；collapsed 不参与判空、不进保存过滤；
- * - hidden 字段不渲染，只在「已隐藏 N 个字段」里恢复；两个状态独立，叠加时 hidden 优先。
+ * - 字段一律渲染，不再有「更多字段 / 收起更多字段」折叠（2026-10-27 用户要求去掉）：
+ *   服务端 FieldOut 仍带 default_collapsed / collapsed_override（DTO 兼容），界面**不读**它们；
+ * - hidden 字段不渲染，只在「已隐藏 N 个字段」里恢复——用户明确说"隐藏就够了"。
  */
 import { AutoComplete, Button, Form, Input, Popover, Typography } from "antd";
 import { t } from "../../i18n";
@@ -21,16 +21,7 @@ interface Props {
   disabled?: boolean;
   singleLineMax: number;
   multiLineMax: number;
-  onSetPreference: (
-    field: FieldOut,
-    patch: { hidden?: boolean; collapsed_override?: boolean | null },
-  ) => void;
-}
-
-/** 该字段此刻是否处于收起态（用户显式展开过就跟随偏好，否则跟随代码默认）。 */
-function isCollapsed(field: FieldOut): boolean {
-  if (field.collapsed_override === null) return field.default_collapsed;
-  return field.collapsed_override;
+  onSetPreference: (field: FieldOut, patch: { hidden?: boolean }) => void;
 }
 
 function fieldPlaceholder(field: FieldOut): string {
@@ -146,18 +137,6 @@ export default function ProfileFieldInputs({
   const visibleFields = section.fields.filter(
     (field) => !field.hidden && field.field_type !== "photo",
   );
-  const collapsedFields = visibleFields.filter(isCollapsed);
-  const expandedFields = visibleFields.filter((field) => !isCollapsed(field));
-  const hasMore = collapsedFields.length > 0;
-
-  const expandAll = () => {
-    collapsedFields.forEach((field) => onSetPreference(field, { collapsed_override: false }));
-  };
-  const collapseAll = () => {
-    visibleFields
-      .filter((field) => field.default_collapsed && !isCollapsed(field))
-      .forEach((field) => onSetPreference(field, { collapsed_override: true }));
-  };
 
   const renderField = (field: FieldOut) => {
     const required = field.section_key === "basic_info" && field.key === "name";
@@ -203,38 +182,21 @@ export default function ProfileFieldInputs({
     </div>
   );
 
-  const showCollapseAll = !hasMore && visibleFields.some((field) => field.default_collapsed);
-
   return (
     <div className="profile-field-inputs">
       <div className="profile-field-grid">
-        {expandedFields.map(renderField)}
-        {hasMore ? (
+        {visibleFields.map(renderField)}
+        {hiddenFields.length > 0 ? (
           <div className="profile-field-grid-actions">
-            <Button type="link" size="small" onClick={expandAll}>
-              {t("profileLibrary.field.more")}
-            </Button>
-          </div>
-        ) : null}
-        {hasMore ? null : collapsedFields.map(renderField)}
-        {hiddenFields.length > 0 || showCollapseAll ? (
-          <div className="profile-field-grid-actions">
-            {hiddenFields.length > 0 ? (
-              <Popover
-                content={hiddenList}
-                title={t("profileLibrary.field.hiddenTitle")}
-                trigger="click"
-              >
-                <Button type="link" size="small">
-                  {t("profileLibrary.field.hiddenList", { count: hiddenFields.length })}
-                </Button>
-              </Popover>
-            ) : null}
-            {showCollapseAll ? (
-              <Button type="link" size="small" onClick={collapseAll}>
-                {t("profileLibrary.field.less")}
+            <Popover
+              content={hiddenList}
+              title={t("profileLibrary.field.hiddenTitle")}
+              trigger="click"
+            >
+              <Button type="link" size="small">
+                {t("profileLibrary.field.hiddenList", { count: hiddenFields.length })}
               </Button>
-            ) : null}
+            </Popover>
           </div>
         ) : null}
       </div>

@@ -22,6 +22,13 @@ interface Options {
   editorRef: RefObject<ResumeWorkbenchEditorHandle | null>;
   content?: ResumeContent | null;
   mergeLive?: (content: ResumeContent | null) => ResumeContent | null;
+  /**
+   * 中栏未挂载（两栏 / 单栏档）时的本地正文来源：统一历史里的文档内容。
+   *
+   * 冲突条上的「比较差异 / 另存副本」读的是"本地还没保存的那一版"；窄档的编辑器不在，
+   * 只回落到宿主已保存的 `content` 会让这两个动作拿旧正文去比/去存。
+   */
+  documentContent?: () => ResumeContent | null;
 }
 
 export interface WorkbenchDocumentBridge {
@@ -39,6 +46,7 @@ export function useWorkbenchDocumentBridge({
   editorRef,
   content,
   mergeLive,
+  documentContent,
 }: Options): WorkbenchDocumentBridge {
   const handleContentSave = useCallback(
     async (next: ResumeContent, expectedRevision?: number): Promise<number | void> => {
@@ -54,10 +62,10 @@ export function useWorkbenchDocumentBridge({
   );
 
   const readLocalContent = useCallback((): ResumeContent | null => {
-    const local = editorRef.current?.readContent() ?? content ?? null;
+    const local = editorRef.current?.readContent() ?? documentContent?.() ?? content ?? null;
     if (!local) return null;
     return mergeLive?.(local) ?? local;
-  }, [content, mergeLive, editorRef]);
+  }, [content, documentContent, mergeLive, editorRef]);
 
   const adoptLatest = useCallback(
     async (latest: ResumeDetail): Promise<void> => {

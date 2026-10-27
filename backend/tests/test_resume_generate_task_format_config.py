@@ -121,7 +121,17 @@ def test_generation_without_format_config_materializes_the_profile_order(client,
     record = client.get(f"/api/resumes/{final['resume_id']}").json()
     assert record["format_config"] == {
         "section_order": _materialized_order(
-            ["projects", "education", "experience", "skills", "campus_experience", "awards", "summary"]
+            [
+                "projects",
+                "education",
+                "experience",
+                "skills",
+                "campus_experience",
+                "awards",
+                "summary",
+                # 资料顺序校验器会把 languages 补在末尾（它现在映射进简历顺序）。
+                "languages",
+            ]
         )
     }
 
@@ -147,7 +157,17 @@ def test_generation_materializes_missing_sections_at_the_end_when_profile_matche
     final = _wait_terminal(client, started.json()["id"])
     record = client.get(f"/api/resumes/{final['resume_id']}").json()
     assert record["format_config"]["section_order"] == _materialized_order(
-        ["education", "experience", "projects", "skills", "campus_experience", "awards", "summary"]
+        [
+            "education",
+            "experience",
+            "projects",
+            "skills",
+            "campus_experience",
+            "awards",
+            "summary",
+            # 资料顺序校验器会把 languages 补在末尾（它现在映射进简历顺序）。
+            "languages",
+        ]
     )
 
 

@@ -137,6 +137,10 @@ def test_projection_editor_schema_follows_participating_order_and_field_order(cl
     assert attrs["study_form"] == "study_form"
     assert attrs["core_courses"] == "courses"  # 目录 key 与 ResumeContent 属性名不同
     assert attrs["achievements"] == "achievements"  # 承载区字段
+    # 承载区元数据（需求 #5）：没有独立槽位的字段（用户自定义字段等）以「标签：值」行
+    # 追加到这里；编辑器把它当输入框的直接落点，与纸面投影同一口径。
+    assert educations["carrier_attr"] == "achievements"
+    assert educations["carrier_list"] is True
 
     # 其余系统分区的 resume_field 同样来自 paper_policy 的同一份表（不在这里复制映射）。
     projects = _section(schema, "projects")
@@ -149,10 +153,52 @@ def test_projection_editor_schema_follows_participating_order_and_field_order(cl
     assert patents["material_only"] is True
     assert patents["resume_field"] == "patents"
 
-    # languages 没有 SECTION_RULES：板块行仍在（前端页签映射照旧），字段无独立槽位。
+    # 2026-10：语言能力是独立正文分区（用户反馈 #11），字段逐项映射到 content.languages。
     languages = _section(schema, "languages")
-    assert languages["resume_field"] is None
-    assert all(item["resume_attr"] is None for item in languages["fields"])
+    assert languages["resume_field"] == "languages"
+    assert languages["material_only"] is False
+    assert _field_attrs(languages) == {
+        "language": "name",
+        "level": "level",
+        "certificate": "certificate",
+        "score": "score",
+        "obtained_at": "obtained_at",
+    }
+
+
+def test_system_section_carrier_metadata_matches_paper_rule(client) -> None:
+    """需求 #5：系统板块的承载区元数据与纸面规则逐字一致，编辑器据此渲染自定义字段输入框。
+
+    carrier_attr / carrier_list 就是纸面投影把「标签：值」行追加到哪、以及是列表还是标量：
+    错一列，用户在编辑器里改的值就上不了纸面（或者落到另一列里）。这里只断言"与
+    paper_policy.SECTION_RULES 同一份表"，不在测试里复制一份更细的映射。
+    """
+    schema = _projection(client)["editor_schema"]
+    projects = _section(schema, "projects")
+    assert projects["carrier_attr"] == "description"
+    assert projects["carrier_list"] is True
+
+    skills = _section(schema, "skills")
+    assert skills["carrier_attr"] == "level"
+    assert skills["carrier_list"] is False
+
+    awards = _section(schema, "awards")
+    assert awards["carrier_attr"] == "description"
+    assert awards["carrier_list"] is False
+
+    credentials = _section(schema, "credentials")
+    assert credentials["carrier_attr"] == "note"
+    assert credentials["carrier_list"] is False
+
+    # 仅素材板块（知识产权）没有承载区：自定义字段本就不上纸面，编辑器也不该给输入框。
+    patents = _section(schema, "patents")
+    assert patents["carrier_attr"] is None
+    assert patents["carrier_list"] is False
+
+    # 自建板块的字段走 ResumeCustomEntry.lines，不用系统板块的承载区。
+    created = _create_section(client, "承载区自建板块")
+    custom = _section(_projection(client)["editor_schema"], created["key"])
+    assert custom["carrier_attr"] is None
 
 
 def test_hidden_field_is_absent_from_editor_schema(client) -> None:
@@ -197,6 +243,10 @@ def test_custom_section_keeps_user_name_and_custom_section_key(client) -> None:
     matched = [item for item in projects["fields"] if item["field_id"] == mentor["field_id"]]
     assert len(matched) == 1
     assert matched[0]["resume_attr"] is None
+    # 需求 #5：编辑器不靠"编一个 ResumeContent 属性名"渲染它，而是靠板块的承载区元数据
+    # （值写进 projects.description 的「标签：值」行，与纸面投影 extras 同一落点）。
+    assert projects["carrier_attr"] == "description"
+    assert projects["carrier_list"] is True
     # 系统板块不带主文本标记：它们有槽位/承载区，不需要"哪一格是正文"的判定。
     assert all(item["primary"] is False for item in projects["fields"])
 

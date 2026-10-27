@@ -303,7 +303,7 @@ class ResumeGenerator:
             from .grounding_entries import (
                 ground_resume_facts_with_annotations as ground_consumed_facts,
             )
-            from .language_restore import LanguageCapacityError, restore_language_skills
+            from .language_restore import LanguageCapacityError, restore_languages
 
             resume, fact_annotations = ground_consumed_facts(
                 resume,
@@ -326,7 +326,7 @@ class ResumeGenerator:
             # F8（R-81）：资料有值、结果槽位空 → 确定性回填；不改 AI 已写值、不阻断保存。
             resume = apply_profile_field_backfill(resume, consumed)
             try:
-                resume, language_annotations = restore_language_skills(resume, consumed)
+                resume, language_annotations = restore_languages(resume, consumed)
             except LanguageCapacityError as exc:
                 # C14：技能 + 语言合并超过 200 条是结构化超限，不静默截断。
                 yield {"type": "error", "message": exc.detail}

@@ -179,6 +179,24 @@ def export_markdown(
             lines.append(_join_bullets(skill_lines))
             lines.append("")
 
+    def write_languages() -> None:
+        """语言能力（2026-10 独立成栏）：语言（水平 · 证书 · 分数）· 取得时间。"""
+        if resume.languages:
+            lines.append(f"## {titles['languages']}\n")
+            language_lines = []
+            for item in resume.languages:
+                detail = " · ".join(
+                    part for part in (item.level, item.certificate, item.score) if part
+                )
+                text = level_text(item.name, detail, language) if item.name else detail
+                if item.obtained_at:
+                    obtained = f"{fields['obtained']}：{item.obtained_at}"
+                    text = f"{text} · {obtained}" if text else obtained
+                if text:
+                    language_lines.append(text)
+            lines.append(_join_bullets(language_lines))
+            lines.append("")
+
     def write_publications() -> None:
         if resume.publications:
             lines.append(f"## {titles['publications']}\n")
@@ -323,6 +341,7 @@ def export_markdown(
         "patents": write_patents,
         "credentials": write_credentials,
         "skills": write_skills,
+        "languages": write_languages,
         "awards": write_awards,
     }
 

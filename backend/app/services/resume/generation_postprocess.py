@@ -29,7 +29,7 @@ from annotated_types import MaxLen
 
 from ...schemas.profile_projection import ConsumedEntry, ConsumedProfile, ConsumedSection
 from ...schemas.resume import ResumeContent
-from ..profile import language_projection as _language_projection
+from ..profile.language_projection import LANGUAGE_FIELD_IDS as _LANGUAGE_FIELD_IDS
 from ..profile.paper_policy import (
     BASIC_INFO_SLOTS,
     SECTION_RULES,
@@ -256,15 +256,13 @@ class MaterialOnlyEchoError(ValueError):
         self.path = path
 
 
-# basic_info / languages 不走 SECTION_RULES（前者是头部槽位、后者整条映射成 skills），
-# 它们的纸面去路从投影层各自的单一来源派生，保证"哪些字段算合法上纸面"没有第二份映射。
+# basic_info / languages 不走 SECTION_RULES：前者是头部槽位，后者（2026-10 起）是独立
+# 正文分区。它们的纸面去路从投影层各自的单一来源派生，保证"哪些字段算合法上纸面"
+# 没有第二份映射。语言能力五个字段现在都能上纸面（语言/水平/证书/分数/取得时间）。
 _SPECIAL_LEGAL_KEYS: dict[str, frozenset[str]] = {
     "basic_info": frozenset(BASIC_INFO_SLOTS),
     "languages": frozenset(
-        {
-            _language_projection._LANGUAGE_FIELD_ID.split(".")[-1],
-            *(field_id.split(".")[-1] for field_id in _language_projection._LEVEL_FIELD_IDS),
-        }
+        field_id.split(".")[-1] for field_id in _LANGUAGE_FIELD_IDS.values()
     ),
 }
 

@@ -43,6 +43,8 @@ POINT_FIELDS: dict[str, tuple[str, ...]] = {
     # A4 资格证照（没有要点数组：一条证照就是一个对象）
     "credentials": (),
     "skills": (),
+    # 2026-10：语言能力独立成栏（一条语言就是一个对象，没有要点数组）。
+    "languages": (),
     "awards": (),
 }
 

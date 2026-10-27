@@ -2,9 +2,9 @@
 /**
  * 资料库（编辑 DTO）与写入请求契约（F6）。
  *
- * 与 backend/app/schemas/profile_workspace.py 逐字段对齐。**这是编辑 DTO**：含 hidden /
- * collapsed_override，只给资料页录入用；生成/填充消费 DTO 在 F4 的 projection 类型里，
- * 两者不得混用（消费侧类型没有 collapsed）。
+ * 与 backend/app/schemas/profile_workspace.py 逐字段对齐。**这是编辑 DTO**：含 hidden，
+ * 只给资料页录入用；生成/填充消费 DTO 在 F4 的 projection 类型里，两者不得混用
+ * （消费侧类型没有 hidden/default_collapsed/collapsed_override）。
  *
  * 表单模型（ProfileFormValues）用「分区 → 条目数组」而不是固定字段：字段定义可增删，
  * 条目值键是稳定 field_id；条目数组的顺序就是界面顺序（保存时按它决定 reorder）。
@@ -15,7 +15,7 @@ export type ProfileFieldType = "single_line" | "multi_line" | "date_text" | "pho
 export type CustomFieldType = Exclude<ProfileFieldType, "photo">;
 export type ProfileSectionForm = "singleton" | "multi";
 
-/** 字段定义 + 该用户的 hidden / collapsed_override 偏好。 */
+/** 字段定义 + 该用户的 hidden 偏好。 */
 export interface FieldOut {
   field_id: string;
   section_key: string;
@@ -23,6 +23,7 @@ export interface FieldOut {
   label: string;
   field_type: ProfileFieldType;
   order: number;
+  /** 后端定义的默认折叠标记：DTO 兼容字段，界面已不再折叠字段，前端不读。 */
   default_collapsed: boolean;
   enum_suggestions: string[];
   is_builtin: boolean;
@@ -30,6 +31,7 @@ export interface FieldOut {
   llm_allowed: boolean;
   webform_allowed: boolean;
   hidden: boolean;
+  /** 后端兼容字段：字段折叠已从界面移除（只保留隐藏/恢复），前端不读不写。 */
   collapsed_override: boolean | null;
   preference_revision: number;
   revision: number;
@@ -117,8 +119,6 @@ export interface FieldDeletionImpactOut {
 export interface FieldPreferencePatch {
   section_key: string;
   hidden?: boolean;
-  /** 三态：undefined=不改；null=恢复跟随代码默认；true/false=显式展开/收起。 */
-  collapsed_override?: boolean | null;
   expected_revision?: number;
 }
 
@@ -182,6 +182,17 @@ export interface EditorSectionOut {
   form: ProfileSectionForm;
   resume_field: string | null;
   material_only: boolean;
+  /**
+   * 承载区（需求 #5）：没有独立槽位的字段（含用户自定义字段）在纸面上以「标签：值」行
+   * 追加到的 ResumeContent 属性名（如 projects → "description"、educations →
+   * "achievements"）。null = 该板块没有承载区（仅素材 / 自建板块 / 标量分区）。
+   *
+   * 编辑器据此给这些字段渲染输入框：值直接读写这个属性，与纸面投影同一口径；
+   * 旧冻结快照没有这个键 → 不渲染（降级为旧行为）。
+   */
+  carrier_attr?: string | null;
+  /** 承载区是字符串数组（education.achievements）还是标量（skills.level / publications.note）。 */
+  carrier_list?: boolean;
   fields: EditorFieldOut[];
 }
 

@@ -45,6 +45,18 @@ class EditorSectionOut(BaseModel):
     # education/experience/...；None = 标量分区（基本信息/个人总结）或自建板块。
     resume_field: str | None = None
     material_only: bool = False
+    # 承载区（纸面「标签：值」追加行的落点）：ResumeContent 条目的属性名，
+    # 如 projects → "description"、educations → "achievements"。None = 该板块没有承载区
+    # （仅素材 / 自建板块 / 标量分区）。
+    #
+    # 编辑器据此给「没有独立槽位的字段」（EditorFieldOut.resume_attr is None，即用户在
+    # 资料里加的自定义字段）渲染输入框：值按「标签：值」行写进同一个承载区，与纸面投影
+    # （paper_content_builder._build_entry 的 extras）逐字同一口径——不扩 ResumeContent、
+    # 不另立字段，保存两次也不会重复追加（行在原地替换/删除）。
+    # 旧冻结快照缺这两个键时降级为 None/False（不渲染这些输入框），不影响解析。
+    carrier_attr: str | None = None
+    # 承载区是字符串数组（education.achievements）还是标量（skills.level / publications.note）。
+    carrier_list: bool = False
     fields: list[EditorFieldOut] = Field(default_factory=list)
 
 

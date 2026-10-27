@@ -6,7 +6,7 @@
  * - 多条：条目以 entry_key（entry_id 或新建临时键）做 React key，顺序来自表单数组，
  *   拖拽/上移下移都走 Form.List 的 move；删除是软删（可撤销），由页面发请求；
  * - 空态：查看态且本分区没有有效值时显示，主按钮直接进入编辑（禁方位词指路）；
- * - 字段输入与折叠/隐藏逻辑在 ProfileFieldInputs。
+ * - 字段输入与隐藏/恢复逻辑在 ProfileFieldInputs。
  */
 import { Button, Form, Input, Tooltip } from "antd";
 import {
@@ -34,10 +34,7 @@ interface Props {
   onRequestEdit: () => void;
   onAddEntry: (sectionKey: string) => void;
   onRemoveEntry: (sectionKey: string, entryKey: string, title: string) => void;
-  onSetPreference: (
-    field: FieldOut,
-    patch: { hidden?: boolean; collapsed_override?: boolean | null },
-  ) => void;
+  onSetPreference: (field: FieldOut, patch: { hidden?: boolean }) => void;
   onOpenGuide: () => void;
 }
 
@@ -192,10 +189,7 @@ interface MultiEntryListProps {
   entries: ProfileEntryDraft[];
   emptyState: React.ReactNode;
   onRemoveEntry: (sectionKey: string, entryKey: string, title: string) => void;
-  onSetPreference: (
-    field: FieldOut,
-    patch: { hidden?: boolean; collapsed_override?: boolean | null },
-  ) => void;
+  onSetPreference: (field: FieldOut, patch: { hidden?: boolean }) => void;
 }
 
 function MultiEntryList({

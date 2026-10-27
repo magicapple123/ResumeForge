@@ -393,6 +393,8 @@ describe("中栏 · 栏目条与溢出三角下拉（需求 4）", () => {
       t("editor.tab.campus"),
       t("editor.tab.projects"),
       t("editor.tab.skills"),
+      // 2026-10：语言能力独立成栏（不再并入技能），栏目条多一个。
+      t("editor.section.languages"),
       t("editor.tab.awards"),
       // W14 科研三页签（researchTabItems 装配）。
       rt("research.tab.publications"),
@@ -416,7 +418,7 @@ describe("中栏 · 栏目条与溢出三角下拉（需求 4）", () => {
     });
   });
 
-  it("三角下拉只列没有显示出来的栏目（不是全部 10 个）", async () => {
+  it("三角下拉只列没有显示出来的栏目（不是全部 11 个）", async () => {
     // 轨道 200px、每栏 60px、按钮预留 28px → 边界 172px：只有前两栏完整放得下。
     const restore = stubLayout(200, 60);
     try {
@@ -426,8 +428,8 @@ describe("中栏 · 栏目条与溢出三角下拉（需求 4）", () => {
       fireEvent.click(trigger);
 
       const menuItems = await screen.findAllByRole("menuitem");
-      // 只列没显示出来的：少于全部 10 个，且不含第一个栏目。
-      expect(menuItems.length).toBeLessThan(10);
+      // 只列没显示出来的：少于全部 11 个（2026-10 语言能力独立成栏后多一个），且不含第一个栏目。
+      expect(menuItems.length).toBeLessThan(11);
       expect(menuItems.length).toBeGreaterThan(0);
       expect(menuItems.map((item) => item.textContent)).not.toContain(t("editor.tab.basic"));
 

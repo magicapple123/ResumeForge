@@ -208,6 +208,7 @@ _SECTION_ORDER = (
     "patents",
     "credentials",
     "skills",
+    "languages",
     "awards",
 )
 
@@ -298,6 +299,12 @@ def _section_texts(resume: ResumeContent) -> dict[str, str]:
         **research_section_texts(resume),
         **credential_section_texts(resume),
         "skills": _join_parts(*[_join_parts(item.name, item.level) for item in resume.skills]),
+        "languages": _join_parts(
+            *[
+                _join_parts(item.name, item.level, item.certificate, item.score)
+                for item in resume.languages
+            ]
+        ),
         "awards": _join_parts(
             *[_join_parts(item.name, item.description) for item in resume.awards]
         ),

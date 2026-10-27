@@ -8,7 +8,7 @@
 3. 填充链路 = project_paper_content(consumed)（前端新建/从资料填充消费的就是它）；
 4. 生成链路 = 模拟模型输出（改写正文、漏写自定义行/自建分区/语言）→ 真实
    generation_postprocess.ensure_custom_field_lines_in_resume / attach_custom_sections /
-   language_restore.restore_language_skills 后处理。
+   language_restore.restore_languages 后处理。
 
 断言：C5-B「标签：值」两条链路逐字一致且生成侧缺失可补回；C1 空键；C2 自建独立成栏且
 两链路一致；material_only 字段不回声（确定性链路不写 + C6 保存前回声阻断负例）；R-72
@@ -33,7 +33,7 @@ from app.services.resume.generation_postprocess import (
     enforce_material_only_echo,
     ensure_custom_field_lines_in_resume,
 )
-from app.services.resume.language_restore import restore_language_skills
+from app.services.resume.language_restore import restore_languages
 from tests.test_profile_group_budget import (
     UNPARTICIPATING,
     seed_profile,
@@ -172,11 +172,12 @@ def test_fill_chain_projection_from_real_storage_has_lines_and_c2_and_languages(
     # 空自建分区不产生纸面占位，但仍参与/存在于消费快照（C1）。
     assert "待补充" not in custom_titles
 
-    # R-72：语言条目整条映射为 skills，排在系统技能之后，level=证书/分数拼接。
+    # 2026-10：语言能力独立成栏，不再并入 skills（用户反馈 #11）。
     skill_names = [item.name for item in content.skills]
-    assert skill_names[:3] == ["Python", "RF_CUSTOM_SKILL_XYZ", "MySQL"]
-    assert skill_names[-1] == "英语"
-    assert content.skills[-1].level == "CET-6 · 550"
+    assert skill_names == ["Python", "RF_CUSTOM_SKILL_XYZ", "MySQL"]
+    assert [item.name for item in content.languages] == ["英语"]
+    language = content.languages[0]
+    assert (language.level, language.score) == ("CET-6", "550")
 
     # material_only（basic_info / 知识产权 / 语言能力）的自定义字段值不上纸面（C6）。
     dumped = _dumped(content)
@@ -231,10 +232,11 @@ def test_generation_chain_postprocess_matches_fill_chain(db_session):
         item.model_dump() for item in fill_content.custom_sections
     ]
 
-    # R-72：模型漏写语言时按同一映射补位，level 与填充链路一致。
-    restored, language_annotations = restore_language_skills(with_custom, consumed)
-    assert restored.skills[-1].name == "英语"
-    assert restored.skills[-1].level == fill_content.skills[-1].level == "CET-6 · 550"
+    # 2026-10：模型漏写语言时补进独立 languages 分区，字段与填充链路一致。
+    restored, language_annotations = restore_languages(with_custom, consumed)
+    assert restored.languages[-1].name == "英语"
+    assert restored.languages[-1].model_dump() == fill_content.languages[-1].model_dump()
+    assert (restored.languages[-1].level, restored.languages[-1].score) == ("CET-6", "550")
     assert language_annotations[-1]["origin"] == "restored"
 
     # 后处理不会把仅素材值写进任何纸面位置（C6）。

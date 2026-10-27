@@ -30,6 +30,20 @@ def skill_tag_text(skill, language: str, fields) -> str:
     return f"{text} · {extra}" if extra else text
 
 
+def language_tag_text(item, language: str, fields) -> str:
+    """语言能力标签文本（2026-10 独立分区）：语言（水平 · 证书 · 分数）· 取得时间。
+
+    与 HTML/Word/Markdown 同一组装口径：空字段不产生多余分隔符，只有一端时不留孤零零的
+    " · "；取得时间用字段前缀（`obtained`）而不是硬编码中文。
+    """
+    detail = " · ".join(part for part in (item.level, item.certificate, item.score) if part)
+    text = level_text(item.name, detail, language) if item.name else detail
+    if item.obtained_at:
+        obtained = f"{fields['obtained']}：{item.obtained_at}"
+        text = f"{text} · {obtained}" if text else obtained
+    return text
+
+
 def draw_bullets_with_profile_fields(
     pdf,
     lines: Sequence[str],
@@ -49,4 +63,9 @@ def draw_bullets_with_profile_fields(
         pdf.bullets(list(lines), base, style=style, section=section)
 
 
-__all__ = ["draw_bullets_with_profile_fields", "draw_profile_meta", "skill_tag_text"]
+__all__ = [
+    "draw_bullets_with_profile_fields",
+    "draw_profile_meta",
+    "language_tag_text",
+    "skill_tag_text",
+]

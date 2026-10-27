@@ -39,7 +39,7 @@ EN_TITLES: tuple[str, ...] = tuple(SECTION_TITLES["en-US"][key] for key in SECTI
 
 
 def _resume() -> ResumeContent:
-    """全部 11 个分区（含 W14 科研三栏目、A4 资格证照）都非空的样本；正文刻意不含任何标题词。"""
+    """全部 12 个分区（含 W14 科研三栏目、A4 资格证照、语言能力）都非空的样本；正文刻意不含任何标题词。"""
     return ResumeContent(
         name="林致远",
         phone="13800001234",
@@ -139,6 +139,17 @@ def _resume() -> ResumeContent:
             }
         ],
         skills=[{"name": "Python", "level": "精通"}, {"name": "MySQL", "level": "熟练"}],
+        # 2026-10：语言能力是独立分区（含取得时间，验证它在各渲染器里的元信息位）。
+        languages=[
+            {
+                "name": "英语",
+                "level": "CET-6",
+                "certificate": "六级证书",
+                "score": "550",
+                "obtained_at": "2013-06",
+            },
+            {"name": "日语", "level": "N2"},
+        ],
         awards=[{"name": "年度优秀员工", "date": "2023-12", "description": "交易链路稳定性治理"}],
     )
 

@@ -42,6 +42,9 @@ PROJECTS_FIRST = [
     "campus_experience",
     "awards",
     "summary",
+    # 2026-10：语言能力独立成栏且可在资料页排序：它按资料顺序排在已映射分区之后，
+    # 未映射的科研/证照（补齐项）仍在最后。
+    "languages",
     "publications",
     "research_projects",
     "patents",
@@ -101,6 +104,7 @@ def test_manual_resume_materializes_ten_keys_when_profile_is_old_default(client)
         "campus_experience",
         "awards",
         "summary",
+        "languages",
         "publications",
         "research_projects",
         "patents",
@@ -126,6 +130,7 @@ def test_manual_resume_explicit_format_config_wins(client):
         "patents",
         "credentials",
         "skills",
+        "languages",
         "campus_experience",
     ]
 

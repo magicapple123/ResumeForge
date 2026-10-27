@@ -1,23 +1,23 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * 覆盖层注入（D05/D10/D09）的组件级验证。
+ * 覆盖层注入（D05/D10）的组件级验证。
  *
  * 这里同时钉住 D05 最关键的承诺：**辅助层不进入导出**——注入只发生在 iframe 的
  * contentDocument 里，纸面 HTML（srcDoc）字符串一个字节都不变；`features/resume-proview`
  * 也不 import 任何导出/渲染接口（另见 exportIsolation.test.ts 的结构断言）。
+ *
+ * 照片裁剪（#10）**不在**覆盖层里：后端已按 `format_config.photo_crop` 把纸面照片换成
+ * 派生裁剪图，覆盖层再写 `object-view-box` 就是二次裁切。下面有一条回归用例钉住它。
  */
 import { afterEach, describe, expect, it } from "vitest";
 import {
-  CROP_STYLE_ID,
   PROOF_CSS,
   PROOF_STYLE_ID,
   applyGrayscaleProof,
-  applyPhotoCrop,
   clearProviewOverlays,
   syncProviewOverlays,
 } from "./previewOverlays";
 import { GUIDE_LAYER_ID } from "./guideGeometry";
-import { createPhotoCropParams, DEFAULT_CROP_DRAFT } from "./photoCrop";
 
 function makeFrame(html = "<!doctype html><html><body></body></html>"): HTMLIFrameElement {
   const frame = document.createElement("iframe");
@@ -50,23 +50,33 @@ describe("灰度校样（D10）", () => {
   });
 });
 
-describe("照片裁剪预览（D09）", () => {
-  it("写入 object-view-box 的 inset 百分比，不回写图片数据", () => {
-    const frame = makeFrame();
+describe("照片裁剪不再由覆盖层二次裁切（#10）", () => {
+  it("纸面里服务端已派生的裁剪图原样显示，不注入 object-view-box", () => {
+    // 后端收到 format_config.photo_crop 时会把 <img> 换成派生裁剪图；覆盖层要做的
+    // 是"什么都不做"——再叠一层 object-view-box 会把取景再裁一次。
+    const cropped = "data:image/png;base64,CROPPED-PHOTO";
+    const html = `<!doctype html><html><body><img class="profile-photo" src="${cropped}" /></body></html>`;
+    const frame = makeFrame(html);
     const doc = frame.contentDocument as Document;
-    const params = createPhotoCropParams(
-      { sha256: "c".repeat(64), width: 1000, height: 1000 },
-      { ...DEFAULT_CROP_DRAFT, aspect: "1:1", zoom: 0.5 },
+    // jsdom 不解析 `srcdoc`：把同一份 HTML 同步写进文档，才能对"眼下这一页"做断言；
+    // `srcdoc` 属性本身仍保持原样（下面用它断言"纸面 HTML 没被改"）。
+    doc.open();
+    doc.write(html);
+    doc.close();
+    syncProviewOverlays(doc, {
+      guides: { margins: true, columns: true, baselines: true, paragraphs: true },
+      proof: false,
+      pageWidth: 794,
+      pageHeight: 1123,
+    });
+
+    const styles = Array.from(doc.querySelectorAll("style"));
+    expect(styles.some((style) => (style.textContent ?? "").includes("object-view-box"))).toBe(
+      false,
     );
-    const before = frame.getAttribute("srcdoc");
-    applyPhotoCrop(doc, params);
-    const style = doc.getElementById(CROP_STYLE_ID) as HTMLStyleElement;
-    expect(style.textContent).toContain("object-view-box:inset(");
-    expect(style.textContent).toContain(".profile-photo");
-    // 非破坏：iframe 的 srcDoc 一个字节没变，图片 src 也没被替换。
-    expect(frame.getAttribute("srcdoc")).toBe(before);
-    applyPhotoCrop(doc, null);
-    expect(doc.getElementById(CROP_STYLE_ID)).toBeNull();
+    expect(doc.querySelector(".profile-photo")?.getAttribute("src")).toBe(cropped);
+    // 非破坏：iframe 的 srcDoc 一个字节没变。
+    expect(frame.getAttribute("srcdoc")).toContain(cropped);
   });
 });
 
@@ -79,7 +89,6 @@ describe("覆盖层总编排", () => {
     syncProviewOverlays(doc, {
       guides: { margins: true, columns: true, baselines: false, paragraphs: false },
       proof: false,
-      crop: null,
       pageWidth: 794,
       pageHeight: 1123,
     });
@@ -91,6 +100,5 @@ describe("覆盖层总编排", () => {
     clearProviewOverlays(doc);
     expect(doc.getElementById(GUIDE_LAYER_ID)).toBeNull();
     expect(doc.getElementById(PROOF_STYLE_ID)).toBeNull();
-    expect(doc.getElementById(CROP_STYLE_ID)).toBeNull();
   });
 });

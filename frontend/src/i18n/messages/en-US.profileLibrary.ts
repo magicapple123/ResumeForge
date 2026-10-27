@@ -59,8 +59,6 @@ const profileLibrary = {
   "profileLibrary.entry.moveUp": "Move this Entry up",
   "profileLibrary.entry.moveDown": "Move this Entry down",
   "profileLibrary.entry.drag": "Drag to reorder",
-  "profileLibrary.field.more": "More Fields",
-  "profileLibrary.field.less": "Collapse extra Fields",
   "profileLibrary.field.private":
     "Stored locally only; never sent to models or application forms, or printed on the Resume",
   "profileLibrary.field.placeholder": "Optional",

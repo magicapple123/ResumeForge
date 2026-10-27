@@ -11,13 +11,18 @@
   <div class="header-main">
     <div class="name" data-role="name"><span data-resume-path="name">{{ resume.name }}</span>{% if resume.gender %} <span data-resume-path="gender" class="name-extra" data-role="meta">{{ resume.gender }}</span>{% endif %}</div>
     {% if resume.job_intent %}<div class="intent" data-role="meta">{{ field_labels.intent }}：<span data-resume-path="job_intent">{{ resume.job_intent }}</span></div>{% endif %}
+  {# 联系方式（#3）：字段顺序 / 文案 / 强制换行来自 `resume_contact.contact_items`，
+     四个渲染器（HTML / PDF / Word / 草稿预览）共用同一份，这里只负责把
+     break_before 译成标记：<br> = 用户设置的强制换行；<wbr> = 字段之间的自动换行点。
+     <span> 之间没有空白字符，浏览器本来**没有**换行点——不加 <wbr> 时整行只能
+     从字段内部劈开（"个人主页：huangcenguo.top" 被截成两行的根因）。
+     字段内部的 nowrap 在各模板 `.header .contact span` 上声明；缺了它 <wbr> 会
+     退化成"可在字段内任意折行"的旧行为。 #}
   <div class="contact" data-role="meta">
-      {%- if resume.phone -%}<span data-resume-path="phone">{{ resume.phone }}</span>{%- endif -%}
-      {%- if resume.email -%}<span data-resume-path="email">{{ resume.email }}</span>{%- endif -%}
-      {%- if resume.city -%}<span data-resume-path="city">{{ resume.city }}</span>{%- endif -%}
-      {%- if resume.birth_year -%}<span data-resume-path="birth_year">{{ resume.birth_year }}</span>{%- endif -%}
-      {%- if resume.github -%}<span data-resume-path="github">{{ field_labels.github }}：{{ resume.github }}</span>{%- endif -%}
-      {%- if resume.personal_website -%}<span data-resume-path="personal_website">{{ field_labels.website }}：{{ resume.personal_website }}</span>{%- endif -%}
+      {%- for item in contact_items -%}
+      {%- if item.break_before %}<br />{% elif not loop.first %}<wbr />{% endif -%}
+      <span data-resume-path="{{ item.key }}">{{ item.text }}</span>
+      {%- endfor -%}
     </div>
     {% if template_config.badges %}
     <div class="template-badges" aria-label="模板装饰">
@@ -46,6 +51,7 @@
 {%- elif section_key == "patents" %}{{ blocks.patents_block(resume) }}
 {%- elif section_key == "credentials" %}{{ blocks.credentials_block(resume) }}
 {%- elif section_key == "skills" %}{{ blocks.skills_block(resume) }}
+{%- elif section_key == "languages" %}{{ blocks.languages_block(resume) }}
 {%- elif section_key == "awards" %}{{ blocks.awards_block(resume) }}
 {%- endif %}
 {% endfor -%}

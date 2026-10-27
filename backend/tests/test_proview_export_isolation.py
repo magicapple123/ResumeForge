@@ -122,8 +122,8 @@ def test_docx_export_has_no_proview_overlay() -> None:
 
 def _photo_with_crop() -> tuple[str, dict]:
     """确定性 40×20 PNG + 与后端同口径的 photo_crop 域（sha256 是 data URL 字符串的哈希）。"""
-    # 必须用**图案**而不是纯色：Word 侧还有一层按模板比例 cover 的裁切，
-    # 纯色图裁前裁后像素完全相同，会让"裁剪是否生效"假阴性。
+    # 必须用**图案**而不是纯色：纯色图裁前裁后像素完全相同，会让"裁剪是否生效"
+    # 出现假阴性；派生图还会重新编码，图案是唯一能从产物像素上验证裁剪位置的办法。
     image = Image.new("RGB", (40, 20))
     image.putdata(
         [
@@ -142,8 +142,8 @@ def _photo_with_crop() -> tuple[str, dict]:
             "width": 40,
             "height": 20,
         },
-        # 刻意用**非居中**裁剪：Word 侧还有一层按模板比例居中的 cover，
-        # 居中裁剪会与那次 cover 得到同一块像素，让差异被掩盖。
+        # 刻意用**非居中**裁剪：左半块与"居中裁剪"得到的是不同像素，
+        # 能证明 rect 真的被消费，而不是被某层默认取景盖掉。
         "rect": {"x": 0.0, "y": 0.0, "w": 0.5, "h": 1.0},
         "aspect": "free",
     }

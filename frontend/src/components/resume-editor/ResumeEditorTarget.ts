@@ -7,6 +7,8 @@ const TAB_BY_SECTION: Record<string, string> = {
   campus_experience: "campus",
   projects: "projects",
   skills: "skills",
+  // 2026-10：语言能力是独立页签 / 独立正文分区。
+  languages: "languages",
   awards: "awards",
   // W14：科研三栏的 key 与 content 字段名一致（见 ResearchTabs.RESEARCH_TAB_KEYS）。
   publications: "publications",

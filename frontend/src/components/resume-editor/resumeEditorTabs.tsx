@@ -30,6 +30,7 @@ import CredentialsEditor from "../resume/CredentialsEditor";
 import ResumeBasicInfoTab from "../resume/ResumeBasicInfoTab";
 import { RESEARCH_TAB_KEYS, researchTabItems } from "../resume/research/ResearchTabs";
 import CustomSectionsEditor from "./CustomSectionsEditor";
+import LanguageEditor from "./LanguageEditor";
 import {
   AwardEditor,
   CampusEditor,
@@ -82,7 +83,7 @@ interface EditorTabSpec {
  *
  * 与 `ResumeEditorTarget.TAB_BY_SECTION` 不是同一张表：那张表的键是**正文数组字段名**
  * （education/projects/…），这里的是投影的**消费分区键**（educations/projects/…）。
- * basic_info 与 summary 同属「基本信息」；languages 按 R-72 写入技能，所以落到「技能」。
+ * basic_info 与 summary 同属「基本信息」；languages 自 2026-10 起是独立页签（不再落到技能）。
  */
 const TAB_KEY_BY_PROFILE_SECTION: Record<string, string> = {
   basic_info: "basic",
@@ -92,7 +93,8 @@ const TAB_KEY_BY_PROFILE_SECTION: Record<string, string> = {
   campus_experiences: "campus",
   projects: "projects",
   skills: "skills",
-  languages: "skills",
+  // 2026-10：语言能力独立成栏（不再是「专业技能」页签的一部分，用户反馈 #11）。
+  languages: "languages",
   awards: "awards",
   publications: "publications",
   research_projects: "research_projects",
@@ -110,6 +112,7 @@ export const EDITOR_TAB_CONTENT_FIELDS = [
   "campus_experience",
   "projects",
   "skills",
+  "languages",
   "awards",
   "publications",
   "research_projects",
@@ -185,6 +188,12 @@ function buildTabSpecs(summarySource: string, fillSummary: () => void): EditorTa
       label: t("editor.tab.skills"),
       contentField: "skills",
       children: <SkillEditor />,
+    },
+    {
+      key: "languages",
+      label: t("editor.section.languages"),
+      contentField: "languages",
+      children: <LanguageEditor />,
     },
     {
       key: "awards",

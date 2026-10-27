@@ -398,4 +398,5 @@ def test_credential_number_never_leaks_to_any_output() -> None:
     # 消费 DTO 类型里没有折叠态（Q：折叠/隐藏不得进入投影输入）
     assert "collapsed" not in ConsumedSection.__dataclass_fields__
     assert "hidden" not in ConsumedSection.__dataclass_fields__
-    assert "languages" not in ResumeContent.model_fields
+    # 2026-10：语言能力已是独立正文分区（不再并进 skills），属于内容字段。
+    assert "languages" in ResumeContent.model_fields

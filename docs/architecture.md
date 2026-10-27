@@ -233,8 +233,10 @@ DTO 读取时已被裁掉）。`GET /api/profile/current/projection` 带 `editor
 唯一数据表；`paper_projection.py` 做确定性转换（`GET /api/profile/current/projection` 与生成链路共用）：
 C1 空分区不产生占位；自建板块**独立成栏**（`ResumeContent.custom_sections`，排在 13 个系统分区之后，C2/R-79）；
 自定义字段以「标签：值」追加到承载区，空值跳过、超长如实 warning（R-44）；`ensure_custom_field_lines` 是
-C5-B 的唯一实现（正文可被 AI 改写，逐字段检测、缺失则按定义顺序补回，不拒绝保存）；语言能力按
-`language_projection.py` 映射为 skills 条目（R-72）。证书编号等私密字段在承载区投影前就被跳过。
+C5-B 的唯一实现（正文可被 AI 改写，逐字段检测、缺失则按定义顺序补回，不拒绝保存）；语言能力
+（2026-10 起）按 `language_projection.py` 映射为**独立的 `ResumeContent.languages` 分区**（五字段
+语言/水平/证书/分数/取得时间，空列表不序列化；旧版 R-72 的"并入 skills"已废弃），HTML / PDF / Word /
+Markdown / TXT 五条产物都渲染独立「语言能力」小节。证书编号等私密字段在承载区投影前就被跳过。
 
 **升级与旧数据**：旧六表 / `profile_fact` / `profile_fact_field_pref` 不删、不迁、也不再被新界面读取
 （R-46）；`services/profile/legacy_status.py` 用 `SELECT 1 ... LIMIT 1` 只探测「旧表里是否还有实际内容」，

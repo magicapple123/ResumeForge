@@ -73,6 +73,8 @@ RESUME_SECTION_KEYS: tuple[str, ...] = (
     # A4：资格证照（与 services/resume/resume_sections.py 的 DEFAULT_SECTION_ORDER 同批更新）。
     "credentials",
     "skills",
+    # 2026-10：语言能力独立成栏（与 DEFAULT_SECTION_ORDER 同批更新）。
+    "languages",
     "campus_experience",
     "awards",
     "summary",

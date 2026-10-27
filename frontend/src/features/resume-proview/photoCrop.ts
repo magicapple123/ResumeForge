@@ -22,8 +22,9 @@
  * ## 非破坏边界
  *
  * - 原图引用不动：`content.photo`（data URL）始终是**原图**；裁剪只产生参数。
- * - 预览侧只写 CSS `object-view-box`（见 `previewOverlays.ts`），不换图片数据。
- * - 后端渲染时按 rect 派生裁剪图（HTML/PDF/Word 消费同一份），原图仍可恢复。
+ * - 渲染时按 rect 派生裁剪图（HTML/PDF/Word 消费同一份），原图仍可恢复。
+ * - 前端**不再**在纸面 iframe 上叠 `object-view-box`（2026-10 #10）：那份纸面 HTML 的
+ *   照片已经由后端按同一参数派生过，再叠一层会二次裁切、取景错位。
  *
  * ## 读写走 v1 域协议
  *
@@ -191,23 +192,6 @@ export function draftFromParams(params: PhotoCropParams): PhotoCropDraft {
 export function isFullFrame(params: PhotoCropParams): boolean {
   const { rect } = params;
   return rect.x <= 0.0001 && rect.y <= 0.0001 && rect.w >= 0.9999 && rect.h >= 0.9999;
-}
-
-/** 归一化矩形 → `object-view-box` 的 inset 百分比（上 右 下 左）。 */
-export function cropInsetPercent(params: PhotoCropParams): {
-  top: number;
-  right: number;
-  bottom: number;
-  left: number;
-} {
-  const { x, y, w, h } = params.rect;
-  const pct = (value: number) => Math.round(value * 10000) / 100;
-  return {
-    top: pct(Math.max(0, y)),
-    right: pct(Math.max(0, 1 - x - w)),
-    bottom: pct(Math.max(0, 1 - y - h)),
-    left: pct(Math.max(0, x)),
-  };
 }
 
 function isUnit(value: unknown): value is number {

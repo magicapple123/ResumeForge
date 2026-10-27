@@ -143,6 +143,27 @@ class ResumeSkill(OptionalVisibilityMixin, BaseModel):
     _optional_empty_string_fields: ClassVar[tuple[str, ...]] = ("category",)
 
 
+class ResumeLanguageItem(OptionalVisibilityMixin, BaseModel):
+    """语言能力条目（2026-10 起独立成栏，不再并入专业技能）。
+
+    资料页的五个字段一一对应：语言 / 水平等级 / 证书 / 分数 / 取得时间。
+    旧版把这些信息压成一条 skills 记录（R-72 路线 1），用户反馈"制作台里语言能力
+    变成了专业技能"，因此改为独立分区；空列表不序列化（旧简历指纹不变）。
+    """
+
+    name: str = Field(default="", max_length=128)
+    level: str = Field(default="", max_length=64)
+    certificate: str = Field(default="", max_length=128)
+    score: str = Field(default="", max_length=64)
+    obtained_at: str = Field(default="", max_length=32)
+    _optional_empty_string_fields: ClassVar[tuple[str, ...]] = (
+        "level",
+        "certificate",
+        "score",
+        "obtained_at",
+    )
+
+
 class ResumeAward(OptionalVisibilityMixin, BaseModel):
     name: str = Field(default="", max_length=256)
     date: str = Field(default="", max_length=32)
@@ -168,6 +189,7 @@ __all__ = [
     "ResumeCampusExperience",
     "ResumeEducation",
     "ResumeExperience",
+    "ResumeLanguageItem",
     "ResumeLine",
     "ResumeProject",
     "ResumeSkill",

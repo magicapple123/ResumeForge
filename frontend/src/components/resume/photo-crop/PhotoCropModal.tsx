@@ -67,18 +67,6 @@ function previewAspect(draft: PhotoCropDraft, source: PhotoSourceInfo | null): n
   return pixelWidth / pixelHeight;
 }
 
-/** 浏览器是否支持 `object-view-box`（Chromium 104+ / Electron 新版支持）。 */
-function supportsObjectViewBox(): boolean {
-  try {
-    const api = (
-      globalThis as { CSS?: { supports?: (property: string, value: string) => boolean } }
-    ).CSS;
-    return Boolean(api?.supports?.("object-view-box", "inset(0)"));
-  } catch {
-    return false;
-  }
-}
-
 export default function PhotoCropModal({
   open,
   onClose,
@@ -126,7 +114,6 @@ export default function PhotoCropModal({
     : null;
   const aspectRatio = previewAspect(draft, source);
   const rect = source ? computeCropRect(source, draft) : null;
-  const objectViewBoxSupported = supportsObjectViewBox();
   const cropRatio =
     params && params.rect.h > 0 && params.rect.w > 0
       ? (params.rect.w * params.source.width) / (params.rect.h * params.source.height)
@@ -322,14 +309,6 @@ export default function PhotoCropModal({
           })}
         />
       ) : null}
-      {objectViewBoxSupported ? null : (
-        <Alert
-          style={{ marginTop: 10 }}
-          type="info"
-          showIcon
-          title={t("proview.photo.unsupported")}
-        />
-      )}
     </Modal>
   );
 }

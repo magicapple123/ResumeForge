@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * 「局部排版」里的两个批量动作（W07 / D03 多选批量调整 + 格式刷）。
+ * 「局部排版」里的批量动作（W07-TL 文字级别 + W07 / D03 多选批量调整 + 格式刷）。
  *
  * 挂载点是左栏 `WorkbenchParamsColumn` 的「局部排版」组、对象面板下方：多选来自大纲
  * （`OutlinePanel.onMultiSelectionChange`），单条来源来自大纲选中（`selectedObjectId`）。
@@ -16,6 +16,8 @@ import { t } from "../../i18n";
 import type { OutlineMultiEntry } from "./outline/OutlinePanel";
 import MultiStyleBar from "./typography/MultiStyleBar";
 import FormatPainterButton from "./typography/FormatPainterButton";
+import TextLevelBar from "./typography/TextLevelBar";
+import { TEXT_LEVEL_LABELS } from "../../features/resume-layout/textLevels";
 import {
   readStyleDomains,
   resolvedPropValue,
@@ -111,6 +113,20 @@ export default function WorkbenchTypographyTools({
       style={{ width: "100%" }}
       data-workbench-typography-tools="1"
     >
+      <TextLevelBar
+        layout={layout}
+        selected={selected}
+        selectedObjectId={selectedObjectId}
+        disabled={disabled}
+        onChange={onChange}
+        onApplied={({ level, count }) =>
+          message.success(
+            level
+              ? t("typography.level.applied", { level: t(TEXT_LEVEL_LABELS[level]), count })
+              : t("typography.level.restored", { count }),
+          )
+        }
+      />
       {selected.length > 0 ? (
         <MultiStyleBar
           layout={layout}

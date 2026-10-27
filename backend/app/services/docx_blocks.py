@@ -348,7 +348,7 @@ def entry_head(
     )
 
 
-def float_picture(run, *, align: str = "right") -> bool:
+def float_picture(run, *, align: str = "right", vertical_offset_mm: float = 0.0) -> bool:
     """把 ``run`` 里刚插入的图片从**嵌入型**改成「**浮于文字上方**」（不占行高）。
 
     ## 为什么必须改
@@ -377,6 +377,9 @@ def float_picture(run, *, align: str = "right") -> bool:
 
     :param run: 已经 `add_picture()` 过的 run。
     :param align: ``"right"``（默认，贴版心右缘）/ ``"left"``（elegant 这类照片在左的模板）。
+    :param vertical_offset_mm: 相对锚点段落顶部的下移量（mm）。照片改成"按原图比例装进
+        照片框（contain）"之后，框内上下留白由调用方算好传进来，与 CSS
+        `object-fit: contain` 的垂直居中同一定位；默认 0 = 贴段首（旧行为）。
     :returns: 是否真的转换成功；没有图片或结构不认识时返回 ``False``（调用方决定是否回退）。
     """
     drawing = run._element.find(qn("w:drawing"))
@@ -421,7 +424,8 @@ def float_picture(run, *, align: str = "right") -> bool:
     position_v = OxmlElement("wp:positionV")
     position_v.set("relativeFrom", "paragraph")
     offset = OxmlElement("wp:posOffset")
-    offset.text = "0"
+    # 0mm 仍写 "0"（与改动前的字节完全一致）；有偏移时用 EMU（1mm = 36000 EMU）。
+    offset.text = "0" if vertical_offset_mm == 0 else str(int(round(Mm(vertical_offset_mm).emu)))
     position_v.append(offset)
     anchor.append(position_v)
 

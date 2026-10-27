@@ -25,8 +25,10 @@ import {
 } from "@ant-design/icons";
 import { Button, Form, Space, Tooltip } from "antd";
 import type { FormListFieldData } from "antd";
+import { memo } from "react";
 import type { ReactNode } from "react";
 import EmptyState from "../../common/EmptyState";
+import AppendedCarrierFields from "../../resume-editor/AppendedCarrierFields";
 import { rt } from "../../../features/resume-research/i18n";
 import { useLocale } from "../../../i18n/i18nContext";
 
@@ -53,6 +55,27 @@ const CARD_STYLE = {
   borderRadius: 8,
   background: "var(--rf-surface-alt)",
 } as const;
+
+/**
+ * 一条目的**字段区** memo（需求 #12，与 `resume-editor/ResumeListSection` 同一取舍）：
+ * Form.List 在它管辖的数组每次变化时都会重跑渲染函数，而数组引用在"某一条的某个字段被改"
+ * 时必然变——不钉住的话，打字会让这个分区所有条目的所有 Form.Item 陪跑重渲染。
+ */
+const EntryFields = memo(
+  function EntryFields({
+    field,
+    children,
+  }: {
+    field: FormListFieldData;
+    children: (field: FormListFieldData) => ReactNode;
+  }) {
+    return <>{children(field)}</>;
+  },
+  (previous, next) =>
+    previous.field.name === next.field.name &&
+    previous.field.key === next.field.key &&
+    previous.children === next.children,
+);
 
 export default function ResearchListSection<T extends object>({
   name,
@@ -135,7 +158,10 @@ export default function ResearchListSection<T extends object>({
                     </Tooltip>
                   </Space>
                 </div>
-                {children(field)}
+                <EntryFields field={field} children={children} />
+                {/* 需求 #5：科研三栏的自定义字段同样以承载区「标签：值」行上纸
+                    （论文 → note，科研项目 → description；专利仅素材、没有承载区不渲染）。 */}
+                <AppendedCarrierFields sectionField={name} entryName={field.name} />
               </div>
             ))}
             <Button

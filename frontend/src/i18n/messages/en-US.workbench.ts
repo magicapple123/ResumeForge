@@ -141,6 +141,7 @@ const workbench = {
   "editor.custom-sections.remove-line": "Delete this line",
   "editor.custom-sections.remove-section": "Delete this Section",
   "editor.custom-sections.text": "Main text",
+  "editor.custom-sections.content": "Content",
   "editor.custom-sections.lines": "Label lines",
   "editor.custom-sections.label": "Label",
   "editor.custom-sections.value": "Value",

@@ -82,7 +82,7 @@ from .layout import (
 )
 from .media import _join as _join
 from .media import _photo_bytes as _photo_bytes
-from .media import crop_image_to_cover
+from .media import fit_photo_size
 from .name_gender import NameGenderPlan, draw_name_gender, plan_name_gender
 from .render import ResumePDF
 from .skill_tags import SkillTagMetrics as SkillTagMetrics
@@ -96,7 +96,7 @@ __all__ = [
     "ResumePDFError",
     "build_resume_pdf",
     "column_frames",
-    "crop_image_to_cover",
+    "fit_photo_size",
     "draw_name_gender",
     "draw_skill_tags",
     "font_available",

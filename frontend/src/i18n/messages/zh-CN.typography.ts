@@ -168,6 +168,33 @@ const typography = {
   "typography.inline.noTarget": "先点中要修改的文本框",
   "typography.inline.selectFirst": "先选要修改的文字",
   "typography.inline.invalidUrl": "链接要用 http(s) 地址",
+  // ── 文字级别（W07-TL：一级/二级/三级标题、正文、次要说明）────────────
+  /** 工具条标题。 */
+  "typography.level.title": "文字级别",
+  /** 按钮组 / 工具条的读屏名。 */
+  "typography.level.groupAria": "把选中的内容设为固定文字级别",
+  /** 一句口径：级别作用在段落上，不是整份缩放，且可撤销。 */
+  "typography.level.hint": "级别只改选中段落的字号层级与段距，每次应用可撤销",
+  /** 没有选中任何内容时的去处。 */
+  "typography.level.empty": "先在大纲或纸面选中一条内容",
+  "typography.level.count": "作用于 {count} 条",
+  "typography.level.current": "当前：{level}",
+  /** 反推结果：对象上没有任何级别覆盖。 */
+  "typography.level.currentInherit": "跟随模板",
+  /** 反推结果：有级别属性但和任一固定级别都对不上（在对象面板手改过）。 */
+  "typography.level.currentCustom": "自定义",
+  /** 反推结果：多选的目标级别不一致。 */
+  "typography.level.currentMixed": "多个级别",
+  "typography.level.heading1": "一级标题",
+  "typography.level.heading2": "二级标题",
+  "typography.level.heading3": "三级标题",
+  "typography.level.body": "正文",
+  "typography.level.caption": "次要说明",
+  /** 删掉级别管理的四项覆盖，回到跟随模板。 */
+  "typography.level.restore": "恢复跟随模板",
+  /** 应用成功提示（含对象数；Toast ≤20 字）。 */
+  "typography.level.applied": "已设为「{level}」，共 {count} 条",
+  "typography.level.restored": "已恢复 {count} 条为跟随模板",
 } as const;
 
 export default typography;

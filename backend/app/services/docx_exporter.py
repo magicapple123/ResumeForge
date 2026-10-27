@@ -54,12 +54,18 @@ from .pdf_exporter import (
     PAGE_WIDTH_MM,
     _photo_bytes,
     _resolve_font_paths,
-    crop_image_to_cover,
+    fit_photo_size,
     measure_content_height,
     resolve_accent,
     resolve_accent_soft,
     resolve_font_paths,
     resolve_layout,
+)
+from .resume.resume_contact import (
+    CONTACT_BREAKS_KEY,
+    WORD_SEPARATOR,
+    contact_items,
+    contact_lines,
 )
 from .resume.resume_labels import DEFAULT_RESUME_LANGUAGE, field_labels
 from .resume.resume_render_overrides import resolve_render_overrides
@@ -76,10 +82,6 @@ class ResumeDOCX:
     content: bytes
     pages: int | None
     overflow: bool = False
-
-
-def _join(values: list[str], separator: str = " · ") -> str:
-    return separator.join(str(item).strip() for item in values if str(item).strip())
 
 
 def _apply_continuation(doc, overrides, name: str) -> None:
@@ -141,11 +143,13 @@ def _header(
     include_photo: bool,
     language: str,
     theme,
+    format_config: dict | None = None,
 ) -> None:
     base = layout.base_px
     # 这份简历的字体族 + 正文/辅助色（与 PDF 同一份解析）。
     set_font = partial(_set_run_font, font_name=theme.font_name)
     photo = _photo_bytes(resume.photo) if (resume.photo and include_photo) else None
+    fields = field_labels(language)
 
     # 姓名与性别各用各的 run：姓名是姓名字号/粗体/强调色，性别是 `.name-extra` 的口径
     # （extra 字号/常规字重/muted 灰）——此前拼成一个 run，性别跟着姓名一起变大变粗。
@@ -164,20 +168,22 @@ def _header(
 
     if photo:
         try:
-            # 与 PDF 同一口径：先按模板照片框的比例做 object-fit: cover 的居中裁剪
-            # （`crop_image_to_cover`，一处实现两处共用），宽度给了之后高度随图片
-            # 自身宽高比走——裁过之后它恰好就是模板的 `photo_height_ratio`。
+            # 与 PDF 同一口径：照片按**原图比例**装进模板照片框（object-fit: contain），
+            # 不再按框比例 cover 裁切——服务端已经按 `photo_crop` 派生过裁剪图，再裁一次
+            # 用户就"看不到裁剪效果"（#10）。只给宽度即可：python-docx 按图片自身宽高比
+            # 算高度，宽高比因此与 fit_photo_size 的结果一致、不会变形。
+            photo_w = layout.gap_mm(layout.photo_width_ratio)
+            photo_h = layout.gap_mm(layout.photo_height_ratio)
+            draw_w, draw_h = fit_photo_size(photo, photo_w, photo_h)
             picture_run = name_paragraph.add_run()
-            picture_run.add_picture(
-                BytesIO(
-                    crop_image_to_cover(photo, layout.photo_width_ratio / layout.photo_height_ratio)
-                ),
-                width=Mm(layout.gap_mm(layout.photo_width_ratio)),
-            )
+            picture_run.add_picture(BytesIO(photo), width=Mm(draw_w))
             # **浮于文字上方**（2026-10-24 用户实测的解法）：嵌入型会让照片独占一行、
             # 把姓名整体下推，页头因此比预览高一截。详见 `docx_blocks.float_picture`。
+            # 垂直偏移 = contain 居中留出的上边距，与 HTML `object-fit: contain` 同一定位。
             float_picture(
-                picture_run, align="left" if layout.header_photo_side == "left" else "right"
+                picture_run,
+                align="left" if layout.header_photo_side == "left" else "right",
+                vertical_offset_mm=max(0.0, (photo_h - draw_h) / 2),
             )
         except Exception:  # noqa: BLE001 - 照片坏了不能阻断导出
             logger.warning("简历照片无法写入 Word，已跳过")
@@ -185,19 +191,29 @@ def _header(
     if resume.job_intent:
         intent_paragraph = _paragraph(doc)
         header_paragraphs.append(intent_paragraph)
-        intent_run = intent_paragraph.add_run(
-            f"{field_labels(language)['intent']}：{resume.job_intent}"
-        )
+        intent_run = intent_paragraph.add_run(f"{fields['intent']}：{resume.job_intent}")
         set_font(intent_run, size_pt=base * layout.intent_ratio * _PX_TO_PT, color=theme.muted_text)
 
-    contact = _join([resume.phone, resume.email, resume.city, resume.birth_year], "　　")
-    if contact:
+    # 联系方式（#6 / #3）：字段集合 / 文案 / 强制换行与 HTML、PDF 共用 `resume_contact`。
+    # 此前 Word 只拼了 phone / email / city / birth_year 四个，GitHub 与个人主页整段缺失
+    # ——预览有、导出没有。强制换行用 OOXML 的 `w:br`（`run.add_break()`），
+    # 与 HTML 的 `<br>` 同义；同一条里字段之间用全角空格（Word 的断行点）。
+    contact_line_texts = contact_lines(
+        contact_items(resume, fields, (format_config or {}).get(CONTACT_BREAKS_KEY)),
+        WORD_SEPARATOR,
+    )
+    if contact_line_texts:
         contact_paragraph = _paragraph(doc)
         header_paragraphs.append(contact_paragraph)
-        contact_run = contact_paragraph.add_run(contact)
-        set_font(
-            contact_run, size_pt=base * layout.contact_ratio * _PX_TO_PT, color=theme.muted_text
-        )
+        for index, line in enumerate(contact_line_texts):
+            if index:
+                contact_paragraph.add_run().add_break()
+            contact_run = contact_paragraph.add_run(line)
+            set_font(
+                contact_run,
+                size_pt=base * layout.contact_ratio * _PX_TO_PT,
+                color=theme.muted_text,
+            )
 
     # 页头底色块（modern 的浅绿块）：模板里 `.header` 有 `background` + `padding`，
     # 导出后若只有文字没有底色，"Word 与预览不一样"就又回来了。三段各加同色底纹，
@@ -227,6 +243,8 @@ def _build_document(
     # 否则这个 None 会顺着传进 section_custom（DocxTheme 参数）把类型弄脏。
     theme: DocxTheme,
     overrides=None,
+    # 已白名单化的 format_config：页头联系方式只要其中的 contact_breaks（#3）。
+    format_config: dict | None = None,
 ) -> bytes:
     base = layout.base_px
     doc = Document()
@@ -254,6 +272,7 @@ def _build_document(
         include_photo=include_photo,
         language=language,
         theme=theme,
+        format_config=format_config,
     )
 
     for section_key in section_order:
@@ -359,6 +378,8 @@ def build_resume_docx(
         language=language,
         font_key=overrides.get(FONT_KEY),
         overrides=render_overrides,
+        # 联系方式强制换行也影响页头高度：量的那份必须和画的那份同配置（#3）。
+        format_config=overrides,
     )
     content = _build_document(
         resume,
@@ -370,6 +391,7 @@ def build_resume_docx(
         language=language,
         theme=theme,
         overrides=render_overrides,
+        format_config=overrides,
     )
     return ResumeDOCX(content=content, pages=pages, overflow=overflow)
 
@@ -384,6 +406,7 @@ def _estimate_pages(
     language: str = DEFAULT_RESUME_LANGUAGE,
     font_key: str | None = None,
     overrides=None,
+    format_config: dict | None = None,
 ) -> tuple[int | None, bool]:
     """估算 Word 页数与"是否超过所选页数"。
 
@@ -409,6 +432,8 @@ def _estimate_pages(
         include_photo=include_photo,
         language=language,
         overrides=overrides,
+        # 联系方式行数由 contact_breaks 决定，页头高度随之变化——估算必须同配置。
+        format_config=format_config,
     )
     pages = max(1, math.ceil(height / layout.usable_height_per_page))
     return pages, pages > page_limit

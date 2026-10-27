@@ -260,6 +260,8 @@ const workbench = {
   "editor.custom-sections.remove-line": "删除这一行",
   "editor.custom-sections.remove-section": "删除这个板块",
   "editor.custom-sections.text": "主文本",
+  // 没有字段定义时的兜底录入（与系统板块同一种固定字段形式，不再给自由标签行）。
+  "editor.custom-sections.content": "内容",
   "editor.custom-sections.lines": "标签行",
   "editor.custom-sections.label": "标签",
   "editor.custom-sections.value": "值",

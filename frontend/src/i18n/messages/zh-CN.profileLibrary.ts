@@ -71,8 +71,6 @@ const profileLibrary = {
   "profileLibrary.entry.moveDown": "下移这一条",
   "profileLibrary.entry.drag": "拖动调整顺序",
 
-  "profileLibrary.field.more": "更多字段",
-  "profileLibrary.field.less": "收起更多字段",
   "profileLibrary.field.private": "仅保存在本地，不进模型与网申，也不会印在简历上",
   "profileLibrary.field.placeholder": "选填",
   "profileLibrary.field.required": "必填",

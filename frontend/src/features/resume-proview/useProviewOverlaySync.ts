@@ -12,7 +12,6 @@
  */
 import { useEffect } from "react";
 import type { RefObject } from "react";
-import type { PhotoCropParams } from "./photoCrop";
 import { clearProviewOverlays, syncProviewOverlays } from "./previewOverlays";
 import type { GuideFlags } from "./types";
 
@@ -26,7 +25,6 @@ export interface OverlaySyncOptions {
   viewportRef: RefObject<HTMLElement | null>;
   guides: GuideFlags;
   proof: boolean;
-  crop: PhotoCropParams | null;
   pageWidth: number;
   pageHeight: number;
   /** iframe 每次 load / 重排后自增，触发重刷。 */
@@ -38,7 +36,6 @@ export function useProviewOverlaySync({
   viewportRef,
   guides,
   proof,
-  crop,
   pageWidth,
   pageHeight,
   frameEpoch,
@@ -47,12 +44,12 @@ export function useProviewOverlaySync({
     const viewport = viewportRef.current;
     if (!viewport) return undefined;
     const frames = Array.from(viewport.querySelectorAll("iframe"));
-    const state = { guides, proof, crop, pageWidth, pageHeight };
+    const state = { guides, proof, pageWidth, pageHeight };
     frames.forEach((frame) => syncProviewOverlays(frame.contentDocument, state));
     return () => {
       frames.forEach((frame) => clearProviewOverlays(frame.contentDocument));
     };
-  }, [crop, frameEpoch, guides, pageHeight, pageWidth, proof, viewportRef]);
+  }, [frameEpoch, guides, pageHeight, pageWidth, proof, viewportRef]);
 }
 
 export interface CurrentPageHighlightOptions {

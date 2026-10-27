@@ -7,6 +7,7 @@ import {
   clearPhotoCrop,
   loadPhotoCrop,
   photoCropStorageKey,
+  resolveInitialPhotoCrop,
   savePhotoCrop,
 } from "./photoCropStore";
 
@@ -29,6 +30,21 @@ describe("照片裁剪的会话级桥（provisional，白名单放行后删除�
     expect(photoCropStorageKey(7)).toBe(PHOTO_CROP_STORAGE_PREFIX + ":7");
     expect(photoCropStorageKey(null)).toBeNull();
     expect(photoCropStorageKey(Number.NaN)).toBeNull();
+  });
+
+  it("format_config 是权威、会话桥只兜底（#10 保存后的裁剪要跟文档走）", () => {
+    const storage = createMemoryStorage();
+    const stale = createPhotoCropParams(
+      { sha256: "c".repeat(64), width: 400, height: 300 },
+      { ...DEFAULT_CROP_DRAFT, zoom: 0.5 },
+    );
+    savePhotoCrop(7, stale, storage);
+
+    // 正式参数（format_config.photo_crop）在场时一律以它为准，哪怕会话桥里还留着旧的。
+    expect(resolveInitialPhotoCrop(PARAMS, 7, storage)).toEqual(PARAMS);
+    // 没有正式参数（还没保存过 / 旧版简历）才回落到会话桥。
+    expect(resolveInitialPhotoCrop(undefined, 7, storage)).toEqual(stale);
+    expect(resolveInitialPhotoCrop(null, 8, storage)).toBeNull();
   });
 
   it("坏 JSON / 旧版本参数 / 无存储都安静回退，不抛错", () => {

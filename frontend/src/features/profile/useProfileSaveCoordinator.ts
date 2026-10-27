@@ -42,7 +42,11 @@ interface Options {
   /** 表单值 → 本轮变更集（唯一实现在页面工具里，协调器不复制一份）。 */
   collectChanges: (workspace: WorkspaceOut, values: ProfileFormValues) => BulkEntryItem[];
   getSectionOrder: () => string[];
-  reloadWorkspace: () => Promise<void>;
+  /**
+   * 重取 workspace 并回填表单；保存成功后必须传 `discardDrafts: true`，
+   * 否则残留的 new: 草稿会在下一次保存时被当成新条目再提交一次。
+   */
+  reloadWorkspace: (options?: { discardDrafts?: boolean }) => Promise<void>;
   /** 保存成功后清 dirty / 退出编辑态（页面负责）。 */
   onSaved: () => void;
   invalidateProjection?: () => void;
@@ -178,18 +182,29 @@ export function useProfileSaveCoordinator({
         }
       }
       if (orderFailure !== null) {
+        // 条目已落库但顺序没存上：先如实告知，再重取服务器真值（丢弃已提交的 new: 草稿，
+        // 否则下一次保存会把同一条再建一遍）。重取失败不覆盖主错误提示。
+        const resyncAfterEntriesSaved = async () => {
+          try {
+            await reloadWorkspace({ discardDrafts: true });
+          } catch {
+            // 保留对用户的错误提示；他仍可手动刷新。
+          }
+        };
         if (isRevisionConflict(orderFailure)) {
           setConflictRevision(revisionFromError(orderFailure));
           setError(profileErrorMessage(orderFailure));
+          await resyncAfterEntriesSaved();
           return "conflict";
         }
         setError(t("profileLibrary.save.failed", { detail: profileErrorMessage(orderFailure) }));
-        // 条目已存、顺序没存：如实告知，不回滚已保存的内容。
+        await resyncAfterEntriesSaved();
         return "failed";
       }
 
       invalidateProjection?.();
-      await reloadWorkspace();
+      // 保存成功后的重载以服务器真值为准：丢掉已提交成功的 new: 临时草稿。
+      await reloadWorkspace({ discardDrafts: true });
       onSaved();
       return "saved";
     } finally {

@@ -21,7 +21,7 @@ import { useProviewPreferences } from "../../../features/resume-proview/preferen
 import { photoSha256, type PhotoCropParams } from "../../../features/resume-proview/photoCrop";
 import {
   clearPhotoCrop,
-  loadPhotoCrop,
+  resolveInitialPhotoCrop,
   savePhotoCrop,
 } from "../../../features/resume-proview/photoCropStore";
 import {
@@ -84,8 +84,8 @@ export default function ProviewLayer({
   const pageMarkers = usePageMarkers();
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [cropOpen, setCropOpen] = useState(false);
-  const [crop, setCrop] = useState<PhotoCropParams | null>(
-    () => config?.photo?.crop ?? loadPhotoCrop(config?.resumeId),
+  const [crop, setCrop] = useState<PhotoCropParams | null>(() =>
+    resolveInitialPhotoCrop(config?.photo?.crop, config?.resumeId),
   );
 
   const geometry = useMemo(
@@ -111,14 +111,15 @@ export default function ProviewLayer({
   const shellCrop = config?.photo?.crop ?? null;
   const resumeId = config?.resumeId;
   useEffect(() => {
-    setCrop(shellCrop ?? loadPhotoCrop(resumeId));
+    setCrop(resolveInitialPhotoCrop(shellCrop, resumeId));
   }, [resumeId, shellCrop]);
 
+  // 照片裁剪**不进覆盖层**：后端已按 format_config.photo_crop 派生裁剪图，再叠一层
+  // object-view-box 会二次裁切（#10 用户看到"裁剪取景不对"的根因）。
   useProviewOverlaySync({
     viewportRef,
     guides: preferences.guides,
     proof: preferences.proof,
-    crop: activeCrop,
     pageWidth,
     pageHeight,
     frameEpoch,

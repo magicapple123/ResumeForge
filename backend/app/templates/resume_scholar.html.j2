@@ -37,9 +37,9 @@
   .name-extra { font-size: calc(var(--fs) * 0.9); font-weight: 400; color: var(--muted); letter-spacing: 0; }
   .header .intent { font-size: calc(var(--fs) * 0.95); color: var(--muted); margin-top: calc(var(--fs) * 0.3); }
   .header .contact { font-size: calc(var(--fs) * 0.88); color: var(--muted); margin-top: calc(var(--fs) * 0.15); }
-  .header .contact span { margin-right: calc(var(--fs) * 0.9); }
+  .header .contact span { margin-right: calc(var(--fs) * 0.9); white-space: nowrap; }
   /* 有照片时是右上角的方形块；没有照片时宏不渲染这个元素，所以不会留空洞。 */
-  .profile-photo { width: calc(var(--fs) * 5 * var(--photo-scale, 1)); height: calc(var(--fs) * 5 * var(--photo-scale, 1)); flex: 0 0 auto; object-fit: cover; }
+  .profile-photo { width: calc(var(--fs) * 5 * var(--photo-scale, 1)); height: calc(var(--fs) * 5 * var(--photo-scale, 1)); flex: 0 0 auto; object-fit: contain; }
   .section { margin-bottom: calc(var(--fs) * 0.75); }
   .section-title { font-size: calc(var(--fs) * 1.06 * var(--section-title-scale, 1)); font-weight: 700; letter-spacing: 1px; border-bottom: 1px solid var(--line); padding-bottom: calc(var(--fs) * 0.14); margin-bottom: calc(var(--fs) * 0.35); }
   .entry { margin-bottom: calc(var(--fs) * 0.42 * var(--entry-gap, 1)); }

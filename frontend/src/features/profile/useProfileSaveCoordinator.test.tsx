@@ -91,7 +91,9 @@ describe("useProfileSaveCoordinator", () => {
     expect(api.saveEntries).toHaveBeenCalledWith([item], 3);
     expect(api.setSectionOrder).not.toHaveBeenCalled();
     expect(api.reorderEntries).not.toHaveBeenCalled();
+    // 保存成功后必须按「丢弃 new: 草稿」口径重载：残留草稿会让下次保存多提交一条。
     expect(reloadWorkspace).toHaveBeenCalledTimes(1);
+    expect(reloadWorkspace).toHaveBeenCalledWith({ discardDrafts: true });
     expect(invalidateProjection).toHaveBeenCalledTimes(1);
     expect(onSaved).toHaveBeenCalledTimes(1);
   });
@@ -134,7 +136,7 @@ describe("useProfileSaveCoordinator", () => {
   });
 
   it("reports partial failure when only the order write fails", async () => {
-    const { result, api, onSaved } = setup({
+    const { result, api, onSaved, reloadWorkspace } = setup({
       collectChanges: vi.fn(() => [
         { section_key: "basic_info", values: { "basic_info.name": "Zhang" } },
       ]),
@@ -144,6 +146,29 @@ describe("useProfileSaveCoordinator", () => {
     expect(await submit(result)).toBe("failed");
     expect(result.current.error).toBeTruthy();
     expect(onSaved).not.toHaveBeenCalled();
+    // 条目已落库、只有顺序没存上：仍要重取服务器真值并丢弃 new: 草稿，
+    // 否则用户直接再点保存会把同一条新记录再建一遍。
+    expect(reloadWorkspace).toHaveBeenCalledTimes(1);
+    expect(reloadWorkspace).toHaveBeenCalledWith({ discardDrafts: true });
+  });
+
+  it("reports conflict on the order write but still re-syncs committed entries", async () => {
+    const conflict = new ApiError("内容已在其他窗口被修改", 409, {
+      businessCode: "revision_conflict",
+      payload: { detail: "x", code: "revision_conflict", revision: 9 },
+    });
+    const { result, api, onSaved, reloadWorkspace } = setup({
+      collectChanges: vi.fn(() => [
+        { section_key: "basic_info", values: { "basic_info.name": "Zhang" } },
+      ]),
+      getSectionOrder: vi.fn(() => ["basic_info", "skills", "projects"]),
+    });
+    api.setSectionOrder.mockRejectedValue(conflict);
+    expect(await submit(result)).toBe("conflict");
+    expect(result.current.conflictRevision).toBe(9);
+    expect(onSaved).not.toHaveBeenCalled();
+    // 条目已经保存成功：草稿不能留，否则重试/刷新后再保存会翻倍。
+    expect(reloadWorkspace).toHaveBeenCalledWith({ discardDrafts: true });
   });
 
   it("blocks a second submit while the first is in flight", async () => {

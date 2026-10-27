@@ -4,13 +4,14 @@
 import { DeleteOutlined, PlusOutlined } from "@ant-design/icons";
 import { Button, Form, Tooltip } from "antd";
 import type { FormListFieldData } from "antd";
-import { useRef } from "react";
+import { memo, useRef } from "react";
 import type { ReactNode } from "react";
 import {
   PROFILE_FILL_KEYS,
   type ProfileFillItem,
   type ProfileFillSection,
 } from "../../features/profile/profileFillOptions";
+import AppendedCarrierFields from "./AppendedCarrierFields";
 import ProfileFillBar from "./ProfileFillBar";
 import { useProfileFill } from "./profileFillContext";
 
@@ -38,6 +39,31 @@ function isBlankValue(value: unknown): boolean {
   if (Array.isArray(value)) return value.length === 0;
   return false;
 }
+
+/**
+ * 一条目的**字段区**（需求 #12）：Form.List 在它管辖的数组每次变化时都会重跑渲染函数，
+ * 而数组引用在"某一条的某个字段被改"时必然变——于是打字会把这个分区**所有**条目的所有
+ * Form.Item 整天重渲染一遍（实测一条内容就是 18 个栅格列陪跑）。
+ *
+ * 字段区本身只依赖「第几条（field.name）」和宿主给的渲染函数（children 在分区组件
+ * 不重渲染时引用稳定），所以用身份比较把它钉住：实际变化交给各 Form.Item 自己的订阅。
+ * 注意不能拿 field 对象做浅比较——Form.List 每次渲染都会新建这个对象。
+ */
+const EntryFields = memo(
+  function EntryFields({
+    field,
+    children,
+  }: {
+    field: FormListFieldData;
+    children: (field: FormListFieldData) => ReactNode;
+  }) {
+    return <>{children(field)}</>;
+  },
+  (previous, next) =>
+    previous.field.name === next.field.name &&
+    previous.field.key === next.field.key &&
+    previous.children === next.children,
+);
 
 export default function ResumeListSection({
   title,
@@ -184,7 +210,10 @@ export default function ResumeListSection({
                     onClick={() => remove(field.name)}
                   />
                 </Tooltip>
-                {children(field)}
+                <EntryFields field={field} children={children} />
+                {/* 需求 #5：方案里这个板块的自定义字段（无独立槽位）也在这里录入——
+                    值直接写进承载区（description / achievements / level …）的「标签：值」行。 */}
+                <AppendedCarrierFields sectionField={name} entryName={field.name} />
               </div>
             ))}
             <Button

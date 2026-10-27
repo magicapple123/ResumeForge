@@ -49,6 +49,7 @@ from .docx_blocks import (
 from .docx_blocks import (
     set_run_font as _set_run_font,
 )
+from .docx_language_section import section_languages
 from .docx_rich import add_rich_runs
 from .docx_section_shared import (
     _apply_break,
@@ -486,5 +487,6 @@ SECTION_RENDERERS = {
     "patents": section_patents,
     "credentials": section_credentials,
     "skills": section_skills,
+    "languages": section_languages,
     "awards": section_awards,
 }

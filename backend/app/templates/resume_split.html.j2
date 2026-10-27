@@ -33,8 +33,8 @@
   .name-extra { font-size: calc(var(--fs) * .95); font-weight: 400; color: var(--muted); }
   .header .intent { font-size: calc(var(--fs) * 1.04); color: var(--accent); margin-top: calc(var(--fs) * .25); }
   .header .contact { font-size: calc(var(--fs) * .86); color: var(--muted); margin-top: calc(var(--fs) * .45); }
-  .header .contact span { margin-right: calc(var(--fs) * .9); }
-  .profile-photo { width: calc(var(--fs) * 5.8 * var(--photo-scale, 1)); height: calc(var(--fs) * 7.4 * var(--photo-scale, 1)); flex: 0 0 auto; object-fit: cover; border: 1px solid var(--line); border-radius: 4px; }
+  .header .contact span { margin-right: calc(var(--fs) * .9); white-space: nowrap; }
+  .profile-photo { width: calc(var(--fs) * 5.8 * var(--photo-scale, 1)); height: calc(var(--fs) * 7.4 * var(--photo-scale, 1)); flex: 0 0 auto; object-fit: contain; border: 1px solid var(--line); border-radius: 4px; }
   .resume-sections { display: grid; grid-template-columns: minmax(0, .9fr) minmax(0, 1.1fr); column-gap: calc(var(--fs) * 1.2); align-items: start; }
   .section { margin-bottom: calc(var(--fs) * 1); }
   .section-title { font-size: calc(var(--fs) * 1.04 * var(--section-title-scale, 1)); font-weight: 700; color: #fff; background: var(--accent); display: inline-block; padding: calc(var(--fs) * .1) calc(var(--fs) * .71); margin-bottom: calc(var(--fs) * .57); }

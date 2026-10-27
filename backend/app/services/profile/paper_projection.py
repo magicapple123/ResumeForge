@@ -4,7 +4,8 @@
 本模块是 F2/F3/F5 共用的**稳定导入面**；实现分两层：
 - paper_content_builder.py：内容组装（消费快照 → ResumeContent + 警告）；
 - projection_views.py：内容之外的只读摘要（候选 / 来源布局 / 组元数据）。
-映射表只有一份（paper_policy.py）；语言映射只有一份（language_projection.py）。
+映射表只有一份（paper_policy.py）；语言映射只有一份（language_projection.py，
+2026-10 起语言是独立分区，不再并入 skills）。
 公共函数 / 类型清单见 __all__，生成链路（F3）与网申链路（F5）直接 import 这里。
 
 **确定性**：同一份消费快照重复调用必须得到逐字节相同的 ResumeContent 与
@@ -31,7 +32,6 @@ from ...schemas.profile_projection import (
 )
 from ...schemas.resume import ResumeContent
 from . import paper_policy
-from .language_projection import project_language_skills
 from .paper_content_builder import clean_values, is_http_url, project_content
 from .paper_limits import PhotoResolver
 from .projection_views import candidates, editor_schema, scope_out, source_layout
@@ -217,7 +217,6 @@ __all__ = [
     "ensure_custom_field_lines",
     "normalize_for_match",
     "project_carrier_text",
-    "project_language_skills",
     "project_paper_content",
     "snapshot_token",
 ]

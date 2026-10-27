@@ -66,9 +66,12 @@ async def test_model_prompt_contains_only_participating_sections(db_session):
             assert label not in message
     done = next(event for event in events if event["type"] == "done")
     assert done["resume"]["summary"]
-    # 七项组含语言能力：模型没写语言时由 R-73 补位（origin=restored）。
+    # 七项组含语言能力：模型没写语言时由 R-73 补位到独立 languages 分区（origin=restored）。
+    # 2026-10 起语言不再并入 skills（用户反馈 #11）。
     skill_names = [item["name"] for item in done["resume"]["skills"]]
-    assert "英语" in skill_names
+    language_names = [item["name"] for item in done["resume"]["languages"]]
+    assert "英语" in language_names
+    assert "英语" not in skill_names
     assert any(annotation.get("origin") == "restored" for annotation in done["fact_annotations"])
 
 

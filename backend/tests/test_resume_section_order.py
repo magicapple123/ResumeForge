@@ -41,6 +41,7 @@ TITLES = (
     "知识产权",
     "证书资质",
     "专业技能",
+    "语言能力",
     "荣誉奖项",
 )
 
@@ -55,6 +56,7 @@ CUSTOM_ORDER = [
     "summary",
     "awards",
     "skills",
+    "languages",
     "education",
     "campus_experience",
 ]
@@ -75,6 +77,7 @@ def _sample_resume() -> ResumeContent:
         patents=[{"title": "示例专利"}],
         credentials=[{"name": "示例证照", "status": "active"}],
         skills=[{"name": "Python"}],
+        languages=[{"name": "英语", "level": "CET-6"}],
         awards=[{"name": "示例奖项"}],
     )
 
@@ -100,6 +103,7 @@ def _assert_follows_order(texts: dict[str, str]) -> None:
             "个人总结",
             "荣誉奖项",
             "专业技能",
+            "语言能力",
             "教育经历",
             "校园经历",
         ], f"{name} 的分区顺序不对：{order_in_output}"
@@ -121,6 +125,7 @@ def test_default_order_matches_the_product_decision():
         "patents",
         "credentials",
         "skills",
+        "languages",
         "campus_experience",
         "awards",
         "summary",
@@ -138,6 +143,7 @@ def test_normalized_order_is_always_a_complete_permutation():
         "patents",
         "credentials",
         "skills",
+        "languages",
         "campus_experience",
         "awards",
         "summary",
@@ -154,6 +160,7 @@ def test_normalized_order_is_always_a_complete_permutation():
         "patents",
         "credentials",
         "skills",
+        "languages",
         "campus_experience",
         "awards",
     ]
@@ -205,6 +212,7 @@ def test_profile_order_is_translated_kept_and_completed():
         "patents",
         "credentials",
         "skills",
+        "languages",
         "campus_experience",
         "awards",
     ]
@@ -231,6 +239,7 @@ def test_profile_order_is_translated_kept_and_completed():
         "research_projects",
         "patents",
         "credentials",
+        "languages",
     ]
 
 
@@ -280,11 +289,12 @@ def test_profile_order_to_section_order_appends_missing_at_the_end():
         "patents",
         "credentials",
         "skills",
+        "languages",
         "campus_experience",
         "awards",
         "summary",
     ]
-    # 与归一化同一口径：结果永远是七个键的完整排列。
+    # 与归一化同一口径：结果永远是完整排列。
     assert sorted(order) == sorted(DEFAULT_SECTION_ORDER)
 
 
@@ -322,6 +332,7 @@ def test_default_section_order_config_appends_research_after_old_sections(db_ses
             "campus_experience",
             "awards",
             "summary",
+            "languages",
             "publications",
             "research_projects",
             "patents",
@@ -367,6 +378,7 @@ def test_default_section_order_config_materializes_profile_order(db_session):
             "skills",
             "campus_experience",
             "awards",
+            "languages",
             "publications",
             "research_projects",
             "patents",
@@ -406,6 +418,7 @@ def test_a_saved_custom_order_is_only_rewritten_by_an_explicit_put(client):
         "projects",
         "campus_experience",
         "summary",
+        "languages",
         "publications",
         "research_projects",
         "patents",

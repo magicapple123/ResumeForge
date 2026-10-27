@@ -100,6 +100,24 @@ const typography = {
   "typography.inline.noTarget": "Select the text box to edit first",
   "typography.inline.selectFirst": "Select the text to edit first",
   "typography.inline.invalidUrl": "Use an http or https URL",
+  "typography.level.title": "Text level",
+  "typography.level.groupAria": "Apply a fixed text level to the selected content",
+  "typography.level.hint":
+    "Levels only change the font scale and spacing of selected paragraphs; every apply can be undone",
+  "typography.level.empty": "Select content in the outline or preview first",
+  "typography.level.count": "Applies to {count} items",
+  "typography.level.current": "Current: {level}",
+  "typography.level.currentInherit": "Follows template",
+  "typography.level.currentCustom": "Custom",
+  "typography.level.currentMixed": "Multiple levels",
+  "typography.level.heading1": "Heading 1",
+  "typography.level.heading2": "Heading 2",
+  "typography.level.heading3": "Heading 3",
+  "typography.level.body": "Body text",
+  "typography.level.caption": "Caption",
+  "typography.level.restore": "Restore template inheritance",
+  "typography.level.applied": "Set {count} items to {level}",
+  "typography.level.restored": "Restored template inheritance for {count} items",
 } as const;
 
 export default typography;

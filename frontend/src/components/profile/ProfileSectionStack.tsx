@@ -38,10 +38,7 @@ interface Props {
   onMoveByOffset: (sectionKey: string, offset: -1 | 1) => void;
   onAddEntry: (sectionKey: string) => void;
   onRemoveEntry: (sectionKey: string, entryKey: string, title: string) => void;
-  onSetPreference: (
-    field: FieldOut,
-    patch: { hidden?: boolean; collapsed_override?: boolean | null },
-  ) => void;
+  onSetPreference: (field: FieldOut, patch: { hidden?: boolean }) => void;
   onOpenFieldSettings: (sectionKey: string) => void;
   onOpenGuide: () => void;
   onRequestEdit: () => void;

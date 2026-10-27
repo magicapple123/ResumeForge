@@ -8,7 +8,6 @@ import {
   createPhotoCropParams,
   DEFAULT_CROP_DRAFT,
   draftFromParams,
-  cropInsetPercent,
   isFullFrame,
   parsePhotoCrop,
   photoSha256,
@@ -72,17 +71,12 @@ describe("裁剪矩形几何（D09，非破坏，后端冻结形状）", () => {
     expect(restored.offsetY).toBeCloseTo(0.7, 3);
   });
 
-  it("全幅判定与 inset 百分比换算（键名 w/h）", () => {
+  it("全幅判定（恢复原图 = 删参数；矩形键名 w/h）", () => {
     const full = createPhotoCropParams(SQUARE, DEFAULT_CROP_DRAFT);
     expect(isFullFrame(full)).toBe(true);
     const cropped = createPhotoCropParams(SQUARE, { ...DEFAULT_CROP_DRAFT, zoom: 0.5 });
     expect(isFullFrame(cropped)).toBe(false);
-    expect(cropInsetPercent({ ...cropped, rect: { x: 0.25, y: 0.1, w: 0.5, h: 0.8 } })).toEqual({
-      top: 10,
-      right: 25,
-      bottom: 10,
-      left: 25,
-    });
+    expect(cropped.rect).toMatchObject({ x: 0.25, y: 0.25, w: 0.5, h: 0.5 });
   });
 
   it("照片哈希与后端 photo_sha256 同口径：sha256(照片字符串) 64 位小写 hex", () => {

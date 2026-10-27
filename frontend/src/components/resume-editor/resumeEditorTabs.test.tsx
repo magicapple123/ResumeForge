@@ -33,6 +33,7 @@ describe("buildResumeEditorTabItems：当前组过滤（R1）", () => {
       "campus",
       "projects",
       "skills",
+      "languages",
       "awards",
       "publications",
       "research_projects",
@@ -64,11 +65,20 @@ describe("buildResumeEditorTabItems：当前组过滤（R1）", () => {
     ]);
   });
 
-  it("languages 按 R-72 写入技能 → 映射到「技能」页签", () => {
+  it("languages 是独立页签（2026-10 起不再并入「技能」）", () => {
     expect(tabKeys({ participatingKeys: ["basic_info", "languages"] })).toEqual([
       "basic",
-      "skills",
+      "languages",
     ]);
+  });
+
+  it("正文里已有语言内容时，切组也保留「语言能力」页签（R-34）", () => {
+    expect(
+      tabKeys({
+        participatingKeys: ["basic_info"],
+        content: contentWith({ languages: [{ name: "英语", level: "CET-6" }] }),
+      }),
+    ).toEqual(["basic", "languages"]);
   });
 
   it("已有内容的分区永远保留页签（切组不丢已保存正文，R-34），按规范顺序补在后面", () => {

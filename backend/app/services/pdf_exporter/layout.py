@@ -244,9 +244,9 @@ def resolve_layout(
     margin_top, margin_right, margin_bottom, margin_left = _resolve_page_margins(
         overrides, defaults, margin_mm
     )
-    # 照片系数在这里就折进宽高比例：`render.py` / `docx_exporter.py` / `canvas.py` 的
-    # 照片代码一行都不用改——`gap_mm(ratio)` 与 `crop_image_to_cover(w/h)` 自动跟随，
-    # 宽高同乘所以宽高比不变，8 个模板的取景裁剪结果一像素都不变，只有画框变大变小。
+    # 照片系数在这里就折进宽高比例：`render.py` / `docx_exporter.py` 的照片代码一行都
+    # 不用改——`gap_mm(ratio)` 与 contain 缩放自动跟随，宽高同乘所以宽高比不变：
+    # 9 个模板的取景（原图比例 / photo_crop 派生图比例）一像素都不变，只有画框变大变小。
     photo_scale = resolve_photo_scale(overrides)
 
     return ResumeLayout(

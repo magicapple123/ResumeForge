@@ -21,6 +21,7 @@ from ..schemas.resume_generation import mode_page_limit
 # Markdown 正文导出（含 TXT 复用的 writers）已迁至 services/resume/markdown_export.py；
 # 这里 re-export，保持 "from app.services.exporter import export_markdown" 等既有导入路径不变。
 from .resume.markdown_export import export_markdown  # noqa: F401  (re-export：保持既有导入路径)
+from .resume.resume_contact import CONTACT_BREAKS_KEY, contact_items
 from .resume.resume_labels import (
     DEFAULT_RESUME_LANGUAGE,
     authors_text,
@@ -200,6 +201,12 @@ def render_html(
         # 产物看起来只是"没有标题"，不会报错，是最难被发现的一类故障。
         "section_titles": section_titles(language),
         "field_labels": field_labels(language),
+        # #3 页眉联系方式：字段顺序 / 文案 / 强制换行都在 `resume_contact` 里定义一次，
+        # 模板只负责把 break_before 译成 <br>（强制换行）与 <wbr>（字段间自动换行点）。
+        # 旧简历没有 contact_breaks → 只有 <wbr>，行为 = "字段整体不拆行、字段间可换行"。
+        "contact_items": contact_items(
+            resume, field_labels(language), format_values.get(CONTACT_BREAKS_KEY)
+        ),
         "list_separator": list_separator(language),
         # 等级括号要拆成左右两半：模板得在括号中间放带 `data-resume-path` 的 `<span>`，
         # 前端靠它做「点纸面字段定位编辑」，所以这里不能直接用 `level_text` 的成品字符串。

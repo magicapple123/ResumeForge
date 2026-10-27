@@ -1,7 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * ProfileFieldInputs（F6/Q）：默认收起 vs 用户隐藏两个状态独立；
- * 「更多字段」展开写 collapsed_override；隐藏字段只从恢复清单回来；照片不走文本输入。
+ * ProfileFieldInputs（F6/Q）：字段一律渲染（不再有「更多字段 / 收起更多字段」折叠）；
+ * 用户隐藏的字段只从恢复清单回来；照片不走文本输入。
+ *
+ * 2026-10-27 用户要求去掉折叠入口（"隐藏就够了"）：服务端 FieldOut 仍可能带
+ * default_collapsed / collapsed_override（DTO 兼容），本组件不读它们。
  */
 import { App as AntdApp, Form } from "antd";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
@@ -28,10 +31,7 @@ function Harness({
   onSetPreference,
 }: {
   section: SectionOut;
-  onSetPreference: (
-    field: FieldOut,
-    patch: { hidden?: boolean; collapsed_override?: boolean | null },
-  ) => void;
+  onSetPreference: (field: FieldOut, patch: { hidden?: boolean }) => void;
 }) {
   const [form] = Form.useForm();
   return (
@@ -75,20 +75,41 @@ function Harness({
   );
 }
 
-describe("ProfileFieldInputs 的收起与隐藏", () => {
-  it("默认收起字段先不渲染，更多字段按钮写 collapsed_override=false", () => {
+describe("ProfileFieldInputs 的字段渲染与隐藏", () => {
+  it("默认收起的字段也始终渲染，且没有折叠入口", () => {
     const onSetPreference = vi.fn();
     render(<Harness section={SECTION} onSetPreference={onSetPreference} />);
 
-    // 只有 name 一个可编辑文本输入：nickname 收起、secret 隐藏、photo 走专门入口。
-    expect(screen.getAllByRole("textbox")).toHaveLength(1);
-    expect(screen.getByText("Name")).toBeInTheDocument();
-    expect(screen.queryByText("Nickname")).not.toBeInTheDocument();
+    // nickname 在服务端定义里是 default_collapsed=true，界面不再折叠：直接渲染。
+    expect(screen.getAllByRole("textbox")).toHaveLength(2);
+    expect(screen.getByText("Nickname")).toBeInTheDocument();
+    expect(screen.getByLabelText("Nickname")).toHaveValue("Ali");
+    // 照片输入走专门入口；隐藏字段不渲染。
+    expect(screen.queryByText("Photo")).not.toBeInTheDocument();
     expect(screen.queryByText("Secret")).not.toBeInTheDocument();
+    // 整块只剩「已隐藏 1 个字段」这一个按钮：没有「更多字段 / 收起更多字段」出口。
+    expect(screen.getAllByRole("button")).toHaveLength(1);
+    expect(onSetPreference).not.toHaveBeenCalled();
+  });
 
-    fireEvent.click(screen.getByRole("button", { name: t("profileLibrary.field.more") }));
-    expect(onSetPreference).toHaveBeenCalledTimes(1);
-    expect(onSetPreference.mock.calls[0][1]).toEqual({ collapsed_override: false });
+  it("服务端残留的折叠偏好不再影响渲染（两份偏好都不读）", () => {
+    const section = makeSection("basic_info", "Basic Info", "singleton", [
+      makeField("basic_info", "name", "Name"),
+      makeField("basic_info", "folded_default", "Folded default", { default_collapsed: true }),
+      makeField("basic_info", "folded_on", "Folded on", {
+        default_collapsed: true,
+        collapsed_override: true,
+      }),
+      makeField("basic_info", "folded_off", "Folded off", {
+        default_collapsed: true,
+        collapsed_override: false,
+      }),
+    ]);
+    render(<Harness section={section} onSetPreference={vi.fn()} />);
+
+    expect(screen.getAllByRole("textbox")).toHaveLength(4);
+    // 没有隐藏字段时整块没有任何按钮（旧版会有「收起更多字段」）。
+    expect(screen.queryAllByRole("button")).toHaveLength(0);
   });
 
   it("隐藏字段只从恢复清单回来，且恢复写 hidden=false", () => {
@@ -118,7 +139,7 @@ describe("ProfileFieldInputs 的收起与隐藏", () => {
 
     const grid = document.querySelector(".profile-field-grid");
     expect(grid).not.toBeNull();
-    // 四个字段都在网格里，DOM 顺序 = 字段顺序（不改变顺序与收起逻辑）。
+    // 四个字段都在网格里，DOM 顺序 = 字段顺序。
     const items = grid!.querySelectorAll(":scope > .profile-field-grid-item");
     expect(items).toHaveLength(4);
     // 只有多行文本占整行。日期不再整行：年/月/日三个下拉收在一格里，
@@ -169,26 +190,5 @@ describe("ProfileFieldInputs 的收起与隐藏", () => {
     render(<Harness section={custom} onSetPreference={vi.fn()} />);
 
     expect(screen.getAllByRole("checkbox", { name: "至今" })).toHaveLength(1);
-  });
-
-  it("展开记忆来自服务端 collapsed_override，两个状态互不覆盖", () => {
-    const expanded = makeSection("basic_info", "Basic Info", "singleton", [
-      makeField("basic_info", "name", "Name"),
-      makeField("basic_info", "nickname", "Nickname", {
-        default_collapsed: true,
-        collapsed_override: false,
-      }),
-      makeField("basic_info", "secret", "Secret", { hidden: true }),
-    ]);
-    render(<Harness section={expanded} onSetPreference={vi.fn()} />);
-
-    expect(screen.getAllByRole("textbox")).toHaveLength(2);
-    expect(
-      screen.queryByRole("button", { name: t("profileLibrary.field.more") }),
-    ).not.toBeInTheDocument();
-    // 再收起写回 collapsed_override=true；与 hidden 无关。
-    fireEvent.click(screen.getByRole("button", { name: t("profileLibrary.field.less") }));
-    // 收起按钮在默认收起字段被展开后出现；点击后走 onSetPreference（此处未断言参数归属）
-    expect(screen.getByTestId("name-value").textContent).toBe("Alice");
   });
 });

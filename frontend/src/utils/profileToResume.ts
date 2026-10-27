@@ -2,7 +2,7 @@
 /**
  * 资料 → 简历正文的**唯一适配层**（F4 §5.3）。
  *
- * 字段映射、承载区「标签：值」追加、语言→skills 映射、分区顺序全部由服务端投影
+ * 字段映射、承载区「标签：值」追加、语言能力独立分区、分区顺序全部由服务端投影
  * （paper_projection.py）唯一生成；前端**不得**再维护第二份映射（R-37 单源）。
  * 所以这里只剩两件事：
  *
@@ -63,7 +63,7 @@ export function blankResumeContent(): ResumeContent {
 /**
  * 这份表单里有没有任何用户内容（T11 的覆盖确认据此决定要不要拦一道）。
  *
- * 只看 `ResumeContent` 的字段本身：基础信息任一非空，或六个列表任一非空，就算"有内容"。
+ * 只看 `ResumeContent` 的字段本身：基础信息任一非空，或任一条目列表非空，就算"有内容"。
  * 空数组与纯空白字符串都按"没有"处理——用户点了「开始」又什么都没写，不该被问一次。
  * 可选栏目（科研/证照/自建分区）也算内容：从资料整份填充后它们可能非空。
  */
@@ -89,6 +89,7 @@ export function hasAnyResumeContent(content: ResumeContent | null | undefined): 
     content.campus_experience,
     content.projects,
     content.skills,
+    content.languages ?? [],
     content.awards,
     content.publications ?? [],
     content.research_projects ?? [],

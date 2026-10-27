@@ -29,6 +29,7 @@ from ...schemas.resume import (
     ResumeCredential,
     ResumeEducation,
     ResumeExperience,
+    ResumeLanguageItem,
     ResumePatent,
     ResumeProject,
     ResumePublication,
@@ -71,6 +72,8 @@ _ENTRY_MODELS: dict[str, tuple[type[BaseModel], frozenset[str]]] = {
     "campus_experience": (ResumeCampusExperience, frozenset({"description"})),
     "projects": (ResumeProject, frozenset({"tech_stack", "description", "highlights"})),
     "skills": (ResumeSkill, frozenset()),
+    # 2026-10：语言能力独立成栏（空列表不序列化，见 OptionalEmptyListMixin）。
+    "languages": (ResumeLanguageItem, frozenset()),
     "awards": (ResumeAward, frozenset()),
     # W14 科研三栏目（空列表不序列化；见 OptionalEmptyListMixin）。
     "publications": (ResumePublication, frozenset()),

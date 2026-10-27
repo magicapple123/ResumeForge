@@ -1,97 +1,75 @@
 # SPDX-License-Identifier: Apache-2.0
-"""R-72 语言能力的唯一纸面映射：语言条目 → ResumeSkill（纯函数，不读库）。
+"""语言能力的唯一纸面映射（2026-10 起：语言是独立分区，不再并入 skills）。
 
-需求 v3 §5.12 的路线 1：不改 ResumeContent 结构、不改模板、不动渲染指纹，把语言
-能力条目映射成"专业技能"分区的 skills 条目。形态口径（R-72）：
+**历史**：旧版 R-72 把每条语言压成一条 `ResumeSkill`（name=语言，level=「水平/证书/分数」）
+塞进 `content.skills`，于是制作台里语言能力显示成「专业技能」——用户反馈 #11 明确要求
+拆开。现在：
 
-- name = 语言；
-- level = 非空的「水平/等级 → 证书 → 分数」以 " · " 连接，空段跳过；
-- **不含取得时间、不含语言的自定义小字段**（§11 第 5 条：仅素材，不进纸面）；
-- 语言条目排在系统技能之后，由 paper_projection 负责拼接顺序，本模块只管单条映射；
-- 同名多证书**不按 name 去重**：完整映射值就是区分项（"英语（CET-6 · 550）" 与
-  "英语（雅思 · 7）"是两条），吞掉一条就是静默丢内容。
+- `ResumeContent.languages` 是独立数组，五个资料字段各自往返（语言 / 水平 / 证书 /
+  分数 / 取得时间），不再做有损拼接；
+- 本模块是「资料消费分区的字段 → ResumeContent.languages 属性」的**唯一映射**：
+  投影组装（paper_content_builder）与生成补位（language_restore）都从这里取，
+  不在两处各写一份字段表；
+- 空条目不产生纸面占位；整条为空由调用方跳过。
 
-level 的 64 字符上限来自既有 ResumeSkill；放不下时这里截断（保证结果可序列化），
-paper_projection 用 language_overflow_warnings 汇总成 carrier_overflow 警告，
-不静默。
+纸面渲染的拼接（「语言（水平 · 证书 · 分数）· 取得时间」）是**展示层**的事，分别在
+HTML 模板 / Word / PDF / Markdown 的渲染器里按同一字段顺序组装，本模块不产出成品文案。
 """
 
 from __future__ import annotations
 
-from ...schemas.profile_projection import ConsumedEntry, ConsumedSection
-from ...schemas.resume_entries import ResumeSkill
+from ...schemas.profile_projection import ConsumedSection
+from ...schemas.resume_entries import ResumeLanguageItem
 
-# 与 schemas/resume_entries.py 的 ResumeSkill.level max_length 一致。
-LANGUAGE_LEVEL_MAX = 64
-LEVEL_SEPARATOR = " · "
+# 资料字段 key → ResumeContent.languages 属性名（顺序即编辑器与纸面字段顺序）。
+LANGUAGE_FIELD_IDS: dict[str, str] = {
+    "name": "languages.language",
+    "level": "languages.level",
+    "certificate": "languages.certificate",
+    "score": "languages.score",
+    "obtained_at": "languages.obtained_at",
+}
 
-_LANGUAGE_FIELD_ID = "languages.language"
-# 拼接顺序固定为"水平/等级 → 证书 → 分数"（R-72 的形态要求），取得时间不参与。
-_LEVEL_FIELD_IDS = ("languages.level", "languages.certificate", "languages.score")
-
-
-def _text(entry: ConsumedEntry, field_id: str) -> str:
-    return str(entry.values.get(field_id) or "").strip()
-
-
-def language_name(entry: ConsumedEntry) -> str:
-    """语言名（纸面 skills 条目的 name）；未填返回空串，由调用方决定是否跳过。"""
-    return _text(entry, _LANGUAGE_FIELD_ID)
-
-
-def language_level(entry: ConsumedEntry) -> str:
-    """未截断的 level 映射值：「水平/等级 · 证书 · 分数」，空段跳过。"""
-    return LEVEL_SEPARATOR.join(
-        part for part in (_text(entry, field_id) for field_id in _LEVEL_FIELD_IDS) if part
-    )
+# 与 ResumeLanguageItem 各字段的 max_length 一致（超长截断而不是丢整条）。
+_FIELD_LIMITS: dict[str, int] = {
+    "name": 128,
+    "level": 64,
+    "certificate": 128,
+    "score": 64,
+    "obtained_at": 32,
+}
 
 
-def project_language_skill_entries(
+def _text(entry, key: str) -> str:
+    return str(entry.values.get(LANGUAGE_FIELD_IDS[key]) or "").strip()
+
+
+def project_language_item_entries(
     languages: ConsumedSection,
-) -> list[tuple[str, ResumeSkill]]:
-    """与 project_language_skills 同一实现，但带上来源 entry_id。
+) -> list[tuple[str, ResumeLanguageItem]]:
+    """语言分区 → [(entry_id, ResumeLanguageItem)]（按条目顺序，空条目跳过）。
 
-    投影层要用 entry_id 回答"这条语言在 content.skills 的第几项"（候选的
-    paper_content_path）；生成侧（F3 语言补位）只需要 skill 列表，走下面那层薄封装。
+    带上 entry_id 是为了让投影层回答"这条语言在 content.languages 的第几项"
+    （候选的 paper_content_path）；生成补位只需要 item 列表，见下面薄封装。
     """
-    rows: list[tuple[str, ResumeSkill]] = []
+    items: list[tuple[str, ResumeLanguageItem]] = []
     for entry in languages.entries:
-        name = language_name(entry)
-        level = language_level(entry)
-        if not name and not level:
-            continue
-        rows.append(
-            (entry.entry_id, ResumeSkill(name=name[:128], level=level[:LANGUAGE_LEVEL_MAX]))
-        )
-    return rows
+        values = {
+            key: _text(entry, key)[:_FIELD_LIMITS[key]] for key in LANGUAGE_FIELD_IDS
+        }
+        if not any(values.values()):
+            continue  # 完全空的条目不产生纸面占位
+        items.append((entry.entry_id, ResumeLanguageItem(**values)))
+    return items
 
 
-def project_language_skills(languages: ConsumedSection) -> list[ResumeSkill]:
-    """把语言能力分区映射成 skills 条目列表（按条目顺序；不按同名去重）。
-
-    整条完全为空（语言与 level 都没有）的条目不产生 skill，避免在纸面上留一个
-    空标签；level 超过 64 字符时截断到 64（限长由既有结构决定，警告见
-    language_overflow_warnings）。
-    """
-    return [skill for _entry_id, skill in project_language_skill_entries(languages)]
-
-
-def language_overflow_warnings(languages: ConsumedSection) -> list[tuple[str, str, int]]:
-    """返回 [(entry_id, 语言, 原始 level 长度)]：limit 放不下的条目，供上层转 warning。"""
-    rows: list[tuple[str, str, int]] = []
-    for entry in languages.entries:
-        level = language_level(entry)
-        if len(level) > LANGUAGE_LEVEL_MAX:
-            rows.append((entry.entry_id, language_name(entry), len(level)))
-    return rows
+def project_language_items(languages: ConsumedSection) -> list[ResumeLanguageItem]:
+    """同 project_language_item_entries，但不带来源 id（生成补位用）。"""
+    return [item for _entry_id, item in project_language_item_entries(languages)]
 
 
 __all__ = [
-    "LANGUAGE_LEVEL_MAX",
-    "LEVEL_SEPARATOR",
-    "language_level",
-    "language_name",
-    "language_overflow_warnings",
-    "project_language_skill_entries",
-    "project_language_skills",
+    "LANGUAGE_FIELD_IDS",
+    "project_language_item_entries",
+    "project_language_items",
 ]

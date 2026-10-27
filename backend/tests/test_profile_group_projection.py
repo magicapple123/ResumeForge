@@ -105,6 +105,7 @@ def _png_data_url() -> str:
 def test_empty_sections_keep_keys_without_placeholder_and_excluded_absent() -> None:
     out = _out(_section("basic_info"), _section("educations"), _section("languages"))
     assert out.content.education == [] and out.content.skills == []
+    assert out.content.languages == []  # 2026-10：语言能力独立成栏
     assert out.candidates == [] and out.warnings == []
     assert [item.entry_count for item in out.source_layout] == [0, 0, 0]
     out = _out(

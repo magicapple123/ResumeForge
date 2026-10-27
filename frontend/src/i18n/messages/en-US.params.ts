@@ -57,6 +57,10 @@ const params = {
   "exact.status.pages": "Exact preview - {pages} actual pages (limit: {limit} pages)",
   "exact.openNewTab": "Open in new tab",
   "exact.unsavedNote": "This preview includes unsaved changes. Save before exporting",
+  "workbench.contactBreak.label": "Contact line breaks",
+  "workbench.contactBreak.hint":
+    "By default each contact field stays on one line and fields wrap between each other. Select a field to force a line break before it.",
+  "workbench.contactBreak.placeholder": "Automatic wrapping",
 } as const;
 
 export default params;

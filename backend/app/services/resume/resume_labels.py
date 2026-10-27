@@ -52,6 +52,7 @@ SECTION_TITLES: dict[str, dict[str, str]] = {
         "patents": "知识产权",
         "credentials": "证书资质",
         "skills": "专业技能",
+        "languages": "语言能力",
         "campus_experience": "校园经历",
         "awards": "荣誉奖项",
         "summary": "个人总结",
@@ -65,6 +66,7 @@ SECTION_TITLES: dict[str, dict[str, str]] = {
         "patents": "Intellectual Property",
         "credentials": "Certifications & Qualifications",
         "skills": "Skills",
+        "languages": "Languages",
         "campus_experience": "Campus Activities",
         "awards": "Honors & Awards",
         "summary": "Summary",
@@ -113,6 +115,8 @@ FIELD_LABELS: dict[str, dict[str, str]] = {
         "my_rank": "我的署名位次",
         "outcome_type": "成果类型",
         "credential_type": "证书类型",
+        # 2026-10：语言能力独立分区后的字段前缀（取得时间在同一行尾部展示）。
+        "obtained": "取得时间",
     },
     "en-US": {
         "intent": "Objective",
@@ -148,6 +152,7 @@ FIELD_LABELS: dict[str, dict[str, str]] = {
         "my_rank": "My Authorship Rank",
         "outcome_type": "Outcome Type",
         "credential_type": "Credential Type",
+        "obtained": "Obtained",
     },
 }
 

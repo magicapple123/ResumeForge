@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 from .resume_config_domains import DOMAIN_KEYS, HEX_COLOR_RE, domain_version, is_supported
+from .resume_contact import CONTACT_BREAKS_KEY, validate_contact_breaks
 from .resume_layout_overrides import (
     EXTRA_FORMAT_KEYS,
     PAGE_MARGIN_KEYS,
@@ -171,6 +172,13 @@ def validated_format_config(raw: dict | None) -> dict:
             font_name = _validated_font_name(value)
             if font_name is not None:
                 result[FONT_KEY] = font_name
+            continue
+        if str(key) == CONTACT_BREAKS_KEY:
+            # #3：联系方式强制换行的字段白名单。空列表 = 空域（不写这个键），与"从未设置"
+            # 逐字节等价；未知字段键丢弃而不是 422——`format_config` 是用户可以随手改的 JSON。
+            breaks = validate_contact_breaks(value)
+            if breaks:
+                result[CONTACT_BREAKS_KEY] = breaks
             continue
         if str(key) in _DOMAIN_VALIDATORS:
             # R2：本端不认识的版本整域丢弃（不 422、不按旧语义误读）。

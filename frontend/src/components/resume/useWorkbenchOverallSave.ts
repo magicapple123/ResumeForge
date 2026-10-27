@@ -48,6 +48,22 @@ export function cloneLayout(layout: ResumeLayout): ResumeLayout {
   return JSON.parse(JSON.stringify(layout)) as ResumeLayout;
 }
 
+/**
+ * 中栏**不在栅格里**时的正文出口（两栏 / 单栏档：内容栏住进抽屉，未打开时编辑器不挂载）。
+ *
+ * 结构命令（大纲排序 / 复制 / 隐藏）改到的正文住在统一历史的文档状态里：三栏档由
+ * `editorRef.replaceContent` 落进表单，窄档没有落点，于是脏值、保存与放弃都需要独立出口，
+ * 否则用户看到的是"树变了、纸面没变、还没有保存按钮"（用户反馈 #4 的窄档原形）。
+ */
+export interface WorkbenchDocumentContentBridge {
+  /** 这份正文比宿主那一版新：窄档内容脏值的唯一来源。 */
+  dirty: boolean;
+  /** 直接保存它；返回与版式 / 正文保存同一套终态语汇。 */
+  save: (expectedRevision: number) => Promise<SaveOutcome>;
+  /** 放弃它：把文档状态退回宿主那一版。 */
+  discard: () => void;
+}
+
 export interface WorkbenchOverallSaveOptions {
   /** 制作台是否打开：打开那一刻记版式基线，关闭时清空（换一份简历再进来必须重新取基线）。 */
   open: boolean;
@@ -55,6 +71,8 @@ export interface WorkbenchOverallSaveOptions {
   layout?: ResumeLayout;
   /** 中栏内容脏值，即编辑器 `onDirtyChange` 上报的那一份（纸面加粗已由宿合并进来）。 */
   editorDirty: boolean;
+  /** 中栏未挂载时的正文出口（窄档）；缺省 = 内容只能经编辑器保存（三栏档行为不变）。 */
+  documentContent?: WorkbenchDocumentContentBridge;
   /** 这份记录还是制作台草稿（见 `onPublishDraft`）：保存按钮要常驻。 */
   isDraft?: boolean;
   /** 中栏的命令式句柄：`saveAsync()` / `discard()` 都在那一层（判据全在中栏里）。 */
@@ -106,6 +124,7 @@ export function useWorkbenchOverallSave({
   open,
   layout,
   editorDirty,
+  documentContent,
   isDraft = false,
   editorRef,
   onApplyLayout,
@@ -131,7 +150,10 @@ export function useWorkbenchOverallSave({
     if (!layout || !layoutSnapshot) return false;
     return JSON.stringify(layout) !== JSON.stringify(layoutSnapshot);
   }, [layout, layoutSnapshot]);
-  const dirty = editorDirty || layoutDirty;
+  // 窄档（中栏在抽屉里、未挂载）时结构命令改到的正文不在编辑器里：它也是"改动"，
+  // 必须并进唯一出口，否则保存按钮不出现、关闭也不问一句（改动静默丢失）。
+  const documentContentDirty = Boolean(documentContent?.dirty);
+  const dirty = editorDirty || layoutDirty || documentContentDirty;
 
   // 「取消修改」的就地确认：用户的眼睛在顶部动作条上，确认条就必须长在那里。
   const [discardConfirm, setDiscardConfirm] = useState(false);
@@ -181,10 +203,12 @@ export function useWorkbenchOverallSave({
       // 版式**确认落库**之后才对快照对齐（见文件头的理由）。
       setLayoutSnapshot(layout ? cloneLayout(layout) : null);
     }
-    if (editorDirty) {
-      const contentOutcome = await editorRef.current?.saveAsync(
-        documentPipeline ? revision : undefined,
-      );
+    if (editorDirty || documentContentDirty) {
+      // 三栏档：正文在编辑器表单里，仍走那一层（校验 / 草稿清理 / 失败提示都在里面）。
+      // 窄档：中栏未挂载，表单里没有这份正文——直接保存统一历史里的文档内容。
+      const contentOutcome = editorDirty
+        ? await editorRef.current?.saveAsync(documentPipeline ? revision : undefined)
+        : await documentContent!.save(revision);
       if (!contentOutcome || contentOutcome.status === "invalid") {
         // 表单校验没过 = 没有发请求：既不是成功也不是失败，草稿与脏值全部原样保留，
         // 错误提示由表单自己的校验态给。
@@ -201,7 +225,7 @@ export function useWorkbenchOverallSave({
     }
     // 草稿的"仅发布"路径：两条写入都没发生（内容没改、版式没动），只有它能把 `draft`
     // 清掉。放在内容之后：真脏的时候前面那条写入已经会转正，再发一次就是同一个请求走两遍。
-    if (isDraft && !editorDirty && !layoutDirty) {
+    if (isDraft && !editorDirty && !layoutDirty && !documentContentDirty) {
       const published = documentPipeline
         ? await documentPipeline.publishDraft(revision)
         : await publishDraftLegacy();
@@ -225,6 +249,8 @@ export function useWorkbenchOverallSave({
    */
   const cancel = (): void => {
     editorRef.current?.discard();
+    // 窄档的正文不在编辑器里：不退回宿主那一版，"取消修改"只回滚了版式。
+    if (documentContentDirty) documentContent?.discard();
     if (layoutDirty && layoutSnapshot) onApplyLayout?.(cloneLayout(layoutSnapshot));
     setDiscardConfirm(false);
   };

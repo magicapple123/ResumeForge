@@ -147,7 +147,12 @@ def _semantic_text(fmt: str, content: bytes) -> str:
     """按格式提取「人类可读正文」：PDF 走 pypdf，docx 剥 XML 标签，html 剥标签，其余原样。"""
     if fmt == "pdf":
         reader = pypdf.PdfReader(io.BytesIO(content))
-        return "".join(page.extract_text() or "" for page in reader.pages)
+        raw = "".join(page.extract_text() or "" for page in reader.pages)
+        # pypdf 对"整份中文字体（未预子集）"的 ToUnicode 会逐字插 NUL 填充；同一份内容
+        # 走预子集字体时不插。这是**字体嵌入方式的提取差异**，不是正文差异——不剥掉它，
+        # 指纹会随"本机子集化是否成功"在 487 / 995 之间跳变（2026-10 实测）。
+        # 与 `test_pdf_exporter.py::_text_runs` 同一口径。
+        return raw.replace("\x00", "")
     if fmt == "docx":
         with zipfile.ZipFile(io.BytesIO(content)) as bundle:
             xml = bundle.read("word/document.xml").decode("utf-8")

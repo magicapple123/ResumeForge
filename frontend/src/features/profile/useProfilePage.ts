@@ -40,6 +40,12 @@ import { useProfileSectionReorder } from "./useProfileSectionReorder";
 
 export type { ProfileFormValues } from "../profile-library/types";
 
+/** workspace 重取口径；保存成功后必须用 `discardDrafts`（见 reloadWorkspace 注释）。 */
+export interface WorkspaceReloadOptions {
+  /** 丢弃表单里未落库的 new: 临时草稿（服务端真值覆盖表单）。 */
+  discardDrafts?: boolean;
+}
+
 /** 提交资料表单的结构化结果：调用方（保存全部资料）按它分流（含 409 conflict）。 */
 export type ProfileSubmitOutcome = ProfileSaveOutcome;
 /** 表单值纯函数已拆到 profileFormData.ts；此处重新导出，保持 useProfilePage 的既有导出面。 */
@@ -91,7 +97,9 @@ export function useProfilePage(options: Options) {
   const [photoReading, setPhotoReading] = useState(false);
   const photoReadId = useRef(0);
   const reorderRef = useRef<ReturnType<typeof useProfileSectionReorder> | null>(null);
-  const reloadRef = useRef<() => Promise<void>>(async () => undefined);
+  const reloadRef = useRef<(options?: WorkspaceReloadOptions) => Promise<void>>(
+    async () => undefined,
+  );
   const coordinator = useProfileSaveCoordinator({
     workspace,
     editing,
@@ -101,7 +109,7 @@ export function useProfilePage(options: Options) {
     form,
     collectChanges: collectEntryChanges,
     getSectionOrder: () => reorderRef.current?.getSectionOrder() ?? [],
-    reloadWorkspace: () => reloadRef.current(),
+    reloadWorkspace: (options) => reloadRef.current(options),
     onSaved: () => setEditing(false),
     invalidateProjection: invalidateProjectionCache,
   });
@@ -170,10 +178,21 @@ export function useProfilePage(options: Options) {
     };
   }, [applyWorkspace, loadToken, message, setSectionReorderMode]);
 
-  const reloadWorkspace = useCallback(async (): Promise<void> => {
-    const next = await getWorkspace();
-    applyWorkspace(next, editingRef.current);
-  }, [applyWorkspace]);
+  /**
+   * 重取 workspace 并回填表单。两种口径：
+   * - 默认（删除条目 / 切组 / 字段设置弹层 / 刷新比较）：编辑中保留未保存的 new: 草稿与
+   *   已改值，避免"重取把用户正在填的东西冲掉"；
+   * - `discardDrafts`（保存成功后）：以服务器真值为准，**丢弃已提交成功的 new: 草稿**。
+   *   否则保存后表单里同时有"服务端新条目 + 残留草稿"，下一次保存会把草稿再当新条目
+   *   提交一次（用户实测：每保存一次多一条）。
+   */
+  const reloadWorkspace = useCallback(
+    async (options?: WorkspaceReloadOptions): Promise<void> => {
+      const next = await getWorkspace();
+      applyWorkspace(next, editingRef.current && !options?.discardDrafts);
+    },
+    [applyWorkspace],
+  );
   useEffect(() => {
     reloadRef.current = reloadWorkspace;
   }, [reloadWorkspace]);
@@ -281,10 +300,7 @@ export function useProfilePage(options: Options) {
   }, []);
 
   const setPreference = useCallback(
-    async (
-      field: FieldOut,
-      patch: { hidden?: boolean; collapsed_override?: boolean | null },
-    ): Promise<void> => {
+    async (field: FieldOut, patch: { hidden?: boolean }): Promise<void> => {
       const previous = workspaceRef.current;
       setWorkspace((current) => {
         if (!current) return current;
@@ -299,10 +315,6 @@ export function useProfilePage(options: Options) {
                       ? {
                           ...item,
                           hidden: patch.hidden === undefined ? item.hidden : patch.hidden,
-                          collapsed_override:
-                            patch.collapsed_override === undefined
-                              ? item.collapsed_override
-                              : patch.collapsed_override,
                         }
                       : item,
                   ),

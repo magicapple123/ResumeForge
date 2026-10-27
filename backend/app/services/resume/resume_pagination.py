@@ -29,6 +29,8 @@ SECTION_KEYS: tuple[str, ...] = (
     # A4：资格证照（与 DEFAULT_SECTION_ORDER 逐项一致）。
     "credentials",
     "skills",
+    # 2026-10：语言能力独立成栏（与 DEFAULT_SECTION_ORDER 逐项一致）。
+    "languages",
     "campus_experience",
     "awards",
     "summary",

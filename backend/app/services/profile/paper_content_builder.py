@@ -10,7 +10,7 @@ paper_projection 导入。
 - 13 个系统分区按 participating_keys（= 全局顺序）逐条映射到 ResumeContent；
 - basic_info 只投影身份标量槽位（其余字段只进生成素材，R-43）；
 - summary 写 ResumeContent.summary（单例）；
-- languages 在系统技能之后整条追加为 skills 条目（R-72）；
+- languages 独立投影成 ResumeContent.languages（2026-10 起不再并入 skills）；
 - 自建分区（custom: 前缀）进 content.custom_sections（13 个系统分区之后）；
 - 承载区追加行按字段定义顺序，超长时保留默认正文、其余进 warnings（R-44）。
 
@@ -38,11 +38,7 @@ from ...schemas.resume_custom_sections import (
 )
 from ...schemas.resume_research import MAX_AUTHORS, ResumeAuthor
 from . import paper_policy
-from .language_projection import (
-    LANGUAGE_LEVEL_MAX,
-    language_overflow_warnings,
-    project_language_skill_entries,
-)
+from .language_projection import project_language_item_entries
 from .paper_limits import (
     PhotoResolver,
     clip_text,
@@ -53,7 +49,6 @@ from .paper_limits import (
     slot_limit,
     split_items,
     split_lines,
-    warn,
     warn_slot_clip,
 )
 
@@ -101,7 +96,10 @@ def project_content(
         elif key == "summary":
             _apply_summary(content, section, warnings, entry_paths)
         elif key == "languages":
-            continue  # 语言排在系统技能之后，主循环结束后统一追加（R-72）
+            # 2026-10：语言能力独立成栏（不再并入 skills）；字段映射只有 language_projection 一份。
+            for entry_id, item in project_language_item_entries(section):
+                entry_paths[entry_id] = f"languages/{len(content.languages)}"
+                content.languages.append(item)
         elif key.startswith("custom:"):
             projected = _project_custom_section(section, entry_paths)
             if projected is not None:
@@ -111,21 +109,6 @@ def project_content(
             if rule is not None:
                 _apply_section_entries(content, section, rule, warnings, entry_paths)
     content.custom_sections = custom_sections
-    languages = consumed.sections.get("languages")
-    if languages is not None and "languages" in consumed.participating_keys:
-        base_index = len(content.skills)
-        for offset, (entry_id, skill) in enumerate(project_language_skill_entries(languages)):
-            content.skills.append(skill)
-            entry_paths[entry_id] = f"skills/{base_index + offset}"
-        for entry_id, language, length in language_overflow_warnings(languages):
-            warn(
-                warnings,
-                "carrier_overflow",
-                "languages",
-                entry_id,
-                f"语言「{language}」的纸面标签有 {length} 个字符，超过 {LANGUAGE_LEVEL_MAX} "
-                "字符上限，已截断；请缩短水平/证书/分数后重新填充",
-            )
     return ContentAssembly(content=content, entry_paths=entry_paths)
 
 

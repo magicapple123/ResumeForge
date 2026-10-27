@@ -132,7 +132,7 @@ describe("自建板块（F10）", () => {
     expect(screen.queryByDisplayValue("custom:22333")).toBeNull();
   });
 
-  it("正文里已有该自建板块时不再渲染同名骨架（首帧也不重复）", () => {
+  it("正文里已有该自建板块时不再渲染同名骨架（首帧也不重复）：板块名只读出现一次", () => {
     render(
       <CustomHarness
         schema={schema}
@@ -145,8 +145,10 @@ describe("自建板块（F10）", () => {
         ]}
       />,
     );
-    // 骨架的板块名是纯文本（标题输入框不算 text），有正文时不该出现。
-    expect(screen.queryAllByText("22333")).toHaveLength(0);
+    // 有正文时渲染的是板块卡片本身；板块名来自方案、只读展示，恰好出现一次（不重复骨架）。
+    expect(screen.getAllByText("22333")).toHaveLength(1);
+    // 需求 #2：没有「自建板块」泛称输入框。
+    expect(screen.queryByLabelText(t("editor.tab.custom-sections"))).not.toBeInTheDocument();
   });
 
   it("点「添加条目」把该板块写进表单（稳定 key + 标题用方案里的名字）", () => {

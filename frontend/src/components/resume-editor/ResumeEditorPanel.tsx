@@ -17,6 +17,7 @@
  * 弹层标签（本文件正是这么被误报过一次）。
  */
 import { Alert, Button, Collapse, Form, Grid, Space, Tabs } from "antd";
+import { useMemo } from "react";
 import type { ReactNode } from "react";
 import type { EditorSchemaOut } from "../../features/profile-library/types";
 import { t } from "../../i18n";
@@ -27,7 +28,7 @@ import EditorHeader from "./EditorHeader";
 import EditorTabStrip from "./EditorTabStrip";
 import { EditorFieldProvider } from "./editorSchemaContext";
 import { ProfileFillProvider } from "./profileFillContext";
-import type { ResumeEditorPanelApi } from "./useResumeEditorPanel";
+import type { ResumeEditorPanelApi } from "./editorPanelTypes";
 
 export interface ResumeEditorPanelProps {
   api: ResumeEditorPanelApi;
@@ -113,21 +114,44 @@ export default function ResumeEditorPanel({
   // 中栏的 antd 标签栏只剩内容面板，导航由上面那条自绘栏目条承担（CSS 里把 nav 藏掉）。
   const tabsClassName = variant === "inline" ? "resume-wb-tabs-body" : undefined;
 
-  const form = (
-    <Form
-      form={api.form}
-      layout="vertical"
-      onValuesChange={api.onValuesChange}
-      onFinish={(values) => void api.onFinish(values)}
-    >
-      {sourcePanel}
-      <Tabs
-        className={tabsClassName}
-        activeKey={api.activeTab}
-        items={api.tabItems}
-        onChange={api.setActiveTab}
-      />
-    </Form>
+  /**
+   * 表单子树 + 页签**整块 memo**（需求 #12）：打字时状态机每帧都会返回一个新的 `api`
+   * 对象（脏值、草稿快照等），如果直接在这里重建 `<Form>`/`<Tabs>`，antd 的 Form、
+   * 页签导航与 rc-tabs 的指示条都会跟着逐键重渲染——用户感知就是"输入卡顿"。
+   *
+   * 依赖只放**语义真的会变**的几项：`api.onValuesChange` / `api.onFinish` 已由状态机
+   * 用 useCallback 固定，`api.tabItems` 只在板块可见性变化时重建。打字不改变其中任何
+   * 一项，于是输入只让"正在编辑的那个 Form.Item"自己重渲染（受控值本来就走这条路）。
+   */
+  const form = useMemo(
+    () => (
+      <Form
+        form={api.form}
+        layout="vertical"
+        onValuesChange={api.onValuesChange}
+        onFinish={(values) => void api.onFinish(values)}
+      >
+        {sourcePanel}
+        <Tabs
+          className={tabsClassName}
+          activeKey={api.activeTab}
+          items={api.tabItems}
+          onChange={api.setActiveTab}
+        />
+      </Form>
+    ),
+    // 刻意不依赖整个 api：它每帧都是新对象（脏值/草稿快照），收进来 memo 就永远失效了。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [
+      api.form,
+      api.onValuesChange,
+      api.onFinish,
+      api.activeTab,
+      api.setActiveTab,
+      api.tabItems,
+      sourcePanel,
+      tabsClassName,
+    ],
   );
 
   // 中栏形态：没有左右分栏，也没有参考栏（见文件头）。

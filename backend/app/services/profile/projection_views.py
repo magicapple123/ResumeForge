@@ -25,6 +25,24 @@ from .paper_content_builder import clean_values, first_line
 
 __all__ = ["candidates", "editor_schema", "scope_out", "source_layout"]
 
+# 语言能力分区（2026-10 起独立成栏）：资料字段 key → ResumeContent.languages 属性名。
+# 与 language_projection.LANGUAGE_FIELD_IDS 同一份字段口径（这里只做编辑器视图的 DTO
+# 映射，不另写一份字段表）；obtained_at 一并往返，纸面渲染器决定是否展示。
+LANGUAGE_RESUME_ATTRS: dict[str, str] = {
+    "language": "name",
+    "level": "level",
+    "certificate": "certificate",
+    "score": "score",
+    "obtained_at": "obtained_at",
+}
+
+
+def _is_paper_material_only(key: str) -> bool:
+    """纸面口径的「仅素材」：语言能力已独立成栏，不再是仅素材。"""
+    if key == "languages":
+        return False
+    return paper_policy.is_material_only(key)
+
 
 def scope_out(consumed: ConsumedProfile) -> ProjectionScopeOut:
     """投影响应的组元数据（生成/新建面板的"本次使用"只读摘要来源）。"""
@@ -90,7 +108,7 @@ def source_layout(consumed: ConsumedProfile) -> list[ProjectionSourceSectionOut]
                 section_name=section.name,
                 form=section.form or "multi",
                 entry_count=len(section.entries),
-                material_only=paper_policy.is_material_only(key),
+                material_only=_is_paper_material_only(key),
             )
         )
     return layout
@@ -125,6 +143,18 @@ def _editor_section(key: str, section: ConsumedSection) -> EditorSectionOut:
             section_name=section.name,
             form="singleton",
             fields=[_editor_field(spec, _basic_info_attr(spec)) for spec in section.fields],
+        )
+    if key == "languages":
+        # 语言能力（2026-10）：独立分区，字段逐项映射到 ResumeContent.languages；
+        # 旧版把语言并入 skills，导致制作台页签显示成「专业技能」（用户反馈 #11）。
+        return EditorSectionOut(
+            section_key=key,
+            section_name=section.name,
+            form="multi",
+            resume_field="languages",
+            fields=[
+                _editor_field(spec, LANGUAGE_RESUME_ATTRS.get(spec.key)) for spec in section.fields
+            ],
         )
     if key == "summary":
         # 个人总结是标量分区：只有承载区字段映射到 ResumeContent.summary。
@@ -170,6 +200,11 @@ def _editor_section(key: str, section: ConsumedSection) -> EditorSectionOut:
         form=section.form or "multi",
         resume_field=rule.resume_field,
         material_only=section.material_only,
+        # 承载区元数据（需求 #5）：没有独立槽位的字段（含用户自定义字段）在纸面上以
+        # 「标签：值」行追加到这里。编辑器直接读写这个属性，与 _build_entry 的 extras
+        # 同一口径——不新增 ResumeContent 字段，也不会有第二份映射表。
+        carrier_attr=rule.carrier_attr,
+        carrier_list=rule.carrier_list,
         fields=[
             _editor_field(spec, _resume_attr(section, rule, spec)) for spec in section.fields
         ],
@@ -189,7 +224,10 @@ def _resume_attr(
 ) -> str | None:
     """系统分区字段的 ResumeContent 属性名：槽位优先，其次承载区，否则无独立输入框。"""
     if not spec.is_builtin:
-        return None  # 自定义字段以「标签：值」进承载区，编辑器不单独渲染
+        # 自定义字段以「标签：值」进承载区，不是 ResumeContent 的独立属性：这里仍返回
+        # None（没有独立槽位）。编辑器按板块的 carrier_attr/carrier_list 把输入框直接
+        # 绑定到承载区（需求 #5），不需要给字段编造一个属性名。
+        return None
     slot = rule.slots.get(spec.key)
     if slot is not None:
         return slot.attr

@@ -45,6 +45,7 @@ from .resume_entries import (  # noqa: F401  (re-export：保持既有导入路�
     ResumeCampusExperience,
     ResumeEducation,
     ResumeExperience,
+    ResumeLanguageItem,
     ResumeLine,
     ResumeProject,
     ResumeSkill,
@@ -103,6 +104,9 @@ class ResumeContent(OptionalEmptyListMixin, BaseModel):
     )
     projects: list[ResumeProject] = Field(default_factory=list, max_length=MAX_RESUME_SECTION_ITEMS)
     skills: list[ResumeSkill] = Field(default_factory=list, max_length=MAX_RESUME_SECTION_ITEMS)
+    # 语言能力（2026-10）：从资料页语言能力投影成独立分区，不再并入 skills。
+    # 空列表不序列化 → 旧记录内容指纹逐字节不变（与科研三栏 / 证照同一规则）。
+    languages: list[ResumeLanguageItem] = Field(default_factory=list, max_length=MAX_RESUME_SECTION_ITEMS)
     awards: list[ResumeAward] = Field(default_factory=list, max_length=MAX_RESUME_SECTION_ITEMS)
     # W14 科研三栏目：空列表不序列化（旧记录内容指纹逐字节不变，D11；见 OptionalEmptyListMixin）。
     publications: list[ResumePublication] = Field(default_factory=list, max_length=MAX_RESUME_SECTION_ITEMS)
@@ -122,6 +126,7 @@ class ResumeContent(OptionalEmptyListMixin, BaseModel):
         "research_projects",
         "patents",
         "credentials",
+        "languages",
         "custom_sections",
     )
 

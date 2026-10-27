@@ -93,6 +93,29 @@ export interface ResumeProject {
   lock_layout?: boolean;
 }
 
+/**
+ * 语言能力条目（2026-10 起独立成栏）：资料页五个字段一一对应。
+ *
+ * 旧版把语言压成一条 `ResumeSkill` 塞进 `skills`，制作台里因此显示成「专业技能」
+ * （用户反馈 #11）；现在它是独立分区 `content.languages`，空列表不序列化。
+ */
+export interface ResumeLanguageEntry {
+  /** 语言名（英语 / 日语…）。 */
+  name: string;
+  /** 水平/等级（CET-6 / N2 / 流利…）。 */
+  level?: string;
+  /** 证书（六级证书、雅思…）。 */
+  certificate?: string;
+  /** 分数（550 / 7…）。 */
+  score?: string;
+  /** 取得时间（2020-06…）。 */
+  obtained_at?: string;
+  /** 语义大纲/导出可见性（与其它正文条目同一套 W06 字段）。 */
+  hidden?: boolean;
+  lock_content?: boolean;
+  lock_layout?: boolean;
+}
+
 export interface ResumeSkill {
   name: string;
   level: string;
@@ -254,6 +277,8 @@ export interface ResumeContent {
   campus_experience: ResumeCampusExperience[];
   projects: ResumeProject[];
   skills: ResumeSkill[];
+  /** 语言能力（独立分区，2026-10 起；旧简历没有这个键，读取侧用 ?? [] 兜底）。 */
+  languages?: ResumeLanguageEntry[];
   awards: ResumeAward[];
   /**
    * 科研三栏目（W14）。

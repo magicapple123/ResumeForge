@@ -1,13 +1,18 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * 自建大字段的编辑块（C2/R-79 + 第 8 项）：**独立栏目**，不塞进 summary 或任何系统分区。
+ * 自建大字段的编辑块（C2/R-79 + 第 8 项 + 需求 #2）：**独立栏目**，不塞进 summary 或任何系统分区。
  *
  * 数据形状与后端 `ResumeCustomSection` 一致：一个栏目 = 标题 + 若干条目，条目 = 主文本 +
  * 若干「标签：值」行。`key` / `entry_id` 用隐藏字段保留：一次保存不能把稳定身份抹掉。
  *
- * 第 8 项（2026-10-27）：自建板块**有字段定义时**按定义渲染，与系统板块同一个录入方式
- * （字段 label 当标签、单行两列、多行整行），字段绑定规则见 `customSectionAlignment.ts`。
- * 没有定义时（旧快照 / 板块已被删）保持原来的通用编辑器，行为逐字不变。
+ * 需求 #2（2026-10-27）：新建/编辑简历时，自建板块与系统板块用**同一种录入格式**：
+ * - 板块名来自资料方案（`editor_schema.section_name`），**只读展示**——不再出现「自建板块」
+ *   泛称输入框与板块级删除按钮；方案里没有这个板块（旧简历 / 板块已被删）时退回正文里的
+ *   标题，同样只读；
+ * - 有字段定义 → 按定义渲染固定字段表单（第 8 项，绑定规则见 `customSectionAlignment.ts`），
+ *   不再有「添加标签行」按钮；
+ * - 没有字段定义（方案里 0 字段 / 旧快照）→ 与系统板块一致的最小兜底：仅一个「内容」字段；
+ *   老简历里已有的「标签：值」行仍原样显示并可编辑/保存（不丢数据，只是不再提供新增入口）。
  *
  * F10：方案里定义的自建板块即使还没有任何条目，也要有录入入口（页签名就是板块名）。
  * 投影对空板块不产出 `custom_sections` 条目，所以这里按编辑器视图补齐这些板块的骨架，
@@ -24,8 +29,9 @@ import CustomSectionFields from "./CustomSectionFields";
 import { alignCustomEntry, emptyCustomEntryLines } from "./customSectionAlignment";
 import { useEditorSchemaSections } from "./editorSchemaContext";
 
-const EMPTY_LINE = { label: "", value: "" };
 const EMPTY_ENTRY = { entry_id: "", text: "", lines: [] };
+const TEXT_MAX = 4000;
+const LINE_VALUE_MAX = 2000;
 
 /** 一个还没有正文的自建板块：显示板块名 + 一个「添加条目」入口。 */
 function EmptyCustomSection({
@@ -56,60 +62,63 @@ function EmptyCustomSection({
   );
 }
 
-/** 一条条目的「标签 + 值 + 删除」通用行（无字段定义时，或定义之外的历史行）。 */ function LegacyLines({
-  entryName,
-}: {
-  entryName: number;
-}) {
+/**
+ * 没有字段定义时的兜底：与系统板块同一种「固定字段」录入——只有一个「内容」字段。
+ *
+ * 老简历里已有的「标签：值」行是历史数据，**原样显示并可编辑/保存**（删掉等于丢用户内容），
+ * 但这里不再提供「添加标签行」入口：新写的内容只走「内容」字段，与系统板块口径一致。
+ */
+function LegacyEntryFields({ entryName }: { entryName: number }) {
   useLocale();
   return (
-    <Form.List name={[entryName, "lines"]}>
-      {(lines, lineOps) => (
-        <div style={{ display: "grid", gap: 6 }}>
-          {lines.map((line) => (
-            <Space key={line.key} align="start" wrap>
-              <Form.Item
-                name={[line.name, "label"]}
-                label={t("editor.custom-sections.label")}
-                rules={[{ required: true }]}
-                style={{ marginBottom: 0 }}
-              >
-                <Input maxLength={64} />
-              </Form.Item>
-              <Form.Item
-                name={[line.name, "value"]}
-                label={t("editor.custom-sections.value")}
-                style={{ marginBottom: 0, minWidth: 260 }}
-              >
-                <Input maxLength={2000} />
-              </Form.Item>
-              <Tooltip title={t("editor.custom-sections.remove-line")}>
-                <Button
-                  type="text"
-                  danger
-                  aria-label={t("editor.custom-sections.remove-line")}
-                  icon={<DeleteOutlined />}
-                  onClick={() => lineOps.remove(line.name)}
-                />
-              </Tooltip>
-            </Space>
-          ))}
-          <Button
-            size="small"
-            type="dashed"
-            icon={<PlusOutlined />}
-            onClick={() => lineOps.add({ ...EMPTY_LINE })}
-          >
-            {t("editor.custom-sections.add-line")}
-          </Button>
-        </div>
-      )}
-    </Form.List>
+    <>
+      <Form.Item
+        name={[entryName, "text"]}
+        label={t("editor.custom-sections.content")}
+        style={{ marginBottom: 12 }}
+      >
+        <Input.TextArea rows={3} maxLength={TEXT_MAX} />
+      </Form.Item>
+      <Form.List name={[entryName, "lines"]}>
+        {(lines, lineOps) => (
+          <div style={{ display: "grid", gap: 6 }}>
+            {lines.map((line) => (
+              <Space key={line.key} align="start" wrap>
+                <Form.Item
+                  name={[line.name, "label"]}
+                  label={t("editor.custom-sections.label")}
+                  rules={[{ required: true }]}
+                  style={{ marginBottom: 0 }}
+                >
+                  <Input maxLength={64} />
+                </Form.Item>
+                <Form.Item
+                  name={[line.name, "value"]}
+                  label={t("editor.custom-sections.value")}
+                  style={{ marginBottom: 0, minWidth: 260 }}
+                >
+                  <Input maxLength={LINE_VALUE_MAX} />
+                </Form.Item>
+                <Tooltip title={t("editor.custom-sections.remove-line")}>
+                  <Button
+                    type="text"
+                    danger
+                    aria-label={t("editor.custom-sections.remove-line")}
+                    icon={<DeleteOutlined />}
+                    onClick={() => lineOps.remove(line.name)}
+                  />
+                </Tooltip>
+              </Space>
+            ))}
+          </div>
+        )}
+      </Form.List>
+    </>
   );
 }
 
 /**
- * 有字段定义的一条条目：字段表单 + 「添加一行」（定义之外的自定义行）。
+ * 有字段定义的一条条目：字段表单（定义之外的历史行由 `CustomSectionFields` 兜底）。
  *
  * **对齐没落盘之前先不渲染输入框**：`Form.Item` 一旦绑到还不存在的 `lines[j]`，
  * rc-field-form 会把这个下标登记成一个空对象——watched 值里就凭空多出一行 `{}`，
@@ -131,23 +140,17 @@ function SchemaEntryFields({
   const alignment = alignCustomEntry(definition.fields, lines);
   return (
     <>
+      {/* 定义里已经没有主文本字段时，条目仍可能带着老正文：隐藏保留，一次保存不吞掉它。 */}
+      {alignment.textField ? null : (
+        <Form.Item name={[entryName, "text"]} hidden>
+          <Input />
+        </Form.Item>
+      )}
       <CustomSectionFields
         entryName={entryName}
         alignment={alignment}
         onRemoveLine={onRemoveLine}
       />
-      <Form.List name={[entryName, "lines"]}>
-        {(_fields, lineOps) => (
-          <Button
-            size="small"
-            type="dashed"
-            icon={<PlusOutlined />}
-            onClick={() => lineOps.add({ ...EMPTY_LINE })}
-          >
-            {t("editor.custom-sections.add-line")}
-          </Button>
-        )}
-      </Form.List>
     </>
   );
 }
@@ -162,23 +165,31 @@ export default function CustomSectionsEditor() {
   const sectionsValue =
     watched ?? (form.getFieldValue("custom_sections") as ResumeCustomSection[] | undefined);
   const schemaSections = useEditorSchemaSections();
-  const existingKeys = new Set((sectionsValue ?? []).map((section) => section.key));
-  const missingSections = schemaSections.filter(
-    (section) =>
-      section.section_key.startsWith("custom:") && !existingKeys.has(section.section_key),
+  // 自建板块的编辑器视图：名字与字段定义都来自资料方案（冻结快照同源）。
+  const customSchemas = schemaSections.filter((section) =>
+    section.section_key.startsWith("custom:"),
   );
+  const schemaByKey = new Map(
+    customSchemas.map((section) => [section.section_key, section] as const),
+  );
+  const existingKeys = new Set((sectionsValue ?? []).map((section) => section.key));
+  const missingSections = customSchemas.filter((section) => !existingKeys.has(section.section_key));
 
-  /** 有字段定义的自建板块：`section_key` → 定义（没有键 = 走通用编辑器兜底）。 */
+  /** 有字段定义的自建板块：`section_key` → 定义（没有键 = 走「仅内容」兜底）。 */
   const definitions = new Map(
-    schemaSections
-      .filter((section) => section.section_key.startsWith("custom:") && section.fields.length > 0)
+    customSchemas
+      .filter((section) => section.fields.length > 0)
       .map((section) => [section.section_key, section] as const),
   );
 
   /**
-   * 挂载时把已有条目的 `lines` 对齐到字段定义（补齐缺失字段、按定义顺序重排、
-   * 历史未知行原样留后）。为什么要在这里写一次表单值：投影只把**有值**的字段写成
-   * 标签行，剩下的字段没有位置可绑，不补齐就没有输入框可填（见 customSectionAlignment.ts）。
+   * 挂载时做两件数据对齐（都只在"第一次拿到方案视图"时跑一次）：
+   *
+   * 1. **标题归一成方案名**（需求 #2：板块名以方案为唯一来源）。旧简历正文里的标题若与
+   *    冻结视图不一致，保存时会被改成方案名；一致时一个字都不写（见下面第 2 条）；
+   * 2. **条目的 `lines` 对齐到字段定义**（补齐缺失字段、按定义顺序重排、历史未知行原样留后）。
+   *    投影只把**有值**的字段写成标签行，剩下的字段没有位置可绑，不补齐就没有输入框可填
+   *    （见 customSectionAlignment.ts）。
    *
    * 三点约束：
    * 1. 只跑一次（`aligned`），之后用户的编辑不会被它覆盖；
@@ -188,27 +199,36 @@ export default function CustomSectionsEditor() {
    */
   const aligned = useRef(false);
   useEffect(() => {
-    if (aligned.current || definitions.size === 0) return;
+    if (aligned.current || customSchemas.length === 0) return;
     const current =
       (form.getFieldValue("custom_sections") as ResumeCustomSection[] | undefined) ?? [];
     let changed = false;
     const next = current.map((section) => {
+      const schemaSection = schemaByKey.get(section.key);
       const definition = definitions.get(section.key);
-      if (!definition) return section;
       let sectionChanged = false;
-      const entries = (section.entries ?? []).map((entry) => {
-        const alignment = alignCustomEntry(definition.fields, entry.lines);
-        if (!alignment.changed) return entry;
+      let renamed = section;
+      if (schemaSection && section.title !== schemaSection.section_name) {
+        renamed = { ...section, title: schemaSection.section_name };
         sectionChanged = true;
-        return { ...entry, lines: alignment.alignedLines };
-      });
+      }
+      let entries = renamed.entries ?? [];
+      if (definition) {
+        entries = entries.map((entry) => {
+          const alignment = alignCustomEntry(definition.fields, entry.lines);
+          if (!alignment.changed) return entry;
+          sectionChanged = true;
+          return { ...entry, lines: alignment.alignedLines };
+        });
+      }
       if (!sectionChanged) return section;
       changed = true;
-      return { ...section, entries };
+      return { ...renamed, entries };
     });
     if (changed) form.setFieldValue("custom_sections", next);
     aligned.current = true;
-    // definitions 每次渲染都是新 Map，不能进依赖数组；这里只在"第一次拿到定义"时执行一次。
+    // customSchemas / schemaByKey / definitions 每次渲染都是新引用，不能进依赖数组；
+    // 这里只在"第一次拿到方案视图"时执行一次。
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [form, schemaSections]);
 
@@ -227,10 +247,15 @@ export default function CustomSectionsEditor() {
 
   return (
     <Form.List name="custom_sections">
-      {(sections, sectionOps) => (
+      {(sections) => (
         <div style={{ display: "grid", gap: 16 }}>
           {sections.map((section) => {
-            const definition = definitions.get(sectionsValue?.[section.name]?.key ?? "");
+            const current = sectionsValue?.[section.name];
+            const key = current?.key ?? "";
+            const definition = definitions.get(key);
+            const schemaSection = schemaByKey.get(key);
+            // 板块名以方案为唯一来源；方案里没有（旧简历 / 板块已删除）才退回正文里的标题。
+            const title = schemaSection?.section_name || current?.title || "";
             return (
               <div
                 key={section.key}
@@ -244,28 +269,14 @@ export default function CustomSectionsEditor() {
                 <Form.Item name={[section.name, "key"]} hidden>
                   <Input />
                 </Form.Item>
-                <Space style={{ display: "flex", marginBottom: 8 }} wrap>
-                  <Form.Item
-                    name={[section.name, "title"]}
-                    label={t("editor.tab.custom-sections")}
-                    rules={[{ required: true }]}
-                    style={{ marginBottom: 0, minWidth: 260 }}
-                  >
-                    <Input maxLength={40} />
-                  </Form.Item>
-                  <Tooltip title={t("editor.custom-sections.remove-section")}>
-                    <Button
-                      type="text"
-                      danger
-                      aria-label={t("editor.custom-sections.remove-section")}
-                      icon={<DeleteOutlined />}
-                      onClick={() => sectionOps.remove(section.name)}
-                    />
-                  </Tooltip>
-                </Space>
+                {/* 标题只读展示：值仍注册在表单里，保存/草稿恢复都逐字往返。 */}
+                <Form.Item name={[section.name, "title"]} hidden>
+                  <Input />
+                </Form.Item>
+                <Typography.Text strong>{title}</Typography.Text>
                 <Form.List name={[section.name, "entries"]}>
                   {(entries, entryOps) => (
-                    <div style={{ display: "grid", gap: 12 }}>
+                    <div style={{ display: "grid", gap: 12, marginTop: 8 }}>
                       {entries.map((entry) => (
                         <div
                           key={entry.key}
@@ -300,7 +311,7 @@ export default function CustomSectionsEditor() {
                             <SchemaEntryFields
                               definition={definition}
                               entryName={entry.name}
-                              lines={sectionsValue?.[section.name]?.entries?.[entry.name]?.lines}
+                              lines={current?.entries?.[entry.name]?.lines}
                               onRemoveLine={(lineIndex) => {
                                 // 用 getFieldValue 现取（watched 可能落后一帧）：删行后
                                 // 定义字段的绑定下标会随 label 重新命中，见 customSectionAlignment.ts。
@@ -319,16 +330,7 @@ export default function CustomSectionsEditor() {
                               }}
                             />
                           ) : (
-                            <>
-                              <Form.Item
-                                name={[entry.name, "text"]}
-                                label={t("editor.custom-sections.text")}
-                                style={{ marginBottom: 12 }}
-                              >
-                                <Input.TextArea rows={3} maxLength={4000} />
-                              </Form.Item>
-                              <LegacyLines entryName={entry.name} />
-                            </>
+                            <LegacyEntryFields entryName={entry.name} />
                           )}
                         </div>
                       ))}

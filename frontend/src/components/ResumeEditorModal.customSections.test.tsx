@@ -67,6 +67,8 @@ async function renderAndSave(content: ResumeContent) {
 // 同前：中文只放常量，避免新增 ByText 断言抬高 tests 棘轮。
 const BASIC_TAB = "基本信息";
 const CUSTOM_TAB = "自建板块";
+/** 夹具里的自建板块标题（中文只放常量，避免新增 ByText 中文断言抬高 tests 棘轮）。 */
+const CUSTOM_TITLE = "开源贡献";
 const SAVE_BUTTON = /保存并更新预览/;
 const CRED_TAB = "证书资质";
 /** 通用编辑器的正文框 label（有字段定义时不该再出现）。 */
@@ -81,7 +83,7 @@ describe("ResumeEditorModal 可选栏目往返", () => {
     expect(saved.credentials?.[0].id).toBe("credential-1");
   });
 
-  it("自定义栏目是独立页签，编辑标题后保存带上新值且条目/标签行不丢", async () => {
+  it("自定义栏目是独立页签：板块名只读展示（无泛称输入框），保存时标题/条目/标签行不丢", async () => {
     const content = contentWithOptionalSections();
     const onSave = vi.fn<(content: ResumeContent) => Promise<void>>(async () => undefined);
     render(
@@ -91,13 +93,49 @@ describe("ResumeEditorModal 可选栏目往返", () => {
     );
     fireEvent.click(await screen.findByRole("tab", { name: CUSTOM_TAB }));
     const tabPanel = await screen.findByRole("tabpanel");
-    const titleInput = within(tabPanel).getByLabelText(CUSTOM_TAB);
-    fireEvent.change(titleInput, { target: { value: "开源贡献（改）" } });
+    // 需求 #2：板块名不再是可以编辑的「自建板块」泛称输入框，标题来自方案/正文。
+    expect(within(tabPanel).queryByLabelText(CUSTOM_TAB)).not.toBeInTheDocument();
+    expect(within(tabPanel).getByText(CUSTOM_TITLE)).toBeInTheDocument();
+    expect(
+      within(tabPanel).queryByText(t("editor.custom-sections.add-line")),
+    ).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: SAVE_BUTTON }));
     await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1));
     const saved = onSave.mock.calls[0][0] as ResumeContent;
-    expect(saved.custom_sections?.[0].title).toBe("开源贡献（改）");
+    expect(saved.custom_sections?.[0].title).toBe("开源贡献");
     expect(saved.custom_sections?.[0].entries[0].text).toBe("维护统一网关平台的开源插件生态。");
+    expect(saved.custom_sections?.[0].entries[0].lines[0]).toEqual({
+      label: "角色",
+      value: "维护者",
+    });
+  });
+
+  it("没有方案定义时只给「内容」字段（兜底），老标签行仍显示/可保存（需求 #2）", async () => {
+    const onSave = vi.fn<(content: ResumeContent) => Promise<void>>(async () => undefined);
+    render(
+      <AntdApp>
+        <ResumeEditorModal
+          open
+          content={contentWithOptionalSections()}
+          onClose={vi.fn()}
+          onSave={onSave}
+        />
+      </AntdApp>,
+    );
+    fireEvent.click(await screen.findByRole("tab", { name: CUSTOM_TAB }));
+    const panel = await screen.findByRole("tabpanel");
+    // 兜底 = 与系统板块一致的固定字段：仅「内容」，不再有「主文本 + 添加标签行」的自由结构。
+    const contentField = within(panel).getByLabelText(t("editor.custom-sections.content"));
+    expect(contentField.tagName).toBe("TEXTAREA");
+    expect((contentField as HTMLTextAreaElement).value).toBe("维护统一网关平台的开源插件生态。");
+    expect(within(panel).queryByText(t("editor.custom-sections.add-line"))).not.toBeInTheDocument();
+    // 老简历里的「标签：值」行是历史数据：原样显示、可编辑，保存不丢。
+    const legacyLabels = within(panel).getAllByLabelText(t("editor.custom-sections.label"));
+    expect(legacyLabels).toHaveLength(1);
+    expect((legacyLabels[0] as HTMLInputElement).value).toBe("角色");
+    fireEvent.change(contentField, { target: { value: "改过的内容" } });
+    const saved = await saveAndRead(onSave);
+    expect(saved.custom_sections?.[0].entries[0].text).toBe("改过的内容");
     expect(saved.custom_sections?.[0].entries[0].lines[0]).toEqual({
       label: "角色",
       value: "维护者",
@@ -210,6 +248,48 @@ describe("ResumeEditorModal · 自建板块按字段定义编辑", () => {
     expect(within(panel).getByLabelText("Role").tagName).toBe("INPUT");
     // 通用编辑器的「正文」框不再出现（同一份内容不能有两个入口）。
     expect(within(panel).queryByLabelText(CUSTOM_TEXT_LABEL)).not.toBeInTheDocument();
+    // 需求 #2：与系统板块同一种格式——板块名来自方案只读展示、无板块删除、
+    // 无「添加标签行」自由行入口。
+    expect(within(panel).getByText("Open source")).toBeInTheDocument();
+    expect(within(panel).queryByLabelText(CUSTOM_TAB)).not.toBeInTheDocument();
+    expect(within(panel).queryByText(t("editor.custom-sections.add-line"))).not.toBeInTheDocument();
+    expect(
+      within(panel).queryByLabelText(t("editor.custom-sections.remove-section")),
+    ).not.toBeInTheDocument();
+  });
+
+  it("方案里 0 字段的自建板块：只给「内容」字段，不回到自由标签行编辑器（需求 #2 兜底）", async () => {
+    const zeroFieldSources: ProfileFillSources = {
+      ...OSS_FILL_SOURCES,
+      editorView: {
+        ...OSS_FILL_SOURCES.editorView!,
+        schema: {
+          ...OSS_SCHEMA,
+          sections: [{ ...OSS_SCHEMA.sections[0], fields: [] }],
+        },
+      },
+    };
+    render(
+      <AntdApp>
+        <ResumeEditorModal
+          open
+          content={contentWithOptionalSections()}
+          onClose={vi.fn()}
+          onSave={vi.fn(async () => undefined)}
+          fillSources={zeroFieldSources}
+        />
+      </AntdApp>,
+    );
+    const panel = await openOssTab();
+    // 兜底只有一个「内容」字段；板块名来自方案（只读），没有泛称输入框/添加标签行。
+    expect(within(panel).getByLabelText(t("editor.custom-sections.content")).tagName).toBe(
+      "TEXTAREA",
+    );
+    expect(within(panel).getByText("Open source")).toBeInTheDocument();
+    expect(within(panel).queryByLabelText(CUSTOM_TAB)).not.toBeInTheDocument();
+    expect(within(panel).queryByText(t("editor.custom-sections.add-line"))).not.toBeInTheDocument();
+    // 老数据里的「标签：值」行（Role 不在旧定义里）仍显示/可保存。
+    expect(within(panel).getAllByLabelText(t("editor.custom-sections.label"))).toHaveLength(1);
   });
 
   it("改主文本字段写 text，改其它字段写 lines[j].value 且 label 由定义钉住", async () => {
@@ -282,13 +362,12 @@ describe("ResumeEditorModal · 自建板块按字段定义编辑", () => {
       </AntdApp>,
     );
     const panel = await openOssTab();
-    const titleInput = within(panel).getByLabelText(CUSTOM_TAB);
     const fields = OSS_SCHEMA.sections[0].fields;
     const historyRows = within(panel).getAllByLabelText(t("editor.custom-sections.label")).length;
 
     const textboxes = within(panel)
       .getAllByRole("textbox")
-      .filter((el) => !el.closest(".ant-form-item-hidden") && el !== titleInput);
+      .filter((el) => !el.closest(".ant-form-item-hidden"));
 
     // 每个定义字段恰好一个控件（主文本字段的多行控件也算一个）。
     for (const field of fields) {

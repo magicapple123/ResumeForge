@@ -100,6 +100,15 @@ const params = {
    * 不说清楚，用户拖完正文直接导出，会以为导出漏了他的修改。
    */
   "exact.unsavedNote": "这份预览含还没保存的修改，导出前请先保存",
+
+  // ── 联系方式换行（#3）──────────────────────────────────────
+  /** 排版参数里的控件名：可选"在某个字段前强制换行"。 */
+  "workbench.contactBreak.label": "联系方式换行",
+  /** 说明默认行为：字段整体不拆行，只在字段之间换行。 */
+  "workbench.contactBreak.hint":
+    "默认每个字段整体不拆行、字段之间自动换行；选中某个字段表示在它前面强制换行",
+  /** 下拉占位：未设置时就是默认的自动换行。 */
+  "workbench.contactBreak.placeholder": "自动换行",
 } as const;
 
 export default params;

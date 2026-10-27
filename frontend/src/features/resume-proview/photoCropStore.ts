@@ -72,6 +72,22 @@ export function savePhotoCrop(
   }
 }
 
+/**
+ * 初始裁剪参数的唯一解析：**format_config 是正式归属，会话桥只做兜底**（#10）。
+ *
+ * 为什么需要这个函数：W15 落地时后端白名单还没放行 `photo_crop`，参数先存在
+ * sessionStorage；现在白名单已放行、参数随版式保存，三个入口（弹窗初值、覆盖层、
+ * 宿主回传）若各写一遍"先读哪个"就会在"保存过 vs 刚裁还没保存"两种状态下给出不同
+ * 的取景。这里只回答"从哪读"，哈希失效（换图）由调用方按 `photo_sha256` 校验。
+ */
+export function resolveInitialPhotoCrop(
+  configCrop: PhotoCropParams | null | undefined,
+  resumeId: number | null | undefined,
+  storage: StorageLike | null = defaultStorage(),
+): PhotoCropParams | null {
+  return configCrop ?? loadPhotoCrop(resumeId, storage);
+}
+
 /** 清掉这份简历的会话级裁剪参数（恢复原图 / 移除照片时）。 */
 export function clearPhotoCrop(
   resumeId: number | null | undefined,

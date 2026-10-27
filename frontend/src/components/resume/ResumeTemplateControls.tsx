@@ -26,6 +26,7 @@ import {
   normalizeSectionOrder,
   RESUME_SECTION_LABELS,
 } from "../../utils/resumeSectionOrder";
+import ContactBreaksControl from "../../features/resume-layout/ContactBreaksControl";
 import ResumeLanguageSelect from "./ResumeLanguageSelect";
 import TemplateGalleryModal from "./TemplateGalleryModal";
 
@@ -373,6 +374,14 @@ export default function ResumeTemplateControls({
           />
         </Tooltip>
       </Space>
+      {/* 联系方式换行（#3）：页眉那几个字段在哪断行。默认"字段整体不拆行、字段之间
+          自动换行"，这里只是给用户一个显式控制点；参数随简历保存，四条渲染链路同源。 */}
+      <ContactBreaksControl
+        formatConfig={layout.format_config}
+        disabled={disabled}
+        compact={compact}
+        onChange={(format_config) => onChange({ ...layout, format_config })}
+      />
       {/* 简历语言：与页数/字号同属"排出来长什么样"，所以跟在结构组最后。
           提示**必须**用 Tooltip 而不是原生 title——原生 title 在触屏上永远不出现，
           而"只改小节标题与字段名、不翻译正文"正是最容易被误解的一句：

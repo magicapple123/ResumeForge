@@ -115,6 +115,17 @@ def _record_photo_x(monkeypatch, template: str) -> tuple[float, float]:
     return recorded[0]
 
 
+def _photo_box_edges(x: float, width: float, box_width: float) -> tuple[float, float]:
+    """照片**框**的左右缘（模板 `.profile-photo` 的固定宽高框）。
+
+    2026-10 #10 起照片按原图比例装进框（`object-fit: contain`）：图片比框窄/矮时会在
+    框内居中，`x` 是**图片**起点而不是框起点。"照片贴哪一侧"断的是框的边——框才是
+    版式单位（页头高度、文字块宽度都按它算）。
+    """
+    inset = (box_width - width) / 2
+    return x - inset, x + width + inset
+
+
 # ===== 1. 页头对齐 =====
 
 
@@ -173,20 +184,34 @@ def test_elegant_intent_and_contact_are_centered_too():
 
 @needs_font
 def test_elegant_photo_sits_on_the_left(monkeypatch):
-    """elegant 的 `.header { flex-direction: row-reverse }` ⇒ 照片在**左**（贴左页边距）。"""
+    """elegant 的 `.header { flex-direction: row-reverse }` ⇒ 照片**框**贴左页边距。"""
     x, width = _record_photo_x(monkeypatch, CENTERED_TEMPLATE)
     layout = resolve_layout(template=CENTERED_TEMPLATE, base_px=BASE_PX, format_config=None)
-    assert x == pytest.approx(layout.margin_left, abs=0.5), f"照片画在 {x:.2f}mm"
-    assert x + width < PAGE_WIDTH_MM / 2, "照片应当整块落在纸面左半"
+    box_left, box_right = _photo_box_edges(
+        x, width, layout.gap_mm(layout.photo_width_ratio)
+    )
+    assert box_left == pytest.approx(
+        layout.margin_left + layout.gap_mm(layout.header_pad_x), abs=0.5
+    ), f"照片框左缘在 {box_left:.2f}mm"
+    assert box_right < PAGE_WIDTH_MM / 2, "照片应当整块落在纸面左半"
 
 
 @needs_font
 def test_classic_photo_sits_on_the_right(monkeypatch):
-    """classic 的照片仍贴右页边距（原行为），未被 elegant 的新分支带走。"""
+    """classic 的照片**框**仍贴右页边距（原行为），未被 elegant 的新分支带走。
+
+    注意断的是框的右缘而不是图片右缘：contain 之后图片可能在框内居中（左右各留白），
+    图片右缘会比右页边距小半个留白——那**不是**回归，"画框位置"才是版式口径。
+    """
     x, width = _record_photo_x(monkeypatch, LEFT_TEMPLATE)
     layout = resolve_layout(template=LEFT_TEMPLATE, base_px=BASE_PX, format_config=None)
+    box_left, box_right = _photo_box_edges(
+        x, width, layout.gap_mm(layout.photo_width_ratio)
+    )
     assert x > PAGE_WIDTH_MM / 2, f"照片画在 {x:.2f}mm"
-    assert x + width == pytest.approx(PAGE_WIDTH_MM - layout.margin_right, abs=0.5)
+    assert box_right == pytest.approx(
+        PAGE_WIDTH_MM - layout.margin_right - layout.gap_mm(layout.header_pad_x), abs=0.5
+    )
 
 
 @needs_font

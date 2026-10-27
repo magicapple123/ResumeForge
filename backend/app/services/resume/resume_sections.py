@@ -43,6 +43,9 @@ DEFAULT_SECTION_ORDER: tuple[str, ...] = (
     # A4 资格证照插在专利之后、技能之前（空板块所有渲染器都不产生节点，旧产物不变）。
     "credentials",
     "skills",
+    # 2026-10：语言能力从"并入专业技能"改为独立分区，排在技能之后、校园经历之前。
+    # 与资料页顺序一致（资料默认把语言能力放最后；简历里紧随技能更符合阅读习惯）。
+    "languages",
     "campus_experience",
     "awards",
     "summary",
@@ -69,6 +72,7 @@ PROFILE_SECTION_TO_RESUME: dict[str, str] = {
     "campus_experiences": "campus_experience",
     "projects": "projects",
     "skills": "skills",
+    "languages": "languages",
     "awards": "awards",
     "summary": "summary",
 }

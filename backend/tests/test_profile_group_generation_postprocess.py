@@ -6,8 +6,8 @@
 - 仅素材分区（basic_info / 知识产权 / 语言能力）的自定义字段不追加到纸面；C2/R-79：
   content.custom_sections 由 project_paper_content(consumed) 确定性写入，标题/条目/标签行
   与"从资料填充"链路同一实现；无自建分区时为空列表；
-- R-72/R-73：语言能力映射进 skills 末尾、origin=restored、已存在不重复、
-  当前组不含 languages 不补；技能+语言合并超 200 条抛结构化 LanguageCapacityError。
+- R-73（2026-10 起）：语言能力补进独立 languages 分区、origin=restored、已存在不重复、
+  当前组不含 languages 不补；语言条数超 200 抛结构化 LanguageCapacityError。
 """
 
 from __future__ import annotations
@@ -26,7 +26,7 @@ from app.services.resume.generation_postprocess import (
 )
 from app.services.resume.language_restore import (
     LanguageCapacityError,
-    restore_language_skills,
+    restore_languages,
 )
 from app.services.resume.resume_consistency import check_consistency
 from app.services.resume.resume_coverage import find_unwritten_details
@@ -290,25 +290,33 @@ def _languages_section(**values: str) -> ConsumedSection:
     )
 
 
-def test_language_restore_appends_after_existing_skills():
+def test_language_restore_adds_standalone_languages_not_skills():
     languages = _languages_section(
         **{
             "languages.language": "英语",
             "languages.level": "CET-6",
+            "languages.certificate": "六级证书",
             "languages.score": "550",
         }
     )
     consumed = _profile({"languages": languages}, ["languages"])
     resume = ResumeContent(skills=[ResumeSkill(name="Python", level="熟练")])
-    result, annotations = restore_language_skills(resume, consumed)
-    assert [skill.name for skill in result.skills] == ["Python", "英语"]
-    assert result.skills[1].level == "CET-6 · 550"
+    result, annotations = restore_languages(resume, consumed)
+    # 技能不受影响；语言进独立分区。
+    assert [skill.name for skill in result.skills] == ["Python"]
+    assert [item.name for item in result.languages] == ["英语"]
+    assert result.languages[0].model_dump() == {
+        "name": "英语",
+        "level": "CET-6",
+        "certificate": "六级证书",
+        "score": "550",
+    }
     assert annotations == [
         {
-            "path": "skills.1",
+            "path": "languages.0",
             "origin": "restored",
             "source_subject": "英语",
-            "source_fact": "CET-6 · 550",
+            "source_fact": "CET-6",
         }
     ]
 
@@ -316,19 +324,19 @@ def test_language_restore_appends_after_existing_skills():
 def test_language_restore_skips_present_and_absent_languages():
     languages = _languages_section(**{"languages.language": "英语"})
     consumed = _profile({"languages": languages}, ["languages"])
-    present = ResumeContent(skills=[ResumeSkill(name="英语", level="CET-6")])
-    result, annotations = restore_language_skills(present, consumed)
+    present = ResumeContent(languages=[{"name": "英语", "level": "CET-6"}])
+    result, annotations = restore_languages(present, consumed)
     assert result is present and annotations == []
-    untouched = restore_language_skills(present, _profile({}, []))
+    untouched = restore_languages(present, _profile({}, []))
     assert untouched == (present, [])
 
 
 def test_language_capacity_error_is_structured():
     languages = _languages_section(**{"languages.language": "英语"})
     consumed = _profile({"languages": languages}, ["languages"])
-    resume = ResumeContent(skills=[ResumeSkill(name=f"技能{i}") for i in range(200)])
+    resume = ResumeContent(languages=[{"name": f"语言{i}"} for i in range(200)])
     with pytest.raises(LanguageCapacityError) as exc:
-        restore_language_skills(resume, consumed)
+        restore_languages(resume, consumed)
     assert exc.value.total == 201
     assert "200" in exc.value.detail
 

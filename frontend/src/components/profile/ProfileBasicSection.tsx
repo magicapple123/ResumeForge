@@ -2,7 +2,8 @@
 /**
  * 基本信息分区（F6）：定义驱动的 15 个默认字段 + 照片专门入口。
  *
- * 字段顺序/类型/收起状态全部来自服务端 SectionOut（basic_info 的定义），不再写死；
+ * 字段顺序/类型全部来自服务端 SectionOut（basic_info 的定义），不再写死
+ * （「默认收起 / 更多字段」已下线：字段始终渲染，只保留隐藏/恢复）；
  * 照片不是普通文本（C4 照片资源例外），仍由 ProfilePhotoPanel 单独承载，不开放为
  * 自定义字段类型。旧版本遗留的网申专用项（证件号/家庭信息等）不在这里渲染。
  */
@@ -21,10 +22,7 @@ interface Props {
   saving: boolean;
   limits?: LimitsOut;
   onPhotoSelect: (dataUrl: string) => void;
-  onSetPreference?: (
-    field: FieldOut,
-    patch: { hidden?: boolean; collapsed_override?: boolean | null },
-  ) => void;
+  onSetPreference?: (field: FieldOut, patch: { hidden?: boolean }) => void;
 }
 
 export default function ProfileBasicSection({

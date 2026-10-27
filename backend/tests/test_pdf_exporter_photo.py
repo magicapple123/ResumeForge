@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-"""PDF 性别字号与照片裁剪：性别不再并入姓名行、object-fit: cover 等价物。
+"""PDF 性别字号与照片取景：性别不再并入姓名行、照片按原图比例装进照片框。
 
 拆分自 test_pdf_exporter.py——性别按 name_extra_ratio 渲染且颜色拆分、无性别行为
 不变、plan/draw 互为镜像；照片按目标比例裁剪、坏图兜底跳过。
@@ -14,8 +14,8 @@ from app.services.pdf_exporter import (
     _PX_TO_PT,
     _ResumePDF,
     build_resume_pdf,
-    crop_image_to_cover,
     draw_name_gender,
+    fit_photo_size,
     plan_name_gender,
 )
 from app.services.resume.resume_templates import (
@@ -146,63 +146,71 @@ def test_plan_name_gender_matches_what_draws():
     assert drawn == pytest.approx(plan.height, abs=0.01)
 
 
-# ===== 照片裁剪：object-fit: cover 的等价物 =====
+# ===== 照片取景：object-fit: contain 的等价物（2026-10 #10）=====
+#
+# 用户反馈"照片裁剪未生效、默认还被强制裁成模板框比例"：旧实现用 cover 把照片裁成
+# 模板照片框的比例，于是 (a) 没有裁剪参数时照片也被硬裁，(b) 已经有 photo_crop 派生图时
+# 又被裁了第二次，用户看不到自己设置的取景。现在统一改成 contain：按原图比例装进框，
+# 不裁切、不溢出、不变形；HTML 侧对应 .profile-photo 的 object-fit: contain。
 
 
-def test_crop_image_to_cover_produces_the_target_ratio():
-    """已知宽高比的图片裁剪后，输出的宽高比应**精确等于**目标框比例。
+def test_fit_photo_size_keeps_the_source_ratio_and_fits_inside_the_box():
+    """任意比例的照片都等比缩放到**恰好装进**框：宽高比与图片完全一致。"""
+    landscape = _png_bytes((400, 100))  # 4:1，横图：被框宽限制
+    w, h = fit_photo_size(landscape, 80.0, 100.0)
+    assert (w, h) == pytest.approx((80.0, 20.0))
+    assert (w / h) == pytest.approx(4.0)
 
-    整数像素量化会把 0.7875 落到 0.79（158/200），所以用绝对容差而非相对——
-    真正要防的是"完全没裁、原比例 1.0 还在"那种大偏离，0.01 的容差足够逮住。
-    """
+    portrait = _png_bytes((100, 400))  # 1:4，竖图：被框高限制
+    w, h = fit_photo_size(portrait, 80.0, 100.0)
+    assert (w, h) == pytest.approx((25.0, 100.0))
+    assert (w / h) == pytest.approx(0.25)
+
     square = _png_bytes((200, 200))
-    classic = TEMPLATE_LAYOUT_DEFAULTS["classic"]
-    target = float(classic["photo_width_ratio"]) / float(classic["photo_height_ratio"])
-    out = crop_image_to_cover(square, target)
-    with Image.open(BytesIO(out)) as img:
-        w, h = img.size
-    assert (w / h) == pytest.approx(target, abs=0.01)
+    w, h = fit_photo_size(square, 80.0, 100.0)
+    # 正方形被"更紧"的宽度限制 → 80×80；不能是 80×100（那会被拉伸变形）。
+    assert (w, h) == pytest.approx((80.0, 80.0))
 
 
-def test_crop_image_to_cover_handles_landscape_input():
-    """横图（宽>高）应左右居中裁掉，保持目标高度方向不变形。"""
-    landscape = _png_bytes((400, 100))
-    out = crop_image_to_cover(landscape, 0.8)
-    with Image.open(BytesIO(out)) as img:
-        w, h = img.size
-    assert (w / h) == pytest.approx(0.8, abs=0.01)
+def test_fit_photo_size_matches_the_box_when_ratios_are_equal():
+    """比例恰好一致时铺满整个框（contain 的边界情况，不该留白）。"""
+    matching = _png_bytes((80, 100))  # 0.8，与框 80×100 同比例
+    w, h = fit_photo_size(matching, 80.0, 100.0)
+    assert (w, h) == pytest.approx((80.0, 100.0))
 
 
-def test_crop_image_to_cover_handles_portrait_input():
-    """竖图（高>宽）应上下居中裁掉，保持目标宽度方向不变形。"""
-    portrait = _png_bytes((100, 400))
-    out = crop_image_to_cover(portrait, 0.8)
-    with Image.open(BytesIO(out)) as img:
-        w, h = img.size
-    assert (w / h) == pytest.approx(0.8, abs=0.01)
+def test_fit_photo_size_respects_exif_orientation():
+    """手机竖拍：像素是 400×100（横），EXIF Orientation=6 表示显示时转 90°。
+
+    不先转正就会按 4:1 横图取景，竖着的人像在 PDF 里被按横图比例压扁。
+    转正后是 1:4 竖图 → 在 80×100 的框里应装成 25×100。
+    """
+    from PIL import Image as _Image
+
+    buffer = BytesIO()
+    image = _Image.new("RGB", (400, 100), (0, 128, 200))
+    exif = _Image.Exif()
+    exif[0x0112] = 6  # Orientation: Rotate 90 CW
+    image.save(buffer, format="JPEG", exif=exif)
+
+    w, h = fit_photo_size(buffer.getvalue(), 80.0, 100.0)
+    assert (w, h) == pytest.approx((25.0, 100.0))
 
 
-def test_crop_image_to_cover_returns_input_unchanged_when_ratio_matches():
-    """比例已经一致且无 EXIF 方向时，原样返回（不重编码、字节相同）。"""
-    matching = _png_bytes((80, 100))  # 0.8
-    out = crop_image_to_cover(matching, 0.8)
-    assert out == matching
-
-
-def test_crop_image_to_cover_raises_on_garbage_bytes():
+def test_fit_photo_size_raises_on_garbage_bytes():
     """坏图应抛异常——PDF/Word 侧已有"跳过照片"兜底，这里不吞。"""
     with pytest.raises(Exception):  # noqa: PT011 - Pillow 抛多种异常，只验"不吞"
-        crop_image_to_cover(b"not an image", 0.8)
+        fit_photo_size(b"not an image", 80.0, 100.0)
 
 
 @needs_font
-def test_pdf_with_photo_does_not_distort():
-    """端到端：带照片的简历导出 PDF 不应抛错（裁剪 + 嵌入走通），且仍是合法 PDF。
+def test_pdf_draws_the_photo_with_its_own_aspect_ratio(monkeypatch):
+    """端到端：照片按**原图比例**画进照片框（contain），不是被 cover 裁成框比例。
 
-    这是"照片被压扁"的回归防线：旧实现同时给 fpdf2 的 image() 传 w 与 h 导致强制拉伸；
-    现在先 cover 裁剪再嵌入，横图/竖图都不会变形。这里只断"不抛错 + 合法 PDF + 有照片
-    流"——几何精确比对在 `crop_image_to_cover` 的纯函数用例里已逐条钉住。
+    旧实现（cover）会把 300×150 的横图画成 6.3:8 的竖图（照片被裁掉两侧）；现在
+    draw w/h 的比值必须等于 2.0（= 300/150），且高度小于照片框高度（框内留白，不溢出）。
     """
+    recorded = _record_photo_draws(monkeypatch)
     resume = ResumeContent(
         name="张三",
         photo=_png_data_url((300, 150)),  # 横图，与 classic 照片框 0.7875 比例不同
@@ -212,13 +220,17 @@ def test_pdf_with_photo_does_not_distort():
     assert result.content.startswith(b"%PDF-")
     assert result.pages >= 1
 
+    assert len(recorded) == 1, "应画出一张照片"
+    draw_w, draw_h = recorded[0]
+    assert draw_w / draw_h == pytest.approx(2.0, rel=1e-6), "照片被按框比例裁切/拉伸了"
+
 
 @needs_font
 def test_pdf_with_a_broken_photo_falls_back_to_no_photo():
     """照片能通过 schema 校验（签名匹配）但 Pillow 解不开时，导出仍成功、只是跳过照片。
 
     ResumeContent.photo 的校验只查文件签名（`\x89PNG...`），所以"签名对、内容截断"的
-    坏图能进得了模型、过得了校验，却会让 `crop_image_to_cover` 的 `Image.open` 抛错——
+    坏图能进得了模型、过得了校验，却会让 `fit_photo_size` 的 `Image.open` 抛错——
     PDF 渲染的兜底要把它吞掉、跳过照片，而不是整份导出失败。
     """
     # PNG 签名 + 截断的内容：过得了 schema 的签名检查，Pillow 打不开。

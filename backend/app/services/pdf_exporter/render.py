@@ -1,5 +1,10 @@
 # SPDX-License-Identifier: Apache-2.0
-"""绘制编排（``ResumePDF`` 结果对象、字体注册、``_draw_resume`` 主绘制流程）。"""
+"""绘制编排（``ResumePDF`` 结果对象、字体注册、``_draw_resume`` 主绘制流程）。
+
+页头整段（照片取景 / 装饰 / 姓名-意向-联系方式）拆到 ``header.py``：本文件贴着 500 行
+生产代码预算，而页头是"版式计算 + 照片 + 三段文字 + 装饰"的四合一，与"各分区怎么画"
+不是同一件事。拆分是纯搬迁，行为零变化（见 ``header.draw_header`` 的 docstring）。
+"""
 
 from __future__ import annotations
 
@@ -24,10 +29,15 @@ from .canvas import _ResumePDF
 from .columns import SectionDrawer, render_sections
 from .custom_sections import draw_custom
 from .fonts import FONT_FAMILY, ResumePDFError
-from .layout import _PX_TO_MM, _PX_TO_PT, PAGE_WIDTH_MM
-from .media import _join, _photo_bytes, crop_image_to_cover
-from .name_gender import draw_name_gender, plan_name_gender
-from .profile_fields import draw_bullets_with_profile_fields, draw_profile_meta, skill_tag_text
+from .header import draw_header
+from .layout import _PX_TO_MM, _PX_TO_PT
+from .media import _join
+from .profile_fields import (
+    draw_bullets_with_profile_fields,
+    draw_profile_meta,
+    language_tag_text,
+    skill_tag_text,
+)
 from .research_render import (
     draw_credentials,
     draw_patents,
@@ -114,181 +124,20 @@ def _draw_resume(
             return None
         return style.effective(role, object_id=object_id)
 
-    # 照片尺寸由模板 `.profile-photo` 的宽高（× 字号）派生——预览里它随字号/缩放走，
-    # PDF 此前却是固定 22×28mm，字号一大一小就对不上（用户看到"照片大小与字号不协调"）。
-    photo_w = layout.gap_mm(layout.photo_width_ratio)
-    photo_h = layout.gap_mm(layout.photo_height_ratio)
-
     # ===== 页头（含装饰：底边线 / modern 的浅底色块）=====
-    # 页头的装饰同样只来自模板 `.header` 的 CSS：底边线（宽度固定 px、强调色）、文字与线之间的
-    # padding-bottom，以及 modern 那种浅底色块（`background: var(--accent-soft)` + 圆角 + 四周内边距）。
-    hdr_pad_x = layout.gap_mm(layout.header_pad_x)
-    hdr_pad_y = layout.gap_mm(layout.header_pad_y)
-    hdr_pad_bottom = layout.gap_mm(layout.header_pad_bottom)
-    hdr_radius = layout.gap_mm(layout.header_radius)
-    # 底边线宽度是固定的 px（CSS `border-bottom: Npx`），不随字号/一页适配缩放，与预览一致。
-    hdr_border_w = layout.header_border_width * _PX_TO_MM
-    header_has_bg = layout.header_bg == "soft_accent"
-
-    header_top = pdf.get_y()
-    content_left = layout.margin_x + hdr_pad_x
-    content_right = PAGE_WIDTH_MM - layout.margin_right - hdr_pad_x
-    content_top = header_top + hdr_pad_y
-    inner_width = pdf.content_width - 2 * hdr_pad_x
-
-    photo = _photo_bytes(resume.photo) if (resume.photo and include_photo) else None
-    # 照片占哪一侧由模板 `.header` 的 `flex-direction` 决定（elegant 是 `row-reverse`，
-    # DOM 顺序 `[文字块, 照片]` ⇒ 照片在**左**）。此前 PDF 恒画右侧、文字恒从左边距起笔。
-    # 两侧的"文字块宽度"是同一个式子（少掉照片宽 + 固定 6mm 间隙），差别只在**起点**平移；
-    # `header_photo_side` 缺省 `"right"` 时 `text_left` 就退回原 `content_left`，逐字节不变。
-    photo_left = bool(photo) and layout.header_photo_side == "left"
-    photo_box = photo_w + 6 if photo else 0.0
-    text_width = inner_width - photo_box
-    text_left = content_left + photo_box if photo_left else content_left
-    # 页头文字对齐：模板 `.header` 的 `text-align`（elegant 是 `center`）。
-    # `left` 是**原行为**，其余 7 个模板读到的就是它。
-    header_centered = layout.header_align == "center"
-    header_text_align = "C" if header_centered else "L"
-
-    name_style = role_style("name")
-    meta_style = role_style("meta")
-    name_scale = float(name_style.font_scale) if name_style is not None and name_style.font_scale else 1.0
-    meta_scale = float(meta_style.font_scale) if meta_style is not None and meta_style.font_scale else 1.0
-    name_size = base * layout.name_ratio * name_scale
-    extra_size = base * layout.name_extra_ratio
-    name_color = parse_color(name_style.color) if name_style is not None and name_style.color else None
-    name_bold = name_style.bold if name_style is not None and name_style.bold is not None else True
-    meta_color = parse_color(meta_style.color) if meta_style is not None and meta_style.color else None
-    gender = (resume.gender or "").strip()
-    intent_text = f"{fields['intent']}：{resume.job_intent}" if resume.job_intent else ""
-    # 与预览 `_resume_sections.j2` 的 `.contact` 同字段、同顺序、同文案。此前只拼了前四个，
-    # GitHub 与个人网站整段丢失（预览有、PDF 没有）。`_join` 会丢掉空串，所以空字段不留分隔符。
-    contact = _join(
-        [
-            resume.phone,
-            resume.email,
-            resume.city,
-            resume.birth_year,
-            f"{fields['github']}：{resume.github}" if resume.github else "",
-            f"{fields['website']}：{resume.personal_website}" if resume.personal_website else "",
-        ],
-        "    ",
-    )
-
-    # 先量页头正文的高度（不落笔）：modern 的底色块要按它定尺寸、并画在文字之下。
-    # 姓名与性别**各量各的**（`plan_name_gender`，与绘制同一逻辑），性别不再并入
-    # 姓名行的字号计算——此前拼成一条 name_line，性别被按姓名字号量与画。
-    name_plan = plan_name_gender(
-        pdf, resume.name, gender, width=text_width, name_size=name_size, extra_size=extra_size
-    )
-    text_height = name_plan.height
-    if intent_text:
-        # 段前留白 `.header .intent { margin-top }` 与正文一样占高度，必须计入（下面画的时候
-        # 也用同一个 `ln`），否则 modern 的底色块会比文字矮一截。
-        text_height += layout.gap_mm(layout.intent_gap)
-        text_height += pdf.text_block_height(
-            intent_text, width=text_width, size_px=base * layout.intent_ratio * meta_scale
-        )
-    if contact:
-        text_height += layout.gap_mm(layout.contact_gap)
-        text_height += pdf.text_block_height(
-            contact, width=text_width, size_px=base * layout.contact_ratio * meta_scale
-        )
-    photo_span = photo_h if photo else 0.0
-    header_content_h = max(text_height, photo_span)
-
-    if header_has_bg:
-        # 页头底色块用模板 `:root` 的 `--accent-soft` 真值（split 现场调淡约得 #edeae5，
-        # 模板写死的是 #f3eee6，两者有色差——见 `theme.resolve_accent_soft`）。
-        pdf.set_fill_color(*pdf.accent_soft)
-        pdf.rect(
-            layout.margin_x,
-            header_top,
-            pdf.content_width,
-            hdr_pad_y + header_content_h + hdr_pad_y,
-            style="F",
-            round_corners=hdr_radius > 0,
-            corner_radius=hdr_radius,
-        )
-
-    if photo:
-        try:
-            from io import BytesIO
-
-            # 先按目标框比例居中裁剪（object-fit: cover 的等价物）再交给 fpdf2——
-            # 它同时给定 w 与 h 时会强制拉伸，不裁剪的照片宽高比一不同就变形。
-            # 坏图（裁剪/解码失败）由这里的兜底跳过照片，不阻断导出。
-            pdf.image(
-                BytesIO(crop_image_to_cover(photo, photo_w / photo_h)),
-                # 照片在左时贴着文字起点画；在右时贴着正文右边界（原行为）。
-                x=content_left if photo_left else content_right - photo_w,
-                y=content_top,
-                w=photo_w,
-                h=photo_h,
-            )
-        except Exception:  # noqa: BLE001 - 照片坏了不能阻断导出
-            logger.warning("简历照片无法写入 PDF，已跳过")
-
-    pdf.set_y(content_top)
-    pdf.set_x(text_left)
-    # 姓名（姓名字号/粗体/强调色）与性别（extra 字号/常规/muted）同块绘制，见 plan。
-    # `align` 决定这一块在 `text_width` 内居中还是贴左（模板 `.header` 的 `text-align`）。
-    draw_name_gender(
+    # 绘制细节在 `header.py`（`render.py` 贴着 500 行预算）：照片 contain 取景、页头底色/
+    # 底边线、姓名-意向-联系方式三段与 contact_breaks 换行都在那里一次写完。空字段零输出，
+    # 所以没有照片/没有联系方式时，页头高度与底边线位置仍是按"没有这一段"算。
+    draw_header(
         pdf,
-        resume.name,
-        name_plan,
-        width=text_width,
-        name_size=name_size,
-        extra_size=extra_size,
-        align=layout.header_align,
-        name_color=name_color,
-        name_bold=bool(name_bold),
+        resume,
+        layout=layout,
+        base=base,
+        fields=fields,
+        include_photo=include_photo,
+        format_config=format_config,
+        role_style=role_style,
     )
-    pdf.set_text_color(*pdf.body_text)
-    if intent_text:
-        intent_size = base * layout.intent_ratio * meta_scale
-        pdf.set_font(FONT_FAMILY, "", intent_size * _PX_TO_PT)
-        pdf.set_text_color(*(meta_color or pdf.muted_text))
-        # 模板 `.header .intent { margin-top: calc(var(--fs) * N) }`；`ln` 会把 x 复位到左边距，
-        # 所以紧跟着重新 `set_x(text_left)`。
-        pdf.ln(layout.gap_mm(layout.intent_gap))
-        pdf.set_x(text_left)
-        pdf.multi_cell(
-            text_width,
-            pdf.line_advance(intent_size),
-            intent_text,
-            align=header_text_align,
-            new_x=XPos.LMARGIN,
-            new_y=YPos.NEXT,
-        )
-    if contact:
-        contact_size = base * layout.contact_ratio * meta_scale
-        pdf.set_font(FONT_FAMILY, "", contact_size * _PX_TO_PT)
-        pdf.set_text_color(*(meta_color or pdf.muted_text))
-        # 同上：`.header .contact { margin-top: calc(var(--fs) * N) }`。
-        pdf.ln(layout.gap_mm(layout.contact_gap))
-        pdf.set_x(text_left)
-        pdf.multi_cell(
-            text_width,
-            pdf.line_advance(contact_size),
-            contact,
-            align=header_text_align,
-            new_x=XPos.LMARGIN,
-            new_y=YPos.NEXT,
-        )
-    pdf.set_text_color(*pdf.body_text)
-
-    # 页头块的底：文字底与照片底取更靠下者；modern 再补下内边距，其余模板补 padding-bottom 后画底边线。
-    header_bottom = max(pdf.get_y(), content_top + photo_span)
-    if header_has_bg:
-        header_bottom += hdr_pad_y
-    if hdr_border_w > 0:
-        header_bottom += hdr_pad_bottom
-        line_y = header_bottom
-        pdf.set_draw_color(*pdf.accent)
-        pdf.set_line_width(hdr_border_w)
-        pdf.line(layout.margin_left, line_y, PAGE_WIDTH_MM - layout.margin_right, line_y)
-    pdf.set_y(header_bottom)
 
     # ===== 各分区 =====
     # 第一段之前用 header_gap，之后用上一段 section_gap；drawer 接收画布参数（双栏量高时
@@ -440,6 +289,21 @@ def _draw_resume(
         )
         return True
 
+    def draw_languages(pdf: _ResumePDF, leading: float) -> bool:
+        if not resume.languages:
+            return False
+        pdf.section_title(labels["languages"], base, leading_gap=leading, style=role_style("section_title"), section="languages", keep_lines=pagination.section("languages").keep_with_next)
+        # 与技能同一类短标签行：语言（水平 · 证书 · 分数）· 取得时间。
+        tags = [
+            language_tag_text(item, language, fields)
+            for item in resume.languages
+            if language_tag_text(item, language, fields)
+        ]
+        if not tags:
+            return False
+        pdf.skill_tags(tags, base, style=role_style("body"))
+        return True
+
     def draw_awards(pdf: _ResumePDF, leading: float) -> bool:
         if not resume.awards:
             return False
@@ -473,6 +337,7 @@ def _draw_resume(
         ),
         "projects": draw_projects,
         "skills": draw_skills,
+        "languages": draw_languages,
         "awards": draw_awards,
     }
     section_keys = [

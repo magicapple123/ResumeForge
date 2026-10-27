@@ -15,7 +15,7 @@
 
 **仅素材**（basic_info / patents / languages）用数据表达（material_only）：
 carrier_field_id 为 None、appended_field_specs 空元组；语言能力另由
-language_projection.py 整条映射成 skills 条目（R-72），本模块不猜。
+language_projection.py 映射成独立 languages 分区（2026-10 起），本模块不猜。
 
 **自建分区**（R-79）：主文本字段 = 自建定义的 primary_field_id，否则第一个多行
 文本字段；其余字段按定义顺序生成「标签：值」行；分区标题 = 大字段名。
@@ -232,7 +232,7 @@ BASIC_INFO_SLOTS: Mapping[str, SlotRule] = {
 }
 
 # 10 个有条目的系统分区；basic_info 无条目模型，summary 只写 ResumeContent.summary，
-# languages 整条交给 language_projection（R-72），三者不在本表。
+# languages 整条交给 language_projection（2026-10 起独立成栏），三者不在本表。
 SECTION_RULES: Mapping[str, PaperSectionRule] = {
     "educations": PaperSectionRule(
         resume_field="education",

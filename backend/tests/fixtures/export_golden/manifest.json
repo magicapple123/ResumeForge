@@ -2,23 +2,23 @@
   "cases": {
     "docx-classic-en-language": {
       "pages": 1,
-      "text_chars": 648,
-      "text_sha256": "343990bde12833d93bcfd5af7563eda53896ecef9d81731a4010b1c7a1d72e3e"
+      "text_chars": 774,
+      "text_sha256": "ebad39350d758a98ae0fd87ae5545f8265f07fdab697ec4e1199f74e902328a3"
     },
     "docx-classic-zh-custom": {
       "pages": 1,
-      "text_chars": 525,
-      "text_sha256": "d4faa941054ea07d5949b0a916e68f23c626cbd0313e8940995efdf02c798a58"
+      "text_chars": 594,
+      "text_sha256": "893a5831c43ea2e4d3bf35010c33bee39d153dddf40c84f4344f1b78a8c5ce75"
     },
     "docx-classic-zh-redact": {
       "pages": 1,
-      "text_chars": 383,
-      "text_sha256": "7d10c93db8092b4246fc84c186abf18fec3b53781e760eb87c08bcdf8a15aa2f"
+      "text_chars": 391,
+      "text_sha256": "9a2ee11c9ba4e72a3e46d3f6fb2d69499311924f26ca286619e57ad70016a4b4"
     },
     "docx-modern-zh-baseline": {
       "pages": 1,
-      "text_chars": 418,
-      "text_sha256": "1aaa7defec894c4749adfeb8b367d6b22954568e260c3f0843e1a873f37e24a7"
+      "text_chars": 487,
+      "text_sha256": "78e8dd894c0ac19ace24c9c2f21f0f42be4bc55aeffb5413fd58ef40edd43482"
     },
     "html-classic-zh-custom": {
       "pages": null,

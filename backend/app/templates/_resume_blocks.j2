@@ -109,6 +109,17 @@
 {% endif %}
 {% endmacro %}
 
+{% macro languages_block(resume) %}
+{% if resume.languages %}
+<div class="section" data-section="languages">
+  <div class="section-title" data-role="section_title">{{ section_titles.languages }}</div>
+  <ul class="skill-list">
+    {% for language in resume.languages %}<li data-role="body"{% if language.id %} data-object-id="{{ language.id }}"{% endif %}>{% if language.name %}<span data-resume-path="languages.{{ loop.index0 }}.name">{{ language.name }}</span>{% endif %}{% if language.level or language.certificate or language.score %}{{ level_parens[0] }}{% if language.level %}<span data-resume-path="languages.{{ loop.index0 }}.level">{{ language.level }}</span>{% endif %}{% if language.certificate %}{% if language.level %} · {% endif %}<span data-resume-path="languages.{{ loop.index0 }}.certificate">{{ language.certificate }}</span>{% endif %}{% if language.score %}{% if language.level or language.certificate %} · {% endif %}<span data-resume-path="languages.{{ loop.index0 }}.score">{{ language.score }}</span>{% endif %}{{ level_parens[1] }}{% endif %}{% if language.obtained_at %}<span class="sub" data-role="meta"> · {{ field_labels.obtained }}：<span data-resume-path="languages.{{ loop.index0 }}.obtained_at">{{ language.obtained_at }}</span></span>{% endif %}</li>{% endfor %}
+  </ul>
+</div>
+{% endif %}
+{% endmacro %}
+
 {% macro awards_block(resume) %}
 {% if resume.awards %}
 <div class="section" data-section="awards">

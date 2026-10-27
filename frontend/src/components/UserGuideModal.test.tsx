@@ -65,7 +65,8 @@ describe("UserGuideModal", () => {
     // 指南不说清楚，用户不会知道"当前组决定生成读什么"。
     expect(screen.getAllByText(/13 个板块/).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/「当前方案」决定生成/).length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/默认收起/).length).toBeGreaterThan(0);
+    // 2026-10：字段折叠已移除；指南改为"字段始终显示 + 不想参与就隐藏"。
+    expect(screen.getAllByText(/字段不再默认折叠/).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/同一段经历只填一个板块/).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/旧资料不再显示/).length).toBeGreaterThan(0);
     // 补充事实已下线：指南里不允许再出现旧入口（L 验收）。

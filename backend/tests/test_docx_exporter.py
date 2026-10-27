@@ -223,35 +223,6 @@ def test_docx_gender_is_a_separate_muted_run_not_the_name_run():
     assert gender_run.font.size.pt < name_run.font.size.pt
 
 
-def test_docx_photo_is_cover_cropped_before_embedding():
-    """Word 的照片也应先按模板照片框比例做 object-fit: cover 裁剪，不变形。
-
-    用一张横图（宽高比 ≠ classic 照片框 0.7875）：裁剪后嵌入的图片宽度仍是模板的
-    `photo_width_ratio`（由 layout 给定），高度随裁后比例走——这条断言"照片真的进了文档
-    且没让导出崩"。几何精确比对在 pdf_exporter 的纯函数用例里已钉。
-    """
-    import base64
-    from io import BytesIO
-
-    from app.services.resume.resume_templates import TEMPLATE_LAYOUT_DEFAULTS
-    from PIL import Image
-
-    # 用 Pillow 现造一张 4x1 的横图 PNG（与 classic 照片框 0.7875 比例明显不同）。
-    buf = BytesIO()
-    Image.new("RGB", (400, 100), (0, 128, 200)).save(buf, format="PNG")
-    png = "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode("ascii")
-    resume = ResumeContent(name="张三", photo=png, summary="带照片。")
-    result = build_resume_docx(resume, template="classic", page_limit=1, include_photo=True)
-    doc = Document(BytesIO(result.content))
-    anchor = anchors(doc)[0]
-    # 宽度应等于模板照片框宽度（mm 换算成 EMU）
-    defaults = TEMPLATE_LAYOUT_DEFAULTS["classic"]
-    expected_width_emu = int(round(14.0 * float(defaults["photo_width_ratio"]) * 0.264583 * 36000))
-    assert abs(int(anchor.find(qn("wp:extent")).get("cx")) - expected_width_emu) < (
-        expected_width_emu * 0.1
-    )
-
-
 @needs_font
 def test_docx_page_estimate_is_within_one_of_pdf():
     resume = sample_resume_content()

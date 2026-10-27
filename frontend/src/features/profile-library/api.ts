@@ -138,7 +138,7 @@ export function getFieldDeletionImpact(
   );
 }
 
-/** 偏好局部更新：hidden 与 collapsed_override 独立；collapsed_override 传 null 表示恢复默认。 */
+/** 偏好局部更新：目前只有 hidden（字段折叠已从界面移除，不再写 collapsed_override）。 */
 export function patchFieldPreference(
   fieldId: string,
   patch: FieldPreferencePatch,

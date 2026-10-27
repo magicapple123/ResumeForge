@@ -123,6 +123,13 @@ describe("CustomSectionsEditor · 有字段定义", () => {
     // 不再是"标签 / 值"两栏的自由行。
     expect(screen.queryAllByLabelText(t("editor.custom-sections.label"))).toHaveLength(0);
     expect(screen.queryByLabelText(t("editor.custom-sections.text"))).not.toBeInTheDocument();
+    // 需求 #2：板块名来自方案只读展示；没有「自建板块」泛称输入框、板块删除与添加标签行。
+    expect(screen.getByText("OSS")).toBeInTheDocument();
+    expect(screen.queryByLabelText(t("editor.tab.custom-sections"))).not.toBeInTheDocument();
+    expect(screen.queryByText(t("editor.custom-sections.add-line"))).not.toBeInTheDocument();
+    expect(
+      screen.queryByLabelText(t("editor.custom-sections.remove-section")),
+    ).not.toBeInTheDocument();
     // 对齐把缺失字段补齐（Role 沿用旧值，Link 补空行）。
     await waitFor(() =>
       expect(linesOf(handle)).toEqual([
@@ -184,26 +191,49 @@ describe("CustomSectionsEditor · 有字段定义", () => {
     const handle = renderEditor(initial);
     await waitFor(() => expect(linesOf(handle)).toEqual(initial[0].entries[0].lines));
   });
+
+  it("标题以方案为唯一来源：正文旧标题被归一成方案名（只读，不可编辑）", async () => {
+    const handle = renderEditor([{ key: "custom:oss", title: "Old name", entries: [] }], {
+      ...SECTION,
+      fields: [],
+    });
+    await waitFor(() =>
+      expect(handle.form?.getFieldValue(["custom_sections", 0, "title"])).toBe("OSS"),
+    );
+    expect(screen.getByText("OSS")).toBeInTheDocument();
+    expect(screen.queryByDisplayValue("Old name")).not.toBeInTheDocument();
+  });
 });
 
 describe("CustomSectionsEditor · 没有字段定义", () => {
-  it("回到通用编辑器：一个主 textarea + 可增删的标签行", async () => {
+  it("只给「内容」字段（不再有添加标签行），老标签行仍显示/可保存", async () => {
     const handle = renderEditor(
       [
         {
           key: "custom:ghost",
           title: "Ghost",
-          entries: [{ entry_id: "e1", text: "hi", lines: [] }],
+          entries: [
+            {
+              entry_id: "e1",
+              text: "hi",
+              lines: [{ label: "Legacy", value: "keep me" }],
+            },
+          ],
         },
       ],
       null,
     );
-    expect(screen.getByLabelText(t("editor.custom-sections.text")).tagName).toBe("TEXTAREA");
-    // 没有定义就不补行、不重排。
-    expect(linesOf(handle)).toEqual([]);
-    fireEvent.change(screen.getByLabelText(t("editor.custom-sections.text")), {
+    // 兜底 = 与系统板块一致：一个「内容」字段；没有「主文本 + 添加标签行」的自由结构。
+    expect(screen.getByLabelText(t("editor.custom-sections.content")).tagName).toBe("TEXTAREA");
+    expect(screen.queryByText(t("editor.custom-sections.add-line"))).not.toBeInTheDocument();
+    // 老简历里的「标签：值」行是历史数据：原样显示、可编辑。
+    const legacyLabels = screen.getAllByLabelText(t("editor.custom-sections.label"));
+    expect(legacyLabels).toHaveLength(1);
+    expect((legacyLabels[0] as HTMLInputElement).value).toBe("Legacy");
+    fireEvent.change(screen.getByLabelText(t("editor.custom-sections.content")), {
       target: { value: "edited" },
     });
     await waitFor(() => expect(textOf(handle)).toBe("edited"));
+    expect(linesOf(handle)).toEqual([{ label: "Legacy", value: "keep me" }]);
   });
 });
