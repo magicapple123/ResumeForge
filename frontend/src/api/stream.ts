@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 /** SSE 流式响应读取：用于简历生成等长任务，逐事件回调。 */
 
+import { t } from "../i18n";
 import { ApiError, extractError } from "./client";
 import { datasetScopeHeaders } from "./datasetScope";
 
@@ -85,7 +86,7 @@ function dispatchEvents<T>(events: string[], onEvent: (event: T) => void): void 
     try {
       event = JSON.parse(data) as T;
     } catch {
-      throw new ApiError("流式响应格式异常，请重试");
+      throw new ApiError(t("apiErrors.stream.malformed"));
     }
     onEvent(event);
   }
@@ -107,7 +108,7 @@ export async function consumeSSE<T>(
     throw new ApiError(await extractError(resp), resp.status);
   }
   if (!resp.body) {
-    throw new ApiError("浏览器不支持流式响应，请更换现代浏览器");
+    throw new ApiError(t("apiErrors.stream.unsupported"));
   }
 
   const reader = resp.body.getReader();
