@@ -11,8 +11,8 @@ import FormModal from "../common/FormModal";
 import { useFormDraft } from "../../hooks/useFormDraft";
 import { useToast } from "../../hooks/useToast";
 import { t } from "../../i18n";
-import type { MessageKey } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
+import { TRACK_CHANNEL_LABEL_KEYS, TRACK_STATUS_LABEL_KEYS } from "../../i18n/enum/tracker";
 import dayjs from "dayjs";
 import type { Dayjs } from "dayjs";
 import { useEffect, useState } from "react";
@@ -22,39 +22,14 @@ import type { Track, TrackChannel, TrackPayload, TrackStatus } from "../../types
 import { TRACK_CHANNELS, TRACK_STATUSES, emptyTrack } from "../../types";
 import { HintedTextArea } from "../common/MaxLengthHint";
 
-/**
- * 状态 / 渠道的显示名：**键是协议 code**（与后端逐字对应），值指向语言包 key。
- *
- * 模块作用域不能调 `t()`（切语言不会重渲染），所以这里只存 key，使用处 map 成
- * `{ value, label: t(labelKey) }`。`types/tracker.ts` 的中文表没动，另有消费者。
- */
-const STATUS_LABEL_KEYS: Record<TrackStatus, MessageKey> = {
-  applied: "trackerForm.status.applied",
-  screening: "trackerForm.status.screening",
-  assessment: "trackerForm.status.assessment",
-  interview: "trackerForm.status.interview",
-  offer: "trackerForm.status.offer",
-  rejected: "trackerForm.status.rejected",
-  unknown: "trackerForm.status.unknown",
-};
-
-const CHANNEL_LABEL_KEYS: Record<TrackChannel, MessageKey> = {
-  unknown: "trackerForm.channel.unknown",
-  referral: "trackerForm.channel.referral",
-  official_website: "trackerForm.channel.official_website",
-  job_platform: "trackerForm.channel.job_platform",
-  headhunter: "trackerForm.channel.headhunter",
-  other: "trackerForm.channel.other",
-};
-
 const STATUS_OPTIONS = TRACK_STATUSES.map((value) => ({
   value,
-  labelKey: STATUS_LABEL_KEYS[value],
+  labelKey: TRACK_STATUS_LABEL_KEYS[value],
 }));
 
 const CHANNEL_OPTIONS = TRACK_CHANNELS.map((value) => ({
   value,
-  labelKey: CHANNEL_LABEL_KEYS[value],
+  labelKey: TRACK_CHANNEL_LABEL_KEYS[value],
 }));
 
 interface FormValues {
