@@ -18,6 +18,7 @@
 import { useSyncExternalStore } from "react";
 import { ApiError } from "../../api/client";
 import { generateJobAnalysis } from "../../api/jobs";
+import { t } from "../../i18n";
 import type { JobAnalysisResult } from "../../types";
 import { announceBackgroundFailure, announceBackgroundResult } from "../../utils/backgroundTask";
 
@@ -142,7 +143,13 @@ export function startJobAnalysis({
       });
       // 用户已经走了：弹窗不再回填，改用统一通知（弹窗 + 提示音），否则他回来什么也看不到。
       if (previous?.background) {
-        announceBackgroundResult("岗位解读", "回到岗位详情再点「岗位需求解读」即可看到。");
+        announceBackgroundResult(
+          t("backgroundTasks.jobAnalysis.label"),
+          t("backgroundTasks.jobAnalysis.completedHint", {
+            // 引用岗位详情里那个按钮的真实名字，避免两处措辞漂移。
+            action: t("jobDetail.action.readRequirement"),
+          }),
+        );
       }
     },
     (error: unknown) => {
@@ -151,7 +158,8 @@ export function startJobAnalysis({
       const previous = states.get(jobId);
       // 取消不是错误：cancelJobAnalysis 已经把状态写成 idle，这里绝不能再写 error。
       if (error instanceof ApiError && error.code === "cancelled") return;
-      const detail = error instanceof Error ? error.message : "生成岗位解读失败，请稍后重试";
+      const detail =
+        error instanceof Error ? error.message : t("backgroundTasks.jobAnalysis.stateFailed");
       setState(jobId, {
         status: "error",
         title: previous?.title ?? title,
@@ -160,7 +168,9 @@ export function startJobAnalysis({
         background: previous?.background ?? false,
         error: detail,
       });
-      if (previous?.background) announceBackgroundFailure("岗位解读", detail);
+      if (previous?.background) {
+        announceBackgroundFailure(t("backgroundTasks.jobAnalysis.label"), detail);
+      }
     },
   );
 }
