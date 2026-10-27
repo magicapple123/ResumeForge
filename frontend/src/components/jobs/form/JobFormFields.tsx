@@ -6,44 +6,47 @@
 import { DatePicker, Form, Input, Select } from "antd";
 import dayjs from "dayjs";
 import type { Dayjs } from "dayjs";
+import { t } from "../../../i18n";
+import { useLocale } from "../../../i18n/i18nContext";
 import { HintedTextArea } from "../../common/MaxLengthHint";
 import { JOB_TYPE_OPTIONS, STATUS_OPTIONS } from "./jobFormOptions";
 
 export default function JobFormFields() {
+  useLocale();
   return (
     <>
       <Form.Item
         name="title"
-        label="岗位名称"
-        rules={[{ required: true, message: "请填写岗位名称" }]}
+        label={t("jobForm.field.title")}
+        rules={[{ required: true, message: t("jobForm.required.title") }]}
       >
-        <Input placeholder="如：市场营销专员（校招）" />
+        <Input placeholder={t("jobForm.placeholder.title")} />
       </Form.Item>
-      <Form.Item name="company" label="公司名称">
-        <Input placeholder="如：字节跳动" />
+      <Form.Item name="company" label={t("jobForm.field.company")}>
+        <Input placeholder={t("jobForm.placeholder.company")} />
       </Form.Item>
-      <Form.Item name="location" label="工作地点">
-        <Input placeholder="如：北京" />
+      <Form.Item name="location" label={t("jobForm.field.location")}>
+        <Input placeholder={t("jobForm.placeholder.location")} />
       </Form.Item>
-      <Form.Item name="salary" label="薪资范围">
-        <Input placeholder="如：25-40K·15薪" />
+      <Form.Item name="salary" label={t("jobForm.field.salary")}>
+        <Input placeholder={t("jobForm.placeholder.salary")} />
       </Form.Item>
-      <Form.Item name="job_type" label="岗位类型">
+      <Form.Item name="job_type" label={t("jobForm.field.jobType")}>
         <Select options={JOB_TYPE_OPTIONS} />
       </Form.Item>
-      <Form.Item name="status" label="状态">
+      <Form.Item name="status" label={t("jobForm.field.status")}>
         <Select options={STATUS_OPTIONS} />
       </Form.Item>
       <Form.Item
         name="source_url"
-        label="投递链接"
-        rules={[{ type: "url", message: "请输入合法的 URL" }]}
+        label={t("jobForm.field.sourceUrl")}
+        rules={[{ type: "url", message: t("jobForm.required.url") }]}
       >
-        <Input placeholder="招聘官网投递链接（选填）" />
+        <Input placeholder={t("jobForm.placeholder.sourceUrl")} />
       </Form.Item>
       <Form.Item
         name="posted_at"
-        label="发布时间（选填）"
+        label={t("jobForm.field.postedAt")}
         // DatePicker 值走 Dayjs，但 JobPayload.posted_at 是字符串：getValueProps 把存的
         // 字符串转成 Dayjs 给控件，normalize 再把 Dayjs 转回 YYYY-MM-DD 存进表单。
         getValueProps={(value: string) => ({ value: value ? dayjs(value) : null })}
@@ -53,30 +56,23 @@ export default function JobFormFields() {
       </Form.Item>
       <Form.Item
         name="description"
-        label="岗位描述（JD）"
-        rules={[{ required: true, message: "请填写岗位描述" }]}
+        label={t("jobForm.field.description")}
+        rules={[{ required: true, message: t("jobForm.required.description") }]}
       >
         <HintedTextArea
           rows={7}
           maxLength={20000}
-          placeholder="粘贴完整 JD，生成简历时 AI 会据此定制内容"
+          placeholder={t("jobForm.placeholder.description")}
         />
       </Form.Item>
-      <Form.Item name="requirements" label="任职要求（选填）">
-        <Input.TextArea rows={3} placeholder="可单独填写任职要求，没有可留空" />
+      <Form.Item name="requirements" label={t("jobForm.field.requirements")}>
+        <Input.TextArea rows={3} placeholder={t("jobForm.placeholder.requirements")} />
       </Form.Item>
-      <Form.Item name="additional_info" label="其他招聘信息（选填）">
-        <Input.TextArea
-          rows={4}
-          placeholder="如：公司与团队介绍、岗位编号、福利待遇、工作安排、申请或面试流程"
-        />
+      <Form.Item name="additional_info" label={t("jobForm.field.additionalInfo")}>
+        <Input.TextArea rows={4} placeholder={t("jobForm.placeholder.additionalInfo")} />
       </Form.Item>
-      <Form.Item name="note" label="备注（选填）">
-        <HintedTextArea
-          rows={3}
-          maxLength={2000}
-          placeholder="记录投递进展、内推联系人、面试安排等"
-        />
+      <Form.Item name="note" label={t("jobForm.field.note")}>
+        <HintedTextArea rows={3} maxLength={2000} placeholder={t("jobForm.placeholder.note")} />
       </Form.Item>
     </>
   );
