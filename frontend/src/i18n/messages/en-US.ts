@@ -43,6 +43,7 @@ import applyQueue from "./en-US.applyQueue";
 import claimForm from "./en-US.claimForm";
 import skills from "./en-US.skills";
 import toolCalls from "./en-US.toolCalls";
+import datasets from "./en-US.datasets";
 
 const enUS = {
   ...core,
@@ -87,6 +88,7 @@ const enUS = {
   ...claimForm,
   ...skills,
   ...toolCalls,
+  ...datasets,
 } as const satisfies Record<keyof ZhCNMessages, string>;
 
 export default enUS;

@@ -33,10 +33,12 @@ import type { DatasetInfo } from "../../types";
 import { formatDateTime } from "../../utils/format";
 import FileDropZone from "../common/FileDropZone";
 import { ListyItem, ListyMeta } from "../common/ListyItem";
+import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 
 /** 备份包导入后默认用的数据集名字：去掉扩展名，空文件名时给一个兜底。 */
 function datasetNameFrom(file: File): string {
-  return (file?.name || "").replace(/\.zip$/i, "") || "导入的数据集";
+  return (file?.name || "").replace(/\.zip$/i, "") || t("datasets.default.importName");
 }
 
 interface Props {
@@ -52,7 +54,7 @@ interface Props {
   deletingId: string | null;
   renameTarget: DatasetInfo | null;
   renameValue: string;
-  /** 新建空数据集（D9）：按钮 loading 与命名弹窗状态。 */
+  /** {t("datasets.action.create")}（D9）：按钮 loading 与命名弹窗状态。 */
   creating: boolean;
   createOpen: boolean;
   createName: string;
@@ -121,13 +123,16 @@ export default function DatasetsCard({
   onConfirmCreate,
   onCancelCreate,
 }: Props) {
+  useLocale();
   // 导出前先问下载名：`"all"` 表示"全部数据集"，null 表示弹窗关着。
   const [exportTarget, setExportTarget] = useState<DatasetInfo | "all" | null>(null);
   const [exportName, setExportName] = useState("");
 
   const openExport = (target: DatasetInfo | "all") => {
     setExportTarget(target);
-    setExportName(defaultExportName(target === "all" ? "全部数据集" : target.name));
+    setExportName(
+      defaultExportName(target === "all" ? t("datasets.default.allName") : target.name),
+    );
   };
 
   const confirmExport = () => {
@@ -147,13 +152,13 @@ export default function DatasetsCard({
   return (
     <>
       <Card
-        title="数据集"
+        title={t("datasets.card.title")}
         className="settings-card"
         extra={
           <Space wrap>
             {/* 主操作：新建是用户在这里最常做的事，用 primary 从一排同色按钮里立起来。 */}
             <Button type="primary" icon={<PlusOutlined />} disabled={busy} onClick={onOpenCreate}>
-              新建空数据集
+              {t("datasets.action.create")}
             </Button>
             {/* 「导出当前」与「导出全部」原来是一对长得一样的描边按钮，容易按错；
                 合并成一个「导出」下拉后入口唯一，两项各带说明，不会再误触。 */}
@@ -165,7 +170,7 @@ export default function DatasetsCard({
                   {
                     key: "current",
                     icon: <DownloadOutlined />,
-                    label: "导出当前数据集",
+                    label: t("datasets.action.exportCurrent"),
                     disabled: !active,
                   },
                   ...(datasets.length > 1
@@ -173,7 +178,7 @@ export default function DatasetsCard({
                         {
                           key: "all",
                           icon: <CloudDownloadOutlined />,
-                          label: "导出全部数据集",
+                          label: t("datasets.action.exportAll"),
                         },
                       ]
                     : []),
@@ -185,17 +190,14 @@ export default function DatasetsCard({
               }}
             >
               <Button icon={<DownloadOutlined />} loading={exporting} disabled={busy || !active}>
-                导出
+                {t("datasets.action.export")}
               </Button>
             </Dropdown>
           </Space>
         }
       >
         <Typography.Paragraph type="secondary" style={{ marginBottom: 12 }}>
-          每份数据集就是一个完整的简历通数据库（岗位、个人资料、简历、收藏、助手会话和全部附件），
-          可以随时切换，互不影响。导入备份包只会<strong>新增</strong>一份数据集，当前正在使用的
-          数据不会被动到；导出的备份<strong>默认包含</strong>全局模型配置与其 API
-          Key，不需要时可取消勾选。
+          {t("datasets.intro")}
         </Typography.Paragraph>
 
         {/* 是否把大模型 API Key 一并带走：默认勾选（D-A），选择权仍交给用户。
@@ -207,22 +209,19 @@ export default function DatasetsCard({
             disabled={busy}
             onChange={(event) => onIncludeGlobalLLMChange(event.target.checked)}
           >
-            备份中包含全局模型配置与 API Key（所有已保存记录）
+            {t("datasets.option.globalConfig")}
           </Checkbox>
           <Typography.Paragraph
             type="secondary"
             style={{ marginBottom: 8, marginTop: 4, fontSize: 12 }}
           >
-            默认勾选。全局模型配置存在数据目录的「global_settings.json」，不在任何数据集的库里；
-            勾选后会作为独立的一段随包导出，导入时合并回本机（同名且本地已有内容的记录保留本地）。
+            {t("datasets.hint.globalConfig")}
           </Typography.Paragraph>
           <Typography.Paragraph
             type="secondary"
             style={{ marginBottom: 0, marginTop: 4, fontSize: 12 }}
           >
-            默认勾选。API Key 跟随这一项：勾选时按本机存储的形态一并写入（Windows 上为系统加密、
-            绑定当前用户与这台电脑，换电脑恢复后可能需要重新填写；macOS/Linux 上密钥以明文随包），
-            取消勾选则配置与密钥都不带。勾选后的备份包更敏感，请妥善保管，不要发给不信任的人。
+            {t("datasets.hint.apiKey")}
           </Typography.Paragraph>
           {/* 字体属于「数据目录里但不属于任何一份数据集库」的东西：不说清楚，用户换机后
               才发现 PDF 导出用的字体没跟过来。同名字体不覆盖，避免把本机正在用的那份换掉。 */}
@@ -230,8 +229,7 @@ export default function DatasetsCard({
             type="secondary"
             style={{ marginBottom: 0, marginTop: 4, fontSize: 12 }}
           >
-            自定义字体（数据目录的「data/fonts/」）会随包一起导出：换机器导入后，简历里引用的
-            字体不会断；本机已有同名字体时保留本机版本，不会被包里那份覆盖。
+            {t("datasets.hint.fonts")}
           </Typography.Paragraph>
         </div>
 
@@ -239,7 +237,7 @@ export default function DatasetsCard({
           accept=".zip,application/zip"
           multiple={false}
           disabled={busy}
-          hint="松开即可导入备份包（.zip）"
+          hint={t("datasets.dropzone.hint")}
           onFiles={(files) => onImport(files[0], datasetNameFrom(files[0]))}
           className="settings-import-drop"
         >
@@ -248,7 +246,7 @@ export default function DatasetsCard({
             showUploadList={false}
             disabled={busy}
             // 设置页上有多个上传入口，这个 aria-label 让它们（以及测试）都能精确定位。
-            aria-label="选择备份文件"
+            aria-label={t("datasets.dropzone.aria")}
             beforeUpload={(file) => {
               onImport(file as File, datasetNameFrom(file as File));
               // 与仓库其它上传一致：本地读取后自行提交，不走 antd 的上传通道。
@@ -257,9 +255,9 @@ export default function DatasetsCard({
           >
             {/* 导入是"新增一份数据集"的特殊操作（不覆盖现有数据），保持 default 样式
                 并用上传图标与导出区分；附件有问题时另有二次确认（见 useSettingsDatasets）。 */}
-            <Tooltip title="导入会新增一份数据集，不会改动当前正在使用的数据">
+            <Tooltip title={t("datasets.import.tooltip")}>
               <Button icon={<UploadOutlined />} loading={importing} disabled={busy}>
-                导入备份为新数据集
+                {t("datasets.action.import")}
               </Button>
             </Tooltip>
           </Upload>
@@ -269,7 +267,7 @@ export default function DatasetsCard({
         <LoadingBlock spinning={loading}>
           {datasets.length === 0 ? (
             <div style={{ marginTop: 16 }}>
-              <EmptyState inline description="暂无数据集" />
+              <EmptyState inline description={t("datasets.empty")} />
             </div>
           ) : (
             <Listy
@@ -279,7 +277,14 @@ export default function DatasetsCard({
               itemRender={(dataset) => (
                 <ListyItem
                   actions={[
-                    <Tooltip key="switch" title={dataset.is_active ? "正在使用" : "切换到这份数据"}>
+                    <Tooltip
+                      key="switch"
+                      title={
+                        dataset.is_active
+                          ? t("datasets.tooltip.active")
+                          : t("datasets.tooltip.switch")
+                      }
+                    >
                       <Button
                         type="link"
                         icon={<SwapOutlined />}
@@ -287,7 +292,7 @@ export default function DatasetsCard({
                         loading={switchingId === dataset.id}
                         onClick={() => onActivate(dataset)}
                       >
-                        切换
+                        {t("datasets.action.switch")}
                       </Button>
                     </Tooltip>,
                     // 编辑/删除收进「···」菜单：删除不再以红图标裸露在行内（全局约定）。
@@ -297,16 +302,16 @@ export default function DatasetsCard({
                       more={[
                         {
                           key: "rename",
-                          label: "重命名",
+                          label: t("datasets.action.rename"),
                           disabled: isProtected(dataset),
                           onClick: () => onOpenRename(dataset),
                         },
                         {
                           key: "delete",
-                          label: "删除",
+                          label: t("datasets.action.delete"),
                           danger: true,
                           disabled: dataset.is_active || isProtected(dataset),
-                          confirm: `删除数据集“${dataset.name}”？`,
+                          confirm: t("datasets.confirm.delete", { name: dataset.name }),
                           // 后果与可逆性进正文，且必须说实话：数据集删除只是把文件移出列表，
                           // 界面上没有恢复入口（它不进「回收站」页），所以只能提醒先导出备份。
                           confirmBody: DATASET_DELETE_NOTE,
@@ -322,9 +327,9 @@ export default function DatasetsCard({
                         {dataset.name}
                         {dataset.is_active && (
                           // “当前”单独看指代不明；顺带说明它为什么不能删、不能切。
-                          <Tooltip title="当前正在使用的数据集">
+                          <Tooltip title={t("datasets.tooltip.active")}>
                             <Tag color="blue" style={{ marginLeft: 8 }}>
-                              当前
+                              {t("datasets.badge.current")}
                             </Tag>
                           </Tooltip>
                         )}
@@ -335,7 +340,7 @@ export default function DatasetsCard({
                         {formatSize(dataset.size_bytes)}
                         {dataset.created_at ? ` · ${formatDateTime(dataset.created_at)}` : ""}
                         {dataset.source
-                          ? ` · ${dataset.source === "sample" ? "示例体验" : dataset.source}`
+                          ? ` · ${dataset.source === "sample" ? t("datasets.source.sample") : dataset.source}`
                           : ""}
                       </>
                     }
@@ -349,10 +354,10 @@ export default function DatasetsCard({
       </Card>
 
       <Modal
-        title="重命名数据集"
+        title={t("datasets.rename.title")}
         open={renameTarget !== null}
-        okText="保存"
-        cancelText="取消"
+        okText={t("datasets.rename.save")}
+        cancelText={t("common.action.cancel")}
         confirmLoading={renamingId !== null}
         destroyOnHidden
         onOk={onConfirmRename}
@@ -362,7 +367,7 @@ export default function DatasetsCard({
           type="info"
           showIcon
           style={{ marginBottom: 16 }}
-          title="名称只用于在列表里区分，不影响数据内容。"
+          title={t("datasets.rename.hint")}
         />
         <Input
           value={renameValue}
@@ -372,10 +377,10 @@ export default function DatasetsCard({
       </Modal>
 
       <Modal
-        title="新建空数据集"
+        title={t("datasets.create.title")}
         open={createOpen}
-        okText="新建"
-        cancelText="取消"
+        okText={t("datasets.create.ok")}
+        cancelText={t("common.action.cancel")}
         confirmLoading={creating}
         destroyOnHidden
         onOk={onConfirmCreate}
@@ -385,21 +390,23 @@ export default function DatasetsCard({
           type="info"
           showIcon
           style={{ marginBottom: 16 }}
-          title="新建后进入数据集列表，可随时切换过去；激活后是一份空数据（岗位、简历、资料都从零开始）。"
+          title={t("datasets.create.hint")}
         />
         <Input
           value={createName}
           maxLength={64}
-          placeholder="数据集名称（例如：秋招专用）"
+          placeholder={t("datasets.create.placeholder")}
           onChange={(event) => onCreateNameChange(event.target.value)}
         />
       </Modal>
 
       <Modal
-        title={exportTarget === "all" ? "导出全部数据集" : "导出数据集"}
+        title={
+          exportTarget === "all" ? t("datasets.export.titleAll") : t("datasets.export.titleOne")
+        }
         open={exportTarget !== null}
-        okText="导出"
-        cancelText="取消"
+        okText={t("datasets.action.export")}
+        cancelText={t("common.action.cancel")}
         confirmLoading={exporting}
         destroyOnHidden
         onOk={confirmExport}
@@ -409,7 +416,7 @@ export default function DatasetsCard({
           type="info"
           showIcon
           style={{ marginBottom: 16 }}
-          title="这个名字会作为下载文件名，可含中文；扩展名会自动补 .zip。"
+          title={t("datasets.export.hint")}
         />
         {/* 导出当下再确认一次：与卡片上的开关是同一份状态（默认包含，D-A）。 */}
         <Checkbox
@@ -418,13 +425,13 @@ export default function DatasetsCard({
           style={{ marginBottom: 16 }}
           onChange={(event) => onIncludeGlobalLLMChange(event.target.checked)}
         >
-          导出包中包含全局模型配置与 API Key（所有已保存记录）
+          {t("datasets.export.includeConfig")}
         </Checkbox>
         <Input
           value={exportName}
           maxLength={80}
-          placeholder="例如：校招线-20261019-101500"
-          aria-label="导出文件名"
+          placeholder={t("datasets.export.placeholder")}
+          aria-label={t("datasets.export.aria")}
           onChange={(event) => setExportName(event.target.value)}
         />
       </Modal>

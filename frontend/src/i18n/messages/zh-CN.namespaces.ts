@@ -51,6 +51,7 @@ import applyQueue from "./zh-CN.applyQueue";
 import claimForm from "./zh-CN.claimForm";
 import skills from "./zh-CN.skills";
 import toolCalls from "./zh-CN.toolCalls";
+import datasets from "./zh-CN.datasets";
 
 const namespaces = {
   /** 简历制作台（2026-10-23）。 */
@@ -130,6 +131,7 @@ const namespaces = {
   ...claimForm,
   ...skills,
   ...toolCalls,
+  ...datasets,
 } as const;
 
 export default namespaces;
