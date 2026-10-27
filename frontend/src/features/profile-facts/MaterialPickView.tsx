@@ -14,6 +14,7 @@ import { Button, Input, Select, Space, Typography } from "antd";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { listMaterials } from "../../api/material";
 import { t } from "../../i18n";
+import { materialCategoryLabel } from "../../i18n/enum/knowledge";
 import { useLocale } from "../../i18n/i18nContext";
 import { splitLines } from "./factModel";
 import { FACT_KINDS, FACT_KIND_LABEL_KEYS } from "./constants";
@@ -222,7 +223,10 @@ export default function MaterialPickView({ onPick, onCancel }: Props) {
           style={{ width: 300 }}
           options={filtered.map((item) => ({
             value: item.id,
-            label: item.category ? item.title + " · " + item.category : item.title,
+            // 分类展示名走语言包（用户自建分类原样返回）；筛选与落库的仍是分类原值。
+            label: item.category
+              ? item.title + " · " + materialCategoryLabel(item.category)
+              : item.title,
           }))}
         />
         <Select
