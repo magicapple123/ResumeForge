@@ -17,10 +17,10 @@ import dayjs from "dayjs";
 import { useState } from "react";
 import { exportJobsCsv } from "../../api/jobs";
 import { t } from "../../i18n";
+import { JOB_STATUS_LABEL_KEYS } from "../../i18n/enum/jobs";
 import { useLocale } from "../../i18n/i18nContext";
 import { downloadBlob } from "../../utils/download";
 import type { BatchAction } from "./jobFilterOptions";
-import { STATUS_OPTIONS } from "./jobFilterOptions";
 
 export function BatchToolbar({
   selectionMode,
@@ -76,6 +76,11 @@ export function BatchToolbar({
     }
   };
   if (!selectionMode) return null;
+  // 下拉的 value 仍是落库的协议值，展示名在渲染期取（见 i18n/enum/jobs.ts）。
+  const statusOptions = Object.entries(JOB_STATUS_LABEL_KEYS).map(([value, key]) => ({
+    value,
+    label: t(key),
+  }));
   return (
     <Space style={{ marginBottom: 12, minHeight: 32 }} wrap>
       <Typography.Text type="secondary">
@@ -114,7 +119,7 @@ export function BatchToolbar({
       <Select
         placeholder={t("jobsPage.toolbar.statusPlaceholder")}
         value={batchStatus}
-        options={STATUS_OPTIONS}
+        options={statusOptions}
         style={{ width: 150 }}
         disabled={selectedJobIds.length === 0 || batchAction !== null}
         onChange={setBatchStatus}
