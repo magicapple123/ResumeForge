@@ -34,9 +34,9 @@ import EmptyState from "../../../components/common/EmptyState";
 import { memo, useState } from "react";
 import type {
   AssistantConversationBrief,
-  AssistantSurface,
   ConversationFilter,
 } from "../../../types";
+import type { Props } from "./ConversationSidebar.types";
 import { conversationToMaterial, exportConversation } from "../../../api/assistant";
 import { copyText } from "../../../utils/clipboard";
 import { downloadBlob } from "../../../utils/download";
@@ -49,31 +49,8 @@ import { useBatchSelection } from "../../../hooks/useBatchSelection";
 import { useDeleteUndo } from "../../trash/useDeleteUndo";
 import { ListyItem } from "../../../components/common/ListyItem";
 import { ConversationTitle } from "./AssistantMessageContent";
-
-interface Props {
-  className?: string;
-  surface?: AssistantSurface;
-  conversations: AssistantConversationBrief[] | undefined;
-  loading: boolean;
-  activeId: number | null;
-  onCreate: () => void;
-  onSelect: (id: number) => void;
-  /** 单条删除：父级负责接口调用与刷新；返回 `false` 表示没删成功（此时不给撤销入口）。 */
-  onDelete: (id: number) => void | Promise<boolean | void>;
-  /** 撤销恢复成功后刷新列表（恢复不经过 `onDelete`，所以单列一个入口）。 */
-  onRestored?: () => void | Promise<void>;
-  onRename: (id: number, title: string) => void;
-  onToggleFlag: (conversation: AssistantConversationBrief, field: "pinned" | "favorite") => void;
-  onArchive: (conversation: AssistantConversationBrief, archived: boolean) => void;
-  onFork: (conversation: AssistantConversationBrief) => void;
-  onMoveToGroup: (conversation: AssistantConversationBrief) => void;
-  /** 批量删除所选会话（传入才显示「批量选择」入口）；父级负责接口调用与刷新。 */
-  onBatchDelete?: (ids: number[]) => void;
-  /** 会话搜索输入框的受控值（P0-2：服务端 keyword 搜索）。缺省不显示搜索框。 */
-  search?: string;
-  /** 搜索输入变化回调（父级负责防抖触发重拉）。 */
-  onSearchChange?: (value: string) => void;
-}
+import { t } from "../../../i18n";
+import { useLocale } from "../../../i18n/i18nContext";
 
 function ConversationSidebar({
   className,
@@ -94,6 +71,7 @@ function ConversationSidebar({
   search,
   onSearchChange,
 }: Props) {
+  useLocale();
   const { message, modal } = App.useApp();
   // 批量选择：勾选若干段对话后一次删除。
   const batch = useBatchSelection<number>();
@@ -140,16 +118,16 @@ function ConversationSidebar({
     const link = `${window.location.origin}/assistant?conversation=${conversation.id}&surface=${surface}`;
     const ok = await copyText(link);
     if (ok) {
-      message.success("已复制会话链接，在本应用打开即可回到这段对话");
+      message.success(t("assistantUi.sidebar.toast.shareLinkCopied"));
     } else {
-      message.warning(`复制失败，可以手动复制：${link}`);
+      message.warning(t("assistantUi.sidebar.toast.copyLinkFailed", { link }));
     }
   };
 
   const copyConversationId = async (conversation: AssistantConversationBrief) => {
     setActionMenuId(null);
     const ok = await copyText(String(conversation.id));
-    if (ok) message.success(`已复制会话 ID：${conversation.id}`);
+    if (ok) message.success(t("assistantUi.sidebar.toast.idCopied", { id: conversation.id }));
   };
 
   /** 导出为 Markdown 文件：内容含时间、附件名、助手做过的操作与参考来源。 */
@@ -158,9 +136,11 @@ function ConversationSidebar({
     try {
       const { blob, filename } = await exportConversation(conversation.id, "md", surface);
       downloadBlob(blob, filename);
-      message.success("已导出为 Markdown 文件");
+      message.success(t("assistantUi.sidebar.toast.exported"));
     } catch (error) {
-      message.error(error instanceof Error ? error.message : "导出失败");
+      message.error(
+        error instanceof Error ? error.message : t("assistantUi.sidebar.toast.exportFailed"),
+      );
     }
   };
 
@@ -169,16 +149,18 @@ function ConversationSidebar({
     setActionMenuId(null);
     try {
       await conversationToMaterial(conversation.id, { title: conversation.title }, surface);
-      message.success("已存进资料箱");
+      message.success(t("assistantUi.sidebar.toast.savedToMaterials"));
     } catch (error) {
-      message.error(error instanceof Error ? error.message : "存进资料箱失败");
+      message.error(
+        error instanceof Error ? error.message : t("assistantUi.sidebar.toast.saveFailed"),
+      );
     }
   };
 
   /** 右键菜单顶部的「批量选择」入口：侧栏按钮已收进这里（R8）。 */
   const batchSelectAction = (): RowActionItem => ({
     key: "batch_select",
-    label: "批量选择",
+    label: t("common.action.batchSelect"),
     icon: <CheckSquareOutlined />,
     onClick: batch.enterSelecting,
   });
@@ -187,7 +169,9 @@ function ConversationSidebar({
   const actionsFor = (conversation: AssistantConversationBrief): RowActionItem[] => [
     {
       key: "pin",
-      label: conversation.pinned ? "取消置顶" : "置顶对话",
+      label: conversation.pinned
+        ? t("assistantUi.sidebar.action.unpin")
+        : t("assistantUi.sidebar.action.pin"),
       icon: conversation.pinned ? <PushpinFilled /> : <PushpinOutlined />,
       onClick: () => {
         setActionMenuId(null);
@@ -196,7 +180,9 @@ function ConversationSidebar({
     },
     {
       key: "favorite",
-      label: conversation.favorite ? "取消收藏" : "收藏对话",
+      label: conversation.favorite
+        ? t("assistantUi.sidebar.action.unfavorite")
+        : t("assistantUi.sidebar.action.favorite"),
       icon: conversation.favorite ? <StarFilled /> : <StarOutlined />,
       onClick: () => {
         setActionMenuId(null);
@@ -205,19 +191,19 @@ function ConversationSidebar({
     },
     {
       key: "link",
-      label: "复制分享链接",
+      label: t("assistantUi.sidebar.action.shareLink"),
       icon: <LinkOutlined />,
       onClick: () => void copyShareLink(conversation),
     },
     {
       key: "rename",
-      label: "重命名",
+      label: t("assistantUi.sidebar.action.rename"),
       icon: <EditOutlined />,
       onClick: () => startRename(conversation),
     },
     {
       key: "fork",
-      label: "在新对话中继续",
+      label: t("assistantUi.sidebar.action.fork"),
       icon: <SplitCellsOutlined />,
       onClick: () => {
         setActionMenuId(null);
@@ -226,21 +212,21 @@ function ConversationSidebar({
     },
     {
       key: "export",
-      label: "导出为 Markdown",
+      label: t("assistantUi.sidebar.action.export"),
       icon: <DownloadOutlined />,
       onClick: () => void exportToFile(conversation),
     },
     {
       key: "material",
-      label: "存进资料箱",
+      label: t("assistantUi.sidebar.action.saveToMaterials"),
       icon: <InboxOutlined />,
       onClick: () => void saveToMaterials(conversation),
     },
     {
       key: "group",
       label: conversation.group_name
-        ? `移动到分组（当前：${conversation.group_name}）`
-        : "移动到分组",
+        ? t("assistantUi.group.moveCurrent", { name: conversation.group_name })
+        : t("assistantUi.group.move"),
       icon: <FolderOutlined />,
       onClick: () => {
         setActionMenuId(null);
@@ -249,13 +235,15 @@ function ConversationSidebar({
     },
     {
       key: "copy-id",
-      label: "复制会话 ID",
+      label: t("assistantUi.sidebar.action.copyId"),
       icon: <LinkOutlined />,
       onClick: () => void copyConversationId(conversation),
     },
     {
       key: "archive",
-      label: conversation.archived ? "取消归档" : "归档对话",
+      label: conversation.archived
+        ? t("assistantUi.sidebar.action.unarchive")
+        : t("assistantUi.sidebar.action.archive"),
       icon: <InboxOutlined />,
       onClick: () => {
         setActionMenuId(null);
@@ -264,7 +252,7 @@ function ConversationSidebar({
     },
     {
       key: "delete",
-      label: "删除",
+      label: t("common.action.delete"),
       danger: true,
       icon: <DeleteOutlined />,
       // 软删可撤销：不弹确认，撤销入口在 Toast 上（见 useDeleteUndo）。
@@ -281,10 +269,14 @@ function ConversationSidebar({
     const ids = [...batch.selectedIds];
     if (!onBatchDelete || ids.length === 0) return;
     modal.confirm({
-      title: "删除选中的对话？",
+      title: t("assistantUi.sidebar.confirm.deleteSelectedTitle"),
       // 与单条删除同措辞的后果段：批量删除同样是软删除，能恢复。条数进正文（§4.4 例外）。
-      content: `这 ${ids.length} 段对话${TRASH_RECOVERY_NOTE}`,
-      okText: "删除",
+      // TRASH_RECOVERY_NOTE 是软删后果的唯一出口；迁出语言包前先按原文拼接。
+      content: t("assistantUi.sidebar.confirm.deleteSelectedContent", {
+        count: ids.length,
+        note: TRASH_RECOVERY_NOTE,
+      }),
+      okText: t("common.action.delete"),
       okButtonProps: { danger: true },
       onOk: () => {
         onBatchDelete(ids);
@@ -296,7 +288,7 @@ function ConversationSidebar({
   return (
     <aside className={`assistant-sidebar${className ? ` ${className}` : ""}`}>
       <Button type="primary" block icon={<PlusOutlined />} onClick={onCreate}>
-        新对话
+        {t("assistantUi.sidebar.newConversation")}
       </Button>
       {onBatchDelete && batch.selecting && (
         <div style={{ marginTop: 8 }}>
@@ -316,7 +308,7 @@ function ConversationSidebar({
             }}
           >
             <Button danger disabled={batch.selectedCount === 0} onClick={removeSelected}>
-              删除所选
+              {t("assistantUi.sidebar.deleteSelected")}
             </Button>
           </BatchActionBar>
         </div>
@@ -325,10 +317,10 @@ function ConversationSidebar({
         <Input
           className="assistant-conversation-search"
           allowClear
-          placeholder="搜索标题或首条消息"
+          placeholder={t("assistantUi.sidebar.searchPlaceholder")}
           value={search}
           onChange={(event) => onSearchChange(event.target.value)}
-          aria-label="搜索对话"
+          aria-label={t("assistantUi.sidebar.searchAria")}
         />
       )}
       <Segmented
@@ -336,9 +328,9 @@ function ConversationSidebar({
         block
         value={filter}
         options={[
-          { label: "全部", value: "all" },
-          { label: "收藏", value: "favorite" },
-          { label: "已归档", value: "archived" },
+          { label: t("assistantUi.sidebar.filter.all"), value: "all" },
+          { label: t("assistantUi.sidebar.filter.favorite"), value: "favorite" },
+          { label: t("assistantUi.sidebar.filter.archived"), value: "archived" },
         ]}
         onChange={(value) => setFilter(value as ConversationFilter)}
       />
@@ -347,9 +339,9 @@ function ConversationSidebar({
       {visibleConversations.length === 0 ? (
         <div className="assistant-conversation-list">
           {loading ? (
-            <LoadingBlock tip="正在加载对话…" />
+            <LoadingBlock tip={t("assistantUi.sidebar.loading")} />
           ) : (
-            <EmptyState inline description="暂无对话" />
+            <EmptyState inline description={t("assistantUi.sidebar.empty")} />
           )}
         </div>
       ) : (
@@ -376,7 +368,9 @@ function ConversationSidebar({
                           // 多选模式：行动作区换成勾选框，点行（标题）也切换勾选。
                           <Checkbox
                             key="pick"
-                            aria-label={`选择对话 ${conversation.title}`}
+                            aria-label={t("assistantUi.sidebar.aria.selectConversation", {
+                              title: conversation.title,
+                            })}
                             checked={batch.isSelected(conversation.id)}
                             onChange={() => batch.toggle(conversation.id)}
                           />,
@@ -428,11 +422,11 @@ function ConversationSidebar({
                               </div>
                             }
                           >
-                            <Tooltip title="更多操作（也可以直接右键这条对话）">
+                            <Tooltip title={t("assistantUi.sidebar.moreTooltip")}>
                               <Button
                                 type="text"
                                 size="small"
-                                aria-label="更多对话操作"
+                                aria-label={t("assistantUi.sidebar.moreAria")}
                                 className="assistant-conversation-more-button"
                                 icon={<MoreOutlined />}
                               />
@@ -448,11 +442,11 @@ function ConversationSidebar({
                       autoFocus
                       maxLength={128}
                       suffix={
-                        <Tooltip title="保存标题（回车也可以）">
+                        <Tooltip title={t("assistantUi.sidebar.saveTitleTooltip")}>
                           <Button
                             type="text"
                             size="small"
-                            aria-label="保存对话标题"
+                            aria-label={t("assistantUi.sidebar.saveTitleAria")}
                             icon={<SaveOutlined />}
                             onClick={() => saveTitle(conversation.id)}
                           />
@@ -475,7 +469,11 @@ function ConversationSidebar({
                       />
                       <Typography.Text type="secondary" className="assistant-conversation-meta">
                         {conversation.group_name ? `${conversation.group_name} · ` : ""}
-                        {conversation.message_count} 条 · {formatDateTime(conversation.updated_at)}
+                        {t("assistantUi.sidebar.messageCount", {
+                          count: conversation.message_count,
+                        })}
+                        {" · "}
+                        {formatDateTime(conversation.updated_at)}
                       </Typography.Text>
                     </div>
                   )}
