@@ -8,6 +8,7 @@ import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import ResumeFieldDiffView from "./ResumeFieldDiffView";
 import { computeFieldDiff } from "../utils/resumeFieldDiff";
+import { t } from "../i18n";
 import type { DiffViewData, ListSectionDiff, StringSectionDiff } from "../types/resumeFieldDiff";
 import type { ResumeContent } from "../types/resume";
 import type { ResumeDiff } from "../types/resumeWriting";
@@ -105,8 +106,10 @@ describe("computeFieldDiff", () => {
     const skills = r.changed.find((s) => s.key === "skills") as ListSectionDiff;
     expect(skills.modified.length).toBe(1);
     expect(skills.modified[0].key).toBe("Go");
+    // 子字段标签来自 editor.* 词表：用 t() 断言，避免把展示文案钉死在这里
+    // （词表从「熟练度」改成「熟练程度」时，这条断言不该跟着红）。
     const sub = skills.modified[0].subfields.find(
-      (s) => s.kind === "string" && s.label === "熟练度",
+      (s) => s.kind === "string" && s.label === t("editor.field.skillLevel"),
     );
     expect(sub).toBeDefined();
     if (sub && sub.kind === "string") {
