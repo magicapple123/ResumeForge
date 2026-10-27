@@ -10,7 +10,11 @@ import type { Dayjs } from "dayjs";
 import type { FormInstance } from "antd";
 import { useState } from "react";
 import type { InterviewExperience, InterviewExperiencePayload } from "../../types";
-import { EXPERIENCE_ROUND_TYPES, EXPERIENCE_SOURCES, EXPERIENCE_SOURCE_LABELS } from "../../types";
+import { EXPERIENCE_ROUND_TYPES, EXPERIENCE_SOURCES } from "../../types";
+import {
+  EXPERIENCE_ROUND_TYPE_LABEL_KEYS,
+  EXPERIENCE_SOURCE_LABEL_KEYS,
+} from "../../i18n/enum/interview";
 import type { useJobSearchSelect } from "../../hooks/remoteSearchOptions";
 import FormModal from "../common/FormModal";
 import { t } from "../../i18n";
@@ -128,7 +132,7 @@ export default function InterviewExperienceFormModal({
             <Select
               options={EXPERIENCE_SOURCES.map((value) => ({
                 value,
-                label: EXPERIENCE_SOURCE_LABELS[value],
+                label: t(EXPERIENCE_SOURCE_LABEL_KEYS[value]),
               }))}
             />
           </Form.Item>
@@ -152,7 +156,10 @@ export default function InterviewExperienceFormModal({
             <Select
               allowClear
               placeholder={t("interview.experienceForm.placeholder.round")}
-              options={EXPERIENCE_ROUND_TYPES.map((value) => ({ value, label: value }))}
+              options={EXPERIENCE_ROUND_TYPES.map((value) => ({
+                value,
+                label: t(EXPERIENCE_ROUND_TYPE_LABEL_KEYS[value]),
+              }))}
             />
           </Form.Item>
           <Form.Item
