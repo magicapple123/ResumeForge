@@ -4,12 +4,16 @@ import { Col, Form, Input, Row } from "antd";
 import type { FormListFieldData } from "antd";
 import PartialDateSelect from "./PartialDateSelect";
 import ProfileSection from "./ProfileSection";
+import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 
 interface Props {
   editable: boolean;
 }
 
 export function AwardSection({ editable }: Props) {
+  // 本组件用模块级 t()：必须订阅语言变化，否则切语言后这一块不重渲染。
+  useLocale();
   return (
     <ProfileSection
       fieldName="awards"
@@ -18,27 +22,33 @@ export function AwardSection({ editable }: Props) {
       itemLabel={(item, index) => {
         const name = String(item.name ?? "").trim();
         const date = String(item.date ?? "").trim();
-        return [name, date].filter(Boolean).join(" · ") || `荣誉奖项 ${index + 1}`;
+        return (
+          [name, date].filter(Boolean).join(" · ") ||
+          t("profileUi.award.itemLabel", { index: index + 1 })
+        );
       }}
       renderRow={(field: FormListFieldData) => (
         <Row gutter={12}>
           <Col xs={24} md={10}>
             <Form.Item
               name={[field.name, "name"]}
-              label="奖项名称"
-              rules={[{ required: true, message: "必填" }]}
+              label={t("profileUi.award.field.name")}
+              rules={[{ required: true, message: t("common.required") }]}
             >
-              <Input placeholder="如：全国大学生数学建模竞赛一等奖" />
+              <Input placeholder={t("profileUi.award.placeholder.name")} />
             </Form.Item>
           </Col>
           <Col xs={24} sm={8} md={6}>
-            <Form.Item name={[field.name, "date"]} label="获得时间">
-              <PartialDateSelect label={`荣誉奖项${field.name + 1}获得时间`} />
+            <Form.Item name={[field.name, "date"]} label={t("profileUi.award.field.date")}>
+              <PartialDateSelect label={t("profileUi.award.dateAria", { index: field.name + 1 })} />
             </Form.Item>
           </Col>
           <Col xs={24} sm={16} md={8}>
-            <Form.Item name={[field.name, "description"]} label="说明">
-              <Input placeholder="选填，如：全国前 1%" />
+            <Form.Item
+              name={[field.name, "description"]}
+              label={t("profileUi.award.field.description")}
+            >
+              <Input placeholder={t("profileUi.award.placeholder.description")} />
             </Form.Item>
           </Col>
         </Row>
