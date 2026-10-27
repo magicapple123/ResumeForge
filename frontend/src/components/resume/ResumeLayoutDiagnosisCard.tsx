@@ -283,9 +283,7 @@ export default function ResumeLayoutDiagnosisCard({
       return;
     }
     // 收到底也放不下时必须如实说，并把用户指向下一条真正有用的建议。
-    message.warning(
-      "排版参数已经收到最紧了，还是放不下。接下来只能精简内容或增加页数——上面「版面诊断」里列了具体怎么做。",
-    );
+    message.warning(t("resume.diagnosis.tightest"));
   }, [analysis, analysisKey, layout, layoutKey, measure, message, onApplied, previewRef, resumeId]);
 
   /**
@@ -364,13 +362,13 @@ export default function ResumeLayoutDiagnosisCard({
     <div className="resume-diagnosis">
       <div className="resume-diagnosis-head">
         <Space size={8} wrap>
-          <Typography.Text strong>版面诊断</Typography.Text>
+          <Typography.Text strong>{t("resume.diagnosis.title")}</Typography.Text>
           {analyzing && <Spin size="small" />}
           {diagnosis && (
             <>
               <Tag color={STATUS_COLORS[diagnosis.status]}>{diagnosis.status_label}</Tag>
               <Typography.Text type="secondary">
-                占用 {Math.round(diagnosis.fill * 100)}%
+                {t("resume.diagnosis.fill", { percent: Math.round(diagnosis.fill * 100) })}
               </Typography.Text>
             </>
           )}
@@ -384,14 +382,18 @@ export default function ResumeLayoutDiagnosisCard({
             disabled={disabled || analyzing || fitting !== null}
             onClick={() => void autoFit()}
           >
-            自动一页
+            {t("resume.diagnosis.autofit")}
           </Button>
         )}
       </div>
 
       {fitting && (
         <Typography.Text type="secondary" className="resume-diagnosis-progress">
-          正在试第 {fitting.index}/{fitting.total} 档：{fitting.label}
+          {t("resume.diagnosis.fitting", {
+            index: fitting.index,
+            total: fitting.total,
+            label: fitting.label,
+          })}
         </Typography.Text>
       )}
 
@@ -409,7 +411,7 @@ export default function ResumeLayoutDiagnosisCard({
           type="warning"
           showIcon
           className="resume-diagnosis-floor"
-          title={`内容超出了 ${layout.page_limit} 页：字号按你设定的值渲染，超出的部分不会显示。暂时读不到详细诊断，可以稍后重试。`}
+          title={t("resume.diagnosis.overflowNoAnalysis", { pages: layout.page_limit })}
         />
       )}
 
@@ -448,7 +450,7 @@ export default function ResumeLayoutDiagnosisCard({
           action={
             layout.page_limit < 3 && (
               <Button size="small" disabled={disabled || fitting !== null} onClick={onAddPage}>
-                增加到 {layout.page_limit + 1} 页
+                {t("resume.diagnosis.addPage", { pages: layout.page_limit + 1 })}
               </Button>
             )
           }
