@@ -32,45 +32,51 @@ import {
 } from "../features/resume/riskScanStore";
 import type { RiskCategory, RiskPoint, RiskSeverity } from "../types/resumeRisk";
 import { t } from "../i18n";
+import type { MessageKey } from "../i18n";
 import { useLocale } from "../i18n/i18nContext";
 
 const CATEGORY_ORDER: {
   key: RiskCategory;
-  label: string;
+  labelKey: MessageKey;
   color: string;
-  description: string;
+  descriptionKey: MessageKey;
 }[] = [
-  { key: "duplicate", label: "查重", color: "default", description: "同一要点在简历里重复出现" },
+  {
+    key: "duplicate",
+    labelKey: "riskPanel.category.duplicate.label",
+    color: "default",
+    descriptionKey: "riskPanel.category.duplicate.description",
+  },
   {
     key: "sensitive",
-    label: "敏感词",
+    labelKey: "riskPanel.category.sensitive.label",
     color: "red",
-    description: "身份证号 / 银行卡号 / 精确生日 / 住址 / 薪资",
+    descriptionKey: "riskPanel.category.sensitive.description",
   },
   {
     key: "exaggeration",
-    label: "夸大",
+    labelKey: "riskPanel.category.exaggeration.label",
     color: "orange",
-    description: "「精通」「全球第一」这类绝对化表述与 ≥100% 的量化",
+    descriptionKey: "riskPanel.category.exaggeration.description",
   },
   {
     key: "deep_dive",
-    label: "深挖风险点",
+    labelKey: "riskPanel.category.deepDive.label",
     color: "volcano",
-    description: "面试官会追问的强主张（联动事实台账给出准备方向）",
+    descriptionKey: "riskPanel.category.deepDive.description",
   },
   {
     key: "compliance",
-    label: "合规校验",
+    labelKey: "riskPanel.category.compliance.label",
     color: "magenta",
-    description: "保密 / 未公开 / 涉密等 NDA 相关表述",
+    descriptionKey: "riskPanel.category.compliance.description",
   },
 ];
 
-const SEVERITY: Record<RiskSeverity, { label: string; color: string }> = {
-  high: { label: "高", color: "red" },
-  medium: { label: "中", color: "orange" },
-  low: { label: "低", color: "blue" },
+const SEVERITY: Record<RiskSeverity, { labelKey: MessageKey; color: string }> = {
+  high: { labelKey: "riskPanel.severity.high", color: "red" },
+  medium: { labelKey: "riskPanel.severity.medium", color: "orange" },
+  low: { labelKey: "riskPanel.severity.low", color: "blue" },
 };
 
 interface Props {
@@ -154,7 +160,7 @@ export default function ResumeRiskPanel({ resumeId, contentSignature }: Props) {
       <Space orientation="vertical" style={{ width: "100%" }} size="middle">
         <Typography.Text type="secondary">
           {t("riskPanel.scanAt", { time: formatClock(state.finishedAt) })}
-          {duration ? ` · 用时 ${duration}` : ""} ·{" "}
+          {duration ? ` · ${t("riskPanel.scanDuration", { duration })}` : ""} ·{" "}
           {data.llm_used ? t("riskPanel.llmUsed") : t("riskPanel.llmOff")}
         </Typography.Text>
 
@@ -178,7 +184,7 @@ export default function ResumeRiskPanel({ resumeId, contentSignature }: Props) {
             if (!count) return null;
             return (
               <Tag key={item.key} color={item.color}>
-                {item.label} {count}
+                {t(item.labelKey)} {count}
               </Tag>
             );
           })}
@@ -205,7 +211,7 @@ export default function ResumeRiskPanel({ resumeId, contentSignature }: Props) {
                 size="small"
                 title={
                   <Space>
-                    <Typography.Text strong>{group.label}</Typography.Text>
+                    <Typography.Text strong>{t(group.labelKey)}</Typography.Text>
                     <Tag color={group.color}>{group.points.length}</Tag>
                   </Space>
                 }
@@ -262,8 +268,7 @@ function IntroCard({
           />
         )}
         <Typography.Paragraph style={{ margin: 0 }}>
-          扫描只做检查与提示，<Typography.Text strong>不会改写任何正文</Typography.Text>
-          ——发现的问题要不要改、怎么改都由你决定。
+          {t("riskPanel.intro.summary")}
         </Typography.Paragraph>
         <List
           size="small"
@@ -271,8 +276,8 @@ function IntroCard({
           renderItem={(item) => (
             <List.Item style={{ paddingBlock: 4 }}>
               <Space size="small" align="start">
-                <Tag color={item.color}>{item.label}</Tag>
-                <Typography.Text type="secondary">{item.description}</Typography.Text>
+                <Tag color={item.color}>{t(item.labelKey)}</Tag>
+                <Typography.Text type="secondary">{t(item.descriptionKey)}</Typography.Text>
               </Space>
             </List.Item>
           )}
@@ -280,18 +285,15 @@ function IntroCard({
         <Space wrap size="small">
           <EnhanceToggle checked={enhance} onChange={onChangeEnhance} />
           <Typography.Text type="secondary">
-            {enhance
-              ? "开启后会把遮罩后的简历发给本机配置的模型复核（姓名/电话/邮箱/公司等已遮蔽），台账只发结构信息。"
-              : "已关闭：只用本地规则，不会向模型发送任何内容。"}
+            {enhance ? t("riskPanel.enhance.note.on") : t("riskPanel.enhance.note.off")}
           </Typography.Text>
         </Space>
         <Typography.Text type="secondary">
-          预计耗时：本地规则通常 1–3 秒；开启 AI 增强一般十几秒，最长 45 秒后自动降级为本地结果。
-          扫描期间可以关掉这个窗口，扫描会在后台继续，完成后会提醒你。
+          {t("riskPanel.intro.estimatedTime")} {t("riskPanel.intro.background")}
         </Typography.Text>
         <div>
           <Button type="primary" onClick={onStart}>
-            {error ? "重新扫描" : "开始扫描"}
+            {error ? t("riskPanel.action.rescan") : t("riskPanel.action.start")}
           </Button>
         </div>
       </Space>
@@ -311,8 +313,8 @@ function ScanningCard({ startedAt, onCancel }: { startedAt?: number; onCancel: (
   return (
     <Space orientation="vertical" style={{ width: "100%" }} size="middle" align="center">
       <LoadingBlock />
-      <Typography.Text>正在扫描…已用时 {elapsed}s</Typography.Text>
-      <Typography.Text type="secondary">可以关闭此窗口，扫描会继续</Typography.Text>
+      <Typography.Text>{t("riskPanel.scanning.elapsed", { elapsed })}</Typography.Text>
+      <Typography.Text type="secondary">{t("riskPanel.scanning.hint")}</Typography.Text>
       <Button onClick={onCancel}>{t("common.action.cancel")}</Button>
     </Space>
   );
@@ -327,13 +329,7 @@ function EnhanceToggle({
   onChange: (next: boolean) => void;
 }) {
   return (
-    <Tooltip
-      title={
-        checked
-          ? "开启时会把你已配置的模型拿来复核简历——只发送遮罩后的正文（姓名/电话/邮箱/公司等已遮蔽），台账只发条数与承担程度这类结构信息，不发送条目原文。关掉后只用本地规则，完全不联网。"
-          : "已关闭：只用本地规则，不会向模型发送任何内容。"
-      }
-    >
+    <Tooltip title={checked ? t("riskPanel.enhance.tooltip.on") : t("riskPanel.enhance.note.off")}>
       <Space size={4}>
         <Switch
           size="small"
@@ -355,7 +351,7 @@ function RiskPointItem({ point }: { point: RiskPoint }) {
       data-risk-category={point.category}
     >
       <Space size="small" wrap>
-        <Tag color={severity.color}>{severity.label}</Tag>
+        <Tag color={severity.color}>{t(severity.labelKey)}</Tag>
         {point.location && <Typography.Text type="secondary">{point.location}</Typography.Text>}
         {point.claim_id != null && <Tag>{t("riskPanel.claimTag", { id: point.claim_id })}</Tag>}
       </Space>
