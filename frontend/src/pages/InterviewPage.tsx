@@ -35,9 +35,13 @@ import type {
 } from "../types";
 import { AUTO_FINISH_MAX_ROUNDS, AUTO_ROUNDS_FLAG } from "../types";
 import { AUTO_ROUNDS_OPTION } from "../pages/interview/SetupTab";
-import { HARD_DELETE_NOTE } from "../components/common/rowActionMenu";
 import { formatDateTime } from "../utils/format";
 import { t } from "../i18n";
+import {
+  interviewDifficultyLabelKey,
+  interviewTypeLabelKey,
+  interviewerStyleLabelKey,
+} from "../i18n/enum/interview";
 import { useLocale } from "../i18n/i18nContext";
 
 /** 每页条数之类没有；这里是深链 ?job_id= 的解析：正整数才认，其余按"没带参"处理。 */
@@ -211,10 +215,10 @@ export default function InterviewPage() {
     if (ids.length === 0) return;
     modal.confirm({
       title: t("interview.confirm.deleteTitle"),
-      // 条数与硬删除的后果段都进语言包：后果段是共用常量 HARD_DELETE_NOTE，以 {note} 传入。
+      // 条数与硬删除的后果段都进语言包：后果段是共用 key common.note.hardDelete，以 {note} 传入。
       content: t("interview.confirm.deleteBody", {
         count: ids.length,
-        note: HARD_DELETE_NOTE,
+        note: t("common.note.hardDelete"),
       }),
       okText: t("common.action.delete"),
       okButtonProps: { danger: true },
@@ -257,6 +261,11 @@ export default function InterviewPage() {
 
   const answered = active?.answered_rounds ?? 0;
   const finished = active?.status === "finished";
+  // 房间头部三只 Tag 显示的是协议值（提交/入库都用它），显示名随语言变；
+  // 后端可能回传白名单外的历史值，映射不到就原样显示。
+  const typeLabelKey = active ? interviewTypeLabelKey(active.interview_type) : undefined;
+  const difficultyLabelKey = active ? interviewDifficultyLabelKey(active.difficulty) : undefined;
+  const styleLabelKey = active ? interviewerStyleLabelKey(active.interviewer_style) : undefined;
 
   return (
     <div className="interview-page">
@@ -338,9 +347,9 @@ export default function InterviewPage() {
           <div className="interview-room-head">
             <Space size={6} wrap>
               <b>{active.title}</b>
-              <Tag color="blue">{active.interview_type}</Tag>
-              <Tag>{active.difficulty}</Tag>
-              <Tag>{active.interviewer_style}</Tag>
+              <Tag color="blue">{typeLabelKey ? t(typeLabelKey) : active.interview_type}</Tag>
+              <Tag>{difficultyLabelKey ? t(difficultyLabelKey) : active.difficulty}</Tag>
+              <Tag>{styleLabelKey ? t(styleLabelKey) : active.interviewer_style}</Tag>
               {active.job_title ? <Tag color="geekblue">{active.job_title}</Tag> : null}
             </Space>
             <Space size={6} wrap>
