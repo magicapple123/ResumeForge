@@ -35,8 +35,23 @@ import { useNavigate } from "react-router-dom";
 import type { Job } from "../types";
 import { getMatchAnalyzingIds, subscribeMatchAnalysis } from "../utils/jobMatchAnalysisState";
 import SkillTags from "./SkillTags";
-import { t } from "../i18n";
+import { t, type MessageKey } from "../i18n";
 import { useLocale } from "../i18n/i18nContext";
+import {
+  jobRecognitionSourceLabelKey,
+  jobStatusLabelKey,
+  jobTypeLabelKey,
+} from "../i18n/enum/jobs";
+
+/**
+ * 协议值 → 展示名：岗位类型 / 状态 / 录入方式都按落库值查语言包。
+ *
+ * 表里没有的取值（历史落库值、后端新增值、采集站点名）一律按**原值**显示，不丢信息；
+ * 空值仍显示 `-`，与同一张字段表里的其它空字段一致。
+ */
+function protocolLabel(key: MessageKey | undefined, value: string): string {
+  return key ? t(key) : value || "-";
+}
 
 interface Props {
   job: Job | null;
@@ -246,10 +261,10 @@ export default function JobDetailDrawer({
               {job.salary || "-"}
             </Descriptions.Item>
             <Descriptions.Item label={t("jobDetail.field.jobType")}>
-              {job.job_type || "-"}
+              {protocolLabel(jobTypeLabelKey(job.job_type), job.job_type)}
             </Descriptions.Item>
             <Descriptions.Item label={t("jobDetail.field.status")}>
-              {job.status || "-"}
+              {protocolLabel(jobStatusLabelKey(job.status), job.status)}
             </Descriptions.Item>
             <Descriptions.Item label={t("jobDetail.field.postedAt")}>
               {job.posted_at || "-"}
@@ -257,8 +272,12 @@ export default function JobDetailDrawer({
             {/* 「录入方式」是系统记录的这条岗位怎么进来的（手动填写/粘贴识别/采集…），
                 与用户可编辑的「来源」是两回事；标签分开写，避免两个"来源"互相打架。 */}
             <Descriptions.Item label={t("jobDetail.field.recognitionSource")}>
-              {/* i18n-ok: 录入方式的值是后端返回的协议值（RECOGNITION_SOURCES），不随界面语言变 */}
-              {job.recognition_source || "手动"}
+              {/* 录入方式是后端协议值（RECOGNITION_SOURCES），展示名走语言包；
+                  空值表示"没有记录"（旧数据），不再冒充「手动填写」。 */}
+              {protocolLabel(
+                jobRecognitionSourceLabelKey(job.recognition_source),
+                job.recognition_source,
+              )}
             </Descriptions.Item>
             {/* 0042 起「来源」是用户可编辑的独立字段（不再追加进备注）；没填就不占一行，
                 免得详情里出现一排"-"里唯一有内容的是录入方式，看着像重复。 */}
