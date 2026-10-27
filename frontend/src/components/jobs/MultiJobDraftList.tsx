@@ -10,6 +10,7 @@ import { FileTextOutlined } from "@ant-design/icons";
 import { Alert, Button, Card, Checkbox, Space, Tag, Tooltip, Typography } from "antd";
 import { useState } from "react";
 import { t } from "../../i18n";
+import { jobTypeLabelKey } from "../../i18n/enum/jobs";
 import { useLocale } from "../../i18n/i18nContext";
 import type { ParsedJobDraft } from "../../types";
 
@@ -73,47 +74,53 @@ export default function MultiJobDraftList({
       />
 
       <Space orientation="vertical" style={{ width: "100%", marginTop: 12 }}>
-        {drafts.map((draft, index) => (
-          <Card
-            key={`${index}-${draft.title}-${draft.company}`}
-            size="small"
-            className="multi-draft-card"
-          >
-            <div className="multi-draft-card-head">
-              <Checkbox
-                checked={selected.includes(index)}
-                onChange={(event) => toggle(index, event.target.checked)}
-              >
-                <span className="multi-draft-title">{draftTitle(draft, index)}</span>
-              </Checkbox>
-              <Tooltip title={t("jobsUi.card.editHint")}>
-                <Button type="link" size="small" onClick={() => onEditSingle(draft)}>
-                  {t("jobsUi.card.editSingle")}
-                </Button>
-              </Tooltip>
-            </div>
-            <Space size={6} wrap style={{ marginTop: 4 }}>
-              {draft.company ? <Tag color="blue">{draft.company}</Tag> : null}
-              {draft.location ? <Tag>{draft.location}</Tag> : null}
-              {draft.salary ? <Tag color="gold">{draft.salary}</Tag> : null}
-              {draft.job_type ? <Tag color="purple">{draft.job_type}</Tag> : null}
-              {!draft.description?.trim() ? (
-                <Tag color="orange">{t("jobsUi.card.missingDescription")}</Tag>
+        {drafts.map((draft, index) => {
+          // 岗位类型是落库的协议值，只有展示名走语言包；表里没有的取值原样显示。
+          const jobTypeKey = jobTypeLabelKey(draft.job_type);
+          return (
+            <Card
+              key={`${index}-${draft.title}-${draft.company}`}
+              size="small"
+              className="multi-draft-card"
+            >
+              <div className="multi-draft-card-head">
+                <Checkbox
+                  checked={selected.includes(index)}
+                  onChange={(event) => toggle(index, event.target.checked)}
+                >
+                  <span className="multi-draft-title">{draftTitle(draft, index)}</span>
+                </Checkbox>
+                <Tooltip title={t("jobsUi.card.editHint")}>
+                  <Button type="link" size="small" onClick={() => onEditSingle(draft)}>
+                    {t("jobsUi.card.editSingle")}
+                  </Button>
+                </Tooltip>
+              </div>
+              <Space size={6} wrap style={{ marginTop: 4 }}>
+                {draft.company ? <Tag color="blue">{draft.company}</Tag> : null}
+                {draft.location ? <Tag>{draft.location}</Tag> : null}
+                {draft.salary ? <Tag color="gold">{draft.salary}</Tag> : null}
+                {draft.job_type ? (
+                  <Tag color="purple">{jobTypeKey ? t(jobTypeKey) : draft.job_type}</Tag>
+                ) : null}
+                {!draft.description?.trim() ? (
+                  <Tag color="orange">{t("jobsUi.card.missingDescription")}</Tag>
+                ) : null}
+              </Space>
+              {draft.recognized_text ? (
+                <Typography.Paragraph type="secondary" className="multi-draft-excerpt">
+                  <FileTextOutlined />{" "}
+                  {t("jobsUi.card.excerpt", { excerpt: excerpt(draft.recognized_text) })}
+                </Typography.Paragraph>
               ) : null}
-            </Space>
-            {draft.recognized_text ? (
-              <Typography.Paragraph type="secondary" className="multi-draft-excerpt">
-                <FileTextOutlined />{" "}
-                {t("jobsUi.card.excerpt", { excerpt: excerpt(draft.recognized_text) })}
-              </Typography.Paragraph>
-            ) : null}
-            {draft.warnings.length > 0 ? (
-              <Typography.Text type="warning" className="multi-draft-warning">
-                {draft.warnings[0]}
-              </Typography.Text>
-            ) : null}
-          </Card>
-        ))}
+              {draft.warnings.length > 0 ? (
+                <Typography.Text type="warning" className="multi-draft-warning">
+                  {draft.warnings[0]}
+                </Typography.Text>
+              ) : null}
+            </Card>
+          );
+        })}
       </Space>
 
       <Space wrap style={{ marginTop: 16 }}>
