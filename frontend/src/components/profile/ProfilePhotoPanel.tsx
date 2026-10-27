@@ -17,6 +17,8 @@ import {
 } from "../../api/photo";
 import { MAX_PROFILE_PHOTOS, type ProfilePhoto } from "../../types";
 import { readAsDataUrl } from "../../utils/attachments";
+import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 import FileDropZone from "../common/FileDropZone";
 
 const PHOTO_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
@@ -31,6 +33,8 @@ interface Props {
 }
 
 export default function ProfilePhotoPanel({ activePhoto, disabled = false, onSelect }: Props) {
+  // 本组件用模块级 t()：必须订阅语言变化，否则切语言后这一块不重渲染。
+  useLocale();
   const { message } = App.useApp();
   const [photos, setPhotos] = useState<ProfilePhoto[]>([]);
   const [loading, setLoading] = useState(true);
@@ -71,15 +75,15 @@ export default function ProfilePhotoPanel({ activePhoto, disabled = false, onSel
 
   const upload = async (file: File) => {
     if (!PHOTO_TYPES.has(file.type)) {
-      message.error("请选择 JPG、PNG 或 WebP 格式的照片");
+      message.error(t("profilePhoto.upload.formatError"));
       return;
     }
     if (file.size > PHOTO_MAX_BYTES) {
-      message.error(`照片不能超过 ${PHOTO_MAX_BYTES / (1024 * 1024)} MB`);
+      message.error(t("profilePhoto.upload.tooLarge", { size: PHOTO_MAX_BYTES / (1024 * 1024) }));
       return;
     }
     if (photos.length >= MAX_PROFILE_PHOTOS) {
-      message.warning(`最多保存 ${MAX_PROFILE_PHOTOS} 张照片，请先删除不再使用的`);
+      message.warning(t("profilePhoto.upload.limit", { count: MAX_PROFILE_PHOTOS }));
       return;
     }
     setBusy(true);
@@ -94,9 +98,9 @@ export default function ProfilePhotoPanel({ activePhoto, disabled = false, onSel
       await load();
       // 第一张上传的照片会自动成为使用中的那张。
       onSelect(created.image);
-      message.success("照片已保存，可在这里切换使用哪一张");
+      message.success(t("profilePhoto.upload.success"));
     } catch (err) {
-      message.error(err instanceof Error ? err.message : "上传照片失败");
+      message.error(err instanceof Error ? err.message : t("profilePhoto.upload.failed"));
     } finally {
       setBusy(false);
       setUploadPercent(null);
@@ -111,9 +115,9 @@ export default function ProfilePhotoPanel({ activePhoto, disabled = false, onSel
       const updated = await updateProfilePhoto(photo.id, { is_primary: true });
       await load();
       onSelect(updated.image);
-      message.success("已切换简历照片");
+      message.success(t("profilePhoto.switch.success"));
     } catch (err) {
-      message.error(err instanceof Error ? err.message : "切换照片失败");
+      message.error(err instanceof Error ? err.message : t("profilePhoto.switch.failed"));
     } finally {
       setBusy(false);
     }
@@ -132,9 +136,9 @@ export default function ProfilePhotoPanel({ activePhoto, disabled = false, onSel
       }
       // 删到只剩一张时照片库自动关上：里面已经没得挑了，留着反而是个空弹窗。
       if (next.length <= 1) setLibraryOpen(false);
-      message.success("已删除这张照片");
+      message.success(t("profilePhoto.delete.success"));
     } catch (err) {
-      message.error(err instanceof Error ? err.message : "删除照片失败");
+      message.error(err instanceof Error ? err.message : t("profilePhoto.delete.failed"));
     } finally {
       setBusy(false);
     }
@@ -151,15 +155,15 @@ export default function ProfilePhotoPanel({ activePhoto, disabled = false, onSel
     <FileDropZone
       accept="image/jpeg,image/png,image/webp"
       disabled={disabled || busy}
-      hint="松开即可上传照片"
+      hint={t("profilePhoto.upload.dropHint")}
       onFiles={(dropped) => void upload(dropped[0])}
-      onRejected={() => message.error("只支持 JPG、PNG 或 WebP 照片")}
+      onRejected={() => message.error(t("profilePhoto.upload.dropRejected"))}
     >
       <div className="profile-photo-panel">
         <div className="profile-photo-frame">
           {activePhoto ? (
             // 允许点开放大：简历照片是用户文件副本库的一部分，原图预览是最自然的入口。
-            <Image src={activePhoto} alt="简历照片" />
+            <Image src={activePhoto} alt={t("profilePhoto.preview.alt")} />
           ) : (
             <UserOutlined className="profile-photo-placeholder" />
           )}
@@ -175,18 +179,18 @@ export default function ProfilePhotoPanel({ activePhoto, disabled = false, onSel
             disabled={disabled || busy}
           >
             <Button icon={<CameraOutlined />} loading={busy}>
-              {activePhoto ? "上传新照片" : "选择照片"}
+              {activePhoto ? t("profilePhoto.action.uploadNew") : t("profilePhoto.action.choose")}
             </Button>
           </Upload>
           {alternateCount > 0 && (
             <Button icon={<PictureOutlined />} onClick={() => setLibraryOpen(true)}>
-              照片库（{photos.length}）
+              {t("profilePhoto.action.library", { count: photos.length })}
             </Button>
           )}
         </Space>
         {uploadPercent !== null && (
           <Progress
-            aria-label="照片上传进度"
+            aria-label={t("profilePhoto.upload.progress")}
             percent={uploadPercent}
             size="small"
             status={uploadPercent >= 100 ? "success" : "active"}
@@ -195,12 +199,15 @@ export default function ProfilePhotoPanel({ activePhoto, disabled = false, onSel
         )}
         <Typography.Text type="secondary" style={{ fontSize: 12 }}>
           {loading
-            ? "正在读取照片…"
-            : `JPG、PNG 或 WebP，最大 ${PHOTO_MAX_BYTES / (1024 * 1024)} MB，最多保存 ${MAX_PROFILE_PHOTOS} 张`}
+            ? t("profilePhoto.upload.loading")
+            : t("profilePhoto.upload.formatsHint", {
+                size: PHOTO_MAX_BYTES / (1024 * 1024),
+                count: MAX_PROFILE_PHOTOS,
+              })}
         </Typography.Text>
 
         <Modal
-          title="照片库"
+          title={t("profilePhoto.library.title")}
           open={libraryOpen}
           onCancel={() => setLibraryOpen(false)}
           footer={null}
@@ -208,7 +215,7 @@ export default function ProfilePhotoPanel({ activePhoto, disabled = false, onSel
           destroyOnHidden
         >
           <Typography.Paragraph type="secondary" style={{ fontSize: 12 }}>
-            点一张设为简历照片；简历上只会用你选中的这一张。
+            {t("profilePhoto.library.description")}
           </Typography.Paragraph>
           <div className="profile-photo-library">
             {photos.map((photo) => {
@@ -218,23 +225,36 @@ export default function ProfilePhotoPanel({ activePhoto, disabled = false, onSel
                   key={photo.id}
                   className={`profile-photo-thumb${isActive ? " is-active" : ""}`}
                 >
-                  <Tooltip title={isActive ? "当前使用中" : "设为简历照片"}>
+                  <Tooltip
+                    title={
+                      isActive
+                        ? t("profilePhoto.library.tooltipActive")
+                        : t("profilePhoto.library.tooltipSelect")
+                    }
+                  >
                     <button
                       type="button"
                       className="profile-photo-thumb-button"
                       disabled={disabled || busy || isActive}
-                      aria-label={`使用照片 ${photo.name || photo.id}`}
+                      aria-label={t("profilePhoto.library.selectAria", {
+                        name: photo.name || photo.id,
+                      })}
                       onClick={() => void selectPhoto(photo)}
                     >
-                      <img src={photo.image} alt={photo.name || "照片"} />
-                      {isActive && <Tag color="blue">使用中</Tag>}
+                      <img
+                        src={photo.image}
+                        alt={photo.name || t("profilePhoto.library.photoAlt")}
+                      />
+                      {isActive && <Tag color="blue">{t("profilePhoto.library.activeTag")}</Tag>}
                     </button>
                   </Tooltip>
                   <Button
                     type="text"
                     size="small"
                     danger
-                    aria-label={`删除照片 ${photo.name || photo.id}`}
+                    aria-label={t("profilePhoto.library.deleteAria", {
+                      name: photo.name || photo.id,
+                    })}
                     icon={<DeleteOutlined />}
                     disabled={disabled || busy}
                     onClick={() => void remove(photo)}
@@ -245,7 +265,7 @@ export default function ProfilePhotoPanel({ activePhoto, disabled = false, onSel
           </div>
           {photos.length <= 1 && (
             <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-              还没有备选照片。上传新照片后就会出现在这里，可以随时切换。
+              {t("profilePhoto.library.empty")}
             </Typography.Text>
           )}
         </Modal>
