@@ -228,7 +228,7 @@ export default function SettingsPage() {
                 <SettingsProvenanceSection
                   targetService={
                     configSummary
-                      ? configSummary.presetLabel + " · " + configSummary.model
+                      ? t(configSummary.presetLabelKey) + " · " + configSummary.model
                       : undefined
                   }
                 />
