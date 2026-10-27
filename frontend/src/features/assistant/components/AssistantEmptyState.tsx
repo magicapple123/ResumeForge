@@ -5,6 +5,8 @@ import { Button, Empty, Typography } from "antd";
 import promoPlane from "../../../assets/toutou/promo-plane.webp";
 import { STARTER_PROMPTS, type StarterPrompt } from "../assistantTypes";
 import { greetingForHour } from "../greetingText";
+import { t } from "../../../i18n";
+import { useLocale } from "../../../i18n/i18nContext";
 
 interface Props {
   variant?: "page" | "floating";
@@ -23,6 +25,7 @@ export default function AssistantEmptyState({
   skillsLoaded,
   onManageSkills,
 }: Props) {
+  useLocale();
   // 有技能在生效时页头已经写着，这里只在"一个都没启用"时负责让用户知道有这回事。
   const floating = variant === "floating";
   // 时间感知：深夜/凌晨补一句休息提醒（本地单用户，浏览器时间即用户时间）。
@@ -45,32 +48,36 @@ export default function AssistantEmptyState({
             ) : null}
             <Typography.Text type="secondary">
               {floating
-                ? "我可以帮你解决简历通使用问题、分析简历和岗位，并在你明确要求时操作允许的数据。"
-                : "能帮你打磨简历、对照岗位查缺补漏、解答求职问题。可先关联岗位或简历，再按需开启资料和联网搜索。"}
+                ? t("assistantUi.empty.floatingDescription")
+                : t("assistantUi.empty.pageDescription")}
             </Typography.Text>
           </div>
         }
       >
-        <div className="assistant-starter-prompts" aria-label="常用求职提问">
+        <div
+          className="assistant-starter-prompts"
+          aria-label={t("assistantUi.empty.starterPromptsAria")}
+        >
           {STARTER_PROMPTS.map((prompt) => (
             <Button
-              key={prompt.label}
+              key={prompt.labelKey}
               size="small"
               className="assistant-starter-prompt"
               onClick={() => onChoosePrompt(prompt)}
             >
-              {prompt.label}
+              {t(prompt.labelKey)}
             </Button>
           ))}
         </div>
         {showSkillDiscovery && (
           <div className="assistant-skills-discovery">
             <Typography.Text type="secondary">
-              助手还能按你导入的<strong>技能</strong>作答——技能是一份提示词（可附带知识文件），
-              用来固定回答风格或流程。
+              {t("assistantUi.empty.skillsDiscoveryBefore")}
+              <strong>{t("assistantUi.empty.skillsDiscoveryTerm")}</strong>
+              {t("assistantUi.empty.skillsDiscoveryAfter")}
             </Typography.Text>
             <Button type="link" size="small" onClick={onManageSkills}>
-              到工作台添加技能
+              {t("assistantUi.empty.manageSkills")}
             </Button>
           </div>
         )}
