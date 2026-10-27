@@ -7,18 +7,15 @@
  * 起了 Edge"这种没人能解释的状态。
  *
  * 用法：放进一个 `<Form>` 里，字段名固定是 `browser_choice` / `browser_path`。
+ *
+ * 选项名与说明都在**渲染期**取语言包（模块作用域求值会把当时的语言固化下来）；Chrome /
+ * Edge 两项的名字是品牌名，沿用 `types` 表的写法（两种语言逐字相同）。
  */
 import { Form, Input, Select, Space } from "antd";
 import { BROWSER_CHOICE_META, type BrowserChoice } from "../../types";
 import { t } from "../../i18n";
+import { BROWSER_CHOICE_HINT_KEYS, BROWSER_CHOICE_LABEL_KEYS } from "../../i18n/enum/apply";
 import { useLocale } from "../../i18n/i18nContext";
-
-const BROWSER_CHOICE_OPTIONS = (Object.keys(BROWSER_CHOICE_META) as BrowserChoice[]).map(
-  (value) => ({
-    value,
-    label: BROWSER_CHOICE_META[value].label,
-  }),
-);
 
 interface Props {
   /** 文案可按场景微调（投递台 / 网申填表），默认写两处都成立的说法。 */
@@ -32,14 +29,18 @@ export default function BrowserChoiceFields({ label, compact = false }: Props) {
   useLocale();
   // 只有选了「自定义路径」才需要填路径。
   const browserChoice = Form.useWatch("browser_choice") as BrowserChoice | undefined;
+  const choiceOptions = (Object.keys(BROWSER_CHOICE_META) as BrowserChoice[]).map((value) => {
+    const labelKey = BROWSER_CHOICE_LABEL_KEYS[value];
+    return { value, label: labelKey ? t(labelKey) : BROWSER_CHOICE_META[value].label };
+  });
   return (
     <Space size={compact ? 8 : 16} wrap>
       <Form.Item
         name="browser_choice"
         label={label ?? t("applyUi.browserChoice.label")}
-        extra={browserChoice ? BROWSER_CHOICE_META[browserChoice]?.hint : undefined}
+        extra={browserChoice ? t(BROWSER_CHOICE_HINT_KEYS[browserChoice]) : undefined}
       >
-        <Select options={BROWSER_CHOICE_OPTIONS} style={{ width: 220 }} />
+        <Select options={choiceOptions} style={{ width: 220 }} />
       </Form.Item>
       <Form.Item
         name="browser_path"
