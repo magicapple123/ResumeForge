@@ -21,6 +21,8 @@ import { useApi } from "../../hooks/useApi";
 import { bulkEnqueueJobs, bulkEnqueueSummary } from "./queue/bulkEnqueue";
 import PageSkeleton from "../common/PageSkeleton";
 import type { CandidateJob, CandidateJobImportResult } from "../../types";
+import { t, type MessageKey } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 
 interface Props {
   /** 要展示的采集批次；为空表示还没采过，整块不渲染。 */
@@ -33,11 +35,17 @@ interface Props {
   onImported?: (result: CandidateJobImportResult) => void;
 }
 
-const OUTCOME_LABELS: Record<string, string> = {
-  duplicate: "岗位广场里已经有这个岗位（已关联到已有那条，没有重复创建）",
-  trashed: "岗位广场的「回收站」里已经有同名岗位——先去回收站恢复它，或彻底删除后再导入",
-  invalid: "这条没有岗位名，成为不了一个正式岗位",
-  missing: "这条候选已经不存在了（可能在别处被删掉）",
+/**
+ * 导入结果的 outcome（协议值）→ 说明文案的 key。
+ *
+ * 键是后端返回的**协议值**，不翻译（`isProblemOutcome` 与入队过滤都靠它们判定）；
+ * 值是文案 key，由使用处 `t()`——模块作用域里调 `t()` 会把语言固定在模块求值那一刻。
+ */
+const OUTCOME_LABEL_KEYS: Record<string, MessageKey> = {
+  duplicate: "collectResult.outcome.duplicate",
+  trashed: "collectResult.outcome.trashed",
+  invalid: "collectResult.outcome.invalid",
+  missing: "collectResult.outcome.missing",
 };
 
 /**
@@ -50,17 +58,14 @@ function isProblemOutcome(item: { outcome: string }): boolean {
   return item.outcome !== "imported";
 }
 
-/** 导入按钮的文案/无障碍名称：带上选中数量，用户不必去数勾了几个。 */
-function importLabel(count: number): string {
-  return count > 0 ? `导入选中的 ${count} 个岗位` : "导入选中的岗位";
-}
-
 export default function CollectResultPanel({
   taskId,
   disabled = false,
   refreshKey = 0,
   onImported,
 }: Props) {
+  // 本组件用模块级 t()：必须订阅语言变化，否则切语言后这一块不重渲染。
+  useLocale();
   const { message } = App.useApp();
   const navigate = useNavigate();
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
@@ -88,6 +93,12 @@ export default function CollectResultPanel({
 
   const candidates = data ?? [];
 
+  /** 导入按钮的文案/无障碍名称：带上选中数量，用户不必去数勾了几个。 */
+  const importLabel = (count: number): string =>
+    count > 0
+      ? t("collectResult.import.labelWithCount", { count })
+      : t("collectResult.import.label");
+
   const doImport = async () => {
     if (selectedIds.length === 0) return;
     setImporting(true);
@@ -100,14 +111,14 @@ export default function CollectResultPanel({
         message.success({
           content: (
             <span>
-              已导入 {result.imported} 个岗位到岗位广场，
+              {t("collectResult.import.success", { count: result.imported })}
               <Button
                 type="link"
                 size="small"
                 style={{ padding: 0 }}
                 onClick={() => navigate("/jobs")}
               >
-                去岗位广场查看
+                {t("collectResult.import.successAction")}
               </Button>
             </span>
           ),
@@ -115,14 +126,16 @@ export default function CollectResultPanel({
         });
       } else {
         message.warning(
-          `没有新增岗位，原因见「有 ${result.results.filter(isProblemOutcome).length} 个岗位没有新建」提示`,
+          t("collectResult.import.noneAdded", {
+            count: result.results.filter(isProblemOutcome).length,
+          }),
         );
       }
       setSelectedIds([]);
       await reload();
       onImported?.(result);
     } catch (err) {
-      message.error(err instanceof Error ? err.message : "导入失败");
+      message.error(err instanceof Error ? err.message : t("collectResult.import.failed"));
     } finally {
       setImporting(false);
     }
@@ -143,23 +156,26 @@ export default function CollectResultPanel({
         )
         .map((item) => item.job_id as number);
       if (jobIds.length === 0) {
-        message.warning("没有可加入投递队列的岗位（选中项没有成功导入岗位广场）");
+        message.warning(t("collectResult.queue.nothingToQueue"));
         await reload();
         return;
       }
       const outcome = await bulkEnqueueJobs(jobIds);
-      const summary = `已导入 ${result.imported} 个岗位，${bulkEnqueueSummary(outcome)}`;
+      const summary = t("collectResult.queue.success", {
+        count: result.imported,
+        summary: bulkEnqueueSummary(outcome),
+      });
       message.success({
         content: (
           <span>
-            {summary}，
+            {summary}
             <Button
               type="link"
               size="small"
               style={{ padding: 0 }}
               onClick={() => navigate("/apply?tab=queue")}
             >
-              去投递队列查看
+              {t("collectResult.queue.successAction")}
             </Button>
           </span>
         ),
@@ -169,7 +185,7 @@ export default function CollectResultPanel({
       await reload();
       onImported?.(result);
     } catch (err) {
-      message.error(err instanceof Error ? err.message : "导入并加入投递队列失败");
+      message.error(err instanceof Error ? err.message : t("collectResult.queue.failed"));
     } finally {
       setImporting(false);
     }
@@ -177,37 +193,37 @@ export default function CollectResultPanel({
 
   const columns: TableColumnsType<CandidateJob> = [
     {
-      title: "岗位",
+      title: t("collectResult.column.title"),
       dataIndex: "title",
       render: (value: string, row) => (
         <Space orientation="vertical" size={0}>
-          <Typography.Text strong>{value || "（未识别到岗位名）"}</Typography.Text>
+          <Typography.Text strong>{value || t("collectResult.row.unknownTitle")}</Typography.Text>
           <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-            {row.company || "（未识别到公司）"}
+            {row.company || t("collectResult.row.unknownCompany")}
           </Typography.Text>
         </Space>
       ),
     },
     {
-      title: "城市",
+      title: t("collectResult.column.location"),
       dataIndex: "location",
       width: 140,
       render: (value: string) => value || "—",
     },
     {
-      title: "薪资",
+      title: t("collectResult.column.salary"),
       dataIndex: "salary",
       width: 130,
       render: (value: string) => value || "—",
     },
     {
-      title: "原站",
+      title: t("collectResult.column.source"),
       dataIndex: "source_url",
       width: 90,
       render: (value: string, row) =>
         value ? (
           <Typography.Link href={value} target="_blank" rel="noopener noreferrer">
-            <LinkOutlined /> 查看
+            <LinkOutlined /> {t("collectResult.action.openSource")}
           </Typography.Link>
         ) : (
           <Tag>{row.source}</Tag>
@@ -221,10 +237,8 @@ export default function CollectResultPanel({
     <div className="apply-collect-result">
       <Space orientation="vertical" size={8} style={{ width: "100%" }}>
         <Space size={8} wrap>
-          <Typography.Text strong>本次采集结果</Typography.Text>
-          <Typography.Text type="secondary">
-            勾选要收进岗位广场的岗位，没勾的会留在备选岗位里，之后还能再来挑。
-          </Typography.Text>
+          <Typography.Text strong>{t("collectResult.title")}</Typography.Text>
+          <Typography.Text type="secondary">{t("collectResult.hint")}</Typography.Text>
         </Space>
 
         {error && <Alert type="error" showIcon title={error} />}
@@ -235,18 +249,22 @@ export default function CollectResultPanel({
             showIcon
             closable
             onClose={() => setLastResult(null)}
-            title={`有 ${problemResults.length} 个岗位没有新建（其余已处理）`}
+            title={t("collectResult.problem.title", { count: problemResults.length })}
             description={
               <ul style={{ margin: 0, paddingLeft: 18 }}>
-                {problemResults.map((item) => (
-                  <li key={item.candidate_id}>
-                    <Typography.Text strong>
-                      {item.title || `#${item.candidate_id}`}
-                    </Typography.Text>
-                    {" — "}
-                    {OUTCOME_LABELS[item.outcome] ?? item.outcome}
-                  </li>
-                ))}
+                {problemResults.map((item) => {
+                  // 未知 outcome（后端将来新增的取值）原样显示，不显示成空字符串。
+                  const labelKey: MessageKey | undefined = OUTCOME_LABEL_KEYS[item.outcome];
+                  return (
+                    <li key={item.candidate_id}>
+                      <Typography.Text strong>
+                        {item.title || `#${item.candidate_id}`}
+                      </Typography.Text>
+                      {" — "}
+                      {labelKey ? t(labelKey) : item.outcome}
+                    </li>
+                  );
+                })}
               </ul>
             }
           />
@@ -255,7 +273,7 @@ export default function CollectResultPanel({
         {loading && !data ? (
           <PageSkeleton rows={4} card={false} />
         ) : candidates.length === 0 ? (
-          <EmptyState description="这次采集还没有待导入的岗位（可能都已导入，或一条都没采到）" />
+          <EmptyState description={t("collectResult.empty")} />
         ) : (
           <>
             <Table
@@ -285,34 +303,32 @@ export default function CollectResultPanel({
               >
                 {importLabel(selectedIds.length)}
               </Button>
-              <Tooltip title="海投模式：先导入岗位广场，再直接加入投递队列（未分析的岗位会跳过确认直接入队，投递前仍会核对准入）">
+              <Tooltip title={t("collectResult.queue.tooltip")}>
                 <Button
                   icon={<SendOutlined />}
                   loading={importing}
                   disabled={disabled || selectedIds.length === 0}
-                  aria-label={`导入选中的 ${selectedIds.length} 个岗位并加入投递队列`}
+                  aria-label={t("collectResult.queue.aria", { count: selectedIds.length })}
                   onClick={() => void doImportAndQueue()}
                 >
-                  导入并加入投递队列
+                  {t("collectResult.queue.label")}
                 </Button>
               </Tooltip>
               <Button
-                aria-label="全选"
+                aria-label={t("collectResult.action.selectAll")}
                 disabled={disabled || importing}
                 onClick={() => setSelectedIds(candidates.map((item) => item.id))}
               >
-                全选
+                {t("collectResult.action.selectAll")}
               </Button>
               <Button
-                aria-label="清空选择"
+                aria-label={t("collectResult.action.clearSelection")}
                 disabled={disabled || importing || selectedIds.length === 0}
                 onClick={() => setSelectedIds([])}
               >
-                清空选择
+                {t("collectResult.action.clearSelection")}
               </Button>
-              <Typography.Text type="secondary">
-                导入后到「投递队列」把想要的岗位排进去，再点开始投递。
-              </Typography.Text>
+              <Typography.Text type="secondary">{t("collectResult.footnote")}</Typography.Text>
             </Space>
           </>
         )}
