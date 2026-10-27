@@ -11,8 +11,11 @@ import { App, Card, Space, Switch, Typography } from "antd";
 import LoadingBlock from "../common/LoadingBlock";
 import { useEffect, useState } from "react";
 import { getAssistantRelaxedMode, saveAssistantRelaxedMode } from "../../api/settings";
+import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 
 export default function AssistantRelaxedModeCard() {
+  useLocale();
   const { message } = App.useApp();
   const [enabled, setEnabled] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -46,41 +49,41 @@ export default function AssistantRelaxedModeCard() {
       setEnabled(saved.enabled);
       message.success(
         checked
-          ? "已开启放宽模式：求职助手现在可以读取完整资料（含敏感信息）"
-          : "已关闭：助手回到默认的脱敏视图，敏感工具不再下发",
+          ? t("settingsUi.assistantRelaxed.enableToast")
+          : t("settingsUi.assistantRelaxed.disableToast"),
       );
     } catch (err) {
       setEnabled(!checked);
-      message.error(err instanceof Error ? err.message : "保存助手放宽模式设置失败");
+      message.error(
+        err instanceof Error ? err.message : t("settingsUi.assistantRelaxed.saveFailed"),
+      );
     } finally {
       setSaving(false);
     }
   };
 
   return (
-    <Card title="求职助手 · 放宽模式" className="settings-card">
+    <Card title={t("settingsUi.assistantRelaxed.title")} className="settings-card">
       <Typography.Paragraph type="secondary" style={{ marginBottom: 16 }}>
-        默认关闭：助手读到的是脱敏资料（不含姓名、电话等身份字段），也没有网申填写值与
-        历史对话工具。
+        {t("settingsUi.assistantRelaxed.intro")}
       </Typography.Paragraph>
       <LoadingBlock spinning={loading}>
         <Space orientation="vertical" size={4}>
           <Switch
             checked={enabled}
             loading={saving}
-            checkedChildren="开"
-            unCheckedChildren="关"
-            aria-label="求职助手放宽模式"
+            checkedChildren={t("settingsUi.switch.on")}
+            unCheckedChildren={t("settingsUi.switch.off")}
+            aria-label={t("settingsUi.assistantRelaxed.toggleAria")}
             onChange={(checked) => void onChange(checked)}
           />
           <Typography.Text type={enabled ? "warning" : "secondary"}>
             {enabled
-              ? "已开启：助手可以读取完整资料——姓名、电话、邮箱等身份字段，网申填表的真实填写值，以及你的历史对话；这些内容会随提问发送给你配置的大模型服务商。请仅在本人设备上开启。"
-              : "开启前请知悉：开启后助手可读取完整资料（含姓名、电话等敏感信息）、网申填表的真实填写值与历史对话，这些内容会随提问发送给你配置的大模型服务商。"}
+              ? t("settingsUi.assistantRelaxed.stateOn")
+              : t("settingsUi.assistantRelaxed.stateOff")}
           </Typography.Text>
           <Typography.Text type="secondary">
-            任何模式下都不会发送：API
-            密钥等凭据与全局配置、简历照片的图片内容；助手也永远没有删除类工具。
+            {t("settingsUi.assistantRelaxed.neverSent")}
           </Typography.Text>
         </Space>
       </LoadingBlock>
