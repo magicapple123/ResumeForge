@@ -4,6 +4,8 @@
 import { DeleteOutlined, PictureOutlined } from "@ant-design/icons";
 import { App, Button, Image, Tooltip, Typography, Upload } from "antd";
 import type { StagedFile } from "../hooks/useRecognitionFiles";
+import { t } from "../i18n";
+import { useLocale } from "../i18n/i18nContext";
 import { MAX_ATTACHMENT_COUNT, RECOGNITION_ACCEPT } from "../utils/attachments";
 import FileDropZone from "./common/FileDropZone";
 import RecognitionFilePreview from "./RecognitionFilePreview";
@@ -23,6 +25,7 @@ export default function RecognitionFileField({
   onAddFiles,
   onRemove,
 }: Props) {
+  useLocale();
   const { message } = App.useApp();
   const full = files.length >= MAX_ATTACHMENT_COUNT;
   const busy = reading || disabled;
@@ -31,10 +34,10 @@ export default function RecognitionFileField({
     <FileDropZone
       accept={RECOGNITION_ACCEPT}
       disabled={busy || full}
-      hint="松开即可添加截图或文档"
+      hint={t("componentsMisc.recognitionField.dropHint")}
       onFiles={onAddFiles}
       onRejected={(count) =>
-        message.warning(`已忽略 ${count} 个不支持的文件（只接受截图与 pdf/docx）`)
+        message.warning(t("componentsMisc.recognitionField.ignoredUnsupported", { count }))
       }
     >
       <div className="recognition-files">
@@ -45,7 +48,7 @@ export default function RecognitionFileField({
             showUploadList={false}
             disabled={busy || full}
             // 页面上有多个上传入口，这个 aria-label 让它们（以及测试）都能精确定位。
-            aria-label="添加截图或文档"
+            aria-label={t("componentsMisc.recognitionField.add")}
             beforeUpload={(file) => {
               onAddFiles([file as File]);
               // 与仓库其它上传一致：本地读取后自行提交，不走 antd 的上传通道。
@@ -53,12 +56,11 @@ export default function RecognitionFileField({
             }}
           >
             <Button icon={<PictureOutlined />} loading={reading} disabled={busy || full}>
-              添加截图或文档
+              {t("componentsMisc.recognitionField.add")}
             </Button>
           </Upload>
           <Typography.Text type="secondary">
-            也可以把文件直接拖到这里，或在文本框里按 Ctrl+V 粘贴截图（最多 {MAX_ATTACHMENT_COUNT}{" "}
-            个，单个 ≤ 2 MB，合计 ≤ 5 MB；支持截图与 pdf/docx 文档）
+            {t("componentsMisc.recognitionField.pasteHint", { count: MAX_ATTACHMENT_COUNT })}
           </Typography.Text>
         </div>
 
@@ -72,12 +74,18 @@ export default function RecognitionFileField({
                   <RecognitionFilePreview file={file} />
                   {/* 动作区独立成块：D16 的整行布局靠它"绝不收缩"（体积/删除不会换行）。 */}
                   <span className="recognition-file-actions">
-                    <Tooltip title={`移除 ${file.name}`}>
+                    <Tooltip
+                      title={t("componentsMisc.recognitionField.removeTooltip", {
+                        name: file.name,
+                      })}
+                    >
                       <Button
                         type="text"
                         size="small"
                         danger
-                        aria-label={`移除文件 ${file.name}`}
+                        aria-label={t("componentsMisc.recognitionField.removeAria", {
+                          name: file.name,
+                        })}
                         icon={<DeleteOutlined />}
                         disabled={busy}
                         onClick={() => onRemove(file.id)}
