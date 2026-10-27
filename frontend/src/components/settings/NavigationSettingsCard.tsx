@@ -3,6 +3,8 @@ import { App, Button, Card, Switch, Tag, Typography } from "antd";
 import LoadingBlock from "../common/LoadingBlock";
 import { useMemo, useState } from "react";
 import { saveNavigationVisibility } from "../../api/settings";
+import { t, type MessageKey } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 import { useNavigationVisibility } from "../../hooks/useNavigationVisibility";
 import {
   CORE_NAVIGATION_KEYS,
@@ -14,9 +16,9 @@ import { publishHiddenNavigationKeys } from "../../utils/navigationVisibility";
 import "./navigationSettings.css";
 
 const GROUPS: NavigationGroup[] = ["primary", "space"];
-const GROUP_LABELS: Record<NavigationGroup, string> = {
-  primary: "核心入口",
-  space: "我的空间",
+const GROUP_LABELS: Record<NavigationGroup, MessageKey> = {
+  primary: "navigation.settings.group.primary",
+  space: "navigation.settings.group.space",
 };
 
 interface ItemRowProps {
@@ -29,25 +31,27 @@ interface ItemRowProps {
 
 /** 一行导航入口：图标 + 名称（核心入口带「固定显示」Tag）+ 右侧开关。 */
 function NavigationItemRow({ item, hidden, loading, savingKey, onToggle }: ItemRowProps) {
+  useLocale();
   const required = CORE_NAVIGATION_KEYS.has(item.key);
   const visible = required || !hidden.has(item.key);
   return (
     <div className="navigation-settings-item">
       <span className="navigation-settings-icon">{item.icon}</span>
-      <span className="navigation-settings-label">{item.label}</span>
-      {required ? <Tag color="blue">固定显示</Tag> : null}
+      <span className="navigation-settings-label">{t(item.labelKey)}</span>
+      {required ? <Tag color="blue">{t("navigation.settings.fixed")}</Tag> : null}
       <Switch
         checked={visible}
         disabled={required || loading || savingKey !== null}
         loading={savingKey === item.key}
         onChange={(checked) => onToggle(item, checked)}
-        aria-label={item.label + "导航入口"}
+        aria-label={t("navigation.settings.switchAria", { name: t(item.labelKey) })}
       />
     </div>
   );
 }
 
 export default function NavigationSettingsCard() {
+  useLocale();
   const { message } = App.useApp();
   const { hiddenKeys, loading } = useNavigationVisibility();
   const [savingKey, setSavingKey] = useState<string | null>(null);
@@ -58,9 +62,9 @@ export default function NavigationSettingsCard() {
     try {
       const saved = await saveNavigationVisibility(nextHidden);
       publishHiddenNavigationKeys(saved.hidden);
-      message.success("导航显示设置已保存");
+      message.success(t("navigation.settings.saved"));
     } catch (error) {
-      message.error(error instanceof Error ? error.message : "保存导航显示设置失败");
+      message.error(error instanceof Error ? error.message : t("navigation.settings.saveFailed"));
     } finally {
       setSavingKey(null);
     }
@@ -77,7 +81,7 @@ export default function NavigationSettingsCard() {
   return (
     <Card
       className="settings-card navigation-settings-card"
-      title="界面与导航"
+      title={t("navigation.settings.title")}
       extra={
         <Button
           size="small"
@@ -85,12 +89,12 @@ export default function NavigationSettingsCard() {
           loading={savingKey === "all"}
           onClick={() => void save([])}
         >
-          恢复默认显示
+          {t("navigation.settings.restore")}
         </Button>
       }
     >
       <Typography.Paragraph type="secondary" className="navigation-settings-intro">
-        隐藏只会移除导航入口，不会删除数据，也不会禁止直接访问对应页面。首页、岗位广场、简历中心、我的资料、投递台和设置始终保留。
+        {t("navigation.settings.intro")}
       </Typography.Paragraph>
       {/* 按 group 分「核心入口 / 我的空间」两块，组内两列网格（窄屏单列）的紧凑布局。 */}
       <LoadingBlock spinning={loading}>
@@ -98,7 +102,7 @@ export default function NavigationSettingsCard() {
           {GROUPS.map((group) => (
             <section key={group} className="navigation-settings-group">
               <Typography.Text type="secondary" className="navigation-settings-group-title">
-                {GROUP_LABELS[group]}
+                {t(GROUP_LABELS[group])}
               </Typography.Text>
               <div className="navigation-settings-grid">
                 {NAVIGATION_ITEMS.filter((item) => item.group === group).map((item) => (
