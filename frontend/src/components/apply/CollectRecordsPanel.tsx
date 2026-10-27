@@ -18,6 +18,8 @@ import PageSkeleton from "../common/PageSkeleton";
 import { TASK_STATUS_META, type ApplyTask } from "../../types";
 import { formatDateTime } from "../../utils/format";
 import CollectResultPanel from "./CollectResultPanel";
+import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 
 /** 采集批次持续累积，一页 20 条走服务端分页（/api/apply/tasks/page）。 */
 const COLLECT_PAGE_SIZE = 20;
@@ -54,9 +56,14 @@ function conditionText(task: ApplyTask): string {
     : [];
   const city = typeof task.config?.city === "string" ? task.config.city : "";
   const parts: string[] = [];
-  if (keywords.length > 0) parts.push(`关键词：${keywords.join("、")}`);
-  if (city.trim()) parts.push(`城市：${city.trim()}`);
-  return parts.length > 0 ? parts.join("；") : "（未记录采集条件）";
+  if (keywords.length > 0) {
+    const joined = keywords.join(t("applyUi.collectRecords.keywordSeparator"));
+    parts.push(t("applyUi.collectRecords.conditionKeywords", { keywords: joined }));
+  }
+  if (city.trim()) parts.push(t("applyUi.collectRecords.conditionCity", { city: city.trim() }));
+  return parts.length > 0
+    ? parts.join(t("applyUi.collectRecords.conditionSeparator"))
+    : t("applyUi.collectRecords.conditionEmpty");
 }
 
 function resultText(task: ApplyTask): string {
@@ -73,21 +80,26 @@ function resultText(task: ApplyTask): string {
     // 补详情模式下 collected/skipped 恒为 0，故 succeeded 即 backfilled、skipped 即 backfill_skipped。
     const backfilled = task.succeeded ?? 0;
     const skipped = task.skipped ?? 0;
-    const parts = [`已补齐 ${backfilled} 条`];
-    if (skipped) parts.push(`跳过 ${skipped} 条`);
-    if (task.failed) parts.push(`失败 ${task.failed} 条`);
-    return parts.join("，");
+    const parts = [t("applyUi.collectRecords.resultBackfilled", { count: backfilled })];
+    if (skipped) parts.push(t("applyUi.collectRecords.resultSkipped", { count: skipped }));
+    if (task.failed) {
+      parts.push(t("applyUi.collectRecords.resultBackfillFailed", { count: task.failed }));
+    }
+    return parts.join(t("applyUi.collectRecords.resultSeparator"));
   }
-  const parts = [`已暂存 ${task.succeeded ?? 0} 个`];
-  if (task.skipped) parts.push(`重复 ${task.skipped} 个`);
+  const parts = [t("applyUi.collectRecords.resultSaved", { count: task.succeeded ?? 0 })];
+  if (task.skipped)
+    parts.push(t("applyUi.collectRecords.resultDuplicate", { count: task.skipped }));
   // 筛选掉的条数也要出现在摘要行里：只写"已暂存 N 个"，用户会以为采到的全都在这儿了。
   const filtered = Number(task.config?.filtered_out) || 0;
-  if (filtered) parts.push(`筛选掉 ${filtered} 个`);
-  if (task.failed) parts.push(`失败 ${task.failed} 个`);
-  return parts.join("，");
+  if (filtered) parts.push(t("applyUi.collectRecords.resultFiltered", { count: filtered }));
+  if (task.failed) parts.push(t("applyUi.collectRecords.resultFailed", { count: task.failed }));
+  return parts.join(t("applyUi.collectRecords.resultSeparator"));
 }
 
 export default function CollectRecordsPanel({ disabled = false, refreshKey = 0 }: Props) {
+  // 本组件用模块级 t()：必须订阅语言变化，否则切语言后摘要行停在旧文案。
+  useLocale();
   const [page, setPage] = useState(1);
   // 服务端分页：total 来自响应的 total 字段，翻页 / refreshKey 变化都重新拉取。
   const { data, loading, error } = useApi(
@@ -102,9 +114,7 @@ export default function CollectRecordsPanel({ disabled = false, refreshKey = 0 }
   if (loading && !data) return <PageSkeleton rows={5} card={false} />;
 
   if (records.length === 0) {
-    return (
-      <EmptyState description="还没有采集记录。到「自动采集」页签设置条件并点「开始采集」，这里就会出现每一次的记录。" />
-    );
+    return <EmptyState description={t("applyUi.collectRecords.empty")} />;
   }
 
   return (
@@ -136,10 +146,12 @@ export default function CollectRecordsPanel({ disabled = false, refreshKey = 0 }
                     （「去求职进度跟进」→ /tracker），那是另一条链路的终点。 */}
                 {!isActiveTaskStatus(record.status) && (
                   <Space size={4} wrap align="center">
-                    <Typography.Text type="secondary">挑选导入之后：</Typography.Text>
+                    <Typography.Text type="secondary">
+                      {t("applyUi.collectRecords.nextStep")}
+                    </Typography.Text>
                     <Link to="/jobs">
                       <Button type="link" size="small" style={{ padding: 0 }}>
-                        查看候选岗位
+                        {t("applyUi.collectRecords.viewJobs")}
                       </Button>
                     </Link>
                   </Space>
@@ -157,7 +169,7 @@ export default function CollectRecordsPanel({ disabled = false, refreshKey = 0 }
           onChange={setPage}
           hideOnSinglePage
           showSizeChanger={false}
-          showTotal={(count) => `共 ${count} 次采集`}
+          showTotal={(count) => t("applyUi.collectRecords.paginationTotal", { count })}
         />
       </div>
     </>
