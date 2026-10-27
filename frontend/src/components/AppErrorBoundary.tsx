@@ -83,11 +83,15 @@ class AppErrorBoundaryImpl extends Component<Props, State> {
     return (
       <Result
         status="500"
-        title={moduleLoadFailed ? "页面代码没能加载完整" : "页面暂时无法显示"}
+        title={
+          moduleLoadFailed
+            ? t("common.errorBoundary.title.moduleLoad")
+            : t("common.errorBoundary.title.generic")
+        }
         subTitle={
           moduleLoadFailed
-            ? "这通常是页面代码没取到（网络抖动、前端开发服务器刚重启，或它缓存了已改名/已移动的文件）。先点「重试」——它会重新取一次；若仍失败，再刷新或重启前端开发服务器（关掉窗口后重新运行 start.cmd）。"
-            : "界面运行时发生异常，请刷新后再试。"
+            ? t("common.errorBoundary.body.moduleLoad")
+            : t("common.errorBoundary.body.generic")
         }
         extra={
           <Space orientation="vertical" size={8} style={{ width: "100%" }}>
@@ -97,13 +101,13 @@ class AppErrorBoundaryImpl extends Component<Props, State> {
               </Button>
             )}
             <Button type={moduleLoadFailed ? "default" : "primary"} onClick={this.reload}>
-              刷新
+              {t("common.action.refresh")}
             </Button>
             {this.state.message && (
               // 把原始报错留在页面上：这类问题以前只能靠猜，一句"运行时异常"提供不了任何线索。
               // 本地单用户工具，报错文本里不含密钥或个人信息。
               <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                原因：{this.state.message}
+                {t("common.errorBoundary.reason", { message: this.state.message })}
               </Typography.Text>
             )}
           </Space>
