@@ -13,18 +13,23 @@
 
 import { RobotOutlined, ToolOutlined } from "@ant-design/icons";
 import { Collapse, Tag, Tooltip, Typography } from "antd";
+import { t, type MessageKey } from "../i18n";
+import { useLocale } from "../i18n/i18nContext";
 import type { RecognitionSource } from "../types";
 
-const SOURCE_HINTS: Record<RecognitionSource, { label: string; color: string; hint: string }> = {
+const SOURCE_HINTS: Record<
+  RecognitionSource,
+  { labelKey: MessageKey; color: string; hintKey: MessageKey }
+> = {
   ai: {
-    label: "AI 识别",
+    labelKey: "componentsMisc.recognitionOutcome.source.ai",
     color: "blue",
-    hint: "由大模型识别，每个字段都校验过能在你给的内容里找到出处；仍请核对后再保存",
+    hintKey: "componentsMisc.recognitionOutcome.hint.ai",
   },
   local: {
-    label: "本地规则",
+    labelKey: "componentsMisc.recognitionOutcome.source.local",
     color: "orange",
-    hint: "未调用大模型，按内置规则匹配得出；准确度低于 AI 识别，请重点核对后再保存",
+    hintKey: "componentsMisc.recognitionOutcome.hint.local",
   },
 };
 
@@ -36,6 +41,7 @@ export default function RecognitionOutcome({
   source?: RecognitionSource | null;
   text?: string;
 }) {
+  useLocale();
   const hint = source ? SOURCE_HINTS[source] : null;
   const recognized = (text ?? "").trim();
   if (!hint && !recognized) return null;
@@ -43,13 +49,13 @@ export default function RecognitionOutcome({
   return (
     <div className="recognition-outcome">
       {hint && (
-        <Tooltip title={hint.hint}>
+        <Tooltip title={t(hint.hintKey)}>
           <Tag
             className="recognition-source-tag"
             color={hint.color}
             icon={source === "ai" ? <RobotOutlined /> : <ToolOutlined />}
           >
-            {hint.label}
+            {t(hint.labelKey)}
           </Tag>
         </Tooltip>
       )}
@@ -61,7 +67,7 @@ export default function RecognitionOutcome({
           items={[
             {
               key: "recognized",
-              label: "查看模型识别到的原文（请对照截图核对）",
+              label: t("componentsMisc.recognitionOutcome.recognizedText"),
               children: (
                 <Typography.Paragraph className="recognized-text-body">
                   {recognized}
