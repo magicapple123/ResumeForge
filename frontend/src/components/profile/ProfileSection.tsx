@@ -6,6 +6,8 @@ import type { FormListFieldData, FormListOperation } from "antd";
 import { useCallback } from "react";
 import type { ReactNode } from "react";
 import { useProfileItemListDrag } from "./useProfileItemListDrag";
+import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 
 type ProfileListItem = Record<string, unknown>;
 
@@ -38,6 +40,8 @@ function ProfileListBody({
   renderRow,
   itemLabel,
 }: ProfileListBodyProps) {
+  // 本组件用模块级 t()：必须订阅语言变化，否则切语言后这一块不重渲染。
+  useLocale();
   const form = Form.useFormInstance();
   /**
    * 拖拽排序（useProfileItemListDrag）：pointerdown 只记起点不改布局，越过阈值才
@@ -57,7 +61,9 @@ function ProfileListBody({
         {fields.map((field, index) => {
           // 提示标签随当前值实时取（旧实现把它缓存在排序模式里，只有拖拽才需要）。
           const values = (form.getFieldValue(fieldName) as ProfileListItem[] | undefined) ?? [];
-          const label = itemLabel?.(values[index] ?? {}, index) || `第 ${index + 1} 项`;
+          const label =
+            itemLabel?.(values[index] ?? {}, index) ||
+            t("profileLibrary.entry.untitled", { index: index + 1 });
           // 视觉身份用稳定的 field.key：Form.List move 会改 field.name，用下标比对
           // 会让被拖条目在第一次实时重排后就丢掉抬起样式。
           const isDragging = draggingIndex?.key === field.key;
@@ -68,11 +74,11 @@ function ProfileListBody({
               className={`profile-list-item${isDragging ? " is-dragging" : ""}`}
             >
               {editable && (
-                <Tooltip title={`拖动调整${label}顺序`}>
+                <Tooltip title={t("profileUi.entry.drag", { label })}>
                   <button
                     type="button"
                     className="profile-list-item-drag-handle"
-                    aria-label={`拖动调整${label}顺序`}
+                    aria-label={t("profileUi.entry.drag", { label })}
                     onPointerDown={(event) => handleItemPointerDown(event, field.name, field.key)}
                     onKeyDown={(event) => {
                       if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return;
@@ -87,12 +93,12 @@ function ProfileListBody({
                   </button>
                 </Tooltip>
               )}
-              <Tooltip title={`删除${label}`}>
+              <Tooltip title={t("profileUi.entry.delete", { label })}>
                 <Button
                   type="text"
                   danger
                   size="small"
-                  aria-label={`删除${label}`}
+                  aria-label={t("profileUi.entry.delete", { label })}
                   icon={<DeleteOutlined />}
                   disabled={!editable}
                   className="profile-list-item-delete"
@@ -105,7 +111,7 @@ function ProfileListBody({
         })}
       </div>
       <Button type="dashed" block icon={<PlusOutlined />} disabled={!editable} onClick={handleAdd}>
-        添加一条
+        {t("profileLibrary.section.addEntry")}
       </Button>
     </>
   );
