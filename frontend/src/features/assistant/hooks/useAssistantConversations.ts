@@ -14,6 +14,7 @@ import {
   updateAssistantConversation,
 } from "../../../api/assistant";
 import { useApi } from "../../../hooks/useApi";
+import { t } from "../../../i18n";
 import { hasShownAssistantWelcome, markAssistantWelcomeShown } from "../welcomeGate";
 import type {
   AssistantConversationBrief,
@@ -135,7 +136,12 @@ export function useAssistantConversations({ message, surface = "page" }: Options
         return { invalidated: false, detail: next };
       } catch (error) {
         const invalidated = requestId !== detailRequestRef.current;
-        if (!invalidated) message.error(error instanceof Error ? error.message : "加载对话失败");
+        if (!invalidated)
+          message.error(
+            error instanceof Error
+              ? error.message
+              : t("assistantHooks.conversations.error.loadDetail"),
+          );
         return { invalidated, detail: null };
       }
     },
@@ -187,7 +193,11 @@ export function useAssistantConversations({ message, surface = "page" }: Options
           : prev,
       );
     } catch (error) {
-      message.error(error instanceof Error ? error.message : "加载更早的消息失败");
+      message.error(
+        error instanceof Error
+          ? error.message
+          : t("assistantHooks.conversations.error.loadEarlier"),
+      );
     } finally {
       setEarlierLoading(false);
     }
@@ -204,7 +214,9 @@ export function useAssistantConversations({ message, surface = "page" }: Options
       await reloadConversations();
       return created.id;
     } catch (error) {
-      message.error(error instanceof Error ? error.message : "创建对话失败");
+      message.error(
+        error instanceof Error ? error.message : t("assistantHooks.conversations.error.create"),
+      );
       return null;
     }
   }, [message, reloadConversations, selectConversation, surface]);
@@ -230,7 +242,11 @@ export function useAssistantConversations({ message, surface = "page" }: Options
       await loadDetail(created.id);
       await reloadConversations();
     } catch (error) {
-      message.error(error instanceof Error ? error.message : "创建引导对话失败");
+      message.error(
+        error instanceof Error
+          ? error.message
+          : t("assistantHooks.conversations.error.createWelcome"),
+      );
     }
   }, [loadDetail, message, reloadConversations, selectConversation, surface]);
 
@@ -252,7 +268,9 @@ export function useAssistantConversations({ message, surface = "page" }: Options
         await reloadConversations();
         return true;
       } catch (error) {
-        message.error(error instanceof Error ? error.message : "删除对话失败");
+        message.error(
+          error instanceof Error ? error.message : t("assistantHooks.conversations.error.delete"),
+        );
         return false;
       }
     },
@@ -263,7 +281,7 @@ export function useAssistantConversations({ message, surface = "page" }: Options
     async (id: number, nextTitle: string) => {
       const title = nextTitle.trim();
       if (!title) {
-        message.warning("对话标题不能为空");
+        message.warning(t("assistantHooks.conversations.warning.emptyTitle"));
         return;
       }
       try {
@@ -276,7 +294,9 @@ export function useAssistantConversations({ message, surface = "page" }: Options
         );
         await reloadConversations();
       } catch (error) {
-        message.error(error instanceof Error ? error.message : "重命名失败");
+        message.error(
+          error instanceof Error ? error.message : t("assistantHooks.conversations.error.rename"),
+        );
       }
     },
     [message, reloadConversations, surface],
@@ -293,7 +313,9 @@ export function useAssistantConversations({ message, surface = "page" }: Options
         await reloadConversations();
         return updated;
       } catch (error) {
-        message.error(error instanceof Error ? error.message : "更新会话失败");
+        message.error(
+          error instanceof Error ? error.message : t("assistantHooks.conversations.error.update"),
+        );
         return null;
       }
     },
@@ -317,7 +339,9 @@ export function useAssistantConversations({ message, surface = "page" }: Options
       try {
         const forkPayload = {
           message_limit: 10,
-          title: `${(conversations ?? []).find((item) => item.id === id)?.title ?? ""}（续）`,
+          title: `${(conversations ?? []).find((item) => item.id === id)?.title ?? ""}${t(
+            "assistantHooks.conversations.forkTitleSuffix",
+          )}`,
         };
         const created =
           surface === "page"
@@ -328,7 +352,9 @@ export function useAssistantConversations({ message, surface = "page" }: Options
         await reloadConversations();
         return created.id;
       } catch (error) {
-        message.error(error instanceof Error ? error.message : "在新对话中继续失败");
+        message.error(
+          error instanceof Error ? error.message : t("assistantHooks.conversations.error.fork"),
+        );
         return null;
       }
     },
