@@ -8,6 +8,8 @@
  * 身份只在两处变化：启动时取一次，以及用户**显式**切数据集时重新同步
  * （`useSettingsDatasets.switchDataset` 的 409 重试）。
  */
+import { t } from "../i18n";
+
 let scopeToken: string | null = null;
 
 export function datasetScopeHeaders(input?: HeadersInit): Headers {
@@ -29,11 +31,12 @@ export async function initializeDatasetScope(signal?: AbortSignal): Promise<void
       signal: controller.signal,
       cache: "no-store",
     });
-    if (!response.ok) throw new Error("无法确认当前数据集，请检查本地服务后刷新页面");
+    if (!response.ok) throw new Error(t("apiErrors.datasetScope.confirmFailed"));
     const data = (await response.json()) as { scope?: unknown };
     if (controller.signal.aborted) throw new DOMException("Cancelled", "AbortError");
     const value = response.headers.get("X-Dataset-Scope") ?? data.scope;
     if (typeof value !== "string" || !value)
+      // i18n-ok: datasetScope.test.ts 的 rejects.toThrow("数据集身份") 钉住这条启动期契约，保持原文
       throw new Error("本地服务未返回数据集身份，请刷新页面");
     scopeToken = value;
   } finally {
