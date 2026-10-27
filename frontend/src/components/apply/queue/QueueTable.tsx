@@ -4,6 +4,9 @@
  * （自 ApplyQueuePanel 拆出：columns/rowSelection/<Table>/右键菜单三段整体搬，
  * contextMenu state 随唯一消费者下沉进本组件；rowMenuItems 经 prop 传入；
  * aria-label/类名/定宽注释逐字随迁，行为等价。）
+ *
+ * 状态标签的展示名仍来自 `QUEUE_STATUS_META`（`types` 层的协议值展示表，本批不动），
+ * 列头、空值兜底、提示与 aria-label 走 applyQueue 包。
  */
 import { MoreOutlined } from "@ant-design/icons";
 import { Button, Dropdown, Menu, Space, Table, Tag, Tooltip, Typography } from "antd";
@@ -11,6 +14,8 @@ import type { MenuProps } from "antd";
 import type { TableColumnsType } from "antd";
 import type { TableRowSelection } from "antd/es/table/interface";
 import { useEffect, useRef, useState } from "react";
+import { t } from "../../../i18n";
+import { useLocale } from "../../../i18n/i18nContext";
 import type { ApplyQueueItem } from "../../../types";
 import { QUEUE_STATUS_META } from "../../../types";
 import { formatDateTime } from "../../../utils/format";
@@ -31,6 +36,8 @@ export function QueueTable({
   setDetail: (item: ApplyQueueItem) => void;
   rowMenuItems: (record: ApplyQueueItem) => MenuProps["items"];
 }) {
+  // 本组件用模块级 t()：必须订阅语言变化，否则切语言后列头停在旧文案。
+  useLocale();
   // 右键菜单：记录鼠标位置与目标行，用定位式 Menu 渲染（避免把 <tr> 包进 Dropdown 造成行重建竞态）。
   const [contextMenu, setContextMenu] = useState<{
     x: number;
@@ -64,7 +71,7 @@ export function QueueTable({
    */
   const columns: TableColumnsType<ApplyQueueItem> = [
     {
-      title: "岗位",
+      title: t("applyQueue.column.job"),
       dataIndex: "job_title",
       width: 220,
       render: (title: string, item) => (
@@ -72,14 +79,18 @@ export function QueueTable({
         // 标签有自己的提示，两层 Tooltip 叠在同一个触发区上会同时弹出两句
         // （2026-10-25 用户截图：鼠标悬停时提示叠在一起）。
         <Space orientation="vertical" size={0} style={{ width: "100%" }}>
-          <Tooltip title={`加入队列于 ${formatDateTime(item.created_at)}`}>
+          <Tooltip
+            title={t("applyQueue.table.joinedAt", { time: formatDateTime(item.created_at) })}
+          >
             <Button
               type="link"
               className="table-text-link"
               onClick={() => setDetail(item)}
-              aria-label={`查看队列条目详情：${title || "岗位已删除"}`}
+              aria-label={t("applyQueue.table.viewDetailAria", {
+                title: title || t("applyQueue.table.deletedJobShort"),
+              })}
             >
-              {title || "（岗位已删除）"}
+              {title || t("applyQueue.detail.deletedJob")}
             </Button>
           </Tooltip>
           <Space size={4} wrap>
@@ -90,9 +101,9 @@ export function QueueTable({
             )}
             {item.apply_supported === false && (
               // 和岗位广场上的「采集 / 手动」同一个位置放来源类标签：用户看来源就看这里。
-              <Tooltip title="来源不在投递台支持的招聘网站内，无法自动投递；移出队列或到原网站自行投递">
+              <Tooltip title={t("applyQueue.table.unsupportedHint")}>
                 <Tag color="red" style={{ marginInlineEnd: 0 }}>
-                  来源不支持
+                  {t("applyQueue.table.unsupportedTag")}
                 </Tag>
               </Tooltip>
             )}
@@ -101,13 +112,13 @@ export function QueueTable({
       ),
     },
     {
-      title: "准入",
+      title: t("applyQueue.column.admission"),
       key: "admission",
       width: 140,
       render: (_, item) => <AdmissionTag item={item} />,
     },
     {
-      title: "状态",
+      title: t("applyQueue.column.status"),
       dataIndex: "status",
       width: 96,
       align: "center",
@@ -117,25 +128,28 @@ export function QueueTable({
       },
     },
     {
-      title: "简历 / 招呼语",
+      title: t("applyQueue.column.assets"),
       key: "assets",
       width: 260,
       render: (_, item) => (
         <Space orientation="vertical" size={0} style={{ width: "100%" }}>
           <Typography.Text
             type="secondary"
-            ellipsis={{ tooltip: item.resume_title || "按默认规则解析" }}
+            ellipsis={{ tooltip: item.resume_title || t("applyQueue.detail.defaultResume") }}
           >
-            {item.resume_title || "按默认规则解析"}
+            {item.resume_title || t("applyQueue.detail.defaultResume")}
           </Typography.Text>
-          <Typography.Text type="secondary" ellipsis={{ tooltip: item.greeting || "默认招呼语" }}>
-            {item.greeting || "默认招呼语"}
+          <Typography.Text
+            type="secondary"
+            ellipsis={{ tooltip: item.greeting || t("applyQueue.detail.defaultGreeting") }}
+          >
+            {item.greeting || t("applyQueue.detail.defaultGreeting")}
           </Typography.Text>
         </Space>
       ),
     },
     {
-      title: "操作",
+      title: t("applyQueue.column.actions"),
       key: "actions",
       width: 64,
       // 表头与单元格一起右对齐：否则「操作」两字靠左、按钮靠右，看起来像没对齐（用户反馈过）。
@@ -148,7 +162,7 @@ export function QueueTable({
           <Dropdown trigger={["click"]} menu={{ items: rowMenuItems(item) }}>
             <Button
               size="small"
-              aria-label={`更多操作 ${item.job_title}`}
+              aria-label={t("applyQueue.table.moreActionsAria", { job: item.job_title })}
               icon={<MoreOutlined />}
             />
           </Dropdown>
@@ -180,7 +194,7 @@ export function QueueTable({
           pageSize: 10,
           hideOnSinglePage: true,
           showSizeChanger: true,
-          showTotal: (total) => `共 ${total} 条`,
+          showTotal: (total) => t("applyQueue.table.total", { total }),
         }}
         rowSelection={rowSelection}
         tableLayout="fixed"
