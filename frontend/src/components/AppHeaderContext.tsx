@@ -43,6 +43,16 @@ import DatasetCreateModal from "./DatasetCreateModal";
 /** 下拉菜单里「新建数据集…」的 key：与数据集 id 不可能冲突。 */
 const CREATE_DATASET_KEY = "create-dataset";
 
+/**
+ * 切换失败的展示内容：后端原文原样透传，没有原文时才用语言包兜底。
+ *
+ * 兜底文案的语言**留到渲染期才定**：事件期调 `t()` 会把当时的语言冻进 state，
+ * 切语言后这行红字不会重译。
+ */
+interface SwitchError {
+  backendMessage?: string;
+}
+
 interface Props {
   /**
    * 渲染在**头像左侧**的插槽（项 1）：目前是「我的空间」入口。
@@ -69,7 +79,7 @@ export default function AppHeaderContext({ beforeAvatar }: Props = {}) {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [ready, setReady] = useState(false);
   const [switchingId, setSwitchingId] = useState<string | null>(null);
-  const [switchError, setSwitchError] = useState("");
+  const [switchError, setSwitchError] = useState<SwitchError | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
   // 数据集下拉的受控开关：快捷键要能把它打开（见 R8 的 switchDataset）。
   const [datasetMenuOpen, setDatasetMenuOpen] = useState(false);
@@ -143,7 +153,7 @@ export default function AppHeaderContext({ beforeAvatar }: Props = {}) {
       const next = datasets.find((item) => item.id === id);
       if (!next) return;
       setSwitchingId(id);
-      setSwitchError("");
+      setSwitchError(null);
       try {
         await activateDataset(id);
         // 先更新页头，用户能立即知道操作已生效；整页重载负责清理各页面的数据缓存。
@@ -152,9 +162,8 @@ export default function AppHeaderContext({ beforeAvatar }: Props = {}) {
         saveActiveDatasetId(next.id);
         scheduleReload();
       } catch (error) {
-        setSwitchError(
-          error instanceof Error ? error.message : t("appHeader.dataset.switchFailed"),
-        );
+        // 只存后端原文（可能是空的）：兜底文案在渲染期取，切语言后才会重译。
+        setSwitchError({ backendMessage: error instanceof Error ? error.message : undefined });
         setSwitchingId(null);
       }
     },
@@ -353,7 +362,11 @@ export default function AppHeaderContext({ beforeAvatar }: Props = {}) {
               {!photo && initial ? initial : undefined}
             </Avatar>
           </button>
-          {switchError ? <span className="app-header-context-error">{switchError}</span> : null}
+          {switchError ? (
+            <span className="app-header-context-error">
+              {switchError.backendMessage ?? t("appHeader.dataset.switchFailed")}
+            </span>
+          ) : null}
         </>
       )}
       <DatasetCreateModal
