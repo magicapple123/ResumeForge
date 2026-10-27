@@ -18,6 +18,7 @@
  */
 import { cancelResumeGenerateTask, getResumeGenerateTask } from "../api/resumes";
 import { ApiError } from "../api/client";
+import { t } from "../i18n";
 import type { ResumeGenerateTask, ResumeGenerateTaskStatus } from "../types";
 import { notifyTaskDone } from "./taskNotify";
 import { isDocumentHidden, onVisibilityChange } from "./visibility";
@@ -194,7 +195,7 @@ function markTaskUnknown(id: number): void {
   tasks.set(id, {
     ...entry,
     unknown: true,
-    message: "任务状态未知：后端可能已重启或记录已被清理",
+    message: t("backgroundTasks.status.unknownDetail"),
   });
   emit();
 }
@@ -235,18 +236,18 @@ function finish(id: number, task: BackgroundTask): void {
     notifyTaskDone({
       // 有界面在看就不要再弹一个居中弹窗打断它；用户已经走了才需要"叫住他"。
       modal: !watchers,
-      title: "简历已生成",
-      description: "已自动保存到简历中心，可以继续微调或导出。",
-      confirmLabel: "知道了",
+      title: t("backgroundTasks.resume.done.title"),
+      description: t("backgroundTasks.resume.done.description"),
+      confirmLabel: t("backgroundTasks.confirm.gotIt"),
     });
   } else if (task.status === "failed") {
     notifyTaskDone({
       kind: "error",
-      title: "简历生成失败",
-      description: task.error || "可以回到简历中心重试。",
+      title: t("backgroundTasks.resume.failed.title"),
+      description: task.error || t("backgroundTasks.resume.failed.description"),
     });
   } else {
-    notifyTaskDone({ kind: "warning", title: "简历生成已取消" });
+    notifyTaskDone({ kind: "warning", title: t("backgroundTasks.resume.cancelled.title") });
   }
   handler?.(task);
 }
@@ -339,7 +340,7 @@ export async function cancelBackgroundTask(id: number): Promise<void> {
   } catch (error) {
     if (error instanceof ApiError && error.status === 404) {
       removeTaskEntry(id);
-      throw new ApiError("任务记录已不存在", 404);
+      throw new ApiError(t("backgroundTasks.error.taskRecordGone"), 404);
     }
     throw error;
   }
@@ -383,16 +384,16 @@ export async function restoreBackgroundTasks(): Promise<void> {
           persistRemoveTask(entry.taskId);
           notifyTaskDone({
             modal: true,
-            title: "简历已生成",
-            description: "刷新前开始的生成任务已完成，简历已自动保存到简历中心。",
-            confirmLabel: "知道了",
+            title: t("backgroundTasks.resume.done.title"),
+            description: t("backgroundTasks.resume.restored.description"),
+            confirmLabel: t("backgroundTasks.confirm.gotIt"),
           });
         } else if (task.status === "failed") {
           persistRemoveTask(entry.taskId);
           notifyTaskDone({
             kind: "error",
-            title: "简历生成失败",
-            description: task.error || "可以回到简历中心重试。",
+            title: t("backgroundTasks.resume.failed.title"),
+            description: task.error || t("backgroundTasks.resume.failed.description"),
           });
         } else if (isTerminal(task.status)) {
           persistRemoveTask(entry.taskId);
