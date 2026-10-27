@@ -23,8 +23,7 @@ import {
 import FormModal from "./common/FormModal";
 import LoadingBlock from "./common/LoadingBlock";
 import { useClientPagination } from "../hooks/useClientPagination";
-import dayjs from "dayjs";
-import type { Dayjs } from "dayjs";
+import dayjs, { type Dayjs } from "dayjs";
 import { useCallback, useEffect, useState } from "react";
 import { createReminder, deleteReminder, listReminders, updateReminder } from "../api/reminders";
 import {
@@ -32,8 +31,8 @@ import {
   useResumeSearchSelect,
   useTrackSearchSelect,
 } from "../hooks/remoteSearchOptions";
-import { REMINDER_KINDS, REMINDER_KIND_LABELS, REMINDER_STATUS_LABELS } from "../types";
-import type { Reminder, ReminderKind, ReminderStatus } from "../types";
+import { REMINDER_KINDS } from "../types";
+import type { Reminder, ReminderKind } from "../types";
 import { formatDateTime } from "../utils/format";
 import { RecordDetailDrawer } from "./common/RecordDetail";
 import { LISTY_ITEM_PADDING_DEFAULT } from "./common/listyPadding";
@@ -43,6 +42,11 @@ import { useBatchSelection } from "../hooks/useBatchSelection";
 import CalendarView from "./tracker/CalendarView";
 import ReminderListItem from "./tracker/ReminderListItem";
 import { t } from "../i18n";
+import {
+  REMINDER_KIND_LABEL_KEYS,
+  reminderKindLabelKey,
+  reminderStatusLabelKey,
+} from "../i18n/enum/reminder";
 import { useLocale } from "../i18n/i18nContext";
 
 interface ReminderForm {
@@ -246,6 +250,10 @@ export default function ReminderPanel() {
     },
   ];
 
+  // 详情抽屉的 Tag：协议值先映到语言包 key；未知取值回退成后端下发的原值（不丢信息）。
+  const detailKindLabelKey = detail ? reminderKindLabelKey(detail.kind) : undefined;
+  const detailStatusLabelKey = detail ? reminderStatusLabelKey(detail.status) : undefined;
+
   return (
     <Space orientation="vertical" style={{ width: "100%" }} size="middle">
       <Card size="small" title={t("reminder.card.title")}>
@@ -258,7 +266,7 @@ export default function ReminderPanel() {
             onChange={setKind}
             options={REMINDER_KINDS.map((value) => ({
               value,
-              label: REMINDER_KIND_LABELS[value],
+              label: t(REMINDER_KIND_LABEL_KEYS[value]),
             }))}
           />
           <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
@@ -366,7 +374,7 @@ export default function ReminderPanel() {
             <Select
               options={REMINDER_KINDS.map((value) => ({
                 value,
-                label: REMINDER_KIND_LABELS[value],
+                label: t(REMINDER_KIND_LABEL_KEYS[value]),
               }))}
             />
           </Form.Item>
@@ -406,7 +414,7 @@ export default function ReminderPanel() {
         tags={
           detail && (
             <Space size={6} wrap>
-              <Tag>{REMINDER_KIND_LABELS[detail.kind as ReminderKind] ?? detail.kind}</Tag>
+              <Tag>{detailKindLabelKey ? t(detailKindLabelKey) : detail.kind}</Tag>
               <Tag
                 color={
                   detail.status === "pending"
@@ -416,7 +424,7 @@ export default function ReminderPanel() {
                       : "default"
                 }
               >
-                {REMINDER_STATUS_LABELS[detail.status as ReminderStatus] ?? detail.status}
+                {detailStatusLabelKey ? t(detailStatusLabelKey) : detail.status}
               </Tag>
             </Space>
           )
