@@ -83,6 +83,7 @@ import aiPolish from "./zh-CN.aiPolish";
 import bulkEnqueue from "./zh-CN.bulkEnqueue";
 import applySettings from "./zh-CN.applySettings";
 import searchCard from "./zh-CN.searchCard";
+import interviewReview from "./zh-CN.interviewReview";
 
 const namespaces = {
   /** 简历制作台（2026-10-23）。 */
@@ -212,6 +213,8 @@ const namespaces = {
   ...applySettings,
   /** 设置页「联网搜索」卡片（2026-10-27）。 */
   ...searchCard,
+  /** 面试复盘面板（2026-10-27）。 */
+  ...interviewReview,
 } as const;
 
 export default namespaces;

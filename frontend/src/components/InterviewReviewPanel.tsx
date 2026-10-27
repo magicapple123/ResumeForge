@@ -24,6 +24,8 @@ import SuggestionsCard from "./interview/SuggestionsCard";
 import { useApi } from "../hooks/useApi";
 import { useJobSearchSelect, useResumeSearchSelect } from "../hooks/remoteSearchOptions";
 import type { InterviewAnalysis, InterviewOptimizeResult, InterviewReviewRecord } from "../types";
+import { t } from "../i18n";
+import { useLocale } from "../i18n/i18nContext";
 
 interface Props {
   onGoToResume?: () => void;
@@ -41,6 +43,8 @@ export default function InterviewReviewPanel({
   onOpenRecord,
   onCloseRecord,
 }: Props) {
+  // 本组件用模块级 t()：必须订阅语言变化，否则切语言后这一块不重渲染。
+  useLocale();
   const { message } = App.useApp();
   // 岗位 / 简历下拉改为远程搜索（P0-1）：不再由页面预拉"前 100 条"当全量。
   const jobSelect = useJobSearchSelect();
@@ -112,7 +116,7 @@ export default function InterviewReviewPanel({
 
   const analyze = async () => {
     if (!record && !question.trim()) {
-      message.error("请先录入真实被问的问题");
+      message.error(t("interviewReview.error.needQuestion"));
       return;
     }
     setAnalyzing(true);
@@ -127,7 +131,9 @@ export default function InterviewReviewPanel({
       // 分析出思路后自动保存为历史（无需用户手点保存）。
       await persistReview(result, []);
     } catch (error) {
-      message.error(error instanceof Error ? error.message : "分析答题思路失败");
+      message.error(
+        error instanceof Error ? error.message : t("interviewReview.error.analyzeFailed"),
+      );
     } finally {
       setAnalyzing(false);
     }
@@ -152,7 +158,9 @@ export default function InterviewReviewPanel({
       });
       await reviews.reload();
     } catch (error) {
-      message.warning(error instanceof Error ? error.message : "自动保存复盘历史失败");
+      message.warning(
+        error instanceof Error ? error.message : t("interviewReview.error.autoSaveFailed"),
+      );
     } finally {
       setSaving(false);
     }
@@ -165,11 +173,11 @@ export default function InterviewReviewPanel({
 
   const optimize = async () => {
     if (!resumeId) {
-      message.error("请先选择要优化的简历");
+      message.error(t("interviewReview.error.needResume"));
       return;
     }
     if (!viewAnalysis) {
-      message.error("请先分析答题思路");
+      message.error(t("interviewReview.error.needAnalysis"));
       return;
     }
     setOptimizing(true);
@@ -189,11 +197,15 @@ export default function InterviewReviewPanel({
             suggestions: result.suggestions,
           });
         } catch (error) {
-          message.warning(error instanceof Error ? error.message : "建议已生成，但写回历史失败");
+          message.warning(
+            error instanceof Error ? error.message : t("interviewReview.error.writeBackFailed"),
+          );
         }
       }
     } catch (error) {
-      message.error(error instanceof Error ? error.message : "反向优化失败");
+      message.error(
+        error instanceof Error ? error.message : t("interviewReview.error.optimizeFailed"),
+      );
     } finally {
       setOptimizing(false);
     }
@@ -202,10 +214,12 @@ export default function InterviewReviewPanel({
   const removeReview = async (id: number) => {
     try {
       await deleteReview(id);
-      message.success("已删除复盘历史");
+      message.success(t("interviewReview.deleted"));
       await reviews.reload();
     } catch (error) {
-      message.error(error instanceof Error ? error.message : "删除复盘历史失败");
+      message.error(
+        error instanceof Error ? error.message : t("interviewReview.error.deleteFailed"),
+      );
     }
   };
 
@@ -215,11 +229,15 @@ export default function InterviewReviewPanel({
         <Alert
           type="info"
           showIcon
-          title={`正在查看历史复盘 #${record.id}（${record.created_at.replace("T", " ").slice(0, 16)}）`}
+          title={t("interviewReview.alert.viewing", {
+            id: record.id,
+            // 格式化逻辑留在代码里：`{time}` 只接格式化后的结果。
+            time: record.created_at.replace("T", " ").slice(0, 16),
+          })}
           action={
             onCloseRecord && (
               <Button size="small" onClick={onCloseRecord}>
-                返回
+                {t("common.action.back")}
               </Button>
             )
           }
@@ -227,19 +245,19 @@ export default function InterviewReviewPanel({
       )}
 
       {!record && (
-        <Card size="small" title="面试复盘">
+        <Card size="small" title={t("interviewReview.card.setup")}>
           <Space orientation="vertical" style={{ width: "100%" }} size={8}>
             <Input.TextArea
               value={question}
               autoSize={{ minRows: 2, maxRows: 4 }}
-              placeholder="录入面试里真实被问的问题，例如：你这个项目的难点是怎么解决的？"
+              placeholder={t("interviewReview.placeholder.question")}
               onChange={(event) => setQuestion(event.target.value)}
             />
             <Space wrap>
               <Select
                 allowClear
                 style={{ minWidth: 220 }}
-                placeholder="关联岗位（选填，输入关键词搜索）"
+                placeholder={t("interviewReview.placeholder.job")}
                 value={jobId}
                 onChange={setJobId}
                 {...jobSelect.selectProps}
@@ -247,7 +265,7 @@ export default function InterviewReviewPanel({
               <Select
                 allowClear
                 style={{ minWidth: 220 }}
-                placeholder="关联简历（反向优化必选，输入关键词搜索）"
+                placeholder={t("interviewReview.placeholder.resume")}
                 value={resumeId}
                 onChange={setResumeId}
                 {...resumeSelect.selectProps}
@@ -258,7 +276,7 @@ export default function InterviewReviewPanel({
                 loading={analyzing}
                 onClick={() => void analyze()}
               >
-                分析答题思路
+                {t("interviewReview.action.analyze")}
               </Button>
             </Space>
           </Space>
@@ -266,11 +284,11 @@ export default function InterviewReviewPanel({
       )}
 
       {viewAnalysis ? (
-        <Card size="small" title="答题思路">
+        <Card size="small" title={t("interviewReview.card.analysis")}>
           <Typography.Paragraph strong>{viewAnalysis.framework}</Typography.Paragraph>
           {viewAnalysis.key_points.length > 0 && (
             <>
-              <Typography.Text strong>要点</Typography.Text>
+              <Typography.Text strong>{t("interviewReview.section.keyPoints")}</Typography.Text>
               <ul>
                 {viewAnalysis.key_points.map((item) => (
                   <li key={item}>{item}</li>
@@ -280,7 +298,7 @@ export default function InterviewReviewPanel({
           )}
           {viewAnalysis.follow_up.length > 0 && (
             <>
-              <Typography.Text strong>可能的追问</Typography.Text>
+              <Typography.Text strong>{t("interviewReview.section.followUp")}</Typography.Text>
               <ul>
                 {viewAnalysis.follow_up.map((item) => (
                   <li key={item}>{item}</li>
@@ -290,7 +308,7 @@ export default function InterviewReviewPanel({
           )}
           {viewAnalysis.pitfalls.length > 0 && (
             <>
-              <Typography.Text strong>常见误区</Typography.Text>
+              <Typography.Text strong>{t("interviewReview.section.pitfalls")}</Typography.Text>
               <ul>
                 {viewAnalysis.pitfalls.map((item) => (
                   <li key={item}>{item}</li>
@@ -303,7 +321,7 @@ export default function InterviewReviewPanel({
               <Select
                 allowClear
                 style={{ minWidth: 220 }}
-                placeholder="关联简历（反向优化必选，输入关键词搜索）"
+                placeholder={t("interviewReview.placeholder.resume")}
                 value={resumeId}
                 onChange={setResumeId}
                 {...resumeSelect.selectProps}
@@ -314,7 +332,7 @@ export default function InterviewReviewPanel({
               loading={optimizing}
               onClick={() => void optimize()}
             >
-              反向优化简历
+              {t("interviewReview.action.optimize")}
             </Button>
             {!record && (
               <Button
@@ -322,23 +340,23 @@ export default function InterviewReviewPanel({
                 loading={saving}
                 onClick={() => void saveReviewRecord()}
               >
-                保存复盘
+                {t("interviewReview.action.save")}
               </Button>
             )}
-            <Typography.Text type="secondary">只产出建议列表，不直接改简历正文。</Typography.Text>
+            <Typography.Text type="secondary">{t("interviewReview.optimize.note")}</Typography.Text>
           </Space>
         </Card>
       ) : (
-        !record && <EmptyState description="录入问题后，先分析答题思路" />
+        !record && <EmptyState description={t("interviewReview.empty")} />
       )}
 
       {legacyText ? (
-        <Card size="small" title="历史复盘">
+        <Card size="small" title={t("interviewReview.card.legacy")}>
           <Alert
             type="warning"
             showIcon
-            title="此为旧版记录，仅可查看"
-            description="旧版历史以纯文本保存，无法还原为结构化复盘，仅展示原始内容。"
+            title={t("interviewReview.legacy.title")}
+            description={t("interviewReview.legacy.body")}
           />
           <Typography.Paragraph style={{ marginTop: 8, whiteSpace: "pre-wrap" }}>
             {legacyText}

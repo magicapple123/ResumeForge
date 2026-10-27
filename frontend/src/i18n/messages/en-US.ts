@@ -75,6 +75,7 @@ import aiPolish from "./en-US.aiPolish";
 import bulkEnqueue from "./en-US.bulkEnqueue";
 import applySettings from "./en-US.applySettings";
 import searchCard from "./en-US.searchCard";
+import interviewReview from "./en-US.interviewReview";
 
 const enUS = {
   ...core,
@@ -151,6 +152,7 @@ const enUS = {
   ...bulkEnqueue,
   ...applySettings,
   ...searchCard,
+  ...interviewReview,
 } as const satisfies Record<keyof ZhCNMessages, string>;
 
 export default enUS;
