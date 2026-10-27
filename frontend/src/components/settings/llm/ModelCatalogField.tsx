@@ -4,6 +4,8 @@ import { Alert, Button, Form, Input, Space } from "antd";
 import type { FormInstance } from "antd";
 import { useLayoutEffect, useRef, useState } from "react";
 import type { RecordFormValues } from "../../../features/settings/useLLMRecordTools";
+import { t } from "../../../i18n";
+import { useLocale } from "../../../i18n/i18nContext";
 import type { LLMModelsResult } from "../../../types";
 import { ModelPickerModal } from "./ModelPickerModal";
 
@@ -34,6 +36,7 @@ export default function ModelCatalogField({
   onFetchModels,
   onModelChange,
 }: Props) {
+  useLocale();
   const baseUrl = Form.useWatch("base_url", form) ?? "";
   const apiKey = Form.useWatch("api_key", form) ?? "";
   const fingerprint = JSON.stringify([open, requestScope, baseUrl, apiKey]);
@@ -73,7 +76,7 @@ export default function ModelCatalogField({
       failed: false,
     };
     if (!String(form.getFieldValue("base_url") ?? "").trim()) {
-      setState({ ...initial, failed: true, message: "请先填写 Base URL，再获取可用模型" });
+      setState({ ...initial, failed: true, message: t("llmUi.catalog.error.baseUrlRequired") });
       form.scrollToField("base_url", { focus: true });
       return;
     }
@@ -98,8 +101,8 @@ export default function ModelCatalogField({
         message:
           result.message ||
           (hasModels
-            ? `获取到 ${models.length} 个模型`
-            : "没有获取到可用模型，请检查 Base URL 与 API Key 后重试；也可以手动填写模型名。"),
+            ? t("llmUi.catalog.message.fetched", { count: models.length })
+            : t("llmUi.catalog.message.empty")),
       });
     } catch (error) {
       if (
@@ -111,7 +114,7 @@ export default function ModelCatalogField({
       setState({
         ...initial,
         failed: true,
-        message: error instanceof Error ? error.message : "获取模型列表失败，请重试",
+        message: error instanceof Error ? error.message : t("llmUi.catalog.error.fetchFailed"),
       });
     } finally {
       if (pendingRequest.current === request) pendingRequest.current = null;
@@ -121,15 +124,19 @@ export default function ModelCatalogField({
   return (
     <>
       <Form.Item
-        label="模型名称"
+        label={t("llmUi.catalog.field.model")}
         htmlFor="llm-record-model"
-        tooltip="按当前账号获取可用模型，也可以照服务商文档手动填写模型名"
+        tooltip={t("llmUi.catalog.tooltip.model")}
       >
         <Space.Compact block>
-          <Form.Item name="model" noStyle rules={[{ required: true, message: "必填" }]}>
+          <Form.Item
+            name="model"
+            noStyle
+            rules={[{ required: true, message: t("llmUi.catalog.validation.required") }]}
+          >
             <Input
               id="llm-record-model"
-              aria-label="模型名称"
+              aria-label={t("llmUi.catalog.field.model")}
               placeholder="deepseek-flash"
               style={{ minWidth: 0, flex: 1 }}
             />
@@ -141,7 +148,7 @@ export default function ModelCatalogField({
             style={{ flexShrink: 0 }}
             onClick={() => void fetchModels()}
           >
-            获取可用模型
+            {t("llmUi.catalog.action.fetch")}
           </Button>
         </Space.Compact>
       </Form.Item>
@@ -157,7 +164,7 @@ export default function ModelCatalogField({
               disabled={disabled || current.loading}
               onClick={() => void fetchModels()}
             >
-              重试
+              {t("llmUi.catalog.action.retry")}
             </Button>
           }
         />
