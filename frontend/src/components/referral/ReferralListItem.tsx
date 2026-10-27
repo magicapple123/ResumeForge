@@ -6,13 +6,14 @@
  */
 import { CheckSquareOutlined, DeleteOutlined, EditOutlined, MoreOutlined } from "@ant-design/icons";
 import { Button, Checkbox, Dropdown, Space, Tag, Typography } from "antd";
-import { REFERRAL_STATUS_COLORS, REFERRAL_STATUS_LABELS, referralImageUrl } from "../../types";
+import { REFERRAL_STATUS_COLORS, referralImageUrl } from "../../types";
 import type { Referral, ReferralStatus } from "../../types";
 import { t } from "../../i18n";
+import { referralStatusLabelKey } from "../../i18n/enum/referral";
 import { useLocale } from "../../i18n/i18nContext";
 import { isFromInnerControl } from "../common/recordDetailCore";
 import { ListyItem, ListyMeta } from "../common/ListyItem";
-import { TRASH_RECOVERY_NOTE, useRowActionMenu } from "../common/rowActionMenu";
+import { useRowActionMenu } from "../common/rowActionMenu";
 import { RowContextMenu } from "../common/RowActions";
 
 interface Props {
@@ -42,6 +43,8 @@ export default function ReferralListItem({
 }: Props) {
   // 本文件用模块级 t()：必须订阅语言变化，否则切语言后行内按钮、菜单与 aria 不重渲染。
   useLocale();
+  // 状态 Tag：协议值先映到语言包 key；未知取值回退成后端下发的原值（不丢信息）。
+  const statusLabelKey = referralStatusLabelKey(item.status);
   return (
     <ListyItem
       className="detail-trigger"
@@ -85,8 +88,8 @@ export default function ReferralListItem({
                       danger: true,
                       icon: <DeleteOutlined />,
                       confirm: t("referralUi.list.confirm.deleteTitle"),
-                      // 复用共用的回收站说明（common/rowActionMenu.ts 的 i18n-ok 常量），保持唯一出处。
-                      confirmBody: TRASH_RECOVERY_NOTE,
+                      // 复用共用的回收站说明（common.note.trashRecovery），保持唯一出处。
+                      confirmBody: t("common.note.trashRecovery"),
                       onClick: onDelete,
                     },
                   ]),
@@ -128,7 +131,7 @@ export default function ReferralListItem({
                   {item.position ? ` · ${item.position}` : ""}
                 </span>
                 <Tag color={REFERRAL_STATUS_COLORS[item.status as ReferralStatus] ?? "default"}>
-                  {REFERRAL_STATUS_LABELS[item.status as ReferralStatus] ?? item.status}
+                  {statusLabelKey ? t(statusLabelKey) : item.status}
                 </Tag>
                 {item.converted && <Tag color="green">{t("referralUi.list.tag.converted")}</Tag>}
               </Space>
