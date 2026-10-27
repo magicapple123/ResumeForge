@@ -13,6 +13,7 @@
  * 「打开手动调整」都留在原位。
  */
 import { Alert, Button, Space, Typography } from "antd";
+import { useI18n } from "../../i18n/i18nContext";
 import type { ResumeCoverageNote } from "../../types";
 
 interface Props {
@@ -32,34 +33,43 @@ export default function ResumeCoverageNotes({
   onRevise,
   onOpenEditor,
 }: Props) {
+  const { t } = useI18n();
   // 两类数据都空时整块不渲染：空壳会在每份简历的弹窗里多出一条什么都没有的提示条。
   if (notes.length === 0 && legacyWarnings.length === 0) return null;
 
   /** 一句话把这条分区清单变成"只补这些、其余不动"的修订指令。 */
   const reviseInstructions = (note: ResumeCoverageNote): string =>
+    // i18n-ok: 喂给模型的修订指令（作为 prompt 保持中文，初值会带进修订弹窗）
     `请把资料中的以下内容补进这份简历的${note.section_label}（只新增这些内容，其余部分保持不变）：` +
-    note.names.map((name) => `「${name}」`).join("、") +
-    "。补充时使用这些条目在个人资料中的原文事实，不要虚构细节。";
+    note.names.map((name) => `「${name}」`).join("、") + // i18n-ok: 同上，模型 prompt 里的中文引号与顿号
+    "。补充时使用这些条目在个人资料中的原文事实，不要虚构细节。"; // i18n-ok: 同上，模型 prompt
+
+  /** 把多个资料名排成一行：引号与分隔符随界面语言（提示块正文用）。 */
+  const formatNames = (names: string[]): string =>
+    names
+      .map((name) => t("resume.coverage.item", { name }))
+      .join(t("resume.coverage.itemSeparator"));
 
   return (
     <Alert
       type="info"
       showIcon
       style={{ marginBottom: 12 }}
-      title="这些资料内容没有写进这份简历"
+      title={t("resume.coverage.title")}
       description={
         <div style={{ display: "grid", gap: 10 }}>
           <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-            这是岗位导向筛选的正常结果：与岗位关键词交集不足的内容不会进入生成，资料本身没有任何丢失。
+            {t("resume.coverage.intro")}
           </Typography.Text>
           {notes.map((note) => (
             <div key={note.section}>
               <Typography.Text strong style={{ fontSize: 13 }}>
-                {note.section_label}（{note.total} 条）：
+                {t("resume.coverage.sectionCount", {
+                  label: note.section_label,
+                  count: note.total,
+                })}
               </Typography.Text>
-              <Typography.Text style={{ fontSize: 13 }}>
-                {note.names.map((name) => `「${name}」`).join("、")}
-              </Typography.Text>
+              <Typography.Text style={{ fontSize: 13 }}>{formatNames(note.names)}</Typography.Text>
               <Space size={8} style={{ marginTop: 6 }} wrap>
                 <Button
                   size="small"
@@ -67,7 +77,7 @@ export default function ResumeCoverageNotes({
                   ghost
                   onClick={() => onRevise(reviseInstructions(note))}
                 >
-                  AI 补上这段
+                  {t("resume.coverage.revise")}
                 </Button>
               </Space>
             </div>
@@ -80,7 +90,7 @@ export default function ResumeCoverageNotes({
           {notes.length > 0 && (
             <Space size={8} wrap>
               <Button size="small" onClick={onOpenEditor}>
-                打开手动调整
+                {t("resume.coverage.openEditor")}
               </Button>
             </Space>
           )}
