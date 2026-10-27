@@ -22,6 +22,7 @@
  * - **options 同时暴露**：个别消费方（详情抽屉、生成结果回填）需要按 id 找 label。
  */
 import { useCallback, useEffect, useRef, useState } from "react";
+import { t } from "../i18n";
 
 export interface RemoteSelectOption {
   value: number;
@@ -119,7 +120,9 @@ export function useRemoteSearchSelect({ fetchOptions, fetchById, debounceMs = 30
     onSearch,
     loading,
     options,
-    notFoundContent: loading ? "搜索中…" : "无匹配结果，可输入关键词搜索",
+    notFoundContent: loading
+      ? t("hooksUi.remoteSearch.searching")
+      : t("hooksUi.remoteSearch.empty"),
   } as const;
 
   return { selectProps, options, ensure, reload };
