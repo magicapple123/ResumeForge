@@ -33,6 +33,8 @@ import {
   type JobMatchOut,
   type MatchCondition,
 } from "../types";
+import { t } from "../i18n";
+import { useLocale } from "../i18n/i18nContext";
 
 interface Props {
   job: Job | null;
@@ -56,7 +58,7 @@ const GROUPS: {
 
 function ConditionList({ conditions }: { conditions: MatchCondition[] }) {
   if (conditions.length === 0) {
-    return <EmptyState inline description="暂无条目" />;
+    return <EmptyState inline description={t("jobMatch.empty.none")} />;
   }
   return (
     <ul className="job-match-conditions">
@@ -84,6 +86,7 @@ function ConditionList({ conditions }: { conditions: MatchCondition[] }) {
 }
 
 export default function JobMatchModal({ job, onClose }: Props) {
+  useLocale();
   const { message } = App.useApp();
   const [data, setData] = useState<JobMatchOut | null>(null);
   const [loading, setLoading] = useState(false);
@@ -111,7 +114,7 @@ export default function JobMatchModal({ job, onClose }: Props) {
       if (current === version.current) setData(result);
     } catch (loadError) {
       if (current === version.current) {
-        setError(loadError instanceof Error ? loadError.message : "读取匹配分析失败，请稍后重试");
+        setError(loadError instanceof Error ? loadError.message : t("jobMatch.error.load"));
       }
     } finally {
       if (current === version.current) setLoading(false);
@@ -147,20 +150,22 @@ export default function JobMatchModal({ job, onClose }: Props) {
       // 无论人是否还在弹窗前，完成都走统一出口（通知卡片 + 提醒声）——
       // 用户反馈过"生成完了没有任何提醒"。区别只在文案指路。
       notifyTaskDone({
-        title: "匹配度分析已完成",
+        title: t("jobMatch.toast.doneTitle"),
         description: leftWhileAnalyzing.current
-          ? "回到岗位详情点「匹配度分析」即可看到结论。"
-          : "结论已在本窗口更新。",
+          ? t("jobMatch.toast.doneInDetail")
+          : t("jobMatch.toast.doneHere"),
       });
       if (leftWhileAnalyzing.current) return;
       await load();
     } catch (analyzeError) {
       const detail =
-        analyzeError instanceof Error ? analyzeError.message : "生成匹配分析失败，请稍后重试";
+        analyzeError instanceof Error ? analyzeError.message : t("jobMatch.error.analyze");
       notifyTaskDone({
         kind: "error",
-        title: "匹配度分析失败",
-        description: leftWhileAnalyzing.current ? `${detail}（可回到岗位详情重试）` : detail,
+        title: t("jobMatch.error.title"),
+        description: leftWhileAnalyzing.current
+          ? `${detail}${t("jobMatch.error.retryHint")}`
+          : detail,
       });
       if (leftWhileAnalyzing.current) return;
       setError(detail);
@@ -175,11 +180,13 @@ export default function JobMatchModal({ job, onClose }: Props) {
     setAnalyzing(true);
     try {
       await deleteJobMatch(job.id);
-      message.success("已清除该岗位的匹配结论");
+      message.success(t("jobMatch.toast.cleared"));
       setData(null);
       await load();
     } catch (clearError) {
-      message.error(clearError instanceof Error ? clearError.message : "清除失败");
+      message.error(
+        clearError instanceof Error ? clearError.message : t("jobMatch.error.clearFailed"),
+      );
     } finally {
       setAnalyzing(false);
     }
@@ -196,10 +203,10 @@ export default function JobMatchModal({ job, onClose }: Props) {
         <Space orientation="vertical" size={0}>
           <Space>
             <RobotOutlined />
-            岗位匹配度分析
+            {t("jobMatch.page.title")}
           </Space>
           <Typography.Text type="secondary" className="job-match-subtitle">
-            对照你已保存的个人资料与简历逐条判断（与只读招聘原文的「岗位需求解读」不同）
+            {t("jobMatch.page.subtitle")}
           </Typography.Text>
         </Space>
       }
@@ -221,7 +228,7 @@ export default function JobMatchModal({ job, onClose }: Props) {
           style={{ marginBottom: 12 }}
           action={
             <Button size="small" icon={<ReloadOutlined />} onClick={() => void load()}>
-              重试
+              {t("jobMatch.action.retry")}
             </Button>
           }
         />
@@ -232,7 +239,7 @@ export default function JobMatchModal({ job, onClose }: Props) {
           type="info"
           showIcon
           style={{ marginBottom: 12 }}
-          title="分析期间可以关掉这个窗口去做别的，完成后会弹通知并响一声（只要页面没刷新）。"
+          title={t("jobMatch.hint.background")}
         />
       ) : null}
 
@@ -240,36 +247,32 @@ export default function JobMatchModal({ job, onClose }: Props) {
         <PageSkeleton rows={8} card={false} />
       ) : !hasResult ? (
         <Space orientation="vertical" style={{ width: "100%" }} size={12}>
-          <EmptyState inline description="这个岗位还没有做过匹配分析" />
-          <Typography.Paragraph type="secondary">
-            分析会读取你的个人资料与简历，对每条招聘要求给出「已匹配 / 表达缺口 / 证据不足 /
-            真实缺口 / 待确认」五类结论。未配置大模型时会走本地降级（各条均为「待确认」），
-            不假装做过 AI 比对。
-          </Typography.Paragraph>
+          <EmptyState inline description={t("jobMatch.empty")} />
+          <Typography.Paragraph type="secondary">{t("jobMatch.intro")}</Typography.Paragraph>
           <Button
             type="primary"
             icon={<BulbOutlined />}
             loading={analyzing}
             onClick={() => void analyze()}
           >
-            开始分析
+            {t("jobMatch.action.start")}
           </Button>
         </Space>
       ) : (
         result && (
           <div className="job-match-content">
             <Descriptions size="small" column={2} style={{ marginBottom: 12 }}>
-              <Descriptions.Item label="该岗位">
+              <Descriptions.Item label={t("jobMatch.field.job")}>
                 {data.company ? `${data.company} · ` : ""}
                 {data.job_title}
               </Descriptions.Item>
-              <Descriptions.Item label="分析模型">
-                {data.model || "本地降级（未配置大模型）"}
+              <Descriptions.Item label={t("jobMatch.field.model")}>
+                {data.model || t("jobMatch.model.local")}
               </Descriptions.Item>
-              <Descriptions.Item label="准入结论">
+              <Descriptions.Item label={t("jobMatch.field.verdict")}>
                 {admissionMeta && <Tag color={admissionMeta.color}>{admissionMeta.label}</Tag>}
               </Descriptions.Item>
-              <Descriptions.Item label="硬性门槛">
+              <Descriptions.Item label={t("jobMatch.field.hardGate")}>
                 {hardGateMeta && <Tag color={hardGateMeta.color}>{hardGateMeta.label}</Tag>}
               </Descriptions.Item>
             </Descriptions>
@@ -279,7 +282,7 @@ export default function JobMatchModal({ job, onClose }: Props) {
                 type="error"
                 showIcon
                 style={{ marginBottom: 12 }}
-                title="存在真实缺口：默认不自动投递，需要你在加入投递台时逐条确认。"
+                title={t("jobMatch.warning.gaps")}
               />
             )}
             {result.admission === "needs_confirm" && (
@@ -287,7 +290,7 @@ export default function JobMatchModal({ job, onClose }: Props) {
                 type="warning"
                 showIcon
                 style={{ marginBottom: 12 }}
-                title="含证据不足或待确认的条目：加入投递台时需要你逐条确认。"
+                title={t("jobMatch.warning.unknown")}
               />
             )}
 
@@ -300,7 +303,7 @@ export default function JobMatchModal({ job, onClose }: Props) {
 
             {result.advice && (
               <>
-                <Typography.Title level={5}>投递建议</Typography.Title>
+                <Typography.Title level={5}>{t("jobMatch.section.advice")}</Typography.Title>
                 <Typography.Paragraph>{result.advice}</Typography.Paragraph>
               </>
             )}
@@ -310,7 +313,7 @@ export default function JobMatchModal({ job, onClose }: Props) {
                 就是在编造一个它没有的判断。 */}
             {data.reference_score && (
               <section className="job-match-score">
-                <Typography.Title level={5}>匹配度参考分</Typography.Title>
+                <Typography.Title level={5}>{t("jobMatch.section.score")}</Typography.Title>
                 <div className="job-match-score-head">
                   <Progress
                     type="circle"
@@ -341,7 +344,7 @@ export default function JobMatchModal({ job, onClose }: Props) {
 
             {result.notes.length > 0 && (
               <>
-                <Typography.Title level={5}>口径说明</Typography.Title>
+                <Typography.Title level={5}>{t("jobMatch.section.scope")}</Typography.Title>
                 <ul className="job-match-notes">
                   {result.notes.map((note) => (
                     <li key={note}>{note}</li>
@@ -352,7 +355,7 @@ export default function JobMatchModal({ job, onClose }: Props) {
 
             <Space wrap style={{ marginTop: 12 }}>
               <Button icon={<ReloadOutlined />} loading={analyzing} onClick={() => void analyze()}>
-                重新分析
+                {t("jobMatch.action.reanalyze")}
               </Button>
               <Button
                 danger
@@ -360,7 +363,7 @@ export default function JobMatchModal({ job, onClose }: Props) {
                 loading={analyzing}
                 onClick={() => void clear()}
               >
-                清除结论
+                {t("jobMatch.action.clear")}
               </Button>
             </Space>
           </div>
