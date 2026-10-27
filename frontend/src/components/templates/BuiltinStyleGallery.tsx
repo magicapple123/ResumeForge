@@ -18,6 +18,8 @@ import { Modal, Skeleton, Typography } from "antd";
 import PageSkeleton from "../common/PageSkeleton";
 import { useEffect, useState } from "react";
 import { previewResumeTemplate } from "../../api/resumes";
+import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 import A4PreviewFrame from "./A4PreviewFrame";
 
 /** 与 A4 保持同比例，避免缩略图把简历"压扁"。 */
@@ -38,6 +40,7 @@ interface Props {
 }
 
 export default function BuiltinStyleGallery({ items }: Props) {
+  useLocale();
   const [previews, setPreviews] = useState<Record<string, string>>({});
   const [opened, setOpened] = useState<BuiltinStyleItem | null>(null);
 
@@ -72,7 +75,7 @@ export default function BuiltinStyleGallery({ items }: Props) {
               type="button"
               key={item.name}
               className="builtin-style-card"
-              aria-label={`预览「${item.label}」样式效果`}
+              aria-label={t("templatesUi.gallery.thumbAria", { label: item.label })}
               onClick={() => setOpened(item)}
             >
               <span
@@ -82,7 +85,7 @@ export default function BuiltinStyleGallery({ items }: Props) {
                 {html ? (
                   <iframe
                     className="builtin-style-frame"
-                    title={`${item.label} 样式缩略图`}
+                    title={t("templatesUi.gallery.thumbTitle", { label: item.label })}
                     aria-hidden="true"
                     tabIndex={-1}
                     sandbox=""
@@ -106,7 +109,11 @@ export default function BuiltinStyleGallery({ items }: Props) {
       </div>
 
       <Modal
-        title={opened ? `内置模板预览 · ${opened.label}` : "内置模板预览"}
+        title={
+          opened
+            ? t("templatesUi.gallery.modalTitleWithLabel", { label: opened.label })
+            : t("templatesUi.gallery.modalTitle")
+        }
         open={!!opened}
         onCancel={() => setOpened(null)}
         footer={null}
@@ -120,7 +127,7 @@ export default function BuiltinStyleGallery({ items }: Props) {
           <Typography.Paragraph type="secondary">{opened.description}</Typography.Paragraph>
         )}
         {openedHtml ? (
-          <A4PreviewFrame html={openedHtml} title="内置模板大图预览" />
+          <A4PreviewFrame html={openedHtml} title={t("templatesUi.gallery.previewTitle")} />
         ) : (
           <div className="template-preview-loading">
             <PageSkeleton rows={6} card={false} />
