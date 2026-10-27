@@ -2,25 +2,26 @@
 /** 设置页「数据」分页的「隐私与数据主权」卡片：把隐私承诺说成用户看得懂的条款。 */
 
 import { Card, Typography } from "antd";
+import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 
 export default function PrivacyCard() {
+  useLocale();
   return (
-    <Card title="隐私与数据主权" className="settings-card">
+    <Card title={t("settingsUi.privacy.title")} className="settings-card">
       <Typography.Paragraph style={{ marginBottom: 12 }}>
-        你的简历、岗位、资料与提醒都保存在<strong>本机</strong>的数据目录里（SQLite 数据库），
-        应用没有账号体系、没有埋点上报，也不会把简历数据上传到任何服务器。
+        {t("settingsUi.privacy.localLead")}
+        <strong>{t("settingsUi.privacy.localStrong")}</strong>
+        {t("settingsUi.privacy.localTail")}
       </Typography.Paragraph>
       <Typography.Paragraph type="secondary" style={{ marginBottom: 12 }}>
-        AI 功能只在你主动调用时，把完成任务所需的内容发送给你自己配置的模型服务商；
-        服务商密钥保存在本机（Windows 上经系统级 DPAPI 加密）。诊断包（见「应用」分页的
-        帮助与诊断）只含脱敏运行事件与日志尾部，不含简历数据与密钥。
+        {t("settingsUi.privacy.ai")}
       </Typography.Paragraph>
       <Typography.Paragraph type="secondary" style={{ marginBottom: 0 }}>
-        <strong>带走数据</strong>：「数据集」卡片「导出」下拉里的「导出全部数据集」可整份导出为 .zip
-        ——数据库、被引用的附件、自定义字体与全局模型配置都在包内；数据目录里若有既没进包、
-        也不属于可重建产物的顶层项，导出后会明确提示「另有 N 项未纳入备份」。
-        <strong>彻底删除</strong>：删除对应数据集即可；想删得干干净净，退出应用后直接删除
-        数据目录（backend/data）即可，卸载不留残余。
+        <strong>{t("settingsUi.privacy.exportStrong")}</strong>
+        {t("settingsUi.privacy.exportBody")}
+        <strong>{t("settingsUi.privacy.deleteStrong")}</strong>
+        {t("settingsUi.privacy.deleteBody")}
       </Typography.Paragraph>
     </Card>
   );
