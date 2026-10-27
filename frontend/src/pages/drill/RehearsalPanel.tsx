@@ -6,25 +6,17 @@ import { useCallback, useEffect, useState } from "react";
 import { listRehearsal, rehearse } from "../../api/drill";
 import { ListyItem } from "../../components/common/ListyItem";
 import { LISTY_ITEM_PADDING_SMALL } from "../../components/common/listyPadding";
-import { t, type MessageKey } from "../../i18n";
+import { t } from "../../i18n";
+import { REHEARSE_KIND_LABEL_KEYS } from "../../i18n/enum/drill";
 import { useLocale } from "../../i18n/i18nContext";
 import type { DrillRehearsalRow, RehearseKind } from "../../types";
 
 /**
- * 复练题型是后端协议值（`variant` / `counterfactual` …），展示名在语言包里。
- * 映射放在这里（协议值 → MessageKey），不改 `types/drill.ts` 的类型层。
+ * 复练题型的展示名在 `i18n/enum/drill.ts`（协议值 → key 的唯一映射）；
+ * 这里只负责"认不出的题型留空"，由调用方回落成协议值。
  */
-const REHEARSE_LABEL_KEYS: Record<RehearseKind, MessageKey> = {
-  variant: "drill.rehearsal.kind.variant",
-  counterfactual: "drill.rehearsal.kind.counterfactual",
-  failure: "drill.rehearsal.kind.failure",
-  evidence: "drill.rehearsal.kind.evidence",
-  compress: "drill.rehearsal.kind.compress",
-};
-
-/** 后端可能给出表外的题型：认不出来就返回空串，由调用方回落到协议值。 */
 function rehearseKindLabel(kind: string): string {
-  const key = REHEARSE_LABEL_KEYS[kind as RehearseKind];
+  const key = REHEARSE_KIND_LABEL_KEYS[kind as RehearseKind];
   return key ? t(key) : "";
 }
 
