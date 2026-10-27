@@ -4,6 +4,8 @@
  * 状态与提交逻辑（confirmRename）留在 ResumesPage，经 props 回传。
  */
 import { Input, Modal } from "antd";
+import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 
 interface Props {
   open: boolean;
@@ -22,11 +24,12 @@ export default function ResumeRenameModal({
   onOk,
   onCancel,
 }: Props) {
+  useLocale();
   return (
     <Modal
-      title="重命名简历"
+      title={t("resumesPage.rename.title")}
       open={open}
-      okText="保存"
+      okText={t("common.action.save")}
       confirmLoading={confirmLoading}
       onCancel={onCancel}
       onOk={onOk}
@@ -34,7 +37,7 @@ export default function ResumeRenameModal({
       <Input
         value={value}
         maxLength={256}
-        placeholder="简历名称"
+        placeholder={t("resumesPage.rename.namePlaceholder")}
         onChange={(event) => onChange(event.target.value)}
       />
     </Modal>
