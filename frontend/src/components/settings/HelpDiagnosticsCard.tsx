@@ -9,6 +9,8 @@ import { useEffect, useState } from "react";
 import { exportDiagnostics, getDiagnosticsPreview } from "../../api/system";
 import type { DiagnosticsPreview } from "../../api/system";
 import { downloadBlob } from "../../utils/download";
+import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 
 export const USER_GROUP_ID = "922830167";
 
@@ -19,6 +21,7 @@ function formatBytes(bytes: number): string {
 }
 
 export default function HelpDiagnosticsCard() {
+  useLocale();
   const { message } = App.useApp();
   const [exporting, setExporting] = useState(false);
   const [preview, setPreview] = useState<DiagnosticsPreview | null>(null);
@@ -42,35 +45,43 @@ export default function HelpDiagnosticsCard() {
     try {
       const { blob, filename } = await exportDiagnostics();
       downloadBlob(blob, filename);
-      message.success("诊断包已导出，里面没有简历数据与密钥");
+      message.success(t("settingsUi.help.exported"));
     } catch (err) {
-      message.error(err instanceof Error ? err.message : "导出诊断包失败");
+      message.error(err instanceof Error ? err.message : t("settingsUi.help.exportFailed"));
     } finally {
       setExporting(false);
     }
   };
 
   return (
-    <Card title="帮助与诊断" className="settings-card">
+    <Card title={t("settingsUi.help.title")} className="settings-card">
       <Typography.Paragraph type="secondary" style={{ marginBottom: 16 }}>
-        遇到问题可以先导出一份诊断包：里面只有脱敏的运行事件、系统信息和近期日志，
-        <strong>不含简历数据与密钥</strong>。把它连同问题描述一起发出来，能省掉大半来回。
+        {t("settingsUi.help.introLead")}
+        <strong>{t("settingsUi.help.introNoResume")}</strong>
+        {t("settingsUi.help.introTail")}
       </Typography.Paragraph>
       <Space orientation="vertical" size={12} style={{ display: "flex" }}>
         <Button type="primary" loading={exporting} onClick={() => void runExport()}>
-          导出诊断包
+          {t("settingsUi.help.export")}
         </Button>
         {preview !== null && (
           <Typography.Text type="secondary" data-testid="diagnostics-preview-summary">
-            {`包内约 ${preview.event_count} 条脱敏事件`}
-            {preview.files.length > 0
-              ? `（${preview.files.map((file) => `${file.name} ${formatBytes(file.bytes)}`).join("、")}）`
-              : ""}
-            ，{preview.note}
+            {t("settingsUi.help.previewSummary", {
+              count: preview.event_count,
+              files:
+                preview.files.length > 0
+                  ? t("settingsUi.help.previewFiles", {
+                      files: preview.files
+                        .map((file) => `${file.name} ${formatBytes(file.bytes)}`)
+                        .join(t("settingsUi.help.previewSeparator")),
+                    })
+                  : "",
+              note: preview.note,
+            })}
           </Typography.Text>
         )}
         <Typography.Text type="secondary">
-          反馈渠道：
+          {t("settingsUi.help.feedbackLead")}
           <Typography.Link
             href="https://github.com/magicapple123/ResumeForge/issues"
             target="_blank"
@@ -78,11 +89,11 @@ export default function HelpDiagnosticsCard() {
           >
             GitHub Issues
           </Typography.Link>
-          ，或加用户群
+          {t("settingsUi.help.feedbackJoin")}
           <Typography.Text copyable style={{ margin: "0 4px" }}>
             {USER_GROUP_ID}
           </Typography.Text>
-          （进群后可直接反馈）。
+          {t("settingsUi.help.feedbackTail")}
         </Typography.Text>
       </Space>
     </Card>
