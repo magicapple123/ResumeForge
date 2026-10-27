@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * 面试深挖页：统计卡、历史列表、状态与批量删除。
+ * Interview deep dive page: stat cards, history list, statuses and batch delete,
+ * plus the start dialog (set the bar, pick claims, question count, feedback mode).
  *
- * 批量删除的确认正文引用 `HARD_DELETE_NOTE`（硬删除的共用常量，与
- * `TRASH_RECOVERY_NOTE` 成对），那一行保持中文，等常量收口时一起改。
+ * The batch delete confirmation body uses `HARD_DELETE_NOTE` (the shared hard-delete
+ * constant, paired with `TRASH_RECOVERY_NOTE`); that line stays Chinese until the two
+ * constants are consolidated.
  */
 const drill = {
   "drill.error.loadRecords": "Could not load records",
@@ -39,6 +41,29 @@ const drill = {
   "drill.action.review": "View retrospective",
   "drill.progress": "{current}/{total} questions",
   "drill.table.total": "{count} total",
+  "drill.startPanel.title": "Deep dive from the fact ledger: set the bar first, then ask",
+  "drill.startPanel.intro.title":
+    "The bar for each question is set **before** you see it, and a fluent answer never loosens it.",
+  "drill.startPanel.intro.description":
+    "A deep dive gives no overall score. It answers one question: can you explain this claim clearly, and where does it still not hold up?",
+  "drill.startPanel.claims.label": "Claims to test",
+  "drill.startPanel.claims.hint": "(leave blank for all confirmed claims)",
+  "drill.startPanel.claims.placeholder": "All confirmed claims",
+  "drill.startPanel.claims.empty":
+    "No confirmed entries in the fact ledger yet. Go to the fact ledger and confirm a few first.",
+  "drill.startPanel.claims.option": "{title} ({level})",
+  "drill.startPanel.maxQuestions.label": "Maximum questions",
+  "drill.startPanel.maxQuestions.option": "{count} questions",
+  "drill.startPanel.feedback.label": "Feedback",
+  "drill.startPanel.feedback.deferred": "Simulation: feedback at the end",
+  "drill.startPanel.feedback.immediate": "Practice: feedback after each question",
+  "drill.startPanel.job.label": "Related job",
+  "drill.startPanel.job.hint": "(optional, to pick questions closer to the job)",
+  "drill.startPanel.job.placeholder": "No job (type keywords to search)",
+  "drill.startPanel.action.open": "Start deep dive",
+  "drill.startPanel.action.start": "Start",
+  "drill.startPanel.toast.started": "The bar is set — get started",
+  "drill.startPanel.error.startFailed": "Could not start the deep dive",
 } as const;
 
 export default drill;

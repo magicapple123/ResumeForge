@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * 面试深挖页：统计卡、历史列表、状态与批量删除。
+ * 面试深挖页：统计卡、历史列表、状态与批量删除，以及开场弹窗（定标准、选主张、题数与反馈方式）。
  *
  * 批量删除的确认正文引用 `HARD_DELETE_NOTE`（硬删除的共用常量，与
  * `TRASH_RECOVERY_NOTE` 成对），那一行保持中文，等常量收口时一起改。
@@ -38,6 +38,28 @@ const drill = {
   "drill.action.review": "看复盘",
   "drill.progress": "{current}/{total} 题",
   "drill.table.total": "共 {count} 场",
+  "drill.startPanel.title": "按事实台账深挖：先定标准，再提问",
+  "drill.startPanel.intro.title":
+    "每道题的评分标准会在你看到问题**之前**定下来，之后不因答得流利而放宽。",
+  "drill.startPanel.intro.description":
+    "深挖不评总分——它回答的是「这条主张我讲不讲得清、哪里还站不住」。",
+  "drill.startPanel.claims.label": "要验证哪些主张",
+  "drill.startPanel.claims.hint": "（留空表示全部已确认的）",
+  "drill.startPanel.claims.placeholder": "全部已确认的主张",
+  "drill.startPanel.claims.empty": "事实台账里还没有「已确认」的条目。先去「事实台账」确认几条。",
+  "drill.startPanel.claims.option": "{title}（{level}）",
+  "drill.startPanel.maxQuestions.label": "最多几道题",
+  "drill.startPanel.maxQuestions.option": "{count} 道",
+  "drill.startPanel.feedback.label": "反馈方式",
+  "drill.startPanel.feedback.deferred": "真实模拟：结束时统一给反馈",
+  "drill.startPanel.feedback.immediate": "训练模式：每题后立刻反馈",
+  "drill.startPanel.job.label": "关联岗位",
+  "drill.startPanel.job.hint": "（可选，用来挑更贴近岗位的问题）",
+  "drill.startPanel.job.placeholder": "不关联（输入关键词搜索）",
+  "drill.startPanel.action.open": "开始深挖",
+  "drill.startPanel.action.start": "开始",
+  "drill.startPanel.toast.started": "评分标准已经定下来，开始吧",
+  "drill.startPanel.error.startFailed": "开场失败",
 } as const;
 
 export default drill;

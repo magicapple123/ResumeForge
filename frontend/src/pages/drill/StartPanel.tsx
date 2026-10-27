@@ -9,10 +9,23 @@ import { createDrillSession } from "../../api/drill";
 import { listClaims } from "../../api/claims";
 import { useApi } from "../../hooks/useApi";
 import { useJobSearchSelect } from "../../hooks/remoteSearchOptions";
+import { t, type MessageKey } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 import type { Claim, DrillSession, FeedbackPolicy } from "../../types";
-import { DRILL_QUESTION_OPTIONS, FEEDBACK_LABELS } from "../../types";
+import { DRILL_QUESTION_OPTIONS } from "../../types";
+
+/**
+ * 反馈策略是协议值，展示名在语言包里。`types/drill.ts` 的 `FEEDBACK_LABELS` 还有别的消费者，
+ * 所以映射放在这里（协议值 → MessageKey），不改类型层。
+ */
+const FEEDBACK_LABEL_KEYS: Record<FeedbackPolicy, MessageKey> = {
+  deferred: "drill.startPanel.feedback.deferred",
+  immediate: "drill.startPanel.feedback.immediate",
+};
 
 export function StartPanel({ onStarted }: { onStarted: (session: DrillSession) => void }) {
+  // 本组件用模块级 t()，必须订阅语言变化，否则切语言后弹窗里的文案不跟着变。
+  useLocale();
   const { message } = App.useApp();
   const [open, setOpen] = useState(false);
   const [claimIds, setClaimIds] = useState<number[]>([]);
@@ -24,6 +37,7 @@ export function StartPanel({ onStarted }: { onStarted: (session: DrillSession) =
   const jobSelect = useJobSearchSelect();
 
   // 只有「已确认」的主张能挖——待确认的本来就还没定稿。
+  // i18n-ok: 「已确认」是提交给后端的协议值（listClaims 的 status 过滤），不是展示文案。
   const claims = useApi<Claim[]>(
     () => listClaims({ status: "已确认" }).then((page) => page.items),
     [],
@@ -49,11 +63,13 @@ export function StartPanel({ onStarted }: { onStarted: (session: DrillSession) =
         max_questions: maxQuestions,
         feedback_policy: policy,
       });
-      message.success("评分标准已经定下来，开始吧");
+      message.success(t("drill.startPanel.toast.started"));
       setOpen(false);
       onStarted(session);
     } catch (error) {
-      message.error(error instanceof Error ? error.message : "开场失败");
+      message.error(
+        error instanceof Error ? error.message : t("drill.startPanel.error.startFailed"),
+      );
     } finally {
       setBusy(false);
     }
@@ -62,18 +78,18 @@ export function StartPanel({ onStarted }: { onStarted: (session: DrillSession) =
   return (
     <>
       <Button type="primary" icon={<ThunderboltOutlined />} onClick={() => setOpen(true)}>
-        开始深挖
+        {t("drill.startPanel.action.open")}
       </Button>
       <Modal
         open={open}
-        title="按事实台账深挖：先定标准，再提问"
+        title={t("drill.startPanel.title")}
         width={640}
         onCancel={() => setOpen(false)}
         footer={
           <Space>
-            <Button onClick={() => setOpen(false)}>取消</Button>
+            <Button onClick={() => setOpen(false)}>{t("common.action.cancel")}</Button>
             <Button type="primary" loading={busy} onClick={() => void start()}>
-              开始
+              {t("drill.startPanel.action.start")}
             </Button>
           </Space>
         }
@@ -82,64 +98,67 @@ export function StartPanel({ onStarted }: { onStarted: (session: DrillSession) =
           <Alert
             type="info"
             showIcon
-            title="每道题的评分标准会在你看到问题**之前**定下来，之后不因答得流利而放宽。"
-            description="深挖不评总分——它回答的是「这条主张我讲不讲得清、哪里还站不住」。"
+            title={t("drill.startPanel.intro.title")}
+            description={t("drill.startPanel.intro.description")}
           />
           <div>
-            <Typography.Text strong>要验证哪些主张</Typography.Text>
-            <Typography.Text type="secondary">（留空表示全部已确认的）</Typography.Text>
+            <Typography.Text strong>{t("drill.startPanel.claims.label")}</Typography.Text>
+            <Typography.Text type="secondary">{t("drill.startPanel.claims.hint")}</Typography.Text>
             {claims.loading ? (
               <PageSkeleton rows={2} card={false} />
             ) : available.length === 0 ? (
-              <EmptyState
-                inline
-                description="事实台账里还没有「已确认」的条目。先去「事实台账」确认几条。"
-              />
+              <EmptyState inline description={t("drill.startPanel.claims.empty")} />
             ) : (
               <Select
                 mode="multiple"
                 allowClear
                 style={{ width: "100%", marginTop: 6 }}
-                placeholder="全部已确认的主张"
+                placeholder={t("drill.startPanel.claims.placeholder")}
                 value={claimIds}
                 onChange={setClaimIds}
                 options={available.map((claim) => ({
                   value: claim.id,
-                  label: `${claim.title || claim.subject}（${claim.responsibility_level}）`,
+                  label: t("drill.startPanel.claims.option", {
+                    title: claim.title || claim.subject,
+                    level: claim.responsibility_level,
+                  }),
                 }))}
               />
             )}
           </div>
           <Space size={12} wrap>
             <div>
-              <Typography.Text strong>最多几道题</Typography.Text>
+              <Typography.Text strong>{t("drill.startPanel.maxQuestions.label")}</Typography.Text>
               <Select
                 style={{ width: 120, marginLeft: 8 }}
                 value={maxQuestions}
                 onChange={setMaxQuestions}
-                options={DRILL_QUESTION_OPTIONS.map((value) => ({ value, label: `${value} 道` }))}
+                options={DRILL_QUESTION_OPTIONS.map((value) => ({
+                  value,
+                  label: t("drill.startPanel.maxQuestions.option", { count: value }),
+                }))}
               />
             </div>
             <div>
-              <Typography.Text strong>反馈方式</Typography.Text>
+              <Typography.Text strong>{t("drill.startPanel.feedback.label")}</Typography.Text>
               <Select
                 style={{ width: 240, marginLeft: 8 }}
                 value={policy}
                 onChange={setPolicy}
                 options={(["deferred", "immediate"] as FeedbackPolicy[]).map((value) => ({
                   value,
-                  label: FEEDBACK_LABELS[value],
+                  label: t(FEEDBACK_LABEL_KEYS[value]),
                 }))}
               />
             </div>
           </Space>
           <div>
-            <Typography.Text strong>关联岗位</Typography.Text>
-            <Typography.Text type="secondary">（可选，用来挑更贴近岗位的问题）</Typography.Text>
+            <Typography.Text strong>{t("drill.startPanel.job.label")}</Typography.Text>
+            <Typography.Text type="secondary">{t("drill.startPanel.job.hint")}</Typography.Text>
             <Select
               allowClear
               style={{ width: "100%", marginTop: 6 }}
-              placeholder="不关联（输入关键词搜索）"
+              placeholder={t("drill.startPanel.job.placeholder")}
               value={jobId}
               onChange={setJobId}
               {...jobSelect.selectProps}
