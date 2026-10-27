@@ -74,9 +74,11 @@
   grid-column: 1 / -1;
 }
 
-/* 「更多字段」「已隐藏 N 个字段」「收起更多字段」这类行内动作占整行。 */
+/* 「更多字段」「已隐藏 N 个字段」「收起更多字段」这类行内动作占整行。
+   上下各留 8px：这些动作行是卡片内容的最后一行，此前贴着卡片下边缘。 */
 .profile-field-grid-actions {
   grid-column: 1 / -1;
+  padding: 8px 0;
 }
 
 /* ===== 资料管理面（组 / 大字段 / 字段）布局补齐 =====
@@ -140,9 +142,14 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  min-height: 44px;
-  padding: 6px 2px;
+  min-height: 52px;
+  padding: 8px 12px;
   border-bottom: 1px solid var(--rf-border-subtle);
+  border-radius: 6px;
+}
+
+.profile-settings-row:hover {
+  background: var(--rf-surface-alt);
 }
 
 .profile-settings-list > .profile-settings-row:last-child {
@@ -160,14 +167,18 @@
 
 .profile-settings-row-title {
   color: var(--rf-text-body);
+  font-size: 14px;
   font-weight: 500;
 }
 
+/* meta（「15 个字段」「1 条记录」「默认方案 / 当前方案」）跟在主标题后面同一行，
+   12px 说明色；不再各占一行（此前 flex-wrap + 无字号差，读起来像三段标题）。 */
 .profile-settings-row-meta {
   color: var(--rf-text-description);
   font-size: 12px;
 }
 
+/* 动作组：固定最小宽度 + 右对齐，三处列表（方案 / 板块 / 字段）共用同一套。 */
 .profile-settings-row-actions {
   display: flex;
   flex: 0 0 auto;
@@ -175,7 +186,10 @@
   align-items: center;
   justify-content: flex-end;
   gap: 4px;
+  min-width: 88px;
 }
+
+/* 行内图标动作与卡片级标题都是「外观」，在 profile-card.css 里（本文件只管摆位）。 */
 
 .profile-settings-add {
   display: flex;
@@ -276,7 +290,7 @@
 
 /* 日期区间：整块不再占满一行——年/月/日 + 「至今」排成一列宽内的紧凑组，
    这样「开始 / 结束」「技能名称 / 熟练度 / 获得日期」才能在同一行收齐。
-   260px 是三个下拉 + 箭头的可用下限；更窄的列（手机 1 列）仍按 100% 自适应。 */
+   260px 是三个下拉 + 箭头的可用上限；更窄的列（手机 1 列）仍按 100% 自适应。 */
 .profile-partial-date-select {
   display: flex;
   flex-wrap: wrap;
@@ -284,9 +298,46 @@
   gap: 6px 8px;
 }
 
+/*
+ * 三个下拉的宽度下限之和 = 208px（年 80 + 月 64 + 日 64，年的 80 在
+ * PartialDateSelect.tsx 的 `style={{ minWidth: 80 }}` 上）。控件区**不允许**被压到
+ * 这个值以下：三个 `.ant-select` 各自守着 min-width，容器一旦更窄，超出的部分整体
+ * 溢出到右侧，与「至今」重叠 11px（2026-10-27 1440 视口实测：controls 宽 187px、
+ * 三个下拉合计 208px、controls 右边界 1025px > ongoing 左边界 1014px）。
+ * 现在宁可让「至今」整体换到下一行（外层 flex-wrap），也不压控件——这条不变式由
+ * styles/profile-partial-date-width.test.ts 守着，改数字会红。
+ */
 .profile-partial-date-select__controls {
-  flex: 1 1 180px;
+  flex: 1 1 208px;
+  min-width: 208px;
   max-width: 260px;
+}
+
+/* 三个下拉各留一个**宽度下限**：`flex: 1 1 0` 在窄列里会把「月」「日」压到 8px，
+   值是 "03"、scrollWidth 18 —— 数字被横着裁掉一半（2026-10-23 的 1280 实测）。
+   64px 是"两位数 + 箭头"的最小可用宽度（56px 时内容盒只剩 14px，两位数是 18px，
+   仍会横裁 4px——2026-10-23 二次实测），`flex-basis: 80px` 让宽容器里仍按比例分配。 */
+.profile-partial-date-select__controls > .ant-select {
+  flex: 1 1 80px;
+  min-width: 64px;
+}
+
+.profile-partial-date-select__controls > .ant-select:first-child {
+  flex-grow: 1.2;
+}
+
+/* 767 是标准断点（theme/breakpoints.ts 里的 mobile 上限，也就是下面网格退化成
+   1 列的那一档）：手机宽度里三个下拉允许换行 + 间距略收紧。这里原先写的 640 是
+   就地微调的存量值，挪到本文件时顺手归一到断点集，不再占 LEGACY 名额。 */
+@media (max-width: 767px) {
+  .profile-partial-date-select__controls {
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .profile-partial-date-select__controls > .ant-select {
+    flex: 1 1 88px;
+  }
 }
 
 /* 「至今」不参与压缩：列窄时宁可整块换到下一行，也不要把这三个字挤断。 */

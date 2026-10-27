@@ -48,7 +48,7 @@ const LEGACY: Record<string, number> = {
   "styles/modules-layout.css:1000": 1,
   "styles/modules-templates.css:575": 1,
   "styles/modules-webform.css:760": 1,
-  "styles/profile.css:640": 2,
+  "styles/profile.css:640": 1,
   "styles/responsive.css:575": 1,
   "styles/resume-editor.css:640": 1,
   "styles/resume-panels.css:720": 1,

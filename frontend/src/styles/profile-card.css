@@ -1,0 +1,201 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/*
+ * 「我的资料」卡片外观分片（2026-10-27）。
+ *
+ * 为什么单独成文件：profile.css 已贴单文件 500 行预算、profile-layout.css 也只剩
+ * 几十行，本轮是纯外观增量（卡片底盘、标题栏、条目卡动作簇、设置弹层的层级与行内
+ * 动作），放这里与「布局」分片分开：layout 管盒子怎么摆，本文件管它长什么样。
+ * 与 tracker.css / profile-layout.css 同一做法：聚合文件按 @import 顺序生效。
+ *
+ * 全部分片都在 profile.css 的 `@import` 头部，所以 profile.css 自己的规则仍在最后、
+ * 同特异度下优先生效（这正是 `.is-compact` / `.is-dragging` 这些状态能覆盖基础样式
+ * 的原因——它们是双类选择器，特异度本来就更高）。
+ */
+
+/* ===== 卡片化：每个大字段就是一张卡（查看态与编辑态同一套） ===== */
+
+/*
+ * 此前 `.profile-section-sortable` 只有 content-visibility 与 transition，卡片之间
+ * 没有任何视觉分隔：13 个分区连成一整片，用户分不清"这个标题属于哪一段"。
+ * 现在底色 + 1px 描边 + 10px 圆角 + 贴地阴影 + 16px 间距。
+ *
+ * 三条既有状态必须继续成立，它们都在 profile.css 里、特异度更高（`.is-*` 双类），
+ * 不会被这条基础样式覆盖：
+ * - `.is-compact`（拖拽期 52px 紧凑条：height/border-box/margin 8px/overflow hidden）
+ * - `.is-dragging`（抬起阴影 + 浅蓝描边环）
+ * - `.is-section-reordering`（content-visibility: visible）
+ */
+.profile-section-sortable {
+  margin: 0 0 16px;
+  border: 1px solid var(--rf-border-subtle);
+  border-radius: 10px;
+  background: var(--rf-surface);
+  /* 阴影只做"贴地"这一层；拖拽抬起的多层阴影由 .is-dragging 整体覆盖。 */
+  box-shadow: 0 1px 2px rgb(31 55 88 / 4%);
+}
+
+/*
+ * 标题栏是这张卡的"头"：浅色底 + 1px 分隔线 + 上圆角，让标题与内容同属一张卡。
+ *
+ * 选择器必须带 `.profile-section-sortable` 前缀：profile.css 里那条
+ * `.profile-section-collapse-toggle, .profile-section-titlebar` 同特异度**(0,1,0)**、
+ * 且写在后面，它声明了 `border: 0` 与 `background: transparent`——只写
+ * `.profile-section-titlebar` 会被它整条盖掉（实测标题栏底色仍是透明的）。
+ */
+.profile-section-sortable .profile-section-titlebar {
+  border-bottom: 1px solid var(--rf-border-subtle);
+  border-radius: 10px 10px 0 0;
+  background: var(--rf-surface-alt);
+}
+
+/* 折叠按钮在标题栏内部：左右内边距由标题栏统一给（12px 16px），按钮自己不再叠加，
+   否则标题离卡片边缘 32px；上下 4px 只为了让悬停底色有呼吸感。 */
+.profile-section-sortable .profile-section-titlebar > .profile-section-collapse-toggle {
+  padding: 4px 0;
+}
+
+/* 标题栏自己有底色了，折叠按钮的悬停底色改用品牌浅底，否则悬停看不出反应。 */
+.profile-section-sortable .profile-section-titlebar > .profile-section-collapse-toggle:hover {
+  background: var(--rf-brand-wash);
+}
+
+/* 内容区与标题栏同一左右内边距，底部留 16px——此前内容与动作行贴着卡片下边缘。 */
+.profile-section-content {
+  padding: 0 16px 16px;
+}
+
+/* ===== 条目卡：标题一行 + 右侧紧凑动作簇 =====
+ * 这批类此前只出现在 JSX（F9 遗留：`.profile-list-item-header/-title/-actions`
+ * 在样式表里一条都没有），于是标题下面紧跟一排极小的 ↑ ↓ 🗑，而拖拽把手浮在
+ * `right: 40px`、卡片还为此留了 76px 的右内边距空白。
+ * 现在回到流式布局：标题占满剩余宽度，动作簇右对齐，把手与按钮同一行。 */
+.profile-list-item-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 28px;
+}
+
+.profile-list-item-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--rf-text-body);
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.profile-list-item-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+}
+
+/* 动作簇里的每个按钮（含拖拽把手）统一 28×28、图标居中。 */
+.profile-list-item-actions > .ant-btn,
+.profile-list-item-drag-handle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  min-width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--rf-text-description);
+}
+
+.profile-list-item-drag-handle {
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+
+.profile-list-item-drag-handle:active {
+  cursor: grabbing;
+}
+
+.profile-list-item-actions > .ant-btn:hover,
+.profile-list-item-drag-handle:hover {
+  background: var(--rf-brand-wash);
+}
+
+/* 删除按钮是 danger：悬停只换底色，正文色留给 antd 的红色（别把危险动作染成品牌蓝）。 */
+.profile-list-item-actions > .ant-btn:not(.ant-btn-dangerous):hover,
+.profile-list-item-drag-handle:hover {
+  color: var(--rf-info);
+}
+
+/* ===== 「板块与字段」弹层内的层级：弹层标题 > 卡片标题 > 行标题 > 说明 =====
+ * 此前「自建板块」是 20px 粗体、紧贴 24px 的弹层标题下方 8px，两者看起来像并列标题。
+ * 现在每个板块分组是一张卡：卡片级小标题 14px/600 + 12px 说明，与弹层标题至少 16px。 */
+.profile-settings-card {
+  margin: 16px 0 0;
+  padding: 16px;
+  border: 1px solid var(--rf-border-subtle);
+  border-radius: 10px;
+  background: var(--rf-surface);
+}
+
+.profile-settings-card-title {
+  margin: 0 0 4px;
+  color: var(--rf-text-body);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 22px;
+}
+
+.profile-settings-card-hint {
+  margin: 0 0 8px;
+  color: var(--rf-text-description);
+  font-size: 12px;
+  line-height: 20px;
+}
+
+/* 列表上方的一行图例（「在资料页显示」开关的方向说明）。 */
+.profile-settings-legend {
+  margin-bottom: 8px;
+  color: var(--rf-text-description);
+  font-size: 12px;
+}
+
+/* 行内图标动作（编辑 / 删除 / 字段设置）：24×24、右对齐成簇、悬停品牌浅底。
+   此前是 type="link" 的纯文字裸露在行尾，三处各写一套排布，行内元素间距随意。 */
+.profile-settings-action.ant-btn {
+  width: 24px;
+  min-width: 24px;
+  height: 24px;
+  padding: 0;
+  border-radius: 6px;
+}
+
+.profile-settings-action.ant-btn:not(.ant-btn-dangerous):hover {
+  background: var(--rf-brand-wash);
+  color: var(--rf-info);
+}
+
+.profile-settings-action.ant-btn-dangerous:hover {
+  background: var(--rf-brand-wash);
+}
+
+/* ===== 「有未保存的修改」确认卡片（居中弹层） ===== */
+
+/* 正文与 Modal 标题同为 14px 行高 22：这条卡片只有一两句话，不需要更大字号。 */
+.profile-leave-confirm-body {
+  margin: 0;
+  color: var(--rf-text-body);
+  font-size: 14px;
+  line-height: 22px;
+}
+
+/* footer 由本组件自绘（Modal 的 footer 插槽），危险动作在左、安全动作在右。 */
+.profile-leave-confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}

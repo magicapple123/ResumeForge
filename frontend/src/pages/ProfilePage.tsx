@@ -1,11 +1,12 @@
 /** 我的资料：13 个大字段（定义驱动）+ 当前组 + 网申资料分页，整体保存。 */
-import { Alert, App, Button, Form, Space } from "antd";
+import { Alert, App, Button, Form } from "antd";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import type { PointerEvent as ReactPointerEvent } from "react";
 import ErrorState from "../components/common/ErrorState";
 import PageSkeleton from "../components/common/PageSkeleton";
 import ProfilePageHeader from "../components/profile/ProfilePageHeader";
+import ProfileLeaveConfirmModal from "../components/profile/ProfileLeaveConfirmModal";
 import ProfilePageModals from "../components/profile/ProfilePageModals";
 import ProfileSectionStack from "../components/profile/ProfileSectionStack";
 import ProfileWorkspaceTabs, {
@@ -87,7 +88,7 @@ export default function ProfilePage() {
   }, [workspace]);
   const participatingKeys = workspace?.current_group?.participating_keys ?? [];
   // 离开守卫（R-26）：路由离页 / 取消编辑 / 程序触发切组共用同一个出口；
-  // dirty 时先出内联确认条，确认放弃才执行动作，继续编辑则原样留下（当前组与草稿不动）。
+  // dirty 时先出居中确认卡片，确认放弃才执行动作，继续编辑则原样留下（当前组与草稿不动）。
   const leaveGuard = useProfileLeaveGuard({ dirty });
 
   const allExpanded = collapsedSections.size === 0;
@@ -157,7 +158,7 @@ export default function ProfilePage() {
     setDirty(false);
   }, [profileCancelEditing, webformCancel]);
 
-  /** 取消编辑入口：先过离开守卫（有未保存改动时出内联确认条）。 */
+  /** 取消编辑入口：先过离开守卫（有未保存改动时出居中确认卡片）。 */
   const handleCancelEditing = useCallback(() => {
     leaveGuard.requestLeave("cancel", performCancelEditing);
   }, [leaveGuard, performCancelEditing]);
@@ -180,8 +181,10 @@ export default function ProfilePage() {
   );
 
   // 悬浮球「保存资料/取消」桥：dirty 时挂上与本页保存条等价的动作入口。
+  // 未保存确认卡片弹出时**必须收起**：同一屏出现两个"未保存"提示、其中一个还压在
+  // 遮罩之上，用户会以为有两个不同的决定要做（2026-10-27 用户截图反馈）。
   useEffect(() => {
-    if (!dirty) {
+    if (!dirty || leaveGuard.confirmOpen) {
       setProfileSaveControl(null);
       return undefined;
     }
@@ -191,11 +194,18 @@ export default function ProfilePage() {
       saving: profile.saving || webform.extraSaving,
     });
     return () => setProfileSaveControl(null);
-  }, [dirty, handleCancelEditing, profile.saving, webform.extraSaving]);
+  }, [dirty, handleCancelEditing, leaveGuard.confirmOpen, profile.saving, webform.extraSaving]);
 
-  // 悬浮球「去改资料」提示卡：停在本页、非编辑、本次没关过时出现。
+  // 悬浮球「去改资料」提示卡：停在本页、非编辑、本次没关过时出现。确认卡片弹出时
+  // 同样收起——它是"顺手去改资料"的轻提示，不该在用户正做丢弃决策时插一脚。
   useEffect(() => {
-    if (profile.loading || profile.loadError || profile.editing || promptDismissed) {
+    if (
+      profile.loading ||
+      profile.loadError ||
+      profile.editing ||
+      promptDismissed ||
+      leaveGuard.confirmOpen
+    ) {
       setProfileEditControl(null);
       return undefined;
     }
@@ -207,7 +217,14 @@ export default function ProfilePage() {
       onDismiss: () => setPromptDismissed(true),
     });
     return () => setProfileEditControl(null);
-  }, [handleStartEditing, profile.editing, profile.loadError, profile.loading, promptDismissed]);
+  }, [
+    handleStartEditing,
+    leaveGuard.confirmOpen,
+    profile.editing,
+    profile.loadError,
+    profile.loading,
+    promptDismissed,
+  ]);
 
   const resumeContent = useMemo(
     () =>
@@ -308,31 +325,6 @@ export default function ProfilePage() {
 
   return (
     <div className={"profile-page" + (profile.editing ? " is-editing" : "")}>
-      {leaveGuard.confirmOpen ? (
-        <Alert
-          type="warning"
-          showIcon
-          style={{ marginBottom: 16 }}
-          title={t("profileGroups.leave.title")}
-          description={t(
-            leaveGuard.pendingKind === "switch-group"
-              ? "profileGroups.leave.body.switchGroup"
-              : leaveGuard.pendingKind === "navigate"
-                ? "profileGroups.leave.body.navigate"
-                : "profileGroups.leave.body.cancel",
-          )}
-          action={
-            <Space>
-              <Button danger onClick={() => leaveGuard.confirmDiscard()}>
-                {t("profileGroups.leave.discard")}
-              </Button>
-              <Button onClick={() => leaveGuard.cancelDiscard()}>
-                {t("profileGroups.leave.keep")}
-              </Button>
-            </Space>
-          }
-        />
-      ) : null}
       <ProfilePageHeader
         editing={profile.editing}
         activeWorkspace={activeWorkspace}
@@ -394,6 +386,15 @@ export default function ProfilePage() {
       ) : null}
 
       {workspaceTabs}
+
+      {/* 未保存修改的确认卡片：与三个 Modal 并列挂在页面上，打开时遮罩 + 居中，
+          不再挤在页面最顶部（触发它的按钮可能在页头甚至页外，用户根本看不到）。 */}
+      <ProfileLeaveConfirmModal
+        open={leaveGuard.confirmOpen}
+        kind={leaveGuard.pendingKind}
+        onDiscard={leaveGuard.confirmDiscard}
+        onKeep={leaveGuard.cancelDiscard}
+      />
 
       <ProfilePageModals
         profileText={profile.recognition.modal}

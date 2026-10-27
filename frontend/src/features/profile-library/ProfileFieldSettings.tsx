@@ -6,8 +6,8 @@
  * 改名/删除入口，只能隐藏——隐藏后不显示、不进生成与导出，但值仍保留。
  * 不叠 modal.confirm：确认条就在本视图内联展示（宿主弹层是单 Modal 多视图）。
  */
-import { App, Button, Divider, Input, Select, Switch, Tag, Typography } from "antd";
-import { ArrowLeftOutlined } from "@ant-design/icons";
+import { App, Button, Input, Select, Switch, Tag, Tooltip } from "antd";
+import { ArrowLeftOutlined, DeleteOutlined, EditOutlined } from "@ant-design/icons";
 import { useState } from "react";
 import SectionVisibilitySwitch from "../../components/profile/SectionVisibilitySwitch";
 import { t } from "../../i18n";
@@ -140,9 +140,9 @@ export default function ProfileFieldSettings({
         <Button type="text" size="small" icon={<ArrowLeftOutlined />} onClick={onBack}>
           {t("profileGroups.manager.back")}
         </Button>
-        <Typography.Title level={5} style={{ margin: 0 }}>
+        <span className="profile-settings-card-title">
           {t("profileLibrary.fieldSettings.title")}
-        </Typography.Title>
+        </span>
       </div>
 
       <div className="profile-settings-row profile-field-settings-visibility">
@@ -152,122 +152,169 @@ export default function ProfileFieldSettings({
             {t("profileLibrary.section.visibleHint")}
           </span>
         </span>
-        <SectionVisibilitySwitch
-          sectionName={section.name}
-          visible={section.key === "basic_info" || sectionVisible}
-          locked={section.key === "basic_info"}
-          busy={visibilityBusy}
-          hideLabel
-          onChange={onSetSectionVisible}
-        />
+        <span className="profile-settings-row-actions">
+          <SectionVisibilitySwitch
+            sectionName={section.name}
+            visible={section.key === "basic_info" || sectionVisible}
+            locked={section.key === "basic_info"}
+            busy={visibilityBusy}
+            hideLabel
+            onChange={onSetSectionVisible}
+          />
+        </span>
       </div>
 
-      <Divider plain>{t("profileLibrary.fieldSettings.defaultTitle")}</Divider>
-      <Typography.Paragraph type="secondary" style={{ marginTop: 0 }}>
-        {t("profileLibrary.fieldSettings.defaultHint")}
-      </Typography.Paragraph>
-      <div className="profile-settings-list">
-        {builtinFields.map((field) => (
-          <div key={field.field_id} className="profile-settings-row">
-            <span className="profile-settings-row-main">
-              <span className="profile-settings-row-title">{field.label}</span>
-              <Tag>{typeLabel(field)}</Tag>
-              {field.private ? <Tag color="gold">{t("profileLibrary.field.private")}</Tag> : null}
-            </span>
-            <span className="profile-settings-row-actions">
-              {/* 行尾不再重复「隐藏 / 恢复显示」文字：开关方向与 aria-label 已经说明状态，
-                  13 个默认字段各带一段文字会把动作列撑成两行。 */}
-              <Switch
-                size="small"
-                checked={!field.hidden}
-                aria-label={
-                  field.hidden
-                    ? t("profileLibrary.fieldSettings.showAria", { label: field.label })
-                    : t("profileLibrary.fieldSettings.hideAria", { label: field.label })
-                }
-                disabled={busy}
-                onChange={(checked) => toggleHidden(field, !checked)}
-              />
-            </span>
-          </div>
-        ))}
-      </div>
-
-      <Divider plain>{t("profileLibrary.fieldSettings.customTitle")}</Divider>
-      <Typography.Paragraph type="secondary" style={{ marginTop: 0 }}>
-        {t("profileLibrary.fieldSettings.limit")}
-      </Typography.Paragraph>
-      {customFields.length === 0 ? (
-        <Typography.Paragraph type="secondary">
-          {t("profileLibrary.fieldSettings.empty")}
-        </Typography.Paragraph>
-      ) : null}
-      <div className="profile-settings-list">
-        {customFields.map((field) => (
-          <div key={field.field_id} className="profile-settings-row">
-            {renamingId === field.field_id ? (
-              <Input
-                value={renameDraft}
-                maxLength={40}
-                onChange={(event) => setRenameDraft(event.target.value)}
-                onPressEnter={() => submitRename(field)}
-                style={{ maxWidth: 260 }}
-              />
-            ) : (
+      <section className="profile-settings-card">
+        <h3 className="profile-settings-card-title">
+          {t("profileLibrary.fieldSettings.defaultTitle")}
+        </h3>
+        <p className="profile-settings-card-hint">
+          {t("profileLibrary.fieldSettings.defaultHint")}
+        </p>
+        <div className="profile-settings-list">
+          {builtinFields.map((field) => (
+            <div key={field.field_id} className="profile-settings-row">
               <span className="profile-settings-row-main">
                 <span className="profile-settings-row-title">{field.label}</span>
-                <Tag>{typeLabel(field)}</Tag>
+                <span className="profile-settings-row-meta">{typeLabel(field)}</span>
+                {field.private ? <Tag color="gold">{t("profileLibrary.field.private")}</Tag> : null}
               </span>
-            )}
-            <span className="profile-settings-row-actions">
+              <span className="profile-settings-row-actions">
+                {/* 行尾不再重复「隐藏 / 恢复显示」文字：开关方向与 aria-label 已经说明状态，
+                    13 个默认字段各带一段文字会把动作列撑成两行。 */}
+                <Switch
+                  size="small"
+                  checked={!field.hidden}
+                  aria-label={
+                    field.hidden
+                      ? t("profileLibrary.fieldSettings.showAria", { label: field.label })
+                      : t("profileLibrary.fieldSettings.hideAria", { label: field.label })
+                  }
+                  disabled={busy}
+                  onChange={(checked) => toggleHidden(field, !checked)}
+                />
+              </span>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section className="profile-settings-card">
+        <h3 className="profile-settings-card-title">
+          {t("profileLibrary.fieldSettings.customTitle")}
+        </h3>
+        <p className="profile-settings-card-hint">{t("profileLibrary.fieldSettings.limit")}</p>
+        {customFields.length === 0 ? (
+          <p className="profile-settings-card-hint">{t("profileLibrary.fieldSettings.empty")}</p>
+        ) : null}
+        <div className="profile-settings-list">
+          {customFields.map((field) => (
+            <div key={field.field_id} className="profile-settings-row">
               {renamingId === field.field_id ? (
-                <Button
-                  size="small"
-                  type="primary"
-                  loading={busy}
-                  onClick={() => submitRename(field)}
-                >
-                  {t("profileLibrary.fieldSettings.saveName")}
-                </Button>
+                <Input
+                  value={renameDraft}
+                  maxLength={40}
+                  aria-label={t("profileLibrary.fieldSettings.rename")}
+                  onChange={(event) => setRenameDraft(event.target.value)}
+                  onPressEnter={() => submitRename(field)}
+                  style={{ maxWidth: 260 }}
+                />
               ) : (
-                <Button
-                  size="small"
-                  type="text"
-                  onClick={() => {
-                    setRenamingId(field.field_id);
-                    setRenameDraft(field.label);
-                  }}
-                >
-                  {t("profileLibrary.fieldSettings.rename")}
-                </Button>
+                <span className="profile-settings-row-main">
+                  <span className="profile-settings-row-title">{field.label}</span>
+                  <span className="profile-settings-row-meta">{typeLabel(field)}</span>
+                </span>
               )}
-              <Button
-                size="small"
-                type="text"
-                danger
-                disabled={busy}
-                onClick={() => requestDelete(field)}
-              >
-                {t("profileLibrary.fieldSettings.delete")}
-              </Button>
-            </span>
-          </div>
-        ))}
-      </div>
+              <span className="profile-settings-row-actions">
+                {renamingId === field.field_id ? (
+                  <Button
+                    size="small"
+                    type="primary"
+                    loading={busy}
+                    onClick={() => submitRename(field)}
+                  >
+                    {t("profileLibrary.fieldSettings.saveName")}
+                  </Button>
+                ) : (
+                  <Tooltip title={t("profileLibrary.fieldSettings.rename")}>
+                    <Button
+                      className="profile-settings-action"
+                      size="small"
+                      type="text"
+                      icon={<EditOutlined />}
+                      aria-label={t("profileLibrary.fieldSettings.rename")}
+                      onClick={() => {
+                        setRenamingId(field.field_id);
+                        setRenameDraft(field.label);
+                      }}
+                    />
+                  </Tooltip>
+                )}
+                <Tooltip title={t("profileLibrary.fieldSettings.delete")}>
+                  <Button
+                    className="profile-settings-action"
+                    size="small"
+                    type="text"
+                    danger
+                    icon={<DeleteOutlined />}
+                    aria-label={t("profileLibrary.fieldSettings.delete")}
+                    disabled={busy}
+                    onClick={() => requestDelete(field)}
+                  />
+                </Tooltip>
+              </span>
+            </div>
+          ))}
+        </div>
+
+        {/* 添加字段并入「自定义字段」这一张卡：不再单起「添加字段」小标题与分隔线，
+            否则同一个模块被切成两段，用户要滚动两次才看清「这里能加字段」。 */}
+        <div className="profile-settings-add" style={{ marginTop: 12 }}>
+          <Input
+            value={addLabel}
+            maxLength={40}
+            placeholder={t("profileLibrary.fieldSettings.label")}
+            onChange={(event) => setAddLabel(event.target.value)}
+            onPressEnter={submitAdd}
+            style={{ maxWidth: 240 }}
+            disabled={customFields.length >= maxCustomFields}
+          />
+          <Select
+            value={addType}
+            style={{ width: 140 }}
+            aria-label={t("profileLibrary.fieldSettings.type")}
+            disabled={customFields.length >= maxCustomFields}
+            onChange={(value) => setAddType(value as CustomFieldType)}
+            options={[
+              { value: "single_line", label: t("profileLibrary.fieldSettings.typeSingle") },
+              { value: "multi_line", label: t("profileLibrary.fieldSettings.typeMulti") },
+              { value: "date_text", label: t("profileLibrary.fieldSettings.typeDate") },
+            ]}
+          />
+          <Button
+            type="primary"
+            loading={busy}
+            disabled={customFields.length >= maxCustomFields}
+            onClick={submitAdd}
+          >
+            {t("profileLibrary.fieldSettings.create")}
+          </Button>
+        </div>
+      </section>
 
       {deleting ? (
         <div className="profile-settings-confirm" role="alertdialog">
-          <Typography.Text strong>
+          <span className="profile-settings-card-title">
             {t("profileLibrary.fieldSettings.deleteTitle", { label: deleting.field.label })}
-          </Typography.Text>
-          <Typography.Paragraph>
+          </span>
+          <p className="profile-settings-card-hint">
             {t("profileLibrary.fieldSettings.deleteBody", {
               count: deleting.impact.affected_entries,
             })}
-          </Typography.Paragraph>
-          <Typography.Paragraph type="secondary">
+          </p>
+          <p className="profile-settings-card-hint">
             {t("profileLibrary.fieldSettings.deleteRestore")}
-          </Typography.Paragraph>
+          </p>
           <div className="profile-settings-confirm-actions">
             <Button danger loading={busy} onClick={confirmDelete}>
               {t("profileLibrary.fieldSettings.deleteConfirm", {
@@ -278,39 +325,6 @@ export default function ProfileFieldSettings({
           </div>
         </div>
       ) : null}
-
-      {/* 添加字段并入「自定义字段」这一段：不再单起「添加字段」小标题与分隔线，
-          否则同一个模块被切成两段，用户要滚动两次才看清「这里能加字段」。 */}
-      <div className="profile-settings-add" style={{ marginTop: 12 }}>
-        <Input
-          value={addLabel}
-          maxLength={40}
-          placeholder={t("profileLibrary.fieldSettings.label")}
-          onChange={(event) => setAddLabel(event.target.value)}
-          onPressEnter={submitAdd}
-          style={{ maxWidth: 240 }}
-          disabled={customFields.length >= maxCustomFields}
-        />
-        <Select
-          value={addType}
-          style={{ width: 140 }}
-          disabled={customFields.length >= maxCustomFields}
-          onChange={(value) => setAddType(value as CustomFieldType)}
-          options={[
-            { value: "single_line", label: t("profileLibrary.fieldSettings.typeSingle") },
-            { value: "multi_line", label: t("profileLibrary.fieldSettings.typeMulti") },
-            { value: "date_text", label: t("profileLibrary.fieldSettings.typeDate") },
-          ]}
-        />
-        <Button
-          type="primary"
-          loading={busy}
-          disabled={customFields.length >= maxCustomFields}
-          onClick={submitAdd}
-        >
-          {t("profileLibrary.fieldSettings.create")}
-        </Button>
-      </div>
     </div>
   );
 }

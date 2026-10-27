@@ -7,7 +7,8 @@
  * 定义用内联确认条（动作 + 条数 + 保留后果 + 恢复位置）。表单型弹层禁蒙层关闭
  * （mask.closable=false）；提交中禁 Esc/×，其余 Esc 与 × 同义（子视图先退一层）。
  */
-import { App, Button, Divider, Input, Modal, Tag, Tooltip, Typography } from "antd";
+import { App, Button, Input, Modal, Popconfirm, Tag, Tooltip, Typography } from "antd";
+import { DeleteOutlined, EditOutlined } from "@ant-design/icons";
 import { Fragment, useState } from "react";
 import { t } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
@@ -128,119 +129,130 @@ export default function ProfileGroupManagerModal({
 
   const renderGroups = () => (
     <div className="profile-group-manager-groups">
-      <div className="profile-settings-add">
-        <Input
-          value={newGroupName}
-          maxLength={40}
-          placeholder={t("profileGroups.manager.createHint")}
-          aria-label={t("profileGroups.manager.nameLabel")}
-          onChange={(event) => setNewGroupName(event.target.value)}
-          onPressEnter={() => void submitCreate()}
-          disabled={groupApi.busy || atLimit}
-          style={{ maxWidth: 260 }}
-        />
-        <Button
-          type="primary"
-          loading={groupApi.busy}
-          disabled={atLimit}
-          onClick={() => void submitCreate()}
-        >
-          {t("profileGroups.manager.create")}
-        </Button>
-        {atLimit ? (
-          <Typography.Text type="secondary">
-            {t("profileGroups.manager.groupCount")}
-          </Typography.Text>
-        ) : null}
-      </div>
-      <Typography.Paragraph type="secondary" style={{ margin: "8px 0 0" }}>
-        {t("profileGroups.manager.createVisibilityHint")}
-      </Typography.Paragraph>
-      <Divider style={{ margin: "12px 0" }} />
-      {/* 一行一个组：名称/Tag 在左，动作按钮在右（.profile-settings-* 见 profile-layout.css）。
-          删除确认条是行**之外**的兄弟节点——行本身是 flex 横排，塞第三个子元素会被压扁。 */}
-      <div className="profile-settings-list">
-        {groupApi.groups.map((group) => {
-          const isCurrent = groupApi.current?.group_id === group.group_id;
-          const isDeleting = deletingGroupId === group.group_id;
-          return (
-            <Fragment key={group.group_id}>
-              <div className="profile-settings-row" data-testid="group-row">
-                <span className="profile-settings-row-main">
-                  <span className="profile-settings-row-title">{group.name}</span>
-                  {group.is_default ? <Tag>{t("profileGroups.manager.default")}</Tag> : null}
-                  {isCurrent ? <Tag color="blue">{t("profileGroups.manager.current")}</Tag> : null}
-                </span>
-                <span className="profile-settings-row-actions">
-                  {isCurrent ? null : (
-                    <Button
-                      size="small"
-                      type="text"
-                      disabled={groupApi.busy}
-                      onClick={() => void groupApi.switchTo(group.group_id)}
-                    >
-                      {t("profileGroups.manager.setCurrent")}
-                    </Button>
-                  )}
-                  <Button
-                    size="small"
-                    type="text"
-                    disabled={groupApi.busy}
-                    onClick={() => {
-                      setEditingGroupId(group.group_id);
-                      setView("group-edit");
-                    }}
-                  >
-                    {t("profileGroups.manager.rename")}
-                  </Button>
-                  {group.is_default ? (
-                    <Tooltip title={t("profileGroups.manager.defaultProtected")}>
+      {/* 与「板块与字段」视图同一套卡片外观（.profile-settings-card）：同一个弹层里
+          两个视图的容器形态不该不一样。此处不再给卡片标题——弹层标题已经是「方案」。 */}
+      <section className="profile-settings-card">
+        <div className="profile-settings-add">
+          <Input
+            value={newGroupName}
+            maxLength={40}
+            placeholder={t("profileGroups.manager.createHint")}
+            aria-label={t("profileGroups.manager.nameLabel")}
+            onChange={(event) => setNewGroupName(event.target.value)}
+            onPressEnter={() => void submitCreate()}
+            disabled={groupApi.busy || atLimit}
+            style={{ maxWidth: 260 }}
+          />
+          <Button
+            type="primary"
+            loading={groupApi.busy}
+            disabled={atLimit}
+            onClick={() => void submitCreate()}
+          >
+            {t("profileGroups.manager.create")}
+          </Button>
+          {atLimit ? (
+            <span className="profile-settings-row-meta">
+              {t("profileGroups.manager.groupCount")}
+            </span>
+          ) : null}
+        </div>
+        <p className="profile-settings-card-hint" style={{ marginTop: 8 }}>
+          {t("profileGroups.manager.createVisibilityHint")}
+        </p>
+        {/* 一行一个方案：名称/Tag 在左，动作按钮在右（.profile-settings-* 见 profile-layout.css）。
+          删除确认是行**之外**的兄弟节点——行本身是 flex 横排，塞第三个子元素会被压扁。
+          动作簇与「板块与字段」视图共用同一套类名：24×24 图标按钮 + Tooltip + aria-label。 */}
+        <div className="profile-settings-list">
+          {groupApi.groups.map((group) => {
+            const isCurrent = groupApi.current?.group_id === group.group_id;
+            const isDeleting = deletingGroupId === group.group_id;
+            return (
+              <Fragment key={group.group_id}>
+                <div className="profile-settings-row" data-testid="group-row">
+                  <span className="profile-settings-row-main">
+                    <span className="profile-settings-row-title">{group.name}</span>
+                    {group.is_default ? (
                       <span className="profile-settings-row-meta">
-                        {t("profileGroups.manager.defaultProtected")}
+                        {t("profileGroups.manager.default")}
                       </span>
+                    ) : null}
+                    {isCurrent ? (
+                      <Tag color="blue">{t("profileGroups.manager.current")}</Tag>
+                    ) : null}
+                  </span>
+                  <span className="profile-settings-row-actions">
+                    {isCurrent ? null : (
+                      <Button
+                        size="small"
+                        type="text"
+                        disabled={groupApi.busy}
+                        onClick={() => void groupApi.switchTo(group.group_id)}
+                      >
+                        {t("profileGroups.manager.setCurrent")}
+                      </Button>
+                    )}
+                    <Tooltip title={t("profileGroups.manager.rename")}>
+                      <Button
+                        className="profile-settings-action"
+                        size="small"
+                        type="text"
+                        icon={<EditOutlined />}
+                        aria-label={t("profileGroups.manager.rename")}
+                        disabled={groupApi.busy}
+                        onClick={() => {
+                          setEditingGroupId(group.group_id);
+                          setView("group-edit");
+                        }}
+                      />
                     </Tooltip>
-                  ) : (
-                    <Button
-                      size="small"
-                      type="text"
-                      danger
-                      disabled={groupApi.busy}
-                      onClick={() => setDeletingGroupId(group.group_id)}
-                    >
-                      {t("profileGroups.manager.delete")}
-                    </Button>
-                  )}
-                </span>
-              </div>
-              {isDeleting ? (
-                <div className="profile-settings-confirm" role="alertdialog">
-                  <Typography.Text strong>
-                    {t("profileGroups.manager.deleteTitle", { name: group.name })}
-                  </Typography.Text>
-                  <Typography.Paragraph>
-                    {t("profileGroups.manager.deleteBody")}
-                  </Typography.Paragraph>
-                  <Typography.Paragraph type="secondary">
-                    {t("profileGroups.manager.deleteRestore")}
-                  </Typography.Paragraph>
-                  <div className="profile-settings-confirm-actions">
-                    <Button
-                      danger
-                      loading={groupApi.busy}
-                      onClick={() => void confirmDeleteGroup()}
-                    >
-                      {t("profileGroups.manager.deleteConfirm", { name: group.name })}
-                    </Button>
-                    <Button onClick={() => setDeletingGroupId("")}>
-                      {t("profileGroups.manager.back")}
-                    </Button>
-                  </div>
+                    {group.is_default ? (
+                      <Tooltip title={t("profileGroups.manager.defaultProtected")}>
+                        <span className="profile-settings-row-meta">
+                          {t("profileGroups.manager.defaultProtected")}
+                        </span>
+                      </Tooltip>
+                    ) : (
+                      <Popconfirm
+                        open={isDeleting}
+                        title={t("profileGroups.manager.deleteTitle", { name: group.name })}
+                        description={
+                          <div>
+                            <p className="profile-settings-card-hint">
+                              {t("profileGroups.manager.deleteBody")}
+                            </p>
+                            <p className="profile-settings-card-hint">
+                              {t("profileGroups.manager.deleteRestore")}
+                            </p>
+                          </div>
+                        }
+                        okText={t("profileGroups.manager.deleteConfirm", { name: group.name })}
+                        okButtonProps={{ danger: true, loading: groupApi.busy }}
+                        cancelText={t("profileGroups.manager.back")}
+                        onConfirm={() => void confirmDeleteGroup()}
+                        onCancel={() => setDeletingGroupId("")}
+                      >
+                        {/* 删除按钮不叠 Tooltip：确认气泡本身就是说明（Tooltip 与 Popconfirm
+                          共用同一个 trigger，叠在一起会互相抢悬停）。 */}
+                        <Button
+                          className="profile-settings-action"
+                          size="small"
+                          type="text"
+                          danger
+                          icon={<DeleteOutlined />}
+                          aria-label={t("profileGroups.manager.delete")}
+                          disabled={groupApi.busy}
+                          onClick={() => setDeletingGroupId(group.group_id)}
+                        />
+                      </Popconfirm>
+                    )}
+                  </span>
                 </div>
-              ) : null}
-            </Fragment>
-          );
-        })}
-      </div>
+              </Fragment>
+            );
+          })}
+        </div>
+      </section>
     </div>
   );
 

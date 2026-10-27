@@ -9,7 +9,13 @@
  * - 字段输入与折叠/隐藏逻辑在 ProfileFieldInputs。
  */
 import { Button, Form, Input, Tooltip } from "antd";
-import { DeleteOutlined, HolderOutlined, PlusOutlined } from "@ant-design/icons";
+import {
+  ArrowDownOutlined,
+  ArrowUpOutlined,
+  DeleteOutlined,
+  HolderOutlined,
+  PlusOutlined,
+} from "@ant-design/icons";
 import { useMemo } from "react";
 import EmptyState from "../../components/common/EmptyState";
 import { useProfileItemListDrag } from "../../components/profile/useProfileItemListDrag";
@@ -227,44 +233,32 @@ function MultiEntryList({
             .join(" ");
           return (
             <div key={item.key} data-profile-list-item-index={item.name} className={itemClass}>
+              {/* 标题一行、右侧一个紧凑的动作簇（↑ ↓ 🗑 + 拖拽把手同处一行、右对齐）。
+                  此前把手是绝对定位（right 40px）、删除按钮 absolute 在最右，卡片还要
+                  为此留 76px 右内边距——把手落在标题与内容之间，读起来像"标题下面的
+                  一排小图标"。流式布局后卡片内边距回到统一的 14px 16px。 */}
               <div className="profile-list-item-header">
-                {editing ? (
-                  <Tooltip title={t("profileLibrary.entry.drag")}>
-                    <button
-                      type="button"
-                      className="profile-list-item-drag-handle"
-                      aria-label={t("profileLibrary.entry.drag")}
-                      onPointerDown={(event) =>
-                        drag.handleItemPointerDown(event, item.name, item.key)
-                      }
-                    >
-                      <HolderOutlined />
-                    </button>
-                  </Tooltip>
-                ) : null}
                 <span className="profile-list-item-title">{entryTitle(section, entry, index)}</span>
                 <div className="profile-list-item-actions">
                   <Tooltip title={t("profileLibrary.entry.moveUp")}>
                     <Button
                       size="small"
                       type="text"
+                      icon={<ArrowUpOutlined />}
                       disabled={!editing || saving || index === 0}
                       aria-label={t("profileLibrary.entry.moveUp")}
                       onClick={() => operations.move(index, index - 1)}
-                    >
-                      ↑
-                    </Button>
+                    />
                   </Tooltip>
                   <Tooltip title={t("profileLibrary.entry.moveDown")}>
                     <Button
                       size="small"
                       type="text"
+                      icon={<ArrowDownOutlined />}
                       disabled={!editing || saving || index === listFields.length - 1}
                       aria-label={t("profileLibrary.entry.moveDown")}
                       onClick={() => operations.move(index, index + 1)}
-                    >
-                      ↓
-                    </Button>
+                    />
                   </Tooltip>
                   {editing ? (
                     <Tooltip title={t("profileLibrary.entry.remove")}>
@@ -273,6 +267,7 @@ function MultiEntryList({
                         type="text"
                         danger
                         icon={<DeleteOutlined />}
+                        className="profile-list-item-delete"
                         aria-label={t("profileLibrary.entry.remove")}
                         onClick={() => {
                           const entryKey = entry?.entry_key ?? "";
@@ -281,6 +276,20 @@ function MultiEntryList({
                           onRemoveEntry(section.key, entryKey, title);
                         }}
                       />
+                    </Tooltip>
+                  ) : null}
+                  {editing ? (
+                    <Tooltip title={t("profileLibrary.entry.drag")}>
+                      <button
+                        type="button"
+                        className="profile-list-item-drag-handle"
+                        aria-label={t("profileLibrary.entry.drag")}
+                        onPointerDown={(event) =>
+                          drag.handleItemPointerDown(event, item.name, item.key)
+                        }
+                      >
+                        <HolderOutlined />
+                      </button>
                     </Tooltip>
                   ) : null}
                 </div>

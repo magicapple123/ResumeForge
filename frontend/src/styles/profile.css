@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 @import "./profile-layout.css";
+@import "./profile-card.css";
 /* 识别结果的校对列表（项 13）：一行一栏，栏目名左、值右；窄屏自动折成上下两段。 */
 .recognition-review-row {
   display: flex;
@@ -106,13 +107,15 @@
   flex-direction: column;
 }
 
-/* 分区标题栏：卡片本体不再自带标题，标题由这里统一给，查看态点标题即可展开/收起。 */
+/* 分区标题栏：卡片本体不再自带标题，标题由这里统一给，查看态点标题即可展开/收起。
+   12px 16px 是卡片内边距的统一口径（内容区同为 16px，见 profile-layout.css）：
+   此前 8px 4px 让齿轮/折叠图标离卡片边缘只有 4px。 */
 .profile-section-collapse-toggle,
 .profile-section-titlebar {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 8px 4px;
+  padding: 12px 16px;
   border: 0;
   background: transparent;
   color: inherit;
@@ -349,7 +352,7 @@
 .profile-list-item {
   position: relative;
   min-width: 0;
-  padding: 16px 76px 4px 16px;
+  padding: 14px 16px;
   border: 1px solid var(--rf-border);
   border-radius: 8px;
   background: var(
@@ -401,43 +404,12 @@
   pointer-events: none;
 }
 
-.profile-list-item-drag-handle,
-.profile-list-item-delete {
-  position: absolute;
-  z-index: 2;
-  top: 8px;
-}
-
-.profile-list-item-drag-handle {
-  right: 40px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  padding: 0;
-  border: 0;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--rf-text-description);
-  cursor: grab;
-  touch-action: none;
-  user-select: none;
-}
-
-.profile-list-item-drag-handle:hover {
-  background: var(--rf-brand-wash);
-  color: var(--rf-info);
-}
-
-.profile-list-item-drag-handle:active {
-  cursor: grabbing;
-}
-
-.profile-list-item-delete {
-  right: 8px;
-}
-
+/*
+ * 条目卡的动作簇（↑ ↓ 🗑 + 拖拽把手）现在是**流式布局**里的一行（右对齐、gap 4px、
+ * 每颗 28×28，样式在 profile-layout.css）。此前它们是 `position: absolute` 浮在
+ * 卡片右上角（把手 right 40px、删除 right 8px），卡片为此留了 76px 右内边距的空白；
+ * 这里只保留"拖拽期交叉隐藏"这一条状态规则。
+ */
 .profile-reference-preview {
   max-height: 60vh;
   margin: 12px 0 0;
@@ -453,41 +425,10 @@
   line-height: 1.7;
 }
 
-/* 年/月/日三个下拉按可用宽度分配，不因日期列偏窄被压成细条；宽度上限见 profile-layout.css。 */
-.profile-partial-date-select {
-  width: 100%;
-  min-width: 0;
-}
-
-.profile-partial-date-select__controls {
-  display: flex;
-  width: 100%;
-  min-width: 0;
-}
-
-/* 三个下拉各留一个**宽度下限**：`flex: 1 1 0` 在窄列里会把「月」「日」压到 8px，
-   值是 "03"、scrollWidth 18 —— 数字被横着裁掉一半（2026-10-23 的 1280 实测）。
-   64px 是"两位数 + 箭头"的最小可用宽度（56px 时内容盒只剩 14px，两位数是 18px，
-   仍会横裁 4px——2026-10-23 二次实测），`flex-basis: 80px` 让宽容器里仍按比例分配。 */
-.profile-partial-date-select__controls > .ant-select {
-  flex: 1 1 80px;
-  min-width: 64px;
-}
-
-.profile-partial-date-select__controls > .ant-select:first-child {
-  flex-grow: 1.2;
-}
-
-@media (max-width: 640px) {
-  .profile-partial-date-select__controls {
-    flex-wrap: wrap;
-    gap: 6px;
-  }
-
-  .profile-partial-date-select__controls > .ant-select {
-    flex: 1 1 88px;
-  }
-}
+/* 年/月/日三个下拉的宽度规则只在 profile-layout.css 里有一份（单一来源）：这里原先
+   还有一组 `width: 100%; min-width: 0`，与那边的 `flex: 1 1 208px; min-width: 208px`
+   互相打架——后写的这份把控件区压到 187px，三个守着自己 min-width 的下拉溢出后与
+   「至今」重叠 11px（2026-10-27 实测）。不要再往这里加日期宽度的覆写。 */
 
 /* 非编辑态的下拉框：**只禁用交互，文字仍用正文色**。
    antd 的 disabled 会把内容统一降到 rgba(0,0,0,.25)，在浅色卡片上几乎读不清；

@@ -92,12 +92,19 @@ function findButton(label: string): HTMLElement {
   return found;
 }
 
-function findButtonIn(container: HTMLElement, label: string): HTMLElement {
-  const compact = compactLabel(label);
-  const found = within(container)
-    .getAllByRole("button")
-    .find((button) => compactLabel(button.textContent ?? "") === compact);
-  if (!found) throw new Error("button not found in row: " + label);
+/**
+ * 行内图标动作（编辑 / 删除 / 字段设置）按钮里没有文字，可访问名来自 aria-label，
+ * 所以按 role + name 找，而不是按 textContent。
+ */
+function findIconButton(label: string): HTMLElement {
+  const found = screen.getAllByRole("button", { name: label })[0];
+  if (!found) throw new Error("icon button not found: " + label);
+  return found;
+}
+
+function findIconButtonIn(container: HTMLElement, label: string): HTMLElement {
+  const found = within(container).getByRole("button", { name: label });
+  if (!found) throw new Error("icon button not found in row: " + label);
   return found;
 }
 
@@ -131,7 +138,7 @@ describe("ProfileGroupManagerModal", () => {
     renderManager();
     expect(screen.getAllByTestId("group-row")).toHaveLength(2);
     // 默认组不给删除按钮；非默认组有一颗。
-    expect(findButton(t("profileGroups.manager.delete"))).toBeInTheDocument();
+    expect(findIconButton(t("profileGroups.manager.delete"))).toBeInTheDocument();
     expect(screen.getByText(t("profileGroups.manager.defaultProtected"))).toBeInTheDocument();
     // 默认组之外的那一个才有「设为当前组」。
     expect(findButton(t("profileGroups.manager.setCurrent"))).toBeInTheDocument();
@@ -139,7 +146,7 @@ describe("ProfileGroupManagerModal", () => {
 
   it("删除组先出三段式确认，确认后带 revision 调接口并刷新", async () => {
     const { onChanged } = renderManager();
-    fireEvent.click(findButton(t("profileGroups.manager.delete")));
+    fireEvent.click(findIconButton(t("profileGroups.manager.delete")));
     expect(
       screen.getByText(t("profileGroups.manager.deleteTitle", { name: "Research" })),
     ).toBeInTheDocument();
@@ -172,7 +179,7 @@ describe("ProfileGroupManagerModal", () => {
       .getAllByTestId("group-row")
       .find((row) => (row.textContent ?? "").includes("Research"));
     if (!researchRow) throw new Error("research group row not found");
-    fireEvent.click(findButtonIn(researchRow, t("profileGroups.manager.rename")));
+    fireEvent.click(findIconButtonIn(researchRow, t("profileGroups.manager.rename")));
     await waitFor(() =>
       expect(screen.getByRole("checkbox", { name: "Education" })).toBeInTheDocument(),
     );
@@ -202,7 +209,7 @@ describe("ProfileGroupManagerModal", () => {
       .getAllByTestId("group-row")
       .find((row) => (row.textContent ?? "").includes("Research"));
     if (!researchRow) throw new Error("research group row not found");
-    fireEvent.click(findButtonIn(researchRow, t("profileGroups.manager.rename")));
+    fireEvent.click(findIconButtonIn(researchRow, t("profileGroups.manager.rename")));
     await waitFor(() =>
       expect(screen.getByRole("checkbox", { name: "Education" })).toBeInTheDocument(),
     );
@@ -282,7 +289,7 @@ describe("ProfileGroupManagerModal", () => {
     renderManager();
     openSectionsView();
     fireEvent.click(
-      findButtonIn(sectionRow("Education"), t("profileLibrary.sectionSettings.fields")),
+      findIconButtonIn(sectionRow("Education"), t("profileLibrary.sectionSettings.fields")),
     );
     fireEvent.change(screen.getByPlaceholderText(t("profileLibrary.fieldSettings.label")), {
       target: { value: "Research" },

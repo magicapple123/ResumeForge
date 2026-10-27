@@ -71,6 +71,16 @@ function clickButton(label: string): void {
   fireEvent.click(target);
 }
 
+/**
+ * 行内图标动作（改名 / 字段设置 / 删除）改为 24×24 图标按钮后，按钮里没有文字，
+ * 可访问名来自 aria-label，所以按 role + name 找。
+ */
+function clickIconButton(label: string): void {
+  const target = screen.getAllByRole("button", { name: label })[0];
+  if (!target) throw new Error("icon button not found: " + label);
+  fireEvent.click(target);
+}
+
 function renderSettings() {
   const onChanged = vi.fn().mockResolvedValue(undefined);
   const onOpenFields = vi.fn();
@@ -102,7 +112,7 @@ describe("ProfileSectionSettings", () => {
 
   it("删除自建大字段先取影响面，再展示三段式确认", async () => {
     const { onChanged } = renderSettings();
-    clickButton(t("profileLibrary.sectionSettings.delete"));
+    clickIconButton(t("profileLibrary.sectionSettings.delete"));
     await waitFor(() => expect(api.getSectionDeletionImpact).toHaveBeenCalledWith("custom:abc"));
     expect(
       screen.getByText(t("profileLibrary.sectionSettings.deleteBody", { count: 2 })),
@@ -132,12 +142,8 @@ describe("ProfileSectionSettings", () => {
   it("系统大字段没有删除/改名入口", () => {
     renderSettings();
     // 只有自建大字段 Math 有删除按钮；13 个系统大字段只有「字段设置」。
-    const byName = (label: string) => {
-      const compact = label.replace(/\s+/g, "");
-      return screen
-        .getAllByRole("button")
-        .filter((button) => (button.textContent ?? "").replace(/\s+/g, "") === compact).length;
-    };
+    // 图标按钮的可访问名来自 aria-label，按 role + name 计数。
+    const byName = (label: string) => screen.getAllByRole("button", { name: label }).length;
     expect(byName(t("profileLibrary.sectionSettings.delete"))).toBe(1);
     expect(byName(t("profileLibrary.sectionSettings.rename"))).toBe(1);
   });
