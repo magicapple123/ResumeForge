@@ -11,6 +11,7 @@ import type { Dispatch, SetStateAction } from "react";
 import { checkLLMThinking, saveLLMConfigRecord, testLLM, listLLMModels } from "../../api/settings";
 import { bumpLLMConfig } from "./llmConfigEvents";
 import { LLM_PRESETS } from "../../config";
+import { t } from "../../i18n";
 import type {
   LLMConfig,
   LLMConfigRecord,
@@ -27,7 +28,7 @@ import {
   configFromRecord,
   matchingPreset,
 } from "../../components/settings/SettingsConfig";
-import { EFFORT_LABELS, FALLBACK_EFFORTS } from "../../components/settings/llm/thinkingMeta";
+import { EFFORT_LABEL_KEYS, FALLBACK_EFFORTS } from "../../components/settings/llm/thinkingMeta";
 
 /** 新增/编辑共用弹窗的表单值。api_key 留空 = 保持原密钥（原样回传脱敏引用）。
  *
@@ -181,12 +182,18 @@ export function useLLMRecordTools(setRecords: Dispatch<SetStateAction<LLMConfigR
 
   /** 思考强度下拉选项：检测前用兜底档位，检测结果一到就被替换。 */
   const effortOptions = [
-    { value: "", label: "默认档位（不指定）" },
+    { value: "", label: t("appConfig.effort.default") },
     ...(thinkingResult?.efforts?.length ? thinkingResult.efforts : FALLBACK_EFFORTS).map(
-      (effort) => ({
-        value: effort,
-        label: EFFORT_LABELS[effort] ? `${EFFORT_LABELS[effort]}（${effort}）` : effort,
-      }),
+      (effort) => {
+        const labelKey = EFFORT_LABEL_KEYS[effort];
+        return {
+          value: effort,
+          // 只有语言包认识的档位才拼「显示名（原始取值）」，其余原样显示协议值。
+          label: labelKey
+            ? t("appConfig.effort.withValue", { label: t(labelKey), effort })
+            : effort,
+        };
+      },
     ),
   ];
 
@@ -231,7 +238,8 @@ export function useLLMRecordTools(setRecords: Dispatch<SetStateAction<LLMConfigR
           probed: false,
           accepted: null,
           reasoning_seen: false,
-          message: err instanceof Error ? err.message : "检测思考支持失败",
+          message:
+            err instanceof Error ? err.message : t("appConfig.llmRecord.checkThinkingFailed"),
         };
         setThinkingResult(failed);
         return failed;
@@ -281,7 +289,7 @@ export function useLLMRecordTools(setRecords: Dispatch<SetStateAction<LLMConfigR
           [record.id]: {
             ok: false,
             latency_ms: null,
-            message: err instanceof Error ? err.message : "测试失败",
+            message: err instanceof Error ? err.message : t("appConfig.llmRecord.testFailed"),
           },
         }));
       } finally {
@@ -373,7 +381,7 @@ export function useLLMRecordTools(setRecords: Dispatch<SetStateAction<LLMConfigR
       setDraftTestResult({
         ok: false,
         latency_ms: null,
-        message: err instanceof Error ? err.message : "测试失败",
+        message: err instanceof Error ? err.message : t("appConfig.llmRecord.testFailed"),
       });
     } finally {
       setDraftTesting(false);
@@ -402,12 +410,12 @@ export function useLLMRecordTools(setRecords: Dispatch<SetStateAction<LLMConfigR
       setModalOpen(false);
       message.success(
         editingRecord
-          ? `配置记录「${saved.name}」已保存`
-          : `新配置「${saved.name}」已保存，点记录卡上的「使用」即可生效`,
+          ? t("appConfig.llmRecord.savedEdit", { name: saved.name })
+          : t("appConfig.llmRecord.savedCreate", { name: saved.name }),
       );
       return saved;
     } catch (err) {
-      message.error(err instanceof Error ? err.message : "保存配置记录失败");
+      message.error(err instanceof Error ? err.message : t("appConfig.llmRecord.saveFailed"));
       return null;
     } finally {
       setRecordSaving(false);
@@ -425,7 +433,7 @@ export function useLLMRecordTools(setRecords: Dispatch<SetStateAction<LLMConfigR
     } catch (err) {
       return {
         models: [],
-        message: err instanceof Error ? err.message : "获取模型列表失败",
+        message: err instanceof Error ? err.message : t("appConfig.llmRecord.fetchModelsFailed"),
       };
     }
   }, [editingRecord, recordForm]);
