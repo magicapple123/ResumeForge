@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * 材料表单弹窗：附件校验、读取失败的提示与提交动作。
+ * Material form dialog: the intro, field labels and placeholders, attachment hints, and the
+ * attachment validation / read-failure messages plus the save action.
  *
- * 分类的兜底值 `其他` 是协议值（`category.trim() || "其他"` 会提交后端并作为分组键），
- * 不在本文件；表单 label 与占位符留待下一批。
+ * The category fallback is a protocol value (it is sent to the backend and acts as a
+ * grouping key), so it stays in the component; category options come from the backend and
+ * from `MATERIAL_CATEGORIES` and are shown as-is.
  */
 const materialForm = {
   "materialForm.error.imageTooLarge": "A single image cannot exceed 2 MB",
@@ -20,6 +22,25 @@ const materialForm = {
   "materialForm.action.addImage": "Add image",
   "materialForm.action.addText": "Add text file",
   "materialForm.hint.drop": "Drop to add the attachment",
+  "materialForm.intro":
+    "The material library holds loose material that is not part of a resume yet: certificates, work samples, links, notes and more. The assistant can read it and cite it as needed.",
+  "materialForm.hint.shortcut": "Ctrl / ⌘ + Enter or S to save, Esc to cancel",
+  "materialForm.hint.dropNote":
+    "You can also drop files here. For PDF or Word, paste the text into the content box: the app does not keep the original file.",
+  "materialForm.label.title": "Title",
+  "materialForm.label.category": "Category",
+  "materialForm.label.content": "Content",
+  "materialForm.label.url": "Related link",
+  "materialForm.label.attachments": "Attachments (up to {count} files, at most {images} images)",
+  "materialForm.label.note": "Notes",
+  "materialForm.placeholder.title": "e.g. CET-6 score report / portfolio link",
+  "materialForm.placeholder.category": "Pick a category or type a new one",
+  "materialForm.placeholder.content": "Paste the original text or write down the key points",
+  "materialForm.placeholder.url": "https://… (optional)",
+  "materialForm.placeholder.note": "Why you kept it and what is still missing (optional)",
+  "materialForm.file.image": "Image · {size} KB",
+  "materialForm.file.text": "{count} characters",
+  "materialForm.aria.removeFile": "Remove attachment {name}",
 } as const;
 
 export default materialForm;

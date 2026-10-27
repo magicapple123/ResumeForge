@@ -56,7 +56,7 @@ export default function MaterialFormModal({
   const { message } = App.useApp();
   const fieldId = useId();
   const [title, setTitle] = useState("");
-  const [category, setCategory] = useState<string>("其他");
+  const [category, setCategory] = useState<string>("其他"); // i18n-ok: 分类兜底值是提交后端的协议值
   const [content, setContent] = useState("");
   const [url, setUrl] = useState("");
   const [note, setNote] = useState("");
@@ -71,7 +71,7 @@ export default function MaterialFormModal({
     setPrevSync({ open, material });
     if (open) {
       setTitle(material?.title ?? "");
-      setCategory(material?.category || "其他");
+      setCategory(material?.category || "其他"); // i18n-ok: 分类兜底值是提交后端的协议值
       setContent(material?.content ?? "");
       setUrl(material?.url ?? "");
       setNote(material?.note ?? "");
@@ -146,7 +146,7 @@ export default function MaterialFormModal({
     }
     onSubmit({
       title: trimmedTitle,
-      category: category.trim() || "其他",
+      category: category.trim() || "其他", // i18n-ok: 分类兜底值是提交后端的协议值
       content,
       url: url.trim(),
       note,
@@ -164,31 +164,26 @@ export default function MaterialFormModal({
       onSubmit={submit}
       okText={t("materialForm.action.save")}
     >
-      <Alert
-        type="info"
-        showIcon
-        style={{ marginBottom: 16 }}
-        title="资料箱用来放还没整理进简历的零散资料：证书、作品说明、链接、笔记等。求职助手可以读取这里的内容并按需引用。"
-      />
+      <Alert type="info" showIcon style={{ marginBottom: 16 }} title={t("materialForm.intro")} />
       <Typography.Paragraph type="secondary">
-        Ctrl / ⌘ + Enter 或 S 保存，Esc 取消
+        {t("materialForm.hint.shortcut")}
       </Typography.Paragraph>
       <Form
         layout="vertical"
         disabled={submitting}
         onKeyDown={(event) => handleEditorSaveKey(event, submit)}
       >
-        <Form.Item label="标题" htmlFor={`${fieldId}-title`}>
+        <Form.Item label={t("materialForm.label.title")} htmlFor={`${fieldId}-title`}>
           <Input
             id={`${fieldId}-title`}
             showCount
             value={title}
             maxLength={256}
-            placeholder="如：CET-6 成绩单 / 个人作品集链接"
+            placeholder={t("materialForm.placeholder.title")}
             onChange={(event) => setTitle(event.target.value)}
           />
         </Form.Item>
-        <Form.Item label="分类" htmlFor={`${fieldId}-category`}>
+        <Form.Item label={t("materialForm.label.category")} htmlFor={`${fieldId}-category`}>
           <Select
             id={`${fieldId}-category`}
             // tags 模式的取值是数组，这里始终只放一项，对外仍当单个字符串用。
@@ -200,28 +195,34 @@ export default function MaterialFormModal({
             // 未选中项置灰禁用，导致编辑时改选不了其他分类；onChange 只取
             // 最后一位，多选的一瞬间也会收敛回单个分类。
             mode="tags"
+            // i18n-ok: 分类兜底值是提交后端的协议值
             onChange={(values: string[]) => setCategory(values[values.length - 1] ?? "其他")}
-            placeholder="选择或输入一个新分类"
+            placeholder={t("materialForm.placeholder.category")}
           />
         </Form.Item>
-        <Form.Item label="正文内容" htmlFor={`${fieldId}-content`}>
+        <Form.Item label={t("materialForm.label.content")} htmlFor={`${fieldId}-content`}>
           <Input.TextArea
             id={`${fieldId}-content`}
             value={content}
             autoSize={{ minRows: 4, maxRows: 12 }}
-            placeholder="粘贴资料原文，或写下要点说明"
+            placeholder={t("materialForm.placeholder.content")}
             onChange={(event) => setContent(event.target.value)}
           />
         </Form.Item>
-        <Form.Item label="相关链接" htmlFor={`${fieldId}-url`}>
+        <Form.Item label={t("materialForm.label.url")} htmlFor={`${fieldId}-url`}>
           <Input
             id={`${fieldId}-url`}
             value={url}
-            placeholder="https://…（选填）"
+            placeholder={t("materialForm.placeholder.url")}
             onChange={(event) => setUrl(event.target.value)}
           />
         </Form.Item>
-        <Form.Item label={`附件（最多 ${MAX_FILES} 个，其中图片最多 ${MAX_IMAGE_FILES} 张）`}>
+        <Form.Item
+          label={t("materialForm.label.attachments", {
+            count: MAX_FILES,
+            images: MAX_IMAGE_FILES,
+          })}
+        >
           {/* 拖进来的文件按类型分流：图片走图片校验，其余按文本文件读取。 */}
           <FileDropZone
             accept={`${IMAGE_ACCEPT},${TEXT_FILE_ACCEPT}`}
@@ -260,7 +261,7 @@ export default function MaterialFormModal({
                 <Button icon={<FileTextOutlined />}>{t("materialForm.action.addText")}</Button>
               </Upload>
               <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                也可以直接拖进来；PDF / Word 请把文字粘贴到正文，程序不保存原始文件
+                {t("materialForm.hint.dropNote")}
               </Typography.Text>
             </Space>
           </FileDropZone>
@@ -277,15 +278,17 @@ export default function MaterialFormModal({
                     <Typography.Text ellipsis={{ tooltip: item.name }}>{item.name}</Typography.Text>
                     <Typography.Text type="secondary" style={{ fontSize: 12 }}>
                       {item.data_url
-                        ? `图片 · ${Math.round(item.size_bytes / 1024)} KB`
-                        : `文字 ${item.text.length} 字`}
+                        ? t("materialForm.file.image", {
+                            size: Math.round(item.size_bytes / 1024),
+                          })
+                        : t("materialForm.file.text", { count: item.text.length })}
                     </Typography.Text>
                   </div>
                   <Button
                     type="text"
                     size="small"
                     danger
-                    aria-label={`移除附件 ${item.name}`}
+                    aria-label={t("materialForm.aria.removeFile", { name: item.name })}
                     icon={<DeleteOutlined />}
                     onClick={() => setFiles((current) => current.filter((_, i) => i !== index))}
                   />
@@ -294,12 +297,16 @@ export default function MaterialFormModal({
             </div>
           )}
         </Form.Item>
-        <Form.Item label="备注" htmlFor={`${fieldId}-note`} style={{ marginBottom: 0 }}>
+        <Form.Item
+          label={t("materialForm.label.note")}
+          htmlFor={`${fieldId}-note`}
+          style={{ marginBottom: 0 }}
+        >
           <Input.TextArea
             id={`${fieldId}-note`}
             value={note}
             autoSize={{ minRows: 2, maxRows: 5 }}
-            placeholder="为什么留下它、还缺什么（选填）"
+            placeholder={t("materialForm.placeholder.note")}
             onChange={(event) => setNote(event.target.value)}
           />
         </Form.Item>
