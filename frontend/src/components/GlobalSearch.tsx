@@ -16,6 +16,8 @@ import { CloseOutlined, SearchOutlined } from "@ant-design/icons";
 import { Button, Input, Space, Spin, Tag, Tooltip, Typography } from "antd";
 import type { InputRef } from "antd";
 import EmptyState from "./common/EmptyState";
+import { t } from "../i18n";
+import { useLocale } from "../i18n/i18nContext";
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
@@ -36,6 +38,7 @@ interface Props {
 }
 
 export default function GlobalSearch({ showTrigger = true }: Props) {
+  useLocale();
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -122,7 +125,7 @@ export default function GlobalSearch({ showTrigger = true }: Props) {
         })
         .catch((err) => {
           if (requestIdRef.current !== requestId) return;
-          setError(err instanceof Error ? err.message : "搜索失败");
+          setError(err instanceof Error ? err.message : t("globalSearch.error.fallback"));
         })
         .finally(() => {
           if (requestIdRef.current !== requestId) return;
@@ -202,11 +205,11 @@ export default function GlobalSearch({ showTrigger = true }: Props) {
   return (
     <>
       {showTrigger && (
-        <Tooltip title="全站搜索（Ctrl/⌘ + K）">
+        <Tooltip title={t("globalSearch.trigger.tooltip")}>
           <Button
             type="text"
             icon={<SearchOutlined />}
-            aria-label="全站搜索"
+            aria-label={t("globalSearch.trigger.aria")}
             onClick={() => {
               setActiveIndex(-1);
               setOpen(true);
@@ -220,15 +223,15 @@ export default function GlobalSearch({ showTrigger = true }: Props) {
               ref={panelRef}
               className="global-search-popover"
               role="search"
-              aria-label="全站搜索"
+              aria-label={t("globalSearch.panel.aria")}
             >
               <div className="global-search-header">
-                <Typography.Text strong>全站搜索</Typography.Text>
+                <Typography.Text strong>{t("globalSearch.title")}</Typography.Text>
                 <Button
                   type="text"
                   size="small"
                   icon={<CloseOutlined />}
-                  aria-label="关闭搜索"
+                  aria-label={t("globalSearch.close.aria")}
                   onClick={close}
                 />
               </div>
@@ -236,8 +239,8 @@ export default function GlobalSearch({ showTrigger = true }: Props) {
                 ref={inputRef}
                 allowClear
                 value={query}
-                placeholder="搜索岗位、简历、内推、提醒、面经、台账、资料…"
-                aria-label="搜索关键词"
+                placeholder={t("globalSearch.input.placeholder")}
+                aria-label={t("globalSearch.input.aria")}
                 onChange={(event) => {
                   const next = event.target.value;
                   const keyword = next.trim();
@@ -258,23 +261,21 @@ export default function GlobalSearch({ showTrigger = true }: Props) {
               />
               <div className="global-search-results" ref={listRef}>
                 {!query.trim() ? (
-                  <Typography.Text type="secondary">
-                    输入关键词开始搜索；结果只来自你自己的本机数据，不会联网。
-                  </Typography.Text>
+                  <Typography.Text type="secondary">{t("globalSearch.idle")}</Typography.Text>
                 ) : error ? (
                   <Typography.Text type="danger">{error}</Typography.Text>
                 ) : loading && !result ? (
                   <Space>
                     <Spin size="small" />
-                    <Typography.Text type="secondary">搜索中…</Typography.Text>
+                    <Typography.Text type="secondary">{t("globalSearch.loading")}</Typography.Text>
                   </Space>
                 ) : result && total === 0 ? (
-                  <EmptyState inline description="没有匹配的内容" />
+                  <EmptyState inline description={t("globalSearch.empty")} />
                 ) : result ? (
                   <Space orientation="vertical" size={10} style={{ width: "100%" }}>
                     {result.jobs.length > 0 && (
                       <div>
-                        <Typography.Text strong>岗位</Typography.Text>
+                        <Typography.Text strong>{t("globalSearch.group.jobs")}</Typography.Text>
                         {result.jobs.map((job, index) => (
                           <button
                             key={`job-${job.id}`}
@@ -291,7 +292,7 @@ export default function GlobalSearch({ showTrigger = true }: Props) {
                     )}
                     {result.resumes.length > 0 && (
                       <div>
-                        <Typography.Text strong>简历</Typography.Text>
+                        <Typography.Text strong>{t("globalSearch.group.resumes")}</Typography.Text>
                         {result.resumes.map((resume, index) => (
                           <button
                             key={`resume-${resume.id}`}
@@ -302,7 +303,9 @@ export default function GlobalSearch({ showTrigger = true }: Props) {
                           >
                             <span>{resume.title}</span>
                             <Typography.Text type="secondary">
-                              {resume.company || resume.job_title || "通用简历"}
+                              {resume.company ||
+                                resume.job_title ||
+                                t("globalSearch.resume.fallback")}
                             </Typography.Text>
                           </button>
                         ))}
@@ -310,7 +313,7 @@ export default function GlobalSearch({ showTrigger = true }: Props) {
                     )}
                     {result.more.length > 0 && (
                       <div>
-                        <Typography.Text strong>其它</Typography.Text>
+                        <Typography.Text strong>{t("globalSearch.group.more")}</Typography.Text>
                         {result.more.map((hit, index) => (
                           <button
                             key={`${hit.type}-${hit.id}`}
