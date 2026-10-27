@@ -8,9 +8,12 @@
 import { CheckCircleFilled, RightOutlined, RocketOutlined } from "@ant-design/icons";
 import { Card, Space, Typography } from "antd";
 import { Link } from "react-router-dom";
+import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 import type { ActivationStage } from "./useActivationProgress";
 
 export function FirstDeliveryPanel({ stages }: { stages: ActivationStage[] }) {
+  useLocale();
   // 当前步 = 第一条未完成；它之前的都算完成态，之后的是未来态。
   const currentIndex = stages.findIndex((stage) => !stage.done);
 
@@ -22,7 +25,7 @@ export function FirstDeliveryPanel({ stages }: { stages: ActivationStage[] }) {
       title={
         <Space size={8}>
           <RocketOutlined />
-          <span>从零到第一份可交付简历</span>
+          <span>{t("activationUi.panel.title")}</span>
         </Space>
       }
     >
@@ -47,7 +50,11 @@ export function FirstDeliveryPanel({ stages }: { stages: ActivationStage[] }) {
               <span className="first-delivery-stage-copy">
                 <span className="first-delivery-stage-title">
                   {stage.title}
-                  {isDone && <Typography.Text type="secondary">已完成</Typography.Text>}
+                  {isDone && (
+                    <Typography.Text type="secondary">
+                      {t("activationUi.panel.done")}
+                    </Typography.Text>
+                  )}
                 </span>
                 <Typography.Text type="secondary" style={{ fontSize: 12 }}>
                   {stage.description}
@@ -75,7 +82,7 @@ export function FirstDeliveryPanel({ stages }: { stages: ActivationStage[] }) {
         })}
       </ul>
       <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-        手动填写、本地检查与导出不需要配置模型；需要 AI 的功能随时可在设置里配。
+        {t("activationUi.panel.note")}
       </Typography.Text>
     </Card>
   );
