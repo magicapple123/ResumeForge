@@ -3,6 +3,7 @@
 import { App } from "antd";
 import { useEffect, useRef, useState } from "react";
 import { listResumeIds } from "../../api/resumes";
+import { t } from "../../i18n";
 
 export function useSelectAllResumes({
   keyword,
@@ -44,20 +45,18 @@ export function useSelectAllResumes({
       });
       if (generation !== generationRef.current) return; // 期间筛选已变：旧结果丢弃
       if (ids.length === 0) {
-        message.warning("当前筛选下没有简历");
+        message.warning(t("resumesPage.selectAll.empty"));
         return;
       }
       if (ids.length > 5000) {
-        message.warning(
-          `当前筛选下共 ${ids.length} 份简历，超出单次批量上限 5000 份；请先用筛选或搜索缩小范围`,
-        );
+        message.warning(t("resumesPage.selectAll.tooMany", { count: ids.length }));
         return;
       }
       setSelectedIds(ids);
-      message.success(`已选中当前筛选下的全部 ${ids.length} 份简历（所有页）`);
+      message.success(t("resumesPage.selectAll.done", { count: ids.length }));
     } catch (err) {
       if (generation !== generationRef.current) return;
-      message.error(err instanceof Error ? err.message : "获取简历列表失败");
+      message.error(err instanceof Error ? err.message : t("resumesPage.error.listFetchFailed"));
     } finally {
       if (generation === generationRef.current) setSelectAllPagesLoading(false);
     }
