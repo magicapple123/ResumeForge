@@ -6,6 +6,8 @@
 import { FileSearchOutlined } from "@ant-design/icons";
 import { Alert, Button, Form } from "antd";
 import type { ChangeEvent, ClipboardEvent } from "react";
+import { t } from "../../../i18n";
+import { useLocale } from "../../../i18n/i18nContext";
 import { MAX_JOB_TEXT_CHARS } from "../../../config";
 import type { StagedFile } from "../../../hooks/useRecognitionFiles";
 import type { RecognitionSource } from "../../../types";
@@ -42,19 +44,20 @@ export default function RecognitionSourceSection({
   onPaste,
   onParse,
 }: Props) {
+  useLocale();
   return (
     <>
-      <Form.Item label="完整招聘信息">
+      <Form.Item label={t("jobsForm.recognition.label")}>
         {/* HintedTextArea 是 Form.Item 直挂版：注入 value/onChange 的同时顺带渲染
             达上限提示（全仓禁用 antd showCount）。上限与后端解析接口的 50_000 对齐。 */}
         <HintedTextArea
-          aria-label="完整招聘信息"
+          aria-label={t("jobsForm.recognition.label")}
           value={rawText}
           maxLength={MAX_JOB_TEXT_CHARS}
           disabled={parsing}
           onPaste={onPaste}
           onChange={onRawTextChange}
-          placeholder="粘贴岗位名称、地点、岗位描述、任职要求等完整招聘信息，或按 Ctrl+V 直接贴招聘截图（也可以上传 pdf/docx 招聘文档）"
+          placeholder={t("jobsForm.recognition.placeholder")}
           style={{ height: 220, resize: "none" }}
         />
       </Form.Item>
@@ -74,7 +77,7 @@ export default function RecognitionSourceSection({
         }}
       >
         <Button type="primary" icon={<FileSearchOutlined />} loading={parsing} onClick={onParse}>
-          识别并填充
+          {t("jobsForm.recognition.submit")}
         </Button>
       </div>
       <RecognitionOutcome source={recognitionSource} text={recognizedText} />
@@ -82,7 +85,7 @@ export default function RecognitionSourceSection({
         <Alert
           type="warning"
           showIcon
-          title={parseWarnings.join("；")}
+          title={parseWarnings.join(t("jobsForm.recognition.warningSeparator"))}
           style={{ marginBottom: 16 }}
         />
       )}
