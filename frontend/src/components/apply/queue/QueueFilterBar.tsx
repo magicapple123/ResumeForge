@@ -4,7 +4,7 @@
  * （自 ApplyQueuePanel 拆出：DOM、类名、Tootip/Popconfirm 文案与按钮顺序逐字随迁，
  * 状态仍由面板持有，这里只受控展示并回调。）
  *
- * 两个下拉的选项文案仍来自 `types` 的展示表（协议值 → 展示名的唯一正本，见 filterOptions.ts），
+ * 两个下拉的选项在渲染期由 filterOptions.ts 构建（展示名走语言包，`value` 仍是协议值），
  * 本组件只迁工具栏自己的文案；移出确认与详情抽屉共用同一条后果正文，避免两处措辞分叉。
  */
 import { PlayCircleOutlined, ReloadOutlined } from "@ant-design/icons";
@@ -13,8 +13,8 @@ import { t } from "../../../i18n";
 import { useLocale } from "../../../i18n/i18nContext";
 import type { QueueStatus } from "../../../types";
 import {
-  STATUS_FILTER_OPTIONS,
   admissionFilterOptions,
+  statusFilterOptions,
   type AdmissionFilterValue,
 } from "./filterOptions";
 
@@ -71,7 +71,7 @@ export function QueueFilterBar({
           style={{ width: 128 }}
           value={statusFilter}
           onChange={(value) => onStatusChange(value as QueueStatus | undefined)}
-          options={STATUS_FILTER_OPTIONS}
+          options={statusFilterOptions()}
           aria-label={t("applyQueue.filter.byStatus")}
         />
         <Select
