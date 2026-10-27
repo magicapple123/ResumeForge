@@ -33,7 +33,9 @@ export default function RedactionModal({ recordId, open, onClose }: Props) {
     try {
       setPreview(await redactResume(recordId, options));
     } catch (err) {
-      message.error(err instanceof Error ? err.message : "脱敏预览失败");
+      message.error(
+        err instanceof Error ? err.message : t("componentsMisc2.redaction.previewFailed"),
+      );
     } finally {
       setLoading(false);
     }
@@ -49,11 +51,13 @@ export default function RedactionModal({ recordId, open, onClose }: Props) {
       });
       downloadBlob(result.blob, result.filename);
       if (result.savedTo) {
-        message.success(`已同时保存到 ${result.savedTo}`);
+        message.success(t("componentsMisc2.redaction.savedTo", { path: result.savedTo }));
       }
-      message.success("脱敏版已开始下载");
+      message.success(t("componentsMisc2.redaction.downloadStarted"));
     } catch (err) {
-      message.error(err instanceof Error ? err.message : "下载脱敏版失败");
+      message.error(
+        err instanceof Error ? err.message : t("componentsMisc2.redaction.downloadFailed"),
+      );
     } finally {
       setExporting(false);
     }
@@ -65,7 +69,7 @@ export default function RedactionModal({ recordId, open, onClose }: Props) {
 
   return (
     <Modal
-      title="一键脱敏"
+      title={t("componentsMisc2.redaction.title")}
       open={open}
       onCancel={onClose}
       footer={null}
@@ -74,7 +78,7 @@ export default function RedactionModal({ recordId, open, onClose }: Props) {
     >
       <Space orientation="vertical" style={{ width: "100%" }} size="middle">
         <div>
-          <Typography.Text strong>遮罩范围</Typography.Text>
+          <Typography.Text strong>{t("componentsMisc2.redaction.scope")}</Typography.Text>
           <div style={{ marginTop: 8 }}>
             {REDACTION_FIELDS.map((field) => (
               <Checkbox
@@ -90,20 +94,26 @@ export default function RedactionModal({ recordId, open, onClose }: Props) {
 
         <Space>
           <Button type="primary" loading={loading} onClick={() => void previewRedacted()}>
-            预览脱敏
+            {t("componentsMisc2.redaction.preview")}
           </Button>
           <Button loading={exporting} onClick={() => void downloadRedacted()}>
-            下载脱敏版（PDF）
+            {t("componentsMisc2.redaction.download")}
           </Button>
         </Space>
 
         {loading && <Spin />}
         {!loading && preview && (
           <Descriptions column={1} size="small" bordered>
-            <Descriptions.Item label="姓名">{preview.name}</Descriptions.Item>
-            <Descriptions.Item label="手机">{preview.phone}</Descriptions.Item>
-            <Descriptions.Item label="邮箱">{preview.email}</Descriptions.Item>
-            <Descriptions.Item label="最近公司">
+            <Descriptions.Item label={t("componentsMisc2.redaction.field.name")}>
+              {preview.name}
+            </Descriptions.Item>
+            <Descriptions.Item label={t("componentsMisc2.redaction.field.phone")}>
+              {preview.phone}
+            </Descriptions.Item>
+            <Descriptions.Item label={t("componentsMisc2.redaction.field.email")}>
+              {preview.email}
+            </Descriptions.Item>
+            <Descriptions.Item label={t("componentsMisc2.redaction.field.company")}>
               {preview.experience[0]?.company ?? "-"}
             </Descriptions.Item>
           </Descriptions>
