@@ -4,6 +4,7 @@ import { ThunderboltOutlined } from "@ant-design/icons";
 import { Alert, App, Input, Modal, Typography } from "antd";
 import { useState } from "react";
 import { reviseResume } from "../../api/resumes";
+import { useI18n } from "../../i18n/i18nContext";
 import { MaxLengthHint } from "../common/MaxLengthHint";
 import type { ResumeDetail } from "../../types";
 
@@ -26,6 +27,7 @@ export default function ResumeReviseModal({
   onClose,
   onApplied,
 }: Props) {
+  const { t } = useI18n();
   const { message } = App.useApp();
   const [instructions, setInstructions] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -59,10 +61,12 @@ export default function ResumeReviseModal({
     try {
       const updated = await reviseResume(recordId, instructions);
       await onApplied(updated);
-      message.success(instructions.trim() ? "已按你的要求修改简历" : "已重新生成简历内容");
+      message.success(
+        instructions.trim() ? t("resume.revise.successTargeted") : t("resume.revise.successFull"),
+      );
       close();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "修订简历失败，请稍后重试");
+      setError(err instanceof Error ? err.message : t("resume.revise.failed"));
     } finally {
       setSubmitting(false);
     }
@@ -74,26 +78,24 @@ export default function ResumeReviseModal({
     <Modal
       title={
         <span>
-          <ThunderboltOutlined /> AI 修改简历
+          <ThunderboltOutlined /> {t("resume.revise.title")}
         </span>
       }
       open={open}
       onCancel={close}
       confirmLoading={submitting}
       onOk={() => void submit()}
-      okText={hasInstructions ? "按要求修改" : "整体重新生成"}
+      okText={hasInstructions ? t("resume.revise.okTargeted") : t("resume.revise.okFull")}
       width={560}
       destroyOnHidden
     >
       <Typography.Paragraph type="secondary">
-        {hasInstructions
-          ? "AI 只会修改你明确提出的内容，其余部分逐字保留。"
-          : "没有填写修改要求时，AI 会整体重新生成：事实与经历保持不变，表达与结构重新组织。"}
+        {hasInstructions ? t("resume.revise.hintTargeted") : t("resume.revise.hintFull")}
       </Typography.Paragraph>
       <Input.TextArea
         value={instructions}
         onChange={(event) => setInstructions(event.target.value.slice(0, MAX_CHARS))}
-        placeholder={`可选。例：把个人总结改得更突出数据分析能力；项目经历里补充量化结果。留空则整体重新生成。最多 ${MAX_CHARS} 字。`}
+        placeholder={t("resume.revise.placeholder", { max: MAX_CHARS })}
         autoSize={{ minRows: 4, maxRows: 10 }}
         maxLength={MAX_CHARS}
         disabled={submitting}
