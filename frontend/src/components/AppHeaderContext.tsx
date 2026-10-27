@@ -36,6 +36,8 @@ import type { Profile } from "../types";
 import type { DatasetInfo } from "../types/settings";
 import { reloadPage } from "../utils/navigation";
 import { saveActiveDatasetId } from "../utils/datasetScope";
+import { t } from "../i18n";
+import { useLocale } from "../i18n/i18nContext";
 import DatasetCreateModal from "./DatasetCreateModal";
 
 /** 下拉菜单里「新建数据集…」的 key：与数据集 id 不可能冲突。 */
@@ -52,6 +54,8 @@ interface Props {
 }
 
 export default function AppHeaderContext({ beforeAvatar }: Props = {}) {
+  // 本组件用模块级 t()：必须订阅语言变化，否则切语言后页头文案不重渲染。
+  const locale = useLocale();
   const navigate = useNavigate();
   const location = useLocation();
   const { message, modal } = App.useApp();
@@ -148,7 +152,9 @@ export default function AppHeaderContext({ beforeAvatar }: Props = {}) {
         saveActiveDatasetId(next.id);
         scheduleReload();
       } catch (error) {
-        setSwitchError(error instanceof Error ? error.message : "切换数据集失败");
+        setSwitchError(
+          error instanceof Error ? error.message : t("appHeader.dataset.switchFailed"),
+        );
         setSwitchingId(null);
       }
     },
@@ -169,7 +175,7 @@ export default function AppHeaderContext({ beforeAvatar }: Props = {}) {
     if (creating) return;
     const name = createName.trim();
     if (!name) {
-      message.warning("请填写数据集名称");
+      message.warning(t("appHeader.dataset.createNameRequired"));
       return;
     }
     setCreating(true);
@@ -184,10 +190,10 @@ export default function AppHeaderContext({ beforeAvatar }: Props = {}) {
         /* 忽略：下拉条目下一次挂载时会自然补齐 */
       }
       modal.confirm({
-        title: `已新建「${created.name || name}」`,
-        content: "是否立即切换到这个数据集？",
-        okText: "立即切换",
-        cancelText: "稍后",
+        title: t("appHeader.dataset.createSucceeded", { name: created.name || name }),
+        content: t("appHeader.dataset.createSwitchPrompt"),
+        okText: t("appHeader.dataset.createSwitchNow"),
+        cancelText: t("appHeader.dataset.createSwitchLater"),
         onOk: async () => {
           try {
             await activateDataset(created.id);
@@ -196,28 +202,32 @@ export default function AppHeaderContext({ beforeAvatar }: Props = {}) {
             saveActiveDatasetId(created.id);
             scheduleReload();
           } catch (error) {
-            message.error(error instanceof Error ? error.message : "切换数据集失败");
+            message.error(
+              error instanceof Error ? error.message : t("appHeader.dataset.switchFailed"),
+            );
           }
         },
       });
     } catch (error) {
       // 后端的 detail 原文（例如「数据集名称已存在」）比通用文案有用得多。
-      message.error(error instanceof Error ? error.message : "新建数据集失败");
+      message.error(error instanceof Error ? error.message : t("appHeader.dataset.createFailed"));
     } finally {
       setCreating(false);
     }
   }, [createName, creating, message, modal]);
 
   const datasetMenuItems = useMemo<MenuProps["items"]>(() => {
+    // t() 是模块级的，不会自己触发重算；语言变了要重新生成菜单文案。
+    void locale;
     const items: MenuProps["items"] = datasets.map((item) => ({
       key: item.id,
       label: (
         <span className="app-dataset-menu-label" title={item.name}>
-          {item.is_active ? `${item.name}（当前）` : item.name}
+          {item.is_active ? t("appHeader.dataset.menuCurrent", { name: item.name }) : item.name}
           {item.source === "sample" && (
-            <Tooltip title="体验数据，与你的真实资料相互独立">
+            <Tooltip title={t("appHeader.dataset.sampleTagTooltip")}>
               <span className="app-dataset-sample-tag" aria-hidden="true">
-                示例
+                {t("appHeader.dataset.sampleTag")}
               </span>
             </Tooltip>
           )}
@@ -232,7 +242,7 @@ export default function AppHeaderContext({ beforeAvatar }: Props = {}) {
       items.unshift({
         key: `return-main:${mainDataset.id}`,
         icon: <HomeOutlined />,
-        label: <span className="app-dataset-return">回到我的数据</span>,
+        label: <span className="app-dataset-return">{t("appHeader.dataset.menuBackToMine")}</span>,
       });
     }
     // 末尾固定留一个「新建数据集…」：用户想到"再开一份数据"的时刻正是在这个下拉里，
@@ -241,10 +251,10 @@ export default function AppHeaderContext({ beforeAvatar }: Props = {}) {
     items.push({
       key: CREATE_DATASET_KEY,
       icon: <PlusOutlined />,
-      label: "新建数据集…",
+      label: t("appHeader.dataset.menuCreate"),
     });
     return items;
-  }, [datasets, switchingId, isSampleActive]);
+  }, [datasets, locale, switchingId, isSampleActive]);
 
   const displayName = (profile?.name || "").trim();
   const photo = (profile?.photo || "").trim();
@@ -298,14 +308,20 @@ export default function AppHeaderContext({ beforeAvatar }: Props = {}) {
                 ref={datasetChipRef}
                 type="button"
                 className="app-dataset-chip"
-                aria-label={`当前数据集：${dataset.name}${isSampleActive ? "，示例数据" : ""}`}
+                aria-label={
+                  isSampleActive
+                    ? t("appHeader.dataset.chipAriaSample", { name: dataset.name })
+                    : t("appHeader.dataset.chipAria", { name: dataset.name })
+                }
                 aria-haspopup="menu"
               >
                 <DatabaseOutlined />
                 <span className="app-dataset-name">{dataset.name}</span>
                 {isSampleActive && (
-                  <Tooltip title="体验数据，与你的真实资料相互独立">
-                    <span className="app-dataset-sample-tag">示例</span>
+                  <Tooltip title={t("appHeader.dataset.sampleTagTooltip")}>
+                    <span className="app-dataset-sample-tag">
+                      {t("appHeader.dataset.sampleTag")}
+                    </span>
                   </Tooltip>
                 )}
                 <DownOutlined className="app-dataset-arrow" />
@@ -319,7 +335,7 @@ export default function AppHeaderContext({ beforeAvatar }: Props = {}) {
             type="button"
             className="app-user-avatar-button"
             onClick={() => navigate("/profile")}
-            aria-label="进入我的资料"
+            aria-label={t("appHeader.avatar.openProfile")}
           >
             <Avatar
               size={36}
@@ -328,7 +344,11 @@ export default function AppHeaderContext({ beforeAvatar }: Props = {}) {
               // 只能二选一：有名字就用首字（更像头像），没名字才用图标。
               icon={!photo && !initial ? <UserOutlined /> : undefined}
               className="app-user-avatar"
-              alt={displayName ? `${displayName}的头像` : "用户头像"}
+              alt={
+                displayName
+                  ? t("appHeader.avatar.altWithName", { name: displayName })
+                  : t("appHeader.avatar.altFallback")
+              }
             >
               {!photo && initial ? initial : undefined}
             </Avatar>
