@@ -19,27 +19,37 @@ import {
 } from "../../../api/assistant";
 import type { AssistantWriteProposal } from "../../../types";
 import { formatErrorGuidance } from "../../../api/errorGuidance";
+import { t, type MessageKey } from "../../../i18n";
+import { useLocale } from "../../../i18n/i18nContext";
 
-const STATUS_META: Record<AssistantWriteProposal["status"], { label: string; color: string }> = {
-  pending: { label: "待确认", color: "warning" },
-  approved: { label: "已批准", color: "processing" },
-  executed: { label: "已执行", color: "success" },
-  expired: { label: "已失效", color: "default" },
-  rejected: { label: "已拒绝", color: "default" },
-  failed: { label: "执行失败", color: "error" },
+/** 状态值是协议值（后端返回），这里只把它们映射到语言包 key。 */
+const STATUS_META: Record<
+  AssistantWriteProposal["status"],
+  { labelKey: MessageKey; color: string }
+> = {
+  pending: { labelKey: "assistantUi.actionProposal.status.pending", color: "warning" },
+  approved: { labelKey: "assistantUi.actionProposal.status.approved", color: "processing" },
+  executed: { labelKey: "assistantUi.actionProposal.status.executed", color: "success" },
+  expired: { labelKey: "assistantUi.actionProposal.status.expired", color: "default" },
+  rejected: { labelKey: "assistantUi.actionProposal.status.rejected", color: "default" },
+  failed: { labelKey: "assistantUi.actionProposal.status.failed", color: "error" },
   // RR-05：执行中途失败但**已经提交过**——数据可能已落库，所以不能说"失败"，
   // 也不能提供任何重试入口（提案终态已经封死）。
-  unknown: { label: "结果未知", color: "warning" },
+  unknown: { labelKey: "assistantUi.actionProposal.status.unknown", color: "warning" },
 };
 
 /** 兜底元数据：后端新增终态而前端还没跟上时也要能渲染，而不是整页白屏。 */
-const FALLBACK_STATUS_META = { label: "状态未知", color: "default" } as const;
+const FALLBACK_STATUS_META = {
+  labelKey: "assistantUi.actionProposal.status.fallback",
+  color: "default",
+} as const;
 
 interface Props {
   proposal: AssistantWriteProposal;
 }
 
 export default function ActionProposalCard({ proposal: initial }: Props) {
+  useLocale();
   const { message } = App.useApp();
   const [proposal, setProposal] = useState(initial);
   const [busy, setBusy] = useState(false);
@@ -68,7 +78,11 @@ export default function ActionProposalCard({ proposal: initial }: Props) {
       if (action === "approve") {
         const result = await approveWriteProposal(proposal.proposal_id);
         setProposal(result.proposal);
-        message.success(result.changed ? "写入已完成" : "提案已执行");
+        message.success(
+          result.changed
+            ? t("assistantUi.actionProposal.toast.done")
+            : t("assistantUi.actionProposal.toast.executed"),
+        );
       } else {
         const result = await rejectWriteProposal(proposal.proposal_id);
         setProposal(result.proposal);
@@ -76,7 +90,7 @@ export default function ActionProposalCard({ proposal: initial }: Props) {
     } catch (error) {
       // 兜底不再是「操作失败」：统一走 errorGuidance 的「原因 · 建议 · 编号」三段，
       // 用户能照着「建议」做，也能把「编号」报给维护者（§4.6）。
-      message.error(formatErrorGuidance(error, "执行提案失败"));
+      message.error(formatErrorGuidance(error, t("assistantUi.actionProposal.error.fallback")));
       // 404/409（失效、已执行、跨数据集等）后刷新一次真实状态，卡片不再可操作。
       try {
         const result = await getWriteProposal(proposal.proposal_id);
@@ -97,13 +111,13 @@ export default function ActionProposalCard({ proposal: initial }: Props) {
     <div
       className="assistant-write-proposal"
       role="group"
-      aria-label={`写入提案：${preview.target}`}
+      aria-label={t("assistantUi.actionProposal.aria", { target: preview.target })}
     >
       <div className="assistant-write-proposal-head">
         <ExclamationCircleOutlined style={{ marginRight: 6 }} />
-        <Typography.Text strong>助手请求写入数据</Typography.Text>
+        <Typography.Text strong>{t("assistantUi.actionProposal.heading")}</Typography.Text>
         <Tag color={meta.color} style={{ marginLeft: 8 }}>
-          {meta.label}
+          {t(meta.labelKey)}
         </Tag>
         <Typography.Text type="secondary" style={{ marginLeft: 8 }}>
           {proposal.tool_name}
@@ -119,7 +133,9 @@ export default function ActionProposalCard({ proposal: initial }: Props) {
         <ul className="assistant-write-proposal-changes">
           {preview.changes.map((change, index) => (
             <li key={`${change.field}-${index}`}>
-              <Typography.Text>{change.field}：</Typography.Text>
+              <Typography.Text>
+                {t("assistantUi.actionProposal.changeField", { field: change.field })}
+              </Typography.Text>
               {change.before != null && (
                 <Typography.Text type="secondary" delete>
                   {change.before}
@@ -130,14 +146,16 @@ export default function ActionProposalCard({ proposal: initial }: Props) {
               )}
               {change.after != null && <Typography.Text>{change.after}</Typography.Text>}
               {change.before == null && change.after == null && (
-                <Typography.Text type="secondary">（无内容）</Typography.Text>
+                <Typography.Text type="secondary">
+                  {t("assistantUi.actionProposal.noContent")}
+                </Typography.Text>
               )}
             </li>
           ))}
         </ul>
       )}
       <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-        在你确认之前，这条写入不会执行；助手也无法替你确认。
+        {t("assistantUi.actionProposal.notice")}
       </Typography.Text>
       {pending && (
         <div className="assistant-write-proposal-actions">
@@ -149,7 +167,7 @@ export default function ActionProposalCard({ proposal: initial }: Props) {
               loading={busy}
               onClick={() => act("approve")}
             >
-              确认执行
+              {t("assistantUi.actionProposal.action.approve")}
             </Button>
             <Button
               size="small"
@@ -157,7 +175,7 @@ export default function ActionProposalCard({ proposal: initial }: Props) {
               disabled={busy}
               onClick={() => act("reject")}
             >
-              拒绝
+              {t("assistantUi.actionProposal.action.reject")}
             </Button>
           </Space>
         </div>
