@@ -11,27 +11,33 @@ import {
   type JobMatchBatchOut,
   type MatchCondition,
 } from "../../types";
+import { t, type MessageKey } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 
 type BatchMatchResult = NonNullable<JobMatchBatchItem["result"]>;
 
 const GROUPS: Array<{
   key: keyof Pick<BatchMatchResult, "hard_conditions" | "core_abilities" | "bonus_items">;
-  label: string;
+  labelKey: MessageKey;
 }> = [
-  { key: "hard_conditions", label: "硬性条件" },
-  { key: "core_abilities", label: "核心能力" },
-  { key: "bonus_items", label: "加分项" },
+  { key: "hard_conditions", labelKey: "jobMatchBatchResult.group.hardConditions" },
+  { key: "core_abilities", labelKey: "jobMatchBatchResult.group.coreAbilities" },
+  { key: "bonus_items", labelKey: "jobMatchBatchResult.group.bonusItems" },
 ];
 
-function sourceLabel(source: JobMatchBatchItem["analysis_source"]): string {
-  if (source === "existing") return "复用已有分析";
-  if (source === "local") return "本地降级";
-  return "本次新分析";
+/** 分析来源对应的文案 key；渲染处再 `t()`，模块作用域不求值文案。 */
+function sourceLabel(source: JobMatchBatchItem["analysis_source"]): MessageKey {
+  if (source === "existing") return "jobMatchBatchResult.source.existing";
+  if (source === "local") return "jobMatchBatchResult.source.local";
+  return "jobMatchBatchResult.source.new";
 }
 
 function ConditionList({ conditions }: { conditions: MatchCondition[] }) {
+  useLocale();
   if (conditions.length === 0) {
-    return <Typography.Text type="secondary">暂无条目</Typography.Text>;
+    return (
+      <Typography.Text type="secondary">{t("jobMatchBatchResult.condition.empty")}</Typography.Text>
+    );
   }
   return (
     <Listy
@@ -48,7 +54,9 @@ function ConditionList({ conditions }: { conditions: MatchCondition[] }) {
                 <Typography.Text strong>{condition.label}</Typography.Text>
               </Space>
               {condition.evidence ? (
-                <Typography.Text type="secondary">依据：{condition.evidence}</Typography.Text>
+                <Typography.Text type="secondary">
+                  {t("jobMatchBatchResult.condition.evidence", { evidence: condition.evidence })}
+                </Typography.Text>
               ) : null}
             </Space>
           </ListyItem>
@@ -59,37 +67,55 @@ function ConditionList({ conditions }: { conditions: MatchCondition[] }) {
 }
 
 function MatchDetail({ item }: { item: JobMatchBatchItem }) {
+  useLocale();
   const result = item.result;
   if (!result) return null;
   const admission = ADMISSION_META[result.admission];
   return (
     <Space orientation="vertical" size="small" style={{ width: "100%" }}>
       <Space wrap>
-        <Tag color={admission.color}>准入：{admission.label}</Tag>
+        <Tag color={admission.color}>
+          {t("jobMatchBatchResult.admission.tag", { label: admission.label })}
+        </Tag>
         <Tag>
-          硬性门槛：
-          {result.hard_gate === "met" ? "满足" : result.hard_gate === "unmet" ? "未满足" : "待确认"}
+          {t("jobMatchBatchResult.hardGate.field", {
+            state:
+              result.hard_gate === "met"
+                ? t("jobMatchBatchResult.hardGate.met")
+                : result.hard_gate === "unmet"
+                  ? t("jobMatchBatchResult.hardGate.unmet")
+                  : t("jobMatchBatchResult.hardGate.unknown"),
+          })}
         </Tag>
       </Space>
       {GROUPS.map((group) => (
         <section key={group.key}>
-          <Typography.Text strong>{group.label}</Typography.Text>
+          <Typography.Text strong>{t(group.labelKey)}</Typography.Text>
           <ConditionList conditions={result[group.key] ?? []} />
         </section>
       ))}
       {result.advice ? <Typography.Paragraph>{result.advice}</Typography.Paragraph> : null}
       {result.notes.length > 0 ? (
-        <Typography.Text type="secondary">说明：{result.notes.join("；")}</Typography.Text>
+        <Typography.Text type="secondary">
+          {t("jobMatchBatchResult.notes.field", {
+            notes: result.notes.join(t("jobMatchBatchResult.separator.notes")),
+          })}
+        </Typography.Text>
       ) : null}
     </Space>
   );
 }
 
 export function BatchItemCard({ item }: { item: JobMatchBatchItem }) {
+  useLocale();
   if (item.status === "failed") {
     return (
       <Card size="small" title={`${item.job_title}${item.company ? ` · ${item.company}` : ""}`}>
-        <Alert type="error" showIcon title={item.error || "本岗位分析失败"} />
+        <Alert
+          type="error"
+          showIcon
+          title={item.error || t("jobMatchBatchResult.error.itemFailed")}
+        />
       </Card>
     );
   }
@@ -103,14 +129,14 @@ export function BatchItemCard({ item }: { item: JobMatchBatchItem }) {
       size="small"
       title={
         <Space size={6} wrap>
-          <Tag color="blue">第 {item.rank ?? "-"} 名</Tag>
+          <Tag color="blue">{t("jobMatchBatchResult.card.rank", { rank: item.rank ?? "-" })}</Tag>
           <span>{item.job_title}</span>
           {item.company ? (
             <Typography.Text type="secondary">· {item.company}</Typography.Text>
           ) : null}
         </Space>
       }
-      extra={<Tag>{sourceLabel(item.analysis_source)}</Tag>}
+      extra={<Tag>{t(sourceLabel(item.analysis_source))}</Tag>}
     >
       <div className="batch-score-row">
         <Progress
@@ -121,22 +147,24 @@ export function BatchItemCard({ item }: { item: JobMatchBatchItem }) {
           format={(value) => (
             <span className="batch-score-number">
               {value}
-              <span className="batch-score-unit">分</span>
+              <span className="batch-score-unit">{t("jobMatchBatchResult.score.unit")}</span>
             </span>
           )}
         />
         <div className="batch-score-meta">
-          <Typography.Text strong>匹配度参考分</Typography.Text>
+          <Typography.Text strong>{t("jobMatchBatchResult.score.label")}</Typography.Text>
           {item.result ? (
             <Tag color={ADMISSION_META[item.result.admission].color}>
-              准入：{ADMISSION_META[item.result.admission].label}
+              {t("jobMatchBatchResult.admission.tag", {
+                label: ADMISSION_META[item.result.admission].label,
+              })}
             </Tag>
           ) : (
-            <Tag>暂无结论</Tag>
+            <Tag>{t("jobMatchBatchResult.verdict.none")}</Tag>
           )}
           {item.model ? (
             <Typography.Text type="secondary" className="batch-score-model">
-              模型：{item.model}
+              {t("jobMatchBatchResult.model.field", { model: item.model })}
             </Typography.Text>
           ) : null}
         </div>
@@ -147,11 +175,12 @@ export function BatchItemCard({ item }: { item: JobMatchBatchItem }) {
 }
 
 function CollapselessDetail({ item }: { item: JobMatchBatchItem }) {
+  useLocale();
   // 原 Collapse 在弹层里展开体验一般：详情直接平铺（结果弹卡空间足够）。
   return (
     <div style={{ marginTop: 8 }}>
       <Typography.Text strong type="secondary">
-        匹配详情
+        {t("jobMatchBatchResult.detail.title")}
       </Typography.Text>
       <MatchDetail item={item} />
     </div>
@@ -159,16 +188,24 @@ function CollapselessDetail({ item }: { item: JobMatchBatchItem }) {
 }
 
 export function BatchResultView({ batch }: { batch: JobMatchBatchOut }) {
+  useLocale();
   return (
     <Space orientation="vertical" size="middle" style={{ width: "100%" }}>
       <Alert
         type={batch.failed_count > 0 ? "warning" : "success"}
         showIcon
-        title={`已完成 ${batch.completed_count} 个岗位，${batch.failed_count} 个岗位失败`}
-        description={`结果已保存，可在「历史记录」中回看；已按匹配度参考分从高到低排列。${batch.model ? `本批使用模型：${batch.model}` : "本批未配置模型，使用本地降级结果。"}`}
+        title={t("jobMatchBatchResult.summary.title", {
+          completed: batch.completed_count,
+          failed: batch.failed_count,
+        })}
+        description={`${t("jobMatchBatchResult.summary.description")}${
+          batch.model
+            ? t("jobMatchBatchResult.summary.modelUsed", { model: batch.model })
+            : t("jobMatchBatchResult.summary.modelMissing")
+        }`}
       />
       {batch.items.length === 0 ? (
-        <Typography.Text type="secondary">没有可展示的分析结果</Typography.Text>
+        <Typography.Text type="secondary">{t("jobMatchBatchResult.empty.results")}</Typography.Text>
       ) : (
         <Listy
           items={batch.items}
