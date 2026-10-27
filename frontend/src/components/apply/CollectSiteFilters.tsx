@@ -27,6 +27,8 @@ import type {
   CollectFilterSource,
   CollectFilterTestResult,
 } from "../../types";
+import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 
 /** 来源标签：颜色 + 文案。文案要说清"这份清单的可信度"，不能只说一个英文枚举值。 */
 const SOURCE_TAG: Record<CollectFilterSource, { color: string; text: string; hint: string }> = {
@@ -77,6 +79,8 @@ function buildOptions(group: CollectFilterGroup): SelectOptionList {
 }
 
 export default function CollectSiteFilters({ disabled, getFilters }: Props) {
+  // 本组件用模块级 t()：必须订阅语言变化，否则切语言后这一块不重渲染。
+  useLocale();
   const { message } = App.useApp();
   const [data, setData] = useState<CollectFilterOptions | null>(null);
   const [loading, setLoading] = useState(true);
@@ -142,7 +146,7 @@ export default function CollectSiteFilters({ disabled, getFilters }: Props) {
       Object.entries(raw || {}).filter(([, code]) => (code || "").trim() !== ""),
     );
     if (Object.keys(selected).length === 0) {
-      message.info("请先选择至少一项站点筛选条件，再测试它是否生效");
+      message.info(t("collectFilters.toast.needCondition"));
       return;
     }
     setTesting(true);
@@ -151,7 +155,7 @@ export default function CollectSiteFilters({ disabled, getFilters }: Props) {
       const result = await testCollectFilters(selected);
       setTestResult(result);
     } catch (err) {
-      message.error(err instanceof Error ? err.message : "测试筛选条件失败");
+      message.error(err instanceof Error ? err.message : t("collectFilters.toast.testFailed"));
     } finally {
       setTesting(false);
     }
@@ -162,11 +166,11 @@ export default function CollectSiteFilters({ disabled, getFilters }: Props) {
       <Alert
         type="warning"
         showIcon
-        title="没能读到招聘网站的筛选条件"
-        description="不影响采集：关键词与城市照常生效。点下面的「重新读取」可以再试一次。"
+        title={t("collectFilters.unread.title")}
+        description={t("collectFilters.unread.body")}
         action={
           <Button size="small" icon={<ReloadOutlined />} onClick={() => void load()}>
-            重新读取
+            {t("collectFilters.action.reload")}
           </Button>
         }
         style={{ marginBottom: 12 }}
@@ -179,9 +183,9 @@ export default function CollectSiteFilters({ disabled, getFilters }: Props) {
     return (
       <div className="apply-collect-site-filters">
         <Space size={8} wrap style={{ marginBottom: 4 }}>
-          <Typography.Text strong>按招聘网站的条件筛</Typography.Text>
+          <Typography.Text strong>{t("collectFilters.section.title")}</Typography.Text>
           <Spin size="small" />
-          <Typography.Text type="secondary">正在读取站点的筛选条件…</Typography.Text>
+          <Typography.Text type="secondary">{t("collectFilters.section.loading")}</Typography.Text>
         </Space>
       </div>
     );
@@ -193,7 +197,7 @@ export default function CollectSiteFilters({ disabled, getFilters }: Props) {
   return (
     <div className="apply-collect-site-filters">
       <Space size={8} wrap style={{ marginBottom: 4 }}>
-        <Typography.Text strong>按招聘网站的条件筛</Typography.Text>
+        <Typography.Text strong>{t("collectFilters.section.title")}</Typography.Text>
         {sources.map((source) => {
           const meta = SOURCE_TAG[source] ?? SOURCE_TAG.unavailable;
           return (
@@ -211,9 +215,9 @@ export default function CollectSiteFilters({ disabled, getFilters }: Props) {
           loading={loading}
           onClick={() => void load()}
         >
-          重新读取
+          {t("collectFilters.action.reload")}
         </Button>
-        <Tooltip title="在真实招聘网站页面上逐项检查你选的条件现在能不能选到（会临时导航到筛选栏，测试完不影响采集）">
+        <Tooltip title={t("collectFilters.test.hint")}>
           <Button
             size="small"
             type="link"
@@ -221,14 +225,13 @@ export default function CollectSiteFilters({ disabled, getFilters }: Props) {
             loading={testing}
             onClick={() => void runTest()}
           >
-            测试是否生效
+            {t("collectFilters.action.test")}
           </Button>
         </Tooltip>
       </Space>
 
       <Typography.Text type="secondary" style={{ display: "block", marginBottom: 12 }}>
-        <InfoCircleOutlined /> 这些是招聘网站筛选栏里的条件，网站在搜索时就替你筛掉了，
-        比采回来再筛更准、也少翻很多页。选项清单读自站点本身，站点改版时会自动跟着变。
+        <InfoCircleOutlined /> {t("collectFilters.intro")}
       </Typography.Text>
 
       {!sessionRead && (
@@ -236,8 +239,8 @@ export default function CollectSiteFilters({ disabled, getFilters }: Props) {
           type="warning"
           showIcon
           style={{ marginBottom: 12 }}
-          title="想拿到你这个账号可见的完整选项，请先启动投递专用浏览器"
-          description="个别选项因人而异（例如学生账号在「求职类型」里能看到「实习」），只有在你已登录的浏览器里才读得到。当前用的是全网通用清单，够用但不一定全。"
+          title={t("collectFilters.launch.title")}
+          description={t("collectFilters.launch.body")}
         />
       )}
 
@@ -250,31 +253,38 @@ export default function CollectSiteFilters({ disabled, getFilters }: Props) {
           style={{ marginBottom: 12 }}
           title={
             testResult.unapplied.length > 0
-              ? `有 ${testResult.unapplied.length} 项条件没能生效`
-              : "选中的条件全部能在站点上真实选到"
+              ? t("collectFilters.result.partial", { count: testResult.unapplied.length })
+              : t("collectFilters.result.all")
           }
           description={
             <Space orientation="vertical" size={4} style={{ width: "100%" }}>
               {testResult.applied.map((item) => (
                 <Typography.Text key={item.key}>
                   <Tag color="success" style={{ marginInlineEnd: 4 }}>
-                    已生效
+                    {t("collectFilters.result.applied")}
                   </Tag>
-                  {item.label}：{item.value}
+                  {t("collectFilters.result.itemLabel", { label: item.label, value: item.value })}
                 </Typography.Text>
               ))}
               {testResult.unapplied.map((item) => (
                 <Typography.Text key={item.key} type="warning">
                   <Tag color="warning" style={{ marginInlineEnd: 4 }}>
-                    未生效
+                    {t("collectFilters.result.unapplied")}
                   </Tag>
-                  {item.label}：{item.value}——{item.detail}
+                  {t("collectFilters.result.itemDetail", {
+                    label: item.label,
+                    value: item.value,
+                    detail: item.detail,
+                  })}
                 </Typography.Text>
               ))}
               {testResult.unlimited.map((item) => (
                 <Typography.Text key={item.key} type="secondary">
-                  <Tag style={{ marginInlineEnd: 4 }}>不限</Tag>
-                  {item.label}——{item.detail}
+                  <Tag style={{ marginInlineEnd: 4 }}>{t("collectFilters.tag.any")}</Tag>
+                  {t("collectFilters.result.unlimited", {
+                    label: item.label,
+                    detail: item.detail,
+                  })}
                 </Typography.Text>
               ))}
             </Space>
@@ -291,12 +301,12 @@ export default function CollectSiteFilters({ disabled, getFilters }: Props) {
               allowClear
               showSearch
               disabled={disabled}
-              placeholder="不限"
+              placeholder={t("collectFilters.tag.any")}
               style={{ width: group.key === "industry" ? 240 : 170 }}
               optionFilterProp="label"
               // 选项多（行业 145 条）时要能搜；分组用 antd 的嵌套 options。
               options={buildOptions(group)}
-              aria-label={`站点筛选-${group.label}`}
+              aria-label={t("collectFilters.aria.group", { label: group.label })}
             />
           </Form.Item>
         ))}

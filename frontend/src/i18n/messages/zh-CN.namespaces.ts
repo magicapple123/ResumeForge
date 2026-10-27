@@ -63,6 +63,7 @@ import drill from "./zh-CN.drill";
 import reminderItem from "./zh-CN.reminderItem";
 import fieldPath from "./zh-CN.fieldPath";
 import applyProgress from "./zh-CN.applyProgress";
+import collectFilters from "./zh-CN.collectFilters";
 import llmRecord from "./zh-CN.llmRecord";
 
 const namespaces = {
@@ -155,6 +156,7 @@ const namespaces = {
   ...reminderItem,
   ...fieldPath,
   ...applyProgress,
+  ...collectFilters,
   ...llmRecord,
 } as const;
 

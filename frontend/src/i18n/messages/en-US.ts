@@ -55,6 +55,7 @@ import drill from "./en-US.drill";
 import reminderItem from "./en-US.reminderItem";
 import fieldPath from "./en-US.fieldPath";
 import applyProgress from "./en-US.applyProgress";
+import collectFilters from "./en-US.collectFilters";
 import llmRecord from "./en-US.llmRecord";
 
 const enUS = {
@@ -112,6 +113,7 @@ const enUS = {
   ...reminderItem,
   ...fieldPath,
   ...applyProgress,
+  ...collectFilters,
   ...llmRecord,
 } as const satisfies Record<keyof ZhCNMessages, string>;
 
