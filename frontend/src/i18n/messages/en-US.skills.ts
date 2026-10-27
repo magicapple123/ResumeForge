@@ -61,6 +61,37 @@ const skills = {
     "The more skills are enabled, the longer the system prompt: once the total prompt size exceeds the budget, the remaining skills are not loaded (the assistant says so in one sentence).",
   "skills.error.loadFailed": "Could not load skills: {error}",
   "skills.empty": "No skills yet — start from a template",
+
+  "skills.editor.detailTitle": "Skill details",
+  "skills.editor.createTitle": "New assistant skill",
+  "skills.editor.editTitle": "Edit skill details",
+  "skills.editor.intro":
+    "The skill prompt is added to the assistant's system prompt, so it acts as a standing requirement; knowledge files are reference material the assistant reads on demand.",
+  "skills.editor.name": "Skill name",
+  "skills.editor.namePlaceholder": "e.g. Resume bullet digest",
+  "skills.editor.nameRequired": "Enter a skill name",
+  "skills.editor.scenario": "Use case (one sentence on when to use it)",
+  "skills.editor.scenarioPlaceholder":
+    "e.g. Compress an experience into at most three Resume bullets",
+  "skills.editor.enabled": "Enabled",
+  "skills.editor.prompt": "Skill prompt",
+  "skills.editor.promptPlaceholder":
+    "Describe what you want the assistant to do with explicit requirements such as “do ...” and “do not ...”.\nFor example: when rewriting Resume bullets, keep each under 35 characters and always include an action verb and a checkable result.",
+  "skills.editor.promptRequired":
+    "Enter the skill prompt; it decides what the assistant does for this skill",
+  "skills.editor.files": "Knowledge files",
+  "skills.editor.filesHint":
+    "Read only when the assistant needs them (e.g. common interview questions, company lists)",
+  "skills.editor.filesTruncated":
+    "This skill's knowledge files are very large, so not all of the content was loaded; saving will not change the knowledge files (only the prompt and the switch are updated).",
+  "skills.editor.filePathPlaceholder": "File name, e.g. interview-questions.md",
+  "skills.editor.fileContentPlaceholder": "Knowledge file content (plain text or Markdown)",
+  "skills.editor.addFile": "Add knowledge file",
+  "skills.editor.removeFile": "Delete knowledge file {path}",
+  "skills.editor.loadFailed": "Could not load the skill",
+  "skills.editor.saveFailed": "Could not save the skill",
+  "skills.editor.created": "Created skill “{name}”",
+  "skills.editor.saved": "Saved skill “{name}”",
 } as const;
 
 export default skills;

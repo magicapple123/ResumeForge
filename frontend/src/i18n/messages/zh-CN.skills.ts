@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * 技能工作台：内置模板的名称与说明、表格、导入导出提示、空态与使用说明。
+ * 技能工作台：内置模板的名称与说明、表格、导入导出提示、空态、使用说明与新建 / 编辑弹窗。
  *
  * **模板的 prompt 正文不在本文件**：那是喂给模型的系统指令（「改写要求 1/2/3…」），
  * 翻译它等于换一套生成行为——模型会跟着用英文产出，对中文简历是灾难。所以 prompt
@@ -60,6 +60,34 @@ const skills = {
     "启用的技能越多，系统提示越长：技能提示词总量超过预算时，后面的技能不会被加载（助手会用一句话说明）。",
   "skills.error.loadFailed": "技能加载失败：{error}",
   "skills.empty": "还没有技能，先用模板建一个试试",
+
+  "skills.editor.detailTitle": "技能详情",
+  "skills.editor.createTitle": "新建助手技能",
+  "skills.editor.editTitle": "技能详情与编辑",
+  "skills.editor.intro":
+    "技能提示词会加进助手的系统提示，等于给它加一条长期要求；知识文件是助手按需查阅的参考资料。",
+  "skills.editor.name": "技能名称",
+  "skills.editor.namePlaceholder": "如：简历要点精炼",
+  "skills.editor.nameRequired": "请填写技能名称",
+  "skills.editor.scenario": "适用场景（一句话说明什么时候用它）",
+  "skills.editor.scenarioPlaceholder": "如：把经历描述压缩成 3 条以内的简历要点",
+  "skills.editor.enabled": "启用",
+  "skills.editor.prompt": "技能提示词",
+  "skills.editor.promptPlaceholder":
+    "用「你要…」「不要…」这类明确要求描述你希望助手怎么做。\n例如：改写简历要点时，每条不超过 35 字，必须包含动作动词与可核对的成果。",
+  "skills.editor.promptRequired": "请填写技能提示词，它决定这个技能让助手怎么做",
+  "skills.editor.files": "知识文件",
+  "skills.editor.filesHint": "助手需要时才会读取（如常见面试题、公司清单）",
+  "skills.editor.filesTruncated":
+    "这个技能的知识文件体积很大，本次没有加载全部内容；保存时不会改动知识文件（只更新提示词与开关）。",
+  "skills.editor.filePathPlaceholder": "文件名，如 面试问题.md",
+  "skills.editor.fileContentPlaceholder": "知识文件内容（纯文本或 Markdown）",
+  "skills.editor.addFile": "添加知识文件",
+  "skills.editor.removeFile": "删除知识文件 {path}",
+  "skills.editor.loadFailed": "加载技能失败",
+  "skills.editor.saveFailed": "保存技能失败",
+  "skills.editor.created": "已创建技能「{name}」",
+  "skills.editor.saved": "已保存技能「{name}」",
 } as const;
 
 export default skills;

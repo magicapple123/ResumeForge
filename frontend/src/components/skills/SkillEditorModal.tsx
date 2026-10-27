@@ -5,6 +5,8 @@ import { DeleteOutlined, PlusOutlined } from "@ant-design/icons";
 import { Alert, App, Button, Form, Input, Modal, Space, Spin, Switch, Typography } from "antd";
 import { useEffect, useState } from "react";
 import { createSkill, getSkill, updateSkill } from "../../api/skill";
+import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 import type { AssistantSkillFileInput } from "../../types";
 
 /** 新建技能时用的预填内容（来自工作台的模板）。 */
@@ -40,6 +42,8 @@ export default function SkillEditorModal({
   onSaved,
 }: Props) {
   const { message } = App.useApp();
+  // 本弹窗用模块级 t()：必须订阅语言变化，否则切语言后这一块不重渲染。
+  useLocale();
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [name, setName] = useState("");
@@ -78,17 +82,19 @@ export default function SkillEditorModal({
         setFiles(detail.file_details.map((item) => ({ path: item.path, content: item.content })));
         setFilesTruncated(detail.files_truncated);
       })
-      .catch((error) => message.error(error instanceof Error ? error.message : "加载技能失败"))
+      .catch((error) =>
+        message.error(error instanceof Error ? error.message : t("skills.editor.loadFailed")),
+      )
       .finally(() => setLoading(false));
   }, [message, open, skillId]);
 
   const save = async () => {
     if (!name.trim()) {
-      message.warning("请填写技能名称");
+      message.warning(t("skills.editor.nameRequired"));
       return;
     }
     if (!prompt.trim()) {
-      message.warning("请填写技能提示词，它决定这个技能让助手怎么做");
+      message.warning(t("skills.editor.promptRequired"));
       return;
     }
     setSaving(true);
@@ -96,17 +102,17 @@ export default function SkillEditorModal({
       const base = { name: name.trim(), description: description.trim(), prompt, enabled };
       if (skillId === null) {
         const created = await createSkill({ ...base, files });
-        message.success(`已创建技能「${created.name}」`);
+        message.success(t("skills.editor.created", { name: created.name }));
         onSaved(created.id);
       } else {
         // 知识文件正文没完全加载时不要提交 files：那会把没加载到的内容覆盖成空。
         const updated = await updateSkill(skillId, filesTruncated ? base : { ...base, files });
-        message.success(`已保存技能「${updated.name}」`);
+        message.success(t("skills.editor.saved", { name: updated.name }));
         onSaved(updated.id);
       }
       onClose();
     } catch (error) {
-      message.error(error instanceof Error ? error.message : "保存技能失败");
+      message.error(error instanceof Error ? error.message : t("skills.editor.saveFailed"));
     } finally {
       setSaving(false);
     }
@@ -115,7 +121,13 @@ export default function SkillEditorModal({
   return (
     <Modal
       className="skill-editor-modal"
-      title={readOnly ? "技能详情" : skillId === null ? "新建助手技能" : "技能详情与编辑"}
+      title={
+        readOnly
+          ? t("skills.editor.detailTitle")
+          : skillId === null
+            ? t("skills.editor.createTitle")
+            : t("skills.editor.editTitle")
+      }
       open={open}
       width={760}
       mask={{ closable: false }}
@@ -135,12 +147,12 @@ export default function SkillEditorModal({
       footer={
         <Space>
           <Button onClick={onClose} disabled={saving}>
-            关闭
+            {t("common.action.close")}
           </Button>
           {/* 只读查看不提供保存：这条链路（设置页）不允许改动技能。 */}
           {!readOnly && (
             <Button type="primary" loading={saving} onClick={() => void save()}>
-              保存
+              {t("common.action.save")}
             </Button>
           )}
         </Space>
@@ -157,43 +169,41 @@ export default function SkillEditorModal({
               type="info"
               showIcon
               style={{ marginBottom: 16 }}
-              title="技能提示词会加进助手的系统提示，等于给它加一条长期要求；知识文件是助手按需查阅的参考资料。"
+              title={t("skills.editor.intro")}
             />
-            <Form.Item label="技能名称" required>
+            <Form.Item label={t("skills.editor.name")} required>
               <Input
                 value={name}
                 maxLength={64}
-                placeholder="如：简历要点精炼"
+                placeholder={t("skills.editor.namePlaceholder")}
                 onChange={(event) => setName(event.target.value)}
               />
             </Form.Item>
-            <Form.Item label="适用场景（一句话说明什么时候用它）">
+            <Form.Item label={t("skills.editor.scenario")}>
               <Input
                 value={description}
                 maxLength={255}
-                placeholder="如：把经历描述压缩成 3 条以内的简历要点"
+                placeholder={t("skills.editor.scenarioPlaceholder")}
                 onChange={(event) => setDescription(event.target.value)}
               />
             </Form.Item>
-            <Form.Item label="启用">
+            <Form.Item label={t("skills.editor.enabled")}>
               <Switch checked={enabled} onChange={setEnabled} />
             </Form.Item>
-            <Form.Item label="技能提示词" required>
+            <Form.Item label={t("skills.editor.prompt")} required>
               <Input.TextArea
                 value={prompt}
                 autoSize={{ minRows: 8, maxRows: 20 }}
-                placeholder={
-                  "用「你要…」「不要…」这类明确要求描述你希望助手怎么做。\n例如：改写简历要点时，每条不超过 35 字，必须包含动作动词与可核对的成果。"
-                }
+                placeholder={t("skills.editor.promptPlaceholder")}
                 onChange={(event) => setPrompt(event.target.value)}
               />
             </Form.Item>
             <Form.Item
               label={
                 <Space>
-                  <span>知识文件</span>
+                  <span>{t("skills.editor.files")}</span>
                   <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                    助手需要时才会读取（如常见面试题、公司清单）
+                    {t("skills.editor.filesHint")}
                   </Typography.Text>
                 </Space>
               }
@@ -203,7 +213,7 @@ export default function SkillEditorModal({
                   type="warning"
                   showIcon
                   style={{ marginBottom: 12 }}
-                  title="这个技能的知识文件体积很大，本次没有加载全部内容；保存时不会改动知识文件（只更新提示词与开关）。"
+                  title={t("skills.editor.filesTruncated")}
                 />
               )}
               <Space orientation="vertical" style={{ width: "100%" }}>
@@ -213,7 +223,7 @@ export default function SkillEditorModal({
                       <Input
                         value={file.path}
                         maxLength={255}
-                        placeholder="文件名，如 面试问题.md"
+                        placeholder={t("skills.editor.filePathPlaceholder")}
                         style={{ width: 240 }}
                         onChange={(event) =>
                           setFiles((current) =>
@@ -228,7 +238,7 @@ export default function SkillEditorModal({
                         <Button
                           type="text"
                           danger
-                          aria-label={`删除知识文件 ${file.path}`}
+                          aria-label={t("skills.editor.removeFile", { path: file.path })}
                           icon={<DeleteOutlined />}
                           onClick={() =>
                             setFiles((current) => current.filter((_, i) => i !== index))
@@ -239,7 +249,7 @@ export default function SkillEditorModal({
                     <Input.TextArea
                       value={file.content}
                       autoSize={{ minRows: 3, maxRows: 10 }}
-                      placeholder="知识文件内容（纯文本或 Markdown）"
+                      placeholder={t("skills.editor.fileContentPlaceholder")}
                       onChange={(event) =>
                         setFiles((current) =>
                           current.map((item, i) =>
@@ -255,7 +265,7 @@ export default function SkillEditorModal({
                     icon={<PlusOutlined />}
                     onClick={() => setFiles((current) => [...current, { path: "", content: "" }])}
                   >
-                    添加知识文件
+                    {t("skills.editor.addFile")}
                   </Button>
                 )}
               </Space>
