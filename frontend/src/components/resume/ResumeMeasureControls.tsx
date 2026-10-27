@@ -27,6 +27,7 @@ import PhotoScaleControl from "./PhotoScaleControl";
 import ResumeFontControl from "./ResumeFontControl";
 import { t } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
+import { RESUME_CATALOG_FONT_SCALE_LABEL_KEYS } from "../../i18n/enum/resumeCatalog";
 import ParamResetButton from "./ParamResetButton";
 import {
   configuredPhotoScale,
@@ -128,8 +129,20 @@ export default function ResumeMeasureControls({
   showPhotoScale = true,
   onChange,
 }: Props) {
-  useLocale();
-  const tiers = useMemo(() => fontTiers(catalog?.font_scales ?? []), [catalog?.font_scales]);
+  const locale = useLocale();
+  /**
+   * 字号档位表：目录里的 `label` 是后端下发的中文展示名，按稳定 `name` 映射到语言包
+   * （映射不到的后端新档位保留原文）。`locale` 进依赖：切语言时重新取一次文案。
+   */
+  const tiers = useMemo(() => {
+    void locale;
+    return fontTiers(catalog?.font_scales ?? []).map((tier) => ({
+      ...tier,
+      label: RESUME_CATALOG_FONT_SCALE_LABEL_KEYS[tier.name]
+        ? t(RESUME_CATALOG_FONT_SCALE_LABEL_KEYS[tier.name])
+        : tier.label,
+    }));
+  }, [catalog?.font_scales, locale]);
   const pxBounds = useMemo(() => fontPxBounds(tiers), [tiers]);
   // 当前「版式」预设的配置：换版式时它盖掉模板默认（模板 < 版式 < 手动微调）。
   const presetConfig = catalog?.format_presets?.find(
