@@ -16,6 +16,8 @@
  */
 import { Checkbox, Collapse, Input, Tag, Typography } from "antd";
 import { useMemo } from "react";
+import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 
 export interface RecognitionReviewRow {
   /** 稳定键：标量=字段名（`name`）；条目=`educations.0.school`。 */
@@ -39,6 +41,8 @@ interface Props {
 }
 
 export default function RecognitionReviewList({ rows, onChange }: Props) {
+  // 本组件用模块级 t()：必须订阅语言变化，否则切语言后这一块不重渲染。
+  useLocale();
   /** 按 `section` 分组，**保持出现顺序**（顺序就是资料页的分区顺序，不重排）。 */
   const groups = useMemo(() => {
     const map = new Map<string, RecognitionReviewRow[]>();
@@ -74,7 +78,7 @@ export default function RecognitionReviewList({ rows, onChange }: Props) {
       <div key={row.id} data-row-id={row.id} className="recognition-review-row">
         {row.isNew ? (
           <Checkbox
-            aria-label={`选用 ${row.label}`}
+            aria-label={t("profileUi.review.selectAria", { label: row.label })}
             checked={row.selected ?? false}
             onChange={(event) => patch(row.id, { selected: event.target.checked })}
           />
@@ -84,14 +88,14 @@ export default function RecognitionReviewList({ rows, onChange }: Props) {
             // 新字段的**名字**也要能改（模型抄错栏目名是常事）。aria-label 加前缀是为了
             // 与同一行的值输入区分开——两个都叫「是否有驾照」的话，按名字定位就二义了。
             <Input
-              aria-label={`字段名 ${row.label}`}
+              aria-label={t("profileUi.review.fieldNameAria", { label: row.label })}
               value={row.label}
               onChange={(event) => patch(row.id, { label: event.target.value })}
             />
           ) : (
             <Typography.Text type="secondary">{row.label}</Typography.Text>
           )}
-          {row.isNew ? <Tag color="blue">新增字段</Tag> : null}
+          {row.isNew ? <Tag color="blue">{t("profileUi.review.newFieldTag")}</Tag> : null}
         </div>
         <div className="recognition-review-value">{valueInput}</div>
       </div>
@@ -108,7 +112,9 @@ export default function RecognitionReviewList({ rows, onChange }: Props) {
         label: (
           <span className="recognition-review-section">
             {section}
-            <Typography.Text type="secondary">（{list.length} 项）</Typography.Text>
+            <Typography.Text type="secondary">
+              {t("profileUi.review.itemCount", { count: list.length })}
+            </Typography.Text>
           </span>
         ),
         children: <div className="recognition-review-rows">{list.map(renderRow)}</div>,
