@@ -20,13 +20,30 @@
  * - **已选值保显示**（ensure）：编辑场景的初始 id 往往不在第一页选项里，按 id 回查
  *   单条并入选项头部；回查结果有缓存，同一 id 不重复请求。
  * - **options 同时暴露**：个别消费方（详情抽屉、生成结果回填）需要按 id 找 label。
+ * - **文案在渲染期求值**：选项缓存里只放原始数据（调用方给的纯文本 `label`，或
+ *   `labelKey` + 参数），渲染时再 `t()` 生成展示文案。把已求值的文案存进 state 的话，
+ *   切语言后它会一直停在旧语种——`useLocale()` 让本 hook 在切语言时重新渲染。
  */
-import { useCallback, useEffect, useRef, useState } from "react";
-import { t } from "../i18n";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { t, type MessageKey, type MessageParams } from "../i18n";
+import { useLocale } from "../i18n/i18nContext";
 
 export interface RemoteSelectOption {
   value: number;
+  /** 展示文案；给了 `labelKey` 时以语言包为准，这一项只作兜底。 */
   label: string;
+  /**
+   * 文案由语言包生成的选项（例如「简历 #{id}」这种兜底名）存 key 与参数，渲染期再
+   * `t()`：纯数据文案（岗位标题、公司名）继续只给 `label` 即可。
+   */
+  labelKey?: MessageKey;
+  labelParams?: MessageParams;
+}
+
+/** 展示文案一律在渲染期求值：缓存里只有原始数据（见文件头「文案在渲染期求值」）。 */
+function resolveLabel(option: RemoteSelectOption): RemoteSelectOption {
+  if (!option.labelKey) return option;
+  return { ...option, label: t(option.labelKey, option.labelParams) };
 }
 
 interface Params {
@@ -39,11 +56,20 @@ interface Params {
 }
 
 export function useRemoteSearchSelect({ fetchOptions, fetchById, debounceMs = 300 }: Params) {
-  const [options, setOptions] = useState<RemoteSelectOption[]>([]);
+  // 订阅语言变化：切语言后 `labelKey` 与空态文案都要重新求值（模块级 t() 不自带订阅）。
+  const locale = useLocale();
+  const [storedOptions, setStoredOptions] = useState<RemoteSelectOption[]>([]);
   const [loading, setLoading] = useState(false);
   const requestSeqRef = useRef(0);
   const timerRef = useRef<number | null>(null);
   const ensureCacheRef = useRef(new Map<number, RemoteSelectOption>());
+
+  // 缓存里是原始选项，展示文案到这里才生成；语言进依赖，否则切语言后不会重算。
+  const options = useMemo(() => {
+    // `void locale`：t() 读的是模块级快照，语言变了就必须重算一遍文案。
+    void locale;
+    return storedOptions.map(resolveLabel);
+  }, [storedOptions, locale]);
 
   // 组件卸载时清掉还没触发的防抖计时器，避免对已卸载组件 setState。
   useEffect(() => {
@@ -59,12 +85,12 @@ export function useRemoteSearchSelect({ fetchOptions, fetchById, debounceMs = 30
       void fetchOptions(keyword)
         .then((next) => {
           if (requestId !== requestSeqRef.current) return;
-          setOptions(next);
+          setStoredOptions(next);
           setLoading(false);
         })
         .catch(() => {
           if (requestId !== requestSeqRef.current) return;
-          setOptions([]);
+          setStoredOptions([]);
           setLoading(false);
         });
     },
@@ -93,19 +119,19 @@ export function useRemoteSearchSelect({ fetchOptions, fetchById, debounceMs = 30
       if (id == null) return null;
       const cached = ensureCacheRef.current.get(id);
       if (cached) {
-        setOptions((previous) =>
+        setStoredOptions((previous) =>
           previous.some((option) => option.value === id) ? previous : [cached, ...previous],
         );
-        return cached;
+        return resolveLabel(cached);
       }
       try {
         const option = await fetchById(id);
         if (!option) return null;
         ensureCacheRef.current.set(id, option);
-        setOptions((previous) =>
+        setStoredOptions((previous) =>
           previous.some((existing) => existing.value === id) ? previous : [option, ...previous],
         );
-        return option;
+        return resolveLabel(option);
       } catch {
         /* 回查失败静默：调用方自己决定降级显示，这里不抛错 */
         return null;
@@ -120,6 +146,7 @@ export function useRemoteSearchSelect({ fetchOptions, fetchById, debounceMs = 30
     onSearch,
     loading,
     options,
+    // 空态文案在渲染期取：本 hook 订阅了语言，切语言后会重新求值。
     notFoundContent: loading
       ? t("hooksUi.remoteSearch.searching")
       : t("hooksUi.remoteSearch.empty"),
