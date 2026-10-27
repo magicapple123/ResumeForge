@@ -9,6 +9,8 @@ import { EditOutlined } from "@ant-design/icons";
 import { Button, Card, Checkbox, Modal, Typography } from "antd";
 import { Link } from "react-router-dom";
 import { useState } from "react";
+import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 import { MENU_ITEMS } from "../../App";
 
 /** 快捷入口默认值（与旧版 7 项一致）；完整可选项见 App.tsx 的 MENU_ITEMS。 */
@@ -38,6 +40,8 @@ function loadShortcutKeys(): string[] {
 }
 
 export function ShortcutsCard() {
+  // 本组件用模块级 t()，必须订阅语言变化。
+  useLocale();
   // 快捷入口：用户可自定义的 key 集合（顺序即渲染顺序），缺省回退默认 7 项。
   const [shortcutKeys, setShortcutKeys] = useState<string[]>(() => loadShortcutKeys());
   const [shortcutModalOpen, setShortcutModalOpen] = useState(false);
@@ -60,19 +64,19 @@ export function ShortcutsCard() {
     <>
       <Card
         style={{ marginTop: 16 }}
-        title="快捷入口"
+        title={t("shortcutsCard.card.title")}
         extra={
           <Button
             type="text"
             size="small"
             icon={<EditOutlined />}
-            aria-label="编辑快捷入口"
+            aria-label={t("shortcutsCard.action.editAria")}
             onClick={() => {
               setShortcutDraft(shortcutKeys);
               setShortcutModalOpen(true);
             }}
           >
-            编辑
+            {t("shortcutsCard.action.edit")}
           </Button>
         }
       >
@@ -87,12 +91,12 @@ export function ShortcutsCard() {
       </Card>
 
       <Modal
-        title="自定义快捷入口"
+        title={t("shortcutsCard.modal.title")}
         open={shortcutModalOpen}
         onCancel={() => setShortcutModalOpen(false)}
         footer={[
           <Button key="restore" onClick={() => setShortcutDraft(DEFAULT_SHORTCUT_KEYS)}>
-            恢复默认
+            {t("shortcutsCard.action.restoreDefault")}
           </Button>,
           <Button
             key="save"
@@ -100,13 +104,11 @@ export function ShortcutsCard() {
             disabled={shortcutDraft.length === 0}
             onClick={() => saveShortcuts(shortcutDraft)}
           >
-            保存
+            {t("common.action.save")}
           </Button>,
         ]}
       >
-        <Typography.Text type="secondary">
-          勾选要在首页展示的入口（至少保留 1 项）。
-        </Typography.Text>
+        <Typography.Text type="secondary">{t("shortcutsCard.modal.hint")}</Typography.Text>
         <Checkbox.Group
           style={{
             display: "grid",
