@@ -44,6 +44,11 @@ const referralForm = {
   "referralForm.status.submitted": "Submitted",
   "referralForm.status.closed": "Closed",
   "referralForm.status.invalid": "Invalid",
+  // List toolbar (`ReferralToolbar`): same feature area, so it shares this namespace.
+  "referralForm.toolbar.title": "Referrals",
+  "referralForm.toolbar.searchPlaceholder": "Search company / role / referrer",
+  "referralForm.toolbar.statusPlaceholder": "Filter by status",
+  "referralForm.toolbar.create": "New referral",
 } as const;
 
 export default referralForm;

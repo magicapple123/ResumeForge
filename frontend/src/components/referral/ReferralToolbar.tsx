@@ -6,6 +6,8 @@
  */
 import { PlusOutlined } from "@ant-design/icons";
 import { Button, Card, Input, Select, Space } from "antd";
+import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 import { REFERRAL_STATUS_LABELS_OPTIONS } from "./ReferralFormFields";
 
 interface Props {
@@ -16,25 +18,28 @@ interface Props {
 }
 
 export default function ReferralToolbar({ status, onStatusChange, onSearch, onCreate }: Props) {
+  // `REFERRAL_STATUS_LABELS_OPTIONS()` 返回的是 `t()` 的结果，所以这里必须订阅语言变化；
+  // 不订阅的话切语言后状态下拉会停在上一种语言（交接单 §8 的静默失效）。
+  useLocale();
   return (
-    <Card size="small" title="内推记录">
+    <Card size="small" title={t("referralForm.toolbar.title")}>
       <Space wrap>
         <Input.Search
           allowClear
-          placeholder="搜索公司 / 岗位 / 内推人"
+          placeholder={t("referralForm.toolbar.searchPlaceholder")}
           style={{ width: 240 }}
           onSearch={onSearch}
         />
         <Select
           allowClear
-          placeholder="状态筛选"
+          placeholder={t("referralForm.toolbar.statusPlaceholder")}
           style={{ minWidth: 140 }}
           value={status}
           onChange={onStatusChange}
           options={REFERRAL_STATUS_LABELS_OPTIONS()}
         />
         <Button type="primary" icon={<PlusOutlined />} onClick={onCreate}>
-          新建内推
+          {t("referralForm.toolbar.create")}
         </Button>
       </Space>
     </Card>

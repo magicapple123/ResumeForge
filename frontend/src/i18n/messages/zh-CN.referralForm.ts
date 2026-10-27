@@ -43,6 +43,11 @@ const referralForm = {
   "referralForm.status.submitted": "已提交",
   "referralForm.status.closed": "已关闭",
   "referralForm.status.invalid": "无效",
+  // 列表工具栏（`ReferralToolbar`）：与表单同属内推功能，共用本命名空间。
+  "referralForm.toolbar.title": "内推记录",
+  "referralForm.toolbar.searchPlaceholder": "搜索公司 / 岗位 / 内推人",
+  "referralForm.toolbar.statusPlaceholder": "状态筛选",
+  "referralForm.toolbar.create": "新建内推",
 } as const;
 
 export default referralForm;
