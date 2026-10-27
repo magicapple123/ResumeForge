@@ -9,7 +9,6 @@ import { Alert, Button, Card, Checkbox, Collapse, Pagination, Space, Typography 
 import EmptyState from "../common/EmptyState";
 import LoadingBlock from "../common/LoadingBlock";
 import { RowActions, RowContextMenu, type RowActionItem } from "../common/RowActions";
-import { TRASH_RECOVERY_NOTE } from "../common/rowActionMenu";
 import BatchActionBar from "../common/BatchActionBar";
 import type { BatchSelection } from "../../hooks/useBatchSelection";
 import type { useApi } from "../../hooks/useApi";
@@ -77,7 +76,7 @@ export default function BankHistoryCard({
                   danger: true,
                   icon: <DeleteOutlined />,
                   confirm: t("questionBankPanel.history.deleteTitle"),
-                  confirmBody: TRASH_RECOVERY_NOTE,
+                  confirmBody: t("common.note.trashRecovery"),
                   onClick: () => void onRemoveBank(bank.id),
                 },
               ] satisfies RowActionItem[])
@@ -129,7 +128,7 @@ export default function BankHistoryCard({
                 label: t("common.action.delete"),
                 danger: true,
                 confirm: t("questionBankPanel.history.deleteTitle"),
-                confirmBody: TRASH_RECOVERY_NOTE,
+                confirmBody: t("common.note.trashRecovery"),
                 onClick: () => void onRemoveBank(bank.id),
               },
             ]}
