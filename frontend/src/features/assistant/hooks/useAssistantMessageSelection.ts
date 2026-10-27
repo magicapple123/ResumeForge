@@ -7,6 +7,7 @@
 import { App } from "antd";
 import { useCallback, useState } from "react";
 import { deleteAssistantMessages } from "../../../api/assistant";
+import { t } from "../../../i18n";
 import type { AssistantMessage, AssistantSurface } from "../../../types";
 
 interface Options {
@@ -61,9 +62,13 @@ export function useAssistantMessageSelection({ activeId, loadDetail, message, su
           : await deleteAssistantMessages(activeId, [...selectedIds], surface);
       await loadDetail(activeId);
       exitSelecting();
-      message.success(`已删除 ${deleted} 条消息`);
+      message.success(
+        t("assistantHooks.messageSelection.success.deletedCount", { count: deleted }),
+      );
     } catch (error) {
-      message.error(error instanceof Error ? error.message : "删除消息失败");
+      message.error(
+        error instanceof Error ? error.message : t("assistantHooks.messageSelection.error.delete"),
+      );
     }
   }, [activeId, exitSelecting, loadDetail, message, selectedIds, surface]);
 
