@@ -44,8 +44,12 @@ import { RecordDetailDrawer } from "./common/RecordDetail";
 import { isFromInnerControl } from "./common/recordDetailCore";
 import { ListyItem, ListyMeta } from "./common/ListyItem";
 import { TRASH_RECOVERY_NOTE, useRowActionMenu } from "./common/rowActionMenu";
+import { t } from "../i18n";
+import { useLocale } from "../i18n/i18nContext";
 
 export default function InterviewExperiencePanel() {
+  // 本组件用模块级 t()：必须订阅语言变化，否则切语言后这一块不重渲染。
+  useLocale();
   const { message } = App.useApp();
   // 批量选择：勾选若干条后一次删除（软删，全部进回收站）；列表是全量下发，
   // 选区即当前已加载的全部条目。
@@ -72,7 +76,9 @@ export default function InterviewExperiencePanel() {
         source: source || undefined,
       });
     } catch (error) {
-      message.error(error instanceof Error ? error.message : "读取面经失败");
+      message.error(
+        error instanceof Error ? error.message : t("interviewExperience.error.loadFailed"),
+      );
       return null;
     }
   }, [keyword, source, message]);
@@ -152,11 +158,15 @@ export default function InterviewExperiencePanel() {
       } else {
         await createInterviewExperience(values);
       }
-      message.success(editing ? "已更新面经" : "已新建面经");
+      message.success(
+        editing ? t("interviewExperience.toast.updated") : t("interviewExperience.toast.created"),
+      );
       setModalOpen(false);
       await loadList();
     } catch (error) {
-      message.error(error instanceof Error ? error.message : "保存面经失败");
+      message.error(
+        error instanceof Error ? error.message : t("interviewExperience.error.saveFailed"),
+      );
     } finally {
       setSaving(false);
     }
@@ -165,10 +175,12 @@ export default function InterviewExperiencePanel() {
   const doRemove = async (experience: InterviewExperience) => {
     try {
       await deleteInterviewExperience(experience.id);
-      message.success("已删除这条面经");
+      message.success(t("interviewExperience.toast.deleted"));
       await loadList();
     } catch (error) {
-      message.error(error instanceof Error ? error.message : "删除失败");
+      message.error(
+        error instanceof Error ? error.message : t("interviewExperience.error.deleteFailed"),
+      );
     }
   };
 
@@ -178,9 +190,11 @@ export default function InterviewExperiencePanel() {
     if (ids.length === 0) return;
     try {
       const { deleted } = await batchDeleteInterviewExperiences(ids);
-      message.success(`已删除 ${deleted} 条面经，可在「回收站」里恢复`);
+      message.success(t("interviewExperience.toast.batchDeleted", { count: deleted }));
     } catch (error) {
-      message.error(error instanceof Error ? error.message : "批量删除失败，请重试");
+      message.error(
+        error instanceof Error ? error.message : t("interviewExperience.error.batchDeleteFailed"),
+      );
     }
     batch.exitSelecting();
     await loadList();
@@ -188,17 +202,17 @@ export default function InterviewExperiencePanel() {
 
   return (
     <Space orientation="vertical" style={{ width: "100%" }} size="middle">
-      <Card size="small" title="面经知识库">
+      <Card size="small" title={t("interviewExperience.title")}>
         <Space wrap>
           <Input.Search
             allowClear
-            placeholder="搜索标题 / 岗位 / 正文"
+            placeholder={t("interviewExperience.searchPlaceholder")}
             style={{ width: 240 }}
             onSearch={(value) => setKeyword(value)}
           />
           <Select
             allowClear
-            placeholder="来源筛选"
+            placeholder={t("interviewExperience.sourcePlaceholder")}
             style={{ minWidth: 140 }}
             value={source}
             onChange={setSource}
@@ -208,7 +222,7 @@ export default function InterviewExperiencePanel() {
             }))}
           />
           <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
-            新建面经
+            {t("interviewExperience.action.create")}
           </Button>
         </Space>
       </Card>
@@ -227,14 +241,18 @@ export default function InterviewExperiencePanel() {
               ),
           }}
         >
-          <BatchDeleteButton count={batch.selectedCount} noun="条面经" onDelete={removeSelected} />
+          <BatchDeleteButton
+            count={batch.selectedCount}
+            noun={t("interviewExperience.deleteNoun")}
+            onDelete={removeSelected}
+          />
         </BatchActionBar>
       )}
 
       {loading ? (
         <LoadingBlock />
       ) : items.length === 0 ? (
-        <Empty description="还没有面经，把面试里被问到的问题记下来吧" />
+        <Empty description={t("interviewExperience.empty")} />
       ) : (
         <Listy
           className="rf-card-list"
@@ -252,13 +270,15 @@ export default function InterviewExperiencePanel() {
                 batch.selecting ? (
                   <Checkbox
                     key="select"
-                    aria-label={`选择面经 ${item.title || item.company}`}
+                    aria-label={t("interviewExperience.aria.select", {
+                      name: item.title || item.company,
+                    })}
                     checked={batch.isSelected(item.id)}
                     onChange={() => batch.toggle(item.id)}
                   />
                 ) : (
                   <Button key="detail" type="link" size="small" onClick={() => setDetail(item)}>
-                    详情
+                    {t("interviewExperience.action.detail")}
                   </Button>
                 ),
                 ...(batch.selecting
@@ -271,16 +291,16 @@ export default function InterviewExperiencePanel() {
                           items: buildMenu([
                             {
                               key: "edit",
-                              label: "编辑",
+                              label: t("interviewExperience.action.edit"),
                               icon: <EditOutlined />,
                               onClick: () => openEdit(item),
                             },
                             {
                               key: "delete",
-                              label: "删除",
+                              label: t("common.action.delete"),
                               danger: true,
                               icon: <DeleteOutlined />,
-                              confirm: "删除这条面经？",
+                              confirm: t("interviewExperience.confirm.delete"),
                               confirmBody: TRASH_RECOVERY_NOTE,
                               onClick: () => void doRemove(item),
                             },
@@ -291,7 +311,9 @@ export default function InterviewExperiencePanel() {
                           type="text"
                           size="small"
                           icon={<MoreOutlined />}
-                          aria-label={`更多操作 ${item.title || item.company}`}
+                          aria-label={t("interviewExperience.aria.more", {
+                            name: item.title || item.company,
+                          })}
                         />
                       </Dropdown>,
                     ]),
@@ -305,7 +327,7 @@ export default function InterviewExperiencePanel() {
                     : [
                         {
                           key: "batch_select",
-                          label: "批量选择",
+                          label: t("common.action.batchSelect"),
                           icon: <CheckSquareOutlined />,
                           onClick: batch.enterSelecting,
                         },
@@ -316,7 +338,7 @@ export default function InterviewExperiencePanel() {
                   <ListyMeta
                     title={
                       <Space size={6} wrap>
-                        <span>{item.title || "未命名面经"}</span>
+                        <span>{item.title || t("interviewExperience.untitled")}</span>
                         <Tag color="geekblue">
                           {EXPERIENCE_SOURCE_LABELS[item.source as ExperienceSource] ?? item.source}
                         </Tag>
@@ -333,8 +355,12 @@ export default function InterviewExperiencePanel() {
                         </Typography.Text>
                         {item.questions.length > 0 && (
                           <Typography.Text type="secondary">
-                            真实问题 {item.questions.length} 个：
-                            {item.questions.slice(0, 3).join("；")}
+                            {t("interviewExperience.questions.preview", {
+                              count: item.questions.length,
+                            })}
+                            {item.questions
+                              .slice(0, 3)
+                              .join(t("interviewExperience.separator.question"))}
                           </Typography.Text>
                         )}
                         {item.tags.length > 0 && (
@@ -366,7 +392,7 @@ export default function InterviewExperiencePanel() {
 
       <RecordDetailDrawer
         open={detail !== null}
-        title={detail?.title || "未命名面经"}
+        title={detail?.title || t("interviewExperience.untitled")}
         subtitle={
           detail
             ? [detail.company, detail.position, detail.difficulty].filter(Boolean).join(" · ")
@@ -390,25 +416,36 @@ export default function InterviewExperiencePanel() {
           detail
             ? [
                 {
-                  label: "关联岗位",
+                  label: t("interviewExperience.field.job"),
                   value:
                     jobSelect.options.find((option) => option.value === detail.job_id)?.label ??
                     "-",
                 },
-                { label: "创建时间", value: formatDateTime(detail.created_at) },
-                { label: "更新时间", value: formatDateTime(detail.updated_at) },
+                {
+                  label: t("interviewExperience.field.createdAt"),
+                  value: formatDateTime(detail.created_at),
+                },
+                {
+                  label: t("interviewExperience.field.updatedAt"),
+                  value: formatDateTime(detail.updated_at),
+                },
               ]
             : []
         }
         sections={
           detail
             ? [
-                { title: "正文", content: detail.content || "（无）" },
                 {
-                  title: `真实问题（${detail.questions.length}）`,
+                  title: t("interviewExperience.section.content"),
+                  content: detail.content || t("interviewExperience.empty.content"),
+                },
+                {
+                  title: t("interviewExperience.section.questions", {
+                    count: detail.questions.length,
+                  }),
                   content:
                     detail.questions.length === 0 ? (
-                      "（还没有记录问题）"
+                      t("interviewExperience.empty.questions")
                     ) : (
                       <ol style={{ margin: 0, paddingLeft: 20 }}>
                         {detail.questions.map((question, index) => (
@@ -430,7 +467,7 @@ export default function InterviewExperiencePanel() {
                 setDetail(null);
               }}
             >
-              编辑
+              {t("interviewExperience.action.edit")}
             </Button>
           )
         }

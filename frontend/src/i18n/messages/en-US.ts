@@ -65,6 +65,7 @@ import webFormRecords from "./en-US.webFormRecords";
 import claimsPage from "./en-US.claimsPage";
 import browserStatus from "./en-US.browserStatus";
 import trackerForm from "./en-US.trackerForm";
+import interviewExperience from "./en-US.interviewExperience";
 
 const enUS = {
   ...core,
@@ -131,6 +132,7 @@ const enUS = {
   ...claimsPage,
   ...browserStatus,
   ...trackerForm,
+  ...interviewExperience,
 } as const satisfies Record<keyof ZhCNMessages, string>;
 
 export default enUS;

@@ -73,6 +73,7 @@ import webFormRecords from "./zh-CN.webFormRecords";
 import claimsPage from "./zh-CN.claimsPage";
 import browserStatus from "./zh-CN.browserStatus";
 import trackerForm from "./zh-CN.trackerForm";
+import interviewExperience from "./zh-CN.interviewExperience";
 
 const namespaces = {
   /** 简历制作台（2026-10-23）。 */
@@ -182,6 +183,8 @@ const namespaces = {
   ...browserStatus,
   /** 求职进度记录表单（2026-10-27）。 */
   ...trackerForm,
+  /** 面经知识库面板（2026-10-27）。 */
+  ...interviewExperience,
 } as const;
 
 export default namespaces;
