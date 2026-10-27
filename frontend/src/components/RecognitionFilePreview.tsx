@@ -18,6 +18,8 @@ import { useState } from "react";
 import type { PdfPreviewPage } from "../api/attachments";
 import { previewPdf } from "../api/attachments";
 import type { StagedFile } from "../hooks/useRecognitionFiles";
+import { t } from "../i18n";
+import { useLocale } from "../i18n/i18nContext";
 import { canPreviewImage } from "../utils/attachments";
 // 体积文案与 PDF 判定是纯函数，住在 `utils/` 里：本文件只导出组件，热更新才只换这一个。
 import { formatFileSize, isPdfFile } from "../utils/recognitionFileMeta";
@@ -37,6 +39,7 @@ function FileSummary({ file, icon }: { file: StagedFile; icon: ReactNode }) {
 }
 
 export default function RecognitionFilePreview({ file }: { file: StagedFile }) {
+  useLocale();
   const { message } = App.useApp();
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewLoading, setPreviewLoading] = useState(false);
@@ -62,7 +65,7 @@ export default function RecognitionFilePreview({ file }: { file: StagedFile }) {
       setPreviewImages(result.pages);
     } catch {
       setPreviewOpen(false);
-      message.error("这个文件预览不了，识别仍可正常使用");
+      message.error(t("componentsMisc.recognitionPreview.error"));
     } finally {
       setPreviewLoading(false);
     }
@@ -103,15 +106,15 @@ export default function RecognitionFilePreview({ file }: { file: StagedFile }) {
           <Button
             type="link"
             size="small"
-            aria-label={`预览 ${file.name}`}
+            aria-label={t("componentsMisc.recognitionPreview.open", { name: file.name })}
             onClick={() => void openPdfPreview()}
           >
-            预览
+            {t("componentsMisc.recognitionPreview.action")}
           </Button>
         </Space>
         {/* 弹层宽度自适应：一页 A4 的首页图在 720px 里已经足够看清版式。 */}
         <Modal
-          title={`预览 ${file.name}`}
+          title={t("componentsMisc.recognitionPreview.open", { name: file.name })}
           open={previewOpen}
           footer={null}
           width="min(720px, 92vw)"
@@ -119,7 +122,9 @@ export default function RecognitionFilePreview({ file }: { file: StagedFile }) {
           destroyOnHidden
         >
           {previewLoading ? (
-            <Typography.Text type="secondary">正在生成预览…</Typography.Text>
+            <Typography.Text type="secondary">
+              {t("componentsMisc.recognitionPreview.loading")}
+            </Typography.Text>
           ) : (
             // PreviewGroup 让多页之间可以左右切换并放大（与服务端 `pages` 上限 3 对应）。
             <Image.PreviewGroup>
@@ -127,7 +132,7 @@ export default function RecognitionFilePreview({ file }: { file: StagedFile }) {
                 <Image
                   key={item.page}
                   src={item.image}
-                  alt={`第 ${item.page} 页`}
+                  alt={t("componentsMisc.recognitionPreview.pageAlt", { page: item.page })}
                   width="100%"
                   style={{ display: "block", marginBottom: 8 }}
                 />
@@ -140,7 +145,7 @@ export default function RecognitionFilePreview({ file }: { file: StagedFile }) {
   }
 
   return (
-    <Tooltip title="Word 文档不支持浏览器预览，识别时会提取文字">
+    <Tooltip title={t("componentsMisc.recognitionPreview.docxHint")}>
       <span>
         <FileSummary file={file} icon={<FileWordOutlined />} />
       </span>
