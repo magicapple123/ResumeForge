@@ -200,7 +200,7 @@ export default function SelectionContextMenu({
       ref={menuRef}
       className="rf-ai-polish-menu"
       role="menu"
-      aria-label="文本操作"
+      aria-label={t("writing.contextMenu.ariaLabel")}
       tabIndex={-1}
       style={{ left: x, top: y, zIndex: layer.aiPolish }}
       onMouseDown={keepSelection}
@@ -214,7 +214,7 @@ export default function SelectionContextMenu({
         onMouseDown={keepSelection}
         onClick={handleCut}
       >
-        剪切
+        {t("writing.contextMenu.cut")}
       </button>
       <button
         type="button"
@@ -227,7 +227,7 @@ export default function SelectionContextMenu({
           void copyText();
         }}
       >
-        复制
+        {t("writing.contextMenu.copy")}
       </button>
       <button
         type="button"
@@ -237,7 +237,7 @@ export default function SelectionContextMenu({
         onMouseDown={keepSelection}
         onClick={handlePaste}
       >
-        粘贴
+        {t("writing.contextMenu.paste")}
       </button>
       <button
         type="button"
@@ -246,7 +246,7 @@ export default function SelectionContextMenu({
         onMouseDown={keepSelection}
         onClick={handleSelectAll}
       >
-        全选
+        {t("writing.contextMenu.selectAll")}
       </button>
       {target && (
         <>
@@ -277,7 +277,7 @@ export default function SelectionContextMenu({
               onAiPolish();
             }}
           >
-            AI 润色
+            {t("writing.contextMenu.aiPolish")}
           </button>
         </>
       )}
