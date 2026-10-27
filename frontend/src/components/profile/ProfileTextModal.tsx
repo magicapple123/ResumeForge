@@ -14,6 +14,9 @@
 
 import { FileSearchOutlined } from "@ant-design/icons";
 import { Alert, Button, Input, Modal, Progress, Space, Spin, Typography } from "antd";
+import type { MessageKey } from "../../i18n";
+import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 import type { StagedFile } from "../../hooks/useRecognitionFiles";
 import { MaxLengthHint } from "../common/MaxLengthHint";
 import RecognitionFileField from "../RecognitionFileField";
@@ -28,24 +31,19 @@ const UPLOAD_SHARE_PERCENT = 15;
 /** 两种宿主：资料页（本轮）与网申资料（下一轮接链路，本轮只有文案）。 */
 export type ProfileTextMode = "profile" | "webform";
 
-const COPY: Record<ProfileTextMode, { title: string; placeholder: string; intro: string }> = {
+const COPY: Record<
+  ProfileTextMode,
+  { titleKey: MessageKey; placeholderKey: MessageKey; introKey: MessageKey }
+> = {
   profile: {
-    title: "粘贴个人资料并识别",
-    placeholder:
-      "例如：\n姓名：张三\n教育经历\n示例大学｜市场营销｜本科｜2022.09-2026.06\n项目经历\n校园招聘会策划｜负责人｜活动策划、渠道对接",
-    intro:
-      "可粘贴包含基本信息、教育经历、实习/工作经历、校园经历、项目经历、技能和获奖情况的整段文字，" +
-      "也可以贴上这些内容的截图（在下面的输入框里按 Ctrl+V），或者上传简历文档（pdf/docx）。" +
-      "文档文字在本机提取，不上传原文件；若已配置大模型，内容会发送到该模型进行" +
-      "结构化识别。识别结果会先列成清单供你核对，确认后才填入表单。识别图片需要支持图片输入的多模态模型。",
+    titleKey: "profileTextModal.profile.title",
+    placeholderKey: "profileTextModal.profile.placeholder",
+    introKey: "profileTextModal.profile.intro",
   },
   webform: {
-    title: "粘贴网申资料并识别",
-    placeholder: "例如：\n政治面貌：中共党员\n是否有高中毕业证：是\n紧急联系人：张三 13800000000",
-    intro:
-      "把网申页面上的一屏栏目整段粘进来（也可以给截图或 PDF/Word），程序会按网申资料的字段目录" +
-      "逐条归位。**目录外的新栏目会先列成待确认项**，由你逐条勾选后才新增——识别可以猜，" +
-      "但你的资料不该被猜出来。",
+    titleKey: "profileTextModal.webform.title",
+    placeholderKey: "profileTextModal.webform.placeholder",
+    introKey: "profileTextModal.webform.intro",
   },
 };
 
@@ -108,6 +106,7 @@ export default function ProfileTextModal({
   onClose,
   onParse,
 }: Props) {
+  useLocale();
   const reviewing = rows !== null;
   const copy = COPY[mode];
   // 新字段只有在勾选后才计入"将写入 N 项"，所以这个数字就是用户眼前真正会发生的变化量。
@@ -117,7 +116,7 @@ export default function ProfileTextModal({
 
   return (
     <Modal
-      title={copy.title}
+      title={t(copy.titleKey)}
       open={open}
       onCancel={handleCancel}
       destroyOnHidden
@@ -126,24 +125,24 @@ export default function ProfileTextModal({
         reviewing
           ? [
               <Button key="discard" onClick={onDiscard}>
-                取消
+                {t("profileTextModal.action.cancel")}
               </Button>,
               <Button key="apply" type="primary" disabled={confirmCount === 0} onClick={onApply}>
-                确认填入 {confirmCount} 项
+                {t("profileTextModal.action.apply", { count: confirmCount })}
               </Button>,
             ]
           : [
               <Button key="cancel" onClick={onClose} disabled={parsing}>
-                关闭
+                {t("profileTextModal.action.close")}
               </Button>,
               parsing ? (
                 // 识别中不再给一个"转圈到结束"的 loading 按钮：用户唯一想做的事是取消。
                 <Button key="cancel-parse" danger onClick={onCancelParse}>
-                  取消识别
+                  {t("profileTextModal.action.cancelRecognize")}
                 </Button>
               ) : (
                 <Button key="parse" type="primary" icon={<FileSearchOutlined />} onClick={onParse}>
-                  识别并填入
+                  {t("profileTextModal.action.recognize")}
                 </Button>
               ),
             ]
@@ -156,15 +155,15 @@ export default function ProfileTextModal({
             type="info"
             showIcon
             style={{ marginBottom: 12 }}
-            title={`识别到 ${rows.length} 项，核对无误后再填入（可原地修改）`}
-            description="识别是自动推断，可能与原文有出入：逐条看过再确认，比事后再改回来省事。"
+            title={t("profileTextModal.review.count", { count: rows.length })}
+            description={t("profileTextModal.review.hint")}
           />
           {warnings.length > 0 && (
             <Alert
               type="warning"
               showIcon
               style={{ marginBottom: 12 }}
-              title={warnings.join("；")}
+              title={warnings.join(t("profileTextModal.separator.warning"))}
             />
           )}
           <RecognitionReviewList rows={rows} onChange={onRowsChange ?? (() => undefined)} />
@@ -172,15 +171,15 @@ export default function ProfileTextModal({
         </>
       ) : (
         <>
-          <Typography.Paragraph type="secondary">{copy.intro}</Typography.Paragraph>
+          <Typography.Paragraph type="secondary">{t(copy.introKey)}</Typography.Paragraph>
           <Input.TextArea
-            aria-label="个人资料文本"
+            aria-label={t("profileTextModal.input.textAria")}
             value={text}
             disabled={parsing}
             onPaste={onPasteFiles}
             onChange={(event) => onTextChange(event.target.value)}
             maxLength={100_000}
-            placeholder={copy.placeholder}
+            placeholder={t(copy.placeholderKey)}
             autoSize={{ minRows: 14, maxRows: 24 }}
           />
           <MaxLengthHint value={text} maxLength={100_000} />
@@ -199,7 +198,7 @@ export default function ProfileTextModal({
             // 上传阶段只占整个等待的一小段：真实字节映射到 0-15%，避免大文件一上传完
             // 进度条就画满、而用户还要再等十几秒解析。
             <Progress
-              aria-label="附件上传进度"
+              aria-label={t("profileTextModal.upload.progressAria")}
               percent={Math.round((uploadPercent / 100) * UPLOAD_SHARE_PERCENT)}
               size="small"
               status="active"
@@ -211,11 +210,18 @@ export default function ProfileTextModal({
             // 用不确定态 + 一句说明，比一个停在 15% 的假进度条诚实。
             <Space size={8} style={{ marginTop: 12 }}>
               <Spin size="small" />
-              <Typography.Text type="secondary">正在解析资料…</Typography.Text>
+              <Typography.Text type="secondary">
+                {t("profileTextModal.upload.parsing")}
+              </Typography.Text>
             </Space>
           )}
           {warnings.length > 0 && (
-            <Alert type="warning" showIcon style={{ marginTop: 12 }} title={warnings.join("；")} />
+            <Alert
+              type="warning"
+              showIcon
+              style={{ marginTop: 12 }}
+              title={warnings.join(t("profileTextModal.separator.warning"))}
+            />
           )}
         </>
       )}
