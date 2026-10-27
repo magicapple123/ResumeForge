@@ -32,7 +32,6 @@ import ErrorState from "../common/ErrorState";
 import { deleteWebFormRecord, getWebFormRecord, listWebFormRecordsPage } from "../../api/webform";
 import BatchActionBar from "../../components/common/BatchActionBar";
 import { useApi } from "../../hooks/useApi";
-import { TRASH_RECOVERY_NOTE } from "../common/rowActionMenu";
 import { useBatchSelection } from "../../hooks/useBatchSelection";
 import type { WebFormFillRecord, WebFormRecordItem, WebFormRecordSummary } from "../../types";
 import { t } from "../../i18n";
@@ -139,7 +138,7 @@ export default function WebFormRecordsPanel({ refreshKey = 0 }: Props) {
       title: t("webFormRecords.confirm.batchTitle"),
       content: t("webFormRecords.confirm.batchBody", {
         count: ids.length,
-        note: TRASH_RECOVERY_NOTE,
+        note: t("common.note.trashRecovery"),
       }),
       okText: t("common.action.delete"),
       okButtonProps: { danger: true },
