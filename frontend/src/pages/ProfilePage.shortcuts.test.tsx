@@ -12,7 +12,7 @@ import { RouterProvider, createMemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import ShortcutProvider from "../features/shortcuts/ShortcutProvider";
 import ProfilePage from "./ProfilePage";
-import { cleanupProfilePage } from "../test/profilePageHarness";
+import { cleanupProfilePage, findHeaderEditButton } from "../test/profilePageHarness";
 import { makeEntry, makeSection, makeWorkspace, makeField } from "../test/profileWorkspaceFixture";
 
 const apiMocks = vi.hoisted(() => ({
@@ -157,7 +157,7 @@ afterEach(() => {
 describe("ProfilePage 快捷键", () => {
   it("输入框外的 Ctrl+Z 撤回整页表单的改动，输入框内不劫持", async () => {
     renderWithShortcuts();
-    fireEvent.click(await screen.findByRole("button", { name: /编辑资料/ }));
+    fireEvent.click(await findHeaderEditButton());
 
     const nameInput = await screen.findByDisplayValue("Zhang");
     await waitFor(() => expect(nameInput).toBeEnabled());
@@ -179,7 +179,7 @@ describe("ProfilePage 快捷键", () => {
 
   it("Ctrl+S 触发页面既有的保存入口（条目级变更集）", async () => {
     renderWithShortcuts();
-    fireEvent.click(await screen.findByRole("button", { name: /编辑资料/ }));
+    fireEvent.click(await findHeaderEditButton());
 
     const nameInput = await screen.findByDisplayValue("Zhang");
     await waitFor(() => expect(nameInput).toBeEnabled());

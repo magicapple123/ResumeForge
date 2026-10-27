@@ -9,7 +9,11 @@
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { getProfileSaveControl } from "../features/tou-tou/profileSaveBridge";
-import { cleanupProfilePage, renderProfilePage } from "../test/profilePageHarness";
+import {
+  cleanupProfilePage,
+  findHeaderEditButton,
+  renderProfilePage,
+} from "../test/profilePageHarness";
 import {
   makeAllSections,
   makeEntry,
@@ -127,7 +131,7 @@ beforeEach(() => {
 afterEach(cleanupProfilePage);
 
 async function openAndParse() {
-  fireEvent.click(await screen.findByRole("button", { name: /编辑资料/ }));
+  fireEvent.click(await findHeaderEditButton());
   fireEvent.click(await screen.findByRole("button", { name: /粘贴文本识别/ }));
   fireEvent.change(await screen.findByLabelText("个人资料文本"), { target: { value: "Name: Li" } });
   fireEvent.click(screen.getByRole("button", { name: /识别并填入/ }));
