@@ -74,6 +74,7 @@ import webFormLegacy from "./en-US.webFormLegacy";
 import aiPolish from "./en-US.aiPolish";
 import bulkEnqueue from "./en-US.bulkEnqueue";
 import applySettings from "./en-US.applySettings";
+import searchCard from "./en-US.searchCard";
 
 const enUS = {
   ...core,
@@ -149,6 +150,7 @@ const enUS = {
   ...aiPolish,
   ...bulkEnqueue,
   ...applySettings,
+  ...searchCard,
 } as const satisfies Record<keyof ZhCNMessages, string>;
 
 export default enUS;

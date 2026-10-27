@@ -28,6 +28,8 @@ import LoadingBlock from "../common/LoadingBlock";
 import { useCallback, useEffect, useState } from "react";
 import { getSearchConfig, saveSearchConfig } from "../../api/settings";
 import type { SearchConfig, SearchSource } from "../../types";
+import { t, type MessageKey } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 
 /** 与后端 `SearchConfig` 的默认值保持一致，用作取数失败时的兜底草稿。 */
 const DEFAULT_CONFIG: SearchConfig = {
@@ -37,18 +39,44 @@ const DEFAULT_CONFIG: SearchConfig = {
   max_results: 8,
 };
 
-const SOURCE_OPTIONS: { value: SearchSource; label: string }[] = [
+/**
+ * 一条搜索来源的显示名。
+ *
+ * `label` 给品牌名用（`Bing` / `DuckDuckGo`：两种语言写法相同，进词表会被
+ * `source-ascii-english` 判成"源文是英文"），`labelKey` 给需要随语言变化的显示名用。
+ * 两者都只影响显示；`value` 是提交给后端的协议值，一个字都不动。
+ */
+interface SourceOption {
+  value: SearchSource;
+  label?: string;
+  labelKey?: MessageKey;
+}
+
+const SOURCE_OPTIONS: SourceOption[] = [
   { value: "bing", label: "Bing" },
   { value: "duckduckgo", label: "DuckDuckGo" },
-  { value: "searxng", label: "SearXNG（自建实例）" },
+  { value: "searxng", labelKey: "searchCard.source.searxng" },
 ];
 
-const FETCH_PAGE_OPTIONS = [
-  { value: 0, label: "只取摘要（最快）" },
-  { value: 1, label: "抓前 1 条正文" },
-  { value: 2, label: "抓前 2 条正文" },
-  { value: 3, label: "抓前 3 条正文（最详细，也最慢）" },
+/**
+ * 抓取正文的档位。
+ *
+ * `value` 就是后端 `fetch_pages` 的取值（0 = 只取摘要），原样提交；
+ * `labelKey` 只负责显示，在渲染处 `t()`——模块作用域里调 `t()` 会把语言固定在
+ * 模块求值那一刻（§8.1）。
+ */
+const FETCH_PAGE_OPTIONS: { value: number; labelKey: MessageKey }[] = [
+  { value: 0, labelKey: "searchCard.fetch.0" },
+  { value: 1, labelKey: "searchCard.fetch.1" },
+  { value: 2, labelKey: "searchCard.fetch.2" },
+  { value: 3, labelKey: "searchCard.fetch.3" },
 ];
+
+/** 一条来源选项的显示名（品牌名直接用，其余走词表）。 */
+function sourceLabel(option: SourceOption): string {
+  if (option.labelKey) return t(option.labelKey);
+  return option.label ?? option.value;
+}
 
 /** 两个设置项是否一致；用来决定保存按钮要不要亮。 */
 function sameConfig(left: SearchConfig, right: SearchConfig): boolean {
@@ -62,6 +90,8 @@ function sameConfig(left: SearchConfig, right: SearchConfig): boolean {
 }
 
 export default function SearchCard() {
+  // 本组件用模块级 t()：必须订阅语言变化，否则切语言后这一块不重渲染。
+  useLocale();
   const { message } = App.useApp();
   const [config, setConfig] = useState<SearchConfig>(DEFAULT_CONFIG);
   const [saved, setSaved] = useState<SearchConfig>(DEFAULT_CONFIG);
@@ -73,14 +103,14 @@ export default function SearchCard() {
   const [editing, setEditing] = useState(false);
 
   // 纯取数（不含 setState）：effect 内联调用时 Compiler 才能验证非同步更新；
-  // 判别式结果保留原始错误消息（测试钉住它必须原样展示）。
+  // 判别式结果保留原始错误消息（测试钉住它必须原样展示），只翻兜底那句。
   const fetchConfig = useCallback(async (): Promise<
     { config: SearchConfig } | { error: string }
   > => {
     try {
       return { config: await getSearchConfig() };
     } catch (err) {
-      return { error: err instanceof Error ? err.message : "加载联网搜索设置失败" };
+      return { error: err instanceof Error ? err.message : t("searchCard.loadFailed") };
     }
   }, []);
 
@@ -118,11 +148,11 @@ export default function SearchCard() {
     const trimmed = { ...config, searxng_url: config.searxng_url.trim() };
     // 后端 `sources` 要求至少一项。前端先拦一道，省得用户点了保存才收到一个 422。
     if (trimmed.sources.length === 0) {
-      message.error("至少要选一个搜索来源");
+      message.error(t("searchCard.needSource"));
       return;
     }
     if (trimmed.searxng_url && !/^https?:\/\//i.test(trimmed.searxng_url)) {
-      message.error("SearXNG 地址要以 http:// 或 https:// 开头");
+      message.error(t("searchCard.badUrl"));
       return;
     }
     setSaving(true);
@@ -130,11 +160,11 @@ export default function SearchCard() {
       const result = await saveSearchConfig(trimmed);
       setConfig(result);
       setSaved(result);
-      message.success("已保存联网搜索设置");
+      message.success(t("searchCard.saved"));
       // 保存完成即编辑结束：回查看态（字段重新变灰）。
       setEditing(false);
     } catch (err) {
-      message.error(err instanceof Error ? err.message : "保存联网搜索设置失败");
+      message.error(err instanceof Error ? err.message : t("searchCard.saveFailed"));
     } finally {
       setSaving(false);
     }
@@ -147,15 +177,14 @@ export default function SearchCard() {
   // 卡片右上角：查看态是「编辑搜索设置」入口（编辑态换回保存/取消，在右下角）。
   const editEntry = (
     <Button type="primary" onClick={() => setEditing(true)}>
-      编辑搜索设置
+      {t("searchCard.edit")}
     </Button>
   );
 
   return (
-    <Card title="联网搜索" className="settings-card" extra={editEntry}>
+    <Card title={t("searchCard.title")} className="settings-card" extra={editEntry}>
       <Typography.Paragraph type="secondary" style={{ marginBottom: 16 }}>
-        这里配的是助手「联网搜索」开关打开时**怎么搜**；助手页那个开关决定这一次要不要联网。
-        抓取正文能拿到比摘要更完整的页面内容，但每次搜索会慢一些，也可能被站点拒绝。
+        {t("searchCard.intro")}
       </Typography.Paragraph>
 
       {loadError && (
@@ -163,20 +192,23 @@ export default function SearchCard() {
           type="warning"
           showIcon
           style={{ marginBottom: 16 }}
-          title="没能读取已保存的设置"
-          description={`${loadError}。下面显示的是默认值，保存会覆盖服务端当前的设置。`}
+          title={t("searchCard.loadErrorTitle")}
+          description={t("searchCard.loadErrorBody", { message: loadError })}
         />
       )}
 
       <LoadingBlock spinning={loading}>
         <Space orientation="vertical" size="large" style={{ width: "100%" }}>
           <div>
-            <Typography.Text strong>搜索来源</Typography.Text>
+            <Typography.Text strong>{t("searchCard.sources.title")}</Typography.Text>
             <Typography.Paragraph type="secondary" style={{ marginBottom: 8 }}>
-              多个来源会并发查询后合并去重，至少选一个。
+              {t("searchCard.sources.hint")}
             </Typography.Paragraph>
             <Checkbox.Group
-              options={SOURCE_OPTIONS}
+              options={SOURCE_OPTIONS.map((option) => ({
+                value: option.value,
+                label: sourceLabel(option),
+              }))}
               value={config.sources}
               disabled={fieldsDisabled}
               onChange={(values) => patch({ sources: values as SearchSource[] })}
@@ -184,10 +216,9 @@ export default function SearchCard() {
           </div>
 
           <div>
-            <Typography.Text strong>SearXNG 实例地址</Typography.Text>
+            <Typography.Text strong>{t("searchCard.searxng.title")}</Typography.Text>
             <Typography.Paragraph type="secondary" style={{ marginBottom: 8 }}>
-              公共实例经常限流，所以不预置默认值；填了自己的实例地址才会去查它，例如{" "}
-              <code>http://localhost:8080</code>。不选 SearXNG 来源时可以留空。
+              {t("searchCard.searxng.hint")}
             </Typography.Paragraph>
             <Input
               value={config.searxng_url}
@@ -199,9 +230,9 @@ export default function SearchCard() {
           </div>
 
           <div>
-            <Typography.Text strong>抓取正文的条数</Typography.Text>
+            <Typography.Text strong>{t("searchCard.fetch.title")}</Typography.Text>
             <Typography.Paragraph type="secondary" style={{ marginBottom: 8 }}>
-              对排序最靠前的几条结果打开页面读取正文。关闭时助手只能看到搜索摘要。
+              {t("searchCard.fetch.hint")}
             </Typography.Paragraph>
             <Space orientation="vertical">
               {FETCH_PAGE_OPTIONS.map((option) => (
@@ -211,28 +242,28 @@ export default function SearchCard() {
                   disabled={fieldsDisabled}
                   onChange={() => patch({ fetch_pages: option.value })}
                 >
-                  {option.label}
+                  {t(option.labelKey)}
                 </Checkbox>
               ))}
             </Space>
           </div>
 
           <div>
-            <Typography.Text strong>每次返回的结果条数</Typography.Text>
+            <Typography.Text strong>{t("searchCard.results.title")}</Typography.Text>
             <Typography.Paragraph type="secondary" style={{ marginBottom: 8 }}>
-              1~15 条。条数越多，占用模型的上下文越多。
+              {t("searchCard.results.hint")}
             </Typography.Paragraph>
             {/* addonAfter 已废弃（v6）：按官方指引以 Space.Compact + Space.Addon 重组。 */}
             <Space.Compact>
               <InputNumber
-                aria-label="搜索结果数量"
+                aria-label={t("searchCard.results.aria")}
                 min={1}
                 max={15}
                 value={config.max_results}
                 disabled={fieldsDisabled}
                 onChange={(value) => patch({ max_results: value ?? DEFAULT_CONFIG.max_results })}
               />
-              <Space.Addon>条</Space.Addon>
+              <Space.Addon>{t("searchCard.results.unit")}</Space.Addon>
             </Space.Compact>
           </div>
 
@@ -247,12 +278,12 @@ export default function SearchCard() {
                   disabled={!dirty}
                   onClick={() => void save()}
                 >
-                  保存搜索设置
+                  {t("searchCard.action.save")}
                 </Button>
                 <Button disabled={saving} onClick={cancelEdit}>
-                  取消
+                  {t("common.action.cancel")}
                 </Button>
-                {dirty && <Typography.Text type="warning">有未保存的改动</Typography.Text>}
+                {dirty && <Typography.Text type="warning">{t("searchCard.dirty")}</Typography.Text>}
               </>
             )}
           </Flex>

@@ -82,6 +82,7 @@ import webFormLegacy from "./zh-CN.webFormLegacy";
 import aiPolish from "./zh-CN.aiPolish";
 import bulkEnqueue from "./zh-CN.bulkEnqueue";
 import applySettings from "./zh-CN.applySettings";
+import searchCard from "./zh-CN.searchCard";
 
 const namespaces = {
   /** 简历制作台（2026-10-23）。 */
@@ -209,6 +210,8 @@ const namespaces = {
   ...bulkEnqueue,
   /** 投递设置弹窗（2026-10-27）。 */
   ...applySettings,
+  /** 设置页「联网搜索」卡片（2026-10-27）。 */
+  ...searchCard,
 } as const;
 
 export default namespaces;
