@@ -6,15 +6,13 @@
  *
  * 只依赖子组件与 `api/resumes`，不 import 两个宿主 Modal，避免循环依赖（设计 §9 ⑨）。
  */
-import type { ResumeFormatConfig } from "../../types/resumeFormat";
+import type { Props } from "./ResumeDetailPreview.types";
 import { Collapse, Space, Tag, Tooltip, Typography } from "antd";
 import { useMemo, useRef, useState } from "react";
+import { t } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
-import type { ReactNode, RefObject } from "react";
 import { useNavigate } from "react-router-dom";
 import { RESUME_ENHANCEMENT_LEVELS } from "../../config";
-import type { ResumeContent, ResumeDetail, ResumeLayout } from "../../types";
-import type { LayoutMeasure } from "../../utils/resumeLayoutMeasure";
 import { contentSignature } from "../../utils/contentSignature";
 import ExportOptionsModal from "../ExportOptionsModal";
 import ExportConfigModal from "./delivery/ExportConfigModal";
@@ -36,83 +34,12 @@ import ResumePreview, {
 } from "../ResumePreview";
 import type { PreviewMode } from "../resume-preview/config";
 import { buildExactPreviewOptions } from "../resume-preview/exactPreviewOptions";
-import type { RichTextEditAdapter } from "../resume-preview/richText";
 import ResumeLayoutDiagnosisCard from "./ResumeLayoutDiagnosisCard";
 import ResumeCoverageNotes from "./ResumeCoverageNotes";
 import ResumeDetailFooter from "./ResumeDetailFooter";
 import EvidencePanel from "./EvidencePanel";
 import { useResumeEditorFillSources } from "./useResumeEditorFillSources";
 import { useVariants } from "../../features/resume-versions/useVariants";
-import type { ResumeDocumentPipeline } from "../../features/resume-document/types";
-import type { PathRemap } from "../../features/resume-outline/paths";
-interface LayoutStatus {
-  pages: number;
-  overflow: boolean;
-}
-interface Props {
-  detail: ResumeDetail;
-  /** 已渲染的预览 HTML（由父组件负责取数 / 重渲染后传入）。 */
-  html: string;
-  layout: ResumeLayout;
-  layoutStatus: LayoutStatus | null;
-  /** 预览量到的实测高度：由预览上报、这里转交给诊断面板。 */
-  measure: LayoutMeasure | null;
-  pdfDirectAvailable: boolean;
-  relayouting: boolean;
-  /** 预览句柄：版式控件 / 诊断卡需要用它注入探针 CSS 与量高。 */
-  previewRef: RefObject<ResumePreviewHandle | null>;
-  onLayoutStatus: (status: LayoutStatus | null) => void;
-  onMeasure: (measure: LayoutMeasure | null) => void;
-  onApplyLayout: (next: ResumeLayout) => void;
-  /** 版式落库：onApplyLayout 只重排不落库，缺这根线版式会静默丢；false=没落库（宿主已弹原因）。 */
-  onCommitLayout?: () => Promise<boolean>;
-  /** 版式 PATCH 在飞：顶部「保存修改」据此禁用。 */ layoutSaving?: boolean;
-  /** 草稿发布（0051）：什么都没脏时点「保存到简历中心」，宿主发一次内容 PATCH 清掉 draft。 */
-  onPublishDraft?: () => Promise<boolean>;
-  /**
-   * W02 条件写通道：制作台整体保存 / 409 冲突三选一（用最新的、比较、另存副本）都靠它。
-   * 缺省 = 旧的无条件写（生成流程那种宿主没有版本保护，行为不变）。
-   */
-  documentPipeline?: ResumeDocumentPipeline;
-  /** 「自动一页」试出方案并保存后的重渲染（只重渲染，不再写回版式）。 */
-  onApplyFittedFormat: (formatConfig: ResumeFormatConfig) => void;
-  onSaveEditedResume: (content: ResumeContent) => Promise<void>;
-  /** 初次挂载就打开制作台（「新建 → 前往制作台」专用，由 `zoomOpen` 的初值消费）。 */
-  autoOpenWorkbench?: boolean;
-  /** 是否已经生成过岗位优化建议：决定按钮文案是「生成」还是「查看」。 */
-  suggestionsGenerated: boolean;
-  suggestionsResetKey: number;
-  onSuggestionsGenerated: () => void;
-  /** 修订（AI 修改 / 采纳建议）成功后刷新预览：父组件负责 setDetail + 重渲染。
-   * 按钮显隐由 ``showReviseAction`` 单独控制（生成弹窗已自带「重新生成」向导）。 */
-  onResumeRevised?: (detail: ResumeDetail) => Promise<void> | void;
-  /** 是否显示「AI 修改 / 重新生成」按钮；缺省跟随 ``onResumeRevised`` 是否传入。 */
-  showReviseAction?: boolean;
-  /** 额外操作（如生成弹窗里的「重新生成 / 去简历中心 / 完成」）插在底部按钮区。 */
-  extraActions?: ReactNode;
-  /** 叠加「右键加粗」overlay 之后的正文：只喂制作台的实时预览（编辑器仍用服务端那份）。 */
-  liveContent?: ResumeContent;
-  /** 加粗契约：只传给制作台——主预览没有内容保存入口，在这里加粗关窗就会静默丢掉。 */
-  richEdit?: RichTextEditAdapter;
-  /** 纸面加粗还没保存：并入制作台脏值（否则"加了粗、关窗即丢"，且顶部不出保存按钮）。 */
-  richDirty?: boolean;
-  /** 丢掉这些 overlay（取消修改 / 放弃并关闭）。 */
-  onDiscardRichText?: () => void;
-  /**
-   * 合并加粗 overlay 的纯函数（宿主的 `overlays.merge`）。只交给制作台的实时预览：
-   * 中栏草稿里没有 overlay，不合并就会"改了字、纸面上的加粗消失"。
-   */
-  mergeLive?: (content: ResumeContent | null) => ResumeContent | null;
-  /** W06 大纲结构命令后：宿主重映射加粗 overlay 与事实标注的 path。 */
-  onRemapPaths?: (remap: PathRemap) => void;
-  /** 服务端已有新版本（表达资产插入等）：宿主刷新 detail/html/revision。 */
-  onDocumentSynced?: (detail: ResumeDetail) => void;
-  /**
-   * 导出入口走哪条链路（W19）：`delivery`（默认，已保存简历 → 导出交付包）/
-   * `legacy`（生成流程/未保存预览 → 旧导出选项面板，避免把草稿当已保存简历核对）。
-   */
-  exportFlow?: "delivery" | "legacy";
-}
 /** W19 导出交付包：模块级单例（与 DeliveryArchiveModal 同一注入模式，测试可替换）。 */
 const deliveryApi = createExportDeliveryApi();
 export default function ResumeDetailPreview({
@@ -188,14 +115,22 @@ export default function ResumeDetailPreview({
   const variantsState = useVariants({ resumeId: detail.id }); // W16 导出变体选择器数据源
   // 缺省跟随 onResumeRevised：能刷新预览就有意义，不能刷新就不该摆出这个入口。
   const showRevise = showReviseAction ?? Boolean(onResumeRevised);
-  const enhancementLabel = RESUME_ENHANCEMENT_LEVELS.find(
+  const enhancementLabelKey = RESUME_ENHANCEMENT_LEVELS.find(
     (item) => item.value === detail.enhancement_level,
-  )?.label;
+  )?.labelKey;
+  /** 美化拓展那一格的取值：没开启就写「未开启」，开了但没记录档位就只写「已开启」。 */
+  const enhancementLevelText = !detail.enhancement_enabled
+    ? t("resumes.list.off")
+    : enhancementLabelKey
+      ? t(enhancementLabelKey)
+      : t("resumes.list.on");
   // 风险扫描的"内容签名"：只随 content 变化重算，用来判断"扫描之后正文是不是改过了"。
   const riskContentSignature = useMemo(() => contentSignature(detail.content), [detail.content]);
   /** 警告分级（#3）：疑似虚构与岗位未选上性质不同；新记录用 coverage_notes，旧记录按特征句拆。 */
   const { fabricationWarnings, legacyCoverageWarnings } = useMemo(() => {
+    // i18n-ok: 后端警告原文，按特征句区分新旧覆盖说明（协议值，不翻）
     const legacy = detail.warnings.filter((warning) => warning.includes("没有出现在这份简历里"));
+    // i18n-ok: 同上
     const rest = detail.warnings.filter((warning) => !warning.includes("没有出现在这份简历里"));
     return { fabricationWarnings: rest, legacyCoverageWarnings: legacy };
   }, [detail.warnings]);
@@ -216,26 +151,34 @@ export default function ResumeDetailPreview({
     <div>
       <Space style={{ marginBottom: 12 }} wrap>
         <Tag color={detail.source === "manual" ? "purple" : "blue"}>
-          {detail.source === "manual" ? "用户编写" : "AI 生成"}
+          {detail.source === "manual" ? t("resumes.list.sourceManual") : t("resumes.list.sourceAi")}
         </Tag>
         {detail.job_id ? (
-          <Tag color="blue">目标岗位：{detail.job_title || "-"}</Tag>
+          <Tag color="blue">
+            {t("appConfig.detail.targetJob", { job: detail.job_title || "-" })}
+          </Tag>
         ) : (
           // 通用简历没有岗位；job_title 里存的是求职意向。
           <>
-            <Tooltip title="不关联岗位、可投递多个方向的简历">
-              <Tag color="purple">通用简历</Tag>
+            <Tooltip title={t("resumes.list.generalHint")}>
+              <Tag color="purple">{t("resumes.list.general")}</Tag>
             </Tooltip>
-            <Tag>求职意向：{detail.job_title || "未填写"}</Tag>
+            <Tag>
+              {t("resumes.list.intent", {
+                job: detail.job_title || t("appConfig.detail.notFilled"),
+              })}
+            </Tag>
           </>
         )}
         {detail.company && <Tag>{detail.company}</Tag>}
-        <Tag>模型：{detail.model || "-"}</Tag>
+        <Tag>{t("appConfig.detail.model", { model: detail.model || "-" })}</Tag>
         <Tag color={detail.enhancement_enabled ? "green" : undefined}>
-          美化拓展：{detail.enhancement_enabled ? (enhancementLabel ?? "已开启") : "未开启"}
+          {t("appConfig.detail.enhancement", { level: enhancementLevelText })}
         </Tag>
         <Typography.Text type="secondary" style={{ fontSize: 13 }}>
-          创建于 {detail.created_at.replace("T", " ").slice(0, 16)}
+          {t("appConfig.detail.createdAt", {
+            time: detail.created_at.replace("T", " ").slice(0, 16),
+          })}
         </Typography.Text>
       </Space>
       {/* 生成说明（折叠）：回答"为什么是这样一份简历"。 */}
@@ -245,7 +188,7 @@ export default function ResumeDetailPreview({
           items={[
             {
               key: "rationale",
-              label: "为什么是这样一份简历（生成说明）",
+              label: t("appConfig.detail.rationale"),
               children: (
                 <Typography.Paragraph
                   style={{ margin: 0, whiteSpace: "pre-wrap", fontSize: 13 }}
@@ -321,7 +264,9 @@ export default function ResumeDetailPreview({
             {/* 「正在按新设置重新排版…」留在度量这一行：它说明的是"你刚拖的那个值正在生效"，
                 回到第一行会与"改版式"的按钮混在一起。 */}
             {relayouting ? (
-              <Typography.Text type="secondary">正在按新设置重新排版…</Typography.Text>
+              <Typography.Text type="secondary">
+                {t("appConfig.detail.relayouting")}
+              </Typography.Text>
             ) : null}
           </>
         }
