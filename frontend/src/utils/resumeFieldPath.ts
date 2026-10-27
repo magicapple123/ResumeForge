@@ -11,17 +11,19 @@
  * 能改的路径集合两边必须相同，否则会出现"前端让改、后端说指不到"。
  */
 import type { ResumeContent } from "../types";
+import { t } from "../i18n";
+import type { MessageKey } from "../i18n";
 
 /** 在简历里是"若干条要点"的字段（与后端 resume_field_rewrite 的 _LIST_FIELD_LABELS 一致）。 */
 const LINE_FIELDS = new Set(["description", "highlights", "achievements", "courses", "tech_stack"]);
 
-const SECTION_LABELS: Record<string, string> = {
-  education: "教育经历",
-  experience: "实习/工作经历",
-  campus_experience: "校园经历",
-  projects: "项目经历",
-  skills: "专业技能",
-  awards: "荣誉奖项",
+const SECTION_LABELS: Record<string, MessageKey> = {
+  education: "editor.section.education",
+  experience: "editor.section.experience",
+  campus_experience: "editor.section.campus",
+  projects: "editor.section.projects",
+  skills: "editor.section.skills",
+  awards: "editor.section.awards",
 };
 
 const ITEM_IDENTITY: Record<string, string> = {
@@ -33,39 +35,39 @@ const ITEM_IDENTITY: Record<string, string> = {
   awards: "name",
 };
 
-const LIST_FIELD_LABELS: Record<string, string> = {
-  description: "要点",
-  highlights: "亮点",
-  achievements: "成果",
-  courses: "课程",
-  tech_stack: "技术栈",
+const LIST_FIELD_LABELS: Record<string, MessageKey> = {
+  description: "fieldPath.point",
+  highlights: "editor.field.highlights",
+  achievements: "fieldPath.outcome",
+  courses: "fieldPath.course",
+  tech_stack: "editor.field.techStack",
 };
 
-const SCALAR_FIELD_LABELS: Record<string, string> = {
-  name: "姓名",
-  gender: "性别",
-  birth_year: "出生年份",
-  phone: "电话",
-  email: "邮箱",
-  city: "城市",
-  personal_website: "个人主页",
-  github: "GitHub 主页",
-  job_intent: "求职意向",
-  summary: "个人总结",
+const SCALAR_FIELD_LABELS: Record<string, MessageKey> = {
+  name: "editor.field.personName",
+  gender: "editor.field.gender",
+  birth_year: "editor.field.birthYear",
+  phone: "editor.field.phone",
+  email: "editor.field.email",
+  city: "editor.field.city",
+  personal_website: "editor.field.website",
+  github: "fieldPath.githubProfile",
+  job_intent: "editor.field.jobIntent",
+  summary: "editor.field.summary",
 };
 
-const ITEM_SCALAR_LABELS: Record<string, string> = {
-  school: "学校",
-  major: "专业",
-  degree: "学历",
-  start_date: "开始时间",
-  end_date: "结束时间",
-  gpa: "绩点/排名",
-  company: "公司",
-  role: "角色",
-  organization: "组织",
-  name: "名称",
-  date: "时间",
+const ITEM_SCALAR_LABELS: Record<string, MessageKey> = {
+  school: "editor.field.school",
+  major: "editor.field.major",
+  degree: "editor.field.degree",
+  start_date: "editor.field.startDate",
+  end_date: "editor.field.endDate",
+  gpa: "editor.field.gpa",
+  company: "editor.field.company",
+  role: "editor.field.campusRole",
+  organization: "editor.field.organization",
+  name: "fieldPath.name",
+  date: "fieldPath.time",
 };
 
 /** 把路径拆成 `(string | number)[]`；非法路径返回空数组。 */
@@ -174,7 +176,7 @@ export function writeResumeFieldByPath(
 /** 人话说明"这是哪一栏"，用于弹窗标题与错误提示。 */
 export function describeResumeFieldPath(path: string, content?: ResumeContent | null): string {
   const segments = parseResumeFieldPath(path);
-  if (segments.length === 0) return "未指定";
+  if (segments.length === 0) return t("fieldPath.unspecified");
   const head = String(segments[0]);
   if (segments.length === 1) {
     return SCALAR_FIELD_LABELS[head] ?? head;
@@ -188,12 +190,21 @@ export function describeResumeFieldPath(path: string, content?: ResumeContent | 
         null)
       : null;
   const identity = item ? String(item[identityField] ?? "").trim() : "";
-  const subject = identity ? `${sectionLabel}「${identity}」` : sectionLabel;
+  const subject = identity
+    ? t("fieldPath.sectionWithIdentity", { section: sectionLabel, identity })
+    : sectionLabel;
   if (segments.length === 2) return subject;
   const field = String(segments[2]);
   if (segments.length === 3) {
-    return `${subject}的${ITEM_SCALAR_LABELS[field] ?? field}`;
+    return t("fieldPath.scalar", {
+      section: subject,
+      field: ITEM_SCALAR_LABELS[field] ? t(ITEM_SCALAR_LABELS[field]) : field,
+    });
   }
   const listIndex = typeof segments[3] === "number" ? segments[3] : -1;
-  return `${subject}的第 ${listIndex + 1} 条${LIST_FIELD_LABELS[field] ?? field}`;
+  return t("fieldPath.listItem", {
+    section: subject,
+    index: listIndex + 1,
+    field: LIST_FIELD_LABELS[field] ? t(LIST_FIELD_LABELS[field]) : field,
+  });
 }

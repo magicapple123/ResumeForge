@@ -53,6 +53,7 @@ import jobMatch from "./en-US.jobMatch";
 import jobDetail from "./en-US.jobDetail";
 import drill from "./en-US.drill";
 import reminderItem from "./en-US.reminderItem";
+import fieldPath from "./en-US.fieldPath";
 
 const enUS = {
   ...core,
@@ -107,6 +108,7 @@ const enUS = {
   ...jobDetail,
   ...drill,
   ...reminderItem,
+  ...fieldPath,
 } as const satisfies Record<keyof ZhCNMessages, string>;
 
 export default enUS;
