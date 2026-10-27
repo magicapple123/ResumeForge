@@ -6,10 +6,27 @@
  */
 import { BulbOutlined } from "@ant-design/icons";
 import { Button, Card, Space, Typography } from "antd";
+import { t, type MessageKey } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 import { QUESTION_BANK_TYPES } from "../../types";
 import type { QuestionAnswer, QuestionBankOut } from "../../types";
 
 type QuestionGroup = QuestionBankOut["groups"][number];
+
+/**
+ * 分组类型的显示名：键是 `types/` 里的中文协议值（协议值不改），值指向语言包 key。
+ * 未登记的取值原样显示——历史记录里可能有旧版本写下的类型，别让它显示成一条裸 key。
+ */
+const GROUP_TYPE_LABEL_KEYS: Record<string, MessageKey> = {
+  基础题: "questionBankPanel.group.basics", // i18n-ok: 协议值（types 中文枚举键）
+  项目深挖题: "questionBankPanel.group.projectDeepDive", // i18n-ok: 协议值（types 中文枚举键）
+  反问HR题: "questionBankPanel.group.askInterviewer", // i18n-ok: 协议值（types 中文枚举键）
+};
+
+function groupTypeLabel(type: string): string {
+  const labelKey: MessageKey | undefined = GROUP_TYPE_LABEL_KEYS[type];
+  return labelKey ? t(labelKey) : type;
+}
 
 interface Props {
   groups: QuestionBankOut["groups"];
@@ -29,13 +46,15 @@ export default function QuestionGroupCards({
   answerLoading,
   toggleAnswer,
 }: Props) {
+  // 本组件用模块级 t()：必须订阅语言变化，否则切语言后这一块不重渲染。
+  useLocale();
   return (
     <>
       {QUESTION_BANK_TYPES.map((type) => {
         const group = groups.find((item: QuestionGroup) => item.type === type);
         if (!group || group.questions.length === 0) return null;
         return (
-          <Card key={type} size="small" title={type}>
+          <Card key={type} size="small" title={groupTypeLabel(type)}>
             <Space orientation="vertical" style={{ width: "100%" }} size="small">
               {group.questions.map((item, index) => {
                 const key = `${group.type}-${index}`;
@@ -53,12 +72,14 @@ export default function QuestionGroupCards({
                     </Typography.Text>
                     {item.purpose && (
                       <Typography.Paragraph type="secondary" style={{ margin: "4px 0 0" }}>
-                        考察：{item.purpose}
+                        {t("questionBankPanel.group.purpose", { purpose: item.purpose })}
                       </Typography.Paragraph>
                     )}
                     {item.answer_hint && (
                       <Typography.Paragraph style={{ margin: "4px 0 0" }}>
-                        <Typography.Text type="success">提示：</Typography.Text>
+                        <Typography.Text type="success">
+                          {t("questionBankPanel.group.hintLabel")}
+                        </Typography.Text>
                         {item.answer_hint}
                       </Typography.Paragraph>
                     )}
@@ -70,7 +91,9 @@ export default function QuestionGroupCards({
                         loading={answerLoading === key}
                         onClick={() => void toggleAnswer(key, item.question, group.type, index)}
                       >
-                        {answer ? "收起参考答案" : "参考答案"}
+                        {answer
+                          ? t("questionBankPanel.action.showAnswer")
+                          : t("questionBankPanel.action.answer")}
                       </Button>
                     </div>
                     {answer && (
@@ -87,7 +110,9 @@ export default function QuestionGroupCards({
                         )}
                         {answer.sample_phrasing && (
                           <Typography.Paragraph type="secondary" style={{ margin: "4px 0 0" }}>
-                            话术参考：{answer.sample_phrasing}
+                            {t("questionBankPanel.group.samplePhrasing", {
+                              text: answer.sample_phrasing,
+                            })}
                           </Typography.Paragraph>
                         )}
                       </div>
