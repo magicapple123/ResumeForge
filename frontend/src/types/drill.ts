@@ -16,22 +16,6 @@ export const EVIDENCE_STATUSES = [
 ] as const;
 export type EvidenceStatus = (typeof EVIDENCE_STATUSES)[number];
 
-export const EVIDENCE_LABELS: Record<EvidenceStatus, string> = {
-  verified: "已验证",
-  partial: "部分验证",
-  unverified: "未验证",
-  contradictory: "存在矛盾",
-  not_covered: "未覆盖",
-};
-
-export const EVIDENCE_HINTS: Record<EvidenceStatus, string> = {
-  verified: "必要证据都讲到了",
-  partial: "讲到了一部分，还有明确缺口",
-  unverified: "没能提供最低限度的事实",
-  contradictory: "与事实台账或前文对不上",
-  not_covered: "这一轮没问到",
-};
-
 export const EVIDENCE_COLORS: Record<EvidenceStatus, string> = {
   verified: "green",
   partial: "gold",
@@ -61,19 +45,6 @@ export const FOLLOWUP_KINDS = [
   "retrospective",
 ] as const;
 export type FollowupKind = (typeof FOLLOWUP_KINDS)[number];
-
-export const FOLLOWUP_LABELS: Record<FollowupKind, string> = {
-  background: "背景",
-  responsibility: "职责",
-  structure: "结构",
-  implementation: "实现",
-  decision: "决策",
-  alternative: "替代方案",
-  failure: "失败与排查",
-  metric: "指标口径",
-  cost: "代价",
-  retrospective: "复盘",
-};
 
 /** 复练题型：不原题重复，换一个角度再问。 */
 export const REHEARSE_KINDS = [
