@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 /** 简历相关接口：生成（SSE）、历史、渲染预览、导出下载。 */
+import { t } from "../i18n";
 import type { ResumeFormatConfig } from "../types/resumeFormat";
 import type {
   DeliveryDetail,
@@ -367,7 +368,8 @@ export async function downloadResumeShareZip(
   return {
     blob: await resp.blob(),
     filename:
-      getFilenameFromDisposition(resp.headers.get("Content-Disposition")) ?? "简历-离线包.zip",
+      getFilenameFromDisposition(resp.headers.get("Content-Disposition")) ??
+      t("apiErrors.download.shareZipFilename"),
   };
 }
 
