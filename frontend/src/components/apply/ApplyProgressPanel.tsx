@@ -23,6 +23,8 @@ import {
 } from "../../types";
 import { isActiveTaskStatus as isActive } from "../../hooks/useTaskPolling";
 import { formatDateTime } from "../../utils/format";
+import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 
 interface Props {
   task: ApplyTaskDetail;
@@ -53,6 +55,7 @@ const KIND_LABELS: Record<string, string> = {
 };
 
 export default function ApplyProgressPanel({ task, busy, onPause, onResume, onStop }: Props) {
+  useLocale();
   const statusMeta = TASK_STATUS_META[task.status];
   const active = isActive(task.status);
   const canResume = task.status === "paused" || task.status === "breaker_paused";
@@ -62,11 +65,11 @@ export default function ApplyProgressPanel({ task, busy, onPause, onResume, onSt
 
   const columns: TableColumnsType<ApplyTaskItem> = [
     {
-      title: "岗位",
+      title: t("applyProgress.column.job"),
       dataIndex: "job_title",
       render: (title: string, item) => (
         <Space orientation="vertical" size={0}>
-          <Typography.Text>{title || "（岗位已删除）"}</Typography.Text>
+          <Typography.Text>{title || t("applyProgress.deletedJob")}</Typography.Text>
           {item.company && (
             <Typography.Text type="secondary" className="apply-progress-company">
               {item.company}
@@ -76,7 +79,7 @@ export default function ApplyProgressPanel({ task, busy, onPause, onResume, onSt
       ),
     },
     {
-      title: "状态",
+      title: t("applyProgress.column.status"),
       dataIndex: "status",
       width: 96,
       render: (value: ApplyTaskItem["status"]) => {
@@ -85,32 +88,42 @@ export default function ApplyProgressPanel({ task, busy, onPause, onResume, onSt
       },
     },
     {
-      title: "失败分类",
+      title: t("applyProgress.column.failureKind"),
       dataIndex: "failure_category",
       width: 180,
       render: (value: string) => (value ? <Tag color="red">{failureLabel(value)}</Tag> : "-"),
     },
-    { title: "尝试", dataIndex: "attempt", width: 64 },
+    { title: t("applyProgress.column.attempt"), dataIndex: "attempt", width: 64 },
   ];
 
   const expandedRowRender = (item: ApplyTaskItem): ReactNode => (
     <Descriptions size="small" column={1} className="apply-progress-detail">
-      <Descriptions.Item label="当前步骤">{stepLabel(task.current_step)}</Descriptions.Item>
-      <Descriptions.Item label="使用简历">
-        {item.resume_title || "按默认规则解析"}
+      <Descriptions.Item label={t("applyProgress.field.currentStep")}>
+        {stepLabel(task.current_step)}
       </Descriptions.Item>
-      <Descriptions.Item label="招呼语">{item.greeting || "（使用默认招呼语）"}</Descriptions.Item>
+      <Descriptions.Item label={t("applyProgress.field.resume")}>
+        {item.resume_title || t("applyProgress.defaultResume")}
+      </Descriptions.Item>
+      <Descriptions.Item label={t("applyProgress.field.greeting")}>
+        {item.greeting || t("applyProgress.defaultGreeting")}
+      </Descriptions.Item>
       {item.failure_detail && (
         // 跳过的条目也会写明细（例如「按『同公司只投一个岗位』跳过」），那是**跳过原因**
         // 不是失败诊断——同一个字段两种含义时，标签得跟着状态走，否则用户会以为出错了。
-        <Descriptions.Item label={item.status === "skipped" ? "跳过原因" : "诊断信息"}>
+        <Descriptions.Item
+          label={
+            item.status === "skipped"
+              ? t("applyProgress.field.skipReason")
+              : t("applyProgress.field.diagnosis")
+          }
+        >
           {item.failure_detail}
         </Descriptions.Item>
       )}
-      <Descriptions.Item label="开始时间">
+      <Descriptions.Item label={t("applyProgress.field.startedAt")}>
         {formatDateTime(item.started_at ?? undefined)}
       </Descriptions.Item>
-      <Descriptions.Item label="结束时间">
+      <Descriptions.Item label={t("applyProgress.field.finishedAt")}>
         {formatDateTime(item.finished_at ?? undefined)}
       </Descriptions.Item>
     </Descriptions>
@@ -120,7 +133,9 @@ export default function ApplyProgressPanel({ task, busy, onPause, onResume, onSt
     <section className="apply-progress-panel" aria-live="polite">
       <div className="apply-progress-head">
         <Space wrap size={12} align="center">
-          <Typography.Text strong>{KIND_LABELS[task.kind] ?? "执行批次"}</Typography.Text>
+          <Typography.Text strong>
+            {KIND_LABELS[task.kind] ?? t("applyProgress.kindFallback")}
+          </Typography.Text>
           {/* 任务进行中时在标题行给一个转动信号：状态 Tag 是静态的，转圈才能一眼看出
               "这一批正在跑"（页面滚到别处回来时尤其重要）。 */}
           {active && <Spin size="small" />}
@@ -137,7 +152,7 @@ export default function ApplyProgressPanel({ task, busy, onPause, onResume, onSt
             disabled={!active || task.status !== "running" || busy}
             onClick={onPause}
           >
-            暂停
+            {t("applyProgress.action.pause")}
           </Button>
           <Button
             type="primary"
@@ -145,10 +160,10 @@ export default function ApplyProgressPanel({ task, busy, onPause, onResume, onSt
             disabled={!canResume || busy}
             onClick={onResume}
           >
-            继续
+            {t("applyProgress.action.resume")}
           </Button>
           <Button danger icon={<StopOutlined />} disabled={!active || busy} onClick={onStop}>
-            停止
+            {t("applyProgress.action.stop")}
           </Button>
         </Space>
       </div>
@@ -164,17 +179,23 @@ export default function ApplyProgressPanel({ task, busy, onPause, onResume, onSt
 
       <Space wrap size={16} className="apply-progress-counts">
         <Typography.Text>
-          已处理 <Typography.Text strong>{task.processed}</Typography.Text> / {task.total}
+          {t("applyProgress.count.processed", { done: task.processed, total: task.total })}
         </Typography.Text>
-        <Typography.Text type="success">成功 {task.succeeded}</Typography.Text>
-        <Typography.Text type="danger">失败 {task.failed}</Typography.Text>
-        <Typography.Text type="secondary">已跳过 {task.skipped}</Typography.Text>
+        <Typography.Text type="success">
+          {t("applyProgress.count.succeeded", { count: task.succeeded })}
+        </Typography.Text>
+        <Typography.Text type="danger">
+          {t("applyProgress.count.failed", { count: task.failed })}
+        </Typography.Text>
+        <Typography.Text type="secondary">
+          {t("applyProgress.count.skipped", { count: task.skipped })}
+        </Typography.Text>
         {/* 投递批次到终态后给下一步入口：投出去的岗位在求职进度里推进，
             不给入口用户不知道这一批"结束了然后呢"。 */}
         {!active && task.kind === "apply" && (
           <Link to="/tracker">
             <Button type="link" size="small" style={{ padding: 0 }}>
-              去求职进度跟进
+              {t("applyProgress.action.track")}
             </Button>
           </Link>
         )}
@@ -194,8 +215,8 @@ export default function ApplyProgressPanel({ task, busy, onPause, onResume, onSt
       ) : (
         <Typography.Paragraph type="secondary" className="apply-progress-empty">
           {task.kind === "collect"
-            ? "采集批次不逐条列出岗位，新增数量见「成功」计数。"
-            : "本批次没有可展示的岗位条目。"}
+            ? t("applyProgress.empty.collect")
+            : t("applyProgress.empty.apply")}
         </Typography.Paragraph>
       )}
     </section>
