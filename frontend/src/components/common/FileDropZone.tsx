@@ -13,6 +13,8 @@
  */
 import type { DragEvent, ReactNode } from "react";
 import { useCallback, useRef, useState } from "react";
+import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 
 interface Props {
   onFiles: (files: File[]) => void;
@@ -50,11 +52,13 @@ export default function FileDropZone({
   accept,
   multiple = true,
   disabled = false,
-  hint = "松开即可导入",
+  hint,
   onRejected,
   className = "",
   children,
 }: Props) {
+  useLocale();
+  const hintText = hint ?? t("common.fileDropZone.hint");
   const [dragging, setDragging] = useState(false);
   // dragenter/dragleave 会在子元素之间反复触发，用深度计数判断"是否真的离开了"。
   const depthRef = useRef(0);
@@ -112,7 +116,7 @@ export default function FileDropZone({
       {children}
       {dragging && (
         <div className="file-drop-overlay" aria-hidden>
-          <span className="file-drop-overlay-text">{hint}</span>
+          <span className="file-drop-overlay-text">{hintText}</span>
         </div>
       )}
     </div>
