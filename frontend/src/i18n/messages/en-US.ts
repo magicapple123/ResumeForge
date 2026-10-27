@@ -51,6 +51,7 @@ import interview from "./en-US.interview";
 import materialForm from "./en-US.materialForm";
 import jobMatch from "./en-US.jobMatch";
 import jobDetail from "./en-US.jobDetail";
+import drill from "./en-US.drill";
 
 const enUS = {
   ...core,
@@ -103,6 +104,7 @@ const enUS = {
   ...materialForm,
   ...jobMatch,
   ...jobDetail,
+  ...drill,
 } as const satisfies Record<keyof ZhCNMessages, string>;
 
 export default enUS;

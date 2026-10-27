@@ -48,8 +48,11 @@ import { FEEDBACK_LABELS } from "../types";
 import { ActiveSession } from "./drill/ActiveSession";
 import { ReviewPanel } from "./drill/ReviewPanel";
 import { StartPanel } from "./drill/StartPanel";
+import { t } from "../i18n";
+import { useLocale } from "../i18n/i18nContext";
 
 export default function DrillPage() {
+  useLocale();
   const { message, modal } = App.useApp();
   const navigate = useNavigate();
   const [current, setCurrent] = useState<DrillSession | null>(null);
@@ -79,7 +82,7 @@ export default function DrillPage() {
     try {
       return await listDrillSessions();
     } catch (error) {
-      message.error(error instanceof Error ? error.message : "读取记录失败");
+      message.error(error instanceof Error ? error.message : t("drill.error.loadRecords"));
       return null;
     }
   }, [message]);
@@ -121,18 +124,18 @@ export default function DrillPage() {
       setOpenId(id);
       setCurrent(await getDrillSession(id));
     } catch (error) {
-      message.error(error instanceof Error ? error.message : "读取失败");
+      message.error(error instanceof Error ? error.message : t("drill.error.load"));
     }
   };
 
   const remove = async (id: number) => {
     try {
       await deleteDrillSession(id);
-      message.success("已删除这条深挖记录");
+      message.success(t("drill.toast.deletedOne"));
       if (current?.id === id) setCurrent(null);
       await refreshHistory();
     } catch (error) {
-      message.error(error instanceof Error ? error.message : "删除失败");
+      message.error(error instanceof Error ? error.message : t("drill.error.deleteFailed"));
     }
   };
 
@@ -141,7 +144,7 @@ export default function DrillPage() {
     const ids = [...batch.selectedIds];
     if (ids.length === 0) return;
     modal.confirm({
-      title: "删除选中的深挖记录？",
+      title: t("drill.confirm.deleteTitle"),
       // 标题只说动作 + 对象；条数与后果进正文（§4.4 的例外：数量让标题超 12 字）。
       // i18n-ok: 条数从标题挪进正文（§4.4 例外），这里的中文就是确认正文本身
       content: `这 ${ids.length} 场深挖${HARD_DELETE_NOTE}`,
@@ -154,8 +157,8 @@ export default function DrillPage() {
             .map((item) => deleteDrillSession(item.id)),
         );
         const failed = results.filter((item) => item.status === "rejected").length;
-        if (failed === 0) message.success(`已删除 ${ids.length} 场深挖`);
-        else message.warning(`已删除 ${ids.length - failed} 场，${failed} 场失败，请重试`);
+        if (failed === 0) message.success(t("drill.toast.deletedMany", { count: ids.length }));
+        else message.warning(t("drill.toast.deletedPartial", { ok: ids.length - failed, failed }));
         batch.exitSelecting();
         await refreshHistory();
       },
@@ -178,16 +181,16 @@ export default function DrillPage() {
   const contextActions = (item: DrillSessionBrief): RowMenuItem[] => [
     {
       key: "batch_select",
-      label: "批量选择",
+      label: t("drill.selectMode"),
       icon: <CheckSquareOutlined />,
       onClick: batch.enterSelecting,
     },
     { key: "delete_divider", type: "divider" },
     {
       key: "delete",
-      label: "删除",
+      label: t("drill.action.delete"),
       danger: true,
-      confirm: "删除这场深挖？",
+      confirm: t("drill.confirm.deleteOne"),
       confirmBody: HARD_DELETE_NOTE,
       onClick: () => void remove(item.id),
     },
@@ -206,10 +209,10 @@ export default function DrillPage() {
             icon={<ArrowLeftOutlined />}
             onClick={() => navigate("/claims")}
           >
-            返回事实台账
+            {t("drill.action.back")}
           </Button>
           <Typography.Title level={4} style={{ margin: 0 }}>
-            面试深挖
+            {t("drill.page.title")}
           </Typography.Title>
           <Typography.Text type="secondary">
             把事实台账里「已确认」的主张逐条拿出来压力测试：讲不讲得清、哪里还站不住。
@@ -227,22 +230,22 @@ export default function DrillPage() {
 
       {current && stats && (
         <div className="drill-summary">
-          <Statistic title="已问" value={stats.questions} />
+          <Statistic title={t("drill.stat.asked")} value={stats.questions} />
           <Statistic
-            title="讲得清"
+            title={t("drill.stat.clear")}
             value={stats.verified_count}
             styles={{ content: { color: "var(--rf-success-text)" } }}
             prefix={<CheckCircleOutlined />}
           />
           <Statistic
-            title="部分验证"
+            title={t("drill.stat.partial")}
             value={stats.partial_count}
             styles={{ content: { color: "var(--rf-warning-text)" } }}
           />
-          <Statistic title="未验证" value={stats.unverified_count} />
+          <Statistic title={t("drill.stat.unverified")} value={stats.unverified_count} />
           {stats.contradictory_count > 0 && (
             <Statistic
-              title="存在矛盾"
+              title={t("drill.stat.contradiction")}
               value={stats.contradictory_count}
               styles={{ content: { color: "var(--rf-error-text)" } }}
               prefix={<ExclamationCircleOutlined />}
@@ -258,10 +261,14 @@ export default function DrillPage() {
           extra={
             <Space>
               <Tag color={finished ? "default" : "processing"}>
-                {finished ? "已结束" : "进行中"}
+                {finished ? t("drill.status.finished") : t("drill.status.active")}
               </Tag>
               <Tooltip title={FEEDBACK_LABELS[current.feedback_policy]}>
-                <Tag>{current.feedback_policy === "deferred" ? "真实模拟" : "训练模式"}</Tag>
+                <Tag>
+                  {current.feedback_policy === "deferred"
+                    ? t("drill.mode.simulated")
+                    : t("drill.mode.training")}
+                </Tag>
               </Tooltip>
             </Space>
           }
@@ -276,10 +283,10 @@ export default function DrillPage() {
 
       <Card
         size="small"
-        title="历史记录"
+        title={t("drill.section.history")}
         extra={
           <Button size="small" onClick={() => void refreshHistory()} loading={loadingHistory}>
-            刷新
+            {t("drill.action.refresh")}
           </Button>
         }
       >
@@ -299,14 +306,14 @@ export default function DrillPage() {
             }}
           >
             <Button danger disabled={batch.selectedCount === 0} onClick={removeSelected}>
-              删除所选
+              {t("drill.batch.delete")}
             </Button>
           </BatchActionBar>
         )}
         {loadingHistory ? (
           <PageSkeleton rows={3} />
         ) : history.length === 0 ? (
-          <EmptyState description="还没有深挖记录。先在「事实台账」确认几条主张，再回来开一场。" />
+          <EmptyState description={t("drill.empty")} />
         ) : (
           <>
             <Listy
@@ -321,7 +328,7 @@ export default function DrillPage() {
                         ? [
                             <Checkbox
                               key="pick"
-                              aria-label={`选择深挖 ${item.title}`}
+                              aria-label={t("drill.aria.select", { title: item.title })}
                               checked={batch.isSelected(item.id)}
                               onChange={() => batch.toggle(item.id)}
                             />,
@@ -333,7 +340,9 @@ export default function DrillPage() {
                               type="link"
                               onClick={() => void openHistory(item.id)}
                             >
-                              {item.status === "active" ? "继续" : "看复盘"}
+                              {item.status === "active"
+                                ? t("drill.action.continue")
+                                : t("drill.action.review")}
                             </Button>,
                             // 删除收进「···」菜单：除回收站外，删除不再以红图标裸露（全局约定）。
                             <RowActions
@@ -341,9 +350,9 @@ export default function DrillPage() {
                               more={[
                                 {
                                   key: "delete",
-                                  label: "删除",
+                                  label: t("drill.action.delete"),
                                   danger: true,
-                                  confirm: "删除这场深挖？",
+                                  confirm: t("drill.confirm.deleteOne"),
                                   confirmBody: HARD_DELETE_NOTE,
                                   onClick: () => void remove(item.id),
                                 },
@@ -355,7 +364,9 @@ export default function DrillPage() {
                     <Space size={8} wrap>
                       <Typography.Text strong={openId === item.id}>{item.title}</Typography.Text>
                       <Tag color={item.status === "active" ? "processing" : "default"}>
-                        {item.status === "active" ? "进行中" : "已结束"}
+                        {item.status === "active"
+                          ? t("drill.status.active")
+                          : t("drill.status.finished")}
                       </Tag>
                       <Typography.Text type="secondary" style={{ fontSize: 12 }}>
                         {item.current_index}/{item.max_questions} 题 ·{" "}
@@ -374,7 +385,7 @@ export default function DrillPage() {
                 onChange={setPage}
                 hideOnSinglePage
                 showSizeChanger={false}
-                showTotal={(count) => `共 ${count} 场`}
+                showTotal={(count) => t("drill.table.total", { count })}
               />
             </div>
           </>
