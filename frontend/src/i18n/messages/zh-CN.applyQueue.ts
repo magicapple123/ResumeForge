@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * 投递队列页：队列说明、不支持来源的提示、详情抽屉与移出确认。
+ * 投递队列页：队列说明、不支持来源的提示、筛选与工具栏、表格列、条目编辑弹窗、
+ * 详情抽屉与移出确认。
  *
  * 说明段落（原来用 `<span className="apply-queue-flow-em">` 高亮名词）整段成 key，
  * 高亮改成文案里的「」/ 引号：片段拼接在英文里语序不通，而 i18n 没有富文本插值。
@@ -56,6 +57,50 @@ const applyQueue = {
   "applyQueue.detail.updatedAt": "最近更新",
   "applyQueue.detail.greeting": "招呼语",
   "applyQueue.detail.defaultGreeting": "默认招呼语",
+
+  // 准入徽标自己的两枚固定标签（准入结论的展示名仍来自 types 的 ADMISSION_META）。
+  "applyQueue.admission.needsConfirm": "需逐条确认",
+  "applyQueue.admission.unanalyzed": "未分析",
+
+  // 表格：列头与单元格里的兜底/提示。状态列的展示名仍来自 types 的 QUEUE_STATUS_META。
+  "applyQueue.column.job": "岗位",
+  "applyQueue.column.admission": "准入",
+  "applyQueue.column.status": "状态",
+  "applyQueue.column.assets": "简历 / 招呼语",
+  "applyQueue.column.actions": "操作",
+  "applyQueue.table.joinedAt": "加入队列于 {time}",
+  "applyQueue.table.viewDetailAria": "查看队列条目详情：{title}",
+  "applyQueue.table.deletedJobShort": "岗位已删除",
+  "applyQueue.table.unsupportedTag": "来源不支持",
+  "applyQueue.table.unsupportedHint":
+    "来源不在投递台支持的招聘网站内，无法自动投递；移出队列或到原网站自行投递",
+  "applyQueue.table.moreActionsAria": "更多操作 {job}",
+  "applyQueue.table.total": "共 {total} 条",
+
+  // 筛选与工具栏。
+  "applyQueue.filter.byStatus": "按状态筛选",
+  "applyQueue.filter.byAdmission": "按准入筛选",
+  "applyQueue.filter.count": "共 {total} 个岗位，已选 {selected} 个",
+  "applyQueue.filter.countFiltered": "共 {total} 个岗位，筛选出 {shown} 个，已选 {selected} 个",
+  "applyQueue.filter.selectAllHint":
+    "勾选当前列表里的全部可投岗位（跨页生效）；不勾选则整队列按顺序投递",
+  "applyQueue.filter.selectAll": "全选队列",
+  "applyQueue.filter.clearSelection": "清空选择",
+  "applyQueue.confirm.removeSelectedTitle": "把选中的岗位移出队列？",
+  "applyQueue.action.removeSelected": "移出所选",
+  "applyQueue.action.start": "开始投递",
+
+  // 条目编辑弹窗。
+  "applyQueue.editor.title": "编辑「{title}」",
+  "applyQueue.editor.untitledJob": "该岗位",
+  "applyQueue.editor.resumeHint": "留空则运行时用该岗位最近一份岗位版简历。",
+  "applyQueue.editor.resumePlaceholder": "按默认规则解析（输入关键词搜索）",
+  "applyQueue.editor.generate": "按岗位生成招呼语",
+  "applyQueue.toast.greetingGenerated": "已按岗位生成招呼语",
+  "applyQueue.toast.greetingDefault": "已填入默认招呼语（未配置模型）",
+  "applyQueue.toast.greetingFailed": "生成招呼语失败",
+  "applyQueue.toast.updated": "队列条目已更新",
+  "applyQueue.toast.updateFailed": "更新失败",
 } as const;
 
 export default applyQueue;

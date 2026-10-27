@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * 个性化题库面板（面试 Tab 里的「题库」）：生成入口、历史题库回看、批量删除确认与提示。
+ * 个性化题库面板（面试 Tab 里的「题库」）：生成入口、题目分组卡、历史题库回看、批量删除确认与提示。
  *
  * `TRASH_RECOVERY_NOTE` 是别处共享的中文常量，这里只引用不翻译；`{count}` / `{note}` /
  * `{ok}` / `{failed}` / `{id}` / `{time}` 是插值占位符，中英两侧名字与出现次数一致。
@@ -34,6 +34,21 @@ const questionBankPanel = {
   "questionBankPanel.toast.deletedMany": "已删除 {count} 份题库历史",
   "questionBankPanel.toast.deletedPartial": "已删除 {ok} 份，{failed} 份失败，请重试",
   "questionBankPanel.toast.deleted": "已删除题库历史",
+  "questionBankPanel.history.fallbackTitle": "题库",
+  "questionBankPanel.history.total": "共 {count} 份",
+  "questionBankPanel.history.deleteTitle": "删除这条题库历史？",
+  "questionBankPanel.history.selectAria": "选择题库 {name}",
+  "questionBankPanel.action.viewDetail": "查看详情",
+  "questionBankPanel.action.deleteSelected": "删除所选",
+  "questionBankPanel.action.answer": "参考答案",
+  "questionBankPanel.action.showAnswer": "收起参考答案",
+  "questionBankPanel.empty.noHistory": "还没有保存过题库",
+  "questionBankPanel.group.basics": "基础题",
+  "questionBankPanel.group.projectDeepDive": "项目深挖题",
+  "questionBankPanel.group.askInterviewer": "反问HR题",
+  "questionBankPanel.group.purpose": "考察：{purpose}",
+  "questionBankPanel.group.hintLabel": "提示：",
+  "questionBankPanel.group.samplePhrasing": "话术参考：{text}",
 } as const;
 
 export default questionBankPanel;

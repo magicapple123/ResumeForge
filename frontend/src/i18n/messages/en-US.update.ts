@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * 设置页的软件更新卡片：检查、下载、重启安装与结果提示。
+ * Settings · software update card: checking, downloading, restart-and-install and results.
  *
- * 带 `<code>` 内嵌的说明段落不在本文件——片段拼接在英文里语序不通，
- * 需要单独设计成整段 key（与投递队列页同一处理）。
+ * Paragraphs with an inline `<code>` are split into lead / middle / tail keys. The
+ * paragraphs still read as one sentence; the spaces around `<code>` live in JSX
+ * `{" "}` rather than inside a translation, because spacing rules differ by language.
  */
 const update = {
   "update.size.unknown": "Unknown size",
@@ -39,6 +40,16 @@ const update = {
   "update.result.title": "Check complete",
   "update.result.latest": "Latest version: {version}",
   "update.result.published": "Published: {date}",
+  "update.installResult.noReason": "The updater did not give a reason.",
+  "update.installResult.lead": "The app still works and your data was not changed. The log is at",
+  "update.installResult.middle": ", or double-click",
+  "update.installResult.tail": "to run the update again.",
+  "update.intro.filesOnly":
+    "An update only replaces the program files. Your Jobs, Resumes, assistant conversations and settings in",
+  "update.intro.dataSuffix": "are never overwritten.",
+  "update.intro.backupHint":
+    "Before updating, it is still worth exporting a backup in Datasets and backups.",
+  "update.downloading": "Downloading the update package: {downloaded} / {total}",
 } as const;
 
 export default update;

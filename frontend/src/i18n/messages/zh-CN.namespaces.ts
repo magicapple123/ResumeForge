@@ -127,6 +127,41 @@ import sections from "./zh-CN.sections";
 import styleTemplateEditor from "./zh-CN.styleTemplateEditor";
 import trackerImport from "./zh-CN.trackerImport";
 import writing from "./zh-CN.writing";
+import activationUi from "./zh-CN.activationUi";
+import analyticsPage from "./zh-CN.analyticsPage";
+import analyticsUi from "./zh-CN.analyticsUi";
+import apiErrors from "./zh-CN.apiErrors";
+import appConfig from "./zh-CN.appConfig";
+import applyCollect from "./zh-CN.applyCollect";
+import applyUi from "./zh-CN.applyUi";
+import assistantHooks from "./zh-CN.assistantHooks";
+import assistantUi from "./zh-CN.assistantUi";
+import componentsMisc from "./zh-CN.componentsMisc";
+import componentsMisc2 from "./zh-CN.componentsMisc2";
+import dateFields from "./zh-CN.dateFields";
+import featuresMisc from "./zh-CN.featuresMisc";
+import fileUtils from "./zh-CN.fileUtils";
+import generateStages from "./zh-CN.generateStages";
+import globalSearch from "./zh-CN.globalSearch";
+import homePage from "./zh-CN.homePage";
+import hooksUi from "./zh-CN.hooksUi";
+import interviewPage from "./zh-CN.interviewPage";
+import jobsCandidate from "./zh-CN.jobsCandidate";
+import jobsForm from "./zh-CN.jobsForm";
+import jobsPage from "./zh-CN.jobsPage";
+import jobsUi from "./zh-CN.jobsUi";
+import llmUi from "./zh-CN.llmUi";
+import navigation from "./zh-CN.navigation";
+import pagesMisc from "./zh-CN.pagesMisc";
+import profileUi from "./zh-CN.profileUi";
+import referralUi from "./zh-CN.referralUi";
+import settingsDatasets from "./zh-CN.settingsDatasets";
+import settingsUi from "./zh-CN.settingsUi";
+import templatesUi from "./zh-CN.templatesUi";
+import touTou from "./zh-CN.touTou";
+import trackerUi from "./zh-CN.trackerUi";
+import userGuide from "./zh-CN.userGuide";
+import userGuideFlow from "./zh-CN.userGuideFlow";
 
 const namespaces = {
   /** 简历制作台（2026-10-23）。 */
@@ -316,6 +351,41 @@ const namespaces = {
   ...styleTemplateEditor,
   ...trackerImport,
   ...writing,
+  ...activationUi,
+  ...analyticsPage,
+  ...analyticsUi,
+  ...apiErrors,
+  ...appConfig,
+  ...applyCollect,
+  ...applyUi,
+  ...assistantHooks,
+  ...assistantUi,
+  ...componentsMisc,
+  ...componentsMisc2,
+  ...dateFields,
+  ...featuresMisc,
+  ...fileUtils,
+  ...generateStages,
+  ...globalSearch,
+  ...homePage,
+  ...hooksUi,
+  ...interviewPage,
+  ...jobsCandidate,
+  ...jobsForm,
+  ...jobsPage,
+  ...jobsUi,
+  ...llmUi,
+  ...navigation,
+  ...pagesMisc,
+  ...profileUi,
+  ...referralUi,
+  ...settingsDatasets,
+  ...settingsUi,
+  ...templatesUi,
+  ...touTou,
+  ...trackerUi,
+  ...userGuide,
+  ...userGuideFlow,
 } as const;
 
 export default namespaces;

@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * 模拟面试页：会话列表、问答、结束/删除确认与结果提示。
+ * 模拟面试页：会话列表、问答、结束/删除确认与结果提示；本批补充面经表单弹窗、
+ * 复盘历史折叠卡片与简历改进建议卡片的展示文案。
  *
- * `interview.listSeparator` 是把关卡焦点题拼成一行时的分隔符：中文用全角「；」，
- * 英文用 "; "，属于随语言变化的符号，必须走语言包而不是硬编码。
+ * `interview.listSeparator` 是把列表项（关卡焦点题、建议依据）拼成一行时的分隔符：
+ * 中文用全角「；」，英文用 "; "，属于随语言变化的符号，必须走语言包而不是硬编码。
  *
  * `interview.confirm.deleteBody` 的后果段用 `{note}` 参数传入共用常量 `HARD_DELETE_NOTE`
  * （硬删除提示的唯一出口，见 `components/common/rowActionMenu.ts`），不在语言包里复制一份。
@@ -48,6 +49,45 @@ const interview = {
   "interview.hint.dontKnow": "答不上来可以直接说「不知道」，面试官会给回答思路。",
   "interview.action.submit": "提交回答",
   "interview.listSeparator": "；",
+
+  "interview.experienceForm.title.edit": "编辑面经",
+  "interview.experienceForm.title.create": "新建面经",
+  "interview.experienceForm.action.save": "保存面经",
+  "interview.experienceForm.field.title": "标题",
+  "interview.experienceForm.placeholder.title": "例如：某司后端一面",
+  "interview.experienceForm.field.company": "公司",
+  "interview.experienceForm.placeholder.company": "公司名",
+  "interview.experienceForm.field.position": "岗位",
+  "interview.experienceForm.placeholder.position": "岗位名",
+  "interview.experienceForm.field.job": "关联岗位（选填，删除岗位不影响面经）",
+  "interview.experienceForm.placeholder.job": "绑定后自动回填公司/岗位快照（输入关键词搜索）",
+  "interview.experienceForm.field.content": "正文（面试过程、怎么答的）",
+  "interview.experienceForm.placeholder.content": "记录面试流程与心得",
+  "interview.experienceForm.field.questions": "被问到的真实问题",
+  "interview.experienceForm.hint.questions": "逐条回车添加，会沉淀进知识库",
+  "interview.experienceForm.placeholder.questions": "输入后回车",
+  "interview.experienceForm.field.tags": "标签",
+  "interview.experienceForm.placeholder.tags": "例如：客户沟通、数据透视表",
+  "interview.experienceForm.field.source": "来源",
+  "interview.experienceForm.field.difficulty": "难度",
+  "interview.experienceForm.placeholder.difficulty": "例如：中等",
+  "interview.experienceForm.field.round": "轮次",
+  "interview.experienceForm.placeholder.round": "选择常见轮次",
+  "interview.experienceForm.field.date": "面试日期",
+
+  "interview.reviewHistory.title": "历史复盘",
+  "interview.reviewHistory.fallbackTitle": "复盘",
+  "interview.reviewHistory.section.questions": "真实问题",
+  "interview.reviewHistory.action.detail": "查看详情",
+  "interview.reviewHistory.action.delete": "删除复盘历史",
+  "interview.reviewHistory.confirm.delete": "删除这条复盘历史？",
+  "interview.reviewHistory.loading": "加载中…",
+  "interview.reviewHistory.empty": "还没有保存过复盘",
+
+  "interview.suggestions.title": "简历改进建议",
+  "interview.suggestions.empty": "没有产出建议，试试补充更多面试暴露的短板或追问",
+  "interview.suggestions.evidence": "依据：{evidence}",
+  "interview.suggestions.goToResume": "去简历中心对照修改 →",
 } as const;
 
 export default interview;

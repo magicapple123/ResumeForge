@@ -1,12 +1,16 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * 模拟面试页：会话列表、问答、结束/删除确认与结果提示。
+ * Mock interview page: session list, Q&A, end/delete confirmations and result toasts. This
+ * batch adds the interview-note form modal, the saved-review accordion and the resume
+ * improvement suggestions card.
  *
- * `interview.listSeparator` 是把关卡焦点题拼成一行时的分隔符：中文用全角「；」，
- * 英文用 "; "，属于随语言变化的符号，必须走语言包而不是硬编码。
+ * `interview.listSeparator` joins list items (focus questions, suggestion evidence) into one
+ * line: a full-width semicolon in Chinese and "; " in English - a language-dependent symbol,
+ * so it lives in the pack instead of being hard-coded.
  *
- * `interview.confirm.deleteBody` 的后果段用 `{note}` 参数传入共用常量 `HARD_DELETE_NOTE`
- * （硬删除提示的唯一出口，见 `components/common/rowActionMenu.ts`），不在语言包里复制一份。
+ * `interview.confirm.deleteBody` takes the consequence clause through the `{note}` parameter
+ * (the shared `HARD_DELETE_NOTE` constant, the single source in
+ * `components/common/rowActionMenu.ts`) rather than copying it into the pack.
  */
 const interview = {
   "interview.toast.loadFailed": "Could not load interview records",
@@ -51,6 +55,48 @@ const interview = {
     "If you cannot answer, say “I don't know” — the interviewer will suggest an approach.",
   "interview.action.submit": "Submit answer",
   "interview.listSeparator": "; ",
+
+  "interview.experienceForm.title.edit": "Edit interview note",
+  "interview.experienceForm.title.create": "New interview note",
+  "interview.experienceForm.action.save": "Save interview note",
+  "interview.experienceForm.field.title": "Title",
+  "interview.experienceForm.placeholder.title": "e.g. Backend interview, round 1",
+  "interview.experienceForm.field.company": "Company",
+  "interview.experienceForm.placeholder.company": "Company name",
+  "interview.experienceForm.field.position": "Role",
+  "interview.experienceForm.placeholder.position": "Role name",
+  "interview.experienceForm.field.job": "Related job (optional; deleting the job keeps this note)",
+  "interview.experienceForm.placeholder.job":
+    "Fills in the company and role snapshot once linked (type keywords to search)",
+  "interview.experienceForm.field.content": "Body (the interview and how you answered)",
+  "interview.experienceForm.placeholder.content": "Note the interview flow and your takeaways",
+  "interview.experienceForm.field.questions": "Real questions asked",
+  "interview.experienceForm.hint.questions":
+    "Press Enter after each one — they are saved to the knowledge base",
+  "interview.experienceForm.placeholder.questions": "Type and press Enter",
+  "interview.experienceForm.field.tags": "Tags",
+  "interview.experienceForm.placeholder.tags": "e.g. client communication, pivot tables",
+  "interview.experienceForm.field.source": "Source",
+  "interview.experienceForm.field.difficulty": "Difficulty",
+  "interview.experienceForm.placeholder.difficulty": "e.g. Medium",
+  "interview.experienceForm.field.round": "Round",
+  "interview.experienceForm.placeholder.round": "Pick a common round",
+  "interview.experienceForm.field.date": "Interview date",
+
+  "interview.reviewHistory.title": "Saved reviews",
+  "interview.reviewHistory.fallbackTitle": "Review",
+  "interview.reviewHistory.section.questions": "Real questions",
+  "interview.reviewHistory.action.detail": "View details",
+  "interview.reviewHistory.action.delete": "Delete saved review",
+  "interview.reviewHistory.confirm.delete": "Delete this saved review?",
+  "interview.reviewHistory.loading": "Loading…",
+  "interview.reviewHistory.empty": "No saved reviews yet",
+
+  "interview.suggestions.title": "Resume improvement suggestions",
+  "interview.suggestions.empty":
+    "No suggestions produced — add more weaknesses or follow-ups the interview exposed",
+  "interview.suggestions.evidence": "Evidence: {evidence}",
+  "interview.suggestions.goToResume": "Compare and edit in the Resume center →",
 } as const;
 
 export default interview;

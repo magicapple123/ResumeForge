@@ -2,8 +2,9 @@
 /**
  * 设置页的软件更新卡片：检查、下载、重启安装与结果提示。
  *
- * 带 `<code>` 内嵌的说明段落不在本文件——片段拼接在英文里语序不通，
- * 需要单独设计成整段 key（与投递队列页同一处理）。
+ * 带 `<code>` 内嵌的说明段落拆成首/中/尾三条：段落本身仍是一条完整的话，
+ * 但 `<code>` 两侧的空格留在 JSX 的 `{" "}` 里，不写进 key —— 中英文的空格
+ * 规则不同，把空格冻进译文会在另一种语言里多出一个空格。
  */
 const update = {
   "update.size.unknown": "未知大小",
@@ -36,6 +37,23 @@ const update = {
   "update.result.title": "检查完成",
   "update.result.latest": "最新版本：{version}",
   "update.result.published": "发布时间：{date}",
+
+  /** 安装结果里后端没给原因时的兜底。 */
+  "update.installResult.noReason": "更新器没有给出原因。",
+  /** 安装结果说明的前半句；`{log}` 路径以 <code> 内嵌在它后面。 */
+  "update.installResult.lead": "应用本身还能正常使用，数据没有被改动。日志在",
+  /** 日志路径与 `update.cmd` 之间的连接语（中文里以一个逗号开头）。 */
+  "update.installResult.middle": "，也可以双击",
+  /** 安装结果说明的收尾。 */
+  "update.installResult.tail": "重新更新一次。",
+  /** 卡片说明的前半句：更新只换程序文件；后面接 <code>data/</code>。 */
+  "update.intro.filesOnly": "更新只替换程序文件，不会覆盖",
+  /** <code>data/</code> 之后的半句：数据目录里有什么不会被覆盖。 */
+  "update.intro.dataSuffix": "里的岗位、简历、助手对话和设置。",
+  /** 卡片说明的第二句：更新前先备份。 */
+  "update.intro.backupHint": "更新前仍建议先在「数据集与备份」里导出一份备份。",
+  /** 下载进度；两个占位符都是格式化后的体积。 */
+  "update.downloading": "正在下载更新包：{downloaded} / {total}",
 } as const;
 
 export default update;

@@ -6,6 +6,7 @@
  * `cjkRatchet` 的逐文件口径会把它判成"新写的硬编码中文"。这些确实是界面文案，
  * 迁到语言包才是正确出路（顺带让它们可翻译），不必加行内豁免。
  * 2026-10-27 起工具栏（`ResumePreviewToolbar.tsx`）剩下的口径切换文案也收进这里。
+ * 2026-10-28 起，精确预览面板、草稿画布与几何层（溢出量说明）的文案也收进本文件。
  */
 const preview = {
   /** 缩小按钮的 Tooltip。 */
@@ -32,6 +33,55 @@ const preview = {
   /** 精确模式下，度量控件下方那行常驻说明（缩放交给 PDF 查看器）——2026-10 从工具栏迁出。 */
   "preview.exact.note":
     "这一版由导出引擎排版，与下载到的 PDF 完全一致；缩放用 PDF 查看器自带的 Ctrl+滚轮",
+
+  // ── 精确预览面板（ExactPreviewPanel）──────────────────────────
+  /** 请求失败／服务端报错共用的标题。 */
+  "preview.exact.errorTitle": "精确预览生成失败",
+  /** 报错正文：草稿侧不受影响，并给出最可能的原因（缺中文字体）。 */
+  "preview.exact.errorHint":
+    "草稿预览不受影响，切换回「草稿」即可继续编辑。导出 PDF 很可能是同一个原因（最常见的是本机缺少中文字体）。",
+  /** 服务端排版期间的占位说明。 */
+  "preview.exact.typesetting": "正在按导出引擎排版…",
+  /** 内嵌 PDF 的 iframe 标题（读屏用）。 */
+  "preview.exact.frameTitle": "简历精确预览（导出 PDF）",
+  /** 透明预加载层的 iframe 标题（读屏隐藏，仅调试与测试可辨识）。 */
+  "preview.exact.pendingFrameTitle": "正在加载的精确预览",
+  /** 环境里没有内置 PDF 查看器时的标题。 */
+  "preview.exact.noViewerTitle": "当前环境没有内置 PDF 查看器",
+  /** 环境里没有内置 PDF 查看器时的正文：文件已排好，给出去系统阅读器打开的出路。 */
+  "preview.exact.noViewerBody":
+    "PDF 已经按导出引擎排好了，但这里没法直接嵌在页面里显示。点下面的按钮用系统的 PDF 阅读器打开——内容与点「导出」下载到的完全一样。",
+  /** 用系统 PDF 阅读器打开预览的按钮。 */
+  "preview.exact.openInSystemViewer": "用系统阅读器打开",
+  /** 精确预览的溢出说明（整句；待清单外消费者改用它，见 config.ts 的说明）。 */
+  "preview.exact.overflowNote":
+    "字号、行距、页边距都按你设定的值原样渲染，不会自动缩小；超出上限的部分不会显示——先收紧排版或增加页数才能看全。",
+
+  // ── 草稿画布（ResumePreviewCanvas）────────────────────────────
+  /** 警告条标题：AI 生成的内容需要人工核对。 */
+  "preview.canvas.warningsTitle": "发现以下内容需要人工核对（可能存在 AI 虚构）",
+  /** 溢出正文：先声明不自动缩字号，再拼上超出量与分页口径说明。 */
+  "preview.canvas.overflowBody":
+    "字号、行距、页边距都按你设定的值原样渲染，不会自动缩小；{amount}{note}",
+  /** 1 页上限时，超出内容被裁掉的说明。 */
+  "preview.canvas.note.overflow": "超出上限的部分不会显示——先收紧排版或增加页数才能看全。",
+  /** 多页视图的近似分页说明。 */
+  "preview.canvas.note.approximate":
+    "多页视图为「按 A4 高度切分的近似分页」，真实分页以「浏览器打印 / 下载 PDF」为准。",
+  /** 单页 iframe 的标题。 */
+  "preview.canvas.frameTitle": "简历预览",
+  /** 多页时第 N 页 iframe 的标题。 */
+  "preview.canvas.frameTitlePage": "简历预览 第 {page} 页",
+  /** 纸面右下角的页码标注。 */
+  "preview.canvas.pageLabel": "第 {page} 页 / 共 {total} 页（近似）",
+
+  // ── 几何层产生的溢出量说明（geometry.ts）──────────────────────
+  /** 超出一页以内：按百分比给出。 */
+  "preview.geometry.overflowPercent": "正文还多出约 {percent}% 的一页高度。",
+  /** 超过一页：按页数给出（一位小数）。 */
+  "preview.geometry.overflowPages": "正文还多出约 {pages} 页的高度。",
+  /** 还没量到内容高度时的说明。 */
+  "preview.geometry.overflowUnknown": "暂时量不到精确的超出量。",
 } as const;
 
 export default preview;

@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * 网申填表页：浏览器控制、读取与填充的结果提示、安全说明与页面内的两张卡标题。
+ * 网申填表页：浏览器控制（地址栏与历史网址）、读取与填充的结果提示、安全说明、
+ * 页面内的两张卡标题，以及三个页面内组件（待处理清单、映射预览表、目标页浮球）的文案。
  *
  * 本页只做编排（各步骤的卡片都在 `pages/webform/` 下），所以文案集中在「动作反馈」
- * 与「卡片标题」两类；填表引擎与预览明细的文案不在这里。
+ * 与「卡片标题」两类；填表引擎自身的文案仍不在这里。
  */
 const webFormPage = {
   "webFormPage.notice.title": "这个功能只负责把资料填进页面，不会替你提交",
@@ -37,6 +38,122 @@ const webFormPage = {
   "webFormPage.error.fillFailed": "填充失败",
   "webFormPage.error.rememberFailed": "记住失败，请稍后再试",
   "webFormPage.error.memorySaveFailed": "保存资料失败，请稍后重试",
+  "webFormPage.urlBar.confirmDeleteTitle": "删除这条历史网址？",
+  "webFormPage.urlBar.deleteAria": "删除网址 {url}",
+  "webFormPage.urlBar.placeholder": "输入要填写网申的目标网址（http:// 或 https://）",
+  "webFormPage.urlBar.inputAria": "网申投递网址",
+  "webFormPage.urlBar.openTooltip": "在网申专用浏览器中打开，不会覆盖已有网页",
+  "webFormPage.urlBar.open": "打开目标页",
+  "webFormPage.urlBar.history": "历史网址",
+  "webFormPage.pending.controlFallback": "第 {index} 个控件",
+  "webFormPage.pending.empty": "这一页没有需要你手动处理的项",
+  "webFormPage.pending.missingTitle": "资料里还没有（{count} 项）",
+  "webFormPage.pending.goToProfile": "去我的资料补上",
+  "webFormPage.pending.blockedTitle": "需要你自己动手（{count} 项）",
+  "webFormPage.pending.blockedBody":
+    "这些不会自动填：下拉、单选、复选与日期控件的值该由你在页面上点选；密码与验证码是刻意的安全边界；简历附件、他人信息与「我已阅读并同意」这类确认项也不该由程序代填。",
+  "webFormPage.pending.unrecognizedTitle": "没认出来（{count} 项，点开查看）",
+  "webFormPage.pending.unrecognizedBody":
+    "多半是「可添加多条」的区块（实习经历 / 项目经历 / 获奖信息）里的字段， 以及这张表特有的问题（导师、实验室、研究方向等）——这一类目前没有对应的资料可填， 不会硬猜一个值写进去。上面「将填入」列出的才是这次真正会填的。",
+  "webFormPage.pending.exitHint":
+    "想自己挑一条资料填进某个框？开启「智能逐项填表」回到浏览器点开那个框， 点「换个资料…」就能从完整资料清单里自己挑一条——没有匹配项也能展开全清单。",
+  "webFormPage.preview.column.pick": "填入",
+  "webFormPage.preview.column.field": "字段",
+  "webFormPage.preview.column.value": "将填入的值",
+  "webFormPage.preview.column.status": "状态",
+  "webFormPage.preview.status.ready": "已就绪",
+  "webFormPage.preview.status.readyHint": "字段与取值都对上了",
+  "webFormPage.preview.status.lowConfidence": "需确认",
+  "webFormPage.preview.status.lowConfidenceHint": "有另一个控件也沾边，请核对填对了没有",
+  "webFormPage.preview.status.conflict": "冲突",
+  "webFormPage.preview.status.conflictHint": "页面上已经有值，默认保留它（不覆盖你自己填的内容）",
+  "webFormPage.preview.status.relaxedReady": "放宽代选",
+  "webFormPage.preview.status.relaxedReadyHint":
+    "放宽模式：这一项的值由点选产生，程序将代点并回读核对，填完请确认",
+  "webFormPage.preview.status.needsConfirm": "需你确认",
+  "webFormPage.preview.status.needsConfirmHint":
+    "同意/声明类勾选：默认不勾，你勾选后才由程序代点——勾上即视为你本人同意",
+  "webFormPage.preview.pickAria": "选择填入{label}",
+  "webFormPage.preview.controlLabel": "页面：{label}",
+  "webFormPage.preview.currentValue": "页面上：{value}",
+  "webFormPage.preview.empty": "这一页没有能自动填的字段",
+  "webFormPage.floating.groupAria": "网申页面智能逐项填写开关",
+  "webFormPage.floating.collapseAria": "收起网申页面智能逐项填写开关",
+  "webFormPage.floating.expandAria": "展开网申页面智能逐项填写开关",
+  "webFormPage.floating.targetFallback": "网申页面 {index}",
+  "webFormPage.floating.labelFallback": "页面 {index}",
+  "webFormPage.floating.switchOff": "关",
+  "webFormPage.floating.toggleAria": "切换 {name} 的智能逐项填写",
+  "webFormPage.floating.more": "还有 {count} 个页面",
+  "webFormPage.aiAssist.title": "未识别字段智能辅助",
+  "webFormPage.aiAssist.toggleAria": "AI 字段识别辅助",
+  "webFormPage.aiAssist.body.lead": "规则未识别的字段，可交由你在「设置」里配置的模型辅助判断。",
+  "webFormPage.aiAssist.body.strong": "只发页面上本来就有的文字与字段名，不发你的资料内容",
+  "webFormPage.aiAssist.body.tail": "；命中的行会标上「AI 建议」并且默认不勾选。",
+  "webFormPage.aiAssist.unavailable":
+    "尚未配置大模型，暂时无法使用。到「设置」页填好 Base URL 与模型名之后，规则认不出的框就能交给 AI 识别。",
+  "webFormPage.aiAssist.pendingRestart": "改动会在下次「开启」时生效",
+  "webFormPage.browserCard.isolatedHint":
+    "使用独立的网申专用浏览器（不会覆盖投递台或已有网申页面）",
+  "webFormPage.browserCard.stopTooltip":
+    "停掉这个受控浏览器窗口。里面的登录态会保留，下次启动不用重新登录",
+  "webFormPage.browserCard.stop": "关闭浏览器",
+  "webFormPage.browserCard.startTooltip": "拉起这个受控浏览器窗口（独立于你日常用的浏览器）",
+  "webFormPage.browserCard.startAria": "开启专用浏览器",
+  "webFormPage.browserCard.start": "开启专用浏览器",
+  "webFormPage.browserCard.settingsTooltip":
+    "只改「用哪个浏览器」这类配置，不会启动或关闭它——改完要关掉再启动一次才生效",
+  "webFormPage.browserCard.settings": "浏览器设置",
+  "webFormPage.browserCard.refreshTooltip":
+    "重新读一次运行状态。平时它每 0.6 秒自己会刷；你刚关掉窗口或刚启动时可以用它立刻确认",
+  "webFormPage.browserCard.refreshAria": "刷新状态",
+  "webFormPage.browserCard.refresh": "刷新状态",
+  "webFormPage.browserCard.diagnosticsTooltip":
+    "导出不含简历内容、表单值和密钥的诊断信息，适合连同截图提交排查",
+  "webFormPage.browserCard.diagnostics": "导出诊断",
+  "webFormPage.browserCard.endTooltip":
+    "结束这一次网申填写：收起面板、不清理资料，下次点「读取当前表单」重来",
+  "webFormPage.browserCard.end": "结束本次填写",
+  "webFormPage.fillRate.label": "成功率 {percent}%（{filled}/{total}）",
+  "webFormPage.fillResult.title": "填充结果",
+  "webFormPage.fillResult.tag.filled": "已填 {count}",
+  "webFormPage.fillResult.tag.unverified": "待确认 {count}",
+  "webFormPage.fillResult.tag.failed": "失败 {count}",
+  "webFormPage.fillResult.outcome": "第 {index} 个控件：{detail}",
+  "webFormPage.fillResult.verifyHint": "请回到浏览器窗口核对，确认无误后由你自己点击提交",
+  "webFormPage.previewCard.title": "核对后填充（已选 {selected} / {total} 项）",
+  "webFormPage.previewCard.selectAi": "全选 AI 建议（{count}）",
+  "webFormPage.previewCard.fill": "填充到页面",
+  "webFormPage.previewCard.empty": "没有可自动填的字段",
+  "webFormPage.readSnapshot.step.startBrowser": "启动浏览器",
+  "webFormPage.readSnapshot.step.openPage": "打开网申页",
+  "webFormPage.readSnapshot.step.reviewMapping": "核对映射",
+  "webFormPage.readSnapshot.step.fill": "填充",
+  "webFormPage.readSnapshot.read": "读取当前表单",
+  "webFormPage.readSnapshot.hint": "先在浏览器窗口里打开网申表单页，停在要填的那一步，再点这里。",
+  "webFormPage.readSnapshot.summary": "已读取：{title} · {url} · 共 {count} 个控件",
+  "webFormPage.readSnapshot.untitled": "（无标题）",
+  "webFormPage.relaxed.onToast": "已开启：点选类控件将尝试代点，请逐条核对",
+  "webFormPage.relaxed.offToast": "已关闭放宽模式",
+  "webFormPage.relaxed.saveFailed": "保存放宽模式设置失败",
+  "webFormPage.relaxed.title": "放宽模式（代点下拉与确认勾选）",
+  "webFormPage.relaxed.toggleAria": "网申填表放宽模式",
+  "webFormPage.relaxed.defaultOff": "默认关闭：工具只填文本框，下拉 / 勾选 / 日期都由你自己点。",
+  "webFormPage.relaxed.enabledHint":
+    "已开启——点选类控件若匹配到资料值，程序会代点并回读核对；同意/声明类会先问你。",
+  "webFormPage.relaxed.risk":
+    "开启后程序会尝试代点下拉/弹层选项并代勾你逐条确认过的声明项，存在选错可能， 填完请核对；日期选择器与文件上传仍不代做。",
+  "webFormPage.liveStatus.thinking": "正在看这个框",
+  "webFormPage.liveStatus.aiThinking": "AI 正在识别",
+  "webFormPage.liveStatus.matched": "已给出建议",
+  "webFormPage.liveStatus.blocked": "不会自动填",
+  "webFormPage.liveStatus.unmatched": "没认出来",
+  "webFormPage.liveStatus.filled": "已填入",
+  "webFormPage.liveStatus.failed": "没填进去",
+  "webFormPage.liveStatus.waiting": "等待你点某个框",
+  "webFormPage.error.memoryTargetsFailed": "加载完整资料目录失败",
+  "webFormPage.toast.restored": "已恢复上次读取的表单；勾选已重置为默认，请核对后再填充",
+  "webFormPage.error.restoreFailed": "上次读取的表单已失效，请重新读取",
 } as const;
 
 export default webFormPage;

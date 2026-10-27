@@ -45,6 +45,30 @@ const materials = {
   "materials.detail.attachmentsTitle": "Attachments ({count})",
   "materials.file.image": "Image · {size} KB",
   "materials.file.text": "{count} characters",
+
+  /** "My files" panel in the Material library (mirrors zh-CN.materials.ts). */
+  "materials.files.searchPlaceholder": "Search file names",
+  "materials.files.empty": "No saved files yet",
+  "materials.files.total": "{count} files",
+  "materials.files.untitled": "(Unnamed)",
+  "materials.files.column.name": "Name",
+  "materials.files.column.type": "Type",
+  "materials.files.column.size": "Size",
+  "materials.files.column.source": "Source",
+  "materials.files.column.savedAt": "Saved",
+  "materials.files.column.actions": "Actions",
+  "materials.files.action.preview": "Preview",
+  "materials.files.action.openFolder": "Open folder",
+  "materials.files.source.material": "Material library",
+  "materials.files.source.photo": "Personal photo",
+  "materials.files.source.jobNote": "Job note image",
+  "materials.files.source.candidateImage": "Candidate job screenshot",
+  "materials.files.source.chatAttachment": "Assistant attachment",
+  "materials.files.source.unknown": "Unknown source",
+  "materials.files.pdfPreviewTitle": "PDF preview",
+  "materials.files.toast.loadFailed": "Could not load the file list",
+  "materials.files.toast.revealed": "Opened the containing folder",
+  "materials.files.toast.revealFailed": "Could not open the folder",
 } as const;
 
 export default materials;

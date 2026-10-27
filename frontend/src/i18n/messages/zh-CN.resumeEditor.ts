@@ -113,6 +113,31 @@ const resumeEditor = {
   "editor.placeholder.skillLevel": "熟练 / 掌握 / 了解",
   "editor.placeholder.skillCategory": "如：编程语言 / 工具",
   "editor.placeholder.awardRatio": "如：前 5%",
+
+  // ── 编辑器头部、「从我的资料填入」下拉与分区条目的增删 ────────────────
+  // 三个入口（模块顶部追加 / 条目级填入 / 分区底部的添加与删除）共用同一批候选与
+  // 去重语义；后缀带前导空格，拼在候选标题（或「标题（说明）」）后面。
+  "editor.header.fillAll": "填入我的资料全部数据",
+  "editor.profileFill.title.append": "从我的资料追加一条",
+  "editor.profileFill.title.entry": "从资料填入本条",
+  "editor.profileFill.placeholder.append": "选择{label}",
+  "editor.profileFill.placeholder.entry": "选择资料条目",
+  "editor.profileFill.aria.append": "从我的资料选择{label}",
+  "editor.profileFill.aria.entry": "从我的资料选择填入本条",
+  "editor.profileFill.empty": "没有可填入的条目",
+  "editor.profileFill.allBlocked": "资料里的{label}都已经在这份简历里了",
+  "editor.profileFill.fillEntryAria": "填入本条的{label}",
+  "editor.profileFill.fillSelectedAria": "填入选中的{label}",
+  "editor.profileFill.action.fill": "填入",
+  "editor.profileFill.onlyBlank": "只填空字段",
+  /** 候选的「标题（次要说明）」拼接；括号是全角，与资料页的展示一致。 */
+  "editor.profileFill.option": "{label}（{hint}）",
+  "editor.profileFill.suffix.current": "当前条目",
+  "editor.profileFill.suffix.other": "已在其他条目",
+  "editor.profileFill.suffix.joined": "已加入",
+  "editor.listSection.removeEntry": "删除这一条{label}",
+  "editor.listSection.removeEntryAria": "删除{label}",
+  "editor.listSection.addEntry": "添加{label}",
 } as const;
 
 export default resumeEditor;

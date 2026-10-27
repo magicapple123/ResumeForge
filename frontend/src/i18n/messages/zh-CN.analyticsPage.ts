@@ -1,0 +1,106 @@
+// SPDX-License-Identifier: Apache-2.0
+/**
+ * 求职统计页：概览指标、四个主题区块、空态与缺口说明。
+ *
+ * 阶段转化/耗时卡里的状态名不在这里——它来自协议值到显示名的映射，
+ * 与「求职进度」页共用 `trackerForm.status.*` 词表；内推状态名同样由
+ * `referralForm.status.*` 提供。这里只放本页独有的标题、说明与指标文案。
+ */
+const analyticsPage = {
+  "analyticsPage.title": "求职统计",
+  "analyticsPage.subtitle":
+    "投递转化与卡点、时间节奏、渠道去向、简历健康度，全部本地聚合、离线可用。",
+  "analyticsPage.loadError": "求职统计加载失败：{error}",
+  "analyticsPage.empty.noData": "暂无看板数据",
+  "analyticsPage.empty.noApplications": "还没有投递记录",
+  "analyticsPage.action.goFill": "去补充",
+  "analyticsPage.reminder.overdue": "已逾期",
+  "analyticsPage.reminder.soon": "24 小时内",
+  "analyticsPage.reminder.upcoming": "3 天内",
+  "analyticsPage.reminder.later": "更远",
+  "analyticsPage.topCompanies.title": "投递最多的公司",
+  "analyticsPage.topCompanies.chartHint": "前 5 名",
+  "analyticsPage.topCompanies.missingCompany": "投递未填写公司名",
+  "analyticsPage.topCompanies.missingCompanyRanking": "投递未填写公司名，未计入排行",
+  "analyticsPage.topCompanies.other": "另有 {count} 家公司未在前 5 列出",
+  "analyticsPage.overview.total": "投递总量",
+  "analyticsPage.overview.validApplications": "有效投递 {count}",
+  "analyticsPage.overview.interviewRate": "面试率",
+  "analyticsPage.overview.interviewHint": "面试 {interview} / 有效投递 {valid}",
+  "analyticsPage.overview.assessmentRate": "笔试通过率",
+  "analyticsPage.overview.assessmentHint": "进面试 {toInterview} / 测评笔试 {assessment}",
+  "analyticsPage.overview.offerCount": "Offer 数",
+  "analyticsPage.overview.offerHint": "Offer 率 {rate}",
+  "analyticsPage.funnel.title": "转化与卡点",
+  "analyticsPage.funnel.description":
+    "转化率的分母都是「有效投递」（扣除尚未核实的「待确认」）。「超过 7 天没有更新」指进行中、且 7 天内没有任何改动——改一条备注也算更新，所以它不等于「面试卡住」。",
+  "analyticsPage.funnel.chartTitle": "求职漏斗",
+  "analyticsPage.funnel.chartHint": "每个阶段的人数，分母是有效投递",
+  "analyticsPage.funnel.active": "进行中",
+  "analyticsPage.funnel.activeHint": "未走到终态",
+  "analyticsPage.funnel.stalled": "超过 7 天没更新",
+  "analyticsPage.funnel.stalledHint": "进行中且久未改动",
+  "analyticsPage.funnel.noNextAction": "没有下一步",
+  "analyticsPage.funnel.noNextActionHint": "进行中且未填",
+  "analyticsPage.funnel.action": "去「求职进度」补下一步或推进状态",
+  "analyticsPage.cohort.title": "真实时间线",
+  "analyticsPage.cohort.description":
+    "只统计事件记录功能上线之后发生的状态变化：每项的分子分母都写在副文案里，样本不足时亮出徽标。这些数字只描述过去——它们不预测、也不承诺任何「用了会更好」。",
+  "analyticsPage.cohort.empty": "还没有进度记录",
+  "analyticsPage.cohort.emptyHistorical":
+    "现有 {count} 条进度记录早于事件记录功能，没有阶段数据；之后的状态变化会开始记录。",
+  "analyticsPage.cohort.historicalNotice":
+    "有 {historical} 条记录早于事件记录功能（共 {total} 条），无阶段数据；之后的状态变化会开始记录。",
+  "analyticsPage.cohort.noRecords": "还没有记录到过这个阶段",
+  "analyticsPage.cohort.conversionHint": "到下一阶段 {numerator} / 到过本阶段 {denominator} 条记录",
+  "analyticsPage.cohort.smallSample": "样本少于 5 条，仅供参考",
+  "analyticsPage.cohort.durationTitle": "{from} → {to} 耗时",
+  "analyticsPage.cohort.noComparableData": "暂无可比数据",
+  "analyticsPage.cohort.medianDays": "中位 {days} 天",
+  "analyticsPage.cohort.basedOn": "基于 {numerator} 对日期（该阶段共 {denominator} 条）",
+  "analyticsPage.cohort.undatedNotice": "有 {count} 次状态变化没写日期，耗时按记录当天兜底。",
+  "analyticsPage.trend.title": "时间与节奏",
+  "analyticsPage.trend.description":
+    "趋势与周内分布按「投递日期」统计；「最近 N 天新增」按记录创建时间算，用的是滚动窗口，与所在时区无关。",
+  "analyticsPage.trend.month1": "近1月",
+  "analyticsPage.trend.month3": "近3月",
+  "analyticsPage.trend.month6": "近6月",
+  "analyticsPage.trend.year1": "近1年",
+  "analyticsPage.trend.missingDate": "投递未填「投递日期」",
+  "analyticsPage.trend.appliedTrend": "投递趋势",
+  "analyticsPage.trend.weekdayTitle": "周内投递分布",
+  "analyticsPage.trend.byAppliedDate": "按投递日期",
+  "analyticsPage.trend.emptyNoDates": "还没有填过投递日期的记录",
+  "analyticsPage.trend.recent7d": "最近 7 天新增",
+  "analyticsPage.trend.recent30d": "最近 30 天新增",
+  "analyticsPage.trend.byCreatedTime": "按创建时间",
+  "analyticsPage.trend.reminderTitle": "提醒·{bucket}",
+  "analyticsPage.channels.title": "渠道与去向",
+  "analyticsPage.channels.description":
+    "内推转化由关联的投递记录派生——那条记录走到「面试」及以上才算转化。「记录来源」是这一行**怎么进系统的**，不是投递渠道（本库没有渠道字段）。",
+  "analyticsPage.channels.referralRate": "内推转化率",
+  "analyticsPage.channels.referralRateHint": "已转化 {converted} / 有效内推 {total}",
+  "analyticsPage.channels.referralTotal": "内推总数",
+  "analyticsPage.channels.referralTotalHint": "含已关闭与无效",
+  "analyticsPage.channels.caliberTitle": "口径提示",
+  "analyticsPage.channels.caliberBody":
+    "「记录来源」是录入方式，不是投递渠道；内推转化按关联投递走到面试及以上算。",
+  "analyticsPage.channels.referralStatusTitle": "内推状态分布",
+  "analyticsPage.channels.referralStatusHint": "按当前内推状态",
+  "analyticsPage.channels.emptyReferrals": "还没有内推记录",
+  "analyticsPage.channels.sourcesTitle": "记录来源",
+  "analyticsPage.channels.sourcesHint": "录入方式，不是投递渠道",
+  "analyticsPage.resume.title": "简历与健康度",
+  "analyticsPage.resume.description":
+    "「带一致性提醒」与「带【待补】」来自生成时留下的记录与正文里的未完成标记；「待确认主张」是事实台账里还没核实、但引用时会受影响的条目。",
+  "analyticsPage.resume.count": "简历",
+  "analyticsPage.resume.scannedHint": "待补只统计最近 {count} 份",
+  "analyticsPage.resume.allScanned": "全部已纳入统计",
+  "analyticsPage.resume.withWarnings": "带一致性提醒",
+  "analyticsPage.resume.withPlaceholders": "带【待补】",
+  "analyticsPage.resume.unverifiedClaims": "待确认主张",
+  "analyticsPage.resume.missingLink": "投递没有关联简历",
+  "analyticsPage.resume.missingLinkAction": "关联后才能按简历看效果；录入界面暂未提供关联入口。",
+} as const;
+
+export default analyticsPage;

@@ -106,6 +106,31 @@ const resumeEditor = {
   "editor.placeholder.skillLevel": "Proficient / Working / Familiar",
   "editor.placeholder.skillCategory": "e.g. Programming languages / Tools",
   "editor.placeholder.awardRatio": "e.g. Top 5%",
+
+  // Editor header, the "fill from My Profile" dropdown and the section entry actions.
+  // Control names match the wording the user guide quotes ("Add one from My Profile",
+  // "Fill this entry from Profile", "Fill", "Added").
+  "editor.header.fillAll": "Fill in all My Profile data",
+  "editor.profileFill.title.append": "Add one from My Profile",
+  "editor.profileFill.title.entry": "Fill this entry from Profile",
+  "editor.profileFill.placeholder.append": "Choose {label}",
+  "editor.profileFill.placeholder.entry": "Choose a Profile entry",
+  "editor.profileFill.aria.append": "Choose {label} from My Profile",
+  "editor.profileFill.aria.entry": "Choose a Profile entry to fill this entry",
+  "editor.profileFill.empty": "No entries to fill in",
+  "editor.profileFill.allBlocked": "All {label} entries in My Profile are already in this Resume",
+  "editor.profileFill.fillEntryAria": "Fill this {label} entry",
+  "editor.profileFill.fillSelectedAria": "Fill the selected {label} entry",
+  "editor.profileFill.action.fill": "Fill",
+  "editor.profileFill.onlyBlank": "Blank fields only",
+  /** Candidate title plus its secondary hint; English uses half-width brackets. */
+  "editor.profileFill.option": "{label} ({hint})",
+  "editor.profileFill.suffix.current": "This entry",
+  "editor.profileFill.suffix.other": "In another entry",
+  "editor.profileFill.suffix.joined": "Added",
+  "editor.listSection.removeEntry": "Delete this {label}",
+  "editor.listSection.removeEntryAria": "Delete {label}",
+  "editor.listSection.addEntry": "Add {label}",
 } as const;
 
 export default resumeEditor;

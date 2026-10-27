@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * Interview deep dive page: stat cards, history list, statuses and batch delete,
- * plus the start dialog (set the bar, pick claims, question count, feedback mode).
+ * Interview deep dive page: stat cards, history list, statuses and batch delete, the start
+ * dialog (set the bar, pick claims, question count, feedback mode), and the review panel with
+ * its action list and rehearsal queue.
  *
  * The batch delete confirmation body uses `HARD_DELETE_NOTE` (the shared hard-delete
  * constant, paired with `TRASH_RECOVERY_NOTE`); that line stays Chinese until the two
@@ -64,6 +65,35 @@ const drill = {
   "drill.startPanel.action.start": "Start",
   "drill.startPanel.toast.started": "The bar is set — get started",
   "drill.startPanel.error.startFailed": "Could not start the deep dive",
+  "drill.rehearsal.intro":
+    "Rehearsal never repeats the original question — it asks again from another angle. Reciting last time's answer does not count as knowing it.",
+  "drill.rehearsal.empty":
+    "The rehearsal queue is empty — nothing in this session needs another pass.",
+  "drill.rehearsal.action.ask": "Ask one",
+  "drill.rehearsal.error.failed": "Could not generate a question",
+  "drill.rehearsal.kind.variant": "Variant",
+  "drill.rehearsal.kind.counterfactual": "Counterfactual",
+  "drill.rehearsal.kind.failure": "Failure case",
+  "drill.rehearsal.kind.evidence": "Evidence",
+  "drill.rehearsal.kind.compress": "Compressed answer",
+  "drill.rehearsal.result.title": "Rehearsal: {label}",
+  "drill.rehearsal.result.expect": "This question asks for: {expect}",
+  "drill.rehearsal.result.note":
+    "This only writes a question and is not recorded in this session. To practise for real, talk through the question yourself.",
+  "drill.rehearsal.action.close": "Close",
+  "drill.review.verified.title": "Explained clearly",
+  "drill.review.gaps.title": "Still not solid",
+  "drill.review.actions.title": "Action list before the interview",
+  "drill.review.rehearsal.title": "Rehearsal queue",
+  // Action kinds are protocol values from the backend; these are their display names.
+  "drill.review.kind.addFact": "Add facts",
+  "drill.review.kind.addKnowledge": "Fill knowledge gaps",
+  "drill.review.kind.downgradeClaim": "Soften the claim",
+  "drill.review.hint.addFact":
+    "You did this work but never wrote down the details — add the decisions, hard parts and exact wording.",
+  "drill.review.hint.addKnowledge": "You genuinely do not know this yet — go learn it.",
+  "drill.review.hint.downgradeClaim":
+    "The facts do not hold up — soften that line on your resume instead of forcing it.",
 } as const;
 
 export default drill;

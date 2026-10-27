@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * 面试深挖页：统计卡、历史列表、状态与批量删除，以及开场弹窗（定标准、选主张、题数与反馈方式）。
+ * 面试深挖页：统计卡、历史列表、状态与批量删除、开场弹窗（定标准、选主张、题数与反馈方式），
+ * 以及复盘面板（三段结论 + 行动清单）与复练队列。
  *
  * 批量删除的确认正文引用 `HARD_DELETE_NOTE`（硬删除的共用常量，与
  * `TRASH_RECOVERY_NOTE` 成对），那一行保持中文，等常量收口时一起改。
@@ -60,6 +61,31 @@ const drill = {
   "drill.startPanel.action.start": "开始",
   "drill.startPanel.toast.started": "评分标准已经定下来，开始吧",
   "drill.startPanel.error.startFailed": "开场失败",
+  "drill.rehearsal.intro": "复练不重复原题，换一个角度再问一次——把上次的答案背一遍不算会了。",
+  "drill.rehearsal.empty": "复练队列是空的——这一场没有需要再练的主张。",
+  "drill.rehearsal.action.ask": "出一道",
+  "drill.rehearsal.error.failed": "出题失败",
+  "drill.rehearsal.kind.variant": "变体题",
+  "drill.rehearsal.kind.counterfactual": "反事实题",
+  "drill.rehearsal.kind.failure": "故障题",
+  "drill.rehearsal.kind.evidence": "证据题",
+  "drill.rehearsal.kind.compress": "压缩表达",
+  "drill.rehearsal.result.title": "复练：{label}",
+  "drill.rehearsal.result.expect": "这道题要求：{expect}",
+  "drill.rehearsal.result.note":
+    "这里只是出题，不会计入这一场的记录——想认真练，可以拿这个问题自己讲一遍。",
+  "drill.rehearsal.action.close": "关掉",
+  "drill.review.verified.title": "讲得清的",
+  "drill.review.gaps.title": "还站不住的",
+  "drill.review.actions.title": "面试前的行动清单",
+  "drill.review.rehearsal.title": "复练队列",
+  // 行动类型是后端返回的协议值（补事实 / 补知识 / 降表述），下面用的是它们的展示名。
+  "drill.review.kind.addFact": "补事实",
+  "drill.review.kind.addKnowledge": "补知识",
+  "drill.review.kind.downgradeClaim": "降表述",
+  "drill.review.hint.addFact": "你确实做过，但没整理出细节——去把当时的决策、难点、口径补上",
+  "drill.review.hint.addKnowledge": "这块你确实还不掌握——去学",
+  "drill.review.hint.downgradeClaim": "事实站不住——把简历里那句话改弱，别硬撑",
 } as const;
 
 export default drill;

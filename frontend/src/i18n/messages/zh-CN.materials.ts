@@ -50,6 +50,30 @@ const materials = {
   "materials.detail.attachmentsTitle": "附件（{count}）",
   "materials.file.image": "图片 · {size} KB",
   "materials.file.text": "文字 {count} 字",
+
+  /** 「我的文件」面板（当前数据集里用户上传内容的清单）。 */
+  "materials.files.searchPlaceholder": "搜索文件名",
+  "materials.files.empty": "还没有保存过文件",
+  "materials.files.total": "共 {count} 份",
+  "materials.files.untitled": "（未命名）",
+  "materials.files.column.name": "名称",
+  "materials.files.column.type": "类型",
+  "materials.files.column.size": "大小",
+  "materials.files.column.source": "来源",
+  "materials.files.column.savedAt": "保存时间",
+  "materials.files.column.actions": "操作",
+  "materials.files.action.preview": "预览",
+  "materials.files.action.openFolder": "打开文件夹",
+  "materials.files.source.material": "资料箱",
+  "materials.files.source.photo": "个人照片",
+  "materials.files.source.jobNote": "岗位备注图",
+  "materials.files.source.candidateImage": "备选岗位截图",
+  "materials.files.source.chatAttachment": "助手附件",
+  "materials.files.source.unknown": "未知来源",
+  "materials.files.pdfPreviewTitle": "PDF 预览",
+  "materials.files.toast.loadFailed": "加载文件列表失败",
+  "materials.files.toast.revealed": "已打开所在文件夹",
+  "materials.files.toast.revealFailed": "打开文件夹失败",
 } as const;
 
 export default materials;

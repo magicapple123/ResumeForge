@@ -119,6 +119,41 @@ import sections from "./en-US.sections";
 import styleTemplateEditor from "./en-US.styleTemplateEditor";
 import trackerImport from "./en-US.trackerImport";
 import writing from "./en-US.writing";
+import activationUi from "./en-US.activationUi";
+import analyticsPage from "./en-US.analyticsPage";
+import analyticsUi from "./en-US.analyticsUi";
+import apiErrors from "./en-US.apiErrors";
+import appConfig from "./en-US.appConfig";
+import applyCollect from "./en-US.applyCollect";
+import applyUi from "./en-US.applyUi";
+import assistantHooks from "./en-US.assistantHooks";
+import assistantUi from "./en-US.assistantUi";
+import componentsMisc from "./en-US.componentsMisc";
+import componentsMisc2 from "./en-US.componentsMisc2";
+import dateFields from "./en-US.dateFields";
+import featuresMisc from "./en-US.featuresMisc";
+import fileUtils from "./en-US.fileUtils";
+import generateStages from "./en-US.generateStages";
+import globalSearch from "./en-US.globalSearch";
+import homePage from "./en-US.homePage";
+import hooksUi from "./en-US.hooksUi";
+import interviewPage from "./en-US.interviewPage";
+import jobsCandidate from "./en-US.jobsCandidate";
+import jobsForm from "./en-US.jobsForm";
+import jobsPage from "./en-US.jobsPage";
+import jobsUi from "./en-US.jobsUi";
+import llmUi from "./en-US.llmUi";
+import navigation from "./en-US.navigation";
+import pagesMisc from "./en-US.pagesMisc";
+import profileUi from "./en-US.profileUi";
+import referralUi from "./en-US.referralUi";
+import settingsDatasets from "./en-US.settingsDatasets";
+import settingsUi from "./en-US.settingsUi";
+import templatesUi from "./en-US.templatesUi";
+import touTou from "./en-US.touTou";
+import trackerUi from "./en-US.trackerUi";
+import userGuide from "./en-US.userGuide";
+import userGuideFlow from "./en-US.userGuideFlow";
 
 const enUS = {
   ...core,
@@ -239,6 +274,41 @@ const enUS = {
   ...styleTemplateEditor,
   ...trackerImport,
   ...writing,
+  ...activationUi,
+  ...analyticsPage,
+  ...analyticsUi,
+  ...apiErrors,
+  ...appConfig,
+  ...applyCollect,
+  ...applyUi,
+  ...assistantHooks,
+  ...assistantUi,
+  ...componentsMisc,
+  ...componentsMisc2,
+  ...dateFields,
+  ...featuresMisc,
+  ...fileUtils,
+  ...generateStages,
+  ...globalSearch,
+  ...homePage,
+  ...hooksUi,
+  ...interviewPage,
+  ...jobsCandidate,
+  ...jobsForm,
+  ...jobsPage,
+  ...jobsUi,
+  ...llmUi,
+  ...navigation,
+  ...pagesMisc,
+  ...profileUi,
+  ...referralUi,
+  ...settingsDatasets,
+  ...settingsUi,
+  ...templatesUi,
+  ...touTou,
+  ...trackerUi,
+  ...userGuide,
+  ...userGuideFlow,
 } as const satisfies Record<keyof ZhCNMessages, string>;
 
 export default enUS;

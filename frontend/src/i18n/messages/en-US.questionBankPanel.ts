@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
  * Personalized question bank panel (the question bank tab under Interview): generate
- * entry, saved-record review, batch-delete confirmation and toasts.
+ * entry, question group cards, saved-record review, batch-delete confirmation and toasts.
  *
  * `TRASH_RECOVERY_NOTE` is a shared Chinese constant owned elsewhere - this file only
  * references it. Placeholder names and occurrence counts match the Chinese pack.
@@ -37,6 +37,21 @@ const questionBankPanel = {
   "questionBankPanel.toast.deletedMany": "Deleted {count} saved question banks",
   "questionBankPanel.toast.deletedPartial": "Deleted {ok}; {failed} failed - try again",
   "questionBankPanel.toast.deleted": "Saved question bank deleted",
+  "questionBankPanel.history.fallbackTitle": "Question bank",
+  "questionBankPanel.history.total": "{count} in total",
+  "questionBankPanel.history.deleteTitle": "Delete this saved question bank?",
+  "questionBankPanel.history.selectAria": "Select question bank {name}",
+  "questionBankPanel.action.viewDetail": "View details",
+  "questionBankPanel.action.deleteSelected": "Delete selected",
+  "questionBankPanel.action.answer": "Sample answer",
+  "questionBankPanel.action.showAnswer": "Hide sample answer",
+  "questionBankPanel.empty.noHistory": "No saved question banks yet",
+  "questionBankPanel.group.basics": "Basic questions",
+  "questionBankPanel.group.projectDeepDive": "Project deep-dives",
+  "questionBankPanel.group.askInterviewer": "Questions for the interviewer",
+  "questionBankPanel.group.purpose": "Purpose: {purpose}",
+  "questionBankPanel.group.hintLabel": "Hint:",
+  "questionBankPanel.group.samplePhrasing": "Sample wording: {text}",
 } as const;
 
 export default questionBankPanel;
