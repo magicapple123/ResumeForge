@@ -33,11 +33,8 @@ import { formatRate } from "../utils/format";
 import { t } from "../i18n";
 import type { MessageKey } from "../i18n";
 import { useLocale } from "../i18n/i18nContext";
-import {
-  CohortBlock,
-  TopCompaniesBlock,
-  referralStatusLabel,
-} from "./analytics/AnalyticsBlocks";
+import { CohortBlock, TopCompaniesBlock } from "./analytics/AnalyticsBlocks";
+import { referralStatusLabel } from "./analytics/analyticsLabels";
 
 /** 提醒四档的展示名。紧急度的判定在后端 `reminder_urgency`（唯一实现），
  *  这里只是给四档取短名。 */
