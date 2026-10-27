@@ -25,6 +25,8 @@ import { RowContextMenu, type RowMenuItem } from "../components/common/RowAction
 import { formatErrorGuidance } from "../api/errorGuidance";
 import { useApi } from "../hooks/useApi";
 import type { TrashBatchItem, TrashItem } from "../types";
+import { t } from "../i18n";
+import { useLocale } from "../i18n/i18nContext";
 
 const ALL = "__all__";
 
@@ -52,13 +54,13 @@ function ContextMenuRow({
     : [
         {
           key: "batch_select",
-          label: "批量选择",
+          label: t("trash.selectMode"),
           icon: <CheckSquareOutlined />,
           onClick: onEnterSelectMode,
         },
         {
           key: "restore",
-          label: "恢复",
+          label: t("trash.action.restore"),
           icon: <UndoOutlined />,
           onClick: () => onRestore(record),
         },
@@ -67,11 +69,11 @@ function ContextMenuRow({
         { key: "purge_divider", type: "divider" },
         {
           key: "purge",
-          label: "彻底删除",
+          label: t("trash.action.purge"),
           danger: true,
           icon: <DeleteOutlined />,
           // 确认文案要把后果说白：这是全应用唯一不可逆的动作。
-          confirm: `「${record.title || record.type_label}」将被彻底删除，无法恢复。`,
+          confirm: t("trash.confirm.purgeOne", { title: record.title || record.type_label }),
           onClick: () => onPurge(record),
         },
       ];
@@ -89,6 +91,7 @@ function deletedAtText(value: string | null): string {
 }
 
 export default function TrashPage() {
+  useLocale();
   const { message } = App.useApp();
   const [type, setType] = useState<string>(ALL);
   const [selectedKeys, setSelectedKeys] = useState<string[]>([]);
@@ -119,9 +122,9 @@ export default function TrashPage() {
     );
     const failed = results.filter((item) => item.status === "rejected").length;
     if (failed === 0) {
-      message.success(`已恢复 ${chosen.length} 条`);
+      message.success(t("trash.toast.restored", { count: chosen.length }));
     } else {
-      message.warning(`已恢复 ${chosen.length - failed} 条，${failed} 条恢复失败，请重试`);
+      message.warning(t("trash.toast.restoredPartial", { ok: chosen.length - failed, failed }));
     }
     setSelectedKeys([]);
     await reload();
@@ -136,20 +139,23 @@ export default function TrashPage() {
     );
     const failed = results.filter((item) => item.status === "rejected").length;
     if (failed === 0) {
-      message.success(`已彻底删除 ${chosen.length} 条`);
+      message.success(t("trash.toast.purged", { count: chosen.length }));
     } else {
-      message.warning(`已彻底删除 ${chosen.length - failed} 条，${failed} 条删除失败，请重试`);
+      message.warning(t("trash.toast.purgedPartial", { ok: chosen.length - failed, failed }));
     }
     setSelectedKeys([]);
     await reload();
   };
 
   const options = [
-    { label: `全部（${data?.total ?? 0}）`, value: ALL },
+    { label: t("trash.filter.all", { count: data?.total ?? 0 }), value: ALL },
     // 只列出**当前有内容**的类型：回收站里的空类型只会让筛选器变长。
     ...Object.entries(labels)
       .filter(([key]) => (counts[key] ?? 0) > 0)
-      .map(([key, label]) => ({ label: `${label}（${counts[key]}）`, value: key })),
+      .map(([key, label]) => ({
+        label: t("trash.filter.labeled", { label, count: counts[key] }),
+        value: key,
+      })),
   ];
 
   const run = async (action: () => Promise<unknown>, success: string, failure: string) => {
@@ -170,25 +176,37 @@ export default function TrashPage() {
    * 失败时也说得清是「恢复」还是「彻底删除」失败。
    */
   const restoreRow = (row: TrashItem) =>
-    run(() => restoreTrashItem(row.type, row.id), `已恢复「${row.title}」`, "恢复失败");
+    run(
+      () => restoreTrashItem(row.type, row.id),
+      t("trash.toast.restoredOne", { title: row.title }),
+      t("trash.toast.restoreFailed"),
+    );
   const purgeRow = (row: TrashItem) =>
-    run(() => purgeTrashItem(row.type, row.id), `已彻底删除「${row.title}」`, "彻底删除失败");
+    run(
+      () => purgeTrashItem(row.type, row.id),
+      t("trash.toast.purgedOne", { title: row.title }),
+      t("trash.toast.purgeFailed"),
+    );
   const emptyAll = () =>
-    run(() => emptyTrash(type === ALL ? "" : type), "回收站已清空", "清空回收站失败");
+    run(
+      () => emptyTrash(type === ALL ? "" : type),
+      t("trash.toast.emptied"),
+      t("trash.toast.emptyFailed"),
+    );
 
   const columns: TableColumnsType<TrashItem> = [
     {
-      title: "类型",
+      title: t("trash.column.type"),
       dataIndex: "type_label",
       width: 110,
       render: (value: string) => <Tag>{value}</Tag>,
     },
     {
-      title: "名称",
+      title: t("trash.column.name"),
       dataIndex: "title",
       render: (value: string, row) => (
         <Space orientation="vertical" size={0}>
-          <Typography.Text strong>{value || "（无标题）"}</Typography.Text>
+          <Typography.Text strong>{value || t("trash.untitled")}</Typography.Text>
           {row.subtitle && (
             <Typography.Text type="secondary" style={{ fontSize: 12 }}>
               {row.subtitle}
@@ -198,13 +216,13 @@ export default function TrashPage() {
       ),
     },
     {
-      title: "删除时间",
+      title: t("trash.column.deletedAt"),
       dataIndex: "deleted_at",
       width: 160,
       render: (value: string | null) => deletedAtText(value),
     },
     {
-      title: "操作",
+      title: t("trash.column.actions"),
       key: "actions",
       width: 190,
       render: (_value, row) => (
@@ -212,33 +230,35 @@ export default function TrashPage() {
           <Button
             size="small"
             icon={<UndoOutlined />}
-            aria-label={`恢复 ${row.title || row.type_label}`}
+            aria-label={t("trash.aria.restore", { title: row.title || row.type_label })}
             onClick={() => void restoreRow(row)}
           >
-            恢复
+            {t("trash.action.restore")}
           </Button>
           <Popconfirm
-            title="彻底删除？"
+            title={t("trash.confirm.purgeOneTitle")}
             // 确认文案要把后果说白：这是全应用唯一不可逆的动作。
-            description={`「${row.title || row.type_label}」将被彻底删除，无法恢复。`}
-            okText="彻底删除"
+            description={t("trash.confirm.purgeOne", { title: row.title || row.type_label })}
+            okText={t("trash.action.purge")}
             // 显式 aria-label：antd 会给两字中文按钮自动插空格（"取 消"），
             // 不写死名称则界面与测试都容易踩到这个坑（同 CollectResultPanel 的处理）。
             okButtonProps={{
               danger: true,
-              "aria-label": `确认彻底删除 ${row.title || row.type_label}`,
+              "aria-label": t("trash.confirm.confirmAria", { title: row.title || row.type_label }),
             }}
-            cancelText="取消"
-            cancelButtonProps={{ "aria-label": `取消彻底删除 ${row.title || row.type_label}` }}
+            cancelText={t("common.action.cancel")}
+            cancelButtonProps={{
+              "aria-label": t("trash.confirm.cancelAria", { title: row.title || row.type_label }),
+            }}
             onConfirm={() => void purgeRow(row)}
           >
             <Button
               size="small"
               danger
               icon={<DeleteOutlined />}
-              aria-label={`彻底删除 ${row.title || row.type_label}`}
+              aria-label={t("trash.aria.purge", { title: row.title || row.type_label })}
             >
-              彻底删除
+              {t("trash.action.purge")}
             </Button>
           </Popconfirm>
         </Space>
@@ -274,49 +294,47 @@ export default function TrashPage() {
       <div className="trash-page-head">
         <Space orientation="vertical" size={0}>
           <Typography.Title level={4} style={{ margin: 0 }}>
-            回收站
+            {t("trash.page.title")}
           </Typography.Title>
-          <Typography.Text type="secondary">
-            删除的内容会先到这里，不会直接消失；恢复是一键的。「彻底删除」才会真正抹掉， 不可撤销。
-          </Typography.Text>
+          <Typography.Text type="secondary">{t("trash.page.subtitle")}</Typography.Text>
         </Space>
         {items.length > 0 && (
           <Space>
             <Popconfirm
-              title={`清空${type === ALL ? "回收站" : "这一类"}？`}
-              description={`将彻底删除 ${
-                type === ALL ? (data?.total ?? 0) : (counts[type] ?? 0)
-              } 条内容，无法恢复。`}
-              okText="清空"
-              okButtonProps={{ danger: true, "aria-label": "确认清空回收站" }}
-              cancelText="取消"
-              cancelButtonProps={{ "aria-label": "取消清空回收站" }}
+              title={type === ALL ? t("trash.emptyOut.titleAll") : t("trash.emptyOut.titleType")}
+              description={t("trash.emptyOut.description", {
+                count: type === ALL ? (data?.total ?? 0) : (counts[type] ?? 0),
+              })}
+              okText={t("trash.action.clear")}
+              okButtonProps={{ danger: true, "aria-label": t("trash.emptyOut.confirmAria") }}
+              cancelText={t("common.action.cancel")}
+              cancelButtonProps={{ "aria-label": t("trash.emptyOut.cancelAria") }}
               onConfirm={() => void emptyAll()}
             >
               <Button danger icon={<DeleteOutlined />}>
-                清空{type === ALL ? "回收站" : "这一类"}
+                {type === ALL ? t("trash.emptyOut.actionAll") : t("trash.emptyOut.actionType")}
               </Button>
             </Popconfirm>
             {/* 进入多选的入口在行右键菜单的「批量选择」（R8）；这里只保留退出。 */}
-            {selectMode && <Button onClick={exitSelectMode}>退出多选</Button>}
+            {selectMode && <Button onClick={exitSelectMode}>{t("trash.exitSelect")}</Button>}
           </Space>
         )}
         {selectMode && selectedKeys.length > 0 && (
           <Space>
             <Button icon={<UndoOutlined />} onClick={() => void batchRestore()}>
-              批量恢复（{selectedKeys.length}）
+              {t("trash.batch.restore", { count: selectedKeys.length })}
             </Button>
             <Popconfirm
-              title="彻底删除选中的记录？"
-              description={`这 ${selectedKeys.length} 条将彻底删除，无法恢复。`}
-              okText="彻底删除"
-              okButtonProps={{ danger: true, "aria-label": "确认批量彻底删除" }}
-              cancelText="取消"
-              cancelButtonProps={{ "aria-label": "取消批量彻底删除" }}
+              title={t("trash.batch.confirmTitle")}
+              description={t("trash.batch.confirmDescription", { count: selectedKeys.length })}
+              okText={t("trash.action.purge")}
+              okButtonProps={{ danger: true, "aria-label": t("trash.batch.confirmAria") }}
+              cancelText={t("common.action.cancel")}
+              cancelButtonProps={{ "aria-label": t("trash.batch.cancelAria") }}
               onConfirm={() => void batchPurge()}
             >
               <Button danger icon={<DeleteOutlined />}>
-                批量彻底删除
+                {t("trash.batch.purge")}
               </Button>
             </Popconfirm>
           </Space>
@@ -327,12 +345,12 @@ export default function TrashPage() {
         type="info"
         showIcon
         style={{ marginBottom: 16 }}
-        title="回收站里的内容不会出现在其它页面"
-        description="岗位、简历、投递记录、事实台账条目、资料箱里的资料与助手会话——删除后它们立刻从各自的列表、首页统计和搜索里消失，只在这里可见。"
+        title={t("trash.tip.title")}
+        description={t("trash.tip.description")}
       />
 
       {data && data.total > 0 && (
-        <div className="trash-type-filters" role="region" aria-label="回收站分类">
+        <div className="trash-type-filters" role="region" aria-label={t("trash.filters.aria")}>
           <Segmented
             value={type}
             onChange={(value) => setType(value as string)}
@@ -346,7 +364,7 @@ export default function TrashPage() {
       ) : loading && !data ? (
         <PageSkeleton rows={5} />
       ) : items.length === 0 ? (
-        <EmptyState description="回收站是空的。删除内容后，它们会出现在这里，可以随时恢复。" />
+        <EmptyState description={t("trash.emptyState.description")} />
       ) : (
         <Table
           rowKey={(row) => `${row.type}-${row.id}`}
