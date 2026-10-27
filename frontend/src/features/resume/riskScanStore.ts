@@ -17,6 +17,7 @@
 import { useSyncExternalStore } from "react";
 import { ApiError } from "../../api/client";
 import { scanResumeRisks } from "../../api/resumeRisk";
+import { t } from "../../i18n";
 import type { ResumeRiskScan } from "../../types/resumeRisk";
 
 export type RiskScanStatus = "idle" | "scanning" | "done" | "error";
@@ -134,7 +135,7 @@ export function startRiskScan(
       if (error instanceof ApiError && error.code === "cancelled") return;
       setState(resumeId, {
         status: "error",
-        error: error instanceof Error ? error.message : "风险扫描失败，请重试",
+        error: error instanceof Error ? error.message : t("backgroundTasks.risk.stateFailed"),
         startedAt,
         signature: opts.signature,
         enhance: opts.enhance,
