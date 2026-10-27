@@ -8,6 +8,8 @@
 import { ExportOutlined } from "@ant-design/icons";
 import { Button } from "antd";
 import { useState } from "react";
+import { t } from "../i18n";
+import { useLocale } from "../i18n/i18nContext";
 import type { ResumeLayout } from "../types";
 import ExportOptionsModal from "./ExportOptionsModal";
 
@@ -30,6 +32,7 @@ export default function ExportButtons({
   pdfDirectAvailable = true,
   onOpen,
 }: Props) {
+  useLocale();
   const [open, setOpen] = useState(false);
 
   return (
@@ -39,7 +42,7 @@ export default function ExportButtons({
         icon={<ExportOutlined />}
         onClick={() => (onOpen ? onOpen() : setOpen(true))}
       >
-        导出
+        {t("componentsMisc.exportButtons.export")}
       </Button>
       {onOpen ? null : (
         <ExportOptionsModal
