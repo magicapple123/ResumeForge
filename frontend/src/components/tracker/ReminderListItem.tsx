@@ -6,15 +6,14 @@
  */
 import { CheckOutlined, StopOutlined } from "@ant-design/icons";
 import { Button, Checkbox, Space, Tag, Typography } from "antd";
-import type { Reminder, ReminderKind, ReminderStatus } from "../../types";
-import { REMINDER_KIND_LABELS, REMINDER_STATUS_LABELS } from "../../types";
+import type { Reminder } from "../../types";
 import { formatDateTime } from "../../utils/format";
 import { ListyItem, ListyMeta } from "../common/ListyItem";
 import { isFromInnerControl } from "../common/recordDetailCore";
 import { RowActions, RowContextMenu } from "../common/RowActions";
 import type { RowActionItem } from "../common/RowActions";
-import { TRASH_RECOVERY_NOTE } from "../common/rowActionMenu";
 import { t } from "../../i18n";
+import { reminderKindLabelKey, reminderStatusLabelKey } from "../../i18n/enum/reminder";
 import { useLocale } from "../../i18n/i18nContext";
 
 interface Props {
@@ -49,6 +48,9 @@ export default function ReminderListItem({
   contextActions,
 }: Props) {
   useLocale();
+  // 两个 Tag：协议值先映到语言包 key；未知取值回退成后端下发的原值（不丢信息）。
+  const kindLabelKey = reminderKindLabelKey(item.kind);
+  const statusLabelKey = reminderStatusLabelKey(item.status);
   // 多选模式：行简化为勾选框 + 点行切换，不提供单行操作。
   if (selecting) {
     return (
@@ -115,7 +117,7 @@ export default function ReminderListItem({
           label: t("reminderItem.action.delete"),
           danger: true,
           confirm: t("reminderItem.confirm.delete"),
-          confirmBody: TRASH_RECOVERY_NOTE,
+          confirmBody: t("common.note.trashRecovery"),
           onClick: () => onRemove(item),
         },
       ]}
@@ -136,13 +138,13 @@ export default function ReminderListItem({
           title={
             <Space size={6} wrap>
               <span>{item.title}</span>
-              <Tag>{REMINDER_KIND_LABELS[item.kind as ReminderKind] ?? item.kind}</Tag>
+              <Tag>{kindLabelKey ? t(kindLabelKey) : item.kind}</Tag>
               <Tag
                 color={
                   item.status === "pending" ? "blue" : item.status === "done" ? "green" : "default"
                 }
               >
-                {REMINDER_STATUS_LABELS[item.status as ReminderStatus] ?? item.status}
+                {statusLabelKey ? t(statusLabelKey) : item.status}
               </Tag>
             </Space>
           }
