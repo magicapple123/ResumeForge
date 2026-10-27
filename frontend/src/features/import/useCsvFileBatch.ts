@@ -16,6 +16,8 @@
  * 3. **超上限拒绝而不是静默截断**：截断会让用户以为全导进去了，事后才发现少了行。
  */
 import { useCallback, useMemo, useRef, useState } from "react";
+import { DEFAULT_LOCALE, t, translate } from "../../i18n";
+import type { MessageKey } from "../../i18n";
 
 /** 一次最多选几个文件（与后端单文件 2MB 限制配合，避免一次提交压垮浏览器）。 */
 export const CSV_MAX_FILES = 10;
@@ -24,8 +26,16 @@ export const CSV_MAX_ROWS = 2000;
 /** 提交时每块多少行：与后端 `MAX_IMPORT_ROWS` 一致，超过就会被 422 拒绝。 */
 export const CSV_CHUNK_SIZE = 500;
 
-export const CSV_TOO_MANY_FILES_MESSAGE = "一次最多 10 个 CSV 文件";
-export const CSV_TOO_MANY_ROWS_MESSAGE = "合计超过 2000 行，请分批导入";
+/** 两条上限提示的 key：模块作用域只存 key，显示时才求值。 */
+const TOO_MANY_FILES_KEY: MessageKey = "featuresMisc.csvBatch.tooManyFiles";
+const TOO_MANY_ROWS_KEY: MessageKey = "featuresMisc.csvBatch.tooManyRows";
+
+/**
+ * 上限提示的**默认语言**文本。保留这两个导出只因既有用例按常量比对 `notice`；
+ * 界面显示一律走 `t(key)`——直接拿它渲染会在英文界面显示中文。
+ */
+export const CSV_TOO_MANY_FILES_MESSAGE = translate(DEFAULT_LOCALE, TOO_MANY_FILES_KEY);
+export const CSV_TOO_MANY_ROWS_MESSAGE = translate(DEFAULT_LOCALE, TOO_MANY_ROWS_KEY);
 
 export type CsvFileStatus = "pending" | "parsing" | "ok" | "error";
 
@@ -98,7 +108,7 @@ export function useCsvFileBatch<TRows extends object, TError extends object>({
 }: UseCsvFileBatchOptions<TRows, TError>): CsvFileBatch<TRows, TError> {
   const [parsedFiles, setParsedFiles] = useState<ParsedFile<TRows, TError>[]>([]);
   const [parsing, setParsing] = useState(false);
-  const [notice, setNotice] = useState("");
+  const [noticeKey, setNoticeKey] = useState<MessageKey | "">("");
   // 状态之外再留一份镜像：`addFiles` 是异步的，判断"再加会不会超过 10 个"必须读
   // 最新的已选列表，不能依赖闭包里的旧值。
   const filesRef = useRef<ParsedFile<TRows, TError>[]>([]);
@@ -119,10 +129,10 @@ export function useCsvFileBatch<TRows extends object, TError extends object>({
       if (list.length === 0) return;
       // 文件数上限：整批拒绝。只导前 10 个会让用户以为剩下的也进了。
       if (filesRef.current.length + list.length > maxFiles) {
-        setNotice(CSV_TOO_MANY_FILES_MESSAGE);
+        setNoticeKey(TOO_MANY_FILES_KEY);
         return;
       }
-      setNotice("");
+      setNoticeKey("");
       pendingRef.current += 1;
       setParsing(true);
       try {
@@ -156,7 +166,10 @@ export function useCsvFileBatch<TRows extends object, TError extends object>({
                       status: "error",
                       rows: [],
                       errors: [],
-                      message: error instanceof Error ? error.message : "解析 CSV 失败",
+                      message:
+                        error instanceof Error
+                          ? error.message
+                          : t("featuresMisc.csvBatch.parseFailed"),
                     }
                   : item,
               ),
@@ -174,7 +187,7 @@ export function useCsvFileBatch<TRows extends object, TError extends object>({
   const removeFile = useCallback(
     (id: string) => {
       applyFiles((previous) => previous.filter((item) => item.id !== id));
-      setNotice("");
+      setNoticeKey("");
     },
     [applyFiles],
   );
@@ -182,7 +195,7 @@ export function useCsvFileBatch<TRows extends object, TError extends object>({
   const reset = useCallback(() => {
     filesRef.current = [];
     setParsedFiles([]);
-    setNotice("");
+    setNoticeKey("");
   }, []);
 
   const merged = useMemo(() => {
@@ -234,7 +247,7 @@ export function useCsvFileBatch<TRows extends object, TError extends object>({
     errors: merged.errors,
     duplicates: merged.duplicates,
     canCommit: files.length > 0 && !parsing && !merged.limitExceeded && merged.rows.length > 0,
-    notice: merged.limitExceeded ? CSV_TOO_MANY_ROWS_MESSAGE : notice,
+    notice: merged.limitExceeded ? t(TOO_MANY_ROWS_KEY) : noticeKey ? t(noticeKey) : "",
   };
 }
 
@@ -286,7 +299,8 @@ export async function commitRowsInChunks<TRow, TError>({
         imported,
         failed,
         failedChunk: index + 1,
-        failedMessage: error instanceof Error ? error.message : "导入失败",
+        failedMessage:
+          error instanceof Error ? error.message : t("featuresMisc.csvBatch.commitFailed"),
       };
     }
   }
