@@ -15,11 +15,12 @@ import {
 import { Button, Input, Select, Space, Tooltip } from "antd";
 import { useState } from "react";
 import { t } from "../../i18n";
+import { JOB_STATUS_LABEL_KEYS, JOB_TYPE_LABEL_KEYS } from "../../i18n/enum/jobs";
 import { useLocale } from "../../i18n/i18nContext";
 import type { JobSortState } from "../../utils/jobSort";
 import { DEFAULT_JOB_SORT_STATE, isDefaultJobSort } from "../../utils/jobSort";
 import type { BatchAction } from "./jobFilterOptions";
-import { JOB_TYPE_OPTIONS, SOURCE_KIND_OPTIONS, STATUS_OPTIONS } from "./jobFilterOptions";
+import { SOURCE_KIND_OPTIONS } from "./jobFilterOptions";
 
 export function JobFilterBar({
   keyword,
@@ -74,6 +75,16 @@ export function JobFilterBar({
     setSearchText(keyword);
   }
 
+  // 下拉的 value 仍是落库的协议值，展示名在渲染期取（见 i18n/enum/jobs.ts）。
+  const jobTypeOptions = Object.entries(JOB_TYPE_LABEL_KEYS).map(([value, key]) => ({
+    value,
+    label: t(key),
+  }));
+  const statusOptions = Object.entries(JOB_STATUS_LABEL_KEYS).map(([value, key]) => ({
+    value,
+    label: t(key),
+  }));
+
   return (
     <div style={{ marginBottom: 16 }}>
       <Space wrap className="jobs-filter-bar">
@@ -108,7 +119,7 @@ export function JobFilterBar({
             setJobType(value ?? "");
             setPage(1);
           }}
-          options={JOB_TYPE_OPTIONS}
+          options={jobTypeOptions}
         />
         <Select
           aria-label={t("jobsPage.filter.statusAria")}
@@ -121,7 +132,7 @@ export function JobFilterBar({
             setStatus(value ?? "");
             setPage(1);
           }}
-          options={STATUS_OPTIONS}
+          options={statusOptions}
         />
         <Select
           aria-label={t("jobsPage.filter.sourceAria")}
