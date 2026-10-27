@@ -8,6 +8,7 @@
 import { App } from "antd";
 import { useCallback, useState } from "react";
 import { deleteAssistantMessage } from "../../../api/assistant";
+import { t } from "../../../i18n";
 import type { AssistantMessage, AssistantQuotedMessage, AssistantSurface } from "../../../types";
 
 type MessageApi = ReturnType<typeof App.useApp>["message"];
@@ -27,9 +28,11 @@ export function useAssistantQuote({ message }: QuoteOptions) {
         id: target.id,
         role: target.role,
         // 与后端快照保持同样的截断长度，避免引用块里显示的长度前后不一致。
-        excerpt: target.content.trim().slice(0, 500) || "[附件消息]",
+        excerpt:
+          target.content.trim().slice(0, 500) ||
+          t("assistantHooks.messageActions.quote.attachmentOnly"),
       });
-      message.info("已引用这条消息，输入你的追问即可");
+      message.info(t("assistantHooks.messageActions.quote.info"));
     },
     [message],
   );
@@ -63,9 +66,11 @@ export function useAssistantMessageActions({
         if (surface === "page") await deleteAssistantMessage(activeId, target.id);
         else await deleteAssistantMessage(activeId, target.id, surface);
         await loadDetail(activeId);
-        message.success("消息已删除");
+        message.success(t("assistantHooks.messageActions.success.deleted"));
       } catch (error) {
-        message.error(error instanceof Error ? error.message : "删除消息失败");
+        message.error(
+          error instanceof Error ? error.message : t("assistantHooks.messageActions.error.delete"),
+        );
       }
     },
     [activeId, loadDetail, message, surface],
