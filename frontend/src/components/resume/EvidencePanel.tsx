@@ -14,6 +14,8 @@
  */
 import { Collapse, Space, Tag, Typography } from "antd";
 import { useMemo } from "react";
+import type { MessageKey } from "../../i18n";
+import { useI18n } from "../../i18n/i18nContext";
 import { claimResponsibilityColor, claimStatusColor } from "../claims/claimPresentation";
 import { describeResumeFieldPath } from "../../utils/resumeFieldPath";
 import type { FactAnnotation, ResumeContent } from "../../types";
@@ -29,14 +31,14 @@ const SECTION_ORDER = [
   "awards",
 ] as const;
 
-const SECTION_TITLES: Record<string, string> = {
-  summary: "个人总结",
-  education: "教育经历",
-  experience: "实习/工作经历",
-  campus_experience: "校园经历",
-  projects: "项目经历",
-  skills: "专业技能",
-  awards: "荣誉奖项",
+const SECTION_TITLES: Record<string, MessageKey> = {
+  summary: "editor.field.summary",
+  education: "editor.section.education",
+  experience: "editor.section.experience",
+  campus_experience: "editor.section.campus",
+  projects: "editor.section.projects",
+  skills: "editor.section.skills",
+  awards: "editor.section.awards",
 };
 
 interface Props {
@@ -45,8 +47,9 @@ interface Props {
 }
 
 export default function EvidencePanel({ annotations, content }: Props) {
+  const { t } = useI18n();
   const grouped = useMemo(() => {
-    const result: { section: string; title: string; items: FactAnnotation[] }[] = [];
+    const result: { section: string; items: FactAnnotation[] }[] = [];
     const bySection = new Map<string, FactAnnotation[]>();
     for (const annotation of annotations ?? []) {
       const section = annotation.path.split(".")[0] ?? "";
@@ -57,7 +60,7 @@ export default function EvidencePanel({ annotations, content }: Props) {
     for (const section of SECTION_ORDER) {
       const items = bySection.get(section);
       if (items?.length) {
-        result.push({ section, title: SECTION_TITLES[section] ?? section, items });
+        result.push({ section, items });
         bySection.delete(section);
       }
     }
@@ -65,7 +68,6 @@ export default function EvidencePanel({ annotations, content }: Props) {
     for (const section of [...bySection.keys()].sort()) {
       result.push({
         section,
-        title: SECTION_TITLES[section] ?? section,
         items: bySection.get(section)!,
       });
     }
@@ -86,71 +88,79 @@ export default function EvidencePanel({ annotations, content }: Props) {
             key: "evidence",
             label: (
               <Typography.Text strong style={{ fontSize: 13 }}>
-                内容来源说明 · {annotations.length} 条
+                {t("resume.evidence.title", { count: annotations.length })}
               </Typography.Text>
             ),
             children: (
               <>
                 <Typography.Paragraph type="secondary" style={{ fontSize: 12, marginBottom: 8 }}>
-                  这些内容来自你的个人资料；AI 改写过的部分永远不显示为"已确认"，建议导出前过目。
+                  {t("resume.evidence.hint")}
                 </Typography.Paragraph>
                 <div style={{ display: "grid", gap: 8 }}>
-                  {grouped.map((group) => (
-                    <div key={group.section}>
-                      <Typography.Text strong style={{ fontSize: 13 }}>
-                        {group.title}
-                      </Typography.Text>
-                      <div style={{ display: "grid", gap: 6, marginTop: 4 }}>
-                        {group.items.map((annotation) => {
-                          const verified = canShowVerified(annotation)
-                            ? annotation.verification_status
-                            : null;
-                          return (
-                            <div
-                              key={`${annotation.path}:${annotation.origin}`}
-                              style={{ fontSize: 13, lineHeight: 1.7 }}
-                            >
-                              <Space size={6} wrap>
-                                <Typography.Text style={{ fontSize: 13 }}>
-                                  {describeResumeFieldPath(annotation.path, content)}
-                                </Typography.Text>
-                                <Tag
-                                  color={ORIGIN_COLORS[annotation.origin] ?? "default"}
-                                  style={{ marginInlineEnd: 0 }}
-                                >
-                                  {ORIGIN_LABELS[annotation.origin] ?? annotation.origin}
-                                </Tag>
-                                {verified && (
-                                  <Tag color={claimStatusColor(verified)}>{verified}</Tag>
-                                )}
-                                {annotation.responsibility && (
-                                  <Tag color={claimResponsibilityColor(annotation.responsibility)}>
-                                    {annotation.responsibility}
+                  {grouped.map((group) => {
+                    const titleKey = SECTION_TITLES[group.section];
+                    return (
+                      <div key={group.section}>
+                        <Typography.Text strong style={{ fontSize: 13 }}>
+                          {titleKey ? t(titleKey) : group.section}
+                        </Typography.Text>
+                        <div style={{ display: "grid", gap: 6, marginTop: 4 }}>
+                          {group.items.map((annotation) => {
+                            const verified = canShowVerified(annotation)
+                              ? annotation.verification_status
+                              : null;
+                            const originKey = ORIGIN_LABELS[annotation.origin];
+                            return (
+                              <div
+                                key={`${annotation.path}:${annotation.origin}`}
+                                style={{ fontSize: 13, lineHeight: 1.7 }}
+                              >
+                                <Space size={6} wrap>
+                                  <Typography.Text style={{ fontSize: 13 }}>
+                                    {describeResumeFieldPath(annotation.path, content)}
+                                  </Typography.Text>
+                                  <Tag
+                                    color={ORIGIN_COLORS[annotation.origin] ?? "default"}
+                                    style={{ marginInlineEnd: 0 }}
+                                  >
+                                    {originKey ? t(originKey) : annotation.origin}
                                   </Tag>
+                                  {verified && (
+                                    <Tag color={claimStatusColor(verified)}>{verified}</Tag>
+                                  )}
+                                  {annotation.responsibility && (
+                                    <Tag
+                                      color={claimResponsibilityColor(annotation.responsibility)}
+                                    >
+                                      {annotation.responsibility}
+                                    </Tag>
+                                  )}
+                                </Space>
+                                {annotation.source_fact && (
+                                  <Typography.Paragraph
+                                    type="secondary"
+                                    style={{ fontSize: 12, margin: "2px 0 0" }}
+                                  >
+                                    {t("resume.evidence.basis", { fact: annotation.source_fact })}
+                                  </Typography.Paragraph>
                                 )}
-                              </Space>
-                              {annotation.source_fact && (
-                                <Typography.Paragraph
-                                  type="secondary"
-                                  style={{ fontSize: 12, margin: "2px 0 0" }}
-                                >
-                                  依据：{annotation.source_fact}
-                                </Typography.Paragraph>
-                              )}
-                              {annotation.boundary && (
-                                <Typography.Paragraph
-                                  type="secondary"
-                                  style={{ fontSize: 12, margin: "2px 0 0" }}
-                                >
-                                  个人边界：{annotation.boundary}
-                                </Typography.Paragraph>
-                              )}
-                            </div>
-                          );
-                        })}
+                                {annotation.boundary && (
+                                  <Typography.Paragraph
+                                    type="secondary"
+                                    style={{ fontSize: 12, margin: "2px 0 0" }}
+                                  >
+                                    {t("resume.evidence.boundary", {
+                                      boundary: annotation.boundary,
+                                    })}
+                                  </Typography.Paragraph>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </>
             ),
