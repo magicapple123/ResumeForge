@@ -42,6 +42,7 @@ import type { Knowledge, KnowledgePayload, KnowledgeSummary } from "../types";
 import { formatDateTime } from "../utils/format";
 import { t } from "../i18n";
 import { useLocale } from "../i18n/i18nContext";
+import { knowledgeCategoryLabel } from "../i18n/enum/knowledge";
 
 /** 卡片网格 15 个一页（3 列 × 5 行），与后端 /knowledge/page 端点默认值一致。 */
 const KNOWLEDGE_PAGE_SIZE = 15;
@@ -100,7 +101,7 @@ export default function KnowledgePage() {
     void locale;
     return [
       { value: "", label: t("knowledgePage.filter.category.all") },
-      ...categories.map((item) => ({ value: item, label: item })),
+      ...categories.map((item) => ({ value: item, label: knowledgeCategoryLabel(item) })),
     ];
   }, [categories, locale]);
 
@@ -341,7 +342,7 @@ export default function KnowledgePage() {
                               onChange={() => batch.toggle(entry.id)}
                             />
                           )}
-                          <Tag color="blue">{entry.category}</Tag>
+                          <Tag color="blue">{knowledgeCategoryLabel(entry.category)}</Tag>
                           <RowActions primary={primary} more={more} disabled={batch.selecting} />
                         </div>
                         <Typography.Title level={5} ellipsis={{ tooltip: entry.title }}>
@@ -419,7 +420,7 @@ export default function KnowledgePage() {
           viewing && (
             <>
               <Space wrap style={{ marginBottom: 12 }}>
-                <Tag color="blue">{viewing.category}</Tag>
+                <Tag color="blue">{knowledgeCategoryLabel(viewing.category)}</Tag>
                 {viewing.tags.map((tag) => (
                   <Tag key={tag}>{tag}</Tag>
                 ))}
