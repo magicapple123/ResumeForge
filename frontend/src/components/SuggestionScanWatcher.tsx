@@ -20,6 +20,8 @@ import {
   isSuggestionPanelAttached,
   useSuggestionScanEntries,
 } from "../features/resume/suggestionScanStore";
+import { t } from "../i18n";
+import { useLocale } from "../i18n/i18nContext";
 
 /** 通知 key：固定前缀，附着/结束时按同一个 key 销毁。 */
 function suggestionNotificationKey(resumeId: number): string {
@@ -27,6 +29,8 @@ function suggestionNotificationKey(resumeId: number): string {
 }
 
 export default function SuggestionScanWatcher() {
+  // 本组件用模块级 t()：必须订阅语言变化，否则切语言后这块文案不重渲染。
+  useLocale();
   const { notification } = App.useApp();
   const entries = useSuggestionScanEntries();
   // 已经提示过的「状态令牌」：避免同一份简历的完成通知被后续无关的状态变化重复触发
@@ -60,27 +64,29 @@ export default function SuggestionScanWatcher() {
       if (state.status === "scanning") {
         notification.open({
           key,
-          title: "岗位优化建议生成中",
-          description: "可以离开此页面，生成会在后台继续",
+          title: t("backgroundTasks.suggestion.running.title"),
+          description: t("backgroundTasks.suggestion.running.description"),
           duration: 0,
           actions: (
             <Button size="small" onClick={() => cancel(resumeId)}>
-              取消
+              {t("backgroundTasks.action.cancel")}
             </Button>
           ),
         });
       } else if (state.status === "done") {
         notification.success({
           key,
-          title: "岗位优化建议已生成",
-          description: "回到简历详情点「查看岗位优化建议」即可看到。",
+          title: t("backgroundTasks.suggestion.done.title"),
+          description: t("backgroundTasks.suggestion.done.description", {
+            action: t("resume.footer.suggestionsView"),
+          }),
           duration: 4,
         });
       } else if (state.status === "error") {
         notification.error({
           key,
-          title: "岗位优化建议生成失败",
-          description: state.error || "可以回到简历详情重新生成。",
+          title: t("backgroundTasks.suggestion.failed.title"),
+          description: state.error || t("backgroundTasks.suggestion.failed.description"),
           duration: 5,
         });
       } else {
