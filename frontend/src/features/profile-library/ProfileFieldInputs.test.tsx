@@ -137,6 +137,40 @@ describe("ProfileFieldInputs 的收起与隐藏", () => {
     expect(formItem.style.marginBottom).toBe("12px");
   });
 
+  it("「至今」只给区间的结束端：出生年月没有勾选框，结束时间有", () => {
+    // 回归：「所有 date_text 都传 allowOngoing」让「出生年月」长出「至今」勾选框，
+    // 而它是个点日期；勾上再取消还会把原值吞成空（见 PartialDateSelect 的用例）。
+    const dates = makeSection("basic_info", "Basic Info", "singleton", [
+      makeField("basic_info", "birth_month", "出生年月", { field_type: "date_text" }),
+      makeField("basic_info", "awarded_at", "获奖时间", { field_type: "date_text" }),
+      makeField("educations", "start_date", "开始时间", { field_type: "date_text" }),
+      makeField("educations", "end_date", "结束时间", { field_type: "date_text" }),
+    ]);
+    render(<Harness section={dates} onSetPreference={vi.fn()} />);
+
+    const item = (label: string) =>
+      screen.getByLabelText(label).closest(".profile-field-grid-item") as HTMLElement;
+    const hasOngoing = (label: string) =>
+      item(label).querySelector(".profile-partial-date-select__ongoing") !== null;
+
+    // 只有结束时间是区间的结束端。
+    expect(hasOngoing("结束时间")).toBe(true);
+    expect(hasOngoing("出生年月")).toBe(false);
+    expect(hasOngoing("获奖时间")).toBe(false);
+    expect(hasOngoing("开始时间")).toBe(false);
+    expect(screen.getAllByRole("checkbox", { name: "至今" })).toHaveLength(1);
+  });
+
+  it("自建小字段没有 end_date 约定，标签写「结束 / 截止」时才给「至今」", () => {
+    const custom = makeSection("basic_info", "Basic Info", "singleton", [
+      makeField("basic_info", "custom_deadline", "截止时间", { field_type: "date_text" }),
+      makeField("basic_info", "custom_birth", "出生年月", { field_type: "date_text" }),
+    ]);
+    render(<Harness section={custom} onSetPreference={vi.fn()} />);
+
+    expect(screen.getAllByRole("checkbox", { name: "至今" })).toHaveLength(1);
+  });
+
   it("展开记忆来自服务端 collapsed_override，两个状态互不覆盖", () => {
     const expanded = makeSection("basic_info", "Basic Info", "singleton", [
       makeField("basic_info", "name", "Name"),

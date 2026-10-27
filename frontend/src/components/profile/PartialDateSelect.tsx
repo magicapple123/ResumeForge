@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 import { Checkbox, Select, Space, Typography } from "antd";
-import { memo, useMemo } from "react";
+import { memo, useEffect, useMemo, useRef } from "react";
 import {
   arePartialDatePropsEqual,
   buildYearGroups,
@@ -31,6 +31,21 @@ function PartialDateSelectImpl({
 }: Props) {
   const parts = parsePartialDate(value);
   const selected = parts ?? { year: "", month: "", day: "", ongoing: false };
+  /**
+   * 取消勾选「至今」时要恢复的那个日期。
+   *
+   * 勾选前组件收到的最后一个**具体日期**（非「至今」、非空）记在这里：勾上「至今」会把
+   * 年月日三个下拉一起锁住、值也被替换成「至今」，取消时若不还回去就只能写空——
+   * 用户实测 2004-11-10 勾上再取消，值变空（原值被"至今"吞了）。
+   *
+   * 用 ref 而不是 state：它不参与渲染，只做"上一次的值"这一件事；跟着 `value` 走，
+   * 因此外部改写（切条目、撤销、服务端刷新）也会同步过来。从来没有具体值时保持空串，
+   * 取消勾选就是空——与勾选前的状态一致。
+   */
+  const lastConcreteRef = useRef("");
+  useEffect(() => {
+    if (!selected.ongoing && value.trim()) lastConcreteRef.current = value;
+  }, [value, selected.ongoing]);
   // 年份范围几乎恒定（1900 → 当前年+5，已选年份更大时才外扩），分两组渲染。这个组件在
   // 「我的资料」里同时存在十几个、每次渲染重建 ~130 项 options 是编辑态卡顿的放大器之一
   // （见 deliverables/profile-input-perf-audit-2026-10-09.md），useMemo 掉。
@@ -130,7 +145,10 @@ function PartialDateSelectImpl({
           className="profile-partial-date-select__ongoing"
           checked={selected.ongoing}
           disabled={disabled || undefined}
-          onChange={(event) => onChange?.(event.target.checked ? "至今" : "")}
+          onChange={(event) =>
+            // 取消勾选恢复勾选前的具体日期（不是置空）：见 `lastConcreteRef` 的说明。
+            onChange?.(event.target.checked ? "至今" : lastConcreteRef.current)
+          }
         >
           至今
         </Checkbox>

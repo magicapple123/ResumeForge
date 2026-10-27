@@ -24,7 +24,12 @@
   box-shadow: 0 12px 30px rgb(42 83 125 / 16%);
   font-size: 12px;
   line-height: 1.55;
-  pointer-events: auto;
+  /*
+   * 卡片本体不吃指针：它浮在右侧内容之上，`auto` 时 `pointerdown` 落在卡上，
+   * 底下条目卡的拖拽把手就"偶尔拖不动"（2026-10-27 实测：把手正好在提示卡下面）。
+   * 卡里**可交互的元素**自己把指针收回来（见 `.tt-tip-close`），文字部分只是说明。
+   */
+  pointer-events: none;
   /* 入场淡入 140ms：只动 opacity。各贴边形态（.tt-shell.is-edge-* .tt-tip）用
      transform 做居中定位，keyframe 里再写 transform 会把定位覆盖掉。 */
   animation: tt-tip-in 140ms ease-out;
@@ -50,6 +55,8 @@
   background: var(--rf-brand-wash);
   cursor: pointer;
   line-height: 20px;
+  /* 卡片本体是 pointer-events: none，关闭按钮必须自己收回来，否则点不动。 */
+  pointer-events: auto;
 }
 
 .tt-tip-close:focus-visible {

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { Form } from "antd";
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import PartialDateSelect from "./PartialDateSelect";
 import { buildYearGroups, normalizePartialDate } from "./partialDate";
@@ -85,6 +85,68 @@ describe("PartialDateSelect", () => {
     }
     // 「至今」勾选框自身不受 selected.ongoing 影响（disabled 只由显式 prop 决定）。
     expect(screen.getByRole("checkbox", { name: "至今" })).toBeEnabled();
+  });
+
+  it("勾上「至今」再取消：回到勾选前的日期，而不是被清空", () => {
+    // 回归（QA B1）：勾选写「至今」、取消写空串，于是 2004-11-10 勾一下再取消就没了。
+    // 「至今」只是这个值的一种写法，不是"删除"。
+    const seen: string[] = [];
+    function Harness() {
+      const [value, setValue] = useState("2004-11-10");
+      return (
+        <PartialDateSelect
+          label="教育日期"
+          value={value}
+          onChange={(next) => {
+            seen.push(next);
+            setValue(next);
+          }}
+          allowOngoing
+        />
+      );
+    }
+    render(<Harness />);
+
+    const box = screen.getByRole("checkbox", { name: "至今" });
+    fireEvent.click(box);
+    expect(seen).toEqual(["至今"]);
+    // 勾选期间三个下拉被锁住（值已被「至今」取代）。
+    expect(screen.getByRole("combobox", { name: "教育日期年份" })).toBeDisabled();
+
+    fireEvent.click(box);
+    expect(seen).toEqual(["至今", "2004-11-10"]);
+    // 渲染层也回到原值：年 / 月 / 日三格各自显示原来的数字。
+    const shown = document.querySelectorAll<HTMLElement>(
+      ".profile-partial-date-select .ant-select-content",
+    );
+    expect(shown[0]).toHaveTextContent("2004");
+    expect(shown[1]).toHaveTextContent("11");
+    expect(shown[2]).toHaveTextContent("10");
+  });
+
+  it("从来没有具体日期时，取消「至今」保持空值", () => {
+    // 没有可恢复的历史值就不该凭空编一个：取消勾选 = 回到勾选前的空。
+    const seen: string[] = [];
+    function Harness() {
+      const [value, setValue] = useState("");
+      return (
+        <PartialDateSelect
+          label="教育日期"
+          value={value}
+          onChange={(next) => {
+            seen.push(next);
+            setValue(next);
+          }}
+          allowOngoing
+        />
+      );
+    }
+    render(<Harness />);
+
+    const box = screen.getByRole("checkbox", { name: "至今" });
+    fireEvent.click(box);
+    fireEvent.click(box);
+    expect(seen).toEqual(["至今", ""]);
   });
 });
 

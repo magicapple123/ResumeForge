@@ -38,6 +38,24 @@ function fieldPlaceholder(field: FieldOut): string {
   return t("profileLibrary.field.placeholder");
 }
 
+/**
+ * 这个日期字段该不该有「至今」勾选框。
+ *
+ * 「至今」只对**区间的结束端**有意义（教育 / 工作的"结束时间"）。此前一个 `date_text`
+ * 就无条件给，于是「出生年月」「获奖时间」「取得时间」「年份」这类**点日期**也长出
+ * 一只「至今」——勾上等于把 2004-11 说成"仍在 2004-11"，语义不成立，取消时还会把原值
+ * 吞成空（用户实测 2004-11-10 勾上再取消变空）。
+ *
+ * 判定按字段定义走，不看分区：`end_date` 结尾是内置区间的结束端；用户自建的小字段
+ * 没有这个约定，因此额外认标签里的「结束 / 截止」。
+ */
+function allowsOngoing(field: FieldOut): boolean {
+  if (field.field_type !== "date_text") return false;
+  if (field.key.endsWith("end_date")) return true;
+  // 匹配后端给的中文字段标签，不是界面文案（永远不该翻）。
+  return /结束|截止/.test(field.label); // i18n-ok: 用中文匹配后端字段标签
+}
+
 /** Form.Item 注入给直接子元素的受控属性；必须原样转交给真正的输入控件。 */
 interface ControlProps {
   value?: string;
@@ -83,7 +101,7 @@ function InputForField({
         value={value}
         onChange={onChange}
         label={field.label}
-        allowOngoing
+        allowOngoing={allowsOngoing(field)}
         disabled={disabled || undefined}
       />
     );
