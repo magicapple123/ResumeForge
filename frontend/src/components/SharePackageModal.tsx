@@ -15,7 +15,6 @@ import {
   Typography,
 } from "antd";
 import { RowActions } from "./common/RowActions";
-import { TRASH_RECOVERY_NOTE } from "./common/rowActionMenu";
 import { useState } from "react";
 import {
   createSharePackage,
@@ -414,7 +413,7 @@ export default function SharePackageModal({ recordId, open, onClose, onLocateAnn
                   label: t("review.sharePackage.delete.label"),
                   danger: true,
                   confirm: t("review.sharePackage.delete.confirm"),
-                  confirmBody: TRASH_RECOVERY_NOTE,
+                  confirmBody: t("common.note.trashRecovery"),
                   onClick: () => void removePackage(),
                 },
               ]}
