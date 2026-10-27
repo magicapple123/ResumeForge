@@ -20,28 +20,42 @@ import { Checkbox, Input, Select, Space, Table, Tag, Tooltip, Typography } from 
 import type { TableColumnsType } from "antd";
 import { memo, useMemo } from "react";
 import type { WebFormItemStatus, WebFormPreviewItem } from "../../types";
+import { t } from "../../i18n";
+import type { MessageKey } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 
-const STATUS_META: Record<WebFormItemStatus, { color: string; label: string; hint: string }> = {
-  ready: { color: "success", label: "已就绪", hint: "字段与取值都对上了" },
+/**
+ * 状态 → 显示名与提示。状态键是协议值，只有显示名与提示走 key：模块作用域不能调 `t()`，
+ * 否则切语言不重渲染。
+ */
+const STATUS_META: Record<
+  WebFormItemStatus,
+  { color: string; labelKey: MessageKey; hintKey: MessageKey }
+> = {
+  ready: {
+    color: "success",
+    labelKey: "webFormPage.preview.status.ready",
+    hintKey: "webFormPage.preview.status.readyHint",
+  },
   low_confidence: {
     color: "warning",
-    label: "需确认",
-    hint: "有另一个控件也沾边，请核对填对了没有",
+    labelKey: "webFormPage.preview.status.lowConfidence",
+    hintKey: "webFormPage.preview.status.lowConfidenceHint",
   },
   conflict: {
     color: "error",
-    label: "冲突",
-    hint: "页面上已经有值，默认保留它（不覆盖你自己填的内容）",
+    labelKey: "webFormPage.preview.status.conflict",
+    hintKey: "webFormPage.preview.status.conflictHint",
   },
   relaxed_ready: {
     color: "processing",
-    label: "放宽代选",
-    hint: "放宽模式：这一项的值由点选产生，程序将代点并回读核对，填完请确认",
+    labelKey: "webFormPage.preview.status.relaxedReady",
+    hintKey: "webFormPage.preview.status.relaxedReadyHint",
   },
   needs_confirm: {
     color: "warning",
-    label: "需你确认",
-    hint: "同意/声明类勾选：默认不勾，你勾选后才由程序代点——勾上即视为你本人同意",
+    labelKey: "webFormPage.preview.status.needsConfirm",
+    hintKey: "webFormPage.preview.status.needsConfirmHint",
   },
 };
 
@@ -66,28 +80,30 @@ const PreviewPickCell = memo(function PreviewPickCell({
   disabled?: boolean;
   onToggle: (index: number) => void;
 }) {
+  useLocale();
   return (
     <Checkbox
       checked={checked}
       disabled={disabled}
       onChange={() => onToggle(item.index)}
-      aria-label={`选择填入${item.field_label}`}
+      aria-label={t("webFormPage.preview.pickAria", { label: item.field_label })}
     />
   );
 });
 
 /** 「字段」列：字段名 + 页面控件名 + AI 建议标签。纯展示，只依赖本行。 */
 const PreviewLabelCell = memo(function PreviewLabelCell({ item }: { item: WebFormPreviewItem }) {
+  useLocale();
   return (
     <div>
       <Space size={4}>
         <span>{item.field_label}</span>
-        {item.source === "ai" ? <Tag color="blue">AI 建议</Tag> : null}
+        {item.source === "ai" ? <Tag color="blue">{t("liveModeCard.tag.ai")}</Tag> : null}
       </Space>
       {item.control_label && item.control_label !== item.field_label ? (
         <div>
           <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-            页面：{item.control_label}
+            {t("webFormPage.preview.controlLabel", { label: item.control_label })}
           </Typography.Text>
         </div>
       ) : null}
@@ -138,14 +154,15 @@ const PreviewValueCell = memo(function PreviewValueCell({
 
 /** 「状态」列：状态标签 + 冲突页面上值 / 备注。纯展示，只依赖本行。 */
 const PreviewStatusCell = memo(function PreviewStatusCell({ item }: { item: WebFormPreviewItem }) {
+  useLocale();
   const meta = STATUS_META[item.status];
   return (
-    <Tooltip title={meta.hint}>
-      <Tag color={meta.color}>{meta.label}</Tag>
+    <Tooltip title={t(meta.hintKey)}>
+      <Tag color={meta.color}>{t(meta.labelKey)}</Tag>
       {item.status === "conflict" && item.current_value ? (
         <div>
           <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-            页面上：{item.current_value}
+            {t("webFormPage.preview.currentValue", { value: item.current_value })}
           </Typography.Text>
         </div>
       ) : null}
@@ -174,12 +191,16 @@ function WebFormPreviewTableImpl({
   onToggle,
   onValueChange,
 }: Props) {
+  const locale = useLocale();
   // 列定义里的 render 闭包引用了 selected/values/disabled 与回调，按真实依赖缓存；
   // render 里只把「本行解析后的原始值」交给 memo 子组件，因此未变行 props 恒等、可 bail。
-  const columns: TableColumnsType<WebFormPreviewItem> = useMemo(
-    () => [
+  const columns: TableColumnsType<WebFormPreviewItem> = useMemo(() => {
+    // 列标题也在这一层用 t() 取；把 locale 标成依赖，切语言时列定义才会重算
+    // （t() 是模块级函数，规则看不出它依赖语言）。
+    void locale;
+    return [
       {
-        title: "填入",
+        title: t("webFormPage.preview.column.pick"),
         key: "pick",
         width: 62,
         render: (_, item) => (
@@ -192,14 +213,14 @@ function WebFormPreviewTableImpl({
         ),
       },
       {
-        title: "字段",
+        title: t("webFormPage.preview.column.field"),
         dataIndex: "field_label",
         key: "field",
         width: 130,
         render: (_, item) => <PreviewLabelCell item={item} />,
       },
       {
-        title: "将填入的值",
+        title: t("webFormPage.preview.column.value"),
         key: "value",
         render: (_, item) => (
           <PreviewValueCell
@@ -211,14 +232,13 @@ function WebFormPreviewTableImpl({
         ),
       },
       {
-        title: "状态",
+        title: t("webFormPage.preview.column.status"),
         key: "status",
         width: 130,
         render: (_, item) => <PreviewStatusCell item={item} />,
       },
-    ],
-    [disabled, onToggle, onValueChange, selected, values],
-  );
+    ];
+  }, [disabled, locale, onToggle, onValueChange, selected, values]);
 
   return (
     <Table
@@ -231,7 +251,7 @@ function WebFormPreviewTableImpl({
         // 「需你确认」行（同意/声明类）用淡警示底色与事实类区分：勾上它等于代你表态。
         item.status === "needs_confirm" ? "webform-row-needs-confirm" : ""
       }
-      locale={{ emptyText: "这一页没有能自动填的字段" }}
+      locale={{ emptyText: t("webFormPage.preview.empty") }}
     />
   );
 }
