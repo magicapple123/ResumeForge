@@ -4,6 +4,8 @@
  * （自 WebFormPage 拆出：:947-984 整块逐字随迁，纯 props。）
  */
 import { Button, Card, Space } from "antd";
+import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 import EmptyState from "../../components/common/EmptyState";
 import WebFormPreviewTable from "../../components/webform/WebFormPreviewTable";
 import type { WebFormPreview } from "../../types";
@@ -32,17 +34,22 @@ export function PreviewCard({
   onToggle: (index: number) => void;
   onValueChange: (index: number, value: string) => void;
 }) {
+  // 本组件用模块级 t()：订阅语言变化，否则切语言后这张卡不重渲染。
+  useLocale();
   return (
     <Card
       size="small"
-      title={`核对后填充（已选 ${selected.size} / ${preview.items.length} 项）`}
+      title={t("webFormPage.previewCard.title", {
+        selected: selected.size,
+        total: preview.items.length,
+      })}
       extra={
         <Space size="small">
           {/* AI 建议默认不勾——失败形态是"我忘了勾"，而不是"悄悄写了个错值"。
               想一次全采纳，这里点一下就好。 */}
           {aiSuggestions.length ? (
             <Button onClick={onSelectAiSuggestions} disabled={busy === "fill"}>
-              全选 AI 建议（{aiSuggestions.length}）
+              {t("webFormPage.previewCard.selectAi", { count: aiSuggestions.length })}
             </Button>
           ) : null}
           <Button
@@ -51,7 +58,7 @@ export function PreviewCard({
             disabled={!running || selected.size === 0}
             onClick={onFill}
           >
-            填充到页面
+            {t("webFormPage.previewCard.fill")}
           </Button>
         </Space>
       }
@@ -66,7 +73,7 @@ export function PreviewCard({
           onValueChange={onValueChange}
         />
       ) : (
-        <EmptyState description="没有可自动填的字段" />
+        <EmptyState description={t("webFormPage.previewCard.empty")} />
       )}
     </Card>
   );
