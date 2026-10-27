@@ -4,6 +4,10 @@
  *
  * 单独成文件而不是和 `RowActions` 放一起：那个文件只导出组件，才能让 React
  * Fast Refresh 在开发时正常工作（同时导出 hook 会让热更新退化成整页刷新）。
+ *
+ * 删除后果的文案**不在本文件**：软删除（进回收站、可恢复）与硬删除（不进回收站、无法恢复）
+ * 分别由语言包的 `common.note.trashRecovery` / `common.note.hardDelete` 提供，调用点在
+ * 渲染 / 事件期用 `t()` 取；本文件不导出任何中文常量，否则英文界面会夹中文。
  */
 
 import { App } from "antd";
@@ -33,7 +37,8 @@ export interface RowActionItem {
    * 二次确认的**正文**：后果与可逆性，如 `会移入回收站，之后可以在「回收站」里恢复。`。
    *
    * 只传 `confirm` 不传它，弹窗就只有标题没有后果段——§4.4 的三段式（动作 + 对象 + 后果）
-   * 会缺一段。软删除类一律用下面导出的 `TRASH_RECOVERY_NOTE`，不要在调用点各写一份。
+   * 会缺一段。软删除类一律传 `t("common.note.trashRecovery")`，硬删除类传
+   * `t("common.note.hardDelete")`，不要在调用点各写一份。
    */
   confirmBody?: string;
   /**
@@ -52,29 +57,6 @@ export interface RowActionItem {
    */
   children?: RowActionItem[];
 }
-
-/**
- * 软删除二次确认的正文（唯一出口）。
- *
- * 「删除」在本应用里是**软删除**：条目移入回收站，可以恢复。这句话要在每个删除确认里
- * 出现，所以只在这里定义一份——调用点写 `confirmBody: TRASH_RECOVERY_NOTE` 即可，
- * 改口径只需改这一行。
- */
-// i18n-ok: 二次确认正文的唯一出口（§4.3 正例原文），调用点引用本常量而非各自重写
-export const TRASH_RECOVERY_NOTE = "会移入回收站，之后可以在「回收站」里恢复。";
-
-/**
- * 不可恢复删除的正文（唯一出口，与 `TRASH_RECOVERY_NOTE` 成对）。
- *
- * 这几类数据**不进回收站**：后端是硬删除（`DELETE` 直接删行，`app/services/trash.py`
- * 的 `TrashSpec` 里没有它们），界面上也没有恢复入口。按 ui-copy-guide §4.3 的例外，
- * 正文必须如实说"无法恢复"，**不许**套回收站话术——承诺做不到的事比不写后果更糟。
- *
- * 当前适用：面试深挖、模拟面试、助手消息。备选岗位**不再适用**（0050 起它进回收站，
- * 改由 `TRASH_RECOVERY_NOTE` 说明后果）。
- */
-// i18n-ok: 不可恢复删除正文的唯一出口（§4.3 例外的原文），调用点引用本常量
-export const HARD_DELETE_NOTE = "会直接删除，不进「回收站」，也无法恢复。";
 
 /** 菜单分组用的分隔线占位（不渲染成可点项）。 */
 export interface RowActionDivider {
