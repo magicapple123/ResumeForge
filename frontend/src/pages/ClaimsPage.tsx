@@ -36,13 +36,41 @@ import BatchDeleteButton from "../components/common/BatchDeleteButton";
 import { useApi } from "../hooks/useApi";
 import { useBatchSelection } from "../hooks/useBatchSelection";
 import { useDeleteUndo } from "../features/trash/useDeleteUndo";
-import type { Claim, ClaimSummary } from "../types";
+import type { Claim, ClaimCategory, ClaimSummary, VerificationStatus } from "../types";
 import { CLAIM_CATEGORIES, VERIFICATION_STATUSES, claimPayload } from "../types";
+import { t } from "../i18n";
+import type { MessageKey } from "../i18n";
+import { useLocale } from "../i18n/i18nContext";
 
 /** 列表一页 20 条，与后端 /claims/page 的默认口径一致。 */
 const CLAIMS_PAGE_SIZE = 20;
 
+/**
+ * 核实状态 / 分类的显示名：**键是协议值**（提交后端并参与校验），值指向语言包 key。
+ *
+ * 模块作用域不能调 `t()`（切语言不会重渲染），所以这里只存 key，取值处统一
+ * `t(STATUS_LABEL_KEYS[value])`。`types/claim.ts` 里的中文枚举一个字都没动。
+ */
+const STATUS_LABEL_KEYS: Record<VerificationStatus, MessageKey> = {
+  已确认: "claimsPage.status.confirmed",
+  待确认: "claimsPage.status.pending",
+  已过期: "claimsPage.status.expired",
+  不采用: "claimsPage.status.rejected",
+};
+
+const CATEGORY_LABEL_KEYS: Record<ClaimCategory, MessageKey> = {
+  教育经历: "claimsPage.category.education",
+  "实习/工作": "claimsPage.category.internship",
+  项目经历: "claimsPage.category.project",
+  校园经历: "claimsPage.category.campus",
+  专业技能: "claimsPage.category.skills",
+  荣誉奖项: "claimsPage.category.awards",
+  其他: "claimsPage.category.other",
+};
+
 export default function ClaimsPage() {
+  // 本页用模块级 t()：必须订阅语言变化，否则切语言后整页文案不重渲染。
+  useLocale();
   const { message } = App.useApp();
   const navigate = useNavigate();
   // 批量选择：勾选若干条后一次删除（软删，全部进回收站）。
@@ -89,7 +117,7 @@ export default function ClaimsPage() {
       });
       await refreshAll();
     } catch (err) {
-      message.error(err instanceof Error ? err.message : "删除失败");
+      message.error(err instanceof Error ? err.message : t("claimsPage.error.deleteFailed"));
     }
   };
 
@@ -104,15 +132,15 @@ export default function ClaimsPage() {
       );
       // 后端可能因为"还留着【待补】"而拒绝，这里要如实说清是哪一条、为什么。
       if (saved.warnings.length > 0) {
-        message.warning(`已标记为已确认，但还有待办：${saved.warnings[0]}`);
+        message.warning(t("claimsPage.toast.confirmedWithTodo", { warning: saved.warnings[0] }));
       } else {
-        message.success("已标记为已确认");
+        message.success(t("claimsPage.toast.confirmed"));
       }
       await reload();
       await baseline.reload();
     } catch (err) {
       // 兜底不再是「操作失败」：说清这一步是「标记为已确认」，再拼 errorGuidance 三段（F11）。
-      message.error(formatErrorGuidance(err, "标记为已确认失败"));
+      message.error(formatErrorGuidance(err, t("claimsPage.error.confirmFailed")));
     }
   };
 
@@ -122,9 +150,9 @@ export default function ClaimsPage() {
     if (ids.length === 0) return;
     try {
       const { deleted } = await batchDeleteClaims(ids);
-      message.success(`已删除 ${deleted} 条台账条目，可在「回收站」里恢复`);
+      message.success(t("claimsPage.toast.batchDeleted", { count: deleted }));
     } catch (err) {
-      message.error(err instanceof Error ? err.message : "批量删除失败，请重试");
+      message.error(err instanceof Error ? err.message : t("claimsPage.error.batchDeleteFailed"));
     }
     batch.exitSelecting();
     await refreshAll();
@@ -136,39 +164,38 @@ export default function ClaimsPage() {
       setEditing(await getClaim(summary.id));
       setFormOpen(true);
     } catch (err) {
-      message.error(err instanceof Error ? err.message : "加载条目失败");
+      message.error(err instanceof Error ? err.message : t("claimsPage.error.loadFailed"));
     }
   };
 
   // 各分类的条目数来自分页响应的 SQL 汇总（与旧端点内存汇总同口径），渲染进下拉标签。
-  const categoryOptions = useMemo(
-    () =>
-      CLAIM_CATEGORIES.map((value) => {
-        const count = data?.category_counts?.[value];
-        return { value, label: count == null ? value : `${value}（${count}）` };
-      }),
-    [data],
-  );
+  // 不用 useMemo：标签要按当前语言取，缓存住 data 会让切语言后停在旧语言
+  // （t() 是模块级函数，memo 不会为语言变化失效），7 条数据直接算更省心。
+  const categoryOptions = CLAIM_CATEGORIES.map((value) => {
+    const count = data?.category_counts?.[value];
+    const label = t(CATEGORY_LABEL_KEYS[value]);
+    return {
+      value,
+      label: count == null ? label : label + t("claimsPage.filter.countSuffix", { count }),
+    };
+  });
 
   return (
     <div className="claims-page">
       <div className="claims-page-head">
         <Space orientation="vertical" size={0}>
           <Typography.Title level={4} style={{ margin: 0 }}>
-            事实台账
+            {t("claimsPage.title")}
           </Typography.Title>
-          <Typography.Text type="secondary">
-            每条对外说得出的话，都能回到一个出处。只有「已确认」的条目会作为事实进入简历生成；
-            其余说法会被显式避开。
-          </Typography.Text>
+          <Typography.Text type="secondary">{t("claimsPage.subtitle")}</Typography.Text>
         </Space>
         <Space>
           {/* 深挖的输入就是台账条目，所以入口放在这里——从别处进它都要先绕一圈。 */}
           <Button icon={<ThunderboltOutlined />} onClick={() => navigate("/claims/drill")}>
-            开始深挖
+            {t("claimsPage.action.drill")}
           </Button>
           <Button icon={<FileAddOutlined />} onClick={() => setDraftOpen(true)}>
-            从资料生成
+            {t("claimsPage.action.fromProfile")}
           </Button>
           <Button
             type="primary"
@@ -178,31 +205,31 @@ export default function ClaimsPage() {
               setFormOpen(true);
             }}
           >
-            新建条目
+            {t("claimsPage.action.create")}
           </Button>
         </Space>
       </div>
 
       <div className="claims-summary">
-        <Statistic title="条目总数" value={data?.total ?? 0} />
+        <Statistic title={t("claimsPage.stat.total")} value={data?.total ?? 0} />
         <Statistic
-          title="已确认（可进正式简历）"
+          title={t("claimsPage.stat.confirmed")}
           value={data?.confirmed_count ?? 0}
           styles={{ content: { color: "var(--rf-success-text)" } }}
         />
         <Statistic
-          title="待确认"
+          title={t("claimsPage.stat.pending")}
           value={data?.pending_count ?? 0}
           styles={{ content: { color: "var(--rf-warning-text)" } }}
         />
         <Statistic
-          title="生成时可用的事实"
+          title={t("claimsPage.stat.baseline")}
           value={baseline.data?.confirmed_count ?? 0}
           prefix={<SafetyCertificateOutlined />}
         />
         {(baseline.data?.blocked_wording.length ?? 0) > 0 && (
           <Statistic
-            title="会被避开的未确认说法"
+            title={t("claimsPage.stat.blocked")}
             value={baseline.data?.blocked_wording.length ?? 0}
             styles={{ content: { color: "var(--rf-error-text)" } }}
           />
@@ -211,25 +238,28 @@ export default function ClaimsPage() {
 
       <Space size={16} wrap className="claims-filters rf-filter-bar">
         <Select
-          aria-label="事实分类筛选"
+          aria-label={t("claimsPage.filter.categoryAria")}
           value={category}
           onChange={setCategory}
           style={{ width: 180 }}
-          options={[{ value: "", label: "全部分类" }, ...categoryOptions]}
+          options={[{ value: "", label: t("claimsPage.filter.allCategories") }, ...categoryOptions]}
         />
         <Select
-          aria-label="事实核实状态筛选"
+          aria-label={t("claimsPage.filter.statusAria")}
           value={status}
           onChange={setStatus}
           style={{ width: 160 }}
           options={[
-            { value: "", label: "全部状态" },
-            ...VERIFICATION_STATUSES.map((value) => ({ value, label: value })),
+            { value: "", label: t("claimsPage.filter.allStatuses") },
+            ...VERIFICATION_STATUSES.map((value) => ({
+              value,
+              label: t(STATUS_LABEL_KEYS[value]),
+            })),
           ]}
         />
         <Input.Search
           allowClear
-          placeholder="搜索标题、主体、事实或表述"
+          placeholder={t("claimsPage.filter.searchPlaceholder")}
           style={{ width: 280 }}
           onSearch={setKeyword}
         />
@@ -249,7 +279,11 @@ export default function ClaimsPage() {
               ),
           }}
         >
-          <BatchDeleteButton count={batch.selectedCount} noun="条台账" onDelete={removeSelected} />
+          <BatchDeleteButton
+            count={batch.selectedCount}
+            noun={t("claimsPage.deleteNoun")}
+            onDelete={removeSelected}
+          />
         </BatchActionBar>
       )}
 
@@ -259,12 +293,12 @@ export default function ClaimsPage() {
         <Empty
           description={
             keyword || category || status
-              ? "没有符合条件的条目"
-              : "事实台账还是空的。可以先「从资料生成」一批草稿，或者手工新建一条。"
+              ? t("claimsPage.empty.filtered")
+              : t("claimsPage.empty.initial")
           }
         >
           <Button type="primary" onClick={() => setDraftOpen(true)}>
-            从资料生成
+            {t("claimsPage.action.fromProfile")}
           </Button>
         </Empty>
       )}
@@ -280,7 +314,7 @@ export default function ClaimsPage() {
                 : [
                     {
                       key: "batch_select",
-                      label: "批量选择",
+                      label: t("common.action.batchSelect"),
                       icon: <CheckSquareOutlined />,
                       onClick: batch.enterSelecting,
                     },
@@ -310,7 +344,7 @@ export default function ClaimsPage() {
           onChange={setPage}
           hideOnSinglePage
           showSizeChanger={false}
-          showTotal={(count) => `共 ${count} 条`}
+          showTotal={(count) => t("claimsPage.pagination.total", { count })}
         />
       </div>
 

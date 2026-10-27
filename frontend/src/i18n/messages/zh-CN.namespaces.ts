@@ -70,6 +70,7 @@ import jobTable from "./zh-CN.jobTable";
 import jobAnalysis from "./zh-CN.jobAnalysis";
 import templateImport from "./zh-CN.templateImport";
 import webFormRecords from "./zh-CN.webFormRecords";
+import claimsPage from "./zh-CN.claimsPage";
 
 const namespaces = {
   /** 简历制作台（2026-10-23）。 */
@@ -173,6 +174,8 @@ const namespaces = {
   ...templateImport,
   /** 网申填充记录面板（2026-10-27）。 */
   ...webFormRecords,
+  /** 事实台账页（2026-10-27）。 */
+  ...claimsPage,
 } as const;
 
 export default namespaces;
