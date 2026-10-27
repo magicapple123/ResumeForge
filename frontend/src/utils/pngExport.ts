@@ -6,6 +6,7 @@
  * 失败"；打包失败则说明是 zip 环节（内存 / 浏览器），两者提示不能混。分开也方便单测：
  * 渲染那层 mock 掉 pdfjs，打包这层可以直接跑真 JSZip。
  */
+import { t, type MessageKey } from "../i18n";
 import { renderPdfToPng, type RenderedPage } from "./pdfToPng";
 
 /** 图片导出的成品：一个可直接下载的 blob + 建议文件名 + 页数。 */
@@ -20,8 +21,8 @@ export interface PngExportResult {
 /** 文件名里不能出现的字符（Windows 比 POSIX 严，按 Windows 收）。 */
 const ILLEGAL_FILENAME_CHARS = /[\\/:*?"<>|]/g;
 
-/** 兜底名：服务端没给文件名时用它。 */
-const FALLBACK_STEM = "简历";
+/** 兜底名（服务端没给文件名时用它）；文案在函数执行期取，模块作用域不求值 `t()`。 */
+const FALLBACK_STEM_KEY: MessageKey = "fileUtils.pngExport.fallbackStem";
 
 /**
  * 从导出文件名取"主名"（去掉扩展名）。
@@ -34,7 +35,7 @@ export function pdfFilenameStem(filename: string): string {
   const dot = trimmed.lastIndexOf(".");
   const stem = dot > 0 ? trimmed.slice(0, dot) : trimmed;
   const safe = stem.replace(ILLEGAL_FILENAME_CHARS, "-").trim();
-  return safe.length > 0 ? safe : FALLBACK_STEM;
+  return safe.length > 0 ? safe : t(FALLBACK_STEM_KEY);
 }
 
 /** 把渲染好的页面打成一个 zip（PNG 已压缩，用 STORE 不再做二次压缩）。 */
@@ -78,7 +79,11 @@ export async function exportPdfBlobAsPng(
  * `ErrorOptions`，只能手动挂）。
  */
 function pngConversionFailed(detail: string, cause: unknown): Error {
-  const error = new Error(`PDF 已生成，图片转换失败${detail}。需要投递时可直接改用「PDF」导出。`);
+  // 详情为空时用不带冒号的整句，避免渲染出悬空的「失败：。」。
+  const message = detail
+    ? t("fileUtils.pngExport.error.conversionFailedWithDetail", { detail })
+    : t("fileUtils.pngExport.error.conversionFailed");
+  const error = new Error(message);
   Object.assign(error, { cause });
   return error;
 }
@@ -113,7 +118,7 @@ export async function runPngExport(
     failure = err;
   }
   if (converted === null) {
-    const detail = failure instanceof Error && failure.message ? `：${failure.message}` : "";
+    const detail = failure instanceof Error && failure.message ? failure.message : "";
     throw pngConversionFailed(detail, failure);
   }
   return {
