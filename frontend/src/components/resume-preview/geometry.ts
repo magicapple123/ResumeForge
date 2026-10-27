@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
+import { t } from "../../i18n";
 import {
   A4_HEIGHT_PX,
   A4_WIDTH_PX,
@@ -97,14 +98,18 @@ export function calculatePreviewGeometry({
   const scaledHeight = contentTotalHeight * scale;
   const pagesNeeded = measure ? pagesNeededFor(measure) : overflow ? pageCount + 1 : pageCount;
   const overflowAmount = measure ? overflowHeightFor(measure) : 0;
+  // 文案在**调用期**取（t() 只能在函数体里求值）；渲染它的 `ResumePreview` 不在本批
+  // 清单内，切语言时需由宿主订阅 locale 才会重算。
   const overflowAmountText = measure
     ? (() => {
         const ratio = overflowAmount / measure.pageContentHeight;
         return ratio < 1
-          ? `正文还多出约 ${Math.max(1, Math.round(ratio * 100))}% 的一页高度。`
-          : `正文还多出约 ${ratio.toFixed(1)} 页的高度。`;
+          ? t("preview.geometry.overflowPercent", {
+              percent: Math.max(1, Math.round(ratio * 100)),
+            })
+          : t("preview.geometry.overflowPages", { pages: ratio.toFixed(1) });
       })()
-    : "暂时量不到精确的超出量。";
+    : t("preview.geometry.overflowUnknown");
 
   return {
     viewportWidth,
