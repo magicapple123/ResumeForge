@@ -2,6 +2,7 @@
 import { App } from "antd";
 import { useCallback, useEffect, useState } from "react";
 import { listSkills } from "../../api/skill";
+import { t } from "../../i18n";
 import type { AssistantSkill } from "../../types";
 
 /**
@@ -22,7 +23,9 @@ export function useSettingsSkills() {
     try {
       return await listSkills();
     } catch (err) {
-      message.error(err instanceof Error ? err.message : "加载技能失败");
+      message.error(
+        err instanceof Error ? err.message : t("featuresMisc.settingsSkills.loadFailed"),
+      );
       return null;
     }
   }, [message]);
