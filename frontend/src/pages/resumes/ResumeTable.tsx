@@ -13,7 +13,7 @@ import type { HTMLAttributes } from "react";
 import type { Dispatch, SetStateAction } from "react";
 import { RowActions, RowContextMenu, type RowActionItem } from "../../components/common/RowActions";
 import type { BatchSelection } from "../../hooks/useBatchSelection";
-import { RESUME_ENHANCEMENT_LEVELS, enhancementLevelDescription } from "../../config";
+import { RESUME_ENHANCEMENT_LEVELS, enhancementLevelDescriptionKey } from "../../config";
 import { t } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
 import type { Page, ResumeBrief } from "../../types";
@@ -333,11 +333,11 @@ export default function ResumeTable({
           <Tooltip
             title={
               record.enhancement_level
-                ? enhancementLevelDescription(record.enhancement_level, !record.job_id)
+                ? t(enhancementLevelDescriptionKey(record.enhancement_level, !record.job_id))
                 : t("resumes.list.enhancementOn")
             }
           >
-            <Tag color="green">{level?.label ?? t("resumes.list.on")}</Tag>
+            <Tag color="green">{level ? t(level.labelKey) : t("resumes.list.on")}</Tag>
           </Tooltip>
         );
       },
