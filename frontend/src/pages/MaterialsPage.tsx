@@ -46,11 +46,14 @@ import ErrorState from "../components/common/ErrorState";
 import type { Material, MaterialPayload, MaterialSummary } from "../types";
 import { canPreviewImage } from "../utils/attachments";
 import { formatDateTime } from "../utils/format";
+import { t } from "../i18n";
+import { useLocale } from "../i18n/i18nContext";
 
 /** 卡片网格 18 个一页（桌面主断点下 4 列网格，末行可留空），与后端 /materials/page 的默认口径一致。 */
 const MATERIALS_PAGE_SIZE = 18;
 
 export default function MaterialsPage() {
+  useLocale();
   const { message } = App.useApp();
   // 批量选择：勾选若干份后一次删除（软删，全部进回收站）。
   const batch = useBatchSelection<number>();
@@ -92,7 +95,7 @@ export default function MaterialsPage() {
 
   const categoryOptions = useMemo(
     () => [
-      { value: "", label: "全部分类" },
+      { value: "", label: t("materials.filter.all") },
       ...categories.map((item) => ({ value: item, label: item })),
     ],
     [categories],
@@ -103,16 +106,16 @@ export default function MaterialsPage() {
     try {
       if (editing) {
         await updateMaterial(editing.id, payload);
-        message.success("已更新这份资料");
+        message.success(t("materials.toast.updated"));
       } else {
         await createMaterial(payload);
-        message.success("已放进资料箱");
+        message.success(t("materials.toast.added"));
       }
       setFormOpen(false);
       setEditing(null);
       await load();
     } catch (error) {
-      message.error(error instanceof Error ? error.message : "保存失败");
+      message.error(error instanceof Error ? error.message : t("materials.toast.saveFailed"));
     } finally {
       setSubmitting(false);
     }
@@ -132,7 +135,7 @@ export default function MaterialsPage() {
       );
       await load();
     } catch (error) {
-      message.error(error instanceof Error ? error.message : "删除失败");
+      message.error(error instanceof Error ? error.message : t("materials.toast.deleteFailed"));
     }
   };
 
@@ -142,9 +145,11 @@ export default function MaterialsPage() {
     if (ids.length === 0) return;
     try {
       const { deleted } = await batchDeleteMaterials(ids);
-      message.success(`已删除 ${deleted} 份资料，可在「回收站」里恢复`);
+      message.success(t("materials.toast.batchDeleted", { count: deleted }));
     } catch (error) {
-      message.error(error instanceof Error ? error.message : "批量删除失败，请重试");
+      message.error(
+        error instanceof Error ? error.message : t("materials.toast.batchDeleteFailed"),
+      );
     }
     batch.exitSelecting();
     await load();
@@ -160,7 +165,7 @@ export default function MaterialsPage() {
     try {
       setDetail(await getMaterial(summary.id));
     } catch (error) {
-      message.error(error instanceof Error ? error.message : "加载资料详情失败");
+      message.error(error instanceof Error ? error.message : t("materials.toast.detailFailed"));
     }
   };
 
@@ -169,17 +174,22 @@ export default function MaterialsPage() {
       setEditing(await getMaterial(summary.id));
       setFormOpen(true);
     } catch (error) {
-      message.error(error instanceof Error ? error.message : "加载资料失败");
+      message.error(error instanceof Error ? error.message : t("materials.toast.loadFailed"));
     }
   };
 
   // 右键菜单：批量选择（顶部入口）+ 编辑 + 单条删除；多选模式下收起。
   const actionsFor = (summary: MaterialSummary) => {
     const items = [
-      { key: "edit", label: "编辑", icon: <EditOutlined />, onClick: () => void openEdit(summary) },
+      {
+        key: "edit",
+        label: t("materials.action.edit"),
+        icon: <EditOutlined />,
+        onClick: () => void openEdit(summary),
+      },
       {
         key: "delete",
-        label: "删除",
+        label: t("materials.action.delete"),
         danger: true,
         icon: <DeleteOutlined />,
         // 软删由本页的 useDeleteUndo 兜：这里不再问，撤销入口在 Toast 上。
@@ -192,7 +202,7 @@ export default function MaterialsPage() {
       : [
           {
             key: "batch_select",
-            label: "批量选择",
+            label: t("materials.selectMode"),
             icon: <CheckSquareOutlined />,
             onClick: batch.enterSelecting,
           },
@@ -205,15 +215,15 @@ export default function MaterialsPage() {
       <div className="materials-page-header">
         <div>
           <Typography.Title level={3} style={{ margin: 0 }}>
-            资料箱
+            {t("materials.page.title")}
           </Typography.Title>
           <Typography.Text type="secondary">
-            这里放与找工作、面试相关的资料：证书、作品、面经、公司信息、面试复盘、实习材料、链接与笔记。
-            助手可以读它们、帮你归类整理、总结某一条，或把某条内容整理进个人资料。
+            {t("materials.page.subtitle1")}
+            {t("materials.page.subtitle2")}
           </Typography.Text>
         </div>
         <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
-          放入资料
+          {t("materials.action.create")}
         </Button>
       </div>
 
@@ -222,8 +232,8 @@ export default function MaterialsPage() {
         value={view}
         onChange={(value) => setView(String(value))}
         options={[
-          { label: "资料", value: "materials" },
-          { label: "我的文件", value: "files" },
+          { label: t("materials.tab.materials"), value: "materials" },
+          { label: t("materials.tab.files"), value: "files" },
         ]}
       />
 
@@ -234,12 +244,12 @@ export default function MaterialsPage() {
           <Space wrap className="rf-filter-bar">
             <Input.Search
               allowClear
-              placeholder="搜索标题、正文或备注"
+              placeholder={t("materials.search.placeholder")}
               style={{ width: 260 }}
               onSearch={setKeyword}
             />
             <Select
-              aria-label="资料分类筛选"
+              aria-label={t("materials.filters.aria")}
               value={category}
               options={categoryOptions}
               style={{ width: 160 }}
@@ -264,7 +274,7 @@ export default function MaterialsPage() {
             >
               <BatchDeleteButton
                 count={batch.selectedCount}
-                noun="份资料"
+                noun={t("materials.noun")}
                 onDelete={removeSelected}
               />
             </BatchActionBar>
@@ -273,14 +283,21 @@ export default function MaterialsPage() {
           {loading ? (
             <LoadingBlock />
           ) : error ? (
-            <ErrorState description={`资料箱加载失败：${error}`} onRetry={() => void load()} />
+            <ErrorState
+              description={t("materials.error.loadFailed", { error })}
+              onRetry={() => void load()}
+            />
           ) : materials.length === 0 ? (
             // total=0 时区分「库里真没东西」和「筛选后没结果」：库空时把主按钮内嵌进空态
             // （不再用「点右上角」这种方位词指路——位置会随响应式变），筛选后为空只提示调整条件。
             total === 0 && !keyword && !category ? (
-              <EmptyState description="还没有资料" actionLabel="放入资料" onAction={openCreate} />
+              <EmptyState
+                description={t("materials.empty.none")}
+                actionLabel={t("materials.action.create")}
+                onAction={openCreate}
+              />
             ) : (
-              <EmptyState description="没有符合筛选条件的资料" />
+              <EmptyState description={t("materials.empty.filtered")} />
             )
           ) : (
             <>
@@ -290,14 +307,18 @@ export default function MaterialsPage() {
                   <RowContextMenu key={material.id} items={actionsFor(material)}>
                     <div>
                       <DetailTrigger
-                        label={`打开资料「${material.title || material.category}」的详情`}
+                        label={t("materials.aria.open", {
+                          title: material.title || material.category,
+                        })}
                         onOpen={() => void openDetail(material)}
                       >
                         <Card size="small" className="material-card">
                           <div className="material-card-head">
                             {batch.selecting && (
                               <Checkbox
-                                aria-label={`选择资料 ${material.title || material.category}`}
+                                aria-label={t("materials.aria.select", {
+                                  title: material.title || material.category,
+                                })}
                                 checked={batch.isSelected(material.id)}
                                 onClick={(event) => event.stopPropagation()}
                                 onChange={() => batch.toggle(material.id)}
@@ -307,7 +328,7 @@ export default function MaterialsPage() {
                             <RowActions more={actionsFor(material)} disabled={batch.selecting} />
                           </div>
                           <Typography.Title level={5} ellipsis={{ tooltip: material.title }}>
-                            {material.title || "（未命名资料）"}
+                            {material.title || t("materials.untitled")}
                           </Typography.Title>
                           {material.content && (
                             <Typography.Paragraph
@@ -321,7 +342,8 @@ export default function MaterialsPage() {
                           <div className="material-card-meta">
                             {material.files.length > 0 && (
                               <Typography.Text type="secondary">
-                                <PaperClipOutlined /> {material.files.length} 个附件
+                                <PaperClipOutlined />{" "}
+                                {t("materials.attachments", { count: material.files.length })}
                               </Typography.Text>
                             )}
                             {material.url && (
@@ -330,7 +352,7 @@ export default function MaterialsPage() {
                                 target="_blank"
                                 rel="noopener noreferrer"
                               >
-                                <LinkOutlined /> 链接
+                                <LinkOutlined /> {t("materials.link")}
                               </Typography.Link>
                             )}
                             <Typography.Text type="secondary">
@@ -351,7 +373,7 @@ export default function MaterialsPage() {
                   onChange={setPage}
                   hideOnSinglePage
                   showSizeChanger={false}
-                  showTotal={(count) => `共 ${count} 条`}
+                  showTotal={(count) => t("materials.table.total", { count })}
                 />
               </div>
             </>
@@ -361,31 +383,46 @@ export default function MaterialsPage() {
 
       <RecordDetailDrawer
         open={detail !== null}
-        title={detail?.title || "（未命名资料）"}
+        title={detail?.title || t("materials.untitled")}
         tags={detail && <Tag color="blue">{detail.category}</Tag>}
         fields={
           detail
             ? [
-                { label: "链接", value: detail.url || "-" },
+                { label: t("materials.link"), value: detail.url || "-" },
                 {
-                  label: "附件",
-                  value: detail.files.length > 0 ? `${detail.files.length} 个` : "-",
+                  label: t("materials.detail.attachments"),
+                  value:
+                    detail.files.length > 0
+                      ? t("materials.detail.fileCount", { count: detail.files.length })
+                      : "-",
                 },
-                { label: "创建时间", value: formatDateTime(detail.created_at) },
-                { label: "更新时间", value: formatDateTime(detail.updated_at) },
+                {
+                  label: t("materials.detail.createdAt"),
+                  value: formatDateTime(detail.created_at),
+                },
+                {
+                  label: t("materials.detail.updatedAt"),
+                  value: formatDateTime(detail.updated_at),
+                },
               ]
             : []
         }
         sections={
           detail
             ? [
-                { title: "正文", content: detail.content || "（无）" },
-                { title: "备注", content: detail.note || "（无）" },
                 {
-                  title: `附件（${detail.files.length}）`,
+                  title: t("materials.detail.body"),
+                  content: detail.content || t("materials.detail.none"),
+                },
+                {
+                  title: t("materials.detail.note"),
+                  content: detail.note || t("materials.detail.none"),
+                },
+                {
+                  title: t("materials.detail.attachmentsTitle", { count: detail.files.length }),
                   content:
                     detail.files.length === 0 ? (
-                      "（无）"
+                      t("materials.detail.none")
                     ) : (
                       <div className="material-file-list">
                         {detail.files.map((file, index) => (
@@ -410,8 +447,10 @@ export default function MaterialsPage() {
                               </Typography.Text>
                               <Typography.Text type="secondary" style={{ fontSize: 12 }}>
                                 {file.data_url
-                                  ? `图片 · ${Math.round(file.size_bytes / 1024)} KB`
-                                  : `文字 ${file.text.length} 字`}
+                                  ? t("materials.file.image", {
+                                      size: Math.round(file.size_bytes / 1024),
+                                    })
+                                  : t("materials.file.text", { count: file.text.length })}
                               </Typography.Text>
                             </div>
                           </div>
@@ -434,7 +473,7 @@ export default function MaterialsPage() {
                 setDetail(null);
               }}
             >
-              编辑
+              {t("materials.action.edit")}
             </Button>
           )
         }

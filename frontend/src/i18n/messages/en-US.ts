@@ -38,6 +38,7 @@ import exportPanel from "./en-US.exportPanel";
 import resumeEditor from "./en-US.resumeEditor";
 import trash from "./en-US.trash";
 import reminder from "./en-US.reminder";
+import materials from "./en-US.materials";
 
 const enUS = {
   ...core,
@@ -77,6 +78,7 @@ const enUS = {
   ...resumeEditor,
   ...trash,
   ...reminder,
+  ...materials,
 } as const satisfies Record<keyof ZhCNMessages, string>;
 
 export default enUS;
