@@ -8,6 +8,8 @@ import {
 } from "@ant-design/icons";
 import { Descriptions, Typography } from "antd";
 import type { ReactNode } from "react";
+import { t } from "../i18n";
+import { useLocale } from "../i18n/i18nContext";
 import type { Job } from "../types";
 import SkillTags from "./SkillTags";
 
@@ -55,10 +57,16 @@ function ReferenceSection({ title, icon, content, emptyText }: ReferenceSectionP
 }
 
 export default function JobRequirementPanel({ job }: Props) {
+  useLocale();
   return (
-    <aside className="job-reference-panel" aria-label={`岗位要求参考：${job.title}`}>
+    <aside
+      className="job-reference-panel"
+      aria-label={t("componentsMisc2.jobReference.ariaLabel", { title: job.title })}
+    >
       <div className="job-reference-header">
-        <Typography.Text className="job-reference-eyebrow">岗位要求参考</Typography.Text>
+        <Typography.Text className="job-reference-eyebrow">
+          {t("componentsMisc2.jobReference.eyebrow")}
+        </Typography.Text>
         <Typography.Title level={5} className="job-reference-title">
           {job.title}
         </Typography.Title>
@@ -67,23 +75,35 @@ export default function JobRequirementPanel({ job }: Props) {
 
       {(job.location || job.job_type || job.salary) && (
         <Descriptions className="job-reference-meta" size="small" column={1} colon={false}>
-          {job.location && <Descriptions.Item label="地点">{job.location}</Descriptions.Item>}
-          {job.job_type && <Descriptions.Item label="类型">{job.job_type}</Descriptions.Item>}
-          {job.salary && <Descriptions.Item label="薪资">{job.salary}</Descriptions.Item>}
+          {job.location && (
+            <Descriptions.Item label={t("componentsMisc2.jobReference.location")}>
+              {job.location}
+            </Descriptions.Item>
+          )}
+          {job.job_type && (
+            <Descriptions.Item label={t("componentsMisc2.jobReference.type")}>
+              {job.job_type}
+            </Descriptions.Item>
+          )}
+          {job.salary && (
+            <Descriptions.Item label={t("componentsMisc2.jobReference.salary")}>
+              {job.salary}
+            </Descriptions.Item>
+          )}
         </Descriptions>
       )}
 
       <ReferenceSection
-        title="岗位职责"
+        title={t("componentsMisc2.jobReference.description")}
         icon={<FileTextOutlined />}
         content={job.description}
-        emptyText="暂无岗位职责"
+        emptyText={t("componentsMisc2.jobReference.emptyDescription")}
       />
       <ReferenceSection
-        title="任职要求"
+        title={t("componentsMisc2.jobReference.requirements")}
         icon={<CheckCircleOutlined />}
         content={job.requirements}
-        emptyText="暂无任职要求"
+        emptyText={t("componentsMisc2.jobReference.emptyRequirements")}
       />
 
       <section className="job-reference-section">
@@ -91,20 +111,22 @@ export default function JobRequirementPanel({ job }: Props) {
           <span className="job-reference-section-icon" aria-hidden="true">
             <TagsOutlined />
           </span>
-          <Typography.Text strong>技能标签</Typography.Text>
+          <Typography.Text strong>{t("componentsMisc2.jobReference.skills")}</Typography.Text>
         </div>
         {job.keywords.length > 0 ? (
           <SkillTags tags={job.keywords} max={20} />
         ) : (
-          <Typography.Text type="secondary">暂无技能标签</Typography.Text>
+          <Typography.Text type="secondary">
+            {t("componentsMisc2.jobReference.emptySkills")}
+          </Typography.Text>
         )}
       </section>
 
       <ReferenceSection
-        title="其他信息"
+        title={t("componentsMisc2.jobReference.other")}
         icon={<InfoCircleOutlined />}
         content={job.additional_info ?? ""}
-        emptyText="暂无其他信息"
+        emptyText={t("componentsMisc2.jobReference.emptyOther")}
       />
     </aside>
   );
