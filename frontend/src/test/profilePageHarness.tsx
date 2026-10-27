@@ -22,6 +22,7 @@ import {
 } from "../features/tou-tou/profileSaveBridge";
 import type { Profile } from "../types";
 import ProfilePage from "../pages/ProfilePage";
+import { t } from "../i18n";
 
 /** ProfilePage 测试文件里 `vi.hoisted` 创建的那组 API mock 的形状。 */
 export interface ProfileApiMocks {
@@ -91,7 +92,9 @@ export async function openWebFormTab() {
   fireEvent.click(tab);
   await waitFor(() => {
     const panel = screen.getByRole("tabpanel");
-    expect(within(panel).getByText("这一区只给「网申填表」用，不会进入简历")).toBeInTheDocument();
+    expect(
+      within(panel).getAllByText(t("profileLibrary.webform.sectionAlertTitle")).length,
+    ).toBeGreaterThan(0);
   });
 }
 

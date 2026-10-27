@@ -16,6 +16,7 @@ import {
   renderProfilePage,
   resetProfileApiMocks,
 } from "../test/profilePageHarness";
+import { t } from "../i18n";
 
 const apiMocks = vi.hoisted(() => ({
   getProfile: vi.fn(),
@@ -201,7 +202,8 @@ function educationWorkspace() {
 /** 「网申资料」面板（antd Tabs 的两个 panel 都常驻，按说明文案定位）。 */
 function webformPanel(): HTMLElement {
   const panel = screen
-    .getByText("这一区只给「网申填表」用，不会进入简历")
+    // 同一句文案在 Card 的 Tag 与 Alert 标题各渲染一次，用 getAllByText 取第一个。
+    .getAllByText(t("profileLibrary.webform.sectionAlertTitle"))[0]
     .closest('[role="tabpanel"]');
   if (!panel) throw new Error("网申资料面板未找到");
   return panel as HTMLElement;
@@ -229,7 +231,9 @@ describe("ProfilePage 资料分页", () => {
     expect(screen.getByRole("tab", { name: "网申资料" })).toHaveAttribute("aria-selected", "false");
 
     fireEvent.click(screen.getByRole("tab", { name: "网申资料" }));
-    expect(await screen.findByText("这一区只给「网申填表」用，不会进入简历")).toBeInTheDocument();
+    expect(
+      (await screen.findAllByText(t("profileLibrary.webform.sectionAlertTitle"))).length,
+    ).toBeGreaterThan(0);
     expect(within(webformPanel()).queryByLabelText("简历名称")).not.toBeInTheDocument();
     // 网申分页下页头不显示简历资料的「全部收起/展开」。
     expect(screen.queryByRole("button", { name: /全部收起/ })).not.toBeInTheDocument();
@@ -418,7 +422,9 @@ describe("ProfilePage 悬浮球「去改资料」提示卡", () => {
     // 之后页面再重渲（例如切分页）也不该把它加回来。
     fireEvent.click(await screen.findByRole("tab", { name: "网申资料" }));
     await waitFor(() =>
-      expect(screen.getByText("这一区只给「网申填表」用，不会进入简历")).toBeInTheDocument(),
+      expect(
+        screen.getAllByText(t("profileLibrary.webform.sectionAlertTitle")).length,
+      ).toBeGreaterThan(0),
     );
     expect(getProfileEditControl()).toBeNull();
   });

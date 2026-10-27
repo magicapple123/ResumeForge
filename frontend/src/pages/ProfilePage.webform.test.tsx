@@ -23,6 +23,7 @@ import {
   renderProfilePage,
   resetProfileApiMocks,
 } from "../test/profilePageHarness";
+import { t } from "../i18n";
 
 const apiMocks = vi.hoisted(() => ({
   getProfile: vi.fn(),
@@ -139,7 +140,9 @@ describe("ProfilePage 「网申资料」", () => {
     renderProfilePage();
 
     await openWebFormTab();
-    expect(screen.getByText("这一区只给「网申填表」用，不会进入简历")).toBeInTheDocument();
+    expect(
+      screen.getAllByText(t("profileLibrary.webform.sectionAlertTitle")).length,
+    ).toBeGreaterThan(0);
   });
   it("查看态只显示已填的项，不铺一屏空标签", async () => {
     apiMocks.getWebFormExtraProfile.mockResolvedValue({
