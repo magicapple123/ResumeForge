@@ -18,6 +18,8 @@ import { useNavigate } from "react-router-dom";
 import { createManualResume } from "../api/resumes";
 import { importDataset } from "../api/settings";
 import { describeImportIssues } from "../features/settings/datasetImportFeedback";
+import { t } from "../i18n";
+import { useLocale } from "../i18n/i18nContext";
 import { getSnapshot } from "../i18n/localeStore";
 
 const ACCEPTED = [".zip", ".csv", ".json"] as const;
@@ -29,7 +31,9 @@ function extensionOf(name: string): string {
 
 function stemOf(name: string): string {
   const index = name.lastIndexOf(".");
-  return (index < 0 ? name : name.slice(0, index)).trim() || "导入的简历";
+  return (
+    (index < 0 ? name : name.slice(0, index)).trim() || t("globalFileDrop.resume.defaultTitle")
+  );
 }
 
 function hasFiles(event: DragEvent): boolean {
@@ -37,6 +41,7 @@ function hasFiles(event: DragEvent): boolean {
 }
 
 export default function GlobalFileDrop() {
+  useLocale();
   const { message, modal } = App.useApp();
   const navigate = useNavigate();
   const [dragging, setDragging] = useState(false);
@@ -46,13 +51,13 @@ export default function GlobalFileDrop() {
   const importZip = useCallback(
     (file: File) => {
       modal.confirm({
-        title: "导入备份包为新数据集？",
-        content: `${file.name} 会新增一份数据集，当前正在使用的数据不受影响；导入后可以随时切换过去。`,
-        okText: "导入",
-        cancelText: "取消",
+        title: t("globalFileDrop.zipImport.title"),
+        content: t("globalFileDrop.zipImport.content", { name: file.name }),
+        okText: t("globalFileDrop.zipImport.confirm"),
+        cancelText: t("common.action.cancel"),
         onOk: async () => {
           const created = await importDataset(file, stemOf(file.name), false);
-          message.success(`已导入数据集「${created.name}」`);
+          message.success(t("globalFileDrop.zipImport.success", { name: created.name }));
           // 整包可能只恢复了一部分：没进来的那几份要点名，不能只报成功。
           const trouble = describeImportIssues(created.failed, created.skipped);
           if (trouble) message.warning(trouble);
@@ -67,21 +72,21 @@ export default function GlobalFileDrop() {
   const importJson = useCallback(
     (file: File) => {
       modal.confirm({
-        title: "从 JSON 新建一份简历？",
-        content: `${file.name} 会作为一份新的手写简历保存，正文按文件里的内容填写。`,
-        okText: "新建简历",
-        cancelText: "取消",
+        title: t("globalFileDrop.jsonImport.title"),
+        content: t("globalFileDrop.jsonImport.content", { name: file.name }),
+        okText: t("globalFileDrop.jsonImport.confirm"),
+        cancelText: t("common.action.cancel"),
         onOk: async () => {
           const text = await file.text();
           let parsed: unknown;
           try {
             parsed = JSON.parse(text);
           } catch {
-            message.error("这个 JSON 解析失败，请确认文件没有损坏");
+            message.error(t("globalFileDrop.jsonImport.parseError"));
             return;
           }
           if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-            message.error("JSON 里必须是一个简历对象（包含姓名、经历等字段）");
+            message.error(t("globalFileDrop.jsonImport.shapeError"));
             return;
           }
           const created = await createManualResume({
@@ -89,7 +94,7 @@ export default function GlobalFileDrop() {
             content: parsed as never,
             language: getSnapshot().locale,
           });
-          message.success(`已新建简历「${created.title}」`);
+          message.success(t("globalFileDrop.jsonImport.success", { name: created.title }));
           navigate("/resumes");
         },
       });
@@ -101,7 +106,7 @@ export default function GlobalFileDrop() {
     (files: File[]) => {
       if (files.length === 0) return;
       if (files.length > 1) {
-        message.info("一次拖入一个文件；岗位 CSV 支持多选，请到岗位页使用「导入 CSV」");
+        message.info(t("globalFileDrop.fileInfo.multiple"));
         return;
       }
       const file = files[0];
@@ -116,17 +121,18 @@ export default function GlobalFileDrop() {
       }
       if (extension === ".csv") {
         modal.info({
-          title: "CSV 请从岗位页导入",
-          content:
-            "岗位页的「导入 CSV」支持一次选多个文件、也支持直接粘贴表格内容，并能逐行预览会导入什么。",
-          okText: "去岗位页",
+          title: t("globalFileDrop.csvImport.title"),
+          content: t("globalFileDrop.csvImport.content"),
+          okText: t("globalFileDrop.csvImport.confirm"),
           onOk: () => navigate("/jobs"),
         });
         return;
       }
       message.warning(
-        `不支持的文件类型「${extension || file.name}」：可以拖入 ${ACCEPTED.join(" / ")}` +
-          "（.zip 数据集备份、.csv 岗位表格、.json 简历内容）",
+        t("globalFileDrop.fileInfo.unsupported", {
+          extension: extension || file.name,
+          formats: ACCEPTED.join(" / "),
+        }),
       );
     },
     [importJson, importZip, message, modal, navigate],
@@ -175,10 +181,8 @@ export default function GlobalFileDrop() {
   return (
     <div className="global-file-drop" role="presentation" aria-hidden="true">
       <div className="global-file-drop-inner">
-        <div className="global-file-drop-title">松开即可导入</div>
-        <div className="global-file-drop-hint">
-          支持 .zip 数据集备份、.csv 岗位表格、.json 简历内容
-        </div>
+        <div className="global-file-drop-title">{t("globalFileDrop.dragOverlay.title")}</div>
+        <div className="global-file-drop-hint">{t("globalFileDrop.dragOverlay.hint")}</div>
       </div>
     </div>
   );
