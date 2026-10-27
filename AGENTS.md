@@ -304,6 +304,19 @@ Windows 侧对应的是 `windows-end-to-end`（从干净检出走完整启动链
 
 改任何用户可见文案（按钮、标题、提示、空态、占位符、表头、Tooltip、`aria-label`）之前，先在 `docs/ui-copy-guide.md` 里找到它属于哪个实体、哪个动作、哪个位置。**三问都落不到某一行，说明规范有缺口，补规范，不要各自发挥。**
 
+### 界面已双语化（2026-10-27 起，**动手改文案前先看这一节**）
+
+前端已按领域把中文迁进语言包（`frontend/src/i18n/messages/`），迁过的领域**界面文案不在组件里，在语言包里**。改之前先确认目标文件属于哪一档：
+
+1. **已迁移文件（基线里是 0）**：改文案 = 改 `zh-CN.<命名空间>.ts` 与 `en-US.<命名空间>.ts`，两边成对改，`{name}` 占位符必须一致。在组件里改中文字面量**不会生效，还会红**。
+2. **`// i18n-ok:` 只用于「这段中文永远不该翻」**：协议值（提交给后端的枚举、`value` 字段）、`includes("中文")` 匹配后端文案、喂给模型的 prompt。**新功能的中文不属于这三类**，别拿豁免绕过棘轮——那是把上限一点点放松。
+3. **用了 `t()` 的组件必须有 `useLocale()`**（`i18n/localeSubscription.test.ts` 会扫）。漏了不会报错，只会让用户切语言后停在旧文案。
+4. **禁止在模块作用域求值 `t()`**：模块级常量表存 `labelKey: MessageKey`，渲染处再 `t()`；`useMemo` 里调 `t()` 必须把 locale 放进依赖，否则切语言不更新（这条没有守卫，靠评审）。
+5. **`types/*.ts` 里的中文枚举是协议值，永远不翻**。要显示名就在页面里建 `Record<协议值, MessageKey>` 映射，别改类型层。
+6. 新命名空间要在 `zh-CN.namespaces.ts` 与 `en-US.ts` 各登记一次（import + spread）。
+
+判断口诀：**这段话是给人看的，还是给后端/模型/对比逻辑看的？** 给人看的 → 语言包；其余 → 原样保留并写清理由。
+
 ### 十条硬约束（违反即返工）
 
 1. **一词一义**：只用术语表的正名。最容易混的是四层——**模板**（外观骨架）/ **版式**（参数预设）/ **排版参数**（字号行距页边距）/ **版面**（排出来的效果）/ 统称 **排版设置**。禁用「样式」「样式模板」「格式模板」「版式模板」「新版式」。
@@ -321,8 +334,9 @@ Windows 侧对应的是 `windows-end-to-end`（从干净检出走完整启动链
 
 1. 改实现 → 2. 跑相关 `.test.tsx` 拿失败清单 → 3. 逐条改断言 → 4. **每次 Edit 后 `grep` 复查被改处**（本项目出过三次"改一处吞掉邻行"）→ 5. 全量 `npm test`。
 
-**界面文案改了，必须同一提交改四处**，否则"文档与界面互相矛盾"本身就是 P1：
+**界面文案改了，必须同一提交改五处**，否则"文档与界面互相矛盾"本身就是 P1：
 
+- `frontend/src/i18n/messages/zh-CN.<命名空间>.ts`（+ 对应的 `en-US.*`）——**文案本体在这里**，已迁移领域尤其注意
 - `frontend/src/components/userGuideSteps.ts`（就地改那一步的措辞，**不要为新功能随手加一步**）
 - `docs/user-guide.md`（对应章节 + 常见问题排查）
 - `README.md`（功能表受影响时；注意 `## ✨ 功能特性` 的行数守卫）
@@ -330,7 +344,7 @@ Windows 侧对应的是 `windows-end-to-end`（从干净检出走完整启动链
 
 ### 守卫（不许豁免、不许调阈值）
 
-- `frontend/src/i18n/cjkRatchet.test.ts`：存量中文只降不升（基线在 `i18nBaseline.json`）。新增硬编码中文走 `// i18n-ok: 理由`。
+- `frontend/src/i18n/cjkRatchet.test.ts`：存量中文只降不升（基线在 `i18nBaseline.json`）。**已迁移领域的新文案走语言包**（见本节「界面已双语化」）；只有「永远不该翻」的三类才用 `// i18n-ok: 理由`。
 - `frontend/src/components/userGuideCopyRef.test.ts`（本轮新增，与 `userGuideSteps.ts` 同目录）：把 `userGuideSteps.ts` 里每个「…」引号内容抽出来，断言它作为字面量存在于 `src/**/*.tsx`。只能证明"字符串出现过"，检不出动态拼接——**动态文案要么改成静态全名，要么显式豁免并写明理由**。
 - `frontend/src/theme/antdDeprecatedProp.test.ts`（本轮新增，与既有 `antdStaticGuard` / `antdOverrideGuard` 同目录）：按 `docs/ui-copy-guide.md` §4.14 的判定表扫 `Alert` / `notification` 的 `message=`。
 

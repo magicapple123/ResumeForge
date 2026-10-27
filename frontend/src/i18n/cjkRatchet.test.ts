@@ -276,7 +276,9 @@ describe("棘轮：存量中文只许下降", () => {
     const problems = diffAgainstBaseline(current, baseline.src);
     expect(
       problems,
-      "Legacy CJK budgets can only decrease. Move product copy to t(); inline markers cannot exempt AST findings." +
+      "存量中文只能下降，新增的中文界面文案要进语言包：frontend/src/i18n/messages/zh-CN.<命名空间>.ts" +
+        '（同批加 en-US.*，占位符保持一致），组件里用 t("<ns>.<key>") 取。' +
+        '只有「永远不该翻」的三类才用 // i18n-ok: 理由 —— 协议值、includes("中文") 匹配后端文案、喂给模型的 prompt。' +
         `（当前 ${current.total} / 基线 ${baseline.src.total}）`,
     ).toEqual([]);
   });
