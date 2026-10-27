@@ -4,6 +4,8 @@
 import { DeleteOutlined, CloseOutlined } from "@ant-design/icons";
 import { App, Button, Space, Typography } from "antd";
 import { HARD_DELETE_NOTE } from "../../../components/common/rowActionMenu";
+import { t } from "../../../i18n";
+import { useLocale } from "../../../i18n/i18nContext";
 
 interface Props {
   disabled: boolean;
@@ -13,10 +15,13 @@ interface Props {
 }
 
 export default function AssistantSelectBar({ disabled, onDelete, onExit, selectedCount }: Props) {
+  useLocale();
   const { modal } = App.useApp();
   return (
     <div className="assistant-select-bar">
-      <Typography.Text type="secondary">已选 {selectedCount} 条</Typography.Text>
+      <Typography.Text type="secondary">
+        {t("assistantUi.selectBar.selected", { count: selectedCount })}
+      </Typography.Text>
       <Space size={8}>
         <Button
           danger
@@ -25,19 +30,23 @@ export default function AssistantSelectBar({ disabled, onDelete, onExit, selecte
           disabled={disabled}
           onClick={() =>
             modal.confirm({
-              title: "删除选中的消息？",
-              content: `这 ${selectedCount} 条消息${HARD_DELETE_NOTE}引用这些消息的提问仍会保留引用内容。`,
-              okText: "删除",
+              title: t("assistantUi.selectBar.confirm.title"),
+              // HARD_DELETE_NOTE 是删除后果的唯一出口；迁出语言包前先按原文拼接。
+              content: t("assistantUi.selectBar.confirm.content", {
+                count: selectedCount,
+                note: HARD_DELETE_NOTE,
+              }),
+              okText: t("common.action.delete"),
               okButtonProps: { danger: true },
-              cancelText: "取消",
+              cancelText: t("common.action.cancel"),
               onOk: onDelete,
             })
           }
         >
-          删除所选
+          {t("assistantUi.selectBar.deleteSelected")}
         </Button>
         <Button size="small" icon={<CloseOutlined />} onClick={onExit}>
-          退出多选
+          {t("assistantUi.selectBar.exit")}
         </Button>
       </Space>
     </div>
