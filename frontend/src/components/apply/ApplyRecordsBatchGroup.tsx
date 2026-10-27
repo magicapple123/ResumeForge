@@ -16,6 +16,7 @@ import { formatDateTime } from "../../utils/format";
 import { TASK_STATUS_META, type ApplyRecord, type ApplyRecordBatch } from "../../types";
 import { BATCH_ITEM_PAGE_SIZE, type BatchItemsState } from "../../types/applyBatchItems";
 import { t } from "../../i18n";
+import { TASK_STATUS_LABEL_KEYS } from "../../i18n/enum/apply";
 import { useLocale } from "../../i18n/i18nContext";
 
 interface BatchGroupProps {
@@ -74,7 +75,7 @@ export default function BatchGroup({
           <Typography.Text type="secondary">
             {formatDateTime(batch.finished_at || batch.created_at)}
           </Typography.Text>
-          <Tag color={statusMeta.color}>{statusMeta.label}</Tag>
+          <Tag color={statusMeta.color}>{t(TASK_STATUS_LABEL_KEYS[batch.status])}</Tag>
           <span className="apply-records-batch-stats">
             <Typography.Text type="secondary">
               {t("applyUi.batch.recordCount", { count: matchedCount })}
