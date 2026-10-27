@@ -10,6 +10,7 @@ import type { Knowledge, KnowledgePayload } from "../../types";
 import { KNOWLEDGE_CATEGORIES } from "../../types";
 import { t } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
+import { knowledgeCategoryLabel } from "../../i18n/enum/knowledge";
 
 interface Props {
   open: boolean;
@@ -124,7 +125,7 @@ export default function KnowledgeFormModal({
             // tags 模式的取值是数组，这里始终只放一项，对外仍当单个字符串用。
             value={category ? [category] : []}
             showSearch
-            options={options.map((item) => ({ value: item, label: item }))}
+            options={options.map((item) => ({ value: item, label: knowledgeCategoryLabel(item) }))}
             // 允许输入新分类：固定的那几个只能算起点。
             // 不加 maxCount={1}：antd 在已选数达到 maxCount 时会把下拉里所有
             // 未选中项置灰禁用，导致编辑时改选不了其他分类；onChange 只取
