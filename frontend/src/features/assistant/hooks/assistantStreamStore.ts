@@ -17,6 +17,7 @@
 
 import type { RefObject } from "react";
 import { sendAssistantMessage } from "../../../api/assistant";
+import { t } from "../../../i18n";
 import type {
   AssistantSource,
   AssistantSourceNumber,
@@ -208,14 +209,17 @@ export async function sendAssistantStreamMessage(
     sending = false;
     patch({
       sending: false,
-      streamError: error instanceof Error ? error.message : "创建会话失败",
+      streamError:
+        error instanceof Error
+          ? error.message
+          : t("assistantHooks.stream.error.createConversation"),
     });
     options.setTouTouStatus("error");
     return;
   }
   if (!conversationId) {
     sending = false;
-    patch({ sending: false, streamError: "创建会话失败" });
+    patch({ sending: false, streamError: t("assistantHooks.stream.error.createConversation") });
     options.setTouTouStatus("error");
     return;
   }
@@ -231,7 +235,7 @@ export async function sendAssistantStreamMessage(
   const controller = new AbortController();
   abortController = controller;
   patch({
-    pendingUserText: trimmedText || "[附件]",
+    pendingUserText: trimmedText || t("assistantHooks.stream.attachmentOnly"),
     // 正在发送的这条消息还没有服务端时间戳，用它被发出的时刻顶上。
     pendingSentAt: new Date().toISOString(),
     pendingUserAttachments: optimisticAttachments,
@@ -320,7 +324,9 @@ export async function sendAssistantStreamMessage(
   } catch (error) {
     if (!controller.signal.aborted) {
       requestErrored = true;
-      patch({ streamError: error instanceof Error ? error.message : "发送消息失败" });
+      patch({
+        streamError: error instanceof Error ? error.message : t("assistantHooks.stream.error.send"),
+      });
       options.setTouTouStatus("error");
     }
   } finally {
