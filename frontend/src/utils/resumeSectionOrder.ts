@@ -7,17 +7,18 @@
  * 两侧各有测试钉住「默认顺序一致」「归一化结果完整」，这是防止漂移的方式。
  */
 
+import type { MessageKey } from "../i18n";
 import type { ResumeFormatConfig } from "../types/resumeFormat";
 
-/** 分区键 → 界面文案。与后端 SECTION_LABELS 保持逐字一致。 */
-export const RESUME_SECTION_LABELS: Record<string, string> = {
-  education: "教育经历",
-  experience: "实习/工作经历",
-  projects: "项目经历",
-  skills: "专业技能",
-  campus_experience: "校园经历",
-  awards: "荣誉奖项",
-  summary: "个人总结",
+/** 分区键 → 界面文案 key（zh 值与后端 SECTION_LABELS 逐字一致，渲染处再过 t()）。 */
+export const RESUME_SECTION_LABELS: Record<string, MessageKey> = {
+  education: "editor.section.education",
+  experience: "editor.section.experience",
+  projects: "editor.section.projects",
+  skills: "editor.section.skills",
+  campus_experience: "editor.section.campus",
+  awards: "editor.section.awards",
+  summary: "editor.field.summary",
 };
 
 /** 与后端 `resume_sections.DEFAULT_SECTION_ORDER` 逐项一致（两侧各有测试钉住）。 */
