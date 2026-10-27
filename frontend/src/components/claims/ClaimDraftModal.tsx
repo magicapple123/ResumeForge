@@ -9,8 +9,30 @@ import { App, Button, Checkbox, Input, Modal, Select, Space, Typography } from "
 import EmptyState from "../common/EmptyState";
 import { useState } from "react";
 import { createClaim, draftClaims } from "../../api/claims";
-import type { Claim, ClaimDraftPayload, ClaimPayload } from "../../types";
+import { t } from "../../i18n";
+import type { MessageKey } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
+import type { Claim, ClaimCategory, ClaimDraftPayload, ClaimPayload } from "../../types";
 import { CLAIM_CATEGORIES } from "../../types";
+
+/**
+ * 分类下拉的显示名：**键是协议值**（提交后端并参与校验），值指向语言包 key。
+ *
+ * 模块作用域不能调 `t()`（语言会被钉死），所以这里只存 key，渲染处统一
+ * `t(CATEGORY_LABEL_KEYS[value])`。
+ *
+ * i18n-ok: 下面的中文是协议值（`types/claim.ts` 的中文枚举，直接提交后端并参与校验），
+ * 翻译会写坏数据；显示名已经在语言包里。
+ */
+const CATEGORY_LABEL_KEYS: Record<ClaimCategory, MessageKey> = {
+  教育经历: "claimDraftModal.category.education",
+  "实习/工作": "claimDraftModal.category.internship",
+  项目经历: "claimDraftModal.category.project",
+  校园经历: "claimDraftModal.category.campus",
+  专业技能: "claimDraftModal.category.skills",
+  荣誉奖项: "claimDraftModal.category.awards",
+  其他: "claimDraftModal.category.other",
+};
 
 /**
  * 一行草稿。可提交的内容单独放在 `payload` 里，而不是把 UI 状态（勾选、行号）混进
@@ -29,8 +51,11 @@ interface Props {
 }
 
 export default function ClaimDraftModal({ open, onClose, onSaved }: Props) {
+  // 本组件用模块级 t()：必须订阅语言变化，否则切语言后弹窗文案不重渲染。
+  useLocale();
   const { message } = App.useApp();
   const [rawText, setRawText] = useState("");
+  // i18n-ok: 分类兜底值是提交后端的协议值
   const [category, setCategory] = useState<ClaimDraftPayload["category"]>("项目经历");
   const [subject, setSubject] = useState("");
   const [rows, setRows] = useState<DraftRow[]>([]);
@@ -44,7 +69,7 @@ export default function ClaimDraftModal({ open, onClose, onSaved }: Props) {
 
   const generate = async () => {
     if (!rawText.trim()) {
-      message.warning("请先粘贴要整理的资料");
+      message.warning(t("claimDraftModal.toast.pasteFirst"));
       return;
     }
     setBusy(true);
@@ -52,9 +77,11 @@ export default function ClaimDraftModal({ open, onClose, onSaved }: Props) {
       const result = await draftClaims({ category, subject, raw_text: rawText });
       setRows(result.drafts.map((payload, index) => ({ key: index, checked: true, payload })));
       setNotes(result.notes);
-      if (result.drafts.length === 0) message.info("这段资料里没有提取出可核对的主张");
+      if (result.drafts.length === 0) message.info(t("claimDraftModal.toast.noDrafts"));
     } catch (error) {
-      message.error(error instanceof Error ? error.message : "生成草稿失败");
+      message.error(
+        error instanceof Error ? error.message : t("claimDraftModal.error.generateFailed"),
+      );
     } finally {
       setBusy(false);
     }
@@ -77,7 +104,7 @@ export default function ClaimDraftModal({ open, onClose, onSaved }: Props) {
   const save = async () => {
     const picked = rows.filter((row) => row.checked);
     if (picked.length === 0) {
-      message.warning("请至少勾选一条");
+      message.warning(t("claimDraftModal.toast.pickAtLeastOne"));
       return;
     }
     setBusy(true);
@@ -86,13 +113,13 @@ export default function ClaimDraftModal({ open, onClose, onSaved }: Props) {
       for (const row of picked) {
         saved.push(await createClaim(row.payload));
       }
-      message.success(`已加入事实台账 ${saved.length} 条，状态都是「待确认」`);
+      message.success(t("claimDraftModal.toast.saved", { count: saved.length }));
       onSaved(saved);
       reset();
       onClose();
     } catch (error) {
       // 中途失败时已保存的条目仍然有效，如实说清数量，不要假装整批成功或整批失败。
-      message.error(error instanceof Error ? error.message : "保存失败");
+      message.error(error instanceof Error ? error.message : t("claimDraftModal.error.saveFailed"));
     } finally {
       setBusy(false);
     }
@@ -101,7 +128,7 @@ export default function ClaimDraftModal({ open, onClose, onSaved }: Props) {
   return (
     <Modal
       open={open}
-      title="从资料生成事实台账草稿"
+      title={t("claimDraftModal.title")}
       width={760}
       onCancel={() => {
         reset();
@@ -119,31 +146,34 @@ export default function ClaimDraftModal({ open, onClose, onSaved }: Props) {
               onClose();
             }}
           >
-            取消
+            {t("common.action.cancel")}
           </Button>
           {rows.length > 0 && (
             <Button type="primary" loading={busy} onClick={() => void save()}>
-              保存勾选的 {rows.filter((row) => row.checked).length} 条
+              {t("claimDraftModal.action.saveSelected", {
+                count: rows.filter((row) => row.checked).length,
+              })}
             </Button>
           )}
         </Space>
       }
     >
       <Space orientation="vertical" size={12} style={{ width: "100%" }}>
-        <Typography.Text type="secondary">
-          粘贴一段经历、项目说明或获奖情况。提取出来的条目一律是「待确认」，请逐条核对后再标为已确认。
-        </Typography.Text>
+        <Typography.Text type="secondary">{t("claimDraftModal.intro")}</Typography.Text>
         <Space size={12}>
           <Select
             value={category}
             onChange={setCategory}
             style={{ width: 160 }}
-            options={CLAIM_CATEGORIES.map((value) => ({ value, label: value }))}
+            options={CLAIM_CATEGORIES.map((value) => ({
+              value,
+              label: t(CATEGORY_LABEL_KEYS[value]),
+            }))}
           />
           <Input
             value={subject}
             onChange={(event) => setSubject(event.target.value)}
-            placeholder="主体（可留空，例如项目名）"
+            placeholder={t("claimDraftModal.placeholder.subject")}
             style={{ width: 260 }}
           />
         </Space>
@@ -151,10 +181,10 @@ export default function ClaimDraftModal({ open, onClose, onSaved }: Props) {
           rows={6}
           value={rawText}
           onChange={(event) => setRawText(event.target.value)}
-          placeholder="把资料原文贴在这里，越具体越好；没写到的东西不会被补出来。"
+          placeholder={t("claimDraftModal.placeholder.rawText")}
         />
         <Button type="primary" loading={busy} onClick={() => void generate()}>
-          生成草稿
+          {t("claimDraftModal.action.generate")}
         </Button>
 
         {notes.map((note) => (
@@ -164,7 +194,7 @@ export default function ClaimDraftModal({ open, onClose, onSaved }: Props) {
         ))}
 
         {rows.length === 0 ? (
-          <EmptyState inline description="还没有草稿" />
+          <EmptyState inline description={t("claimDraftModal.empty.noDrafts")} />
         ) : (
           <div className="claim-draft-list">
             {rows.map((row) => (
@@ -177,20 +207,20 @@ export default function ClaimDraftModal({ open, onClose, onSaved }: Props) {
                   <Input
                     value={row.payload.title}
                     onChange={(event) => update(row.key, { title: event.target.value })}
-                    placeholder="标题"
+                    placeholder={t("claimDraftModal.placeholder.title")}
                     maxLength={200}
                   />
                   <Input.TextArea
                     rows={2}
                     value={row.payload.source_fact}
                     onChange={(event) => update(row.key, { source_fact: event.target.value })}
-                    placeholder="原始事实"
+                    placeholder={t("claimDraftModal.placeholder.sourceFact")}
                   />
                   <Input.TextArea
                     rows={2}
                     value={row.payload.candidate_wording}
                     onChange={(event) => update(row.key, { candidate_wording: event.target.value })}
-                    placeholder="简历表述（未核实的内容请保留【待补】标记）"
+                    placeholder={t("claimDraftModal.placeholder.candidateWording")}
                   />
                 </div>
               </div>
