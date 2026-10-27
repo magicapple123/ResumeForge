@@ -35,50 +35,30 @@ import { useApi } from "../../hooks/useApi";
 import { TRASH_RECOVERY_NOTE } from "../common/rowActionMenu";
 import { useBatchSelection } from "../../hooks/useBatchSelection";
 import type { WebFormFillRecord, WebFormRecordItem, WebFormRecordSummary } from "../../types";
+import { t } from "../../i18n";
+import type { MessageKey } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 
 /** 每页条数：与迁移前「最近 20 条」的口径一致（迁移后翻页可达全部历史记录）。 */
 const RECORD_PAGE_SIZE = 20;
 
-/** 记录里那条明细的状态 → 中文与颜色（与填充结果用的是同一套取值）。 */
-const ITEM_STATUS_META: Record<string, { color: string; label: string }> = {
-  filled: { color: "success", label: "已填入" },
-  unverified: { color: "warning", label: "待核对" },
-  failed: { color: "error", label: "失败" },
-  skipped: { color: "default", label: "已跳过" },
-  conflict: { color: "error", label: "冲突" },
+/**
+ * 记录里那条明细的状态 → 显示名（labelKey）与颜色（与填充结果用的是同一套取值）。
+ *
+ * 状态键是协议值（与填充结果同源），只有显示名走 `labelKey`：模块作用域不能调 `t()`，
+ * 否则切语言不重渲染。
+ */
+const ITEM_STATUS_META: Record<string, { color: string; labelKey: MessageKey }> = {
+  filled: { color: "success", labelKey: "webFormRecords.status.filled" },
+  unverified: { color: "warning", labelKey: "webFormRecords.status.unverified" },
+  failed: { color: "error", labelKey: "webFormRecords.status.failed" },
+  skipped: { color: "default", labelKey: "webFormRecords.status.skipped" },
+  conflict: { color: "error", labelKey: "webFormRecords.status.conflict" },
 };
 
 function shortTime(value: string): string {
   return (value || "").replace("T", " ").slice(0, 16);
 }
-
-const itemColumns: TableColumnsType<WebFormRecordItem> = [
-  {
-    title: "字段",
-    key: "field",
-    width: 150,
-    render: (_, item) => item.field_label || item.control_label || "—",
-  },
-  { title: "填入的值", dataIndex: "value", key: "value", ellipsis: true },
-  {
-    title: "结果",
-    key: "status",
-    width: 200,
-    render: (_, item) => {
-      const meta = ITEM_STATUS_META[item.status] ?? { color: "default", label: item.status };
-      return (
-        <Space orientation="vertical" size={0}>
-          <Tag color={meta.color}>{meta.label}</Tag>
-          {item.detail ? (
-            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-              {item.detail}
-            </Typography.Text>
-          ) : null}
-        </Space>
-      );
-    },
-  },
-];
 
 interface Props {
   /** 外部触发刷新（填充完成后调用，让新记录立刻出现）。 */
@@ -86,6 +66,8 @@ interface Props {
 }
 
 export default function WebFormRecordsPanel({ refreshKey = 0 }: Props) {
+  // 本组件用模块级 t()：必须订阅语言变化，否则切语言后这一块不重渲染。
+  useLocale();
   const { message, modal } = App.useApp();
   // 服务端分页（RF-08）：页码/总数来自分页端点；列表行是摘要（无填写值与页面快照），
   // 展开某条时再取详情（getWebFormRecord），不让真实填写值随列表整体下发。
@@ -154,15 +136,24 @@ export default function WebFormRecordsPanel({ refreshKey = 0 }: Props) {
     const ids = [...batch.selectedIds];
     if (ids.length === 0) return;
     modal.confirm({
-      title: "删除选中的填充记录？",
-      content: `这 ${ids.length} 条填充记录${TRASH_RECOVERY_NOTE}`,
-      okText: "删除",
+      title: t("webFormRecords.confirm.batchTitle"),
+      content: t("webFormRecords.confirm.batchBody", {
+        count: ids.length,
+        note: TRASH_RECOVERY_NOTE,
+      }),
+      okText: t("common.action.delete"),
       okButtonProps: { danger: true },
       onOk: async () => {
         const results = await Promise.allSettled(ids.map((id) => deleteWebFormRecord(id)));
         const failed = results.filter((item) => item.status === "rejected").length;
-        if (failed === 0) message.success(`已删除 ${ids.length} 条填充记录`);
-        else message.warning(`已删除 ${ids.length - failed} 条，${failed} 条失败，请重试`);
+        if (failed === 0) message.success(t("webFormRecords.toast.deleted", { count: ids.length }));
+        else
+          message.warning(
+            t("webFormRecords.toast.partialDeleted", {
+              done: ids.length - failed,
+              failed,
+            }),
+          );
         batch.exitSelecting();
         await reload();
       },
@@ -175,11 +166,46 @@ export default function WebFormRecordsPanel({ refreshKey = 0 }: Props) {
     // 错误与空态分开：失败给重试出路（ErrorState，role=alert 可感知），
     // 真的没有记录才是 EmptyState——两者混成一句文案会让"坏了"看起来像"没填过"。
     return error ? (
-      <ErrorState description="读取填充记录失败" onRetry={() => void reload()} />
+      <ErrorState description={t("webFormRecords.error.load")} onRetry={() => void reload()} />
     ) : (
-      <EmptyState description="还没有填充记录" />
+      <EmptyState description={t("webFormRecords.empty.none")} />
     );
   }
+
+  // 列定义放在组件内：列名要按当前语言取，模块作用域调 t() 切语言不会重渲染。
+  const itemColumns: TableColumnsType<WebFormRecordItem> = [
+    {
+      title: t("webFormRecords.column.field"),
+      key: "field",
+      width: 150,
+      render: (_, item) => item.field_label || item.control_label || "—",
+    },
+    {
+      title: t("webFormRecords.column.value"),
+      dataIndex: "value",
+      key: "value",
+      ellipsis: true,
+    },
+    {
+      title: t("webFormRecords.column.status"),
+      key: "status",
+      width: 200,
+      render: (_, item) => {
+        const meta = ITEM_STATUS_META[item.status];
+        return (
+          <Space orientation="vertical" size={0}>
+            {/* 状态值不在词表里时如实显示协议值，不吞掉。 */}
+            <Tag color={meta?.color ?? "default"}>{meta ? t(meta.labelKey) : item.status}</Tag>
+            {item.detail ? (
+              <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                {item.detail}
+              </Typography.Text>
+            ) : null}
+          </Space>
+        );
+      },
+    },
+  ];
 
   // 翻页即清空展开条与选择集：上一页的展开/勾选对新页没有意义。
   const changePage = (next: number) => {
@@ -192,15 +218,15 @@ export default function WebFormRecordsPanel({ refreshKey = 0 }: Props) {
   const contextActions = (record: WebFormRecordSummary): RowActionItem[] => [
     {
       key: "batch_select",
-      label: "批量选择",
+      label: t("common.action.batchSelect"),
       icon: <CheckSquareOutlined />,
       onClick: batch.enterSelecting,
     },
     {
       key: "delete",
-      label: "删除",
+      label: t("common.action.delete"),
       danger: true,
-      confirm: "删除这条填充记录？会进回收站，之后可以恢复。",
+      confirm: t("webFormRecords.confirm.deleteOne"),
       onClick: () => void remove(record.id),
     },
   ];
@@ -222,7 +248,7 @@ export default function WebFormRecordsPanel({ refreshKey = 0 }: Props) {
           }}
         >
           <Button danger disabled={batch.selectedCount === 0} onClick={removeSelected}>
-            删除所选
+            {t("webFormRecords.action.deleteSelected")}
           </Button>
         </BatchActionBar>
       )}
@@ -241,21 +267,29 @@ export default function WebFormRecordsPanel({ refreshKey = 0 }: Props) {
               <Space size={8} wrap>
                 {batch.selecting && (
                   <Checkbox
-                    aria-label={`选择填充记录 ${record.id}`}
+                    aria-label={t("webFormRecords.aria.selectRecord", { id: record.id })}
                     checked={batch.isSelected(record.id)}
                     onChange={() => batch.toggle(record.id)}
                   />
                 )}
                 <span>{shortTime(record.created_at)}</span>
                 <Typography.Text type="secondary">
-                  {record.page_title || record.url || "（无标题）"}
+                  {record.page_title || record.url || t("webFormRecords.untitled")}
                 </Typography.Text>
-                <Tag color="success">成功 {record.filled}</Tag>
+                <Tag color="success">
+                  {t("webFormRecords.tag.filled", { count: record.filled })}
+                </Tag>
                 {record.unverified > 0 ? (
-                  <Tag color="warning">待核对 {record.unverified}</Tag>
+                  <Tag color="warning">
+                    {t("webFormRecords.tag.unverified", { count: record.unverified })}
+                  </Tag>
                 ) : null}
-                {record.failed > 0 ? <Tag color="error">失败 {record.failed}</Tag> : null}
-                {record.source === "live" ? <Tag>逐项填</Tag> : null}
+                {record.failed > 0 ? (
+                  <Tag color="error">
+                    {t("webFormRecords.tag.failed", { count: record.failed })}
+                  </Tag>
+                ) : null}
+                {record.source === "live" ? <Tag>{t("webFormRecords.tag.live")}</Tag> : null}
               </Space>
             </RowContextMenu>
           ),
@@ -266,9 +300,9 @@ export default function WebFormRecordsPanel({ refreshKey = 0 }: Props) {
                 more={[
                   {
                     key: "delete",
-                    label: "删除",
+                    label: t("common.action.delete"),
                     danger: true,
-                    confirm: "删除这条填充记录？会进回收站，之后可以恢复。",
+                    confirm: t("webFormRecords.confirm.deleteOne"),
                     onClick: () => void remove(record.id),
                   },
                 ]}
@@ -278,8 +312,8 @@ export default function WebFormRecordsPanel({ refreshKey = 0 }: Props) {
           children: (
             <Space orientation="vertical" size={12} style={{ width: "100%" }}>
               <Descriptions size="small" column={1}>
-                <Descriptions.Item label="页面">
-                  {record.page_title || "（无标题）"}
+                <Descriptions.Item label={t("webFormRecords.field.page")}>
+                  {record.page_title || t("webFormRecords.untitled")}
                   {record.url ? (
                     <Typography.Text type="secondary" style={{ marginLeft: 8 }}>
                       {record.url}
@@ -299,12 +333,13 @@ export default function WebFormRecordsPanel({ refreshKey = 0 }: Props) {
                     pagination={{ pageSize: 20, hideOnSinglePage: true, showSizeChanger: false }}
                     columns={itemColumns}
                     dataSource={detail?.items ?? []}
-                    locale={{ emptyText: "这一轮没有可填的字段" }}
+                    locale={{ emptyText: t("webFormRecords.table.empty") }}
                   />
                   {(detail?.page_snapshot.length ?? 0) > 0 ? (
                     <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                      填完后页面上共 {detail?.page_snapshot.filter((row) => row.filled).length}{" "}
-                      个框是我们填的；其余为你原有的内容或页面自己算出来的。
+                      {t("webFormRecords.snapshot.summary", {
+                        filled: detail?.page_snapshot.filter((row) => row.filled).length ?? 0,
+                      })}
                     </Typography.Text>
                   ) : null}
                 </>
@@ -322,7 +357,7 @@ export default function WebFormRecordsPanel({ refreshKey = 0 }: Props) {
           onChange={changePage}
           hideOnSinglePage
           showSizeChanger={false}
-          showTotal={(count) => `共 ${count} 条`}
+          showTotal={(count) => t("webFormRecords.pagination.total", { count })}
         />
       </div>
     </div>

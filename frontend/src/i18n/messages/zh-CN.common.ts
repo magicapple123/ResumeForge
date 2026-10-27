@@ -8,6 +8,7 @@ const common = {
   "common.action.back": "返回",
   "common.action.discard": "放弃修改",
   "common.action.keep-editing": "继续编辑",
+  "common.action.batchSelect": "批量选择",
   "common.retry": "重试",
   "common.required": "必填",
   "common.placeholder.select": "请选择",

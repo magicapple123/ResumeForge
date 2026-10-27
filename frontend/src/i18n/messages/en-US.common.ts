@@ -8,6 +8,7 @@ const common = {
   "common.action.back": "Back",
   "common.action.discard": "Discard changes",
   "common.action.keep-editing": "Keep editing",
+  "common.action.batchSelect": "Select multiple",
   "common.retry": "Retry",
   "common.required": "Required",
   "common.placeholder.select": "Select",
