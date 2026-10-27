@@ -8,6 +8,8 @@
  *    新增文案写在这里天然合规，不需要行内豁免。
  *
  * key 前缀统一 `responsive.`：一眼能看出属于"不同视口下的形态"而不是某个业务域。
+ * 助手外壳（页头说明、浮窗历史、回到底部）的通用文案也在本包的 `responsive.assistant.*`
+ * 下：这些控件会随档位在页内 / 抽屉 / 浮层之间换位置，归"形态"比归某个业务域更贴切。
  */
 const responsive = {
   /** 制作台动作条：单栏时打开左栏参数抽屉。 */
@@ -56,6 +58,21 @@ const responsive = {
   "responsive.assistant.history": "历史会话",
   /** 助手历史会话抽屉标题。 */
   "responsive.assistant.history.title": "历史会话",
+
+  /** 助手页头：会话还没有标题时的兜底标题。 */
+  "responsive.assistant.defaultTitle": "AI 求职助手",
+  /** 助手消息旁的显示名（整页形态）。 */
+  "responsive.assistant.label": "求职助手",
+  /** 助手消息旁的显示名（浮窗形态，用吉祥物的名字）。 */
+  "responsive.assistant.shortLabel": "投投",
+  /** 页头说明：回复用的模型来自设置页。 */
+  "responsive.assistant.headerNote": "当前回复由「设置」中的模型配置提供。",
+  /** 浮窗历史按钮的无障碍名。 */
+  "responsive.assistant.aria.history": "查看投投历史",
+  /** 浮窗历史层背板的关闭入口（键盘用户除 Esc 之外的出口）。 */
+  "responsive.assistant.aria.closeHistory": "关闭历史记录",
+  /** 流式期间上翻后出现的「回到底部」按钮（aria-label 与 title 共用一条）。 */
+  "responsive.assistant.scrollBottom": "回到底部",
 } as const;
 
 export default responsive;

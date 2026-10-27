@@ -311,7 +311,7 @@ export default function AssistantPage({
         <button
           type="button"
           className="assistant-sidebar-backdrop"
-          aria-label="关闭历史记录"
+          aria-label={t("responsive.assistant.aria.closeHistory")}
           onClick={() => setHistoryOpen(false)}
         />
       )}
@@ -343,7 +343,7 @@ export default function AssistantPage({
           selectedIds={selectedIds}
           removeSelected={removeSelected}
           exitSelecting={exitSelecting}
-          title={detail?.title || "AI 求职助手"}
+          title={detail?.title || t("responsive.assistant.defaultTitle")}
         />
         <AssistantMessageList
           detail={detail}
@@ -367,7 +367,9 @@ export default function AssistantPage({
           messagesTotal={detail?.messages_total ?? 0}
           enabledSkillCount={enabledSkills.length}
           skillsLoaded={skillsLoaded}
-          assistantLabel={compact ? "投投" : "求职助手"}
+          assistantLabel={
+            compact ? t("responsive.assistant.shortLabel") : t("responsive.assistant.label")
+          }
           emptyVariant={compact ? "floating" : "page"}
           onChoosePrompt={chooseStarterPrompt}
           onManageSkills={openSkillWorkbench}
@@ -387,8 +389,8 @@ export default function AssistantPage({
           <button
             type="button"
             className="assistant-scroll-bottom"
-            aria-label="回到底部"
-            title="回到底部"
+            aria-label={t("responsive.assistant.scrollBottom")}
+            title={t("responsive.assistant.scrollBottom")}
             onClick={scrollToBottom}
           >
             <ArrowDownOutlined aria-hidden="true" />

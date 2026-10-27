@@ -35,6 +35,13 @@ const responsive = {
   "responsive.assistant.historyShort": "History",
   "responsive.assistant.history": "Conversation history",
   "responsive.assistant.history.title": "Conversation history",
+  "responsive.assistant.defaultTitle": "AI job assistant",
+  "responsive.assistant.label": "Job assistant",
+  "responsive.assistant.shortLabel": "Toutou",
+  "responsive.assistant.headerNote": "Replies use the model configured in Settings.",
+  "responsive.assistant.aria.history": "View conversation history",
+  "responsive.assistant.aria.closeHistory": "Close conversation history",
+  "responsive.assistant.scrollBottom": "Jump to latest",
 } as const;
 
 export default responsive;
