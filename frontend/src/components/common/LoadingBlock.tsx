@@ -16,6 +16,8 @@
  */
 import { Spin } from "antd";
 import type { CSSProperties, ReactNode } from "react";
+import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 
 interface Props {
   /** Spin 尺寸，与 antd 对齐。 */
@@ -37,6 +39,7 @@ export default function LoadingBlock({
   spinning = true,
   children,
 }: Props) {
+  useLocale();
   // antd 6 把 Spin 的 "default" 改名为 "medium"，这里兜一层映射。
   const spinSize = size === "default" ? "medium" : size;
 
@@ -54,7 +57,7 @@ export default function LoadingBlock({
   return (
     <div
       role="status"
-      aria-label={tip || "正在加载内容"}
+      aria-label={tip || t("common.loading.content")}
       style={{ display: "flex", alignItems: "center", justifyContent: "center", ...style }}
     >
       <Spin size={spinSize} description={tip} />
