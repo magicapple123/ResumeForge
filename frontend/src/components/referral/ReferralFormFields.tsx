@@ -15,26 +15,11 @@ import { referralImageUrl } from "../../types";
 import { useJobSearchSelect, useTrackSearchSelect } from "../../hooks/remoteSearchOptions";
 import { IMAGE_ACCEPT } from "../../utils/attachments";
 import { t } from "../../i18n";
-import type { MessageKey } from "../../i18n";
+import { REFERRAL_STATUS_LABEL_KEYS } from "../../i18n/enum/referral";
 import { useLocale } from "../../i18n/i18nContext";
 
 /** 与后端 ``schemas/referral.MAX_NOTE_IMAGES`` 保持一致。 */
 export const MAX_NOTE_IMAGES = 9;
-
-/**
- * 内推状态的显示名：**键是协议值**（`active` / `submitted` / `closed` / `invalid`，
- * 提交后端并参与校验），值指向语言包 key。
- *
- * 模块作用域不能调 `t()`（切语言不会重渲染），所以这里只存 key，取值处统一
- * `t(STATUS_LABEL_KEYS[value])`。`types/referral.ts` 的 `REFERRAL_STATUS_LABELS`
- * 一个字都没动——它另有消费者（`ReferralListItem` / `ReferralDetailDrawer`）。
- */
-const STATUS_LABEL_KEYS: Record<ReferralStatus, MessageKey> = {
-  active: "referralForm.status.active",
-  submitted: "referralForm.status.submitted",
-  closed: "referralForm.status.closed",
-  invalid: "referralForm.status.invalid",
-};
 
 interface Props {
   form: FormInstance<ReferralPayload>;
@@ -197,10 +182,11 @@ export default function ReferralFormFields({
   );
 }
 
-/** 状态选项：分色在列表 Tag 上体现，这里只给标签（运行期 `t()`，随语言变化）。 */
+/** 状态选项：分色在列表 Tag 上体现，这里只给标签（运行期 `t()`，随语言变化）。
+ *  协议值 → key 的表在 `i18n/enum/referral.ts`，与列表行、详情抽屉共用同一张。 */
 export function REFERRAL_STATUS_LABELS_OPTIONS(): { value: ReferralStatus; label: string }[] {
-  return (Object.keys(STATUS_LABEL_KEYS) as ReferralStatus[]).map((value) => ({
+  return (Object.keys(REFERRAL_STATUS_LABEL_KEYS) as ReferralStatus[]).map((value) => ({
     value,
-    label: t(STATUS_LABEL_KEYS[value]),
+    label: t(REFERRAL_STATUS_LABEL_KEYS[value]),
   }));
 }
