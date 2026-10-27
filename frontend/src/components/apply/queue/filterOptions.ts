@@ -11,6 +11,7 @@ import {
   type AdmissionResult,
   type QueueStatus,
 } from "../../../types";
+import { t } from "../../../i18n";
 
 /** 状态筛选选项：直接从 QUEUE_STATUS_META 取，文案与表格里的状态标签同源。 */
 export const STATUS_FILTER_OPTIONS = (
@@ -23,10 +24,17 @@ export const STATUS_FILTER_OPTIONS = (
  * null，而它不是准入结论（后端只下发三值），所以不进 `ADMISSION_META`。
  */
 export const UNANALYZED_FILTER = "unanalyzed";
-export const ADMISSION_FILTER_OPTIONS = [
-  ...(Object.entries(ADMISSION_META) as [AdmissionResult, { label: string; color: string }][]).map(
-    ([value, meta]) => ({ value, label: meta.label }),
-  ),
-  { value: UNANALYZED_FILTER, label: "未分析" },
-];
+
+/**
+ * 准入筛选选项（渲染期构建）：前三条的显示名仍来自 types 的 `ADMISSION_META`（协议值→
+ * 展示名的唯一正本，待 types 层枚举 code 化），只有筛选专用哨兵「未分析」走语言包。
+ */
+export function admissionFilterOptions(): { value: string; label: string }[] {
+  return [
+    ...(
+      Object.entries(ADMISSION_META) as [AdmissionResult, { label: string; color: string }][]
+    ).map(([value, meta]) => ({ value, label: meta.label })),
+    { value: UNANALYZED_FILTER, label: t("applyQueue.admission.unanalyzed") },
+  ];
+}
 export type AdmissionFilterValue = AdmissionResult | typeof UNANALYZED_FILTER;
