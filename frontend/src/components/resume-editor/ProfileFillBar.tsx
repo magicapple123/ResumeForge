@@ -22,6 +22,8 @@
 import { ImportOutlined } from "@ant-design/icons";
 import { Button, Select, Tooltip, Typography } from "antd";
 import { useState } from "react";
+import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 import type { ProfileFillItem } from "../../features/profile/profileFillOptions";
 
 /** `append` = 模块顶部追加一条；`entry` = 条目头部填进当前这条。 */
@@ -54,6 +56,7 @@ export default function ProfileFillBar({
   variant = "append",
   currentKey,
 }: Props) {
+  useLocale();
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const isEntry = variant === "entry";
 
@@ -68,18 +71,21 @@ export default function ProfileFillBar({
     const isCurrent = isEntry && currentKey != null && matchKey === currentKey;
     const inOthers = existingKeys.has(matchKey);
     // 后缀优先级：先说自己，再说别人——"当前条目"比"已在其他条目"更贴近用户当下正在看的东西。
+    // 分隔空格放在这里而不是语言包里：指南按原文引用「已加入」，值要逐字等于那个短语。
     const suffix = isCurrent
-      ? " 当前条目"
+      ? ` ${t("editor.profileFill.suffix.current")}`
       : inOthers
         ? isEntry
-          ? " 已在其他条目"
-          : " 已加入"
+          ? ` ${t("editor.profileFill.suffix.other")}`
+          : ` ${t("editor.profileFill.suffix.joined")}`
         : "";
     return {
       value: item.key,
       // `optionFilterProp="label"` 搜的是这个字段：主标题 + 次要说明都参与搜索，
       // 用户记得"公司名"或"2024"都能找到。
-      label: item.hint ? `${item.label}（${item.hint}）${suffix}` : `${item.label}${suffix}`,
+      label: item.hint
+        ? `${t("editor.profileFill.option", { label: item.label, hint: item.hint })}${suffix}`
+        : `${item.label}${suffix}`,
       disabled: isCurrent || inOthers,
       title: item.hint,
     };
@@ -108,36 +114,48 @@ export default function ProfileFillBar({
     // 改成 flex 之后，中间那颗下拉吃掉剩余宽度，文字与按钮固定，最窄时换行而不是溢出。
     <div className="resume-profile-fill" data-fill-variant={variant}>
       <Typography.Text type="secondary" className="resume-profile-fill-label">
-        {isEntry ? "从资料填入本条" : "从我的资料追加一条"}
+        {isEntry ? t("editor.profileFill.title.entry") : t("editor.profileFill.title.append")}
       </Typography.Text>
       <Select
         size="small"
         className="resume-profile-fill-select"
-        placeholder={isEntry ? "选择资料条目" : `选择${label}`}
-        aria-label={isEntry ? "从我的资料选择填入本条" : `从我的资料选择${label}`}
+        placeholder={
+          isEntry
+            ? t("editor.profileFill.placeholder.entry")
+            : t("editor.profileFill.placeholder.append", { label })
+        }
+        aria-label={
+          isEntry
+            ? t("editor.profileFill.aria.entry")
+            : t("editor.profileFill.aria.append", { label })
+        }
         showSearch
         optionFilterProp="label"
         value={selectedKey}
         options={options}
         onChange={(value: string | null) => setSelectedKey(value ?? null)}
-        notFoundContent="没有可填入的条目"
+        notFoundContent={t("editor.profileFill.empty")}
       />
-      <Tooltip title={allBlocked ? `资料里的${label}都已经在这份简历里了` : ""}>
+      <Tooltip title={allBlocked ? t("editor.profileFill.allBlocked", { label }) : ""}>
         <Button
           size="small"
           icon={<ImportOutlined />}
           disabled={selectedBlocked}
-          aria-label={isEntry ? `填入本条的${label}` : `填入选中的${label}`}
+          aria-label={
+            isEntry
+              ? t("editor.profileFill.fillEntryAria", { label })
+              : t("editor.profileFill.fillSelectedAria", { label })
+          }
           onClick={fill}
         >
-          填入
+          {t("editor.profileFill.action.fill")}
         </Button>
       </Tooltip>
       {/* 条目模式必须说清语义：它和顶部的"追加一条"在同一屏里，用户有权知道
           这里不会覆盖他已经写好的内容。 */}
       {isEntry && (
         <Typography.Text type="secondary" className="resume-profile-fill-hint">
-          只填空字段
+          {t("editor.profileFill.onlyBlank")}
         </Typography.Text>
       )}
     </div>
