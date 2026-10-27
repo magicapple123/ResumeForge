@@ -2,14 +2,18 @@
 /**
  * 思考模式相关的共享元数据。
  * （档位文案、兜底档位、说明与思考参数形态选项。）
+ *
+ * 表里只存语言包 key：模块作用域**禁止**求值 `t()`（切语言后不会重新求值），
+ * 渲染处再 `t(item.labelKey)`。
  */
+import type { MessageKey } from "../../../i18n";
 
-/** 档位的中文名；表里出现的其它取值（各家自定义的）原样显示。 */
-export const EFFORT_LABELS: Record<string, string> = {
-  minimal: "最低",
-  low: "低",
-  medium: "中",
-  high: "高",
+/** 档位在语言包里的显示名 key；表里出现的其它取值（各家自定义的）原样显示。 */
+export const EFFORT_LABEL_KEYS: Record<string, MessageKey> = {
+  minimal: "appConfig.effort.minimal",
+  low: "appConfig.effort.low",
+  medium: "appConfig.effort.medium",
+  high: "appConfig.effort.high",
 };
 
 /**
@@ -21,15 +25,13 @@ export const EFFORT_LABELS: Record<string, string> = {
 export const FALLBACK_EFFORTS = ["low", "medium", "high"];
 
 /** 「思考强度」的说明：两个分支（下拉 / 自定义输入框）共用同一份文案。 */
-export const EFFORT_TOOLTIP =
-  "档位越高通常越慢也越贵。各家的档位划分不同，选项来自「检测思考支持」；也可以选「自定义…」自己填。" +
-  "自定义值原样发给 OpenAI 兼容接口；Claude 原生协议下填写数字＝思考预算 tokens，填其他词按默认档处理。" +
-  "留空表示不指定档位。";
+export const EFFORT_TOOLTIP_KEY: MessageKey = "appConfig.effort.tooltip";
 
-export const THINKING_STYLE_OPTIONS = [
-  { value: "auto", label: "自动（按协议与服务商推断）" },
-  { value: "reasoning_effort", label: "reasoning_effort（OpenAI 系）" },
-  { value: "thinking_object", label: "thinking 开关（智谱等）" },
-  { value: "enable_thinking", label: "enable_thinking（通义 qwen3）" },
-  { value: "budget", label: "thinking 预算（Claude 原生）" },
+/** 思考参数形态的下拉选项：`labelKey` 在渲染处 `t()`。 */
+export const THINKING_STYLE_OPTIONS: { value: string; labelKey: MessageKey }[] = [
+  { value: "auto", labelKey: "appConfig.thinkingStyle.auto" },
+  { value: "reasoning_effort", labelKey: "appConfig.thinkingStyle.reasoningEffort" },
+  { value: "thinking_object", labelKey: "appConfig.thinkingStyle.thinkingObject" },
+  { value: "enable_thinking", labelKey: "appConfig.thinkingStyle.enableThinking" },
+  { value: "budget", labelKey: "appConfig.thinkingStyle.budget" },
 ];
