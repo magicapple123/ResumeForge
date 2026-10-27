@@ -7,6 +7,8 @@ import type {
   WebFormExtraProfileParsedItem,
   WebFormField,
 } from "../types";
+import { t } from "../i18n";
+import type { MessageKey } from "../i18n";
 
 export type EditableProfileValues = Omit<Profile, "id" | "updated_at">;
 
@@ -42,18 +44,18 @@ type ListField = (typeof LIST_FIELDS)[number];
  * 与资料表单里各分区组件的 `label` 逐字对应；改表单文案时这里要跟着改，
  * 否则校对卡会显示"和页面上不一样的名字"。
  */
-const SCALAR_LABELS: Record<ScalarField, string> = {
-  name: "姓名",
-  gender: "性别",
-  birth_year: "出生年份",
-  phone: "手机",
-  email: "邮箱",
-  city: "城市",
-  target_city: "期望城市",
-  job_intent: "求职意向",
-  personal_website: "个人主页",
-  github: "GitHub",
-  summary: "个人总结",
+const SCALAR_LABELS: Record<ScalarField, MessageKey> = {
+  name: "editor.field.personName",
+  gender: "editor.field.gender",
+  birth_year: "editor.field.birthYear",
+  phone: "editor.field.phone",
+  email: "editor.field.email",
+  city: "editor.field.city",
+  target_city: "editor.field.targetCity",
+  job_intent: "editor.field.jobIntent",
+  personal_website: "editor.field.website",
+  github: "editor.field.github",
+  summary: "editor.field.summary",
 };
 
 /**
@@ -63,53 +65,53 @@ const SCALAR_LABELS: Record<ScalarField, string> = {
  * 参考资料是旧版本兼容字段（界面已无入口），让它们在"校对"里出现等于请用户确认一个
  * 他看不见的东西。
  */
-const LIST_ITEM_FIELDS: Record<ListField, Record<string, string>> = {
+const LIST_ITEM_FIELDS: Record<ListField, Record<string, MessageKey>> = {
   educations: {
-    school: "学校",
-    department: "院系",
-    major: "专业",
-    degree: "学历",
-    study_mode: "学习形式",
-    degree_type: "学位类型",
-    start_date: "开始时间",
-    end_date: "结束时间",
-    gpa: "绩点",
-    cet4_score: "四级分数",
-    cet6_score: "六级分数",
-    courses: "主修课程",
-    achievements: "在校荣誉",
+    school: "editor.field.school",
+    department: "editor.field.department",
+    major: "editor.field.major",
+    degree: "editor.field.degree",
+    study_mode: "editor.field.studyForm",
+    degree_type: "editor.field.degreeType",
+    start_date: "editor.field.startDate",
+    end_date: "editor.field.endDate",
+    gpa: "editor.field.gpa",
+    cet4_score: "editor.field.cet4",
+    cet6_score: "editor.field.cet6",
+    courses: "editor.field.courses",
+    achievements: "editor.field.studyAchievements",
   },
   experiences: {
-    company: "公司",
-    role: "岗位",
-    start_date: "开始时间",
-    end_date: "结束时间",
-    description: "工作内容",
+    company: "editor.field.company",
+    role: "editor.field.expRole",
+    start_date: "editor.field.startDate",
+    end_date: "editor.field.endDate",
+    description: "editor.field.expDescription",
   },
   campus_experiences: {
-    organization: "组织",
-    role: "角色",
-    start_date: "开始时间",
-    end_date: "结束时间",
-    description: "经历描述",
+    organization: "editor.field.organization",
+    role: "editor.field.campusRole",
+    start_date: "editor.field.startDate",
+    end_date: "editor.field.endDate",
+    description: "editor.field.campusDescription",
   },
   projects: {
-    name: "项目名称",
-    role: "角色",
-    start_date: "开始时间",
-    end_date: "结束时间",
-    tech_stack: "技术栈",
-    description: "项目描述",
-    highlights: "亮点",
+    name: "editor.field.projectName",
+    role: "editor.field.projectRole",
+    start_date: "editor.field.startDate",
+    end_date: "editor.field.endDate",
+    tech_stack: "editor.field.techStack",
+    description: "editor.field.projectDescription",
+    highlights: "editor.field.highlights",
   },
   skills: {
-    name: "技能",
-    level: "熟练度",
+    name: "editor.field.skillName",
+    level: "editor.field.skillLevel",
   },
   awards: {
-    name: "奖项",
-    date: "时间",
-    description: "说明",
+    name: "editor.field.awardName",
+    date: "editor.field.awardDate",
+    description: "editor.field.notes",
   },
 };
 
@@ -162,7 +164,7 @@ export function profileToReviewRows(parsed: ProfileTextParseResult): Recognition
     rows.push({
       id: field,
       section: field === "summary" ? SECTION_LABELS.summary : SECTION_LABELS.basic_info,
-      label: SCALAR_LABELS[field],
+      label: t(SCALAR_LABELS[field]),
       value,
       multiline: MULTILINE_KEYS.has(field),
     });
@@ -180,7 +182,7 @@ export function profileToReviewRows(parsed: ProfileTextParseResult): Recognition
         rows.push({
           id: `${field}.${index}.${key}`,
           section: SECTION_LABELS[field],
-          label,
+          label: t(label),
           value: raw,
           multiline: MULTILINE_KEYS.has(key),
         });
@@ -278,7 +280,7 @@ export function webformToReviewRows(
   for (const item of custom) {
     rows.push({
       id: item.key,
-      section: "自定义",
+      section: t("editor.field.customSection"),
       label: item.label,
       value: item.value,
       isNew: true,

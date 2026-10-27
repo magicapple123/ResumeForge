@@ -8,6 +8,22 @@
  * 表单出现"这个条目到底该填什么"的歧义。
  */
 const resumeEditor = {
+  "editor.field.personName": "姓名",
+  "editor.field.photo": "照片",
+  "editor.field.gender": "性别",
+  "editor.field.birthYear": "出生年份",
+  "editor.field.phone": "手机",
+  "editor.field.email": "邮箱",
+  "editor.field.city": "城市",
+  "editor.field.targetCity": "期望城市",
+  "editor.field.jobIntent": "求职意向",
+  "editor.field.website": "个人主页",
+  "editor.field.github": "GitHub",
+  "editor.field.summary": "个人总结",
+  "editor.field.cet4": "四级分数",
+  "editor.field.cet6": "六级分数",
+  "editor.field.customSection": "自定义",
+
   "editor.jobKind.fullTime": "全职",
   "editor.jobKind.partTime": "兼职",
   "editor.jobKind.contract": "合同",

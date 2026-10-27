@@ -1,6 +1,22 @@
 // SPDX-License-Identifier: Apache-2.0
 /** 简历编辑器的分区标题、表单标签、校验提示与占位符（与 zh-CN.editor.ts 对应）。 */
 const resumeEditor = {
+  "editor.field.personName": "Name",
+  "editor.field.photo": "Photo",
+  "editor.field.gender": "Gender",
+  "editor.field.birthYear": "Birth year",
+  "editor.field.phone": "Phone",
+  "editor.field.email": "Email",
+  "editor.field.city": "City",
+  "editor.field.targetCity": "Preferred city",
+  "editor.field.jobIntent": "Objective",
+  "editor.field.website": "Personal website",
+  "editor.field.github": "GitHub",
+  "editor.field.summary": "Summary",
+  "editor.field.cet4": "CET-4 score",
+  "editor.field.cet6": "CET-6 score",
+  "editor.field.customSection": "Custom",
+
   "editor.jobKind.fullTime": "Full-time",
   "editor.jobKind.partTime": "Part-time",
   "editor.jobKind.contract": "Contract",
