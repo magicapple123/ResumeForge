@@ -16,8 +16,11 @@ import { QuestionCircleOutlined } from "@ant-design/icons";
 import { App, Button, Card, Popconfirm, Space, Table, Tag, Tooltip, Typography } from "antd";
 import type { TableColumnsType } from "antd";
 import { useEffect, useMemo, useState } from "react";
+import { t } from "../../i18n";
+import type { MessageKey } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 import {
-  SCOPE_LABELS,
+  SCOPE_LABEL_KEYS,
   SHORTCUT_ACTIONS,
   defaultShortcutBindings,
   type ShortcutAction,
@@ -44,11 +47,12 @@ import {
   useShortcutSettings,
 } from "../../features/shortcuts/useShortcutKeymap";
 
-const REJECTION_TEXT: Record<ShortcutRejectionReason, string> = {
-  empty: "没听清，请再按一次组合键",
-  modifierOnly: "还需要一个非修饰键（例如 Z、K）",
-  reserved: "这是浏览器或窗口的保留组合，换一个",
-  noModifier: "组合键必须带 Ctrl / ⌘ 或 Alt",
+/** 拒绝原因 → 语言包 key；取值处再 `t()`（模块作用域不能求值 `t`）。 */
+const REJECTION_KEYS: Record<ShortcutRejectionReason, MessageKey> = {
+  empty: "shortcutSettings.reject.empty",
+  modifierOnly: "shortcutSettings.reject.modifierOnly",
+  reserved: "shortcutSettings.reject.reserved",
+  noModifier: "shortcutSettings.reject.noModifier",
 };
 
 /**
@@ -59,18 +63,20 @@ const REJECTION_TEXT: Record<ShortcutRejectionReason, string> = {
  * 正在用的浏览器功能抢走。默认值因此统一加一级修饰键或换主键；用户仍可在本卡改键。
  * 另外两个翻页动作只作用于**列表分页**，不是简历预览翻页，必须写清楚。
  */
-const ACTION_HINTS: Partial<Record<ShortcutActionId, string>> = {
-  toggleTheme: "避开 Ctrl+Shift+L（部分浏览器/扩展占用），改用 Ctrl/⌘+Alt+D。",
-  openSettings: "Ctrl/⌘+, 是浏览器与系统的设置键，到不了页面，改用 Ctrl/⌘+Alt+S。",
-  openSkills: "避开 Ctrl+Shift+K（浏览器开发者工具/搜索冲突），改用 Ctrl/⌘+Alt+K。",
-  exportPdf: "Ctrl/⌘+E 是浏览器地址栏搜索的保留键，改用 Ctrl/⌘+Shift+E。",
-  newResume: "避开 Ctrl/⌘+Alt+R（与输入法/扩展冲突），改用 Ctrl/⌘+Shift+N。",
-  prevPage: "作用于当前列表分页，不是简历预览翻页；落到分页控件上，不在预览里翻页。",
-  nextPage: "作用于当前列表分页，不是简历预览翻页；落到分页控件上，不在预览里翻页。",
+const ACTION_HINT_KEYS: Partial<Record<ShortcutActionId, MessageKey>> = {
+  toggleTheme: "shortcutSettings.hint.toggleTheme",
+  openSettings: "shortcutSettings.hint.openSettings",
+  openSkills: "shortcutSettings.hint.openSkills",
+  exportPdf: "shortcutSettings.hint.exportPdf",
+  newResume: "shortcutSettings.hint.newResume",
+  // 翻页两个动作的提示是同一句话，共用一条 key（避免两份同文案漂移）。
+  prevPage: "shortcutSettings.hint.pageOnly",
+  nextPage: "shortcutSettings.hint.pageOnly",
 };
 
 function actionLabel(id: ShortcutActionId): string {
-  return SHORTCUT_ACTIONS.find((action) => action.id === id)?.label ?? id;
+  const action = SHORTCUT_ACTIONS.find((item) => item.id === id);
+  return action ? t(action.labelKey) : id;
 }
 
 function sameKeys(left: string[], right: string[]): boolean {
@@ -79,6 +85,8 @@ function sameKeys(left: string[], right: string[]): boolean {
 }
 
 export default function ShortcutSettingsCard() {
+  // 本组件用模块级 t()，必须订阅语言变化。
+  useLocale();
   const { message } = App.useApp();
   const settings = useShortcutSettings();
   const [recordingId, setRecordingId] = useState<ShortcutActionId | null>(null);
@@ -106,19 +114,22 @@ export default function ShortcutSettingsCard() {
       if (!binding) return;
       const validation = validateShortcut(binding);
       if (!validation.ok) {
-        setError(REJECTION_TEXT[validation.reason ?? "empty"]);
+        setError(t(REJECTION_KEYS[validation.reason ?? "empty"]));
         return;
       }
       const conflictId = findConflict(settings.bindings, validation.binding, recordingId);
       if (conflictId) {
-        setError(`已被「${actionLabel(conflictId)}」占用`);
+        setError(t("shortcutSettings.conflict", { label: actionLabel(conflictId) }));
         return;
       }
       updateShortcutBinding(settings, recordingId, [validation.binding]);
       setRecordingId(null);
       setError("");
       message.success(
-        `「${actionLabel(recordingId)}」已改为 ${formatShortcut(validation.binding, { mac })}`,
+        t("shortcutSettings.changed", {
+          label: actionLabel(recordingId),
+          keys: formatShortcut(validation.binding, { mac }),
+        }),
       );
     };
     // capture 阶段挂 window：录制时要先于页面上任何 keydown 处理拿到这次按键。
@@ -133,35 +144,39 @@ export default function ShortcutSettingsCard() {
     updateShortcutBinding(settings, action.id, null);
     setRecordingId(null);
     setError("");
-    message.success(`「${action.label}」已解绑，这个组合键不再触发任何动作`);
+    message.success(t("shortcutSettings.unboundDone", { label: t(action.labelKey) }));
   };
 
   const handleRestore = (action: ShortcutAction) => {
     restoreShortcutBinding(settings, action.id);
     setRecordingId(null);
     setError("");
-    message.success(`「${action.label}」已恢复默认`);
+    message.success(t("shortcutSettings.restoredDone", { label: t(action.labelKey) }));
   };
 
   const handleResetAll = () => {
     const next: ShortcutSettings = resetShortcutSettings();
     setRecordingId(null);
     setError("");
-    message.success(`已恢复默认快捷键（共 ${Object.keys(next.bindings).length} 项）`);
+    message.success(
+      t("shortcutSettings.resetAllDone", { count: Object.keys(next.bindings).length }),
+    );
   };
 
   const columns: TableColumnsType<ShortcutAction> = [
     {
-      title: "动作",
+      title: t("shortcutSettings.column.action"),
       key: "label",
       render: (_, action) => {
-        const hint = ACTION_HINTS[action.id];
+        const hintKey = ACTION_HINT_KEYS[action.id];
         return (
           <Space size={4}>
-            <Typography.Text>{action.label}</Typography.Text>
-            {hint ? (
-              <Tooltip title={hint}>
-                <QuestionCircleOutlined aria-label={`${action.label} 说明`} />
+            <Typography.Text>{t(action.labelKey)}</Typography.Text>
+            {hintKey ? (
+              <Tooltip title={t(hintKey)}>
+                <QuestionCircleOutlined
+                  aria-label={t("shortcutSettings.actionHelp", { label: t(action.labelKey) })}
+                />
               </Tooltip>
             ) : null}
           </Space>
@@ -169,22 +184,22 @@ export default function ShortcutSettingsCard() {
       },
     },
     {
-      title: "作用域",
+      title: t("shortcutSettings.column.scope"),
       key: "scope",
       width: 108,
       render: (_, action) => (
-        <Typography.Text type="secondary">{SCOPE_LABELS[action.scope]}</Typography.Text>
+        <Typography.Text type="secondary">{t(SCOPE_LABEL_KEYS[action.scope])}</Typography.Text>
       ),
     },
     {
-      title: "当前按键",
+      title: t("shortcutSettings.column.keys"),
       key: "keys",
       width: 260,
       render: (_, action) => {
         if (recordingId === action.id) {
           return (
             <Space orientation="vertical" size={2}>
-              <Tag color="processing">请按下新组合，Esc 取消</Tag>
+              <Tag color="processing">{t("shortcutSettings.recording")}</Tag>
               {error ? (
                 <Typography.Text type="danger" className="shortcut-settings-error">
                   {error}
@@ -196,7 +211,7 @@ export default function ShortcutSettingsCard() {
         const keys = shortcutKeysOf(settings, action.id);
         if (keys.length === 0) {
           // 「未绑定」必须显式显示：留空会让用户以为设置丢了。
-          return <Tag className="shortcut-settings-key">未绑定</Tag>;
+          return <Tag className="shortcut-settings-key">{t("shortcutSettings.unbound")}</Tag>;
         }
         return (
           <Space size={4} wrap>
@@ -210,7 +225,7 @@ export default function ShortcutSettingsCard() {
       },
     },
     {
-      title: "操作",
+      title: t("shortcutSettings.column.actions"),
       key: "actions",
       width: 240,
       render: (_, action) => {
@@ -230,21 +245,23 @@ export default function ShortcutSettingsCard() {
                 setRecordingId((current) => (current === action.id ? null : action.id));
               }}
             >
-              {recordingId === action.id ? "取消" : "修改"}
+              {recordingId === action.id
+                ? t("common.action.cancel")
+                : t("shortcutSettings.action.edit")}
             </Button>
             <Popconfirm
-              title={`解绑「${action.label}」？`}
-              description="解绑后这个组合键不再触发任何动作，可随时「恢复默认」。"
-              okText="解绑"
-              cancelText="取消"
+              title={t("shortcutSettings.clearConfirm.title", { label: t(action.labelKey) })}
+              description={t("shortcutSettings.clearConfirm.body")}
+              okText={t("shortcutSettings.clearConfirm.ok")}
+              cancelText={t("common.action.cancel")}
               onConfirm={() => handleClear(action)}
             >
               <Button size="small" disabled={isUnbound}>
-                清除
+                {t("shortcutSettings.action.clear")}
               </Button>
             </Popconfirm>
             <Button size="small" disabled={isDefault} onClick={() => handleRestore(action)}>
-              恢复默认
+              {t("shortcutSettings.action.restore")}
             </Button>
           </Space>
         );
@@ -255,22 +272,20 @@ export default function ShortcutSettingsCard() {
   return (
     <Card
       className="settings-card shortcut-settings-card"
-      title="快捷键"
+      title={t("shortcutSettings.card.title")}
       extra={
         <Popconfirm
-          title="全部恢复默认快捷键？"
-          okText="恢复默认"
-          cancelText="取消"
+          title={t("shortcutSettings.resetAllConfirm.title")}
+          okText={t("shortcutSettings.action.restore")}
+          cancelText={t("common.action.cancel")}
           onConfirm={handleResetAll}
         >
-          <Button size="small">全部恢复默认</Button>
+          <Button size="small">{t("shortcutSettings.action.resetAll")}</Button>
         </Popconfirm>
       }
     >
       <Typography.Paragraph type="secondary" className="shortcut-settings-intro">
-        点「修改」后直接按下想要的组合，按 Esc 取消。组合键必须带 Ctrl / ⌘ 或
-        Alt；浏览器保留的组合（如
-        Ctrl+W）以及已被其它动作占用的组合会被拒绝。改动保存在本机，立即生效。
+        {t("shortcutSettings.card.intro")}
       </Typography.Paragraph>
       <Table<ShortcutAction>
         rowKey="id"

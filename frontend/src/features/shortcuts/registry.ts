@@ -9,6 +9,7 @@
  * 注册好行为，再回这里登记。快捷键表里出现"按了没反应"的条目，比少一条更糟——
  * 用户会以为是应用坏了。
  */
+import type { MessageKey } from "../../i18n";
 
 /** 动作的作用域：只用于设置页展示与代码阅读，拦截判断由"有没有注册 handler"决定。 */
 export type ShortcutScope = "form" | "page" | "global" | "jobs";
@@ -34,45 +35,111 @@ export type ShortcutActionId =
 
 export interface ShortcutAction {
   id: ShortcutActionId;
-  /** 设置页展示用的中文名。 */
-  label: string;
+  /** 设置页展示名（语言包 key）；显示时走 `t(action.labelKey)`。 */
+  labelKey: MessageKey;
   /** 默认组合（`mod` 在 macOS 上是 Command，其它平台是 Ctrl）。 */
   defaultKeys: string[];
   scope: ShortcutScope;
 }
 
-export const SCOPE_LABELS: Record<ShortcutScope, string> = {
-  form: "表单",
-  page: "页面",
-  global: "全局",
-  jobs: "岗位广场",
+/** 作用域显示名（协议值是 `ShortcutScope`，这里的值只是语言包 key）。 */
+export const SCOPE_LABEL_KEYS: Record<ShortcutScope, MessageKey> = {
+  form: "shortcutSettings.scope.form",
+  page: "shortcutSettings.scope.page",
+  global: "shortcutSettings.scope.global",
+  jobs: "shortcutSettings.scope.jobs",
 };
 
 export const SHORTCUT_ACTIONS: readonly ShortcutAction[] = [
-  { id: "undo", label: "撤回", defaultKeys: ["mod+z"], scope: "form" },
-  { id: "redo", label: "恢复", defaultKeys: ["mod+shift+z", "mod+y"], scope: "form" },
-  { id: "save", label: "保存当前编辑", defaultKeys: ["mod+s"], scope: "page" },
-  { id: "search", label: "搜索", defaultKeys: ["mod+k"], scope: "global" },
-  { id: "assistant", label: "打开/关闭求职助手", defaultKeys: ["mod+j"], scope: "global" },
-  { id: "newJob", label: "新建岗位", defaultKeys: ["mod+alt+n"], scope: "jobs" },
+  { id: "undo", labelKey: "shortcutSettings.action.undo", defaultKeys: ["mod+z"], scope: "form" },
+  {
+    id: "redo",
+    labelKey: "shortcutSettings.action.redo",
+    defaultKeys: ["mod+shift+z", "mod+y"],
+    scope: "form",
+  },
+  { id: "save", labelKey: "shortcutSettings.action.save", defaultKeys: ["mod+s"], scope: "page" },
+  {
+    id: "search",
+    labelKey: "shortcutSettings.action.search",
+    defaultKeys: ["mod+k"],
+    scope: "global",
+  },
+  {
+    id: "assistant",
+    labelKey: "shortcutSettings.action.assistant",
+    defaultKeys: ["mod+j"],
+    scope: "global",
+  },
+  {
+    id: "newJob",
+    labelKey: "shortcutSettings.action.newJob",
+    defaultKeys: ["mod+alt+n"],
+    scope: "jobs",
+  },
   // 下面四个是 R8 新增的"全局动作"：都在 `GlobalShortcuts` / 预览组件里有真实落点，
   // 不是只占一行表（按了没反应的快捷键比没有更糟）。
-  { id: "toggleTheme", label: "切换深色/浅色", defaultKeys: ["mod+alt+d"], scope: "global" },
-  { id: "openSettings", label: "打开设置", defaultKeys: ["mod+alt+s"], scope: "global" },
-  { id: "openSkills", label: "打开助手技能", defaultKeys: ["mod+alt+k"], scope: "global" },
-  { id: "exportPdf", label: "打开导出（简历预览中）", defaultKeys: ["mod+shift+e"], scope: "page" },
+  {
+    id: "toggleTheme",
+    labelKey: "shortcutSettings.action.toggleTheme",
+    defaultKeys: ["mod+alt+d"],
+    scope: "global",
+  },
+  {
+    id: "openSettings",
+    labelKey: "shortcutSettings.action.openSettings",
+    defaultKeys: ["mod+alt+s"],
+    scope: "global",
+  },
+  {
+    id: "openSkills",
+    labelKey: "shortcutSettings.action.openSkills",
+    defaultKeys: ["mod+alt+k"],
+    scope: "global",
+  },
+  {
+    id: "exportPdf",
+    labelKey: "shortcutSettings.action.exportPdf",
+    defaultKeys: ["mod+shift+e"],
+    scope: "page",
+  },
   // R8 第二批：落点分别是简历中心、页头数据集菜单、当前列表分页、求职助手。
-  { id: "newResume", label: "新建简历", defaultKeys: ["mod+shift+n"], scope: "page" },
-  { id: "switchDataset", label: "切换数据集", defaultKeys: ["mod+shift+d"], scope: "global" },
-  { id: "prevPage", label: "上一页（列表）", defaultKeys: ["mod+["], scope: "page" },
-  { id: "nextPage", label: "下一页（列表）", defaultKeys: ["mod+]"], scope: "page" },
-  { id: "focusAssistant", label: "打开助手并聚焦输入", defaultKeys: ["mod+/"], scope: "global" },
+  {
+    id: "newResume",
+    labelKey: "shortcutSettings.action.newResume",
+    defaultKeys: ["mod+shift+n"],
+    scope: "page",
+  },
+  {
+    id: "switchDataset",
+    labelKey: "shortcutSettings.action.switchDataset",
+    defaultKeys: ["mod+shift+d"],
+    scope: "global",
+  },
+  {
+    id: "prevPage",
+    labelKey: "shortcutSettings.action.prevPage",
+    defaultKeys: ["mod+["],
+    scope: "page",
+  },
+  {
+    id: "nextPage",
+    labelKey: "shortcutSettings.action.nextPage",
+    defaultKeys: ["mod+]"],
+    scope: "page",
+  },
+  {
+    id: "focusAssistant",
+    labelKey: "shortcutSettings.action.focusAssistant",
+    defaultKeys: ["mod+/"],
+    scope: "global",
+  },
   // W15/D13 命令面板（制作台内）。mod+k 已被全站搜索占用（既有用户习惯与测试），
   // 命令面板采用 VSCode 同款 mod+shift+p；两个动作都能在设置页改键。
   {
     id: "commandPalette",
-    // i18n-ok: 设置页快捷键表沿用既有 action.label 字面量口径（本表全部动作同型），统一迁移另立项
-    label: "打开命令面板（制作台）",
+    // 动作名走语言包；这条以前挂着 i18n-ok 豁免，本项目已迁移。
+    labelKey: "shortcutSettings.action.commandPalette",
     defaultKeys: ["mod+shift+p"],
     scope: "page",
   },

@@ -90,6 +90,7 @@ import storageStats from "./zh-CN.storageStats";
 import referralForm from "./zh-CN.referralForm";
 import trackerPage from "./zh-CN.trackerPage";
 import drillSession from "./zh-CN.drillSession";
+import shortcutSettings from "./zh-CN.shortcutSettings";
 
 const namespaces = {
   /** 简历制作台（2026-10-23）。 */
@@ -232,6 +233,7 @@ const namespaces = {
   /** 求职进度页（2026-10-27）。 */
   ...trackerPage,
   ...drillSession,
+  ...shortcutSettings,
 } as const;
 
 export default namespaces;
