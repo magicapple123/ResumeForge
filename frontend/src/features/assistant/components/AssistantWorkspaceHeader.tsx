@@ -40,7 +40,7 @@ export default function AssistantWorkspaceHeader({
       <header className="assistant-header">
         <div className="assistant-header-titles">
           <Typography.Title level={3}>{title}</Typography.Title>
-          <Typography.Text type="secondary">当前回复由「设置」中的模型配置提供。</Typography.Text>
+          <Typography.Text type="secondary">{t("responsive.assistant.headerNote")}</Typography.Text>
         </div>
         {/* 多选入口已收进消息右键菜单（R8）；浮窗这里只剩历史按钮。
             header 是 space-between 布局，只剩两个子元素时操作全部靠右。 */}
@@ -49,7 +49,7 @@ export default function AssistantWorkspaceHeader({
             <Button
               type="text"
               icon={<HistoryOutlined />}
-              aria-label="查看投投历史"
+              aria-label={t("responsive.assistant.aria.history")}
               aria-expanded={historyOpen}
               onClick={onToggleHistory}
             >
