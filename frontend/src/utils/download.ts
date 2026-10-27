@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 /** 浏览器端文件下载与打印工具。 */
 
+import { t } from "../i18n";
+
 /** 触发浏览器下载 blob 文件 */
 export function downloadBlob(blob: Blob, filename: string): void {
   const url = URL.createObjectURL(blob);
@@ -32,7 +34,7 @@ export function printHtml(html: string): void {
   const win = window.open(url, "_blank");
   if (!win) {
     URL.revokeObjectURL(url);
-    throw new Error("浏览器拦截了弹窗，请允许本站弹窗后重试");
+    throw new Error(t("fileUtils.download.error.popupBlocked"));
   }
   win.addEventListener(
     "load",
