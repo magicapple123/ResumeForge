@@ -39,6 +39,7 @@ import resumeEditor from "./en-US.resumeEditor";
 import trash from "./en-US.trash";
 import reminder from "./en-US.reminder";
 import materials from "./en-US.materials";
+import applyQueue from "./en-US.applyQueue";
 
 const enUS = {
   ...core,
@@ -79,6 +80,7 @@ const enUS = {
   ...trash,
   ...reminder,
   ...materials,
+  ...applyQueue,
 } as const satisfies Record<keyof ZhCNMessages, string>;
 
 export default enUS;

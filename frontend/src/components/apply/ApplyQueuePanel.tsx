@@ -28,6 +28,8 @@ import { QueueFilterBar } from "./queue/QueueFilterBar";
 import { UNANALYZED_FILTER, type AdmissionFilterValue } from "./queue/filterOptions";
 import { QueueItemEditor } from "./queue/QueueItemEditor";
 import { QueueTable } from "./queue/QueueTable";
+import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 
 interface Props {
   /** 有任务正在运行时为真：禁止重复开始。 */
@@ -39,6 +41,8 @@ interface Props {
 
 export default function ApplyQueuePanel({ disabled, onStarted, onChanged }: Props) {
   const { message } = App.useApp();
+  // 本面板用模块级 t()：必须订阅语言变化。
+  useLocale();
   const [reloadKey, setReloadKey] = useState(0);
   // 列表响应是 { items, total, truncated }（P2-2）：队列封顶 500 条，total 是真实条数。
   const { data, loading, error, reload } = useApi<ApplyQueueList>(() => listQueue(), [reloadKey]);
@@ -114,24 +118,24 @@ export default function ApplyQueuePanel({ disabled, onStarted, onChanged }: Prop
     buildMenu([
       {
         key: "detail",
-        label: "查看详情",
+        label: t("applyQueue.action.viewDetail"),
         icon: <EyeOutlined />,
         onClick: () => setDetail(record),
       },
       {
         key: "edit",
-        label: "编辑",
+        label: t("applyQueue.action.edit"),
         icon: <EditOutlined />,
         onClick: () => setEditing(record),
       },
       {
         key: "remove",
-        label: "移出队列",
+        label: t("applyQueue.action.remove"),
         danger: true,
         icon: <DeleteOutlined />,
-        confirm: "移出队列？",
+        confirm: t("applyQueue.confirm.removeTitle"),
         // 与「删除」区别开：移出队列不动数据，正文要说清"岗位与投递记录都还在"。
-        confirmBody: "只是从队列里拿掉，岗位与投递记录都不会被删除。",
+        confirmBody: t("applyQueue.confirm.removeBody"),
         onClick: () => void remove(record),
       },
     ]);
@@ -141,10 +145,10 @@ export default function ApplyQueuePanel({ disabled, onStarted, onChanged }: Prop
     try {
       await removeQueueItem(item.id);
       setSelectedIds((current) => current.filter((id) => id !== item.id));
-      message.success("已移出队列");
+      message.success(t("applyQueue.toast.removed"));
       refresh();
     } catch (err) {
-      message.error(err instanceof Error ? err.message : "移出队列失败");
+      message.error(err instanceof Error ? err.message : t("applyQueue.toast.removeFailed"));
     } finally {
       setBusy(false);
     }
@@ -161,9 +165,9 @@ export default function ApplyQueuePanel({ disabled, onStarted, onChanged }: Prop
       setSelectedIds([]);
       refresh();
       if (failed > 0) {
-        message.warning(`已移出 ${ids.length - failed} 个岗位，${failed} 个移出失败`);
+        message.warning(t("applyQueue.toast.removePartial", { ok: ids.length - failed, failed }));
       } else {
-        message.success(`已把 ${ids.length} 个岗位移出队列`);
+        message.success(t("applyQueue.toast.removedCount", { count: ids.length }));
       }
     } finally {
       setBatchRemoving(false);
@@ -183,7 +187,7 @@ export default function ApplyQueuePanel({ disabled, onStarted, onChanged }: Prop
             .map((item) => item.job_id)
         : undefined;
     if (selectedIds.length > 0 && chosen?.length === 0) {
-      message.warning("选中的条目已经不可投递，请刷新队列后重试");
+      message.warning(t("applyQueue.toast.notEligible"));
       return;
     }
     setBusy(true);
@@ -192,17 +196,21 @@ export default function ApplyQueuePanel({ disabled, onStarted, onChanged }: Prop
       // 但点击时先查一次状态并给出引导，而不是让用户去读一条后端报错。
       const browser = await getBrowserStatus();
       if (browser.state !== "running") {
-        message.warning("请先启动浏览器再开始投递");
+        message.warning(t("applyQueue.toast.needBrowser"));
         return;
       }
       const task = await createApplyTask(
         chosen ? { job_ids: chosen, use_queue: false } : { use_queue: true },
       );
-      message.success(chosen ? `已开始投递选中的 ${chosen.length} 个岗位` : "已开始投递队列");
+      message.success(
+        chosen
+          ? t("applyQueue.toast.startedSelected", { count: chosen.length })
+          : t("applyQueue.toast.startedAll"),
+      );
       setSelectedIds([]);
       onStarted(task);
     } catch (err) {
-      message.error(err instanceof Error ? err.message : "开始投递失败");
+      message.error(err instanceof Error ? err.message : t("applyQueue.toast.startFailed"));
     } finally {
       setBusy(false);
     }
@@ -218,27 +226,13 @@ export default function ApplyQueuePanel({ disabled, onStarted, onChanged }: Prop
         className="apply-queue-flow"
         type="info"
         showIcon
-        title="队列里放的是「准备投、但还没投」的岗位"
+        title={t("applyQueue.guide.title")}
         description={
           <ol style={{ margin: 0, paddingLeft: 18 }}>
-            <li>
-              在<span className="apply-queue-flow-em">「岗位广场」</span>
-              打开岗位详情，点<span className="apply-queue-flow-em">「加入投递台」</span>
-              把它加进来（从「自动采集」导入的岗位也是同一入口）。
-            </li>
-            <li>
-              在这里核对每个岗位的<span className="apply-queue-flow-em">准入结论</span>
-              ：不确定的先回岗位广场做「匹配度分析」，判定有真实缺口的默认不投。
-            </li>
-            <li>
-              需要时逐行点岗位名<span className="apply-queue-flow-em">查看详情或编辑</span>
-              ，换一份更贴岗位的简历、改一版招呼语。
-            </li>
-            <li>
-              勾选本轮要投的岗位（
-              <span className="apply-queue-flow-em">不勾选＝按顺序投整个队列</span>
-              ），再点「开始投递」——在那之前不会打开任何招聘网站。
-            </li>
+            <li>{t("applyQueue.guide.step1")}</li>
+            <li>{t("applyQueue.guide.step2")}</li>
+            <li>{t("applyQueue.guide.step3")}</li>
+            <li>{t("applyQueue.guide.step4")}</li>
           </ol>
         }
       />
@@ -250,17 +244,8 @@ export default function ApplyQueuePanel({ disabled, onStarted, onChanged }: Prop
           type="warning"
           showIcon
           style={{ marginBottom: 12 }}
-          title={`队列里有 ${unsupportedPending.length} 个岗位不能用投递台自动投递`}
-          description={
-            <span>
-              它们的来源不在投递台支持的招聘网站内（已在「岗位」列标出
-              <Tag color="red" style={{ margin: "0 4px" }}>
-                来源不支持
-              </Tag>
-              ）。按「开始投递」投整个队列时会被拦下，请先点行末「更多操作 → 移出队列」把它们清掉；
-              只想投其中几个时，勾选要投的岗位再点「开始投递」即可。
-            </span>
-          }
+          title={t("applyQueue.unsupported.title", { count: unsupportedPending.length })}
+          description={<span>{t("applyQueue.unsupported.body")}</span>}
         />
       )}
 
@@ -269,7 +254,7 @@ export default function ApplyQueuePanel({ disabled, onStarted, onChanged }: Prop
         <Alert
           type="warning"
           showIcon
-          title={`队列共 ${queueTotal} 个岗位，列表只显示最新入队的前 ${items.length} 条，请用筛选缩小范围或先投递消化队列。`}
+          title={t("applyQueue.truncated", { total: queueTotal, shown: items.length })}
           style={{ marginBottom: 12 }}
         />
       )}
@@ -299,11 +284,8 @@ export default function ApplyQueuePanel({ disabled, onStarted, onChanged }: Prop
         <Empty
           description={
             <Space orientation="vertical" size={4}>
-              <Typography.Text>队列还是空的：先去「岗位广场」挑几个岗位。</Typography.Text>
-              <Typography.Text type="secondary">
-                在「岗位广场」点岗位名打开详情 → 点「加入投递台」，就能把它加到这里；
-                加完之后回到本页，勾选要投的岗位再点「开始投递」。
-              </Typography.Text>
+              <Typography.Text>{t("applyQueue.empty.title")}</Typography.Text>
+              <Typography.Text type="secondary">{t("applyQueue.empty.body")}</Typography.Text>
             </Space>
           }
         />
@@ -321,23 +303,23 @@ export default function ApplyQueuePanel({ disabled, onStarted, onChanged }: Prop
       {/* 队列条目的详情：表格里只放得下摘要，招呼语全文、准入结论与时间都在这里看。 */}
       <RecordDetailDrawer
         open={detail !== null}
-        title={detail?.job_title || "（岗位已删除）"}
+        title={detail?.job_title || t("applyQueue.detail.deletedJob")}
         subtitle={detail?.company}
         tags={detail && <AdmissionTag item={detail} />}
         fields={
           detail
             ? [
                 {
-                  label: "自动投递",
+                  label: t("applyQueue.detail.autoApply"),
                   value:
                     detail.apply_supported === false ? (
-                      <Tag color="red">来源不支持：请到原网站自行投递</Tag>
+                      <Tag color="red">{t("applyQueue.detail.unsupported")}</Tag>
                     ) : (
-                      "可以：来源在投递台支持的招聘网站内"
+                      t("applyQueue.detail.supported")
                     ),
                 },
                 {
-                  label: "状态",
+                  label: t("applyQueue.detail.status"),
                   value: (
                     <Tag color={QUEUE_STATUS_META[detail.status].color}>
                       {QUEUE_STATUS_META[detail.status].label}
@@ -345,16 +327,36 @@ export default function ApplyQueuePanel({ disabled, onStarted, onChanged }: Prop
                   ),
                 },
                 {
-                  label: "排队序号",
-                  value: `第 ${items.findIndex((i) => i.id === detail.id) + 1} 位`,
+                  label: t("applyQueue.detail.queuePosition"),
+                  value: t("applyQueue.detail.position", {
+                    index: items.findIndex((i) => i.id === detail.id) + 1,
+                  }),
                 },
-                { label: "使用简历", value: detail.resume_title || "按默认规则解析" },
-                { label: "加入队列", value: formatDateTime(detail.created_at) },
-                { label: "最近更新", value: formatDateTime(detail.updated_at) },
+                {
+                  label: t("applyQueue.detail.resume"),
+                  value: detail.resume_title || t("applyQueue.detail.defaultResume"),
+                },
+                {
+                  label: t("applyQueue.detail.joinedAt"),
+                  value: formatDateTime(detail.created_at),
+                },
+                {
+                  label: t("applyQueue.detail.updatedAt"),
+                  value: formatDateTime(detail.updated_at),
+                },
               ]
             : []
         }
-        sections={detail ? [{ title: "招呼语", content: detail.greeting || "默认招呼语" }] : []}
+        sections={
+          detail
+            ? [
+                {
+                  title: t("applyQueue.detail.greeting"),
+                  content: detail.greeting || t("applyQueue.detail.defaultGreeting"),
+                },
+              ]
+            : []
+        }
         actions={
           detail && (
             <Space>
@@ -365,14 +367,14 @@ export default function ApplyQueuePanel({ disabled, onStarted, onChanged }: Prop
                   setDetail(null);
                 }}
               >
-                编辑
+                {t("applyQueue.action.edit")}
               </Button>
               <Popconfirm
-                title="移出队列？"
+                title={t("applyQueue.confirm.removeTitle")}
                 // 后果段与行菜单那一处同措辞：移出队列不动岗位与投递记录。
-                description="只是从队列里拿掉，岗位与投递记录都不会被删除。"
-                okText="移出"
-                cancelText="取消"
+                description={t("applyQueue.confirm.removeBody")}
+                okText={t("applyQueue.action.removeShort")}
+                cancelText={t("common.action.cancel")}
                 okButtonProps={{ danger: true }}
                 onConfirm={() => {
                   void remove(detail);
@@ -380,7 +382,7 @@ export default function ApplyQueuePanel({ disabled, onStarted, onChanged }: Prop
                 }}
               >
                 <Button danger icon={<DeleteOutlined />}>
-                  移出队列
+                  {t("applyQueue.action.remove")}
                 </Button>
               </Popconfirm>
             </Space>
