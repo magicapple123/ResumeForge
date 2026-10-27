@@ -4,6 +4,8 @@
 import type { ReactNode } from "react";
 import { useEffect } from "react";
 import { ConfigProvider } from "antd";
+import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 import { layer } from "../../theme/tokens";
 import { useTouTou } from "./touTouContext";
 import { useTouTouCardDrag } from "./useTouTouCardDrag";
@@ -16,6 +18,7 @@ interface Props {
 }
 
 export default function TouTouAssistantCard({ children, onClose, open }: Props) {
+  useLocale();
   const { edge } = useTouTou();
   // 拖拽 hook 必须在 `open` 早退之前调用：条件调用会打乱 React hooks 的调用序约束。
   const { cardStyle, dragging, gripRef, handleKeyDown, handlePointerDown, placeNextToOrb } =
@@ -30,12 +33,12 @@ export default function TouTouAssistantCard({ children, onClose, open }: Props) 
     <section
       className={`tt-assistant-card is-edge-${edge}${dragging ? " is-dragging" : ""}`}
       role="dialog"
-      aria-label="投投求职助手"
+      aria-label={t("touTou.assistant.ariaLabel")}
       aria-describedby="tt-assistant-card-description"
       style={cardStyle}
     >
       <p id="tt-assistant-card-description" className="tt-assistant-card-sr-only">
-        投投可以帮助你解决简历通使用问题、分析简历和岗位，并在明确要求时操作允许的数据。
+        {t("touTou.assistant.description")}
       </p>
       {/*
         把手：按住这里拖动卡片。放在卡片最上层、关闭按钮（z-index: 4）之下——
@@ -46,15 +49,15 @@ export default function TouTouAssistantCard({ children, onClose, open }: Props) 
         className="tt-assistant-card-grip"
         role="button"
         tabIndex={0}
-        aria-label="拖动投投助手卡片"
-        title="按住拖动卡片"
+        aria-label={t("touTou.assistant.gripLabel")}
+        title={t("touTou.assistant.gripTitle")}
         onPointerDown={handlePointerDown}
         onKeyDown={handleKeyDown}
       />
       <button
         type="button"
         className="tt-assistant-card-close"
-        aria-label="关闭投投助手"
+        aria-label={t("touTou.assistant.close")}
         onClick={onClose}
       >
         ×
