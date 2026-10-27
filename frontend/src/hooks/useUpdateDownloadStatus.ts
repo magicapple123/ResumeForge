@@ -1,16 +1,24 @@
 // SPDX-License-Identifier: Apache-2.0
 import { useCallback, useEffect, useRef, useState } from "react";
 import { getUpdateDownloadStatus } from "../api/settings";
-import { t } from "../i18n";
+import type { MessageKey } from "../i18n";
 import type { UpdateStatus } from "../types";
 import { isDocumentHidden, onVisibilityChange } from "../utils/visibility";
 
 const POLL_MS = 800;
 
+/**
+ * 读取失败时的提示**只存 key，不存已求值的文案**：事件期取 t() 会把当时的语言冻进
+ * state，切语言后这句提示就停在旧语种。语言在渲染期由消费方（UpdateCard）决定，
+ * 它订阅了语言变化，所以切语言会重新渲染并重译。
+ */
+const STATUS_READ_ERROR_KEY: MessageKey = "hooksUi.updateStatus.error.read";
+
 /** Status reads must never overwrite a newer download/install action result. */
 export function useUpdateDownloadStatus() {
   const [status, setStatusState] = useState<UpdateStatus | null>(null);
-  const [statusError, setStatusError] = useState("");
+  /** 空串表示"没有错误"；否则是待渲染期翻译的 key。 */
+  const [statusError, setStatusError] = useState<MessageKey | "">("");
   const mounted = useRef(false);
   const version = useRef(0);
   const pending = useRef<{ controller: AbortController; promise: Promise<void> } | null>(null);
@@ -31,7 +39,7 @@ export function useUpdateDownloadStatus() {
         setStatusError("");
       })
       .catch(() => {
-        if (isCurrent()) setStatusError(t("hooksUi.updateStatus.error.read"));
+        if (isCurrent()) setStatusError(STATUS_READ_ERROR_KEY);
       })
       .finally(() => {
         if (pending.current?.controller === controller) pending.current = null;
