@@ -17,7 +17,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { t } from "../../i18n";
 import BatchDeleteButton from "./BatchDeleteButton";
 import { RowActions } from "./RowActions";
-import { TRASH_RECOVERY_NOTE, useRowActionMenu, type RowMenuItem } from "./rowActionMenu";
+import { useRowActionMenu, type RowMenuItem } from "./rowActionMenu";
 
 afterEach(() => {
   cleanup();
@@ -81,7 +81,7 @@ describe("二次确认的正文", () => {
               label: "删除",
               danger: true,
               confirm: "删除这条记录？",
-              confirmBody: TRASH_RECOVERY_NOTE,
+              confirmBody: t("common.note.trashRecovery"),
               onClick,
             },
           ]}
@@ -94,7 +94,7 @@ describe("二次确认的正文", () => {
     const dialog = await screen.findByRole("dialog");
     // 标题说动作与对象，正文说后果与可逆性——两段都在，才算 §4.4 的三段式。
     expect(dialog.textContent).toContain("删除这条记录？");
-    expect(dialog.textContent).toContain(TRASH_RECOVERY_NOTE);
+    expect(dialog.textContent).toContain(t("common.note.trashRecovery"));
   });
 
   it("确认按钮写具体动作：传了 confirmOkText/confirmCancelText 就不再是默认「确定/取消」", async () => {
@@ -107,7 +107,7 @@ describe("二次确认的正文", () => {
               label: "删除",
               danger: true,
               confirm: "删除这份简历？",
-              confirmBody: TRASH_RECOVERY_NOTE,
+              confirmBody: t("common.note.trashRecovery"),
               confirmOkText: t("resumes.remove.confirm.ok"),
               confirmCancelText: t("resumes.remove.confirm.cancel"),
               onClick: vi.fn(),

@@ -91,7 +91,7 @@ describe("useUpdateDownloadStatus", () => {
     await act(async () => {
       await Promise.resolve();
     });
-    expect(result.current.statusError).toContain("重试读取");
+    expect(result.current.statusError).toBe("hooksUi.updateStatus.error.read");
     expect(result.current.statusError).not.toContain("SYNTHETIC_PRIVATE");
     api.getUpdateDownloadStatus.mockResolvedValueOnce(status("ready"));
     await act(async () => result.current.refreshStatus());

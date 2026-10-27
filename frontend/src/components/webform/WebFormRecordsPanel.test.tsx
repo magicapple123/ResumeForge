@@ -13,7 +13,6 @@ import { App as AntdApp } from "antd";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { WebFormFillRecord, WebFormRecordSummary } from "../../types";
-import { TRASH_RECOVERY_NOTE } from "../common/rowActionMenu";
 import { t } from "../../i18n";
 import WebFormRecordsPanel from "./WebFormRecordsPanel";
 
@@ -136,7 +135,7 @@ describe("WebFormRecordsPanel", () => {
     // 正文里的条数来自勾选数量，跟着选择走。
     expectDialogText(
       dialog,
-      t("webFormRecords.confirm.batchBody", { count: 1, note: TRASH_RECOVERY_NOTE }),
+      t("webFormRecords.confirm.batchBody", { count: 1, note: t("common.note.trashRecovery") }),
     );
 
     fireEvent.click(
