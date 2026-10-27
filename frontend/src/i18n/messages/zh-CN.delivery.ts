@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * 「导出交付包 / 导出配置 / 交付原件」（W19 / D18–D20）这一批**新增**界面文案。
+ * 「导出交付包 / 导出配置 / 交付原件 / 交付存档」（W19 / D18–D20）这一批**新增**界面文案。
  *
  * 术语按 docs/ui-copy-guide.md：**模板 / 版式 / 排版参数 / 版面**四层不混用；
  * 「导出配置」= 数据集级命名预设，「交付原件」= 可选归档的文件字节（与投递快照区分）。
@@ -144,6 +144,33 @@ const delivery = {
   "delivery.archive.deleted": "已删除这件原件",
   "delivery.archive.deleteFailed": "删除失败，请重试",
   "delivery.archive.limit": "每份简历最多保留 {max} 份原件，满了请先删旧",
+
+  // ── 交付存档弹层（历史存档表：筛选、来源标签与下载）───────────
+  "delivery.archive.modalTitle": "交付存档",
+  "delivery.archive.noticeTitle": "原简历删除后仍可查找历史存档",
+  "delivery.archive.noticeBody":
+    "回收站的彻底删除不清除交付快照、附件副本或已有备份。存档用于核对历史内容；重新生成不等同于取回原始文件字节。",
+  "delivery.archive.search": "搜索交付存档",
+  "delivery.archive.searchPlaceholder": "简历标题、公司或岗位",
+  "delivery.archive.sourceFilter": "交付来源",
+  "delivery.archive.source.all": "全部来源",
+  "delivery.archive.source.apply": "投递台",
+  "delivery.archive.source.track": "进度关联",
+  "delivery.archive.source.export": "导出存档",
+  "delivery.archive.source.unknown": "历史记录",
+  "delivery.archive.refresh": "刷新",
+  "delivery.archive.modalLoadFailed": "交付存档加载失败",
+  "delivery.archive.table.resume": "简历",
+  "delivery.archive.table.destination": "目的地",
+  "delivery.archive.table.source": "来源",
+  "delivery.archive.table.date": "日期",
+  "delivery.archive.table.actions": "操作",
+  "delivery.archive.companyUnknown": "公司未记录",
+  "delivery.archive.jobUnknown": "岗位未记录",
+  "delivery.archive.download": "下载存档",
+  "delivery.archive.downloaded": "已下载冻结的交付内容",
+  "delivery.archive.downloadedReplayed": "已按存档内容重新生成文件；并非保证字节相同的原件",
+  "delivery.archive.downloadFailed": "下载失败",
 } as const;
 
 export default delivery;

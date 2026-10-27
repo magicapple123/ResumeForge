@@ -129,6 +129,32 @@ const delivery = {
   "delivery.archive.deleteFailed": "Could not delete the original file; retry",
   "delivery.archive.limit":
     "Each Resume can keep up to {max} originals; delete older files when the limit is reached",
+  "delivery.archive.modalTitle": "Delivery archive",
+  "delivery.archive.noticeTitle": "Archived deliveries stay searchable after the Resume is deleted",
+  "delivery.archive.noticeBody":
+    "Permanently deleting from Trash does not remove delivery snapshots, attachment copies, or existing backups. The archive is for checking past content; regenerating a file does not recover the original bytes.",
+  "delivery.archive.search": "Search delivery archive",
+  "delivery.archive.searchPlaceholder": "Resume title, company, or Job",
+  "delivery.archive.sourceFilter": "Delivery source",
+  "delivery.archive.source.all": "All sources",
+  "delivery.archive.source.apply": "Apply desk",
+  "delivery.archive.source.track": "Progress link",
+  "delivery.archive.source.export": "Export archive",
+  "delivery.archive.source.unknown": "History",
+  "delivery.archive.refresh": "Refresh",
+  "delivery.archive.modalLoadFailed": "Could not load the delivery archive",
+  "delivery.archive.table.resume": "Resume",
+  "delivery.archive.table.destination": "Destination",
+  "delivery.archive.table.source": "Source",
+  "delivery.archive.table.date": "Date",
+  "delivery.archive.table.actions": "Actions",
+  "delivery.archive.companyUnknown": "Company not recorded",
+  "delivery.archive.jobUnknown": "Job not recorded",
+  "delivery.archive.download": "Download archive",
+  "delivery.archive.downloaded": "Downloaded the frozen delivery content",
+  "delivery.archive.downloadedReplayed":
+    "Regenerated from the archived content; the bytes are not guaranteed to match the original",
+  "delivery.archive.downloadFailed": "Download failed",
 } as const;
 
 export default delivery;

@@ -61,28 +61,34 @@ export default function DeliveryArchiveModal({
       downloadBlob(result.blob, result.filename);
       message.success(
         result.replayed
-          ? "已按存档内容重新生成文件；并非保证字节相同的原件"
-          : "已下载冻结的交付内容",
+          ? t("delivery.archive.downloadedReplayed")
+          : t("delivery.archive.downloaded"),
       );
     } catch (err) {
-      message.error(err instanceof Error ? err.message : "下载失败");
+      message.error(err instanceof Error ? err.message : t("delivery.archive.downloadFailed"));
     } finally {
       setDownloading(null);
     }
   };
   return (
-    <Modal open title="交付存档" onCancel={onClose} footer={null} width={850}>
+    <Modal
+      open
+      title={t("delivery.archive.modalTitle")}
+      onCancel={onClose}
+      footer={null}
+      width={850}
+    >
       <Alert
         type="info"
         showIcon
-        title="原简历删除后仍可查找历史存档"
-        description="回收站的彻底删除不清除交付快照、附件副本或已有备份。存档用于核对历史内容；重新生成不等同于取回原始文件字节。"
+        title={t("delivery.archive.noticeTitle")}
+        description={t("delivery.archive.noticeBody")}
         style={{ marginBottom: 16 }}
       />
       <Space wrap style={{ marginBottom: 16 }}>
         <Input.Search
-          aria-label="搜索交付存档"
-          placeholder="简历标题、公司或岗位"
+          aria-label={t("delivery.archive.search")}
+          placeholder={t("delivery.archive.searchPlaceholder")}
           allowClear
           onSearch={(value) => {
             setKeyword(value);
@@ -90,7 +96,7 @@ export default function DeliveryArchiveModal({
           }}
         />
         <Select
-          aria-label="交付来源"
+          aria-label={t("delivery.archive.sourceFilter")}
           value={source}
           style={{ width: 150 }}
           onChange={(value) => {
@@ -98,18 +104,18 @@ export default function DeliveryArchiveModal({
             setPage(1);
           }}
           options={[
-            { value: "", label: "全部来源" },
-            { value: "apply", label: "投递台" },
-            { value: "track", label: "进度关联" },
-            { value: "export", label: "导出存档" },
+            { value: "", label: t("delivery.archive.source.all") },
+            { value: "apply", label: t("delivery.archive.source.apply") },
+            { value: "track", label: t("delivery.archive.source.track") },
+            { value: "export", label: t("delivery.archive.source.export") },
           ]}
         />
-        <Button onClick={() => void reload()}>刷新</Button>
+        <Button onClick={() => void reload()}>{t("delivery.archive.refresh")}</Button>
       </Space>
       {error && (
         <Alert
           type="error"
-          title="交付存档加载失败"
+          title={t("delivery.archive.modalLoadFailed")}
           description={error}
           style={{ marginBottom: 12 }}
         />
@@ -130,35 +136,39 @@ export default function DeliveryArchiveModal({
           onChange: setPage,
         }}
         columns={[
-          { title: "简历", dataIndex: "resume_title", ellipsis: true },
+          { title: t("delivery.archive.table.resume"), dataIndex: "resume_title", ellipsis: true },
           {
-            title: "目的地",
+            title: t("delivery.archive.table.destination"),
             render: (_, item) =>
-              `${item.company || "公司未记录"} · ${item.job_title || "岗位未记录"}`,
+              `${item.company || t("delivery.archive.companyUnknown")} · ${item.job_title || t("delivery.archive.jobUnknown")}`,
           },
           {
-            title: "来源",
+            title: t("delivery.archive.table.source"),
             render: (_, item) => (
               <Tag>
                 {(
-                  { apply: "投递台", track: "进度关联", export: "导出存档" } as Record<
-                    string,
-                    string
-                  >
-                )[item.source] ?? "历史记录"}
+                  {
+                    apply: t("delivery.archive.source.apply"),
+                    track: t("delivery.archive.source.track"),
+                    export: t("delivery.archive.source.export"),
+                  } as Record<string, string>
+                )[item.source] ?? t("delivery.archive.source.unknown")}
               </Tag>
             ),
           },
-          { title: "日期", render: (_, item) => new Date(item.created_at).toLocaleDateString() },
           {
-            title: "操作",
+            title: t("delivery.archive.table.date"),
+            render: (_, item) => new Date(item.created_at).toLocaleDateString(),
+          },
+          {
+            title: t("delivery.archive.table.actions"),
             render: (_, item) => (
               <Button
                 size="small"
                 loading={downloading === item.id}
                 onClick={() => void download(item)}
               >
-                下载存档
+                {t("delivery.archive.download")}
               </Button>
             ),
           },
