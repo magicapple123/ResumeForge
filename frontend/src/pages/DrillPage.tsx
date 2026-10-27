@@ -43,13 +43,21 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useClientPagination } from "../hooks/useClientPagination";
 import { deleteDrillSession, getDrillSession, listDrillSessions } from "../api/drill";
-import type { DrillSession, DrillSessionBrief } from "../types";
-import { FEEDBACK_LABELS } from "../types";
+import type { DrillSession, DrillSessionBrief, FeedbackPolicy } from "../types";
 import { ActiveSession } from "./drill/ActiveSession";
 import { ReviewPanel } from "./drill/ReviewPanel";
 import { StartPanel } from "./drill/StartPanel";
-import { t } from "../i18n";
+import { t, type MessageKey } from "../i18n";
 import { useLocale } from "../i18n/i18nContext";
+
+/**
+ * 反馈策略是协议值，展示名在语言包里。这里沿用 `drill.startPanel.feedback.*` 那组 key
+ * （与开场面板的选项逐字一致）；`types/drill.ts` 的 `FEEDBACK_LABELS` 属类型层，按约定不改。
+ */
+const FEEDBACK_LABEL_KEYS: Record<FeedbackPolicy, MessageKey> = {
+  deferred: "drill.startPanel.feedback.deferred",
+  immediate: "drill.startPanel.feedback.immediate",
+};
 
 export default function DrillPage() {
   useLocale();
@@ -146,9 +154,9 @@ export default function DrillPage() {
     modal.confirm({
       title: t("drill.confirm.deleteTitle"),
       // 标题只说动作 + 对象；条数与后果进正文（§4.4 的例外：数量让标题超 12 字）。
-      // i18n-ok: 条数从标题挪进正文（§4.4 例外），这里的中文就是确认正文本身
+      // i18n-ok: 正文后缀是共用常量 HARD_DELETE_NOTE（含中文），待常量收口后整句一起迁移
       content: `这 ${ids.length} 场深挖${HARD_DELETE_NOTE}`,
-      okText: "删除",
+      okText: t("common.action.delete"),
       okButtonProps: { danger: true },
       onOk: async () => {
         const results = await Promise.allSettled(
@@ -214,10 +222,7 @@ export default function DrillPage() {
           <Typography.Title level={4} style={{ margin: 0 }}>
             {t("drill.page.title")}
           </Typography.Title>
-          <Typography.Text type="secondary">
-            把事实台账里「已确认」的主张逐条拿出来压力测试：讲不讲得清、哪里还站不住。
-            每道题的标准在你看到问题之前就定下来，不评总分。
-          </Typography.Text>
+          <Typography.Text type="secondary">{t("drill.page.subtitle")}</Typography.Text>
         </Space>
         <StartPanel
           onStarted={(session) => {
@@ -263,7 +268,7 @@ export default function DrillPage() {
               <Tag color={finished ? "default" : "processing"}>
                 {finished ? t("drill.status.finished") : t("drill.status.active")}
               </Tag>
-              <Tooltip title={FEEDBACK_LABELS[current.feedback_policy]}>
+              <Tooltip title={t(FEEDBACK_LABEL_KEYS[current.feedback_policy])}>
                 <Tag>
                   {current.feedback_policy === "deferred"
                     ? t("drill.mode.simulated")
@@ -369,7 +374,11 @@ export default function DrillPage() {
                           : t("drill.status.finished")}
                       </Tag>
                       <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                        {item.current_index}/{item.max_questions} 题 ·{" "}
+                        {t("drill.progress", {
+                          current: item.current_index,
+                          total: item.max_questions,
+                        })}
+                        {" · "}
                         {item.created_at.replace("T", " ").slice(0, 16)}
                       </Typography.Text>
                     </Space>
@@ -394,8 +403,8 @@ export default function DrillPage() {
 
       {!current && history.length > 0 && (
         <Typography.Text type="secondary">
-          点上方「继续」或「看复盘」打开某一场；也可以
-          <PlusOutlined /> 直接开始新的一场。
+          {t("pagesMisc.drillPage.openHint.before")}
+          <PlusOutlined /> {t("pagesMisc.drillPage.openHint.after")}
         </Typography.Text>
       )}
     </div>
