@@ -14,6 +14,8 @@ import {
 } from "antd";
 import type { UploadProps } from "antd";
 import { useMemo } from "react";
+import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 import type { ResumeStyleField } from "../../types";
 
 interface BadgeValue {
@@ -32,7 +34,7 @@ function readAsDataUrl(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => resolve(String(reader.result || ""));
-    reader.onerror = () => reject(new Error("读取图片失败"));
+    reader.onerror = () => reject(new Error(t("templatesUi.styleControls.error.readImage")));
     reader.readAsDataURL(file);
   });
 }
@@ -42,6 +44,7 @@ function isHexColor(value: unknown): value is string {
 }
 
 export default function TemplateStyleControls({ fields, values, onChange }: Props) {
+  useLocale();
   const { message } = App.useApp();
   const badges = useMemo(
     () => (Array.isArray(values.badges) ? (values.badges as BadgeValue[]) : []),
@@ -59,6 +62,7 @@ export default function TemplateStyleControls({ fields, values, onChange }: Prop
       "badges",
       badges.filter((_, i) => i !== index),
     );
+  // i18n-ok: 徽章 alt 随模板配置提交后端并落库，是数据不是界面文案（换语言会让旧数据混语言）
   const addBadge = () => setValue("badges", [...badges, { image: "", label: "", alt: "模板装饰" }]);
 
   const uploadProps = (index: number): UploadProps => ({
@@ -66,7 +70,7 @@ export default function TemplateStyleControls({ fields, values, onChange }: Prop
     showUploadList: false,
     beforeUpload: async (file) => {
       if (file.size > 300 * 1024) {
-        message.error("自定义标签图片不能超过 300 KB，请先缩小或压缩图片");
+        message.error(t("templatesUi.styleControls.error.imageTooLarge"));
         return false;
       }
       try {
@@ -95,7 +99,7 @@ export default function TemplateStyleControls({ fields, values, onChange }: Prop
                     onChange={(_, hex) => setValue(field.key, hex)}
                   />
                   <Input
-                    aria-label={field.label + "十六进制"}
+                    aria-label={t("templatesUi.styleControls.colorHexAria", { label: field.label })}
                     size="small"
                     value={typeof value === "string" ? value : ""}
                     placeholder="#16365c"
@@ -108,7 +112,7 @@ export default function TemplateStyleControls({ fields, values, onChange }: Prop
                   aria-label={field.label}
                   size="small"
                   value={typeof value === "string" ? value : undefined}
-                  placeholder="沿用模板"
+                  placeholder={t("templatesUi.styleControls.placeholder.inherit")}
                   allowClear
                   options={field.options}
                   onChange={(next) => setValue(field.key, next ?? null)}
@@ -121,7 +125,7 @@ export default function TemplateStyleControls({ fields, values, onChange }: Prop
                   min={field.min}
                   max={field.max}
                   step={field.step ?? 0.1}
-                  placeholder="沿用模板"
+                  placeholder={t("templatesUi.styleControls.placeholder.inherit")}
                   onChange={(next) => setValue(field.key, next ?? null)}
                 />
               )}
@@ -131,19 +135,18 @@ export default function TemplateStyleControls({ fields, values, onChange }: Prop
       </div>
       <div className="template-badge-editor">
         <Space align="center" style={{ marginBottom: 8 }}>
-          <Typography.Text strong>自定义标签 / 图片</Typography.Text>
+          <Typography.Text strong>{t("templatesUi.styleControls.label")}</Typography.Text>
           <Button
             size="small"
             icon={<PlusOutlined />}
             onClick={addBadge}
             disabled={badges.length >= 8}
           >
-            添加
+            {t("templatesUi.styleControls.action.add")}
           </Button>
         </Space>
         <Typography.Paragraph type="secondary" style={{ marginTop: 0, fontSize: 12 }}>
-          可添加个人品牌、证书、语言或作品标签；图片需为 ≤300 KB 的 PNG / JPG /
-          WEBP，内嵌到模板，不会请求外部地址。
+          {t("templatesUi.styleControls.hint")}
         </Typography.Paragraph>
         {badges.map((badge, index) => (
           <div className="template-badge-editor-row" key={String(index) + "-" + badge.alt}>
@@ -152,14 +155,14 @@ export default function TemplateStyleControls({ fields, values, onChange }: Prop
             ) : (
               <Upload {...uploadProps(index)}>
                 <Button size="small" icon={<UploadOutlined />}>
-                  上传图片
+                  {t("templatesUi.styleControls.action.upload")}
                 </Button>
               </Upload>
             )}
             <Input
               size="small"
               value={badge.label}
-              placeholder="标签文字（可留空）"
+              placeholder={t("templatesUi.styleControls.placeholder.label")}
               onChange={(event) => setBadge(index, { label: event.target.value })}
             />
             <Button
@@ -167,7 +170,7 @@ export default function TemplateStyleControls({ fields, values, onChange }: Prop
               danger
               type="text"
               icon={<DeleteOutlined />}
-              aria-label={"删除第 " + (index + 1) + " 个自定义标签"}
+              aria-label={t("templatesUi.styleControls.removeAria", { count: index + 1 })}
               onClick={() => removeBadge(index)}
             />
           </div>
