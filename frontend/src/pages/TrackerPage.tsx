@@ -44,33 +44,14 @@ import TrackImportModal from "../components/tracker/TrackImportModal";
 import { useApi } from "../hooks/useApi";
 import { useDeleteUndo } from "../features/trash/useDeleteUndo";
 import { downloadBlob } from "../utils/download";
-import type { Track, TrackStatus } from "../types";
+import type { Track } from "../types";
 import { FUNNEL_STATUSES, TRACK_STATUSES } from "../types";
 import { t } from "../i18n";
-import type { MessageKey } from "../i18n";
 import { useLocale } from "../i18n/i18nContext";
+import { TRACK_STATUS_LABEL_KEYS } from "../i18n/enum/tracker";
 
 /** 每页条数：与后端分页端点默认值一致（page_size 1–100）。 */
 const TRACK_PAGE_SIZE = 20;
-
-/**
- * 漏斗与筛选下拉的状态名：**键是协议值**（`applied` / `screening` …，与后端逐字对应，
- * 见 `types/tracker.ts`），值指向语言包 key。
- *
- * 模块作用域不能调 `t()`（切语言不会重渲染），所以这里只存 key，使用处 `t(...)`。
- * 七个名字与进度表单共用同一份词表（`trackerForm.status.*`）：同一个协议值在两处
- * 必须是同一个名字，各写一份迟早会漂。`types/tracker.ts` 的 `TRACK_STATUS_LABELS`
- * 一个字都没动——`AnalyticsPage` 与列表卡片仍在用。
- */
-const TRACK_STATUS_LABEL_KEYS: Record<TrackStatus, MessageKey> = {
-  applied: "trackerForm.status.applied",
-  screening: "trackerForm.status.screening",
-  assessment: "trackerForm.status.assessment",
-  interview: "trackerForm.status.interview",
-  offer: "trackerForm.status.offer",
-  rejected: "trackerForm.status.rejected",
-  unknown: "trackerForm.status.unknown",
-};
 
 /** 深链 ?job_id= 的解析：正整数才认，其余（缺省/非数字/≤0）一律按"没有筛选"处理。 */
 function parseLinkedJobId(raw: string | null): number | null {
