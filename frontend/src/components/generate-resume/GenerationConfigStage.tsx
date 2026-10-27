@@ -81,7 +81,7 @@ export default function GenerationConfigStage({
           type="warning"
           showIcon
           style={{ marginBottom: 16 }}
-          title="尚未配置大模型 API，请先到「设置」页完成配置（支持 DeepSeek / 豆包 / Kimi / OpenAI 等）"
+          title={t("generate.config.llmMissing")}
         />
       ) : (
         <Alert
@@ -91,38 +91,34 @@ export default function GenerationConfigStage({
           title={t("generate.config.model-hint", {
             model: modelName || t("generate.config.model-unknown"),
           })}
-          description={
-            job
-              ? "系统会根据目标岗位的 JD，从完整个人资料与经历总结文件中筛选并排序相关信息；原始资料不会被修改。"
-              : "通用简历不针对任何岗位：系统会使用当前方案包含的板块（只受篇幅预算限制），保留各方向的经历与技能；原始资料不会被修改。"
-          }
+          description={job ? t("generate.config.jobHint") : t("generate.config.generalHint")}
         />
       )}
       {!job && (
         <div style={{ marginBottom: 16 }}>
-          <Typography.Text strong>简历名称</Typography.Text>
+          <Typography.Text strong>{t("generate.config.titleName")}</Typography.Text>
           <Input
-            aria-label="简历名称"
+            aria-label={t("generate.config.titleName")}
             value={title}
             maxLength={64}
             style={{ marginTop: 8 }}
-            placeholder="留空则自动命名为「姓名-通用简历-时间」"
+            placeholder={t("generate.config.titlePlaceholder")}
             onChange={(event) => setTitle(event.target.value)}
           />
         </div>
       )}
-      <Typography.Title level={5}>{job ? "岗位适配与内容美化" : "内容美化"}</Typography.Title>
+      <Typography.Title level={5}>
+        {job ? t("generate.config.headingJob") : t("generate.config.headingGeneral")}
+      </Typography.Title>
       <Space orientation="vertical" size={14} style={{ width: "100%" }}>
         <Space size={10}>
           <Switch checked={enhance} onChange={setEnhance} />
           <Typography.Text strong>
-            {job ? "根据岗位要求美化拓展经历" : "用资料里的总结文件补足经历细节"}
+            {job ? t("generate.config.enhanceJob") : t("generate.config.enhanceGeneral")}
           </Typography.Text>
         </Space>
         <Typography.Text type="secondary">
-          {job
-            ? "基于已有经历和总结文件补足表达细节，突出与岗位相关的能力，不修改个人资料原文。"
-            : "基于已有经历和总结文件补足表达细节，突出资料本身的重点，不修改个人资料原文。"}
+          {job ? t("generate.config.enhanceJobHint") : t("generate.config.enhanceGeneralHint")}
         </Typography.Text>
         <Segmented
           block
@@ -141,12 +137,12 @@ export default function GenerationConfigStage({
         <Typography.Text type={enhance ? undefined : "secondary"}>
           {enhance
             ? enhancementLevelDescription(enhancementLevel, !job)
-            : "关闭后仅筛选和整理原有资料，不进行拓展。"}
+            : t("generate.config.enhanceOffHint")}
         </Typography.Text>
       </Space>
 
       <Typography.Title level={5} style={{ marginTop: 20 }}>
-        篇幅与版式
+        {t("generate.config.layoutSection")}
       </Typography.Title>
       <Space size={10} align="center" style={{ marginBottom: 10 }} wrap>
         <Typography.Text type="secondary">{t("research.mode.label")}</Typography.Text>
@@ -179,8 +175,7 @@ export default function GenerationConfigStage({
         }
       />
       <Typography.Text type="secondary" style={{ display: "block", marginTop: 8 }}>
-        默认 1 页 A4 +
-        标准字号。生成后如果内容塞不下，可以在预览里一键增加页数或缩小字号，不必重新生成。
+        {t("generate.config.layoutHint")}
       </Typography.Text>
 
       <Typography.Title level={5} style={{ marginTop: 20 }}>
@@ -193,26 +188,26 @@ export default function GenerationConfigStage({
       />
 
       <Typography.Title level={5} style={{ marginTop: 20 }}>
-        补充要求（选填）
+        {t("generate.config.extraRequirements")}
       </Typography.Title>
       <Input.TextArea
         value={customInstruction}
         maxLength={MAX_CUSTOM_INSTRUCTION}
         disabled={!llmReady}
         autoSize={{ minRows: 2, maxRows: 5 }}
-        placeholder="例如：突出后端性能优化经历；不要出现「负责…」这类空泛表述；把实习经历放在教育经历前面。"
+        placeholder={t("generate.config.extraPlaceholder")}
         onChange={(event) => setCustomInstruction(event.target.value)}
       />
       <MaxLengthHint value={customInstruction} maxLength={MAX_CUSTOM_INSTRUCTION} />
       <Typography.Text type="secondary" style={{ display: "block", marginTop: 8 }}>
-        这段要求会附在生成提示词后面，只影响表达方向；事实锚定、篇幅上限和防虚构规则不变。
+        {t("generate.config.extraHint")}
       </Typography.Text>
 
       <div style={{ marginTop: 24, textAlign: "right" }}>
         <Space>
-          <Button onClick={onClose}>取消</Button>
+          <Button onClick={onClose}>{t("common.action.cancel")}</Button>
           <Button type="primary" disabled={!llmReady} onClick={onStart}>
-            开始生成
+            {t("generate.config.start")}
           </Button>
         </Space>
       </div>
