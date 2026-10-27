@@ -7,16 +7,38 @@
  *
  * 设置页与全局拖入导入共用这一份拼装逻辑，避免两处措辞/截断规则各写一遍。
  */
+import { t } from "../../i18n";
+import type { MessageKey } from "../../i18n";
 import type { DatasetImportIssue } from "../../types";
 
-function summarize(label: "失败" | "跳过", items: DatasetImportIssue[]): string {
+/** 逐份问题的两种口径：各自的整句与「另有 N 份」后缀（模块作用域只存 key）。 */
+type IssueKind = "failed" | "skipped";
+
+const SUMMARY_KEYS: Record<IssueKind, { summary: MessageKey; rest: MessageKey }> = {
+  failed: {
+    summary: "featuresMisc.datasetImport.failedSummary",
+    rest: "featuresMisc.datasetImport.failedRest",
+  },
+  skipped: {
+    summary: "featuresMisc.datasetImport.skippedSummary",
+    rest: "featuresMisc.datasetImport.skippedRest",
+  },
+};
+
+function summarize(kind: IssueKind, items: DatasetImportIssue[]): string {
   // 逐份点名（最多 3 条）：只说"另外 N 份"用户还是不知道是哪几份。
   const shown = items
     .slice(0, 3)
-    .map((item) => `${item.name || item.id || "未命名数据集"}：${item.error}`)
-    .join("；");
+    .map((item) =>
+      t("featuresMisc.datasetImport.item", {
+        name: item.name || item.id || t("featuresMisc.datasetImport.unnamed"),
+        reason: item.error,
+      }),
+    )
+    .join(t("featuresMisc.datasetImport.separator"));
   const rest = items.length - 3;
-  return `${items.length} 份数据集${label}：${shown}${rest > 0 ? `；另有 ${rest} 份${label}` : ""}`;
+  const summary = t(SUMMARY_KEYS[kind].summary, { count: items.length, items: shown });
+  return rest > 0 ? summary + t(SUMMARY_KEYS[kind].rest, { count: rest }) : summary;
 }
 
 /** 把逐份失败/跳过拼成一条可直接展示的提示；两者都为空时返回 null。 */
@@ -25,7 +47,7 @@ export function describeImportIssues(
   skipped: DatasetImportIssue[] | undefined,
 ): string | null {
   const parts: string[] = [];
-  if (failed?.length) parts.push(summarize("失败", failed));
-  if (skipped?.length) parts.push(summarize("跳过", skipped));
-  return parts.length > 0 ? parts.join("；") : null;
+  if (failed?.length) parts.push(summarize("failed", failed));
+  if (skipped?.length) parts.push(summarize("skipped", skipped));
+  return parts.length > 0 ? parts.join(t("featuresMisc.datasetImport.separator")) : null;
 }
