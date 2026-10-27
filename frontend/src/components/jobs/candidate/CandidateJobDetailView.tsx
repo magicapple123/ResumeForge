@@ -12,6 +12,7 @@ import { App, Button, Descriptions, Image, Space, Tag, Typography } from "antd";
 import { useState } from "react";
 import { lookupUserFiles, openUserFile } from "../../../api/userFiles";
 import { t } from "../../../i18n";
+import { candidateJobSourceLabelKey } from "../../../i18n/enum/jobs";
 import { useLocale } from "../../../i18n/i18nContext";
 import type { CandidateJobDetail } from "../../../types";
 
@@ -64,6 +65,12 @@ export default function CandidateJobDetailView({ candidate, onEdit, onImport }: 
 
   if (!candidate) return null;
 
+  // 来源是落库的协议值（或后端站点名）：能对上语言包就翻，站点名原样显示。
+  const sourceKey = candidateJobSourceLabelKey(candidate.source);
+  const sourceLabel = sourceKey
+    ? t(sourceKey)
+    : candidate.source || t("jobs.candidate.detail.source-manual");
+
   // 备选阶段不展示地点/薪资：真到投递的时候正式岗位里有更全的版本。
   const fields = [
     {
@@ -76,7 +83,7 @@ export default function CandidateJobDetailView({ candidate, onEdit, onImport }: 
       label: t("jobs.candidate.detail.source"),
       children: (
         <Space>
-          <Tag>{candidate.source || t("jobs.candidate.detail.source-manual")}</Tag>
+          <Tag>{sourceLabel}</Tag>
           <Tag color={candidate.status === "imported" ? "green" : "orange"}>
             {candidate.status === "imported"
               ? t("jobs.candidate.detail.status-imported", { id: candidate.imported_job_id ?? "" })
