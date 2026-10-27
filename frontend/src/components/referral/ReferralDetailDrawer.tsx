@@ -8,6 +8,8 @@ import { EditOutlined } from "@ant-design/icons";
 import { REFERRAL_STATUS_COLORS, REFERRAL_STATUS_LABELS, referralImageUrl } from "../../types";
 import type { Referral, ReferralStatus } from "../../types";
 import { formatDateTime } from "../../utils/format";
+import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 import { RecordDetailDrawer } from "../common/RecordDetail";
 
 interface Props {
@@ -17,10 +19,12 @@ interface Props {
 }
 
 export default function ReferralDetailDrawer({ detail, onEdit, onClose }: Props) {
+  // 本文件用模块级 t()：必须订阅语言变化，否则切语言后抽屉文案不重渲染。
+  useLocale();
   return (
     <RecordDetailDrawer
       open={detail !== null}
-      title={detail?.position || detail?.company || "内推详情"}
+      title={detail?.position || detail?.company || t("referralDetail.title.fallback")}
       subtitle={detail?.company}
       tags={
         detail && (
@@ -28,36 +32,53 @@ export default function ReferralDetailDrawer({ detail, onEdit, onClose }: Props)
             <Tag color={REFERRAL_STATUS_COLORS[detail.status as ReferralStatus] ?? "default"}>
               {REFERRAL_STATUS_LABELS[detail.status as ReferralStatus] ?? detail.status}
             </Tag>
-            {detail.converted && <Tag color="green">已转化</Tag>}
+            {detail.converted && <Tag color="green">{t("referralDetail.tag.converted")}</Tag>}
           </Space>
         )
       }
       fields={
         detail
           ? [
-              { label: "公司", value: detail.company || "-" },
-              { label: "内推岗位", value: detail.position || "-" },
-              { label: "内推人", value: detail.referrer_name || "未记录" },
-              { label: "联系方式", value: detail.referrer_contact || "-" },
-              { label: "关系", value: detail.relation || "-" },
-              { label: "渠道", value: detail.channel || "-" },
-              { label: "内推码", value: detail.referral_code || "-" },
-              { label: "投递日期", value: detail.submitted_at || "未知" },
-              { label: "关联岗位", value: detail.job_title || "-" },
-              { label: "创建时间", value: formatDateTime(detail.created_at) },
-              { label: "更新时间", value: formatDateTime(detail.updated_at) },
+              { label: t("referralDetail.field.company"), value: detail.company || "-" },
+              { label: t("referralDetail.field.position"), value: detail.position || "-" },
+              {
+                label: t("referralDetail.field.referrer"),
+                value: detail.referrer_name || t("referralDetail.value.notRecorded"),
+              },
+              { label: t("referralDetail.field.contact"), value: detail.referrer_contact || "-" },
+              { label: t("referralDetail.field.relation"), value: detail.relation || "-" },
+              { label: t("referralDetail.field.channel"), value: detail.channel || "-" },
+              { label: t("referralDetail.field.code"), value: detail.referral_code || "-" },
+              {
+                label: t("referralDetail.field.submittedAt"),
+                value: detail.submitted_at || t("referralDetail.value.unknown"),
+              },
+              { label: t("referralDetail.field.job"), value: detail.job_title || "-" },
+              {
+                label: t("referralDetail.field.createdAt"),
+                value: formatDateTime(detail.created_at),
+              },
+              {
+                label: t("referralDetail.field.updatedAt"),
+                value: formatDateTime(detail.updated_at),
+              },
             ]
           : []
       }
       sections={
         detail
           ? [
-              { title: "备注", content: detail.note || "（无）" },
               {
-                title: `图片备注（${(detail.note_images ?? []).length}）`,
+                title: t("referralDetail.section.note"),
+                content: detail.note || t("referralDetail.value.empty"),
+              },
+              {
+                title: t("referralDetail.section.images", {
+                  count: (detail.note_images ?? []).length,
+                }),
                 content:
                   (detail.note_images ?? []).length === 0 ? (
-                    "（无）"
+                    t("referralDetail.value.empty")
                   ) : (
                     <Space size={8} wrap>
                       {(detail.note_images ?? []).map((path) => (
@@ -69,7 +90,7 @@ export default function ReferralDetailDrawer({ detail, onEdit, onClose }: Props)
                         >
                           <img
                             src={referralImageUrl(path)}
-                            alt="备注图"
+                            alt={t("referralDetail.image.noteAlt")}
                             style={{ width: 96, height: 96, objectFit: "cover", borderRadius: 4 }}
                           />
                         </a>
@@ -90,7 +111,7 @@ export default function ReferralDetailDrawer({ detail, onEdit, onClose }: Props)
               onClose();
             }}
           >
-            编辑
+            {t("referralDetail.action.edit")}
           </Button>
         )
       }
