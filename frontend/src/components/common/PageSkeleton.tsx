@@ -6,6 +6,8 @@
  * 传 `card={false}` 可去掉容器（用于调用方已经有卡片外壳的场景）。
  */
 import { Skeleton } from "antd";
+import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 
 interface Props {
   /** 段落行数。 */
@@ -17,10 +19,11 @@ interface Props {
 }
 
 export default function PageSkeleton({ rows = 6, avatar = false, card = true }: Props) {
+  useLocale();
   const skeleton = <Skeleton active avatar={avatar} paragraph={{ rows }} />;
   const status = (
     <span className="rf-sr-only" role="status">
-      正在加载内容
+      {t("common.loading.content")}
     </span>
   );
   if (!card)
