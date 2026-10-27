@@ -14,6 +14,8 @@ import { Button, Dropdown, Space } from "antd";
 import type { ReactNode } from "react";
 import { cloneElement, isValidElement, useState } from "react";
 import { useRowActionMenu, type RowActionItem, type RowMenuItem } from "./rowActionMenu";
+import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 
 // 类型从工具模块转发出去：调用方只认 `RowActions` 这一个入口，不必知道菜单项
 // 与 hook 被拆到了另一个文件。
@@ -28,6 +30,7 @@ interface RowActionsProps {
 }
 
 export function RowActions({ primary = [], more = [], disabled = false }: RowActionsProps) {
+  useLocale();
   const buildMenu = useRowActionMenu();
   const menuItems = buildMenu(more);
   return (
@@ -51,7 +54,7 @@ export function RowActions({ primary = [], more = [], disabled = false }: RowAct
             type="text"
             size="small"
             className="row-actions-more"
-            aria-label="更多操作"
+            aria-label={t("common.rowActions.more")}
             disabled={disabled || undefined}
             icon={<MoreOutlined />}
           />
