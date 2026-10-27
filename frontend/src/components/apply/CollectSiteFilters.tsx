@@ -27,30 +27,33 @@ import type {
   CollectFilterSource,
   CollectFilterTestResult,
 } from "../../types";
-import { t } from "../../i18n";
+import { t, type MessageKey } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
 
-/** 来源标签：颜色 + 文案。文案要说清"这份清单的可信度"，不能只说一个英文枚举值。 */
-const SOURCE_TAG: Record<CollectFilterSource, { color: string; text: string; hint: string }> = {
+/** 来源标签：颜色 + 文案 key。文案要说清"这份清单的可信度"，不能只说一个英文枚举值。 */
+const SOURCE_TAG: Record<
+  CollectFilterSource,
+  { color: string; textKey: MessageKey; hintKey: MessageKey }
+> = {
   session: {
     color: "green",
-    text: "读取自你的登录会话",
-    hint: "这是你这个账号在招聘网站上真实能看到的选项，最准。",
+    textKey: "collectFilters.source.session.text",
+    hintKey: "collectFilters.source.session.hint",
   },
   public: {
     color: "blue",
-    text: "全网通用清单",
-    hint: "浏览器没启动，用的是不需要登录就能拿到的通用清单。个别选项（例如部分账号才有的「实习」）可能不在里面；启动浏览器后会被换成你自己账号可见的完整清单。",
+    textKey: "collectFilters.source.public.text",
+    hintKey: "collectFilters.source.public.hint",
   },
   snapshot: {
     color: "orange",
-    text: "内置快照（离线）",
-    hint: "联网读取失败，用的是内置的一份快照。编码可能已经过期，采集前建议连上网重读一次。",
+    textKey: "collectFilters.source.snapshot.text",
+    hintKey: "collectFilters.source.snapshot.hint",
   },
   unavailable: {
     color: "default",
-    text: "本次读不到",
-    hint: "这一项这次没能从站点读到，暂时不能按它筛。",
+    textKey: "collectFilters.source.unavailable.text",
+    hintKey: "collectFilters.source.unavailable.hint",
   },
 };
 
@@ -201,9 +204,9 @@ export default function CollectSiteFilters({ disabled, getFilters }: Props) {
         {sources.map((source) => {
           const meta = SOURCE_TAG[source] ?? SOURCE_TAG.unavailable;
           return (
-            <Tooltip key={`tag-${source}`} title={meta.hint}>
+            <Tooltip key={`tag-${source}`} title={t(meta.hintKey)}>
               <Tag color={meta.color} style={{ marginInlineEnd: 0 }}>
-                {meta.text}
+                {t(meta.textKey)}
               </Tag>
             </Tooltip>
           );

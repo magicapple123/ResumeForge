@@ -2,8 +2,7 @@
 /**
  * 采集页签「按招聘网站的条件筛」：读取/重读动作、站点筛选条件测试、结果明细。
  *
- * 模块级常量 `SOURCE_TAG` 里的 `text` / `hint`（读取自你的登录会话 / 全网通用清单 …）
- * 仍是中文字面量，需先改成 labelKey，留待下一批。
+ * 含模块级常量 `SOURCE_TAG` 的来源标签与提示（读取自你的登录会话 / 全网通用清单 …）。
  */
 const collectFilters = {
   "collectFilters.toast.needCondition": "请先选择至少一项站点筛选条件，再测试它是否生效",
@@ -31,6 +30,16 @@ const collectFilters = {
   "collectFilters.result.unlimited": "{label}——{detail}",
   "collectFilters.tag.any": "不限",
   "collectFilters.aria.group": "站点筛选-{label}",
+  "collectFilters.source.session.text": "读取自你的登录会话",
+  "collectFilters.source.session.hint": "这是你这个账号在招聘网站上真实能看到的选项，最准。",
+  "collectFilters.source.public.text": "全网通用清单",
+  "collectFilters.source.public.hint":
+    "浏览器没启动，用的是不需要登录就能拿到的通用清单。个别选项（例如部分账号才有的「实习」）可能不在里面；启动浏览器后会被换成你自己账号可见的完整清单。",
+  "collectFilters.source.snapshot.text": "内置快照（离线）",
+  "collectFilters.source.snapshot.hint":
+    "联网读取失败，用的是内置的一份快照。编码可能已经过期，采集前建议连上网重读一次。",
+  "collectFilters.source.unavailable.text": "本次读不到",
+  "collectFilters.source.unavailable.hint": "这一项这次没能从站点读到，暂时不能按它筛。",
 } as const;
 
 export default collectFilters;

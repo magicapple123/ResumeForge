@@ -3,8 +3,8 @@
  * Collect tab, "filter by job site conditions": reload/test actions, the site filter
  * test and its per-item result rows.
  *
- * The `text` / `hint` fields of the module-level `SOURCE_TAG` constant are still Chinese
- * literals; they need labelKeys first and are left for the next batch.
+ * Covers the module-level `SOURCE_TAG` source tags and their tooltips (read from your
+ * signed-in session / site-wide option list …).
  */
 const collectFilters = {
   "collectFilters.toast.needCondition":
@@ -34,6 +34,18 @@ const collectFilters = {
   "collectFilters.result.unlimited": "{label} — {detail}",
   "collectFilters.tag.any": "Any",
   "collectFilters.aria.group": "Site filter - {label}",
+  "collectFilters.source.session.text": "Read from your signed-in session",
+  "collectFilters.source.session.hint":
+    "These are the options your account can really see on the job site, so they are the most accurate.",
+  "collectFilters.source.public.text": "Site-wide option list",
+  "collectFilters.source.public.hint":
+    "The browser is not running, so this is the generic list you can get without signing in. A few options (such as internships, which only some accounts have) may be missing; once the browser starts, it is replaced with the full list your own account can see.",
+  "collectFilters.source.snapshot.text": "Built-in snapshot (offline)",
+  "collectFilters.source.snapshot.hint":
+    "Reading from the site over the network failed, so this is a built-in snapshot. Its codes may be out of date; reconnect to the internet and reload before collecting.",
+  "collectFilters.source.unavailable.text": "Unavailable this time",
+  "collectFilters.source.unavailable.hint":
+    "This condition could not be read from the site this time, so it cannot be used for filtering yet.",
 } as const;
 
 export default collectFilters;
