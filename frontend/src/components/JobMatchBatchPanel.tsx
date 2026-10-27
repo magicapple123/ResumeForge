@@ -37,6 +37,8 @@ import {
   watchJobMatchBatchTask,
 } from "../utils/jobMatchBackgroundTasks";
 import { useJobMatchBackgroundTasks } from "../hooks/useJobMatchBackgroundTasks";
+import { t } from "../i18n";
+import { useLocale } from "../i18n/i18nContext";
 
 interface JobMatchBatchPanelProps {
   open: boolean;
@@ -57,6 +59,8 @@ export default function JobMatchBatchPanel({
   initialView = "setup",
   onClose,
 }: JobMatchBatchPanelProps) {
+  // 本组件用模块级 t()：必须订阅语言变化，否则切语言后面板文案不重渲染。
+  useLocale();
   const { message } = App.useApp();
   // 后台任务注册表（useSyncExternalStore）：面板开着时实时跟随进度；关掉面板
   // 任务照跑，完成时全局通知——"切页自动转后台"靠的就是任务在服务端、不在组件里。
@@ -88,7 +92,11 @@ export default function JobMatchBatchPanel({
     try {
       setHistory(await listJobMatchBatches());
     } catch (requestError) {
-      message.error(requestError instanceof Error ? requestError.message : "读取匹配记录失败");
+      message.error(
+        requestError instanceof Error
+          ? requestError.message
+          : t("jobMatchBatch.error.loadHistoryFailed"),
+      );
     } finally {
       setHistoryLoading(false);
     }
@@ -147,7 +155,9 @@ export default function JobMatchBatchPanel({
         } catch (requestError) {
           if (!cancelled) {
             message.error(
-              requestError instanceof Error ? requestError.message : "读取分析结果失败",
+              requestError instanceof Error
+                ? requestError.message
+                : t("jobMatchBatch.error.loadResultFailed"),
             );
             setPhase("setup");
             setRunningTaskId(null);
@@ -166,28 +176,37 @@ export default function JobMatchBatchPanel({
     };
   }, [loadHistory, message, open, phase, runningTaskId]);
 
+  /* eslint-disable react-hooks/preserve-manual-memoization --
+     误报：加了 useLocale()（语言订阅）之后，React Compiler 把 useState 的稳定 setter
+     也算进依赖推断，于是与人工核对的依赖数组对不上。本回调的依赖就是 jobIds /
+     loadHistory / message 这三个，setter 恒稳不需要列。 */
   const startAnalysis = useCallback(
     async (overrideForce: boolean) => {
       if (jobIds.length === 0) {
-        message.warning("请先选择岗位");
+        message.warning(t("jobMatchBatch.toast.needJobs"));
         return;
       }
       setStarting(true);
       setError("");
       try {
         const task = await startJobMatchBatchTask({ job_ids: jobIds, force: overrideForce });
-        watchJobMatchBatchTask(task, "岗位适配度分析（" + jobIds.length + " 个岗位）");
+        watchJobMatchBatchTask(task, t("jobMatchBatch.task.title", { count: jobIds.length }));
         setRunningTaskId(task.task_id);
         setPhase("running");
         void loadHistory();
       } catch (requestError) {
-        setError(requestError instanceof Error ? requestError.message : "创建分析任务失败");
+        setError(
+          requestError instanceof Error
+            ? requestError.message
+            : t("jobMatchBatch.error.createFailed"),
+        );
       } finally {
         setStarting(false);
       }
     },
     [jobIds, loadHistory, message],
   );
+  /* eslint-enable react-hooks/preserve-manual-memoization */
 
   const cancelRunning = async () => {
     if (!activeTask || cancelling) return;
@@ -196,9 +215,13 @@ export default function JobMatchBatchPanel({
       await cancelJobMatchBackgroundTask(activeTask.id);
       setRunningTaskId(null);
       setPhase("setup");
-      message.success("已取消本次分析；取消前完成的结果仍已保存");
+      message.success(t("jobMatchBatch.toast.cancelled"));
     } catch (requestError) {
-      message.error(requestError instanceof Error ? requestError.message : "取消失败");
+      message.error(
+        requestError instanceof Error
+          ? requestError.message
+          : t("jobMatchBatch.error.cancelFailed"),
+      );
     } finally {
       setCancelling(false);
     }
@@ -209,7 +232,11 @@ export default function JobMatchBatchPanel({
     try {
       setHistoryBatch(await getJobMatchBatch(id));
     } catch (requestError) {
-      message.error(requestError instanceof Error ? requestError.message : "读取匹配记录失败");
+      message.error(
+        requestError instanceof Error
+          ? requestError.message
+          : t("jobMatchBatch.error.loadHistoryFailed"),
+      );
     } finally {
       setHistoryBatchLoading(false);
     }
@@ -220,8 +247,8 @@ export default function JobMatchBatchPanel({
       <Alert
         type="info"
         showIcon
-        title="正在后台分析，关闭这个窗口也不会中断"
-        description="分析在服务端逐个岗位进行；切到其他页面任务会继续，完成时会弹出通知。"
+        title={t("jobMatchBatch.running.title")}
+        description={t("jobMatchBatch.running.body")}
       />
       <div style={{ textAlign: "center" }}>
         <Progress
@@ -239,24 +266,30 @@ export default function JobMatchBatchPanel({
         />
         <div style={{ marginTop: 8 }}>
           <Typography.Text strong>
-            已完成 {activeTask.completedCount + activeTask.failedCount} /{" "}
-            {activeTask.requestedCount} 个岗位
+            {t("jobMatchBatch.running.progress", {
+              done: activeTask.completedCount + activeTask.failedCount,
+              total: activeTask.requestedCount,
+            })}
           </Typography.Text>
           {activeTask.failedCount > 0 ? (
-            <Typography.Text type="secondary">（失败 {activeTask.failedCount}）</Typography.Text>
+            <Typography.Text type="secondary">
+              {t("jobMatchBatch.running.failed", { count: activeTask.failedCount })}
+            </Typography.Text>
           ) : null}
         </div>
         {activeTask.currentJobTitle ? (
-          <Typography.Text type="secondary">正在分析：{activeTask.currentJobTitle}</Typography.Text>
+          <Typography.Text type="secondary">
+            {t("jobMatchBatch.running.current", { title: activeTask.currentJobTitle })}
+          </Typography.Text>
         ) : (
-          <Typography.Text type="secondary">等待后台任务启动…</Typography.Text>
+          <Typography.Text type="secondary">{t("jobMatchBatch.running.waiting")}</Typography.Text>
         )}
       </div>
       <Space wrap style={{ justifyContent: "center", width: "100%" }}>
         <Button danger loading={cancelling} onClick={() => void cancelRunning()}>
-          取消本次分析
+          {t("jobMatchBatch.action.cancel")}
         </Button>
-        <Button onClick={onClose}>转入后台，先去忙别的</Button>
+        <Button onClick={onClose}>{t("jobMatchBatch.action.background")}</Button>
       </Space>
     </Space>
   ) : (
@@ -268,11 +301,11 @@ export default function JobMatchBatchPanel({
       <Alert
         type="info"
         showIcon
-        title={`将为 ${jobIds.length} 个勾选的岗位逐一分析适配度`}
-        description="分析在后台逐个岗位进行：可以随时取消，也可以关掉窗口先去忙别的，完成时会弹出通知；结论不带百分比，参考分仅作展示排序用。"
+        title={t("jobMatchBatch.setup.title", { count: jobIds.length })}
+        description={t("jobMatchBatch.setup.body")}
       />
       <Checkbox checked={force} onChange={(event) => setForce(event.target.checked)}>
-        重新分析已有结论的岗位（默认跳过已有适配度结论的岗位）
+        {t("jobMatchBatch.setup.force")}
       </Checkbox>
     </Space>
   );
@@ -280,7 +313,7 @@ export default function JobMatchBatchPanel({
   const historyContent = historyLoading ? (
     <LoadingBlock />
   ) : history.length === 0 ? (
-    <EmptyState inline description="还没有批量分析记录" />
+    <EmptyState inline description={t("jobMatchBatch.history.empty")} />
   ) : (
     <Listy
       items={history}
@@ -289,13 +322,26 @@ export default function JobMatchBatchPanel({
         <ListyItem
           actions={[
             <Button key="view" type="link" onClick={() => void openHistoryBatch(item.id)}>
-              查看结果
+              {t("jobMatchBatch.action.viewResult")}
             </Button>,
           ]}
         >
           <ListyMeta
-            title={`第 ${item.id} 批 · ${formatTime(item.created_at)}`}
-            description={`共 ${item.requested_count} 个岗位，完成 ${item.completed_count} 个，失败 ${item.failed_count} 个${item.top_score === null ? "" : `，最高参考分 ${item.top_score}`}`}
+            title={t("jobMatchBatch.history.batchTitle", {
+              id: item.id,
+              time: formatTime(item.created_at),
+            })}
+            description={t(
+              item.top_score === null
+                ? "jobMatchBatch.history.summary"
+                : "jobMatchBatch.history.summaryWithScore",
+              {
+                requested: item.requested_count,
+                completed: item.completed_count,
+                failed: item.failed_count,
+                score: item.top_score ?? "",
+              },
+            )}
           />
         </ListyItem>
       )}
@@ -326,7 +372,7 @@ export default function JobMatchBatchPanel({
         title={
           <Space>
             <RobotOutlined />
-            岗位批量适配度分析
+            {t("jobMatchBatch.title")}
           </Space>
         }
         width={900}
@@ -352,7 +398,7 @@ export default function JobMatchBatchPanel({
                 loading={starting}
                 onClick={() => void startAnalysis(force)}
               >
-                开始分析
+                {t("jobMatchBatch.action.start")}
               </Button>
             </Space>
           ) : phase === "result" && batch && jobIds.length > 0 ? (
@@ -362,7 +408,7 @@ export default function JobMatchBatchPanel({
                 loading={starting}
                 onClick={() => void startAnalysis(true)}
               >
-                重新分析这批
+                {t("jobMatchBatch.action.restart")}
               </Button>
             </Space>
           ) : null
@@ -385,7 +431,11 @@ export default function JobMatchBatchPanel({
               label: (
                 <Space size={4}>
                   <RobotOutlined />
-                  {phase === "running" ? "进行中" : phase === "result" ? "本次结果" : "分析设置"}
+                  {phase === "running"
+                    ? t("jobMatchBatch.tab.running")
+                    : phase === "result"
+                      ? t("jobMatchBatch.tab.result")
+                      : t("jobMatchBatch.tab.setup")}
                 </Space>
               ),
               children: phaseContent,
@@ -395,7 +445,7 @@ export default function JobMatchBatchPanel({
               label: (
                 <Space size={4}>
                   <HistoryOutlined />
-                  历史记录
+                  {t("jobMatchBatch.tab.history")}
                 </Space>
               ),
               children: historyContent,
@@ -403,20 +453,26 @@ export default function JobMatchBatchPanel({
           ]}
         />
         {phase === "setup" && jobIdsKey ? (
-          <Typography.Text type="secondary">本次选择：{jobIds.length} 个岗位</Typography.Text>
+          <Typography.Text type="secondary">
+            {t("jobMatchBatch.setup.selected", { count: jobIds.length })}
+          </Typography.Text>
         ) : null}
       </Modal>
       {/* 历史结果弹卡：查看某一批的完整结果，不占用面板本身的"本次结果"页签。 */}
       <Modal
         open={historyBatch !== null || historyBatchLoading}
-        title={historyBatch ? `第 ${historyBatch.id} 批分析结果` : "读取分析结果…"}
+        title={
+          historyBatch
+            ? t("jobMatchBatch.detail.title", { id: historyBatch.id })
+            : t("jobMatchBatch.detail.loading")
+        }
         width={900}
         confirmLoading={historyBatchLoading}
         onCancel={() => setHistoryBatch(null)}
         footer={
           // 保留：这张弹卡自带「关闭」是有意设计（JobMatchBatchPanel.test.tsx 断言
           // "此刻页面上只有弹卡这一颗关闭按钮"）；删除需先改测试，并确认只用 × 的可用性。
-          <Button onClick={() => setHistoryBatch(null)}>关闭</Button>
+          <Button onClick={() => setHistoryBatch(null)}>{t("common.action.close")}</Button>
         }
         styles={{
           body: {

@@ -66,6 +66,7 @@ import claimsPage from "./en-US.claimsPage";
 import browserStatus from "./en-US.browserStatus";
 import trackerForm from "./en-US.trackerForm";
 import interviewExperience from "./en-US.interviewExperience";
+import jobMatchBatch from "./en-US.jobMatchBatch";
 
 const enUS = {
   ...core,
@@ -133,6 +134,7 @@ const enUS = {
   ...browserStatus,
   ...trackerForm,
   ...interviewExperience,
+  ...jobMatchBatch,
 } as const satisfies Record<keyof ZhCNMessages, string>;
 
 export default enUS;
