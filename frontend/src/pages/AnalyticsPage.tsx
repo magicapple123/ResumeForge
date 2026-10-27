@@ -34,7 +34,13 @@ import { t } from "../i18n";
 import type { MessageKey } from "../i18n";
 import { useLocale } from "../i18n/i18nContext";
 import { CohortBlock, TopCompaniesBlock } from "./analytics/AnalyticsBlocks";
-import { referralStatusLabel } from "./analytics/analyticsLabels";
+import {
+  funnelStageLabel,
+  recordSourceLabel,
+  referralStatusLabel,
+  trendMonthLabel,
+  weekdayLabel,
+} from "./analytics/analyticsLabels";
 
 /** 提醒四档的展示名。紧急度的判定在后端 `reminder_urgency`（唯一实现），
  *  这里只是给四档取短名。 */
@@ -175,7 +181,12 @@ function AnalyticsBody({ data, mainFunnel, trendMonths, onTrendMonthsChange }: B
               title={t("analyticsPage.funnel.chartTitle")}
               hint={t("analyticsPage.funnel.chartHint")}
             >
-              <FunnelChart stages={mainFunnel} />
+              <FunnelChart
+                stages={mainFunnel.map((stage) => ({
+                  ...stage,
+                  label: funnelStageLabel(stage.status, stage.label),
+                }))}
+              />
             </ChartBlock>
           </Col>
           <Col xs={24} xl={10}>
@@ -246,7 +257,13 @@ function AnalyticsBody({ data, mainFunnel, trendMonths, onTrendMonthsChange }: B
               hint={t("analyticsPage.trend.byAppliedDate")}
             >
               {hasAppliedDates ? (
-                <BarChart points={data.trend} ariaLabel={t("analyticsPage.trend.appliedTrend")} />
+                <BarChart
+                  points={data.trend.map((point) => ({
+                    label: trendMonthLabel(point.month, point.label),
+                    count: point.count,
+                  }))}
+                  ariaLabel={t("analyticsPage.trend.appliedTrend")}
+                />
               ) : (
                 <Empty description={t("analyticsPage.trend.emptyNoDates")} />
               )}
@@ -258,7 +275,14 @@ function AnalyticsBody({ data, mainFunnel, trendMonths, onTrendMonthsChange }: B
               hint={t("analyticsPage.trend.byAppliedDate")}
             >
               {hasAppliedDates ? (
-                <BarChart points={data.weekday} ariaLabel={t("analyticsPage.trend.weekdayTitle")} />
+                <BarChart
+                  points={data.weekday.map((item) => ({
+                    key: item.key,
+                    label: weekdayLabel(item.key, item.label),
+                    count: item.count,
+                  }))}
+                  ariaLabel={t("analyticsPage.trend.weekdayTitle")}
+                />
               ) : (
                 <Empty description={t("analyticsPage.trend.emptyNoDates")} />
               )}
@@ -371,7 +395,7 @@ function AnalyticsBody({ data, mainFunnel, trendMonths, onTrendMonthsChange }: B
               {data.record_sources.map((item) => (
                 <Col xs={8} key={item.key}>
                   <div className="analytics-source-tile">
-                    <StatCard title={item.label} value={item.count} />
+                    <StatCard title={recordSourceLabel(item.key, item.label)} value={item.count} />
                   </div>
                 </Col>
               ))}
