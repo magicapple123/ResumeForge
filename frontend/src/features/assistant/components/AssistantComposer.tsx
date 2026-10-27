@@ -45,17 +45,9 @@ import {
 } from "../../../types/assistant";
 import { useJobSearchSelect, useResumeSearchSelect } from "../../../hooks/remoteSearchOptions";
 import FileDropZone from "../../../components/common/FileDropZone";
-import { t, type MessageKey } from "../../../i18n";
+import { t } from "../../../i18n";
+import { REASONING_EFFORT_LABEL_KEYS } from "../../../i18n/enum/assistant";
 import { useLocale } from "../../../i18n/i18nContext";
-
-/** 思考强度显示名：键是协议值，值是 key；档位清单仍由 types/assistant.ts 单一提供。 */
-const EFFORT_LABEL_KEYS: Record<string, MessageKey> = {
-  "": "assistantComposer.effort.default",
-  none: "assistantComposer.effort.off",
-  low: "assistantComposer.effort.low",
-  medium: "assistantComposer.effort.medium",
-  high: "assistantComposer.effort.high",
-};
 
 /** 文档按扩展名区分图标：pdf 和 docx 混在一串标签里时，图标比文件名更好认。 */
 function attachmentIcon(attachment: PendingAttachment) {
@@ -447,7 +439,8 @@ export default function AssistantComposer({
                     options={[
                       ...REASONING_EFFORT_OPTIONS.map((option) => ({
                         value: option.value,
-                        label: t(EFFORT_LABEL_KEYS[option.value]),
+                        // 清单仍由 types 表提供（协议层），只有显示名走 enum 映射 + t()。
+                        label: t(REASONING_EFFORT_LABEL_KEYS[option.value]),
                       })),
                       { value: CUSTOM_EFFORT_OPTION, label: t("assistantComposer.effort.custom") },
                     ]}
