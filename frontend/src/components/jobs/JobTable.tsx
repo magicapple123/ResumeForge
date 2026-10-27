@@ -10,7 +10,7 @@ import { JOB_STATUS_META, type JobList, type Page } from "../../types";
 import { formatDateTime } from "../../utils/format";
 import { RowActions, RowContextMenu, type RowActionItem } from "../common/RowActions";
 import SkillTags from "../SkillTags";
-import { jobSourceKind } from "../../utils/jobSource";
+import { JOB_SOURCE_LABEL_KEYS, jobSourceKind } from "../../utils/jobSource";
 import { nextSortState, sortOrderFor, type JobSortState } from "../../utils/jobSort";
 import { t } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
@@ -129,10 +129,10 @@ export default function JobTable({
               </Button>
               {jobSourceKind(job) === "collected" ? (
                 <Tag color="purple" style={{ marginInlineEnd: 0 }}>
-                  {t("jobTable.source.collected")}
+                  {t(JOB_SOURCE_LABEL_KEYS.collected)}
                 </Tag>
               ) : (
-                <Tag style={{ marginInlineEnd: 0 }}>{t("jobTable.source.manual")}</Tag>
+                <Tag style={{ marginInlineEnd: 0 }}>{t(JOB_SOURCE_LABEL_KEYS.manual)}</Tag>
               )}
             </div>
             <div style={{ marginTop: 4 }}>
