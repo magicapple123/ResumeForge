@@ -15,16 +15,20 @@ import {
   useJobAnalysis,
 } from "../features/jobs/jobAnalysisStore";
 import type { Job, JobAnalysisPriority, JobAnalysisResult } from "../types";
+import { t } from "../i18n";
+import type { MessageKey } from "../i18n";
+import { useLocale } from "../i18n/i18nContext";
 
 interface Props {
   job: Job | null;
   onClose: () => void;
 }
 
-const PRIORITY_META: Record<JobAnalysisPriority, { label: string; color: string }> = {
-  high: { label: "核心要求", color: "red" },
-  medium: { label: "重要要求", color: "orange" },
-  low: { label: "加分项", color: "blue" },
+/** 优先级 → 显示名（labelKey）+ Tag 颜色；显示名在使用处 `t()`，颜色与语言无关。 */
+const PRIORITY_META: Record<JobAnalysisPriority, { labelKey: MessageKey; color: string }> = {
+  high: { labelKey: "jobAnalysis.priority.high", color: "red" },
+  medium: { labelKey: "jobAnalysis.priority.medium", color: "orange" },
+  low: { labelKey: "jobAnalysis.priority.low", color: "blue" },
 };
 
 /** 服务端缓存里读到的那一份（只作为"没有新结果时"的展示来源）。 */
@@ -50,6 +54,8 @@ function useElapsedSeconds(startedAt: number | undefined): number {
 }
 
 export default function JobAnalysisModal({ job, onClose }: Props) {
+  // 本组件用模块级 t()：必须订阅语言变化，否则切语言后弹窗文案不重渲染。
+  useLocale();
   const { message } = App.useApp();
   const jobId = job?.id ?? null;
   const state = useJobAnalysis(jobId);
@@ -114,7 +120,7 @@ export default function JobAnalysisModal({ job, onClose }: Props) {
   const cancel = () => {
     if (!job) return;
     cancelJobAnalysis(job.id);
-    message.info("已取消，本次生成结果不会保存", 6);
+    message.info(t("jobAnalysis.toast.cancelled"), 6);
   };
 
   /** 后台继续 = 关掉弹窗但不断开连接，完成后弹通知并响一声。 */
@@ -134,7 +140,7 @@ export default function JobAnalysisModal({ job, onClose }: Props) {
       title={
         <Space>
           <BulbOutlined />
-          岗位需求解读
+          {t("jobAnalysis.title")}
         </Space>
       }
       open={!!job}
@@ -150,29 +156,35 @@ export default function JobAnalysisModal({ job, onClose }: Props) {
       {error ? (
         <Space orientation="vertical" style={{ width: "100%" }}>
           <Alert type="error" showIcon title={error} />
-          <Button aria-label="重新生成解读" icon={<ReloadOutlined />} onClick={() => start(false)}>
-            重新生成解读
+          <Button
+            aria-label={t("jobAnalysis.action.regenerateAnalysis")}
+            icon={<ReloadOutlined />}
+            onClick={() => start(false)}
+          >
+            {t("jobAnalysis.action.regenerateAnalysis")}
           </Button>
         </Space>
       ) : running ? (
         <div>
           <PageSkeleton rows={8} card={false} />
           <Typography.Paragraph type="secondary" className="job-analysis-elapsed">
-            已生成 {elapsedSeconds} 秒
+            {t("jobAnalysis.elapsed", { seconds: elapsedSeconds })}
           </Typography.Paragraph>
           {/* 两条出路说明白：取消 = 白跑一次（结果不保存）；后台继续 = 结果会留下。 */}
           <Alert
             type="info"
             showIcon
-            title="生成期间可以关掉这个弹窗去做别的，完成后会提醒你（弹窗 + 提示音）。"
-            description="点「取消」会中断本次生成，结果不会保存。"
+            title={t("jobAnalysis.running.title")}
+            description={t("jobAnalysis.running.body")}
           />
           <div className="job-analysis-actions">
             <Space>
-              <Button aria-label="取消生成本次解读" onClick={cancel}>
-                取消
+              <Button aria-label={t("jobAnalysis.aria.cancel")} onClick={cancel}>
+                {t("common.action.cancel")}
               </Button>
-              <Button onClick={continueInBackground}>后台继续</Button>
+              <Button onClick={continueInBackground}>
+                {t("jobAnalysis.action.continueInBackground")}
+              </Button>
             </Space>
           </div>
         </div>
@@ -183,11 +195,13 @@ export default function JobAnalysisModal({ job, onClose }: Props) {
               type="warning"
               showIcon
               style={{ marginBottom: 12 }}
-              title="岗位内容改过，这份解读可能已过期"
+              title={t("jobAnalysis.stale.title")}
               description={
                 generatedAt
-                  ? `生成于 ${new Date(generatedAt).toLocaleString()}；重写岗位描述后建议重新生成。`
-                  : "重写岗位描述后建议重新生成。"
+                  ? t("jobAnalysis.stale.body", {
+                      time: new Date(generatedAt).toLocaleString(),
+                    })
+                  : t("jobAnalysis.stale.bodyNoTime")
               }
             />
           ) : null}
@@ -199,21 +213,26 @@ export default function JobAnalysisModal({ job, onClose }: Props) {
               </Typography.Text>
               {/* 重新生成会覆盖当前这份结果，先问一句再动手。 */}
               <Popconfirm
-                title="重新生成岗位解读？"
-                description="当前这份解读会被新结果替换。"
-                okText="重新生成"
-                cancelText="取消"
+                title={t("jobAnalysis.confirm.regenerate.title")}
+                description={t("jobAnalysis.confirm.regenerate.body")}
+                okText={t("jobAnalysis.action.regenerate")}
+                cancelText={t("common.action.cancel")}
                 onConfirm={() => start(true)}
               >
-                <Button type="link" size="small" aria-label="重新生成" icon={<ReloadOutlined />}>
-                  重新生成
+                <Button
+                  type="link"
+                  size="small"
+                  aria-label={t("jobAnalysis.action.regenerate")}
+                  icon={<ReloadOutlined />}
+                >
+                  {t("jobAnalysis.action.regenerate")}
                 </Button>
               </Popconfirm>
             </Space>
             <Typography.Paragraph>{data.summary}</Typography.Paragraph>
           </div>
 
-          <Typography.Title level={5}>核心需求</Typography.Title>
+          <Typography.Title level={5}>{t("jobAnalysis.section.requirements")}</Typography.Title>
           {data.requirements.length ? (
             <Listy
               items={data.requirements}
@@ -224,12 +243,14 @@ export default function JobAnalysisModal({ job, onClose }: Props) {
                   <ListyItem>
                     <Space orientation="vertical" size={5} style={{ width: "100%" }}>
                       <Space wrap>
-                        <Tag color={priority.color}>{priority.label}</Tag>
+                        <Tag color={priority.color}>{t(priority.labelKey)}</Tag>
                         {item.category && <Tag>{item.category}</Tag>}
                       </Space>
                       <Typography.Text strong>{item.requirement}</Typography.Text>
                       {item.evidence && (
-                        <Typography.Text type="secondary">依据：{item.evidence}</Typography.Text>
+                        <Typography.Text type="secondary">
+                          {t("jobAnalysis.item.evidence", { value: item.evidence })}
+                        </Typography.Text>
                       )}
                     </Space>
                   </ListyItem>
@@ -237,10 +258,10 @@ export default function JobAnalysisModal({ job, onClose }: Props) {
               }}
             />
           ) : (
-            <EmptyState inline description="未提取到明确要求" />
+            <EmptyState inline description={t("jobAnalysis.empty.requirements")} />
           )}
 
-          <Typography.Title level={5}>求职建议</Typography.Title>
+          <Typography.Title level={5}>{t("jobAnalysis.section.advice")}</Typography.Title>
           {data.advice.length ? (
             <Listy
               items={data.advice}
@@ -251,32 +272,28 @@ export default function JobAnalysisModal({ job, onClose }: Props) {
                     <Typography.Text strong>{item.title}</Typography.Text>
                     <Typography.Text>{item.action}</Typography.Text>
                     {item.rationale && (
-                      <Typography.Text type="secondary">原因：{item.rationale}</Typography.Text>
+                      <Typography.Text type="secondary">
+                        {t("jobAnalysis.item.rationale", { value: item.rationale })}
+                      </Typography.Text>
                     )}
                   </Space>
                 </ListyItem>
               )}
             />
           ) : (
-            <EmptyState inline description="暂无补充建议" />
+            <EmptyState inline description={t("jobAnalysis.empty.advice")} />
           )}
         </div>
       ) : (
         // 首次打开：先讲清楚这一步在做什么，再让用户决定何时开始。
         <Space orientation="vertical" size={12} style={{ width: "100%" }}>
-          <Alert
-            type="info"
-            showIcon
-            title="这一步会把岗位描述交给模型，整理出核心要求与求职建议"
-          />
+          <Alert type="info" showIcon title={t("jobAnalysis.firstRun.title")} />
           <Typography.Paragraph type="secondary" style={{ marginBottom: 0 }}>
-            读取的是这个岗位的标题、公司、岗位描述与你已保存的标签，<strong>不会</strong>
-            发送整份简历或个人资料；通常需要 10–60 秒。生成期间可以关掉弹窗去做别的，
-            完成后会提醒你。
+            {t("jobAnalysis.firstRun.body")}
           </Typography.Paragraph>
           <div>
             <Button type="primary" icon={<BulbOutlined />} onClick={() => start(false)}>
-              开始生成
+              {t("jobAnalysis.action.start")}
             </Button>
           </div>
         </Space>
