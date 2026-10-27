@@ -67,10 +67,11 @@ interface FontOption {
   disabled?: boolean;
 }
 
-const SYSTEM_OPTION: FontOption = {
+/** 下拉第一项：展示名在渲染期由 `t()` 取（模块作用域不能求值语言包）。 */
+const SYSTEM_OPTION = {
   value: SYSTEM_FONT_VALUE,
-  label: "系统字体（不使用自定义字体）",
-};
+  labelKey: "fonts.control.system",
+} as const;
 
 /**
  * 关闭态里显示的短名。
@@ -79,7 +80,7 @@ const SYSTEM_OPTION: FontOption = {
  * 反而不好认。完整说明留在展开的列表里（那里有整行宽度），选中态只要说清"现在是系统字体"。
  * 原生 title 仍是全称，悬停可看。
  */
-const SYSTEM_FONT_SHORT_LABEL = "系统字体";
+const SYSTEM_FONT_SHORT_LABEL_KEY = "fonts.control.system-short";
 
 interface Props {
   layout: ResumeLayout;
@@ -106,7 +107,7 @@ export default function ResumeFontControl({
   alignWithSlider = false,
   disabled = false,
 }: Props) {
-  useLocale();
+  const locale = useLocale();
   const { message } = App.useApp();
   const { data, reload } = useApi(listResumeFonts, []);
   const items = useMemo(() => data?.items ?? [], [data]);
@@ -166,6 +167,9 @@ export default function ResumeFontControl({
     typeof configured === "string" && configured ? configured : (activeName ?? SYSTEM_FONT_VALUE);
 
   const options = useMemo<FontOption[]>(() => {
+    // 选项的展示名在这一层用 `t()` 取（"当前全局"、系统字体全称）；把 locale 标成依赖，
+    // 切语言时选项才会重算（`t()` 是模块级函数，规则看不出它依赖语言）。
+    void locale;
     const fonts = items.map((font, index) => {
       const display = font.display_name || font.name;
       // 内置条目还没下载：磁盘上没有这个文件，注入 @font-face 只会换来一次 404，
@@ -176,7 +180,7 @@ export default function ResumeFontControl({
         label: undownloaded
           ? display
           : font.name === activeName
-            ? `${display}（当前全局）`
+            ? t("fonts.control.current-global", { name: display })
             : display,
         // 完整信息放进 title：弹层只有 260px，展示名与文件名不可能并排放下。
         fileName: font.name,
@@ -185,8 +189,12 @@ export default function ResumeFontControl({
         builtin: Boolean(font.builtin && undownloaded),
       };
     });
-    return [SYSTEM_OPTION, ...fonts];
-  }, [activeName, items]);
+    const system: FontOption = {
+      value: SYSTEM_OPTION.value,
+      label: t(SYSTEM_OPTION.labelKey),
+    };
+    return [system, ...fonts];
+  }, [activeName, items, locale]);
 
   // 字形预览：只在打开下拉时注入，关闭即移除（见文件头注释）。
   const previewCss = useMemo(
@@ -290,7 +298,7 @@ export default function ResumeFontControl({
   return (
     <Select
       size="small"
-      aria-label="简历字体"
+      aria-label={t("fonts.control.aria")}
       value={currentValue}
       options={options}
       disabled={disabled}
@@ -299,17 +307,17 @@ export default function ResumeFontControl({
       // 弹窗（对齐滑杆）：宽度与左侧偏移交给 CSS（`.is-stacked .resume-font-select`），
       // 因为要对齐的是滑杆的像素位置，而不是"把剩余宽度吃掉"。
       // 2026-10-24 收窄（用户截图："下拉栏太宽"）：176/140 → 152/128。选中态本来就只显示
-      // 短名（`SYSTEM_FONT_SHORT_LABEL`），宽度再大也只是把箭头推到很远的地方。
+      // 短名（`SYSTEM_FONT_SHORT_LABEL_KEY`），宽度再大也只是把箭头推到很远的地方。
       style={alignWithSlider ? undefined : { width: compact ? 128 : 152 }}
       // 弹层**不**跟着触发框，也**不**按内容撑开（2026-11-06 用户截图：长字体名把弹层
       // 拉到半屏，甚至被窗口右缘裁掉）。宽度由 `.resume-params-dropdown` 定在 216px，
       // 选项文字单行省略、悬停看全称（见 `optionRender`）。
       popupMatchSelectWidth={false}
       classNames={{ popup: { root: "resume-params-dropdown" } }}
-      // 选中态用短名（见 `SYSTEM_FONT_SHORT_LABEL`）：这一格与页边距滑杆同宽 200px，
+      // 选中态用短名（见 `SYSTEM_FONT_SHORT_LABEL_KEY`）：这一格与页边距滑杆同宽 200px，
       // 全称必然被截成「系统字体（不使用自定义…」。展开的列表与 title 仍是完整说明。
       labelRender={(props) =>
-        props.value === SYSTEM_FONT_VALUE ? SYSTEM_FONT_SHORT_LABEL : props.label
+        props.value === SYSTEM_FONT_VALUE ? t(SYSTEM_FONT_SHORT_LABEL_KEY) : props.label
       }
       onOpenChange={(next) => {
         // 点"去下载"引起的那次关闭不算：把弹层按回去，进度就在这一行里走。

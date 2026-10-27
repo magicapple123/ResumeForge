@@ -42,6 +42,42 @@ const fonts = {
   "fonts.card.reset-hint":
     "清空选择后，简历回到本机系统字体（Windows 微软雅黑 / macOS 苹方），已下载的字体文件仍留在磁盘上。",
 
+  // ── 设置页「简历字体」卡片：标题、行操作与重命名弹窗 ──────────
+  /** 卡片标题。 */
+  "fonts.card.title": "简历字体",
+  /** 切换成功：带上字体名，用户才知道换的是哪一款。 */
+  "fonts.card.activated": "已切换到「{name}」",
+  /** 切回系统字体（`active = null`）的反馈。 */
+  "fonts.card.reset-to-system": "已回到系统字体",
+  /** 切换失败（接口异常）：后端原因由调用方原样透出，这里只说动作失败。 */
+  "fonts.card.activate-failed": "切换字体失败",
+  /** 页脚：清空设备当前字体，回到系统字体。 */
+  "fonts.card.reset": "回到系统字体",
+  /** 删除确认标题：点明删除对象（直删、没有恢复入口，正文由 `fonts.card.delete-body` 说）。 */
+  "fonts.card.delete-title": "删除字体「{name}」？",
+  /** 删除成功：删掉的是用户自己导入的这一款。 */
+  "fonts.card.deleted": "已删除这个字体",
+  /** 「···」菜单：先看字形，再决定要不要切换。 */
+  "fonts.card.menu-preview": "预览字体",
+  /** 「···」菜单：改展示名（磁盘文件名不动）。 */
+  "fonts.card.menu-rename": "重命名",
+  /** 「···」按钮的可访问名：带上字体名，读屏用户在列表里能分辨是哪一行。 */
+  "fonts.card.more-aria": "更多字体操作（{name}）",
+  /** 重命名弹窗标题。 */
+  "fonts.card.rename-title": "重命名字体",
+  /** 重命名输入框的可访问名。 */
+  "fonts.card.name-aria": "字体名称",
+  /** 重命名输入框的占位提示。 */
+  "fonts.card.name-placeholder": "给这款字体起个名字",
+  /** 名称为空时的提示（没有发出请求，所以不说「保存失败」）。 */
+  "fonts.card.name-required": "字体名称不能为空",
+  /** 重命名成功。 */
+  "fonts.card.renamed": "已重命名字体",
+  /** 重命名失败（文件名冲突 / 无权限 / 接口异常），原因由后端透出。 */
+  "fonts.card.rename-failed": "重命名字体失败",
+  /** 弹窗底部说明：只改展示名，磁盘上的文件名不变（排查时要靠原名）。 */
+  "fonts.card.rename-hint": "只改显示名。原文件名保持不变：{name}",
+
   // ── 内置思源黑体（按需下载）──────────────────────────────────
   /** 兜底显示名：后端 `label` 缺失时才用（正常情况下用后端给的 label）。 */
   "fonts.builtin.name": "思源黑体",
@@ -66,7 +102,7 @@ const fonts = {
   "fonts.builtin.retry": "重试",
   /** 已下载的标记。 */
   "fonts.builtin.downloaded": "已下载",
-  /** 已下载后的动作：把它设为全局当前字体。 */
+  /** 把这款设为全局当前字体；内置行与历史字体行是同一个动作，共用这一条。 */
   "fonts.builtin.activate": "设为当前",
   /** 下载成功后自动设为当前：Toast 要说清"下了什么"以及"已经生效"。 */
   "fonts.builtin.activate-success": "已下载思源黑体并设为当前字体",
@@ -84,6 +120,14 @@ const fonts = {
   "fonts.control.download-hint": "在设置 → 应用 → 简历字体里下载",
   /** 一款可用字体都没有时的指引：直接说出"能下载内置的思源黑体"这条最近的路。 */
   "fonts.control.empty": "还没有可用字体，可以在 设置 → 应用 → 简历字体 下载内置的思源黑体",
+  /** 下拉第一项的全称：不使用自定义字体。 */
+  "fonts.control.system": "系统字体（不使用自定义字体）",
+  /** 触发框里的短名：这一格只有 200px，全称会被截断。 */
+  "fonts.control.system-short": "系统字体",
+  /** 这份简历没设过字体、当前值取自设备全局字体时的标注。 */
+  "fonts.control.current-global": "{name}（当前全局）",
+  /** 下拉的可访问名：读屏靠它说明这一格是干什么的。 */
+  "fonts.control.aria": "简历字体",
 
   // ── 工作台（R1：自制模板下线，页签改叫「版式」）──────────────
   /** 工作台第二个页签的名字。数据层仍叫 `templates`（key 改名会牵动路由与状态机）。 */
