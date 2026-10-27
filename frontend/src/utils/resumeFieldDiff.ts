@@ -273,7 +273,8 @@ function compareItemSubfields(
   let changed = false;
   const keys = new Set<string>([...Object.keys(oldItem), ...Object.keys(newItem)]);
   for (const sk of keys) {
-    const label = labels[sk] ?? sk;
+    const labelKey = labels[sk];
+    const label = labelKey ? t(labelKey) : sk;
     const ov = oldItem[sk];
     const nv = newItem[sk];
     if (Array.isArray(ov) || Array.isArray(nv)) {
@@ -315,7 +316,8 @@ function renderItem(key: string, item: RawItem): ListItemView {
   const labels = LIST_SUBFIELD_LABELS[key] ?? {};
   const lines: string[] = [];
   for (const sk of Object.keys(item)) {
-    const label = labels[sk] ?? sk;
+    const labelKey = labels[sk];
+    const label = labelKey ? t(labelKey) : sk;
     const v = item[sk];
     if (Array.isArray(v)) {
       const parts = (v as unknown[]).map((x) => sanitizePhoto(x)).filter((s) => s !== "");

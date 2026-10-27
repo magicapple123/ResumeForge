@@ -179,9 +179,13 @@ export function describeResumeFieldPath(path: string, content?: ResumeContent | 
   if (segments.length === 0) return t("fieldPath.unspecified");
   const head = String(segments[0]);
   if (segments.length === 1) {
-    return SCALAR_FIELD_LABELS[head] ?? head;
+    // 表里存的是 language-pack key（`editor.*` 词表），显示前必须过一遍 t()：
+    // 漏了就会把 `editor.field.title` 这种 key 原样显示给用户。
+    const scalarKey = SCALAR_FIELD_LABELS[head];
+    return scalarKey ? t(scalarKey) : head;
   }
-  const sectionLabel = SECTION_LABELS[head] ?? head;
+  const sectionKey = SECTION_LABELS[head];
+  const sectionLabel = sectionKey ? t(sectionKey) : head;
   const index = typeof segments[1] === "number" ? segments[1] : -1;
   const identityField = ITEM_IDENTITY[head];
   const item =
