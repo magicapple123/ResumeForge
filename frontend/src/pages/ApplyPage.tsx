@@ -29,11 +29,14 @@ import CurrentSiteBar from "../components/apply/CurrentSiteBar";
 import { isActiveTaskStatus, useTaskPolling } from "../hooks/useTaskPolling";
 import { formatErrorGuidance } from "../api/errorGuidance";
 import type { ApplyTask } from "../types";
+import { t } from "../i18n";
+import { useLocale } from "../i18n/i18nContext";
 
 /** 投递台的页签 key：URL ?tab= 的合法值域（白名单外回落 queue，不让 Tabs 激活态落空）。 */
 const APPLY_TAB_KEYS = ["queue", "collect", "collect-records", "records", "referrals"];
 
 export default function ApplyPage() {
+  useLocale();
   const { message } = App.useApp();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [task, setTask] = useState<ApplyTask | null>(null);
@@ -106,7 +109,7 @@ export default function ApplyPage() {
     } catch (err) {
       // 兜底不再是「操作失败」：暂停/继续/停止都是同一个入口，失败时统一给
       // 「原因 · 建议 · 编号」，用户能照「建议」重试（§4.6）。
-      message.error(formatErrorGuidance(err, "调整任务失败"));
+      message.error(formatErrorGuidance(err, t("pagesMisc.applyPage.error.controlFailed")));
     } finally {
       setBusy(false);
     }
@@ -119,15 +122,12 @@ export default function ApplyPage() {
       <div className="apply-page-head">
         <Space orientation="vertical" size={0}>
           <Typography.Title level={4} style={{ margin: 0 }}>
-            投递台
+            {t("pagesMisc.applyPage.title")}
           </Typography.Title>
-          <Typography.Text type="secondary">
-            采集岗位 → 判断匹配度 → 显式确认 → 自动投递。所有对招聘网站的动作都由你显式发起，
-            登录在你自己的浏览器窗口里完成。
-          </Typography.Text>
+          <Typography.Text type="secondary">{t("pagesMisc.applyPage.subtitle")}</Typography.Text>
         </Space>
         <Button icon={<SettingOutlined />} onClick={() => setSettingsOpen(true)}>
-          投递设置
+          {t("pagesMisc.applyPage.action.settings")}
         </Button>
       </div>
 
@@ -147,17 +147,19 @@ export default function ApplyPage() {
         />
       )}
       {!detail && task && !notFound && (
-        <Typography.Paragraph type="secondary">正在读取任务进度…</Typography.Paragraph>
+        <Typography.Paragraph type="secondary">
+          {t("pagesMisc.applyPage.progress.loading")}
+        </Typography.Paragraph>
       )}
       {/* 任务记录已经不存在（被清理 / 后端重启）时如实说明并给「重试」——否则这里会
           永远停在「正在读取任务进度…」，看起来像卡死。 */}
       {!detail && task && notFound && (
         <Space orientation="vertical" size={4} style={{ marginBottom: 8 }}>
           <Typography.Paragraph type="secondary" style={{ marginBottom: 0 }}>
-            任务记录不存在，可能已被清理。
+            {t("pagesMisc.applyPage.progress.notFound")}
           </Typography.Paragraph>
           <Button size="small" onClick={() => void refresh()}>
-            重试
+            {t("common.retry")}
           </Button>
         </Space>
       )}
@@ -168,12 +170,12 @@ export default function ApplyPage() {
         items={[
           {
             key: "queue",
-            label: "投递队列",
+            label: t("pagesMisc.applyPage.tab.queue"),
             children: <ApplyQueuePanel disabled={running} onStarted={adoptTask} />,
           },
           {
             key: "collect",
-            label: "自动采集",
+            label: t("pagesMisc.applyPage.tab.collect"),
             // 进入应用就预渲染（并开始读采集配置与站点筛选清单）：等用户切到这个
             // 页签时筛选项已经就位，不会看到"筛选区还没加载出来"的空窗。
             forceRender: true,
@@ -198,7 +200,7 @@ export default function ApplyPage() {
           },
           {
             key: "collect-records",
-            label: "采集记录",
+            label: t("pagesMisc.applyPage.tab.collectRecords"),
             // 刷新键拼上"完成时间"：采集一结束它就会变，于是记录页签自己重新拉一次，
             // 不必让用户手动刷新去看刚跑完的那一次。
             children: (
@@ -210,12 +212,12 @@ export default function ApplyPage() {
           },
           {
             key: "records",
-            label: "投递记录",
+            label: t("pagesMisc.applyPage.tab.records"),
             children: <ApplyRecordsPanel disabled={running} onRetried={adoptTask} />,
           },
           {
             key: "referrals",
-            label: "内推",
+            label: t("pagesMisc.applyPage.tab.referrals"),
             // 关联岗位/漏斗下拉由内推面板内部远程搜索（P0-1），页面不再预拉选项。
             children: <ReferralPanel />,
           },
