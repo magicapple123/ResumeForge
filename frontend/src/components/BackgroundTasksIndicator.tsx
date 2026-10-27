@@ -28,6 +28,8 @@ import {
   cancelJobMatchBackgroundTask,
   type JobMatchBackgroundTaskView,
 } from "../utils/jobMatchBackgroundTasks";
+import { t } from "../i18n";
+import { useLocale } from "../i18n/i18nContext";
 
 /** 一行任务：名称、进度、取消。状态未知时给出「移除」而不是「取消」——后端都不认识
  * 这个任务了，再发取消请求只会再吃一个 404。 */
@@ -40,6 +42,7 @@ function TaskRow({
   onCancel: () => void;
   onDismiss: () => void;
 }) {
+  useLocale();
   if (task.unknown) {
     return (
       <div className="background-task-row">
@@ -50,47 +53,19 @@ function TaskRow({
               {task.label}
             </Typography.Text>
             <Typography.Text type="secondary" className="background-task-progress">
-              {task.message || "任务状态未知"}
+              {task.message || t("backgroundTasks.status.unknown")}
             </Typography.Text>
           </div>
         </Space>
         <Button size="small" type="text" icon={<CloseCircleOutlined />} onClick={onDismiss}>
-          移除
+          {t("backgroundTasks.action.remove")}
         </Button>
       </div>
     );
   }
-  const progress = [`已接收 ${task.receivedChars} 字`, task.message].filter(Boolean).join(" · ");
-  return (
-    <div className="background-task-row">
-      <Space size={8} align="start">
-        <LoadingOutlined className="background-task-spin" />
-        <div>
-          <Typography.Text strong className="background-task-label">
-            {task.label}
-          </Typography.Text>
-          <Typography.Text type="secondary" className="background-task-progress">
-            {progress || "正在准备…"}
-          </Typography.Text>
-        </div>
-      </Space>
-      <Button size="small" danger type="text" icon={<CloseCircleOutlined />} onClick={onCancel}>
-        取消
-      </Button>
-    </div>
-  );
-}
-
-function JobMatchTaskRow({
-  task,
-  onCancel,
-}: {
-  task: JobMatchBackgroundTaskView;
-  onCancel: () => void;
-}) {
   const progress = [
-    "已处理 " + (task.completedCount + task.failedCount) + "/" + task.requestedCount + " 个岗位",
-    task.currentJobTitle ? "当前：" + task.currentJobTitle : task.message,
+    t("backgroundTasks.progress.received", { count: task.receivedChars }),
+    task.message,
   ]
     .filter(Boolean)
     .join(" · ");
@@ -103,12 +78,51 @@ function JobMatchTaskRow({
             {task.label}
           </Typography.Text>
           <Typography.Text type="secondary" className="background-task-progress">
-            {progress || "正在准备…"}
+            {progress || t("backgroundTasks.status.preparing")}
           </Typography.Text>
         </div>
       </Space>
       <Button size="small" danger type="text" icon={<CloseCircleOutlined />} onClick={onCancel}>
-        取消
+        {t("backgroundTasks.action.cancel")}
+      </Button>
+    </div>
+  );
+}
+
+function JobMatchTaskRow({
+  task,
+  onCancel,
+}: {
+  task: JobMatchBackgroundTaskView;
+  onCancel: () => void;
+}) {
+  useLocale();
+  const progress = [
+    t("backgroundTasks.progress.processed", {
+      done: task.completedCount + task.failedCount,
+      total: task.requestedCount,
+    }),
+    task.currentJobTitle
+      ? t("backgroundTasks.progress.currentJob", { title: task.currentJobTitle })
+      : task.message,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+  return (
+    <div className="background-task-row">
+      <Space size={8} align="start">
+        <LoadingOutlined className="background-task-spin" />
+        <div>
+          <Typography.Text strong className="background-task-label">
+            {task.label}
+          </Typography.Text>
+          <Typography.Text type="secondary" className="background-task-progress">
+            {progress || t("backgroundTasks.status.preparing")}
+          </Typography.Text>
+        </div>
+      </Space>
+      <Button size="small" danger type="text" icon={<CloseCircleOutlined />} onClick={onCancel}>
+        {t("backgroundTasks.action.cancel")}
       </Button>
     </div>
   );
@@ -122,7 +136,10 @@ function JobAnalysisTaskRow({
   entry: JobAnalysisEntry;
   onCancel: () => void;
 }) {
-  const label = ["岗位解读", entry.state.company, entry.state.title].filter(Boolean).join(" · ");
+  useLocale();
+  const label = [t("backgroundTasks.jobAnalysis.label"), entry.state.company, entry.state.title]
+    .filter(Boolean)
+    .join(" · ");
   return (
     <div className="background-task-row">
       <Space size={8} align="start">
@@ -132,18 +149,20 @@ function JobAnalysisTaskRow({
             {label}
           </Typography.Text>
           <Typography.Text type="secondary" className="background-task-progress">
-            正在生成岗位解读…
+            {t("backgroundTasks.jobAnalysis.running")}
           </Typography.Text>
         </div>
       </Space>
       <Button size="small" danger type="text" icon={<CloseCircleOutlined />} onClick={onCancel}>
-        取消
+        {t("backgroundTasks.action.cancel")}
       </Button>
     </div>
   );
 }
 
 export default function BackgroundTasksIndicator() {
+  // 本组件用模块级 t()：必须订阅语言变化，否则切语言后这块文案不重渲染。
+  useLocale();
   const { message } = App.useApp();
   const tasks = useBackgroundTasks();
   const matchTasks = useJobMatchBackgroundTasks();
@@ -158,9 +177,11 @@ export default function BackgroundTasksIndicator() {
     setCancelling(task.id);
     try {
       await cancelBackgroundTask(task.id);
-      message.info(`已取消「${task.label}」`);
+      message.info(t("backgroundTasks.toast.cancelled", { name: task.label }));
     } catch (error) {
-      message.error(error instanceof Error ? error.message : "取消失败，请稍后重试");
+      message.error(
+        error instanceof Error ? error.message : t("backgroundTasks.toast.cancelFailed"),
+      );
     } finally {
       setCancelling(null);
     }
@@ -171,9 +192,11 @@ export default function BackgroundTasksIndicator() {
     setCancelling(task.id);
     try {
       await cancelJobMatchBackgroundTask(task.id);
-      message.info("已请求取消「" + task.label + "」");
+      message.info(t("backgroundTasks.toast.cancelRequested", { name: task.label }));
     } catch (error) {
-      message.error(error instanceof Error ? error.message : "取消失败，请稍后重试");
+      message.error(
+        error instanceof Error ? error.message : t("backgroundTasks.toast.cancelFailed"),
+      );
     } finally {
       setCancelling(null);
     }
@@ -189,7 +212,7 @@ export default function BackgroundTasksIndicator() {
           onCancel={() => void cancel(task)}
           onDismiss={() => {
             dismissBackgroundTask(task.id);
-            message.info(`已移除「${task.label}」`);
+            message.info(t("backgroundTasks.toast.dismissed", { name: task.label }));
           }}
         />
       ))}
@@ -202,26 +225,39 @@ export default function BackgroundTasksIndicator() {
           entry={entry}
           onCancel={() => {
             cancelJobAnalysis(entry.jobId);
-            message.info("已取消岗位解读");
+            message.info(t("backgroundTasks.toast.jobAnalysisCancelled"));
           }}
         />
       ))}
       <Typography.Text type="secondary" className="background-tasks-hint">
-        关掉窗口也会继续跑，完成后会弹窗提醒并响一声。
+        {t("backgroundTasks.hint.keepsRunning")}
       </Typography.Text>
     </div>
   );
 
   return (
-    <Popover content={content} title="正在进行的任务" trigger="click" placement="bottomRight">
-      <Tooltip title={tasks.length + matchTasks.length + analyses.length + " 个任务正在进行"}>
-        <Button className="background-tasks-button" type="text" aria-label="查看后台任务">
+    <Popover
+      content={content}
+      title={t("backgroundTasks.popover.title")}
+      trigger="click"
+      placement="bottomRight"
+    >
+      <Tooltip
+        title={t("backgroundTasks.tooltip.running", {
+          count: tasks.length + matchTasks.length + analyses.length,
+        })}
+      >
+        <Button
+          className="background-tasks-button"
+          type="text"
+          aria-label={t("backgroundTasks.aria.viewTasks")}
+        >
           <Badge
             count={tasks.length + matchTasks.length + analyses.length}
             size="small"
             offset={[2, -2]}
           >
-            <LoadingOutlined /> 后台任务
+            <LoadingOutlined /> {t("backgroundTasks.label")}
           </Badge>
         </Button>
       </Tooltip>
