@@ -34,6 +34,8 @@ import type { RecordFormValues } from "../../features/settings/useLLMRecordTools
 import { useCollapsedList } from "../common/useCollapsedList";
 import LLMRecordModal from "./LLMRecordModal";
 import LLMRecordViewModal from "./LLMRecordViewModal";
+import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 
 interface Props {
   records: LLMConfigRecord[];
@@ -111,6 +113,7 @@ export default function LLMConfigCard({
   onPresetChange,
   onFetchDraftModels,
 }: Props) {
+  useLocale();
   const { modal } = App.useApp();
   const [viewingRecord, setViewingRecord] = useState<LLMConfigRecord | null>(null);
   // 「使用中」的记录永远排最顶部（用户要求）：当前生效的那张是最高频查看对象。
@@ -132,10 +135,10 @@ export default function LLMConfigCard({
   /** 删除走 confirm 二次确认（维持原 Popconfirm 的文案语义）。 */
   const confirmRemove = (record: LLMConfigRecord) => {
     modal.confirm({
-      title: `删除记录“${record.name}”？`,
-      content: "删除记录不会影响当前正在使用的配置",
-      okText: "删除",
-      cancelText: "取消",
+      title: t("llmConfigCard.confirm.deleteTitle", { name: record.name }),
+      content: t("llmConfigCard.confirm.deleteContent"),
+      okText: t("llmConfigCard.action.delete"),
+      cancelText: t("llmConfigCard.action.cancel"),
       okButtonProps: { danger: true },
       onOk: () => onRemoveRecord(record),
     });
@@ -144,7 +147,7 @@ export default function LLMConfigCard({
   return (
     <>
       <Card
-        title="大模型 API 配置"
+        title={t("llmConfigCard.card.title")}
         className="settings-card"
         extra={
           <Button
@@ -153,7 +156,7 @@ export default function LLMConfigCard({
             disabled={cardBusy || recordsLoading}
             onClick={onOpenCreate}
           >
-            新建配置
+            {t("llmConfigCard.action.create")}
           </Button>
         }
       >
@@ -161,7 +164,7 @@ export default function LLMConfigCard({
           type="info"
           showIcon
           style={{ marginBottom: 16 }}
-          title="支持所有兼容 OpenAI Chat Completions 协议的模型服务（DeepSeek、豆包、Kimi、通义千问、智谱、MiniMax、硅基流动、OpenRouter、OpenAI、Gemini、Ollama 等），也可切换到 Anthropic 原生协议直连 Claude。所有数据集共用这里的配置：每张卡片是一份已保存的记录，点卡片本体查看详情，可直接测试连接、切换「使用中」。API Key 加密保存在本地数据目录，不进入备份包。"
+          title={t("llmConfigCard.hint.intro")}
         />
         <LoadingBlock spinning={recordsLoading}>
           {records.length === 0 ? (
@@ -169,7 +172,7 @@ export default function LLMConfigCard({
               inline
               // 不再内嵌主按钮：这张卡的 extra 已经有「新建配置」，同一张卡里再放一颗
               // primary 就是两个同义主动作（§4.1）。改为写明按钮名——它同屏可见（§4.7）。
-              description="还没有配置记录，点「新建配置」创建第一份；当前生效的配置会继续正常使用"
+              description={t("llmConfigCard.empty.description")}
             />
           ) : (
             <Flex vertical gap={12}>
@@ -177,8 +180,11 @@ export default function LLMConfigCard({
                 <Alert
                   type="info"
                   showIcon
-                  title="当前沿用本数据集旧配置，保存后将升级为全局配置"
-                  description={`正在使用：${configSummary.model || "未填写模型"} · ${configSummary.baseUrl || "未填写地址"}。保存一次（或新建一条记录后点「使用」）即改为所有数据集共用。`}
+                  title={t("llmConfigCard.legacy.title")}
+                  description={t("llmConfigCard.legacy.description", {
+                    model: configSummary.model || t("llmConfigCard.fallback.model"),
+                    baseUrl: configSummary.baseUrl || t("llmConfigCard.fallback.baseUrl"),
+                  })}
                 />
               )}
               {visibleRecords.map((record) => {
@@ -195,12 +201,16 @@ export default function LLMConfigCard({
                     title={
                       <Flex gap={8} wrap align="center">
                         {/* 「更新于 …」改为悬停显示，不再常驻占排版宽度。 */}
-                        <Tooltip title={`更新于 ${formatDateTime(record.updated_at)}`}>
+                        <Tooltip
+                          title={t("llmConfigCard.tooltip.updatedAt", {
+                            time: formatDateTime(record.updated_at),
+                          })}
+                        >
                           <Typography.Text strong>{record.name}</Typography.Text>
                         </Tooltip>
                         {isActive && (
-                          <Tooltip title="当前生效的配置：简历生成与求职助手正在用它">
-                            <Tag color="blue">使用中</Tag>
+                          <Tooltip title={t("llmConfigCard.tooltip.active")}>
+                            <Tag color="blue">{t("llmConfigCard.tag.active")}</Tag>
                           </Tooltip>
                         )}
                       </Flex>
@@ -209,14 +219,14 @@ export default function LLMConfigCard({
                     <Flex gap={8} wrap style={{ marginBottom: 12 }}>
                       <Tag>{matchingPreset(record)?.label ?? CUSTOM_PRESET_LABEL}</Tag>
                       <Typography.Text type="secondary">
-                        {record.model || "未填写模型"}
+                        {record.model || t("llmConfigCard.fallback.model")}
                       </Typography.Text>
                       <Typography.Text type="secondary">
-                        {record.base_url || "未填写地址"}
+                        {record.base_url || t("llmConfigCard.fallback.baseUrl")}
                       </Typography.Text>
                       {record.api_key && (
                         // 脱敏承诺：卡片只说明"配置了密钥"，密钥本体与占位符都不渲染。
-                        <Tag color="green">密钥已配置</Tag>
+                        <Tag color="green">{t("llmConfigCard.tag.keyConfigured")}</Tag>
                       )}
                     </Flex>
                     <div onClick={(event) => event.stopPropagation()}>
@@ -231,7 +241,7 @@ export default function LLMConfigCard({
                           loading={recordApplyingId === record.id}
                           onClick={() => onApplyRecord(record)}
                         >
-                          使用
+                          {t("llmConfigCard.action.apply")}
                         </Button>
                         <Button
                           size="small"
@@ -240,16 +250,20 @@ export default function LLMConfigCard({
                           loading={recordTestingId === record.id}
                           onClick={() => onTestRecord(record)}
                         >
-                          测试连接
+                          {t("llmConfigCard.action.test")}
                         </Button>
                         <Dropdown
                           menu={{
                             items: [
-                              { key: "edit", icon: <EditOutlined />, label: "编辑" },
+                              {
+                                key: "edit",
+                                icon: <EditOutlined />,
+                                label: t("llmConfigCard.action.edit"),
+                              },
                               {
                                 key: "delete",
                                 icon: <DeleteOutlined />,
-                                label: "删除",
+                                label: t("llmConfigCard.action.delete"),
                                 danger: true,
                               },
                             ],
@@ -263,7 +277,7 @@ export default function LLMConfigCard({
                           <Button
                             size="small"
                             icon={<MoreOutlined />}
-                            aria-label={`更多操作（${record.name}）`}
+                            aria-label={t("llmConfigCard.aria.moreActions", { name: record.name })}
                             disabled={cardBusy}
                           />
                         </Dropdown>
@@ -275,8 +289,11 @@ export default function LLMConfigCard({
                           showIcon
                           title={
                             testResult.ok
-                              ? `${testResult.message}（耗时 ${testResult.latency_ms}ms）`
-                              : `连接失败：${testResult.message}`
+                              ? t("llmConfigCard.test.ok", {
+                                  message: testResult.message,
+                                  latency: `${testResult.latency_ms}`,
+                                })
+                              : t("llmConfigCard.test.failed", { message: testResult.message })
                           }
                         />
                       )}
