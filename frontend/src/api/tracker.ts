@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 /** 求职进度接口：增删改查、两步导入（解析预览 → 确认写入）与导出。 */
+import { t } from "../i18n";
 import type {
   Track,
   TrackApplyResult,
@@ -106,6 +107,7 @@ export async function exportTracks(
     },
   );
   const filename =
-    getFilenameFromDisposition(resp.headers.get("Content-Disposition")) ?? `求职进度.${format}`;
+    getFilenameFromDisposition(resp.headers.get("Content-Disposition")) ??
+    t("apiErrors.download.trackerFilename", { format });
   return { blob: await resp.blob(), filename };
 }
