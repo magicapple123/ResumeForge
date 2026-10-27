@@ -60,6 +60,7 @@ import materialForm from "./zh-CN.materialForm";
 import jobMatch from "./zh-CN.jobMatch";
 import jobDetail from "./zh-CN.jobDetail";
 import drill from "./zh-CN.drill";
+import reminderItem from "./zh-CN.reminderItem";
 
 const namespaces = {
   /** 简历制作台（2026-10-23）。 */
@@ -148,6 +149,7 @@ const namespaces = {
   ...jobMatch,
   ...jobDetail,
   ...drill,
+  ...reminderItem,
 } as const;
 
 export default namespaces;

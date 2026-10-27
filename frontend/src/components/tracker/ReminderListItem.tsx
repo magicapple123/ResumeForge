@@ -14,6 +14,8 @@ import { isFromInnerControl } from "../common/recordDetailCore";
 import { RowActions, RowContextMenu } from "../common/RowActions";
 import type { RowActionItem } from "../common/RowActions";
 import { TRASH_RECOVERY_NOTE } from "../common/rowActionMenu";
+import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 
 interface Props {
   item: Reminder;
@@ -46,6 +48,7 @@ export default function ReminderListItem({
   onStatus,
   contextActions,
 }: Props) {
+  useLocale();
   // 多选模式：行简化为勾选框 + 点行切换，不提供单行操作。
   if (selecting) {
     return (
@@ -54,7 +57,7 @@ export default function ReminderListItem({
         actions={[
           <Checkbox
             key="pick"
-            aria-label={`选择提醒 ${item.title}`}
+            aria-label={t("reminderItem.aria.select", { title: item.title })}
             checked={selected}
             onChange={() => onToggle(item.id)}
           />,
@@ -68,7 +71,7 @@ export default function ReminderListItem({
   // 「详情」放在第一位：列表只放得下摘要，备注、绑定对象这些都得点进去看。
   const actions = [
     <Button key="detail" type="link" size="small" onClick={() => onDetail(item)}>
-      详情
+      {t("reminderItem.action.detail")}
     </Button>,
   ];
   if (item.status === "pending") {
@@ -78,10 +81,10 @@ export default function ReminderListItem({
         type="link"
         size="small"
         icon={<CheckOutlined />}
-        aria-label={`完成提醒 ${item.title}`}
+        aria-label={t("reminderItem.aria.done", { title: item.title })}
         onClick={() => onStatus(item, "done")}
       >
-        完成
+        {t("reminderItem.action.done")}
       </Button>,
     );
     actions.push(
@@ -90,10 +93,10 @@ export default function ReminderListItem({
         type="text"
         size="small"
         icon={<StopOutlined />}
-        aria-label={`忽略提醒 ${item.title}`}
+        aria-label={t("reminderItem.aria.ignore", { title: item.title })}
         onClick={() => onStatus(item, "dismissed")}
       >
-        忽略
+        {t("reminderItem.action.ignore")}
       </Button>,
     );
   }
@@ -104,14 +107,14 @@ export default function ReminderListItem({
       more={[
         {
           key: "edit",
-          label: "编辑",
+          label: t("reminderItem.action.edit"),
           onClick: () => onEdit(item),
         },
         {
           key: "delete",
-          label: "删除",
+          label: t("reminderItem.action.delete"),
           danger: true,
-          confirm: "删除这条提醒？",
+          confirm: t("reminderItem.confirm.delete"),
           confirmBody: TRASH_RECOVERY_NOTE,
           onClick: () => onRemove(item),
         },
