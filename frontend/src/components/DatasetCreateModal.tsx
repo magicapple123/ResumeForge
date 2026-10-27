@@ -6,6 +6,8 @@
  * 这里只负责把"数据集是什么、名字有什么限制"说清楚，避免用户把它当成文件夹。
  */
 import { Input, Modal, Typography } from "antd";
+import { t } from "../i18n";
+import { useLocale } from "../i18n/i18nContext";
 
 interface Props {
   open: boolean;
@@ -24,27 +26,27 @@ export default function DatasetCreateModal({
   onOk,
   onCancel,
 }: Props) {
+  useLocale();
   return (
     <Modal
-      title="新建数据集"
+      title={t("componentsMisc.datasetCreate.title")}
       open={open}
-      okText="新建"
+      okText={t("componentsMisc.datasetCreate.create")}
       confirmLoading={confirmLoading}
       onCancel={onCancel}
       onOk={onOk}
       destroyOnHidden
     >
       <Typography.Paragraph type="secondary">
-        每份数据集是一套互相独立的岗位、资料与简历。界面长得一样，但数据不互通—— 适合区分「工作 /
-        私人 / 面试练习」。
+        {t("componentsMisc.datasetCreate.intro")}
       </Typography.Paragraph>
       <Input
         value={value}
         maxLength={64}
         showCount
         autoFocus
-        placeholder="例如：工作、私人、面试练习"
-        aria-label="数据集名称"
+        placeholder={t("componentsMisc.datasetCreate.namePlaceholder")}
+        aria-label={t("componentsMisc.datasetCreate.nameAria")}
         onChange={(event) => onChange(event.target.value)}
         onPressEnter={onOk}
       />
