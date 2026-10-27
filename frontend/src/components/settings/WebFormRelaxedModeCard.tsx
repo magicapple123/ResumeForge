@@ -9,38 +9,44 @@
 import { App, Card, Space, Switch, Typography } from "antd";
 import LoadingBlock from "../common/LoadingBlock";
 import { useWebFormRelaxedMode } from "../../features/settings/useWebFormRelaxedMode";
+import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 
 export default function WebFormRelaxedModeCard() {
+  useLocale();
   const { message } = App.useApp();
   const { enabled, loading, saving, toggle } = useWebFormRelaxedMode();
 
   const onChange = async (checked: boolean) => {
     const saved = await toggle(checked);
     if (saved === checked) {
-      message.success(checked ? "已开启放宽模式" : "已关闭：回到「只填不点」的默认边界");
+      message.success(
+        checked
+          ? t("settingsUi.webFormRelaxed.enableToast")
+          : t("settingsUi.webFormRelaxed.disableToast"),
+      );
     } else {
-      message.error("保存放宽模式设置失败");
+      message.error(t("settingsUi.webFormRelaxed.saveFailed"));
     }
   };
 
   return (
-    <Card title="网申填表 · 放宽模式" className="settings-card">
+    <Card title={t("settingsUi.webFormRelaxed.title")} className="settings-card">
       <Typography.Paragraph type="secondary" style={{ marginBottom: 16 }}>
-        默认关闭：网申填表「只填不点」，下拉、勾选、日期都需要你在页面上自己点。
+        {t("settingsUi.webFormRelaxed.intro")}
       </Typography.Paragraph>
       <LoadingBlock spinning={loading}>
         <Space orientation="vertical" size={4}>
           <Switch
             checked={enabled}
             loading={saving}
-            checkedChildren="开"
-            unCheckedChildren="关"
-            aria-label="网申填表放宽模式"
+            checkedChildren={t("settingsUi.switch.on")}
+            unCheckedChildren={t("settingsUi.switch.off")}
+            aria-label={t("settingsUi.webFormRelaxed.toggleAria")}
             onChange={(checked) => void onChange(checked)}
           />
           <Typography.Text type={enabled ? "warning" : "secondary"}>
-            开启后程序会尝试代点下拉/弹层选项并代勾你逐条确认过的声明项，存在选错可能，
-            填完请核对；日期选择器与文件上传仍不代做。
+            {t("settingsUi.webFormRelaxed.warning")}
           </Typography.Text>
         </Space>
       </LoadingBlock>
