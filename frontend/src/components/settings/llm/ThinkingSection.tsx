@@ -11,7 +11,9 @@ import {
   MAX_REASONING_EFFORT_CHARS,
   isValidReasoningEffort,
 } from "../../../types/assistant";
-import { EFFORT_TOOLTIP } from "./thinkingMeta";
+import { t } from "../../../i18n";
+import { useLocale } from "../../../i18n/i18nContext";
+import { EFFORT_TOOLTIP_KEY } from "./thinkingMeta";
 
 export function ThinkingSection({
   thinkingEnabled,
@@ -36,6 +38,7 @@ export function ThinkingSection({
   onProbe: () => Promise<void>;
   onBackToPresets: () => void;
 }) {
+  useLocale();
   const thinkingAlertType = () => {
     if (!thinkingResult) return "info" as const;
     if (thinkingResult.reasoning_seen) return "success" as const;
@@ -52,11 +55,14 @@ export function ThinkingSection({
         <Col xs={24} md={8}>
           <Form.Item
             name="thinking_enabled"
-            label="思考模式"
+            label={t("llmUi.thinking.field.mode")}
             valuePropName="checked"
-            tooltip="开启后，AI 对话与简历生成会请求模型先思考再作答——回答更有深度，但每轮都会多一段思考时间；岗位识别、匹配分析等结构化任务不受影响（自动跳过思考以保证速度）。默认关闭；各家对思考参数的写法与档位都不一样，可以先点右边的按钮检测。"
+            tooltip={t("llmUi.thinking.tooltip.mode")}
           >
-            <Switch checkedChildren="开启" unCheckedChildren="关闭" />
+            <Switch
+              checkedChildren={t("llmUi.thinking.switch.on")}
+              unCheckedChildren={t("llmUi.thinking.switch.off")}
+            />
           </Form.Item>
         </Col>
         <Col xs={24} md={8}>
@@ -65,11 +71,15 @@ export function ThinkingSection({
               字段上收到"配置异步载入"那次通知，不挂 name 的话载入值永远读不到。 */}
           {showingCustomEffort ? (
             <>
-              <Form.Item name="thinking_effort" label="思考强度" tooltip={EFFORT_TOOLTIP}>
+              <Form.Item
+                name="thinking_effort"
+                label={t("llmUi.thinking.field.effort")}
+                tooltip={t(EFFORT_TOOLTIP_KEY)}
+              >
                 <Input
-                  aria-label="思考强度"
+                  aria-label={t("llmUi.thinking.field.effort")}
                   maxLength={MAX_REASONING_EFFORT_CHARS}
-                  placeholder="如 xhigh / max / 4096"
+                  placeholder={t("llmUi.thinking.placeholder.customEffort")}
                   status={isValidReasoningEffort(thinkingEffort) ? undefined : "error"}
                 />
               </Form.Item>
@@ -79,24 +89,31 @@ export function ThinkingSection({
                 className="llm-thinking-effort-back"
                 onClick={onBackToPresets}
               >
-                用预设档位
+                {t("llmUi.thinking.action.usePresets")}
               </Button>
             </>
           ) : (
-            <Form.Item name="thinking_effort" label="思考强度" tooltip={EFFORT_TOOLTIP}>
+            <Form.Item
+              name="thinking_effort"
+              label={t("llmUi.thinking.field.effort")}
+              tooltip={t(EFFORT_TOOLTIP_KEY)}
+            >
               <Select
-                aria-label="思考强度"
-                options={[...effortOptions, { value: CUSTOM_EFFORT_OPTION, label: "自定义…" }]}
+                aria-label={t("llmUi.thinking.field.effort")}
+                options={[
+                  ...effortOptions,
+                  { value: CUSTOM_EFFORT_OPTION, label: t("llmUi.thinking.option.custom") },
+                ]}
                 disabled={thinkingEnabled ? undefined : true}
-                placeholder="默认档位（不指定）"
+                placeholder={t("llmUi.thinking.placeholder.defaultEffort")}
               />
             </Form.Item>
           )}
         </Col>
         <Col xs={24} md={8}>
           <Form.Item
-            label="支持情况"
-            tooltip="上游没有「查询思考能力」的接口，所以这里分两步：只读内置表给出候选档位，点按钮则真的发一次最小请求——用来分辨「真的生效 / 被静默忽略 / 被上游拒绝」。"
+            label={t("llmUi.thinking.field.support")}
+            tooltip={t("llmUi.thinking.tooltip.support")}
           >
             <Button
               icon={<ExperimentOutlined />}
@@ -104,14 +121,13 @@ export function ThinkingSection({
               disabled={saving || testing}
               onClick={() => void onProbe()}
             >
-              检测思考支持
+              {t("llmUi.thinking.action.probe")}
             </Button>
           </Form.Item>
         </Col>
       </Row>
       <Typography.Text type="secondary" style={{ display: "block", marginBottom: 12 }}>
-        「检测思考支持」会发一次最小请求，计入你的模型用量。思考模式只作用于除「求职助手」以外的 AI
-        调用；助手的思考强度在求职助手输入框的「思考强度」里单独设置。
+        {t("llmUi.thinking.note.probe")}
       </Typography.Text>
       {thinkingResult && (
         <Alert
