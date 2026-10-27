@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
  * 面试官设定卡：类型/难度/风格/轮数/考察重点/人设，提交后由页面发起面试。
- * （自 InterviewPage 拆出：CONFIDENCE_TIP 与 SetupForm 接口随迁；form 实例由页面持有，
+ * （自 InterviewPage 拆出：SetupForm 接口随迁，提示语改由语言包
+ * `interviewPage.setup.confidenceTip` 提供；form 实例由页面持有，
  * 供题库「开始模拟面试」的 startFromBank 联动写回考察重点。）
  */
 import { PlayCircleOutlined } from "@ant-design/icons";
@@ -10,6 +11,8 @@ import type { FormInstance } from "antd";
 import { useEffect } from "react";
 import type { InterviewDifficulty, InterviewType, InterviewerStyle } from "../../types";
 import { useJobSearchSelect } from "../../hooks/remoteSearchOptions";
+import { t, type MessageKey } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 import { JANE_FACE_SOURCES } from "./janeFaces";
 import {
   INTERVIEW_DIFFICULTIES,
@@ -19,17 +22,44 @@ import {
   MIN_INTERVIEW_ROUNDS,
 } from "../../types";
 
-const CONFIDENCE_TIP =
-  "面试官会基于你的资料与岗位要求提问，回答越具体（做了什么、结果是什么）点评越有用。";
+/**
+ * 面试类型 / 难度 / 面试官风格的显示名：**键是协议值**（提交给后端并原样入库，
+ * `types/interview.ts` 的白名单一个字都没动），值指向语言包 key。
+ *
+ * 模块作用域不能调 `t()`（切语言不会重渲染），所以这里只存 key，渲染处再取。
+ */
+const INTERVIEW_TYPE_LABEL_KEYS: Record<InterviewType, MessageKey> = {
+  技术面: "interviewPage.setup.type.technical",
+  项目深挖: "interviewPage.setup.type.project",
+  "行为面（STAR）": "interviewPage.setup.type.behavioral",
+  "HR 面": "interviewPage.setup.type.hr",
+  综合面: "interviewPage.setup.type.general",
+  案例分析: "interviewPage.setup.type.case",
+  英语面试: "interviewPage.setup.type.english",
+  压力面: "interviewPage.setup.type.stress",
+};
+
+const INTERVIEW_DIFFICULTY_LABEL_KEYS: Record<InterviewDifficulty, MessageKey> = {
+  初级: "interviewPage.setup.difficulty.junior",
+  中级: "interviewPage.setup.difficulty.mid",
+  高级: "interviewPage.setup.difficulty.senior",
+};
+
+const INTERVIEWER_STYLE_LABEL_KEYS: Record<InterviewerStyle, MessageKey> = {
+  严谨专业: "interviewPage.setup.style.rigorous",
+  温和引导: "interviewPage.setup.style.gentle",
+  持续追问: "interviewPage.setup.style.probing",
+  压力质询: "interviewPage.setup.style.pressure",
+};
 
 /** 轮数选择框的「自动」档值：AI 按表现决定何时收尾（区间不向用户/模型展示）。 */
 export const AUTO_ROUNDS_OPTION = "auto";
 
-const ROUNDS_OPTIONS: { value: number | typeof AUTO_ROUNDS_OPTION; label: string }[] = [
-  { value: AUTO_ROUNDS_OPTION, label: "自动（AI 判断收尾）" },
+const ROUNDS_OPTIONS: { value: number | typeof AUTO_ROUNDS_OPTION; labelKey: MessageKey }[] = [
+  { value: AUTO_ROUNDS_OPTION, labelKey: "interviewPage.setup.roundsAuto" },
   ...Array.from({ length: MAX_INTERVIEW_ROUNDS - MIN_INTERVIEW_ROUNDS + 1 }, (_, index) => ({
     value: MIN_INTERVIEW_ROUNDS + index,
-    label: `${MIN_INTERVIEW_ROUNDS + index} 轮`,
+    labelKey: "interviewPage.setup.roundsOption" as const,
   })),
 ];
 
@@ -57,6 +87,8 @@ export function SetupTab({
   starting: boolean;
   onStart: (values: SetupForm) => void;
 }) {
+  // 本卡用模块级 t()：必须订阅语言变化，否则切语言后表单文案不重渲染。
+  useLocale();
   // 关联岗位下拉改为远程搜索（P0-1）：不再由页面预拉"前 100 条"当全量。
   const jobSelect = useJobSearchSelect();
 
@@ -75,13 +107,13 @@ export function SetupTab({
         <img
           className="jane-avatar jane-avatar--intro"
           src={JANE_FACE_SOURCES.idle}
-          alt="面试官 Jane"
+          alt={t("interviewPage.avatarAlt")}
         />
         <div>
           <Typography.Title level={5} style={{ margin: 0 }}>
-            面试官设定
+            {t("interviewPage.setup.title")}
           </Typography.Title>
-          <Typography.Text type="secondary">你好，我是 Jane，今天由我来面试你。</Typography.Text>
+          <Typography.Text type="secondary">{t("interviewPage.setup.greeting")}</Typography.Text>
         </div>
       </div>
       <Form
@@ -90,6 +122,7 @@ export function SetupTab({
         initialValues={{
           // 默认「综合面」而不是「技术面」：技术面只是其中一种类型，
           // 把它当默认会让非技术岗的用户每次都要先改一次。
+          // 下面三个初始值是提交给后端的协议值（不随语言变），显示名走上面那张映射表。
           interviewType: "综合面",
           difficulty: "中级",
           interviewerStyle: "严谨专业",
@@ -101,54 +134,72 @@ export function SetupTab({
         onFinish={(values) => void onStart(values)}
       >
         <div className="interview-setup-grid">
-          <Form.Item label="关联岗位（选填）" name="jobId">
+          <Form.Item label={t("interviewPage.setup.jobLabel")} name="jobId">
             <Select
               allowClear
-              placeholder="选中后按该岗位的 JD 提问（输入关键词搜索）"
+              placeholder={t("interviewPage.setup.jobPlaceholder")}
               {...jobSelect.selectProps}
             />
           </Form.Item>
-          <Form.Item label="面试类型" name="interviewType">
-            <Select options={INTERVIEW_TYPES.map((value) => ({ value, label: value }))} />
-          </Form.Item>
-          <Form.Item label="难度" name="difficulty">
+          <Form.Item label={t("interviewPage.setup.typeLabel")} name="interviewType">
             <Select
-              options={INTERVIEW_DIFFICULTIES.map((value) => ({
+              options={INTERVIEW_TYPES.map((value) => ({
                 value,
-                label: value,
+                label: t(INTERVIEW_TYPE_LABEL_KEYS[value]),
               }))}
             />
           </Form.Item>
-          <Form.Item label="面试官风格" name="interviewerStyle">
-            <Select options={INTERVIEWER_STYLES.map((value) => ({ value, label: value }))} />
+          <Form.Item label={t("interviewPage.setup.difficultyLabel")} name="difficulty">
+            <Select
+              options={INTERVIEW_DIFFICULTIES.map((value) => ({
+                value,
+                label: t(INTERVIEW_DIFFICULTY_LABEL_KEYS[value]),
+              }))}
+            />
+          </Form.Item>
+          <Form.Item label={t("interviewPage.setup.styleLabel")} name="interviewerStyle">
+            <Select
+              options={INTERVIEWER_STYLES.map((value) => ({
+                value,
+                label: t(INTERVIEWER_STYLE_LABEL_KEYS[value]),
+              }))}
+            />
           </Form.Item>
           <Form.Item
-            label="轮数"
+            label={t("interviewPage.setup.roundsLabel")}
             name="rounds"
-            extra="选「自动」时不设轮数：面试官按你的表现自主决定何时收尾，更接近真实面试。"
+            extra={t("interviewPage.setup.roundsExtra")}
           >
-            <Select options={ROUNDS_OPTIONS} />
+            {/* 「自动」档的文案不含 {round}，多传的参数不会被替换。 */}
+            <Select
+              options={ROUNDS_OPTIONS.map((option) => ({
+                value: option.value,
+                label: t(option.labelKey, { round: option.value }),
+              }))}
+            />
           </Form.Item>
           <Form.Item
-            label="考察重点（选填）"
+            label={t("interviewPage.setup.focusLabel")}
             name="focus"
-            extra="例如：用户增长、跨部门协作、成本控制"
+            extra={t("interviewPage.setup.focusExtra")}
           >
-            <Input maxLength={255} placeholder="留空则按面试类型通用考察" />
+            <Input maxLength={255} placeholder={t("interviewPage.setup.focusPlaceholder")} />
           </Form.Item>
         </div>
         <Form.Item
-          label="自定义面试官人设（选填）"
+          label={t("interviewPage.setup.personaLabel")}
           name="persona"
-          extra="例如：某公司业务负责人，喜欢追问具体数字与落地过程。优先级高于上面的默认风格。"
+          extra={t("interviewPage.setup.personaExtra")}
         >
           <Input.TextArea autoSize={{ minRows: 2, maxRows: 5 }} maxLength={2000} />
         </Form.Item>
         <Space wrap>
           <Button type="primary" htmlType="submit" icon={<PlayCircleOutlined />} loading={starting}>
-            开始面试
+            {t("interviewPage.setup.start")}
           </Button>
-          <Typography.Text type="secondary">{CONFIDENCE_TIP}</Typography.Text>
+          <Typography.Text type="secondary">
+            {t("interviewPage.setup.confidenceTip")}
+          </Typography.Text>
         </Space>
       </Form>
     </Card>
