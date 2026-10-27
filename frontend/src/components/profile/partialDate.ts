@@ -1,4 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
+import { t } from "../../i18n";
+
 interface PartialDate {
   year: string;
   month: string;
@@ -44,14 +46,18 @@ function yearRange(from: number, to: number, step: 1 | -1): YearOption[] {
  * 已选年份仍按原来的外扩逻辑并进对应组：早于 1900 的放进"今年及以前"末尾，晚于
  * `当前年+5` 的放进"未来年份"末尾，历史脏数据不会变成"选不中的值"。
  *
- * 这里是纯函数（不读 `Date`），当前年由调用方传入，测试因此不依赖运行日期。
+ * 函数本身不读 `Date`，当前年由调用方传入，测试因此不依赖运行日期；分组标题在调用时
+ * 按当前语言取，渲染它们的组件必须订阅 locale。
  */
 export function buildYearGroups(currentYear: number, selectedYear: number): YearOptionGroup[] {
   const pastMinYear = Math.min(1900, selectedYear || 1900);
   const futureMaxYear = Math.max(currentYear + 5, selectedYear);
   return [
-    { label: "今年及以前", options: yearRange(currentYear, pastMinYear, -1) },
-    { label: "未来年份", options: yearRange(currentYear + 1, futureMaxYear, 1) },
+    { label: t("dateFields.yearGroup.past"), options: yearRange(currentYear, pastMinYear, -1) },
+    {
+      label: t("dateFields.yearGroup.future"),
+      options: yearRange(currentYear + 1, futureMaxYear, 1),
+    },
   ];
 }
 
@@ -59,6 +65,7 @@ export function parsePartialDate(value: string): PartialDate | null {
   const raw = value.trim();
   if (!raw) return { year: "", month: "", day: "", ongoing: false };
   if (
+    // i18n-ok: 解析协议值——历史数据与手工输入可能是中文，翻译会破坏解析
     ["至今", "现在", "目前", "在职", "在读", "present", "now", "current"].includes(
       raw.toLowerCase(),
     )
@@ -68,9 +75,9 @@ export function parsePartialDate(value: string): PartialDate | null {
 
   const normalized = raw
     .replace(/\s+/g, "")
-    .replace(/年/g, "-")
-    .replace(/月/g, "-")
-    .replace(/日$/, "")
+    .replace(/年/g, "-") // i18n-ok: 解析协议：中文日期输入写法
+    .replace(/月/g, "-") // i18n-ok: 解析协议：中文日期输入写法
+    .replace(/日$/, "") // i18n-ok: 解析协议：中文日期输入写法
     .replace(/[./]/g, "-")
     .replace(/-+$/, "");
   const match = /^(\d{4})(?:-(\d{1,2})(?:-(\d{1,2}))?)?$/.exec(normalized);
@@ -96,7 +103,7 @@ export function normalizePartialDate(value: string | undefined): string {
   const raw = value?.trim() ?? "";
   const parsed = parsePartialDate(raw);
   if (!parsed) return raw;
-  if (parsed.ongoing) return "至今";
+  if (parsed.ongoing) return "至今"; // i18n-ok: 存储协议值（ongoing 的中文写法），不能翻译
   if (!parsed.year) return "";
   if (!parsed.month) return parsed.year;
   if (!parsed.day) return `${parsed.year}-${parsed.month}`;
