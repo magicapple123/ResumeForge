@@ -13,39 +13,42 @@
  */
 import { App, Button, Space, Tag, Typography } from "antd";
 import { useEffect, useState } from "react";
+import { t } from "../../i18n";
+import type { MessageKey } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 import { downloadDelivery, listResumeDeliveries } from "../../api/resumes";
 import type { DeliverySummary } from "../../types";
 import { downloadBlob } from "../../utils/download";
 
-const DELIVERY_SOURCE_LABELS: Record<string, string> = {
-  apply: "投递台",
-  track: "进度关联",
-  export: "导出存档",
+const DELIVERY_SOURCE_LABELS: Record<string, MessageKey> = {
+  apply: "resumeDeliveryInfo.source.apply",
+  track: "resumeDeliveryInfo.source.track",
+  export: "resumeDeliveryInfo.source.export",
 };
 
 /** 按来源区分语义的前缀文案：只有 apply 是"已实际投递"（ADR-0002 三态语义）。 */
-function deliveryPrefix(source: string): string {
+function deliveryPrefix(source: string): MessageKey {
   switch (source) {
     case "apply":
-      return "已投递给";
+      return "resumeDeliveryInfo.prefix.apply";
     case "track":
-      return "进度关联：";
+      return "resumeDeliveryInfo.prefix.track";
     case "export":
-      return "导出存档：";
+      return "resumeDeliveryInfo.prefix.export";
     default:
-      return "交付记录：";
+      return "resumeDeliveryInfo.prefix.default";
   }
 }
 
 /** 按来源区分的后缀说明：明确"这不是投递台发送"的两种情况。 */
-function deliverySuffix(source: string): string {
+function deliverySuffix(source: string): MessageKey | null {
   switch (source) {
     case "track":
-      return "（手工关联，非投递台发送）";
+      return "resumeDeliveryInfo.suffix.track";
     case "export":
-      return "（导出留档，不代表已实际发送）";
+      return "resumeDeliveryInfo.suffix.export";
     default:
-      return "";
+      return null;
   }
 }
 
@@ -56,6 +59,7 @@ interface Props {
 }
 
 export default function ResumeDeliveryInfo({ recordId, parentRevisionId }: Props) {
+  useLocale();
   const { message } = App.useApp();
   const [deliveries, setDeliveries] = useState<DeliverySummary[] | null>(null);
   const [downloadingId, setDownloadingId] = useState<number | null>(null);
@@ -104,14 +108,13 @@ export default function ResumeDeliveryInfo({ recordId, parentRevisionId }: Props
       downloadBlob(file.blob, file.filename);
       if (file.replayed && file.artifactSha256 && file.artifactSha256 !== file.contentSha256) {
         message.info(
-          `已下载按存档重新生成的版本（原始产物指纹 ${file.artifactSha256.slice(0, 8)}…）；` +
-            "重新生成每次可能略有差异（例如页面随机数），内容与投递当时一致。",
+          t("resumeDeliveryInfo.download.replayed", { hash: file.artifactSha256.slice(0, 8) }),
         );
       } else {
-        message.success("已下载交付存档");
+        message.success(t("resumeDeliveryInfo.download.success"));
       }
     } catch (err) {
-      message.error(err instanceof Error ? err.message : "下载交付存档失败");
+      message.error(err instanceof Error ? err.message : t("resumeDeliveryInfo.download.failed"));
     } finally {
       setDownloadingId(null);
     }
@@ -123,15 +126,19 @@ export default function ResumeDeliveryInfo({ recordId, parentRevisionId }: Props
     <div className="resume-delivery-info" data-testid="resume-delivery-info">
       <Space size={8} wrap>
         {parentRevisionId !== null && (
-          <Typography.Text type="secondary">派生自简历 #{parentRevisionId}</Typography.Text>
+          <Typography.Text type="secondary">
+            {t("resumeDeliveryInfo.parent.derivedFrom", { id: parentRevisionId })}
+          </Typography.Text>
         )}
         {deliveries.length === 0 && !loadFailed && parentRevisionId === null && (
-          <Typography.Text type="secondary">独立版本，暂无投递记录</Typography.Text>
+          <Typography.Text type="secondary">
+            {t("resumeDeliveryInfo.empty.standalone")}
+          </Typography.Text>
         )}
         {loadFailed && (
           <Space size={4} wrap>
             <Typography.Text type="warning">
-              投递记录加载失败（并非「暂无投递记录」），可重试
+              {t("resumeDeliveryInfo.error.loadFailed")}
             </Typography.Text>
             <Button
               size="small"
@@ -139,21 +146,23 @@ export default function ResumeDeliveryInfo({ recordId, parentRevisionId }: Props
               onClick={() => setReloadToken((token) => token + 1)}
               data-testid="delivery-retry"
             >
-              重试
+              {t("common.retry")}
             </Button>
           </Space>
         )}
         {deliveries.map((item) => {
           const destinationMissing = !item.company && !item.job_title;
+          const sourceLabelKey = DELIVERY_SOURCE_LABELS[item.source];
+          const suffixKey = deliverySuffix(item.source);
           return (
             <Tag key={item.id} color="blue" style={{ marginInlineEnd: 0 }}>
-              {deliveryPrefix(item.source)}
+              {t(deliveryPrefix(item.source))}
               {destinationMissing
-                ? "目的地未记录（旧版本快照）"
-                : `${item.company || "（公司未知）"} · ${item.job_title || "（岗位未知）"}`}{" "}
-              · {DELIVERY_SOURCE_LABELS[item.source] ?? item.source} ·{" "}
+                ? t("resumeDeliveryInfo.destination.missing")
+                : `${item.company || t("resumeDeliveryInfo.destination.companyUnknown")} · ${item.job_title || t("resumeDeliveryInfo.destination.jobUnknown")}`}{" "}
+              · {sourceLabelKey ? t(sourceLabelKey) : item.source} ·{" "}
               {new Date(item.created_at).toLocaleDateString()} · {item.content_sha256.slice(0, 8)}
-              {deliverySuffix(item.source)}
+              {suffixKey ? t(suffixKey) : null}
               <Button
                 type="link"
                 size="small"
@@ -162,7 +171,7 @@ export default function ResumeDeliveryInfo({ recordId, parentRevisionId }: Props
                 onClick={() => void handleDownload(item)}
                 data-testid={`delivery-download-${item.id}`}
               >
-                下载存档
+                {t("resumeDeliveryInfo.download.action")}
               </Button>
             </Tag>
           );
