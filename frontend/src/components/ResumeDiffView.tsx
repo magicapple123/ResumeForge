@@ -5,6 +5,8 @@
  */
 import { Tag, Typography } from "antd";
 import type { CSSProperties } from "react";
+import { t } from "../i18n";
+import { useLocale } from "../i18n/i18nContext";
 import type { DiffLine, DiffLineType, DiffToken, ResumeDiff } from "../types/resumeWriting";
 
 /**
@@ -56,17 +58,24 @@ const PREFIX: Record<DiffLineType, string> = {
 };
 
 export default function ResumeDiffView({ diff }: { diff: ResumeDiff }) {
+  useLocale();
   return (
     <div>
       <div style={{ marginBottom: 12 }}>
-        <Typography.Text>对比：</Typography.Text>
+        <Typography.Text>{t("componentsMisc.resumeDiff.compare")}</Typography.Text>
         <Typography.Text strong>{diff.base_title}</Typography.Text>
         <Typography.Text type="secondary"> → </Typography.Text>
         <Typography.Text strong>{diff.against_title}</Typography.Text>
         <span style={{ marginLeft: 12 }}>
-          <Tag color="green">新增 {diff.stats.added}</Tag>
-          <Tag color="red">删除 {diff.stats.removed}</Tag>
-          <Tag>未变 {diff.stats.unchanged}</Tag>
+          <Tag color="green">
+            {t("componentsMisc.resumeDiff.stat.added", { added: diff.stats.added })}
+          </Tag>
+          <Tag color="red">
+            {t("componentsMisc.resumeDiff.stat.removed", { removed: diff.stats.removed })}
+          </Tag>
+          <Tag>
+            {t("componentsMisc.resumeDiff.stat.unchanged", { unchanged: diff.stats.unchanged })}
+          </Tag>
         </span>
       </div>
       <div style={{ fontFamily: "monospace", fontSize: 13, lineHeight: 1.7 }}>
