@@ -28,6 +28,8 @@ import { useApi } from "../hooks/useApi";
 import { useBatchSelection } from "../hooks/useBatchSelection";
 import { useJobSearchSelect, useResumeSearchSelect } from "../hooks/remoteSearchOptions";
 import type { QuestionAnswer, QuestionBankOut, QuestionBankRecord } from "../types";
+import { t } from "../i18n";
+import { useLocale } from "../i18n/i18nContext";
 import QuestionGroupCards from "./questionbank/QuestionGroupCards";
 import { TRASH_RECOVERY_NOTE } from "./common/rowActionMenu";
 import BankHistoryCard from "./questionbank/BankHistoryCard";
@@ -48,6 +50,8 @@ export default function QuestionBankPanel({
   onOpenRecord,
   onCloseRecord,
 }: Props) {
+  // 本组件用模块级 t()：必须订阅语言变化，否则切语言后这一块不重渲染。
+  useLocale();
   const { message, modal } = App.useApp();
   // 岗位 / 简历下拉改为远程搜索（P0-1）：不再由页面预拉"前 100 条"当全量。
   const jobSelect = useJobSearchSelect();
@@ -123,7 +127,7 @@ export default function QuestionBankPanel({
   const generate = async () => {
     if (loading) return;
     if (!record && !jobId && !resumeId) {
-      setError("请至少选择一个岗位或一份简历，题库才能有针对性");
+      setError(t("questionBankPanel.validate.needJobOrResume"));
       setData(null);
       return;
     }
@@ -138,7 +142,7 @@ export default function QuestionBankPanel({
       // 生成完成自动保存为历史（无需用户手点保存）。
       await autoSaveBank(result);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "生成题库失败");
+      setError(err instanceof Error ? err.message : t("questionBankPanel.error.generate"));
       setData(null);
     } finally {
       setLoading(false);
@@ -162,7 +166,7 @@ export default function QuestionBankPanel({
       await banks.reload();
     } catch (err) {
       // 自动保存失败不阻断生成结果展示，仅轻提示。
-      message.warning(err instanceof Error ? err.message : "自动保存题库历史失败");
+      message.warning(err instanceof Error ? err.message : t("questionBankPanel.error.autoSave"));
     } finally {
       setSaving(false);
     }
@@ -186,10 +190,12 @@ export default function QuestionBankPanel({
     const ids = [...batch.selectedIds];
     if (ids.length === 0) return;
     modal.confirm({
-      title: "删除选中的题库历史？",
-      // i18n-ok: 条数从标题挪进正文（§4.4 例外），这里的中文就是确认正文本身
-      content: `这 ${ids.length} 份题库历史${TRASH_RECOVERY_NOTE}`,
-      okText: "删除",
+      title: t("questionBankPanel.confirm.bulkDeleteTitle"),
+      content: t("questionBankPanel.confirm.bulkDeleteBody", {
+        count: ids.length,
+        note: TRASH_RECOVERY_NOTE,
+      }),
+      okText: t("common.action.delete"),
       okButtonProps: { danger: true },
       onOk: async () => {
         const results = await Promise.allSettled(
@@ -198,8 +204,15 @@ export default function QuestionBankPanel({
             .map((bank) => deleteQuestionBank(bank.id)),
         );
         const failed = results.filter((item) => item.status === "rejected").length;
-        if (failed === 0) message.success(`已删除 ${ids.length} 份题库历史`);
-        else message.warning(`已删除 ${ids.length - failed} 份，${failed} 份失败，请重试`);
+        if (failed === 0)
+          message.success(t("questionBankPanel.toast.deletedMany", { count: ids.length }));
+        else
+          message.warning(
+            t("questionBankPanel.toast.deletedPartial", {
+              ok: ids.length - failed,
+              failed,
+            }),
+          );
         batch.exitSelecting();
         await banks.reload();
       },
@@ -209,10 +222,10 @@ export default function QuestionBankPanel({
   const removeBank = async (id: number) => {
     try {
       await deleteQuestionBank(id);
-      message.success("已删除题库历史");
+      message.success(t("questionBankPanel.toast.deleted"));
       await banks.reload();
     } catch (err) {
-      message.error(err instanceof Error ? err.message : "删除题库历史失败");
+      message.error(err instanceof Error ? err.message : t("questionBankPanel.error.delete"));
     }
   };
 
@@ -263,11 +276,13 @@ export default function QuestionBankPanel({
           );
           await updateQuestionBank(record.id, { groups });
         } catch (err) {
-          message.warning(err instanceof Error ? err.message : "参考答案已生成，但写回历史失败");
+          message.warning(
+            err instanceof Error ? err.message : t("questionBankPanel.error.answerWriteBack"),
+          );
         }
       }
     } catch (err) {
-      setAnswerError(err instanceof Error ? err.message : "生成参考答案失败");
+      setAnswerError(err instanceof Error ? err.message : t("questionBankPanel.error.answer"));
     } finally {
       setAnswerLoading(null);
     }
@@ -283,11 +298,14 @@ export default function QuestionBankPanel({
         <Alert
           type="info"
           showIcon
-          title={`正在查看历史题库 #${record.id}（${record.created_at.replace("T", " ").slice(0, 16)}）`}
+          title={t("questionBankPanel.history.viewingTitle", {
+            id: record.id,
+            time: record.created_at.replace("T", " ").slice(0, 16),
+          })}
           action={
             onCloseRecord && (
               <Button size="small" onClick={onCloseRecord}>
-                返回
+                {t("common.action.back")}
               </Button>
             )
           }
@@ -295,12 +313,12 @@ export default function QuestionBankPanel({
       )}
 
       {!record && (
-        <Card size="small" title="个性化题库">
+        <Card size="small" title={t("questionBankPanel.page.title")}>
           <Space wrap>
             <Select
               allowClear
               style={{ minWidth: 240 }}
-              placeholder="关联岗位（选填，输入关键词搜索）"
+              placeholder={t("questionBankPanel.select.jobPlaceholder")}
               value={jobId}
               onChange={setJobId}
               {...jobSelect.selectProps}
@@ -308,7 +326,7 @@ export default function QuestionBankPanel({
             <Select
               allowClear
               style={{ minWidth: 240 }}
-              placeholder="关联简历（选填，输入关键词搜索）"
+              placeholder={t("questionBankPanel.select.resumePlaceholder")}
               value={resumeId}
               onChange={setResumeId}
               {...resumeSelect.selectProps}
@@ -319,7 +337,7 @@ export default function QuestionBankPanel({
               loading={loading}
               onClick={() => void generate()}
             >
-              生成题库
+              {t("questionBankPanel.action.generate")}
             </Button>
             {data && (
               <>
@@ -328,17 +346,16 @@ export default function QuestionBankPanel({
                   disabled={total === 0}
                   onClick={() => void startSession()}
                 >
-                  开始模拟面试
+                  {t("questionBankPanel.action.startSession")}
                 </Button>
                 <Button icon={<SaveOutlined />} loading={saving} onClick={() => void saveBank()}>
-                  保存题库
+                  {t("questionBankPanel.action.save")}
                 </Button>
               </>
             )}
           </Space>
           <Typography.Paragraph type="secondary" style={{ marginTop: 12, marginBottom: 0 }}>
-            题库基于岗位 JD、简历与已确认的事实台账即时生成，覆盖基础题、项目深挖题与反问 HR
-            题三类。
+            {t("questionBankPanel.page.description")}
           </Typography.Paragraph>
         </Card>
       )}
@@ -348,14 +365,20 @@ export default function QuestionBankPanel({
       ) : error ? (
         <Alert type="error" showIcon title={error} />
       ) : !viewData ? (
-        <Empty description={record ? "该历史记录为空" : "选择岗位或简历后生成题库"} />
+        <Empty
+          description={
+            record
+              ? t("questionBankPanel.empty.recordEmpty")
+              : t("questionBankPanel.empty.needSelection")
+          }
+        />
       ) : legacyText ? (
-        <Card size="small" title="历史题库">
+        <Card size="small" title={t("questionBankPanel.history.title")}>
           <Alert
             type="warning"
             showIcon
-            title="此为旧版记录，仅可查看"
-            description="旧版历史以纯文本保存，无法还原为结构化题库，仅展示原始内容。"
+            title={t("questionBankPanel.history.legacyTitle")}
+            description={t("questionBankPanel.history.legacyBody")}
           />
           <Typography.Paragraph style={{ marginTop: 8, whiteSpace: "pre-wrap" }}>
             {legacyText}
@@ -368,7 +391,9 @@ export default function QuestionBankPanel({
           ))}
           {answerError && <Alert type="error" showIcon title={answerError} />}
           <Space wrap>
-            <Typography.Text strong>共 {total} 题</Typography.Text>
+            <Typography.Text strong>
+              {t("questionBankPanel.summary.total", { count: total })}
+            </Typography.Text>
             {viewData.groups.map((group) =>
               group.questions.length ? (
                 <Tag key={group.type} color="geekblue">
@@ -378,7 +403,7 @@ export default function QuestionBankPanel({
             )}
             {!record && (
               <Button size="small" icon={<ReloadOutlined />} onClick={() => void generate()}>
-                重新生成
+                {t("questionBankPanel.action.regenerate")}
               </Button>
             )}
           </Space>
