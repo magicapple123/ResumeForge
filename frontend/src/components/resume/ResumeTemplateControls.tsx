@@ -15,9 +15,19 @@ import { ArrowDownOutlined, ArrowUpOutlined, PictureOutlined } from "@ant-design
 import { Button, Popover, Segmented, Select, Space, Tooltip, Typography } from "antd";
 import { useMemo, useState } from "react";
 import { RESUME_PAGE_LIMITS } from "../../types";
-import type { ResumeContent, ResumeLayout, ResumeTemplateCatalog } from "../../types";
+import type {
+  ResumeContent,
+  ResumeFormatPreset,
+  ResumeLayout,
+  ResumeTemplateCatalog,
+} from "../../types";
 import type { ResumeFormatConfig } from "../../types/resumeFormat";
 import { useI18n } from "../../i18n/i18nContext";
+import {
+  RESUME_CATALOG_FORMAT_DESCRIPTION_KEYS,
+  RESUME_CATALOG_FORMAT_LABEL_KEYS,
+  RESUME_CATALOG_SECTION_LABEL_KEYS,
+} from "../../i18n/enum/resumeCatalog";
 import { layoutWithFormatPreset } from "./layoutWithFormatPreset";
 import {
   buildSectionOrderConfig,
@@ -86,6 +96,14 @@ export default function ResumeTemplateControls({
   const { t } = useI18n();
   const templates = catalog?.templates ?? [];
   const formatPresets = catalog?.format_presets ?? [];
+  /**
+   * 版式预设的展示名：内置预设按稳定 `name` 映射到语言包；自制版式的名字是用户输入，
+   * 后端新增的未知预设也映射不到——两者一律回退后端原文（不丢信息）。
+   */
+  const formatPresetLabel = (item: ResumeFormatPreset): string => {
+    const labelKey = item.custom ? undefined : RESUME_CATALOG_FORMAT_LABEL_KEYS[item.name];
+    return labelKey ? t(labelKey) : item.label;
+  };
 
   const currentTemplate = templates.find((item) => item.name === layout.template);
 
@@ -252,13 +270,18 @@ export default function ResumeTemplateControls({
               classNames={{ popup: { root: "resume-params-dropdown resume-format-dropdown" } }}
               options={[
                 { value: "", label: t("sections.templateControls.followTemplate") },
-                ...formatPresets.map((item) => ({
-                  value: item.name,
-                  label: item.custom
-                    ? `${item.label}${t("sections.templateControls.customSuffix")}`
-                    : item.label,
-                  title: item.description,
-                })),
+                ...formatPresets.map((item) => {
+                  // 展示名与说明都走语言包；自制版式的名字与说明是用户数据，原样显示。
+                  const label = formatPresetLabel(item);
+                  const descriptionKey = RESUME_CATALOG_FORMAT_DESCRIPTION_KEYS[item.name];
+                  return {
+                    value: item.name,
+                    label: item.custom
+                      ? `${label}${t("sections.templateControls.customSuffix")}`
+                      : label,
+                    title: item.custom || !descriptionKey ? item.description : t(descriptionKey),
+                  };
+                }),
               ]}
               // 弹层定宽 + 单行省略之后，"这个名字到底叫什么"只能靠悬停：
               // 这里包一层带 `title` 的 span（选项自己的 `title` 是**说明**，不是名字，
@@ -332,8 +355,12 @@ export default function ResumeTemplateControls({
               aria-label={t("sections.templateControls.orderListAriaLabel")}
             >
               {sectionOrder.map((key, index) => {
+                // 后端下发的是中文展示名，先按稳定分区 key 映射到语言包；未知分区
+                // （后端新增的）再回退目录原文，最后才是前端内置的七个兜底 key。
+                const labelKey = RESUME_CATALOG_SECTION_LABEL_KEYS[key];
                 const fallbackLabelKey = RESUME_SECTION_LABELS[key];
                 const label =
+                  (labelKey ? t(labelKey) : undefined) ??
                   sectionOptions.find((item) => item.key === key)?.label ??
                   (fallbackLabelKey ? t(fallbackLabelKey) : key);
                 return (
