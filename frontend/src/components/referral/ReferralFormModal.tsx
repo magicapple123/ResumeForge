@@ -7,6 +7,8 @@
 import { Modal } from "antd";
 import type { FormInstance } from "antd";
 import type { Referral, ReferralPayload } from "../../types";
+import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 import ReferralFormFields from "./ReferralFormFields";
 
 interface Props {
@@ -41,15 +43,17 @@ export default function ReferralFormModal({
   onCancel,
   onOk,
 }: Props) {
+  // 本文件用模块级 t()：必须订阅语言变化，否则切语言后弹窗标题与按钮不重渲染。
+  useLocale();
   return (
     <Modal
-      title={editing ? "编辑内推" : "新建内推"}
+      title={editing ? t("referralUi.form.title.edit") : t("referralUi.form.title.create")}
       open={open}
       onCancel={onCancel}
       onOk={onOk}
       confirmLoading={saving}
-      okText="保存"
-      cancelText="取消"
+      okText={t("common.action.save")}
+      cancelText={t("common.action.cancel")}
     >
       <ReferralFormFields
         form={form}
