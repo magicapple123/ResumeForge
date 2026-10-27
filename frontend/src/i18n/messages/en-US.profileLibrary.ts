@@ -17,6 +17,7 @@ const profileLibrary = {
   "profileLibrary.page.subtitle":
     "Resume Profile feeds Resume generation; web form Profile supplements application forms",
   "profileLibrary.action.edit": "Edit Profile",
+  "profileLibrary.action.fillWebForm": "Fill in Web form",
   "profileLibrary.action.save": "Save all Profile data",
   "profileLibrary.action.cancel": "Cancel",
   "profileLibrary.action.expandAll": "Expand all",
@@ -222,7 +223,7 @@ const profileLibrary = {
   "profileLibrary.webform.sectionAlertTitle": "For Web form completion only",
   "profileLibrary.webform.sectionEmpty": "No Web form Profile data yet",
   "profileLibrary.webform.sectionEmptyHint":
-    "Use Edit Profile to add commonly requested Web form Fields",
+    'Use "Fill in Web form" to add commonly requested Web form Fields',
   "profileLibrary.webform.sectionEmptySearch": "No matching Web form Profile data",
   "profileLibrary.webform.fieldLearnedHint":
     "You entered this while completing a Web form and chose to remember it because it was not in your Resume Profile",

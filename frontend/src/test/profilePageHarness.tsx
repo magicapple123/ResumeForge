@@ -89,8 +89,9 @@ export function renderProfilePage() {
 /**
  * 页头那只「编辑资料」按钮所在的容器。
  *
- * 「网申资料」空态（`WebFormProfileEmpty`）里也有一个同名 CTA，两者走同一个词表 key，
- * 所以 `getByRole("button", { name: /编辑资料/ })` 会命中两个。这里收窄到页头，
+ * 「网申资料」空态（`WebFormProfileEmpty`）里也有一颗 CTA，此前与页头共用同一个词表 key，
+ * 于是 `getByRole("button", { name: /编辑资料/ })` 会命中两个；空态改用自己的
+ * `profileLibrary.action.fillWebForm` 后名字已不再撞，这里仍收窄到页头，
  * 语义是「点页面右上角那只」——不是「随便哪只都行」。
  */
 export function headerRegion(): HTMLElement {
@@ -104,7 +105,7 @@ export function headerRegion(): HTMLElement {
  *
  * 名字用正则而不是全等：按钮带图标，antd 的图标有 `aria-label="edit"`，所以可访问名
  * 是「edit 编辑资料」而非「编辑资料」；这里只要求包含词表里的那个名字，同时靠
- * `within(页头)` 把「网申资料」空态的同名 CTA 排除掉。
+ * `within(页头)` 把页面其他位置的按钮排除掉。
  */
 export function headerEditButton(): HTMLElement {
   return within(headerRegion()).getByRole("button", { name: editNamePattern() });

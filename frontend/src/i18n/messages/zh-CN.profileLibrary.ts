@@ -25,6 +25,8 @@ const profileLibrary = {
   "profileLibrary.page.subtitle": "简历资料用于生成简历，网申资料用于补充网申填表",
 
   "profileLibrary.action.edit": "编辑资料",
+  /** 网申资料空态那颗按钮：与页头「编辑资料」作用域不同，必须能靠名字区分。 */
+  "profileLibrary.action.fillWebForm": "填写网申资料",
   "profileLibrary.action.save": "保存全部资料",
   "profileLibrary.action.cancel": "取消",
   "profileLibrary.action.expandAll": "全部展开",
@@ -216,7 +218,7 @@ const profileLibrary = {
   "profileLibrary.webform.sectionTag": "网申填表专用",
   "profileLibrary.webform.sectionAlertTitle": "网申填表专用",
   "profileLibrary.webform.sectionEmpty": "还没有填过",
-  "profileLibrary.webform.sectionEmptyHint": "点「编辑资料」即可补上网申表单常问的那些栏目",
+  "profileLibrary.webform.sectionEmptyHint": "点「填写网申资料」即可补上网申表单常问的那些栏目",
   "profileLibrary.webform.sectionEmptySearch": "没有匹配的网申资料",
   "profileLibrary.webform.fieldLearnedHint":
     "填表时你填了这个框、而简历通里没有，于是问你要不要记住",

@@ -119,14 +119,16 @@ describe("WebFormProfileSection 只看已填写", () => {
       within(notice).getByText(t("profileLibrary.webform.sectionAlertTitle")),
     ).toBeInTheDocument();
 
-    const editButton = screen.getByRole("button", { name: t("profileLibrary.action.edit") });
+    const editButton = screen.getByRole("button", {
+      name: t("profileLibrary.action.fillWebForm"),
+    });
     fireEvent.click(editButton);
     expect(onRequestEdit).toHaveBeenCalledOnce();
 
     act(() => selectLocale("en-US"));
 
     expect(
-      screen.getByRole("button", { name: t("profileLibrary.action.edit") }),
+      screen.getByRole("button", { name: t("profileLibrary.action.fillWebForm") }),
     ).toBeInTheDocument();
   });
 

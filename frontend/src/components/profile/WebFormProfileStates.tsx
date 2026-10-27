@@ -56,7 +56,7 @@ export function WebFormProfileEmpty({ onEdit }: { onEdit: () => void }) {
           <Typography.Text>{t("profileLibrary.webform.sectionEmptyHint")}</Typography.Text>
         </Space>
       }
-      actionLabel={t("profileLibrary.action.edit")}
+      actionLabel={t("profileLibrary.action.fillWebForm")}
       onAction={onEdit}
     />
   );
