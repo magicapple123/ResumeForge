@@ -68,6 +68,7 @@ import llmRecord from "./zh-CN.llmRecord";
 import educationSection from "./zh-CN.educationSection";
 import jobTable from "./zh-CN.jobTable";
 import jobAnalysis from "./zh-CN.jobAnalysis";
+import templateImport from "./zh-CN.templateImport";
 
 const namespaces = {
   /** 简历制作台（2026-10-23）。 */
@@ -167,6 +168,8 @@ const namespaces = {
   ...jobTable,
   /** 岗位需求解读弹窗（2026-10-27）。 */
   ...jobAnalysis,
+  /** 导入参考模板弹窗（2026-10-27）。 */
+  ...templateImport,
 } as const;
 
 export default namespaces;

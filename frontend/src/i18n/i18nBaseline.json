@@ -3,7 +3,7 @@
   "generatedAt": "2026-10-27",
   "rule": "Legacy CJK ceilings plus language-independent AST product-copy fingerprints",
   "src": {
-    "total": 4135,
+    "total": 4103,
     "files": {
       "App.tsx": 0,
       "api/analytics.ts": 0,
@@ -477,7 +477,7 @@
       "components/templates/FormatTemplateEditorModal.tsx": 15,
       "components/templates/StyleTemplateEditorModal.tsx": 23,
       "components/templates/TemplateCustomTable.tsx": 9,
-      "components/templates/TemplateImportModal.tsx": 33,
+      "components/templates/TemplateImportModal.tsx": 1,
       "components/templates/TemplatePreviewModal.tsx": 9,
       "components/templates/TemplateStyleControls.tsx": 13,
       "components/templates/TemplateWorkbench.tsx": 11,

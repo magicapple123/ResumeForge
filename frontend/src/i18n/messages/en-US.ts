@@ -60,6 +60,7 @@ import llmRecord from "./en-US.llmRecord";
 import educationSection from "./en-US.educationSection";
 import jobTable from "./en-US.jobTable";
 import jobAnalysis from "./en-US.jobAnalysis";
+import templateImport from "./en-US.templateImport";
 
 const enUS = {
   ...core,
@@ -121,6 +122,7 @@ const enUS = {
   ...educationSection,
   ...jobTable,
   ...jobAnalysis,
+  ...templateImport,
 } as const satisfies Record<keyof ZhCNMessages, string>;
 
 export default enUS;

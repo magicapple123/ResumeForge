@@ -19,6 +19,8 @@ import { previewResumeTemplate } from "../../api/resumes";
 import type { ResumeStyleField, ResumeTemplateDetail, TemplateRecognitionDraft } from "../../types";
 import A4PreviewFrame from "./A4PreviewFrame";
 import TemplateStyleControls from "./TemplateStyleControls";
+import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 
 interface Props {
   open: boolean;
@@ -33,6 +35,8 @@ const ACCEPT = ".png,.jpg,.jpeg,.webp,.gif,.bmp,.tif,.tiff,.pdf,.docx";
 /** 后端上限 2MB（`MAX_ATTACHMENT_BYTES`），这里提前拦一次，省得用户等一次失败。 */
 const MAX_BYTES = 2 * 1024 * 1024;
 const MAX_TOTAL_BYTES = 5 * 1024 * 1024;
+/** 一次最多几份：与上传器 `maxCount` 同源，提示文案里的数字也从这里取。 */
+const MAX_FILES = 8;
 
 export default function TemplateImportModal({
   open,
@@ -40,6 +44,8 @@ export default function TemplateImportModal({
   onImported,
   styleFields = [],
 }: Props) {
+  // 本组件用模块级 t()：必须订阅语言变化，否则切语言后弹窗文案不重渲染。
+  useLocale();
   const { message } = App.useApp();
   const [fileList, setFileList] = useState<UploadFile[]>([]);
   const [name, setName] = useState("");
@@ -77,7 +83,9 @@ export default function TemplateImportModal({
       if (sequence === previewSequence.current) setPreview(html);
     } catch (error) {
       if (sequence === previewSequence.current) {
-        setPreviewError(error instanceof Error ? error.message : "预览渲染失败");
+        setPreviewError(
+          error instanceof Error ? error.message : t("templateImport.error.previewFailed"),
+        );
       }
     }
   };
@@ -98,7 +106,7 @@ export default function TemplateImportModal({
       .map((item) => item.originFileObj)
       .filter((file): file is NonNullable<UploadFile["originFileObj"]> => Boolean(file));
     if (files.length === 0) {
-      message.warning("先选一份参考模板文件");
+      message.warning(t("templateImport.toast.needFile"));
       return;
     }
     setRunning(true);
@@ -109,7 +117,7 @@ export default function TemplateImportModal({
         setName(analyzed.name);
         setConfig(analyzed.config);
         await renderDraft(analyzed, analyzed.config);
-        message.success("识别完成，请检查右侧预览并微调后再保存");
+        message.success(t("templateImport.toast.analyzed"));
       } else {
         const created = await createResumeTemplate({
           name: name.trim() || draft.name,
@@ -119,13 +127,15 @@ export default function TemplateImportModal({
           kind: "style",
           source_name: draft.source_names.join("、"),
         });
-        message.success("已保存模板「" + created.name + "」");
+        message.success(t("templateImport.toast.saved", { name: created.name }));
         onImported(created);
         reset();
         onClose();
       }
     } catch (error) {
-      message.error(error instanceof Error ? error.message : "导入失败，请稍后重试");
+      message.error(
+        error instanceof Error ? error.message : t("templateImport.error.importFailed"),
+      );
     } finally {
       setRunning(false);
     }
@@ -133,15 +143,15 @@ export default function TemplateImportModal({
 
   return (
     <Modal
-      title={draft ? "微调导入模板" : "导入参考模板"}
+      title={draft ? t("templateImport.title.edit") : t("templateImport.title.import")}
       open={open}
       onCancel={() => {
         if (running) return;
         reset();
         onClose();
       }}
-      okText={draft ? "保存为我的模板" : "识别并预览"}
-      cancelText="取消"
+      okText={draft ? t("templateImport.action.saveAsMine") : t("templateImport.action.analyze")}
+      cancelText={t("common.action.cancel")}
       mask={{ closable: false }}
       confirmLoading={running}
       okButtonProps={{ disabled: fileList.length === 0 }}
@@ -154,25 +164,28 @@ export default function TemplateImportModal({
       destroyOnHidden
     >
       <Typography.Paragraph type="secondary" style={{ marginTop: 0 }}>
-        上传你想照着做的简历截图或文档。识别结果会先进入编辑器，确认后才会保存；
-        不会直接覆盖已有模板。
+        {t("templateImport.intro")}
       </Typography.Paragraph>
       {!draft ? (
         <Upload.Dragger
           accept={ACCEPT}
-          maxCount={8}
+          maxCount={MAX_FILES}
           multiple
           fileList={fileList}
           beforeUpload={(file) => {
             if (file.size > MAX_BYTES) {
-              message.error("文件不能超过 " + MAX_BYTES / (1024 * 1024) + " MB，请压缩后再试");
+              message.error(
+                t("templateImport.error.fileTooLarge", { size: MAX_BYTES / (1024 * 1024) }),
+              );
               return Upload.LIST_IGNORE;
             }
             const existingBytes = [...selectedFileSizes.current.entries()]
               .filter(([uid]) => uid !== file.uid)
               .reduce((total, [, size]) => total + size, 0);
             if (existingBytes + file.size > MAX_TOTAL_BYTES) {
-              message.error("参考模板文件合计不能超过 5 MB");
+              message.error(
+                t("templateImport.error.totalTooLarge", { size: MAX_TOTAL_BYTES / (1024 * 1024) }),
+              );
               return Upload.LIST_IGNORE;
             }
             selectedFileSizes.current.set(file.uid, file.size);
@@ -197,16 +210,20 @@ export default function TemplateImportModal({
           <p className="ant-upload-drag-icon">
             <InboxOutlined />
           </p>
-          <p className="ant-upload-text">点这里选择，或把文件拖进来</p>
+          <p className="ant-upload-text">{t("templateImport.upload.text")}</p>
           <p className="ant-upload-hint">
-            最多 8 份 PNG / JPG / WEBP 图片或 PDF / DOCX，单个 ≤ 2 MB、合计 ≤ 5 MB
+            {t("templateImport.upload.hint", {
+              count: MAX_FILES,
+              single: MAX_BYTES / (1024 * 1024),
+              total: MAX_TOTAL_BYTES / (1024 * 1024),
+            })}
           </p>
         </Upload.Dragger>
       ) : (
         <Alert
           type="success"
           showIcon
-          title="已完成初步识别"
+          title={t("templateImport.draft.recognized")}
           description={
             <Space wrap>
               {draft.source_names.map((item) => (
@@ -219,13 +236,13 @@ export default function TemplateImportModal({
       )}
 
       <Form layout="vertical">
-        <Form.Item label="模板名称（可留空，由模型起名）">
+        <Form.Item label={t("templateImport.field.name")}>
           <Input
             value={name}
             onChange={(event) => setName(event.target.value)}
             maxLength={40}
-            placeholder="例如：深蓝简洁版式"
-            aria-label="模板名称"
+            placeholder={t("templateImport.placeholder.name")}
+            aria-label={t("templateImport.aria.name")}
           />
         </Form.Item>
       </Form>
@@ -236,20 +253,28 @@ export default function TemplateImportModal({
             <Alert
               type="info"
               showIcon
-              title="识别依据"
+              title={t("templateImport.draft.evidenceTitle")}
               description={
-                (draft.evidence.length ? draft.evidence.join("；") : "模型没有返回可解释依据") +
-                (draft.warnings.length ? "。" + draft.warnings.join("；") : "")
+                (draft.evidence.length
+                  ? draft.evidence.join(t("templateImport.separator.item"))
+                  : t("templateImport.draft.noEvidence")) +
+                (draft.warnings.length
+                  ? t("templateImport.separator.period") +
+                    draft.warnings.join(t("templateImport.separator.item"))
+                  : "")
               }
               style={{ marginBottom: 12 }}
             />
             <Typography.Paragraph type="secondary" style={{ fontSize: 12 }}>
-              HTML 预览与 HTML 导出使用完整样式；PDF / Word
-              会应用颜色、字号、行高和页边距等通用参数， 但不能完整复现自定义双栏、标签图片或任意
-              CSS，建议导出后核对。
+              {t("templateImport.draft.exportNote")}
             </Typography.Paragraph>
-            <div className="template-recognition-confidence" aria-label="识别置信度">
-              <Typography.Text type="secondary">识别置信度：</Typography.Text>
+            <div
+              className="template-recognition-confidence"
+              aria-label={t("templateImport.aria.confidence")}
+            >
+              <Typography.Text type="secondary">
+                {t("templateImport.draft.confidenceTitle")}
+              </Typography.Text>
               {Object.entries(draft.confidence).length ? (
                 <Space wrap size={[4, 4]}>
                   {Object.entries(draft.confidence).map(([key, confidence]) => {
@@ -262,7 +287,9 @@ export default function TemplateImportModal({
                   })}
                 </Space>
               ) : (
-                <Typography.Text type="secondary">模型未提供</Typography.Text>
+                <Typography.Text type="secondary">
+                  {t("templateImport.draft.noConfidence")}
+                </Typography.Text>
               )}
             </div>
             <TemplateStyleControls
@@ -276,11 +303,18 @@ export default function TemplateImportModal({
           </div>
           <div className="template-recognition-preview">
             {previewError ? (
-              <Alert type="error" showIcon title="预览失败" description={previewError} />
+              <Alert
+                type="error"
+                showIcon
+                title={t("templateImport.draft.previewFailedTitle")}
+                description={previewError}
+              />
             ) : preview ? (
-              <A4PreviewFrame html={preview} title="导入模板预览" />
+              <A4PreviewFrame html={preview} title={t("templateImport.draft.previewTitle")} />
             ) : (
-              <Typography.Text type="secondary">正在生成预览…</Typography.Text>
+              <Typography.Text type="secondary">
+                {t("templateImport.draft.previewing")}
+              </Typography.Text>
             )}
           </div>
         </div>
@@ -288,8 +322,8 @@ export default function TemplateImportModal({
         <Alert
           type="info"
           showIcon
-          title="识别需要已配置的大模型"
-          description="参考图片会发给你配置的大模型；若含真实姓名、电话或邮箱，建议先遮挡。PDF / DOCX 原文留在本机，仅发送本地生成的脱敏结构统计。识别结果会先预览和微调，再保存为模板。"
+          title={t("templateImport.model.title")}
+          description={t("templateImport.model.body")}
         />
       )}
     </Modal>
