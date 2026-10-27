@@ -18,7 +18,8 @@ import type { Dayjs } from "dayjs";
 import { useMemo, useState } from "react";
 import { listReminders } from "../../api/reminders";
 import { useApi } from "../../hooks/useApi";
-import { REMINDER_KIND_LABELS, REMINDER_STATUS_LABELS } from "../../types";
+import { t, type MessageKey } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 import type { Reminder, ReminderKind, ReminderStatus } from "../../types";
 import { formatDateTime } from "../../utils/format";
 
@@ -37,8 +38,41 @@ interface Props {
   onSelectDate?: (date: Dayjs) => void;
 }
 
-/** 星期表头：周一开始（国内习惯）。 */
-const WEEK_LABELS = ["一", "二", "三", "四", "五", "六", "日"];
+/** 星期表头：周一开始（国内习惯）。显示名在语言包，渲染处 t()。 */
+const WEEKDAY_LABEL_KEYS: readonly MessageKey[] = [
+  "trackerUi.calendar.weekday.mon",
+  "trackerUi.calendar.weekday.tue",
+  "trackerUi.calendar.weekday.wed",
+  "trackerUi.calendar.weekday.thu",
+  "trackerUi.calendar.weekday.fri",
+  "trackerUi.calendar.weekday.sat",
+  "trackerUi.calendar.weekday.sun",
+];
+
+/** 提醒类型 / 状态的显示名：键是协议值（与后端逐字对应），值指向语言包 key。 */
+const KIND_LABEL_KEYS: Record<ReminderKind, MessageKey> = {
+  interview: "trackerUi.reminderKind.interview",
+  assessment_deadline: "trackerUi.reminderKind.assessmentDeadline",
+  hr_reply: "trackerUi.reminderKind.hrReply",
+  other: "trackerUi.reminderKind.other",
+};
+
+const STATUS_LABEL_KEYS: Record<ReminderStatus, MessageKey> = {
+  pending: "trackerUi.reminderStatus.pending",
+  done: "trackerUi.reminderStatus.done",
+  dismissed: "trackerUi.reminderStatus.dismissed",
+};
+
+/** 未知取值原样显示（与旧的 `?? item.kind` 同义）。 */
+function kindLabel(kind: string): string {
+  const key = KIND_LABEL_KEYS[kind as ReminderKind];
+  return key ? t(key) : kind;
+}
+
+function statusLabel(status: string): string {
+  const key = STATUS_LABEL_KEYS[status as ReminderStatus];
+  return key ? t(key) : status;
+}
 
 /** 提醒在月历上的颜色：状态优先，逾期再单独标红。 */
 function reminderColor(reminder: Reminder, now: Dayjs): string {
@@ -62,6 +96,8 @@ export default function CalendarView({
   compact = false,
   onSelectDate,
 }: Props) {
+  // 本组件用模块级 t()：必须订阅语言变化，否则切语言后月历停在旧文案。
+  useLocale();
   const [month, setMonth] = useState<Dayjs>(() => dayjs().startOf("month"));
   // 被点开的那一天（内建明细用）。`null` 表示没打开。
   const [detailDate, setDetailDate] = useState<Dayjs | null>(null);
@@ -120,23 +156,25 @@ export default function CalendarView({
           <Button
             size="small"
             icon={<LeftOutlined />}
-            aria-label="上个月"
+            aria-label={t("trackerUi.calendar.prevMonth")}
             onClick={() => setMonth((current) => current.subtract(1, "month"))}
           />
-          <Typography.Text strong>{month.format("YYYY 年 M 月")}</Typography.Text>
+          <Typography.Text strong>
+            {month.format(t("trackerUi.calendar.monthTitle"))}
+          </Typography.Text>
           <Button
             size="small"
             icon={<RightOutlined />}
-            aria-label="下个月"
+            aria-label={t("trackerUi.calendar.nextMonth")}
             onClick={() => setMonth((current) => current.add(1, "month"))}
           />
           <Button size="small" onClick={() => setMonth(dayjs().startOf("month"))}>
-            回到本月
+            {t("trackerUi.calendar.thisMonth")}
           </Button>
         </Space>
         {!compact && (
           <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-            点日期格看当天的安排
+            {t("trackerUi.calendar.hint")}
           </Typography.Text>
         )}
       </div>
@@ -145,9 +183,9 @@ export default function CalendarView({
         <LoadingBlock />
       ) : (
         <div className="calendar-view-grid" role="grid">
-          {WEEK_LABELS.map((label) => (
-            <div key={label} className="calendar-view-weekday" role="columnheader">
-              {label}
+          {WEEKDAY_LABEL_KEYS.map((labelKey) => (
+            <div key={labelKey} className="calendar-view-weekday" role="columnheader">
+              {t(labelKey)}
             </div>
           ))}
           {cells.map((date) => {
@@ -162,7 +200,11 @@ export default function CalendarView({
                   dimmed ? " is-dimmed" : ""
                 }`}
                 onClick={() => openDay(date)}
-                aria-label={`${key}${dayItems.length ? `，${dayItems.length} 条提醒` : ""}，查看当天安排`}
+                aria-label={
+                  dayItems.length
+                    ? t("trackerUi.calendar.dayAria", { date: key, count: dayItems.length })
+                    : t("trackerUi.calendar.dayAriaEmpty", { date: key })
+                }
               >
                 <span className="calendar-view-day">{date.date()}</span>
                 {compact
@@ -186,9 +228,7 @@ export default function CalendarView({
                         {dayItems.slice(0, 2).map((item) => (
                           <Tooltip
                             key={item.id}
-                            title={`${formatDateTime(item.remind_at)} · ${
-                              REMINDER_KIND_LABELS[item.kind as ReminderKind] ?? item.kind
-                            }`}
+                            title={`${formatDateTime(item.remind_at)} · ${kindLabel(item.kind)}`}
                           >
                             <span
                               className="calendar-view-item"
@@ -209,16 +249,19 @@ export default function CalendarView({
         </div>
       )}
       {!loading && items.length === 0 && (
-        <EmptyState inline description="这个月还没有提醒，把面试、测评截止这些时点记下来吧" />
+        <EmptyState inline description={t("trackerUi.calendar.monthEmpty")} />
       )}
 
       <Modal
         open={detailDate !== null}
         title={
           detailDate
-            ? `${detailDate.format("YYYY 年 M 月 D 日")}${
-                detailItems.length > 0 ? ` · ${detailItems.length} 条提醒` : ""
-              }`
+            ? detailItems.length > 0
+              ? t("trackerUi.calendar.detailTitle", {
+                  date: detailDate.format(t("trackerUi.calendar.dayTitle")),
+                  count: detailItems.length,
+                })
+              : detailDate.format(t("trackerUi.calendar.dayTitle"))
             : ""
         }
         onCancel={() => setDetailDate(null)}
@@ -229,7 +272,7 @@ export default function CalendarView({
         }}
       >
         {detailItems.length === 0 ? (
-          <EmptyState inline description="这一天没有安排" />
+          <EmptyState inline description={t("trackerUi.calendar.dayEmpty")} />
         ) : (
           <Listy
             items={detailItems}
@@ -241,10 +284,8 @@ export default function CalendarView({
                   title={
                     <Space size={6} wrap>
                       <span>{item.title}</span>
-                      <Tag>{REMINDER_KIND_LABELS[item.kind as ReminderKind] ?? item.kind}</Tag>
-                      <Tag color={reminderColor(item, now)}>
-                        {REMINDER_STATUS_LABELS[item.status as ReminderStatus] ?? item.status}
-                      </Tag>
+                      <Tag>{kindLabel(item.kind)}</Tag>
+                      <Tag color={reminderColor(item, now)}>{statusLabel(item.status)}</Tag>
                     </Space>
                   }
                   description={
