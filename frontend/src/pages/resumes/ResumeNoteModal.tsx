@@ -5,6 +5,8 @@
  */
 import { Input, Modal } from "antd";
 import { MaxLengthHint } from "../../components/common/MaxLengthHint";
+import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 
 interface Props {
   open: boolean;
@@ -23,11 +25,12 @@ export default function ResumeNoteModal({
   onOk,
   onCancel,
 }: Props) {
+  useLocale();
   return (
     <Modal
-      title="编辑备注"
+      title={t("resumesPage.note.title")}
       open={open}
-      okText="保存"
+      okText={t("common.action.save")}
       confirmLoading={confirmLoading}
       onCancel={onCancel}
       onOk={onOk}
@@ -36,7 +39,7 @@ export default function ResumeNoteModal({
         value={value}
         maxLength={2000}
         rows={4}
-        placeholder="备注会显示在简历列表里（选填）"
+        placeholder={t("resumesPage.note.placeholder")}
         onChange={(event) => onChange(event.target.value)}
       />
       <MaxLengthHint value={value} maxLength={2000} />
