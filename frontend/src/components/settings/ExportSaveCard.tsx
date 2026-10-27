@@ -20,8 +20,11 @@ import {
   getExportSaveLocation,
   pickExportSaveFolder,
 } from "../../api/settings";
+import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 
 export default function ExportSaveCard() {
+  useLocale();
   const { message } = App.useApp();
   const [path, setPath] = useState("");
   const [loading, setLoading] = useState(true);
@@ -37,7 +40,7 @@ export default function ExportSaveCard() {
         if (!cancelled) setPath(saved.path);
       } catch (err) {
         if (!cancelled) {
-          message.error(err instanceof Error ? err.message : "加载导出保存位置失败");
+          message.error(err instanceof Error ? err.message : t("settingsUi.exportSave.loadFailed"));
         }
       } finally {
         if (!cancelled) setLoading(false);
@@ -54,10 +57,10 @@ export default function ExportSaveCard() {
     try {
       const saved = await clearExportSaveLocation();
       setPath(saved.path);
-      message.success("已恢复默认：仅浏览器下载");
+      message.success(t("settingsUi.exportSave.resetDone"));
     } catch (err) {
       // 清除失败时保留后端给出的可读原因。
-      message.error(err instanceof Error ? err.message : "保存导出保存位置失败");
+      message.error(err instanceof Error ? err.message : t("settingsUi.exportSave.saveFailed"));
     } finally {
       setSaving(false);
     }
@@ -71,23 +74,23 @@ export default function ExportSaveCard() {
     try {
       const picked = await pickExportSaveFolder();
       if (picked.path === null) {
-        message.info("已取消选择");
+        message.info(t("settingsUi.exportSave.cancelled"));
         return;
       }
       setPath(picked.path);
-      message.success(`已保存：从本机前端导出时会同时存到 ${picked.path}`);
+      message.success(t("settingsUi.exportSave.picked", { path: picked.path }));
     } catch (err) {
       // 503：本机环境弹不出原生对话框（如运行时缺 tkinter），提示重试。
-      message.warning(err instanceof Error ? err.message : "无法打开文件夹选择器，请重试");
+      message.warning(err instanceof Error ? err.message : t("settingsUi.exportSave.pickerFailed"));
     } finally {
       setPicking(false);
     }
   };
 
   return (
-    <Card title="生成内容保存位置" className="settings-card">
+    <Card title={t("settingsUi.exportSave.title")} className="settings-card">
       <Typography.Paragraph type="secondary" style={{ marginBottom: 16 }}>
-        默认保存到浏览器默认下载目录；从本机前端选择文件夹后，导出会同时保存一份到那里。
+        {t("settingsUi.exportSave.intro")}
       </Typography.Paragraph>
       <LoadingBlock spinning={loading}>
         <Space wrap>
@@ -98,7 +101,7 @@ export default function ExportSaveCard() {
             loading={picking}
             onClick={() => void browse()}
           >
-            选择文件夹
+            {t("settingsUi.exportSave.browse")}
           </Button>
           <Button
             disabled={loading || saving || picking || !path}
@@ -106,14 +109,16 @@ export default function ExportSaveCard() {
               void clear();
             }}
           >
-            恢复默认
+            {t("settingsUi.exportSave.reset")}
           </Button>
         </Space>
         <Typography.Text type="secondary" style={{ display: "block", marginTop: 8 }}>
-          当前：{path || "默认（浏览器下载目录）"}
+          {t("settingsUi.exportSave.current", {
+            path: path || t("settingsUi.exportSave.defaultPath"),
+          })}
         </Typography.Text>
         <Typography.Text type="secondary" style={{ display: "block", marginTop: 4 }}>
-          同名文件已存在时会自动加时间戳后缀，不会覆盖；落盘失败不影响正常下载。
+          {t("settingsUi.exportSave.footnote")}
         </Typography.Text>
       </LoadingBlock>
     </Card>
