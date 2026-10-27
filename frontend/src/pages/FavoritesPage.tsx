@@ -15,12 +15,15 @@ import ResumeDetailModal from "../components/ResumeDetailModal";
 import { useApi } from "../hooks/useApi";
 import type { JobList, Page, ResumeBrief } from "../types";
 import { formatDateTime } from "../utils/format";
+import { t } from "../i18n";
+import { useLocale } from "../i18n/i18nContext";
 
 type FavoriteKind = "jobs" | "resumes";
 type FavoritePage =
   { kind: "jobs"; page: Page<JobList> } | { kind: "resumes"; page: Page<ResumeBrief> };
 
 export default function FavoritesPage() {
+  useLocale();
   const navigate = useNavigate();
   const { message } = App.useApp();
   // 页签 / 分页从 URL 读初值、改动后 replace 写回（模式同 WebFormPage / JobsPage）。
@@ -72,7 +75,7 @@ export default function FavoritesPage() {
         await updateJob(job.id, { favorite: false });
         await reload();
       } catch (err) {
-        message.error(err instanceof Error ? err.message : "取消收藏失败");
+        message.error(err instanceof Error ? err.message : t("favorites.error.unfavoriteFailed"));
       } finally {
         updatingKeyRef.current = "";
         setUpdatingKey("");
@@ -91,7 +94,7 @@ export default function FavoritesPage() {
         await updateResumeFavorite(resume.id, false);
         await reload();
       } catch (err) {
-        message.error(err instanceof Error ? err.message : "取消收藏失败");
+        message.error(err instanceof Error ? err.message : t("favorites.error.unfavoriteFailed"));
       } finally {
         updatingKeyRef.current = "";
         setUpdatingKey("");
@@ -101,10 +104,10 @@ export default function FavoritesPage() {
   );
 
   const favoriteButton = (key: string, onClick: () => void) => (
-    <Tooltip title="取消收藏">
+    <Tooltip title={t("favorites.action.unfavorite")}>
       <Button
         type="text"
-        aria-label="取消收藏"
+        aria-label={t("favorites.action.unfavorite")}
         loading={updatingKey === key}
         disabled={Boolean(updatingKey)}
         icon={<StarFilled style={{ color: "var(--rf-favorite)" }} />}
@@ -122,18 +125,24 @@ export default function FavoritesPage() {
       ? [
           {
             key: "open",
-            label: "打开岗位详情",
+            label: t("favorites.action.openJob"),
             onClick: () => navigate(`/jobs?job_id=${item.id}`),
           },
         ]
-      : [{ key: "preview", label: "预览 / 导出", onClick: () => setPreviewId(item.id) }];
+      : [
+          {
+            key: "preview",
+            label: t("favorites.action.previewExport"),
+            onClick: () => setPreviewId(item.id),
+          },
+        ];
 
   /** 整行右键：鼠标不在星标上，补上取消收藏，一次右键就能做完。 */
   const contextActions = (item: JobList | ResumeBrief): RowActionItem[] => [
     ...secondaryActions(item),
     {
       key: "unfavorite",
-      label: "取消收藏",
+      label: t("favorites.action.unfavorite"),
       onClick: () =>
         kind === "jobs"
           ? void removeJobFavorite(item as JobList)
@@ -143,10 +152,12 @@ export default function FavoritesPage() {
 
   const jobColumns: TableColumnsType<JobList> = [
     {
-      title: "岗位",
+      title: t("favorites.column.job"),
       dataIndex: "title",
       render: (_, job) => (
-        <Tooltip title={`导入于 ${formatDateTime(job.created_at)}`}>
+        <Tooltip
+          title={t("favorites.tooltip.importedAt", { time: formatDateTime(job.created_at) })}
+        >
           <Button
             type="link"
             className="table-text-link"
@@ -157,11 +168,26 @@ export default function FavoritesPage() {
         </Tooltip>
       ),
     },
-    { title: "公司", dataIndex: "company", width: 180, render: (value) => value || "-" },
-    { title: "地点", dataIndex: "location", width: 120, render: (value) => value || "-" },
-    { title: "发布时间", dataIndex: "posted_at", width: 150, render: (value) => value || "-" },
     {
-      title: "操作",
+      title: t("favorites.column.company"),
+      dataIndex: "company",
+      width: 180,
+      render: (value) => value || "-",
+    },
+    {
+      title: t("favorites.column.location"),
+      dataIndex: "location",
+      width: 120,
+      render: (value) => value || "-",
+    },
+    {
+      title: t("favorites.column.postedAt"),
+      dataIndex: "posted_at",
+      width: 150,
+      render: (value) => value || "-",
+    },
+    {
+      title: t("favorites.column.actions"),
       width: 130,
       align: "center",
       render: (_, job) => (
@@ -175,7 +201,7 @@ export default function FavoritesPage() {
 
   const resumeColumns: TableColumnsType<ResumeBrief> = [
     {
-      title: "简历",
+      title: t("favorites.column.resume"),
       dataIndex: "title",
       render: (_, resume) => (
         <Button type="link" className="table-text-link" onClick={() => setPreviewId(resume.id)}>
@@ -184,7 +210,7 @@ export default function FavoritesPage() {
       ),
     },
     {
-      title: "目标岗位",
+      title: t("favorites.column.targetJob"),
       width: 220,
       render: (_, resume) => (
         <Space size={4}>
@@ -194,19 +220,20 @@ export default function FavoritesPage() {
       ),
     },
     {
-      title: "来源",
+      title: t("favorites.column.source"),
       dataIndex: "source",
       width: 110,
-      render: (value: ResumeBrief["source"]) => (value === "manual" ? "用户编写" : "AI 生成"),
+      render: (value: ResumeBrief["source"]) =>
+        value === "manual" ? t("favorites.source.manual") : t("favorites.source.ai"),
     },
     {
-      title: "创建时间",
+      title: t("favorites.column.createdAt"),
       dataIndex: "created_at",
       width: 160,
       render: (value) => formatDateTime(value),
     },
     {
-      title: "操作",
+      title: t("favorites.column.actions"),
       width: 130,
       align: "center",
       render: (_, resume) => (
@@ -225,9 +252,9 @@ export default function FavoritesPage() {
     <div>
       <div style={{ marginBottom: 16 }}>
         <Typography.Title level={3} style={{ marginBottom: 4 }}>
-          收藏夹
+          {t("favorites.page.title")}
         </Typography.Title>
-        <Typography.Text type="secondary">集中查看你关注的招聘信息和简历版本。</Typography.Text>
+        <Typography.Text type="secondary">{t("favorites.page.subtitle")}</Typography.Text>
       </div>
       <Tabs
         activeKey={kind}
@@ -241,7 +268,7 @@ export default function FavoritesPage() {
             label: (
               <Space size={6}>
                 <SearchOutlined />
-                招聘信息
+                {t("favorites.tab.jobs")}
               </Space>
             ),
           },
@@ -250,7 +277,7 @@ export default function FavoritesPage() {
             label: (
               <Space size={6}>
                 <FileTextOutlined />
-                简历
+                {t("favorites.tab.resumes")}
               </Space>
             ),
           },
@@ -270,7 +297,11 @@ export default function FavoritesPage() {
           loading={loading}
           locale={{
             emptyText: (
-              <EmptyState description={kind === "jobs" ? "暂无收藏岗位" : "暂无收藏简历"} />
+              <EmptyState
+                description={
+                  kind === "jobs" ? t("favorites.empty.jobs") : t("favorites.empty.resumes")
+                }
+              />
             ),
           }}
           // 简历列的固定宽度加起来约 620px，比岗位列更窄，在普通窗口里根本不会横向溢出；
@@ -297,7 +328,7 @@ export default function FavoritesPage() {
             pageSize,
             total: currentPage?.total ?? 0,
             showSizeChanger: true,
-            showTotal: (total) => `共 ${total} 项收藏`,
+            showTotal: (total) => t("favorites.pagination.total", { total }),
             onChange: (nextPage, nextPageSize) => {
               setPage(nextPage);
               setPageSize(nextPageSize);
