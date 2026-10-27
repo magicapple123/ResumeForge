@@ -31,6 +31,8 @@ import {
   useRiskScan,
 } from "../features/resume/riskScanStore";
 import type { RiskCategory, RiskPoint, RiskSeverity } from "../types/resumeRisk";
+import { t } from "../i18n";
+import { useLocale } from "../i18n/i18nContext";
 
 const CATEGORY_ORDER: {
   key: RiskCategory;
@@ -110,6 +112,7 @@ function initialEnhancePreference(): boolean {
 }
 
 export default function ResumeRiskPanel({ resumeId, contentSignature }: Props) {
+  useLocale();
   const [enhance, setEnhance] = useState(initialEnhancePreference);
   const state = useRiskScan(resumeId);
 
@@ -150,25 +153,26 @@ export default function ResumeRiskPanel({ resumeId, contentSignature }: Props) {
     return (
       <Space orientation="vertical" style={{ width: "100%" }} size="middle">
         <Typography.Text type="secondary">
-          扫描于 {formatClock(state.finishedAt)}
-          {duration ? ` · 用时 ${duration}` : ""} · {data.llm_used ? "含模型增强" : "不含模型增强"}
+          {t("riskPanel.scanAt", { time: formatClock(state.finishedAt) })}
+          {duration ? ` · 用时 ${duration}` : ""} ·{" "}
+          {data.llm_used ? t("riskPanel.llmUsed") : t("riskPanel.llmOff")}
         </Typography.Text>
 
         {changed && (
           <Alert
             type="warning"
             showIcon
-            title="简历内容已修改，建议重新扫描"
+            title={t("riskPanel.stale.title")}
             action={
               <Button size="small" onClick={beginScan}>
-                重新扫描
+                {t("riskPanel.action.rescan")}
               </Button>
             }
           />
         )}
 
         <Space wrap>
-          <Typography.Text strong>共 {total} 条风险点</Typography.Text>
+          <Typography.Text strong>{t("riskPanel.summary", { count: total })}</Typography.Text>
           {CATEGORY_ORDER.map((item) => {
             const count = data.summary?.[item.key] ?? 0;
             if (!count) return null;
@@ -178,9 +182,9 @@ export default function ResumeRiskPanel({ resumeId, contentSignature }: Props) {
               </Tag>
             );
           })}
-          {data.llm_used && <Tag color="geekblue">含模型增强</Tag>}
+          {data.llm_used && <Tag color="geekblue">{t("riskPanel.llmUsed")}</Tag>}
           <Button size="small" icon={<ReloadOutlined />} onClick={beginScan}>
-            重新扫描
+            {t("riskPanel.action.rescan")}
           </Button>
           {data.remote_enhancement_available && (
             <EnhanceToggle checked={enhance} onChange={changeEnhance} />
@@ -192,7 +196,7 @@ export default function ResumeRiskPanel({ resumeId, contentSignature }: Props) {
         ))}
 
         {total === 0 ? (
-          <Empty description="未发现明显风险点" />
+          <Empty description={t("riskPanel.empty")} />
         ) : (
           grouped.map((group) =>
             group.points.length === 0 ? null : (
@@ -248,11 +252,11 @@ function IntroCard({
           <Alert
             type="error"
             showIcon
-            title="风险扫描失败"
+            title={t("riskPanel.error.title")}
             description={error}
             action={
               <Button size="small" onClick={onStart}>
-                重试
+                {t("riskPanel.action.retry")}
               </Button>
             }
           />
@@ -309,7 +313,7 @@ function ScanningCard({ startedAt, onCancel }: { startedAt?: number; onCancel: (
       <LoadingBlock />
       <Typography.Text>正在扫描…已用时 {elapsed}s</Typography.Text>
       <Typography.Text type="secondary">可以关闭此窗口，扫描会继续</Typography.Text>
-      <Button onClick={onCancel}>取消</Button>
+      <Button onClick={onCancel}>{t("common.action.cancel")}</Button>
     </Space>
   );
 }
@@ -331,8 +335,13 @@ function EnhanceToggle({
       }
     >
       <Space size={4}>
-        <Switch size="small" checked={checked} onChange={onChange} aria-label="AI 增强" />
-        <Typography.Text type="secondary">AI 增强</Typography.Text>
+        <Switch
+          size="small"
+          checked={checked}
+          onChange={onChange}
+          aria-label={t("riskPanel.enhance.aria")}
+        />
+        <Typography.Text type="secondary">{t("riskPanel.enhance.label")}</Typography.Text>
       </Space>
     </Tooltip>
   );
@@ -348,7 +357,7 @@ function RiskPointItem({ point }: { point: RiskPoint }) {
       <Space size="small" wrap>
         <Tag color={severity.color}>{severity.label}</Tag>
         {point.location && <Typography.Text type="secondary">{point.location}</Typography.Text>}
-        {point.claim_id != null && <Tag>事实台账 #{point.claim_id}</Tag>}
+        {point.claim_id != null && <Tag>{t("riskPanel.claimTag", { id: point.claim_id })}</Tag>}
       </Space>
       {point.text && (
         <Typography.Paragraph style={{ margin: "8px 0 4px" }} code>
@@ -357,7 +366,7 @@ function RiskPointItem({ point }: { point: RiskPoint }) {
       )}
       {point.suggestion && (
         <Typography.Paragraph style={{ margin: "4px 0" }}>
-          <Typography.Text type="success">建议：</Typography.Text>
+          <Typography.Text type="success">{t("riskPanel.suggestion")}</Typography.Text>
           {point.suggestion}
         </Typography.Paragraph>
       )}
@@ -368,7 +377,7 @@ function RiskPointItem({ point }: { point: RiskPoint }) {
           items={[
             {
               key: "follow-up",
-              label: `追问准备（${point.follow_up.length}）`,
+              label: t("riskPanel.followUp", { count: point.follow_up.length }),
               children: (
                 <ul style={{ margin: 0, paddingLeft: 20 }}>
                   {point.follow_up.map((item, index) => (

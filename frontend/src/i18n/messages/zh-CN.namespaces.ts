@@ -54,6 +54,7 @@ import toolCalls from "./zh-CN.toolCalls";
 import datasets from "./zh-CN.datasets";
 import jobImport from "./zh-CN.jobImport";
 import update from "./zh-CN.update";
+import riskPanel from "./zh-CN.riskPanel";
 
 const namespaces = {
   /** 简历制作台（2026-10-23）。 */
@@ -136,6 +137,7 @@ const namespaces = {
   ...datasets,
   ...jobImport,
   ...update,
+  ...riskPanel,
 } as const;
 
 export default namespaces;
