@@ -6,6 +6,7 @@
 import { App } from "antd";
 import { useState } from "react";
 import { addToQueue, QueueConflictError } from "../../api/apply";
+import { t } from "../../i18n";
 import type { Job } from "../../types";
 
 export function useJobQueue() {
@@ -27,7 +28,7 @@ export function useJobQueue() {
           confirm_real_gap: confirm.realGap,
         },
       ]);
-      message.success("已加入投递台队列");
+      message.success(t("jobsPage.queue.added"));
     } catch (err) {
       if (err instanceof QueueConflictError) {
         const detail = err.detail;
@@ -35,32 +36,34 @@ export function useJobQueue() {
           // 这一类**没有"仍然加入"的选项**：确认也放行不了（投递时定位不到站点），
           // 所以只给一个必须点掉的提示，而不是给个按钮让人以为可以强行通过。
           modal.warning({
-            title: "这个岗位不能自动投递",
+            title: t("jobsPage.queue.unsupportedTitle"),
             content: detail.message,
-            okText: "知道了",
+            okText: t("jobsPage.queue.unsupportedOk"),
           });
         } else if (detail.unanalyzed) {
           modal.confirm({
-            title: "该岗位还没做过匹配分析",
-            content: "建议先做「匹配度分析」。也可以直接加入队列，投递前仍会再核对一次。",
-            okText: "仍然加入队列",
-            cancelText: "取消",
+            title: t("jobsPage.queue.unanalyzedTitle"),
+            content: t("jobsPage.queue.unanalyzedContent"),
+            okText: t("jobsPage.queue.unanalyzedOk"),
+            cancelText: t("common.action.cancel"),
             onOk: () => addJobToQueue(job, { unanalyzed: true }),
           });
         } else if (detail.gaps && detail.gaps.length > 0) {
           modal.confirm({
-            title: "该岗位存在真实缺口，默认不投",
-            content: `匹配分析判定你确实不具备这些要求：${detail.gaps.join("、")}。确认仍要投递该岗位吗？`,
-            okText: "确认仍然投递",
+            title: t("jobsPage.queue.realGapTitle"),
+            content: t("jobsPage.queue.realGapContent", {
+              gaps: detail.gaps.join(t("jobsPage.queue.gapSeparator")),
+            }),
+            okText: t("jobsPage.queue.realGapOk"),
             okButtonProps: { danger: true },
-            cancelText: "取消",
+            cancelText: t("common.action.cancel"),
             onOk: () => addJobToQueue(job, { realGap: true }),
           });
         } else {
           message.warning(detail.message);
         }
       } else {
-        message.error(err instanceof Error ? err.message : "加入投递台失败");
+        message.error(err instanceof Error ? err.message : t("jobsPage.queue.addFailed"));
       }
     } finally {
       setQueueJobId(null);
