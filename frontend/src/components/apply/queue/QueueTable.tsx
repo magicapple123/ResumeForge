@@ -5,7 +5,7 @@
  * contextMenu state 随唯一消费者下沉进本组件；rowMenuItems 经 prop 传入；
  * aria-label/类名/定宽注释逐字随迁，行为等价。）
  *
- * 状态标签的展示名仍来自 `QUEUE_STATUS_META`（`types` 层的协议值展示表，本批不动），
+ * 状态标签的展示名走语言包（`QUEUE_STATUS_LABEL_KEYS`），颜色仍取 `QUEUE_STATUS_META`；
  * 列头、空值兜底、提示与 aria-label 走 applyQueue 包。
  */
 import { MoreOutlined } from "@ant-design/icons";
@@ -15,6 +15,7 @@ import type { TableColumnsType } from "antd";
 import type { TableRowSelection } from "antd/es/table/interface";
 import { useEffect, useRef, useState } from "react";
 import { t } from "../../../i18n";
+import { QUEUE_STATUS_LABEL_KEYS } from "../../../i18n/enum/apply";
 import { useLocale } from "../../../i18n/i18nContext";
 import type { ApplyQueueItem } from "../../../types";
 import { QUEUE_STATUS_META } from "../../../types";
@@ -124,7 +125,7 @@ export function QueueTable({
       align: "center",
       render: (value: ApplyQueueItem["status"]) => {
         const meta = QUEUE_STATUS_META[value];
-        return <Tag color={meta.color}>{meta.label}</Tag>;
+        return <Tag color={meta.color}>{t(QUEUE_STATUS_LABEL_KEYS[value])}</Tag>;
       },
     },
     {
