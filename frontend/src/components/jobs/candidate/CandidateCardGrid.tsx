@@ -9,8 +9,8 @@
 import { CheckSquareOutlined, DeleteOutlined, EditOutlined, EyeOutlined } from "@ant-design/icons";
 import { Card, Checkbox, Space, Tag, Typography } from "antd";
 import { RowActions, RowContextMenu, type RowMenuItem } from "../../common/RowActions";
-import { TRASH_RECOVERY_NOTE } from "../../common/rowActionMenu";
 import { t } from "../../../i18n";
+import { candidateJobSourceLabelKey } from "../../../i18n/enum/jobs";
 import { useLocale } from "../../../i18n/i18nContext";
 import type { CandidateJob } from "../../../types";
 import { formatDateTime } from "../../../utils/format";
@@ -45,6 +45,11 @@ export function CandidateCardGrid({
     <div className="candidate-job-card-grid">
       {items.map((candidate) => {
         const selected = selectedIds.includes(candidate.id);
+        // 来源是落库的协议值（或后端站点名）：能对上语言包就翻，站点名原样显示。
+        const sourceKey = candidateJobSourceLabelKey(candidate.source);
+        const sourceLabel = sourceKey
+          ? t(sourceKey)
+          : candidate.source || t("jobs.candidate.detail.source-manual");
         /** 右键菜单：查看/编辑组 + 分隔线 + 批量/删除组（与原「···」菜单同一份确认）；
             多选时收起。功能与工具栏口径一致——「批量选择」进多选模式后，批量导入/
             批量删除/清空/退出都在工具栏上。 */
@@ -78,7 +83,7 @@ export function CandidateCardGrid({
                 confirm: t("jobsCandidate.card.deleteConfirm"),
                 // 0050 起备选岗位是软删除：文案必须说"进回收站、可恢复"，
                 // 不能再说"无法恢复"（说了就会让用户不敢删，也说不清去哪找回来）。
-                confirmBody: TRASH_RECOVERY_NOTE,
+                confirmBody: t("common.note.trashRecovery"),
                 onClick: () => void onRemove(candidate),
               },
             ];
@@ -126,7 +131,7 @@ export function CandidateCardGrid({
                     .join(" · ")}
                 </Typography.Text>
                 <Space wrap>
-                  <Tag>{candidate.source || t("jobs.candidate.detail.source-manual")}</Tag>
+                  <Tag>{sourceLabel}</Tag>
                   {candidate.images.length > 0 && (
                     <Tag color="blue">
                       {t("jobsCandidate.card.images", { count: candidate.images.length })}
