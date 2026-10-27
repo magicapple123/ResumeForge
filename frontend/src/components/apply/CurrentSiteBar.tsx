@@ -17,6 +17,8 @@ import { Space, Tag, Typography } from "antd";
 import { getSiteHealth, listSites } from "../../api/apply";
 import { useApi } from "../../hooks/useApi";
 import { type SiteHealthList, type SiteList, siteDisplayName, siteHealthFor } from "../../types";
+import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 
 interface Props {
   /** 采集批次完成时变化，让刚产生的站点健康度结论立即刷新。 */
@@ -24,6 +26,8 @@ interface Props {
 }
 
 export default function CurrentSiteBar({ refreshKey = 0 }: Props) {
+  // 本组件用模块级 t()：必须订阅语言变化，否则切语言后提示条停在旧文案。
+  useLocale();
   const { data } = useApi<SiteList>(listSites, []);
   // 健康度单独取：它随每次采集变化，而站点清单基本不变，合在一起反而会互相牵制。
   const { data: health } = useApi<SiteHealthList>(getSiteHealth, [refreshKey]);
@@ -35,7 +39,10 @@ export default function CurrentSiteBar({ refreshKey = 0 }: Props) {
   const currentOption = data.sites.find((site) => site.key === data.current);
   const onlyOne = data.sites.length <= 1;
   const capabilities = currentOption
-    ? [currentOption.supports_collect ? "采集" : "", currentOption.supports_apply ? "投递" : ""]
+    ? [
+        currentOption.supports_collect ? t("applyUi.siteBar.capabilityCollect") : "",
+        currentOption.supports_apply ? t("applyUi.siteBar.capabilityApply") : "",
+      ]
         .filter(Boolean)
         .join(" / ")
     : "";
@@ -44,8 +51,7 @@ export default function CurrentSiteBar({ refreshKey = 0 }: Props) {
   const currentHealth = siteHealthFor(health, data.current);
   const degraded = currentHealth?.status === "degraded";
   const healthText = degraded
-    ? currentHealth.reasons.filter(Boolean).join(" ") ||
-      "最近采集异常，站点可能已改版——先重试一次；如果一直这样，请到项目仓库反馈。"
+    ? currentHealth.reasons.filter(Boolean).join(" ") || t("applyUi.siteBar.degradedFallback")
     : "";
 
   return (
@@ -53,13 +59,12 @@ export default function CurrentSiteBar({ refreshKey = 0 }: Props) {
       <Space wrap align="center" size={8}>
         <GlobalOutlined />
         <Typography.Text>
-          当前招聘网站：<Typography.Text strong>{current}</Typography.Text>
+          {t("applyUi.siteBar.currentLabel")}
+          <Typography.Text strong>{current}</Typography.Text>
         </Typography.Text>
         {capabilities && <Tag color="blue">{capabilities}</Tag>}
         <Typography.Text type="secondary">
-          {onlyOne
-            ? "目前仅支持这一个招聘网站，后续会陆续增加。"
-            : "可在「投递设置」里切换要使用的招聘网站。"}
+          {onlyOne ? t("applyUi.siteBar.onlyOne") : t("applyUi.siteBar.switchHint")}
         </Typography.Text>
       </Space>
       {degraded && (
@@ -69,12 +74,12 @@ export default function CurrentSiteBar({ refreshKey = 0 }: Props) {
         <div
           className="apply-site-bar-health"
           role="alert"
-          aria-label={`站点健康度告警：${healthText}`}
+          aria-label={t("applyUi.siteBar.healthAria", { reason: healthText })}
           style={{ marginTop: 6 }}
         >
           <Space wrap align="center" size={8}>
             <Tag color="error" icon={<WarningFilled />}>
-              站点可能已改版
+              {t("applyUi.siteBar.degradedTag")}
             </Tag>
             <Typography.Text type="danger">{healthText}</Typography.Text>
           </Space>
