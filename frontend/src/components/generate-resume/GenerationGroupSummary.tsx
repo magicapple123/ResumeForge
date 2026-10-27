@@ -63,8 +63,10 @@ export default function GenerationGroupSummary() {
       <Typography.Text type="secondary">{t("resume.generate.group-title")}</Typography.Text>
       <Tooltip title={fieldNames}>
         <Typography.Text strong>
-          {scope.group_name}（{t("resume.generate.group-members", { count: participating.length })}
-          ）
+          {t("resume.generate.groupSummary", {
+            group: scope.group_name,
+            count: participating.length,
+          })}
         </Typography.Text>
       </Tooltip>
       <Button type="link" size="small" style={{ padding: 0 }} onClick={() => navigate("/profile")}>
