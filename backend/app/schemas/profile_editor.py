@@ -27,6 +27,13 @@ class EditorFieldOut(BaseModel):
     # ResumeContent 条目/标量里的属性名；None = 编辑器没有独立输入框
     # （仅素材/私密/自定义字段/承载区追加）。
     resume_attr: str | None = None
+    # 自建板块的**主文本字段**标记：命中 `paper_policy.custom_section_text_field()`
+    # （primary_field_id 优先，否则第一个多行文本字段）。投影把它的值写进
+    # `ResumeCustomEntry.text`，其余字段按定义顺序写成「标签：值」行——前端必须按同一
+    # 判定绑定输入框，否则用户改的东西会在保存后落到另一列。
+    # 系统板块恒为 False（它们有槽位/承载区，不需要这个标记）。旧快照缺这个键时按
+    # 「第一个 multi_line 字段」兜底，与后端的判定一致。
+    primary: bool = False
 
 
 class EditorSectionOut(BaseModel):

@@ -167,6 +167,12 @@ export interface EditorFieldOut {
   label: string;
   field_type: ProfileFieldType;
   resume_attr: string | null;
+  /**
+   * 自建板块的**主文本字段**标记（服务端按 `custom_section_text_field()` 打，与纸面投影
+   * 同一判定）：它的值进 `ResumeCustomEntry.text`，其余字段按定义顺序进 `lines`。
+   * 系统板块恒为 false；旧快照没有这个键（undefined）时按「第一个 multi_line 字段」兜底。
+   */
+  primary?: boolean;
 }
 
 /** 一个可见板块；`resume_field` 是正文数组字段名（标量分区为 null）。 */

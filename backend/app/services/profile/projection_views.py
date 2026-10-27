@@ -139,13 +139,20 @@ def _editor_section(key: str, section: ConsumedSection) -> EditorSectionOut:
             ],
         )
     if key.startswith("custom:"):
-        # 自建板块：字段只给定义身份；值以「标签：值」进承载区，编辑器不单独渲染。
+        # 自建板块：字段只给定义身份；值以「标签：值」进承载区，编辑器按定义顺序渲染。
+        # 主文本字段（`paper_policy.custom_section_text_field`，与纸面投影同一个判定）
+        # 标 `primary=True`：编辑器把它绑定到 `ResumeCustomEntry.text`，其余字段绑定到
+        # `lines` —— 两处必须用同一套判定，否则用户改的值会落到另一列。
+        text_field_id = paper_policy.custom_section_text_field(section)
         return EditorSectionOut(
             section_key=key,
             section_name=section.name,
             form="multi",
             resume_field="custom_sections",
-            fields=[_editor_field(spec, None) for spec in section.fields],
+            fields=[
+                _editor_field(spec, None, primary=spec.field_id == text_field_id)
+                for spec in section.fields
+            ],
         )
     rule = paper_policy.SECTION_RULES.get(key)
     if rule is None:
@@ -191,13 +198,16 @@ def _resume_attr(
     return None
 
 
-def _editor_field(spec: ConsumedFieldSpec, resume_attr: str | None) -> EditorFieldOut:
+def _editor_field(
+    spec: ConsumedFieldSpec, resume_attr: str | None, primary: bool = False
+) -> EditorFieldOut:
     return EditorFieldOut(
         field_id=spec.field_id,
         key=spec.key,
         label=spec.label,
         field_type=spec.field_type,
         resume_attr=resume_attr,
+        primary=primary,
     )
 
 
