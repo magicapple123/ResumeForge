@@ -20,11 +20,13 @@ import {
 } from "@ant-design/icons";
 import { Segmented } from "antd";
 import { setThemeMode, useThemeMode, type ThemeMode } from "../features/theme/themeStore";
+import { t, type MessageKey } from "../i18n";
+import { useLocale } from "../i18n/i18nContext";
 
-const OPTIONS: { value: ThemeMode; label: string }[] = [
-  { value: "light", label: "浅色" },
-  { value: "dark", label: "深色" },
-  { value: "system", label: "跟随系统" },
+const OPTIONS: { value: ThemeMode; labelKey: MessageKey }[] = [
+  { value: "light", labelKey: "componentsMisc.theme.light" },
+  { value: "dark", labelKey: "componentsMisc.theme.dark" },
+  { value: "system", labelKey: "componentsMisc.theme.system" },
 ];
 
 /** 实心的"显示器"图标：antd 只有 DesktopOutlined，跟随系统这一档需要实心态。 */
@@ -50,29 +52,33 @@ function iconFor(value: ThemeMode, selected: boolean) {
 }
 
 export default function ThemeSwitch() {
+  useLocale();
   const mode = useThemeMode();
 
   return (
     <Segmented<ThemeMode>
-      aria-label="主题"
+      aria-label={t("componentsMisc.theme.label")}
       className="app-theme-switch"
       value={mode}
       onChange={(value) => setThemeMode(value)}
-      options={OPTIONS.map(({ value, label }) => ({
-        value,
-        tooltip: label,
-        label: (
-          <span
-            className="app-theme-switch-icon"
-            role="img"
-            aria-label={label}
-            title={label}
-            data-filled={mode === value ? "true" : "false"}
-          >
-            {iconFor(value, mode === value)}
-          </span>
-        ),
-      }))}
+      options={OPTIONS.map(({ value, labelKey }) => {
+        const label = t(labelKey);
+        return {
+          value,
+          tooltip: label,
+          label: (
+            <span
+              className="app-theme-switch-icon"
+              role="img"
+              aria-label={label}
+              title={label}
+              data-filled={mode === value ? "true" : "false"}
+            >
+              {iconFor(value, mode === value)}
+            </span>
+          ),
+        };
+      })}
     />
   );
 }
