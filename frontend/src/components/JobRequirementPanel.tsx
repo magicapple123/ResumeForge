@@ -10,6 +10,7 @@ import { Descriptions, Typography } from "antd";
 import type { ReactNode } from "react";
 import { t } from "../i18n";
 import { useLocale } from "../i18n/i18nContext";
+import { jobTypeLabelKey } from "../i18n/enum/jobs";
 import type { Job } from "../types";
 import SkillTags from "./SkillTags";
 
@@ -58,6 +59,8 @@ function ReferenceSection({ title, icon, content, emptyText }: ReferenceSectionP
 
 export default function JobRequirementPanel({ job }: Props) {
   useLocale();
+  // 岗位类型是落库的协议值，只有展示名走语言包；表里没有的取值原样显示。
+  const jobTypeKey = jobTypeLabelKey(job.job_type);
   return (
     <aside
       className="job-reference-panel"
@@ -82,7 +85,7 @@ export default function JobRequirementPanel({ job }: Props) {
           )}
           {job.job_type && (
             <Descriptions.Item label={t("componentsMisc2.jobReference.type")}>
-              {job.job_type}
+              {jobTypeKey ? t(jobTypeKey) : job.job_type}
             </Descriptions.Item>
           )}
           {job.salary && (
