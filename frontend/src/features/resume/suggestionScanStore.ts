@@ -16,6 +16,7 @@
 import { useSyncExternalStore } from "react";
 import { ApiError } from "../../api/client";
 import { generateResumeSuggestions } from "../../api/resumes";
+import { t } from "../../i18n";
 import type { ResumeSuggestions } from "../../types";
 
 export type SuggestionScanStatus = "idle" | "scanning" | "done" | "error";
@@ -113,7 +114,7 @@ export function startSuggestionScan(resumeId: number): void {
       if (error instanceof ApiError && error.code === "cancelled") return;
       setState(resumeId, {
         status: "error",
-        error: error instanceof Error ? error.message : "生成建议失败，请稍后重试",
+        error: error instanceof Error ? error.message : t("resumeSuggestions.generateFailed"),
         startedAt,
       });
     },
