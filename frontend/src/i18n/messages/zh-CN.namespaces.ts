@@ -79,6 +79,7 @@ import assistantComposer from "./zh-CN.assistantComposer";
 import webFormPage from "./zh-CN.webFormPage";
 import collectResult from "./zh-CN.collectResult";
 import webFormLegacy from "./zh-CN.webFormLegacy";
+import aiPolish from "./zh-CN.aiPolish";
 
 const namespaces = {
   /** 简历制作台（2026-10-23）。 */
@@ -200,6 +201,8 @@ const namespaces = {
   ...collectResult,
   /** 网申资料里沿用 UserProfile 的旧字段（2026-10-27）。 */
   ...webFormLegacy,
+  /** AI 润色浮层卡片（2026-10-27）。 */
+  ...aiPolish,
 } as const;
 
 export default namespaces;

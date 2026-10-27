@@ -71,6 +71,7 @@ import assistantComposer from "./en-US.assistantComposer";
 import webFormPage from "./en-US.webFormPage";
 import collectResult from "./en-US.collectResult";
 import webFormLegacy from "./en-US.webFormLegacy";
+import aiPolish from "./en-US.aiPolish";
 
 const enUS = {
   ...core,
@@ -143,6 +144,7 @@ const enUS = {
   ...webFormPage,
   ...collectResult,
   ...webFormLegacy,
+  ...aiPolish,
 } as const satisfies Record<keyof ZhCNMessages, string>;
 
 export default enUS;

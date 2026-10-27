@@ -14,6 +14,8 @@ import { getLLMConfig } from "../../api/settings";
 import { polishSelection } from "../../api/writing";
 import { replaceSelection } from "./replaceSelection";
 import type { SelectionTarget } from "./selectionTarget";
+import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 
 /** 与后端 `MAX_SELECTION_TEXT_CHARS` 同一口径：超过就不发请求，先说清楚为什么。 */
 export const MAX_SELECTION_CHARS = 4000;
@@ -45,6 +47,8 @@ export default function AiPolishCard({
   onClose,
   onReplaced,
 }: AiPolishCardProps) {
+  // 本组件用模块级 t()：必须订阅语言变化，否则切语言后这张卡片不重渲染。
+  useLocale();
   const [instruction, setInstruction] = useState("");
   const [phase, setPhase] = useState<"compose" | "result">("compose");
   const [rewritten, setRewritten] = useState("");
@@ -162,7 +166,7 @@ export default function AiPolishCard({
       // 自己发起的中止（换选区 / 关卡片）不是失败：静默返回，不弹错。
       if (controller.signal.aborted) return;
       if (err instanceof ApiError && err.code === "cancelled") return;
-      setError(err instanceof Error && err.message ? err.message : "润色失败，请稍后重试");
+      setError(err instanceof Error && err.message ? err.message : t("aiPolish.error.failed"));
       // 失败留在原状态：选区、要求、上一版结果都还在，用户可以直接重试。
     } finally {
       // 只有"发出它的那条请求"才有资格收尾：换选区后可能已经有一条新请求接管了
@@ -204,7 +208,7 @@ export default function AiPolishCard({
       // 用户关掉卡片或换选区时是取消，不是失败：静默返回，不弹错。
       if (controller.signal.aborted) return;
       if (err instanceof ApiError && err.code === "cancelled") return;
-      setError(err instanceof Error && err.message ? err.message : "润色失败，请稍后重试");
+      setError(err instanceof Error && err.message ? err.message : t("aiPolish.error.failed"));
       // 失败不动 rewritten / followUp：上一版结果与刚写的要求都还在，可以重试。
     } finally {
       // 与 `start()` 同理：只有发出它的那条请求才收尾，免得清掉新请求的在飞状态。
@@ -223,8 +227,8 @@ export default function AiPolishCard({
     }
     setError(
       outcome.reason === "maxLength"
-        ? "这个字段有字数上限，放不下这段改写。请缩短结果后再替换。"
-        : "原来的输入框已经不在了（页面可能已切换），请重新选中文字。",
+        ? t("aiPolish.error.maxLength")
+        : t("aiPolish.error.targetGone"),
     );
   }, [onReplaced, rewritten, target]);
 
@@ -282,26 +286,24 @@ export default function AiPolishCard({
       ref={cardRef}
       className="rf-ai-polish-card"
       role="dialog"
-      aria-label="AI 润色"
+      aria-label={t("aiPolish.title")}
       style={{ left: pos.left, top: pos.top }}
       onMouseDown={keepSelection}
     >
       <div
         className="rf-ai-polish-card-head"
-        title="按住标题可以拖动卡片"
+        title={t("aiPolish.dragHint")}
         onPointerDown={onDragStart}
         onPointerMove={onDragMove}
         onPointerUp={onDragEnd}
         onPointerCancel={onDragEnd}
       >
-        <Typography.Text strong>AI 润色</Typography.Text>
-        <Typography.Text className="rf-ai-polish-privacy">
-          只发送选中的这段文字，不发送整份简历
-        </Typography.Text>
+        <Typography.Text strong>{t("aiPolish.title")}</Typography.Text>
+        <Typography.Text className="rf-ai-polish-privacy">{t("aiPolish.privacy")}</Typography.Text>
       </div>
 
       <Typography.Text className="rf-ai-polish-label">
-        {phase === "result" ? "原文" : "选中的文字"}
+        {phase === "result" ? t("aiPolish.label.source") : t("aiPolish.label.selection")}
       </Typography.Text>
       <div
         className={phase === "result" ? "rf-ai-polish-preview is-muted" : "rf-ai-polish-preview"}
@@ -311,17 +313,21 @@ export default function AiPolishCard({
 
       {phase === "result" ? (
         <>
-          <Typography.Text className="rf-ai-polish-label">改写结果（可以直接改）</Typography.Text>
+          <Typography.Text className="rf-ai-polish-label">
+            {t("aiPolish.label.result")}
+          </Typography.Text>
           <Input.TextArea
             className="rf-ai-polish-result"
-            aria-label="改写结果"
+            aria-label={t("aiPolish.aria.result")}
             value={rewritten}
             autoSize={{ minRows: 3, maxRows: 8 }}
             onChange={(event) => setRewritten(event.target.value)}
           />
           {/* 继续改写（以这一版结果为输入，可反复迭代）：要求只作用于"下一步"，
               所以放在结果框下面，紧挨着它要处理的那段文字。 */}
-          <Typography.Text className="rf-ai-polish-label">继续改写要求（可选）</Typography.Text>
+          <Typography.Text className="rf-ai-polish-label">
+            {t("aiPolish.label.followUp")}
+          </Typography.Text>
           {followUpTooLong && (
             <Typography.Text
               id={FOLLOWUP_TOO_LONG_ID}
@@ -330,32 +336,34 @@ export default function AiPolishCard({
               type="warning"
               className="rf-ai-polish-followup-warning"
             >
-              待改写内容超过 {MAX_SELECTION_CHARS} 字，请先手动精简
+              {t("aiPolish.followUp.tooLong", { limit: MAX_SELECTION_CHARS })}
             </Typography.Text>
           )}
           <Input.TextArea
             className="rf-ai-polish-followup"
-            aria-label="继续改写要求"
+            aria-label={t("aiPolish.aria.followUp")}
             // 提示只在超长时存在，所以 id 也跟着条件挂——否则会指向一个不存在的节点。
             aria-describedby={followUpTooLong ? FOLLOWUP_TOO_LONG_ID : undefined}
             value={followUp}
             maxLength={MAX_INSTRUCTION_CHARS}
             autoSize={{ minRows: 1, maxRows: 3 }}
-            placeholder="例如：再精简一点 / 突出量化结果"
+            placeholder={t("aiPolish.placeholder.followUp")}
             disabled={followUpTooLong}
             onChange={(event) => setFollowUp(event.target.value)}
           />
         </>
       ) : (
         <>
-          <Typography.Text className="rf-ai-polish-label">你的要求（可选）</Typography.Text>
+          <Typography.Text className="rf-ai-polish-label">
+            {t("aiPolish.label.instruction")}
+          </Typography.Text>
           <Input.TextArea
             className="rf-ai-polish-instruction"
-            aria-label="润色要求"
+            aria-label={t("aiPolish.aria.instruction")}
             value={instruction}
             maxLength={MAX_INSTRUCTION_CHARS}
             autoSize={{ minRows: 2, maxRows: 4 }}
-            placeholder="例如：更简洁、突出成果、改成 STAR 结构"
+            placeholder={t("aiPolish.placeholder.instruction")}
             onChange={(event) => setInstruction(event.target.value)}
           />
         </>
@@ -365,8 +373,8 @@ export default function AiPolishCard({
         <Alert
           type="warning"
           showIcon
-          title={`选中的文字超过 ${MAX_SELECTION_CHARS} 字`}
-          description="一次只润色一段：请缩小选中范围后再试。"
+          title={t("aiPolish.tooLong.title", { limit: MAX_SELECTION_CHARS })}
+          description={t("aiPolish.tooLong.body")}
         />
       )}
 
@@ -374,18 +382,19 @@ export default function AiPolishCard({
         <Alert
           type="warning"
           showIcon
-          title="还没有配置大模型"
+          title={t("aiPolish.modelMissing.title")}
           description={
             <span>
-              润色需要调用大模型，
-              <Link to="/settings">去设置配置模型</Link>
-              后再回来试。
+              {t("aiPolish.modelMissing.body")}
+              <Link to="/settings">{t("aiPolish.modelMissing.action")}</Link>
             </span>
           }
         />
       )}
 
-      {error && <Alert type="error" showIcon title="润色没有完成" description={error} />}
+      {error && (
+        <Alert type="error" showIcon title={t("aiPolish.error.title")} description={error} />
+      )}
 
       <div className="rf-ai-polish-actions">
         {/* 两个分支各带一个 key：不然 React 会按"同位置同类型"复用按钮实例，结果态的
@@ -402,7 +411,7 @@ export default function AiPolishCard({
               // 只在"别人在飞"时禁用：自己转圈时若也置灰，按钮会整块变灰白，看不出在跑。
               disabled={followUpTooLong || !rewritten.trim() || (busy && pending !== "followUp")}
             >
-              继续改写
+              {t("aiPolish.action.continue")}
             </Button>
             {/* 与「替换选中」同样受 `busy` 约束：原来只有守卫、按钮看着能点却点了没反应。
                 与「继续改写」保持同一套写法——自己转圈时不置灰（否则整颗按钮变灰白，
@@ -413,13 +422,13 @@ export default function AiPolishCard({
               loading={pending === "compose"}
               disabled={busy && pending !== "compose"}
             >
-              重新改写
+              {t("aiPolish.action.restart")}
             </Button>
             <Button size="small" type="primary" onClick={apply} disabled={busy}>
-              替换选中
+              {t("aiPolish.action.replace")}
             </Button>
             <Button size="small" type="text" onClick={onClose}>
-              取消
+              {t("common.action.cancel")}
             </Button>
           </Space>
         ) : (
@@ -431,10 +440,10 @@ export default function AiPolishCard({
               loading={pending === "compose"}
               disabled={tooLong}
             >
-              开始改写
+              {t("aiPolish.action.start")}
             </Button>
             <Button size="small" type="text" onClick={onClose}>
-              取消
+              {t("common.action.cancel")}
             </Button>
           </Space>
         )}
