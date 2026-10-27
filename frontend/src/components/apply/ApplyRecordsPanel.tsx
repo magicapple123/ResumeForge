@@ -42,6 +42,8 @@ import {
   type ApplyTask,
   type Page,
 } from "../../types";
+import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 
 interface Props {
   disabled: boolean;
@@ -51,6 +53,8 @@ interface Props {
 const BATCH_PAGE_SIZE = 10;
 
 export default function ApplyRecordsPanel({ disabled, onRetried }: Props) {
+  // 本组件用模块级 t()：必须订阅语言变化，否则切语言后这一块不重渲染。
+  useLocale();
   const { message } = App.useApp();
   const [keyword, setKeyword] = useState("");
   // 搜索框受控镜像：点 × 清空时立即把筛选也清掉——之前非受控时清空后列表仍按
@@ -101,10 +105,10 @@ export default function ApplyRecordsPanel({ disabled, onRetried }: Props) {
     setRetrying(record.id);
     try {
       const task = await retryRecord(record.id);
-      message.success("已新建一个重投批次");
+      message.success(t("applyRecords.toast.retried"));
       onRetried(task);
     } catch (err) {
-      message.error(err instanceof Error ? err.message : "重投失败");
+      message.error(err instanceof Error ? err.message : t("applyRecords.error.retryFailed"));
     } finally {
       setRetrying(null);
     }
@@ -122,10 +126,10 @@ export default function ApplyRecordsPanel({ disabled, onRetried }: Props) {
       await deleteRecord(record.id);
       // 详情抽屉正开着这一条时一并关掉——否则会留着一份已经不存在的数据。
       if (detail?.id === record.id) setDetail(null);
-      message.success("已移入回收站");
+      message.success(t("applyRecords.toast.movedToTrash"));
       await reload();
     } catch (err) {
-      message.error(err instanceof Error ? err.message : "删除失败");
+      message.error(err instanceof Error ? err.message : t("applyRecords.error.deleteFailed"));
     }
   };
 
@@ -135,10 +139,10 @@ export default function ApplyRecordsPanel({ disabled, onRetried }: Props) {
       await deleteRecordBatch(batch.id);
       setExpanded((prev) => prev.filter((id) => id !== batch.id));
       if (detail?.task_id === batch.id) setDetail(null);
-      message.success("已移入回收站");
+      message.success(t("applyRecords.toast.movedToTrash"));
       await reload();
     } catch (err) {
-      message.error(err instanceof Error ? err.message : "删除失败");
+      message.error(err instanceof Error ? err.message : t("applyRecords.error.deleteFailed"));
     }
   };
 
@@ -163,10 +167,10 @@ export default function ApplyRecordsPanel({ disabled, onRetried }: Props) {
     if (ids.length === 0) return;
     try {
       const { deleted } = await batchDeleteRecords(ids);
-      message.success(`已删除 ${deleted} 条投递记录，可在「回收站」里恢复`);
+      message.success(t("applyRecords.toast.batchDeleted", { count: deleted }));
       exitBatchSelect(batch.id);
     } catch (err) {
-      message.error(err instanceof Error ? err.message : "批量删除失败，请重试");
+      message.error(err instanceof Error ? err.message : t("applyRecords.error.batchDeleteFailed"));
       return;
     }
     await reload();
@@ -174,12 +178,12 @@ export default function ApplyRecordsPanel({ disabled, onRetried }: Props) {
 
   const recordColumns: TableColumnsType<ApplyRecord> = [
     {
-      title: "岗位",
+      title: t("applyRecords.column.job"),
       dataIndex: "job_title",
       ellipsis: true,
       render: (title: string, record) => (
         <Space orientation="vertical" size={0} style={{ width: "100%" }}>
-          <Typography.Text ellipsis>{title || "（岗位已删除）"}</Typography.Text>
+          <Typography.Text ellipsis>{title || t("applyRecords.deletedJob")}</Typography.Text>
           {record.company && (
             <Typography.Text type="secondary" ellipsis>
               {record.company}
@@ -189,7 +193,7 @@ export default function ApplyRecordsPanel({ disabled, onRetried }: Props) {
       ),
     },
     {
-      title: "结果",
+      title: t("applyRecords.column.result"),
       dataIndex: "status",
       width: 80,
       render: (value: ApplyRecord["status"]) => {
@@ -198,7 +202,7 @@ export default function ApplyRecordsPanel({ disabled, onRetried }: Props) {
       },
     },
     {
-      title: "失败分类",
+      title: t("applyRecords.column.failureKind"),
       key: "failure",
       ellipsis: true,
       render: (_, record) =>
@@ -209,31 +213,31 @@ export default function ApplyRecordsPanel({ disabled, onRetried }: Props) {
         ),
     },
     {
-      title: "简历",
+      title: t("applyRecords.column.resume"),
       dataIndex: "resume_title",
       width: 120,
       ellipsis: true,
       render: (v: string) => v || "-",
     },
     {
-      title: "招呼语",
+      title: t("applyRecords.column.greeting"),
       dataIndex: "greeting",
       ellipsis: true,
-      render: (v: string) => v || "（默认）",
+      render: (v: string) => v || t("applyRecords.defaultGreeting"),
     },
     {
-      title: "投递时间",
+      title: t("applyRecords.column.finishedAt"),
       key: "finished_at",
       width: 150,
       render: (_, record) => formatDateTime(record.finished_at || record.created_at),
     },
     {
-      title: "操作",
+      title: t("applyRecords.column.actions"),
       key: "actions",
       width: 160,
       render: (_, record) => (
         <Space size={4}>
-          <Tooltip title="以该条目为唯一目标重新投递（仍走去重与每日上限）">
+          <Tooltip title={t("applyRecords.retryHint")}>
             <Button
               size="small"
               icon={<RedoOutlined />}
@@ -241,7 +245,7 @@ export default function ApplyRecordsPanel({ disabled, onRetried }: Props) {
               disabled={disabled || record.job_id == null}
               onClick={() => void retry(record)}
             >
-              重投
+              {t("applyRecords.action.retry")}
             </Button>
           </Tooltip>
           {/* 「查看详情」与「删除」都收进「···」菜单：整行点击本来就能看详情，
@@ -250,15 +254,15 @@ export default function ApplyRecordsPanel({ disabled, onRetried }: Props) {
             more={[
               {
                 key: "detail",
-                label: "查看详情",
+                label: t("applyRecords.action.viewDetail"),
                 icon: <EyeOutlined />,
                 onClick: () => setDetail(record),
               },
               {
                 key: "delete",
-                label: "删除",
+                label: t("common.action.delete"),
                 danger: true,
-                confirm: "删除这条投递记录？会进回收站，之后可以恢复；也会从统计与每日上限里去掉。",
+                confirm: t("applyRecords.confirm.deleteRecord"),
                 onClick: () => void removeRecord(record),
               },
             ]}
@@ -295,7 +299,7 @@ export default function ApplyRecordsPanel({ disabled, onRetried }: Props) {
       >
         <BatchDeleteButton
           count={selected.length}
-          noun="条投递记录"
+          noun={t("applyRecords.deleteNoun")}
           onDelete={() => void removeBatchSelected(batch)}
         />
       </BatchActionBar>
@@ -331,7 +335,7 @@ export default function ApplyRecordsPanel({ disabled, onRetried }: Props) {
           <LoadingBlock />
         </div>
       )}
-      {!loading && batches.length === 0 && <Empty description="还没有投递记录" />}
+      {!loading && batches.length === 0 && <Empty description={t("applyRecords.empty")} />}
 
       <div className="apply-records-batches">
         {batches.map((batch) => (
@@ -365,7 +369,7 @@ export default function ApplyRecordsPanel({ disabled, onRetried }: Props) {
           onChange={(next) => setPage(next)}
           hideOnSinglePage
           showSizeChanger={false}
-          showTotal={(batchTotal) => `共 ${batchTotal} 个批次`}
+          showTotal={(batchTotal) => t("applyRecords.pagination.total", { count: batchTotal })}
         />
       </div>
 
