@@ -1,17 +1,21 @@
 // SPDX-License-Identifier: Apache-2.0
 import { useEffect } from "react";
 import { useLocation } from "react-router-dom";
-import { APP_NAME } from "../../config";
-import { navigationPageLabel } from "./navigationConfig";
+import { APP_NAME_KEY } from "../../config";
+import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
+import { navigationPageLabelKey } from "./navigationConfig";
 
 /** Keep route changes discoverable without taking focus away from active controls. */
 export default function RouteAccessibility() {
+  useLocale();
   const { pathname } = useLocation();
-  const pageName = navigationPageLabel(pathname);
+  const pageName = t(navigationPageLabelKey(pathname));
+  const appName = t(APP_NAME_KEY);
 
   useEffect(() => {
-    document.title = `${pageName} · ${APP_NAME}`;
-  }, [pageName]);
+    document.title = `${pageName} · ${appName}`;
+  }, [pageName, appName]);
 
   return (
     <>
@@ -23,7 +27,7 @@ export default function RouteAccessibility() {
           document.getElementById("main-content")?.focus();
         }}
       >
-        跳到主要内容
+        {t("navigation.a11y.skipToMain")}
       </a>
       <span className="rf-sr-only" role="status" aria-live="polite" aria-atomic="true">
         {pageName}
