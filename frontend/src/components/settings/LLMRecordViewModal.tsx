@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 /** 配置记录的只读详情弹窗：点记录卡本体查看。密钥只显示脱敏占位，不回显本体。 */
 import { Descriptions, Modal, Tag } from "antd";
+import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 import type { LLMConfigRecord } from "../../types";
 import { API_KEY_MASK, CUSTOM_PRESET_LABEL, matchingPreset } from "./SettingsConfig";
 
@@ -22,18 +24,25 @@ function advancedLines(record: LLMConfigRecord): string[] {
   if (record.seed !== null && record.seed !== undefined) lines.push(`seed = ${record.seed}`);
   if (record.repetition_penalty !== null && record.repetition_penalty !== undefined)
     lines.push(`repetition_penalty = ${record.repetition_penalty}`);
-  if (record.stop && record.stop.length > 0) lines.push(`停止词 = ${record.stop.join("、")}`);
+  if (record.stop && record.stop.length > 0)
+    lines.push(
+      `${t("llmRecordView.advanced.stop")} = ${record.stop.join(t("llmRecordView.separator.stop"))}`,
+    );
   if (record.extra_body && Object.keys(record.extra_body).length > 0)
     lines.push(`extra_body = ${JSON.stringify(record.extra_body)}`);
   return lines;
 }
 
 export default function LLMRecordViewModal({ open, record, onClose }: Props) {
+  // 本组件用模块级 t()：不订阅语言变化的话，切到英文后这一屏不会重渲染。
+  useLocale();
   if (!record) return null;
   const advanced = advancedLines(record);
+  // Base URL / API Key 是纯 ASCII 技术标签（源文本身就是英文），收进词表会触发
+  // messageContract 的 source-ascii-english 校验，所以这两处保留字面量。
   return (
     <Modal
-      title={`配置详情「${record.name}」`}
+      title={t("llmRecordView.title.detail", { name: record.name })}
       open={open}
       onCancel={onClose}
       // 只读详情没有第二个动作，底部栏那只「关闭」是右上角 × 的重复入口（Esc / 点遮罩
@@ -42,36 +51,48 @@ export default function LLMRecordViewModal({ open, record, onClose }: Props) {
       width={560}
     >
       <Descriptions bordered column={1} size="small">
-        <Descriptions.Item label="预设">
+        <Descriptions.Item label={t("llmRecordView.field.preset")}>
           {matchingPreset(record)?.label ?? CUSTOM_PRESET_LABEL}
         </Descriptions.Item>
-        <Descriptions.Item label="接口协议">
+        <Descriptions.Item label={t("llmRecordView.field.protocol")}>
           {record.api_style === "anthropic"
-            ? "Anthropic 原生（Messages）"
-            : "OpenAI 兼容（Chat Completions）"}
+            ? t("llmRecordView.protocol.anthropic")
+            : t("llmRecordView.protocol.openai")}
         </Descriptions.Item>
-        <Descriptions.Item label="Base URL">{record.base_url || "未填写"}</Descriptions.Item>
-        <Descriptions.Item label="模型名称">{record.model || "未填写"}</Descriptions.Item>
+        <Descriptions.Item label="Base URL">
+          {record.base_url || t("llmRecordView.value.empty")}
+        </Descriptions.Item>
+        <Descriptions.Item label={t("llmRecordView.field.model")}>
+          {record.model || t("llmRecordView.value.empty")}
+        </Descriptions.Item>
         <Descriptions.Item label="API Key">
           {record.api_key ? (
             // 脱敏承诺：密钥本体与 `********:record:N` 引用都不出弹窗，只说明"已配置"。
-            <Tag color="green">已配置（{API_KEY_MASK}）</Tag>
+            <Tag color="green">{t("llmRecordView.apiKey.configured", { mask: API_KEY_MASK })}</Tag>
           ) : (
-            <Tag>未配置</Tag>
+            <Tag>{t("llmRecordView.apiKey.notConfigured")}</Tag>
           )}
         </Descriptions.Item>
-        <Descriptions.Item label="创意度 temperature">{record.temperature}</Descriptions.Item>
-        <Descriptions.Item label="超时时间">{record.timeout_seconds} 秒</Descriptions.Item>
-        <Descriptions.Item label="最大输出 Token">
-          {record.max_tokens === 0 ? "不限制（由服务商决定上限）" : record.max_tokens}
+        <Descriptions.Item label={t("llmRecordView.field.temperature")}>
+          {record.temperature}
         </Descriptions.Item>
-        <Descriptions.Item label="思考模式">
+        <Descriptions.Item label={t("llmRecordView.field.timeout")}>
+          {t("llmRecordView.value.timeoutSeconds", { seconds: record.timeout_seconds })}
+        </Descriptions.Item>
+        <Descriptions.Item label={t("llmRecordView.field.maxTokens")}>
+          {record.max_tokens === 0 ? t("llmRecordView.maxTokens.unlimited") : record.max_tokens}
+        </Descriptions.Item>
+        <Descriptions.Item label={t("llmRecordView.field.thinking")}>
           {record.thinking_enabled
-            ? `已开启${record.thinking_effort ? ` · 档位 ${record.thinking_effort}` : " · 不指定档位"}`
-            : "关闭"}
+            ? record.thinking_effort
+              ? t("llmRecordView.thinking.onWithEffort", { effort: record.thinking_effort })
+              : t("llmRecordView.thinking.onPreset")
+            : t("llmRecordView.thinking.off")}
         </Descriptions.Item>
         {advanced.length > 0 && (
-          <Descriptions.Item label="高级调整">{advanced.join("；")}</Descriptions.Item>
+          <Descriptions.Item label={t("llmRecordView.field.advanced")}>
+            {advanced.join(t("llmRecordView.separator.line"))}
+          </Descriptions.Item>
         )}
       </Descriptions>
     </Modal>
