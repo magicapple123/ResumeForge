@@ -16,6 +16,8 @@ import { importJobs, previewJobImport } from "../../api/jobs";
 import type { JobImportRow } from "../../types";
 import { downloadCsvTemplate } from "../../utils/download";
 import { commitRowsInChunks, useCsvFileBatch } from "../../features/import/useCsvFileBatch";
+import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 
 interface CsvRowError {
   line: number;
@@ -42,6 +44,8 @@ export function JobImportModal({
   onImported: () => void;
 }) {
   const { message } = App.useApp();
+  // 本弹窗用模块级 t()：必须订阅语言变化。
+  useLocale();
   const [committing, setCommitting] = useState(false);
   const batch = useCsvFileBatch<JobImportRow, CsvRowError>({
     parseFile: async (file) => {
@@ -84,24 +88,26 @@ export function JobImportModal({
       });
       onImported();
       if (outcome.imported > 0) {
-        message.success(`已导入 ${outcome.imported} 个岗位`);
+        message.success(t("jobImport.toast.imported", { count: outcome.imported }));
       }
       if (outcome.failedChunk !== undefined) {
         // 停在失败块：后续块没提交，账目只说已成功的那部分。
         message.error(
-          `第 ${outcome.failedChunk} 批导入失败（已导入 ${outcome.imported} 个岗位）：${
-            outcome.failedMessage ?? "请检查网络后重试"
-          }`,
+          t("jobImport.toast.chunkFailed", {
+            chunk: outcome.failedChunk,
+            imported: outcome.imported,
+            message: outcome.failedMessage ?? t("jobImport.toast.retryHint"),
+          }),
         );
         return;
       }
       const skipped = outcome.failed.filter((item) => item.message.includes("已跳过")).length;
       const failed = outcome.failed.length - skipped;
       if (skipped > 0) {
-        message.info(`${skipped} 行与已有岗位重复，已跳过`);
+        message.info(t("jobImport.toast.duplicates", { count: skipped }));
       }
       if (failed > 0) {
-        message.warning(`${failed} 行导入失败，详见弹窗中的错误列表`);
+        message.warning(t("jobImport.toast.failed", { count: failed }));
         // 失败行保留在预览里，用户改完 CSV 可以只重导这些行。
         return;
       }
@@ -109,7 +115,7 @@ export function JobImportModal({
       batch.reset();
       onClose();
     } catch (error) {
-      message.error(error instanceof Error ? error.message : "导入失败");
+      message.error(error instanceof Error ? error.message : t("jobImport.toast.failedGeneric"));
     } finally {
       setCommitting(false);
     }
@@ -120,7 +126,7 @@ export function JobImportModal({
 
   return (
     <Modal
-      title="导入岗位 CSV"
+      title={t("jobImport.title")}
       open={open}
       onCancel={close}
       width={640}
@@ -132,7 +138,7 @@ export function JobImportModal({
             size="small"
             icon={<DownloadOutlined />}
             onClick={() =>
-              downloadCsvTemplate("岗位导入模板.csv", [
+              downloadCsvTemplate(t("jobImport.template.fileName"), [
                 "岗位名称",
                 "公司名称",
                 "工作地点",
@@ -149,11 +155,11 @@ export function JobImportModal({
               ])
             }
           >
-            下载空模板
+            {t("jobImport.action.downloadTemplate")}
           </Button>
           <Space>
             <Button disabled={batch.parsing || committing} onClick={close}>
-              取消
+              {t("common.action.cancel")}
             </Button>
             <Button
               type="primary"
@@ -161,7 +167,7 @@ export function JobImportModal({
               loading={committing}
               onClick={() => void commit()}
             >
-              确认导入 {rows.length} 条
+              {t("jobImport.action.confirm", { count: rows.length })}
             </Button>
           </Space>
         </Flex>
@@ -170,7 +176,7 @@ export function JobImportModal({
       {/* 整块导入区都可粘贴：拖拽进文件、或者从表格复制一片内容按 Ctrl+V。 */}
       <div
         role="group"
-        aria-label="CSV 导入区"
+        aria-label={t("jobImport.dropzone.aria")}
         tabIndex={0}
         onPaste={handlePaste}
         style={{ outline: "none" }}
@@ -189,18 +195,17 @@ export function JobImportModal({
           <p className="ant-upload-drag-icon">
             <UploadOutlined />
           </p>
-          <p className="ant-upload-text">点击或拖拽 CSV 文件到这里（可多选）</p>
-          <p className="ant-upload-hint">
-            第一行是表头（岗位名称 / 公司名称 / 工作地点 / 薪资范围 / 岗位类型 / 状态 / 投递链接 /
-            发布时间…），也可以先用「导出 CSV」拿一份现成模板；一次最多 10 个文件、合计 2000 行
-          </p>
+          <p className="ant-upload-text">{t("jobImport.dropzone.text")}</p>
+          <p className="ant-upload-hint">{t("jobImport.dropzone.hint1")}</p>
         </Upload.Dragger>
         <Typography.Text type="secondary" style={{ display: "block", marginTop: 8 }}>
-          也可以直接在这块区域按 Ctrl+V 粘贴从表格复制的 CSV 内容
+          {t("jobImport.dropzone.hint2")}
         </Typography.Text>
       </div>
 
-      {batch.parsing && <Typography.Text type="secondary">正在解析…</Typography.Text>}
+      {batch.parsing && (
+        <Typography.Text type="secondary">{t("jobImport.parsing")}</Typography.Text>
+      )}
 
       {batch.notice && (
         <Alert type="warning" showIcon style={{ marginTop: 8 }} title={batch.notice} />
@@ -209,9 +214,11 @@ export function JobImportModal({
       {batch.files.length > 0 && (
         <div style={{ marginTop: 16 }}>
           <Typography.Text strong>
-            已选 {batch.files.length} 个文件：合计可导入 {rows.length} 条
-            {errors.length > 0 ? `，${errors.length} 行有问题` : ""}
-            {batch.duplicates > 0 ? `，已去除重复 ${batch.duplicates} 行` : ""}
+            {t("jobImport.summary", { files: batch.files.length, rows: rows.length })}
+            {errors.length > 0 ? t("jobImport.summary.errors", { count: errors.length }) : ""}
+            {batch.duplicates > 0
+              ? t("jobImport.summary.duplicates", { count: batch.duplicates })
+              : ""}
           </Typography.Text>
           <Listy
             items={batch.files}
@@ -221,18 +228,32 @@ export function JobImportModal({
                 <Flex justify="space-between" gap={12} wrap>
                   <Typography.Text>{item.file}</Typography.Text>
                   <Space size={8} wrap>
-                    {item.status === "parsing" && <Tag color="processing">解析中…</Tag>}
-                    {item.status === "ok" && <Tag color="success">可导入 {item.importable} 条</Tag>}
-                    {item.status === "error" && <Tag color="error">解析失败</Tag>}
-                    {item.errorCount > 0 && <Tag color="warning">{item.errorCount} 行有问题</Tag>}
-                    {item.duplicates > 0 && <Tag>重复 {item.duplicates} 行</Tag>}
+                    {item.status === "parsing" && (
+                      <Tag color="processing">{t("jobImport.tag.parsing")}</Tag>
+                    )}
+                    {item.status === "ok" && (
+                      <Tag color="success">
+                        {t("jobImport.tag.importable", { count: item.importable })}
+                      </Tag>
+                    )}
+                    {item.status === "error" && (
+                      <Tag color="error">{t("jobImport.tag.parseFailed")}</Tag>
+                    )}
+                    {item.errorCount > 0 && (
+                      <Tag color="warning">
+                        {t("jobImport.tag.errorRows", { count: item.errorCount })}
+                      </Tag>
+                    )}
+                    {item.duplicates > 0 && (
+                      <Tag>{t("jobImport.tag.duplicates", { count: item.duplicates })}</Tag>
+                    )}
                     <Button
                       type="link"
                       size="small"
                       disabled={batch.parsing || committing}
                       onClick={() => batch.removeFile(item.id)}
                     >
-                      移除
+                      {t("jobImport.action.remove")}
                     </Button>
                   </Space>
                 </Flex>
@@ -250,7 +271,7 @@ export function JobImportModal({
           type="warning"
           showIcon
           style={{ marginTop: 8 }}
-          title="以下行不会导入（改好 CSV 后可以重新选择文件）"
+          title={t("jobImport.skipped.title")}
           description={
             <Listy
               items={errors.slice(0, 10)}
@@ -258,7 +279,7 @@ export function JobImportModal({
               itemRender={(item) => (
                 <ListyItem>
                   <Tag>{item.sourceFile}</Tag>
-                  <Tag>第 {item.line} 行</Tag>
+                  <Tag>{t("jobImport.skipped.line", { line: item.line })}</Tag>
                   {item.message}
                 </ListyItem>
               )}
@@ -269,17 +290,21 @@ export function JobImportModal({
 
       {rows.length > 0 && (
         <div style={{ marginTop: 8 }}>
-          <Typography.Text type="secondary">将导入以下岗位（最多显示前 10 条）</Typography.Text>
+          <Typography.Text type="secondary">{t("jobImport.preview.title")}</Typography.Text>
           <Listy
             items={rows.slice(0, 10)}
             rowKey={(item) => `${item.sourceFile}#${item.line}`}
             itemRender={(item) => (
               <ListyItem>
                 <Flex justify="space-between" gap={12}>
-                  <Typography.Text strong>{item.data.title || "（无标题）"}</Typography.Text>
+                  <Typography.Text strong>
+                    {item.data.title || t("jobImport.untitled")}
+                  </Typography.Text>
                   <Typography.Text type="secondary">
                     {item.data.company || "—"}
-                    {item.data.origin_source ? ` · 来源：${item.data.origin_source}` : ""}
+                    {item.data.origin_source
+                      ? ` · ${t("jobImport.preview.source", { source: item.data.origin_source })}`
+                      : ""}
                     {` · ${item.sourceFile}`}
                   </Typography.Text>
                 </Flex>

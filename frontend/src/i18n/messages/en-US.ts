@@ -44,6 +44,7 @@ import claimForm from "./en-US.claimForm";
 import skills from "./en-US.skills";
 import toolCalls from "./en-US.toolCalls";
 import datasets from "./en-US.datasets";
+import jobImport from "./en-US.jobImport";
 
 const enUS = {
   ...core,
@@ -89,6 +90,7 @@ const enUS = {
   ...skills,
   ...toolCalls,
   ...datasets,
+  ...jobImport,
 } as const satisfies Record<keyof ZhCNMessages, string>;
 
 export default enUS;
