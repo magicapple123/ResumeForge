@@ -2,6 +2,8 @@
 /** 助手会话分组编辑弹窗。 */
 
 import { Input, Modal, Typography } from "antd";
+import { t } from "../../../i18n";
+import { useLocale } from "../../../i18n/i18nContext";
 
 interface Props {
   onChange: (value: string) => void;
@@ -12,15 +14,22 @@ interface Props {
 }
 
 export default function AssistantGroupModal({ onChange, onClose, onConfirm, open, value }: Props) {
+  useLocale();
   return (
-    <Modal title="移动到分组" open={open} okText="保存" onCancel={onClose} onOk={onConfirm}>
+    <Modal
+      title={t("assistantUi.group.move")}
+      open={open}
+      okText={t("common.action.save")}
+      onCancel={onClose}
+      onOk={onConfirm}
+    >
       <Typography.Paragraph type="secondary">
-        给这段对话归个类（例如「字节」「面试准备」）。留空表示移出分组。分组只影响侧栏的显示，不会动对话内容。
+        {t("assistantUi.group.description")}
       </Typography.Paragraph>
       <Input
         value={value}
         maxLength={64}
-        placeholder="分组名称"
+        placeholder={t("assistantUi.group.placeholder")}
         onChange={(event) => onChange(event.target.value)}
       />
     </Modal>
