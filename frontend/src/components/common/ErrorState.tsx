@@ -9,12 +9,14 @@
 import { Button, Empty } from "antd";
 import { ExclamationCircleOutlined } from "@ant-design/icons";
 import type { ReactNode } from "react";
+import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 
 export default function ErrorState({
   description,
   onRetry,
   retrying = false,
-  retryLabel = "重试",
+  retryLabel,
 }: {
   /** 说明出了什么事、用户能做什么（接口错误信息或一句人话）。 */
   description: ReactNode;
@@ -24,6 +26,7 @@ export default function ErrorState({
   retrying?: boolean;
   retryLabel?: string;
 }) {
+  useLocale();
   return (
     <div role="alert" className="rf-state rf-state--error">
       <Empty
@@ -32,7 +35,7 @@ export default function ErrorState({
       >
         {onRetry ? (
           <Button onClick={onRetry} loading={retrying}>
-            {retryLabel}
+            {retryLabel ?? t("common.retry")}
           </Button>
         ) : null}
       </Empty>
