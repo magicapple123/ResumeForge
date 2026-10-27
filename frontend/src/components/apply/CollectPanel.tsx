@@ -7,7 +7,7 @@
  * 生效了，实际却把不符合条件的岗位也采了进来。后端把这些条件写进
  * `task.config["unmapped_conditions"]`，界面据此显示。
  */
-import { Alert, App, Form, Select, Space, Typography } from "antd";
+import { Alert, App, Form, Select, Space } from "antd";
 import PageSkeleton from "../common/PageSkeleton";
 import { RowActions } from "../common/RowActions";
 import { useEffect, useState, type ReactNode } from "react";
@@ -26,6 +26,8 @@ import {
 } from "./collect/collectConfigHistory";
 import type { CollectConfigSnapshot } from "./collect/collectConfigHistory";
 import { siteFilterSummary, unmappedConditions } from "./collect/collectTaskSummary";
+import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 
 interface Props {
   disabled: boolean;
@@ -38,6 +40,8 @@ interface Props {
 }
 
 export default function CollectPanel({ disabled, onStarted, collectTask, progress }: Props) {
+  // 本组件用模块级 t()：必须订阅语言变化，否则切语言后面板停在旧文案。
+  useLocale();
   const { message } = App.useApp();
   const [form] = Form.useForm<CollectConfig>();
   const { data, loading, error } = useApi<CollectConfigOut>(getCollectConfig, []);
@@ -73,9 +77,9 @@ export default function CollectPanel({ disabled, onStarted, collectTask, progres
     try {
       await updateCollectConfig(values);
       pushHistory(values as CollectConfig);
-      message.success("采集条件已保存");
+      message.success(t("applyUi.collect.saved"));
     } catch (err) {
-      message.error(err instanceof Error ? err.message : "保存采集条件失败");
+      message.error(err instanceof Error ? err.message : t("applyUi.collect.saveFailed"));
     } finally {
       setSaving(false);
     }
@@ -100,7 +104,7 @@ export default function CollectPanel({ disabled, onStarted, collectTask, progres
     // 开始前先保存，避免"改了条件但用的是旧值"这种静默落差。
     const values = await form.validateFields();
     if (!values.keywords?.length && !values.city?.trim()) {
-      message.warning("请至少填写一个关键词或城市");
+      message.warning(t("applyUi.collect.needKeywords"));
       return;
     }
     setStarting(true);
@@ -108,13 +112,11 @@ export default function CollectPanel({ disabled, onStarted, collectTask, progres
       await updateCollectConfig(values);
       const task = await createCollectTask(saveSamples);
       message.success(
-        saveSamples
-          ? "已开始采集，进度见「采集批次」；本次会保存站点原文，完成时提示位置"
-          : "已开始采集，进度见「采集批次」",
+        saveSamples ? t("applyUi.collect.startedWithSamples") : t("applyUi.collect.started"),
       );
       onStarted(task);
     } catch (err) {
-      message.error(err instanceof Error ? err.message : "开始采集失败");
+      message.error(err instanceof Error ? err.message : t("applyUi.collect.startFailed"));
     } finally {
       setStarting(false);
     }
@@ -129,32 +131,27 @@ export default function CollectPanel({ disabled, onStarted, collectTask, progres
   return (
     <div className="apply-collect-panel">
       {/* 用户反馈过"采完了只显示成功，不知道下一步做什么"。采集只是第一步、而且**不会**直接
-          进岗位广场，所以这里把后面两步明确写出来，并指出每一步在哪个页签。 */}
+          进岗位广场，所以这里把后面两步明确写出来，并指出每一步在哪个页签。
+          内嵌强调（.apply-collect-flow-em / Typography.Text strong）收敛为「」：句子按整句
+          进语言包，切成前后几段在英文里语序不通（同 zh-CN.browserStatus.ts 的先例）。 */}
       <Alert
         className="apply-collect-flow"
         type="info"
         showIcon
-        title="采集之后还有两步才轮到投递"
+        title={t("applyUi.collect.flowTitle")}
         description={
           <ol style={{ margin: 0, paddingLeft: 18 }}>
-            <li>
-              采集把岗位放进下面的<span className="apply-collect-flow-em">「本次采集结果」</span>，
-              <Typography.Text strong>不会</Typography.Text>直接进岗位广场——采到的噪声由你筛掉。
-            </li>
-            <li>在结果里勾选要留下的岗位，点「导入选中的岗位」。</li>
-            <li>
-              到<span className="apply-collect-flow-em">「投递队列」</span>
-              把它们排进队列并显式开始投递， 结果在
-              <span className="apply-collect-flow-em">「投递记录」</span>里看。
-            </li>
+            <li>{t("applyUi.collect.flowStepStage")}</li>
+            <li>{t("applyUi.collect.flowStepImport")}</li>
+            <li>{t("applyUi.collect.flowStepQueue")}</li>
           </ol>
         }
       />
 
       <Space size={8} wrap style={{ marginBottom: 12 }}>
         <Select
-          aria-label="历史条件"
-          placeholder="历史条件"
+          aria-label={t("applyUi.collect.historyLabel")}
+          placeholder={t("applyUi.collect.historyLabel")}
           allowClear
           style={{ minWidth: 320 }}
           value={historyValue}
@@ -172,9 +169,9 @@ export default function CollectPanel({ disabled, onStarted, collectTask, progres
           more={[
             {
               key: "clear-history",
-              label: "清空历史",
+              label: t("applyUi.collect.clearHistory"),
               danger: true,
-              confirm: "清空历史条件？会删除全部已保存的采集条件快照，且不可恢复。",
+              confirm: t("applyUi.collect.clearHistoryConfirm"),
               onClick: clearHistory,
             },
           ]}
