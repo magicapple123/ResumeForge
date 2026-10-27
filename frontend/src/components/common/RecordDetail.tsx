@@ -17,6 +17,8 @@ import { useCallback } from "react";
 import type { KeyboardEvent, MouseEvent } from "react";
 import { isFromInnerControl } from "./recordDetailCore";
 import type { DetailField, DetailSection } from "./recordDetailCore";
+import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 
 export type { DetailField, DetailSection } from "./recordDetailCore";
 
@@ -99,6 +101,7 @@ export function RecordDetailDrawer({
   onClose,
   width = 520,
 }: RecordDetailDrawerProps) {
+  useLocale();
   const visibleFields = fields.filter((field) => field.value !== undefined && field.value !== null);
   const visibleSections = sections.filter((section) => section.content !== undefined);
   const isEmpty = visibleFields.length === 0 && visibleSections.length === 0;
@@ -118,7 +121,7 @@ export function RecordDetailDrawer({
       </Space>
 
       {isEmpty ? (
-        <EmptyState inline description="这条记录没有更多内容" />
+        <EmptyState inline description={t("common.recordDetail.empty")} />
       ) : (
         <>
           {visibleFields.length > 0 && (
