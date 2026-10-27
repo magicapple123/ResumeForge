@@ -45,6 +45,7 @@ import settingsPage from "./zh-CN.settingsPage";
 import exportPanel from "./zh-CN.exportPanel";
 import resumeEditor from "./zh-CN.resumeEditor";
 import trash from "./zh-CN.trash";
+import reminder from "./zh-CN.reminder";
 
 const namespaces = {
   /** 简历制作台（2026-10-23）。 */
@@ -118,6 +119,7 @@ const namespaces = {
   ...exportPanel,
   ...resumeEditor,
   ...trash,
+  ...reminder,
 } as const;
 
 export default namespaces;

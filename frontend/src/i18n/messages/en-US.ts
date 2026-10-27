@@ -37,6 +37,7 @@ import settingsPage from "./en-US.settingsPage";
 import exportPanel from "./en-US.exportPanel";
 import resumeEditor from "./en-US.resumeEditor";
 import trash from "./en-US.trash";
+import reminder from "./en-US.reminder";
 
 const enUS = {
   ...core,
@@ -75,6 +76,7 @@ const enUS = {
   ...exportPanel,
   ...resumeEditor,
   ...trash,
+  ...reminder,
 } as const satisfies Record<keyof ZhCNMessages, string>;
 
 export default enUS;

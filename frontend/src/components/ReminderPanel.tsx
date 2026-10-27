@@ -38,11 +38,12 @@ import { formatDateTime } from "../utils/format";
 import { RecordDetailDrawer } from "./common/RecordDetail";
 import { LISTY_ITEM_PADDING_DEFAULT } from "./common/listyPadding";
 import type { RowActionItem } from "./common/RowActions";
-import { TRASH_RECOVERY_NOTE } from "./common/rowActionMenu";
 import BatchActionBar from "./common/BatchActionBar";
 import { useBatchSelection } from "../hooks/useBatchSelection";
 import CalendarView from "./tracker/CalendarView";
 import ReminderListItem from "./tracker/ReminderListItem";
+import { t } from "../i18n";
+import { useLocale } from "../i18n/i18nContext";
 
 interface ReminderForm {
   title: string;
@@ -55,6 +56,7 @@ interface ReminderForm {
 }
 
 export default function ReminderPanel() {
+  useLocale();
   const { message, modal } = App.useApp();
   // 绑定目标下拉改为远程搜索（P0-1）：不再由页面预拉"前 100 条"当全量。
   const trackSelect = useTrackSearchSelect();
@@ -81,7 +83,7 @@ export default function ReminderPanel() {
     try {
       return await listReminders({ kind: kind || undefined });
     } catch (error) {
-      message.error(error instanceof Error ? error.message : "读取提醒失败");
+      message.error(error instanceof Error ? error.message : t("reminder.toast.loadFailed"));
       return null;
     }
   }, [kind, message]);
@@ -160,11 +162,11 @@ export default function ReminderPanel() {
     try {
       if (editing) await updateReminder(editing.id, payload);
       else await createReminder(payload);
-      message.success(editing ? "已更新提醒" : "已新建提醒");
+      message.success(editing ? t("reminder.toast.updated") : t("reminder.toast.created"));
       setModalOpen(false);
       await loadList();
     } catch (error) {
-      message.error(error instanceof Error ? error.message : "保存提醒失败");
+      message.error(error instanceof Error ? error.message : t("reminder.toast.saveFailed"));
     } finally {
       setSaving(false);
     }
@@ -173,10 +175,10 @@ export default function ReminderPanel() {
   const setStatus = async (item: Reminder, status: "done" | "dismissed") => {
     try {
       await updateReminder(item.id, { status });
-      message.success(status === "done" ? "已标记完成" : "已忽略");
+      message.success(status === "done" ? t("reminder.toast.done") : t("reminder.toast.ignored"));
       await loadList();
     } catch (error) {
-      message.error(error instanceof Error ? error.message : "更新提醒失败");
+      message.error(error instanceof Error ? error.message : t("reminder.toast.updateFailed"));
     }
   };
 
@@ -198,17 +200,18 @@ export default function ReminderPanel() {
     const ids = [...batch.selectedIds];
     if (ids.length === 0) return;
     modal.confirm({
-      title: "删除选中的提醒？",
-      content: `这 ${ids.length} 条提醒${TRASH_RECOVERY_NOTE}`,
-      okText: "删除",
+      title: t("reminder.confirm.deleteTitle"),
+      content: t("reminder.confirm.deleteBody", { count: ids.length }),
+      okText: t("common.action.delete"),
       okButtonProps: { danger: true },
       onOk: async () => {
         const results = await Promise.allSettled(
           items.filter((item) => batch.isSelected(item.id)).map((item) => deleteReminder(item.id)),
         );
         const failed = results.filter((item) => item.status === "rejected").length;
-        if (failed === 0) message.success(`已删除 ${ids.length} 条提醒`);
-        else message.warning(`已删除 ${ids.length - failed} 条，${failed} 条失败，请重试`);
+        if (failed === 0) message.success(t("reminder.toast.deleted", { count: ids.length }));
+        else
+          message.warning(t("reminder.toast.deletedPartial", { ok: ids.length - failed, failed }));
         batch.exitSelecting();
         await loadList();
       },
@@ -218,10 +221,10 @@ export default function ReminderPanel() {
   const remove = async (item: Reminder) => {
     try {
       await deleteReminder(item.id);
-      message.success("已删除这条提醒");
+      message.success(t("reminder.toast.deletedOne"));
       await loadList();
     } catch (error) {
-      message.error(error instanceof Error ? error.message : "删除失败");
+      message.error(error instanceof Error ? error.message : t("reminder.toast.deleteFailed"));
     }
   };
 
@@ -229,27 +232,27 @@ export default function ReminderPanel() {
   const contextActions = (item: Reminder): RowActionItem[] => [
     {
       key: "batch_select",
-      label: "批量选择",
+      label: t("reminder.selectMode"),
       icon: <CheckSquareOutlined />,
       onClick: batch.enterSelecting,
     },
     {
       key: "delete",
-      label: "删除",
+      label: t("common.action.delete"),
       danger: true,
-      confirm: "删除这条提醒？",
-      confirmBody: TRASH_RECOVERY_NOTE,
+      confirm: t("reminder.confirm.deleteOneTitle"),
+      confirmBody: t("reminder.confirm.deleteOneBody"),
       onClick: () => void remove(item),
     },
   ];
 
   return (
     <Space orientation="vertical" style={{ width: "100%" }} size="middle">
-      <Card size="small" title="日历提醒">
+      <Card size="small" title={t("reminder.card.title")}>
         <Space wrap>
           <Select
             allowClear
-            placeholder="按类型筛选"
+            placeholder={t("reminder.filter.placeholder")}
             style={{ minWidth: 150 }}
             value={kind}
             onChange={setKind}
@@ -259,15 +262,15 @@ export default function ReminderPanel() {
             }))}
           />
           <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
-            新建提醒
+            {t("reminder.action.create")}
           </Button>
           {/* 批量选择入口已收进提醒条目的右键菜单（R8）。 */}
           <Segmented
             value={view}
             onChange={(value) => setView(value as "list" | "calendar")}
             options={[
-              { label: "列表", value: "list" },
-              { label: "月历", value: "calendar" },
+              { label: t("reminder.view.list"), value: "list" },
+              { label: t("reminder.view.calendar"), value: "calendar" },
             ]}
           />
         </Space>
@@ -278,7 +281,7 @@ export default function ReminderPanel() {
       ) : loading ? (
         <LoadingBlock />
       ) : items.length === 0 ? (
-        <Empty description="还没有提醒，把面试、测评截止这些时点记下来吧" />
+        <Empty description={t("reminder.empty")} />
       ) : (
         <>
           {batch.selecting && (
@@ -298,7 +301,7 @@ export default function ReminderPanel() {
               }}
             >
               <Button danger disabled={batch.selectedCount === 0} onClick={removeSelected}>
-                删除所选
+                {t("reminder.batch.delete")}
               </Button>
             </BatchActionBar>
           )}
@@ -329,37 +332,37 @@ export default function ReminderPanel() {
               onChange={setPage}
               hideOnSinglePage
               showSizeChanger={false}
-              showTotal={(count) => `共 ${count} 条`}
+              showTotal={(count) => t("reminder.table.total", { count })}
             />
           </div>
         </>
       )}
 
       <FormModal
-        title={editing ? "编辑提醒" : "新建提醒"}
+        title={editing ? t("reminder.modal.edit") : t("reminder.action.create")}
         open={modalOpen}
         onCancel={() => setModalOpen(false)}
         onSubmit={() => void save()}
         submitting={saving}
-        okText="保存提醒"
+        okText={t("reminder.modal.save")}
         width={520}
       >
         <Form form={form} layout="vertical" initialValues={{ kind: "other", remind_at: dayjs() }}>
           <Form.Item
-            label="提醒内容"
+            label={t("reminder.field.content")}
             name="title"
-            rules={[{ required: true, message: "请填写提醒内容" }]}
+            rules={[{ required: true, message: t("reminder.required.content") }]}
           >
-            <Input maxLength={200} placeholder="例如：参加某司二面" />
+            <Input maxLength={200} placeholder={t("reminder.placeholder.content")} />
           </Form.Item>
           <Form.Item
-            label="提醒时间"
+            label={t("reminder.field.time")}
             name="remind_at"
-            rules={[{ required: true, message: "请选择提醒时间" }]}
+            rules={[{ required: true, message: t("reminder.required.time") }]}
           >
             <DatePicker showTime style={{ width: "100%" }} />
           </Form.Item>
-          <Form.Item label="类型" name="kind">
+          <Form.Item label={t("reminder.field.kind")} name="kind">
             <Select
               options={REMINDER_KINDS.map((value) => ({
                 value,
@@ -367,24 +370,39 @@ export default function ReminderPanel() {
               }))}
             />
           </Form.Item>
-          <Form.Item label="绑定漏斗（选填）" name="track_id">
-            <Select allowClear placeholder="输入关键词搜索进度" {...trackSelect.selectProps} />
+          <Form.Item label={t("reminder.field.track")} name="track_id">
+            <Select
+              allowClear
+              placeholder={t("reminder.placeholder.track")}
+              {...trackSelect.selectProps}
+            />
           </Form.Item>
-          <Form.Item label="绑定岗位（选填）" name="job_id">
-            <Select allowClear placeholder="输入关键词搜索岗位" {...jobSelect.selectProps} />
+          <Form.Item label={t("reminder.field.job")} name="job_id">
+            <Select
+              allowClear
+              placeholder={t("reminder.placeholder.job")}
+              {...jobSelect.selectProps}
+            />
           </Form.Item>
-          <Form.Item label="绑定简历（选填）" name="resume_id">
-            <Select allowClear placeholder="输入关键词搜索简历" {...resumeSelect.selectProps} />
+          <Form.Item label={t("reminder.field.resume")} name="resume_id">
+            <Select
+              allowClear
+              placeholder={t("reminder.placeholder.resume")}
+              {...resumeSelect.selectProps}
+            />
           </Form.Item>
-          <Form.Item label="备注" name="note">
-            <Input.TextArea autoSize={{ minRows: 2, maxRows: 4 }} placeholder="补充说明（选填）" />
+          <Form.Item label={t("reminder.field.note")} name="note">
+            <Input.TextArea
+              autoSize={{ minRows: 2, maxRows: 4 }}
+              placeholder={t("reminder.placeholder.note")}
+            />
           </Form.Item>
         </Form>
       </FormModal>
 
       <RecordDetailDrawer
         open={detail !== null}
-        title={detail?.title || "提醒详情"}
+        title={detail?.title || t("reminder.detail.title")}
         tags={
           detail && (
             <Space size={6} wrap>
@@ -406,31 +424,40 @@ export default function ReminderPanel() {
         fields={
           detail
             ? [
-                { label: "提醒时间", value: formatDateTime(detail.remind_at) },
+                { label: t("reminder.field.time"), value: formatDateTime(detail.remind_at) },
                 {
-                  label: "绑定漏斗",
+                  label: t("reminder.detail.track"),
                   value:
                     trackSelect.options.find((option) => option.value === detail.track_id)?.label ??
                     "-",
                 },
                 {
-                  label: "绑定岗位",
+                  label: t("reminder.detail.job"),
                   value:
                     jobSelect.options.find((option) => option.value === detail.job_id)?.label ??
                     "-",
                 },
                 {
-                  label: "绑定简历",
+                  label: t("reminder.detail.resume"),
                   value:
                     resumeSelect.options.find((option) => option.value === detail.resume_id)
                       ?.label ?? "-",
                 },
-                { label: "创建时间", value: formatDateTime(detail.created_at) },
-                { label: "更新时间", value: formatDateTime(detail.updated_at) },
+                { label: t("reminder.detail.createdAt"), value: formatDateTime(detail.created_at) },
+                { label: t("reminder.detail.updatedAt"), value: formatDateTime(detail.updated_at) },
               ]
             : []
         }
-        sections={detail ? [{ title: "备注", content: detail.note || "（无）" }] : []}
+        sections={
+          detail
+            ? [
+                {
+                  title: t("reminder.field.note"),
+                  content: detail.note || t("reminder.detail.none"),
+                },
+              ]
+            : []
+        }
         actions={
           detail && (
             <Space>
@@ -442,7 +469,7 @@ export default function ReminderPanel() {
                     setDetail(null);
                   }}
                 >
-                  标记完成
+                  {t("reminder.action.markDone")}
                 </Button>
               )}
               <Button
@@ -453,7 +480,7 @@ export default function ReminderPanel() {
                   setDetail(null);
                 }}
               >
-                编辑
+                {t("reminder.action.edit")}
               </Button>
             </Space>
           )
