@@ -140,7 +140,7 @@ export default function ResumeDetailModal({ recordId, onClose, autoOpenWorkbench
     },
     onRendered: (next) => setLayout(next),
     onError: (err) => {
-      message.error(err instanceof Error ? err.message : "按新设置重新排版失败");
+      message.error(err instanceof Error ? err.message : t("resume.detail.relayoutFailed"));
       previewRef.current?.setLiveProbe("");
     },
   });
@@ -209,7 +209,7 @@ export default function ResumeDetailModal({ recordId, onClose, autoOpenWorkbench
       })
       .catch((err) => {
         if (currentRequest === requestVersion.current) {
-          setError(err instanceof Error ? err.message : "加载失败");
+          setError(err instanceof Error ? err.message : t("resume.detail.loadFailed"));
         }
       });
     return () => {
@@ -313,7 +313,7 @@ export default function ResumeDetailModal({ recordId, onClose, autoOpenWorkbench
         // 标题行右侧自绘 ×（`closable={false}`）：卡片长在用户刚点的地方，不用把视线
         // 拉到底部去找确认。
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <span>{detail?.title ?? "简历预览"}</span>
+          <span>{detail?.title ?? t("resume.detail.titleFallback")}</span>
           <Popconfirm
             open={closeConfirmOpen}
             onOpenChange={handleCloseRequest}
@@ -369,11 +369,15 @@ export default function ResumeDetailModal({ recordId, onClose, autoOpenWorkbench
               通用简历（无 job_id）没有这行（预览头部的「通用简历」标签照旧）。 */}
           {detail.job_id ? (
             <Space size={12} wrap style={{ marginBottom: 12 }}>
-              <Link to={`/jobs?job_id=${detail.job_id}`}>查看关联岗位</Link>
+              <Link to={`/jobs?job_id=${detail.job_id}`}>{t("resume.detail.link.job")}</Link>
               <Typography.Text type="secondary">·</Typography.Text>
-              <Link to={`/tracker?job_id=${detail.job_id}`}>该岗位的投递进度</Link>
+              <Link to={`/tracker?job_id=${detail.job_id}`}>
+                {t("resume.detail.link.progress")}
+              </Link>
               <Typography.Text type="secondary">·</Typography.Text>
-              <Link to={`/interview?job_id=${detail.job_id}`}>模拟面试</Link>
+              <Link to={`/interview?job_id=${detail.job_id}`}>
+                {t("resume.detail.link.interview")}
+              </Link>
             </Space>
           ) : null}
           {/* 本次使用（R-33）：保存/生成时的组与参与大字段；资料/定义变了提示需重新生成。
@@ -429,7 +433,7 @@ export default function ResumeDetailModal({ recordId, onClose, autoOpenWorkbench
               layoutDirty ? (
                 <Space size={8}>
                   <Button onClick={cancelLayout} disabled={relayouting || layoutSaving}>
-                    取消
+                    {t("common.action.cancel")}
                   </Button>
                   <Button
                     type="primary"
@@ -437,7 +441,7 @@ export default function ResumeDetailModal({ recordId, onClose, autoOpenWorkbench
                     disabled={relayouting}
                     onClick={() => void saveLayout()}
                   >
-                    保存
+                    {t("common.action.save")}
                   </Button>
                 </Space>
               ) : null
