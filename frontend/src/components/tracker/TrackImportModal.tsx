@@ -9,10 +9,38 @@ import { App, Button, Checkbox, Input, Modal, Space, Tag, Typography } from "ant
 import EmptyState from "../common/EmptyState";
 import { useEffect, useState } from "react";
 import { applyTracks, parseTracks } from "../../api/tracker";
+import { t } from "../../i18n";
+import type { MessageKey } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 import { useRecognitionFiles } from "../../hooks/useRecognitionFiles";
 import RecognitionFileField from "../RecognitionFileField";
-import type { TrackMergePreview, TrackRecord } from "../../types";
-import { MERGE_ACTION_COLORS, MERGE_ACTION_LABELS, TRACK_STATUS_LABELS } from "../../types";
+import type { MergeAction, TrackMergePreview, TrackRecord, TrackStatus } from "../../types";
+import { MERGE_ACTION_COLORS } from "../../types";
+
+/**
+ * 状态与合并结论的显示名：**键是协议值**（`applied` / `created` …，与后端逐字对应，
+ * 见 `types/tracker.ts`），值指向语言包 key。
+ *
+ * 模块作用域不能调 `t()`（切语言不会重渲染），所以这里只存 key，使用处 `t(...)`。
+ * 状态名复用进度表单的 `trackerForm.status.*`——与 `TrackerPage`、`TrackFormModal`
+ * 指向同一份词表：同一个协议值在两处必须是同一个名字。
+ * `types/tracker.ts` 的中文表没动（`TrackCard`、`AnalyticsPage` 仍在用状态名）。
+ */
+const TRACK_STATUS_LABEL_KEYS: Record<TrackStatus, MessageKey> = {
+  applied: "trackerForm.status.applied",
+  screening: "trackerForm.status.screening",
+  assessment: "trackerForm.status.assessment",
+  interview: "trackerForm.status.interview",
+  offer: "trackerForm.status.offer",
+  rejected: "trackerForm.status.rejected",
+  unknown: "trackerForm.status.unknown",
+};
+
+const MERGE_ACTION_LABEL_KEYS: Record<MergeAction, MessageKey> = {
+  created: "trackerImport.mergeAction.created",
+  updated: "trackerImport.mergeAction.updated",
+  unchanged: "trackerImport.mergeAction.unchanged",
+};
 
 interface Row {
   key: number;
@@ -27,6 +55,8 @@ interface Props {
 }
 
 export default function TrackImportModal({ open, onClose, onImported }: Props) {
+  // 本组件用模块级 t()：必须订阅语言变化，否则切语言后弹窗文案不重渲染。
+  useLocale();
   const { message } = App.useApp();
   const [text, setText] = useState("");
   const [rows, setRows] = useState<Row[]>([]);
@@ -54,7 +84,7 @@ export default function TrackImportModal({ open, onClose, onImported }: Props) {
 
   const recognize = async () => {
     if (!text.trim() && files.length === 0) {
-      message.warning("请先粘贴通知内容，或上传截图、文档");
+      message.warning(t("trackerImport.toast.noInput"));
       return;
     }
     setBusy(true);
@@ -71,9 +101,11 @@ export default function TrackImportModal({ open, onClose, onImported }: Props) {
       setRows(result.items.map((preview, index) => ({ key: index, checked: true, preview })));
       setNotes(result.notes);
       setEngine(result.parse_engine);
-      if (result.items.length === 0) message.info("没有识别出可用的进度记录");
+      if (result.items.length === 0) message.info(t("trackerImport.toast.noRecords"));
     } catch (error) {
-      message.error(error instanceof Error ? error.message : "识别失败");
+      message.error(
+        error instanceof Error ? error.message : t("trackerImport.toast.recognizeFailed"),
+      );
     } finally {
       setBusy(false);
     }
@@ -82,7 +114,7 @@ export default function TrackImportModal({ open, onClose, onImported }: Props) {
   const confirm = async () => {
     const picked = rows.filter((row) => row.checked).map((row) => row.preview.record);
     if (picked.length === 0) {
-      message.warning("请至少勾选一条");
+      message.warning(t("trackerImport.toast.noneSelected"));
       return;
     }
     setBusy(true);
@@ -90,15 +122,17 @@ export default function TrackImportModal({ open, onClose, onImported }: Props) {
       const result = await applyTracks(picked as TrackRecord[]);
       // 如实分别报出三种结果：全都说成"已保存"会让用户以为进度确实更新了。
       const parts = [
-        result.created ? `新增 ${result.created} 条` : "",
-        result.updated ? `更新 ${result.updated} 条` : "",
-        result.unchanged ? `${result.unchanged} 条已是最新` : "",
+        result.created ? t("trackerImport.result.created", { count: result.created }) : "",
+        result.updated ? t("trackerImport.result.updated", { count: result.updated }) : "",
+        result.unchanged ? t("trackerImport.result.unchanged", { count: result.unchanged }) : "",
       ].filter(Boolean);
-      message.success(parts.join("，") || "已处理");
+      message.success(
+        parts.join(t("trackerImport.result.separator")) || t("trackerImport.result.done"),
+      );
       onImported();
       onClose();
     } catch (error) {
-      message.error(error instanceof Error ? error.message : "保存失败");
+      message.error(error instanceof Error ? error.message : t("trackerImport.toast.saveFailed"));
     } finally {
       setBusy(false);
     }
@@ -107,7 +141,7 @@ export default function TrackImportModal({ open, onClose, onImported }: Props) {
   return (
     <Modal
       open={open}
-      title="从通知导入进度"
+      title={t("trackerImport.dialog.title")}
       width={780}
       // 识别出的通知条数不固定：限高让超长列表只滚弹窗内部。
       styles={{
@@ -116,26 +150,25 @@ export default function TrackImportModal({ open, onClose, onImported }: Props) {
       onCancel={onClose}
       footer={
         <Space>
-          <Button onClick={onClose}>取消</Button>
+          <Button onClick={onClose}>{t("common.action.cancel")}</Button>
           {rows.length > 0 && (
             <Button type="primary" loading={busy} onClick={() => void confirm()}>
-              确认写入勾选的 {rows.filter((row) => row.checked).length} 条
+              {t("trackerImport.action.confirm", {
+                count: rows.filter((row) => row.checked).length,
+              })}
             </Button>
           )}
         </Space>
       }
     >
       <Space orientation="vertical" size={12} style={{ width: "100%" }}>
-        <Typography.Text type="secondary">
-          把招聘邮件、短信或站内通知的内容粘贴进来（也可以贴截图）。识别结果先给你看"会发生什么"，
-          你确认之后才会写入。
-        </Typography.Text>
+        <Typography.Text type="secondary">{t("trackerImport.dialog.intro")}</Typography.Text>
         <Input.TextArea
           rows={6}
           value={text}
           onChange={(event) => setText(event.target.value)}
           onPaste={onPaste}
-          placeholder="在这里按 Ctrl+V 可以直接贴截图；纯文字通知直接粘进来即可。"
+          placeholder={t("trackerImport.dialog.placeholder")}
           disabled={busy}
         />
         <RecognitionFileField
@@ -147,11 +180,11 @@ export default function TrackImportModal({ open, onClose, onImported }: Props) {
         />
         <Space>
           <Button type="primary" loading={busy} onClick={() => void recognize()}>
-            识别并预览
+            {t("trackerImport.action.recognize")}
           </Button>
           {engine && (
             <Tag color={engine === "ai" ? "blue" : "default"}>
-              {engine === "ai" ? "AI 识别" : "本地关键词匹配"}
+              {engine === "ai" ? t("trackerImport.engine.ai") : t("trackerImport.engine.local")}
             </Tag>
           )}
         </Space>
@@ -163,7 +196,7 @@ export default function TrackImportModal({ open, onClose, onImported }: Props) {
         ))}
 
         {rows.length === 0 ? (
-          <EmptyState inline description="还没有识别结果" />
+          <EmptyState inline description={t("trackerImport.empty.noResults")} />
         ) : (
           <div className="track-import-list">
             {rows.map((row) => (
@@ -183,9 +216,9 @@ export default function TrackImportModal({ open, onClose, onImported }: Props) {
                     <Typography.Text strong>{row.preview.record.company}</Typography.Text>
                     <Typography.Text type="secondary">{row.preview.record.title}</Typography.Text>
                     <Tag color={MERGE_ACTION_COLORS[row.preview.action]}>
-                      {MERGE_ACTION_LABELS[row.preview.action]}
+                      {t(MERGE_ACTION_LABEL_KEYS[row.preview.action])}
                     </Tag>
-                    <Tag>{TRACK_STATUS_LABELS[row.preview.record.status]}</Tag>
+                    <Tag>{t(TRACK_STATUS_LABEL_KEYS[row.preview.record.status])}</Tag>
                   </Space>
                   {/* 原因比结论更重要：用户据此判断这条该不该勾。 */}
                   <Typography.Text type="secondary" className="track-import-reason">
@@ -193,7 +226,7 @@ export default function TrackImportModal({ open, onClose, onImported }: Props) {
                   </Typography.Text>
                   {row.preview.record.evidence && (
                     <Typography.Text type="secondary" className="track-import-evidence">
-                      依据：{row.preview.record.evidence}
+                      {t("trackerImport.evidence.label", { evidence: row.preview.record.evidence })}
                     </Typography.Text>
                   )}
                 </div>
