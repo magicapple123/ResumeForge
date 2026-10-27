@@ -15,7 +15,6 @@ import {
 } from "../api/resumes";
 import { diffResume } from "../api/resumeWriting";
 import BatchActionBar from "../components/common/BatchActionBar";
-import { TRASH_RECOVERY_NOTE } from "../components/common/rowActionMenu";
 import ErrorState from "../components/common/ErrorState";
 import { useBatchSelection } from "../hooks/useBatchSelection";
 import ManualResumeModal from "../components/ManualResumeModal";
@@ -240,7 +239,7 @@ export default function ResumesPage() {
       title: t("resumesPage.batchDelete.title"),
       content: t("resumesPage.batchDelete.body", {
         count: ids.length,
-        note: TRASH_RECOVERY_NOTE,
+        note: t("common.note.trashRecovery"),
       }),
       okText: t("common.action.delete"),
       okButtonProps: { danger: true },
