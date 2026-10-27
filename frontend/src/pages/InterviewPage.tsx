@@ -211,8 +211,12 @@ export default function InterviewPage() {
     if (ids.length === 0) return;
     modal.confirm({
       title: t("interview.confirm.deleteTitle"),
-      content: `这 ${ids.length} 场面试${HARD_DELETE_NOTE}`,
-      okText: "删除",
+      // 条数与硬删除的后果段都进语言包：后果段是共用常量 HARD_DELETE_NOTE，以 {note} 传入。
+      content: t("interview.confirm.deleteBody", {
+        count: ids.length,
+        note: HARD_DELETE_NOTE,
+      }),
+      okText: t("common.action.delete"),
       okButtonProps: { danger: true },
       onOk: async () => {
         const results = await Promise.allSettled(

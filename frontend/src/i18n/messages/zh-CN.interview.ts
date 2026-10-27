@@ -4,6 +4,9 @@
  *
  * `interview.listSeparator` 是把关卡焦点题拼成一行时的分隔符：中文用全角「；」，
  * 英文用 "; "，属于随语言变化的符号，必须走语言包而不是硬编码。
+ *
+ * `interview.confirm.deleteBody` 的后果段用 `{note}` 参数传入共用常量 `HARD_DELETE_NOTE`
+ * （硬删除提示的唯一出口，见 `components/common/rowActionMenu.ts`），不在语言包里复制一份。
  */
 const interview = {
   "interview.toast.loadFailed": "读取面试记录失败",
@@ -25,6 +28,7 @@ const interview = {
   "interview.confirm.endOk": "结束并出报告",
   "interview.confirm.endCancel": "继续面试",
   "interview.confirm.deleteTitle": "删除选中的面试记录？",
+  "interview.confirm.deleteBody": "这 {count} 场面试{note}",
   "interview.page.title": "模拟面试",
   "interview.page.subtitle": "让 AI 面试官按你设定的类型与难度提问，结束后给出评分报告与改进建议。",
   "interview.action.backToSettings": "回到设置",

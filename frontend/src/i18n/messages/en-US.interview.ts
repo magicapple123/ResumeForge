@@ -4,6 +4,9 @@
  *
  * `interview.listSeparator` 是把关卡焦点题拼成一行时的分隔符：中文用全角「；」，
  * 英文用 "; "，属于随语言变化的符号，必须走语言包而不是硬编码。
+ *
+ * `interview.confirm.deleteBody` 的后果段用 `{note}` 参数传入共用常量 `HARD_DELETE_NOTE`
+ * （硬删除提示的唯一出口，见 `components/common/rowActionMenu.ts`），不在语言包里复制一份。
  */
 const interview = {
   "interview.toast.loadFailed": "Could not load interview records",
@@ -26,6 +29,7 @@ const interview = {
   "interview.confirm.endOk": "End and get the report",
   "interview.confirm.endCancel": "Keep interviewing",
   "interview.confirm.deleteTitle": "Delete the selected interviews?",
+  "interview.confirm.deleteBody": "These {count} interviews will be deleted permanently. {note}",
   "interview.page.title": "Mock interview",
   "interview.page.subtitle":
     "An AI interviewer asks questions at the type and difficulty you set, then gives a score report and improvement suggestions.",
