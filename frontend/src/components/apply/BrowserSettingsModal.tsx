@@ -18,6 +18,8 @@ import { useApi } from "../../hooks/useApi";
 import PageSkeleton from "../common/PageSkeleton";
 import type { ApplyConfigOut, BrowserChoice } from "../../types";
 import BrowserChoiceFields from "./BrowserChoiceFields";
+import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 
 interface Props {
   open: boolean;
@@ -32,6 +34,8 @@ interface BrowserForm {
 }
 
 export default function BrowserSettingsModal({ open, onClose, onSaved }: Props) {
+  // 本组件用模块级 t()：必须订阅语言变化，否则切语言后弹窗停在旧文案。
+  useLocale();
   const { message } = App.useApp();
   const [form] = Form.useForm<BrowserForm>();
   const { data, loading } = useApi<ApplyConfigOut>(getApplyConfig, []);
@@ -76,11 +80,13 @@ export default function BrowserSettingsModal({ open, onClose, onSaved }: Props) 
       // 名字要和页头那两个按钮**对得上**：原来这里（以及下面那行链接）写的是
       // 「重启浏览器」，而页面上从来没有这个按钮——用户照着找必然找不到，
       // 这正是"三个按钮职责说不清"的来源之一。
-      message.success("浏览器设置已保存");
+      message.success(t("applyUi.browserSettings.saved"));
       onSaved?.();
       onClose();
     } catch (error) {
-      message.error(error instanceof Error ? error.message : "保存失败");
+      message.error(
+        error instanceof Error ? error.message : t("applyUi.browserSettings.saveFailed"),
+      );
     } finally {
       setSaving(false);
     }
@@ -89,9 +95,9 @@ export default function BrowserSettingsModal({ open, onClose, onSaved }: Props) 
   return (
     <FormModal
       open={open}
-      title="浏览器设置"
+      title={t("applyUi.browserSettings.title")}
       onCancel={onClose}
-      okText="保存浏览器设置"
+      okText={t("applyUi.browserSettings.save")}
       submitting={saving}
       onSubmit={() => void submit()}
       width={640}
@@ -101,16 +107,14 @@ export default function BrowserSettingsModal({ open, onClose, onSaved }: Props) 
       ) : (
         <>
           {/* 说明段落与表单、表单与底部链接之间的间距统一收紧（用户反馈行距偏松）。 */}
-          <p style={{ marginBottom: 12 }}>
-            投递台和网申填表会分别打开独立浏览器窗口与登录态；这里选择的浏览器类型对两边都生效。
-          </p>
+          <p style={{ marginBottom: 12 }}>{t("applyUi.browserSettings.intro")}</p>
           {/* mb-tight：Form.Item 默认 marginBottom 24 与 Space 行距叠加，两枚字段换行
               后中间会空出一大段，这里收紧到 8；compact 让字段换行行距 16→8。 */}
           <Form form={form} layout="vertical" className="browser-settings-form">
             <BrowserChoiceFields compact />
           </Form>
           <Button type="link" style={{ paddingLeft: 0 }} onClick={onClose}>
-            换过浏览器后，回页面点「关闭浏览器」再点「启动浏览器」才会生效
+            {t("applyUi.browserSettings.effectiveHint")}
           </Button>
         </>
       )}
