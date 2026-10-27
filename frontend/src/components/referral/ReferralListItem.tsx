@@ -8,6 +8,8 @@ import { CheckSquareOutlined, DeleteOutlined, EditOutlined, MoreOutlined } from 
 import { Button, Checkbox, Dropdown, Space, Tag, Typography } from "antd";
 import { REFERRAL_STATUS_COLORS, REFERRAL_STATUS_LABELS, referralImageUrl } from "../../types";
 import type { Referral, ReferralStatus } from "../../types";
+import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 import { isFromInnerControl } from "../common/recordDetailCore";
 import { ListyItem, ListyMeta } from "../common/ListyItem";
 import { TRASH_RECOVERY_NOTE, useRowActionMenu } from "../common/rowActionMenu";
@@ -38,6 +40,8 @@ export default function ReferralListItem({
   onDelete,
   onEnterSelecting,
 }: Props) {
+  // 本文件用模块级 t()：必须订阅语言变化，否则切语言后行内按钮、菜单与 aria 不重渲染。
+  useLocale();
   return (
     <ListyItem
       className="detail-trigger"
@@ -50,13 +54,15 @@ export default function ReferralListItem({
         selecting ? (
           <Checkbox
             key="select"
-            aria-label={`选择内推 ${item.referrer_name || item.position}`}
+            aria-label={t("referralUi.list.aria.select", {
+              name: item.referrer_name || item.position,
+            })}
             checked={selected}
             onChange={onToggleSelected}
           />
         ) : (
           <Button key="detail" type="link" size="small" onClick={onOpenDetail}>
-            详情
+            {t("referralUi.list.action.detail")}
           </Button>
         ),
         ...(selecting
@@ -69,16 +75,17 @@ export default function ReferralListItem({
                   items: buildMenu([
                     {
                       key: "edit",
-                      label: "编辑",
+                      label: t("referralUi.list.action.edit"),
                       icon: <EditOutlined />,
                       onClick: onEdit,
                     },
                     {
                       key: "delete",
-                      label: "删除",
+                      label: t("common.action.delete"),
                       danger: true,
                       icon: <DeleteOutlined />,
-                      confirm: "删除这条内推？",
+                      confirm: t("referralUi.list.confirm.deleteTitle"),
+                      // 复用共用的回收站说明（common/rowActionMenu.ts 的 i18n-ok 常量），保持唯一出处。
                       confirmBody: TRASH_RECOVERY_NOTE,
                       onClick: onDelete,
                     },
@@ -89,7 +96,9 @@ export default function ReferralListItem({
                   type="text"
                   size="small"
                   icon={<MoreOutlined />}
-                  aria-label={`更多操作 ${item.referrer_name || item.position}`}
+                  aria-label={t("referralUi.list.aria.moreActions", {
+                    name: item.referrer_name || item.position,
+                  })}
                 />
               </Dropdown>,
             ]),
@@ -103,7 +112,7 @@ export default function ReferralListItem({
             : [
                 {
                   key: "batch_select",
-                  label: "批量选择",
+                  label: t("common.action.batchSelect"),
                   icon: <CheckSquareOutlined />,
                   onClick: onEnterSelecting,
                 },
@@ -115,13 +124,13 @@ export default function ReferralListItem({
             title={
               <Space size={6} wrap>
                 <span>
-                  {item.referrer_name || "未记内推人"}
+                  {item.referrer_name || t("referralUi.list.value.noReferrer")}
                   {item.position ? ` · ${item.position}` : ""}
                 </span>
                 <Tag color={REFERRAL_STATUS_COLORS[item.status as ReferralStatus] ?? "default"}>
                   {REFERRAL_STATUS_LABELS[item.status as ReferralStatus] ?? item.status}
                 </Tag>
-                {item.converted && <Tag color="green">已转化</Tag>}
+                {item.converted && <Tag color="green">{t("referralUi.list.tag.converted")}</Tag>}
               </Space>
             }
             description={
@@ -132,7 +141,9 @@ export default function ReferralListItem({
                   {item.channel ? ` · ${item.channel}` : ""}
                 </Typography.Text>
                 {item.referral_code && (
-                  <Typography.Text type="secondary">内推码：{item.referral_code}</Typography.Text>
+                  <Typography.Text type="secondary">
+                    {t("referralUi.list.label.referralCode", { code: item.referral_code })}
+                  </Typography.Text>
                 )}
                 {item.note && <Typography.Text type="secondary">{item.note}</Typography.Text>}
                 {(item.note_images ?? []).length > 0 && (
@@ -141,7 +152,7 @@ export default function ReferralListItem({
                       <img
                         key={path}
                         src={referralImageUrl(path)}
-                        alt="备注图"
+                        alt={t("referralUi.list.image.noteAlt")}
                         style={{
                           width: 32,
                           height: 32,
