@@ -191,35 +191,45 @@ export default function ResumeTemplateControls({
     // 预览工具栏里这些类名不匹配任何规则，形态不变。
     <Space size={compact ? 8 : 16} wrap className="resume-template-controls">
       <Space size={6}>
-        {!compact && <Typography.Text type="secondary">模板</Typography.Text>}
+        {!compact && (
+          <Typography.Text type="secondary">
+            {t("sections.templateControls.templateLabel")}
+          </Typography.Text>
+        )}
         {/* 选模板与看效果合并成同一个入口：打开的就是"每种模板的真实渲染"，
             点「用这个模板」即写入并重渲染（没有额外确认步骤）。这样就不必先在下拉里
             按名字盲选、再另外点一次「看效果」——选与看是同一件事。 */}
         <Tooltip
           title={
             currentTemplate
-              ? `${currentTemplate.description}。点击打开预览，直接看到每种模板的真实效果`
-              : "打开模板预览，直接看到每种模板的真实效果"
+              ? t("sections.templateControls.templateTooltipWithDescription", {
+                  description: currentTemplate.description,
+                })
+              : t("sections.templateControls.templateTooltip")
           }
         >
           <Button
             size="small"
             icon={<PictureOutlined />}
             disabled={disabled || templates.length === 0}
-            aria-label="选择简历模板并预览效果"
+            aria-label={t("sections.templateControls.templateAriaLabel")}
             onClick={() => setGalleryOpen(true)}
           >
             {currentTemplate?.label ?? layout.template}
-            {currentTemplate?.custom ? "（自制）" : ""}
+            {currentTemplate?.custom ? t("sections.templateControls.customSuffix") : ""}
           </Button>
         </Tooltip>
       </Space>
       <Space size={6}>
-        {!compact && <Typography.Text type="secondary">版式</Typography.Text>}
+        {!compact && (
+          <Typography.Text type="secondary">
+            {t("sections.templateControls.formatLabel")}
+          </Typography.Text>
+        )}
         <Tooltip
           open={formatTipOpen}
           onOpenChange={setFormatTipOpen}
-          title="版式控制行高、页边距与强调色；可以在工作台里自制更多版式"
+          title={t("sections.templateControls.formatHint")}
         >
           <span onClick={() => setFormatTipOpen(false)}>
             <Select
@@ -241,10 +251,12 @@ export default function ResumeTemplateControls({
               // `max-width` 兜底与选项单行省略规则。
               classNames={{ popup: { root: "resume-params-dropdown resume-format-dropdown" } }}
               options={[
-                { value: "", label: "跟随模板" },
+                { value: "", label: t("sections.templateControls.followTemplate") },
                 ...formatPresets.map((item) => ({
                   value: item.name,
-                  label: item.custom ? `${item.label}（自制）` : item.label,
+                  label: item.custom
+                    ? `${item.label}${t("sections.templateControls.customSuffix")}`
+                    : item.label,
                   title: item.description,
                 })),
               ]}
@@ -280,14 +292,18 @@ export default function ResumeTemplateControls({
         onClose={() => setGalleryOpen(false)}
       />
       <Space size={6}>
-        {!compact && <Typography.Text type="secondary">板块</Typography.Text>}
+        {!compact && (
+          <Typography.Text type="secondary">
+            {t("sections.templateControls.sectionsLabel")}
+          </Typography.Text>
+        )}
         <Popover
           trigger="click"
           placement="bottomRight"
           arrow={false}
           title={
             <span className="resume-section-order-title">
-              调整板块顺序
+              {t("sections.templateControls.orderTitle")}
               {/* 一次性快照：把资料页当前那套顺序写进这份简历（见 `handleArrangeByProfile`）。 */}
               <Tooltip title={arrangeByProfileHint}>
                 {/* 包一层 span：禁用态的按钮不接收指针事件，Tooltip 只能挂在外层。 */}
@@ -304,13 +320,17 @@ export default function ResumeTemplateControls({
               </Tooltip>
               {isCustomOrder && (
                 <Button size="small" type="link" onClick={handleSectionOrderReset}>
-                  恢复默认
+                  {t("sections.templateControls.orderReset")}
                 </Button>
               )}
             </span>
           }
           content={
-            <div className="resume-section-order-list" role="list" aria-label="简历板块顺序">
+            <div
+              className="resume-section-order-list"
+              role="list"
+              aria-label={t("sections.templateControls.orderListAriaLabel")}
+            >
               {sectionOrder.map((key, index) => {
                 const label =
                   sectionOptions.find((item) => item.key === key)?.label ??
@@ -321,22 +341,22 @@ export default function ResumeTemplateControls({
                     <span className="resume-section-order-index">{index + 1}</span>
                     <span className="resume-section-order-label">{label}</span>
                     <Space size={0}>
-                      <Tooltip title="上移">
+                      <Tooltip title={t("sections.templateControls.orderMoveUp")}>
                         <Button
                           size="small"
                           type="text"
                           icon={<ArrowUpOutlined />}
-                          aria-label={`把${label}上移`}
+                          aria-label={t("sections.templateControls.orderMoveUpAria", { label })}
                           disabled={index === 0}
                           onClick={() => handleSectionMove(index, -1)}
                         />
                       </Tooltip>
-                      <Tooltip title="下移">
+                      <Tooltip title={t("sections.templateControls.orderMoveDown")}>
                         <Button
                           size="small"
                           type="text"
                           icon={<ArrowDownOutlined />}
-                          aria-label={`把${label}下移`}
+                          aria-label={t("sections.templateControls.orderMoveDownAria", { label })}
                           disabled={index === sectionOrder.length - 1}
                           onClick={() => handleSectionMove(index, 1)}
                         />
@@ -346,29 +366,38 @@ export default function ResumeTemplateControls({
                 );
               })}
               <Typography.Paragraph type="secondary" className="resume-section-order-hint">
-                顺序对预览、PDF、Word
-                与文本导出同时生效；页眉（姓名、求职意向、联系方式）固定在最前。
+                {t("sections.templateControls.orderHint")}
               </Typography.Paragraph>
             </div>
           }
         >
-          <Tooltip title="调整个人总结、教育经历、项目经历等板块在简历里的先后顺序">
-            <Button size="small" disabled={disabled} aria-label="调整简历板块顺序">
-              顺序{isCustomOrder ? "·已调整" : ""}
+          <Tooltip title={t("sections.templateControls.orderTriggerHint")}>
+            <Button
+              size="small"
+              disabled={disabled}
+              aria-label={t("sections.templateControls.orderTriggerAriaLabel")}
+            >
+              {isCustomOrder
+                ? t("sections.templateControls.orderTriggerAdjusted")
+                : t("sections.templateControls.orderTrigger")}
             </Button>
           </Tooltip>
         </Popover>
       </Space>
       <Space size={6} className="resume-page-limit-group">
-        {!compact && <Typography.Text type="secondary">最大篇幅</Typography.Text>}
-        <Tooltip title="简历内容最多排几页 A4；内容少时会自然留白，不会硬撑满">
+        {!compact && (
+          <Typography.Text type="secondary">
+            {t("sections.templateControls.pageLimitLabel")}
+          </Typography.Text>
+        )}
+        <Tooltip title={t("sections.templateControls.pageLimitHint")}>
           <Segmented
             size="small"
             value={layout.page_limit}
             disabled={disabled}
             options={(pageLimitOptions ?? RESUME_PAGE_LIMITS).map((value) => ({
               value,
-              label: `${value} 页`,
+              label: t("sections.templateControls.pageLimitPages", { count: value }),
             }))}
             onChange={(value) => onChange({ ...layout, page_limit: value as number })}
           />
