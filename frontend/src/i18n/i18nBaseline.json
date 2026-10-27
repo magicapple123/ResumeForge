@@ -3,7 +3,7 @@
   "generatedAt": "2026-10-27",
   "rule": "Legacy CJK ceilings plus language-independent AST product-copy fingerprints",
   "src": {
-    "total": 3925,
+    "total": 3892,
     "files": {
       "App.tsx": 0,
       "api/analytics.ts": 0,
@@ -520,7 +520,7 @@
       "features/assistant/assistantTypes.ts": 8,
       "features/assistant/assistantUtils.ts": 3,
       "features/assistant/components/ActionProposalCard.tsx": 17,
-      "features/assistant/components/AssistantComposer.tsx": 33,
+      "features/assistant/components/AssistantComposer.tsx": 0,
       "features/assistant/components/AssistantEmptyState.tsx": 6,
       "features/assistant/components/AssistantGroupModal.tsx": 3,
       "features/assistant/components/AssistantMessageContent.tsx": 5,

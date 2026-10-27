@@ -45,6 +45,22 @@ import {
 } from "../../../types/assistant";
 import { useJobSearchSelect, useResumeSearchSelect } from "../../../hooks/remoteSearchOptions";
 import FileDropZone from "../../../components/common/FileDropZone";
+import { t } from "../../../i18n";
+import type { MessageKey } from "../../../i18n";
+import { useLocale } from "../../../i18n/i18nContext";
+
+/**
+ * 思考强度的显示名：键是协议值（""/none/low/medium/high）。档位清单仍由
+ * `types/assistant.ts` 的 `REASONING_EFFORT_OPTIONS` 单一提供；模块作用域不能调
+ * `t()`，渲染处 `t(EFFORT_LABEL_KEYS[value])`。
+ */
+const EFFORT_LABEL_KEYS: Record<string, MessageKey> = {
+  "": "assistantComposer.effort.default",
+  none: "assistantComposer.effort.off",
+  low: "assistantComposer.effort.low",
+  medium: "assistantComposer.effort.medium",
+  high: "assistantComposer.effort.high",
+};
 
 /** 文档按扩展名区分图标：pdf 和 docx 混在一串标签里时，图标比文件名更好认。 */
 function attachmentIcon(attachment: PendingAttachment) {
@@ -113,6 +129,8 @@ export default function AssistantComposer({
   onSend,
   onStop,
 }: Props) {
+  // 本组件用模块级 t()：必须订阅语言变化，否则切语言后输入区不重渲染。
+  useLocale();
   const { message } = App.useApp();
   // 关联岗位 / 简历下拉改为远程搜索（P0-1）：不再由页面预拉"前 100 条"当全量。
   const jobSelect = useJobSearchSelect();
@@ -164,26 +182,26 @@ export default function AssistantComposer({
       disabled={
         compact || sending || attachmentReads > 0 || attachments.length >= MAX_ATTACHMENT_COUNT
       }
-      hint="松开即可把文件加进对话"
+      hint={t("assistantComposer.dropHint")}
       onFiles={(dropped) => dropped.forEach((file) => onAddAttachment(file))}
-      onRejected={(count) => message.warning(`已忽略 ${count} 个不支持的附件`)}
+      onRejected={(count) => message.warning(t("assistantComposer.toast.rejectedCount", { count }))}
     >
       <div className="assistant-composer">
         {!compact && (
           <div className="assistant-context-controls">
             <div className="assistant-context-selects">
               <Select
-                aria-label="选择关联岗位"
+                aria-label={t("assistantComposer.aria.jobSelect")}
                 allowClear
-                placeholder="关联岗位（输入关键词搜索）"
+                placeholder={t("assistantComposer.placeholder.job")}
                 value={jobId}
                 onChange={onJobChange}
                 {...jobSelect.selectProps}
               />
               <Select
-                aria-label="选择关联简历"
+                aria-label={t("assistantComposer.aria.resumeSelect")}
                 allowClear
-                placeholder="关联简历（输入关键词搜索）"
+                placeholder={t("assistantComposer.placeholder.resume")}
                 value={resumeId}
                 onChange={onResumeChange}
                 {...resumeSelect.selectProps}
@@ -194,13 +212,15 @@ export default function AssistantComposer({
         {quoted ? (
           <div className="assistant-quote-chip">
             <span className="assistant-quote-chip-label">
-              引用{quoted.role === "user" ? "你的消息" : "助手的回复"}
+              {quoted.role === "user"
+                ? t("assistantComposer.quote.user")
+                : t("assistantComposer.quote.assistant")}
             </span>
             <span className="assistant-quote-chip-text">{quoted.excerpt}</span>
             <Button
               type="text"
               size="small"
-              aria-label="取消引用"
+              aria-label={t("assistantComposer.aria.clearQuote")}
               className="assistant-quote-chip-close"
               icon={<CloseOutlined />}
               onClick={onClearQuote}
@@ -208,7 +228,7 @@ export default function AssistantComposer({
           </div>
         ) : null}
         {!compact && attachments.length > 0 && (
-          <Alert type="info" showIcon title="已选择的附件或个人资料会发送给当前配置的模型服务" />
+          <Alert type="info" showIcon title={t("assistantComposer.notice.attachments")} />
         )}
         {attachments.length > 0 && (
           <div className="assistant-composer-attachments">
@@ -224,10 +244,10 @@ export default function AssistantComposer({
                     type="text"
                     size="small"
                     danger
-                    aria-label={`移除附件 ${attachment.name}`}
+                    aria-label={t("assistantComposer.aria.remove", { name: attachment.name })}
                     onClick={() => onRemoveAttachment(attachment.id)}
                   >
-                    移除
+                    {t("assistantComposer.action.remove")}
                   </Button>
                 </div>
               ) : (
@@ -250,7 +270,7 @@ export default function AssistantComposer({
           value={content}
           autoSize={{ minRows: compact ? 2 : 3, maxRows: 8 }}
           disabled={sending}
-          placeholder="输入求职、岗位、简历或项目经历相关问题"
+          placeholder={t("assistantComposer.placeholder.content")}
           onPaste={handlePaste}
           onChange={(event) => onContentChange(event.target.value)}
           onPressEnter={(event) => {
@@ -283,13 +303,15 @@ export default function AssistantComposer({
               */}
               <Tooltip
                 title={
-                  compact ? "添加图片或文档附件" : "添加文本、图片或文档附件（也可以直接粘贴截图）"
+                  compact
+                    ? t("assistantComposer.tooltip.attachCompact")
+                    : t("assistantComposer.tooltip.attach")
                 }
                 placement="top"
                 styles={compact ? { root: { maxWidth: 240, zIndex: layer.cardPopup } } : undefined}
               >
                 <Button
-                  aria-label="添加附件"
+                  aria-label={t("assistantComposer.aria.attach")}
                   icon={<PaperClipOutlined />}
                   loading={attachmentReads > 0}
                   // 选满时 Upload 自己会吞掉点击，但按钮还亮着——看起来能点却没反应。
@@ -298,7 +320,7 @@ export default function AssistantComposer({
                     sending || attachmentReads > 0 || attachments.length >= MAX_ATTACHMENT_COUNT
                   }
                 >
-                  附件
+                  {t("assistantComposer.action.attach")}
                 </Button>
               </Tooltip>
             </Upload>
@@ -312,7 +334,11 @@ export default function AssistantComposer({
                   items: [
                     {
                       key: "hint",
-                      label: <span className="assistant-skill-menu-hint">勾选要启用的技能</span>,
+                      label: (
+                        <span className="assistant-skill-menu-hint">
+                          {t("assistantComposer.skills.hint")}
+                        </span>
+                      ),
                       disabled: true,
                     },
                     { type: "divider" as const },
@@ -337,7 +363,7 @@ export default function AssistantComposer({
                       disabled: togglingSkillId === skill.id,
                     })),
                     { type: "divider" as const },
-                    { key: "manage", label: "打开工作台" },
+                    { key: "manage", label: t("assistantComposer.skills.manage") },
                   ],
                   onClick: ({ key }) => {
                     if (key === "manage") {
@@ -350,14 +376,16 @@ export default function AssistantComposer({
                 }}
                 disabled={sending}
               >
-                <Tooltip title="点击开关助手技能；勾选表示已启用">
+                <Tooltip title={t("assistantComposer.skills.toggleHint")}>
                   <Button
-                    aria-label="技能"
+                    aria-label={t("assistantComposer.skills.label")}
                     icon={<ExperimentOutlined />}
                     loading={!skillsLoaded}
                     disabled={sending}
                   >
-                    技能{enabledSkills.length > 0 ? `（${enabledSkills.length}）` : ""}
+                    {enabledSkills.length > 0
+                      ? t("assistantComposer.skills.count", { count: enabledSkills.length })
+                      : t("assistantComposer.skills.label")}
                   </Button>
                 </Tooltip>
               </Dropdown>
@@ -365,17 +393,19 @@ export default function AssistantComposer({
             <div className="assistant-context-toggles">
               <label className="assistant-context-toggle">
                 <Switch size="small" checked={webSearch} onChange={onWebSearchChange} />
-                <span>联网搜索</span>
+                <span>{t("assistantComposer.toggle.webSearch")}</span>
               </label>
               {/* 带文字标签：只放一个「默认」下拉，用户看不出这是在调什么（截图反馈）。
                   说明挂在文字旁的问号图标上——此前整块套 Tooltip，悬停「思考强度」四个字
                   就弹出一大条提示，太重；文字标签本身不再触发。 */}
               <span className="assistant-reasoning-control">
-                <span className="assistant-reasoning-label">思考强度</span>
-                <Tooltip title="有思考模式的大模型可以在这里调推理强度。各家档位词汇不同（low/medium/high、minimal、xhigh、max…），选「自定义…」可以自己填；不支持该参数的服务商会忽略它，被拒绝时还会自动去掉重试一次">
+                <span className="assistant-reasoning-label">
+                  {t("assistantComposer.effort.label")}
+                </span>
+                <Tooltip title={t("assistantComposer.effort.hint")}>
                   <QuestionCircleOutlined
                     className="assistant-reasoning-help"
-                    aria-label="思考强度说明"
+                    aria-label={t("assistantComposer.aria.effortHint")}
                   />
                 </Tooltip>
                 {customEffort ? (
@@ -385,7 +415,7 @@ export default function AssistantComposer({
                       className="assistant-reasoning-input"
                       value={reasoningEffort}
                       maxLength={MAX_REASONING_EFFORT_CHARS}
-                      placeholder="如 xhigh / max / 4096"
+                      placeholder={t("assistantComposer.placeholder.customEffort")}
                       disabled={sending}
                       status={isValidReasoningEffort(reasoningEffort) ? undefined : "error"}
                       onChange={(event) => onReasoningEffortChange(event.target.value)}
@@ -397,7 +427,7 @@ export default function AssistantComposer({
                           onReasoningEffortChange("");
                         }
                       }}
-                      aria-label="自定义思考强度"
+                      aria-label={t("assistantComposer.aria.customEffort")}
                     />
                     <Button
                       type="link"
@@ -409,7 +439,7 @@ export default function AssistantComposer({
                         onReasoningEffortChange("");
                       }}
                     >
-                      用预设
+                      {t("assistantComposer.action.usePreset")}
                     </Button>
                   </span>
                 ) : (
@@ -420,8 +450,11 @@ export default function AssistantComposer({
                     className="assistant-reasoning-select"
                     value={reasoningEffort}
                     options={[
-                      ...REASONING_EFFORT_OPTIONS,
-                      { value: CUSTOM_EFFORT_OPTION, label: "自定义…" },
+                      ...REASONING_EFFORT_OPTIONS.map((option) => ({
+                        value: option.value,
+                        label: t(EFFORT_LABEL_KEYS[option.value]),
+                      })),
+                      { value: CUSTOM_EFFORT_OPTION, label: t("assistantComposer.effort.custom") },
                     ]}
                     disabled={sending}
                     onChange={(value) => {
@@ -432,25 +465,30 @@ export default function AssistantComposer({
                       }
                       onReasoningEffortChange(value);
                     }}
-                    aria-label="思考强度"
+                    aria-label={t("assistantComposer.effort.label")}
                   />
                 )}
               </span>
             </div>
           </div>
           {sending ? (
-            <Button danger aria-label="停止生成" icon={<StopOutlined />} onClick={onStop}>
-              停止
+            <Button
+              danger
+              aria-label={t("assistantComposer.aria.stop")}
+              icon={<StopOutlined />}
+              onClick={onStop}
+            >
+              {t("assistantComposer.action.stop")}
             </Button>
           ) : (
             <Button
               type="primary"
-              aria-label="发送消息"
+              aria-label={t("assistantComposer.aria.send")}
               icon={<SendOutlined />}
               disabled={attachmentReads > 0 || (!content.trim() && attachments.length === 0)}
               onClick={onSend}
             >
-              发送
+              {t("assistantComposer.action.send")}
             </Button>
           )}
         </div>
