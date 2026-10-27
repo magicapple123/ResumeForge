@@ -14,6 +14,8 @@ import BatchActionBar from "../common/BatchActionBar";
 import type { BatchSelection } from "../../hooks/useBatchSelection";
 import type { useApi } from "../../hooks/useApi";
 import { useClientPagination } from "../../hooks/useClientPagination";
+import { t, type MessageKey } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 import type { QuestionBankRecord } from "../../types";
 
 type BanksState = ReturnType<typeof useApi<QuestionBankRecord[]>>;
@@ -27,6 +29,21 @@ interface Props {
   removeSelected: () => void;
 }
 
+/**
+ * 分组类型的显示名：键是 `types/` 里的中文协议值（协议值不改），值指向语言包 key。
+ * 未登记的取值原样显示——历史记录里可能有旧版本写下的类型，别让它显示成一条裸 key。
+ */
+const GROUP_TYPE_LABEL_KEYS: Record<string, MessageKey> = {
+  基础题: "questionBankPanel.group.basics", // i18n-ok: 协议值（types 中文枚举键）
+  项目深挖题: "questionBankPanel.group.projectDeepDive", // i18n-ok: 协议值（types 中文枚举键）
+  反问HR题: "questionBankPanel.group.askInterviewer", // i18n-ok: 协议值（types 中文枚举键）
+};
+
+function groupTypeLabel(type: string): string {
+  const labelKey: MessageKey | undefined = GROUP_TYPE_LABEL_KEYS[type];
+  return labelKey ? t(labelKey) : type;
+}
+
 export default function BankHistoryCard({
   banks,
   batch,
@@ -34,6 +51,8 @@ export default function BankHistoryCard({
   onRemoveBank,
   removeSelected,
 }: Props) {
+  // 本组件用模块级 t()：必须订阅语言变化，否则切语言后这一块不重渲染。
+  useLocale();
   // 题库历史每次生成一份、持续累积，Collapse 一页 10 条（Collapse 没有内建分页）。
   const bankList = banks.data ?? [];
   const { page, setPage, paged: pagedBanks, total: bankTotal } = useClientPagination(bankList, 10);
@@ -48,16 +67,16 @@ export default function BankHistoryCard({
             : ([
                 {
                   key: "batch_select",
-                  label: "批量选择",
+                  label: t("common.action.batchSelect"),
                   icon: <CheckSquareOutlined />,
                   onClick: batch.enterSelecting,
                 },
                 {
                   key: "delete",
-                  label: "删除",
+                  label: t("common.action.delete"),
                   danger: true,
                   icon: <DeleteOutlined />,
-                  confirm: "删除这条题库历史？",
+                  confirm: t("questionBankPanel.history.deleteTitle"),
                   confirmBody: TRASH_RECOVERY_NOTE,
                   onClick: () => void onRemoveBank(bank.id),
                 },
@@ -65,7 +84,9 @@ export default function BankHistoryCard({
         }
       >
         <Space wrap>
-          <span>{bank.resume_title || bank.job_title || "题库"}</span>
+          <span>
+            {bank.resume_title || bank.job_title || t("questionBankPanel.history.fallbackTitle")}
+          </span>
           <Typography.Text type="secondary" style={{ fontSize: 12 }}>
             {bank.created_at.replace("T", " ").slice(0, 16)}
           </Typography.Text>
@@ -76,7 +97,7 @@ export default function BankHistoryCard({
       <Space orientation="vertical" style={{ width: "100%" }}>
         {bank.groups.map((group) => (
           <div key={group.type}>
-            <Typography.Text strong>{group.type}</Typography.Text>
+            <Typography.Text strong>{groupTypeLabel(group.type)}</Typography.Text>
             <ul style={{ paddingLeft: 20, margin: "4px 0" }}>
               {group.questions.map((item) => (
                 <li key={item.question}>{item.question}</li>
@@ -87,14 +108,16 @@ export default function BankHistoryCard({
         <Space wrap>
           {batch.selecting ? (
             <Checkbox
-              aria-label={`选择题库 ${bank.resume_title || bank.job_title || bank.id}`}
+              aria-label={t("questionBankPanel.history.selectAria", {
+                name: bank.resume_title || bank.job_title || bank.id,
+              })}
               checked={batch.isSelected(bank.id)}
               onChange={() => batch.toggle(bank.id)}
             />
           ) : (
             onOpenRecord && (
               <Button size="small" onClick={() => onOpenRecord(bank)}>
-                查看详情
+                {t("questionBankPanel.action.viewDetail")}
               </Button>
             )
           )}
@@ -103,9 +126,9 @@ export default function BankHistoryCard({
             more={[
               {
                 key: "delete",
-                label: "删除",
+                label: t("common.action.delete"),
                 danger: true,
-                confirm: "删除这条题库历史？",
+                confirm: t("questionBankPanel.history.deleteTitle"),
                 confirmBody: TRASH_RECOVERY_NOTE,
                 onClick: () => void onRemoveBank(bank.id),
               },
@@ -122,7 +145,7 @@ export default function BankHistoryCard({
       title={
         <Space>
           <HistoryOutlined />
-          历史题库
+          {t("questionBankPanel.history.title")}
         </Space>
       }
     >
@@ -142,7 +165,7 @@ export default function BankHistoryCard({
           }}
         >
           <Button danger disabled={batch.selectedCount === 0} onClick={removeSelected}>
-            删除所选
+            {t("questionBankPanel.action.deleteSelected")}
           </Button>
         </BatchActionBar>
       )}
@@ -151,7 +174,7 @@ export default function BankHistoryCard({
       ) : banks.error ? (
         <Alert type="error" showIcon title={banks.error} />
       ) : (banks.data ?? []).length === 0 ? (
-        <EmptyState inline description="还没有保存过题库" />
+        <EmptyState inline description={t("questionBankPanel.empty.noHistory")} />
       ) : (
         <>
           <Collapse items={historyItems} />
@@ -163,7 +186,7 @@ export default function BankHistoryCard({
               onChange={setPage}
               hideOnSinglePage
               showSizeChanger={false}
-              showTotal={(count) => `共 ${count} 份`}
+              showTotal={(count) => t("questionBankPanel.history.total", { count })}
             />
           </div>
         </>
