@@ -14,6 +14,8 @@ import * as pdfjs from "pdfjs-dist";
 // `?url` 让 Vite 把 worker 打进 dist/assets：桌面端离线、CSP 不允许 CDN，不能用 unpkg。
 import workerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 
+import { t } from "../i18n";
+
 pdfjs.GlobalWorkerOptions.workerSrc = workerUrl;
 
 /** 默认目标宽度（A4 300dpi）。 */
@@ -58,7 +60,7 @@ function canvasToPngBlob(canvas: HTMLCanvasElement): Promise<Blob> {
       if (blob) {
         resolve(blob);
       } else {
-        reject(new Error("浏览器未能把画布转成 PNG（画布可能过大）"));
+        reject(new Error(t("fileUtils.pdfToPng.error.canvasToPng")));
       }
     }, "image/png");
   });
@@ -118,7 +120,7 @@ export async function renderPdfToPng(
     }
 
     if (rendered.length === 0) {
-      throw new Error("这份 PDF 里没有可渲染的页面");
+      throw new Error(t("fileUtils.pdfToPng.error.noPages"));
     }
     return rendered;
   } finally {
