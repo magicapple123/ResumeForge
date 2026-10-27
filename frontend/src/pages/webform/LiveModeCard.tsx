@@ -76,7 +76,7 @@ export const LiveModeCard = memo(function LiveModeCard({
             color={liveEnabled ? (LIVE_STATUS_META[live.status]?.color ?? "processing") : "default"}
           >
             {liveEnabled
-              ? (LIVE_STATUS_META[live.status]?.label ?? t("liveModeCard.status.waiting"))
+              ? t(LIVE_STATUS_META[live.status]?.labelKey ?? "liveModeCard.status.waiting")
               : t("liveModeCard.tag.off")}
           </Tag>
           {liveEnabled && live.field_label ? (
