@@ -13,6 +13,7 @@ import SkillTags from "../SkillTags";
 import { JOB_SOURCE_LABEL_KEYS, jobSourceKind } from "../../utils/jobSource";
 import { nextSortState, sortOrderFor, type JobSortState } from "../../utils/jobSort";
 import { t } from "../../i18n";
+import { jobStatusLabelKey, jobTypeLabelKey } from "../../i18n/enum/jobs";
 import { useLocale } from "../../i18n/i18nContext";
 
 // 值域与 pages/jobs/jobFilterOptions.ts 的 BatchAction 保持一致（新增动作两处同步改）；
@@ -45,11 +46,11 @@ interface Props {
 }
 
 /**
- * `active` / `open` 是历史落库值：显示前先归一到「开放中」，再查 JOB_STATUS_META（兼容层，别删）。
+ * `active` / `open` 是历史落库值：显示前先归一到「开放中」，再查 JOB_STATUS_META
+ * （颜色）与 jobStatusLabelKey()（展示名），兼容层别删。
  *
- * 值这一侧**不是界面文案**，是 JOB_STATUS_META 的查找键：换成语言包 key 会让状态 Tag
- * 查不到颜色与显示名（静默掉成 default）。状态名的本地化要先把 `types/job.ts` 的
- * JOB_STATUS_META 改成 labelKey，属于另一批。
+ * 归一后的值仍是落库的协议值，不是语言包 key：把它换成 key 会让颜色查不到
+ * （静默掉成 default），所以归一表保持原样。
  */
 const STATUS_LABELS: Record<string, string> = {
   active: "开放中", // i18n-ok: 归一化目标是落库的数据值（JOB_STATUS_META 的键），不是界面文案
@@ -164,17 +165,31 @@ export default function JobTable({
       width: 130,
       render: (value) => value || "-",
     },
-    { title: t("jobTable.column.jobType"), dataIndex: "job_type", width: 80 },
+    {
+      title: t("jobTable.column.jobType"),
+      dataIndex: "job_type",
+      width: 80,
+      // 展示名走语言包，落库的 job_type 一个字符不动；表里没有的取值原样显示。
+      render: (value: string) => {
+        const labelKey = jobTypeLabelKey(value);
+        return value && labelKey ? t(labelKey) : value;
+      },
+    },
     {
       title: t("jobTable.column.status"),
       dataIndex: "status",
       width: 90,
       render: (value: string) => {
-        // 先归一再查 META：`active` / `open` 是历史落库值（见上面的 STATUS_LABELS），
-        // 归一后与 META 的键对齐。标签与颜色都来自 `types/job.ts` 的 JOB_STATUS_META
-        // （唯一来源），不再在这里写一份「中文值当查找键」的颜色表。
-        const meta = JOB_STATUS_META[STATUS_LABELS[value] ?? value];
-        return <Tag color={meta?.color ?? "default"}>{meta?.label ?? (value || "-")}</Tag>;
+        // 先归一再查表：`active` / `open` 是历史落库值（见上面的 STATUS_LABELS）。
+        // 颜色仍来自 `types/job.ts` 的 JOB_STATUS_META（唯一来源），展示名来自语言包；
+        // 两张表都没登记的取值按原逻辑回退，不丢信息。
+        const normalized = STATUS_LABELS[value] ?? value;
+        const labelKey = jobStatusLabelKey(normalized);
+        return (
+          <Tag color={JOB_STATUS_META[normalized]?.color ?? "default"}>
+            {labelKey ? t(labelKey) : value || "-"}
+          </Tag>
+        );
       },
     },
     {
