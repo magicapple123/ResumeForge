@@ -5,15 +5,16 @@
  * 独立成文件是 react-refresh/only-export-components 的要求——组件文件只导出
  * 组件，常量与纯函数放这里（quickStartPaths.ts 同款先例）。
  */
+import type { MessageKey } from "../../i18n";
 import type { FactAnnotation, FactAnnotationOrigin } from "../../types";
 
-/** 四类 origin 的展示口径（色板刻意与台账状态 Tag 同源）。 */
-export const ORIGIN_LABELS: Record<FactAnnotationOrigin, string> = {
-  grounded: "资料原文",
-  restored: "回填原文",
-  enhanced_kept: "AI 改写保留",
-  ai_rewrite: "AI 改写",
-  user_added: "用户补充",
+/** 四类 origin 的展示文案 key（渲染处再过 t()；色板刻意与台账状态 Tag 同源）。 */
+export const ORIGIN_LABELS: Record<FactAnnotationOrigin, MessageKey> = {
+  grounded: "resume.evidence.origin.grounded",
+  restored: "resume.evidence.origin.restored",
+  enhanced_kept: "resume.evidence.origin.enhancedKept",
+  ai_rewrite: "resume.evidence.origin.aiRewrite",
+  user_added: "resume.evidence.origin.userAdded",
 };
 
 export const ORIGIN_COLORS: Record<FactAnnotationOrigin, string> = {
