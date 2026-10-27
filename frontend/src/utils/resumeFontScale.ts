@@ -15,6 +15,7 @@
  * 14→15.5），往下**可以一直到 5/11 ≈ 0.455**（最小档基准 11px 时拖到 5px）——
  * 因此后端 `font_scale_adjust` 的字段下限已经从 0.88 放宽到 0.35，与 `ADJUST_MIN` 对齐。
  */
+import { t } from "../i18n";
 import type { ResumeFontScale, ResumeFontScaleOption, ResumeLayout } from "../types";
 import type { ResumeFormatConfig } from "../types/resumeFormat";
 
@@ -48,11 +49,14 @@ export const SMALL_FONT_WARNING_PX = 8;
  * 有档位、却一个合法 `base_px` 都没有）就会 `console.warn`。否则前端的 12/14/15.5
  * 就成了与后端 `FONT_SCALES` 并存的第二份真相，改档位时两边会悄悄分叉。
  */
-const FALLBACK_TIERS: FontTier[] = [
-  { name: "small", basePx: 11.0, label: "小字号" },
-  { name: "standard", basePx: 14.0, label: "标准字号" },
-  { name: "large", basePx: 18.0, label: "大字号" },
-];
+function fallbackTiers(): FontTier[] {
+  // 展示名在函数体内取：模块作用域求值 t() 会钉死首帧语言（见 i18n 迁移约定）。
+  return [
+    { name: "small", basePx: 11.0, label: t("resume.fontScale.small") },
+    { name: "standard", basePx: 14.0, label: t("resume.fontScale.standard") },
+    { name: "large", basePx: 18.0, label: t("resume.fontScale.large") },
+  ];
+}
 const DEFAULT_TIER: ResumeFontScale = "standard";
 
 /**
@@ -87,12 +91,12 @@ export function fontTiers(options: ResumeFontScaleOption[] = []): FontTier[] {
         "请确认 GET /api/resumes/templates 的 font_scales 是否包含 base_px。",
     );
   }
-  return FALLBACK_TIERS;
+  return fallbackTiers();
 }
 
 /** 滑块的可选范围：**最小 5px**（可打印性下限），最大取所有档位基准像素的最大值。 */
 export function fontPxBounds(tiers: FontTier[]): { min: number; max: number } {
-  const list = tiers.length > 0 ? tiers : FALLBACK_TIERS;
+  const list = tiers.length > 0 ? tiers : fallbackTiers();
   return { min: MIN_FONT_PX, max: list[list.length - 1].basePx };
 }
 
@@ -109,7 +113,7 @@ function readAdjust(formatConfig: ResumeLayout["format_config"]): number | undef
 
 /** 按名字取档位；名字未知时退回默认档，再退回第一个。 */
 export function tierByName(tiers: FontTier[], name: ResumeFontScale): FontTier {
-  const list = tiers.length > 0 ? tiers : FALLBACK_TIERS;
+  const list = tiers.length > 0 ? tiers : fallbackTiers();
   return (
     list.find((tier) => tier.name === name) ?? list.find((t) => t.name === DEFAULT_TIER) ?? list[0]
   );
@@ -135,7 +139,7 @@ function nearestTier(px: number, tiers: FontTier[]): FontTier {
  * 且"恢复默认"和"恰好落在档位上"会留下不同的存储形态。保留其它覆盖（强调色等）。
  */
 export function layoutForFontPx(layout: ResumeLayout, px: number, tiers: FontTier[]): ResumeLayout {
-  const list = tiers.length > 0 ? tiers : FALLBACK_TIERS;
+  const list = tiers.length > 0 ? tiers : fallbackTiers();
   const bounds = fontPxBounds(list);
   const clampedPx = round(Math.min(bounds.max, Math.max(bounds.min, px)), 2);
   const tier = nearestTier(clampedPx, list);
