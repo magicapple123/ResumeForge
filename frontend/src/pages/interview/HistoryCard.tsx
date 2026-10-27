@@ -14,6 +14,8 @@ import type { BatchSelection } from "../../hooks/useBatchSelection";
 import { useClientPagination } from "../../hooks/useClientPagination";
 import type { InterviewBrief } from "../../types";
 import { formatDateTime } from "../../utils/format";
+import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 
 export function HistoryCard({
   sessions,
@@ -30,6 +32,8 @@ export function HistoryCard({
   onRemove: (session: InterviewBrief) => Promise<void>;
   onRemoveSelected: () => void;
 }) {
+  // 本卡用模块级 t()：必须订阅语言变化，否则切语言后卡片文案不重渲染。
+  useLocale();
   // 面试历史持续累积，一页 10 条（Listy 是虚拟滚动列表、无内建分页，走通用客户端分页）。
   const {
     page,
@@ -42,22 +46,27 @@ export function HistoryCard({
   const contextActions = (item: InterviewBrief): RowActionItem[] => [
     {
       key: "batch_select",
-      label: "批量选择",
+      label: t("common.action.batchSelect"),
       icon: <CheckSquareOutlined />,
       onClick: batch.enterSelecting,
     },
     {
       key: "delete",
-      label: "删除这场面试",
+      label: t("interviewPage.history.deleteOne"),
       danger: true,
       icon: <DeleteOutlined />,
-      confirm: "删除这场面试？删除后无法恢复。",
+      confirm: t("interviewPage.history.deleteOneConfirm"),
       onClick: () => void onRemove(item),
     },
   ];
 
   return (
-    <Card size="small" className="settings-card" title="历史面试" style={{ marginTop: 16 }}>
+    <Card
+      size="small"
+      className="settings-card"
+      title={t("interviewPage.history.cardTitle")}
+      style={{ marginTop: 16 }}
+    >
       {batch.selecting && (
         <BatchActionBar
           count={batch.selectedCount}
@@ -74,14 +83,14 @@ export function HistoryCard({
           }}
         >
           <Button danger disabled={batch.selectedCount === 0} onClick={onRemoveSelected}>
-            删除所选
+            {t("interviewPage.history.deleteSelected")}
           </Button>
         </BatchActionBar>
       )}
       {loadingList ? (
         <LoadingBlock />
       ) : sessions.length === 0 ? (
-        <Empty description="还没有做过模拟面试" />
+        <Empty description={t("interviewPage.history.empty")} />
       ) : (
         <>
           <Listy
@@ -96,7 +105,9 @@ export function HistoryCard({
                       ? [
                           <Checkbox
                             key="pick"
-                            aria-label={`选择面试 ${item.title}`}
+                            aria-label={t("interviewPage.history.selectAria", {
+                              title: item.title,
+                            })}
                             checked={batch.isSelected(item.id)}
                             onChange={() => batch.toggle(item.id)}
                           />,
@@ -107,17 +118,20 @@ export function HistoryCard({
                             primary={[
                               {
                                 key: "open",
-                                label: item.status === "active" ? "继续" : "看报告",
+                                label:
+                                  item.status === "active"
+                                    ? t("interviewPage.history.actionContinue")
+                                    : t("interviewPage.history.actionViewReport"),
                                 onClick: () => void onOpen(item.id),
                               },
                             ]}
                             more={[
                               {
                                 key: "delete",
-                                label: "删除这场面试",
+                                label: t("interviewPage.history.deleteOne"),
                                 danger: true,
                                 icon: <DeleteOutlined />,
-                                confirm: "删除这场面试？删除后无法恢复。",
+                                confirm: t("interviewPage.history.deleteOneConfirm"),
                                 onClick: () => void onRemove(item),
                               },
                             ]}
@@ -130,7 +144,9 @@ export function HistoryCard({
                       <Space size={6} wrap>
                         <span>{item.title}</span>
                         <Tag color={item.status === "active" ? "blue" : "default"}>
-                          {item.status === "active" ? "进行中" : "已结束"}
+                          {item.status === "active"
+                            ? t("interviewPage.history.statusActive")
+                            : t("interviewPage.history.statusFinished")}
                         </Tag>
                         <Tag>{item.interview_type}</Tag>
                         <Tag>{item.difficulty}</Tag>
@@ -138,8 +154,15 @@ export function HistoryCard({
                     }
                     description={
                       item.rounds_min != null
-                        ? `${item.answered_rounds} 轮（自动收尾） · ${formatDateTime(item.created_at)}`
-                        : `第 ${item.answered_rounds}/${item.rounds} 轮 · ${formatDateTime(item.created_at)}`
+                        ? t("interviewPage.history.roundsAuto", {
+                            answered: item.answered_rounds,
+                            time: formatDateTime(item.created_at),
+                          })
+                        : t("interviewPage.history.roundsProgress", {
+                            answered: item.answered_rounds,
+                            total: item.rounds,
+                            time: formatDateTime(item.created_at),
+                          })
                     }
                   />
                 </ListyItem>
@@ -154,7 +177,7 @@ export function HistoryCard({
               onChange={setPage}
               hideOnSinglePage
               showSizeChanger={false}
-              showTotal={(count) => `共 ${count} 场`}
+              showTotal={(count) => t("interviewPage.history.total", { count })}
             />
           </div>
         </>
