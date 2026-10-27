@@ -11,10 +11,14 @@ import { App } from "antd";
 import { useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { useTaskCompletionWatcher } from "../hooks/useTaskCompletionWatcher";
+import { t } from "../i18n";
+import { useLocale } from "../i18n/i18nContext";
 import { playDoneSound } from "../utils/notifySound";
 import { buildTaskNotification, fireWebNotification } from "../utils/taskNotification";
 
 export default function TaskCompletionNotifier() {
+  // 本组件用模块级 t()：必须订阅语言变化，否则切语言后这块文案不重渲染。
+  useLocale();
   const { notification } = App.useApp();
   const navigate = useNavigate();
 
@@ -44,7 +48,8 @@ export default function TaskCompletionNotifier() {
               if (event.key === "Enter") navigate("/apply");
             }}
           >
-            {payload.description}（点击查看投递台）
+            {payload.description}
+            {t("backgroundTasks.batch.clickToView")}
           </span>
         ),
         duration: 8,
