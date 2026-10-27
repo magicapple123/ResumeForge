@@ -20,6 +20,8 @@ import {
 import type { ResumeFontScale, ResumeStyleField } from "../../types";
 import A4PreviewFrame from "./A4PreviewFrame";
 import TemplateStyleControls from "./TemplateStyleControls";
+import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 
 interface Props {
   open: boolean;
@@ -35,10 +37,6 @@ interface Props {
   onSaved: () => void;
 }
 
-const STARTER_HINT =
-  "模板是一份完整的 HTML 页面，可用的变量：{{ resume.* }}（简历内容）、{{ page_limit }}（页数）、" +
-  '{{ base_px }}（基准字号像素）、{{ csp_nonce }}。正文结构可以直接 include：{% include "_resume_sections.j2" %}';
-
 export default function StyleTemplateEditorModal({
   open,
   templateId,
@@ -50,6 +48,8 @@ export default function StyleTemplateEditorModal({
   onClose,
   onSaved,
 }: Props) {
+  // 本组件用模块级 t()：必须订阅语言变化，否则切语言后弹窗文案不重渲染。
+  useLocale();
   const { message } = App.useApp();
   const [name, setName] = useState(initialName);
   const [description, setDescription] = useState("");
@@ -100,7 +100,9 @@ export default function StyleTemplateEditorModal({
         setHtml(detail.html);
         setConfig(detail.config);
       })
-      .catch((error) => message.error(error instanceof Error ? error.message : "读取模板失败"))
+      .catch((error) =>
+        message.error(error instanceof Error ? error.message : t("styleTemplateEditor.error.load")),
+      )
       .finally(() => setLoading(false));
   }, [open, templateId, message]);
 
@@ -120,7 +122,9 @@ export default function StyleTemplateEditorModal({
       } catch (error) {
         if (sequence === previewSequence.current) {
           setPreview("");
-          setPreviewError(error instanceof Error ? error.message : "预览渲染失败");
+          setPreviewError(
+            error instanceof Error ? error.message : t("styleTemplateEditor.error.preview"),
+          );
         }
       } finally {
         if (sequence === previewSequence.current) setPreviewing(false);
@@ -141,26 +145,26 @@ export default function StyleTemplateEditorModal({
 
   const save = async () => {
     if (!name.trim()) {
-      message.warning("请填写模板名称");
+      message.warning(t("styleTemplateEditor.toast.needName"));
       return;
     }
     if (html.trim().length < 40) {
-      message.warning("模板内容太短，请提供完整的 HTML");
+      message.warning(t("styleTemplateEditor.toast.htmlTooShort"));
       return;
     }
     setSaving(true);
     try {
       if (templateId) {
         await updateResumeTemplate(templateId, { name, description, html, config });
-        message.success("模板已更新");
+        message.success(t("styleTemplateEditor.toast.updated"));
       } else {
         await createResumeTemplate({ name, description, html, config, kind: "style" });
-        message.success("模板已创建，可以在生成简历时选用");
+        message.success(t("styleTemplateEditor.toast.created"));
       }
       onSaved();
       onClose();
     } catch (error) {
-      message.error(error instanceof Error ? error.message : "保存失败");
+      message.error(error instanceof Error ? error.message : t("styleTemplateEditor.error.save"));
     } finally {
       setSaving(false);
     }
@@ -168,11 +172,13 @@ export default function StyleTemplateEditorModal({
 
   return (
     <Modal
-      title={templateId ? "编辑模板" : "自制模板"}
+      title={
+        templateId ? t("styleTemplateEditor.title.edit") : t("styleTemplateEditor.title.create")
+      }
       open={open}
       onCancel={onClose}
       onOk={() => void save()}
-      okText="保存模板"
+      okText={t("styleTemplateEditor.action.save")}
       mask={{ closable: false }}
       confirmLoading={saving}
       width="min(1120px, 96vw)"
@@ -186,35 +192,35 @@ export default function StyleTemplateEditorModal({
       ) : (
         <div className="style-template-editor">
           <Form layout="vertical" className="style-template-form">
-            <Form.Item label="模板名称" required>
+            <Form.Item label={t("styleTemplateEditor.field.name")} required>
               <Input
                 value={name}
                 maxLength={40}
-                placeholder="如：我的深蓝模板"
+                placeholder={t("styleTemplateEditor.placeholder.name")}
                 onChange={(event) => setName(event.target.value)}
               />
             </Form.Item>
-            <Form.Item label="说明（选填）">
+            <Form.Item label={t("styleTemplateEditor.field.description")}>
               <Input
                 value={description}
                 maxLength={255}
-                placeholder="一句话说明它适合什么场景"
+                placeholder={t("styleTemplateEditor.placeholder.description")}
                 onChange={(event) => setDescription(event.target.value)}
               />
             </Form.Item>
             <Alert
               type="info"
               showIcon
-              title={STARTER_HINT}
-              description="HTML 预览与 HTML 导出使用完整自制样式；PDF / Word 使用后端版式引擎，能沿用强调色、字号、行高和页边距等通用参数，但不会完整复现自定义双栏、装饰图或任意 CSS。"
+              title={t("styleTemplateEditor.hint.starter")}
+              description={t("styleTemplateEditor.hint.export")}
               style={{ marginBottom: 12 }}
             />
             {fields.length > 0 ? (
-              <Form.Item label="视觉与排版微调">
+              <Form.Item label={t("styleTemplateEditor.field.styleControls")}>
                 <TemplateStyleControls fields={fields} values={config} onChange={setConfig} />
               </Form.Item>
             ) : null}
-            <Form.Item label="模板 HTML">
+            <Form.Item label={t("styleTemplateEditor.field.html")}>
               <Input.TextArea
                 value={html}
                 onChange={(event) => setHtml(event.target.value)}
@@ -225,24 +231,35 @@ export default function StyleTemplateEditorModal({
             </Form.Item>
             <Space wrap>
               <Button loading={previewing} onClick={() => void runPreview(html)}>
-                刷新预览
+                {t("styleTemplateEditor.action.refreshPreview")}
               </Button>
               <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                预览用的是内置示例简历；导入时脚本与外链会被自动去掉。
+                {t("styleTemplateEditor.hint.sampleResume")}
               </Typography.Text>
             </Space>
           </Form>
           <div className="style-template-preview">
             {previewError ? (
-              <Alert type="error" showIcon title="模板渲染失败" description={previewError} />
+              <Alert
+                type="error"
+                showIcon
+                title={t("styleTemplateEditor.error.renderTitle")}
+                description={previewError}
+              />
             ) : previewing ? (
               <div className="style-template-preview-loading">
                 <Spin />
               </div>
             ) : preview ? (
-              <A4PreviewFrame html={preview} title="模板预览" maxHeight="66vh" />
+              <A4PreviewFrame
+                html={preview}
+                title={t("styleTemplateEditor.preview.title")}
+                maxHeight="66vh"
+              />
             ) : (
-              <Typography.Text type="secondary">还没有预览，点「刷新预览」试试。</Typography.Text>
+              <Typography.Text type="secondary">
+                {t("styleTemplateEditor.preview.empty")}
+              </Typography.Text>
             )}
           </div>
         </div>
