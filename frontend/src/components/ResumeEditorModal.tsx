@@ -16,6 +16,8 @@
 import { Grid, Modal, Space } from "antd";
 import { useEffect } from "react";
 import type { ReactNode } from "react";
+import { t } from "../i18n";
+import { useLocale } from "../i18n/i18nContext";
 import type { ResumeContent } from "../types";
 import type { ProfileFillSources } from "../features/profile/profileFillOptions";
 import { layer } from "../theme/tokens";
@@ -105,10 +107,10 @@ export default function ResumeEditorModal({
   content,
   onClose,
   onSave,
-  title = "手动调整简历内容",
+  title,
   description,
   headerExtra,
-  saveLabel = "保存并更新预览",
+  saveLabel,
   referencePanel,
   initialTarget,
   resumeId,
@@ -121,6 +123,9 @@ export default function ResumeEditorModal({
   footerExtra,
   sourcePanel,
 }: Props) {
+  useLocale();
+  // 保存按钮文案：宿主可覆盖（手写简历传「保存手写简历」），缺省用通用那条。
+  const resolvedSaveLabel = saveLabel ?? t("componentsMisc.resumeEditorModal.save");
   // 弹窗形态 = 「面板可见」跟着 open 走：关掉时既不读也不写草稿、也不挂 beforeunload。
   // `onExit` 就是关窗：保存成功、放弃修改、无脏值关闭都汇到这一个出口。
   const api = useResumeEditorPanel({
@@ -151,7 +156,7 @@ export default function ResumeEditorModal({
 
   return (
     <Modal
-      title={title}
+      title={title ?? t("componentsMisc.resumeEditorModal.title")}
       open={open}
       width={referencePanel ? "min(1320px, calc(100vw - 24px))" : "min(1000px, calc(100vw - 24px))"}
       // 必须高于宿主弹窗（ResumeDetailModal / GenerateResumeModal）：全局主题把
@@ -169,7 +174,7 @@ export default function ResumeEditorModal({
           <EditorFooterBar
             confirming={api.confirming}
             saving={api.saving}
-            saveLabel={saveLabel}
+            saveLabel={resolvedSaveLabel}
             onRequestClose={api.requestClose}
             onConfirmPending={api.confirmPending}
             onKeepEditing={api.keepEditing}
@@ -181,7 +186,7 @@ export default function ResumeEditorModal({
             <EditorFooterBar
               confirming={api.confirming}
               saving={api.saving}
-              saveLabel={saveLabel}
+              saveLabel={resolvedSaveLabel}
               onRequestClose={api.requestClose}
               onConfirmPending={api.confirmPending}
               onKeepEditing={api.keepEditing}
