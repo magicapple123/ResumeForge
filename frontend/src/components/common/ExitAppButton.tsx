@@ -14,13 +14,15 @@ import { LogoutOutlined } from "@ant-design/icons";
 import { App, Button, Result, Tooltip } from "antd";
 import { useState } from "react";
 import { shutdownApp } from "../../api/system";
+import { t, type MessageKey } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 
 /** 桌面壳的确认/成功文案（浏览器路径维持原有措辞）。 */
-const DESKTOP_CONFIRM_TEXT =
-  "应用会完全退出，后台服务一并停止。再次使用请从桌面快捷方式启动简历通。";
-const DESKTOP_EXITED_TEXT = "前端、后端与桌面壳进程都已停止。再次使用请从桌面快捷方式启动简历通。";
+const DESKTOP_CONFIRM_KEY: MessageKey = "common.exitApp.confirm.desktop";
+const DESKTOP_EXITED_KEY: MessageKey = "common.exitApp.exited.desktop";
 
 export default function ExitAppButton() {
+  useLocale();
   const { modal, message } = App.useApp();
   const [exited, setExited] = useState(false);
   const [exiting, setExiting] = useState(false);
@@ -29,24 +31,22 @@ export default function ExitAppButton() {
 
   const exit = () => {
     modal.confirm({
-      title: "退出简历通？",
+      title: t("common.exitApp.title"),
       className: "rf-modal-danger",
-      content: isDesktop
-        ? DESKTOP_CONFIRM_TEXT
-        : "前端与后端进程都会停止，当前页面上的查询与生成立即不可用（浏览器不允许脚本关闭本页，请顺手关掉这个标签页）。下次使用请在项目目录重新运行 start.cmd。",
-      okText: "退出",
+      content: isDesktop ? t(DESKTOP_CONFIRM_KEY) : t("common.exitApp.confirm.browser"),
+      okText: t("common.action.exit"),
       okButtonProps: { danger: true },
-      cancelText: "取消",
+      cancelText: t("common.action.cancel"),
       onOk: async () => {
         setExiting(true);
         try {
           const result = await shutdownApp();
-          message.success(result.message || "应用正在退出");
+          message.success(result.message || t("common.exitApp.exiting"));
         } catch (error) {
           message.error(
             error instanceof Error
-              ? `${error.message}（也可以直接关闭后端窗口）`
-              : "退出失败，也可以直接关闭后端窗口",
+              ? t("common.exitApp.failedWithReason", { message: error.message })
+              : t("common.exitApp.failed"),
           );
           setExiting(false);
           // 抛出让 Modal 保持打开：失败时用户需要看到发生了什么。
@@ -75,19 +75,15 @@ export default function ExitAppButton() {
       <div className="app-exited-overlay">
         <Result
           status="success"
-          title="简历通已退出"
-          subTitle={
-            isDesktop
-              ? DESKTOP_EXITED_TEXT
-              : "前端与后端进程都已停止，现在可以关闭这个标签页。要再次使用，请在项目目录运行 start.cmd。"
-          }
+          title={t("common.exitApp.exited.title")}
+          subTitle={isDesktop ? t(DESKTOP_EXITED_KEY) : t("common.exitApp.exited.browser")}
         />
       </div>
     );
   }
 
   return (
-    <Tooltip title="退出应用（停止前端与后端进程）">
+    <Tooltip title={t("common.exitApp.tooltip")}>
       <Button
         className="app-exit-button"
         type="text"
@@ -95,9 +91,9 @@ export default function ExitAppButton() {
         icon={<LogoutOutlined />}
         loading={exiting}
         onClick={exit}
-        aria-label="退出应用"
+        aria-label={t("common.exitApp.aria")}
       >
-        <span className="app-exit-label">退出</span>
+        <span className="app-exit-label">{t("common.action.exit")}</span>
       </Button>
     </Tooltip>
   );
