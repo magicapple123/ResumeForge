@@ -4,8 +4,18 @@
 // 版本号的单源是根 package.json 的 version 字段（CI 有一致性核对把它与后端
 // config.py 的 app_version 钉在一起），这里直接读它，前端展示永远不与单源脱节。
 import pkg from "../package.json";
+import type { MessageKey } from "./i18n";
 
-export const APP_NAME = "简历通";
+/**
+ * 应用名的语言包 key。
+ *
+ * 中文字面量已搬进 `i18n/messages/zh-CN.appConfig.ts`：品牌名的唯一真相在那里，
+ * 渲染处 `t(APP_NAME_KEY)`（页面标题、页头品牌区、星标提示、源码入口的无障碍名都取它）。
+ * 这里只 `import type`——本文件**不引入任何运行时 i18n 模块**，避免把整份语言包拉进
+ * `config.ts` 的模块图。
+ */
+export const APP_NAME_KEY: MessageKey = "appConfig.brand.name";
+/** 英文品牌名（常量口径，不是界面文案；界面上取 `APP_NAME_KEY` 的值）。 */
 export const APP_NAME_EN = "ResumeForge";
 
 /** 应用版本号（页头品牌区展示，如 "0.17.0"）。 */
@@ -26,7 +36,8 @@ export const MAX_JOB_TEXT_CHARS = 50_000;
 
 /** 大模型预设：选择后自动填充 Base URL 与模型名，省去查文档的麻烦 */
 export interface LLMPreset {
-  label: string;
+  /** 预设显示名（语言包 key；渲染处 `t(preset.labelKey)`）。 */
+  labelKey: MessageKey;
   provider: string;
   base_url: string;
   model: string;
@@ -38,7 +49,7 @@ export interface LLMPreset {
    * 请求，而错误信息只会说"接口返回 404"，看不出是协议选错了。
    *
    * 类型写联合类型而不是 `LLMApiStyle`：本文件**不引入 `types/`**，原因见
-   * `enhancementLevelDescription` 上方的说明。
+   * `enhancementLevelDescriptionKey` 上方的说明。
    */
   api_style?: "openai" | "anthropic";
 }
@@ -64,7 +75,7 @@ export const LLM_PRESETS: LLMPreset[] = [
   {
     // 2026-10-16 核对：模型列表使用 deepseek-flash / deepseek-v4-pro。
     // deepseek-v4-flash 仍是兼容别名；思考由 thinking 参数控制，默认开启。
-    label: "DeepSeek（深度求索）",
+    labelKey: "appConfig.preset.deepseek",
     provider: "deepseek",
     base_url: "https://api.deepseek.com",
     model: "deepseek-flash",
@@ -72,14 +83,14 @@ export const LLM_PRESETS: LLMPreset[] = [
   {
     // 地址必须带 /v1：provider 拼的是 `{base_url}/messages`，少了这一段会打到
     // https://api.anthropic.com/messages，那是官方根本不存在的路径。
-    label: "Claude（Anthropic 原生协议）",
+    labelKey: "appConfig.preset.anthropic",
     provider: "anthropic",
     base_url: "https://api.anthropic.com/v1",
     model: "claude-sonnet-5-5",
     api_style: "anthropic",
   },
   {
-    label: "豆包（火山方舟）",
+    labelKey: "appConfig.preset.doubao",
     provider: "doubao",
     base_url: "https://ark.cn-beijing.volces.com/api/v3",
     model: "doubao-seed-2.1-pro",
@@ -87,38 +98,38 @@ export const LLM_PRESETS: LLMPreset[] = [
   {
     // kimi-k2 系列已于 2026-05-25 下线（含 kimi-k2-0711-preview），moonshot-v1 与
     // kimi-k2.5 于 2026-08-31 下线；当前主推 kimi-k3（思考常开）。
-    label: "Kimi（月之暗面）",
+    labelKey: "appConfig.preset.kimi",
     provider: "kimi",
     base_url: "https://api.moonshot.cn/v1",
     model: "kimi-k3",
   },
   {
     // `qwen-plus` 是官方长期保留的档位别名（指向当前的中端模型），比钉死某个版本稳。
-    label: "通义千问（阿里云百炼）",
+    labelKey: "appConfig.preset.qwen",
     provider: "qwen",
     base_url: "https://dashscope.aliyuncs.com/compatible-mode/v1",
     model: "qwen-plus",
   },
   {
-    label: "智谱 GLM",
+    labelKey: "appConfig.preset.zhipu",
     provider: "zhipu",
     base_url: "https://open.bigmodel.cn/api/paas/v4",
     model: "glm-5.3",
   },
   {
-    label: "MiniMax",
+    labelKey: "appConfig.preset.minimax",
     provider: "minimax",
     base_url: "https://api.minimax.chat/v1",
     model: "MiniMax-M3",
   },
   {
-    label: "硅基流动 SiliconFlow",
+    labelKey: "appConfig.preset.siliconflow",
     provider: "siliconflow",
     base_url: "https://api.siliconflow.cn/v1",
     model: "deepseek-ai/DeepSeek-V3",
   },
   {
-    label: "OpenRouter（聚合网关）",
+    labelKey: "appConfig.preset.openrouter",
     provider: "openrouter",
     base_url: "https://openrouter.ai/api/v1",
     model: "openai/gpt-4o-mini",
@@ -126,44 +137,44 @@ export const LLM_PRESETS: LLMPreset[] = [
   {
     // gpt-4o 这代已陆续下线，推理模型用 reasoning_effort 分档（各代档位不同，
     // 详见后端 services/llm/thinking.py 的能力表）。
-    label: "OpenAI",
+    labelKey: "appConfig.preset.openai",
     provider: "openai",
     base_url: "https://api.openai.com/v1",
     model: "gpt-5.1",
   },
   {
     // gemini-2.5 系列已于 2026-06-17 停机，当前的 Flash 是 3.6。
-    label: "Google Gemini（OpenAI 兼容）",
+    labelKey: "appConfig.preset.gemini",
     provider: "gemini",
     base_url: "https://generativelanguage.googleapis.com/v1beta/openai",
     model: "gemini-3.6-flash",
   },
   {
-    label: "xAI Grok",
+    labelKey: "appConfig.preset.xai",
     provider: "xai",
     base_url: "https://api.x.ai/v1",
     model: "grok-4.3",
   },
   {
-    label: "Groq（推理加速）",
+    labelKey: "appConfig.preset.groq",
     provider: "groq",
     base_url: "https://api.groq.com/openai/v1",
     model: "llama-3.3-70b-versatile",
   },
   {
-    label: "Mistral AI",
+    labelKey: "appConfig.preset.mistral",
     provider: "mistral",
     base_url: "https://api.mistral.ai/v1",
     model: "mistral-large-latest",
   },
   {
-    label: "Ollama（本地部署）",
+    labelKey: "appConfig.preset.ollama",
     provider: "ollama",
     base_url: "http://localhost:11434/v1",
     model: "qwen2.5:7b",
   },
   {
-    label: "LM Studio（本地部署）",
+    labelKey: "appConfig.preset.lmstudio",
     provider: "lmstudio",
     base_url: "http://localhost:1234/v1",
     model: "qwen2.5-7b-instruct",
@@ -174,35 +185,38 @@ export const LLM_PRESETS: LLMPreset[] = [
 export const RESUME_ENHANCEMENT_LEVELS = [
   {
     value: "light",
-    label: "轻度",
-    description: "优化措辞与重点，基本保持原有篇幅",
+    labelKey: "appConfig.enhancement.light.label",
+    descriptionKey: "appConfig.enhancement.light.description",
   },
   {
     value: "balanced",
-    label: "均衡",
-    description: "补足方法、技术细节与成果表达",
+    labelKey: "appConfig.enhancement.balanced.label",
+    descriptionKey: "appConfig.enhancement.balanced.description",
   },
   {
     value: "strong",
-    label: "深度",
-    description: "充分利用已有资料，强化岗位匹配度",
+    labelKey: "appConfig.enhancement.strong.label",
+    descriptionKey: "appConfig.enhancement.strong.description",
   },
 ] as const;
 
 /**
  * 通用简历没有岗位可匹配，深度档的说明要换一个说法。
  *
+ * 返回**语言包 key**，不是文案：本文件是模块作用域，禁止求值 `t()`（切语言后不会重新
+ * 求值）。调用方写 `t(enhancementLevelDescriptionKey(...))`。
+ *
  * 参数类型直接写联合类型，**不要**改成 `import type { EnhancementLevel } from "./types"`：
  * 实测只是加上那一行类型导入，`AssistantPage.test.tsx` 就从稳定通过变成 5/6 失败
  * （报错是空态元素刚找到就被卸载，像时序问题；去掉后 6/6 通过）。类型导入本身不该有
  * 运行时影响，具体机制没查清，所以这里保持不引入 `types/` barrel。
  */
-export function enhancementLevelDescription(
+export function enhancementLevelDescriptionKey(
   level: "light" | "balanced" | "strong",
   general = false,
-): string {
+): MessageKey {
+  if (general && level === "strong") return "appConfig.enhancement.strong.description-general";
   const matched = RESUME_ENHANCEMENT_LEVELS.find((item) => item.value === level);
-  if (!matched) return "";
-  if (!general || level !== "strong") return matched.description;
-  return "充分利用已有资料，充分展开过程与成果";
+  // 三档表覆盖了全部取值；find 的兜底只为让类型收窄，正常路径不会走到这里。
+  return matched ? matched.descriptionKey : "appConfig.enhancement.light.description";
 }
