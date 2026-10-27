@@ -86,6 +86,57 @@ export function renderProfilePage() {
   return render(<RouterProvider router={router} />);
 }
 
+/**
+ * 页头那只「编辑资料」按钮所在的容器。
+ *
+ * 「网申资料」空态（`WebFormProfileEmpty`）里也有一个同名 CTA，两者走同一个词表 key，
+ * 所以 `getByRole("button", { name: /编辑资料/ })` 会命中两个。这里收窄到页头，
+ * 语义是「点页面右上角那只」——不是「随便哪只都行」。
+ */
+export function headerRegion(): HTMLElement {
+  const header = document.querySelector<HTMLElement>(".profile-page-header");
+  if (!header) throw new Error("页头容器 .profile-page-header 未找到");
+  return header;
+}
+
+/**
+ * 页头那只「编辑资料」按钮（同步取，用于 fireEvent.click）。
+ *
+ * 名字用正则而不是全等：按钮带图标，antd 的图标有 `aria-label="edit"`，所以可访问名
+ * 是「edit 编辑资料」而非「编辑资料」；这里只要求包含词表里的那个名字，同时靠
+ * `within(页头)` 把「网申资料」空态的同名 CTA 排除掉。
+ */
+export function headerEditButton(): HTMLElement {
+  return within(headerRegion()).getByRole("button", { name: editNamePattern() });
+}
+
+function editNamePattern(): RegExp {
+  return new RegExp(t("profileLibrary.action.edit"));
+}
+
+/**
+ * antd 会在两个中文字之间插一个空格（按钮「两字间距」），可访问名因此是「删 除」而不是
+ * 「删除」。断言按钮名时用这个把词表值转成正则，逐字之间允许空白；英文名不受影响
+ * （`\s*` 允许零个空白）。
+ */
+export function looseButtonName(text: string): RegExp {
+  return new RegExp(Array.from(text).join("\\s*"));
+}
+
+/**
+ * 页头那只「编辑资料」按钮（等待它出现）。
+ *
+ * 不能用 `headerRegion()` + `findByRole`：页头在加载态里整个不渲染（只剩骨架屏），
+ * 容器会先短暂不存在。这里用 `waitFor` 同时等「容器出现」与「按钮出现」。
+ */
+export async function findHeaderEditButton(): Promise<HTMLElement> {
+  return waitFor(() => {
+    const header = document.querySelector<HTMLElement>(".profile-page-header");
+    if (!header) throw new Error("页头容器 .profile-page-header 未找到");
+    return within(header).getByRole("button", { name: editNamePattern() });
+  });
+}
+
 /** 打开「网申资料」分页，并等它的说明文案出现（面板内容加载完成的信号）。 */
 export async function openWebFormTab() {
   const tab = await screen.findByRole("tab", { name: "网申资料" });

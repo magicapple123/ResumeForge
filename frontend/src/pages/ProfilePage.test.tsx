@@ -15,6 +15,8 @@ import {
   openWebFormTab,
   renderProfilePage,
   resetProfileApiMocks,
+  headerEditButton,
+  findHeaderEditButton,
 } from "../test/profilePageHarness";
 import { t } from "../i18n";
 
@@ -128,7 +130,7 @@ async function waitForProfileReady() {
   // F6：页面数据源是 workspace（13 分区定义驱动）；就绪信号用「编辑资料」按钮 +
   // 「简历资料」tab——它们只在 workspace 加载成功、页面不是骨架/错误态时出现。
   await screen.findByRole("tab", { name: "简历资料" });
-  await screen.findByRole("button", { name: /编辑资料/ });
+  await findHeaderEditButton();
 }
 
 /** F6 页面按服务端 namespace 渲染：测试用中文名，断言才与用户看到的一致。 */
@@ -263,14 +265,14 @@ describe("ProfilePage 资料分页", () => {
     const webFormPanel = await screen.findByRole("tabpanel");
     expect(await within(webFormPanel).findByText("网申资料", { exact: true })).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: /编辑资料/ }));
+    fireEvent.click(headerEditButton());
     expect(await within(webFormPanel).findByLabelText("证件号码")).toBeEnabled();
   });
 
   it("切换资料分页不会丢失当前编辑状态", async () => {
     renderProfilePage();
     await waitForProfileReady();
-    fireEvent.click(screen.getByRole("button", { name: /编辑资料/ }));
+    fireEvent.click(headerEditButton());
 
     fireEvent.click(screen.getByRole("tab", { name: "网申资料" }));
     expect(await screen.findByLabelText("英语六级分数")).toBeEnabled();
@@ -299,7 +301,7 @@ describe("ProfilePage 未保存防护", () => {
     renderProfilePage();
     await waitForProfileReady();
 
-    fireEvent.click(screen.getByRole("button", { name: /编辑资料/ }));
+    fireEvent.click(headerEditButton());
     // 通过简历资料表单改一个字段：F6 的 dirty 由 Form.onValuesChange/网申 onDirty 统一置位，
     // 姓名是最稳定的入口（必填且渲染在基本信息里）。
     fireEvent.change(await screen.findByLabelText("姓名"), { target: { value: "李四" } });
@@ -314,7 +316,7 @@ describe("ProfilePage 未保存防护", () => {
     renderProfilePage();
     await waitForProfileReady();
 
-    fireEvent.click(screen.getByRole("button", { name: /编辑资料/ }));
+    fireEvent.click(headerEditButton());
     fireEvent.change(await screen.findByLabelText("姓名"), { target: { value: "李四" } });
     await waitFor(() => expect(addSpy).toHaveBeenCalledWith("beforeunload", expect.any(Function)));
 
@@ -323,7 +325,7 @@ describe("ProfilePage 未保存防护", () => {
     // 保存成功后回到查看态：dirty 清零的可观察结果是页头回到「编辑资料」。
     // （beforeunload 监听的挂/摘由 useProfileLeaveGuard 单测直接钉住；本页级用例守
     //  "保存链路真的把 dirty 清掉"，不重复依赖 window 监听时序。）
-    expect(await screen.findByRole("button", { name: /编辑资料/ })).toBeInTheDocument();
+    expect(await findHeaderEditButton()).toBeInTheDocument();
     expect(workspaceMocks.saveEntries).toHaveBeenCalled();
     // 本用例没打开网申资料分页：目录/草稿都还没加载，网申那次提交被跳过是正确语义
     // （它自己的保存链路由 ProfilePage.webform.test.tsx 覆盖）。
@@ -407,7 +409,7 @@ describe("ProfilePage 悬浮球「去改资料」提示卡", () => {
     await waitFor(() => expect(getProfileEditControl()).toBeNull());
 
     fireEvent.click(screen.getByRole("button", { name: /取消/ }));
-    await screen.findByRole("button", { name: /编辑资料/ });
+    await findHeaderEditButton();
     // 卡片起初就是为了让人知道去哪改资料；取消一次编辑后再催一遍属于打扰。
     expect(getProfileEditControl()).toBeNull();
   });
@@ -452,7 +454,7 @@ describe("ProfilePage 「网申资料」输入性能", () => {
     workspaceMocks.getWorkspace.mockResolvedValue(educationWorkspace());
     renderProfilePage();
     await openWebFormTab();
-    fireEvent.click(screen.getByRole("button", { name: /编辑资料/ }));
+    fireEvent.click(headerEditButton());
 
     // 简历资料的「教育经历」里也有一个「英语六级分数」，所以要限定在网申资料面板内取。
     const input = await within(webformPanel()).findByLabelText("英语六级分数");

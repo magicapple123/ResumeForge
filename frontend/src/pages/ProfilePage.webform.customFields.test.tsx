@@ -21,7 +21,11 @@ import {
   openWebFormTab,
   renderProfilePage,
   resetProfileApiMocks,
+  headerEditButton,
+  findHeaderEditButton,
+  looseButtonName,
 } from "../test/profilePageHarness";
+import { t } from "../i18n";
 
 const apiMocks = vi.hoisted(() => ({
   getProfile: vi.fn(),
@@ -137,7 +141,7 @@ describe("ProfilePage 「网申资料」（自定义字段与多条记录）", (
   it("编辑态可以新增自定义网申字段并随资料一起保存", async () => {
     renderProfilePage();
     await openWebFormTab();
-    fireEvent.click(screen.getByRole("button", { name: /编辑资料/ }));
+    fireEvent.click(headerEditButton());
 
     fireEvent.change(screen.getByLabelText("英语六级分数"), { target: { value: "512" } });
 
@@ -198,12 +202,14 @@ describe("ProfilePage 「网申资料」（自定义字段与多条记录）", (
     await openWebFormTab();
     // i18n-ok: 查找的是自定义字段值（数据夹具），不是界面文案
     await screen.findByText("实验室");
-    fireEvent.click(screen.getByRole("button", { name: /编辑资料/ }));
+    fireEvent.click(headerEditButton());
 
     fireEvent.click(screen.getByRole("button", { name: "修改字段名：实验室" }));
     const renameInput = screen.getByRole("textbox", { name: "编辑字段名：实验室" });
     fireEvent.change(renameInput, { target: { value: "导师姓名" } });
-    fireEvent.click(screen.getByRole("button", { name: "保存字段名" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: t("profileLibrary.webform.customSaveAria") }),
+    );
     fireEvent.click(screen.getByRole("button", { name: /保存全部资料/ }));
 
     await waitFor(() =>
@@ -248,9 +254,21 @@ describe("ProfilePage 「网申资料」（自定义字段与多条记录）", (
     await openWebFormTab();
     // i18n-ok: 查找的是自定义字段值（数据夹具），不是界面文案
     await screen.findByText("实验室");
-    fireEvent.click(screen.getByRole("button", { name: /编辑资料/ }));
+    fireEvent.click(headerEditButton());
     fireEvent.click(screen.getByRole("button", { name: "删除自定义字段：实验室" }));
-    fireEvent.click(screen.getByRole("button", { name: /确\s*定/ }));
+    // 确认键在 Popconfirm 浮层里：必须在浮层内收窄。
+    // 1) 触发按钮的可访问名是「删除自定义字段：实验室」，它也包含「删除」——放到整页查会命中两个；
+    // 2) 浮层里的确认键名字带 antd 的两字间距（「删 除」），所以用 looseButtonName 容忍空白。
+    const popconfirm = await waitFor(() => {
+      const node = document.querySelector<HTMLElement>(".ant-popconfirm");
+      if (!node) throw new Error("删除确认浮层未出现");
+      return node;
+    });
+    fireEvent.click(
+      within(popconfirm).getByRole("button", {
+        name: looseButtonName(t("profileLibrary.webform.customDelete")),
+      }),
+    );
     fireEvent.click(screen.getByRole("button", { name: /保存全部资料/ }));
 
     await waitFor(() =>
@@ -287,7 +305,7 @@ describe("ProfilePage 「网申资料」（自定义字段与多条记录）", (
     });
     renderProfilePage();
     await openWebFormTab();
-    fireEvent.click(screen.getByRole("button", { name: /编辑资料/ }));
+    fireEvent.click(headerEditButton());
 
     fireEvent.click(screen.getByRole("button", { name: "新增教育经历补充" }));
     fireEvent.change(await screen.findByLabelText("教育经历补充第1条班级排名"), {
@@ -346,7 +364,7 @@ describe("ProfilePage 「网申资料」（自定义字段与多条记录）", (
     });
     renderProfilePage();
     await openWebFormTab();
-    fireEvent.click(screen.getByRole("button", { name: /编辑资料/ }));
+    fireEvent.click(headerEditButton());
 
     fireEvent.change(await screen.findByLabelText("教育经历补充第1条班级排名"), {
       target: { value: "新排名" },
@@ -373,10 +391,10 @@ describe("ProfilePage 「网申资料」（自定义字段与多条记录）", (
     // 都不会提交（界面上却毫无提示）。
     renderProfilePage();
     // 加载态只有骨架屏，页头按钮要等资料取回来才出现。
-    fireEvent.click(await screen.findByRole("button", { name: /编辑资料/ }));
+    fireEvent.click(await findHeaderEditButton());
     await openWebFormTab();
     fireEvent.click(screen.getByRole("button", { name: /取消/ }));
-    fireEvent.click(screen.getByRole("button", { name: /编辑资料/ }));
+    fireEvent.click(await findHeaderEditButton());
 
     const input = await within(screen.getByRole("tabpanel")).findByLabelText("英语六级分数");
     fireEvent.change(input, { target: { value: "512" } });
@@ -401,7 +419,7 @@ describe("ProfilePage 「网申资料」（自定义字段与多条记录）", (
     // 两次保存都成功、dirty 翻回 false 后自动收起。
     renderProfilePage();
     await openWebFormTab();
-    fireEvent.click(screen.getByRole("button", { name: /编辑资料/ }));
+    fireEvent.click(headerEditButton());
     fireEvent.change(await screen.findByLabelText("英语六级分数"), { target: { value: "512" } });
 
     await waitFor(() => expect(getProfileSaveControl()).not.toBeNull());

@@ -22,6 +22,8 @@ import {
   openWebFormTab,
   renderProfilePage,
   resetProfileApiMocks,
+  headerEditButton,
+  findHeaderEditButton,
 } from "../test/profilePageHarness";
 import { t } from "../i18n";
 
@@ -186,7 +188,7 @@ describe("ProfilePage 「网申资料」", () => {
     renderProfilePage();
     await openWebFormTab();
 
-    fireEvent.click(screen.getByRole("button", { name: /编辑资料/ }));
+    fireEvent.click(headerEditButton());
 
     // 编辑态才铺出全部输入框——查看态看不到空字段。
     expect(await screen.findByLabelText("英语六级分数")).toBeInTheDocument();
@@ -198,7 +200,7 @@ describe("ProfilePage 「网申资料」", () => {
     // 现在的语义：两次都成功才算保存；简历资料 invalid 时网申资料不提交。
     renderProfilePage();
     await openWebFormTab();
-    fireEvent.click(screen.getByRole("button", { name: /编辑资料/ }));
+    fireEvent.click(headerEditButton());
     fireEvent.change(await screen.findByLabelText("英语六级分数"), { target: { value: "512" } });
 
     // 清空必填的「姓名」制造校验失败（antd 会把错误标在字段上）。
@@ -217,19 +219,19 @@ describe("ProfilePage 「网申资料」", () => {
   it("全部合法时保存成功并退出编辑态", async () => {
     renderProfilePage();
     await openWebFormTab();
-    fireEvent.click(screen.getByRole("button", { name: /编辑资料/ }));
+    fireEvent.click(headerEditButton());
 
     fireEvent.change(await screen.findByLabelText("英语六级分数"), { target: { value: "512" } });
     fireEvent.click(screen.getByRole("button", { name: /保存全部资料/ }));
 
     await waitFor(() => expect(apiMocks.updateWebFormExtraProfile).toHaveBeenCalled());
     // 已退出编辑态：页头回到「编辑资料」。
-    expect(await screen.findByRole("button", { name: /编辑资料/ })).toBeInTheDocument();
+    expect(await findHeaderEditButton()).toBeInTheDocument();
   });
   it("保存全部资料时，网申资料也跟着存一次", async () => {
     renderProfilePage();
     await openWebFormTab();
-    fireEvent.click(screen.getByRole("button", { name: /编辑资料/ }));
+    fireEvent.click(headerEditButton());
 
     const input = await screen.findByLabelText("英语六级分数");
     fireEvent.change(input, { target: { value: "512" } });
