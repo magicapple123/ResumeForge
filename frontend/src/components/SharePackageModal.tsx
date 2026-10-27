@@ -92,9 +92,9 @@ export default function SharePackageModal({ recordId, open, onClose, onLocateAnn
     try {
       const { blob, filename } = await downloadResumeShareZip(recordId);
       downloadBlob(blob, filename);
-      message.success("离线包已开始下载");
+      message.success(t("review.sharePackage.zipStarted"));
     } catch (err) {
-      message.error(err instanceof Error ? err.message : "生成离线包失败");
+      message.error(err instanceof Error ? err.message : t("review.sharePackage.zipFailed"));
     } finally {
       setZipLoading(false);
     }
@@ -120,9 +120,9 @@ export default function SharePackageModal({ recordId, open, onClose, onLocateAnn
           // 评论文件读取失败不阻断主流程，导入时仍可再试。
         }
       }
-      message.success("分享包已生成");
+      message.success(t("review.sharePackage.generated"));
     } catch (err) {
-      message.error(err instanceof Error ? err.message : "生成分享包失败");
+      message.error(err instanceof Error ? err.message : t("review.sharePackage.generateFailed"));
     } finally {
       setGenerating(false);
     }
@@ -131,7 +131,7 @@ export default function SharePackageModal({ recordId, open, onClose, onLocateAnn
   const importComments = async () => {
     if (!result || importing) return;
     if (!commentText.trim()) {
-      message.warning("请先粘贴或填写收件人回传的评论");
+      message.warning(t("review.sharePackage.commentRequired"));
       return;
     }
     setImporting(true);
@@ -142,9 +142,11 @@ export default function SharePackageModal({ recordId, open, onClose, onLocateAnn
       });
       setComments(imported.content);
       setCommentText("");
-      message.success("评论已导入");
+      message.success(t("review.sharePackage.commentImported"));
     } catch (err) {
-      message.error(err instanceof Error ? err.message : "导入评论失败");
+      message.error(
+        err instanceof Error ? err.message : t("review.sharePackage.commentImportFailed"),
+      );
     } finally {
       setImporting(false);
     }
@@ -156,7 +158,7 @@ export default function SharePackageModal({ recordId, open, onClose, onLocateAnn
       const file = await downloadSharePackageFile(detail.id, filename);
       downloadBlob(file.blob, file.filename);
     } catch (err) {
-      message.error(err instanceof Error ? err.message : "下载文件失败");
+      message.error(err instanceof Error ? err.message : t("review.sharePackage.downloadFailed"));
     } finally {
       setDownloading(null);
     }
@@ -167,11 +169,11 @@ export default function SharePackageModal({ recordId, open, onClose, onLocateAnn
     setDeleting(true);
     try {
       await deleteSharePackage(result.id);
-      message.success("分享包已移入回收站，可在「回收站」里恢复");
+      message.success(t("review.sharePackage.movedToTrash"));
       setResult(null);
       setComments("");
     } catch (err) {
-      message.error(err instanceof Error ? err.message : "删除分享包失败");
+      message.error(err instanceof Error ? err.message : t("review.sharePackage.deleteFailed"));
     } finally {
       setDeleting(false);
     }
@@ -183,7 +185,7 @@ export default function SharePackageModal({ recordId, open, onClose, onLocateAnn
     try {
       await revealSharePackage(result.id);
     } catch (err) {
-      message.error(err instanceof Error ? err.message : "打开文件夹失败");
+      message.error(err instanceof Error ? err.message : t("review.sharePackage.revealFailed"));
     } finally {
       setRevealing(false);
     }
@@ -193,13 +195,13 @@ export default function SharePackageModal({ recordId, open, onClose, onLocateAnn
     const dir = deriveDirectory(result);
     if (!dir) return;
     const ok = await copyText(dir);
-    if (ok) message.success("已复制分享包路径");
-    else message.warning(`复制失败，可以手动复制：${dir}`);
+    if (ok) message.success(t("review.sharePackage.pathCopied"));
+    else message.warning(t("review.sharePackage.copyFailed", { path: dir }));
   };
 
   return (
     <Modal
-      title="离线分享包"
+      title={t("review.sharePackage.title")}
       open={open}
       onCancel={onClose}
       footer={null}
@@ -211,7 +213,7 @@ export default function SharePackageModal({ recordId, open, onClose, onLocateAnn
     >
       <Space orientation="vertical" style={{ width: "100%" }} size="middle">
         <div>
-          <Typography.Text strong>分享权限</Typography.Text>
+          <Typography.Text strong>{t("review.sharePackage.permission.label")}</Typography.Text>
           <Radio.Group
             style={{ marginTop: 8 }}
             value={permission}
@@ -219,14 +221,16 @@ export default function SharePackageModal({ recordId, open, onClose, onLocateAnn
           >
             {SHARE_PERMISSIONS.map((value) => (
               <Radio key={value} value={value}>
-                {value === "read_only" ? "只读（不可回传评论）" : "可评论（附带评论回传文件）"}
+                {value === "read_only"
+                  ? t("review.sharePackage.permission.readOnlyOption")
+                  : t("review.sharePackage.permission.commentOption")}
               </Radio>
             ))}
           </Radio.Group>
         </div>
 
         <div>
-          <Typography.Text strong>脱敏范围</Typography.Text>
+          <Typography.Text strong>{t("review.sharePackage.redaction.label")}</Typography.Text>
           <div style={{ marginTop: 8 }}>
             {REDACTION_FIELDS.map((field) => (
               <Checkbox
@@ -241,28 +245,28 @@ export default function SharePackageModal({ recordId, open, onClose, onLocateAnn
             ))}
           </div>
           <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-            分享包始终基于脱敏后的内容生成，不含真实敏感信息。
+            {t("review.sharePackage.redaction.hint")}
           </Typography.Text>
         </div>
 
         <div>
-          <Typography.Text strong>照片</Typography.Text>
+          <Typography.Text strong>{t("review.sharePackage.photo.label")}</Typography.Text>
           <div style={{ marginTop: 8 }}>
             <Checkbox
               checked={includePhoto}
               onChange={(event) => setIncludePhoto(event.target.checked)}
             >
-              包含照片
+              {t("review.sharePackage.photo.include")}
             </Checkbox>
           </div>
           <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-            分享包固定包含 HTML 与 PDF；取消勾选后这两个文件都不再绘制照片。
+            {t("review.sharePackage.photo.hint")}
           </Typography.Text>
         </div>
 
         <Space wrap>
           <Button type="primary" loading={generating} onClick={() => void generate()}>
-            生成分享包
+            {t("review.sharePackage.action.generate")}
           </Button>
           {/* R3：给"没有这个应用的人"的一份 zip（HTML + PDF + 说明）。 */}
           <Button
@@ -270,41 +274,48 @@ export default function SharePackageModal({ recordId, open, onClose, onLocateAnn
             loading={zipLoading}
             onClick={() => void downloadZip()}
           >
-            下载离线包（zip）
+            {t("review.sharePackage.action.downloadZip")}
           </Button>
         </Space>
 
         {!result && (
           <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-            分享包含 HTML、PDF、脱敏快照与文件清单；生成后在这里显示实际体积。
+            {t("review.sharePackage.intro")}
           </Typography.Text>
         )}
 
         {result && (
           <>
             <Descriptions column={1} size="small" bordered>
-              <Descriptions.Item label="标题">{result.title}</Descriptions.Item>
-              <Descriptions.Item label="本地目录">{deriveDirectory(result)}</Descriptions.Item>
-              <Descriptions.Item label="分享码">{result.share_token}</Descriptions.Item>
-              <Descriptions.Item label="权限">
+              <Descriptions.Item label={t("review.sharePackage.field.title")}>
+                {result.title}
+              </Descriptions.Item>
+              <Descriptions.Item label={t("review.sharePackage.field.directory")}>
+                {deriveDirectory(result)}
+              </Descriptions.Item>
+              <Descriptions.Item label={t("review.sharePackage.field.shareCode")}>
+                {result.share_token}
+              </Descriptions.Item>
+              <Descriptions.Item label={t("review.sharePackage.field.permission")}>
                 <Tag color={result.permission === "comment" ? "blue" : "default"}>
-                  {result.permission === "comment" ? "可评论" : "只读"}
+                  {result.permission === "comment"
+                    ? t("review.sharePackage.permission.commentTag")
+                    : t("review.sharePackage.permission.readOnlyTag")}
                 </Tag>
               </Descriptions.Item>
-              <Descriptions.Item label="预计体积">
-                {`约 ${formatBytes(totalBytes)}（${fileCount} 个文件）`}
+              <Descriptions.Item label={t("review.sharePackage.field.estimatedSize")}>
+                {t("review.sharePackage.estimatedSizeValue", {
+                  size: formatBytes(totalBytes),
+                  count: fileCount,
+                })}
               </Descriptions.Item>
             </Descriptions>
 
             <div>
-              <Typography.Text strong>使用说明</Typography.Text>
+              <Typography.Text strong>{t("review.sharePackage.usage.title")}</Typography.Text>
               <Typography.Paragraph type="secondary" style={{ margin: "4px 0 0", fontSize: 12 }}>
-                {
-                  "把整个文件夹发给对方，对方用浏览器打开 resume.html 即可查看；HTML 与 PDF 由同一份版式生成。"
-                }
-                {result.permission === "comment"
-                  ? " 如需评论，让对方填写 comments.md 后回传给你，你用「导入评论」导入。"
-                  : ""}
+                {t("review.sharePackage.usage.body")}
+                {result.permission === "comment" ? t("review.sharePackage.usage.commentExtra") : ""}
               </Typography.Paragraph>
             </div>
 
@@ -314,15 +325,15 @@ export default function SharePackageModal({ recordId, open, onClose, onLocateAnn
                 loading={revealing}
                 onClick={() => void openDirectory()}
               >
-                打开所在文件夹
+                {t("review.sharePackage.action.openDirectory")}
               </Button>
               <Button icon={<CopyOutlined />} onClick={() => void copyDirectory()}>
-                复制路径
+                {t("review.sharePackage.action.copyPath")}
               </Button>
             </Space>
 
             <div>
-              <Typography.Text strong>文件清单</Typography.Text>
+              <Typography.Text strong>{t("review.sharePackage.files.title")}</Typography.Text>
               <Space orientation="vertical" style={{ width: "100%", marginTop: 8 }} size={4}>
                 {result.files.map((file) => (
                   <Space key={file.name} style={{ width: "100%" }} wrap>
@@ -343,9 +354,9 @@ export default function SharePackageModal({ recordId, open, onClose, onLocateAnn
 
             {result.permission === "comment" && (
               <div>
-                <Typography.Text strong>评论回传</Typography.Text>
+                <Typography.Text strong>{t("review.sharePackage.comments.title")}</Typography.Text>
                 <Typography.Paragraph type="secondary" style={{ fontSize: 12, marginBottom: 8 }}>
-                  把收件人回传的评论内容粘贴进来导入（Markdown 或 JSON）。
+                  {t("review.sharePackage.comments.hint")}
                 </Typography.Paragraph>
                 <Space orientation="vertical" style={{ width: "100%" }} size="small">
                   <Radio.Group
@@ -359,14 +370,14 @@ export default function SharePackageModal({ recordId, open, onClose, onLocateAnn
                     style={{ whiteSpace: "pre-wrap", margin: 0 }}
                     type={comments ? undefined : "secondary"}
                   >
-                    {comments || "（还没有评论）"}
+                    {comments || t("review.sharePackage.comments.empty")}
                   </Typography.Paragraph>
                   <Space.Compact style={{ width: "100%" }}>
                     <Input.TextArea
-                      aria-label="评论回传内容"
+                      aria-label={t("review.sharePackage.comments.aria")}
                       rows={4}
                       value={commentText}
-                      placeholder="粘贴收件人回传的评论内容"
+                      placeholder={t("review.sharePackage.comments.placeholder")}
                       onChange={(event) => setCommentText(event.target.value)}
                     />
                     <Button
@@ -374,7 +385,7 @@ export default function SharePackageModal({ recordId, open, onClose, onLocateAnn
                       loading={importing}
                       onClick={() => void importComments()}
                     >
-                      导入评论
+                      {t("review.sharePackage.action.importComments")}
                     </Button>
                   </Space.Compact>
                 </Space>
@@ -400,9 +411,9 @@ export default function SharePackageModal({ recordId, open, onClose, onLocateAnn
               more={[
                 {
                   key: "delete",
-                  label: "删除此分享包",
+                  label: t("review.sharePackage.delete.label"),
                   danger: true,
-                  confirm: "删除此分享包？",
+                  confirm: t("review.sharePackage.delete.confirm"),
                   confirmBody: TRASH_RECOVERY_NOTE,
                   onClick: () => void removePackage(),
                 },

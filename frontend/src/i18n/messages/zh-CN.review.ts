@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * 「离线对象批注」（W18 / D17）这一批**新增**的界面文案。
+ * 「离线对象批注」（W18 / D17）与「离线分享包」弹窗（R-18）的界面文案。
+ *
+ * `sharePackage.*` 是同一个弹窗里的分享/脱敏/评论回传文案：与批注无关，但同属
+ * 分享包这一屏，放同一个命名空间比再开一个文件更省一次注册。
  *
  * 拆法与现有命名空间一致：扁平点分 key、一个默认导出、`as const`；由 lead 在
  * `zh-CN.namespaces.ts` 聚合。术语口径：
@@ -133,6 +136,69 @@ const review = {
   "review.field.field": "字段名",
   "review.field.status": "状态",
   "review.field.id": "编号",
+
+  // ── 离线分享包（SharePackageModal，R-18）────────────────────────
+  "review.sharePackage.title": "离线分享包",
+  "review.sharePackage.permission.label": "分享权限",
+  "review.sharePackage.permission.readOnlyOption": "只读（不可回传评论）",
+  "review.sharePackage.permission.commentOption": "可评论（附带评论回传文件）",
+  "review.sharePackage.permission.readOnlyTag": "只读",
+  "review.sharePackage.permission.commentTag": "可评论",
+  "review.sharePackage.redaction.label": "脱敏范围",
+  /** 分享包固定基于脱敏内容生成：这是隐私边界的说明，不是可选项。 */
+  "review.sharePackage.redaction.hint": "分享包始终基于脱敏后的内容生成，不含真实敏感信息。",
+  "review.sharePackage.photo.label": "照片",
+  "review.sharePackage.photo.include": "包含照片",
+  "review.sharePackage.photo.hint":
+    "分享包固定包含 HTML 与 PDF；取消勾选后这两个文件都不再绘制照片。",
+  "review.sharePackage.action.generate": "生成分享包",
+  "review.sharePackage.action.downloadZip": "下载离线包（zip）",
+  "review.sharePackage.intro": "分享包含 HTML、PDF、脱敏快照与文件清单；生成后在这里显示实际体积。",
+
+  // ── 生成结果 ────────────────────────────────────────────
+  "review.sharePackage.field.title": "标题",
+  "review.sharePackage.field.directory": "本地目录",
+  "review.sharePackage.field.shareCode": "分享码",
+  "review.sharePackage.field.permission": "权限",
+  "review.sharePackage.field.estimatedSize": "预计体积",
+  /** 体积一句：数字与文件数都走占位符，拼接在英文里语序不通。 */
+  "review.sharePackage.estimatedSizeValue": "约 {size}（{count} 个文件）",
+  "review.sharePackage.usage.title": "使用说明",
+  "review.sharePackage.usage.body":
+    "把整个文件夹发给对方，对方用浏览器打开 resume.html 即可查看；HTML 与 PDF 由同一份版式生成。",
+  /** 句首空格是原渲染的一部分：它接在上一句的句号后面。 */
+  "review.sharePackage.usage.commentExtra":
+    " 如需评论，让对方填写 comments.md 后回传给你，你用「导入评论」导入。",
+  "review.sharePackage.action.openDirectory": "打开所在文件夹",
+  "review.sharePackage.action.copyPath": "复制路径",
+  "review.sharePackage.files.title": "文件清单",
+
+  // ── 评论回传 ────────────────────────────────────────────
+  "review.sharePackage.comments.title": "评论回传",
+  "review.sharePackage.comments.hint": "把收件人回传的评论内容粘贴进来导入（Markdown 或 JSON）。",
+  "review.sharePackage.comments.empty": "（还没有评论）",
+  "review.sharePackage.comments.aria": "评论回传内容",
+  "review.sharePackage.comments.placeholder": "粘贴收件人回传的评论内容",
+  "review.sharePackage.action.importComments": "导入评论",
+
+  // ── Toast 与错误兜底 ────────────────────────────────────
+  "review.sharePackage.zipStarted": "离线包已开始下载",
+  "review.sharePackage.zipFailed": "生成离线包失败",
+  "review.sharePackage.generated": "分享包已生成",
+  "review.sharePackage.generateFailed": "生成分享包失败",
+  "review.sharePackage.commentRequired": "请先粘贴或填写收件人回传的评论",
+  "review.sharePackage.commentImported": "评论已导入",
+  "review.sharePackage.commentImportFailed": "导入评论失败",
+  "review.sharePackage.downloadFailed": "下载文件失败",
+  "review.sharePackage.movedToTrash": "分享包已移入回收站，可在「回收站」里恢复",
+  "review.sharePackage.deleteFailed": "删除分享包失败",
+  "review.sharePackage.revealFailed": "打开文件夹失败",
+  "review.sharePackage.pathCopied": "已复制分享包路径",
+  "review.sharePackage.copyFailed": "复制失败，可以手动复制：{path}",
+
+  // ── 行内操作（二次确认）─────────────────────────────────
+  "review.sharePackage.delete.label": "删除此分享包",
+  "review.sharePackage.delete.confirm": "删除此分享包？",
 } as const;
 
 export default review;
