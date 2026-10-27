@@ -1,11 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 import { Alert } from "antd";
 import type { RefObject, SyntheticEvent } from "react";
+import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 import {
   A4_HEIGHT_PX,
   A4_WIDTH_PX,
-  APPROXIMATE_PAGINATION_NOTE,
-  OVERFLOW_NOTE,
+  APPROXIMATE_PAGINATION_NOTE_KEY,
+  OVERFLOW_NOTE_KEY,
   PAGE_STACK_GAP_PX,
 } from "./config";
 
@@ -71,6 +73,7 @@ export default function ResumePreviewCanvas({
   onIframeLoad,
   clickToEdit = false,
 }: Props) {
+  useLocale();
   return (
     <>
       {warnings.length > 0 && (
@@ -78,7 +81,7 @@ export default function ResumePreviewCanvas({
           type="warning"
           showIcon
           style={{ marginBottom: 12 }}
-          title="发现以下内容需要人工核对（可能存在 AI 虚构）"
+          title={t("preview.canvas.warningsTitle")}
           description={
             <ul style={{ margin: 0, paddingLeft: 18 }}>
               {warnings.map((warning) => (
@@ -95,13 +98,11 @@ export default function ResumePreviewCanvas({
           className="resume-preview-overflow"
           // 措辞只说事实（约需几页、超了多少），**不再说"字号已降到最小"**：2026-10-21
           // 起不再自动缩字号，装不下就是装不下，改法由用户决定（加页 / 收紧排版 / 删内容）。
-          title={`按当前设置约需 ${pagesNeeded} 页（上限 ${pageCount} 页）。`}
-          description={
-            <>
-              字号、行距、页边距都按你设定的值原样渲染，不会自动缩小；{overflowAmountText}
-              {overflowClipped ? OVERFLOW_NOTE : APPROXIMATE_PAGINATION_NOTE}
-            </>
-          }
+          title={t("exact.overflow.title", { needed: pagesNeeded, limit: pageCount })}
+          description={t("preview.canvas.overflowBody", {
+            amount: overflowAmountText,
+            note: t(overflowClipped ? OVERFLOW_NOTE_KEY : APPROXIMATE_PAGINATION_NOTE_KEY),
+          })}
         />
       )}
       <div
@@ -128,7 +129,11 @@ export default function ResumePreviewCanvas({
                 <iframe
                   // 第 1 页挂外部 ref：版面测量与"字号 / 行距"探针只需要一份权威结果。
                   ref={index === 0 ? iframeRef : undefined}
-                  title={index === 0 ? "简历预览" : `简历预览 第 ${index + 1} 页`}
+                  title={
+                    index === 0
+                      ? t("preview.canvas.frameTitle")
+                      : t("preview.canvas.frameTitlePage", { page: index + 1 })
+                  }
                   className="resume-iframe"
                   width={A4_WIDTH_PX}
                   height={A4_HEIGHT_PX}
@@ -139,7 +144,7 @@ export default function ResumePreviewCanvas({
                 />
                 {totalVisualPages > 1 ? (
                   <span className="resume-preview-page-label">
-                    第 {index + 1} 页 / 共 {totalVisualPages} 页（近似）
+                    {t("preview.canvas.pageLabel", { page: index + 1, total: totalVisualPages })}
                   </span>
                 ) : null}
               </div>
