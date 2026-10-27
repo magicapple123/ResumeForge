@@ -14,7 +14,20 @@
  */
 import { Alert, Button, Space, Typography } from "antd";
 import { useI18n } from "../../i18n/i18nContext";
+import { RESUME_CATALOG_SECTION_LABEL_KEYS } from "../../i18n/enum/resumeCatalog";
 import type { ResumeCoverageNote } from "../../types";
+
+/**
+ * `coverage_notes[].section` 是**资料分区键**（后端 `resume_coverage._SECTION_MAP`）：
+ * 其中三个分区在资料侧是复数（`experiences` / `educations` / `campus_experiences`），
+ * 与简历分区键不同名。显示前先归一到简历分区键，再查语言包（其余分区同名，不需要别名）。
+ * 不归一的话，这三个分区在英文界面仍会回退后端中文。
+ */
+const PROFILE_SECTION_KEY_ALIASES: Record<string, string> = {
+  experiences: "experience",
+  educations: "education",
+  campus_experiences: "campus_experience",
+};
 
 interface Props {
   /** 结构化的分区级清单（新生成的记录才有）。 */
@@ -61,27 +74,35 @@ export default function ResumeCoverageNotes({
           <Typography.Text type="secondary" style={{ fontSize: 12 }}>
             {t("resume.coverage.intro")}
           </Typography.Text>
-          {notes.map((note) => (
-            <div key={note.section}>
-              <Typography.Text strong style={{ fontSize: 13 }}>
-                {t("resume.coverage.sectionCount", {
-                  label: note.section_label,
-                  count: note.total,
-                })}
-              </Typography.Text>
-              <Typography.Text style={{ fontSize: 13 }}>{formatNames(note.names)}</Typography.Text>
-              <Space size={8} style={{ marginTop: 6 }} wrap>
-                <Button
-                  size="small"
-                  type="primary"
-                  ghost
-                  onClick={() => onRevise(reviseInstructions(note))}
-                >
-                  {t("resume.coverage.revise")}
-                </Button>
-              </Space>
-            </div>
-          ))}
+          {notes.map((note) => {
+            // 分区名走语言包（按稳定的 `section` 键，先归一对资料侧的复数键），
+            // 后端下发的原文只作未知分区的回退；喂给模型的修订指令仍用后端原文，不本地化。
+            const section = PROFILE_SECTION_KEY_ALIASES[note.section] ?? note.section;
+            const sectionKey = RESUME_CATALOG_SECTION_LABEL_KEYS[section];
+            return (
+              <div key={note.section}>
+                <Typography.Text strong style={{ fontSize: 13 }}>
+                  {t("resume.coverage.sectionCount", {
+                    label: sectionKey ? t(sectionKey) : note.section_label,
+                    count: note.total,
+                  })}
+                </Typography.Text>
+                <Typography.Text style={{ fontSize: 13 }}>
+                  {formatNames(note.names)}
+                </Typography.Text>
+                <Space size={8} style={{ marginTop: 6 }} wrap>
+                  <Button
+                    size="small"
+                    type="primary"
+                    ghost
+                    onClick={() => onRevise(reviseInstructions(note))}
+                  >
+                    {t("resume.coverage.revise")}
+                  </Button>
+                </Space>
+              </div>
+            );
+          })}
           {legacyWarnings.map((warning) => (
             <Typography.Paragraph key={warning} style={{ margin: 0, fontSize: 13 }}>
               {warning}
