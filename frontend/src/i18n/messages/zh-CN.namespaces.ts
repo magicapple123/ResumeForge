@@ -58,6 +58,7 @@ import riskPanel from "./zh-CN.riskPanel";
 import interview from "./zh-CN.interview";
 import materialForm from "./zh-CN.materialForm";
 import jobMatch from "./zh-CN.jobMatch";
+import jobDetail from "./zh-CN.jobDetail";
 
 const namespaces = {
   /** 简历制作台（2026-10-23）。 */
@@ -144,6 +145,7 @@ const namespaces = {
   ...interview,
   ...materialForm,
   ...jobMatch,
+  ...jobDetail,
 } as const;
 
 export default namespaces;

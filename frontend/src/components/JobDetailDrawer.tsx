@@ -35,6 +35,8 @@ import { useNavigate } from "react-router-dom";
 import type { Job } from "../types";
 import { getMatchAnalyzingIds, subscribeMatchAnalysis } from "../utils/jobMatchAnalysisState";
 import SkillTags from "./SkillTags";
+import { t } from "../i18n";
+import { useLocale } from "../i18n/i18nContext";
 
 interface Props {
   job: Job | null;
@@ -91,6 +93,7 @@ export default function JobDetailDrawer({
   queueLoading = false,
   webFormLoading = false,
 }: Props) {
+  useLocale();
   const navigate = useNavigate();
   // 匹配分析在弹窗（或用户已关掉弹窗）里后台进行时，这里也要看得见：
   // 订阅全局登记表，按钮转圈 + 文案点名，避免"后台在跑但界面毫无迹象"。
@@ -106,7 +109,7 @@ export default function JobDetailDrawer({
   const matchAnalyzing = job != null && matchAnalyzingIds.has(job.id);
   return (
     <Drawer
-      title="岗位详情"
+      title={t("jobDetail.title")}
       size="min(640px, 100vw)"
       open={!!job}
       onClose={onClose}
@@ -117,26 +120,24 @@ export default function JobDetailDrawer({
         job && (
           <Space className="job-detail-actions" wrap>
             <Button type="primary" icon={<FileTextOutlined />} onClick={() => onGenerate(job)}>
-              用 AI 生成简历
+              {t("jobDetail.action.generate")}
             </Button>
             <Button icon={<EditOutlined />} onClick={() => onWrite(job)}>
-              自行编写简历
+              {t("jobDetail.action.write")}
             </Button>
             <Button icon={<FolderOpenOutlined />} onClick={() => onViewResumes(job)}>
-              查看生成的简历
+              {t("jobDetail.action.viewResume")}
             </Button>
             {/* 两个"解读"性质不同，按钮相邻但用 Tooltip 讲清区别：需求解读只读 JD，
                 匹配分析会读取你的资料与简历。 */}
-            <Tooltip title="只读招聘原文，总结岗位要什么">
+            <Tooltip title={t("jobDetail.hint.readRequirement")}>
               <Button icon={<BulbOutlined />} onClick={() => onAnalyze(job)}>
-                岗位需求解读
+                {t("jobDetail.action.readRequirement")}
               </Button>
             </Tooltip>
             <Tooltip
               title={
-                matchAnalyzing
-                  ? "匹配分析正在后台进行，完成后会弹通知提醒"
-                  : "读取你的资料与简历，判断你够不够"
+                matchAnalyzing ? t("jobDetail.hint.matchRunning") : t("jobDetail.hint.matchIdle")
               }
             >
               <Button
@@ -144,14 +145,14 @@ export default function JobDetailDrawer({
                 loading={matchAnalyzing}
                 onClick={() => onMatch(job)}
               >
-                {matchAnalyzing ? "分析中…" : "匹配度分析"}
+                {matchAnalyzing ? t("jobDetail.action.analyzing") : t("jobDetail.action.match")}
               </Button>
             </Tooltip>
             <Tooltip
               title={
                 job.apply_supported === false
-                  ? "这个岗位的来源不在投递台支持的招聘网站内，无法自动投递"
-                  : "加入投递台队列；命中真实缺口或未分析时会先请你确认"
+                  ? t("jobDetail.hint.unsupported")
+                  : t("jobDetail.hint.applyDesk")
               }
             >
               <Button
@@ -160,11 +161,11 @@ export default function JobDetailDrawer({
                 disabled={queueLoading || job.apply_supported === false}
                 onClick={() => onAddToQueue(job)}
               >
-                加入投递台
+                {t("jobDetail.action.applyDesk")}
               </Button>
             </Tooltip>
             <Button icon={<MessageOutlined />} onClick={() => onAskAssistant(job)}>
-              咨询求职助手
+              {t("jobDetail.action.askAssistant")}
             </Button>
             {/* 带 id 的跨模块动作（RF-11）：目标页按 job_id 自行过滤/预填，
                 不必到了那边再选一遍岗位。纯跳页，无回调 prop。 */}
@@ -172,13 +173,13 @@ export default function JobDetailDrawer({
               icon={<FunnelPlotOutlined />}
               onClick={() => navigate(`/tracker?job_id=${job.id}`)}
             >
-              该岗位的投递进度
+              {t("jobDetail.section.progress")}
             </Button>
             <Button
               icon={<PlayCircleOutlined />}
               onClick={() => navigate(`/interview?job_id=${job.id}`)}
             >
-              模拟面试
+              {t("jobDetail.action.interview")}
             </Button>
             {job.source_url && (
               <Button
@@ -187,7 +188,7 @@ export default function JobDetailDrawer({
                 disabled={webFormLoading}
                 onClick={() => onOpenWebForm(job)}
               >
-                前往投递
+                {t("jobDetail.action.goApply")}
               </Button>
             )}
           </Space>
@@ -200,10 +201,16 @@ export default function JobDetailDrawer({
             <Typography.Title level={4} style={{ margin: 0 }}>
               {job.title}
             </Typography.Title>
-            <Tooltip title={job.favorite ? "取消收藏" : "收藏岗位"}>
+            <Tooltip
+              title={
+                job.favorite ? t("jobDetail.action.unfavorite") : t("jobDetail.action.favorite")
+              }
+            >
               <Button
                 type="text"
-                aria-label={job.favorite ? "取消收藏" : "收藏岗位"}
+                aria-label={
+                  job.favorite ? t("jobDetail.action.unfavorite") : t("jobDetail.action.favorite")
+                }
                 className={`job-favorite-button${job.favorite ? " is-favorite" : ""}`}
                 icon={job.favorite ? <StarFilled /> : <StarOutlined />}
                 loading={favoriteLoading}
@@ -219,25 +226,34 @@ export default function JobDetailDrawer({
               type="info"
               showIcon
               style={{ marginTop: 12 }}
-              title="这个岗位不能用投递台自动投递"
+              title={t("jobDetail.unsupported.title")}
               description={
                 <Typography.Text type="secondary">
-                  投递台只能自动投递<Typography.Text strong>招聘网站上的岗位</Typography.Text>
-                  ——它的来源或「投递链接」必须指向某个已支持的站点。这个岗位两者都指不到，所以
-                  「加入投递台」是灰的。要么把它的「投递链接」改成该岗位在招聘网站上的地址（改完即可
-                  自动投递），要么直接在上面「前往投递」或到原渠道自行投递。
+                  {t("jobDetail.unsupported.body")}
                 </Typography.Text>
               }
             />
           )}
 
           <Descriptions column={2} size="small" style={{ marginTop: 16, marginBottom: 16 }}>
-            <Descriptions.Item label="公司">{job.company || "-"}</Descriptions.Item>
-            <Descriptions.Item label="工作地点">{job.location || "-"}</Descriptions.Item>
-            <Descriptions.Item label="薪资范围">{job.salary || "-"}</Descriptions.Item>
-            <Descriptions.Item label="岗位类型">{job.job_type || "-"}</Descriptions.Item>
-            <Descriptions.Item label="状态">{job.status || "-"}</Descriptions.Item>
-            <Descriptions.Item label="发布时间">{job.posted_at || "-"}</Descriptions.Item>
+            <Descriptions.Item label={t("jobDetail.field.company")}>
+              {job.company || "-"}
+            </Descriptions.Item>
+            <Descriptions.Item label={t("jobDetail.field.location")}>
+              {job.location || "-"}
+            </Descriptions.Item>
+            <Descriptions.Item label={t("jobDetail.field.salary")}>
+              {job.salary || "-"}
+            </Descriptions.Item>
+            <Descriptions.Item label={t("jobDetail.field.jobType")}>
+              {job.job_type || "-"}
+            </Descriptions.Item>
+            <Descriptions.Item label={t("jobDetail.field.status")}>
+              {job.status || "-"}
+            </Descriptions.Item>
+            <Descriptions.Item label={t("jobDetail.field.postedAt")}>
+              {job.posted_at || "-"}
+            </Descriptions.Item>
             {/* 「录入方式」是系统记录的这条岗位怎么进来的（手动填写/粘贴识别/采集…），
                 与用户可编辑的「来源」是两回事；标签分开写，避免两个"来源"互相打架。 */}
             <Descriptions.Item label="录入方式">
@@ -246,14 +262,16 @@ export default function JobDetailDrawer({
             {/* 0042 起「来源」是用户可编辑的独立字段（不再追加进备注）；没填就不占一行，
                 免得详情里出现一排"-"里唯一有内容的是录入方式，看着像重复。 */}
             {job.origin_source && (
-              <Descriptions.Item label="来源">{job.origin_source}</Descriptions.Item>
+              <Descriptions.Item label={t("jobDetail.field.source")}>
+                {job.origin_source}
+              </Descriptions.Item>
             )}
           </Descriptions>
 
           {job.keywords.length > 0 && (
             <>
               <Divider titlePlacement="start" plain style={{ margin: "8px 0" }}>
-                岗位技能标签
+                {t("jobDetail.section.skills")}
               </Divider>
               <SkillTags tags={job.keywords} max={20} />
             </>
@@ -261,31 +279,31 @@ export default function JobDetailDrawer({
 
           <div className="job-detail-text-sections">
             <TextSection
-              title="岗位描述"
+              title={t("jobDetail.section.description")}
               icon={<FileTextOutlined />}
               content={job.description}
-              emptyText="暂无岗位描述"
+              emptyText={t("jobDetail.empty.description")}
               variant="description"
             />
             <TextSection
-              title="任职要求"
+              title={t("jobDetail.section.requirements")}
               icon={<CheckCircleOutlined />}
               content={job.requirements}
-              emptyText="暂无任职要求"
+              emptyText={t("jobDetail.empty.requirements")}
               variant="requirements"
             />
             <TextSection
-              title="其他招聘信息"
+              title={t("jobDetail.section.extra")}
               icon={<InfoCircleOutlined />}
               content={job.additional_info}
-              emptyText="暂无其他招聘信息"
+              emptyText={t("jobDetail.empty.extra")}
               variant="additional"
             />
             <TextSection
-              title="备注"
+              title={t("jobDetail.section.note")}
               icon={<PushpinOutlined />}
               content={job.note}
-              emptyText="暂无备注"
+              emptyText={t("jobDetail.empty.note")}
               variant="note"
             />
             {(job.note_images?.length ?? 0) > 0 && (
@@ -294,14 +312,14 @@ export default function JobDetailDrawer({
                   <span className="job-detail-section-icon">
                     <PictureOutlined />
                   </span>
-                  <Typography.Text strong>备注图片</Typography.Text>
+                  <Typography.Text strong>{t("jobDetail.section.noteImages")}</Typography.Text>
                 </div>
                 <Space wrap>
                   {job.note_images.map((source, index) => (
                     <Image
                       key={`${index}-${source.slice(-16)}`}
                       src={source}
-                      alt={`备注图片 ${index + 1}`}
+                      alt={t("jobDetail.alt.noteImage", { index: index + 1 })}
                       width={150}
                     />
                   ))}

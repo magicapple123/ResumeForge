@@ -50,6 +50,7 @@ import riskPanel from "./en-US.riskPanel";
 import interview from "./en-US.interview";
 import materialForm from "./en-US.materialForm";
 import jobMatch from "./en-US.jobMatch";
+import jobDetail from "./en-US.jobDetail";
 
 const enUS = {
   ...core,
@@ -101,6 +102,7 @@ const enUS = {
   ...interview,
   ...materialForm,
   ...jobMatch,
+  ...jobDetail,
 } as const satisfies Record<keyof ZhCNMessages, string>;
 
 export default enUS;
