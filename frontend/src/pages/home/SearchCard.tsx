@@ -19,6 +19,9 @@ import { Link } from "react-router-dom";
 import { searchAll } from "../../api/search";
 import type { SearchHitType, SearchResult } from "../../types";
 import { formatDateTime } from "../../utils/format";
+import { t } from "../../i18n";
+import type { MessageKey } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 
 /** 全局搜索"更多结果"分组的展示顺序与图标/标签（与后端下发顺序一致）。 */
 const MORE_ORDER: SearchHitType[] = [
@@ -30,16 +33,18 @@ const MORE_ORDER: SearchHitType[] = [
   "skill",
 ];
 
-const MORE_HIT_META: Record<SearchHitType, { icon: ReactNode; label: string }> = {
-  referral: { icon: <TeamOutlined />, label: "内推" },
-  reminder: { icon: <CalendarOutlined />, label: "提醒" },
-  experience: { icon: <SolutionOutlined />, label: "面经" },
-  claim: { icon: <AuditOutlined />, label: "事实台账" },
-  material: { icon: <InboxOutlined />, label: "资料" },
-  skill: { icon: <ToolOutlined />, label: "技能" },
+const MORE_HIT_META: Record<SearchHitType, { icon: ReactNode; labelKey: MessageKey }> = {
+  referral: { icon: <TeamOutlined />, labelKey: "homePage.search.more.referral" },
+  reminder: { icon: <CalendarOutlined />, labelKey: "homePage.search.more.reminder" },
+  experience: { icon: <SolutionOutlined />, labelKey: "homePage.search.more.experience" },
+  claim: { icon: <AuditOutlined />, labelKey: "homePage.search.more.claim" },
+  material: { icon: <InboxOutlined />, labelKey: "homePage.search.more.material" },
+  skill: { icon: <ToolOutlined />, labelKey: "homePage.search.more.skill" },
 };
 
 export function SearchCard() {
+  // 本组件用模块级 t()，必须订阅语言变化。
+  useLocale();
   const [searchText, setSearchText] = useState("");
   const [result, setResult] = useState<SearchResult | null>(null);
   const [searching, setSearching] = useState(false);
@@ -76,7 +81,7 @@ export function SearchCard() {
     } catch (error) {
       if (currentSearch === searchVersion.current) {
         setResult(null);
-        setSearchError(error instanceof Error ? error.message : "搜索失败，请重试");
+        setSearchError(error instanceof Error ? error.message : t("homePage.search.failed"));
       }
     } finally {
       if (currentSearch === searchVersion.current) setSearching(false);
@@ -86,11 +91,11 @@ export function SearchCard() {
   return (
     <Card style={{ marginTop: 16 }}>
       <Typography.Title level={5} style={{ marginTop: 0 }}>
-        全局搜索
+        {t("homePage.search.title")}
       </Typography.Title>
       <Input.Search
-        placeholder="搜索岗位、简历，或内推、提醒、面经、事实台账、资料、技能，如：市场营销 / 财务会计"
-        enterButton="搜索"
+        placeholder={t("homePage.search.placeholder")}
+        enterButton={t("homePage.search.action")}
         size="large"
         loading={searching}
         value={searchText}
@@ -101,10 +106,10 @@ export function SearchCard() {
       {searched && (
         <div className="home-search-results">
           <Typography.Title level={5} type="secondary" style={{ margin: "8px 0" }}>
-            匹配的岗位（{result?.jobs.length ?? 0}）
+            {t("homePage.search.jobsTitle", { count: result?.jobs.length ?? 0 })}
           </Typography.Title>
           {(result?.jobs.length ?? 0) === 0 ? (
-            <Empty description="没有匹配的岗位" />
+            <Empty description={t("homePage.search.jobsEmpty")} />
           ) : (
             <Listy
               items={result?.jobs ?? []}
@@ -116,17 +121,19 @@ export function SearchCard() {
                     <Link to={`/jobs?job_id=${job.id}`}>{job.title}</Link>
                     <Tag>{job.company}</Tag>
                     <Tag color="blue">{job.location}</Tag>
-                    <Typography.Text type="secondary">{job.salary || "薪资面议"}</Typography.Text>
+                    <Typography.Text type="secondary">
+                      {job.salary || t("homePage.search.salaryNegotiable")}
+                    </Typography.Text>
                   </Space>
                 </ListyItem>
               )}
             />
           )}
           <Typography.Title level={5} type="secondary" style={{ margin: "8px 0" }}>
-            匹配的简历记录（{result?.resumes.length ?? 0}）
+            {t("homePage.search.resumesTitle", { count: result?.resumes.length ?? 0 })}
           </Typography.Title>
           {(result?.resumes.length ?? 0) === 0 ? (
-            <Empty description="没有匹配的简历记录" />
+            <Empty description={t("homePage.search.resumesEmpty")} />
           ) : (
             <Listy
               items={result?.resumes ?? []}
@@ -148,7 +155,7 @@ export function SearchCard() {
           {(result?.more.length ?? 0) > 0 && (
             <div style={{ marginTop: 8 }}>
               <Typography.Title level={5} type="secondary" style={{ margin: "8px 0" }}>
-                更多结果（{result?.more.length ?? 0}）
+                {t("homePage.search.moreTitle", { count: result?.more.length ?? 0 })}
               </Typography.Title>
               {MORE_ORDER.map((type) => {
                 const hits = (result?.more ?? []).filter((hit) => hit.type === type);
@@ -159,7 +166,10 @@ export function SearchCard() {
                     <Space size={6} className="home-more-heading">
                       {meta.icon}
                       <Typography.Text type="secondary">
-                        {meta.label}（{hits.length}）
+                        {t("homePage.search.groupHeading", {
+                          name: t(meta.labelKey),
+                          count: hits.length,
+                        })}
                       </Typography.Text>
                     </Space>
                     <Listy
