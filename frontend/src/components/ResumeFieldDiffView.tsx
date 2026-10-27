@@ -18,6 +18,9 @@ import type {
   SubFieldDiff,
 } from "../types/resumeFieldDiff";
 import ResumeDiffView from "./ResumeDiffView";
+import { t } from "../i18n";
+import type { MessageKey } from "../i18n";
+import { useLocale } from "../i18n/i18nContext";
 
 /**
  * 三态配色与 `ResumeDiffView` 共用同一组 token（`--rf-diff-*`）：同一语义两套颜色
@@ -61,39 +64,40 @@ function Column({ children }: { children: React.ReactNode }) {
 }
 
 function StringSectionCard({ section }: { section: StringSectionDiff }) {
-  const tag = !section.oldText
-    ? { color: "green", text: "新增" }
+  useLocale();
+  const tag: { color: string; labelKey: MessageKey } = !section.oldText
+    ? { color: "green", labelKey: "resumeFieldDiffView.tag.added" }
     : !section.newText
-      ? { color: "red", text: "删除" }
-      : { color: "blue", text: "修改" };
+      ? { color: "red", labelKey: "resumeFieldDiffView.tag.removed" }
+      : { color: "blue", labelKey: "resumeFieldDiffView.tag.modified" };
   return (
     <Card
       size="small"
       title={
         <span>
           <Typography.Text strong>{section.label}</Typography.Text>{" "}
-          <Tag color={tag.color}>{tag.text}</Tag>
+          <Tag color={tag.color}>{t(tag.labelKey)}</Tag>
         </span>
       }
     >
       <TwoColumn>
         <Column>
-          <Typography.Text type="secondary">原</Typography.Text>
+          <Typography.Text type="secondary">{t("resumeFieldDiffView.column.old")}</Typography.Text>
           <div>
             {section.oldText ? (
               <TokenText tokens={section.oldTokens} />
             ) : (
-              <Typography.Text type="secondary">（空）</Typography.Text>
+              <Typography.Text type="secondary">{t("resumeFieldDiffView.empty")}</Typography.Text>
             )}
           </div>
         </Column>
         <Column>
-          <Typography.Text type="secondary">新</Typography.Text>
+          <Typography.Text type="secondary">{t("resumeFieldDiffView.column.new")}</Typography.Text>
           <div>
             {section.newText ? (
               <TokenText tokens={section.newTokens} />
             ) : (
-              <Typography.Text type="secondary">（空）</Typography.Text>
+              <Typography.Text type="secondary">{t("resumeFieldDiffView.empty")}</Typography.Text>
             )}
           </div>
         </Column>
@@ -104,6 +108,7 @@ function StringSectionCard({ section }: { section: StringSectionDiff }) {
 
 /** 新增/删除条目：红 − / 绿 + 边框块。 */
 function ItemBlock({ item, sign }: { item: ListItemView; sign: "added" | "removed" }) {
+  useLocale();
   // 语义 token：浅色下 --rf-accent-green=#52c41a、--rf-danger=#ff4d4f，与原写死值一致；
   // 深色下两者都会提亮，边框与加号才不会糊在暗底上。
   const color = sign === "added" ? "var(--rf-accent-green)" : "var(--rf-danger)";
@@ -115,7 +120,7 @@ function ItemBlock({ item, sign }: { item: ListItemView; sign: "added" | "remove
     >
       <div style={{ fontWeight: 600, color }}>
         {sign === "added" ? "+ " : "− "}
-        {item.title || "（条目）"}
+        {item.title || t("resumeFieldDiffView.itemFallback")}
       </div>
       {item.lines.map((line, index) => (
         <div key={index} style={{ fontSize: 13 }}>
@@ -127,23 +132,26 @@ function ItemBlock({ item, sign }: { item: ListItemView; sign: "added" | "remove
 }
 
 function SubFieldRow({ sub }: { sub: SubFieldDiff }) {
+  useLocale();
   if (sub.kind === "string") {
     return (
       <div>
-        <Typography.Text type="secondary">{sub.label}：</Typography.Text>
+        <Typography.Text type="secondary">
+          {t("resumeFieldDiffView.subFieldLabel", { label: sub.label })}
+        </Typography.Text>
         <TwoColumn>
           <Column>
             {sub.oldText ? (
               <TokenText tokens={sub.oldTokens} />
             ) : (
-              <Typography.Text type="secondary">（空）</Typography.Text>
+              <Typography.Text type="secondary">{t("resumeFieldDiffView.empty")}</Typography.Text>
             )}
           </Column>
           <Column>
             {sub.newText ? (
               <TokenText tokens={sub.newTokens} />
             ) : (
-              <Typography.Text type="secondary">（空）</Typography.Text>
+              <Typography.Text type="secondary">{t("resumeFieldDiffView.empty")}</Typography.Text>
             )}
           </Column>
         </TwoColumn>
@@ -152,7 +160,9 @@ function SubFieldRow({ sub }: { sub: SubFieldDiff }) {
   }
   return (
     <div>
-      <Typography.Text type="secondary">{sub.label}：</Typography.Text>
+      <Typography.Text type="secondary">
+        {t("resumeFieldDiffView.subFieldLabel", { label: sub.label })}
+      </Typography.Text>
       <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
         {sub.removedLines.map((line, index) => (
           <div key={`r-${index}`} style={{ color: "var(--rf-error-text)" }}>
@@ -171,6 +181,7 @@ function SubFieldRow({ sub }: { sub: SubFieldDiff }) {
 
 /** 修改条目：拆成子字段逐条对照。 */
 function ModifiedItemBlock({ item }: { item: ModifiedItemDiff }) {
+  useLocale();
   return (
     <div
       data-sign="modified"
@@ -181,8 +192,8 @@ function ModifiedItemBlock({ item }: { item: ModifiedItemDiff }) {
         background: "var(--rf-info-bg)",
       }}
     >
-      <Tag color="blue">修改</Tag>
-      <Typography.Text strong>{item.key || "（条目）"}</Typography.Text>
+      <Tag color="blue">{t("resumeFieldDiffView.tag.modified")}</Tag>
+      <Typography.Text strong>{item.key || t("resumeFieldDiffView.itemFallback")}</Typography.Text>
       <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 8 }}>
         {item.subfields.map((sub, index) => (
           <SubFieldRow key={index} sub={sub} />
@@ -193,6 +204,7 @@ function ModifiedItemBlock({ item }: { item: ModifiedItemDiff }) {
 }
 
 function ListSectionCard({ section }: { section: ListSectionDiff }) {
+  useLocale();
   return (
     <Card size="small" title={<Typography.Text strong>{section.label}</Typography.Text>}>
       <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
@@ -206,7 +218,9 @@ function ListSectionCard({ section }: { section: ListSectionDiff }) {
           <ModifiedItemBlock key={`m-${index}`} item={item} />
         ))}
         {section.unchangedCount > 0 && (
-          <Typography.Text type="secondary">{section.unchangedCount} 个条目未变化</Typography.Text>
+          <Typography.Text type="secondary">
+            {t("resumeFieldDiffView.unchangedItems", { count: section.unchangedCount })}
+          </Typography.Text>
         )}
       </div>
     </Card>
@@ -222,23 +236,28 @@ function SectionCard({ section }: { section: SectionDiff }) {
 }
 
 export default function ResumeFieldDiffView({ data }: { data: DiffViewData }) {
+  useLocale();
   const { field, raw } = data;
   return (
     <div>
       <div style={{ marginBottom: 12 }}>
-        <Typography.Text>对比：</Typography.Text>
+        <Typography.Text>{t("resumeFieldDiffView.compare")}</Typography.Text>
         <Typography.Text strong>{field.baseTitle}</Typography.Text>
         <Typography.Text type="secondary"> → </Typography.Text>
         <Typography.Text strong>{field.againstTitle}</Typography.Text>
         <span style={{ marginLeft: 12 }}>
-          <Tag color="green">新增 {raw.stats.added}</Tag>
-          <Tag color="red">删除 {raw.stats.removed}</Tag>
-          <Tag>未变 {raw.stats.unchanged}</Tag>
+          <Tag color="green">
+            {t("resumeFieldDiffView.stats.added", { added: raw.stats.added })}
+          </Tag>
+          <Tag color="red">
+            {t("resumeFieldDiffView.stats.removed", { removed: raw.stats.removed })}
+          </Tag>
+          <Tag>{t("resumeFieldDiffView.stats.unchanged", { unchanged: raw.stats.unchanged })}</Tag>
         </span>
       </div>
 
       {field.changed.length === 0 ? (
-        <Empty description="两份简历内容完全一致，没有差异" />
+        <Empty description={t("resumeFieldDiffView.emptyDescription")} />
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
           {field.changed.map((section) => (
@@ -253,7 +272,9 @@ export default function ResumeFieldDiffView({ data }: { data: DiffViewData }) {
           items={[
             {
               key: "unchanged",
-              label: `${field.unchangedLabels.length} 个字段未变化`,
+              label: t("resumeFieldDiffView.unchangedFields", {
+                count: field.unchangedLabels.length,
+              }),
               children: (
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
                   {field.unchangedLabels.map((label) => (
@@ -271,7 +292,7 @@ export default function ResumeFieldDiffView({ data }: { data: DiffViewData }) {
         items={[
           {
             key: "raw",
-            label: "查看原始差异",
+            label: t("resumeFieldDiffView.raw.toggle"),
             children: <ResumeDiffView diff={raw} />,
           },
         ]}
