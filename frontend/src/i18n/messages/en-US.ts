@@ -76,6 +76,7 @@ import bulkEnqueue from "./en-US.bulkEnqueue";
 import applySettings from "./en-US.applySettings";
 import searchCard from "./en-US.searchCard";
 import interviewReview from "./en-US.interviewReview";
+import resumeSuggestions from "./en-US.resumeSuggestions";
 
 const enUS = {
   ...core,
@@ -153,6 +154,7 @@ const enUS = {
   ...applySettings,
   ...searchCard,
   ...interviewReview,
+  ...resumeSuggestions,
 } as const satisfies Record<keyof ZhCNMessages, string>;
 
 export default enUS;

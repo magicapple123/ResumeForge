@@ -3,7 +3,7 @@
   "generatedAt": "2026-10-27",
   "rule": "Legacy CJK ceilings plus language-independent AST product-copy fingerprints",
   "src": {
-    "total": 3688,
+    "total": 3664,
     "files": {
       "App.tsx": 0,
       "api/analytics.ts": 0,
@@ -94,7 +94,7 @@
       "components/ResumePreview.tsx": 0,
       "components/ResumeQualityModal.tsx": 3,
       "components/ResumeRiskPanel.tsx": 24,
-      "components/ResumeSuggestionsModal.tsx": 28,
+      "components/ResumeSuggestionsModal.tsx": 4,
       "components/ResumeWritingPanel.tsx": 23,
       "components/RiskScanWatcher.tsx": 7,
       "components/SharePackageModal.tsx": 45,

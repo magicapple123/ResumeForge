@@ -84,6 +84,7 @@ import bulkEnqueue from "./zh-CN.bulkEnqueue";
 import applySettings from "./zh-CN.applySettings";
 import searchCard from "./zh-CN.searchCard";
 import interviewReview from "./zh-CN.interviewReview";
+import resumeSuggestions from "./zh-CN.resumeSuggestions";
 
 const namespaces = {
   /** 简历制作台（2026-10-23）。 */
@@ -215,6 +216,8 @@ const namespaces = {
   ...searchCard,
   /** 面试复盘面板（2026-10-27）。 */
   ...interviewReview,
+  /** 岗位化修改建议弹窗（2026-10-27）。 */
+  ...resumeSuggestions,
 } as const;
 
 export default namespaces;

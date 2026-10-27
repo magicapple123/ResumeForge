@@ -38,6 +38,8 @@ import {
   useSuggestionScan,
 } from "../features/resume/suggestionScanStore";
 import type { ResumeDetail, ResumeSuggestion, ResumeSuggestions } from "../types";
+import { t, type MessageKey } from "../i18n";
+import { useLocale } from "../i18n/i18nContext";
 
 interface Props {
   open: boolean;
@@ -50,11 +52,19 @@ interface Props {
   onApplied?: (detail: ResumeDetail) => Promise<void> | void;
 }
 
-const PRIORITY_META: Record<ResumeSuggestion["priority"], { label: string; color: string }> = {
-  high: { label: "优先修改", color: "red" },
-  medium: { label: "建议修改", color: "orange" },
-  low: { label: "可选优化", color: "blue" },
-};
+/**
+ * 三档优先级的显示名与颜色。
+ *
+ * `labelKey` 而不是 `label`：模块作用域里调 `t()` 会把语言固定在模块求值那一刻
+ * （交接单 §8.1），所以常量里只存 key，`t()` 留在渲染处。
+ * `color` 是 antd Tag 的色板名，与语言无关，不进词表。
+ */
+const PRIORITY_META: Record<ResumeSuggestion["priority"], { labelKey: MessageKey; color: string }> =
+  {
+    high: { labelKey: "resumeSuggestions.priority.high", color: "red" },
+    medium: { labelKey: "resumeSuggestions.priority.medium", color: "orange" },
+    low: { labelKey: "resumeSuggestions.priority.low", color: "blue" },
+  };
 
 export default function ResumeSuggestionsModal({
   open,
@@ -64,6 +74,8 @@ export default function ResumeSuggestionsModal({
   onGenerated,
   onApplied,
 }: Props) {
+  // 本组件与它的三个子视图都用模块级 t()：必须订阅语言变化，否则切语言后这块不重渲染。
+  useLocale();
   const { message } = App.useApp();
   const { token } = theme.useToken();
   const state = useSuggestionScan(recordId ?? 0);
@@ -119,6 +131,7 @@ export default function ResumeSuggestionsModal({
     setAdoptingIndex(index);
     setAdoptError("");
     try {
+      // 这是给模型的修订指令，不是界面文案（交接单 §3 红线）：翻成英文会改变生成行为。
       const instructions = [
         `请按以下建议修改简历（目标分区：${item.section || "未指定"}）：`,
         `问题：${item.issue}`,
@@ -129,10 +142,10 @@ export default function ResumeSuggestionsModal({
         .join("\n");
       const updated = await reviseResume(recordId, instructions);
       await onApplied?.(updated);
-      message.success("已采纳这条建议并更新简历");
+      message.success(t("resumeSuggestions.adopted"));
       onClose();
     } catch (err) {
-      setAdoptError(err instanceof Error ? err.message : "采纳建议失败，请稍后重试");
+      setAdoptError(err instanceof Error ? err.message : t("resumeSuggestions.adoptFailed"));
     } finally {
       setAdoptingIndex(null);
     }
@@ -143,7 +156,7 @@ export default function ResumeSuggestionsModal({
       title={
         <Space>
           <BulbOutlined />
-          岗位化修改建议
+          {t("resumeSuggestions.modal.title")}
         </Space>
       }
       open={open}
@@ -160,10 +173,14 @@ export default function ResumeSuggestionsModal({
         <ScanningBody startedAt={state.startedAt} onCancel={() => cancelSuggestionScan(recordId)} />
       ) : state.status === "error" ? (
         <Space orientation="vertical" style={{ width: "100%" }} size="middle">
-          <Alert type="error" showIcon title={state.error || "生成建议失败，请稍后重试"} />
+          <Alert
+            type="error"
+            showIcon
+            title={state.error || t("resumeSuggestions.generateFailed")}
+          />
           <div>
             <Button icon={<ReloadOutlined />} onClick={start}>
-              重试
+              {t("common.retry")}
             </Button>
           </div>
         </Space>
@@ -188,17 +205,16 @@ function IntroBody({ onStart, onCancel }: { onStart: () => void; onCancel: () =>
   return (
     <Space orientation="vertical" style={{ width: "100%" }} size="middle">
       <Typography.Title level={5} style={{ margin: 0 }}>
-        生成岗位优化建议
+        {t("resumeSuggestions.intro.title")}
       </Typography.Title>
       <Typography.Paragraph type="secondary" style={{ margin: 0 }}>
-        会读取这份简历与关联岗位 JD，调用一次大模型生成逐条修改建议；约 10–60
-        秒，生成期间可以关闭窗口，完成后会通知你。
+        {t("resumeSuggestions.intro.body")}
       </Typography.Paragraph>
       <Space wrap>
         <Button type="primary" icon={<ThunderboltOutlined />} onClick={onStart}>
-          开始生成
+          {t("resumeSuggestions.action.start")}
         </Button>
-        <Button onClick={onCancel}>取消</Button>
+        <Button onClick={onCancel}>{t("common.action.cancel")}</Button>
       </Space>
     </Space>
   );
@@ -216,9 +232,11 @@ function ScanningBody({ startedAt, onCancel }: { startedAt?: number; onCancel: (
   return (
     <Space orientation="vertical" style={{ width: "100%" }} size="middle" align="center">
       <PageSkeleton rows={5} card={false} />
-      <Typography.Text>正在生成建议…已用时 {elapsed}s</Typography.Text>
-      <Typography.Text type="secondary">可以关闭此窗口，生成会继续</Typography.Text>
-      <Button onClick={onCancel}>取消生成</Button>
+      <Typography.Text>
+        {t("resumeSuggestions.scanning.elapsed", { seconds: elapsed })}
+      </Typography.Text>
+      <Typography.Text type="secondary">{t("resumeSuggestions.scanning.hint")}</Typography.Text>
+      <Button onClick={onCancel}>{t("resumeSuggestions.action.cancelScan")}</Button>
     </Space>
   );
 }
@@ -243,18 +261,23 @@ function SuggestionList({
     <div>
       <Space style={{ marginBottom: 12 }} wrap>
         <Typography.Text type="secondary">
-          目标岗位：{data.company ? `${data.company} · ` : ""}
-          {data.job_title}
+          {/* 没有关联公司时换一句话说，不留下悬空的「·」分隔符。 */}
+          {data.company
+            ? t("resumeSuggestions.target.company", {
+                company: data.company,
+                job: data.job_title,
+              })
+            : t("resumeSuggestions.target.job", { job: data.job_title })}
         </Typography.Text>
         {/* 覆盖类动作：就地 Popconfirm（Popover 形态，不占弹层容器层级）。 */}
         <Popconfirm
-          title="重新生成会覆盖当前建议"
-          okText="重新生成"
-          cancelText="取消"
+          title={t("resumeSuggestions.regenerate.confirm")}
+          okText={t("resumeSuggestions.regenerate.ok")}
+          cancelText={t("common.action.cancel")}
           onConfirm={onRestart}
         >
           <Button type="link" size="small" icon={<ReloadOutlined />}>
-            重新生成建议
+            {t("resumeSuggestions.action.regenerate")}
           </Button>
         </Popconfirm>
       </Space>
@@ -288,13 +311,13 @@ function SuggestionList({
                     disabled={adoptingIndex !== null && !adopting}
                     onClick={() => onAdopt(item, index)}
                   >
-                    采纳并修改
+                    {t("resumeSuggestions.action.adopt")}
                   </Button>,
                 ]}
               >
                 <Space orientation="vertical" size={6} style={{ width: "100%" }}>
                   <Space wrap>
-                    <Tag color={priority.color}>{priority.label}</Tag>
+                    <Tag color={priority.color}>{t(priority.labelKey)}</Tag>
                     {item.section && <Tag>{item.section}</Tag>}
                   </Space>
                   <Typography.Text strong>{item.issue}</Typography.Text>
@@ -303,7 +326,9 @@ function SuggestionList({
                   </Typography.Paragraph>
                   {item.evidence.length > 0 && (
                     <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                      依据：{item.evidence.join("；")}
+                      {t("resumeSuggestions.evidence", {
+                        evidence: item.evidence.join(t("resumeSuggestions.separator.evidence")),
+                      })}
                     </Typography.Text>
                   )}
                 </Space>
@@ -312,7 +337,7 @@ function SuggestionList({
           }}
         />
       ) : (
-        <Empty description="当前简历与岗位要求匹配度较好，暂未发现必须修改项" />
+        <Empty description={t("resumeSuggestions.empty")} />
       )}
     </div>
   );
