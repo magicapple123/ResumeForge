@@ -13,7 +13,7 @@
  *    原因，整张图没有输入就显示空态而不是零轴。
  * 2. **每张图的 `aria-label` 必须互不相同**，否则读屏软件与测试都分不清是哪张图。
  */
-import { Col, Empty, Row, Segmented, Tag, Typography } from "antd";
+import { Col, Empty, Row, Segmented, Typography } from "antd";
 import PageSkeleton from "../components/common/PageSkeleton";
 import ErrorState from "../components/common/ErrorState";
 import { useState } from "react";
@@ -27,23 +27,25 @@ import HorizontalBarChart from "../components/analytics/HorizontalBarChart";
 import SectionCard from "../components/analytics/SectionCard";
 import StatCard from "../components/analytics/StatCard";
 import { useApi } from "../hooks/useApi";
-import { FUNNEL_STATUSES, REFERRAL_STATUS_LABELS, TRACK_STATUS_LABELS } from "../types";
-import type {
-  AnalyticsDashboard,
-  FunnelStage,
-  ReferralStatus,
-  TrackCohort,
-  TrackStatus,
-} from "../types";
+import { FUNNEL_STATUSES } from "../types";
+import type { AnalyticsDashboard, FunnelStage } from "../types";
 import { formatRate } from "../utils/format";
+import { t } from "../i18n";
+import type { MessageKey } from "../i18n";
+import { useLocale } from "../i18n/i18nContext";
+import {
+  CohortBlock,
+  TopCompaniesBlock,
+  referralStatusLabel,
+} from "./analytics/AnalyticsBlocks";
 
 /** 提醒四档的展示名。紧急度的判定在后端 `reminder_urgency`（唯一实现），
  *  这里只是给四档取短名。 */
-const REMINDER_BUCKETS: { key: keyof ReminderBucketKeys; label: string }[] = [
-  { key: "overdue", label: "已逾期" },
-  { key: "soon", label: "24 小时内" },
-  { key: "upcoming", label: "3 天内" },
-  { key: "later", label: "更远" },
+const REMINDER_BUCKETS: { key: keyof ReminderBucketKeys; labelKey: MessageKey }[] = [
+  { key: "overdue", labelKey: "analyticsPage.reminder.overdue" },
+  { key: "soon", labelKey: "analyticsPage.reminder.soon" },
+  { key: "upcoming", labelKey: "analyticsPage.reminder.upcoming" },
+  { key: "later", labelKey: "analyticsPage.reminder.later" },
 ];
 
 type ReminderBucketKeys = {
@@ -53,125 +55,9 @@ type ReminderBucketKeys = {
   later: number;
 };
 
-/** 后端把明显非公司名的记录（纯数字 ID、单字垃圾、空）归并到这个中性占位。 */
-const UNKNOWN_COMPANY_LABEL = "未填写公司";
-
-/** 「投递最多的公司」：展示清洗后的真实公司前 5 名。
- *
- * 明显非公司名已被后端归并到「未填写公司」并从榜单剔除——这里只画真公司，缺口用
- * `DataGapNotice` 诚实交代，绝不把垃圾当公司名展示（宁可少显示也不要假数据）。
- */
-function TopCompaniesBlock({ data }: { data: AnalyticsDashboard }) {
-  const realGroups = data.top_companies.filter((item) => item.label !== UNKNOWN_COMPANY_LABEL);
-  const displayed = realGroups.slice(0, 5);
-  // 前 5 之外（含后端折进 other 的长尾）如实并入"另有 N 家"，不让榜单总数对不上。
-  const otherCount = Math.max(0, realGroups.length + data.other_company_count - displayed.length);
-  const unknownCount = data.top_companies
-    .filter((item) => item.label === UNKNOWN_COMPANY_LABEL)
-    .reduce((sum, item) => sum + item.count, 0);
-
-  if (data.total_applications === 0) {
-    return <Empty description="还没有投递记录" />;
-  }
-  if (realGroups.length === 0) {
-    // 有记录但全都没填公司名：诚实说明缺口，而不是画一张空榜或展示垃圾。
-    return (
-      <DataGapNotice
-        missing={unknownCount}
-        label="投递未填写公司名"
-        action={<Link to="/tracker">去补充</Link>}
-      />
-    );
-  }
-  return (
-    <>
-      <HorizontalBarChart
-        ariaLabel="投递最多的公司"
-        align="start"
-        items={displayed.map((item) => ({
-          key: item.key,
-          label: item.label,
-          count: item.count,
-        }))}
-      />
-      {otherCount > 0 ? (
-        <Typography.Text type="secondary">另有 {otherCount} 家公司未在前 5 列出</Typography.Text>
-      ) : null}
-      {unknownCount > 0 ? (
-        <DataGapNotice
-          missing={unknownCount}
-          label="投递未填写公司名，未计入排行"
-          action={<Link to="/tracker">去补充</Link>}
-        />
-      ) : null}
-    </>
-  );
-}
-
-/** 「真实时间线」（RF-18）：基于状态变化事件表的阶段转化与耗时。
- *
- * 只展示事件能证明的事：每项带分子/分母副文案与小样本徽标；历史记录（早于事件
- * 记录功能、无阶段数据）如实说明缺口。**不做**任何「使用产品能提高 X%」式的推断。
- */
-function CohortBlock({ cohort }: { cohort: TrackCohort }) {
-  if (cohort.event_track_count === 0) {
-    return (
-      <Empty
-        description={
-          cohort.historical_track_count > 0
-            ? `现有 ${cohort.historical_track_count} 条进度记录早于事件记录功能，没有阶段数据；之后的状态变化会开始记录。`
-            : "还没有进度记录"
-        }
-      />
-    );
-  }
-  return (
-    <>
-      {cohort.historical_track_count > 0 ? (
-        <Typography.Paragraph type="secondary" style={{ marginBottom: 8 }}>
-          有 {cohort.historical_track_count} 条记录早于事件记录功能（共{" "}
-          {cohort.event_track_count + cohort.historical_track_count}{" "}
-          条），无阶段数据；之后的状态变化会开始记录。
-        </Typography.Paragraph>
-      ) : null}
-      <Row gutter={[16, 16]}>
-        {cohort.conversions.map((item) => (
-          <Col xs={24} sm={12} xl={6} key={`${item.from_status}-${item.to_status}`}>
-            <StatCard
-              title={`${TRACK_STATUS_LABELS[item.from_status as TrackStatus]} → ${TRACK_STATUS_LABELS[item.to_status as TrackStatus]}`}
-              value={formatRate(item.rate)}
-              hint={
-                item.denominator === 0
-                  ? "还没有记录到过这个阶段"
-                  : `到下一阶段 ${item.numerator} / 到过本阶段 ${item.denominator} 条记录`
-              }
-            />
-            {item.small_sample && <Tag>样本少于 5 条，仅供参考</Tag>}
-          </Col>
-        ))}
-      </Row>
-      <Row gutter={[16, 16]} style={{ marginTop: 8 }}>
-        {cohort.durations.map((item) => (
-          <Col xs={24} sm={12} xl={6} key={`${item.from_status}-${item.to_status}`}>
-            <StatCard
-              title={`${TRACK_STATUS_LABELS[item.from_status as TrackStatus]} → ${TRACK_STATUS_LABELS[item.to_status as TrackStatus]} 耗时`}
-              value={item.median_days === null ? "暂无可比数据" : `中位 ${item.median_days} 天`}
-              hint={`基于 ${item.numerator} 对日期（该阶段共 ${item.denominator} 条）`}
-            />
-            {item.small_sample && <Tag>样本少于 5 条，仅供参考</Tag>}
-          </Col>
-        ))}
-      </Row>
-      {cohort.undated_event_count > 0 ? (
-        <Typography.Paragraph type="secondary" style={{ marginTop: 8, marginBottom: 0 }}>
-          有 {cohort.undated_event_count} 次状态变化没写日期，耗时按记录当天兜底。
-        </Typography.Paragraph>
-      ) : null}
-    </>
-  );
-}
-
 export default function AnalyticsPage() {
+  // 本页用模块级 t()：必须订阅语言变化，否则切语言后整页文案不重渲染。
+  useLocale();
   const [trendMonths, setTrendMonths] = useState(6);
   const { data, loading, error, reload } = useApi(
     () => getAnalyticsDashboard(trendMonths),
@@ -189,20 +75,21 @@ export default function AnalyticsPage() {
       <div className="profile-page-header">
         <div>
           <Typography.Title level={3} style={{ margin: 0 }}>
-            求职统计
+            {t("analyticsPage.title")}
           </Typography.Title>
-          <Typography.Text type="secondary">
-            投递转化与卡点、时间节奏、渠道去向、简历健康度，全部本地聚合、离线可用。
-          </Typography.Text>
+          <Typography.Text type="secondary">{t("analyticsPage.subtitle")}</Typography.Text>
         </div>
       </div>
 
       {loading ? (
         <PageSkeleton rows={8} />
       ) : error ? (
-        <ErrorState description={`求职统计加载失败：${error}`} onRetry={() => void reload()} />
+        <ErrorState
+          description={t("analyticsPage.loadError", { error })}
+          onRetry={() => void reload()}
+        />
       ) : !data ? (
-        <Empty description="暂无看板数据" />
+        <Empty description={t("analyticsPage.empty.noData")} />
       ) : (
         <AnalyticsBody
           data={data}
@@ -223,6 +110,8 @@ interface BodyProps {
 }
 
 function AnalyticsBody({ data, mainFunnel, trendMonths, onTrendMonthsChange }: BodyProps) {
+  // 本组件用模块级 t()：必须订阅语言变化，否则切语言后这一段不重渲染。
+  useLocale();
   const gap = data.applied_date_gap;
   // 趋势图与周内分布都吃 applied_at：一条带日期的都没有时，它们只能画零轴。
   const hasAppliedDates = gap.dated > 0;
@@ -236,98 +125,113 @@ function AnalyticsBody({ data, mainFunnel, trendMonths, onTrendMonthsChange }: B
           <StatCard
             framed
             className="stat-card-applied"
-            title="投递总量"
+            title={t("analyticsPage.overview.total")}
             value={data.total_applications}
-            hint={`有效投递 ${data.valid_applications}`}
+            hint={t("analyticsPage.overview.validApplications", {
+              count: data.valid_applications,
+            })}
           />
         </Col>
         <Col xs={24} sm={12} xl={6}>
           <StatCard
             framed
             className="stat-card-interview"
-            title="面试率"
+            title={t("analyticsPage.overview.interviewRate")}
             value={formatRate(data.interview_rate)}
-            hint={`面试 ${data.interview_count} / 有效投递 ${data.valid_applications}`}
+            hint={t("analyticsPage.overview.interviewHint", {
+              interview: data.interview_count,
+              valid: data.valid_applications,
+            })}
           />
         </Col>
         <Col xs={24} sm={12} xl={6}>
           <StatCard
             framed
             className="stat-card-assessment"
-            title="笔试通过率"
+            title={t("analyticsPage.overview.assessmentRate")}
             value={formatRate(data.assessment_pass_rate)}
-            hint={`进面试 ${data.assessment_to_interview_count} / 测评笔试 ${data.assessment_count}`}
+            hint={t("analyticsPage.overview.assessmentHint", {
+              toInterview: data.assessment_to_interview_count,
+              assessment: data.assessment_count,
+            })}
           />
         </Col>
         <Col xs={24} sm={12} xl={6}>
           <StatCard
             framed
             className="stat-card-offer"
-            title="Offer 数"
+            title={t("analyticsPage.overview.offerCount")}
             value={data.offer_count}
             valueStyle={{ color: "var(--rf-success-strong)" }}
-            hint={`Offer 率 ${formatRate(data.offer_rate)}`}
+            hint={t("analyticsPage.overview.offerHint", { rate: formatRate(data.offer_rate) })}
           />
         </Col>
       </Row>
 
       <SectionCard
-        title="转化与卡点"
-        description="转化率的分母都是「有效投递」（扣除尚未核实的「待确认」）。「超过 7 天没有更新」指进行中、且 7 天内没有任何改动——改一条备注也算更新，所以它不等于「面试卡住」。"
+        title={t("analyticsPage.funnel.title")}
+        description={t("analyticsPage.funnel.description")}
       >
         <Row gutter={[16, 16]}>
           <Col xs={24} xl={14}>
-            <ChartBlock title="求职漏斗" hint="每个阶段的人数，分母是有效投递">
+            <ChartBlock
+              title={t("analyticsPage.funnel.chartTitle")}
+              hint={t("analyticsPage.funnel.chartHint")}
+            >
               <FunnelChart stages={mainFunnel} />
             </ChartBlock>
           </Col>
           <Col xs={24} xl={10}>
             <Row gutter={[16, 16]}>
               <Col span={8}>
-                <StatCard title="进行中" value={data.active_count} hint="未走到终态" />
-              </Col>
-              <Col span={8}>
                 <StatCard
-                  title="超过 7 天没更新"
-                  value={data.stalled_count}
-                  hint="进行中且久未改动"
+                  title={t("analyticsPage.funnel.active")}
+                  value={data.active_count}
+                  hint={t("analyticsPage.funnel.activeHint")}
                 />
               </Col>
               <Col span={8}>
                 <StatCard
-                  title="没有下一步"
+                  title={t("analyticsPage.funnel.stalled")}
+                  value={data.stalled_count}
+                  hint={t("analyticsPage.funnel.stalledHint")}
+                />
+              </Col>
+              <Col span={8}>
+                <StatCard
+                  title={t("analyticsPage.funnel.noNextAction")}
                   value={data.no_next_action_count}
-                  hint="进行中且未填"
+                  hint={t("analyticsPage.funnel.noNextActionHint")}
                 />
               </Col>
             </Row>
             <Typography.Paragraph style={{ marginTop: 12, marginBottom: 0 }}>
-              <Link to="/tracker">去「求职进度」补下一步或推进状态</Link>
+              <Link to="/tracker">{t("analyticsPage.funnel.action")}</Link>
             </Typography.Paragraph>
           </Col>
         </Row>
       </SectionCard>
 
       <SectionCard
-        title="真实时间线"
-        description="只统计事件记录功能上线之后发生的状态变化：每项的分子分母都写在副文案里，样本不足时亮出徽标。这些数字只描述过去——它们不预测、也不承诺任何「用了会更好」。"
+        title={t("analyticsPage.cohort.title")}
+        description={t("analyticsPage.cohort.description")}
       >
         <CohortBlock cohort={data.cohort} />
       </SectionCard>
 
       <SectionCard
-        title="时间与节奏"
-        description="趋势与周内分布按「投递日期」统计；「最近 N 天新增」按记录创建时间算，用的是滚动窗口，与所在时区无关。"
+        title={t("analyticsPage.trend.title")}
+        description={t("analyticsPage.trend.description")}
         extra={
           <Segmented
             size="small"
             value={trendMonths}
             onChange={(value) => onTrendMonthsChange(Number(value))}
             options={[
-              { label: "近1月", value: 1 },
-              { label: "近3月", value: 3 },
-              { label: "近6月", value: 6 },
-              { label: "近1年", value: 12 },
+              { label: t("analyticsPage.trend.month1"), value: 1 },
+              { label: t("analyticsPage.trend.month3"), value: 3 },
+              { label: t("analyticsPage.trend.month6"), value: 6 },
+              { label: t("analyticsPage.trend.year1"), value: 12 },
             ]}
           />
         }
@@ -335,40 +239,54 @@ function AnalyticsBody({ data, mainFunnel, trendMonths, onTrendMonthsChange }: B
         <DataGapNotice
           missing={gap.undated}
           available={gap.dated}
-          label="投递未填「投递日期」"
-          action={<Link to="/tracker">去补充</Link>}
+          label={t("analyticsPage.trend.missingDate")}
+          action={<Link to="/tracker">{t("analyticsPage.action.goFill")}</Link>}
         />
         <Row gutter={[16, 16]}>
           <Col xs={24} xl={12}>
-            <ChartBlock title="投递趋势" hint="按投递日期">
+            <ChartBlock
+              title={t("analyticsPage.trend.appliedTrend")}
+              hint={t("analyticsPage.trend.byAppliedDate")}
+            >
               {hasAppliedDates ? (
-                <BarChart points={data.trend} ariaLabel="投递趋势" />
+                <BarChart points={data.trend} ariaLabel={t("analyticsPage.trend.appliedTrend")} />
               ) : (
-                <Empty description="还没有填过投递日期的记录" />
+                <Empty description={t("analyticsPage.trend.emptyNoDates")} />
               )}
             </ChartBlock>
           </Col>
           <Col xs={24} xl={12}>
-            <ChartBlock title="周内投递分布" hint="按投递日期">
+            <ChartBlock
+              title={t("analyticsPage.trend.weekdayTitle")}
+              hint={t("analyticsPage.trend.byAppliedDate")}
+            >
               {hasAppliedDates ? (
-                <BarChart points={data.weekday} ariaLabel="周内投递分布" />
+                <BarChart points={data.weekday} ariaLabel={t("analyticsPage.trend.weekdayTitle")} />
               ) : (
-                <Empty description="还没有填过投递日期的记录" />
+                <Empty description={t("analyticsPage.trend.emptyNoDates")} />
               )}
             </ChartBlock>
           </Col>
         </Row>
         <Row gutter={[16, 16]} style={{ marginTop: 16 }}>
           <Col xs={12} sm={6}>
-            <StatCard title="最近 7 天新增" value={data.recent_7d_count} hint="按创建时间" />
+            <StatCard
+              title={t("analyticsPage.trend.recent7d")}
+              value={data.recent_7d_count}
+              hint={t("analyticsPage.trend.byCreatedTime")}
+            />
           </Col>
           <Col xs={12} sm={6}>
-            <StatCard title="最近 30 天新增" value={data.recent_30d_count} hint="按创建时间" />
+            <StatCard
+              title={t("analyticsPage.trend.recent30d")}
+              value={data.recent_30d_count}
+              hint={t("analyticsPage.trend.byCreatedTime")}
+            />
           </Col>
           {REMINDER_BUCKETS.map((bucket) => (
             <Col xs={12} sm={3} key={bucket.key}>
               <StatCard
-                title={`提醒·${bucket.label}`}
+                title={t("analyticsPage.trend.reminderTitle", { bucket: t(bucket.labelKey) })}
                 value={reminders[bucket.key]}
                 valueStyle={
                   bucket.key === "overdue" && reminders.overdue > 0
@@ -382,30 +300,33 @@ function AnalyticsBody({ data, mainFunnel, trendMonths, onTrendMonthsChange }: B
       </SectionCard>
 
       <SectionCard
-        title="渠道与去向"
-        description="内推转化由关联的投递记录派生——那条记录走到「面试」及以上才算转化。「记录来源」是这一行**怎么进系统的**，不是投递渠道（本库没有渠道字段）。"
+        title={t("analyticsPage.channels.title")}
+        description={t("analyticsPage.channels.description")}
       >
         {/* 顶部三张卡：两个核心指标 + 一条口径提示，把描述里的长句收敛成可扫读的提示 tile。 */}
         <Row gutter={[16, 16]}>
           <Col xs={24} sm={8}>
             <StatCard
-              title="内推转化率"
+              title={t("analyticsPage.channels.referralRate")}
               value={formatRate(data.referral.rate)}
-              hint={`已转化 ${data.referral.converted} / 有效内推 ${data.referral.total}`}
+              hint={t("analyticsPage.channels.referralRateHint", {
+                converted: data.referral.converted,
+                total: data.referral.total,
+              })}
             />
           </Col>
           <Col xs={24} sm={8}>
             <StatCard
-              title="内推总数"
+              title={t("analyticsPage.channels.referralTotal")}
               value={data.referral_status.reduce((sum, item) => sum + item.count, 0)}
-              hint="含已关闭与无效"
+              hint={t("analyticsPage.channels.referralTotalHint")}
             />
           </Col>
           <Col xs={24} sm={8}>
             <div className="analytics-hint-tile">
-              <Typography.Text strong>口径提示</Typography.Text>
+              <Typography.Text strong>{t("analyticsPage.channels.caliberTitle")}</Typography.Text>
               <Typography.Text type="secondary">
-                「记录来源」是录入方式，不是投递渠道；内推转化按关联投递走到面试及以上算。
+                {t("analyticsPage.channels.caliberBody")}
               </Typography.Text>
             </div>
           </Col>
@@ -414,24 +335,30 @@ function AnalyticsBody({ data, mainFunnel, trendMonths, onTrendMonthsChange }: B
         {/* 中部左右两栏：左内推状态分布，右投递最多的公司（前 5，缺口诚实说明）。 */}
         <Row gutter={[16, 16]} style={{ marginTop: 16 }}>
           <Col xs={24} xl={12}>
-            <ChartBlock title="内推状态分布" hint="按当前内推状态">
+            <ChartBlock
+              title={t("analyticsPage.channels.referralStatusTitle")}
+              hint={t("analyticsPage.channels.referralStatusHint")}
+            >
               {data.referral_status.some((item) => item.count > 0) ? (
                 <HorizontalBarChart
-                  ariaLabel="内推状态分布"
+                  ariaLabel={t("analyticsPage.channels.referralStatusTitle")}
                   align="start"
                   items={data.referral_status.map((item) => ({
                     key: item.key,
-                    label: REFERRAL_STATUS_LABELS[item.key as ReferralStatus] ?? item.key,
+                    label: referralStatusLabel(item.key),
                     count: item.count,
                   }))}
                 />
               ) : (
-                <Empty description="还没有内推记录" />
+                <Empty description={t("analyticsPage.channels.emptyReferrals")} />
               )}
             </ChartBlock>
           </Col>
           <Col xs={24} xl={12}>
-            <ChartBlock title="投递最多的公司" hint="前 5 名">
+            <ChartBlock
+              title={t("analyticsPage.topCompanies.title")}
+              hint={t("analyticsPage.topCompanies.chartHint")}
+            >
               <TopCompaniesBlock data={data} />
             </ChartBlock>
           </Col>
@@ -439,7 +366,10 @@ function AnalyticsBody({ data, mainFunnel, trendMonths, onTrendMonthsChange }: B
 
         {/* 底部：三种记录来源的迷你 tile。 */}
         <div style={{ marginTop: 16 }}>
-          <ChartBlock title="记录来源" hint="录入方式，不是投递渠道">
+          <ChartBlock
+            title={t("analyticsPage.channels.sourcesTitle")}
+            hint={t("analyticsPage.channels.sourcesHint")}
+          >
             <Row gutter={[16, 16]}>
               {data.record_sources.map((item) => (
                 <Col xs={8} key={item.key}>
@@ -454,38 +384,47 @@ function AnalyticsBody({ data, mainFunnel, trendMonths, onTrendMonthsChange }: B
       </SectionCard>
 
       <SectionCard
-        title="简历与健康度"
-        description="「带一致性提醒」与「带【待补】」来自生成时留下的记录与正文里的未完成标记；「待确认主张」是事实台账里还没核实、但引用时会受影响的条目。"
+        title={t("analyticsPage.resume.title")}
+        description={t("analyticsPage.resume.description")}
       >
         <Row gutter={[16, 16]}>
           <Col xs={12} sm={6}>
             <StatCard
-              title="简历"
+              title={t("analyticsPage.resume.count")}
               value={data.resume_count}
               hint={
                 data.resume_scanned_count < data.resume_count
-                  ? `待补只统计最近 ${data.resume_scanned_count} 份`
-                  : "全部已纳入统计"
+                  ? t("analyticsPage.resume.scannedHint", { count: data.resume_scanned_count })
+                  : t("analyticsPage.resume.allScanned")
               }
             />
           </Col>
           <Col xs={12} sm={6}>
-            <StatCard title="带一致性提醒" value={data.resume_with_warnings_count} />
+            <StatCard
+              title={t("analyticsPage.resume.withWarnings")}
+              value={data.resume_with_warnings_count}
+            />
           </Col>
           <Col xs={12} sm={6}>
-            <StatCard title="带【待补】" value={data.resume_with_placeholders_count} />
+            <StatCard
+              title={t("analyticsPage.resume.withPlaceholders")}
+              value={data.resume_with_placeholders_count}
+            />
           </Col>
           <Col xs={12} sm={6}>
-            <StatCard title="待确认主张" value={data.unverified_claim_count} />
+            <StatCard
+              title={t("analyticsPage.resume.unverifiedClaims")}
+              value={data.unverified_claim_count}
+            />
           </Col>
         </Row>
         <DataGapNotice
           missing={unlinkedApplications}
           available={data.track_resume_linked_count}
-          label="投递没有关联简历"
+          label={t("analyticsPage.resume.missingLink")}
           action={
             <Typography.Text type="secondary">
-              关联后才能按简历看效果；录入界面暂未提供关联入口。
+              {t("analyticsPage.resume.missingLinkAction")}
             </Typography.Text>
           }
         />
