@@ -18,6 +18,8 @@ import { LoadingOutlined } from "@ant-design/icons";
 import { App, Select } from "antd";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useLocation } from "react-router-dom";
+import { t } from "../i18n";
+import { useLocale } from "../i18n/i18nContext";
 import { subscribeLLMConfig } from "../features/settings/llmConfigEvents";
 import { getLLMConfig, listLLMConfigRecords, activateLLMRecord, testLLM } from "../api/settings";
 import { configFromRecord } from "./settings/SettingsConfig";
@@ -32,6 +34,8 @@ import type { LLMConfigRecord } from "../types";
 const SWITCH_DELAY_MS = 220;
 
 export default function ModelProfileSelect() {
+  // 本组件用模块级 t() 取文案：必须订阅语言变化。
+  useLocale();
   const { message } = App.useApp();
   const location = useLocation();
   const [records, setRecords] = useState<LLMConfigRecord[]>([]);
@@ -98,9 +102,11 @@ export default function ModelProfileSelect() {
     try {
       const activated = await activateLLMRecord(id);
       setActiveId(activated.id);
-      message.success(`已切换到配置「${activated.name}」`);
+      message.success(t("componentsMisc2.modelProfile.switched", { name: activated.name }));
     } catch (error) {
-      message.error(error instanceof Error ? error.message : "切换模型配置失败");
+      message.error(
+        error instanceof Error ? error.message : t("componentsMisc2.modelProfile.switchFailed"),
+      );
     } finally {
       setSwitching(false);
       setOpen(false);
@@ -129,15 +135,28 @@ export default function ModelProfileSelect() {
       // 调用会被 `react-hooks/purity` 拦下。后端没给就只说"正常"。
       const result = await testLLM(configFromRecord(record));
       if (!result.ok) {
-        message.error(`「${record.name}」连接失败：${result.message || "未知原因"}`);
+        message.error(
+          t("componentsMisc2.modelProfile.testFailed", {
+            name: record.name,
+            reason: result.message || t("componentsMisc2.modelProfile.unknownReason"),
+          }),
+        );
       } else if (result.latency_ms != null) {
-        message.success(`「${record.name}」连接正常（${result.latency_ms}ms）`);
+        message.success(
+          t("componentsMisc2.modelProfile.testOkLatency", {
+            name: record.name,
+            latency: result.latency_ms,
+          }),
+        );
       } else {
-        message.success(`「${record.name}」连接正常`);
+        message.success(t("componentsMisc2.modelProfile.testOk", { name: record.name }));
       }
     } catch (error) {
-      const detail = error instanceof Error ? error.message : "未知原因";
-      message.error(`「${record.name}」连接失败：${detail}`);
+      const detail =
+        error instanceof Error ? error.message : t("componentsMisc2.modelProfile.unknownReason");
+      message.error(
+        t("componentsMisc2.modelProfile.testFailed", { name: record.name, reason: detail }),
+      );
     } finally {
       setTestingId(null);
     }
@@ -149,9 +168,9 @@ export default function ModelProfileSelect() {
       // aria-labelledby 会指到这个 input，导致按"角色 + 名称"查询对话框全部失效。
       id="global-model-profile-select"
       className="app-model-profile-select"
-      aria-label="当前模型配置"
+      aria-label={t("componentsMisc2.modelProfile.ariaLabel")}
       value={activeId ?? undefined}
-      placeholder="选择模型配置"
+      placeholder={t("componentsMisc2.modelProfile.placeholder")}
       loading={switching}
       // 触发器固定 200px（见 base.css 的 .app-model-profile-select），弹层**不跟着它**
       // 变窄：`false` 让弹层按内容自适应，再由下面的 maxWidth 收到 320px。
