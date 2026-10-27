@@ -17,6 +17,7 @@ import { useMemo } from "react";
 import type { MessageKey } from "../../i18n";
 import { useI18n } from "../../i18n/i18nContext";
 import { claimResponsibilityColor, claimStatusColor } from "../claims/claimPresentation";
+import { claimResponsibilityLabelKey, claimStatusLabelKey } from "../../i18n/enum/claims";
 import { describeResumeFieldPath } from "../../utils/resumeFieldPath";
 import type { FactAnnotation, ResumeContent } from "../../types";
 import { ORIGIN_COLORS, ORIGIN_LABELS, canShowVerified } from "./factAnnotationMeta";
@@ -109,6 +110,14 @@ export default function EvidencePanel({ annotations, content }: Props) {
                             const verified = canShowVerified(annotation)
                               ? annotation.verification_status
                               : null;
+                            // 标注里的状态/承担程度是后端下发的协议值：映射到语言包，
+                            // 认不出的取值回退原样显示（不丢信息）。
+                            const verifiedKey = verified
+                              ? claimStatusLabelKey(verified)
+                              : undefined;
+                            const responsibilityKey = claimResponsibilityLabelKey(
+                              annotation.responsibility ?? "",
+                            );
                             const originKey = ORIGIN_LABELS[annotation.origin];
                             return (
                               <div
@@ -126,13 +135,17 @@ export default function EvidencePanel({ annotations, content }: Props) {
                                     {originKey ? t(originKey) : annotation.origin}
                                   </Tag>
                                   {verified && (
-                                    <Tag color={claimStatusColor(verified)}>{verified}</Tag>
+                                    <Tag color={claimStatusColor(verified)}>
+                                      {verifiedKey ? t(verifiedKey) : verified}
+                                    </Tag>
                                   )}
                                   {annotation.responsibility && (
                                     <Tag
                                       color={claimResponsibilityColor(annotation.responsibility)}
                                     >
-                                      {annotation.responsibility}
+                                      {responsibilityKey
+                                        ? t(responsibilityKey)
+                                        : annotation.responsibility}
                                     </Tag>
                                   )}
                                 </Space>
