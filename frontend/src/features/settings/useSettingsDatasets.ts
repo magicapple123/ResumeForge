@@ -15,6 +15,7 @@ import type { BackupAssetIssues, BackupCoverage } from "../../api/settings";
 import type { DatasetInfo } from "../../types";
 import { formatErrorGuidance, isDatasetScopeExpired } from "../../api/errorGuidance";
 import { initializeDatasetScope } from "../../api/datasetScope";
+import { t } from "../../i18n";
 import { downloadBlob } from "../../utils/download";
 import { formatBytes } from "../../utils/format";
 import { reloadPage } from "../../utils/navigation";
@@ -29,12 +30,14 @@ import { describeImportIssues } from "./datasetImportFeedback";
  */
 function describeUncovered(coverage?: BackupCoverage): string | null {
   if (!coverage || coverage.count <= 0) return null;
-  const amount = coverage.truncated ? `至少 ${coverage.count} 项` : `${coverage.count} 项`;
-  const size = coverage.bytes > 0 ? `（${formatBytes(coverage.bytes)}）` : "";
-  return (
-    `另有 ${amount}${size}未纳入备份：它们在数据目录里，但不在这个包里；` +
-    "详见包内 manifest.json 的 uncovered 段"
-  );
+  const amount = coverage.truncated
+    ? t("settingsDatasets.uncovered.atLeast", { count: coverage.count })
+    : t("settingsDatasets.uncovered.count", { count: coverage.count });
+  const size =
+    coverage.bytes > 0
+      ? t("settingsDatasets.uncovered.size", { size: formatBytes(coverage.bytes) })
+      : "";
+  return t("settingsDatasets.uncovered.summary", { amount, size });
 }
 
 /** 设置页「数据」页里数据集的加载、导出、导入、切换、重命名、删除与新建。 */
@@ -62,7 +65,7 @@ export function useSettingsDatasets() {
     try {
       return await listDatasets();
     } catch (err) {
-      message.error(err instanceof Error ? err.message : "加载数据集失败");
+      message.error(err instanceof Error ? err.message : t("settingsDatasets.load.failed"));
       return null;
     }
   }, [message]);
@@ -104,21 +107,24 @@ export function useSettingsDatasets() {
     // 用户也需要知道"这个包不等于整个数据目录"。
     const uncovered = describeUncovered(coverage);
     if (issues.missing > 0) {
-      parts.push(`有 ${issues.missing} 个被引用的附件在磁盘上找不到，备份里不包含它们`);
+      parts.push(t("settingsDatasets.export.missingAttachments", { count: issues.missing }));
     }
     if (issues.mismatched > 0) {
-      parts.push(`${issues.mismatched} 个附件内容与数据库登记不符，包里装的是当前磁盘上的字节`);
+      parts.push(t("settingsDatasets.export.mismatchedAttachments", { count: issues.mismatched }));
     }
     if (parts.length > 0) {
-      message.warning(`${successText}，但这份备份「不完整」：${parts.join("；")}`);
+      message.warning(
+        t("settingsDatasets.export.incomplete", {
+          summary: successText,
+          problems: parts.join(t("settingsDatasets.problemSeparator")),
+        }),
+      );
       if (uncovered) message.info(uncovered);
       return;
     }
     message.success(successText);
     if (issues.missingAtImport > 0) {
-      message.info(
-        `另有 ${issues.missingAtImport} 个附件在该数据集导入时就已缺失，已在包内清单注明`,
-      );
+      message.info(t("settingsDatasets.export.missingAtImport", { count: issues.missingAtImport }));
     }
     if (uncovered) message.info(uncovered);
   };
@@ -134,9 +140,13 @@ export function useSettingsDatasets() {
         downloadName,
       );
       downloadBlob(blob, filename);
-      reportBackupIssues(`已导出「${dataset.name}」到浏览器的下载目录`, assetIssues, coverage);
+      reportBackupIssues(
+        t("settingsDatasets.export.datasetDone", { name: dataset.name }),
+        assetIssues,
+        coverage,
+      );
     } catch (err) {
-      message.error(err instanceof Error ? err.message : "导出数据集失败");
+      message.error(err instanceof Error ? err.message : t("settingsDatasets.export.failed"));
     } finally {
       setDatasetExporting(false);
     }
@@ -153,12 +163,12 @@ export function useSettingsDatasets() {
       );
       downloadBlob(blob, filename);
       reportBackupIssues(
-        `已把全部 ${datasets.length} 份数据集导出到浏览器的下载目录`,
+        t("settingsDatasets.export.allDone", { count: datasets.length }),
         assetIssues,
         coverage,
       );
     } catch (err) {
-      message.error(err instanceof Error ? err.message : "导出全部数据集失败");
+      message.error(err instanceof Error ? err.message : t("settingsDatasets.export.allFailed"));
     } finally {
       setDatasetExporting(false);
     }
@@ -174,60 +184,88 @@ export function useSettingsDatasets() {
       // 只报主数据集的名字会让用户以为另外几份没被恢复。
       const extras = created.restored_datasets?.length ?? 0;
       // 勾选过"包含 API Key"的包要如实告诉用户密钥也回来了（换机器解不开时仍需重填）。
-      const parts = [`已导入数据集「${created.name}」`];
+      const parts = [t("settingsDatasets.import.done", { name: created.name })];
       if (extras > 0) {
         // 逐份点名（最多 3 个）：只说"另外 N 份"，用户还是不知道恢复了哪几份。
         const names = (created.restored_datasets ?? [])
           .map((dataset) => dataset.name)
           .filter(Boolean);
-        const shownNames = names.slice(0, 3).join("、");
+        const shownNames = names.slice(0, 3).join(t("settingsDatasets.import.namesSeparator"));
         parts.push(
-          `并随包恢复了另外 ${extras} 份数据集` +
-            (shownNames ? `（${shownNames}${names.length > 3 ? " 等" : ""}）` : ""),
+          t("settingsDatasets.import.extraDatasets", { count: extras }) +
+            (shownNames
+              ? t(
+                  names.length > 3
+                    ? "settingsDatasets.import.extraNamesMore"
+                    : "settingsDatasets.import.extraNames",
+                  { names: shownNames },
+                )
+              : ""),
         );
       }
-      if (created.api_key_included) parts.push("备份中的大模型 API Key 已一并恢复");
+      if (created.api_key_included) parts.push(t("settingsDatasets.import.apiKeyRestored"));
       // 全局模型配置是"数据集之外"的一段：恢复条数与跳过原因都要说清楚，
       // 否则用户只看到数据集恢复，以为配置也回来了（或反之）。
       const globalLlm = created.global_llm;
       const globalFailed = Boolean(globalLlm?.error);
       if (globalLlm?.error) {
-        parts.push(`全局模型配置未能导入（${globalLlm.error}）`);
+        parts.push(t("settingsDatasets.import.globalFailed", { error: globalLlm.error }));
       } else if (globalLlm && (globalLlm.imported || globalLlm.updated)) {
         const restored = (globalLlm.imported ?? 0) + (globalLlm.updated ?? 0);
         parts.push(
-          `全局模型配置已恢复 ${restored} 条` +
-            (globalLlm.skipped ? `（跳过 ${globalLlm.skipped} 条同名）` : ""),
+          t("settingsDatasets.import.globalRestored", { count: restored }) +
+            (globalLlm.skipped
+              ? t("settingsDatasets.import.globalSkipped", { count: globalLlm.skipped })
+              : ""),
         );
       } else if (globalLlm?.skipped) {
-        parts.push(`全局模型配置 ${globalLlm.skipped} 条与本地同名，已保留本地版本`);
+        parts.push(t("settingsDatasets.import.globalKeptLocal", { count: globalLlm.skipped }));
       }
       // 自定义字体（data/fonts/）随包导出：恢复了几份、有几份因为本机已有同名文件而
       // 保留本机版本，都要说清楚——用户可能正是因为"换机后字体要重新上传"才做备份的。
       // 注意字体与附件是两套口径：字体问题不进 problems，也不影响"这份备份完整与否"。
       const restoredFonts = created.restored_fonts ?? 0;
-      if (restoredFonts > 0) parts.push(`恢复了 ${restoredFonts} 个自定义字体`);
+      if (restoredFonts > 0) {
+        parts.push(t("settingsDatasets.import.fontsRestored", { count: restoredFonts }));
+      }
       const skippedFonts = created.skipped_fonts ?? 0;
-      if (skippedFonts > 0) parts.push(`${skippedFonts} 个同名字体保留本机版本`);
+      if (skippedFonts > 0) {
+        parts.push(t("settingsDatasets.import.fontsSkipped", { count: skippedFonts }));
+      }
       // RR-03：带着附件问题导入时不得呈现成"完整恢复"——问题逐条（最多 3 条）摆出来。
       const problems = [...(created.backup_asset_warnings ?? []), ...(created.asset_issues ?? [])];
       if (created.assets_incomplete || problems.length > 0 || globalFailed) {
-        const shown = problems.slice(0, 3).join("；");
+        const shown =
+          problems.slice(0, 3).join(t("settingsDatasets.problemSeparator")) ||
+          t("settingsDatasets.import.fallbackProblem");
         message.warning(
-          `${parts.join("，")}；当前数据未受影响，但这份备份「不完整」：` +
-            (shown || "附件存在缺失或校验不一致") +
-            (problems.length > 3 ? `（共 ${problems.length} 条）` : ""),
+          t("settingsDatasets.import.summaryIncomplete", {
+            parts: parts.join(t("settingsDatasets.partsSeparator")),
+            problems:
+              shown +
+              (problems.length > 3
+                ? t("settingsDatasets.import.moreProblems", { count: problems.length })
+                : ""),
+          }),
         );
       } else {
-        message.success(`${parts.join("，")}；当前数据未受影响`);
+        message.success(
+          t("settingsDatasets.import.summaryOk", {
+            parts: parts.join(t("settingsDatasets.partsSeparator")),
+          }),
+        );
       }
       // 字体没能完全恢复只影响 PDF 导出的字形，**不算**这份备份不完整：单独一条提示，
       // 绝不并进上面那条"备份不完整"的分支（那会让用户以为简历里的附件丢了）。
       const fontIssues = created.font_issues ?? [];
       if (fontIssues.length > 0) {
         message.warning(
-          `字体未完全恢复：${fontIssues.slice(0, 3).join("；")}` +
-            (fontIssues.length > 3 ? `（共 ${fontIssues.length} 条）` : ""),
+          t("settingsDatasets.import.fontsIncomplete", {
+            problems: fontIssues.slice(0, 3).join(t("settingsDatasets.problemSeparator")),
+          }) +
+            (fontIssues.length > 3
+              ? t("settingsDatasets.import.moreProblems", { count: fontIssues.length })
+              : ""),
         );
       }
       // R16：整包逐份恢复，坏一份不影响其它份。成功提示之后必须点名没恢复的那几份，
@@ -235,15 +273,16 @@ export function useSettingsDatasets() {
       const trouble = describeImportIssues(created.failed, created.skipped);
       if (trouble) message.warning(trouble);
     } catch (err) {
-      const text = err instanceof Error ? err.message : "导入备份失败";
+      const text = err instanceof Error ? err.message : t("settingsDatasets.import.failed");
       // 附件完整性问题默认让整次导入失败（写盘前就拒绝）。这里给用户一条显式出路：
       // 明确告知代价后，才带着"跳过有问题的附件"重试。
+      // i18n-ok: 匹配后端返回的附件校验文案（协议耦合），翻了就永远匹配不上
       if (text.includes("附件未通过校验")) {
         modal.confirm({
-          title: "备份包的附件有问题",
-          content: `${text}\n\n可以选择跳过有问题的附件，只导入数据库内容（这些附件在你本机的原文件不会被改动）。`,
-          okText: "跳过附件继续导入",
-          cancelText: "取消",
+          title: t("settingsDatasets.import.assetProblemTitle"),
+          content: t("settingsDatasets.import.assetProblemContent", { error: text }),
+          okText: t("settingsDatasets.import.skipAssets"),
+          cancelText: t("common.action.cancel"),
           onOk: () => importDatasetFile(file, name, true),
         });
       } else {
@@ -267,12 +306,12 @@ export function useSettingsDatasets() {
         await initializeDatasetScope();
         await activateDataset(dataset.id);
       }
-      message.success(`已切换到「${dataset.name}」，正在刷新页面`);
+      message.success(t("settingsDatasets.switch.done", { name: dataset.name }));
       // 整页重载：切换后所有本地状态都要按新数据集重建。失败时保留 loading 以便重试。
       window.setTimeout(reloadPage, 800);
     } catch (err) {
       // RF-20：失败不只显示原始异常——给「原因 + 建议 + 编号」指引。
-      message.error(formatErrorGuidance(err, "切换数据集失败"));
+      message.error(formatErrorGuidance(err, t("settingsDatasets.switch.failed")));
       setSwitchingDatasetId(null);
     }
   };
@@ -284,9 +323,9 @@ export function useSettingsDatasets() {
       await renameDataset(renameTarget.id, renameValue);
       setRenameTarget(null);
       await loadDatasetList();
-      message.success("已重命名");
+      message.success(t("settingsDatasets.rename.done"));
     } catch (err) {
-      message.error(err instanceof Error ? err.message : "重命名失败");
+      message.error(err instanceof Error ? err.message : t("settingsDatasets.rename.failed"));
     } finally {
       setRenamingDatasetId(null);
     }
@@ -298,9 +337,9 @@ export function useSettingsDatasets() {
     try {
       await deleteDataset(dataset.id);
       await loadDatasetList();
-      message.success(`已删除「${dataset.name}」，可在 data/datasets/.trash/ 找回`);
+      message.success(t("settingsDatasets.delete.done", { name: dataset.name }));
     } catch (err) {
-      message.error(err instanceof Error ? err.message : "删除数据集失败");
+      message.error(err instanceof Error ? err.message : t("settingsDatasets.delete.failed"));
     } finally {
       setDeletingDatasetId(null);
     }
@@ -309,7 +348,7 @@ export function useSettingsDatasets() {
   const createEmptyDataset = async () => {
     const name = createDatasetName.trim();
     if (!name) {
-      message.warning("请填写数据集名称");
+      message.warning(t("settingsDatasets.create.nameRequired"));
       return;
     }
     if (datasetCreating) return;
@@ -319,9 +358,9 @@ export function useSettingsDatasets() {
       await loadDatasetList();
       setCreateDatasetOpen(false);
       setCreateDatasetName("");
-      message.success(`已新建数据集「${created.name}」，可在列表里切换到它`);
+      message.success(t("settingsDatasets.create.done", { name: created.name }));
     } catch (err) {
-      message.error(err instanceof Error ? err.message : "新建数据集失败");
+      message.error(err instanceof Error ? err.message : t("settingsDatasets.create.failed"));
     } finally {
       setDatasetCreating(false);
     }
