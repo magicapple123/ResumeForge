@@ -14,6 +14,8 @@
 import { ImportOutlined } from "@ant-design/icons";
 import { Button, Typography } from "antd";
 import type { ReactNode } from "react";
+import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 
 interface Props {
   /** 说明文字。不传则不占位（例如编辑已保存简历时不需要额外解释）。 */
@@ -30,6 +32,7 @@ interface Props {
 }
 
 export default function EditorHeader({ description, onFillAll, headerExtra }: Props) {
+  useLocale();
   // 三样都没有时不渲染任何东西：否则会留下一个只有下边距的空盒子。
   if (!description && !onFillAll && !headerExtra) return null;
 
@@ -47,10 +50,10 @@ export default function EditorHeader({ description, onFillAll, headerExtra }: Pr
             <Button
               size="small"
               icon={<ImportOutlined />}
-              aria-label="填入我的资料全部数据"
+              aria-label={t("editor.header.fillAll")}
               onClick={onFillAll}
             >
-              填入我的资料全部数据
+              {t("editor.header.fillAll")}
             </Button>
           ) : null}
         </div>
