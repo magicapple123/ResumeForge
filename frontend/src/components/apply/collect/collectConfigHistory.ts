@@ -6,6 +6,7 @@
  */
 import { formatDateTime } from "../../../utils/format";
 import type { CollectConfig } from "../../../types";
+import { t } from "../../../i18n";
 
 export const CONFIG_HISTORY_KEY = "rf.collect.configHistory";
 
@@ -44,8 +45,11 @@ export const CONFIG_HISTORY_MAX = CONFIG_HISTORY_LIMIT;
 /** 历史下拉的展示文案：保存时间 + 关键词/城市摘要（岗位类型已随「采集后筛选」下线）。 */
 export function historySummaryLabel(snapshot: CollectConfigSnapshot): string {
   const { config, savedAt } = snapshot;
-  const keywords = (config.keywords ?? []).slice(0, 3).join("、");
-  const keywordText = keywords || "无关键词";
-  const cityText = config.city?.trim() || "无城市";
+  // 在函数执行期取文案：模块作用域求值 t() 会把语言固定在 import 那一刻。
+  const keywords = (config.keywords ?? [])
+    .slice(0, 3)
+    .join(t("applyCollect.history.keywordSeparator"));
+  const keywordText = keywords || t("applyCollect.history.noKeywords");
+  const cityText = config.city?.trim() || t("applyCollect.history.noCity");
   return `${formatDateTime(savedAt)} · ${keywordText} / ${cityText}`;
 }
