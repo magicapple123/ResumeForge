@@ -20,6 +20,7 @@ import { getBrowserStatus, openBrowserSite, startBrowser, stopBrowser } from "..
 import { BROWSER_STATUS_POLL_INTERVAL_MS, useBrowserStatus } from "../../hooks/useBrowserStatus";
 import { BROWSER_STATE_META } from "../../types";
 import { t } from "../../i18n";
+import { BROWSER_STATE_LABEL_KEYS } from "../../i18n/enum/apply";
 import { useLocale } from "../../i18n/i18nContext";
 
 export default function BrowserStatusBar() {
@@ -86,7 +87,7 @@ export default function BrowserStatusBar() {
         <Space size={8} align="center">
           <ChromeOutlined />
           <Typography.Text strong>{t("browserStatus.title")}</Typography.Text>
-          <Tag color={meta.color}>{meta.label}</Tag>
+          <Tag color={meta.color}>{t(BROWSER_STATE_LABEL_KEYS[state])}</Tag>
           {data && (
             <Typography.Text type="secondary">
               {t("browserStatus.port", { port: data.port })}
