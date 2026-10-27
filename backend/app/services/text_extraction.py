@@ -19,6 +19,7 @@ from ..schemas.profile import ProfileTextParseResult
 from ..schemas.setting import LLMConfig
 from .llm.base import BaseLLMProvider, LLMError
 from .llm.structured_output import parse_json_object
+from .profile_text_parser import parse_profile_text
 from .text_extraction_normalization import (
     normalize_job_result,
     normalize_profile_result,
@@ -179,9 +180,33 @@ async def extract_profile_text(
         build_profile_extraction_messages(source_text, local_draft, image_data_urls), thinking=False
     )
     data = parse_json_object(raw, label="资料识别", max_chars=MAX_EXTRACTION_RESPONSE_CHARS)
+    anchor = _anchor_for(data, source_text, image_data_urls)
     return normalize_profile_result(
-        data, local_draft, _anchor_for(data, source_text, image_data_urls)
+        data, _local_baseline(source_text, local_draft, image_data_urls, data), anchor
     )
+
+
+def _local_baseline(
+    source_text: str,
+    local_draft: ProfileTextParseResult,
+    image_data_urls: Sequence[str],
+    data: dict[str, Any],
+) -> ProfileTextParseResult:
+    """本地草稿基线：图片通路用**抄录文本**补一份。
+
+    纯图片请求里 `source_text` 为空，本地规则一行都没得解析，于是 `local_draft` 全空；
+    一旦某个字段没通过锚定校验就没有任何兜底（用户实测：截图识别的三段日期全空，
+    只有「至今」留下）。抄录文本本身就是出处（模型自己逐字写下的内容），拿它跑一遍
+    本地规则既能救回日期这类"格式不一致但事实在原文里"的字段，也不放宽反幻觉前提。
+
+    只对**纯图片**（没有粘贴文本）生效：混合输入时粘贴文本已经产出了更可信的草稿。
+    """
+    if not image_data_urls or source_text.strip():
+        return local_draft
+    transcription = transcription_of(data)
+    if not transcription:
+        return local_draft
+    return parse_profile_text(transcription)
 
 
 def _anchor_for(data: dict[str, Any], source_text: str, image_data_urls: Sequence[str]) -> str:

@@ -25,6 +25,36 @@ from .normalization import _COMPACT_RESET_ALIASES, _clean_line, _compact_heading
 # 不可靠，识别器刻意忽略（截图抄录里最常见的就是它把姓名吞成半行）。
 _IGNORED_INLINE_LABELS = ("年龄", "age")
 
+# 出生年月的取值前缀：年 + 可选的月（`1998`、`1998-07`、`1998年7月生`、`1998.07`、`1996年8月`）。
+# 「日」即使写了也不保留——资料里这个字段叫**出生年月**，多出来的日无处可放。
+_BIRTH_PREFIX_RE = re.compile(
+    r"^\s*((?:19|20)\d{2})\s*(?:[年./-]\s*(\d{1,2})(?!\d)\s*[月./-]?\s*(?:\d{1,2}\s*[日号])?)?"
+)
+
+
+def _format_birth(value: str) -> str:
+    """出生年月统一成 ``YYYY`` / ``YYYY-MM``。
+
+    解析器此前把命中的原样文字直接当值（``2001年生``、``2002年``），这类值在日期控件里
+    **认不出来**（"当前日期格式无法识别"），写进新资料模型也只是原样保留；而有月份时
+    又只留了年（``1998年7月生`` → ``1998年``），用户看到"出生年月"少了一半。这里一次收敛到
+    与 ``normalize_partial_date`` 相同的短横线格式，无月份就仍是四位年份。
+    """
+    raw = str(value or "").strip()
+    if not raw:
+        return ""
+    match = _BIRTH_PREFIX_RE.match(raw)
+    if match is None:
+        return raw
+    year = match.group(1)
+    month_text = match.group(2)
+    if not month_text:
+        return year
+    month = int(month_text)
+    if not 1 <= month <= 12:
+        return year
+    return f"{year}-{month:02d}"
+
 
 @lru_cache(maxsize=64)
 def _label_value_pattern(labels: tuple[str, ...]) -> re.Pattern[str]:
@@ -115,9 +145,16 @@ def _extract_unlabeled_basic(lines: list[str], values: dict[str, str]) -> None:
             if match:
                 values["gender"] = match.group("gender")
     if not values["birth_year"]:
-        match = re.search(r"((?:19|20)\d{2}\s*(?:年出生|年生|年|出生))", full_text)
+        # 带月份的中文写法（`1998年7月生` / `1998年7月出生`）必须整段吃掉：此前只捕获
+        # 「年 + 年出生|年生|年|出生」这一段，月份留在原地——用户看到的出生年月只有 1998。
+        match = re.search(
+            r"((?:19|20)\d{2})\s*(?:[年./-]\s*(\d{1,2})(?!\d)\s*[月./-]?)?\s*"
+            r"(?:年出生|年生|出生|年|生)",
+            full_text,
+        )
         if match:
-            values["birth_year"] = match.group(1).replace(" ", "")
+            month = match.group(2)
+            values["birth_year"] = f"{match.group(1)}年{month}月" if month else match.group(1)
         else:
             # 只有身份首行明确出现 born，或首行同时包含姓名/联系方式等
             # 身份信号时，才把独立四位年份当作出生年；否则项目/任职日期
@@ -222,4 +259,6 @@ def _extract_basic(lines: list[str]) -> dict[str, str]:
             (url.rstrip(".,;，。；") for url in urls if "github.com" not in url.lower()), ""
         )
     _extract_unlabeled_basic(lines, values)
+    # 两条路径（标签值 / 无标签推断）都可能留下非规范写法，出口统一一次。
+    values["birth_year"] = _format_birth(values["birth_year"])
     return values

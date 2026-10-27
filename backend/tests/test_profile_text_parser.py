@@ -88,7 +88,9 @@ ResumeForge / 全栈开发 / 2025.01-现在
 
     assert result.name == "张三"
     assert result.gender == "男"
-    assert result.birth_year == "2001年生"
+    # 出生年月统一成 YYYY / YYYY-MM：原文只写了年份（`2001年生`）就仍是四位年份。
+    # 旧断言是命中的原样文字 `2001年生`，那串东西日期控件认不出来（显示"格式无法识别"）。
+    assert result.birth_year == "2001"
     assert result.city == "广州"
     assert result.educations[0].school == "华南理工大学"
     assert result.educations[0].major == "计算机科学与技术"
@@ -204,7 +206,8 @@ def test_parse_profile_text_keeps_multiline_entry_fields_in_one_record():
 
     assert result.name == "王五"
     assert result.gender == "男"
-    assert result.birth_year == "2002年"
+    # 同上：`2002年` 收敛成 `2002`（无月份可用，不编造）。
+    assert result.birth_year == "2002"
     assert result.educations[0].school == "清华大学"
     assert result.educations[0].major == "计算机科学与技术"
     assert result.educations[0].degree == "硕士"

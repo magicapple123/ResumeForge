@@ -61,7 +61,10 @@ def _compact_heading(value: str) -> str:
         r"(?:technical\s+)?(?:skills?|expertise|proficiencies?)|"
         r"skills?\s+(?:and|&)\s+certifications|"
         r"programming\s+languages|tools\s+(?:and|&)\s+technologies|"
-        r"awards?|honors?|certificates?|certifications?|summary|profile"
+        r"awards?|honors?|certificates?|certifications?|summary|profile|"
+        # 裸的 `Experience` / `Practice`：`工作经历 Experience`、`项目实践 Practice` 这类
+        # 中文在前、英文只有一个词的写法，上面那些"work experience"组合都覆盖不到。
+        r"experiences?|practices?"
     )
     candidate = re.sub(
         rf"\s*[（(](?:{english_section_words})[）)]\s*$", "", candidate, flags=re.IGNORECASE
@@ -72,6 +75,12 @@ def _compact_heading(value: str) -> str:
     candidate = re.sub(
         rf"^(?:{english_section_words})\s*(?:/|｜|\|)\s*", "", candidate, flags=re.IGNORECASE
     )
+    # 双语标题最省事的写法是**空格直接拼**（`教育经历 Education`、`Work Experience
+    # 工作经历`）：英文那头既没有括号也没有斜线，上面三条规则都吃不到，整行 compact 之后
+    # 变成 `教育经历education`，对不上任何别名 → 这行不算标题，它的内容被并进上一个分区
+    # （用户实测：双语模板下 `Microsoft / Software Engineer` 同时进了教育和工作经历）。
+    candidate = re.sub(rf"\s+(?:{english_section_words})\s*$", "", candidate, flags=re.IGNORECASE)
+    candidate = re.sub(rf"^(?:{english_section_words})\s+", "", candidate, flags=re.IGNORECASE)
     return re.sub(r"[\s（）()【】\[\]·•_-]", "", candidate).casefold()
 
 

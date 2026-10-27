@@ -2,6 +2,7 @@
 """岗位与个人资料 AI 抽取结果的字段边界、事实锚定和合并。"""
 
 import re
+import unicodedata
 from typing import Any
 from urllib.parse import urlsplit
 
@@ -9,6 +10,14 @@ from ..schemas.extraction import MAX_RECOGNIZED_TEXT_CHARS
 from ..schemas.job import JobTextParseResult
 from ..schemas.profile import ProfileTextParseResult
 from .llm.base import LLMError
+from .profile_entry_merge import (
+    IDENTITY_FIELDS,
+    is_usable_anchor,
+    merge_entries,
+    normalized_key,
+)
+from .profile_parser.normalization import _normalize_lines
+from .profile_parser.section_detection import _split_sections
 
 _JOB_FIELDS = (
     "title",
@@ -88,15 +97,10 @@ _PROFILE_ENTRY_LIMITS = {
     "skills": {"name": 64, "level": 32},
     "awards": {"name": 128, "date": 32, "description": 2_000},
 }
-_IDENTITY_FIELDS = {
-    "educations": ("school", "major"),
-    "experiences": ("company", "role"),
-    "campus_experiences": ("organization", "role"),
-    "projects": ("name", "role"),
-    "skills": ("name",),
-    "awards": ("name",),
-}
 _TOKEN_SPLIT_RE = re.compile(r"[,，、;；/|]+")
+# 日期类字段：接地校验走"数字组序列"比对，其余字段仍是字面比对（见 `_is_grounded`）。
+_DATE_FIELDS = frozenset({"start_date", "end_date", "date", "birth_year"})
+_DIGITS_RE = re.compile(r"\d+")
 
 
 def _bounded_text(value: Any, limit: int, state: dict[str, bool]) -> str:
@@ -111,13 +115,43 @@ def _bounded_text(value: Any, limit: int, state: dict[str, bool]) -> str:
     return text
 
 
-def _normalized(value: str) -> str:
-    return re.sub(r"\s+", "", value).casefold()
+def _digit_groups(value: str) -> list[str]:
+    """抽出全部数字组（日期比对只看数字，忽略 `.` `/` `-` `年月日` 与空格）。
+
+    前导零归一：`09` 与 `9` 是同一个月份，`2014/09` 与 `2014年9月` 必须判等。
+    """
+    return [str(int(group)) for group in _DIGITS_RE.findall(unicodedata.normalize("NFKC", value))]
 
 
-def _is_grounded(value: str, source_text: str) -> bool:
-    normalized = _normalized(value)
-    return bool(normalized) and normalized in _normalized(source_text)
+def _is_date_grounded(value: str, source_normalized: str) -> bool:
+    """日期类值的接地判定：数字组按顺序**连续**出现在原文里即算有出处。"""
+    groups = _digit_groups(value)
+    if not groups:
+        return False
+    source_groups = _digit_groups(source_normalized)
+    width = len(groups)
+    for start in range(len(source_groups) - width + 1):
+        if source_groups[start : start + width] == groups:
+            return True
+    return False
+
+
+def _is_grounded(value: str, source_text: str, field: str = "") -> bool:
+    """值是否出自原文。
+
+    日期字段放宽成"数字组序列一致"：抄录写 ``2014.09``、模型写 ``2014-09`` 是同一件事，
+    字面比对会把它判成幻觉并清空（图片通路没有任何本地兜底，用户看到的就是"日期全空"）。
+    其余字段仍是**字面**比对——放宽整体校验会让模型凭空写的学校/公司也留下来。
+    """
+    normalized = normalized_key(value)
+    if not normalized:
+        return False
+    if field in _DATE_FIELDS:
+        if _is_date_grounded(value, normalized_key(source_text)):
+            return True
+        # 日期字段里也可能出现「至今」这类无数字的值：退回字面比对。
+        return normalized in normalized_key(source_text)
+    return normalized in normalized_key(source_text)
 
 
 def transcription_of(data: dict[str, Any]) -> str:
@@ -141,6 +175,29 @@ def _pick_grounded(value: str, fallback: str, source_text: str) -> str:
     if value and _is_grounded(value, source_text):
         return value
     return fallback
+
+
+# 出生年月：模型常常只回四位年份（`1998`），而这个资料字段叫**出生年月**。原文里同一年
+# 只出现过**一个**月份时把它补回去；出现多个（简历里同年的入学/毕业/入职日期）就保持原样，
+# 宁可不猜也不把一个日期安到生日上。
+_BIRTH_YEAR_ONLY_RE = re.compile(r"^(?:19|20)\d{2}$")
+_YEAR_MONTH_IN_SOURCE_RE = re.compile(r"((?:19|20)\d{2})\s*[年./-]\s*(\d{1,2})(?!\d)")
+
+
+def _refine_birth_month(value: str, source_text: str) -> str:
+    """把「只有年份」的出生年月补成 ``YYYY-MM``，补不出来就原样返回。"""
+    if not _BIRTH_YEAR_ONLY_RE.fullmatch(value):
+        return value
+    source = unicodedata.normalize("NFKC", source_text)
+    months = {
+        int(match.group(2))
+        for match in _YEAR_MONTH_IN_SOURCE_RE.finditer(source)
+        if match.group(1) == value
+    }
+    valid = {month for month in months if 1 <= month <= 12}
+    if len(valid) != 1:
+        return value
+    return f"{value}-{valid.pop():02d}"
 
 
 def _safe_source_url(value: str, source_text: str) -> str:
@@ -193,6 +250,26 @@ def normalize_job_result(
     )
 
 
+# 需要"条目必须长在自己分区里"这条结构校验的分区：它们的身份锚点（校名 / 公司 /
+# 组织 / 项目名）是具体实体，跨板块串用就是可见的错误。技能与奖项不在此列：技能名
+# 本来就会在项目正文里出现（"技术栈：Python"），拿分区范围卡它会误杀。
+_SCOPED_SECTIONS = frozenset({"educations", "experiences", "campus_experiences", "projects"})
+
+
+def _section_scopes(source_text: str) -> dict[str, str]:
+    """原文按标题切成 分区 → 正文；没有可识别标题的原文返回空字典（跳过结构校验）。
+
+    复用本地解析的切分器而不是另写一套：模型与本地规则必须对"这一行属于谁"有同一个
+    答案，两套边界迟早会对不上。
+    """
+    if not source_text.strip():
+        return {}
+    sections = _split_sections(_normalize_lines(source_text))
+    if not any(sections.values()):
+        return {}
+    return {key: "\n".join(lines) for key, lines in sections.items() if lines}
+
+
 def _entry_values(section: str, value: Any, state: dict[str, bool]) -> list[dict[str, str]]:
     if isinstance(value, dict):
         raw_items = [value]
@@ -220,63 +297,41 @@ def _entry_values(section: str, value: Any, state: dict[str, bool]) -> list[dict
     return result
 
 
-def _entry_anchor(section: str, item: dict[str, Any]) -> str:
-    for field in _IDENTITY_FIELDS[section]:
-        value = item.get(field, "")
-        if value:
-            return _normalized(value)
-    return ""
-
-
 def _ground_entries(
-    section: str, entries: list[dict[str, str]], source_text: str
+    section: str,
+    entries: list[dict[str, str]],
+    source_text: str,
+    scope: str = "",
 ) -> list[dict[str, str]]:
-    """丢弃无身份锚点条目，并移除未被原文支持的单个字段。"""
+    """丢弃无身份锚点条目，并移除未被原文支持的单个字段。
+
+    ``scope`` 是这个分区在原文里**自己的**正文（标题到下一个标题之间，见
+    `_section_scopes`）。条目锚点必须落在它里面：否则「工作经历」那一段会被同时算进
+    「教育经历」——用户实测双语模板下 `Microsoft / Software Engineer` 在教育里也出现
+    一次，学校/公司两栏都填了同一家公司。scope 为空（原文这首区没有可识别边界）时
+    跳过这道检查，不能因为"认不出标题"就把条目全杀掉。
+    """
     grounded = []
     for item in entries:
-        anchors = [item.get(field, "") for field in _IDENTITY_FIELDS[section]]
-        if any(_is_grounded(anchor, source_text) for anchor in anchors if len(anchor) >= 2):
+        anchors = [item.get(field, "") for field in IDENTITY_FIELDS[section]]
+        if any(
+            _is_grounded(anchor, source_text)
+            for anchor in anchors
+            if is_usable_anchor(section, anchor)
+        ):
             grounded.append(
                 {
-                    field: value if _is_grounded(value, source_text) else ""
+                    field: value if _is_grounded(value, source_text, field) else ""
                     for field, value in item.items()
                 }
             )
-    return grounded
-
-
-def _merge_entries(
-    section: str, ai_entries: list[dict[str, str]], local_entries: list[dict[str, Any]]
-) -> list[dict[str, Any]]:
-    if not ai_entries:
-        return local_entries
-    local_by_anchor = {
-        anchor: item for item in local_entries if (anchor := _entry_anchor(section, item))
-    }
-    seen: set[str] = set()
-    merged: list[dict[str, Any]] = []
-    for ai_item in ai_entries:
-        anchor = _entry_anchor(section, ai_item)
-        local_item = local_by_anchor.get(anchor)
-        if local_item is None:
-            merged.append(ai_item)
-        else:
-            # 已通过原文锚定的 AI 字段可纠正本地分类；空字段仍保留本地草稿。
-            merged.append(
-                {
-                    **local_item,
-                    **{field: value for field, value in ai_item.items() if value},
-                }
-            )
-        if anchor:
-            seen.add(anchor)
-    for item in local_entries:
-        anchor = _entry_anchor(section, item)
-        if not anchor or anchor not in seen:
-            merged.append(item)
-            if anchor:
-                seen.add(anchor)
-    return merged[:200]
+    if not scope.strip():
+        return grounded
+    return [
+        item
+        for item in grounded
+        if any(_is_grounded(item.get(field, ""), scope) for field in IDENTITY_FIELDS[section])
+    ]
 
 
 # 模型偶尔无视提示词里的规范分区键，用同义别名输出（practice / campus /
@@ -332,14 +387,19 @@ def normalize_profile_result(
     }
     for field in _PROFILE_BASIC_LIMITS:
         values[field] = _pick_grounded(values[field], getattr(local, field), source_text)
+    values["birth_year"] = _refine_birth_month(values["birth_year"], source_text)
     if not values["summary"]:
         values["summary"] = local.summary
 
+    scopes = _section_scopes(source_text)
     for section in _PROFILE_ENTRY_LIMITS:
         ai_entries = _ground_entries(
-            section, _entry_values(section, data.get(section), state), source_text
+            section,
+            _entry_values(section, data.get(section), state),
+            source_text,
+            scopes.get(section, "") if section in _SCOPED_SECTIONS else "",
         )
-        values[section] = _merge_entries(section, ai_entries, local_data.get(section, []))
+        values[section] = merge_entries(section, ai_entries, local_data.get(section, []))
 
     if not any(
         [values["name"], values["summary"], *(values[section] for section in _PROFILE_ENTRY_LIMITS)]
