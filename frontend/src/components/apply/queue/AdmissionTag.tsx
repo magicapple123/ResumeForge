@@ -3,11 +3,12 @@
  * 准入徽标：展示后端下发的准入结论与"需逐条确认"标记。
  * （自 ApplyQueuePanel 拆出，逐字搬运，行为等价。）
  *
- * 本组件只迁两枚固定标签的文案；准入结论的展示名仍取自 `types` 的 `ADMISSION_META`
- * （协议值 → 展示名的唯一正本，本批不动）。
+ * 三枚标签的文案都在语言包里：两枚固定标签在 applyQueue 包，准入结论的展示名在
+ * enumsApply 包（`ADMISSION_LABEL_KEYS`，与筛选下拉同源）。
  */
 import { Space, Tag } from "antd";
 import { t } from "../../../i18n";
+import { ADMISSION_LABEL_KEYS } from "../../../i18n/enum/apply";
 import { useLocale } from "../../../i18n/i18nContext";
 import { ADMISSION_META } from "../../../types";
 import type { ApplyQueueItem } from "../../../types";
@@ -28,7 +29,7 @@ export function AdmissionTag({ item }: { item: ApplyQueueItem }) {
   const meta = ADMISSION_META[item.admission];
   return (
     <Space size={4} wrap>
-      <Tag color={meta.color}>{meta.label}</Tag>
+      <Tag color={meta.color}>{t(ADMISSION_LABEL_KEYS[item.admission])}</Tag>
       {item.requires_confirm && <Tag color="gold">{t("applyQueue.admission.needsConfirm")}</Tag>}
     </Space>
   );
