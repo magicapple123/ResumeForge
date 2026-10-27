@@ -48,12 +48,13 @@ import { canPreviewImage } from "../utils/attachments";
 import { formatDateTime } from "../utils/format";
 import { t } from "../i18n";
 import { useLocale } from "../i18n/i18nContext";
+import { materialCategoryLabel } from "../i18n/enum/knowledge";
 
 /** 卡片网格 18 个一页（桌面主断点下 4 列网格，末行可留空），与后端 /materials/page 的默认口径一致。 */
 const MATERIALS_PAGE_SIZE = 18;
 
 export default function MaterialsPage() {
-  useLocale();
+  const locale = useLocale();
   const { message } = App.useApp();
   // 批量选择：勾选若干份后一次删除（软删，全部进回收站）。
   const batch = useBatchSelection<number>();
@@ -93,13 +94,14 @@ export default function MaterialsPage() {
     setPage(1);
   }
 
-  const categoryOptions = useMemo(
-    () => [
+  // 选项文字随语言变化：locale 进依赖（只订阅不读取会漏掉重建）。
+  const categoryOptions = useMemo(() => {
+    void locale;
+    return [
       { value: "", label: t("materials.filter.all") },
-      ...categories.map((item) => ({ value: item, label: item })),
-    ],
-    [categories],
-  );
+      ...categories.map((item) => ({ value: item, label: materialCategoryLabel(item) })),
+    ];
+  }, [categories, locale]);
 
   const submit = async (payload: MaterialPayload) => {
     setSubmitting(true);
@@ -308,7 +310,7 @@ export default function MaterialsPage() {
                     <div>
                       <DetailTrigger
                         label={t("materials.aria.open", {
-                          title: material.title || material.category,
+                          title: material.title || materialCategoryLabel(material.category),
                         })}
                         onOpen={() => void openDetail(material)}
                       >
@@ -317,14 +319,14 @@ export default function MaterialsPage() {
                             {batch.selecting && (
                               <Checkbox
                                 aria-label={t("materials.aria.select", {
-                                  title: material.title || material.category,
+                                  title: material.title || materialCategoryLabel(material.category),
                                 })}
                                 checked={batch.isSelected(material.id)}
                                 onClick={(event) => event.stopPropagation()}
                                 onChange={() => batch.toggle(material.id)}
                               />
                             )}
-                            <Tag color="blue">{material.category}</Tag>
+                            <Tag color="blue">{materialCategoryLabel(material.category)}</Tag>
                             <RowActions more={actionsFor(material)} disabled={batch.selecting} />
                           </div>
                           <Typography.Title level={5} ellipsis={{ tooltip: material.title }}>
@@ -384,7 +386,7 @@ export default function MaterialsPage() {
       <RecordDetailDrawer
         open={detail !== null}
         title={detail?.title || t("materials.untitled")}
-        tags={detail && <Tag color="blue">{detail.category}</Tag>}
+        tags={detail && <Tag color="blue">{materialCategoryLabel(detail.category)}</Tag>}
         fields={
           detail
             ? [
