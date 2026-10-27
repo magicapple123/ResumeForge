@@ -11,8 +11,11 @@ import LoadingBlock from "../common/LoadingBlock";
 import { useEffect, useState } from "react";
 import { getReminderPopupSetting, saveReminderPopupSetting } from "../../api/settings";
 import { isSoundEnabled, playDoneSound, setSoundEnabled } from "../../utils/notifySound";
+import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 
 export default function ReminderPopupCard() {
+  useLocale();
   const { message } = App.useApp();
   const [enabled, setEnabled] = useState(true);
   const [loading, setLoading] = useState(true);
@@ -29,7 +32,11 @@ export default function ReminderPopupCard() {
         const saved = await getReminderPopupSetting();
         if (!cancelled) setEnabled(saved.enabled);
       } catch (err) {
-        if (!cancelled) message.error(err instanceof Error ? err.message : "加载提醒弹窗设置失败");
+        if (!cancelled) {
+          message.error(
+            err instanceof Error ? err.message : t("settingsUi.reminderPopup.loadFailed"),
+          );
+        }
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -47,12 +54,14 @@ export default function ReminderPopupCard() {
       const saved = await saveReminderPopupSetting(checked);
       setEnabled(saved.enabled);
       message.success(
-        saved.enabled ? "已开启：打开应用时弹出近期提醒" : "已关闭：打开应用时不再弹出提醒",
+        saved.enabled
+          ? t("settingsUi.reminderPopup.enableToast")
+          : t("settingsUi.reminderPopup.disableToast"),
       );
     } catch (err) {
       // 保存失败回滚到切换前的状态。
       setEnabled(!checked);
-      message.error(err instanceof Error ? err.message : "保存提醒弹窗设置失败");
+      message.error(err instanceof Error ? err.message : t("settingsUi.reminderPopup.saveFailed"));
     } finally {
       setSaving(false);
     }
@@ -66,38 +75,37 @@ export default function ReminderPopupCard() {
   };
 
   return (
-    <Card title="提醒与提示音" className="settings-card">
+    <Card title={t("settingsUi.reminderPopup.title")} className="settings-card">
       <Typography.Paragraph type="secondary" style={{ marginBottom: 16 }}>
-        打开应用时，若还有未完成的日历提醒，是否弹出「近期提醒」列表。
+        {t("settingsUi.reminderPopup.intro")}
       </Typography.Paragraph>
       <LoadingBlock spinning={loading}>
         <Space orientation="vertical" size={4}>
           <Switch
             checked={enabled}
             loading={saving}
-            checkedChildren="开"
-            unCheckedChildren="关"
-            aria-label="打开应用时弹出提醒"
+            checkedChildren={t("settingsUi.switch.on")}
+            unCheckedChildren={t("settingsUi.switch.off")}
+            aria-label={t("settingsUi.reminderPopup.toggleAria")}
             onChange={(checked) => void toggle(checked)}
           />
-          <Typography.Text type="secondary">默认开启，可随时在这里关闭。</Typography.Text>
+          <Typography.Text type="secondary">{t("settingsUi.switch.defaultOnHint")}</Typography.Text>
         </Space>
       </LoadingBlock>
 
       <Typography.Paragraph type="secondary" style={{ margin: "20px 0 12px" }}>
-        生成类任务（简历生成、岗位解读、匹配度分析等）与投递 /
-        采集批次**完成时**，是否播放一声提示音。 弹窗提醒不受这个开关影响。
+        {t("settingsUi.reminderPopup.soundIntro")}
       </Typography.Paragraph>
       <Space orientation="vertical" size={4}>
         <Switch
           checked={sound}
-          checkedChildren="开"
-          unCheckedChildren="关"
-          aria-label="任务完成时播放提示音"
+          checkedChildren={t("settingsUi.switch.on")}
+          unCheckedChildren={t("settingsUi.switch.off")}
+          aria-label={t("settingsUi.reminderPopup.soundAria")}
           onChange={toggleSound}
         />
         <Typography.Text type="secondary">
-          默认开启。浏览器若拦截自动播放，会静默跳过。
+          {t("settingsUi.reminderPopup.soundHint")}
         </Typography.Text>
       </Space>
     </Card>
