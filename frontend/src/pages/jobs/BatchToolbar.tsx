@@ -16,6 +16,8 @@ import { App, Button, Select, Space, Tooltip, Typography } from "antd";
 import dayjs from "dayjs";
 import { useState } from "react";
 import { exportJobsCsv } from "../../api/jobs";
+import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 import { downloadBlob } from "../../utils/download";
 import type { BatchAction } from "./jobFilterOptions";
 import { STATUS_OPTIONS } from "./jobFilterOptions";
@@ -52,6 +54,7 @@ export function BatchToolbar({
   /** 一键全选所有页；未传（undefined）时不渲染该入口。 */
   onSelectAllPages?: () => void;
 }) {
+  useLocale();
   // 导出 CSV 是纯前端动作（勾选的 id → 后端序列化 → 触发下载）：
   // 状态本地持有，不占用页面级的 batchAction（那边留给会改数据的操作）。
   const { message } = App.useApp();
@@ -64,10 +67,10 @@ export function BatchToolbar({
       // 文件名带导出时刻：几次导出的文件落在同一个下载目录里不会互相覆盖、
       // 也不用靠文件管理器的"副本 (1)"来分辨先后。
       const stamp = dayjs().format("YYYYMMDD-HHmmss");
-      downloadBlob(blob, `岗位列表-${stamp}.csv`);
-      message.success(`已导出 ${selectedJobIds.length} 个岗位`);
+      downloadBlob(blob, t("jobsPage.toolbar.exportFileName", { stamp }));
+      message.success(t("jobsPage.toolbar.exported", { count: selectedJobIds.length }));
     } catch (err) {
-      message.error(err instanceof Error ? err.message : "导出失败");
+      message.error(err instanceof Error ? err.message : t("jobsPage.toolbar.exportFailed"));
     } finally {
       setExporting(false);
     }
@@ -75,15 +78,17 @@ export function BatchToolbar({
   if (!selectionMode) return null;
   return (
     <Space style={{ marginBottom: 12, minHeight: 32 }} wrap>
-      <Typography.Text type="secondary">已选 {selectedJobIds.length} 个岗位</Typography.Text>
+      <Typography.Text type="secondary">
+        {t("jobsPage.toolbar.selectedCount", { count: selectedJobIds.length })}
+      </Typography.Text>
       {onSelectAllPages && totalCount > 0 && (
-        <Tooltip title={`按当前筛选，一键选中全部 ${totalCount} 个岗位（跨页，不止当前页）`}>
+        <Tooltip title={t("jobsPage.toolbar.selectAllTooltip", { count: totalCount })}>
           <Button
             disabled={batchAction !== null}
             loading={selectAllPagesLoading}
             onClick={onSelectAllPages}
           >
-            全选全部岗位（共 {totalCount} 个）
+            {t("jobsPage.toolbar.selectAllButton", { count: totalCount })}
           </Button>
         </Tooltip>
       )}
@@ -94,7 +99,7 @@ export function BatchToolbar({
         disabled={batchAction !== null}
         onClick={exitSelectionMode}
       >
-        退出选择
+        {t("jobsPage.toolbar.exitSelection")}
       </Button>
       <Button
         icon={<ClearOutlined />}
@@ -104,10 +109,10 @@ export function BatchToolbar({
           setBatchStatus(undefined);
         }}
       >
-        清空选择
+        {t("jobsPage.toolbar.clearSelection")}
       </Button>
       <Select
-        placeholder="批量设置状态"
+        placeholder={t("jobsPage.toolbar.statusPlaceholder")}
         value={batchStatus}
         options={STATUS_OPTIONS}
         style={{ width: 150 }}
@@ -120,18 +125,18 @@ export function BatchToolbar({
         loading={batchAction === "status"}
         onClick={() => void applyBatchStatus()}
       >
-        应用状态
+        {t("jobsPage.toolbar.applyStatus")}
       </Button>
       {/* 海投效率路径：批量直接入队。Tooltip 必须说清两件看不见的事——双确认会被
           一并带上（不逐条弹窗）、来源不支持的岗位会静默跳过，否则用户只看到"少进去了几个"。 */}
-      <Tooltip title="海投路径：直接加入投递队列（未分析/真实缺口不再逐条弹确认）；来源不支持的岗位自动跳过并在结果中说明">
+      <Tooltip title={t("jobsPage.toolbar.enqueueTooltip")}>
         <Button
           icon={<SendOutlined />}
           disabled={selectedJobIds.length === 0 || batchAction !== null}
           loading={batchAction === "enqueue"}
           onClick={() => void enqueueSelectedJobs()}
         >
-          加入投递队列
+          {t("jobsPage.toolbar.enqueue")}
         </Button>
       </Tooltip>
       <Button
@@ -140,7 +145,7 @@ export function BatchToolbar({
         loading={exporting}
         onClick={() => void exportSelectedJobs()}
       >
-        导出 CSV
+        {t("jobsPage.toolbar.exportCsv")}
       </Button>
       {/* 软删可撤销：不再前置确认，撤销入口在删除后的 Toast 上（见 useDeleteUndo）。 */}
       <Button
@@ -150,7 +155,7 @@ export function BatchToolbar({
         loading={batchAction === "delete"}
         onClick={() => removeSelectedJobs()}
       >
-        批量删除
+        {t("jobsPage.toolbar.delete")}
       </Button>
     </Space>
   );
