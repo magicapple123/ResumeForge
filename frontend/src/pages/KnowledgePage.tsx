@@ -40,11 +40,14 @@ import KnowledgeFormModal from "../components/knowledge/KnowledgeFormModal";
 import { AssistantMessageContent } from "../features/assistant/components/AssistantMessageContent";
 import type { Knowledge, KnowledgePayload, KnowledgeSummary } from "../types";
 import { formatDateTime } from "../utils/format";
+import { t } from "../i18n";
+import { useLocale } from "../i18n/i18nContext";
 
 /** 卡片网格 15 个一页（3 列 × 5 行），与后端 /knowledge/page 端点默认值一致。 */
 const KNOWLEDGE_PAGE_SIZE = 15;
 
 export default function KnowledgePage() {
+  const locale = useLocale();
   const { message } = App.useApp();
   // 批量选择：勾选若干条后一次删除（软删，全部进回收站）。
   const batch = useBatchSelection<number>();
@@ -92,36 +95,40 @@ export default function KnowledgePage() {
     setPage(1);
   }
 
-  const categoryOptions = useMemo(
-    () => [
-      { value: "", label: "全部分类" },
+  // 选项文字随语言变化：locale 进依赖（只订阅不读取会漏掉重建）。
+  const categoryOptions = useMemo(() => {
+    void locale;
+    return [
+      { value: "", label: t("knowledgePage.filter.category.all") },
       ...categories.map((item) => ({ value: item, label: item })),
-    ],
-    [categories],
-  );
+    ];
+  }, [categories, locale]);
 
   // 标签下拉来自全库标签端点（/knowledge/tags），与服务端筛选口径一致；
   // 换标签会触发 filterKey 变化 → 回第 1 页并按 tag 重新请求。
-  const tagOptions = useMemo(
-    () => [{ value: "", label: "全部标签" }, ...tags.map((item) => ({ value: item, label: item }))],
-    [tags],
-  );
+  const tagOptions = useMemo(() => {
+    void locale;
+    return [
+      { value: "", label: t("knowledgePage.filter.tag.all") },
+      ...tags.map((item) => ({ value: item, label: item })),
+    ];
+  }, [tags, locale]);
 
   const submit = async (payload: KnowledgePayload) => {
     setSubmitting(true);
     try {
       if (editing) {
         await updateKnowledge(editing.id, payload);
-        message.success("条目已更新");
+        message.success(t("knowledgePage.toast.updated"));
       } else {
         await createKnowledge(payload);
-        message.success("已加入知识库");
+        message.success(t("knowledgePage.toast.created"));
       }
       setFormOpen(false);
       setEditing(null);
       await load();
     } catch (error) {
-      message.error(error instanceof Error ? error.message : "保存失败");
+      message.error(error instanceof Error ? error.message : t("knowledgePage.error.saveFailed"));
     } finally {
       setSubmitting(false);
     }
@@ -139,7 +146,7 @@ export default function KnowledgePage() {
       );
       await load();
     } catch (error) {
-      message.error(error instanceof Error ? error.message : "删除失败");
+      message.error(error instanceof Error ? error.message : t("knowledgePage.error.deleteFailed"));
     }
   };
 
@@ -150,10 +157,12 @@ export default function KnowledgePage() {
     if (ids.length === 0) return;
     try {
       const { deleted } = await batchDeleteKnowledge(ids);
-      message.success(`已删除 ${deleted} 条知识，可在「回收站」里恢复`);
+      message.success(t("knowledgePage.toast.batchDeleted", { count: deleted }));
       batch.exitSelecting();
     } catch (error) {
-      message.error(error instanceof Error ? error.message : "批量删除失败，请重试");
+      message.error(
+        error instanceof Error ? error.message : t("knowledgePage.error.batchDeleteFailed"),
+      );
       return;
     }
     await load();
@@ -170,7 +179,9 @@ export default function KnowledgePage() {
       setEditing(await getKnowledge(entry.id));
       setFormOpen(true);
     } catch (error) {
-      message.error(error instanceof Error ? error.message : "读取条目失败");
+      message.error(
+        error instanceof Error ? error.message : t("knowledgePage.error.loadEntryFailed"),
+      );
     }
   };
 
@@ -182,7 +193,9 @@ export default function KnowledgePage() {
     try {
       setViewing(await getKnowledge(entry.id));
     } catch (error) {
-      message.error(error instanceof Error ? error.message : "读取条目失败");
+      message.error(
+        error instanceof Error ? error.message : t("knowledgePage.error.loadEntryFailed"),
+      );
       setViewOpen(false);
     } finally {
       setViewLoading(false);
@@ -193,10 +206,15 @@ export default function KnowledgePage() {
     // 不再放「查看」按钮：点卡片本身就打开详情（DetailTrigger），重复入口只会占地方。
     const primary: { key: string; label: string; icon?: ReactNode; onClick: () => void }[] = [];
     const more = [
-      { key: "edit", label: "编辑", icon: <EditOutlined />, onClick: () => void openEdit(entry) },
+      {
+        key: "edit",
+        label: t("knowledgePage.action.edit"),
+        icon: <EditOutlined />,
+        onClick: () => void openEdit(entry),
+      },
       {
         key: "delete",
-        label: "删除",
+        label: t("knowledgePage.action.delete"),
         danger: true,
         icon: <DeleteOutlined />,
         // 软删由本页的 useDeleteUndo 兜：这里不再问，撤销入口在 Toast 上。
@@ -210,7 +228,7 @@ export default function KnowledgePage() {
       : [
           {
             key: "batch_select",
-            label: "批量选择",
+            label: t("knowledgePage.action.batchSelect"),
             icon: <CheckSquareOutlined />,
             onClick: batch.enterSelecting,
           },
@@ -225,34 +243,31 @@ export default function KnowledgePage() {
       <div className="knowledge-page-header">
         <div>
           <Typography.Title level={3} style={{ margin: 0 }}>
-            知识库
+            {t("knowledgePage.page.title")}
           </Typography.Title>
-          <Typography.Text type="secondary">
-            沉淀面经总结、简历技巧、求职策略、行业笔记等成文内容。正文支持 Markdown，
-            保存后按标题、列表、表格等结构渲染。
-          </Typography.Text>
+          <Typography.Text type="secondary">{t("knowledgePage.page.subtitle")}</Typography.Text>
         </div>
         <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
-          新建知识
+          {t("knowledgePage.action.create")}
         </Button>
       </div>
 
       <Space wrap className="rf-filter-bar">
         <Input.Search
           allowClear
-          placeholder="搜索标题或正文"
+          placeholder={t("knowledgePage.filter.search.placeholder")}
           style={{ width: 260 }}
           onSearch={setKeyword}
         />
         <Select
-          aria-label="分类筛选"
+          aria-label={t("knowledgePage.filter.category.aria")}
           value={category}
           options={categoryOptions}
           style={{ width: 160 }}
           onChange={setCategory}
         />
         <Select
-          aria-label="标签筛选"
+          aria-label={t("knowledgePage.filter.tag.aria")}
           value={tag}
           options={tagOptions}
           style={{ width: 160 }}
@@ -274,21 +289,32 @@ export default function KnowledgePage() {
               ),
           }}
         >
-          <BatchDeleteButton count={batch.selectedCount} noun="条知识" onDelete={removeSelected} />
+          <BatchDeleteButton
+            count={batch.selectedCount}
+            noun={t("knowledgePage.batch.noun")}
+            onDelete={removeSelected}
+          />
         </BatchActionBar>
       )}
 
       {loading ? (
         <LoadingBlock />
       ) : error ? (
-        <ErrorState description={`知识库加载失败：${error}`} onRetry={() => void load()} />
+        <ErrorState
+          description={t("knowledgePage.error.loadFailed", { error })}
+          onRetry={() => void load()}
+        />
       ) : entries.length === 0 ? (
         // total=0 时区分「库里真没东西」和「筛选后没结果」：库空时把主按钮内嵌进空态
         // （不再用「点右上角」这种方位词指路——位置会随响应式变），筛选后为空只提示调整条件。
         total === 0 && !keyword && !category && !tag ? (
-          <EmptyState description="还没有知识条目" actionLabel="新建知识" onAction={openCreate} />
+          <EmptyState
+            description={t("knowledgePage.empty.none")}
+            actionLabel={t("knowledgePage.action.create")}
+            onAction={openCreate}
+          />
         ) : (
-          <EmptyState description="没有符合筛选条件的条目" />
+          <EmptyState description={t("knowledgePage.empty.filtered")} />
         )
       ) : (
         <>
@@ -300,14 +326,16 @@ export default function KnowledgePage() {
                 <RowContextMenu key={entry.id} items={all}>
                   <div>
                     <DetailTrigger
-                      label={`打开知识条目「${entry.title}」的详情`}
+                      label={t("knowledgePage.card.openAria", { title: entry.title })}
                       onOpen={() => void openView(entry)}
                     >
                       <Card size="small" className="knowledge-card">
                         <div className="knowledge-card-head">
                           {batch.selecting && (
                             <Checkbox
-                              aria-label={`选择知识条目 ${entry.title}`}
+                              aria-label={t("knowledgePage.card.selectAria", {
+                                title: entry.title,
+                              })}
                               checked={batch.isSelected(entry.id)}
                               onClick={(event) => event.stopPropagation()}
                               onChange={() => batch.toggle(entry.id)}
@@ -358,7 +386,7 @@ export default function KnowledgePage() {
               onChange={setPage}
               hideOnSinglePage
               showSizeChanger={false}
-              showTotal={(count) => `共 ${count} 条`}
+              showTotal={(count) => t("knowledgePage.pagination.total", { count })}
             />
           </div>
         </>
