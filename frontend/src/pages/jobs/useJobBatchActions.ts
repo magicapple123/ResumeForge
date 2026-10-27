@@ -9,6 +9,7 @@ import { App } from "antd";
 import type { Dispatch, SetStateAction } from "react";
 import { batchDeleteJobs, batchUpdateJobStatus } from "../../api/jobs";
 import { bulkEnqueueJobs, bulkEnqueueSummary } from "../../components/apply/queue/bulkEnqueue";
+import { t } from "../../i18n";
 import type { Job, JobList, Page } from "../../types";
 
 /** 批量动作的类型与 `pages/jobs/jobFilterOptions.ts` 的 `BatchAction` 一致。 */
@@ -41,11 +42,11 @@ export function useJobBatchActions({
 
   const applyBatchStatus = async () => {
     if (selectedJobIds.length === 0) {
-      message.warning("请先选择岗位");
+      message.warning(t("jobsPage.batch.needSelection"));
       return;
     }
     if (!batchStatus) {
-      message.warning("请选择要设置的状态");
+      message.warning(t("jobsPage.batch.needStatus"));
       return;
     }
 
@@ -61,9 +62,9 @@ export function useJobBatchActions({
         current && jobIds.includes(current.id) ? { ...current, status: nextStatus } : current,
       );
       await reload();
-      message.success(`已更新 ${result.updated} 个岗位的状态`);
+      message.success(t("jobsPage.batch.statusUpdated", { count: result.updated }));
     } catch (err) {
-      message.error(err instanceof Error ? err.message : "批量更新状态失败");
+      message.error(err instanceof Error ? err.message : t("jobsPage.batch.statusUpdateFailed"));
     } finally {
       setBatchAction(null);
     }
@@ -71,7 +72,7 @@ export function useJobBatchActions({
 
   const removeSelectedJobs = async () => {
     if (selectedJobIds.length === 0) {
-      message.warning("请先选择岗位");
+      message.warning(t("jobsPage.batch.needSelection"));
       return;
     }
 
@@ -91,12 +92,12 @@ export function useJobBatchActions({
       await reload();
       const failed = jobIds.length - result.deleted;
       if (failed > 0) {
-        message.warning(`成功 ${result.deleted} 个，${failed} 个未能删除；已删除的可在回收站恢复`);
+        message.warning(t("jobsPage.batch.deletePartial", { deleted: result.deleted, failed }));
       } else {
-        message.success(`已删除 ${result.deleted} 个岗位，可在回收站恢复`);
+        message.success(t("jobsPage.batch.deleted", { deleted: result.deleted }));
       }
     } catch (err) {
-      message.error(err instanceof Error ? err.message : "批量删除失败");
+      message.error(err instanceof Error ? err.message : t("jobsPage.batch.deleteFailed"));
     } finally {
       setBatchAction(null);
     }
@@ -104,7 +105,7 @@ export function useJobBatchActions({
 
   const enqueueSelectedJobs = async () => {
     if (selectedJobIds.length === 0) {
-      message.warning("请先选择岗位");
+      message.warning(t("jobsPage.batch.needSelection"));
       return;
     }
 
@@ -122,7 +123,7 @@ export function useJobBatchActions({
         message.warning(bulkEnqueueSummary(outcome));
       }
     } catch (err) {
-      message.error(err instanceof Error ? err.message : "批量加入投递队列失败");
+      message.error(err instanceof Error ? err.message : t("jobsPage.batch.enqueueFailed"));
     } finally {
       setBatchAction(null);
     }
