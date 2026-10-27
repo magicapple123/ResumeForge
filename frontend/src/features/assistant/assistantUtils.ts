@@ -4,6 +4,7 @@
 import { createElement } from "react";
 import type { CSSProperties, ReactNode } from "react";
 import type { AssistantAttachmentInput, AssistantSourceNumber } from "../../types";
+import { t } from "../../i18n";
 
 // 附件限值、类型判定与读取和岗位/资料识别共用，实现在 utils 里；这里保留
 // 原有导入路径，助手侧调用方不必跟着改。
@@ -33,8 +34,12 @@ const MAX_LISTED_SKILL_NAMES = 2;
 
 export function summarizeSkillNames(skills: { name: string }[]): string {
   const names = skills.map((skill) => skill.name);
-  if (names.length <= MAX_LISTED_SKILL_NAMES) return names.join("、");
-  return `${names.slice(0, MAX_LISTED_SKILL_NAMES).join("、")} 等 ${names.length} 个`;
+  const separator = t("assistantUi.skillNames.separator");
+  if (names.length <= MAX_LISTED_SKILL_NAMES) return names.join(separator);
+  return t("assistantUi.skillNames.overflow", {
+    names: names.slice(0, MAX_LISTED_SKILL_NAMES).join(separator),
+    count: names.length,
+  });
 }
 
 export function safeExternalUrl(value: string): string | null {
@@ -66,6 +71,7 @@ export function renderInlineMarkdown(
   sourceMap?: AssistantSourceNumber[],
 ): ReactNode[] {
   const tokenPattern =
+    // i18n-ok: [来源N] 与 URL 边界字符属于模型输出 / 链接语法，不是界面文案
     /(\*\*([^*]+)\*\*|`([^`]+)`|\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)|\[来源(\d+)\]|(https?:\/\/[^\s<，。！？、）】〉》]+))/g;
   const nodes: ReactNode[] = [];
   let cursor = 0;
