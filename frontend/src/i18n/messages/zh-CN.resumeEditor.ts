@@ -1,0 +1,89 @@
+// SPDX-License-Identifier: Apache-2.0
+/**
+ * 简历编辑器的分区标题、表单标签、校验提示与占位符。
+ *
+ * 为什么不复用 `bilingual.field.*`：那套是**双语对照**用的宽泛字段名（「岗位/角色」
+ * 「技术栈/工具」），而表单标签要精确到该分区的实际含义（实习用「岗位」、校园用
+ * 「职务/角色」、项目用「担任角色」）。同一份简历在两种场景下的用词不同，硬套会让
+ * 表单出现"这个条目到底该填什么"的歧义。
+ */
+const resumeEditor = {
+  "editor.jobKind.fullTime": "全职",
+  "editor.jobKind.partTime": "兼职",
+  "editor.jobKind.contract": "合同",
+  "editor.jobKind.selfEmployed": "自雇",
+  "editor.jobKind.internship": "实习",
+  "editor.jobKind.volunteer": "志愿",
+  "editor.jobKind.other": "其他",
+
+  "editor.section.education": "教育经历",
+  "editor.section.experience": "实习/工作经历",
+  "editor.section.campus": "校园经历",
+  "editor.section.projects": "项目经历",
+  "editor.section.skills": "专业技能",
+  "editor.section.awards": "荣誉奖项",
+
+  "editor.field.school": "学校",
+  "editor.field.major": "专业",
+  "editor.field.degree": "学历",
+  "editor.field.startDate": "开始时间",
+  "editor.field.endDate": "结束时间",
+  "editor.field.gpa": "绩点/排名",
+  "editor.field.studyForm": "学习形式",
+  "editor.field.degreeType": "学位类型",
+  "editor.field.department": "院系",
+  "editor.field.classRank": "成绩排名",
+  "editor.field.advisor": "导师",
+  "editor.field.researchDirection": "研究方向",
+  "editor.field.courses": "核心课程",
+  "editor.field.studyAchievements": "在校成果",
+
+  "editor.field.company": "公司",
+  "editor.field.expRole": "岗位",
+  "editor.field.start": "开始",
+  "editor.field.end": "结束",
+  "editor.field.teamSize": "团队规模",
+  "editor.field.jobKind": "工作类型",
+  "editor.field.expDescription": "工作内容",
+
+  "editor.field.organization": "组织/部门",
+  "editor.field.campusRole": "职务/角色",
+  "editor.field.activityType": "活动类型",
+  "editor.field.campusDescription": "经历描述",
+
+  "editor.field.projectName": "项目名称",
+  "editor.field.projectRole": "担任角色",
+  "editor.field.projectSize": "项目规模",
+  "editor.field.artifactType": "成果类型",
+  "editor.field.techStack": "技术栈",
+  "editor.field.projectDescription": "项目描述",
+  "editor.field.highlights": "亮点/成果",
+
+  "editor.field.skillName": "技能名称",
+  "editor.field.skillLevel": "熟练程度",
+  "editor.field.skillCategory": "技能分类",
+
+  "editor.field.awardName": "奖项名称",
+  "editor.field.awardDate": "获奖时间",
+  "editor.field.issuer": "颁发机构",
+  "editor.field.awardLevel": "奖项级别",
+  "editor.field.awardRatio": "获奖比例",
+  "editor.field.notes": "说明",
+
+  "editor.required.school": "请填写学校",
+  "editor.required.company": "请填写公司",
+  "editor.required.organization": "请填写组织/部门",
+  "editor.required.projectName": "请填写项目名称",
+  "editor.required.skillName": "请填写技能名称",
+  "editor.required.awardName": "请填写奖项名称",
+
+  "editor.placeholder.classRank": "如：前 10%",
+  "editor.placeholder.onePerLine": "每行一项",
+  "editor.placeholder.onePointPerLine": "每行一个要点",
+  "editor.placeholder.teamSize": "如：8 人",
+  "editor.placeholder.skillLevel": "熟练 / 掌握 / 了解",
+  "editor.placeholder.skillCategory": "如：编程语言 / 工具",
+  "editor.placeholder.awardRatio": "如：前 5%",
+} as const;
+
+export default resumeEditor;

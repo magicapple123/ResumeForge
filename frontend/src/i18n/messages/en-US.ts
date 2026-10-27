@@ -35,6 +35,7 @@ import webformGroups from "./en-US.webformGroups";
 import webformFields from "./en-US.webformFields";
 import settingsPage from "./en-US.settingsPage";
 import exportPanel from "./en-US.exportPanel";
+import resumeEditor from "./en-US.resumeEditor";
 
 const enUS = {
   ...core,
@@ -71,6 +72,7 @@ const enUS = {
   ...webformFields,
   ...settingsPage,
   ...exportPanel,
+  ...resumeEditor,
 } as const satisfies Record<keyof ZhCNMessages, string>;
 
 export default enUS;

@@ -1,28 +1,32 @@
 // SPDX-License-Identifier: Apache-2.0
 /** 简历编辑器的分区字段表单。 */
 import { Form, Input, Row, Select } from "antd";
+import { t } from "../../i18n";
+import type { MessageKey } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 import EditorFieldCol from "./EditorFieldCol";
 import ResumeListSection from "./ResumeListSection";
 import { useEditorFieldVisibility } from "./editorSchemaContext";
 import { multilineItemProps } from "./resumeFieldUtils";
 
 /** 工作类型（A4 白名单 code：后端存 code，界面显示中文；与资料页同一组枚举）。 */
-const EXPERIENCE_KIND_OPTIONS = [
-  { value: "full_time", label: "全职" },
-  { value: "part_time", label: "兼职" },
-  { value: "contract", label: "合同" },
-  { value: "self_employed", label: "自雇" },
-  { value: "internship", label: "实习" },
-  { value: "volunteer", label: "志愿" },
-  { value: "other", label: "其他" },
+const EXPERIENCE_KIND_OPTIONS: { value: string; labelKey: MessageKey }[] = [
+  { value: "full_time", labelKey: "editor.jobKind.fullTime" },
+  { value: "part_time", labelKey: "editor.jobKind.partTime" },
+  { value: "contract", labelKey: "editor.jobKind.contract" },
+  { value: "self_employed", labelKey: "editor.jobKind.selfEmployed" },
+  { value: "internship", labelKey: "editor.jobKind.internship" },
+  { value: "volunteer", labelKey: "editor.jobKind.volunteer" },
+  { value: "other", labelKey: "editor.jobKind.other" },
 ];
 
 export function EducationEditor() {
+  useLocale();
   // F10：当前方案里看不见的字段不渲染（仍有值的字段保留，见 useEditorFieldVisibility）。
   const visible = useEditorFieldVisibility("educations");
   return (
     <ResumeListSection
-      title="教育经历"
+      title={t("editor.section.education")}
       name="education"
       fillSection="education"
       emptyValue={{
@@ -47,77 +51,90 @@ export function EducationEditor() {
           <EditorFieldCol xs={24} md={8} show={visible.show("school")}>
             <Form.Item
               name={[field.name, "school"]}
-              label="学校"
+              label={t("editor.field.school")}
               rules={
-                visible.show("school") ? [{ required: true, message: "请填写学校" }] : undefined
+                visible.show("school")
+                  ? [{ required: true, message: t("editor.required.school") }]
+                  : undefined
               }
             >
               <Input />
             </Form.Item>
           </EditorFieldCol>
           <EditorFieldCol xs={24} md={8} show={visible.show("major")}>
-            <Form.Item name={[field.name, "major"]} label="专业">
+            <Form.Item name={[field.name, "major"]} label={t("editor.field.major")}>
               <Input />
             </Form.Item>
           </EditorFieldCol>
           <EditorFieldCol xs={24} md={8} show={visible.show("degree")}>
-            <Form.Item name={[field.name, "degree"]} label="学历">
+            <Form.Item name={[field.name, "degree"]} label={t("editor.field.degree")}>
               <Input />
             </Form.Item>
           </EditorFieldCol>
           <EditorFieldCol xs={12} md={6} show={visible.show("start_date")}>
-            <Form.Item name={[field.name, "start_date"]} label="开始时间">
+            <Form.Item name={[field.name, "start_date"]} label={t("editor.field.startDate")}>
               <Input placeholder="2023.09" />
             </Form.Item>
           </EditorFieldCol>
           <EditorFieldCol xs={12} md={6} show={visible.show("end_date")}>
-            <Form.Item name={[field.name, "end_date"]} label="结束时间">
+            <Form.Item name={[field.name, "end_date"]} label={t("editor.field.endDate")}>
               <Input placeholder="2027.06" />
             </Form.Item>
           </EditorFieldCol>
           <EditorFieldCol xs={24} md={12} show={visible.show("gpa")}>
-            <Form.Item name={[field.name, "gpa"]} label="绩点/排名">
+            <Form.Item name={[field.name, "gpa"]} label={t("editor.field.gpa")}>
               <Input />
             </Form.Item>
           </EditorFieldCol>
           <EditorFieldCol xs={12} md={6} show={visible.show("study_form")}>
-            <Form.Item name={[field.name, "study_form"]} label="学习形式">
+            <Form.Item name={[field.name, "study_form"]} label={t("editor.field.studyForm")}>
               <Input />
             </Form.Item>
           </EditorFieldCol>
           <EditorFieldCol xs={12} md={6} show={visible.show("degree_type")}>
-            <Form.Item name={[field.name, "degree_type"]} label="学位类型">
+            <Form.Item name={[field.name, "degree_type"]} label={t("editor.field.degreeType")}>
               <Input />
             </Form.Item>
           </EditorFieldCol>
           <EditorFieldCol xs={24} md={12} show={visible.show("department")}>
-            <Form.Item name={[field.name, "department"]} label="院系">
+            <Form.Item name={[field.name, "department"]} label={t("editor.field.department")}>
               <Input />
             </Form.Item>
           </EditorFieldCol>
           <EditorFieldCol xs={12} md={6} show={visible.show("rank")}>
-            <Form.Item name={[field.name, "rank"]} label="成绩排名">
-              <Input placeholder="如：前 10%" />
+            <Form.Item name={[field.name, "rank"]} label={t("editor.field.classRank")}>
+              <Input placeholder={t("editor.placeholder.classRank")} />
             </Form.Item>
           </EditorFieldCol>
           <EditorFieldCol xs={24} md={9} show={visible.show("advisor")}>
-            <Form.Item name={[field.name, "advisor"]} label="导师">
+            <Form.Item name={[field.name, "advisor"]} label={t("editor.field.advisor")}>
               <Input />
             </Form.Item>
           </EditorFieldCol>
           <EditorFieldCol xs={24} md={15} show={visible.show("research_direction")}>
-            <Form.Item name={[field.name, "research_direction"]} label="研究方向">
+            <Form.Item
+              name={[field.name, "research_direction"]}
+              label={t("editor.field.researchDirection")}
+            >
               <Input />
             </Form.Item>
           </EditorFieldCol>
           <EditorFieldCol xs={24} md={12} show={visible.show("courses")}>
-            <Form.Item {...multilineItemProps} name={[field.name, "courses"]} label="核心课程">
-              <Input.TextArea rows={3} placeholder="每行一项" />
+            <Form.Item
+              {...multilineItemProps}
+              name={[field.name, "courses"]}
+              label={t("editor.field.courses")}
+            >
+              <Input.TextArea rows={3} placeholder={t("editor.placeholder.onePerLine")} />
             </Form.Item>
           </EditorFieldCol>
           <EditorFieldCol xs={24} md={12} show={visible.show("achievements")}>
-            <Form.Item {...multilineItemProps} name={[field.name, "achievements"]} label="在校成果">
-              <Input.TextArea rows={3} placeholder="每行一项" />
+            <Form.Item
+              {...multilineItemProps}
+              name={[field.name, "achievements"]}
+              label={t("editor.field.studyAchievements")}
+            >
+              <Input.TextArea rows={3} placeholder={t("editor.placeholder.onePerLine")} />
             </Form.Item>
           </EditorFieldCol>
         </Row>
@@ -127,10 +144,11 @@ export function EducationEditor() {
 }
 
 export function ExperienceEditor() {
+  useLocale();
   const visible = useEditorFieldVisibility("experiences");
   return (
     <ResumeListSection
-      title="实习/工作经历"
+      title={t("editor.section.experience")}
       name="experience"
       fillSection="experience"
       emptyValue={{
@@ -148,42 +166,54 @@ export function ExperienceEditor() {
           <EditorFieldCol xs={24} md={8} show={visible.show("company")}>
             <Form.Item
               name={[field.name, "company"]}
-              label="公司"
+              label={t("editor.field.company")}
               rules={
-                visible.show("company") ? [{ required: true, message: "请填写公司" }] : undefined
+                visible.show("company")
+                  ? [{ required: true, message: t("editor.required.company") }]
+                  : undefined
               }
             >
               <Input />
             </Form.Item>
           </EditorFieldCol>
           <EditorFieldCol xs={24} md={8} show={visible.show("role")}>
-            <Form.Item name={[field.name, "role"]} label="岗位">
+            <Form.Item name={[field.name, "role"]} label={t("editor.field.expRole")}>
               <Input />
             </Form.Item>
           </EditorFieldCol>
           <EditorFieldCol xs={12} md={4} show={visible.show("start_date")}>
-            <Form.Item name={[field.name, "start_date"]} label="开始">
+            <Form.Item name={[field.name, "start_date"]} label={t("editor.field.start")}>
               <Input placeholder="2025.03" />
             </Form.Item>
           </EditorFieldCol>
           <EditorFieldCol xs={12} md={4} show={visible.show("end_date")}>
-            <Form.Item name={[field.name, "end_date"]} label="结束">
+            <Form.Item name={[field.name, "end_date"]} label={t("editor.field.end")}>
               <Input placeholder="2025.08" />
             </Form.Item>
           </EditorFieldCol>
           <EditorFieldCol xs={12} md={6} show={visible.show("team_size")}>
-            <Form.Item name={[field.name, "team_size"]} label="团队规模">
-              <Input placeholder="如：8 人" />
+            <Form.Item name={[field.name, "team_size"]} label={t("editor.field.teamSize")}>
+              <Input placeholder={t("editor.placeholder.teamSize")} />
             </Form.Item>
           </EditorFieldCol>
           <EditorFieldCol xs={12} md={6} show={visible.show("experience_kind")}>
-            <Form.Item name={[field.name, "experience_kind"]} label="工作类型">
-              <Select allowClear options={EXPERIENCE_KIND_OPTIONS} />
+            <Form.Item name={[field.name, "experience_kind"]} label={t("editor.field.jobKind")}>
+              <Select
+                allowClear
+                options={EXPERIENCE_KIND_OPTIONS.map((o) => ({
+                  value: o.value,
+                  label: t(o.labelKey),
+                }))}
+              />
             </Form.Item>
           </EditorFieldCol>
           <EditorFieldCol span={24} show={visible.show("description")}>
-            <Form.Item {...multilineItemProps} name={[field.name, "description"]} label="工作内容">
-              <Input.TextArea rows={5} placeholder="每行一个要点" />
+            <Form.Item
+              {...multilineItemProps}
+              name={[field.name, "description"]}
+              label={t("editor.field.expDescription")}
+            >
+              <Input.TextArea rows={5} placeholder={t("editor.placeholder.onePointPerLine")} />
             </Form.Item>
           </EditorFieldCol>
         </Row>
@@ -193,10 +223,11 @@ export function ExperienceEditor() {
 }
 
 export function CampusEditor() {
+  useLocale();
   const visible = useEditorFieldVisibility("campus_experiences");
   return (
     <ResumeListSection
-      title="校园经历"
+      title={t("editor.section.campus")}
       name="campus_experience"
       fillSection="campusExperience"
       emptyValue={{
@@ -213,10 +244,10 @@ export function CampusEditor() {
           <EditorFieldCol xs={24} md={8} show={visible.show("organization")}>
             <Form.Item
               name={[field.name, "organization"]}
-              label="组织/部门"
+              label={t("editor.field.organization")}
               rules={
                 visible.show("organization")
-                  ? [{ required: true, message: "请填写组织/部门" }]
+                  ? [{ required: true, message: t("editor.required.organization") }]
                   : undefined
               }
             >
@@ -224,28 +255,32 @@ export function CampusEditor() {
             </Form.Item>
           </EditorFieldCol>
           <EditorFieldCol xs={24} md={8} show={visible.show("role")}>
-            <Form.Item name={[field.name, "role"]} label="职务/角色">
+            <Form.Item name={[field.name, "role"]} label={t("editor.field.campusRole")}>
               <Input />
             </Form.Item>
           </EditorFieldCol>
           <EditorFieldCol xs={12} md={4} show={visible.show("start_date")}>
-            <Form.Item name={[field.name, "start_date"]} label="开始">
+            <Form.Item name={[field.name, "start_date"]} label={t("editor.field.start")}>
               <Input />
             </Form.Item>
           </EditorFieldCol>
           <EditorFieldCol xs={12} md={4} show={visible.show("end_date")}>
-            <Form.Item name={[field.name, "end_date"]} label="结束">
+            <Form.Item name={[field.name, "end_date"]} label={t("editor.field.end")}>
               <Input />
             </Form.Item>
           </EditorFieldCol>
           <EditorFieldCol xs={24} md={8} show={visible.show("activity_type")}>
-            <Form.Item name={[field.name, "activity_type"]} label="活动类型">
+            <Form.Item name={[field.name, "activity_type"]} label={t("editor.field.activityType")}>
               <Input />
             </Form.Item>
           </EditorFieldCol>
           <EditorFieldCol span={24} show={visible.show("description")}>
-            <Form.Item {...multilineItemProps} name={[field.name, "description"]} label="经历描述">
-              <Input.TextArea rows={5} placeholder="每行一个要点" />
+            <Form.Item
+              {...multilineItemProps}
+              name={[field.name, "description"]}
+              label={t("editor.field.campusDescription")}
+            >
+              <Input.TextArea rows={5} placeholder={t("editor.placeholder.onePointPerLine")} />
             </Form.Item>
           </EditorFieldCol>
         </Row>
@@ -255,10 +290,11 @@ export function CampusEditor() {
 }
 
 export function ProjectEditor() {
+  useLocale();
   const visible = useEditorFieldVisibility("projects");
   return (
     <ResumeListSection
-      title="项目经历"
+      title={t("editor.section.projects")}
       name="projects"
       fillSection="projects"
       emptyValue={{
@@ -278,52 +314,66 @@ export function ProjectEditor() {
           <EditorFieldCol xs={24} md={8} show={visible.show("name")}>
             <Form.Item
               name={[field.name, "name"]}
-              label="项目名称"
+              label={t("editor.field.projectName")}
               rules={
-                visible.show("name") ? [{ required: true, message: "请填写项目名称" }] : undefined
+                visible.show("name")
+                  ? [{ required: true, message: t("editor.required.projectName") }]
+                  : undefined
               }
             >
               <Input />
             </Form.Item>
           </EditorFieldCol>
           <EditorFieldCol xs={24} md={8} show={visible.show("role")}>
-            <Form.Item name={[field.name, "role"]} label="担任角色">
+            <Form.Item name={[field.name, "role"]} label={t("editor.field.projectRole")}>
               <Input />
             </Form.Item>
           </EditorFieldCol>
           <EditorFieldCol xs={12} md={4} show={visible.show("start_date")}>
-            <Form.Item name={[field.name, "start_date"]} label="开始">
+            <Form.Item name={[field.name, "start_date"]} label={t("editor.field.start")}>
               <Input />
             </Form.Item>
           </EditorFieldCol>
           <EditorFieldCol xs={12} md={4} show={visible.show("end_date")}>
-            <Form.Item name={[field.name, "end_date"]} label="结束">
+            <Form.Item name={[field.name, "end_date"]} label={t("editor.field.end")}>
               <Input />
             </Form.Item>
           </EditorFieldCol>
           <EditorFieldCol xs={12} md={6} show={visible.show("project_size")}>
-            <Form.Item name={[field.name, "project_size"]} label="项目规模">
+            <Form.Item name={[field.name, "project_size"]} label={t("editor.field.projectSize")}>
               <Input />
             </Form.Item>
           </EditorFieldCol>
           <EditorFieldCol xs={24} md={10} show={visible.show("artifact_type")}>
-            <Form.Item name={[field.name, "artifact_type"]} label="成果类型">
+            <Form.Item name={[field.name, "artifact_type"]} label={t("editor.field.artifactType")}>
               <Input />
             </Form.Item>
           </EditorFieldCol>
           <EditorFieldCol span={24} show={visible.show("tech_stack")}>
-            <Form.Item {...multilineItemProps} name={[field.name, "tech_stack"]} label="技术栈">
-              <Input.TextArea rows={2} placeholder="每行一项" />
+            <Form.Item
+              {...multilineItemProps}
+              name={[field.name, "tech_stack"]}
+              label={t("editor.field.techStack")}
+            >
+              <Input.TextArea rows={2} placeholder={t("editor.placeholder.onePerLine")} />
             </Form.Item>
           </EditorFieldCol>
           <EditorFieldCol xs={24} md={12} show={visible.show("description")}>
-            <Form.Item {...multilineItemProps} name={[field.name, "description"]} label="项目描述">
-              <Input.TextArea rows={5} placeholder="每行一个要点" />
+            <Form.Item
+              {...multilineItemProps}
+              name={[field.name, "description"]}
+              label={t("editor.field.projectDescription")}
+            >
+              <Input.TextArea rows={5} placeholder={t("editor.placeholder.onePointPerLine")} />
             </Form.Item>
           </EditorFieldCol>
           <EditorFieldCol xs={24} md={12} show={visible.show("highlights")}>
-            <Form.Item {...multilineItemProps} name={[field.name, "highlights"]} label="亮点/成果">
-              <Input.TextArea rows={5} placeholder="每行一个要点" />
+            <Form.Item
+              {...multilineItemProps}
+              name={[field.name, "highlights"]}
+              label={t("editor.field.highlights")}
+            >
+              <Input.TextArea rows={5} placeholder={t("editor.placeholder.onePointPerLine")} />
             </Form.Item>
           </EditorFieldCol>
         </Row>
@@ -333,10 +383,11 @@ export function ProjectEditor() {
 }
 
 export function SkillEditor() {
+  useLocale();
   const visible = useEditorFieldVisibility("skills");
   return (
     <ResumeListSection
-      title="专业技能"
+      title={t("editor.section.skills")}
       name="skills"
       fillSection="skills"
       emptyValue={{ name: "", level: "", category: "" }}
@@ -346,22 +397,24 @@ export function SkillEditor() {
           <EditorFieldCol xs={24} md={12} show={visible.show("name")}>
             <Form.Item
               name={[field.name, "name"]}
-              label="技能名称"
+              label={t("editor.field.skillName")}
               rules={
-                visible.show("name") ? [{ required: true, message: "请填写技能名称" }] : undefined
+                visible.show("name")
+                  ? [{ required: true, message: t("editor.required.skillName") }]
+                  : undefined
               }
             >
               <Input />
             </Form.Item>
           </EditorFieldCol>
           <EditorFieldCol xs={24} md={12} show={visible.show("level")}>
-            <Form.Item name={[field.name, "level"]} label="熟练程度">
-              <Input placeholder="熟练 / 掌握 / 了解" />
+            <Form.Item name={[field.name, "level"]} label={t("editor.field.skillLevel")}>
+              <Input placeholder={t("editor.placeholder.skillLevel")} />
             </Form.Item>
           </EditorFieldCol>
           <EditorFieldCol xs={24} md={12} show={visible.show("category")}>
-            <Form.Item name={[field.name, "category"]} label="技能分类">
-              <Input placeholder="如：编程语言 / 工具" />
+            <Form.Item name={[field.name, "category"]} label={t("editor.field.skillCategory")}>
+              <Input placeholder={t("editor.placeholder.skillCategory")} />
             </Form.Item>
           </EditorFieldCol>
         </Row>
@@ -371,10 +424,11 @@ export function SkillEditor() {
 }
 
 export function AwardEditor() {
+  useLocale();
   const visible = useEditorFieldVisibility("awards");
   return (
     <ResumeListSection
-      title="荣誉奖项"
+      title={t("editor.section.awards")}
       name="awards"
       fillSection="awards"
       emptyValue={{ name: "", date: "", description: "", issuer: "", level: "", ratio: "" }}
@@ -384,36 +438,38 @@ export function AwardEditor() {
           <EditorFieldCol xs={24} md={12} show={visible.show("name")}>
             <Form.Item
               name={[field.name, "name"]}
-              label="奖项名称"
+              label={t("editor.field.awardName")}
               rules={
-                visible.show("name") ? [{ required: true, message: "请填写奖项名称" }] : undefined
+                visible.show("name")
+                  ? [{ required: true, message: t("editor.required.awardName") }]
+                  : undefined
               }
             >
               <Input />
             </Form.Item>
           </EditorFieldCol>
           <EditorFieldCol xs={24} md={12} show={visible.show("date")}>
-            <Form.Item name={[field.name, "date"]} label="获奖时间">
+            <Form.Item name={[field.name, "date"]} label={t("editor.field.awardDate")}>
               <Input placeholder="2025.10" />
             </Form.Item>
           </EditorFieldCol>
           <EditorFieldCol xs={24} md={12} show={visible.show("issuer")}>
-            <Form.Item name={[field.name, "issuer"]} label="颁发机构">
+            <Form.Item name={[field.name, "issuer"]} label={t("editor.field.issuer")}>
               <Input />
             </Form.Item>
           </EditorFieldCol>
           <EditorFieldCol xs={12} md={6} show={visible.show("level")}>
-            <Form.Item name={[field.name, "level"]} label="奖项级别">
+            <Form.Item name={[field.name, "level"]} label={t("editor.field.awardLevel")}>
               <Input />
             </Form.Item>
           </EditorFieldCol>
           <EditorFieldCol xs={12} md={6} show={visible.show("ratio")}>
-            <Form.Item name={[field.name, "ratio"]} label="获奖比例">
-              <Input placeholder="如：前 5%" />
+            <Form.Item name={[field.name, "ratio"]} label={t("editor.field.awardRatio")}>
+              <Input placeholder={t("editor.placeholder.awardRatio")} />
             </Form.Item>
           </EditorFieldCol>
           <EditorFieldCol span={24} show={visible.show("description")}>
-            <Form.Item name={[field.name, "description"]} label="说明">
+            <Form.Item name={[field.name, "description"]} label={t("editor.field.notes")}>
               <Input.TextArea rows={3} />
             </Form.Item>
           </EditorFieldCol>

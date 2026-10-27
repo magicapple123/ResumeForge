@@ -3,7 +3,7 @@
   "generatedAt": "2026-10-27",
   "rule": "Legacy CJK ceilings plus language-independent AST product-copy fingerprints",
   "src": {
-    "total": 5134,
+    "total": 5058,
     "files": {
       "App.tsx": 0,
       "api/analytics.ts": 0,
@@ -253,7 +253,7 @@
       "components/resume-editor/ResumeEditorPanel.tsx": 0,
       "components/resume-editor/ResumeEditorTarget.ts": 0,
       "components/resume-editor/ResumeListSection.tsx": 3,
-      "components/resume-editor/ResumeSectionEditors.tsx": 76,
+      "components/resume-editor/ResumeSectionEditors.tsx": 0,
       "components/resume-editor/editorFieldScroll.ts": 0,
       "components/resume-editor/editorSchemaContext.tsx": 0,
       "components/resume-editor/profileFillContext.ts": 0,

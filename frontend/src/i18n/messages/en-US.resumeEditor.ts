@@ -1,0 +1,82 @@
+// SPDX-License-Identifier: Apache-2.0
+/** 简历编辑器的分区标题、表单标签、校验提示与占位符（与 zh-CN.editor.ts 对应）。 */
+const resumeEditor = {
+  "editor.jobKind.fullTime": "Full-time",
+  "editor.jobKind.partTime": "Part-time",
+  "editor.jobKind.contract": "Contract",
+  "editor.jobKind.selfEmployed": "Self-employed",
+  "editor.jobKind.internship": "Internship",
+  "editor.jobKind.volunteer": "Volunteer",
+  "editor.jobKind.other": "Other",
+
+  "editor.section.education": "Education",
+  "editor.section.experience": "Experience",
+  "editor.section.campus": "Campus activities",
+  "editor.section.projects": "Projects",
+  "editor.section.skills": "Skills",
+  "editor.section.awards": "Honors & awards",
+
+  "editor.field.school": "School",
+  "editor.field.major": "Major",
+  "editor.field.degree": "Degree",
+  "editor.field.startDate": "Start date",
+  "editor.field.endDate": "End date",
+  "editor.field.gpa": "GPA / Rank",
+  "editor.field.studyForm": "Study mode",
+  "editor.field.degreeType": "Degree type",
+  "editor.field.department": "Department",
+  "editor.field.classRank": "Class rank",
+  "editor.field.advisor": "Advisor",
+  "editor.field.researchDirection": "Research area",
+  "editor.field.courses": "Core courses",
+  "editor.field.studyAchievements": "Achievements",
+
+  "editor.field.company": "Company",
+  "editor.field.expRole": "Role",
+  "editor.field.start": "Start",
+  "editor.field.end": "End",
+  "editor.field.teamSize": "Team size",
+  "editor.field.jobKind": "Employment type",
+  "editor.field.expDescription": "Responsibilities",
+
+  "editor.field.organization": "Organization",
+  "editor.field.campusRole": "Position",
+  "editor.field.activityType": "Activity type",
+  "editor.field.campusDescription": "Description",
+
+  "editor.field.projectName": "Project name",
+  "editor.field.projectRole": "Your role",
+  "editor.field.projectSize": "Project size",
+  "editor.field.artifactType": "Deliverable type",
+  "editor.field.techStack": "Tech stack",
+  "editor.field.projectDescription": "Project description",
+  "editor.field.highlights": "Highlights",
+
+  "editor.field.skillName": "Skill",
+  "editor.field.skillLevel": "Proficiency",
+  "editor.field.skillCategory": "Category",
+
+  "editor.field.awardName": "Award",
+  "editor.field.awardDate": "Date",
+  "editor.field.issuer": "Issuer",
+  "editor.field.awardLevel": "Award level",
+  "editor.field.awardRatio": "Award ratio",
+  "editor.field.notes": "Notes",
+
+  "editor.required.school": "Enter a school",
+  "editor.required.company": "Enter a company",
+  "editor.required.organization": "Enter an organization",
+  "editor.required.projectName": "Enter a project name",
+  "editor.required.skillName": "Enter a skill",
+  "editor.required.awardName": "Enter an award name",
+
+  "editor.placeholder.classRank": "e.g. Top 10%",
+  "editor.placeholder.onePerLine": "One item per line",
+  "editor.placeholder.onePointPerLine": "One point per line",
+  "editor.placeholder.teamSize": "e.g. 8 people",
+  "editor.placeholder.skillLevel": "Proficient / Working / Familiar",
+  "editor.placeholder.skillCategory": "e.g. Programming languages / Tools",
+  "editor.placeholder.awardRatio": "e.g. Top 5%",
+} as const;
+
+export default resumeEditor;
