@@ -7,6 +7,9 @@
  * 文件后缀刻意是 `.testkit.tsx`（不含 `.test.`），不会被当成测试文件。
  *
  * **纯搬迁**：Harness、几何桩与助手逐字未改，用例与断言留在各自的测试文件里。
+ *
+ * 读屏标签（拖动 / 上移 / 下移 / 重置）在 i18n 迁移时改为 `t()`：取值仍是分区 key，
+ * 中文渲染结果逐字未变，所以用例里按中文标签定位的写法保持原样。
  */
 /* 测试专用脚手架：本文件既导出 Harness 组件（用例需要）也导出几何桩/助手；
    Fast Refresh 的"只导出组件"约束针对应用模块，对不被应用引用的 testkit 不适用。 */
@@ -21,6 +24,8 @@ import {
 } from "../../components/profile/ProfileSectionConfig";
 import type { ProfileSectionKey } from "../../components/profile/ProfileSectionConfig";
 import { resetScrollAnchoringStateForTests } from "../../components/profile/dragAutoScroll";
+import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 import { useProfileSectionReorder } from "./useProfileSectionReorder";
 import { COMPACT_SECTION_HEIGHT_PX } from "./profileCompactDrag";
 
@@ -55,6 +60,7 @@ export function currentOrder(): ProfileSectionKey[] {
 }
 
 export function Harness({ editing = true }: { editing?: boolean }) {
+  useLocale();
   const reorder = useProfileSectionReorder({ editing, saving: false, photoReading: false });
   // 与 ProfileSectionStack 相同的消费方式：顺序 + 拖拽态经外部 store 订阅。
   const { sectionOrder, reordering, draggingKey, compact } = useSyncExternalStore(
@@ -84,22 +90,22 @@ export function Harness({ editing = true }: { editing?: boolean }) {
           <button
             type="button"
             className="profile-section-drag-handle"
-            aria-label={`拖动调整${key}顺序`}
+            aria-label={t("featuresMisc.profileReorder.dragAria", { label: key })}
             onPointerDown={(event) => reorder.handleSectionPointerDown(event, key)}
           />
           <button
             type="button"
-            aria-label={`上移${key}`}
+            aria-label={t("featuresMisc.profileReorder.moveUpAria", { label: key })}
             onClick={() => reorder.moveSectionByOffset(key, -1)}
           />
           <button
             type="button"
-            aria-label={`下移${key}`}
+            aria-label={t("featuresMisc.profileReorder.moveDownAria", { label: key })}
             onClick={() => reorder.moveSectionByOffset(key, 1)}
           />
           <button
             type="button"
-            aria-label={`重置${key}`}
+            aria-label={t("featuresMisc.profileReorder.resetAria", { label: key })}
             onClick={() => reorder.resetSectionReorder(DEFAULT_SECTION_ORDER)}
           />
           {/* 与生产实现一致：分区壳里有标题栏（紧凑条的可见内容就是它）。 */}
@@ -156,11 +162,14 @@ export function stubSectionRects(options: { compactHeight?: number } = {}) {
 
 /** pointerdown → 一步越过阈值（激活 + 重排 + 写 transform 全在同一个事件里同步完成）。 */
 export function dragTo(key: ProfileSectionKey, fromY: number, toY: number) {
-  fireEvent.pointerDown(screen.getByLabelText(`拖动调整${key}顺序`), {
-    clientX: 10,
-    clientY: fromY,
-    pointerId: 1,
-  });
+  fireEvent.pointerDown(
+    screen.getByLabelText(t("featuresMisc.profileReorder.dragAria", { label: key })),
+    {
+      clientX: 10,
+      clientY: fromY,
+      pointerId: 1,
+    },
+  );
   fireEvent.pointerMove(document, { clientX: 10, clientY: toY, pointerId: 1 });
 }
 
