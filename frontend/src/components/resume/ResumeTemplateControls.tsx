@@ -332,10 +332,10 @@ export default function ResumeTemplateControls({
               aria-label={t("sections.templateControls.orderListAriaLabel")}
             >
               {sectionOrder.map((key, index) => {
+                const fallbackLabelKey = RESUME_SECTION_LABELS[key];
                 const label =
                   sectionOptions.find((item) => item.key === key)?.label ??
-                  RESUME_SECTION_LABELS[key] ??
-                  key;
+                  (fallbackLabelKey ? t(fallbackLabelKey) : key);
                 return (
                   <div className="resume-section-order-row" role="listitem" key={key}>
                     <span className="resume-section-order-index">{index + 1}</span>
