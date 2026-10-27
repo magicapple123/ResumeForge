@@ -13,6 +13,7 @@
  */
 import { createElement } from "react";
 import type { ReactNode } from "react";
+import { t } from "../i18n";
 import { playDoneSound } from "./notifySound";
 
 export interface TaskDoneNotice {
@@ -104,7 +105,7 @@ export function notifyTaskDone(notice: TaskDoneNotice): void {
                 : null,
             )
           : undefined,
-      okText: notice.confirmLabel ?? "知道了",
+      okText: notice.confirmLabel ?? t("backgroundTasks.confirm.gotIt"),
       onOk: notice.onConfirm,
     });
     return;
