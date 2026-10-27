@@ -31,8 +31,11 @@ import { useSelectAllJobs } from "./jobs/useSelectAllJobs";
 import { useJobBatchActions } from "./jobs/useJobBatchActions";
 import { useDeleteUndo } from "../features/trash/useDeleteUndo";
 import { registerJobCreateHandler } from "../features/shortcuts/runtimeTargets";
+import { t } from "../i18n";
+import { useLocale } from "../i18n/i18nContext";
 
 export default function JobsPage() {
+  useLocale();
   const navigate = useNavigate();
   const { message } = App.useApp();
 
@@ -171,7 +174,9 @@ export default function JobsPage() {
         setSelectedJobIds((current) => current.filter((jobId) => jobId !== id));
         void reload();
       } catch (err) {
-        message.error(err instanceof Error ? err.message : "删除失败");
+        message.error(
+          err instanceof Error ? err.message : t("pagesMisc.jobsPage.error.deleteFailed"),
+        );
       }
     },
     [deleteUndo, message, reload],
@@ -186,7 +191,9 @@ export default function JobsPage() {
         setDetailJob((current) => (current?.id === job.id ? updated : current));
         await reload();
       } catch (err) {
-        message.error(err instanceof Error ? err.message : "更新收藏状态失败");
+        message.error(
+          err instanceof Error ? err.message : t("pagesMisc.jobsPage.error.favoriteFailed"),
+        );
       } finally {
         setFavoriteJobId(null);
       }
@@ -202,9 +209,11 @@ export default function JobsPage() {
       setWebFormJobId(job.id);
       try {
         await openWebFormUrl(job.source_url);
-        message.success("已在网申专用浏览器中打开投递页面");
+        message.success(t("pagesMisc.jobsPage.toast.webFormOpened"));
       } catch (error) {
-        message.error(error instanceof Error ? error.message : "打开网申页面失败");
+        message.error(
+          error instanceof Error ? error.message : t("pagesMisc.jobsPage.error.webFormFailed"),
+        );
       } finally {
         setWebFormJobId(null);
       }
@@ -217,16 +226,18 @@ export default function JobsPage() {
     const target =
       selectionMode && selectedJobIds.length > 0 ? selectedJobIds : emptyDescriptionJobIds;
     if (target.length === 0) {
-      message.warning("当前页没有需要补齐详情的岗位");
+      message.warning(t("pagesMisc.jobsPage.backfill.none"));
       return;
     }
     setBackfilling(true);
     try {
       await startBackfill(target);
       // 它是 kind=collect 的批次，界面入口在投递台：不告诉用户去哪儿看，他会以为点了没反应。
-      message.success(`已开始为 ${target.length} 个岗位补齐详情，进度见「投递台 → 自动采集」`);
+      message.success(t("pagesMisc.jobsPage.backfill.started", { count: target.length }));
     } catch (err) {
-      message.error(err instanceof Error ? err.message : "补齐详情失败");
+      message.error(
+        err instanceof Error ? err.message : t("pagesMisc.jobsPage.error.backfillFailed"),
+      );
     } finally {
       setBackfilling(false);
     }
@@ -283,15 +294,15 @@ export default function JobsPage() {
         // 「AI 分析适配度」分析的是勾选的岗位：没进选择模式说明用户还没机会勾选——
         // 直接带他进选择模式，而不是丢一句「请先选择岗位」的死路提示。
         setSelectionMode(true);
-        message.info("已进入选择模式，勾选岗位后点分析");
+        message.info(t("pagesMisc.jobsPage.match.enteredSelection"));
         return;
       }
       if (selectedJobIds.length === 0) {
-        message.warning("请先选择岗位");
+        message.warning(t("pagesMisc.jobsPage.match.needJobs"));
         return;
       }
       if (selectedJobIds.length > 50) {
-        message.warning("一次最多分析 50 个岗位");
+        message.warning(t("pagesMisc.jobsPage.match.tooMany"));
         return;
       }
     }
@@ -420,8 +431,12 @@ export default function JobsPage() {
           setImportCandidate(null);
           setImportedCandidateId(candidate.id);
           void markCandidateJobImported(candidate.id, jobId)
-            .then(() => message.success("备选岗位已导入正式岗位"))
-            .catch((err) => message.error(err instanceof Error ? err.message : "标记导入状态失败"));
+            .then(() => message.success(t("pagesMisc.jobsPage.candidate.imported")))
+            .catch((err) =>
+              message.error(
+                err instanceof Error ? err.message : t("pagesMisc.jobsPage.candidate.markFailed"),
+              ),
+            );
         }}
       />
       <CandidateJobsDrawer
