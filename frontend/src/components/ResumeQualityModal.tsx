@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 /** 质量检测弹窗：风险扫描（R-08~R-09）与 ATS 本地检测（R-10）同用一个 Tabs 面板。 */
 import { Modal, Tabs } from "antd";
+import { t } from "../i18n";
+import { useLocale } from "../i18n/i18nContext";
 import AtsCheckPanel from "./AtsCheckPanel";
 import ResumeRiskPanel from "./ResumeRiskPanel";
 
@@ -21,9 +23,10 @@ export default function ResumeQualityModal({
   jobId,
   onClose,
 }: Props) {
+  useLocale();
   return (
     <Modal
-      title="质量检测"
+      title={t("componentsMisc.qualityModal.title")}
       open={open}
       onCancel={onClose}
       width="min(880px, calc(100vw - 24px))"
@@ -36,12 +39,12 @@ export default function ResumeQualityModal({
           items={[
             {
               key: "risk",
-              label: "风险扫描",
+              label: t("componentsMisc.qualityModal.tab.risk"),
               children: <ResumeRiskPanel resumeId={resumeId} contentSignature={contentSignature} />,
             },
             {
               key: "ats",
-              label: "ATS 检测",
+              label: t("componentsMisc.qualityModal.tab.ats"),
               children: <AtsCheckPanel resumeId={resumeId} jobId={jobId} />,
             },
           ]}
