@@ -32,8 +32,14 @@ import {
   type Job,
   type JobMatchOut,
   type MatchCondition,
+  type MatchScoreDimension,
 } from "../types";
 import { t, type MessageKey } from "../i18n";
+import {
+  ADMISSION_LABEL_KEYS,
+  MATCH_STATUS_LABEL_KEYS,
+  matchScoreDimensionKey,
+} from "../i18n/enum/apply";
 import { useLocale } from "../i18n/i18nContext";
 
 interface Props {
@@ -56,6 +62,17 @@ const GROUPS: {
   { key: "bonus_items", titleKey: "jobMatch.group.bonusItems" },
 ];
 
+/**
+ * 参考分分项的展示名：按后端稳定的 `key` 查语言包。
+ *
+ * `label` 是后端下发的中文展示名（`MATCH_SCORE_DIMENSIONS`），英文界面下会露中文；
+ * 后端新增分项时表里查不到，回退它下发的原文——不显示 key，也不留空。
+ */
+function dimensionLabel(dimension: MatchScoreDimension): string {
+  const labelKey = matchScoreDimensionKey(dimension.key);
+  return labelKey ? t(labelKey) : dimension.label;
+}
+
 function ConditionList({ conditions }: { conditions: MatchCondition[] }) {
   useLocale();
   if (conditions.length === 0) {
@@ -68,7 +85,7 @@ function ConditionList({ conditions }: { conditions: MatchCondition[] }) {
         return (
           <li key={`${condition.label}-${index}`} className="job-match-condition">
             <Space wrap size={8}>
-              <Tag color={meta.color}>{meta.label}</Tag>
+              <Tag color={meta.color}>{t(MATCH_STATUS_LABEL_KEYS[condition.status])}</Tag>
               <Typography.Text strong>{condition.label}</Typography.Text>
             </Space>
             {condition.jd_quote && (
@@ -198,6 +215,7 @@ export default function JobMatchModal({ job, onClose }: Props) {
   const hasResult = data != null && data.id > 0;
   const result = hasResult ? data.result : null;
   const admissionMeta = result ? ADMISSION_META[result.admission] : null;
+  const admissionLabelKey = result ? ADMISSION_LABEL_KEYS[result.admission] : null;
   const hardGateMeta = result ? HARD_GATE_LABELS[result.hard_gate] : null;
 
   return (
@@ -273,7 +291,9 @@ export default function JobMatchModal({ job, onClose }: Props) {
                 {data.model || t("jobMatch.model.local")}
               </Descriptions.Item>
               <Descriptions.Item label={t("jobMatch.field.verdict")}>
-                {admissionMeta && <Tag color={admissionMeta.color}>{admissionMeta.label}</Tag>}
+                {admissionMeta && admissionLabelKey && (
+                  <Tag color={admissionMeta.color}>{t(admissionLabelKey)}</Tag>
+                )}
               </Descriptions.Item>
               <Descriptions.Item label={t("jobMatch.field.hardGate")}>
                 {hardGateMeta && <Tag color={hardGateMeta.color}>{t(hardGateMeta.labelKey)}</Tag>}
@@ -332,7 +352,7 @@ export default function JobMatchModal({ job, onClose }: Props) {
                   {data.reference_score.dimensions.map((dimension) => (
                     <li key={dimension.key}>
                       <div className="job-match-score-line">
-                        <span className="job-match-score-label">{dimension.label}</span>
+                        <span className="job-match-score-label">{dimensionLabel(dimension)}</span>
                         <Progress percent={dimension.score} showInfo={false} size="small" />
                         <span className="job-match-score-value">{dimension.score}</span>
                       </div>
