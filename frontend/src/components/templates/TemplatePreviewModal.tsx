@@ -3,6 +3,9 @@
 import { Alert, Modal, Segmented, Space, Spin, Typography } from "antd";
 import { useEffect, useState } from "react";
 import { previewResumeTemplate } from "../../api/resumes";
+import { t } from "../../i18n";
+import type { MessageKey } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 import type { ResumeFontScale, ResumeFormatPreset, ResumeTemplateDetail } from "../../types";
 import A4PreviewFrame from "./A4PreviewFrame";
 
@@ -12,13 +15,15 @@ interface Props {
   onClose: () => void;
 }
 
-const FONT_SCALES: { value: ResumeFontScale; label: string }[] = [
-  { value: "small", label: "小字号" },
-  { value: "standard", label: "标准" },
-  { value: "large", label: "大字号" },
+// 只存 key：模块作用域求值 `t()` 会让切语言后停在旧文案。
+const FONT_SCALES: { value: ResumeFontScale; labelKey: MessageKey }[] = [
+  { value: "small", labelKey: "templatesUi.preview.fontScale.small" },
+  { value: "standard", labelKey: "templatesUi.preview.fontScale.standard" },
+  { value: "large", labelKey: "templatesUi.preview.fontScale.large" },
 ];
 
 export default function TemplatePreviewModal({ template, formatPresets, onClose }: Props) {
+  useLocale();
   const [fontScale, setFontScale] = useState<ResumeFontScale>("standard");
   const [formatName, setFormatName] = useState("");
   const [html, setHtml] = useState("");
@@ -51,7 +56,7 @@ export default function TemplatePreviewModal({ template, formatPresets, onClose 
       .catch((err) => {
         if (!cancelled) {
           setHtml("");
-          setError(err instanceof Error ? err.message : "预览失败");
+          setError(err instanceof Error ? err.message : t("templatesUi.preview.error"));
         }
       })
       .finally(() => {
@@ -62,7 +67,9 @@ export default function TemplatePreviewModal({ template, formatPresets, onClose 
     };
   }, [template, fontScale, formatName, previewKey]);
 
-  const title = template ? `模板预览 · ${template.name}` : "模板预览";
+  const title = template
+    ? t("templatesUi.preview.titleWithName", { name: template.name })
+    : t("templatesUi.preview.title");
 
   return (
     <Modal
@@ -80,7 +87,7 @@ export default function TemplatePreviewModal({ template, formatPresets, onClose 
         <Segmented
           size="small"
           value={fontScale}
-          options={FONT_SCALES}
+          options={FONT_SCALES.map(({ value, labelKey }) => ({ value, label: t(labelKey) }))}
           onChange={(value) => setFontScale(value as ResumeFontScale)}
         />
         {template?.kind === "style" ? (
@@ -88,24 +95,29 @@ export default function TemplatePreviewModal({ template, formatPresets, onClose 
             size="small"
             value={formatName || ""}
             options={[
-              { value: "", label: "跟随模板" },
+              { value: "", label: t("templatesUi.preview.followTemplate") },
               ...formatPresets.map((item) => ({ value: item.name, label: item.label })),
             ]}
             onChange={(value) => setFormatName(String(value))}
           />
         ) : null}
         <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-          预览使用内置示例简历内容
+          {t("templatesUi.preview.demoNote")}
         </Typography.Text>
       </Space>
       {error ? (
-        <Alert type="error" showIcon title="预览渲染失败" description={error} />
+        <Alert
+          type="error"
+          showIcon
+          title={t("templatesUi.preview.errorTitle")}
+          description={error}
+        />
       ) : loading ? (
         <div className="template-preview-loading">
           <Spin />
         </div>
       ) : (
-        <A4PreviewFrame html={html} title="模板预览" />
+        <A4PreviewFrame html={html} title={t("templatesUi.preview.title")} />
       )}
     </Modal>
   );
