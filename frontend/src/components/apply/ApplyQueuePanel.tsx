@@ -29,6 +29,7 @@ import { UNANALYZED_FILTER, type AdmissionFilterValue } from "./queue/filterOpti
 import { QueueItemEditor } from "./queue/QueueItemEditor";
 import { QueueTable } from "./queue/QueueTable";
 import { t } from "../../i18n";
+import { QUEUE_STATUS_LABEL_KEYS } from "../../i18n/enum/apply";
 import { useLocale } from "../../i18n/i18nContext";
 
 interface Props {
@@ -322,7 +323,7 @@ export default function ApplyQueuePanel({ disabled, onStarted, onChanged }: Prop
                   label: t("applyQueue.detail.status"),
                   value: (
                     <Tag color={QUEUE_STATUS_META[detail.status].color}>
-                      {QUEUE_STATUS_META[detail.status].label}
+                      {t(QUEUE_STATUS_LABEL_KEYS[detail.status])}
                     </Tag>
                   ),
                 },
