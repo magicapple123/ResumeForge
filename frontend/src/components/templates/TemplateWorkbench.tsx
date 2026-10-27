@@ -27,6 +27,8 @@ import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { fetchResumeTemplates } from "../../api/resumes";
 import { deleteResumeTemplate, listResumeTemplates } from "../../api/resumeTemplates";
+import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 import type { ResumeTemplateCatalog, ResumeTemplateDetail } from "../../types";
 import FormatTemplateEditorModal from "./FormatTemplateEditorModal";
 import TemplateCustomTable from "./TemplateCustomTable";
@@ -38,7 +40,12 @@ interface Props {
   onChanged?: () => void;
 }
 
+/** 「找求职助手制作」预填的提问；它在助手里被当成用户问题，不是界面文案。 */
+// i18n-ok: 预填给求职助手的 prompt（模型输入），翻成英文会改变助手收到的问题
+const ASK_NEW_LAYOUT_PROMPT = "帮我新建一个版式：";
+
 export default function TemplateWorkbench({ onChanged }: Props) {
+  useLocale();
   const { message } = App.useApp();
   const navigate = useNavigate();
   const [templates, setTemplates] = useState<ResumeTemplateDetail[]>([]);
@@ -57,7 +64,9 @@ export default function TemplateWorkbench({ onChanged }: Props) {
     try {
       return await listResumeTemplates();
     } catch (error) {
-      message.error(error instanceof Error ? error.message : "读取自制版式失败");
+      message.error(
+        error instanceof Error ? error.message : t("templatesUi.workbench.error.loadTemplates"),
+      );
       return null;
     }
   }, [message]);
@@ -66,7 +75,9 @@ export default function TemplateWorkbench({ onChanged }: Props) {
     try {
       return await fetchResumeTemplates();
     } catch (error) {
-      message.error(error instanceof Error ? error.message : "读取版式目录失败");
+      message.error(
+        error instanceof Error ? error.message : t("templatesUi.workbench.error.loadCatalog"),
+      );
       return null;
     }
   }, [message]);
@@ -111,17 +122,19 @@ export default function TemplateWorkbench({ onChanged }: Props) {
   const remove = async (template: ResumeTemplateDetail) => {
     try {
       await deleteResumeTemplate(template.id);
-      message.success(`已删除「${template.name}」；引用它的简历会退回默认版式`);
+      message.success(t("templatesUi.workbench.toast.deleted", { name: template.name }));
       refreshAll();
     } catch (error) {
-      message.error(error instanceof Error ? error.message : "删除失败");
+      message.error(
+        error instanceof Error ? error.message : t("templatesUi.workbench.error.delete"),
+      );
     }
   };
 
   // 只剩版式：模板那一类不再有入口，也不再从列表里过滤出来展示。
   const formatTemplates = templates.filter((item) => item.kind === "format");
 
-  const askTemplate = (row: ResumeTemplateDetail) => askAssistant(`帮我调整版式「${row.name}」：`);
+  const askTemplate = (row: ResumeTemplateDetail) => askAssistant(`帮我调整版式「${row.name}」：`); // i18n-ok: 预填给求职助手的 prompt（模型输入），不随界面语言变
 
   return (
     <div className="template-workbench">
@@ -130,25 +143,25 @@ export default function TemplateWorkbench({ onChanged }: Props) {
       <Card
         size="small"
         className="settings-card"
-        title="版式"
+        title={t("templatesUi.workbench.title")}
         style={{ marginTop: 16 }}
         extra={
           <Space wrap>
-            <Button icon={<RobotOutlined />} onClick={() => askAssistant("帮我新建一个版式：")}>
-              找求职助手制作
+            <Button icon={<RobotOutlined />} onClick={() => askAssistant(ASK_NEW_LAYOUT_PROMPT)}>
+              {t("templatesUi.workbench.action.askAssistant")}
             </Button>
             <Button
               type="primary"
               icon={<PlusOutlined />}
               onClick={() => setFormatEditor({ open: true, template: null })}
             >
-              自制版式
+              {t("templatesUi.workbench.action.create")}
             </Button>
           </Space>
         }
       >
         <Typography.Paragraph type="secondary" style={{ marginTop: 0 }}>
-          内置版式：
+          {t("templatesUi.workbench.builtinLabel")}
           {(catalog?.format_presets ?? [])
             .filter((item) => !item.custom)
             .map((item) => (
@@ -158,9 +171,7 @@ export default function TemplateWorkbench({ onChanged }: Props) {
             ))}
         </Typography.Paragraph>
         {formatTemplates.length === 0 ? (
-          <Typography.Text type="secondary">
-            还没有自制版式。想压进一页时，用它调行高与页边距最快。
-          </Typography.Text>
+          <Typography.Text type="secondary">{t("templatesUi.workbench.empty")}</Typography.Text>
         ) : (
           <TemplateCustomTable
             templates={formatTemplates}
