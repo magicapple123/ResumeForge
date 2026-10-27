@@ -29,7 +29,7 @@ import type {
 } from "../../types";
 import { formatDateTime } from "../../utils/format";
 import type { LLMConfigSummary } from "./SettingsConfig";
-import { CUSTOM_PRESET_LABEL, matchingPreset } from "./SettingsConfig";
+import { CUSTOM_PRESET_LABEL_KEY, matchingPreset } from "./SettingsConfig";
 import type { RecordFormValues } from "../../features/settings/useLLMRecordTools";
 import { useCollapsedList } from "../common/useCollapsedList";
 import LLMRecordModal from "./LLMRecordModal";
@@ -217,7 +217,7 @@ export default function LLMConfigCard({
                     }
                   >
                     <Flex gap={8} wrap style={{ marginBottom: 12 }}>
-                      <Tag>{matchingPreset(record)?.label ?? CUSTOM_PRESET_LABEL}</Tag>
+                      <Tag>{t(matchingPreset(record)?.labelKey ?? CUSTOM_PRESET_LABEL_KEY)}</Tag>
                       <Typography.Text type="secondary">
                         {record.model || t("llmConfigCard.fallback.model")}
                       </Typography.Text>
