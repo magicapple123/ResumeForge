@@ -12,6 +12,8 @@
  */
 import type { FunnelStage } from "../../types";
 import { useChartPalette } from "../../theme/chartPalette";
+import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 import HorizontalBarChart from "./HorizontalBarChart";
 
 interface Props {
@@ -19,6 +21,7 @@ interface Props {
 }
 
 export default function FunnelChart({ stages }: Props) {
+  useLocale();
   const palette = useChartPalette();
   return (
     <HorizontalBarChart
@@ -27,7 +30,7 @@ export default function FunnelChart({ stages }: Props) {
         label: stage.label,
         count: stage.count,
       }))}
-      ariaLabel="求职漏斗"
+      ariaLabel={t("analyticsUi.funnel.aria")}
       align="center"
       showPercent
       colorFor={(key) => {
