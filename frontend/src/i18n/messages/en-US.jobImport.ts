@@ -4,6 +4,8 @@
  *
  * **CSV 列名不在本文件**：模板表头（岗位名称 / 公司名称 …）同时是解析时的匹配依据，
  * 翻译它会让导出的模板再导入时全部匹配不上。列名属于协议值，保持中文。
+ *
+ * 「粘贴内容」的临时文件名（`jobImport.pasted.fileName`）只是界面标签、不落库，随语言变化。
  */
 const jobImport = {
   "jobImport.toast.imported": "Imported {count} Jobs",
@@ -15,6 +17,7 @@ const jobImport = {
   "jobImport.toast.failedGeneric": "Could not import",
   "jobImport.title": "Import Jobs from CSV",
   "jobImport.template.fileName": "job-import-template.csv",
+  "jobImport.pasted.fileName": "pasted-content.csv",
   "jobImport.action.downloadTemplate": "Download blank template",
   "jobImport.action.confirm": "Import {count} rows",
   "jobImport.dropzone.aria": "CSV import area",

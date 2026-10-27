@@ -74,7 +74,7 @@ export function JobImportModal({
     const text = event.clipboardData?.getData("text/plain") ?? "";
     if (!text.trim()) return;
     event.preventDefault();
-    void batch.addFiles([new File([text], "粘贴内容.csv", { type: "text/csv" })]);
+    void batch.addFiles([new File([text], t("jobImport.pasted.fileName"), { type: "text/csv" })]);
   };
 
   const commit = async () => {
@@ -101,6 +101,7 @@ export function JobImportModal({
         );
         return;
       }
+      // i18n-ok: 匹配后端返回的「已跳过」文案，不是界面文案
       const skipped = outcome.failed.filter((item) => item.message.includes("已跳过")).length;
       const failed = outcome.failed.length - skipped;
       if (skipped > 0) {
@@ -139,6 +140,7 @@ export function JobImportModal({
             icon={<DownloadOutlined />}
             onClick={() =>
               downloadCsvTemplate(t("jobImport.template.fileName"), [
+                // i18n-ok: 模板列名同时是后端表头的别名匹配依据（协议值），翻译后导出模板会导不回来
                 "岗位名称",
                 "公司名称",
                 "工作地点",
