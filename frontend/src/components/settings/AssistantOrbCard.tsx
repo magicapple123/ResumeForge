@@ -7,8 +7,11 @@ import { useCallback, useEffect, useState } from "react";
 import { getAssistantOrbSetting, saveAssistantOrbSetting } from "../../api/settings";
 import type { AssistantOrbSetting } from "../../types/settings";
 import { TOU_TOU_SETTING_EVENT } from "../../features/tou-tou/touTouTypes";
+import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 
 export default function AssistantOrbCard() {
+  useLocale();
   const { message } = App.useApp();
   const [setting, setSetting] = useState<AssistantOrbSetting>({
     enabled: true,
@@ -22,7 +25,7 @@ export default function AssistantOrbCard() {
     try {
       return await getAssistantOrbSetting();
     } catch (err) {
-      message.error(err instanceof Error ? err.message : "加载投投悬浮球设置失败");
+      message.error(err instanceof Error ? err.message : t("settingsUi.orb.loadFailed"));
       return null;
     }
   }, [message]);
@@ -62,51 +65,48 @@ export default function AssistantOrbCard() {
       message.success(successText);
     } catch (err) {
       setSetting(previous);
-      message.error(err instanceof Error ? err.message : "保存投投悬浮球设置失败");
+      message.error(err instanceof Error ? err.message : t("settingsUi.orb.saveFailed"));
     } finally {
       setSaving(false);
     }
   };
 
   return (
-    <Card title="投投悬浮球" className="settings-card">
+    <Card title={t("settingsUi.orb.title")} className="settings-card">
       <Typography.Paragraph type="secondary" style={{ marginBottom: 16 }}>
-        在应用各页面保留一个轻量的求职助手入口。点击它可以直接进入助手，静置后会自动贴边收起，
-        不会遮挡主要内容。
+        {t("settingsUi.orb.intro")}
       </Typography.Paragraph>
       <LoadingBlock spinning={loading}>
         <Space orientation="vertical" size={4}>
           <Switch
             checked={setting.enabled}
             loading={saving}
-            checkedChildren="开"
-            unCheckedChildren="关"
-            aria-label="开启投投悬浮球"
+            checkedChildren={t("settingsUi.switch.on")}
+            unCheckedChildren={t("settingsUi.switch.off")}
+            aria-label={t("settingsUi.orb.enableAria")}
             onChange={(checked) =>
               void save(
                 { ...setting, enabled: checked },
-                checked ? "已开启投投悬浮球" : "已关闭投投悬浮球",
+                checked ? t("settingsUi.orb.enableToast") : t("settingsUi.orb.disableToast"),
               )
             }
           />
-          <Typography.Text type="secondary">默认开启，可随时在这里关闭。</Typography.Text>
+          <Typography.Text type="secondary">{t("settingsUi.switch.defaultOnHint")}</Typography.Text>
           <Divider style={{ margin: "12px 0 8px" }} />
           <Switch
             checked={setting.tips_enabled}
             loading={saving}
-            checkedChildren="开"
-            unCheckedChildren="关"
-            aria-label="开启投投提示标语"
+            checkedChildren={t("settingsUi.switch.on")}
+            unCheckedChildren={t("settingsUi.switch.off")}
+            aria-label={t("settingsUi.orb.tipsAria")}
             onChange={(checked) =>
               void save(
                 { ...setting, tips_enabled: checked },
-                checked ? "投投会继续弹出提示标语" : "投投不再弹出提示标语",
+                checked ? t("settingsUi.orb.tipsOnToast") : t("settingsUi.orb.tipsOffToast"),
               )
             }
           />
-          <Typography.Text type="secondary">
-            关闭后悬浮球不再弹出提示语，也不会在「我的资料」页提示你去改资料，其余功能不受影响。
-          </Typography.Text>
+          <Typography.Text type="secondary">{t("settingsUi.orb.tipsHint")}</Typography.Text>
         </Space>
       </LoadingBlock>
     </Card>
