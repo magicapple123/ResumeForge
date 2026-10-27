@@ -8,6 +8,8 @@ import { BulbOutlined } from "@ant-design/icons";
 import { Alert, Button, Card, Listy, Space, Tag, Typography } from "antd";
 import { ListyItem, ListyMeta } from "../common/ListyItem";
 import type { InterviewOptimizeResult } from "../../types";
+import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 
 interface Props {
   suggestions: InterviewOptimizeResult["suggestions"];
@@ -19,10 +21,12 @@ const priorityColor = (priority: string) =>
   priority === "high" ? "red" : priority === "medium" ? "gold" : "default";
 
 export default function SuggestionsCard({ suggestions, onGoToResume }: Props) {
+  // 本组件用模块级 t()：必须订阅语言变化，否则切语言后这一块不重渲染。
+  useLocale();
   return (
-    <Card size="small" title="简历改进建议">
+    <Card size="small" title={t("interview.suggestions.title")}>
       {suggestions.length === 0 ? (
-        <Alert type="info" showIcon title="没有产出建议，试试补充更多面试暴露的短板或追问" />
+        <Alert type="info" showIcon title={t("interview.suggestions.empty")} />
       ) : (
         <Listy
           items={suggestions}
@@ -44,7 +48,9 @@ export default function SuggestionsCard({ suggestions, onGoToResume }: Props) {
                     </span>
                     {item.evidence.length > 0 && (
                       <Typography.Text type="secondary">
-                        依据：{item.evidence.join("；")}
+                        {t("interview.suggestions.evidence", {
+                          evidence: item.evidence.join(t("interview.listSeparator")),
+                        })}
                       </Typography.Text>
                     )}
                   </Space>
@@ -56,7 +62,7 @@ export default function SuggestionsCard({ suggestions, onGoToResume }: Props) {
       )}
       {onGoToResume && (
         <Button type="link" style={{ paddingLeft: 0 }} onClick={onGoToResume}>
-          去简历中心对照修改 →
+          {t("interview.suggestions.goToResume")}
         </Button>
       )}
     </Card>
