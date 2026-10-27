@@ -7,9 +7,10 @@
  */
 import { MoreOutlined } from "@ant-design/icons";
 import { Button, Dropdown, Space, Tag, Typography } from "antd";
-import { t, type MessageKey } from "../../i18n";
+import { t } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
-import type { Track, TrackSource, TrackStatus } from "../../types";
+import { TRACK_SOURCE_LABEL_KEYS, TRACK_STATUS_LABEL_KEYS } from "../../i18n/enum/tracker";
+import type { Track } from "../../types";
 import { FUNNEL_STATUSES, TRACK_STATUS_COLORS, isActiveStatus } from "../../types";
 import { useRowActionMenu } from "../common/rowActionMenu";
 
@@ -18,30 +19,6 @@ interface Props {
   onEdit: () => void;
   onDelete: () => void;
 }
-
-/**
- * 进度状态的显示名：键是协议值（与后端逐字对应），值指向语言包 key。
- *
- * 七个名字与「求职进度」页、进度表单共用 `trackerForm.status.*` 词表——同一个协议值
- * 在两处必须是同一个名字，各写一份迟早会漂。`types/tracker.ts` 的中文表不翻，也
- * 一个字都没动（界面显示名一律从这里取 key）。
- */
-const STATUS_LABEL_KEYS: Record<TrackStatus, MessageKey> = {
-  applied: "trackerForm.status.applied",
-  screening: "trackerForm.status.screening",
-  assessment: "trackerForm.status.assessment",
-  interview: "trackerForm.status.interview",
-  offer: "trackerForm.status.offer",
-  rejected: "trackerForm.status.rejected",
-  unknown: "trackerForm.status.unknown",
-};
-
-/** 记录来源的显示名：同一个协议值的名字只在本包写一份。 */
-const SOURCE_LABEL_KEYS: Record<TrackSource, MessageKey> = {
-  apply: "trackerUi.source.apply",
-  manual: "trackerUi.source.manual",
-  recognized: "trackerUi.source.recognized",
-};
 
 /** 截止日期是不是已经过了（只看日期，不管当天）。 */
 function isOverdue(dateText: string): boolean {
@@ -75,7 +52,9 @@ export default function TrackCard({ track, onEdit, onDelete }: Props) {
           <Typography.Text type="secondary">
             {track.title || t("trackerUi.card.emptyTitle")}
           </Typography.Text>
-          <Tag color={TRACK_STATUS_COLORS[track.status]}>{t(STATUS_LABEL_KEYS[track.status])}</Tag>
+          <Tag color={TRACK_STATUS_COLORS[track.status]}>
+            {t(TRACK_STATUS_LABEL_KEYS[track.status])}
+          </Tag>
           {track.stage_note && <Tag>{track.stage_note}</Tag>}
         </Space>
         <Space size={4}>
@@ -118,7 +97,9 @@ export default function TrackCard({ track, onEdit, onDelete }: Props) {
             {t("trackerUi.card.statusDate", { date: track.status_date })}
           </Typography.Text>
         )}
-        <Typography.Text type="secondary">{t(SOURCE_LABEL_KEYS[track.source])}</Typography.Text>
+        <Typography.Text type="secondary">
+          {t(TRACK_SOURCE_LABEL_KEYS[track.source])}
+        </Typography.Text>
         {/* 使用的简历版本（RF-17）：有活关联显示名字；只剩标题快照（简历已删、
             resume_id 被 SET NULL）时如实标注"历史关联"，不臆造还关联着。 */}
         {(track.resume_id || track.resume_title) && (
