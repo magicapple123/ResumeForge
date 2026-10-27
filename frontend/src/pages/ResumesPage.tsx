@@ -28,6 +28,8 @@ import { useResumeListVersion } from "../features/resume/resumeListEvents";
 import type { DiffViewData } from "../types/resumeFieldDiff";
 import { useApi } from "../hooks/useApi";
 import type { ResumeBrief } from "../types";
+import { t } from "../i18n";
+import { useLocale } from "../i18n/i18nContext";
 import {
   DEFAULT_RESUME_SORT_STATE,
   isDefaultResumeSort,
@@ -46,6 +48,7 @@ import ResumeSearchInput from "./resumes/ResumeSearchInput";
 import { useSelectAllResumes } from "./resumes/useSelectAllResumes";
 
 export default function ResumesPage() {
+  useLocale();
   const navigate = useNavigate();
   const [archiveOpen, setArchiveOpen] = useState(false);
   const [searchParams, setSearchParams] = useSearchParams();
@@ -200,10 +203,10 @@ export default function ResumesPage() {
     async (id: number) => {
       try {
         await deleteResume(id);
-        message.success("已移入回收站，可在「回收站」里恢复");
+        message.success(t("resumesPage.toast.movedToTrash"));
         void reload();
       } catch (err) {
-        message.error(err instanceof Error ? err.message : "删除失败");
+        message.error(err instanceof Error ? err.message : t("resumesPage.error.deleteFailed"));
       }
     },
     [message, reload],
@@ -218,7 +221,9 @@ export default function ResumesPage() {
         await updateResumeFavorite(record.id, !record.favorite);
         await reload();
       } catch (err) {
-        message.error(err instanceof Error ? err.message : "更新收藏状态失败");
+        message.error(
+          err instanceof Error ? err.message : t("resumesPage.error.favoriteUpdateFailed"),
+        );
       } finally {
         favoriteResumeIdRef.current = null;
         setFavoriteResumeId(null);
@@ -232,16 +237,21 @@ export default function ResumesPage() {
     const ids = [...batch.selectedIds];
     if (ids.length === 0) return;
     modal.confirm({
-      title: "删除选中的简历？",
-      content: `这 ${ids.length} 份简历${TRASH_RECOVERY_NOTE}`,
-      okText: "删除",
+      title: t("resumesPage.batchDelete.title"),
+      content: t("resumesPage.batchDelete.body", {
+        count: ids.length,
+        note: TRASH_RECOVERY_NOTE,
+      }),
+      okText: t("common.action.delete"),
       okButtonProps: { danger: true },
       onOk: async () => {
         try {
           const { deleted } = await batchDeleteResumes(ids);
-          message.success(`已删除 ${deleted} 份简历，可在「回收站」里恢复`);
+          message.success(t("resumesPage.batchDelete.done", { count: deleted }));
         } catch (err) {
-          message.error(err instanceof Error ? err.message : "批量删除失败，请重试");
+          message.error(
+            err instanceof Error ? err.message : t("resumesPage.error.batchDeleteFailed"),
+          );
         }
         batch.exitSelecting();
         void reload();
@@ -253,17 +263,17 @@ export default function ResumesPage() {
     if (!renameTarget || renaming) return;
     const title = renameValue.trim();
     if (!title) {
-      message.warning("简历名称不能为空");
+      message.warning(t("resumesPage.rename.required"));
       return;
     }
     setRenaming(true);
     try {
       await renameResume(renameTarget.id, title);
-      message.success("已重命名");
+      message.success(t("resumesPage.rename.done"));
       setRenameTarget(null);
       void reload();
     } catch (err) {
-      message.error(err instanceof Error ? err.message : "重命名失败");
+      message.error(err instanceof Error ? err.message : t("resumesPage.rename.failed"));
     } finally {
       setRenaming(false);
     }
@@ -283,7 +293,7 @@ export default function ResumesPage() {
       const field = computeFieldDiff(base.content, against.content, base.title, against.title);
       setDiffResult({ raw, field });
     } catch (err) {
-      message.error(err instanceof Error ? err.message : "版本对比失败");
+      message.error(err instanceof Error ? err.message : t("resumesPage.diff.failed"));
     } finally {
       setDiffLoading(false);
     }
@@ -294,11 +304,11 @@ export default function ResumesPage() {
     setSavingNote(true);
     try {
       await updateResumeNote(noteTarget.id, noteValue);
-      message.success("备注已保存");
+      message.success(t("resumesPage.note.saved"));
       setNoteTarget(null);
       void reload();
     } catch (err) {
-      message.error(err instanceof Error ? err.message : "保存备注失败");
+      message.error(err instanceof Error ? err.message : t("resumesPage.note.saveFailed"));
     } finally {
       setSavingNote(false);
     }
@@ -338,15 +348,19 @@ export default function ResumesPage() {
           行内元素水平方向零间距——按钮和搜索框几乎贴死，视觉节奏也不一致。 */}
       <Space wrap size={16} align="center" className="rf-filter-bar">
         <Button type="primary" onClick={() => setManualOpen(true)}>
-          新建简历
+          {t("resumesPage.page.newResume")}
         </Button>
         <ResumeCenterAiEntry />
-        <Button onClick={() => setArchiveOpen(true)}>交付存档</Button>
+        <Button onClick={() => setArchiveOpen(true)}>
+          {t("resumesPage.page.deliveryArchive")}
+        </Button>
         {jobId && (
           <Space size={4} align="center">
-            <Tag color="blue">按岗位筛选：{jobLabel || `#${jobId}`}</Tag>
+            <Tag color="blue">
+              {t("resumesPage.page.jobFilterTag", { job: jobLabel || `#${jobId}` })}
+            </Tag>
             <Button type="link" size="small" onClick={() => applyJobFilter(undefined)}>
-              清除筛选
+              {t("resumesPage.page.clearFilter")}
             </Button>
           </Space>
         )}
@@ -354,8 +368,8 @@ export default function ResumesPage() {
         <ResumeSearchInput keyword={keyword} onCommit={applyKeyword} />
         <Select
           allowClear
-          placeholder="岗位关联"
-          aria-label="按岗位关联筛选"
+          placeholder={t("resumesPage.filter.jobRelation")}
+          aria-label={t("resumesPage.filter.jobRelationAria")}
           style={{ width: 140 }}
           value={hasJobFilter}
           onChange={(value) => {
@@ -363,8 +377,8 @@ export default function ResumesPage() {
             setPage(1);
           }}
           options={[
-            { value: true, label: "有目标岗位" },
-            { value: false, label: "通用简历" },
+            { value: true, label: t("resumesPage.filter.hasJob") },
+            { value: false, label: t("resumesPage.filter.general") },
           ]}
         />
         {/* T2：排序改到列头（三态），这里只留「恢复默认排序」——默认态禁用，
@@ -372,11 +386,11 @@ export default function ResumesPage() {
         <Tooltip title={resumeSortResetHint(sortState)}>
           <Button
             icon={<UndoOutlined />}
-            aria-label="恢复默认排序"
+            aria-label={t("resumesPage.sort.reset")}
             disabled={isDefaultResumeSort(sortState)}
             onClick={() => applySort(DEFAULT_RESUME_SORT_STATE)}
           >
-            恢复默认排序
+            {t("resumesPage.sort.reset")}
           </Button>
         </Tooltip>
       </Space>
@@ -385,14 +399,14 @@ export default function ResumesPage() {
       {batch.selecting && (
         <BatchActionBar count={batch.selectedCount} onExit={batch.exitSelecting}>
           {(data?.total ?? 0) > 0 && (
-            <Tooltip title={`按当前筛选，一键选中全部 ${data?.total} 份简历（跨页，不止当前页）`}>
+            <Tooltip title={t("resumesPage.selectAll.tooltip", { count: data?.total ?? 0 })}>
               <Button loading={selectAllPagesLoading} onClick={() => void selectAllPages()}>
-                全选全部简历（共 {data?.total} 个）
+                {t("resumesPage.selectAll.button", { count: data?.total ?? 0 })}
               </Button>
             </Tooltip>
           )}
           <Button danger disabled={batch.selectedCount === 0} onClick={removeSelected}>
-            批量删除
+            {t("resumesPage.batchDelete.button")}
           </Button>
         </BatchActionBar>
       )}
