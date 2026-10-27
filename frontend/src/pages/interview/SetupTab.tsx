@@ -4,6 +4,9 @@
  * （自 InterviewPage 拆出：SetupForm 接口随迁，提示语改由语言包
  * `interviewPage.setup.confidenceTip` 提供；form 实例由页面持有，
  * 供题库「开始模拟面试」的 startFromBank 联动写回考察重点。）
+ *
+ * 类型/难度/风格的显示名来自 `i18n/enum/interview.ts`（协议值 → 语言包 key），
+ * 提交给后端的仍是 `types/interview.ts` 的协议值，不随语言变。
  */
 import { PlayCircleOutlined } from "@ant-design/icons";
 import { Button, Card, Form, Input, Select, Space, Typography } from "antd";
@@ -12,6 +15,11 @@ import { useEffect } from "react";
 import type { InterviewDifficulty, InterviewType, InterviewerStyle } from "../../types";
 import { useJobSearchSelect } from "../../hooks/remoteSearchOptions";
 import { t, type MessageKey } from "../../i18n";
+import {
+  INTERVIEW_DIFFICULTY_LABEL_KEYS,
+  INTERVIEW_TYPE_LABEL_KEYS,
+  INTERVIEWER_STYLE_LABEL_KEYS,
+} from "../../i18n/enum/interview";
 import { useLocale } from "../../i18n/i18nContext";
 import { JANE_FACE_SOURCES } from "./janeFaces";
 import {
@@ -21,36 +29,6 @@ import {
   MAX_INTERVIEW_ROUNDS,
   MIN_INTERVIEW_ROUNDS,
 } from "../../types";
-
-/**
- * 面试类型 / 难度 / 面试官风格的显示名：**键是协议值**（提交给后端并原样入库，
- * `types/interview.ts` 的白名单一个字都没动），值指向语言包 key。
- *
- * 模块作用域不能调 `t()`（切语言不会重渲染），所以这里只存 key，渲染处再取。
- */
-const INTERVIEW_TYPE_LABEL_KEYS: Record<InterviewType, MessageKey> = {
-  技术面: "interviewPage.setup.type.technical",
-  项目深挖: "interviewPage.setup.type.project",
-  "行为面（STAR）": "interviewPage.setup.type.behavioral",
-  "HR 面": "interviewPage.setup.type.hr",
-  综合面: "interviewPage.setup.type.general",
-  案例分析: "interviewPage.setup.type.case",
-  英语面试: "interviewPage.setup.type.english",
-  压力面: "interviewPage.setup.type.stress",
-};
-
-const INTERVIEW_DIFFICULTY_LABEL_KEYS: Record<InterviewDifficulty, MessageKey> = {
-  初级: "interviewPage.setup.difficulty.junior",
-  中级: "interviewPage.setup.difficulty.mid",
-  高级: "interviewPage.setup.difficulty.senior",
-};
-
-const INTERVIEWER_STYLE_LABEL_KEYS: Record<InterviewerStyle, MessageKey> = {
-  严谨专业: "interviewPage.setup.style.rigorous",
-  温和引导: "interviewPage.setup.style.gentle",
-  持续追问: "interviewPage.setup.style.probing",
-  压力质询: "interviewPage.setup.style.pressure",
-};
 
 /** 轮数选择框的「自动」档值：AI 按表现决定何时收尾（区间不向用户/模型展示）。 */
 export const AUTO_ROUNDS_OPTION = "auto";
@@ -122,7 +100,7 @@ export function SetupTab({
         initialValues={{
           // 默认「综合面」而不是「技术面」：技术面只是其中一种类型，
           // 把它当默认会让非技术岗的用户每次都要先改一次。
-          // 下面三个初始值是提交给后端的协议值（不随语言变），显示名走上面那张映射表。
+          // 下面三个初始值是提交给后端的协议值（不随语言变），显示名走 i18n/enum/interview.ts。
           interviewType: "综合面",
           difficulty: "中级",
           interviewerStyle: "严谨专业",
