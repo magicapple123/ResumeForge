@@ -13,6 +13,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { getJob, listJobs } from "../../api/jobs";
 import { jobOption } from "../../hooks/remoteSearchOptions";
 import { useRemoteSearchSelect } from "../../hooks/useRemoteSearchSelect";
+import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 
 /** 每页 20 条：筛选靠继续输入收窄，不需要一屏列出全部岗位。 */
 const FILTER_PAGE_SIZE = 20;
@@ -27,6 +29,7 @@ interface Props {
 }
 
 export default function JobFilterSelect({ value, onChange, onLabelChange }: Props) {
+  useLocale();
   // 取数函数用 useCallback 定住：hook 内部以引用做依赖，每次渲染换新函数会反复回查。
   const fetchOptions = useCallback(
     (keyword: string) =>
@@ -88,8 +91,8 @@ export default function JobFilterSelect({ value, onChange, onLabelChange }: Prop
     <Select
       {...selectProps}
       allowClear
-      placeholder="按岗位筛选"
-      aria-label="按岗位筛选"
+      placeholder={t("resumesPage.jobFilter.label")}
+      aria-label={t("resumesPage.jobFilter.label")}
       style={{ width: 240 }}
       options={mergedOptions}
       value={value}
