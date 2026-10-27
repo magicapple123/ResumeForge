@@ -9,6 +9,7 @@
 
 import { App } from "antd";
 import { useCallback, useRef, useState } from "react";
+import { t } from "../i18n";
 import {
   MAX_ATTACHMENT_BYTES,
   MAX_ATTACHMENT_COUNT,
@@ -51,22 +52,22 @@ export function useRecognitionFiles() {
 
       for (const file of incoming) {
         if (occupied.count >= MAX_ATTACHMENT_COUNT) {
-          message.warning(`最多只能添加 ${MAX_ATTACHMENT_COUNT} 个文件`);
+          message.warning(
+            t("hooksUi.recognition.warning.tooMany", { count: MAX_ATTACHMENT_COUNT }),
+          );
           break;
         }
         const classification = classifyAttachment(file);
         if (!classification || classification.kind === "text") {
-          message.warning(
-            `「${file.name}」不是受支持的截图或文档（png/jpg/webp/gif/bmp/tiff、pdf/docx）`,
-          );
+          message.warning(t("hooksUi.recognition.warning.unsupported", { name: file.name }));
           continue;
         }
         if (file.size > MAX_ATTACHMENT_BYTES) {
-          message.warning(`「${file.name}」超过 2 MB`);
+          message.warning(t("hooksUi.recognition.warning.tooLarge", { name: file.name }));
           continue;
         }
         if (occupied.bytes + file.size > MAX_TOTAL_ATTACHMENT_BYTES) {
-          message.warning("文件总大小不能超过 5 MB");
+          message.warning(t("hooksUi.recognition.warning.totalTooLarge"));
           continue;
         }
         accepted.push(file);
@@ -101,7 +102,7 @@ export function useRecognitionFiles() {
           count: usageRef.current.count - accepted.length,
           bytes: usageRef.current.bytes - accepted.reduce((sum, file) => sum + file.size, 0),
         };
-        message.error(error instanceof Error ? error.message : "读取文件失败");
+        message.error(error instanceof Error ? error.message : t("hooksUi.recognition.error.read"));
       } finally {
         setReading(false);
       }
