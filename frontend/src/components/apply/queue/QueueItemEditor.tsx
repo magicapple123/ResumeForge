@@ -7,6 +7,8 @@ import { App, Button, Form, Modal, Select, Space } from "antd";
 import { useEffect, useState } from "react";
 import { previewGreeting, updateQueueItem } from "../../../api/apply";
 import { useResumeSearchSelectForJob } from "../../../hooks/remoteSearchOptions";
+import { t } from "../../../i18n";
+import { useLocale } from "../../../i18n/i18nContext";
 import { HintedTextArea } from "../../common/MaxLengthHint";
 import type { ApplyQueueItem } from "../../../types";
 
@@ -20,6 +22,8 @@ export function QueueItemEditor({
   onSaved: () => void;
 }) {
   const { message } = App.useApp();
+  // 本组件用模块级 t()：必须订阅语言变化，否则切语言后弹窗停在旧文案。
+  useLocale();
   const [form] = Form.useForm<{ greeting: string; resume_id?: number }>();
   // 简历下拉改为远程搜索（P0-1）：候选限定该岗位关联过的简历，
   // 编辑器挂载即打开，挂载时回查已选值并预拉第一页候选。
@@ -46,10 +50,12 @@ export function QueueItemEditor({
       const preview = await previewGreeting({ job_id: item.job_id, item_id: item.id });
       form.setFieldValue("greeting", preview.greeting);
       message.success(
-        preview.source === "generated" ? "已按岗位生成招呼语" : "已填入默认招呼语（未配置模型）",
+        preview.source === "generated"
+          ? t("applyQueue.toast.greetingGenerated")
+          : t("applyQueue.toast.greetingDefault"),
       );
     } catch (err) {
-      message.error(err instanceof Error ? err.message : "生成招呼语失败");
+      message.error(err instanceof Error ? err.message : t("applyQueue.toast.greetingFailed"));
     } finally {
       setGenerating(false);
     }
@@ -63,11 +69,11 @@ export function QueueItemEditor({
         greeting: values.greeting ?? "",
         ...(values.resume_id ? { resume_id: values.resume_id } : {}),
       });
-      message.success("队列条目已更新");
+      message.success(t("applyQueue.toast.updated"));
       onSaved();
       onClose();
     } catch (err) {
-      message.error(err instanceof Error ? err.message : "更新失败");
+      message.error(err instanceof Error ? err.message : t("applyQueue.toast.updateFailed"));
     } finally {
       setSaving(false);
     }
@@ -75,7 +81,9 @@ export function QueueItemEditor({
 
   return (
     <Modal
-      title={`编辑「${item.job_title || "该岗位"}」`}
+      title={t("applyQueue.editor.title", {
+        title: item.job_title || t("applyQueue.editor.untitledJob"),
+      })}
       open
       onCancel={onClose}
       footer={null}
@@ -85,27 +93,27 @@ export function QueueItemEditor({
       <Form form={form} layout="vertical">
         <Form.Item
           name="resume_id"
-          label="使用简历"
-          extra="留空则运行时用该岗位最近一份岗位版简历。"
+          label={t("applyQueue.detail.resume")}
+          extra={t("applyQueue.editor.resumeHint")}
         >
           <Select
             allowClear
-            placeholder="按默认规则解析（输入关键词搜索）"
+            placeholder={t("applyQueue.editor.resumePlaceholder")}
             {...resumeSelect.selectProps}
           />
         </Form.Item>
-        <Form.Item name="greeting" label="招呼语">
+        <Form.Item name="greeting" label={t("applyQueue.detail.greeting")}>
           <HintedTextArea rows={3} maxLength={1000} />
         </Form.Item>
       </Form>
       <Space>
         <Button onClick={() => void generateGreeting()} loading={generating}>
-          按岗位生成招呼语
+          {t("applyQueue.editor.generate")}
         </Button>
         <Button type="primary" loading={saving} onClick={() => void save()}>
-          保存
+          {t("common.action.save")}
         </Button>
-        <Button onClick={onClose}>取消</Button>
+        <Button onClick={onClose}>{t("common.action.cancel")}</Button>
       </Space>
     </Modal>
   );
