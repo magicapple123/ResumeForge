@@ -125,6 +125,7 @@ export default function TemplateImportModal({
           html: draft.html,
           config,
           kind: "style",
+          // i18n-ok: 顿号是写进模板 source_name 字段的分隔符，随模板落库并长期回显，不随界面语言变
           source_name: draft.source_names.join("、"),
         });
         message.success(t("templateImport.toast.saved", { name: created.name }));
