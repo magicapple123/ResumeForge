@@ -345,7 +345,7 @@ it("打印当前中文计数（只读，不写文件）", () => {
   const rows = Object.entries(current.files)
     .filter(([, count]) => count > 0)
     .sort((a, b) => b[1] - a[1])
-    .slice(0, 20);
+    .slice(0, 400);
   for (const [file, count] of rows) {
     // eslint-disable-next-line no-console
     console.log(`[i18n] ${count}	${file}`);
