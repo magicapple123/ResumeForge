@@ -29,6 +29,8 @@ import { parseWebFormExtraProfileText } from "../../api/webform";
 import type { RecognitionReviewRow } from "../../components/profile/RecognitionReviewList";
 import type ProfileTextModal from "../../components/profile/ProfileTextModal";
 import { attachmentInputs, useRecognitionFiles } from "../../hooks/useRecognitionFiles";
+import { t } from "../../i18n";
+import type { MessageKey } from "../../i18n";
 import type { RecognitionSource, WebFormField } from "../../types";
 import { webformToReviewRows } from "../../utils/profileText";
 
@@ -40,7 +42,7 @@ interface Options {
 }
 
 /** 结果为空时补的一句提示：用户需要知道"不是没反应，是真没识别到"。 */
-const EMPTY_WARNING = "没有识别到可填入的栏目，请检查粘贴的内容或换一种写法。";
+const EMPTY_WARNING_KEY: MessageKey = "featuresMisc.webformParse.emptyWarning";
 
 export function useWebformParse({ fields, applyRows }: Options) {
   const { message } = App.useApp();
@@ -129,7 +131,7 @@ export function useWebformParse({ fields, applyRows }: Options) {
     const { text: currentText, files: currentFiles, fields: currentFields } = latestRef.current;
     const trimmed = currentText.trim();
     if (!trimmed && currentFiles.length === 0) {
-      message.warning("请先粘贴网申资料，或添加截图、上传文档");
+      message.warning(t("featuresMisc.webformParse.needInput"));
       return;
     }
     const controller = new AbortController();
@@ -151,7 +153,9 @@ export function useWebformParse({ fields, applyRows }: Options) {
       );
       if (currentId !== requestId.current) return;
       const nextRows = webformToReviewRows(parsed.values, parsed.custom, currentFields);
-      setWarnings(nextRows.length === 0 ? [...parsed.warnings, EMPTY_WARNING] : parsed.warnings);
+      setWarnings(
+        nextRows.length === 0 ? [...parsed.warnings, t(EMPTY_WARNING_KEY)] : parsed.warnings,
+      );
       setRecognizedText(parsed.recognized_text ?? "");
       setSource(parsed.parse_engine);
       setRows(nextRows);
@@ -160,7 +164,7 @@ export function useWebformParse({ fields, applyRows }: Options) {
       // 用户自己点了「取消识别」：静默回输入态，不弹错误（这不是失败）。
       if (!isCancellation(err)) {
         resetOutcome();
-        message.error(err instanceof Error ? err.message : "识别网申资料失败");
+        message.error(err instanceof Error ? err.message : t("featuresMisc.webformParse.failed"));
       }
     } finally {
       if (currentId === requestId.current) {
