@@ -40,6 +40,7 @@ import trash from "./en-US.trash";
 import reminder from "./en-US.reminder";
 import materials from "./en-US.materials";
 import applyQueue from "./en-US.applyQueue";
+import claimForm from "./en-US.claimForm";
 
 const enUS = {
   ...core,
@@ -81,6 +82,7 @@ const enUS = {
   ...reminder,
   ...materials,
   ...applyQueue,
+  ...claimForm,
 } as const satisfies Record<keyof ZhCNMessages, string>;
 
 export default enUS;

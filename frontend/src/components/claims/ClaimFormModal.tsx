@@ -32,7 +32,12 @@ import {
   emptyClaim,
 } from "../../types";
 
-/** 一句话讲清每个承担程度，用户不必猜"负责模块"和"主导交付"差在哪。 */
+/**
+ * 一句话讲清每个承担程度，用户不必猜"负责模块"和"主导交付"差在哪。
+ *
+ * i18n-ok: key 是协议值（中文枚举，直接提交后端并参与校验），翻译会写坏数据；
+ * 说明文本本身待「枚举 code 化」那批统一处理。
+ */
 const RESPONSIBILITY_HINTS: Record<string, string> = {
   参与: "在他人安排下完成其中一部分工作",
   负责模块: "独立负责其中一个明确模块或方向",
@@ -69,6 +74,7 @@ interface FormValues {
   result: string;
 }
 
+// i18n-ok: 下面三个中文值是协议值（提交后端并参与校验），不是显示文案。
 const EMPTY_VALUES: FormValues = {
   title: "",
   category: "项目经历",
@@ -196,7 +202,7 @@ export default function ClaimFormModal({ open, claim, onClose, onSaved }: Props)
       const saved = editing ? await updateClaim(claim.id, payload) : await createClaim(payload);
       // 提交成功才清草稿：清早了等于"保存失败也把内容扔了"。
       draft.clear();
-      message.success(editing ? "已保存这条台账条目" : "已加入事实台账");
+      message.success(editing ? t("claimForm.toast.saved") : t("claimForm.toast.created"));
       onSaved(saved);
       // 保存成功同样是"一次编辑结束"：标记清掉，别把下次打开的弹窗说成有未保存修改。
       setDirty(false);
@@ -204,14 +210,14 @@ export default function ClaimFormModal({ open, claim, onClose, onSaved }: Props)
     } catch (error) {
       // 「已确认却还留着【待补】」这类自相矛盾由后端挡下，原样把中文原因显示出来，
       // 否则用户只会看到一个说得不清不楚的 422。
-      message.error(error instanceof Error ? error.message : "保存失败");
+      message.error(error instanceof Error ? error.message : t("claimForm.toast.saveFailed"));
     }
   };
 
   return (
     <FormModal
       open={open}
-      title={editing ? "编辑台账" : "新建台账"}
+      title={editing ? t("claimForm.title.edit") : t("claimForm.title.create")}
       onCancel={() => {
         // L1：有草稿时关闭无损，只告知一句（短、不打断）。
         if (dirty) toast.info(t("draft.kept"));
@@ -220,7 +226,7 @@ export default function ClaimFormModal({ open, claim, onClose, onSaved }: Props)
         onClose();
       }}
       onSubmit={() => void submit()}
-      okText="保存台账"
+      okText={t("claimForm.action.save")}
       okIcon={<SaveOutlined />}
       dirty={dirty}
       hasDraft
@@ -246,52 +252,52 @@ export default function ClaimFormModal({ open, claim, onClose, onSaved }: Props)
             `.ant-space-item`，flex 宽度落在内层 Form.Item 上、管不到真正的 flex 子项，
             结果就是窄列被挤成一条竖排文字。 */}
         <div className="claim-form-row">
-          <Form.Item name="title" label="标题" className="claim-form-grow">
-            <Input placeholder="便于检索的名字，例如「校园检索平台的检索接口」" maxLength={200} />
+          <Form.Item name="title" label={t("claimForm.field.title")} className="claim-form-grow">
+            <Input placeholder={t("claimForm.placeholder.title")} maxLength={200} />
           </Form.Item>
-          <Form.Item name="category" label="分类" className="claim-form-fixed">
+          <Form.Item name="category" label={t("claimForm.field.category")} className="claim-form-fixed">
             <Select options={CLAIM_CATEGORIES.map((value) => ({ value, label: value }))} />
           </Form.Item>
         </div>
 
         <Form.Item
           name="subject"
-          label="主体"
-          extra="这条主张关于谁：公司名 / 项目名 / 学校名 / 技能名。生成简历时据此回指到对应经历。"
+          label={t("claimForm.field.subject")}
+          extra={t("claimForm.hint.subject")}
         >
-          <Input placeholder="例如「校园知识检索平台」" maxLength={200} />
+          <Input placeholder={t("claimForm.placeholder.subject")} maxLength={200} />
         </Form.Item>
 
         <Form.Item
           name="source_fact"
-          label="原始事实"
-          extra="照实写，不做包装。它是之后核对一切表述的基准。"
-          rules={[{ required: true, message: "请写清原始事实" }]}
+          label={t("claimForm.field.sourceFact")}
+          extra={t("claimForm.hint.sourceFact")}
+          rules={[{ required: true, message: t("claimForm.required.sourceFact") }]}
         >
           {/* showCount 已移除（统一用 MaxLengthHint 模式）：只有顶到 8000 字上限时，
               才在输入框下方出现一行小号红字提醒。 */}
-          <HintedTextArea rows={3} maxLength={8000} placeholder="我实际做了什么、做到了什么程度" />
+          <HintedTextArea rows={3} maxLength={8000} placeholder={t("claimForm.placeholder.sourceFact")} />
         </Form.Item>
 
         <Form.Item
           name="candidate_wording"
-          label="简历表述"
-          extra="准备写进简历的版本。不得比原始事实更强；还没核实的内容请用【待补：缺什么】标记。"
+          label={t("claimForm.field.wording")}
+          extra={t("claimForm.hint.wording")}
         >
-          <Input.TextArea rows={2} maxLength={8000} placeholder="例如「实现检索接口并联调上线」" />
+          <Input.TextArea rows={2} maxLength={8000} placeholder={t("claimForm.placeholder.wording")} />
         </Form.Item>
 
         <div className="claim-form-row">
-          <Form.Item name="responsibility_level" label="承担程度" className="claim-form-grow">
+          <Form.Item name="responsibility_level" label={t("claimForm.field.responsibility")} className="claim-form-grow">
             <Select options={RESPONSIBILITY_OPTIONS} />
           </Form.Item>
-          <Form.Item name="verification_status" label="核实状态" className="claim-form-grow">
+          <Form.Item name="verification_status" label={t("claimForm.field.verification")} className="claim-form-grow">
             <Select options={STATUS_OPTIONS} />
           </Form.Item>
           {/* 日期用固定宽度；DatePicker 值走 Dayjs，表单里仍存 YYYY-MM-DD 字符串（E12）。 */}
           <Form.Item
             name="last_verified"
-            label="最近核实"
+            label={t("claimForm.field.lastVerified")}
             className="claim-form-date"
             getValueProps={(value: string) => ({ value: value ? dayjs(value) : null })}
             normalize={(value: Dayjs | null) => (value ? value.format("YYYY-MM-DD") : "")}
@@ -302,27 +308,27 @@ export default function ClaimFormModal({ open, claim, onClose, onSaved }: Props)
 
         <Form.Item
           name="boundary"
-          label="个人边界"
-          extra="团队做了什么、你做了什么。已确认的条目会进正式简历，这句就是面试时的防线。"
+          label={t("claimForm.field.boundary")}
+          extra={t("claimForm.hint.boundary")}
         >
           <Input.TextArea
             rows={2}
             maxLength={1000}
-            placeholder="例如「接口由本人实现，检索算法由另一位同学负责」"
+            placeholder={t("claimForm.placeholder.boundary")}
           />
         </Form.Item>
 
-        <Form.Item name="allowed_uses" label="可用范围">
+        <Form.Item name="allowed_uses" label={t("claimForm.field.allowedUses")}>
           <Select
             mode="tags"
-            placeholder="回车添加，例如「AI 岗简历」「HR 开场白」。留空表示不限。"
+            placeholder={t("claimForm.placeholder.allowedUses")}
             open={false}
             suffixIcon={null}
           />
         </Form.Item>
 
         <Typography.Text type="secondary" className="claim-form-section">
-          证据来源（只记去哪儿能找到，不要粘贴内容）
+          {t("claimForm.evidence.title")}
         </Typography.Text>
         <Form.List name="sources">
           {(fields, { add, remove }) => (
@@ -341,7 +347,7 @@ export default function ClaimFormModal({ open, claim, onClose, onSaved }: Props)
                   <Form.Item name={[field.name, "location"]} noStyle>
                     <Input
                       className="claim-source-location"
-                      placeholder="链接、文件名或「导师证明可提供」"
+                      placeholder={t("claimForm.placeholder.evidence")}
                     />
                   </Form.Item>
                   <Form.Item
@@ -350,13 +356,13 @@ export default function ClaimFormModal({ open, claim, onClose, onSaved }: Props)
                     initialValue={false}
                     noStyle
                   >
-                    <Switch checkedChildren="公开" unCheckedChildren="不公开" />
+                    <Switch checkedChildren={t("claimForm.evidence.public")} unCheckedChildren={t("claimForm.evidence.private")} />
                   </Form.Item>
                   <Button
                     type="text"
                     icon={<DeleteOutlined />}
                     onClick={() => remove(field.name)}
-                    aria-label="删除这条证据"
+                    aria-label={t("claimForm.evidence.removeAria")}
                   />
                 </Space>
               ))}
@@ -365,46 +371,46 @@ export default function ClaimFormModal({ open, claim, onClose, onSaved }: Props)
                 icon={<PlusOutlined />}
                 onClick={() => add({ type: "link", public: false })}
               >
-                添加证据来源
+                {t("claimForm.evidence.add")}
               </Button>
             </div>
           )}
         </Form.List>
 
         <Typography.Text type="secondary" className="claim-form-section">
-          面试细节（能答上追问的部分；强主张尤其要填）
+          {t("claimForm.interview.title")}
         </Typography.Text>
         <div className="claim-form-row">
           <Form.Item
             name="decisions"
-            label="做过的决策"
+            label={t("claimForm.field.decisions")}
             className="claim-form-grow"
-            extra="每行一条"
+            extra={t("claimForm.hint.onePerLine")}
           >
             <Input.TextArea rows={3} />
           </Form.Item>
-          <Form.Item name="difficulties" label="难点" className="claim-form-grow" extra="每行一条">
+          <Form.Item name="difficulties" label={t("claimForm.field.difficulties")} className="claim-form-grow" extra={t("claimForm.hint.onePerLine")}>
             <Input.TextArea rows={3} />
           </Form.Item>
         </div>
         <div className="claim-form-row">
           <Form.Item
             name="verification"
-            label="怎么验证"
+            label={t("claimForm.field.howVerified")}
             className="claim-form-grow"
-            extra="每行一条"
+            extra={t("claimForm.hint.onePerLine")}
           >
             <Input.TextArea rows={3} />
           </Form.Item>
-          <Form.Item name="result" label="结果" className="claim-form-grow">
-            <Input.TextArea rows={3} placeholder="没有可靠数字时写定性结果，不要编造" />
+          <Form.Item name="result" label={t("claimForm.field.result")} className="claim-form-grow">
+            <Input.TextArea rows={3} placeholder={t("claimForm.placeholder.result")} />
           </Form.Item>
         </div>
 
-        <Form.Item name="risk_notes" label="风险备注" extra="面试里可能被追问什么、哪里还站不住。">
+        <Form.Item name="risk_notes" label={t("claimForm.field.riskNotes")} extra={t("claimForm.hint.riskNotes")}>
           <Select
             mode="tags"
-            placeholder="回车添加，例如「指标口径未说明」"
+            placeholder={t("claimForm.placeholder.riskNotes")}
             open={false}
             suffixIcon={null}
           />
