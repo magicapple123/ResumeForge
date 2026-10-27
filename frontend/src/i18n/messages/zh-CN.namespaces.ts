@@ -63,6 +63,7 @@ import drill from "./zh-CN.drill";
 import reminderItem from "./zh-CN.reminderItem";
 import fieldPath from "./zh-CN.fieldPath";
 import applyProgress from "./zh-CN.applyProgress";
+import llmRecord from "./zh-CN.llmRecord";
 
 const namespaces = {
   /** 简历制作台（2026-10-23）。 */
@@ -154,6 +155,7 @@ const namespaces = {
   ...reminderItem,
   ...fieldPath,
   ...applyProgress,
+  ...llmRecord,
 } as const;
 
 export default namespaces;

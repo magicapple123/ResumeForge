@@ -37,6 +37,8 @@ import { ThinkingSection } from "./llm/ThinkingSection";
 import { useUnlimitedTokens } from "./llm/useUnlimitedTokens";
 import { MAX_MAX_TOKENS, MIN_MAX_TOKENS, PRESET_OPTIONS } from "./SettingsConfig";
 import type { RecordFormValues } from "../../features/settings/useLLMRecordTools";
+import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 
 interface Props {
   open: boolean;
@@ -104,6 +106,7 @@ export default function LLMRecordModal({
   onPresetChange,
   onFetchModels,
 }: Props) {
+  useLocale();
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const nameValue = Form.useWatch("name", form);
   const thinkingEnabled = Form.useWatch("thinking_enabled", form);
@@ -132,7 +135,11 @@ export default function LLMRecordModal({
 
   return (
     <Modal
-      title={mode === "create" ? "新建配置记录" : `编辑配置记录「${recordName}」`}
+      title={
+        mode === "create"
+          ? t("llmRecord.title.create")
+          : t("llmRecord.title.edit", { name: recordName })
+      }
       open={open}
       onCancel={onClose}
       // 表单弹层：点蒙层关掉会丢掉一屏配置，禁掉（Esc / × 仍可关）。
@@ -169,10 +176,10 @@ export default function LLMRecordModal({
       footer={
         <Space wrap>
           <Button icon={<ApiOutlined />} loading={testing} disabled={saving} onClick={onTest}>
-            测试连接
+            {t("llmRecord.action.test")}
           </Button>
           <Button disabled={saving} onClick={onClose}>
-            取消
+            {t("common.action.cancel")}
           </Button>
           <Button
             type="primary"
@@ -180,7 +187,7 @@ export default function LLMRecordModal({
             disabled={testing}
             onClick={() => void handleSave()}
           >
-            {mode === "create" ? "保存记录" : "保存"}
+            {mode === "create" ? t("llmRecord.action.saveRecord") : t("llmRecord.action.save")}
           </Button>
         </Space>
       }
@@ -232,18 +239,18 @@ export default function LLMRecordModal({
                 否则 value/onChange 注入会失效。 */}
             <Form.Item
               name="name"
-              label="配置名称"
+              label={t("llmRecord.field.name")}
               rules={[
-                { required: true, message: "请填写配置名称" },
-                { whitespace: true, message: "请填写配置名称" },
+                { required: true, message: t("llmRecord.required.name") },
+                { whitespace: true, message: t("llmRecord.required.name") },
               ]}
             >
-              <Input autoFocus maxLength={64} placeholder="如：DeepSeek 校招、Ollama 本地模型" />
+              <Input autoFocus maxLength={64} placeholder={t("llmRecord.placeholder.name")} />
             </Form.Item>
             <MaxLengthHint value={nameValue} maxLength={64} />
           </>
         )}
-        <Form.Item name="preset" label="快速预设（选择后自动填充 Base URL 与模型名）">
+        <Form.Item name="preset" label={t("llmRecord.field.preset")}>
           <Select
             options={PRESET_OPTIONS}
             onChange={onPresetChange}
@@ -253,21 +260,21 @@ export default function LLMRecordModal({
         </Form.Item>
         <Form.Item
           name="api_style"
-          label="接口协议"
+          label={t("llmRecord.field.protocol")}
           tooltip="多数服务商（含 Claude 的 OpenAI 兼容层）走 Chat Completions，选「OpenAI 兼容」。只有要用 Claude 原生 Messages 协议（支持扩展思考、独立 system 字段）时才选 Anthropic 原生——此时 Base URL 填 https://api.anthropic.com/v1（本应用会在后面接 /messages）。"
         >
           <Select
             options={[
-              { value: "openai", label: "OpenAI 兼容（Chat Completions）" },
-              { value: "anthropic", label: "Anthropic 原生（Messages）" },
+              { value: "openai", label: t("llmRecord.protocol.openai") },
+              { value: "anthropic", label: t("llmRecord.protocol.anthropic") },
             ]}
           />
         </Form.Item>
         <Form.Item
           name="base_url"
           label="Base URL"
-          rules={[{ required: true, message: "必填" }]}
-          tooltip="服务地址，通常形如 https://api.xxx.com 或 https://api.xxx.com/v1"
+          rules={[{ required: true, message: t("llmRecord.required.field") }]}
+          tooltip={t("llmRecord.hint.baseUrl")}
         >
           <Input placeholder="https://api.deepseek.com" />
         </Form.Item>
@@ -281,16 +288,18 @@ export default function LLMRecordModal({
         />
         <Form.Item
           name="api_key"
-          label={mode === "create" ? "API Key（选填）" : "API Key（留空保持不变）"}
-          tooltip={
+          label={
             mode === "create"
-              ? "多数云模型服务需要填写；Ollama 等无需鉴权的本地兼容服务可留空。密钥保存在本地数据库，仅本机可访问。"
-              : "出于脱敏考虑，已保存的密钥不会显示出来（记录里只保存脱敏引用）；留空即沿用原密钥，输入新值则整体替换。"
+              ? t("llmRecord.field.apiKeyOptional")
+              : t("llmRecord.field.apiKeyKeep")
+          }
+          tooltip={
+            mode === "create" ? t("llmRecord.hint.apiKeyCreate") : t("llmRecord.hint.apiKeyEdit")
           }
         >
           {/* 显隐开关只作用于本条刚输入的明文；已保存的密钥是脱敏引用，不存在可回显的本体。 */}
           <Input.Password
-            placeholder={mode === "create" ? "sk-…" : "已配置，留空保持不变"}
+            placeholder={mode === "create" ? "sk-…" : t("llmRecord.placeholder.apiKeyKeep")}
             autoComplete="new-password"
           />
         </Form.Item>
@@ -298,23 +307,32 @@ export default function LLMRecordModal({
           <Col xs={24} md={8}>
             <Form.Item
               name="temperature"
-              label="创意度 temperature"
-              tooltip="控制输出的随机性。值越低越稳定，适合事实型简历；值越高表达更发散，也会增加内容不一致或虚构风险。"
+              label={t("llmRecord.field.temperature")}
+              tooltip={t("llmRecord.hint.temperature")}
             >
               {/* 两端 marks（严谨/发散）与手柄以轨道端点为中心渲染、会溢出 Slider 盒子
                   （mark 半宽 ~14px、handle 半径 ~7px）：外层 div 内缩 16px 把溢出全部吸收
                   在自身 padding 区内——弹窗 body 的 overflowX hidden 就裁不到它们了。
                   内缩只包 Slider 不包 Form.Item，label 左缘与其他列保持对齐。 */}
               <div style={{ paddingInline: 16 }}>
-                <Slider min={0} max={2} step={0.1} marks={{ 0: "严谨", 1: "均衡", 2: "发散" }} />
+                <Slider
+                  min={0}
+                  max={2}
+                  step={0.1}
+                  marks={{
+                    0: t("llmRecord.temperature.strict"),
+                    1: t("llmRecord.temperature.balanced"),
+                    2: t("llmRecord.temperature.creative"),
+                  }}
+                />
               </div>
             </Form.Item>
           </Col>
           <Col xs={24} md={8}>
             <Form.Item
               name="timeout_seconds"
-              label="超时时间（秒）"
-              tooltip="等待模型返回响应数据的最长时间；超过后请求会终止。网络较慢或生成内容较长时可适当调大，但调大不会让模型生成得更快。"
+              label={t("llmRecord.field.timeout")}
+              tooltip={t("llmRecord.hint.timeout")}
             >
               <InputNumber min={10} max={600} style={{ width: "100%" }} />
             </Form.Item>
@@ -326,11 +344,11 @@ export default function LLMRecordModal({
               name="max_tokens"
               label={
                 <Space size={4} wrap={false}>
-                  最大输出 Token
-                  <Tooltip title="限制模型单次回复的最大输出 Token 数。值越大可能增加费用；过小可能导致内容被截断。它不是模型的上下文长度上限。">
+                  {t("llmRecord.field.maxTokens")}
+                  <Tooltip title={t("llmRecord.hint.maxTokens")}>
                     <QuestionCircleOutlined
                       style={{ color: "var(--rf-text-description)", fontSize: 12 }}
-                      aria-label="最大输出 Token 说明"
+                      aria-label={t("llmRecord.aria.maxTokens")}
                     />
                   </Tooltip>
                   {/* 这一条的行为与直觉相反（"不限制"其实取决于服务商默认值，可能比
@@ -340,7 +358,7 @@ export default function LLMRecordModal({
                       checked={unlimitedTokens}
                       onChange={(event) => setUnlimitedTokens(event.target.checked)}
                     >
-                      不限制
+                      {t("llmRecord.label.unlimited")}
                     </Checkbox>
                   </Tooltip>
                 </Space>
