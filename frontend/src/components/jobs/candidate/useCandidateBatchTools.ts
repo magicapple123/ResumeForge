@@ -13,6 +13,7 @@ import {
   exportCandidatesCsv,
   listCandidateJobIds,
 } from "../../../api/candidateJob";
+import { t } from "../../../i18n";
 import { downloadBlob } from "../../../utils/download";
 
 export function useCandidateBatchTools({
@@ -50,21 +51,19 @@ export function useCandidateBatchTools({
           : {}),
       });
       if (ids.length === 0) {
-        message.warning("当前筛选下没有备选岗位");
+        message.warning(t("jobsCandidate.batch.emptyFiltered"));
         return;
       }
       // 上限与后端批量端点（5000）对齐：全选全部（含 CSV 导出）一次过；
       // 超出时给出明确提示，而不是让请求撞 422。
       if (ids.length > 5000) {
-        message.warning(
-          `当前筛选下共 ${ids.length} 条备选岗位，超出单次批量上限 5000 条；请先用搜索缩小范围`,
-        );
+        message.warning(t("jobsCandidate.batch.overLimit", { count: ids.length }));
         return;
       }
       setSelectedIds(() => ids);
-      message.success(`已选中当前筛选下的全部 ${ids.length} 条候选（所有页）`);
+      message.success(t("jobsCandidate.batch.selectAllDone", { count: ids.length }));
     } catch (error) {
-      message.error(error instanceof Error ? error.message : "获取备选岗位列表失败");
+      message.error(error instanceof Error ? error.message : t("jobsCandidate.batch.loadFailed"));
     } finally {
       setSelectAllPagesLoading(false);
     }
@@ -77,10 +76,10 @@ export function useCandidateBatchTools({
     try {
       const blob = await exportCandidatesCsv([...selectedIds]);
       const stamp = dayjs().format("YYYYMMDD-HHmmss");
-      downloadBlob(blob, `备选岗位-${stamp}.csv`);
-      message.success(`已导出 ${selectedIds.length} 条备选岗位`);
+      downloadBlob(blob, t("jobsCandidate.batch.exportFileName", { stamp }));
+      message.success(t("jobsCandidate.batch.exported", { count: selectedIds.length }));
     } catch (error) {
-      message.error(error instanceof Error ? error.message : "导出失败");
+      message.error(error instanceof Error ? error.message : t("jobsCandidate.batch.exportFailed"));
     } finally {
       setExporting(false);
     }
@@ -96,7 +95,7 @@ export function useCandidateBatchTools({
    */
   const deleteSelected = async () => {
     if (selectedIds.length === 0) {
-      message.warning("请先选择备选岗位");
+      message.warning(t("jobsCandidate.batch.needSelection"));
       return;
     }
     const ids = [...selectedIds];
@@ -109,12 +108,12 @@ export function useCandidateBatchTools({
       setSelectedIds(() => []);
       await onMutated();
       if (failed > 0) {
-        message.warning(`已删除 ${deleted} 个备选岗位，${failed} 个删除失败`);
+        message.warning(t("jobsCandidate.batch.deletePartial", { deleted, failed }));
       } else {
-        message.success(`已删除 ${deleted} 个备选岗位`);
+        message.success(t("jobsCandidate.batch.deleted", { deleted }));
       }
     } catch (error) {
-      message.error(error instanceof Error ? error.message : "批量删除失败");
+      message.error(error instanceof Error ? error.message : t("jobsCandidate.batch.deleteFailed"));
     } finally {
       onBatchActionChange?.(null);
     }
