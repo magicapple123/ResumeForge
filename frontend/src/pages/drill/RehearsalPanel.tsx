@@ -6,10 +6,31 @@ import { useCallback, useEffect, useState } from "react";
 import { listRehearsal, rehearse } from "../../api/drill";
 import { ListyItem } from "../../components/common/ListyItem";
 import { LISTY_ITEM_PADDING_SMALL } from "../../components/common/listyPadding";
-import type { DrillRehearsalRow } from "../../types";
-import { REHEARSE_LABELS } from "../../types";
+import { t, type MessageKey } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
+import type { DrillRehearsalRow, RehearseKind } from "../../types";
+
+/**
+ * 复练题型是后端协议值（`variant` / `counterfactual` …），展示名在语言包里。
+ * 映射放在这里（协议值 → MessageKey），不改 `types/drill.ts` 的类型层。
+ */
+const REHEARSE_LABEL_KEYS: Record<RehearseKind, MessageKey> = {
+  variant: "drill.rehearsal.kind.variant",
+  counterfactual: "drill.rehearsal.kind.counterfactual",
+  failure: "drill.rehearsal.kind.failure",
+  evidence: "drill.rehearsal.kind.evidence",
+  compress: "drill.rehearsal.kind.compress",
+};
+
+/** 后端可能给出表外的题型：认不出来就返回空串，由调用方回落到协议值。 */
+function rehearseKindLabel(kind: string): string {
+  const key = REHEARSE_LABEL_KEYS[kind as RehearseKind];
+  return key ? t(key) : "";
+}
 
 export function RehearsalPanel({ sessionId }: { sessionId: number }) {
+  // 本组件用模块级 t()，必须订阅语言变化，否则切语言后文案不跟着变。
+  useLocale();
   const { message } = App.useApp();
   const [rows, setRows] = useState<DrillRehearsalRow[]>([]);
   const [loading, setLoading] = useState(false);
@@ -53,7 +74,7 @@ export function RehearsalPanel({ sessionId }: { sessionId: number }) {
       const fresh = await rehearse(sessionId, row);
       setResult({ question: fresh.question, expect: fresh.expect, label: fresh.claim_title });
     } catch (error) {
-      message.error(error instanceof Error ? error.message : "出题失败");
+      message.error(error instanceof Error ? error.message : t("drill.rehearsal.error.failed"));
     } finally {
       setBusy("");
     }
@@ -61,16 +82,12 @@ export function RehearsalPanel({ sessionId }: { sessionId: number }) {
 
   if (loading) return <PageSkeleton rows={2} card={false} />;
   if (rows.length === 0) {
-    return (
-      <Typography.Text type="secondary">复练队列是空的——这一场没有需要再练的主张。</Typography.Text>
-    );
+    return <Typography.Text type="secondary">{t("drill.rehearsal.empty")}</Typography.Text>;
   }
 
   return (
     <>
-      <Typography.Paragraph type="secondary">
-        复练不重复原题，换一个角度再问一次——把上次的答案背一遍不算会了。
-      </Typography.Paragraph>
+      <Typography.Paragraph type="secondary">{t("drill.rehearsal.intro")}</Typography.Paragraph>
       <Listy
         items={rows}
         rowKey={(row) => `${row.claim_title}-${row.kind}`}
@@ -85,14 +102,14 @@ export function RehearsalPanel({ sessionId }: { sessionId: number }) {
                 loading={busy === `${row.claim_title}-${row.kind}`}
                 onClick={() => void run(row)}
               >
-                出一道
+                {t("drill.rehearsal.action.ask")}
               </Button>,
             ]}
           >
             <Space orientation="vertical" size={2} style={{ width: "100%" }}>
               <Space size={6} wrap>
                 <Typography.Text strong>{row.claim_title}</Typography.Text>
-                <Tag>{row.kind_label || REHEARSE_LABELS[row.kind as never] || row.kind}</Tag>
+                <Tag>{row.kind_label || rehearseKindLabel(row.kind) || row.kind}</Tag>
               </Space>
               {row.why && (
                 <Typography.Text type="secondary" style={{ fontSize: 12 }}>
@@ -105,17 +122,21 @@ export function RehearsalPanel({ sessionId }: { sessionId: number }) {
       />
       <Modal
         open={result !== null}
-        title={`复练：${result?.label ?? ""}`}
+        title={t("drill.rehearsal.result.title", { label: result?.label ?? "" })}
         onCancel={() => setResult(null)}
-        footer={<Button onClick={() => setResult(null)}>关掉</Button>}
+        footer={
+          <Button onClick={() => setResult(null)}>{t("drill.rehearsal.action.close")}</Button>
+        }
         width={620}
       >
         <Typography.Paragraph strong>{result?.question}</Typography.Paragraph>
         {result?.expect && (
-          <Typography.Text type="secondary">这道题要求：{result.expect}</Typography.Text>
+          <Typography.Text type="secondary">
+            {t("drill.rehearsal.result.expect", { expect: result.expect })}
+          </Typography.Text>
         )}
         <Typography.Paragraph type="secondary" style={{ marginTop: 12, fontSize: 12 }}>
-          这里只是出题，不会计入这一场的记录——想认真练，可以拿这个问题自己讲一遍。
+          {t("drill.rehearsal.result.note")}
         </Typography.Paragraph>
       </Modal>
     </>
