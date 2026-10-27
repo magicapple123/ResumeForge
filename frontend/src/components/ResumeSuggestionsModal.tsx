@@ -133,10 +133,10 @@ export default function ResumeSuggestionsModal({
     try {
       // 这是给模型的修订指令，不是界面文案（交接单 §3 红线）：翻成英文会改变生成行为。
       const instructions = [
-        `请按以下建议修改简历（目标分区：${item.section || "未指定"}）：`,
-        `问题：${item.issue}`,
-        `修改建议：${item.suggestion}`,
-        item.evidence.length ? `依据：${item.evidence.join("；")}` : "",
+        `请按以下建议修改简历（目标分区：${item.section || "未指定"}）：`, // i18n-ok: 喂给模型的修订指令，翻成英文会改变生成行为
+        `问题：${item.issue}`, // i18n-ok: 同上，喂给模型的 prompt
+        `修改建议：${item.suggestion}`, // i18n-ok: 同上，喂给模型的 prompt
+        item.evidence.length ? `依据：${item.evidence.join("；")}` : "", // i18n-ok: 同上，喂给模型的 prompt
       ]
         .filter(Boolean)
         .join("\n");
