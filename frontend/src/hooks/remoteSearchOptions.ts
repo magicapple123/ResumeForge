@@ -11,6 +11,7 @@
 import { getJob, listJobs } from "../api/jobs";
 import { getResume, listResumes } from "../api/resumes";
 import { getTrack, listTracksPage } from "../api/tracker";
+import { t } from "../i18n";
 import { useRemoteSearchSelect } from "./useRemoteSearchSelect";
 import type { RemoteSelectOption } from "./useRemoteSearchSelect";
 
@@ -22,7 +23,10 @@ export function jobOption(job: { id: number; title: string; company: string }): 
 }
 
 export function resumeOption(resume: { id: number; title: string }): RemoteSelectOption {
-  return { value: resume.id, label: resume.title || `简历 #${resume.id}` };
+  return {
+    value: resume.id,
+    label: resume.title || t("hooksUi.option.resumeFallback", { id: resume.id }),
+  };
 }
 
 export function trackOption(track: {
