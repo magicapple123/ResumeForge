@@ -36,37 +36,14 @@ import BatchDeleteButton from "../components/common/BatchDeleteButton";
 import { useApi } from "../hooks/useApi";
 import { useBatchSelection } from "../hooks/useBatchSelection";
 import { useDeleteUndo } from "../features/trash/useDeleteUndo";
-import type { Claim, ClaimCategory, ClaimSummary, VerificationStatus } from "../types";
+import type { Claim, ClaimSummary } from "../types";
 import { CLAIM_CATEGORIES, VERIFICATION_STATUSES, claimPayload } from "../types";
 import { t } from "../i18n";
-import type { MessageKey } from "../i18n";
+import { CLAIM_CATEGORY_LABEL_KEYS, VERIFICATION_STATUS_LABEL_KEYS } from "../i18n/enum/claims";
 import { useLocale } from "../i18n/i18nContext";
 
 /** 列表一页 20 条，与后端 /claims/page 的默认口径一致。 */
 const CLAIMS_PAGE_SIZE = 20;
-
-/**
- * 核实状态 / 分类的显示名：**键是协议值**（提交后端并参与校验），值指向语言包 key。
- *
- * 模块作用域不能调 `t()`（切语言不会重渲染），所以这里只存 key，取值处统一
- * `t(STATUS_LABEL_KEYS[value])`。`types/claim.ts` 里的中文枚举一个字都没动。
- */
-const STATUS_LABEL_KEYS: Record<VerificationStatus, MessageKey> = {
-  已确认: "claimsPage.status.confirmed",
-  待确认: "claimsPage.status.pending",
-  已过期: "claimsPage.status.expired",
-  不采用: "claimsPage.status.rejected",
-};
-
-const CATEGORY_LABEL_KEYS: Record<ClaimCategory, MessageKey> = {
-  教育经历: "claimsPage.category.education",
-  "实习/工作": "claimsPage.category.internship",
-  项目经历: "claimsPage.category.project",
-  校园经历: "claimsPage.category.campus",
-  专业技能: "claimsPage.category.skills",
-  荣誉奖项: "claimsPage.category.awards",
-  其他: "claimsPage.category.other",
-};
 
 export default function ClaimsPage() {
   // 本页用模块级 t()：必须订阅语言变化，否则切语言后整页文案不重渲染。
@@ -173,7 +150,7 @@ export default function ClaimsPage() {
   // （t() 是模块级函数，memo 不会为语言变化失效），7 条数据直接算更省心。
   const categoryOptions = CLAIM_CATEGORIES.map((value) => {
     const count = data?.category_counts?.[value];
-    const label = t(CATEGORY_LABEL_KEYS[value]);
+    const label = t(CLAIM_CATEGORY_LABEL_KEYS[value]);
     return {
       value,
       label: count == null ? label : label + t("claimsPage.filter.countSuffix", { count }),
@@ -253,7 +230,7 @@ export default function ClaimsPage() {
             { value: "", label: t("claimsPage.filter.allStatuses") },
             ...VERIFICATION_STATUSES.map((value) => ({
               value,
-              label: t(STATUS_LABEL_KEYS[value]),
+              label: t(VERIFICATION_STATUS_LABEL_KEYS[value]),
             })),
           ]}
         />
