@@ -77,19 +77,23 @@ export default function ResumePreviewToolbar({
           {canExactPreview ? (
             <Segmented
               size="small"
-              aria-label="预览口径"
+              aria-label={t("preview.mode.ariaLabel")}
               value={previewMode}
               onChange={(value) => onPreviewModeChange?.(value as "draft" | "exact")}
               options={[
                 {
                   value: "draft",
-                  label: <Tooltip title="按浏览器排版实时显示，编辑时用这个">草稿</Tooltip>,
+                  label: (
+                    <Tooltip title={t("preview.mode.draft.hint")}>
+                      {t("preview.mode.draft")}
+                    </Tooltip>
+                  ),
                 },
                 {
                   value: "exact",
                   label: (
-                    <Tooltip title="按导出引擎排出的真实 PDF 显示，与下载到的文件完全一致">
-                      精确
+                    <Tooltip title={t("preview.mode.exact.hint")}>
+                      {t("preview.mode.exact")}
                     </Tooltip>
                   ),
                 },
@@ -124,7 +128,7 @@ export default function ResumePreviewToolbar({
       {canExactPreview && previewMode === "exact" ? (
         <div className="resume-preview-toolbar-row resume-preview-toolbar-row-hint">
           <Typography.Text type="secondary" className="resume-preview-exact-hint">
-            这一版由导出引擎排版，与下载到的 PDF 完全一致；缩放用 PDF 查看器自带的 Ctrl+滚轮
+            {t("preview.exact.note")}
           </Typography.Text>
         </div>
       ) : null}
