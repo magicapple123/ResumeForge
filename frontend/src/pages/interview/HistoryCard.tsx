@@ -15,6 +15,7 @@ import { useClientPagination } from "../../hooks/useClientPagination";
 import type { InterviewBrief } from "../../types";
 import { formatDateTime } from "../../utils/format";
 import { t } from "../../i18n";
+import { interviewDifficultyLabelKey, interviewTypeLabelKey } from "../../i18n/enum/interview";
 import { useLocale } from "../../i18n/i18nContext";
 
 export function HistoryCard({
@@ -97,77 +98,82 @@ export function HistoryCard({
             items={pagedSessions}
             rowKey={(item) => item.id}
             styles={{ item: { ...LISTY_ITEM_PADDING_SMALL } }}
-            itemRender={(item) => (
-              <RowContextMenu items={batch.selecting ? [] : contextActions(item)}>
-                <ListyItem
-                  actions={
-                    batch.selecting
-                      ? [
-                          <Checkbox
-                            key="pick"
-                            aria-label={t("interviewPage.history.selectAria", {
-                              title: item.title,
-                            })}
-                            checked={batch.isSelected(item.id)}
-                            onChange={() => batch.toggle(item.id)}
-                          />,
-                        ]
-                      : [
-                          <RowActions
-                            key="actions"
-                            primary={[
-                              {
-                                key: "open",
-                                label:
-                                  item.status === "active"
-                                    ? t("interviewPage.history.actionContinue")
-                                    : t("interviewPage.history.actionViewReport"),
-                                onClick: () => void onOpen(item.id),
-                              },
-                            ]}
-                            more={[
-                              {
-                                key: "delete",
-                                label: t("interviewPage.history.deleteOne"),
-                                danger: true,
-                                icon: <DeleteOutlined />,
-                                confirm: t("interviewPage.history.deleteOneConfirm"),
-                                onClick: () => void onRemove(item),
-                              },
-                            ]}
-                          />,
-                        ]
-                  }
-                >
-                  <ListyMeta
-                    title={
-                      <Space size={6} wrap>
-                        <span>{item.title}</span>
-                        <Tag color={item.status === "active" ? "blue" : "default"}>
-                          {item.status === "active"
-                            ? t("interviewPage.history.statusActive")
-                            : t("interviewPage.history.statusFinished")}
-                        </Tag>
-                        <Tag>{item.interview_type}</Tag>
-                        <Tag>{item.difficulty}</Tag>
-                      </Space>
+            itemRender={(item) => {
+              // 类型/难度是协议值（原样入库），显示名走语言包；白名单外的历史值原样显示。
+              const typeLabelKey = interviewTypeLabelKey(item.interview_type);
+              const difficultyLabelKey = interviewDifficultyLabelKey(item.difficulty);
+              return (
+                <RowContextMenu items={batch.selecting ? [] : contextActions(item)}>
+                  <ListyItem
+                    actions={
+                      batch.selecting
+                        ? [
+                            <Checkbox
+                              key="pick"
+                              aria-label={t("interviewPage.history.selectAria", {
+                                title: item.title,
+                              })}
+                              checked={batch.isSelected(item.id)}
+                              onChange={() => batch.toggle(item.id)}
+                            />,
+                          ]
+                        : [
+                            <RowActions
+                              key="actions"
+                              primary={[
+                                {
+                                  key: "open",
+                                  label:
+                                    item.status === "active"
+                                      ? t("interviewPage.history.actionContinue")
+                                      : t("interviewPage.history.actionViewReport"),
+                                  onClick: () => void onOpen(item.id),
+                                },
+                              ]}
+                              more={[
+                                {
+                                  key: "delete",
+                                  label: t("interviewPage.history.deleteOne"),
+                                  danger: true,
+                                  icon: <DeleteOutlined />,
+                                  confirm: t("interviewPage.history.deleteOneConfirm"),
+                                  onClick: () => void onRemove(item),
+                                },
+                              ]}
+                            />,
+                          ]
                     }
-                    description={
-                      item.rounds_min != null
-                        ? t("interviewPage.history.roundsAuto", {
-                            answered: item.answered_rounds,
-                            time: formatDateTime(item.created_at),
-                          })
-                        : t("interviewPage.history.roundsProgress", {
-                            answered: item.answered_rounds,
-                            total: item.rounds,
-                            time: formatDateTime(item.created_at),
-                          })
-                    }
-                  />
-                </ListyItem>
-              </RowContextMenu>
-            )}
+                  >
+                    <ListyMeta
+                      title={
+                        <Space size={6} wrap>
+                          <span>{item.title}</span>
+                          <Tag color={item.status === "active" ? "blue" : "default"}>
+                            {item.status === "active"
+                              ? t("interviewPage.history.statusActive")
+                              : t("interviewPage.history.statusFinished")}
+                          </Tag>
+                          <Tag>{typeLabelKey ? t(typeLabelKey) : item.interview_type}</Tag>
+                          <Tag>{difficultyLabelKey ? t(difficultyLabelKey) : item.difficulty}</Tag>
+                        </Space>
+                      }
+                      description={
+                        item.rounds_min != null
+                          ? t("interviewPage.history.roundsAuto", {
+                              answered: item.answered_rounds,
+                              time: formatDateTime(item.created_at),
+                            })
+                          : t("interviewPage.history.roundsProgress", {
+                              answered: item.answered_rounds,
+                              total: item.rounds,
+                              time: formatDateTime(item.created_at),
+                            })
+                      }
+                    />
+                  </ListyItem>
+                </RowContextMenu>
+              );
+            }}
           />
           <div style={{ textAlign: "right", marginTop: 12 }}>
             <Pagination
