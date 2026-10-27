@@ -102,10 +102,11 @@ export default function UpdateCard() {
               : t("update.toast.failedTitle"),
           content: (
             <div>
-              <p>{outcome.message || "更新器没有给出原因。"}</p>
+              <p>{outcome.message || t("update.installResult.noReason")}</p>
               <p style={{ marginBottom: 0 }}>
-                应用本身还能正常使用，数据没有被改动。日志在 <code>{outcome.log}</code>， 也可以双击{" "}
-                <code>update.cmd</code> 重新更新一次。
+                {t("update.installResult.lead")} <code>{outcome.log}</code>
+                {t("update.installResult.middle")} <code>update.cmd</code>{" "}
+                {t("update.installResult.tail")}
               </p>
             </div>
           ),
@@ -190,8 +191,8 @@ export default function UpdateCard() {
   return (
     <Card title={t("update.card.title")} className="settings-card">
       <Typography.Paragraph type="secondary" style={{ marginBottom: 16 }}>
-        更新只替换程序文件，不会覆盖 <code>data/</code> 里的岗位、简历、助手对话和设置。
-        更新前仍建议先在「数据集与备份」里导出一份备份。
+        {t("update.intro.filesOnly")} <code>data/</code> {t("update.intro.dataSuffix")}{" "}
+        {t("update.intro.backupHint")}
       </Typography.Paragraph>
       <Descriptions size="small" column={1} style={{ marginBottom: 12 }}>
         <Descriptions.Item label={t("update.field.channel")}>
@@ -281,8 +282,10 @@ export default function UpdateCard() {
       {status?.state === "downloading" && !statusError && (
         <div style={{ marginTop: 16 }}>
           <Typography.Text>
-            正在下载更新包：{formatBytes(status.downloaded_bytes)} /{" "}
-            {formatBytes(status.total_bytes)}
+            {t("update.downloading", {
+              downloaded: formatBytes(status.downloaded_bytes),
+              total: formatBytes(status.total_bytes),
+            })}
           </Typography.Text>
           <Progress percent={Math.round(status.progress)} status="active" />
         </div>
