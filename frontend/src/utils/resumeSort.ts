@@ -14,6 +14,7 @@
  * 广场**刻意保留**的差异，不是漏改。
  */
 import type { SortOrder } from "antd/es/table/interface";
+import { t } from "../i18n";
 import type { ResumeSort, ResumeSortOrder } from "../types";
 
 export type ResumeSortField = "title" | "job_title" | "created" | "updated";
@@ -123,6 +124,6 @@ export function isDefaultResumeSort(state: ResumeSortState): boolean {
 /** 「恢复默认排序」按钮的 Tooltip 文案：说清"点了会发生什么"。 */
 export function resumeSortResetHint(state: ResumeSortState): string {
   return isDefaultResumeSort(state)
-    ? "当前已是默认排序：最近修改在前"
-    : "恢复默认排序：最近修改在前";
+    ? t("resume.sort.resetHintDefault")
+    : t("resume.sort.resetHint");
 }
