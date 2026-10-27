@@ -21,6 +21,8 @@ import {
   isRiskPanelAttached,
   useRiskScanEntries,
 } from "../features/resume/riskScanStore";
+import { t } from "../i18n";
+import { useLocale } from "../i18n/i18nContext";
 
 /** 通知 key：固定前缀，附着/结束时按同一个 key 销毁。 */
 function riskNotificationKey(resumeId: number): string {
@@ -28,6 +30,8 @@ function riskNotificationKey(resumeId: number): string {
 }
 
 export default function RiskScanWatcher() {
+  // 本组件用模块级 t()：必须订阅语言变化，否则切语言后这块文案不重渲染。
+  useLocale();
   const { notification } = App.useApp();
   const entries = useRiskScanEntries();
   // 已经提示过的「状态令牌」：避免同一份简历的完成通知被后续无关的状态变化重复触发
@@ -61,12 +65,12 @@ export default function RiskScanWatcher() {
       if (state.status === "scanning") {
         notification.open({
           key,
-          title: "风险扫描进行中",
-          description: "可以离开此页面，扫描会在后台继续",
+          title: t("backgroundTasks.risk.running.title"),
+          description: t("backgroundTasks.risk.running.description"),
           duration: 0,
           actions: (
             <Button size="small" onClick={() => cancel(resumeId)}>
-              取消
+              {t("backgroundTasks.action.cancel")}
             </Button>
           ),
         });
@@ -74,15 +78,15 @@ export default function RiskScanWatcher() {
         const total = state.result?.points.length ?? 0;
         notification.success({
           key,
-          title: "风险扫描完成",
-          description: `共 ${total} 条风险点`,
+          title: t("backgroundTasks.risk.done.title"),
+          description: t("backgroundTasks.risk.done.description", { count: total }),
           duration: 4,
         });
       } else if (state.status === "error") {
         notification.error({
           key,
-          title: "风险扫描失败",
-          description: state.error || "可以回到简历预览重新扫描。",
+          title: t("backgroundTasks.risk.failed.title"),
+          description: state.error || t("backgroundTasks.risk.failed.description"),
           duration: 5,
         });
       } else {
