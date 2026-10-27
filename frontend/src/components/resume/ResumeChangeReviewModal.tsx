@@ -14,6 +14,8 @@ import { DiffTokenText } from "../ResumeDiffView";
 import { wordDiff } from "../../utils/resumeFieldDiff";
 import { describeResumeFieldPath } from "../../utils/resumeFieldPath";
 import type { ResumeContent, ResumePendingChange } from "../../types";
+import { t, type MessageKey } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 
 interface Props {
   open: boolean;
@@ -27,10 +29,10 @@ interface Props {
 
 type Decision = "accepted" | "rejected" | "undecided";
 
-const VERDICT_LABELS: Record<string, string> = {
-  ok: "预检通过",
-  fact_check_needed: "涉及事实，建议回台账核实",
-  blocked: "含未完成标记，不能写入",
+const VERDICT_LABELS: Record<string, MessageKey> = {
+  ok: "resumeChangeReview.verdict.ok",
+  fact_check_needed: "resumeChangeReview.verdict.factCheckNeeded",
+  blocked: "resumeChangeReview.verdict.blocked",
 };
 
 /**
@@ -61,6 +63,7 @@ export default function ResumeChangeReviewModal({
   onCancel,
   onConfirm,
 }: Props) {
+  const locale = useLocale();
   // 决定按条目下标记录；弹窗每次打开/换一批变更都重置为未决。
   const [decisions, setDecisions] = useState<Decision[]>([]);
   const [decidedFor, setDecidedFor] = useState<ResumePendingChange[] | null>(null);
@@ -72,13 +75,13 @@ export default function ResumeChangeReviewModal({
   const acceptedCount = decisions.filter((d) => d === "accepted").length;
   const undecided = decisions.filter((d) => d === "undecided").length;
 
-  const labels = useMemo(
-    () =>
-      pendingChanges.map((change) =>
-        content ? describeResumeFieldPath(change.path, content) : change.path,
-      ),
-    [pendingChanges, content],
-  );
+  const labels = useMemo(() => {
+    // 栏目名由 describeResumeFieldPath 按当前语言生成；切语言必须重算这份缓存。
+    void locale;
+    return pendingChanges.map((change) =>
+      content ? describeResumeFieldPath(change.path, content) : change.path,
+    );
+  }, [pendingChanges, content, locale]);
 
   const setDecision = (index: number, decision: Decision) => {
     setDecisions((current) => {
@@ -96,7 +99,7 @@ export default function ResumeChangeReviewModal({
 
   return (
     <Modal
-      title="逐条审阅改动"
+      title={t("resumeChangeReview.modal.title")}
       open={open}
       width={720}
       destroyOnHidden
@@ -104,11 +107,18 @@ export default function ResumeChangeReviewModal({
       footer={
         <Space>
           <Typography.Text type="secondary" data-testid="review-accept-count">
-            已接受 {acceptedCount} 条{undecided > 0 ? `，未决 ${undecided} 条` : ""}
+            {undecided > 0
+              ? t("resumeChangeReview.footer.acceptedWithUndecided", {
+                  accepted: acceptedCount,
+                  undecided,
+                })
+              : t("resumeChangeReview.footer.accepted", { count: acceptedCount })}
           </Typography.Text>
-          <Button onClick={onCancel}>取消</Button>
+          <Button onClick={onCancel}>{t("common.action.cancel")}</Button>
           <Button type="primary" onClick={confirm}>
-            应用所选{acceptedCount > 0 ? `（${acceptedCount}）` : ""}
+            {acceptedCount > 0
+              ? t("resumeChangeReview.footer.applySelectedCount", { count: acceptedCount })
+              : t("resumeChangeReview.footer.applySelected")}
           </Button>
         </Space>
       }
@@ -116,10 +126,10 @@ export default function ResumeChangeReviewModal({
     >
       <Space style={{ marginBottom: 12 }} wrap>
         <Button size="small" onClick={acceptAll}>
-          全部接受
+          {t("resumeChangeReview.action.acceptAll")}
         </Button>
         <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-          只有被接受的改动会填入表单；保存后才会更新简历。
+          {t("resumeChangeReview.hint.acceptedOnly")}
         </Typography.Text>
       </Space>
       <div style={{ display: "grid", gap: 16 }}>
@@ -135,17 +145,19 @@ export default function ResumeChangeReviewModal({
               <Space size={8} wrap style={{ marginBottom: 6 }}>
                 <Typography.Text strong>{labels[index]}</Typography.Text>
                 <Tag color={change.origin === "ai_rewrite" ? "gold" : "purple"}>
-                  {change.origin === "ai_rewrite" ? "AI 改写" : "用户补充"}
+                  {change.origin === "ai_rewrite"
+                    ? t("resumeChangeReview.origin.aiRewrite")
+                    : t("resumeChangeReview.origin.userSupplement")}
                 </Tag>
                 {change.verdict === "fact_check_needed" && (
-                  <Tag color="volcano">{VERDICT_LABELS.fact_check_needed}</Tag>
+                  <Tag color="volcano">{t(VERDICT_LABELS.fact_check_needed)}</Tag>
                 )}
-                {change.verdict === "blocked" && <Tag color="red">{VERDICT_LABELS.blocked}</Tag>}
-                {change.verdict === "ok" && <Tag color="green">{VERDICT_LABELS.ok}</Tag>}
+                {change.verdict === "blocked" && <Tag color="red">{t(VERDICT_LABELS.blocked)}</Tag>}
+                {change.verdict === "ok" && <Tag color="green">{t(VERDICT_LABELS.ok)}</Tag>}
               </Space>
               {change.instruction && (
                 <Typography.Paragraph type="secondary" style={{ fontSize: 12, margin: 0 }}>
-                  改写要求：{change.instruction}
+                  {t("resumeChangeReview.item.instruction", { instruction: change.instruction })}
                 </Typography.Paragraph>
               )}
               {change.verdict === "fact_check_needed" && (
@@ -155,10 +167,12 @@ export default function ResumeChangeReviewModal({
                   style={{ margin: "6px 0" }}
                   title={
                     <span>
-                      涉及事实，建议回台账核实
+                      {t("resumeChangeReview.verdict.factCheckNeeded")}
                       {(change.reasons ?? []).length > 0 && (
                         <Typography.Paragraph style={{ fontSize: 12, margin: "2px 0 0" }}>
-                          {(change.reasons ?? []).join("；")}
+                          {(change.reasons ?? []).join(
+                            t("resumeChangeReview.item.reasonSeparator"),
+                          )}
                         </Typography.Paragraph>
                       )}
                     </span>
@@ -167,7 +181,7 @@ export default function ResumeChangeReviewModal({
                     <Link
                       to={`/claims${change.subject ? `?keyword=${encodeURIComponent(change.subject)}` : ""}`}
                     >
-                      去事实台账核实
+                      {t("resumeChangeReview.verdict.factCheckLink")}
                     </Link>
                   }
                 />
@@ -177,7 +191,7 @@ export default function ResumeChangeReviewModal({
                   type="error"
                   showIcon
                   style={{ margin: "6px 0" }}
-                  title={(change.reasons ?? ["内容含未完成标记，请先补全"])[0]}
+                  title={(change.reasons ?? [t("resumeChangeReview.verdict.blockedFallback")])[0]}
                 />
               )}
               <div
@@ -189,7 +203,9 @@ export default function ResumeChangeReviewModal({
                 }}
               >
                 {rows.length === 0 ? (
-                  <Typography.Text type="secondary">（这一栏原来是空的）</Typography.Text>
+                  <Typography.Text type="secondary">
+                    {t("resumeChangeReview.diff.empty")}
+                  </Typography.Text>
                 ) : (
                   rows.map((row, rowIndex) => (
                     <div key={rowIndex}>
@@ -213,14 +229,14 @@ export default function ResumeChangeReviewModal({
                   type={decision === "accepted" ? "primary" : "default"}
                   onClick={() => setDecision(index, "accepted")}
                 >
-                  接受
+                  {t("resumeChangeReview.action.accept")}
                 </Button>
                 <Button
                   size="small"
                   danger={decision === "rejected"}
                   onClick={() => setDecision(index, "rejected")}
                 >
-                  拒绝
+                  {t("resumeChangeReview.action.reject")}
                 </Button>
               </Space>
             </div>
