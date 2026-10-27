@@ -12,6 +12,7 @@ import {
   type MatchCondition,
 } from "../../types";
 import { t, type MessageKey } from "../../i18n";
+import { ADMISSION_LABEL_KEYS, MATCH_STATUS_LABEL_KEYS } from "../../i18n/enum/apply";
 import { useLocale } from "../../i18n/i18nContext";
 
 type BatchMatchResult = NonNullable<JobMatchBatchItem["result"]>;
@@ -50,7 +51,7 @@ function ConditionList({ conditions }: { conditions: MatchCondition[] }) {
           <ListyItem>
             <Space orientation="vertical" size={2} style={{ width: "100%" }}>
               <Space size={6} wrap>
-                <Tag color={meta.color}>{meta.label}</Tag>
+                <Tag color={meta.color}>{t(MATCH_STATUS_LABEL_KEYS[condition.status])}</Tag>
                 <Typography.Text strong>{condition.label}</Typography.Text>
               </Space>
               {condition.evidence ? (
@@ -75,7 +76,9 @@ function MatchDetail({ item }: { item: JobMatchBatchItem }) {
     <Space orientation="vertical" size="small" style={{ width: "100%" }}>
       <Space wrap>
         <Tag color={admission.color}>
-          {t("jobMatchBatchResult.admission.tag", { label: admission.label })}
+          {t("jobMatchBatchResult.admission.tag", {
+            label: t(ADMISSION_LABEL_KEYS[result.admission]),
+          })}
         </Tag>
         <Tag>
           {t("jobMatchBatchResult.hardGate.field", {
@@ -156,7 +159,7 @@ export function BatchItemCard({ item }: { item: JobMatchBatchItem }) {
           {item.result ? (
             <Tag color={ADMISSION_META[item.result.admission].color}>
               {t("jobMatchBatchResult.admission.tag", {
-                label: ADMISSION_META[item.result.admission].label,
+                label: t(ADMISSION_LABEL_KEYS[item.result.admission]),
               })}
             </Tag>
           ) : (
