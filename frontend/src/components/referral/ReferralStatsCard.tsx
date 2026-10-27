@@ -5,26 +5,30 @@
  */
 import { Card, Col, Row, Statistic } from "antd";
 import type { ReferralStats } from "../../types";
+import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 
 interface Props {
   stats: ReferralStats | null;
 }
 
 export default function ReferralStatsCard({ stats }: Props) {
+  // 本文件用模块级 t()：必须订阅语言变化，否则切语言后统计卡标题不重渲染。
+  useLocale();
   const convertedRate = stats?.total ? Math.round((stats.rate ?? 0) * 100) : 0;
 
   return (
-    <Card size="small" title="内推转化率">
+    <Card size="small" title={t("referralUi.stats.title")}>
       <Row gutter={16}>
         <Col span={8}>
-          <Statistic title="有效内推" value={stats?.total ?? 0} />
+          <Statistic title={t("referralUi.stats.valid")} value={stats?.total ?? 0} />
         </Col>
         <Col span={8}>
-          <Statistic title="已转化" value={stats?.converted ?? 0} />
+          <Statistic title={t("referralUi.stats.converted")} value={stats?.converted ?? 0} />
         </Col>
         <Col span={8}>
           <Statistic
-            title="转化率"
+            title={t("referralUi.stats.rate")}
             value={convertedRate}
             suffix="%"
             styles={{
