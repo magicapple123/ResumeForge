@@ -3,7 +3,7 @@
   "generatedAt": "2026-10-27",
   "rule": "Legacy CJK ceilings plus language-independent AST product-copy fingerprints",
   "src": {
-    "total": 4198,
+    "total": 4168,
     "files": {
       "App.tsx": 0,
       "api/analytics.ts": 0,
@@ -176,7 +176,7 @@
       "components/jobs/CandidateJobsDrawer.tsx": 0,
       "components/jobs/JobImportModal.tsx": 15,
       "components/jobs/JobMatchBatchResult.tsx": 23,
-      "components/jobs/JobTable.tsx": 30,
+      "components/jobs/JobTable.tsx": 0,
       "components/jobs/MultiJobDraftList.tsx": 9,
       "components/jobs/candidate/CandidateCardGrid.tsx": 13,
       "components/jobs/candidate/CandidateImportView.tsx": 0,

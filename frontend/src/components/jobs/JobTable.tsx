@@ -12,6 +12,8 @@ import { RowActions, RowContextMenu, type RowActionItem } from "../common/RowAct
 import SkillTags from "../SkillTags";
 import { jobSourceKind } from "../../utils/jobSource";
 import { nextSortState, sortOrderFor, type JobSortState } from "../../utils/jobSort";
+import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 
 // 值域与 pages/jobs/jobFilterOptions.ts 的 BatchAction 保持一致（新增动作两处同步改）；
 // 此处只判「有无批量操作进行中」，不区分具体动作。类型本地持有是因为 components
@@ -42,10 +44,16 @@ interface Props {
   onSortChange: (state: JobSortState) => void;
 }
 
-/** `active` / `open` 是历史落库值：显示前先归一到「开放中」，再查 JOB_STATUS_META（兼容层，别删）。 */
+/**
+ * `active` / `open` 是历史落库值：显示前先归一到「开放中」，再查 JOB_STATUS_META（兼容层，别删）。
+ *
+ * 值这一侧**不是界面文案**，是 JOB_STATUS_META 的查找键：换成语言包 key 会让状态 Tag
+ * 查不到颜色与显示名（静默掉成 default）。状态名的本地化要先把 `types/job.ts` 的
+ * JOB_STATUS_META 改成 labelKey，属于另一批。
+ */
 const STATUS_LABELS: Record<string, string> = {
-  active: "开放中",
-  open: "开放中",
+  active: "开放中", // i18n-ok: 归一化目标是落库的数据值（JOB_STATUS_META 的键），不是界面文案
+  open: "开放中", // i18n-ok: 同上，历史落库值共用同一个归一化目标
 };
 
 export default function JobTable({
@@ -69,18 +77,24 @@ export default function JobTable({
   sortState,
   onSortChange,
 }: Props) {
+  // 本组件用模块级 t()：必须订阅语言变化，否则切语言后列头与菜单不重渲染。
+  useLocale();
   const columns: TableColumnsType<JobList> = [
     {
-      title: "收藏",
+      title: t("jobTable.column.favorite"),
       key: "favorite",
       width: 64,
       align: "center",
       render: (_, job) => (
-        <Tooltip title={job.favorite ? "取消收藏" : "收藏岗位"}>
+        <Tooltip
+          title={job.favorite ? t("jobTable.action.unfavorite") : t("jobTable.action.favorite")}
+        >
           <Button
             type="text"
             size="small"
-            aria-label={job.favorite ? "取消收藏" : "收藏岗位"}
+            aria-label={
+              job.favorite ? t("jobTable.action.unfavorite") : t("jobTable.action.favorite")
+            }
             className={`job-favorite-button${job.favorite ? " is-favorite" : ""}`}
             icon={job.favorite ? <StarFilled /> : <StarOutlined />}
             loading={favoriteJobId === job.id}
@@ -91,18 +105,18 @@ export default function JobTable({
       ),
     },
     {
-      title: "岗位",
+      title: t("jobTable.column.title"),
       dataIndex: "title",
       key: "title",
       width: 260,
       // 排序走服务端（R14）：本页数据本地排序在分页下必错。
       sorter: true,
       sortOrder: sortOrderFor("title", sortState),
-      showSorterTooltip: { title: "按岗位名称排序" },
+      showSorterTooltip: { title: t("jobTable.sort.title") },
       // 悬停整格都能看到导入时间：之前 Tooltip 只挂在岗位名那颗链接上，
       // 鼠标停在关键字标签或旁边空白处就没有提示，等于只有一半时候管用。
       render: (_, job) => (
-        <Tooltip title={`导入于 ${formatDateTime(job.created_at)}`}>
+        <Tooltip title={t("jobTable.tooltip.importedAt", { time: formatDateTime(job.created_at) })}>
           <div>
             <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
               <Button
@@ -115,10 +129,10 @@ export default function JobTable({
               </Button>
               {jobSourceKind(job) === "collected" ? (
                 <Tag color="purple" style={{ marginInlineEnd: 0 }}>
-                  采集
+                  {t("jobTable.source.collected")}
                 </Tag>
               ) : (
-                <Tag style={{ marginInlineEnd: 0 }}>手动</Tag>
+                <Tag style={{ marginInlineEnd: 0 }}>{t("jobTable.source.manual")}</Tag>
               )}
             </div>
             <div style={{ marginTop: 4 }}>
@@ -129,20 +143,30 @@ export default function JobTable({
       ),
     },
     {
-      title: "公司",
+      title: t("jobTable.column.company"),
       dataIndex: "company",
       key: "company",
       width: 130,
       sorter: true,
       sortOrder: sortOrderFor("company", sortState),
-      showSorterTooltip: { title: "按公司名称排序" },
+      showSorterTooltip: { title: t("jobTable.sort.company") },
       render: (value) => value || "-",
     },
-    { title: "城市", dataIndex: "location", width: 90, render: (value) => value || "-" },
-    { title: "薪资", dataIndex: "salary", width: 130, render: (value) => value || "-" },
-    { title: "类型", dataIndex: "job_type", width: 80 },
     {
-      title: "状态",
+      title: t("jobTable.column.location"),
+      dataIndex: "location",
+      width: 90,
+      render: (value) => value || "-",
+    },
+    {
+      title: t("jobTable.column.salary"),
+      dataIndex: "salary",
+      width: 130,
+      render: (value) => value || "-",
+    },
+    { title: t("jobTable.column.jobType"), dataIndex: "job_type", width: 80 },
+    {
+      title: t("jobTable.column.status"),
       dataIndex: "status",
       width: 90,
       render: (value: string) => {
@@ -154,7 +178,7 @@ export default function JobTable({
       },
     },
     {
-      title: "备注",
+      title: t("jobTable.column.note"),
       dataIndex: "note",
       width: 180,
       render: (_, job) => {
@@ -170,9 +194,9 @@ export default function JobTable({
               {text || "-"}
             </Typography.Text>
             {hasImages && (
-              <Tooltip title={`备注里有 ${job.note_images.length} 张图片，打开详情查看`}>
+              <Tooltip title={t("jobTable.note.imageHint", { count: job.note_images.length })}>
                 <Tag color="blue" className="job-note-image-tag">
-                  {job.note_images.length} 张图
+                  {t("jobTable.note.imageCount", { count: job.note_images.length })}
                 </Tag>
               </Tooltip>
             )}
@@ -181,7 +205,7 @@ export default function JobTable({
       },
     },
     {
-      title: "发布时间",
+      title: t("jobTable.column.postedAt"),
       dataIndex: "posted_at",
       // 列里展示招聘信息自己写的 posted_at；排序键 `posted_desc` 也按它排——
       // 解析不出日期（空串 / "3 天前"）时后端回落到导入日期，不会把这类岗位甩到两端。
@@ -193,11 +217,11 @@ export default function JobTable({
       // 用默认的 ["ascend","descend"] 时，第一次点击是"取消排序"，而取消后又回到默认
       // 倒序——用户看到的是"点了没反应"。
       sortDirections: ["descend", "ascend"],
-      showSorterTooltip: { title: "按发布时间排序（没有发布时间的按导入时间）" },
+      showSorterTooltip: { title: t("jobTable.sort.postedAt") },
       render: (value: string) => value || "-",
     },
     {
-      title: "操作",
+      title: t("jobTable.column.actions"),
       key: "actions",
       width: 170,
       render: (_, job) => (
@@ -210,18 +234,18 @@ export default function JobTable({
 
   /** 主操作直接平铺在行上；其余操作（含删除）统一收进整行右键菜单。 */
   const primaryActions = (job: JobList): RowActionItem[] => [
-    { key: "detail", label: "详情", onClick: () => onOpenDetail(job) },
-    { key: "generate", label: "生成简历", onClick: () => onGenerate(job) },
+    { key: "detail", label: t("jobTable.action.detail"), onClick: () => onOpenDetail(job) },
+    { key: "generate", label: t("jobTable.action.generate"), onClick: () => onGenerate(job) },
   ];
 
   /** 次级操作：只出现在整行右键菜单（行内不再有三点下拉）。 */
   const secondaryActions = (job: JobList): RowActionItem[] => [
-    { key: "write", label: "自行编写", onClick: () => onWrite(job) },
-    { key: "resumes", label: "相关简历", onClick: () => onViewResumes(job) },
-    { key: "edit", label: "编辑", onClick: () => onEdit(job) },
+    { key: "write", label: t("jobTable.action.write"), onClick: () => onWrite(job) },
+    { key: "resumes", label: t("jobTable.action.resumes"), onClick: () => onViewResumes(job) },
+    { key: "edit", label: t("jobTable.action.edit"), onClick: () => onEdit(job) },
     {
       key: "delete",
-      label: "删除",
+      label: t("common.action.delete"),
       danger: true,
       // 软删可撤销：不弹确认，5 秒撤销在 Toast 上。
       undo: true,
@@ -237,7 +261,7 @@ export default function JobTable({
       : [
           {
             key: "batch_select",
-            label: "批量选择",
+            label: t("jobTable.action.batchSelect"),
             icon: <CheckSquareOutlined />,
             onClick: onEnterSelecting,
           } satisfies RowActionItem,
@@ -279,7 +303,7 @@ export default function JobTable({
         total: jobs?.total ?? 0,
         disabled: batchAction !== null,
         showSizeChanger: true,
-        showTotal: (total) => `共 ${total} 个岗位`,
+        showTotal: (total) => t("jobTable.pagination.total", { total }),
         onChange: onPageChange,
       }}
       // 排序交给服务端：只把"排序动作"翻译成 API 参数，分页/筛选的动作各走各的。

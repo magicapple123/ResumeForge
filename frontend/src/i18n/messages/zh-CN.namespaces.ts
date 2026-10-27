@@ -66,6 +66,7 @@ import applyProgress from "./zh-CN.applyProgress";
 import collectFilters from "./zh-CN.collectFilters";
 import llmRecord from "./zh-CN.llmRecord";
 import educationSection from "./zh-CN.educationSection";
+import jobTable from "./zh-CN.jobTable";
 
 const namespaces = {
   /** 简历制作台（2026-10-23）。 */
@@ -161,6 +162,8 @@ const namespaces = {
   ...llmRecord,
   /** 个人资料「教育经历」分区（2026-10-27）。 */
   ...educationSection,
+  /** 岗位列表表格与行操作（2026-10-27）。 */
+  ...jobTable,
 } as const;
 
 export default namespaces;
