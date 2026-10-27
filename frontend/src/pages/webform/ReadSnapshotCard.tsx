@@ -6,6 +6,8 @@
 import { FileSearchOutlined } from "@ant-design/icons";
 import { Button, Card, Space, Steps, Typography } from "antd";
 import { memo } from "react";
+import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 import type { WebFormSnapshot } from "../../types";
 import type { WebFormBusyState } from "./constants";
 
@@ -26,6 +28,8 @@ export const ReadSnapshotCard = memo(function ReadSnapshotCard({
   snapshot: WebFormSnapshot | null;
   onRead: () => void;
 }) {
+  // 本组件用模块级 t()：订阅语言变化，否则切语言后步骤条与摘要不重渲染。
+  useLocale();
   return (
     <>
       {/* 本组件在父级 Space 里只占一个 item（memo 包着的 fragment 不会被拍平），
@@ -35,10 +39,10 @@ export const ReadSnapshotCard = memo(function ReadSnapshotCard({
         current={step}
         style={{ marginBottom: 12 }}
         items={[
-          { title: "启动浏览器" },
-          { title: "打开网申页" },
-          { title: "核对映射" },
-          { title: "填充" },
+          { title: t("webFormPage.readSnapshot.step.startBrowser") },
+          { title: t("webFormPage.readSnapshot.step.openPage") },
+          { title: t("webFormPage.readSnapshot.step.reviewMapping") },
+          { title: t("webFormPage.readSnapshot.step.fill") },
         ]}
       />
 
@@ -51,17 +55,18 @@ export const ReadSnapshotCard = memo(function ReadSnapshotCard({
             loading={busy === "read"}
             onClick={onRead}
           >
-            读取当前表单
+            {t("webFormPage.readSnapshot.read")}
           </Button>
-          <Typography.Text type="secondary">
-            先在浏览器窗口里打开网申表单页，停在要填的那一步，再点这里。
-          </Typography.Text>
+          <Typography.Text type="secondary">{t("webFormPage.readSnapshot.hint")}</Typography.Text>
         </Space>
         {snapshot ? (
           <div style={{ marginTop: 8 }}>
             <Typography.Text type="secondary">
-              已读取：{snapshot.page.title || "（无标题）"} · {snapshot.page.url} · 共{" "}
-              {snapshot.page.control_count} 个控件
+              {t("webFormPage.readSnapshot.summary", {
+                title: snapshot.page.title || t("webFormPage.readSnapshot.untitled"),
+                url: snapshot.page.url,
+                count: snapshot.page.control_count,
+              })}
             </Typography.Text>
           </div>
         ) : null}
