@@ -21,6 +21,7 @@ const EXEMPT_FIXTURES = {
   "versions.variants.exportOption.job": " · {job}",
   "provenance.usage.tokens": "token",
   "trial.export.all": "HTML / PDF / Word",
+  "trackerForm.status.offer": "Offer",
 } satisfies Record<keyof typeof EQUALITY_EXEMPT_KEYS, string>;
 
 describe("message contract failure fixtures", () => {

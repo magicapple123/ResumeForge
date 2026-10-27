@@ -3,7 +3,7 @@
   "generatedAt": "2026-10-27",
   "rule": "Legacy CJK ceilings plus language-independent AST product-copy fingerprints",
   "src": {
-    "total": 4018,
+    "total": 3988,
     "files": {
       "App.tsx": 0,
       "api/analytics.ts": 0,
@@ -485,7 +485,7 @@
       "components/tracker/CalendarView.tsx": 11,
       "components/tracker/ReminderListItem.tsx": 0,
       "components/tracker/TrackCard.tsx": 13,
-      "components/tracker/TrackFormModal.tsx": 30,
+      "components/tracker/TrackFormModal.tsx": 0,
       "components/tracker/TrackImportModal.tsx": 19,
       "components/user-guide/assistantSteps.ts": 52,
       "components/user-guide/dataBackupSteps.ts": 36,

@@ -21,6 +21,8 @@ export const EQUALITY_EXEMPT_KEYS = {
   "provenance.usage.tokens": "Model accounting unit token",
   // These are official export format names separated by slashes.
   "trial.export.all": "Official export format names",
+  // Chinese recruiting says "Offer" too; the label is the same word in both languages.
+  "trackerForm.status.offer": "Recruiting loanword spelled identically in both languages",
 } as const satisfies Readonly<Record<string, string>>;
 
 export function isEqualityExempt(key: string): boolean {
