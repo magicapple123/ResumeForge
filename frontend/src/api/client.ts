@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 /** 统一请求封装：JSON 解析、错误信息提取、请求预算（超时）、取消与友好报错。 */
 
+import { t } from "../i18n";
 import { recordClientDiagnostic } from "../utils/clientDiagnostics";
 import { ApiError } from "./apiError";
 import { datasetScopeHeaders } from "./datasetScope";
@@ -65,7 +66,9 @@ async function readErrorPayload(resp: Response): Promise<ErrorPayload> {
     if (typeof detail === "string") return { message: detail, businessCode, body: data };
     if (Array.isArray(detail) && detail.length > 0) {
       return {
-        message: detail.map((item) => item?.msg ?? String(item)).join("；"),
+        message: detail
+          .map((item) => item?.msg ?? String(item))
+          .join(t("apiErrors.http.detailSeparator")),
         businessCode,
         body: data,
       };
@@ -77,13 +80,17 @@ async function readErrorPayload(resp: Response): Promise<ErrorPayload> {
     if (detail && typeof detail === "object" && typeof detail.message === "string") {
       return { message: detail.message, businessCode, body: data };
     }
-    return { message: `请求失败（HTTP ${resp.status}）`, businessCode, body: data };
+    return {
+      message: t("apiErrors.http.statusFallback", { status: resp.status }),
+      businessCode,
+      body: data,
+    };
   } catch (error) {
     // 正文读取阶段的中止（预算到期 / 调用方取消）已经是 ApiError：不能在这里被吞成
     // 「请求失败（HTTP xxx）」，否则传输层超时会被误报成"后端返回了一个坏响应"。
     if (error instanceof ApiError) throw error;
     // 响应体不是 JSON 时退回状态码提示
-    return { message: `请求失败（HTTP ${resp.status}）` };
+    return { message: t("apiErrors.http.statusFallback", { status: resp.status }) };
   }
 }
 
@@ -116,7 +123,7 @@ function isReadMethod(method: string | undefined): boolean {
   return (method ?? "GET").toUpperCase() === "GET";
 }
 
-/** 网络类失败统一转成中文提示的 ApiError，原始错误保留在 cause 上不丢诊断信息。 */
+/** 网络类失败统一转成本地化提示的 ApiError，原始错误保留在 cause 上不丢诊断信息。 */
 function networkFailure(
   path: string,
   method: string,
@@ -128,7 +135,7 @@ function networkFailure(
     method,
     error: cause instanceof Error ? cause.name : String(cause),
   });
-  return new ApiError("无法连接本地服务，请确认应用已启动", undefined, {
+  return new ApiError(t("apiErrors.network.unreachable"), undefined, {
     code: "network",
     retryable,
     cause,
@@ -151,7 +158,7 @@ export async function requestRaw(path: string, options: RequestOptions = {}): Pr
 
   // 调用方在发起前就已取消：请求根本不必发出。
   if (signal?.aborted) {
-    throw new ApiError("已取消", undefined, { code: "cancelled" });
+    throw new ApiError(t("apiErrors.request.cancelled"), undefined, { code: "cancelled" });
   }
 
   // 超时用 AbortController 实现（不用计时器轮询）：内部 controller 是唯一传给 fetch 的
@@ -242,7 +249,7 @@ export async function requestRaw(path: string, options: RequestOptions = {}): Pr
     if (timedOut) throw abortErrorOf(lifecycle);
     if (signal?.aborted) {
       // 调用方取消不是错误：不记诊断，message 固定为「已取消」，由 isCancellation 判别。
-      throw new ApiError("已取消", undefined, { code: "cancelled" });
+      throw new ApiError(t("apiErrors.request.cancelled"), undefined, { code: "cancelled" });
     }
     throw networkFailure(path, method, error, retryable);
   }
@@ -299,7 +306,9 @@ export function uploadWithProgress<T>(
 
   // 调用方在发起前就已取消：请求根本不必发出（与 requestRaw 同一口径）。
   if (signal?.aborted) {
-    return Promise.reject(new ApiError("已取消", undefined, { code: "cancelled" }));
+    return Promise.reject(
+      new ApiError(t("apiErrors.request.cancelled"), undefined, { code: "cancelled" }),
+    );
   }
 
   return new Promise<T>((resolve, reject) => {
@@ -373,16 +382,26 @@ export function uploadWithProgress<T>(
           ),
         )
         .catch(() =>
-          fail(new ApiError(`请求失败（HTTP ${xhr.status}）`, xhr.status, { code: "http" })),
+          fail(
+            new ApiError(t("apiErrors.http.statusFallback", { status: xhr.status }), xhr.status, {
+              code: "http",
+            }),
+          ),
         );
     };
     // 预算到期：XHR 内部按 timeout 中止，只触发 ontimeout。
     xhr.ontimeout = () => {
       recordClientDiagnostic("api.timeout", { path, method: "POST", budget });
-      fail(new ApiError("请求超时，请重试", undefined, { code: "timeout", retryable: false }));
+      fail(
+        new ApiError(t("apiErrors.request.timeout"), undefined, {
+          code: "timeout",
+          retryable: false,
+        }),
+      );
     };
     // 只有调用方 abort 会走到这里（timeout 走 ontimeout，onerror 是连接层失败）。
-    xhr.onabort = () => fail(new ApiError("已取消", undefined, { code: "cancelled" }));
+    xhr.onabort = () =>
+      fail(new ApiError(t("apiErrors.request.cancelled"), undefined, { code: "cancelled" }));
     xhr.onerror = () => fail(networkFailure(path, "POST", new Error("NetworkError"), false));
 
     xhr.send(body);
