@@ -14,6 +14,8 @@ import {
 } from "@ant-design/icons";
 import { Button, Input, Select, Space, Tooltip } from "antd";
 import { useState } from "react";
+import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 import type { JobSortState } from "../../utils/jobSort";
 import { DEFAULT_JOB_SORT_STATE, isDefaultJobSort } from "../../utils/jobSort";
 import type { BatchAction } from "./jobFilterOptions";
@@ -61,6 +63,7 @@ export function JobFilterBar({
   sortState: JobSortState;
   applySort: (next: JobSortState) => void;
 }) {
+  useLocale();
   // 搜索框受控：本地镜像同步外部 keyword（URL 带参等外部变化能回填输入框），
   // 点 × 清空时立即把筛选也清掉——之前非受控时清空后列表仍按旧关键词过滤。
   // Compiler 规范：镜像同步用渲染期守卫式调整。
@@ -76,7 +79,7 @@ export function JobFilterBar({
       <Space wrap className="jobs-filter-bar">
         <Input.Search
           className="jobs-search-input"
-          placeholder="搜索岗位 / 公司 / 城市 / 描述 / 备注"
+          placeholder={t("jobsPage.filter.searchPlaceholder")}
           allowClear
           disabled={batchAction !== null}
           value={searchText}
@@ -95,8 +98,8 @@ export function JobFilterBar({
           }}
         />
         <Select
-          aria-label="岗位类型筛选"
-          placeholder="类型"
+          aria-label={t("jobsPage.filter.jobTypeAria")}
+          placeholder={t("jobsPage.filter.jobTypePlaceholder")}
           allowClear
           disabled={batchAction !== null}
           style={{ width: 110 }}
@@ -108,8 +111,8 @@ export function JobFilterBar({
           options={JOB_TYPE_OPTIONS}
         />
         <Select
-          aria-label="岗位状态筛选"
-          placeholder="状态"
+          aria-label={t("jobsPage.filter.statusAria")}
+          placeholder={t("jobsPage.filter.statusPlaceholder")}
           allowClear
           disabled={batchAction !== null}
           style={{ width: 110 }}
@@ -121,8 +124,8 @@ export function JobFilterBar({
           options={STATUS_OPTIONS}
         />
         <Select
-          aria-label="来源筛选"
-          placeholder="来源"
+          aria-label={t("jobsPage.filter.sourceAria")}
+          placeholder={t("jobsPage.filter.sourcePlaceholder")}
           allowClear
           disabled={batchAction !== null}
           style={{ width: 120 }}
@@ -131,7 +134,10 @@ export function JobFilterBar({
             setSourceKind((value ?? "") as "" | "collected" | "manual");
             setPage(1);
           }}
-          options={SOURCE_KIND_OPTIONS}
+          options={SOURCE_KIND_OPTIONS.map((option) => ({
+            value: option.value,
+            label: t(option.labelKey),
+          }))}
         />
         {/* 进入选择模式的入口在行右键菜单的「批量选择」（R8）；退出选择已挪到
             BatchToolbar 的「全选全部岗位」右侧（用户要求，两行各归其位）。 */}
@@ -142,37 +148,37 @@ export function JobFilterBar({
           disabled={batchAction !== null}
           onClick={() => openMatchBatch("setup")}
         >
-          AI 分析适配度
+          {t("jobsPage.filter.analyzeMatch")}
         </Button>
         <Button
           icon={<HistoryOutlined />}
           disabled={batchAction !== null}
           onClick={() => openMatchBatch("history")}
         >
-          分析记录
+          {t("jobsPage.filter.matchHistory")}
         </Button>
         <Button
           icon={<InboxOutlined />}
           disabled={batchAction !== null}
           onClick={() => setCandidatesOpen(true)}
         >
-          备选岗位
+          {t("jobsPage.filter.candidates")}
         </Button>
         {emptyDescriptionJobIds.length > 0 && (
           // 只在有 JD 为空的岗位时才出现——否则按钮点了什么也不会发生。
           // 显式 aria-label：antd 会给纯中文按钮做字距处理，用文本当查询条件可能找不到。
           <Button
             icon={<ReloadOutlined />}
-            aria-label="补齐详情"
+            aria-label={t("jobsPage.filter.backfill")}
             disabled={batchAction !== null}
             loading={backfilling}
             onClick={() => void backfillDetails()}
           >
-            补齐详情
+            {t("jobsPage.filter.backfill")}
           </Button>
         )}
         <Button icon={<UploadOutlined />} disabled={batchAction !== null} onClick={onImportCsv}>
-          导入 CSV
+          {t("jobsPage.filter.importCsv")}
         </Button>
         <Button
           type="primary"
@@ -180,24 +186,24 @@ export function JobFilterBar({
           disabled={batchAction !== null}
           onClick={() => setFormOpen(true)}
         >
-          手动添加
+          {t("jobsPage.filter.addManual")}
         </Button>
         {/* 恢复默认排序（E）：排序一旦点上列头就没有"取消"的可视入口，这里给一个
             明确的退路；点击同时回到第 1 页（停在第 3 页看默认排序的前几条没有意义）。 */}
         <Tooltip
           title={
             isDefaultJobSort(sortState)
-              ? "当前已是默认排序：最近导入在前"
-              : "恢复默认排序：最近导入在前"
+              ? t("jobsPage.filter.sortResetHintDefault")
+              : t("jobsPage.filter.sortResetHint")
           }
         >
           <Button
             icon={<UndoOutlined />}
-            aria-label="恢复默认排序"
+            aria-label={t("jobsPage.filter.sortReset")}
             disabled={batchAction !== null || isDefaultJobSort(sortState)}
             onClick={() => applySort(DEFAULT_JOB_SORT_STATE)}
           >
-            恢复默认排序
+            {t("jobsPage.filter.sortReset")}
           </Button>
         </Tooltip>
       </Space>
