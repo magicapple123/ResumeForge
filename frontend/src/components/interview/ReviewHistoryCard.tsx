@@ -9,6 +9,8 @@ import { Alert, Button, Card, Collapse, Space, Typography } from "antd";
 import EmptyState from "../common/EmptyState";
 import { RowActions } from "../common/RowActions";
 import type { InterviewReviewRecord } from "../../types";
+import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 
 interface Props {
   /** ``null`` 表示尚未加载完成（与父组件 useApi 的 data 语义对齐）。 */
@@ -27,11 +29,15 @@ export default function ReviewHistoryCard({
   onOpenRecord,
   onRemove,
 }: Props) {
+  // 本组件用模块级 t()：必须订阅语言变化，否则切语言后这一块不重渲染。
+  useLocale();
   const items = (reviews ?? []).map((review) => ({
     key: String(review.id),
     label: (
       <Space wrap>
-        <span>{review.resume_title || review.job_title || "复盘"}</span>
+        <span>
+          {review.resume_title || review.job_title || t("interview.reviewHistory.fallbackTitle")}
+        </span>
         <Typography.Text type="secondary" style={{ fontSize: 12 }}>
           {review.created_at.replace("T", " ").slice(0, 16)}
         </Typography.Text>
@@ -41,7 +47,9 @@ export default function ReviewHistoryCard({
       <Space orientation="vertical" style={{ width: "100%" }}>
         {review.questions.length > 0 && (
           <>
-            <Typography.Text strong>真实问题</Typography.Text>
+            <Typography.Text strong>
+              {t("interview.reviewHistory.section.questions")}
+            </Typography.Text>
             <ul style={{ paddingLeft: 20, margin: "4px 0" }}>
               {review.questions.map((item) => (
                 <li key={item}>{item}</li>
@@ -56,7 +64,7 @@ export default function ReviewHistoryCard({
         )}
         {review.suggestions.length > 0 && (
           <>
-            <Typography.Text strong>简历改进建议</Typography.Text>
+            <Typography.Text strong>{t("interview.suggestions.title")}</Typography.Text>
             <ul style={{ paddingLeft: 20, margin: "4px 0" }}>
               {review.suggestions.map((item) => (
                 <li key={item.suggestion}>{item.suggestion}</li>
@@ -67,17 +75,17 @@ export default function ReviewHistoryCard({
         <Space wrap>
           {onOpenRecord && (
             <Button size="small" onClick={() => onOpenRecord(review)}>
-              查看详情
+              {t("interview.reviewHistory.action.detail")}
             </Button>
           )}
           <RowActions
             more={[
               {
                 key: "delete",
-                label: "删除复盘历史",
+                label: t("interview.reviewHistory.action.delete"),
                 danger: true,
                 icon: <DeleteOutlined />,
-                confirm: "删除这条复盘历史？",
+                confirm: t("interview.reviewHistory.confirm.delete"),
                 onClick: () => onRemove(review.id),
               },
             ]}
@@ -93,16 +101,16 @@ export default function ReviewHistoryCard({
       title={
         <Space>
           <HistoryOutlined />
-          历史复盘
+          {t("interview.reviewHistory.title")}
         </Space>
       }
     >
       {loading && !reviews ? (
-        <Alert type="info" showIcon title="加载中…" />
+        <Alert type="info" showIcon title={t("interview.reviewHistory.loading")} />
       ) : error ? (
         <Alert type="error" showIcon title={error} />
       ) : (reviews ?? []).length === 0 ? (
-        <EmptyState inline description="还没有保存过复盘" />
+        <EmptyState inline description={t("interview.reviewHistory.empty")} />
       ) : (
         <Collapse items={items} />
       )}
