@@ -5,6 +5,8 @@
  */
 import { DeleteOutlined, PictureOutlined } from "@ant-design/icons";
 import { Button, Form, Image, Space, Typography, Upload } from "antd";
+import { t } from "../../../i18n";
+import { useLocale } from "../../../i18n/i18nContext";
 
 /** 与后端 MAX_JOB_NOTE_IMAGES 一致（服务端仍是权威校验）。 */
 export const MAX_NOTE_IMAGES = 2;
@@ -16,8 +18,9 @@ interface Props {
 }
 
 export default function NoteImagesField({ noteImages, onAddImage, onRemove }: Props) {
+  useLocale();
   return (
-    <Form.Item label={`备注图片（选填，最多 ${MAX_NOTE_IMAGES} 张）`}>
+    <Form.Item label={t("jobsForm.noteImages.label", { count: MAX_NOTE_IMAGES })}>
       <Space orientation="vertical" style={{ width: "100%" }}>
         <Space wrap>
           <Upload
@@ -28,22 +31,26 @@ export default function NoteImagesField({ noteImages, onAddImage, onRemove }: Pr
               return Upload.LIST_IGNORE;
             }}
           >
-            <Button icon={<PictureOutlined />}>添加图片</Button>
+            <Button icon={<PictureOutlined />}>{t("jobsForm.noteImages.add")}</Button>
           </Upload>
           <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-            招聘截图、内推码等，每张不超过 2 MB
+            {t("jobsForm.noteImages.hint")}
           </Typography.Text>
         </Space>
         {noteImages.length > 0 && (
           <Space wrap>
             {noteImages.map((source, index) => (
               <div key={`${index}-${source.slice(-16)}`} className="job-note-image-item">
-                <Image src={source} alt={`备注图片 ${index + 1}`} width={96} />
+                <Image
+                  src={source}
+                  alt={t("jobsForm.noteImages.imageAlt", { index: index + 1 })}
+                  width={96}
+                />
                 <Button
                   type="text"
                   size="small"
                   danger
-                  aria-label={`移除备注图片 ${index + 1}`}
+                  aria-label={t("jobsForm.noteImages.remove", { index: index + 1 })}
                   icon={<DeleteOutlined />}
                   onClick={() => onRemove(index)}
                 />
