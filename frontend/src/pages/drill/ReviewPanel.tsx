@@ -3,34 +3,27 @@
 import { Alert, Listy, Space, Tag, Typography } from "antd";
 import { ListyItem } from "../../components/common/ListyItem";
 import { LISTY_ITEM_PADDING_SMALL } from "../../components/common/listyPadding";
-import { t, type MessageKey } from "../../i18n";
+import { t } from "../../i18n";
+import { ACTION_KIND_HINT_KEYS, ACTION_KIND_LABEL_KEYS } from "../../i18n/enum/drill";
 import { useLocale } from "../../i18n/i18nContext";
 import type { DrillSession } from "../../types";
 import { RehearsalPanel } from "./RehearsalPanel";
 
 /**
- * 行动类型是后端返回的协议值（中文），展示名与一句说明在语言包里。
- * 映射放在这里（协议值 → MessageKey），不改 `types/drill.ts` 的类型层。
+ * 认不出的协议值原样显示，保证后端新增类型时不至于渲染空白。
+ *
+ * 行动类型由后端下发（协议值本身是中文），展示名与一句说明在 `i18n/enum/drill.ts` 的
+ * 两张 key 表里；`types/drill.ts` 是协议值的来源，展示名不往类型层加。
  */
-const ACTION_KIND_COPY: Partial<Record<string, { labelKey: MessageKey; hintKey: MessageKey }>> = {
-  补事实: { labelKey: "drill.review.kind.addFact", hintKey: "drill.review.hint.addFact" },
-  补知识: { labelKey: "drill.review.kind.addKnowledge", hintKey: "drill.review.hint.addKnowledge" },
-  降表述: {
-    labelKey: "drill.review.kind.downgradeClaim",
-    hintKey: "drill.review.hint.downgradeClaim",
-  },
-};
-
-/** 认不出的协议值原样显示，保证后端新增类型时不至于渲染空白。 */
 function actionKindLabel(kind: string): string {
-  const copy = ACTION_KIND_COPY[kind];
-  return copy ? t(copy.labelKey) : kind;
+  const key = ACTION_KIND_LABEL_KEYS[kind];
+  return key ? t(key) : kind;
 }
 
 /** 同类操作的一句说明；没有就返回空串，由调用方决定不渲染。 */
 function actionKindHint(kind: string): string {
-  const copy = ACTION_KIND_COPY[kind];
-  return copy ? t(copy.hintKey) : "";
+  const key = ACTION_KIND_HINT_KEYS[kind];
+  return key ? t(key) : "";
 }
 
 export function ReviewPanel({ session }: { session: DrillSession }) {
