@@ -17,6 +17,7 @@ import { act, cleanup, fireEvent, render, screen, within } from "@testing-librar
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import AppShell from "./AppShell";
+import { t } from "../../i18n";
 import { PRIMARY_NAVIGATION_ITEMS } from "../navigation/navigationConfig";
 
 /**
@@ -210,8 +211,8 @@ describe("AppShell · 空闲预热（A04）", () => {
     }
 
     const home = PRIMARY_NAVIGATION_ITEMS[0];
-    fireEvent.mouseEnter(within(menu()).getByText(home.label));
-    fireEvent.click(within(menu()).getByText(home.label));
+    fireEvent.mouseEnter(within(menu()).getByText(t(home.labelKey)));
+    fireEvent.click(within(menu()).getByText(t(home.labelKey)));
     await act(async () => {
       await vi.advanceTimersByTimeAsync(50);
     });
@@ -219,6 +220,6 @@ describe("AppShell · 空闲预热（A04）", () => {
     // 调用可以重复（悬停 + 点击各一次），但底层加载只有一次。
     expect(registryMock.preloadCalls.get("HomePage")).toBe(3);
     expect(registryMock.loads.get("HomePage")).toBe(1);
-    expect(screen.getAllByText(home.label).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(t(home.labelKey)).length).toBeGreaterThan(0);
   });
 });

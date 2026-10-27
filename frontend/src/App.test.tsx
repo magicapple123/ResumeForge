@@ -4,7 +4,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter } from "react-router-dom";
 import App from "./App";
 import pkg from "../package.json";
-import { APP_NAME, GITHUB_REPO } from "./config";
+import { APP_NAME_KEY, GITHUB_REPO } from "./config";
+import { t } from "./i18n";
 
 vi.mock("./pages/HomePage", () => ({ default: () => <div>首页内容</div> }));
 vi.mock("./pages/JobsPage", () => ({ default: () => <div>岗位广场内容</div> }));
@@ -90,7 +91,7 @@ describe("application navigation", () => {
     expect(await screen.findByText("岗位广场内容")).toBeInTheDocument();
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "功能导航" })).toBeNull());
     expect(screen.getByRole("main")).toHaveFocus();
-    expect(document.title).toBe(`岗位广场 · ${APP_NAME}`);
+    expect(document.title).toBe(`岗位广场 · ${t(APP_NAME_KEY)}`);
   });
 
   it("shows the app version next to the brand name, matching package.json", async () => {
@@ -167,7 +168,7 @@ describe("application navigation", () => {
     const repoLink = headerActions?.querySelector(".app-repo-button");
     expect(repoLink).not.toBeNull();
     expect(repoLink).toHaveAttribute("href", GITHUB_REPO);
-    expect(repoLink).toHaveAttribute("aria-label", `在 GitHub 上查看 ${APP_NAME} 源码`);
+    expect(repoLink).toHaveAttribute("aria-label", `在 GitHub 上查看 ${t(APP_NAME_KEY)} 源码`);
     // 页头里必须和「退出」并排，且页脚不再有第二个源码入口。
     expect(headerActions?.textContent).toContain("退出");
     expect(container.querySelector(".app-sider-footer .app-repo-button")).toBeNull();
