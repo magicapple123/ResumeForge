@@ -25,7 +25,6 @@ const jobTable = {
   "jobTable.action.write": "自行编写",
   "jobTable.action.resumes": "相关简历",
   "jobTable.action.edit": "编辑",
-  "jobTable.action.batchSelect": "批量选择",
   "jobTable.sort.title": "按岗位名称排序",
   "jobTable.sort.company": "按公司名称排序",
   "jobTable.sort.postedAt": "按发布时间排序（没有发布时间的按导入时间）",

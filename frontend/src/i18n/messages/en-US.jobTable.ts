@@ -27,7 +27,6 @@ const jobTable = {
   "jobTable.action.write": "Write it myself",
   "jobTable.action.resumes": "Related resumes",
   "jobTable.action.edit": "Edit",
-  "jobTable.action.batchSelect": "Select multiple",
   "jobTable.sort.title": "Sort by job title",
   "jobTable.sort.company": "Sort by company name",
   "jobTable.sort.postedAt": "Sort by posting date (jobs without one use their import date)",

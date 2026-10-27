@@ -261,7 +261,7 @@ export default function JobTable({
       : [
           {
             key: "batch_select",
-            label: t("jobTable.action.batchSelect"),
+            label: t("common.action.batchSelect"),
             icon: <CheckSquareOutlined />,
             onClick: onEnterSelecting,
           } satisfies RowActionItem,
