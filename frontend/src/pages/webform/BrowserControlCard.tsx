@@ -14,6 +14,7 @@ import { Button, Card, Spin, Tag, Tooltip, Typography } from "antd";
 import { memo } from "react";
 import { t } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
+import { BROWSER_STATE_LABEL_KEYS } from "../../i18n/enum/apply";
 import WebFormBrowserUrlBar from "../../components/webform/WebFormBrowserUrlBar";
 import { BROWSER_STATE_META } from "../../types";
 import type { BrowserState, WebFormUrlHistory } from "../../types";
@@ -83,7 +84,10 @@ export const BrowserControlCard = memo(function BrowserControlCard({
       {/* 轮询状态行：对读屏器 polite 播报状态变化（Tag 文字变化时才触发，不会逐秒骚扰）。 */}
       <div className="webform-browser-status-row">
         <div className="webform-browser-status" aria-live="polite">
-          <Tag color={stateMeta.color}>{stateMeta.label}</Tag>
+          {/* 状态名走语言包，颜色仍来自 `BROWSER_STATE_META`（唯一来源）。 */}
+          <Tag color={stateMeta.color}>
+            {t(BROWSER_STATE_LABEL_KEYS[browserState ?? "stopped"])}
+          </Tag>
           {browserLoading && !browserHasData ? <Spin size="small" /> : null}
           <Typography.Text type="secondary">
             {t("webFormPage.browserCard.isolatedHint")}
