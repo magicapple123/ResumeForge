@@ -28,7 +28,6 @@ import EmptyState from "../components/common/EmptyState";
 import PageSkeleton from "../components/common/PageSkeleton";
 import BatchActionBar from "../components/common/BatchActionBar";
 import { RowActions, RowContextMenu, type RowMenuItem } from "../components/common/RowActions";
-import { HARD_DELETE_NOTE } from "../components/common/rowActionMenu";
 import { useBatchSelection } from "../hooks/useBatchSelection";
 import { ListyItem } from "../components/common/ListyItem";
 import { LISTY_ITEM_PADDING_SMALL } from "../components/common/listyPadding";
@@ -43,21 +42,13 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useClientPagination } from "../hooks/useClientPagination";
 import { deleteDrillSession, getDrillSession, listDrillSessions } from "../api/drill";
-import type { DrillSession, DrillSessionBrief, FeedbackPolicy } from "../types";
+import type { DrillSession, DrillSessionBrief } from "../types";
 import { ActiveSession } from "./drill/ActiveSession";
 import { ReviewPanel } from "./drill/ReviewPanel";
 import { StartPanel } from "./drill/StartPanel";
-import { t, type MessageKey } from "../i18n";
+import { t } from "../i18n";
+import { FEEDBACK_POLICY_LABEL_KEYS } from "../i18n/enum/drill";
 import { useLocale } from "../i18n/i18nContext";
-
-/**
- * 反馈策略是协议值，展示名在语言包里。这里沿用 `drill.startPanel.feedback.*` 那组 key
- * （与开场面板的选项逐字一致）；`types/drill.ts` 的 `FEEDBACK_LABELS` 属类型层，按约定不改。
- */
-const FEEDBACK_LABEL_KEYS: Record<FeedbackPolicy, MessageKey> = {
-  deferred: "drill.startPanel.feedback.deferred",
-  immediate: "drill.startPanel.feedback.immediate",
-};
 
 export default function DrillPage() {
   useLocale();
@@ -154,8 +145,10 @@ export default function DrillPage() {
     modal.confirm({
       title: t("drill.confirm.deleteTitle"),
       // 标题只说动作 + 对象；条数与后果进正文（§4.4 的例外：数量让标题超 12 字）。
-      // i18n-ok: 正文后缀是共用常量 HARD_DELETE_NOTE（含中文），待常量收口后整句一起迁移
-      content: `这 ${ids.length} 场深挖${HARD_DELETE_NOTE}`,
+      content: t("drill.confirm.deleteManyBody", {
+        count: ids.length,
+        note: t("common.note.hardDelete"),
+      }),
       okText: t("common.action.delete"),
       okButtonProps: { danger: true },
       onOk: async () => {
@@ -199,7 +192,7 @@ export default function DrillPage() {
       label: t("drill.action.delete"),
       danger: true,
       confirm: t("drill.confirm.deleteOne"),
-      confirmBody: HARD_DELETE_NOTE,
+      confirmBody: t("common.note.hardDelete"),
       onClick: () => void remove(item.id),
     },
   ];
@@ -268,7 +261,7 @@ export default function DrillPage() {
               <Tag color={finished ? "default" : "processing"}>
                 {finished ? t("drill.status.finished") : t("drill.status.active")}
               </Tag>
-              <Tooltip title={t(FEEDBACK_LABEL_KEYS[current.feedback_policy])}>
+              <Tooltip title={t(FEEDBACK_POLICY_LABEL_KEYS[current.feedback_policy])}>
                 <Tag>
                   {current.feedback_policy === "deferred"
                     ? t("drill.mode.simulated")
@@ -358,7 +351,7 @@ export default function DrillPage() {
                                   label: t("drill.action.delete"),
                                   danger: true,
                                   confirm: t("drill.confirm.deleteOne"),
-                                  confirmBody: HARD_DELETE_NOTE,
+                                  confirmBody: t("common.note.hardDelete"),
                                   onClick: () => void remove(item.id),
                                 },
                               ]}
