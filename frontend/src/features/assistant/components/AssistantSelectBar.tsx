@@ -3,7 +3,6 @@
 
 import { DeleteOutlined, CloseOutlined } from "@ant-design/icons";
 import { App, Button, Space, Typography } from "antd";
-import { HARD_DELETE_NOTE } from "../../../components/common/rowActionMenu";
 import { t } from "../../../i18n";
 import { useLocale } from "../../../i18n/i18nContext";
 
@@ -31,10 +30,10 @@ export default function AssistantSelectBar({ disabled, onDelete, onExit, selecte
           onClick={() =>
             modal.confirm({
               title: t("assistantUi.selectBar.confirm.title"),
-              // HARD_DELETE_NOTE 是删除后果的唯一出口；迁出语言包前先按原文拼接。
+              // 删除后果的唯一出处是 common.note.hardDelete（语言包），这里只做拼接。
               content: t("assistantUi.selectBar.confirm.content", {
                 count: selectedCount,
-                note: HARD_DELETE_NOTE,
+                note: t("common.note.hardDelete"),
               }),
               okText: t("common.action.delete"),
               okButtonProps: { danger: true },
