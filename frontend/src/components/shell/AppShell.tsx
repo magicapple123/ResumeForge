@@ -18,11 +18,13 @@ import {
   NAVIGATION_ITEMS,
   PRIMARY_NAVIGATION_ITEMS,
   filterNavigationItems,
-  navigationPageLabel,
+  navigationPageLabelKey,
   pathMatchesNavigationItem,
 } from "../../components/navigation/navigationConfig";
 import TaskCompletionNotifier from "../../components/TaskCompletionNotifier";
-import { APP_NAME, APP_VERSION } from "../../config";
+import { APP_NAME_KEY, APP_VERSION } from "../../config";
+import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 import GlobalOverlays from "../../components/GlobalOverlays";
 import AiPolishLayer from "../../features/ai-polish/AiPolishLayer";
 import ShortcutProvider from "../../features/shortcuts/ShortcutProvider";
@@ -81,6 +83,7 @@ const { Sider, Header, Content } = Layout;
  * 加分组标题会把 13 项挤成两屏。
  */
 export default function AppShell() {
+  const locale = useLocale();
   const shell = useResponsiveShell();
   const navigate = useNavigate();
   const location = useLocation();
@@ -151,17 +154,17 @@ export default function AppShell() {
       visiblePrimaryItems.map((item) => ({
         key: item.key,
         icon: item.icon,
-        "aria-label": item.label,
+        "aria-label": t(item.labelKey),
         label: (
           <span
             onMouseEnter={() => void preloadPage(item.key)}
             onFocus={() => void preloadPage(item.key)}
           >
-            {item.label}
+            {t(item.labelKey)}
           </span>
         ),
       })),
-    [preloadPage, visiblePrimaryItems],
+    [locale, preloadPage, visiblePrimaryItems],
   );
   const selectedKey =
     NAVIGATION_ITEMS.find((item) => pathMatchesNavigationItem(location.pathname, item))?.key ?? "/";
@@ -303,7 +306,7 @@ export default function AppShell() {
                   if (typeof content?.scrollTo === "function") content.scrollTo(position);
                   if (typeof window.scrollTo === "function") window.scrollTo(position);
                 }}
-                aria-label="回到当前页面顶部"
+                aria-label={t("navigation.shell.scrollTop")}
               >
                 {/* 用 import 拿到带 base 前缀的 URL，不要写死 "/resumeforge-icon.png"：
                   在线体验构建把产物部署在 GitHub Pages 的**子路径**（base: "./"）下，
@@ -312,16 +315,16 @@ export default function AppShell() {
               </button>
               <span className="app-brand-copy">
                 <span className="app-brand-name">
-                  {APP_NAME}
+                  {t(APP_NAME_KEY)}
                   {/* 版本号低调跟在应用名旁：次要文字色 + 小字号，不抢视觉；
                     说明走 Tooltip 而不是原生 title —— 后者只对鼠标可见，键盘用户与读屏
                     都拿不到"这是什么"。Tooltip 不产生 DOM，`className` 仍留在 span 上，
                     页头品牌区的布局不受影响。值来自 package.json（版本单源）。 */}
-                  <Tooltip title="当前版本">
+                  <Tooltip title={t("navigation.shell.versionTooltip")}>
                     <span className="app-brand-version">v{APP_VERSION}</span>
                   </Tooltip>
                 </span>
-                <span className="app-brand-caption">AI 简历工作台</span>
+                <span className="app-brand-caption">{t("navigation.shell.brandCaption")}</span>
               </span>
             </div>
             <Menu
@@ -342,9 +345,9 @@ export default function AppShell() {
                   type="text"
                   icon={<QuestionCircleOutlined />}
                   onClick={() => setGuideOpen(true)}
-                  aria-label="使用指南"
+                  aria-label={t("navigation.guide.open")}
                 >
-                  <span className="app-guide-label">使用指南</span>
+                  <span className="app-guide-label">{t("navigation.guide.open")}</span>
                 </Button>
                 {/* 开源仓库入口在页头右上角（见下面的 Header）。检查更新入口已按用户
                   要求从左下角移除：统一走「设置」页的更新卡片。 */}
@@ -358,15 +361,15 @@ export default function AppShell() {
                 className="app-mobile-menu-button"
                 id="mobile-navigation-trigger"
                 icon={<MenuOutlined />}
-                aria-label="打开导航"
+                aria-label={t("navigation.shell.openMenu")}
                 aria-expanded={mobileNavigationOpen}
                 aria-controls={mobileNavigationOpen ? "mobile-navigation" : undefined}
                 onClick={() => setMobileNavigationOpen(true)}
               />
               <Typography.Text strong className="app-header-title">
-                AI 定制化简历生成平台
+                {t("navigation.shell.title")}
                 <span className="app-header-page-label">
-                  {navigationPageLabel(location.pathname)}
+                  {t(navigationPageLabelKey(location.pathname))}
                 </span>
               </Typography.Text>
               <AppHeaderActions
