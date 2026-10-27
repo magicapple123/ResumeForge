@@ -1,200 +1,196 @@
 // SPDX-License-Identifier: Apache-2.0
-/** 使用指南数据：resumeSteps（数据文件，中文正文沿用指南既有豁免形态）。 */
+/** 使用指南数据：resumeSteps（正文在 `userGuide.*` 语言包里，这里只存 key）。 */
 import { FileTextOutlined } from "@ant-design/icons";
 import type { GuideStep } from "./guideTypes";
 
 export const RESUME_STEPS: GuideStep[] = [
   {
-    title: "制作简历",
-    heading: "按岗位生成，或写一份通用的",
-    description:
-      "从岗位进入简历流程，预览后可只改点中的那一处，或用「手动调整」通改，再保存历史记录并导出。",
+    titleKey: "userGuideFlow.resume.step1.title",
+    headingKey: "userGuideFlow.resume.step1.heading",
+    descriptionKey: "userGuideFlow.resume.step1.description",
     points: [
       {
-        lead: "三种入口",
-        // i18n-ok: 使用指南正文
-        text: "本页页头的「AI 生成」不绑定岗位，生成一份通用简历（按当前方案包含的板块取资料，不按方向筛选）；「新建简历」是按当前方案资料预填的手写入口，页签也只显示当前方案有的分区；从岗位详情进入的 AI 生成会按该岗位筛选资料并可选择美化程度。",
+        leadKey: "userGuideFlow.resume.step1.point1.lead",
+        textKey: "userGuideFlow.resume.step1.point1.text",
       },
       {
-        lead: "长 CV 生成", // i18n-ok: 使用指南正文
-        // i18n-ok: 使用指南正文
-        text: "生成弹窗的「文档模式」可选「普通简历」（1–3 页）或「长 CV」（最多 10 页）。长 CV 只是显式选择的页数策略，不会自动切换；超页会如实提示，不自动缩小字号。",
+        leadKey: "userGuideFlow.resume.step1.point2.lead",
+        textKey: "userGuideFlow.resume.step1.point2.text",
       },
       {
-        lead: "用于本次生成", // i18n-ok: 使用指南正文
-        // i18n-ok: 使用指南正文
-        text: "生成弹窗里的「职业场景（用于本次生成）」默认关闭；打开并选中场景后，服务端只发送允许的表达维度并冻结一份快照（不发送姓名、联系方式；就业状态默认不发送）。关闭时请求与旧版本完全一致。",
+        leadKey: "userGuideFlow.resume.step1.point3.lead",
+        textKey: "userGuideFlow.resume.step1.point3.text",
       },
       {
         // 入口 2026-10-24 从「我的资料」页撤掉，统一走这一页的「新建简历」：
         // 指南里不能再说"资料页上方那张卡片"。
-        lead: "通用简历",
-        text: "方向还没定时用：不绑定岗位，入口是本页页头「新建简历」（标题「从头编写通用简历」），按当前方案预填资料；页签、页签名与可见字段随当前方案在创建时冻结，之后改方案不影响这份简历。另一个窗口改资料/切组后自动刷新；有未保存修改先问覆盖还是保留。保存只写这份简历、不改资料。",
+        leadKey: "userGuideFlow.resume.step1.point4.lead",
+        textKey: "userGuideFlow.resume.step1.point4.text",
       },
       {
-        lead: "从资料填入",
-        text: "自己写简历时，每个模块顶部有「从我的资料追加一条」、每个条目旁有「从资料填入本条」：选中一条点「填入」，前者在末尾加一条，后者只补当前这条的空字段；已用过的标「已加入」并禁用，不重复也不覆盖手写内容。候选跟随当前方案，资料变化或切组后自动刷新。岗位详情进入时只有模块顶部追加，条目旁不显示。",
+        leadKey: "userGuideFlow.resume.step1.point5.lead",
+        textKey: "userGuideFlow.resume.step1.point5.text",
       },
       {
-        lead: "生成是后台任务",
-        text: "弹窗里显示「整理资料 → 筛选资料 → 调用模型生成 → 校验修复 → 完成」的阶段条和「已接收 N 字」的实时计数——没有百分比，因为模型逐字输出、总长未知。",
+        leadKey: "userGuideFlow.resume.step1.point6.lead",
+        textKey: "userGuideFlow.resume.step1.point6.text",
       },
       {
-        lead: "可以关掉弹窗",
-        text: "生成期间放心关掉，任务会在后台继续，完成后会弹「简历已生成」通知并直接打开结果；点「取消生成」才真正中断，且取消后不保存任何半成品。",
+        leadKey: "userGuideFlow.resume.step1.point7.lead",
+        textKey: "userGuideFlow.resume.step1.point7.text",
       },
       {
-        lead: "篇幅与字号",
-        text: "生成前可选最大篇幅（1-3 页 A4）与字号（5-18px、0.1px 步进，小于 8px 会提示打印可能看不清），默认一页 + 标准字号；旁边「字体」可按这份简历挑一款已下载或已导入的字体（内置的思源黑体要先在设置里下载）。",
+        leadKey: "userGuideFlow.resume.step1.point8.lead",
+        textKey: "userGuideFlow.resume.step1.point8.text",
       },
       {
         // 与版式同一组：语言只改纸面固定文案，正文不翻译——不写清楚会被当成"翻译功能坏了"。
-        lead: "简历语言",
-        text: "导出前可以在排版设置里选「简历语言」，它只改小节标题与字段名（如 Education / Skills），不会翻译你写的内容。",
+        leadKey: "userGuideFlow.resume.step1.point9.lead",
+        textKey: "userGuideFlow.resume.step1.point9.text",
       },
       {
-        lead: "版面诊断",
-        text: "预览上方会显示正文**占了页面**的百分之多少，并告诉你该按什么顺序改；多页简历另看末页是否太空。",
+        leadKey: "userGuideFlow.resume.step1.point10.lead",
+        textKey: "userGuideFlow.resume.step1.point10.text",
       },
       {
-        lead: "自动一页",
-        text: "内容塞不下时按钮才会出现：它按「页边距 → 区块间距 → 行高 → 字号」逐档收紧，**够放下就停**，不会一步把字缩到最小。",
+        leadKey: "userGuideFlow.resume.step1.point11.lead",
+        textKey: "userGuideFlow.resume.step1.point11.text",
       },
       {
-        lead: "缩到多小为止",
-        text: "**自动一页**最多把字号缩到 11px（手动滑块可以更小，最小 5px）；排版参数收到最紧还是放不下时，它会如实说，而不是假装成功。",
+        leadKey: "userGuideFlow.resume.step1.point12.lead",
+        textKey: "userGuideFlow.resume.step1.point12.text",
       },
       {
-        lead: "科研简历", // i18n-ok: 使用指南正文（与 docs/user-guide.md 同源的数据文件）
-        text: "制作台中栏有学术成果、科研项目、知识产权三栏：题目、作者顺序与本人标记、发表状态（在投不会被写成已发表）、DOI / 链接都能录；参数栏「文档模式」可切「长 CV」（上限 10 页，普通简历 1–3 页）。", // i18n-ok: 使用指南正文（与 docs/user-guide.md 同源的数据文件）
+        leadKey: "userGuideFlow.resume.step1.point13.lead",
+        textKey: "userGuideFlow.resume.step1.point13.text",
       },
       {
-        lead: "语言能力独立栏目",
-        text: "语言能力在简历里是独立栏目（制作台左栏也有独立「语言能力」页签），按语言（水平 · 证书 · 分数）展示、取得时间作行尾说明，不再并入专业技能；模型漏写时后端也会按资料补回。",
+        leadKey: "userGuideFlow.resume.step1.point14.lead",
+        textKey: "userGuideFlow.resume.step1.point14.text",
       },
       {
-        lead: "版面优化", // i18n-ok: 使用指南正文（与 docs/user-guide.md 同源的数据文件）
-        text: "预览「版面诊断」卡下方能按条件优化版面：先设「不动字号 / 最小页边距 / 目标篇幅」，再看最多 3 个候选（改了哪些参数、减少多少溢出、可读性影响）；点「应用这个方案」会把数值写回滑杆，不偷偷缩字号。", // i18n-ok: 使用指南正文（与 docs/user-guide.md 同源的数据文件）
+        leadKey: "userGuideFlow.resume.step1.point15.lead",
+        textKey: "userGuideFlow.resume.step1.point15.text",
       },
       {
-        lead: "内容精简候选", // i18n-ok: 使用指南正文（与 docs/user-guide.md 同源的数据文件）
-        text: "版面优化除收紧排版，还给内容层候选：合并重复条目、删除重复要点、合并短要点，有岗位信号时精简低相关要点；每个候选列出改动，先看差异、确认才写入（可撤销），无方案时说明原因。", // i18n-ok: 使用指南正文
+        leadKey: "userGuideFlow.resume.step1.point16.lead",
+        textKey: "userGuideFlow.resume.step1.point16.text",
       },
       {
-        lead: "来源与事实锁", // i18n-ok: 使用指南正文（与 docs/user-guide.md 同源的数据文件）
-        text: "制作台左栏「来源」显示选中内容来自哪条资料、关联时是哪一版，未关联不猜；可建立关联（含手工来源），来源更新后可确认后采纳写回。事实锁锁住关键事实，AI 改写被拒并逐条列值，手动编辑不受限。", // i18n-ok: 使用指南正文（与 docs/user-guide.md 同源的数据文件）
+        leadKey: "userGuideFlow.resume.step1.point17.lead",
+        textKey: "userGuideFlow.resume.step1.point17.text",
       },
       {
-        lead: "外发预览与用量", // i18n-ok: 使用指南正文（与 docs/user-guide.md 同源的数据文件）
-        text: "设置页能看「外发前预览」（这次要发什么：目标服务、资料类别、附件、排除字段与正文）和「模型用量」（按任务 / 模型列调用数与 token；未知 token 不算 0）；预览正文只存在内存、不落盘。", // i18n-ok: 使用指南正文（与 docs/user-guide.md 同源的数据文件）
+        leadKey: "userGuideFlow.resume.step1.point18.lead",
+        textKey: "userGuideFlow.resume.step1.point18.text",
       },
       {
-        lead: "文档大纲", // i18n-ok: 使用指南正文（与 docs/user-guide.md 同源的数据文件）
-        text: "制作台左栏「文档大纲」按板块列条目与要点：可排序、复制、隐藏、锁内容或锁排版；顶部可搜索大纲并从纸面定位后恢复滚动，要点也能单独隐藏或复制；隐藏内容不进任何导出。拖拽排序时大纲树与右侧预览实时跟随（屏幕窄、编辑内容收进抽屉时同样生效，并会算进保存修改），松手才记一步历史；条目与要点手柄样式不同。", // i18n-ok: 使用指南正文（与 docs/user-guide.md 同源的数据文件）
+        leadKey: "userGuideFlow.resume.step1.point19.lead",
+        textKey: "userGuideFlow.resume.step1.point19.text",
       },
       {
-        lead: "保存冲突", // i18n-ok: 使用指南正文（与 docs/user-guide.md 同源的数据文件）
-        text: "在「简历制作台」保存时，如果同一份简历已在别的窗口改过，会先让你选「用最新的 / 比较差异 / 另存副本」，**不会直接覆盖**别人的改动。", // i18n-ok: 使用指南正文（与 docs/user-guide.md 同源的数据文件）
+        leadKey: "userGuideFlow.resume.step1.point20.lead",
+        textKey: "userGuideFlow.resume.step1.point20.text",
       },
       {
-        lead: "检查简历", // i18n-ok: 使用指南正文（与 docs/user-guide.md 同源的数据文件）
-        text: "制作台动作条「检查简历」三层检查内容、排版与导出产物，问题分级并给修复入口，修完可复检；还会查关键链接与导出脱敏状态，导出前核对用服务端同快照摘要。", // i18n-ok: 使用指南正文（与 docs/user-guide.md 同源的数据文件）
+        leadKey: "userGuideFlow.resume.step1.point21.lead",
+        textKey: "userGuideFlow.resume.step1.point21.text",
       },
       {
-        lead: "专业视图", // i18n-ok: 使用指南正文（与 docs/user-guide.md 同源的数据文件）
-        text: "画布工具条能整页 / 适宽 / 100% 缩放、翻页、开辅助线和灰度校样；「命令」或 Cmd/Ctrl+Shift+P 打开命令面板，工作区预设只切面板可见性；「照片裁剪」只改取景、原图不动，可恢复原图，参数随这份简历保存；没裁剪时照片按原图比例展示、不会被强制裁成方框。", // i18n-ok: 使用指南正文（与 docs/user-guide.md 同源的数据文件）
+        leadKey: "userGuideFlow.resume.step1.point22.lead",
+        textKey: "userGuideFlow.resume.step1.point22.text",
       },
       {
-        lead: "撤销与恢复", // i18n-ok: 使用指南正文（与 docs/user-guide.md 同源的数据文件）
-        text: "制作台左栏的「历史」能一步步撤销或恢复：内容、排版、结构操作各记一步（连续输入合并成一步）；点某一步只看当时的摘要，真正的回退按「撤销」。", // i18n-ok: 使用指南正文（与 docs/user-guide.md 同源的数据文件）
+        leadKey: "userGuideFlow.resume.step1.point23.lead",
+        textKey: "userGuideFlow.resume.step1.point23.text",
       },
       {
-        lead: "局部排版", // i18n-ok: 使用指南正文（与 docs/user-guide.md 同源的数据文件）
-        text: "制作台左栏「局部排版」按六类段落微调字号、颜色、行距与缩进，未设过的属性跟随模板并可逐项恢复继承；选中内容后还能套用「一级标题 / 二级标题 / 三级标题 / 正文 / 次要说明」五个固定文字级别（可多选批量、可恢复跟随模板），大纲里多选条目可批量应用，格式刷能把一条的排版复制到另一条，正文选中文字可用斜体/链接按钮。", // i18n-ok: 使用指南正文（与 docs/user-guide.md 同源的数据文件）
+        leadKey: "userGuideFlow.resume.step1.point24.lead",
+        textKey: "userGuideFlow.resume.step1.point24.text",
       },
       {
-        lead: "分页控制", // i18n-ok: 使用指南正文（与 docs/user-guide.md 同源的数据文件）
-        text: "制作台左栏「分页」可给板块设「从新页开始」、续页重复姓名与页码；页缩略图显示实际页数与末页占用，PDF/Word 避免标题或要点孤行；草稿不显示真实分页，切精确或导出核对。板块分页方式可整份切换自然填充/每板块新页；已设断页可见，可一键恢复自然分页。", // i18n-ok: 使用指南正文（与 docs/user-guide.md 同源的数据文件）
+        leadKey: "userGuideFlow.resume.step1.point25.lead",
+        textKey: "userGuideFlow.resume.step1.point25.text",
       },
       {
-        lead: "表达资产", // i18n-ok: 使用指南正文（与 docs/user-guide.md 同源的数据文件）
-        text: "制作台左栏的「表达资产」收藏可复用的表达，按关键词 / 类型 / 语言 / 岗位标签检索；选中要插入的位置后一键插入（生成新对象），删除会进回收站、可在 Toast 里撤销。", // i18n-ok: 使用指南正文（与 docs/user-guide.md 同源的数据文件）
+        leadKey: "userGuideFlow.resume.step1.point26.lead",
+        textKey: "userGuideFlow.resume.step1.point26.text",
       },
       {
-        lead: "命名版本", // i18n-ok: 使用指南正文（与 docs/user-guide.md 同源的数据文件）
-        text: "制作台顶部「版本」保存不可变命名版本：可冻结、比较、恢复，恢复生成新的当前版本且历史与已投递记录不变。「岗位变体」独立编辑并可选路径同步；变体还能存独立排版并按变体导出。想按职业场景调整表达，可在「岗位变体」页先派生一条场景变体，再生成候选、看差异后采纳——源简历不会被改写。", // i18n-ok: 使用指南正文（与 docs/user-guide.md 同源的数据文件）
+        leadKey: "userGuideFlow.resume.step1.point27.lead",
+        textKey: "userGuideFlow.resume.step1.point27.text",
       },
       {
-        lead: "双语版本", // i18n-ok: 使用指南正文（与 docs/user-guide.md 同源的数据文件）
-        text: "制作台左栏的「双语版本」做正文翻译：左右对照后点「生成翻译候选」，逐项勾选「采纳选中」只写入该语言变体，不改当前简历；人名 / 公司名等固定译法先记进「术语表」（数据集级、可锁定），删除进回收站可恢复。生成要等整份简历翻完（通常几十秒），等待时不要重复点击。", // i18n-ok: 使用指南正文（与 docs/user-guide.md 同源的数据文件）
+        leadKey: "userGuideFlow.resume.step1.point28.lead",
+        textKey: "userGuideFlow.resume.step1.point28.text",
       },
       {
-        lead: "改写某一栏",
-        text: "在「手动调整」里**选中要改的那段文字 → 右键 →「AI 润色」**：写下要求 → 生成 → 结果先给你看，点「替换选中」才写回；只把选中的那一段发给模型。不满意可以直接关掉，原文一字不动。",
+        leadKey: "userGuideFlow.resume.step1.point29.lead",
+        textKey: "userGuideFlow.resume.step1.point29.text",
       },
       {
-        lead: "生成完会提醒你",
-        text: "简历生成、岗位解读、匹配度分析、岗位优化建议这类要等模型的任务都先说明再开跑，生成中给「后台继续」——关掉窗口也能跑完（建议生成可随时取消），结束**弹窗提醒并响一声**（声音可在设置 → 提醒与提示音里关）。",
+        leadKey: "userGuideFlow.resume.step1.point30.lead",
+        textKey: "userGuideFlow.resume.step1.point30.text",
       },
       {
-        lead: "写作增强",
-        text: "编辑简历时**选中一段文字 → 右键 →「写作增强」**：可做 STAR 量化改写、话术生成器（简历版 / STAR 版 / 口述版）、多风格润色、中英互译。结果**写回你刚选中的那一段**（右键落在不可编辑的位置时动作变成「复制」）；还能任选两份简历做「版本对比」（纯本地计算、不调模型）。",
+        leadKey: "userGuideFlow.resume.step1.point31.lead",
+        textKey: "userGuideFlow.resume.step1.point31.text",
       },
       {
-        lead: "选中就能润色",
-        text: "选中文字后右键，菜单里有剪切/复制/粘贴/全选；在输入框、多行文本框或可编辑区域里还会多出「写作增强」与「AI 润色」两项。写一句要求 → 看结果 → 点「替换选中」才写回；只发送选中的这一段，不发送整份简历。",
+        leadKey: "userGuideFlow.resume.step1.point32.lead",
+        textKey: "userGuideFlow.resume.step1.point32.text",
       },
       {
-        lead: "放大预览",
-        text: "按住 **Ctrl**（macOS 为 **Cmd**）滚鼠标滚轮即可缩放预览，工具栏上也有放大 / 缩小 / 适应页面三个按钮。预览下方的「简历制作台」把参数、内容编辑、版面放在同一屏；**分边页边距只在制作台里**——「分边调整页边距」这个开关在生成前的配置页和预览工具栏都已经没有了。栏宽可拖动、可一键复位。", // i18n-ok: 使用指南正文（与 docs/user-guide.md 同源的数据文件）
+        leadKey: "userGuideFlow.resume.step1.point33.lead",
+        textKey: "userGuideFlow.resume.step1.point33.text",
       },
       {
-        lead: "精确预览",
-        text: "工具栏第一行的「草稿 / 精确」切换：**草稿**是浏览器实时排版，改一下立刻看到、可点选编辑；**精确**显示服务端按导出引擎排好的 PDF，与点「导出」下载到的完全一致，页数也照它报。",
+        leadKey: "userGuideFlow.resume.step1.point34.lead",
+        textKey: "userGuideFlow.resume.step1.point34.text",
       },
       {
-        lead: "保存前自检",
-        text: "「质量检测」要先点「开始扫描」才跑：查重、敏感词、夸大风险、深挖风险点、合规与 ATS 本地检测；扫描中可取消，关掉窗口也会在后台跑完并通知。ATS 另给分项、覆盖率与逐条建议，关联了岗位时打开就自动带入 JD（只填不跑检测）。",
+        leadKey: "userGuideFlow.resume.step1.point35.lead",
+        textKey: "userGuideFlow.resume.step1.point35.text",
       },
       {
-        lead: "模板",
-        text: "五套模板另有只调参数的版式，生成前与预览时都能切换，模板一览可点缩略图看大图；还能用「试用与对比」拿当前内容并排比较两套模板（显示真实页数与溢出），采纳后才生效。同一条工具栏里可调板块顺序、给联系方式指定强制换行（每个字段整体不拆行，长网址不会被截断）。技术/社论/分栏已不出现。",
+        leadKey: "userGuideFlow.resume.step1.point36.lead",
+        textKey: "userGuideFlow.resume.step1.point36.text",
       },
       {
-        lead: "导出格式",
-        text: "PDF 可直接下载（服务端生成），也可以走浏览器打印（版式与预览一致）；此外还有 Word、纯文本、Markdown、JSON。",
+        leadKey: "userGuideFlow.resume.step1.point37.lead",
+        textKey: "userGuideFlow.resume.step1.point37.text",
       },
       {
-        lead: "水印与脱敏",
-        text: "导出时可加自定义水印（**仅 HTML / PDF / Word**，纯文本与 Markdown、JSON 不支持，同时勾选会报错），或一键隐私脱敏（姓名 / 电话 / 邮箱 / 公司 / 学校等）。",
+        leadKey: "userGuideFlow.resume.step1.point38.lead",
+        textKey: "userGuideFlow.resume.step1.point38.text",
       },
       {
-        lead: "导出交付包", // i18n-ok: 使用指南正文（与 docs/user-guide.md 同源的数据文件）
-        text: "已保存简历的导出窗口可保存导出配置（格式、命名规则、水印/脱敏），水印/脱敏可先预览真实 PDF；还能成套导出 zip（逐项哈希）并可选归档交付原件（哈希与字体/渲染版本清单）。", // i18n-ok: 使用指南正文
+        leadKey: "userGuideFlow.resume.step1.point39.lead",
+        textKey: "userGuideFlow.resume.step1.point39.text",
       },
       {
-        lead: "给别人看",
-        text: "用「离线分享包」：脱敏 HTML/PDF + 只读快照 + 评论回传文件，可选只读或可评论。可评论的包生成后详情里会出现「对象批注」：导入别人交回的 annotations.json，逐条「标记已解决」「忽略这条」；对象改过的批注要「重新关联」，不会自动挂到别的条目上——批注只存在分享包里，不会进投递的简历。", // i18n-ok: 使用指南正文（与 docs/user-guide.md 同源的数据文件）
+        leadKey: "userGuideFlow.resume.step1.point40.lead",
+        textKey: "userGuideFlow.resume.step1.point40.text",
       },
       {
-        lead: "内容超出页数",
-        text: "草稿预览会把多页**上下摞成几张 A4**（按 A4 高度切分的近似分页）并提示约需几页、超出多少；要看真实分页就切「精确」——那是导出引擎排出的同一份 PDF。",
+        leadKey: "userGuideFlow.resume.step1.point41.lead",
+        textKey: "userGuideFlow.resume.step1.point41.text",
       },
       {
-        lead: "保存之后",
-        text: "可回看关联岗位，也能给每条简历加一条**备注**标记用途；列表还能按**岗位**筛选（地址里带 `?job_id=`，存成书签可直达）。",
+        leadKey: "userGuideFlow.resume.step1.point42.lead",
+        textKey: "userGuideFlow.resume.step1.point42.text",
       },
       {
-        lead: "投递存档",
-        text: "每条交付记录旁都能**下载存档**；简历中心的「交付存档」还能在原简历删除后按标题、公司和来源找回历史记录。文件按冻结内容与参数重新生成，可能略有差异，界面会说明并给出历史指纹。",
+        leadKey: "userGuideFlow.resume.step1.point43.lead",
+        textKey: "userGuideFlow.resume.step1.point43.text",
       },
       {
-        lead: "批量选择",
-        text: "在简历中心、备选岗位、助手会话或消息、历史面试、深挖、提醒、题库、填充记录、知识库、资料箱、事实台账、面经、内推与投递记录明细等列表的条目上**右键**，选择「批量选择」进入多选，统一确认后删除（都进回收站可恢复）。",
+        leadKey: "userGuideFlow.resume.step1.point44.lead",
+        textKey: "userGuideFlow.resume.step1.point44.text",
       },
     ],
     path: "/resumes",
-    actionLabel: "查看简历中心",
+    actionLabelKey: "userGuideFlow.resume.step1.actionLabel",
     icon: FileTextOutlined,
   },
 ];

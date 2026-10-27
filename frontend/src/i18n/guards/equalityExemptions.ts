@@ -23,6 +23,13 @@ export const EQUALITY_EXEMPT_KEYS = {
   "trial.export.all": "Official export format names",
   // Chinese recruiting says "Offer" too; the label is the same word in both languages.
   "trackerForm.status.offer": "Recruiting loanword spelled identically in both languages",
+  // Provider brand names are spelled the same in every locale.
+  "appConfig.preset.minimax": "Provider brand name, identical in both languages",
+  "appConfig.preset.openai": "Provider brand name, identical in both languages",
+  "appConfig.preset.xai": "Provider brand name spelled identically",
+  "appConfig.preset.mistral": "Provider brand name spelled identically",
+  // The API key label is the same technical term in Chinese UI (original copy used "API Key").
+  "userGuide.setupProfile.step1.point9.lead": "Technical term used verbatim in the original Chinese copy",
 } as const satisfies Readonly<Record<string, string>>;
 
 export function isEqualityExempt(key: string): boolean {

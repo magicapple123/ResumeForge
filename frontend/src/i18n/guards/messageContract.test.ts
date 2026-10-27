@@ -22,6 +22,11 @@ const EXEMPT_FIXTURES = {
   "provenance.usage.tokens": "token",
   "trial.export.all": "HTML / PDF / Word",
   "trackerForm.status.offer": "Offer",
+  "appConfig.preset.minimax": "MiniMax",
+  "appConfig.preset.openai": "OpenAI",
+  "appConfig.preset.xai": "xAI Grok",
+  "appConfig.preset.mistral": "Mistral AI",
+  "userGuide.setupProfile.step1.point9.lead": "API Key",
 } satisfies Record<keyof typeof EQUALITY_EXEMPT_KEYS, string>;
 
 describe("message contract failure fixtures", () => {

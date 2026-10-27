@@ -14,6 +14,8 @@ import type { ReactNode } from "react";
 // （在线体验产物部署在 Pages 子路径下，绝对路径会 404）。理由同 App.tsx 侧栏图标。
 import brandIcon from "../assets/resumeforge-icon.png";
 import { loadSampleDataset } from "../api/settings";
+import { t } from "../i18n";
+import { useLocale } from "../i18n/i18nContext";
 import { QUICK_START_PATHS } from "./quickStartPaths";
 import type { QuickStartPath } from "./quickStartPaths";
 import { GUIDE_STEPS } from "./userGuideSteps";
@@ -49,6 +51,8 @@ export default function UserGuideModal({
   onSampleLoaded = () => window.location.reload(),
   initialQuickStart = false,
 }: UserGuideModalProps) {
+  // 正文与按钮文案都来自语言包：订阅语言变化，切换语言后弹窗立即重渲染。
+  useLocale();
   const { message } = AntdApp.useApp();
   const [current, setCurrent] = useState(0);
   // 弹窗内容容器：打开时把初始焦点收进来（而非 antd 默认放进右上角关闭按钮），
@@ -126,11 +130,15 @@ export default function UserGuideModal({
       const result = await loadSampleDataset();
       // 后端在已有「体验示例」数据集时会复用而不是再建一份（reused=true）——
       // 这时说"已创建/已就绪"是在撒谎，用户会以为又多了一份数据。
-      message.success(result.reused ? "已回到体验示例数据" : "示例数据已就绪，正在进入首页");
+      message.success(
+        result.reused
+          ? t("userGuideFlow.modal.toast.sampleReused")
+          : t("userGuideFlow.modal.toast.sampleReady"),
+      );
       onClose();
       onSampleLoaded();
     } catch (err) {
-      message.error(err instanceof Error ? err.message : "示例数据载入失败");
+      message.error(err instanceof Error ? err.message : t("userGuideFlow.modal.toast.sampleFailed"));
       setLoadingSample(false);
     }
   };
@@ -145,7 +153,7 @@ export default function UserGuideModal({
       title={
         <Space size={10}>
           <img className="user-guide-brand-image" src={brandIcon} alt="" />
-          <span>欢迎使用简历通</span>
+          <span>{t("userGuideFlow.modal.title")}</span>
         </Space>
       }
       // 720 → 880：左导航列固定 168px，所以多出来的宽度**全给正文**——720 时正文只剩
@@ -162,9 +170,9 @@ export default function UserGuideModal({
       footer={
         showQuickStart ? (
           <div className="user-guide-footer">
-            <Button onClick={onClose}>稍后查看</Button>
+            <Button onClick={onClose}>{t("userGuideFlow.modal.action.later")}</Button>
             <Button type="link" onClick={() => setView("steps")}>
-              查看完整指南（8 步）
+              {t("userGuideFlow.modal.action.viewFullGuide")}
             </Button>
           </div>
         ) : (
@@ -174,23 +182,23 @@ export default function UserGuideModal({
               loading={loadingSample}
               onClick={() => void loadSample()}
             >
-              载入示例数据体验
+              {t("userGuideFlow.modal.action.loadSample")}
             </Button>
-            <Button onClick={onClose}>稍后查看</Button>
+            <Button onClick={onClose}>{t("userGuideFlow.modal.action.later")}</Button>
             <Space wrap>
               <Button
                 disabled={current === 0}
                 icon={<ArrowLeftOutlined />}
                 onClick={() => setCurrent(current - 1)}
               >
-                上一步
+                {t("userGuideFlow.modal.action.prev")}
               </Button>
               <Button type="link" icon={<FormOutlined />} onClick={goToStepPage}>
-                {step.actionLabel}
+                {t(step.actionLabelKey)}
               </Button>
               {isLast ? (
                 <Button type="primary" icon={<CheckOutlined />} onClick={onClose}>
-                  开始使用
+                  {t("userGuideFlow.modal.action.start")}
                 </Button>
               ) : (
                 <Button
@@ -198,7 +206,7 @@ export default function UserGuideModal({
                   icon={<ArrowRightOutlined />}
                   onClick={() => setCurrent(current + 1)}
                 >
-                  下一步
+                  {t("userGuideFlow.modal.action.next")}
                 </Button>
               )}
             </Space>
@@ -212,9 +220,9 @@ export default function UserGuideModal({
           /* 首启动首屏：三条都通向"第一份可交付简历"，选一条顺的走；
            完整 8 步保留在「查看完整指南」后面，一步不少。 */
           <section className="user-guide-quickstart" aria-live="polite">
-            <Typography.Title level={4}>从这里开始</Typography.Title>
+            <Typography.Title level={4}>{t("userGuideFlow.modal.quickStart.heading")}</Typography.Title>
             <Typography.Paragraph className="user-guide-description">
-              三条路都通向你的第一份可交付简历，选一条顺的走。
+              {t("userGuideFlow.modal.quickStart.description")}
             </Typography.Paragraph>
             <div className="user-guide-quickstart-paths">
               {QUICK_START_PATHS.map((item) => {
@@ -231,8 +239,8 @@ export default function UserGuideModal({
                       <PathIcon />
                     </span>
                     <span className="user-guide-quickstart-copy">
-                      <span className="user-guide-quickstart-lead">{item.lead}</span>
-                      <span className="user-guide-quickstart-text">{item.text}</span>
+                      <span className="user-guide-quickstart-lead">{t(item.leadKey)}</span>
+                      <span className="user-guide-quickstart-text">{t(item.textKey)}</span>
                     </span>
                     <RightOutlined className="user-guide-quickstart-arrow" aria-hidden="true" />
                   </button>
@@ -251,7 +259,7 @@ export default function UserGuideModal({
               orientation="vertical"
               size="small"
               current={current}
-              items={GUIDE_STEPS.map(({ title }) => ({ title }))}
+              items={GUIDE_STEPS.map((item) => ({ title: t(item.titleKey) }))}
               onChange={setCurrent}
             />
             <Divider orientation="vertical" className="user-guide-divider" />
@@ -260,15 +268,17 @@ export default function UserGuideModal({
                 <StepIcon />
               </div>
               <div className="user-guide-step-copy">
-                <Typography.Title level={4}>{step.heading}</Typography.Title>
+                <Typography.Title level={4}>{t(step.headingKey)}</Typography.Title>
                 <Typography.Paragraph className="user-guide-description">
-                  {renderEmphasis(step.description)}
+                  {renderEmphasis(t(step.descriptionKey))}
                 </Typography.Paragraph>
                 <ul className="user-guide-points">
                   {step.points.map((point) => (
-                    <li key={point.lead}>
-                      <span className="user-guide-point-lead">{point.lead}</span>
-                      <span className="user-guide-point-text">{renderEmphasis(point.text)}</span>
+                    <li key={point.leadKey}>
+                      <span className="user-guide-point-lead">{t(point.leadKey)}</span>
+                      <span className="user-guide-point-text">
+                        {renderEmphasis(t(point.textKey))}
+                      </span>
                     </li>
                   ))}
                 </ul>

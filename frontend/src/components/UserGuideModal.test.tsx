@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 // 路由表唯一来源是 appRoutes.tsx（App.tsx 只是 <Routes>{APP_ROOT_ROUTE}</Routes> 的壳），
 // 读它的源码即可——再维护一份页面清单只会多一处会过期的真相。
 import appRoutesSource from "../appRoutes.tsx?raw";
+import { t } from "../i18n";
 import UserGuideModal from "./UserGuideModal";
 import { QUICK_START_PATHS } from "./quickStartPaths";
 import { GUIDE_STEPS } from "./userGuideSteps";
@@ -41,7 +42,7 @@ function renderGuide(props: Partial<Parameters<typeof UserGuideModal>[0]> = {}) 
 
 /** 按标题走到某一步：写死点几次“下一步”的话，插入一步就会连带改一堆断言。 */
 function goToStep(title: string) {
-  const index = GUIDE_STEPS.findIndex((step) => step.title === title);
+  const index = GUIDE_STEPS.findIndex((step) => t(step.titleKey) === title);
   if (index < 0) throw new Error(`使用指南里没有「${title}」这一步`);
   for (let step = 0; step < index; step += 1) {
     fireEvent.click(screen.getByRole("button", { name: /下一步/ }));
@@ -156,7 +157,7 @@ describe("UserGuideModal", () => {
     const onNavigate = vi.fn();
     renderGuide({ onClose, onNavigate });
 
-    goToStep(GUIDE_STEPS[GUIDE_STEPS.length - 1].title);
+    goToStep(t(GUIDE_STEPS[GUIDE_STEPS.length - 1].titleKey));
 
     expect(screen.getByText("把数据带走，或换一份")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /前往设置/ }));
@@ -237,8 +238,8 @@ describe("快速开始首屏（initialQuickStart）", () => {
 
     expect(screen.getByText("从这里开始")).toBeInTheDocument();
     for (const item of QUICK_START_PATHS) {
-      expect(screen.getByText(item.lead)).toBeInTheDocument();
-      expect(screen.getByText(item.text)).toBeInTheDocument();
+      expect(screen.getByText(t(item.leadKey))).toBeInTheDocument();
+      expect(screen.getByText(t(item.textKey))).toBeInTheDocument();
     }
     // 8 步视图不该同时出现：第 1 步的标题不在首屏里。
     expect(screen.queryByText("选择预设或自定义模型")).toBeNull();
@@ -286,10 +287,10 @@ describe("QUICK_START_PATHS 文案口径", () => {
   it("三条路径，短标题 + 一句话说明，与 GUIDE_STEPS 同一口径", () => {
     expect(QUICK_START_PATHS).toHaveLength(3);
     for (const item of QUICK_START_PATHS) {
-      expect(item.lead.length).toBeGreaterThan(0);
-      expect(item.lead.length).toBeLessThanOrEqual(8);
-      expect(item.text.length).toBeGreaterThan(0);
-      expect(item.text.length).toBeLessThanOrEqual(160);
+      expect(t(item.leadKey).length).toBeGreaterThan(0);
+      expect(t(item.leadKey).length).toBeLessThanOrEqual(8);
+      expect(t(item.textKey).length).toBeGreaterThan(0);
+      expect(t(item.textKey).length).toBeLessThanOrEqual(160);
     }
     // 除示例数据走既有载入流程（path 为空）外，其余路径必须指向真实路由。
     const routes = [...appRoutesSource.matchAll(/<Route\s+path="([^"]+)"/g)].map((m) => m[1]);
@@ -319,12 +320,12 @@ describe("GUIDE_STEPS", () => {
 
   it("has no duplicate titles and a full set of copy on every step", () => {
     // 标题是 Steps 的定位与测试的入口，重复会让两者都指错地方。
-    expect(new Set(GUIDE_STEPS.map((step) => step.title)).size).toBe(GUIDE_STEPS.length);
+    expect(new Set(GUIDE_STEPS.map((step) => t(step.titleKey))).size).toBe(GUIDE_STEPS.length);
     for (const step of GUIDE_STEPS) {
-      expect(step.heading.length).toBeGreaterThan(0);
-      expect(step.description.length).toBeGreaterThan(0);
+      expect(t(step.headingKey).length).toBeGreaterThan(0);
+      expect(t(step.descriptionKey).length).toBeGreaterThan(0);
       expect(step.points.length).toBeGreaterThan(0);
-      expect(step.actionLabel.length).toBeGreaterThan(0);
+      expect(t(step.actionLabelKey).length).toBeGreaterThan(0);
     }
   });
 
@@ -334,12 +335,12 @@ describe("GUIDE_STEPS", () => {
     // 现在钉住的是**层级**而不是条数：每条先给一个短标签（扫读的锚点），说明控制在一句。
     for (const step of GUIDE_STEPS) {
       for (const point of step.points) {
-        expect(point.lead.length).toBeGreaterThan(0);
+        expect(t(point.leadKey).length).toBeGreaterThan(0);
         // 标签超过 8 字就退化成一句话，扫读的锚点作用就没了。
-        expect(point.lead.length).toBeLessThanOrEqual(8);
-        expect(point.text.length).toBeGreaterThan(0);
+        expect(t(point.leadKey).length).toBeLessThanOrEqual(8);
+        expect(t(point.textKey).length).toBeGreaterThan(0);
         // 一句话的上限：再长就该拆成两条，或者搬去 docs/user-guide.md（那里才是完整版）。
-        expect(point.text.length).toBeLessThanOrEqual(160);
+        expect(t(point.textKey).length).toBeLessThanOrEqual(160);
       }
     }
   });
@@ -347,7 +348,7 @@ describe("GUIDE_STEPS", () => {
   it("要点之间不重复用同一个标签", () => {
     // 同一个标签在一次浏览里出现两次，扫读时会以为看过了。
     for (const step of GUIDE_STEPS) {
-      const leads = step.points.map((point) => point.lead);
+      const leads = step.points.map((point) => t(point.leadKey));
       expect(new Set(leads).size).toBe(leads.length);
     }
   });
