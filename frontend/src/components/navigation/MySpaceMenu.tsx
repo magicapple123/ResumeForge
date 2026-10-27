@@ -4,6 +4,8 @@ import { Button, Dropdown } from "antd";
 import type { MenuProps } from "antd";
 import { useMemo } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
+import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 import { filterNavigationItems, SPACE_NAVIGATION_ITEMS } from "./navigationConfig";
 
 interface Props {
@@ -11,6 +13,7 @@ interface Props {
 }
 
 export default function MySpaceMenu({ hiddenKeys }: Props) {
+  const locale = useLocale();
   const navigate = useNavigate();
   const location = useLocation();
   const items = useMemo<MenuProps["items"]>(() => {
@@ -18,10 +21,10 @@ export default function MySpaceMenu({ hiddenKeys }: Props) {
     return visible.map((item) => ({
       key: item.key,
       icon: item.icon,
-      label: item.label,
-      "aria-label": item.label,
+      label: t(item.labelKey),
+      "aria-label": t(item.labelKey),
     }));
-  }, [hiddenKeys, location.pathname]);
+  }, [hiddenKeys, location.pathname, locale]);
   const selectedKey = SPACE_NAVIGATION_ITEMS.find((item) =>
     item.key === "/" ? location.pathname === "/" : location.pathname.startsWith(item.key),
   )?.key;
@@ -41,11 +44,11 @@ export default function MySpaceMenu({ hiddenKeys }: Props) {
       <Button
         className="app-space-menu-button"
         type="text"
-        aria-label="我的空间"
+        aria-label={t("navigation.mySpace.label")}
         aria-haspopup="menu"
         icon={<AppstoreOutlined />}
       >
-        我的空间 <DownOutlined />
+        {t("navigation.mySpace.label")} <DownOutlined />
       </Button>
     </Dropdown>
   );
