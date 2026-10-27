@@ -13,7 +13,7 @@ import { evidenceTag } from "./evidenceTag";
 
 /**
  * 追问方向是后端给的自由字符串（类型上是 `string`），不在已知表里就返回空串——
- * 与原实现 `FOLLOWUP_LABELS[kind] ?? ""` 的行为一致，不认识的取值宁可不显示。
+ * 不认识的取值宁可不显示。
  */
 function followupKindLabel(kind: string): string {
   return kind in FOLLOWUP_LABEL_KEYS
