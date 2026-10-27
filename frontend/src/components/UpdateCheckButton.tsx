@@ -16,6 +16,8 @@ import { App, Button, Tooltip } from "antd";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { checkForUpdate } from "../api/settings";
+import { t } from "../i18n";
+import { useLocale } from "../i18n/i18nContext";
 
 interface Props {
   /** 紧凑的折叠侧栏里只留图标（按钮本身就是图标，这里控制尺寸）。 */
@@ -23,6 +25,7 @@ interface Props {
 }
 
 export default function UpdateCheckButton({ label }: Props) {
+  useLocale();
   const { message } = App.useApp();
   const navigate = useNavigate();
   const [checking, setChecking] = useState(false);
@@ -34,7 +37,10 @@ export default function UpdateCheckButton({ label }: Props) {
       // refresh=true：用户主动点就是要当下的结果，不吃 15 分钟的缓存。
       const result = await checkForUpdate(true);
       if (!result.update_available) {
-        message.success(result.message || `已是最新版本（${result.current_version}）`);
+        message.success(
+          result.message ||
+            t("componentsMisc.updateCheck.latest", { version: result.current_version }),
+        );
         return;
       }
       message.open({
@@ -42,34 +48,40 @@ export default function UpdateCheckButton({ label }: Props) {
         duration: 8,
         content: (
           <span>
-            有新版本 {result.latest_version}。
+            {t("componentsMisc.updateCheck.available", { version: result.latest_version })}
             <Button
               type="link"
               size="small"
               style={{ paddingInline: 4 }}
               onClick={() => navigate("/settings")}
             >
-              去设置页更新
+              {t("componentsMisc.updateCheck.goUpdate")}
             </Button>
           </span>
         ),
       });
     } catch (error) {
-      message.warning(error instanceof Error ? error.message : "检查更新失败");
+      message.warning(
+        error instanceof Error ? error.message : t("componentsMisc.updateCheck.failed"),
+      );
     } finally {
       setChecking(false);
     }
   };
 
   return (
-    <Tooltip title={checking ? "正在检查更新…" : "检查更新"}>
+    <Tooltip
+      title={
+        checking ? t("componentsMisc.updateCheck.checking") : t("componentsMisc.updateCheck.check")
+      }
+    >
       <Button
         className="app-update-button"
         type="text"
         icon={<SyncOutlined spin={checking} />}
         disabled={checking}
         onClick={() => void check()}
-        aria-label="检查更新"
+        aria-label={t("componentsMisc.updateCheck.check")}
       >
         {label ? <span className="app-update-label">{label}</span> : null}
       </Button>
