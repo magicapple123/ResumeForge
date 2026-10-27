@@ -10,29 +10,10 @@ import EmptyState from "../common/EmptyState";
 import { useState } from "react";
 import { createClaim, draftClaims } from "../../api/claims";
 import { t } from "../../i18n";
-import type { MessageKey } from "../../i18n";
+import { CLAIM_CATEGORY_LABEL_KEYS } from "../../i18n/enum/claims";
 import { useLocale } from "../../i18n/i18nContext";
-import type { Claim, ClaimCategory, ClaimDraftPayload, ClaimPayload } from "../../types";
+import type { Claim, ClaimDraftPayload, ClaimPayload } from "../../types";
 import { CLAIM_CATEGORIES } from "../../types";
-
-/**
- * 分类下拉的显示名：**键是协议值**（提交后端并参与校验），值指向语言包 key。
- *
- * 模块作用域不能调 `t()`（语言会被钉死），所以这里只存 key，渲染处统一
- * `t(CATEGORY_LABEL_KEYS[value])`。
- *
- * i18n-ok: 下面的中文是协议值（`types/claim.ts` 的中文枚举，直接提交后端并参与校验），
- * 翻译会写坏数据；显示名已经在语言包里。
- */
-const CATEGORY_LABEL_KEYS: Record<ClaimCategory, MessageKey> = {
-  教育经历: "claimDraftModal.category.education",
-  "实习/工作": "claimDraftModal.category.internship",
-  项目经历: "claimDraftModal.category.project",
-  校园经历: "claimDraftModal.category.campus",
-  专业技能: "claimDraftModal.category.skills",
-  荣誉奖项: "claimDraftModal.category.awards",
-  其他: "claimDraftModal.category.other",
-};
 
 /**
  * 一行草稿。可提交的内容单独放在 `payload` 里，而不是把 UI 状态（勾选、行号）混进
@@ -167,7 +148,7 @@ export default function ClaimDraftModal({ open, onClose, onSaved }: Props) {
             style={{ width: 160 }}
             options={CLAIM_CATEGORIES.map((value) => ({
               value,
-              label: t(CATEGORY_LABEL_KEYS[value]),
+              label: t(CLAIM_CATEGORY_LABEL_KEYS[value]),
             }))}
           />
           <Input
