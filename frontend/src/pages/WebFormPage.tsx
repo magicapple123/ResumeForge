@@ -66,6 +66,8 @@ import { WEB_FORM_STATUS_POLL_INTERVAL_MS } from "./webform/constants";
 import { useAiAvailable } from "./webform/useAiAvailable";
 import { useLiveSession } from "./webform/useLiveSession";
 import { useSnapshotUrl } from "./webform/useSnapshotUrl";
+import { t } from "../i18n";
+import { useLocale } from "../i18n/i18nContext";
 import {
   type WebFormExtraEntry,
   type WebFormFillResult,
@@ -90,6 +92,8 @@ const EMPTY_ALTERNATIVES: WebFormLive["alternatives"] = [];
 const WEB_FORM_SESSION_PERSIST_DEBOUNCE_MS = 450;
 
 export default function WebFormPage() {
+  // 本页用模块级 t()：必须订阅语言变化，否则切语言后整页文案不重渲染。
+  useLocale();
   const { message } = App.useApp();
   const browser = useBrowserStatus(getWebFormBrowserStatus, WEB_FORM_STATUS_POLL_INTERVAL_MS);
   // `reload`/`setData` 是 useBrowserStatus 内部的 useCallback([])，引用恒定；而 browser 这个
@@ -268,11 +272,11 @@ export default function WebFormPage() {
       setSessionActive(true);
       message.success(
         targetUrl.trim()
-          ? "目标网申页面已打开；已有网页不会被覆盖"
-          : "浏览器已启动。请在这个窗口里打开目标公司的网申页面，再回来点「读取当前表单」",
+          ? t("webFormPage.toast.targetOpened")
+          : t("webFormPage.toast.browserStarted"),
       );
     } catch (error) {
-      message.error(error instanceof Error ? error.message : "启动浏览器失败");
+      message.error(error instanceof Error ? error.message : t("webFormPage.error.startFailed"));
     } finally {
       setBusy(null);
     }
@@ -292,9 +296,9 @@ export default function WebFormPage() {
       setSessionActive(true);
       const next = await listWebFormUrlHistory();
       setUrlHistory(next.items);
-      message.success("目标网申页面已打开；已有网页不会被覆盖");
+      message.success(t("webFormPage.toast.targetOpened"));
     } catch (error) {
-      message.error(error instanceof Error ? error.message : "打开网申页面失败");
+      message.error(error instanceof Error ? error.message : t("webFormPage.error.openUrlFailed"));
     } finally {
       setBusy(null);
     }
@@ -306,7 +310,9 @@ export default function WebFormPage() {
         await deleteWebFormUrlHistory(item.id);
         setUrlHistory((previous) => previous.filter((entry) => entry.id !== item.id));
       } catch (error) {
-        message.error(error instanceof Error ? error.message : "删除网址记录失败");
+        message.error(
+          error instanceof Error ? error.message : t("webFormPage.error.deleteHistoryFailed"),
+        );
       }
     },
     [message],
@@ -334,7 +340,7 @@ export default function WebFormPage() {
       await reloadBrowserStatus();
       // 关闭浏览器不等于结束本次填写：用户重新打开后仍应接着刚才的草稿。
     } catch (error) {
-      message.error(error instanceof Error ? error.message : "关闭浏览器失败");
+      message.error(error instanceof Error ? error.message : t("webFormPage.error.stopFailed"));
     } finally {
       setBusy(null);
     }
@@ -361,9 +367,9 @@ export default function WebFormPage() {
       setRestoring(false);
       clearWebFormSession();
       forgetSnapshot();
-      message.success("本次网申填写已结束");
+      message.success(t("webFormPage.toast.sessionEnded"));
     } catch (error) {
-      message.error(error instanceof Error ? error.message : "结束本次填写失败");
+      message.error(error instanceof Error ? error.message : t("webFormPage.error.endFailed"));
     } finally {
       setBusy(null);
     }
@@ -374,9 +380,9 @@ export default function WebFormPage() {
     setBusy("refresh");
     try {
       await reloadBrowserStatus();
-      message.success("浏览器状态已刷新");
+      message.success(t("webFormPage.toast.statusRefreshed"));
     } catch (error) {
-      message.error(error instanceof Error ? error.message : "刷新浏览器状态失败");
+      message.error(error instanceof Error ? error.message : t("webFormPage.error.refreshFailed"));
     } finally {
       setBusy(null);
     }
@@ -405,9 +411,11 @@ export default function WebFormPage() {
       anchor.download = `resumeforge-diagnostics-${new Date().toISOString().replace(/[:.]/g, "-")}.json`;
       anchor.click();
       URL.revokeObjectURL(url);
-      message.success("已导出脱敏诊断信息，可连同截图提交排查");
+      message.success(t("webFormPage.toast.diagnosticsExported"));
     } catch (error) {
-      message.error(error instanceof Error ? error.message : "导出诊断信息失败");
+      message.error(
+        error instanceof Error ? error.message : t("webFormPage.error.diagnosticsFailed"),
+      );
     } finally {
       setBusy(null);
     }
@@ -424,11 +432,13 @@ export default function WebFormPage() {
       setLiveOptOut(false);
       message.success(
         (next?.enabled ?? next?.running)
-          ? "已开启。回到浏览器窗口，点到哪个框就在旁边给你要填的值"
-          : "已关闭，悬浮球保留为灰色，页面不会再显示提示卡",
+          ? t("webFormPage.toast.liveOn")
+          : t("webFormPage.toast.liveOff"),
       );
     } catch (error) {
-      message.error(error instanceof Error ? error.message : "切换点击填表失败");
+      message.error(
+        error instanceof Error ? error.message : t("webFormPage.error.liveToggleFailed"),
+      );
     } finally {
       setBusy(null);
     }
@@ -446,10 +456,10 @@ export default function WebFormPage() {
       applyPreview(report);
       rememberSnapshot(taken.snapshot_id, aiOn);
       if (!report.items.length) {
-        message.info("这一页没找到能自动填的字段，可以看看下面的清单");
+        message.info(t("webFormPage.toast.nothingToFill"));
       }
     } catch (error) {
-      message.error(error instanceof Error ? error.message : "读取表单失败");
+      message.error(error instanceof Error ? error.message : t("webFormPage.error.readFailed"));
     } finally {
       setBusy(null);
     }
@@ -473,14 +483,14 @@ export default function WebFormPage() {
       setRecordRefresh((previous) => previous + 1);
       // 这一轮已经落定：清掉 URL 里的读取标记，否则下次进页面会重放一份"已经填过了"的预览。
       forgetSnapshot();
-      message.success(`已填 ${filled.filled} 项，请到浏览器窗口里核对后自己提交`);
+      message.success(t("webFormPage.toast.filled", { count: filled.filled }));
       // 真填进去了、且有"库里没有"的项 → 问一句要不要记住。
       // **判据里的 filled > 0 不能省**：一个都没填进去却问"要记住吗"是自相矛盾的。
       if (filled.filled > 0 && (preview.learning?.candidates?.length ?? 0) > 0) {
         setLearning(preview.learning.candidates);
       }
     } catch (error) {
-      message.error(error instanceof Error ? error.message : "填充失败");
+      message.error(error instanceof Error ? error.message : t("webFormPage.error.fillFailed"));
     } finally {
       setBusy(null);
     }
@@ -506,10 +516,12 @@ export default function WebFormPage() {
         }
         await updateWebFormExtraProfile(values, details);
         setLearning([]);
-        message.success(`已记住 ${selections.length} 项，下次遇到同一个框会自动填`);
+        message.success(t("webFormPage.toast.remembered", { count: selections.length }));
       } catch (error) {
         // **失败要说出来**：静默关掉弹窗会让用户以为记住了，而下次却没自动填。
-        message.error(error instanceof Error ? error.message : "记住失败，请稍后再试");
+        message.error(
+          error instanceof Error ? error.message : t("webFormPage.error.rememberFailed"),
+        );
       } finally {
         setLearningSaving(false);
       }
@@ -524,9 +536,11 @@ export default function WebFormPage() {
         const result = await rememberWebFormLive(selection);
         setLive(result.live);
         setMemoryDialogOpen(false);
-        message.success("已保存到你选择的资料目标，下次可以继续复用");
+        message.success(t("webFormPage.toast.memorySaved"));
       } catch (error) {
-        message.error(error instanceof Error ? error.message : "保存资料失败，请稍后重试");
+        message.error(
+          error instanceof Error ? error.message : t("webFormPage.error.memorySaveFailed"),
+        );
       } finally {
         setMemorySaving(false);
       }
@@ -579,11 +593,11 @@ export default function WebFormPage() {
         <Alert
           type="warning"
           showIcon
-          title="这个功能只负责把资料填进页面，不会替你提交"
-          description="填充完成后请回到浏览器窗口逐项核对，确认无误后由你自己点击页面上的提交按钮。"
+          title={t("webFormPage.notice.title")}
+          description={t("webFormPage.notice.body")}
         />
       ) : (
-        <Alert type="warning" showIcon title="这个功能只负责把资料填进页面，不会替你提交" />
+        <Alert type="warning" showIcon title={t("webFormPage.notice.title")} />
       )}
 
       <BrowserControlCard
@@ -642,9 +656,7 @@ export default function WebFormPage() {
       />
 
       {controlsExpanded ? null : (
-        <Typography.Text type="secondary">
-          浏览器就绪后，安全说明、AI 辅助、放宽模式等控制项会在这里逐步展开。
-        </Typography.Text>
+        <Typography.Text type="secondary">{t("webFormPage.hint.expandLater")}</Typography.Text>
       )}
 
       {preview ? (
@@ -665,7 +677,7 @@ export default function WebFormPage() {
       {result ? <FillResultCard result={result} /> : null}
 
       {preview ? (
-        <Card size="small" title="页面还要求这些">
+        <Card size="small" title={t("webFormPage.card.pending")}>
           <MemoWebFormPendingPanel
             missingData={preview.missing_data}
             unrecognized={preview.unrecognized}
@@ -676,7 +688,7 @@ export default function WebFormPage() {
 
       {/* 填充记录：每次填充留一笔，供事后回看"我当时到底填了什么"。
           记录里含真实值（证件号、手机号），所以删除是隐私上的必要项，不是便利。 */}
-      <Card size="small" title="填充记录">
+      <Card size="small" title={t("webFormPage.card.records")}>
         <MemoWebFormRecordsPanel refreshKey={recordRefresh} />
       </Card>
 

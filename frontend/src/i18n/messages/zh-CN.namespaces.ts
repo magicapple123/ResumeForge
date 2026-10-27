@@ -76,6 +76,7 @@ import trackerForm from "./zh-CN.trackerForm";
 import interviewExperience from "./zh-CN.interviewExperience";
 import jobMatchBatch from "./zh-CN.jobMatchBatch";
 import assistantComposer from "./zh-CN.assistantComposer";
+import webFormPage from "./zh-CN.webFormPage";
 
 const namespaces = {
   /** 简历制作台（2026-10-23）。 */
@@ -191,6 +192,8 @@ const namespaces = {
   ...jobMatchBatch,
   /** 求职助手输入区（2026-10-27）。 */
   ...assistantComposer,
+  /** 网申填表页（2026-10-27）。 */
+  ...webFormPage,
 } as const;
 
 export default namespaces;
