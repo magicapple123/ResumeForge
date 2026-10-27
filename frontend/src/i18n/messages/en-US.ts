@@ -80,6 +80,7 @@ import resumeSuggestions from "./en-US.resumeSuggestions";
 import manualBackups from "./en-US.manualBackups";
 import storageStats from "./en-US.storageStats";
 import referralForm from "./en-US.referralForm";
+import trackerPage from "./en-US.trackerPage";
 
 const enUS = {
   ...core,
@@ -161,6 +162,7 @@ const enUS = {
   ...manualBackups,
   ...storageStats,
   ...referralForm,
+  ...trackerPage,
 } as const satisfies Record<keyof ZhCNMessages, string>;
 
 export default enUS;

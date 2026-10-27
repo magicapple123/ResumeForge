@@ -88,6 +88,7 @@ import resumeSuggestions from "./zh-CN.resumeSuggestions";
 import manualBackups from "./zh-CN.manualBackups";
 import storageStats from "./zh-CN.storageStats";
 import referralForm from "./zh-CN.referralForm";
+import trackerPage from "./zh-CN.trackerPage";
 
 const namespaces = {
   /** 简历制作台（2026-10-23）。 */
@@ -227,6 +228,8 @@ const namespaces = {
   ...storageStats,
   /** 内推表单字段与图片备注上传（2026-10-27）。 */
   ...referralForm,
+  /** 求职进度页（2026-10-27）。 */
+  ...trackerPage,
 } as const;
 
 export default namespaces;

@@ -44,11 +44,33 @@ import TrackImportModal from "../components/tracker/TrackImportModal";
 import { useApi } from "../hooks/useApi";
 import { useDeleteUndo } from "../features/trash/useDeleteUndo";
 import { downloadBlob } from "../utils/download";
-import type { Track } from "../types";
-import { FUNNEL_STATUSES, TRACK_STATUSES, TRACK_STATUS_LABELS } from "../types";
+import type { Track, TrackStatus } from "../types";
+import { FUNNEL_STATUSES, TRACK_STATUSES } from "../types";
+import { t } from "../i18n";
+import type { MessageKey } from "../i18n";
+import { useLocale } from "../i18n/i18nContext";
 
 /** 每页条数：与后端分页端点默认值一致（page_size 1–100）。 */
 const TRACK_PAGE_SIZE = 20;
+
+/**
+ * 漏斗与筛选下拉的状态名：**键是协议值**（`applied` / `screening` …，与后端逐字对应，
+ * 见 `types/tracker.ts`），值指向语言包 key。
+ *
+ * 模块作用域不能调 `t()`（切语言不会重渲染），所以这里只存 key，使用处 `t(...)`。
+ * 七个名字与进度表单共用同一份词表（`trackerForm.status.*`）：同一个协议值在两处
+ * 必须是同一个名字，各写一份迟早会漂。`types/tracker.ts` 的 `TRACK_STATUS_LABELS`
+ * 一个字都没动——`AnalyticsPage` 与列表卡片仍在用。
+ */
+const TRACK_STATUS_LABEL_KEYS: Record<TrackStatus, MessageKey> = {
+  applied: "trackerForm.status.applied",
+  screening: "trackerForm.status.screening",
+  assessment: "trackerForm.status.assessment",
+  interview: "trackerForm.status.interview",
+  offer: "trackerForm.status.offer",
+  rejected: "trackerForm.status.rejected",
+  unknown: "trackerForm.status.unknown",
+};
 
 /** 深链 ?job_id= 的解析：正整数才认，其余（缺省/非数字/≤0）一律按"没有筛选"处理。 */
 function parseLinkedJobId(raw: string | null): number | null {
@@ -57,6 +79,8 @@ function parseLinkedJobId(raw: string | null): number | null {
 }
 
 export default function TrackerPage() {
+  // 本页用模块级 t()：必须订阅语言变化，否则切语言后整页文案不重渲染。
+  useLocale();
   const { message } = App.useApp();
   // 状态筛选与关键词从 URL 读初值、改动后 replace 写回（模式同 WebFormPage / JobsPage）。
   const [searchParams, setSearchParams] = useSearchParams();
@@ -144,11 +168,13 @@ export default function TrackerPage() {
       .then((job) => {
         if (cancelled) return;
         setLinkedJobLabel(
-          job.title ? `${job.title}${job.company ? ` · ${job.company}` : ""}` : `岗位 #${jobId}`,
+          job.title
+            ? `${job.title}${job.company ? ` · ${job.company}` : ""}`
+            : t("trackerPage.linkedJob.unknownName", { id: jobId }),
         );
       })
       .catch(() => {
-        if (!cancelled) setLinkedJobLabel("该岗位可能已删除");
+        if (!cancelled) setLinkedJobLabel(t("trackerPage.linkedJob.deleted"));
       });
     return () => {
       cancelled = true;
@@ -185,7 +211,7 @@ export default function TrackerPage() {
       });
       await reloadAll();
     } catch (err) {
-      message.error(err instanceof Error ? err.message : "删除失败");
+      message.error(err instanceof Error ? err.message : t("trackerPage.error.deleteFailed"));
     }
   };
 
@@ -199,13 +225,13 @@ export default function TrackerPage() {
       });
       downloadBlob(blob, filename);
     } catch (err) {
-      message.error(err instanceof Error ? err.message : "导出失败");
+      message.error(err instanceof Error ? err.message : t("trackerPage.error.exportFailed"));
     }
   };
 
   const exportMenu: MenuProps["items"] = [
-    { key: "csv", label: "导出 CSV（可直接用 Excel 打开）" },
-    { key: "json", label: "导出 JSON" },
+    { key: "csv", label: t("trackerPage.export.csv") },
+    { key: "json", label: t("trackerPage.export.json") },
   ];
 
   return (
@@ -213,19 +239,16 @@ export default function TrackerPage() {
       <div className="tracker-page-head">
         <Space orientation="vertical" size={0}>
           <Typography.Title level={4} style={{ margin: 0 }}>
-            求职进度
+            {t("trackerPage.title")}
           </Typography.Title>
-          <Typography.Text type="secondary">
-            一家公司一个岗位一条记录，随对方发来的通知往前推进。投递台投出去的岗位会自动记一条
-            「已投递」，之后的进展把通知粘进来即可。
-          </Typography.Text>
+          <Typography.Text type="secondary">{t("trackerPage.subtitle")}</Typography.Text>
         </Space>
         <Space>
           <Button icon={<BellOutlined />} onClick={() => setReminderOpen(true)}>
-            提醒
+            {t("trackerPage.action.reminders")}
           </Button>
           <Button icon={<ImportOutlined />} onClick={() => setImportOpen(true)}>
-            从通知导入
+            {t("trackerPage.action.import")}
           </Button>
           <Dropdown
             menu={{
@@ -234,7 +257,7 @@ export default function TrackerPage() {
             }}
             disabled={totalCount === 0}
           >
-            <Button icon={<DownloadOutlined />}>导出</Button>
+            <Button icon={<DownloadOutlined />}>{t("trackerPage.action.export")}</Button>
           </Dropdown>
           <Button
             type="primary"
@@ -244,7 +267,7 @@ export default function TrackerPage() {
               setFormOpen(true);
             }}
           >
-            添加进度
+            {t("trackerPage.action.create")}
           </Button>
         </Space>
       </div>
@@ -264,26 +287,31 @@ export default function TrackerPage() {
         ) : (
           <>
             {statsError && (
-              <Typography.Text type="danger">统计加载失败：{statsError}</Typography.Text>
+              <Typography.Text type="danger">
+                {t("trackerPage.stats.error", { error: statsError })}
+              </Typography.Text>
             )}
             {/* 上色靠**语义类名**（T9）：此前是 `:nth-child(2..5)`，网格里一旦多出
                 一个兄弟节点（statsError 的错误文案就是），整排配色会集体前移一格。 */}
             <Statistic
               className="tracker-stat tracker-stat--total"
-              title="总数"
+              title={t("trackerPage.stat.total")}
               value={totalCount}
             />
             <Statistic
               className="tracker-stat tracker-stat--active"
-              title="进行中"
+              title={t("trackerPage.stat.active")}
               value={stats?.active_count ?? 0}
               prefix={<FunnelPlotOutlined />}
             />
             <Statistic
               className="tracker-stat tracker-stat--month"
-              title="本月投递"
+              title={t("trackerPage.stat.month")}
               value={stats?.month_count ?? 0}
             />
+            {/* Offer 是招聘行业的通用写法，两种语言都写 Offer——它是纯 ASCII，
+                不进中文棘轮，硬塞一个 key 只会多一条"源文与译文相同"的等值豁免
+                （与进度表单里 `trackerForm.status.offer` 同一处理）。 */}
             <Statistic
               className="tracker-stat tracker-stat--offer"
               title="Offer"
@@ -294,7 +322,7 @@ export default function TrackerPage() {
             />
             <Statistic
               className="tracker-stat tracker-stat--closed"
-              title="已结束"
+              title={t("trackerPage.stat.closed")}
               value={stats?.rejected_count ?? 0}
               styles={{ content: { color: "var(--rf-stage-rejected)" } }}
             />
@@ -309,7 +337,13 @@ export default function TrackerPage() {
             const stageIndex = FUNNEL_STATUSES.indexOf(key);
             const percentage = funnelMax > 0 ? Math.round((value / funnelMax) * 100) : 0;
             return (
-              <Tooltip key={key} title={`${TRACK_STATUS_LABELS[key]}：${value} 条`}>
+              <Tooltip
+                key={key}
+                title={t("trackerPage.funnel.tooltip", {
+                  label: t(TRACK_STATUS_LABEL_KEYS[key]),
+                  count: value,
+                })}
+              >
                 <button
                   type="button"
                   className={`tracker-funnel-step${status === key ? " is-selected" : ""}`}
@@ -319,7 +353,7 @@ export default function TrackerPage() {
                   <span className="tracker-funnel-index" aria-hidden="true">
                     {String(stageIndex + 1).padStart(2, "0")}
                   </span>
-                  <span className="tracker-funnel-label">{TRACK_STATUS_LABELS[key]}</span>
+                  <span className="tracker-funnel-label">{t(TRACK_STATUS_LABEL_KEYS[key])}</span>
                   <span className="tracker-funnel-count">{value}</span>
                   <span className="tracker-funnel-meter" aria-hidden="true">
                     <span className="tracker-funnel-bar" style={{ width: `${percentage}%` }} />
@@ -334,21 +368,21 @@ export default function TrackerPage() {
 
       <Space size={16} wrap className="tracker-filters rf-filter-bar">
         <Select
-          aria-label="求职进度状态筛选"
+          aria-label={t("trackerPage.filter.statusAria")}
           value={status}
           onChange={setStatus}
           style={{ width: 160 }}
           options={[
-            { value: "", label: "全部状态" },
+            { value: "", label: t("trackerPage.filter.allStatuses") },
             ...TRACK_STATUSES.map((value) => ({
               value,
-              label: TRACK_STATUS_LABELS[value],
+              label: t(TRACK_STATUS_LABEL_KEYS[value]),
             })),
           ]}
         />
         <Input.Search
           allowClear
-          placeholder="搜索公司、岗位、备注或下一步"
+          placeholder={t("trackerPage.filter.searchPlaceholder")}
           style={{ width: 280 }}
           value={searchText}
           onChange={(event) => {
@@ -368,11 +402,11 @@ export default function TrackerPage() {
             style={{ marginInlineEnd: 0 }}
             className="tracker-job-filter-tag"
           >
-            只看该岗位的投递：{linkedJobLabel ?? "…"}
+            {t("trackerPage.linkedJob.prefix", { label: linkedJobLabel ?? "…" })}
             <Button
               type="text"
               size="small"
-              aria-label="清除岗位筛选"
+              aria-label={t("trackerPage.action.clearJobFilter")}
               icon={<CloseOutlined />}
               onClick={clearJobFilter}
             />
@@ -385,9 +419,7 @@ export default function TrackerPage() {
       {!loading && !error && items.length === 0 && (
         <Empty
           description={
-            keyword || status
-              ? "没有符合条件的记录"
-              : "还没有进度记录。投递台投出的岗位会自动出现在这里，也可以点「从通知导入」把邮箱里的进展整理进来。"
+            keyword || status ? t("trackerPage.empty.filtered") : t("trackerPage.empty.initial")
           }
         />
       )}
@@ -415,7 +447,7 @@ export default function TrackerPage() {
           onChange={setPage}
           hideOnSinglePage
           showSizeChanger={false}
-          showTotal={(count) => `共 ${count} 条`}
+          showTotal={(count) => t("trackerPage.pagination.total", { count })}
         />
       </div>
 
@@ -435,7 +467,7 @@ export default function TrackerPage() {
       />
 
       <Modal
-        title="日历提醒"
+        title={t("trackerPage.modal.reminderTitle")}
         open={reminderOpen}
         onCancel={() => setReminderOpen(false)}
         footer={null}
