@@ -10,6 +10,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { App } from "antd";
 import { getWebFormLiveStatus, getWebFormMemoryTargets, startWebFormLive } from "../../api/webform";
+import { t } from "../../i18n";
 import type { WebFormLive, WebFormMemoryTarget } from "../../types";
 import { isDocumentHidden, onVisibilityChange } from "../../utils/visibility";
 
@@ -131,7 +132,9 @@ export function useLiveSession({
     void getWebFormMemoryTargets()
       .then((result) => setMemoryTargets(result.targets))
       .catch((error) => {
-        message.error(error instanceof Error ? error.message : "加载完整资料目录失败");
+        message.error(
+          error instanceof Error ? error.message : t("webFormPage.error.memoryTargetsFailed"),
+        );
       })
       .finally(() => setMemoryTargetsLoading(false));
   }, [message, rememberPendingSignature]);
