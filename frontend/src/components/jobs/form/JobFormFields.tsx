@@ -7,12 +7,22 @@ import { DatePicker, Form, Input, Select } from "antd";
 import dayjs from "dayjs";
 import type { Dayjs } from "dayjs";
 import { t } from "../../../i18n";
+import { JOB_STATUS_LABEL_KEYS, JOB_TYPE_LABEL_KEYS } from "../../../i18n/enum/jobs";
 import { useLocale } from "../../../i18n/i18nContext";
 import { HintedTextArea } from "../../common/MaxLengthHint";
-import { JOB_TYPE_OPTIONS, STATUS_OPTIONS } from "./jobFormOptions";
 
 export default function JobFormFields() {
   useLocale();
+  // 下拉的 value 仍是落库的协议值（types/job.ts 的选项表），只有展示名在渲染期取：
+  // 放模块作用域会让切语言后停在旧文案。
+  const jobTypeOptions = Object.entries(JOB_TYPE_LABEL_KEYS).map(([value, key]) => ({
+    value,
+    label: t(key),
+  }));
+  const statusOptions = Object.entries(JOB_STATUS_LABEL_KEYS).map(([value, key]) => ({
+    value,
+    label: t(key),
+  }));
   return (
     <>
       <Form.Item
@@ -32,10 +42,10 @@ export default function JobFormFields() {
         <Input placeholder={t("jobForm.placeholder.salary")} />
       </Form.Item>
       <Form.Item name="job_type" label={t("jobForm.field.jobType")}>
-        <Select options={JOB_TYPE_OPTIONS} />
+        <Select options={jobTypeOptions} />
       </Form.Item>
       <Form.Item name="status" label={t("jobForm.field.status")}>
-        <Select options={STATUS_OPTIONS} />
+        <Select options={statusOptions} />
       </Form.Item>
       <Form.Item
         name="source_url"
