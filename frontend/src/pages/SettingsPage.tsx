@@ -24,6 +24,8 @@ import UpdateCard from "../components/settings/UpdateCard";
 import HelpDiagnosticsCard from "../components/settings/HelpDiagnosticsCard";
 import PrivacyCard from "../components/settings/PrivacyCard";
 import NavigationSettingsCard from "../components/settings/NavigationSettingsCard";
+import { t } from "../i18n";
+import { useLocale } from "../i18n/i18nContext";
 import LocaleSettingsCard from "../components/settings/LocaleSettingsCard";
 import ResumeFontCard from "../components/settings/ResumeFontCard";
 import ShortcutSettingsCard from "../components/settings/ShortcutSettingsCard";
@@ -56,6 +58,9 @@ export default function SettingsPage() {
     applyRecord,
     removeRecord,
   } = useLLMSettings();
+
+  // 本页用模块级 t() 取文案：必须订阅语言变化，否则切到英文后这一页仍是中文。
+  useLocale();
 
   // 记录卡动作（卡上测试连接 / 新增与编辑共用弹窗）拆在独立 hook：保持 useLLMSettings 精简。
   const {
@@ -133,11 +138,9 @@ export default function SettingsPage() {
       <div className="settings-page-header">
         <div>
           <Typography.Title level={3} style={{ margin: 0 }}>
-            设置
+            {t("settings.page.title")}
           </Typography.Title>
-          <Typography.Text type="secondary">
-            配置简历生成、岗位需求解读和求职助手等 AI 功能使用的模型服务
-          </Typography.Text>
+          <Typography.Text type="secondary">{t("settings.page.subtitle")}</Typography.Text>
         </div>
       </div>
 
@@ -152,21 +155,18 @@ export default function SettingsPage() {
         items={[
           {
             key: "model",
-            label: "AI 模型",
+            label: t("settings.tab.model"),
             children: (
               <>
                 <div className="settings-section-head">
                   <div className="settings-section-titles">
-                    <Typography.Text type="secondary">
-                      简历生成、岗位解读与求职助手用的是同一套模型配置，所有数据集共用；
-                      已保存的配置以记录卡片展示，点「新建配置」或记录卡上的「编辑」在弹窗中填写。
-                    </Typography.Text>
+                    <Typography.Text type="secondary">{t("settings.model.intro")}</Typography.Text>
                   </div>
                 </div>
 
                 <SettingsGroupTitle
-                  text="大模型 API 配置（所有数据集共用）"
-                  hint="保存即对所有数据集生效；记录卡片可随时切换「使用中」"
+                  text={t("settings.model.group.title")}
+                  hint={t("settings.model.group.hint")}
                 />
                 <LLMConfigCard
                   records={records}
@@ -205,7 +205,10 @@ export default function SettingsPage() {
                 />
 
                 {/* 联网搜索与模型配置同页：两者一起决定助手"能查什么、查得多细"。 */}
-                <SettingsGroupTitle text="助手能力" hint="助手能查什么、会什么、能读什么" />
+                <SettingsGroupTitle
+                  text={t("settings.assistant.group.title")}
+                  hint={t("settings.assistant.group.hint")}
+                />
                 <SearchCard />
 
                 {/* 助手的数据可见范围开关：放宽模式（默认关，开启前有明确告知）。 */}
@@ -234,14 +237,12 @@ export default function SettingsPage() {
           },
           {
             key: "data",
-            label: "数据",
+            label: t("settings.tab.data"),
             children: (
               <>
                 <div className="settings-section-head">
                   <div className="settings-section-titles">
-                    <Typography.Text type="secondary">
-                      岗位、简历与资料都存放在当前数据集里，可以整份导出备份或切换。
-                    </Typography.Text>
+                    <Typography.Text type="secondary">{t("settings.data.intro")}</Typography.Text>
                   </div>
                 </div>
                 <DatasetsCard
@@ -297,24 +298,21 @@ export default function SettingsPage() {
           },
           {
             key: "app",
-            label: "应用",
+            label: t("settings.tab.app"),
             children: (
               <>
                 <div className="settings-section-head">
                   <div className="settings-section-titles">
-                    <Typography.Text type="secondary">
-                      应用本身的版本、更新与提醒行为。
-                    </Typography.Text>
+                    <Typography.Text type="secondary">{t("settings.app.intro")}</Typography.Text>
                   </div>
                 </div>
                 <SettingsGroupTitle
-                  text="界面与提醒"
-                  hint="导航入口、快捷键、悬浮球与近期提醒的行为"
+                  text={t("settings.app.ui.title")}
+                  hint={t("settings.app.ui.hint")}
                 />
                 {/* 主题切换已上移到页头（A3）：设置页只留一句说明，避免两处控件各说一套。 */}
                 <Typography.Paragraph type="secondary" className="settings-theme-note">
-                  主题用「主题」开关切换；深色只作用于应用界面，简历预览、导出 PDF 与打印结果
-                  仍是白纸。
+                  {t("settings.app.theme.note")}
                 </Typography.Paragraph>
                 <LocaleSettingsCard />
                 <ResumeFontCard />
@@ -324,10 +322,16 @@ export default function SettingsPage() {
                 <ReminderPopupCard />
 
                 {/* 网申填表的 AI 行为边界：与网申填表页顶部的快捷入口是同一个开关。 */}
-                <SettingsGroupTitle text="网申填表" hint="网申填表时 AI 能多做多少" />
+                <SettingsGroupTitle
+                  text={t("settings.webform.title")}
+                  hint={t("settings.webform.hint")}
+                />
                 <WebFormRelaxedModeCard />
 
-                <SettingsGroupTitle text="更新与帮助" hint="版本更新、诊断与反馈入口" />
+                <SettingsGroupTitle
+                  text={t("settings.help.title")}
+                  hint={t("settings.help.hint")}
+                />
                 <UpdateCard />
                 <AnnouncementSettingsCard />
                 <HelpDiagnosticsCard />

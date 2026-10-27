@@ -33,6 +33,7 @@ import versions from "./en-US.versions";
 import workbench from "./en-US.workbench";
 import webformGroups from "./en-US.webformGroups";
 import webformFields from "./en-US.webformFields";
+import settingsPage from "./en-US.settingsPage";
 
 const enUS = {
   ...core,
@@ -67,6 +68,7 @@ const enUS = {
   ...workbench,
   ...webformGroups,
   ...webformFields,
+  ...settingsPage,
 } as const satisfies Record<keyof ZhCNMessages, string>;
 
 export default enUS;
