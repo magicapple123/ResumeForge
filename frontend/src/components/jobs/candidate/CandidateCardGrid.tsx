@@ -10,6 +10,8 @@ import { CheckSquareOutlined, DeleteOutlined, EditOutlined, EyeOutlined } from "
 import { Card, Checkbox, Space, Tag, Typography } from "antd";
 import { RowActions, RowContextMenu, type RowMenuItem } from "../../common/RowActions";
 import { TRASH_RECOVERY_NOTE } from "../../common/rowActionMenu";
+import { t } from "../../../i18n";
+import { useLocale } from "../../../i18n/i18nContext";
 import type { CandidateJob } from "../../../types";
 import { formatDateTime } from "../../../utils/format";
 
@@ -38,6 +40,7 @@ export function CandidateCardGrid({
   onOpenEdit: (candidate: CandidateJob) => void;
   onRemove: (candidate: CandidateJob) => Promise<void>;
 }) {
+  useLocale();
   return (
     <div className="candidate-job-card-grid">
       {items.map((candidate) => {
@@ -50,29 +53,29 @@ export function CandidateCardGrid({
           : [
               {
                 key: "detail",
-                label: "查看详情",
+                label: t("jobsCandidate.card.viewDetail"),
                 icon: <EyeOutlined />,
                 onClick: () => void onOpenDetails(candidate),
               },
               {
                 key: "edit",
-                label: "编辑",
+                label: t("jobs.candidate.action.edit"),
                 icon: <EditOutlined />,
                 onClick: () => onOpenEdit(candidate),
               },
               { key: "divider-batch", type: "divider" },
               {
                 key: "batch_select",
-                label: "批量选择",
+                label: t("common.action.batchSelect"),
                 icon: <CheckSquareOutlined />,
                 onClick: onEnterSelecting,
               },
               {
                 key: "delete",
-                label: "删除",
+                label: t("common.action.delete"),
                 danger: true,
                 icon: <DeleteOutlined />,
-                confirm: "删除这条备选岗位？",
+                confirm: t("jobsCandidate.card.deleteConfirm"),
                 // 0050 起备选岗位是软删除：文案必须说"进回收站、可恢复"，
                 // 不能再说"无法恢复"（说了就会让用户不敢删，也说不清去哪找回来）。
                 confirmBody: TRASH_RECOVERY_NOTE,
@@ -99,30 +102,46 @@ export function CandidateCardGrid({
                       onChange={(event) => onToggleSelected(candidate.id, event.target.checked)}
                     />
                   )}
-                  <Typography.Text strong>{candidate.title || "（未识别岗位名）"}</Typography.Text>
+                  <Typography.Text strong>
+                    {candidate.title || t("jobsCandidate.card.untitled")}
+                  </Typography.Text>
                 </Space>
               }
               extra={
                 <Tag color={candidate.status === "imported" ? "green" : "orange"}>
-                  {candidate.status === "imported" ? "已导入" : "待处理"}
+                  {candidate.status === "imported"
+                    ? t("jobsCandidate.card.statusImported")
+                    : t("jobs.candidate.detail.status-pending")}
                 </Tag>
               }
             >
               <Space orientation="vertical" size={6} style={{ width: "100%" }}>
                 <Typography.Text type="secondary">
-                  {[candidate.company || "未识别公司", candidate.location, candidate.salary]
+                  {[
+                    candidate.company || t("jobs.candidate.detail.company-unknown"),
+                    candidate.location,
+                    candidate.salary,
+                  ]
                     .filter(Boolean)
                     .join(" · ")}
                 </Typography.Text>
                 <Space wrap>
-                  <Tag>{candidate.source || "手动添加"}</Tag>
+                  <Tag>{candidate.source || t("jobs.candidate.detail.source-manual")}</Tag>
                   {candidate.images.length > 0 && (
-                    <Tag color="blue">截图 {candidate.images.length} 张</Tag>
+                    <Tag color="blue">
+                      {t("jobsCandidate.card.images", { count: candidate.images.length })}
+                    </Tag>
                   )}
-                  {candidate.raw_text && <Tag>原文 {candidate.raw_text.length} 字</Tag>}
+                  {candidate.raw_text && (
+                    <Tag>
+                      {t("jobsCandidate.card.rawLength", { count: candidate.raw_text.length })}
+                    </Tag>
+                  )}
                 </Space>
                 <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                  更新于 {formatDateTime(candidate.updated_at)}
+                  {t("jobsCandidate.card.updatedAt", {
+                    time: formatDateTime(candidate.updated_at),
+                  })}
                 </Typography.Text>
                 {/* 只保留主操作（待处理卡片的「导入到岗位」）；已导入卡片不渲染操作区，
                     否则空容器会在卡片底部撑出一截留白。 */}
@@ -131,7 +150,7 @@ export function CandidateCardGrid({
                     primary={[
                       {
                         key: "import",
-                        label: "导入到岗位",
+                        label: t("jobs.candidate.action.import"),
                         onClick: () => void onStartImport(candidate),
                       },
                     ]}
