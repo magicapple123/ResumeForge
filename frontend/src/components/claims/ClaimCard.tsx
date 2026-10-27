@@ -12,7 +12,13 @@ import { useState } from "react";
 import { t } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
 import type { Claim, ClaimSummary } from "../../types";
-import { SOURCE_TYPE_LABELS, hasPlaceholder } from "../../types";
+import { hasPlaceholder } from "../../types";
+import {
+  claimCategoryLabelKey,
+  claimResponsibilityLabelKey,
+  claimSourceTypeLabelKey,
+  claimStatusLabelKey,
+} from "../../i18n/enum/claims";
 import { useRowActionMenu } from "../common/rowActionMenu";
 import { claimResponsibilityColor, claimStatusColor } from "./claimPresentation";
 
@@ -78,6 +84,10 @@ export default function ClaimCard({
     (interview?.decisions?.length ?? 0) > 0 ||
     (interview?.difficulties?.length ?? 0) > 0 ||
     (interview?.verification?.length ?? 0) > 0;
+  // 显示名走语言包；协议值本身就可能是后端新加的取值，查不到时回退成原值。
+  const categoryKey = claimCategoryLabelKey(claim.category);
+  const responsibilityKey = claimResponsibilityLabelKey(claim.responsibility_level);
+  const statusKey = claimStatusLabelKey(claim.verification_status);
 
   return (
     <article className="claim-card">
@@ -86,11 +96,13 @@ export default function ClaimCard({
           <Typography.Text strong>
             {claim.title || claim.subject || t("claimCard.header.fallbackTitle", { id: claim.id })}
           </Typography.Text>
-          <Tag>{claim.category}</Tag>
+          <Tag>{categoryKey ? t(categoryKey) : claim.category}</Tag>
           <Tag color={claimResponsibilityColor(claim.responsibility_level)}>
-            {claim.responsibility_level}
+            {responsibilityKey ? t(responsibilityKey) : claim.responsibility_level}
           </Tag>
-          <Tag color={claimStatusColor(claim.verification_status)}>{claim.verification_status}</Tag>
+          <Tag color={claimStatusColor(claim.verification_status)}>
+            {statusKey ? t(statusKey) : claim.verification_status}
+          </Tag>
           {claim.last_verified && (
             <Typography.Text type="secondary" className="claim-card-verified">
               {t("claimCard.header.lastVerified", { date: claim.last_verified })}
@@ -183,14 +195,17 @@ export default function ClaimCard({
           {sources.length > 0 && (
             <Space size={4} wrap>
               <span className="claim-card-label">{t("claimCard.evidence.title")}</span>
-              {sources.map((source, index) => (
-                <Tooltip
-                  key={index}
-                  title={`${source.location}${source.public ? "" : t("claimCard.evidence.privateSuffix")}`}
-                >
-                  <Tag>{SOURCE_TYPE_LABELS[source.type] ?? source.type}</Tag>
-                </Tooltip>
-              ))}
+              {sources.map((source, index) => {
+                const sourceKey = claimSourceTypeLabelKey(source.type);
+                return (
+                  <Tooltip
+                    key={index}
+                    title={`${source.location}${source.public ? "" : t("claimCard.evidence.privateSuffix")}`}
+                  >
+                    <Tag>{sourceKey ? t(sourceKey) : source.type}</Tag>
+                  </Tooltip>
+                );
+              })}
             </Space>
           )}
           {allowedUses.length > 0 && (
