@@ -30,11 +30,17 @@ import {
 } from "../../api/settings";
 import type { UpdateCheckResult } from "../../types";
 import { useUpdateDownloadStatus } from "../../hooks/useUpdateDownloadStatus";
-import { t } from "../../i18n";
+import { t, type MessageKey } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
 import { renderReleaseNotes } from "./updateNotesRenderer";
 
 const UPDATE_COMPLETED_KEY = "resumeforge.update.completed";
+
+/**
+ * 卡片内的错误提示：后端原文原样透传，没有原文时回退到语言包 key。
+ * key 在渲染期才 `t()`——事件期求值会把当时的语言冻进 state，切语言后不会重译。
+ */
+type CardError = { backendMessage: string } | { fallbackKey: MessageKey };
 
 function formatBytes(value: number | null): string {
   if (value === null || value < 0) return t("update.size.unknown");
@@ -53,7 +59,7 @@ export default function UpdateCard() {
   const [downloading, setDownloading] = useState(false);
   const [installing, setInstalling] = useState(false);
   const [background, setBackground] = useState(false);
-  const [error, setError] = useState("");
+  const [error, setError] = useState<CardError | null>(null);
   // 桌面安装壳：页面内的"下载 zip 并覆盖"对它无效（桌面 payload 是源码形态整包，
   // 更新包里没有 python-runtime.zip / desktop/，装上去只会半新半旧），所以要先问形态。
   const [desktop, setDesktop] = useState(false);
@@ -123,7 +129,7 @@ export default function UpdateCard() {
   const check = async (refresh: boolean) => {
     if (checking) return;
     setChecking(true);
-    setError("");
+    setError(null);
     try {
       const next = await checkForUpdate(refresh);
       setResult(next);
@@ -136,7 +142,11 @@ export default function UpdateCard() {
         message.info(t("update.check.latest", { version }));
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : t("update.error.check"));
+      setError(
+        err instanceof Error
+          ? { backendMessage: err.message }
+          : { fallbackKey: "update.error.check" },
+      );
     } finally {
       setChecking(false);
     }
@@ -145,12 +155,16 @@ export default function UpdateCard() {
   const download = async () => {
     if (downloading || installing) return;
     setDownloading(true);
-    setError("");
+    setError(null);
     try {
       const next = await startUpdateDownload(background);
       setStatus(next);
     } catch (err) {
-      setError(err instanceof Error ? err.message : t("update.error.download"));
+      setError(
+        err instanceof Error
+          ? { backendMessage: err.message }
+          : { fallbackKey: "update.error.download" },
+      );
       // 失败后状态多半已经变了（例如包其实已在磁盘上、后端恢复成了 ready）。
       await refreshStatus();
     } finally {
@@ -167,7 +181,7 @@ export default function UpdateCard() {
       cancelText: t("update.confirm.cancel"),
       onOk: async () => {
         setInstalling(true);
-        setError("");
+        setError(null);
         try {
           // 这里**不写任何"已完成"的标记**：装没装成由更新器写状态、后端读出来告诉界面，
           // 前端自己记一笔就等于在替结果打包票（旧版本正是这么做的，安装失败也会显示"已更新"）。
@@ -175,7 +189,11 @@ export default function UpdateCard() {
           setStatus(next);
         } catch (err) {
           setInstalling(false);
-          setError(err instanceof Error ? err.message : t("update.error.install"));
+          setError(
+            err instanceof Error
+              ? { backendMessage: err.message }
+              : { fallbackKey: "update.error.install" },
+          );
           // 安装被拒多半是后端状态已经变了（例如后端刚重启、内存里的"已下载"丢了）。
           // 重新拉一次真实状态：陈旧的绿色成功框会随之消失，不再与错误同屏。
           await refreshStatus();
@@ -183,6 +201,13 @@ export default function UpdateCard() {
       },
     });
   };
+
+  // 错误文案按当前语言在这里取（state 里只有后端原文或 key）。
+  const errorText = !error
+    ? ""
+    : "backendMessage" in error
+      ? error.backendMessage
+      : t(error.fallbackKey);
 
   const activeStatus = status?.state === "downloading" || status?.state === "installing";
   // 桌面形态一律不给页面内下载：那条路装不上依赖（见 getAppForm 的说明）。
@@ -267,18 +292,19 @@ export default function UpdateCard() {
       )}
 
       {checking && !result && <Spin style={{ marginTop: 16 }} />}
-      {error && <Alert style={{ marginTop: 16 }} type="error" showIcon title={error} />}
-      {statusError && (
+      {error && <Alert style={{ marginTop: 16 }} type="error" showIcon title={errorText} />}
+      {/* hook 只存提示 key：文案按当前语言在这里取，切语言后会跟着重译。 */}
+      {statusError ? (
         <Alert
           style={{ marginTop: 16 }}
           type="warning"
           showIcon
-          title={statusError}
+          title={t(statusError)}
           action={
             <Button onClick={() => void refreshStatus()}>{t("update.action.retryStatus")}</Button>
           }
         />
-      )}
+      ) : null}
       {status?.state === "downloading" && !statusError && (
         <div style={{ marginTop: 16 }}>
           <Typography.Text>
