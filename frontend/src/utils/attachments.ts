@@ -6,6 +6,8 @@
  * 保持一致——前端先拦一道只是为了少一次往返，服务端才是权威。
  */
 
+import { t } from "../i18n";
+
 /** 一次请求最多几个附件。 */
 export const MAX_ATTACHMENT_COUNT = 4;
 /** 单个附件的字节上限。 */
@@ -169,7 +171,7 @@ export function readAsDataUrl(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => resolve(String(reader.result ?? ""));
-    reader.onerror = () => reject(new Error("读取附件失败"));
+    reader.onerror = () => reject(new Error(t("fileUtils.attachments.error.read")));
     reader.readAsDataURL(file);
   });
 }
