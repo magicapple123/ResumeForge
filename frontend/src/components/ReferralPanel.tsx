@@ -12,6 +12,8 @@
 import { App, Empty, Form, Listy, Pagination, Space, Upload } from "antd";
 import LoadingBlock from "./common/LoadingBlock";
 import { useCallback, useEffect, useState } from "react";
+import { t } from "../i18n";
+import { useLocale } from "../i18n/i18nContext";
 import {
   batchDeleteReferrals,
   createReferral,
@@ -38,6 +40,8 @@ import { useBatchSelection } from "../hooks/useBatchSelection";
 const REFERRAL_PAGE_SIZE = 10;
 
 export default function ReferralPanel() {
+  // 本面板用模块级 t() 取文案：必须订阅语言变化。
+  useLocale();
   const { message } = App.useApp();
   // 批量选择：勾选若干条后一次删除（软删，全部进回收站）；列表是服务端分页，
   // 选区即当前页已加载的条目（pageSelectAll 只作用于当前页）。
@@ -73,7 +77,9 @@ export default function ReferralPanel() {
         REFERRAL_PAGE_SIZE,
       );
     } catch (error) {
-      message.error(error instanceof Error ? error.message : "读取内推失败");
+      message.error(
+        error instanceof Error ? error.message : t("componentsMisc2.referral.loadFailed"),
+      );
       return null;
     }
   }, [status, keyword, page, message]);
@@ -178,15 +184,15 @@ export default function ReferralPanel() {
   const beforeImageUpload = async (file: File) => {
     const classified = classifyAttachment(file);
     if (!classified || classified.kind !== "image") {
-      message.error("只能上传 png/jpg/webp/gif/bmp/tiff 图片");
+      message.error(t("componentsMisc2.referral.imageTypeError"));
       return Upload.LIST_IGNORE;
     }
     if (file.size > MAX_ATTACHMENT_BYTES) {
-      message.error("单张图片不能超过 2 MB");
+      message.error(t("componentsMisc2.referral.imageSizeError"));
       return Upload.LIST_IGNORE;
     }
     if (noteImages.length >= MAX_NOTE_IMAGES) {
-      message.error(`最多上传 ${MAX_NOTE_IMAGES} 张备注图片`);
+      message.error(t("componentsMisc2.referral.imageCountLimit", { count: MAX_NOTE_IMAGES }));
       return Upload.LIST_IGNORE;
     }
     setUploadingImages(true);
@@ -195,7 +201,9 @@ export default function ReferralPanel() {
       const { path } = await uploadReferralImage(file, (percent) => setImageUploadPercent(percent));
       setNoteImages((prev) => [...prev, path]);
     } catch (error) {
-      message.error(error instanceof Error ? error.message : "上传图片失败");
+      message.error(
+        error instanceof Error ? error.message : t("componentsMisc2.referral.uploadFailed"),
+      );
     } finally {
       setUploadingImages(false);
       setImageUploadPercent(null);
@@ -217,12 +225,16 @@ export default function ReferralPanel() {
     try {
       if (editing) await updateReferral(editing.id, payload);
       else await createReferral(payload);
-      message.success(editing ? "已更新内推" : "已新建内推");
+      message.success(
+        editing ? t("componentsMisc2.referral.updated") : t("componentsMisc2.referral.created"),
+      );
       setModalOpen(false);
       await loadList();
       await loadStats();
     } catch (error) {
-      message.error(error instanceof Error ? error.message : "保存内推失败");
+      message.error(
+        error instanceof Error ? error.message : t("componentsMisc2.referral.saveFailed"),
+      );
     } finally {
       setSaving(false);
     }
@@ -231,11 +243,13 @@ export default function ReferralPanel() {
   const remove = async (item: Referral) => {
     try {
       await deleteReferral(item.id);
-      message.success("已删除这条内推");
+      message.success(t("componentsMisc2.referral.deleted"));
       await loadList();
       await loadStats();
     } catch (error) {
-      message.error(error instanceof Error ? error.message : "删除失败");
+      message.error(
+        error instanceof Error ? error.message : t("componentsMisc2.referral.deleteFailed"),
+      );
     }
   };
 
@@ -245,9 +259,11 @@ export default function ReferralPanel() {
     if (ids.length === 0) return;
     try {
       const { deleted } = await batchDeleteReferrals(ids);
-      message.success(`已删除 ${deleted} 条内推，可在「回收站」里恢复`);
+      message.success(t("componentsMisc2.referral.batchDeleted", { count: deleted }));
     } catch (error) {
-      message.error(error instanceof Error ? error.message : "批量删除失败，请重试");
+      message.error(
+        error instanceof Error ? error.message : t("componentsMisc2.referral.batchDeleteFailed"),
+      );
     }
     batch.exitSelecting();
     await loadList();
@@ -279,14 +295,18 @@ export default function ReferralPanel() {
               ),
           }}
         >
-          <BatchDeleteButton count={batch.selectedCount} noun="条内推" onDelete={removeSelected} />
+          <BatchDeleteButton
+            count={batch.selectedCount}
+            noun={t("componentsMisc2.referral.batchNoun")}
+            onDelete={removeSelected}
+          />
         </BatchActionBar>
       )}
 
       {loading ? (
         <LoadingBlock />
       ) : items.length === 0 ? (
-        <Empty description="还没有内推记录，把找人内推的机会记下来吧" />
+        <Empty description={t("componentsMisc2.referral.empty")} />
       ) : (
         <>
           <Listy
@@ -315,7 +335,7 @@ export default function ReferralPanel() {
               onChange={setPage}
               hideOnSinglePage
               showSizeChanger={false}
-              showTotal={(count) => `共 ${count} 条`}
+              showTotal={(count) => t("componentsMisc2.referral.paginationTotal", { count })}
             />
           </div>
         </>
