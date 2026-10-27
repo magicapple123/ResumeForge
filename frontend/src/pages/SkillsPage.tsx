@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * 助手技能工作台：创建、导入和管理助手技能。
+ * 助手技能{t("skills.breadcrumb")}：创建、导入和管理助手技能。
  *
  * 「技能」= 一段长期生效的提示词 + 若干知识文件。它改变的是助手怎么回答问题，
  * 所以这一页的重点不是"管理列表"，而是让用户明白自己能造出什么样的助手。
@@ -109,7 +109,7 @@ export default function SkillsPage() {
         (current ?? []).map((item) => (item.id === updated.id ? updated : item)),
       );
     } catch (error) {
-      message.error(error instanceof Error ? error.message : "切换技能状态失败");
+      message.error(error instanceof Error ? error.message : t("skills.toast.toggleFailed"));
     } finally {
       setTogglingId(null);
     }
@@ -118,10 +118,10 @@ export default function SkillsPage() {
   const remove = async (skill: AssistantSkill) => {
     try {
       await deleteSkill(skill.id);
-      message.success(`已删除技能「${skill.name}」`);
+      message.success(t("skills.toast.deleted", { name: skill.name }));
       await load();
     } catch (error) {
-      message.error(error instanceof Error ? error.message : "删除技能失败");
+      message.error(error instanceof Error ? error.message : t("skills.toast.deleteFailed"));
     }
   };
 
@@ -130,10 +130,10 @@ export default function SkillsPage() {
     setImporting(true);
     try {
       const saved = await importSkill(file);
-      message.success(`已导入技能「${saved.name}」`);
+      message.success(t("skills.toast.imported", { name: saved.name }));
       await load();
     } catch (error) {
-      message.error(error instanceof Error ? error.message : "导入技能失败");
+      message.error(error instanceof Error ? error.message : t("skills.toast.importFailed"));
     } finally {
       setImporting(false);
     }
@@ -152,20 +152,25 @@ export default function SkillsPage() {
   };
 
   const actionsFor = (skill: AssistantSkill) => [
-    { key: "view", label: "查看 / 编辑", icon: <EditOutlined />, onClick: () => openEditor(skill) },
+    {
+      key: "view",
+      label: t("skills.action.view"),
+      icon: <EditOutlined />,
+      onClick: () => openEditor(skill),
+    },
     {
       key: "delete",
-      label: "删除",
+      label: t("skills.action.delete"),
       danger: true,
       icon: <DeleteOutlined />,
-      confirm: `删除技能「${skill.name}」？删除后助手不再按它的要求作答。`,
+      confirm: t("skills.confirm.delete", { name: skill.name }),
       onClick: () => void remove(skill),
     },
   ];
 
   const columns: TableColumnsType<AssistantSkill> = [
     {
-      title: "技能",
+      title: t("skills.column.skill"),
       dataIndex: "name",
       render: (_, skill) => (
         <Space orientation="vertical" size={0}>
@@ -181,12 +186,16 @@ export default function SkillsPage() {
       ),
     },
     {
-      title: "启用",
+      title: t("skills.column.enabled"),
       key: "enabled",
       width: 90,
       render: (_, skill) => (
         <Switch
-          aria-label={`${skill.enabled ? "停用" : "启用"}技能「${skill.name}」`}
+          aria-label={
+            skill.enabled
+              ? t("skills.aria.disable", { name: skill.name })
+              : t("skills.aria.enable", { name: skill.name })
+          }
           size="small"
           checked={skill.enabled}
           loading={togglingId === skill.id}
@@ -195,38 +204,38 @@ export default function SkillsPage() {
       ),
     },
     {
-      title: "提示词",
+      title: t("skills.column.prompt"),
       dataIndex: "prompt_chars",
       width: 110,
-      render: (value: number) => `${value} 字`,
+      render: (value: number) => t("skills.column.promptLength", { count: value }),
     },
     {
-      title: "知识文件",
+      title: t("skills.column.files"),
       dataIndex: "files",
       width: 200,
       render: (files: string[]) =>
         files.length === 0 ? (
-          <Typography.Text type="secondary">无</Typography.Text>
+          <Typography.Text type="secondary">{t("skills.none")}</Typography.Text>
         ) : (
-          <Tooltip title={files.join("、")}>
-            <Tag>{files.length} 个</Tag>
+          <Tooltip title={files.join(" / ")}>
+            <Tag>{t("skills.fileCount", { count: files.length })}</Tag>
           </Tooltip>
         ),
     },
     {
-      title: "来源",
+      title: t("skills.column.source"),
       dataIndex: "source_name",
       width: 140,
       render: (value: string) => value || "-",
     },
     {
-      title: "更新时间",
+      title: t("skills.column.updatedAt"),
       dataIndex: "updated_at",
       width: 170,
       render: (value: string) => formatDateTime(value),
     },
     {
-      title: "操作",
+      title: t("skills.column.actions"),
       key: "actions",
       width: 120,
       render: (_, skill) => <RowActions more={actionsFor(skill)} />,
@@ -254,11 +263,11 @@ export default function SkillsPage() {
               }}
             >
               <Button icon={<UploadOutlined />} loading={importing}>
-                导入技能（.md / .zip）
+                {t("skills.action.import")}
               </Button>
             </Upload>
             <Button type="primary" icon={<PlusOutlined />} onClick={() => openCreate()}>
-              新建技能
+              {t("skills.action.create")}
             </Button>
           </Space>
         )}
@@ -268,7 +277,7 @@ export default function SkillsPage() {
         activeKey={tab}
         onChange={(key) => setTab(key as "skills" | "templates")}
         items={[
-          { key: "skills", label: "技能" },
+          { key: "skills", label: t("skills.tab.skills") },
           // key 保持 `templates`：它同时是路由 query 与状态机里的名字，改名要连带改
           // 跳转与测试；界面上的名字已改成「版式」（自制模板下线后只剩版式）。
           { key: "templates", label: t("skills.tab.layout") },
@@ -284,19 +293,16 @@ export default function SkillsPage() {
               技能是什么
             </Typography.Title>
             <Typography.Paragraph type="secondary" style={{ marginBottom: 8 }}>
-              技能由两部分组成：<b>提示词</b>
-              是加进助手系统提示的长期要求（例如"改写简历要点时每条不超过 35 字"）；<b>知识文件</b>
-              是助手按需查阅的参考资料（例如常见面试题清单）。技能只影响助手怎么回答，
-              不会改动你的岗位、简历和资料。
+              {t("skills.guide.whatBody")}
             </Typography.Paragraph>
-            <Typography.Title level={5}>工作台怎么用</Typography.Title>
+            <Typography.Title level={5}>{t("skills.guide.howTitle")}</Typography.Title>
             <ol className="skills-intro-steps">
-              <li>从下面的模板复制一个起点，或直接点「新建技能」；</li>
-              <li>用「你要…」「不要…」把要求写具体，保存后技能立即生效；</li>
-              <li>在求职助手页可以随时开关技能，也可以用「导入技能」加载别人分享的 .md / .zip。</li>
+              <li>{t("skills.guide.how1")}</li>
+              <li>{t("skills.guide.how2")}</li>
+              <li>{t("skills.guide.how3")}</li>
             </ol>
             <Space wrap>
-              <Typography.Text type="secondary">模板：</Typography.Text>
+              <Typography.Text type="secondary">{t("skills.guide.templates")}</Typography.Text>
               {SKILL_TEMPLATES.map((template) => (
                 <Tooltip key={template.label} title={template.hint}>
                   <Button size="small" onClick={() => openCreate(template.draft)}>
@@ -311,15 +317,18 @@ export default function SkillsPage() {
             type="info"
             showIcon
             style={{ marginBottom: 16 }}
-            title="启用的技能越多，系统提示越长：技能提示词总量超过预算时，后面的技能不会被加载（助手会用一句话说明）。"
+            title={t("skills.budget.title")}
           />
 
           {loading ? (
             <LoadingBlock />
           ) : error ? (
-            <ErrorState description={`技能加载失败：${error}`} onRetry={() => void load()} />
+            <ErrorState
+              description={t("skills.error.loadFailed", { error })}
+              onRetry={() => void load()}
+            />
           ) : skills.length === 0 ? (
-            <Empty description="还没有技能，先用模板建一个试试" />
+            <Empty description={t("skills.empty")} />
           ) : (
             <Table
               rowKey="id"
