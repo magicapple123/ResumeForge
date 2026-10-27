@@ -12,6 +12,8 @@ import {
 } from "@ant-design/icons";
 import { Button, Card, Spin, Tag, Tooltip, Typography } from "antd";
 import { memo } from "react";
+import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 import WebFormBrowserUrlBar from "../../components/webform/WebFormBrowserUrlBar";
 import { BROWSER_STATE_META } from "../../types";
 import type { BrowserState, WebFormUrlHistory } from "../../types";
@@ -60,6 +62,8 @@ export const BrowserControlCard = memo(function BrowserControlCard({
   onExportDiagnostics: () => void;
   onEndSession: () => void;
 }) {
+  // 本组件用模块级 t()：订阅语言变化，否则切语言后这些按钮与提示不重渲染。
+  useLocale();
   // 浏览器那几个按钮共用这一个 busy：**任何一个在跑，其余的都禁用**。
   // 它们职责分得开（起停 / 配置 / 重查），但都围绕同一个浏览器进程——并行点开只会让
   // "关闭还没回来就点了启动"这类交错更难对上账。
@@ -82,7 +86,7 @@ export const BrowserControlCard = memo(function BrowserControlCard({
           <Tag color={stateMeta.color}>{stateMeta.label}</Tag>
           {browserLoading && !browserHasData ? <Spin size="small" /> : null}
           <Typography.Text type="secondary">
-            使用独立的网申专用浏览器（不会覆盖投递台或已有网申页面）
+            {t("webFormPage.browserCard.isolatedHint")}
           </Typography.Text>
         </div>
         <div className="webform-browser-actions">
@@ -90,65 +94,65 @@ export const BrowserControlCard = memo(function BrowserControlCard({
                 起停（启动/关闭浏览器）· 配置（浏览器设置）· 重查（刷新状态）。
               设置不回显状态、刷新不改配置、起停只碰进程——所以这里也不该让它们并行。 */}
           {running ? (
-            <Tooltip title="停掉这个受控浏览器窗口。里面的登录态会保留，下次启动不用重新登录">
+            <Tooltip title={t("webFormPage.browserCard.stopTooltip")}>
               <Button
                 icon={<StopOutlined />}
                 loading={busy === "stop"}
                 disabled={anyBusy}
                 onClick={onStop}
               >
-                关闭浏览器
+                {t("webFormPage.browserCard.stop")}
               </Button>
             </Tooltip>
           ) : (
-            <Tooltip title="拉起这个受控浏览器窗口（独立于你日常用的浏览器）">
+            <Tooltip title={t("webFormPage.browserCard.startTooltip")}>
               <Button
                 type="primary"
                 icon={<ChromeOutlined />}
-                aria-label="开启专用浏览器"
+                aria-label={t("webFormPage.browserCard.startAria")}
                 loading={busy === "start"}
                 disabled={anyBusy}
                 onClick={onStart}
               >
-                开启专用浏览器
+                {t("webFormPage.browserCard.start")}
               </Button>
             </Tooltip>
           )}
-          <Tooltip title="只改「用哪个浏览器」这类配置，不会启动或关闭它——改完要关掉再启动一次才生效">
+          <Tooltip title={t("webFormPage.browserCard.settingsTooltip")}>
             <Button icon={<SettingOutlined />} disabled={anyBusy} onClick={onOpenBrowserSettings}>
-              浏览器设置
+              {t("webFormPage.browserCard.settings")}
             </Button>
           </Tooltip>
-          <Tooltip title="重新读一次运行状态。平时它每 0.6 秒自己会刷；你刚关掉窗口或刚启动时可以用它立刻确认">
+          <Tooltip title={t("webFormPage.browserCard.refreshTooltip")}>
             <Button
               icon={<ReloadOutlined />}
               loading={busy === "refresh"}
               disabled={anyBusy}
               onClick={() => void onRefreshStatus()}
-              aria-label="刷新状态"
+              aria-label={t("webFormPage.browserCard.refreshAria")}
             >
-              刷新状态
+              {t("webFormPage.browserCard.refresh")}
             </Button>
           </Tooltip>
-          <Tooltip title="导出不含简历内容、表单值和密钥的诊断信息，适合连同截图提交排查">
+          <Tooltip title={t("webFormPage.browserCard.diagnosticsTooltip")}>
             <Button
               icon={<DownloadOutlined />}
               loading={busy === "diagnostics"}
               disabled={anyBusy}
               onClick={() => void onExportDiagnostics()}
             >
-              导出诊断
+              {t("webFormPage.browserCard.diagnostics")}
             </Button>
           </Tooltip>
           {running && (sessionActive || liveRunning) ? (
-            <Tooltip title="结束这一次网申填写：收起面板、不清理资料，下次点「读取当前表单」重来">
+            <Tooltip title={t("webFormPage.browserCard.endTooltip")}>
               <Button
                 danger
                 loading={busy === "end"}
                 disabled={anyBusy}
                 onClick={() => void onEndSession()}
               >
-                结束本次填写
+                {t("webFormPage.browserCard.end")}
               </Button>
             </Tooltip>
           ) : null}
