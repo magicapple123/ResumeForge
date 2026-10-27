@@ -25,6 +25,8 @@ import {
   cancelJobMatchBackgroundTask,
   type JobMatchBackgroundTaskView,
 } from "../utils/jobMatchBackgroundTasks";
+import { t } from "../i18n";
+import { useLocale } from "../i18n/i18nContext";
 
 /** 任务条自身的每秒心跳：chip 上的「已运行 N 秒」靠它推进。 */
 function useSecondTick(active: boolean): number {
@@ -56,6 +58,7 @@ function TaskChip({
   onView?: () => void;
   onCancel?: () => void;
 }) {
+  useLocale();
   return (
     <Tag className="background-task-bar-chip">
       <Space size={6}>
@@ -68,7 +71,7 @@ function TaskChip({
         </Typography.Text>
         {onView && (
           <Button size="small" type="link" onClick={onView} disabled={busy}>
-            查看
+            {t("backgroundTasks.bar.view")}
           </Button>
         )}
         {onCancel && (
@@ -77,7 +80,7 @@ function TaskChip({
             type="text"
             danger
             icon={<CloseCircleOutlined />}
-            aria-label={`取消${label}`}
+            aria-label={t("backgroundTasks.bar.cancelAria", { label })}
             onClick={onCancel}
             disabled={busy}
           />
@@ -88,6 +91,8 @@ function TaskChip({
 }
 
 export default function BackgroundTaskBar() {
+  // 本组件用模块级 t()：必须订阅语言变化，否则切语言后这块文案不重渲染。
+  useLocale();
   const { message } = App.useApp();
   const navigate = useNavigate();
   const resumeTasks = useBackgroundTasks();
@@ -104,9 +109,11 @@ export default function BackgroundTaskBar() {
     setCancelling(task.id);
     try {
       await cancelJobMatchBackgroundTask(task.id);
-      message.info(`已请求取消「${task.label}」`);
+      message.info(t("backgroundTasks.toast.cancelRequested", { name: task.label }));
     } catch (error) {
-      message.error(error instanceof Error ? error.message : "取消失败，请稍后重试");
+      message.error(
+        error instanceof Error ? error.message : t("backgroundTasks.toast.cancelFailed"),
+      );
     } finally {
       setCancelling(null);
     }
@@ -117,28 +124,40 @@ export default function BackgroundTaskBar() {
     setCancelling(String(task.id));
     try {
       await cancelBackgroundTask(task.id);
-      message.info(`已取消「${task.label}」`);
+      message.info(t("backgroundTasks.toast.cancelled", { name: task.label }));
     } catch (error) {
-      message.error(error instanceof Error ? error.message : "取消失败，请稍后重试");
+      message.error(
+        error instanceof Error ? error.message : t("backgroundTasks.toast.cancelFailed"),
+      );
     } finally {
       setCancelling(null);
     }
   };
 
   return (
-    <div className="background-task-bar" role="status" aria-label="正在进行的任务">
+    <div
+      className="background-task-bar"
+      role="status"
+      aria-label={t("backgroundTasks.popover.title")}
+    >
       <Typography.Text type="secondary" className="background-task-bar-title">
-        正在进行
+        {t("backgroundTasks.bar.heading")}
       </Typography.Text>
       {analyses.map((entry: JobAnalysisEntry) => {
-        const label = ["岗位解读", entry.state.company, entry.state.title]
+        const label = [
+          t("backgroundTasks.jobAnalysis.label"),
+          entry.state.company,
+          entry.state.title,
+        ]
           .filter(Boolean)
           .join(" · ");
         return (
           <TaskChip
             key={`analysis-${entry.jobId}`}
             label={label}
-            meta={`已运行 ${elapsedSeconds(entry.state.startedAt, now)} 秒`}
+            meta={t("backgroundTasks.bar.elapsed", {
+              seconds: elapsedSeconds(entry.state.startedAt, now),
+            })}
             busy={busy}
             onView={() => navigate(`/jobs?job_id=${entry.jobId}&analysis=1`)}
             onCancel={() => cancelJobAnalysis(entry.jobId)}
@@ -149,7 +168,7 @@ export default function BackgroundTaskBar() {
         <TaskChip
           key={`resume-${task.id}`}
           label={task.label}
-          meta={task.message || "生成中…"}
+          meta={task.message || t("backgroundTasks.bar.generating")}
           busy={busy}
           onView={() => navigate("/resumes")}
           onCancel={() => void cancelResume(task)}
@@ -159,7 +178,10 @@ export default function BackgroundTaskBar() {
         <TaskChip
           key={`match-${task.id}`}
           label={task.label}
-          meta={`已处理 ${task.completedCount + task.failedCount}/${task.requestedCount} 个岗位`}
+          meta={t("backgroundTasks.progress.processed", {
+            done: task.completedCount + task.failedCount,
+            total: task.requestedCount,
+          })}
           busy={busy}
           onView={() => navigate("/jobs?match_batch=history")}
           onCancel={() => void cancelJobMatch(task)}
