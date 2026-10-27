@@ -38,6 +38,7 @@ GUIDE_STEPS_TS = FRONTEND_DIR / "src" / "components" / "userGuideSteps.ts"
 # FE3（2026-10-25）把指南步骤数据拆到 components/user-guide/*.ts，userGuideSteps.ts 只剩
 # ≤100 行门面（类型再导出 + 组装）。标题从分域模块提取；门面里已没有 title 字面量。
 GUIDE_MODULES_DIR = FRONTEND_DIR / "src" / "components" / "user-guide"
+ZH_MESSAGES_DIR = FRONTEND_DIR / "src" / "i18n" / "messages"
 README_MD = REPO_ROOT / "README.md"
 
 # README「功能特性」表每一行 → 目录里覆盖它的功能 key（可一对多）。
@@ -184,16 +185,54 @@ GUIDE_TITLE_DOMAINS = {
 }
 
 
+# 语言包条目：键是文案 key（字母开头、带点号），值是普通 TS 字符串（可能跨行）。
+_LOCALE_ENTRY_RE = re.compile(r'"([A-Za-z][\w.]*)":\s*\n?\s*"((?:[^"\\]|\\.)*)"')
+
+
+def _zh_copy() -> dict[str, str]:
+    """解析 zh-CN 语言包，得到「文案 key → 中文」。
+
+    导航与使用指南在 2026-10-28 完成双语化后，数据文件里只剩 `labelKey` / `titleKey`，
+    中文在语言包里；守卫要断言的是"用户看到的中文"，所以先把 key 还原成 zh 值再比较。
+    """
+    copy: dict[str, str] = {}
+    for path in sorted(ZH_MESSAGES_DIR.glob("zh-CN.*.ts")):
+        if path.name.endswith("namespaces.ts"):
+            continue
+        text = path.read_text(encoding="utf-8")
+        for match in _LOCALE_ENTRY_RE.finditer(text):
+            copy[match.group(1)] = match.group(2).replace('\\"', '"').replace("\\\\", "\\")
+    return copy
+
+
+def _resolve_copy(
+    copy: dict[str, str], keys: list[str], literals: list[str]
+) -> set[str]:
+    """key 还原成 zh 文案；同时兼容尚未迁走的字面量写法。"""
+    resolved = {copy[key] for key in keys if key in copy}
+    resolved.update(literals)
+    return resolved
+
+
 def _menu_labels() -> set[str]:
     text = NAVIGATION_CONFIG_TSX.read_text(encoding="utf-8")
-    return set(re.findall(r'label:\s*"([^"]+)"', text))
+    keys = re.findall(r'labelKey:\s*"([^"]+)"', text)
+    literals = re.findall(r'(?<!Key)label:\s*"([^"]+)"', text)
+    return _resolve_copy(_zh_copy(), keys, literals)
 
 
 def _guide_titles() -> set[str]:
-    """指南步骤标题：FE3 起从 components/user-guide/ 的分域数据模块提取。"""
+    """指南步骤标题：FE3 起从 components/user-guide/ 的分域数据模块提取。
+
+    双语化后数据模块只存 `titleKey`，这里经 zh 语言包还原成标题原文再比对。
+    """
+    copy = _zh_copy()
     titles: set[str] = set()
     for path in sorted(GUIDE_MODULES_DIR.glob("*.ts")):
-        titles.update(re.findall(r'title:\s*"([^"]+)"', path.read_text(encoding="utf-8")))
+        text = path.read_text(encoding="utf-8")
+        keys = re.findall(r'titleKey:\s*"([^"]+)"', text)
+        titles.update(copy[key] for key in keys if key in copy)
+        titles.update(re.findall(r'(?<!Key)title:\s*"([^"]+)"', text))
     return titles
 
 
