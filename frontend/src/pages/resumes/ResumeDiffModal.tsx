@@ -7,6 +7,8 @@
 import { Modal, Select, Space, Typography } from "antd";
 import LoadingBlock from "../../components/common/LoadingBlock";
 import ResumeFieldDiffView from "../../components/ResumeFieldDiffView";
+import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 import type { DiffViewData } from "../../types/resumeFieldDiff";
 import type { ResumeBrief } from "../../types";
 
@@ -31,9 +33,10 @@ export default function ResumeDiffModal({
   onSelect,
   onClose,
 }: Props) {
+  useLocale();
   return (
     <Modal
-      title="版本对比"
+      title={t("resumesPage.diff.title")}
       open={diffBase !== null}
       width="min(880px, calc(100vw - 24px))"
       footer={null}
@@ -46,12 +49,12 @@ export default function ResumeDiffModal({
       {diffBase && (
         <Space orientation="vertical" style={{ width: "100%" }} size="middle">
           <Space wrap>
-            <Typography.Text>基准版本：</Typography.Text>
+            <Typography.Text>{t("resumesPage.diff.baseLabel")}</Typography.Text>
             <Typography.Text strong>{diffBase.title}</Typography.Text>
-            <Typography.Text type="secondary">对比：</Typography.Text>
+            <Typography.Text type="secondary">{t("resumesPage.diff.againstLabel")}</Typography.Text>
             <Select
               style={{ minWidth: 240 }}
-              placeholder="选择要对比的版本"
+              placeholder={t("resumesPage.diff.againstPlaceholder")}
               value={diffAgainstId ?? undefined}
               onChange={(value) => onSelect(value)}
               options={items
@@ -62,7 +65,7 @@ export default function ResumeDiffModal({
           {diffLoading && <LoadingBlock />}
           {!diffLoading && diffResult && <ResumeFieldDiffView data={diffResult} />}
           {!diffLoading && !diffResult && (
-            <Typography.Text type="secondary">选择一份其它简历后展示三态差异。</Typography.Text>
+            <Typography.Text type="secondary">{t("resumesPage.diff.emptyHint")}</Typography.Text>
           )}
         </Space>
       )}
