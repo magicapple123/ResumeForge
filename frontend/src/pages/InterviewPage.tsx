@@ -37,6 +37,8 @@ import { AUTO_FINISH_MAX_ROUNDS, AUTO_ROUNDS_FLAG } from "../types";
 import { AUTO_ROUNDS_OPTION } from "../pages/interview/SetupTab";
 import { HARD_DELETE_NOTE } from "../components/common/rowActionMenu";
 import { formatDateTime } from "../utils/format";
+import { t } from "../i18n";
+import { useLocale } from "../i18n/i18nContext";
 
 /** 每页条数之类没有；这里是深链 ?job_id= 的解析：正整数才认，其余按"没带参"处理。 */
 function parseLinkedJobId(raw: string | null): number | undefined {
@@ -45,6 +47,7 @@ function parseLinkedJobId(raw: string | null): number | undefined {
 }
 
 export default function InterviewPage() {
+  useLocale();
   const { message, modal } = App.useApp();
   const navigate = useNavigate();
   // 岗位详情「模拟面试」深链带来的预填（RF-11）：进页面就把关联岗位选好。
@@ -73,7 +76,7 @@ export default function InterviewPage() {
     try {
       return await listInterviews();
     } catch (error) {
-      message.error(error instanceof Error ? error.message : "读取面试记录失败");
+      message.error(error instanceof Error ? error.message : t("interview.toast.loadFailed"));
       return null;
     }
   }, [message]);
@@ -127,7 +130,7 @@ export default function InterviewPage() {
       setAnswer("");
       await loadList();
     } catch (error) {
-      message.error(error instanceof Error ? error.message : "开始面试失败");
+      message.error(error instanceof Error ? error.message : t("interview.toast.startFailed"));
     } finally {
       setStarting(false);
     }
@@ -138,7 +141,7 @@ export default function InterviewPage() {
       setActive(await getInterview(id));
       setAnswer("");
     } catch (error) {
-      message.error(error instanceof Error ? error.message : "打开面试失败");
+      message.error(error instanceof Error ? error.message : t("interview.toast.openFailed"));
     }
   };
 
@@ -156,12 +159,12 @@ export default function InterviewPage() {
       });
       setActive(result.session);
       if (result.finished) {
-        message.success("面试结束，评分报告已生成");
+        message.success(t("interview.toast.reportReady"));
         await loadList();
       }
     } catch (error) {
       // 回答已经写到服务端了（后端先存后问），所以失败时提示"重试"而不是"重写"。
-      message.error(error instanceof Error ? error.message : "提交回答失败，请重试");
+      message.error(error instanceof Error ? error.message : t("interview.toast.submitFailed"));
       setAnswer(content);
     } finally {
       setStreamingQuestion(null);
@@ -172,18 +175,18 @@ export default function InterviewPage() {
   const endEarly = () => {
     if (!active) return;
     modal.confirm({
-      title: "结束这场面试？",
-      content: "结束后会根据已有的问答生成评分报告，不能再补充回答。",
-      okText: "结束并出报告",
-      cancelText: "继续面试",
+      title: t("interview.confirm.endTitle"),
+      content: t("interview.confirm.endBody"),
+      okText: t("interview.confirm.endOk"),
+      cancelText: t("interview.confirm.endCancel"),
       onOk: async () => {
         setSubmitting(true);
         try {
           setActive(await finishInterview(active.id));
-          message.success("面试已结束");
+          message.success(t("interview.toast.ended"));
           await loadList();
         } catch (error) {
-          message.error(error instanceof Error ? error.message : "结束面试失败");
+          message.error(error instanceof Error ? error.message : t("interview.toast.endFailed"));
         } finally {
           setSubmitting(false);
         }
@@ -195,10 +198,10 @@ export default function InterviewPage() {
     try {
       await deleteInterview(session.id);
       if (active?.id === session.id) setActive(null);
-      message.success("已删除这场面试");
+      message.success(t("interview.toast.deleted"));
       await loadList();
     } catch (error) {
-      message.error(error instanceof Error ? error.message : "删除失败");
+      message.error(error instanceof Error ? error.message : t("interview.toast.deleteFailed"));
     }
   };
 
@@ -207,7 +210,7 @@ export default function InterviewPage() {
     const ids = [...batch.selectedIds];
     if (ids.length === 0) return;
     modal.confirm({
-      title: "删除选中的面试记录？",
+      title: t("interview.confirm.deleteTitle"),
       content: `这 ${ids.length} 场面试${HARD_DELETE_NOTE}`,
       okText: "删除",
       okButtonProps: { danger: true },
@@ -218,8 +221,9 @@ export default function InterviewPage() {
             .map((item) => deleteInterview(item.id)),
         );
         const failed = results.filter((item) => item.status === "rejected").length;
-        if (failed === 0) message.success(`已删除 ${ids.length} 场面试`);
-        else message.warning(`已删除 ${ids.length - failed} 场，${failed} 场失败，请重试`);
+        if (failed === 0) message.success(t("interview.toast.deletedMany", { count: ids.length }));
+        else
+          message.warning(t("interview.toast.deletedPartial", { ok: ids.length - failed, failed }));
         batch.exitSelecting();
         await loadList();
       },
@@ -231,9 +235,9 @@ export default function InterviewPage() {
     setSavingReport(true);
     try {
       await interviewToMaterial(active.id);
-      message.success("已存进资料箱的「面试复盘」分类");
+      message.success(t("interview.toast.savedToMaterials"));
     } catch (error) {
-      message.error(error instanceof Error ? error.message : "存进资料箱失败");
+      message.error(error instanceof Error ? error.message : t("interview.toast.saveFailed"));
     } finally {
       setSavingReport(false);
     }
@@ -241,10 +245,10 @@ export default function InterviewPage() {
 
   // 题库「开始模拟面试」：把题目带入面试的考察重点，并切回模拟面试页。
   const startFromBank = (questions: string[]) => {
-    const focus = questions.slice(0, 6).join("；").slice(0, 255);
+    const focus = questions.slice(0, 6).join(t("interview.listSeparator")).slice(0, 255);
     form.setFieldsValue({ focus });
     setActiveTab("session");
-    message.info("题目已带入「考察重点」，调整后即可开始面试");
+    message.info(t("interview.toast.questionsImported"));
   };
 
   const answered = active?.answered_rounds ?? 0;
@@ -255,15 +259,13 @@ export default function InterviewPage() {
       <div className="profile-page-header">
         <div>
           <Typography.Title level={3} style={{ margin: 0 }}>
-            模拟面试
+            {t("interview.page.title")}
           </Typography.Title>
-          <Typography.Text type="secondary">
-            让 AI 面试官按你设定的类型与难度提问，结束后给出评分报告与改进建议。
-          </Typography.Text>
+          <Typography.Text type="secondary">{t("interview.page.subtitle")}</Typography.Text>
         </div>
         {active && (
           <Button icon={<ArrowLeftOutlined />} onClick={() => setActive(null)}>
-            回到设置
+            {t("interview.action.backToSettings")}
           </Button>
         )}
       </div>
@@ -275,7 +277,7 @@ export default function InterviewPage() {
           items={[
             {
               key: "session",
-              label: "模拟面试",
+              label: t("interview.tab.interview"),
               children: (
                 <div className="interview-setup">
                   <SetupTab
@@ -298,7 +300,7 @@ export default function InterviewPage() {
             },
             {
               key: "bank",
-              label: "题库",
+              label: t("interview.tab.questionBank"),
               children: (
                 <QuestionBankPanel
                   onStartSession={startFromBank}
@@ -310,12 +312,12 @@ export default function InterviewPage() {
             },
             {
               key: "experiences",
-              label: "面经",
+              label: t("interview.tab.experiences"),
               children: <InterviewExperiencePanel />,
             },
             {
               key: "review",
-              label: "面试复盘",
+              label: t("interview.tab.review"),
               children: (
                 <InterviewReviewPanel
                   onGoToResume={() => navigate("/resumes")}
@@ -340,8 +342,13 @@ export default function InterviewPage() {
             <Space size={6} wrap>
               <Typography.Text type="secondary">
                 {active.rounds_min != null
-                  ? `第 ${Math.min(answered + (finished ? 0 : 1), active.rounds)} 轮 · 面试官按表现收尾`
-                  : `第 ${Math.min(answered + (finished ? 0 : 1), active.rounds)} / ${active.rounds} 轮`}
+                  ? t("interview.round.withClosing", {
+                      current: Math.min(answered + (finished ? 0 : 1), active.rounds),
+                    })
+                  : t("interview.round.progress", {
+                      current: Math.min(answered + (finished ? 0 : 1), active.rounds),
+                      total: active.rounds,
+                    })}
               </Typography.Text>
               {!finished && (
                 <Button
@@ -351,11 +358,11 @@ export default function InterviewPage() {
                   onClick={endEarly}
                   loading={submitting}
                 >
-                  结束并出报告
+                  {t("interview.action.end")}
                 </Button>
               )}
               <Button size="small" icon={<ThunderboltOutlined />} onClick={() => setActive(null)}>
-                新开一场
+                {t("interview.action.new")}
               </Button>
             </Space>
           </div>
@@ -380,7 +387,7 @@ export default function InterviewPage() {
                         aria-hidden="true"
                       />
                     ) : null}
-                    <b>{item.role === "interviewer" ? "Jane" : "我"}</b>
+                    <b>{item.role === "interviewer" ? "Jane" : t("interview.role.you")}</b>
                     <Typography.Text type="secondary" className="assistant-message-time">
                       {formatDateTime(item.created_at)}
                     </Typography.Text>
@@ -388,7 +395,7 @@ export default function InterviewPage() {
                   <div className="interview-message-body">{item.content}</div>
                   {item.context.feedback ? (
                     <div className="interview-feedback">
-                      <b>面试官点评：</b>
+                      <b>{t("interview.role.comment")}</b>
                       {item.context.feedback}
                     </div>
                   ) : null}
@@ -414,7 +421,7 @@ export default function InterviewPage() {
                     // 流式：问题文本逐字到达（question_delta），像打字一样出现。
                     <div style={{ whiteSpace: "pre-wrap" }}>{streamingQuestion}</div>
                   ) : (
-                    <LoadingBlock tip="正在思考下一个问题…" minHeight={120} />
+                    <LoadingBlock tip={t("interview.thinking")} minHeight={120} />
                   )}
                 </div>
               </div>
@@ -433,7 +440,7 @@ export default function InterviewPage() {
               <Input.TextArea
                 value={answer}
                 autoSize={{ minRows: 3, maxRows: 10 }}
-                placeholder="像真实面试那样回答：先说结论，再说做了什么、结果如何（Ctrl+Enter 发送）"
+                placeholder={t("interview.placeholder")}
                 disabled={submitting}
                 onChange={(event) => setAnswer(event.target.value)}
                 onKeyDown={(event) => {
@@ -444,16 +451,14 @@ export default function InterviewPage() {
                 }}
               />
               <div className="interview-composer-actions">
-                <Typography.Text type="secondary">
-                  答不上来可以直接说「不知道」，面试官会给回答思路。
-                </Typography.Text>
+                <Typography.Text type="secondary">{t("interview.hint.dontKnow")}</Typography.Text>
                 <Button
                   type="primary"
                   loading={submitting}
                   disabled={!answer.trim()}
                   onClick={() => void sendAnswer()}
                 >
-                  提交回答
+                  {t("interview.action.submit")}
                 </Button>
               </div>
             </div>
