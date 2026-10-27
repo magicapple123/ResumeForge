@@ -6,6 +6,8 @@ import type { UploadProps } from "antd";
 import { useEffect, useRef, useState } from "react";
 import FileDropZone from "../common/FileDropZone";
 import { HintedTextArea } from "../common/MaxLengthHint";
+import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 
 const MAX_FILE_BYTES = 200_000;
 const MAX_FILE_NAME_CHARS = 255;
@@ -22,16 +24,25 @@ function hasSupportedExtension(fileName: string): boolean {
   return SUPPORTED_EXTENSIONS.some((extension) => normalized.endsWith(extension));
 }
 
+/**
+ * 解码失败的信号。
+ *
+ * 不能在模块作用域就构造带文案的 Error：那样等于在加载时求值 t()，语言会被钉死。
+ * 所以这里只抛类型，文案留给组件渲染期再取。
+ */
+class TextEncodingError extends Error {}
+
 async function readUtf8Text(file: File): Promise<string> {
   const buffer = await file.arrayBuffer();
   try {
     return new TextDecoder("utf-8", { fatal: true }).decode(buffer).replace(/^\uFEFF/, "");
   } catch {
-    throw new Error("文件不是有效的 UTF-8 编码，请转换编码后重试");
+    throw new TextEncodingError();
   }
 }
 
 export default function ReferenceFileField({ listName, fieldName, editable }: Props) {
+  useLocale();
   const { message } = App.useApp();
   const form = Form.useFormInstance();
   const [reading, setReading] = useState(false);
@@ -68,15 +79,15 @@ export default function ReferenceFileField({ listName, fieldName, editable }: Pr
   const acceptFile = (file: File) => {
     if (!editableRef.current) return;
     if (!hasSupportedExtension(file.name)) {
-      message.error("仅支持 .md 或 .txt 格式的总结文件");
+      message.error(t("referenceFile.error.extension"));
       return;
     }
     if (file.name.length > MAX_FILE_NAME_CHARS) {
-      message.error("总结文件名不能超过 255 个字符");
+      message.error(t("referenceFile.error.nameTooLong"));
       return;
     }
     if (file.size > MAX_FILE_BYTES) {
-      message.error("总结文件不能超过 200 KB");
+      message.error(t("referenceFile.error.size"));
       return;
     }
 
@@ -86,11 +97,15 @@ export default function ReferenceFileField({ listName, fieldName, editable }: Pr
       .then((text) => {
         if (readId.current !== currentReadId || !editableRef.current) return;
         setReference(file.name, text);
-        message.success("总结文件已添加，保存全部资料后生效");
+        message.success(t("referenceFile.toast.added"));
       })
       .catch((error) => {
         if (readId.current === currentReadId) {
-          message.error(error instanceof Error ? error.message : "读取总结文件失败");
+          message.error(
+            error instanceof TextEncodingError
+              ? t("referenceFile.error.encoding")
+              : t("referenceFile.error.readFailed"),
+          );
         }
       })
       .finally(() => {
@@ -117,33 +132,36 @@ export default function ReferenceFileField({ listName, fieldName, editable }: Pr
       accept=".md,.txt"
       multiple={false}
       disabled={!editable || reading}
-      hint="松开即可导入总结文件（.md / .txt）"
+      hint={t("referenceFile.hint.drop")}
       onFiles={(files) => acceptFile(files[0])}
-      onRejected={() => message.error("仅支持 .md 或 .txt 格式的总结文件")}
+      onRejected={() => message.error(t("referenceFile.error.extension"))}
     >
       {editable ? (
         <>
           <Form.Item
             name={[fieldName, "reference_file_name"]}
-            label="补充总结名称"
-            extra="导入文件会自动填入名称；直接输入内容时可自定义名称"
+            label={t("referenceFile.label.name")}
+            extra={t("referenceFile.extra.name")}
           >
-            <Input maxLength={MAX_FILE_NAME_CHARS} placeholder="如：项目总结.md" />
+            <Input
+              maxLength={MAX_FILE_NAME_CHARS}
+              placeholder={t("referenceFile.placeholder.name")}
+            />
           </Form.Item>
           <Form.Item
             name={[fieldName, "reference_content"]}
-            label="补充总结内容"
-            extra="支持直接输入，最多 200,000 字符"
+            label={t("referenceFile.label.content")}
+            extra={t("referenceFile.extra.content")}
           >
             <HintedTextArea
               rows={5}
               maxLength={200_000}
-              placeholder="可直接粘贴或输入项目总结、工作成果、校园经历细节等内容"
+              placeholder={t("referenceFile.placeholder.content")}
               onChange={(event) => {
                 if (event.target.value && !fileName) {
                   form.setFieldValue(
                     [listName, fieldName, "reference_file_name"],
-                    "手动输入总结.md",
+                    t("referenceFile.name.manualFile"),
                   );
                 }
               }}
@@ -158,17 +176,17 @@ export default function ReferenceFileField({ listName, fieldName, editable }: Pr
               disabled={reading}
             >
               <Button icon={<UploadOutlined />} loading={reading}>
-                {fileName ? "替换文件" : "导入文件"}
+                {fileName ? t("referenceFile.action.replace") : t("referenceFile.action.import")}
               </Button>
             </Upload>
             {(fileName || content) && (
               <Button danger icon={<DeleteOutlined />} disabled={reading} onClick={removeReference}>
-                移除总结
+                {t("referenceFile.action.remove")}
               </Button>
             )}
             {content && (
               <Button icon={<EyeOutlined />} onClick={() => setViewing(true)}>
-                查看内容
+                {t("referenceFile.action.view")}
               </Button>
             )}
           </Space>
@@ -178,21 +196,21 @@ export default function ReferenceFileField({ listName, fieldName, editable }: Pr
           <Space size={6}>
             <FileTextOutlined />
             <Typography.Text
-              ellipsis={{ tooltip: fileName || "手动输入总结" }}
+              ellipsis={{ tooltip: fileName || t("referenceFile.name.manual") }}
               style={{ maxWidth: "min(420px, 65vw)" }}
             >
-              {fileName || "手动输入总结"}
+              {fileName || t("referenceFile.name.manual")}
             </Typography.Text>
-            <Tag>{content.length.toLocaleString()} 字</Tag>
+            <Tag>{t("referenceFile.count.chars", { count: content.length.toLocaleString() })}</Tag>
           </Space>
           <Button icon={<EyeOutlined />} disabled={!content} onClick={() => setViewing(true)}>
-            查看内容
+            {t("referenceFile.action.view")}
           </Button>
         </Space>
       )}
       // popup-ok: 只读预览，关闭无损失（footer 为空，没有提交动作）
       <Modal
-        title={fileName || "补充总结内容"}
+        title={fileName || t("referenceFile.label.content")}
         open={viewing}
         onCancel={() => setViewing(false)}
         // 关闭只留右上角 ×（Esc / 点遮罩同样关闭）：单动作的底部栏是重复入口。
@@ -200,7 +218,9 @@ export default function ReferenceFileField({ listName, fieldName, editable }: Pr
         width={760}
         destroyOnHidden
       >
-        <Typography.Text type="secondary">{content.length.toLocaleString()} 字</Typography.Text>
+        <Typography.Text type="secondary">
+          {t("referenceFile.count.chars", { count: content.length.toLocaleString() })}
+        </Typography.Text>
         <pre className="profile-reference-preview">{content}</pre>
       </Modal>
     </FileDropZone>
