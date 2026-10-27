@@ -3,6 +3,7 @@
 import { Button } from "antd";
 import { createElement } from "react";
 import { cancelJobMatchBatchTask, getJobMatchBatchTask, listJobMatchBatchTasks } from "../api/jobs";
+import { t } from "../i18n";
 import type { JobMatchBackgroundTask } from "../types";
 import { navigateForTask, notifyTaskDone } from "./taskNotify";
 
@@ -105,13 +106,11 @@ function finish(id: string, task: JobMatchBackgroundTaskView): void {
   emit();
   if (task.status === "completed") {
     notifyTaskDone({
-      title: "岗位适配度分析完成",
-      description:
-        "已完成 " +
-        task.completedCount +
-        " 个岗位，" +
-        task.failedCount +
-        " 个岗位失败；结果已保存到分析记录。",
+      title: t("backgroundTasks.jobMatch.done.title"),
+      description: t("backgroundTasks.jobMatch.done.description", {
+        completed: task.completedCount,
+        failed: task.failedCount,
+      }),
       // 通知卡片上的「查看结果」：跳到岗位广场的分析记录（createElement——本文件是 .ts）。
       actions: createElement(
         Button,
@@ -120,26 +119,29 @@ function finish(id: string, task: JobMatchBackgroundTaskView): void {
           type: "primary",
           onClick: () => navigateForTask("/jobs?match_batch=history"),
         },
-        "查看结果",
+        t("backgroundTasks.jobMatch.action.viewResults"),
       ),
     });
   } else if (task.status === "failed") {
     notifyTaskDone({
       kind: "error",
-      title: "岗位适配度分析失败",
-      description: task.error || "请稍后重试。",
+      title: t("backgroundTasks.jobMatch.failed.title"),
+      description: task.error || t("backgroundTasks.jobMatch.failed.description"),
     });
   } else {
     notifyTaskDone({
       kind: "warning",
-      title: "岗位适配度分析已取消",
-      description: task.batchId ? "取消前已完成的结果仍已保存。" : undefined,
+      title: t("backgroundTasks.jobMatch.cancelled.title"),
+      description: task.batchId ? t("backgroundTasks.jobMatch.cancelled.description") : undefined,
     });
   }
 }
 
 export function watchJobMatchBatchTask(task: JobMatchBackgroundTask, label?: string): void {
-  tasks.set(task.task_id, toView(task, label ?? "分析 " + task.requested_count + " 个岗位"));
+  tasks.set(
+    task.task_id,
+    toView(task, label ?? t("backgroundTasks.jobMatch.label", { count: task.requested_count })),
+  );
   ensurePolling();
   emit();
   void tick();
