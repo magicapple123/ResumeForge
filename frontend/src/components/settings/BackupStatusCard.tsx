@@ -19,6 +19,8 @@ import { getBackupStatus, saveAutoBackupInterval } from "../../api/settings";
 import { useApi } from "../../hooks/useApi";
 import type { BackupStatus } from "../../types";
 import { formatDateTime } from "../../utils/format";
+import { t, type MessageKey } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 import LoadingBlock from "../common/LoadingBlock";
 import { ListyItem } from "../common/ListyItem";
 
@@ -30,27 +32,6 @@ function resolveSnapshotState(status: BackupStatus): SnapshotState {
   return status.snapshot_count === 0 ? "empty" : "ok";
 }
 
-// i18n-ok: 新增状态标签，待随本卡片统一迁 t()
-const UNREADABLE_LABEL = "无法确认";
-// i18n-ok: 新增状态标签，待随本卡片统一迁 t()
-const SNAPSHOT_MISSING_LABEL = "快照缺失";
-// i18n-ok: 新增状态说明（目录读不了时必须说清"无法确认"而不是"没有"）
-const UNREADABLE_HINT = "无法读取快照目录，请检查磁盘权限；当前无法确认快照是否存在。";
-// i18n-ok: 新增状态说明（历史成功记录还在，但快照文件不在了）
-const SNAPSHOT_MISSING_HINT = "上次成功记录存在，但当前找不到快照文件；请重新备份一次。";
-// i18n-ok: A02 新增禁用态标签（设置域尚未有 i18n 命名空间，待统一迁移）
-const DISABLED_LABEL = "自动备份已禁用";
-// i18n-ok: A02 新增禁用态说明（由部署配置控制，界面不能假装有开关）
-const DISABLED_HINT = "自动备份已禁用（由部署配置控制）；仍可手动导出备份包。";
-// i18n-ok: A02 禁用态下的间隔说明（设置域 i18n 迁移前临时硬编码）
-const DISABLED_INTERVAL_HINT = "天自动快照次数由部署配置控制；手动导出的备份包仍包含附件。";
-
-/**
- * 状态 → 展示标签（保护缺口优先如实暴露）。
- *
- * 优先级（高→低）：无法确认 → 保护中断 → 尚无备份 → 快照缺失 → 已到期 → 受保护。
- * 「无法确认」必须压过其他一切：目录读不了时，后面每一条判断都缺依据。
- */
 /** 后端显式禁用（A02）：新字段任一为真，或统一 state 枚举为 disabled。 */
 function isAutoBackupDisabled(status: BackupStatus): boolean {
   return (
@@ -58,33 +39,63 @@ function isAutoBackupDisabled(status: BackupStatus): boolean {
   );
 }
 
-function statusMeta(status: BackupStatus): { label: string; color: string } {
+/**
+ * 状态 → 展示标签 key（保护缺口优先如实暴露）。
+ *
+ * 优先级（高→低）：无法确认 → 保护中断 → 尚无备份 → 快照缺失 → 已到期 → 受保护。
+ * 「无法确认」必须压过其他一切：目录读不了时，后面每一条判断都缺依据。
+ *
+ * 只返回 key、不在这里取文案：模块作用域求值会把语言钉死，渲染处才 `t()`。
+ */
+function statusMeta(status: BackupStatus): { labelKey: MessageKey; color: string } {
   const state = resolveSnapshotState(status);
   // 禁用压过其它：部署配置关掉自动备份时，不能显示"受保护/保护中断"这些需要调度才能得出的结论。
-  if (isAutoBackupDisabled(status)) return { label: DISABLED_LABEL, color: "default" };
-  if (status.state === "unreadable") return { label: UNREADABLE_LABEL, color: "warning" };
-  // A02：后端 state 枚举 → 既有标签（设置域 i18n 迁移前临时硬编码，见 i18n-ok）。
-  // i18n-ok: A02 状态枚举复用既有标签
-  if (status.state === "failing") return { label: "保护中断", color: "error" };
-  // i18n-ok: A02 状态枚举复用既有标签
-  if (status.state === "never") return { label: "尚无备份", color: "warning" };
-  if (status.state === "empty") return { label: SNAPSHOT_MISSING_LABEL, color: "warning" };
-  // i18n-ok: A02 状态枚举复用既有标签
-  if (status.state === "overdue") return { label: "已到期未备份", color: "warning" };
-  // i18n-ok: A02 状态枚举复用既有标签
-  if (status.state === "protected") return { label: "受保护", color: "success" };
-  if (state === "unreadable") return { label: UNREADABLE_LABEL, color: "warning" };
-  if (status.consecutive_failures > 0) return { label: "保护中断", color: "error" };
-  if (!status.last_success) return { label: "尚无备份", color: "warning" };
-  if (state === "empty") return { label: SNAPSHOT_MISSING_LABEL, color: "warning" };
-  if (status.overdue) return { label: "已到期未备份", color: "warning" };
-  return { label: "受保护", color: "success" };
+  if (isAutoBackupDisabled(status)) {
+    return { labelKey: "backupStatus.state.disabled.label", color: "default" };
+  }
+  if (status.state === "unreadable") {
+    return { labelKey: "backupStatus.state.unreadable.label", color: "warning" };
+  }
+  // A02：后端 state 枚举 → 既有标签（文案见 backupStatus.state.*）。
+  if (status.state === "failing") {
+    return { labelKey: "backupStatus.state.failing.label", color: "error" };
+  }
+  if (status.state === "never") {
+    return { labelKey: "backupStatus.state.never.label", color: "warning" };
+  }
+  if (status.state === "empty") {
+    return { labelKey: "backupStatus.state.empty.label", color: "warning" };
+  }
+  if (status.state === "overdue") {
+    return { labelKey: "backupStatus.state.overdue.label", color: "warning" };
+  }
+  if (status.state === "protected") {
+    return { labelKey: "backupStatus.state.protected.label", color: "success" };
+  }
+  if (state === "unreadable") {
+    return { labelKey: "backupStatus.state.unreadable.label", color: "warning" };
+  }
+  if (status.consecutive_failures > 0) {
+    return { labelKey: "backupStatus.state.failing.label", color: "error" };
+  }
+  if (!status.last_success) {
+    return { labelKey: "backupStatus.state.never.label", color: "warning" };
+  }
+  if (state === "empty") {
+    return { labelKey: "backupStatus.state.empty.label", color: "warning" };
+  }
+  if (status.overdue) {
+    return { labelKey: "backupStatus.state.overdue.label", color: "warning" };
+  }
+  return { labelKey: "backupStatus.state.protected.label", color: "success" };
 }
 
 /** 常用间隔档位（天）；用户自定义过的值不在档位里时由调用方动态补进选项。 */
 const INTERVAL_PRESET_DAYS = [1, 3, 7, 14, 30, 90, 365];
 
 export default function BackupStatusCard() {
+  // 本组件用模块级 t()：必须订阅语言变化，否则切语言后这一块不重渲染。
+  useLocale();
   const { message } = App.useApp();
   const { data: status, loading, error, reload } = useApi(getBackupStatus);
   const [savingInterval, setSavingInterval] = useState(false);
@@ -98,10 +109,10 @@ export default function BackupStatusCard() {
     setSavingInterval(true);
     try {
       await saveAutoBackupInterval(days);
-      message.success(`自动备份间隔已改为每 ${days} 天，下次调度检查时生效`);
+      message.success(t("backupStatus.interval.saved", { count: days }));
       await reload();
     } catch (err) {
-      message.error(err instanceof Error ? err.message : "保存自动备份间隔失败");
+      message.error(err instanceof Error ? err.message : t("backupStatus.interval.saveFailed"));
     } finally {
       setSavingInterval(false);
     }
@@ -110,14 +121,23 @@ export default function BackupStatusCard() {
   const intervalOptions =
     status && !INTERVAL_PRESET_DAYS.includes(status.interval_days)
       ? [
-          { value: status.interval_days, label: `${status.interval_days} 天` },
-          ...INTERVAL_PRESET_DAYS.map((days) => ({ value: days, label: `${days} 天` })),
+          {
+            value: status.interval_days,
+            label: t("backupStatus.interval.optionDays", { count: status.interval_days }),
+          },
+          ...INTERVAL_PRESET_DAYS.map((days) => ({
+            value: days,
+            label: t("backupStatus.interval.optionDays", { count: days }),
+          })),
         ]
-      : INTERVAL_PRESET_DAYS.map((days) => ({ value: days, label: `${days} 天` }));
+      : INTERVAL_PRESET_DAYS.map((days) => ({
+          value: days,
+          label: t("backupStatus.interval.optionDays", { count: days }),
+        }));
 
   return (
     <Card
-      title="自动备份状态"
+      title={t("backupStatus.title")}
       className="settings-card"
       extra={
         <Button
@@ -125,7 +145,7 @@ export default function BackupStatusCard() {
           type="text"
           icon={<ReloadOutlined />}
           onClick={() => void reload()}
-          aria-label="刷新备份状态"
+          aria-label={t("backupStatus.refresh.aria")}
         />
       }
     >
@@ -136,12 +156,12 @@ export default function BackupStatusCard() {
       ) : status && meta ? (
         <Space orientation="vertical" style={{ width: "100%" }} size={8}>
           <Space wrap>
-            <Tag color={meta.color}>{meta.label}</Tag>
+            <Tag color={meta.color}>{t(meta.labelKey)}</Tag>
             <Typography.Text type="secondary">
-              每
+              {t("backupStatus.interval.prefix")}
               <Select
                 size="small"
-                aria-label="自动备份间隔（天）"
+                aria-label={t("backupStatus.interval.aria")}
                 style={{ width: 88, margin: "0 4px" }}
                 value={status.interval_days}
                 options={intervalOptions}
@@ -150,38 +170,44 @@ export default function BackupStatusCard() {
                 onChange={(days) => void changeInterval(days)}
               />
               {disabled
-                ? DISABLED_INTERVAL_HINT
-                : "天自动快照一次（仅数据库快照，不含附件文件）；手动导出的备份包才包含附件。"}
-              只保留最近几份，手动备份不受影响。
+                ? t("backupStatus.interval.suffixDisabled")
+                : t("backupStatus.interval.suffix")}
             </Typography.Text>
           </Space>
-          {disabled ? <Alert type="info" showIcon title={DISABLED_HINT} /> : null}
+          {disabled ? (
+            <Alert type="info" showIcon title={t("backupStatus.state.disabled.hint")} />
+          ) : null}
           {status.last_success ? (
             <Typography.Text>
-              最近一次成功备份：
-              {formatDateTime(new Date(status.last_success * 1000).toISOString())}
+              {t("backupStatus.lastSuccess", {
+                time: formatDateTime(new Date(status.last_success * 1000).toISOString()),
+              })}
             </Typography.Text>
           ) : (
-            <Typography.Text type="warning">还没有成功过的自动备份。</Typography.Text>
+            <Typography.Text type="warning">{t("backupStatus.lastSuccess.never")}</Typography.Text>
           )}
           {/* H3：后端把覆盖范围显式写进 status（coverage=database_only）。不写出来，用户会
               把「受保护」读成"所有东西都不会丢"，而自动快照里根本没有附件与字体。 */}
           {status.coverage === "database_only" && (
             <Typography.Text type="secondary">
-              自动备份只覆盖数据库快照，不含附件与字体；需要连附件与字体一起备份，请用「数据集」卡片的「导出数据集
-              / 导出全部数据集」。
+              {t("backupStatus.coverage.databaseOnly")}
             </Typography.Text>
           )}
           {status.consecutive_failures > 0 && status.last_error && (
             <Alert
               type="error"
               showIcon
-              title={`连续 ${status.consecutive_failures} 次备份失败：${status.last_error}。系统会按短间隔自动重试。`}
+              title={t("backupStatus.failures", {
+                count: status.consecutive_failures,
+                error: status.last_error,
+              })}
             />
           )}
-          {state === "unreadable" && <Alert type="warning" showIcon title={UNREADABLE_HINT} />}
+          {state === "unreadable" && (
+            <Alert type="warning" showIcon title={t("backupStatus.state.unreadable.hint")} />
+          )}
           {state === "empty" && status.last_success && (
-            <Alert type="warning" showIcon title={SNAPSHOT_MISSING_HINT} />
+            <Alert type="warning" showIcon title={t("backupStatus.state.empty.hint")} />
           )}
           {state !== "unreadable" && status.snapshot_count > 0 && (
             <Listy
@@ -202,9 +228,7 @@ export default function BackupStatusCard() {
             />
           )}
           {state !== "unreadable" && status.snapshot_count === 0 && (
-            <Typography.Text type="secondary">
-              暂无自动快照；首次成功备份后会在这里列出。
-            </Typography.Text>
+            <Typography.Text type="secondary">{t("backupStatus.snapshots.empty")}</Typography.Text>
           )}
         </Space>
       ) : null}
