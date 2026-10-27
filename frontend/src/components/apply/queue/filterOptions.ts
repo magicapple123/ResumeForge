@@ -4,36 +4,35 @@
  *
  * 单独成 `.ts` 而不是放进 `QueueFilterBar.tsx`：那个文件只导出组件，React Fast Refresh
  * 才不会退化成整页刷新（同 `common/rowActionMenu.tsx` 的注释）。
+ *
+ * 两个清单都在**渲染期**构建：展示名取语言包（`i18n/enum/apply.ts` 的 key 表），`value`
+ * 仍是后端协议值。调用方 `useLocale()` 订阅语言变化，切语言后重建 options 才会拿到新文案。
  */
-import {
-  ADMISSION_META,
-  QUEUE_STATUS_META,
-  type AdmissionResult,
-  type QueueStatus,
-} from "../../../types";
 import { t } from "../../../i18n";
+import { ADMISSION_LABEL_KEYS, QUEUE_STATUS_LABEL_KEYS } from "../../../i18n/enum/apply";
+import type { AdmissionResult, QueueStatus } from "../../../types";
 
-/** 状态筛选选项：直接从 QUEUE_STATUS_META 取，文案与表格里的状态标签同源。 */
-export const STATUS_FILTER_OPTIONS = (
-  Object.entries(QUEUE_STATUS_META) as [QueueStatus, { label: string; color: string }][]
-).map(([value, meta]) => ({ value, label: meta.label }));
+/** 状态筛选选项：顺序与 `QUEUE_STATUS_META` 一致，文案与表格里的状态标签同源。 */
+export function statusFilterOptions(): { value: QueueStatus; label: string }[] {
+  return (Object.keys(QUEUE_STATUS_LABEL_KEYS) as QueueStatus[]).map((value) => ({
+    value,
+    label: t(QUEUE_STATUS_LABEL_KEYS[value]),
+  }));
+}
 
 /**
- * 准入筛选选项：**派生**自 `ADMISSION_META`（唯一正本），标签因此与准入徽标同源。
+ * 准入筛选选项：与准入徽标同源（同一份 key 表）。
  * 末尾的「未分析」是**筛选专用哨兵**：`admission === null` 时 Select 的 value 不能是
  * null，而它不是准入结论（后端只下发三值），所以不进 `ADMISSION_META`。
  */
 export const UNANALYZED_FILTER = "unanalyzed";
 
-/**
- * 准入筛选选项（渲染期构建）：前三条的显示名仍来自 types 的 `ADMISSION_META`（协议值→
- * 展示名的唯一正本，待 types 层枚举 code 化），只有筛选专用哨兵「未分析」走语言包。
- */
 export function admissionFilterOptions(): { value: string; label: string }[] {
   return [
-    ...(
-      Object.entries(ADMISSION_META) as [AdmissionResult, { label: string; color: string }][]
-    ).map(([value, meta]) => ({ value, label: meta.label })),
+    ...(Object.keys(ADMISSION_LABEL_KEYS) as AdmissionResult[]).map((value) => ({
+      value,
+      label: t(ADMISSION_LABEL_KEYS[value]),
+    })),
     { value: UNANALYZED_FILTER, label: t("applyQueue.admission.unanalyzed") },
   ];
 }
