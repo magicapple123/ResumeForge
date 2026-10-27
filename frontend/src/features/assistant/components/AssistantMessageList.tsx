@@ -33,6 +33,8 @@ import {
 } from "./AssistantMessageContent";
 import type { PendingAttachment } from "../assistantUtils";
 import type { StarterPrompt } from "../assistantTypes";
+import { t } from "../../../i18n";
+import { useLocale } from "../../../i18n/i18nContext";
 
 interface Props {
   assistantLabel?: string;
@@ -108,39 +110,42 @@ const AssistantMessageBubble = memo(function AssistantMessageBubble({
   onDeleteMessage,
   onEnterSelecting,
 }: BubbleProps) {
+  useLocale();
   const { message } = App.useApp();
 
   /** 每条消息的操作：整块右键即可唤出（和岗位卡片、会话列表一致）。 */
   const actionsFor = (): RowActionItem[] => [
     {
       key: "batch_select",
-      label: "批量选择",
+      label: t("common.action.batchSelect"),
       icon: <CheckSquareOutlined />,
       onClick: onEnterSelecting,
     },
     {
       key: "quote",
-      label: "引用这条继续问",
+      label: t("assistantUi.messageList.action.quote"),
       icon: <CommentOutlined />,
       onClick: () => onQuote(item),
     },
     {
       key: "copy",
-      label: "复制内容",
+      label: t("assistantUi.messageList.action.copy"),
       icon: <CopyOutlined />,
       onClick: () => {
         void copyText(item.content).then((ok) =>
-          ok ? message.success("已复制这条消息") : message.warning("复制失败，可以手动选中"),
+          ok
+            ? message.success(t("assistantUi.messageList.toast.copied"))
+            : message.warning(t("assistantUi.messageList.toast.copyFailed")),
         );
       },
     },
     {
       key: "delete",
-      label: "删除这条消息",
+      label: t("assistantUi.messageList.action.delete"),
       icon: <DeleteOutlined />,
       danger: true,
       // 删除不可撤销；引用它的消息保留引用快照，所以这里明确说一下影响范围。
-      confirm: "删除这条消息？引用它的提问仍会保留引用内容。",
+      confirm: t("assistantUi.messageList.confirm.delete"),
       onClick: () => onDeleteMessage(item),
     },
   ];
@@ -153,7 +158,9 @@ const AssistantMessageBubble = memo(function AssistantMessageBubble({
         }`}
       >
         <div className="assistant-message-head">
-          <Typography.Text strong>{item.role === "user" ? "你" : assistantLabel}</Typography.Text>
+          <Typography.Text strong>
+            {item.role === "user" ? t("assistantUi.messageList.role.self") : assistantLabel}
+          </Typography.Text>
           <Typography.Text type="secondary" className="assistant-message-time">
             {formatDateTime(item.created_at)}
           </Typography.Text>
@@ -161,7 +168,9 @@ const AssistantMessageBubble = memo(function AssistantMessageBubble({
         {item.context.quoted ? (
           <div className="assistant-quoted-block">
             <span className="assistant-quoted-label">
-              {item.context.quoted.role === "user" ? "引用你的消息" : "引用助手的回复"}
+              {item.context.quoted.role === "user"
+                ? t("assistantComposer.quote.user")
+                : t("assistantComposer.quote.assistant")}
             </span>
             <span className="assistant-quoted-text">{item.context.quoted.excerpt}</span>
           </div>
@@ -182,7 +191,7 @@ const AssistantMessageBubble = memo(function AssistantMessageBubble({
 });
 
 export default function AssistantMessageList({
-  assistantLabel = "求职助手",
+  assistantLabel,
   emptyVariant = "page",
   detail,
   showLoading,
@@ -216,6 +225,9 @@ export default function AssistantMessageList({
   messagesScrollRef,
   onMessagesScroll,
 }: Props) {
+  useLocale();
+  // 页面总会传已翻译的显示名；缺省时按整页形态的「求职助手」兜底。
+  const resolvedAssistantLabel = assistantLabel ?? t("responsive.assistant.label");
   const historyMessages = detail?.messages ?? [];
 
   return (
@@ -247,11 +259,13 @@ export default function AssistantMessageList({
                   loading={earlierLoading}
                   onClick={onLoadEarlier}
                 >
-                  加载更早
+                  {t("assistantUi.messageList.loadEarlier")}
                 </Button>
               )}
               {messagesTotal > 0 && (
-                <Typography.Text type="secondary">{`共 ${messagesTotal} 条消息`}</Typography.Text>
+                <Typography.Text type="secondary">
+                  {t("assistantUi.messageList.total", { count: messagesTotal })}
+                </Typography.Text>
               )}
             </div>
           )}
@@ -259,7 +273,7 @@ export default function AssistantMessageList({
             const bubble = (
               <AssistantMessageBubble
                 item={item}
-                assistantLabel={assistantLabel}
+                assistantLabel={resolvedAssistantLabel}
                 selected={selectedIds.has(item.id)}
                 onQuote={onQuote}
                 onDeleteMessage={onDeleteMessage}
@@ -273,7 +287,11 @@ export default function AssistantMessageList({
                   <Checkbox
                     checked={selectedIds.has(item.id)}
                     onChange={() => onToggleSelected(item)}
-                    aria-label={`选择 ${item.role === "user" ? "你的" : "助手的"}这条消息`}
+                    aria-label={
+                      item.role === "user"
+                        ? t("assistantUi.messageList.aria.selectOwn")
+                        : t("assistantUi.messageList.aria.selectAssistant")
+                    }
                   />
                   {bubble}
                 </label>
@@ -286,7 +304,7 @@ export default function AssistantMessageList({
       {activeStream && (pendingUserText || pendingUserAttachments.length > 0) && (
         <article className="assistant-message assistant-message--user">
           <div className="assistant-message-head">
-            <Typography.Text strong>你</Typography.Text>
+            <Typography.Text strong>{t("assistantUi.messageList.role.self")}</Typography.Text>
             <Typography.Text type="secondary" className="assistant-message-time">
               {formatDateTime(pendingSentAt)}
             </Typography.Text>
@@ -298,18 +316,22 @@ export default function AssistantMessageList({
       {activeStream && sending && (
         <article className="assistant-message assistant-message--assistant">
           <div className="assistant-message-head">
-            <Typography.Text strong>{assistantLabel}</Typography.Text>
+            <Typography.Text strong>{resolvedAssistantLabel}</Typography.Text>
             <Typography.Text type="secondary" className="assistant-message-time">
               {formatDateTime(pendingSentAt)}
             </Typography.Text>
           </div>
           <MessageReasoning reasoning={streamingReasoning} active />
           <AssistantMessageContent
-            content={streamingText || progressText || "正在思考…"}
+            content={streamingText || progressText || t("assistantUi.messageList.thinking")}
             sourceMap={streamingSourceMap}
           />
           <StreamingStatus
-            message={streamingText ? "正在生成回答" : progressText || "正在准备回答"}
+            message={
+              streamingText
+                ? t("assistantUi.messageList.streaming")
+                : progressText || t("assistantUi.messageList.preparing")
+            }
           />
           <MessageSources sources={streamingSources} />
           <MessageToolCalls calls={streamingTools} />
