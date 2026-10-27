@@ -37,7 +37,7 @@ import { renderReleaseNotes } from "./updateNotesRenderer";
 const UPDATE_COMPLETED_KEY = "resumeforge.update.completed";
 
 function formatBytes(value: number | null): string {
-  if (value === null || value < 0) return "未知大小";
+  if (value === null || value < 0) return t("update.size.unknown");
   if (value < 1024) return `${value} B`;
   if (value < 1024 * 1024) return `${(value / 1024).toFixed(1)} KB`;
   if (value < 1024 * 1024 * 1024) return `${(value / 1024 / 1024).toFixed(1)} MB`;
@@ -89,14 +89,17 @@ export default function UpdateCard() {
 
         if (outcome.state === "success") {
           modal.success({
-            title: "ResumeForge 已更新",
-            content: `已更新到 ${outcome.target_version}。你的岗位、简历和设置仍保留在原数据目录中。`,
+            title: t("update.toast.doneTitle"),
+            content: t("update.toast.doneBody", { version: outcome.target_version }),
           });
           return;
         }
         if (outcome.state === "installing") return; // 更新器还在跑，等它写完再说
         modal.error({
-          title: outcome.state === "interrupted" ? "上次更新没有完成" : "上次更新失败",
+          title:
+            outcome.state === "interrupted"
+              ? t("update.toast.interruptedTitle")
+              : t("update.toast.failedTitle"),
           content: (
             <div>
               <p>{outcome.message || "更新器没有给出原因。"}</p>
@@ -132,7 +135,7 @@ export default function UpdateCard() {
         message.info(t("update.check.latest", { version }));
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "检查更新失败");
+      setError(err instanceof Error ? err.message : t("update.error.check"));
     } finally {
       setChecking(false);
     }
@@ -146,7 +149,7 @@ export default function UpdateCard() {
       const next = await startUpdateDownload(background);
       setStatus(next);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "下载更新失败");
+      setError(err instanceof Error ? err.message : t("update.error.download"));
       // 失败后状态多半已经变了（例如包其实已在磁盘上、后端恢复成了 ready）。
       await refreshStatus();
     } finally {
@@ -157,11 +160,10 @@ export default function UpdateCard() {
   const install = () => {
     if (!status || status.state !== "ready" || installing) return;
     modal.confirm({
-      title: "重启并安装更新？",
-      content:
-        "应用会先退出，覆盖程序文件后自动重启。岗位、简历、对话和设置保存在 data/ 中，不会被更新包覆盖。",
-      okText: "重启并安装",
-      cancelText: "稍后安装",
+      title: t("update.confirm.title"),
+      content: t("update.confirm.body"),
+      okText: t("update.confirm.ok"),
+      cancelText: t("update.confirm.cancel"),
       onOk: async () => {
         setInstalling(true);
         setError("");
@@ -172,7 +174,7 @@ export default function UpdateCard() {
           setStatus(next);
         } catch (err) {
           setInstalling(false);
-          setError(err instanceof Error ? err.message : "启动安装失败");
+          setError(err instanceof Error ? err.message : t("update.error.install"));
           // 安装被拒多半是后端状态已经变了（例如后端刚重启、内存里的"已下载"丢了）。
           // 重新拉一次真实状态：陈旧的绿色成功框会随之消失，不再与错误同屏。
           await refreshStatus();
@@ -186,20 +188,22 @@ export default function UpdateCard() {
   const canDownload = Boolean(result?.update_available && result.installable) && !desktop;
 
   return (
-    <Card title="软件更新" className="settings-card">
+    <Card title={t("update.card.title")} className="settings-card">
       <Typography.Paragraph type="secondary" style={{ marginBottom: 16 }}>
         更新只替换程序文件，不会覆盖 <code>data/</code> 里的岗位、简历、助手对话和设置。
         更新前仍建议先在「数据集与备份」里导出一份备份。
       </Typography.Paragraph>
       <Descriptions size="small" column={1} style={{ marginBottom: 12 }}>
-        <Descriptions.Item label="更新方式">
+        <Descriptions.Item label={t("update.field.channel")}>
           {desktop ? t("update.method.desktop") : t("update.method.in-app")}
         </Descriptions.Item>
-        <Descriptions.Item label="当前版本">
-          {result?.current_version || status?.current_version || "点「检查更新」获取"}
+        <Descriptions.Item label={t("update.field.current")}>
+          {result?.current_version || status?.current_version || t("update.value.checkFirst")}
         </Descriptions.Item>
         {status?.target_version && (
-          <Descriptions.Item label="目标版本">{status.target_version}</Descriptions.Item>
+          <Descriptions.Item label={t("update.field.target")}>
+            {status.target_version}
+          </Descriptions.Item>
         )}
       </Descriptions>
 
@@ -207,32 +211,32 @@ export default function UpdateCard() {
         <Button
           type="primary"
           icon={<CloudDownloadOutlined />}
-          aria-label="检查更新"
+          aria-label={t("update.action.check")}
           loading={checking}
           onClick={() => void check(true)}
         >
-          检查更新
+          {t("update.action.check")}
         </Button>
         {canDownload && (
           <Button
             type="primary"
             icon={<DownloadOutlined />}
-            aria-label="下载更新"
+            aria-label={t("update.action.download")}
             loading={downloading}
             disabled={activeStatus || installing || Boolean(statusError)}
             onClick={() => void download()}
           >
-            下载更新
+            {t("update.action.download")}
           </Button>
         )}
         {result && (
           <Button
             icon={<ReloadOutlined />}
-            aria-label="重新检查"
+            aria-label={t("update.action.recheck")}
             disabled={checking || activeStatus}
             onClick={() => void check(true)}
           >
-            重新检查
+            {t("update.action.recheck")}
           </Button>
         )}
         {status?.state === "ready" && !statusError && !desktop && (
@@ -240,11 +244,11 @@ export default function UpdateCard() {
             type="primary"
             danger
             icon={<SyncOutlined />}
-            aria-label="重启并安装"
+            aria-label={t("update.action.install")}
             onClick={install}
             loading={installing}
           >
-            重启并安装
+            {t("update.action.install")}
           </Button>
         )}
       </Space>
@@ -257,7 +261,7 @@ export default function UpdateCard() {
             disabled={activeStatus || installing || Boolean(statusError)}
             onChange={setBackground}
           />
-          <span>后台下载（下载完成后提醒我安装）</span>
+          <span>{t("update.bgDownload")}</span>
         </label>
       )}
 
@@ -269,7 +273,9 @@ export default function UpdateCard() {
           type="warning"
           showIcon
           title={statusError}
-          action={<Button onClick={() => void refreshStatus()}>重试读取状态</Button>}
+          action={
+            <Button onClick={() => void refreshStatus()}>{t("update.action.retryStatus")}</Button>
+          }
         />
       )}
       {status?.state === "downloading" && !statusError && (
@@ -286,7 +292,7 @@ export default function UpdateCard() {
           style={{ marginTop: 16 }}
           type="info"
           showIcon
-          title="更新器已启动，应用即将退出并自动重启。"
+          title={t("update.installing.title")}
         />
       )}
       {status?.state === "failed" && status.message && !statusError && (
@@ -298,7 +304,7 @@ export default function UpdateCard() {
           type="success"
           showIcon
           title={t("update.downloaded.title")}
-          description="点击「重启并安装」后，应用会在原路径覆盖旧版本并自动重启。"
+          description={t("update.hint.restart")}
         />
       )}
       {desktop && (
@@ -316,7 +322,7 @@ export default function UpdateCard() {
                   target="_blank"
                   rel="noopener noreferrer"
                 >
-                  打开发布页面
+                  {t("update.action.release")}
                 </Typography.Link>
               )}
             </Space>
@@ -328,11 +334,17 @@ export default function UpdateCard() {
           style={{ marginTop: 16 }}
           type={result.update_available ? "success" : "info"}
           showIcon
-          title={result.message || "检查完成"}
+          title={result.message || t("update.result.title")}
           description={
             <Space orientation="vertical" size={4} style={{ width: "100%" }}>
-              {result.latest_version && <span>最新版本：{result.latest_version}</span>}
-              {result.published_at && <span>发布时间：{result.published_at.slice(0, 10)}</span>}
+              {result.latest_version && (
+                <span>{t("update.result.latest", { version: result.latest_version })}</span>
+              )}
+              {result.published_at && (
+                <span>
+                  {t("update.result.published", { date: result.published_at.slice(0, 10) })}
+                </span>
+              )}
               {result.notes && (
                 /* 版本说明是 markdown（## 标题 / - 列表 / **粗体**），不能当纯文本直出；
                    容器保留滚动（说明长时不把弹窗撑爆）。 */
@@ -354,7 +366,7 @@ export default function UpdateCard() {
                   target="_blank"
                   rel="noopener noreferrer"
                 >
-                  打开发布页面
+                  {t("update.action.release")}
                 </Typography.Link>
               )}
             </Space>

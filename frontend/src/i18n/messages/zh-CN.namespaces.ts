@@ -53,6 +53,7 @@ import skills from "./zh-CN.skills";
 import toolCalls from "./zh-CN.toolCalls";
 import datasets from "./zh-CN.datasets";
 import jobImport from "./zh-CN.jobImport";
+import update from "./zh-CN.update";
 
 const namespaces = {
   /** 简历制作台（2026-10-23）。 */
@@ -134,6 +135,7 @@ const namespaces = {
   ...toolCalls,
   ...datasets,
   ...jobImport,
+  ...update,
 } as const;
 
 export default namespaces;
