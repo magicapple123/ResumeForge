@@ -9,6 +9,8 @@
  * `missing` 为 0 时**返回 null**：没有缺口就一个字都不显示，不留空占位。 */
 import { Typography } from "antd";
 import type { ReactNode } from "react";
+import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 
 interface Props {
   /** 缺失的数量。为 0 时整个组件不渲染。 */
@@ -22,11 +24,14 @@ interface Props {
 }
 
 export default function DataGapNotice({ missing, label, available, action }: Props) {
+  useLocale();
   if (missing <= 0) return null;
   return (
     <Typography.Text type="warning" className="analytics-gap-notice">
-      有 {missing} 条{label}，未计入图表
-      {typeof available === "number" ? `（共 ${available + missing} 条记录）` : ""}
+      {t("analyticsUi.dataGap.notice", { missing, label })}
+      {typeof available === "number"
+        ? t("analyticsUi.dataGap.total", { total: available + missing })
+        : ""}
       {action ? <> {action}</> : null}
     </Typography.Text>
   );
