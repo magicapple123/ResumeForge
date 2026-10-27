@@ -30,11 +30,11 @@ import { copyText } from "../utils/clipboard";
 
 type Operation = "star" | "phrases" | "polish" | "translate";
 
-const OPERATIONS: { value: Operation; label: string }[] = [
-  { value: "star", label: "STAR 改写" },
-  { value: "phrases", label: "话术生成" },
-  { value: "polish", label: "风格润色" },
-  { value: "translate", label: "中英互译" },
+const OPERATIONS: { value: Operation; labelKey: MessageKey }[] = [
+  { value: "star", labelKey: "writing.operation.star" },
+  { value: "phrases", labelKey: "writing.operation.phrases" },
+  { value: "polish", labelKey: "writing.operation.polish" },
+  { value: "translate", labelKey: "writing.operation.translate" },
 ];
 
 /**
@@ -50,16 +50,16 @@ const OPERATION_HINTS: Record<Operation, MessageKey> = {
   translate: "writing.hint.translate",
 };
 
-const POLISH_STYLES: { value: PolishStyle; label: string }[] = [
-  { value: "big_tech", label: "大厂风" },
-  { value: "concise_tech", label: "简洁干练风" },
-  { value: "campus", label: "应届生风" },
+const POLISH_STYLES: { value: PolishStyle; labelKey: MessageKey }[] = [
+  { value: "big_tech", labelKey: "writing.style.bigTech" },
+  { value: "concise_tech", labelKey: "writing.style.conciseTech" },
+  { value: "campus", labelKey: "writing.style.campus" },
 ];
 
-const PHRASE_MODES: { value: PhraseMode; label: string }[] = [
-  { value: "star", label: "STAR 版" },
-  { value: "resume", label: "简历版" },
-  { value: "interview", label: "面试口述版" },
+const PHRASE_MODES: { value: PhraseMode; labelKey: MessageKey }[] = [
+  { value: "star", labelKey: "writing.phraseMode.star" },
+  { value: "resume", labelKey: "writing.phraseMode.resume" },
+  { value: "interview", labelKey: "writing.phraseMode.interview" },
 ];
 
 interface Props {
@@ -103,7 +103,7 @@ export default function ResumeWritingPanel({ resumeId, initialText = "", onApply
         setSingleResult((await translateResumeText(resumeId, text.trim(), direction)).result);
       }
     } catch (err) {
-      message.error(err instanceof Error ? err.message : "生成失败，请重试");
+      message.error(err instanceof Error ? err.message : t("writing.generate.failed"));
     } finally {
       setLoading(false);
     }
@@ -144,14 +144,14 @@ export default function ResumeWritingPanel({ resumeId, initialText = "", onApply
       <Input.TextArea
         rows={4}
         value={text}
-        placeholder="粘贴或输入一段简历描述"
+        placeholder={t("writing.input.placeholder")}
         onChange={(event) => setText(event.target.value)}
-        aria-label="写作输入文本"
+        aria-label={t("writing.input.ariaLabel")}
       />
 
       <Segmented
         block
-        options={OPERATIONS}
+        options={OPERATIONS.map((item) => ({ value: item.value, label: t(item.labelKey) }))}
         value={operation}
         onChange={(value) => setOperation(value as Operation)}
       />
@@ -164,11 +164,11 @@ export default function ResumeWritingPanel({ resumeId, initialText = "", onApply
         <Radio.Group
           value={polishStyle}
           onChange={(event) => setPolishStyle(event.target.value)}
-          aria-label="润色风格"
+          aria-label={t("writing.style.ariaLabel")}
         >
           {POLISH_STYLES.map((item) => (
             <Radio.Button key={item.value} value={item.value}>
-              {item.label}
+              {t(item.labelKey)}
             </Radio.Button>
           ))}
         </Radio.Group>
@@ -178,31 +178,31 @@ export default function ResumeWritingPanel({ resumeId, initialText = "", onApply
         <Radio.Group
           value={direction}
           onChange={(event) => setDirection(event.target.value)}
-          aria-label="翻译方向"
+          aria-label={t("writing.direction.ariaLabel")}
         >
-          <Radio.Button value="zh2en">中译英</Radio.Button>
-          <Radio.Button value="en2zh">英译中</Radio.Button>
+          <Radio.Button value="zh2en">{t("writing.direction.zh2en")}</Radio.Button>
+          <Radio.Button value="en2zh">{t("writing.direction.en2zh")}</Radio.Button>
         </Radio.Group>
       )}
 
       {operation === "phrases" && (
         <Checkbox.Group
-          options={PHRASE_MODES}
+          options={PHRASE_MODES.map((item) => ({ value: item.value, label: t(item.labelKey) }))}
           value={modes}
           onChange={(value) => setModes(value as PhraseMode[])}
-          aria-label="话术版式"
+          aria-label={t("writing.phraseMode.ariaLabel")}
         />
       )}
 
       <Button type="primary" loading={loading} disabled={!canRun} onClick={() => void run()}>
-        生成
+        {t("writing.action.generate")}
       </Button>
 
       {loading && <LoadingBlock />}
 
       {!loading && singleResult && (
         <ResultBlock
-          label="结果"
+          label={t("writing.result.label")}
           onApply={onApply ? () => apply(singleResult) : undefined}
           onCopy={() => void copy(singleResult)}
         >
@@ -216,16 +216,16 @@ export default function ResumeWritingPanel({ resumeId, initialText = "", onApply
         <Space orientation="vertical" style={{ width: "100%" }} size="small">
           {(
             [
-              ["star", "STAR 版"],
-              ["resume", "简历版"],
-              ["interview", "面试口述版"],
+              ["star", "writing.phraseMode.star"],
+              ["resume", "writing.phraseMode.resume"],
+              ["interview", "writing.phraseMode.interview"],
             ] as const
           )
             .filter(([key]) => phrasesResult[key])
-            .map(([key, label]) => (
+            .map(([key, labelKey]) => (
               <ResultBlock
                 key={key}
-                label={label}
+                label={t(labelKey)}
                 onApply={onApply ? () => apply(phrasesResult[key]) : undefined}
                 onCopy={() => void copy(phrasesResult[key])}
               >
