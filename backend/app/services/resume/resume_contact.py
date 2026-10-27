@@ -32,6 +32,8 @@ contact_breaks = ["email", "github"]   # 键取自 CONTACT_FIELDS；在列出的
 
 from __future__ import annotations
 
+from collections.abc import Sequence
+
 from ...schemas.resume import ResumeContent
 
 #: `format_config` 里的键名（与前端 `CONTACT_BREAKS_KEY` 逐字一致）。
@@ -68,7 +70,10 @@ def validate_contact_breaks(raw: object) -> list[str]:
     """
     if isinstance(raw, str):
         # 兼容查询串 / 手写 JSON 的逗号写法（与 `section_order` 的宽松度一致）。
-        candidates: list[object] = raw.split(",")
+        # 用协变的 `Sequence` 而不是 `list`：两个分支给的是 `list[str]` 与 `list[Unknown]`，
+        # `list` 不变型接不住 `list[str]`（`list[object]` 会直接报错）；这里的候选只被
+        # 迭代与集合推导，不需要可变性。
+        candidates: Sequence[object] = raw.split(",")
     elif isinstance(raw, (list, tuple)):
         candidates = list(raw)
     else:

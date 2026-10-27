@@ -12,6 +12,7 @@ from ..models.material import CANDIDATE_JOB_STATUSES, CandidateJob
 from ..schemas.common import Page
 from ..schemas.material import (
     CandidateCsvExportRequest,
+    CandidateCsvImportFailure,
     CandidateCsvImportRequest,
     CandidateCsvImportResult,
     CandidateCsvPreview,
@@ -201,6 +202,18 @@ def export_candidate_jobs_csv(payload: CandidateCsvExportRequest, db: Session = 
     )
 
 
+def _csv_failures(errors: list[dict[str, object]]) -> list[CandidateCsvImportFailure]:
+    """把服务层返回的 dict 错误账目显式转成响应契约里的模型。
+
+    `services/candidate_csv` 的公开签名给的是 `list[dict[str, object]]`（服务层不绑定
+    响应模型），而 `CandidateCsvPreview.errors` / `CandidateCsvImportResult.failed`
+    要求 `list[CandidateCsvImportFailure]`。pydantic 在构造响应时会 coerce，运行时本来就
+    是对的——只是类型标注在撒谎；这里显式转一次，让标注与契约一致。错误 dict 只有
+    `line` / `message` / `code` 三个键，与模型字段一一对应。
+    """
+    return [CandidateCsvImportFailure.model_validate(error) for error in errors]
+
+
 @router.post("/csv/import/preview", response_model=CandidateCsvPreview)
 async def preview_candidate_csv_import(file: UploadFile = File(...)):
     """解析上传的候选 CSV，返回可导入行与逐行错误（不落库，等用户确认）。"""
@@ -214,7 +227,7 @@ async def preview_candidate_csv_import(file: UploadFile = File(...)):
     rows, errors = parse_candidate_csv(text)
     return CandidateCsvPreview(
         rows=[CandidateCsvRow(line=line, data=data) for line, data in rows],
-        errors=errors,
+        errors=_csv_failures(errors),
     )
 
 
@@ -222,7 +235,7 @@ async def preview_candidate_csv_import(file: UploadFile = File(...)):
 def import_candidate_csv(payload: CandidateCsvImportRequest, db: Session = Depends(get_db)):
     """提交导入：逐行建候选、逐行容错；与已有候选重复的行跳过并说明。"""
     imported, failed = import_candidate_rows(db, [(item.line, item.data) for item in payload.rows])
-    return CandidateCsvImportResult(imported=imported, failed=failed)
+    return CandidateCsvImportResult(imported=imported, failed=_csv_failures(failed))
 
 
 def _get_candidates_or_404(db: Session, candidate_ids: list[int]) -> list:

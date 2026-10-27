@@ -36,6 +36,10 @@ from ..resume.resume_contact import (
     contact_groups,
     contact_items,
 )
+
+# 别名导入：本模块的 `RoleStyle` 是"查询函数"的类型别名（见下），与这个 dataclass 同名但
+# 语义不同，不改名会互相遮蔽。
+from ..resume.resume_style import RoleStyle as _RoleStyle
 from .canvas import _ResumePDF
 from .fonts import FONT_FAMILY
 from .layout import _PX_TO_MM, _PX_TO_PT, PAGE_WIDTH_MM
@@ -46,7 +50,10 @@ from .style_blocks import parse_color
 logger = logging.getLogger(__name__)
 
 #: 角色/对象覆盖的查询函数：`role_style(role, object_id=None)`，无覆盖返回 None。
-RoleStyle = Callable[..., object]
+#: 返回值必须是 `resume_style.RoleStyle`（合成后的显式覆盖）：标成 `object` 会让下面
+#: 读 `.font_scale` / `.color` / `.bold` 的地方全部失去类型信息（pyright 报
+#: reportAttributeAccessIssue），而这个别名同时是 `draw_header` 的参数标注。
+RoleStyle = Callable[..., _RoleStyle | None]
 
 
 def _pack_contact_lines(pdf: _ResumePDF, groups: list[list[str]], width: float) -> list[str]:
