@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import { useCallback, useEffect, useRef, useState } from "react";
 import { getUpdateDownloadStatus } from "../api/settings";
+import { t } from "../i18n";
 import type { UpdateStatus } from "../types";
 import { isDocumentHidden, onVisibilityChange } from "../utils/visibility";
 
@@ -30,7 +31,7 @@ export function useUpdateDownloadStatus() {
         setStatusError("");
       })
       .catch(() => {
-        if (isCurrent()) setStatusError("暂时无法读取下载状态，请重试读取后再下载或安装");
+        if (isCurrent()) setStatusError(t("hooksUi.updateStatus.error.read"));
       })
       .finally(() => {
         if (pending.current?.controller === controller) pending.current = null;
