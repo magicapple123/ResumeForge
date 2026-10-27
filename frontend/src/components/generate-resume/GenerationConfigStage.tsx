@@ -6,7 +6,7 @@
  */
 import { Alert, Button, Input, Segmented, Space, Switch, Tooltip, Typography } from "antd";
 import type { EnhancementLevel, Job, ResumeLayout } from "../../types";
-import { RESUME_ENHANCEMENT_LEVELS, enhancementLevelDescription } from "../../config";
+import { RESUME_ENHANCEMENT_LEVELS, enhancementLevelDescriptionKey } from "../../config";
 import { t } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
 import {
@@ -128,7 +128,9 @@ export default function GenerationConfigStage({
           // 每一档自己带上悬停说明，生成前可以先把三档比一遍。
           options={RESUME_ENHANCEMENT_LEVELS.map((item) => ({
             label: (
-              <Tooltip title={enhancementLevelDescription(item.value, !job)}>{item.label}</Tooltip>
+              <Tooltip title={t(enhancementLevelDescriptionKey(item.value, !job))}>
+                {t(item.labelKey)}
+              </Tooltip>
             ),
             value: item.value,
           }))}
@@ -136,7 +138,7 @@ export default function GenerationConfigStage({
         />
         <Typography.Text type={enhance ? undefined : "secondary"}>
           {enhance
-            ? enhancementLevelDescription(enhancementLevel, !job)
+            ? t(enhancementLevelDescriptionKey(enhancementLevel, !job))
             : t("generate.config.enhanceOffHint")}
         </Typography.Text>
       </Space>
