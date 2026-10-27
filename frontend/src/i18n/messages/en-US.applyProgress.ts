@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * 投递/采集进度面板：批次类型、步骤、计数与结果表。
+ * Apply / collect progress panel: run kinds, steps, counters and the result table.
  *
- * 停止原因与批次类型的显示名（用户停止 / 连续失败过多 / 投递批次 …）是
- * 模块级常量的 label，需先改成 labelKey，留待下一批。
+ * Stop reasons and run kinds are backend codes (`user` / `breaker` / `done` / `error`,
+ * `apply` / `collect`). The panel keeps two `Record<string, MessageKey>` tables keyed by
+ * those codes and resolves them with `t()` at render time: `t()` must never run at module
+ * scope, or the labels would freeze in whatever language was active at load.
  */
 const applyProgress = {
   "applyProgress.column.job": "Job",
@@ -21,6 +23,12 @@ const applyProgress = {
   "applyProgress.field.startedAt": "Started",
   "applyProgress.field.finishedAt": "Finished",
   "applyProgress.kindFallback": "Run",
+  "applyProgress.kind.apply": "Apply run",
+  "applyProgress.kind.collect": "Collect run",
+  "applyProgress.stopReason.user": "Stopped by you",
+  "applyProgress.stopReason.breaker": "Paused automatically after too many failures in a row",
+  "applyProgress.stopReason.done": "Completed",
+  "applyProgress.stopReason.error": "An error occurred",
   "applyProgress.progress": "Current step: {step}",
   "applyProgress.action.pause": "Pause",
   "applyProgress.action.resume": "Resume",

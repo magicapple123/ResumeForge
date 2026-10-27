@@ -2,8 +2,9 @@
 /**
  * 投递/采集进度面板：批次类型、步骤、计数与结果表。
  *
- * 停止原因与批次类型的显示名（用户停止 / 连续失败过多 / 投递批次 …）是
- * 模块级常量的 label，需先改成 labelKey，留待下一批。
+ * 停止原因与批次类型的取值是**后端码**（`user` / `breaker` / `done` / `error`、
+ * `apply` / `collect`），面板里存的是两张 `Record<string, MessageKey>`，键仍是码，
+ * 取值处 `t()`——模块作用域不能调 `t()`，否则切语言不会重算。
  */
 const applyProgress = {
   "applyProgress.column.job": "岗位",
@@ -21,6 +22,12 @@ const applyProgress = {
   "applyProgress.field.startedAt": "开始时间",
   "applyProgress.field.finishedAt": "结束时间",
   "applyProgress.kindFallback": "执行批次",
+  "applyProgress.kind.apply": "投递批次",
+  "applyProgress.kind.collect": "采集批次",
+  "applyProgress.stopReason.user": "用户停止",
+  "applyProgress.stopReason.breaker": "连续失败过多，已自动暂停",
+  "applyProgress.stopReason.done": "已完成",
+  "applyProgress.stopReason.error": "发生错误",
   "applyProgress.progress": "当前步骤：{step}",
   "applyProgress.action.pause": "暂停",
   "applyProgress.action.resume": "继续",

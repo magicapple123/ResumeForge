@@ -24,6 +24,7 @@ import {
 import { isActiveTaskStatus as isActive } from "../../hooks/useTaskPolling";
 import { formatDateTime } from "../../utils/format";
 import { t } from "../../i18n";
+import type { MessageKey } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
 
 interface Props {
@@ -42,16 +43,22 @@ function alertType(status: TaskStatus): "error" | "warning" | "info" | "success"
   return "info";
 }
 
-const STOP_REASON_LABELS: Record<string, string> = {
-  user: "用户停止",
-  breaker: "连续失败过多，已自动暂停",
-  done: "已完成",
-  error: "发生错误",
+/**
+ * 停止原因 / 批次类型的显示名：**键是后端码**（`user` / `breaker` / `done` / `error`、
+ * `apply` / `collect`），值指向语言包 key。
+ *
+ * 模块作用域不能调 `t()`（切语言不会重渲染），所以这里只存 key，取值处 `t(...)`。
+ */
+const STOP_REASON_LABEL_KEYS: Record<string, MessageKey> = {
+  user: "applyProgress.stopReason.user",
+  breaker: "applyProgress.stopReason.breaker",
+  done: "applyProgress.stopReason.done",
+  error: "applyProgress.stopReason.error",
 };
 
-const KIND_LABELS: Record<string, string> = {
-  apply: "投递批次",
-  collect: "采集批次",
+const KIND_LABEL_KEYS: Record<string, MessageKey> = {
+  apply: "applyProgress.kind.apply",
+  collect: "applyProgress.kind.collect",
 };
 
 export default function ApplyProgressPanel({ task, busy, onPause, onResume, onStop }: Props) {
@@ -59,9 +66,13 @@ export default function ApplyProgressPanel({ task, busy, onPause, onResume, onSt
   const statusMeta = TASK_STATUS_META[task.status];
   const active = isActive(task.status);
   const canResume = task.status === "paused" || task.status === "breaker_paused";
+  // 未登记的停止原因（后端新增码）没有 key：原样显示那个码，比显示一条 key 或空白强。
+  const stopReasonKey: MessageKey | undefined = task.stop_reason
+    ? STOP_REASON_LABEL_KEYS[task.stop_reason]
+    : undefined;
   const alertMessage =
-    task.message ||
-    (task.stop_reason ? (STOP_REASON_LABELS[task.stop_reason] ?? task.stop_reason) : "");
+    task.message || (stopReasonKey ? t(stopReasonKey) : task.stop_reason ? task.stop_reason : "");
+  const kindKey: MessageKey | undefined = KIND_LABEL_KEYS[task.kind];
 
   const columns: TableColumnsType<ApplyTaskItem> = [
     {
@@ -134,7 +145,7 @@ export default function ApplyProgressPanel({ task, busy, onPause, onResume, onSt
       <div className="apply-progress-head">
         <Space wrap size={12} align="center">
           <Typography.Text strong>
-            {KIND_LABELS[task.kind] ?? t("applyProgress.kindFallback")}
+            {kindKey ? t(kindKey) : t("applyProgress.kindFallback")}
           </Typography.Text>
           {/* 任务进行中时在标题行给一个转动信号：状态 Tag 是静态的，转圈才能一眼看出
               "这一批正在跑"（页面滚到别处回来时尤其重要）。 */}
@@ -142,7 +153,9 @@ export default function ApplyProgressPanel({ task, busy, onPause, onResume, onSt
           <Tag color={statusMeta.color}>{statusMeta.label}</Tag>
           {active && (
             <Typography.Text type="secondary">
-              当前步骤：{stepLabel(task.current_step)}
+              {/* 步骤名仍来自 `types/apply/failures.ts` 的 `STEP_LABELS`（另一批迁移），
+                  这里只负责「当前步骤：」这层外壳。 */}
+              {t("applyProgress.progress", { step: stepLabel(task.current_step) })}
             </Typography.Text>
           )}
         </Space>
