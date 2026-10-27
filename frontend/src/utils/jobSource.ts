@@ -7,6 +7,7 @@
  * 而这里已经踩过一次：导入时把来源写死成「备选岗位导入」，于是**从官网采集 / 投递台采集回来的
  * 岗位在岗位广场里全挂着「手动」角标**，用户看到的与自己做的事完全对不上。
  */
+import type { MessageKey } from "../i18n";
 import type { Job, JobRecognitionSource } from "../types";
 
 /**
@@ -16,12 +17,25 @@ import type { Job, JobRecognitionSource } from "../types";
  * 旧版本的官网采集曾把 `官网采集` 写进来源列，新的候选导入统一写 `岗位采集`，
  * 读取侧不能只认其中一个。
  */
+// i18n-ok: 来源值是落库协议值（后端 recognition_source），不是展示文案
 const COLLECTED_SOURCES = new Set<JobRecognitionSource>(["岗位采集", "官网采集"]);
 
+/** 列表角标与来源筛选共用的协议取值。 */
+export type JobSourceKind = "collected" | "manual";
+
 /** 这条岗位算"采集来的"还是"手动加的"（列表岗位列的角标口径）。 */
-export function jobSourceKind(job: Pick<Job, "recognition_source">): "collected" | "manual" {
+export function jobSourceKind(job: Pick<Job, "recognition_source">): JobSourceKind {
   return COLLECTED_SOURCES.has(job.recognition_source) ? "collected" : "manual";
 }
+
+/**
+ * 列表来源角标的显示名 key：`collected` / `manual` 是协议取值，永远不翻；
+ * 翻译的是这两个 key。渲染处再 `t()`，模块作用域不求值文案。
+ */
+export const JOB_SOURCE_LABEL_KEYS: Record<JobSourceKind, MessageKey> = {
+  collected: "jobTable.source.collected",
+  manual: "jobTable.source.manual",
+};
 
 /**
  * 从备选岗位导入到岗位广场时，这条岗位该写哪个来源。
@@ -39,8 +53,8 @@ export interface CandidateOrigin {
 
 export function candidateImportSource(candidate: CandidateOrigin): JobRecognitionSource {
   if (candidate.collect_task_id !== null && candidate.collect_task_id !== undefined) {
-    return "岗位采集";
+    return "岗位采集"; // i18n-ok: 写入 recognition_source 的协议值
   }
-  if (candidate.source === "官网采集") return "官网采集";
-  return "备选岗位导入";
+  if (candidate.source === "官网采集") return "官网采集"; // i18n-ok: 比较与返回的都是后端来源协议值
+  return "备选岗位导入"; // i18n-ok: 写入 recognition_source 的协议值
 }
