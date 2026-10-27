@@ -91,6 +91,42 @@ import referralForm from "./zh-CN.referralForm";
 import trackerPage from "./zh-CN.trackerPage";
 import drillSession from "./zh-CN.drillSession";
 import shortcutSettings from "./zh-CN.shortcutSettings";
+import shortcutsCard from "./zh-CN.shortcutsCard";
+import backgroundTasks from "./zh-CN.backgroundTasks";
+import referenceFile from "./zh-CN.referenceFile";
+import knowledgeForm from "./zh-CN.knowledgeForm";
+import jobForm from "./zh-CN.jobForm";
+import applyRecords from "./zh-CN.applyRecords";
+import profilePhoto from "./zh-CN.profilePhoto";
+import favorites from "./zh-CN.favorites";
+import atsCheck from "./zh-CN.atsCheck";
+import advancedParams from "./zh-CN.advancedParams";
+import appHeader from "./zh-CN.appHeader";
+import backupStatus from "./zh-CN.backupStatus";
+import claimCard from "./zh-CN.claimCard";
+import claimDraftModal from "./zh-CN.claimDraftModal";
+import gallery from "./zh-CN.gallery";
+import generate from "./zh-CN.generate";
+import globalFileDrop from "./zh-CN.globalFileDrop";
+import jobMatchBatchResult from "./zh-CN.jobMatchBatchResult";
+import jobs from "./zh-CN.jobs";
+import knowledgePage from "./zh-CN.knowledgePage";
+import liveModeCard from "./zh-CN.liveModeCard";
+import llmConfigCard from "./zh-CN.llmConfigCard";
+import llmRecordView from "./zh-CN.llmRecordView";
+import profileTextModal from "./zh-CN.profileTextModal";
+import questionBankPanel from "./zh-CN.questionBankPanel";
+import referralDetail from "./zh-CN.referralDetail";
+import resume from "./zh-CN.resume";
+import resumeChangeReview from "./zh-CN.resumeChangeReview";
+import resumeDeliveryInfo from "./zh-CN.resumeDeliveryInfo";
+import resumeFieldDiffView from "./zh-CN.resumeFieldDiffView";
+import resumes from "./zh-CN.resumes";
+import resumesPage from "./zh-CN.resumesPage";
+import sections from "./zh-CN.sections";
+import styleTemplateEditor from "./zh-CN.styleTemplateEditor";
+import trackerImport from "./zh-CN.trackerImport";
+import writing from "./zh-CN.writing";
 
 const namespaces = {
   /** 简历制作台（2026-10-23）。 */
@@ -234,6 +270,52 @@ const namespaces = {
   ...trackerPage,
   ...drillSession,
   ...shortcutSettings,
+  /** 首页快捷入口卡（2026-10-27）。 */
+  ...shortcutsCard,
+  /** 页头后台任务指示器（2026-10-27）。 */
+  ...backgroundTasks,
+  /** 经历参考资料字段（2026-10-27）。 */
+  ...referenceFile,
+  /** 知识库条目编辑弹窗（2026-10-27）。 */
+  ...knowledgeForm,
+  /** 岗位新增/编辑弹窗与字段（2026-10-27）。 */
+  ...jobForm,
+  /** 投递记录面板（2026-10-27）。 */
+  ...applyRecords,
+  /** 简历照片面板（2026-10-27）。 */
+  ...profilePhoto,
+  /** 收藏夹页（2026-10-27）。 */
+  ...favorites,
+  /** ATS 检测面板（2026-10-27）。 */
+  ...atsCheck,
+  /** 模型高级参数（2026-10-27）。 */
+  ...advancedParams,
+  ...appHeader,
+  ...backupStatus,
+  ...claimCard,
+  ...claimDraftModal,
+  ...gallery,
+  ...generate,
+  ...globalFileDrop,
+  ...jobMatchBatchResult,
+  ...jobs,
+  ...knowledgePage,
+  ...liveModeCard,
+  ...llmConfigCard,
+  ...llmRecordView,
+  ...profileTextModal,
+  ...questionBankPanel,
+  ...referralDetail,
+  ...resume,
+  ...resumeChangeReview,
+  ...resumeDeliveryInfo,
+  ...resumeFieldDiffView,
+  ...resumes,
+  ...resumesPage,
+  ...sections,
+  ...styleTemplateEditor,
+  ...trackerImport,
+  ...writing,
 } as const;
 
 export default namespaces;

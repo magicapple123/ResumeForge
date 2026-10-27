@@ -83,6 +83,42 @@ import referralForm from "./en-US.referralForm";
 import trackerPage from "./en-US.trackerPage";
 import drillSession from "./en-US.drillSession";
 import shortcutSettings from "./en-US.shortcutSettings";
+import shortcutsCard from "./en-US.shortcutsCard";
+import backgroundTasks from "./en-US.backgroundTasks";
+import referenceFile from "./en-US.referenceFile";
+import knowledgeForm from "./en-US.knowledgeForm";
+import jobForm from "./en-US.jobForm";
+import applyRecords from "./en-US.applyRecords";
+import profilePhoto from "./en-US.profilePhoto";
+import favorites from "./en-US.favorites";
+import atsCheck from "./en-US.atsCheck";
+import advancedParams from "./en-US.advancedParams";
+import appHeader from "./en-US.appHeader";
+import backupStatus from "./en-US.backupStatus";
+import claimCard from "./en-US.claimCard";
+import claimDraftModal from "./en-US.claimDraftModal";
+import gallery from "./en-US.gallery";
+import generate from "./en-US.generate";
+import globalFileDrop from "./en-US.globalFileDrop";
+import jobMatchBatchResult from "./en-US.jobMatchBatchResult";
+import jobs from "./en-US.jobs";
+import knowledgePage from "./en-US.knowledgePage";
+import liveModeCard from "./en-US.liveModeCard";
+import llmConfigCard from "./en-US.llmConfigCard";
+import llmRecordView from "./en-US.llmRecordView";
+import profileTextModal from "./en-US.profileTextModal";
+import questionBankPanel from "./en-US.questionBankPanel";
+import referralDetail from "./en-US.referralDetail";
+import resume from "./en-US.resume";
+import resumeChangeReview from "./en-US.resumeChangeReview";
+import resumeDeliveryInfo from "./en-US.resumeDeliveryInfo";
+import resumeFieldDiffView from "./en-US.resumeFieldDiffView";
+import resumes from "./en-US.resumes";
+import resumesPage from "./en-US.resumesPage";
+import sections from "./en-US.sections";
+import styleTemplateEditor from "./en-US.styleTemplateEditor";
+import trackerImport from "./en-US.trackerImport";
+import writing from "./en-US.writing";
 
 const enUS = {
   ...core,
@@ -167,6 +203,42 @@ const enUS = {
   ...trackerPage,
   ...drillSession,
   ...shortcutSettings,
+  ...shortcutsCard,
+  ...backgroundTasks,
+  ...referenceFile,
+  ...knowledgeForm,
+  ...jobForm,
+  ...applyRecords,
+  ...profilePhoto,
+  ...favorites,
+  ...atsCheck,
+  ...advancedParams,
+  ...appHeader,
+  ...backupStatus,
+  ...claimCard,
+  ...claimDraftModal,
+  ...gallery,
+  ...generate,
+  ...globalFileDrop,
+  ...jobMatchBatchResult,
+  ...jobs,
+  ...knowledgePage,
+  ...liveModeCard,
+  ...llmConfigCard,
+  ...llmRecordView,
+  ...profileTextModal,
+  ...questionBankPanel,
+  ...referralDetail,
+  ...resume,
+  ...resumeChangeReview,
+  ...resumeDeliveryInfo,
+  ...resumeFieldDiffView,
+  ...resumes,
+  ...resumesPage,
+  ...sections,
+  ...styleTemplateEditor,
+  ...trackerImport,
+  ...writing,
 } as const satisfies Record<keyof ZhCNMessages, string>;
 
 export default enUS;
