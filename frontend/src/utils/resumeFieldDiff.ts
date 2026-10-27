@@ -22,7 +22,8 @@ import type {
 import { t } from "../i18n";
 import type { MessageKey } from "../i18n";
 
-const PHOTO_PLACEHOLDER = "[图片]";
+/** 照片字段的展示占位（base64 不能直接展示给用户）。 */
+const PHOTO_PLACEHOLDER_KEY: MessageKey = "resume.fieldDiff.photoPlaceholder";
 
 type RawItem = Record<string, unknown>;
 
@@ -133,7 +134,7 @@ function str(value: unknown): string {
 
 /** 把 base64 照片替换成占位符，避免把一长串乱码展示给用户。 */
 function sanitizePhoto(value: unknown): string {
-  if (typeof value === "string" && value.startsWith("data:")) return PHOTO_PLACEHOLDER;
+  if (typeof value === "string" && value.startsWith("data:")) return t(PHOTO_PLACEHOLDER_KEY);
   return str(value);
 }
 
@@ -315,16 +316,19 @@ function compareItemSubfields(
 function renderItem(key: string, item: RawItem): ListItemView {
   const labels = LIST_SUBFIELD_LABELS[key] ?? {};
   const lines: string[] = [];
+  const listSeparator = t("resume.fieldDiff.listSeparator");
   for (const sk of Object.keys(item)) {
     const labelKey = labels[sk];
     const label = labelKey ? t(labelKey) : sk;
     const v = item[sk];
     if (Array.isArray(v)) {
       const parts = (v as unknown[]).map((x) => sanitizePhoto(x)).filter((s) => s !== "");
-      if (parts.length > 0) lines.push(`${label}：${parts.join("、")}`);
+      if (parts.length > 0) {
+        lines.push(t("resume.fieldDiff.line", { label, value: parts.join(listSeparator) }));
+      }
     } else {
       const text = sanitizePhoto(v);
-      if (text !== "") lines.push(`${label}：${text}`);
+      if (text !== "") lines.push(t("resume.fieldDiff.line", { label, value: text }));
     }
   }
   return { title: itemTitle(key, item), lines };
