@@ -19,6 +19,8 @@ import { useCollapsedList } from "../common/useCollapsedList";
 import { ListyItem, ListyMeta } from "../common/ListyItem";
 import { LISTY_ITEM_PADDING_SMALL } from "../common/listyPadding";
 import { formatDateTime } from "../../utils/format";
+import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 
 interface Props {
   skills: AssistantSkill[];
@@ -28,33 +30,40 @@ interface Props {
 }
 
 function describe(skill: AssistantSkill): string {
-  const files = skill.files.length > 0 ? `${skill.files.length} 份知识文件` : "仅提示词";
+  const files =
+    skill.files.length > 0
+      ? t("settingsUi.skills.files", { count: skill.files.length })
+      : t("settingsUi.skills.promptOnly");
   return [
-    skill.description || "未填写适用场景",
+    skill.description || t("settingsUi.skills.noDescription"),
     files,
-    `提示词 ${skill.prompt_chars} 字`,
-    `更新于 ${formatDateTime(skill.updated_at)}`,
+    t("settingsUi.skills.promptChars", { count: skill.prompt_chars }),
+    t("settingsUi.skills.updatedAt", { date: formatDateTime(skill.updated_at) }),
   ].join(" · ");
 }
 
 export default function SkillsCard({ skills, loading, onOpen }: Props) {
+  useLocale();
   // 技能多了会淹没页面：默认只展示前 5 项，其余收进「显示全部」（展示层折叠）。
   const { visibleItems: visibleSkills, toggleNode: skillsToggleNode } = useCollapsedList(skills);
 
   return (
-    <Card title="助手技能" className="settings-card">
+    <Card title={t("settingsUi.skills.title")} className="settings-card">
       <Typography.Paragraph type="secondary" style={{ marginBottom: 16 }}>
-        技能是一份<strong>提示词</strong>，也可以再带上一包<strong>知识文件</strong>
-        （.md / .txt）。启用的技能会告诉助手「按什么要求作答」，知识文件则由助手在需要时自己去读，
-        不会一次性塞进对话。想新建或改得更细，请
-        <Link to="/skills">去工作台管理</Link>。
+        {t("settingsUi.skills.introLead")}
+        <strong>{t("settingsUi.skills.introPrompt")}</strong>
+        {t("settingsUi.skills.introMiddle")}
+        <strong>{t("settingsUi.skills.introKnowledge")}</strong>
+        {t("settingsUi.skills.introTail")}
+        <Link to="/skills">{t("settingsUi.skills.manageLink")}</Link>
+        {t("settingsUi.skills.manageTail")}
       </Typography.Paragraph>
 
       {/* List 的 loading 是内容外层的 Spin；空态单独渲染（与原 locale.emptyText 等价）。 */}
       <LoadingBlock spinning={loading}>
         {skills.length === 0 ? (
           <div style={{ marginTop: 16 }}>
-            <EmptyState inline description="还没有技能" />
+            <EmptyState inline description={t("settingsUi.skills.empty")} />
           </div>
         ) : (
           <Listy
@@ -72,7 +81,9 @@ export default function SkillsCard({ skills, loading, onOpen }: Props) {
                         {skill.name}
                       </Button>
                       <Tag color={skill.enabled ? "blue" : "default"}>
-                        {skill.enabled ? "启用中" : "已停用"}
+                        {skill.enabled
+                          ? t("settingsUi.skills.tagEnabled")
+                          : t("settingsUi.skills.tagDisabled")}
                       </Tag>
                     </Space>
                   }
