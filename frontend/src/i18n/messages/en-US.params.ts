@@ -42,7 +42,7 @@ const params = {
   "resumes.copy.done": "Copied {field}",
   "resumes.copy.failed": "Could not copy; select and copy the text manually in your browser",
   "resumes.copy.field.title": "title",
-  "resumes.copy.field.job": "target Job",
+  "resumes.copy.field.job": "target job",
   "resumes.copy.field.company": "company name",
   "resumes.copy.field.note": "note",
   "resumes.copy.field.row": "entire row",

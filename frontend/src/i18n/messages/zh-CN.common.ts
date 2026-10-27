@@ -73,6 +73,10 @@ const common = {
   "common.collapsedList.expand": "显示全部 {count} 条",
   /** 折叠列表收起。 */
   "common.collapsedList.collapse": "收起列表",
+  /** 软删除二次确认的后果段（行操作与批量删除共用的唯一出处）：进回收站，之后可恢复。 */
+  "common.note.trashRecovery": "会移入回收站，之后可以在「回收站」里恢复。",
+  /** 硬删除二次确认的后果段（与上一条成对）：不进回收站，也没有恢复入口。 */
+  "common.note.hardDelete": "会直接删除，不进「回收站」，也无法恢复。",
 } as const;
 
 export default common;

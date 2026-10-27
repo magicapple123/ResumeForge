@@ -49,7 +49,7 @@ const webformFields = {
   "webformFields.contact_name": "Emergency contact name",
   "webformFields.contact_phone": "Emergency contact phone",
   "webformFields.contact_relation": "Relationship to emergency contact",
-  "webformFields.country_region": "Country or region",
+  "webformFields.country_region": "Country / region",
   "webformFields.degree_type": "Degree",
   "webformFields.department": "Department",
   "webformFields.disadvantaged_student": "Low-income student status",

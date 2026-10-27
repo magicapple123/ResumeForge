@@ -4,8 +4,8 @@
  * pagination.
  *
  * The `ITEM_STATUS_META` keys (filled / unverified / failed / skipped / conflict) are
- * protocol values; only the display name moves to `labelKey`. `TRASH_RECOVERY_NOTE` is a
- * shared Chinese constant owned elsewhere - this file only references it.
+ * protocol values; only the display name moves to `labelKey`. The batch body takes the
+ * shared `common.note.trashRecovery` through the `{note}` placeholder.
  */
 const webFormRecords = {
   "webFormRecords.column.field": "Field",
@@ -18,7 +18,7 @@ const webFormRecords = {
   "webFormRecords.status.conflict": "Conflict",
   "webFormRecords.action.deleteSelected": "Delete selected",
   "webFormRecords.confirm.batchTitle": "Delete the selected fill records?",
-  "webFormRecords.confirm.batchBody": "These {count} fill records {note}",
+  "webFormRecords.confirm.batchBody": "Delete these {count} fill records. {note}",
   "webFormRecords.confirm.deleteOne":
     "Delete this fill record? It goes to the trash and can be restored later.",
   "webFormRecords.toast.deleted": "Deleted {count} fill records",
@@ -26,7 +26,7 @@ const webFormRecords = {
   "webFormRecords.error.load": "Could not read the fill records",
   "webFormRecords.empty.none": "No fill records yet",
   "webFormRecords.aria.selectRecord": "Select fill record {id}",
-  "webFormRecords.untitled": "(untitled)",
+  "webFormRecords.untitled": "(Untitled)",
   "webFormRecords.tag.filled": "Filled {count}",
   "webFormRecords.tag.unverified": "Check {count}",
   "webFormRecords.tag.failed": "Failed {count}",

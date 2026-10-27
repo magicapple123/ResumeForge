@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * Job analytics page: overview metrics, the four themed sections, empty states and data-gap notes.
+ * Job analytics page: overview metrics, the four themed sections, empty states, data-gap notes
+ * and the chart axis labels.
  *
  * Stage names on the conversion/duration cards are not here: they map a protocol value to a
- * display name and are shared with the Job tracker page through `trackerForm.status.*`.
- * Referral status names likewise come from `referralForm.status.*`.
+ * display name and share the tracker enum table in `i18n/enum/tracker.ts`; referral status
+ * names likewise come from `i18n/enum/referral.ts`.
  */
 const analyticsPage = {
   "analyticsPage.title": "Job search analytics",
@@ -81,6 +82,27 @@ const analyticsPage = {
   "analyticsPage.trend.recent30d": "Added in the last 30 days",
   "analyticsPage.trend.byCreatedTime": "By creation time",
   "analyticsPage.trend.reminderTitle": "Reminders · {bucket}",
+  // Chart axis labels: the backend sends Chinese display names, so the page maps them back by
+  // the stable month number and weekday index.
+  "analyticsPage.trend.monthLabel.1": "Jan",
+  "analyticsPage.trend.monthLabel.2": "Feb",
+  "analyticsPage.trend.monthLabel.3": "Mar",
+  "analyticsPage.trend.monthLabel.4": "Apr",
+  "analyticsPage.trend.monthLabel.5": "May",
+  "analyticsPage.trend.monthLabel.6": "Jun",
+  "analyticsPage.trend.monthLabel.7": "Jul",
+  "analyticsPage.trend.monthLabel.8": "Aug",
+  "analyticsPage.trend.monthLabel.9": "Sep",
+  "analyticsPage.trend.monthLabel.10": "Oct",
+  "analyticsPage.trend.monthLabel.11": "Nov",
+  "analyticsPage.trend.monthLabel.12": "Dec",
+  "analyticsPage.weekday.mon": "Mon",
+  "analyticsPage.weekday.tue": "Tue",
+  "analyticsPage.weekday.wed": "Wed",
+  "analyticsPage.weekday.thu": "Thu",
+  "analyticsPage.weekday.fri": "Fri",
+  "analyticsPage.weekday.sat": "Sat",
+  "analyticsPage.weekday.sun": "Sun",
   "analyticsPage.channels.title": "Channels and outcomes",
   "analyticsPage.channels.description":
     "Referral conversion is derived from the linked tracker entry — it only counts once that entry reaches Interview or later. Source is **how the entry got into the system**, not an application channel (this database has no channel field).",

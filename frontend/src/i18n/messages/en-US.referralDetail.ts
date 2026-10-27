@@ -17,7 +17,7 @@ const referralDetail = {
   "referralDetail.field.channel": "Channel",
   "referralDetail.field.code": "Referral code",
   "referralDetail.field.submittedAt": "Date applied",
-  "referralDetail.field.job": "Linked Job",
+  "referralDetail.field.job": "Linked job",
   "referralDetail.field.createdAt": "Created",
   "referralDetail.field.updatedAt": "Updated",
   "referralDetail.value.notRecorded": "Not recorded",

@@ -8,9 +8,8 @@
  * line: a full-width semicolon in Chinese and "; " in English - a language-dependent symbol,
  * so it lives in the pack instead of being hard-coded.
  *
- * `interview.confirm.deleteBody` takes the consequence clause through the `{note}` parameter
- * (the shared `HARD_DELETE_NOTE` constant, the single source in
- * `components/common/rowActionMenu.ts`) rather than copying it into the pack.
+ * `interview.confirm.deleteBody` takes the consequence sentence through the `{note}`
+ * parameter (the shared `common.note.hardDelete` key) rather than copying it into the pack.
  */
 const interview = {
   "interview.toast.loadFailed": "Could not load interview records",
@@ -33,7 +32,7 @@ const interview = {
   "interview.confirm.endOk": "End and get the report",
   "interview.confirm.endCancel": "Keep interviewing",
   "interview.confirm.deleteTitle": "Delete the selected interviews?",
-  "interview.confirm.deleteBody": "These {count} interviews will be deleted permanently. {note}",
+  "interview.confirm.deleteBody": "Delete these {count} interviews. {note}",
   "interview.page.title": "Mock interview",
   "interview.page.subtitle":
     "An AI interviewer asks questions at the type and difficulty you set, then gives a score report and improvement suggestions.",

@@ -28,7 +28,7 @@ const webFormPage = {
   "webFormPage.toast.liveOn":
     "On. Go back to the browser window: click any box and the value to fill appears next to it",
   "webFormPage.toast.liveOff":
-    "Off. The floating ball stays grey and the page no longer shows suggestion cards",
+    "Off. The floating ball stays gray and the page no longer shows suggestion cards",
   "webFormPage.toast.nothingToFill":
     "No field on this page could be filled automatically - check the list below",
   "webFormPage.toast.filled":
@@ -152,7 +152,7 @@ const webFormPage = {
   "webFormPage.readSnapshot.hint":
     "Open the web form in the browser window first, stop at the step you want to fill, then click here.",
   "webFormPage.readSnapshot.summary": "Read: {title} · {url} · {count} controls",
-  "webFormPage.readSnapshot.untitled": "(untitled)",
+  "webFormPage.readSnapshot.untitled": "(Untitled)",
   "webFormPage.relaxed.onToast": "On: clickable controls will be clicked for you - check each one",
   "webFormPage.relaxed.offToast": "Relaxed mode is off",
   "webFormPage.relaxed.saveFailed": "Could not save the relaxed mode setting",

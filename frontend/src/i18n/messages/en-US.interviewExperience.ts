@@ -28,7 +28,7 @@ const interviewExperience = {
   "interviewExperience.field.updatedAt": "Updated",
   "interviewExperience.section.content": "Content",
   "interviewExperience.section.questions": "Real questions ({count})",
-  "interviewExperience.empty.content": "(none)",
+  "interviewExperience.empty.content": "(None)",
   "interviewExperience.empty.questions": "(no question recorded yet)",
   "interviewExperience.toast.updated": "Interview note updated",
   "interviewExperience.toast.created": "Interview note created",

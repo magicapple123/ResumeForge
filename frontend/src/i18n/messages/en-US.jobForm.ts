@@ -43,7 +43,7 @@ const jobForm = {
     "Application progress, referral contacts, interview schedule, and so on",
   "jobForm.images.tooLarge": "A single image cannot exceed 2 MB",
   "jobForm.images.limit": "A note can hold at most {count} images",
-  "jobForm.images.readFailed": "Could not read the image - try again",
+  "jobForm.images.readFailed": "Could not read the image — try again",
   "jobForm.parse.needMaterial": "Paste the job posting, or add a screenshot or document first",
   "jobForm.parse.noContent": "Nothing was recognized - check the material or try again later",
   "jobForm.parse.noFields": "Nothing was recognized, so the form was left unchanged",

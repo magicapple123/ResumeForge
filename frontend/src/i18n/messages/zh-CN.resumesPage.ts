@@ -5,7 +5,7 @@
  *
  * 表格视图与卡片视图自身的文案在 `zh-CN.resumes.ts` / `zh-CN.responsive.ts`；
  * 批量操作条（`BatchActionBar`）属于别的批次。
- * 批量删除的正文用 `{note}` 占位符引用 `TRASH_RECOVERY_NOTE`（别处共享的中文常量），
+ * 批量删除的正文用 `{note}` 占位符引用 `common.note.trashRecovery`（删除后果的共用 key），
  * 不在这里另写一份。
  */
 const resumesPage = {

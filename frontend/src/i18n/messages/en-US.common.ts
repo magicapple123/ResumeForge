@@ -74,6 +74,10 @@ const common = {
   "common.collapsedList.expand": "Show all {count}",
   /** Collapse the list again. */
   "common.collapsedList.collapse": "Collapse list",
+  /** Consequence sentence of a soft-delete confirmation (row actions and batch delete share it). */
+  "common.note.trashRecovery": "It will move to Trash, where you can restore it later.",
+  /** Consequence sentence of a hard-delete confirmation (paired with the key above). */
+  "common.note.hardDelete": "It will be deleted permanently and cannot be recovered.",
 } as const;
 
 export default common;

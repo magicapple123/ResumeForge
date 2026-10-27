@@ -1,18 +1,18 @@
 // SPDX-License-Identifier: Apache-2.0
 const profileLibrary = {
-  "profileLibrary.sectionFallback.basic_info": "Basic Information",
+  "profileLibrary.sectionFallback.basic_info": "Basic information",
   "profileLibrary.sectionFallback.educations": "Education",
   "profileLibrary.sectionFallback.experiences": "Internship / Work Experience",
   "profileLibrary.sectionFallback.projects": "Projects",
   "profileLibrary.sectionFallback.skills": "Skills",
-  "profileLibrary.sectionFallback.campus_experiences": "Campus Activities",
-  "profileLibrary.sectionFallback.awards": "Honors & Awards",
+  "profileLibrary.sectionFallback.campus_experiences": "Campus activities",
+  "profileLibrary.sectionFallback.awards": "Honors & awards",
   "profileLibrary.sectionFallback.summary": "Summary / Self-assessment",
-  "profileLibrary.sectionFallback.publications": "Academic Achievements",
+  "profileLibrary.sectionFallback.publications": "Academic achievements",
   "profileLibrary.sectionFallback.research_projects": "Research Projects",
   "profileLibrary.sectionFallback.patents": "Intellectual Property",
   "profileLibrary.sectionFallback.credentials": "Certifications & Qualifications",
-  "profileLibrary.sectionFallback.languages": "Language Proficiency",
+  "profileLibrary.sectionFallback.languages": "Language proficiency",
   "profileLibrary.page.title": "My Profile",
   "profileLibrary.page.subtitle":
     "Resume Profile feeds Resume generation; web form Profile supplements application forms",
@@ -141,18 +141,18 @@ const profileLibrary = {
   "profileLibrary.guide.row.work":
     "Employment contract, pay and a supervisor|Internship / Work Experience",
   "profileLibrary.guide.row.campus":
-    "Roles in campus organizations, clubs or student government|Campus Activities",
+    "Roles in campus organizations, clubs or student government|Campus activities",
   "profileLibrary.guide.row.volunteer":
-    "Volunteering, community service or public-interest projects|Campus Activities (choose volunteering / community service as the activity type)",
-  "profileLibrary.guide.row.paper": "Papers, books or research reports|Academic Achievements",
+    "Volunteering, community service or public-interest projects|Campus activities (choose volunteering / community service as the activity type)",
+  "profileLibrary.guide.row.paper": "Papers, books or research reports|Academic achievements",
   "profileLibrary.guide.row.research":
     "Funding, project approval, project ID or a research group|Research Projects",
   "profileLibrary.guide.row.project": "A deliverable product, code repository or design|Projects",
-  "profileLibrary.guide.row.award": "Competition awards, honors or scholarships|Honors & Awards",
+  "profileLibrary.guide.row.award": "Competition awards, honors or scholarships|Honors & awards",
   "profileLibrary.guide.row.credential":
     "Qualification exams, professional certifications or licenses|Certifications & Qualifications",
   "profileLibrary.guide.row.language":
-    "Language test scores (CET / IELTS / TOEFL / JLPT / TestDaF)|Language Proficiency",
+    "Language test scores (CET / IELTS / TOEFL / JLPT / TestDaF)|Language proficiency",
   "profileLibrary.guide.row.patent": "Patents or software copyrights|Intellectual Property",
   "profileLibrary.empty.groupTitle": "The current Plan hides all Sections",
   "profileLibrary.empty.groupHint":

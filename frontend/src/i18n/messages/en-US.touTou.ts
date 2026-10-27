@@ -46,7 +46,7 @@ const touTou = {
 
   // ── Orb button (TouTouOrbButton) ────────────────────────────
   "touTou.orb.tooltip": "Click: open the job assistant; double-click: open the Toutou clipboard",
-  "touTou.orb.ariaLabel": "Open the job assistant",
+  "touTou.orb.ariaLabel": "Open the Job assistant",
 
   // ── Profile prompt card (TouTouProfilePromptCard) ───────────
   "touTou.profilePrompt.ariaLabel": "Edit My Profile",

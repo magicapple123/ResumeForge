@@ -40,7 +40,7 @@ const jobMatch = {
   "jobMatch.section.advice": "Application advice",
   "jobMatch.section.score": "Reference score",
   "jobMatch.section.scope": "How to read this",
-  "jobMatch.action.reanalyze": "Analyse again",
+  "jobMatch.action.reanalyze": "Analyze again",
   "jobMatch.action.clear": "Clear result",
   "jobMatch.condition.jdQuote": "From the posting: {quote}",
   "jobMatch.condition.evidence": "Evidence: {evidence}",

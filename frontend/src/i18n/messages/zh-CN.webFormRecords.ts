@@ -3,7 +3,7 @@
  * 网申「填充记录」面板：列表摘要、明细表、批量删除与分页。
  *
  * `ITEM_STATUS_META` 的状态键（filled / unverified / failed / skipped / conflict）是协议值，
- * 只有显示名走 `labelKey`；`TRASH_RECOVERY_NOTE` 是别处共享的中文常量，这里只引用不翻译。
+ * 只有显示名走 `labelKey`；批量正文的 `{note}` 插的是 `common.note.trashRecovery`（共用 key）。
  */
 const webFormRecords = {
   "webFormRecords.column.field": "字段",

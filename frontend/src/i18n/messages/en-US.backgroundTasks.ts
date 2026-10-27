@@ -10,7 +10,7 @@ const backgroundTasks = {
   "backgroundTasks.aria.viewTasks": "View background tasks",
   "backgroundTasks.popover.title": "Tasks in progress",
   "backgroundTasks.tooltip.running": "{count} tasks in progress",
-  "backgroundTasks.status.preparing": "Preparing...",
+  "backgroundTasks.status.preparing": "Preparing…",
   "backgroundTasks.status.unknown": "Task status unknown",
   "backgroundTasks.progress.received": "Received {count} characters",
   "backgroundTasks.progress.processed": "Processed {done}/{total} jobs",
@@ -83,7 +83,7 @@ const backgroundTasks = {
   "backgroundTasks.jobMatch.cancelled.title": "Job fit analysis cancelled",
   "backgroundTasks.jobMatch.cancelled.description":
     "Results finished before the cancellation are still saved.",
-  "backgroundTasks.jobMatch.label": "Analysing {count} jobs",
+  "backgroundTasks.jobMatch.label": "Analyzing {count} jobs",
   // ── Apply / collect batch notifications ────────────────────
   "backgroundTasks.batch.kindApply": "Apply",
   "backgroundTasks.batch.kindCollect": "Collect",

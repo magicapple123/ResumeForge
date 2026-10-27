@@ -162,6 +162,16 @@ import touTou from "./zh-CN.touTou";
 import trackerUi from "./zh-CN.trackerUi";
 import userGuide from "./zh-CN.userGuide";
 import userGuideFlow from "./zh-CN.userGuideFlow";
+import enumsApply from "./zh-CN.enumsApply";
+import enumsAssistant from "./zh-CN.enumsAssistant";
+import enumsClaims from "./zh-CN.enumsClaims";
+import enumsDrill from "./zh-CN.enumsDrill";
+import enumsInterview from "./zh-CN.enumsInterview";
+import enumsJobs from "./zh-CN.enumsJobs";
+import enumsKnowledge from "./zh-CN.enumsKnowledge";
+import enumsReferral from "./zh-CN.enumsReferral";
+import enumsResumeCatalog from "./zh-CN.enumsResumeCatalog";
+import enumsTracker from "./zh-CN.enumsTracker";
 
 const namespaces = {
   /** 简历制作台（2026-10-23）。 */
@@ -386,6 +396,16 @@ const namespaces = {
   ...trackerUi,
   ...userGuide,
   ...userGuideFlow,
+  ...enumsApply,
+  ...enumsAssistant,
+  ...enumsClaims,
+  ...enumsDrill,
+  ...enumsInterview,
+  ...enumsJobs,
+  ...enumsKnowledge,
+  ...enumsReferral,
+  ...enumsResumeCatalog,
+  ...enumsTracker,
 } as const;
 
 export default namespaces;

@@ -6,8 +6,8 @@
  *
  * The table and card views keep their own copy in `en-US.resumes.ts` /
  * `en-US.responsive.ts`; the batch action bar (`BatchActionBar`) belongs to another
- * batch. The batch-delete body references `TRASH_RECOVERY_NOTE` through the `{note}`
- * placeholder instead of restating it.
+ * batch. The batch-delete body references `common.note.trashRecovery` through the
+ * `{note}` placeholder instead of restating it.
  */
 const resumesPage = {
   "resumesPage.page.newResume": "New resume",
@@ -33,7 +33,7 @@ const resumesPage = {
     "Selected all {count} Resumes matching the current filter (all pages)",
   "resumesPage.batchDelete.button": "Delete selected",
   "resumesPage.batchDelete.title": "Delete the selected resumes?",
-  "resumesPage.batchDelete.body": "These {count} resumes {note}",
+  "resumesPage.batchDelete.body": "Delete these {count} resumes. {note}",
   "resumesPage.batchDelete.done": "Deleted {count} resumes — restore them from the Trash",
 
   "resumesPage.rename.title": "Rename Resume",

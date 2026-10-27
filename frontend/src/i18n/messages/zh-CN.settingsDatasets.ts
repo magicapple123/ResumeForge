@@ -131,7 +131,7 @@ const settingsDatasets = {
   /**
    * 删除数据集的后果段（唯一出口）。
    *
-   * 刻意**不**复用 `TRASH_RECOVERY_NOTE`：数据集删除只是把文件移出列表，它不进「回收站」
+   * 刻意**不**复用 `common.note.trashRecovery`：数据集删除只是把文件移出列表，它不进「回收站」
    * 页，界面上也就没有恢复入口——写"可在「回收站」里恢复"是承诺一件应用做不到的事（R2）。
    */
   "settingsDatasets.delete.note": "数据集会移出列表，界面上没有恢复入口；删除前请先「导出」备份。",

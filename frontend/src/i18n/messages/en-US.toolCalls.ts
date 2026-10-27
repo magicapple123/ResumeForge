@@ -45,7 +45,7 @@ const toolCalls = {
   "toolLabel.update_skill": "Update an assistant skill",
   "toolLabel.read_skill_knowledge": "Read a skill knowledge file",
   "toolLabel.update_resume_layout": "Adjust Resume layout",
-  "toolLabel.update_resume": "Update Resume favourite or notes",
+  "toolLabel.update_resume": "Update Resume favorite or notes",
   "toolLabel.create_format_template": "Create a layout template",
   "toolLabel.update_format_template": "Update a layout template",
   "toolLabel.list_format_templates": "List layout templates",

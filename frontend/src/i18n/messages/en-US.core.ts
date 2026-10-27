@@ -148,11 +148,11 @@ const core = {
     "The first row contains headers (Job title / Company name / Job URL / Original hiring text / Note). Download a blank template if needed. Maximum 10 files and 2,000 rows total",
   "jobs.candidate.import.paste-hint":
     "You can also press Ctrl+V here to paste CSV content copied from a spreadsheet",
-  "jobs.candidate.import.parsing": "Parsing...",
+  "jobs.candidate.import.parsing": "Parsing…",
   "jobs.candidate.import.summary": "{files} files selected: {rows} rows available to import",
   "jobs.candidate.import.errors-count": "{count} rows have issues",
   "jobs.candidate.import.duplicates-count": "Removed {count} duplicate rows",
-  "jobs.candidate.import.file-parsing": "Parsing...",
+  "jobs.candidate.import.file-parsing": "Parsing…",
   "jobs.candidate.import.file-ok": "{count} rows available to import",
   "jobs.candidate.import.file-error": "Could not parse file",
   "jobs.candidate.import.file-duplicates": "{count} duplicate rows",

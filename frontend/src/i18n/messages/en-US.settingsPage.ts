@@ -16,7 +16,7 @@ const settingsPage = {
   "settings.assistant.group.hint": "What the assistant can search, do and read",
   "settings.data.intro":
     "Jobs, Resumes and Profile content all live in the current dataset, which can be exported as a backup or switched.",
-  "settings.app.intro": "Version, update and reminder behaviour of the app itself.",
+  "settings.app.intro": "Version, update and reminder behavior of the app itself.",
   "settings.app.ui.title": "Interface and reminders",
   "settings.app.ui.hint": "Navigation entries, shortcuts, the floating orb and recent reminders",
   "settings.app.theme.note":

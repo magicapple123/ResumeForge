@@ -10,11 +10,11 @@ const jobDetail = {
   "jobDetail.action.write": "Write a Resume manually",
   "jobDetail.action.viewResume": "View the generated Resume",
   "jobDetail.action.readRequirement": "Read the requirements",
-  "jobDetail.hint.readRequirement": "Reads only the posting and summarises what the Job asks for",
+  "jobDetail.hint.readRequirement": "Reads only the posting and summarizes what the Job asks for",
   "jobDetail.hint.matchRunning":
     "Match analysis is running in the background; a notification will follow",
   "jobDetail.hint.matchIdle": "Reads your Profile and Resumes to judge how well you fit",
-  "jobDetail.action.analyzing": "Analysing…",
+  "jobDetail.action.analyzing": "Analyzing…",
   "jobDetail.action.match": "Match analysis",
   "jobDetail.hint.unsupported":
     "This Job's source is not a job board the apply desk supports, so it cannot be auto-applied",
@@ -25,11 +25,11 @@ const jobDetail = {
   "jobDetail.section.progress": "Application progress for this Job",
   "jobDetail.action.interview": "Mock interview",
   "jobDetail.action.goApply": "Go and apply",
-  "jobDetail.action.favorite": "Favourite this Job",
-  "jobDetail.action.unfavorite": "Remove from favourites",
+  "jobDetail.action.favorite": "Favorite this job",
+  "jobDetail.action.unfavorite": "Remove from favorites",
   "jobDetail.unsupported.title": "This Job cannot be auto-applied from the apply desk",
   "jobDetail.unsupported.body":
-    "The apply desk can only auto-apply to Jobs posted on a job board — either the source or the apply link must point at a supported site, and this Job has neither, so Add to apply desk is greyed out. Either change its apply link to the Job's address on the job board (that is enough to enable auto-apply), or use Go and apply above, or apply through the original channel.",
+    "The apply desk can only auto-apply to Jobs posted on a job board — either the source or the apply link must point at a supported site, and this Job has neither, so Add to apply desk is grayed out. Either change its apply link to the Job's address on the job board (that is enough to enable auto-apply), or use Go and apply above, or apply through the original channel.",
   "jobDetail.field.company": "Company",
   "jobDetail.field.location": "Location",
   "jobDetail.field.salary": "Salary range",

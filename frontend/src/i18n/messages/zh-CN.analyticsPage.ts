@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * 求职统计页：概览指标、四个主题区块、空态与缺口说明。
+ * 求职统计页：概览指标、四个主题区块、空态与缺口说明，以及两张图内的坐标轴文案。
  *
- * 阶段转化/耗时卡里的状态名不在这里——它来自协议值到显示名的映射，
- * 与「求职进度」页共用 `trackerForm.status.*` 词表；内推状态名同样由
- * `referralForm.status.*` 提供。这里只放本页独有的标题、说明与指标文案。
+ * 阶段转化/耗时卡里的状态名不在这里——它来自协议值到显示名的映射，与「求职进度」页
+ * 共用同一张表（`i18n/enum/tracker.ts`）；内推状态名同理在 `i18n/enum/referral.ts`。
+ * 这里只放本页独有的标题、说明、指标文案与图表坐标轴（月份 / 星期）。
  */
 const analyticsPage = {
   "analyticsPage.title": "求职统计",
@@ -75,6 +75,26 @@ const analyticsPage = {
   "analyticsPage.trend.recent30d": "最近 30 天新增",
   "analyticsPage.trend.byCreatedTime": "按创建时间",
   "analyticsPage.trend.reminderTitle": "提醒·{bucket}",
+  // 图内坐标轴文案：后端下发的是中文展示名，前端按稳定字段（月份号 / 星期序号）映射。
+  "analyticsPage.trend.monthLabel.1": "1月",
+  "analyticsPage.trend.monthLabel.2": "2月",
+  "analyticsPage.trend.monthLabel.3": "3月",
+  "analyticsPage.trend.monthLabel.4": "4月",
+  "analyticsPage.trend.monthLabel.5": "5月",
+  "analyticsPage.trend.monthLabel.6": "6月",
+  "analyticsPage.trend.monthLabel.7": "7月",
+  "analyticsPage.trend.monthLabel.8": "8月",
+  "analyticsPage.trend.monthLabel.9": "9月",
+  "analyticsPage.trend.monthLabel.10": "10月",
+  "analyticsPage.trend.monthLabel.11": "11月",
+  "analyticsPage.trend.monthLabel.12": "12月",
+  "analyticsPage.weekday.mon": "周一",
+  "analyticsPage.weekday.tue": "周二",
+  "analyticsPage.weekday.wed": "周三",
+  "analyticsPage.weekday.thu": "周四",
+  "analyticsPage.weekday.fri": "周五",
+  "analyticsPage.weekday.sat": "周六",
+  "analyticsPage.weekday.sun": "周日",
   "analyticsPage.channels.title": "渠道与去向",
   "analyticsPage.channels.description":
     "内推转化由关联的投递记录派生——那条记录走到「面试」及以上才算转化。「记录来源」是这一行**怎么进系统的**，不是投递渠道（本库没有渠道字段）。",

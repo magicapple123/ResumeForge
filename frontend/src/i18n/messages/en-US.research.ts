@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 const research = {
-  "research.tab.publications": "Academic Achievements",
+  "research.tab.publications": "Academic achievements",
   "research.tab.projects": "Research Projects",
   "research.tab.patents": "Intellectual Property",
   "research.section.count": "{count} entries total",

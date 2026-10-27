@@ -48,10 +48,10 @@ const userGuide = {
     "The 13 sections, the Current Plan and the field settings all live here; then verify, entry by entry, what you may say in public in the Fact ledger.",
   "userGuide.setupProfile.step2.point1.lead": "How to enter it",
   "userGuide.setupProfile.step2.point1.text":
-    "Fill it in by hand, or paste a whole Profile at once; you can also press Ctrl+V to paste a screenshot, or upload a **pdf/docx Resume** (text is extracted on this machine) and have it recognised as a draft.",
+    "Fill it in by hand, or paste a whole Profile at once; you can also press Ctrl+V to paste a screenshot, or upload a **pdf/docx Resume** (text is extracted on this machine) and have it recognized as a draft.",
   "userGuide.setupProfile.step2.point2.lead": "13 sections",
   "userGuide.setupProfile.step2.point2.text":
-    "The Profile page is organised into 13 sections: Basic information, Education, Internship/Work, Projects, Skills, Campus, Honours, Summary, Academic output, Research projects, Intellectual property, Certificates, Languages; each one has its default fields. Fields use a responsive multi-column layout — single-line text up to 3 columns on wide screens, multi-line text and dates on a full row.",
+    "The Profile page is organized into 13 sections: Basic information, Education, Internship/Work, Projects, Skills, Campus, Honors, Summary, Academic output, Research projects, Intellectual property, Certificates, Languages; each one has its default fields. Fields use a responsive multi-column layout — single-line text up to 3 columns on wide screens, multi-line text and dates on a full row.",
   "userGuide.setupProfile.step2.point3.lead": "Current Plan",
   "userGuide.setupProfile.step2.point3.text":
     "“Current Plan” in the header decides which sections generation, new Resumes and Web form filling read; click “Manage Plans” to tick the section list. Basic information always stays first and cannot be removed.",
@@ -96,7 +96,7 @@ const userGuide = {
     "While the body still contains [To be filled: …] the export is blocked and the position is pointed out; to export a draft just to review it, choose “Still export draft” in the dialog.",
   "userGuide.setupProfile.step2.point17.lead": "Web form Profile",
   "userGuide.setupProfile.step2.point17.text":
-    "“My Profile” switches horizontally between the Resume Profile and the shared Web form Profile. The latter adds Web form fields such as ID documents and family, and Education, Experience, Certificates and Works can each have several entries; the education extras (studied abroad, unified admission, highest degree, minor) are plain yes/no choices. In edit mode you can **paste text and have it recognised** for the whole screen of fields; unknown fields are first listed as items to confirm. Attachments must be uploaded by hand. **Resume generation reads the Resume Profile only; Web form filling merges both parts**.",
+    "“My Profile” switches horizontally between the Resume Profile and the shared Web form Profile. The latter adds Web form fields such as ID documents and family, and Education, Experience, Certificates and Works can each have several entries; the education extras (studied abroad, unified admission, highest degree, minor) are plain yes/no choices. In edit mode you can **paste text and have it recognized** for the whole screen of fields; unknown fields are first listed as items to confirm. Attachments must be uploaded by hand. **Resume generation reads the Resume Profile only; Web form filling merges both parts**.",
   "userGuide.setupProfile.step2.point18.lead": "Resume photo",
   "userGuide.setupProfile.step2.point18.text":
     "Only **the photo in use** is shown; click “Photo library” to change or delete it. The photo stays on this machine and is never sent to the model.",
@@ -108,7 +108,7 @@ const userGuide = {
     "“Career scenario” in the header is an optional suggestion for this window (career change, research application, career return, senior management and so on). Switching or editing a scenario changes only the guidance and suggestions — not the Profile, Jobs, existing Resumes, Apply settings or background tasks; to use it for a Resume you must turn on “For this generation” in the generate dialog, and the generation record keeps the scenario used.",
   "userGuide.setupProfile.step2.point21.lead": "Default order",
   "userGuide.setupProfile.step2.point21.text":
-    "The global order of the 13 sections is: Basic information, Education, Internship/Work, Projects, Skills, Campus, Honours, Summary, Academic output, Research projects, Intellectual property, Certificates, Languages; sections you create come last. Drag the reorder handle to change it — the order holds from then on, and Resume generation follows it too.",
+    "The global order of the 13 sections is: Basic information, Education, Internship/Work, Projects, Skills, Campus, Honors, Summary, Academic output, Research projects, Intellectual property, Certificates, Languages; sections you create come last. Drag the reorder handle to change it — the order holds from then on, and Resume generation follows it too.",
   "userGuide.setupProfile.step2.actionLabel": "Go to My Profile",
   // ── Step 1 · Import Jobs and apply (workflowSteps.ts) ──
   "userGuide.workflow.step1.title": "Import Jobs and apply",
@@ -118,7 +118,7 @@ const userGuide = {
     "Jobs can be entered by hand or collected automatically; before anything is sent you see the match verdict and confirm it yourself.",
   "userGuide.workflow.step1.point1.lead": "How to enter one",
   "userGuide.workflow.step1.point1.text":
-    "Type it in field by field, or paste a whole posting and let it be recognised; you can also paste a screenshot, or upload a **pdf/docx posting — both are recognised** (up to 4 at a time).",
+    "Type it in field by field, or paste a whole posting and let it be recognized; you can also paste a screenshot, or upload a **pdf/docx posting — both are recognized** (up to 4 at a time).",
   "userGuide.workflow.step1.point2.lead": "Bulk CSV import",
   "userGuide.workflow.step1.point2.text":
     "“Import CSV” takes up to 10 files at once (2000 rows in total), by selection or drag and drop, and pasted table content works too — press Ctrl+V in the import area; a bad file only flags itself while good ones still import, and submission splits into batches of 500 rows automatically.",
@@ -136,7 +136,7 @@ const userGuide = {
     "In “Apply desk → Auto collect” set the keywords and city, then click “Start collecting”; several keywords are searched one by one and de-duplicated across them, and saved conditions land in “Saved filters” for one-click reuse. Collection runs in the background: switching page does not interrupt it, the Apply desk still shows progress when you come back, and a notification arrives when it finishes.",
   "userGuide.workflow.step1.point7.lead": "City codes",
   "userGuide.workflow.step1.point7.text":
-    "The city name is converted to that site's own city code; when it cannot be recognised you get a clear error instead of a silent search in a different city.",
+    "The city name is converted to that site's own city code; when it cannot be recognized you get a clear error instead of a silent search in a different city.",
   "userGuide.workflow.step1.point8.lead": "Site filters",
   "userGuide.workflow.step1.point8.text":
     "Collection conditions include “Filter by the job site's own filters”: job type / salary / experience / education / company industry / company size / funding stage — the site filters them during the search, which is more accurate than filtering afterwards. The options are read from the site itself and their source is stated: with the browser running it is the list **your account can see**.",
@@ -163,7 +163,7 @@ const userGuide = {
     "There is also a 0–100 reference score with five sub-scores; it only helps you sense the distance, **takes no part in apply admission**, and comes with a disclaimer.",
   "userGuide.workflow.step1.point16.lead": "Join the apply queue",
   "userGuide.workflow.step1.point16.text":
-    "Click “Add to Apply desk” on the Job detail to queue it; **only Jobs whose source is a job site can be applied to automatically** — for a hand-entered Job with no site application URL the button is greyed out and the detail explains why (add that Job's URL on the site and it works). The top of the queue page lays out the whole flow (where Jobs come from, what to check, when anything is really sent); click a Job name for details, and you can reorder, edit the greeting and choose which materials to use.",
+    "Click “Add to apply desk” on the Job detail to queue it; **only Jobs whose source is a job site can be applied to automatically** — for a hand-entered Job with no site application URL the button is grayed out and the detail explains why (add that Job's URL on the site and it works). The top of the queue page lays out the whole flow (where Jobs come from, what to check, when anything is really sent); click a Job name for details, and you can reorder, edit the greeting and choose which materials to use.",
   "userGuide.workflow.step1.point17.lead": "Admission rules",
   "userGuide.workflow.step1.point17.text":
     "Jobs with “insufficient evidence / needs confirmation” need your confirmation item by item before they can join the queue; a Job with a “real gap” shows as “Do not apply” with the reason.",
@@ -193,13 +193,13 @@ const userGuide = {
     "Filling a company's web form goes “open browser → open the form page → read the form → check → fill”; with a target URL it opens directly, without loading a blank page or opening duplicate dialogs.",
   "userGuide.workflow.step1.point26.lead": "Floating ball",
   "userGuide.workflow.step1.point26.text":
-    "“Lili” in the dedicated browser supports click to toggle, double-click for the menu and press-and-drag. Turning live filling off greys the ball out and focusing an input no longer pops a card; “Auto-fill this page” in the menu is the shortcut for the main fill flow — it reuses the same date conversion, conflict protection and field matching, shows the result and success rate, and can also “Ask Lili” directly.",
+    "“Lili” in the dedicated browser supports click to toggle, double-click for the menu and press-and-drag. Turning live filling off grays the ball out and focusing an input no longer pops a card; “Auto-fill this page” in the menu is the shortcut for the main fill flow — it reuses the same date conversion, conflict protection and field matching, shows the result and success rate, and can also “Ask Lili” directly.",
   "userGuide.workflow.step1.point27.lead": "Remember a field",
   "userGuide.workflow.step1.point27.text":
     "“Remember this” lets you rename the field; by default it writes only into the Web form Profile — an existing field is updated, otherwise a custom field is added. Normal mode reuses a field only on one unique exact label; with relaxed mode on, custom fields also take part in constrained text matching.",
   "userGuide.workflow.step1.point28.lead": "Repeated sections",
   "userGuide.workflow.step1.point28.text":
-    "Repeated blocks such as Internship-2 or Project-3 match the Profile entry by their index on the page; a box it cannot recognise can be pointed at another entry or handed to AI (only the page text is sent).",
+    "Repeated blocks such as Internship-2 or Project-3 match the Profile entry by their index on the page; a box it cannot recognize can be pointed at another entry or handed to AI (only the page text is sent).",
   "userGuide.workflow.step1.point29.lead": "A browser for filling",
   "userGuide.workflow.step1.point29.text":
     "The Web form browser and the Apply desk share the browser-type setting, and **their windows never overwrite each other**. On launch you can type a URL to open a new page, and history can be deleted; **opening the browser or a page turns on “Smart field-by-field filling” automatically** (the Lili ball appears with the page, no manual switch), and every page has a floating switch that is on by default and can be turned off separately. Changing browser settings needs a restart to take effect.",
@@ -208,10 +208,10 @@ const userGuide = {
     "Go back to the browser to check after filling — **submitting is your click**; passwords and CAPTCHAs are never filled, and existing values are not overwritten by default. **Only text-like controls are written**: dropdowns, radio buttons, checkboxes, date controls and searchable dropdowns such as school or major — ones that “look like an input but must be opened and picked” — are never filled automatically and are listed honestly as “you need to pick this yourself”; dates are converted only inside text boxes, following the page's format (missing parts are not invented). AI suggestions are unticked by default.",
   "userGuide.workflow.step1.point31.lead": "Relaxed mode",
   "userGuide.workflow.step1.point31.text":
-    "After you **turn it on explicitly** on the Web form page or in Settings, the app clicks dropdown and popover options for you and matches unrecognised text boxes (custom fields included) by label and context; low-confidence candidates are marked “needs confirmation” and unticked by default. Consent and declaration items still need confirming one by one; date pickers and file uploads are left to you. Relaxed matching can pick the wrong item, so check after filling.",
+    "After you **turn it on explicitly** on the Web form page or in Settings, the app clicks dropdown and popover options for you and matches unrecognized text boxes (custom fields included) by label and context; low-confidence candidates are marked “needs confirmation” and unticked by default. Consent and declaration items still need confirming one by one; date pickers and file uploads are left to you. Relaxed matching can pick the wrong item, so check after filling.",
   "userGuide.workflow.step1.point32.lead": "Success rate and diagnostics",
   "userGuide.workflow.step1.point32.text":
-    "Batch filling and the ball's auto-fill show a success rate as “fields filled / total form fields on the page”, and tell you how many were actually recognised and attempted. When something goes wrong, “Export diagnostics” exports only redacted facts — version, request id, control count, elapsed time, error type — never Resume values, form values, passwords or API keys; send it with a screenshot to make it easier to pin down.",
+    "Batch filling and the ball's auto-fill show a success rate as “fields filled / total form fields on the page”, and tell you how many were actually recognized and attempted. When something goes wrong, “Export diagnostics” exports only redacted facts — version, request id, control count, elapsed time, error type — never Resume values, form values, passwords or API keys; send it with a screenshot to make it easier to pin down.",
   "userGuide.workflow.step1.point33.lead": "What was filled",
   "userGuide.workflow.step1.point33.text":
     "“Fill records” at the bottom keeps the time, page, field, value, result and snapshot of every fill, **stored on this machine only**. Switching page or closing the dedicated browser keeps the current draft; come back to the Web form page to continue, and only “Finish this fill” clears it.",
@@ -226,7 +226,7 @@ const userGuide = {
     "Jobs sent successfully from the Apply desk appear here automatically — no need to enter them again by hand.",
   "userGuide.workflow.step2.point2.lead": "Import from a message",
   "userGuide.workflow.step2.point2.text":
-    "Paste a recruiting email, SMS or in-site notification and the progress is recognised; screenshots and pdf/docx uploads work too.",
+    "Paste a recruiting email, SMS or in-site notification and the progress is recognized; screenshots and pdf/docx uploads work too.",
   "userGuide.workflow.step2.point3.lead": "Preview before writing",
   "userGuide.workflow.step2.point3.text":
     "The result **shows you what will happen first**: every item states “new record / progress update / already up to date, unchanged” together with the reason, and nothing is written until you tick and confirm it.",
@@ -250,10 +250,10 @@ const userGuide = {
     "Export the current filter as CSV (opens straight in Excel) or JSON.",
   "userGuide.workflow.step2.point10.lead": "Reminders and referrals",
   "userGuide.workflow.step2.point10.text":
-    "“Reminders” sets due-time alerts for applications, interviews and referrals, switchable between **list / month view** (clicking a day in the month view shows everything scheduled that day, and the home month view works the same), and the home page colours them by urgency; “Referrals” records opportunities that came from your network and tracks the conversion rate — click a card for contact details, referral code and note images.",
+    "“Reminders” sets due-time alerts for applications, interviews and referrals, switchable between **list / month view** (clicking a day in the month view shows everything scheduled that day, and the home month view works the same), and the home page colors them by urgency; “Referrals” records opportunities that came from your network and tracks the conversion rate — click a card for contact details, referral code and note images.",
   "userGuide.workflow.step2.point11.lead": "Interview prep",
   "userGuide.workflow.step2.point11.text":
-    "Practise with “Personalised question bank” (basics / project deep dive / questions for HR), or run an “Interview retrospective” to record the real questions and analyse them; afterwards you can keep it as an “Interview experience”.",
+    "Practice with “Personalized question bank” (basics / project deep dive / questions for HR), or run an “Interview retrospective” to record the real questions and analyze them; afterwards you can keep it as an “Interview experience”.",
   "userGuide.workflow.step2.point12.lead": "History is kept",
   "userGuide.workflow.step2.point12.text":
     "Question-bank generation and interview retrospectives are saved to history automatically; open a history entry and the original screen and buttons are still there, with new results written back to that entry.",

@@ -5,7 +5,7 @@ const materials = {
   "materials.page.subtitle1":
     "Keep job-search and interview material here: certificates, work samples, interview notes, company research, interview retrospectives, internship documents, links and notes.",
   "materials.page.subtitle2":
-    "The assistant can read them, sort them, summarise a single item, or turn one into Profile content.",
+    "The assistant can read them, sort them, summarize a single item, or turn one into Profile content.",
   "materials.action.create": "Add material",
   "materials.action.edit": "Edit",
   "materials.action.delete": "Delete",

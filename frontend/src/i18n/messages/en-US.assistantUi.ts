@@ -10,9 +10,8 @@
  * and the write-proposal statuses and buttons.
  *
  * The module-level tables store keys only (labelKey) and resolve them with t() at render
- * time; this pack contains no protocol values. The {note} placeholder carries the
- * deletion-consequence constant from components/common/rowActionMenu.ts until that
- * constant moves into a language pack.
+ * time; this pack contains no protocol values. The {note} placeholder carries
+ * common.note.trashRecovery / common.note.hardDelete (the shared delete consequences).
  */
 const assistantUi = {
   "assistantUi.starter.matchAnalysis": "Analyze job fit",
@@ -60,7 +59,7 @@ const assistantUi = {
   "assistantUi.selectBar.selected": "{count} selected",
   "assistantUi.selectBar.confirm.title": "Delete the selected messages?",
   "assistantUi.selectBar.confirm.content":
-    "These {count} messages {note} Questions that quote them keep the quoted content.",
+    "Delete these {count} messages. {note} Questions that quote them keep the quoted content.",
   "assistantUi.selectBar.deleteSelected": "Delete selected",
   "assistantUi.selectBar.exit": "Exit selection",
   "assistantUi.actionProposal.status.pending": "Pending confirmation",
@@ -110,7 +109,7 @@ const assistantUi = {
   "assistantUi.sidebar.action.archive": "Archive conversation",
   "assistantUi.sidebar.action.unarchive": "Unarchive conversation",
   "assistantUi.sidebar.confirm.deleteSelectedTitle": "Delete the selected conversations?",
-  "assistantUi.sidebar.confirm.deleteSelectedContent": "These {count} conversations {note}",
+  "assistantUi.sidebar.confirm.deleteSelectedContent": "Delete these {count} conversations. {note}",
   "assistantUi.sidebar.toast.shareLinkCopied":
     "Copied the conversation link — open it in this app to return to the conversation",
   "assistantUi.sidebar.toast.copyLinkFailed": "Could not copy — copy it manually: {link}",

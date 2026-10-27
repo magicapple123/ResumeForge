@@ -80,7 +80,7 @@ const resumeEditor = {
   "editor.field.languageObtained": "Obtained",
   "editor.required.language": "Enter a language",
   "editor.placeholder.language": "e.g. English",
-  "editor.placeholder.languageLevel": "e.g. CET-6 / Fluent",
+  "editor.placeholder.languageLevel": "e.g. CET-6 / fluent",
   "editor.placeholder.languageCertificate": "e.g. CET-6 certificate",
   "editor.placeholder.languageScore": "e.g. 550",
   "editor.placeholder.languageObtained": "e.g. 2024.06",

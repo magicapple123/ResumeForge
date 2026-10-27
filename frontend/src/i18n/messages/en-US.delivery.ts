@@ -54,7 +54,7 @@ const delivery = {
   "delivery.issue.duplicate-format": "Duplicate format",
   "delivery.issue.unknown-format": "A selected format is unsupported",
   "delivery.check.title": "Pre-export review",
-  "delivery.check.target": "Target Job",
+  "delivery.check.target": "Target job",
   "delivery.check.targetEmpty": "No linked Job",
   "delivery.check.resumeTitle": "Resume title",
   "delivery.check.contact": "Contact information",

@@ -5,7 +5,7 @@
  *
  * The values of `STATUS_LABELS` ("开放中") are stored data values and the lookup key into
  * `JOB_STATUS_META`, not UI copy: turning them into locale keys would make the Tag miss
- * its colour and label (silently falling back to `default`). That normalization stays in
+ * its color and label (silently falling back to `default`). That normalization stays in
  * the component; localizing the status label itself requires converting
  * `JOB_STATUS_META` in `types/job.ts` to labelKeys first (separate batch).
  */

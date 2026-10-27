@@ -4,9 +4,8 @@
  * dialog (set the bar, pick claims, question count, feedback mode), and the review panel with
  * its action list and rehearsal queue.
  *
- * The batch delete confirmation body uses `HARD_DELETE_NOTE` (the shared hard-delete
- * constant, paired with `TRASH_RECOVERY_NOTE`); that line stays Chinese until the two
- * constants are consolidated.
+ * The batch delete confirmation body (`drill.confirm.deleteManyBody`) takes the count through
+ * `{count}` and the consequence through `{note}` (`common.note.hardDelete`).
  */
 const drill = {
   "drill.error.loadRecords": "Could not load records",
@@ -14,6 +13,7 @@ const drill = {
   "drill.toast.deletedOne": "Deleted this deep-dive record",
   "drill.error.deleteFailed": "Could not delete",
   "drill.confirm.deleteTitle": "Delete the selected deep-dive records?",
+  "drill.confirm.deleteManyBody": "Delete these {count} deep dives. {note}",
   "drill.toast.deletedMany": "Deleted {count} deep dives",
   "drill.toast.deletedPartial": "Deleted {ok}; {failed} failed — try again",
   "drill.selectMode": "Select",
@@ -79,7 +79,7 @@ const drill = {
   "drill.rehearsal.result.title": "Rehearsal: {label}",
   "drill.rehearsal.result.expect": "This question asks for: {expect}",
   "drill.rehearsal.result.note":
-    "This only writes a question and is not recorded in this session. To practise for real, talk through the question yourself.",
+    "This only writes a question and is not recorded in this session. To practice for real, talk through the question yourself.",
   "drill.rehearsal.action.close": "Close",
   "drill.review.verified.title": "Explained clearly",
   "drill.review.gaps.title": "Still not solid",

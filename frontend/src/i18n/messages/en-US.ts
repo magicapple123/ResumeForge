@@ -154,6 +154,16 @@ import touTou from "./en-US.touTou";
 import trackerUi from "./en-US.trackerUi";
 import userGuide from "./en-US.userGuide";
 import userGuideFlow from "./en-US.userGuideFlow";
+import enumsApply from "./en-US.enumsApply";
+import enumsAssistant from "./en-US.enumsAssistant";
+import enumsClaims from "./en-US.enumsClaims";
+import enumsDrill from "./en-US.enumsDrill";
+import enumsInterview from "./en-US.enumsInterview";
+import enumsJobs from "./en-US.enumsJobs";
+import enumsKnowledge from "./en-US.enumsKnowledge";
+import enumsReferral from "./en-US.enumsReferral";
+import enumsResumeCatalog from "./en-US.enumsResumeCatalog";
+import enumsTracker from "./en-US.enumsTracker";
 
 const enUS = {
   ...core,
@@ -309,6 +319,16 @@ const enUS = {
   ...trackerUi,
   ...userGuide,
   ...userGuideFlow,
+  ...enumsApply,
+  ...enumsAssistant,
+  ...enumsClaims,
+  ...enumsDrill,
+  ...enumsInterview,
+  ...enumsJobs,
+  ...enumsKnowledge,
+  ...enumsReferral,
+  ...enumsResumeCatalog,
+  ...enumsTracker,
 } as const satisfies Record<keyof ZhCNMessages, string>;
 
 export default enUS;

@@ -3,8 +3,8 @@
  * 面试深挖页：统计卡、历史列表、状态与批量删除、开场弹窗（定标准、选主张、题数与反馈方式），
  * 以及复盘面板（三段结论 + 行动清单）与复练队列。
  *
- * 批量删除的确认正文引用 `HARD_DELETE_NOTE`（硬删除的共用常量，与
- * `TRASH_RECOVERY_NOTE` 成对），那一行保持中文，等常量收口时一起改。
+ * 批量删除的确认正文（`drill.confirm.deleteManyBody`）：条数走 `{count}`，后果段用
+ * `{note}` 插 `common.note.hardDelete`（硬删除的共用 key），不在这里另写一份。
  */
 const drill = {
   "drill.error.loadRecords": "读取记录失败",
@@ -12,6 +12,7 @@ const drill = {
   "drill.toast.deletedOne": "已删除这条深挖记录",
   "drill.error.deleteFailed": "删除失败",
   "drill.confirm.deleteTitle": "删除选中的深挖记录？",
+  "drill.confirm.deleteManyBody": "这 {count} 场深挖{note}",
   "drill.toast.deletedMany": "已删除 {count} 场深挖",
   "drill.toast.deletedPartial": "已删除 {ok} 场，{failed} 场失败，请重试",
   "drill.selectMode": "批量选择",

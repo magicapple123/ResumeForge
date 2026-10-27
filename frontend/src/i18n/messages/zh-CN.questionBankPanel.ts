@@ -2,8 +2,8 @@
 /**
  * 个性化题库面板（面试 Tab 里的「题库」）：生成入口、题目分组卡、历史题库回看、批量删除确认与提示。
  *
- * `TRASH_RECOVERY_NOTE` 是别处共享的中文常量，这里只引用不翻译；`{count}` / `{note}` /
- * `{ok}` / `{failed}` / `{id}` / `{time}` 是插值占位符，中英两侧名字与出现次数一致。
+ * `{note}` 插的是 `common.note.trashRecovery`（删除后果的共用 key），不在这里重复文案；
+ * `{count}` / `{ok}` / `{failed}` / `{id}` / `{time}` 是插值占位符，中英两侧名字与出现次数一致。
  */
 const questionBankPanel = {
   "questionBankPanel.page.title": "个性化题库",

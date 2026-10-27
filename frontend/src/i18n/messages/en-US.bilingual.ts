@@ -31,7 +31,7 @@ const bilingual = {
   "bilingual.compare.group.experience": "Internships / work experience",
   "bilingual.compare.group.projects": "Projects",
   "bilingual.compare.group.skills": "Professional skills",
-  "bilingual.compare.group.awards": "Honors and awards",
+  "bilingual.compare.group.awards": "Honors & awards",
   "bilingual.compare.group.campus": "Campus activities",
   "bilingual.candidate.title": "Translation candidates",
   "bilingual.candidate.hint": "Select the Entries to adopt; everything else stays unchanged",

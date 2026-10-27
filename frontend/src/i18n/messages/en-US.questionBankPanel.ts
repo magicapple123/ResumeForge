@@ -3,8 +3,8 @@
  * Personalized question bank panel (the question bank tab under Interview): generate
  * entry, question group cards, saved-record review, batch-delete confirmation and toasts.
  *
- * `TRASH_RECOVERY_NOTE` is a shared Chinese constant owned elsewhere - this file only
- * references it. Placeholder names and occurrence counts match the Chinese pack.
+ * The batch body takes the shared `common.note.trashRecovery` through the `{note}`
+ * placeholder. Placeholder names and occurrence counts match the Chinese pack.
  */
 const questionBankPanel = {
   "questionBankPanel.page.title": "Personalized question bank",
@@ -33,7 +33,7 @@ const questionBankPanel = {
   "questionBankPanel.error.answerWriteBack":
     "The sample answer was generated, but writing it back to the record failed",
   "questionBankPanel.confirm.bulkDeleteTitle": "Delete the selected saved question banks?",
-  "questionBankPanel.confirm.bulkDeleteBody": "These {count} saved question banks {note}",
+  "questionBankPanel.confirm.bulkDeleteBody": "Delete these {count} saved question banks. {note}",
   "questionBankPanel.toast.deletedMany": "Deleted {count} saved question banks",
   "questionBankPanel.toast.deletedPartial": "Deleted {ok}; {failed} failed - try again",
   "questionBankPanel.toast.deleted": "Saved question bank deleted",

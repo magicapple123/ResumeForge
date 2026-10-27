@@ -7,8 +7,7 @@
  * 消息右键菜单与多选工具条、会话侧栏的筛选/操作/确认/Toast、写入提案卡的状态与按钮。
  *
  * 模块级常量表只存 key（`labelKey`），渲染处再 `t()`；本包不含任何协议值。
- * `{note}` 插的是 `components/common/rowActionMenu.ts` 里的删除后果常量
- * （`HARD_DELETE_NOTE` / `TRASH_RECOVERY_NOTE`），那份常量迁出语言包前这里只做拼接。
+ * `{note}` 插的是 `common.note.hardDelete` / `common.note.trashRecovery`（删除后果的共用 key）。
  */
 const assistantUi = {
   "assistantUi.starter.matchAnalysis": "分析岗位匹配度",

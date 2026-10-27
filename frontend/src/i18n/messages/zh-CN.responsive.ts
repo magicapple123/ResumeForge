@@ -46,7 +46,7 @@ const responsive = {
   "responsive.resumes.unfavorite": "取消收藏",
   "responsive.resumes.remove": "删除",
   "responsive.resumes.remove.confirm": "删除这份简历？",
-  "responsive.resumes.remove.body": "删除后可以在回收站恢复；",
+  "responsive.resumes.remove.body": "删除后可以在回收站恢复；{note}",
   /** 二次确认按钮必须写具体动作（AGENTS 禁用「确定/取消」泛动词）：确认 = 删除对象。 */
   "resumes.remove.confirm.ok": "删除这份简历",
   /** 取消侧同样写具体动作（不删这份，而不是泛泛的「取消」）。 */

@@ -37,7 +37,7 @@ const claimForm = {
   "claimForm.field.lastVerified": "Last verified",
   "claimForm.field.boundary": "Personal boundary",
   "claimForm.hint.boundary":
-    "What the team did versus what you did. Verified entries go into the real Resume, so this line is your defence in an interview.",
+    "What the team did versus what you did. Verified entries go into the real Resume, so this line is your defense in an interview.",
   "claimForm.placeholder.boundary":
     "e.g. “I built the API; the retrieval algorithm was another student's work”",
   "claimForm.field.allowedUses": "Allowed uses",

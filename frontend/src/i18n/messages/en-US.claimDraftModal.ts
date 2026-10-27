@@ -32,7 +32,7 @@ const claimDraftModal = {
   "claimDraftModal.placeholder.candidateWording":
     "Resume wording (keep a [TODO: what is missing] marker on anything unverified)",
 
-  "claimDraftModal.toast.pasteFirst": "Paste the material you want to organise first",
+  "claimDraftModal.toast.pasteFirst": "Paste the material you want to organize first",
   "claimDraftModal.toast.noDrafts": "No checkable claims were found in this material",
   "claimDraftModal.toast.pickAtLeastOne": "Select at least one entry",
   "claimDraftModal.toast.saved": "Added {count} entries to the fact ledger as Pending",

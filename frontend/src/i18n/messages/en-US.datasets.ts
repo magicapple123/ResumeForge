@@ -11,7 +11,7 @@ const datasets = {
   "datasets.action.rename": "Rename",
   "datasets.action.delete": "Delete",
   "datasets.intro":
-    "Each dataset is a complete ResumeForge database (Jobs, Profile, Resumes, favourites, assistant conversations and every attachment). You can switch between them at any time and they never affect each other. Importing a backup only adds a dataset — the one you are using is untouched; exported backups include the global model configuration and its API keys by default, and you can untick that.",
+    "Each dataset is a complete ResumeForge database (Jobs, Profile, Resumes, favorites, assistant conversations and every attachment). You can switch between them at any time and they never affect each other. Importing a backup only adds a dataset — the one you are using is untouched; exported backups include the global model configuration and its API keys by default, and you can untick that.",
   "datasets.option.globalConfig":
     "Include the global model configuration and API keys (all saved records) in the backup",
   "datasets.hint.globalConfig":

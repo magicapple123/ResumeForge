@@ -31,7 +31,7 @@ const userGuideFlow = {
     "When writing a Resume yourself, each module has “Add one from My Profile” at the top and each entry has “Fill this entry from Profile”: pick one and click “Fill” — the first appends an entry, the second fills only the empty fields of the current entry; used ones are marked “Added” and disabled, so nothing is duplicated or overwritten. Candidates follow the Current Plan and refresh after Profile changes or a Plan switch. Entering from a Job detail shows only the module-level append, not the per-entry one.",
   "userGuideFlow.resume.step1.point6.lead": "Generation runs in the background",
   "userGuideFlow.resume.step1.point6.text":
-    "The dialog shows a stage bar — “Organise material → Select material → Call the model → Validate and repair → Done” — and a live “N characters received” count. There is no percentage, because the model emits text token by token and the total length is unknown.",
+    "The dialog shows a stage bar — “Organize material → Select material → Call the model → Validate and repair → Done” — and a live “N characters received” count. There is no percentage, because the model emits text token by token and the total length is unknown.",
   "userGuideFlow.resume.step1.point7.lead": "You can close the dialog",
   "userGuideFlow.resume.step1.point7.text":
     "Close it while generating and the task continues in the background; when it finishes a “Resume generated” notification opens the result directly. Only “Cancel generation” really stops it, and a cancelled run saves no half-finished output.",
@@ -56,12 +56,12 @@ const userGuideFlow = {
   "userGuideFlow.resume.step1.point14.lead": "Languages are their own section",
   "userGuideFlow.resume.step1.point14.text":
     "Languages are a separate section in the Resume (the Workbench's left column has its own “Languages” tab too), shown per language (level · certificate · score) with the date obtained as a trailing note, no longer folded into Skills; if the model omits it, the backend restores it from the Profile.",
-  "userGuideFlow.resume.step1.point15.lead": "Layout optimisation",
+  "userGuideFlow.resume.step1.point15.lead": "Layout optimization",
   "userGuideFlow.resume.step1.point15.text":
-    "Below the “Layout diagnosis” card in the preview you can optimise by condition: first set “keep font size / minimum page margin / target length”, then review up to 3 candidate plans (which parameters changed, how much overflow was removed, readability impact); “Apply this plan” writes the values back into the sliders and never quietly shrinks the font.",
+    "Below the “Layout diagnosis” card in the preview you can optimize by condition: first set “keep font size / minimum page margin / target length”, then review up to 3 candidate plans (which parameters changed, how much overflow was removed, readability impact); “Apply this plan” writes the values back into the sliders and never quietly shrinks the font.",
   "userGuideFlow.resume.step1.point16.lead": "Content trims",
   "userGuideFlow.resume.step1.point16.text":
-    "Besides tightening typography, layout optimisation offers content-level candidates: merge duplicate entries, delete duplicate bullets, merge short bullets, and trim low-relevance bullets when there is a Job signal; each candidate lists its changes, you review the diff and only confirm writes it (undoable), and when there is no plan it explains why.",
+    "Besides tightening typography, layout optimization offers content-level candidates: merge duplicate entries, delete duplicate bullets, merge short bullets, and trim low-relevance bullets when there is a Job signal; each candidate lists its changes, you review the diff and only confirm writes it (undoable), and when there is no plan it explains why.",
   "userGuideFlow.resume.step1.point17.lead": "Source and fact lock",
   "userGuideFlow.resume.step1.point17.text":
     "“Source” in the Workbench's left column shows which Profile entry the selected content came from and, when linked, which version; it does not guess when unlinked. You can create links (including manual sources) and, after the source updates, confirm to write the update back. The fact lock pins key facts: AI rewrites are rejected with the values listed, while manual editing is unrestricted.",
@@ -79,13 +79,13 @@ const userGuideFlow = {
     "“Check Resume” in the Workbench action bar checks content, typography and the export output on three levels, grades problems and offers a way to fix each, and can re-check afterwards; it also checks key links and export redaction, and verifies before export against the same snapshot digest the server uses.",
   "userGuideFlow.resume.step1.point22.lead": "Pro view",
   "userGuideFlow.resume.step1.point22.text":
-    "The canvas toolbar offers full page / fit width / 100% zoom, paging, guides and a greyscale proof; “Commands” or Cmd/Ctrl+Shift+P opens the command palette, and workspace presets only toggle panel visibility; “Photo crop” changes framing only — the original is untouched and can be restored, and the parameters are saved with this Resume; an uncropped photo keeps its aspect ratio instead of being forced into a square.",
+    "The canvas toolbar offers full page / fit width / 100% zoom, paging, guides and a grayscale proof; “Commands” or Cmd/Ctrl+Shift+P opens the command palette, and workspace presets only toggle panel visibility; “Photo crop” changes framing only — the original is untouched and can be restored, and the parameters are saved with this Resume; an uncropped photo keeps its aspect ratio instead of being forced into a square.",
   "userGuideFlow.resume.step1.point23.lead": "Undo and redo",
   "userGuideFlow.resume.step1.point23.text":
     "“History” in the Workbench's left column undoes or redoes step by step: content, typography and structural actions each record a step (consecutive typing is merged into one); clicking a step shows the summary at that point, and the actual rollback is “Undo”.",
   "userGuideFlow.resume.step1.point24.lead": "Local typography",
   "userGuideFlow.resume.step1.point24.text":
-    "“Local typography” in the Workbench's left column fine-tunes font size, colour, line height and indentation for six paragraph kinds; properties you never set follow the template and can each be reset to inherit again. With content selected you can apply one of five fixed text levels (“Heading 1 / Heading 2 / Heading 3 / Body / Secondary note”, multi-select supported, restoring inheritance supported); outline entries can be multi-selected and applied in bulk, the format painter copies one entry's typography to another, and selected body text can use the italic and link buttons.",
+    "“Local typography” in the Workbench's left column fine-tunes font size, color, line height and indentation for six paragraph kinds; properties you never set follow the template and can each be reset to inherit again. With content selected you can apply one of five fixed text levels (“Heading 1 / Heading 2 / Heading 3 / Body / Secondary note”, multi-select supported, restoring inheritance supported); outline entries can be multi-selected and applied in bulk, the format painter copies one entry's typography to another, and selected body text can use the italic and link buttons.",
   "userGuideFlow.resume.step1.point25.lead": "Pagination",
   "userGuideFlow.resume.step1.point25.text":
     "“Pagination” in the Workbench's left column can set “start on a new page” per section and repeat name and page number on continuation pages; page thumbnails show the real page count and how full the last page is, and PDF/Word avoid orphaned headings or bullets; drafts do not show real pagination, so switch to Exact or check on export. The section pagination mode can be switched for the whole Resume between natural flow and a new page per section; inserted breaks are visible and can be reset to natural pagination in one click.",
@@ -154,10 +154,10 @@ const userGuideFlow = {
     "Ask it anything about the project, and let it change data directly after telling you exactly what it will do; on any other page, click the Toutou floating ball to open it, or **double-click** it to open the “Toutou clipboard” for snippets you paste often.",
   "userGuideFlow.assistant.step1.point1.lead": "What it can look up",
   "userGuideFlow.assistant.step1.point1.text":
-    "Besides Jobs, Candidate Jobs, the material library, Resume layout presets and the Profile, it can read reminders, referrals, interview experiences, question-bank history, retrospective history, the knowledge base, job-search statistics and share packages; it can also summarise the failure reasons in Apply records to help you diagnose them.",
+    "Besides Jobs, Candidate Jobs, the material library, Resume layout presets and the Profile, it can read reminders, referrals, interview experiences, question-bank history, retrospective history, the knowledge base, job-search statistics and share packages; it can also summarize the failure reasons in Apply records to help you diagnose them.",
   "userGuideFlow.assistant.step1.point2.lead": "What it can change",
   "userGuideFlow.assistant.step1.point2.text":
-    "It can **add and edit knowledge-base entries, record a reminder, and create or update tracker records**, and also enter interview experiences and referrals, mark reminders done, and favourite or annotate Resumes; structured entries (education / work / projects / skills / awards) can only be **appended**.",
+    "It can **add and edit knowledge-base entries, record a reminder, and create or update tracker records**, and also enter interview experiences and referrals, mark reminders done, and favorite or annotate Resumes; structured entries (education / work / projects / skills / awards) can only be **appended**.",
   "userGuideFlow.assistant.step1.point3.lead": "Time awareness",
   "userGuideFlow.assistant.step1.point3.text":
     "Before answering it is given the local date, time and weekday; ask late at night and it first suggests you get some rest.",
@@ -203,7 +203,7 @@ const userGuideFlow = {
     "The material library holds loose material, the knowledge base keeps written-up notes, and the Workbench is where you build skills and templates.",
   "userGuideFlow.assistant.step2.point1.lead": "Material library",
   "userGuideFlow.assistant.step2.point1.text":
-    "Write a body, paste a link, or upload images and text files — files can be dragged straight in; click a card for details (full body, note and attachment list), and the assistant can read them and help you organise them.",
+    "Write a body, paste a link, or upload images and text files — files can be dragged straight in; click a card for details (full body, note and attachment list), and the assistant can read them and help you organize them.",
   "userGuideFlow.assistant.step2.point2.lead": "My files",
   "userGuideFlow.assistant.step2.point2.text":
     "Stored files all appear under the “My files” tab of the material library: images, documents and PDFs are visible at a glance and open any time; they belong to the current dataset, so export/import and upgrades never lose them",
@@ -212,7 +212,7 @@ const userGuideFlow = {
     "Written-up content — interview summaries, Resume tips, job-search strategy, interview Q&A, industry notes and so on; it has categories and tags, the body supports Markdown, entries can be searched, added, edited and deleted, and clicking a card reads the full text.",
   "userGuideFlow.assistant.step2.point4.lead": "Which one to use",
   "userGuideFlow.assistant.step2.point4.text":
-    "The material library holds **loose material that is not organised yet**; the knowledge base holds **notes written up and worth re-reading**.",
+    "The material library holds **loose material that is not organized yet**; the knowledge base holds **notes written up and worth re-reading**.",
   "userGuideFlow.assistant.step2.point5.lead": "Editing shortcuts",
   "userGuideFlow.assistant.step2.point5.text":
     "The edit dialogs in the material library and knowledge base save with **Ctrl / ⌘ + S** or **Ctrl / ⌘ + Enter**; when the title fails validation the body is kept, so you can fix it and save again.",
@@ -224,7 +224,7 @@ const userGuideFlow = {
     "A “Skill” in the Workbench is a prompt that stays in effect: once ticked it applies to every later conversation; it can carry knowledge files too.",
   "userGuideFlow.assistant.step2.point8.lead": "Layout presets",
   "userGuideFlow.assistant.step2.point8.text":
-    "The Workbench's “Layout presets” lists the built-in presets; “Custom preset” only asks for parameters (line height, page margins, block spacing, accent colour) — no code; this is the fastest way to squeeze into one page. The entry points for custom templates and importing HTML are gone, and existing templates still render as they are.",
+    "The Workbench's “Layout presets” lists the built-in presets; “Custom preset” only asks for parameters (line height, page margins, block spacing, accent color) — no code; this is the fastest way to squeeze into one page. The entry points for custom templates and importing HTML are gone, and existing templates still render as they are.",
   "userGuideFlow.assistant.step2.point9.lead": "Let the assistant build one",
   "userGuideFlow.assistant.step2.point9.text":
     "The layout preset page has “Ask the Job assistant to build one”, so the assistant can create or edit a **preset** — you still save it in the Workbench; the assistant changes only the parameters you mention and cannot clear ones you already set.",

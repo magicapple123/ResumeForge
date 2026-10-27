@@ -24,7 +24,7 @@ const templateImport = {
   "templateImport.draft.evidenceTitle": "Recognition basis",
   "templateImport.draft.noEvidence": "The model returned no explainable basis",
   "templateImport.draft.exportNote":
-    "HTML preview and HTML export use the full styling; PDF / Word apply the generic parameters such as colour, font size, line height and margins, but cannot fully reproduce custom two-column layouts, label images or arbitrary CSS. Check the exported file.",
+    "HTML preview and HTML export use the full styling; PDF / Word apply the generic parameters such as color, font size, line height and margins, but cannot fully reproduce custom two-column layouts, label images or arbitrary CSS. Check the exported file.",
   "templateImport.aria.confidence": "Recognition confidence",
   "templateImport.draft.confidenceTitle": "Recognition confidence:",
   "templateImport.draft.noConfidence": "Not provided by the model",

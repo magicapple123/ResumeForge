@@ -6,8 +6,8 @@
  * `interview.listSeparator` 是把列表项（关卡焦点题、建议依据）拼成一行时的分隔符：
  * 中文用全角「；」，英文用 "; "，属于随语言变化的符号，必须走语言包而不是硬编码。
  *
- * `interview.confirm.deleteBody` 的后果段用 `{note}` 参数传入共用常量 `HARD_DELETE_NOTE`
- * （硬删除提示的唯一出口，见 `components/common/rowActionMenu.ts`），不在语言包里复制一份。
+ * `interview.confirm.deleteBody` 的后果段用 `{note}` 参数传入共用 key `common.note.hardDelete`
+ * （硬删除提示的唯一出处），不在语言包里复制一份。
  */
 const interview = {
   "interview.toast.loadFailed": "读取面试记录失败",
