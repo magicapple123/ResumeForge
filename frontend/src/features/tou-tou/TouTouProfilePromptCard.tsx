@@ -11,6 +11,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Button } from "antd";
+import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 import type { ProfileEditControl } from "./profileSaveBridge";
 import { usePrefersReducedMotion } from "./usePrefersReducedMotion";
 
@@ -23,6 +25,7 @@ export interface TouTouProfilePromptCardProps {
 }
 
 export default function TouTouProfilePromptCard({ control }: TouTouProfilePromptCardProps) {
+  useLocale();
   const prefersReducedMotion = usePrefersReducedMotion();
   // 与 TouTouSaveCard 同一套状态机：control 归 null 后仍需多留 EXIT_MS 播完反向动画。
   const [shown, setShown] = useState<ProfileEditControl | null>(control);
@@ -57,16 +60,16 @@ export default function TouTouProfilePromptCard({ control }: TouTouProfilePrompt
     <div
       className={`tt-card tt-profile-prompt-card${leaving ? " is-leaving" : ""}`}
       role="group"
-      aria-label="修改我的资料"
+      aria-label={t("touTou.profilePrompt.ariaLabel")}
     >
       <p className="tt-profile-prompt-card-title">
-        想补充或修改资料？
+        {t("touTou.profilePrompt.title")}
         {/* 关闭键的名字刻意不带「编辑资料」四个字：读屏按名检索时，它不该和页头那只
             「编辑资料」按钮混起来。 */}
         <button
           type="button"
           className="tt-profile-prompt-card-close"
-          aria-label="关闭提示卡"
+          aria-label={t("touTou.profilePrompt.close")}
           onClick={(event) => {
             // 卡片是球的兄弟节点，事件本就不会落进球的单击/双击判定；
             // 这里按契约显式拦截，防止未来结构调整后误触发球的开卡逻辑。
@@ -86,7 +89,7 @@ export default function TouTouProfilePromptCard({ control }: TouTouProfilePrompt
             shown.onEdit();
           }}
         >
-          去编辑
+          {t("touTou.profilePrompt.edit")}
         </Button>
       </div>
       {/* 指向悬浮球的小尾巴（球在卡片右下方，尾巴水平对齐球心）。 */}
