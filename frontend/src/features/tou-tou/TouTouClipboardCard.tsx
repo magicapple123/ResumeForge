@@ -12,6 +12,8 @@ import { App, Button, ConfigProvider, Input, Listy, Typography } from "antd";
 import EmptyState from "../../components/common/EmptyState";
 import { ListyItem, ListyMeta } from "../../components/common/ListyItem";
 import { useEffect, useState } from "react";
+import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 import { layer } from "../../theme/tokens";
 import { RowActions } from "../../components/common/RowActions";
 import { copyText } from "../../utils/clipboard";
@@ -62,6 +64,7 @@ interface Props {
 }
 
 export default function TouTouClipboardCard({ open, onClose }: Props) {
+  useLocale();
   const { message } = App.useApp();
   const [items, setItems] = useState<ClipboardItem[]>([]);
   /** 正在编辑的条目 id；``"new"`` 表示新增。null = 列表视图。 */
@@ -110,10 +113,11 @@ export default function TouTouClipboardCard({ open, onClose }: Props) {
   };
 
   const saveEditing = () => {
-    const trimmedTitle = title.trim() || content.trim().slice(0, 20) || "未命名片段";
+    const trimmedTitle =
+      title.trim() || content.trim().slice(0, 20) || t("touTou.clipboard.untitled");
     const trimmedContent = content.trimEnd();
     if (!trimmedContent.trim()) {
-      message.warning("内容不能为空");
+      message.warning(t("touTou.clipboard.emptyContent"));
       return;
     }
     setItems((current) => {
@@ -139,7 +143,7 @@ export default function TouTouClipboardCard({ open, onClose }: Props) {
       persistItems(next);
       return next;
     });
-    message.success("已保存片段");
+    message.success(t("touTou.clipboard.saved"));
     closeEditor();
   };
 
@@ -149,15 +153,15 @@ export default function TouTouClipboardCard({ open, onClose }: Props) {
       persistItems(next);
       return next;
     });
-    message.success("已删除片段");
+    message.success(t("touTou.clipboard.deleted"));
   };
 
   const copyItem = async (item: ClipboardItem) => {
     setCopyingId(item.id);
     try {
       const ok = await copyText(item.content);
-      if (ok) message.success(`已复制「${item.title}」`);
-      else message.warning("复制失败，请手动选择内容复制");
+      if (ok) message.success(t("touTou.clipboard.copied", { title: item.title }));
+      else message.warning(t("touTou.clipboard.copyFailed"));
     } finally {
       setCopyingId(null);
     }
@@ -166,7 +170,12 @@ export default function TouTouClipboardCard({ open, onClose }: Props) {
   const classes = ["tt-clipboard-card", dragging ? "is-dragging" : ""].filter(Boolean).join(" ");
 
   return (
-    <section className={classes} style={cardStyle} role="dialog" aria-label="投投剪贴板">
+    <section
+      className={classes}
+      style={cardStyle}
+      role="dialog"
+      aria-label={t("touTou.clipboard.ariaLabel")}
+    >
       {/*
         卡片内弹层基准抬层：全局 zIndexPopupBase（3100）配 antd 的组件偏移
         （+50~+80）到不了本卡（3500）之上，「···」下拉从这里挂到 body 后被卡片
@@ -179,23 +188,23 @@ export default function TouTouClipboardCard({ open, onClose }: Props) {
           className="tt-clipboard-card-grip"
           role="button"
           tabIndex={0}
-          aria-label="拖动投投剪贴板"
+          aria-label={t("touTou.clipboard.gripLabel")}
           onPointerDown={handlePointerDown}
           onKeyDown={handleKeyDown}
         >
-          <span className="tt-clipboard-card-title">投投剪贴板</span>
+          <span className="tt-clipboard-card-title">{t("touTou.clipboard.title")}</span>
         </div>
         <button
           type="button"
           className="tt-clipboard-card-close"
-          aria-label="关闭投投剪贴板"
+          aria-label={t("touTou.clipboard.close")}
           onClick={onClose}
         >
           ×
         </button>
         <div className="tt-clipboard-card-body">
           <Typography.Paragraph type="secondary" className="tt-clipboard-card-hint">
-            把要反复粘贴的资料存成片段，点一下就复制。
+            {t("touTou.clipboard.hint")}
           </Typography.Paragraph>
           {editingId === null ? (
             <>
@@ -207,11 +216,13 @@ export default function TouTouClipboardCard({ open, onClose }: Props) {
                 onClick={startCreate}
                 disabled={items.length >= MAX_ITEMS}
               >
-                {items.length >= MAX_ITEMS ? `片段已达上限（${MAX_ITEMS} 条）` : "新增片段"}
+                {items.length >= MAX_ITEMS
+                  ? t("touTou.clipboard.limitReached", { count: MAX_ITEMS })
+                  : t("touTou.clipboard.add")}
               </Button>
               <div className="tt-clipboard-card-list">
                 {items.length === 0 ? (
-                  <EmptyState inline description="还没有片段：把常贴的内容存进来，随时一键复制。" />
+                  <EmptyState inline description={t("touTou.clipboard.empty")} />
                 ) : (
                   <Listy
                     items={items}
@@ -227,7 +238,7 @@ export default function TouTouClipboardCard({ open, onClose }: Props) {
                             loading={copyingId === item.id}
                             onClick={() => void copyItem(item)}
                           >
-                            复制
+                            {t("touTou.clipboard.copy")}
                           </Button>,
                           // 编辑/删除收进「···」菜单：删除不再以红图标裸露在行内
                           // （全局约定：除回收站外，删除一律走菜单 + 二次确认）。
@@ -236,16 +247,16 @@ export default function TouTouClipboardCard({ open, onClose }: Props) {
                             more={[
                               {
                                 key: "edit",
-                                label: "编辑",
+                                label: t("touTou.clipboard.edit"),
                                 icon: <EditOutlined />,
                                 onClick: () => startEdit(item),
                               },
                               {
                                 key: "delete",
-                                label: "删除",
+                                label: t("touTou.clipboard.delete"),
                                 icon: <DeleteOutlined />,
                                 danger: true,
-                                confirm: "删除这条片段？",
+                                confirm: t("touTou.clipboard.deleteConfirm"),
                                 onClick: () => removeItem(item.id),
                               },
                             ]}
@@ -275,14 +286,14 @@ export default function TouTouClipboardCard({ open, onClose }: Props) {
               <Input
                 value={title}
                 maxLength={MAX_TITLE_CHARS}
-                placeholder={`片段名称（留空则取内容前 20 字，最多 ${MAX_TITLE_CHARS} 字）`}
+                placeholder={t("touTou.clipboard.titlePlaceholder", { max: MAX_TITLE_CHARS })}
                 onChange={(event) => setTitle(event.target.value)}
                 style={{ marginBottom: 8 }}
               />
               <Input.TextArea
                 value={content}
                 onChange={(event) => setContent(event.target.value.slice(0, MAX_CONTENT_CHARS))}
-                placeholder="片段内容（复制时按这里保存的原文粘贴）"
+                placeholder={t("touTou.clipboard.contentPlaceholder")}
                 autoSize={{ minRows: 6, maxRows: 12 }}
                 // 不用 antd showCount（"0/4000" 常驻计数打扰且会与按钮行叠字）：
                 // maxLength 作硬上限，达到上限才出现一行红色小字提示。
@@ -290,15 +301,15 @@ export default function TouTouClipboardCard({ open, onClose }: Props) {
               />
               {content.length >= MAX_CONTENT_CHARS ? (
                 <div className="tt-clipboard-card-limit-hint" role="note">
-                  已达 {MAX_CONTENT_CHARS} 字上限
+                  {t("touTou.clipboard.contentLimit", { max: MAX_CONTENT_CHARS })}
                 </div>
               ) : null}
               <div style={{ marginTop: 12, textAlign: "right" }}>
                 <Button onClick={closeEditor} style={{ marginRight: 8 }}>
-                  取消
+                  {t("touTou.clipboard.cancel")}
                 </Button>
                 <Button type="primary" onClick={saveEditing}>
-                  保存
+                  {t("touTou.clipboard.save")}
                 </Button>
               </div>
             </div>
