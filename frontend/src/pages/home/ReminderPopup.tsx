@@ -10,6 +10,8 @@ import { Link } from "react-router-dom";
 import { REMINDER_URGENCY_COLORS } from "../../types";
 import type { ReminderUpcoming } from "../../types";
 import { formatDateTime } from "../../utils/format";
+import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 import "./reminderPopupSurface.css";
 
 export function ReminderPopup({
@@ -21,13 +23,15 @@ export function ReminderPopup({
   reminders: ReminderUpcoming[] | undefined;
   onClose: () => void;
 }) {
+  // 本组件用模块级 t()，必须订阅语言变化。
+  useLocale();
   return (
     <Modal
       open={open}
       title={
         <Space size={8}>
           <BellOutlined aria-hidden />
-          <span>近期提醒</span>
+          <span>{t("homePage.reminders.title")}</span>
         </Space>
       }
       onCancel={onClose}
@@ -38,7 +42,7 @@ export function ReminderPopup({
       className="rf-reminder-modal"
       footer={
         <Button type="primary" onClick={onClose}>
-          知道了
+          {t("homePage.reminders.gotIt")}
         </Button>
       }
     >
