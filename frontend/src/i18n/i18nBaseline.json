@@ -3,7 +3,7 @@
   "generatedAt": "2026-10-27",
   "rule": "Legacy CJK ceilings plus language-independent AST product-copy fingerprints",
   "src": {
-    "total": 4557,
+    "total": 4543,
     "files": {
       "App.tsx": 0,
       "api/analytics.ts": 0,
@@ -191,7 +191,7 @@
       "components/jobs/form/RecognitionSourceSection.tsx": 5,
       "components/jobs/form/jobFormOptions.ts": 0,
       "components/knowledge/KnowledgeFormModal.tsx": 24,
-      "components/materials/MaterialFormModal.tsx": 35,
+      "components/materials/MaterialFormModal.tsx": 21,
       "components/materials/UserFilesPanel.tsx": 22,
       "components/navigation/MobileNavigation.tsx": 3,
       "components/navigation/MySpaceMenu.tsx": 2,

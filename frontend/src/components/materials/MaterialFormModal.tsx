@@ -15,6 +15,8 @@ import {
   canPreviewImage,
   readAsDataUrl,
 } from "../../utils/attachments";
+import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 
 /** 与后端 MAX_MATERIAL_* 保持一致（服务端仍是权威校验）。 */
 const MAX_FILES = 10;
@@ -50,6 +52,7 @@ export default function MaterialFormModal({
   onCancel,
   onSubmit,
 }: Props) {
+  useLocale();
   const { message } = App.useApp();
   const fieldId = useId();
   const [title, setTitle] = useState("");
@@ -80,15 +83,15 @@ export default function MaterialFormModal({
 
   const addImage = async (file: File) => {
     if (file.size > MAX_ATTACHMENT_BYTES) {
-      message.error("单张图片不能超过 2 MB");
+      message.error(t("materialForm.error.imageTooLarge"));
       return;
     }
     if (files.filter((item) => item.data_url).length >= MAX_IMAGE_FILES) {
-      message.warning(`一份资料最多附加 ${MAX_IMAGE_FILES} 张图片`);
+      message.warning(t("materialForm.error.maxImages", { count: MAX_IMAGE_FILES }));
       return;
     }
     if (files.length >= MAX_FILES) {
-      message.warning(`一份资料最多附加 ${MAX_FILES} 个文件`);
+      message.warning(t("materialForm.error.maxFiles", { count: MAX_FILES }));
       return;
     }
     try {
@@ -104,19 +107,19 @@ export default function MaterialFormModal({
         },
       ]);
     } catch {
-      message.error("读取图片失败，请重试");
+      message.error(t("materialForm.error.readImage"));
     }
   };
 
   const addTextFile = async (file: File) => {
     if (files.length >= MAX_FILES) {
-      message.warning(`一份资料最多附加 ${MAX_FILES} 个文件`);
+      message.warning(t("materialForm.error.maxFiles", { count: MAX_FILES }));
       return;
     }
     try {
       const text = await file.text();
       if (!text.trim()) {
-        message.warning("这个文件里没有可读的文字");
+        message.warning(t("materialForm.warning.noText"));
         return;
       }
       setFiles((current) => [
@@ -130,7 +133,7 @@ export default function MaterialFormModal({
         },
       ]);
     } catch {
-      message.error("读取文件失败，请重试");
+      message.error(t("materialForm.error.readFile"));
     }
   };
 
@@ -138,7 +141,7 @@ export default function MaterialFormModal({
     if (submitting) return;
     const trimmedTitle = title.trim();
     if (!trimmedTitle && !content.trim() && !url.trim() && files.length === 0) {
-      message.warning("请至少填写标题、内容、链接或添加附件");
+      message.warning(t("materialForm.warning.needContent"));
       return;
     }
     onSubmit({
@@ -153,13 +156,13 @@ export default function MaterialFormModal({
 
   return (
     <FormModal
-      title={material ? "编辑资料" : "放入资料"}
+      title={material ? t("materialForm.title.edit") : t("materialForm.title.create")}
       open={open}
       width={720}
       onCancel={onCancel}
       submitting={submitting}
       onSubmit={submit}
-      okText="保存资料"
+      okText={t("materialForm.action.save")}
     >
       <Alert
         type="info"
@@ -223,7 +226,7 @@ export default function MaterialFormModal({
           <FileDropZone
             accept={`${IMAGE_ACCEPT},${TEXT_FILE_ACCEPT}`}
             disabled={files.length >= MAX_FILES}
-            hint="松开即可添加附件"
+            hint={t("materialForm.hint.drop")}
             onFiles={(dropped) =>
               dropped.forEach((file) => {
                 if (IMAGE_MIME_BY_EXTENSION[`${file.name.split(".").pop()?.toLowerCase()}`]) {
@@ -233,7 +236,7 @@ export default function MaterialFormModal({
                 }
               })
             }
-            onRejected={() => message.error("只支持图片与文本文件（.txt/.md/.csv 等）")}
+            onRejected={() => message.error(t("materialForm.error.unsupported"))}
           >
             <Space wrap>
               <Upload
@@ -244,7 +247,7 @@ export default function MaterialFormModal({
                   return Upload.LIST_IGNORE;
                 }}
               >
-                <Button icon={<PictureOutlined />}>添加图片</Button>
+                <Button icon={<PictureOutlined />}>{t("materialForm.action.addImage")}</Button>
               </Upload>
               <Upload
                 accept={TEXT_FILE_ACCEPT}
@@ -254,7 +257,7 @@ export default function MaterialFormModal({
                   return Upload.LIST_IGNORE;
                 }}
               >
-                <Button icon={<FileTextOutlined />}>添加文本文件</Button>
+                <Button icon={<FileTextOutlined />}>{t("materialForm.action.addText")}</Button>
               </Upload>
               <Typography.Text type="secondary" style={{ fontSize: 12 }}>
                 也可以直接拖进来；PDF / Word 请把文字粘贴到正文，程序不保存原始文件
