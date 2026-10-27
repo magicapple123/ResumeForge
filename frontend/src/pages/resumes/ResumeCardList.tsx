@@ -14,7 +14,6 @@ import { MoreOutlined, StarFilled, StarOutlined } from "@ant-design/icons";
 import { Button, Checkbox, Dropdown, Empty, Pagination, Popconfirm, Select, Space } from "antd";
 import type { Dispatch, SetStateAction } from "react";
 import LoadingBlock from "../../components/common/LoadingBlock";
-import { TRASH_RECOVERY_NOTE } from "../../components/common/rowActionMenu";
 import type { BatchSelection } from "../../hooks/useBatchSelection";
 import { t } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
@@ -221,7 +220,9 @@ export default function ResumeCardList({
                   {/* 删除走就地确认（不用 modal.confirm：`popupStackGuard` 禁止同层再叠一层）。 */}
                   <Popconfirm
                     title={t("responsive.resumes.remove.confirm")}
-                    description={`${t("responsive.resumes.remove.body")}${TRASH_RECOVERY_NOTE}`}
+                    description={t("responsive.resumes.remove.body", {
+                      note: t("common.note.trashRecovery"),
+                    })}
                     okText={t("responsive.resumes.remove")}
                     cancelText={t("common.action.cancel")}
                     okButtonProps={{ danger: true }}
