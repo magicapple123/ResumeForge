@@ -10,37 +10,12 @@ import EmptyState from "../common/EmptyState";
 import { useEffect, useState } from "react";
 import { applyTracks, parseTracks } from "../../api/tracker";
 import { t } from "../../i18n";
-import type { MessageKey } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
+import { MERGE_ACTION_LABEL_KEYS, TRACK_STATUS_LABEL_KEYS } from "../../i18n/enum/tracker";
 import { useRecognitionFiles } from "../../hooks/useRecognitionFiles";
 import RecognitionFileField from "../RecognitionFileField";
-import type { MergeAction, TrackMergePreview, TrackRecord, TrackStatus } from "../../types";
+import type { TrackMergePreview, TrackRecord } from "../../types";
 import { MERGE_ACTION_COLORS } from "../../types";
-
-/**
- * 状态与合并结论的显示名：**键是协议值**（`applied` / `created` …，与后端逐字对应，
- * 见 `types/tracker.ts`），值指向语言包 key。
- *
- * 模块作用域不能调 `t()`（切语言不会重渲染），所以这里只存 key，使用处 `t(...)`。
- * 状态名复用进度表单的 `trackerForm.status.*`——与 `TrackerPage`、`TrackFormModal`
- * 指向同一份词表：同一个协议值在两处必须是同一个名字。
- * `types/tracker.ts` 的中文表没动（`TrackCard`、`AnalyticsPage` 仍在用状态名）。
- */
-const TRACK_STATUS_LABEL_KEYS: Record<TrackStatus, MessageKey> = {
-  applied: "trackerForm.status.applied",
-  screening: "trackerForm.status.screening",
-  assessment: "trackerForm.status.assessment",
-  interview: "trackerForm.status.interview",
-  offer: "trackerForm.status.offer",
-  rejected: "trackerForm.status.rejected",
-  unknown: "trackerForm.status.unknown",
-};
-
-const MERGE_ACTION_LABEL_KEYS: Record<MergeAction, MessageKey> = {
-  created: "trackerImport.mergeAction.created",
-  updated: "trackerImport.mergeAction.updated",
-  unchanged: "trackerImport.mergeAction.unchanged",
-};
 
 interface Row {
   key: number;
