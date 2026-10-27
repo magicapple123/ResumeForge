@@ -7,6 +7,8 @@
 import { Descriptions, Drawer } from "antd";
 import { TASK_ITEM_STATUS_META, failureLabel, type ApplyRecord } from "../../types";
 import { formatDateTime } from "../../utils/format";
+import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 
 interface Props {
   record: ApplyRecord | null;
@@ -14,9 +16,11 @@ interface Props {
 }
 
 export default function ApplyRecordDetailDrawer({ record, onClose }: Props) {
+  // 本组件用模块级 t()：必须订阅语言变化，否则切语言后抽屉停在旧文案。
+  useLocale();
   return (
     <Drawer
-      title="投递记录详情"
+      title={t("applyUi.recordDetail.title")}
       placement="right"
       size={480}
       open={record !== null}
@@ -25,30 +29,35 @@ export default function ApplyRecordDetailDrawer({ record, onClose }: Props) {
     >
       {record && (
         <Descriptions column={1} bordered size="small" colon>
-          <Descriptions.Item label="岗位">
-            {record.job_title || "（岗位已删除）"}
+          <Descriptions.Item label={t("applyRecords.column.job")}>
+            {record.job_title || t("applyRecords.deletedJob")}
             {record.company ? ` · ${record.company}` : ""}
           </Descriptions.Item>
-          <Descriptions.Item label="简历">{record.resume_title || "-"}</Descriptions.Item>
-          <Descriptions.Item label="招呼语">
-            {record.greeting || "（默认招呼语）"}
+          <Descriptions.Item label={t("applyRecords.column.resume")}>
+            {record.resume_title || "-"}
           </Descriptions.Item>
-          <Descriptions.Item label="结果">
+          <Descriptions.Item label={t("applyRecords.column.greeting")}>
+            {record.greeting || t("applyUi.recordDetail.defaultGreeting")}
+          </Descriptions.Item>
+          <Descriptions.Item label={t("applyRecords.column.result")}>
             {TASK_ITEM_STATUS_META[record.status].label}
           </Descriptions.Item>
-          <Descriptions.Item label="失败分类">
+          <Descriptions.Item label={t("applyRecords.column.failureKind")}>
             {record.failure_category
               ? failureLabel(record.failure_category, record.failure_label)
               : "-"}
           </Descriptions.Item>
-          <Descriptions.Item label="失败信息（含页面 URL / 标题）">
+          <Descriptions.Item label={t("applyUi.recordDetail.failureDetail")}>
             {record.failure_detail || "-"}
           </Descriptions.Item>
-          <Descriptions.Item label="时间">
+          <Descriptions.Item label={t("applyUi.recordDetail.time")}>
             {formatDateTime(record.finished_at || record.created_at)}
           </Descriptions.Item>
-          <Descriptions.Item label="任务 / 批次">
-            {`批次 #${record.task_id} · 第 ${record.attempt} 次尝试`}
+          <Descriptions.Item label={t("applyUi.recordDetail.taskBatch")}>
+            {t("applyUi.recordDetail.batchAttempt", {
+              id: record.task_id,
+              attempt: record.attempt,
+            })}
           </Descriptions.Item>
         </Descriptions>
       )}
