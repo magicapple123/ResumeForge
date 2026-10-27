@@ -9,6 +9,8 @@ import { App, Button, Form, Input, InputNumber, Space, Typography } from "antd";
 import FormModal from "../common/FormModal";
 import { useState } from "react";
 import { createResumeTemplate, updateResumeTemplate } from "../../api/resumeTemplates";
+import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 import type { ResumeFormatConfig, ResumeFormatField, ResumeTemplateDetail } from "../../types";
 
 interface Props {
@@ -29,6 +31,7 @@ export default function FormatTemplateEditorModal({
   onClose,
   onSaved,
 }: Props) {
+  useLocale();
   const { message } = App.useApp();
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
@@ -54,7 +57,7 @@ export default function FormatTemplateEditorModal({
 
   const save = async () => {
     if (!name.trim()) {
-      message.warning("请填写模板名称");
+      message.warning(t("templatesUi.formatEditor.toast.needName"));
       return;
     }
     // 只提交填过的项：空值代表"沿用模板的设置"。
@@ -63,22 +66,24 @@ export default function FormatTemplateEditorModal({
       if (value !== null && value !== undefined && value !== "") config[key] = value;
     });
     if (Object.keys(config).length === 0) {
-      message.warning("至少设置一项参数，否则这个版式没有任何效果");
+      message.warning(t("templatesUi.formatEditor.toast.needValue"));
       return;
     }
     setSaving(true);
     try {
       if (template) {
         await updateResumeTemplate(template.id, { name, description, config });
-        message.success("版式已更新");
+        message.success(t("templatesUi.formatEditor.toast.updated"));
       } else {
         await createResumeTemplate({ name, description, config, kind: "format" });
-        message.success("版式已创建，可以在生成或预览简历时选用");
+        message.success(t("templatesUi.formatEditor.toast.created"));
       }
       onSaved();
       onClose();
     } catch (error) {
-      message.error(error instanceof Error ? error.message : "保存失败");
+      message.error(
+        error instanceof Error ? error.message : t("templatesUi.formatEditor.error.save"),
+      );
     } finally {
       setSaving(false);
     }
@@ -86,28 +91,32 @@ export default function FormatTemplateEditorModal({
 
   return (
     <FormModal
-      title={template ? "编辑版式" : "自制版式"}
+      title={
+        template
+          ? t("templatesUi.formatEditor.title.edit")
+          : t("templatesUi.formatEditor.title.create")
+      }
       open={open}
       onCancel={onClose}
       onSubmit={() => void save()}
-      okText="保存版式"
+      okText={t("templatesUi.formatEditor.action.save")}
       submitting={saving}
       width={620}
     >
       <Form layout="vertical">
-        <Form.Item label="名称" required>
+        <Form.Item label={t("templatesUi.formatEditor.field.name")} required>
           <Input
             value={name}
             maxLength={40}
-            placeholder="如：我的紧凑版式"
+            placeholder={t("templatesUi.formatEditor.placeholder.name")}
             onChange={(event) => setName(event.target.value)}
           />
         </Form.Item>
-        <Form.Item label="说明（选填）">
+        <Form.Item label={t("templatesUi.formatEditor.field.description")}>
           <Input
             value={description}
             maxLength={255}
-            placeholder="一句话说明它解决什么问题"
+            placeholder={t("templatesUi.formatEditor.placeholder.description")}
             onChange={(event) => setDescription(event.target.value)}
           />
         </Form.Item>
@@ -130,11 +139,13 @@ export default function FormatTemplateEditorModal({
                   className="format-color-input"
                 />
                 <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                  {typeof values[field.key] === "string" ? String(values[field.key]) : "未设置"}
+                  {typeof values[field.key] === "string"
+                    ? String(values[field.key])
+                    : t("templatesUi.formatEditor.value.unset")}
                 </Typography.Text>
                 {values[field.key] ? (
                   <Button size="small" type="link" onClick={() => setValue(field.key, null)}>
-                    清除
+                    {t("templatesUi.formatEditor.action.clear")}
                   </Button>
                 ) : null}
               </Space>
@@ -144,7 +155,7 @@ export default function FormatTemplateEditorModal({
                 min={field.min}
                 max={field.max}
                 step={field.step ?? 0.1}
-                placeholder="未设置"
+                placeholder={t("templatesUi.formatEditor.value.unset")}
                 onChange={(value) => setValue(field.key, value ?? null)}
               />
             )}
@@ -152,7 +163,7 @@ export default function FormatTemplateEditorModal({
         ))}
       </Form>
       <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-        留空表示沿用模板的设置；只有填过的项才会生效。
+        {t("templatesUi.formatEditor.hint.blank")}
       </Typography.Text>
     </FormModal>
   );
