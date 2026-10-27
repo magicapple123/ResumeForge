@@ -5,10 +5,11 @@
  */
 import { Button, Space, Tag } from "antd";
 import { EditOutlined } from "@ant-design/icons";
-import { REFERRAL_STATUS_COLORS, REFERRAL_STATUS_LABELS, referralImageUrl } from "../../types";
+import { REFERRAL_STATUS_COLORS, referralImageUrl } from "../../types";
 import type { Referral, ReferralStatus } from "../../types";
 import { formatDateTime } from "../../utils/format";
 import { t } from "../../i18n";
+import { referralStatusLabelKey } from "../../i18n/enum/referral";
 import { useLocale } from "../../i18n/i18nContext";
 import { RecordDetailDrawer } from "../common/RecordDetail";
 
@@ -21,6 +22,8 @@ interface Props {
 export default function ReferralDetailDrawer({ detail, onEdit, onClose }: Props) {
   // 本文件用模块级 t()：必须订阅语言变化，否则切语言后抽屉文案不重渲染。
   useLocale();
+  // 状态 Tag：协议值先映到语言包 key；未知取值回退成后端下发的原值（不丢信息）。
+  const statusLabelKey = detail ? referralStatusLabelKey(detail.status) : undefined;
   return (
     <RecordDetailDrawer
       open={detail !== null}
@@ -30,7 +33,7 @@ export default function ReferralDetailDrawer({ detail, onEdit, onClose }: Props)
         detail && (
           <Space size={6} wrap>
             <Tag color={REFERRAL_STATUS_COLORS[detail.status as ReferralStatus] ?? "default"}>
-              {REFERRAL_STATUS_LABELS[detail.status as ReferralStatus] ?? detail.status}
+              {statusLabelKey ? t(statusLabelKey) : detail.status}
             </Tag>
             {detail.converted && <Tag color="green">{t("referralDetail.tag.converted")}</Tag>}
           </Space>
