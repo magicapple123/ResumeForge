@@ -23,6 +23,7 @@ import type {
   ResumeTemplateOption,
 } from "../../types";
 import { t } from "../../i18n";
+import type { MessageKey } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
 import { withHiddenScrollbar } from "../../utils/iframeDocument";
 import { templateCapability } from "../../features/resume-template-trial/templateProfile";
@@ -56,10 +57,10 @@ interface Props {
   content?: ResumeContent | null;
 }
 
-const FONT_SCALES: { value: ResumeFontScale; label: string }[] = [
-  { value: "small", label: "小字号" },
-  { value: "standard", label: "标准" },
-  { value: "large", label: "大字号" },
+const FONT_SCALES: { value: ResumeFontScale; labelKey: MessageKey }[] = [
+  { value: "small", labelKey: "gallery.fontScale.small" },
+  { value: "standard", labelKey: "gallery.fontScale.standard" },
+  { value: "large", labelKey: "gallery.fontScale.large" },
 ];
 
 /** 浅拷贝去掉一个键：`setFailed` 里直接 delete 会改到上一次的 state 对象。 */
@@ -116,7 +117,7 @@ export default function TemplateGalleryModal({
     try {
       return await fetchResumeTemplates();
     } catch (error) {
-      message.error(error instanceof Error ? error.message : "读取模板清单失败");
+      message.error(error instanceof Error ? error.message : t("gallery.catalog.loadFailed"));
       return null;
     }
   }, [message]);
@@ -189,7 +190,7 @@ export default function TemplateGalleryModal({
             if (previewGeneration.current !== generation || controller.signal.aborted) return;
             setFailed((prev) => ({
               ...prev,
-              [item.name]: error instanceof Error ? error.message : "预览渲染失败",
+              [item.name]: error instanceof Error ? error.message : t("gallery.preview.failed"),
             }));
           }
         }),
@@ -220,7 +221,7 @@ export default function TemplateGalleryModal({
           }),
         );
       } catch (error) {
-        message.error(error instanceof Error ? error.message : "预览渲染失败");
+        message.error(error instanceof Error ? error.message : t("gallery.preview.failed"));
         setZoomTemplate(null);
       } finally {
         setZoomLoading(false);
@@ -255,7 +256,9 @@ export default function TemplateGalleryModal({
       <div className="template-gallery">
         <div className="template-gallery-toolbar">
           <Typography.Text type="secondary" className="template-gallery-note">
-            {t("gallery.preview.demo")}；{t("gallery.fontScale.scope")}
+            {t("gallery.preview.demo")}
+            {t("gallery.toolbar.separator")}
+            {t("gallery.fontScale.scope")}
           </Typography.Text>
           {/* 导出支持/格式差异是**格式级**事实，按 W11 矩阵在"试用与对比"里显示，
               不在每张卡片上各写一句（那会是第二份能力判定）。 */}
@@ -268,7 +271,7 @@ export default function TemplateGalleryModal({
           <Segmented
             size="small"
             value={previewScale}
-            options={FONT_SCALES}
+            options={FONT_SCALES.map(({ value, labelKey }) => ({ value, label: t(labelKey) }))}
             aria-label={t("gallery.fontScale.label")}
             onChange={(value) => onFontScaleChange(value as ResumeFontScale)}
           />
@@ -293,7 +296,7 @@ export default function TemplateGalleryModal({
                 className="template-gallery-preview"
                 role="button"
                 tabIndex={0}
-                aria-label={`查看${item.label}模板大图`}
+                aria-label={t("gallery.zoom.openAria", { name: item.label })}
                 onClick={() => void openZoom(item)}
                 onKeyDown={(event) => {
                   if (event.key === "Enter" || event.key === " ") {
@@ -307,7 +310,7 @@ export default function TemplateGalleryModal({
                   // 不再写死 `scale(0.36)` —— 卡片宽一变就会左右各裁 4px、右边留白。
                   <A4PreviewFrame
                     html={withHiddenScrollbar(previews[item.name])}
-                    title={`${item.label} 预览`}
+                    title={t("gallery.preview.iframeTitle", { name: item.label })}
                     fit="width"
                   />
                 ) : failed[item.name] ? (
@@ -326,11 +329,13 @@ export default function TemplateGalleryModal({
               <div className="template-gallery-meta">
                 <div className="template-gallery-title">
                   <span>{item.label}</span>
-                  {item.custom ? <Tag color="blue">自制</Tag> : null}
-                  {item.name === selectedName ? <Tag color="green">使用中</Tag> : null}
+                  {item.custom ? <Tag color="blue">{t("gallery.badge.custom")}</Tag> : null}
+                  {item.name === selectedName ? (
+                    <Tag color="green">{t("gallery.status.inUse")}</Tag>
+                  ) : null}
                 </div>
                 <Typography.Text type="secondary" className="template-gallery-desc">
-                  {item.description || "你自制的模板"}
+                  {item.description || t("gallery.card.customDescription")}
                 </Typography.Text>
                 {/* W10 能力卡片：篇幅（后端 density_group 同判据）/ 照片 / 栏目 / 导出。
                     数据全部从目录投影，不写死第二份模板档案。 */}
@@ -338,6 +343,8 @@ export default function TemplateGalleryModal({
                   {cardCapability(item)}
                 </Typography.Text>
                 <Space size={8}>
+                  {/* 「查看大图」暂时保留中文字面量：`workbenchRenameGuard.test.ts` 要求这串文案
+                      去注释后仍然只出现在本文件里，改成 t() 会让那条守卫变红。 */}
                   <Button size="small" onClick={() => void openZoom(item)}>
                     查看大图
                   </Button>
@@ -357,7 +364,9 @@ export default function TemplateGalleryModal({
                     disabled={item.name === selectedName}
                     onClick={() => onSelect(item.name)}
                   >
-                    {item.name === selectedName ? "当前使用" : "用这个模板"}
+                    {item.name === selectedName
+                      ? t("gallery.status.current")
+                      : t("gallery.action.use")}
                   </Button>
                 </Space>
               </div>
@@ -381,7 +390,7 @@ export default function TemplateGalleryModal({
 
   return (
     <Modal
-      title="选择简历模板"
+      title={t("gallery.title")}
       open={open}
       onCancel={onClose}
       footer={null}
@@ -411,7 +420,7 @@ export default function TemplateGalleryModal({
           }}
         />
       ) : templates.length === 0 && !loading ? (
-        <Empty description="还没有可选模板" />
+        <Empty description={t("gallery.empty.noTemplates")} />
       ) : (
         body
       )}
@@ -420,7 +429,11 @@ export default function TemplateGalleryModal({
           弹窗窄于 794px 时出横向滚动条，文档比一页高时 iframe 内部再出一条竖向滚动条，
           加上弹窗本体那条，一共三条。缩放成自适应宽度后，整块只剩弹窗本体一条。 */}
       <Modal
-        title={zoomTemplate ? `${zoomTemplate.label} · 完整预览` : "完整预览"}
+        title={
+          zoomTemplate
+            ? t("gallery.zoom.titleWithName", { name: zoomTemplate.label })
+            : t("gallery.zoom.title")
+        }
         open={zoomTemplate !== null}
         onCancel={() => setZoomTemplate(null)}
         // 只留主动作（用这个模板）。先前那颗「关闭」与右上角 × 重复，属于同一弹窗的
@@ -435,7 +448,9 @@ export default function TemplateGalleryModal({
                 setZoomTemplate(null);
               }}
             >
-              {zoomTemplate.name === selectedName ? "当前使用" : "用这个模板"}
+              {zoomTemplate.name === selectedName
+                ? t("gallery.status.current")
+                : t("gallery.action.use")}
             </Button>
           ) : null
         }
@@ -460,7 +475,7 @@ export default function TemplateGalleryModal({
         ) : (
           <A4PreviewFrame
             html={withHiddenScrollbar(zoomHtml)}
-            title="模板完整预览"
+            title={t("gallery.zoom.frameTitle")}
             fit="width"
             pages={zoomPages}
           />
