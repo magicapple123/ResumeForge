@@ -8,45 +8,46 @@
  */
 import { App, Card, Space, Switch, Typography } from "antd";
 import { memo } from "react";
+import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 import { useWebFormRelaxedMode } from "../../features/settings/useWebFormRelaxedMode";
 
 /**
  * **memo**：本卡无 props，父组件因别处击键重渲时它整块跳过（自身 hook 的状态更新照常生效）。
  */
 export const RelaxedModeCard = memo(function RelaxedModeCard() {
+  // 本组件用模块级 t()：订阅语言变化，否则切语言后这张卡不重渲染。
+  useLocale();
   const { message } = App.useApp();
   const { enabled, loading, saving, toggle } = useWebFormRelaxedMode();
 
   const onChange = async (checked: boolean) => {
     const saved = await toggle(checked);
     if (saved === checked) {
-      message.success(checked ? "已开启：点选类控件将尝试代点，请逐条核对" : "已关闭放宽模式");
+      message.success(
+        checked ? t("webFormPage.relaxed.onToast") : t("webFormPage.relaxed.offToast"),
+      );
     } else {
-      message.error("保存放宽模式设置失败");
+      message.error(t("webFormPage.relaxed.saveFailed"));
     }
   };
 
   return (
-    <Card size="small" title="放宽模式（代点下拉与确认勾选）">
+    <Card size="small" title={t("webFormPage.relaxed.title")}>
       <Space size="middle" wrap>
         <Switch
           checked={enabled}
           loading={loading || saving}
           onChange={(checked) => void onChange(checked)}
-          aria-label="网申填表放宽模式"
+          aria-label={t("webFormPage.relaxed.toggleAria")}
         />
         <Typography.Text type="secondary">
-          默认关闭：工具只填文本框，下拉 / 勾选 / 日期都由你自己点。
+          {t("webFormPage.relaxed.defaultOff")}
           {enabled ? (
-            <Typography.Text type="warning">
-              已开启——点选类控件若匹配到资料值，程序会代点并回读核对；同意/声明类会先问你。
-            </Typography.Text>
+            <Typography.Text type="warning">{t("webFormPage.relaxed.enabledHint")}</Typography.Text>
           ) : null}
         </Typography.Text>
-        <Typography.Text type="warning">
-          开启后程序会尝试代点下拉/弹层选项并代勾你逐条确认过的声明项，存在选错可能，
-          填完请核对；日期选择器与文件上传仍不代做。
-        </Typography.Text>
+        <Typography.Text type="warning">{t("webFormPage.relaxed.risk")}</Typography.Text>
       </Space>
     </Card>
   );
