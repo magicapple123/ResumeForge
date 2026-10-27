@@ -12,6 +12,9 @@ import { useState } from "react";
 import type { ReminderUpcoming } from "../../types";
 import { formatDateTime } from "../../utils/format";
 import CalendarView from "../../components/tracker/CalendarView";
+import { t } from "../../i18n";
+import type { MessageKey } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 
 const REMINDER_VIEW_KEY = "rf.home.reminderView";
 
@@ -25,12 +28,17 @@ const URGENCY_DOT_COLORS: Record<string, string> = {
 };
 
 /** 紧急度的文字名（RF-12：颜色不能是唯一状态信号——点旁必须带可读的紧急度）。 */
-const URGENCY_LABELS: Record<string, string> = {
-  overdue: "已逾期",
-  soon: "即将到期",
-  upcoming: "未到期",
-  later: "较远",
+const URGENCY_LABELS: Record<string, MessageKey> = {
+  overdue: "homePage.reminders.urgency.overdue",
+  soon: "homePage.reminders.urgency.soon",
+  upcoming: "homePage.reminders.urgency.upcoming",
+  later: "homePage.reminders.urgency.later",
 };
+
+/** 紧急度的显示名；后端给了未知取值时回落到「未知」。 */
+function urgencyLabel(urgency: string): string {
+  return t(URGENCY_LABELS[urgency] ?? "homePage.reminders.urgency.unknown");
+}
 
 /** 从 localStorage 读取近期提醒视图偏好；缺省为列表。 */
 function loadReminderView(): "list" | "calendar" {
@@ -50,6 +58,8 @@ export function RemindersCard({
   remindersLoading: boolean;
   onOpenPopup: () => void;
 }) {
+  // 本组件用模块级 t()，必须订阅语言变化。
+  useLocale();
   // 近期提醒卡片视图：列表 / 月历，缺省列表。
   const [reminderView, setReminderView] = useState<"list" | "calendar">(() => loadReminderView());
 
@@ -64,22 +74,22 @@ export function RemindersCard({
       title={
         <Space size={8}>
           <CalendarOutlined />
-          <span>近期提醒</span>
+          <span>{t("homePage.reminders.title")}</span>
         </Space>
       }
       extra={
         <Space size={8}>
           <Segmented
-            aria-label="近期提醒视图切换"
+            aria-label={t("homePage.reminders.viewSwitchAria")}
             size="small"
             value={reminderView}
             options={[
-              { label: "列表", value: "list" },
-              { label: "月历", value: "calendar" },
+              { label: t("homePage.reminders.view.list"), value: "list" },
+              { label: t("homePage.reminders.view.calendar"), value: "calendar" },
             ]}
             onChange={(value) => changeReminderView(value as "list" | "calendar")}
           />
-          <Link to="/tracker">查看全部</Link>
+          <Link to="/tracker">{t("homePage.action.viewAll")}</Link>
         </Space>
       }
       loading={remindersLoading}
@@ -87,7 +97,7 @@ export function RemindersCard({
       {reminderView === "calendar" ? (
         <CalendarView compact />
       ) : (reminders ?? []).length === 0 ? (
-        <Empty description="近期没有待办提醒" />
+        <Empty description={t("homePage.reminders.empty")} />
       ) : (
         <Listy
           items={reminders ?? []}
@@ -96,12 +106,14 @@ export function RemindersCard({
             <ListyItem
               style={{ cursor: "pointer" }}
               onClick={onOpenPopup}
-              ariaLabel={`查看提醒：${item.title}`}
+              ariaLabel={t("homePage.reminders.openAria", { title: item.title })}
             >
               <Space size={8} wrap>
                 <span
                   role="img"
-                  aria-label={`紧急度：${URGENCY_LABELS[item.urgency] ?? "未知"}`}
+                  aria-label={t("homePage.reminders.urgencyAria", {
+                    level: urgencyLabel(item.urgency),
+                  })}
                   className="reminder-urgency-dot"
                   style={{
                     display: "inline-block",
