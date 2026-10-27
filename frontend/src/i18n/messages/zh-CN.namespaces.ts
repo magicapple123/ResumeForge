@@ -81,6 +81,7 @@ import collectResult from "./zh-CN.collectResult";
 import webFormLegacy from "./zh-CN.webFormLegacy";
 import aiPolish from "./zh-CN.aiPolish";
 import bulkEnqueue from "./zh-CN.bulkEnqueue";
+import applySettings from "./zh-CN.applySettings";
 
 const namespaces = {
   /** 简历制作台（2026-10-23）。 */
@@ -206,6 +207,8 @@ const namespaces = {
   ...aiPolish,
   /** 投递队列「直接加入队列」的聚合账目（2026-10-27）。 */
   ...bulkEnqueue,
+  /** 投递设置弹窗（2026-10-27）。 */
+  ...applySettings,
 } as const;
 
 export default namespaces;

@@ -24,6 +24,8 @@ import { useApi } from "../../hooks/useApi";
 import { HintedTextArea } from "../common/MaxLengthHint";
 import { type ApplyConfig, type ApplyConfigOut, type SiteList } from "../../types";
 import BrowserChoiceFields from "./BrowserChoiceFields";
+import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 
 interface Props {
   open: boolean;
@@ -31,15 +33,29 @@ interface Props {
   onSaved?: (config: ApplyConfigOut) => void;
 }
 
+/**
+ * 出厂默认值的回显文案。
+ *
+ * 布尔值先翻成「开启 / 关闭」再交给模板：那两个词是**取值**，模板由
+ * `applySettings.defaults.hint` 的 `{value}` 接住（§8.1 说的是模块求值期不能调 `t()`，
+ * 本函数在渲染期调用，因此随语言变化）。
+ */
 function defaultsHint(value: string | number | boolean): string {
-  return `出厂默认：${typeof value === "boolean" ? (value ? "开启" : "关闭") : value}`;
+  const shown =
+    typeof value === "boolean"
+      ? t(value ? "applySettings.defaults.on" : "applySettings.defaults.off")
+      : value;
+  return t("applySettings.defaults.hint", { value: shown });
 }
 
 function ApplySettingsForm({ onClose, onSaved }: Omit<Props, "open">) {
+  // 本组件用模块级 t()：必须订阅语言变化，否则切语言后这一块不重渲染。
+  useLocale();
   const { message } = App.useApp();
   const [form] = Form.useForm<ApplyConfig>();
   const { data, loading, error } = useApi<ApplyConfigOut>(getApplyConfig, []);
   // 站点清单来自后端接口，前端不写死站点名；将来后端加站点这里自动多出选项。
+  // `display_name` 由服务端下发，因此不经过语言包（前端没有第二份真相）。
   const { data: siteList } = useApi<SiteList>(listSites, []);
   const [saving, setSaving] = useState(false);
   const defaults = data?.defaults;
@@ -62,11 +78,11 @@ function ApplySettingsForm({ onClose, onSaved }: Omit<Props, "open">) {
     setSaving(true);
     try {
       const saved = await updateApplyConfig(values);
-      message.success("投递设置已保存");
+      message.success(t("applySettings.saved"));
       onSaved?.(saved);
       onClose();
     } catch (err) {
-      message.error(err instanceof Error ? err.message : "保存投递设置失败");
+      message.error(err instanceof Error ? err.message : t("applySettings.saveFailed"));
     } finally {
       setSaving(false);
     }
@@ -81,30 +97,31 @@ function ApplySettingsForm({ onClose, onSaved }: Omit<Props, "open">) {
         <Typography.Text type="danger">{error}</Typography.Text>
         {/* 保留：只在「读取失败且没有任何数据」时渲染，是失败态唯一的显式出口
             （表单都没渲染出来，不能靠 × 之外的动作离开）。 */}
-        <Button onClick={onClose}>关闭</Button>
+        <Button onClick={onClose}>{t("common.action.close")}</Button>
       </Space>
     );
   }
 
   return (
     <Form form={form} layout="vertical" onFinish={() => void submit()}>
-      <Typography.Paragraph type="secondary">
-        这些设置决定投递的节奏与安全网：岗位之间会随机等待，连续失败会自动暂停， 每日上限只统计
-        <Typography.Text strong>成功投递</Typography.Text>的数量。
-      </Typography.Paragraph>
+      {/*
+        整段合成一个 key（原文「成功投递」外面套过 `<Typography.Text strong>`）：
+        富文本插值不存在，按标签切开的两半在英文里语序不通，强调让位于完整句子。
+      */}
+      <Typography.Paragraph type="secondary">{t("applySettings.intro")}</Typography.Paragraph>
 
       <Space size={16} wrap>
         <Form.Item
           name="interval_seconds"
-          label="岗位间隔（秒）"
+          label={t("applySettings.interval.label")}
           extra={defaults && defaultsHint(defaults.interval_seconds)}
-          rules={[{ required: true, message: "请填写岗位间隔" }]}
+          rules={[{ required: true, message: t("applySettings.interval.required") }]}
         >
           <InputNumber min={1} max={600} style={{ width: 160 }} />
         </Form.Item>
         <Form.Item
           name="interval_jitter_seconds"
-          label="随机抖动（秒）"
+          label={t("applySettings.jitter.label")}
           extra={defaults && defaultsHint(defaults.interval_jitter_seconds)}
         >
           <InputNumber min={0} max={300} style={{ width: 160 }} />
@@ -114,22 +131,22 @@ function ApplySettingsForm({ onClose, onSaved }: Omit<Props, "open">) {
       <Space size={16} wrap>
         <Form.Item
           name="daily_limit"
-          label="每日上限（成功数）"
+          label={t("applySettings.dailyLimit.label")}
           extra={defaults && defaultsHint(defaults.daily_limit)}
-          rules={[{ required: true, message: "请填写每日上限" }]}
+          rules={[{ required: true, message: t("applySettings.dailyLimit.required") }]}
         >
           <InputNumber min={1} max={1000} style={{ width: 160 }} />
         </Form.Item>
         <Form.Item
           name="per_task_limit"
-          label="单批上限"
+          label={t("applySettings.perTaskLimit.label")}
           extra={defaults && defaultsHint(defaults.per_task_limit)}
         >
           <InputNumber min={1} max={200} style={{ width: 160 }} />
         </Form.Item>
         <Form.Item
           name="breaker_threshold"
-          label="连续失败熔断阈值"
+          label={t("applySettings.breaker.label")}
           extra={defaults && defaultsHint(defaults.breaker_threshold)}
         >
           <InputNumber min={1} max={20} style={{ width: 160 }} />
@@ -138,8 +155,8 @@ function ApplySettingsForm({ onClose, onSaved }: Omit<Props, "open">) {
 
       <Form.Item
         name="default_greeting"
-        label="默认招呼语"
-        extra="队列条目没有单独填写招呼语时使用；投递前可逐岗位预览并修改。"
+        label={t("applySettings.greeting.label")}
+        extra={t("applySettings.greeting.extra")}
       >
         <HintedTextArea rows={2} maxLength={1000} />
       </Form.Item>
@@ -148,19 +165,23 @@ function ApplySettingsForm({ onClose, onSaved }: Omit<Props, "open">) {
 
       <Form.Item
         name="site_key"
-        label="当前招聘网站"
-        extra="目前仅支持一个招聘网站，后续会陆续增加；新增站点无需你手动配置。"
+        label={t("applySettings.site.label")}
+        extra={t("applySettings.site.extra")}
       >
-        <Select options={siteOptions} style={{ maxWidth: 280 }} placeholder="使用默认站点" />
+        <Select
+          options={siteOptions}
+          style={{ maxWidth: 280 }}
+          placeholder={t("applySettings.site.placeholder")}
+        />
       </Form.Item>
 
       <Divider plain style={{ margin: "4px 0 16px" }} />
 
-      <BrowserChoiceFields label="投递台使用的浏览器" />
+      <BrowserChoiceFields label={t("applySettings.browser.label")} />
 
       <Form.Item
         name="browser_port"
-        label="投递专用浏览器调试端口"
+        label={t("applySettings.browserPort.label")}
         extra={defaults && defaultsHint(defaults.browser_port)}
       >
         <InputNumber min={1024} max={65535} style={{ width: 160 }} />
@@ -168,15 +189,13 @@ function ApplySettingsForm({ onClose, onSaved }: Omit<Props, "open">) {
 
       <Form.Item
         name="skip_same_company"
-        label="同公司只投一个岗位"
+        label={t("applySettings.skipSameCompany.label")}
         valuePropName="checked"
         // 光写"同公司只投一个岗位"会被读成全历史：用户会以为投过百度就永远不能再投百度的
         // 其他岗位。**作用域就是本批**，必须写在这里——开关的语义只能由它的说明来界定。
         extra={
           <>
-            只在本批内生效：同一批里同一家公司的多个岗位只投最先的那个，其余标为「已跳过」
-            并写明原因；换一批再遇到这家公司仍会投。判断忽略公司名的空格与大小写，
-            失败的那次也算「投过」（招呼语可能已经发出去了）。
+            {t("applySettings.skipSameCompany.extra")}
             {defaults && <div>{defaultsHint(defaults.skip_same_company)}</div>}
           </>
         }
@@ -185,9 +204,9 @@ function ApplySettingsForm({ onClose, onSaved }: Omit<Props, "open">) {
       </Form.Item>
       <Form.Item
         name="confirm_real_gap"
-        label="默认允许「真实缺口」岗位直接入队"
+        label={t("applySettings.realGap.label")}
         valuePropName="checked"
-        extra="默认关闭：命中真实缺口的岗位需要你逐条确认；开启后仍会在记录里标注。"
+        extra={t("applySettings.realGap.extra")}
       >
         <Switch />
       </Form.Item>
@@ -195,9 +214,9 @@ function ApplySettingsForm({ onClose, onSaved }: Omit<Props, "open">) {
       {/* 底部操作区：**吸附在可视区底部**（不再随内容滚走），靠右并排。
           这个表单有七八个字段，用户改到中间想保存时不该先滚到底。 */}
       <div className="apply-settings-actions">
-        <Button onClick={onClose}>取消</Button>
+        <Button onClick={onClose}>{t("common.action.cancel")}</Button>
         <Button type="primary" loading={saving} onClick={() => void submit()}>
-          保存设置
+          {t("applySettings.action.save")}
         </Button>
       </div>
     </Form>
@@ -205,9 +224,11 @@ function ApplySettingsForm({ onClose, onSaved }: Omit<Props, "open">) {
 }
 
 export default function ApplySettingsModal({ open, onClose, onSaved }: Props) {
+  // 弹窗标题也走词表：`open` 为假时表单不渲染，订阅放在这里才不会漏掉标题。
+  useLocale();
   return (
     <Modal
-      title="投递设置"
+      title={t("applySettings.title")}
       open={open}
       onCancel={onClose}
       footer={null}

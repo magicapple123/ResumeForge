@@ -73,6 +73,7 @@ import collectResult from "./en-US.collectResult";
 import webFormLegacy from "./en-US.webFormLegacy";
 import aiPolish from "./en-US.aiPolish";
 import bulkEnqueue from "./en-US.bulkEnqueue";
+import applySettings from "./en-US.applySettings";
 
 const enUS = {
   ...core,
@@ -147,6 +148,7 @@ const enUS = {
   ...webFormLegacy,
   ...aiPolish,
   ...bulkEnqueue,
+  ...applySettings,
 } as const satisfies Record<keyof ZhCNMessages, string>;
 
 export default enUS;
