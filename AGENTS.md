@@ -99,6 +99,12 @@ $env:PYTHONUTF8 = "1"
 
   判定时**以汇总行 + 覆盖率报告为准**；只有两者都正常打印，退出码才可信。
 
+- **"并行跑"和"覆盖率"不能写进同一条命令**（2026-10-27 实测）：`coverage run ... -m pytest -n 4`
+  会因为 xdist 的 worker 是**子进程**而统计不到它们——`[tool.coverage.run] parallel = true`
+  只让被测进程各写一份 `.coverage.*`，plain `coverage run` 不追子进程，控制器进程本身又几乎
+  不执行被测代码。结果 `combine` + `report` 出来是 **28%**（真值 88%），`--fail-under=80` 直接
+  红。**要覆盖率就串行跑上面那三条；要速度就并行跑 pytest 但别开 coverage**，两者分开。
+
 - **`vite build` 在本机沙箱下会以 exit 1 失败**，但**不是构建错误**：模块已经全部 transform 成功，
   死在 `prepareOutDir/emptyDir` 清理 `frontend/dist/assets` 时被同一个批量删除守卫拦下
   （日志形如 `SAFE_DELETE_BULK_CONFIRM_REQUIRED count=170 threshold=100`）。
