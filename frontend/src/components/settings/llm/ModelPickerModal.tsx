@@ -4,6 +4,8 @@
  * （自 LLMConfigCard 拆出，逐字搬运，行为等价。）
  */
 import { Button, Listy, Modal, Typography } from "antd";
+import { t } from "../../../i18n";
+import { useLocale } from "../../../i18n/i18nContext";
 import { ListyItem } from "../../common/ListyItem";
 import { LISTY_ITEM_PADDING_SMALL } from "../../common/listyPadding";
 
@@ -20,10 +22,11 @@ export function ModelPickerModal({
   onPick: (model: string) => void;
   onClose: () => void;
 }) {
+  useLocale();
   return (
     <Modal
-      title="选择模型"
-      aria-label="选择模型"
+      title={t("llmUi.picker.title")}
+      aria-label={t("llmUi.picker.title")}
       open={open}
       destroyOnHidden
       footer={null}
@@ -50,7 +53,7 @@ export function ModelPickerModal({
                   onClose();
                 }}
               >
-                使用
+                {t("llmUi.picker.action.use")}
               </Button>,
             ]}
           >
