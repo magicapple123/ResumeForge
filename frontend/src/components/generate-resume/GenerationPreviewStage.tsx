@@ -7,6 +7,8 @@
 import { ReloadOutlined } from "@ant-design/icons";
 import { Button, Space } from "antd";
 import type { RefObject } from "react";
+import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 import ResumeDetailPreview from "../resume/ResumeDetailPreview";
 import type { ResumePreviewHandle } from "../ResumePreview";
 import type { ResumeContent, ResumeDetail, ResumeLayout } from "../../types";
@@ -63,6 +65,7 @@ export default function GenerationPreviewStage({
   onRegenerate,
   onClose,
 }: Props) {
+  useLocale();
   return (
     <ResumeDetailPreview
       detail={result.detail}
@@ -87,12 +90,12 @@ export default function GenerationPreviewStage({
       onSuggestionsGenerated={() => setSuggestionsGenerated(true)}
       extraActions={
         <Space wrap>
-          <Button onClick={onGoResumes}>去简历中心</Button>
+          <Button onClick={onGoResumes}>{t("generateStages.preview.goResumes")}</Button>
           <Button icon={<ReloadOutlined />} onClick={onRegenerate}>
-            重新生成
+            {t("generateStages.action.regenerate")}
           </Button>
           <Button type="primary" onClick={onClose}>
-            完成
+            {t("generateStages.preview.done")}
           </Button>
         </Space>
       }
