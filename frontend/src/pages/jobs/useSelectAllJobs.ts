@@ -4,6 +4,7 @@
 import { App } from "antd";
 import { useEffect, useRef, useState } from "react";
 import { listJobIds } from "../../api/jobs";
+import { t } from "../../i18n";
 import type { JobSortState } from "../../utils/jobSort";
 
 export function useSelectAllJobs({
@@ -54,20 +55,18 @@ export function useSelectAllJobs({
       });
       if (generation !== generationRef.current) return; // 期间筛选已变：旧结果丢弃
       if (ids.length === 0) {
-        message.warning("当前筛选下没有岗位");
+        message.warning(t("jobsPage.selectAll.empty"));
         return;
       }
       if (ids.length > 5000) {
-        message.warning(
-          `当前筛选下共 ${ids.length} 个岗位，超出单次批量上限 5000 个；请先用筛选或搜索缩小范围`,
-        );
+        message.warning(t("jobsPage.selectAll.overLimit", { count: ids.length, limit: 5000 }));
         return;
       }
       setSelectedJobIds(() => ids);
-      message.success(`已选中当前筛选下的全部 ${ids.length} 个岗位（所有页）`);
+      message.success(t("jobsPage.selectAll.done", { count: ids.length }));
     } catch (err) {
       if (generation !== generationRef.current) return;
-      message.error(err instanceof Error ? err.message : "获取岗位列表失败");
+      message.error(err instanceof Error ? err.message : t("jobsPage.selectAll.failed"));
     } finally {
       if (generation === generationRef.current) setSelectAllPagesLoading(false);
     }
