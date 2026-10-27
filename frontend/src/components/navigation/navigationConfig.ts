@@ -19,128 +19,135 @@ import {
   ToolOutlined,
 } from "@ant-design/icons";
 import { createElement, type ReactNode } from "react";
+import type { MessageKey } from "../../i18n";
 
 export type NavigationGroup = "primary" | "space";
 
 export interface NavigationItem {
   key: string;
   icon: ReactNode;
-  label: string;
+  labelKey: MessageKey;
   group: NavigationGroup;
   required: boolean;
 }
 
 export const NAVIGATION_ITEMS: NavigationItem[] = [
-  { key: "/", icon: createElement(HomeOutlined), label: "首页", group: "primary", required: true },
+  {
+    key: "/",
+    icon: createElement(HomeOutlined),
+    labelKey: "navigation.item.home",
+    group: "primary",
+    required: true,
+  },
   {
     key: "/jobs",
     icon: createElement(SearchOutlined),
-    label: "岗位广场",
+    labelKey: "navigation.item.jobs",
     group: "primary",
     required: true,
   },
   {
     key: "/resumes",
     icon: createElement(FileTextOutlined),
-    label: "简历中心",
+    labelKey: "navigation.item.resumes",
     group: "primary",
     required: true,
   },
   {
     key: "/apply",
     icon: createElement(SendOutlined),
-    label: "投递台",
+    labelKey: "navigation.item.apply",
     group: "primary",
     required: true,
   },
   {
     key: "/webform",
     icon: createElement(FormOutlined),
-    label: "网申填表",
+    labelKey: "navigation.item.webform",
     group: "primary",
     required: false,
   },
   {
     key: "/tracker",
     icon: createElement(FunnelPlotOutlined),
-    label: "求职进度",
+    labelKey: "navigation.item.tracker",
     group: "primary",
     required: false,
   },
   {
     key: "/interview",
     icon: createElement(SolutionOutlined),
-    label: "模拟面试",
+    labelKey: "navigation.item.interview",
     group: "primary",
     required: false,
   },
   {
     key: "/assistant",
     icon: createElement(MessageOutlined),
-    label: "求职助手",
+    labelKey: "navigation.item.assistant",
     group: "primary",
     required: false,
   },
   {
     key: "/settings",
     icon: createElement(SettingOutlined),
-    label: "设置",
+    labelKey: "navigation.item.settings",
     group: "primary",
     required: true,
   },
   {
     key: "/profile",
     icon: createElement(ProfileOutlined),
-    label: "我的资料",
+    labelKey: "navigation.item.profile",
     group: "space",
     required: true,
   },
   {
     key: "/favorites",
     icon: createElement(StarOutlined),
-    label: "收藏夹",
+    labelKey: "navigation.item.favorites",
     group: "space",
     required: false,
   },
   {
     key: "/materials",
     icon: createElement(InboxOutlined),
-    label: "资料箱",
+    labelKey: "navigation.item.materials",
     group: "space",
     required: false,
   },
   {
     key: "/knowledge",
     icon: createElement(BookOutlined),
-    label: "知识库",
+    labelKey: "navigation.item.knowledge",
     group: "space",
     required: false,
   },
   {
     key: "/skills",
     icon: createElement(ToolOutlined),
-    label: "工作台",
+    labelKey: "navigation.item.skills",
     group: "space",
     required: false,
   },
   {
     key: "/analytics",
     icon: createElement(BarChartOutlined),
-    label: "求职统计",
+    labelKey: "navigation.item.analytics",
     group: "space",
     required: false,
   },
   {
     key: "/claims",
     icon: createElement(AuditOutlined),
-    label: "事实台账",
+    labelKey: "navigation.item.claims",
     group: "space",
     required: false,
   },
   {
     key: "/trash",
     icon: createElement(DeleteOutlined),
-    label: "回收站",
+    labelKey: "navigation.item.trash",
     group: "space",
     required: false,
   },
@@ -159,10 +166,11 @@ export function pathMatchesNavigationItem(pathname: string, item: NavigationItem
     : pathname === item.key || pathname.startsWith(item.key + "/");
 }
 
-export function navigationPageLabel(pathname: string): string {
-  if (pathname === "/claims/drill") return "事实核对";
+export function navigationPageLabelKey(pathname: string): MessageKey {
+  if (pathname === "/claims/drill") return "navigation.page.claimsDrill";
   return (
-    NAVIGATION_ITEMS.find((item) => pathMatchesNavigationItem(pathname, item))?.label ?? "首页"
+    NAVIGATION_ITEMS.find((item) => pathMatchesNavigationItem(pathname, item))?.labelKey ??
+    "navigation.item.home"
   );
 }
 
