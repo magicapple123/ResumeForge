@@ -33,7 +33,7 @@ import {
   type JobMatchOut,
   type MatchCondition,
 } from "../types";
-import { t } from "../i18n";
+import { t, type MessageKey } from "../i18n";
 import { useLocale } from "../i18n/i18nContext";
 
 interface Props {
@@ -41,22 +41,23 @@ interface Props {
   onClose: () => void;
 }
 
-const HARD_GATE_LABELS: Record<HardGateResult, { label: string; color: string }> = {
-  met: { label: "硬性条件已满足", color: "green" },
-  unmet: { label: "硬性条件未满足", color: "red" },
-  unknown: { label: "硬性条件待确认", color: "gold" },
+const HARD_GATE_LABELS: Record<HardGateResult, { labelKey: MessageKey; color: string }> = {
+  met: { labelKey: "jobMatch.hardGate.met", color: "green" },
+  unmet: { labelKey: "jobMatch.hardGate.unmet", color: "red" },
+  unknown: { labelKey: "jobMatch.hardGate.unknown", color: "gold" },
 };
 
 const GROUPS: {
   key: keyof Pick<JobMatchOut["result"], "hard_conditions" | "core_abilities" | "bonus_items">;
-  title: string;
+  titleKey: MessageKey;
 }[] = [
-  { key: "hard_conditions", title: "硬性条件" },
-  { key: "core_abilities", title: "核心能力" },
-  { key: "bonus_items", title: "加分项" },
+  { key: "hard_conditions", titleKey: "jobMatch.group.hardConditions" },
+  { key: "core_abilities", titleKey: "jobMatch.group.coreAbilities" },
+  { key: "bonus_items", titleKey: "jobMatch.group.bonusItems" },
 ];
 
 function ConditionList({ conditions }: { conditions: MatchCondition[] }) {
+  useLocale();
   if (conditions.length === 0) {
     return <EmptyState inline description={t("jobMatch.empty.none")} />;
   }
@@ -72,11 +73,13 @@ function ConditionList({ conditions }: { conditions: MatchCondition[] }) {
             </Space>
             {condition.jd_quote && (
               <Typography.Paragraph type="secondary" className="job-match-quote">
-                招聘原文：{condition.jd_quote}
+                {t("jobMatch.condition.jdQuote", { quote: condition.jd_quote })}
               </Typography.Paragraph>
             )}
             <Typography.Paragraph className="job-match-evidence">
-              依据：{condition.evidence || "资料中未提供"}
+              {t("jobMatch.condition.evidence", {
+                evidence: condition.evidence || t("jobMatch.condition.evidenceMissing"),
+              })}
             </Typography.Paragraph>
           </li>
         );
@@ -273,7 +276,7 @@ export default function JobMatchModal({ job, onClose }: Props) {
                 {admissionMeta && <Tag color={admissionMeta.color}>{admissionMeta.label}</Tag>}
               </Descriptions.Item>
               <Descriptions.Item label={t("jobMatch.field.hardGate")}>
-                {hardGateMeta && <Tag color={hardGateMeta.color}>{hardGateMeta.label}</Tag>}
+                {hardGateMeta && <Tag color={hardGateMeta.color}>{t(hardGateMeta.labelKey)}</Tag>}
               </Descriptions.Item>
             </Descriptions>
 
@@ -296,7 +299,7 @@ export default function JobMatchModal({ job, onClose }: Props) {
 
             {GROUPS.map((group) => (
               <section key={group.key} className="job-match-group">
-                <Typography.Title level={5}>{group.title}</Typography.Title>
+                <Typography.Title level={5}>{t(group.titleKey)}</Typography.Title>
                 <ConditionList conditions={result[group.key]} />
               </section>
             ))}

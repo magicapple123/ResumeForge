@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * 岗位匹配分析弹窗：结论、准入提示、投递建议与操作。
+ * "Job match analysis" dialog: verdicts, admission hints, application advice and actions.
  *
- * 三类硬性条件的显示名（已满足 / 未满足 / 待确认）是状态映射常量的 label，
- * 需要先改成 labelKey 才能迁，留待下一批。
+ * This pack supplies the three hard-gate labels (met / not met / unconfirmed) and the
+ * three condition group titles; the dialog's status maps store labelKey only. The
+ * admission verdict and the five-way status names still come from
+ * `types/apply/match.ts`, which the batch result panel shares.
  */
 const jobMatch = {
   "jobMatch.empty.none": "No items",
@@ -40,6 +42,15 @@ const jobMatch = {
   "jobMatch.section.scope": "How to read this",
   "jobMatch.action.reanalyze": "Analyse again",
   "jobMatch.action.clear": "Clear result",
+  "jobMatch.condition.jdQuote": "From the posting: {quote}",
+  "jobMatch.condition.evidence": "Evidence: {evidence}",
+  "jobMatch.condition.evidenceMissing": "Not provided in your Profile",
+  "jobMatch.group.hardConditions": "Hard requirements",
+  "jobMatch.group.coreAbilities": "Core abilities",
+  "jobMatch.group.bonusItems": "Bonus items",
+  "jobMatch.hardGate.met": "Hard requirements met",
+  "jobMatch.hardGate.unmet": "Hard requirements not met",
+  "jobMatch.hardGate.unknown": "Hard requirements unconfirmed",
 } as const;
 
 export default jobMatch;

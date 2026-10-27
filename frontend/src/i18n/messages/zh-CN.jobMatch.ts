@@ -2,8 +2,9 @@
 /**
  * 岗位匹配分析弹窗：结论、准入提示、投递建议与操作。
  *
- * 三类硬性条件的显示名（已满足 / 未满足 / 待确认）是状态映射常量的 label，
- * 需要先改成 labelKey 才能迁，留待下一批。
+ * 三类硬性条件的显示名（已满足 / 未满足 / 待确认）与三组条件标题由本包提供，
+ * 组件里的状态映射常量只存 labelKey。准入结论与五类状态名仍来自
+ * `types/apply/match.ts`（与批量结果面板共用），不在本包内。
  */
 const jobMatch = {
   "jobMatch.empty.none": "暂无条目",
@@ -38,6 +39,15 @@ const jobMatch = {
   "jobMatch.section.scope": "口径说明",
   "jobMatch.action.reanalyze": "重新分析",
   "jobMatch.action.clear": "清除结论",
+  "jobMatch.condition.jdQuote": "招聘原文：{quote}",
+  "jobMatch.condition.evidence": "依据：{evidence}",
+  "jobMatch.condition.evidenceMissing": "资料中未提供",
+  "jobMatch.group.hardConditions": "硬性条件",
+  "jobMatch.group.coreAbilities": "核心能力",
+  "jobMatch.group.bonusItems": "加分项",
+  "jobMatch.hardGate.met": "硬性条件已满足",
+  "jobMatch.hardGate.unmet": "硬性条件未满足",
+  "jobMatch.hardGate.unknown": "硬性条件待确认",
 } as const;
 
 export default jobMatch;
