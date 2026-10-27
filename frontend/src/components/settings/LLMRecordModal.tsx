@@ -252,7 +252,10 @@ export default function LLMRecordModal({
         )}
         <Form.Item name="preset" label={t("llmRecord.field.preset")}>
           <Select
-            options={PRESET_OPTIONS}
+            options={PRESET_OPTIONS.map((option) => ({
+              value: option.value,
+              label: t(option.labelKey),
+            }))}
             onChange={onPresetChange}
             showSearch
             optionFilterProp="label"
