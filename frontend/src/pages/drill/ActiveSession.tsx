@@ -5,9 +5,21 @@ import { useState } from "react";
 import { answerDrill, finishDrill } from "../../api/drill";
 import { ListyItem } from "../../components/common/ListyItem";
 import { LISTY_ITEM_PADDING_SMALL } from "../../components/common/listyPadding";
+import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 import type { DrillSession, EvidenceStatus } from "../../types";
-import { EVIDENCE_LABELS, FOLLOWUP_LABELS } from "../../types";
+import { EVIDENCE_LABEL_KEYS, FOLLOWUP_LABEL_KEYS } from "./drillLabels";
 import { evidenceTag } from "./evidenceTag";
+
+/**
+ * 追问方向是后端给的自由字符串（类型上是 `string`），不在已知表里就返回空串——
+ * 与原实现 `FOLLOWUP_LABELS[kind] ?? ""` 的行为一致，不认识的取值宁可不显示。
+ */
+function followupKindLabel(kind: string): string {
+  return kind in FOLLOWUP_LABEL_KEYS
+    ? t(FOLLOWUP_LABEL_KEYS[kind as keyof typeof FOLLOWUP_LABEL_KEYS])
+    : "";
+}
 
 export function ActiveSession({
   session,
@@ -16,6 +28,8 @@ export function ActiveSession({
   session: DrillSession;
   onUpdate: (session: DrillSession) => void;
 }) {
+  // 本组件用模块级 t()，必须订阅语言变化，否则切语言后判定标签与文案不跟着变。
+  useLocale();
   const { message } = App.useApp();
   const [answer, setAnswer] = useState("");
   const [busy, setBusy] = useState(false);
@@ -31,7 +45,7 @@ export function ActiveSession({
 
   const submit = async () => {
     if (!answer.trim()) {
-      message.warning("请先写下你的回答");
+      message.warning(t("drillSession.answerRequired"));
       return;
     }
     setBusy(true);
@@ -45,9 +59,9 @@ export function ActiveSession({
         feedback: result.feedback,
       });
       onUpdate(result.session);
-      if (result.finished) message.success("这一场问完了，复盘已生成");
+      if (result.finished) message.success(t("drillSession.finishedScan"));
     } catch (error) {
-      message.error(error instanceof Error ? error.message : "提交失败");
+      message.error(error instanceof Error ? error.message : t("drillSession.submitFailed"));
     } finally {
       setBusy(false);
     }
@@ -57,9 +71,9 @@ export function ActiveSession({
     setBusy(true);
     try {
       onUpdate(await finishDrill(session.id));
-      message.success("已结束，复盘已生成");
+      message.success(t("drillSession.stoppedScan"));
     } catch (error) {
-      message.error(error instanceof Error ? error.message : "结束失败");
+      message.error(error instanceof Error ? error.message : t("drillSession.stopFailed"));
     } finally {
       setBusy(false);
     }
@@ -77,22 +91,32 @@ export function ActiveSession({
                 : "warning"
           }
           showIcon
-          title={`上一轮判定：${EVIDENCE_LABELS[lastVerdict.status]}`}
+          title={t("drillSession.lastVerdict", {
+            label: t(EVIDENCE_LABEL_KEYS[lastVerdict.status]),
+          })}
           description={
             <Space orientation="vertical" size={2}>
               {/* 真实模拟模式下不展示"还缺什么"——那等于把判分标准念出来。 */}
               {deferred && lastVerdict.feedback === "" ? (
                 <Typography.Text type="secondary">
-                  真实模拟模式：判定已记录，结束后统一复盘。
+                  {t("drillSession.deferredNotice")}
                 </Typography.Text>
               ) : (
                 <>
                   {lastVerdict.feedback && <span>{lastVerdict.feedback}</span>}
                   {lastVerdict.missing.length > 0 && (
-                    <span>还缺：{lastVerdict.missing.join("；")}</span>
+                    <span>
+                      {t("drillSession.missing", {
+                        items: lastVerdict.missing.join(t("drillSession.separator.list")),
+                      })}
+                    </span>
                   )}
                   {lastVerdict.contradictions.length > 0 && (
-                    <span>矛盾：{lastVerdict.contradictions.join("；")}</span>
+                    <span>
+                      {t("drillSession.contradictions", {
+                        items: lastVerdict.contradictions.join(t("drillSession.separator.list")),
+                      })}
+                    </span>
                   )}
                 </>
               )}
@@ -102,25 +126,37 @@ export function ActiveSession({
       )}
 
       {pending ? (
-        <Card size="small" title={`第 ${session.current_index} / ${session.max_questions} 题`}>
+        <Card
+          size="small"
+          title={t("drillSession.questionProgress", {
+            current: session.current_index,
+            total: session.max_questions,
+          })}
+        >
           <Space orientation="vertical" size={10} style={{ width: "100%" }}>
             <Typography.Title level={5} style={{ margin: 0 }}>
               {pending.question}
             </Typography.Title>
 
             {pending.followup_depth > 0 && (
-              <Tag color="purple">这是对同一条主张的第 {pending.followup_depth + 1} 次追问</Tag>
+              <Tag color="purple">
+                {t("drillSession.followupDepth", { count: pending.followup_depth + 1 })}
+              </Tag>
             )}
 
             {/* 契约对整个会话可见：用户有权知道自己在被怎么衡量。 */}
             <details className="drill-contract">
-              <summary>这道题的评分标准（提问前已锁定）</summary>
+              <summary>{t("drillSession.contractSummary")}</summary>
               <Space orientation="vertical" size={4} style={{ marginTop: 8 }}>
                 {pending.intent && (
-                  <Typography.Text type="secondary">想验证：{pending.intent}</Typography.Text>
+                  <Typography.Text type="secondary">
+                    {t("drillSession.contractIntent", { intent: pending.intent })}
+                  </Typography.Text>
                 )}
                 <div>
-                  <Typography.Text type="secondary">必须讲到：</Typography.Text>
+                  <Typography.Text type="secondary">
+                    {t("drillSession.contractRequired")}
+                  </Typography.Text>
                   <ul className="drill-contract-list">
                     {pending.required_evidence.map((item) => (
                       <li key={item}>{item}</li>
@@ -129,7 +165,9 @@ export function ActiveSession({
                 </div>
                 {pending.followup_triggers.length > 0 && (
                   <div>
-                    <Typography.Text type="secondary">出现这些就该被追问：</Typography.Text>
+                    <Typography.Text type="secondary">
+                      {t("drillSession.contractTriggers")}
+                    </Typography.Text>
                     <ul className="drill-contract-list">
                       {pending.followup_triggers.map((item) => (
                         <li key={item}>{item}</li>
@@ -139,7 +177,9 @@ export function ActiveSession({
                 )}
                 {pending.next_followup_kind && (
                   <Typography.Text type="secondary">
-                    下一问方向：{FOLLOWUP_LABELS[pending.next_followup_kind as never] ?? ""}
+                    {t("drillSession.contractNextFollowup", {
+                      kind: followupKindLabel(pending.next_followup_kind),
+                    })}
                   </Typography.Text>
                 )}
               </Space>
@@ -150,20 +190,20 @@ export function ActiveSession({
               value={answer}
               onChange={(event) => setAnswer(event.target.value)}
               disabled={busy}
-              placeholder="照实说你做过什么。没做到的就说没做到——这里不会替你编，编了也是面试时要还的。"
+              placeholder={t("drillSession.answerPlaceholder")}
             />
             <Space>
               <Button type="primary" loading={busy} onClick={() => void submit()}>
-                提交回答
+                {t("drillSession.submit")}
               </Button>
               <Popconfirm
-                title="结束这一场并出复盘？"
-                description="已经答过的判定都会保留。"
-                okText="结束并出复盘"
-                cancelText="继续答"
+                title={t("drillSession.stopConfirmTitle")}
+                description={t("drillSession.stopConfirmBody")}
+                okText={t("drillSession.stopConfirmOk")}
+                cancelText={t("drillSession.stopConfirmCancel")}
                 onConfirm={() => void stop()}
               >
-                <Button disabled={busy}>提前结束</Button>
+                <Button disabled={busy}>{t("drillSession.stopEarly")}</Button>
               </Popconfirm>
             </Space>
           </Space>
@@ -172,11 +212,11 @@ export function ActiveSession({
         <Alert
           type="info"
           showIcon
-          title="正在生成下一题…"
-          description="如果长时间没有变化，可以点「提前结束」先拿现有的判定出复盘。"
+          title={t("drillSession.generating")}
+          description={t("drillSession.generatingHint")}
           action={
             <Button size="small" loading={busy} onClick={() => void stop()}>
-              提前结束
+              {t("drillSession.stopEarly")}
             </Button>
           }
         />
@@ -184,7 +224,7 @@ export function ActiveSession({
 
       {session.turns.length > 0 && (
         <details className="drill-transcript">
-          <summary>逐轮记录（{session.turns.length} 轮）</summary>
+          <summary>{t("drillSession.transcriptSummary", { count: session.turns.length })}</summary>
           <Listy
             style={{ marginTop: 8 }}
             items={session.turns}
@@ -193,8 +233,12 @@ export function ActiveSession({
             itemRender={(turn) => (
               <ListyItem>
                 <Space orientation="vertical" size={4} style={{ width: "100%" }}>
-                  <Typography.Text strong>问：{turn.question}</Typography.Text>
-                  <Typography.Text>答：{turn.answer}</Typography.Text>
+                  <Typography.Text strong>
+                    {t("drillSession.turnQuestion", { question: turn.question })}
+                  </Typography.Text>
+                  <Typography.Text>
+                    {t("drillSession.turnAnswer", { answer: turn.answer })}
+                  </Typography.Text>
                   {turn.status && (
                     <Space size={6}>
                       {evidenceTag(turn.status as EvidenceStatus)}

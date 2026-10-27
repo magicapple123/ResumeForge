@@ -81,6 +81,7 @@ import manualBackups from "./en-US.manualBackups";
 import storageStats from "./en-US.storageStats";
 import referralForm from "./en-US.referralForm";
 import trackerPage from "./en-US.trackerPage";
+import drillSession from "./en-US.drillSession";
 
 const enUS = {
   ...core,
@@ -163,6 +164,7 @@ const enUS = {
   ...storageStats,
   ...referralForm,
   ...trackerPage,
+  ...drillSession,
 } as const satisfies Record<keyof ZhCNMessages, string>;
 
 export default enUS;
