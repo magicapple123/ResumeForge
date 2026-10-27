@@ -19,6 +19,8 @@ import LoadingBlock from "../common/LoadingBlock";
 import { useCollapsedList } from "../common/useCollapsedList";
 import { ListyItem, ListyMeta } from "../common/ListyItem";
 import { RowContextMenu, type RowMenuItem } from "../common/RowActions";
+import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 
 function formatSize(bytes: number): string {
   if (bytes <= 0) return "0 B";
@@ -27,6 +29,8 @@ function formatSize(bytes: number): string {
 }
 
 export default function ManualBackupsCard() {
+  // 本组件（含模块级的 `trashed_count_note`）用模块级 t()：必须订阅语言变化才会重渲染。
+  useLocale();
   const { message, modal } = App.useApp();
   const [items, setItems] = useState<ManualBackupItem[]>([]);
   const [trashedCount, setTrashedCount] = useState(0);
@@ -45,7 +49,7 @@ export default function ManualBackupsCard() {
       setItems(result.items);
       setTrashedCount(result.trashed_count);
     } catch (err) {
-      message.error(err instanceof Error ? err.message : "读取手动备份失败");
+      message.error(err instanceof Error ? err.message : t("manualBackups.loadFailed"));
     } finally {
       setLoading(false);
     }
@@ -63,7 +67,7 @@ export default function ManualBackupsCard() {
       })
       .catch((err) => {
         if (cancelled) return;
-        message.error(err instanceof Error ? err.message : "读取手动备份失败");
+        message.error(err instanceof Error ? err.message : t("manualBackups.loadFailed"));
         setLoading(false);
       });
     return () => {
@@ -75,32 +79,32 @@ export default function ManualBackupsCard() {
     await trashManualBackup(name);
     // 移除后同步退出选区：条目已不在列表里，勾着它只会产生幽灵选中。
     setSelectedNames((current) => current.filter((value) => value !== name));
-    message.success("已移到本地数据目录下的回收目录，可在文件管理器里彻底删除或找回");
+    message.success(t("manualBackups.trashed"));
   };
 
   const confirmDelete = (item: ManualBackupItem) => {
     modal.confirm({
-      title: `移除备份「${item.name}」？`,
+      title: t("manualBackups.confirm.title", { name: item.name }),
       content: (
         <div>
           <p>
-            这份备份约占 {formatSize(item.size_bytes)}，快照时间：
-            {formatDateTime(new Date(item.modified_at * 1000).toISOString())}。
+            {t("manualBackups.confirm.size", {
+              size: formatSize(item.size_bytes),
+              time: formatDateTime(new Date(item.modified_at * 1000).toISOString()),
+            })}
           </p>
-          <p>
-            移除后会放到本地数据目录下的回收目录里，随时可以在文件管理器里找回来；系统不会自动清理。
-          </p>
+          <p>{t("manualBackups.confirm.body")}</p>
         </div>
       ),
-      okText: "移到回收目录",
+      okText: t("manualBackups.action.trash"),
       okButtonProps: { danger: true },
-      cancelText: "取消",
+      cancelText: t("common.action.cancel"),
       onOk: async () => {
         try {
           await trashOne(item.name);
           await load();
         } catch (err) {
-          message.error(err instanceof Error ? err.message : "移除失败");
+          message.error(err instanceof Error ? err.message : t("manualBackups.removeFailed"));
         }
       },
     });
@@ -111,11 +115,11 @@ export default function ManualBackupsCard() {
   const confirmBatchRemove = () => {
     if (selectedItems.length === 0) return;
     modal.confirm({
-      title: "移除选中的备份？",
-      content: `这 ${selectedItems.length} 份备份移除后会放到本地数据目录下的回收目录里，随时可以在文件管理器里找回来；系统不会自动清理。`,
-      okText: "移到回收目录",
+      title: t("manualBackups.batch.confirm.title"),
+      content: t("manualBackups.batch.confirm.body", { count: selectedItems.length }),
+      okText: t("manualBackups.action.trash"),
       okButtonProps: { danger: true },
-      cancelText: "取消",
+      cancelText: t("common.action.cancel"),
       onOk: async () => {
         setBatchRemoving(true);
         try {
@@ -125,9 +129,9 @@ export default function ManualBackupsCard() {
           const done = results.filter((result) => result.status === "fulfilled").length;
           const failed = results.length - done;
           if (failed > 0) {
-            message.warning(`已移除 ${done} 份，${failed} 份移除失败`);
+            message.warning(t("manualBackups.batch.partial", { done, failed }));
           } else {
-            message.success(`已把 ${done} 份备份移到本地数据目录下的回收目录`);
+            message.success(t("manualBackups.batch.done", { count: done }));
           }
           await load();
         } finally {
@@ -149,19 +153,20 @@ export default function ManualBackupsCard() {
   };
 
   // 右键菜单：查看态提供「批量选择」入口；多选模式下收起（退出在操作条上）。
+  // 菜单项在组件体内构造，`t()` 可以安全直调（模块作用域里调会把语言固定住）。
   const contextItems: RowMenuItem[] = selecting
     ? []
     : [
         {
           key: "batch_select",
-          label: "批量选择",
+          label: t("common.action.batchSelect"),
           onClick: () => setSelecting(true),
         },
       ];
 
   return (
     <Card
-      title="手动备份"
+      title={t("manualBackups.title")}
       className="settings-card manual-backups-card"
       extra={
         <Button
@@ -169,7 +174,7 @@ export default function ManualBackupsCard() {
           type="text"
           icon={<ReloadOutlined />}
           onClick={() => void load()}
-          aria-label="刷新手动备份列表"
+          aria-label={t("manualBackups.refresh.aria")}
         />
       }
     >
@@ -184,22 +189,19 @@ export default function ManualBackupsCard() {
               type="secondary"
               style={{ marginBottom: 0, flex: 1, minWidth: 240 }}
             >
-              这里是迁移或手工备份留在 backups/ 目录里的数据库快照。不会自动清理； 确认后移除到
-              本地数据目录下的回收目录，需要时还能找回。
+              {t("manualBackups.intro")}
             </Typography.Paragraph>
             {selecting && selectedNames.length > 0 && (
               <Space size={8}>
                 <Button danger loading={batchRemoving} onClick={confirmBatchRemove}>
-                  移除所选
+                  {t("manualBackups.action.removeSelected")}
                 </Button>
-                <Button onClick={exitSelecting}>取消</Button>
+                <Button onClick={exitSelecting}>{t("common.action.cancel")}</Button>
               </Space>
             )}
           </Flex>
           {items.length === 0 ? (
-            <Typography.Text type="secondary">
-              暂无手动备份快照。数据库升级前会自动在这里留一份快照。
-            </Typography.Text>
+            <Typography.Text type="secondary">{t("manualBackups.empty")}</Typography.Text>
           ) : (
             <RowContextMenu items={contextItems}>
               <Listy
@@ -220,7 +222,7 @@ export default function ManualBackupsCard() {
                                   items: [
                                     {
                                       key: "remove",
-                                      label: "移除",
+                                      label: t("manualBackups.action.remove"),
                                       icon: <DeleteOutlined />,
                                       danger: true,
                                       onClick: () => confirmDelete(item),
@@ -232,7 +234,7 @@ export default function ManualBackupsCard() {
                                   type="text"
                                   size="small"
                                   icon={<MoreOutlined />}
-                                  aria-label={`备份 ${item.name} 的更多操作`}
+                                  aria-label={t("manualBackups.more.aria", { name: item.name })}
                                 />
                               </Dropdown>,
                             ]
@@ -245,7 +247,7 @@ export default function ManualBackupsCard() {
                             <Checkbox
                               checked={selected}
                               disabled={batchRemoving}
-                              aria-label={`选择备份 ${item.name}`}
+                              aria-label={t("manualBackups.select.aria", { name: item.name })}
                               onChange={(event) => toggleSelected(item.name, event.target.checked)}
                             />
                           ) : undefined
@@ -280,7 +282,7 @@ function trashed_count_note(count: number) {
       style={{ marginTop: 8 }}
       type="info"
       showIcon
-      title={`本地数据目录下的回收目录里还有 ${count} 份已移除的快照，确认不要了可以在文件管理器里删除。`}
+      title={t("manualBackups.trashNote", { count })}
     />
   );
 }

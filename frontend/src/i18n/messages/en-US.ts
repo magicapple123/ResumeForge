@@ -77,6 +77,7 @@ import applySettings from "./en-US.applySettings";
 import searchCard from "./en-US.searchCard";
 import interviewReview from "./en-US.interviewReview";
 import resumeSuggestions from "./en-US.resumeSuggestions";
+import manualBackups from "./en-US.manualBackups";
 
 const enUS = {
   ...core,
@@ -155,6 +156,7 @@ const enUS = {
   ...searchCard,
   ...interviewReview,
   ...resumeSuggestions,
+  ...manualBackups,
 } as const satisfies Record<keyof ZhCNMessages, string>;
 
 export default enUS;

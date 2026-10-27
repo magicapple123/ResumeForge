@@ -85,6 +85,7 @@ import applySettings from "./zh-CN.applySettings";
 import searchCard from "./zh-CN.searchCard";
 import interviewReview from "./zh-CN.interviewReview";
 import resumeSuggestions from "./zh-CN.resumeSuggestions";
+import manualBackups from "./zh-CN.manualBackups";
 
 const namespaces = {
   /** 简历制作台（2026-10-23）。 */
@@ -218,6 +219,8 @@ const namespaces = {
   ...interviewReview,
   /** 岗位化修改建议弹窗（2026-10-27）。 */
   ...resumeSuggestions,
+  /** 设置页「手动备份」卡片（2026-10-27）。 */
+  ...manualBackups,
 } as const;
 
 export default namespaces;
