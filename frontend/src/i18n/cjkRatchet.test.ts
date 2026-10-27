@@ -329,3 +329,25 @@ describe("基线比较的边界", () => {
     ]);
   });
 });
+
+/**
+ * 只读报告：打印当前总量与最大的 20 个文件。
+ *
+ * 用途是给**迁移批次收尾**用——把 baseline 的数字对准真实值，而不是靠猜。
+ * 只在 `CJK_BASELINE_WRITE=1` 时执行；不写文件，所以不受"不能登记新文案"的限制。
+ * 用法：`CJK_BASELINE_WRITE=1 npx vitest run src/i18n/cjkRatchet -t 打印`
+ */
+it("打印当前中文计数（只读，不写文件）", () => {
+  if (!WRITE_MODE) return;
+  const current = scanTree(SRC_ROOT, "src");
+  // eslint-disable-next-line no-console
+  console.log(`[i18n] total=${current.total}`);
+  const rows = Object.entries(current.files)
+    .filter(([, count]) => count > 0)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 20);
+  for (const [file, count] of rows) {
+    // eslint-disable-next-line no-console
+    console.log(`[i18n] ${count}	${file}`);
+  }
+});
