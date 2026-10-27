@@ -90,12 +90,12 @@ export default function ResumeDetailFooter({
       {editorBlocked ? (
         <Tooltip title={t("workbench.editor.blocked")}>
           <Button block icon={<EditOutlined />} disabled onClick={onOpenEditor}>
-            手动调整
+            {t("resume.footer.edit")}
           </Button>
         </Tooltip>
       ) : (
         <Button block icon={<EditOutlined />} onClick={onOpenEditor}>
-          手动调整
+          {t("resume.footer.edit")}
         </Button>
       )}
       <Button block icon={<ZoomInOutlined />} onClick={onOpenZoom}>
@@ -103,27 +103,29 @@ export default function ResumeDetailFooter({
       </Button>
       {showRevise && (
         <Button block icon={<ThunderboltOutlined />} onClick={onOpenRevise}>
-          AI 修改 / 重新生成
+          {t("resume.footer.revise")}
         </Button>
       )}
       <Button block icon={<BulbOutlined />} disabled={jobId === null} onClick={onOpenSuggestions}>
-        {suggestionsGenerated ? "查看岗位优化建议" : "生成岗位优化建议"}
+        {suggestionsGenerated
+          ? t("resume.footer.suggestionsView")
+          : t("resume.footer.suggestionsGenerate")}
       </Button>
       <Button block icon={<FolderOpenOutlined />} disabled={jobId === null} onClick={onOpenJob}>
-        查看对应岗位
+        {t("resume.footer.openJob")}
       </Button>
       {/* 最后一行：左边三个次动作与右边的「取消 / 保存 / 导出」**同一行**。
           `.resume-detail-footer-tail` 用 subgrid 复用上面的列，所以左边三个按钮
           仍与上排按钮逐列对齐；右侧动作按内容宽度、靠右收尾（不占满列）。 */}
       <div className="resume-detail-footer-tail">
         <Button block icon={<MessageOutlined />} onClick={onOpenAssistant}>
-          咨询求职助手
+          {t("resume.footer.assistant")}
         </Button>
         <Button block icon={<SafetyCertificateOutlined />} onClick={onOpenQuality}>
-          质量检测
+          {t("resume.footer.quality")}
         </Button>
         <Button block icon={<ShareAltOutlined />} onClick={onOpenSharePackage}>
-          离线分享
+          {t("resume.footer.share")}
         </Button>
         {/* 两种形态（D8）：语义不同，不能统一成一种。
           - **没有待确认改动**：导出是"一排动作里的终点"，落右下角最顺手（`-2 / -1`）。
