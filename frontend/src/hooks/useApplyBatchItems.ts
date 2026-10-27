@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { listRecordBatchItems } from "../api/apply";
+import { t } from "../i18n";
 import { BATCH_ITEM_PAGE_SIZE, type BatchItemsState } from "../types/applyBatchItems";
 import type { ApplyRecordBatch, Page } from "../types";
 
@@ -65,7 +66,7 @@ export function useApplyBatchItems(
         })
         .catch((error: unknown) => {
           if (!isCurrent()) return;
-          onError(error instanceof Error ? error.message : "加载批次明细失败");
+          onError(error instanceof Error ? error.message : t("hooksUi.batchItems.error.load"));
           setCached((previous) => ({
             ...previous,
             [batchId]: {
