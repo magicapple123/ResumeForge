@@ -13,6 +13,8 @@ import { Collapse, Image, Tag, Tooltip, Typography } from "antd";
 import { memo, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import type { AssistantAttachment, AssistantSource, AssistantSourceNumber } from "../../../types";
+import { t } from "../../../i18n";
+import { useLocale } from "../../../i18n/i18nContext";
 import { MessageToolCalls } from "./MessageToolCalls";
 
 import {
@@ -207,6 +209,7 @@ export function MessageAttachments({
     AssistantAttachment | { name: string; kind: "text" | "image" | "document"; data: string }
   >;
 }) {
+  useLocale();
   if (!attachments.length) return null;
   const notes = attachments.flatMap((attachment) =>
     "notes" in attachment ? attachment.notes : [],
@@ -238,7 +241,11 @@ export function MessageAttachments({
           </Tooltip>
         );
       })}
-      {notes.length > 0 && <span className="assistant-attachment-notes">{notes.join("；")}</span>}
+      {notes.length > 0 && (
+        <span className="assistant-attachment-notes">
+          {notes.join(t("assistantUi.attachments.notesSeparator"))}
+        </span>
+      )}
     </div>
   );
 }
@@ -265,6 +272,7 @@ export function MessageReasoning({
   /** 正在流式思考时为 true：标题旁亮脉冲点，思考结束后停（A2）。 */
   active?: boolean;
 }) {
+  useLocale();
   if (!reasoning || !reasoning.trim()) return null;
   return (
     <Collapse
@@ -275,8 +283,11 @@ export function MessageReasoning({
         {
           key: "reasoning",
           label: (
-            <span className="assistant-reasoning-label" aria-label="思考过程">
-              思考过程
+            <span
+              className="assistant-reasoning-label"
+              aria-label={t("assistantUi.reasoning.title")}
+            >
+              {t("assistantUi.reasoning.title")}
               {active && <span className="assistant-reasoning-dot" aria-hidden="true" />}
             </span>
           ),
@@ -287,7 +298,7 @@ export function MessageReasoning({
               </div>
               {truncated && (
                 <Typography.Text type="secondary" className="assistant-reasoning-truncated">
-                  思考过程过长，这里只保留了前一部分。
+                  {t("assistantUi.reasoning.truncated")}
                 </Typography.Text>
               )}
             </div>
@@ -299,6 +310,7 @@ export function MessageReasoning({
 }
 
 export function MessageSources({ sources }: { sources: AssistantSource[] }) {
+  useLocale();
   if (!sources.length) return null;
   return (
     <Collapse
@@ -307,7 +319,7 @@ export function MessageSources({ sources }: { sources: AssistantSource[] }) {
       items={[
         {
           key: "sources",
-          label: `参考来源（${sources.length}）`,
+          label: t("assistantUi.sources.header", { count: sources.length }),
           children: (
             <ol>
               {sources.map((source) => (
