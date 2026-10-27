@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 import type { LayoutMeasure } from "../../utils/resumeLayoutMeasure";
+import type { MessageKey } from "../../i18n";
 
 export const A4_WIDTH_PX = 794;
 export const A4_HEIGHT_PX = 1123;
@@ -34,6 +35,9 @@ export const MAX_FIT_SCALE_DEFAULT = 1;
 export const PROBE_STYLE_ID = "resume-fit-probe";
 export const LIVE_PROBE_STYLE_ID = "resume-font-live-probe";
 
+/** 多页视图的近似分页说明（渲染处 `t(APPROXIMATE_PAGINATION_NOTE_KEY)`）。 */
+export const APPROXIMATE_PAGINATION_NOTE_KEY: MessageKey = "preview.canvas.note.approximate";
+
 /**
  * 1 页上限时，溢出的内容要不要再向右排成第 2 列？
  *
@@ -43,22 +47,21 @@ export const LIVE_PROBE_STYLE_ID = "resume-font-live-probe";
  *
  * 选 2 / 3 页时不受这个开关影响：多页本来就是横向并排——用户 2026-10-20 再次确认
  * 要保留这种"几张 A4 并排"的形态，不接受上下叠。
+ *
+ * 这段行为对应的提示文案是 `preview.canvas.note.overflow`（渲染处 `t(OVERFLOW_NOTE_KEY)`）。
  */
-export const APPROXIMATE_PAGINATION_NOTE =
-  "多页视图为「按 A4 高度切分的近似分页」，真实分页以「浏览器打印 / 下载 PDF」为准。";
-
-/** 溢出内容不显示时（1 页上限）的说明。 */
-export const OVERFLOW_NOTE = "超出上限的部分不会显示——先收紧排版或增加页数才能看全。";
+export const OVERFLOW_NOTE_KEY: MessageKey = "preview.canvas.note.overflow";
 
 /**
- * 精确预览的溢出说明：比 `OVERFLOW_NOTE` 多一句"不自动缩小"。
+ * 精确预览的溢出说明：比草稿侧多一句"不自动缩小"（整句，与 `preview.canvas.overflowBody`
+ * 共用同一段前言）。
  *
  * **不要在这里另写一份后果句**：精确口径与草稿口径必须说同一句话（"先收紧排版或增加
  * 页数"），只是精确侧要先补上"字号线距页边距按你设的值原样渲染、不会自动缩小"这条事实。
  * 2026-10-22 就是这条尾巴各写了一份，常量里改成「排版」之后精确预览还留着「版式」，
  * 同一个界面上两份互相打架的说明。
  */
-export const EXACT_OVERFLOW_NOTE = `字号、行距、页边距都按你设定的值原样渲染，不会自动缩小；${OVERFLOW_NOTE}`; // i18n-ok: 前半句是从 ExactPreviewPanel 内联副本原样搬来的既有文案（本轮修「版式→排版」时收敛到常量），不是新增文案
+export const EXACT_OVERFLOW_NOTE_KEY: MessageKey = "preview.exact.overflowNote";
 
 export interface AvailableSpace {
   width: number;
