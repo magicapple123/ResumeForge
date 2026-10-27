@@ -62,7 +62,7 @@ export default function LineHeightControl({
   customized,
   restore,
   disabled = false,
-  defaultHint = "随模板",
+  defaultHint = t("resume.measure.hintTemplate"),
   onChange,
   onProbe,
 }: Props) {
@@ -123,12 +123,12 @@ export default function LineHeightControl({
           （`.resume-measure-*` 的栅格约束依赖这个层级）。
           标签在行首、气泡默认向上弹，不会像 ± 按钮那样盖住同排的滑块。
           单击刻意不重置（误点代价是丢掉手调的行距），所以键盘侧给的是 Enter / 空格。 */}
-      <Tooltip title="双击或按回车恢复默认行距">
+      <Tooltip title={t("resume.lineHeight.resetTooltip")}>
         <span
           className="resume-measure-label"
           role="button"
           tabIndex={0}
-          aria-label="行距（双击或按回车恢复默认）"
+          aria-label={t("resume.lineHeight.resetLabel")}
           onDoubleClick={reset}
           onKeyDown={(event) => {
             // 只接管 Enter / 空格：其它按键必须留给滑块的既有键盘行为。
@@ -137,7 +137,7 @@ export default function LineHeightControl({
             reset();
           }}
         >
-          行距
+          {t("resume.lineHeight.label")}
         </span>
       </Tooltip>
       <Space size={2} align="center">
@@ -145,7 +145,7 @@ export default function LineHeightControl({
           size="small"
           type="text"
           icon={<MinusOutlined />}
-          aria-label="减小行距"
+          aria-label={t("resume.lineHeight.decrease")}
           disabled={disabled || shown <= LINE_HEIGHT_MIN}
           onClick={() => commit(shown - LINE_HEIGHT_STEP)}
         />
@@ -156,8 +156,8 @@ export default function LineHeightControl({
           step={LINE_HEIGHT_STEP}
           value={shown}
           disabled={disabled}
-          aria-label="行距（拖动调整）"
-          ariaLabelForHandle="行距"
+          aria-label={t("resume.lineHeight.sliderLabel")}
+          ariaLabelForHandle={t("resume.lineHeight.label")}
           tooltip={{ formatter: (value) => (value == null ? "" : Number(value).toFixed(2)) }}
           style={{ flex: "1 1 70px", minWidth: 56, margin: "0 2px" }}
           onChange={commit}
@@ -166,7 +166,7 @@ export default function LineHeightControl({
           size="small"
           type="text"
           icon={<PlusOutlined />}
-          aria-label="增大行距"
+          aria-label={t("resume.lineHeight.increase")}
           disabled={disabled || shown >= LINE_HEIGHT_MAX}
           onClick={() => commit(shown + LINE_HEIGHT_STEP)}
         />
