@@ -2,6 +2,7 @@
 /** 多格式导出与脱敏的类型（R-16 / R-17）。枚举字符串与后端逐字一致。 */
 import type { ResumeFontScale, ResumeLanguage } from "./resume";
 import type { ResumeFormatConfig } from "./resumeFormat";
+import type { MessageKey } from "../i18n";
 
 /** 导出格式（与后端 ``ExportFormat`` 逐字一致）。 */
 export type ExportFormat = "json" | "md" | "html" | "pdf" | "docx" | "txt";
@@ -77,35 +78,32 @@ export type LocalExportFormat = "png";
 export type ExportUiFormat = ExportFormat | LocalExportFormat;
 
 /** 可选的导出格式（顺序即「导出选项」里的展示顺序）。 */
-export const EXPORT_FORMATS: { value: ExportFormat; label: string }[] = [
-  { value: "pdf", label: "PDF" },
-  { value: "docx", label: "Word" },
-  { value: "html", label: "HTML" },
-  { value: "md", label: "Markdown" },
-  { value: "txt", label: "纯文本" },
-  { value: "json", label: "JSON" },
+export const EXPORT_FORMATS: { value: ExportFormat; labelKey: MessageKey }[] = [
+  { value: "pdf", labelKey: "exportPanel.format.pdf" },
+  { value: "docx", labelKey: "exportPanel.format.docx" },
+  { value: "html", labelKey: "exportPanel.format.html" },
+  { value: "md", labelKey: "exportPanel.format.md" },
+  { value: "txt", labelKey: "exportPanel.format.txt" },
+  { value: "json", labelKey: "exportPanel.format.json" },
 ];
 
 /** 导出面板的完整格式清单 = 六种后端格式 + 前端转出的图片（不重复抄一遍标签）。 */
-export const EXPORT_FORMAT_OPTIONS: { value: ExportUiFormat; label: string }[] = [
+export const EXPORT_FORMAT_OPTIONS: { value: ExportUiFormat; labelKey: MessageKey }[] = [
   ...EXPORT_FORMATS,
-  { value: "png", label: "图片（PNG）" },
+  { value: "png", labelKey: "exportPanel.format.png" },
 ];
 
-/** 图片格式的定位说明：一句话讲清"什么时候用图片、什么时候必须用 PDF"。 */
-export const PNG_FORMAT_NOTE = "图片用于必须上传图片的投递平台；需要机器筛选（ATS）时请用 PDF。";
-
 /** 脱敏范围的可配置项（与后端字段一一对应，label 用于勾选界面）。 */
-export const REDACTION_FIELDS: { key: keyof RedactionOptions; label: string }[] = [
-  { key: "mask_name", label: "姓名" },
-  { key: "mask_phone", label: "手机" },
-  { key: "mask_email", label: "邮箱" },
-  { key: "mask_github", label: "GitHub" },
-  { key: "mask_website", label: "个人主页" },
-  { key: "mask_company", label: "公司" },
-  { key: "mask_school", label: "学校" },
-  { key: "mask_project", label: "项目" },
-  { key: "mask_product", label: "产品名（正文）" },
+export const REDACTION_FIELDS: { key: keyof RedactionOptions; labelKey: MessageKey }[] = [
+  { key: "mask_name", labelKey: "exportPanel.redact.name" },
+  { key: "mask_phone", labelKey: "exportPanel.redact.phone" },
+  { key: "mask_email", labelKey: "exportPanel.redact.email" },
+  { key: "mask_github", labelKey: "exportPanel.redact.github" },
+  { key: "mask_website", labelKey: "exportPanel.redact.website" },
+  { key: "mask_company", labelKey: "exportPanel.redact.company" },
+  { key: "mask_school", labelKey: "exportPanel.redact.school" },
+  { key: "mask_project", labelKey: "exportPanel.redact.project" },
+  { key: "mask_product", labelKey: "exportPanel.redact.product" },
 ];
 
 /** 默认遮罩可直接识别身份的四项（与后端默认值一致）。 */

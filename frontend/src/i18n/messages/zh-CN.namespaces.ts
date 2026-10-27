@@ -42,6 +42,7 @@ import workbench from "./zh-CN.workbench";
 import webformGroups from "./zh-CN.webformGroups";
 import webformFields from "./zh-CN.webformFields";
 import settingsPage from "./zh-CN.settingsPage";
+import exportPanel from "./zh-CN.exportPanel";
 
 const namespaces = {
   /** 简历制作台（2026-10-23）。 */
@@ -112,6 +113,7 @@ const namespaces = {
   ...webformGroups,
   ...webformFields,
   ...settingsPage,
+  ...exportPanel,
 } as const;
 
 export default namespaces;

@@ -236,7 +236,7 @@ export default function SharePackageModal({ recordId, open, onClose, onLocateAnn
                   setRedactOptions((prev) => ({ ...prev, [field.key]: event.target.checked }))
                 }
               >
-                {field.label}
+                {t(field.labelKey)}
               </Checkbox>
             ))}
           </div>

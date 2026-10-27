@@ -10,13 +10,14 @@ import type { ResumeFormatConfig } from "../types/resumeFormat";
 import {
   DEFAULT_REDACTION_OPTIONS,
   EXPORT_FORMAT_OPTIONS,
-  PNG_FORMAT_NOTE,
   REDACTION_FIELDS,
   type ExportFormat,
   type ExportRequest,
   type ExportUiFormat,
   type RedactionOptions,
 } from "../types/export";
+import { t } from "../i18n";
+import { useLocale } from "../i18n/i18nContext";
 import { downloadBlob, printHtml } from "../utils/download";
 
 interface Props {
@@ -57,6 +58,8 @@ export default function ExportOptionsModal({
   onClose,
 }: Props) {
   const { message } = App.useApp();
+  // 本面板用模块级 t()：必须订阅语言变化。
+  useLocale();
   // 「图片（PNG）」是前端本地格式：它不在后端枚举里，勾选后请求的仍是 PDF。
   const [formats, setFormats] = useState<ExportUiFormat[]>(["pdf"]);
   const [watermarkEnabled, setWatermarkEnabled] = useState(false);
@@ -169,20 +172,22 @@ export default function ExportOptionsModal({
 
     downloadBlob(outcome.blob, outcome.filename);
     if (outcome.pages > 1) {
-      message.info(`共 ${outcome.pages} 页，已打包成 ${outcome.filename}`);
+      message.info(
+        t("exportPanel.toast.packDone", { pages: outcome.pages, filename: outcome.filename }),
+      );
     }
     return "done";
   };
 
   const exportAll = async () => {
     if (formats.length === 0) {
-      message.warning("请至少选择一种导出格式");
+      message.warning(t("exportPanel.toast.needFormat"));
       return;
     }
     if (exporting) return;
     // 图片是从服务端 PDF 转出来的：没有服务端 PDF 就没有图片可转，先别让用户白等。
     if (formats.includes("png") && !pdfDirectAvailable) {
-      message.warning("系统里没有找到中文字体，暂时无法生成图片：请先用「浏览器打印」导出 PDF。");
+      message.warning(t("exportPanel.font.missingImage"));
       return;
     }
     setExporting(true);
@@ -201,17 +206,21 @@ export default function ExportOptionsModal({
         if (result === null) return; // 用户选择先去改简历
         downloadBlob(result.blob, result.filename);
         if (result.savedTo) {
-          message.success(`已同时保存到 ${result.savedTo}`);
+          message.success(t("exportPanel.toast.savedBoth", { path: result.savedTo }));
         }
         if (result.pages && result.pageLimit && result.pages > result.pageLimit) {
           message.warning(
-            `「${format}」共 ${result.pages} 页，超过所选 ${result.pageLimit} 页上限。`,
+            t("exportPanel.toast.overLimit", {
+              format,
+              pages: result.pages,
+              limit: result.pageLimit,
+            }),
           );
         }
       }
-      message.success("已开始导出");
+      message.success(t("exportPanel.toast.started"));
     } catch (err) {
-      message.error(err instanceof Error ? err.message : "导出失败");
+      message.error(err instanceof Error ? err.message : t("exportPanel.toast.failed"));
     } finally {
       setExporting(false);
     }
@@ -234,20 +243,21 @@ export default function ExportOptionsModal({
       if (desktopPrint) {
         const outcome = await desktopPrint({
           html,
-          suggestedName: `${recordId}-简历.pdf`,
+          suggestedName: t("exportPanel.fileName", { record: recordId }),
         });
-        if (outcome?.saved) message.success(`已保存到 ${outcome.path}`);
+        if (outcome?.saved)
+          message.success(t("exportPanel.toast.savedTo", { path: outcome.path ?? "" }));
         return;
       }
       printHtml(html);
     } catch (err) {
-      message.error(err instanceof Error ? err.message : "打开打印窗口失败");
+      message.error(err instanceof Error ? err.message : t("exportPanel.toast.printFailed"));
     }
   };
 
   return (
     <Modal
-      title="导出"
+      title={t("exportPanel.title")}
       open={open}
       onCancel={onClose}
       width="min(520px, 92vw)"
@@ -259,13 +269,13 @@ export default function ExportOptionsModal({
           icon={<PrinterOutlined />}
           onClick={() => void printResume()}
         >
-          浏览器打印
+          {t("exportPanel.action.print")}
         </Button>,
         <Button key="cancel" onClick={onClose}>
-          取消
+          {t("common.action.cancel")}
         </Button>,
         <Button key="ok" type="primary" loading={exporting} onClick={() => void exportAll()}>
-          导出
+          {t("export.action.export")}
         </Button>,
       ]}
     >
@@ -274,26 +284,26 @@ export default function ExportOptionsModal({
           <Alert
             type="warning"
             showIcon
-            title="简历里还有未完成标记"
+            title={t("export.incomplete.title")}
             description={incompleteAsk.message}
             action={
               <Space size={8}>
                 <Button size="small" onClick={() => answerIncomplete(false)}>
-                  我去改简历
+                  {t("export.incomplete.dismiss")}
                 </Button>
                 <Button size="small" type="primary" onClick={() => answerIncomplete(true)}>
-                  仍要导出草稿
+                  {t("export.incomplete.action")}
                 </Button>
               </Space>
             }
           />
         ) : null}
         <div>
-          <Typography.Text strong>格式</Typography.Text>
+          <Typography.Text strong>{t("exportPanel.format.title")}</Typography.Text>
           <div style={{ marginTop: 8 }}>
             <Checkbox.Group
               options={EXPORT_FORMAT_OPTIONS.map((item) => ({
-                label: item.label,
+                label: t(item.labelKey),
                 value: item.value,
               }))}
               value={formats}
@@ -303,19 +313,22 @@ export default function ExportOptionsModal({
           <div style={{ marginTop: 8 }}>
             <Space>
               {/* 照片是"导出什么"，不是"长什么样"：它不参与预览渲染，所以归「格式」。 */}
-              <Typography.Text>包含照片</Typography.Text>
-              <Switch checked={includePhoto} onChange={setIncludePhoto} aria-label="包含照片" />
+              <Typography.Text>{t("exportPanel.format.includePhoto")}</Typography.Text>
+              <Switch
+                checked={includePhoto}
+                onChange={setIncludePhoto}
+                aria-label={t("exportPanel.format.includePhoto")}
+              />
             </Space>
           </div>
           <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-            PDF 与 Word 由服务端排版引擎生成，保证文字可提取；自编 HTML 的复杂版式请在浏览器中打开
-            HTML 文件后打印导出。
+            {t("exportPanel.format.pdfNote")}
           </Typography.Text>
           {formats.includes("png") && (
             <div style={{ marginTop: 6 }}>
               <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                {PNG_FORMAT_NOTE}
-                图片由同一份 PDF 逐页转出（300dpi），多页会打成一个 zip。
+                {t("exportPanel.format.pngHint")}
+                {t("exportPanel.format.pngNote")}
               </Typography.Text>
             </div>
           )}
@@ -323,17 +336,17 @@ export default function ExportOptionsModal({
 
         <div>
           <Space>
-            <Typography.Text strong>水印</Typography.Text>
+            <Typography.Text strong>{t("exportPanel.watermark.title")}</Typography.Text>
             <Switch
               checked={watermarkEnabled}
               onChange={setWatermarkEnabled}
-              aria-label="开启水印"
+              aria-label={t("exportPanel.watermark.aria")}
             />
           </Space>
           {watermarkEnabled && (
             <Input
               style={{ marginTop: 8 }}
-              placeholder="水印文案，例如：内部使用"
+              placeholder={t("exportPanel.watermark.placeholder")}
               value={watermark}
               onChange={(event) => setWatermark(event.target.value)}
             />
@@ -342,13 +355,20 @@ export default function ExportOptionsModal({
 
         <div>
           <Space>
-            <Typography.Text strong>脱敏</Typography.Text>
-            <Switch checked={redact} onChange={setRedact} aria-label="开启脱敏" />
+            <Typography.Text strong>{t("exportPanel.redact.title")}</Typography.Text>
+            <Switch
+              checked={redact}
+              onChange={setRedact}
+              aria-label={t("exportPanel.redact.aria")}
+            />
           </Space>
           {redact && (
             <div style={{ marginTop: 8 }}>
               <Checkbox.Group
-                options={REDACTION_FIELDS.map((item) => ({ label: item.label, value: item.key }))}
+                options={REDACTION_FIELDS.map((item) => ({
+                  label: t(item.labelKey),
+                  value: item.key,
+                }))}
                 value={REDACTION_FIELDS.filter((item) => redactOptions[item.key]).map(
                   (item) => item.key,
                 )}
@@ -367,7 +387,7 @@ export default function ExportOptionsModal({
 
         {!pdfDirectAvailable && (
           <Typography.Text type="warning" style={{ fontSize: 12 }}>
-            系统里没有找到中文字体，PDF 需要走「浏览器打印」生成。
+            {t("exportPanel.font.missingPdf")}
           </Typography.Text>
         )}
       </Space>

@@ -10,6 +10,8 @@ import {
   type RedactionOptions,
 } from "../types/export";
 import { downloadBlob } from "../utils/download";
+import { t } from "../i18n";
+import { useLocale } from "../i18n/i18nContext";
 
 interface Props {
   recordId: number;
@@ -19,6 +21,8 @@ interface Props {
 
 export default function RedactionModal({ recordId, open, onClose }: Props) {
   const { message } = App.useApp();
+  // 本弹窗用模块级 t() 取文案：必须订阅语言变化。
+  useLocale();
   const [options, setOptions] = useState<RedactionOptions>(DEFAULT_REDACTION_OPTIONS);
   const [preview, setPreview] = useState<ResumeContent | null>(null);
   const [loading, setLoading] = useState(false);
@@ -78,7 +82,7 @@ export default function RedactionModal({ recordId, open, onClose }: Props) {
                 checked={options[field.key]}
                 onChange={(event) => setField(field.key, event.target.checked)}
               >
-                {field.label}
+                {t(field.labelKey)}
               </Checkbox>
             ))}
           </div>
