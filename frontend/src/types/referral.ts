@@ -4,13 +4,6 @@
 export const REFERRAL_STATUSES = ["active", "submitted", "closed", "invalid"] as const;
 export type ReferralStatus = (typeof REFERRAL_STATUSES)[number];
 
-export const REFERRAL_STATUS_LABELS: Record<ReferralStatus, string> = {
-  active: "已联系",
-  submitted: "已提交",
-  closed: "已关闭",
-  invalid: "无效",
-};
-
 /** 状态分色（antd Tag color）：active=蓝 / submitted=绿 / closed=灰 / invalid=红。 */
 export const REFERRAL_STATUS_COLORS: Record<ReferralStatus, string> = {
   active: "blue",

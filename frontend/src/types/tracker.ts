@@ -18,16 +18,6 @@ export const TRACK_STATUSES = [
 ] as const;
 export type TrackStatus = (typeof TRACK_STATUSES)[number];
 
-export const TRACK_STATUS_LABELS: Record<TrackStatus, string> = {
-  applied: "已投递",
-  screening: "筛选中",
-  assessment: "测评/笔试",
-  interview: "面试",
-  offer: "Offer",
-  rejected: "已结束",
-  unknown: "待确认",
-};
-
 /** 漏斗主线（按推进顺序），「已结束」「待确认」不属于主线。 */
 export const FUNNEL_STATUSES: readonly TrackStatus[] = [
   "applied",
@@ -63,12 +53,6 @@ export function isActiveStatus(status: TrackStatus): boolean {
 export const TRACK_SOURCES = ["apply", "manual", "recognized"] as const;
 export type TrackSource = (typeof TRACK_SOURCES)[number];
 
-export const TRACK_SOURCE_LABELS: Record<TrackSource, string> = {
-  apply: "投递台自动记录",
-  manual: "手动添加",
-  recognized: "识别导入",
-};
-
 /**
  * 投递渠道（RF-18）：用户自选"这份工作从哪来的"，与上面的记录来源是两个维度。
  * 取值与后端 `models/tracker.py` 的 CHANNELS 逐字对应；「未知」是合法默认值。
@@ -83,24 +67,9 @@ export const TRACK_CHANNELS = [
 ] as const;
 export type TrackChannel = (typeof TRACK_CHANNELS)[number];
 
-export const TRACK_CHANNEL_LABELS: Record<TrackChannel, string> = {
-  unknown: "未知",
-  referral: "内推",
-  official_website: "官网",
-  job_platform: "招聘平台",
-  headhunter: "猎头/中介",
-  other: "其他",
-};
-
 /** 合并结论：这次识别对这条记录做了什么。 */
 export const MERGE_ACTIONS = ["created", "updated", "unchanged"] as const;
 export type MergeAction = (typeof MERGE_ACTIONS)[number];
-
-export const MERGE_ACTION_LABELS: Record<MergeAction, string> = {
-  created: "新增记录",
-  updated: "更新进度",
-  unchanged: "已是最新，未改动",
-};
 
 export const MERGE_ACTION_COLORS: Record<MergeAction, string> = {
   created: "green",

@@ -7,12 +7,6 @@ export type ExperienceSource = (typeof EXPERIENCE_SOURCES)[number];
 /** 常见面试轮次（供下拉的白名单参考，存储仍允许自由字符串）。 */
 export const EXPERIENCE_ROUND_TYPES = ["一面", "二面", "三面", "HR面", "笔试", "其他"] as const;
 
-export const EXPERIENCE_SOURCE_LABELS: Record<ExperienceSource, string> = {
-  self: "自己",
-  peer: "同行",
-  public: "公开",
-};
-
 export interface InterviewExperience {
   id: number;
   title: string;

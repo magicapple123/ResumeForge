@@ -30,7 +30,8 @@ export interface LabeledCount {
   count: number;
 }
 
-/** 只有键与计数的分桶（内推状态分布）。中文名由前端 `REFERRAL_STATUS_LABELS` 提供。 */
+/** 只有键与计数的分桶（内推状态分布）。中文名由 `i18n/enum/referral.ts` 的
+ *  `REFERRAL_STATUS_LABEL_KEYS` 映射到语言包提供。 */
 export interface KeyedCount {
   key: string;
   count: number;

@@ -7,29 +7,9 @@ export type ReminderKind = (typeof REMINDER_KINDS)[number];
 export const REMINDER_STATUSES = ["pending", "done", "dismissed"] as const;
 export type ReminderStatus = (typeof REMINDER_STATUSES)[number];
 
-export const REMINDER_KIND_LABELS: Record<ReminderKind, string> = {
-  interview: "面试",
-  assessment_deadline: "测评/笔试截止",
-  hr_reply: "催 HR 回复",
-  other: "其他",
-};
-
-export const REMINDER_STATUS_LABELS: Record<ReminderStatus, string> = {
-  pending: "待办",
-  done: "已完成",
-  dismissed: "已忽略",
-};
-
 /** 首页紧急度（与后端 services/reminder_service 唯一实现处保持一致）。 */
 export const REMINDER_URGENCIES = ["overdue", "soon", "upcoming", "later"] as const;
 export type ReminderUrgency = (typeof REMINDER_URGENCIES)[number];
-
-export const REMINDER_URGENCY_LABELS: Record<ReminderUrgency, string> = {
-  overdue: "已逾期",
-  soon: "临近",
-  upcoming: "即将",
-  later: "稍后",
-};
 
 export const REMINDER_URGENCY_COLORS: Record<ReminderUrgency, string> = {
   overdue: "red",

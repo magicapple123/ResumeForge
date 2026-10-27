@@ -20,13 +20,6 @@ export const STRONG_RESPONSIBILITY_LEVELS: readonly ResponsibilityLevel[] = [
 export const VERIFICATION_STATUSES = ["已确认", "待确认", "已过期", "不采用"] as const;
 export type VerificationStatus = (typeof VERIFICATION_STATUSES)[number];
 
-export const VERIFICATION_STATUS_HINTS: Record<VerificationStatus, string> = {
-  已确认: "可以作为事实写进正式简历",
-  待确认: "只能进草稿，必须保留【待补】占位符",
-  已过期: "内容会随时间变化，更新前不作为最新事实",
-  不采用: "保留原因供复盘，不进入对外资料",
-};
-
 export const CLAIM_CATEGORIES = [
   "教育经历",
   "实习/工作",
@@ -50,17 +43,6 @@ export const SOURCE_TYPES = [
   "other",
 ] as const;
 export type SourceType = (typeof SOURCE_TYPES)[number];
-
-export const SOURCE_TYPE_LABELS: Record<SourceType, string> = {
-  pull_request: "合并请求 / PR",
-  repository: "代码仓库",
-  document: "文档 / 报告",
-  certificate: "证书 / 证明",
-  link: "公开链接",
-  screenshot: "截图",
-  reference: "可联系的人 / 推荐人",
-  other: "其他",
-};
 
 /**
  * 未完成占位符。与后端 `PLACEHOLDER_MARKERS` 保持一致：导出终稿时命中这些标记

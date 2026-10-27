@@ -56,22 +56,9 @@ export const REHEARSE_KINDS = [
 ] as const;
 export type RehearseKind = (typeof REHEARSE_KINDS)[number];
 
-export const REHEARSE_LABELS: Record<RehearseKind, string> = {
-  variant: "变体题",
-  counterfactual: "反事实题",
-  failure: "故障题",
-  evidence: "证据题",
-  compress: "压缩表达",
-};
-
 /** 反馈策略：真实模拟默认不在每题后念判定，训练模式则立刻反馈。 */
 export const FEEDBACK_POLICIES = ["deferred", "immediate"] as const;
 export type FeedbackPolicy = (typeof FEEDBACK_POLICIES)[number];
-
-export const FEEDBACK_LABELS: Record<FeedbackPolicy, string> = {
-  deferred: "真实模拟：结束时统一给反馈",
-  immediate: "训练模式：每题后立刻反馈",
-};
 
 export interface DrillContract {
   id: number;
@@ -185,9 +172,3 @@ export interface DrillRehearsalRow extends DrillRehearsalItem {
 
 /** 可选的反馈策略与题数，界面直接用它们渲染下拉。 */
 export const DRILL_QUESTION_OPTIONS = [3, 4, 6, 8, 10] as const;
-
-export const ACTION_KIND_HINTS: Record<string, string> = {
-  补事实: "你确实做过，但没整理出细节——去把当时的决策、难点、口径补上",
-  补知识: "这块你确实还不掌握——去学",
-  降表述: "事实站不住——把简历里那句话改弱，别硬撑",
-};

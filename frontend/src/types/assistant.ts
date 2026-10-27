@@ -30,12 +30,12 @@ export type ConversationFilter = "all" | "favorite" | "archived";
  */
 export type ReasoningEffort = string;
 
-export const REASONING_EFFORT_OPTIONS: { value: ReasoningEffort; label: string }[] = [
-  { value: "", label: "默认" },
-  { value: "none", label: "关闭" },
-  { value: "low", label: "低" },
-  { value: "medium", label: "中" },
-  { value: "high", label: "高" },
+export const REASONING_EFFORT_OPTIONS: { value: ReasoningEffort }[] = [
+  { value: "" },
+  { value: "none" },
+  { value: "low" },
+  { value: "medium" },
+  { value: "high" },
 ];
 
 /** 选「自定义…」时给 Select 用的哨兵值：它不是真的档位，只是让输入框冒出来。 */
