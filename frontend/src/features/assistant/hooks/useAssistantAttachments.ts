@@ -4,6 +4,7 @@
 import { App } from "antd";
 import type { RefObject } from "react";
 import { useCallback, useRef, useState } from "react";
+import { t } from "../../../i18n";
 import {
   MAX_ATTACHMENT_BYTES,
   MAX_ATTACHMENT_COUNT,
@@ -48,19 +49,29 @@ export function useAssistantAttachments({ mountedRef }: Options) {
     async (file: File) => {
       const classification = classifyAttachment(file);
       if (!classification) {
-        message.warning("附件扩展名与文件类型不一致，或格式不受支持");
+        message.warning(t("assistantHooks.attachments.warning.unsupported"));
         return;
       }
       if (attachmentUsageRef.current.count >= MAX_ATTACHMENT_COUNT) {
-        message.warning(`每条消息最多添加 ${MAX_ATTACHMENT_COUNT} 个附件`);
+        message.warning(
+          t("assistantHooks.attachments.warning.tooMany", { count: MAX_ATTACHMENT_COUNT }),
+        );
         return;
       }
       if (file.size > MAX_ATTACHMENT_BYTES) {
-        message.warning(`单个附件不能超过 ${MAX_ATTACHMENT_BYTES / 1024 / 1024} MB`);
+        message.warning(
+          t("assistantHooks.attachments.warning.tooLarge", {
+            size: MAX_ATTACHMENT_BYTES / 1024 / 1024,
+          }),
+        );
         return;
       }
       if (attachmentUsageRef.current.bytes + file.size > MAX_TOTAL_ATTACHMENT_BYTES) {
-        message.warning(`附件总大小不能超过 ${MAX_TOTAL_ATTACHMENT_BYTES / 1024 / 1024} MB`);
+        message.warning(
+          t("assistantHooks.attachments.warning.totalTooLarge", {
+            size: MAX_TOTAL_ATTACHMENT_BYTES / 1024 / 1024,
+          }),
+        );
         return;
       }
       attachmentUsageRef.current = {
@@ -89,7 +100,9 @@ export function useAssistantAttachments({ mountedRef }: Options) {
           count: Math.max(0, attachmentUsageRef.current.count - 1),
           bytes: Math.max(0, attachmentUsageRef.current.bytes - file.size),
         };
-        message.error(error instanceof Error ? error.message : "读取附件失败");
+        message.error(
+          error instanceof Error ? error.message : t("assistantHooks.attachments.error.read"),
+        );
       } finally {
         attachmentReadsRef.current = Math.max(0, attachmentReadsRef.current - 1);
         if (mountedRef.current) setAttachmentReads((current) => Math.max(0, current - 1));
