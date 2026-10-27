@@ -18,6 +18,7 @@ import FormModal from "../common/FormModal";
 import { useFormDraft } from "../../hooks/useFormDraft";
 import { useToast } from "../../hooks/useToast";
 import { t } from "../../i18n";
+import type { MessageKey } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
 import { createClaim, updateClaim } from "../../api/claims";
 import type { Claim, ClaimPayload, ClaimSource, SourceType } from "../../types";
@@ -35,14 +36,14 @@ import {
 /**
  * 一句话讲清每个承担程度，用户不必猜"负责模块"和"主导交付"差在哪。
  *
- * i18n-ok: key 是协议值（中文枚举，直接提交后端并参与校验），翻译会写坏数据；
- * 说明文本本身待「枚举 code 化」那批统一处理。
+ * i18n-ok: 这里的**键**是协议值（中文枚举，直接提交后端并参与校验），翻译会写坏数据；
+ * 说明文字已进语言包（`claimForm.responsibility.hint.*`），渲染期用 t() 取。
  */
-const RESPONSIBILITY_HINTS: Record<string, string> = {
-  参与: "在他人安排下完成其中一部分工作",
-  负责模块: "独立负责其中一个明确模块或方向",
-  主导方案或交付: "方案由你定、交付由你推，其他人配合你",
-  项目负责人: "对整个项目的结果负责",
+const RESPONSIBILITY_HINT_KEYS: Record<string, MessageKey> = {
+  参与: "claimForm.responsibility.hint.participate",
+  负责模块: "claimForm.responsibility.hint.ownModule",
+  主导方案或交付: "claimForm.responsibility.hint.leadDelivery",
+  项目负责人: "claimForm.responsibility.hint.owner",
 };
 
 const STATUS_OPTIONS = VERIFICATION_STATUSES.map((value) => ({
@@ -52,7 +53,7 @@ const STATUS_OPTIONS = VERIFICATION_STATUSES.map((value) => ({
 
 const RESPONSIBILITY_OPTIONS = RESPONSIBILITY_LEVELS.map((value) => ({
   value,
-  label: `${value}——${RESPONSIBILITY_HINTS[value]}`,
+  hintKey: RESPONSIBILITY_HINT_KEYS[value],
 }));
 
 interface FormValues {
@@ -214,6 +215,12 @@ export default function ClaimFormModal({ open, claim, onClose, onSaved }: Props)
     }
   };
 
+  // 选项标签里的枚举值是协议值（提交后端），说明文字按当前语言取。
+  const responsibilityOptions = RESPONSIBILITY_OPTIONS.map(({ value, hintKey }) => ({
+    value,
+    label: `${value}——${t(hintKey)}`,
+  }));
+
   return (
     <FormModal
       open={open}
@@ -255,7 +262,11 @@ export default function ClaimFormModal({ open, claim, onClose, onSaved }: Props)
           <Form.Item name="title" label={t("claimForm.field.title")} className="claim-form-grow">
             <Input placeholder={t("claimForm.placeholder.title")} maxLength={200} />
           </Form.Item>
-          <Form.Item name="category" label={t("claimForm.field.category")} className="claim-form-fixed">
+          <Form.Item
+            name="category"
+            label={t("claimForm.field.category")}
+            className="claim-form-fixed"
+          >
             <Select options={CLAIM_CATEGORIES.map((value) => ({ value, label: value }))} />
           </Form.Item>
         </div>
@@ -276,7 +287,11 @@ export default function ClaimFormModal({ open, claim, onClose, onSaved }: Props)
         >
           {/* showCount 已移除（统一用 MaxLengthHint 模式）：只有顶到 8000 字上限时，
               才在输入框下方出现一行小号红字提醒。 */}
-          <HintedTextArea rows={3} maxLength={8000} placeholder={t("claimForm.placeholder.sourceFact")} />
+          <HintedTextArea
+            rows={3}
+            maxLength={8000}
+            placeholder={t("claimForm.placeholder.sourceFact")}
+          />
         </Form.Item>
 
         <Form.Item
@@ -284,14 +299,26 @@ export default function ClaimFormModal({ open, claim, onClose, onSaved }: Props)
           label={t("claimForm.field.wording")}
           extra={t("claimForm.hint.wording")}
         >
-          <Input.TextArea rows={2} maxLength={8000} placeholder={t("claimForm.placeholder.wording")} />
+          <Input.TextArea
+            rows={2}
+            maxLength={8000}
+            placeholder={t("claimForm.placeholder.wording")}
+          />
         </Form.Item>
 
         <div className="claim-form-row">
-          <Form.Item name="responsibility_level" label={t("claimForm.field.responsibility")} className="claim-form-grow">
-            <Select options={RESPONSIBILITY_OPTIONS} />
+          <Form.Item
+            name="responsibility_level"
+            label={t("claimForm.field.responsibility")}
+            className="claim-form-grow"
+          >
+            <Select options={responsibilityOptions} />
           </Form.Item>
-          <Form.Item name="verification_status" label={t("claimForm.field.verification")} className="claim-form-grow">
+          <Form.Item
+            name="verification_status"
+            label={t("claimForm.field.verification")}
+            className="claim-form-grow"
+          >
             <Select options={STATUS_OPTIONS} />
           </Form.Item>
           {/* 日期用固定宽度；DatePicker 值走 Dayjs，表单里仍存 YYYY-MM-DD 字符串（E12）。 */}
@@ -356,7 +383,10 @@ export default function ClaimFormModal({ open, claim, onClose, onSaved }: Props)
                     initialValue={false}
                     noStyle
                   >
-                    <Switch checkedChildren={t("claimForm.evidence.public")} unCheckedChildren={t("claimForm.evidence.private")} />
+                    <Switch
+                      checkedChildren={t("claimForm.evidence.public")}
+                      unCheckedChildren={t("claimForm.evidence.private")}
+                    />
                   </Form.Item>
                   <Button
                     type="text"
@@ -389,7 +419,12 @@ export default function ClaimFormModal({ open, claim, onClose, onSaved }: Props)
           >
             <Input.TextArea rows={3} />
           </Form.Item>
-          <Form.Item name="difficulties" label={t("claimForm.field.difficulties")} className="claim-form-grow" extra={t("claimForm.hint.onePerLine")}>
+          <Form.Item
+            name="difficulties"
+            label={t("claimForm.field.difficulties")}
+            className="claim-form-grow"
+            extra={t("claimForm.hint.onePerLine")}
+          >
             <Input.TextArea rows={3} />
           </Form.Item>
         </div>
@@ -407,7 +442,11 @@ export default function ClaimFormModal({ open, claim, onClose, onSaved }: Props)
           </Form.Item>
         </div>
 
-        <Form.Item name="risk_notes" label={t("claimForm.field.riskNotes")} extra={t("claimForm.hint.riskNotes")}>
+        <Form.Item
+          name="risk_notes"
+          label={t("claimForm.field.riskNotes")}
+          extra={t("claimForm.hint.riskNotes")}
+        >
           <Select
             mode="tags"
             placeholder={t("claimForm.placeholder.riskNotes")}

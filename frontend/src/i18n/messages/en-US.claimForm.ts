@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-/** 事实台账表单（与 zh-CN.claimForm.ts 一一对应）。 */
+/** Fact ledger form (mirrors zh-CN.claimForm.ts). */
 const claimForm = {
   "claimForm.title.edit": "Edit entry",
   "claimForm.title.create": "New entry",
@@ -26,6 +26,13 @@ const claimForm = {
     "The version that goes into the Resume. It must not claim more than the source fact; mark anything unverified with [TODO: what is missing].",
   "claimForm.placeholder.wording": "e.g. “built the search API and shipped it end to end”",
   "claimForm.field.responsibility": "Responsibility",
+  "claimForm.responsibility.hint.participate":
+    "Did part of the work under someone else's direction",
+  "claimForm.responsibility.hint.ownModule":
+    "Independently owned one clearly defined module or area",
+  "claimForm.responsibility.hint.leadDelivery":
+    "Set the approach and drove delivery while others supported you",
+  "claimForm.responsibility.hint.owner": "Accountable for the whole project's outcome",
   "claimForm.field.verification": "Verification",
   "claimForm.field.lastVerified": "Last verified",
   "claimForm.field.boundary": "Personal boundary",
