@@ -19,8 +19,12 @@ import { useState } from "react";
 import { getBrowserStatus, openBrowserSite, startBrowser, stopBrowser } from "../../api/apply";
 import { BROWSER_STATUS_POLL_INTERVAL_MS, useBrowserStatus } from "../../hooks/useBrowserStatus";
 import { BROWSER_STATE_META } from "../../types";
+import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 
 export default function BrowserStatusBar() {
+  // 本组件用模块级 t()：必须订阅语言变化，否则切语言后这一块不重渲染。
+  useLocale();
   const { message } = App.useApp();
   const { data, loading, error, reload, setData } = useBrowserStatus(getBrowserStatus);
   const [busy, setBusy] = useState(false);
@@ -30,9 +34,9 @@ export default function BrowserStatusBar() {
     try {
       const status = await startBrowser();
       setData(status);
-      message.success("投递专用浏览器已启动，请在弹出的窗口里扫码登录一次");
+      message.success(t("browserStatus.toast.started"));
     } catch (err) {
-      message.error(err instanceof Error ? err.message : "启动投递专用浏览器失败");
+      message.error(err instanceof Error ? err.message : t("browserStatus.error.startFailed"));
     } finally {
       setBusy(false);
     }
@@ -43,9 +47,9 @@ export default function BrowserStatusBar() {
     try {
       const status = await openBrowserSite();
       setData(status);
-      message.success("已在该窗口里打开招聘网站，请在里面扫码登录");
+      message.success(t("browserStatus.toast.siteOpened"));
     } catch (err) {
-      message.error(err instanceof Error ? err.message : "打开招聘网站失败");
+      message.error(err instanceof Error ? err.message : t("browserStatus.error.openSiteFailed"));
     } finally {
       setBusy(false);
     }
@@ -55,10 +59,10 @@ export default function BrowserStatusBar() {
     setBusy(true);
     try {
       await stopBrowser();
-      message.success("已关闭投递专用浏览器");
+      message.success(t("browserStatus.toast.stopped"));
       await reload();
     } catch (err) {
-      message.error(err instanceof Error ? err.message : "关闭投递专用浏览器失败");
+      message.error(err instanceof Error ? err.message : t("browserStatus.error.stopFailed"));
     } finally {
       setBusy(false);
     }
@@ -81,9 +85,13 @@ export default function BrowserStatusBar() {
       <Space wrap align="center" size={12}>
         <Space size={8} align="center">
           <ChromeOutlined />
-          <Typography.Text strong>投递专用浏览器</Typography.Text>
+          <Typography.Text strong>{t("browserStatus.title")}</Typography.Text>
           <Tag color={meta.color}>{meta.label}</Tag>
-          {data && <Typography.Text type="secondary">调试端口 {data.port}</Typography.Text>}
+          {data && (
+            <Typography.Text type="secondary">
+              {t("browserStatus.port", { port: data.port })}
+            </Typography.Text>
+          )}
         </Space>
         <Space wrap>
           <Button
@@ -93,13 +101,13 @@ export default function BrowserStatusBar() {
             disabled={running || busy}
             onClick={() => void handleStart()}
           >
-            启动浏览器
+            {t("browserStatus.action.start")}
           </Button>
           <Tooltip
             title={
               canOpenSite
-                ? "在这个窗口里重新打开招聘网站首页"
-                : "浏览器启动后可用；用于标签页被关掉或跳走时找回登录页"
+                ? t("browserStatus.tooltip.openSite")
+                : t("browserStatus.tooltip.openSiteDisabled")
             }
           >
             <Button
@@ -108,7 +116,7 @@ export default function BrowserStatusBar() {
               disabled={!canOpenSite || busy}
               onClick={() => void handleOpenSite()}
             >
-              打开招聘网站
+              {t("browserStatus.action.openSite")}
             </Button>
           </Tooltip>
           <Button
@@ -117,47 +125,33 @@ export default function BrowserStatusBar() {
             disabled={!canStop || busy}
             onClick={() => void handleStop()}
           >
-            关闭浏览器
+            {t("browserStatus.action.stop")}
           </Button>
           <Tooltip
-            title={
-              loading
-                ? "正在刷新；平时约每 " +
-                  (BROWSER_STATUS_POLL_INTERVAL_MS / 1000).toFixed(1) +
-                  " 秒自动检查一次"
-                : "平时约每 " +
-                  (BROWSER_STATUS_POLL_INTERVAL_MS / 1000).toFixed(1) +
-                  " 秒自动检查一次；点击立即检查"
-            }
+            title={t(
+              loading ? "browserStatus.tooltip.reload" : "browserStatus.tooltip.reloadIdle",
+              { seconds: (BROWSER_STATUS_POLL_INTERVAL_MS / 1000).toFixed(1) },
+            )}
           >
             <Button
               icon={<ReloadOutlined />}
               disabled={busy}
               onClick={() => void reload()}
-              aria-label="刷新状态"
+              aria-label={t("browserStatus.aria.reload")}
             >
-              刷新状态
+              {t("browserStatus.action.reload")}
             </Button>
           </Tooltip>
         </Space>
       </Space>
 
       <Typography.Paragraph type="secondary" className="apply-browser-hint">
-        投递与采集都在这个<Typography.Text strong>独立窗口</Typography.Text>
-        里进行（用的是专用数据目录，和你日常的浏览器互不影响）。点「启动浏览器」后，这个窗口会
-        <Typography.Text strong>直接打开招聘网站首页</Typography.Text>
-        ，请在那里扫码登录一次——登录由你自己完成，应用不保存密码、Cookie
-        或验证码；登录态由浏览器自己保留，下次启动无需重复登录。若你把标签页关掉或跳到了别处，
-        点「打开招聘网站」即可找回来，不用重启浏览器。
+        {t("browserStatus.intro")}
       </Typography.Paragraph>
 
       {adopted && (
         <Typography.Paragraph type="secondary" className="apply-browser-hint">
-          这个窗口是<Typography.Text strong>上一次运行</Typography.Text>
-          打开的，应用重启时丢掉了它的进程句柄，因此
-          <Typography.Text strong>关不掉它</Typography.Text>
-          ——应用只关自己启动的窗口，不按进程号去猜（免得误关你自己的浏览器）。直接关闭那个窗口即可，
-          <Typography.Text strong>采集与投递不受影响</Typography.Text>。
+          {t("browserStatus.adopted")}
         </Typography.Paragraph>
       )}
 
@@ -168,13 +162,18 @@ export default function BrowserStatusBar() {
       )}
       {data?.entry_url && (
         <Typography.Paragraph type="secondary" className="apply-browser-path">
-          站点入口：{data.entry_url}
+          {t("browserStatus.entry", { url: data.entry_url })}
         </Typography.Paragraph>
       )}
       {data?.browser_path && (
         <Typography.Paragraph type="secondary" className="apply-browser-path">
-          使用浏览器：
-          {data.browser_name ? `${data.browser_name}（${data.browser_path}）` : data.browser_path}
+          {t("browserStatus.browser")}
+          {data.browser_name
+            ? t("browserStatus.browserWithName", {
+                name: data.browser_name,
+                path: data.browser_path,
+              })
+            : data.browser_path}
         </Typography.Paragraph>
       )}
       {error && <Alert type="error" showIcon title={error} style={{ marginTop: 8 }} />}

@@ -63,6 +63,7 @@ import jobAnalysis from "./en-US.jobAnalysis";
 import templateImport from "./en-US.templateImport";
 import webFormRecords from "./en-US.webFormRecords";
 import claimsPage from "./en-US.claimsPage";
+import browserStatus from "./en-US.browserStatus";
 
 const enUS = {
   ...core,
@@ -127,6 +128,7 @@ const enUS = {
   ...templateImport,
   ...webFormRecords,
   ...claimsPage,
+  ...browserStatus,
 } as const satisfies Record<keyof ZhCNMessages, string>;
 
 export default enUS;

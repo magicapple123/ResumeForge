@@ -71,6 +71,7 @@ import jobAnalysis from "./zh-CN.jobAnalysis";
 import templateImport from "./zh-CN.templateImport";
 import webFormRecords from "./zh-CN.webFormRecords";
 import claimsPage from "./zh-CN.claimsPage";
+import browserStatus from "./zh-CN.browserStatus";
 
 const namespaces = {
   /** 简历制作台（2026-10-23）。 */
@@ -176,6 +177,8 @@ const namespaces = {
   ...webFormRecords,
   /** 事实台账页（2026-10-27）。 */
   ...claimsPage,
+  /** 投递专用浏览器状态条（2026-10-27）。 */
+  ...browserStatus,
 } as const;
 
 export default namespaces;
