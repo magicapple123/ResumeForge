@@ -9,13 +9,14 @@
  * 所以约定：生成类弹窗在关闭时把"用户已经离开"记下来，请求结束时如果发现人已经走了，
  * 就改用统一通知（弹窗卡片 + 提示声）告诉他结果好了，而不是对着已卸载的组件 setState。
  */
+import { t } from "../i18n";
 import { notifyTaskDone } from "./taskNotify";
 
 /** 报告一件"你没在看，但它完成了"的结果。 */
 export function announceBackgroundResult(label: string, detail?: string): void {
   notifyTaskDone({
-    title: `${label}已完成`,
-    description: detail ?? "结果已经可以查看了，回到刚才的页面即可。",
+    title: t("backgroundTasks.announce.completed", { label }),
+    description: detail ?? t("backgroundTasks.announce.completedHint"),
   });
 }
 
@@ -23,7 +24,7 @@ export function announceBackgroundResult(label: string, detail?: string): void {
 export function announceBackgroundFailure(label: string, detail?: string): void {
   notifyTaskDone({
     kind: "error",
-    title: `${label}失败`,
-    description: detail ?? "可以回到刚才的页面重试。",
+    title: t("backgroundTasks.announce.failed", { label }),
+    description: detail ?? t("backgroundTasks.announce.failedHint"),
   });
 }
