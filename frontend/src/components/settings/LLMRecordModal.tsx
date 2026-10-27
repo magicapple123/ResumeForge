@@ -261,7 +261,7 @@ export default function LLMRecordModal({
         <Form.Item
           name="api_style"
           label={t("llmRecord.field.protocol")}
-          tooltip="多数服务商（含 Claude 的 OpenAI 兼容层）走 Chat Completions，选「OpenAI 兼容」。只有要用 Claude 原生 Messages 协议（支持扩展思考、独立 system 字段）时才选 Anthropic 原生——此时 Base URL 填 https://api.anthropic.com/v1（本应用会在后面接 /messages）。"
+          tooltip={t("llmRecord.hint.protocol")}
         >
           <Select
             options={[
@@ -353,7 +353,7 @@ export default function LLMRecordModal({
                   </Tooltip>
                   {/* 这一条的行为与直觉相反（"不限制"其实取决于服务商默认值，可能比
                       手填的还小），勾选框悬停自带解释。 */}
-                  <Tooltip title="勾选后不再发送 max_tokens，由服务商决定上限。可缓解推理模型把思考过程算进输出预算、正文被挤空的问题；但它不是真的无限——部分服务商的默认值可能比手动设置的值更小。">
+                  <Tooltip title={t("llmRecord.hint.unlimited")}>
                     <Checkbox
                       checked={unlimitedTokens}
                       onChange={(event) => setUnlimitedTokens(event.target.checked)}
@@ -408,8 +408,8 @@ export default function LLMRecordModal({
             onClick={() => setAdvancedOpen((current) => !current)}
           >
             {advancedOpen
-              ? "收起高级调整"
-              : "高级调整（Top P / Top K、惩罚项、随机种子、停止词、思考参数形态）"}
+              ? t("llmRecord.action.collapseAdvanced")
+              : t("llmRecord.action.expandAdvanced")}
           </Button>
         </div>
         {advancedOpen && <AdvancedParamsSection />}
@@ -420,8 +420,11 @@ export default function LLMRecordModal({
           showIcon
           title={
             testResult.ok
-              ? `${testResult.message}（耗时 ${testResult.latency_ms}ms）`
-              : `连接失败：${testResult.message}`
+              ? t("llmRecord.test.ok", {
+                  message: testResult.message,
+                  latency: `${testResult.latency_ms}`,
+                })
+              : t("llmRecord.test.failed", { message: testResult.message })
           }
         />
       )}

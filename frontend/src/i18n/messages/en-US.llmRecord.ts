@@ -1,8 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * 模型配置记录弹窗：名称、协议、Base URL、密钥、采样参数与高级调整。
+ * Model configuration record dialog: name, protocol, Base URL, key, sampling parameters and
+ * advanced settings.
  *
- * 含多行三元的标题与错误提示留待下一批。
+ * The multi-line ternary title, the full protocol and "no limit" explanations, the advanced
+ * settings toggle and the connection test result (success with latency / failure reason) all
+ * live in this file.
  */
 const llmRecord = {
   "llmRecord.title.create": "New configuration",
@@ -16,7 +19,7 @@ const llmRecord = {
   "llmRecord.field.preset": "Quick preset (fills Base URL and model)",
   "llmRecord.field.protocol": "API protocol",
   "llmRecord.hint.protocol":
-    "Most providers (including Claude's OpenAI-compatible layer) speak Chat Completions — choose OpenAI compatible. Pick the other option only when you need Claude's native Messages API.",
+    "Most providers (including Claude's OpenAI-compatible layer) speak Chat Completions — choose OpenAI compatible. Pick Anthropic native only when you need Claude's native Messages protocol (which supports extended thinking and a separate system field); in that case set Base URL to https://api.anthropic.com/v1 (the app appends /messages).",
   "llmRecord.protocol.openai": "OpenAI compatible (Chat Completions)",
   "llmRecord.protocol.anthropic": "Anthropic native (Messages)",
   "llmRecord.required.field": "Required",
@@ -43,8 +46,13 @@ const llmRecord = {
     "Caps the tokens in a single reply. Higher costs more; too low truncates content. This is not the model's context window.",
   "llmRecord.aria.maxTokens": "About max output tokens",
   "llmRecord.hint.unlimited":
-    "When ticked, max_tokens is no longer sent and the provider decides. This helps reasoning models whose thinking eats the output budget — but it is not truly unlimited.",
+    "When ticked, max_tokens is no longer sent and the provider decides the cap. This eases the case where a reasoning model counts its thinking against the output budget and squeezes the reply empty — but it is not truly unlimited: some providers default to a value smaller than what you set by hand.",
   "llmRecord.label.unlimited": "No limit",
+  "llmRecord.action.collapseAdvanced": "Hide advanced settings",
+  "llmRecord.action.expandAdvanced":
+    "Advanced settings (Top P / Top K, penalties, seed, stop sequences, thinking parameter style)",
+  "llmRecord.test.ok": "{message} ({latency} ms)",
+  "llmRecord.test.failed": "Connection failed: {message}",
 } as const;
 
 export default llmRecord;

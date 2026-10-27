@@ -2,7 +2,8 @@
 /**
  * 模型配置记录弹窗：名称、协议、Base URL、密钥、采样参数与高级调整。
  *
- * 含多行三元的标题与错误提示留待下一批。
+ * 多行三元的标题、协议与「不限制」的完整说明、高级调整折叠头，以及连接测试结果
+ * （成功带耗时 / 失败原因）都在本文件。
  */
 const llmRecord = {
   "llmRecord.title.create": "新建配置记录",
@@ -16,7 +17,7 @@ const llmRecord = {
   "llmRecord.field.preset": "快速预设（选择后自动填充 Base URL 与模型名）",
   "llmRecord.field.protocol": "接口协议",
   "llmRecord.hint.protocol":
-    "多数服务商（含 Claude 的 OpenAI 兼容层）走 Chat Completions，选「OpenAI 兼容」。只有要用 Claude 原生 Messages 接口时才选另一项。",
+    "多数服务商（含 Claude 的 OpenAI 兼容层）走 Chat Completions，选「OpenAI 兼容」。只有要用 Claude 原生 Messages 协议（支持扩展思考、独立 system 字段）时才选 Anthropic 原生——此时 Base URL 填 https://api.anthropic.com/v1（本应用会在后面接 /messages）。",
   "llmRecord.protocol.openai": "OpenAI 兼容（Chat Completions）",
   "llmRecord.protocol.anthropic": "Anthropic 原生（Messages）",
   "llmRecord.required.field": "必填",
@@ -42,8 +43,13 @@ const llmRecord = {
     "限制模型单次回复的最大输出 Token 数。值越大可能增加费用；过小可能导致内容被截断。它不是模型的上下文长度上限。",
   "llmRecord.aria.maxTokens": "最大输出 Token 说明",
   "llmRecord.hint.unlimited":
-    "勾选后不再发送 max_tokens，由服务商决定上限。可缓解推理模型把思考过程算进输出预算、正文被挤空的问题；但它不是真的无限。",
+    "勾选后不再发送 max_tokens，由服务商决定上限。可缓解推理模型把思考过程算进输出预算、正文被挤空的问题；但它不是真的无限——部分服务商的默认值可能比手动设置的值更小。",
   "llmRecord.label.unlimited": "不限制",
+  "llmRecord.action.collapseAdvanced": "收起高级调整",
+  "llmRecord.action.expandAdvanced":
+    "高级调整（Top P / Top K、惩罚项、随机种子、停止词、思考参数形态）",
+  "llmRecord.test.ok": "{message}（耗时 {latency}ms）",
+  "llmRecord.test.failed": "连接失败：{message}",
 } as const;
 
 export default llmRecord;
