@@ -9,6 +9,8 @@
  * （「条知识」「份资料」），避免每个页面各拼一次。
  */
 import { Button } from "antd";
+import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 
 interface Props {
   count: number;
@@ -20,9 +22,10 @@ interface Props {
 }
 
 export default function BatchDeleteButton({ count, disabled = false, onDelete }: Props) {
+  useLocale();
   return (
     <Button danger disabled={disabled || count === 0 || undefined} onClick={onDelete}>
-      删除所选
+      {t("common.batchBar.deleteSelected")}
     </Button>
   );
 }
