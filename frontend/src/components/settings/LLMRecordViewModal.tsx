@@ -4,7 +4,7 @@ import { Descriptions, Modal, Tag } from "antd";
 import { t } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
 import type { LLMConfigRecord } from "../../types";
-import { API_KEY_MASK, CUSTOM_PRESET_LABEL, matchingPreset } from "./SettingsConfig";
+import { API_KEY_MASK, CUSTOM_PRESET_LABEL_KEY, matchingPreset } from "./SettingsConfig";
 
 interface Props {
   open: boolean;
@@ -52,7 +52,7 @@ export default function LLMRecordViewModal({ open, record, onClose }: Props) {
     >
       <Descriptions bordered column={1} size="small">
         <Descriptions.Item label={t("llmRecordView.field.preset")}>
-          {matchingPreset(record)?.label ?? CUSTOM_PRESET_LABEL}
+          {t(matchingPreset(record)?.labelKey ?? CUSTOM_PRESET_LABEL_KEY)}
         </Descriptions.Item>
         <Descriptions.Item label={t("llmRecordView.field.protocol")}>
           {record.api_style === "anthropic"
