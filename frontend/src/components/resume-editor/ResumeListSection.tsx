@@ -8,14 +8,10 @@ import { memo, useRef } from "react";
 import type { ReactNode } from "react";
 import { t } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
-import {
-  PROFILE_FILL_KEYS,
-  type ProfileFillItem,
-  type ProfileFillSection,
-} from "../../features/profile/profileFillOptions";
+import type { ProfileFillSection } from "../../features/profile/profileFillOptions";
 import AppendedCarrierFields from "./AppendedCarrierFields";
 import ProfileFillBar from "./ProfileFillBar";
-import { useProfileFill } from "./profileFillContext";
+import { useProfileEntryFill } from "./profileEntryFill";
 
 interface Props {
   title: string;
@@ -23,23 +19,10 @@ interface Props {
   emptyValue: Record<string, string | string[]>;
   children: (field: FormListFieldData) => ReactNode;
   /**
-   * 对应「我的资料」里的哪个模块。给了才渲染「从我的资料填入」，
+   * 对应「我的资料」里的哪个模块候选。给了才渲染条目级「从资料填入本条」，
    * 且只在宿主提供了候选（`ProfileFillProvider`）时才会出现。
    */
   fillSection?: ProfileFillSection;
-}
-
-/**
- * 「这个字段算不算空」——`fillEntry` 只往空字段里写。
- *
- * 表单里"空"有三种写法：字段根本不存在（新加的空条目里，没被填过的键就是 `undefined`）、
- * 空串、空数组（多行文本/技术栈）。三者都要认，否则"我明明没写学校，为什么填不进去"。
- */
-function isBlankValue(value: unknown): boolean {
-  if (value === undefined || value === null) return true;
-  if (typeof value === "string") return value.trim().length === 0;
-  if (Array.isArray(value)) return value.length === 0;
-  return false;
 }
 
 /**
@@ -47,9 +30,9 @@ function isBlankValue(value: unknown): boolean {
  * 而数组引用在"某一条的某个字段被改"时必然变——于是打字会把这个分区**所有**条目的所有
  * Form.Item 整天重渲染一遍（实测一条内容就是 18 个栅格列陪跑）。
  *
- * 字段区本身只依赖「第几条（field.name）」和宿主给的渲染函数（children 在分区组件
+ * 字段区本身只依赖「第几条（field.name）」和宿主给的渲染函数（`children` 在分区组件
  * 不重渲染时引用稳定），所以用身份比较把它钉住：实际变化交给各 Form.Item 自己的订阅。
- * 注意不能拿 field 对象做浅比较——Form.List 每次渲染都会新建这个对象。
+ * 注意不能拿 `field` 对象做浅比较——Form.List 每次渲染都会新建这个对象。
  */
 const EntryFields = memo(
   function EntryFields({
@@ -75,19 +58,12 @@ export default function ResumeListSection({
   fillSection,
 }: Props) {
   useLocale();
-  const fill = useProfileFill();
-  const form = Form.useFormInstance();
   const rootRef = useRef<HTMLDivElement | null>(null);
-  const current = Form.useWatch(name, form) as unknown[] | undefined;
-
-  const keyOf = fillSection ? PROFILE_FILL_KEYS[fillSection] : null;
-  // 每条自己的键：顶部追加用它算"已加入"，条目旁用它算"当前条目/已在其他条目"。
-  const entryKeys: (string | undefined)[] = keyOf ? (current ?? []).map((item) => keyOf(item)) : [];
-  const existingKeys = new Set<string>(entryKeys.filter((key): key is string => Boolean(key)));
-  const items: ProfileFillItem[] = (fillSection ? fill?.sources[fillSection] : undefined) ?? [];
+  // 任务 #9：每个条目都有「从资料填入本条」；板块级的「从我的资料追加一条」已下线。
+  const { available, items, entryKeys, fillEntry } = useProfileEntryFill(name, fillSection);
 
   /**
-   * 聚焦第 index 条的第一个输入框（新条目追加、字段填入之后都用它）。
+   * 聚焦第 index 条的第一个输入框（字段填入之后用）。
    *
    * 跳过条目头部「从资料填入本条」的搜索框（`.resume-profile-fill` 里的 `input`）：
    * 它排在 DOM 最前面，但它是**工具条**——用户刚刚才用过它，把焦点交回去等于让他
@@ -103,53 +79,13 @@ export default function ResumeListSection({
     });
   };
 
-  const appendItem = (item: ProfileFillItem) => {
-    const list = (form.getFieldValue(name) as unknown[] | undefined) ?? [];
-    // 只做加法：已有内容一条都不动，新条目追加在最后。
-    form.setFieldValue(name, [...list, item.value]);
-    fill?.onFilled();
-    // 新条目渲染出来之后再聚焦它的第一个输入框——否则用户填完还得自己再滚下去找。
-    focusEntry(list.length);
-  };
-
-  /**
-   * 把资料里的一条**填进当前这一条**的空字段。
-   *
-   * 与 `appendItem` 的分工：那个是"整条加进来"，这个是"这一条我写了一半，剩下的带过来"。
-   * 只填空字段是硬约束——用户手写过的东西一定比资料里那份更贴近目标岗位，覆盖它等于
-   * 把他刚做的编辑删掉，而界面上不会提示。
-   */
-  const fillEntry = (index: number, item: ProfileFillItem) => {
-    const list = (form.getFieldValue(name) as unknown[] | undefined) ?? [];
-    const next: Record<string, unknown> = { ...((list[index] ?? {}) as Record<string, unknown>) };
-    const source = (item.value ?? {}) as Record<string, unknown>;
-    for (const [key, value] of Object.entries(source)) {
-      if (!isBlankValue(next[key]) || isBlankValue(value)) continue;
-      // 数组要复制一份：直接把候选里的引用塞进表单，两次填写会共用同一个数组对象。
-      next[key] = Array.isArray(value) ? [...value] : value;
-    }
-    // 整表写回（而不是 `[name, index]`）：Form.List 的数组本身必须是**新引用**，
-    // 否则 `useWatch` 与列表渲染都不会认为它变了；其它条目原样带过去。
-    form.setFieldValue(
-      name,
-      list.map((entry, position) => (position === index ? next : entry)),
-    );
-    fill?.onFilled();
+  const handleFillEntry = (index: number, item: Parameters<typeof fillEntry>[1]): void => {
+    fillEntry(index, item);
     focusEntry(index);
   };
 
   return (
     <div ref={rootRef} data-resume-section={name}>
-      {fill && fillSection && (
-        <div style={{ marginBottom: 12 }}>
-          <ProfileFillBar
-            label={title}
-            items={items}
-            existingKeys={existingKeys}
-            onFill={appendItem}
-          />
-        </div>
-      )}
       <Form.List name={name}>
         {(fields, { add, remove }) => (
           <div>
@@ -182,11 +118,8 @@ export default function ResumeListSection({
                   <div style={{ fontWeight: 600, minWidth: 0, marginRight: "auto" }}>
                     {title} {index + 1}
                   </div>
-                  {/* `entryFill !== false`：岗位详情里的「自行编写」关掉条目级入口，只留
-                      模块顶部的「从我的资料追加一条」。缺省（不传）保持旧行为。 */}
-                  {fill && fillSection && fill.entryFill !== false && (
+                  {available && (
                     <ProfileFillBar
-                      variant="entry"
                       label={title}
                       items={items}
                       // 传"其它条目"用过的键：本条引用过的资料条目不必再选一次。
@@ -198,7 +131,7 @@ export default function ResumeListSection({
                         )
                       }
                       currentKey={entryKeys[index]}
-                      onFill={(item) => fillEntry(index, item)}
+                      onFill={(item) => handleFillEntry(index, item)}
                     />
                   )}
                 </div>

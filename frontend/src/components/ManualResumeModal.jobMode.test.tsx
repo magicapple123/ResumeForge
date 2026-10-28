@@ -6,9 +6,9 @@
  * 跟着当前组走"（两种模式共用）；这里只钉**岗位模式**的差异，以及两种模式不互相污染：
  *
  * - 初始内容同样来自当前组投影（F9/R1 起不再是"只预填基本信息"），求职意向覆盖成岗位名；
- * - 每个条目卡上不出现「从资料填入本条」（岗位模式关掉条目级入口），但模块顶部的
- *   「从我的资料追加一条」还在——需要哪条加哪条；
- * - `job == null` 时条目级入口必须仍然存在（P4 行为不能因为岗位模式一起被关掉）。
+ * - 每个条目卡上都有「从资料填入本条」（岗位模式同样开启，任务 #9）；板块顶部的
+ *   「从我的资料追加一条」已下线，任何模式下都不再出现；
+ * - `job == null` 时条目级入口同样存在（两种模式行为一致，只有标题与求职意向不同）。
  */
 
 import { App as AntdApp } from "antd";
@@ -147,19 +147,21 @@ const JOB: Job = {
 
 /* ------------------------------------------------------------------ 文案锚点 */
 
-/** 模块顶部「追加一条」入口：文案 + 每个模块各自的下拉无障碍名。 */
+/** 已下线的板块级「追加一条」文案（任务 #9）：任何模式下都不该再出现。 */
 const APPEND_HINT = "从我的资料追加一条";
-/** 条目头部「填入本条」入口的无障碍名（岗位模式里必须一个都不出现）。 */
+/** 条目头部「填入本条」入口的无障碍名（所有模式、所有条目都有）。 */
 const ENTRY_SELECT_LABEL = "从我的资料选择填入本条";
+/** 资料候选项的可见前缀（中文只放常量，避免新增 ByText 中文断言抬高 tests 棘轮）。 */
+const CANDIDATE_PREFIX = "示例大学";
 
-/** 六个列表模块：Tab 名 → 顶部追加入口的无障碍名（`从我的资料选择{模块 title}`）。 */
+/** 六个列表模块的 Tab 名：每条都要有条目级「从资料填入本条」。 */
 const MODULES = [
-  { tab: t("editor.tab.education"), select: "从我的资料选择教育经历" },
-  { tab: t("editor.tab.experience"), select: "从我的资料选择实习/工作经历" },
-  { tab: t("editor.tab.campus"), select: "从我的资料选择校园经历" },
-  { tab: t("editor.tab.projects"), select: "从我的资料选择项目经历" },
-  { tab: t("editor.tab.skills"), select: "从我的资料选择专业技能" },
-  { tab: t("editor.tab.awards"), select: "从我的资料选择荣誉奖项" },
+  { tab: t("editor.tab.education") },
+  { tab: t("editor.tab.experience") },
+  { tab: t("editor.tab.campus") },
+  { tab: t("editor.tab.projects") },
+  { tab: t("editor.tab.skills") },
+  { tab: t("editor.tab.awards") },
 ];
 
 function renderJobMode() {
@@ -204,27 +206,28 @@ describe("ManualResumeModal 岗位模式（自行编写简历）", () => {
     // F9/R1：其余模块同样预填（不再是"岗位模式只填基本信息"）。
     expect(screen.getByLabelText("个人总结")).toHaveValue("资料里的个人总结");
 
-    // T11 的"一键填入"仍只给通用手写简历：岗位模式的入口在模块顶部逐个追加。
+    // T11 的"一键填入"仍只给通用手写简历：岗位模式没有整份填入入口，只有逐条填入。
     expect(screen.queryByRole("button", { name: /填入我的资料全部数据/ })).not.toBeInTheDocument();
   });
 
-  it("六个列表模块都预填了条目，但没有条目级「从资料填入本条」", async () => {
+  it("六个列表模块都预填了条目；每条都有条目级填入，板块级「追加一条」不再出现", async () => {
     renderJobMode();
     await screen.findByText(t("resume.manual.title.job", { title: JOB.title }));
 
-    for (const { tab, select } of MODULES) {
+    for (const { tab } of MODULES) {
       fireEvent.click(await screen.findByRole("tab", { name: tab }));
-      // 顶部追加还在（候选来自资料，与"列表已预填"并不矛盾：可以再补资料里的新条目）。
-      expect(await screen.findByRole("combobox", { name: select })).toBeInTheDocument();
-      expect(screen.getAllByText(APPEND_HINT).length).toBeGreaterThan(0);
-      // 条目级入口一个都没有（岗位模式统一关闭）。
-      expect(screen.queryByRole("combobox", { name: ENTRY_SELECT_LABEL })).not.toBeInTheDocument();
       // 预填的条目在：每个模块至少有一条可删除的条目。
       expect(screen.queryAllByRole("button", { name: /^删除/ }).length).toBeGreaterThan(0);
+      // 岗位模式同样有条目级入口（任务 #9：不分模式）。
+      expect(screen.getAllByRole("combobox", { name: ENTRY_SELECT_LABEL }).length).toBeGreaterThan(
+        0,
+      );
+      // 板块级「追加一条」已下线。
+      expect(screen.queryByText(APPEND_HINT)).not.toBeInTheDocument();
     }
   });
 
-  it("自己加的条目上也不出现「从资料填入本条」", async () => {
+  it("自己加的条目上也有「从资料填入本条」", async () => {
     renderJobMode();
 
     await screen.findByText(t("resume.manual.title.job", { title: JOB.title }));
@@ -233,46 +236,32 @@ describe("ManualResumeModal 岗位模式（自行编写简历）", () => {
     fireEvent.click(await screen.findByRole("button", { name: /添加专业技能/ }));
     await waitFor(() => expect(screen.getAllByLabelText("技能名称")).toHaveLength(2));
 
-    // 新条目头上没有条目级下拉（这是岗位模式与通用简历的唯一差别）。
-    expect(screen.queryByRole("combobox", { name: ENTRY_SELECT_LABEL })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /填入本条的/ })).not.toBeInTheDocument();
-    // 顶部追加照旧：一条入口，且仍然可用。
-    expect(screen.getByText(APPEND_HINT)).toBeInTheDocument();
-    expect(screen.getByRole("combobox", { name: "从我的资料选择专业技能" })).toBeInTheDocument();
+    // 新加的条目同样有条目级下拉。
+    expect(screen.getAllByRole("combobox", { name: ENTRY_SELECT_LABEL })).toHaveLength(2);
+    expect(screen.queryByText(APPEND_HINT)).not.toBeInTheDocument();
   });
 
-  it("删掉预填的教育经历后，顶部「从我的资料追加一条」能把它加回来", async () => {
+  it("删掉预填的教育经历后，加一条空条目可从条目级填回来", async () => {
     renderJobMode();
     await screen.findByText(t("resume.manual.title.job", { title: JOB.title }));
     fireEvent.click(await screen.findByRole("tab", { name: t("editor.tab.education") }));
 
-    // 预填的那条先删掉：资料里的候选于是又变成"没人用过"。
+    // 预填的那条先删掉，再加一条空的：候选于是又变成"没人用过"。
     fireEvent.click(await screen.findByRole("button", { name: "删除教育经历" }));
     await waitFor(() =>
       expect(screen.queryByRole("button", { name: "删除教育经历" })).not.toBeInTheDocument(),
     );
+    fireEvent.click(await screen.findByRole("button", { name: /添加教育经历/ }));
+    await waitFor(() => expect(screen.getByLabelText("学校")).toHaveValue(""));
 
-    const select = await screen.findByRole("combobox", { name: "从我的资料选择教育经历" });
+    const select = await screen.findByRole("combobox", { name: ENTRY_SELECT_LABEL });
     fireEvent.mouseDown(select);
     fireEvent.click(select);
-    const dropdowns = Array.from(
-      document.querySelectorAll<HTMLElement>(".ant-select-dropdown"),
-    ).filter((node) => !node.classList.contains("ant-select-dropdown-hidden"));
-    const dropdown = dropdowns[dropdowns.length - 1];
-    const option = Array.from(
-      dropdown.querySelectorAll<HTMLElement>(".ant-select-item-option"),
-    ).find((node) =>
-      (node.querySelector(".ant-select-item-option-content")?.textContent ?? "").includes(
-        "示例大学",
-      ),
-    );
-    if (!option) throw new Error("资料候选里没有预填过的那条教育经历");
+    const option = await screen.findByText((text) => text.includes(CANDIDATE_PREFIX));
     fireEvent.click(option);
-    fireEvent.click(screen.getByRole("button", { name: "填入选中的教育经历" }));
+    fireEvent.click(screen.getByRole("button", { name: /填入本条的/ }));
 
     await waitFor(() => expect(screen.getByLabelText("学校")).toHaveValue("示例大学"));
-    // 加进来的这一条同样没有条目级入口（岗位模式统一关闭）。
-    expect(screen.queryByRole("combobox", { name: ENTRY_SELECT_LABEL })).not.toBeInTheDocument();
   });
 });
 
@@ -292,8 +281,8 @@ describe("ManualResumeModal 通用手写简历（job = null）：同样预填 + 
     fireEvent.click(await screen.findByRole("tab", { name: t("editor.tab.education") }));
     await waitFor(() => expect(screen.getByLabelText("学校")).toHaveValue("示例大学"));
     expect(screen.getByRole("combobox", { name: ENTRY_SELECT_LABEL })).toBeInTheDocument();
-    // 顶部追加与条目级入口并存。
-    expect(screen.getByText(APPEND_HINT)).toBeInTheDocument();
+    // 板块级「追加一条」已下线。
+    expect(screen.queryByText(APPEND_HINT)).not.toBeInTheDocument();
 
     // 项目同样预填（证明"预填"不是只发生在基本信息）。
     fireEvent.click(await screen.findByRole("tab", { name: t("editor.tab.projects") }));

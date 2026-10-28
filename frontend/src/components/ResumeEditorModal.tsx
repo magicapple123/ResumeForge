@@ -70,14 +70,6 @@ interface Props {
   /** 表单脏值变化（新建简历据此决定"前往制作台"这类入口能不能用）。 */
   onDirtyChange?: (dirty: boolean) => void;
   /**
-   * 是否渲染**条目级**的「从资料填入本条」，默认 `true`。
-   *
-   * 关掉它（`false`）时，模块顶部的「从我的资料追加一条」照旧可用，只是每个条目头部
-   * 不再出现下拉。岗位详情里的「自行编写简历」用它：那份表单的经历/项目是空的，
-   * 用户要照着岗位从头写，条目级填入没有可对应的东西。
-   */
-  entryFill?: boolean;
-  /**
    * 「填入我的资料全部数据」（T11）。
    *
    * 提供后头部多一个次按钮：把当前组投影内容重新整份带进表单（有内容时先内联确认）。
@@ -118,7 +110,6 @@ export default function ResumeEditorModal({
   fillSources,
   deferRefreshWhenDirty = false,
   onDirtyChange,
-  entryFill = true,
   fillAll,
   footerExtra,
   sourcePanel,
@@ -136,7 +127,6 @@ export default function ResumeEditorModal({
     draftScopeKey,
     fillSources,
     deferRefreshWhenDirty,
-    entryFill,
     fillAll,
     onSave,
     onExit: onClose,

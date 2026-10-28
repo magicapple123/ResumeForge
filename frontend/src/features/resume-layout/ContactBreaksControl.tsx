@@ -60,8 +60,12 @@ export default function ContactBreaksControl({
         <Typography.Text type="secondary">{t("workbench.contactBreak.label")}</Typography.Text>
       )}
       <Tooltip title={t("workbench.contactBreak.hint")}>
-        {/* 包一层 span：禁用态的下拉不接收指针事件，Tooltip 只能挂在外层。 */}
-        <span>
+        {/* 包一层 span：禁用态的下拉不接收指针事件，Tooltip 只能挂在外层。
+            宽度是#3 用户反馈的直接修复：不设宽度时 antd Select 会缩到内容宽（实测 34px），
+            弹层选项跟着变成一条缝——用户既看不清选了什么，也点不准要选哪个字段。
+            260px 够放下两个已选标签与最长选项「出生年份」；maxWidth 100% 让窄屏
+            （两栏/单栏制作台、主预览工具栏）按容器收窄，不撑出横向滚动。 */}
+        <span style={{ display: "inline-block", width: 260, maxWidth: "100%" }}>
           <Select
             size="small"
             mode="multiple"
@@ -70,6 +74,7 @@ export default function ContactBreaksControl({
             aria-label={t("workbench.contactBreak.label")}
             placeholder={t("workbench.contactBreak.placeholder")}
             className="resume-contact-break-select"
+            style={{ width: "100%" }}
             disabled={disabled || undefined}
             value={value}
             options={options}

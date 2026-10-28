@@ -97,18 +97,29 @@ function entryRow(content: ResumeContent, name: string): HTMLElement {
   return row;
 }
 
-/** 条目顺序（读标题而不是整行文本：徽标/要点计数会混进 textContent）。 */
+function byVisualOrder(elements: HTMLElement[]): HTMLElement[] {
+  return elements
+    .map((element, index) => ({
+      element,
+      index,
+      order: element.style.order === "" ? index : Number(element.style.order),
+    }))
+    .sort((left, right) => left.order - right.order || left.index - right.index)
+    .map((item) => item.element);
+}
+
+/** 条目顺序（读**视觉**顺序：拖动中 DOM 稳定、换位靠 CSS order；读标题避免徽标混入）。 */
 function entryOrder(): string[] {
-  return Array.from(
-    document.querySelectorAll<HTMLElement>('[data-tree-key^="entry:projects:"]'),
+  return byVisualOrder(
+    Array.from(document.querySelectorAll<HTMLElement>('[data-tree-key^="entry:projects:"]')),
   ).map((element) => element.querySelector(".resume-outline-title")?.textContent ?? "");
 }
 
-/** 要点顺序（只取条目内可见的要点行）。 */
+/** 要点顺序（视觉顺序；只取可见的要点行）。 */
 function pointOrder(): string[] {
-  return Array.from(document.querySelectorAll<HTMLElement>(".resume-outline-row.is-point")).map(
-    (element) => element.querySelector(".resume-outline-point-text")?.textContent ?? "",
-  );
+  return byVisualOrder(
+    Array.from(document.querySelectorAll<HTMLElement>('[data-tree-key^="point:"]')),
+  ).map((element) => element.querySelector(".resume-outline-point-text")?.textContent ?? "");
 }
 
 /** 最小 dataTransfer 桩：dragstart 里 setData、dragOver 里只读事件，不涉及真实剪贴板。 */

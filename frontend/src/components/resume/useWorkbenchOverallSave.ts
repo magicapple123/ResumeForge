@@ -73,6 +73,12 @@ export interface WorkbenchOverallSaveOptions {
   editorDirty: boolean;
   /** 中栏未挂载时的正文出口（窄档）；缺省 = 内容只能经编辑器保存（三栏档行为不变）。 */
   documentContent?: WorkbenchDocumentContentBridge;
+  /**
+   * 正文缺少条目 id（W01 身份还没物化）时为 true：保存版式的同时把正文写回一次。
+   * 只影响"版式脏、正文不脏"这一条路径；没有它，对象级样式（文字级别 / 对象面板）
+   * 会存进 `format_config.objects` 却指向下次打开就不存在的随机 id。
+   */
+  persistDocumentOnLayoutSave?: boolean;
   /** 这份记录还是制作台草稿（见 `onPublishDraft`）：保存按钮要常驻。 */
   isDraft?: boolean;
   /** 中栏的命令式句柄：`saveAsync()` / `discard()` 都在那一层（判据全在中栏里）。 */
@@ -125,6 +131,7 @@ export function useWorkbenchOverallSave({
   layout,
   editorDirty,
   documentContent,
+  persistDocumentOnLayoutSave = false,
   isDraft = false,
   editorRef,
   onApplyLayout,
@@ -203,7 +210,8 @@ export function useWorkbenchOverallSave({
       // 版式**确认落库**之后才对快照对齐（见文件头的理由）。
       setLayoutSnapshot(layout ? cloneLayout(layout) : null);
     }
-    if (editorDirty || documentContentDirty) {
+    const persistDocument = Boolean(documentContent && layoutDirty && persistDocumentOnLayoutSave);
+    if (editorDirty || documentContentDirty || persistDocument) {
       // 三栏档：正文在编辑器表单里，仍走那一层（校验 / 草稿清理 / 失败提示都在里面）。
       // 窄档：中栏未挂载，表单里没有这份正文——直接保存统一历史里的文档内容。
       const contentOutcome = editorDirty

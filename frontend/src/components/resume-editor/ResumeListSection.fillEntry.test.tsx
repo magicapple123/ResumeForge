@@ -2,10 +2,9 @@
 /**
  * `ResumeListSection` 的**条目级**填入——「从资料填入本条」（`fillEntry`）。
  *
- * 与 `ManualResumeModal.integration.test.tsx` 里的 R16 用例分工：那里走整条弹窗链路，
- * 验证的是"入口在、能追加"；这里直接挂 `Form + EducationEditor`，**只**盯 `fillEntry`
- * 的语义（只填空字段、不动别的条目、候选禁用规则、填完聚焦），因为这几条用整条弹窗
- * 很难摆出干净的初始状态（弹窗里预填的那条是资料来的，天然和候选同键）。
+ * 任务 #9：板块级的「从我的资料追加一条」已下线，每个条目头部都有「从资料填入本条」。
+ * 这里直接挂 `Form + EducationEditor`，**只**盯 `fillEntry` 的语义（只填空字段、不动别的
+ * 条目、候选禁用规则、填完聚焦）与"顶部入口不再存在"。
  *
  * 断言口径：
  * - 字段值一律从**输入框**读（`getByLabelText` + `toHaveValue`），而不是从表单实例读——
@@ -33,13 +32,6 @@ import { EducationEditor } from "./ResumeSectionEditors";
 const ENTRY_SELECT_LABEL = "从我的资料选择填入本条";
 /** 条目头部按钮的 `aria-label`：`填入本条的{label}`，教育模块的 label 是「教育经历」。 */
 const ENTRY_FILL_LABEL = "填入本条的教育经历";
-/** 顶部追加入口的 `aria-label`：`从我的资料选择{label}`。 */
-const TOP_SELECT_LABEL = "从我的资料选择教育经历";
-/** 顶部追加按钮的 `aria-label`：`填入选中的{label}`。 */
-const TOP_FILL_LABEL = "填入选中的教育经历";
-/** 顶部入口的固定文案，用来确认"追加一条"没有被条目级入口取代。 */
-const TOP_HINT_TEXT = "从我的资料追加一条";
-
 /* ------------------------------------------------------------------ 夹具 */
 
 const EDU_A: ResumeEducation = {
@@ -130,7 +122,7 @@ function EducationFillHarness({ education, sources, onFilled, onFormReady }: Har
   return (
     <AntdApp>
       <Form form={form} layout="vertical" initialValues={{ education }}>
-        <ProfileFillProvider value={{ sources, onFilled: onFilled ?? noop, entryFill: true }}>
+        <ProfileFillProvider value={{ sources, onFilled: onFilled ?? noop }}>
           <EducationEditor />
         </ProfileFillProvider>
       </Form>
@@ -233,17 +225,16 @@ describe("ResumeListSection 条目级填入（fillEntry）", () => {
     expect(screen.getAllByLabelText("学校")).toHaveLength(1);
   });
 
-  it("顶部「从我的资料追加一条」在条目级入口出现后仍然可用", async () => {
+  it("板块级「从我的资料追加一条」已下线：只剩条目级入口", async () => {
     renderHarness({
       education: [{ ...BLANK_EDUCATION }],
       sources: sourcesOf([CANDIDATE_A]),
     });
 
-    expect(screen.getByText(TOP_HINT_TEXT)).toBeInTheDocument();
-    expect(screen.getByRole("combobox", { name: TOP_SELECT_LABEL })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: TOP_FILL_LABEL })).toBeInTheDocument();
-    // 两条入口并存：顶部一条（追加）+ 每个条目一条（填入）。
+    // 条目级入口在；顶部入口的 DOM 一个都不该再出现。
     expect(screen.getAllByRole("combobox", { name: ENTRY_SELECT_LABEL })).toHaveLength(1);
+    expect(screen.getByRole("button", { name: ENTRY_FILL_LABEL })).toBeInTheDocument();
+    expect(document.querySelectorAll("[data-fill-variant='append']")).toHaveLength(0);
   });
 
   it("只填空字段：手写过的学校保持原值，其余空字段被补齐", async () => {
@@ -324,28 +315,6 @@ describe("ResumeListSection 条目级填入（fillEntry）", () => {
     // 没有可选项时按钮保持禁用（不会出现"点了没反应"）。
     expect(entryFillButton(0)).toBeDisabled();
     expect(entryFillButton(1)).toBeDisabled();
-  });
-
-  it("顶部追加回归：选一条 → 填入 → 列表 +1，新条目也有自己的条目级入口", async () => {
-    const { form } = renderHarness({
-      education: [{ ...EDU_A }],
-      sources: sourcesOf([CANDIDATE_A, CANDIDATE_B]),
-    });
-
-    const dropdown = await openDropdown(screen.getByRole("combobox", { name: TOP_SELECT_LABEL }));
-    // 已经在这份简历里的那条标「已加入」并禁用——追加不会造出重复项。
-    const joined = optionElement(dropdown, `${OPTION_A} 已加入`);
-    expect(joined).toHaveAttribute("aria-disabled", "true");
-
-    fireEvent.click(optionElement(dropdown, OPTION_B));
-    fireEvent.click(screen.getByRole("button", { name: TOP_FILL_LABEL }));
-
-    await waitFor(() => expect(screen.getAllByLabelText("学校")).toHaveLength(2));
-    expect(form.getFieldValue("education")).toHaveLength(2);
-    expect(screen.getAllByLabelText("学校")[1]).toHaveValue("第二大学");
-    expect(screen.getAllByLabelText("专业")[1]).toHaveValue("机械设计");
-    // 加进来的条目同样可以继续"填入本条"（它当前的键就是候选 B）。
-    expect(screen.getAllByRole("combobox", { name: ENTRY_SELECT_LABEL })).toHaveLength(2);
   });
 
   it("填入后焦点进入被填的那一条（不留在下拉里）", async () => {

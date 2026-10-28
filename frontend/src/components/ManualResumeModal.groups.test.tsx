@@ -5,7 +5,7 @@
  * 断言口径（契约 §4 C / R-27）：
  * - 来源面板由服务端 `source_layout` 驱动：7 个参与分区只有 7 行，13 个只有 13 行；
  * - **没有选组器**：面板里不出现"组"下拉，只有只读提示 +「去切换组」跳资料页；
- * - 逐分区「追加本分区」只做加法：把投影 content 里该分区条目追加到表单末尾。
+ * - 逐分区「追加本分区」入口已随任务 #9 下线：面板只列当前组参与分区，不提供整块追加。
  */
 import { App as AntdApp } from "antd";
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";

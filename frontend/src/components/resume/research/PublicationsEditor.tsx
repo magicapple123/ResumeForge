@@ -17,6 +17,7 @@ import ResearchListSection from "./ResearchListSection";
 import UrlPreview from "./UrlPreview";
 import EditorFieldCol from "../../resume-editor/EditorFieldCol";
 import { useEditorFieldVisibility } from "../../resume-editor/editorSchemaContext";
+import { useCarrierDisplayProps } from "../../resume-editor/carrierDisplay";
 import { rt } from "../../../features/resume-research/i18n";
 import {
   PUBLICATION_STATUSES,
@@ -30,6 +31,8 @@ export default function PublicationsEditor() {
   useLocale();
   const label = rt(LABEL);
   const visible = useEditorFieldVisibility("publications");
+  // 任务 #8：paper 的承载区是 note（标量），自定义字段行只在自己的输入框里显示。
+  const carrierProps = useCarrierDisplayProps("publications", false);
   return (
     <ResearchListSection
       name="publications"
@@ -121,7 +124,11 @@ export default function PublicationsEditor() {
             </Form.Item>
           </EditorFieldCol>
           <EditorFieldCol xs={24} md={12} show={visible.show("note")}>
-            <Form.Item name={[field.name, "note"]} label={rt("research.publications.note")}>
+            <Form.Item
+              {...carrierProps}
+              name={[field.name, "note"]}
+              label={rt("research.publications.note")}
+            >
               <Input.TextArea rows={2} />
             </Form.Item>
           </EditorFieldCol>

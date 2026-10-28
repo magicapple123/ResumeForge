@@ -58,6 +58,11 @@ const sections = {
   /** 列表底部的常驻说明：顺序影响哪些产物、页眉为什么不在排序范围内。 */
   "sections.templateControls.orderHint":
     "顺序对预览、PDF、Word 与文本导出同时生效；页眉（姓名、求职意向、联系方式）固定在最前。",
+  /** 自建板块行的固定位置标签（渲染器固定排在系统板块之后）。 */
+  "sections.templateControls.customFixedTag": "固定末尾",
+  "sections.templateControls.customFixedHint": "自建板块固定排在系统板块之后",
+  /** 正文没有任何可排序板块时的空态。 */
+  "sections.templateControls.orderEmpty": "当前简历还没有可排序的内容板块",
 
   // ── 最大篇幅 ─────────────────────────────────────────
   /** 分组标签（与 bilingual.layout.pages 同一个词）。 */

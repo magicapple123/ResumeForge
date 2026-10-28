@@ -329,19 +329,19 @@ export default function WorkbenchParamsColumn({
               onChange={onChange}
             />
           ) : null}
-          {/* W07 批量：多选批量调整（D03）+ 格式刷。每次应用 = 一次 onChange = 一步历史。 */}
-          {multiSelectedEntries.length > 0 || selectedObjectId ? (
-            <WorkbenchTypographyTools
-              layout={layout}
-              catalog={catalog}
-              selectedObjectId={selectedObjectId ?? null}
-              selectedObjectLabel={selectedObjectLabel}
-              selected={multiSelectedEntries}
-              disabled={relayouting || layoutSaving || undefined}
-              onChange={onChange}
-              onClearSelection={() => onClearMultiSelect?.()}
-            />
-          ) : null}
+          {/* W07 局部排版：文字级别 / 多选批量 / 格式刷。没有选中时也渲染一句指路
+              （见 WorkbenchTypographyTools 的 empty 分支）——否则用户只看到角色级滑杆，
+              根本找不到"文字级别"藏在哪里（2026-10-28 用户反馈）。 */}
+          <WorkbenchTypographyTools
+            layout={layout}
+            catalog={catalog}
+            selectedObjectId={selectedObjectId ?? null}
+            selectedObjectLabel={selectedObjectLabel}
+            selected={multiSelectedEntries}
+            disabled={relayouting || layoutSaving || undefined}
+            onChange={onChange}
+            onClearSelection={() => onClearMultiSelect?.()}
+          />
           <ResumeParamGroup title={t("pagination.group.title")} storageKey="pagination">
             <PaginationControls
               layout={layout}

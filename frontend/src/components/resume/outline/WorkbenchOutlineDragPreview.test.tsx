@@ -10,7 +10,7 @@
  *
  * 画布用桩（这里只断言"它收到的正文"，不渲染 iframe），目录用桩（与本用例无关）。
  */
-import { cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { t } from "../../../i18n";
 import { ensureIds } from "../../../features/resume-document/identity";
@@ -106,10 +106,16 @@ function rowOf(name: string): HTMLElement {
   return treeitem(entryKey(name)).querySelector(".resume-outline-row") as HTMLElement;
 }
 
+/** 树的**视觉**顺序：拖动中 DOM 稳定、换位靠 CSS order（否则 drop 会被浏览器扣掉）。 */
 function treeOrder(): string[] {
-  return Array.from(
-    document.querySelectorAll<HTMLElement>('[data-tree-key^="entry:projects:"]'),
-  ).map((element) => element.querySelector(".resume-outline-title")?.textContent ?? "");
+  return Array.from(document.querySelectorAll<HTMLElement>('[data-tree-key^="entry:projects:"]'))
+    .map((element, index) => ({
+      element,
+      index,
+      order: element.style.order === "" ? index : Number(element.style.order),
+    }))
+    .sort((left, right) => left.order - right.order || left.index - right.index)
+    .map((item) => item.element.querySelector(".resume-outline-title")?.textContent ?? "");
 }
 
 /** 画布桩收到的正文里，项目条目的顺序（名字）。 */
@@ -201,5 +207,44 @@ describe("松手落点：提交一条命令，树与保存 payload 都是新序"
       PROJECT_IDS[2],
       PROJECT_IDS[0],
     ]);
+  });
+
+  it("快速松手（没有 dragOver，落点是标题文本）：同样提交，保存 payload 顺序正确", async () => {
+    const onSaveContent = vi.fn<(next: ResumeContent) => Promise<void>>(async () => undefined);
+    renderModal({ content: CONTENT, onSaveContent });
+    openOutline();
+    const tree = await screen.findByRole("tree", { name: t("outline.tree.label") });
+
+    // 真机最常见的两种形态：dragStart 之后**没有任何 dragOver**就松手，且松在标题文本上。
+    const dataTransfer = dragData();
+    fireEvent.dragStart(button(t("outline.sort.handle", { name: PROJECT_A })), { dataTransfer });
+    const targetTitle = within(rowOf(PROJECT_C)).getByText(PROJECT_C);
+    fireEvent.drop(targetTitle, { dataTransfer });
+
+    expect(treeOrder()).toEqual([PROJECT_B, PROJECT_C, PROJECT_A]);
+    expect(within(tree).getByText(PROJECT_C)).toBeInTheDocument();
+
+    fireEvent.click(button(t("workbench.action.save-changes")));
+    await waitFor(() => expect(onSaveContent).toHaveBeenCalled());
+    const saved = onSaveContent.mock.calls[0][0];
+    expect(entriesOf(saved, "projects").map((entry) => entry.name)).toEqual([
+      PROJECT_B,
+      PROJECT_C,
+      PROJECT_A,
+    ]);
+  });
+
+  it("拖行标题（不是手柄）+ 快速 drop：也能提交", async () => {
+    const onSaveContent = vi.fn<(next: ResumeContent) => Promise<void>>(async () => undefined);
+    renderModal({ content: CONTENT, onSaveContent });
+    openOutline();
+    await screen.findByRole("tree", { name: t("outline.tree.label") });
+
+    const dataTransfer = dragData();
+    const sourceTitle = within(rowOf(PROJECT_C)).getByText(PROJECT_C);
+    fireEvent.dragStart(sourceTitle, { dataTransfer });
+    fireEvent.drop(rowOf(PROJECT_A), { dataTransfer });
+
+    expect(treeOrder()).toEqual([PROJECT_C, PROJECT_A, PROJECT_B]);
   });
 });

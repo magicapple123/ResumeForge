@@ -4,6 +4,7 @@ import { Form, Input, Row, Select } from "antd";
 import { t } from "../../i18n";
 import type { MessageKey } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
+import { useCarrierDisplayProps } from "./carrierDisplay";
 import EditorFieldCol from "./EditorFieldCol";
 import ResumeListSection from "./ResumeListSection";
 import { useEditorFieldVisibility } from "./editorSchemaContext";
@@ -24,6 +25,8 @@ export function EducationEditor() {
   useLocale();
   // F10：当前方案里看不见的字段不渲染（仍有值的字段保留，见 useEditorFieldVisibility）。
   const visible = useEditorFieldVisibility("educations");
+  // 任务 #8：承载区正文框只显示用户手写行（自定义字段行由 AppendedCarrierFields 单独编辑）。
+  const carrierProps = useCarrierDisplayProps("education", true);
   return (
     <ResumeListSection
       title={t("editor.section.education")}
@@ -130,7 +133,7 @@ export function EducationEditor() {
           </EditorFieldCol>
           <EditorFieldCol xs={24} md={12} show={visible.show("achievements")}>
             <Form.Item
-              {...multilineItemProps}
+              {...carrierProps}
               name={[field.name, "achievements"]}
               label={t("editor.field.studyAchievements")}
             >
@@ -146,6 +149,7 @@ export function EducationEditor() {
 export function ExperienceEditor() {
   useLocale();
   const visible = useEditorFieldVisibility("experiences");
+  const carrierProps = useCarrierDisplayProps("experience", true);
   return (
     <ResumeListSection
       title={t("editor.section.experience")}
@@ -209,7 +213,7 @@ export function ExperienceEditor() {
           </EditorFieldCol>
           <EditorFieldCol span={24} show={visible.show("description")}>
             <Form.Item
-              {...multilineItemProps}
+              {...carrierProps}
               name={[field.name, "description"]}
               label={t("editor.field.expDescription")}
             >
@@ -225,6 +229,7 @@ export function ExperienceEditor() {
 export function CampusEditor() {
   useLocale();
   const visible = useEditorFieldVisibility("campus_experiences");
+  const carrierProps = useCarrierDisplayProps("campus_experience", true);
   return (
     <ResumeListSection
       title={t("editor.section.campus")}
@@ -276,7 +281,7 @@ export function CampusEditor() {
           </EditorFieldCol>
           <EditorFieldCol span={24} show={visible.show("description")}>
             <Form.Item
-              {...multilineItemProps}
+              {...carrierProps}
               name={[field.name, "description"]}
               label={t("editor.field.campusDescription")}
             >
@@ -292,6 +297,7 @@ export function CampusEditor() {
 export function ProjectEditor() {
   useLocale();
   const visible = useEditorFieldVisibility("projects");
+  const carrierProps = useCarrierDisplayProps("projects", true);
   return (
     <ResumeListSection
       title={t("editor.section.projects")}
@@ -360,7 +366,7 @@ export function ProjectEditor() {
           </EditorFieldCol>
           <EditorFieldCol xs={24} md={12} show={visible.show("description")}>
             <Form.Item
-              {...multilineItemProps}
+              {...carrierProps}
               name={[field.name, "description"]}
               label={t("editor.field.projectDescription")}
             >
@@ -385,6 +391,7 @@ export function ProjectEditor() {
 export function SkillEditor() {
   useLocale();
   const visible = useEditorFieldVisibility("skills");
+  const carrierProps = useCarrierDisplayProps("skills", false);
   return (
     <ResumeListSection
       title={t("editor.section.skills")}
@@ -408,7 +415,11 @@ export function SkillEditor() {
             </Form.Item>
           </EditorFieldCol>
           <EditorFieldCol xs={24} md={12} show={visible.show("level")}>
-            <Form.Item name={[field.name, "level"]} label={t("editor.field.skillLevel")}>
+            <Form.Item
+              {...carrierProps}
+              name={[field.name, "level"]}
+              label={t("editor.field.skillLevel")}
+            >
               <Input placeholder={t("editor.placeholder.skillLevel")} />
             </Form.Item>
           </EditorFieldCol>
@@ -426,6 +437,7 @@ export function SkillEditor() {
 export function AwardEditor() {
   useLocale();
   const visible = useEditorFieldVisibility("awards");
+  const carrierProps = useCarrierDisplayProps("awards", false);
   return (
     <ResumeListSection
       title={t("editor.section.awards")}
@@ -469,7 +481,11 @@ export function AwardEditor() {
             </Form.Item>
           </EditorFieldCol>
           <EditorFieldCol span={24} show={visible.show("description")}>
-            <Form.Item name={[field.name, "description"]} label={t("editor.field.notes")}>
+            <Form.Item
+              {...carrierProps}
+              name={[field.name, "description"]}
+              label={t("editor.field.notes")}
+            >
               <Input.TextArea rows={3} />
             </Form.Item>
           </EditorFieldCol>

@@ -1,11 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * 简历微调弹窗：参考栏、未保存守卫、双栏独立滚动、从我的资料填入、快捷键。
+ * 简历微调弹窗：参考栏、未保存守卫、双栏独立滚动、快捷键、填入我的资料全部数据。
  *
  * 2026-10-19：条目级填入开关（`entryFill`）那一组按内聚边界拆到
  * `ResumeEditorModal.entryFill.test.tsx`（行数预算 500）。内容夹具与视口 mock 抽到
  * `ResumeEditorModal.testkit.tsx` 供两个文件共用；本文件自身不注册 `vi.mock`
  * （这一批用例断言的都是渲染行为，不打 api）。
+ *
+ * 2026-10-28：R16「从我的资料填入」入口显隐拆到
+ * `ResumeEditorModal.profileFill.test.tsx`（本文件到 500 行上限，新增用例加在那边）。
  */
 import { App as AntdApp } from "antd";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
@@ -301,75 +304,6 @@ describe("ResumeEditorModal 双栏独立滚动（R11）", () => {
     await waitFor(() => expect(field).toHaveFocus());
     // 目标字段在编辑栏里：两栏布局下这一栏自己滚，参考栏不该跟着动。
     expect(field.closest(".resume-editor-main")).not.toBeNull();
-  });
-});
-
-/**
- * R16：`fillSources` 不传时这条入口**完全不渲染**。
- *
- * 编辑已保存简历时用户要的是改这一份，不是从资料里再抓一条进来；把入口留在那里只会让
- * 他以为"填进来会替换"，而实际是追加一条重复项。
- */
-describe("ResumeEditorModal 从我的资料填入（R16）", () => {
-  const FILL_SOURCES = {
-    education: [
-      {
-        key: "示例大学|软件工程|2023.09|2027.06",
-        label: "示例大学",
-        hint: "软件工程",
-        value: { school: "示例大学", major: "软件工程" },
-      },
-    ],
-    experience: [],
-    campusExperience: [],
-    projects: [],
-    skills: [],
-    awards: [],
-    summary: "资料里的个人总结",
-  };
-
-  async function openEducationTab() {
-    fireEvent.click(await screen.findByRole("tab", { name: "教育" }));
-    // 「添加教育经历」始终存在，用它确认这一页真的挂上了（内容为空时没有字段可等）。
-    // 用正则：按钮里带图标，无障碍名会混进图标的 aria-label。
-    return screen.findByRole("button", { name: /添加教育经历/ });
-  }
-
-  it("不传 fillSources 时教育页没有任何填入入口", async () => {
-    render(
-      <AntdApp>
-        <ResumeEditorModal open content={CONTENT} onClose={vi.fn()} onSave={vi.fn()} />
-      </AntdApp>,
-    );
-
-    await openEducationTab();
-    expect(screen.queryByText("从我的资料填入")).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole("combobox", { name: "从我的资料选择教育经历" }),
-    ).not.toBeInTheDocument();
-    // 基本信息页的「填入个人总结」同样不该出现。
-    expect(
-      screen.queryByRole("button", { name: /从我的资料填入个人总结/ }),
-    ).not.toBeInTheDocument();
-  });
-
-  it("传了 fillSources 时教育页出现候选下拉", async () => {
-    render(
-      <AntdApp>
-        <ResumeEditorModal
-          open
-          content={CONTENT}
-          fillSources={FILL_SOURCES}
-          onClose={vi.fn()}
-          onSave={vi.fn()}
-        />
-      </AntdApp>,
-    );
-
-    await openEducationTab();
-    expect(
-      await screen.findByRole("combobox", { name: "从我的资料选择教育经历" }),
-    ).toBeInTheDocument();
   });
 });
 

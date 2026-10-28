@@ -8,14 +8,17 @@
  * **Enter 才派发一条 `OutlineCommand`**、Esc 直接丢弃。于是"一次排序 = 一条历史记录"，
  * 中途取消不会留下半截操作（W03 的时间线里也不会出现一串零碎移动）。
  *
- * ## 拖拽落点语义
+ * ## 拖拽落点语义（2026-10-28 修）
  *
- * 落在目标行上 = "移动到目标行当前下标"（不做上下半区的像素判定：那需要真实布局尺寸，
- * jsdom 里测不了，也会让"落点提示"与"实际插入"两套算法分叉）。精确的首尾控制由键盘
- * 的 Home/End 负责。
+ * 拖动是"抓行"而不是"抓 18px 手柄"：整行可拖（行内动作按钮不劫持拖动），手柄保留给键盘。
+ * 落点解析在树容器上做（`useOutlineDragDrop` + `outlineDropTargets`）：松在同类行上是
+ * "移动到该行当前下标"；松在缝隙 / 分组容器 / 同板块标题上时按指针纵向找同组最近行；
+ * 松在被拖对象自己或别的板块上则不动。**不能只挂行级 drop**——28px 高的行之间满是缝隙，
+ * 差一两像素就会静默取消（用户反馈"大部分情况下拖不动"的真机原形）。精确的首尾控制
+ * 仍由键盘的 Home/End 负责。
  */
 import { useCallback, useEffect, useMemo, useState } from "react";
-import type { DragEvent, KeyboardEvent } from "react";
+import type { DragEvent, KeyboardEvent, RefObject } from "react";
 import { t } from "../../../i18n";
 import { useLocale } from "../../../i18n/i18nContext";
 import type { ResumeContent } from "../../../types/resume";
@@ -43,6 +46,8 @@ import {
   sortSessionForSelection,
 } from "./outlineTree";
 import { structurePreviewContent } from "./outlinePreview";
+import { entryIndexInModel, pointIndexInModel } from "./outlineDropTargets";
+import { useOutlineDragDrop } from "./useOutlineDragDrop";
 
 export interface OutlineSortOptions {
   model: OutlineModel;
@@ -60,6 +65,8 @@ export interface OutlineSortOptions {
   previewBase: ResumeContent | null;
   /** 结构预览出口：排序会话改变时给出新内容，结束（松手 / 取消 / 提交）时给 null。 */
   onStructurePreview?: (content: ResumeContent | null) => void;
+  /** 大纲树滚动容器：拖到上下边缘时自动滚动（长列表才能拖到屏幕外目标）。 */
+  treeRef: RefObject<HTMLElement | null>;
 }
 
 /** 一次拖拽携带的信息（只记身份；落点按目标行当前下标算）。 */
@@ -85,13 +92,15 @@ export interface OutlineSortApi {
   beginPointDrag: (entry: OutlineEntry, point: OutlinePoint) => void;
   endDrag: () => void;
   dragOverEntry: (entry: OutlineEntry, event: DragEvent<HTMLDivElement>) => void;
-  dropOnEntry: (entry: OutlineEntry, event: DragEvent<HTMLDivElement>) => void;
   dragOverPoint: (
     entry: OutlineEntry,
     point: OutlinePoint,
     event: DragEvent<HTMLDivElement>,
   ) => void;
-  dropOnPoint: (entry: OutlineEntry, point: OutlinePoint, event: DragEvent<HTMLDivElement>) => void;
+  /** 树容器上的 dragOver / drop / dragEnd（落点解析见 `outlineDropTargets`）。 */
+  handleTreeDragOver: (event: DragEvent<HTMLDivElement>) => void;
+  handleTreeDrop: (event: DragEvent<HTMLDivElement>) => void;
+  handleTreeDragEnd: (event: DragEvent<HTMLDivElement>) => void;
 }
 
 function clampIndex(value: number, total: number): number {
@@ -100,24 +109,6 @@ function clampIndex(value: number, total: number): number {
 
 function entryName(entry: OutlineEntry | null): string {
   return entry && entry.title ? entry.title : t("outline.entry.untitled");
-}
-
-/** 目标行在**基准模型**里的下标：命令的 `toIndex` 也是这个口径（预览树已重排，下标不能现算）。 */
-function entryIndexInModel(model: OutlineModel, field: OutlineEntry["field"], objectId: string) {
-  const section = model.sections.find((item) => item.field === field);
-  return section?.entries.find((item) => item.objectId === objectId)?.index ?? -1;
-}
-
-/** 要点在它那个 pointField 分组里的基准下标（`reorder-point` 的 toIndex 口径）。 */
-function pointIndexInModel(model: OutlineModel, entry: OutlineEntry, point: OutlinePoint) {
-  const found = findOutlinePoint(model, {
-    kind: "point",
-    field: entry.field,
-    objectId: entry.objectId,
-    pointField: point.pointField,
-    pointId: point.pointId,
-  });
-  return found?.index ?? -1;
 }
 
 export function useOutlineSort({
@@ -130,6 +121,7 @@ export function useOutlineSort({
   enabled,
   previewBase,
   onStructurePreview,
+  treeRef,
 }: OutlineSortOptions): OutlineSortApi {
   useLocale();
   const [sortSession, setSortSession] = useState<OutlineSortSession | null>(null);
@@ -364,15 +356,6 @@ export function useOutlineSort({
     [dragPayload, dropTargetKey, model],
   );
 
-  const dropOnEntry = useCallback(
-    (entry: OutlineEntry, event: DragEvent<HTMLDivElement>) => {
-      if (dragPayload?.kind !== "entry" || dragPayload.field !== entry.field) return;
-      event.preventDefault();
-      commitDrag();
-    },
-    [commitDrag, dragPayload],
-  );
-
   const dragOverPoint = useCallback(
     (entry: OutlineEntry, point: OutlinePoint, event: DragEvent<HTMLDivElement>) => {
       if (dragPayload?.kind !== "point") return;
@@ -383,7 +366,13 @@ export function useOutlineSort({
       const key = pointTreeKey(entry.field, entry.objectId, point.pointField, point.pointId);
       if (key === dropTargetKey) return;
       setDropTargetKey(key);
-      const targetIndex = pointIndexInModel(model, entry, point);
+      const targetIndex = pointIndexInModel(
+        model,
+        entry.field,
+        entry.objectId,
+        point.pointField,
+        point.pointId,
+      );
       if (targetIndex < 0) return;
       setSortSession((previous) => {
         if (!previous || previous.kind !== "point" || previous.currentIndex === targetIndex) {
@@ -395,16 +384,29 @@ export function useOutlineSort({
     [dragPayload, dropTargetKey, model],
   );
 
-  const dropOnPoint = useCallback(
-    (entry: OutlineEntry, point: OutlinePoint, event: DragEvent<HTMLDivElement>) => {
-      if (dragPayload?.kind !== "point") return;
-      if (dragPayload.objectId !== entry.objectId || dragPayload.pointField !== point.pointField)
-        return;
-      event.preventDefault();
-      commitDrag();
-    },
-    [commitDrag, dragPayload],
-  );
+  /**
+   * 拖动悬停（树容器上算）：行在拖动中被设成 `pointer-events:none`（否则被拖行会挡住指针、
+   * 浏览器扣掉 drop），所以行级 dragover 在真机收不到——预览换位改由这里驱动。
+   */
+  const handleDragHover = useCallback((target: { key: string; index: number } | null) => {
+    if (!target) return;
+    setDropTargetKey(target.key);
+    setSortSession((previous) => {
+      if (!previous || previous.currentIndex === target.index) return previous;
+      return { ...previous, currentIndex: target.index };
+    });
+  }, []);
+  // 树容器上的拖放接入（悬停预览 / drop 落点解析 / 边缘自动滚动）：命令与历史仍走上面那几个出口。
+  const dragDrop = useOutlineDragDrop({
+    model,
+    payload: dragPayload,
+    treeRef,
+    dispatch,
+    announce,
+    endDrag,
+    commitDrag,
+    onHover: handleDragHover,
+  });
 
   // ── 结构预览（只给右栏画布，不落库、不进历史）──────────────────
   // 只服务**拖动**：键盘会话是"逐键改 currentIndex"，每一步都推右栏重排只会让纸面闪；
@@ -443,8 +445,9 @@ export function useOutlineSort({
     beginPointDrag,
     endDrag,
     dragOverEntry,
-    dropOnEntry,
     dragOverPoint,
-    dropOnPoint,
+    handleTreeDragOver: dragDrop.handleTreeDragOver,
+    handleTreeDrop: dragDrop.handleTreeDrop,
+    handleTreeDragEnd: dragDrop.handleTreeDragEnd,
   };
 }

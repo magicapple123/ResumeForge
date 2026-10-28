@@ -22,6 +22,8 @@ export default function LanguageEditor() {
     <ResumeListSection
       title={t("editor.section.languages")}
       name="languages"
+      // 任务 #9：语言能力也是多条目板块，每条都能从资料填入。
+      fillSection="languages"
       emptyValue={{ name: "", level: "", certificate: "", score: "", obtained_at: "" }}
     >
       {(field) => (

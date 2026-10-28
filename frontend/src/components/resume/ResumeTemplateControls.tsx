@@ -32,11 +32,15 @@ import { layoutWithFormatPreset } from "./layoutWithFormatPreset";
 import {
   buildSectionOrderConfig,
   DEFAULT_RESUME_SECTION_ORDER,
-  moveSection,
   normalizeSectionOrder,
   RESUME_SECTION_LABELS,
 } from "../../utils/resumeSectionOrder";
 import ContactBreaksControl from "../../features/resume-layout/ContactBreaksControl";
+import {
+  customSectionRows as collectCustomSectionRows,
+  moveVisibleSection,
+  presentSectionKeys,
+} from "../../features/resume-layout/sectionPresence";
 import ResumeLanguageSelect from "./ResumeLanguageSelect";
 import TemplateGalleryModal from "./TemplateGalleryModal";
 
@@ -127,6 +131,20 @@ export default function ResumeTemplateControls({
     () => normalizeSectionOrder(layout.format_config?.section_order, defaultSectionOrder),
     [layout.format_config?.section_order, defaultSectionOrder],
   );
+  // 当前简历里真的有内容的板块；内容为空时退回完整列表（空简历仍能看到默认顺序）。
+  const presentKeys = useMemo(
+    () => presentSectionKeys(content, sectionOptions),
+    [content, sectionOptions],
+  );
+  const visibleSectionOrder = useMemo(
+    () =>
+      presentKeys && presentKeys.size > 0
+        ? sectionOrder.filter((key) => presentKeys.has(key))
+        : sectionOrder,
+    [sectionOrder, presentKeys],
+  );
+  // 自建板块固定排在系统板块之后（渲染器口径），只列出有内容的，不给上下移。
+  const customSectionRows = useMemo(() => collectCustomSectionRows(content), [content]);
   /**
    * 「顺序·已调整」的判据 = **`section_order` 这个键在不在**（P0-5），不是"和默认顺序比"。
    *
@@ -136,13 +154,14 @@ export default function ResumeTemplateControls({
    */
   const isCustomOrder = "section_order" in (layout.format_config ?? {});
 
-  const handleSectionMove = (index: number, direction: -1 | 1) => {
-    const next = moveSection(sectionOrder, index, direction);
-    if (next === sectionOrder) return;
-    onChange({
-      ...layout,
-      format_config: { ...layout.format_config, section_order: next },
-    });
+  /**
+   * 在**可见列表**里上下移一格：只交换当前简历里有的那两个板块在完整 `section_order`
+   * 里的位置，空板块的位置原样保留（它们不显示，但存储里仍是一份完整排列）。
+   */
+  const handleSectionMove = (key: string, direction: -1 | 1) => {
+    const next = moveVisibleSection(sectionOrder, visibleSectionOrder, key, direction);
+    if (!next) return;
+    onChange({ ...layout, format_config: { ...layout.format_config, section_order: next } });
   };
 
   /**
@@ -354,7 +373,7 @@ export default function ResumeTemplateControls({
               role="list"
               aria-label={t("sections.templateControls.orderListAriaLabel")}
             >
-              {sectionOrder.map((key, index) => {
+              {visibleSectionOrder.map((key, index) => {
                 // 后端下发的是中文展示名，先按稳定分区 key 映射到语言包；未知分区
                 // （后端新增的）再回退目录原文，最后才是前端内置的七个兜底 key。
                 const labelKey = RESUME_CATALOG_SECTION_LABEL_KEYS[key];
@@ -375,7 +394,7 @@ export default function ResumeTemplateControls({
                           icon={<ArrowUpOutlined />}
                           aria-label={t("sections.templateControls.orderMoveUpAria", { label })}
                           disabled={index === 0}
-                          onClick={() => handleSectionMove(index, -1)}
+                          onClick={() => handleSectionMove(key, -1)}
                         />
                       </Tooltip>
                       <Tooltip title={t("sections.templateControls.orderMoveDown")}>
@@ -384,14 +403,32 @@ export default function ResumeTemplateControls({
                           type="text"
                           icon={<ArrowDownOutlined />}
                           aria-label={t("sections.templateControls.orderMoveDownAria", { label })}
-                          disabled={index === sectionOrder.length - 1}
-                          onClick={() => handleSectionMove(index, 1)}
+                          disabled={index === visibleSectionOrder.length - 1}
+                          onClick={() => handleSectionMove(key, 1)}
                         />
                       </Tooltip>
                     </Space>
                   </div>
                 );
               })}
+              {customSectionRows.map((row, index) => (
+                <div className="resume-section-order-row" role="listitem" key={row.key}>
+                  <span className="resume-section-order-index">
+                    {visibleSectionOrder.length + index + 1}
+                  </span>
+                  <span className="resume-section-order-label">{row.title}</span>
+                  <Tooltip title={t("sections.templateControls.customFixedHint")}>
+                    <Typography.Text type="secondary">
+                      {t("sections.templateControls.customFixedTag")}
+                    </Typography.Text>
+                  </Tooltip>
+                </div>
+              ))}
+              {visibleSectionOrder.length === 0 && customSectionRows.length === 0 ? (
+                <Typography.Paragraph type="secondary">
+                  {t("sections.templateControls.orderEmpty")}
+                </Typography.Paragraph>
+              ) : null}
               <Typography.Paragraph type="secondary" className="resume-section-order-hint">
                 {t("sections.templateControls.orderHint")}
               </Typography.Paragraph>

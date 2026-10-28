@@ -134,7 +134,8 @@ const typography = {
   // ── 多选批量调整（D03）──────────────────────────────────────
   "typography.multi.title": "批量调整",
   "typography.multi.count": "已选 {count} 条",
-  "typography.multi.empty": "在大纲里多选条目后可批量调整",
+  "typography.multi.empty":
+    "在左侧「文档大纲」选中条目（或按空格多选）后，可设置文字级别与批量样式",
   "typography.multi.clear": "取消选择",
   /** 三个批量控件的空值占位：不动这项。 */
   "typography.multi.unchanged": "不改这项",

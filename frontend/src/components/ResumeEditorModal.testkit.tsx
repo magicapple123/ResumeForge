@@ -2,7 +2,7 @@
 /**
  * ResumeEditorModal 测试共用夹具：默认简历内容、内容构造器与视口 mock。
  *
- * 2026-10-19：文件行数预算（500 行）触顶后，把「条目级填入开关（entryFill）」那一组
+ * 2026-10-19：文件行数预算（500 行）触顶后，把「条目级填入」那一组
  * 用例拆到 `ResumeEditorModal.entryFill.test.tsx`。`vi.mock` 不跨文件 hoist，所以
  * mock 注册仍在各测试文件内；**内容夹具**与**视口 mock** 只有一份实现——就是本文件。
  *

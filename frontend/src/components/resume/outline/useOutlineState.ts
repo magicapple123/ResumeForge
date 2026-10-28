@@ -64,6 +64,8 @@ export function useOutlineState({
     // 预览基准 = 面板渲染/命令用的同一份内容（含未保存编辑）：id 一一对上，预览与提交同源。
     previewBase: baseContent,
     onStructurePreview,
+    // 拖到树容器上下边缘时自动滚动（长列表才拖得到屏幕外目标）。
+    treeRef,
   });
 
   const batchSetHidden = useCallback(

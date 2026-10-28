@@ -73,7 +73,8 @@ const typography = {
   "typography.painter.applied": "Applied to {count} items",
   "typography.multi.title": "Batch adjustments",
   "typography.multi.count": "{count} items selected",
-  "typography.multi.empty": "Select multiple Entries in the outline to adjust them together",
+  "typography.multi.empty":
+    "Select an entry in the outline (or press Space to multi-select) to set text levels and batch styles",
   "typography.multi.clear": "Clear selection",
   "typography.multi.unchanged": "Leave unchanged",
   "typography.multi.apply": "Apply to selected Entries",

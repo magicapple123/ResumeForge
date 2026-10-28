@@ -15,14 +15,19 @@ import { useLocale } from "../../i18n/i18nContext";
 import ResumeListSection from "../resume-editor/ResumeListSection";
 import EditorFieldCol from "../resume-editor/EditorFieldCol";
 import { useEditorFieldVisibility } from "../resume-editor/editorSchemaContext";
+import { useCarrierDisplayProps } from "../resume-editor/carrierDisplay";
 
 export default function CredentialsEditor() {
   useLocale();
   const visible = useEditorFieldVisibility("credentials");
+  // 任务 #8：承载区是 note（标量），自定义字段行只在自己的输入框里显示。
+  const carrierProps = useCarrierDisplayProps("credentials", false);
   return (
     <ResumeListSection
       title={t("editor.tab.credentials")}
       name="credentials"
+      // 任务 #9：证照也是多条目板块，每条都能从资料填入。
+      fillSection="credentials"
       emptyValue={{
         name: "",
         issuer: "",
@@ -102,7 +107,11 @@ export default function CredentialsEditor() {
             </Form.Item>
           </EditorFieldCol>
           <EditorFieldCol span={24} show={visible.show("note")}>
-            <Form.Item name={[field.name, "note"]} label={t("credentials.credential.note")}>
+            <Form.Item
+              {...carrierProps}
+              name={[field.name, "note"]}
+              label={t("credentials.credential.note")}
+            >
               <Input.TextArea rows={2} maxLength={2000} />
             </Form.Item>
           </EditorFieldCol>

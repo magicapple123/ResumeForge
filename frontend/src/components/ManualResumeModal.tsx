@@ -80,7 +80,7 @@ export default function ManualResumeModal({
     [job, projection.data],
   );
 
-  // 「从我的资料追加一条」的候选：服务端投影 candidates（当前组），value 是 content 现成条目。
+  // 「从资料填入本条」的候选：服务端投影 candidates（当前组），value 是 content 现成条目。
   const fillSources = useMemo(
     () => (projection.data ? buildProfileFillSources(projection.data) : null),
     [projection.data],
@@ -226,8 +226,6 @@ export default function ManualResumeModal({
         saveLabel={t("resume.manual.save")}
         referencePanel={job ? <JobRequirementPanel job={job} /> : undefined}
         fillSources={fillSources}
-        // 岗位模式只留模块顶部的「追加一条」：条目是用户照岗位亲手加出来的。
-        entryFill={!job}
         // T11：通用模式才给「重新带入全部」；数据来自当前组投影（服务端确定性纸面内容）。
         fillAll={
           job || !projection.data

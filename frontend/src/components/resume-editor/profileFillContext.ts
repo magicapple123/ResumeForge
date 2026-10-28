@@ -18,17 +18,6 @@ export interface ProfileFillContextValue {
   sources: ProfileFillSources;
   /** 填入一条之后通知宿主：标记"有未保存的修改"（未保存守卫要看得见它）。 */
   onFilled: () => void;
-  /**
-   * 是否在每个**条目**的头部渲染「从资料填入本条」。
-   *
-   * 为什么需要这个开关：岗位详情里的「自行编写简历」拿到的是**空白**的经历/项目列表，
-   * 用户要的是"照着这个岗位从头写"，条目是他自己一条条加出来的——每条头部再摆一个
-   * "填入本条"既没有可用目标（条目不来自资料），也和顶部「从我的资料追加一条」抢同一
-   * 件事。顶部的追加入口不受它影响（那才是这个场景下唯一需要的入口）。
-   *
-   * 缺省（`undefined`）视为 `true`：既有的通用手写简历、资料页编辑都要保留条目级入口。
-   */
-  entryFill: boolean;
 }
 
 const ProfileFillContext = createContext<ProfileFillContextValue | null>(null);

@@ -175,12 +175,12 @@ describe("ManualResumeModal 从我的资料填入（R16）", () => {
     });
   });
 
-  /** 打开「教育」标签页，并让「从我的资料填入」的下拉展开。 */
+  /** 打开「教育」标签页，并展开条目头的「从资料填入本条」下拉。 */
   async function openEducationFill() {
     await screen.findByText(/自行编写|从头编写/);
     fireEvent.click(await screen.findByRole("tab", { name: "教育" }));
 
-    const select = await screen.findByRole("combobox", { name: "从我的资料选择教育经历" });
+    const select = await screen.findByRole("combobox", { name: "从我的资料选择填入本条" });
     fireEvent.mouseDown(select);
     fireEvent.click(select);
     return select;
@@ -188,31 +188,31 @@ describe("ManualResumeModal 从我的资料填入（R16）", () => {
 
   // F9/R1 起初始内容就是当前组投影：这里不再需要先点「填入我的资料全部数据」。
 
-  it("打开后教育页有候选，且已经在简历里的那条标成「已加入」", async () => {
+  it("打开后教育页每条都有条目级候选，且当前这条自己标成「当前条目」", async () => {
     render(
       <AntdApp>
         <ManualResumeModal job={null} open onClose={vi.fn()} />
       </AntdApp>,
     );
 
-    // 初始内容来自当前组投影 → 同一条再出现在候选里就是「已加入」。
+    // 初始内容来自当前组投影 → 本条自己就是候选 A，标「当前条目」并禁用。
     await openEducationFill();
 
-    const option = await screen.findByText(/示例大学.*已加入/);
+    const option = await screen.findByText(/示例大学.*当前条目/);
     expect(option).toBeInTheDocument();
     expect(option.closest(".ant-select-item-option")).toHaveClass(
       "ant-select-item-option-disabled",
     );
   });
 
-  it("删掉一条后可以把它填回来：列表 +1，且填完又变成「已加入」", async () => {
+  it("删掉一条后加一条空条目，可从条目级把它填回来", async () => {
     render(
       <AntdApp>
         <ManualResumeModal job={null} open onClose={vi.fn()} />
       </AntdApp>,
     );
 
-    // 初始内容已预填；删掉那条，模拟"误删了想加回来"。
+    // 初始内容已预填；删掉那条再加一条空的，模拟"误删了想加回来"。
     await screen.findByText(/自行编写|从头编写/);
     fireEvent.click(await screen.findByRole("tab", { name: "教育" }));
     await waitFor(() =>
@@ -222,27 +222,26 @@ describe("ManualResumeModal 从我的资料填入（R16）", () => {
     await waitFor(() =>
       expect(screen.queryByRole("button", { name: "删除教育经历" })).not.toBeInTheDocument(),
     );
+    fireEvent.click(await screen.findByRole("button", { name: /添加教育经历/ }));
+    await waitFor(() => expect(screen.getByLabelText("学校")).toHaveValue(""));
 
     await openEducationFill();
     const option = await screen.findByText("示例大学（软件工程 · 本科 · 2023.09 ~ 2027.06）");
     fireEvent.click(option);
-    fireEvent.click(screen.getByRole("button", { name: "填入选中的教育经历" }));
+    fireEvent.click(screen.getByRole("button", { name: "填入本条的教育经历" }));
 
-    // 列表 +1：又出现了一条可删除的教育经历。
-    await waitFor(() =>
-      expect(screen.getByRole("button", { name: "删除教育经历" })).toBeInTheDocument(),
-    );
-    // 填进来的字段与表单形状一致：学校名进了输入框。
+    // 填进新加的那一条：学校名进了输入框，且没有多出条目。
     expect(await screen.findByLabelText("学校")).toHaveValue("示例大学");
+    expect(screen.getAllByLabelText("学校")).toHaveLength(1);
 
-    // 再展开一次：同一条已经标成「已加入」、不可重复填。
-    const select = screen.getByRole("combobox", { name: "从我的资料选择教育经历" });
+    // 再展开一次：填进来的这条已经标成「当前条目」、不可重复填。
+    const select = screen.getByRole("combobox", { name: "从我的资料选择填入本条" });
     fireEvent.mouseDown(select);
-    const again = await screen.findByText(/示例大学.*已加入/);
+    const again = await screen.findByText(/示例大学.*当前条目/);
     expect(again.closest(".ant-select-item-option")).toHaveClass("ant-select-item-option-disabled");
   });
 
-  it("填入只做加法：用户改过的条目原样保留", async () => {
+  it("填入只做加法：用户改过的字段原样保留，不新增条目", async () => {
     render(
       <AntdApp>
         <ManualResumeModal job={null} open onClose={vi.fn()} />
@@ -259,13 +258,11 @@ describe("ManualResumeModal 从我的资料填入（R16）", () => {
     await openEducationFill();
     const option = await screen.findByText("示例大学（软件工程 · 本科 · 2023.09 ~ 2027.06）");
     fireEvent.click(option);
-    fireEvent.click(screen.getByRole("button", { name: "填入选中的教育经历" }));
+    fireEvent.click(screen.getByRole("button", { name: "填入本条的教育经历" }));
 
-    // 两条：改过的那条（在前）原样保留，资料里的那条追加在后面。
-    await waitFor(() => expect(screen.getAllByLabelText("学校")).toHaveLength(2));
-    const schools = screen.getAllByLabelText("学校") as HTMLInputElement[];
-    expect(schools[0]).toHaveValue("我自己改过的大学");
-    expect(schools[1]).toHaveValue("示例大学");
+    // 填进"这一条"：手写的学校不被覆盖，条目数也不变（不再追加重复项）。
+    await waitFor(() => expect(screen.getAllByLabelText("学校")).toHaveLength(1));
+    expect((screen.getByLabelText("学校") as HTMLInputElement).value).toBe("我自己改过的大学");
   });
 
   it("基本信息页只提供「个人总结」，点了写进 summary", async () => {
@@ -358,8 +355,8 @@ describe("ManualResumeModal 从资料填入本条（条目级）", () => {
     expect(screen.getAllByLabelText("专业")[1]).toHaveValue("机械设计");
     expect(screen.getAllByLabelText("学历")[1]).toHaveValue("硕士");
     expect(screen.getAllByLabelText("开始时间")[1]).toHaveValue("2021.09");
-    // 顶部「追加一条」入口还在，两者并存。
-    expect(screen.getByText("从我的资料追加一条")).toBeInTheDocument();
+    // 板块级「追加一条」已下线：整份编辑器里不该再出现。
+    expect(screen.queryByText("从我的资料追加一条")).not.toBeInTheDocument();
   });
 });
 

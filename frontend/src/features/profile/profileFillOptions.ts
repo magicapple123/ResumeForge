@@ -52,6 +52,18 @@ export interface ProfileFillSources {
   projects: ProfileFillItem[];
   skills: ProfileFillItem[];
   awards: ProfileFillItem[];
+  /**
+   * 扩展分区候选（任务 #9）：科研三栏 / 证照 / 语言能力也要支持「从资料填入本条」。
+   *
+   * **可选**：旧宿主 / 旧夹具没给时按"没有候选"处理（入口不渲染），既有用例语义不变。
+   * 自建板块刻意不在这里：它的正文形状是 {text, lines}，没有"字段"可只填空字段，
+   * 硬填会覆盖用户的标签行，所以不提供该入口。
+   */
+  publications?: ProfileFillItem[];
+  researchProjects?: ProfileFillItem[];
+  patents?: ProfileFillItem[];
+  credentials?: ProfileFillItem[];
+  languages?: ProfileFillItem[];
   /** 资料里的个人总结；空串表示没写过。 */
   summary: string;
   /**
@@ -76,7 +88,17 @@ export interface ProfileFillSources {
  * 不是"可填入的分区"，漏排一次就会让 `PROFILE_FILL_KEYS` 多出一个没有键函数的成员。
  */
 export type ProfileFillSection =
-  "education" | "experience" | "campusExperience" | "projects" | "skills" | "awards";
+  | "education"
+  | "experience"
+  | "campusExperience"
+  | "projects"
+  | "skills"
+  | "awards"
+  | "publications"
+  | "researchProjects"
+  | "patents"
+  | "credentials"
+  | "languages";
 
 /** 统一取值：非字符串（表单里可能是 undefined）当成空串，并折叠多余空白。 */
 function text(value: unknown): string {
@@ -125,7 +147,32 @@ export function awardFillKey(item: Partial<ResumeAward> | null | undefined): str
   return joinKey([item?.name, item?.date]);
 }
 
-/** 各模块的形状键实现，供 `ResumeListSection` 计算"已加入"集合时复用。 */
+/** 论文：`title`（标题是认出"同一条"最稳的字段）。 */
+export function publicationFillKey(item: { title?: string } | null | undefined): string {
+  return joinKey([item?.title]);
+}
+
+/** 科研项目：`name`。 */
+export function researchProjectFillKey(item: { name?: string } | null | undefined): string {
+  return joinKey([item?.name]);
+}
+
+/** 专利：`title`。 */
+export function patentFillKey(item: { title?: string } | null | undefined): string {
+  return joinKey([item?.title]);
+}
+
+/** 证照：`name`。 */
+export function credentialFillKey(item: { name?: string } | null | undefined): string {
+  return joinKey([item?.name]);
+}
+
+/** 语言能力：`name`（英语 / 日语…）。 */
+export function languageFillKey(item: { name?: string } | null | undefined): string {
+  return joinKey([item?.name]);
+}
+
+/** 各模块的形状键实现，供 `ResumeListSection` / `ResearchListSection` 计算"已加入"集合时复用。 */
 export const PROFILE_FILL_KEYS: Record<ProfileFillSection, (item: unknown) => string> = {
   education: (item) => educationFillKey(item as Partial<ResumeEducation>),
   experience: (item) => experienceFillKey(item as Partial<ResumeExperience>),
@@ -133,9 +180,14 @@ export const PROFILE_FILL_KEYS: Record<ProfileFillSection, (item: unknown) => st
   projects: (item) => projectFillKey(item as Partial<ResumeProject>),
   skills: (item) => skillFillKey(item as Partial<ResumeSkill>),
   awards: (item) => awardFillKey(item as Partial<ResumeAward>),
+  publications: (item) => publicationFillKey(item as { title?: string }),
+  researchProjects: (item) => researchProjectFillKey(item as { name?: string }),
+  patents: (item) => patentFillKey(item as { title?: string }),
+  credentials: (item) => credentialFillKey(item as { name?: string }),
+  languages: (item) => languageFillKey(item as { name?: string }),
 };
 
-/** 消费分区键 → 简历正文数组字段 + 下拉模块名；语言/科研/证照/自建不进"追加一条"。 */
+/** 消费分区键 → 简历正文数组字段 + 下拉模块名；自建板块的正文是 {text, lines}，不进填入下拉。 */
 const SECTION_BY_CONSUMED_KEY: Record<
   string,
   { contentField: keyof ResumeContent; section: ProfileFillSection }
@@ -146,6 +198,26 @@ const SECTION_BY_CONSUMED_KEY: Record<
   projects: { contentField: "projects", section: "projects" },
   skills: { contentField: "skills", section: "skills" },
   awards: { contentField: "awards", section: "awards" },
+  publications: { contentField: "publications", section: "publications" },
+  research_projects: { contentField: "research_projects", section: "researchProjects" },
+  patents: { contentField: "patents", section: "patents" },
+  credentials: { contentField: "credentials", section: "credentials" },
+  languages: { contentField: "languages", section: "languages" },
+};
+
+/** 简历正文数组字段名 → 填入模块名（通用列表容器按 Form.List 的 name 直接取候选）。 */
+export const PROFILE_FILL_SECTION_BY_CONTENT_FIELD: Record<string, ProfileFillSection> = {
+  education: "education",
+  experience: "experience",
+  campus_experience: "campusExperience",
+  projects: "projects",
+  skills: "skills",
+  awards: "awards",
+  publications: "publications",
+  research_projects: "researchProjects",
+  patents: "patents",
+  credentials: "credentials",
+  languages: "languages",
 };
 
 /** 按服务端给的 paper_content_path（如 `projects/2`）取 content 里的现成条目。 */
@@ -217,8 +289,9 @@ export function projectionSectionFill(
  *
  * 顺序沿用 candidates（= 全局顺序 + 条目 sort_order），前端不再排序；每条 `value` 都是
  * 投影 content 里的现成对象，与纸面逐字相同，所以"填入"就是一次 `[...current, value]`。
- * 语言条目已经按 R-72 并进 content.skills，因此 languages 候选**不再单独出现**；
- * 科研三栏/证照/自建分区有各自的编辑面板，不进"追加一条"下拉。
+ * 科研三栏 / 证照 / 语言能力从 2026-10 起也进"从资料填入本条"（任务 #9）：每条都能从
+ * 当前组资料里把空字段补齐，不再需要板块级的"追加一条"入口。
+ * 自建板块不提供候选：正文形状是 {text, lines}，没有"字段"可只填空字段。
  */
 export function buildProfileFillSources(projection: PaperProjectionOut): ProfileFillSources {
   const content = projection?.content;
@@ -235,6 +308,11 @@ export function buildProfileFillSources(projection: PaperProjectionOut): Profile
       projects: [],
       skills: [],
       awards: [],
+      publications: [],
+      researchProjects: [],
+      patents: [],
+      credentials: [],
+      languages: [],
       summary: "",
       ...(participatingKeys ? { participatingKeys } : {}),
       ...(editorView ? { editorView } : {}),
@@ -247,6 +325,11 @@ export function buildProfileFillSources(projection: PaperProjectionOut): Profile
     projects: buildBucket(projection, "projects", "projects"),
     skills: buildBucket(projection, "skills", "skills"),
     awards: buildBucket(projection, "awards", "awards"),
+    publications: buildBucket(projection, "publications", "publications"),
+    researchProjects: buildBucket(projection, "researchProjects", "research_projects"),
+    patents: buildBucket(projection, "patents", "patents"),
+    credentials: buildBucket(projection, "credentials", "credentials"),
+    languages: buildBucket(projection, "languages", "languages"),
     summary: text(content.summary),
     ...(participatingKeys ? { participatingKeys } : {}),
     ...(editorView ? { editorView } : {}),

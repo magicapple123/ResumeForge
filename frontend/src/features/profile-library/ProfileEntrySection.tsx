@@ -38,12 +38,23 @@ interface Props {
   onOpenGuide: () => void;
 }
 
-/** 条目标题：默认字段里第一个有值的单行文本（与界面给用户的识别锚点一致）。 */
+/**
+ * 条目标题：**只作为"第几条"的识别锚点**（2026-10-28 用户反馈 #6）。
+ *
+ * - **自建板块**：按条目在当前板块里的顺序显示纯序号 1/2/3，**不跟随字段内容**。
+ *   此前这里取"第一个有值的单行字段"，于是用户输入的单行文本（如「法国色色」）被当成
+ *   条目名显示，看起来像数据串到了标题上；卡片内部字段标签已经足够说明内容是什么。
+ * - **系统板块**：仍取第一个有值的单行字段（公司 / 学校 / 项目名）——那是用户真正的
+ *   识别锚点，改成序号反而更难分辨两条经历。
+ *
+ * 序号按 **当前顺序** 现算（不落库）：上移/下移/拖拽之后序号自动跟着位置走。
+ */
 function entryTitle(
   section: SectionOut,
   entry: ProfileEntryDraft | undefined,
   index: number,
 ): string {
+  if (!section.is_builtin) return String(index + 1);
   if (!entry) return t("profileLibrary.entry.untitled", { index: index + 1 });
   const text = (fieldId: string) => String(entry.values?.[fieldId] ?? "").trim();
   const first = section.fields.find((field) => field.field_type === "single_line");

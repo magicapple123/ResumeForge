@@ -293,10 +293,15 @@ export default function CustomSectionsEditor() {
                             style={{
                               display: "flex",
                               alignItems: "center",
-                              justifyContent: "flex-end",
+                              justifyContent: "space-between",
                               marginBottom: 6,
                             }}
                           >
+                            {/* 条目卡标题 = 当前顺序的序号（2026-10-28 用户反馈 #6）：与系统板块
+                                「条目名来自字段」不同，自建板块不拿字段内容当名字，顺序即身份。 */}
+                            <span data-custom-entry-index={entry.name + 1}>
+                              <Typography.Text strong>{entry.name + 1}</Typography.Text>
+                            </span>
                             <Tooltip title={t("editor.custom-sections.remove-entry")}>
                               <Button
                                 type="text"

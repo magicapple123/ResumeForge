@@ -52,12 +52,12 @@ function projection(): PaperProjectionOut {
       awards: [{ name: "一等奖学金", date: "2024.10", description: "" }],
     },
   });
-  // 语言候选：内容里已按 R-72 并入 skills，候选层不该再作为可追加项重复出现。
+  // 语言能力 2026-10 起独立成栏（任务 #9：也进条目级候选）。
   return {
     ...data,
     content: {
       ...data.content,
-      skills: [...data.content.skills, { name: "英语", level: "CET-6 · 550" }],
+      languages: [{ name: "英语", level: "CET-6 · 550" }],
     },
     candidates: [
       ...data.candidates,
@@ -67,7 +67,7 @@ function projection(): PaperProjectionOut {
         entry_id: "entry-languages-0",
         title: "英语",
         subtitle: "CET-6 · 550",
-        paper_content_path: "skills/1",
+        paper_content_path: "languages/0",
       },
       {
         section_key: "custom:open",
@@ -102,26 +102,22 @@ describe("buildProfileFillSources（投影输入）", () => {
     expect(sources.education[0].hint).toBe("软件工程 · 本科 · 2023.09 ~ 2027.06");
   });
 
-  it("语言与自建分区候选不进入「追加一条」下拉（避免与专门面板重复）", () => {
+  it("语言能力也进条目级候选（任务 #9）；自建分区没有字段级来源，不提供候选", () => {
     const data = projection();
     const sources = buildProfileFillSources(data);
-    const values = [
-      ...sources.education,
-      ...sources.experience,
-      ...sources.projects,
-      ...sources.skills,
-      ...sources.awards,
-    ].map((item) => item.value);
-    // 语言技能仍在 content.skills（整份填充会带上），但不是单独候选。
-    expect(values).toContain(data.content.skills[0]);
-    expect(values).not.toContain(data.content.skills[1]);
+    expect(sources.languages).toHaveLength(1);
+    expect(sources.languages?.[0].value).toBe(data.content.languages?.[0]);
+    // 自建板块的正文是 {text, lines}，没有"字段"可只填空字段：不给候选，也不伪造。
+    expect(projectionSectionFill(data, "custom:open")).toBeNull();
+    expect(sources.publications).toEqual([]);
   });
 
-  it("只映射六个可追加分区；summary 来自 content（去首尾空白）", () => {
+  it("扩展分区（科研/证照/语言）也有映射；summary 来自 content（去首尾空白）", () => {
     const data = projection();
     const sources = buildProfileFillSources(data);
     expect(sources.summary).toBe("三年后端开发经验。");
-    expect(projectionSectionFill(data, "publications")).toBeNull();
+    expect(projectionSectionFill(data, "publications")?.contentField).toBe("publications");
+    expect(projectionSectionFill(data, "credentials")?.contentField).toBe("credentials");
     expect(projectionSectionFill(data, "basic_info")).toBeNull();
     expect(projectionSectionFill(data, "projects")?.items).toHaveLength(1);
   });
@@ -135,6 +131,8 @@ describe("buildProfileFillSources（投影输入）", () => {
     expect(sources.projects).toEqual([]);
     expect(sources.skills).toEqual([]);
     expect(sources.awards).toEqual([]);
+    expect(sources.publications).toEqual([]);
+    expect(sources.languages).toEqual([]);
     expect(sources.summary).toBe("三年后端开发经验。");
   });
 });

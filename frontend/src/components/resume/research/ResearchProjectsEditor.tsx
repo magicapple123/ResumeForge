@@ -12,6 +12,7 @@ import ResearchListSection from "./ResearchListSection";
 import EditorFieldCol from "../../resume-editor/EditorFieldCol";
 import { useEditorFieldVisibility } from "../../resume-editor/editorSchemaContext";
 import { multilineItemProps } from "../../resume-editor/resumeFieldUtils";
+import { useCarrierDisplayProps } from "../../resume-editor/carrierDisplay";
 import { rt } from "../../../features/resume-research/i18n";
 import { emptyResearchProject } from "../../../features/resume-research/researchFields";
 
@@ -21,6 +22,8 @@ export default function ResearchProjectsEditor() {
   useLocale();
   const label = rt(LABEL);
   const visible = useEditorFieldVisibility("research_projects");
+  // 任务 #8：承载区是 description（列表），自定义字段行只在自己的输入框里显示。
+  const carrierProps = useCarrierDisplayProps("research_projects", true);
   return (
     <ResearchListSection
       name="research_projects"
@@ -79,7 +82,7 @@ export default function ResearchProjectsEditor() {
           </EditorFieldCol>
           <EditorFieldCol xs={24} md={12} show={visible.show("description")}>
             <Form.Item
-              {...multilineItemProps}
+              {...carrierProps}
               name={[field.name, "description"]}
               label={rt("research.projects.description")}
             >

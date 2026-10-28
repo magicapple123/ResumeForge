@@ -4,8 +4,8 @@
  *
  * ## 为什么不复用 `resume-editor/ResumeListSection`
  *
- * 那个容器是给"教育/经历"这类**只有平铺字段**的分区用的：它有「从我的资料填入」的耦合，
- * 而且没有排序能力。科研条目有两件它做不到的事：
+ * 那个容器是给"教育/经历"这类**只有平铺字段**的分区用的：没有排序能力。科研条目有两件
+ * 它做不到的事（「从资料填入本条」用的是同一个共享 hook，不是不复用的理由）：
  * 1. 条目内还有**嵌套列表**（论文的作者、专利的发明人），空值里带对象数组；
  * 2. 顺序本身就是语义（作者顺序 = 署名顺序），需要真实的上移/下移动作。
  * 视觉上刻意沿用同一套容器样式（同一组 CSS 变量、同样的卡片圆角与内边距），
@@ -29,6 +29,9 @@ import { memo } from "react";
 import type { ReactNode } from "react";
 import EmptyState from "../../common/EmptyState";
 import AppendedCarrierFields from "../../resume-editor/AppendedCarrierFields";
+import ProfileFillBar from "../../resume-editor/ProfileFillBar";
+import { useProfileEntryFill } from "../../resume-editor/profileEntryFill";
+import { PROFILE_FILL_SECTION_BY_CONTENT_FIELD } from "../../../features/profile/profileFillOptions";
 import { rt } from "../../../features/resume-research/i18n";
 import { useLocale } from "../../../i18n/i18nContext";
 
@@ -86,6 +89,8 @@ export default function ResearchListSection<T extends object>({
   children,
 }: Props<T>) {
   useLocale();
+  // 任务 #9：科研三栏的每条也有「从资料填入本条」（候选来自当前组投影的现成条目）。
+  const fill = useProfileEntryFill(name, PROFILE_FILL_SECTION_BY_CONTENT_FIELD[name]);
   return (
     <div data-research-section={name}>
       <Form.List name={name}>
@@ -125,6 +130,21 @@ export default function ResearchListSection<T extends object>({
                   <span style={{ fontWeight: 600, minWidth: 0, marginRight: "auto" }}>
                     {label} {index + 1}
                   </span>
+                  {fill.available && (
+                    <ProfileFillBar
+                      label={label}
+                      items={fill.items}
+                      existingKeys={
+                        new Set(
+                          fill.entryKeys.filter(
+                            (key, position): key is string => position !== index && Boolean(key),
+                          ),
+                        )
+                      }
+                      currentKey={fill.entryKeys[index]}
+                      onFill={(item) => fill.fillEntry(index, item)}
+                    />
+                  )}
                   <Space size={2}>
                     <Tooltip title={rt("research.list.moveUp")}>
                       <Button

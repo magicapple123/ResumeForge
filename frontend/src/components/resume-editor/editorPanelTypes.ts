@@ -30,7 +30,6 @@ export interface ResumeEditorPanelOptions {
    */
   pickTarget?: { path: string; nonce: number } | null;
   fillSources?: ProfileFillSources | null;
-  entryFill?: boolean;
   /**
    * 内容变化且表单有未保存改动时**不静默覆盖**，改为暴露 contentRefreshPending 让界面问一句。
    *

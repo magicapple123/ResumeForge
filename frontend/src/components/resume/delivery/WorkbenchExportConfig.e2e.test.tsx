@@ -167,14 +167,14 @@ function installFetchStub(): void {
   );
 }
 
-function renderPreview() {
+function renderPreview(layout: ResumeLayout = LAYOUT) {
   return render(
     <MemoryRouter>
       <AntdApp>
         <ResumeDetailPreview
           detail={DETAIL}
           html="<html><body>preview</body></html>"
-          layout={LAYOUT}
+          layout={layout}
           layoutStatus={null}
           measure={null}
           pdfDirectAvailable
@@ -281,6 +281,27 @@ describe("W19 制作台导出交付包端到端（真实 shell + HTTP 适配层�
     expect(screen.queryAllByRole("dialog", { name: t("workbench.title") }).length).toBeGreaterThan(
       0,
     );
+  });
+
+  it("导出请求带全 format_config（联系方式换行等布局覆盖不被丢掉）", async () => {
+    // #3 用户反馈回归：制作台里设了「联系方式换行」后导出的 Word 没有换行。
+    // 第一段证据在这里：导出弹窗必须把**当前整份 format_config** 原样塞进成套导出请求
+    // （后端 Word 渲染读的正是其中的 contact_breaks）；漏带它时后端只能回落记录值。
+    const withBreaks: ResumeLayout = {
+      ...LAYOUT,
+      format_config: { contact_breaks: ["personal_website"], accent: "#123456" },
+    };
+    renderPreview(withBreaks);
+    const dialog = await openExportDialog();
+
+    fireEvent.click(button(dialog, t("delivery.export.action")));
+    await waitFor(() => {
+      const bundle = calls.find((call) => call.url.includes("/export-bundle"));
+      expect(bundle?.body.format_config).toEqual({
+        contact_breaks: ["personal_website"],
+        accent: "#123456",
+      });
+    });
   });
 
   it("409 版本已更新：提示 + 不自动重试；点「刷新并核对」走 onReloadRevision 重取 revision", async () => {

@@ -26,17 +26,12 @@
 import { Button } from "antd";
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import type { RefObject } from "react";
-import EmptyState from "../../common/EmptyState";
 import { t } from "../../../i18n";
 import { useLocale } from "../../../i18n/i18nContext";
 import { ensureIds } from "../../../features/resume-document/identity";
 import {
   buildOutline,
   entryKey,
-  personalSubtitle,
-  selectionKey,
-  type OutlineEntry,
-  type OutlinePoint,
   type OutlineSection,
 } from "../../../features/resume-outline/model";
 import { resolveHighlightTargets } from "../../../features/resume-outline/highlight";
@@ -44,15 +39,16 @@ import { selectionPath } from "../../../features/resume-outline/model";
 import type { OutlineCommand, OutlineSelection } from "../../../features/resume-outline/types";
 import type { ResumeContent } from "../../../types/resume";
 import OutlineInspector from "./OutlineInspector";
-import { EntryRowContent, PointRowContent, SectionHeaderContent } from "./OutlineRows";
 import OutlineSearchBar from "./OutlineSearchBar";
-import { pointTreeKey } from "./outlineTree";
+import OutlineTreeView from "./OutlineTreeView";
 import { useOutlineCanvasHighlight } from "./useOutlineCanvasHighlight";
 import { useOutlineHostBridge } from "./useOutlineHostBridge";
 import type { OutlineMultiEntry, OutlineMultiSelectionApi } from "./useOutlineHostBridge";
+import { useOutlineRowDrag } from "./useOutlineRowDrag";
 import { useOutlineSearch } from "./useOutlineSearch";
 import { useOutlineState } from "./useOutlineState";
 import "./outline.css";
+import "./outline-batch.css";
 
 export type { OutlineMultiEntry, OutlineMultiSelectionApi };
 
@@ -95,20 +91,6 @@ export interface OutlinePanelProps {
   className?: string;
 }
 
-function entrySelectionOf(entry: OutlineEntry): OutlineSelection {
-  return { kind: "entry", field: entry.field, objectId: entry.objectId };
-}
-
-function pointSelectionOf(entry: OutlineEntry, point: OutlinePoint): OutlineSelection {
-  return {
-    kind: "point",
-    field: entry.field,
-    objectId: entry.objectId,
-    pointField: point.pointField,
-    pointId: point.pointId,
-  };
-}
-
 export default function OutlinePanel({
   content,
   onCommand,
@@ -139,6 +121,16 @@ export default function OutlinePanel({
   });
   // 搜索时只画命中行（+祖先）；选中/命令仍按 id 指向原对象（模型只是"显示哪些行"）。
   const displayedModel = search.query ? search.result.model : model;
+  const searching = search.query !== "";
+  /**
+   * 树上渲染的**结构**来源：搜索时是命中模型，否则是完整模型。
+   *
+   * 拖动中的**视觉顺序**不走 React 重排 DOM，而是给每行写 CSS `order`（见下方 render*）：
+   * 真机实测，把被拖行/目标行在 DOM 里挪位置会让 Chromium 认为 hovered 元素被替换、
+   * 从而**扣掉 drop 事件**（只剩 dragend）——"松手后顺序没变"的主因。DOM 稳定后 drop 一定触发；
+   * 视觉上仍然按预览顺序换位，落点也仍按对象 id 回查基准下标。
+   */
+  const treeSource = searching ? displayedModel : model;
   const readonly = readOnly || !onCommand || !baseContent;
   const state = useOutlineState({
     baseContent,
@@ -148,6 +140,12 @@ export default function OutlinePanel({
     onSelectionChange,
     treeRef,
     onStructurePreview,
+  });
+  // 整行可拖：手柄仍是精确入口，行/标题是用户真正的抓取位置（行内按钮不劫持拖动）。
+  const rowDrag = useOutlineRowDrag({
+    beginEntryDrag: state.beginEntryDrag,
+    beginPointDrag: state.beginPointDrag,
+    enabled: !readonly,
   });
   const targets = useMemo(
     () => resolveHighlightTargets(baseContent, state.selection),
@@ -238,159 +236,6 @@ export default function OutlinePanel({
   const parentEntry = selectedKind === "point" ? state.selectedEntry : null;
   const multi = state.multiSelectedEntries;
   const allHidden = multi.length > 0 && multi.every((entry) => entry.hidden);
-  const selectedKey = selectionKey(state.selection);
-
-  const renderPoint = (entry: OutlineEntry, point: OutlinePoint) => {
-    const key = pointTreeKey(entry.field, entry.objectId, point.pointField, point.pointId);
-    const pointSelection = pointSelectionOf(entry, point);
-    const selected = selectedKey === selectionKey(pointSelection);
-    const moving =
-      state.sortSession?.kind === "point" &&
-      state.sortSession.objectId === entry.objectId &&
-      state.sortSession.pointId === point.pointId;
-    return (
-      <div
-        key={key}
-        role="treeitem"
-        aria-selected={selected}
-        data-tree-key={key}
-        tabIndex={state.activeKey === key ? 0 : -1}
-        className="resume-outline-treeitem"
-      >
-        <PointRowContent
-          point={point}
-          moving={Boolean(moving)}
-          dropTarget={state.dropTargetKey === key}
-          readOnly={readonly}
-          query={search.query || undefined}
-          sortBlockedReason={entry.lockLayout ? t("outline.blocked.locked-layout") : undefined}
-          onSelect={() => state.select(pointSelection)}
-          onToggleHidden={() => state.setHiddenPoints(entry, [point], !point.hidden)}
-          onClone={() => state.clonePoint(entry, point)}
-          onSortFocus={() => state.select(pointSelection)}
-          onSortStart={() => state.startSort(pointSelection)}
-          onSortKeyDown={state.handleSortKeyDown}
-          onDragStart={(event) => {
-            event.stopPropagation();
-            event.dataTransfer?.setData("text/plain", point.pointId);
-            state.beginPointDrag(entry, point);
-          }}
-          onDragEnd={state.endDrag}
-          onDragOver={(event) => state.dragOverPoint(entry, point, event)}
-          onDrop={(event) => state.dropOnPoint(entry, point, event)}
-        />
-      </div>
-    );
-  };
-
-  const renderEntry = (entry: OutlineEntry) => {
-    const key = entryKey(entry.field, entry.objectId);
-    const entrySelection = entrySelectionOf(entry);
-    // 搜索时让命中条目的要点直接展开：命中就在要点里，不展开等于没显示结果。
-    const expanded = searching ? entry.points.length > 0 : state.expandedEntries.has(key);
-    const selected = selectedKey === selectionKey(entrySelection);
-    const moving =
-      state.sortSession?.kind === "entry" &&
-      state.sortSession.field === entry.field &&
-      state.sortSession.objectId === entry.objectId;
-    return (
-      <div
-        key={key}
-        role="treeitem"
-        aria-expanded={entry.points.length > 0 ? expanded : undefined}
-        aria-selected={selected}
-        data-tree-key={key}
-        tabIndex={state.activeKey === key ? 0 : -1}
-        className="resume-outline-treeitem"
-      >
-        <EntryRowContent
-          entry={entry}
-          expanded={expanded}
-          moving={Boolean(moving)}
-          dropTarget={state.dropTargetKey === key}
-          readOnly={readonly}
-          displayName={entry.title || t("outline.entry.untitled")}
-          query={search.query || undefined}
-          hiddenPointCount={entry.points.filter((point) => point.hidden).length}
-          sortBlockedReason={entry.lockLayout ? t("outline.blocked.locked-layout") : undefined}
-          onSelect={() => state.select(entrySelection)}
-          onToggle={() => state.toggleEntry(key)}
-          onSortFocus={() => state.select(entrySelection)}
-          onSortStart={() => state.startSort(entrySelection)}
-          onSortKeyDown={state.handleSortKeyDown}
-          onDragStart={(event) => {
-            event.stopPropagation();
-            event.dataTransfer?.setData("text/plain", entry.objectId);
-            state.beginEntryDrag(entry);
-          }}
-          onDragEnd={state.endDrag}
-          onDragOver={(event) => state.dragOverEntry(entry, event)}
-          onDrop={(event) => state.dropOnEntry(entry, event)}
-        />
-        {expanded && entry.points.length > 0 ? (
-          <div role="group" className="resume-outline-group">
-            {entry.points.map((point) => (point.pointId ? renderPoint(entry, point) : null))}
-          </div>
-        ) : null}
-      </div>
-    );
-  };
-
-  const renderSection = (section: OutlineSection) => {
-    if (section.field === null) {
-      const selected = selectedKind === "personal";
-      return (
-        <div
-          key="personal"
-          role="treeitem"
-          aria-selected={selected}
-          data-tree-key="personal"
-          tabIndex={state.activeKey === "personal" ? 0 : -1}
-          className="resume-outline-treeitem"
-          onClick={() => state.select({ kind: "personal" })}
-        >
-          <SectionHeaderContent
-            title={t(section.titleKey)}
-            expanded={false}
-            collapsible={false}
-            subtitle={personalSubtitle(baseContent)}
-            query={search.query || undefined}
-            onToggle={() => state.select({ kind: "personal" })}
-          />
-        </div>
-      );
-    }
-    const field = section.field;
-    const sectionKey = `section:${field}`;
-    // 搜索时板块恒展开（过滤后的树只有命中行，收起会让用户看不到结果）。
-    const expanded = searching ? true : !state.collapsedSections.has(field);
-    return (
-      <div
-        key={sectionKey}
-        role="treeitem"
-        aria-expanded={expanded}
-        data-tree-key={sectionKey}
-        tabIndex={state.activeKey === sectionKey ? 0 : -1}
-        className="resume-outline-treeitem"
-      >
-        <SectionHeaderContent
-          title={t(section.titleKey)}
-          count={section.entries.length}
-          expanded={expanded}
-          collapsible
-          query={search.query || undefined}
-          onToggle={() => state.toggleSection(field)}
-        />
-        {expanded ? (
-          <div role="group" className="resume-outline-group">
-            {section.entries.map((entry) => (entry.objectId ? renderEntry(entry) : null))}
-          </div>
-        ) : null}
-      </div>
-    );
-  };
-
-  const searching = search.query !== "";
   // 搜索时"没有命中"与"这份简历还没有条目"是两种空：前者说明换个词，后者引导去中栏添加。
   const showEmpty = searching
     ? displayedModel.entryCount === 0 &&
@@ -441,24 +286,19 @@ export default function OutlinePanel({
           </Button>
         </div>
       ) : null}
-      {showEmpty ? (
-        <EmptyState
-          inline
-          description={t(searching ? "outline.search.noMatch" : "outline.empty")}
-        />
-      ) : (
-        <div
-          role="tree"
-          aria-label={t("outline.tree.label")}
-          aria-multiselectable="true"
-          className="resume-outline-tree"
-          ref={treeRef}
-          onScroll={search.onTreeScroll}
-          onKeyDown={state.handleTreeKeyDown}
-        >
-          {state.previewTree.sections.map(renderSection)}
-        </div>
-      )}
+      <OutlineTreeView
+        treeSource={treeSource}
+        previewTree={state.previewTree}
+        baseContent={baseContent}
+        query={search.query}
+        searching={searching}
+        readonly={readonly}
+        state={state}
+        rowDrag={rowDrag}
+        treeRef={treeRef}
+        onTreeScroll={search.onTreeScroll}
+        showEmpty={showEmpty}
+      />
       {readonly ? null : <p className="resume-outline-hint">{t("outline.batch.hint")}</p>}
       <OutlineInspector
         selection={state.selection}

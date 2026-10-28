@@ -64,7 +64,7 @@ function pointIdsFor(entry: AnyEntry, field: EntryField): Record<string, string[
   return next;
 }
 
-function ensureEntryIds(entry: AnyEntry, field: EntryField): AnyEntry {
+function withEntryIdentity(entry: AnyEntry, field: EntryField): AnyEntry {
   const next: AnyEntry = { ...entry };
   if (!isObjectId(next.id)) next.id = newObjectId();
   const points = pointIdsFor(entry, field);
@@ -84,10 +84,46 @@ export function ensureIds(content: ResumeContent): ResumeContent {
     const entries = (content as unknown as Record<string, unknown>)[field];
     if (!Array.isArray(entries)) continue;
     next[field] = entries.map((entry) =>
-      entry && typeof entry === "object" ? ensureEntryIds(entry as AnyEntry, field) : entry,
+      entry && typeof entry === "object" ? withEntryIdentity(entry as AnyEntry, field) : entry,
     );
   }
   return next as ResumeContent;
+}
+
+/**
+ * 只补"条目 id"（不生成要点 id），返回新对象；已有合法 id 原样保留。
+ *
+ * 为什么单独需要一个只补条目 id 的版本：制作台的局部排版（对象样式 / 文字级别）以
+ * `format_config.objects[object_id]` 为唯一落点，要求正文里的条目**带稳定 id**；但编辑表单
+ * 在增删要点行时不会同步 `point_ids`，若把 `ensureIds` 生成的要点 id 一起塞进表单，
+ * 用户改一行要点后保存就会被 W01 的"要点 id 与文本等长"校验 422。这里只补条目 id，
+ * 要点身份仍由大纲结构命令按需维护。
+ */
+export function ensureEntryIds(content: ResumeContent): ResumeContent {
+  const next = { ...content } as ResumeContent & Record<string, unknown>;
+  for (const field of Object.keys(ENTRY_POINT_FIELDS) as EntryField[]) {
+    const entries = (content as unknown as Record<string, unknown>)[field];
+    if (!Array.isArray(entries)) continue;
+    next[field] = entries.map((entry) => {
+      if (!entry || typeof entry !== "object") return entry;
+      const item = entry as AnyEntry;
+      return isObjectId(item.id) ? item : { ...item, id: newObjectId() };
+    });
+  }
+  return next as ResumeContent;
+}
+
+/** 正文里是否存在缺少合法条目 id 的条目（用于判断保存版式时是否要顺带物化身份）。 */
+export function hasMissingEntryIds(content: ResumeContent): boolean {
+  for (const field of Object.keys(ENTRY_POINT_FIELDS) as EntryField[]) {
+    const entries = (content as unknown as Record<string, unknown>)[field];
+    if (!Array.isArray(entries)) continue;
+    for (const entry of entries) {
+      if (!entry || typeof entry !== "object") continue;
+      if (!isObjectId((entry as AnyEntry).id)) return true;
+    }
+  }
+  return false;
 }
 
 /** 复制一条条目：内容原样、身份全新（含全部要点 id）。 */
@@ -95,7 +131,7 @@ export function cloneEntryWithNewIds<T extends object>(entry: T, field: EntryFie
   const copy = JSON.parse(JSON.stringify(entry)) as AnyEntry;
   delete copy.id;
   delete copy.point_ids;
-  return ensureEntryIds(copy, field) as T;
+  return withEntryIdentity(copy, field) as T;
 }
 
 /** 按条目 id 找它当前的下标路径（`experience.2`）；找不到返回 null。 */

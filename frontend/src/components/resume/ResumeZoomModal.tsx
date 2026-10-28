@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 /** 「简历制作台」整屏外壳：三栏编排、动作条、窄屏降级与各领域挂载点（W02–W17）的接线。 */
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import type { ResumeLayout } from "../../types";
 import { createResumeDraftStore } from "../../features/resume/resumeDraftContent";
 import { useMediaQuery } from "../../hooks/useMediaQuery";
@@ -29,6 +29,7 @@ import { useWorkbenchProview } from "./useWorkbenchProview";
 import { useWorkbenchServerSync } from "./useWorkbenchServerSync";
 import { useWorkbenchOverallSave } from "./useWorkbenchOverallSave";
 import { useOpenLayoutBaseline } from "../../features/resume-document/useOpenLayoutBaseline";
+import { ensureEntryIds, hasMissingEntryIds } from "../../features/resume-document/identity";
 import type { ResumeZoomModalProps } from "./ResumeZoomModal.types";
 
 export default function ResumeZoomModal({
@@ -108,18 +109,34 @@ export default function ResumeZoomModal({
   const columns = useWorkbenchColumns();
   const { containerRef: bodyRef } = columns;
   const editorEnabled = Boolean(onSaveContent);
+  /**
+   * 制作台内的一切"对象身份"（局部排版 / 文字级别 / 对象样式 / 来源定位）都以
+   * `format_config.objects[object_id]` 和 `data-object-id` 为锚点。后端读取旧记录时
+   * 不物化 id（W01：打开看一眼不改库），所以这里在**进入制作台时补一次条目 id**，
+   * 并把它传给大纲、上下文面板、编辑表单与保存通道——三处各补一次会得到三套随机 id，
+   * 选中自然对不上（2026-10-28 用户反馈「找不到文字级别」的根因）。
+   *
+   * 只补条目 id，不生成要点 id：编辑表单增删要点时不会同步 `point_ids`，一起塞进去
+   * 会让保存被 W01 的等长校验 422（详见 `ensureEntryIds` 的注释）。
+   */
+  const identifiedContent = useMemo(() => (content ? ensureEntryIds(content) : null), [content]);
+  /** 正文里还有没物化的条目 id：保存版式时顺带把身份写回，否则对象样式重开就断链。 */
+  const contentLacksEntryIds = useMemo(
+    () => (content ? hasMissingEntryIds(content) : false),
+    [content],
+  );
   const { handleContentSave, readLocalContent, adoptLatest } = useWorkbenchDocumentBridge({
     documentPipeline,
     onSaveContent,
     editorRef,
-    content,
+    content: identifiedContent,
     mergeLive,
     // 中栏未挂载时冲突条要用的"本地那一版"在统一历史里。
     documentContent: () => history.content,
   });
   const history = useWorkbenchHistory({
     resumeId,
-    content,
+    content: identifiedContent,
     layout,
     onApplyLayout,
     editorRef,
@@ -161,6 +178,9 @@ export default function ResumeZoomModal({
     documentPipeline,
     onPublishDraft,
     documentContent: documentCommit.bridge,
+    // 旧记录没有条目 id：用户只改版式（如应用文字级别）时也把身份一并落库，
+    // 否则保存后的 format_config.objects 指向一套下次打开就不存在的 id。
+    persistDocumentOnLayoutSave: contentLacksEntryIds,
   });
   // W15 专业视图：命令 / 工作区预设 / 照片入口；裁剪落点复用 history.recordLayout（进历史 + 既有保存链路）。
   const { proview, panels } = useWorkbenchProview({
@@ -175,7 +195,7 @@ export default function ResumeZoomModal({
   const serverSync = useWorkbenchServerSync({
     resumeId,
     currentRevision: documentPipeline?.revision,
-    currentContent: liveContent ?? content ?? null,
+    currentContent: liveContent ?? identifiedContent ?? null,
     history,
     onDocumentSynced,
   });
@@ -202,10 +222,10 @@ export default function ResumeZoomModal({
   };
   // W08/W07 上下文：一份选中同时喂条目级分页、溢出定位与对象级排版；定位复用纸面链路。
   const contextPanels = useWorkbenchContextPanels({
-    content: content ?? null,
+    content: identifiedContent,
     resumeId,
     layout,
-    draftContent: liveContent ?? content ?? null,
+    draftContent: liveContent ?? identifiedContent ?? null,
     sectionOptions: catalog?.section_options,
     onLocateField: pickFromPaper,
     onApplyContent: history.commitContent,
@@ -261,8 +281,8 @@ export default function ResumeZoomModal({
       layoutSaving={layoutSaving}
       onDocumentModeSaved={onDocumentSynced}
       {...contextPanels.paramsProps}
-      // W06 大纲：内容 + 纸面点击目标 + 右栏节点。
-      content={content ?? null}
+      // W06 大纲：内容 + 纸面点击目标 + 右栏节点（带条目 id，选中才能落到对象上）。
+      content={identifiedContent}
       draftContent={mergeLive?.(history.content) ?? history.content}
       pickTarget={pickTarget}
       canvasContainer={canvasNode}
@@ -283,7 +303,7 @@ export default function ResumeZoomModal({
       <ResumeWorkbenchEditorColumn
         ref={editorRef}
         active
-        content={content ?? null}
+        content={identifiedContent}
         resumeId={resumeId}
         fillSources={fillSources}
         relayouting={relayouting}
@@ -336,7 +356,7 @@ export default function ResumeZoomModal({
         // 勾上「草稿模式编辑」后，右栏纸面点哪里，中栏就跳到哪一栏的输入框。
         onPickField={editorEnabled ? pickFromPaper : undefined}
         // 实时预览优先级在画布里定：结构预览（拖动中）→ 草稿（叠加加粗）→ 宿主已保存 / 已加粗。
-        content={outline.preview ?? liveContent ?? content ?? null}
+        content={outline.preview ?? liveContent ?? identifiedContent ?? null}
         draftStore={draftStore}
         mergeLive={mergeLive}
         layout={layout}

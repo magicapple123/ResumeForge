@@ -51,7 +51,6 @@ export function useResumeEditorPanel(options: ResumeEditorPanelOptions): ResumeE
     pickTarget = null,
     draftScopeKey,
     fillSources,
-    entryFill = true,
     deferRefreshWhenDirty = false,
     fillAll,
     onSave,
@@ -125,9 +124,8 @@ export function useResumeEditorPanel(options: ResumeEditorPanelOptions): ResumeE
   }, [setFormValue, summarySource]);
   // 上下文的值必须稳定：每次渲染新建一个对象会让所有消费它的分区重渲染（表单很大）。
   const fillContextValue = useMemo(
-    () =>
-      fillSources ? { sources: fillSources, onFilled: () => setDirty(true), entryFill } : null,
-    [fillSources, entryFill],
+    () => (fillSources ? { sources: fillSources, onFilled: () => setDirty(true) } : null),
+    [fillSources],
   );
 
   /**

@@ -58,7 +58,17 @@ const CONTENT: ResumeContent = {
       achievements: [],
     },
   ],
-  experience: [],
+  // 第二块有内容的板块：板块顺序浮层只列「真的有内容」的板块（#5）。
+  // 只有教育时列表仅一行，没有「第 2 项上移」可点，本用例要验证的正是上移后的回滚。
+  experience: [
+    {
+      company: "示例公司",
+      role: "市场专员",
+      start_date: "2023-07",
+      end_date: "2024-06",
+      description: ["负责示例项目"],
+    },
+  ],
   campus_experience: [],
   projects: [],
   skills: [],

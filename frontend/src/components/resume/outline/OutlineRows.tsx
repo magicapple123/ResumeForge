@@ -100,7 +100,9 @@ export interface EntryRowContentProps {
   onDragStart: (event: DragEvent<HTMLButtonElement>) => void;
   onDragEnd: () => void;
   onDragOver: (event: DragEvent<HTMLDivElement>) => void;
-  onDrop: (event: DragEvent<HTMLDivElement>) => void;
+  /** 整行可拖（用户抓的是行/标题，不是 18px 手柄）：行内按钮另有让路规则，见 useOutlineRowDrag。 */
+  draggable?: boolean;
+  onRowDragStart?: (event: DragEvent<HTMLDivElement>) => void;
 }
 
 function rowClassNames(base: string, moving: boolean, dropTarget: boolean, extra = ""): string {
@@ -202,7 +204,8 @@ export function EntryRowContent({
   onDragStart,
   onDragEnd,
   onDragOver,
-  onDrop,
+  draggable = false,
+  onRowDragStart,
 }: EntryRowContentProps) {
   useLocale();
   const hasPoints = entry.points.length > 0;
@@ -213,11 +216,15 @@ export function EntryRowContent({
         "resume-outline-row",
         moving,
         dropTarget,
-        entry.hidden ? "is-hidden" : "",
+        [entry.hidden ? "is-hidden" : "", draggable ? "is-draggable" : ""]
+          .filter(Boolean)
+          .join(" "),
       )}
       onClick={onSelect}
+      draggable={draggable || undefined}
+      onDragStart={onRowDragStart}
+      onDragEnd={onDragEnd}
       onDragOver={onDragOver}
-      onDrop={onDrop}
     >
       <Caret expanded={expanded} hasChildren={hasPoints} onToggle={onToggle} />
       {readOnly ? null : (
@@ -283,7 +290,9 @@ export interface PointRowContentProps {
   onDragStart: (event: DragEvent<HTMLButtonElement>) => void;
   onDragEnd: () => void;
   onDragOver: (event: DragEvent<HTMLDivElement>) => void;
-  onDrop: (event: DragEvent<HTMLDivElement>) => void;
+  /** 整行可拖：与条目行同一套让路规则（手柄优先 / 行内按钮不劫持）。 */
+  draggable?: boolean;
+  onRowDragStart?: (event: DragEvent<HTMLDivElement>) => void;
   /** W06 要点级显隐：action 是真正的按钮（Tooltip + aria-label，键盘可达）。 */
   onToggleHidden?: () => void;
   /** W06 要点复制：复制生成新 point id、相邻插入。 */
@@ -304,7 +313,8 @@ export function PointRowContent({
   onDragStart,
   onDragEnd,
   onDragOver,
-  onDrop,
+  draggable = false,
+  onRowDragStart,
   onToggleHidden,
   onClone,
 }: PointRowContentProps) {
@@ -319,11 +329,15 @@ export function PointRowContent({
         "resume-outline-row is-point",
         moving,
         dropTarget,
-        point.hidden ? "is-hidden" : "",
+        [point.hidden ? "is-hidden" : "", draggable ? "is-draggable" : ""]
+          .filter(Boolean)
+          .join(" "),
       )}
       onClick={onSelect}
+      draggable={draggable || undefined}
+      onDragStart={onRowDragStart}
+      onDragEnd={onDragEnd}
       onDragOver={onDragOver}
-      onDrop={onDrop}
     >
       {readOnly ? null : (
         <SortHandle
