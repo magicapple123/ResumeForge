@@ -35,9 +35,10 @@ import logging
 import threading
 from collections.abc import Callable, Coroutine
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, cast
 
 from sqlalchemy import update
+from sqlalchemy.engine import CursorResult
 from sqlalchemy.orm import Session, sessionmaker
 
 from ..database import SessionLocal
@@ -396,10 +397,15 @@ class AiTaskRunner:
     def _mark_running(self, session: Session, task_id: int) -> bool:
         """pending→running。返回是否真的抢到（False = 已被取消/收尾，不该再执行）。"""
         try:
-            result = session.execute(
-                update(AiTask)
-                .where(AiTask.id == task_id, AiTask.status.in_(AI_TASK_ACTIVE_STATUSES))
-                .values(status=AI_TASK_STATUS_RUNNING, started_at=utcnow(), progress=1)
+            # 抢占判定必须读 `rowcount`；execute 的 UPDATE 运行时真实类型就是
+            # CursorResult，显式收窄（同 career_scenarios/store.py 的条件写）。
+            result = cast(
+                "CursorResult[Any]",
+                session.execute(
+                    update(AiTask)
+                    .where(AiTask.id == task_id, AiTask.status.in_(AI_TASK_ACTIVE_STATUSES))
+                    .values(status=AI_TASK_STATUS_RUNNING, started_at=utcnow(), progress=1)
+                ),
             )
             session.commit()
         except Exception:  # noqa: BLE001 - 落库失败按"没抢到"处理，绝不带病执行

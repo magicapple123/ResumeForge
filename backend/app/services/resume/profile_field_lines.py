@@ -13,7 +13,7 @@ funding 保持既有渲染位置（契约 §2），不在这里重复输出。
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 
 # 分区键用 ResumeContent 字段名（education/experience/...），与四个渲染器的分区键一致。
 PROFILE_FIELD_ORDER: dict[str, tuple[str, ...]] = {
@@ -175,8 +175,15 @@ def profile_field_row_cells(
     ]
 
 
-def profile_row_text(row: list[tuple[str, str]], separator: str = ROW_SEPARATOR) -> str:
-    """一行单元格拼成行内文本：``标签：值 · 标签：值``（PDF / Word / Markdown 共用）。"""
+def profile_row_text(
+    row: Sequence[tuple[str, str]], separator: str = ROW_SEPARATOR
+) -> str:
+    """一行单元格拼成行内文本：``标签：值 · 标签：值``（PDF / Word / Markdown 共用）。
+
+    参数取 ``Sequence`` 而不是 ``list``：实现只迭代、从不原地改；调用方（如
+    pdf_exporter 的 ``extras`` 行组）手里可能是任意只读序列，收窄成 list 会把
+    类型正确的调用判成错误。
+    """
     return separator.join(f"{label}：{value}" for label, value in row)
 
 
