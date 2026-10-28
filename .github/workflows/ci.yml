@@ -502,7 +502,13 @@ jobs:
   frontend:
     name: Frontend (Node 22)
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    # 35 分钟，不是 25。4320 个用例的测试步骤基线本来就在 17~23 分钟（--maxWorkers=2，
+    # 每一步 import 一整个 antd 页面），再叠加 26s 格式化 + 49s lint + build，25 分钟只剩
+    # 两分钟余量：**任何**测试基础设施的正确性修复（比如 2026-10-28 给每个用例补全局
+    # afterEach(cleanup)，把 unhandled ReferenceError 根治掉）都会把 job 顶破。
+    # 更麻烦的是超时表现为"Run lint 那一步 cancelled"，看起来像 lint 坏了——那一轮就被误读成
+    # 了 lint 问题，实际 lint 是 0 error / 25 warning。余量给足，同时保留"真挂住时止损"。
+    timeout-minutes: 35
     env:
       CI: "true"
     defaults:
