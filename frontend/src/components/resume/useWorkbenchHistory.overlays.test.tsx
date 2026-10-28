@@ -216,6 +216,24 @@ describe("纸面加粗进统一历史（W02/W03）", () => {
     expect(screen.getByText(t("workbench.history.label.bold"))).toBeInTheDocument();
   });
 
+  it("回到某一步：连续撤销到底层下标，只应用那一份快照", () => {
+    const { result } = renderHook(() => useHarness());
+    act(() => result.current.history.recordDraft({ ...CONTENT, name: "A" }));
+    commit();
+    act(() => result.current.history.recordDraft({ ...CONTENT, name: "B" }));
+    commit();
+    act(() => result.current.history.recordDraft({ ...CONTENT, name: "C" }));
+    commit();
+    // 三次编辑 = 三个"改动前"快照：下标 0 是最初的 Alex。
+    expect(result.current.history.historyTab.past).toHaveLength(3);
+
+    act(() => result.current.history.historyTab.onJumpTo("past", 0));
+
+    expect(result.current.history.content.name).toBe("Alex");
+    expect(result.current.history.historyTab.past).toHaveLength(0);
+    expect(result.current.history.historyTab.future).toHaveLength(3);
+  });
+
   it("旧记录（没有 overlays 绑定）加载与编辑无回归：撤销仍有效", () => {
     const { result } = renderHook(() => useLegacyHarness());
     // 没有加粗能力/旧记录：overlay 恒为空对象，不因 undefined 抛错，也不产生"加粗"步骤。

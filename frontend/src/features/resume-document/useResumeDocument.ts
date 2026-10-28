@@ -35,6 +35,7 @@ import {
   DEFAULT_HISTORY_DEBOUNCE_MS,
   DEFAULT_HISTORY_LIMIT,
   type DocumentHistory,
+  type HistoryStepMeta,
 } from "./history";
 
 /** 一个历史快照：撤销/恢复要同时还原正文、排版参数与纸面上的加粗 overlay。 */
@@ -76,6 +77,10 @@ export interface ResumeDocumentApi {
   canRedo: boolean;
   /** 历史点名字（最旧 → 最新）；`future` 末尾是下一次 redo。 */
   labels: () => { past: string[]; future: string[] };
+  /** 与 `labels()` 同序的元信息（动作名 + 发生时间）：左栏历史面板要显示"几点"。 */
+  entries: () => { past: HistoryStepMeta[]; future: HistoryStepMeta[] };
+  /** 栈的位置（各几步）：「回到某一步」按它算需要连续撤销/恢复几次。 */
+  position: () => { past: number; future: number };
   /** 预览某个已发生步骤的快照（不改变文档）；下标对应 `labels().past`。 */
   previewPast: (index: number) => ResumeDocumentSnapshot | null;
   previewFuture: (index: number) => ResumeDocumentSnapshot | null;
@@ -203,6 +208,8 @@ export function useResumeDocument({
     canUndo: chapter >= 0 && history.canUndo(),
     canRedo: chapter >= 0 && history.canRedo(),
     labels: () => history.labels(),
+    entries: () => history.entries(),
+    position: () => history.position(),
     previewPast: (index) => history.previewPast(index),
     previewFuture: (index) => history.previewFuture(index),
     dispose,

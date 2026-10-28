@@ -58,6 +58,13 @@ class GroupBriefOut(BaseModel):
     group_id: str
     name: str
     is_default: bool = False
+    """
+    这个名字是否仍是**内置的默认组名**（没被用户改过）。
+
+    前端据此把默认组名翻成当前界面语言：名字是用户可改的数据，只有"还是后端创建时
+    那个名字"时才该按文案显示；`is_default` 只说明它是默认组、不说明它有没有被改名。
+    """
+    name_is_default: bool = False
     revision: int = 0
     participating_keys: list[str] = Field(default_factory=list)
     member_count: int = 0

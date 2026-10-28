@@ -1,6 +1,18 @@
 # SPDX-License-Identifier: Apache-2.0
 """集中导入全部模型，保证 Base.metadata 注册完整（create_all 依赖此注册）。"""
 
+from .ai_task import (
+    AI_TASK_ACTIVE_STATUSES,
+    AI_TASK_KINDS,
+    AI_TASK_STATUS_CANCELED,
+    AI_TASK_STATUS_FAILED,
+    AI_TASK_STATUS_PENDING,
+    AI_TASK_STATUS_RUNNING,
+    AI_TASK_STATUS_SUCCEEDED,
+    AI_TASK_STATUSES,
+    AI_TASK_TERMINAL_STATUSES,
+    AiTask,
+)
 from .apply import (
     ADMISSIONS,
     FAILURE_CATEGORIES,
@@ -132,6 +144,7 @@ from .tracker import (
     ApplicationTrack,
     ApplicationTrackEvent,
 )
+from .usage_pricing import UsagePricingRecord
 from .user_file import UserFile
 from .versions import (
     VERSION_SOURCE_MANUAL,
@@ -146,6 +159,17 @@ from .web_form_record import SOURCE_BATCH, SOURCE_LIVE, WebFormFillRecord
 from .web_form_url_history import WebFormUrlHistory
 
 __all__ = [
+    # 通用 AI 任务（0068）：所有 AI 入口统一登记，前端只有一个状态出口。
+    "AiTask",
+    "AI_TASK_KINDS",
+    "AI_TASK_STATUSES",
+    "AI_TASK_STATUS_PENDING",
+    "AI_TASK_STATUS_RUNNING",
+    "AI_TASK_STATUS_SUCCEEDED",
+    "AI_TASK_STATUS_FAILED",
+    "AI_TASK_STATUS_CANCELED",
+    "AI_TASK_ACTIVE_STATUSES",
+    "AI_TASK_TERMINAL_STATUSES",
     "Job",
     "JobMatchBatch",
     "ChatConversation",
@@ -250,6 +274,7 @@ __all__ = [
     "WebFormUrlHistory",
     "UserFile",
     "LLMUsageRecord",
+    "UsagePricingRecord",
     "ResumeSource",
     "ResumeSourceRevision",
     "ResumeBlockSource",

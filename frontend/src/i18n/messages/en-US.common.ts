@@ -10,6 +10,8 @@ const common = {
   "common.action.discard": "Discard changes",
   "common.action.keep-editing": "Keep editing",
   "common.action.batchSelect": "Select multiple",
+  /** Abort button of every "click once, wait for the result" panel (`AbortButton`). */
+  "common.action.stop": "Stop",
   "common.retry": "Retry",
   "common.errorBoundary.title.moduleLoad": "Part of the page code could not be loaded",
   "common.errorBoundary.title.generic": "This page is temporarily unavailable",
@@ -23,6 +25,7 @@ const common = {
 
   // ── Shared interaction components (batch bar / quit app / file drop / loading / detail / row actions / collapsed list) ──
   /** Confirmation action of the quit button and its confirm dialog (`ExitAppButton`). */
+  "common.action.more": "More actions",
   "common.action.exit": "Quit",
   /** Accessible name of the batch action bar (`BatchActionBar`). */
   "common.batchBar.aria": "Batch actions",

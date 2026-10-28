@@ -6,26 +6,16 @@
  * 只有接口没有入口，于是「抓取正文的条数」永远是默认的 0，助手拿到的永远只有摘要。
  * 助手页那个开关是"这次要不要联网"，这里配的是"联网时怎么搜"，两者互不替代。
  *
- * 卡片自带取数与保存（与 `UpdateCard` 一致）：它和上面的模型配置是两套独立设置。
- * 交互是「查看态 → 编辑态」（用户要求）：字段默认灰色只读，点「编辑搜索设置」解锁，
- * 编辑时按钮换成「保存搜索设置 + 取消」；卡片右上角常驻「编辑搜索设置」入口。
+ * 卡片自带取数与保存（与 `UpdateCard` 一致）：它和模型配置是两套独立设置。
+ *
+ * **没有保存按钮**：字段常驻可编辑，改动合并 400ms 后自动 PUT；离散勾选与数字框
+ * 也一样。校验失败（一个来源都没选、地址不是 http(s)）时只在卡片底部说明，不发请求；
+ * 改对后自动重试。这样"改完还要记得点保存"不再是一个会丢配置的步骤。
  */
 
-import { SaveOutlined } from "@ant-design/icons";
-import {
-  App,
-  Alert,
-  Button,
-  Card,
-  Checkbox,
-  Flex,
-  Input,
-  InputNumber,
-  Space,
-  Typography,
-} from "antd";
+import { Alert, Card, Checkbox, Input, InputNumber, Space, Typography } from "antd";
 import LoadingBlock from "../common/LoadingBlock";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { getSearchConfig, saveSearchConfig } from "../../api/settings";
 import type { SearchConfig, SearchSource } from "../../types";
 import { t, type MessageKey } from "../../i18n";
@@ -78,29 +68,16 @@ function sourceLabel(option: SourceOption): string {
   return option.label ?? option.value;
 }
 
-/** 两个设置项是否一致；用来决定保存按钮要不要亮。 */
-function sameConfig(left: SearchConfig, right: SearchConfig): boolean {
-  return (
-    left.fetch_pages === right.fetch_pages &&
-    left.max_results === right.max_results &&
-    left.searxng_url.trim() === right.searxng_url.trim() &&
-    // 顺序不算差异：勾选框的先后不改变任何行为，后端也会去重。
-    [...left.sources].sort().join("\u0000") === [...right.sources].sort().join("\u0000")
-  );
-}
-
 export default function SearchCard() {
   // 本组件用模块级 t()：必须订阅语言变化，否则切语言后这一块不重渲染。
   useLocale();
-  const { message } = App.useApp();
   const [config, setConfig] = useState<SearchConfig>(DEFAULT_CONFIG);
-  const [saved, setSaved] = useState<SearchConfig>(DEFAULT_CONFIG);
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
+  const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const [saveError, setSaveError] = useState("");
   const [loadError, setLoadError] = useState("");
-  // 查看态 → 编辑态（用户要求的交互）：字段默认灰色只读，点「编辑搜索设置」解锁；
-  // 编辑时按钮换成「保存搜索设置 + 取消」，保存成功或取消都回到查看态。
-  const [editing, setEditing] = useState(false);
+  const timer = useRef<number | null>(null);
+  const latest = useRef<SearchConfig>(DEFAULT_CONFIG);
 
   // 纯取数（不含 setState）：effect 内联调用时 Compiler 才能验证非同步更新；
   // 判别式结果保留原始错误消息（测试钉住它必须原样展示），只翻兜底那句。
@@ -123,7 +100,7 @@ export default function SearchCard() {
       if (cancelled) return;
       if ("config" in result) {
         setConfig(result.config);
-        setSaved(result.config);
+        latest.current = result.config;
       } else {
         setLoadError(result.error);
       }
@@ -134,55 +111,62 @@ export default function SearchCard() {
     };
   }, [fetchConfig]);
 
-  const patch = (changes: Partial<SearchConfig>) =>
-    setConfig((current) => ({ ...current, ...changes }));
-
-  // 取消编辑：丢弃未保存改动，回到查看态（不重新发请求）。
-  const cancelEdit = () => {
-    setConfig(saved);
-    setEditing(false);
-  };
-
-  const save = async () => {
-    if (saving) return;
-    const trimmed = { ...config, searxng_url: config.searxng_url.trim() };
-    // 后端 `sources` 要求至少一项。前端先拦一道，省得用户点了保存才收到一个 422。
+  /** 真正发请求；校验失败时只更新状态，不发请求。 */
+  const persist = useCallback(async (next: SearchConfig) => {
+    const trimmed = { ...next, searxng_url: next.searxng_url.trim() };
     if (trimmed.sources.length === 0) {
-      message.error(t("searchCard.needSource"));
+      setSaveStatus("error");
+      setSaveError(t("searchCard.needSource"));
       return;
     }
     if (trimmed.searxng_url && !/^https?:\/\//i.test(trimmed.searxng_url)) {
-      message.error(t("searchCard.badUrl"));
+      setSaveStatus("error");
+      setSaveError(t("searchCard.badUrl"));
       return;
     }
-    setSaving(true);
+    setSaveStatus("saving");
+    setSaveError("");
     try {
-      const result = await saveSearchConfig(trimmed);
-      setConfig(result);
-      setSaved(result);
-      message.success(t("searchCard.saved"));
-      // 保存完成即编辑结束：回查看态（字段重新变灰）。
-      setEditing(false);
+      await saveSearchConfig(trimmed);
+      setSaveStatus("saved");
     } catch (err) {
-      message.error(err instanceof Error ? err.message : t("searchCard.saveFailed"));
-    } finally {
-      setSaving(false);
+      setSaveStatus("error");
+      setSaveError(err instanceof Error ? err.message : t("searchCard.saveFailed"));
     }
-  };
+  }, []);
 
-  const usesSearxng = config.sources.includes("searxng");
-  const dirty = !sameConfig(config, saved);
-  // 查看态字段整体只读；SearXNG 输入框叠加原条件（未选该来源时也禁用）。
-  const fieldsDisabled = !editing;
-  // 卡片右上角：查看态是「编辑搜索设置」入口（编辑态换回保存/取消，在右下角）。
-  const editEntry = (
-    <Button type="primary" onClick={() => setEditing(true)}>
-      {t("searchCard.edit")}
-    </Button>
+  /** 改动合并 400ms 后保存：勾选/数字框不会连发，URL 输入也不会每键一次请求。 */
+  const scheduleSave = useCallback(
+    (next: SearchConfig) => {
+      if (timer.current !== null) window.clearTimeout(timer.current);
+      timer.current = window.setTimeout(() => {
+        timer.current = null;
+        void persist(next);
+      }, 400);
+    },
+    [persist],
   );
 
+  const patch = (changes: Partial<SearchConfig>) => {
+    setConfig((current) => {
+      const next = { ...current, ...changes };
+      latest.current = next;
+      scheduleSave(next);
+      return next;
+    });
+  };
+
+  useEffect(
+    () => () => {
+      if (timer.current !== null) window.clearTimeout(timer.current);
+    },
+    [],
+  );
+
+  const usesSearxng = config.sources.includes("searxng");
+
   return (
-    <Card title={t("searchCard.title")} className="settings-card" extra={editEntry}>
+    <Card title={t("searchCard.title")} className="settings-card">
       <Typography.Paragraph type="secondary" style={{ marginBottom: 16 }}>
         {t("searchCard.intro")}
       </Typography.Paragraph>
@@ -210,7 +194,6 @@ export default function SearchCard() {
                 label: sourceLabel(option),
               }))}
               value={config.sources}
-              disabled={fieldsDisabled}
               onChange={(values) => patch({ sources: values as SearchSource[] })}
             />
           </div>
@@ -224,7 +207,8 @@ export default function SearchCard() {
               value={config.searxng_url}
               onChange={(event) => patch({ searxng_url: event.target.value })}
               placeholder="http://localhost:8080"
-              disabled={fieldsDisabled || !usesSearxng}
+              // 只有勾了 SearXNG 才需要填地址：未勾选时禁用以免误以为"必须先填"。
+              disabled={!usesSearxng}
               allowClear
             />
           </div>
@@ -239,7 +223,6 @@ export default function SearchCard() {
                 <Checkbox
                   key={option.value}
                   checked={config.fetch_pages === option.value}
-                  disabled={fieldsDisabled}
                   onChange={() => patch({ fetch_pages: option.value })}
                 >
                   {t(option.labelKey)}
@@ -260,33 +243,27 @@ export default function SearchCard() {
                 min={1}
                 max={15}
                 value={config.max_results}
-                disabled={fieldsDisabled}
                 onChange={(value) => patch({ max_results: value ?? DEFAULT_CONFIG.max_results })}
               />
               <Space.Addon>{t("searchCard.results.unit")}</Space.Addon>
             </Space.Compact>
           </div>
 
-          {/* 编辑态的操作区在右下角；查看态入口在卡片右上角（extra）。 */}
-          <Flex justify="flex-end" wrap gap={8}>
-            {editing && (
-              <>
-                <Button
-                  type="primary"
-                  icon={<SaveOutlined />}
-                  loading={saving}
-                  disabled={!dirty}
-                  onClick={() => void save()}
-                >
-                  {t("searchCard.action.save")}
-                </Button>
-                <Button disabled={saving} onClick={cancelEdit}>
-                  {t("common.action.cancel")}
-                </Button>
-                {dirty && <Typography.Text type="warning">{t("searchCard.dirty")}</Typography.Text>}
-              </>
-            )}
-          </Flex>
+          {saveStatus === "saving" ? (
+            <Typography.Text type="secondary" className="search-save-status">
+              {t("searchCard.saving")}
+            </Typography.Text>
+          ) : null}
+          {saveStatus === "saved" ? (
+            <Typography.Text type="secondary" className="search-save-status">
+              {t("searchCard.saved")}
+            </Typography.Text>
+          ) : null}
+          {saveStatus === "error" ? (
+            <Typography.Text type="danger" className="search-save-status">
+              {saveError}
+            </Typography.Text>
+          ) : null}
         </Space>
       </LoadingBlock>
     </Card>

@@ -5,7 +5,7 @@
 1. GET 从新模型全量投影出旧 ProfileOut（形状等价），**不读旧六表**；
 2. PUT/PATCH 映射到新条目（软删多余、保留新模型独有字段），不再重建旧子表；
 3. 新模型没有位置的旧字段写日志告警而不是静默丢；
-4. 助手/岗位匹配改读 load_all_consumed_profile（不按当前组限制，R-64），hidden 不进 AI。
+4. 助手/岗位匹配/AI 建议统一读 `load_ai_profile`（当前组 + hidden 不进 AI，2026-10-28）。
 """
 
 from __future__ import annotations
@@ -23,7 +23,6 @@ from app.schemas.profile import ProfileOut
 from app.services.assistant_tools import execute_tool
 from app.services.job.job_match_context import match_source_texts, profile_is_empty
 from app.services.profile import entry_store, field_preferences, group_store
-from app.services.profile.profile_reader import load_all_consumed_profile
 from app.services.profile.profile_service import project_legacy_profile
 from sqlalchemy import event
 
@@ -298,8 +297,12 @@ def test_legacy_section_order_roundtrip_keeps_new_keys_in_place(client, db_sessi
     assert positions == sorted(positions), "旧协议写入的 8 个 key 顺序没有落到全局顺序"
 
 
-def test_external_consumers_ignore_group_and_hidden(db_session):
-    """三链外读全部活动分区（R-64），且 hidden 不算进 AI 资料。"""
+def test_ai_consumers_follow_current_group_and_hidden(db_session):
+    """AI 取数唯一口径：当前组 + 去隐藏（2026-10-28 用户要求统一）。
+
+    助手上下文与岗位匹配都必须只看到「我的资料」当前选中组里未隐藏的内容；把当前组
+    切回去之后，同一批消费者要立刻看到组外分区——这是"后续任务跟着组走"的判据。
+    """
     entry_store.upsert_entry(
         db_session,
         "basic_info",
@@ -321,19 +324,32 @@ def test_external_consumers_ignore_group_and_hidden(db_session):
     )
 
     from app.api.assistant_context import profile_context
+    from app.services.profile.ai_profile import load_ai_profile
 
     context = profile_context(db_session, relaxed=True)
-    assert "简历工具" in context, "助手读取被当前组过滤了（R-64 不允许）"
+    assert "张三" in context
+    assert "简历工具" not in context, "助手读取了当前组之外的分区"
     assert "13800000000" not in context, "hidden 字段仍然进了助手上下文"
 
     job = Job(title="后端开发工程师", company="示例公司")
     db_session.add(job)
     db_session.commit()
-    consumed = load_all_consumed_profile(db_session)
-    assert profile_is_empty(consumed) is False
+    profile = load_ai_profile(db_session)
+    assert profile.projects == [], "AI 资料快照包含了组外项目"
+    assert profile_is_empty(profile) is False
     _profile, personal_text, _resume_text = match_source_texts(db_session, job)
-    assert "简历工具" in personal_text
+    assert "简历工具" not in personal_text
     assert "13800000000" not in personal_text
+
+    # 切回默认组：同一个消费者不需要任何缓存失效，下一次读取就应看到 projects。
+    default_group = next(group for group in group_store.list_groups(db_session) if group.is_default)
+    group_store.switch_current_group(
+        db_session,
+        default_group.group_id,
+        expected_revision=int(group_store.read_state(db_session).revision or 1),
+    )
+    _profile, personal_text, _resume_text = match_source_texts(db_session, job)
+    assert "简历工具" in personal_text, "切换当前组后，后续任务没有跟随"
 
 
 def test_assistant_tools_read_and_write_the_new_model(db_session):

@@ -148,29 +148,116 @@ body {
 .app-brand-copy {
   display: flex;
   min-width: 0;
+  flex: 1 1 auto;
   flex-direction: column;
   gap: 1px;
+  overflow: hidden;
 }
 
+/* 应用名与副标题都按"一行 + 省略号"排：`min-width: 0` 只让容器可缩，文字本身仍会
+  折行——那是英文界面里副标题变两行、把 72px 的品牌区挤满的直接原因。
+   语言间宽度差很大（「简历通」远窄于 ResumeForge），所以宁可截断也不换行。 */
 .app-brand-name {
-  font-size: 17px;
+  min-width: 0;
+  overflow: hidden;
+  font-size: 16px;
   font-weight: 700;
   line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .app-brand-caption {
+  overflow: hidden;
   color: var(--rf-text-tertiary);
   font-size: 11px;
   line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* 版本号跟在应用名旁：与 caption 同一套次要视觉（灰、小字、不加粗），
-  nowrap 保证窄屏时不拆行、不挤压应用名。侧栏折叠时随 .app-brand-copy 一起隐藏。 */
+  nowrap 保证窄屏时不拆行、不挤压应用名。侧栏折叠时随 .app-brand-copy 一起隐藏。
+  字号刻意比 caption 再小一号（10px）：侧栏只有 240px（中文 216px），英文应用名本身
+  就占掉 100px 出头，11px 的版本号会把这一行顶穿。 */
 .app-brand-version {
-  margin-left: 6px;
-  font-size: 11px;
+  margin-left: 5px;
+  font-size: 10px;
   font-weight: 400;
   line-height: 1.2;
   color: var(--rf-text-tertiary);
   white-space: nowrap;
+}
+
+/* 英文界面的侧栏宽一档（252px，中文仍是 216px）。
+   原因只有一条：ResumeForge + v1.0.2 在一行里需要约 132px，而 216px 的侧栏扣掉图标、
+   折叠按钮与内边距只剩 114px——副标题被挤成两行、版本号贴到折叠按钮上，就是用户截图
+   里的"左上角很挤"。中文侧栏不受影响：三个字的名字根本用不到这些空间。
+   内边距同时在英文里收紧到 12px（中文保持 18px）：这样多出来的宽度全给文字，图标不会
+   离边线太远。断点从 1093 起：≤1092 的侧栏是 64px 的图标导轨，不能跟着变宽。 */
+@media (min-width: 1093px) {
+  html[lang="en-US"] {
+    --rf-sider-width: 252px;
+  }
+
+  html[lang="en-US"] .app-brand-button {
+    gap: 8px;
+    padding: 0 12px;
+  }
+}
+
+/* ── 侧栏手动折叠（宽档）────────────────────────────────────
+   宽度真相仍在 --rf-sider-width：收起时在 .app-shell 上改这一个变量，
+   Sider 的 width/collapsedWidth 与 .app-main 的左边距会一起跟着变。
+   窄档（≤1092）由 design-tokens 的媒体查询直接给 64，这里的规则不参与。 */
+.app-sider-toggle {
+  flex: 0 0 auto;
+  margin-left: auto;
+}
+
+/* 展开入口默认在页头隐藏：只有"宽档 + 已收起"时才出现（见 AppShell 的条件渲染）。 */
+.app-sider-expand {
+  display: none;
+}
+
+.app-shell.is-sider-collapsed .app-sider-expand {
+  display: inline-flex;
+}
+
+@media (min-width: 1092px) {
+  .app-shell.is-sider-collapsed {
+    --rf-sider-width: 64px;
+  }
+}
+
+.app-shell.is-sider-collapsed .app-brand-button {
+  justify-content: center;
+  padding: 0;
+}
+
+.app-shell.is-sider-collapsed .app-brand-copy {
+  display: none;
+}
+
+/* 收起后页脚只剩图标，版本号没有位置也没有意义。 */
+.app-shell.is-sider-collapsed .app-brand-version {
+  display: none;
+}
+
+.app-shell.is-sider-collapsed .app-nav-menu {
+  padding-right: 8px;
+  padding-left: 8px;
+}
+
+.app-shell.is-sider-collapsed .app-sider-footer-row {
+  justify-content: center;
+}
+
+.app-shell.is-sider-collapsed .app-guide-button {
+  justify-content: center;
+  padding-inline: 0;
+}
+
+.app-shell.is-sider-collapsed .app-guide-label {
+  display: none;
 }

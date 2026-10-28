@@ -1,10 +1,12 @@
 # SPDX-License-Identifier: Apache-2.0
 """F2-E：三链外剩余旧表消费者的迁移回归。
 
-背景：F2-D 之后旧 `user_profile`/旧六表不再被写入，但面试、批量匹配、投递取数、
-AI 建议、审阅预检、低相关提示、简历默认板块顺序仍直接读旧表——"新模型里编辑的资料"
-在这些链路不可见。这里逐个钉住：新模型数据可见、旧表数据不再影响、且不按当前组过滤
-（R-64 非目标：组只作用于生成/新建/网申三条链路，其余入口读全量）。
+背景：F2-D 之后旧 `user_profile`/旧六表不再被写入，但批量匹配、投递取数、AI 建议、
+审阅预检等链路仍直接读旧表——"新模型里编辑的资料"在这些链路不可见。这里逐个钉住：
+新模型数据可见、旧表数据不再影响。
+
+**取数边界在 2026-10-28 收窄**：AI 链路（批量匹配、建议、审阅）跟随「我的资料」当前组且
+剔除隐藏字段；投递取数（`build_apply_data`）属于表单自动填充、不是 AI 取数，仍读全量。
 """
 
 from __future__ import annotations
@@ -60,7 +62,7 @@ def _seed_old_tables(db) -> None:
 
 
 def _switch_to_basic_only_group(db) -> None:
-    """当前组只含基本信息：三链外仍应看到全部资料（R-64 非目标）。"""
+    """当前组只含基本信息：AI 链路据此裁剪，投递取数不受影响。"""
     group = group_store.create_group(db, "只有基本信息")
     row = group_store.get_group(db, group.group_id)
     group_store.set_group_members(
@@ -98,18 +100,17 @@ def _assert_new_model_visible(text: str) -> None:
     assert "旧姓名" not in text and "旧项目" not in text and "旧学校" not in text
 
 
-def test_interview_profile_text_reads_new_model_and_ignores_group(db_session):
-    _seed_old_tables(db_session)
-    _seed_new_model(db_session)
-    _switch_to_basic_only_group(db_session)
+def test_interview_is_no_longer_a_profile_consumer():
+    """模拟面试自 0066 起**不再读个人资料**：它只读「关联简历 + 关联岗位」。
 
-    from app.api.interview import _profile_text
+    真实面试里面试官手里只有候选人提交的简历与招聘的 JD，多喂资料会让它问出两份材料
+    之外的东西。这条断言防止有人把 `_profile_text` 悄悄加回来（那会同时破坏信息边界与
+    本文件"面试读新模型资料"的旧前提——后者已不成立，所以这条用例改成守边界）。
+    """
+    from app.api import interview as interview_api
 
-    text = _profile_text(db_session)
-    parsed = json.loads(text)  # datetime 已转字符串
-    assert parsed["name"] == _NEW_NAME
-    assert [item["name"] for item in parsed["projects"]] == ["新项目"]
-    _assert_new_model_visible(text)
+    assert not hasattr(interview_api, "_profile_text")
+    assert not hasattr(interview_api, "project_legacy_profile")
 
 
 def test_job_match_batch_reads_new_model(db_session):
@@ -122,8 +123,18 @@ def test_job_match_batch_reads_new_model(db_session):
 
     assert len(inputs) == 1
     personal_text = inputs[0].profile_text
-    assert "新项目" in personal_text
+    assert _NEW_NAME in personal_text
+    assert "新项目" not in personal_text, "批量匹配没有按当前组裁剪"
     _assert_new_model_visible(personal_text)
+
+    # 切回默认组（含 projects）：同一调用下一次就应看到新项目，证明"后续任务跟着组走"。
+    default_group = next(group for group in group_store.list_groups(db_session) if group.is_default)
+    state = group_store.read_state(db_session)
+    group_store.switch_current_group(
+        db_session, default_group.group_id, expected_revision=int(state.revision or 1)
+    )
+    inputs = build_batch_inputs(db_session, [job], force=True)
+    assert "新项目" in inputs[0].profile_text
 
 
 def test_apply_queue_build_apply_data_reads_new_model(db_session):
@@ -169,7 +180,7 @@ class _SuggestionProvider(BaseLLMProvider):
 def test_resume_suggestions_use_new_model_profile(monkeypatch, client, db_session):
     _seed_old_tables(db_session)
     _seed_new_model(db_session)
-    _switch_to_basic_only_group(db_session)
+    # 不切组：默认组包含 projects，这里守的是"建议读新模型而不是旧表"。
     _job, record = _job_and_resume(db_session)
     provider = _SuggestionProvider()
     monkeypatch.setattr("app.api.resumes.get_llm_config", lambda _db: provider.config)
@@ -179,7 +190,7 @@ def test_resume_suggestions_use_new_model_profile(monkeypatch, client, db_sessio
 
     assert response.status_code == 200, response.text
     prompt_text = "\n".join(item["content"] for item in provider.messages[0])
-    assert "新项目" in prompt_text  # 当前组不含项目也照常读取（R-64）
+    assert "新项目" in prompt_text
     assert "旧项目" not in prompt_text
 
 

@@ -177,9 +177,17 @@ def cleanup_now(body: dict | None = None) -> dict:
         days = max(1, min(3650, int(raw)))
     except (TypeError, ValueError):
         days = DEFAULT_RETENTION_DAYS
+    raw_paths = payload.get("paths")
+    paths: set[str] | None = None
+    if raw_paths is not None:
+        if not isinstance(raw_paths, (list, tuple, set)):
+            raise HTTPException(status_code=400, detail="paths 必须是字符串数组")
+        if any(not isinstance(item, str) for item in raw_paths):
+            raise HTTPException(status_code=400, detail="paths 必须是字符串数组")
+        paths = {item.strip() for item in raw_paths if item.strip()}
     try:
         selected = _cleanup_categories(payload.get("categories"))
-        return run_cleanup(older_than_days=days, categories=selected)
+        return run_cleanup(older_than_days=days, categories=selected, paths=paths)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 

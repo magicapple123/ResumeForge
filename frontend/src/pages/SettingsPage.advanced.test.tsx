@@ -247,7 +247,7 @@ describe("SettingsPage 记录编辑参数往返", () => {
 });
 
 describe("SettingsPage 提醒弹窗开关", () => {
-  async function renderAppTab() {
+  async function renderAboutTab() {
     render(
       <MemoryRouter>
         <AntdApp>
@@ -256,12 +256,13 @@ describe("SettingsPage 提醒弹窗开关", () => {
       </MemoryRouter>,
     );
     await waitFor(() => expect(apiMocks.getLLMConfig).toHaveBeenCalledOnce());
-    fireEvent.click(screen.getByRole("tab", { name: "应用" }));
+    // 提醒弹窗开关从「应用」迁到「更新与帮助」（它是应用行为，不是外观）。
+    fireEvent.click(screen.getByRole("tab", { name: "更新与帮助" }));
   }
 
   it("toggles the startup reminder popup switch", async () => {
     apiMocks.saveReminderPopupSetting.mockImplementation(async (enabled) => ({ enabled }));
-    await renderAppTab();
+    await renderAboutTab();
 
     const toggle = await screen.findByRole("switch", { name: "打开应用时弹出提醒" });
     await waitFor(() => expect(toggle).toBeChecked());
@@ -273,7 +274,7 @@ describe("SettingsPage 提醒弹窗开关", () => {
 });
 
 describe("SettingsPage 投投悬浮球开关", () => {
-  async function renderAppTab() {
+  async function renderAssistantTab() {
     render(
       <MemoryRouter>
         <AntdApp>
@@ -282,11 +283,12 @@ describe("SettingsPage 投投悬浮球开关", () => {
       </MemoryRouter>,
     );
     await waitFor(() => expect(apiMocks.getLLMConfig).toHaveBeenCalledOnce());
-    fireEvent.click(screen.getByRole("tab", { name: "应用" }));
+    // 悬浮球属于"助手行为"，从「应用」迁到「助手与 AI 行为」。
+    fireEvent.click(screen.getByRole("tab", { name: "助手与 AI 行为" }));
   }
 
   it("toggles and persists the assistant orb switch", async () => {
-    await renderAppTab();
+    await renderAssistantTab();
 
     const toggle = await screen.findByRole("switch", { name: "开启投投悬浮球" });
     await waitFor(() => expect(toggle).toBeChecked());

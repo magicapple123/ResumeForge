@@ -16,8 +16,8 @@ const searchCard = {
   "searchCard.intro":
     "This is **how the search runs** when the assistant's Web search switch is on; the switch on the assistant page decides whether this run searches at all. Fetching page bodies gives more complete content than snippets, but each search is slower and a site may refuse it.",
 
-  "searchCard.edit": "Edit search settings",
   "searchCard.action.save": "Save search settings",
+  "searchCard.action.reset": "Restore saved values",
   "searchCard.dirty": "Unsaved changes",
 
   "searchCard.loadErrorTitle": "Could not load the saved settings",
@@ -26,6 +26,7 @@ const searchCard = {
   "searchCard.loadFailed": "Could not load the web search settings",
   "searchCard.needSource": "Select at least one search source",
   "searchCard.badUrl": "The SearXNG address must start with http:// or https://",
+  "searchCard.saving": "Saving…",
   "searchCard.saved": "Web search settings saved",
   "searchCard.saveFailed": "Could not save the web search settings",
 

@@ -14,7 +14,6 @@ import { App as AntdApp } from "antd";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { t } from "../../i18n";
 import { legacyProfileToProjection } from "../../test/profileProjectionFixture";
 import { TEMPLATE_CATALOG } from "../../test/resumeFixtures";
 import { invalidateProjectionCache } from "../../features/profile-library/projectionCache";
@@ -164,31 +163,13 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-describe("「手动调整」的资料填入候选", () => {
-  it("资料只在打开编辑器之后才取一次，不在页面挂载时请求", async () => {
+describe("预览不再就地取资料候选", () => {
+  // 「手动调整」入口删掉之后（2026-10-28），预览页本身不该再拉资料投影：
+  // 候选只在制作台弹层打开时才取一次（那条口径在下面「制作台中栏」里守着）。
+  it("页面挂载时不请求资料投影", async () => {
     renderPreview();
+    await screen.findByRole("button", { name: /简历制作台/ });
     expect(profileMocks.getCurrentProjection).not.toHaveBeenCalled();
-
-    fireEvent.click(await screen.findByRole("button", { name: /手动调整/ }));
-
-    await waitFor(() => expect(profileMocks.getCurrentProjection).toHaveBeenCalledTimes(1));
-    // 入口出现 = `fillSources` 真的传到了编辑器。
-    await waitFor(() => expect(fillSummaryButton()).not.toBeNull());
-    // F9/R1：页签也按同一份参与清单过滤（这份投影的当前组只有基本信息；简历正文为空，
-    // 没有"已有内容"需要保留的教育栏）。
-    expect(screen.queryByRole("tab", { name: t("editor.tab.education") })).not.toBeInTheDocument();
-  });
-
-  it("资料接口失败时编辑器照常打开，只是没有这条入口（静默降级）", async () => {
-    profileMocks.getCurrentProjection.mockRejectedValueOnce(new Error("profile down"));
-    renderPreview();
-
-    fireEvent.click(await screen.findByRole("button", { name: /手动调整/ }));
-
-    await waitFor(() => expect(profileMocks.getCurrentProjection).toHaveBeenCalled());
-    // 编辑器本体可用：`Form.Item name="name"` 渲染出的输入框 id 就是字段名。
-    await waitFor(() => expect(document.getElementById("name")).not.toBeNull());
-    expect(fillSummaryButton()).toBeNull();
   });
 });
 

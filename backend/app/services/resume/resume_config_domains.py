@@ -14,7 +14,14 @@ import json
 import re
 
 # 域键名**冻结**：新增域必须先改 Wave2 契约与本文档，不允许插件式塞入。
-DOMAIN_KEYS: tuple[str, ...] = ("roles", "objects", "pagination", "photo_crop")
+DOMAIN_KEYS: tuple[str, ...] = (
+    "roles",
+    "objects",
+    "pagination",
+    "photo_crop",
+    "object_roles",
+    "field_layout",
+)
 
 # 本端当前读写的版本。域里 ``version`` 缺省按 1 读（宽容旧数据）。
 DOMAIN_VERSION: dict[str, int] = {key: 1 for key in DOMAIN_KEYS}

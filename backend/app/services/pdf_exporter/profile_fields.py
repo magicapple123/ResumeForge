@@ -13,14 +13,24 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
-from ..resume.profile_field_lines import profile_field_lines, profile_field_text
+from ..resume.profile_field_lines import (
+    profile_field_rows,
+    profile_field_text,
+    profile_row_text,
+)
 from ..resume.resume_labels import level_text
 
 
-def draw_profile_meta(pdf, item, section_key: str, *, base: float, fields, style=None) -> None:
-    """在条目既有内容之后画「标签：值」行（空值跳过；fields = field_labels(language)）。"""
-    for label, value in profile_field_lines(item, section_key, fields):
-        pdf.meta_line(f"{label}：{value}", base, style=style)
+def draw_profile_meta(
+    pdf, item, section_key: str, *, base: float, fields, style=None, field_layout=None
+) -> None:
+    """在条目既有内容之后画「标签：值」行（空值跳过；fields = field_labels(language)）。
+
+    W4：有 ``field_layout`` 时按装箱后的**行**画（一行一条 meta_line，行内单元格用
+    " · " 连接）；无配置时 profile_field_rows 返回「每字段一行」= 改造前的产物。
+    """
+    for row in profile_field_rows(item, section_key, fields, field_layout):
+        pdf.meta_line(profile_row_text(row), base, style=style)
 
 
 def skill_tag_text(skill, language: str, fields) -> str:
@@ -47,18 +57,22 @@ def language_tag_text(item, language: str, fields) -> str:
 def draw_bullets_with_profile_fields(
     pdf,
     lines: Sequence[str],
-    extras: Sequence[Sequence[tuple[str, str]]],
+    extras: Sequence[Sequence[Sequence[tuple[str, str]]]],
     *,
     base: float,
     style=None,
     section: str | None = None,
 ) -> None:
-    """awards 专用：有新增字段时逐条 bullets + 其后追加标签行；否则保持原一次调用。"""
+    """awards 专用：有新增字段时逐条 bullets + 其后追加标签行；否则保持原一次调用。
+
+    ``extras`` 是"每条 award 的行组"（``profile_field_rows`` 的返回）：一行画一次
+    meta_line，行内用 " · " 连接；无配置时每字段一行 = 旧产物。
+    """
     if any(extras):
         for line, rows in zip(lines, extras, strict=True):
             pdf.bullets([line], base, style=style, section=section)
-            for label, value in rows:
-                pdf.meta_line(f"{label}：{value}", base, style=style)
+            for row in rows:
+                pdf.meta_line(profile_row_text(row), base, style=style)
     else:
         pdf.bullets(list(lines), base, style=style, section=section)
 

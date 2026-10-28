@@ -19,6 +19,7 @@ import {
   Listy,
   Modal,
   Progress,
+  Select,
   Space,
   Typography,
 } from "antd";
@@ -33,11 +34,13 @@ import {
 } from "../../api/storage";
 import LoadingBlock from "../common/LoadingBlock";
 import { ListyItem } from "../common/ListyItem";
+import { storageCategoryLabel, storageItemLabel } from "../../features/settings/storageLabels";
 import { t, type MessageKey } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
 
-/** 与后端默认保留期一致：界面上固定展示的就是这一档。 */
-const CLEANUP_DAYS = 30;
+/** 保留期可选档位（天）；默认 30 与后端一致。 */
+const CLEANUP_DAY_OPTIONS = [7, 30, 90, 180, 365];
+const DEFAULT_CLEANUP_DAYS = 30;
 /**
  * 固定提示语的**词表 key**。
  *
@@ -72,7 +75,9 @@ export default function StorageStatsCard() {
   // 清理（R19）：先看清单再动手，且只移到回收目录——这里不做任何"彻底删除"。
   const [cleanupOpen, setCleanupOpen] = useState(false);
   const [cleanupPlan, setCleanupPlan] = useState<CleanupPlan | null>(null);
+  const [cleanupDays, setCleanupDays] = useState(DEFAULT_CLEANUP_DAYS);
   const [selectedCategories, setSelectedCategories] = useState<CleanupCategoryKey[]>([]);
+  const [selectedPaths, setSelectedPaths] = useState<Set<string>>(new Set());
   const [cleanupRunning, setCleanupRunning] = useState(false);
 
   const load = useCallback(async () => {
@@ -106,43 +111,62 @@ export default function StorageStatsCard() {
     };
   }, []);
 
+  /** 预览成功后重置逐文件勾选：新清单默认全选，用户再按需取消。 */
+  const applyPlan = (plan: CleanupPlan) => {
+    setCleanupPlan(plan);
+    setSelectedPaths(new Set(plan.candidates.map((item) => item.path)));
+  };
+
   /** 打开清理预览：没有候选时说一句就收工，不弹一个空清单。 */
   const openCleanup = async () => {
     try {
       // 不传 categories = 全部类别：弹窗里再按类别勾选。
-      const plan = await previewCleanup(CLEANUP_DAYS);
+      const plan = await previewCleanup(cleanupDays);
       if (plan.totals.files === 0) {
-        message.success(t("storageStats.cleanup.nothing", { days: CLEANUP_DAYS }));
+        message.success(t("storageStats.cleanup.nothing", { days: cleanupDays }));
         return;
       }
       setSelectedCategories(plan.categories.map((item) => item.key));
-      setCleanupPlan(plan);
+      applyPlan(plan);
       setCleanupOpen(true);
     } catch (err) {
       message.error(err instanceof Error ? err.message : t("storageStats.cleanup.planFailed"));
     }
   };
 
-  /**
-   * 勾选变化：立刻重新预览。
-   *
-   * 刻意不让前端自己算数量——"预览 = 执行"的保证在后端同一份 plan 上，前端重算一遍
-   * 就等于把这条保证降级成"两处代码碰巧算得一样"。
-   */
-  const applyCategories = async (next: CleanupCategoryKey[]) => {
-    setSelectedCategories(next);
+  /** 按当前天数与类别重拉预览；预览与执行仍共用后端同一份 plan。 */
+  const refreshPlan = async (days: number, categories: CleanupCategoryKey[]) => {
     try {
-      setCleanupPlan(await previewCleanup(CLEANUP_DAYS, next));
+      applyPlan(await previewCleanup(days, categories));
     } catch (err) {
       message.error(err instanceof Error ? err.message : t("storageStats.cleanup.planFailed"));
     }
+  };
+
+  const applyCategories = async (next: CleanupCategoryKey[]) => {
+    setSelectedCategories(next);
+    await refreshPlan(cleanupDays, next);
+  };
+
+  const changeDays = async (days: number) => {
+    setCleanupDays(days);
+    await refreshPlan(days, selectedCategories);
+  };
+
+  const togglePath = (path: string, checked: boolean) => {
+    setSelectedPaths((previous) => {
+      const next = new Set(previous);
+      if (checked) next.add(path);
+      else next.delete(path);
+      return next;
+    });
   };
 
   const confirmCleanup = async () => {
     if (cleanupRunning) return;
     setCleanupRunning(true);
     try {
-      const result = await runCleanup(CLEANUP_DAYS, selectedCategories);
+      const result = await runCleanup(cleanupDays, selectedCategories, [...selectedPaths]);
       setCleanupOpen(false);
       const failed = result.failed.length;
       modal.success({
@@ -176,6 +200,12 @@ export default function StorageStatsCard() {
   const top = stats ? [...stats.items].sort((a, b) => b.size_bytes - a.size_bytes).slice(0, 6) : [];
   const maxSize = top.length > 0 ? Math.max(...top.map((item) => item.size_bytes), 1) : 1;
   const listedCandidates = cleanupPlan?.candidates ?? [];
+  const selectedSize = listedCandidates.reduce(
+    (total, item) => (selectedPaths.has(item.path) ? total + item.size : total),
+    0,
+  );
+  const allSelected =
+    listedCandidates.length > 0 && listedCandidates.every((item) => selectedPaths.has(item.path));
 
   return (
     <Card
@@ -217,7 +247,7 @@ export default function StorageStatsCard() {
                 <ListyItem>
                   <div style={{ width: "100%" }}>
                     <Space style={{ width: "100%", justifyContent: "space-between" }}>
-                      <Typography.Text>{item.label}</Typography.Text>
+                      <Typography.Text>{storageItemLabel(item)}</Typography.Text>
                       <Typography.Text type="secondary">
                         {formatSize(item.size_bytes)}
                       </Typography.Text>
@@ -243,12 +273,12 @@ export default function StorageStatsCard() {
         open={cleanupOpen}
         okText={
           cleanupPlan
-            ? t("storageStats.cleanup.okCount", { count: cleanupPlan.totals.files })
+            ? t("storageStats.cleanup.okCount", { count: selectedPaths.size })
             : t("storageStats.cleanup.ok")
         }
         cancelText={t("common.action.cancel")}
         confirmLoading={cleanupRunning}
-        okButtonProps={{ disabled: (cleanupPlan?.totals.files ?? 0) === 0 }}
+        okButtonProps={{ disabled: selectedPaths.size === 0 }}
         onOk={() => void confirmCleanup()}
         onCancel={() => setCleanupOpen(false)}
         // 清单可能有 30+ 个文件：body 用统一上限自己滚动（--rf-modal-body-max-h），
@@ -260,7 +290,7 @@ export default function StorageStatsCard() {
             overflowY: "auto",
           },
         }}
-        width="min(560px, 92vw)"
+        width="min(640px, 94vw)"
       >
         {cleanupPlan ? (
           <Space orientation="vertical" size={8} style={{ width: "100%" }}>
@@ -280,6 +310,23 @@ export default function StorageStatsCard() {
                 count: cleanupPlan.skipped.length,
               })}
             </Typography.Text>
+            {/* 保留期可选：30 天只是默认值，更久以前的备份/日志应当能一次调出来。 */}
+            <Space wrap size={8}>
+              <Typography.Text>{t("storageStats.cleanup.days.prefix")}</Typography.Text>
+              <Select
+                size="small"
+                style={{ width: 96 }}
+                value={cleanupDays}
+                onChange={(days) => void changeDays(days)}
+                options={CLEANUP_DAY_OPTIONS.map((days) => ({
+                  value: days,
+                  label: t("storageStats.cleanup.days.option", { count: days }),
+                }))}
+              />
+              <Typography.Text type="secondary">
+                {t("storageStats.cleanup.days.suffix")}
+              </Typography.Text>
+            </Space>
             {/* 按类别分组勾选：名称 / 文件数 / 体积都在同一行，默认全选。 */}
             <Checkbox.Group
               value={selectedCategories}
@@ -293,7 +340,7 @@ export default function StorageStatsCard() {
                   const stat = cleanupPlan.by_category[category.key];
                   return (
                     <Checkbox key={category.key} value={category.key}>
-                      <span>{category.label}</span>
+                      <span>{storageCategoryLabel(category)}</span>
                       <Typography.Text type="secondary">
                         {` ${t("storageStats.category.files", {
                           files: stat?.files ?? 0,
@@ -305,21 +352,47 @@ export default function StorageStatsCard() {
                 })}
               </Space>
             </Checkbox.Group>
+            <div className="cleanup-candidate-head">
+              <Typography.Text>
+                {t("storageStats.cleanup.selected.summary", {
+                  count: selectedPaths.size,
+                  size: formatSize(selectedSize),
+                })}
+              </Typography.Text>
+              <Space size={4}>
+                <Button
+                  size="small"
+                  type="link"
+                  onClick={() =>
+                    setSelectedPaths(new Set(listedCandidates.map((item) => item.path)))
+                  }
+                  disabled={allSelected}
+                >
+                  {t("storageStats.cleanup.select.all")}
+                </Button>
+                <Button
+                  size="small"
+                  type="link"
+                  onClick={() => setSelectedPaths(new Set())}
+                  disabled={selectedPaths.size === 0}
+                >
+                  {t("storageStats.cleanup.select.none")}
+                </Button>
+              </Space>
+            </div>
             <div className="cleanup-candidate-list">
-              <Listy
-                items={listedCandidates.slice(0, CANDIDATE_PREVIEW_LIMIT)}
-                rowKey={(item) => item.path}
-                itemRender={(item) => (
-                  <ListyItem>
-                    <Space style={{ width: "100%", justifyContent: "space-between" }}>
-                      <Typography.Text ellipsis title={item.path} style={{ maxWidth: 340 }}>
-                        {item.label}·{item.path}
-                      </Typography.Text>
-                      <Typography.Text type="secondary">{formatSize(item.size)}</Typography.Text>
-                    </Space>
-                  </ListyItem>
-                )}
-              />
+              {listedCandidates.slice(0, CANDIDATE_PREVIEW_LIMIT).map((item) => (
+                <label key={item.path} className="cleanup-candidate-row">
+                  <Checkbox
+                    checked={selectedPaths.has(item.path)}
+                    onChange={(event) => togglePath(item.path, event.target.checked)}
+                  />
+                  <span className="cleanup-candidate-name" title={item.path}>
+                    {item.label}·{item.path}
+                  </span>
+                  <Typography.Text type="secondary">{formatSize(item.size)}</Typography.Text>
+                </label>
+              ))}
               {listedCandidates.length > CANDIDATE_PREVIEW_LIMIT ? (
                 <Typography.Text type="secondary">
                   {t("storageStats.cleanup.more", {

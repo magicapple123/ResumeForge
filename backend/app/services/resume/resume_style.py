@@ -3,9 +3,10 @@
 
 只做两件事：
 
-1. **合成** ``format_config["roles"]`` 与 ``format_config["objects"]`` 成
-   ``ResolvedStyle``（RoleStyle 只承载用户显式设过的值；None = 该属性未覆盖，
-   由渲染器回落到模板值）。
+1. **合成** ``format_config["roles"]`` / ``format_config["objects"]`` /
+   ``format_config["object_roles"]`` 成 ``ResolvedStyle``（RoleStyle 只承载用户显式
+   设过的值；None = 该属性未覆盖，由渲染器回落到模板值）。``object_roles`` 的键是
+   ``"<object_id>:<role>"``——W3 起「文字级别」可以只作用于选中的字段/角色。
 2. 产出 **HTML 的唯一 CSS**（``role_style_css`` / ``entry_style_css``）与"属性来源"查询
    （``source_of``，供属性面板三态胶囊）。
 
@@ -26,6 +27,7 @@ from .resume_style_schema import (
     PROP_KEYS,
     ROLES,
     template_role_defaults,
+    validate_object_roles_domain,
     validate_objects_domain,
     validate_roles_domain,
 )
@@ -94,6 +96,8 @@ class ResolvedStyle:
     template: str
     roles: Mapping[str, RoleStyle]
     objects: Mapping[str, RoleStyle]
+    # 键为 ``"<object_id>:<role>"``：该对象该角色的最高优先覆盖（W3）。
+    object_roles: Mapping[str, RoleStyle] = field(default_factory=dict)
     flat: Mapping[str, object] = field(default_factory=dict)
 
     def role(self, role: str) -> RoleStyle:
@@ -103,9 +107,21 @@ class ResolvedStyle:
         """该对象的 L5 覆盖；未命中返回空 RoleStyle（调用方再用角色层/模板值）。"""
         return self.objects.get(object_id or "", _EMPTY_ROLE)
 
+    def entry_role(self, role: str, object_id: str | None) -> RoleStyle:
+        """该对象该角色的 L5.5 覆盖（W3）；未命中返回空 RoleStyle。"""
+        return self.object_roles.get(f"{object_id or ''}:{role}", _EMPTY_ROLE)
+
     def effective(self, role: str, *, object_id: str | None = None) -> RoleStyle:
-        """角色层 + 对象层合成后的显式值（对象层优先）。"""
-        return self.role(role).merged_with(self.entry(object_id))
+        """角色层 → 对象层 → 对象角色层合成后的显式值（越具体越优先）。
+
+        ``obj:<role>`` 是 W3 新增的最高层：用户把「文字级别」限定到某个字段后，
+        同一条目其它角色仍走对象层/角色层，互不污染。
+        """
+        return (
+            self.role(role)
+            .merged_with(self.entry(object_id))
+            .merged_with(self.entry_role(role, object_id))
+        )
 
     def source_of(
         self, prop: str, *, role: str | None = None, object_id: str | None = None
@@ -115,6 +131,12 @@ class ResolvedStyle:
         L2（具名版式）与 L3（简历覆盖）在调用方已经合成进同一份 format_config，这里
         无法再区分——两者都报 ``resume``，属性面板文案按"已调整"处理（契约 §2.5 三态）。
         """
+        if (
+            object_id
+            and role
+            and getattr(self.entry_role(role, object_id), prop, None) is not None
+        ):
+            return "object"
         if object_id and getattr(self.entry(object_id), prop, None) is not None:
             return "object"
         if role and getattr(self.role(role), prop, None) is not None:
@@ -129,14 +151,16 @@ class ResolvedStyle:
         return not (
             any(not style.empty for style in self.roles.values())
             or any(not style.empty for style in self.objects.values())
+            or any(not style.empty for style in self.object_roles.values())
         )
 
 
 def resolve_style(*, template: str, format_config: dict | None) -> ResolvedStyle:
-    """L4/L5 合成。纯函数：不读 DB / 不读文件 / 不抛异常（畸形输入按"未设置"）。"""
+    """L4/L5/L5.5 合成。纯函数：不读 DB / 不读文件 / 不抛异常（畸形输入按"未设置"）。"""
     config = format_config if isinstance(format_config, dict) else {}
     roles_domain = validate_roles_domain(config.get("roles")) or {}
     objects_domain = validate_objects_domain(config.get("objects")) or {}
+    object_roles_domain = validate_object_roles_domain(config.get("object_roles")) or {}
     roles = {
         role: _role_style(roles_domain.get(role))
         for role in ROLES
@@ -147,7 +171,19 @@ def resolve_style(*, template: str, format_config: dict | None) -> ResolvedStyle
         for object_id, payload in objects_domain.items()
         if str(object_id) != "version" and isinstance(payload, dict)
     }
-    return ResolvedStyle(template=template, roles=roles, objects=objects, flat=config)
+    # 键已由校验器归一成 ``"<object_id>:<role>"``，这里原样保留（不重新拼）。
+    object_roles = {
+        str(key): _role_style(payload)
+        for key, payload in object_roles_domain.items()
+        if str(key) != "version" and isinstance(payload, dict)
+    }
+    return ResolvedStyle(
+        template=template,
+        roles=roles,
+        objects=objects,
+        object_roles=object_roles,
+        flat=config,
+    )
 
 
 def _css_number(value: float) -> str:
@@ -270,9 +306,15 @@ def entry_style_css(style: ResolvedStyle) -> str:
       自己的模板基准比例**展开（与 ``role_style_css`` 同一张 ratio 表），与 PDF/Word 的
       逐角色合并口径一致。基准相同的角色合并成一条选择器列表，规则数不随角色数膨胀。
 
-    没有对象覆盖时仍返回空串（``render_overrides_css`` 因此不产出任何字节，默认产物零变化）。
+    W3 追加第三层：``object_roles``（``"<object_id>:<role>"``）命中的角色再输出一条
+    ``[data-object-id] [data-role]`` 规则，只含**文字外观**属性、字号按该角色自己的
+    模板基准展开；空间属性仍只走对象根（与 PDF/Word 的 ``effective(role, object_id)``
+    逐角色合并对等）。
+
+    没有任何对象/对象角色覆盖时仍返回空串（``render_overrides_css`` 因此不产出任何
+    字节，默认产物零变化）。
     """
-    if not style.objects:
+    if not style.objects and not style.object_roles:
         return ""
     ratios = _template_ratios(style.template)
     rules: list[str] = []
@@ -308,6 +350,27 @@ def entry_style_css(style: ResolvedStyle) -> str:
                     ),
                     ratio=1.0,
                 ),
+            )
+        )
+    # 3) 对象**角色**级（W3）：只追加该角色被允许的文字外观属性。空间/对齐/符号仍只
+    #    落在对象根（重复写到子元素会把段距/缩进放大好几倍）。选择器与第 2 步同权重
+    #    （0,2,0）且注入在其后：同权重时本段生效，不需要 !important。
+    for key in sorted(style.object_roles):
+        object_id, _, role = key.partition(":")
+        if role not in _OBJECT_ROLES:
+            # name / section_title / emphasis 不在对象子树里出现（模板契约），跳过而不是
+            # 写一条永远匹配不到的选择器。
+            continue
+        role_style = style.object_roles[key]
+        text_style = RoleStyle(
+            **{prop: getattr(role_style, prop) for prop in _OBJECT_TEXT_PROPS}
+        )
+        if text_style.empty:
+            continue
+        rules.append(
+            _rule(
+                f'[data-object-id="{object_id}"] [data-role="{role}"]',
+                _declarations(text_style, ratio=ratios.get(role, 1.0)),
             )
         )
     return "\n".join(rule for rule in rules if rule)

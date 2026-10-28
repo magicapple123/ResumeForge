@@ -60,6 +60,29 @@ export interface JobMatchOut {
 
 export type JobMatchBatchItemStatus = "completed" | "failed";
 export type JobMatchBatchAnalysisSource = "new" | "existing" | "local";
+/** match = 只逐岗位给结论；compare = 逐岗结论之后再横向排序并解释原因。 */
+export type JobMatchBatchMode = "match" | "compare";
+
+/** 横向对比里的档位：只到"最合适/较合适/一般/偏弱"，没有百分比。 */
+export type JobComparisonVerdict = "best" | "good" | "fair" | "weak";
+
+export interface JobComparisonItem {
+  job_id: number;
+  rank: number;
+  verdict: JobComparisonVerdict;
+  headline: string;
+  reasons: string[];
+  concerns: string[];
+}
+
+export interface JobComparisonResult {
+  summary: string;
+  items: JobComparisonItem[];
+  notes: string[];
+  /** 非空表示对比没生成（逐岗结论仍在），前端照常展示逐岗位卡片并说明原因。 */
+  error: string;
+  model: string;
+}
 
 export interface JobMatchBatchItem {
   job_id: number;
@@ -81,6 +104,8 @@ export interface JobMatchBatchOut {
   failed_count: number;
   items: JobMatchBatchItem[];
   model: string;
+  mode: JobMatchBatchMode;
+  comparison: JobComparisonResult | null;
   created_at: string;
   updated_at: string;
 }
@@ -92,6 +117,7 @@ export interface JobMatchBatchSummary {
   failed_count: number;
   top_score: number | null;
   model: string;
+  mode: JobMatchBatchMode;
   created_at: string;
 }
 
@@ -103,6 +129,8 @@ export interface JobMatchBackgroundTask {
   status: JobMatchBackgroundTaskStatus;
   job_ids: number[];
   force: boolean;
+  /** 老任务（本次改动之前写入的）没有这个字段，按逐岗匹配理解。 */
+  mode?: JobMatchBatchMode;
   requested_count: number;
   completed_count: number;
   failed_count: number;

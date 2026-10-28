@@ -283,3 +283,113 @@ def test_the_reflow_timer_is_stopped_on_uninstall(page_client):
     )
 
     assert cleared >= 1, "卸载时没有停掉重排跟踪的定时器"
+
+
+def _panel_rect(page_client) -> dict:
+    return page_client.evaluate(
+        "(() => { const r = document.getElementById('__rf_live_host__').shadowRoot;"
+        " const b = r.querySelector('.p').getBoundingClientRect();"
+        " return {left: Math.round(b.left), top: Math.round(b.top),"
+        " w: Math.round(b.width), h: Math.round(b.height)}; })()"
+    )
+
+
+def _drag_panel(page_client, dx: int, dy: int) -> None:
+    """按住面板标题栏拖 (dx, dy)。**坐标从面板的实际位置取**，不假设它贴在哪。"""
+    origin = _panel_rect(page_client)
+    x, y = origin["left"] + 12, origin["top"] + 6
+    page_client.evaluate(
+        "(() => {"
+        " const root = document.getElementById('__rf_live_host__').shadowRoot;"
+        " const panel = root.querySelector('.p');"
+        f" panel.dispatchEvent(new MouseEvent('mousedown',"
+        f"   {{bubbles: true, button: 0, clientX: {x}, clientY: {y}}}));"
+        f" window.dispatchEvent(new MouseEvent('mousemove',"
+        f"   {{bubbles: true, clientX: {x + dx}, clientY: {y + dy}}}));"
+        " window.dispatchEvent(new MouseEvent('mouseup', {bubbles: true}));"
+        "})()"
+    )
+
+
+def _drag_resize(page_client, dx: int, dy: int) -> None:
+    """按住右下角把手拖 (dx, dy)。"""
+    corner = page_client.evaluate(
+        "(() => { const r = document.getElementById('__rf_live_host__').shadowRoot;"
+        " const b = r.querySelector('.rs').getBoundingClientRect();"
+        " return {x: Math.round(b.left + b.width / 2), y: Math.round(b.top + b.height / 2)}; })()"
+    )
+    page_client.evaluate(
+        "(() => {"
+        " const root = document.getElementById('__rf_live_host__').shadowRoot;"
+        " const handle = root.querySelector('.rs');"
+        f" handle.dispatchEvent(new MouseEvent('mousedown',"
+        f"   {{bubbles: true, button: 0, clientX: {corner['x']}, clientY: {corner['y']}}}));"
+        f" window.dispatchEvent(new MouseEvent('mousemove',"
+        f"   {{bubbles: true, clientX: {corner['x'] + dx}, clientY: {corner['y'] + dy}}}));"
+        " window.dispatchEvent(new MouseEvent('mouseup', {bubbles: true}));"
+        "})()"
+    )
+
+
+def test_dragging_the_title_bar_moves_the_panel_by_exactly_that_much(page_client):
+    """拖多少就走多少。
+    旧实现把拖动量当成"相对输入框的绝对偏移"再叠加，面板本来就被视口夹在某个位置时，
+    夹掉的差值会一直留在算式里——用户往上拖，面板纹丝不动（反馈原话：「顶部像是被什么
+    东西抵住了，明明还有空间却拖不动」）。这条用例钉住"跟手"这个性质本身。
+    """
+    _open_panel(page_client)
+
+    before = _panel_rect(page_client)
+    _drag_panel(page_client, 0, -DRAG_DELTA)
+    after = _panel_rect(page_client)
+
+    moved = before["top"] - after["top"]
+    assert abs(moved - DRAG_DELTA) <= 4, f"往上拖 {DRAG_DELTA}px，面板只移动了 {moved}px"
+
+
+def test_the_panel_can_be_resized_from_its_corner_with_a_floor(page_client):
+    """右下角把手改尺寸；**缩到 380×300 就停住**，不会变成一条看不清的窄缝。
+
+    下限是刻意的：再小就塞不下搜索框加一行资料，而"拖到最小"的用户本意是别挡着表单，
+    不是要一块没法读的卡片。
+
+    **左上角必须锚住。** 把手在右下角，拖它只该改宽高；宽度一变，`position()` 的
+    `maxLeft` 会跟着变小，旧实现于是把 left 往左推——用户看到的是"拖右下角、动的却是
+    左边"（2026-10-28 反馈），再继续拖还会让把手和鼠标错位。视口放大到 1200×900 再测，
+    小视口下面板本来就贴着左上角，锚没锚住看不出来。
+    """
+    page_client.send(
+        "Emulation.setDeviceMetricsOverride",
+        {"width": 1200, "height": 900, "deviceScaleFactor": 1, "mobile": False},
+    )
+    try:
+        _open_panel(page_client)
+        page_client.evaluate(_shadow("querySelector('.more').click()"))
+
+        before = _panel_rect(page_client)
+        _drag_resize(page_client, 60, -80)
+        grown = _panel_rect(page_client)
+        assert (grown["left"], grown["top"]) == (before["left"], before["top"]), (
+            f"拖右下角把面板整体挪走了：{before} → {grown}"
+        )
+        assert grown["w"] == before["w"] + 60, f"宽度没跟着拖动走：{before} → {grown}"
+        assert grown["h"] == before["h"] - 80, f"高度没跟着拖动走：{before} → {grown}"
+
+        _drag_resize(page_client, -900, -900)
+        floor = _panel_rect(page_client)
+        assert (floor["w"], floor["h"]) == (380, 300), f"最小尺寸没守住：{floor}"
+        assert (floor["left"], floor["top"]) == (before["left"], before["top"]), (
+            f"缩到最小又把面板挪走了：{floor}"
+        )
+
+        # **贴住右边界时再拖宽**：右侧没有余量，宽度就该停住，left 尤其不许被推走。
+        # 旧实现按 `innerWidth - 2*gap` 算上限，这里会得到"变宽 80px、同时左移 80px"。
+        _drag_panel(page_client, 900, 0)
+        edge = _panel_rect(page_client)
+        _drag_resize(page_client, 80, 0)
+        pushed = _panel_rect(page_client)
+        assert (pushed["left"], pushed["w"]) == (edge["left"], edge["w"]), (
+            f"贴右边拖宽把面板推走了：{edge} → {pushed}"
+        )
+    finally:
+        page_client.send("Emulation.clearDeviceMetricsOverride")

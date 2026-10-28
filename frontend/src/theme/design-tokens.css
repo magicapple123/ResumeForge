@@ -117,8 +117,9 @@
   --rf-bp-huge: 1920px;
   --rf-bp-ultra: 2048px;
   /* 外壳几何：唯一来源。Sider 的 width 与 .app-main 的 margin-left 都读它，
-     消灭「App.tsx 写 200 / base-shell.css 写 200 / responsive.css 写 64」三处耦合。 */
-  --rf-sider-width: 200px;
+     消灭「App.tsx 写 200 / base-shell.css 写 200 / responsive.css 写 64」三处耦合。
+     2026-10-28 由 200 加宽到 216（用户要求"稍微加宽一点"），收起态仍是 64。 */
+  --rf-sider-width: 216px;
   /* 内容区内边距：取代 base-tasks.css 的 24px、responsive.css 的 16px、mobile.css 的 16px。 */
   --rf-content-pad: 24px;
   /* 卡片内边距与栅格间距（供各页复用；值全部落在 4/8 网格上）。 */

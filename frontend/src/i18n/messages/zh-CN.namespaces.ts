@@ -11,6 +11,7 @@
  */
 
 import assets from "./zh-CN.assets";
+import batchOperation from "./zh-CN.batchOperation";
 import bilingual from "./zh-CN.bilingual";
 import careerScenarios from "./zh-CN.careerScenarios";
 import conflict from "./zh-CN.conflict";
@@ -27,6 +28,7 @@ import preflight from "./zh-CN.preflight";
 import profileFacts from "./zh-CN.profileFacts";
 import profileFactsLegacy from "./zh-CN.profileFactsLegacy";
 import profileGroups from "./zh-CN.profileGroups";
+import profileField from "./zh-CN.profileField";
 import profileLibrary from "./zh-CN.profileLibrary";
 import preview from "./zh-CN.preview";
 import provenance from "./zh-CN.provenance";
@@ -201,6 +203,7 @@ const namespaces = {
   ...typography,
   /** W17 私有表达资产。 */
   ...assets,
+  ...batchOperation,
   /** W11 统一检查面板。 */
   ...preflight,
   /** W18 离线对象批注。 */
@@ -224,6 +227,7 @@ const namespaces = {
   /** F6 资料方案与当前方案（2026-10-25）。 */
   ...profileGroups,
   /** F6 资料库 / 资料页 / 字段管理（2026-10-25）。 */
+  ...profileField,
   ...profileLibrary,
   /** F6 证书资质编辑槽（2026-10-25 从补充事实文案迁移，R-70）。 */
   ...credentials,

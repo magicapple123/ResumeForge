@@ -7,11 +7,12 @@
  * 空态要说明「当前组已隐藏全部大字段（基本信息除外）」并内嵌同一个入口。
  */
 import { App as AntdApp, Form } from "antd";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { t } from "../../i18n";
 import { createSectionOrderStore } from "../../features/profile/sectionOrderStore";
-import { LIMITS, makeAllSections } from "../../test/profileWorkspaceFixture";
+import type { SectionOut } from "../../features/profile-library/types";
+import { LIMITS, makeAllSections, makeSection } from "../../test/profileWorkspaceFixture";
 import ProfileSectionStack from "./ProfileSectionStack";
 
 afterEach(() => {
@@ -19,7 +20,12 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-function renderStack(participatingKeys: string[], onSetSectionVisible = vi.fn(), editing = false) {
+function renderStack(
+  participatingKeys: string[],
+  onSetSectionVisible = vi.fn(),
+  editing = false,
+  sections: SectionOut[] = makeAllSections(),
+) {
   const store = createSectionOrderStore();
   const noop = vi.fn();
   const onOpenFieldSettings = vi.fn();
@@ -27,7 +33,7 @@ function renderStack(participatingKeys: string[], onSetSectionVisible = vi.fn(),
     <AntdApp>
       <Form>
         <ProfileSectionStack
-          sections={makeAllSections()}
+          sections={sections}
           participatingKeys={participatingKeys}
           reorderStore={store}
           editing={editing}
@@ -121,7 +127,7 @@ describe("ProfileSectionStack 的标题唯一性与字段设置入口", () => {
     expect(screen.getAllByText("Education")).toHaveLength(1);
   });
 
-  it("标题栏齿轮直达该大字段的字段设置，basic_info 没有齿轮", () => {
+  it("标题栏齿轮直达该大字段的字段设置（基本信息也有齿轮）", () => {
     const { onOpenFieldSettings } = renderStack(["basic_info", "educations"]);
     const gear = screen.getByRole("button", {
       name: t("profileLibrary.section.fieldSettingsAria", { name: "Education" }),
@@ -134,11 +140,28 @@ describe("ProfileSectionStack 的标题唯一性与字段设置入口", () => {
     // 页面此前忽略了这个 key，弹层只能落到组/大字段列表；现在必须带上分区 key。
     expect(onOpenFieldSettings).toHaveBeenCalledWith("educations");
 
-    // 照片不是可配置字段：基本信息卡片不提供字段设置入口。
+    // 2026-10-28 用户要求：基本信息的姓名/联系方式同样可隐藏、可加自定义字段，
+    // 它和其他板块一样要有字段设置入口。
+    const basicGear = screen.getByRole("button", {
+      name: t("profileLibrary.section.fieldSettingsAria", { name: "Basic Info" }),
+    });
+    expect(basicGear.closest(".profile-section-collapse-toggle")).toBeNull();
+    fireEvent.click(basicGear);
+    expect(onOpenFieldSettings).toHaveBeenCalledWith("basic_info");
+  });
+
+  it("自建板块在标题旁挂「自建」标记，系统板块没有", () => {
+    const sections = [
+      ...makeAllSections(),
+      makeSection("custom_side", "Side Projects", "multi", [], { is_builtin: false }),
+    ];
+    renderStack(["basic_info", "educations", "custom_side"], vi.fn(), false, sections);
+    // 只有自建的那一张卡带标记；标记文案与标题是两段文本，不会干扰标题唯一性。
+    expect(screen.getAllByText(t("profileLibrary.section.customBadge"))).toHaveLength(1);
+    const customCard = document.querySelector('[data-profile-section-key="custom_side"]');
+    if (!(customCard instanceof HTMLElement)) throw new Error("custom section card not found");
     expect(
-      screen.queryByRole("button", {
-        name: t("profileLibrary.section.fieldSettingsAria", { name: "Basic Info" }),
-      }),
-    ).not.toBeInTheDocument();
+      within(customCard).getByText(t("profileLibrary.section.customBadge")),
+    ).toBeInTheDocument();
   });
 });

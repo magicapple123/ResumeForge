@@ -59,9 +59,28 @@
   background: var(--rf-brand-wash);
 }
 
-/* 内容区与标题栏同一左右内边距，底部留 16px——此前内容与动作行贴着卡片下边缘。 */
+/* 内容区与标题栏同一左右内边距，四周都留 16px。
+ *
+ * 2026-10-28：上内边距此前是 **0**，于是第一个字段/条目卡直接贴着标题栏的下边框，
+ * 每个分区看起来都像"标题压着内容"（用户截图：基本信息 / 教育经历 / 实习工作经历
+ * 顶部全挤在一起）。这里改成一圈 16px，13 个分区一次生效。 */
 .profile-section-content {
-  padding: 0 16px 16px;
+  padding: 16px;
+}
+
+/* 编辑态：相对「已保存基线」改过的字段打上 is-dirty（判据见 profileBaselineContext）。
+ * 只做两件事——标签变强调色、输入框换浅底——不改变布局，扫一眼就能看出改了哪些。 */
+.profile-field-grid-item.is-dirty > .ant-form-item .ant-form-item-label > label {
+  color: var(--rf-brand);
+  font-weight: 600;
+}
+
+.profile-field-grid-item.is-dirty .ant-input,
+.profile-field-grid-item.is-dirty .ant-input-affix-wrapper,
+.profile-field-grid-item.is-dirty .ant-input-number,
+.profile-field-grid-item.is-dirty .ant-select-selector {
+  border-color: var(--rf-brand);
+  background: var(--rf-brand-wash);
 }
 
 /* ===== 条目卡：标题一行 + 右侧紧凑动作簇 =====

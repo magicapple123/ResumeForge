@@ -33,6 +33,7 @@ from .middleware import (
 from .middleware.dataset_request import DatasetRequestMiddleware
 from .runtime.log_context import LogContextFilter
 from .runtime.log_redact import RedactExceptionFilter
+from .services.ai_task_recovery import fail_orphaned_ai_tasks
 from .services.apply import apply_service
 from .services.apply.task_runner import get_task_runner
 from .services.data_backup import cleanup_temp_directories
@@ -210,6 +211,12 @@ async def lifespan(_app: FastAPI):
             fail_orphaned_generate_tasks(session)
         except Exception:  # noqa: BLE001 - 清理失败不应阻断启动
             startup_logger.warning("清理中断的简历生成任务失败", exc_info=True)
+        try:
+            # 通用 AI 任务（0068）：进程中断后它们永远不会再被推进，前端会一直
+            # 看到 running —— 必须在开始接收请求前收尾。
+            fail_orphaned_ai_tasks(session)
+        except Exception:  # noqa: BLE001 - 清理失败不应阻断启动
+            startup_logger.warning("清理中断的 AI 任务失败", exc_info=True)
     startup_logger.info("启动自检完成，开始接收请求")
     # 自动备份放后台调度线程（RF-05）：启动时先检查一次"是否到期"，之后每个
     # check_seconds 周期再查；快照可能几百 MB，不能让它卡住"开始接收请求"这一行。

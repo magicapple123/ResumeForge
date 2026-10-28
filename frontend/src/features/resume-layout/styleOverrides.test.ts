@@ -7,10 +7,13 @@
 import { describe, expect, it } from "vitest";
 import {
   clearObject,
+  clearObjectRole,
   clearRole,
   displayStyleValue,
   explicitObjectProps,
+  objectRoleKey,
   roleBaseRatio,
+  readObjectRoleStyle,
   readObjectStyle,
   readRoleStyle,
   readStyleDomains,
@@ -18,6 +21,8 @@ import {
   styleSourceOf,
   withObjectProp,
   withObjectProps,
+  withObjectRoleProp,
+  withObjectRoleProps,
   storedStyleValue,
   withRoleProp,
   writeStyleDomains,
@@ -49,8 +54,12 @@ describe("styleOverrides · 读取", () => {
   });
 
   it("空 / 缺域读成空对象", () => {
-    expect(readStyleDomains(undefined)).toEqual({ roles: {}, objects: {} });
-    expect(readStyleDomains({ accent: "#123456" } as never)).toEqual({ roles: {}, objects: {} });
+    expect(readStyleDomains(undefined)).toEqual({ roles: {}, objects: {}, objectRoles: {} });
+    expect(readStyleDomains({ accent: "#123456" } as never)).toEqual({
+      roles: {},
+      objects: {},
+      objectRoles: {},
+    });
   });
 
   it("version 2 的域整域忽略（读宽容、写不猜）", () => {
@@ -141,7 +150,9 @@ describe("styleOverrides · 写对象", () => {
   });
 
   it("writeStyleDomains 空域删键（R3）", () => {
-    expect(writeStyleDomains({ accent: "#123456" }, { roles: {}, objects: {} })).toEqual({
+    expect(
+      writeStyleDomains({ accent: "#123456" }, { roles: {}, objects: {}, objectRoles: {} }),
+    ).toEqual({
       accent: "#123456",
     });
   });
@@ -209,5 +220,104 @@ describe("styleOverrides · 来源与生效值", () => {
       "indent",
       "align",
     ]);
+  });
+});
+
+describe("styleOverrides · 对象角色（W3）", () => {
+  it("读 object_roles：合法键保留，非法对象 id / 未知角色 / 非法值丢弃", () => {
+    const domains = readStyleDomains({
+      object_roles: {
+        version: 1,
+        [`${OBJ_A}:body`]: { font_scale: 1.4, indent: 0.5, bogus: 1 },
+        [`${OBJ_A}:nope`]: { bold: true },
+        "short:body": { bold: true },
+        "bad id:body": { bold: true },
+        [`${OBJ_A}:meta`]: { color: "red" },
+      },
+    } as never);
+    expect(domains.objectRoles).toEqual({
+      [objectRoleKey(OBJ_A, "body")]: { font_scale: 1.4, indent: 0.5 },
+    });
+  });
+
+  it("写一个对象角色属性：只动这一条，保留 roles / objects / 扁平键", () => {
+    const base = {
+      accent: "#123456",
+      roles: { version: 1, body: { line_height: 1.55 } },
+      objects: { version: 1, [OBJ_A]: { color: "#111111" } },
+    } as never;
+    const next = withObjectRoleProp(base, OBJ_A, "body", "font_scale", 1.4);
+    expect(next).toEqual({
+      accent: "#123456",
+      roles: { version: 1, body: { line_height: 1.55 } },
+      objects: { version: 1, [OBJ_A]: { color: "#111111" } },
+      object_roles: { version: 1, [objectRoleKey(OBJ_A, "body")]: { font_scale: 1.4 } },
+    });
+  });
+
+  it("null 删属性；删空后键与域一起消失；角色不允许的属性 / 非法 id 不写", () => {
+    const base = withObjectRoleProp({}, OBJ_A, "body", "bold", true);
+    expect(withObjectRoleProp(base, OBJ_A, "body", "bold", null)).toEqual({});
+    // meta 不允许段距：写入被忽略，原配置原样返回。
+    expect(withObjectRoleProp(base, OBJ_A, "meta", "space_before", 0.3)).toBe(base);
+    expect(withObjectRoleProp({}, "short", "body", "bold", true)).toEqual({});
+  });
+
+  it("批量写对象角色：逐条保留其它属性，只动该角色", () => {
+    const base = withObjectRoleProp({}, OBJ_B, "body", "color", "#111111");
+    const next = withObjectRoleProps(base, [OBJ_A, OBJ_B], "body", {
+      font_scale: 1.2,
+      bold: true,
+    });
+    expect(next).toEqual({
+      object_roles: {
+        version: 1,
+        [objectRoleKey(OBJ_A, "body")]: { font_scale: 1.2, bold: true },
+        [objectRoleKey(OBJ_B, "body")]: { color: "#111111", font_scale: 1.2, bold: true },
+      },
+    });
+  });
+
+  it("clearObjectRole 只清该对象的该角色，不碰整条目覆盖", () => {
+    const base = withObjectProps(withObjectRoleProp({}, OBJ_A, "body", "bold", true), [OBJ_A], {
+      color: "#111111",
+    });
+    expect(clearObjectRole(base, [OBJ_A], "body")).toEqual({
+      objects: { version: 1, [OBJ_A]: { color: "#111111" } },
+    });
+    const config = { accent: "#123456" } as never;
+    expect(clearObjectRole(config, [OBJ_A], "body")).toBe(config);
+  });
+
+  it("三层来源与生效值：对象角色 > 对象 > 角色", () => {
+    const config = {
+      roles: { version: 1, body: { line_height: 1.55, indent: 1.2 } },
+      objects: { version: 1, [OBJ_A]: { line_height: 1.4, color: "#111111" } },
+      object_roles: { version: 1, [objectRoleKey(OBJ_A, "body")]: { line_height: 1.6 } },
+    } as never;
+    const domains = readStyleDomains(config);
+    expect(resolvedPropValue(domains, { role: "body", prop: "line_height", objectId: OBJ_A })).toBe(
+      1.6,
+    );
+    expect(resolvedPropValue(domains, { role: "body", prop: "color", objectId: OBJ_A })).toBe(
+      "#111111",
+    );
+    expect(resolvedPropValue(domains, { role: "body", prop: "indent", objectId: OBJ_A })).toBe(1.2);
+    expect(styleSourceOf(config, { role: "body", prop: "line_height", objectId: OBJ_A })).toBe(
+      "object",
+    );
+    // 只读该对象该角色的覆盖（同一条目的其它角色不受影响）。
+    expect(readObjectRoleStyle(domains, OBJ_B, "body")).toEqual({});
+  });
+
+  it("动 roles / objects 不会丢 object_roles 域（三域一起写回）", () => {
+    const base = withObjectRoleProp({}, OBJ_A, "body", "bold", true);
+    expect(withRoleProp(base, "body", "line_height", 1.5)).toEqual({
+      roles: { version: 1, body: { line_height: 1.5 } },
+      object_roles: { version: 1, [objectRoleKey(OBJ_A, "body")]: { bold: true } },
+    });
+    expect(clearRole(base, "body")).toEqual({
+      object_roles: { version: 1, [objectRoleKey(OBJ_A, "body")]: { bold: true } },
+    });
   });
 });

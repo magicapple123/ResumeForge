@@ -58,7 +58,11 @@ export function deleteResumeTemplate(id: number): Promise<void> {
  * 走 multipart 而不是 base64 JSON：一份简历 PDF 几 MB，base64 后还要再涨三分之一，
  * 而这条路径本来就不需要 JSON 结构。
  */
-export async function importTemplateFromFile(file: File, name = ""): Promise<ResumeTemplateDetail> {
+export async function importTemplateFromFile(
+  file: File,
+  name = "",
+  signal?: AbortSignal,
+): Promise<ResumeTemplateDetail> {
   const formData = new FormData();
   formData.append("file", file);
   if (name.trim()) formData.append("name", name.trim());
@@ -67,6 +71,7 @@ export async function importTemplateFromFile(file: File, name = ""): Promise<Res
     method: "POST",
     body: formData,
     budget: "upload",
+    signal,
   });
 }
 
@@ -74,6 +79,7 @@ export async function importTemplateFromFile(file: File, name = ""): Promise<Res
 export async function analyzeTemplateFromFiles(
   files: File[],
   name = "",
+  signal?: AbortSignal,
 ): Promise<TemplateRecognitionDraft> {
   const formData = new FormData();
   files.forEach((file) => formData.append("files", file));
@@ -82,5 +88,6 @@ export async function analyzeTemplateFromFiles(
     method: "POST",
     body: formData,
     budget: "upload",
+    signal,
   });
 }

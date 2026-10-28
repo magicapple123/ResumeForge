@@ -122,8 +122,11 @@
    完整名字由选项自带的 `title` 提供。写 px 而不是 em：em 跟着 antd 的字号 token 漂，
    同一个框在不同主题下会悄悄变宽/变窄。 */
 .resume-format-select {
-  width: 88px;
-  min-width: 88px;
+  /* 2026-10-28 用户要求：触发框与下拉弹层**同宽**，整体收到"四个字"就够
+     （「跟随模板」）。弹层的宽度在 resume-workbench-controls.css 的
+     `.resume-params-dropdown.resume-format-dropdown` 里跟着改成同一个值。 */
+  width: 104px;
+  min-width: 104px;
 }
 
 /* 缩放条：在纸面**下方**居中（P2b / D6）。缩放是"看"的动作，手应该落在图旁边。 */
@@ -280,11 +283,20 @@
   border-radius: 6px;
   background: var(--rf-surface-alt);
   /* 放大（`scale > 1`）时纸会比相框宽：允许横向滚动看右边，而不是把纸裁掉。
-     只开横向——纵向高度是按页数算出来的，再出一条竖向滚动条就回到"两个滚动条"。
-     横向滚动条只会压缩高度，不影响 `clientWidth`，所以宽度测量不会自激。 */
-  overflow-x: auto;
+     **但只在真的放大时才开**（`.is-zoomed`）：100% 时纸列宽度已经等于相框宽，
+     浮点累计出的半像素会让 `overflow-x: auto` 凭空多出一条横向滚动条，用户拖动它
+     纸就歪了（2026-11 反馈"精确预览有时候可以左右滑动、简历歪斜"）。
+     `overflow-x: hidden` 与 `overflow-y: hidden` 配对，不会按规范把 `overflow-y`
+     连带算成 `auto`——纵向高度是按页数算出来的，再出一条竖向滚动条就回到"两个滚动条"。 */
+  overflow-x: hidden;
   overflow-y: hidden;
   position: relative;
+}
+
+/* 只有放大之后才让纸溢出相框（相框高度由 `useExactPreviewFrameHeight` 按宽度算，
+   横向滚动条只会压缩高度，不影响 `clientWidth`，所以宽度测量不会自激）。 */
+.exact-preview.is-zoomed {
+  overflow-x: auto;
 }
 
 .exact-preview-frame {
@@ -308,6 +320,14 @@
 .exact-preview-paper-column {
   /* 高度由相框（`frameHeight`）决定，不需要额外预留：宽度一变，纸高自己跟着变。 */
   margin: 0 auto;
+  /* 100% 时不允许比相框更宽（半像素也不许）：多出来的那一点就是横向滚动条的来源。
+     放大时由 `.is-zoomed` 把上限放开——那条路上"纸比相框宽"才是正确行为。 */
+  max-width: 100%;
+  min-width: 0;
+}
+
+.exact-preview.is-zoomed .exact-preview-paper-column {
+  max-width: none;
 }
 
 .exact-preview-stack > .exact-preview-frame {

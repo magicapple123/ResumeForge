@@ -95,6 +95,14 @@ const settingsUi = {
   "settingsUi.help.previewFiles": "（{files}）",
   /** 清单里多个文件之间的分隔符。 */
   "settingsUi.help.previewSeparator": "、",
+  /**
+   * 预览摘要末尾那句「包里有什么、没有什么」。
+   *
+   * 文案与后端 `_DIAGNOSTICS_PREVIEW_NOTE` 逐字一致：接口仍附带 `note` 字段供非界面
+   * 消费者使用，但界面按语言包取文——否则英文界面里这句会是中文。
+   */
+  "settingsUi.help.previewNote":
+    "诊断包只包含脱敏运行事件、系统信息与近期后端日志尾部（疑似令牌已兜底抹除）；不包含简历全文、表单填写值、Cookie 或提示词。",
   /** 反馈渠道那一行的三段：链接前、群号前、群号后。 */
   "settingsUi.help.feedbackLead": "反馈渠道：",
   "settingsUi.help.feedbackJoin": "，或加用户群",

@@ -259,3 +259,18 @@ def test_cleanup_accepts_a_bad_window_without_failing(client):
     assert response.status_code == 200
     # 回落到默认 30 天，而不是 500。
     assert response.json()["moved"] == 0
+
+
+def test_cleanup_can_move_only_selected_paths(data_dir):
+    """逐文件勾选：只移走用户点名的候选，其余候选留在原地。"""
+    for index in range(1, 6):
+        _write(f"backups/b{index}.db", 10, age_days=40 + index)
+    keep = data_dir / "backups/b4.db"
+    move = data_dir / "backups/b5.db"
+
+    result = run_cleanup(older_than_days=30, paths={"backups/b5.db"})
+
+    assert result["moved"] == 1
+    assert keep.exists(), "未勾选的候选不能被移走"
+    assert not move.exists()
+    assert (data_dir / result["trash_dir"] / "backups/b5.db").exists()

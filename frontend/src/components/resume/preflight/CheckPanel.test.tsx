@@ -113,4 +113,25 @@ describe("统一检查面板（W11）", () => {
     fireEvent.click(screen.getByRole("button", { name: t("preflight.action.cancel") }));
     expect(onCancel).toHaveBeenCalledTimes(1);
   });
+
+  /** 回归（2026-10-29 用户反馈）：同一张卡片上出现两个「开始检查」。 */
+  it("空态只有顶部那一颗「开始检查」", () => {
+    renderPanel({ status: "idle", result: null });
+    expect(screen.getByText(t("preflight.status.idle"))).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: t("preflight.action.run") })).toHaveLength(1);
+  });
+
+  /**
+   * 回归：结果缺字段（老版本后端 / 只跑了部分层）时不能整页崩。
+   * 旧实现直接读 `result.issues.length` → `Cannot read properties of undefined (reading 'length')`。
+   */
+  it("issues 缺失时按空清单处理，不抛错", () => {
+    const broken = {
+      ...makePreflightOut(),
+      issues: undefined,
+      snapshot: undefined,
+    } as unknown as Parameters<typeof CheckPanel>[0]["result"];
+    expect(() => renderPanel({ result: broken })).not.toThrow();
+    expect(screen.getByText(t("preflight.empty.title"))).toBeInTheDocument();
+  });
 });

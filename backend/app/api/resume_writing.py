@@ -3,13 +3,19 @@
 
 薄路由：只做校验、调 service、返回 schema。写作/润色/翻译依赖模型，未配置时返回清晰
 中文错误（不做本地降级、不伪造结果）；版本对比是纯本地 difflib，不依赖模型。
+
+**这一组端点刻意不做成任务**：它们 1–3 秒就返回，而且结果必须**当场回填到用户正在编辑
+的那一栏**（选中一段话给三个改写选项、点「润色」换掉这句话）。后台化的开销（建任务 +
+轮询 + 一次通知）大于收益，人走了也没有回填目标。它们改为**保证可以中途取消**：
+每个模型调用都套 ``run_until_disconnect``——客户端 abort 之后服务端真的停下，
+而不是把整段跑完继续烧 token。
 """
 
 from __future__ import annotations
 
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
 from ..database import get_db
@@ -49,6 +55,7 @@ from ..services.resume.resume_writing import (
     translate,
 )
 from ..services.settings_service import get_llm_config
+from ._disconnect import client_gone, run_until_disconnect
 
 router = APIRouter(prefix="/api/resumes", tags=["resume-writing"])
 
@@ -74,7 +81,12 @@ def _require_provider(db: Session):
 
 
 @router.post("/{resume_id}/writing/star", response_model=StarRewriteOut)
-async def star_rewrite(resume_id: int, payload: StarRewriteRequest, db: Session = Depends(get_db)):
+async def star_rewrite(
+    request: Request,
+    resume_id: int,
+    payload: StarRewriteRequest,
+    db: Session = Depends(get_db),
+):
     _load_record(db, resume_id)
     claim = None
     if payload.claim_id is not None:
@@ -84,7 +96,11 @@ async def star_rewrite(resume_id: int, payload: StarRewriteRequest, db: Session 
     provider = _require_provider(db)
     db.close()
     try:
-        result = await rewrite_star(provider, payload.text, claim)
+        result = await run_until_disconnect(
+            request, rewrite_star(provider, payload.text, claim), what="STAR 改写"
+        )
+        if result is None:
+            raise client_gone("STAR 改写")
     except LLMError as exc:
         raise HTTPException(status_code=502, detail=f"STAR 改写失败：{exc}") from exc
     except Exception as exc:  # noqa: BLE001 - 为用户提供可理解的失败提示
@@ -94,12 +110,21 @@ async def star_rewrite(resume_id: int, payload: StarRewriteRequest, db: Session 
 
 
 @router.post("/{resume_id}/writing/phrases", response_model=PhrasesOut)
-async def phrases(resume_id: int, payload: PhrasesRequest, db: Session = Depends(get_db)):
+async def phrases(
+    request: Request,
+    resume_id: int,
+    payload: PhrasesRequest,
+    db: Session = Depends(get_db),
+):
     _load_record(db, resume_id)
     provider = _require_provider(db)
     db.close()
     try:
-        result = await generate_phrases(provider, payload.text, list(payload.modes))
+        result = await run_until_disconnect(
+            request, generate_phrases(provider, payload.text, list(payload.modes)), what="话术生成"
+        )
+        if result is None:
+            raise client_gone("话术生成")
     except LLMError as exc:
         raise HTTPException(status_code=502, detail=f"生成话术失败：{exc}") from exc
     except Exception as exc:  # noqa: BLE001
@@ -109,12 +134,21 @@ async def phrases(resume_id: int, payload: PhrasesRequest, db: Session = Depends
 
 
 @router.post("/{resume_id}/writing/polish", response_model=PolishOut)
-async def polish_resume(resume_id: int, payload: PolishRequest, db: Session = Depends(get_db)):
+async def polish_resume(
+    request: Request,
+    resume_id: int,
+    payload: PolishRequest,
+    db: Session = Depends(get_db),
+):
     _load_record(db, resume_id)
     provider = _require_provider(db)
     db.close()
     try:
-        result = await polish(provider, payload.text, payload.style)
+        result = await run_until_disconnect(
+            request, polish(provider, payload.text, payload.style), what="润色"
+        )
+        if result is None:
+            raise client_gone("润色")
     except LLMError as exc:
         raise HTTPException(status_code=502, detail=f"润色失败：{exc}") from exc
     except Exception as exc:  # noqa: BLE001
@@ -125,7 +159,10 @@ async def polish_resume(resume_id: int, payload: PolishRequest, db: Session = De
 
 @router.post("/{resume_id}/writing/rewrite-field", response_model=RewriteFieldOut)
 async def rewrite_resume_field(
-    resume_id: int, payload: RewriteFieldRequest, db: Session = Depends(get_db)
+    request: Request,
+    resume_id: int,
+    payload: RewriteFieldRequest,
+    db: Session = Depends(get_db),
 ):
     """按用户要求重写简历里的某一栏，返回**建议**（不改动已保存的简历）。
 
@@ -144,7 +181,11 @@ async def rewrite_resume_field(
     provider = _require_provider(db)
     db.close()
     try:
-        result = await rewrite_field(provider, target, payload.instruction)
+        result = await run_until_disconnect(
+            request, rewrite_field(provider, target, payload.instruction), what="改写"
+        )
+        if result is None:
+            raise client_gone("改写")
     except LLMError as exc:
         raise HTTPException(status_code=502, detail=f"改写这一栏失败：{exc}") from exc
     except ValueError as exc:
@@ -167,13 +208,20 @@ async def rewrite_resume_field(
 
 @router.post("/{resume_id}/writing/translate", response_model=TranslateOut)
 async def translate_resume(
-    resume_id: int, payload: TranslateRequest, db: Session = Depends(get_db)
+    request: Request,
+    resume_id: int,
+    payload: TranslateRequest,
+    db: Session = Depends(get_db),
 ):
     _load_record(db, resume_id)
     provider = _require_provider(db)
     db.close()
     try:
-        result = await translate(provider, payload.text, payload.direction)
+        result = await run_until_disconnect(
+            request, translate(provider, payload.text, payload.direction), what="翻译"
+        )
+        if result is None:
+            raise client_gone("翻译")
     except LLMError as exc:
         raise HTTPException(status_code=502, detail=f"翻译失败：{exc}") from exc
     except Exception as exc:  # noqa: BLE001
@@ -183,7 +231,9 @@ async def translate_resume(
 
 
 @selection_router.post("/polish-selection", response_model=PolishSelectionOut)
-async def polish_selection_endpoint(payload: PolishSelectionRequest, db: Session = Depends(get_db)):
+async def polish_selection_endpoint(
+    request: Request, payload: PolishSelectionRequest, db: Session = Depends(get_db)
+):
     """润色用户选中的那一段文字（全局 AI 润色）。
 
     **只处理请求体里的 ``text``**：这里既不读简历、也不知道这段文字属于哪一栏，
@@ -192,7 +242,11 @@ async def polish_selection_endpoint(payload: PolishSelectionRequest, db: Session
     provider = _require_provider(db)
     db.close()
     try:
-        result = await polish_selection(provider, payload.text, payload.instruction)
+        result = await run_until_disconnect(
+            request, polish_selection(provider, payload.text, payload.instruction), what="润色"
+        )
+        if result is None:
+            raise client_gone("润色")
     except LLMError as exc:
         raise HTTPException(status_code=502, detail=f"润色失败：{exc}") from exc
     except Exception as exc:  # noqa: BLE001 - 为用户提供可理解的失败提示

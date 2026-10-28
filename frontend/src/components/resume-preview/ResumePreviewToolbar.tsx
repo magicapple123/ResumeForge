@@ -50,6 +50,11 @@ interface Props {
    * 比不摆更让人困惑（导出/分享那种只读宿主就是这一支）。
    */
   clickToEditAvailable?: boolean;
+  /**
+   * 是否渲染「草稿模式编辑」开关。简历预览弹窗传 false（2026-10-28 用户要求：
+   * 详细编辑统一去简历制作台）；制作台仍保留，它是"点纸面跳到对应字段"的导航入口。
+   */
+  showClickToEdit?: boolean;
 }
 
 export default function ResumePreviewToolbar({
@@ -61,6 +66,7 @@ export default function ResumePreviewToolbar({
   clickToEdit = false,
   onClickToEditChange,
   clickToEditAvailable = false,
+  showClickToEdit = true,
 }: Props) {
   useLocale();
   const draftMode = previewMode === "draft";
@@ -100,7 +106,7 @@ export default function ResumePreviewToolbar({
               ]}
             />
           ) : null}
-          {clickToEditAvailable ? (
+          {showClickToEdit && clickToEditAvailable ? (
             // Tooltip 包一层 `<span>` 而不是直接包 Checkbox：禁用的表单控件收不到
             // mouseenter，antd 的 Tooltip 也就永远不显示——而"为什么不能用"正是这一档
             // 唯一需要解释的东西。

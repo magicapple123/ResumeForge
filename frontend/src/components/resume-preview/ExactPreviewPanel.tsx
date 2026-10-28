@@ -386,8 +386,11 @@ export default function ExactPreviewPanel({
   return (
     <>
       <ExactPreviewAlerts current={current} busy={busy} pageLimit={pageLimit} />
-      {/* 相框**不设**高度：高度只给 stack（纸）与 iframe，外层自然包住"纸 + 状态行"——写死会裁掉状态行。 */}
-      <div className="exact-preview" ref={frameRef}>
+      {/* 相框**不设**高度：高度只给 stack（纸）与 iframe，外层自然包住"纸 + 状态行"——写死会裁掉状态行。
+          `is-zoomed` 只在**放大**（scale > 1）时挂上：100% 时纸列宽度恰好等于相框宽，
+          浮点累计出来的半像素会让 `overflow-x: auto` 凭空多出一条横向滚动条，
+          而横向滚动正是"纸被推歪"的来源（2026-11 用户反馈）。 */}
+      <div className={`exact-preview${scale > 1 ? " is-zoomed" : ""}`} ref={frameRef}>
         {/* 只在这个口径可见时才摆加载占位：草稿模式下这块是隐藏的，占位没有意义
             （而且会让每份简历的弹窗里都多一个空壳）。 */}
         {active && busy && !current ? (

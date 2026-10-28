@@ -3,7 +3,13 @@
  *
  * 2026-10-25 UI 排版优化（任务 C3）：去掉内联样式与裸 <button>，步骤行改成 antd Button
  * （type=text + block），选中态用 --rf-brand-tint 背景 + --rf-brand 1px 描边；
- * 预览摘要块（role=status）做成底部信息条。颜色 / 圆角 / 间距只走 --rf-* token。 */
+ * 预览摘要块（role=status）做成底部信息条。颜色 / 圆角 / 间距只走 --rf-* token。
+ *
+ * 2026-10-29（用户：「历史界面可以显示每条历史的时间」「撤销和恢复按钮的质量有点不清晰」）：
+ * - 步骤行改成"左文字两行 + 右时间一列"，时间 12px secondary、等宽数字，不参与压缩；
+ * - 撤销 / 恢复换成带图标的等宽按钮（min-width 84、间距 8），撤销是主入口（正文色 + 500），
+ *   恢复是次入口（secondary），禁用时由 Tooltip 说明原因；
+ * - 预览条加一排动作：「回到这一步」（带二次确认）/「回到当前」。 */
 
 .resume-history {
   display: flex;
@@ -14,9 +20,35 @@
   font-size: 13px;
 }
 
+/* ===== 撤销 / 恢复 ===== */
 .resume-history-actions {
   display: flex;
   gap: 8px;
+}
+
+/* 包一层 span：tooltip 要能挂在禁用按钮外面（禁用元素收不到鼠标事件）。 */
+.resume-history-action-wrap {
+  display: flex;
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+/* antd-override: 私有形态 —— 两颗按钮等宽（各占一半 + 最小 84px），读起来是一对动作。 */
+.resume-history-action.ant-btn {
+  flex: 1 1 auto;
+  width: 100%;
+  min-width: 84px;
+  font-weight: 500;
+}
+
+/* 撤销 = 主入口：正文色 + 正常描边；恢复 = 次入口：弱化成 secondary。 */
+.resume-history-undo.ant-btn {
+  border-color: var(--rf-border);
+  color: var(--rf-text-body);
+}
+
+.resume-history-redo.ant-btn {
+  color: var(--rf-text-secondary);
 }
 
 .resume-history-body {
@@ -46,13 +78,14 @@
   font-weight: 600;
 }
 
-/* 步骤行：antd text 按钮改成"两行、左对齐、通栏"，行高由内容决定。
+/* 步骤行：antd text 按钮改成"左侧两行文字 + 右侧时间"，行高由内容决定。
    这里是 antd-override: 私有形态 —— 按钮要当"可选中的两行步骤卡"用，antd 没有等价形态。 */
 .resume-history-step.ant-btn {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   align-items: flex-start;
-  gap: 2px;
+  justify-content: space-between;
+  gap: 8px;
   height: auto;
   border: 1px solid var(--rf-border-subtle);
   border-radius: var(--rf-radius-control);
@@ -67,6 +100,15 @@
   background: var(--rf-surface-alt);
 }
 
+.resume-history-step-main {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  gap: 2px;
+  min-width: 0;
+  text-align: left;
+}
+
 .resume-history-step-label {
   font-size: 13px;
   line-height: 18px;
@@ -78,6 +120,16 @@
   line-height: 16px;
 }
 
+/* 时间：右对齐、不压缩、等宽数字（否则 11:58 / 12:00 这类会左右抖）。 */
+.resume-history-step-time {
+  flex: 0 0 auto;
+  color: var(--rf-text-secondary);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  line-height: 18px;
+  white-space: nowrap;
+}
+
 /* 选中态：淡品牌底 + 品牌描边（不只用边框颜色区分）。antd text 按钮的 hover
    选择器权重更高，所以这两条加 !important，否则鼠标划过时选中底色会被盖掉。
    antd-override: 私有形态 —— 选中态表达由 aria-pressed 驱动，antd 无对应样式槽。 */
@@ -86,8 +138,12 @@
   background: var(--rf-brand-tint) !important;
 }
 
-/* 预览摘要：底部信息条（surface-alt + 12px）。 */
+/* ===== 预览条 ===== */
+/* 摘要在上、动作在下：按钮不挤在一行文字里，窄栏也不会把时间顶掉。 */
 .resume-history-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
   border: 1px solid var(--rf-border-subtle);
   border-radius: var(--rf-radius-control);
   padding: 6px 8px;
@@ -100,8 +156,27 @@
   font-weight: 600;
 }
 
-/* 「当时：」前缀与摘要同为 12px secondary：读起来是"快照"，而不是列表里的一行。 */
+/* 「当时：」前缀、时间与摘要同为 12px secondary：读起来是"快照"，而不是列表里的一行。 */
 .resume-history-preview-label,
-.resume-history-preview-summary {
+.resume-history-preview-summary,
+.resume-history-preview-time {
   color: var(--rf-text-secondary);
+}
+
+.resume-history-preview-time {
+  margin-left: 6px;
+  font-variant-numeric: tabular-nums;
+}
+
+.resume-history-preview-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* antd-override: 私有形态 —— 两颗动作按钮等宽，与上方撤销/恢复同一口径。 */
+.resume-history-jump.ant-btn,
+.resume-history-jump-current.ant-btn {
+  flex: 0 0 auto;
+  min-width: 84px;
 }

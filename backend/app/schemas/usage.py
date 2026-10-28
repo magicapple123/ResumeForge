@@ -17,6 +17,11 @@ class UsageBucketOut(BaseModel):
     calls: int = 0
     retries: int = 0
     prompt_tokens: int | None = None
+    # 输入两档（0067）：只累加"有记录"的行；cache_unknown_calls 告诉你有多少条老账本
+    # 没这个信息，避免把部分和误当成全量。
+    cache_hit_tokens: int | None = None
+    cache_miss_tokens: int | None = None
+    cache_unknown_calls: int = 0
     completion_tokens: int | None = None
     total_tokens: int | None = None
     duration_ms: int | None = None
@@ -55,6 +60,8 @@ class UsageRecordOut(BaseModel):
     model: str = ""
     resume_id: int | None = None
     prompt_tokens: int | None = None
+    cache_hit_tokens: int | None = None
+    cache_miss_tokens: int | None = None
     completion_tokens: int | None = None
     total_tokens: int | None = None
     duration_ms: int | None = None
@@ -72,30 +79,68 @@ class UsageRecordListOut(BaseModel):
 
 
 class UsagePricingIn(BaseModel):
-    """用户配置的每千 token 单价（输入/输出分开）；两项同时给或同时清空。
+    """一份单价：**每百万 token**，输入拆缓存命中 / 未命中，输出单独一档。
 
-    费用只在配置后估算（R04）；不配置时接口保持 estimated=False，不臆造金额。
+    三档至少填一个（服务商没有缓存折扣时命中档留空很正常）；不填的档按 0 计并在界面
+    上说明。名称可选，用来区分"某服务商官方价 / 某次调价后"。
     """
 
     model_config = ConfigDict(extra="forbid")
 
-    input_per_1k: float | None = Field(default=None, ge=0, le=MAX_PRICE_PER_1K)
-    output_per_1k: float | None = Field(default=None, ge=0, le=MAX_PRICE_PER_1K)
+    name: str = Field(default="", max_length=64)
+    input_cache_hit_per_million: float | None = Field(default=None, ge=0, le=MAX_PRICE_PER_1K)
+    input_cache_miss_per_million: float | None = Field(default=None, ge=0, le=MAX_PRICE_PER_1K)
+    output_per_million: float | None = Field(default=None, ge=0, le=MAX_PRICE_PER_1K)
     currency: str = Field(default="CNY", min_length=1, max_length=8)
 
     @model_validator(mode="after")
-    def _require_both_prices(self) -> UsagePricingIn:
-        if (self.input_per_1k is None) != (self.output_per_1k is None):
-            raise ValueError("输入与输出单价必须同时配置或同时清除")
+    def _require_any_price(self) -> UsagePricingIn:
+        prices = (
+            self.input_cache_hit_per_million,
+            self.input_cache_miss_per_million,
+            self.output_per_million,
+        )
+        if all(price is None for price in prices):
+            raise ValueError("至少要填一档单价（缓存命中 / 缓存未命中 / 输出）")
         return self
 
 
 class UsagePricingOut(BaseModel):
-    """当前生效的单价配置；configured=False 表示未配置（费用一律未知）。"""
+    """当前生效的单价（每百万 token，三档）；configured=False 表示未配置。"""
 
     configured: bool = False
-    input_per_1k: float | None = None
-    output_per_1k: float | None = None
+    input_cache_hit_per_million: float | None = None
+    input_cache_miss_per_million: float | None = None
+    output_per_million: float | None = None
     currency: str = ""
-    # settings = 用户保存在设置里的值；environment = 环境变量兜底。
+    # record = 单价记录；settings / environment = 老格式兜底。
     source: str = ""
+    record_id: int | None = None
+    name: str = ""
+
+
+class UsagePricingRecordOut(BaseModel):
+    """一条单价记录（可命名、可回溯）。"""
+
+    id: int
+    name: str = ""
+    input_cache_hit_per_million: float | None = None
+    input_cache_miss_per_million: float | None = None
+    output_per_million: float | None = None
+    currency: str = "CNY"
+    is_active: bool = False
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+
+class UsagePricingRecordListOut(BaseModel):
+    items: list[UsagePricingRecordOut] = Field(default_factory=list)
+    count: int = 0
+
+
+class UsagePricingRenameIn(BaseModel):
+    """只改名字：价格与生效状态都不动。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(default="", max_length=64)

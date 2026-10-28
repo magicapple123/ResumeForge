@@ -54,9 +54,11 @@ const pagesMisc = {
   "pagesMisc.jobsPage.backfill.started":
     "已开始为 {count} 个岗位补齐详情，进度见「投递台 → 自动采集」",
   "pagesMisc.jobsPage.error.backfillFailed": "补齐详情失败",
-  "pagesMisc.jobsPage.match.enteredSelection": "已进入选择模式，勾选岗位后点分析",
+  "pagesMisc.jobsPage.match.enteredSelection": "已进入选择模式：勾选 2 个以上岗位后可开始横向对比",
   "pagesMisc.jobsPage.match.needJobs": "请先选择岗位",
+  "pagesMisc.jobsPage.match.needCompareJobs": "横向对比至少选择 2 个岗位",
   "pagesMisc.jobsPage.match.tooMany": "一次最多分析 50 个岗位",
+  "pagesMisc.jobsPage.match.tooManyCompare": "横向对比一次最多 12 个岗位，请缩小选择范围",
   "pagesMisc.jobsPage.candidate.imported": "备选岗位已导入正式岗位",
   "pagesMisc.jobsPage.candidate.markFailed": "标记导入状态失败",
 } as const;

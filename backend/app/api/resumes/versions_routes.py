@@ -9,7 +9,7 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
@@ -43,6 +43,7 @@ from ...services.resume import bilingual_variants, fact_locks
 from ...services.resume import document_variants as variants
 from ...services.resume import document_versions as versions
 from ...services.resume.document_save import RevisionConflict, revision_conflict_response
+from .._disconnect import client_gone, run_until_disconnect
 from ._shared import _to_resume_out
 
 router = APIRouter()
@@ -280,6 +281,7 @@ async def translate_variant(
     resume_id: int,
     variant_id: int,
     payload: TranslateVariantRequest,
+    request: Request,
     db: Session = Depends(get_db),
 ) -> TranslateVariantOut:
     """生成翻译候选（不写库）：逐字段翻译 + 术语锁定 + 事实锁校验。"""
@@ -295,13 +297,20 @@ async def translate_variant(
         raise HTTPException(status_code=400, detail="尚未配置大模型 API")
     provider = _api.create_provider(config)
     try:
-        data = await bilingual_variants.build_translation_candidate(
-            db, provider, variant, target_language=payload.target_language
+        # 逐字段翻译要跑好几十秒：客户端断开就停，不把没人要的结果算完。
+        data = await run_until_disconnect(
+            request,
+            bilingual_variants.build_translation_candidate(
+                db, provider, variant, target_language=payload.target_language
+            ),
+            what="变体翻译",
         )
     except bilingual_variants.BilingualError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except LLMError as exc:
         raise HTTPException(status_code=502, detail=f"翻译失败：{exc}") from exc
+    if data is None:
+        raise client_gone("变体翻译")
     return TranslateVariantOut.model_validate(data)
 
 

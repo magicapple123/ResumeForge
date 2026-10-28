@@ -12,6 +12,9 @@ const webFormPage = {
     "填充完成后请回到浏览器窗口逐项核对，确认无误后由你自己点击页面上的提交按钮。",
   "webFormPage.hint.expandLater":
     "浏览器就绪后，安全说明、AI 辅助、放宽模式等控制项会在这里逐步展开。",
+  "webFormPage.stagedAi.ready":
+    "上一次后台的 AI 字段识别已完成，结果先存着；点「应用」切到那份预览，页面仍不会被自动修改。",
+  "webFormPage.stagedAi.apply": "应用",
   "webFormPage.card.pending": "页面还要求这些",
   "webFormPage.card.records": "填充记录",
   "webFormPage.toast.targetOpened": "目标网申页面已打开；已有网页不会被覆盖",

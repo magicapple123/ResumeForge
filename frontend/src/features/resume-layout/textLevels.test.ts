@@ -11,16 +11,23 @@ import { coerceStylePropValue } from "../../utils/resumeStyleParams";
 import {
   TEXT_LEVEL_LABELS,
   TEXT_LEVEL_PROPS,
+  TEXT_LEVEL_SCOPES,
+  TEXT_LEVEL_SCOPE_LABELS,
   TEXT_LEVELS,
   applyTextLevel,
+  applyTextLevelToScope,
   clearTextLevel,
+  clearTextLevelScope,
   readObjectTextLevel,
   readTextLevelState,
+  scopeForFieldPath,
   textLevelPatch,
+  textLevelPropsForScope,
+  textLevelScopeRole,
   textLevelStateKey,
   type TextLevelId,
 } from "./textLevels";
-import { readStyleDomains } from "./styleOverrides";
+import { objectRoleKey, readStyleDomains, withObjectRoleProp } from "./styleOverrides";
 
 const OBJ_A = "exp_12345678";
 const OBJ_B = "prj_87654321";
@@ -170,5 +177,163 @@ describe("textLevels · 读回当前级别", () => {
     expect(textLevelStateKey({ kind: "level", level: "heading1" })).toBe("level:heading1");
     expect(textLevelStateKey({ kind: "inherit" })).toBe("inherit");
     expect(textLevelStateKey({ kind: "mixed" })).toBe("mixed");
+  });
+});
+
+describe("textLevels · 作用范围（W3）", () => {
+  it("作用范围目录：整个条目 + 条目内三个角色，词条键成对", () => {
+    expect([...TEXT_LEVEL_SCOPES]).toEqual(["object", "entry_title", "body", "meta"]);
+    expect(textLevelScopeRole("object")).toBeNull();
+    expect(textLevelScopeRole("body")).toBe("body");
+    for (const scope of TEXT_LEVEL_SCOPES) {
+      expect(TEXT_LEVEL_SCOPE_LABELS[scope]).toBe(`typography.level.scope.${scope}`);
+    }
+  });
+
+  it("字段范围只管理该角色允许的属性：meta 没有段距", () => {
+    expect([...textLevelPropsForScope(null)]).toEqual([...TEXT_LEVEL_PROPS]);
+    expect([...textLevelPropsForScope("entry_title")]).toEqual([
+      "font_scale",
+      "bold",
+      "space_before",
+      "space_after",
+    ]);
+    expect([...textLevelPropsForScope("body")]).toEqual([
+      "font_scale",
+      "bold",
+      "space_before",
+      "space_after",
+    ]);
+    expect([...textLevelPropsForScope("meta")]).toEqual(["font_scale", "bold"]);
+  });
+
+  it("整条目（role=null）与既有 applyTextLevel 逐字节一致", () => {
+    const base = { accent: "#123456" } as never;
+    for (const level of TEXT_LEVELS) {
+      expect(applyTextLevelToScope(base, [OBJ_A], null, level)).toEqual(
+        applyTextLevel(base, [OBJ_A], level),
+      );
+    }
+  });
+
+  it("字段范围：只写 object_roles，不动 objects / 其它扁平键", () => {
+    const base = { objects: { version: 1, [OBJ_A]: { color: "#123456" } } } as never;
+    const next = applyTextLevelToScope(base, [OBJ_A], "body", "heading1");
+    expect(objectsOf(next)).toEqual({ [OBJ_A]: { color: "#123456" } });
+    expect(next).toEqual({
+      objects: { version: 1, [OBJ_A]: { color: "#123456" } },
+      object_roles: { version: 1, [objectRoleKey(OBJ_A, "body")]: EXPECTED_PATCHES.heading1 },
+    });
+  });
+
+  it("meta 范围只写该角色允许的两项（段距被过滤）", () => {
+    const next = applyTextLevelToScope({} as never, [OBJ_A], "meta", "heading1");
+    expect(next).toEqual({
+      object_roles: {
+        version: 1,
+        [objectRoleKey(OBJ_A, "meta")]: { font_scale: 1.4, bold: true },
+      },
+    });
+  });
+
+  it("多选字段范围：一次写入全部合法目标，非法 id 不写垃圾键", () => {
+    const next = applyTextLevelToScope({} as never, [OBJ_A, "short", OBJ_B], "meta", "caption");
+    expect(next).toEqual({
+      object_roles: {
+        version: 1,
+        [objectRoleKey(OBJ_A, "meta")]: { font_scale: 0.9, bold: false },
+        [objectRoleKey(OBJ_B, "meta")]: { font_scale: 0.9, bold: false },
+      },
+    });
+  });
+
+  it("整条目与字段范围互不覆盖：读回按范围区分", () => {
+    const both = applyTextLevel(
+      applyTextLevelToScope({} as never, [OBJ_A], "body", "heading2"),
+      [OBJ_A],
+      "caption",
+    );
+    const domains = readStyleDomains(both);
+    expect(readTextLevelState(domains, [OBJ_A])).toEqual({ kind: "level", level: "caption" });
+    expect(readTextLevelState(domains, [OBJ_A], "body")).toEqual({
+      kind: "level",
+      level: "heading2",
+    });
+    expect(readTextLevelState(domains, [OBJ_A], "meta")).toEqual({ kind: "inherit" });
+    // 该角色被手改过 = 自定义，不影响整条目读数。
+    const custom = readStyleDomains({
+      object_roles: { version: 1, [objectRoleKey(OBJ_A, "body")]: { font_scale: 1.31 } },
+    } as never);
+    expect(readObjectTextLevel(custom, OBJ_A, "body")).toEqual({ kind: "custom" });
+  });
+
+  it("恢复只清所选范围：字段范围清完后整条目级别仍在，反之亦然", () => {
+    const base = applyTextLevel(
+      applyTextLevelToScope(
+        applyTextLevelToScope({} as never, [OBJ_A], "body", "heading1"),
+        [OBJ_A],
+        "meta",
+        "caption",
+      ),
+      [OBJ_A],
+      "heading2",
+    );
+    const clearedBody = clearTextLevelScope(base, [OBJ_A], "body");
+    const domains = readStyleDomains(clearedBody);
+    expect(readTextLevelState(domains, [OBJ_A])).toEqual({ kind: "level", level: "heading2" });
+    expect(readTextLevelState(domains, [OBJ_A], "body")).toEqual({ kind: "inherit" });
+    expect(readTextLevelState(domains, [OBJ_A], "meta")).toEqual({
+      kind: "level",
+      level: "caption",
+    });
+
+    const clearedAll = clearTextLevelScope(clearedBody, [OBJ_A], null);
+    const afterAll = readStyleDomains(clearedAll);
+    expect(readTextLevelState(afterAll, [OBJ_A])).toEqual({ kind: "inherit" });
+    expect(readTextLevelState(afterAll, [OBJ_A], "meta")).toEqual({
+      kind: "level",
+      level: "caption",
+    });
+  });
+
+  it("字段范围恢复保留该角色其它手工覆盖；没有可清目标返回原引用", () => {
+    const base = withObjectRoleProp(
+      applyTextLevelToScope({} as never, [OBJ_A], "body", "body"),
+      OBJ_A,
+      "body",
+      "color",
+      "#123456",
+    );
+    const cleared = clearTextLevelScope(base, [OBJ_A], "body");
+    expect(readStyleDomains(cleared).objectRoles).toEqual({
+      [objectRoleKey(OBJ_A, "body")]: { color: "#123456" },
+    });
+    const config = { accent: "#123456" } as never;
+    expect(clearTextLevelScope(config, [OBJ_A], "body")).toBe(config);
+    expect(clearTextLevelScope(config, [], null)).toBe(config);
+  });
+});
+
+describe("scopeForFieldPath · 纸面字段 → 默认作用范围", () => {
+  it("条目身份字段落到「条目标题」", () => {
+    expect(scopeForFieldPath("education.0.school")).toBe("entry_title");
+    expect(scopeForFieldPath("education.1.major")).toBe("entry_title");
+    expect(scopeForFieldPath("experience.0.company")).toBe("entry_title");
+    expect(scopeForFieldPath("experience.2.role")).toBe("entry_title");
+  });
+
+  it("列表型正文落到「正文」，时间/学籍落到「说明」", () => {
+    expect(scopeForFieldPath("education.0.achievements.1")).toBe("body");
+    expect(scopeForFieldPath("projects.0.description.0")).toBe("body");
+    expect(scopeForFieldPath("education.0.start_date")).toBe("meta");
+    expect(scopeForFieldPath("education.0.gpa")).toBe("meta");
+  });
+
+  it("推不出来（个人信息标量 / 空路径 / 陌生字段）回落到整个条目", () => {
+    expect(scopeForFieldPath("name")).toBe("object");
+    expect(scopeForFieldPath("job_intent")).toBe("object");
+    expect(scopeForFieldPath(null)).toBe("object");
+    expect(scopeForFieldPath("")).toBe("object");
+    expect(scopeForFieldPath("education.0.some_new_field")).toBe("object");
   });
 });

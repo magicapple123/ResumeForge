@@ -22,6 +22,7 @@ from .docx_section_shared import (
     _break_plan,
     _join,
     _role,
+    field_layout_of,
     profile_meta_lines,
 )
 from .resume.resume_labels import (
@@ -93,7 +94,8 @@ def section_publications(
         if detail:
             _meta_line(doc, detail, base=base, layout=layout, theme=theme)
         profile_meta_lines(
-            doc, publication, "publications", base=base, layout=layout, theme=theme, language=language
+            doc, publication, "publications", base=base, layout=layout, theme=theme, language=language,
+            field_layout=field_layout_of(overrides),
         )
 
 
@@ -153,6 +155,7 @@ def section_research_projects(
             layout=layout,
             theme=theme,
             language=language,
+            field_layout=field_layout_of(overrides),
         )
 
 

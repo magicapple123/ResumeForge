@@ -5,7 +5,6 @@ import { App, Button, Select, Space, Tag, Tooltip } from "antd";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import {
-  batchDeleteResumes,
   deleteResume,
   getResume,
   listResumes,
@@ -14,7 +13,7 @@ import {
   updateResumeNote,
 } from "../api/resumes";
 import { diffResume } from "../api/resumeWriting";
-import BatchActionBar from "../components/common/BatchActionBar";
+import ResumeBatchToolbar from "./resumes/ResumeBatchToolbar";
 import ErrorState from "../components/common/ErrorState";
 import { useBatchSelection } from "../hooks/useBatchSelection";
 import ManualResumeModal from "../components/ManualResumeModal";
@@ -45,15 +44,20 @@ import ResumeDiffModal from "./resumes/ResumeDiffModal";
 import JobFilterSelect from "./resumes/JobFilterSelect";
 import ResumeSearchInput from "./resumes/ResumeSearchInput";
 import { useSelectAllResumes } from "./resumes/useSelectAllResumes";
+import { useResumeBatchActions } from "./resumes/useResumeBatchActions";
+import { buildResumeBatchRowActions } from "./resumes/resumeBatchActions";
+import { useBatchOperationGuard } from "../features/settings/useBatchOperationConfig";
 
 export default function ResumesPage() {
   useLocale();
   const navigate = useNavigate();
   const [archiveOpen, setArchiveOpen] = useState(false);
   const [searchParams, setSearchParams] = useSearchParams();
-  const { message, modal } = App.useApp();
+  const { message } = App.useApp();
   // 批量选择：勾选若干份简历后一次删除（全部进回收站，可恢复）。
   const batch = useBatchSelection<number>();
+  // 批量导出前必须先有「设置 → 批量操作」保存过的一套参数（版式 + 导出格式）。
+  const batchOp = useBatchOperationGuard("export");
   // 筛选 / 分页初值从 URL 读，改动后用 replace 写回（模式同 WebFormPage / JobsPage）。
   const boolParam = (key: string): boolean | undefined => {
     const raw = searchParams.get(key);
@@ -231,32 +235,16 @@ export default function ResumesPage() {
     [message, reload],
   );
 
-  /** 批量删除：一次请求删完（P2-4，全部进回收站），不再前端逐条 N 连发。 */
-  const removeSelected = useCallback(() => {
-    const ids = [...batch.selectedIds];
-    if (ids.length === 0) return;
-    modal.confirm({
-      title: t("resumesPage.batchDelete.title"),
-      content: t("resumesPage.batchDelete.body", {
-        count: ids.length,
-        note: t("common.note.trashRecovery"),
-      }),
-      okText: t("common.action.delete"),
-      okButtonProps: { danger: true },
-      onOk: async () => {
-        try {
-          const { deleted } = await batchDeleteResumes(ids);
-          message.success(t("resumesPage.batchDelete.done", { count: deleted }));
-        } catch (err) {
-          message.error(
-            err instanceof Error ? err.message : t("resumesPage.error.batchDeleteFailed"),
-          );
-        }
-        batch.exitSelecting();
-        void reload();
-      },
-    });
-  }, [batch, message, modal, reload]);
+  const { exporting, handleBatchAction } = useResumeBatchActions({
+    selectedIds: batch.selectedIds,
+    exitSelecting: batch.exitSelecting,
+    onDeleted: () => void reload(),
+    ensureBatchConfig: batchOp.ensure,
+  });
+  const batchRowActions = buildResumeBatchRowActions(
+    handleBatchAction,
+    batch.selectedCount === 0 || exporting,
+  );
 
   const confirmRename = async () => {
     if (!renameTarget || renaming) return;
@@ -396,18 +384,15 @@ export default function ResumesPage() {
       {/* A2 场景建议卡：只提供入口，不调用模型、不按场景过滤任何已有简历。 */}
       <ResumeScenarioSuggestion />
       {batch.selecting && (
-        <BatchActionBar count={batch.selectedCount} onExit={batch.exitSelecting}>
-          {(data?.total ?? 0) > 0 && (
-            <Tooltip title={t("resumesPage.selectAll.tooltip", { count: data?.total ?? 0 })}>
-              <Button loading={selectAllPagesLoading} onClick={() => void selectAllPages()}>
-                {t("resumesPage.selectAll.button", { count: data?.total ?? 0 })}
-              </Button>
-            </Tooltip>
-          )}
-          <Button danger disabled={batch.selectedCount === 0} onClick={removeSelected}>
-            {t("resumesPage.batchDelete.button")}
-          </Button>
-        </BatchActionBar>
+        <ResumeBatchToolbar
+          count={batch.selectedCount}
+          total={data?.total ?? 0}
+          selectAllLoading={selectAllPagesLoading}
+          exporting={exporting}
+          onSelectAll={() => void selectAllPages()}
+          onAction={handleBatchAction}
+          onExit={batch.exitSelecting}
+        />
       )}
       {error ? (
         <ErrorState description={error} onRetry={() => void reload()} />
@@ -434,6 +419,7 @@ export default function ResumesPage() {
           sortState={sortState}
           onSortChange={applySort}
           navigate={navigate}
+          batchActions={batchRowActions}
         />
       )}
       <ResumeDetailModal

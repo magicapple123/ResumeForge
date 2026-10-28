@@ -179,7 +179,12 @@ describe("DrillPage", () => {
     fireEvent.click(screen.getByRole("button", { name: /提交回答/ }));
 
     expect(await screen.findByText("这块具体是谁写的？")).toBeInTheDocument();
-    expect(apiMocks.answerDrill).toHaveBeenCalledWith(1, "因为关键词召回不够。");
+    expect(apiMocks.answerDrill).toHaveBeenCalledWith(
+      1,
+      "因为关键词召回不够。",
+      // T04-d：判定可被「停止」掐断，第三个参数是 AbortSignal。
+      expect.anything(),
+    );
     // 上一轮的记录要能回看。
     expect(screen.getByText(/逐轮记录/)).toBeInTheDocument();
   });

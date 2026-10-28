@@ -175,8 +175,8 @@ describe("SettingsPage datasets", () => {
       </MemoryRouter>,
     );
     await waitFor(() => expect(apiMocks.listDatasets).toHaveBeenCalled());
-    // 设置默认停在「AI 模型」页，先切到「数据」页（不切换就看不到这张卡片）。
-    fireEvent.click(screen.getByRole("tab", { name: "数据" }));
+    // 设置默认停在「AI 模型」页，先切到「数据与导出」页（不切换就看不到这张卡片）。
+    fireEvent.click(screen.getByRole("tab", { name: "数据与导出" }));
     return view;
   }
 

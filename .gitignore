@@ -80,6 +80,10 @@ mokahr_apply_controls.json
 
 # ===== 日志 =====
 *.log
+# 运行日志目录（backend-*.log 等）：`*.log` 只拦文件名后缀，拦不住目录里
+# 其它名目的日志/临时输出。只忽略仓库根的 `logs/`（`/logs/`），不影响
+# frontend/desktop 等子目录里可能出现、但另有用途的同名目录。
+/logs/
 
 # Desktop shell build artifacts
 desktop/payload/

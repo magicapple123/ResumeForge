@@ -94,6 +94,7 @@ def _filtered_query(
     job_id: int | None = None,
     favorite: bool | None = None,
     has_job: bool | None = None,
+    include_general: bool = False,
 ):
     """list_resumes 与 list_resume_ids **共用的过滤口径**。
 
@@ -104,10 +105,20 @@ def _filtered_query(
 
     **一律排除草稿**（0051）：制作台草稿是"用户点进去看过、还没保存"的落脚点，
     出现在简历中心里等于凭空多出一份空白简历。
+
+    ``include_general`` 只与 ``job_id`` 组合生效（面试关联简历：本岗位的 + 通用的）：
+    真实的投递/面试既可能用专为这个岗位写的简历，也可能用一份通用简历，所以下拉里
+    两类都要给。不传或 ``job_id`` 为空时口径与以前完全一致。
     """
     query = db.query(ResumeRecord).filter(trash.live_only(ResumeRecord), saved_only())
     if job_id is not None:
-        query = query.filter(ResumeRecord.job_id == job_id)
+        if include_general:
+            # 「本岗位的简历」+「通用简历（没关联任何岗位）」，两者都在面试可选的范围内。
+            query = query.filter(
+                or_(ResumeRecord.job_id == job_id, ResumeRecord.job_id.is_(None))
+            )
+        else:
+            query = query.filter(ResumeRecord.job_id == job_id)
     if has_job is not None:
         query = query.filter(
             ResumeRecord.job_id.is_not(None) if has_job else ResumeRecord.job_id.is_(None)
@@ -184,6 +195,10 @@ def list_resumes(
     job_id: int | None = Query(default=None, ge=1),
     favorite: bool | None = Query(default=None),
     has_job: bool | None = Query(default=None),
+    include_general: bool = Query(
+        default=False,
+        description="面试关联简历：与 job_id 组合时同时返回「本岗位的」与「通用的」简历",
+    ),
     sort: Literal[
         "updated_desc",
         "updated_asc",
@@ -200,8 +215,19 @@ def list_resumes(
         description="排序：最近修改 / 最近生成 / 标题 / 公司 / 岗位（各含升降序）",
     ),
 ):
-    """列出简历。``has_job=false`` 只返回通用简历（未关联任何岗位）。"""
-    query = _filtered_query(db, keyword=keyword, job_id=job_id, favorite=favorite, has_job=has_job)
+    """列出简历。``has_job=false`` 只返回通用简历（未关联任何岗位）。
+
+    ``job_id`` + ``include_general=true``：面试关联简历用——返回**本岗位的 + 通用的**
+    简历，其它岗位的简历不出现。
+    """
+    query = _filtered_query(
+        db,
+        keyword=keyword,
+        job_id=job_id,
+        favorite=favorite,
+        has_job=has_job,
+        include_general=include_general,
+    )
     total = query.count()
     records = (
         query.order_by(*RESUME_SORT_ORDERS[sort])
@@ -219,6 +245,10 @@ def list_resume_ids(
     job_id: int | None = Query(default=None, ge=1),
     favorite: bool | None = Query(default=None),
     has_job: bool | None = Query(default=None),
+    include_general: bool = Query(
+        default=False,
+        description="面试关联简历：与 job_id 组合时同时返回「本岗位的」与「通用的」简历",
+    ),
 ):
     """当前筛选下**全部**简历的 id（不分页）：批量选择「全选全部简历」用。
 
@@ -227,7 +257,14 @@ def list_resume_ids(
     要多轮请求；批量操作 500 的上限由前端在拿到列表后裁决——这里如实返回全量。
     **声明在 ``/{resume_id}`` 之前**：字面量段必须排在参数段前面。
     """
-    query = _filtered_query(db, keyword=keyword, job_id=job_id, favorite=favorite, has_job=has_job)
+    query = _filtered_query(
+        db,
+        keyword=keyword,
+        job_id=job_id,
+        favorite=favorite,
+        has_job=has_job,
+        include_general=include_general,
+    )
     return [
         resume_id
         for (resume_id,) in query.order_by(ResumeRecord.created_at.desc())

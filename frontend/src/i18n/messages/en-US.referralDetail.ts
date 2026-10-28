@@ -27,6 +27,7 @@ const referralDetail = {
   "referralDetail.section.images": "Image notes ({count})",
   "referralDetail.image.noteAlt": "Image note",
   "referralDetail.action.edit": "Edit",
+  "referralDetail.image.previewMask": "View image {index}",
 } as const;
 
 export default referralDetail;

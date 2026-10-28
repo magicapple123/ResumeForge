@@ -1,0 +1,129 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/* 来源核对面板（W12 / P1-06）：选择卡 + 三块独立卡片（来源链 / 事实锁 / 改写候选）。
+   上一版把四个面板平铺在一个纵向 flex 里、只隔 12px，用户看到的是"两段空态 + 事实锁
+   + 改写候选"糊成一片；这里给每块一张卡、各自的小标题，块间 16px。 */
+
+.provenance-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--rf-space-3);
+  min-height: 0;
+  min-width: 0;
+}
+
+/* 每块面板一张卡：1px 边框 + 圆角，卡片内部再按 8px 排。 */
+.provenance-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--rf-space-2);
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--rf-border-subtle);
+  border-radius: var(--rf-radius-control);
+  background: var(--rf-surface);
+}
+
+.provenance-card__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--rf-space-2);
+}
+
+.provenance-card__hint {
+  font-size: 12px;
+}
+
+/* ── 选择卡：核对哪一条内容 + 关联到来源 ───────────────────── */
+.provenance-selection {
+  background: var(--rf-brand-wash);
+  border-color: var(--rf-border-strong);
+}
+
+.provenance-selection__controls {
+  width: 100%;
+}
+
+/* 下拉自己吃掉剩余宽度，但永远不给面板撑出横向滚动。 */
+.provenance-selection__select {
+  flex: 1 1 220px;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.provenance-selection__state {
+  font-size: 12px;
+}
+
+.provenance-selection__note {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--rf-text-secondary);
+}
+
+/* ── 来源链 ─────────────────────────────────────────────────── */
+.source-chain {
+  display: flex;
+  flex-direction: column;
+  gap: var(--rf-space-2);
+  min-width: 0;
+}
+
+.source-chain__head {
+  margin-bottom: 0;
+}
+
+.source-chain__body {
+  width: 100%;
+}
+
+.source-chain__count,
+.source-chain__fingerprint {
+  font-size: 12px;
+}
+
+/* 一条来源一张小卡：长标题换行，不把卡片顶出去。 */
+.source-chain__row {
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--rf-border-subtle);
+  border-radius: var(--rf-radius-control);
+  background: var(--rf-surface-alt);
+  overflow-wrap: anywhere;
+}
+
+.source-chain__revision,
+.source-chain__current {
+  margin-top: 4px;
+  font-size: 13px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+/* 字段表（事实锁 / 来源更新影响）在卡片里横向滚动，不撑破卡片。 */
+.provenance-card .ant-table-wrapper {
+  overflow-x: auto;
+}
+
+.provenance-card .ant-table {
+  min-width: 100%;
+}
+
+/* 卡片里的按钮行 / 表单行不外溢。 */
+.provenance-card .ant-space,
+.provenance-card .ant-form {
+  max-width: 100%;
+}
+
+/* 窄栏：选择卡的下拉独占一行，按钮换到下一行也不变形。 */
+@media (max-width: 720px) {
+  .provenance-card {
+    padding: 10px;
+  }
+
+  .provenance-selection__select {
+    flex: 1 1 100%;
+  }
+}

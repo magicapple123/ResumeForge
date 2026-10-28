@@ -9,6 +9,8 @@ import { App, Button, Checkbox, Input, Modal, Space, Tag, Typography } from "ant
 import EmptyState from "../common/EmptyState";
 import { useEffect, useState } from "react";
 import { applyTracks, parseTracks } from "../../api/tracker";
+import AbortButton from "../common/AbortButton";
+import { errorText, useAbortableRequest } from "../../hooks/useAbortableRequest";
 import { t } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
 import { MERGE_ACTION_LABEL_KEYS, TRACK_STATUS_LABEL_KEYS } from "../../i18n/enum/tracker";
@@ -37,7 +39,11 @@ export default function TrackImportModal({ open, onClose, onImported }: Props) {
   const [rows, setRows] = useState<Row[]>([]);
   const [notes, setNotes] = useState<string[]>([]);
   const [engine, setEngine] = useState<"ai" | "local" | "">("");
-  const [busy, setBusy] = useState(false);
+  // 识别（模型读通知）与写入（落库）分成两个状态：「停止」只该停识别那一半。
+  const recognizeRequest = useAbortableRequest();
+  const [saving, setSaving] = useState(false);
+  // 识别中同样禁用输入：不要让用户在等结果时又改一遍粘贴内容。
+  const busy = saving || recognizeRequest.loading;
   const { files, reading, addFiles, removeFile, clear, onPaste } = useRecognitionFiles();
 
   // 关闭时清空：否则下次打开会看到上一次的内容和预览，容易误以为已经保存过了。
@@ -62,28 +68,30 @@ export default function TrackImportModal({ open, onClose, onImported }: Props) {
       message.warning(t("trackerImport.toast.noInput"));
       return;
     }
-    setBusy(true);
-    try {
-      const result = await parseTracks({
-        text,
-        images: files
-          .filter((file) => file.kind === "image")
-          .map(({ name, mime_type, data }) => ({ name, mime_type, data })),
-        documents: files
-          .filter((file) => file.kind === "document")
-          .map(({ name, mime_type, data }) => ({ name, mime_type, data })),
-      });
-      setRows(result.items.map((preview, index) => ({ key: index, checked: true, preview })));
-      setNotes(result.notes);
-      setEngine(result.parse_engine);
-      if (result.items.length === 0) message.info(t("trackerImport.toast.noRecords"));
-    } catch (error) {
-      message.error(
-        error instanceof Error ? error.message : t("trackerImport.toast.recognizeFailed"),
-      );
-    } finally {
-      setBusy(false);
+    const outcome = await recognizeRequest.run((signal) =>
+      parseTracks(
+        {
+          text,
+          images: files
+            .filter((file) => file.kind === "image")
+            .map(({ name, mime_type, data }) => ({ name, mime_type, data })),
+          documents: files
+            .filter((file) => file.kind === "document")
+            .map(({ name, mime_type, data }) => ({ name, mime_type, data })),
+        },
+        signal,
+      ),
+    );
+    if (outcome.status === "error") {
+      message.error(errorText(outcome.error, t("trackerImport.toast.recognizeFailed")));
+      return;
     }
+    // 停止：上一次的识别预览原样留着（用户可能只是不想再等了），不弹错误。
+    if (outcome.status === "aborted") return;
+    setRows(outcome.data.items.map((preview, index) => ({ key: index, checked: true, preview })));
+    setNotes(outcome.data.notes);
+    setEngine(outcome.data.parse_engine);
+    if (outcome.data.items.length === 0) message.info(t("trackerImport.toast.noRecords"));
   };
 
   const confirm = async () => {
@@ -92,7 +100,7 @@ export default function TrackImportModal({ open, onClose, onImported }: Props) {
       message.warning(t("trackerImport.toast.noneSelected"));
       return;
     }
-    setBusy(true);
+    setSaving(true);
     try {
       const result = await applyTracks(picked as TrackRecord[]);
       // 如实分别报出三种结果：全都说成"已保存"会让用户以为进度确实更新了。
@@ -109,7 +117,7 @@ export default function TrackImportModal({ open, onClose, onImported }: Props) {
     } catch (error) {
       message.error(error instanceof Error ? error.message : t("trackerImport.toast.saveFailed"));
     } finally {
-      setBusy(false);
+      setSaving(false);
     }
   };
 
@@ -127,7 +135,7 @@ export default function TrackImportModal({ open, onClose, onImported }: Props) {
         <Space>
           <Button onClick={onClose}>{t("common.action.cancel")}</Button>
           {rows.length > 0 && (
-            <Button type="primary" loading={busy} onClick={() => void confirm()}>
+            <Button type="primary" loading={saving} onClick={() => void confirm()}>
               {t("trackerImport.action.confirm", {
                 count: rows.filter((row) => row.checked).length,
               })}
@@ -154,9 +162,14 @@ export default function TrackImportModal({ open, onClose, onImported }: Props) {
           onRemove={removeFile}
         />
         <Space>
-          <Button type="primary" loading={busy} onClick={() => void recognize()}>
+          <Button
+            type="primary"
+            loading={recognizeRequest.loading}
+            onClick={() => void recognize()}
+          >
             {t("trackerImport.action.recognize")}
           </Button>
+          {recognizeRequest.loading && <AbortButton onClick={() => recognizeRequest.cancel()} />}
           {engine && (
             <Tag color={engine === "ai" ? "blue" : "default"}>
               {engine === "ai" ? t("trackerImport.engine.ai") : t("trackerImport.engine.local")}

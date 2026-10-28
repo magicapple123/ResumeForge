@@ -1,5 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
-import { MenuOutlined, QuestionCircleOutlined } from "@ant-design/icons";
+import {
+  MenuFoldOutlined,
+  MenuOutlined,
+  MenuUnfoldOutlined,
+  QuestionCircleOutlined,
+} from "@ant-design/icons";
 import { Button, Layout, Menu, Tooltip, Typography } from "antd";
 import AppHeaderActions from "../../components/AppHeaderActions";
 import AnnouncementBar from "../../components/common/AnnouncementBar";
@@ -10,8 +15,6 @@ import PageSkeleton from "../../components/common/PageSkeleton";
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import { registerTaskNavigate } from "../../utils/taskNotify";
-import RiskScanWatcher from "../../components/RiskScanWatcher";
-import SuggestionScanWatcher from "../../components/SuggestionScanWatcher";
 import MobileNavigation from "../../components/navigation/MobileNavigation";
 import RouteAccessibility from "../../components/navigation/RouteAccessibility";
 import {
@@ -36,6 +39,7 @@ import TouTouClipboardCard from "../../features/tou-tou/TouTouClipboardCard";
 import TouTouOrb from "../../features/tou-tou/TouTouOrb";
 import { TouTouProvider } from "../../features/tou-tou/TouTouProvider";
 import { useNavigationVisibility } from "../../hooks/useNavigationVisibility";
+import { useSiderCollapse } from "../../hooks/useSiderCollapse";
 import { useResponsiveShell } from "../../hooks/useResponsiveShell";
 import {
   AnalyticsPage,
@@ -111,6 +115,11 @@ export default function AppShell() {
   // 公告条唯一的真实来源（更新可用 / 安装包已下载）；失败静默，不留痕。
   useUpdateAnnouncement();
   const { hiddenKeys } = useNavigationVisibility();
+  // 侧栏折叠：窄档由断点强制（shell.collapsed）；宽档才允许用户手动收起，偏好本地持久化。
+  const sider = useSiderCollapse();
+  const siderCollapsed = shell.collapsed || sider.collapsed;
+  // 窄档展开也放不下文字（宽度由 CSS 断点给成 64），所以那里不给切换按钮。
+  const canToggleSider = !shell.collapsed;
   const visiblePrimaryItems = useMemo(
     () => filterNavigationItems(PRIMARY_NAVIGATION_ITEMS, hiddenKeys, location.pathname),
     [hiddenKeys, location.pathname],
@@ -252,10 +261,10 @@ export default function AppShell() {
         <RouteAccessibility />
         {/* 批次完成全局通知：挂在布局层，投递/采集跑完时无论用户在哪个页面都能收到。 */}
         <TaskCompletionNotifier />
-        {/* 风险扫描的后台提醒：用户关掉「质量检测」弹窗后，进度与结果由它接住。 */}
-        <RiskScanWatcher />
-        {/* 岗位优化建议的后台提醒：关掉建议弹窗后，生成进度与结果由它接住。 */}
-        <SuggestionScanWatcher />
+        {/* 风险扫描 / 岗位优化建议的后台提醒已并入统一任务表：它们和简历生成、岗位解读一样
+            登记在 `utils/backgroundTasks`，进度在页头指示器与常驻任务条上，完成提醒走
+            `backgroundTasks.finish` 的唯一出口。**不要再挂第三个 watcher**——那会变成
+            同一件事响两次，正是本轮在收敛的"有的地方响、有的地方不响"。 */}
         {/* 全局 AI 润色：文档级监听，任何输入框里选中一段文字都能就地改写。 */}
         <AiPolishLayer />
 
@@ -280,7 +289,7 @@ export default function AppShell() {
           </Suspense>
         </TouTouAssistantCard>
         <TouTouClipboardCard open={clipboardOpen} onClose={() => setClipboardOpen(false)} />
-        <Layout className="app-shell">
+        <Layout className={`app-shell${siderCollapsed ? " is-sider-collapsed" : ""}`}>
           {/* 宽度完全交给 CSS 变量；antd 6 的 SiderProps.width 是 number|string，
               非数字会原样写进 inline style（Sider.js 的 isNumeric 分支），所以这里传
               var() 是受支持的用法。折叠与否由 useResponsiveShell 给，判据与
@@ -290,7 +299,7 @@ export default function AppShell() {
             theme="light"
             width="var(--rf-sider-width)"
             collapsedWidth="var(--rf-sider-width)"
-            collapsed={shell.collapsed}
+            collapsed={siderCollapsed}
           >
             <div className="app-brand-button">
               <button
@@ -316,7 +325,7 @@ export default function AppShell() {
               <span className="app-brand-copy">
                 <span className="app-brand-name">
                   {t(APP_NAME_KEY)}
-                  {/* 版本号低调跟在应用名旁：次要文字色 + 小字号，不抢视觉；
+                  {/* 版本号跟在应用名旁：次要文字色 + 小字号，不抢视觉；
                     说明走 Tooltip 而不是原生 title —— 后者只对鼠标可见，键盘用户与读屏
                     都拿不到"这是什么"。Tooltip 不产生 DOM，`className` 仍留在 span 上，
                     页头品牌区的布局不受影响。值来自 package.json（版本单源）。 */}
@@ -326,11 +335,24 @@ export default function AppShell() {
                 </span>
                 <span className="app-brand-caption">{t("navigation.shell.brandCaption")}</span>
               </span>
+              {canToggleSider && !siderCollapsed ? (
+                <Tooltip title={t("navigation.shell.collapse")}>
+                  <Button
+                    type="text"
+                    size="small"
+                    className="app-sider-toggle"
+                    icon={<MenuFoldOutlined />}
+                    aria-label={t("navigation.shell.collapse")}
+                    onClick={sider.toggle}
+                  />
+                </Tooltip>
+              ) : null}
             </div>
             <Menu
               className="app-nav-menu"
               theme="light"
               mode="inline"
+              inlineCollapsed={siderCollapsed}
               selectedKeys={[selectedKey]}
               items={menuItems}
               onClick={({ key }) => {
@@ -366,6 +388,18 @@ export default function AppShell() {
                 aria-controls={mobileNavigationOpen ? "mobile-navigation" : undefined}
                 onClick={() => setMobileNavigationOpen(true)}
               />
+              {/* 侧栏收起后，展开入口挪到页头：64px 的导轨里塞不下第二颗按钮。 */}
+              {canToggleSider && siderCollapsed ? (
+                <Tooltip title={t("navigation.shell.expand")}>
+                  <Button
+                    type="text"
+                    className="app-sider-expand"
+                    icon={<MenuUnfoldOutlined />}
+                    aria-label={t("navigation.shell.expand")}
+                    onClick={sider.toggle}
+                  />
+                </Tooltip>
+              ) : null}
               <Typography.Text strong className="app-header-title">
                 {t("navigation.shell.title")}
                 <span className="app-header-page-label">

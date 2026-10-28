@@ -33,6 +33,8 @@ import {
   listMaterialsPage,
   updateMaterial,
 } from "../api/material";
+import AttachmentList from "../components/materials/AttachmentList";
+import AttachmentPreviewModal from "../components/materials/AttachmentPreviewModal";
 import MaterialFormModal from "../components/materials/MaterialFormModal";
 import UserFilesPanel from "../components/materials/UserFilesPanel";
 import { DetailTrigger, RecordDetailDrawer } from "../components/common/RecordDetail";
@@ -43,8 +45,7 @@ import { useBatchSelection } from "../hooks/useBatchSelection";
 import { useApi } from "../hooks/useApi";
 import { useDeleteUndo } from "../features/trash/useDeleteUndo";
 import ErrorState from "../components/common/ErrorState";
-import type { Material, MaterialPayload, MaterialSummary } from "../types";
-import { canPreviewImage } from "../utils/attachments";
+import type { Material, MaterialFile, MaterialPayload, MaterialSummary } from "../types";
 import { formatDateTime } from "../utils/format";
 import { t } from "../i18n";
 import { useLocale } from "../i18n/i18nContext";
@@ -66,6 +67,9 @@ export default function MaterialsPage() {
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<Material | null>(null);
   const [detail, setDetail] = useState<Material | null>(null);
+  // 详情抽屉里点开的那份附件（null = 预览弹层关着）。文档只有提取出的文本、图片有
+  // data_url，两者都在弹层里展示（见 AttachmentPreviewModal）。
+  const [previewFile, setPreviewFile] = useState<MaterialFile | null>(null);
   const [submitting, setSubmitting] = useState(false);
   // 页面顶部视图切换：资料卡片 / 我的文件清单（入口刻意挂在这里，不加新菜单）。
   const [view, setView] = useState<string>("materials");
@@ -426,38 +430,7 @@ export default function MaterialsPage() {
                     detail.files.length === 0 ? (
                       t("materials.detail.none")
                     ) : (
-                      <div className="material-file-list">
-                        {detail.files.map((file, index) => (
-                          <div key={`${file.name}-${index}`} className="material-file-item">
-                            {file.data_url && canPreviewImage(file.mime_type) ? (
-                              <img
-                                src={file.data_url}
-                                alt={file.name}
-                                style={{
-                                  width: 64,
-                                  height: 64,
-                                  objectFit: "cover",
-                                  borderRadius: 4,
-                                }}
-                              />
-                            ) : (
-                              <PaperClipOutlined className="material-file-icon" />
-                            )}
-                            <div className="material-file-meta">
-                              <Typography.Text ellipsis={{ tooltip: file.name }}>
-                                {file.name}
-                              </Typography.Text>
-                              <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                                {file.data_url
-                                  ? t("materials.file.image", {
-                                      size: Math.round(file.size_bytes / 1024),
-                                    })
-                                  : t("materials.file.text", { count: file.text.length })}
-                              </Typography.Text>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
+                      <AttachmentList files={detail.files} onPreview={setPreviewFile} />
                     ),
                 },
               ]
@@ -481,6 +454,8 @@ export default function MaterialsPage() {
         }
         onClose={() => setDetail(null)}
       />
+
+      <AttachmentPreviewModal file={previewFile} onClose={() => setPreviewFile(null)} />
 
       <MaterialFormModal
         open={formOpen}

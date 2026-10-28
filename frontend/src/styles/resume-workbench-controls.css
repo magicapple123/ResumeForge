@@ -371,7 +371,9 @@
    antd 的选项内边距若变了，按「6 个字 + 省略号刚好放得下」重新校准，并同步
    `resume-dropdown-width.test.ts`。 */
 .resume-params-dropdown.resume-format-dropdown {
-  width: 130px;
+  /* 与触发框（`.resume-format-select`，104px）一致：两者不等宽时，弹层比框宽出一截，
+     视觉上像是"点开跳出来一块"（用户截图）。 */
+  width: 104px;
 }
 
 /* 选项行单行省略：弹层宽度定死之后，长字体名 / 长文件名不能换行把行高撑乱。

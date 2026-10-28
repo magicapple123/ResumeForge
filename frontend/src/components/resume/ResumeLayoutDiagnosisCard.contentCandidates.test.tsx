@@ -8,6 +8,7 @@ import { App as AntdApp } from "antd";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { createRef } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { t } from "../../i18n";
 import { ot } from "../../features/resume-optimizer/i18n";
 import type { ResumeContent } from "../../types";
 import type { ResumePreviewHandle } from "../ResumePreview";
@@ -109,6 +110,9 @@ describe("诊断卡 · 内容精简候选", () => {
       </AntdApp>,
     );
 
+    // 详情默认收起（2026-10-28）：优化候选在"详情"里，先展开再点它的开关。
+    const expand = screen.getByRole("button", { name: t("resume.diagnosis.expand") });
+    fireEvent.click(expand);
     fireEvent.click(screen.getByRole("button", { name: ot("optimizer.generate") }));
     // 正文类候选不依赖诊断：重复条目会被列出来。
     expect(

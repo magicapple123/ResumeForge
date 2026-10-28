@@ -17,6 +17,7 @@ import {
   Input,
   Listy,
   Modal,
+  Popover,
   Space,
   Tag,
   Tooltip,
@@ -31,6 +32,7 @@ import { RowActions } from "../common/RowActions";
 import { useCollapsedList } from "../common/useCollapsedList";
 import type { DatasetInfo } from "../../types";
 import { formatDateTime } from "../../utils/format";
+import { datasetDisplayName, datasetSourceLabel } from "../../utils/displayNames";
 import FileDropZone from "../common/FileDropZone";
 import { ListyItem, ListyMeta } from "../common/ListyItem";
 import { t } from "../../i18n";
@@ -203,26 +205,42 @@ export default function DatasetsCard({
           >
             {t("datasets.option.globalConfig")}
           </Checkbox>
-          <Typography.Paragraph
-            type="secondary"
-            style={{ marginBottom: 8, marginTop: 4, fontSize: 12 }}
+          {/* 详细说明收进弹层：三段落常驻会把卡片撑成"免责声明"，而这里只需要一句摘要。 */}
+          <div
+            style={{
+              marginTop: 4,
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              flexWrap: "wrap",
+            }}
           >
-            {t("datasets.hint.globalConfig")}
-          </Typography.Paragraph>
-          <Typography.Paragraph
-            type="secondary"
-            style={{ marginBottom: 0, marginTop: 4, fontSize: 12 }}
-          >
-            {t("datasets.hint.apiKey")}
-          </Typography.Paragraph>
-          {/* 字体属于「数据目录里但不属于任何一份数据集库」的东西：不说清楚，用户换机后
-              才发现 PDF 导出用的字体没跟过来。同名字体不覆盖，避免把本机正在用的那份换掉。 */}
-          <Typography.Paragraph
-            type="secondary"
-            style={{ marginBottom: 0, marginTop: 4, fontSize: 12 }}
-          >
-            {t("datasets.hint.fonts")}
-          </Typography.Paragraph>
+            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+              {t("datasets.hint.summary")}
+            </Typography.Text>
+            <Popover
+              trigger="click"
+              placement="rightTop"
+              title={t("datasets.export.contents.title")}
+              content={
+                <div style={{ maxWidth: 380 }}>
+                  <Typography.Paragraph type="secondary" style={{ marginBottom: 8, fontSize: 12 }}>
+                    {t("datasets.hint.globalConfig")}
+                  </Typography.Paragraph>
+                  <Typography.Paragraph type="secondary" style={{ marginBottom: 8, fontSize: 12 }}>
+                    {t("datasets.hint.apiKey")}
+                  </Typography.Paragraph>
+                  <Typography.Paragraph type="secondary" style={{ marginBottom: 0, fontSize: 12 }}>
+                    {t("datasets.hint.fonts")}
+                  </Typography.Paragraph>
+                </div>
+              }
+            >
+              <Button type="link" size="small" style={{ padding: 0, height: "auto" }}>
+                {t("datasets.export.contents.action")}
+              </Button>
+            </Popover>
+          </div>
         </div>
 
         <FileDropZone
@@ -303,7 +321,9 @@ export default function DatasetsCard({
                           label: t("datasets.action.delete"),
                           danger: true,
                           disabled: dataset.is_active || isProtected(dataset),
-                          confirm: t("datasets.confirm.delete", { name: dataset.name }),
+                          confirm: t("datasets.confirm.delete", {
+                            name: datasetDisplayName(dataset),
+                          }),
                           // 后果与可逆性进正文，且必须说实话：数据集删除只是把文件移出列表，
                           // 界面上没有恢复入口（它不进「回收站」页），所以只能提醒先导出备份。
                           // 后果段（唯一出口）在语言包里：`settingsDatasets.delete.note`。
@@ -317,7 +337,7 @@ export default function DatasetsCard({
                   <ListyMeta
                     title={
                       <>
-                        {dataset.name}
+                        {datasetDisplayName(dataset)}
                         {dataset.is_active && (
                           // “当前”单独看指代不明；顺带说明它为什么不能删、不能切。
                           <Tooltip title={t("datasets.tooltip.active")}>
@@ -332,9 +352,7 @@ export default function DatasetsCard({
                       <>
                         {formatSize(dataset.size_bytes)}
                         {dataset.created_at ? ` · ${formatDateTime(dataset.created_at)}` : ""}
-                        {dataset.source
-                          ? ` · ${dataset.source === "sample" ? t("datasets.source.sample") : dataset.source}`
-                          : ""}
+                        {dataset.source ? ` · ${datasetSourceLabel(dataset)}` : ""}
                       </>
                     }
                   />

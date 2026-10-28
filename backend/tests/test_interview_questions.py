@@ -19,6 +19,7 @@ from app.services.interview.interview_questions import (
     generate_question_bank,
     optimize_resume,
     parse_analysis,
+    parse_answer_review,
     parse_question_answer,
     parse_question_bank,
 )
@@ -309,3 +310,74 @@ def test_optimize_endpoint_does_not_mutate_resume(client, db_session, monkeypatc
     # 反向优化只出建议，简历正文必须原样。
     db_session.refresh(resume)
     assert resume.content == original
+
+
+# ===== 自答批改（打分 + 解析 + 修改建议 + 改写示范）=====
+
+_REVIEW_JSON = json.dumps(
+    {
+        "score": 78,
+        "summary": "结论先给了，但证据只有结论没有数字",
+        "strengths": ["开头先给结论"],
+        "gaps": ["没有量化结果"],
+        "suggestions": ["补一个耗时或订单量"],
+        "revised_answer": "我在上一家公司负责订单系统，把下单耗时从 800ms 降到 200ms。",
+    },
+    ensure_ascii=False,
+)
+
+
+def test_parse_answer_review_normalizes_messy_output():
+    """分数写成字符串 / 越界、列表里混空串，都要收敛成可渲染的形状。"""
+    review = parse_answer_review(
+        {
+            "score": "88.6",
+            "summary": "还行",
+            "strengths": ["有结论", "", None],
+            "gaps": "只有一条也接受",  # 字符串而不是数组
+            "suggestions": ["补数字"],
+            "revised_answer": "示范",
+        },
+        "讲讲项目难点",
+    )
+    assert review.score == 89
+    assert review.strengths == ["有结论"]
+    assert review.gaps == ["只有一条也接受"]
+    assert review.question == "讲讲项目难点"
+
+    # 分数越界钳到 0–100；完全没内容时才报错。
+    assert parse_answer_review({"score": 150, "gaps": ["x"]}, "q").score == 100
+    assert parse_answer_review({"score": -5, "gaps": ["x"]}, "q").score == 0
+    with pytest.raises(LLMError):
+        parse_answer_review({}, "q")
+
+
+def test_answer_review_endpoint_returns_structured_review(client, monkeypatch):
+    _configure_provider(monkeypatch, _REVIEW_JSON)
+    response = client.post(
+        "/api/interview/questions/review",
+        json={"question": "讲讲项目难点", "my_answer": "我做过一个交易系统。"},
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["score"] == 78
+    assert body["summary"]
+    assert body["gaps"] == ["没有量化结果"]
+    assert "800ms" in body["revised_answer"]
+
+
+def test_answer_review_endpoint_requires_model(client):
+    response = client.post(
+        "/api/interview/questions/review",
+        json={"question": "讲讲项目难点", "my_answer": "我做过一个交易系统。"},
+    )
+    assert response.status_code == 400
+    assert "配置大模型" in response.json()["detail"]
+
+
+def test_answer_review_endpoint_rejects_blank_answer(client):
+    response = client.post(
+        "/api/interview/questions/review",
+        json={"question": "讲讲项目难点", "my_answer": "   "},
+    )
+    assert response.status_code == 422

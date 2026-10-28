@@ -225,4 +225,27 @@ describe("useResumeDocument · 换记录", () => {
     expect(result.current.content.name).toBe("Bob");
     expect(result.current.overlays).toEqual(overlays);
   });
+
+  it("entries() 带时间戳、position() 给出步数（历史面板显示时间 / 回到某一步的基础）", () => {
+    const { result } = setup();
+    vi.setSystemTime(new Date(2026, 9, 29, 8, 0, 0));
+    act(() => {
+      result.current.dispatch({ kind: "set-text", path: "name", text: "Bob" }, "edit");
+      vi.advanceTimersByTime(300);
+    });
+
+    const entries = result.current.entries();
+    expect(entries.future).toEqual([]);
+    expect(entries.past).toHaveLength(1);
+    expect(entries.past[0]?.label).toBe("edit");
+    expect(entries.past[0]?.at).toBe(new Date(2026, 9, 29, 8, 0, 0).getTime());
+    // labels() 保持原有形状（只给动作名），老调用点不必改。
+    expect(result.current.labels()).toEqual({ past: ["edit"], future: [] });
+    expect(result.current.position()).toEqual({ past: 1, future: 0 });
+
+    act(() => {
+      result.current.undo();
+    });
+    expect(result.current.position()).toEqual({ past: 0, future: 1 });
+  });
 });

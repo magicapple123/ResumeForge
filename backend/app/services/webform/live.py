@@ -57,7 +57,7 @@ from .live_control import (
     set_autofill_status_script,
     set_live_enabled_script,
 )
-from .live_memory_panel import REMEMBER_EDITOR_SCRIPT, memory_targets_script
+from .live_memory_panel import memory_targets_script, remember_editor_script
 from .live_remember import LiveRememberMixin
 from .live_scripts import (
     _ACK_ASSISTANT_ASK_SCRIPT,
@@ -69,6 +69,7 @@ from .live_scripts import (
     _clear_state_script,
     _show_panel_script,
 )
+from .panel_copy import localize_panel
 from .repeated_fields import field_key_for_block, field_label_for_key, split_repeated_key
 from .service import (
     AI_NOTE,
@@ -88,6 +89,7 @@ from .service import (
 from .service.relaxed import _own_text_contains
 from .service.relaxed_matching import custom_labels_from_catalog
 from .session import Snapshot
+from .webform_copy import locale_key, ui_text
 
 if TYPE_CHECKING:
     # 仅供静态检查：运行时的 MultiLiveSession 经下方模块级 ``__getattr__`` 延迟提供
@@ -146,6 +148,8 @@ class LiveSession(LiveRememberMixin):
         memory_targets: list[dict[str, Any]] | None = None,
         memory_targets_loader: Callable[[], list[dict[str, Any]]] | None = None,
         relaxed_mode_loader: Callable[[], bool] | None = None,
+        ui_locale_loader: Callable[[], str | None] | None = None,
+        ui_locale: str | None = None,
     ) -> None:
         self._client = client
         self._data = dict(data)
@@ -169,6 +173,12 @@ class LiveSession(LiveRememberMixin):
         # 「放宽模式」是用户设置（默认关）：每次聚焦时现读，设置页改完立刻生效，
         # 不需要重启会话。loader 为 None（单测/未接线）⇒ 恒为关。
         self._relaxed_mode_loader = relaxed_mode_loader
+        # 注入到页面里的文案（悬浮球菜单、焦点面板、「记住这条」）用哪种语言：
+        # 每次安装脚本时现读，用户切了界面语言、下一个页面就跟着变。
+        self._ui_locale_loader = ui_locale_loader
+        # 开启会话那一刻的界面语言：请求里有数据集身份，读到的就是用户正在用的那份设置。
+        # 后台轮询线程读同一个键时没有请求身份，可能落到主数据集上，所以**优先用这个值**。
+        self._ui_locale = ui_locale
         self._engine = FormEngine()
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
@@ -277,6 +287,18 @@ class LiveSession(LiveRememberMixin):
         """替换「放宽模式」开关的读取回调（每次聚焦现读，改动即时生效）。"""
         self._relaxed_mode_loader = loader
 
+    def set_ui_locale_loader(self, loader: Callable[[], str | None] | None) -> None:
+        """替换界面语言读取回调（会话已存在时切语言也能生效）。"""
+        self._ui_locale_loader = loader
+
+    def _locale(self) -> str:
+        """注入脚本文案用哪种语言：优先用开启会话时记下的值，其次现读，最后回退源语言。"""
+        if self._ui_locale:
+            return locale_key(self._ui_locale)
+        if self._ui_locale_loader is None:
+            return locale_key(None)
+        return locale_key(self._ui_locale_loader())
+
     def _relaxed_enabled(self) -> bool:
         if self._relaxed_mode_loader is None:
             return False
@@ -346,11 +368,12 @@ class LiveSession(LiveRememberMixin):
         两件事必须成对做：清单先送进去，再装监听。少了清单，用户第一次点「换个资料…」
         会看到空列表；少了监听，点哪个框都没反应。
         """
+        locale = self._locale()
         self._client.evaluate(_catalog_script(self._catalog))
-        self._client.evaluate(FOCUS_LISTENER_SCRIPT)
-        self._client.evaluate(install_live_control_script(self._enabled))
+        self._client.evaluate(localize_panel(FOCUS_LISTENER_SCRIPT, locale))
+        self._client.evaluate(install_live_control_script(self._enabled, locale))
         self._client.evaluate(memory_targets_script(self._memory_targets))
-        self._client.evaluate(REMEMBER_EDITOR_SCRIPT)
+        self._client.evaluate(remember_editor_script(locale))
 
     def stop(self) -> None:
         self._stop.set()
@@ -611,7 +634,7 @@ class LiveSession(LiveRememberMixin):
                 self._publish(
                     {
                         "status": "ai_thinking",
-                        "note": "AI 正在识别这个框…",
+                        "note": ui_text(self._locale(), "note.aiThinking"),
                         "source": SOURCE_AI,
                         "remember_field_key": "",
                     }
@@ -666,7 +689,7 @@ class LiveSession(LiveRememberMixin):
         self._publish(
             {
                 "status": "ai_thinking",
-                "note": "AI 正在识别这个框…",
+                "note": ui_text(self._locale(), "note.aiThinking"),
                 "source": SOURCE_AI,
                 "remember_field_key": "",
             }
@@ -804,7 +827,7 @@ class LiveSession(LiveRememberMixin):
                 "status": "unmatched",
                 "field_label": field_label,
                 "remember_field_key": field_key,
-                "note": f"{note}，点「换个资料…」自己挑一条",
+                "note": ui_text(self._locale(), "note.pickFromList", note=note),
                 "source": source,
             }
         )
@@ -961,7 +984,7 @@ class LiveSession(LiveRememberMixin):
             elif candidates:
                 # 所有候选都被守卫拦下：这是"猜的和框对不上"，不是"资料里没填"。
                 key = candidates[0]
-                note = "AI 猜的字段和这个框的语义对不上，未采纳"
+                note = ui_text(self._locale(), "note.aiRejected")
             else:
                 key = ""
                 note = self._ai_dead_end(())
@@ -1078,12 +1101,16 @@ class LiveSession(LiveRememberMixin):
         outcome = results[0] if results else None
         ok = outcome is not None and outcome.status == "filled"
         if ok:
-            note = "已填入，请核对"
+            note = ui_text(self._locale(), "note.filled")
         else:
             detail = outcome.detail if outcome else "没能写入"
             # 放宽代点失败的失败形态与"写值失败"不同（弹层没打开/没有匹配选项/没勾上），
             # 把原因如实写成「代选失败：…」，用户才知道这是程序代点没成，不是资料填错。
-            note = f"代选失败：{detail}" if FormEngine.relaxed_kind(control) else detail
+            note = (
+                ui_text(self._locale(), "note.relaxedFailed", detail=detail)
+                if FormEngine.relaxed_kind(control)
+                else detail
+            )
 
         # 「已填入」之后不再留候选——那几个备选是针对"该填什么"的，已经填完了。
         self._publish(
@@ -1149,6 +1176,7 @@ class LiveSession(LiveRememberMixin):
                 should_stop=self._stop.is_set,
                 relaxed=self._relaxed_enabled(),
                 custom_labels=custom_labels_from_catalog(catalog),
+                locale=self._locale(),
             )
         except Exception as error:  # noqa: BLE001 - 失败要回显在悬浮球而不是吞掉
             logger.warning("网申填表：自动填写当前页面失败：%s", error)
@@ -1207,6 +1235,8 @@ def start_live(
     memory_targets_loader: Callable[[], list[dict[str, Any]]] | None = None,
     target_clients_loader: Callable[[], list[tuple[str, CdpClient]]] | None = None,
     relaxed_mode_loader: Callable[[], bool] | None = None,
+    ui_locale_loader: Callable[[], str | None] | None = None,
+    ui_locale: str | None = None,
 ) -> LiveSession | MultiLiveSession:
     """开一次会话。**已经在跑就直接返回它**——注意 ``provider`` / ``ai_enabled`` 也一并
     被忽略，AI 开关是"开启时"的设置，改动要停掉再开才生效（界面上有这句提示）。"""
@@ -1218,6 +1248,9 @@ def start_live(
             _session.set_data_loader(data_loader)
             _session.set_autofill_data_loader(autofill_data_loader)
             _session.set_relaxed_mode_loader(relaxed_mode_loader)
+            _session.set_ui_locale_loader(ui_locale_loader)
+            if ui_locale:
+                _session._ui_locale = ui_locale
             _session.set_memory_choice_required(require_memory_choice)
             _session.set_memory_targets_loader(memory_targets_loader)
             if memory_targets is not None:
@@ -1240,6 +1273,8 @@ def start_live(
             memory_targets=memory_targets,
             memory_targets_loader=memory_targets_loader,
             relaxed_mode_loader=relaxed_mode_loader,
+            ui_locale_loader=ui_locale_loader,
+            ui_locale=ui_locale,
             **(
                 {"target_clients_loader": target_clients_loader}
                 if target_clients_loader is not None

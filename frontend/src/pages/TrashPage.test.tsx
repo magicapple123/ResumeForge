@@ -125,7 +125,7 @@ describe("TrashPage", () => {
     expect(screen.getAllByRole("checkbox").length).toBeGreaterThan(0);
 
     // 退出多选后复选框消失，且已勾选的选择集一并清空（批量按钮不再可见）。
-    fireEvent.click(screen.getByRole("button", { name: "退出多选" }));
+    fireEvent.click(screen.getByRole("button", { name: "退出选择" }));
     expect(screen.queryByRole("checkbox")).toBeNull();
     expect(screen.queryByRole("button", { name: /批量恢复/ })).toBeNull();
   });

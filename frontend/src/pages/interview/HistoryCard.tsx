@@ -155,6 +155,9 @@ export function HistoryCard({
                           </Tag>
                           <Tag>{typeLabelKey ? t(typeLabelKey) : item.interview_type}</Tag>
                           <Tag>{difficultyLabelKey ? t(difficultyLabelKey) : item.difficulty}</Tag>
+                          {/* 关联简历（0066）：让用户一眼看出这场面试面的是哪份简历；
+                              0066 之前的会话没有这项，为空就不显示。 */}
+                          {item.resume_title ? <Tag color="cyan">{item.resume_title}</Tag> : null}
                         </Space>
                       }
                       description={

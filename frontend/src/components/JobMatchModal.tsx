@@ -17,14 +17,27 @@
  * 它放在五类结论**之后**作为补充，且不给分数配"好/差"的颜色分级——后端没有定义档位，
  * 前端自己划一条线就是在编造一个判断。
  */
-import { BulbOutlined, DeleteOutlined, ReloadOutlined, RobotOutlined } from "@ant-design/icons";
+import {
+  BulbOutlined,
+  CloseCircleOutlined,
+  DeleteOutlined,
+  ReloadOutlined,
+  RobotOutlined,
+} from "@ant-design/icons";
 import { Alert, App, Button, Descriptions, Modal, Progress, Space, Tag, Typography } from "antd";
 import EmptyState from "./common/EmptyState";
 import PageSkeleton from "./common/PageSkeleton";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { deleteJobMatch, generateJobMatch, getJobMatch } from "../api/jobs";
-import { notifyTaskDone } from "../utils/taskNotify";
+import { createAiTask } from "../api/aiTasks";
+import { deleteJobMatch, getJobMatch } from "../api/jobs";
+import { useBackgroundTasks } from "../hooks/useBackgroundTasks";
 import { beginMatchAnalysis, endMatchAnalysis } from "../utils/jobMatchAnalysisState";
+import {
+  attachTaskUi,
+  backgroundTaskKey,
+  cancelBackgroundTask,
+  watchAiTask,
+} from "../utils/backgroundTasks";
 import {
   ADMISSION_META,
   MATCH_STATUS_META,
@@ -110,10 +123,19 @@ export default function JobMatchModal({ job, onClose }: Props) {
   const { message } = App.useApp();
   const [data, setData] = useState<JobMatchOut | null>(null);
   const [loading, setLoading] = useState(false);
-  const [analyzing, setAnalyzing] = useState(false);
+  /** 建任务请求还在飞（真正的"进行中"由登记表里那条任务说了算）。 */
+  const [starting, setStarting] = useState(false);
+  const [taskId, setTaskId] = useState<number | null>(null);
   const [error, setError] = useState("");
   const version = useRef(0);
   const lastJobId = useRef<number | null>(null);
+
+  // 任务状态来自**统一登记表**（`utils/backgroundTasks`），不是本组件的 useState：
+  // 关掉弹窗后轮询仍在，页头任务面板也能看到并取消同一个任务。
+  const tracked = useBackgroundTasks();
+  const taskKey = taskId === null ? null : backgroundTaskKey("job_match", taskId);
+  const activeTask = taskKey === null ? undefined : tracked.find((item) => item.key === taskKey);
+  const analyzing = starting || activeTask !== undefined;
 
   useEffect(() => {
     if (!job || lastJobId.current === job.id) return;
@@ -122,7 +144,15 @@ export default function JobMatchModal({ job, onClose }: Props) {
     setData(null);
     setError("");
     setLoading(false);
+    // 换岗位 = 换任务：旧任务的进度不该显示在新岗位上（旧任务仍在后台跑完并提醒）。
+    setTaskId(null);
   }, [job]);
+
+  useEffect(() => {
+    if (taskKey === null) return undefined;
+    // 弹窗开着时声明"界面在看这个任务"：完成时用右上角卡片，不弹居中弹窗打断用户。
+    return attachTaskUi(taskKey);
+  }, [taskKey]);
 
   const load = useCallback(async () => {
     if (!job) return;
@@ -149,55 +179,72 @@ export default function JobMatchModal({ job, onClose }: Props) {
   }, [job, load]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
-  // 用户在分析过程中关掉了弹窗：请求照跑。人已经走了之后不再 setState（组件可能已卸载），
-  // 完成时改走全局通知；同时全局登记表让岗位列表 / 详情抽屉显示「分析中」标志。
-  const leftWhileAnalyzing = useRef(false);
+  // 离开弹窗 = 任务继续在后台跑（不是取消）；列表里的"分析中"标志由登记表兜底清掉。
+  useEffect(() => {
+    return () => {
+      if (lastJobId.current !== null) endMatchAnalysis(lastJobId.current);
+    };
+  }, []);
 
-  const handleCancel = () => {
-    if (analyzing) leftWhileAnalyzing.current = true;
-    onClose();
-  };
-
+  /**
+   * 发起一次分析：**建任务**就返回，不在请求里等模型。
+   *
+   * 为什么必须这样：改动前这里直接 `await generateJobMatch()`，那条 HTTP 连接就是任务的
+   * 生命线——用户关掉弹窗、切页或刷新，连接一断前端就再也拿不到结果，而**后端仍会把
+   * token 烧完**（该端点曾经是 sync def，跑在线程池里，客户端断开对它毫无影响）。
+   * 现在任务由后端后台线程跑，前端只轮询状态，关掉窗口真的不影响结果。
+   */
   const analyze = async () => {
     if (!job) return;
     const jobId = job.id;
-    setAnalyzing(true);
+    const label = t("jobMatch.task.label", { job: job.title });
     setError("");
-    leftWhileAnalyzing.current = false;
+    setStarting(true);
     beginMatchAnalysis(jobId);
     try {
-      await generateJobMatch(jobId, data != null && data.id > 0);
-      // 无论人是否还在弹窗前，完成都走统一出口（通知卡片 + 提醒声）——
-      // 用户反馈过"生成完了没有任何提醒"。区别只在文案指路。
-      notifyTaskDone({
-        title: t("jobMatch.toast.doneTitle"),
-        description: leftWhileAnalyzing.current
-          ? t("jobMatch.toast.doneInDetail")
-          : t("jobMatch.toast.doneHere"),
+      const created = await createAiTask({
+        kind: "job_match",
+        payload: { job_id: jobId, force: data != null && data.id > 0 },
+        label,
       });
-      if (leftWhileAnalyzing.current) return;
-      await load();
-    } catch (analyzeError) {
-      const detail =
-        analyzeError instanceof Error ? analyzeError.message : t("jobMatch.error.analyze");
-      notifyTaskDone({
-        kind: "error",
-        title: t("jobMatch.error.title"),
-        description: leftWhileAnalyzing.current
-          ? `${detail}${t("jobMatch.error.retryHint")}`
-          : detail,
+      setTaskId(created.id);
+      // 完成提醒（弹窗 + 提示音 + 「查看岗位」深链）由登记表统一发：只有它知道用户
+      // 是"还在看弹窗"还是"已经走开了"。
+      watchAiTask(created, label, (finished) => {
+        setTaskId(null);
+        endMatchAnalysis(jobId);
+        if (finished.status === "completed") {
+          void load();
+          return;
+        }
+        if (finished.status === "failed") {
+          setError(finished.error || t("jobMatch.error.analyze"));
+        }
+        // cancelled：用户自己按的取消，回到"未分析"即可，不再报一个错。
       });
-      if (leftWhileAnalyzing.current) return;
-      setError(detail);
-    } finally {
+    } catch (createError) {
       endMatchAnalysis(jobId);
-      if (!leftWhileAnalyzing.current) setAnalyzing(false);
+      setError(createError instanceof Error ? createError.message : t("jobMatch.error.analyze"));
+    } finally {
+      setStarting(false);
+    }
+  };
+
+  const cancelAnalyze = async () => {
+    if (taskKey === null) return;
+    try {
+      // 登记表 → 适配器 → `POST /ai-tasks/{id}/cancel`：后端会真的停下执行体。
+      await cancelBackgroundTask(taskKey);
+    } catch (cancelError) {
+      message.error(
+        cancelError instanceof Error ? cancelError.message : t("jobMatch.error.cancelFailed"),
+      );
     }
   };
 
   const clear = async () => {
     if (!job) return;
-    setAnalyzing(true);
+    setStarting(true);
     try {
       await deleteJobMatch(job.id);
       message.success(t("jobMatch.toast.cleared"));
@@ -208,7 +255,7 @@ export default function JobMatchModal({ job, onClose }: Props) {
         clearError instanceof Error ? clearError.message : t("jobMatch.error.clearFailed"),
       );
     } finally {
-      setAnalyzing(false);
+      setStarting(false);
     }
   };
 
@@ -232,7 +279,7 @@ export default function JobMatchModal({ job, onClose }: Props) {
         </Space>
       }
       open={!!job}
-      onCancel={handleCancel}
+      onCancel={onClose}
       footer={null}
       width={760}
       // 匹配分析逐条输出，条数不固定：限高让超长内容只滚弹窗内部。
@@ -260,7 +307,25 @@ export default function JobMatchModal({ job, onClose }: Props) {
           type="info"
           showIcon
           style={{ marginBottom: 12 }}
-          title={t("jobMatch.hint.background")}
+          title={
+            activeTask?.progressPercent != null
+              ? t("jobMatch.hint.progress", { percent: activeTask.progressPercent })
+              : t("jobMatch.hint.starting")
+          }
+          description={t("jobMatch.hint.background")}
+          // 关掉弹窗不等于取消；要停下就按这颗：它会让后端真的停止模型调用。
+          action={
+            taskKey === null ? null : (
+              <Button
+                size="small"
+                danger
+                icon={<CloseCircleOutlined />}
+                onClick={() => void cancelAnalyze()}
+              >
+                {t("jobMatch.action.cancel")}
+              </Button>
+            )
+          }
         />
       ) : null}
 

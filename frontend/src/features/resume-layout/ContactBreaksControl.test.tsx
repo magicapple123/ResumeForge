@@ -111,14 +111,15 @@ describe("联系方式换行控件（排版参数）", () => {
     expect(onChange).toHaveBeenCalledWith({ accent: "#123456" });
   });
 
-  it("下拉至少 240px 宽，且窄容器下按 100% 收窄（用户反馈：34px 时看不清选项）", () => {
+  it("下拉宽 104px（能看见四个字），窄屏按 100% 收窄", () => {
     renderControl();
     const select = document.querySelector<HTMLElement>(".resume-contact-break-select");
     expect(select).not.toBeNull();
-    // Select 撑满外层 260px 的包裹层；包裹层再 maxWidth 100% 适配窄屏。
+    // Select 撑满外层包裹层；包裹层定宽 104px（四个中文字符），再 maxWidth 100% 适配窄屏。
+    // 早先是 260px：空白比字多（2026-10-28 用户口径"能看见四个字就好"）。
     expect(select?.style.width).toBe("100%");
     const wrap = select?.parentElement as HTMLElement;
-    expect(wrap.style.width).toBe("260px");
+    expect(wrap.style.width).toBe("104px");
     expect(wrap.style.maxWidth).toBe("100%");
   });
 

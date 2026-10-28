@@ -44,6 +44,11 @@ export function listResumes(
     favorite?: boolean;
     /** false 只取通用简历（未关联任何岗位） */
     has_job?: boolean;
+    /**
+     * 面试关联简历用：与 `job_id` 组合时同时返回「本岗位的」与「通用的」简历
+     * （真实面试里两种都可能用；其它岗位的简历不出现）。
+     */
+    include_general?: boolean;
     /** 列表排序（R14）；省略时后端用「最近修改」。 */
     sort?: ResumeSort;
   } = {},

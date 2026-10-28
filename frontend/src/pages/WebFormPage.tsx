@@ -21,7 +21,7 @@
  * 如果只有 URL 而没有当前标签页草稿，重放的是**「读到了什么」**，勾选会回到默认；有草稿时则连
  * 勾选、手改值和填充结果一起恢复。这样既不把临时状态塞进 URL，也不会在正常切页时丢失进度。
  */
-import { Alert, App, Card, Space, Typography } from "antd";
+import { Alert, App, Button, Card, Space, Typography } from "antd";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getDiagnostics } from "../api/system";
 import { clientDiagnosticSnapshot } from "../utils/clientDiagnostics";
@@ -46,6 +46,12 @@ import BrowserSettingsModal from "../components/apply/BrowserSettingsModal";
 import { useWebFormSession } from "../features/webform/useWebFormSession";
 import type { WebFormSessionState } from "../features/webform/webFormSessionStorage";
 import { readActiveDatasetId } from "../utils/datasetScope";
+import { attachAiTaskUi, startAiTask } from "../utils/aiTaskEntry";
+import {
+  clearStagedAiPreview,
+  getStagedAiPreview,
+  useStagedAiPreview,
+} from "../features/webform/stagedAiPreview";
 import WebFormLearningDialog, {
   type LearningSelection,
 } from "../components/webform/WebFormLearningDialog";
@@ -138,6 +144,39 @@ export default function WebFormPage() {
     setSelected(new Set(report.default_indexes));
     setValues({});
   }, []);
+
+  // AI 识别的暂存结果：任务在后台跑完时，用户可能已经离开这一页（那正是任务化的意义）。
+  // 快照对得上就**自动应用**（应用 = 把预览画出来，仍然一行都没写），对不上留一张提示卡。
+  const stagedAi = useStagedAiPreview();
+  /** 本次读取对应的任务"有人在看"声明（用户回到页面时要重新声明）。 */
+  const readDetach = useRef<(() => void) | null>(null);
+
+  useEffect(() => {
+    if (!stagedAi) return;
+    if (snapshot?.snapshot_id !== stagedAi.snapshotId) return;
+    // 这是"把外部系统（模块级暂存槽）里的结果同步到页面 state"的标准用法：结果由另一个
+    // 上下文（后台任务）产生，不可能在渲染期同步算出。
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    applyPreview(stagedAi.preview);
+    clearStagedAiPreview();
+  }, [stagedAi, snapshot, applyPreview]);
+
+  /** 用户点了提示卡上的「应用」：切到那份暂存的预览（页面本身仍未被写入）。 */
+  const applyStagedAi = useCallback(() => {
+    const pending = getStagedAiPreview();
+    if (!pending) return;
+    applyPreview(pending.preview);
+    clearStagedAiPreview();
+  }, [applyPreview]);
+
+  // 卸载时释放"有人在看"的声明：不释放的话，用户离开后再完成的任务就不会弹提醒了。
+  useEffect(
+    () => () => {
+      readDetach.current?.();
+      readDetach.current = null;
+    },
+    [],
+  );
 
   const { rememberSnapshot, forgetSnapshot, setRestoring } = useSnapshotUrl({
     aiAvailable,
@@ -451,13 +490,32 @@ export default function WebFormPage() {
     setSessionActive(true);
     try {
       const taken = await takeWebFormSnapshot();
-      const report = await previewWebForm(taken.snapshot_id, aiOn);
       setSnapshot(taken);
-      applyPreview(report);
       rememberSnapshot(taken.snapshot_id, aiOn);
-      if (!report.items.length) {
-        message.info(t("webFormPage.toast.nothingToFill"));
+      if (!aiOn) {
+        // 不调模型：本地规则秒出，没必要为了统一而多开一次任务。
+        const report = await previewWebForm(taken.snapshot_id, false);
+        applyPreview(report);
+        if (!report.items.length) {
+          message.info(t("webFormPage.toast.nothingToFill"));
+        }
+        return;
       }
+      // 调模型：交给统一任务地基。**离开页面也继续跑**，结果回来后先暂存
+      // （见 features/webform/stagedAiPreview），由用户在页面上核对后再自己勾选填入。
+      const started = await startAiTask({
+        kind: "webform_fill",
+        payload: { snapshot_id: taken.snapshot_id },
+        label: t("backgroundTasks.aiTask.webform.label"),
+        onFinished: (task) => {
+          if (task.status === "failed") {
+            message.error(task.error || t("webFormPage.error.readFailed"));
+          }
+        },
+      });
+      // 用户正看着这一页：完成时不要再弹一个居中弹窗打断他。
+      readDetach.current?.();
+      readDetach.current = attachAiTaskUi(started.key);
     } catch (error) {
       message.error(error instanceof Error ? error.message : t("webFormPage.error.readFailed"));
     } finally {
@@ -658,6 +716,21 @@ export default function WebFormPage() {
       {controlsExpanded ? null : (
         <Typography.Text type="secondary">{t("webFormPage.hint.expandLater")}</Typography.Text>
       )}
+
+      {/* AI 建议已就绪，但当前页面对应的不是那次快照：**由用户点一下**再切过去，
+          绝不自动覆盖他正在核对的这份预览。 */}
+      {stagedAi && snapshot?.snapshot_id !== stagedAi.snapshotId ? (
+        <Alert
+          type="info"
+          showIcon
+          title={t("webFormPage.stagedAi.ready")}
+          action={
+            <Button size="small" onClick={applyStagedAi}>
+              {t("webFormPage.stagedAi.apply")}
+            </Button>
+          }
+        />
+      ) : null}
 
       {preview ? (
         <PreviewCard

@@ -9,7 +9,7 @@ import logging
 import sys
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 
@@ -37,6 +37,7 @@ from ..services.resume.resume_template_import import (
 from ..services.resume.resume_template_store import TemplateError, create_user_template
 from ..services.resume.resume_templates import RESUME_TEMPLATES, TEMPLATES_DIR
 from ..services.settings_service import get_llm_config
+from ._disconnect import client_gone, run_until_disconnect
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["resume-templates"])
@@ -58,6 +59,7 @@ def _provider(config):
 
 @router.post("/import-from-file", response_model=ResumeTemplateDetail, status_code=201)
 async def import_template_from_file(
+    request: Request,
     file: UploadFile = File(...),
     name: str = Form(default=""),
     db: Session = Depends(get_db),
@@ -111,7 +113,10 @@ async def import_template_from_file(
     provider = _provider(config)
     db.close()
     try:
-        derived = await derive_format_template(provider, source)
+        # 识别一次要十几秒：客户端断开就真的停下（服务端不再继续烧 token）。
+        derived = await run_until_disconnect(
+            request, derive_format_template(provider, source), what="模板版式识别"
+        )
     except TemplateImportError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     except LLMError as exc:
@@ -120,6 +125,8 @@ async def import_template_from_file(
         logger.exception("模板导入分析发生内部错误")
         raise HTTPException(status_code=502, detail="分析模板失败") from exc
 
+    if derived is None:
+        raise client_gone("模板版式识别")
     final_name = (name or "").strip() or str(derived["name"])
     try:
         template = create_user_template(
@@ -215,6 +222,7 @@ async def _read_sources(
 
 @router.post("/analyze-from-files", response_model=TemplateRecognitionDraft)
 async def analyze_template_from_files(
+    request: Request,
     files: list[UploadFile] = File(...),
     name: str = Form(default=""),
     db: Session = Depends(get_db),
@@ -227,7 +235,9 @@ async def analyze_template_from_files(
     provider = _provider(config)
     db.close()
     try:
-        derived = await derive_style_template(provider, source)
+        derived = await run_until_disconnect(
+            request, derive_style_template(provider, source), what="参考模板识别"
+        )
     except TemplateImportError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     except LLMError as exc:
@@ -236,6 +246,8 @@ async def analyze_template_from_files(
         logger.exception("参考模板视觉分析发生内部错误")
         raise HTTPException(status_code=502, detail="分析模板失败") from exc
 
+    if derived is None:
+        raise client_gone("参考模板识别")
     spec = RESUME_TEMPLATES["classic"]
     html_path = TEMPLATES_DIR / spec["file"]
     if not html_path.is_file():

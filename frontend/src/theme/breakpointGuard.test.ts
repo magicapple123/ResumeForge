@@ -45,10 +45,15 @@ const LEGACY: Record<string, number> = {
   "styles/announcement.css:600": 1,
   "styles/apply.css:768": 1,
   "styles/base-panels.css:720": 1,
+  // base-shell.css:1093 —— 英文侧栏手动收起断点：≤1092 侧栏是 64px 图标导轨，
+  // ≥1093 才允许 252px 宽侧栏（1093 = 标准断点 1092 的"开区间"下沿，非标准值但语义上紧贴它）。
+  "styles/base-shell.css:1093": 1,
   "styles/modules-layout.css:1000": 1,
   "styles/modules-templates.css:575": 1,
   "styles/modules-webform.css:760": 1,
   "styles/profile.css:640": 1,
+  // provenance.css:720 —— 来源卡窄容器版式：选择卡的下拉独占一行、按钮换行不变形。
+  "styles/provenance.css:720": 1,
   "styles/responsive.css:575": 1,
   "styles/resume-editor.css:640": 1,
   "styles/resume-panels.css:720": 1,
@@ -168,7 +173,13 @@ describe("断点单一事实源", () => {
     // 为什么钉住文件数：`container-type: inline-size` 会让该元素成为 position:fixed 后代的
     // 包含块（方案 §3.5）。工作台弹窗体与中栏内部没有 fixed 后代，所以安全；一旦有人在
     // `.app-content` 上开容器查询，网申页右下角的浮球会改为相对内容区定位、滚出屏幕。
-    const allowed = new Set(["styles/workbench-narrow.css", "styles/resume-workbench-tabs.css"]);
+    // bilingual.css —— 双语工作台容器查询：`字段对照` 面板按实际宽度切换版式，
+    // 面板内部无 fixed 后代，已按 §3.5 评估安全。
+    const allowed = new Set([
+      "styles/workbench-narrow.css",
+      "styles/resume-workbench-tabs.css",
+      "styles/bilingual.css",
+    ]);
     const offenders: string[] = [];
     for (const absolute of collectCssFiles()) {
       const file = relativeToSrc(absolute);

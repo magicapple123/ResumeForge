@@ -108,10 +108,12 @@ export function previewScenarioVariant(
   resumeId: number,
   variantId: number,
   payload: ScenarioVariantPreviewRequest,
+  signal?: AbortSignal,
 ): Promise<ScenarioVariantPreviewOut> {
   return request(`${base(resumeId)}/variants/${variantId}/scenario-preview`, {
     method: "POST",
     body: JSON.stringify(payload),
+    signal,
   });
 }
 

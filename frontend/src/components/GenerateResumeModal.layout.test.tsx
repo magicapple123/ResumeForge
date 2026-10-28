@@ -1,10 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * R6：生成时定下的版式覆盖（板块顺序 / 字号系数）必须跟着生成请求走。
+ * R6：生成时定下的版式覆盖（板块顺序）必须跟着生成请求走。
  *
  * 从 `GenerateResumeModal.test.tsx` 拆出（行数预算 500）。`vi.mock` 不跨文件
  * hoist，所以这里自带一份最小的 mock 脚手架（只保留本文件用到的 api 与夹具），
  * 用例外壳、断言与文案原样搬迁。
+ *
+ * 注：字号系数控件已移到设置页「批量操作」的生成卡（弹窗阶段不再有字号滑块），
+ * 字号随请求走的覆盖由批量操作卡自己的测试面负责，本文件只管板块顺序。
  */
 
 import { App as AntdApp } from "antd";
@@ -132,8 +135,8 @@ function renderModal(props: Partial<React.ComponentProps<typeof GenerateResumeMo
 /**
  * R6：生成时定下的版式覆盖要跟着请求走。
  *
- * 用户在配置页把「项目经历」拖到最前、或把字号调到 5px，关掉弹窗再从简历中心重开时
- * 这两项都该还在——所以它们是**生成请求**的一部分，而不是预览期才拼进去的临时状态。
+ * 用户在配置页把「项目经历」拖到最前，关掉弹窗再从简历中心重开时它还该在——
+ * 所以它是**生成请求**的一部分，而不是预览期才拼进去的临时状态。
  */
 describe("GenerateResumeModal 版式覆盖落库（R6）", () => {
   /** 资料页把「项目经历」拖到最前的那种顺序（与内置默认不同）。 */
@@ -215,26 +218,11 @@ describe("GenerateResumeModal 版式覆盖落库（R6）", () => {
 });
 
 describe("GenerateResumeModal 回填只重算板块顺序（R6）", () => {
-  /** rc-slider 读的是 keyCode/which，不是 key。 */
-  function pressArrowRight(target: Element) {
-    fireEvent.keyDown(target, { key: "ArrowRight", keyCode: 39, which: 39 });
-  }
-
-  it("重新打开时保留字号系数等其它覆盖，只把板块顺序重算成资料顺序", async () => {
+  it("重新打开时只把板块顺序重算成资料顺序，目录回填不夹带其它键", async () => {
     const view = renderModal({ open: true });
     await waitFor(() => expect(apiMocks.fetchResumeTemplates).toHaveBeenCalled());
     await act(async () => {
       await Promise.resolve();
-    });
-
-    // 在配置阶段把字号往上调一格：14 → 14.1px（步长 0.1px），落库形态是「档位 + 系数」。
-    const slider = await screen.findByRole("slider", { name: /字号/ });
-    pressArrowRight(slider);
-    // 断言滑块本身的值（读数与 tooltip 里也会出现 "14.1px"，按文本查会撞车）。
-    await waitFor(() => expect(slider).toHaveAttribute("aria-valuenow", "14.1"));
-    // 等防抖（180ms）把这次拖动提交成一次 setLayout。
-    await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 300));
     });
 
     view.rerender(
@@ -256,9 +244,6 @@ describe("GenerateResumeModal 回填只重算板块顺序（R6）", () => {
     await waitFor(() => expect(apiMocks.startResumeGeneration).toHaveBeenCalledOnce());
 
     const formatConfig = apiMocks.startResumeGeneration.mock.calls[0][0].options.format_config;
-    // 字号是用户的调整，不该被目录回填抹掉（那会让"关掉再打开字号变回去"）。
-    // 14.1 / 14 ≈ 1.0071 → 系数量化到 3 位小数 1.007。
-    expect(formatConfig.font_scale_adjust).toBeCloseTo(1.007, 2);
     // 板块顺序则按资料顺序重算；资料顺序等于内置默认时不写这个键。
     expect(formatConfig).not.toHaveProperty("section_order");
   });

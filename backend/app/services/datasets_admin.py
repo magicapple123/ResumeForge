@@ -46,6 +46,17 @@ from .data_backup.import_archive import (
 
 logger = logging.getLogger(__name__)
 
+# 数据集来源的**稳定代码**：`source` 是落盘的中文展示名（用户导入的包里也可能带别的写法），
+# 界面要按语言显示就得有一个不随文案变的键。映射不到（历史包里自定义的写法）时
+# `source_code` 是空串，前端退回显示 `source` 原文，不丢信息。
+_SOURCE_CODES: dict[str, str] = {
+    "本机": "machine",
+    "新建": "created",
+    "导入": "imported",
+    "随备份包导入": "restored",
+    "sample": "sample",
+}
+
 
 def _describe(dataset_id: str, path: Path) -> dict[str, Any]:
     metadata = read_metadata(dataset_id) if dataset_id != MAIN_DATASET_ID else {}
@@ -53,11 +64,13 @@ def _describe(dataset_id: str, path: Path) -> dict[str, Any]:
         size = path.stat().st_size
     except OSError:
         size = 0
+    source = metadata.get("source") or ("本机" if dataset_id == MAIN_DATASET_ID else "导入")
     return {
         "id": dataset_id,
         "name": metadata.get("name")
         or (MAIN_DATASET_NAME if dataset_id == MAIN_DATASET_ID else "未命名数据集"),
-        "source": metadata.get("source") or ("本机" if dataset_id == MAIN_DATASET_ID else "导入"),
+        "source": source,
+        "source_code": _SOURCE_CODES.get(source, ""),
         "size_bytes": size,
         "created_at": metadata.get("created_at"),
         "is_active": dataset_id == read_active_dataset_id(),
@@ -65,15 +78,36 @@ def _describe(dataset_id: str, path: Path) -> dict[str, Any]:
     }
 
 
+def _activity_time_name_key(item: dict[str, Any]) -> tuple[int, float, str]:
+    """列表排序键：当前激活的排最前，其余按创建时间倒序（新导入的在上）。
+
+    三个细节都是坑：
+    1. **激活优先**：切换数据集是用户当下在做的事，它必须永远第一条；
+    2. **时间倒序**：用户刚导入的那份一定在最上面。``created_at`` 是元信息里的 ISO
+       字符串，主数据集没有元信息、个别历史数据集也可能没写——缺失按"最旧"处理，
+       绝不能让 ``None`` 进比较（那会在排序时抛 TypeError）；
+    3. **name 兜底**：同一秒导入的两份（或都缺时间）用名称兜底，顺序才是稳定的。
+    """
+    raw = item.get("created_at")
+    stamp = 0.0
+    if isinstance(raw, str) and raw.strip():
+        try:
+            stamp = datetime.fromisoformat(raw).timestamp()
+        except ValueError:
+            # 历史元信息里可能是别的时间格式：当作"时间未知"，不让整张列表炸掉。
+            stamp = 0.0
+    return (0 if item["is_active"] else 1, -stamp, item["name"])
+
+
 def list_datasets() -> list[dict[str, Any]]:
-    """主数据 + datasets 目录下的各份数据集；当前激活的排在最前。"""
+    """主数据 + datasets 目录下的各份数据集；当前激活的排最前，其余按创建时间倒序（新导入的在上）。"""
     items = [_describe(MAIN_DATASET_ID, dataset_database_file(MAIN_DATASET_ID))]
     directory = datasets_directory()
     if directory.exists():
         for path in sorted(directory.glob("*.db")):
             if is_valid_dataset_id(path.stem):
                 items.append(_describe(path.stem, path))
-    items.sort(key=lambda item: (not item["is_active"], item["name"]))
+    items.sort(key=_activity_time_name_key)
     return items
 
 

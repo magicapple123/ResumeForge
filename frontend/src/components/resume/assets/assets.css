@@ -16,12 +16,20 @@
 }
 
 /* ===== 面板头：标题 13/600 + 计数 12 secondary + 右侧 small 动作 ===== */
+/* 2026-10-29 用户反馈「表达资产库这里挨得太近了」：面板根节点原先没加
+   `.resume-assets-panel`（容器的 gap 10 因此没生效，head / 筛选条 / 列表三块直接贴住），
+   且 head 与搜索框之间连一条分隔都没有。现在：根节点固定带 `.resume-assets-panel`
+   （gap 10），head 自己再给 8px 下内边距 + 一条极轻的下分隔，于是「收藏为资产」不再压在
+   搜索框上。`align-items: center` 让右侧按钮与左侧文字垂直居中（baseline 会把按钮压低
+   半行，看着像贴住下面的输入框）。 */
 .resume-assets-head {
   display: flex;
   flex-wrap: wrap;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
-  gap: 8px;
+  gap: 8px 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--rf-border-subtle);
 }
 
 .resume-assets-head-main {
@@ -41,16 +49,25 @@
   font-size: 12px;
 }
 
+/* 右侧「收藏为资产」：不参与压缩、不换行——窄栏（380px）时宁可标题那侧先收缩，
+   也不让按钮被挤成两行压住下面的搜索框。 */
+.resume-assets-head-action {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
 .resume-assets-empty-hint {
   color: var(--rf-text-secondary);
   font-size: 12px;
 }
 
 /* ===== 筛选条 ===== */
+/* 头部下分隔之外再留 2px：视觉上"标题区 / 筛选区"是两块，而不是一条线贴着一个输入框。 */
 .resume-phrase-filters {
   display: flex;
   flex-direction: column;
   gap: 8px;
+  margin-top: 2px;
 }
 
 /* 搜索框通栏：Input.Search 的 group wrapper 默认就是 100% 宽。 */

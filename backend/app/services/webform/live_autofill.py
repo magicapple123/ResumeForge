@@ -5,6 +5,7 @@
 会话生命周期和悬浮球状态仍由 ``live.py`` / ``live_control.py`` 编排，避免把实时
 监听继续堆进一个文件。
 """
+
 from __future__ import annotations
 
 import logging
@@ -20,6 +21,7 @@ from .engine.recovery import REASON_WRITE_ERROR
 from .service import FillSelection, apply_fill, build_preview, default_selections
 from .service.fill import SETTLE_RECHECK_SECONDS
 from .session import Snapshot
+from .webform_copy import ui_text
 
 logger = logging.getLogger(__name__)
 
@@ -85,6 +87,7 @@ def fill_current_page(
     delay_seconds: float = 0.03,
     relaxed: bool = False,
     custom_labels: dict[str, str] | None = None,
+    locale: str | None = None,
 ) -> AutoFillResult:
     """读取当前页并逐个写入可安全识别的空控件。
 
@@ -122,7 +125,11 @@ def fill_current_page(
             failed=0,
             form_control_total=form_control_total,
             recognized_total=total,
-            message="正在识别当前页面…" if total else "当前页面没有可自动填写的空字段",
+            message=(
+                ui_text(locale, "autofill.recognizing")
+                if total
+                else ui_text(locale, "autofill.nothing")
+            ),
         )
     )
     outcomes_by_index: dict[int, ApplyOutcome] = {}
@@ -173,7 +180,12 @@ def fill_current_page(
                 form_control_total=form_control_total,
                 recognized_total=total,
                 current_label=item.field_label,
-                message=("已填入" if outcome and outcome.status == "filled" else "这一项未能确认，请稍后核对"),
+                message=ui_text(
+                    locale,
+                    "note.autofillFilled"
+                    if outcome and outcome.status == "filled"
+                    else "note.autofillUnconfirmed",
+                ),
             )
         )
         if delay_seconds > 0 and (should_stop is None or not should_stop()):
@@ -181,7 +193,11 @@ def fill_current_page(
 
     state = "cancelled" if should_stop is not None and should_stop() else "done"
     # 成功率分母是页面全部可安全读取的控件，而不是规则恰好识别出的那一小部分。
-    rate_note = f"（成功率 {round(filled * 100 / form_control_total)}%）" if form_control_total else ""
+    rate_note = (
+        ui_text(locale, "autofill.rate", percent=round(filled * 100 / form_control_total))
+        if form_control_total
+        else ""
+    )
     report(
         AutoFillProgress(
             state=state,

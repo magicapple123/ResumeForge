@@ -30,6 +30,8 @@ const resume = {
   "resume.diagnosis.title": "Page layout diagnosis",
   "resume.diagnosis.fill": "Used {percent}%",
   "resume.diagnosis.autofit": "Fit one page",
+  "resume.diagnosis.expand": "Show details",
+  "resume.diagnosis.collapse": "Hide details",
   "resume.diagnosis.fitting": "Trying step {index}/{total}: {label}",
   "resume.diagnosis.tightest":
     "Typography settings are already at their tightest and the content still does not fit. From here, shorten the content or add a page - page layout diagnosis above lists the exact steps",

@@ -78,6 +78,59 @@
   flex: 1;
 }
 
+/* 附件行现在是一个 <button>（点开预览），所以要把浏览器的默认按钮样式清掉，
+   只留下"可点"的视觉反馈：手型光标 + hover 底色 + 键盘焦点环。 */
+.material-file-item--clickable {
+  width: 100%;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease;
+}
+
+.material-file-item--clickable:hover {
+  background: var(--rf-surface);
+  border-color: var(--rf-brand);
+}
+
+.material-file-item--clickable:focus-visible {
+  outline: 2px solid var(--rf-focus-visible);
+  outline-offset: 2px;
+}
+
+/* 缩略图尺寸原先是行内样式（64×64 + 圆角），搬进样式表以便复用。 */
+.material-file-thumb {
+  width: 64px;
+  height: 64px;
+  object-fit: cover;
+  border-radius: 4px;
+  flex: 0 0 auto;
+}
+
+/* 预览弹层：文档只有文本层，用等宽字体 + pre-wrap 保留换行，超长内容在弹层内滚动。 */
+.material-preview-image {
+  display: flex;
+  justify-content: center;
+  background: var(--rf-surface-alt);
+  border-radius: 6px;
+  padding: 8px;
+}
+
+.material-preview-text {
+  max-height: 60vh;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  background: var(--rf-surface-alt);
+  border-radius: 6px;
+  padding: 12px;
+  margin-bottom: 0;
+}
+
 /* ===== 知识库 ===== */
 
 .knowledge-page-header {
@@ -171,6 +224,37 @@
  * 类别勾选与说明留在弹窗上层不滚动，只有这份清单内部滚动——30 个文件时
  * 头部 Alert 与底部「移走 N 个文件」都还在原位。
  */
+.cleanup-candidate-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding-top: 2px;
+}
+
+.cleanup-candidate-row {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.cleanup-candidate-row:hover {
+  background: var(--rf-surface-alt);
+}
+
+.cleanup-candidate-name {
+  overflow: hidden;
+  color: var(--rf-text-secondary);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .cleanup-candidate-list {
   max-height: 42vh;
   overflow-y: auto;
@@ -268,4 +352,25 @@
   font-size: 12px;
   color: var(--rf-text-secondary);
   white-space: normal;
+}
+
+/* 「我的文件」文档预览：提取出的文字按等宽排版，长行折行而不是横向滚整页。 */
+.user-file-text-preview {
+  display: flex;
+  flex-direction: column;
+}
+
+.user-file-text-body {
+  margin: 0;
+  padding: 14px 16px;
+  max-height: 72vh;
+  overflow: auto;
+  border: 1px solid var(--rf-border-subtle);
+  border-radius: 10px;
+  background: var(--rf-surface-alt);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12.5px;
+  line-height: 1.8;
+  white-space: pre-wrap;
+  word-break: break-word;
 }

@@ -2,6 +2,7 @@
 import { App as AntdApp } from "antd";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { t } from "../i18n";
 import type { JobMatchBatchOut, JobMatchBackgroundTask } from "../types";
 import JobMatchBatchPanel from "./JobMatchBatchPanel";
 
@@ -27,6 +28,8 @@ const BATCH: JobMatchBatchOut = {
   completed_count: 2,
   failed_count: 0,
   model: "demo-model",
+  mode: "match",
+  comparison: null,
   created_at: "2026-09-29T08:00:00",
   updated_at: "2026-09-29T08:00:00",
   items: [
@@ -120,7 +123,7 @@ describe("JobMatchBatchPanel", () => {
     renderPanel();
 
     // 设置视图：不再一点击入口就开跑——同步批量端点（会撞超时）也不该被调用。
-    expect(await screen.findByText(/将为 2 个勾选的岗位逐一分析适配度/)).toBeInTheDocument();
+    expect(await screen.findByText(/将为 2 个勾选的岗位逐一分析匹配度/)).toBeInTheDocument();
     expect(apiMocks.startJobMatchBatchTask).not.toHaveBeenCalled();
 
     fireEvent.click(screen.getByRole("button", { name: /开始分析/ }));
@@ -129,11 +132,12 @@ describe("JobMatchBatchPanel", () => {
       expect(apiMocks.startJobMatchBatchTask).toHaveBeenCalledWith({
         job_ids: [2, 1],
         force: false,
+        mode: "match",
       }),
     );
     expect(backgroundMocks.watchJobMatchBatchTask).toHaveBeenCalledWith(
       expect.objectContaining({ task_id: "background-task-1" }),
-      "岗位适配度分析（2 个岗位）",
+      "岗位匹配度分析（2 个岗位）",
     );
     // 任务创建后面板进入进度视图（进度来自后台任务注册表，见下一个用例）。
   });
@@ -142,7 +146,7 @@ describe("JobMatchBatchPanel", () => {
     tasksHookMocks.useJobMatchBackgroundTasks.mockReturnValue([
       {
         id: "background-task-1",
-        label: "岗位适配度分析（2 个岗位）",
+        label: "岗位匹配度分析（2 个岗位）",
         status: "running",
         requestedCount: 2,
         completedCount: 1,
@@ -177,7 +181,7 @@ describe("JobMatchBatchPanel", () => {
     tasksHookMocks.useJobMatchBackgroundTasks.mockReturnValue([
       {
         id: "background-task-1",
-        label: "岗位适配度分析（2 个岗位）",
+        label: "岗位匹配度分析（2 个岗位）",
         status: "running",
         requestedCount: 2,
         completedCount: 1,
@@ -230,5 +234,28 @@ describe("JobMatchBatchPanel", () => {
     // JobMatchBatchPanel 的 footer 注释），所以此刻页面上只有弹卡这一颗。
     const closeButtons = screen.getAllByRole("button", { name: /关\s*闭/ });
     expect(closeButtons).toHaveLength(1);
+  });
+
+  it("compare 模式：标题与按钮改成横向对比，创建的任务带 mode=compare", async () => {
+    renderPanel({ mode: "compare" });
+
+    expect(
+      await screen.findByText(t("jobMatchBatch.setup.title.compare", { count: 2 })),
+    ).toBeInTheDocument();
+    expect(screen.getByText(t("jobMatchBatch.title.compare"))).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /开始对比/ }));
+
+    await waitFor(() =>
+      expect(apiMocks.startJobMatchBatchTask).toHaveBeenCalledWith({
+        job_ids: [2, 1],
+        force: false,
+        mode: "compare",
+      }),
+    );
+    expect(backgroundMocks.watchJobMatchBatchTask).toHaveBeenCalledWith(
+      expect.objectContaining({ task_id: "background-task-1" }),
+      "岗位横向对比（2 个岗位）",
+    );
   });
 });

@@ -16,7 +16,8 @@ from fpdf import FPDF
 from fpdf.enums import XPos, YPos
 
 from ...schemas.resume import ResumeContent
-from ..resume.profile_field_lines import profile_field_lines
+from ..resume.profile_field_lines import profile_field_rows
+from ..resume.resume_field_layout import resolve_field_layout
 from ..resume.resume_labels import (
     DEFAULT_RESUME_LANGUAGE,
     field_labels,
@@ -114,6 +115,8 @@ def _draw_resume(
     labels = section_titles(language)
     fields = field_labels(language)
     sep = list_separator(language)
+    # W4：条目字段排版域（空字典 = 默认逐字段一行，四个渲染器共用同一份解析）。
+    field_layout = resolve_field_layout(format_config)
     # W07：角色/对象覆盖的唯一解析结果（四域入口见 RenderOverrides）。None = 默认路径。
     style = overrides.style if overrides is not None else None
     pagination = overrides.pagination if overrides is not None else PaginationPlan()
@@ -203,7 +206,7 @@ def _draw_resume(
             if edu.courses:
                 pdf.meta_line(f"{fields['courses']}：{sep.join(edu.courses)}", base, style=role_style("meta", edu.id))
             pdf.bullets(edu.achievements, base, style=role_style("body", edu.id), section="education", object_id=edu.id, split_ok=pagination.entry(edu.id).allow_split)
-            draw_profile_meta(pdf, edu, "education", base=base, fields=fields, style=role_style("meta", edu.id))
+            draw_profile_meta(pdf, edu, "education", base=base, fields=fields, style=role_style("meta", edu.id), field_layout=field_layout)
         return True
 
     def draw_experience(pdf: _ResumePDF, leading: float) -> bool:
@@ -226,7 +229,7 @@ def _draw_resume(
             if kind_line:
                 pdf.meta_line(kind_line, base, style=role_style("meta", exp.id))
             pdf.bullets(exp.description, base, style=role_style("body", exp.id), section="experience", object_id=exp.id, split_ok=pagination.entry(exp.id).allow_split)
-            draw_profile_meta(pdf, exp, "experience", base=base, fields=fields, style=role_style("meta", exp.id))
+            draw_profile_meta(pdf, exp, "experience", base=base, fields=fields, style=role_style("meta", exp.id), field_layout=field_layout)
         return True
 
     def draw_campus(pdf: _ResumePDF, leading: float) -> bool:
@@ -245,7 +248,7 @@ def _draw_resume(
                 meta_style=role_style("meta", item.id), section="campus_experience", object_id=item.id, keep_lines=pagination.entry(item.id).keep_with_next,
             )
             pdf.bullets(item.description, base, style=role_style("body", item.id), section="campus_experience", object_id=item.id, split_ok=pagination.entry(item.id).allow_split)
-            draw_profile_meta(pdf, item, "campus_experience", base=base, fields=fields, style=role_style("meta", item.id))
+            draw_profile_meta(pdf, item, "campus_experience", base=base, fields=fields, style=role_style("meta", item.id), field_layout=field_layout)
         return True
 
     def draw_projects(pdf: _ResumePDF, leading: float) -> bool:
@@ -273,7 +276,7 @@ def _draw_resume(
             project_body = role_style("body", project.id)
             pdf.bullets(project.description, base, style=project_body, section="projects", object_id=project.id, split_ok=pagination.entry(project.id).allow_split)
             pdf.bullets(project.highlights, base, style=project_body, section="projects", object_id=project.id, split_ok=pagination.entry(project.id).allow_split)
-            draw_profile_meta(pdf, project, "projects", base=base, fields=fields, style=role_style("meta", project.id))
+            draw_profile_meta(pdf, project, "projects", base=base, fields=fields, style=role_style("meta", project.id), field_layout=field_layout)
         return True
 
     def draw_skills(pdf: _ResumePDF, leading: float) -> bool:
@@ -310,7 +313,7 @@ def _draw_resume(
         pdf.section_title(labels["awards"], base, leading_gap=leading, style=role_style("section_title"), section="awards", keep_lines=pagination.section("awards").keep_with_next)
         award_lines = [_join([award.name, award.date, award.description]) for award in resume.awards]
         draw_bullets_with_profile_fields(
-            pdf, award_lines, [profile_field_lines(a, "awards", fields) for a in resume.awards],
+            pdf, award_lines, [profile_field_rows(a, "awards", fields, field_layout) for a in resume.awards],
             base=base, style=role_style("body"), section="awards",
         )
         return True
@@ -324,10 +327,12 @@ def _draw_resume(
         "experience": draw_experience,
         "campus_experience": draw_campus,
         "publications": lambda pdf, leading: draw_publications(
-            pdf, resume, base=base, leading=leading, labels=labels, language=language
+            pdf, resume, base=base, leading=leading, labels=labels, language=language,
+            field_layout=field_layout,
         ),
         "research_projects": lambda pdf, leading: draw_research_projects(
-            pdf, resume, base=base, leading=leading, labels=labels, language=language
+            pdf, resume, base=base, leading=leading, labels=labels, language=language,
+            field_layout=field_layout,
         ),
         "patents": lambda pdf, leading: draw_patents(
             pdf, resume, base=base, leading=leading, labels=labels, language=language

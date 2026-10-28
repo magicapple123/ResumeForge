@@ -28,10 +28,13 @@ export const MAX_INTERVIEW_ROUNDS = 12;
 /** 自动收尾模式：何时结束完全由 AI 判断，界面与提示词都不给出轮数范围；
  *  AUTO_FINISH_MAX_ROUNDS 只是服务端的硬性保险（防对话失控），不向用户/模型展示。 */
 export const AUTO_FINISH_MAX_ROUNDS = 12;
-/** 自动收尾模式随表单提交的 rounds_min：语义是「自动收尾的最早轮数下限」，
- *  取产品允许的最小轮数（后端校验 rounds_min ≥ MIN_INTERVIEW_ROUNDS 且 < rounds；
- *  取 MIN 时 AI 从第 3 轮起即可按表现收尾，适配大多数真实面试的节奏）。 */
-export const AUTO_ROUNDS_FLAG = MIN_INTERVIEW_ROUNDS;
+/** 自动收尾模式随表单提交的 rounds_min：语义是「自动收尾的最早轮数下限」。
+ *
+ *  取 8（而不是产品的最低下限 3）：真实面试通常要聊 8 轮以上才看得出一场对话的分量，
+ *  取下限时 AI 从第 3 轮起就被允许收尾，实测常常问 3~4 题就结束——"自动"变成了
+ *  "尽快结束"。**尽量像真实面试那样多聊几轮，只有明显聊透才收尾**；上限仍是
+ *  AUTO_FINISH_MAX_ROUNDS（必须严格大于它，后端校验 rounds_min < rounds）。 */
+export const AUTO_ROUNDS_FLAG = 8;
 
 export interface InterviewMessage {
   id: number;
@@ -70,6 +73,11 @@ export interface InterviewBrief {
   job_id: number | null;
   job_title: string;
   company: string;
+  /** 关联简历（面试官只读这份简历 + 关联岗位的 JD）；历史会话可能为 null。 */
+  resume_id: number | null;
+  resume_title: string;
+  /** 累计有效面试时长（秒）：点「准备好了」之后才开始计时、离开暂停。 */
+  duration_seconds: number;
   interview_type: InterviewType | string;
   difficulty: InterviewDifficulty | string;
   interviewer_style: InterviewerStyle | string;
@@ -92,7 +100,10 @@ export interface InterviewDetail extends InterviewBrief {
 
 export interface InterviewCreatePayload {
   title?: string;
-  job_id?: number | null;
+  /** 关联岗位（必填）：面试官只能看到这个岗位的 JD。 */
+  job_id: number;
+  /** 关联简历（必填）：面试官只能看到这份简历里的内容。 */
+  resume_id: number;
   interview_type: InterviewType;
   difficulty: InterviewDifficulty;
   interviewer_style: InterviewerStyle;
@@ -121,6 +132,10 @@ export interface InterviewQuestionItem {
   answer?: string | null;
   key_points?: string[] | null;
   sample_phrasing?: string | null;
+  /** 候选人自己写的作答（随题库历史保存，重新打开还在）。 */
+  my_answer?: string;
+  /** 自答的批改结果；没批改过就是空对象。 */
+  review?: InterviewAnswerReview | null;
 }
 
 export interface QuestionBankGroup {
@@ -169,6 +184,26 @@ export interface QuestionAnswer {
   answer: string;
   key_points: string[];
   sample_phrasing: string;
+}
+
+/** 自答的批改结果：分数 + 总评 + 亮点 / 差距 / 修改建议 + 改写示范。 */
+export interface InterviewAnswerReview {
+  question: string;
+  score: number;
+  summary: string;
+  strengths: string[];
+  gaps: string[];
+  suggestions: string[];
+  revised_answer: string;
+}
+
+export interface InterviewAnswerReviewPayload {
+  question: string;
+  my_answer: string;
+  job_id?: number | null;
+  resume_id?: number | null;
+  /** 已生成参考答案时一并带上，批改会对照"标准答法"指出差在哪。 */
+  reference_answer?: string;
 }
 
 export interface InterviewOptimizePayload {

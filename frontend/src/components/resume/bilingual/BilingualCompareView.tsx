@@ -7,6 +7,13 @@
  *
  * 事实锁字段（姓名/机构/时间/数字）**不显示采纳按钮**，只显示标记与说明——真正的拒写
  * 在服务端，这里的作用是让用户**事先**看懂为什么这条不能点。
+ *
+ * 版式：**窄栏堆叠、宽栏并排**。这块面板住在制作台左栏（默认 380px，可拖到 640px），
+ * 三列并排时每列只剩 80 多像素，中文会被逐字折行（用户 2026-11 反馈"排版有点乱"）。
+ * 所以默认是「字段名 + 操作」一行、下面中文一段、英文一段，各带一个小语种标签；
+ * 只有容器够宽（≥620px）时才切回「字段名 | 中文 | 英文 | 操作」四栏。
+ * 判定用容器查询（`styles/bilingual.css` 里的 `@container`），不用视口断点——
+ * 面板宽度由用户拖动决定，与窗口宽度不是一回事。
  */
 import { LockOutlined } from "@ant-design/icons";
 import { Button, Tag, Tooltip, Typography } from "antd";
@@ -35,13 +42,6 @@ const GROUP_LABEL_KEYS: Record<BilingualGroup, string> = {
   campus: "bilingual.compare.group.campus",
 };
 
-const CELL_STYLE = {
-  minWidth: 0,
-  whiteSpace: "pre-wrap",
-  wordBreak: "break-word",
-  fontSize: 13,
-} as const;
-
 export default function BilingualCompareView({
   pairs,
   onAdopt,
@@ -54,76 +54,87 @@ export default function BilingualCompareView({
     return <EmptyState inline description={bt("bilingual.compare.nothing")} />;
   }
 
-  // 分组标题只在组内第一行出现：按下标与上一行比较，渲染期不写任何外部变量。
-  const rows = visible.map((pair, index) => ({
-    pair,
-    showGroup: index === 0 || visible[index - 1].group !== pair.group,
-  }));
+  // 分组：同一板块的行连成一块（只保留分组标题一次），渲染期不写任何外部变量。
+  const groups: { group: BilingualGroup; rows: BilingualPair[] }[] = [];
+  for (const pair of visible) {
+    const last = groups[groups.length - 1];
+    if (last && last.group === pair.group) last.rows.push(pair);
+    else groups.push({ group: pair.group, rows: [pair] });
+  }
+
   return (
-    <div data-bilingual-compare="1">
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "minmax(96px, 140px) 1fr 1fr auto",
-          gap: "6px 12px",
-          alignItems: "start",
-        }}
-      >
-        <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-          {bt("bilingual.compare.title")}
-        </Typography.Text>
-        <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+    <div className="bilingual-compare" data-bilingual-compare="1">
+      <div className="bilingual-compare__head">
+        <span className="bilingual-compare__head-cell">{bt("bilingual.compare.title")}</span>
+        <span className="bilingual-compare__head-cell">
           {primaryLabel ?? bt("bilingual.compare.columnPrimary")}
-        </Typography.Text>
-        <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+        </span>
+        <span className="bilingual-compare__head-cell">
           {secondaryLabel ?? bt("bilingual.compare.columnSecondary")}
-        </Typography.Text>
-        <span />
-        {rows.map(({ pair, showGroup }) => (
-          <Row
-            key={pair.id}
-            pair={pair}
-            showGroup={showGroup}
-            onAdopt={pair.locked ? undefined : onAdopt}
-          />
-        ))}
+        </span>
+        <span className="bilingual-compare__head-cell" />
       </div>
+      {groups.map((group) => (
+        <section key={group.group} className="bilingual-compare__group">
+          <Typography.Text strong className="bilingual-compare__group-title">
+            {bt(GROUP_LABEL_KEYS[group.group] as Parameters<typeof bt>[0])}
+          </Typography.Text>
+          {group.rows.map((pair) => (
+            <Row
+              key={pair.id}
+              pair={pair}
+              onAdopt={pair.locked ? undefined : onAdopt}
+              primaryLabel={primaryLabel ?? bt("bilingual.compare.columnPrimary")}
+              secondaryLabel={secondaryLabel ?? bt("bilingual.compare.columnSecondary")}
+            />
+          ))}
+        </section>
+      ))}
     </div>
   );
 }
 
 function Row({
   pair,
-  showGroup,
   onAdopt,
+  primaryLabel,
+  secondaryLabel,
 }: {
   pair: BilingualPair;
-  showGroup: boolean;
   onAdopt?: (path: string) => void;
+  primaryLabel: string;
+  secondaryLabel: string;
 }) {
   useLocale();
   return (
-    <>
-      {showGroup ? (
-        <Typography.Text strong style={{ gridColumn: "1 / -1", marginTop: 6 }}>
-          {bt(GROUP_LABEL_KEYS[pair.group] as Parameters<typeof bt>[0])}
-        </Typography.Text>
-      ) : null}
-      <span style={{ display: "flex", alignItems: "center", gap: 4, minWidth: 0 }}>
-        <Typography.Text style={{ fontSize: 12 }} ellipsis>
+    <div className="bilingual-compare__row" data-pair-path={pair.path}>
+      <span className="bilingual-compare__field">
+        <Typography.Text className="bilingual-compare__field-label" ellipsis>
           {bt(pair.labelKey as Parameters<typeof bt>[0])}
         </Typography.Text>
         {pair.locked ? (
           <Tooltip title={bt("bilingual.compare.lockedHint")}>
-            <Tag icon={<LockOutlined />} color="gold" style={{ marginInlineEnd: 0 }}>
+            <Tag icon={<LockOutlined />} color="gold" className="bilingual-compare__lock">
               {bt("bilingual.compare.locked")}
             </Tag>
           </Tooltip>
         ) : null}
       </span>
-      <div style={CELL_STYLE}>{pair.primary || "-"}</div>
-      <div style={CELL_STYLE}>{pair.secondary || "-"}</div>
-      <span>
+      {/* 每个语种一个 cell：宽栏并排时是小语种标签隐藏、值占一列；窄栏堆叠时标签
+          变成值的标题（否则两段中文/英文只靠颜色区分，读起来要来回猜哪段是哪种语言）。 */}
+      <div className="bilingual-compare__cell bilingual-compare__cell--primary">
+        <span className="bilingual-compare__lang">{primaryLabel}</span>
+        <div className="bilingual-compare__value bilingual-compare__value--primary">
+          {pair.primary || "-"}
+        </div>
+      </div>
+      <div className="bilingual-compare__cell bilingual-compare__cell--secondary">
+        <span className="bilingual-compare__lang">{secondaryLabel}</span>
+        <div className="bilingual-compare__value bilingual-compare__value--secondary">
+          {pair.secondary || "-"}
+        </div>
+      </div>
+      <span className="bilingual-compare__action">
         {pair.status === "changed" && onAdopt ? (
           <Button
             size="small"
@@ -137,6 +148,6 @@ function Row({
           </Button>
         ) : null}
       </span>
-    </>
+    </div>
   );
 }

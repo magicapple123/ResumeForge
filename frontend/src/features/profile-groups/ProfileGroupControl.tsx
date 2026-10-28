@@ -8,6 +8,7 @@ import { Button, Select, Tooltip } from "antd";
 import { SettingOutlined } from "@ant-design/icons";
 import { t } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
+import { profileGroupDisplayName } from "../../utils/displayNames";
 import type { GroupBriefOut } from "./types";
 
 interface Props {
@@ -35,7 +36,7 @@ export default function ProfileGroupControl({
     const names = group.participating_keys
       .map((key) => sectionNames[key] ?? key)
       .join(t("profileGroups.summary.separator"));
-    return { value: group.group_id, label: group.name, title: names };
+    return { value: group.group_id, label: profileGroupDisplayName(group), title: names };
   });
   return (
     <div className="profile-group-control">

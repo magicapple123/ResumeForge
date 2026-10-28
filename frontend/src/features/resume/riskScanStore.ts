@@ -1,26 +1,39 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * 风险扫描的**模块级**状态机：让「关了窗口也继续扫」这件事真的有结果。
+ * 风险扫描的**模块级**状态：让「关了窗口 / 刷新页面也继续扫」这件事真的有结果。
  *
- * 为什么不能用 `useApi`：它在组件卸载时就 abort（AGENTS/交接书里的已知坑）。风险扫描
- * 可能跑十几秒，用户在等的时候会去翻别的页面——组件一卸载请求就没了，而界面上"扫描会在
- * 后台继续"这句话就成了空话。所以请求与状态放在模块级单例里，与任何组件生命周期无关。
+ * 执行已交给统一任务地基（`/ai-tasks`，kind=`resume_risk`）：本文件只回答"这份简历的风险
+ * 扫描现在是什么状态"。理由与 `features/jobs/jobAnalysisStore` 同源——"关页面还在跑吗、
+ * 刷新怎么恢复、取消能不能真停、提醒从哪个出口发"对所有 AI 入口是同一套答案。
+ *
+ * 与岗位解读的唯一实质差异：**扫描报告没有业务表**（它是即时诊断，不该入库），所以报告
+ * 随任务的 `result_ref` 回来，由 `aiTaskResultSink` 交回本文件。刷新后任务若已完成，
+ * 恢复流程会重放这次交付，于是面板一打开就是上次那份报告，不必再烧一次模型。
  *
  * 每个 `resumeId` 一个槽：
  * - `idle/error` → 面板显示说明卡（重新扫描 / 重试）；
- * - `scanning` → 面板显示进度；**离开面板时**由 `RiskScanWatcher` 用全局通知接替提示；
+ * - `scanning` → 面板显示进度；**离开面板时**由页头任务面板 / 常驻任务条接替提示；
  * - `done` → 结果 + 扫描元信息（时间/耗时/是否含模型增强）+ 签名对比。
  *
  * 快照引用必须稳定：`useSyncExternalStore` 用 `Object.is` 比较前后值，每次返回新对象会被
- * 判成"一直在变"，组件会无限重渲染（backgroundTasks 里真实踩过一次）。
+ * 判成"一直在变"，组件会无限重渲染。
  */
 import { useSyncExternalStore } from "react";
-import { ApiError } from "../../api/client";
-import { scanResumeRisks } from "../../api/resumeRisk";
 import { t } from "../../i18n";
 import type { ResumeRiskScan } from "../../types/resumeRisk";
+import {
+  attachAiTaskUi,
+  cancelAiTaskEntry,
+  startAiTask,
+  type StartedAiTask,
+} from "../../utils/aiTaskEntry";
+import { registerAiTaskResultSink } from "../../utils/aiTaskResultSink";
+import { backgroundTaskKey } from "../../utils/backgroundTasks";
 
 export type RiskScanStatus = "idle" | "scanning" | "done" | "error";
+
+/** 本文件负责的任务类型（= 后端 `ai_task.kind`）。 */
+const TASK_KIND = "resume_risk";
 
 export interface RiskScanState {
   status: RiskScanStatus;
@@ -40,13 +53,17 @@ export interface RiskScanState {
 const IDLE_STATE: RiskScanState = Object.freeze({ status: "idle" });
 
 const states = new Map<number, RiskScanState>();
-/** 每个 resumeId 当前请求的 controller：重复 start 要先把旧的 abort 掉。 */
-const controllers = new Map<number, AbortController>();
+/** 每个 resumeId 当前任务的后端 id（取消要它）。 */
+const taskIds = new Map<number, number>();
+/** 每个 resumeId 当前的"面板在看"声明。 */
+const detachers = new Map<number, () => void>();
 /** 每个 resumeId 被几个面板挂着（计数，StrictMode 双挂载也不会算错）。 */
 const attachedCounts = new Map<number, number>();
+/** 已经交付过结果的 task id（刷新恢复 + 正常轮询可能各派发一次）。 */
+const delivered = new Set<number>();
 const listeners = new Set<() => void>();
 
-/** 批量快照（给全局 watcher 用）。与 states 同步维护，但只在变化时重建数组。 */
+/** 批量快照（给需要全量视图的地方用）。与 states 同步维护，但只在变化时重建数组。 */
 let cachedEntries: RiskScanEntry[] = [];
 let entriesDirty = false;
 
@@ -87,24 +104,48 @@ export function getRiskScanEntries(): RiskScanEntry[] {
   return cachedEntries;
 }
 
-/** 这个简历的风险面板是否正被挂载（决定完成时是就地展示还是弹全局通知）。 */
+/** 这个简历的风险面板是否正被挂载（决定完成时是就地展示还是"叫住他"）。 */
 export function isRiskPanelAttached(resumeId: number): boolean {
   return (attachedCounts.get(resumeId) ?? 0) > 0;
 }
 
+/** 结果交付：成功那一次（含刷新恢复后重放的那一次）从这里回到本 store。 */
+registerAiTaskResultSink(TASK_KIND, (taskId, resultData) => {
+  if (delivered.has(taskId)) return;
+  delivered.add(taskId);
+  const raw = resultData?.resume_id;
+  const resumeId = typeof raw === "number" ? raw : Number(raw);
+  if (!Number.isInteger(resumeId) || resumeId <= 0) return;
+  const payload = resultData?.risk_scan;
+  if (!payload || typeof payload !== "object") return;
+  const previous = states.get(resumeId);
+  taskIds.delete(resumeId);
+  setState(resumeId, {
+    status: "done",
+    result: payload as unknown as ResumeRiskScan,
+    startedAt: previous?.startedAt,
+    finishedAt: Date.now(),
+    signature: previous?.signature,
+    enhance: previous?.enhance,
+  });
+});
+
 /**
- * 发起一次扫描。**重复调用只保留最新一次**：先 abort 旧请求，再建新 controller。
+ * 发起一次扫描。
  *
- * 旧请求被 abort 后仍会 reject 一个 `cancelled` 的 ApiError——那时 controller 已经不是
- * 当前的那个，回调里据此直接丢弃，避免"旧结果覆盖新结果"。
+ * **重复发起只保留最新一次**：先取消上一次的任务，否则两次扫描会并行烧模型。
+ * `enhance=false`（用户关掉模型增强）时后端只跑本地规则——任务照样走同一套地基，
+ * 用户不必因为"这次没调模型"就换一条链路。
  */
 export function startRiskScan(
   resumeId: number,
   opts: { enhance: boolean; signature?: string },
 ): void {
-  controllers.get(resumeId)?.abort();
-  const controller = new AbortController();
-  controllers.set(resumeId, controller);
+  const previousTaskId = taskIds.get(resumeId);
+  if (previousTaskId !== undefined) {
+    taskIds.delete(resumeId);
+    void cancelAiTaskEntry(backgroundTaskKey(TASK_KIND, previousTaskId));
+  }
 
   const startedAt = Date.now();
   setState(resumeId, {
@@ -114,25 +155,31 @@ export function startRiskScan(
     enhance: opts.enhance,
   });
 
-  const isCurrent = () => controllers.get(resumeId) === controller;
-  scanResumeRisks(resumeId, opts.enhance, controller.signal).then(
-    (result) => {
-      if (!isCurrent()) return;
-      controllers.delete(resumeId);
-      setState(resumeId, {
-        status: "done",
-        result,
-        startedAt,
-        finishedAt: Date.now(),
-        signature: opts.signature,
-        enhance: opts.enhance,
-      });
+  void startAiTask({
+    kind: TASK_KIND,
+    payload: { resume_id: resumeId, enhance: opts.enhance },
+    label: t("backgroundTasks.aiTask.risk.label"),
+    onFinished: (task) => {
+      // 成功不走这里（报告由 sink 交回）：这里只收两种"没有结果要交回"的终态。
+      if (task.status === "failed") {
+        const previous = states.get(resumeId);
+        setState(resumeId, {
+          status: "error",
+          error: task.error || t("backgroundTasks.risk.stateFailed"),
+          startedAt,
+          signature: previous?.signature,
+          enhance: previous?.enhance,
+        });
+      } else if (task.status === "cancelled") {
+        setState(resumeId, { status: "idle" });
+      }
+      taskIds.delete(resumeId);
+    },
+  }).then(
+    (started: StartedAiTask) => {
+      if (states.get(resumeId)?.status === "scanning") taskIds.set(resumeId, started.id);
     },
     (error: unknown) => {
-      if (!isCurrent()) return;
-      controllers.delete(resumeId);
-      // 取消不是错误：cancelRiskScan 已经把状态写成 idle，这里绝不能再写 error。
-      if (error instanceof ApiError && error.code === "cancelled") return;
       setState(resumeId, {
         status: "error",
         error: error instanceof Error ? error.message : t("backgroundTasks.risk.stateFailed"),
@@ -144,12 +191,13 @@ export function startRiskScan(
   );
 }
 
-/** 取消进行中的扫描：abort 请求并把状态退回 idle（不留 error）。 */
+/** 取消进行中的扫描：**真的**让后端任务停下（不是只把自己标成已取消）。 */
 export function cancelRiskScan(resumeId: number): void {
-  const controller = controllers.get(resumeId);
-  if (!controller) return;
-  controllers.delete(resumeId);
-  controller.abort();
+  const taskId = taskIds.get(resumeId);
+  taskIds.delete(resumeId);
+  if (taskId !== undefined) {
+    void cancelAiTaskEntry(backgroundTaskKey(TASK_KIND, taskId));
+  }
   setState(resumeId, { status: "idle" });
 }
 
@@ -161,22 +209,34 @@ export function cancelRiskScan(resumeId: number): void {
  */
 export function markRiskPanelAttached(resumeId: number): () => void {
   attachedCounts.set(resumeId, (attachedCounts.get(resumeId) ?? 0) + 1);
+  const taskId = taskIds.get(resumeId);
+  if (taskId !== undefined) {
+    detachers.get(resumeId)?.();
+    detachers.set(resumeId, attachAiTaskUi(backgroundTaskKey(TASK_KIND, taskId)));
+  }
   emit();
   let detached = false;
   return () => {
     if (detached) return;
     detached = true;
     const next = (attachedCounts.get(resumeId) ?? 1) - 1;
-    if (next > 0) attachedCounts.set(resumeId, next);
-    else attachedCounts.delete(resumeId);
+    if (next > 0) {
+      attachedCounts.set(resumeId, next);
+    } else {
+      attachedCounts.delete(resumeId);
+      detachers.get(resumeId)?.();
+      detachers.delete(resumeId);
+    }
     emit();
   };
 }
 
-/** 测试用：清空全部槽（不动订阅者）。 */
+/** 测试用：清空全部槽（不动订阅者，也不取消后端任务）。 */
 export function resetRiskScanStore(): void {
-  for (const controller of controllers.values()) controller.abort();
-  controllers.clear();
+  for (const detach of detachers.values()) detach();
+  detachers.clear();
+  taskIds.clear();
+  delivered.clear();
   states.clear();
   attachedCounts.clear();
   emit();
@@ -191,7 +251,7 @@ export function useRiskScan(resumeId: number): RiskScanState {
   );
 }
 
-/** 订阅**所有**槽（全局 watcher 用：它要把每一份简历的通知都接住）。 */
+/** 订阅**所有**槽（需要全量视图的调用方用）。 */
 export function useRiskScanEntries(): RiskScanEntry[] {
   return useSyncExternalStore(subscribeRiskScan, getRiskScanEntries, getRiskScanEntries);
 }

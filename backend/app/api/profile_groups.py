@@ -34,6 +34,7 @@ from ..schemas.profile_groups import (
 )
 from ..schemas.profile_workspace import PendingNoticeOut, WorkspaceStateOut
 from ..services.profile import group_store
+from ..services.profile.workspace_bootstrap import DEFAULT_GROUP_NAME
 
 router = APIRouter(prefix="/api/profile", tags=["profile-groups"])
 
@@ -45,6 +46,9 @@ def group_brief_out(db: Session, group: Any) -> GroupBriefOut:
         group_id=group.group_id,
         name=group.name,
         is_default=bool(group.is_default),
+        # 名字仍是内置默认名（用户没改过）→ 前端可以把它翻成当前界面语言；
+        # 改过名之后原样显示用户输入，那是数据，不是文案。
+        name_is_default=bool(group.is_default) and group.name == DEFAULT_GROUP_NAME,
         revision=group.revision,
         participating_keys=keys,
         member_count=len(keys),

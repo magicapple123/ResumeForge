@@ -109,6 +109,14 @@ export const RESUME_STEPS: GuideStep[] = [
         textKey: "userGuideFlow.resume.step1.point24.text",
       },
       {
+        leadKey: "userGuideFlow.resume.step1.point45.lead",
+        textKey: "userGuideFlow.resume.step1.point45.text",
+      },
+      {
+        leadKey: "userGuideFlow.resume.step1.point46.lead",
+        textKey: "userGuideFlow.resume.step1.point46.text",
+      },
+      {
         leadKey: "userGuideFlow.resume.step1.point25.lead",
         textKey: "userGuideFlow.resume.step1.point25.text",
       },

@@ -163,6 +163,19 @@ const bilingual = {
   "bilingual.layout.retry": "重新加载",
   "bilingual.layout.unchanged": "还没有改动",
   "bilingual.layout.templateHint": "模板在版本派生时确定，这里只调页数与字号",
+
+  // ── 创建后自动翻译（创建变体 → translate → adopt 一次跑完）──────
+  "bilingual.variant.creating": "正在创建语言版本",
+  "bilingual.variant.translating": "正在翻译…",
+  "bilingual.workspace.autoTranslate.title": "正在自动翻译这份新版本",
+  "bilingual.workspace.autoTranslate.hint":
+    "整份翻译要几十秒；完成后对侧列就是译文，姓名/机构/时间/数字保留原文",
+  "bilingual.workspace.autoTranslate.done": "已自动采纳 {count} 条译文",
+  "bilingual.workspace.autoTranslate.nothing": "没有可翻译的字段，新版本已保留，可稍后手动生成候选",
+  "bilingual.workspace.autoTranslate.failed":
+    "自动翻译没完成，新版本已保留；可稍后点「生成翻译候选」重试",
+  "bilingual.workspace.translateRejected":
+    "翻译没开始：{reason}。先去「设置 → AI 模型」确认模型配置；新版本已保留",
 } as const;
 
 export default bilingual;

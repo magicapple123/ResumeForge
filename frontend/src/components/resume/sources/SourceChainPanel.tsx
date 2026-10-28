@@ -62,15 +62,7 @@ function SourceRow({
   const link = source.blocks[0] ?? null;
   const stale = link?.status === "stale";
   return (
-    <div
-      data-source-id={source.id}
-      style={{
-        border: "1px solid var(--rf-border-subtle)",
-        borderRadius: 8,
-        padding: "8px 10px",
-        background: "var(--rf-surface-alt)",
-      }}
-    >
+    <div className="source-chain__row" data-source-id={source.id}>
       <Space size={6} wrap align="center">
         <Typography.Text strong>{source.title || source.external_ref || "-"}</Typography.Text>
         <Tag>{pt(sourceKindKey(source.kind))}</Tag>
@@ -81,15 +73,15 @@ function SourceRow({
             </Tag>
           </Tooltip>
         ) : null}
-        <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+        <Typography.Text type="secondary" className="source-chain__fingerprint">
           {pt("provenance.chain.fingerprint", {
             value: shortFingerprint(source.current_fingerprint),
           })}
         </Typography.Text>
       </Space>
       {revisionSummary(source) ? (
-        <div style={{ marginTop: 4, fontSize: 13, whiteSpace: "pre-wrap" }}>
-          <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+        <div className="source-chain__revision">
+          <Typography.Text type="secondary" className="source-chain__fingerprint">
             {pt("provenance.chain.latestColon")}
           </Typography.Text>
           {revisionSummary(source)}
@@ -130,7 +122,8 @@ export default function SourceChainPanel({
     return <LoadingBlock tip={pt("provenance.panel.title")} />;
   }
   if (objects.length === 0) {
-    return <EmptyState inline description={pt("provenance.chain.empty")} />;
+    // 未选中内容：只说一句"先选一条"，不再和"未关联"叠成两句空话。
+    return <EmptyState inline description={pt("provenance.chain.selectFirst")} />;
   }
 
   const linkedObject = objects.find((item) => item.link !== null) ?? null;
@@ -138,16 +131,13 @@ export default function SourceChainPanel({
   const sources = chain?.sources ?? [];
 
   return (
-    <div data-provenance-chain="1">
-      <Space size={8} align="center" style={{ marginBottom: 8 }} wrap>
-        <Typography.Text strong>{pt("provenance.panel.title")}</Typography.Text>
-        <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-          {pt("provenance.panel.hint")}
-        </Typography.Text>
+    <div className="source-chain" data-provenance-chain="1">
+      <Space size={8} align="center" className="source-chain__head" wrap>
+        <Typography.Text strong>{pt("provenance.chain.heading")}</Typography.Text>
       </Space>
 
       {sources.length === 0 ? (
-        <Space orientation="vertical" size={6} style={{ width: "100%" }}>
+        <Space orientation="vertical" size={6} className="source-chain__body">
           <Alert
             type="info"
             showIcon
@@ -166,13 +156,13 @@ export default function SourceChainPanel({
           ) : null}
         </Space>
       ) : (
-        <Space orientation="vertical" size={8} style={{ width: "100%" }}>
-          <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+        <Space orientation="vertical" size={8} className="source-chain__body">
+          <Typography.Text type="secondary" className="source-chain__count">
             {pt("provenance.linked", { count: sources.length })}
           </Typography.Text>
           {currentText ? (
-            <div style={{ fontSize: 13, whiteSpace: "pre-wrap" }}>
-              <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+            <div className="source-chain__current">
+              <Typography.Text type="secondary" className="source-chain__fingerprint">
                 {pt("provenance.chain.currentTextColon")}
               </Typography.Text>
               {currentText}

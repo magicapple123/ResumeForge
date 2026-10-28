@@ -124,7 +124,8 @@ function renderManager(onChanged = vi.fn().mockResolvedValue(undefined), editing
 }
 
 function openSectionsView() {
-  fireEvent.click(findButton(t("profileGroups.manager.sectionsTab")));
+  // 视图切换已从底部按钮改成顶部页签（用户 2026-10-28 要求去掉底部那排按钮）。
+  fireEvent.click(screen.getByRole("tab", { name: t("profileGroups.manager.sectionsTab") }));
 }
 
 function sectionRow(name: string): HTMLElement {
@@ -261,6 +262,26 @@ describe("ProfileGroupManagerModal", () => {
     openSectionsView();
     expect(screen.getByText(t("profileLibrary.sectionSettings.customTitle"))).toBeInTheDocument();
     expect(screen.getByText(t("profileLibrary.sectionSettings.builtinHint"))).toBeInTheDocument();
+  });
+
+  it("视图切换只在顶部页签：底部不再有「板块与字段 / 关闭」按钮", () => {
+    renderManager();
+    // 导航只有页签，关闭只有右上角 ×；底部那排按钮已在 2026-10-28 移除。
+    expect(
+      screen.getByRole("tab", { name: t("profileGroups.manager.groupsTab") }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("tab", { name: t("profileGroups.manager.sectionsTab") }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: t("profileGroups.manager.close") }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: t("profileGroups.manager.sectionsTab") }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: t("profileGroups.manager.groupsTab") }),
+    ).not.toBeInTheDocument();
   });
 
   it("大字段行开关写当前组参与清单；基本信息开关禁用", async () => {

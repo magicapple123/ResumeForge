@@ -28,7 +28,7 @@ const userGuideFlow = {
     "For when the direction is not settled yet: it is not tied to a Job — the entry is “New Resume” in this page's header (titled “Write a general Resume from scratch”), pre-filled from the Current Plan; tabs, tab names and visible fields are frozen from the Plan at creation, so later Plan changes do not affect this Resume. Another window changing the Profile or switching Plan refreshes it automatically; unsaved changes trigger a keep-or-overwrite question first. Saving writes only this Resume and leaves the Profile alone.",
   "userGuideFlow.resume.step1.point5.lead": "Fill from the Profile",
   "userGuideFlow.resume.step1.point5.text":
-    "When writing a Resume yourself, every entry has “Fill this entry from Profile”: pick one and click “Fill” to fill only the empty fields of the current entry; candidates already used in another entry are marked “In another entry”, the entry itself is marked “This entry”, and both are disabled — nothing is duplicated or overwritten. Candidates follow the Current Plan and refresh after Profile changes or a Plan switch.",
+    "When writing a Resume yourself, every entry (including custom sections) has “Fill this entry from Profile”: pick one and click “Fill” to fill only the empty fields of the current entry; candidates already used in another entry are marked “In another entry”, the entry itself is marked “This entry”, and both are disabled — nothing is duplicated or overwritten. Candidates follow the Current Plan and refresh after Profile changes or a Plan switch.",
   "userGuideFlow.resume.step1.point6.lead": "Generation runs in the background",
   "userGuideFlow.resume.step1.point6.text":
     "The dialog shows a stage bar — “Organize material → Select material → Call the model → Validate and repair → Done” — and a live “N characters received” count. There is no percentage, because the model emits text token by token and the total length is unknown.",
@@ -85,7 +85,13 @@ const userGuideFlow = {
     "“History” in the Workbench's left column undoes or redoes step by step: content, typography and structural actions each record a step (consecutive typing is merged into one); clicking a step shows the summary at that point, and the actual rollback is “Undo”.",
   "userGuideFlow.resume.step1.point24.lead": "Local typography",
   "userGuideFlow.resume.step1.point24.text":
-    "“Local typography” in the Workbench's left column fine-tunes font size, color, line height and indentation for six paragraph kinds; properties you never set follow the template and can each be reset to inherit again. With content selected you can apply one of five fixed text levels (“Heading 1 / Heading 2 / Heading 3 / Body / Secondary note”, multi-select supported, restoring inheritance supported); outline entries can be multi-selected and applied in bulk, the format painter copies one entry's typography to another, and selected body text can use the italic and link buttons.",
+    "“Local typography” in the Workbench's left column fine-tunes font size, color, line height and indentation for six paragraph kinds; properties you never set follow the template and can each be reset to inherit again. The format painter copies one entry's typography to another, and selected body text can use the italic and link buttons.",
+  "userGuideFlow.resume.step1.point45.lead": "Text levels",
+  "userGuideFlow.resume.step1.point45.text":
+    "With content selected you can apply one of five fixed text levels (“Heading 1 / Heading 2 / Heading 3 / Body / Secondary note”); multi-select is supported and applied levels can be reset to follow the template. Outline entries can also be multi-selected and styled in bulk.",
+  "userGuideFlow.resume.step1.point46.lead": "Entry field layout",
+  "userGuideFlow.resume.step1.point46.text":
+    "Text levels can also be applied by scope (whole entry / entry title / body / note); “Entry field layout” under Typography parameters tunes fields individually, and supplemental fields can flow into 1–3 columns.",
   "userGuideFlow.resume.step1.point25.lead": "Pagination",
   "userGuideFlow.resume.step1.point25.text":
     "“Pagination” in the Workbench's left column can set “start on a new page” per section and repeat name and page number on continuation pages; page thumbnails show the real page count and how full the last page is, and PDF/Word avoid orphaned headings or bullets; drafts do not show real pagination, so switch to Exact or check on export. The section pagination mode can be switched for the whole Resume between natural flow and a new page per section; inserted breaks are visible and can be reset to natural pagination in one click.",

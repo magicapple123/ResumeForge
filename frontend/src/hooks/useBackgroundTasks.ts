@@ -12,9 +12,14 @@ export function useBackgroundTasks(): BackgroundTask[] {
   return useSyncExternalStore(subscribeBackgroundTasks, getBackgroundTasks, getBackgroundTasks);
 }
 
-/** 只看某一个任务；不在了（完成/取消）返回 undefined。 */
-export function useBackgroundTask(id: number | null): BackgroundTask | undefined {
+/**
+ * 只看某一个任务；不在了（完成/取消）返回 undefined。
+ *
+ * 参数是登记表主键（`backgroundTasks.types.backgroundTaskKey`），**不是**数字 id：
+ * 简历任务与通用 AI 任务各有自己的 id 序列，数字会撞。
+ */
+export function useBackgroundTask(key: string | null): BackgroundTask | undefined {
   const tasks = useBackgroundTasks();
-  if (id === null) return undefined;
-  return tasks.find((task) => task.id === id);
+  if (key === null) return undefined;
+  return tasks.find((task) => task.key === key);
 }

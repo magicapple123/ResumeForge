@@ -153,9 +153,9 @@ const userGuide = {
   "userGuide.workflow.step1.point13.lead": "匹配度分析",
   "userGuide.workflow.step1.point13.text":
     "岗位详情里的「匹配度分析」读取你的资料与简历，给出「已匹配 / 表达缺口 / 证据不足 / 真实缺口 / 待确认」五类结论与 0–100 的参考分（详见下一条）；与只读招聘原文的「岗位需求解读」不同。",
-  "userGuide.workflow.step1.point14.lead": "批量分析",
+  "userGuide.workflow.step1.point14.lead": "AI 对比选岗",
   "userGuide.workflow.step1.point14.text":
-    "岗位广场点「选择」勾选多个岗位，再点「AI 分析适配度」；可从下拉菜单选择后台运行，结果按参考分排序并保存到「分析记录」中回看。",
+    "岗位广场点「选择」勾选 2–12 个岗位，再点「AI 对比选岗」：先逐个核对匹配情况，再横向排出适合程度并解释原因；后台运行，结果保存到「分析记录」中回看。多选态的「批量操作」下拉还能逐个生成简历、解读岗位、做匹配度分析、入队、导出或删除。",
   "userGuide.workflow.step1.point15.lead": "匹配参考分",
   "userGuide.workflow.step1.point15.text":
     "另有 0–100 的参考分与五个分项，只帮你感知差多少，**不参与投递准入**，并带免责说明。",

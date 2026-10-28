@@ -47,12 +47,14 @@
 /* 参数栏与内容栏的宽度来自自定义属性；预览栏吃掉剩下的全部（折叠态与只读态也一样：
    中栏不渲染时它自动变宽，不需要另写一套列宽规则）。
    2026-10-25 起两栏都可拖（用户："第一列也支持调整宽度"）：默认值与上下限在
-   `useWorkbenchColumns` 里，CSS 只负责把两个变量接到宽度上。 */
+   `useWorkbenchColumns` 里，CSS 只负责把两个变量接到宽度上。
+   2026-10-29：分组改成轻卡片后，容器间距 18 → 14（页签条 / 文档模式开关 / 卡片之间
+   都落在这个 gap 上；卡片自己已有边框与内边距，再留 18 会显得空）。 */
 .resume-wb-col-params {
   display: flex;
   flex: 0 0 auto;
   flex-direction: column;
-  gap: 18px;
+  gap: 14px;
   width: var(--resume-wb-params);
   padding: 20px;
   background: var(--rf-surface);
@@ -69,9 +71,17 @@
   background: var(--rf-surface);
 }
 
-/* 画布自己控制内边距与滚动，所以这一栏不设 overflow-y（否则会出现两条滚动条）。 */
+/* 画布自己控制内边距与滚动，所以这一栏不设 overflow-y（否则会出现两条滚动条）。
+   这一栏必须是 **flex 列**：横幅（分页报告 / 溢出提示）先占它需要的高度，画布再吃剩下的。
+   2026-10-29 之前这里是普通块级流，而 `.resume-wb-canvas { height: 100% }` 是相对**整栏**
+   高度算的，于是「画布 = 整栏」+「横幅 52px」叠起来比栏高多 52px，被 `overflow: hidden`
+   裁掉——裁掉的正好是画布最底部那条缩放条（用户反馈"制作台下方还是没有缩放行"）。
+   画布自身改由 `flex: 1 1 auto` 撑满剩余高度（见 `workbench-canvas.css`）。 */
 .resume-wb-col-canvas {
+  display: flex;
   flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
   overflow: hidden;
   border-right: 0;
 }
@@ -119,34 +129,55 @@ body.is-slider-dragging iframe {
 }
 
 /* ===== 左栏分组 ===== */
+/* 2026-10-29 用户反馈「左边各个功能之间的区分不是很明显」：原先分组标题是一行 12px
+   secondary 色的纯文本，六个分组摞起来像一段连续文字（「条目字段排版／分页／格式支持」
+   几乎糊成一片）。现在每个分组是一张**轻卡片**——细边框 + 控制圆角 + 10/12 内边距 +
+   与左栏同色的底（边框承担"这是一块独立功能"的唯一职责，不叠第二层底色）。
+   分组之间 14px（左栏容器的 gap），卡片内部 12px。 */
 .resume-wb-group {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
   min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--rf-border-subtle);
+  border-radius: var(--rf-radius-control);
+  background: var(--rf-surface);
 }
 
-/* 折叠标题：一行文字 + 箭头，不给它铺满整行（铺满会像一条分隔条，反而不像按钮）。 */
+/* 折叠标题：整行可点（32px 命中高度），文字 13px 正文色 + 600 字重，箭头靠右。
+   收起的卡片就只剩这一行——高度与展开态的卡片头一致，折叠/展开不会跳动。 */
 .resume-wb-group-title.ant-btn {
-  align-self: flex-start;
-  height: 24px;
-  padding: 0 6px 0 0;
-  color: var(--rf-text-secondary);
-  font-size: 12px;
+  display: flex;
+  align-self: stretch;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  height: 32px;
+  padding: 0 6px;
+  border-radius: var(--rf-radius-control);
+  color: var(--rf-text-body);
+  font-size: 13px;
 }
 
+/* antd-override: 私有形态 —— 分组标题是"整行可点的卡片头"，hover 铺满一行；
+   .ant-btn 的默认 hover 底色是浅灰实心块，权重不够压住，故用 !important。 */
 .resume-wb-group-title.ant-btn:hover {
   color: var(--rf-text-body) !important;
   background: var(--rf-surface-alt) !important;
 }
 
 .resume-wb-group-label {
+  flex: 1 1 auto;
+  min-width: 0;
   font-weight: 600;
+  text-align: left;
 }
 
 /* 展开 / 收起的唯一视觉状态：箭头翻转。文字保持不变，用户不用重读一遍标签。 */
 .resume-wb-group-chevron {
-  margin-left: 4px;
+  flex: 0 0 auto;
+  margin-left: 8px;
   font-size: 10px;
   transition: transform 0.15s ease;
 }

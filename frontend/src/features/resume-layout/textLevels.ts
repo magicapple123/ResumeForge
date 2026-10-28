@@ -32,8 +32,16 @@ import type { MessageKey } from "../../i18n";
 import type { ResumeFormatConfig } from "../../types/resumeFormat";
 import type { StylePropKey } from "../../utils/resumeStyleParams";
 import { isStylePropSet, readStylePropValue, styleIsEmpty } from "../../utils/resumeStyleParams";
+import { ROLE_STYLE_PROPS, type ResumeRoleKey } from "./styleCatalog";
 import type { ResumeRoleStyle, ResumeStyleDomains } from "./styleOverrides";
-import { readStyleDomains, withObjectProps, writeStyleDomains } from "./styleOverrides";
+import {
+  objectRoleKey,
+  readObjectRoleStyle,
+  readStyleDomains,
+  withObjectProps,
+  withObjectRoleProps,
+  writeStyleDomains,
+} from "./styleOverrides";
 
 /** 五个固定级别的 id（与界面顺序、词条键一一对应；落库时不出现这些字符串）。 */
 export const TEXT_LEVELS = ["heading1", "heading2", "heading3", "body", "caption"] as const;
@@ -56,6 +64,93 @@ export const TEXT_LEVEL_LABELS: Record<TextLevelId, MessageKey> = {
   body: "typography.level.body",
   caption: "typography.level.caption",
 };
+
+/**
+ * 「作用范围」的界面取值（W3）：`object` = 整个条目（既有行为），其余是段落角色。
+ *
+ * 只开放条目内部实际存在的三个角色：条目标题 / 正文 / 说明。name、section_title、
+ * emphasis 不在条目子树里，选它们只会写出一条永远匹配不到的覆盖。
+ */
+export type TextLevelScope = "object" | "entry_title" | "body" | "meta";
+
+export const TEXT_LEVEL_SCOPES: readonly TextLevelScope[] = [
+  "object",
+  "entry_title",
+  "body",
+  "meta",
+];
+
+export const TEXT_LEVEL_SCOPE_LABELS: Record<TextLevelScope, MessageKey> = {
+  object: "typography.level.scope.object",
+  entry_title: "typography.level.scope.entry_title",
+  body: "typography.level.scope.body",
+  meta: "typography.level.scope.meta",
+};
+
+/** 作用范围 → 后端角色；`null` = 整个条目（写 `objects` 域）。 */
+export function textLevelScopeRole(scope: TextLevelScope): ResumeRoleKey | null {
+  return scope === "object" ? null : scope;
+}
+
+/**
+ * 纸面字段（`data-resume-path` 的**叶子段**）→ 作用范围。
+ *
+ * 为什么要这张表：用户点纸面上的"上海财经大学"（`education.0.school`）时，他要调的是
+ * **条目标题**的字号，而不是整条——面板默认停在"整个条目"等于让他每次再手动点一次
+ * 范围（2026-10-29 反馈"作用范围没有随我选择的字段改变"）。
+ *
+ * 叶子名来自后端模板真实输出的 `data-resume-path`（`rg 'data-resume-path' templates/`
+ * 可核对），不是猜的：条目身份字段（学校/专业/公司/职位）落在 `entry_title`，
+ * 时间与学籍类（起止、GPA、排名、院系、导师、形式、类型）落在 `meta`（"说明"），
+ * 列表型正文（课程 / 成果 / 要点）落在 `body`。表里没有的（个人信息标量、板块标题）
+ * 一律回落到"整个条目"——它们本来就不在条目子树里，给一个更窄的范围只会写出空覆盖。
+ */
+const FIELD_PATH_SCOPE: Record<string, TextLevelScope> = {
+  // 条目标题：这一行的主角（学校 / 公司 / 项目名 / 奖项名 + 专业 / 职位）
+  school: "entry_title",
+  major: "entry_title",
+  degree: "entry_title",
+  company: "entry_title",
+  role: "entry_title",
+  project_name: "entry_title",
+  award: "entry_title",
+  title: "entry_title",
+  // 说明：标题行右侧与下方的时间、学籍、量化信息
+  start_date: "meta",
+  end_date: "meta",
+  gpa: "meta",
+  rank: "meta",
+  study_form: "meta",
+  degree_type: "meta",
+  department: "meta",
+  advisor: "meta",
+  research_direction: "meta",
+  experience_kind: "meta",
+  // 正文：条目里的列表型内容
+  achievements: "body",
+  courses: "body",
+  description: "body",
+  highlights: "body",
+  bullets: "body",
+  summary: "body",
+};
+
+/** 从纸面路径推默认作用范围；推不出来就是"整个条目"（既有行为）。 */
+export function scopeForFieldPath(path: string | null | undefined): TextLevelScope {
+  if (!path) return "object";
+  const leaf =
+    path
+      .split(".")
+      .filter((part) => part.length > 0 && !/^\d+$/.test(part))
+      .pop() ?? "";
+  return FIELD_PATH_SCOPE[leaf] ?? "object";
+}
+
+/** 某个作用范围下级别实际管理的属性：整条目 = 四项；字段范围 = 该角色允许的交集。 */
+export function textLevelPropsForScope(role: ResumeRoleKey | null): readonly StylePropKey[] {
+  if (role === null) return TEXT_LEVEL_PROPS;
+  return TEXT_LEVEL_PROPS.filter((prop) => ROLE_STYLE_PROPS[role].includes(prop));
+}
 
 /** 一级别 = 一组显式覆盖（值必须落在 `resumeStyleParams` 的区间内，写入时会再夹紧一次）。 */
 interface TextLevelSpec {
@@ -101,17 +196,35 @@ export type TextLevelState =
   | { kind: "custom" }
   | { kind: "mixed" };
 
-/** 单个对象上的级别状态（读宽容：非法值已在 `readStyleDomains` 里被丢弃）。 */
+/**
+ * 级别补丁按作用范围收窄：整条目 = 原样四项；字段范围只保留该角色允许的属性
+ * （meta 只有字号/加粗，段距写进去也会被后端丢弃）。
+ */
+function levelPatchForScope(level: TextLevelId, role: ResumeRoleKey | null): ResumeRoleStyle {
+  const patch = textLevelPatch(level);
+  if (role === null) return patch;
+  const narrowed: ResumeRoleStyle = {};
+  for (const prop of textLevelPropsForScope(role)) {
+    const value = patch[prop];
+    if (value !== undefined) narrowed[prop] = value;
+  }
+  return narrowed;
+}
+
+/** 单个对象（可选：某个角色）上的级别状态（读宽容：非法值已在 readStyleDomains 里丢弃）。 */
 export function readObjectTextLevel(
   domains: ResumeStyleDomains,
   objectId: string,
+  role: ResumeRoleKey | null = null,
 ): Exclude<TextLevelState, { kind: "mixed" }> {
-  const style = domains.objects[objectId];
+  const style =
+    role === null ? domains.objects[objectId] : readObjectRoleStyle(domains, objectId, role);
   if (!style) return { kind: "inherit" };
-  const hasLevelProp = TEXT_LEVEL_PROPS.some((prop) => isStylePropSet(style, prop));
+  const props = textLevelPropsForScope(role);
+  const hasLevelProp = props.some((prop) => isStylePropSet(style, prop));
   if (!hasLevelProp) return { kind: "inherit" };
   const matched = TEXT_LEVEL_SPECS.find((spec) =>
-    TEXT_LEVEL_PROPS.every((prop) => {
+    props.every((prop) => {
       const stored = readStylePropValue(prop, style[prop]);
       return stored !== null && stored === spec.patch[prop];
     }),
@@ -119,15 +232,16 @@ export function readObjectTextLevel(
   return matched ? { kind: "level", level: matched.id } : { kind: "custom" };
 }
 
-/** 一组目标的共同级别状态：全一致给那一档，否则 `mixed`；空集合按跟随模板处理。 */
+/** 一组目标的共同级别状态：全一致给那一档，否则 mixed；空集合按跟随模板处理。 */
 export function readTextLevelState(
   domains: ResumeStyleDomains,
   objectIds: readonly string[],
+  role: ResumeRoleKey | null = null,
 ): TextLevelState {
   if (objectIds.length === 0) return { kind: "inherit" };
   let first: TextLevelState | null = null;
   for (const objectId of objectIds) {
-    const state = readObjectTextLevel(domains, objectId);
+    const state = readObjectTextLevel(domains, objectId, role);
     if (first === null) {
       first = state;
       continue;
@@ -146,7 +260,7 @@ export function textLevelStateKey(state: TextLevelState): string {
 }
 
 /**
- * 应用一个级别：一次写入全部目标（多选批量 = 一次 `onChange` = 历史一步）。
+ * 应用一个级别（整个条目；既有行为，与 W3 前逐字节一致）。
  *
  * 逐条保留目标自己的其它覆盖（颜色等）；级别管理的四项被级别定义整体替换。
  */
@@ -155,31 +269,63 @@ export function applyTextLevel(
   objectIds: readonly string[],
   level: TextLevelId,
 ): ResumeFormatConfig {
-  if (objectIds.length === 0) return (config ?? {}) as ResumeFormatConfig;
-  return withObjectProps(config, objectIds, textLevelPatch(level));
+  return applyTextLevelToScope(config, objectIds, null, level);
 }
 
 /**
- * 恢复跟随模板：只删级别管理的四项（保留颜色/缩进等手动取舍），空对象条目整条删掉。
+ * 按作用范围应用级别（W3）：role=null 写 objects 域（既有行为）；否则只写
+ * object_roles["<id>:<role>"]，并收窄成该角色允许的属性。
  *
- * 与"写回默认值"不同：删键才是继承（契约 R3）；写 0/1/false 会把"跟随模板"固化成覆盖。
+ * 一次调用只提交一次 onChange（多选批量 = 历史一步）；不适用该角色的对象自然无变化。
  */
+export function applyTextLevelToScope(
+  config: ResumeFormatConfig | undefined | null,
+  objectIds: readonly string[],
+  role: ResumeRoleKey | null,
+  level: TextLevelId,
+): ResumeFormatConfig {
+  if (objectIds.length === 0) return (config ?? {}) as ResumeFormatConfig;
+  const patch = levelPatchForScope(level, role);
+  if (role === null) return withObjectProps(config, objectIds, patch);
+  return withObjectRoleProps(config, objectIds, role, patch);
+}
+
+/** 恢复跟随模板（整个条目；既有行为）。 */
 export function clearTextLevel(
   config: ResumeFormatConfig | undefined | null,
   objectIds: readonly string[],
 ): ResumeFormatConfig {
+  return clearTextLevelScope(config, objectIds, null);
+}
+
+/**
+ * 按作用范围恢复跟随模板（W3）：只删该范围下级别管理的属性。
+ *
+ * role=null 与既有 clearTextLevel 逐字节相同（删 objects 里的四项，保留其它局部调整，
+ * 空条目整条删掉）；字段范围只删 object_roles 里该角色允许的级别属性，不碰整条目级别。
+ * 删键才是继承（契约 R3）；没有可清的目标时返回原配置引用（宿主据此不写库）。
+ */
+export function clearTextLevelScope(
+  config: ResumeFormatConfig | undefined | null,
+  objectIds: readonly string[],
+  role: ResumeRoleKey | null,
+): ResumeFormatConfig {
   const domains = readStyleDomains(config);
-  const objects = { ...domains.objects };
+  const props = textLevelPropsForScope(role);
+  const entries: Record<string, ResumeRoleStyle> =
+    role === null ? { ...domains.objects } : { ...domains.objectRoles };
   let changed = false;
   for (const objectId of objectIds) {
-    const style = objects[objectId];
+    const key = role === null ? objectId : objectRoleKey(objectId, role);
+    const style = entries[key];
     if (!style) continue;
     const next: ResumeRoleStyle = { ...style };
-    for (const prop of TEXT_LEVEL_PROPS) delete next[prop];
-    if (styleIsEmpty(next)) delete objects[objectId];
-    else objects[objectId] = next;
+    for (const prop of props) delete next[prop];
+    if (styleIsEmpty(next)) delete entries[key];
+    else entries[key] = next;
     changed = true;
   }
   if (!changed) return (config ?? {}) as ResumeFormatConfig;
-  return writeStyleDomains(config, { roles: domains.roles, objects });
+  if (role === null) return writeStyleDomains(config, { ...domains, objects: entries });
+  return writeStyleDomains(config, { ...domains, objectRoles: entries });
 }

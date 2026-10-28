@@ -78,6 +78,29 @@ export function useResumeSearchSelectForJob(jobId: number | null) {
   });
 }
 
+/**
+ * 简历远程搜索（限定某岗位 + 通用，0066）：**模拟面试的「关联简历」**用。
+ *
+ * 与 `useResumeSearchSelectForJob` 只差一个 `include_general`：候选人可能专门为这个岗位
+ * 写了一份简历，也可能用一份通用简历，两种都该出现在可选范围里——但**别的岗位**的简历
+ * 不该出现（面试官只会看到你提交的那份）。
+ */
+export function useResumeSearchSelectForJobOrGeneral(jobId: number | null) {
+  return useRemoteSearchSelect({
+    fetchOptions: (keyword) =>
+      listResumes({
+        job_id: jobId ?? undefined,
+        include_general: true,
+        keyword,
+        page_size: SELECT_PAGE_SIZE,
+      }).then((page) => page.items.map(resumeOption)),
+    fetchById: (id) =>
+      getResume(id)
+        .then(resumeOption)
+        .catch(() => null),
+  });
+}
+
 export function useTrackSearchSelect() {
   return useRemoteSearchSelect({
     fetchOptions: (keyword) =>

@@ -13,7 +13,10 @@ import { Button, Card, Form, Input, Select, Space, Typography } from "antd";
 import type { FormInstance } from "antd";
 import { useEffect } from "react";
 import type { InterviewDifficulty, InterviewType, InterviewerStyle } from "../../types";
-import { useJobSearchSelect } from "../../hooks/remoteSearchOptions";
+import {
+  useJobSearchSelect,
+  useResumeSearchSelectForJobOrGeneral,
+} from "../../hooks/remoteSearchOptions";
 import { t, type MessageKey } from "../../i18n";
 import {
   INTERVIEW_DIFFICULTY_LABEL_KEYS,
@@ -42,7 +45,10 @@ const ROUNDS_OPTIONS: { value: number | typeof AUTO_ROUNDS_OPTION; labelKey: Mes
 ];
 
 export interface SetupForm {
+  /** 关联岗位（必填）：面试官只能看到这个岗位的 JD。 */
   jobId?: number;
+  /** 关联简历（必填）：候选范围 = 该岗位关联的简历 + 通用简历（0066）。 */
+  resumeId?: number;
   interviewType: InterviewType;
   difficulty: InterviewDifficulty;
   interviewerStyle: InterviewerStyle;
@@ -69,6 +75,17 @@ export function SetupTab({
   useLocale();
   // 关联岗位下拉改为远程搜索（P0-1）：不再由页面预拉"前 100 条"当全量。
   const jobSelect = useJobSearchSelect();
+  // 关联简历（0066）：候选 = 所选岗位关联的简历 **+** 通用简历。岗位没选之前不给候选
+  // （面试官要读的就是"这份简历 + 那个岗位的 JD"，脱离岗位挑简历没有意义）。
+  const watchedJobId = Form.useWatch("jobId", form) as number | undefined;
+  const resumeSelect = useResumeSearchSelectForJobOrGeneral(watchedJobId ?? null);
+
+  // 岗位一变就重拉简历候选：上一次的候选属于上一个岗位，留着会让用户挑到不该出现的简历。
+  // hook 的 fetch 闭包跟随 jobId，`reload` 引用因此每次渲染都不同，只在 jobId 变化时执行。
+  useEffect(() => {
+    void resumeSelect.reload();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [watchedJobId]);
 
   // 深链预填的岗位按 id 回查补进候选（P0-1），否则第 101 条之后的岗位只显示 id；
   // 设定卡常驻可见，挂载时同时预拉第一页候选。
@@ -110,13 +127,41 @@ export function SetupTab({
           ...(initialJobId !== undefined ? { jobId: initialJobId } : {}),
         }}
         onFinish={(values) => void onStart(values)}
+        // 岗位变了就清掉已选简历：岗位与简历必须成对，"上一个岗位的简历"不该被带过来。
+        // 用事件而不是 effect 守卫，避免"清空 → 校验失败 → 再清空"的渲染循环。
+        onValuesChange={(changed) => {
+          if (Object.prototype.hasOwnProperty.call(changed, "jobId")) {
+            form.setFieldValue("resumeId", undefined);
+          }
+        }}
       >
         <div className="interview-setup-grid">
-          <Form.Item label={t("interviewPage.setup.jobLabel")} name="jobId">
+          <Form.Item
+            label={t("interviewPage.setup.jobLabel")}
+            name="jobId"
+            rules={[{ required: true, message: t("interviewPage.setup.jobRequired") }]}
+          >
             <Select
               allowClear
               placeholder={t("interviewPage.setup.jobPlaceholder")}
               {...jobSelect.selectProps}
+            />
+          </Form.Item>
+          <Form.Item
+            label={t("interviewPage.setup.resumeLabel")}
+            name="resumeId"
+            rules={[{ required: true, message: t("interviewPage.setup.resumeRequired") }]}
+            extra={t("interviewPage.setup.scopeHint")}
+          >
+            <Select
+              allowClear
+              disabled={watchedJobId === undefined || watchedJobId === null}
+              placeholder={
+                watchedJobId === undefined || watchedJobId === null
+                  ? t("interviewPage.setup.resumePlaceholderNoJob")
+                  : t("interviewPage.setup.resumePlaceholder")
+              }
+              {...resumeSelect.selectProps}
             />
           </Form.Item>
           <Form.Item label={t("interviewPage.setup.typeLabel")} name="interviewType">

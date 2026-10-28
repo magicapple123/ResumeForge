@@ -15,6 +15,7 @@ import {
   getBackgroundTasks,
   resetBackgroundTasks,
   restoreBackgroundTasks,
+  resumeTaskKey,
   subscribeBackgroundTasks,
   watchResumeTask,
 } from "./backgroundTasks";
@@ -33,7 +34,36 @@ vi.mock("../api/resumes", () => ({
   cancelResumeGenerateTask: apiMocks.cancelResumeGenerateTask,
 }));
 
-const notices: { title: string; modal?: boolean; kind?: string }[] = [];
+/**
+ * 通用 AI 任务端点（`/ai-tasks`）：登记表在恢复阶段会兜一次 `/active`，
+ * 所以这里必须给出替身，否则每个用例都会真的发一次请求。
+ */
+const aiMocks = vi.hoisted(() => ({
+  getAiTask: vi.fn(),
+  cancelAiTask: vi.fn(),
+  listActiveAiTasks: vi.fn(),
+}));
+
+vi.mock("../api/aiTasks", () => ({
+  getAiTask: aiMocks.getAiTask,
+  cancelAiTask: aiMocks.cancelAiTask,
+  listActiveAiTasks: aiMocks.listActiveAiTasks,
+}));
+
+/**
+ * 假宿主记录到的提醒。
+ *
+ * `hasActions` / `hasContent` 是"通知上有没有那颗跳转按钮"的代理：`notifyTaskDone` 把
+ * `deepLink` 消费成一颗按钮（卡片放 `actions`、弹窗并进 `content`），所以只要这两个之一
+ * 为真，就说明"任务完成 → 可点进结果"这条线是通的。
+ */
+const notices: {
+  title: string;
+  modal?: boolean;
+  kind?: string;
+  hasActions?: boolean;
+  hasContent?: boolean;
+}[] = [];
 
 function makeTask(overrides: Partial<ResumeGenerateTask> = {}): ResumeGenerateTask {
   return {
@@ -69,11 +99,21 @@ beforeEach(() => {
   notices.length = 0;
   apiMocks.getResumeGenerateTask.mockReset();
   apiMocks.cancelResumeGenerateTask.mockReset();
+  aiMocks.getAiTask.mockReset();
+  aiMocks.cancelAiTask.mockReset();
+  aiMocks.listActiveAiTasks.mockReset();
+  // 默认"后端没有在跑的通用任务"：恢复流程不该把别的用例的任务接进来。
+  aiMocks.listActiveAiTasks.mockResolvedValue([]);
   registerNotifyHost({
     notification: {
       // antd 6 起通知卡片的标题参数由 message 改名 title（见 utils/taskNotify.ts），
       // 假宿主按新形状记录。
-      success: (config) => notices.push({ title: String(config.title), modal: false }),
+      success: (config) =>
+        notices.push({
+          title: String(config.title),
+          modal: false,
+          hasActions: config.actions !== undefined,
+        }),
       warning: (config) =>
         notices.push({ title: String(config.title), modal: false, kind: "warning" }),
       error: (config) => notices.push({ title: String(config.title), modal: false, kind: "error" }),
@@ -82,7 +122,13 @@ beforeEach(() => {
     modal: {
       // AntD 的 modal 认 title / content（不是 message）——曾经就因为传了 message，
       // 弹窗标题与正文全空。假宿主按真实形状记录，测试才能钉住这一点。
-      info: (config) => notices.push({ title: String(config.title), modal: true, kind: "modal" }),
+      info: (config) =>
+        notices.push({
+          title: String(config.title),
+          modal: true,
+          kind: "modal",
+          hasContent: config.content !== undefined,
+        }),
     },
   });
   vi.useFakeTimers();
@@ -95,7 +141,12 @@ describe("后台任务登记表", () => {
 
     watchResumeTask(makeTask(), "生成通用简历");
     expect(getBackgroundTasks()).toEqual([
-      expect.objectContaining({ id: 7, label: "生成通用简历", message: "正在写第 1 段" }),
+      expect.objectContaining({
+        id: 7,
+        kind: "resume_generate",
+        label: "生成通用简历",
+        message: "正在写第 1 段",
+      }),
     ]);
     expect(seen.length).toBeGreaterThan(0);
     unsubscribe();
@@ -113,12 +164,26 @@ describe("后台任务登记表", () => {
     expect(getBackgroundTasks()).toEqual([]);
   });
 
+  it("完成时带上「跳到这条简历」的深链动作", async () => {
+    apiMocks.getResumeGenerateTask.mockResolvedValue(
+      makeTask({ status: "completed", resume_id: 42 }),
+    );
+    watchResumeTask(makeTask(), "生成通用简历");
+
+    await runOneTick();
+
+    // 没有界面在看 → 居中弹窗；深链被消费成正文里那颗「查看简历」按钮。
+    const notice = notices.find((item) => item.title === "简历已生成");
+    expect(notice?.modal).toBe(true);
+    expect(notice?.hasContent).toBe(true);
+  });
+
   it("用户已经离开（界面没在看）时用居中弹窗；还在看时只用卡片", async () => {
     apiMocks.getResumeGenerateTask.mockResolvedValue(
       makeTask({ status: "completed", resume_id: 1 }),
     );
     watchResumeTask(makeTask(), "生成通用简历");
-    const detach = attachTaskUi(7);
+    const detach = attachTaskUi(resumeTaskKey(7));
 
     await runOneTick();
     expect(notices.find((item) => item.title === "简历已生成")?.modal).toBe(false);
@@ -170,7 +235,7 @@ describe("后台任务登记表", () => {
     expect(notices).toEqual([]);
 
     // 「状态未知」条目给「移除」：把条目清掉，不再轮询。
-    dismissBackgroundTask(task.id);
+    dismissBackgroundTask(task.key);
     expect(getBackgroundTasks()).toEqual([]);
     expect(window.localStorage.getItem(STORAGE_KEY)).toBeNull();
   });
@@ -205,7 +270,7 @@ describe("后台任务登记表", () => {
     apiMocks.cancelResumeGenerateTask.mockRejectedValue(new ApiError("任务不存在", 404));
 
     // 抛出的中文信息会被调用方的错误提示原样展示。
-    await expect(cancelBackgroundTask(7)).rejects.toThrow("任务记录已不存在");
+    await expect(cancelBackgroundTask(resumeTaskKey(7))).rejects.toThrow("任务记录已不存在");
 
     // 条目同时被移除：取消按钮不再对一条已经不存在的任务反复 404。
     expect(getBackgroundTasks()).toEqual([]);
@@ -216,7 +281,7 @@ describe("后台任务登记表", () => {
     apiMocks.cancelResumeGenerateTask.mockResolvedValue(makeTask({ status: "cancelled" }));
     watchResumeTask(makeTask(), "生成通用简历");
 
-    await cancelBackgroundTask(7);
+    await cancelBackgroundTask(resumeTaskKey(7));
 
     expect(apiMocks.cancelResumeGenerateTask).toHaveBeenCalledWith(7);
     expect(notices.some((item) => item.title === "简历生成已取消")).toBe(true);

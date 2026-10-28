@@ -5,6 +5,7 @@ from __future__ import annotations
 
 from .resume_config_domains import DOMAIN_KEYS, HEX_COLOR_RE, domain_version, is_supported
 from .resume_contact import CONTACT_BREAKS_KEY, validate_contact_breaks
+from .resume_field_layout import validate_field_layout_domain
 from .resume_layout_overrides import (
     EXTRA_FORMAT_KEYS,
     PAGE_MARGIN_KEYS,
@@ -25,7 +26,11 @@ from .resume_layout_overrides import (
 from .resume_pagination import validate_pagination_domain
 from .resume_photo_crop import validate_photo_crop_domain
 from .resume_sections import normalized_section_order
-from .resume_style_schema import validate_objects_domain, validate_roles_domain
+from .resume_style_schema import (
+    validate_object_roles_domain,
+    validate_objects_domain,
+    validate_roles_domain,
+)
 
 # ===== 每份简历选字体（项 14）=====
 #
@@ -106,13 +111,15 @@ _HEX_COLOR_RE = HEX_COLOR_RE
 _CSS_MANUAL_KEYS: frozenset[str] = frozenset({PAGE_PADDING_KEY, *EXTRA_FORMAT_KEYS})
 
 # ===== Wave2 扩展域的分派表（契约第 1 册 §1.2，全仓库唯一扩展点）=====
-# 严格白名单：只有这四个键会被当成"域"；每个域的自有校验在各自模块里，这里只负责
+# 严格白名单：只有登记在这里的键会被当成"域"；每个域的自有校验在各自模块里，这里只负责
 # 把"合法且非空"的域写回 format_config。None = 空域/不可用域 → 键不落库（契约 R3）。
 _DOMAIN_VALIDATORS: dict[str, object] = {
     "roles": validate_roles_domain,
     "objects": validate_objects_domain,
     "pagination": validate_pagination_domain,
     "photo_crop": validate_photo_crop_domain,
+    "object_roles": validate_object_roles_domain,
+    "field_layout": validate_field_layout_domain,
 }
 
 

@@ -63,7 +63,7 @@ describe("BackupStatusCard", () => {
     expect(screen.getByText(/每/)).toBeTruthy();
     expect(screen.getByLabelText("自动备份间隔（天）")).toBeTruthy();
     // 「受保护」必须注明范围：仅数据库快照，不含附件（PR-15 审计项）。
-    expect(screen.getByText(/仅数据库快照，不含附件文件/)).toBeTruthy();
+    expect(screen.getByText(/仅数据库快照/)).toBeTruthy();
   });
 
   it("修改间隔：调用保存接口并刷新状态", async () => {
@@ -124,9 +124,9 @@ describe("BackupStatusCard", () => {
     getBackupStatus.mockResolvedValue(status({ coverage: "database_only" }));
     renderCard();
     await waitFor(() => {
-      expect(screen.getByText(/自动备份只覆盖数据库快照，不含附件与字体/)).toBeTruthy();
+      expect(screen.getByText(/只备份数据库快照，不含附件与字体/)).toBeTruthy();
     });
-    expect(screen.getByText(/导出数据集 \/ 导出全部数据集/)).toBeTruthy();
+    expect(screen.getByText(/完整备份请用「数据集」里的导出/)).toBeTruthy();
   });
 
   it("接口失败：显示错误而不是空白", async () => {

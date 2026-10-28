@@ -141,7 +141,7 @@ describe("AppHeaderContext", () => {
     ).toBeGreaterThanOrEqual(4.5);
   });
 
-  it("弹层宽度跟随触发框（与圆角框同宽）", async () => {
+  it("弹层宽度跟随触发框，但不小于 280px（名字短时也读得清条目）", async () => {
     // jsdom 里 offsetWidth 恒为 0；这里给原型装一个可配置的 getter，模拟真实布局下量到的宽度。
     Object.defineProperty(HTMLElement.prototype, "offsetWidth", {
       configurable: true,
@@ -157,8 +157,9 @@ describe("AppHeaderContext", () => {
         expect(node).not.toBeNull();
         return node!;
       });
-      expect(dropdown.style.width).toBe("220px");
-      expect(dropdown.style.maxWidth).toBe("220px");
+      // chip 实测 220（短名字）→ 弹层取最小宽度 280，否则条目会被截成「简历通…」。
+      expect(dropdown.style.width).toBe("280px");
+      expect(dropdown.style.maxWidth).toBe("280px");
     } finally {
       delete (HTMLElement.prototype as { offsetWidth?: number }).offsetWidth;
     }
@@ -280,18 +281,19 @@ describe("AppHeaderContext", () => {
   });
 
   it("当前不是示例数据集：不显示「示例」徽标，也没有「回到我的数据」", async () => {
+    // 主数据集的展示名恒为内置文案（后端拒绝改名），后端下发的 name 只作为数据存在。
     listDatasets.mockResolvedValue([
-      { id: "main", name: "我的数据", source: "本机", is_active: true },
+      { id: "main", name: "主数据", source: "本机", is_active: true },
     ]);
     getProfile.mockResolvedValue({ name: "张示例", photo: "" });
 
     renderHeader();
 
-    await waitFor(() => expect(screen.getByText("我的数据")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText("主数据")).toBeInTheDocument());
     expect(screen.queryByText("示例")).toBeNull();
 
-    fireEvent.click(screen.getByRole("button", { name: "当前数据集：我的数据" }));
-    await waitFor(() => expect(screen.getByText("我的数据（当前）")).toBeInTheDocument());
+    fireEvent.click(screen.getByRole("button", { name: "当前数据集：主数据" }));
+    await waitFor(() => expect(screen.getByText("主数据（当前）")).toBeInTheDocument());
     expect(screen.queryByText("回到我的数据")).toBeNull();
   });
 });

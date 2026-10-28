@@ -61,8 +61,12 @@ def _png(width: int = 8, height: int = 8) -> str:
 # ===== 1. 域机制 =====
 
 
-def test_domain_keys_are_the_frozen_four():
-    assert DOMAIN_KEYS == ("roles", "objects", "pagination", "photo_crop")
+def test_domain_keys_keep_the_frozen_prefix_and_include_object_roles():
+    # Wave2 的四个键顺序冻结；W3 起的新域（object_roles，以及后续批次）只能追加在末尾。
+    # 不写全量元组断言：并行批次各追加各的域，全等判断会让两边互相踩。
+    assert DOMAIN_KEYS[:4] == ("roles", "objects", "pagination", "photo_crop")
+    assert "object_roles" in DOMAIN_KEYS
+    assert DOMAIN_KEYS.index("object_roles") >= 4
     assert all(is_supported(key, 1) for key in DOMAIN_KEYS)
     assert not is_supported("roles", 2)
 
@@ -79,9 +83,12 @@ def test_validated_format_config_accepts_domains_and_drops_empty_ones():
                 "rect": {"x": 0, "y": 0, "w": 1, "h": 1},
                 "aspect": "free",
             },
+            "object_roles": {"version": 1, "exp_12345678:body": {"font_scale": 1.4}},
         }
     )
-    for key in DOMAIN_KEYS:
+    # 只断言本文件覆盖的域：其它并行批次追加的域由各自用例负责。
+    covered = ("roles", "objects", "pagination", "photo_crop", "object_roles")
+    for key in covered:
         assert key in config
     # R3：空域（只有 version / 全非法）不落库。
     empty = validated_format_config(
@@ -90,9 +97,10 @@ def test_validated_format_config_accepts_domains_and_drops_empty_ones():
             "objects": {"version": 1, "bad": {"nope": 1}},
             "pagination": {"version": 1},
             "photo_crop": {"version": 1},
+            "object_roles": {"version": 1, "bad": {"bold": True}},
         }
     )
-    assert not [key for key in DOMAIN_KEYS if key in empty]
+    assert not [key for key in covered if key in empty]
 
 
 def test_unsupported_domain_version_is_dropped_whole():

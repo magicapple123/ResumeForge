@@ -18,16 +18,17 @@ import LoadingBlock from "./common/LoadingBlock";
 import { useEffect, useState } from "react";
 import {
   deleteQuestionBank,
-  generateQuestionAnswer,
   generateQuestionBank,
   listQuestionBanks,
   saveQuestionBank,
-  updateQuestionBank,
 } from "../api/interview";
+import { useQuestionBankAnswers } from "../features/interview/useQuestionBankAnswers";
+import AbortButton from "./common/AbortButton";
+import { errorText, useAbortableRequest } from "../hooks/useAbortableRequest";
 import { useApi } from "../hooks/useApi";
 import { useBatchSelection } from "../hooks/useBatchSelection";
 import { useJobSearchSelect, useResumeSearchSelect } from "../hooks/remoteSearchOptions";
-import type { QuestionAnswer, QuestionBankOut, QuestionBankRecord } from "../types";
+import type { QuestionBankOut, QuestionBankRecord } from "../types";
 import { t } from "../i18n";
 import { useLocale } from "../i18n/i18nContext";
 import QuestionGroupCards from "./questionbank/QuestionGroupCards";
@@ -64,14 +65,14 @@ export default function QuestionBankPanel({
   }, []);
   const [jobId, setJobId] = useState<number | undefined>();
   const [resumeId, setResumeId] = useState<number | undefined>();
-  const [loading, setLoading] = useState(false);
+  // 生成题库是一次「点一下等十几秒」的请求：用统一的中止能力，面板上就有「停止」。
+  const generateRequest = useAbortableRequest();
+  const loading = generateRequest.loading;
   const [data, setData] = useState<QuestionBankOut | null>(null);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
-  // 单题参考答案：按「分组-序号」键控，展开即缓存，收起即丢弃；不落库、不自动发送。
-  const [answerMap, setAnswerMap] = useState<Record<string, QuestionAnswer>>({});
-  const [answerLoading, setAnswerLoading] = useState<string | null>(null);
-  const [answerError, setAnswerError] = useState("");
+  // 本次生成自动保存出来的记录 id：没有打开历史记录时，"我的作答"也要能落到这条记录上。
+  const [savedRecordId, setSavedRecordId] = useState<number | null>(null);
   const banks = useApi(listQuestionBanks, []);
 
   // 历史富还原：用历史记录的 groups 充当展示数据；否则用刚生成的结果。
@@ -90,62 +91,36 @@ export default function QuestionBankPanel({
   // 旧版纯文本记录（groups 为字符串）兼容：只展示提示，不崩。
   const legacyText = record && typeof record.groups === "string" ? record.groups : null;
 
-  // 打开历史记录时，若其中已持久化参考答案，预填到 answerMap，使其直接渲染出来。
-  // Compiler 规范：随 record 变化的派生回填用渲染期守卫式调整（哨兵 null 保证
-  // "挂载即带 record"的首次渲染也走一次，与原 effect 语义一致）。
-  const [prevRecordSync, setPrevRecordSync] = useState<{
-    record: QuestionBankRecord | null | undefined;
-    legacyText: string | null;
-  } | null>(null);
-  if (
-    prevRecordSync === null ||
-    prevRecordSync.record !== record ||
-    prevRecordSync.legacyText !== legacyText
-  ) {
-    setPrevRecordSync({ record, legacyText });
-    if (!record || legacyText) {
-      setAnswerMap({});
-    } else {
-      const seeded: Record<string, QuestionAnswer> = {};
-      record.groups.forEach((group) =>
-        group.questions.forEach((item, index) => {
-          if (item.answer || (item.key_points && item.key_points.length)) {
-            seeded[`${group.type}-${index}`] = {
-              question: item.question,
-              answer: item.answer ?? "",
-              key_points: item.key_points ?? [],
-              sample_phrasing: item.sample_phrasing ?? "",
-            };
-          }
-        }),
-      );
-      setAnswerMap(seeded);
-    }
+  // 换一条历史记录（或退出历史视图）时，写回目标必须换掉：旧记录的 id 不能再用来 PATCH。
+  // 参考答案 / 自答 / 批改的种回与作废由 `useQuestionBankAnswers` 按 groups 引用变化处理。
+  const [prevRecordSync, setPrevRecordSync] = useState<QuestionBankRecord | null | undefined>(
+    record,
+  );
+  if (prevRecordSync !== record) {
+    setPrevRecordSync(record);
+    setSavedRecordId(null);
   }
 
   const generate = async () => {
-    if (loading) return;
+    if (generateRequest.loading) return;
     if (!record && !jobId && !resumeId) {
       setError(t("questionBankPanel.validate.needJobOrResume"));
       setData(null);
       return;
     }
-    setLoading(true);
     setError("");
-    try {
-      const result = await generateQuestionBank({
-        job_id: jobId ?? null,
-        resume_id: resumeId ?? null,
-      });
-      setData(result);
+    const outcome = await generateRequest.run((signal) =>
+      generateQuestionBank({ job_id: jobId ?? null, resume_id: resumeId ?? null }, signal),
+    );
+    if (outcome.status === "ok") {
+      setData(outcome.data);
       // 生成完成自动保存为历史（无需用户手点保存）。
-      await autoSaveBank(result);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : t("questionBankPanel.error.generate"));
+      await autoSaveBank(outcome.data);
+    } else if (outcome.status === "error") {
+      setError(errorText(outcome.error, t("questionBankPanel.error.generate")));
       setData(null);
-    } finally {
-      setLoading(false);
     }
+    // aborted：用户自己按了停止——不清空上一次结果、不弹错误提示（界面已回到可再点）。
   };
 
   const autoSaveBank = async (result: QuestionBankOut) => {
@@ -153,7 +128,7 @@ export default function QuestionBankPanel({
     try {
       const resumeTitle =
         resumeSelect.options.find((option) => option.value === result.resume_id)?.label ?? "";
-      await saveQuestionBank({
+      const created = await saveQuestionBank({
         job_id: result.job_id ?? null,
         job_title: result.job_title,
         company: result.company,
@@ -162,6 +137,8 @@ export default function QuestionBankPanel({
         groups: result.groups,
         model: "",
       });
+      // 记下刚创建的那条记录：没有打开历史记录时，"我的作答"也要有地方落。
+      setSavedRecordId(created.id);
       await banks.reload();
     } catch (err) {
       // 自动保存失败不阻断生成结果展示，仅轻提示。
@@ -229,63 +206,17 @@ export default function QuestionBankPanel({
   };
 
   /** 展开/收起某道题的参考答案；展开时带上当前选中的岗位与简历作为背景。查看历史记录时，生成结果写回该记录。 */
-  const toggleAnswer = async (
-    key: string,
-    question: string,
-    groupType?: string,
-    index?: number,
-  ) => {
-    if (answerMap[key]) {
-      setAnswerMap((current) => {
-        const next = { ...current };
-        delete next[key];
-        return next;
-      });
-      return;
-    }
-    if (answerLoading) return;
-    setAnswerLoading(key);
-    setAnswerError("");
-    try {
-      const answer = await generateQuestionAnswer({
-        question,
-        job_id: record?.job_id ?? jobId ?? null,
-        resume_id: record?.resume_id ?? resumeId ?? null,
-      });
-      setAnswerMap((current) => ({ ...current, [key]: answer }));
-      // 历史记录富还原：把新生成的参考答案写回同一条记录。
-      if (record && groupType !== undefined && index !== undefined) {
-        try {
-          const groups = record.groups.map((group) =>
-            group.type === groupType
-              ? {
-                  ...group,
-                  questions: group.questions.map((item, i) =>
-                    i === index
-                      ? {
-                          ...item,
-                          answer: answer.answer,
-                          key_points: answer.key_points,
-                          sample_phrasing: answer.sample_phrasing,
-                        }
-                      : item,
-                  ),
-                }
-              : group,
-          );
-          await updateQuestionBank(record.id, { groups });
-        } catch (err) {
-          message.warning(
-            err instanceof Error ? err.message : t("questionBankPanel.error.answerWriteBack"),
-          );
-        }
-      }
-    } catch (err) {
-      setAnswerError(err instanceof Error ? err.message : t("questionBankPanel.error.answer"));
-    } finally {
-      setAnswerLoading(null);
-    }
-  };
+  // 参考答案 / 我的作答的状态机整体在 hook 里（面板文件已贴行数预算）。
+  const answers = useQuestionBankAnswers({
+    groups: viewData?.groups ?? null,
+    targetId: record?.id ?? savedRecordId,
+    jobId: record?.job_id ?? jobId ?? null,
+    resumeId: record?.resume_id ?? resumeId ?? null,
+    writeBackFailedText: t("questionBankPanel.error.answerWriteBack"),
+    generateFailedText: t("questionBankPanel.error.answer"),
+    reviewFailedText: t("questionBankPanel.error.reviewAnswer"),
+    onWarn: (text) => message.warning(text),
+  });
 
   const total = Array.isArray(viewData?.groups)
     ? viewData.groups.reduce((sum, group) => sum + group.questions.length, 0)
@@ -338,6 +269,8 @@ export default function QuestionBankPanel({
             >
               {t("questionBankPanel.action.generate")}
             </Button>
+            {/* 生成中：「停止」与主按钮并列出现，点了立刻回到可再点（不弹错误）。 */}
+            {loading && <AbortButton onClick={() => generateRequest.cancel()} />}
             {data && (
               <>
                 <Button
@@ -388,7 +321,7 @@ export default function QuestionBankPanel({
           {viewData.notes.map((note) => (
             <Alert key={note} type="warning" showIcon title={note} />
           ))}
-          {answerError && <Alert type="error" showIcon title={answerError} />}
+          {answers.answerError && <Alert type="error" showIcon title={answers.answerError} />}
           <Space wrap>
             <Typography.Text strong>
               {t("questionBankPanel.summary.total", { count: total })}
@@ -408,9 +341,19 @@ export default function QuestionBankPanel({
           </Space>
           <QuestionGroupCards
             groups={viewData.groups}
-            answerMap={answerMap}
-            answerLoading={answerLoading}
-            toggleAnswer={toggleAnswer}
+            answerMap={answers.answerMap}
+            answerOpen={answers.answerOpen}
+            answerLoading={answers.answerLoading}
+            onToggleAnswer={answers.toggleAnswer}
+            onRegenerateAnswer={answers.regenerateAnswer}
+            myAnswerMap={answers.myAnswerMap}
+            reviewMap={answers.reviewMap}
+            myAnswerOpen={answers.myAnswerOpen}
+            reviewLoading={answers.reviewLoading}
+            reviewError={answers.reviewError}
+            onToggleMyAnswer={answers.toggleMyAnswer}
+            onCancelActive={answers.cancelActive}
+            onSubmitMyAnswer={answers.submitMyAnswer}
           />
         </>
       )}

@@ -84,6 +84,8 @@ export interface WorkbenchHistoryTab {
   canRedo: boolean;
   onUndo: () => void;
   onRedo: () => void;
+  /** 真正回退到某一步（连续撤销/恢复到底层下标，再应用那份快照）。 */
+  onJumpTo: (group: "past" | "future", index: number) => void;
 }
 
 interface Options {
@@ -312,6 +314,29 @@ export function useWorkbenchHistory({
     if (!documentRef.current.redo()) pendingApplyRef.current = false;
   }, []);
 
+  /**
+   * 回到某一步（历史面板的「回到这一步」）。
+   *
+   * 不重写快照栈：文档状态是**纯快照**，只要把栈走到目标下标、再应用最后那一份即可。
+   * 所以这里按 `position()` 算要连续撤销/恢复几次，循环调用底层 `undo()/redo()`——
+   * 中间每一步的 `setState` 由 React 自动批处理，effect 只在最后那一份快照上写回中栏表单/
+   * 版式/加粗（`pendingApplyRef` 保证这次回写不会被记成新历史点）。
+   *
+   * 下标口径与 `historyTab.past/future` 一致（数据顺序，不是界面上的倒序）。
+   */
+  const jumpTo = useCallback((group: "past" | "future", index: number) => {
+    const api = documentRef.current;
+    const position = api.position();
+    const remaining = group === "past" ? position.past - index : position.future - index;
+    if (remaining <= 0) return;
+    for (let step = 0; step < remaining; step += 1) {
+      const moved = group === "past" ? api.undo() : api.redo();
+      if (!moved) break;
+      // 走到目标之后才把"待回写"点亮：中途失败不该让下一帧白写一遍当前值。
+      pendingApplyRef.current = true;
+    }
+  }, []);
+
   const appliedContent = document.content;
   const appliedLayout = document.layout;
   const appliedOverlays = document.overlays;
@@ -350,24 +375,27 @@ export function useWorkbenchHistory({
   };
 
   const historyTab = useMemo<WorkbenchHistoryTab>(() => {
-    const labels = document.labels();
+    // `entries()` 与 `labels()` 同序，但多带一个 `at`（历史面板要显示"几点"），
+    // 两者都由同一次渲染的快照栈算出，不会错位。
+    const entries = document.entries();
     return {
-      past: labels.past.map((label, index) => ({
-        label,
+      past: entries.past.map((entry, index) => ({
+        ...entry,
         summary: summaryOf(document.previewPast(index)),
       })),
-      future: labels.future.map((label, index) => ({
-        label,
+      future: entries.future.map((entry, index) => ({
+        ...entry,
         summary: summaryOf(document.previewFuture(index)),
       })),
       canUndo: document.canUndo,
       canRedo: document.canRedo,
       onUndo: undo,
       onRedo: redo,
+      onJumpTo: jumpTo,
     };
     // summaryOf 读的是当前 document 快照；document 每次历史变化都是新对象。
     // eslint-disable-next-line react-hooks/exhaustive-deps -- summaryOf 是纯派生，跟随 document 变化
-  }, [document, redo, undo]);
+  }, [document, jumpTo, redo, undo]);
 
   return {
     recordDraft,

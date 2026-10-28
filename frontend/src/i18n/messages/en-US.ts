@@ -2,6 +2,7 @@
 // Static pack only. Runtime registration and UI switching belong to stage 1.
 import type { ZhCNMessages } from "./zh-CN";
 import assets from "./en-US.assets";
+import batchOperation from "./en-US.batchOperation";
 import bilingual from "./en-US.bilingual";
 import careerScenarios from "./en-US.careerScenarios";
 import conflict from "./en-US.conflict";
@@ -20,6 +21,7 @@ import preview from "./en-US.preview";
 import profileFacts from "./en-US.profileFacts";
 import profileFactsLegacy from "./en-US.profileFactsLegacy";
 import profileGroups from "./en-US.profileGroups";
+import profileField from "./en-US.profileField";
 import profileLibrary from "./en-US.profileLibrary";
 import provenance from "./en-US.provenance";
 import proview from "./en-US.proview";
@@ -168,6 +170,7 @@ import enumsTracker from "./en-US.enumsTracker";
 const enUS = {
   ...core,
   ...assets,
+  ...batchOperation,
   ...bilingual,
   ...careerScenarios,
   ...conflict,
@@ -185,6 +188,7 @@ const enUS = {
   ...profileFacts,
   ...profileFactsLegacy,
   ...profileGroups,
+  ...profileField,
   ...profileLibrary,
   ...provenance,
   ...proview,

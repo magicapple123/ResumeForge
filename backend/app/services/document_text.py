@@ -287,3 +287,56 @@ def extract_documents_text(documents: Sequence[Any]) -> ExtractedDocuments:
         size_bytes=total_bytes,
         images=tuple(images),
     )
+
+
+# 「我的文件」里能直接当文本看的扩展名：这些没有解析成本，读出来即可。
+_PLAIN_TEXT_SUFFIXES = frozenset(
+    {"txt", "md", "markdown", "csv", "tsv", "json", "log", "yaml", "yml", "xml", "html", "htm"}
+)
+_UNSUPPORTED_PREVIEW_MESSAGE = (
+    "这种格式暂不支持在线预览；请用「打开所在文件夹」用系统程序查看。"
+)
+
+
+def _decode_plain_text(raw: bytes) -> str:
+    """按 UTF-8 解码，失败退回 GB18030（中文 Windows 上的记事本 / Excel 常见）。
+
+    不用 ``errors="replace"`` 直接糊过去：那会把 GBK 文件解成一屏乱码，用户以为文件坏了。
+    两种都失败才用 replace 兜底，至少还能看到一部分。
+    """
+    for encoding in ("utf-8-sig", "gb18030"):
+        try:
+            return raw.decode(encoding)
+        except UnicodeDecodeError:
+            continue
+    return raw.decode("utf-8", errors="replace")
+
+
+def preview_text_of_file(name: str, mime_type: str, raw: bytes) -> tuple[str, list[str]]:
+    """把**本机副本**渲染成可读文本，供「我的文件」的预览抽屉使用。
+
+    与 :func:`extract_document_text` 的区别只有两点，都是"预览"这个用途决定的：
+
+    1. **不做 2 MB 附件体积校验**——副本目录里存的是用户真实文件（PDF 十几 MB 很常见），
+       按上传预算拦下来会让最该预览的文件恰好打不开；
+    2. 支持纯文本类扩展名（txt / md / csv / json…），它们没有解析成本。
+
+    格式不认识就抛出面向用户的 ``ValueError``，由调用方转成 400。
+    """
+    suffix = name.rsplit(".", 1)[-1].lower() if "." in name else ""
+    declared = mime_type.split(";", 1)[0].strip().lower()
+
+    if suffix == "docx" or declared == DOCX_MIME:
+        text = _docx_text(raw)
+    elif suffix == "pdf" or declared == "application/pdf":
+        text = _pdf_text(raw)
+    elif suffix in _PLAIN_TEXT_SUFFIXES or declared.startswith("text/"):
+        text = _decode_plain_text(raw)
+    else:
+        raise ValueError(_UNSUPPORTED_PREVIEW_MESSAGE)
+
+    body = strip_markers(text).strip()
+    if not body:
+        raise ValueError(_EMPTY_TEXT_MESSAGE)
+    truncated, warnings = _truncate(body)
+    return truncated, list(warnings)

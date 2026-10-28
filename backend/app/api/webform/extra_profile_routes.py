@@ -6,7 +6,7 @@
 
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 
@@ -33,6 +33,7 @@ from ...services.llm.base import LLMError
 from ...services.settings_service import get_llm_config
 from ...services.text_extraction import ai_failed_warning, llm_is_configured, no_model_warning
 from ...services.webform.field_types import normalize_group_id, normalize_grouped_payload
+from .._disconnect import client_gone, run_until_disconnect
 
 router = APIRouter(prefix="/api/webform", tags=["webform"])
 
@@ -60,12 +61,14 @@ def list_fields():
 @router.get("/extra-profile", response_model=WebFormExtraProfileOut)
 def read_extra_profile(db: Session = Depends(get_db)):
     """字段清单 + 已填的值 + 每条的来源与档位（清单由后端下发，前端不写死字段名）。"""
-    return normalize_grouped_payload({
-        **webform_service.list_extra_fields(db),
-        "values": webform_service.extra_profile.list_entries(db),
-        "details": webform_service.extra_profile.list_details(db),
-        "repeated_groups": webform_service.repeated_profile.list_groups(db),
-    })
+    return normalize_grouped_payload(
+        {
+            **webform_service.list_extra_fields(db),
+            "values": webform_service.extra_profile.list_entries(db),
+            "details": webform_service.extra_profile.list_details(db),
+            "repeated_groups": webform_service.repeated_profile.list_groups(db),
+        }
+    )
 
 
 @router.put("/extra-profile", response_model=WebFormExtraProfileOut)
@@ -97,12 +100,14 @@ def write_extra_profile(payload: WebFormExtraProfileIn, db: Session = Depends(ge
     except Exception:
         db.rollback()
         raise
-    return normalize_grouped_payload({
-        **webform_service.list_extra_fields(db),
-        "values": webform_service.extra_profile.list_entries(db),
-        "details": webform_service.extra_profile.list_details(db),
-        "repeated_groups": webform_service.repeated_profile.list_groups(db),
-    })
+    return normalize_grouped_payload(
+        {
+            **webform_service.list_extra_fields(db),
+            "values": webform_service.extra_profile.list_entries(db),
+            "details": webform_service.extra_profile.list_details(db),
+            "repeated_groups": webform_service.repeated_profile.list_groups(db),
+        }
+    )
 
 
 @router.get("/memory-targets", response_model=WebFormMemoryTargetsOut)
@@ -121,7 +126,7 @@ def list_memory_targets(db: Session = Depends(get_db)):
 
 @router.post("/extra-profile/parse-text", response_model=WebFormExtraProfileParseOut)
 async def parse_extra_profile_text_draft(
-    payload: WebFormExtraProfileParseIn, db: Session = Depends(get_db)
+    payload: WebFormExtraProfileParseIn, request: Request, db: Session = Depends(get_db)
 ):
     """把粘贴的网申资料拆成草稿：目录内进 ``values``，目录外进 ``custom``（待用户勾选）。
 
@@ -168,10 +173,13 @@ async def parse_extra_profile_text_draft(
     # 拿到配置就把连接还给池子：模型调用可能几十秒，不该一直占着一个会话。
     db.close()
     try:
-        values, custom, warnings, recognized = (
-            await webform_service.extra_profile_text.extract_extra_profile(
+        # 客户端断开就停下：这份草稿没人收，本地兜底也不必算。
+        identified = await run_until_disconnect(
+            request,
+            webform_service.extra_profile_text.extract_extra_profile(
                 provider, source_text, local_values, image_urls
-            )
+            ),
+            what="网申资料识别",
         )
     except LLMError as exc:
         logger.warning("网申资料 AI 识别失败，已回退本地解析：%s", exc)
@@ -179,15 +187,15 @@ async def parse_extra_profile_text_draft(
     except Exception:  # noqa: BLE001 - 外部模型异常不能阻断草稿解析
         logger.exception("网申资料 AI 识别发生内部错误，已回退本地解析")
         return local_result([ai_failed_warning(has_images, has_documents=has_documents)])
+    if identified is None:
+        raise client_gone("网申资料识别")
+    values, custom, warnings, recognized = identified
     return WebFormExtraProfileParseOut(
         values=values,
         # 服务层返回的是 dict 草稿（模型与本地路径同形）；pydantic 运行时会强转，
         # 但 pyright 的 list 不变性要求这里显式收窄成 schema 项。
-        custom=[
-            WebFormExtraProfileParsedItem.model_validate(item) for item in custom
-        ],
+        custom=[WebFormExtraProfileParsedItem.model_validate(item) for item in custom],
         warnings=list(dict.fromkeys([*warnings, *documents.warnings])),
         parse_engine="ai",
         recognized_text=recognized,
     )
-

@@ -32,6 +32,8 @@ const resumesPage = {
   "resumesPage.selectAll.tooMany":
     "当前筛选下共 {count} 份简历，超出单次批量上限 5000 份；请先用筛选或搜索缩小范围",
   "resumesPage.selectAll.done": "已选中当前筛选下的全部 {count} 份简历（所有页）",
+  "resumesPage.batch.actions": "批量操作",
+  "resumesPage.batch.export": "批量导出",
   "resumesPage.batchDelete.button": "批量删除",
   "resumesPage.batchDelete.title": "删除选中的简历？",
   "resumesPage.batchDelete.body": "这 {count} 份简历{note}",

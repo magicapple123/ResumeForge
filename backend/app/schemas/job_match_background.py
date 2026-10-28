@@ -1,11 +1,14 @@
 # SPDX-License-Identifier: Apache-2.0
 """岗位批量适配度分析后台任务的数据结构。"""
+
 from __future__ import annotations
 
 from datetime import datetime
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
+
+from .job_match_batch import BatchMode
 
 JobMatchBackgroundTaskStatus = Literal["pending", "running", "completed", "failed", "cancelled"]
 ACTIVE_JOB_MATCH_BACKGROUND_STATUSES = ("pending", "running")
@@ -20,6 +23,8 @@ class JobMatchBackgroundTask(BaseModel):
     status: JobMatchBackgroundTaskStatus
     job_ids: list[int] = Field(min_length=1, max_length=50)
     force: bool = False
+    # 老任务（本次改动之前写入 AppSetting 的 JSON）没有这个字段，默认按逐岗匹配读。
+    mode: BatchMode = "match"
     requested_count: int = Field(ge=1, le=50)
     completed_count: int = Field(default=0, ge=0)
     failed_count: int = Field(default=0, ge=0)

@@ -50,8 +50,7 @@ const backupStatus = {
   /** 间隔那句话的前半截，选择器之后接 `interval.suffix`。 */
   "backupStatus.interval.prefix": "每",
   /** 间隔那句话的后半截（含保留策略），接在选择器后面。 */
-  "backupStatus.interval.suffix":
-    "天自动快照一次（仅数据库快照，不含附件文件）；手动导出的备份包才包含附件。只保留最近几份，手动备份不受影响。",
+  "backupStatus.interval.suffix": "天自动快照一次（仅数据库快照），只保留最近几份。",
   /** 禁用态下的后半截：档位由部署配置控制，手动导出仍含附件。 */
   "backupStatus.interval.suffixDisabled":
     "天自动快照次数由部署配置控制；手动导出的备份包仍包含附件。只保留最近几份，手动备份不受影响。",
@@ -66,7 +65,7 @@ const backupStatus = {
   "backupStatus.lastSuccess.never": "还没有成功过的自动备份。",
   /** 覆盖范围说明：只含数据库快照，要连附件一起备份得去「数据集」卡片手动导出。 */
   "backupStatus.coverage.databaseOnly":
-    "自动备份只覆盖数据库快照，不含附件与字体；需要连附件与字体一起备份，请用「数据集」卡片的「导出数据集 / 导出全部数据集」。",
+    "只备份数据库快照，不含附件与字体；完整备份请用「数据集」里的导出。",
   /** 连续失败提示：`{count}` 次数、`{error}` 后端给的原因。 */
   "backupStatus.failures": "连续 {count} 次备份失败：{error}。系统会按短间隔自动重试。",
   /** 一份自动快照都没有时的空态。 */

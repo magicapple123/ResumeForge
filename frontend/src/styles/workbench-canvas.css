@@ -75,16 +75,27 @@
 
   display: flex;
   flex-direction: column;
-  height: 100%;
+  /* **剩余高度**，不是整栏高度：这一栏里横幅（分页报告）是兄弟节点。写 `height: 100%`
+     会按整栏算，横幅那 52px 就把画布顶出栏外、被 `overflow: hidden` 裁掉，末尾的缩放条
+     正好落在被裁的那一段（2026-10-29 用户反馈）。`min-height: 0` 允许它真的缩小。 */
+  flex: 1 1 auto;
   min-height: 0;
   background: var(--rf-wb-canvas);
 }
 
+/* 画布条：**只装实时预览状态**（2026-11 起）。原先那两句说明（分页虚线 / 缩放怎么用）
+   已经并成一句交给纸面下方的缩放条，所以这条现在通常只有一枚状态胶囊；
+   没有状态时 `ResumeWorkbenchCanvas` 整条都不渲染，不会留一个空盒子。
+   只剩一个子项，所以从"竖排两行说明"改成**横排**：这样出错时那句说明与「重试」
+   并排在一行，而不是上下堆成两块。 */
 .resume-wb-canvas-bar {
   display: flex;
   flex: 0 0 auto;
-  flex-direction: column;
-  gap: 2px;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 4px 8px;
   margin: 8px 12px 0;
   padding: 6px 10px;
   border: 1px solid var(--rf-border-subtle);
@@ -92,6 +103,8 @@
   background: var(--rf-surface);
 }
 
+/* 状态条里那句话（`ResumeWorkbenchLiveCanvas` 的「正在更新预览…」/「上一次预览成功」）：
+   与画布其它说明同字号，margin 归零以适配 antd Typography 的默认外边距。 */
 .resume-wb-canvas-note.ant-typography {
   margin: 0;
   font-size: 12px;
@@ -101,11 +114,89 @@
 .resume-wb-canvas-scroll {
   flex: 1 1 auto;
   min-height: 0;
-  overflow: auto;
+  /* **不再整块滚动**（2026-10-29 用户要求"上下滑动时红框部分都不要动"）。
+     这一层只做三件事：竖排「固定头部 / 纸面滚动区 / 缩放条页脚」，并把高度接力传下去。
+     整块滚的时候，工具条以下（专业视图行、溢出提示）都会跟着走，用户怎么滚都在动。 */
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   overscroll-behavior: contain;
-  padding: 12px 16px 16px;
+  /* 底部 0：缩放条自己就是页脚，留 16px 会在它和纸面之间露出一条灰缝（"脱节"）。 */
+  padding: 12px 16px 0;
   scrollbar-color: var(--rf-border) transparent;
   scrollbar-width: thin;
+}
+
+/* ===== 头部固定、只有纸面滚（2026-11 用户要求） ===== */
+/* 结构（见 `ResumePreview`）：`.resume-preview-chrome`（工具条 + 专业视图行 + 两条提示）
+   → `.resume-preview-body`（纸面，唯一滚动区）→ 缩放条（页脚）。
+   头部用 flex 的 `0 0 auto` 而不是 sticky：不滚的那一层自然不动，也不需要在滚动时
+   补背景色去盖住从缝里透出来的纸边。 */
+.resume-wb-canvas-scroll .resume-preview-root {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.resume-wb-canvas-scroll .resume-preview-chrome {
+  flex: 0 0 auto;
+}
+
+/* 纸面：精确模式的多页 PDF 也在这里滚（草稿模式一页刚好塞满，通常没有滚动条）。 */
+.resume-wb-canvas-scroll .resume-preview-body {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+/* 纸面本身（相框 / 草稿视口）高度是算出来的，不能被 flex 压缩——压了就不会滚，
+   内容会被直接裁掉。 */
+.resume-wb-canvas-scroll .resume-preview-body > * {
+  flex: 0 0 auto;
+}
+
+/* 缩放条：页脚，贴在右栏底部（不再是 sticky 在滚动流里，因此不会"滚到底脱节"）。 */
+.resume-wb-canvas-scroll .resume-preview-zoom-row {
+  flex: 0 0 auto;
+  /* 说明并进来之后这一行可能很长：允许换行，否则它会横向撑出滚动条。 */
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px 10px;
+  /* 上边距必须是 0：这一行是页脚，与纸面滚动区之间只要 1px 分隔线。
+     留一档 8px 就是用户说的"滑到最下面这里脱节了"——纸面已经到底，页脚却浮在下面。 */
+  margin: 0 -16px;
+  /* 右侧 56px：让开右下角常驻的助手悬浮球（它是 fixed，会压在这条尾巴上）。 */
+  padding: 10px 56px 10px 12px;
+  /* 白底 + 上分隔：与预览弹窗里那行同款（那边坐在白卡上），在灰画布上才读得出
+     "这是页脚工具条"而不是"浮在纸上的几个图标"。 */
+  border-top: 1px solid var(--rf-border-subtle);
+  background: var(--rf-surface);
+}
+
+/* 缩放条里的提示语在这一屏是**唯一的**分页/缩放说明（画布上方那条已经撤掉），
+   所以不能沿用 `.resume-preview-zoom-hint` 在窄屏隐藏的规则（那条规则属于
+   "主预览里还有别处解释"的语境）；长句允许换行、居中收尾。
+   `flex: 0 1 auto`（不是 `1 1 auto`）：让"控件 + 提示"整体居中，而不是提示撑满右侧
+   把控件推到偏左——后者正是用户说的"和预览界面那行不一样"。 */
+.resume-wb-canvas-scroll .resume-preview-zoom-hint {
+  display: inline;
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 100%;
+  white-space: normal;
+  text-align: center;
+  line-height: 1.45;
+}
+
+/* 精确模式的 PDF 相框：吸顶的工具栏不能盖住第一页的页首——`resume-canvas.css` 里
+   `.exact-preview` 自带 1px 边框与底色，这里补一档上间距即可（不改它的 overflow）。 */
+.resume-wb-canvas-scroll .exact-preview {
+  margin-top: 2px;
 }
 
 .resume-wb-canvas-scroll::-webkit-scrollbar {
@@ -134,16 +225,12 @@
   line-height: 1.5;
 }
 
-/* 矮屏（≤839 高）：说明条折成一行，把 20px 还给纸张。
-   为什么值得收：工作台的可用高 = 弹窗体高 − 动作条 56 − 说明条 − 画布内边距，而纸的缩放
-   由**高度**决定（宽度再宽也不会让纸变大，见方案 §4.6.1 的读表要点）。只留第一句分页说明，
-   第二句"怎么缩放"在矮屏上属于可发现性的锦上添花，不收起来就换不回纸。 */
+/* 矮屏（≤839 高）：说明条已经撤掉（说明并到纸面下方的缩放条里），这里只把状态条收薄，
+   把省下的高度还给纸张。
+   为什么值得收：工作台的可用高 = 弹窗体高 − 动作条 56 − 状态条 − 画布内边距，而纸的缩放
+   由**高度**决定（宽度再宽也不会让纸变大，见方案 §4.6.1 的读表要点）。 */
 @media (max-height: 839px) {
   .resume-wb-canvas-bar {
-    padding: 4px 8px 0;
-  }
-
-  .resume-wb-canvas-bar .resume-wb-canvas-note + .resume-wb-canvas-note {
-    display: none;
+    padding: 4px 8px;
   }
 }

@@ -42,6 +42,7 @@ export function JobFilterBar({
   onImportCsv,
   sortState,
   applySort,
+  selectionMode = false,
 }: {
   keyword: string;
   setKeyword: (value: string) => void;
@@ -63,6 +64,15 @@ export function JobFilterBar({
   /** 当前排序（E）：只存在页面状态里，用于「恢复默认排序」的禁用态。 */
   sortState: JobSortState;
   applySort: (next: JobSortState) => void;
+  /**
+   * 是否处于多选态。默认 `false`（既有调用方与单测都不用改）。
+   *
+   * 多选时**不渲染**「分析记录」：用户的原话是"多选的时候把分析记录删掉，在 AI 对比选岗
+   * 界面看就好了"——勾选状态下这一栏的注意力属于批量动作，跳去历史记录会中断它。
+   * 只隐藏入口、不删功能：`?match_batch=history` 深链仍可达（完成通知会跳它），
+   * 非多选态下这颗按钮照旧出现。
+   */
+  selectionMode?: boolean;
 }) {
   useLocale();
   // 搜索框受控：本地镜像同步外部 keyword（URL 带参等外部变化能回填输入框），
@@ -161,13 +171,17 @@ export function JobFilterBar({
         >
           {t("jobsPage.filter.analyzeMatch")}
         </Button>
-        <Button
-          icon={<HistoryOutlined />}
-          disabled={batchAction !== null}
-          onClick={() => openMatchBatch("history")}
-        >
-          {t("jobsPage.filter.matchHistory")}
-        </Button>
+        {/* 多选态不渲染「分析记录」（用户要求）：勾选中这一栏只服务批量动作，
+            历史记录请到「AI 对比选岗 / 批量匹配分析」界面看。非多选态保留入口（深链也仍然可达）。 */}
+        {selectionMode ? null : (
+          <Button
+            icon={<HistoryOutlined />}
+            disabled={batchAction !== null}
+            onClick={() => openMatchBatch("history")}
+          >
+            {t("jobsPage.filter.matchHistory")}
+          </Button>
+        )}
         <Button
           icon={<InboxOutlined />}
           disabled={batchAction !== null}

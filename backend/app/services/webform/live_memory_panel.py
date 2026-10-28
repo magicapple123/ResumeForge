@@ -1,9 +1,12 @@
 # SPDX-License-Identifier: Apache-2.0
 """目标浏览器里的逐框记忆编辑器；不直接请求本地 API。"""
+
 from __future__ import annotations
 
 import json
 from typing import Any
+
+from .webform_copy import apply_copy
 
 
 def memory_targets_script(targets: list[dict[str, Any]]) -> str:
@@ -15,7 +18,7 @@ def memory_targets_script(targets: list[dict[str, Any]]) -> str:
     )
 
 
-REMEMBER_EDITOR_SCRIPT = r"""(() => { /* rf:live-memory-editor */
+_REMEMBER_EDITOR_TEMPLATE = r"""(() => { /* rf:live-memory-editor */
   const host = document.getElementById('__rf_live_host__');
   const root = host && host.shadowRoot;
   const panel = root && root.querySelector('.p');
@@ -68,14 +71,14 @@ REMEMBER_EDITOR_SCRIPT = r"""(() => { /* rf:live-memory-editor */
   const editor = document.createElement('div');
   editor.className = 'rf-memory';
   editor.innerHTML = [
-    '<div class="rf-memory-title">记住这条：确认字段名与保存位置</div>',
-    '<div class="rf-memory-subtitle">默认先保存到网申资料·自定义；如果已有对应字段，也可以在下面展开后选择。</div>',
-    '<label class="rf-memory-label">字段名<input class="rf-memory-label-input" type="text" maxlength="40"></label>',
-    '<label class="rf-memory-label">字段内容<input class="rf-memory-value-input" type="text" maxlength="2000"></label>',
-    '<label class="rf-memory-label">保存到哪里（支持模糊搜索）<input class="rf-memory-search" type="text" placeholder="搜索资料模块、字段名或当前值"></label>',
+    '<div class="rf-memory-title">%%copy:memory.title%%</div>',
+    '<div class="rf-memory-subtitle">%%copy:memory.subtitle%%</div>',
+    '<label class="rf-memory-label">%%copy:memory.fieldName%%<input class="rf-memory-label-input" type="text" maxlength="40"></label>',
+    '<label class="rf-memory-label">%%copy:memory.fieldValue%%<input class="rf-memory-value-input" type="text" maxlength="2000"></label>',
+    '<label class="rf-memory-label">%%copy:memory.target%%<input class="rf-memory-search" type="text" placeholder="%%copy:memory.targetPlaceholder%%"></label>',
     '<div class="rf-memory-targets"></div>',
     '<div class="rf-memory-hint"></div>',
-    '<div class="rf-memory-actions"><button class="ghost rf-memory-cancel" type="button">取消</button><button class="rf-memory-save" type="button">保存这条</button></div>',
+    '<div class="rf-memory-actions"><button class="ghost rf-memory-cancel" type="button">%%copy:memory.cancel%%</button><button class="rf-memory-save" type="button">%%copy:memory.save%%</button></div>',
   ].join('');
   panel.insertBefore(editor, root.querySelector('.pick'));
   // 原按钮绑定着直接落库的旧监听；替换节点而不是叠加事件监听，避免一次点击写入两次。
@@ -90,6 +93,13 @@ REMEMBER_EDITOR_SCRIPT = r"""(() => { /* rf:live-memory-editor */
   const moreButton = root.querySelector('.more');
   const targets = () => Array.isArray(window.__rfMemoryTargets) ? window.__rfMemoryTargets : [];
   const control = () => window.__rfFocus || {};
+  // 分组名是**协议标识**（identity / contact / …），中文名只由面板脚本那份映射给。
+  // 不翻的话弹层里一行「网申资料 · 身份信息」、下一行「网申资料 · school」。
+  const groupLabel = (raw) => (
+    typeof window.__rfGroupLabel === 'function'
+      ? window.__rfGroupLabel(raw)
+      : String(raw || '')
+  );
   const cleanLabel = (raw) => String(raw || '')
     .normalize('NFKC')
     .replace(/\s+/g, ' ')
@@ -159,8 +169,8 @@ REMEMBER_EDITOR_SCRIPT = r"""(() => { /* rf:live-memory-editor */
   const updateHint = () => {
     const target = selected();
     hint.textContent = target
-      ? '将更新「网申资料 · ' + target.group + ' · ' + target.label + '」。已有字段名称不变。'
-      : '将按上方字段名新增或更新「网申资料 · 自定义」。';
+      ? '%%copy:memory.updateHint%%'.replace('{group}', groupLabel(target.group)).replace('{label}', target.label)
+      : '%%copy:memory.createHint%%';
   };
   const render = () => {
     const custom = {target_id: 'custom', source: 'extra', group: '自定义', label: name.value || '新增自定义字段', value: ''};
@@ -177,7 +187,7 @@ REMEMBER_EDITOR_SCRIPT = r"""(() => { /* rf:live-memory-editor */
     if (!groups.size) {
       const empty = document.createElement('div');
       empty.className = 'rf-memory-empty';
-      empty.textContent = '没有匹配的保存位置';
+      empty.textContent = '%%copy:memory.empty%%';
       list.appendChild(empty);
       return;
     }
@@ -188,16 +198,16 @@ REMEMBER_EDITOR_SCRIPT = r"""(() => { /* rf:live-memory-editor */
       title.type = 'button';
       title.className = 'rf-memory-group' + (expanded ? '' : ' collapsed');
       title.setAttribute('aria-expanded', String(expanded));
-      title.title = expanded ? '点击折叠这一组' : '点击展开这一组';
+      title.title = expanded ? '%%copy:panel.group.fold%%' : '%%copy:panel.group.unfold%%';
       const caret = document.createElement('span');
       caret.className = 'caret';
       caret.textContent = '▾';
       const groupName = document.createElement('span');
       groupName.className = 'group-name';
-      groupName.textContent = '网申资料 · ' + group;
+      groupName.textContent = '%%copy:panel.source.webform%% · ' + groupLabel(group);
       const groupCount = document.createElement('span');
       groupCount.className = 'group-count';
-      groupCount.textContent = `${items.length} 条`;
+      groupCount.textContent = '%%copy:panel.group.count%%'.replace('{count}', String(items.length));
       title.append(caret, groupName, groupCount);
       title.addEventListener('click', () => {
         if (collapsedGroups.has(group)) { collapsedGroups.delete(group); }
@@ -209,7 +219,7 @@ REMEMBER_EDITOR_SCRIPT = r"""(() => { /* rf:live-memory-editor */
       for (const item of items) {
         const row = document.createElement('div');
         row.className = 'rf-memory-row' + (item.target_id === selectedId ? ' selected' : '');
-        row.title = `${item.label || ''}：${item.target_id === 'custom' ? '使用上方字段名' : (item.value || '（尚未填写）')}`;
+        row.title = `${item.label || ''}: ${item.target_id === 'custom' ? '%%copy:panel.pick.useLabel%%' : (item.value || '%%copy:panel.pick.empty%%')}`;
         const icon = document.createElement('span');
         icon.className = 'rf-memory-radio';
         icon.textContent = item.target_id === selectedId ? '●' : '○';
@@ -220,7 +230,7 @@ REMEMBER_EDITOR_SCRIPT = r"""(() => { /* rf:live-memory-editor */
         label.textContent = item.label;
         const value = document.createElement('div');
         value.className = 'rf-memory-value';
-        value.textContent = item.target_id === 'custom' ? '使用上方字段名' : '当前值：' + (item.value || '（尚未填写）');
+        value.textContent = item.target_id === 'custom' ? '%%copy:panel.pick.useLabel%%' : '%%copy:memory.currentValue%%'.replace('{value}', item.value || '%%copy:panel.pick.empty%%');
         content.append(label, value);
         row.append(icon, content);
         row.addEventListener('click', () => {
@@ -237,7 +247,10 @@ REMEMBER_EDITOR_SCRIPT = r"""(() => { /* rf:live-memory-editor */
   const close = () => {
     editing = false;
     editor.style.display = 'none';
-    panel.style.width = '';
+    // **还回用户缩放的尺寸**，而不是一律清空：用户可能刚把面板拖到合适的大小，
+    // 一次「取消」不该把它变回默认宽度。没有缩放过时 `applySize` 自己就是清空。
+    if (typeof window.__rfApplySize === 'function') { window.__rfApplySize(); }
+    else { panel.style.width = ''; }
     button.style.display = '';
     if (moreButton) { moreButton.style.display = moreInlineDisplay; }
     if (picker) {
@@ -265,6 +278,10 @@ REMEMBER_EDITOR_SCRIPT = r"""(() => { /* rf:live-memory-editor */
     if (moreButton) { moreButton.style.display = 'none'; }
     editor.style.display = 'block';
     panel.style.width = 'min(680px,calc(100vw - 16px))';
+    // 宽度与高度同时变了（编辑器比资料区高得多），落点要**立刻**重算：
+    // 面板变高之后 top 的上限跟着变小，不重算它会先在原地撑出视口底部，
+    // 等 200ms 后的定时器才被拽回来——用户看到的是一次跳动。
+    if (typeof window.__rfRelayout === 'function') { window.__rfRelayout(); }
     button.style.display = 'none';
     render();
     updateHint();
@@ -285,8 +302,8 @@ REMEMBER_EDITOR_SCRIPT = r"""(() => { /* rf:live-memory-editor */
     // 字段内容以**编辑器里的值**为准（打开时已按 typed > payload.value > field.value
     // 初始化，用户可改）。不再保存时回头读表单——那会悄悄覆盖用户改过的内容。
     const value = String(valueInput.value || '').trim();
-    if (!label) { hint.textContent = '请先填写字段名。'; name.focus(); return; }
-    if (!value) { hint.textContent = '请先填写字段内容。'; valueInput.focus(); return; }
+    if (!label) { hint.textContent = '%%copy:memory.nameRequired%%'; name.focus(); return; }
+    if (!value) { hint.textContent = '%%copy:memory.valueRequired%%'; valueInput.focus(); return; }
     window.__rfRemember = {target_id: selectedId, label, value, control: field, selector: field.selector || ''};
     close();
   });
@@ -314,5 +331,14 @@ REMEMBER_EDITOR_SCRIPT = r"""(() => { /* rf:live-memory-editor */
   return '1';
 })()"""
 
+# 文案随界面语言走：模板里是 ``%%copy:key%%`` 占位，模块级常量渲染成源语言（中文）。
+# 其它语言用 ``remember_editor_script(locale)`` 现渲染，不在 import 时缓存语言。
+REMEMBER_EDITOR_SCRIPT = apply_copy(_REMEMBER_EDITOR_TEMPLATE, "zh-CN")
 
-__all__ = ["REMEMBER_EDITOR_SCRIPT", "memory_targets_script"]
+
+def remember_editor_script(locale: str | None = None) -> str:
+    """按界面语言渲染「记住这条」编辑器（缺省中文，与 ``REMEMBER_EDITOR_SCRIPT`` 一致）。"""
+    return apply_copy(_REMEMBER_EDITOR_TEMPLATE, locale)
+
+
+__all__ = ["REMEMBER_EDITOR_SCRIPT", "memory_targets_script", "remember_editor_script"]

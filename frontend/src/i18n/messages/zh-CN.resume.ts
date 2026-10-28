@@ -59,6 +59,8 @@ const resume = {
   "resume.diagnosis.fill": "占用 {percent}%",
   /** 「自动一页」：诊断判定溢出、且有可试的候选版式时才出现。 */
   "resume.diagnosis.autofit": "自动一页",
+  "resume.diagnosis.expand": "展开详情",
+  "resume.diagnosis.collapse": "收起详情",
   /** 逐档试时的进度；{label} 是后端给出的这一档名字。 */
   "resume.diagnosis.fitting": "正在试第 {index}/{total} 档：{label}",
   /** 收到最紧仍放不下：必须如实说，并把用户指向下一条真正有用的建议。 */

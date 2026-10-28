@@ -31,6 +31,8 @@ const resumesPage = {
     "The current filter matches {count} Resumes, above the 5000-per-batch limit; narrow the filter or search first",
   "resumesPage.selectAll.done":
     "Selected all {count} Resumes matching the current filter (all pages)",
+  "resumesPage.batch.actions": "Bulk actions",
+  "resumesPage.batch.export": "Export selected",
   "resumesPage.batchDelete.button": "Delete selected",
   "resumesPage.batchDelete.title": "Delete the selected resumes?",
   "resumesPage.batchDelete.body": "Delete these {count} resumes. {note}",

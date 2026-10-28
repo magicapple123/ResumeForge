@@ -79,8 +79,10 @@ export default function CheckPanel({
   // 只在 result 变化时跑：pending 集合放 ref，不把"清除 pending"写进依赖（否则会自激）。
   useEffect(() => {
     if (!result) return;
+    // 后端字段缺失（老版本 / 部分层）不能让整页崩：一律按空数组兜底。
+    const issues = result.issues ?? [];
     if (pendingRef.current.size > 0) {
-      const comparison = compareRecheck(previousIssuesRef.current, result.issues);
+      const comparison = compareRecheck(previousIssuesRef.current, issues);
       const resolved = comparison.resolved.length;
       if (resolved > 0) {
         message.success(t("preflight.recheck.resolved", { count: resolved }));
@@ -88,7 +90,7 @@ export default function CheckPanel({
       pendingRef.current = new Set();
       setHasPending(false);
     }
-    previousIssuesRef.current = result.issues;
+    previousIssuesRef.current = issues;
   }, [message, result]);
 
   /** 修复入口：先交给宿主，再把这条记为"待复检"（下一次结果到达时比对）。 */
@@ -101,10 +103,13 @@ export default function CheckPanel({
   const idle = status === "idle" && !result;
   const firstLoading = status === "loading" && !result;
   const firstError = status === "error" && !result;
-  const counts = result ? countBySeverity(result.issues) : null;
+  // 后端字段缺失时的统一兜底：下面所有 `.length` 都读这份，不再直接摸 `result.issues`。
+  const issues = result?.issues ?? [];
+  const counts = result ? countBySeverity(issues) : null;
   const coverage = fontCoverage ?? result?.font_coverage ?? null;
-  const groups = result ? groupIssues(filterBlockersOnly(result.issues, blockersOnly)) : [];
-  const filteredEmpty = Boolean(result && result.issues.length > 0 && groups.length === 0);
+  const groups = result ? groupIssues(filterBlockersOnly(issues, blockersOnly)) : [];
+  const filteredEmpty = Boolean(result && issues.length > 0 && groups.length === 0);
+  const snapshotHash = (result?.snapshot?.content_sha256 ?? "").slice(0, 8);
 
   const runLabel = result ? t("preflight.action.recheck") : t("preflight.action.run");
 
@@ -117,6 +122,9 @@ export default function CheckPanel({
           icon={<ReloadOutlined />}
           loading={running}
           onClick={onRun}
+          // 显式可访问名：图标（`role="img"` + aria-label="reload"）会混进按钮名，
+          // 读屏与测试都会读成「reload 开始检查」。这里钉成与文案一致的唯一名字。
+          aria-label={runLabel}
         >
           {runLabel}
         </Button>
@@ -165,12 +173,9 @@ export default function CheckPanel({
       ) : null}
 
       {idle ? (
-        <EmptyState
-          inline
-          description={t("preflight.status.idle")}
-          actionLabel={t("preflight.action.run")}
-          onAction={onRun}
-        />
+        // 空态只给说明：**入口只有顶部那一颗「开始检查」**（2026-10-29 用户反馈"卡片上有两个
+        // 开始检查按钮"）。同一屏里两颗同名主按钮既像重复，也让人猜哪一颗才生效。
+        <EmptyState inline description={t("preflight.status.idle")} />
       ) : null}
       {firstLoading ? <LoadingBlock tip={t("preflight.status.loading")} /> : null}
       {firstError ? (
@@ -184,7 +189,7 @@ export default function CheckPanel({
       {result ? (
         <>
           <FontCoverageCard coverage={coverage} />
-          {result.issues.length === 0 ? (
+          {issues.length === 0 ? (
             <EmptyState
               inline
               description={
@@ -228,7 +233,7 @@ export default function CheckPanel({
           <Typography.Text type="secondary" style={{ fontSize: 12 }}>
             {t("preflight.snapshot.line", {
               label: t("preflight.snapshot.label"),
-              hash: result.snapshot.content_sha256.slice(0, 8),
+              hash: snapshotHash,
             })}
           </Typography.Text>
           <Typography.Text type="secondary" style={{ fontSize: 12 }}>

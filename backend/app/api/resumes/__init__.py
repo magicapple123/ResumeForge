@@ -23,6 +23,7 @@ from ...services.llm import create_provider as create_provider
 from ...services.settings_service import get_llm_config as get_llm_config
 from . import (
     ai_edits_routes,
+    batch_export_routes,
     crud_routes,
     delivery_archive_routes,
     export_bundle_routes,
@@ -65,6 +66,8 @@ router.include_router(templates_routes.router, prefix="/api/resumes")
 router.include_router(export_bundle_routes.router, prefix="/api/resumes")
 router.include_router(generate_routes.router, prefix="/api/resumes")
 router.include_router(delivery_archive_routes.router, prefix="/api/resumes")
+# 批量导出是字面量段 /batch-export，先于 crud 的 /{resume_id} 注册（与 /templates 同理）。
+router.include_router(batch_export_routes.router, prefix="/api/resumes")
 router.include_router(crud_routes.router, prefix="/api/resumes")
 router.include_router(ai_edits_routes.router, prefix="/api/resumes")
 # R-33：/{resume_id}/profile-usage 只读追溯（段数更深，与 GET /{resume_id} 不冲突）。

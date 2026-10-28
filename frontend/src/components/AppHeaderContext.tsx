@@ -36,11 +36,15 @@ import type { Profile } from "../types";
 import type { DatasetInfo } from "../types/settings";
 import { reloadPage } from "../utils/navigation";
 import { saveActiveDatasetId } from "../utils/datasetScope";
+import { datasetDisplayName } from "../utils/displayNames";
 import { t } from "../i18n";
 import { useLocale } from "../i18n/i18nContext";
 import DatasetCreateModal from "./DatasetCreateModal";
 
 /** 下拉菜单里「新建数据集…」的 key：与数据集 id 不可能冲突。 */
+/** 数据集下拉的最小宽度（px）：名字短时也要能读清条目，见 onOpenChange 的注释。 */
+const DATASET_MENU_MIN_WIDTH = 280;
+
 const CREATE_DATASET_KEY = "create-dataset";
 
 /**
@@ -231,8 +235,10 @@ export default function AppHeaderContext({ beforeAvatar }: Props = {}) {
     const items: MenuProps["items"] = datasets.map((item) => ({
       key: item.id,
       label: (
-        <span className="app-dataset-menu-label" title={item.name}>
-          {item.is_active ? t("appHeader.dataset.menuCurrent", { name: item.name }) : item.name}
+        <span className="app-dataset-menu-label" title={datasetDisplayName(item)}>
+          {item.is_active
+            ? t("appHeader.dataset.menuCurrent", { name: datasetDisplayName(item) })
+            : datasetDisplayName(item)}
           {item.source === "sample" && (
             <Tooltip title={t("appHeader.dataset.sampleTagTooltip")}>
               <span className="app-dataset-sample-tag" aria-hidden="true">
@@ -284,7 +290,15 @@ export default function AppHeaderContext({ beforeAvatar }: Props = {}) {
                 setDatasetMenuOpen(next);
                 // 弹层宽度跟随触发框（用户反馈：弹层比圆角框宽出一截）。
                 // 打开时量一次即可——chip 的宽度在同一屏里不会变，关着的时候量不到。
-                if (next) setDatasetMenuWidth(datasetChipRef.current?.offsetWidth);
+                // 弹层宽度 = 触发框实测宽度，但**不小于一个下限**：数据集名字短的时候
+                // （「主数据」「体验示例」），chip 只有 100 出头，弹层跟着变窄，条目全变成
+                // 「简历通…」「resume…」——用户截图里的样子。下限取 280：够放「简历通测试
+                // 数据集-2026-10-28」这类名字的前 16 个字符与右侧「示例」徽标。
+                if (next) {
+                  setDatasetMenuWidth(
+                    Math.max(datasetChipRef.current?.offsetWidth ?? 0, DATASET_MENU_MIN_WIDTH),
+                  );
+                }
               }}
               styles={{
                 root:
@@ -319,13 +333,13 @@ export default function AppHeaderContext({ beforeAvatar }: Props = {}) {
                 className="app-dataset-chip"
                 aria-label={
                   isSampleActive
-                    ? t("appHeader.dataset.chipAriaSample", { name: dataset.name })
-                    : t("appHeader.dataset.chipAria", { name: dataset.name })
+                    ? t("appHeader.dataset.chipAriaSample", { name: datasetDisplayName(dataset) })
+                    : t("appHeader.dataset.chipAria", { name: datasetDisplayName(dataset) })
                 }
                 aria-haspopup="menu"
               >
                 <DatabaseOutlined />
-                <span className="app-dataset-name">{dataset.name}</span>
+                <span className="app-dataset-name">{datasetDisplayName(dataset)}</span>
                 {isSampleActive && (
                   <Tooltip title={t("appHeader.dataset.sampleTagTooltip")}>
                     <span className="app-dataset-sample-tag">

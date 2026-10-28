@@ -21,6 +21,8 @@ import type {
   ProvenanceSourceListOut,
   UsagePricingIn,
   UsagePricingOut,
+  UsagePricingRecordListOut,
+  UsagePricingRecordOut,
   UsageRecordListOut,
   OutboundPreviewRequest,
   ResumeProvenanceOut,
@@ -176,12 +178,42 @@ export function fetchUsagePricing(): Promise<UsagePricingOut> {
   return request("/usage/pricing");
 }
 
-/** 保存单价（只影响费用估算；未知 token 仍不会当 0 算）。 */
+/**
+ * 保存一份新单价（每百万 token、三档），保存后立即生效。
+ *
+ * 每次保存都新建一条记录而不是覆盖：用户要能同时保留"官方价 / 调价后"并给它们命名。
+ */
 export function saveUsagePricing(payload: UsagePricingIn): Promise<UsagePricingOut> {
   return request("/usage/pricing", {
     method: "PUT",
     body: JSON.stringify(payload),
   });
+}
+
+/** 全部单价记录（新→旧），含哪条生效。 */
+export function fetchUsagePricingRecords(): Promise<UsagePricingRecordListOut> {
+  return request("/usage/pricing/records");
+}
+
+/** 给一条单价记录改名（价格与生效状态都不动）。 */
+export function renameUsagePricingRecord(
+  recordId: number,
+  name: string,
+): Promise<UsagePricingRecordOut> {
+  return request(`/usage/pricing/records/${recordId}`, {
+    method: "PATCH",
+    body: JSON.stringify({ name }),
+  });
+}
+
+/** 切换生效的单价（其它记录同时失效）。 */
+export function activateUsagePricingRecord(recordId: number): Promise<UsagePricingOut> {
+  return request(`/usage/pricing/records/${recordId}/activate`, { method: "POST" });
+}
+
+/** 删除一条单价记录（删掉生效那条时，剩下最新的一条自动顶上）。 */
+export function deleteUsagePricingRecord(recordId: number): Promise<{ ok: boolean }> {
+  return request(`/usage/pricing/records/${recordId}`, { method: "DELETE" });
 }
 
 /** 调用记录（含 finish_reason；无正文，隐私边界由后端保证）。 */

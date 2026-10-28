@@ -339,3 +339,132 @@ def test_jumping_to_a_group_actually_brings_it_into_view(page_client):
         )
         assert state["found"], f"找不到「{name}」那一组"
         assert state["visible"], f"点「{name}」之后它没被带到眼前：{state}"
+
+
+# ===== 分类与中文标签、跳转条高度可拖 =====
+
+MIXED_CATALOG = [
+    {"group": "基本信息", "label": "姓名", "value": "张三"},
+    {"group": "实习经历 1", "label": "公司", "value": "星河科技"},
+    {"group": "identity", "label": "证件类型", "value": "居民身份证"},
+    {"group": "contact", "label": "手机号", "value": "13500000000"},
+    {"group": "school", "label": "学校", "value": "天津工业大学"},
+]
+
+
+def test_jump_chips_split_resume_and_webform_material_and_speak_chinese(page_client):
+    """跳转条分「简历资料 / 网申资料」两段，网申的协议 id 必须显示成中文。
+
+    网申资料的分组名是 `identity` / `contact` / `school` 这样的**协议标识**
+    （`services/webform/field_types.py`），中文名只在界面上解析。跳转条以前直接把标识
+    印出来，于是同一片胶囊里一半中文一半英文——用户的原话是"怎么变成英文了"。
+    分类则解决另一个抱怨："看着全是一团"。
+    """
+    _open_picker(page_client, catalog=MIXED_CATALOG)
+
+    sections = page_client.evaluate(
+        f"[...{_ROOT}.querySelectorAll('.navsec')].map((s) => s.firstChild.textContent)"
+    )
+    assert sections == ["简历资料", "网申资料"], sections
+
+    labels = page_client.evaluate(
+        f"[...{_ROOT}.querySelectorAll('.navchip')].map((c) => c.firstChild.textContent)"
+    )
+    assert labels == ["基本信息", "实习经历 1", "身份信息", "联系方式", "学籍与档案"], labels
+
+    # **只翻显示**：跳转与折叠仍按原始组名走，`dataset.group` 不能跟着变。
+    assert page_client.evaluate(_chip("identity") + ".dataset.group") == "identity"
+
+
+# 每个组都是独立家族（名字不带尾部数字，`familyOf` 不会把它们并成一个家族），
+# 这样才能把胶囊区铺到超过默认高度上限、测出"下沿拖得动"。
+TALL_NAV_CATALOG = [
+    {"group": f"资料 {name}", "label": "字段", "value": f"值 {index}"}
+    for index, name in enumerate("ABCDEFGHIJKLMNOPQRST", start=1)
+]
+
+
+def _drag_grip(page_client, dy: int) -> None:
+    """按住胶囊区下沿拖 ``dy`` 像素（正数 = 变高）。"""
+    grip = page_client.evaluate(
+        "(() => { const r = document.getElementById('__rf_live_host__').shadowRoot;"
+        " const b = r.querySelector('.navgrip').getBoundingClientRect();"
+        " return {x: Math.round(b.left + 8), y: Math.round(b.top + b.height / 2)}; })()"
+    )
+    page_client.evaluate(
+        "(() => { const r = document.getElementById('__rf_live_host__').shadowRoot;"
+        " const grip = r.querySelector('.navgrip');"
+        f" grip.dispatchEvent(new MouseEvent('mousedown',"
+        f"   {{bubbles: true, button: 0, clientX: {grip['x']}, clientY: {grip['y']}}}));"
+        f" window.dispatchEvent(new MouseEvent('mousemove',"
+        f"   {{bubbles: true, clientX: {grip['x']}, clientY: {grip['y'] + dy}}}));"
+        " window.dispatchEvent(new MouseEvent('mouseup', {bubbles: true})); })()"
+    )
+
+
+def test_the_chip_area_bottom_edge_can_be_dragged(page_client):
+    """胶囊区的下沿可以拖：组多时拉大一次看全，组少时压小省地方。
+
+    默认高度是按资料区可见高度倒推的（`measureNavLimit`），用户拖过之后以他给的值为准
+    ——但天花板仍然是"资料区至少还剩 150px"，拖到底也盖不住清单。
+
+    **要点：先把视口调高**。默认测试视口只有 484px，胶囊区一上来就被压到 46px 的下限，
+    那里根本没有"伸缩"的余地——量出来的只是下限本身，测不出拖动。
+    """
+    page_client.send(
+        "Emulation.setDeviceMetricsOverride",
+        {"width": 1200, "height": 900, "deviceScaleFactor": 1, "mobile": False},
+    )
+    try:
+        _open_picker(page_client, catalog=TALL_NAV_CATALOG)
+
+        def body_height() -> int:
+            return round(
+                page_client.evaluate(
+                    _shadow("querySelector('.navbody').getBoundingClientRect().height")
+                )
+            )
+
+        before = body_height()
+        assert before > 0, "胶囊区没摊开，这条用例的前提不成立"
+
+        _drag_grip(page_client, -40)
+
+        after = body_height()
+        assert after <= before - 20, f"下沿拖不动：{before} → {after}"
+    finally:
+        page_client.send("Emulation.clearDeviceMetricsOverride")
+
+
+def test_dragging_the_chip_area_keeps_the_list_below_in_place(page_client):
+    """拖大胶囊区时，下面正在看的那几行不该跟着走。
+
+    胶囊区在 `position:sticky` 的搜索块里，它一变高就把清单往下顶——用户反馈的
+    "拖下边框时下面的内容一起跟着动"就是这条布局链。实现里把 `.pick` 的滚动量补上
+    同样的差值，这里钉住"补偿真的发生了"（只量视觉位置的话，稍有布局差异就假红）。
+    """
+    page_client.send(
+        "Emulation.setDeviceMetricsOverride",
+        {"width": 1200, "height": 900, "deviceScaleFactor": 1, "mobile": False},
+    )
+    try:
+        _open_picker(page_client, catalog=TALL_NAV_CATALOG)
+        page_client.evaluate(_shadow("querySelector('.pick').scrollTop = 160"))
+
+        def probe() -> dict:
+            return page_client.evaluate(
+                "(() => { const r = document.getElementById('__rf_live_host__').shadowRoot;"
+                " return {h: Math.round(r.querySelector('.navbody').getBoundingClientRect().height),"
+                "         scroll: Math.round(r.querySelector('.pick').scrollTop)}; })()"
+            )
+
+        start = probe()
+        _drag_grip(page_client, 40)
+        end = probe()
+
+        assert end["h"] > start["h"], f"胶囊区没被拖大：{start} → {end}"
+        assert end["scroll"] - start["scroll"] == end["h"] - start["h"], (
+            f"滚动量没跟着补偿，下面的清单会被顶走：{start} → {end}"
+        )
+    finally:
+        page_client.send("Emulation.clearDeviceMetricsOverride")

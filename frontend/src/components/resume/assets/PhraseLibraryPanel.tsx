@@ -78,7 +78,13 @@ export default function PhraseLibraryPanel({
   const visible = useMemo(() => visiblePhrases(phrases, filter), [phrases, filter]);
 
   return (
-    <div className={className} data-resume-assets="library">
+    // 根节点固定带 `.resume-assets-panel`（flex 列 + gap 10）：宿主传进来的 `className`
+    // 只做外层补充，不能决定这段排版是否存在——2026-10-29 用户反馈"挨得太近"，根因就是
+    // 容器没传 className 时 head / 筛选条 / 列表三块直接贴住（gap 全丢了）。
+    <div
+      className={["resume-assets-panel", className].filter(Boolean).join(" ")}
+      data-resume-assets="library"
+    >
       <div className="resume-assets-head">
         <div className="resume-assets-head-main">
           <span className="resume-assets-head-title">{at("assets.panel.title")}</span>
@@ -90,6 +96,7 @@ export default function PhraseLibraryPanel({
           <Tooltip title={at("assets.action.collect")}>
             <Button
               size="small"
+              className="resume-assets-head-action"
               icon={<StarOutlined />}
               aria-label={at("assets.action.collectAria")}
               onClick={onCollectCurrent}

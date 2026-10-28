@@ -252,18 +252,35 @@
    原先写死 `height: 405px` + `scale(0.36)` + `margin-left: -143px`：那三个数只在卡片
    恰好 286px 宽时成立，栅格一变（minmax(280px, 1fr)）就左右各裁 4px、右侧留白。
    现在交给 `A4PreviewFrame` 的 `fit="width"`：它按容器实测宽算比例，高度由
-   `aspect-ratio` 反推，所以任何卡片宽度下都是一整页、不裁也不留白。 */
+   `aspect-ratio` 反推，所以任何卡片宽度下都是一整页、不裁也不留白。
+
+   2026-11：四周补一圈内边距 + 更深的画布底色，让每张缩略图**看得出是一张 A4 纸**
+   （用户："预览模板能有个 A4 纸的边框"）。底色靠 `color-mix` 从既有 token 派生，
+   深浅两套主题各自成立（不新增十六进制）。 */
 .template-gallery-preview {
   position: relative;
-  background: var(--rf-surface-alt);
+  padding: 12px;
+  background: color-mix(in srgb, var(--rf-surface-alt) 84%, var(--rf-border) 16%);
   overflow: hidden;
 }
 
-/* 卡片自己已经有边框与圆角：把 A4 纸舞台那一层外壳去掉，避免"卡里还有一张卡"。 */
+/* 卡片自己已经有边框与圆角：把 A4 纸舞台那一层外壳去掉，避免"卡里还有一张卡"。
+   纸本身的边界由下面 `.a4-preview-paper` 的描边 + 投影给（舞台保持透明）。 */
 .template-gallery-preview .a4-preview-stage {
   border: 0;
   border-radius: 0;
   background: transparent;
+}
+
+/* 纸：1px 描边 + 轻微投影 + 2px 圆角。
+   `box-sizing: border-box` 是必需的——本仓没有全局重置，而 `.a4-preview-paper` 的宽高
+   是内联写死的（= 舞台实测宽 × 比例），content-box 下描边会外扩 2px，被舞台的
+   `overflow: hidden` 左右各切掉 1px（纸边看起来只有三面）。 */
+.template-gallery-preview .a4-preview-paper {
+  box-sizing: border-box;
+  border: 1px solid var(--rf-border);
+  border-radius: 2px;
+  box-shadow: 0 2px 8px rgb(15 23 42 / 14%);
 }
 
 /* 缩略图整块可点：iframe 吃不到指针事件，点击由这层接收（与旧写法同一语义）。 */

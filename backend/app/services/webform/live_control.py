@@ -13,11 +13,14 @@ Python 侧通过 CDP 轮询这个状态，再决定当前标签页是否继续�
 写回 ``window.__rfAssistantReply``。**注入脚本里没有任何对本地 API 的请求**——
 素材也以 base64 data URI 随脚本携带，不给第三方页面留直连通道。
 """
+
 from __future__ import annotations
 
 import base64
 import json
 from pathlib import Path
+
+from .webform_copy import apply_copy
 
 # 吉祥物素材目录（``backend/app/assets``，透明底小图，由美术原图切出）。
 _ASSET_DIR = Path(__file__).resolve().parents[2] / "assets"
@@ -41,12 +44,12 @@ def _load_face_data_uri(filename: str) -> str | None:
     return f"data:image/png;base64,{base64.b64encode(raw).decode('ascii')}"
 
 
-def install_live_control_script(enabled: bool = True) -> str:
-    """返回幂等的悬浮球安装脚本。"""
+def install_live_control_script(enabled: bool = True, locale: str | None = None) -> str:
+    """返回幂等的悬浮球安装脚本；界面文案按 ``locale`` 取（缺省中文）。"""
     initial = "true" if enabled else "false"
     avatar = _load_face_data_uri(_LILI_ORB_FILE)
     avatar_literal = json.dumps(avatar)
-    return f"""
+    script = f"""
 (() => {{
   /* rf:live-control */
   const host = document.getElementById('__rf_live_host__');
@@ -153,7 +156,7 @@ def install_live_control_script(enabled: bool = True) -> str:
   const ball = document.createElement('button');
   ball.className = 'rf-live-switch';
   ball.type = 'button';
-  ball.setAttribute('aria-label', '历历求职助手：实时填表已开启，单击切换，双击打开菜单，按住拖动');
+  ball.setAttribute('aria-label', '%%copy:ball.aria.on%%');
   shadow.appendChild(ball);
 
   // 历历形象：data URI 由 Python 侧随脚本内嵌（资产缺失时为 null，回退渐变球 + 文字）。
@@ -168,8 +171,8 @@ def install_live_control_script(enabled: bool = True) -> str:
 
   const menu = document.createElement('div');
   menu.className = 'rf-live-autofill-menu';
-  menu.innerHTML = '<div class="rf-live-autofill-title">当前页面助手<span>仅填写，不替你提交</span></div>' +
-    '<button class="rf-live-autofill-button" type="button">自动填写当前页面</button>' +
+  menu.innerHTML = '<div class="rf-live-autofill-title">%%copy:menu.title%%<span>%%copy:menu.subtitle%%</span></div>' +
+    '<button class="rf-live-autofill-button" type="button">%%copy:autofill.action%%</button>' +
     '<div class="rf-live-autofill-progress" aria-live="polite"></div>';
   shadow.appendChild(menu);
   const autoFillButton = menu.querySelector('.rf-live-autofill-button');
@@ -179,7 +182,7 @@ def install_live_control_script(enabled: bool = True) -> str:
   const askToggle = document.createElement('button');
   askToggle.className = 'rf-live-ask-toggle';
   askToggle.type = 'button';
-  askToggle.textContent = '问历历';
+  askToggle.textContent = '%%copy:ask.open%%';
   askToggle.setAttribute('aria-expanded', 'false');
   menu.appendChild(askToggle);
 
@@ -188,8 +191,8 @@ def install_live_control_script(enabled: bool = True) -> str:
   // maxlength 与后端 live_assistant.ASK_MAX_CHARS（2000）同值：页面拦一层，Python 再兜一层。
   askPanel.innerHTML = '<div class="rf-live-ask-log"></div>' +
     '<textarea class="rf-live-ask-input" rows="2" maxlength="2000" ' +
-    'placeholder="问历历：岗位、简历、填表问题…"></textarea>' +
-    '<button class="rf-live-ask-send" type="button">发送</button>' +
+    'placeholder="%%copy:ask.placeholder%%"></textarea>' +
+    '<button class="rf-live-ask-send" type="button">%%copy:ask.send%%</button>' +
     '<div class="rf-live-ask-note" aria-live="polite"></div>';
   menu.appendChild(askPanel);
   const askLog = askPanel.querySelector('.rf-live-ask-log');
@@ -206,10 +209,10 @@ def install_live_control_script(enabled: bool = True) -> str:
 
   const renderAsk = () => {{
     askPanel.classList.toggle('on', askOpen);
-    askToggle.textContent = askOpen ? '收起问答' : '问历历';
+    askToggle.textContent = askOpen ? '%%copy:ask.close%%' : '%%copy:ask.open%%';
     askToggle.setAttribute('aria-expanded', askOpen ? 'true' : 'false');
     if (askSend) askSend.disabled = pendingAskSeq !== null;
-    if (askNote) askNote.textContent = pendingAskSeq !== null ? '历历思考中…' : askNoteText;
+    if (askNote) askNote.textContent = pendingAskSeq !== null ? '%%copy:ask.thinking%%' : askNoteText;
     if (askLog) {{
       askLog.textContent = '';
       askEntries.forEach((item) => {{
@@ -311,7 +314,7 @@ def install_live_control_script(enabled: bool = True) -> str:
     const running = state === 'requested' || state === 'filling';
     if (autoFillButton) {{
       autoFillButton.disabled = !enabled || running;
-      autoFillButton.textContent = running ? '正在填写中…' : '自动填写当前页面';
+      autoFillButton.textContent = running ? '%%copy:autofill.busy%%' : '%%copy:autofill.action%%';
     }}
     if (autoFillProgress) {{
       const total = Number(autoStatus && autoStatus.total) || 0;
@@ -320,10 +323,10 @@ def install_live_control_script(enabled: bool = True) -> str:
       const completed = Number(autoStatus && autoStatus.completed) || 0;
       const filled = Number(autoStatus && autoStatus.filled) || 0;
       const current = String(autoStatus && autoStatus.current_label || '');
-      if (running) autoFillProgress.textContent = current ? `正在填写：${{current}}（${{completed}}/${{recognizedTotal}}）` : '正在识别当前页面…';
-      else if (state === 'done') autoFillProgress.textContent = String(autoStatus.message || `已完成 ${{filled}}/${{formTotal}} 个表单框，请回到页面核对`);
-      else if (state === 'cancelled' || state === 'error') autoFillProgress.textContent = String(autoStatus.message || '自动填写已停止');
-      else autoFillProgress.textContent = '识别到的字段会逐项写入，已有内容不会覆盖。';
+      if (running) autoFillProgress.textContent = current ? '%%copy:autofill.running%%'.replace('{{current}}', String(current)).replace('{{done}}', String(completed)).replace('{{total}}', String(recognizedTotal)) : '%%copy:autofill.recognizing%%';
+      else if (state === 'done') autoFillProgress.textContent = String(autoStatus.message || '%%copy:autofill.done%%'.replace('{{filled}}', String(filled)).replace('{{total}}', String(formTotal)));
+      else if (state === 'cancelled' || state === 'error') autoFillProgress.textContent = String(autoStatus.message || '%%copy:autofill.stopped%%');
+      else autoFillProgress.textContent = '%%copy:autofill.idle%%';
     }}
     menu.classList.toggle('on', expanded);
     positionDock();
@@ -332,13 +335,9 @@ def install_live_control_script(enabled: bool = True) -> str:
   const render = () => {{
     ball.classList.toggle('off', !enabled);
     // 渐变球回退时用文字承载「填」的语义；有历历形象时用置灰表达关闭态。
-    if (!hasAvatar) ball.textContent = enabled ? '填' : '关';
-    ball.title = enabled
-      ? '历历求职助手：实时填表已开启。单击切换，双击打开菜单，按住拖动'
-      : '历历求职助手：实时填表已关闭。单击开启，双击打开菜单，按住拖动';
-    ball.setAttribute('aria-label', enabled
-      ? '历历求职助手：实时填表已开启，单击切换，双击打开菜单，按住拖动'
-      : '历历求职助手：实时填表已关闭，单击开启，双击打开菜单');
+    if (!hasAvatar) ball.textContent = enabled ? '%%copy:ball.fallback.on%%' : '%%copy:ball.fallback.off%%';
+    ball.title = enabled ? '%%copy:ball.title.on%%' : '%%copy:ball.title.off%%';
+    ball.setAttribute('aria-label', enabled ? '%%copy:ball.aria.on%%' : '%%copy:ball.aria.off%%');
     ball.setAttribute('aria-pressed', enabled ? 'true' : 'false');
     window.__rfLiveEnabled = enabled;
     renderAutoFill();
@@ -457,6 +456,7 @@ def install_live_control_script(enabled: bool = True) -> str:
   return '1';
 }})()
 """
+    return apply_copy(script, locale)
 
 
 LIVE_CONTROL_STATE_SCRIPT = """

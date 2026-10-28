@@ -70,6 +70,14 @@ const APPROX = "32 MB";
  */
 const DELETE_BUTTON = new RegExp(t("fontDownload.delete").split("").join("\\s*"));
 
+/** 删除已收进「更多操作」：先点开菜单，再点菜单项。 */
+async function clickDeleteMenuItem() {
+  fireEvent.click(screen.getByRole("button", { name: t("common.action.more") }));
+  await flush();
+  fireEvent.click(screen.getByRole("menuitem", { name: DELETE_BUTTON }));
+  await flush();
+}
+
 function renderRow(
   status: BuiltinFontStatus | null,
   onChanged: () => void = () => undefined,
@@ -246,24 +254,26 @@ describe("BuiltinFontRow", () => {
 
   // ── P0-2：已下载可删除 ──────────────────────────────────────────
 
-  it("未下载时没有「删除」；已下载才出现（下载中也不出现）", async () => {
+  it("未下载时没有「删除」；已下载才出现在「更多操作」里（下载中也不出现）", async () => {
     const idle = renderRow(IDLE);
-    expect(screen.queryByRole("button", { name: DELETE_BUTTON })).toBeNull();
+    expect(screen.queryByRole("button", { name: t("common.action.more") })).toBeNull();
     idle.unmount();
 
     renderRow(DOWNLOADING);
-    expect(screen.queryByRole("button", { name: DELETE_BUTTON })).toBeNull();
+    expect(screen.queryByRole("button", { name: t("common.action.more") })).toBeNull();
     cleanup();
 
     renderRow(DONE);
-    expect(screen.getByRole("button", { name: DELETE_BUTTON })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: t("common.action.more") })).toBeInTheDocument();
+    // 删除不裸露：只在菜单项里。
+    expect(screen.queryByRole("button", { name: DELETE_BUTTON })).toBeNull();
   });
 
   it("删除要二次确认：正文写明没有恢复入口，确认后才真的删", async () => {
     const onChanged = vi.fn();
     renderRow(DONE, onChanged);
 
-    fireEvent.click(screen.getByRole("button", { name: DELETE_BUTTON }));
+    await clickDeleteMenuItem();
     // 确认弹窗出现且删除尚未发生。
     await flush();
     expect(screen.getByText(t("fontDownload.deleteConfirmBody"))).toBeInTheDocument();
@@ -283,8 +293,7 @@ describe("BuiltinFontRow", () => {
   it("删掉的正是当前字体：提示写明已回到系统字体", async () => {
     renderRow(DONE, () => undefined, BUILTIN_FONT_FILE);
 
-    fireEvent.click(screen.getByRole("button", { name: DELETE_BUTTON }));
-    await flush();
+    await clickDeleteMenuItem();
     const dialog = screen.getByRole("dialog");
     fireEvent.click(within(dialog).getByRole("button", { name: DELETE_BUTTON }));
     await flush();
@@ -296,8 +305,7 @@ describe("BuiltinFontRow", () => {
     apiMocks.deleteBuiltinFont.mockRejectedValueOnce(new Error("字体文件正被占用，无法删除"));
     renderRow(DONE);
 
-    fireEvent.click(screen.getByRole("button", { name: DELETE_BUTTON }));
-    await flush();
+    await clickDeleteMenuItem();
     const dialog = screen.getByRole("dialog");
     fireEvent.click(within(dialog).getByRole("button", { name: DELETE_BUTTON }));
     await flush();

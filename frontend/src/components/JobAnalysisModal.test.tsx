@@ -20,13 +20,26 @@ vi.mock("../api/jobs", () => ({
   getJobAnalysis: apiMocks.getJobAnalysis,
 }));
 
-const noticeMocks = vi.hoisted(() => ({
-  announceBackgroundResult: vi.fn(),
-  announceBackgroundFailure: vi.fn(),
+/**
+ * 任务地基的替身：把"一次请求"接到 `startAiTask` + 结果派发上（见
+ * `src/test/aiTaskEntryBridge.ts`）。组件测试验的是界面语义，轮询与通知出口由
+ * `utils/backgroundTasks*.test.ts` 负责。
+ */
+const bridgeBox = vi.hoisted(() => ({
+  bridge: null as null | import("../test/aiTaskEntryBridge").AiTaskEntryBridge,
 }));
-
-// 通知出口换成替身：这里只断言"用户走了才通知"，不测通知长什么样。
-vi.mock("../utils/backgroundTask", () => noticeMocks);
+vi.mock("../utils/aiTaskEntry", async () => {
+  const { createAiTaskEntryBridge } = await import("../test/aiTaskEntryBridge");
+  const bridge = createAiTaskEntryBridge({
+    run: async (payload, signal) => {
+      const jobId = Number(payload.job_id);
+      const analysis = await apiMocks.generateJobAnalysis(jobId, signal, Boolean(payload.force));
+      return { job_id: jobId, analysis };
+    },
+  });
+  bridgeBox.bridge = bridge;
+  return bridge;
+});
 
 const JOB: Job = {
   id: 12,
@@ -96,8 +109,6 @@ beforeEach(() => {
     generated_at: null,
     result: null,
   });
-  noticeMocks.announceBackgroundResult.mockReset();
-  noticeMocks.announceBackgroundFailure.mockReset();
 });
 
 afterEach(() => {
@@ -210,12 +221,14 @@ describe("JobAnalysisModal", () => {
     expect(signal?.aborted).toBe(false);
     expect(await screen.findByText("岗位解读已关闭")).toBeInTheDocument();
 
+    // 「后台继续」= 收回"有人在看"的声明（完成提醒由统一出口决定要不要弹居中弹窗）。
+    expect(bridgeBox.bridge?.attachedKeys()).toEqual([]);
+
     act(() => {
       pending.resolve(ANALYSIS);
     });
 
-    // 结果不往已关闭的弹窗里回填，改走统一通知。
-    await waitFor(() => expect(noticeMocks.announceBackgroundResult).toHaveBeenCalledOnce());
+    // 结果不往已关闭的弹窗里回填（弹窗已经不在 DOM 里）。
     expect(screen.queryByText(ANALYSIS.summary)).not.toBeInTheDocument();
   });
 

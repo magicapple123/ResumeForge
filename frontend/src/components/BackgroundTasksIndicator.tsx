@@ -63,8 +63,16 @@ function TaskRow({
       </div>
     );
   }
+  // 进度文案：有可信百分比就带上（通用 AI 任务），简历生成只报字数（总长未知）。
+  const percent =
+    task.progressPercent === null
+      ? ""
+      : t("backgroundTasks.progress.percent", { percent: task.progressPercent });
   const progress = [
-    t("backgroundTasks.progress.received", { count: task.receivedChars }),
+    percent,
+    task.receivedChars > 0
+      ? t("backgroundTasks.progress.received", { count: task.receivedChars })
+      : "",
     task.message,
   ]
     .filter(Boolean)
@@ -174,9 +182,9 @@ export default function BackgroundTasksIndicator() {
 
   const cancel = async (task: BackgroundTask) => {
     if (cancelling !== null) return;
-    setCancelling(task.id);
+    setCancelling(task.key);
     try {
-      await cancelBackgroundTask(task.id);
+      await cancelBackgroundTask(task.key);
       message.info(t("backgroundTasks.toast.cancelled", { name: task.label }));
     } catch (error) {
       message.error(
@@ -207,11 +215,11 @@ export default function BackgroundTasksIndicator() {
     <div className="background-tasks-panel">
       {tasks.map((task) => (
         <TaskRow
-          key={task.id}
+          key={task.key}
           task={task}
           onCancel={() => void cancel(task)}
           onDismiss={() => {
-            dismissBackgroundTask(task.id);
+            dismissBackgroundTask(task.key);
             message.info(t("backgroundTasks.toast.dismissed", { name: task.label }));
           }}
         />

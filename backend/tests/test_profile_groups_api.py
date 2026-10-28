@@ -179,6 +179,9 @@ def test_delete_current_group_falls_back_to_default_and_notifies(client):
 def test_default_group_can_be_renamed_but_not_deleted(client):
     """R-20：默认组恒存在、可改名、不可删除（错误码 default_group_protected）。"""
     default = _groups(client)["items"][0]
+    # 还没改名时，界面可以把这个名字翻成当前语言（`name_is_default` 是唯一判据）。
+    assert default["is_default"] is True
+    assert default["name_is_default"] is True
     renamed = client.patch(
         f"{GROUPS_API}/{default['group_id']}",
         json={"name": "我的默认组", "expected_revision": default["revision"]},
@@ -186,6 +189,8 @@ def test_default_group_can_be_renamed_but_not_deleted(client):
     assert renamed.status_code == 200, renamed.text
     assert renamed.json()["is_default"] is True
     assert renamed.json()["name"] == "我的默认组"
+    # 改名之后名字是用户数据：不再标记为默认名，界面原样显示，不再翻译。
+    assert renamed.json()["name_is_default"] is False
 
     deleted = client.request(
         "DELETE",

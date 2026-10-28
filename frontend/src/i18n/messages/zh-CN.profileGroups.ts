@@ -6,6 +6,8 @@
  * （动作 + 对象/条数 + 后果 + 恢复位置），不为凑字数删安全后果。
  */
 const profileGroups = {
+  /** 默认组还没被改过名时的展示名（后端 `DEFAULT_GROUP_NAME` 逐字一致）；改名后原样显示用户的输入。 */
+  "profileGroups.defaultName": "默认组",
   "profileGroups.control.label": "当前方案",
   "profileGroups.control.manage": "管理方案",
   "profileGroups.control.locked": "编辑中不能切换方案，请先保存或取消",

@@ -15,8 +15,14 @@ const backgroundTasks = {
   "backgroundTasks.progress.received": "Received {count} characters",
   "backgroundTasks.progress.processed": "Processed {done}/{total} jobs",
   "backgroundTasks.progress.currentJob": "Current: {title}",
+  /** Trustworthy percentage from the backend `progress` field. */
+  "backgroundTasks.progress.percent": "{percent}%",
   "backgroundTasks.action.cancel": "Cancel",
   "backgroundTasks.action.remove": "Remove",
+  /** The jump button on a completion notice (its target comes from `utils/taskDeepLinks`). */
+  "backgroundTasks.action.view": "View",
+  /** Fallback dialog title: never show a completion dialog without a title. */
+  "backgroundTasks.notice.done.title": "Task finished",
   "backgroundTasks.jobAnalysis.label": "Job analysis",
   "backgroundTasks.jobAnalysis.running": "Generating the job analysis...",
   "backgroundTasks.toast.cancelled": 'Cancelled "{name}"',
@@ -51,8 +57,43 @@ const backgroundTasks = {
   "backgroundTasks.suggestion.failed.title": "Could not generate job suggestions",
   "backgroundTasks.suggestion.failed.description":
     "Go back to the Resume detail and generate again.",
+  // ── Generic AI tasks: job analysis / risk scan / suggestions / webform ──
+  "backgroundTasks.aiTask.jobAnalysis.label": "Job analysis",
+  "backgroundTasks.aiTask.jobAnalysis.done.title": "Job analysis ready",
+  "backgroundTasks.aiTask.jobAnalysis.done.description":
+    "Saved to the job; open “Job analysis” to read it.",
+  "backgroundTasks.aiTask.jobAnalysis.failed.title": "Job analysis failed",
+  "backgroundTasks.aiTask.jobAnalysis.failed.description": "Open the job and generate it again.",
+  "backgroundTasks.aiTask.jobAnalysis.cancelled.title": "Job analysis cancelled",
+  "backgroundTasks.aiTask.jobAnalysis.action.viewJob": "View analysis",
+  "backgroundTasks.aiTask.risk.label": "Resume risk scan",
+  "backgroundTasks.aiTask.risk.done.title": "Risk scan complete",
+  "backgroundTasks.aiTask.risk.done.description":
+    "Open the resume and check “Quality check” to see the risk points.",
+  "backgroundTasks.aiTask.risk.failed.title": "Risk scan failed",
+  "backgroundTasks.aiTask.risk.failed.description": "Open the resume and scan again.",
+  "backgroundTasks.aiTask.risk.cancelled.title": "Risk scan cancelled",
+  "backgroundTasks.aiTask.risk.action.viewResume": "View resume",
+  "backgroundTasks.aiTask.rewrite.label": "Job-tailored suggestions",
+  "backgroundTasks.aiTask.rewrite.done.title": "Job-tailored suggestions ready",
+  "backgroundTasks.aiTask.rewrite.done.description":
+    "Open the resume and check “Job suggestions” to review and adopt them one by one.",
+  "backgroundTasks.aiTask.rewrite.failed.title": "Job-tailored suggestions failed",
+  "backgroundTasks.aiTask.rewrite.failed.description": "Open the resume and generate them again.",
+  "backgroundTasks.aiTask.rewrite.cancelled.title": "Job-tailored suggestions cancelled",
+  "backgroundTasks.aiTask.rewrite.action.viewResume": "View suggestions",
+  "backgroundTasks.aiTask.webform.label": "Web form field detection",
+  "backgroundTasks.aiTask.webform.done.title": "Web form field detection complete",
+  "backgroundTasks.aiTask.webform.done.description":
+    "AI suggestions are staged; review and tick them on the web form page.",
+  "backgroundTasks.aiTask.webform.failed.title": "Web form field detection failed",
+  "backgroundTasks.aiTask.webform.failed.description":
+    "Go back to the web form page and rebuild the preview.",
+  "backgroundTasks.aiTask.webform.cancelled.title": "Web form field detection cancelled",
+  "backgroundTasks.aiTask.webform.action.viewWebform": "Open web form",
   // ── Resume generation notices ──────────────────────────────
   "backgroundTasks.resume.done.title": "Resume generated",
+  "backgroundTasks.resume.action.viewResume": "View resume",
   "backgroundTasks.resume.done.description":
     "Saved to Resume Center; you can keep fine-tuning or export it.",
   "backgroundTasks.resume.restored.description":
@@ -83,6 +124,15 @@ const backgroundTasks = {
   "backgroundTasks.jobMatch.cancelled.title": "Job fit analysis cancelled",
   "backgroundTasks.jobMatch.cancelled.description":
     "Results finished before the cancellation are still saved.",
+  // ── Generic AI tasks (single job fit, via /ai-tasks) ───────
+  "backgroundTasks.aiTask.jobMatch.label": "Job fit analysis",
+  "backgroundTasks.aiTask.jobMatch.done.title": "Job fit analysis complete",
+  "backgroundTasks.aiTask.jobMatch.done.description":
+    "The result is saved; open the job to see the five verdicts.",
+  "backgroundTasks.aiTask.jobMatch.failed.title": "Job fit analysis failed",
+  "backgroundTasks.aiTask.jobMatch.failed.description": "Open the job to analyze again.",
+  "backgroundTasks.aiTask.jobMatch.cancelled.title": "Job fit analysis cancelled",
+  "backgroundTasks.aiTask.jobMatch.action.viewJob": "View job",
   "backgroundTasks.jobMatch.label": "Analyzing {count} jobs",
   // ── Apply / collect batch notifications ────────────────────
   "backgroundTasks.batch.kindApply": "Apply",

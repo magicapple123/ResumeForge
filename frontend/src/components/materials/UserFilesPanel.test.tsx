@@ -4,6 +4,7 @@ import { App as AntdApp } from "antd";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { UserFileItem } from "../../api/userFiles";
+import { t } from "../../i18n";
 import UserFilesPanel from "./UserFilesPanel";
 
 const apiMocks = vi.hoisted(() => ({
@@ -11,6 +12,7 @@ const apiMocks = vi.hoisted(() => ({
   revealUserFile: vi.fn(),
   lookupUserFiles: vi.fn(),
   userFileRawUrl: vi.fn((id: number) => `/api/user-files/${id}/raw`),
+  userFileTextPreview: vi.fn(),
 }));
 
 vi.mock("../../api/userFiles", () => apiMocks);
@@ -38,6 +40,7 @@ function renderPanel() {
 beforeEach(() => {
   apiMocks.listUserFiles.mockReset().mockResolvedValue({ items: ITEMS, total: 1 });
   apiMocks.revealUserFile.mockReset().mockResolvedValue({ ok: true });
+  apiMocks.userFileTextPreview.mockReset().mockResolvedValue({ text: "", warnings: [] });
 });
 
 afterEach(() => {
@@ -85,5 +88,36 @@ describe("UserFilesPanel", () => {
         expect.objectContaining({ keyword: "证书", page: 1 }),
       );
     });
+  });
+
+  it("文档类副本点「预览」：后端提取的文字在抽屉里显示出来", async () => {
+    apiMocks.listUserFiles.mockResolvedValue({
+      items: [
+        {
+          id: 12,
+          original_name: "实习鉴定表.docx",
+          mime: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+          size: 4096,
+          source_type: "material",
+          source_ref: "material:3",
+          created_at: "2026-10-02T08:00:00",
+        },
+      ],
+      total: 1,
+    });
+    apiMocks.userFileTextPreview.mockResolvedValue({
+      text: "实习期间负责订单模块，独立完成三个接口。",
+      warnings: [],
+    });
+    renderPanel();
+
+    fireEvent.click(await screen.findByRole("button", { name: /预览/ }));
+
+    expect(await screen.findByText(t("materials.files.previewTextNote"))).toBeInTheDocument();
+    expect(apiMocks.userFileTextPreview).toHaveBeenCalledWith(12);
+    // 正文在 <pre> 里：断言容器文本，避免新增中文 ByText（tests 口径的棘轮只降不升）。
+    expect(document.querySelector(".user-file-text-body")?.textContent).toContain(
+      "独立完成三个接口",
+    );
   });
 });

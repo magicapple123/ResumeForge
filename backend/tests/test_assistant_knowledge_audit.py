@@ -79,6 +79,9 @@ README_FEATURE_KEYS: dict[str, tuple[str, ...]] = {
     "岗位需求解读": ("job_analysis",),
     "岗位匹配度分析": ("job_match",),
     "批量岗位适配度分析": ("job_match_batch",),
+    # AI 对比选岗（横向对比 2–12 个岗位）与批量逐一分析共用 job_match_batch 这张批次表
+    # （对比结论也挂在批次行上），所以映射到同一个 key。
+    "AI 对比选岗": ("job_match_batch",),
     "匹配度参考分": ("match_reference_score",),
     "求职进度": ("tracker", "tracker_import"),
     "日历提醒": ("reminders",),

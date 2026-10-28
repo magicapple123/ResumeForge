@@ -35,6 +35,9 @@ const generate = {
   "generate.config.layoutSection": "篇幅与版式",
   "generate.config.layoutHint":
     "默认 1 页 A4 + 标准字号。生成后如果内容塞不下，可以在预览里一键增加页数或缩小字号，不必重新生成。",
+  /** 岗位广场的生成配置只让定 5 个参数，其余版式生成后去简历界面调。 */
+  "generate.config.layoutHintEssential":
+    "这里只定模板、篇幅、简历语言与字体；版式预设、板块顺序、字号行距边距等，生成后在简历界面随时可调。",
 
   // ── 补充要求 ──────────────────────────────────────────────────
   "generate.config.extraRequirements": "补充要求（选填）",

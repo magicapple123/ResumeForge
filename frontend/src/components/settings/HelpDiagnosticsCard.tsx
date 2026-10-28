@@ -76,7 +76,7 @@ export default function HelpDiagnosticsCard() {
                         .join(t("settingsUi.help.previewSeparator")),
                     })
                   : "",
-              note: preview.note,
+              note: t("settingsUi.help.previewNote"),
             })}
           </Typography.Text>
         )}

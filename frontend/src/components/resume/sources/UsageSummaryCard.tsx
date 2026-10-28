@@ -89,36 +89,67 @@ export default function UsageSummaryCard({
       <div style={{ fontSize: 12, color: "var(--rf-text-secondary)", marginBottom: 6 }}>
         {pt("provenance.usage.hint")}
       </div>
-      <div style={{ marginBottom: 6 }} data-usage-totals="1">
-        <Typography.Text>
-          {pt("provenance.usage.records", { count: summary.records })}
-          {" · "}
-          {pt("provenance.usage.tokensColon")}
-          {tokenText(summary.totals.total_tokens) ?? pt(UNKNOWN)}
-        </Typography.Text>
-        {summary.unknown_token_records > 0 || hasUnknownTokens(summary.totals) ? (
-          <div style={{ marginTop: 2 }}>
-            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-              {pt("provenance.usage.unknownTokens", { count: summary.unknown_token_records })}
-            </Typography.Text>
-          </div>
-        ) : null}
-        <div style={{ marginTop: 2, fontSize: 12 }}>
-          {pt("provenance.usage.costColon")}
-          <Typography.Text>
+      <div className="usage-stat-grid" data-usage-totals="1">
+        <div className="usage-stat">
+          <span className="usage-stat-label">{pt("provenance.usage.stat.calls")}</span>
+          <Typography.Text strong className="usage-stat-value">
+            {summary.records}
+          </Typography.Text>
+        </div>
+        <div className="usage-stat">
+          <span className="usage-stat-label">{pt("provenance.usage.stat.tokens")}</span>
+          <Typography.Text strong className="usage-stat-value">
+            {tokenText(summary.totals.total_tokens) ?? pt(UNKNOWN)}
+          </Typography.Text>
+        </div>
+        <div className="usage-stat">
+          <span className="usage-stat-label">{pt("provenance.usage.cacheHit")}</span>
+          <Typography.Text strong className="usage-stat-value">
+            {tokenText(summary.totals.cache_hit_tokens ?? null) ?? pt(UNKNOWN)}
+          </Typography.Text>
+        </div>
+        <div className="usage-stat">
+          <span className="usage-stat-label">{pt("provenance.usage.cacheMiss")}</span>
+          <Typography.Text strong className="usage-stat-value">
+            {tokenText(summary.totals.cache_miss_tokens ?? null) ?? pt(UNKNOWN)}
+          </Typography.Text>
+        </div>
+        <div className="usage-stat">
+          <span className="usage-stat-label">{pt("provenance.usage.output")}</span>
+          <Typography.Text strong className="usage-stat-value">
+            {tokenText(summary.totals.completion_tokens) ?? pt(UNKNOWN)}
+          </Typography.Text>
+        </div>
+        <div className="usage-stat">
+          <span className="usage-stat-label">{pt("provenance.usage.stat.cost")}</span>
+          <Typography.Text strong className="usage-stat-value">
             {amount === null
               ? pt("provenance.usage.costUnavailable")
               : pt("provenance.usage.cost.value", {
-                  amount: amount,
+                  amount,
                   currency: summary.cost.currency,
                 })}
           </Typography.Text>
           {amount !== null ? (
-            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+            <Typography.Text type="secondary" className="usage-stat-hint">
               {pt("provenance.usage.costEstimated")}
             </Typography.Text>
           ) : null}
         </div>
+      </div>
+      <div data-usage-cache="1">
+        {(summary.totals.cache_unknown_calls ?? 0) > 0 ? (
+          <Typography.Text type="secondary" className="usage-stat-note">
+            {pt("provenance.usage.cacheUnknown", {
+              count: summary.totals.cache_unknown_calls ?? 0,
+            })}
+          </Typography.Text>
+        ) : null}
+        {summary.unknown_token_records > 0 || hasUnknownTokens(summary.totals) ? (
+          <Typography.Text type="secondary" className="usage-stat-note">
+            {pt("provenance.usage.unknownTokens", { count: summary.unknown_token_records })}
+          </Typography.Text>
+        ) : null}
       </div>
       {finishReasons.length > 0 ? (
         <div data-usage-finish-reasons="1" style={{ marginBottom: 6 }}>

@@ -5,6 +5,7 @@ import { t } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
 import type { LLMConfigRecord } from "../../types";
 import { API_KEY_MASK, CUSTOM_PRESET_LABEL_KEY, matchingPreset } from "./SettingsConfig";
+import { llmRecordDisplayName } from "../../utils/displayNames";
 
 interface Props {
   open: boolean;
@@ -42,7 +43,7 @@ export default function LLMRecordViewModal({ open, record, onClose }: Props) {
   // messageContract 的 source-ascii-english 校验，所以这两处保留字面量。
   return (
     <Modal
-      title={t("llmRecordView.title.detail", { name: record.name })}
+      title={t("llmRecordView.title.detail", { name: llmRecordDisplayName(record) })}
       open={open}
       onCancel={onClose}
       // 只读详情没有第二个动作，底部栏那只「关闭」是右上角 × 的重复入口（Esc / 点遮罩

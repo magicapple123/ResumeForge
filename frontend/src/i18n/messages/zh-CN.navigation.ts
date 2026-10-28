@@ -46,6 +46,8 @@ const navigation = {
   "navigation.shell.brandCaption": "AI 简历工作台",
   "navigation.shell.versionTooltip": "当前版本",
   "navigation.shell.scrollTop": "回到当前页面顶部",
+  "navigation.shell.collapse": "收起侧栏",
+  "navigation.shell.expand": "展开侧栏",
   "navigation.shell.openMenu": "打开导航",
 
   /** 设置页「界面与导航」卡。 */

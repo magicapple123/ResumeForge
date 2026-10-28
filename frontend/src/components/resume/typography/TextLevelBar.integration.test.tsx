@@ -11,7 +11,7 @@
  *
  * 断言文案走 `t()`（cjkRatchet 的 tests 口径）；时间性质用假定时器，不靠墙钟。
  */
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { useRef, useState } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { t } from "../../../i18n";
@@ -69,6 +69,12 @@ function objectsOf(text: string | null): Record<string, Record<string, unknown>>
 
 function currentText(levelLabel: string) {
   return t("typography.level.current", { level: levelLabel });
+}
+
+/** 作用范围 Segmented 的四个单选（顺序 = TEXT_LEVEL_SCOPES：整条目 / 条目标题 / 正文 / 说明）。 */
+function scopeRadios() {
+  const group = screen.getByRole("radiogroup", { name: t("typography.level.scope.aria") });
+  return within(group).getAllByRole("radio");
 }
 
 /** 与制作台同形的最小宿主：layout 住宿主，历史只负责记快照/回写。 */
@@ -191,6 +197,43 @@ describe("文字级别 · 撤销/恢复（W03 历史一步）", () => {
       bold: true,
     });
   });
+
+  it("字段范围应用 / 恢复也各是一步历史，且只写 object_roles", () => {
+    render(<HistoryHost />);
+    fireEvent.click(scopeRadios()[2]);
+    fireEvent.click(levelButton(t("typography.level.heading1")));
+    act(() => {
+      vi.advanceTimersByTime(300);
+    });
+    expect(screen.getByTestId("past").textContent).toBe("1");
+    const applied = JSON.parse(screen.getByTestId("layout").textContent ?? "{}") as {
+      objects?: Record<string, unknown>;
+      object_roles?: Record<string, Record<string, unknown>>;
+    };
+    expect(applied.objects ?? {}).toEqual({});
+    expect(applied.object_roles?.[`${OBJ_A}:body`]).toMatchObject({
+      font_scale: 1.4,
+      bold: true,
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: t("typography.level.restore") }));
+    act(() => {
+      vi.advanceTimersByTime(300);
+    });
+    expect(screen.getByTestId("past").textContent).toBe("2");
+    expect(JSON.parse(screen.getByTestId("layout").textContent ?? "{}")).toEqual({});
+    expect(screen.getByText(currentText(t("typography.level.currentInherit")))).toBeInTheDocument();
+
+    // 撤销恢复 → 字段范围级别回来（历史里存的是同一份 format_config）。
+    fireEvent.click(screen.getByRole("button", { name: "undo" }));
+    expect(
+      (
+        JSON.parse(screen.getByTestId("layout").textContent ?? "{}") as {
+          object_roles?: Record<string, Record<string, unknown>>;
+        }
+      ).object_roles?.[`${OBJ_A}:body`],
+    ).toMatchObject({ font_scale: 1.4, bold: true });
+  });
 });
 
 describe("文字级别 · 预览样式跟随", () => {
@@ -219,6 +262,34 @@ describe("文字级别 · 预览样式跟随", () => {
       bold: true,
       space_before: 0.4,
       space_after: 0.2,
+    });
+  });
+
+  it("字段范围应用后实时预览用含 object_roles 的新版式重排", async () => {
+    const rendered: ResumeLayout[] = [];
+    render(<PreviewHost onRender={(next) => rendered.push(next)} />);
+    await act(async () => {
+      vi.advanceTimersByTime(2000);
+      await Promise.resolve();
+    });
+    expect(rendered).toHaveLength(0);
+
+    fireEvent.click(scopeRadios()[2]);
+    fireEvent.click(levelButton(t("typography.level.heading1")));
+    await act(async () => {
+      vi.advanceTimersByTime(600);
+      await Promise.resolve();
+    });
+
+    expect(rendered).toHaveLength(1);
+    const formatConfig = rendered[0].format_config as unknown as {
+      objects?: Record<string, unknown>;
+      object_roles?: Record<string, Record<string, unknown>>;
+    };
+    expect(formatConfig.objects ?? {}).toEqual({});
+    expect(formatConfig.object_roles?.[`${OBJ_A}:body`]).toMatchObject({
+      font_scale: 1.4,
+      bold: true,
     });
   });
 });

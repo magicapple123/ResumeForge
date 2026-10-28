@@ -17,6 +17,9 @@ from ..dataset_registry import read_active_dataset_id
 from ..schemas.usage import (
     UsagePricingIn,
     UsagePricingOut,
+    UsagePricingRecordListOut,
+    UsagePricingRecordOut,
+    UsagePricingRenameIn,
     UsageRecordListOut,
     UsageRecordOut,
     UsageSummaryOut,
@@ -57,21 +60,69 @@ def read_usage_pricing(db: Session = Depends(get_db)) -> UsagePricingOut:
     return _read_pricing_out(db)
 
 
+def _record_out(record) -> UsagePricingRecordOut:
+    return UsagePricingRecordOut.model_validate(usage_ledger.pricing_record_payload(record))
+
+
 @router.put("/pricing", response_model=UsagePricingOut)
-def write_usage_pricing(
-    payload: UsagePricingIn, db: Session = Depends(get_db)
-) -> UsagePricingOut:
-    """保存/清除每千 token 单价（两项同时给或同时清空）；只影响未来的费用估算。"""
+def write_usage_pricing(payload: UsagePricingIn, db: Session = Depends(get_db)) -> UsagePricingOut:
+    """保存一份新单价（**每百万 token**，三档）并立即生效。
+
+    每次保存都新建一条带名字的记录，而不是覆盖上一条：用户要能对比"官方价 / 调价后"，
+    也要能给已有的记录改名（``PATCH /pricing/records/{id}``）。
+    """
     try:
-        usage_ledger.save_pricing(
+        record = usage_ledger.create_pricing_record(
             db,
-            input_per_1k=payload.input_per_1k,
-            output_per_1k=payload.output_per_1k,
+            name=payload.name,
+            input_cache_hit_per_million=payload.input_cache_hit_per_million,
+            input_cache_miss_per_million=payload.input_cache_miss_per_million,
+            output_per_million=payload.output_per_million,
             currency=payload.currency,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return UsagePricingOut.model_validate(
+        usage_ledger.pricing_payload(usage_ledger.pricing_from_record(record))
+    )
+
+
+@router.get("/pricing/records", response_model=UsagePricingRecordListOut)
+def list_usage_pricing_records(db: Session = Depends(get_db)) -> UsagePricingRecordListOut:
+    """全部单价记录（新→旧），含"哪条生效"与创建时间。"""
+    rows = usage_ledger.list_pricing_records(db)
+    items = [_record_out(row) for row in rows]
+    return UsagePricingRecordListOut(items=items, count=len(items))
+
+
+@router.patch("/pricing/records/{record_id}", response_model=UsagePricingRecordOut)
+def rename_usage_pricing_record(
+    record_id: int, payload: UsagePricingRenameIn, db: Session = Depends(get_db)
+) -> UsagePricingRecordOut:
+    """给一条单价记录改名（价格与生效状态都不动）。"""
+    record = usage_ledger.rename_pricing_record(db, record_id, payload.name)
+    if record is None:
+        raise HTTPException(status_code=404, detail="单价记录不存在")
+    return _record_out(record)
+
+
+@router.post("/pricing/records/{record_id}/activate", response_model=UsagePricingOut)
+def activate_usage_pricing_record(
+    record_id: int, db: Session = Depends(get_db)
+) -> UsagePricingOut:
+    """切换生效的单价（其它记录同时失效）。"""
+    record = usage_ledger.activate_pricing_record(db, record_id)
+    if record is None:
+        raise HTTPException(status_code=404, detail="单价记录不存在")
     return _read_pricing_out(db)
+
+
+@router.delete("/pricing/records/{record_id}")
+def delete_usage_pricing_record(record_id: int, db: Session = Depends(get_db)) -> dict:
+    """删除一条单价记录；删掉生效那条时，剩下最新的一条自动顶上。"""
+    if not usage_ledger.delete_pricing_record(db, record_id):
+        raise HTTPException(status_code=404, detail="单价记录不存在")
+    return {"ok": True}
 
 
 @router.get("/records", response_model=UsageRecordListOut)

@@ -26,6 +26,7 @@ const referralDetail = {
   "referralDetail.section.images": "图片备注（{count}）",
   "referralDetail.image.noteAlt": "备注图",
   "referralDetail.action.edit": "编辑",
+  "referralDetail.image.previewMask": "查看第 {index} 张图片",
 } as const;
 
 export default referralDetail;

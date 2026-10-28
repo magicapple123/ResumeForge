@@ -19,6 +19,8 @@ import { previewResumeTemplate } from "../../api/resumes";
 import type { ResumeStyleField, ResumeTemplateDetail, TemplateRecognitionDraft } from "../../types";
 import A4PreviewFrame from "./A4PreviewFrame";
 import TemplateStyleControls from "./TemplateStyleControls";
+import AbortButton from "../common/AbortButton";
+import { errorText, useAbortableRequest } from "../../hooks/useAbortableRequest";
 import { t } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
 
@@ -49,7 +51,9 @@ export default function TemplateImportModal({
   const { message } = App.useApp();
   const [fileList, setFileList] = useState<UploadFile[]>([]);
   const [name, setName] = useState("");
-  const [running, setRunning] = useState(false);
+  // 识别模板版式要等模型读完参考件：等着的时候可以停（入库那一步不跟着停，见 submit）。
+  const importRequest = useAbortableRequest();
+  const running = importRequest.loading;
   const [draft, setDraft] = useState<TemplateRecognitionDraft | null>(null);
   const [config, setConfig] = useState<Record<string, unknown>>({});
   const [preview, setPreview] = useState("");
@@ -62,7 +66,6 @@ export default function TemplateImportModal({
     setFileList([]);
     selectedFileSizes.current.clear();
     setName("");
-    setRunning(false);
     setDraft(null);
     setConfig({});
     setPreview("");
@@ -109,36 +112,39 @@ export default function TemplateImportModal({
       message.warning(t("templateImport.toast.needFile"));
       return;
     }
-    setRunning(true);
-    try {
-      if (!draft) {
-        const analyzed = await analyzeTemplateFromFiles(files, name);
-        setDraft(analyzed);
-        setName(analyzed.name);
-        setConfig(analyzed.config);
-        await renderDraft(analyzed, analyzed.config);
-        message.success(t("templateImport.toast.analyzed"));
-      } else {
-        const created = await createResumeTemplate({
-          name: name.trim() || draft.name,
-          description: draft.description,
-          html: draft.html,
-          config,
-          kind: "style",
-          // i18n-ok: 顿号是写进模板 source_name 字段的分隔符，随模板落库并长期回显，不随界面语言变
-          source_name: draft.source_names.join("、"),
-        });
-        message.success(t("templateImport.toast.saved", { name: created.name }));
-        onImported(created);
-        reset();
-        onClose();
-      }
-    } catch (error) {
-      message.error(
-        error instanceof Error ? error.message : t("templateImport.error.importFailed"),
+    if (!draft) {
+      // 识别阶段可以被「停止」掐断；掐断就当没发生，不落库、不弹错。
+      const outcome = await importRequest.run((signal) =>
+        analyzeTemplateFromFiles(files, name, signal),
       );
-    } finally {
-      setRunning(false);
+      if (outcome.status === "error") {
+        message.error(errorText(outcome.error, t("templateImport.error.importFailed")));
+        return;
+      }
+      if (outcome.status === "aborted") return;
+      setDraft(outcome.data);
+      setName(outcome.data.name);
+      setConfig(outcome.data.config);
+      await renderDraft(outcome.data, outcome.data.config);
+      message.success(t("templateImport.toast.analyzed"));
+      return;
+    }
+    try {
+      const created = await createResumeTemplate({
+        name: name.trim() || draft.name,
+        description: draft.description,
+        html: draft.html,
+        config,
+        kind: "style",
+        // i18n-ok: 顿号是写进模板 source_name 字段的分隔符，随模板落库并长期回显，不随界面语言变
+        source_name: draft.source_names.join("、"),
+      });
+      message.success(t("templateImport.toast.saved", { name: created.name }));
+      onImported(created);
+      reset();
+      onClose();
+    } catch (error) {
+      message.error(errorText(error, t("templateImport.error.importFailed")));
     }
   };
 
@@ -167,6 +173,13 @@ export default function TemplateImportModal({
       <Typography.Paragraph type="secondary" style={{ marginTop: 0 }}>
         {t("templateImport.intro")}
       </Typography.Paragraph>
+      {/* 识别阶段（要等模型读参考件）才给「停止」：保存是秒回的，不需要。
+          放在正文而不是 footer，是为了不动既有的确定/取消按钮结构。 */}
+      {running && !draft ? (
+        <Space style={{ marginBottom: 12 }}>
+          <AbortButton onClick={() => importRequest.cancel()} />
+        </Space>
+      ) : null}
       {!draft ? (
         <Upload.Dragger
           accept={ACCEPT}

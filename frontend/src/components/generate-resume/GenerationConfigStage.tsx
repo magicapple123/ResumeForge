@@ -175,9 +175,14 @@ export default function GenerationConfigStage({
         pageLimitOptions={
           generation.documentMode === "long_cv" ? pageLimitOptions("long_cv") : undefined
         }
+        // **两个入口都收敛**：只留「模板 / 最大篇幅 / 简历语言 / 字体」。
+        // 用户在这个弹窗只想定个大致样子，版式预设、板块顺序、字号、行距、页边距、照片
+        // 这些生成后去简历界面调更顺手（那里有实时预览）。早先只改了岗位广场那条路，
+        // 通用简历生成仍然铺开全部参数，两处体验不一致。
+        essentialOnly
       />
       <Typography.Text type="secondary" style={{ display: "block", marginTop: 8 }}>
-        {t("generate.config.layoutHint")}
+        {t("generate.config.layoutHintEssential")}
       </Typography.Text>
 
       <Typography.Title level={5} style={{ marginTop: 20 }}>

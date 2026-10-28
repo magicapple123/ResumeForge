@@ -30,15 +30,17 @@ import {
   dragPayloadName,
   dragStartIndex,
   nearestDropIndex,
+  resolveHoverTarget,
   type DropRowBox,
 } from "./outlineDropTargets";
 import type { OutlineDragPayload } from "./useOutlineSort";
 
 /** 指针进入距容器上下边缘多少像素内开始自动滚动。 */
 const AUTO_SCROLL_EDGE_PX = 40;
-/** 每次滚动的像素数（每 50ms 一跳；不追求平滑，够把屏幕外行拖进可视区）。 */
-const AUTO_SCROLL_STEP_PX = 14;
-const AUTO_SCROLL_INTERVAL_MS = 50;
+/** 自动滚动速度（px/ms）：与帧率无关；60fps 下约 14px/帧，长列表也拖得动。 */
+const AUTO_SCROLL_SPEED_PX_PER_MS = 0.24;
+/** 单帧最多结算的时长：标签页掉帧后不会一次滚很远。 */
+const AUTO_SCROLL_MAX_FRAME_MS = 50;
 
 interface Options {
   model: OutlineModel;
@@ -83,6 +85,12 @@ export function useOutlineDragDrop({
   const pointerYRef = useRef<number | null>(null);
   /** 指针此刻是否在树容器内（由 document 级 dragover 维护：拖出树后能立刻变 false）。 */
   const pointerInsideRef = useRef(false);
+  /** 最近一次上报的悬停目标行（滞回判定用；拖动结束清空，下一次拖动不会继承上一次的目标）。 */
+  const activeHoverKeyRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!payload) activeHoverKeyRef.current = null;
+  }, [payload]);
 
   /** 当前 DOM 里每一行的纵向中心（拖动中预览会换位，所以每次 dragover 现量）。 */
   const collectRows = useCallback((): DropRowBox[] => {
@@ -97,24 +105,24 @@ export function useOutlineDragDrop({
     });
   }, [treeRef]);
 
-  /** 指针纵向位置附近最近的**同类行**（行已 `pointer-events:none`，只能按几何距离算）。 */
+  /**
+   * 指针纵向位置 → 悬停目标（行已 `pointer-events:none`，只能按几何距离算）。
+   * 返回 null = 维持现状：指针压在被拖行自己身上、目标没变、或新行只近了一点点（滞回）。
+   * 判定规则与不变量见 `resolveHoverTarget`。
+   */
   const hoverAt = useCallback(
     (pointerY: number): { key: string; index: number } | null => {
-      let best: { distance: number; key: string; index: number } | null = null;
-      for (const row of collectRows()) {
-        const resolution = classifyDropKey(
-          model,
-          payload ?? { kind: "entry", field: "projects", objectId: "" },
-          row.key,
-        );
-        let index: number | null = null;
-        if (resolution.kind === "row") index = resolution.index;
-        else if (resolution.kind === "self") index = dragStartIndex(model, payload!);
-        if (index === null) continue;
-        const distance = Math.abs(row.centerY - pointerY);
-        if (!best || distance < best.distance) best = { distance, key: row.key, index };
-      }
-      return best ? { key: best.key, index: best.index } : null;
+      if (!payload) return null;
+      const resolution = resolveHoverTarget(
+        model,
+        payload,
+        collectRows(),
+        pointerY,
+        activeHoverKeyRef.current,
+      );
+      if (resolution.kind !== "target") return null;
+      activeHoverKeyRef.current = resolution.key;
+      return { key: resolution.key, index: resolution.index };
     },
     [collectRows, model, payload],
   );
@@ -130,7 +138,10 @@ export function useOutlineDragDrop({
       // getBoundingClientRect 覆盖它。
       const target = event.target as Element | null;
       const insideRow = Boolean(target?.closest?.("[data-tree-key]"));
-      if (!insideRow) onHover(hoverAt(event.clientY));
+      if (!insideRow) {
+        const hover = hoverAt(event.clientY);
+        if (hover) onHover(hover);
+      }
     },
     [hoverAt, onHover, payload],
   );
@@ -158,28 +169,56 @@ export function useOutlineDragDrop({
     return () => document.removeEventListener("dragover", onDragOver, true);
   }, [payload, treeRef]);
 
-  // 边缘自动滚动（指针停在边缘不动时也持续滚）。
+  // 边缘自动滚动（指针停在边缘不动时也持续滚），与浏览器绘制同一节奏（rAF）。
+  // 滚动改变了行相对指针的位置，但**不在滚动回调里同步重算悬停**：隔一帧再算，
+  // 避免"滚动 → 重算 → 改预览 → 又改布局"在同一个任务里连锁触发。
   useEffect(() => {
     if (!payload) {
       pointerYRef.current = null;
       return;
     }
-    const timer = window.setInterval(() => {
+    if (typeof window.requestAnimationFrame !== "function") return;
+    let frame = 0;
+    let hoverFrame = 0;
+    let lastFrameAt = performance.now();
+    const tick = (now: number) => {
+      frame = window.requestAnimationFrame(tick);
+      const elapsed = Math.min(AUTO_SCROLL_MAX_FRAME_MS, Math.max(0, now - lastFrameAt));
+      lastFrameAt = now;
       const root = treeRef.current;
       const pointerY = pointerYRef.current;
       if (!root || pointerY === null || !pointerInsideRef.current) return;
       const rect = root.getBoundingClientRect();
+      let scrolled = false;
       if (pointerY < rect.top + AUTO_SCROLL_EDGE_PX) {
-        root.scrollTop = Math.max(0, root.scrollTop - AUTO_SCROLL_STEP_PX);
+        const next = Math.max(0, root.scrollTop - AUTO_SCROLL_SPEED_PX_PER_MS * elapsed);
+        if (next !== root.scrollTop) {
+          root.scrollTop = next;
+          scrolled = true;
+        }
       } else if (pointerY > rect.bottom - AUTO_SCROLL_EDGE_PX) {
-        root.scrollTop = Math.min(
-          Math.max(0, root.scrollHeight - root.clientHeight),
-          root.scrollTop + AUTO_SCROLL_STEP_PX,
-        );
+        const max = Math.max(0, root.scrollHeight - root.clientHeight);
+        const next = Math.min(max, root.scrollTop + AUTO_SCROLL_SPEED_PX_PER_MS * elapsed);
+        if (next !== root.scrollTop) {
+          root.scrollTop = next;
+          scrolled = true;
+        }
       }
-    }, AUTO_SCROLL_INTERVAL_MS);
-    return () => window.clearInterval(timer);
-  }, [payload, treeRef]);
+      if (!scrolled || hoverFrame !== 0) return;
+      hoverFrame = window.requestAnimationFrame(() => {
+        hoverFrame = 0;
+        const currentY = pointerYRef.current;
+        if (currentY === null || !pointerInsideRef.current) return;
+        const hover = hoverAt(currentY);
+        if (hover) onHover(hover);
+      });
+    };
+    frame = window.requestAnimationFrame(tick);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      if (hoverFrame !== 0) window.cancelAnimationFrame(hoverFrame);
+    };
+  }, [hoverAt, onHover, payload, treeRef]);
 
   const handleTreeDrop = useCallback(
     (event: DragEvent<HTMLDivElement>) => {

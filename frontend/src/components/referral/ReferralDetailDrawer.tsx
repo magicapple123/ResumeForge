@@ -3,7 +3,7 @@
  *
  * 纯展示组合——详情数据与编辑回调由 ReferralPanel 传入。
  */
-import { Button, Space, Tag } from "antd";
+import { Button, Image, Space, Tag } from "antd";
 import { EditOutlined } from "@ant-design/icons";
 import { REFERRAL_STATUS_COLORS, referralImageUrl } from "../../types";
 import type { Referral, ReferralStatus } from "../../types";
@@ -84,19 +84,21 @@ export default function ReferralDetailDrawer({ detail, onEdit, onClose }: Props)
                     t("referralDetail.value.empty")
                   ) : (
                     <Space size={8} wrap>
-                      {(detail.note_images ?? []).map((path) => (
-                        <a
+                      {/* 用 antd Image 的原生预览（遮罩层里的那张大图），不用 `<a target="_blank">`：
+                          后者会把用户甩到一个新页面，和岗位备注、资料附件、我的文件里的
+                          图片预览都不一致（用户截图反馈"不要新进一个页面"）。 */}
+                      {(detail.note_images ?? []).map((path, index) => (
+                        <Image
                           key={path}
-                          href={referralImageUrl(path)}
-                          target="_blank"
-                          rel="noreferrer"
-                        >
-                          <img
-                            src={referralImageUrl(path)}
-                            alt={t("referralDetail.image.noteAlt")}
-                            style={{ width: 96, height: 96, objectFit: "cover", borderRadius: 4 }}
-                          />
-                        </a>
+                          src={referralImageUrl(path)}
+                          alt={t("referralDetail.image.noteAlt")}
+                          width={96}
+                          height={96}
+                          style={{ objectFit: "cover", borderRadius: 4 }}
+                          preview={{
+                            mask: t("referralDetail.image.previewMask", { index: index + 1 }),
+                          }}
+                        />
                       ))}
                     </Space>
                   ),

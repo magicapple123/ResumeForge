@@ -6,7 +6,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { markCandidateJobImported } from "../api/candidateJob";
 import { openWebFormUrl } from "../api/webform";
-import { startBackfill } from "../api/apply";
 import { deleteJob, getJob, updateJob } from "../api/jobs";
 import GenerateResumeModal from "../components/GenerateResumeModal";
 import JobAnalysisModal from "../components/JobAnalysisModal";
@@ -23,8 +22,12 @@ import JobTable from "../components/jobs/JobTable";
 import ErrorState from "../components/common/ErrorState";
 import type { CandidateJobDetail, Job, JobList } from "../types";
 import { BatchToolbar } from "./jobs/BatchToolbar";
+import { buildBulkRowActions } from "./jobs/bulkActionItems";
 import { JobFilterBar } from "./jobs/JobFilterBar";
 import type { BatchAction } from "./jobs/jobFilterOptions";
+import { useJobBulkActions } from "./jobs/useJobBulkActions";
+import { useBatchOperationGuard } from "../features/settings/useBatchOperationConfig";
+import { useJobBackfill } from "./jobs/useJobBackfill";
 import { useJobQueue } from "./jobs/useJobQueue";
 import { useJobsPageState } from "./jobs/useJobsPageState";
 import { useSelectAllJobs } from "./jobs/useSelectAllJobs";
@@ -76,13 +79,13 @@ export default function JobsPage() {
   const [matchJob, setMatchJob] = useState<Job | null>(null);
   const [matchBatchOpen, setMatchBatchOpen] = useState(false);
   const [matchBatchView, setMatchBatchView] = useState<"setup" | "history">("setup");
+  // 筛选条入口 = 横向对比；批量菜单的「匹配度分析」= 逐岗结论。两者共用同一个面板。
+  const [matchBatchMode, setMatchBatchMode] = useState<"match" | "compare">("compare");
   const [webFormJobId, setWebFormJobId] = useState<number | null>(null);
   const [selectedJobIds, setSelectedJobIds] = useState<number[]>([]);
   const [batchStatus, setBatchStatus] = useState<string>();
   const [batchAction, setBatchAction] = useState<BatchAction>(null);
   const [favoriteJobId, setFavoriteJobId] = useState<number | null>(null);
-  // 「补齐详情」触发中：防止连点，也让按钮有个加载态。
-  const [backfilling, setBackfilling] = useState(false);
   // 备选岗位：抽屉里暂存未核对的招聘信息，导入时走正式岗位表单。
   const [candidatesOpen, setCandidatesOpen] = useState(false);
   // CSV 导入弹窗。
@@ -157,11 +160,12 @@ export default function JobsPage() {
     setCandidatesOpen(true);
   }
 
-  // 只有"岗位描述为空"的岗位才值得补详情（补详情要逐个打开页面，很慢），按钮据此出现/消失，
-  // 而不是常驻一个点了没反应的按钮。当前只统计这一页已加载的岗位：补的就这一页里空的那些。
-  const emptyDescriptionJobIds = (jobs?.items ?? [])
-    .filter((job) => !job.has_description)
-    .map((job) => job.id);
+  // 只有"岗位描述为空"的岗位才值得补详情；逻辑与状态都在 hook 里（守页面行数预算）。
+  const { emptyDescriptionJobIds, backfilling, backfillDetails } = useJobBackfill({
+    jobs,
+    selectionMode,
+    selectedJobIds,
+  });
 
   // 软删可撤销：删除不再前置确认，Toast 里给 5 秒「撤销」（见 useDeleteUndo）。
   const deleteUndo = useDeleteUndo();
@@ -221,28 +225,6 @@ export default function JobsPage() {
     [message, webFormJobId],
   );
 
-  const backfillDetails = async () => {
-    // 批量优先：选择模式下有勾选就补勾选的，否则补当前这页所有 JD 为空的岗位。
-    const target =
-      selectionMode && selectedJobIds.length > 0 ? selectedJobIds : emptyDescriptionJobIds;
-    if (target.length === 0) {
-      message.warning(t("pagesMisc.jobsPage.backfill.none"));
-      return;
-    }
-    setBackfilling(true);
-    try {
-      await startBackfill(target);
-      // 它是 kind=collect 的批次，界面入口在投递台：不告诉用户去哪儿看，他会以为点了没反应。
-      message.success(t("pagesMisc.jobsPage.backfill.started", { count: target.length }));
-    } catch (err) {
-      message.error(
-        err instanceof Error ? err.message : t("pagesMisc.jobsPage.error.backfillFailed"),
-      );
-    } finally {
-      setBackfilling(false);
-    }
-  };
-
   // 批量动作（改状态 / 删除 / 加入投递队列）在独立 hook 里：页面组合层只负责接线，
   // 勾选与忙态仍由本页持有（BatchToolbar 的按钮据此禁用）。
   const batch = useJobBatchActions({
@@ -288,10 +270,13 @@ export default function JobsPage() {
     setSelectionMode(true);
   }, [batchAction]);
 
-  const openMatchBatch = (view: "setup" | "history" = "setup") => {
+  const openMatchBatch = (
+    view: "setup" | "history" = "setup",
+    mode: "match" | "compare" = "compare",
+  ) => {
     if (view === "setup") {
       if (!selectionMode) {
-        // 「AI 分析适配度」分析的是勾选的岗位：没进选择模式说明用户还没机会勾选——
+        // 两个入口分析的都是勾选的岗位：没进选择模式说明用户还没机会勾选——
         // 直接带他进选择模式，而不是丢一句「请先选择岗位」的死路提示。
         setSelectionMode(true);
         message.info(t("pagesMisc.jobsPage.match.enteredSelection"));
@@ -301,14 +286,35 @@ export default function JobsPage() {
         message.warning(t("pagesMisc.jobsPage.match.needJobs"));
         return;
       }
-      if (selectedJobIds.length > 50) {
+      if (mode === "compare" && selectedJobIds.length < 2) {
+        message.warning(t("pagesMisc.jobsPage.match.needCompareJobs"));
+        return;
+      }
+      if (mode === "compare" && selectedJobIds.length > 12) {
+        message.warning(t("pagesMisc.jobsPage.match.tooManyCompare"));
+        return;
+      }
+      if (mode === "match" && selectedJobIds.length > 50) {
         message.warning(t("pagesMisc.jobsPage.match.tooMany"));
         return;
       }
     }
+    setMatchBatchMode(mode);
     setMatchBatchView(view);
     setMatchBatchOpen(true);
   };
+
+  // 批量 AI 生成简历前必须先有「设置 → 批量操作」保存过的一套参数。
+  const batchOp = useBatchOperationGuard("generation");
+  const bulk = useJobBulkActions({
+    jobs,
+    selectedJobIds,
+    removeSelectedJobs,
+    enqueueSelectedJobs,
+    openMatchBatch,
+    ensureBatchConfig: batchOp.ensure,
+  });
+  const busy = batchAction !== null || bulk.bulkAi.running;
 
   const rowSelection: TableRowSelection<JobList> = {
     selectedRowKeys: selectedJobIds,
@@ -340,6 +346,7 @@ export default function JobsPage() {
         onImportCsv={() => setImportCsvOpen(true)}
         sortState={sortState}
         applySort={applySort}
+        selectionMode={selectionMode}
       />
 
       <BatchToolbar
@@ -350,8 +357,9 @@ export default function JobsPage() {
         batchStatus={batchStatus}
         setBatchStatus={setBatchStatus}
         applyBatchStatus={applyBatchStatus}
-        enqueueSelectedJobs={enqueueSelectedJobs}
-        removeSelectedJobs={removeSelectedJobs}
+        onBulkAction={bulk.handleBulkAction}
+        bulkAi={bulk.bulkAi}
+        onStopBulkAi={bulk.stopBulkAi}
         exitSelectionMode={exitSelectionMode}
         totalCount={jobs?.total ?? 0}
         selectAllPagesLoading={selectAllPagesLoading}
@@ -384,6 +392,7 @@ export default function JobsPage() {
           }}
           onDelete={(job) => void removeJob(job.id)}
           onEnterSelecting={enterSelectionMode}
+          bulkActions={buildBulkRowActions(bulk.handleBulkAction, busy)}
           sortState={sortState}
           onSortChange={applySort}
           onPageChange={(nextPage, nextPageSize) => {
@@ -472,6 +481,7 @@ export default function JobsPage() {
         open={matchBatchOpen}
         jobIds={selectedJobIds}
         initialView={matchBatchView}
+        mode={matchBatchMode}
         onClose={() => setMatchBatchOpen(false)}
       />
     </div>

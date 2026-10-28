@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.orm import Session
 
 from ..database import SessionLocal, get_db
@@ -56,6 +56,7 @@ from ..services.llm import create_provider
 from ..services.llm.base import LLMError
 from ..services.settings_service import get_llm_config
 from ..services.text_extraction import llm_is_configured
+from ._disconnect import run_or_gone
 
 router = APIRouter(prefix="/api/drill", tags=["drill"])
 logger = logging.getLogger(__name__)
@@ -118,7 +119,7 @@ def list_sessions(
 
 
 @router.post("", response_model=DrillSessionOut, status_code=201)
-async def create_session(payload: DrillCreate, db: Session = Depends(get_db)):
+async def create_session(payload: DrillCreate, request: Request, db: Session = Depends(get_db)):
     """开一场深挖：先选出要验证的主张，再为第一条生成**评分契约**。
 
     契约在这一步就落库了——用户看到问题的时候，判定标准已经定下来。
@@ -181,7 +182,8 @@ async def create_session(payload: DrillCreate, db: Session = Depends(get_db)):
                 cleanup_db.commit()
 
     try:
-        plan = await generate_plan(provider, claims[0], job_title=job_title, company=company)
+        plan_coro = generate_plan(provider, claims[0], job_title=job_title, company=company)
+        plan = await run_or_gone(request, plan_coro, what="深挖第一题")
     except LLMError as exc:
         logger.warning("生成面试深挖契约失败：%s", exc)
         await _drop_session()
@@ -212,7 +214,9 @@ def read_session(session_id: int, db: Session = Depends(get_db)):
 
 
 @router.post("/{session_id}/answer", response_model=DrillAnswerResult)
-async def answer(session_id: int, payload: DrillAnswerRequest, db: Session = Depends(get_db)):
+async def answer(
+    session_id: int, payload: DrillAnswerRequest, request: Request, db: Session = Depends(get_db)
+):
     """回答当前这一问：按**已锁定的契约**判定，然后要么追问，要么问下一题。"""
     session = _session_or_404(db, session_id)
     if session.status != DRILL_STATUS_ACTIVE:
@@ -241,7 +245,8 @@ async def answer(session_id: int, payload: DrillAnswerRequest, db: Session = Dep
         if live_contract is None:  # pragma: no cover - 并发改动
             raise HTTPException(status_code=409, detail="这场深挖的进度已经变化")
         try:
-            verdict = await evaluate_answer(provider, reloaded, live_contract, payload.answer)
+            verdict_coro = evaluate_answer(provider, reloaded, live_contract, payload.answer)
+            verdict = await run_or_gone(request, verdict_coro, what="深挖判定")
         except LLMError as exc:
             logger.warning("面试深挖判定失败：%s", exc)
             raise HTTPException(status_code=502, detail=f"判定这一轮失败：{exc}") from exc
@@ -364,7 +369,7 @@ def _load_session_for_model(session_id: int):
 
 
 @router.post("/{session_id}/finish", response_model=DrillSessionOut)
-async def finish(session_id: int, db: Session = Depends(get_db)):
+async def finish(session_id: int, request: Request, db: Session = Depends(get_db)):
     """提前结束并出复盘。已经结束的再调一次不会重复生成。"""
     session = _session_or_404(db, session_id)
     if session.status != DRILL_STATUS_ACTIVE:
@@ -382,7 +387,8 @@ async def finish(session_id: int, db: Session = Depends(get_db)):
     read_db, reloaded = _load_session_for_model(session_id)
     try:
         try:
-            review = await generate_review(provider, reloaded)
+            review_coro = generate_review(provider, reloaded)
+            review = await run_or_gone(request, review_coro, what="深挖复盘生成")
         except LLMError as exc:
             logger.warning("生成复盘失败，改用本地汇总：%s", exc)
             review = local_review(reloaded)
@@ -403,7 +409,9 @@ async def finish(session_id: int, db: Session = Depends(get_db)):
 
 
 @router.post("/{session_id}/rehearse", response_model=DrillRehearseOut)
-async def rehearse(session_id: int, payload: DrillRehearseRequest, db: Session = Depends(get_db)):
+async def rehearse(
+    session_id: int, payload: DrillRehearseRequest, request: Request, db: Session = Depends(get_db)
+):
     """把复练队列里的一条变成一个**可回答的新问题**（不落库）。
 
     复练的关键是"不原题重复"：同一条主张换一个角度再问一次，才检验得出他是不是真的
@@ -430,12 +438,11 @@ async def rehearse(session_id: int, payload: DrillRehearseRequest, db: Session =
         '让人知道该往哪个方向答"}'
     )
     try:
-        raw = await provider.chat(
-            [
-                {"role": "system", "content": load_prompt("drill_contract.md")},
-                {"role": "user", "content": instruction},
-            ]
-        )
+        messages = [
+            {"role": "system", "content": load_prompt("drill_contract.md")},
+            {"role": "user", "content": instruction},
+        ]
+        raw = await run_or_gone(request, provider.chat(messages), what="深挖复练题")
         from ..services.llm.structured_output import parse_json_object
 
         data = parse_json_object(raw, label="面试深挖", max_chars=20_000)

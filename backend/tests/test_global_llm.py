@@ -166,6 +166,8 @@ def test_record_crud_and_active_switch(client):
     first_id = first_record["id"]
     assert first_id.startswith("p_")
     assert first_record["is_active"] is True
+    # 用户自己起的名字不是"内置默认名"，界面不要翻译它。
+    assert first_record["name_is_default"] is False
     # 记录里任何一层都不能出现密钥。
     assert "sk-a" not in first.text
 
@@ -234,7 +236,10 @@ def test_migration_imports_dataset_records_once(client, db_session):
     names = [item["name"] for item in records]
     assert "旧记录甲" in names and "旧记录乙" in names
     assert "默认配置" in names
-    assert next(item for item in records if item["name"] == "默认配置")["is_active"] is True
+    default_record = next(item for item in records if item["name"] == "默认配置")
+    assert default_record["is_active"] is True
+    # 自动建的那条仍用内置默认名 → 标记为默认名，英文界面可以翻成 "Default configuration"。
+    assert default_record["name_is_default"] is True
     assert read_global_llm().config.model == "dataset-model"
 
     # 用户删光之后不会再次自动导入（标记已写）。

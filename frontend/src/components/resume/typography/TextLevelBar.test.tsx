@@ -7,7 +7,7 @@
  * "一次 `onChange`"，不在组件里另造历史。
  */
 import { App as AntdApp } from "antd";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { t } from "../../../i18n";
@@ -38,10 +38,17 @@ interface HarnessProps {
   selected?: readonly { id: string }[];
   selectedObjectId?: string | null;
   onCommitSpy?: (next: ResumeLayout) => void;
+  pickedPath?: string | null;
 }
 
 /** 最小宿主：layout 住在这里，提交次数与最后一次 layout 暴露给断言。 */
-function Harness({ initial, selected = [], selectedObjectId = null, onCommitSpy }: HarnessProps) {
+function Harness({
+  initial,
+  selected = [],
+  selectedObjectId = null,
+  onCommitSpy,
+  pickedPath = null,
+}: HarnessProps) {
   const [layout, setLayout] = useState<ResumeLayout>(initial ?? baseLayout());
   const [commits, setCommits] = useState(0);
   const commit = (next: ResumeLayout) => {
@@ -57,6 +64,7 @@ function Harness({ initial, selected = [], selectedObjectId = null, onCommitSpy 
         layout={layout}
         selected={selected}
         selectedObjectId={selectedObjectId}
+        pickedPath={pickedPath}
         onChange={commit}
       />
     </div>
@@ -86,6 +94,25 @@ function levelButton(level: TextLevelId) {
 
 function currentText(stateLabel: string) {
   return t("typography.level.current", { level: stateLabel });
+}
+
+/** 作用范围 Segmented 的四个单选（顺序 = TEXT_LEVEL_SCOPES：整条目 / 条目标题 / 正文 / 说明）。 */
+function scopeRadios() {
+  const group = screen.getByRole("radiogroup", { name: t("typography.level.scope.aria") });
+  return within(group).getAllByRole("radio");
+}
+
+/** 读 layout 里的 object_roles 域（去掉 version）。 */
+function objectRolesOf(): Record<string, Record<string, unknown>> {
+  const raw = JSON.parse(screen.getByTestId("layout").textContent ?? "{}") as {
+    object_roles?: Record<string, Record<string, unknown>>;
+  };
+  const entries: Record<string, Record<string, unknown>> = {};
+  for (const [key, value] of Object.entries(raw.object_roles ?? {})) {
+    if (key === "version") continue;
+    entries[key] = value as Record<string, unknown>;
+  }
+  return entries;
 }
 
 afterEach(() => {
@@ -196,6 +223,94 @@ describe("文字级别工具条", () => {
 
     expect(onCommit).toHaveBeenCalledTimes(1);
     expect(objectsOf()[OBJ_A]).toEqual({ color: "#123456" });
+    expect(screen.getByText(currentText(t("typography.level.currentInherit")))).toBeInTheDocument();
+  });
+
+  it("纸面点中的字段决定默认作用范围：点标题→条目标题，换一条成果→正文", () => {
+    const { rerender } = render(
+      <Harness selectedObjectId={OBJ_A} pickedPath="education.0.school" />,
+    );
+    expect(scopeRadios()[1]).toBeChecked();
+
+    rerender(<Harness selectedObjectId={OBJ_A} pickedPath="education.0.achievements.0" />);
+    expect(scopeRadios()[2]).toBeChecked();
+
+    // 推不出角色的字段（个人信息标量）回落成"整个条目"，不能瞎猜一个更窄的范围。
+    rerender(<Harness selectedObjectId={OBJ_A} pickedPath="education.0." />);
+    expect(scopeRadios()[0]).toBeChecked();
+  });
+
+  it("默认作用范围是「整个条目」（与既有行为逐字节一致）", () => {
+    render(<Harness selectedObjectId={OBJ_A} />);
+    const radios = scopeRadios();
+    expect(radios).toHaveLength(4);
+    expect(radios[0]).toBeChecked();
+    expect(objectRolesOf()).toEqual({});
+  });
+
+  it("选择「正文」范围后只写 object_roles，objects 不动", () => {
+    render(<Harness selectedObjectId={OBJ_A} />);
+    fireEvent.click(scopeRadios()[2]);
+
+    fireEvent.click(levelButton("heading1"));
+
+    expect(screen.getByTestId("commits").textContent).toBe("1");
+    expect(objectsOf()).toEqual({});
+    expect(objectRolesOf()).toEqual({
+      [`${OBJ_A}:body`]: {
+        font_scale: 1.4,
+        bold: true,
+        space_before: 0.4,
+        space_after: 0.2,
+      },
+    });
+    expect(screen.getByText(currentText(t("typography.level.heading1")))).toBeInTheDocument();
+  });
+
+  it("选择「说明」范围后按该角色白名单收窄（meta 不写段距）", () => {
+    render(<Harness selectedObjectId={OBJ_A} />);
+    fireEvent.click(scopeRadios()[3]);
+
+    fireEvent.click(levelButton("heading1"));
+
+    expect(objectsOf()).toEqual({});
+    expect(objectRolesOf()).toEqual({
+      [`${OBJ_A}:meta`]: { font_scale: 1.4, bold: true },
+    });
+  });
+
+  it("恢复只清当前范围：正文范围清掉后，说明范围仍在、整条目覆盖仍在", () => {
+    const initial = baseLayout({
+      objects: { version: 1, [OBJ_A]: { font_scale: 1.2, bold: true } },
+      object_roles: {
+        version: 1,
+        [`${OBJ_A}:body`]: { font_scale: 1.4, bold: true, space_before: 0.4, space_after: 0.2 },
+        [`${OBJ_A}:meta`]: { font_scale: 1.1, bold: true },
+      },
+    });
+    const onCommit = vi.fn();
+    render(<Harness initial={initial} selectedObjectId={OBJ_A} onCommitSpy={onCommit} />);
+
+    fireEvent.click(scopeRadios()[2]);
+    expect(screen.getByText(currentText(t("typography.level.heading1")))).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: t("typography.level.restore") }));
+
+    expect(onCommit).toHaveBeenCalledTimes(1);
+    expect(objectsOf()[OBJ_A]).toEqual({ font_scale: 1.2, bold: true });
+    expect(objectRolesOf()).toEqual({
+      [`${OBJ_A}:meta`]: { font_scale: 1.1, bold: true },
+    });
+    expect(screen.getByText(currentText(t("typography.level.currentInherit")))).toBeInTheDocument();
+  });
+
+  it("字段范围当前级别按该范围读取：整条目是标题、正文范围是跟随模板", () => {
+    const initial = baseLayout(applyTextLevel({} as never, [OBJ_A], "heading2") as never);
+    render(<Harness initial={initial} selectedObjectId={OBJ_A} />);
+    expect(screen.getByText(currentText(t("typography.level.heading2")))).toBeInTheDocument();
+
+    fireEvent.click(scopeRadios()[2]);
+
     expect(screen.getByText(currentText(t("typography.level.currentInherit")))).toBeInTheDocument();
   });
 });

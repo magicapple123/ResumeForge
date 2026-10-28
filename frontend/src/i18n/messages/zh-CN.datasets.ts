@@ -16,7 +16,10 @@ const datasets = {
   "datasets.action.rename": "重命名",
   "datasets.action.delete": "删除",
   "datasets.intro":
-    "每份数据集就是一个完整的简历通数据库（岗位、个人资料、简历、收藏、助手会话和全部附件），可以随时切换，互不影响。导入备份包只会「新增」一份数据集，当前正在使用的数据不会被动到；导出的备份「默认包含」全局模型配置与其 API Key，不需要时可取消勾选。",
+    "数据集是一份完整的简历库（岗位、资料、简历、收藏与助手会话），可整份导出、导入或切换，互不影响。",
+  "datasets.hint.summary": "备份包默认包含全局模型配置、API Key 与自定义字体。",
+  "datasets.export.contents.title": "导出包里包含什么",
+  "datasets.export.contents.action": "查看说明",
   "datasets.option.globalConfig": "备份中包含全局模型配置与 API Key（所有已保存记录）",
   "datasets.hint.globalConfig":
     "默认勾选。全局模型配置存在数据目录的「global_settings.json」，不在任何数据集的库里；勾选后会作为独立的一段随包导出，导入时合并回本机（同名且本地已有内容的记录保留本地）。",
@@ -32,6 +35,11 @@ const datasets = {
   "datasets.tooltip.switch": "切换到这份数据",
   "datasets.badge.current": "当前",
   "datasets.source.sample": "示例体验",
+  /** 数据集来源（后端 `_describe` 的 source_code）：中文与落盘的 source 原文逐字一致。 */
+  "datasets.source.machine": "本机",
+  "datasets.source.created": "新建",
+  "datasets.source.imported": "导入",
+  "datasets.source.restored": "随备份包导入",
   "datasets.confirm.delete": "删除数据集“{name}”？",
   "datasets.default.allName": "全部数据集",
   "datasets.default.importName": "导入的数据集",

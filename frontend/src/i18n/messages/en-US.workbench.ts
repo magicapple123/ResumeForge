@@ -10,6 +10,7 @@ const workbench = {
   "workbench.note.canvas":
     "Shown at original size. Dashed lines mark page breaks for the current {pages}-page setting",
   "workbench.note.zoom": "Use Zoom in and Zoom out, or hold Ctrl and scroll",
+  "workbench.note.zoomInline": "Zoom with the buttons below, or hold Ctrl and scroll",
   "workbench.group.layout": "Templates and layout presets",
   "workbench.group.measure": "Typography settings",
   "workbench.group.spacing": "Hierarchy and spacing",

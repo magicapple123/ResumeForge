@@ -22,6 +22,8 @@ const componentsMisc2 = {
   "componentsMisc2.jobReference.emptyOther": "暂无其他信息",
 
   // 页头模型切换下拉（`ModelProfileSelect`）：切换与双击测连接的反馈。
+  /** 后端自动创建的那条记录的默认名（用户没改过名时按语言包显示）。 */
+  "componentsMisc2.modelProfile.defaultRecordName": "默认配置",
   "componentsMisc2.modelProfile.ariaLabel": "当前模型配置",
   "componentsMisc2.modelProfile.placeholder": "选择模型配置",
   "componentsMisc2.modelProfile.switched": "已切换到配置「{name}」",

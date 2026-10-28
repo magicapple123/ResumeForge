@@ -1,5 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 const profileGroups = {
+  // Display name of the default Plan while it still carries the built-in name; once the
+  // user renames it the backend stops sending `name_is_default` and the real name shows.
+  "profileGroups.defaultName": "Default Plan",
   "profileGroups.control.label": "Current Plan",
   "profileGroups.control.manage": "Manage Plans",
   "profileGroups.control.locked": "Save or cancel your edits before switching Plans",

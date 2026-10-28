@@ -46,6 +46,13 @@ const materials = {
   "materials.file.image": "Image · {size} KB",
   "materials.file.text": "{count} characters",
 
+  // Attachment preview: documents only keep the extracted text, so say so.
+  "materials.attachments.previewAction": "Click to preview",
+  "materials.attachments.previewTitle": "Attachment preview",
+  "materials.attachments.previewTextNote":
+    "This is the text extracted from the file, not the original layout. Open it from My files for the original.",
+  "materials.attachments.previewEmpty": "This attachment has nothing to preview.",
+
   /** "My files" panel in the Material library (mirrors zh-CN.materials.ts). */
   "materials.files.searchPlaceholder": "Search file names",
   "materials.files.empty": "No saved files yet",
@@ -69,6 +76,11 @@ const materials = {
   "materials.files.toast.loadFailed": "Could not load the file list",
   "materials.files.toast.revealed": "Opened the containing folder",
   "materials.files.toast.revealFailed": "Could not open the folder",
+  "materials.files.previewTitle": "File preview",
+  "materials.files.previewLoading": "Reading the file…",
+  "materials.files.previewTextNote":
+    "This is the text extracted from the file, not its original layout. Use “Open folder” to see the original.",
+  "materials.files.previewImageTitle": "Image preview",
 } as const;
 
 export default materials;

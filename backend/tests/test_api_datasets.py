@@ -21,6 +21,9 @@ def test_list_datasets_starts_with_only_the_main_dataset(client):
 
     assert [item["id"] for item in items] == [MAIN]
     assert items[0]["is_active"] is True
+    # 来源同时下发稳定代码：界面按语言显示，`source` 只作为兜底原文。
+    assert items[0]["source"] == "本机"
+    assert items[0]["source_code"] == "machine"
 
 
 def test_create_dataset_makes_a_named_empty_dataset(client):
@@ -30,6 +33,7 @@ def test_create_dataset_makes_a_named_empty_dataset(client):
     created = response.json()
     assert created["name"] == "校招空库"
     assert created["source"] == "新建"
+    assert created["source_code"] == "created"
     assert created["is_active"] is False
     assert created["id"] != MAIN
     assert {item["id"] for item in _list_datasets(client)} == {MAIN, created["id"]}

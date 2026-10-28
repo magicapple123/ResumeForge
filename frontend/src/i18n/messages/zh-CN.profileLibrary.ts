@@ -33,7 +33,16 @@ const profileLibrary = {
   "profileLibrary.action.collapseAll": "全部收起",
   "profileLibrary.action.recognize": "粘贴文本识别",
   "profileLibrary.action.guide": "填写规则",
+  /** 页头总入口：一个弹层里统一管方案 / 板块 / 字段；单独入口保留。 */
+  "profileLibrary.action.settings": "资料设置",
   "profileLibrary.action.refreshCompare": "刷新比较",
+
+  // 编辑操作条（需求 6）：与页头那两颗同名按钮**刻意不同名**——同一屏会有两组保存/取消，
+  // 名字一样的话用户（和测试）都分不清点的是哪一只。
+  "profileLibrary.editBar.ariaLabel": "编辑操作条",
+  "profileLibrary.editBar.title": "改动还没保存",
+  "profileLibrary.editBar.save": "保存修改",
+  "profileLibrary.editBar.cancel": "取消编辑",
 
   "profileLibrary.tab.resume": "简历资料",
   "profileLibrary.tab.webform": "网申资料",
@@ -59,6 +68,8 @@ const profileLibrary = {
   "profileLibrary.section.entryLimit": "每个板块最多 200 条",
   "profileLibrary.section.fieldSettings": "字段设置",
   "profileLibrary.section.fieldSettingsAria": "字段设置：{name}",
+  /** 自建板块在资料页标题旁的标记，避免与 13 个系统板块混淆。 */
+  "profileLibrary.section.customBadge": "自建",
   "profileLibrary.section.emptyTitle": "这个分区还没有内容",
   "profileLibrary.section.emptyHint": "填写后照常参与生成与导出",
   "profileLibrary.section.startFill": "开始填写",
@@ -140,6 +151,15 @@ const profileLibrary = {
 
   "profileLibrary.guide.title": "填写规则",
   "profileLibrary.guide.subtitle": "同一段经历只填一个板块",
+  "profileLibrary.guide.terms.title": "先认三个词：方案 › 板块 › 字段",
+  "profileLibrary.guide.terms.plan":
+    "方案：一次投递用到的整套资料组合。投不同岗位时换个方案就行，不用把资料重填一遍。",
+  "profileLibrary.guide.terms.section":
+    "板块：一类资料，例如「教育经历」「项目经历」「技能」。一个方案由多个板块组成。",
+  "profileLibrary.guide.terms.field":
+    "字段：板块里真正填内容的那一格，例如教育经历里的「学校」「专业」「起止时间」。一个板块包含多个字段。",
+  "profileLibrary.guide.terms.hierarchy":
+    "层级是「方案 › 板块 › 字段」，下面的表按这个层级对号入座：换方案影响整套资料，板块的开关影响它下面的所有字段，字段设置只影响那一格。",
   "profileLibrary.guide.ruleCol": "素材特征",
   "profileLibrary.guide.targetCol": "该填哪里",
   "profileLibrary.guide.total": "总则：同一段经历只填一个地方。不要为了显得丰富在两处重复录入。",

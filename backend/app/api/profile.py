@@ -3,7 +3,7 @@
 
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
@@ -50,6 +50,7 @@ from ..services.text_extraction import (
     no_model_warning,
 )
 from ..services.user_files import save_from_data_url
+from ._disconnect import client_gone, run_until_disconnect
 
 router = APIRouter(prefix="/api/profile", tags=["profile"])
 logger = logging.getLogger(__name__)
@@ -191,7 +192,9 @@ def remove_photo(photo_id: int, db: Session = Depends(get_db)):
     response_model=ProfileTextParseDraftOut,
     response_model_exclude_none=True,
 )
-async def parse_profile_text_draft(payload: ProfileTextParseRequest, db: Session = Depends(get_db)):
+async def parse_profile_text_draft(
+    payload: ProfileTextParseRequest, request: Request, db: Session = Depends(get_db)
+):
     """把用户粘贴的个人资料（或截图、文档）拆成可编辑草稿，不写入数据库。"""
     try:
         images = normalize_extraction_images(payload.images)
@@ -225,7 +228,12 @@ async def parse_profile_text_draft(payload: ProfileTextParseRequest, db: Session
     provider = create_provider(config)
     db.close()
     try:
-        result = await extract_profile_text(provider, source_text, local_draft, image_urls)
+        # 一次识别要几十秒：客户端断开就停下（结果没人要，本地兜底也不必算）。
+        result = await run_until_disconnect(
+            request,
+            extract_profile_text(provider, source_text, local_draft, image_urls),
+            what="个人资料识别",
+        )
     except LLMError as exc:
         logger.warning("个人资料 AI 识别失败，已回退本地解析：%s", exc)
         result = mark_local_fallback(
@@ -236,6 +244,8 @@ async def parse_profile_text_draft(payload: ProfileTextParseRequest, db: Session
         result = mark_local_fallback(
             local_draft, ai_failed_warning(has_images, has_documents=has_documents)
         )
+    if result is None:
+        raise client_gone("个人资料识别")
     return _with_catalog_draft(
         finalize_recognition_result(
             result, has_images=has_images, document_warnings=documents.warnings

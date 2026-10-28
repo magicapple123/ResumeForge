@@ -1,24 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
-import { Alert } from "antd";
 import type { RefObject, SyntheticEvent } from "react";
 import { t } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
-import {
-  A4_HEIGHT_PX,
-  A4_WIDTH_PX,
-  APPROXIMATE_PAGINATION_NOTE_KEY,
-  OVERFLOW_NOTE_KEY,
-  PAGE_STACK_GAP_PX,
-} from "./config";
+import { A4_HEIGHT_PX, A4_WIDTH_PX, PAGE_STACK_GAP_PX } from "./config";
 
 interface Props {
-  warnings: string[];
-  overflow: boolean;
-  /** 溢出内容被裁掉（1 页上限）而不是排成第二页：决定提示里说哪一句话。 */
-  overflowClipped: boolean;
-  pagesNeeded: number;
-  pageCount: number;
-  overflowAmountText: string;
   isPanning: boolean;
   viewportHeight: number;
   scaledWidth: number;
@@ -55,12 +41,6 @@ interface Props {
  * "一个 iframe + JS 切分 DOM"能省内存，但那要自己复刻浏览器分页，断点必然漂移。
  */
 export default function ResumePreviewCanvas({
-  warnings,
-  overflow,
-  overflowClipped,
-  pagesNeeded,
-  pageCount,
-  overflowAmountText,
   isPanning,
   viewportHeight,
   scaledWidth,
@@ -76,35 +56,6 @@ export default function ResumePreviewCanvas({
   useLocale();
   return (
     <>
-      {warnings.length > 0 && (
-        <Alert
-          type="warning"
-          showIcon
-          style={{ marginBottom: 12 }}
-          title={t("preview.canvas.warningsTitle")}
-          description={
-            <ul style={{ margin: 0, paddingLeft: 18 }}>
-              {warnings.map((warning) => (
-                <li key={warning}>{warning}</li>
-              ))}
-            </ul>
-          }
-        />
-      )}
-      {overflow && (
-        <Alert
-          type="warning"
-          showIcon
-          className="resume-preview-overflow"
-          // 措辞只说事实（约需几页、超了多少），**不再说"字号已降到最小"**：2026-10-21
-          // 起不再自动缩字号，装不下就是装不下，改法由用户决定（加页 / 收紧排版 / 删内容）。
-          title={t("exact.overflow.title", { needed: pagesNeeded, limit: pageCount })}
-          description={t("preview.canvas.overflowBody", {
-            amount: overflowAmountText,
-            note: t(overflowClipped ? OVERFLOW_NOTE_KEY : APPROXIMATE_PAGINATION_NOTE_KEY),
-          })}
-        />
-      )}
       <div
         ref={containerRef}
         className={`resume-preview-viewport${isPanning ? " is-panning" : ""}${

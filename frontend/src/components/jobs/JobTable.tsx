@@ -39,6 +39,8 @@ interface Props {
   onDelete: (job: JobList) => void;
   /** 右键菜单「批量选择」的动作：进入选择模式（工具栏按钮已收进这里，R8）。 */
   onEnterSelecting: () => void;
+  /** 多选态的整行右键菜单：只给批量动作（逐个执行，不是合成一份结果）。 */
+  bulkActions: RowActionItem[];
   onPageChange: (page: number, pageSize: number) => void;
   /** 当前排序（受控）：列头箭头由它决定，点击列头经 onSortChange 回到 URL 状态里。 */
   sortState: JobSortState;
@@ -74,6 +76,7 @@ export default function JobTable({
   onEdit,
   onDelete,
   onEnterSelecting,
+  bulkActions,
   onPageChange,
   sortState,
   onSortChange,
@@ -269,10 +272,11 @@ export default function JobTable({
   ];
 
   /** 整行右键：鼠标不在行内链接上，给完整清单更方便。
-   * 非选择模式时顶部带「批量选择」（工具栏按钮已收进这里，R8）；选择模式下不重复给。 */
-  const contextActions = (job: JobList): RowActionItem[] => [
-    ...(selectionMode
-      ? []
+   * 选择模式下换成批量动作：勾选状态下的右键是"对所选这批做什么"，
+   * 再混进单行的编辑/删除会让"删的是这一行还是所选"变成歧义。 */
+  const contextActions = (job: JobList): RowActionItem[] =>
+    selectionMode
+      ? bulkActions
       : [
           {
             key: "batch_select",
@@ -280,10 +284,9 @@ export default function JobTable({
             icon: <CheckSquareOutlined />,
             onClick: onEnterSelecting,
           } satisfies RowActionItem,
-        ]),
-    ...primaryActions(job),
-    ...secondaryActions(job),
-  ];
+          ...primaryActions(job),
+          ...secondaryActions(job),
+        ];
 
   return (
     <Table

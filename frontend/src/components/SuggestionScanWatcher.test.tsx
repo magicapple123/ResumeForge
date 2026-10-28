@@ -1,161 +1,73 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * 岗位优化建议的全局提醒：弹窗没开着时才弹通知（生成中带「取消」、完成提示去看、失败报错）。
+ * 岗位优化建议的后台提醒：**已并入统一任务表**。
  *
- * 这一条**必须用真实 AntD**（照 RiskScanWatcher.test.tsx 的做法）：通知卡片的字段名在
- * antd 6 里是 `title` / `actions`，用假宿主记录参数的话传错键名也能"通过"，真机上却只是
- * 一张空白卡片。所以断言直接读 `.ant-notification-notice-*` 的真实 DOM。
+ * 与 `RiskScanWatcher.test.tsx` 同一个理由（别再挂第二个通知源），这里补上另一半：
+ * **完成后跳哪**这张映射表。深链算错的表现很隐蔽——通知照样弹，只是点进去落到列表页，
+ * 用户得自己再找一遍那份简历，于是"跑完了"这件事等于没说。
  */
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { App as AntdApp } from "antd";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
+import type { AiTaskSnapshot } from "../types";
 import {
-  getSuggestionScanState,
-  markSuggestionPanelAttached,
-  resetSuggestionScan,
-  startSuggestionScan,
-} from "../features/resume/suggestionScanStore";
-import type { ResumeSuggestions } from "../types";
-import SuggestionScanWatcher from "./SuggestionScanWatcher";
+  getBackgroundTaskAdapter,
+  registeredBackgroundTaskKinds,
+  updateFromAiTask,
+} from "../utils/backgroundTasks.adapters";
 
-const apiMocks = vi.hoisted(() => ({ generateResumeSuggestions: vi.fn() }));
-
-// store 只从 api/resumes 取这一个函数。
-vi.mock("../api/resumes", () => apiMocks);
-
-function payload(): ResumeSuggestions {
+function snapshot(kind: string, result_ref: Record<string, unknown> | null): AiTaskSnapshot {
   return {
-    job_id: 3,
-    job_title: "前端工程师",
-    company: "示例公司",
-    suggestions: [
-      {
-        priority: "high",
-        section: "项目经历",
-        issue: "缺少量化结果",
-        suggestion: "补充可核对的数字",
-        evidence: [],
-      },
-    ],
+    id: 1,
+    kind,
+    status: "succeeded",
+    progress: 100,
+    label: "",
+    message: "",
+    result_ref,
+    error: "",
+    created_at: "2026-10-28T10:00:00+08:00",
+    started_at: "2026-10-28T10:00:00+08:00",
+    finished_at: "2026-10-28T10:01:00+08:00",
   };
 }
 
-interface Deferred<T> {
-  promise: Promise<T>;
-  resolve: (value: T) => void;
-}
+describe("岗位优化建议的后台提醒（统一出口）", () => {
+  it("resume_rewrite 已登记适配器，通知文案取到了真实翻译", () => {
+    expect(registeredBackgroundTaskKinds()).toContain("resume_rewrite");
+    const adapter = getBackgroundTaskAdapter("resume_rewrite");
+    expect(adapter).not.toBeNull();
 
-function deferred<T>(): Deferred<T> {
-  let resolve!: (value: T) => void;
-  const promise = new Promise<T>((res) => {
-    resolve = res;
-  });
-  return { promise, resolve };
-}
-
-function renderWatcher() {
-  return render(
-    <AntdApp>
-      <SuggestionScanWatcher />
-    </AntdApp>,
-  );
-}
-
-/** 通知标题/描述的选择器（antd 6 把卡片内容渲染在这两个 class 上）。 */
-function noticeTitle(): string | null {
-  return document.querySelector(".ant-notification-notice-title")?.textContent ?? null;
-}
-
-function noticeDescription(): string | null {
-  return document.querySelector(".ant-notification-notice-description")?.textContent ?? null;
-}
-
-/** 给通知一次出场机会（断言"没有弹"时必须先等一拍）。 */
-async function settle(): Promise<void> {
-  await new Promise((resolve) => setTimeout(resolve, 50));
-}
-
-beforeEach(() => {
-  resetSuggestionScan();
-  apiMocks.generateResumeSuggestions.mockReset();
-});
-
-afterEach(() => {
-  cleanup();
-  resetSuggestionScan();
-  document.body.innerHTML = "";
-});
-
-describe("SuggestionScanWatcher", () => {
-  it("生成中且弹窗未附着时弹常驻通知，带「取消」且点了回到 idle", async () => {
-    const pending = deferred<ResumeSuggestions>();
-    apiMocks.generateResumeSuggestions.mockReturnValue(pending.promise);
-    renderWatcher();
-
-    startSuggestionScan(7);
-
-    await waitFor(() => expect(noticeTitle()).toBe("岗位优化建议生成中"));
-    expect(noticeDescription()).toContain("后台继续");
-
-    fireEvent.click(screen.getByRole("button", { name: /取\s*消/ }));
-    await waitFor(() => expect(getSuggestionScanState(7).status).toBe("idle"));
+    for (const value of Object.values(adapter!.notices())) {
+      expect(value).toBeTruthy();
+      expect(value).not.toMatch(/^backgroundTasks\./);
+    }
   });
 
-  it("弹窗正开着时不弹通知（生成中与完成都在弹窗里就地展示）", async () => {
-    const detach = markSuggestionPanelAttached(7);
-    const pending = deferred<ResumeSuggestions>();
-    apiMocks.generateResumeSuggestions.mockReturnValue(pending.promise);
-    renderWatcher();
-
-    startSuggestionScan(7);
-    await waitFor(() => expect(getSuggestionScanState(7).status).toBe("scanning"));
-    await settle();
-    expect(noticeTitle()).toBeNull();
-
-    pending.resolve(payload());
-    await waitFor(() => expect(getSuggestionScanState(7).status).toBe("done"));
-    await settle();
-    expect(noticeTitle()).toBeNull();
-
-    detach();
+  it("四种新入口的完成深链各落到该去的地方", () => {
+    // 岗位解读：直接打开解读弹窗（analysis=1 是 JobsPage 已在消费的既有参数）。
+    expect(updateFromAiTask(snapshot("job_analysis", { job_id: 12 })).deepLink).toBe(
+      "/jobs?job_id=12&analysis=1",
+    );
+    // 风险扫描 / 岗位化建议：结果都挂在简历上。
+    expect(updateFromAiTask(snapshot("resume_risk", { resume_id: 7 })).deepLink).toBe(
+      "/resumes?resume_id=7",
+    );
+    expect(updateFromAiTask(snapshot("resume_rewrite", { resume_id: 7 })).deepLink).toBe(
+      "/resumes?resume_id=7",
+    );
+    // 网申是整页型结果，没有可定位的记录 id。
+    expect(updateFromAiTask(snapshot("webform_fill", { webform: 1 })).deepLink).toBe("/webform");
   });
 
-  it("弹窗关掉之后，进行中的生成才弹通知", async () => {
-    const detach = markSuggestionPanelAttached(7);
-    const pending = deferred<ResumeSuggestions>();
-    apiMocks.generateResumeSuggestions.mockReturnValue(pending.promise);
-    renderWatcher();
-
-    startSuggestionScan(7);
-    await waitFor(() => expect(getSuggestionScanState(7).status).toBe("scanning"));
-    await settle();
-    expect(noticeTitle()).toBeNull();
-
-    detach();
-
-    await waitFor(() => expect(noticeTitle()).toBe("岗位优化建议生成中"));
+  it("结果标识缺失时不猜地址（宁可少一颗按钮，也不跳到不存在的记录）", () => {
+    expect(updateFromAiTask(snapshot("resume_rewrite", null)).deepLink).toBeNull();
+    expect(updateFromAiTask(snapshot("job_analysis", {})).deepLink).toBeNull();
   });
 
-  it("完成后在弹窗未附着时报「已生成」并指路", async () => {
-    const pending = deferred<ResumeSuggestions>();
-    apiMocks.generateResumeSuggestions.mockReturnValue(pending.promise);
-    renderWatcher();
+  it("result_ref 原样带给领域 store（没有业务表的那几种结果只能从这里回去）", () => {
+    const ref = { resume_id: 7, risk_scan: { points: [] } };
+    const update = updateFromAiTask(snapshot("resume_risk", ref));
 
-    startSuggestionScan(7);
-    await waitFor(() => expect(noticeTitle()).toBe("岗位优化建议生成中"));
-
-    pending.resolve(payload());
-    await waitFor(() => expect(noticeTitle()).toBe("岗位优化建议已生成"));
-    expect(noticeDescription()).toContain("岗位优化建议");
-  });
-
-  it("失败且弹窗未附着时报错，并把错误信息透传", async () => {
-    apiMocks.generateResumeSuggestions.mockRejectedValue(new Error("模型服务不可用"));
-    renderWatcher();
-
-    startSuggestionScan(7);
-
-    await waitFor(() => expect(noticeTitle()).toBe("岗位优化建议生成失败"));
-    expect(noticeDescription()).toContain("模型服务不可用");
+    expect(update.resultData).toEqual(ref);
+    expect(update.status).toBe("completed");
   });
 });

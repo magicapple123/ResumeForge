@@ -199,6 +199,12 @@ class LLMGlobalRecordOut(LLMConfig):
 
     id: str
     name: str
+    """
+    这条记录是否还在用**内置默认名**（用户没改过）。
+
+    前端据此把默认名翻成当前界面语言；改过名之后名字是用户数据，原样显示。
+    """
+    name_is_default: bool = False
     models: list[str] = Field(default_factory=list)
     created_at: str = ""
     updated_at: str = ""

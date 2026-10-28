@@ -7,6 +7,7 @@ import { useLocale } from "../../i18n/i18nContext";
 import { webformOptionLabel } from "../../features/webform/groupIdentity";
 import type { WebFormRepeatedGroup, WebFormRepeatedRecord } from "../../types";
 import PartialDateSelect from "./PartialDateSelect";
+import { profileFieldLabel } from "../../features/profile-library/profileLabels";
 
 const { TextArea } = Input;
 
@@ -144,7 +145,7 @@ function RecordCard({
             <Col key={field.key} xs={24} md={field.kind === "longtext" ? 24 : 12}>
               <div style={{ marginBottom: 10 }}>
                 <Typography.Text type="secondary" style={{ display: "block", marginBottom: 5 }}>
-                  {field.label}
+                  {profileFieldLabel(field)}
                 </Typography.Text>
                 <RecordInput
                   field={field}
@@ -153,7 +154,7 @@ function RecordCard({
                   label={t("profileLibrary.webform.recordFieldAria", {
                     group: groupLabel,
                     index: index + 1,
-                    field: field.label,
+                    field: profileFieldLabel(field),
                   })}
                   onChange={(value) => onChange(field.key, value)}
                 />
@@ -169,7 +170,7 @@ function RecordCard({
             return (
               <Col key={field.key} xs={24} md={field.kind === "longtext" ? 24 : 12}>
                 <Typography.Text type="secondary" style={{ display: "block", fontSize: 12 }}>
-                  {field.label}
+                  {profileFieldLabel(field)}
                 </Typography.Text>
                 <Typography.Text style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>
                   {field.options?.includes(value) ? webformOptionLabel(field.key, value) : value}
@@ -245,7 +246,7 @@ export default memo(function WebFormProfileRecordGroup({
       const value = (record.values[field.key] ?? "").toLocaleLowerCase();
       if (!value) return false;
       return (
-        field.label.toLocaleLowerCase().includes(normalizedSearch) ||
+        profileFieldLabel(field).toLocaleLowerCase().includes(normalizedSearch) ||
         value.includes(normalizedSearch)
       );
     });

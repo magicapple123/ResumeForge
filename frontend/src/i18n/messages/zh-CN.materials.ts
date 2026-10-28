@@ -51,6 +51,13 @@ const materials = {
   "materials.file.image": "图片 · {size} KB",
   "materials.file.text": "文字 {count} 字",
 
+  /** 附件预览（0066 补）：文档只存了提取出的文本，弹层要如实说明这一点。 */
+  "materials.attachments.previewAction": "点击预览",
+  "materials.attachments.previewTitle": "附件预览",
+  "materials.attachments.previewTextNote":
+    "这是系统从文件里提取的文本，不是原文件的排版；原件请到「我的文件」里查看。",
+  "materials.attachments.previewEmpty": "该附件没有可预览的内容。",
+
   /** 「我的文件」面板（当前数据集里用户上传内容的清单）。 */
   "materials.files.searchPlaceholder": "搜索文件名",
   "materials.files.empty": "还没有保存过文件",
@@ -74,6 +81,11 @@ const materials = {
   "materials.files.toast.loadFailed": "加载文件列表失败",
   "materials.files.toast.revealed": "已打开所在文件夹",
   "materials.files.toast.revealFailed": "打开文件夹失败",
+  "materials.files.previewTitle": "文件预览",
+  "materials.files.previewLoading": "正在读取文件内容…",
+  "materials.files.previewTextNote":
+    "下面是系统从文件里提取的文字，不是原文件的排版；要看原件请用「打开所在文件夹」。",
+  "materials.files.previewImageTitle": "图片预览",
 } as const;
 
 export default materials;

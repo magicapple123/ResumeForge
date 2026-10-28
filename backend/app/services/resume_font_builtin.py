@@ -102,6 +102,17 @@ _worker: threading.Thread | None = None
 # 本轮的"下载完成后是否接管当前字体"（P0-3：在制作台里下载不该改全局字体）。
 # 唯一消费者是 ``take_auto_activate()``；三条终止路径都会把它复位成 True（见 ``_apply``）。
 _auto_activate = True
+# "这一轮下载**刚刚**真正成功"的一次性令牌，唯一消费者是 ``consume_completion()``。
+#
+# **为什么不能只靠 ``_auto_activate``**：那个开关没有下载在跑时恒为 True（模块默认值，
+# 且每次取用都复位成 True），所以它答不了"此刻是不是刚下完"。而 ``GET /fonts/builtin``
+# 是个**只读**轮询端点，前端每进一次设置页都会打它——用 ``_auto_activate`` 直接判定的
+# 结果是"每次轮询都接管一次当前字体"，用户点了「回到系统字体」（``active = None``）之后
+# 会被静默改回 Regular，刷新也治不好。
+#
+# 所以"刚下完"必须由写侧显式置位：只有本轮下载真正落地成功（以及"文件已存在"那次短路，
+# 用户毕竟是主动点了下载）才置 True，三条终止路径（完成/失败/取消）都会把它清干净。
+_completion_pending = False
 
 
 def fonts_dir() -> Path:
@@ -203,9 +214,10 @@ def start_download(activate: bool = True) -> dict:
         _auto_activate = activate
         if all(_is_present(item) for item in BUILTIN_FILES):
             # 没有下载就没有"本轮"：保持今天的行为（轮询照常接管），也别把 False 留在
-            # 全局给下一次普通下载继承。
+            # 全局给下一次普通下载继承。用户是主动点了下载，接管一次仍然合理，所以
+            # 这里也置"刚完成"令牌（与真下载落地的语义一致）。
             _auto_activate = True
-            _apply("done", progress=total_bytes(), keep_switch=True)
+            _apply("done", progress=total_bytes(), keep_switch=True, completion=True)
         else:
             free = _available_bytes()
             if free is not None and free < total_bytes() * DISK_HEADROOM:
@@ -225,11 +237,28 @@ def take_auto_activate() -> bool:
     唯一消费者是 ``api/font_builtin._ensure_active``：它在下一次轮询到 ``done`` 时读
     一次，然后**无论结果如何都复位成 True**。不复位的话，一次"从制作台下载"会让之后
     所有普通下载都静默地不设当前字体——表现是"下载完没生效，重下也没用"，极难查。
+
+    **注意它不是一次性令牌**：没有下载在跑时它恒为 True（模块默认值，取用后也复位成
+    True）。"此刻是不是刚下完"由 :func:`consume_completion` 回答，两者必须配合使用。
     """
     global _auto_activate
     with _lock:
         value = _auto_activate
         _auto_activate = True
+        return value
+
+
+def consume_completion() -> bool:
+    """取走"这一轮下载刚刚真正完成"的令牌：读出即复位（真正的一次性）。
+
+    唯一消费者是 ``api/font_builtin._ensure_active``，用来把"下载完成时接管当前字体"
+    收敛成**一次性**动作。没有这一步，只读的 ``GET /fonts/builtin`` 会在每次轮询时
+    再接管一次，把用户选的「系统字体」静默改回内置 Regular。
+    """
+    global _completion_pending
+    with _lock:
+        value = _completion_pending
+        _completion_pending = False
         return value
 
 
@@ -240,20 +269,33 @@ def _spawn_worker() -> None:
     _worker.start()
 
 
-def _apply(state: str, *, error: str = "", progress: int = 0, keep_switch: bool = False) -> None:
+def _apply(
+    state: str,
+    *,
+    error: str = "",
+    progress: int = 0,
+    keep_switch: bool = False,
+    completion: bool = False,
+) -> None:
     """写状态（**调用方必须已持锁**）：四条路径共用同一个形状，免得字段慢慢漂开。
 
     ``keep_switch=False`` 时顺带把"下载完成后是否接管当前字体"复位：done / failed /
     cancelled 三条终止路径**都必须**做这一步，集中在这里才不会漏（漏一处的表现是
     "上一次从制作台下载，之后所有下载都不设当前字体"）。``done`` 那一笔是例外
     （``keep_switch=True``）——开关要留给下一次轮询去取用。
+
+    ``completion`` 决定要不要置"这一轮下载刚刚真正完成"的一次性令牌。**只有"
+    下载真的落地成功"那两处（后台线程跑完 / 文件已存在时的短路）传 True**；
+    失败、取消、删除、复位这些路径一律默认 False，顺手把上一轮可能残留的令牌清掉
+    ——脏令牌的表现是"某次普通轮询忽然把当前字体改回内置 Regular"。
     """
-    global _auto_activate
+    global _auto_activate, _completion_pending
     _state.update(
         {"state": state, "error": error, "downloaded_bytes": progress, "cancelling": False}
     )
     if not keep_switch:
         _auto_activate = True
+    _completion_pending = completion
 
 
 def _advance(delta: int) -> None:
@@ -273,7 +315,7 @@ def _run_download() -> None:
             # ``_stop`` 已被置位（取消与完成撞车），也保留文件、落 done。删掉刚下好的
             # 32MB 是净损失——他要的就是这份字体，只是慢了一步，``status()`` 会如实说。
             _stop.clear()
-            _apply("done", progress=total_bytes(), keep_switch=True)
+            _apply("done", progress=total_bytes(), keep_switch=True, completion=True)
         logger.info("内置字体下载完成：%s", FONT_LABEL)
     except Cancelled:
         _finish_cancelled(written)
@@ -444,6 +486,7 @@ __all__ = [
     "FontDownloadError",
     "FontNotDownloaded",
     "cancel",
+    "consume_completion",
     "delete",
     "downloaded_names",
     "fonts_dir",

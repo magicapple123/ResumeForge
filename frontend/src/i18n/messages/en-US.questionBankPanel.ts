@@ -44,7 +44,8 @@ const questionBankPanel = {
   "questionBankPanel.action.viewDetail": "View details",
   "questionBankPanel.action.deleteSelected": "Delete selected",
   "questionBankPanel.action.answer": "Sample answer",
-  "questionBankPanel.action.showAnswer": "Hide sample answer",
+  "questionBankPanel.action.showAnswer": "View sample answer",
+  "questionBankPanel.action.generateAnswer": "Generate sample answer",
   "questionBankPanel.empty.noHistory": "No saved question banks yet",
   "questionBankPanel.group.basics": "Basic questions",
   "questionBankPanel.group.projectDeepDive": "Project deep-dives",
@@ -52,6 +53,33 @@ const questionBankPanel = {
   "questionBankPanel.group.purpose": "Purpose: {purpose}",
   "questionBankPanel.group.hintLabel": "Hint:",
   "questionBankPanel.group.samplePhrasing": "Sample wording: {text}",
+  "questionBankPanel.action.hideAnswer": "Hide sample answer",
+  "questionBankPanel.action.regenerateAnswer": "Regenerate",
+  "questionBankPanel.error.reviewAnswer": "Could not review your answer",
+  "questionBankPanel.group.keyPointsTitle": "Key points",
+  "questionBankPanel.group.sampleTitle": "Sample wording",
+  "questionBankPanel.group.sampleHint":
+    "Swap the example for your own real experience before you speak.",
+  "questionBankPanel.review.scoreUnit": "pts",
+  "questionBankPanel.review.tone.good": "Ready to interview",
+  "questionBankPanel.review.tone.fair": "Room to improve",
+  "questionBankPanel.review.tone.weak": "Needs a rewrite",
+  "questionBankPanel.review.noSummary": "No overall comment this time.",
+  "questionBankPanel.review.strengths": "What worked",
+  "questionBankPanel.review.gaps": "What fell short",
+  "questionBankPanel.review.suggestions": "How to fix it",
+  "questionBankPanel.review.revisedAnswer": "Rewrite sample",
+  "questionBankPanel.myAnswer.expand": "Write my own answer",
+  "questionBankPanel.myAnswer.collapse": "Hide my answer",
+  "questionBankPanel.myAnswer.savedHint": "Your answer is saved",
+  "questionBankPanel.myAnswer.scoredHint": "last scored {score}",
+  "questionBankPanel.myAnswer.placeholder":
+    "Answer in your own words: lead with the conclusion, then the approach and trade-offs, then the numbers.",
+  "questionBankPanel.myAnswer.submit": "Ask AI to review",
+  "questionBankPanel.myAnswer.rescore": "Review again",
+  "questionBankPanel.myAnswer.counter": "{count} / {max} characters",
+  "questionBankPanel.myAnswer.dirty":
+    "Edited since the last review — review again to update the score",
 } as const;
 
 export default questionBankPanel;

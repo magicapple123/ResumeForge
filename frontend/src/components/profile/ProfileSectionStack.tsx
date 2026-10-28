@@ -16,6 +16,7 @@ import { t } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
 import type { ProfileSectionOrderStore } from "../../features/profile/sectionOrderStore";
 import type { FieldOut, LimitsOut, SectionOut } from "../../features/profile-library/types";
+import { profileSectionLabel } from "../../features/profile-library/profileLabels";
 import ProfileEntrySection from "../../features/profile-library/ProfileEntrySection";
 import ProfileBasicSection from "./ProfileBasicSection";
 import { SortableProfileSection } from "./ProfileSectionShell";
@@ -146,13 +147,13 @@ export default function ProfileSectionStack(props: Props) {
    * 每个分区的「字段设置」齿轮（常驻在标题栏右侧）。
    *
    * 此前它渲染在内容区的同名标题行里，与外部标题栏重复；挪到标题栏后由本组件按
-   * section.key 直接生成。basic_info 没有字段设置入口（照片不是可配置字段）。
+   * section.key 直接生成。**基本信息也有齿轮**（2026-10-28 用户要求）：它的姓名、
+   * 联系方式等字段同样可以隐藏/恢复，也能加自定义字段，没有理由比其他卡少一个入口。
    * 查看态整页在 <Form disabled> 里，DisabledContext 会连坐按钮：就地放开。
    */
   const sectionActions = useMemo(() => {
     const actions = new Map<string, ReactNode>();
     visibleSections.forEach((section) => {
-      if (section.key === "basic_info") return;
       actions.set(
         section.key,
         <ConfigProvider componentDisabled={false}>
@@ -161,7 +162,9 @@ export default function ProfileSectionStack(props: Props) {
               size="small"
               type="text"
               icon={<SettingOutlined />}
-              aria-label={t("profileLibrary.section.fieldSettingsAria", { name: section.name })}
+              aria-label={t("profileLibrary.section.fieldSettingsAria", {
+                name: profileSectionLabel(section),
+              })}
               onClick={() => onOpenFieldSettings(section.key)}
             />
           </Tooltip>
@@ -191,10 +194,12 @@ export default function ProfileSectionStack(props: Props) {
       </Typography.Paragraph>
       {hiddenSections.map((section) => (
         <div key={section.key} className="profile-hidden-section-row">
-          <Typography.Text>{section.name}</Typography.Text>
+          <Typography.Text>{profileSectionLabel(section)}</Typography.Text>
           <Button
             size="small"
-            aria-label={t("profileLibrary.hiddenSections.showAria", { name: section.name })}
+            aria-label={t("profileLibrary.hiddenSections.showAria", {
+              name: profileSectionLabel(section),
+            })}
             disabled={sectionVisibilityBusy || undefined}
             onClick={() => onSetSectionVisible(section.key, true)}
           >
@@ -252,7 +257,8 @@ export default function ProfileSectionStack(props: Props) {
           <SortableProfileSection
             key={section.key}
             sectionKey={section.key}
-            label={section.name}
+            label={profileSectionLabel(section)}
+            custom={!section.is_builtin}
             order={order >= 0 ? order : 0}
             editable={editing}
             reordering={reordering}

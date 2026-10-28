@@ -36,21 +36,30 @@ def _regular_name() -> str:
 
 
 def _ensure_active(result: dict) -> dict:
-    """下载完成后把 Regular 设为当前字体（用户点一次"下载"就该能直接导出）。
+    """**只在"这一轮下载刚刚完成"那一刻**把 Regular 设为当前字体（用户点一次"下载"就该能直接导出）。
+
+    「刚刚完成」由 ``consume_completion()`` 回答：它是真正的一次性令牌，取走即复位。
+    **顺序不能反**——先 consume 再 take_auto_activate：
+
+    - 先 consume：不是"刚下完"就立刻返回，``_auto_activate`` 一个字都不动。漏了这一步
+      的后果是"每次轮询都接管一次"，而 ``GET /fonts/builtin`` 是前端每进一次设置页都要
+      打的只读端点——用户点「回到系统字体」（``active=None``）之后会被静默改回 Regular，
+      刷新也治不好（那个分支是唯一没有守卫的）。
+    - 后 take：刚下完，但这一轮是"制作台里下载"（``activate=false``）就跳过，且开关在这里
+      当场复位，不会污染下一轮普通下载。
 
     已经有**自己上传的**字体在用时不动它：那是用户明确选过的偏好，被一次下载悄悄换掉
     属于"我明明选了字体"。当前选择为空或本身指向内置字体时才接管。
-
-    **本轮下载若是"制作台里下载"（``activate=false``）则整个跳过**：那一刻的语义是
-    "成为这份简历的字体"，不是"改掉全局选择"。开关由 ``take_auto_activate()`` 取用并
-    **当场复位**，只作用于这一轮——这是唯一能拦住"下一次轮询又把它设回去"的地方。
 
     返回值**就是** ``status()`` 的形状，不额外塞字段：这个响应与 ``BuiltinFontStatus``
     一一对应，多一个未声明的键会让"同一组接口返回同一个结构"变成一句空话（前端要读
     当前字体，去读 ``GET /api/settings/fonts`` 的 ``active``——那是唯一事实来源）。
     """
     if not result.get("downloaded"):
-        # 还没下完：开关一个字都不动（下一轮 done 才轮到它被取用）。
+        # 还没下完：两个开关一个字都不动（下一轮 done 才轮到它们被取用）。
+        return result
+    if not resume_font_builtin.consume_completion():
+        # 只是普通轮询：这是只读接口，**不得**写当前字体（用户的选择要留得住）。
         return result
     if not resume_font_builtin.take_auto_activate():
         return result
@@ -70,7 +79,11 @@ def _ensure_active(result: dict) -> dict:
 
 @router.get("/fonts/builtin")
 def read_builtin_font() -> dict:
-    """内置字体的下载状态（含 ``downloaded_bytes`` / ``total_bytes`` 供进度条）。"""
+    """内置字体的下载状态（含 ``downloaded_bytes`` / ``total_bytes`` 供进度条）。
+
+    语义上是**只读**：唯一的写副作用是"这一轮下载刚刚完成"时接管当前字体一次
+    （见 :func:`_ensure_active`），普通轮询不碰 ``active.json``。
+    """
     return _ensure_active(resume_font_builtin.status())
 
 

@@ -166,7 +166,7 @@ describe("StorageStatsCard", () => {
     await waitFor(() => expect(mocks.getStorageStats).toHaveBeenCalled());
     await openCleanupModal();
 
-    fireEvent.click(screen.getByRole("checkbox", { name: /自动备份/ }));
+    fireEvent.click(screen.getByRole("checkbox", { name: /自动备份\s*\d+ 个文件/ }));
 
     await waitFor(() =>
       expect(mocks.previewCleanup).toHaveBeenLastCalledWith(30, [
@@ -174,6 +174,26 @@ describe("StorageStatsCard", () => {
         "backup-trash",
         "logs",
       ]),
+    );
+  });
+
+  it("逐文件勾选：只把勾选的文件交给执行", async () => {
+    renderCard();
+    await waitFor(() => expect(mocks.getStorageStats).toHaveBeenCalled());
+    await openCleanupModal();
+
+    // 取消 backups/b5.db，只留 auto-backups 那一份。
+    fireEvent.click(screen.getByRole("checkbox", { name: /backups\/b5\.db/ }));
+    expect(screen.getByRole("button", { name: "移走 1 个文件" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "移走 1 个文件" }));
+
+    await waitFor(() =>
+      expect(mocks.runCleanup).toHaveBeenCalledWith(
+        30,
+        PLAN.categories.map((c) => c.key),
+        ["auto-backups/main/snap.db"],
+      ),
     );
   });
 
@@ -197,6 +217,7 @@ describe("StorageStatsCard", () => {
       expect(mocks.runCleanup).toHaveBeenCalledWith(
         30,
         PLAN.categories.map((c) => c.key),
+        PLAN.candidates.map((c) => c.path),
       ),
     );
     // antd 的确认弹窗把标题同时渲染在弹窗头与内容区，按"至少出现一次"断言。

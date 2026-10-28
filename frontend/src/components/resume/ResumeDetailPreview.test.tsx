@@ -11,7 +11,7 @@
  */
 import { App as AntdApp } from "antd";
 import { t } from "../../i18n";
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 // @ts-expect-error Node 内置模块：@types/node 未安装，但 vitest 运行在 Node 里。
 import { readFileSync } from "node:fs";
 import type { ReactNode } from "react";
@@ -54,6 +54,8 @@ const PROFILE = {
 // 预览本身由 ResumePreview.test.tsx 覆盖；这里把它替成一个**只做插槽接线**的桩：
 // 两个具名插槽（结构类 / 度量类）原样渲染出来，好让"调用点有没有把两组喂进去"被钉住。
 // 桩不再提供"点中某一栏"的按钮——预览的点击编辑已于 2026-10-21 整块去掉。
+// `zoomHint` 也要透出来：制作台把"虚线是分页位置（当前 N 页）"那句说明并进了缩放条，
+// 桩把它吞掉的话，"页数有没有带过去"就再也测不到了。
 vi.mock("../ResumePreview", () => ({
   default: ({
     templateControls,
@@ -61,18 +63,21 @@ vi.mock("../ResumePreview", () => ({
     previewMode,
     onPreviewModeChange,
     exactPreview,
+    zoomHint,
   }: {
     templateControls?: ReactNode;
     measureControls?: ReactNode;
     previewMode?: string;
     onPreviewModeChange?: (mode: "draft" | "exact") => void;
     exactPreview?: { resumeId: number };
+    zoomHint?: string;
   }) => (
     <div>
       <div data-testid="toolbar-template-slot">{templateControls}</div>
       <div data-testid="toolbar-measure-slot">{measureControls}</div>
       <div data-testid="preview-mode">{previewMode ?? "draft"}</div>
       <div data-testid="preview-exact-resume">{exactPreview?.resumeId ?? ""}</div>
+      <div data-testid="preview-zoom-hint">{zoomHint}</div>
       <button type="button" onClick={() => onPreviewModeChange?.("exact")}>
         切到精确
       </button>
@@ -189,16 +194,18 @@ beforeEach(() => {
   profileMocks.getProfile.mockResolvedValue(PROFILE);
 });
 
-describe("ResumeDetailPreview 的「手动调整」", () => {
-  it("打开整份编辑器后能看到内容页签（写作增强已搬到右键，不再是页签）", async () => {
+describe("ResumeDetailPreview 不再提供手动编辑", () => {
+  /**
+   * 2026-10-28 用户要求：预览界面去掉「手动调整」与「草稿模式编辑」，详细编辑统一去
+   * 简历制作台。这里钉住两件事——底部没有这个按钮、点纸面也不会弹出编辑器。
+   */
+  it("底部没有「手动调整」，也不会渲染编辑器弹层", async () => {
     renderPreview();
 
-    fireEvent.click(await screen.findByRole("button", { name: /手动调整/ }));
-
-    expect(await screen.findByRole("tab", { name: t("editor.tab.basic") })).toBeInTheDocument();
-    // 入口搬走了就别留一个空壳页签：写作增强的入口在右键菜单里
-    // （见 `features/ai-polish/AiPolishLayer.test.tsx` 的那两条）。
-    expect(screen.queryByText(t("editor.tab.writing"))).toBeNull();
+    await screen.findByRole("button", { name: /简历制作台/ });
+    expect(screen.queryByRole("button", { name: /手动调整/ })).toBeNull();
+    // 编辑器弹层的标题只由它自己渲染，全篇不该出现。
+    expect(screen.queryByText(t("componentsMisc.resumeEditorModal.title"))).toBeNull();
   });
 });
 
@@ -298,7 +305,7 @@ describe("生成说明与警告分级", () => {
     expect((box as HTMLTextAreaElement).value).toContain("项目经历");
   });
 
-  it("「打开手动调整」打开的编辑器盖在宿主弹窗之上（zIndex 不低于全局弹层基准）", async () => {
+  it("覆盖提示里的「打开手动调整」改为打开简历制作台", async () => {
     renderWith({
       coverage_notes: [
         {
@@ -312,15 +319,10 @@ describe("生成说明与警告分级", () => {
       ],
     });
 
+    // 入口还在（它是"这条没写进去，去哪儿改"的唯一指路），但改成打开制作台，
+    // 不再就地弹编辑器。
     fireEvent.click(await screen.findByRole("button", { name: "打开手动调整" }));
-
-    // 回归：编辑器弹窗曾写死 zIndex=1100，而全局主题把 zIndexPopupBase 提到了
-    // 3100（宿主 Modal 都在 3100），编辑器整张被宿主压住——看起来就是"卡片被挡"。
-    // 这里钉住：编辑器节点存在，且 zIndex（在 .ant-modal-wrap 上）高于宿主弹窗。
-    await screen.findByText("手动调整简历内容");
-    const editorWrap = document.querySelector<HTMLElement>(".ant-modal-wrap");
-    expect(editorWrap).not.toBeNull();
-    expect(Number(editorWrap!.style.zIndex)).toBeGreaterThanOrEqual(3100);
+    expect(screen.queryByText("手动调整简历内容")).toBeNull();
   });
 
   it("routes legacy plain-text coverage warnings away from the fabrication group", () => {
@@ -388,27 +390,26 @@ describe("ResumeDetailPreview 底部按钮排满整行", () => {
     ]);
   });
 
-  it("「手动调整」才打开整份编辑器", async () => {
+  it("底部没有「手动调整」：编辑入口只剩「简历制作台」", async () => {
     renderPreview();
 
-    fireEvent.click(screen.getByRole("button", { name: /手动调整/ }));
-
-    expect(await screen.findByRole("tab", { name: t("editor.tab.basic") })).toBeInTheDocument();
+    await screen.findByRole("button", { name: /简历制作台/ });
+    expect(screen.queryByRole("button", { name: /手动调整/ })).toBeNull();
   });
 
-  it("中栏有未保存内容时，底部「手动调整」被禁用（设计 §9 Q6）", async () => {
+  it("中栏改过内容也不会禁用预览里的其它动作（不再有第二个编辑器抢草稿）", async () => {
     renderPreview();
 
     fireEvent.click(screen.getByRole("button", { name: /简历制作台/ }));
     await screen.findByRole("dialog", { name: "简历制作台" });
 
-    // 中栏改一个字 → 脏值上报到宿主 → 底部那颗按钮禁用：两个编辑器同时开会各自持有
-    // 一份 form 实例，在同一个草稿槽上互相覆盖。
     const nameInput = document.getElementById("name") as HTMLInputElement;
     expect(nameInput).not.toBeNull();
     fireEvent.change(nameInput, { target: { value: "李四" } });
 
-    await waitFor(() => expect(screen.getByRole("button", { name: /手动调整/ })).toBeDisabled());
+    // 预览里已经没有「手动调整」，脏值不再需要禁用任何按钮。
+    expect(screen.queryByRole("button", { name: /手动调整/ })).toBeNull();
+    expect(screen.getByRole("button", { name: /简历制作台/ })).not.toBeDisabled();
   });
 
   it("底部操作条使用 grid 布局类，且所有动作按钮都渲染出来", () => {
@@ -420,7 +421,6 @@ describe("ResumeDetailPreview 底部按钮排满整行", () => {
     expect(footer!.className).toContain("resume-detail-footer");
     // 动作按钮都在（ExportButtons 在测试里被替成 null，不影响这一层）。
     for (const name of [
-      "手动调整",
       "简历制作台",
       "生成岗位优化建议",
       "查看对应岗位",
@@ -479,14 +479,16 @@ describe("ResumeDetailPreview 底部按钮排满整行", () => {
     expect(tailChildren[tailChildren.length - 1]).toBe(exportBox);
     expect(footer.querySelectorAll(".resume-detail-footer-export")).toHaveLength(1);
 
-    // 位置在 CSS 里、jsdom 不求值：读原文断言它占第 4-5 列且靠右收尾。
+    // 位置在 CSS 里、jsdom 不求值：读原文断言它从第 4 列跨到**最后一列**的右边界。
+    // 2026-11 起写 `4 / -1` 而不是 `4 / 6`：`auto-fill` 的列数随容器宽变（960px 弹窗里
+    // 是 5～6 列），写死列号时列数一变导出就不再贴右边缘。
     // 2026 年样式表拆分后，`.resume-detail-footer*` 落在 resume-panels.css
     // （resume.css 现为 @import 清单，读它只剩两行 import）。
     const css = readFileSync(
       [process.cwd(), "src", "styles", "resume-panels.css"].join("/"),
       "utf8",
     );
-    expect(css).toContain("grid-column: 4 / 6");
+    expect(css).toContain("grid-column: 4 / -1");
     expect(css).toContain("justify-self: end");
   });
 });

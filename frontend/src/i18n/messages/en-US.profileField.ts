@@ -1,0 +1,131 @@
+// SPDX-License-Identifier: Apache-2.0
+/**
+ * Display names for the Profile page's **built-in fields**.
+ *
+ * The backend sends Chinese labels (`definition_catalog`) with every workspace payload;
+ * the stable identifier is the field id (`<section>.<key>`, e.g. `educations.school`).
+ * Fields the user creates have a `custom:` id and a user-chosen name, so they are never
+ * looked up here.
+ */
+const profileField = {
+  "profileField.basic_info.name": "Name",
+  "profileField.basic_info.gender": "Gender",
+  "profileField.basic_info.birth_month": "Date of birth",
+  "profileField.basic_info.phone": "Phone",
+  "profileField.basic_info.email": "Email",
+  "profileField.basic_info.city": "City",
+  "profileField.basic_info.target_city": "Preferred city",
+  "profileField.basic_info.job_intention": "Target role",
+  "profileField.basic_info.homepage": "Personal site",
+  "profileField.basic_info.github": "GitHub",
+  "profileField.basic_info.photo": "Photo",
+  "profileField.basic_info.portfolio_url": "Portfolio link",
+  "profileField.basic_info.political_status": "Political affiliation",
+  "profileField.basic_info.driver_license": "Driving licence",
+  "profileField.basic_info.available_date": "Available from",
+
+  "profileField.educations.school": "School",
+  "profileField.educations.major": "Major",
+  "profileField.educations.degree": "Degree",
+  "profileField.educations.study_form": "Study mode",
+  "profileField.educations.degree_type": "Degree type",
+  "profileField.educations.department": "Department",
+  "profileField.educations.start_date": "Start date",
+  "profileField.educations.end_date": "End date",
+  "profileField.educations.gpa": "GPA",
+  "profileField.educations.rank": "Class rank",
+  "profileField.educations.advisor": "Advisor",
+  "profileField.educations.research_direction": "Research area",
+  "profileField.educations.core_courses": "Core courses",
+  "profileField.educations.achievements": "Achievements",
+
+  "profileField.experiences.company": "Company / organisation",
+  "profileField.experiences.title": "Role",
+  "profileField.experiences.start_date": "Start date",
+  "profileField.experiences.end_date": "End date",
+  "profileField.experiences.description": "Responsibilities",
+  "profileField.experiences.team_size": "Team size",
+  "profileField.experiences.work_type": "Employment type",
+
+  "profileField.projects.name": "Project name",
+  "profileField.projects.role": "Role",
+  "profileField.projects.start_date": "Start date",
+  "profileField.projects.end_date": "End date",
+  "profileField.projects.tech_stack": "Tech stack",
+  "profileField.projects.description": "Description",
+  "profileField.projects.highlights": "Highlights",
+  "profileField.projects.project_size": "Project scale",
+  "profileField.projects.public_url": "Public link",
+  "profileField.projects.outcome_type": "Outcome type",
+
+  "profileField.skills.name": "Skill",
+  "profileField.skills.level": "Proficiency",
+  "profileField.skills.category": "Category",
+
+  "profileField.campus_experiences.organization": "Organisation",
+  "profileField.campus_experiences.role": "Role",
+  "profileField.campus_experiences.start_date": "Start date",
+  "profileField.campus_experiences.end_date": "End date",
+  "profileField.campus_experiences.description": "Description",
+  "profileField.campus_experiences.activity_type": "Activity type",
+
+  "profileField.awards.title": "Award",
+  "profileField.awards.awarded_at": "Date awarded",
+  "profileField.awards.description": "Description",
+  "profileField.awards.issuer": "Issuer",
+  "profileField.awards.level": "Award level",
+  "profileField.awards.award_ratio": "Award rate",
+
+  "profileField.summary.content": "Body",
+
+  "profileField.publications.title": "Title",
+  "profileField.publications.outcome_type": "Outcome type",
+  "profileField.publications.authorship_rank": "My author position",
+  "profileField.publications.authors": "Authors",
+  "profileField.publications.venue": "Journal / conference",
+  "profileField.publications.year": "Year",
+  "profileField.publications.status": "Status",
+  "profileField.publications.url": "Link",
+  "profileField.publications.note": "Notes",
+  "profileField.publications.doi": "DOI",
+  "profileField.publications.volume_pages": "Volume, issue and pages",
+
+  "profileField.research_projects.name": "Project name",
+  "profileField.research_projects.role": "Role",
+  "profileField.research_projects.institution": "Institution",
+  "profileField.research_projects.level": "Project level",
+  "profileField.research_projects.start_date": "Start date",
+  "profileField.research_projects.end_date": "End date",
+  "profileField.research_projects.description": "Description",
+  "profileField.research_projects.outcomes": "Outcomes",
+  "profileField.research_projects.funding": "Funding",
+
+  "profileField.patents.title": "Title",
+  "profileField.patents.outcome_type": "Outcome type",
+  "profileField.patents.inventors": "Inventors",
+  "profileField.patents.inventor_rank": "My inventor position",
+  "profileField.patents.patent_number": "Patent number",
+  "profileField.patents.status": "Status",
+  "profileField.patents.application_date": "Filing date",
+  "profileField.patents.grant_date": "Grant date",
+  "profileField.patents.url": "Link",
+  "profileField.patents.country": "Country / region",
+
+  "profileField.credentials.title": "Credential",
+  "profileField.credentials.credential_type": "Credential type",
+  "profileField.credentials.issuer": "Issuer",
+  "profileField.credentials.issued_at": "Issued on",
+  "profileField.credentials.expires_at": "Expires on",
+  "profileField.credentials.status": "Status",
+  "profileField.credentials.note": "Notes",
+  "profileField.credentials.credential_number": "Credential number",
+  "profileField.credentials.verify_url": "Verification link",
+
+  "profileField.languages.language": "Language",
+  "profileField.languages.level": "Level",
+  "profileField.languages.certificate": "Certificate",
+  "profileField.languages.score": "Score",
+  "profileField.languages.obtained_at": "Obtained on",
+} as const;
+
+export default profileField;

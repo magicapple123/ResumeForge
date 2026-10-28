@@ -134,76 +134,6 @@ def test_cost_is_not_estimated_without_configured_price(db_session):
     assert summary["totals"]["calls"] == 1
 
 
-def test_cost_estimated_when_user_configures_prices(client, db_session):
-    response = client.put(
-        "/api/usage/pricing",
-        json={"input_per_1k": 1.0, "output_per_1k": 2.0, "currency": "USD"},
-    )
-    assert response.status_code == 200, response.text
-    assert response.json()["configured"] is True
-    assert response.json()["source"] == "settings"
-
-    # 100 prompt + 50 completion：100/1000*1 + 50/1000*2 = 0.2
-    row = usage_ledger.record_llm_usage(db_session, task="resume_revise", usage=_usage())
-    assert row.cost_estimate == 0.2
-    assert row.cost_currency == "USD"
-
-    summary = usage_ledger.summarize_usage(db_session)
-    assert summary["cost"] == {
-        "estimated": True,
-        "currency": "USD",
-        "amount": 0.2,
-        "reason": "",
-    }
-
-    # token 未知的行不参与金额：仍然 estimated=True，但 reason 说明是部分估算。
-    usage_ledger.record_llm_usage(db_session, task="translate", usage=None)
-    partial = usage_ledger.summarize_usage(db_session)
-    assert partial["cost"]["estimated"] is True
-    assert partial["cost"]["amount"] == 0.2
-    assert partial["cost"]["reason"] == usage_ledger.COST_PARTIAL
-
-    # 清除单价：回到"未知费用"（不保留上一次的估算口径）。
-    cleared = client.put(
-        "/api/usage/pricing", json={"input_per_1k": None, "output_per_1k": None}
-    )
-    assert cleared.status_code == 200, cleared.text
-    assert cleared.json()["configured"] is False
-    assert usage_ledger.summarize_usage(db_session)["cost"]["estimated"] is False
-
-
-def test_cost_estimated_from_environment_prices(monkeypatch, db_session):
-    monkeypatch.setenv(usage_ledger.PRICING_ENV_INPUT, "0.5")
-    monkeypatch.setenv(usage_ledger.PRICING_ENV_OUTPUT, "1.5")
-    monkeypatch.setenv(usage_ledger.PRICING_ENV_CURRENCY, "EUR")
-
-    pricing = usage_ledger.load_pricing(db_session)
-    assert pricing is not None
-    assert pricing.source == "environment"
-    assert pricing.currency == "EUR"
-
-    row = usage_ledger.record_llm_usage(db_session, task="assistant", usage=_usage())
-    # 100/1000*0.5 + 50/1000*1.5 = 0.125
-    assert row.cost_estimate == 0.125
-    summary = usage_ledger.summarize_usage(db_session)
-    assert summary["cost"]["estimated"] is True
-    assert summary["cost"]["currency"] == "EUR"
-    assert summary["cost"]["amount"] == 0.125
-
-
-def test_pricing_endpoint_validates_pair_and_ranges(client):
-    assert client.get("/api/usage/pricing").json()["configured"] is False
-    assert (
-        client.put("/api/usage/pricing", json={"input_per_1k": 1.0}).status_code == 422
-    )
-    assert (
-        client.put(
-            "/api/usage/pricing", json={"input_per_1k": -1, "output_per_1k": 1}
-        ).status_code
-        == 422
-    )
-
-
 def test_finish_reasons_are_recorded_and_aggregated(db_session):
     from app.services.llm.usage import build_usage
 
@@ -485,4 +415,3 @@ def test_generation_task_records_usage(client, db_session, monkeypatch):
         assert rows[0].total_tokens == 50
     finally:
         reset_resume_generate_runner()
-

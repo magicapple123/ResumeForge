@@ -31,6 +31,8 @@ const generate = {
   "generate.config.layoutSection": "Length and layout presets",
   "generate.config.layoutHint":
     "Defaults to one A4 page at the standard font size. If the content does not fit after generation, add pages or shrink the font in the preview with one click; no need to regenerate.",
+  "generate.config.layoutHintEssential":
+    "Only the template, page limit, resume language and font are set here; layout presets, section order, font size, line height and margins can be adjusted in the resume editor after generation.",
   "generate.config.extraRequirements": "Additional requirements (optional)",
   "generate.config.extraPlaceholder":
     "e.g. Highlight backend performance work; avoid vague phrases like 'responsible for...'; put internships before education.",

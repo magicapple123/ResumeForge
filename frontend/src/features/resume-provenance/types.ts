@@ -262,6 +262,10 @@ export interface UsageBucketOut {
   retries: number;
   /** null = 存在未知用量（不是 0）。 */
   prompt_tokens: number | null;
+  /** 输入拆两档（0067）：只累加有记录的行；cache_unknown_calls 说明有多少条老账本没记。 */
+  cache_hit_tokens?: number | null;
+  cache_miss_tokens?: number | null;
+  cache_unknown_calls?: number;
   completion_tokens: number | null;
   total_tokens: number | null;
   duration_ms: number | null;
@@ -288,18 +292,47 @@ export interface UsageSummaryOut {
   cost: UsageCostOut;
 }
 
-/** GET|PUT /api/usage/pricing 的写入形状（两项单价必须同时给或同时清空）。 */
+/**
+ * 一份单价（**每百万 token**）：输入拆缓存命中 / 未命中，输出单独一档。
+ * 三档至少填一个——没有缓存折扣的服务商把命中档留空即可。
+ */
 export interface UsagePricingIn {
-  input_per_1k: number | null;
-  output_per_1k: number | null;
+  name: string;
+  input_cache_hit_per_million: number | null;
+  input_cache_miss_per_million: number | null;
+  output_per_million: number | null;
   currency: string;
 }
 
-/** GET|PUT /api/usage/pricing：当前生效的单价配置（configured=false = 未配置）。 */
-export interface UsagePricingOut extends UsagePricingIn {
+/** GET|PUT /api/usage/pricing：当前生效的单价（configured=false = 未配置）。 */
+export interface UsagePricingOut {
   configured?: boolean;
-  /** settings = 用户设置保存的值；environment = 环境变量兜底。 */
+  input_cache_hit_per_million: number | null;
+  input_cache_miss_per_million: number | null;
+  output_per_million: number | null;
+  currency: string;
+  /** record = 单价记录；settings / environment = 老格式兜底。 */
   source?: string;
+  record_id?: number | null;
+  name?: string;
+}
+
+/** GET /api/usage/pricing/records：一条可命名、可回溯的单价记录。 */
+export interface UsagePricingRecordOut {
+  id: number;
+  name: string;
+  input_cache_hit_per_million: number | null;
+  input_cache_miss_per_million: number | null;
+  output_per_million: number | null;
+  currency: string;
+  is_active: boolean;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+export interface UsagePricingRecordListOut {
+  items: UsagePricingRecordOut[];
+  count: number;
 }
 
 /** GET /api/usage/records 的单条记录（含 finish_reason，无正文）。 */

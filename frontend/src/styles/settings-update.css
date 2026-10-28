@@ -1,0 +1,36 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/* 设置页 · 软件更新：正文之后接一条横向版本信息，填满宽度且不再留大片空白。 */
+.update-meta {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 18px;
+  padding: 12px 16px;
+  border: 1px solid var(--rf-border);
+  border-radius: 10px;
+  background: var(--rf-surface-alt);
+}
+
+.update-meta-item {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.update-meta-label {
+  color: var(--rf-text-secondary);
+  font-size: 12px;
+}
+
+.update-meta-note {
+  display: block;
+  margin-top: 8px;
+  font-size: 12px;
+}
+
+@media (max-width: 767px) {
+  .update-meta {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

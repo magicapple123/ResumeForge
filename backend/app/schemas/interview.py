@@ -39,14 +39,16 @@ InterviewStatus = Literal["active", "finished"]
 class InterviewCreate(BaseModel):
     """开一场模拟面试。
 
-    只有 ``job_id`` 是可选的关联，其余都有默认值——用户可以"打开就能开始"，
-    也可以把难度、风格、轮数、人设都调一遍。
+    关联岗位与关联简历都是**必填**（真实面试里面试官只看得到这两份内容：你提交的简历
+    与他招聘的岗位要求）。其余都有默认值——用户可以"打开就能开始"，也可以把难度、
+    风格、轮数、人设都调一遍。
     """
 
     model_config = ConfigDict(extra="forbid")
 
     title: str = Field(default="", max_length=128)
-    job_id: int | None = Field(default=None, ge=1)
+    job_id: int = Field(ge=1)
+    resume_id: int = Field(ge=1)
     interview_type: InterviewType = "技术面"
     difficulty: InterviewDifficulty = "中级"
     interviewer_style: InterviewerStyle = "严谨专业"
@@ -106,6 +108,18 @@ class InterviewMessageOut(BaseModel):
     created_at: datetime
 
 
+class InterviewDurationUpdate(BaseModel):
+    """累计「有效面试时长」上报。
+
+    语义是**绝对累计值**（不是增量）：前端每次把"本次已累计的有效秒数"整份发上来，
+    服务端 ``max()`` 取大值，网络乱序或重试都不会让时长回退。
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    elapsed_seconds: int = Field(ge=0, le=86_400)
+
+
 class InterviewBrief(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -114,6 +128,11 @@ class InterviewBrief(BaseModel):
     job_id: int | None
     job_title: str
     company: str
+    # 关联简历（0066）：面试官只读这份简历 + 关联岗位的 JD。
+    resume_id: int | None = None
+    resume_title: str = ""
+    # 累计有效面试时长（秒）：界面在「准备好了」之后计时、离开暂停。
+    duration_seconds: int = 0
     interview_type: str
     difficulty: str
     interviewer_style: str
@@ -159,6 +178,8 @@ QUESTION_BANK_TYPES = ("基础题", "项目深挖题", "反问HR题")
 # 参考答案（单题）字段的长度上限，复用于题库历史里持久化的参考答案。
 MAX_QUESTION_ANSWER_CHARS = 10_000
 MAX_SAMPLE_PHRASING_CHARS = 5_000
+# 自己写的作答上限：比面试里一轮回答（8000）宽一点，允许把思路写全再交批改。
+MAX_MY_ANSWER_CHARS = 12_000
 
 MAX_QUESTION_BANK_PER_TYPE = 8
 MAX_ANALYSIS_QUESTION_CHARS = 2000
@@ -179,6 +200,11 @@ class InterviewQuestionItem(BaseModel):
     answer: str | None = Field(default=None, max_length=MAX_QUESTION_ANSWER_CHARS)
     key_points: list[str] | None = Field(default=None, max_length=20)
     sample_phrasing: str | None = Field(default=None, max_length=MAX_SAMPLE_PHRASING_CHARS)
+    # 候选人自己写的作答，以及它的批改结果（``InterviewAnswerReviewOut`` 的 JSON）。
+    # 用 ``dict`` 而不是强类型：这两个字段既要随题库历史存下来，又要能容纳旧记录里
+    # 没有它们的形态；结构由批改接口写入、由前端按 ``InterviewAnswerReview`` 读。
+    my_answer: str = Field(default="", max_length=MAX_MY_ANSWER_CHARS)
+    review: dict = Field(default_factory=dict)
 
 
 class QuestionBankGroup(BaseModel):
@@ -276,9 +302,49 @@ class InterviewQuestionAnswerOut(BaseModel):
     sample_phrasing: str = Field(default="", max_length=MAX_SAMPLE_PHRASING_CHARS)
 
 
+class InterviewAnswerReviewRequest(BaseModel):
+    """把自己的作答交给 AI 批改：题目与作答必填，岗位 / 简历 / 参考答案可选（给背景）。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    question: str = Field(min_length=1, max_length=MAX_ANALYSIS_QUESTION_CHARS)
+    my_answer: str = Field(min_length=1, max_length=MAX_MY_ANSWER_CHARS)
+    job_id: int | None = Field(default=None, ge=1)
+    resume_id: int | None = Field(default=None, ge=1)
+    # 已生成参考答案时一并带上：让批改能对照"标准答法"指出差在哪，比凭空评判更准。
+    reference_answer: str = Field(default="", max_length=MAX_QUESTION_ANSWER_CHARS)
+
+    @field_validator("question")
+    @classmethod
+    def review_question_must_not_be_blank(cls, value: str) -> str:
+        cleaned = value.strip()
+        if not cleaned:
+            raise ValueError("问题不能为空")
+        return cleaned
+
+    @field_validator("my_answer")
+    @classmethod
+    def my_answer_must_not_be_blank(cls, value: str) -> str:
+        cleaned = value.strip()
+        if not cleaned:
+            raise ValueError("回答不能为空")
+        return cleaned
+
+
+class InterviewAnswerReviewOut(BaseModel):
+    """一份作答的批改结果：分数 + 总评 + 亮点 / 差距 / 修改建议 + 改写示范。"""
+
+    question: str = ""
+    score: int = Field(default=0, ge=0, le=100)
+    summary: str = Field(default="", max_length=2_000)
+    strengths: list[str] = Field(default_factory=list, max_length=10)
+    gaps: list[str] = Field(default_factory=list, max_length=10)
+    suggestions: list[str] = Field(default_factory=list, max_length=10)
+    revised_answer: str = Field(default="", max_length=MAX_QUESTION_ANSWER_CHARS)
+
+
 class InterviewOptimizeRequest(BaseModel):
     """把面试暴露的短板与高频追问，反向转成简历改写建议。"""
-
     model_config = ConfigDict(extra="forbid")
 
     resume_id: int = Field(ge=1)
@@ -312,6 +378,7 @@ __all__ = [
     "InterviewBrief",
     "InterviewCreate",
     "InterviewDetail",
+    "InterviewDurationUpdate",
     "InterviewMessageOut",
     "INTERVIEW_STATUS_ACTIVE",
     "INTERVIEW_STATUS_FINISHED",
@@ -324,6 +391,8 @@ __all__ = [
     "InterviewAnalysisOut",
     "InterviewQuestionAnswerRequest",
     "InterviewQuestionAnswerOut",
+    "InterviewAnswerReviewRequest",
+    "InterviewAnswerReviewOut",
     "InterviewOptimizeRequest",
     "InterviewOptimizeOut",
 ]

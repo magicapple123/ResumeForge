@@ -10,6 +10,8 @@
 import { App, Button, Input, Select, Space, Tag, Typography } from "antd";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ApiError } from "../../../api/client";
+import AbortButton from "../../common/AbortButton";
+import { useAbortableRequest } from "../../../hooks/useAbortableRequest";
 import {
   fetchCareerScenarioCatalog,
   listCareerScenarios,
@@ -107,6 +109,8 @@ export default function ScenarioVariantSection({ resumeId, onChanged, variants }
   const [instructions, setInstructions] = useState("");
   const [preview, setPreview] = useState<ScenarioVariantPreviewOut | null>(null);
   const [actionError, setActionError] = useState("");
+  // 生成候选是一次现场长调用：每一条都能单独停，停了已有的差异预览原样留着。
+  const previewRequest = useAbortableRequest();
 
   const loadOptions = useCallback(async () => {
     setLoading(true);
@@ -198,17 +202,29 @@ export default function ScenarioVariantSection({ resumeId, onChanged, variants }
     }
     setPreviewLoadingId(variant.id);
     setActionError("");
-    try {
-      const result = await previewScenarioVariant(resumeId, variant.id, {
-        career_context: context,
-        instructions: instructions.trim(),
-      });
-      setPreview(result);
-    } catch (error) {
-      setActionError(conflictMessage(error, "careerScenarios.variant.previewFailed"));
-    } finally {
-      setPreviewLoadingId(null);
+    const outcome = await previewRequest.run((signal) =>
+      previewScenarioVariant(
+        resumeId,
+        variant.id,
+        { career_context: context, instructions: instructions.trim() },
+        signal,
+      ),
+    );
+    setPreviewLoadingId(null);
+    if (outcome.status === "ok") {
+      setPreview(outcome.data);
+      return;
     }
+    if (outcome.status === "error") {
+      setActionError(conflictMessage(outcome.error, "careerScenarios.variant.previewFailed"));
+    }
+    // aborted：用户自己按了停止——上一次的差异预览留着，不弹错误。
+  };
+
+  /** 停止生成候选：行内 loading 一起收起，按钮立刻可再点。 */
+  const cancelPreview = () => {
+    previewRequest.cancel();
+    setPreviewLoadingId(null);
   };
 
   const adopt = async () => {
@@ -302,6 +318,7 @@ export default function ScenarioVariantSection({ resumeId, onChanged, variants }
           >
             {t("careerScenarios.variant.generate")}
           </Button>
+          {previewLoadingId === variant.id && <AbortButton size="small" onClick={cancelPreview} />}
         </div>
       ))}
       {contextVariants.length > 0 ? (

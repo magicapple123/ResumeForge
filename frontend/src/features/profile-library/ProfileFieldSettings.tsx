@@ -20,6 +20,7 @@ import {
   updateField,
 } from "./api";
 import { profileErrorMessage } from "./errors";
+import { profileFieldLabel, profileSectionLabel } from "./profileLabels";
 import { invalidateProjectionCache } from "./projectionCache";
 import type { CustomFieldType, FieldDeletionImpactOut, FieldOut, SectionOut } from "./types";
 
@@ -147,14 +148,14 @@ export default function ProfileFieldSettings({
 
       <div className="profile-settings-row profile-field-settings-visibility">
         <span className="profile-settings-row-main">
-          <span className="profile-settings-row-title">{section.name}</span>
+          <span className="profile-settings-row-title">{profileSectionLabel(section)}</span>
           <span className="profile-settings-row-meta">
             {t("profileLibrary.section.visibleHint")}
           </span>
         </span>
         <span className="profile-settings-row-actions">
           <SectionVisibilitySwitch
-            sectionName={section.name}
+            sectionName={profileSectionLabel(section)}
             visible={section.key === "basic_info" || sectionVisible}
             locked={section.key === "basic_info"}
             busy={visibilityBusy}
@@ -175,7 +176,7 @@ export default function ProfileFieldSettings({
           {builtinFields.map((field) => (
             <div key={field.field_id} className="profile-settings-row">
               <span className="profile-settings-row-main">
-                <span className="profile-settings-row-title">{field.label}</span>
+                <span className="profile-settings-row-title">{profileFieldLabel(field)}</span>
                 <span className="profile-settings-row-meta">{typeLabel(field)}</span>
                 {field.private ? <Tag color="gold">{t("profileLibrary.field.private")}</Tag> : null}
               </span>
@@ -187,8 +188,12 @@ export default function ProfileFieldSettings({
                   checked={!field.hidden}
                   aria-label={
                     field.hidden
-                      ? t("profileLibrary.fieldSettings.showAria", { label: field.label })
-                      : t("profileLibrary.fieldSettings.hideAria", { label: field.label })
+                      ? t("profileLibrary.fieldSettings.showAria", {
+                          label: profileFieldLabel(field),
+                        })
+                      : t("profileLibrary.fieldSettings.hideAria", {
+                          label: profileFieldLabel(field),
+                        })
                   }
                   disabled={busy}
                   onChange={(checked) => toggleHidden(field, !checked)}
@@ -221,7 +226,7 @@ export default function ProfileFieldSettings({
                 />
               ) : (
                 <span className="profile-settings-row-main">
-                  <span className="profile-settings-row-title">{field.label}</span>
+                  <span className="profile-settings-row-title">{profileFieldLabel(field)}</span>
                   <span className="profile-settings-row-meta">{typeLabel(field)}</span>
                 </span>
               )}

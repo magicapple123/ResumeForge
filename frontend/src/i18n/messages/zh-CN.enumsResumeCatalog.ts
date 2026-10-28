@@ -20,6 +20,30 @@ const enumsResumeCatalog = {
   "enumsResumeCatalog.formatPresetDescription.spacious": "行高与留白放大，适合内容不多、想显得从容",
   "enumsResumeCatalog.formatPresetDescription.mono_accent":
     "低调的深灰强调色，适合正式、保守的投递场景",
+  // 内置简历模板（后端 RESUME_TEMPLATES[].name）；用户导入的模板带自己的名字，不查这张表。
+  "enumsResumeCatalog.template.classic": "经典",
+  "enumsResumeCatalog.template.modern": "现代",
+  "enumsResumeCatalog.template.compact": "精简",
+  "enumsResumeCatalog.template.elegant": "优雅",
+  "enumsResumeCatalog.template.technical": "技术",
+  "enumsResumeCatalog.template.minimal": "极简",
+  "enumsResumeCatalog.template.scholar": "学术",
+  "enumsResumeCatalog.template.editorial": "社论",
+  "enumsResumeCatalog.template.split": "分栏",
+  // 同一批模板的一句话说明（后端 RESUME_TEMPLATES[].description 逐字）。
+  "enumsResumeCatalog.templateDescription.classic": "深蓝标题与左侧色条，稳重的通用款式",
+  "enumsResumeCatalog.templateDescription.modern": "青绿配色与圆角标签，适合互联网岗位",
+  "enumsResumeCatalog.templateDescription.compact": "细线分隔、排版紧凑，适合内容多、想压在一页",
+  "enumsResumeCatalog.templateDescription.elegant":
+    "居中标题与衬线字，留白舒展，适合文商科与管理岗位",
+  "enumsResumeCatalog.templateDescription.technical":
+    "色块标题与等宽辅助信息，信息密度高，适合研发岗位",
+  "enumsResumeCatalog.templateDescription.minimal": "只用黑灰与字号层级，没有任何色块与装饰",
+  "enumsResumeCatalog.templateDescription.scholar":
+    "纯黑白、加粗标题配细线，短条目三列并排，适合科研与学术岗位",
+  "enumsResumeCatalog.templateDescription.editorial":
+    "衬线字体与细线分隔，适合文商科、内容与管理岗位",
+  "enumsResumeCatalog.templateDescription.split": "正文双栏、信息密度高，适合经历与技能较多的简历",
 } as const;
 
 export default enumsResumeCatalog;

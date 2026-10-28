@@ -43,6 +43,11 @@ interface SortableProfileSectionProps {
   sectionKey: ProfileSectionKey;
   /** 分区显示名：服务端 SectionOut.name（自建大字段也用它）；缺省回落内置兜底标签。 */
   label?: string;
+  /**
+   * 自建板块：标题旁挂「自建」标记。13 个系统板块与用户自建板块在同一份清单里，
+   * 没有标记时分不清哪个能删、哪个是系统给的（用户 2026-10-28 要求）。
+   */
+  custom?: boolean;
   order: number;
   editable: boolean;
   /**
@@ -147,6 +152,7 @@ function SectionNudgeButtons({
 export const SortableProfileSection = memo(function SortableProfileSection({
   sectionKey,
   label,
+  custom = false,
   order,
   editable,
   reordering,
@@ -167,11 +173,15 @@ export const SortableProfileSection = memo(function SortableProfileSection({
   // 标题栏是每张卡唯一的标题：卡片本体不再自带标题（否则展开时会和标题栏重复）。
   // 查看态是可点的折叠开关；编辑态只是普通标题，折叠由「全部展开/收起」在查看态接管。
   // 动作槽始终在折叠按钮之外：按钮里嵌按钮是非法结构（点齿轮会连带折叠整卡）。
+  const customBadge = custom ? (
+    <span className="profile-section-badge">{t("profileLibrary.section.customBadge")}</span>
+  ) : null;
   const titleBar = (
     <div className="profile-section-titlebar">
       {editable ? (
         <span className="profile-section-title">
           <Typography.Text strong>{displayLabel}</Typography.Text>
+          {customBadge}
         </span>
       ) : (
         <button
@@ -190,6 +200,7 @@ export const SortableProfileSection = memo(function SortableProfileSection({
             {collapsed ? <RightOutlined /> : <DownOutlined />}
           </span>
           <Typography.Text strong>{displayLabel}</Typography.Text>
+          {customBadge}
         </button>
       )}
       {actions ? <div className="profile-section-titlebar-actions">{actions}</div> : null}

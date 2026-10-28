@@ -18,6 +18,10 @@
 }
 
 .app-header-title {
+  /* 侧栏收起后页头多出一颗「展开侧栏」按钮：只靠 space-between 会把标题挤到中间。
+     让标题吃掉剩余空间，两种状态下都紧跟在左侧按钮后面。 */
+  flex: 1 1 auto;
+  margin-right: auto;
   min-width: 0;
   overflow: hidden;
   font-size: 16px;
@@ -143,6 +147,9 @@
    这里只兜一个上限，并把条目/标签的省略边界改成"跟着弹层走"——写死 340/300 时，
    弹层被收窄到 chip 的 220px，长名字会横向溢出。 */
 .app-dataset-dropdown {
+  /* 与 AppHeaderContext 的 DATASET_MENU_MIN_WIDTH 一致：JS 未测量时（首帧/快捷键打开）
+     也保证不窄于 280px。两处同改，否则会出现"点开是宽的、快捷键打开是窄的"。 */
+  min-width: 280px;
   max-width: 360px;
   /* 弹层宽度 = 触发框宽度（JS 实测后写内联），所以长名字必然放不下：
      这里全部走"省略号 + title 悬停看全名"，不要出现横向滚动条。 */

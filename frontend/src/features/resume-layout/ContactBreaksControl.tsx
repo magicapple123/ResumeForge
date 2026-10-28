@@ -61,11 +61,11 @@ export default function ContactBreaksControl({
       )}
       <Tooltip title={t("workbench.contactBreak.hint")}>
         {/* 包一层 span：禁用态的下拉不接收指针事件，Tooltip 只能挂在外层。
-            宽度是#3 用户反馈的直接修复：不设宽度时 antd Select 会缩到内容宽（实测 34px），
-            弹层选项跟着变成一条缝——用户既看不清选了什么，也点不准要选哪个字段。
-            260px 够放下两个已选标签与最长选项「出生年份」；maxWidth 100% 让窄屏
-            （两栏/单栏制作台、主预览工具栏）按容器收窄，不撑出横向滚动。 */}
-        <span style={{ display: "inline-block", width: 260, maxWidth: "100%" }}>
+            宽度：不设时限宽会让 antd Select 缩到内容宽（实测 34px），弹层变成一条缝；
+            但 260px 又太宽——空白比字多（2026-10-28 用户口径"能看见四个字就好"）。
+            104px 与同一行「版式」下拉同宽，四个中文字符放得下；多选的已选标签由
+            `maxTagCount="responsive"` 收成 +N。maxWidth 100% 让窄屏按容器收窄。 */}
+        <span style={{ display: "inline-block", width: 104, maxWidth: "100%" }}>
           <Select
             size="small"
             mode="multiple"

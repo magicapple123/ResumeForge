@@ -37,7 +37,9 @@ export default function AnnouncementSettingsCard() {
   };
 
   return (
-    <Card title={t("announcement.settings.title")} size="small">
+    // `settings-card` 不能漏：卡间距只由这一个类给（`margin-bottom: 22px`），
+    // 漏掉就会和下一张「帮助与诊断」贴在一起。
+    <Card title={t("announcement.settings.title")} size="small" className="settings-card">
       {muted.length === 0 ? (
         <Empty
           image={Empty.PRESENTED_IMAGE_SIMPLE}

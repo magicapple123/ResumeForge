@@ -93,11 +93,15 @@ describe("InterviewReviewPanel", () => {
 
     expect(await screen.findByText(/先讲背景/)).toBeInTheDocument();
     expect(screen.getByText("说明约束")).toBeInTheDocument();
-    expect(apiMocks.analyzeInterviewQuestion).toHaveBeenCalledWith({
-      question: "这个项目难点怎么解决？",
-      job_id: null,
-      resume_id: null,
-    });
+    expect(apiMocks.analyzeInterviewQuestion).toHaveBeenCalledWith(
+      {
+        question: "这个项目难点怎么解决？",
+        job_id: null,
+        resume_id: null,
+      },
+      // T04-d：分析可被「停止」掐断，第二个参数是 AbortSignal。
+      expect.anything(),
+    );
   });
 
   it("反向优化简历产出并渲染建议列表", async () => {
@@ -125,12 +129,16 @@ describe("InterviewReviewPanel", () => {
     expect(screen.getByText("项目经历")).toBeInTheDocument();
 
     await waitFor(() =>
-      expect(apiMocks.optimizeResumeFromInterview).toHaveBeenCalledWith({
-        resume_id: 1,
-        job_id: null,
-        weaknesses: ["只讲过程不讲结果"],
-        follow_ups: ["这个指标怎么算的"],
-      }),
+      expect(apiMocks.optimizeResumeFromInterview).toHaveBeenCalledWith(
+        {
+          resume_id: 1,
+          job_id: null,
+          weaknesses: ["只讲过程不讲结果"],
+          follow_ups: ["这个指标怎么算的"],
+        },
+        // T04-d：反向优化可被「停止」掐断，第二个参数是 AbortSignal。
+        expect.anything(),
+      ),
     );
   });
 

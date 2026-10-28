@@ -11,11 +11,10 @@ from sqlalchemy.orm import Session
 
 from ...models.job import Job
 from ...schemas.profile import ProfileOut
-from ..profile.profile_reader import load_all_consumed_profile
+from ..profile.ai_profile import load_ai_profile
 from ..profile.profile_service import (
     legacy_profile_has_entries,
     project_legacy_profile,
-    project_legacy_profile_from_consumed,
 )
 
 logger = logging.getLogger(__name__)
@@ -116,7 +115,7 @@ def _load_profile(db: Session) -> ProfileOut | None:
 
 
 def _profile_snapshot(db: Session) -> ProfileOut | None:
-    """AI 可读资料快照：消费 DTO（hidden 已剔除）+ 不按组限制（R-64）→ 旧形状。"""
+    """AI 可读资料快照：当前组 + hidden 已剔除（唯一入口见 ``profile.ai_profile``）。"""
     if not legacy_profile_has_entries(db):
         return None
-    return project_legacy_profile_from_consumed(load_all_consumed_profile(db))
+    return load_ai_profile(db)

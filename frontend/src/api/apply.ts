@@ -162,12 +162,20 @@ export function removeQueueItem(itemId: number): Promise<void> {
   return request(`/apply/queue/${itemId}`, { method: "DELETE" });
 }
 
-/** 按岗位生成一版招呼语（不落库）；给了 item_id 就基于队列里的当前值。 */
-export function previewGreeting(payload: {
-  job_id: number;
-  item_id?: number;
-}): Promise<GreetingPreview> {
-  return request("/apply/greeting/preview", { method: "POST", body: JSON.stringify(payload) });
+/** 按岗位生成一版招呼语（不落库）；给了 item_id 就基于队列里的当前值。
+ *  `signal` 供面板上的「停止」用：断开连接即不再等这条生成。 */
+export function previewGreeting(
+  payload: {
+    job_id: number;
+    item_id?: number;
+  },
+  signal?: AbortSignal,
+): Promise<GreetingPreview> {
+  return request("/apply/greeting/preview", {
+    method: "POST",
+    body: JSON.stringify(payload),
+    signal,
+  });
 }
 
 // ===== 执行批次（轮询模型）=====

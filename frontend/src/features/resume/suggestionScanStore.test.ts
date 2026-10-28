@@ -1,15 +1,15 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * suggestionScanStore：模块级生成状态机。
+ * `suggestionScanStore`：岗位优化建议的显示状态（执行已交给统一任务地基）。
  *
  * 这份 store 是**单例**，用例之间共享同一份 Map，所以每个用例前后都要
  * `resetSuggestionScan()` / `vi.clearAllMocks()`；否则上一条的 done 结果会漏进下一条。
  *
- * 断言全部基于"真实状态变化"：deferred promise 手动 resolve，不用固定 sleep。
+ * 替身的是 `utils/aiTaskEntry`（store 与地基之间的全部契约），成功路径用
+ * `dispatchAiTaskResult` 模拟——建议**不入库**，只随 `result_ref` 回来一次。
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { ApiError } from "../../api/client";
-import type { ResumeSuggestions } from "../../types";
+import type { BackgroundTask } from "../../utils/backgroundTasks.types";
 import {
   cancelSuggestionScan,
   clearSuggestionScan,
@@ -21,47 +21,58 @@ import {
   startSuggestionScan,
 } from "./suggestionScanStore";
 
-const apiMocks = vi.hoisted(() => ({ generateResumeSuggestions: vi.fn() }));
+const entryMocks = vi.hoisted(() => ({
+  startAiTask: vi.fn(),
+  cancelAiTaskEntry: vi.fn(),
+  attachAiTaskUi: vi.fn(),
+}));
+vi.mock("../../utils/aiTaskEntry", () => entryMocks);
 
-// store 只从 api/resumes 取这一个函数，mock 到这个粒度就够。
-vi.mock("../../api/resumes", () => apiMocks);
+import { dispatchAiTaskResult } from "../../utils/aiTaskResultSink";
 
-const mockedGenerate = apiMocks.generateResumeSuggestions;
+/** 后端 `result_ref` 里那一份建议负载。 */
+const RESULT_DATA = {
+  resume_id: 7,
+  job_id: 3,
+  job_title: "后端开发工程师",
+  company: "示例公司",
+  suggestions: [
+    {
+      priority: "high",
+      section: "项目经历",
+      issue: "没有写到接口开发",
+      suggestion: "补上接口 QPS",
+      evidence: ["后端"],
+    },
+  ],
+};
 
-interface Deferred<T> {
-  promise: Promise<T>;
-  resolve: (value: T) => void;
-  reject: (reason?: unknown) => void;
-}
-
-function deferred<T>(): Deferred<T> {
-  let resolve!: (value: T) => void;
-  let reject!: (reason?: unknown) => void;
-  const promise = new Promise<T>((res, rej) => {
-    resolve = res;
-    reject = rej;
-  });
-  return { promise, resolve, reject };
-}
-
-function payload(jobTitle: string): ResumeSuggestions {
+function finishedTask(status: BackgroundTask["status"], error = ""): BackgroundTask {
   return {
-    job_id: 3,
-    job_title: jobTitle,
-    company: "示例公司",
-    suggestions: [
-      {
-        priority: "high",
-        section: "项目经历",
-        issue: "缺少量化结果",
-        suggestion: "补充可核对的数字",
-        evidence: [],
-      },
-    ],
+    key: "resume_rewrite#1",
+    kind: "resume_rewrite",
+    id: 1,
+    label: "岗位优化建议",
+    status,
+    message: "",
+    progressPercent: null,
+    receivedChars: 0,
+    resumeId: null,
+    refId: null,
+    deepLink: null,
+    resultData: null,
+    error,
+    unknown: false,
   };
 }
 
-/** 让 store 里 promise 回调（微任务）跑完。 */
+function capturedOnFinished(call = 0) {
+  const input = entryMocks.startAiTask.mock.calls[call][0] as {
+    onFinished?: (task: BackgroundTask) => void;
+  };
+  return input.onFinished;
+}
+
 async function flush(): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, 0));
 }
@@ -69,6 +80,9 @@ async function flush(): Promise<void> {
 beforeEach(() => {
   resetSuggestionScan();
   vi.clearAllMocks();
+  entryMocks.startAiTask.mockResolvedValue({ id: 1, key: "resume_rewrite#1" });
+  entryMocks.cancelAiTaskEntry.mockResolvedValue(undefined);
+  entryMocks.attachAiTaskUi.mockReturnValue(() => undefined);
 });
 
 afterEach(() => {
@@ -76,167 +90,103 @@ afterEach(() => {
 });
 
 describe("suggestionScanStore", () => {
-  it("start 进入 scanning（带 startedAt），resolve 后变 done（带 data 与 finishedAt）", async () => {
-    const pending = deferred<ResumeSuggestions>();
-    mockedGenerate.mockReturnValue(pending.promise);
-
-    expect(getSuggestionScanState(7).status).toBe("idle");
-
+  it("start 进入 scanning，成功后建议由 sink 交付（带 job 元信息）", async () => {
     startSuggestionScan(7);
 
     const scanning = getSuggestionScanState(7);
     expect(scanning.status).toBe("scanning");
     expect(scanning.startedAt).toEqual(expect.any(Number));
-    expect(scanning.finishedAt).toBeUndefined();
-    expect(mockedGenerate).toHaveBeenCalledTimes(1);
-    expect(mockedGenerate.mock.calls[0][0]).toBe(7);
-
-    pending.resolve(payload("前端工程师"));
-    await flush();
-
-    const done = getSuggestionScanState(7);
-    expect(done.status).toBe("done");
-    expect(done.data?.job_title).toBe("前端工程师");
-    expect(done.finishedAt).toEqual(expect.any(Number));
-    expect(done.error).toBeUndefined();
-  });
-
-  it("reject 后进入 error，并把错误信息透传出去", async () => {
-    mockedGenerate.mockRejectedValue(new Error("模型服务不可用"));
-
-    startSuggestionScan(7);
-    await flush();
-
-    const failed = getSuggestionScanState(7);
-    expect(failed.status).toBe("error");
-    expect(failed.error).toBe("模型服务不可用");
-    expect(failed.data).toBeUndefined();
-  });
-
-  it("cancel 退回 idle 且不留 error，被 abort 的 promise 也不会再写 error", async () => {
-    // 模拟真实请求：signal 一 abort 就 reject 一个 cancelled 的 ApiError。
-    mockedGenerate.mockImplementation(
-      (_id: number, signal?: AbortSignal) =>
-        new Promise<ResumeSuggestions>((_resolve, reject) => {
-          signal?.addEventListener("abort", () => {
-            reject(new ApiError("已取消", undefined, { code: "cancelled" }));
-          });
-        }),
+    expect(entryMocks.startAiTask).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: "resume_rewrite", payload: { resume_id: 7 } }),
     );
 
-    startSuggestionScan(7);
-    const signal = mockedGenerate.mock.calls[0][1] as AbortSignal | undefined;
-    expect(signal?.aborted).toBe(false);
-
-    cancelSuggestionScan(7);
-
-    expect(signal?.aborted).toBe(true);
-    expect(getSuggestionScanState(7).status).toBe("idle");
-    expect(getSuggestionScanState(7).error).toBeUndefined();
-
-    // 取消之后那次 reject 落地：状态必须还是 idle（取消不是错误）。
-    await flush();
-    expect(getSuggestionScanState(7).status).toBe("idle");
-    expect(getSuggestionScanState(7).error).toBeUndefined();
-  });
-
-  it("同一份简历重复 start 只保留最新一次，旧结果不覆盖新结果", async () => {
-    const first = deferred<ResumeSuggestions>();
-    const second = deferred<ResumeSuggestions>();
-    mockedGenerate.mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise);
-
-    startSuggestionScan(7);
-    startSuggestionScan(7);
-
-    expect(mockedGenerate).toHaveBeenCalledTimes(2);
-    // 旧请求被 abort 掉，避免两份结果抢同一个槽。
-    const firstSignal = mockedGenerate.mock.calls[0][1] as AbortSignal | undefined;
-    expect(firstSignal?.aborted).toBe(true);
-
-    first.resolve(payload("过期的岗位"));
-    await flush();
-    // 旧 promise 晚到也不能把界面从 scanning 拽出来。
-    expect(getSuggestionScanState(7).status).toBe("scanning");
-
-    second.resolve(payload("最新岗位"));
+    dispatchAiTaskResult("resume_rewrite", 1, RESULT_DATA);
     await flush();
 
     const done = getSuggestionScanState(7);
     expect(done.status).toBe("done");
-    expect(done.data?.job_title).toBe("最新岗位");
+    expect(done.data?.suggestions).toHaveLength(1);
+    expect(done.data?.job_title).toBe("后端开发工程师");
+    expect(done.finishedAt).toEqual(expect.any(Number));
+  });
+
+  it("失败写 error，并把原因透传出去", async () => {
+    startSuggestionScan(7);
+    capturedOnFinished()?.(finishedTask("failed", "尚未配置大模型 API"));
+    await flush();
+
+    expect(getSuggestionScanState(7).status).toBe("error");
+    expect(getSuggestionScanState(7).error).toBe("尚未配置大模型 API");
+  });
+
+  it("取消退回 idle，且不写 error", async () => {
+    startSuggestionScan(7);
+    await flush();
+    cancelSuggestionScan(7);
+    await flush();
+
+    expect(entryMocks.cancelAiTaskEntry).toHaveBeenCalledWith("resume_rewrite#1");
+    expect(getSuggestionScanState(7).status).toBe("idle");
+    expect(getSuggestionScanState(7).error).toBeUndefined();
+  });
+
+  it("同一份简历重复 start 只保留最新一次", async () => {
+    startSuggestionScan(7);
+    await flush();
+    startSuggestionScan(7);
+    await flush();
+
+    expect(entryMocks.cancelAiTaskEntry).toHaveBeenCalledWith("resume_rewrite#1");
+    expect(entryMocks.startAiTask).toHaveBeenCalledTimes(2);
   });
 
   it("不同简历的状态互相隔离", async () => {
-    const firstResume = deferred<ResumeSuggestions>();
-    const secondResume = deferred<ResumeSuggestions>();
-    mockedGenerate
-      .mockReturnValueOnce(firstResume.promise)
-      .mockReturnValueOnce(secondResume.promise);
-
     startSuggestionScan(7);
-    startSuggestionScan(8);
-
-    firstResume.resolve(payload("岗位 A"));
+    startSuggestionScan(9);
+    dispatchAiTaskResult("resume_rewrite", 1, RESULT_DATA);
     await flush();
 
     expect(getSuggestionScanState(7).status).toBe("done");
-    expect(getSuggestionScanState(7).data?.job_title).toBe("岗位 A");
-    expect(getSuggestionScanState(8).status).toBe("scanning");
-    expect(getSuggestionScanState(8).data).toBeUndefined();
-
-    secondResume.resolve(payload("岗位 B"));
-    await flush();
-
-    expect(getSuggestionScanState(8).data?.job_title).toBe("岗位 B");
-    expect(getSuggestionScanState(7).data?.job_title).toBe("岗位 A");
+    expect(getSuggestionScanState(9).status).toBe("scanning");
+    expect(getSuggestionScanEntries().map((entry) => entry.resumeId)).toEqual([7, 9]);
   });
 
-  it("markSuggestionPanelAttached 用计数：两个 attach 一次 detach 仍附着", () => {
-    const detachOuter = markSuggestionPanelAttached(7);
-    const detachInner = markSuggestionPanelAttached(7);
-    expect(isSuggestionPanelAttached(7)).toBe(true);
-
-    detachInner();
-    // StrictMode 双挂载 / 嵌套两处 attach 时，第一次清理不能把标记抹掉。
-    expect(isSuggestionPanelAttached(7)).toBe(true);
-
-    detachOuter();
-    expect(isSuggestionPanelAttached(7)).toBe(false);
-    // 重复 detach 是幂等的（返回的清理函数可能被 React 调两次）。
-    detachOuter();
-    expect(isSuggestionPanelAttached(7)).toBe(false);
-  });
-
-  it("entries 快照覆盖所有槽，reset 后清空", async () => {
-    mockedGenerate.mockResolvedValue(payload("前端工程师"));
-
+  it("clearSuggestionScan 丢掉这一份简历的槽，并取消在跑的任务", async () => {
     startSuggestionScan(7);
     await flush();
 
-    expect(getSuggestionScanEntries().map((entry) => entry.resumeId)).toEqual([7]);
-    expect(getSuggestionScanEntries()[0].state.status).toBe("done");
+    clearSuggestionScan(7);
+    await flush();
 
+    expect(entryMocks.cancelAiTaskEntry).toHaveBeenCalledWith("resume_rewrite#1");
+    expect(getSuggestionScanState(7).status).toBe("idle");
+    // 迟到的结果不能把已经清掉的槽写回来。
+    dispatchAiTaskResult("resume_rewrite", 1, RESULT_DATA);
+    await flush();
+    expect(getSuggestionScanState(7).status).toBe("idle");
+  });
+
+  it("弹窗附着用计数（StrictMode 双挂载不会误判）", async () => {
+    startSuggestionScan(7);
+    await flush();
+
+    const detachFirst = markSuggestionPanelAttached(7);
+    const detachSecond = markSuggestionPanelAttached(7);
+    expect(isSuggestionPanelAttached(7)).toBe(true);
+    expect(entryMocks.attachAiTaskUi).toHaveBeenCalledWith("resume_rewrite#1");
+
+    detachFirst();
+    expect(isSuggestionPanelAttached(7)).toBe(true);
+    detachSecond();
+    expect(isSuggestionPanelAttached(7)).toBe(false);
+  });
+
+  it("reset 清空所有槽", async () => {
+    startSuggestionScan(7);
+    markSuggestionPanelAttached(7);
     resetSuggestionScan();
 
-    expect(getSuggestionScanEntries()).toEqual([]);
     expect(getSuggestionScanState(7).status).toBe("idle");
     expect(isSuggestionPanelAttached(7)).toBe(false);
-  });
-
-  it("clearSuggestionScan 丢掉这一份简历的槽，在跑的请求也不回写", async () => {
-    const pending = deferred<ResumeSuggestions>();
-    mockedGenerate.mockReturnValue(pending.promise);
-
-    startSuggestionScan(7);
-    clearSuggestionScan(7);
-
-    expect(getSuggestionScanState(7).status).toBe("idle");
-
-    pending.resolve(payload("前端工程师"));
-    await flush();
-
-    // 简历内容已经改过，旧请求的结果不该再出现在槽里。
-    expect(getSuggestionScanState(7).status).toBe("idle");
-    expect(getSuggestionScanState(7).data).toBeUndefined();
   });
 });

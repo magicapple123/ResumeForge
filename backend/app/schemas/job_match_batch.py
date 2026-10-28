@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 """岗位批量匹配接口的数据结构。"""
+
 from __future__ import annotations
 
 from datetime import datetime
@@ -7,10 +8,13 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from .job_comparison import JobComparisonResult
 from .job_match import JobMatchResult, MatchReferenceScore
 
 BatchItemStatus = Literal["completed", "failed"]
 BatchAnalysisSource = Literal["new", "existing", "local"]
+# match = 只逐岗位给匹配结论；compare = 逐岗结论之后再横向排序并解释原因。
+BatchMode = Literal["match", "compare"]
 
 
 class JobMatchBatchRequest(BaseModel):
@@ -18,6 +22,7 @@ class JobMatchBatchRequest(BaseModel):
 
     job_ids: list[int] = Field(min_length=1, max_length=50)
     force: bool = False
+    mode: BatchMode = "match"
 
 
 class JobMatchBatchItem(BaseModel):
@@ -44,6 +49,8 @@ class JobMatchBatchOut(BaseModel):
     failed_count: int
     items: list[JobMatchBatchItem] = Field(default_factory=list)
     model: str = ""
+    mode: BatchMode = "match"
+    comparison: JobComparisonResult | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -57,12 +64,14 @@ class JobMatchBatchSummary(BaseModel):
     failed_count: int
     top_score: int | None = None
     model: str = ""
+    mode: BatchMode = "match"
     created_at: datetime
 
 
 __all__ = [
     "BatchAnalysisSource",
     "BatchItemStatus",
+    "BatchMode",
     "JobMatchBatchItem",
     "JobMatchBatchOut",
     "JobMatchBatchRequest",

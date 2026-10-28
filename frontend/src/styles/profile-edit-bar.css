@@ -1,0 +1,88 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/*
+ * 我的资料「编辑操作条」（需求 6）：编辑且有改动时常驻在内容区底部。
+ *
+ * ## 为什么是 fixed 而不是 sticky
+ *
+ * 本仓 prefer 用 `position: sticky; bottom: 0`（apply.css / resume-panels.css 的弹窗操作条
+ * 都是这么做）。但那些都活在**弹窗自己的滚动区**里；资料页的滚动容器是 `.app-main`，而
+ * `.app-content` 上有一句 `overflow-x: hidden`——按 CSS Overflow 规范，另一轴的 `visible`
+ * 会被算成 `auto`，于是 `.app-content` 自己也成了一个滚动容器（高度随内容长），sticky 的
+ * 参照系就落在一个不会滚的容器上：条会跟着页面一起滚走，正是需求要解决的那个问题。
+ * 所以这里直接 fixed，只按侧栏宽度让出左偏移（`--rf-sider-width` 与 `.app-main` 的
+ * margin-left 同源，1280/手机两档都自动对齐）。
+ *
+ * ## 和投投悬浮球的关系
+ *
+ * 球是 `position: fixed` 的右侧 24px、宽 64px、层级 3650，**压在本条之上**。若不处理，
+ * 球正好盖住右端的「保存修改」。这里在条右侧留出 `--rf-profile-edit-bar-orb-lane`
+ * （球宽 + 右侧距 + 一道缝），按钮永远停在球左边。
+ *
+ * ## 高度必须可预测
+ *
+ * 条是 fixed，末尾那行表单会一直被它压住，所以下面配一个等高的 `.profile-edit-bar-spacer`
+ * 占位。占位高度和条高度读同一个变量，而条用 `min-height` + `flex-wrap: nowrap` 保证
+ * 内容不会把它撑得更高（窄屏把说明文字藏掉，只留两颗按钮）。
+ */
+
+.profile-edit-bar-region {
+  --rf-profile-edit-bar-height: 56px;
+  /* 球 64 + 距右 24 + 8 缝；767 档球会缩到 56 / 距右 16（见 tou-tou-accessibility.css）。 */
+  --rf-profile-edit-bar-orb-lane: 96px;
+}
+
+.profile-edit-bar-spacer {
+  height: var(--rf-profile-edit-bar-height);
+}
+
+.profile-edit-bar {
+  position: fixed;
+  right: 0;
+  bottom: 0;
+  left: var(--rf-sider-width);
+  z-index: 30;
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  box-sizing: border-box;
+  min-height: var(--rf-profile-edit-bar-height);
+  padding: 8px var(--rf-profile-edit-bar-orb-lane) 8px 16px;
+  background: var(--rf-surface);
+  border-top: 1px solid var(--rf-border);
+  box-shadow: 0 -2px 12px rgb(15 23 42 / 6%);
+}
+
+/* 说明文字是"为什么冒出来"，不是必须读完的正文：窄下来先牺牲它，按钮不能被挤到第二行。 */
+.profile-edit-bar-hint {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--rf-text-secondary);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.profile-edit-bar-actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 8px;
+}
+
+@media (max-width: 767px) {
+  .profile-edit-bar-region {
+    /* 手机档 antd 按钮最小高度 48px（mobile.css），加 8+8 内边距正好 64。 */
+    --rf-profile-edit-bar-height: 64px;
+    --rf-profile-edit-bar-orb-lane: 80px;
+  }
+
+  .profile-edit-bar-hint {
+    display: none;
+  }
+
+  .profile-edit-bar {
+    padding-left: 12px;
+  }
+}

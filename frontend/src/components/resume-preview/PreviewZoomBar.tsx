@@ -16,6 +16,14 @@ interface Props {
   scale: number;
   /** 是否停在下限上：为真时读数换成可聚焦的提示胶囊。 */
   clampedToMin: boolean;
+  /**
+   * 右侧提示语的**覆盖**（不传时用默认的「按住 Ctrl 滚滚轮可缩放」）。
+   *
+   * 简历制作台把"虚线是分页位置"那句说明并到这一行来（2026-11 用户要求：说明不该
+   * 悬在纸面上方另占一条），两句用「 · 」连成一句由宿主拼好传进来——本组件不关心
+   * 内容，只负责"提示语有一条位置"。
+   */
+  hint?: string;
   onZoomOut: () => void;
   onZoomIn: () => void;
   onReset: () => void;
@@ -24,6 +32,7 @@ interface Props {
 export default function PreviewZoomBar({
   scale,
   clampedToMin,
+  hint,
   onZoomOut,
   onZoomIn,
   onReset,
@@ -76,9 +85,10 @@ export default function PreviewZoomBar({
         />
       </Tooltip>
       {/* 快捷键提示：Ctrl+滚轮缩放早已实现，但没有任何地方告诉用户——用户只能一个个
-          按钮试。常驻在缩放控件旁边而不是做成一次性引导，因为"想放大看一眼"随时会发生。 */}
+          按钮试。常驻在缩放控件旁边而不是做成一次性引导，因为"想放大看一眼"随时会发生。
+          制作台会传 `hint` 进来（把分页说明并进这一行），主预览仍用默认那一句。 */}
       <Typography.Text type="secondary" className="resume-preview-zoom-hint">
-        {t("preview.zoom.hint")}
+        {hint ?? t("preview.zoom.hint")}
       </Typography.Text>
     </div>
   );

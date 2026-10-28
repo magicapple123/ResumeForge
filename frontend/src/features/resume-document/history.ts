@@ -44,10 +44,22 @@ export interface DocumentHistoryOptions<T> {
   onChange?: () => void;
 }
 
-/** 一个历史点：快照 + 给用户看的动作名（"编辑正文" / "调整排版" / "移动条目"…）。 */
+/** 一个历史点的元信息：动作名 + 发生时间（前端只显示，不参与比较）。 */
+export interface HistoryStepMeta {
+  label: string;
+  /** 毫秒时间戳（`Date.now()`）：历史面板按它显示"几点"做的事。 */
+  at: number;
+}
+
+/** 一个历史点：快照 + 给用户看的动作名（"编辑正文" / "调整排版" / "移动条目"…）+ 时间。 */
 export interface HistoryEntry<T> {
   snapshot: T;
   label: string;
+  /**
+   * 这一步**发生**的时间（毫秒）。撤销/恢复搬运历史点时**沿用原时间**：同一步在不同时刻
+   * 被撤销/恢复，它在时间轴上仍然只发生过一次（否则撤销一次就会把"10:00 的编辑"标成 10:05）。
+   */
+  at: number;
 }
 
 export interface DocumentHistory<T> {
@@ -61,8 +73,18 @@ export interface DocumentHistory<T> {
   redo: () => T | null;
   /** 清栈并以给定状态为新基线（换记录 / 用最新的 / 恢复草稿后调用）。 */
   reset: (current: T) => void;
-  /** 已发生的步骤（最旧 → 最新）与可恢复步骤（下一次 redo 在末尾）。 */
+  /**
+   * 已发生的步骤（最旧 → 最新）与可恢复步骤（下一次 redo 在末尾）。
+   *
+   * **向后兼容**：只关心动作名的调用点继续用它（返回字符串数组）。
+   */
   labels: () => { past: string[]; future: string[] };
+  /** 与 `labels()` **同序**的元信息（动作名 + 时间戳）：历史面板要显示"几点"。 */
+  entries: () => { past: HistoryStepMeta[]; future: HistoryStepMeta[] };
+  /**
+   * 栈的位置（各几步）。「回到某一步」按它算要连续撤销/恢复几次，不用重写快照栈。
+   */
+  position: () => { past: number; future: number };
   /** 预览某个已发生步骤的快照（不改变当前文档）；下标对应 \`labels().past\`。 */
   previewPast: (index: number) => T | null;
   /** 预览某个可恢复步骤的快照（不改变当前文档）。 */
@@ -107,6 +129,12 @@ export function createDocumentHistory<T>({
   let baselineKey = fingerprint(baseline);
   let pending: T | null = null;
   let pendingLabel = "";
+  /**
+   * 待提交这一步**发生**的时刻（`push` 那一刻），不是 debounce 到期的时刻。
+   *
+   * 两者差 300ms：历史面板要显示的是"我几点改的"，不是"计时器几点收的口"。
+   */
+  let pendingAt = 0;
   let timer: ReturnType<typeof setTimeout> | null = null;
 
   const clearTimer = (): void => {
@@ -123,7 +151,7 @@ export function createDocumentHistory<T>({
     if (current === null) return;
     const key = fingerprint(current);
     if (key === baselineKey) return;
-    past.push({ snapshot: baseline, label: pendingLabel });
+    past.push({ snapshot: baseline, label: pendingLabel, at: pendingAt });
     // 超出上限从最旧一端截断：撤销只能回到"最近 50 步"，不能靠无限栈伪装能力。
     if (past.length > limit) past.splice(0, past.length - limit);
     future.length = 0;
@@ -140,6 +168,7 @@ export function createDocumentHistory<T>({
   const push = (current: T, label = ""): void => {
     pending = deepClone(current);
     pendingLabel = label;
+    pendingAt = Date.now();
     clearTimer();
     timer = setTimeout(() => {
       timer = null;
@@ -151,7 +180,8 @@ export function createDocumentHistory<T>({
     flush();
     const previous = past.pop();
     if (previous === undefined) return null;
-    future.push({ snapshot: baseline, label: previous.label });
+    // 时间戳跟着历史点走：撤销只是"把这一步挪到可恢复"，不是"此刻又执行了一次"。
+    future.push({ snapshot: baseline, label: previous.label, at: previous.at });
     baseline = previous.snapshot;
     baselineKey = fingerprint(previous.snapshot);
     return deepClone(previous.snapshot);
@@ -161,7 +191,7 @@ export function createDocumentHistory<T>({
     flush();
     const next = future.pop();
     if (next === undefined) return null;
-    past.push({ snapshot: baseline, label: next.label });
+    past.push({ snapshot: baseline, label: next.label, at: next.at });
     if (past.length > limit) past.splice(0, past.length - limit);
     baseline = next.snapshot;
     baselineKey = fingerprint(next.snapshot);
@@ -188,6 +218,11 @@ export function createDocumentHistory<T>({
       past: past.map((item) => item.label),
       future: future.map((item) => item.label),
     }),
+    entries: () => ({
+      past: past.map((item) => ({ label: item.label, at: item.at })),
+      future: future.map((item) => ({ label: item.label, at: item.at })),
+    }),
+    position: () => ({ past: past.length, future: future.length }),
     previewPast: (index: number) => {
       const entry = past[index];
       return entry ? deepClone(entry.snapshot) : null;

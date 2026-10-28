@@ -9,7 +9,7 @@
  * 这里守两件事：它能在这儿编辑保存；以及它**不进**可拖拽排序的分区栈——后端按
  * PROFILE_SECTION_KEYS 归一化 section_order，不认识的键会被**静默丢弃**。
  */
-import { fireEvent, screen, waitFor } from "@testing-library/react";
+import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   makeAllSections,
@@ -24,6 +24,7 @@ import {
   resetProfileApiMocks,
   headerEditButton,
   findHeaderEditButton,
+  headerRegion,
 } from "../test/profilePageHarness";
 import { t } from "../i18n";
 
@@ -213,7 +214,9 @@ describe("ProfilePage 「网申资料」", () => {
     expect(apiMocks.updateWebFormExtraProfile).not.toHaveBeenCalled();
     // 页面仍在编辑态（未退出编辑），并给出"先补全必填项"的提示。
     expect(screen.getByRole("button", { name: /保存全部资料/ })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /取消/ })).toBeInTheDocument();
+    // 收窄到页头：编辑且有改动时页面底部还有一条编辑操作条，它那颗「取消编辑」同样命
+    // /取消/。这里要守的是"页头那颗取消还在"= 页面没退出编辑态。
+    expect(within(headerRegion()).getByRole("button", { name: /取消/ })).toBeInTheDocument();
     expect(await screen.findByText(/请先补全简历资料里的必填项/)).toBeInTheDocument();
   });
   it("全部合法时保存成功并退出编辑态", async () => {

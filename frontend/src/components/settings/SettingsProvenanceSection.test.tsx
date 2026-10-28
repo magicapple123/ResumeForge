@@ -9,7 +9,11 @@ import SettingsProvenanceSection from "./SettingsProvenanceSection";
 const apiMocks = vi.hoisted(() => ({
   fetchUsageSummary: vi.fn(),
   fetchUsagePricing: vi.fn(),
+  fetchUsagePricingRecords: vi.fn(),
   saveUsagePricing: vi.fn(),
+  renameUsagePricingRecord: vi.fn(),
+  activateUsagePricingRecord: vi.fn(),
+  deleteUsagePricingRecord: vi.fn(),
   previewOutbound: vi.fn(),
 }));
 vi.mock("../../features/resume-provenance/api", () => apiMocks);
@@ -37,10 +41,16 @@ const USAGE = {
 beforeEach(() => {
   apiMocks.fetchUsageSummary.mockResolvedValue(USAGE);
   apiMocks.fetchUsagePricing.mockResolvedValue({
-    input_per_1k: null,
-    output_per_1k: null,
+    configured: true,
+    input_cache_hit_per_million: 0.5,
+    input_cache_miss_per_million: 4,
+    output_per_million: 8,
     currency: "USD",
+    source: "record",
+    record_id: 1,
+    name: "官方价",
   });
+  apiMocks.fetchUsagePricingRecords.mockResolvedValue({ items: [], count: 0 });
   apiMocks.saveUsagePricing.mockImplementation((payload: unknown) => Promise.resolve(payload));
   apiMocks.previewOutbound.mockResolvedValue({
     target_service: "本地 Ollama",
@@ -75,24 +85,37 @@ describe("SettingsProvenanceSection", () => {
     expect(await screen.findByText(pt("provenance.usage.title"))).toBeTruthy();
   });
 
-  it("单价配置：保存后回显并调用 PUT /usage/pricing", async () => {
+  it("单价：三档 + 名称，保存后调用 PUT 并刷新记录", async () => {
     render(
       <AntdApp>
         <SettingsProvenanceSection targetService="本地 Ollama" />
       </AntdApp>,
     );
-    await waitFor(() => expect(apiMocks.fetchUsagePricing).toHaveBeenCalledTimes(1));
-    fireEvent.change(screen.getByLabelText(pt("settings.provenance.pricing.input")), {
-      target: { value: "1.5" },
+    await waitFor(() => expect(apiMocks.fetchUsagePricingRecords).toHaveBeenCalled());
+
+    fireEvent.change(screen.getByLabelText(pt("settings.provenance.pricing.hit")), {
+      target: { value: "0.5" },
+    });
+    fireEvent.change(screen.getByLabelText(pt("settings.provenance.pricing.miss")), {
+      target: { value: "4" },
     });
     fireEvent.change(screen.getByLabelText(pt("settings.provenance.pricing.output")), {
-      target: { value: "6" },
+      target: { value: "8" },
     });
-    fireEvent.click(screen.getByRole("button", { name: pt("settings.provenance.pricing.save") }));
+    fireEvent.change(screen.getByLabelText(pt("settings.provenance.pricing.nameLabel")), {
+      target: { value: "官方价" },
+    });
+    fireEvent.click(
+      screen.getByRole("button", { name: new RegExp(pt("settings.provenance.pricing.save")) }),
+    );
+
     await waitFor(() => expect(apiMocks.saveUsagePricing).toHaveBeenCalledTimes(1));
+    // 单位是每百万 token，三档分别下发；名称跟着一起存。
     expect(apiMocks.saveUsagePricing.mock.calls[0][0]).toMatchObject({
-      input_per_1k: 1.5,
-      output_per_1k: 6,
+      name: "官方价",
+      input_cache_hit_per_million: 0.5,
+      input_cache_miss_per_million: 4,
+      output_per_million: 8,
       currency: "USD",
     });
   });

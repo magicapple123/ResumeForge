@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
-/** 批量适配度分析的结果展示层：条件列表、单岗位卡片与整批结果视图。
+/** 批量分析的结果展示层：条件列表、单岗位卡片与整批结果视图。
+ *  横向对比批次会在最上方先渲染对比排名（见 `JobComparisonResult`）。
  *  （自 JobMatchBatchPanel 拆出：面板只管状态机与数据流，展示组件在这里。） */
 import { Alert, Card, Listy, Progress, Space, Tag, Typography } from "antd";
 import { ListyItem } from "../common/ListyItem";
@@ -14,6 +15,7 @@ import {
 import { t, type MessageKey } from "../../i18n";
 import { ADMISSION_LABEL_KEYS, MATCH_STATUS_LABEL_KEYS } from "../../i18n/enum/apply";
 import { useLocale } from "../../i18n/i18nContext";
+import JobComparisonResult from "./JobComparisonResult";
 
 type BatchMatchResult = NonNullable<JobMatchBatchItem["result"]>;
 
@@ -194,6 +196,9 @@ export function BatchResultView({ batch }: { batch: JobMatchBatchOut }) {
   useLocale();
   return (
     <Space orientation="vertical" size="middle" style={{ width: "100%" }}>
+      {batch.comparison ? (
+        <JobComparisonResult comparison={batch.comparison} items={batch.items} />
+      ) : null}
       <Alert
         type={batch.failed_count > 0 ? "warning" : "success"}
         showIcon

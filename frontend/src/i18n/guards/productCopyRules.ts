@@ -85,10 +85,42 @@ export function isTranslationCall(expression: ts.Expression): boolean {
   return parts.length === 1 && NAMESPACE_TRANSLATION_HELPERS.has(name ?? "");
 }
 
+/**
+ * 后端排版角色的**枚举值**（与 `backend/app/services/resume/resume_style_schema.ROLES`
+ * 及前端 `features/resume-layout/styleCatalog.ts` 的 `RESUME_ROLES` 逐字相等的六值全集）。
+ *
+ * 为什么排除它们：`textLevels.ts` 的 `FIELD_PATH_SCOPE`（`data-resume-path` 叶子 →
+ * 作用范围角色）这类映射表里，`description: "body"` / `summary: "body"` 的右侧值是
+ * **发给后端 schema 的技术标识**（该纸面字段属于哪个段落角色），不是界面文案。
+ * 但 `description` / `summary` 恰好都在 COPY_PROPERTIES 清单里，扫描器按属性名判
+ * copy 语境就会把这两行误报成"新增界面文案"；而同表的 `achievements: "body"` 等
+ * 行又因属性名不在清单而不被判——只有个别行触发棘轮的不对称正源于此。
+ *
+ * 豁免用**值的全等集合匹配**（右侧字符串字面量精确等于六个角色之一，且它必须是
+ * COPY_PROPERTIES 属性的赋值），不放宽成"短 ASCII 字符串"之类模糊规则：真正的
+ * 产品文案几乎不可能是这几个词本身，而 JSX 属性（`title="body"`）与其它语境不受影响。
+ */
+const RESUME_ROLE_VALUES: ReadonlySet<string> = new Set([
+  "name",
+  "section_title",
+  "entry_title",
+  "body",
+  "meta",
+  "emphasis",
+]);
+
 /** CSS/script bodies and console payloads are technical even if a field is named title. */
 export function isTechnicalContext(node: ts.Node): boolean {
   let current: ts.Node | undefined = node;
   while (current) {
+    if (
+      ts.isStringLiteralLike(current) &&
+      RESUME_ROLE_VALUES.has(current.text) &&
+      ts.isPropertyAssignment(current.parent) &&
+      COPY_PROPERTIES.has(propertyName(current.parent.name) ?? "")
+    ) {
+      return true;
+    }
     if (ts.isJsxAttribute(current) && TECHNICAL_PROPERTIES.has(current.name.getText())) return true;
     if (
       ts.isVariableDeclaration(current) &&

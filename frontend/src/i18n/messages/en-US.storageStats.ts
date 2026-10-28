@@ -40,8 +40,38 @@ const storageStats = {
   "storageStats.cleanup.done.busy": "{count} other files were in use and could not be moved.",
   "storageStats.cleanup.failed": "Cleanup failed",
 
+  "storageStats.cleanup.days.prefix": "Clean files older than",
+  "storageStats.cleanup.days.option": "{count} days",
+  "storageStats.cleanup.days.suffix": "without changes",
+  "storageStats.cleanup.selected.summary": "{count} selected · {size}",
+  "storageStats.cleanup.select.all": "Select all",
+  "storageStats.cleanup.select.none": "Clear",
   "storageStats.cleanup.okCount": "Move {count} files",
   "storageStats.cleanup.ok": "Move",
+
+  // Folder labels: the backend's `_ITEM_SPECS[].label` is Chinese; these keys are keyed by
+  // its stable `key` so the English UI never shows the Chinese name.
+  "storageStats.item.database": "Database (incl. WAL sidecars)",
+  "storageStats.item.datasets": "Datasets (incl. trash)",
+  "storageStats.item.backups": "Manual backups",
+  "storageStats.item.auto_backups": "Automatic backup snapshots",
+  "storageStats.item.user_files": "Attachment copies on disk",
+  "storageStats.item.exports": "Exported backup bundles",
+  "storageStats.item.captures": "Site capture samples",
+  "storageStats.item.share_packages": "Share page bundles",
+  "storageStats.item.referral_images": "Referral note images",
+  "storageStats.item.logs": "Logs",
+  "storageStats.item.browser_profile": "Apply browser profile",
+  "storageStats.item.webform_browser_profile": "Web-form browser profile",
+  "storageStats.item.restore": "Import staging",
+  "storageStats.item.pre_update": "Pre-update snapshots",
+  "storageStats.item.uncategorized": "Uncategorised (other files)",
+
+  // Cleanup categories: keyed by `cleanup.CATEGORIES[].key`.
+  "storageStats.cleanupCategory.backups": "Manual and migration backups",
+  "storageStats.cleanupCategory.backup-trash": "Backup trash folder",
+  "storageStats.cleanupCategory.auto-backups": "Automatic backups",
+  "storageStats.cleanupCategory.logs": "Runtime logs",
 } as const;
 
 export default storageStats;

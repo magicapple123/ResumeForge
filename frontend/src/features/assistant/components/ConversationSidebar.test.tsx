@@ -120,14 +120,14 @@ describe("ConversationSidebar 批量选择", () => {
     await waitFor(() => expect(onBatchDelete).toHaveBeenCalledWith([1, 2]));
   });
 
-  it("退出多选清空选区", async () => {
+  it("退出选择清空选区", async () => {
     const onBatchDelete = vi.fn();
     renderSidebar(onBatchDelete);
 
     await enterSelectingViaContextMenu("简历修改讨论");
     fireEvent.click(await screen.findByRole("checkbox", { name: "选择对话 简历修改讨论" }));
     expect(screen.getByText("已选 1 项")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "退出多选" }));
+    fireEvent.click(screen.getByRole("button", { name: "退出选择" }));
 
     expect(screen.queryByText(/已选/)).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "删除所选" })).not.toBeInTheDocument();

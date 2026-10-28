@@ -71,13 +71,17 @@ export interface TrackParsePayload {
 }
 
 /** 解析通知内容，**只返回预览，不写任何数据**。 */
-export function parseTracks(payload: TrackParsePayload): Promise<TrackParseResult> {
+export function parseTracks(
+  payload: TrackParsePayload,
+  signal?: AbortSignal,
+): Promise<TrackParseResult> {
   // 识别类请求走 recognition 档（90s）：大文本/多附件解析与岗位、资料识别同口径，
   // 不吃 15s 默认档（AI 提速批次的遗漏项，批次 C 补齐）。
   return request("/tracker/parse", {
     method: "POST",
     body: JSON.stringify(payload),
     budget: "recognition",
+    signal,
   });
 }
 

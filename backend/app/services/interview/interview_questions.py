@@ -19,6 +19,7 @@ from typing import Any
 from ...schemas.interview import (
     QUESTION_BANK_TYPES,
     InterviewAnalysisOut,
+    InterviewAnswerReviewOut,
     InterviewQuestionAnswerOut,
     InterviewQuestionItem,
     QuestionBankGroup,
@@ -219,8 +220,74 @@ async def generate_question_answer(
     return result
 
 
-async def analyze_question(
+def _score_0_100(value: Any) -> int:
+    """把模型给的分数收敛成 0–100 的整数：写成 "78"、78.0、越界值都要能兜住。"""
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return 0
+    return max(0, min(100, int(round(number))))
+
+
+def parse_answer_review(data: dict[str, Any], question: str) -> InterviewAnswerReviewOut:
+    """归一化作答批改：分数钳到 0–100，列表去空、限长，完全没有内容才报错。"""
+
+    def _lines(key: str, limit: int = 10) -> list[str]:
+        raw = data.get(key) or []
+        if isinstance(raw, str):
+            raw = [raw]
+        # 丢掉 None / 空串：模型偶尔把"没有这一条"写成 null，`str(None)` 会变成
+        # 一个真的 "None" 条目显示在界面上。
+        return [
+            str(item).strip()[:600]
+            for item in raw
+            if item is not None and str(item).strip()
+        ][:limit]
+
+    result = InterviewAnswerReviewOut(
+        question=question,
+        score=_score_0_100(data.get("score")),
+        summary=str(data.get("summary") or "").strip()[:2_000],
+        strengths=_lines("strengths"),
+        gaps=_lines("gaps"),
+        suggestions=_lines("suggestions"),
+        revised_answer=str(data.get("revised_answer") or "").strip()[:10_000],
+    )
+    if not result.summary and not result.gaps and not result.revised_answer:
+        raise LLMError("模型未返回有效的批改结果，请重试")
+    return result
+
+
+async def review_answer(
     provider: BaseLLMProvider,
+    *,
+    question: str,
+    my_answer: str,
+    job_payload: str,
+    resume_text: str,
+    reference_answer: str,
+) -> InterviewAnswerReviewOut:
+    """批改候选人对某道题的自答（打分 + 解析 + 修改建议 + 改写示范），**即时计算、不落库**。"""
+    prompt = (
+        _load_prompt("interview_answer_review.md")
+        .replace("{{ question }}", question.strip())
+        .replace("{{ my_answer }}", my_answer.strip())
+        .replace("{{ job_payload }}", (job_payload or "（未关联岗位）").strip())
+        .replace("{{ resume_text }}", (resume_text or "（未提供简历）").strip())
+        .replace("{{ reference_answer }}", (reference_answer or "（尚未生成参考答案）").strip())
+    )
+    data = await _chat_json(provider, prompt, "作答批改")
+    result = parse_answer_review(data, question)
+    logger.info(
+        "作答批改完成 question_chars=%s answer_chars=%s score=%s",
+        len(question),
+        len(my_answer),
+        result.score,
+    )
+    return result
+
+
+async def analyze_question(    provider: BaseLLMProvider,
     *,
     question: str,
     context: str,
@@ -293,6 +360,8 @@ __all__ = [
     "generate_question_bank",
     "optimize_resume",
     "parse_analysis",
+    "parse_answer_review",
     "parse_question_answer",
     "parse_question_bank",
+    "review_answer",
 ]

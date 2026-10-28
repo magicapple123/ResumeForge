@@ -14,7 +14,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import type { ResumeContent } from "../../types";
-import type { ProvenanceLocator } from "../../features/resume-provenance/selection";
+import { EMPTY_LOCATOR, type ProvenanceLocator } from "../../features/resume-provenance/selection";
+import { pt } from "../../features/resume-provenance/i18n";
+import {
+  locatorForSelectionKey,
+  selectionKeyForLocator,
+  selectionOptions,
+} from "../../features/resume-provenance/panelSelection";
 import {
   createFactLock,
   createSourceLink,
@@ -48,6 +54,7 @@ import SourceLinkModal from "./sources/SourceLinkModal";
 import SourceImpactPanel from "./sources/SourceImpactPanel";
 import FactLockPanel from "./sources/FactLockPanel";
 import WritingCandidatesPanel from "./sources/WritingCandidatesPanel";
+import ProvenanceSelectionCard from "./sources/ProvenanceSelectionCard";
 
 /** 候选模式 → 发送给后端的指令（不是界面文案，界面标题在 `zh-CN.provenance`）。 */
 const MODE_INSTRUCTION = {
@@ -117,6 +124,15 @@ export function useWorkbenchProvenancePanels({
   // W12 建立关联：目标块与弹窗开关住在宿主（面板只发起"我要关联这个对象"）。
   const [linkTarget, setLinkTarget] = useState<LinkTargetInput | null>(null);
   const [linkOpen, setLinkOpen] = useState(false);
+  // 面板自己的选中（下拉里挑"要核对哪一条内容"）。外部 locator 一变就交回外部——
+  // 用户在大纲/纸面上重新点了东西，面板应当跟着走，而不是死守上一次的下拉选择。
+  const externalKey = locator.object_id ?? locator.point_id ?? locator.path ?? "";
+  const [localKey, setLocalKey] = useState<string | null>(null);
+  const [lastExternalKey, setLastExternalKey] = useState(externalKey);
+  if (lastExternalKey !== externalKey) {
+    setLastExternalKey(externalKey);
+    setLocalKey(null);
+  }
 
   // 整份来源视图（含覆盖数）：换简历时取一次；建立/解除关联后也靠它刷新覆盖数。
   const refreshProvenance = useCallback(() => {
@@ -155,7 +171,18 @@ export function useWorkbenchProvenancePanels({
     };
   }, [resumeId]);
 
-  const hasLocator = Boolean(locator.object_id || locator.point_id || locator.path);
+  // 生效定位 = 下拉里选的那条（本地）优先，否则用外部 locator（大纲/纸面点击）。
+  const localLocator = useMemo(
+    () => locatorForSelectionKey(provenance, localKey),
+    [localKey, provenance],
+  );
+  const externalActive = Boolean(locator.object_id || locator.point_id || locator.path);
+  const effective = localLocator ?? (externalActive ? locator : EMPTY_LOCATOR);
+  const effectiveObjectId = effective.object_id ?? null;
+  const effectivePointId = effective.point_id ?? null;
+  const effectivePath = effective.path ?? null;
+  const hasLocator = Boolean(effectiveObjectId || effectivePointId || effectivePath);
+
   const reloadChain = useCallback(() => {
     if (resumeId == null || !hasLocator) {
       setChain(null);
@@ -166,9 +193,9 @@ export function useWorkbenchProvenancePanels({
     setChainLoading(true);
     setChainError(null);
     void fetchSourceChain(resumeId, {
-      object_id: locator.object_id ?? undefined,
-      point_id: locator.point_id ?? undefined,
-      path: locator.path ?? undefined,
+      object_id: effectiveObjectId ?? undefined,
+      point_id: effectivePointId ?? undefined,
+      path: effectivePath ?? undefined,
     })
       .then((next) => {
         if (chainGeneration.current === generation) setChain(next);
@@ -179,7 +206,7 @@ export function useWorkbenchProvenancePanels({
       .finally(() => {
         if (chainGeneration.current === generation) setChainLoading(false);
       });
-  }, [hasLocator, locator.object_id, locator.path, locator.point_id, resumeId]);
+  }, [effectiveObjectId, effectivePath, effectivePointId, hasLocator, resumeId]);
 
   useEffect(() => {
     reloadChain();
@@ -188,11 +215,11 @@ export function useWorkbenchProvenancePanels({
   const objects = useMemo(
     () =>
       objectsForSelection(provenance, {
-        object_id: locator.object_id,
-        point_id: locator.point_id,
-        path: locator.path,
+        object_id: effectiveObjectId,
+        point_id: effectivePointId,
+        path: effectivePath,
       }),
-    [locator.object_id, locator.path, locator.point_id, provenance],
+    [effectiveObjectId, effectivePath, effectivePointId, provenance],
   );
 
   const refreshLocks = useCallback(() => {
@@ -219,9 +246,9 @@ export function useWorkbenchProvenancePanels({
       try {
         await createFactLock(resumeId, {
           kind: payload.kind as never,
-          object_id: payload.object_id ?? locator.object_id,
-          point_id: payload.point_id ?? locator.point_id,
-          path: payload.path ?? locator.path,
+          object_id: payload.object_id ?? effectiveObjectId,
+          point_id: payload.point_id ?? effectivePointId,
+          path: payload.path ?? effectivePath,
           label: payload.label,
         });
         refreshLocks();
@@ -232,7 +259,7 @@ export function useWorkbenchProvenancePanels({
         setLockSaving(false);
       }
     },
-    [locator.object_id, locator.path, locator.point_id, refreshLocks, resumeId],
+    [effectiveObjectId, effectivePath, effectivePointId, refreshLocks, resumeId],
   );
 
   const removeLock = useCallback(
@@ -304,14 +331,14 @@ export function useWorkbenchProvenancePanels({
 
   const generate = useCallback(
     async (mode: (typeof CANDIDATE_MODES)[number]) => {
-      if (resumeId == null || !locator.path) return;
+      if (resumeId == null || !effectivePath) return;
       setCandidateConflict(null);
       setCandidates((prev) =>
         withCandidateState(prev, mode, { status: "loading", errorMessage: "" }),
       );
       try {
         const suggestion = await rewriteField(resumeId, {
-          path: locator.path,
+          path: effectivePath,
           instruction: MODE_INSTRUCTION[mode],
         });
         setCandidates((prev) => withCandidateState(prev, mode, { status: "ready", suggestion }));
@@ -325,7 +352,7 @@ export function useWorkbenchProvenancePanels({
         );
       }
     },
-    [locator.path, resumeId],
+    [effectivePath, resumeId],
   );
 
   const discard = useCallback((mode: (typeof CANDIDATE_MODES)[number]) => {
@@ -348,54 +375,93 @@ export function useWorkbenchProvenancePanels({
     [content, onApplyContent],
   );
 
+  // 下拉选项 / 当前值 / 关联目标：三块面板都以"这一条内容"为准（未选中就没有目标）。
+  const options = useMemo(() => selectionOptions(provenance), [provenance]);
+  const selectedKey = localKey ?? selectionKeyForLocator(provenance, hasLocator ? effective : null);
+  const currentValue =
+    selectedKey && options.some((item) => item.value === selectedKey) ? selectedKey : null;
+  const linkObject = objects[0] ?? null;
+  const linkTargetForButton = linkObject
+    ? {
+        object_id: linkObject.object_id,
+        point_id: linkObject.point_id,
+        path: linkObject.path,
+        field: linkObject.field,
+      }
+    : null;
+  const linkedState = linkObject ? linkObject.link != null : null;
+
   const sourcesPanel =
     resumeId == null ? null : (
-      <div style={{ display: "flex", flexDirection: "column", gap: 12, minHeight: 0 }}>
-        <SourceChainPanel
-          objects={objects}
-          chain={chain}
-          loading={chainLoading}
-          error={chainError}
-          onRetry={reloadChain}
-          onUnlink={(link) => void unlink(link)}
-          onLink={(object) =>
-            openLink({
-              object_id: object.object_id,
-              point_id: object.point_id,
-              path: object.path,
-              field: object.field,
-            })
-          }
-          onRelink={(link) => void relink(link)}
-        />
-        {/* 来源更新影响：受影响目标块逐条采纳（重链到最新修订）/保持原稿/解除。 */}
-        <SourceImpactPanel
-          sourceId={chain?.sources[0]?.id ?? null}
-          revision={chain?.sources[0]?.latest_revision_no ?? null}
-          onAdopted={() => reloadChain()}
-        />
-        <FactLockPanel
-          locks={locksForSelection(locks, { object_id: locator.object_id, path: locator.path })}
-          selection={{
-            object_id: locator.object_id,
-            point_id: locator.point_id,
-            path: locator.path,
-            label: locator.label,
+      <div className="provenance-panel">
+        <ProvenanceSelectionCard
+          options={options}
+          value={currentValue}
+          linked={linkedState}
+          note={linkTargetForButton ? null : pt("provenance.selection.needSelect")}
+          canLink={linkTargetForButton !== null}
+          onChange={(key) => setLocalKey(key)}
+          onLink={() => {
+            if (linkTargetForButton) openLink(linkTargetForButton);
           }}
-          loading={locksLoading}
-          saving={lockSaving}
-          conflictCode={conflictCode}
-          violations={violations}
-          onCreate={(payload) => void createLock(payload)}
-          onDelete={(lock) => void removeLock(lock)}
         />
-        <WritingCandidatesPanel
-          states={candidates}
-          onGenerate={(mode) => void generate(mode)}
-          onAdopt={onApplyContent ? adopt : undefined}
-          onDiscard={discard}
-          conflictCode={candidateConflict}
-        />
+        <section className="provenance-card" data-provenance-card="chain">
+          <SourceChainPanel
+            objects={objects}
+            chain={chain}
+            loading={chainLoading}
+            error={chainError}
+            onRetry={reloadChain}
+            onUnlink={(link) => void unlink(link)}
+            onLink={(object) =>
+              openLink({
+                object_id: object.object_id,
+                point_id: object.point_id,
+                path: object.path,
+                field: object.field,
+              })
+            }
+            onRelink={(link) => void relink(link)}
+          />
+          {/* 来源更新影响：只有这条链上真有来源时才有意义（否则只是又一句空话）。 */}
+          {chain && chain.sources.length > 0 ? (
+            <SourceImpactPanel
+              sourceId={chain.sources[0]?.id ?? null}
+              revision={chain.sources[0]?.latest_revision_no ?? null}
+              onAdopted={() => reloadChain()}
+            />
+          ) : null}
+        </section>
+        <section className="provenance-card" data-provenance-card="locks">
+          <FactLockPanel
+            locks={locksForSelection(locks, {
+              object_id: effectiveObjectId,
+              path: effectivePath,
+            })}
+            selection={{
+              object_id: effectiveObjectId,
+              point_id: effectivePointId,
+              path: effectivePath,
+              label: effective.label,
+            }}
+            loading={locksLoading}
+            saving={lockSaving}
+            conflictCode={conflictCode}
+            violations={violations}
+            onCreate={(payload) => void createLock(payload)}
+            onDelete={(lock) => void removeLock(lock)}
+          />
+        </section>
+        <section className="provenance-card" data-provenance-card="candidates">
+          <WritingCandidatesPanel
+            states={candidates}
+            onGenerate={(mode) => void generate(mode)}
+            onAdopt={onApplyContent ? adopt : undefined}
+            onDiscard={discard}
+            conflictCode={candidateConflict}
+            disabledReason={effectivePath ? null : pt("provenance.candidate.needPoint")}
+          />
+        </section>
         {/* W12：新建/选择来源 → POST /provenance/links（弹窗自己提交，宿主只负责刷新）。 */}
         <SourceLinkModal
           open={linkOpen}

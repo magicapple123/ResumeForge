@@ -56,10 +56,11 @@ from .docx_section_shared import (
     _break_plan,
     _join,
     _role,
+    field_layout_of,
     profile_meta_lines,
 )
 from .pdf_exporter import _PX_TO_PT
-from .resume.profile_field_lines import profile_field_lines, profile_field_text
+from .resume.profile_field_lines import profile_field_rows, profile_field_text, profile_row_text
 from .resume.resume_labels import (
     experience_kind_text,
     field_labels,
@@ -177,7 +178,7 @@ def section_education(
         )
         profile_meta_lines(
             doc, edu, "education", base=base, layout=layout, theme=theme,
-            language=language, style=_meta_style,
+            language=language, style=_meta_style, field_layout=field_layout_of(overrides),
         )
 
 
@@ -245,7 +246,7 @@ def section_experience(
         )
         profile_meta_lines(
             doc, exp, "experience", base=base, layout=layout, theme=theme,
-            language=language, style=_meta_style,
+            language=language, style=_meta_style, field_layout=field_layout_of(overrides),
         )
 
 
@@ -302,7 +303,7 @@ def section_campus(
         )
         profile_meta_lines(
             doc, item, "campus_experience", base=base, layout=layout, theme=theme,
-            language=language, style=_meta_style,
+            language=language, style=_meta_style, field_layout=field_layout_of(overrides),
         )
 
 
@@ -388,7 +389,7 @@ def section_projects(
         )
         profile_meta_lines(
             doc, project, "projects", base=base, layout=layout, theme=theme,
-            language=language, style=_meta_style,
+            language=language, style=_meta_style, field_layout=field_layout_of(overrides),
         )
 
 
@@ -463,12 +464,15 @@ def section_awards(
     award_lines = [_join([award.name, award.date, award.description]) for award in resume.awards]
     # F8：有新增字段时逐条渲染并在该 award 行之后追加「标签：值」；无新增字段保持原
     # 一次 bullets 的调用形状（旧产物逐字节不变）。
-    award_extras = [profile_field_lines(award, "awards", fields) for award in resume.awards]
-    if any(award_extras):
-        for line, rows in zip(award_lines, award_extras, strict=True):
+    field_layout = field_layout_of(overrides)
+    award_rows = [
+        profile_field_rows(award, "awards", fields, field_layout) for award in resume.awards
+    ]
+    if any(award_rows):
+        for line, rows in zip(award_lines, award_rows, strict=True):
             _bullets(doc, [line], base=base, theme=theme)
-            for label, value in rows:
-                _meta_line(doc, f"{label}：{value}", base=base, layout=layout, theme=theme)
+            for row in rows:
+                _meta_line(doc, profile_row_text(row), base=base, layout=layout, theme=theme)
     else:
         _bullets(doc, award_lines, base=base, theme=theme)
 

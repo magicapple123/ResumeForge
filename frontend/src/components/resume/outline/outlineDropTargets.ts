@@ -220,6 +220,64 @@ export function nearestDropIndex(
   return best?.resolution ?? null;
 }
 
+/** 悬停切换目标所需的滞回带宽（px）：指针在行边界附近抖动时不要来回改目标。 */
+export const HOVER_HYSTERESIS_PX = 8;
+
+/** 悬停判定结果：`keep` = 维持当前目标（不产生任何状态变化）。 */
+export type HoverResolution = { kind: "keep" } | { kind: "target"; key: string; index: number };
+
+/**
+ * 悬停判定：把"指针最近的同类行"翻译成落点目标，并保证拖动预览不会自己驱动自己。
+ *
+ * 旧实现把"离指针最近的行"直接当目标，包括**被拖行自己**——预览把被拖行挪到指针下之后，
+ * 它成了最近行，而它的落点下标被映射回**起始下标**，于是每次 dragover 都在
+ * "预览到目标位置 → 自己成为最近行 → 弹回起始位置 → 目标行又成为最近行"之间循环
+ * （真机实测 2.4s 内约 30 次来回，用户看到的就是条目反复跳动）。
+ *
+ * 三条判据把反馈环拆掉：
+ * 1. **自己不是目标**：指针压在被拖行身上（含滞回带）→ 维持现状；
+ * 2. **目标没换就不动**：最近行仍是当前目标行 → 维持现状（调用方不重复 setState）；
+ * 3. **切换要越过滞回带**：新目标必须比当前目标明显更近才切换，行边界 ±1px 抖动不换目标。
+ *
+ * 稳定性的关键：预览把被拖行放进目标行的槽位后，指针离被拖行最近（判据 1 直接保持），
+ * 不会再出现"目标行 → 自己 → 目标行"的循环。
+ */
+export function resolveHoverTarget(
+  model: OutlineModel,
+  payload: OutlineDragPayload,
+  rows: readonly DropRowBox[],
+  pointerY: number,
+  activeKey: string | null,
+  marginPx: number = HOVER_HYSTERESIS_PX,
+): HoverResolution {
+  let selfDistance = Number.POSITIVE_INFINITY;
+  let nearest: { key: string; index: number; distance: number } | null = null;
+  let activeDistance: number | null = null;
+  for (const row of rows) {
+    const resolution = classifyDropKey(model, payload, row.key);
+    const distance = Math.abs(row.centerY - pointerY);
+    if (resolution.kind === "self") {
+      if (distance < selfDistance) selfDistance = distance;
+      continue;
+    }
+    if (resolution.kind !== "row") continue;
+    if (row.key === activeKey) activeDistance = distance;
+    if (!nearest || distance < nearest.distance) {
+      nearest = { key: row.key, index: resolution.index, distance };
+    }
+  }
+  if (!nearest) return { kind: "keep" };
+  // 1) 指针压在被拖行自己身上（含 ±margin 缓冲带）：不要把自己算成新目标。
+  if (selfDistance <= nearest.distance + marginPx) return { kind: "keep" };
+  // 2) 最近行仍是当前目标：不产生状态变化（拖动中的高频 dragover 不会反复重算预览）。
+  if (nearest.key === activeKey) return { kind: "keep" };
+  // 3) 滞回：新目标必须明显更近才切换，边界抖动不会让预览来回跳。
+  if (activeDistance !== null && nearest.distance > activeDistance - marginPx) {
+    return { kind: "keep" };
+  }
+  return { kind: "target", key: nearest.key, index: nearest.index };
+}
+
 /** 落点下标 → 一条 reorder 命令（与键盘/会话提交共用命令层，语义不可能分叉）。 */
 export function dragDropCommand(payload: OutlineDragPayload, toIndex: number): OutlineCommand {
   if (payload.kind === "entry") {

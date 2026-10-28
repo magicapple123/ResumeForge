@@ -6,6 +6,8 @@
 import { App, Button, Form, Modal, Select, Space } from "antd";
 import { useEffect, useState } from "react";
 import { previewGreeting, updateQueueItem } from "../../../api/apply";
+import AbortButton from "../../common/AbortButton";
+import { errorText, useAbortableRequest } from "../../../hooks/useAbortableRequest";
 import { useResumeSearchSelectForJob } from "../../../hooks/remoteSearchOptions";
 import { t } from "../../../i18n";
 import { useLocale } from "../../../i18n/i18nContext";
@@ -28,7 +30,9 @@ export function QueueItemEditor({
   // 简历下拉改为远程搜索（P0-1）：候选限定该岗位关联过的简历，
   // 编辑器挂载即打开，挂载时回查已选值并预拉第一页候选。
   const resumeSelect = useResumeSearchSelectForJob(item.job_id);
-  const [generating, setGenerating] = useState(false);
+  // 招呼语是现场生成的一小段文案，但同样要等模型回包：等着的时候可以停。
+  const greetingRequest = useAbortableRequest();
+  const generating = greetingRequest.loading;
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -44,21 +48,23 @@ export function QueueItemEditor({
   }, []);
 
   const generateGreeting = async () => {
-    if (item.job_id == null) return;
-    setGenerating(true);
-    try {
-      const preview = await previewGreeting({ job_id: item.job_id, item_id: item.id });
-      form.setFieldValue("greeting", preview.greeting);
-      message.success(
-        preview.source === "generated"
-          ? t("applyQueue.toast.greetingGenerated")
-          : t("applyQueue.toast.greetingDefault"),
-      );
-    } catch (err) {
-      message.error(err instanceof Error ? err.message : t("applyQueue.toast.greetingFailed"));
-    } finally {
-      setGenerating(false);
+    // 先落到局部常量：闭包里读 `item.job_id` 会丢掉上面的判空收窄（TS 不跨回调保留）。
+    const jobId = item.job_id;
+    if (jobId == null) return;
+    const outcome = await greetingRequest.run((signal) =>
+      previewGreeting({ job_id: jobId, item_id: item.id }, signal),
+    );
+    if (outcome.status === "error") {
+      message.error(errorText(outcome.error, t("applyQueue.toast.greetingFailed")));
+      return;
     }
+    if (outcome.status === "aborted") return;
+    form.setFieldValue("greeting", outcome.data.greeting);
+    message.success(
+      outcome.data.source === "generated"
+        ? t("applyQueue.toast.greetingGenerated")
+        : t("applyQueue.toast.greetingDefault"),
+    );
   };
 
   const save = async () => {
@@ -110,6 +116,7 @@ export function QueueItemEditor({
         <Button onClick={() => void generateGreeting()} loading={generating}>
           {t("applyQueue.editor.generate")}
         </Button>
+        {generating && <AbortButton onClick={() => greetingRequest.cancel()} />}
         <Button type="primary" loading={saving} onClick={() => void save()}>
           {t("common.action.save")}
         </Button>

@@ -17,6 +17,7 @@ export * from "./resumeTemplate";
 export * from "./resumeWriting";
 export * from "./resumeRisk";
 export * from "./ats";
+export * from "./aiTask";
 export * from "./interview";
 export * from "./interviewExperience";
 export * from "./reminder";

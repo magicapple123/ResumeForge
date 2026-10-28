@@ -201,8 +201,14 @@ flowchart LR
 请求体不能指定另一个方案）→ `profile_reader.load_consumed_profile(db, scope)` 产出 `ConsumedProfile`
 （`schemas/profile_projection.py`）。消费 DTO 的 sections 键集合恒等于 `scope.participating_keys`
 （C1：在方案里就出现、没数据就是空元组），hidden 字段的定义与值都被裁掉，**类型里没有 collapsed**；
-已软删定义、软删条目、空壳条目不出现。三链外（助手/评分/审阅）走 `load_all_consumed_profile`，不受方案限制
-（R-64 非目标）。
+已软删定义、软删条目、空壳条目不出现。
+
+**AI 取数只有一条路**：`profile/ai_profile.load_ai_consumed_profile(db)` /
+`load_ai_profile(db)`——**当前方案 + hidden 剔除**。助手上下文、岗位匹配（单岗与横向对比）、
+简历建议、审阅预检都走它，因此切方案后新任务自动跟随，已生成结果各自冻结快照、不受影响。
+`load_all_consumed_profile`（`all_sections_scope`）仍保留，但只服务确实需要全量分区的非 AI
+场景（如网申重叠值裁决），**不得**再用于给模型取资料（R-64 的"三链外不受方案限制"已按
+2026-10-28 用户口径收窄）。
 
 | 链路 | 过滤位置 | 行为 |
 | --- | --- | --- |

@@ -258,6 +258,7 @@ def run_cleanup(
     *,
     older_than_days: int = DEFAULT_RETENTION_DAYS,
     categories: set[str] | None = None,
+    paths: set[str] | None = None,
     now: datetime | None = None,
 ) -> dict[str, Any]:
     """把候选文件移入 ``.cleanup-trash/<时间戳>/``，返回移动结果。
@@ -271,12 +272,17 @@ def run_cleanup(
     """
     root = _data_root()
     plan = plan_cleanup(older_than_days=older_than_days, categories=categories, now=now)
+    candidates = plan["candidates"]
+    # 逐文件勾选：只处理用户点名的路径。``None`` = 不按文件过滤（整类清理）；
+    # 空集合 = 一个都不选，不能当成"全部"。
+    if paths is not None:
+        candidates = [entry for entry in candidates if entry["path"] in paths]
     stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     trash_dir = root / TRASH_DIRNAME / stamp
     moved = 0
     freed = 0
     failed: list[str] = []
-    for entry in plan["candidates"]:
+    for entry in candidates:
         source = root / entry["path"]
         target = trash_dir / entry["path"]
         try:

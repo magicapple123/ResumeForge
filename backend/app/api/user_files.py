@@ -21,6 +21,7 @@ from sqlalchemy.orm import Session
 
 from ..database import get_db
 from ..models.user_file import UserFile
+from ..services.document_text import preview_text_of_file
 from ..services.user_files import user_files_dir
 
 router = APIRouter(prefix="/api/user-files", tags=["user-files"])
@@ -28,6 +29,8 @@ logger = logging.getLogger(__name__)
 
 # 列表单页上限：副本页是本机界面，100 条足够一次看完。
 _MAX_PAGE_SIZE = 100
+# 文本预览的体积上限：再大就不是"预览"而是"打开大文件"，读进内存也不划算。
+_MAX_TEXT_PREVIEW_BYTES = 50 * 1024 * 1024
 
 
 def _file_out(row: UserFile) -> dict:
@@ -109,6 +112,36 @@ def read_raw(file_id: int, db: Session = Depends(get_db)) -> FileResponse:
         filename=row.original_name or path.name,
         content_disposition_type="inline",
     )
+
+
+@router.get("/{file_id}/text")
+def read_text(file_id: int, db: Session = Depends(get_db)) -> dict:
+    """把副本渲染成可读文本（docx / pdf / 纯文本），供「我的文件」的预览抽屉使用。
+
+    与 ``/raw`` 的分工：``/raw`` 交给浏览器自己渲染（图片、pdf 够用），这个接口给
+    **浏览器渲染不了的格式**（docx）与需要按文本呈现的纯文本文件。提取仍在本机做，
+    不把文件发给任何第三方。
+    """
+    row = db.get(UserFile, file_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="文件副本不存在")
+    path = _resolved_copy_path(row, db)
+    size = path.stat().st_size
+    if size > _MAX_TEXT_PREVIEW_BYTES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"文件超过 {_MAX_TEXT_PREVIEW_BYTES // (1024 * 1024)} MB，暂不支持在线预览",
+        )
+    try:
+        text, warnings = preview_text_of_file(row.original_name or path.name, row.mime, path.read_bytes())
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:  # noqa: BLE001 - 解析失败只给一句中文原因
+        logger.warning(
+            "提取副本文字失败 id=%s error_type=%s", int(file_id), type(exc).__name__
+        )
+        raise HTTPException(status_code=400, detail="读取这个文件失败（可能已损坏）") from exc
+    return {"text": text, "warnings": warnings}
 
 
 @router.post("/{file_id}/open-in-system")

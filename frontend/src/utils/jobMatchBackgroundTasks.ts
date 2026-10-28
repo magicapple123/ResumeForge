@@ -1,11 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 /** 岗位批量适配度分析的全局后台任务登记表。 */
-import { Button } from "antd";
-import { createElement } from "react";
 import { cancelJobMatchBatchTask, getJobMatchBatchTask, listJobMatchBatchTasks } from "../api/jobs";
 import { t } from "../i18n";
 import type { JobMatchBackgroundTask } from "../types";
-import { navigateForTask, notifyTaskDone } from "./taskNotify";
+import { jobMatchHistoryDeepLink } from "./taskDeepLinks";
+import { notifyTaskDone } from "./taskNotify";
 
 export interface JobMatchBackgroundTaskView {
   id: string;
@@ -111,16 +110,10 @@ function finish(id: string, task: JobMatchBackgroundTaskView): void {
         completed: task.completedCount,
         failed: task.failedCount,
       }),
-      // 通知卡片上的「查看结果」：跳到岗位广场的分析记录（createElement——本文件是 .ts）。
-      actions: createElement(
-        Button,
-        {
-          size: "small",
-          type: "primary",
-          onClick: () => navigateForTask("/jobs?match_batch=history"),
-        },
-        t("backgroundTasks.jobMatch.action.viewResults"),
-      ),
+      // 跳转不再自己拼按钮：交给 `deepLink` + `viewLabel`，两种呈现（卡片 / 弹窗）共用
+      // 同一条地址与同一颗按钮，避免"通知里两颗按钮跳同一个地方"。
+      deepLink: jobMatchHistoryDeepLink(),
+      viewLabel: t("backgroundTasks.jobMatch.action.viewResults"),
     });
   } else if (task.status === "failed") {
     notifyTaskDone({

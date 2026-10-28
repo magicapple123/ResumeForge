@@ -48,6 +48,9 @@ const interview = {
     "像真实面试那样回答：先说结论，再说做了什么、结果如何（Ctrl+Enter 发送）",
   "interview.hint.dontKnow": "答不上来可以直接说「不知道」，面试官会给回答思路。",
   "interview.action.submit": "提交回答",
+  "interview.action.stopRound": "停止本轮",
+  "interview.action.retryRound": "重新回答",
+  "interview.interrupted.hint": "这一轮没有答完（上次中途停下了），可以重新回答。",
   "interview.listSeparator": "；",
 
   "interview.experienceForm.title.edit": "编辑面经",

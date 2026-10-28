@@ -149,6 +149,18 @@ const bilingual = {
   "bilingual.layout.unchanged": "No changes yet",
   "bilingual.layout.templateHint":
     "The template is set when the version is derived; only page limit and font size can be adjusted here",
+  "bilingual.variant.creating": "Creating the language version",
+  "bilingual.variant.translating": "Translating…",
+  "bilingual.workspace.autoTranslate.title": "Translating this new version automatically",
+  "bilingual.workspace.autoTranslate.hint":
+    "Translating the whole Resume takes up to a minute; the opposite column turns into the translation while names, organizations, dates and numbers keep the original text",
+  "bilingual.workspace.autoTranslate.done": "Adopted {count} translations automatically",
+  "bilingual.workspace.autoTranslate.nothing":
+    "No translatable fields found; the new version was kept, you can generate candidates later",
+  "bilingual.workspace.autoTranslate.failed":
+    "Automatic translation did not finish; the new version was kept — retry with Generate translation candidates",
+  "bilingual.workspace.translateRejected":
+    "Translation did not start: {reason}. Check the model configuration in Settings → AI model; the new version was kept",
 } as const;
 
 export default bilingual;

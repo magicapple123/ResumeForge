@@ -8,6 +8,13 @@ const appHeader = {
   "appHeader.dataset.sampleTagTooltip": "体验数据，与你的真实资料相互独立",
   "appHeader.dataset.chipAria": "当前数据集：{name}",
   "appHeader.dataset.chipAriaSample": "当前数据集：{name}，示例数据",
+  /**
+   * 主数据集（后端 `MAIN_DATASET_NAME`）的展示名。
+   *
+   * 它是**创建时写死的名字**、且后端拒绝改名，所以按固定文案翻译；用户自建/导入的
+   * 数据集一律显示它们自己的名字（那是用户数据）。
+   */
+  "appHeader.dataset.mainName": "主数据",
   "appHeader.dataset.menuCurrent": "{name}（当前）",
   "appHeader.dataset.menuBackToMine": "回到我的数据",
   "appHeader.dataset.menuCreate": "新建数据集…",

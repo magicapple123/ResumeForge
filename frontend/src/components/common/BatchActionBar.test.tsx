@@ -21,7 +21,7 @@ describe("BatchActionBar", () => {
     expect(screen.getByText("已选 3 项")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "删除所选" }));
     expect(onDelete).toHaveBeenCalledTimes(1);
-    fireEvent.click(screen.getByRole("button", { name: "退出多选" }));
+    fireEvent.click(screen.getByRole("button", { name: "退出选择" }));
     expect(onExit).toHaveBeenCalledTimes(1);
   });
 });

@@ -1,11 +1,15 @@
 # SPDX-License-Identifier: Apache-2.0
 """岗位匹配分析所需的个人资料与简历来源快照。
 
-F2 起资料来源改成新模型的消费快照（`load_all_consumed_profile`，**不按当前组限制**，
-R-64）：hidden 字段已被 reader 剔除、旧资料六表不再读取，返回给调用方的仍是旧形状
-`ProfileOut`（接口形状不变，只换来源）。批量匹配（job_match_batch）仍传旧 ORM 资料，
-这里继续兼容，待生成/网申链路同批迁移后自然收敛。
+**唯一的取数口径**：`services.profile.ai_profile.load_ai_profile`——「我的资料」页
+**当前选中的组** + **未隐藏字段**。单岗匹配、批量匹配、横向对比都走这里，因此三者看到
+的资料永远一致；用户切组后新发起的分析自动跟随，已生成结论不受影响。
+
+历史说明：F2 曾让三链外消费者读 `load_all_consumed_profile`（不按组限制，R-64）。
+2026-10-28 用户要求统一为"当前组 + 去隐藏"，本模块随之切换；旧入口仍保留给网申重叠值
+裁决等确实需要全量分区的场景，**AI 取数不得再直接使用它**。
 """
+
 from __future__ import annotations
 
 import json
@@ -17,7 +21,7 @@ from ...models.profile import UserProfile
 from ...schemas.profile import ProfileOut
 from ...schemas.profile_projection import ConsumedProfile
 from ..apply import apply_service
-from ..profile.profile_reader import load_all_consumed_profile
+from ..profile.ai_profile import load_ai_profile
 from ..profile.profile_service import (
     legacy_profile_is_empty,
     project_legacy_profile_from_consumed,
@@ -61,20 +65,26 @@ def profile_text(profile: ProfileOut | UserProfile | ConsumedProfile) -> str:
     )
 
 
-def match_source_texts(
-    db: Session, job: Job, *, profile: UserProfile | None = None
-) -> tuple[ProfileOut | UserProfile, str, str]:
-    """返回岗位匹配所需的资料文本与岗位对应简历文本（资料来自新模型消费快照）。"""
-    current = profile or project_legacy_profile_from_consumed(load_all_consumed_profile(db))
-    personal_text = profile_text(current)
+def job_resume_text(db: Session, job: Job) -> str:
+    """岗位对应简历（绑定/默认）的序列化文本；没有简历时是空串。
+
+    单岗匹配与批量匹配共用这一处序列化，避免两条链路对"模型看到的简历"出现差异。
+    """
     resume = apply_service.resolve_resume(db, job.id, None)
-    resume_text = ""
-    if resume is not None:
-        resume_text = json.dumps(
-            {"title": resume.title, "job_title": resume.job_title, "content": resume.content},
-            ensure_ascii=False,
-        )
-    return current, personal_text, resume_text
+    if resume is None:
+        return ""
+    return json.dumps(
+        {"title": resume.title, "job_title": resume.job_title, "content": resume.content},
+        ensure_ascii=False,
+    )
 
 
-__all__ = ["match_source_texts", "profile_is_empty", "profile_text"]
+def match_source_texts(
+    db: Session, job: Job, *, profile: ProfileOut | UserProfile | None = None
+) -> tuple[ProfileOut | UserProfile, str, str]:
+    """返回岗位匹配所需的资料文本与岗位对应简历文本（当前组 + 去隐藏）。"""
+    current = profile or load_ai_profile(db)
+    return current, profile_text(current), job_resume_text(db, job)
+
+
+__all__ = ["job_resume_text", "match_source_texts", "profile_is_empty", "profile_text"]

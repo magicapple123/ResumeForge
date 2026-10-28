@@ -24,8 +24,21 @@ import type { ResumeFormatConfig } from "../../types/resumeFormat";
 /** 本端支持的域协议版本；`version > 1` 的域整域丢弃（与后端一致）。 */
 export const FORMAT_DOMAIN_VERSION = 1;
 
-/** 四个域键（R1 白名单；新增域必须先在契约文档增补）。 */
-export const FORMAT_DOMAIN_KEYS = ["roles", "objects", "pagination", "photo_crop"] as const;
+/**
+ * 域键白名单（R1；新增域必须先在契约文档增补）。
+ *
+ * `object_roles`（W3：文字级别按选中字段/角色生效）追加在既有四个键之后；顺序本身
+ * 不影响读写，但保持"旧键在前"让 diff 与后端 `DOMAIN_KEYS` 对得上。
+ */
+export const FORMAT_DOMAIN_KEYS = [
+  "roles",
+  "objects",
+  "pagination",
+  "photo_crop",
+  "object_roles",
+  // W4 条目字段排版（承载区补充字段分行/位置可调）。
+  "field_layout",
+] as const;
 
 export type FormatDomainKey = (typeof FORMAT_DOMAIN_KEYS)[number];
 

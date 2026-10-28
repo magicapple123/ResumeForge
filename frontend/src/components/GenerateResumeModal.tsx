@@ -3,7 +3,7 @@
 import { App, Modal } from "antd";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { attachTaskUi, watchResumeTask } from "../utils/backgroundTasks";
+import { attachTaskUi, resumeTaskKey, watchResumeTask } from "../utils/backgroundTasks";
 import { isDocumentHidden, onVisibilityChange } from "../utils/visibility";
 import {
   cancelResumeGenerateTask,
@@ -314,7 +314,7 @@ export default function GenerateResumeModal({ job, open, initialTitle = "", onCl
       return;
     }
     if (taskId == null || detachTaskUiRef.current) return;
-    detachTaskUiRef.current = attachTaskUi(taskId);
+    detachTaskUiRef.current = attachTaskUi(resumeTaskKey(taskId));
   }, [open, taskId]);
   useEffect(() => {
     // 组件卸载兜底释放，防止登记表泄漏。

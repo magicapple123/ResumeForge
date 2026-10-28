@@ -3,6 +3,7 @@
 
 每个标签页仍是一份普通 ``LiveSession``（从 ``.live`` 单向导入）。
 """
+
 from __future__ import annotations
 
 import contextlib
@@ -49,6 +50,8 @@ class MultiLiveSession:
         memory_targets_loader: Callable[[], list[dict[str, Any]]] | None = None,
         target_clients_loader: Callable[[], list[tuple[str, CdpClient]]] | None = None,
         relaxed_mode_loader: Callable[[], bool] | None = None,
+        ui_locale_loader: Callable[[], str | None] | None = None,
+        ui_locale: str | None = None,
     ) -> None:
         self._initial_client = initial_client
         self._initial_client_used = False
@@ -64,6 +67,8 @@ class MultiLiveSession:
         self._memory_targets_loader = memory_targets_loader
         self._target_clients_loader = target_clients_loader
         self._relaxed_mode_loader = relaxed_mode_loader
+        self._ui_locale_loader = ui_locale_loader
+        self._ui_locale = ui_locale
         self._sessions: dict[str, LiveSession] = {}
         self._clients: dict[str, CdpClient] = {}
         self._control_sequences: dict[str, int] = {}
@@ -100,11 +105,17 @@ class MultiLiveSession:
             memory_targets=self._memory_targets,
             memory_targets_loader=self._memory_targets_loader,
             relaxed_mode_loader=self._relaxed_mode_loader,
+            ui_locale_loader=self._ui_locale_loader,
+            ui_locale=self._ui_locale,
         )
 
     def set_relaxed_mode_loader(self, loader: Callable[[], bool] | None) -> None:
         """替换「放宽模式」开关读取回调，随新标签页会话生效。"""
         self._relaxed_mode_loader = loader
+
+    def set_ui_locale_loader(self, loader: Callable[[], str | None] | None) -> None:
+        """替换界面语言读取回调，随新标签页会话生效。"""
+        self._ui_locale_loader = loader
 
     @staticmethod
     def _close_client(client: CdpClient) -> None:
@@ -279,9 +290,7 @@ class MultiLiveSession:
         for session in sessions:
             session.set_data_loader(loader)
 
-    def set_autofill_data_loader(
-        self, loader: Callable[[], dict[str, str]] | None
-    ) -> None:
+    def set_autofill_data_loader(self, loader: Callable[[], dict[str, str]] | None) -> None:
         self._autofill_data_loader = loader
         with self._lock:
             sessions = list(self._sessions.values())
@@ -295,9 +304,7 @@ class MultiLiveSession:
         for session in sessions:
             session.set_memory_choice_required(required)
 
-    def set_memory_targets_loader(
-        self, loader: Callable[[], list[dict[str, Any]]] | None
-    ) -> None:
+    def set_memory_targets_loader(self, loader: Callable[[], list[dict[str, Any]]] | None) -> None:
         self._memory_targets_loader = loader
         with self._lock:
             sessions = list(self._sessions.values())

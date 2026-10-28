@@ -113,6 +113,9 @@ PROP_STEPS: dict[str, float] = {
 # 单角色/单对象最多 12 个属性（契约 §1.3）；STYLE_PROPS 一共 12 个，正好封顶。
 MAX_ROLE_PROPS = 12
 MAX_OBJECTS = 400
+# ``object_roles`` 域的条目上限（键是"对象 id:角色"，比 objects 更细，仍按同一数量级
+# 封顶，避免畸形 payload 把 format_config 撑爆 32 KiB）。
+MAX_OBJECT_ROLES = 400
 
 
 def _as_float(value: object) -> float | None:
@@ -198,6 +201,33 @@ def validate_objects_domain(raw: object) -> dict | None:
     return {"version": 1, **result}
 
 
+def validate_object_roles_domain(raw: object) -> dict | None:
+    """§1.2 的 ``object_roles`` 域校验（W3：文字级别按选中字段/角色生效）。
+
+    键形如 ``"<object_id>:<role>"``：对象 id 必须过 ``is_object_id``、角色必须是
+    ``ROLES`` 之一，属性按该角色的 ``ROLE_PROPS[role]`` 收窄（meta 不允许段距等）。
+    ≤400 条；空域返回 ``None``（R3：不落库）。畸形键**整条丢弃**，不猜语义。
+    """
+    if not isinstance(raw, dict):
+        return None
+    result: dict[str, object] = {}
+    for key, payload in raw.items():
+        name = str(key)
+        if name == "version":
+            continue
+        object_id, sep, role = name.rpartition(":")
+        if not sep or not is_object_id(object_id) or role not in ROLES:
+            continue
+        cleaned = _validate_style_payload(payload, allowed=ROLE_PROPS[role])
+        if cleaned:
+            result[f"{object_id}:{role}"] = cleaned
+        if len(result) >= MAX_OBJECT_ROLES:
+            break
+    if not result:
+        return None
+    return {"version": 1, **result}
+
+
 def template_role_defaults(template: str) -> dict[str, dict[str, float]]:
     """模板的角色基准值（从 ``TEMPLATE_LAYOUT_DEFAULTS`` 既有比例字段投影，不新增数字）。
 
@@ -230,6 +260,7 @@ def role_fields_catalog() -> list[dict]:
 
 __all__ = [
     "MAX_OBJECTS",
+    "MAX_OBJECT_ROLES",
     "MAX_ROLE_PROPS",
     "OBJECT_PROPS",
     "PROP_BOUNDS",
@@ -240,6 +271,7 @@ __all__ = [
     "STYLE_PROPS",
     "role_fields_catalog",
     "template_role_defaults",
+    "validate_object_roles_domain",
     "validate_objects_domain",
     "validate_roles_domain",
 ]

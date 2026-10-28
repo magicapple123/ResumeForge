@@ -14,7 +14,7 @@ from __future__ import annotations
 import logging
 from urllib.parse import quote
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import Response, StreamingResponse
 from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
@@ -67,6 +67,7 @@ from ..services.tracker import (
     list_track_deliveries as list_track_delivery_records,
 )
 from ..services.tracker_extract import extract_tracker_records, local_tracker_records
+from ._disconnect import client_gone, run_until_disconnect
 
 router = APIRouter(prefix="/api/tracker", tags=["tracker"])
 logger = logging.getLogger(__name__)
@@ -200,7 +201,7 @@ def export_tracks(
 
 
 @router.post("/parse", response_model=TrackParseOut)
-async def parse_tracks(payload: TrackParseRequest, db: Session = Depends(get_db)):
+async def parse_tracks(payload: TrackParseRequest, request: Request, db: Session = Depends(get_db)):
     """从一段通知材料里识别进度条目；**只返回预览，不写库**。"""
     try:
         images = normalize_extraction_images(payload.images)
@@ -231,8 +232,15 @@ async def parse_tracks(payload: TrackParseRequest, db: Session = Depends(get_db)
     # 模型调用可能持续几十秒：先释放请求会话，避免 await 期间一直占着连接池。
     db.close()
     try:
-        records, extra = await extract_tracker_records(provider, source_text, urls)
+        parsed = await run_until_disconnect(
+            request, extract_tracker_records(provider, source_text, urls), what="求职进度识别"
+        )
+        if parsed is None:  # 客户端断开：不落任何预览，也没必要回退本地规则
+            raise client_gone("求职进度识别")
+        records, extra = parsed
         engine = "ai"
+    except HTTPException:  # 499 原样上抛，别被下面的兜底改写成"识别失败"
+        raise
     except LLMError as exc:
         logger.warning("求职进度识别失败，已回退本地规则：%s", exc)
         records, extra = local_tracker_records(source_text)

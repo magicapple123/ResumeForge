@@ -28,6 +28,7 @@ import type {
   LLMThinkingResult,
 } from "../../types";
 import { formatDateTime } from "../../utils/format";
+import { llmRecordDisplayName } from "../../utils/displayNames";
 import type { LLMConfigSummary } from "./SettingsConfig";
 import { CUSTOM_PRESET_LABEL_KEY, matchingPreset } from "./SettingsConfig";
 import type { RecordFormValues } from "../../features/settings/useLLMRecordTools";
@@ -135,7 +136,7 @@ export default function LLMConfigCard({
   /** 删除走 confirm 二次确认（维持原 Popconfirm 的文案语义）。 */
   const confirmRemove = (record: LLMConfigRecord) => {
     modal.confirm({
-      title: t("llmConfigCard.confirm.deleteTitle", { name: record.name }),
+      title: t("llmConfigCard.confirm.deleteTitle", { name: llmRecordDisplayName(record) }),
       content: t("llmConfigCard.confirm.deleteContent"),
       okText: t("llmConfigCard.action.delete"),
       cancelText: t("llmConfigCard.action.cancel"),
@@ -206,7 +207,7 @@ export default function LLMConfigCard({
                             time: formatDateTime(record.updated_at),
                           })}
                         >
-                          <Typography.Text strong>{record.name}</Typography.Text>
+                          <Typography.Text strong>{llmRecordDisplayName(record)}</Typography.Text>
                         </Tooltip>
                         {isActive && (
                           <Tooltip title={t("llmConfigCard.tooltip.active")}>
@@ -277,7 +278,9 @@ export default function LLMConfigCard({
                           <Button
                             size="small"
                             icon={<MoreOutlined />}
-                            aria-label={t("llmConfigCard.aria.moreActions", { name: record.name })}
+                            aria-label={t("llmConfigCard.aria.moreActions", {
+                              name: llmRecordDisplayName(record),
+                            })}
                             disabled={cardBusy}
                           />
                         </Dropdown>

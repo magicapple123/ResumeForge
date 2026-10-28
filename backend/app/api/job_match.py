@@ -17,6 +17,7 @@ from ..models.job import Job
 from ..models.job_match_batch import JobMatchBatch
 from ..models.profile import utcnow
 from ..runtime.log_redact import log_exception_redacted
+from ..schemas.job_comparison import JobComparisonResult
 from ..schemas.job_match import JobMatchOut, JobMatchResult
 from ..schemas.job_match_background import JobMatchBackgroundTask
 from ..schemas.job_match_batch import (
@@ -26,6 +27,8 @@ from ..schemas.job_match_batch import (
 )
 from ..services import trash
 from ..services.apply import apply_service
+from ..services.job.job_comparison import MAX_COMPARISON_JOBS
+from ..services.job.job_comparison_store import load_comparison
 from ..services.job.job_match import (
     analyze_match_with_retry,
     finalize_match_result,
@@ -43,6 +46,7 @@ from ..services.job.job_match_batch import (
     build_batch_inputs,
     list_batch_summaries,
     persist_batch,
+    run_batch_comparison,
     run_batch_match,
 )
 from ..services.job.job_match_context import match_source_texts, profile_is_empty
@@ -55,6 +59,28 @@ router = APIRouter(prefix="/api/jobs", tags=["job-match"])
 logger = logging.getLogger(__name__)
 
 
+def _validate_mode(job_ids: list[int], mode: str) -> None:
+    """横向对比的规模约束：少于 2 个没有"对比"可言，多于上限会把上下文挤爆。"""
+    if mode != "compare":
+        return
+    if len(job_ids) < 2:
+        raise HTTPException(status_code=400, detail="横向对比至少选择 2 个岗位")
+    if len(job_ids) > MAX_COMPARISON_JOBS:
+        # 后端 detail 只写原因，「请缩小选择范围」这类动作指引由前端 errorGuidance 给。
+        raise HTTPException(
+            status_code=400,
+            detail=f"横向对比一次最多 {MAX_COMPARISON_JOBS} 个岗位",
+        )
+
+
+def _batch_out(row: JobMatchBatch, comparison: JobComparisonResult | None) -> JobMatchBatchOut:
+    """批次行 + 对比结论（存在 ``app_setting`` 的独立键里）合成响应。"""
+    out = JobMatchBatchOut.model_validate(row)
+    return out.model_copy(
+        update={"mode": "compare" if comparison is not None else "match", "comparison": comparison}
+    )
+
+
 @router.post("/match-batches", response_model=JobMatchBatchOut)
 async def create_match_batch(
     payload: JobMatchBatchRequest,
@@ -62,6 +88,7 @@ async def create_match_batch(
 ):
     """对用户选中的岗位批量分析，并按参考分保存一份可回看的快照。"""
     job_ids = list(dict.fromkeys(payload.job_ids))
+    _validate_mode(job_ids, payload.mode)
     jobs = db.query(Job).filter(trash.live_only(Job), Job.id.in_(job_ids)).all()
     found = {job.id: job for job in jobs}
     missing = [job_id for job_id in job_ids if job_id not in found]
@@ -78,16 +105,19 @@ async def create_match_batch(
     # 模型调用期间不占用请求数据库连接。
     db.close()
     run = await run_batch_match(inputs, config)
+    comparison = (
+        await run_batch_comparison(inputs, run, config) if payload.mode == "compare" else None
+    )
     session = SessionLocal()
     try:
-        row = persist_batch(session, run)
+        row = persist_batch(session, run, comparison=comparison)
     except Exception as exc:  # noqa: BLE001 - 记录失败要返回可理解的错误，不泄露堆栈
         session.rollback()
         logger.exception("保存批量岗位匹配记录失败")
         raise HTTPException(status_code=500, detail="保存批量匹配记录失败") from exc
     finally:
         session.close()
-    return JobMatchBatchOut.model_validate(row)
+    return _batch_out(row, comparison)
 
 
 @router.post("/match-batch-tasks", response_model=JobMatchBackgroundTask)
@@ -97,6 +127,7 @@ def create_match_batch_task(
 ):
     """创建后台批量分析任务；任务结果完成后仍写入同一份历史快照。"""
     job_ids = list(dict.fromkeys(payload.job_ids))
+    _validate_mode(job_ids, payload.mode)
     jobs = db.query(Job).filter(trash.live_only(Job), Job.id.in_(job_ids)).all()
     found = {job.id: job for job in jobs}
     missing = [job_id for job_id in job_ids if job_id not in found]
@@ -107,7 +138,7 @@ def create_match_batch_task(
     try:
         # 在创建任务前先做资料准入校验，避免用户关闭弹窗后才发现资料为空。
         build_batch_inputs(db, [found[job_id] for job_id in job_ids], force=payload.force)
-        task = create_job_match_background_task(db, job_ids, force=payload.force)
+        task = create_job_match_background_task(db, job_ids, force=payload.force, mode=payload.mode)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     try:
@@ -160,7 +191,7 @@ def get_match_batch(batch_id: int, db: Session = Depends(get_db)):
     row = db.get(JobMatchBatch, batch_id)
     if row is None:
         raise HTTPException(status_code=404, detail="批量匹配记录不存在")
-    return JobMatchBatchOut.model_validate(row)
+    return _batch_out(row, load_comparison(db, batch_id))
 
 
 @router.post("/{job_id}/match-analysis", response_model=JobMatchResult)

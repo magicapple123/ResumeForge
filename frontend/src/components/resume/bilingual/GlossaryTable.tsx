@@ -134,21 +134,24 @@ export default function GlossaryTable({ terms, onSaveTerm, onDeleteTerm, saving 
   ];
 
   return (
-    <div data-glossary-table="1">
-      <Space size={8} align="center" style={{ marginBottom: 6 }}>
+    <div className="glossary-table" data-glossary-table="1">
+      <Space size={8} align="center" className="glossary-table__head">
         <Typography.Text strong>{bt("bilingual.glossary.title")}</Typography.Text>
-        <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+        <Typography.Text type="secondary" className="glossary-table__hint">
           {bt("bilingual.glossary.hint")}
         </Typography.Text>
       </Space>
-      <Table
-        size="small"
-        rowKey="id"
-        columns={columns}
-        dataSource={terms}
-        pagination={false}
-        locale={{ emptyText: bt("bilingual.glossary.empty") }}
-      />
+      {/* 术语表列多（原词/类别/译法/锁定/删除）：窄栏里必须能横向滚动，不能把表挤压变形。 */}
+      <div className="glossary-table__scroll">
+        <Table
+          size="small"
+          rowKey="id"
+          columns={columns}
+          dataSource={terms}
+          pagination={false}
+          locale={{ emptyText: bt("bilingual.glossary.empty") }}
+        />
+      </div>
       {readOnly ? null : (
         <Form form={form} layout="vertical" style={{ marginTop: 8 }}>
           <Row gutter={8} align="bottom">

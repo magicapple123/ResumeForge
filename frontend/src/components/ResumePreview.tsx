@@ -23,6 +23,7 @@ import ProviewLayer from "./resume/proview/ProviewLayer";
 import ExactPreviewPanel from "./resume-preview/ExactPreviewPanel";
 import type { ExactPreviewOptions } from "./resume-preview/exactPreviewOptions";
 import ResumePreviewCanvas from "./resume-preview/ResumePreviewCanvas";
+import PreviewAlerts from "./resume-preview/PreviewAlerts";
 import PreviewZoomBar from "./resume-preview/PreviewZoomBar";
 import ResumePreviewToolbar from "./resume-preview/ResumePreviewToolbar";
 import BoldContextMenu, { type RichTextEditAdapter } from "./resume-preview/BoldContextMenu";
@@ -30,9 +31,7 @@ import { useClickToEditPreview } from "./resume-preview/useClickToEditPreview";
 import { layoutFrame } from "./resume-preview/layout";
 import { forwardWheelToParent, useFrameInteractions } from "./resume-preview/useFrameInteractions";
 
-// `ExactPreviewOptions` 的定义搬到了 `resume-preview/exactPreviewOptions.ts`（本文件贴着
-// 500 行预算，而那个类型只被"构造它的人"与"消费它的组件"用到），这里 re-export 保持
-// `import type { ExactPreviewOptions } from "../ResumePreview"` 那几处调用不变。
+// `ExactPreviewOptions` 的定义在 `resume-preview/exactPreviewOptions.ts`，这里 re-export 保持调用点不变。
 
 interface Props {
   html: string;
@@ -51,6 +50,8 @@ interface Props {
    * （`chromeHeight` 实测），纸面只拿剩下的部分。不传时行为**一字不变**。
    */
   availableHeight?: number;
+  /** 是否渲染「草稿模式编辑」开关（预览弹窗传 false，详细编辑去制作台）。 */
+  showClickToEdit?: boolean;
   /** 渲染完成后的版式状态。pages 始终是用户设置的页数上限。 */
   onLayoutStatus?: (status: { pages: number; overflow: boolean }) => void;
   /** 实测高度，交给版面诊断使用。 */
@@ -68,6 +69,8 @@ interface Props {
    * 缩放条不在工具栏里：它由预览自己渲染在纸面下方（缩放是"看"的动作，不是"改"的动作）。
    */
   measureControls?: ReactNode;
+  /** 缩放条提示语的覆盖（制作台把分页说明并进那一行）；不传时用默认文案。 */
+  zoomHint?: string;
   /**
    * 精确预览（方案 A）：给出简历 id 与**当前草稿版式**，就用服务端排出的真实 PDF 渲染。
    *
@@ -93,16 +96,10 @@ interface Props {
 }
 
 /**
- * 预览只"看"不改（2026-10-21）。
- *
- * 它曾经有一套"编辑"模式：iframe 接上指针事件、给每个 `[data-resume-path]` 挂
- * `role=button`，点一下纸面字段就打开对应栏的编辑器。这条路径被去掉了——修改入口
- * 已经统一到「选中文字 → 右键 → AI 润色」与「手动调整」，预览里再留一套命中区等于
- * 同一件事两个入口、两套命中规则；而且它要求 iframe 接管指针事件，与"按住拖动平移"
- * 互斥（iframe 文档里的事件不冒泡到父文档，容器就收不到 pointerdown）。
- *
- * 2026-11 补回**只挂 `click`** 的那一半（`resume-preview/useClickToEditPreview`）：不接管
- * 指针事件，拖动平移与 Ctrl+滚轮缩放照旧；命中区是后端模板已有的 `data-resume-path`。
+ * 预览只"看"不改（2026-10-21）：那套"iframe 接管指针事件、点纸面即开编辑器"的编辑模式
+ * 已删除（与拖动平移互斥，且与「选中文字 → 右键 / 手动调整」两个入口重复）；2026-11 补回
+ * **只挂 click** 的一半（`resume-preview/useClickToEditPreview`），命中区仍是后端的
+ * `data-resume-path`。详见该模块头部。
  */
 const ResumePreview = forwardRef<ResumePreviewHandle, Props>(function ResumePreview(
   {
@@ -111,10 +108,13 @@ const ResumePreview = forwardRef<ResumePreviewHandle, Props>(function ResumePrev
     pages = 1,
     height,
     availableHeight,
+    // 默认 true：制作台仍要这个开关；预览弹窗显式传 false。
+    showClickToEdit = true,
     onLayoutStatus,
     onMeasure,
     templateControls,
     measureControls,
+    zoomHint,
     exactPreview,
     previewMode,
     onPreviewModeChange,
@@ -384,100 +384,108 @@ const ResumePreview = forwardRef<ResumePreviewHandle, Props>(function ResumePrev
   }, [availableHeight]);
 
   return (
-    <div ref={rootRef}>
-      <ResumePreviewToolbar
-        templateControls={templateControls}
-        measureControls={measureControls}
-        canExactPreview={canExactPreview}
-        previewMode={activeMode}
-        onPreviewModeChange={changeMode}
-        clickToEdit={checked}
-        onClickToEditChange={setChecked}
-        clickToEditAvailable={available}
-      />
-      {/* 专业视图工具条（W15）：只在制作台（有 ProviewProvider）且草稿口径下出现；
-          主预览与精确模式一行 DOM 都不多。 */}
-      {proviewConfig && draftMode ? (
-        <ProviewLayer
-          viewportRef={containerRef}
-          pageCount={pageCount}
-          pageWidth={A4_WIDTH_PX}
-          pageHeight={A4_HEIGHT_PX}
-          zoom={zoom}
-          scale={geometry.scale}
-          fitScale={geometry.fitScale}
-          viewportWidth={geometry.viewportWidth}
-          onZoomChange={setZoom}
-          frameEpoch={frameEpoch}
+    <div className="resume-preview-root" ref={rootRef}>
+      {/* 固定头部：工具条 + 专业视图行 + 两条提示；制作台只让纸面滚动，这一层不滚。 */}
+      <div className="resume-preview-chrome">
+        <ResumePreviewToolbar
+          templateControls={templateControls}
+          measureControls={measureControls}
+          canExactPreview={canExactPreview}
+          previewMode={activeMode}
+          onPreviewModeChange={changeMode}
+          clickToEdit={checked}
+          onClickToEditChange={setChecked}
+          clickToEditAvailable={available}
+          showClickToEdit={showClickToEdit}
         />
-      ) : null}
-      {/*
-       * 精确面板**常驻**：草稿模式下只是把它藏起来（`hidden`），不卸载。
-       *
-       * 卸载会连同内嵌 PDF 查看器一起销毁，切回来等于重新开一个查看器——用户看到的
-       * 是一次几百毫秒的白屏，此前还会附赠一次完整的服务端重排（2026-10-21 用户实测：
-       * 「什么都没改，跳回精确却还要重排一次」）。`active=false` 时面板不发请求，
-       * 所以"常驻"的代价只是一个空 div。
-       */}
-      {canExactPreview ? (
-        <div hidden={activeMode !== "exact"}>
-          <ExactPreviewPanel
-            active={activeMode === "exact"}
-            resumeId={exactPreview!.resumeId}
-            template={exactPreview!.template}
-            formatName={exactPreview!.formatName}
-            pageLimit={pageCount}
-            fontScale={exactPreview!.fontScale}
-            language={exactPreview!.language}
-            formatConfig={exactPreview!.formatConfig}
-            contentSignature={exactPreview!.contentSignature}
-            // 制作台里还没保存的正文（W04）：没有这一项，精确预览就停在上一版内容。
-            content={exactPreview!.content}
-            headingSerif={exactPreview!.headingSerif}
-            height={Math.max(MIN_PREVIEW_HEIGHT, viewportHeight)}
-            // 精确模式的缩放与草稿共用同一个 `zoom`：两边都从 100% 起，
-            // 用户的心理模型只有"这张纸现在多大"，没有第二套比例。
-            scale={zoom}
-          />
-        </div>
-      ) : null}
-      {mountDraftCanvas ? (
-        <div
-          ref={draftHostRef}
-          // 精确模式下它只是"测量用的尸体"：看不见、不占位，但仍在排版。
-          style={measuringOnly ? { height: 0, overflow: "hidden" } : undefined}
-          aria-hidden={measuringOnly || undefined}
-        >
-          <ResumePreviewCanvas
-            warnings={warnings}
-            overflow={overflow}
-            overflowClipped={geometry.overflowClipped}
-            pagesNeeded={geometry.pagesNeeded}
+        {/* 专业视图工具条（W15）：只在制作台（有 ProviewProvider）且草稿口径下出现；
+          主预览与精确模式一行 DOM 都不多。 */}
+        {proviewConfig && draftMode ? (
+          <ProviewLayer
+            viewportRef={containerRef}
             pageCount={pageCount}
-            overflowAmountText={geometry.overflowAmountText}
-            isPanning={isPanning}
-            viewportHeight={viewportHeight}
-            scaledWidth={geometry.scaledWidth}
-            scaledHeight={geometry.scaledHeight}
+            pageWidth={A4_WIDTH_PX}
+            pageHeight={A4_HEIGHT_PX}
+            zoom={zoom}
             scale={geometry.scale}
-            totalVisualPages={geometry.totalVisualPages}
-            html={html}
-            containerRef={containerRef}
-            iframeRef={iframeRef}
-            onIframeLoad={handleFrameLoad}
-            clickToEdit={active}
+            fitScale={geometry.fitScale}
+            viewportWidth={geometry.viewportWidth}
+            onZoomChange={setZoom}
+            frameEpoch={frameEpoch}
           />
-        </div>
-      ) : null}
-      {/* 缩放条两个口径都有（2026-10-24）：精确模式原先把它藏起来，理由是"缩放交给
-          浏览器的 PDF 查看器"——但补出来的空白纸是父页面的 DOM，查看器的缩放管不到它，
-          于是"PDF 变大了、空白纸没变"。现在两边共用同一条缩放条与同一个 `zoom`：
-          精确模式放大 = 把纸列改宽（查看器重新排版，矢量不糊）。 */}
+        ) : null}
+        <PreviewAlerts
+          warnings={warnings}
+          overflow={overflow}
+          overflowClipped={geometry.overflowClipped}
+          pagesNeeded={geometry.pagesNeeded}
+          pageCount={pageCount}
+          overflowAmountText={geometry.overflowAmountText}
+        />
+      </div>
+      {/* 纸张区域：制作台里**只有这一层滚动**——精确模式的多页 PDF 也在这里滚。 */}
+      <div className="resume-preview-body">
+        {/*
+         * 精确面板**常驻**：草稿模式下只是把它藏起来（`hidden`），不卸载。
+         *
+         * 卸载会连同内嵌 PDF 查看器一起销毁，切回来等于重新开一个查看器——用户看到的
+         * 是一次几百毫秒的白屏，此前还会附赠一次完整的服务端重排（2026-10-21 用户实测：
+         * 「什么都没改，跳回精确却还要重排一次」）。`active=false` 时面板不发请求，
+         * 所以"常驻"的代价只是一个空 div。
+         */}
+        {canExactPreview ? (
+          <div hidden={activeMode !== "exact"}>
+            <ExactPreviewPanel
+              active={activeMode === "exact"}
+              resumeId={exactPreview!.resumeId}
+              template={exactPreview!.template}
+              formatName={exactPreview!.formatName}
+              pageLimit={pageCount}
+              fontScale={exactPreview!.fontScale}
+              language={exactPreview!.language}
+              formatConfig={exactPreview!.formatConfig}
+              contentSignature={exactPreview!.contentSignature}
+              // 制作台里还没保存的正文（W04）：没有这一项，精确预览就停在上一版内容。
+              content={exactPreview!.content}
+              headingSerif={exactPreview!.headingSerif}
+              height={Math.max(MIN_PREVIEW_HEIGHT, viewportHeight)}
+              // 精确模式的缩放与草稿共用同一个 `zoom`：两边都从 100% 起，
+              // 用户的心理模型只有"这张纸现在多大"，没有第二套比例。
+              scale={zoom}
+            />
+          </div>
+        ) : null}
+        {mountDraftCanvas ? (
+          <div
+            ref={draftHostRef}
+            // 精确模式下它只是"测量用的尸体"：看不见、不占位，但仍在排版。
+            style={measuringOnly ? { height: 0, overflow: "hidden" } : undefined}
+            aria-hidden={measuringOnly || undefined}
+          >
+            <ResumePreviewCanvas
+              isPanning={isPanning}
+              viewportHeight={viewportHeight}
+              scaledWidth={geometry.scaledWidth}
+              scaledHeight={geometry.scaledHeight}
+              scale={geometry.scale}
+              totalVisualPages={geometry.totalVisualPages}
+              html={html}
+              containerRef={containerRef}
+              iframeRef={iframeRef}
+              onIframeLoad={handleFrameLoad}
+              clickToEdit={active}
+            />
+          </div>
+        ) : null}
+      </div>
+      {/* 缩放条是**页脚**：跟着纸面区域一起不出现在滚动流里，制作台里它因此永远贴底
+          （2026-10-29：原来是 sticky 在滚动容器里，滚到底会与纸面之间留出一条缝）。 */}
       <PreviewZoomBar
         scale={canExactPreview && activeMode === "exact" ? zoom : geometry.scale}
         // `clampedToMin` 的文案说的是"容器装不下"，只对草稿的按宽自适应成立；
         // 精确模式的 50% 是用户自己缩到的，不该冒出一句对不上的解释。
         clampedToMin={canExactPreview && activeMode === "exact" ? false : geometry.clampedToMin}
+        hint={zoomHint}
         onZoomOut={() => adjustZoom(-0.1)}
         onZoomIn={() => adjustZoom(0.1)}
         onReset={resetZoom}

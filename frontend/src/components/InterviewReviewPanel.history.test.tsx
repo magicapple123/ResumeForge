@@ -3,6 +3,7 @@
 import { App as AntApp } from "antd";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { t } from "../i18n";
 import InterviewReviewPanel from "./InterviewReviewPanel";
 
 const apiMocks = vi.hoisted(() => ({
@@ -142,12 +143,16 @@ describe("InterviewReviewPanel 自动保存与历史富还原", () => {
     fireEvent.click(screen.getByRole("button", { name: /反向优化简历/ }));
 
     expect(await screen.findByText(/补充指标与对比/)).toBeInTheDocument();
-    expect(apiMocks.optimizeResumeFromInterview).toHaveBeenCalledWith({
-      resume_id: 1,
-      job_id: null,
-      weaknesses: ANALYSIS.pitfalls,
-      follow_ups: ANALYSIS.follow_up,
-    });
+    expect(apiMocks.optimizeResumeFromInterview).toHaveBeenCalledWith(
+      {
+        resume_id: 1,
+        job_id: null,
+        weaknesses: ANALYSIS.pitfalls,
+        follow_ups: ANALYSIS.follow_up,
+      },
+      // T04-d：反向优化可被「停止」掐断，第二个参数是 AbortSignal。
+      expect.anything(),
+    );
 
     // 生成结果写回同一条历史记录（PATCH）。
     await waitFor(() =>
@@ -168,5 +173,25 @@ describe("InterviewReviewPanel 自动保存与历史富还原", () => {
 
     expect(await screen.findByText("此为旧版记录，仅可查看")).toBeInTheDocument();
     expect(screen.getByText(/旧版纯文本复盘内容/)).toBeInTheDocument();
+  });
+});
+
+describe("InterviewReviewPanel 半成品历史记录不再白屏", () => {
+  it("analysis 只有 framework：不抛错，framework 照常显示", async () => {
+    // 线上真实记录：模型只写了 framework，没有 key_points / follow_up / pitfalls。
+    // 旧代码直接读 viewAnalysis.key_points.length → TypeError，点「查看详情」整页白屏。
+    const framework = "只写了框架，没有要点";
+    renderPanel({
+      record: {
+        ...RECORD,
+        analysis: { framework } as unknown as typeof RECORD.analysis,
+        // suggestions 也可能整个缺失。
+        suggestions: undefined as unknown as typeof RECORD.suggestions,
+      },
+    });
+
+    expect(await screen.findByText(framework)).toBeInTheDocument();
+    // 建议区因为"没有可展示的建议"而不渲染，同样不该崩。
+    expect(screen.queryByText(t("interview.suggestions.title"))).toBeNull();
   });
 });

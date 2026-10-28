@@ -347,11 +347,12 @@ describe("SettingsPage 编辑使用中的记录", () => {
 });
 
 describe("SettingsPage 快捷键设置", () => {
-  it("在「应用」页签挂载快捷键设置卡", async () => {
+  it("在外观与交互页签挂载快捷键设置卡", async () => {
     renderSettingsPage();
     await waitFor(() => expect(apiMocks.getLLMConfig).toHaveBeenCalledOnce());
 
-    fireEvent.click(screen.getByRole("tab", { name: "应用" }));
+    // 快捷键从原来的「应用」页签迁到「外观与交互」（它管的就是"按什么键"）。
+    fireEvent.click(screen.getByRole("tab", { name: "外观与交互" }));
 
     // 卡片标题 + 动作表第一行（撤回）都在，说明整张卡真的挂上了。
     expect(await screen.findByText("快捷键")).toBeInTheDocument();

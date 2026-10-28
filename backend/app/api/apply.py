@@ -8,7 +8,7 @@
 import json
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.orm import Session
 
 from ..database import get_db
@@ -50,6 +50,7 @@ from ..services.llm import create_provider
 from ..services.llm.base import LLMError
 from ..services.settings_service import get_llm_config
 from ..services.site_health import site_health_overview
+from ._disconnect import client_gone, run_until_disconnect
 from .apply_queue import router as apply_queue_router
 from .apply_record_items import router as apply_record_items_router
 from .apply_tasks_page import router as apply_tasks_page_router
@@ -196,7 +197,9 @@ def browser_stop(db: Session = Depends(get_db)):
 
 
 @router.post("/greeting/preview", response_model=GreetingPreviewOut)
-async def greeting_preview(payload: GreetingPreviewRequest, db: Session = Depends(get_db)):
+async def greeting_preview(
+    payload: GreetingPreviewRequest, request: Request, db: Session = Depends(get_db)
+):
     job = db.get(Job, payload.job_id)
     if job is None:
         raise HTTPException(status_code=404, detail="岗位不存在或已被删除")
@@ -220,13 +223,21 @@ async def greeting_preview(payload: GreetingPreviewRequest, db: Session = Depend
     payload_data = job_payload(job)
     provider = create_provider(llm)
     db.close()
+    # 客户端断开（用户关了预览/离开页面）：不生成、也不回退默认招呼语——没人收这份结果。
+    disconnected = False
     try:
-        greeting = await generate_greeting(provider, payload_data, resume_text)
-        return GreetingPreviewOut(greeting=greeting, source="generated")
+        greeting = await run_until_disconnect(
+            request, generate_greeting(provider, payload_data, resume_text), what="招呼语生成"
+        )
+        if greeting is not None:
+            return GreetingPreviewOut(greeting=greeting, source="generated")
+        disconnected = True
     except LLMError as exc:
         logger.warning("招呼语生成失败，回退默认招呼语：%s", exc)
     except Exception:  # noqa: BLE001 - 模型异常不能阻断预览
         logger.exception("招呼语生成发生内部错误，回退默认招呼语")
+    if disconnected:
+        raise client_gone("招呼语生成")
     return GreetingPreviewOut(greeting=config.default_greeting.strip(), source="default")
 
 

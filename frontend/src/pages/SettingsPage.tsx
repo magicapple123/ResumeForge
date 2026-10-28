@@ -1,51 +1,71 @@
 // SPDX-License-Identifier: Apache-2.0
-/** 设置页：大模型配置（单区块：记录卡列表 + 新增/编辑共用弹窗）。 */
+/**
+ * 设置页外壳：只做三件事——持有需要跨页签共享的 hooks、算好各卡片的 props、渲染六个页签。
+ *
+ * 页签内"哪张卡放哪一页"全部在 `components/settings/SettingsPanels.tsx`（那份文件就是
+ * 页面结构表）。这样拆的原因：设置项从 21 张卡、3 个页签扩到 6 个页签后，如果编排还留在
+ * 这里，本文件会顶到 500 行预算并且再也没法加东西。
+ *
+ * 默认停留在 `model`：多数人进设置页是为了改模型或看用量，切页签不改变任何已存设置。
+ */
 import { Tabs, Typography } from "antd";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import type { ComponentProps } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useSettingsDatasets } from "../features/settings/useSettingsDatasets";
 import { useSettingsSkills } from "../features/settings/useSettingsSkills";
 import { useLLMSettings } from "../features/settings/useLLMSettings";
 import { useLLMRecordTools } from "../features/settings/useLLMRecordTools";
-import DatasetsCard from "../components/settings/DatasetsCard";
-import BackupStatusCard from "../components/settings/BackupStatusCard";
-import ManualBackupsCard from "../components/settings/ManualBackupsCard";
-import StorageStatsCard from "../components/settings/StorageStatsCard";
-import AssistantOrbCard from "../components/settings/AssistantOrbCard";
 import LLMConfigCard from "../components/settings/LLMConfigCard";
-import ReminderPopupCard from "../components/settings/ReminderPopupCard";
-import WebFormRelaxedModeCard from "../components/settings/WebFormRelaxedModeCard";
-import ExportSaveCard from "../components/settings/ExportSaveCard";
-import SearchCard from "../components/settings/SearchCard";
-import AssistantRelaxedModeCard from "../components/settings/AssistantRelaxedModeCard";
+import DatasetsCard from "../components/settings/DatasetsCard";
 import SkillsCard from "../components/settings/SkillsCard";
-import SettingsProvenanceSection from "../components/settings/SettingsProvenanceSection";
-import AnnouncementSettingsCard from "../components/settings/AnnouncementSettingsCard";
-import UpdateCard from "../components/settings/UpdateCard";
-import HelpDiagnosticsCard from "../components/settings/HelpDiagnosticsCard";
-import PrivacyCard from "../components/settings/PrivacyCard";
-import NavigationSettingsCard from "../components/settings/NavigationSettingsCard";
+import {
+  AboutPanel,
+  AppearancePanel,
+  AssistantPanel,
+  BackupPanel,
+  DataPanel,
+  ModelPanel,
+} from "../components/settings/SettingsPanels";
 import { t } from "../i18n";
 import { useLocale } from "../i18n/i18nContext";
-import LocaleSettingsCard from "../components/settings/LocaleSettingsCard";
-import ResumeFontCard from "../components/settings/ResumeFontCard";
-import ShortcutSettingsCard from "../components/settings/ShortcutSettingsCard";
 import SkillEditorModal from "../components/skills/SkillEditorModal";
 
-/** 设置分页。三页各自装同一类东西：改模型配置不用先翻过整套数据备份。 */
-type SettingsTabKey = "model" | "data" | "app";
+/** 设置分页：六页各自装同一类东西——改模型配置不用先翻过整套数据备份。 */
+export type SettingsTabKey = "model" | "assistant" | "appearance" | "data" | "backup" | "about";
 
-/** 页签内分组标题：卡片多了之后，每页再按「管什么」分层，扫一眼就能对号入座。 */
-function SettingsGroupTitle({ text, hint }: { text: string; hint?: string }) {
-  return (
-    <div className="settings-group-title">
-      <Typography.Text strong>{text}</Typography.Text>
-      {hint && <Typography.Text type="secondary">{hint}</Typography.Text>}
-    </div>
-  );
+const SETTINGS_TAB_KEYS: SettingsTabKey[] = [
+  "model",
+  "assistant",
+  "appearance",
+  "data",
+  "backup",
+  "about",
+];
+
+/** 深链 `?tab=` 的解析：不在清单里就回默认页（不报错，也不接受任意字符串）。 */
+function parseSettingsTab(value: string | null): SettingsTabKey {
+  return SETTINGS_TAB_KEYS.find((key) => key === value) ?? "model";
 }
 
 export default function SettingsPage() {
-  const [activeTab, setActiveTab] = useState<SettingsTabKey>("model");
+  const [searchParams] = useSearchParams();
+  const [activeTab, setActiveTab] = useState<SettingsTabKey>(() =>
+    parseSettingsTab(searchParams.get("tab")),
+  );
+
+  // 带锚点进来（例如批量操作未配置时从岗位广场跳来）要落到那张卡，而不是停在页签顶部。
+  useEffect(() => {
+    const hash = window.location.hash;
+    if (!hash) return;
+    let target: Element | null;
+    try {
+      target = document.querySelector(hash);
+    } catch {
+      return;
+    }
+    target?.scrollIntoView({ block: "start", behavior: "smooth" });
+  }, [activeTab]);
 
   const {
     records,
@@ -133,6 +153,92 @@ export default function SettingsPage() {
     setCreateDatasetName,
   } = useSettingsDatasets();
 
+  // 三组卡片 props 在这里一次算好：Panels 里不再重复取数，也不会出现"同一份数据两个来源"。
+  const llmCard: ComponentProps<typeof LLMConfigCard> = {
+    records,
+    recordsLoading,
+    activeRecordId,
+    configSummary,
+    recordApplyingId,
+    recordDeletingId,
+    recordTestingId,
+    recordTestResults,
+    recordForm,
+    recordModalOpen,
+    editingRecord,
+    recordSaving: recordEditSaving,
+    draftTesting,
+    draftTestResult,
+    checkingThinking,
+    thinkingResult,
+    showingCustomEffort,
+    effortOptions,
+    onProbeThinking: () => probeThinking(),
+    onLoadThinkingOptions: () => checkThinking(false),
+    onBackToEffortPresets: backToEffortPresets,
+    onEffortCustom: handleEffortCustom,
+    onClearThinkingResult: clearThinkingResult,
+    onOpenCreate: openCreate,
+    onOpenRecordEdit: openRecordEdit,
+    onSaveRecord: () => void handleSaveRecord(),
+    onCloseRecordModal: closeRecordModal,
+    onApplyRecord: (record) => void applyRecord(record),
+    onRemoveRecord: (record) => void removeRecord(record),
+    onTestRecord: (record) => void testRecord(record),
+    onTestDraft: () => void testDraft(),
+    onPresetChange: applyRecordPreset,
+    onFetchDraftModels: fetchDraftModels,
+  };
+
+  const skillsCard: ComponentProps<typeof SkillsCard> = {
+    skills,
+    loading: skillsLoading,
+    onOpen: (skill) => {
+      setSkillEditorId(skill.id);
+      setSkillEditorOpen(true);
+    },
+  };
+
+  const datasetsCard: ComponentProps<typeof DatasetsCard> = {
+    datasets,
+    loading: datasetsLoading,
+    exporting: datasetExporting,
+    importing: datasetImporting,
+    includeGlobalLLM,
+    onIncludeGlobalLLMChange: setIncludeGlobalLLM,
+    switchingId: switchingDatasetId,
+    renamingId: renamingDatasetId,
+    deletingId: deletingDatasetId,
+    renameTarget,
+    renameValue,
+    creating: datasetCreating,
+    createOpen: createDatasetOpen,
+    createName: createDatasetName,
+    onExport: (dataset, filename) => void runDatasetExport(dataset, filename),
+    onExportAll: (filename) => void runExportAllDatasets(filename),
+    onImport: (file, name) => void importDatasetFile(file, name),
+    onActivate: (dataset) => void switchDataset(dataset),
+    onOpenRename: (dataset) => {
+      setRenameTarget(dataset);
+      setRenameValue(dataset.name);
+    },
+    onRenameValueChange: setRenameValue,
+    onConfirmRename: () => void confirmDatasetRename(),
+    onCancelRename: () => {
+      if (renamingDatasetId === null) setRenameTarget(null);
+    },
+    onDelete: (dataset) => void removeDataset(dataset),
+    onOpenCreate: () => {
+      setCreateDatasetName("");
+      setCreateDatasetOpen(true);
+    },
+    onCreateNameChange: setCreateDatasetName,
+    onConfirmCreate: () => void createEmptyDataset(),
+    onCancelCreate: () => {
+      if (!datasetCreating) setCreateDatasetOpen(false);
+    },
+  };
+
   return (
     <div className="settings-page">
       <div className="settings-page-header">
@@ -144,10 +250,9 @@ export default function SettingsPage() {
         </div>
       </div>
 
-      {/* 设置项按"你改的是什么"分成三页，而不是全部平铺一页。
-          功能变多之后一整页排下来找起来很费劲：想改数据备份得先翻过整套模型参数。
-          分页之后每页只装同一类东西，「编辑设置」跟着**它真正控制的那一页**走——
-          此前它在页面顶部，却只管模型配置，而其余几组一直是可编辑的。 */}
+      {/* 设置项按"你改的是什么"分页，而不是全部平铺一页：功能变多之后一整页排下来找起来
+          很费劲（想改数据备份得先翻过整套模型参数）。六页的分法与顺序见 SettingsPanels
+          的文件头说明。 */}
       <Tabs
         className="settings-tabs"
         activeKey={activeTab}
@@ -157,186 +262,40 @@ export default function SettingsPage() {
             key: "model",
             label: t("settings.tab.model"),
             children: (
-              <>
-                <div className="settings-section-head">
-                  <div className="settings-section-titles">
-                    <Typography.Text type="secondary">{t("settings.model.intro")}</Typography.Text>
-                  </div>
-                </div>
-
-                <SettingsGroupTitle
-                  text={t("settings.model.group.title")}
-                  hint={t("settings.model.group.hint")}
-                />
-                <LLMConfigCard
-                  records={records}
-                  recordsLoading={recordsLoading}
-                  activeRecordId={activeRecordId}
-                  configSummary={configSummary}
-                  recordApplyingId={recordApplyingId}
-                  recordDeletingId={recordDeletingId}
-                  recordTestingId={recordTestingId}
-                  recordTestResults={recordTestResults}
-                  recordForm={recordForm}
-                  recordModalOpen={recordModalOpen}
-                  editingRecord={editingRecord}
-                  recordSaving={recordEditSaving}
-                  draftTesting={draftTesting}
-                  draftTestResult={draftTestResult}
-                  checkingThinking={checkingThinking}
-                  thinkingResult={thinkingResult}
-                  showingCustomEffort={showingCustomEffort}
-                  effortOptions={effortOptions}
-                  onProbeThinking={() => probeThinking()}
-                  onLoadThinkingOptions={() => checkThinking(false)}
-                  onBackToEffortPresets={backToEffortPresets}
-                  onEffortCustom={handleEffortCustom}
-                  onClearThinkingResult={clearThinkingResult}
-                  onOpenCreate={openCreate}
-                  onOpenRecordEdit={openRecordEdit}
-                  onSaveRecord={() => void handleSaveRecord()}
-                  onCloseRecordModal={closeRecordModal}
-                  onApplyRecord={(record) => void applyRecord(record)}
-                  onRemoveRecord={(record) => void removeRecord(record)}
-                  onTestRecord={(record) => void testRecord(record)}
-                  onTestDraft={() => void testDraft()}
-                  onPresetChange={applyRecordPreset}
-                  onFetchDraftModels={fetchDraftModels}
-                />
-
-                {/* 联网搜索与模型配置同页：两者一起决定助手"能查什么、查得多细"。 */}
-                <SettingsGroupTitle
-                  text={t("settings.assistant.group.title")}
-                  hint={t("settings.assistant.group.hint")}
-                />
-                <SearchCard />
-
-                {/* 助手的数据可见范围开关：放宽模式（默认关，开启前有明确告知）。 */}
-                <AssistantRelaxedModeCard />
-
-                <SkillsCard
-                  skills={skills}
-                  loading={skillsLoading}
-                  onOpen={(skill) => {
-                    setSkillEditorId(skill.id);
-                    setSkillEditorOpen(true);
-                  }}
-                />
-
-                {/* 外发与用量（R04）：目标服务取当前生效模型配置的摘要（不造清单）；
-                    外发预览正文只留在组件 state，不落盘。 */}
-                <SettingsProvenanceSection
-                  targetService={
-                    configSummary
-                      ? t(configSummary.presetLabelKey) + " · " + configSummary.model
-                      : undefined
-                  }
-                />
-              </>
+              <ModelPanel
+                llmCard={llmCard}
+                provenanceTarget={
+                  configSummary
+                    ? t(configSummary.presetLabelKey) + " · " + configSummary.model
+                    : undefined
+                }
+              />
             ),
+          },
+          {
+            key: "assistant",
+            label: t("settings.tab.assistant"),
+            children: <AssistantPanel skillsCard={skillsCard} />,
+          },
+          {
+            key: "appearance",
+            label: t("settings.tab.appearance"),
+            children: <AppearancePanel />,
           },
           {
             key: "data",
             label: t("settings.tab.data"),
-            children: (
-              <>
-                <div className="settings-section-head">
-                  <div className="settings-section-titles">
-                    <Typography.Text type="secondary">{t("settings.data.intro")}</Typography.Text>
-                  </div>
-                </div>
-                <DatasetsCard
-                  datasets={datasets}
-                  loading={datasetsLoading}
-                  exporting={datasetExporting}
-                  importing={datasetImporting}
-                  includeGlobalLLM={includeGlobalLLM}
-                  onIncludeGlobalLLMChange={setIncludeGlobalLLM}
-                  switchingId={switchingDatasetId}
-                  renamingId={renamingDatasetId}
-                  deletingId={deletingDatasetId}
-                  renameTarget={renameTarget}
-                  renameValue={renameValue}
-                  creating={datasetCreating}
-                  createOpen={createDatasetOpen}
-                  createName={createDatasetName}
-                  onExport={(dataset, filename) => void runDatasetExport(dataset, filename)}
-                  onExportAll={(filename) => void runExportAllDatasets(filename)}
-                  onImport={(file, name) => void importDatasetFile(file, name)}
-                  onActivate={(dataset) => void switchDataset(dataset)}
-                  onOpenRename={(dataset) => {
-                    setRenameTarget(dataset);
-                    setRenameValue(dataset.name);
-                  }}
-                  onRenameValueChange={setRenameValue}
-                  onConfirmRename={() => void confirmDatasetRename()}
-                  onCancelRename={() => {
-                    if (renamingDatasetId === null) setRenameTarget(null);
-                  }}
-                  onDelete={(dataset) => void removeDataset(dataset)}
-                  onOpenCreate={() => {
-                    setCreateDatasetName("");
-                    setCreateDatasetOpen(true);
-                  }}
-                  onCreateNameChange={setCreateDatasetName}
-                  onConfirmCreate={() => void createEmptyDataset()}
-                  onCancelCreate={() => {
-                    if (!datasetCreating) setCreateDatasetOpen(false);
-                  }}
-                />
-                {/* 自动备份保护状态（RF-05）：是否被保护、最近成功、快照清单。 */}
-                <BackupStatusCard />
-                {/* 手动备份（RF-25）：backups/ 目录的快照清单与逐份可恢复清理。 */}
-                <ManualBackupsCard />
-                {/* 导出产物落盘位置：本质是"数据存哪里"的选择，与数据集放同一页签。 */}
-                <ExportSaveCard />
-                <PrivacyCard />
-                {/* 存储占用（RF-25）：数据目录各分项的体积与文件数，只读展示。 */}
-                <StorageStatsCard />
-              </>
-            ),
+            children: <DataPanel datasetsCard={datasetsCard} />,
           },
           {
-            key: "app",
-            label: t("settings.tab.app"),
-            children: (
-              <>
-                <div className="settings-section-head">
-                  <div className="settings-section-titles">
-                    <Typography.Text type="secondary">{t("settings.app.intro")}</Typography.Text>
-                  </div>
-                </div>
-                <SettingsGroupTitle
-                  text={t("settings.app.ui.title")}
-                  hint={t("settings.app.ui.hint")}
-                />
-                {/* 主题切换已上移到页头（A3）：设置页只留一句说明，避免两处控件各说一套。 */}
-                <Typography.Paragraph type="secondary" className="settings-theme-note">
-                  {t("settings.app.theme.note")}
-                </Typography.Paragraph>
-                <LocaleSettingsCard />
-                <ResumeFontCard />
-                <NavigationSettingsCard />
-                <ShortcutSettingsCard />
-                <AssistantOrbCard />
-                <ReminderPopupCard />
-
-                {/* 网申填表的 AI 行为边界：与网申填表页顶部的快捷入口是同一个开关。 */}
-                <SettingsGroupTitle
-                  text={t("settings.webform.title")}
-                  hint={t("settings.webform.hint")}
-                />
-                <WebFormRelaxedModeCard />
-
-                <SettingsGroupTitle
-                  text={t("settings.help.title")}
-                  hint={t("settings.help.hint")}
-                />
-                <UpdateCard />
-                <AnnouncementSettingsCard />
-                <HelpDiagnosticsCard />
-              </>
-            ),
+            key: "backup",
+            label: t("settings.tab.backup"),
+            children: <BackupPanel />,
+          },
+          {
+            key: "about",
+            label: t("settings.tab.about"),
+            children: <AboutPanel />,
           },
         ]}
       />

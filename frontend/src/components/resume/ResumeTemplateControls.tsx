@@ -2,14 +2,10 @@
 /**
  * 简历版式控件 · 第一组：**结构类**（模板 / 版式 / 板块顺序 / 最大篇幅）。
  *
- * 从 `ResumeLayoutControls` 拆出（P2 / D4）。拆分的三条理由：
- * 1. 主控件已 495 行、贴着单文件预算，再加东西就越线；
- * 2. 项 4 要求第一行摆"模板/版式/顺序/页数"、第二行摆"字号/行距/页边距"——这正是天然的
- *    分组边界，也是本次拆分的**容器边界**（工具栏按这两个插槽分别渲染）；
- * 3. 生成配置阶段仍要"一行全都要"，所以壳必须存在——壳 + 两组同时满足两种形态，零重复。
- *
- * 本组只管**结构**（长什么样、板块怎么排、最多几页）。影响"排出来的字"的度量参数
- * （字号/行距/页边距）在 `ResumeMeasureControls`，两者共用壳里取到的那一份模板目录。
+ * 从 `ResumeLayoutControls` 拆出（P2 / D4）：主控件当时已 495 行贴预算；"结构"与"度量"
+ * 正好是工具栏两个插槽的天然边界；生成配置阶段仍要"一行全都要"，所以壳 + 两组零重复。
+ * 本组只管**结构**（长什么样、板块怎么排、最多几页）；字号/行距/页边距在
+ * `ResumeMeasureControls`，两者共用壳里取到的那一份模板目录。
  */
 import { ArrowDownOutlined, ArrowUpOutlined, PictureOutlined } from "@ant-design/icons";
 import { Button, Popover, Segmented, Select, Space, Tooltip, Typography } from "antd";
@@ -27,6 +23,8 @@ import {
   RESUME_CATALOG_FORMAT_DESCRIPTION_KEYS,
   RESUME_CATALOG_FORMAT_LABEL_KEYS,
   RESUME_CATALOG_SECTION_LABEL_KEYS,
+  resumeTemplateDescription,
+  resumeTemplateLabel,
 } from "../../i18n/enum/resumeCatalog";
 import { layoutWithFormatPreset } from "./layoutWithFormatPreset";
 import {
@@ -51,13 +49,13 @@ interface Props {
   compact?: boolean;
   /** 模板目录（由壳 `ResumeLayoutControls` 取一次后下发，避免两组各拉一次）。 */
   catalog?: ResumeTemplateCatalog;
+  /** 岗位广场的生成配置只让用户定 5 个参数，版式预设与板块顺序留到简历界面再调。缺省都渲染。 */
+  showFormat?: boolean;
+  showSections?: boolean;
   /**
-   * 默认板块顺序是否跟随「我的资料」。
-   *
-   * 只在**生成**场景为 true：新简历的默认顺序应当等于用户在资料页排好的顺序。
-   * 已保存简历（预览 / 编辑）与生成后的预览阶段都不传——它们读的是这份简历自己的
-   * `section_order`，没有则用内置默认。否则用户在资料页拖一下，所有老简历的外观都会
-   * 跟着变，而"老简历不追溯改变"是这条功能的前提。
+   * 默认板块顺序是否跟随「我的资料」：只在**生成**场景为 true（新简历的默认顺序等于用户在
+   * 资料页排好的顺序）。已保存简历与生成后的预览阶段都不传——它们读这份简历自己的
+   * `section_order`，否则用户在资料页拖一下，所有老简历的外观都会跟着变。
    */
   preferProfileOrder?: boolean;
   /**
@@ -69,10 +67,7 @@ interface Props {
   resumeId?: number | null;
   content?: ResumeContent | null;
   onTrialAdopt?: (request: { template: string; formatConfig: ResumeFormatConfig }) => void;
-  /**
-   * 页数选项：缺省用内置 `RESUME_PAGE_LIMITS`（1–3 页）。
-   * 生成配置的长 CV 模式传 1–10（契约 §5）；其他宿主不传，行为与此前逐字一致。
-   */
+  /** 页数选项：缺省用内置 `RESUME_PAGE_LIMITS`（1–3 页）；生成配置的长 CV 模式传 1–10。 */
   pageLimitOptions?: readonly number[];
   onChange: (layout: ResumeLayout) => void;
 }
@@ -85,6 +80,8 @@ export default function ResumeTemplateControls({
   layout,
   disabled = false,
   compact = false,
+  showFormat = true,
+  showSections = true, // 缺省 true = 现有行为逐字不变（工具栏 / 制作台 / 预览）
   catalog,
   preferProfileOrder = false,
   resumeId,
@@ -240,7 +237,7 @@ export default function ResumeTemplateControls({
           title={
             currentTemplate
               ? t("sections.templateControls.templateTooltipWithDescription", {
-                  description: currentTemplate.description,
+                  description: resumeTemplateDescription(currentTemplate),
                 })
               : t("sections.templateControls.templateTooltip")
           }
@@ -252,75 +249,77 @@ export default function ResumeTemplateControls({
             aria-label={t("sections.templateControls.templateAriaLabel")}
             onClick={() => setGalleryOpen(true)}
           >
-            {currentTemplate?.label ?? layout.template}
+            {currentTemplate ? resumeTemplateLabel(currentTemplate) : layout.template}
             {currentTemplate?.custom ? t("sections.templateControls.customSuffix") : ""}
           </Button>
         </Tooltip>
       </Space>
-      <Space size={6}>
-        {!compact && (
-          <Typography.Text type="secondary">
-            {t("sections.templateControls.formatLabel")}
-          </Typography.Text>
-        )}
-        <Tooltip
-          open={formatTipOpen}
-          onOpenChange={setFormatTipOpen}
-          title={t("sections.templateControls.formatHint")}
-        >
-          <span onClick={() => setFormatTipOpen(false)}>
-            <Select
-              size="small"
-              value={layout.format_name || ""}
-              disabled={disabled}
-              // 下拉只有一行可见文字时，读屏软件读到的仍是"combobox"——补一个与视觉标签
-              // 同名的无障碍名（工具栏里现在有两个下拉，按名字定位也才稳）。
-              aria-label={t("resume.format.label")}
-              // 宽度只够框住 4 个中文字符（见 `.resume-format-select`）：原来是 min-width:120，
-              // 框比文字宽出一大截，和同一行的其它控件疏密不匀。名字更长的自制版式
-              // （如「宽松（自制）」）在触发框里走省略号，展开后的列表按内容撑开。
-              className="resume-format-select"
-              popupMatchSelectWidth={false}
-              // 弹层宽度：字体下拉与版式下拉共用 `.resume-params-dropdown`（216px，字体是
-              // 竖排两层，需要那个宽度），版式下拉再由 `.resume-format-dropdown` 收窄到
-              // 6 个中文字符宽（见 resume-workbench-controls.css）。触发框宽度不受影响
-              // （仍由 `.resume-format-select` 管）。两个类都要带上：只写专属类会丢掉共用的
-              // `max-width` 兜底与选项单行省略规则。
-              classNames={{ popup: { root: "resume-params-dropdown resume-format-dropdown" } }}
-              options={[
-                { value: "", label: t("sections.templateControls.followTemplate") },
-                ...formatPresets.map((item) => {
-                  // 展示名与说明都走语言包；自制版式的名字与说明是用户数据，原样显示。
-                  const label = formatPresetLabel(item);
-                  const descriptionKey = RESUME_CATALOG_FORMAT_DESCRIPTION_KEYS[item.name];
-                  return {
-                    value: item.name,
-                    label: item.custom
-                      ? `${label}${t("sections.templateControls.customSuffix")}`
-                      : label,
-                    title: item.custom || !descriptionKey ? item.description : t(descriptionKey),
-                  };
-                }),
-              ]}
-              // 弹层定宽 + 单行省略之后，"这个名字到底叫什么"只能靠悬停：
-              // 这里包一层带 `title` 的 span（选项自己的 `title` 是**说明**，不是名字，
-              // 名字被截断时指上去看到的会是"行高 1.45、页边距 12mm…"，答非所问）。
-              optionRender={(option) => (
-                <span
-                  className="resume-format-option"
-                  title={typeof option.data.label === "string" ? option.data.label : undefined}
-                >
-                  {option.data.label}
-                </span>
-              )}
-              onChange={(value) => {
-                setFormatTipOpen(false);
-                onChange(layoutWithFormatPreset(layout, value, formatPresets));
-              }}
-            />
-          </span>
-        </Tooltip>
-      </Space>
+      {showFormat && (
+        <Space size={6}>
+          {!compact && (
+            <Typography.Text type="secondary">
+              {t("sections.templateControls.formatLabel")}
+            </Typography.Text>
+          )}
+          <Tooltip
+            open={formatTipOpen}
+            onOpenChange={setFormatTipOpen}
+            title={t("sections.templateControls.formatHint")}
+          >
+            <span onClick={() => setFormatTipOpen(false)}>
+              <Select
+                size="small"
+                value={layout.format_name || ""}
+                disabled={disabled}
+                // 下拉只有一行可见文字时，读屏软件读到的仍是"combobox"——补一个与视觉标签
+                // 同名的无障碍名（工具栏里现在有两个下拉，按名字定位也才稳）。
+                aria-label={t("resume.format.label")}
+                // 宽度只够框住 4 个中文字符（见 `.resume-format-select`）：原来是 min-width:120，
+                // 框比文字宽出一大截，和同一行的其它控件疏密不匀。名字更长的自制版式
+                // （如「宽松（自制）」）在触发框里走省略号，展开后的列表按内容撑开。
+                className="resume-format-select"
+                popupMatchSelectWidth={false}
+                // 弹层宽度：字体下拉与版式下拉共用 `.resume-params-dropdown`（216px，字体是
+                // 竖排两层，需要那个宽度），版式下拉再由 `.resume-format-dropdown` 收窄到
+                // 6 个中文字符宽（见 resume-workbench-controls.css）。触发框宽度不受影响
+                // （仍由 `.resume-format-select` 管）。两个类都要带上：只写专属类会丢掉共用的
+                // `max-width` 兜底与选项单行省略规则。
+                classNames={{ popup: { root: "resume-params-dropdown resume-format-dropdown" } }}
+                options={[
+                  { value: "", label: t("sections.templateControls.followTemplate") },
+                  ...formatPresets.map((item) => {
+                    // 展示名与说明都走语言包；自制版式的名字与说明是用户数据，原样显示。
+                    const label = formatPresetLabel(item);
+                    const descriptionKey = RESUME_CATALOG_FORMAT_DESCRIPTION_KEYS[item.name];
+                    return {
+                      value: item.name,
+                      label: item.custom
+                        ? `${label}${t("sections.templateControls.customSuffix")}`
+                        : label,
+                      title: item.custom || !descriptionKey ? item.description : t(descriptionKey),
+                    };
+                  }),
+                ]}
+                // 弹层定宽 + 单行省略之后，"这个名字到底叫什么"只能靠悬停：
+                // 这里包一层带 `title` 的 span（选项自己的 `title` 是**说明**，不是名字，
+                // 名字被截断时指上去看到的会是"行高 1.45、页边距 12mm…"，答非所问）。
+                optionRender={(option) => (
+                  <span
+                    className="resume-format-option"
+                    title={typeof option.data.label === "string" ? option.data.label : undefined}
+                  >
+                    {option.data.label}
+                  </span>
+                )}
+                onChange={(value) => {
+                  setFormatTipOpen(false);
+                  onChange(layoutWithFormatPreset(layout, value, formatPresets));
+                }}
+              />
+            </span>
+          </Tooltip>
+        </Space>
+      )}
       <TemplateGalleryModal
         open={galleryOpen}
         layout={layout}
@@ -333,121 +332,122 @@ export default function ResumeTemplateControls({
         onTrialAdopt={onTrialAdopt}
         onClose={() => setGalleryOpen(false)}
       />
-      <Space size={6}>
-        {!compact && (
-          <Typography.Text type="secondary">
-            {t("sections.templateControls.sectionsLabel")}
-          </Typography.Text>
-        )}
-        <Popover
-          trigger="click"
-          placement="bottomRight"
-          arrow={false}
-          title={
-            <span className="resume-section-order-title">
-              {t("sections.templateControls.orderTitle")}
-              {/* 一次性快照：把资料页当前那套顺序写进这份简历（见 `handleArrangeByProfile`）。 */}
-              <Tooltip title={arrangeByProfileHint}>
-                {/* 包一层 span：禁用态的按钮不接收指针事件，Tooltip 只能挂在外层。 */}
-                <span>
-                  <Button
-                    size="small"
-                    type="link"
-                    disabled={!canArrangeByProfile}
-                    onClick={handleArrangeByProfile}
-                  >
-                    {t("sections.arrangeByProfile")}
-                  </Button>
-                </span>
-              </Tooltip>
-              {isCustomOrder && (
-                <Button size="small" type="link" onClick={handleSectionOrderReset}>
-                  {t("sections.templateControls.orderReset")}
-                </Button>
-              )}
-            </span>
-          }
-          content={
-            <div
-              className="resume-section-order-list"
-              role="list"
-              aria-label={t("sections.templateControls.orderListAriaLabel")}
-            >
-              {visibleSectionOrder.map((key, index) => {
-                // 后端下发的是中文展示名，先按稳定分区 key 映射到语言包；未知分区
-                // （后端新增的）再回退目录原文，最后才是前端内置的七个兜底 key。
-                const labelKey = RESUME_CATALOG_SECTION_LABEL_KEYS[key];
-                const fallbackLabelKey = RESUME_SECTION_LABELS[key];
-                const label =
-                  (labelKey ? t(labelKey) : undefined) ??
-                  sectionOptions.find((item) => item.key === key)?.label ??
-                  (fallbackLabelKey ? t(fallbackLabelKey) : key);
-                return (
-                  <div className="resume-section-order-row" role="listitem" key={key}>
-                    <span className="resume-section-order-index">{index + 1}</span>
-                    <span className="resume-section-order-label">{label}</span>
-                    <Space size={0}>
-                      <Tooltip title={t("sections.templateControls.orderMoveUp")}>
-                        <Button
-                          size="small"
-                          type="text"
-                          icon={<ArrowUpOutlined />}
-                          aria-label={t("sections.templateControls.orderMoveUpAria", { label })}
-                          disabled={index === 0}
-                          onClick={() => handleSectionMove(key, -1)}
-                        />
-                      </Tooltip>
-                      <Tooltip title={t("sections.templateControls.orderMoveDown")}>
-                        <Button
-                          size="small"
-                          type="text"
-                          icon={<ArrowDownOutlined />}
-                          aria-label={t("sections.templateControls.orderMoveDownAria", { label })}
-                          disabled={index === visibleSectionOrder.length - 1}
-                          onClick={() => handleSectionMove(key, 1)}
-                        />
-                      </Tooltip>
-                    </Space>
-                  </div>
-                );
-              })}
-              {customSectionRows.map((row, index) => (
-                <div className="resume-section-order-row" role="listitem" key={row.key}>
-                  <span className="resume-section-order-index">
-                    {visibleSectionOrder.length + index + 1}
+      {showSections && (
+        <Space size={6}>
+          {!compact && (
+            <Typography.Text type="secondary">
+              {t("sections.templateControls.sectionsLabel")}
+            </Typography.Text>
+          )}
+          <Popover
+            trigger="click"
+            placement="bottomRight"
+            arrow={false}
+            title={
+              <span className="resume-section-order-title">
+                {t("sections.templateControls.orderTitle")}
+                <Tooltip title={arrangeByProfileHint}>
+                  {/* 包一层 span：禁用态的按钮不接收指针事件，Tooltip 只能挂在外层。 */}
+                  <span>
+                    <Button
+                      size="small"
+                      type="link"
+                      disabled={!canArrangeByProfile}
+                      onClick={handleArrangeByProfile}
+                    >
+                      {t("sections.arrangeByProfile")}
+                    </Button>
                   </span>
-                  <span className="resume-section-order-label">{row.title}</span>
-                  <Tooltip title={t("sections.templateControls.customFixedHint")}>
-                    <Typography.Text type="secondary">
-                      {t("sections.templateControls.customFixedTag")}
-                    </Typography.Text>
-                  </Tooltip>
-                </div>
-              ))}
-              {visibleSectionOrder.length === 0 && customSectionRows.length === 0 ? (
-                <Typography.Paragraph type="secondary">
-                  {t("sections.templateControls.orderEmpty")}
+                </Tooltip>
+                {isCustomOrder && (
+                  <Button size="small" type="link" onClick={handleSectionOrderReset}>
+                    {t("sections.templateControls.orderReset")}
+                  </Button>
+                )}
+              </span>
+            }
+            content={
+              <div
+                className="resume-section-order-list"
+                role="list"
+                aria-label={t("sections.templateControls.orderListAriaLabel")}
+              >
+                {visibleSectionOrder.map((key, index) => {
+                  // 后端下发的是中文展示名，先按稳定分区 key 映射到语言包；未知分区
+                  // （后端新增的）再回退目录原文，最后才是前端内置的七个兜底 key。
+                  const labelKey = RESUME_CATALOG_SECTION_LABEL_KEYS[key];
+                  const fallbackLabelKey = RESUME_SECTION_LABELS[key];
+                  const label =
+                    (labelKey ? t(labelKey) : undefined) ??
+                    sectionOptions.find((item) => item.key === key)?.label ??
+                    (fallbackLabelKey ? t(fallbackLabelKey) : key);
+                  return (
+                    <div className="resume-section-order-row" role="listitem" key={key}>
+                      <span className="resume-section-order-index">{index + 1}</span>
+                      <span className="resume-section-order-label">{label}</span>
+                      <Space size={0}>
+                        <Tooltip title={t("sections.templateControls.orderMoveUp")}>
+                          <Button
+                            size="small"
+                            type="text"
+                            icon={<ArrowUpOutlined />}
+                            aria-label={t("sections.templateControls.orderMoveUpAria", { label })}
+                            disabled={index === 0}
+                            onClick={() => handleSectionMove(key, -1)}
+                          />
+                        </Tooltip>
+                        <Tooltip title={t("sections.templateControls.orderMoveDown")}>
+                          <Button
+                            size="small"
+                            type="text"
+                            icon={<ArrowDownOutlined />}
+                            aria-label={t("sections.templateControls.orderMoveDownAria", { label })}
+                            disabled={index === visibleSectionOrder.length - 1}
+                            onClick={() => handleSectionMove(key, 1)}
+                          />
+                        </Tooltip>
+                      </Space>
+                    </div>
+                  );
+                })}
+                {customSectionRows.map((row, index) => (
+                  <div className="resume-section-order-row" role="listitem" key={row.key}>
+                    <span className="resume-section-order-index">
+                      {visibleSectionOrder.length + index + 1}
+                    </span>
+                    <span className="resume-section-order-label">{row.title}</span>
+                    <Tooltip title={t("sections.templateControls.customFixedHint")}>
+                      <Typography.Text type="secondary">
+                        {t("sections.templateControls.customFixedTag")}
+                      </Typography.Text>
+                    </Tooltip>
+                  </div>
+                ))}
+                {visibleSectionOrder.length === 0 && customSectionRows.length === 0 ? (
+                  <Typography.Paragraph type="secondary">
+                    {t("sections.templateControls.orderEmpty")}
+                  </Typography.Paragraph>
+                ) : null}
+                <Typography.Paragraph type="secondary" className="resume-section-order-hint">
+                  {t("sections.templateControls.orderHint")}
                 </Typography.Paragraph>
-              ) : null}
-              <Typography.Paragraph type="secondary" className="resume-section-order-hint">
-                {t("sections.templateControls.orderHint")}
-              </Typography.Paragraph>
-            </div>
-          }
-        >
-          <Tooltip title={t("sections.templateControls.orderTriggerHint")}>
-            <Button
-              size="small"
-              disabled={disabled}
-              aria-label={t("sections.templateControls.orderTriggerAriaLabel")}
-            >
-              {isCustomOrder
-                ? t("sections.templateControls.orderTriggerAdjusted")
-                : t("sections.templateControls.orderTrigger")}
-            </Button>
-          </Tooltip>
-        </Popover>
-      </Space>
+              </div>
+            }
+          >
+            <Tooltip title={t("sections.templateControls.orderTriggerHint")}>
+              <Button
+                size="small"
+                disabled={disabled}
+                aria-label={t("sections.templateControls.orderTriggerAriaLabel")}
+              >
+                {isCustomOrder
+                  ? t("sections.templateControls.orderTriggerAdjusted")
+                  : t("sections.templateControls.orderTrigger")}
+              </Button>
+            </Tooltip>
+          </Popover>
+        </Space>
+      )}
       <Space size={6} className="resume-page-limit-group">
         {!compact && (
           <Typography.Text type="secondary">

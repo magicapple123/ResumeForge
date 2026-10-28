@@ -10,7 +10,7 @@ const trash = {
   "trash.page.subtitle":
     "删除的内容会先到这里，不会直接消失；恢复是一键的。「彻底删除」才会真正抹掉，不可撤销。",
   "trash.selectMode": "批量选择",
-  "trash.exitSelect": "退出多选",
+  "trash.exitSelect": "退出选择",
   "trash.action.restore": "恢复",
   "trash.action.purge": "彻底删除",
   "trash.action.clear": "清空",

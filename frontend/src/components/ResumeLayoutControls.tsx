@@ -55,6 +55,13 @@ interface Props {
    * 其他宿主不传，行为与拆出前逐字一致。
    */
   pageLimitOptions?: readonly number[];
+  /**
+   * 只要「模板 / 最大篇幅 / 简历语言 / 字体」这 5 个参数（岗位广场的生成配置）。
+   *
+   * 其余版式（版式预设、板块顺序、字号、行距、页边距、分边、照片大小）留给用户
+   * **生成之后**去简历界面调——真实场景里用户在这个弹窗里只想定个大致样子。
+   */
+  essentialOnly?: boolean;
 }
 
 export default function ResumeLayoutControls({
@@ -66,6 +73,7 @@ export default function ResumeLayoutControls({
   hasPhoto,
   preferProfileOrder = false,
   pageLimitOptions,
+  essentialOnly = false,
 }: Props) {
   // 目录只在这里取一次：两组的默认值（行距 / 页边距 / 字号档位）都吃这一份数据。
   // 取数走 `useResumeTemplateCatalog`（唯一加载入口），这样"一个宿主一次请求"是有出处的。
@@ -80,6 +88,8 @@ export default function ResumeLayoutControls({
         catalog={catalog}
         preferProfileOrder={preferProfileOrder}
         pageLimitOptions={pageLimitOptions}
+        showFormat={!essentialOnly}
+        showSections={!essentialOnly}
         onChange={onChange}
       />
       <ResumeMeasureControls
@@ -89,6 +99,7 @@ export default function ResumeLayoutControls({
         catalog={catalog}
         previewRef={previewRef}
         hasPhoto={hasPhoto}
+        fontOnly={essentialOnly}
         onChange={onChange}
       />
     </Space>

@@ -3,10 +3,11 @@
  * 面试评分报告卡：dashboard 分数 + 维度列表 + 强项/改进清单。
  * （自 InterviewPage 拆出，逐字搬运，行为等价。）
  */
-import { PlusOutlined } from "@ant-design/icons";
-import { Alert, Button, Card, Listy, Progress, Tag, Typography } from "antd";
+import { ClockCircleOutlined, PlusOutlined } from "@ant-design/icons";
+import { Alert, Button, Card, Listy, Progress, Space, Tag, Typography } from "antd";
 import { ListyItem } from "../../components/common/ListyItem";
 import { LISTY_ITEM_PADDING_SMALL } from "../../components/common/listyPadding";
+import { formatElapsed } from "../../features/interview/useInterviewTimer";
 import type { InterviewDetail } from "../../types";
 import { t } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
@@ -51,6 +52,14 @@ export function ReportCard({
             <Typography.Paragraph type="secondary" style={{ marginBottom: 0 }}>
               {report.summary}
             </Typography.Paragraph>
+            {/* 面试用时（0066）：报告要能回答"这场面试聊了多久"——它也是评分时的一个
+                节奏依据（太短=回答浮在表层，太长而轮次少=表达拖沓）。 */}
+            <Space size={4}>
+              <ClockCircleOutlined />
+              <Typography.Text type="secondary">
+                {t("interviewPage.timer.label")} {formatElapsed(session.duration_seconds)}
+              </Typography.Text>
+            </Space>
           </div>
           <Listy
             items={report.dimensions ?? []}

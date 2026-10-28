@@ -122,6 +122,26 @@
   margin-left: auto;
 }
 
+/* 自建板块标记：紧跟板块名，与 13 个系统板块区分（用户 2026-10-28 要求）。
+   用胶囊形浅底而不是 antd Tag，是因为它要和标题同排、且不能把标题栏撑高。 */
+.profile-section-badge {
+  flex: 0 0 auto;
+  margin-left: 8px;
+  padding: 0 6px;
+  border: 1px solid var(--rf-border-subtle);
+  border-radius: 999px;
+  background: var(--rf-brand-wash);
+  color: var(--rf-brand);
+  font-size: 12px;
+  line-height: 18px;
+  white-space: nowrap;
+}
+
+/* 弹层顶部的视图页签（方案 / 板块与字段）：页签本身带下边框，间距只留一点。 */
+.profile-settings-tabs .ant-tabs-nav {
+  margin-bottom: 12px;
+}
+
 /* 编辑态右侧被拖动把手占用（right 38/66/94px，各 28px 宽）：动作退到把手左侧。 */
 .profile-page.is-editing .profile-section-titlebar {
   padding-right: 132px;
@@ -261,6 +281,25 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+}
+
+/* 术语说明（需求 7）：判定表之前的三词释义 + 层级。和表格同宽同字号，
+   让它读起来是"表头的一部分"而不是另一段无关的说明。 */
+.profile-placement-guide-terms {
+  margin: 12px 0;
+  padding: 10px 12px;
+  background: var(--rf-surface-alt);
+  border-radius: 8px;
+  font-size: 13px;
+}
+
+.profile-placement-guide-term-list {
+  margin: 0 0 8px;
+  padding-left: 18px;
+}
+
+.profile-placement-guide-term-list li + li {
+  margin-top: 4px;
 }
 
 /* 填写规则判定表：此前是零样式的裸 table，列宽与分隔线全靠浏览器默认。 */

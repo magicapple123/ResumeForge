@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * 简历制作台 · **右栏画布**：一条浮动说明 + 中性底色 + 纸张投影 + 预览本体。
+ * 简历制作台 · **右栏画布**：中性底色 + 纸张投影 + 预览本体 + 一小块实时预览状态。
  *
  * ## 为什么不在这里再写一个渲染器
  *
@@ -22,12 +22,14 @@
  *
  * 目标很具体：制作台打开时**恰好一页 A4 完整可见**，缩放读数就是那个 fit 比例。
  *
- * ## 说明文字为什么在画布上浮一条而不是弹窗顶部
+ * ## 说明文字为什么在纸面**下方**（2026-11 改）
  *
- * 那句话解释的是**眼前这张纸**（虚线 = 分页、缩放怎么用），贴着纸比贴在弹窗外壳上更近；
- * 外壳上的 56px 动作条已经只放动作，不再兼说明。
+ * 那句话解释的是**眼前这张纸**（虚线 = 分页、缩放怎么用），贴着纸比贴在弹窗外壳上更近。
+ * 它曾经是画布上方的一条浮层；用户反馈那条浮层占掉了纸的高度、又和下方的缩放按钮
+ * 说着同一件事，于是并成一句交给 `PreviewZoomBar` 的 `hint`：说明落在纸面下方、
+ * 与缩放按钮同处一行，且随滚动一直可见（`workbench-canvas.css` 里吸底）。
+ * 画布上方只留实时预览状态（没有状态时整条不渲染，不留空白盒）。
  */
-import { Typography } from "antd";
 import { useEffect, useRef, useState } from "react";
 import type { ReactNode, RefObject } from "react";
 import ResumePreview, {
@@ -119,16 +121,9 @@ export default function ResumeWorkbenchCanvas({
 
   return (
     <div className="resume-wb-canvas">
-      {/* 两句话分两个 `<span>`：句末标点不该由界面拼——拼出来的那份文案没法单独翻译。 */}
-      <div className="resume-wb-canvas-bar">
-        <Typography.Text type="secondary" className="resume-wb-canvas-note">
-          {t("workbench.note.canvas", { pages })}
-        </Typography.Text>
-        <Typography.Text type="secondary" className="resume-wb-canvas-note">
-          {t("workbench.note.zoom")}
-        </Typography.Text>
-        {status}
-      </div>
+      {/* 画布上方只留实时预览状态：没有状态时**整条不渲染**（渲染一个空盒子会在纸上
+          多出一条 32px 的灰条，而它什么信息都没有）。 */}
+      {status ? <div className="resume-wb-canvas-bar">{status}</div> : null}
       <div className="resume-wb-canvas-scroll" ref={scrollRef}>
         <ResumePreview
           ref={previewRef}
@@ -141,6 +136,8 @@ export default function ResumeWorkbenchCanvas({
           availableHeight={availableHeight}
           onPickField={onPickField}
           richEdit={richEdit}
+          // 说明并进纸面下方那行缩放条（分页口径 + 缩放怎么用，用「 · 」连成一句）。
+          zoomHint={`${t("workbench.note.canvas", { pages })} · ${t("workbench.note.zoomInline")}`}
         />
       </div>
     </div>

@@ -23,6 +23,19 @@ const jobsPage = {
   "jobsPage.toolbar.exported": "已导出 {count} 个岗位",
   "jobsPage.toolbar.exportFailed": "导出失败",
   "jobsPage.toolbar.delete": "批量删除",
+  // 多选态把单项动作收进一个下拉；六项都是"逐个执行原来的动作"。
+  "jobsPage.toolbar.bulkActions": "批量操作",
+  "jobsPage.toolbar.bulkGenerate": "AI 生成简历",
+  "jobsPage.toolbar.bulkAnalyze": "岗位需求解读",
+  "jobsPage.toolbar.bulkMatch": "匹配度分析",
+  "jobsPage.toolbar.bulkEnqueue": "加入投递队列",
+  "jobsPage.bulkAi.resumeLabel": "AI 生成简历",
+  "jobsPage.bulkAi.analysisLabel": "岗位需求解读",
+  "jobsPage.bulkAi.resumeProgress": "正在生成简历：{current}（{done}/{total}）",
+  "jobsPage.bulkAi.analysisProgress": "正在解读岗位：{current}（{done}/{total}）",
+  "jobsPage.bulkAi.stop": "当前岗位完成后停止",
+  "jobsPage.bulkAi.doneTitle": "{label}完成：成功 {ok} 个，失败 {failed} 个",
+  "jobsPage.bulkAi.skippedHint": "另有 {count} 个岗位未处理（已停止）",
 
   // ── 筛选工具栏（JobFilterBar） ──────────────────────────
   "jobsPage.filter.searchPlaceholder": "搜索岗位 / 公司 / 城市 / 描述 / 备注",
@@ -32,7 +45,7 @@ const jobsPage = {
   "jobsPage.filter.statusPlaceholder": "状态",
   "jobsPage.filter.sourceAria": "来源筛选",
   "jobsPage.filter.sourcePlaceholder": "来源",
-  "jobsPage.filter.analyzeMatch": "AI 分析适配度",
+  "jobsPage.filter.analyzeMatch": "AI 对比选岗",
   "jobsPage.filter.matchHistory": "分析记录",
   "jobsPage.filter.candidates": "备选岗位",
   "jobsPage.filter.backfill": "补齐详情",

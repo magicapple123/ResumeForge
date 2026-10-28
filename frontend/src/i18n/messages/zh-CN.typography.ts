@@ -174,6 +174,13 @@ const typography = {
   "typography.level.title": "文字级别",
   /** 按钮组 / 工具条的读屏名。 */
   "typography.level.groupAria": "把选中的内容设为固定文字级别",
+  /** 作用范围（W3）：整个条目 = 既有行为；其余只作用于该字段/角色。 */
+  "typography.level.scope.label": "作用范围",
+  "typography.level.scope.aria": "选择文字级别的作用范围",
+  "typography.level.scope.object": "整个条目",
+  "typography.level.scope.entry_title": "条目标题",
+  "typography.level.scope.body": "正文",
+  "typography.level.scope.meta": "说明",
   /** 一句口径：级别作用在段落上，不是整份缩放，且可撤销。 */
   "typography.level.hint": "级别只改选中段落的字号层级与段距，每次应用可撤销",
   /** 没有选中任何内容时的去处。 */
@@ -196,6 +203,23 @@ const typography = {
   /** 应用成功提示（含对象数；Toast ≤20 字）。 */
   "typography.level.applied": "已设为「{level}」，共 {count} 条",
   "typography.level.restored": "已恢复 {count} 条为跟随模板",
+  // ── 条目字段排版（W4：承载区补充字段分行/位置可调）────────────
+  /** 参数栏分组标题。 */
+  "typography.fieldLayout.groupTitle": "条目字段排版",
+  /** 分组说明：只说作用范围，不写操作步骤。 */
+  "typography.fieldLayout.hint": "调整补充字段的列数与顺序，只影响所选分区",
+  "typography.fieldLayout.sectionLabel": "分区",
+  "typography.fieldLayout.columnsLabel": "每行字段数",
+  "typography.fieldLayout.columns.1": "1 列",
+  "typography.fieldLayout.columns.2": "2 列",
+  "typography.fieldLayout.columns.3": "3 列",
+  "typography.fieldLayout.fieldsTitle": "字段顺序",
+  "typography.fieldLayout.moveUp": "上移{label}",
+  "typography.fieldLayout.moveDown": "下移{label}",
+  "typography.fieldLayout.solo": "独占一行",
+  "typography.fieldLayout.soloAria": "{label}独占一行",
+  "typography.fieldLayout.reset": "恢复默认",
+  "typography.fieldLayout.summary": "当前：{columns} 列，{solo} 个字段独占一行",
 } as const;
 
 export default typography;

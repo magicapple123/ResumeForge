@@ -52,6 +52,16 @@ export function revealUserFile(id: number): Promise<{ ok: boolean }> {
   return request(`/user-files/${id}/reveal`, { method: "POST" });
 }
 
+/**
+ * 让后端把副本渲染成可读文本（docx / pdf / 纯文本）。
+ *
+ * 浏览器自己渲染不了 docx，而「我的文件」里存的又恰恰是用户上传的原件；这条接口在本机
+ * 提取文字（不发给第三方），慢的是解析而不是网络，所以给 `task` 预算（30s）而不是默认 15s。
+ */
+export function userFileTextPreview(id: number): Promise<{ text: string; warnings: string[] }> {
+  return request(`/user-files/${id}/text`, { budget: "task" });
+}
+
 /** raw 直链：图片可直接给 antd Image，pdf 可嵌 iframe。 */
 export function userFileRawUrl(id: number): string {
   return `/api/user-files/${id}/raw`;

@@ -24,7 +24,12 @@ const profileLibrary = {
   "profileLibrary.action.collapseAll": "Collapse all",
   "profileLibrary.action.recognize": "Recognize pasted text",
   "profileLibrary.action.guide": "Entry guidelines",
+  "profileLibrary.action.settings": "Profile settings",
   "profileLibrary.action.refreshCompare": "Refresh and compare",
+  "profileLibrary.editBar.ariaLabel": "Edit action bar",
+  "profileLibrary.editBar.title": "Unsaved changes",
+  "profileLibrary.editBar.save": "Save changes",
+  "profileLibrary.editBar.cancel": "Stop editing",
   "profileLibrary.tab.resume": "Resume Profile",
   "profileLibrary.tab.webform": "Web form Profile",
   "profileLibrary.load.error": "Could not load My Profile: {detail}",
@@ -48,6 +53,7 @@ const profileLibrary = {
   "profileLibrary.section.entryLimit": "Up to 200 Entries per Section",
   "profileLibrary.section.fieldSettings": "Field settings",
   "profileLibrary.section.fieldSettingsAria": "Field settings: {name}",
+  "profileLibrary.section.customBadge": "Custom",
   "profileLibrary.section.emptyTitle": "This Section has no content yet",
   "profileLibrary.section.emptyHint":
     "Entered content will be used in generation and export as usual",
@@ -133,6 +139,15 @@ const profileLibrary = {
   "profileLibrary.upgrade.start": "Start entering data",
   "profileLibrary.guide.title": "Entry guidelines",
   "profileLibrary.guide.subtitle": "Enter each experience in one Section only",
+  "profileLibrary.guide.terms.title": "Three words: Plan › Section › Field",
+  "profileLibrary.guide.terms.plan":
+    "Plan: the whole set of Profile material used for one application. Switch Plans for a different job instead of re-entering everything.",
+  "profileLibrary.guide.terms.section":
+    "Section: one kind of material, such as Education, Projects or Skills. A Plan is made of several Sections.",
+  "profileLibrary.guide.terms.field":
+    "Field: one cell you actually fill in, such as School, Major or Dates under Education. A Section contains several Fields.",
+  "profileLibrary.guide.terms.hierarchy":
+    "The hierarchy is Plan › Section › Field, and the table below follows it: switching a Plan affects all the material, a Section switch affects every Field under it, and a Field setting affects only that one cell.",
   "profileLibrary.guide.ruleCol": "Content characteristics",
   "profileLibrary.guide.targetCol": "Where to enter it",
   "profileLibrary.guide.total":

@@ -4,6 +4,10 @@
  *
  * `font_coverage` 为 `null` / `checked=false` 时不得显示"通过"——那会把"没检查"
  * 伪装成"检查过且没问题"（契约 §4.7 + W11 后端规则）。
+ *
+ * `missing` 的键**可能缺**：后端字段是 `dict[str, list[str]]`（默认空字典），`checked=true`
+ * 但两个角色都没有缺字时就是 `{}`。所以这里一律 `?? []`，绝不直接摸 `.length`
+ * （2026-10-29 用户报的 `Cannot read properties of undefined (reading 'length')` 根因）。
  */
 import { Alert, Space, Tag, Typography } from "antd";
 import { t } from "../../../i18n";
@@ -16,6 +20,11 @@ interface Props {
 
 /** 缺字列表：超过 60 个字符就截断（后端也可能 `truncated`），不把卡片撑爆。 */
 const MAX_CHARS_SHOWN = 60;
+
+/** 安全取一组缺字：键缺失 / 值不是数组都当"没有缺字"，不让一个畸形响应炸掉整页。 */
+function safeChars(chars: string[] | undefined | null): string[] {
+  return Array.isArray(chars) ? chars : [];
+}
 
 function missingLine(chars: string[]): string {
   const text = chars.slice(0, MAX_CHARS_SHOWN).join(" ");
@@ -40,8 +49,8 @@ export default function FontCoverageCard({ coverage }: Props) {
     );
   }
 
-  const regular = coverage.missing.regular;
-  const bold = coverage.missing.bold;
+  const regular = safeChars(coverage.missing?.regular);
+  const bold = safeChars(coverage.missing?.bold);
   const missingCount = regular.length + bold.length;
   return (
     <div

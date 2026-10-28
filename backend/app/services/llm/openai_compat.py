@@ -46,6 +46,7 @@ from .usage import (
     FINISH_CANCELLED,
     FINISH_ERROR,
     FINISH_STOP,
+    extract_cache_hit_tokens,
     merge_openai_stream_usage,
     openai_chat_outcome,
 )
@@ -138,6 +139,9 @@ class OpenAICompatProvider(BaseLLMProvider):
         # 尝试开始时在 stream_chat_events 里重置（见那里的注释）。
         self._stream_prompt_tokens: int | None = None
         self._stream_completion_tokens: int | None = None
+        # 输入里命中 prompt cache 的 token（0067）：老端点没这个字段，保持 None。
+        self._stream_cache_hit_tokens: int | None = None
+        self._cache_hit_tokens: int | None = None
         # 帧级 finish_reason 捕获：收尾帧可能不产出任何 delta（无正文、无工具调用）。
         self._stream_stop_reason: str | None = None
 
@@ -209,6 +213,9 @@ class OpenAICompatProvider(BaseLLMProvider):
                 # data 可能不是 dict（非法响应形态）：usage/finish_reason 的提取要容忍，
                 # 真正的形态校验交给 _extract_content 抛 LLMError。
                 prompt_tokens, completion_tokens, protocol_reason = openai_chat_outcome(data)
+                self._cache_hit_tokens = extract_cache_hit_tokens(
+                    data.get("usage") if isinstance(data, dict) else None
+                )
                 finish_reason = protocol_reason or FINISH_STOP
                 return self._extract_content(data)
         except OperationCancelled:
@@ -227,6 +234,7 @@ class OpenAICompatProvider(BaseLLMProvider):
                 prompt_tokens=prompt_tokens,
                 completion_tokens=completion_tokens,
                 retries=gate.retries,
+                cache_hit_tokens=self._cache_hit_tokens,
             )
 
     async def stream_chat(self, messages: list[dict]) -> AsyncGenerator[str, None]:
@@ -264,6 +272,7 @@ class OpenAICompatProvider(BaseLLMProvider):
                 # _stream_deltas 与 finally 之间传递是安全的（占位见 __init__）。
                 self._stream_prompt_tokens = None
                 self._stream_completion_tokens = None
+                self._stream_cache_hit_tokens = None
                 self._stream_stop_reason = None
                 try:
                     async for delta in self._stream_deltas(
@@ -320,6 +329,7 @@ class OpenAICompatProvider(BaseLLMProvider):
                 prompt_tokens=self._stream_prompt_tokens,
                 completion_tokens=self._stream_completion_tokens,
                 retries=gate.retries,
+                cache_hit_tokens=self._stream_cache_hit_tokens,
             )
 
     def _degrade_for_rejected_parameter(
@@ -412,6 +422,9 @@ class OpenAICompatProvider(BaseLLMProvider):
                                 self._stream_completion_tokens,
                                 data,
                             )
+                            frame_hit = extract_cache_hit_tokens(data.get("usage"))
+                            if frame_hit is not None:
+                                self._stream_cache_hit_tokens = frame_hit
                         choices = data.get("choices") or []
                         if not isinstance(choices, list):
                             raise LLMError("模型返回了无法解析的流式响应")

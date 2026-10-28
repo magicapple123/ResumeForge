@@ -7,10 +7,17 @@
 import { App as AntdApp } from "antd";
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { useBatchSelection } from "../../hooks/useBatchSelection";
+// @ts-expect-error Node 内置模块：@types/node 未安装，但 vitest 运行在 Node 里。
+import { readFileSync } from "node:fs";
+import { useBatchSelection, type BatchSelection } from "../../hooks/useBatchSelection";
+import type { RowActionItem } from "../../components/common/RowActions";
 import type { ResumeBrief } from "../../types";
 import { DEFAULT_RESUME_SORT_STATE, type ResumeSortState } from "../../utils/resumeSort";
 import ResumeTable from "./ResumeTable";
+
+// 与 `styles/color-regression.test.ts` 同一套写法：从磁盘读源码原文（jsdom 看得到 DOM，
+// 看不到"某个 prop 有没有被传"）。
+declare const process: { cwd(): string };
 
 const RESUME: ResumeBrief = {
   id: 8,
@@ -33,16 +40,35 @@ const RESUME: ResumeBrief = {
   updated_at: "2026-08-21T09:30:00",
 };
 
+/** 多选态固定桩：本文件只验"右键菜单换成了批量动作"，不重跑勾选逻辑。 */
+const SELECTING_BATCH: BatchSelection<number> = {
+  selecting: true,
+  selectedIds: new Set([1]),
+  selectedCount: 1,
+  isSelected: () => true,
+  toggle: () => {},
+  toggleAll: () => {},
+  setSelected: () => {},
+  selectPage: () => {},
+  enterSelecting: () => {},
+  exitSelecting: () => {},
+};
+
 function Harness({
   item,
   sortState = DEFAULT_RESUME_SORT_STATE,
   onSortChange = () => {},
+  selecting = false,
+  batchActions = [],
 }: {
   item: ResumeBrief;
   sortState?: ResumeSortState;
   onSortChange?: (next: ResumeSortState) => void;
+  selecting?: boolean;
+  batchActions?: RowActionItem[];
 }) {
-  const batch = useBatchSelection<number>();
+  const hookBatch = useBatchSelection<number>();
+  const batch = selecting ? SELECTING_BATCH : hookBatch;
   return (
     <AntdApp>
       <ResumeTable
@@ -67,6 +93,7 @@ function Harness({
         sortState={sortState}
         onSortChange={onSortChange}
         navigate={() => {}}
+        batchActions={batchActions}
       />
     </AntdApp>
   );
@@ -78,7 +105,7 @@ afterEach(() => {
 });
 
 describe("ResumeTable 标题列（R14-b）", () => {
-  it("给出宽度下限并省略，悬停能看到完整标题", async () => {
+  it("给出宽度下限并省略，且不再有悬停提示", async () => {
     render(<Harness item={RESUME} />);
     const cell = await screen.findByRole("columnheader", { name: "简历标题" });
 
@@ -90,8 +117,15 @@ describe("ResumeTable 标题列（R14-b）", () => {
     const title = screen.getByRole("button", { name: RESUME.title });
     expect(title).toHaveStyle({ textOverflow: "ellipsis", overflow: "hidden" });
 
+    // 2026-11 用户要求去掉标题的悬停提示：鼠标扫过列表时那个黑框会挡住相邻行，
+    // 而"看完整标题"已经由点击打开预览满足。antd 的 Tooltip 是克隆子节点 + 挂事件，
+    // 不改变 DOM 结构，所以这里读源码守住"别再包回去"。
     fireEvent.mouseEnter(title);
-    expect(await screen.findByRole("tooltip")).toHaveTextContent(RESUME.title);
+    const source = readFileSync(
+      [process.cwd(), "src", "pages", "resumes", "ResumeTable.tsx"].join("/"),
+      "utf8",
+    );
+    expect(source).not.toContain("title={record.title}");
   });
 });
 
@@ -229,5 +263,26 @@ describe("ResumeTable 列头排序（T2）", () => {
       order: "asc",
       explicit: true,
     });
+  });
+});
+
+describe("ResumeTable 多选态右键", () => {
+  it("菜单只给批量动作，不再混入单行的编辑/删除", async () => {
+    const onExport = vi.fn();
+    render(
+      <Harness
+        item={RESUME}
+        selecting
+        batchActions={[{ key: "bulk_export", label: "Bulk export", onClick: onExport }]}
+      />,
+    );
+
+    const title = await screen.findByText(RESUME.title);
+    fireEvent.contextMenu(title.closest("tr") as HTMLElement);
+
+    expect(await screen.findByText("Bulk export")).toBeInTheDocument();
+    expect(screen.queryByRole("menuitem", { name: /批量选择/ })).toBeNull();
+    fireEvent.click(screen.getByText("Bulk export"));
+    expect(onExport).toHaveBeenCalledTimes(1);
   });
 });

@@ -55,6 +55,15 @@ const storageStats = {
   /** 候选清单被截断时的说明；`{count}` 是未列出的文件数。 */
   "storageStats.cleanup.more": "还有 {count} 个文件未列出，确认后一并移走。",
 
+  /** 保留期选择：前缀 + 天数档位 + 后缀拼成一句。 */
+  "storageStats.cleanup.days.prefix": "清理超过",
+  "storageStats.cleanup.days.option": "{count} 天",
+  "storageStats.cleanup.days.suffix": "没有变动的文件",
+  /** 逐文件勾选的摘要：`{count}` 已选文件数、`{size}` 合计体积。 */
+  "storageStats.cleanup.selected.summary": "已选 {count} 个 · {size}",
+  /** 逐文件清单的全选 / 清空。 */
+  "storageStats.cleanup.select.all": "全选",
+  "storageStats.cleanup.select.none": "清空",
   /** 清理结果弹窗的标题；`{count}` 是移走的文件数。 */
   "storageStats.cleanup.done.title": "已移走 {count} 个文件",
   /** 结果第一句：`{size}` 是释放的体积。 */
@@ -70,6 +79,34 @@ const storageStats = {
   "storageStats.cleanup.okCount": "移走 {count} 个文件",
   /** 确认按钮（清单还没回来时的兜底）。 */
   "storageStats.cleanup.ok": "移走",
+
+  /**
+   * 各目录分项的展示名：后端 `_ITEM_SPECS[].label` 的稳定 `key` → 文案。
+   *
+   * 中文逐字对齐后端原文（翻译后中文界面渲染结果不变）；后端新增分项映射不到时
+   * 调用方回退后端原文，不丢信息。
+   */
+  "storageStats.item.database": "数据库（含 WAL 边车）",
+  "storageStats.item.datasets": "数据集（含回收站）",
+  "storageStats.item.backups": "手动备份",
+  "storageStats.item.auto_backups": "自动备份快照",
+  "storageStats.item.user_files": "附件磁盘副本",
+  "storageStats.item.exports": "导出备份包",
+  "storageStats.item.captures": "站点采集样例",
+  "storageStats.item.share_packages": "分享页面包",
+  "storageStats.item.referral_images": "内推备注图片",
+  "storageStats.item.logs": "日志",
+  "storageStats.item.browser_profile": "投递浏览器用户目录",
+  "storageStats.item.webform_browser_profile": "网申浏览器用户目录",
+  "storageStats.item.restore": "导入暂存",
+  "storageStats.item.pre_update": "升级前快照",
+  "storageStats.item.uncategorized": "未分类（其他文件）",
+
+  /** 清理弹窗里的类别名：后端 `cleanup.CATEGORIES[].key` → 文案（中文与后端逐字一致）。 */
+  "storageStats.cleanupCategory.backups": "手动与迁移备份",
+  "storageStats.cleanupCategory.backup-trash": "备份回收目录",
+  "storageStats.cleanupCategory.auto-backups": "自动备份",
+  "storageStats.cleanupCategory.logs": "运行日志",
 } as const;
 
 export default storageStats;

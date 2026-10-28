@@ -6,6 +6,8 @@
 
 - `prompt_tokens` / `completion_tokens` / `total_tokens` 可空——服务商没给就是
   `NULL`（界面显示"未知"），**禁止用 0 冒充**；汇总时只要有一行未知就整体给 None。
+- `cache_hit_tokens` / `cache_miss_tokens`（0067）：把输入拆成"命中 / 未命中 prompt cache"
+  两档，费用估算按两档不同单价算。同样可空，NULL 表示服务商没给。
 - `finish_reason` 记录结束原因（stop/length/cancelled/... 或 unknown）。
 - `retries` 是传输层重试次数。
 - `cost_estimate` 只在**用户配置了单价**时估算；没配置就留 NULL，不臆造费用。
@@ -35,6 +37,10 @@ class LLMUsageRecord(Base):
         ForeignKey("resume_record.id", ondelete="SET NULL"), nullable=True, index=True
     )
     prompt_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # 输入拆分（0067）：命中 prompt cache / 未命中。可空——0067 之前的账本没有这个信息，
+    # NULL 表示"没记录过"，不是 0。
+    cache_hit_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    cache_miss_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
     completion_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
     total_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
     duration_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)

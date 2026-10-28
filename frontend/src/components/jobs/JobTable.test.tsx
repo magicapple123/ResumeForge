@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Job, JobList, Page } from "../../types";
 import { DEFAULT_JOB_SORT_STATE, type JobSortState } from "../../utils/jobSort";
 import JobTable from "./JobTable";
+import type { RowActionItem } from "../common/RowActions";
 
 const BASE_JOB: Job = {
   id: 1,
@@ -45,6 +46,8 @@ function renderTable(
   options: {
     sortState?: JobSortState;
     onSortChange?: (state: JobSortState) => void;
+    selectionMode?: boolean;
+    bulkActions?: RowActionItem[];
   } = {},
 ) {
   const page: Page<JobList> = { items: jobs, total: jobs.length };
@@ -53,7 +56,7 @@ function renderTable(
       <JobTable
         jobs={page}
         loading={false}
-        selectionMode={false}
+        selectionMode={options.selectionMode ?? false}
         rowSelection={{} as never}
         batchAction={null}
         favoriteJobId={null}
@@ -67,6 +70,7 @@ function renderTable(
         onEdit={noop}
         onDelete={noop}
         onEnterSelecting={noop}
+        bulkActions={options.bulkActions ?? []}
         onPageChange={noop}
         sortState={options.sortState ?? DEFAULT_JOB_SORT_STATE}
         onSortChange={options.onSortChange ?? noop}
@@ -204,5 +208,39 @@ describe("JobTable 空表可访问性", () => {
     const content = container.querySelector<HTMLElement>(".ant-table-content");
     expect(content?.style.overflowX).toBe("auto");
     expect(container.querySelector<HTMLElement>("table")?.style.width).toBe("1330px");
+  });
+});
+
+describe("JobTable 多选态右键", () => {
+  it("只给批量动作，不再混入单行的编辑/删除", async () => {
+    const onBulk = vi.fn();
+    const bulkActions: RowActionItem[] = [
+      { key: "bulk_match", label: "Bulk match", onClick: onBulk },
+      { key: "bulk_export", label: "Bulk export", onClick: onBulk },
+    ];
+    renderTable([makeJob()], { selectionMode: true, bulkActions });
+
+    fireEvent.contextMenu(
+      document.querySelector(".jobs-table tbody tr.ant-table-row") as HTMLElement,
+    );
+
+    expect(await screen.findByText("Bulk match")).toBeInTheDocument();
+    expect(screen.getByText("Bulk export")).toBeInTheDocument();
+    expect(screen.queryByRole("menuitem", { name: /编\s*辑/ })).toBeNull();
+
+    fireEvent.click(screen.getByText("Bulk export"));
+    expect(onBulk).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("JobTable 非选择模式右键", () => {
+  it("菜单里有「批量选择」入口", async () => {
+    renderTable([makeJob()]);
+
+    fireEvent.contextMenu(
+      document.querySelector(".jobs-table tbody tr.ant-table-row") as HTMLElement,
+    );
+
+    expect(await screen.findByRole("menuitem", { name: /批量选择/ })).toBeInTheDocument();
   });
 });

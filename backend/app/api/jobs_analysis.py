@@ -7,10 +7,8 @@
 
 from __future__ import annotations
 
-import asyncio
 import logging
 from collections.abc import Awaitable
-from contextlib import suppress
 from typing import TypeVar
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -29,6 +27,7 @@ from ..services.job_analysis_cache import read_cached_analysis, store_analysis
 from ..services.llm import create_provider
 from ..services.llm.base import LLMError
 from ..services.settings_service import get_llm_config
+from ._disconnect import DISCONNECT_POLL_SECONDS, run_until_disconnect
 
 logger = logging.getLogger(__name__)
 
@@ -36,41 +35,20 @@ router = APIRouter(prefix="/api/jobs", tags=["jobs"])
 
 T = TypeVar("T")
 
-# 轮询客户端是否还连着的间隔：0.4s 足够让「点了取消」立刻停掉生成，
-# 又不会把一次 60s 的调用变成上万次 is_disconnected 调用。
-DISCONNECT_POLL_SECONDS = 0.4
-
 
 async def _run_until_disconnect(
     coro: Awaitable[T],
     request: Request,
     poll_interval: float = DISCONNECT_POLL_SECONDS,
 ) -> T | None:
-    """跑一个协程，同时盯着客户端是否还连着；断开就取消它并返回 ``None``。
+    """跑一个协程并盯着客户端是否还连着；断开就取消它并返回 ``None``。
 
-    为什么不只是"跑完再问一次"：那样用户点了取消之后，服务端仍然把整段生成跑完、
-    照样烧 token——前端的 abort 只停掉了自己那一侧的等待。
-
-    第一轮**先**判断一次断开，再进入等待：客户端在请求刚发出就跑了的情况下，
-    协程不会先白跑 0.4 秒。协程一律先 `create_task` 成任务，取消时 `await` 它收尾，
-    保证没有"创建了却没人持有"的协程。
+    实现已抽到 ``api/_disconnect.py``（简历写作的六个短端点用的是同一套机制）：
+    "客户端 abort 之后服务端还在烧 token"是**所有**非任务化端点共有的问题，
+    不该每个模块各写一遍。这里保留原名字与**原来的参数顺序**（``coro, request``），
+    因为既有用例直接按位置调它。
     """
-    task = asyncio.create_task(coro)  # type: ignore[arg-type]  # 泛型协程
-    try:
-        while True:
-            if await request.is_disconnected():
-                task.cancel()
-                with suppress(asyncio.CancelledError):
-                    await task
-                logger.info("客户端已断开，已取消本次岗位解读生成")
-                return None
-            done, _ = await asyncio.wait({task}, timeout=poll_interval)
-            if done:
-                return task.result()
-    finally:
-        # 任何提前返回/异常路径都不留下孤儿任务。
-        if not task.done():
-            task.cancel()
+    return await run_until_disconnect(request, coro, poll_interval, what="岗位解读生成")
 
 
 def _disconnected_response() -> JSONResponse:

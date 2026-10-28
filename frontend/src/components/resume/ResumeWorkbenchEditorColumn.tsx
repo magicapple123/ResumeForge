@@ -419,6 +419,7 @@ export default function ResumeWorkbenchEditorColumn({
       >
         <InlineMarkButtons
           getTarget={inlineMarks.getTarget}
+          getRememberedRange={inlineMarks.getRememberedRange}
           onCommit={inlineMarks.commit}
           disabled={api.saving || relayouting || undefined}
         />

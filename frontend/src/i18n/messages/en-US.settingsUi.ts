@@ -75,6 +75,8 @@ const settingsUi = {
   "settingsUi.help.previewSummary": "About {count} redacted events in the bundle{files}. {note}",
   "settingsUi.help.previewFiles": " ({files})",
   "settingsUi.help.previewSeparator": ", ",
+  "settingsUi.help.previewNote":
+    "The bundle contains only redacted runtime events, system information and the tail of recent backend logs (anything resembling a token is scrubbed); it never includes full Resume text, form values, cookies or prompts.",
   "settingsUi.help.feedbackLead": "Feedback: ",
   "settingsUi.help.feedbackJoin": " or join our user group ",
   "settingsUi.help.feedbackTail": " (we can help right there).",

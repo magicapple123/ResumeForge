@@ -50,6 +50,8 @@ interface Props {
   disabled?: boolean;
   onChange: (next: ResumeLayout) => void;
   onClearSelection: () => void;
+  /** 纸面最后点中的字段路径：文字级别据此把「作用范围」调到对应角色。 */
+  pickedPath?: string | null;
 }
 
 export default function WorkbenchTypographyTools({
@@ -61,6 +63,7 @@ export default function WorkbenchTypographyTools({
   disabled = false,
   onChange,
   onClearSelection,
+  pickedPath = null,
 }: Props) {
   useLocale();
   const { message } = App.useApp();
@@ -118,6 +121,7 @@ export default function WorkbenchTypographyTools({
         selected={selected}
         selectedObjectId={selectedObjectId}
         disabled={disabled}
+        pickedPath={pickedPath}
         onChange={onChange}
         onApplied={({ level, count }) =>
           message.success(

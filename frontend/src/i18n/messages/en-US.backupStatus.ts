@@ -33,8 +33,7 @@ const backupStatus = {
   "backupStatus.interval.aria": "Automatic backup interval (days)",
   "backupStatus.interval.optionDays": "{count} days",
   "backupStatus.interval.prefix": "Every",
-  "backupStatus.interval.suffix":
-    ", an automatic snapshot is taken (database snapshots only, no attachment files); only backups exported by hand include attachments. Only the latest few are kept; manual backups are unaffected.",
+  "backupStatus.interval.suffix": " (database snapshots only), keeping the latest few.",
   "backupStatus.interval.suffixDisabled":
     ", the automatic snapshot count is controlled by the deployment configuration; backups exported by hand still include attachments. Only the latest few are kept; manual backups are unaffected.",
   "backupStatus.interval.saved":
@@ -44,7 +43,7 @@ const backupStatus = {
   "backupStatus.lastSuccess": "Last successful backup: {time}",
   "backupStatus.lastSuccess.never": "No automatic backup has succeeded yet.",
   "backupStatus.coverage.databaseOnly":
-    "Automatic backups cover database snapshots only, not attachments or fonts; to back up attachments and fonts too, use [Export dataset / Export all datasets] on the Datasets card.",
+    "Database snapshots only — attachments and fonts are not included. Use the Datasets export for a full backup.",
   "backupStatus.failures":
     "Backup failed {count} times in a row: {error}. The system retries automatically at a short interval.",
   "backupStatus.snapshots.empty":

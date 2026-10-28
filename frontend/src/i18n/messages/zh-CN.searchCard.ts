@@ -34,8 +34,12 @@ const searchCard = {
   "searchCard.intro":
     "这里配的是助手「联网搜索」开关打开时**怎么搜**；助手页那个开关决定这一次要不要联网。抓取正文能拿到比摘要更完整的页面内容，但每次搜索会慢一些，也可能被站点拒绝。",
 
-  "searchCard.edit": "编辑搜索设置",
   "searchCard.action.save": "保存搜索设置",
+  /**
+   * 字段常驻可编辑（不再有「编辑」门禁），所以原来那颗「取消」改成语义准确的
+   * 「恢复为已保存值」：它做的事就是把草稿退回上一次保存的那份，而不是"退出编辑态"。
+   */
+  "searchCard.action.reset": "恢复为已保存值",
   "searchCard.dirty": "有未保存的改动",
 
   "searchCard.loadErrorTitle": "没能读取已保存的设置",
@@ -45,6 +49,7 @@ const searchCard = {
   "searchCard.needSource": "至少要选一个搜索来源",
   /** URL 部分保持原样：校验规则里的 scheme 是技术常量。 */
   "searchCard.badUrl": "SearXNG 地址要以 http:// 或 https:// 开头",
+  "searchCard.saving": "保存中…",
   "searchCard.saved": "已保存联网搜索设置",
   "searchCard.saveFailed": "保存联网搜索设置失败",
 

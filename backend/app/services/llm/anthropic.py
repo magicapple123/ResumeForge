@@ -111,6 +111,10 @@ class AnthropicProvider(BaseLLMProvider):
         gate = retry.StatusRetryGate(deadline_remaining_fn=self._deadline_remaining)
         prompt_tokens: int | None = None
         completion_tokens: int | None = None
+        # cache_hit_tokens 只在 usage 为 dict 的分支里赋值；非 200 / 异常路径会直接
+        # 走 finally 的 _record_usage，不初始化会在这里抛 UnboundLocalError
+        # （0067 缓存三档计费引入）。None = 认不出缓存命中，与 base 的约定一致。
+        cache_hit_tokens: int | None = None
         finish_reason = FINISH_ERROR
         try:
             while True:
@@ -165,6 +169,14 @@ class AnthropicProvider(BaseLLMProvider):
                 if isinstance(usage, dict):
                     input_tokens = usage.get("input_tokens")
                     output_tokens = usage.get("output_tokens")
+                    # Anthropic 的 prompt cache 命中数单独给：cache_read_input_tokens。
+                    # 认不出就保持 None（不把"全部未命中"说成事实）。
+                    cache_read = usage.get("cache_read_input_tokens")
+                    cache_hit_tokens = (
+                        cache_read
+                        if isinstance(cache_read, int) and not isinstance(cache_read, bool)
+                        else None
+                    )
                     prompt_tokens = (
                         input_tokens
                         if isinstance(input_tokens, int) and not isinstance(input_tokens, bool)
@@ -196,6 +208,7 @@ class AnthropicProvider(BaseLLMProvider):
                 prompt_tokens=prompt_tokens,
                 completion_tokens=completion_tokens,
                 retries=gate.retries,
+                cache_hit_tokens=cache_hit_tokens,
             )
 
     async def stream_chat(self, messages: list[dict]) -> AsyncGenerator[str, None]:

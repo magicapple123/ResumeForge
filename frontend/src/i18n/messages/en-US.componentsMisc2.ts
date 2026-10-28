@@ -24,6 +24,7 @@ const componentsMisc2 = {
   "componentsMisc2.jobReference.emptyOther": "No other information",
 
   // Header model switcher (`ModelProfileSelect`): switch and double-click test feedback.
+  "componentsMisc2.modelProfile.defaultRecordName": "Default configuration",
   "componentsMisc2.modelProfile.ariaLabel": "Current model profile",
   "componentsMisc2.modelProfile.placeholder": "Select a model profile",
   "componentsMisc2.modelProfile.switched": "Switched to profile “{name}”",

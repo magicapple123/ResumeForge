@@ -23,6 +23,24 @@ vi.mock("../api/resumes", async (importOriginal) => ({
   reviseResume: vi.fn(),
 }));
 
+/**
+ * 任务地基的替身（见 `src/test/aiTaskEntryBridge.ts`）：弹窗验的是界面语义，
+ * 轮询与通知出口由 `utils/backgroundTasks*.test.ts` 负责。
+ *
+ * 建议**不入库**，所以结果随 `result_ref` 回到 store —— 桥这里把老 API 的返回值
+ * 摊成那份负载。
+ */
+vi.mock("../utils/aiTaskEntry", async () => {
+  const { createAiTaskEntryBridge } = await import("../test/aiTaskEntryBridge");
+  return createAiTaskEntryBridge({
+    run: async (payload, signal) => {
+      const resumeId = Number(payload.resume_id);
+      const data = await generateResumeSuggestions(resumeId, signal);
+      return { resume_id: resumeId, ...data };
+    },
+  });
+});
+
 const mockedGenerate = vi.mocked(generateResumeSuggestions);
 const mockedRevise = vi.mocked(reviseResume);
 

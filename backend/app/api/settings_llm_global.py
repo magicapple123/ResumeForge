@@ -39,6 +39,7 @@ from ..schemas.setting import (
 from ..services.api_key_crypto import ApiKeyEncryptionError
 from ..services.api_key_session import get_session_key
 from ..services.global_llm_profiles import (
+    DEFAULT_RECORD_NAME,
     activate_profile,
     delete_record,
     list_records,
@@ -86,6 +87,13 @@ def _masked_global(config: LLMConfig, record_id: str, *, session_key: bool = Fal
     else:
         key = PROFILE_API_KEY_PREFIX + record_id if config.api_key else ""
     return config.model_copy(update={"api_key": key})
+
+
+def _record_out(item: dict) -> LLMGlobalRecordOut:
+    """记录对外的形态：附带"名字是否仍是内置默认名"，供界面翻译默认名。"""
+    record = LLMGlobalRecordOut.model_validate(item)
+    record.name_is_default = record.name == DEFAULT_RECORD_NAME
+    return record
 
 
 def _out_from_global() -> LLMConfigOut | None:
@@ -164,7 +172,7 @@ def write_llm_config(payload: LLMConfig, db: Session = Depends(get_db)) -> LLMCo
 def read_llm_records(db: Session = Depends(get_db)) -> list[LLMGlobalRecordOut]:
     """全部记录；首次调用把数据集里的旧记录一次性搬过来（之后不再自动导入）。"""
     migrate_from_dataset_once(db)
-    return [LLMGlobalRecordOut.model_validate(item) for item in list_records()]
+    return [_record_out(item) for item in list_records()]
 
 
 @router.post("/llm/records", response_model=LLMGlobalRecordOut)
@@ -197,7 +205,7 @@ def write_llm_record(payload: dict, db: Session = Depends(get_db)) -> LLMGlobalR
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except ApiKeyEncryptionError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
-    return LLMGlobalRecordOut.model_validate(record)
+    return _record_out(record)
 
 
 @router.delete("/llm/records/{record_id}", status_code=204)
@@ -216,7 +224,7 @@ def activate_llm_record(record_id: str) -> LLMGlobalRecordOut:
         raise HTTPException(status_code=404, detail="配置记录不存在或已被删除") from exc
     for item in list_records():
         if item.get("id") == record_id:
-            return LLMGlobalRecordOut.model_validate(item)
+            return _record_out(item)
     raise HTTPException(status_code=404, detail="配置记录不存在或已被删除")
 
 

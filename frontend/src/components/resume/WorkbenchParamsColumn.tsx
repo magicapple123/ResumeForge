@@ -29,6 +29,7 @@ import OutlinePanel from "./outline/OutlinePanel";
 import type { OutlineMultiEntry, OutlineMultiSelectionApi } from "./outline/OutlinePanel";
 import WorkbenchTypographyTools from "./WorkbenchTypographyTools";
 import RoleStylePanel from "./typography/RoleStylePanel";
+import FieldLayoutPanel from "./FieldLayoutPanel";
 import PhraseLibraryContainer from "./assets/PhraseLibraryContainer";
 import ObjectStylePanel from "./typography/ObjectStylePanel";
 import { modeLimitsFromCatalog, saveDocumentMode } from "../../features/resume-research/api";
@@ -313,6 +314,10 @@ export default function WorkbenchParamsColumn({
               onChange={onChange}
             />
           </ResumeParamGroup>
+          {/* W4 条目字段排版：教育等条目的补充字段分行 / 顺序 / 独占行（四格式同源）。 */}
+          <ResumeParamGroup title={t("typography.fieldLayout.groupTitle")} storageKey="fieldLayout">
+            <FieldLayoutPanel layout={layout} disabled={relayouting} onChange={onChange} />
+          </ResumeParamGroup>
           {/* 只在内容栏不在栅格里时显示（两栏 / 单栏）：告诉用户它去哪了，而不是让他找。
               三栏时这句描述的是不存在的问题（`display: none` 也在管这件事，两处同源）。 */}
           {tier !== "three" && editorEnabled ? (
@@ -341,6 +346,7 @@ export default function WorkbenchParamsColumn({
             disabled={relayouting || layoutSaving || undefined}
             onChange={onChange}
             onClearSelection={() => onClearMultiSelect?.()}
+            pickedPath={pickTarget?.path ?? null}
           />
           <ResumeParamGroup title={t("pagination.group.title")} storageKey="pagination">
             <PaginationControls

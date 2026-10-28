@@ -50,7 +50,9 @@ from .llm_key_refs import PROFILE_API_KEY_PREFIX
 
 logger = logging.getLogger(__name__)
 
-_DEFAULT_RECORD_NAME = "默认配置"
+# 新建记录时的默认名。用户看到的是**这个名字的翻译**（前端按 `name_is_default` 判定），
+# 落库的始终是中文原文：用户改过名之后就显示输入，而不是继续按文案翻译。
+DEFAULT_RECORD_NAME = "默认配置"
 
 
 @dataclass(frozen=True)
@@ -134,7 +136,7 @@ def write_global_llm(config: LLMConfig) -> GlobalLLM:
         profiles = profiles_of(state)
         profile = active_profile_of(state)
         if profile is None:
-            profile = _new_profile(config, name=_DEFAULT_RECORD_NAME)
+            profile = _new_profile(config, name=DEFAULT_RECORD_NAME)
             profiles.append(profile)
             block["profiles"] = profiles
             block["active_profile_id"] = profile["id"]
@@ -355,7 +357,7 @@ def migrate_from_dataset_once(db: Session) -> None:
     current = get_dataset_llm_config(db)
     active_id = ""
     if current.base_url and current.model:
-        default = _new_profile(current, name=_DEFAULT_RECORD_NAME)
+        default = _new_profile(current, name=DEFAULT_RECORD_NAME)
         imported.insert(0, default)
         active_id = default["id"]
     elif imported:

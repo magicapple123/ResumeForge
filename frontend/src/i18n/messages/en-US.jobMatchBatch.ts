@@ -1,15 +1,18 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * The job-square "bulk fit analysis" panel: setup, in-progress background task, results and
- * the history view.
+ * The job-square bulk analysis panel: setup, in-progress background task, results and the
+ * history view. Two modes share this copy: `match` (per-job verdicts) and `compare`
+ * (per-job verdicts followed by a relative ranking with reasons).
  *
  * The history summary has two keys (with and without the top reference score) instead of a
  * main sentence plus a comma-prefixed suffix: a suffix fragment cannot be composed into a
  * grammatical English sentence, and i18n has no "optional fragment" interpolation.
  */
 const jobMatchBatch = {
-  "jobMatchBatch.title": "Bulk job fit analysis",
+  "jobMatchBatch.title": "Job match analysis",
+  "jobMatchBatch.title.compare": "Side-by-side job comparison",
   "jobMatchBatch.action.start": "Start analysis",
+  "jobMatchBatch.action.start.compare": "Start comparison",
   "jobMatchBatch.action.restart": "Analyze this batch again",
   "jobMatchBatch.action.viewResult": "View results",
   "jobMatchBatch.action.cancel": "Cancel this analysis",
@@ -29,6 +32,9 @@ const jobMatchBatch = {
   "jobMatchBatch.setup.title": "Each of the {count} selected jobs is analyzed one by one",
   "jobMatchBatch.setup.body":
     "The analysis runs in the background, job by job: you can cancel at any time, or close the window and come back later - a notification appears when it finishes. Verdicts carry no percentages; the reference score only orders the list.",
+  "jobMatchBatch.setup.title.compare": "{count} selected jobs will be compared side by side",
+  "jobMatchBatch.setup.body.compare":
+    "Each job is checked first, then the jobs are ranked against each other with reasons, so you can see why one fits you better. The ranking is relative and never shows percentages; the reference score stays display-only. It runs in the background: cancel any time, or close the window and come back later.",
   "jobMatchBatch.setup.force":
     "Re-analyze jobs that already have a verdict (jobs with an existing fit verdict are skipped by default)",
   "jobMatchBatch.setup.selected": "Selected: {count} jobs",
@@ -37,9 +43,12 @@ const jobMatchBatch = {
   "jobMatchBatch.history.summary": "{requested} jobs in total, {completed} done, {failed} failed",
   "jobMatchBatch.history.summaryWithScore":
     "{requested} jobs in total, {completed} done, {failed} failed, top reference score {score}",
+  "jobMatchBatch.history.mode.compare": "Comparison",
+  "jobMatchBatch.history.mode.match": "Match analysis",
   "jobMatchBatch.detail.title": "Results of batch {id}",
   "jobMatchBatch.detail.loading": "Reading the analysis result…",
-  "jobMatchBatch.task.title": "Job fit analysis ({count} jobs)",
+  "jobMatchBatch.task.title": "Job match analysis ({count} jobs)",
+  "jobMatchBatch.task.title.compare": "Job comparison ({count} jobs)",
   "jobMatchBatch.toast.needJobs": "Select at least one job first",
   "jobMatchBatch.toast.cancelled":
     "Cancelled this analysis; results finished before the cancel are still saved",
@@ -47,6 +56,15 @@ const jobMatchBatch = {
   "jobMatchBatch.error.loadResultFailed": "Could not read the analysis result",
   "jobMatchBatch.error.createFailed": "Could not create the analysis task",
   "jobMatchBatch.error.cancelFailed": "Could not cancel",
+  "jobMatchBatch.comparison.rank": "Rank {rank}",
+  "jobMatchBatch.comparison.verdict.best": "Best fit",
+  "jobMatchBatch.comparison.verdict.good": "Good fit",
+  "jobMatchBatch.comparison.verdict.fair": "Fair",
+  "jobMatchBatch.comparison.verdict.weak": "Weak",
+  "jobMatchBatch.comparison.concerns": "Watch out for: {concerns}",
+  "jobMatchBatch.comparison.separator": ", ",
+  "jobMatchBatch.comparison.disclaimer":
+    "The ranking is a relative comparison of this batch's per-job verdicts and never shows percentages; the reference score is still a local rule-based estimate, display only, and does not affect application admission.",
 } as const;
 
 export default jobMatchBatch;

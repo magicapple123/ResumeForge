@@ -128,6 +128,9 @@ export default function ResumeLayoutDiagnosisCard({
    * 用户看到的就是"点了没变"。所以这里记下基准，对不上就**先重新诊断**再试。
    */
   const [analysisKey, setAnalysisKey] = useState<string | null>(null);
+  // 详情默认收起（2026-10-28 用户要求）：标题行的状态与占用率仍然一直可见，
+  // 收起的只是"结论正文 + 优化候选"，把首屏留给简历本身。
+  const [bodyOpen, setBodyOpen] = useState(false);
   // W09 优化器：应用候选 = 一次显式写回（与「自动一页」同一条 PATCH 路径）。
   const [optimizerApplying, setOptimizerApplying] = useState(false);
   const [optimizerConflict, setOptimizerConflict] = useState<string | null>(null);
@@ -373,6 +376,9 @@ export default function ResumeLayoutDiagnosisCard({
             </>
           )}
         </Space>
+        <Button size="small" type="text" onClick={() => setBodyOpen((open) => !open)}>
+          {bodyOpen ? t("resume.diagnosis.collapse") : t("resume.diagnosis.expand")}
+        </Button>
         {diagnosis?.status === "overflow" && (analysis?.fit_ladder.length ?? 0) > 0 && (
           <Button
             size="small"
@@ -387,74 +393,78 @@ export default function ResumeLayoutDiagnosisCard({
         )}
       </div>
 
-      {fitting && (
-        <Typography.Text type="secondary" className="resume-diagnosis-progress">
-          {t("resume.diagnosis.fitting", {
-            index: fitting.index,
-            total: fitting.total,
-            label: fitting.label,
-          })}
-        </Typography.Text>
-      )}
+      {bodyOpen && (
+        <>
+          {fitting && (
+            <Typography.Text type="secondary" className="resume-diagnosis-progress">
+              {t("resume.diagnosis.fitting", {
+                index: fitting.index,
+                total: fitting.total,
+                label: fitting.label,
+              })}
+            </Typography.Text>
+          )}
 
-      {diagnosis && (
-        <Typography.Paragraph className="resume-diagnosis-summary">
-          {diagnosis.summary}
-        </Typography.Paragraph>
-      )}
+          {diagnosis && (
+            <Typography.Paragraph className="resume-diagnosis-summary">
+              {diagnosis.summary}
+            </Typography.Paragraph>
+          )}
 
-      {/* 诊断接口不可用（后端一时不可达等）时，至少把"塞不下"这件事说出来——
+          {/* 诊断接口不可用（后端一时不可达等）时，至少把"塞不下"这件事说出来——
           只是静默地不显示面板，用户会以为版面没问题。措辞不再提"整体缩小"：
           2026-10-21 起预览不再自动缩字号，装不下的部分直接截断。 */}
-      {!diagnosis && overflow && (
-        <Alert
-          type="warning"
-          showIcon
-          className="resume-diagnosis-floor"
-          title={t("resume.diagnosis.overflowNoAnalysis", { pages: layout.page_limit })}
-        />
-      )}
+          {!diagnosis && overflow && (
+            <Alert
+              type="warning"
+              showIcon
+              className="resume-diagnosis-floor"
+              title={t("resume.diagnosis.overflowNoAnalysis", { pages: layout.page_limit })}
+            />
+          )}
 
-      {suggestions.length > 0 && (
-        <ol className="resume-diagnosis-list">
-          {suggestions.map((item) => (
-            <li key={item.kind}>
-              <Typography.Text strong>{item.title}</Typography.Text>
-              <Typography.Text type="secondary"> — {item.detail}</Typography.Text>
-            </li>
-          ))}
-        </ol>
-      )}
+          {suggestions.length > 0 && (
+            <ol className="resume-diagnosis-list">
+              {suggestions.map((item) => (
+                <li key={item.kind}>
+                  <Typography.Text strong>{item.title}</Typography.Text>
+                  <Typography.Text type="secondary"> — {item.detail}</Typography.Text>
+                </li>
+              ))}
+            </ol>
+          )}
 
-      {/* W09：按条件优化版面的候选方案（挂在诊断结论下方；应用=写回滑杆）。 */}
-      <LayoutOptimizerPanel
-        analysis={analysisKey === layoutKey ? analysis : null}
-        current={optimizerCurrentOf(layout)}
-        probe={(css) => previewRef.current?.measureWithProbe(css) ?? null}
-        before={measure}
-        disabled={disabled}
-        applying={optimizerApplying}
-        conflictCode={optimizerConflict}
-        onApply={applyOptimizer}
-        content={content}
-        contentHints={contentHints}
-        onApplyContent={onApplyContent ? applyContent : undefined}
-      />
+          {/* W09：按条件优化版面的候选方案（挂在诊断结论下方；应用=写回滑杆）。 */}
+          <LayoutOptimizerPanel
+            analysis={analysisKey === layoutKey ? analysis : null}
+            current={optimizerCurrentOf(layout)}
+            probe={(css) => previewRef.current?.measureWithProbe(css) ?? null}
+            before={measure}
+            disabled={disabled}
+            applying={optimizerApplying}
+            conflictCode={optimizerConflict}
+            onApply={applyOptimizer}
+            content={content}
+            contentHints={contentHints}
+            onApplyContent={onApplyContent ? applyContent : undefined}
+          />
 
-      {fitRoom && diagnosis?.status === "overflow" && (
-        <Alert
-          type="info"
-          showIcon
-          className="resume-diagnosis-floor"
-          title={fitRoom.font_floor_note}
-          action={
-            layout.page_limit < 3 && (
-              <Button size="small" disabled={disabled || fitting !== null} onClick={onAddPage}>
-                {t("resume.diagnosis.addPage", { pages: layout.page_limit + 1 })}
-              </Button>
-            )
-          }
-        />
+          {fitRoom && diagnosis?.status === "overflow" && (
+            <Alert
+              type="info"
+              showIcon
+              className="resume-diagnosis-floor"
+              title={fitRoom.font_floor_note}
+              action={
+                layout.page_limit < 3 && (
+                  <Button size="small" disabled={disabled || fitting !== null} onClick={onAddPage}>
+                    {t("resume.diagnosis.addPage", { pages: layout.page_limit + 1 })}
+                  </Button>
+                )
+              }
+            />
+          )}
+        </>
       )}
     </div>
   );

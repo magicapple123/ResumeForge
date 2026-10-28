@@ -7,11 +7,12 @@
  * 定义用内联确认条（动作 + 条数 + 保留后果 + 恢复位置）。表单型弹层禁蒙层关闭
  * （mask.closable=false）；提交中禁 Esc/×，其余 Esc 与 × 同义（子视图先退一层）。
  */
-import { App, Button, Input, Modal, Popconfirm, Tag, Tooltip, Typography } from "antd";
+import { App, Button, Input, Modal, Popconfirm, Tabs, Tag, Tooltip, Typography } from "antd";
 import { DeleteOutlined, EditOutlined } from "@ant-design/icons";
 import { Fragment, useState } from "react";
 import { t } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
+import { profileGroupDisplayName } from "../../utils/displayNames";
 import ProfileFieldSettings from "../profile-library/ProfileFieldSettings";
 import ProfileSectionSettings from "../profile-library/ProfileSectionSettings";
 import type { WorkspaceOut } from "../profile-library/types";
@@ -171,8 +172,12 @@ export default function ProfileGroupManagerModal({
               <Fragment key={group.group_id}>
                 <div className="profile-settings-row" data-testid="group-row">
                   <span className="profile-settings-row-main">
-                    <span className="profile-settings-row-title">{group.name}</span>
-                    {group.is_default ? (
+                    <span className="profile-settings-row-title">
+                      {profileGroupDisplayName(group)}
+                    </span>
+                    {/* 名字已经被翻成「默认方案」时不再重复挂一个同名 Tag；改过名的
+                        默认组名字是用户数据，保留 Tag 说明它仍是默认组。 */}
+                    {group.is_default && !group.name_is_default ? (
                       <span className="profile-settings-row-meta">
                         {t("profileGroups.manager.default")}
                       </span>
@@ -256,8 +261,10 @@ export default function ProfileGroupManagerModal({
     </div>
   );
 
+  // 页签负责区分「方案 / 板块与字段」，所以两个列表视图共用同一个弹层标题；
+  // 下钻层（编辑方案 / 字段设置）各有自己的标题与返回入口。
   const viewTitle =
-    view === "sections" || view === "fields"
+    view === "fields"
       ? t("profileLibrary.sectionSettings.title")
       : view === "group-edit"
         ? t("profileGroups.manager.editTitle")
@@ -275,6 +282,20 @@ export default function ProfileGroupManagerModal({
       closable={!groupApi.busy}
       destroyOnHidden
     >
+      {/* 视图切换从底部按钮挪到顶部页签：底部那一排按钮（含「关闭」）看起来像页脚动作，
+          实际是导航；页签把「方案 / 板块与字段」的层级关系说清楚，关闭交给右上角 ×。
+          「编辑方案」与「字段设置」是下钻层，带自己的返回入口，不出页签。 */}
+      {view === "groups" || view === "sections" ? (
+        <Tabs
+          className="profile-settings-tabs"
+          activeKey={view}
+          onChange={(key) => setView(key === "sections" ? "sections" : "groups")}
+          items={[
+            { key: "groups", label: t("profileGroups.manager.groupsTab") },
+            { key: "sections", label: t("profileGroups.manager.sectionsTab") },
+          ]}
+        />
+      ) : null}
       {view === "groups" ? renderGroups() : null}
       {view === "group-edit" && editingGroup ? (
         <ProfileGroupForm
@@ -325,21 +346,6 @@ export default function ProfileGroupManagerModal({
         <Typography.Paragraph type="secondary">
           {t("profileLibrary.error.notFound")}
         </Typography.Paragraph>
-      ) : null}
-      {view === "groups" || view === "sections" ? (
-        <div className="profile-settings-confirm-actions" style={{ marginTop: 16 }}>
-          <Button
-            onClick={() => setView(view === "groups" ? "sections" : "groups")}
-            disabled={groupApi.busy}
-          >
-            {view === "groups"
-              ? t("profileGroups.manager.sectionsTab")
-              : t("profileGroups.manager.groupsTab")}
-          </Button>
-          <Button onClick={handleCancel} disabled={groupApi.busy}>
-            {t("profileGroups.manager.close")}
-          </Button>
-        </div>
       ) : null}
     </Modal>
   );

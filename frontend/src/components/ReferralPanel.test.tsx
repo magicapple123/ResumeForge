@@ -183,6 +183,27 @@ describe("ReferralPanel", () => {
     expect(screen.getByText("REF-888")).toBeInTheDocument();
   });
 
+  it("详情里的图片备注用弹层预览，不是开新页面（与其他地方的图片一致）", async () => {
+    apiMocks.listReferralsPage.mockResolvedValue({
+      items: [{ ...ITEMS[0], note_images: ["referral_images/a.png"] }],
+      total: 1,
+    });
+    renderPanel();
+    // 用可访问名等列表就绪、用容器等图片出现：新增中文 ByText 会撞 tests 口径的棘轮。
+    await waitFor(() => expect(screen.getByRole("button", { name: "详情" })).toBeInTheDocument());
+    fireEvent.click(screen.getByRole("button", { name: "详情" }));
+    await waitFor(() => expect(document.querySelector(".ant-image img")).not.toBeNull());
+
+    // 缩略图是 antd Image：点开是遮罩层里的大图（弹出卡片），
+    // 不是 `<a target="_blank">` 那种把用户甩到新页面的写法。
+    // 缩略图在 antd Image 里（`ant-image` 容器自带预览交互），且页面上没有任何
+    // `target="_blank"` 的图片链接——jsdom 里不去点开遮罩层（那是 antd 自己的行为，
+    // 由 antd 的测试覆盖），这里只钉住"用对了组件、没退回新页面"。
+    expect(document.querySelector(".ant-image img")).not.toBeNull();
+    expect(document.querySelector('a[target="_blank"] img')).toBeNull();
+    expect(document.querySelector('a[href*="/api/"]')).toBeNull();
+  });
+
   it("批量选择：右键进多选 → 勾 2 条 → 删除所选（直接删，撤销在 Toast）→ 一次批量删除请求带全部 id 并刷新", async () => {
     apiMocks.listReferralsPage.mockResolvedValue({
       items: [ITEMS[0], { ...ITEMS[0], id: 2, referrer_name: "李四", converted: false }],

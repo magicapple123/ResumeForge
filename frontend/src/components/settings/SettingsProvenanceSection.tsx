@@ -7,23 +7,15 @@
  * 外发预览的正文只存在本组件 state 与本次响应里：不写 localStorage/sessionStorage、
  * 不输出日志、不放进任何全局 store；关掉设置页即丢。组件不自动请求，两个动作都由按钮触发。
  */
-import { Alert, Button, Card, Divider, Input, InputNumber, Space, Typography } from "antd";
+import { Button, Card, Divider, Input, Space, Typography } from "antd";
 import { useEffect, useState } from "react";
 import { useToast } from "../../hooks/useToast";
 import { pt } from "../../features/resume-provenance/i18n";
 import { useLocale } from "../../i18n/i18nContext";
-import {
-  fetchUsagePricing,
-  fetchUsageSummary,
-  previewOutbound,
-  saveUsagePricing,
-} from "../../features/resume-provenance/api";
-import type {
-  OutboundPreviewOut,
-  UsagePricingOut,
-  UsageSummaryOut,
-} from "../../features/resume-provenance/types";
+import { fetchUsageSummary, previewOutbound } from "../../features/resume-provenance/api";
+import type { OutboundPreviewOut, UsageSummaryOut } from "../../features/resume-provenance/types";
 import OutboundPreviewCard from "../resume/sources/OutboundPreviewCard";
+import UsagePricingCard from "./UsagePricingCard";
 import UsageSummaryCard from "../resume/sources/UsageSummaryCard";
 
 interface Props {
@@ -46,78 +38,30 @@ export default function SettingsProvenanceSection({ targetService, className }: 
   const [preview, setPreview] = useState<OutboundPreviewOut | null>(null);
   const [previewing, setPreviewing] = useState(false);
   const [previewError, setPreviewError] = useState<string | null>(null);
-  const [pricing, setPricing] = useState<UsagePricingOut>({
-    input_per_1k: null,
-    output_per_1k: null,
-    currency: "USD",
-  });
-  const [pricingLoading, setPricingLoading] = useState(false);
-  const [pricingSaving, setPricingSaving] = useState(false);
-  const [pricingError, setPricingError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    queueMicrotask(() => {
-      setPricingLoading(true);
-      void fetchUsagePricing()
-        .then((next) => {
-          if (!cancelled) setPricing(next);
-        })
-        .catch(() => {
-          // 旧后端没有 pricing 端点时保持未配置态；不阻塞外发预览与用量展示。
-        })
-        .finally(() => {
-          if (!cancelled) setPricingLoading(false);
-        });
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  const submitPricing = async () => {
-    const values = [pricing.input_per_1k, pricing.output_per_1k];
-    const bad = values.some((value) => value !== null && (!Number.isFinite(value) || value < 0));
-    if (bad) {
-      setPricingError(pt("settings.provenance.pricing.invalid"));
-      return;
-    }
-    // 后端校验：输入/输出单价必须同时配置或同时清空（只填一项会 422）。
-    const filled = values.filter((value) => value !== null).length;
-    if (filled === 1) {
-      setPricingError(pt("settings.provenance.pricing.both"));
-      return;
-    }
-    setPricingSaving(true);
-    setPricingError(null);
-    try {
-      const saved = await saveUsagePricing({
-        input_per_1k: pricing.input_per_1k,
-        output_per_1k: pricing.output_per_1k,
-        currency: pricing.currency.trim() || "CNY",
-      });
-      setPricing(saved);
-      toast.success(pt("settings.provenance.pricing.saved"));
-    } catch (caught) {
-      const message = errorText(caught) || pt("settings.provenance.pricing.failed");
-      setPricingError(message);
-      toast.error(message);
-    } finally {
-      setPricingSaving(false);
-    }
-  };
-
+  /** 取一次用量汇总；失败只在本卡里说明，不影响外发预览。 */
   const loadUsage = async () => {
     setUsageLoading(true);
     setUsageError(null);
     try {
-      setSummary(await fetchUsageSummary());
+      setSummary(await fetchUsageSummary({}));
     } catch (caught) {
       setUsageError(errorText(caught) || pt("settings.provenance.usageFailed"));
     } finally {
       setUsageLoading(false);
     }
   };
+
+  useEffect(() => {
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (cancelled) return;
+      void loadUsage();
+    });
+    return () => {
+      cancelled = true;
+    };
+    // 只在挂载时取一次；之后靠按钮手动刷新。
+  }, []);
 
   const buildPreview = async () => {
     setPreviewing(true);
@@ -164,61 +108,7 @@ export default function SettingsProvenanceSection({ targetService, className }: 
 
         <Divider style={{ margin: "4px 0" }} />
 
-        <div data-usage-pricing="1">
-          <Typography.Text strong>{pt("settings.provenance.pricing.title")}</Typography.Text>
-          <div style={{ fontSize: 12, color: "var(--rf-text-secondary)", marginBottom: 6 }}>
-            {pt("settings.provenance.pricing.hint")}
-          </div>
-          <Space size={8} wrap>
-            <InputNumber
-              size="small"
-              min={0}
-              step={0.1}
-              value={pricing.input_per_1k}
-              disabled={pricingLoading || undefined}
-              aria-label={pt("settings.provenance.pricing.input")}
-              placeholder={pt("settings.provenance.pricing.input")}
-              onChange={(value) =>
-                setPricing((current) => ({
-                  ...current,
-                  input_per_1k: typeof value === "number" ? value : null,
-                }))
-              }
-            />
-            <InputNumber
-              size="small"
-              min={0}
-              step={0.1}
-              value={pricing.output_per_1k}
-              disabled={pricingLoading || undefined}
-              aria-label={pt("settings.provenance.pricing.output")}
-              placeholder={pt("settings.provenance.pricing.output")}
-              onChange={(value) =>
-                setPricing((current) => ({
-                  ...current,
-                  output_per_1k: typeof value === "number" ? value : null,
-                }))
-              }
-            />
-            <Input
-              size="small"
-              value={pricing.currency}
-              aria-label={pt("settings.provenance.pricing.currency")}
-              style={{ width: 90 }}
-              onChange={(event) =>
-                setPricing((current) => ({ ...current, currency: event.target.value }))
-              }
-            />
-            <Button
-              size="small"
-              loading={pricingSaving || undefined}
-              onClick={() => void submitPricing()}
-            >
-              {pt("settings.provenance.pricing.save")}
-            </Button>
-          </Space>
-          {pricingError ? <Alert type="error" showIcon title={pricingError} /> : null}
-        </div>
+        <UsagePricingCard />
 
         <Divider style={{ margin: "4px 0" }} />
 

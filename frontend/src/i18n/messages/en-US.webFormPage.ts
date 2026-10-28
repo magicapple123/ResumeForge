@@ -15,6 +15,9 @@ const webFormPage = {
     "After filling, review each field in the browser window and click the page's own submit button yourself once everything is correct.",
   "webFormPage.hint.expandLater":
     "Once the browser is ready, the safety note, AI assist and relaxed-mode controls expand here step by step.",
+  "webFormPage.stagedAi.ready":
+    "The AI field detection you started earlier is done. Its result is staged; click “Apply” to switch to that preview — the page itself is still untouched.",
+  "webFormPage.stagedAi.apply": "Apply",
   "webFormPage.card.pending": "This page also asks for",
   "webFormPage.card.records": "Fill records",
   "webFormPage.toast.targetOpened":

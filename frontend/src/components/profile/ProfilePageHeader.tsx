@@ -12,6 +12,7 @@ import {
   FileSearchOutlined,
   QuestionCircleOutlined,
   SaveOutlined,
+  SettingOutlined,
   UpOutlined,
 } from "@ant-design/icons";
 import { Button, Typography } from "antd";
@@ -37,6 +38,11 @@ interface Props {
   onToggleExpandAll: () => void;
   onStartEditing: () => void;
   onOpenGuide: () => void;
+  /**
+   * 「资料设置」总入口：一个弹层里统一管方案 / 板块 / 字段。
+   * 单独的入口（当前方案下拉里的「管理方案」、每张卡的字段设置齿轮）都保留。
+   */
+  onOpenSettings: () => void;
 }
 
 export default function ProfilePageHeader({
@@ -55,6 +61,7 @@ export default function ProfilePageHeader({
   onToggleExpandAll,
   onStartEditing,
   onOpenGuide,
+  onOpenSettings,
 }: Props) {
   useLocale();
   return (
@@ -67,6 +74,9 @@ export default function ProfilePageHeader({
         <div className="profile-page-header-group">{groupControl}</div>
       </div>
       <div className="profile-page-header-actions">
+        <Button icon={<SettingOutlined />} disabled={saving} onClick={onOpenSettings}>
+          {t("profileLibrary.action.settings")}
+        </Button>
         <Button icon={<QuestionCircleOutlined />} disabled={saving} onClick={onOpenGuide}>
           {t("profileLibrary.action.guide")}
         </Button>

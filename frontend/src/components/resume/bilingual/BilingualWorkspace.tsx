@@ -9,13 +9,14 @@
  * - 后端 `blocked_fields`（事实锁/术语锁定保留原文）在候选里禁用勾选，**不给采纳**；
  * - 术语删除是软删（回收站第 18 类），Toast 5 秒撤销 → `restoreTrashItem("glossary_term", id)`。
  */
-import { Alert, Button, Segmented, Space, Typography } from "antd";
-import { useCallback, useEffect, useState } from "react";
+import { Alert, Button, Segmented, Typography } from "antd";
+import { useCallback, useEffect, useRef, useState } from "react";
 import ErrorState from "../../common/ErrorState";
 import LoadingBlock from "../../common/LoadingBlock";
 import { useToast } from "../../../hooks/useToast";
 import { t } from "../../../i18n";
 import { useLocale } from "../../../i18n/i18nContext";
+import { ApiError } from "../../../api/client";
 import { restoreTrashItem } from "../../../api/trash";
 import { bt } from "../../../features/resume-bilingual/i18n";
 import { buildBilingualPairs } from "../../../features/resume-bilingual/fieldPairs";
@@ -68,6 +69,16 @@ function errorText(error: unknown): string {
   return error instanceof Error && error.message ? error.message : "";
 }
 
+/**
+ * 后端 400 = 「这次翻译没法开始」（最常见是还没配大模型 API，也可能是语言方向不对）。
+ *
+ * 只按状态码分类、把后端原文当 reason 带出来：后端那句 detail 是服务端文案，
+ * 前端不再按中文关键字匹配（否则界面文案会被硬编码进代码里）。
+ */
+function isRejectedByBackend(error: unknown): boolean {
+  return error instanceof ApiError && error.status === 400;
+}
+
 export default function BilingualWorkspace({
   resumeId,
   currentContent,
@@ -89,6 +100,18 @@ export default function BilingualWorkspace({
   const [terms, setTerms] = useState<GlossaryTerm[]>([]);
   const [termsLoading, setTermsLoading] = useState(false);
   const [savingTerm, setSavingTerm] = useState(false);
+  /** 正在新建的语言版本（翻译开始前就清空）。 */
+  const [creating, setCreating] = useState<"zh-CN" | "en-US" | null>(null);
+  /** 创建成功后自动翻译（translate → adopt）是否在跑。 */
+  const [autoTranslating, setAutoTranslating] = useState(false);
+  // 翻译可能几十秒、也可能被取消：卸载后不再 setState（只在 finally 里复位 loading）。
+  const alive = useRef(true);
+  useEffect(() => {
+    alive.current = true;
+    return () => {
+      alive.current = false;
+    };
+  }, []);
 
   const targetLanguage = currentLanguage === "zh-CN" ? "en-US" : "zh-CN";
 
@@ -214,16 +237,80 @@ export default function BilingualWorkspace({
     }
   };
 
+  /**
+   * 新建语言版本 = 「复制一份同语言内容」+「立刻翻译成目标语言」两步。
+   *
+   * 以前只做了第一步，用户看到两列都是中文就以为坏了。这里把后端既有链路接起来：
+   * create → getVariant（拿复制来的正文）→ translate（生成候选、不写库）→
+   * `buildTranslationCandidates` 过滤掉 `blocked_fields`（事实锁/术语锁保留原文的字段）→
+   * adopt（写回该变体）→ 交回宿主。
+   *
+   * 失败口径：**变体一律保留**。任何一步失败都只 toast 具体原因，不把整块面板推进
+   * Error 态——用户还能手动点「生成翻译候选」重试。
+   */
   const handleCreateVariant = async (language: "zh-CN" | "en-US") => {
-    if (!resumeId) return;
+    if (!resumeId || creating !== null || autoTranslating) return;
+    setCreating(language);
+    const name =
+      language === "en-US" ? bt("bilingual.variant.name.en") : bt("bilingual.variant.name.zh");
+    let created: VariantDetailOut;
     try {
-      const name =
-        language === "en-US" ? bt("bilingual.variant.name.en") : bt("bilingual.variant.name.zh");
-      await createLanguageVariant(resumeId, language, name);
-      await loadVariants();
-      toast.success(bt("bilingual.variant.created"));
+      created = await createLanguageVariant(resumeId, language, name);
     } catch (caught) {
-      toast.error(errorText(caught) || bt("bilingual.variant.createFailed"));
+      if (alive.current) {
+        setCreating(null);
+        toast.error(errorText(caught) || bt("bilingual.variant.createFailed"));
+      }
+      return;
+    }
+    if (!alive.current) return;
+    // 变体先落进列表：后面翻译失败/超时也能看到并使用这份版本。
+    setSelectedId(created.id);
+    setCreating(null);
+    toast.success(bt("bilingual.variant.created"));
+    await loadVariants();
+
+    if (!alive.current) return;
+    setAutoTranslating(true);
+    try {
+      const source = await getVariant(resumeId, created.id);
+      const result = await translateVariant(resumeId, created.id, {
+        target_language: language,
+      });
+      const mapped = buildTranslationCandidates(
+        source.content,
+        result.candidate,
+        result.blocked_fields,
+      );
+      const items = adoptItems(
+        mapped,
+        mapped.filter((candidate) => !candidate.blocked).map((candidate) => candidate.path),
+      );
+      if (items.length === 0) {
+        if (alive.current) toast.info(bt("bilingual.workspace.autoTranslate.nothing"));
+        return;
+      }
+      const adopted = await adoptTranslation(resumeId, created.id, items);
+      if (!alive.current) return;
+      setDetail(adopted.variant);
+      setCandidates(null);
+      onVariantApplied?.(adopted.variant);
+      await loadVariants();
+      if (alive.current) {
+        toast.success(
+          bt("bilingual.workspace.autoTranslate.done", { count: adopted.applied_paths.length }),
+        );
+      }
+    } catch (caught) {
+      if (!alive.current) return;
+      if (isRejectedByBackend(caught)) {
+        toast.warning(bt("bilingual.workspace.translateRejected", { reason: errorText(caught) }));
+      } else {
+        toast.error(errorText(caught) || bt("bilingual.workspace.autoTranslate.failed"));
+      }
+    } finally {
+      // 超时/取消也只是"这次没翻成"：loading 必须复位，变体保持不动。
+      if (alive.current) setAutoTranslating(false);
     }
   };
 
@@ -288,10 +375,18 @@ export default function BilingualWorkspace({
     (currentContent ?? null) as never,
     (detail?.content ?? null) as never,
   );
+  // 创建/翻译期间整条工具条禁用：这两步都不能并行（会建出两份一样语言的版本）。
+  const busy = creating !== null || autoTranslating;
+  const createBusyLabel = autoTranslating
+    ? bt("bilingual.variant.translating")
+    : bt("bilingual.variant.creating");
 
   return (
-    <div className={className} data-bilingual-workspace="1">
-      <Space size={8} wrap style={{ marginBottom: 8 }}>
+    <div
+      className={["bilingual-workspace", className].filter(Boolean).join(" ")}
+      data-bilingual-workspace="1"
+    >
+      <div className="bilingual-toolbar">
         <VariantBar
           variants={variants}
           current={selected?.language || currentLanguage}
@@ -300,27 +395,30 @@ export default function BilingualWorkspace({
             if (next) setSelectedId(next.id);
           }}
           onCreate={(language) => void handleCreateVariant(language)}
+          busy={busy}
+          busyLabel={createBusyLabel}
         />
-        <Button
-          type="primary"
-          size="small"
-          loading={translating || undefined}
-          disabled={!detail || undefined}
-          onClick={() => void handleTranslate()}
-        >
-          {bt("bilingual.workspace.translate")}
-        </Button>
-        <Segmented
-          size="small"
-          value={tab}
-          options={[
-            { value: "compare", label: bt("bilingual.workspace.tabCompare") },
-            { value: "candidates", label: bt("bilingual.workspace.tabCandidates") },
-            { value: "glossary", label: bt("bilingual.workspace.tabGlossary") },
-          ]}
-          onChange={(value) => setTab(value as WorkspaceTab)}
+        <div className="bilingual-toolbar__actions">
+          <Button
+            type="primary"
+            size="small"
+            loading={translating || undefined}
+            disabled={!detail || busy || undefined}
+            onClick={() => void handleTranslate()}
+          >
+            {bt("bilingual.workspace.translate")}
+          </Button>
+        </div>
+      </div>
+      {autoTranslating ? (
+        <Alert
+          className="bilingual-progress"
+          type="info"
+          showIcon
+          title={bt("bilingual.workspace.autoTranslate.title")}
+          description={bt("bilingual.workspace.autoTranslate.hint")}
         />
-      </Space>
+      ) : null}
       {detail ? (
         <VariantLayoutSection
           resumeId={resumeId}
@@ -331,34 +429,48 @@ export default function BilingualWorkspace({
           }}
         />
       ) : null}
-      {tab === "compare" ? (
-        detail ? (
-          <BilingualCompareView pairs={pairs} />
-        ) : (
-          <Typography.Text type="secondary">{bt("bilingual.variant.missing")}</Typography.Text>
-        )
-      ) : tab === "candidates" ? (
-        <TranslationCandidatePanel
-          candidates={candidates ?? []}
-          loading={translating}
-          adopting={adopting}
-          onAdopt={(paths) => void handleAdopt(paths)}
-          onRetry={() => void handleTranslate()}
+      <div className="bilingual-tabs">
+        <Segmented
+          size="small"
+          value={tab}
+          options={[
+            { value: "compare", label: bt("bilingual.workspace.tabCompare") },
+            { value: "candidates", label: bt("bilingual.workspace.tabCandidates") },
+            { value: "glossary", label: bt("bilingual.workspace.tabGlossary") },
+          ]}
+          onChange={(value) => setTab(value as WorkspaceTab)}
         />
-      ) : (
-        <>
-          {termsLoading && terms.length === 0 ? (
-            <LoadingBlock tip={bt("bilingual.glossary.loading")} />
+      </div>
+      <div className="bilingual-body">
+        {tab === "compare" ? (
+          detail ? (
+            <BilingualCompareView pairs={pairs} />
           ) : (
-            <GlossaryTable
-              terms={terms}
-              saving={savingTerm}
-              onSaveTerm={(term) => void handleSaveTerm(term)}
-              onDeleteTerm={(term) => void handleDeleteTerm(term)}
-            />
-          )}
-        </>
-      )}
+            <Typography.Text type="secondary">{bt("bilingual.variant.missing")}</Typography.Text>
+          )
+        ) : tab === "candidates" ? (
+          <TranslationCandidatePanel
+            candidates={candidates ?? []}
+            loading={translating || autoTranslating}
+            adopting={adopting}
+            onAdopt={(paths) => void handleAdopt(paths)}
+            onRetry={() => void handleTranslate()}
+          />
+        ) : (
+          <>
+            {termsLoading && terms.length === 0 ? (
+              <LoadingBlock tip={bt("bilingual.glossary.loading")} />
+            ) : (
+              <GlossaryTable
+                terms={terms}
+                saving={savingTerm}
+                onSaveTerm={(term) => void handleSaveTerm(term)}
+                onDeleteTerm={(term) => void handleDeleteTerm(term)}
+              />
+            )}
+          </>
+        )}
+      </div>
     </div>
   );
 }

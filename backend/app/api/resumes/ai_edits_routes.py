@@ -27,7 +27,7 @@ from ...schemas.resume import (
 from ...services import trash
 from ...services.llm import usage_ledger
 from ...services.llm.base import LLMError
-from ...services.profile.profile_service import project_legacy_profile
+from ...services.profile.ai_profile import load_ai_profile
 from ...services.resume import fact_locks
 from ...services.resume.document_identity import sanitize_document_ids
 from ...services.resume.document_save import (
@@ -62,7 +62,8 @@ async def suggest_resume_edits(resume_id: int, db: Session = Depends(get_db)):
     if not config.base_url or not config.model:
         raise HTTPException(status_code=400, detail="尚未配置大模型 API")
     try:
-        profile = project_legacy_profile(db)
+        # 建议也是"读我的资料"的 AI 功能：当前组 + 去隐藏（与匹配/助手同一口径）。
+        profile = load_ai_profile(db)
         resume = ResumeContent.model_validate(record.content)
         job_out = JobOut.model_validate(job)
         # 经包命名空间调用期读取，保住 test_resume_suggestions 对
@@ -140,9 +141,7 @@ async def revise_existing_resume(
     try:
         fact_locks.enforce_ai_content(db, record, sanitized)
     except fact_locks.FactLockError as exc:
-        logger.info(
-            "AI 修订被事实锁拒绝 record_id=%s locks=%s", record.id, len(exc.violations)
-        )
+        logger.info("AI 修订被事实锁拒绝 record_id=%s locks=%s", record.id, len(exc.violations))
         return fact_locks.fact_lock_conflict_response(exc.violations)
 
     # 模型调用期间**不持写事务**（到这里才第一次写库）：条件写 + 版本推进 + 清空

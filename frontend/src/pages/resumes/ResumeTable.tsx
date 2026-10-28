@@ -39,6 +39,8 @@ interface ContextMenuRowProps extends HTMLAttributes<HTMLTableRowElement> {
   selecting: boolean;
   /** 进入多选模式（「批量选择」菜单项的动作），页面传入的 useCallback 稳定引用。 */
   enterSelecting: () => void;
+  /** 多选态的整行右键菜单：与工具条的「批量操作」下拉同一组动作。 */
+  batchActions: RowActionItem[];
   deps: RowActionDeps;
 }
 
@@ -48,6 +50,7 @@ const ContextMenuRow = memo(function ContextMenuRow({
   record,
   selecting,
   enterSelecting,
+  batchActions,
   deps,
   ...rest
 }: ContextMenuRowProps) {
@@ -59,7 +62,7 @@ const ContextMenuRow = memo(function ContextMenuRow({
     <RowContextMenu
       items={
         selecting
-          ? []
+          ? batchActions
           : [
               batchSelectAction(enterSelecting),
               ...primaryActionsFor(record, deps),
@@ -100,6 +103,8 @@ interface Props {
   onSortChange: (next: ResumeSortState) => void;
   /** 跳转岗位广场（保留在页面里的 useNavigate）。 */
   navigate: (path: string) => void;
+  /** 多选态右键菜单的批量动作（批量删除 / 批量导出）。 */
+  batchActions: RowActionItem[];
 }
 
 export default function ResumeTable({
@@ -124,6 +129,7 @@ export default function ResumeTable({
   sortState,
   onSortChange,
   navigate,
+  batchActions,
 }: Props) {
   useLocale(); // 本组件用模块级 t()，必须订阅语言变化，否则切语言后列头与菜单不重渲染
   const tableWrapRef = useRef<HTMLDivElement>(null);
@@ -232,19 +238,19 @@ export default function ResumeTable({
       sortDirections: sortDirectionsFor("title"),
       showSorterTooltip: sortTooltip(t("resumes.list.column.title")),
       // 自定义 render 返回的是按钮，列级 ellipsis 截不到按钮里的文字（按钮自带样式），
-      // 所以省略号由按钮自己带（见下）；这里关掉 antd 的原生 title，避免和 Tooltip 弹两次。
+      // 所以省略号由按钮自己带（见下）；这里关掉 antd 的原生 title，避免再弹一次浏览器原生提示。
       ellipsis: { showTitle: false },
+      // 标题本身**不再包 Tooltip**（2026-11 用户要求）：鼠标扫过列表时黑框会挡住相邻行，
+      // 而"看完整标题"的诉求已经由点击打开预览满足。省略号仍在，长标题不撑破列宽。
       render: (_, record) => (
-        <Tooltip title={record.title} placement="topLeft">
-          <Button
-            type="link"
-            className="table-text-link"
-            style={{ maxWidth: "100%", overflow: "hidden", textOverflow: "ellipsis" }}
-            onClick={() => setPreviewId(record.id)}
-          >
-            {record.title}
-          </Button>
-        </Tooltip>
+        <Button
+          type="link"
+          className="table-text-link"
+          style={{ maxWidth: "100%", overflow: "hidden", textOverflow: "ellipsis" }}
+          onClick={() => setPreviewId(record.id)}
+        >
+          {record.title}
+        </Button>
       ),
     },
     {
@@ -413,6 +419,7 @@ export default function ResumeTable({
                   record={itemsByRowKey.get(rowKey)}
                   selecting={batch.selecting}
                   enterSelecting={batch.enterSelecting}
+                  batchActions={batchActions}
                   deps={actionDeps}
                 />
               );

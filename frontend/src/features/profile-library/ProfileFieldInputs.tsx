@@ -12,7 +12,10 @@ import { AutoComplete, Button, Form, Input, Popover, Typography } from "antd";
 import { t } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
 import PartialDateSelect from "../../components/profile/PartialDateSelect";
+import { asFieldText } from "../profile/profileFormData";
+import { useProfileBaselineLookup } from "../profile/profileBaselineContext";
 import type { FieldOut, SectionOut } from "./types";
+import { profileFieldLabel } from "./profileLabels";
 
 interface Props {
   section: SectionOut;
@@ -91,7 +94,7 @@ function InputForField({
         id={id}
         value={value}
         onChange={onChange}
-        label={field.label}
+        label={profileFieldLabel(field)}
         allowOngoing={allowsOngoing(field)}
         disabled={disabled || undefined}
       />
@@ -124,6 +127,102 @@ function InputForField({
   );
 }
 
+/** 按路径读一个嵌套值（`shouldUpdate` 拿到的是整份表单值，没有 getFieldValue 可用）。 */
+function readAtPath(values: unknown, path: (string | number)[]): unknown {
+  let node: unknown = values;
+  for (const step of path) {
+    if (node === null || typeof node !== "object") return undefined;
+    node = (node as Record<string | number, unknown>)[step];
+  }
+  return node;
+}
+
+/**
+ * 一个字段的单元格。单独成组件是因为它要用 hook（`useWatch` 取当前值、`entry_key`）——
+ * 在 `renderField` 的 map 里调 hook 会违反 hooks 规则。
+ *
+ * 编辑态且值相对"已保存基线"改过时，给外框加 `is-dirty`：标签变强调色、输入框换浅底，
+ * 用户一眼能看出"这些是我改过还没保存的"。
+ */
+function ProfileFieldCell({
+  field,
+  namePrefix,
+  disabled,
+  singleLineMax,
+  multiLineMax,
+}: {
+  field: FieldOut;
+  namePrefix: (string | number)[];
+  disabled: boolean;
+  singleLineMax: number;
+  multiLineMax: number;
+}) {
+  const form = Form.useFormInstance();
+  const baselineOf = useProfileBaselineLookup();
+  const required = field.section_key === "basic_info" && field.key === "name";
+  // 只有多行文本需要整行（半列里失去可读宽度）。日期不再整行：年/月/日三个下拉
+  // 排在一格里，相邻字段（姓名 / 性别 / 出生年月、开始 / 结束）才能落在同一行。
+  const wide = field.field_type === "multi_line";
+  const valuePath = [...namePrefix, field.field_id];
+  // entry_key 与 `values` 同级，是它的兄弟字段。
+  const entryPath = [...namePrefix.slice(0, -1), "entry_key"];
+
+  // 订阅方式用 `Form.Item shouldUpdate`（渲染函数）而不是 `Form.useWatch`：
+  // 本仓库实测 useWatch 对深层路径（`sections.x.N.values.field`）**不触发更新**，
+  // 表现恰好是"输入了但标记不变"——`components/resume/research/UrlPreview.tsx`
+  // 里记着同一个坑。shouldUpdate 带比较函数，只有本字段或 entry_key 变了才重渲。
+  return (
+    <Form.Item
+      noStyle
+      shouldUpdate={(prev, next) =>
+        readAtPath(prev, valuePath) !== readAtPath(next, valuePath) ||
+        readAtPath(prev, entryPath) !== readAtPath(next, entryPath)
+      }
+    >
+      {() => {
+        const currentValue = form.getFieldValue(valuePath) as string | undefined;
+        const entryKey = form.getFieldValue(entryPath) as string | undefined;
+        const current = asFieldText(currentValue);
+        const baseline = baselineOf?.(entryKey) ?? null;
+        // 新条目（还没有 entry_id）没有基线：只要写了内容就算"新增"，同样标出来。
+        // `undefined` 表示这个字段还没写过值（新行），不能当成"被清空了"。
+        const dirty =
+          !disabled &&
+          currentValue !== undefined &&
+          entryKey !== undefined &&
+          (baseline ? asFieldText(baseline[field.field_id]) !== current : current.trim() !== "");
+        return (
+          <div
+            className={
+              "profile-field-grid-item" + (wide ? " is-wide" : "") + (dirty ? " is-dirty" : "")
+            }
+          >
+            <Form.Item
+              name={valuePath}
+              label={profileFieldLabel(field)}
+              rules={
+                required
+                  ? [{ required: true, message: t("profileLibrary.field.required") }]
+                  : undefined
+              }
+              extra={field.private ? t("profileLibrary.field.private") : undefined}
+              // 网格已经给出横向间距，行间只剩 12px：13 个大字段纵向不再各占一行半。
+              style={{ marginBottom: 12 }}
+            >
+              <InputForField
+                field={field}
+                disabled={disabled}
+                singleLineMax={singleLineMax}
+                multiLineMax={multiLineMax}
+              />
+            </Form.Item>
+          </div>
+        );
+      }}
+    </Form.Item>
+  );
+}
+
 export default function ProfileFieldInputs({
   section,
   namePrefix,
@@ -138,33 +237,16 @@ export default function ProfileFieldInputs({
     (field) => !field.hidden && field.field_type !== "photo",
   );
 
-  const renderField = (field: FieldOut) => {
-    const required = field.section_key === "basic_info" && field.key === "name";
-    // 只有多行文本需要整行（半列里失去可读宽度）。日期不再整行：年/月/日三个下拉
-    // 排在一格里，相邻字段（姓名 / 性别 / 出生年月、开始 / 结束）才能落在同一行。
-    const wide = field.field_type === "multi_line";
-    return (
-      <div key={field.field_id} className={"profile-field-grid-item" + (wide ? " is-wide" : "")}>
-        <Form.Item
-          name={[...namePrefix, field.field_id]}
-          label={field.label}
-          rules={
-            required ? [{ required: true, message: t("profileLibrary.field.required") }] : undefined
-          }
-          extra={field.private ? t("profileLibrary.field.private") : undefined}
-          // 网格已经给出横向间距，行间只剩 12px：13 个大字段纵向不再各占一行半。
-          style={{ marginBottom: 12 }}
-        >
-          <InputForField
-            field={field}
-            disabled={disabled}
-            singleLineMax={singleLineMax}
-            multiLineMax={multiLineMax}
-          />
-        </Form.Item>
-      </div>
-    );
-  };
+  const renderField = (field: FieldOut) => (
+    <ProfileFieldCell
+      key={field.field_id}
+      field={field}
+      namePrefix={namePrefix}
+      disabled={disabled}
+      singleLineMax={singleLineMax}
+      multiLineMax={multiLineMax}
+    />
+  );
 
   const hiddenList = (
     <div className="profile-hidden-field-list">
@@ -173,7 +255,7 @@ export default function ProfileFieldInputs({
       </Typography.Paragraph>
       {hiddenFields.map((field) => (
         <div key={field.field_id} className="profile-hidden-field-row">
-          <Typography.Text>{field.label}</Typography.Text>
+          <Typography.Text>{profileFieldLabel(field)}</Typography.Text>
           <Button size="small" onClick={() => onSetPreference(field, { hidden: false })}>
             {t("profileLibrary.field.restore")}
           </Button>

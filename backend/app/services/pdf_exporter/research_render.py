@@ -9,7 +9,7 @@
 
 from __future__ import annotations
 
-from ..resume.profile_field_lines import profile_field_lines
+from ..resume.profile_field_lines import profile_field_rows, profile_row_text
 from ..resume.resume_labels import (
     authors_text,
     credential_detail,
@@ -28,10 +28,14 @@ def _join(values, separator: str = " · ") -> str:
     return separator.join(str(item).strip() for item in values if str(item).strip())
 
 
-def _profile_meta(pdf, item, section_key: str, base: float, language: str) -> None:
-    """F8：条目既有内容之后的新增字段「标签：值」行（空值跳过，顺序单源）。"""
-    for label, value in profile_field_lines(item, section_key, field_labels(language)):
-        pdf.meta_line(f"{label}：{value}", base)
+def _profile_meta(
+    pdf, item, section_key: str, base: float, language: str, field_layout=None
+) -> None:
+    """F8 + W4：条目既有内容之后的新增字段行（空值跳过，顺序/装箱单源）。"""
+    for row in profile_field_rows(
+        item, section_key, field_labels(language), field_layout
+    ):
+        pdf.meta_line(profile_row_text(row), base)
 
 
 def experience_kind_line(kind: str, language: str) -> str:
@@ -51,7 +55,9 @@ def project_extra_line(project, language: str) -> str:
     return _join([artifact, project.public_url])
 
 
-def draw_publications(pdf, resume, *, base: float, leading: float, labels, language: str) -> bool:
+def draw_publications(
+    pdf, resume, *, base: float, leading: float, labels, language: str, field_layout=None
+) -> bool:
     """论文发表：题目加粗 + 期刊/年份/状态；作者行（本人加粗）+ DOI/链接。"""
     if not resume.publications:
         return False
@@ -76,12 +82,12 @@ def draw_publications(pdf, resume, *, base: float, leading: float, labels, langu
         detail = publication_detail(publication, language)
         if detail:
             pdf.meta_line(detail, base)
-        _profile_meta(pdf, publication, "publications", base, language)
+        _profile_meta(pdf, publication, "publications", base, language, field_layout)
     return True
 
 
 def draw_research_projects(
-    pdf, resume, *, base: float, leading: float, labels, language: str
+    pdf, resume, *, base: float, leading: float, labels, language: str, field_layout=None
 ) -> bool:
     """科研项目：名称/角色/机构/周期 + 经费 + 描述与成果列表。"""
     if not resume.research_projects:
@@ -101,7 +107,7 @@ def draw_research_projects(
             pdf.meta_line(f"{field_labels(language)['funding']}：{project.funding}", base)
         pdf.bullets(project.description, base, section="research_projects", object_id=project.id)
         pdf.bullets(project.outcomes, base, section="research_projects", object_id=project.id)
-        _profile_meta(pdf, project, "research_projects", base, language)
+        _profile_meta(pdf, project, "research_projects", base, language, field_layout)
     return True
 
 

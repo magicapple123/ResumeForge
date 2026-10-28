@@ -11,6 +11,7 @@ import type {
   JobMatchOut,
   JobMatchResult,
   JobMatchBatchOut,
+  JobMatchBatchMode,
   JobMatchBatchSummary,
   JobMatchBackgroundTask,
   JobPayload,
@@ -192,6 +193,8 @@ export function listJobMatchBatches(limit = 30): Promise<JobMatchBatchSummary[]>
 export function startJobMatchBatchTask(payload: {
   job_ids: number[];
   force?: boolean;
+  /** 省略即逐岗匹配（旧行为）；compare = 逐岗结论之后再横向排序并解释原因。 */
+  mode?: JobMatchBatchMode;
 }): Promise<JobMatchBackgroundTask> {
   return request("/jobs/match-batch-tasks", {
     method: "POST",

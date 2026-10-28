@@ -27,6 +27,7 @@ const EXEMPT_FIXTURES = {
   "appConfig.preset.xai": "xAI Grok",
   "appConfig.preset.mistral": "Mistral AI",
   "userGuide.setupProfile.step1.point9.lead": "API Key",
+  "interviewPage.interviewerName": "Jane",
 } satisfies Record<keyof typeof EQUALITY_EXEMPT_KEYS, string>;
 
 describe("message contract failure fixtures", () => {

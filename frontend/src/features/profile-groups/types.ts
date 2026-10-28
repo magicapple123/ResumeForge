@@ -13,6 +13,11 @@ export interface GroupBriefOut {
   group_id: string;
   name: string;
   is_default: boolean;
+  /**
+   * 名字仍是内置的默认组名（用户没改过）。为 true 时界面按语言包显示，
+   * 否则原样显示 `name`——那是用户自己输入的数据。
+   */
+  name_is_default?: boolean;
   revision: number;
   participating_keys: string[];
   member_count: number;

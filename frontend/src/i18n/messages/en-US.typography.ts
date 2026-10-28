@@ -103,6 +103,12 @@ const typography = {
   "typography.inline.invalidUrl": "Use an http or https URL",
   "typography.level.title": "Text level",
   "typography.level.groupAria": "Apply a fixed text level to the selected content",
+  "typography.level.scope.label": "Scope",
+  "typography.level.scope.aria": "Choose which part of the entry the text level applies to",
+  "typography.level.scope.object": "Whole entry",
+  "typography.level.scope.entry_title": "Entry heading",
+  "typography.level.scope.body": "Body text",
+  "typography.level.scope.meta": "Details",
   "typography.level.hint":
     "Levels only change the font scale and spacing of selected paragraphs; every apply can be undone",
   "typography.level.empty": "Select content in the outline or preview first",
@@ -119,6 +125,20 @@ const typography = {
   "typography.level.restore": "Restore template inheritance",
   "typography.level.applied": "Set {count} items to {level}",
   "typography.level.restored": "Restored template inheritance for {count} items",
+  "typography.fieldLayout.groupTitle": "Entry field layout",
+  "typography.fieldLayout.hint": "Adjust columns and order of extra fields for this section only",
+  "typography.fieldLayout.sectionLabel": "Section",
+  "typography.fieldLayout.columnsLabel": "Fields per row",
+  "typography.fieldLayout.columns.1": "1 column",
+  "typography.fieldLayout.columns.2": "2 columns",
+  "typography.fieldLayout.columns.3": "3 columns",
+  "typography.fieldLayout.fieldsTitle": "Field order",
+  "typography.fieldLayout.moveUp": "Move {label} up",
+  "typography.fieldLayout.moveDown": "Move {label} down",
+  "typography.fieldLayout.solo": "Own row",
+  "typography.fieldLayout.soloAria": "Put {label} on its own row",
+  "typography.fieldLayout.reset": "Reset to default",
+  "typography.fieldLayout.summary": "Current: {columns} columns, {solo} fields on their own row",
 } as const;
 
 export default typography;

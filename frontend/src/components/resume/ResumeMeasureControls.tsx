@@ -113,6 +113,13 @@ interface Props {
    * 只展示部分功能就可以了"。默认 true 让生成配置页零改动地保留它。
    */
   showPhotoScale?: boolean;
+  /**
+   * 只渲染**字体**这一项，其余（行距 / 页边距 / 分边 / 字号 / 照片大小）都不渲染。
+   *
+   * 岗位广场的生成配置只让用户指定 5 个参数（文档模式 / 模板 / 最大篇幅 / 简历语言 /
+   * 字体），剩下那些"生成之后再去简历界面调"。默认 false = 现有宿主零改动。
+   */
+  fontOnly?: boolean;
   onChange: (layout: ResumeLayout) => void;
 }
 
@@ -127,6 +134,7 @@ export default function ResumeMeasureControls({
   showMarginSides = false,
   defaultSidesOpen = false,
   showPhotoScale = true,
+  fontOnly = false,
   onChange,
 }: Props) {
   const locale = useLocale();
@@ -354,59 +362,63 @@ export default function ResumeMeasureControls({
           "压不压得进一页"的旋钮，排在第一行；字号与字体在第二行（用户 2026-10-20 指定）。
           分边页边距紧跟在它的总滑杆之后（2026-10-23）：它解释的是"页边距"这一项，
           隔开放到末尾会让人读不出两者的从属关系。 */}
-      <LineHeightControl
-        defaultHint={
-          presetConfig ? t("resume.measure.hintPreset") : t("resume.measure.hintTemplate")
-        }
-        value={configuredLineHeight ?? templateLineHeight}
-        customized={configuredLineHeight !== null}
-        restore={restoreLineHeight}
-        disabled={disabled}
-        onProbe={applyProbe}
-        onChange={applyLineHeight}
-      />
-      <PagePaddingControl
-        defaultHint={
-          presetConfig ? t("resume.measure.hintPreset") : t("resume.measure.hintTemplate")
-        }
-        value={margins.top}
-        customized={marginsCustomized}
-        restore={restorePagePadding}
-        uniform={marginsUniform}
-        // 自定义态下读数只写「自定义」：四边各是多少放在悬停气泡里
-        // （「上 8 · 右 12 · 下 12 · 左 12」），一处不重复维护。
-        margins={margins}
-        disabled={disabled}
-        onProbe={applyProbe}
-        onChange={applyPagePadding}
-      />
-      {/* 分边页边距：只在制作台里渲染（见 `showMarginSides`）。折叠标题常驻、
+      {!fontOnly && (
+        <>
+          <LineHeightControl
+            defaultHint={
+              presetConfig ? t("resume.measure.hintPreset") : t("resume.measure.hintTemplate")
+            }
+            value={configuredLineHeight ?? templateLineHeight}
+            customized={configuredLineHeight !== null}
+            restore={restoreLineHeight}
+            disabled={disabled}
+            onProbe={applyProbe}
+            onChange={applyLineHeight}
+          />
+          <PagePaddingControl
+            defaultHint={
+              presetConfig ? t("resume.measure.hintPreset") : t("resume.measure.hintTemplate")
+            }
+            value={margins.top}
+            customized={marginsCustomized}
+            restore={restorePagePadding}
+            uniform={marginsUniform}
+            // 自定义态下读数只写「自定义」：四边各是多少放在悬停气泡里
+            // （「上 8 · 右 12 · 下 12 · 左 12」），一处不重复维护。
+            margins={margins}
+            disabled={disabled}
+            onProbe={applyProbe}
+            onChange={applyPagePadding}
+          />
+          {/* 分边页边距：只在制作台里渲染（见 `showMarginSides`）。折叠标题常驻、
           面板默认收起、展开后占满整行（`.resume-margin-sides` 的 grid-column）。
           四条支路各自独立拖动/防抖，写入语义统一在 `utils/pageMargins.ts`。 */}
-      {showMarginSides ? (
-        <PageMarginSidesControl
-          open={sidesOpen}
-          onToggle={() => setSidesOpen((open) => !open)}
-          margins={margins}
-          customizedSides={customizedSides}
-          disabled={disabled}
-          onChangeSide={applyMarginSide}
-          onResetSide={resetMarginSide}
-          onProbe={applyProbe}
-        />
-      ) : null}
-      <FontSizeControl
-        value={committedPx}
-        bounds={pxBounds}
-        signature={fontSignature}
-        customized={fontCustomized}
-        restore={restoreFontSize}
-        disabled={disabled}
-        compact={compact}
-        previewRef={previewRef}
-        onCommit={commitFontPx}
-        onReset={resetFont}
-      />
+          {showMarginSides ? (
+            <PageMarginSidesControl
+              open={sidesOpen}
+              onToggle={() => setSidesOpen((open) => !open)}
+              margins={margins}
+              customizedSides={customizedSides}
+              disabled={disabled}
+              onChangeSide={applyMarginSide}
+              onResetSide={resetMarginSide}
+              onProbe={applyProbe}
+            />
+          ) : null}
+          <FontSizeControl
+            value={committedPx}
+            bounds={pxBounds}
+            signature={fontSignature}
+            customized={fontCustomized}
+            restore={restoreFontSize}
+            disabled={disabled}
+            compact={compact}
+            previewRef={previewRef}
+            onCommit={commitFontPx}
+            onReset={resetFont}
+          />
+        </>
+      )}
       <div className="resume-measure-cell">
         <span className="resume-measure-label">{t("resume.measure.fontLabel")}</span>
         {/* 字体（项 14）：它写的是**这一份简历**的 `format_config.font`，与「设置 → 应用 →
@@ -428,7 +440,7 @@ export default function ResumeMeasureControls({
       {/* 照片大小（系数，不是绝对尺寸）：乘在模板自己的宽高上，宽高比不变。
           排在「字体」之后，与上面三行共用同一套"标签 + ± + 滑杆 + 读数"的视觉语言。
           主预览不渲染它（`showPhotoScale={false}`）：那一栏只留高频项，照片大小去制作台调。 */}
-      {showPhotoScale ? (
+      {showPhotoScale && !fontOnly ? (
         <PhotoScaleControl
           defaultHint={
             presetConfig ? t("resume.measure.hintPreset") : t("resume.measure.hintTemplate")

@@ -13,7 +13,7 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
@@ -36,6 +36,7 @@ from ...services.resume.document_versions import VersionNotFound
 from ...services.resume.resume_delivery import canonical_content_sha256
 from ...services.resume.resume_diff import build_resume_diff
 from .. import resumes as _api
+from .._disconnect import client_gone, run_until_disconnect
 from ._shared import _get_live_resume
 
 router = APIRouter(tags=["resumes"])
@@ -90,6 +91,7 @@ async def preview_scenario_variant(
     resume_id: int,
     variant_id: int,
     payload: ScenarioVariantPreviewRequest,
+    request: Request,
     db: Session = Depends(get_db),
 ) -> ScenarioVariantPreviewOut | JSONResponse:
     """按场景表达指南生成候选（不落库、不写源简历）。"""
@@ -106,18 +108,24 @@ async def preview_scenario_variant(
         raise HTTPException(status_code=400, detail="尚未配置大模型 API")
     provider = _api.create_provider(config)
     try:
-        candidate = await service.preview_scenario_candidate(
-            provider,
-            record=record,
-            variant=variant,
-            job=_job_out(db, record),
-            snapshot=snapshot,
-            instructions=payload.instructions,
+        candidate = await run_until_disconnect(
+            request,
+            service.preview_scenario_candidate(
+                provider,
+                record=record,
+                variant=variant,
+                job=_job_out(db, record),
+                snapshot=snapshot,
+                instructions=payload.instructions,
+            ),
+            what="场景候选生成",
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except LLMError as exc:
         raise HTTPException(status_code=502, detail=f"生成场景候选失败：{exc}") from exc
+    if candidate is None:
+        raise client_gone("场景候选生成")
     candidate_dump = candidate.model_dump()
     return ScenarioVariantPreviewOut(
         variant=VariantOut.model_validate(variants.variant_brief(variant)),

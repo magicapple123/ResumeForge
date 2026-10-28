@@ -61,9 +61,11 @@ const pagesMisc = {
     "Started filling in descriptions for {count} jobs; follow the progress in Apply desk → Auto collect",
   "pagesMisc.jobsPage.error.backfillFailed": "Could not fill in the descriptions",
   "pagesMisc.jobsPage.match.enteredSelection":
-    "Selection mode is on; tick the jobs, then run the analysis",
+    "Selection mode is on; tick at least two jobs to compare them",
   "pagesMisc.jobsPage.match.needJobs": "Select at least one job first",
+  "pagesMisc.jobsPage.match.needCompareJobs": "Pick at least two jobs to compare",
   "pagesMisc.jobsPage.match.tooMany": "You can analyze up to 50 jobs at a time",
+  "pagesMisc.jobsPage.match.tooManyCompare": "You can compare up to 12 jobs at a time",
   "pagesMisc.jobsPage.candidate.imported": "Candidate job imported into the job list",
   "pagesMisc.jobsPage.candidate.markFailed": "Could not mark the import status",
 } as const;

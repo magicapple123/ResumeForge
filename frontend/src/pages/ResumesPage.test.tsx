@@ -367,7 +367,8 @@ describe("ResumesPage 批量选择", () => {
     fireEvent.click(rowBoxes()[2]!);
     expect(screen.getByText("已选 2 项")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "批量删除" }));
+    fireEvent.click(screen.getByRole("button", { name: "批量操作" }));
+    fireEvent.click(await screen.findByRole("menuitem", { name: /批量删除/ }));
     // 标题只写动作 + 对象；条数按 §4.4 的例外进正文（见下一条断言）。
     expect(
       (await screen.findAllByText("删除选中的简历？", {}, { timeout: 5000 })).length,
@@ -400,7 +401,7 @@ describe("ResumesPage 批量选择", () => {
     expect(await screen.findByText(/已删除 2 份简历/, {}, { timeout: 5000 })).toBeInTheDocument();
   });
 
-  it("空选时「批量删除」不可用；退出多选清空选区", async () => {
+  it("空选时「批量操作」不可用；退出选择清空选区", async () => {
     apiMocks.listResumes.mockResolvedValue({ items: [RESUME], total: 1 });
     renderPage();
 
@@ -408,13 +409,13 @@ describe("ResumesPage 批量选择", () => {
     // 顺带钉住 R8 口径：工具栏不再有直接的「批量选择」按钮。
     expect(screen.queryByRole("button", { name: /批量选择/ })).not.toBeInTheDocument();
     await enterSelectingViaContextMenu();
-    const deleteBtn = await screen.findByRole("button", { name: "批量删除" }, { timeout: 5000 });
-    expect(deleteBtn).toBeDisabled();
+    const actionsBtn = await screen.findByRole("button", { name: "批量操作" }, { timeout: 5000 });
+    expect(actionsBtn).toBeDisabled();
 
     const rowCheckbox = screen.getAllByRole("checkbox")[1]!;
     fireEvent.click(rowCheckbox);
     expect(screen.getByText("已选 1 项")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "退出多选" }));
+    fireEvent.click(screen.getByRole("button", { name: "退出选择" }));
     expect(screen.queryByText(/已选/)).not.toBeInTheDocument();
     expect(apiMocks.deleteResume).not.toHaveBeenCalled();
     expect(apiMocks.batchDeleteResumes).not.toHaveBeenCalled();
@@ -445,7 +446,8 @@ describe("ResumesPage 跨页全选（C3）", () => {
       expect.objectContaining({ keyword: "", has_job: undefined }),
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "批量删除" }));
+    fireEvent.click(screen.getByRole("button", { name: "批量操作" }));
+    fireEvent.click(await screen.findByRole("menuitem", { name: /批量删除/ }));
     const confirmRoot = await waitFor(() => {
       const root = document.querySelector(".ant-modal-confirm");
       expect(root).not.toBeNull();

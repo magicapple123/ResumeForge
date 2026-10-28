@@ -3,8 +3,10 @@
 import { Alert, App, Button, Card, Input, Listy, Popconfirm, Space, Tag, Typography } from "antd";
 import { useState } from "react";
 import { answerDrill, finishDrill } from "../../api/drill";
+import AbortButton from "../../components/common/AbortButton";
 import { ListyItem } from "../../components/common/ListyItem";
 import { LISTY_ITEM_PADDING_SMALL } from "../../components/common/listyPadding";
+import { errorText, useAbortableRequest } from "../../hooks/useAbortableRequest";
 import { t } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
 import type { DrillSession, EvidenceStatus } from "../../types";
@@ -32,7 +34,10 @@ export function ActiveSession({
   useLocale();
   const { message } = App.useApp();
   const [answer, setAnswer] = useState("");
-  const [busy, setBusy] = useState(false);
+  // 判定与「提前结束出复盘」各是一条长调用，都能单独停。
+  const answerRequest = useAbortableRequest();
+  const finishRequest = useAbortableRequest();
+  const busy = answerRequest.loading || finishRequest.loading;
   const [lastVerdict, setLastVerdict] = useState<{
     status: EvidenceStatus;
     missing: string[];
@@ -48,35 +53,35 @@ export function ActiveSession({
       message.warning(t("drillSession.answerRequired"));
       return;
     }
-    setBusy(true);
-    try {
-      const result = await answerDrill(session.id, answer.trim());
-      setAnswer("");
-      setLastVerdict({
-        status: result.status,
-        missing: result.missing,
-        contradictions: result.contradictions,
-        feedback: result.feedback,
-      });
-      onUpdate(result.session);
-      if (result.finished) message.success(t("drillSession.finishedScan"));
-    } catch (error) {
-      message.error(error instanceof Error ? error.message : t("drillSession.submitFailed"));
-    } finally {
-      setBusy(false);
+    const outcome = await answerRequest.run((signal) =>
+      answerDrill(session.id, answer.trim(), signal),
+    );
+    if (outcome.status === "error") {
+      message.error(errorText(outcome.error, t("drillSession.submitFailed")));
+      return;
     }
+    // 停止/取消：输入框里的答案**保留**（用户还能接着提交），上一次的判定也不动。
+    if (outcome.status === "aborted") return;
+    setAnswer("");
+    setLastVerdict({
+      status: outcome.data.status,
+      missing: outcome.data.missing,
+      contradictions: outcome.data.contradictions,
+      feedback: outcome.data.feedback,
+    });
+    onUpdate(outcome.data.session);
+    if (outcome.data.finished) message.success(t("drillSession.finishedScan"));
   };
 
   const stop = async () => {
-    setBusy(true);
-    try {
-      onUpdate(await finishDrill(session.id));
-      message.success(t("drillSession.stoppedScan"));
-    } catch (error) {
-      message.error(error instanceof Error ? error.message : t("drillSession.stopFailed"));
-    } finally {
-      setBusy(false);
+    const outcome = await finishRequest.run((signal) => finishDrill(session.id, signal));
+    if (outcome.status === "error") {
+      message.error(errorText(outcome.error, t("drillSession.stopFailed")));
+      return;
     }
+    if (outcome.status === "aborted") return;
+    onUpdate(outcome.data);
+    message.success(t("drillSession.stoppedScan"));
   };
 
   return (
@@ -196,6 +201,7 @@ export function ActiveSession({
               <Button type="primary" loading={busy} onClick={() => void submit()}>
                 {t("drillSession.submit")}
               </Button>
+              {answerRequest.loading && <AbortButton onClick={() => answerRequest.cancel()} />}
               <Popconfirm
                 title={t("drillSession.stopConfirmTitle")}
                 description={t("drillSession.stopConfirmBody")}
@@ -215,9 +221,14 @@ export function ActiveSession({
           title={t("drillSession.generating")}
           description={t("drillSession.generatingHint")}
           action={
-            <Button size="small" loading={busy} onClick={() => void stop()}>
-              {t("drillSession.stopEarly")}
-            </Button>
+            <Space size={6}>
+              {finishRequest.loading && (
+                <AbortButton size="small" onClick={() => finishRequest.cancel()} />
+              )}
+              <Button size="small" loading={busy} onClick={() => void stop()}>
+                {t("drillSession.stopEarly")}
+              </Button>
+            </Space>
           }
         />
       )}

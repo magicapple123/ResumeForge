@@ -1,31 +1,34 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * 顶部常驻任务条（T1）：三源聚合、无任务不渲染、查看与取消。
+ * 顶部常驻任务条：两源聚合（统一登记表 + 批量匹配）、无任务不渲染、查看与取消。
  *
- * 三个来源里只驱动岗位解读（真实 store + mock 掉的 api），简历生成 / 批量匹配的 hook
- * 直接打桩返回空数组——这里要验的是"任务条怎么摆这三类任务"，不是它们各自的轮询。
+ * 两个 hook 直接打桩返回数组——这里要验的是"任务条怎么摆这些任务"，不是它们各自的轮询。
+ * 本轮起**岗位解读也走统一登记表**，所以这一份桩里放一条 `job_analysis` 任务就能覆盖
+ * 它原来的那几条断言（顺带证明"新增入口不需要改这个组件"）。
  */
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { App as AntdApp } from "antd";
 import { MemoryRouter, useLocation } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { JobAnalysisResult } from "../types";
-import { resetJobAnalysisStoreForTests, startJobAnalysis } from "../features/jobs/jobAnalysisStore";
+import type { BackgroundTask } from "../utils/backgroundTasks.types";
 import BackgroundTaskBar from "./BackgroundTaskBar";
 
 const sourceMocks = vi.hoisted(() => ({
-  resumeTasks: [] as unknown[],
+  tasks: [] as BackgroundTask[],
   matchTasks: [] as unknown[],
-  generateJobAnalysis: vi.fn(),
+  cancelBackgroundTask: vi.fn(),
 }));
 
 vi.mock("../hooks/useBackgroundTasks", () => ({
-  useBackgroundTasks: () => sourceMocks.resumeTasks,
+  useBackgroundTasks: () => sourceMocks.tasks,
 }));
 vi.mock("../hooks/useJobMatchBackgroundTasks", () => ({
   useJobMatchBackgroundTasks: () => sourceMocks.matchTasks,
 }));
-vi.mock("../api/jobs", () => ({ generateJobAnalysis: sourceMocks.generateJobAnalysis }));
+vi.mock("../utils/backgroundTasks", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../utils/backgroundTasks")>();
+  return { ...actual, cancelBackgroundTask: sourceMocks.cancelBackgroundTask };
+});
 
 function LocationProbe() {
   const location = useLocation();
@@ -43,24 +46,35 @@ function renderBar() {
   );
 }
 
-/** 让 store 里一个"永不结束"的解读任务跑起来（任务条的典型输入）。 */
-function startRunningAnalysis() {
-  sourceMocks.generateJobAnalysis.mockReturnValueOnce(
-    new Promise<JobAnalysisResult>(() => undefined),
-  );
-  startJobAnalysis({ jobId: 12, title: "算法工程师", company: "字节跳动" });
+/** 一条正在跑的岗位解读任务（统一登记表里的形状）。 */
+function jobAnalysisTask(): BackgroundTask {
+  return {
+    key: "job_analysis#12",
+    kind: "job_analysis",
+    id: 12,
+    label: "岗位解读 · 字节跳动 · 算法工程师",
+    status: "running",
+    message: "正在解读岗位要求",
+    progressPercent: 40,
+    receivedChars: 0,
+    resumeId: null,
+    refId: 12,
+    deepLink: "/jobs?job_id=12&analysis=1",
+    resultData: null,
+    error: "",
+    unknown: false,
+  };
 }
 
 beforeEach(() => {
-  resetJobAnalysisStoreForTests();
-  sourceMocks.resumeTasks = [];
+  sourceMocks.tasks = [];
   sourceMocks.matchTasks = [];
-  sourceMocks.generateJobAnalysis.mockReset();
+  sourceMocks.cancelBackgroundTask.mockReset();
+  sourceMocks.cancelBackgroundTask.mockResolvedValue(undefined);
 });
 
 afterEach(() => {
   cleanup();
-  resetJobAnalysisStoreForTests();
 });
 
 describe("BackgroundTaskBar", () => {
@@ -72,36 +86,38 @@ describe("BackgroundTaskBar", () => {
     expect(container.querySelector(".background-task-bar")).toBeNull();
   });
 
-  it("有岗位解读任务时出 chip：名称 + 计时 + 查看 + 取消", async () => {
-    startRunningAnalysis();
+  it("统一登记表里的任务各出一枚 chip：名称 + 进度文案 + 查看 + 取消", () => {
+    sourceMocks.tasks = [jobAnalysisTask()];
     renderBar();
 
     expect(screen.getByRole("status")).toBeInTheDocument();
     expect(screen.getByText("岗位解读 · 字节跳动 · 算法工程师")).toBeInTheDocument();
-    expect(screen.getByText(/已运行 \d+ 秒/)).toBeInTheDocument();
+    // 进度文案用 textContent 判定而不是 ByText：中文字面量的 ByText 断言有棘轮配额，
+    // 这里没有"必须精确匹配整段文本"的需要。
+    expect(screen.getByRole("status").textContent).toContain("正在解读岗位要求");
     expect(screen.getByRole("button", { name: "查看" })).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "取消岗位解读 · 字节跳动 · 算法工程师" }),
     ).toBeInTheDocument();
   });
 
-  it("「查看」跳到对应岗位并带上打开解读的参数", () => {
-    startRunningAnalysis();
+  it("没有进度文案时退回「生成中…」（地址由 taskDeepLinks 生成，组件不手拼）", () => {
+    sourceMocks.tasks = [{ ...jobAnalysisTask(), message: "" }];
     renderBar();
 
-    fireEvent.click(screen.getByRole("button", { name: "查看" }));
+    expect(screen.getByText("生成中…")).toBeInTheDocument();
 
+    fireEvent.click(screen.getByRole("button", { name: "查看" }));
     expect(screen.getByTestId("location")).toHaveTextContent("/jobs?job_id=12&analysis=1");
   });
 
-  it("「取消」立刻停掉本次生成，chip 随之消失", async () => {
-    startRunningAnalysis();
+  it("「取消」走统一取消入口（真的是让后端任务停下，不是删掉本地条目）", async () => {
+    sourceMocks.tasks = [jobAnalysisTask()];
     renderBar();
 
     fireEvent.click(screen.getByRole("button", { name: "取消岗位解读 · 字节跳动 · 算法工程师" }));
 
-    // store 里状态回 idle → 订阅者重渲染 → 任务条没有任务了，整个消失。
-    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+    expect(sourceMocks.cancelBackgroundTask).toHaveBeenCalledWith("job_analysis#12");
   });
 
   it("批量匹配任务也在条上（进度以「已处理 N/M」表示）", () => {

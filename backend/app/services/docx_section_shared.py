@@ -15,7 +15,7 @@ from __future__ import annotations
 
 from .docx_blocks import DocxTheme
 from .docx_blocks import meta_line as _meta_line
-from .resume.profile_field_lines import profile_field_lines
+from .resume.profile_field_lines import profile_field_rows, profile_row_text
 from .resume.resume_labels import field_labels
 
 
@@ -29,13 +29,23 @@ def profile_meta_lines(
     theme: DocxTheme,
     language: str,
     style=None,
+    field_layout=None,
 ) -> None:
-    """F8：条目既有内容之后的「标签：值」副行（空值跳过，字段顺序由单一来源给）。"""
+    """F8 + W4：条目既有内容之后的「标签：值」副行（空值跳过，顺序/装箱由单一来源给）。
+
+    有 ``field_layout`` 时按装箱后的行输出（一行一次 meta_line，行内 " · " 连接）；
+    无配置时每字段一行 = 改造前的 Word 产物。
+    """
     labels = field_labels(language)
-    for label, value in profile_field_lines(item, section_key, labels):
+    for row in profile_field_rows(item, section_key, labels, field_layout):
         _meta_line(
-            doc, f"{label}：{value}", base=base, layout=layout, theme=theme, style=style
+            doc, profile_row_text(row), base=base, layout=layout, theme=theme, style=style
         )
+
+
+def field_layout_of(overrides):
+    """从 RenderOverrides 取条目字段排版（None / 旧构造 = 无配置 → 默认逐字段一行）。"""
+    return getattr(overrides, "field_layout", None)
 
 
 def _join(values: list[str], separator: str = " · ") -> str:

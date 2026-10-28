@@ -25,6 +25,7 @@ import type {
 import { t } from "../../i18n";
 import type { MessageKey } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
+import { resumeTemplateDescription, resumeTemplateLabel } from "../../i18n/enum/resumeCatalog";
 import { withHiddenScrollbar } from "../../utils/iframeDocument";
 import { templateCapability } from "../../features/resume-template-trial/templateProfile";
 import TemplateTrialPanel from "./template-trial/TemplateTrialPanel";
@@ -296,7 +297,7 @@ export default function TemplateGalleryModal({
                 className="template-gallery-preview"
                 role="button"
                 tabIndex={0}
-                aria-label={t("gallery.zoom.openAria", { name: item.label })}
+                aria-label={t("gallery.zoom.openAria", { name: resumeTemplateLabel(item) })}
                 onClick={() => void openZoom(item)}
                 onKeyDown={(event) => {
                   if (event.key === "Enter" || event.key === " ") {
@@ -310,7 +311,7 @@ export default function TemplateGalleryModal({
                   // 不再写死 `scale(0.36)` —— 卡片宽一变就会左右各裁 4px、右边留白。
                   <A4PreviewFrame
                     html={withHiddenScrollbar(previews[item.name])}
-                    title={t("gallery.preview.iframeTitle", { name: item.label })}
+                    title={t("gallery.preview.iframeTitle", { name: resumeTemplateLabel(item) })}
                     fit="width"
                   />
                 ) : failed[item.name] ? (
@@ -328,14 +329,14 @@ export default function TemplateGalleryModal({
               </div>
               <div className="template-gallery-meta">
                 <div className="template-gallery-title">
-                  <span>{item.label}</span>
+                  <span>{resumeTemplateLabel(item)}</span>
                   {item.custom ? <Tag color="blue">{t("gallery.badge.custom")}</Tag> : null}
                   {item.name === selectedName ? (
                     <Tag color="green">{t("gallery.status.inUse")}</Tag>
                   ) : null}
                 </div>
                 <Typography.Text type="secondary" className="template-gallery-desc">
-                  {item.description || t("gallery.card.customDescription")}
+                  {resumeTemplateDescription(item) || t("gallery.card.customDescription")}
                 </Typography.Text>
                 {/* W10 能力卡片：篇幅（后端 density_group 同判据）/ 照片 / 栏目 / 导出。
                     数据全部从目录投影，不写死第二份模板档案。 */}

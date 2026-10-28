@@ -11,6 +11,9 @@ const appHeader = {
   "appHeader.dataset.chipAriaSample": "Current dataset: {name}, sample data",
   "appHeader.dataset.menuCurrent": "{name} (current)",
   "appHeader.dataset.menuBackToMine": "Back to my data",
+  // Display name of the built-in main dataset (fixed at creation; the backend refuses to
+  // rename it). User-created and imported datasets always show their own name.
+  "appHeader.dataset.mainName": "My data",
   "appHeader.dataset.menuCreate": "New dataset...",
   "appHeader.dataset.switchFailed": "Could not switch the dataset",
   "appHeader.dataset.createNameRequired": "Enter a dataset name",

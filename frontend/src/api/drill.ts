@@ -1,5 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
-/** 面试深挖接口：开场、逐轮回答、提前收尾、复盘与复练。 */
+/**
+ * 面试深挖接口：开场、逐轮回答、提前收尾、复盘与复练。
+ *
+ * 这几条写请求都会现场调大模型，所以都接受可选的 `signal`：界面上的「停止」一按就断开
+ * 连接，服务端据此停下（后端对应路由已经套了 `run_until_disconnect`）。signal 缺省时
+ * 行为与从前完全一致。
+ */
 import type {
   DrillAnswerResult,
   DrillCreatePayload,
@@ -15,8 +21,11 @@ export function listDrillSessions(params: { status?: string } = {}): Promise<Dri
 }
 
 /** 开一场深挖。第一题的**评分契约**会在这一步就落库——用户看到问题时标准已经定下来。 */
-export function createDrillSession(payload: DrillCreatePayload): Promise<DrillSession> {
-  return request("/drill", { method: "POST", body: JSON.stringify(payload) });
+export function createDrillSession(
+  payload: DrillCreatePayload,
+  signal?: AbortSignal,
+): Promise<DrillSession> {
+  return request("/drill", { method: "POST", body: JSON.stringify(payload), signal });
 }
 
 export function getDrillSession(id: number): Promise<DrillSession> {
@@ -24,16 +33,21 @@ export function getDrillSession(id: number): Promise<DrillSession> {
 }
 
 /** 回答当前这一问。状态由后端按契约判定，前端不传。 */
-export function answerDrill(id: number, answer: string): Promise<DrillAnswerResult> {
+export function answerDrill(
+  id: number,
+  answer: string,
+  signal?: AbortSignal,
+): Promise<DrillAnswerResult> {
   return request(`/drill/${id}/answer`, {
     method: "POST",
     body: JSON.stringify({ answer }),
+    signal,
   });
 }
 
 /** 提前结束并出复盘。 */
-export function finishDrill(id: number): Promise<DrillSession> {
-  return request(`/drill/${id}/finish`, { method: "POST" });
+export function finishDrill(id: number, signal?: AbortSignal): Promise<DrillSession> {
+  return request(`/drill/${id}/finish`, { method: "POST", signal });
 }
 
 export function deleteDrillSession(id: number): Promise<void> {
@@ -46,7 +60,11 @@ export function listRehearsal(id: number): Promise<DrillRehearsalRow[]> {
 }
 
 /** 把复练队列里的一条变成一个可回答的新问题（不落库）。 */
-export function rehearse(id: number, payload: DrillRehearsalRow): Promise<DrillRehearseResult> {
+export function rehearse(
+  id: number,
+  payload: DrillRehearsalRow,
+  signal?: AbortSignal,
+): Promise<DrillRehearseResult> {
   return request(`/drill/${id}/rehearse`, {
     method: "POST",
     body: JSON.stringify({
@@ -54,5 +72,6 @@ export function rehearse(id: number, payload: DrillRehearsalRow): Promise<DrillR
       kind: payload.kind,
       why: payload.why,
     }),
+    signal,
   });
 }

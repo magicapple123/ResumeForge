@@ -1,18 +1,32 @@
 // SPDX-License-Identifier: Apache-2.0
-/** 风险扫描 store：状态机、取消、重复发起、多简历互不影响。 */
+/**
+ * 风险扫描 store：状态机、结果交付、取消、重复发起、多简历互不影响。
+ *
+ * 执行已交给统一任务地基，所以这里替身的是 `utils/aiTaskEntry`（store 与地基之间的
+ * 全部契约），成功路径用 `dispatchAiTaskResult` 模拟——**扫描报告不入库，只能随
+ * `result_ref` 回来**，这条正是本 store 与其它两个 store 的实质差别，必须被钉住。
+ */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { ApiError } from "../../api/client";
 import type { ResumeRiskScan } from "../../types/resumeRisk";
+import type { BackgroundTask } from "../../utils/backgroundTasks.types";
 import {
   cancelRiskScan,
+  getRiskScanEntries,
   getRiskScanState,
+  isRiskPanelAttached,
+  markRiskPanelAttached,
   resetRiskScanStore,
   startRiskScan,
 } from "./riskScanStore";
 
-const apiMocks = vi.hoisted(() => ({ scanResumeRisks: vi.fn() }));
+const entryMocks = vi.hoisted(() => ({
+  startAiTask: vi.fn(),
+  cancelAiTaskEntry: vi.fn(),
+  attachAiTaskUi: vi.fn(),
+}));
+vi.mock("../../utils/aiTaskEntry", () => entryMocks);
 
-vi.mock("../../api/resumeRisk", () => apiMocks);
+import { dispatchAiTaskResult } from "../../utils/aiTaskResultSink";
 
 const RESULT: ResumeRiskScan = {
   resume_id: 7,
@@ -33,25 +47,43 @@ const RESULT: ResumeRiskScan = {
   notes: [],
 };
 
-interface Deferred<T> {
-  promise: Promise<T>;
-  resolve: (value: T) => void;
-  reject: (error: unknown) => void;
+/** 一个终态任务快照（只填 store 会用到的字段）。 */
+function finishedTask(status: BackgroundTask["status"], error = ""): BackgroundTask {
+  return {
+    key: "resume_risk#1",
+    kind: "resume_risk",
+    id: 1,
+    label: "简历风险扫描",
+    status,
+    message: "",
+    progressPercent: null,
+    receivedChars: 0,
+    resumeId: null,
+    refId: null,
+    deepLink: null,
+    resultData: null,
+    error,
+    unknown: false,
+  };
 }
 
-function deferred<T>(): Deferred<T> {
-  let resolve!: (value: T) => void;
-  let reject!: (error: unknown) => void;
-  const promise = new Promise<T>((res, rej) => {
-    resolve = res;
-    reject = rej;
-  });
-  return { promise, resolve, reject };
+function capturedOnFinished(call = 0) {
+  const input = entryMocks.startAiTask.mock.calls[call][0] as {
+    onFinished?: (task: BackgroundTask) => void;
+  };
+  return input.onFinished;
+}
+
+async function flush(): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, 0));
 }
 
 beforeEach(() => {
   resetRiskScanStore();
-  apiMocks.scanResumeRisks.mockReset();
+  vi.clearAllMocks();
+  entryMocks.startAiTask.mockResolvedValue({ id: 1, key: "resume_risk#1" });
+  entryMocks.cancelAiTaskEntry.mockResolvedValue(undefined);
+  entryMocks.attachAiTaskUi.mockReturnValue(() => undefined);
 });
 
 afterEach(() => {
@@ -59,94 +91,94 @@ afterEach(() => {
 });
 
 describe("riskScanStore", () => {
-  it("start → scanning → done，并记录签名与耗时", async () => {
-    const pending = deferred<typeof RESULT>();
-    apiMocks.scanResumeRisks.mockReturnValue(pending.promise);
-
-    expect(getRiskScanState(7).status).toBe("idle");
-    startRiskScan(7, { enhance: true, signature: "sig-1" });
+  it("start 立刻进入 scanning（带签名与增强开关），成功时报告由 sink 交付", async () => {
+    startRiskScan(7, { enhance: false, signature: "sig-1" });
 
     const scanning = getRiskScanState(7);
     expect(scanning.status).toBe("scanning");
-    expect(scanning.enhance).toBe(true);
+    expect(scanning.startedAt).toEqual(expect.any(Number));
     expect(scanning.signature).toBe("sig-1");
-    expect(typeof scanning.startedAt).toBe("number");
-    expect(apiMocks.scanResumeRisks).toHaveBeenCalledTimes(1);
-    expect(apiMocks.scanResumeRisks.mock.calls[0][0]).toBe(7);
-    expect(apiMocks.scanResumeRisks.mock.calls[0][1]).toBe(true);
-
-    pending.resolve(RESULT);
-    await vi.waitFor(() => expect(getRiskScanState(7).status).toBe("done"));
-    const done = getRiskScanState(7);
-    expect(done.result?.points).toHaveLength(1);
-    expect(typeof done.finishedAt).toBe("number");
-    expect(done.signature).toBe("sig-1");
-  });
-
-  it("cancel 回到 idle 且不写 error（取消不是失败）", async () => {
-    apiMocks.scanResumeRisks.mockImplementation(
-      (_id: number, _enhance: boolean, signal?: AbortSignal) =>
-        new Promise((_resolve, reject) => {
-          signal?.addEventListener("abort", () =>
-            reject(new ApiError("已取消", undefined, { code: "cancelled" })),
-          );
-        }),
+    expect(scanning.enhance).toBe(false);
+    // 增强开关必须进 payload：它决定后端是否把简历发给模型（RR-01）。
+    expect(entryMocks.startAiTask).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: "resume_risk",
+        payload: { resume_id: 7, enhance: false },
+      }),
     );
 
-    startRiskScan(7, { enhance: false });
-    expect(getRiskScanState(7).status).toBe("scanning");
+    dispatchAiTaskResult("resume_risk", 1, { resume_id: 7, risk_scan: RESULT });
+    await flush();
 
-    cancelRiskScan(7);
-    expect(getRiskScanState(7).status).toBe("idle");
-    // 让 abort 引发的 rejection 真的跑完：状态必须还停在 idle，且没有 error。
-    await Promise.resolve();
-    await Promise.resolve();
-    const state = getRiskScanState(7);
-    expect(state.status).toBe("idle");
-    expect(state.error).toBeUndefined();
-  });
-
-  it("同一份简历重复 start 只保留最新一次的结果", async () => {
-    const first = deferred<typeof RESULT>();
-    const second = deferred<typeof RESULT>();
-    apiMocks.scanResumeRisks.mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise);
-
-    startRiskScan(7, { enhance: true, signature: "old" });
-    startRiskScan(7, { enhance: false, signature: "new" });
-    expect(apiMocks.scanResumeRisks).toHaveBeenCalledTimes(2);
-
-    // 旧请求晚回来：不能覆盖新请求的状态。
-    first.resolve({ ...RESULT, resume_id: 7, notes: ["旧结果"] });
-    await Promise.resolve();
-    await Promise.resolve();
-    expect(getRiskScanState(7).status).toBe("scanning");
-
-    second.resolve(RESULT);
-    await vi.waitFor(() => expect(getRiskScanState(7).status).toBe("done"));
-    expect(getRiskScanState(7).signature).toBe("new");
-    expect(getRiskScanState(7).enhance).toBe(false);
-  });
-
-  it("不同简历的扫描互不影响", async () => {
-    const first = deferred<typeof RESULT>();
-    const second = deferred<typeof RESULT>();
-    apiMocks.scanResumeRisks.mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise);
-
-    startRiskScan(1, { enhance: true });
-    startRiskScan(2, { enhance: true });
-
-    first.resolve({ ...RESULT, resume_id: 1 });
-    await vi.waitFor(() => expect(getRiskScanState(1).status).toBe("done"));
-    expect(getRiskScanState(2).status).toBe("scanning");
-
-    second.resolve({ ...RESULT, resume_id: 2 });
-    await vi.waitFor(() => expect(getRiskScanState(2).status).toBe("done"));
+    const done = getRiskScanState(7);
+    expect(done.status).toBe("done");
+    expect(done.result?.points).toHaveLength(1);
+    expect(done.finishedAt).toEqual(expect.any(Number));
   });
 
   it("真实失败写 error，并把后端信息透出", async () => {
-    apiMocks.scanResumeRisks.mockRejectedValue(new ApiError("风险扫描失败", 500));
     startRiskScan(7, { enhance: true });
-    await vi.waitFor(() => expect(getRiskScanState(7).status).toBe("error"));
-    expect(getRiskScanState(7).error).toBe("风险扫描失败");
+    capturedOnFinished()?.(finishedTask("failed", "模型不可用"));
+    await flush();
+
+    expect(getRiskScanState(7).status).toBe("error");
+    expect(getRiskScanState(7).error).toBe("模型不可用");
+  });
+
+  it("取消回到 idle 且不写 error（取消不是失败）", async () => {
+    startRiskScan(7, { enhance: true });
+    await flush();
+    cancelRiskScan(7);
+    await flush();
+
+    expect(entryMocks.cancelAiTaskEntry).toHaveBeenCalledWith("resume_risk#1");
+    expect(getRiskScanState(7).status).toBe("idle");
+    expect(getRiskScanState(7).error).toBeUndefined();
+  });
+
+  it("同一份简历重复 start 只保留最新一次", async () => {
+    startRiskScan(7, { enhance: true, signature: "old" });
+    await flush();
+    startRiskScan(7, { enhance: true, signature: "new" });
+    await flush();
+
+    expect(entryMocks.cancelAiTaskEntry).toHaveBeenCalledWith("resume_risk#1");
+    expect(getRiskScanState(7).signature).toBe("new");
+  });
+
+  it("不同简历的扫描互不影响", async () => {
+    startRiskScan(7, { enhance: true });
+    startRiskScan(9, { enhance: true });
+
+    dispatchAiTaskResult("resume_risk", 1, { resume_id: 7, risk_scan: RESULT });
+    await flush();
+
+    expect(getRiskScanState(7).status).toBe("done");
+    expect(getRiskScanState(9).status).toBe("scanning");
+    expect(getRiskScanEntries().map((entry) => entry.resumeId)).toEqual([7, 9]);
+  });
+
+  it("面板附着用计数（StrictMode 双挂载不会误判），并声明任务 UI 在看着", async () => {
+    startRiskScan(7, { enhance: true });
+    await flush();
+
+    const detachFirst = markRiskPanelAttached(7);
+    const detachSecond = markRiskPanelAttached(7);
+    expect(isRiskPanelAttached(7)).toBe(true);
+    expect(entryMocks.attachAiTaskUi).toHaveBeenCalledWith("resume_risk#1");
+
+    detachFirst();
+    expect(isRiskPanelAttached(7)).toBe(true);
+    detachSecond();
+    expect(isRiskPanelAttached(7)).toBe(false);
+  });
+
+  it("reset 清空所有槽", async () => {
+    startRiskScan(7, { enhance: true });
+    markRiskPanelAttached(7);
+    resetRiskScanStore();
+
+    expect(getRiskScanState(7).status).toBe("idle");
+    expect(isRiskPanelAttached(7)).toBe(false);
   });
 });

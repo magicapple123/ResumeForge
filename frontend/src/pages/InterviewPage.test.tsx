@@ -4,9 +4,9 @@
  *
  * 1. **自动轮数 422**：选「自动」时 rounds_min 曾提交模式开关值 1，被后端
  *    `rounds_min ≥ 3` 拦下（"Input should be greater than or equal to 3"）。
- *    现契约：rounds_min 提交 MIN_INTERVIEW_ROUNDS（=3，AI 最早第 3 轮起可收尾），
- *    rounds 提交 AUTO_FINISH_MAX_ROUNDS（=12，服务端硬性保险），且恒有
- *    rounds_min < rounds。
+ *    现契约：rounds_min 提交 AUTO_ROUNDS_FLAG（=8，AI 最早第 8 轮起才可收尾——取 3 时
+ *    实测常常问 3~4 题就结束），rounds 提交 AUTO_FINISH_MAX_ROUNDS（=12，服务端硬性保险），
+ *    且恒有 rounds_min < rounds。
  * 2. **提交回答 404**：回答走 SSE 流式（consumeSSE 不像 request() 会自动补 /api
  *    前缀），漏前缀会打到前端自身源上 → 「请求失败（HTTP 404）」。钉住 URL 必须是
  *    `/api/interview/{id}/answers/stream`，且后端 404 detail（"面试不存在或已被删除"）
@@ -20,6 +20,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "../api/client";
+import { t } from "../i18n";
 import type { InterviewDetail } from "../types";
 import InterviewPage from "./InterviewPage";
 
@@ -50,7 +51,9 @@ vi.mock("./interview/ReportCard", () => ({ ReportCard: () => <div>评分报告</
 // SetupTab 桩：AUTO_ROUNDS_OPTION 的值必须与真实模块一致（InterviewPage 靠它分流）。
 const setupStubs = vi.hoisted(() => {
   const base = {
-    jobId: undefined,
+    // 0066：关联岗位与关联简历都是必选，页面直接从 values 里取。
+    jobId: 3,
+    resumeId: 5,
     interviewType: "综合面",
     difficulty: "中级",
     interviewerStyle: "严谨专业",
@@ -82,9 +85,12 @@ function makeDetail(overrides: Partial<InterviewDetail> = {}): InterviewDetail {
   return {
     id: 7,
     title: "综合面 · 中级",
-    job_id: null,
-    job_title: "",
-    company: "",
+    job_id: 3,
+    job_title: "后端开发工程师",
+    company: "示例公司",
+    resume_id: 5,
+    resume_title: "后端版简历",
+    duration_seconds: 0,
     interview_type: "综合面",
     difficulty: "中级",
     interviewer_style: "严谨专业",
@@ -141,8 +147,8 @@ afterEach(() => {
 });
 
 describe("InterviewPage：自动轮数提交契约", () => {
-  it("选「自动」：rounds_min 提交 3（后端下限），rounds 提交硬性保险 12", async () => {
-    apiMocks.createInterview.mockResolvedValue(makeDetail({ rounds: 12, rounds_min: 3 }));
+  it("选「自动」：rounds_min 提交 8（最早可收尾轮数），rounds 提交硬性保险 12", async () => {
+    apiMocks.createInterview.mockResolvedValue(makeDetail({ rounds: 12, rounds_min: 8 }));
     renderPage();
 
     fireEvent.click(await screen.findByText("自动开始（桩）"));
@@ -151,8 +157,12 @@ describe("InterviewPage：自动轮数提交契约", () => {
     expect(apiMocks.createInterview).toHaveBeenCalledWith(
       expect.objectContaining({
         interview_type: "综合面",
+        job_id: 3,
+        resume_id: 5,
         rounds: 12,
-        rounds_min: 3, // 曾经提交 1 → 后端 422："should be greater than or equal to 3"
+        // 曾经提交 1 → 后端 422："should be greater than or equal to 3"；
+        // 后来取 3（最小合法值）又太早收尾，现在固定 8（AUTO_ROUNDS_FLAG）。
+        rounds_min: 8,
       }),
     );
     // 自动模式界面：不显示总轮数，提示按表现收尾。
@@ -196,6 +206,8 @@ describe("InterviewPage：创建失败与提交回答的错误链路", () => {
     renderPage();
 
     fireEvent.click(await screen.findByText("固定开始（桩）"));
+    // 0066：进房间先过「准备好了」闸门，作答区才出现（计时也从这一刻开始）。
+    fireEvent.click(await screen.findByRole("button", { name: /准备好了/ }));
     const textarea = await screen.findByPlaceholderText(/像真实面试那样回答/);
     fireEvent.change(textarea, { target: { value: "不知道" } });
     fireEvent.click(screen.getByText("提交回答"));
@@ -208,5 +220,33 @@ describe("InterviewPage：创建失败与提交回答的错误链路", () => {
     expect(await screen.findByText("面试不存在或已被删除")).toBeInTheDocument();
     // 回答已放回输入框，用户可以直接重试（页面 catch 的既有约定）。
     await waitFor(() => expect(textarea).toHaveValue("不知道"));
+  });
+});
+
+describe("InterviewPage：先出现用户内容，再出现「正在思考」", () => {
+  it("请求未回包时，用户刚发的那句话在思考气泡**之前**", async () => {
+    apiMocks.createInterview.mockResolvedValue(makeDetail());
+    // 永不 resolve：模拟"模型还在生成下一题"的那段时间。
+    streamMocks.consumeSSE.mockReturnValue(new Promise(() => {}));
+    renderPage();
+
+    // 用 role 定位桩按钮：新用例不新增中文 `*ByText` 断言行（i18n 棘轮只盯这一种）。
+    fireEvent.click(await screen.findByRole("button", { name: /固定开始/ }));
+    // 按钮里带图标，可访问名要按正则匹配（`t()` 求值时是中文，正则同样能命中）。
+    fireEvent.click(
+      await screen.findByRole("button", { name: new RegExp(t("interviewPage.ready.start")) }),
+    );
+    const textarea = await screen.findByPlaceholderText(/像真实面试那样回答/);
+    const content = "我用 Redis 做了缓存分层，QPS 从 800 提到 3600";
+    fireEvent.change(textarea, { target: { value: content } });
+    fireEvent.click(screen.getByRole("button", { name: t("interview.action.submit") }));
+
+    // 输入框立刻清空，但**那句话必须已经在屏幕上**（否则用户以为没发出去）。
+    await waitFor(() => expect(textarea).toHaveValue(""));
+    const mine = await screen.findByText(content);
+    const thinking = screen.getByText(t("interview.thinking"));
+
+    // 顺序断言：用户气泡在思考气泡之前（compareDocumentPosition 的 FOLLOWING 位）。
+    expect(mine.compareDocumentPosition(thinking) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 });

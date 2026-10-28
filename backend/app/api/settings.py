@@ -10,6 +10,13 @@ from sqlalchemy.orm import Session
 
 from ..database import get_db, session_engine
 from ..schemas.backup_status import BackupStatusOut
+from ..schemas.batch_operation import (
+    BatchExportConfig,
+    BatchExportConfigOut,
+    BatchGenerationConfig,
+    BatchGenerationConfigOut,
+    BatchOperationConfigOut,
+)
 from ..schemas.setting import (
     AssistantOrbSetting,
     AssistantRelaxedModeSetting,
@@ -30,6 +37,11 @@ from ..schemas.setting import (
     WebFormRelaxedModeSetting,
 )
 from ..services.api_key_session import clear_session_key, session_key_configured, set_session_key
+from ..services.batch_operation import (
+    read_batch_operation_config,
+    save_batch_export_config,
+    save_batch_generation_config,
+)
 from ..services.export_save_location import (
     FolderPickerUnavailable,
     pick_directory,
@@ -324,3 +336,31 @@ def write_auto_backup_interval(payload: AutoBackupIntervalSetting, db: Session =
     return AutoBackupIntervalSetting(
         interval_days=save_auto_backup_interval_days(db, payload.interval_days)
     )
+
+
+@router.get("/batch-operation", response_model=BatchOperationConfigOut)
+def read_batch_operation(db: Session = Depends(get_db)):
+    """批量操作的两套参数（生成 / 导出）；每节的 ``configured`` 独立判断。
+
+    岗位广场的「批量 AI 生成简历」与简历中心的「批量导出简历」各读自己那节；批量导出
+    的后端入口在未配置时直接拒绝，不把"必须配置"只做在前端提示上。
+    """
+    return read_batch_operation_config(db)
+
+
+@router.put("/batch-operation/generation", response_model=BatchGenerationConfigOut)
+def write_batch_generation(payload: BatchGenerationConfig, db: Session = Depends(get_db)):
+    """只保存「批量生成简历」这一节，不影响导出参数。"""
+    try:
+        return save_batch_generation_config(db, payload)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.put("/batch-operation/export", response_model=BatchExportConfigOut)
+def write_batch_export(payload: BatchExportConfig, db: Session = Depends(get_db)):
+    """只保存「批量导出简历」这一节，不影响生成参数。"""
+    try:
+        return save_batch_export_config(db, payload)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc

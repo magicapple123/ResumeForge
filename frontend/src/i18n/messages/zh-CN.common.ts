@@ -10,6 +10,7 @@ const common = {
   "common.action.discard": "放弃修改",
   "common.action.keep-editing": "继续编辑",
   "common.action.batchSelect": "批量选择",
+  "common.action.stop": "停止",
   "common.retry": "重试",
   "common.errorBoundary.title.moduleLoad": "页面代码没能加载完整",
   "common.errorBoundary.title.generic": "页面暂时无法显示",
@@ -23,6 +24,7 @@ const common = {
   // ── 通用交互组件（批量条 / 退出应用 / 拖放 / 加载 / 详情 / 行操作 / 折叠） ──
   /** 退出按钮与确认框的确认动作（`ExitAppButton`）。 */
   "common.action.exit": "退出",
+  "common.action.more": "更多操作",
   /** 批量操作条的无障碍名（`BatchActionBar`）。 */
   "common.batchBar.aria": "批量操作",
   /** 批量操作条的已选计数。 */
@@ -30,7 +32,7 @@ const common = {
   /** 卡片网格类列表的「全选本页」：勾选框文字、title 与无障碍名共用一条。 */
   "common.batchBar.selectPage": "全选本页",
   /** 退出批量选择。 */
-  "common.batchBar.exit": "退出多选",
+  "common.batchBar.exit": "退出选择",
   /** 批量删除按钮（`BatchDeleteButton`）。 */
   "common.batchBar.deleteSelected": "删除所选",
   /** 退出应用的二次确认标题。 */

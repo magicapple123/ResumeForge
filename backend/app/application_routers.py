@@ -15,6 +15,7 @@ from __future__ import annotations
 from fastapi import FastAPI
 
 from .api import (
+    ai_tasks,
     analytics,
     apply,
     assistant,
@@ -27,6 +28,7 @@ from .api import (
     datasets,
     drill,
     interview,
+    interview_answer_review,
     interview_experiences,
     interview_history,
     job_match,
@@ -97,6 +99,8 @@ ROUTERS = (
     # 批量匹配的 `/match-batches` 是岗位路由下的字面量路径，必须先于 jobs.router
     # 的 `/{job_id}` 参数路径注册，否则 FastAPI 会把它尝试解析成整数并返回 422。
     job_match.router,
+    # 通用 AI 任务（0068）：独立前缀 /api/ai-tasks，不与其他前缀抢路径。
+    ai_tasks.router,
     jobs.router,
     jobs_analysis.router,
     resumes.router,
@@ -123,6 +127,7 @@ ROUTERS = (
     # 历史路由必须排在 interview.router 之前：它用 /question-banks、/reviews 字面量段，
     # 排在后面会被 interview 的 /{session_id} 参数段抢走。
     interview_history.router,
+    interview_answer_review.router,
     interview.router,
     interview_experiences.router,
     reminders.router,

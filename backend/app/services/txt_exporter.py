@@ -49,6 +49,7 @@ def export_txt(
     *,
     section_order: list[str] | None = None,
     language: str = DEFAULT_RESUME_LANGUAGE,
+    format_config: dict | None = None,
 ) -> str:
     """把结构化简历渲染成纯文本。
 
@@ -59,7 +60,14 @@ def export_txt(
     ``language`` 原样透传给 ``export_markdown``：纯文本的**标题与 Markdown 同源**，
     不自己判语言、也不自己存文案——否则同一份简历的 .md 与 .txt 会印出两种标题。
     """
-    return strip_markdown(export_markdown(resume, section_order=section_order, language=language))
+    return strip_markdown(
+        export_markdown(
+            resume,
+            section_order=section_order,
+            language=language,
+            format_config=format_config,
+        )
+    )
 
 
 __all__ = ["export_txt", "strip_markdown"]

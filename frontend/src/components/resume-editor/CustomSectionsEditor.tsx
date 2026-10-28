@@ -17,21 +17,36 @@
  * F10：方案里定义的自建板块即使还没有任何条目，也要有录入入口（页签名就是板块名）。
  * 投影对空板块不产出 `custom_sections` 条目，所以这里按编辑器视图补齐这些板块的骨架，
  * 用户点「添加条目」时才把它写进表单值（不凭空往正文里塞空板块）。
+ *
+ * 2026-10-28：每条条目卡也有「从资料填入本条」（与其他板块同一交互）。自建条目的形状是
+ * `{text, lines}`，只补空值：text 空才填，lines 按 label 合并（非空值不覆盖、缺失行追加）。
  */
 import { DeleteOutlined, PlusOutlined } from "@ant-design/icons";
 import { Button, Form, Input, Space, Tooltip, Typography } from "antd";
 import { useEffect, useRef } from "react";
 import { t } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
-import type { ResumeCustomLine, ResumeCustomSection } from "../../types";
+import type { ResumeCustomEntry, ResumeCustomLine, ResumeCustomSection } from "../../types";
 import type { EditorSectionOut } from "../../features/profile-library/types";
+import {
+  customEntryFillKey,
+  type ProfileFillItem,
+} from "../../features/profile/profileFillOptions";
 import CustomSectionFields from "./CustomSectionFields";
 import { alignCustomEntry, emptyCustomEntryLines } from "./customSectionAlignment";
 import { useEditorSchemaSections } from "./editorSchemaContext";
+import ProfileFillBar from "./ProfileFillBar";
+import { useProfileFill } from "./profileFillContext";
+import { fillCustomEntryFromSource } from "./profileEntryFill";
 
 const EMPTY_ENTRY = { entry_id: "", text: "", lines: [] };
 const TEXT_MAX = 4000;
 const LINE_VALUE_MAX = 2000;
+
+/** 同一自建板块内每条条目的形状键（用于「当前条目 / 已在其他条目」判定）。 */
+function entryFillKeys(entries: readonly ResumeCustomEntry[] | undefined): string[] {
+  return (entries ?? []).map((entry) => customEntryFillKey(entry));
+}
 
 /** 一个还没有正文的自建板块：显示板块名 + 一个「添加条目」入口。 */
 function EmptyCustomSection({
@@ -174,6 +189,9 @@ export default function CustomSectionsEditor() {
   );
   const existingKeys = new Set((sectionsValue ?? []).map((section) => section.key));
   const missingSections = customSchemas.filter((section) => !existingKeys.has(section.section_key));
+  // 自建板块的条目级候选按完整 section key（custom:<id>）分组；没提供 Provider 时为 null。
+  const fill = useProfileFill();
+  const customFillSources = fill?.sources.customSections;
 
   /** 有字段定义的自建板块：`section_key` → 定义（没有键 = 走「仅内容」兜底）。 */
   const definitions = new Map(
@@ -232,6 +250,27 @@ export default function CustomSectionsEditor() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [form, schemaSections]);
 
+  /**
+   * 把一条资料候选填进当前条目：只补空值、不复制 `entry_id`。
+   *
+   * 用 `getFieldValue` 现取（watched 可能落后一帧）；没有实际变化就不写表单——
+   * 否则"填入"会在什么都没改的情况下把简历标脏。
+   */
+  const fillCustomEntry = (
+    sectionIndex: number,
+    entryIndex: number,
+    item: ProfileFillItem,
+  ): void => {
+    const path = ["custom_sections", sectionIndex, "entries", entryIndex];
+    const result = fillCustomEntryFromSource(
+      form.getFieldValue(path) as ResumeCustomEntry | undefined,
+      item.value as Partial<Pick<ResumeCustomEntry, "text" | "lines">> | null,
+    );
+    if (!result.changed) return;
+    form.setFieldValue(path, result.entry);
+    fill?.onFilled();
+  };
+
   const addSectionEntry = (section: EditorSectionOut): void => {
     const current =
       (form.getFieldValue("custom_sections") as ResumeCustomSection[] | undefined) ?? [];
@@ -256,6 +295,9 @@ export default function CustomSectionsEditor() {
             const schemaSection = schemaByKey.get(key);
             // 板块名以方案为唯一来源；方案里没有（旧简历 / 板块已删除）才退回正文里的标题。
             const title = schemaSection?.section_name || current?.title || "";
+            // 条目级候选按完整 section key 取；同一板块内互相识别"当前条目 / 已在其他条目"。
+            const fillItems = key ? (customFillSources?.[key] ?? []) : [];
+            const fillKeys = entryFillKeys(current?.entries);
             return (
               <div
                 key={section.key}
@@ -312,6 +354,25 @@ export default function CustomSectionsEditor() {
                               />
                             </Tooltip>
                           </div>
+                          {/* 与系统板块同一种交互：有候选时每条一个「从资料填入本条」。
+                              候选只在当前板块内去重，跨板块各填各的互不影响。 */}
+                          {fillItems.length > 0 && (
+                            <div style={{ marginBottom: 8 }}>
+                              <ProfileFillBar
+                                label={title}
+                                items={fillItems}
+                                existingKeys={
+                                  new Set(
+                                    fillKeys.filter(
+                                      (entryKey, position) => position !== entry.name && entryKey,
+                                    ),
+                                  )
+                                }
+                                currentKey={fillKeys[entry.name]}
+                                onFill={(item) => fillCustomEntry(section.name, entry.name, item)}
+                              />
+                            </div>
+                          )}
                           {definition ? (
                             <SchemaEntryFields
                               definition={definition}

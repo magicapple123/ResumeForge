@@ -8,7 +8,7 @@ from app.services.profile.entry_store import upsert_entry
 
 
 def _seed_profile(db_session) -> None:
-    """资料自 F2 起落在新模型：批量匹配读全量新资料（旧 user_profile 已退役）。"""
+    """资料自 F2 起落在新模型：批量匹配读当前组（未隐藏）的消费快照。"""
     upsert_entry(db_session, "basic_info", values={"basic_info.name": "张示例"})
     upsert_entry(db_session, "summary", values={"summary.content": "Python 后端开发"})
 

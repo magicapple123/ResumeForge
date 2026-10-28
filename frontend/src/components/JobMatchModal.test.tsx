@@ -6,24 +6,65 @@ import type { Job, JobMatchOut } from "../types";
 import JobMatchModal from "./JobMatchModal";
 import { registerNotifyHost } from "../utils/taskNotify";
 import { endMatchAnalysis } from "../utils/jobMatchAnalysisState";
+import { resetBackgroundTasks, tickBackgroundTasks } from "../utils/backgroundTasks";
+import type { AiTaskSnapshot } from "../types";
+import { t } from "../i18n";
+
+/** 失败原因用 ASCII：它只是"后端给的原因原样展示"这条链路的载荷。 */
+const FAIL_REASON = "model call timed out";
 
 const apiMocks = vi.hoisted(() => ({
   getJobMatch: vi.fn(),
-  generateJobMatch: vi.fn(),
   deleteJobMatch: vi.fn(),
 }));
 
 vi.mock("../api/jobs", () => ({
   getJobMatch: apiMocks.getJobMatch,
-  generateJobMatch: apiMocks.generateJobMatch,
   deleteJobMatch: apiMocks.deleteJobMatch,
+}));
+
+/**
+ * 通用 AI 任务端点。本组件不再直接等模型返回：它**建任务**，然后由统一登记表
+ * （`utils/backgroundTasks`）轮询状态。这里替身化端点，用例用 `tickBackgroundTasks()`
+ * 手动推进一轮，避免依赖真实 1.5s 定时器。
+ */
+const aiMocks = vi.hoisted(() => ({
+  createAiTask: vi.fn(),
+  getAiTask: vi.fn(),
+  cancelAiTask: vi.fn(),
+  listActiveAiTasks: vi.fn(),
+}));
+
+vi.mock("../api/aiTasks", () => ({
+  createAiTask: aiMocks.createAiTask,
+  getAiTask: aiMocks.getAiTask,
+  cancelAiTask: aiMocks.cancelAiTask,
+  listActiveAiTasks: aiMocks.listActiveAiTasks,
 }));
 
 vi.mock("../utils/notifySound", () => ({
   playDoneSound: vi.fn(),
 }));
 
-const notices: { title: string; kind?: string; description?: string }[] = [];
+const notices: { title: string; kind?: string; description?: string; hasActions?: boolean }[] = [];
+
+/** 一座任务快照（后端 `/ai-tasks` 的形状）。 */
+function taskSnapshot(overrides: Partial<AiTaskSnapshot> = {}): AiTaskSnapshot {
+  return {
+    id: 5,
+    kind: "job_match",
+    status: "running",
+    progress: 30,
+    label: "适配「后端开发」",
+    message: "正在调用模型分析匹配度",
+    result_ref: null,
+    error: "",
+    created_at: "2026-10-28T00:00:00",
+    started_at: "2026-10-28T00:00:00",
+    finished_at: null,
+    ...overrides,
+  };
+}
 
 const JOB: Job = {
   id: 12,
@@ -130,7 +171,12 @@ const NOT_ANALYZED: JobMatchOut = {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  resetBackgroundTasks();
   apiMocks.getJobMatch.mockResolvedValue(NOT_ANALYZED);
+  aiMocks.listActiveAiTasks.mockResolvedValue([]);
+  aiMocks.createAiTask.mockResolvedValue(taskSnapshot());
+  aiMocks.getAiTask.mockResolvedValue(taskSnapshot());
+  aiMocks.cancelAiTask.mockResolvedValue(taskSnapshot({ status: "canceled" }));
   notices.length = 0;
   registerNotifyHost({
     notification: {
@@ -138,6 +184,7 @@ beforeEach(() => {
         notices.push({
           title: String(config.title),
           description: String(config.description ?? ""),
+          hasActions: config.actions !== undefined,
         }),
       warning: (config) =>
         notices.push({
@@ -159,6 +206,7 @@ beforeEach(() => {
 
 afterEach(() => {
   registerNotifyHost(null);
+  resetBackgroundTasks();
   endMatchAnalysis(JOB.id);
   cleanup();
   document.body.innerHTML = "";
@@ -227,9 +275,8 @@ describe("JobMatchModal", () => {
     expect(screen.queryByText("匹配度参考分")).toBeNull();
   });
 
-  it("forces a re-analysis only when the user asks", async () => {
+  it("发起分析 = 建任务（不再用一条 HTTP 连接等模型跑完）", async () => {
     apiMocks.getJobMatch.mockResolvedValue(ANALYZED);
-    apiMocks.generateJobMatch.mockResolvedValue(ANALYZED.result);
 
     render(
       <AntdApp>
@@ -239,7 +286,14 @@ describe("JobMatchModal", () => {
 
     fireEvent.click(await screen.findByRole("button", { name: /重新分析/ }));
 
-    await waitFor(() => expect(apiMocks.generateJobMatch).toHaveBeenCalledWith(JOB.id, true));
+    await waitFor(() => expect(aiMocks.createAiTask).toHaveBeenCalled());
+    // 已有结论时带 force=true：与后端"不重算已有结论"的语义对齐。
+    expect(aiMocks.createAiTask).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: "job_match",
+        payload: { job_id: JOB.id, force: true },
+      }),
+    );
   });
 
   it("shows a friendly error with a retry action", async () => {
@@ -255,9 +309,7 @@ describe("JobMatchModal", () => {
     expect(screen.getByRole("button", { name: /重试/ })).toBeInTheDocument();
   });
 
-  it("分析完成无论人是否还在，都走统一出口提醒（用户反馈过完成无提醒）", async () => {
-    apiMocks.generateJobMatch.mockResolvedValue(ANALYZED.result);
-
+  it("任务完成后走统一出口提醒（带「查看岗位」深链），并刷新结论", async () => {
     render(
       <AntdApp>
         <JobMatchModal job={JOB} onClose={vi.fn()} />
@@ -265,17 +317,25 @@ describe("JobMatchModal", () => {
     );
 
     fireEvent.click(await screen.findByRole("button", { name: /开始分析/ }));
+    await waitFor(() => expect(aiMocks.createAiTask).toHaveBeenCalled());
+
+    // 后端把任务跑到成功：登记表下一秒就会看到（这里手动推进一轮，不等 1.5s）。
+    aiMocks.getAiTask.mockResolvedValue(
+      taskSnapshot({ status: "succeeded", progress: 100, result_ref: { job_id: JOB.id } }),
+    );
+    await tickBackgroundTasks();
 
     await waitFor(() =>
-      expect(notices.some((item) => item.title === "匹配度分析已完成")).toBe(true),
+      expect(notices.some((item) => item.title === "岗位适配度分析完成")).toBe(true),
     );
-    // 人还在窗口前：完成通知之后还会重新拉取最新结论（初次挂载 + 完成后各一次）。
+    const notice = notices.find((item) => item.title === "岗位适配度分析完成");
+    // 深链被消费成动作按钮：点它就是 /jobs?job_id=<id>（由 taskDeepLinks 生成）。
+    expect(notice?.hasActions).toBe(true);
+    // 人还在窗口前：完成后重新拉取最新结论（挂载一次 + 完成一次）。
     await waitFor(() => expect(apiMocks.getJobMatch).toHaveBeenCalledTimes(2));
   });
 
-  it("分析失败同样提醒（kind=error），弹窗内保留错误与重试", async () => {
-    apiMocks.generateJobMatch.mockRejectedValue(new Error("模型调用超时"));
-
+  it("任务失败：错误原因落回弹窗，同时发一条 error 提醒", async () => {
     render(
       <AntdApp>
         <JobMatchModal job={JOB} onClose={vi.fn()} />
@@ -283,23 +343,40 @@ describe("JobMatchModal", () => {
     );
 
     fireEvent.click(await screen.findByRole("button", { name: /开始分析/ }));
+    await waitFor(() => expect(aiMocks.createAiTask).toHaveBeenCalled());
+
+    aiMocks.getAiTask.mockResolvedValue(taskSnapshot({ status: "failed", error: FAIL_REASON }));
+    await tickBackgroundTasks();
 
     await waitFor(() =>
-      expect(notices.some((item) => item.title === "匹配度分析失败" && item.kind === "error")).toBe(
-        true,
-      ),
+      expect(
+        notices.some((item) => item.title === "岗位适配度分析失败" && item.kind === "error"),
+      ).toBe(true),
     );
-    expect(await screen.findByText("模型调用超时")).toBeInTheDocument();
+    expect(await screen.findByText(FAIL_REASON)).toBeInTheDocument();
   });
 
-  it("分析进行中关掉弹窗：完成后仍提醒，文案指路岗位详情", async () => {
-    let resolveGenerate: (value: unknown) => void = () => {};
-    apiMocks.generateJobMatch.mockReturnValue(
-      new Promise((resolve) => {
-        resolveGenerate = resolve;
-      }),
+  it("进行中可以取消：调 /ai-tasks 的 cancel，回到可再次分析的状态", async () => {
+    render(
+      <AntdApp>
+        <JobMatchModal job={JOB} onClose={vi.fn()} />
+      </AntdApp>,
     );
 
+    fireEvent.click(await screen.findByRole("button", { name: /开始分析/ }));
+    await waitFor(() => expect(aiMocks.createAiTask).toHaveBeenCalled());
+    // 取消按钮只在任务进行中显示（它是"真取消"，不是"关掉弹窗"）。
+    fireEvent.click(await screen.findByRole("button", { name: /取消分析/ }));
+
+    await waitFor(() => expect(aiMocks.cancelAiTask).toHaveBeenCalledWith(5));
+    // 用户自己取消的：不弹错误（文案取自语言包，避免把中文写进 ByText 字面量）。
+    expect(document.body.textContent ?? "").not.toContain(t("jobMatch.error.cancelFailed"));
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: /开始分析/ })).toBeInTheDocument(),
+    );
+  });
+
+  it("分析进行中关掉弹窗：任务在后台继续，完成时仍提醒并可跳回岗位", async () => {
     const onClose = vi.fn();
     render(
       <AntdApp>
@@ -308,16 +385,26 @@ describe("JobMatchModal", () => {
     );
 
     fireEvent.click(await screen.findByRole("button", { name: /开始分析/ }));
-    // 分析进行中关闭弹窗（antd 关闭按钮的可访问名）。
-    fireEvent.click(await screen.findByRole("button", { name: /close|Close/ }));
+    await waitFor(() => expect(aiMocks.createAiTask).toHaveBeenCalled());
+    // 关掉弹窗 ≠ 取消：任务留在登记表里继续被轮询（页头任务面板也能看到它）。
+    // 用 antd 关闭按钮的类名定位：进行中提示条里那颗「取消分析」的图标按钮
+    // 无障碍名同样含 close，按名字查会命中两个。
+    const closeButton = document.querySelector(".ant-modal-close");
+    expect(closeButton).not.toBeNull();
+    fireEvent.click(closeButton as HTMLElement);
     expect(onClose).toHaveBeenCalled();
 
-    resolveGenerate(undefined);
-    await waitFor(() =>
-      expect(notices.some((item) => item.title === "匹配度分析已完成")).toBe(true),
+    aiMocks.getAiTask.mockResolvedValue(
+      taskSnapshot({ status: "succeeded", progress: 100, result_ref: { job_id: JOB.id } }),
     );
-    // 人已经走了：不再对（可能已卸载的）弹窗内容做刷新，文案指路详情页。
-    const notice = notices.find((item) => item.title === "匹配度分析已完成");
-    expect(notice?.description).toContain("岗位详情");
+    await tickBackgroundTasks();
+
+    await waitFor(() =>
+      expect(notices.some((item) => item.title === "岗位适配度分析完成")).toBe(true),
+    );
+    const notice = notices.find((item) => item.title === "岗位适配度分析完成");
+    // 弹窗仍挂在页面上（onClose 只是父组件的开关），"界面在看"的声明还在，故用卡片；
+    // 卡片同样挂深链按钮。
+    expect(notice?.hasActions).toBe(true);
   });
 });

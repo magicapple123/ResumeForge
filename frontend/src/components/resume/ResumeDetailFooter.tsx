@@ -14,7 +14,6 @@
  */
 import {
   BulbOutlined,
-  EditOutlined,
   FolderOpenOutlined,
   MessageOutlined,
   SafetyCertificateOutlined,
@@ -22,7 +21,7 @@ import {
   ThunderboltOutlined,
   ZoomInOutlined,
 } from "@ant-design/icons";
-import { Button, Tooltip } from "antd";
+import { Button } from "antd";
 import type { ReactNode } from "react";
 import type { ResumeLayout } from "../../types";
 import { t } from "../../i18n";
@@ -49,8 +48,6 @@ interface Props {
    * 两个编辑器各持一份 form 实例，同时开会各自往同一份草稿槽位里写，互相覆盖
    * （设计 §9 Q6）。禁用而不是隐藏：位置跳动的代价比"看见但暂时不能点"更大。
    */
-  editorBlocked?: boolean;
-  onOpenEditor: () => void;
   onOpenZoom: () => void;
   onOpenRevise: () => void;
   onOpenSuggestions: () => void;
@@ -69,8 +66,6 @@ export default function ResumeDetailFooter({
   showRevise,
   suggestionsGenerated,
   jobId,
-  editorBlocked = false,
-  onOpenEditor,
   onOpenZoom,
   onOpenRevise,
   onOpenSuggestions,
@@ -85,19 +80,6 @@ export default function ResumeDetailFooter({
     // 固定在弹窗底部：内容长（版面诊断 + 预览）时不必一路翻到最后才够得着这些按钮。
     // 按钮区是 CSS Grid：每个按钮独占一格、block 拉满整格，自动铺满整行不留右侧空当。
     <div className="resume-detail-footer">
-      {/* 中栏有未保存内容时禁用并说明原因（只在禁用时才套 Tooltip：套着会让 antd
-          在悬停时给按钮外层补一个 span，网格里那一格会跟着抖一下）。 */}
-      {editorBlocked ? (
-        <Tooltip title={t("workbench.editor.blocked")}>
-          <Button block icon={<EditOutlined />} disabled onClick={onOpenEditor}>
-            {t("resume.footer.edit")}
-          </Button>
-        </Tooltip>
-      ) : (
-        <Button block icon={<EditOutlined />} onClick={onOpenEditor}>
-          {t("resume.footer.edit")}
-        </Button>
-      )}
       <Button block icon={<ZoomInOutlined />} onClick={onOpenZoom}>
         {t("workbench.title")}
       </Button>
@@ -114,13 +96,17 @@ export default function ResumeDetailFooter({
       <Button block icon={<FolderOpenOutlined />} disabled={jobId === null} onClick={onOpenJob}>
         {t("resume.footer.openJob")}
       </Button>
-      {/* 最后一行：左边三个次动作与右边的「取消 / 保存 / 导出」**同一行**。
-          `.resume-detail-footer-tail` 用 subgrid 复用上面的列，所以左边三个按钮
+      {/* 「咨询求职助手」上提到**主网格**（2026-11 用户要求）：第一行排满 5 个动作，
+          第二行只留「质量检测 / 离线分享」+ 右侧导出，页脚从"4 + 3 + 导出"收成"5 + 2 + 导出"。
+          它本来就是和上面四个同级的动作（都是"针对这份简历做点什么"），落在主网格里
+          也让它的宽度与上面的按钮逐列对齐。 */}
+      <Button block icon={<MessageOutlined />} onClick={onOpenAssistant}>
+        {t("resume.footer.assistant")}
+      </Button>
+      {/* 最后一行：左边两个次动作（质量 / 离线分享）与右边的「取消 / 保存 / 导出」**同一行**。
+          `.resume-detail-footer-tail` 用 subgrid 复用上面的列，所以左边两个按钮
           仍与上排按钮逐列对齐；右侧动作按内容宽度、靠右收尾（不占满列）。 */}
       <div className="resume-detail-footer-tail">
-        <Button block icon={<MessageOutlined />} onClick={onOpenAssistant}>
-          {t("resume.footer.assistant")}
-        </Button>
         <Button block icon={<SafetyCertificateOutlined />} onClick={onOpenQuality}>
           {t("resume.footer.quality")}
         </Button>

@@ -45,13 +45,15 @@ export default function ReviewHistoryCard({
     ),
     children: (
       <Space orientation="vertical" style={{ width: "100%" }}>
-        {review.questions.length > 0 && (
+        {/* 历史记录来自模型输出直接落库：questions/suggestions 可能整个字段都不存在，
+            这里一律兜底成空数组，避免 `.length` 在展开时就抛 TypeError。 */}
+        {(review.questions?.length ?? 0) > 0 && (
           <>
             <Typography.Text strong>
               {t("interview.reviewHistory.section.questions")}
             </Typography.Text>
             <ul style={{ paddingLeft: 20, margin: "4px 0" }}>
-              {review.questions.map((item) => (
+              {(review.questions ?? []).map((item) => (
                 <li key={item}>{item}</li>
               ))}
             </ul>
@@ -62,12 +64,13 @@ export default function ReviewHistoryCard({
             {review.analysis.framework}
           </Typography.Paragraph>
         )}
-        {review.suggestions.length > 0 && (
+        {(review.suggestions?.length ?? 0) > 0 && (
           <>
             <Typography.Text strong>{t("interview.suggestions.title")}</Typography.Text>
             <ul style={{ paddingLeft: 20, margin: "4px 0" }}>
-              {review.suggestions.map((item) => (
-                <li key={item.suggestion}>{item.suggestion}</li>
+              {(review.suggestions ?? []).map((item, index) => (
+                // 建议可能是脏数据（没有 suggestion 文本），不能拿它当 key。
+                <li key={`${index}-${item?.suggestion ?? ""}`}>{item?.suggestion}</li>
               ))}
             </ul>
           </>

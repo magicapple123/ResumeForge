@@ -44,6 +44,8 @@ const navigation = {
   "navigation.shell.brandCaption": "AI resume workbench",
   "navigation.shell.versionTooltip": "Current version",
   "navigation.shell.scrollTop": "Back to top",
+  "navigation.shell.collapse": "Collapse sidebar",
+  "navigation.shell.expand": "Expand sidebar",
   "navigation.shell.openMenu": "Open navigation",
 
   /** Settings page "Interface and navigation" card. */

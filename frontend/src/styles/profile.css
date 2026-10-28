@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 @import "./profile-layout.css";
 @import "./profile-card.css";
+@import "./profile-edit-bar.css";
 /* 识别结果的校对列表（项 13）：一行一栏，栏目名左、值右；窄屏自动折成上下两段。 */
 .recognition-review-row {
   display: flex;

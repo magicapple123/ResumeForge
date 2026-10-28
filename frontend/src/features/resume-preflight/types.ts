@@ -102,13 +102,18 @@ export interface OrderDiff {
  * D08：缺字与粗体可用性（W11-BE 冻结字段）。
  *
  * `null` = **未检查**（没跑排版层，或没有中文字体）；`checked=false` 时不得显示"通过"。
+ *
+ * `missing` 是 `Partial<Record<…, string[]>>` 而不是 `{regular, bold}`：后端
+ * `FontCoverageOut.missing` 是 `dict[str, list[str]]` 且默认空字典（`schemas/preflight.py`），
+ * 所以 `checked=true` 时也可能**没有** `regular` / `bold` 键。按必填读会在运行时得到
+ * `undefined.length`（2026-10-29 用户报的 `Cannot read properties of undefined (reading 'length')`）。
  */
 export interface FontCoveragePayload {
   checked: boolean;
   font: string | null;
   bold_available: boolean;
-  /** 各字体角色缺失的字符（regular / bold 两族由后端给出）。 */
-  missing: { regular: string[]; bold: string[] };
+  /** 各字体角色缺失的字符（regular / bold 两族由后端给出；键可能缺）。 */
+  missing: Partial<Record<"regular" | "bold", string[]>>;
   /** 缺字列表被截断（只保留前 N 个）时为真：UI 必须说明，不能假装完整。 */
   truncated: boolean;
 }

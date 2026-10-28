@@ -7,18 +7,7 @@ import {
   ReloadOutlined,
   SyncOutlined,
 } from "@ant-design/icons";
-import {
-  Alert,
-  App,
-  Button,
-  Card,
-  Descriptions,
-  Progress,
-  Space,
-  Spin,
-  Switch,
-  Typography,
-} from "antd";
+import { Alert, App, Button, Card, Progress, Space, Spin, Switch, Typography } from "antd";
 import { useEffect, useState } from "react";
 import {
   acknowledgeUpdateInstallResult,
@@ -219,20 +208,6 @@ export default function UpdateCard() {
         {t("update.intro.filesOnly")} <code>data/</code> {t("update.intro.dataSuffix")}{" "}
         {t("update.intro.backupHint")}
       </Typography.Paragraph>
-      <Descriptions size="small" column={1} style={{ marginBottom: 12 }}>
-        <Descriptions.Item label={t("update.field.channel")}>
-          {desktop ? t("update.method.desktop") : t("update.method.in-app")}
-        </Descriptions.Item>
-        <Descriptions.Item label={t("update.field.current")}>
-          {result?.current_version || status?.current_version || t("update.value.checkFirst")}
-        </Descriptions.Item>
-        {status?.target_version && (
-          <Descriptions.Item label={t("update.field.target")}>
-            {status.target_version}
-          </Descriptions.Item>
-        )}
-      </Descriptions>
-
       <Space wrap>
         <Button
           type="primary"
@@ -292,6 +267,29 @@ export default function UpdateCard() {
       )}
 
       {checking && !result && <Spin style={{ marginTop: 16 }} />}
+      <div className="update-meta">
+        <div className="update-meta-item">
+          <span className="update-meta-label">{t("update.field.channel")}</span>
+          <Typography.Text strong>
+            {desktop ? t("update.method.desktop") : t("update.method.in-app")}
+          </Typography.Text>
+        </div>
+        <div className="update-meta-item">
+          <span className="update-meta-label">{t("update.field.current")}</span>
+          <Typography.Text strong>
+            {result?.current_version || status?.current_version || t("update.value.checkFirst")}
+          </Typography.Text>
+        </div>
+        <div className="update-meta-item">
+          <span className="update-meta-label">{t("update.field.latest")}</span>
+          <Typography.Text strong>
+            {result?.latest_version || status?.target_version || t("update.value.checkFirst")}
+          </Typography.Text>
+        </div>
+      </div>
+      <Typography.Text type="secondary" className="update-meta-note">
+        {t("update.side.note")}
+      </Typography.Text>
       {error && <Alert style={{ marginTop: 16 }} type="error" showIcon title={errorText} />}
       {/* hook 只存提示 key：文案按当前语言在这里取，切语言后会跟着重译。 */}
       {statusError ? (

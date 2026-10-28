@@ -2,21 +2,26 @@
 /**
  * 字符级标记按钮（W07）：加粗 / 斜体 / 链接。
  *
- * 守四件事：①按 textarea 选区插入成对标记并回传新选区；②空选区/无目标/非法 URL
+ * 守五件事：①按 textarea 选区插入成对标记并回传新选区；②空选区/无目标/非法 URL
  * 都给出 t() 提示且**不写回**（不制造空改动）；③已有成对加粗时斜体不拆标记、不产生空提交；
- * ④按钮是受控禁用（宿主保存中/只读时一致置灰）。
+ * ④按钮是受控禁用（宿主保存中/只读时一致置灰）；
+ * ⑤**选区降级**：实时选区为空时用宿主记住的最近一次非空选区（2026-10-29 用户反馈"添加
+ * 链接还需要选取文字"），链接在没有选区时按"光标处插入、URL 当链接文字"处理。
  */
 import { App as AntdApp } from "antd";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { useRef } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { t } from "../../../i18n";
+import type { InlineRange } from "../../../features/resume-layout/inlineMarks";
 import InlineMarkButtons, { type InlineMarkCommit } from "./InlineMarkButtons";
 
 interface HarnessProps {
   initial?: string;
   noTarget?: boolean;
   disabled?: boolean;
+  /** 宿主"记住的最近一次非空选区"（模拟 useWorkbenchInlineMarks 的 getRememberedRange）。 */
+  remembered?: InlineRange | null;
   onCommit?: (next: InlineMarkCommit) => void;
 }
 
@@ -25,6 +30,7 @@ function Harness({
   initial = "abcdef",
   noTarget = false,
   disabled,
+  remembered = null,
   onCommit = vi.fn(),
 }: HarnessProps) {
   const ref = useRef<HTMLTextAreaElement>(null);
@@ -33,6 +39,7 @@ function Harness({
       <textarea ref={ref} defaultValue={initial} aria-label="draft" />
       <InlineMarkButtons
         getTarget={() => (noTarget ? null : ref.current)}
+        getRememberedRange={() => remembered}
         onCommit={onCommit}
         disabled={disabled}
       />
@@ -123,6 +130,49 @@ describe("InlineMarkButtons", () => {
     select(container, 2, 4);
     fireEvent.click(screen.getByRole("button", { name: t("typography.inline.italicAria") }));
     expect(onCommit).not.toHaveBeenCalled();
+  });
+
+  it("实时选区已被折叠时，用宿主记住的选区插入链接", () => {
+    // 用户确实选过 2–4，但点图标那一拍选区被折叠成 5/5（浏览器把选区收掉了）。
+    const { container, onCommit } = renderHarness({ remembered: { start: 2, end: 4 } });
+    select(container, 5, 5);
+    fireEvent.click(screen.getByRole("button", { name: t("typography.inline.linkAria") }));
+    fireEvent.change(
+      screen.getByRole("textbox", { name: t("typography.inline.linkPlaceholder") }),
+      {
+        target: { value: "https://x.dev/a" },
+      },
+    );
+    fireEvent.click(screen.getByRole("button", { name: t("typography.inline.linkApply") }));
+    expect(onCommit).toHaveBeenCalledWith({
+      text: "ab[cd](https://x.dev/a)ef",
+      selection: { start: 2, end: 23 },
+    });
+  });
+
+  it("实时选区为空时，加粗也能用记住的选区", () => {
+    const { container, onCommit } = renderHarness({ remembered: { start: 2, end: 4 } });
+    select(container, 0, 0);
+    fireEvent.click(screen.getByRole("button", { name: t("typography.inline.boldAria") }));
+    expect(onCommit).toHaveBeenCalledWith({ text: "ab**cd**ef", selection: { start: 4, end: 6 } });
+  });
+
+  it("完全没有选区时点链接：在光标处插入，用 URL 当链接文字", () => {
+    const { container, onCommit } = renderHarness({ remembered: null });
+    select(container, 6, 6);
+    fireEvent.click(screen.getByRole("button", { name: t("typography.inline.linkAria") }));
+    fireEvent.change(
+      screen.getByRole("textbox", { name: t("typography.inline.linkPlaceholder") }),
+      {
+        target: { value: "https://x.dev/a" },
+      },
+    );
+    fireEvent.click(screen.getByRole("button", { name: t("typography.inline.linkApply") }));
+    const inserted = "[https://x.dev/a](https://x.dev/a)";
+    expect(onCommit).toHaveBeenCalledWith({
+      text: `abcdef${inserted}`,
+      selection: { start: 6, end: 6 + inserted.length },
+    });
   });
 
   it("disabled 时三颗按钮都不可点", () => {

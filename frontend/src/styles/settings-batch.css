@@ -1,0 +1,110 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/* 设置页 · 批量操作：两列紧凑网格，控件定宽（不再拉成一整行），长文本跨两列。 */
+.batch-config-rows {
+  display: grid;
+  max-width: 820px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px 16px;
+}
+
+.batch-config-row {
+  display: grid;
+  grid-template-columns: 80px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+}
+
+/* 长文本：标签留在左列、输入框跨两列，避免标签独占一行白占高度。 */
+.batch-config-row.is-wide {
+  grid-column: 1 / -1;
+  grid-template-columns: 80px minmax(0, 1fr);
+  align-items: start;
+}
+
+/* 需要两个控件并排的短字段（AI 润色：开关 + 档位）占两列。 */
+.batch-config-row.is-span-2 {
+  grid-column: span 2;
+}
+
+.batch-config-label {
+  color: var(--rf-text-secondary);
+  font-size: 13px;
+}
+
+.batch-config-hint {
+  margin-left: 4px;
+  color: var(--rf-text-secondary);
+  font-size: 12px;
+  opacity: 0.75;
+}
+
+.batch-config-control {
+  min-width: 0;
+  max-width: 160px;
+}
+
+.batch-config-row.is-wide .batch-config-control,
+.batch-config-row.is-span-2 .batch-config-control {
+  max-width: none;
+}
+
+.batch-config-control .ant-select {
+  width: 100%;
+}
+
+/* 页数：数字框固定 96px，后面还要跟「页」这个单位。 */
+.batch-config-control .ant-input-number {
+  width: 96px;
+}
+
+.batch-config-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.batch-config-status.is-saving {
+  color: var(--rf-text-secondary);
+}
+
+.batch-config-status.is-saved {
+  color: var(--rf-success-text);
+}
+
+.batch-config-status.is-error {
+  color: var(--rf-danger);
+}
+
+.batch-config-status.is-pending {
+  color: var(--rf-text-secondary);
+}
+
+.batch-config-footnote {
+  margin-top: 10px;
+  margin-bottom: 0;
+  font-size: 12px;
+}
+
+@media (max-width: 1092px) {
+  .batch-config-rows {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 10px;
+  }
+
+  .batch-config-row {
+    grid-template-columns: 96px minmax(0, 1fr);
+    gap: 12px;
+  }
+
+  .batch-config-row.is-wide,
+  .batch-config-row.is-span-2 {
+    grid-column: auto;
+    grid-template-columns: 96px minmax(0, 1fr);
+  }
+
+  .batch-config-control {
+    max-width: 220px;
+  }
+}

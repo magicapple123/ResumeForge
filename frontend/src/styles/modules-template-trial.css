@@ -1,0 +1,107 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/*
+ * 模板「试用与对比」视图（`components/resume/template-trial/*`）的样式。
+ *
+ * 为什么要单独一片：`modules-templates.css` 已经 465 行（单文件 500 行零豁免），
+ * 这批规则加进去会超预算。拆法与 `modules-settings-fonts.css` 相同：纯新增分片，
+ * 由 `modules.css` 按顺序 @import，既有规则一行不动。
+ *
+ * ## 修的是什么
+ *
+ * `TemplateTrialPanel` 早就写着 `.template-trial` / `.template-trial-toolbar` /
+ * `.template-trial-columns` 三个类名，但**全仓 CSS 里一条都没有**（grep 可证）。
+ * 于是两块预览落进普通块级流：上下堆叠、没有任何间距，用户看到的是"简历不是按
+ * 左右排布的"（2026-11 反馈）。这里把这两个类名真正实现出来，并顺手把列内的
+ * 标题层级、预览边界、采纳按钮的对齐一起整理好。
+ */
+
+/* 整块：工具条在上、两栏在下，彼此隔一档。 */
+.template-trial {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* 工具条（antd Space + `wrap`）：占满整行，换行由 Space 的 `wrap` 负责。
+   加 `width: 100%` 是因为 Space 默认 `inline-flex`，作为 flex 子项时会收缩到内容宽，
+   长句说明与右侧按钮之间的留白就不受控了。 */
+.template-trial-toolbar {
+  width: 100%;
+  row-gap: 8px;
+}
+
+/* 两栏：**宽屏必须左右并排**（本视图的全部意义就是"并排比较"）。
+   `minmax(0, 1fr)` 而不是 `1fr`：简历预览里有很宽的 iframe/长标题，
+   默认的 `min-width: auto` 会让某一列撑破 `1fr`，两列宽度就一边宽一边窄。 */
+.template-trial-columns {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  align-items: start;
+}
+
+/* 单栏：内部按"选择器 → 预览 → 标签 → 已知差异 → 页数 → 采纳"竖排。 */
+.template-trial-column {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--rf-border-subtle);
+  border-radius: 10px;
+  background: var(--rf-surface);
+}
+
+/* 预览：给 A4 纸一圈"画布"，纸的边界才立得住（与模板图库缩略图同一套观感）。 */
+.template-trial-preview {
+  padding: 10px;
+  border: 1px solid var(--rf-border-subtle);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--rf-surface-alt) 84%, var(--rf-border) 16%);
+  overflow: hidden;
+}
+
+/* 卡片自己已经有边框与内边距：去掉 A4 舞台那一层外壳，避免"框里还有一层框"。 */
+.template-trial-preview .a4-preview-stage {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+/* 档位标签行（篇幅 / 照片）与已知差异：比正文小一档，且每句独占一行
+   （`Typography.Text` 默认是 `span`，不改成块级时多条差异会挤在同一行里连成一句）。 */
+.template-trial-chips {
+  font-size: 12px;
+}
+
+.template-trial-limit {
+  display: block;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+/* 页数/溢出区：固定最小高度，避免"正在测量 → 量完了"时整栏高度跳一下
+   （两栏一高一低时，用户会以为右侧那份排得更多）。 */
+.template-trial-measure {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-height: 20px;
+  font-size: 12px;
+}
+
+/* 采纳按钮顶到栏底：两栏的"已知差异"条数不同（一边可能多一行说明），
+   `margin-top: auto` 让两栏的按钮始终停在同一水平线上，不跟着文字长度上下错位。 */
+.template-trial-column > .ant-btn {
+  align-self: flex-start;
+  margin-top: auto;
+}
+
+/* 窄屏（≤1092）：并排已经挤到看不清一页纸，塌成单列、上下对照。
+   断点取 `--rf-bp-narrow`（1092）而不是随手一个 1100：全仓媒体查询数值必须落在
+   断点集里，由 `theme/breakpointGuard.test.ts` 守着。 */
+@media (max-width: 1092px) {
+  .template-trial-columns {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

@@ -1,5 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
-/** 岗位广场批量适配度分析：设置 → 进行中（后台任务进度）→ 结果，与历史回看。
+/** 岗位广场批量分析面板：设置 → 进行中（后台任务进度）→ 结果，与历史回看。
+ *
+ * 两种模式：`match` 逐岗位给匹配结论（批量操作 →「匹配度分析」）；`compare` 在逐岗结论之后
+ * 再横向排序并解释原因（筛选条 →「AI 对比选岗」）。
  *
  * 分析**一律走后台任务**（`startJobMatchBatchTask`）：同步批量端点要等全部岗位
  * 分析完才返回，多岗位必然撞前端请求超时预算（"请求超时，请重试"就是这么来的）。
@@ -7,31 +10,21 @@
  * 自动回到进行中视图——这就是"切页自动转后台"的机制。
  */
 import { HistoryOutlined, ReloadOutlined, RobotOutlined } from "@ant-design/icons";
-import {
-  Alert,
-  App,
-  Button,
-  Checkbox,
-  Listy,
-  Modal,
-  Progress,
-  Space,
-  Tabs,
-  Typography,
-} from "antd";
+import { Alert, App, Button, Checkbox, Listy, Modal, Space, Tabs, Tag, Typography } from "antd";
 import EmptyState from "./common/EmptyState";
 import PageSkeleton from "./common/PageSkeleton";
 import LoadingBlock from "./common/LoadingBlock";
 import { ListyItem, ListyMeta } from "./common/ListyItem";
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { BatchResultView } from "./jobs/JobMatchBatchResult";
+import JobMatchBatchRunning from "./jobs/JobMatchBatchRunning";
 import {
   getJobMatchBatch,
   getJobMatchBatchTask,
   listJobMatchBatches,
   startJobMatchBatchTask,
 } from "../api/jobs";
-import type { JobMatchBatchOut, JobMatchBatchSummary } from "../types";
+import type { JobMatchBatchMode, JobMatchBatchOut, JobMatchBatchSummary } from "../types";
 import {
   cancelJobMatchBackgroundTask,
   watchJobMatchBatchTask,
@@ -43,8 +36,10 @@ import { useLocale } from "../i18n/i18nContext";
 interface JobMatchBatchPanelProps {
   open: boolean;
   jobIds: number[];
-  /** 打开时先看哪个页签：筛选条「AI 分析适配度」进设置，「分析记录」进历史。 */
+  /** 打开时先看哪个页签：筛选条「AI 对比选岗」进设置，「分析记录」进历史。 */
   initialView?: "setup" | "history";
+  /** match = 逐岗匹配结论；compare = 逐岗结论之后再横向排序（默认 match，保持旧入口行为）。 */
+  mode?: JobMatchBatchMode;
   onClose: () => void;
 }
 
@@ -57,6 +52,7 @@ export default function JobMatchBatchPanel({
   open,
   jobIds,
   initialView = "setup",
+  mode = "match",
   onClose,
 }: JobMatchBatchPanelProps) {
   // 本组件用模块级 t()：必须订阅语言变化，否则切语言后面板文案不重渲染。
@@ -176,10 +172,7 @@ export default function JobMatchBatchPanel({
     };
   }, [loadHistory, message, open, phase, runningTaskId]);
 
-  /* eslint-disable react-hooks/preserve-manual-memoization --
-     误报：加了 useLocale()（语言订阅）之后，React Compiler 把 useState 的稳定 setter
-     也算进依赖推断，于是与人工核对的依赖数组对不上。本回调的依赖就是 jobIds /
-     loadHistory / message 这三个，setter 恒稳不需要列。 */
+  // 依赖就是 jobIds / loadHistory / message / mode 四个；setter 恒稳不需要列。
   const startAnalysis = useCallback(
     async (overrideForce: boolean) => {
       if (jobIds.length === 0) {
@@ -189,8 +182,17 @@ export default function JobMatchBatchPanel({
       setStarting(true);
       setError("");
       try {
-        const task = await startJobMatchBatchTask({ job_ids: jobIds, force: overrideForce });
-        watchJobMatchBatchTask(task, t("jobMatchBatch.task.title", { count: jobIds.length }));
+        const task = await startJobMatchBatchTask({
+          job_ids: jobIds,
+          force: overrideForce,
+          mode,
+        });
+        watchJobMatchBatchTask(
+          task,
+          t(mode === "compare" ? "jobMatchBatch.task.title.compare" : "jobMatchBatch.task.title", {
+            count: jobIds.length,
+          }),
+        );
         setRunningTaskId(task.task_id);
         setPhase("running");
         void loadHistory();
@@ -204,9 +206,8 @@ export default function JobMatchBatchPanel({
         setStarting(false);
       }
     },
-    [jobIds, loadHistory, message],
+    [jobIds, loadHistory, message, mode],
   );
-  /* eslint-enable react-hooks/preserve-manual-memoization */
 
   const cancelRunning = async () => {
     if (!activeTask || cancelling) return;
@@ -243,55 +244,12 @@ export default function JobMatchBatchPanel({
   };
 
   const runningContent = activeTask ? (
-    <Space orientation="vertical" size="middle" style={{ width: "100%" }}>
-      <Alert
-        type="info"
-        showIcon
-        title={t("jobMatchBatch.running.title")}
-        description={t("jobMatchBatch.running.body")}
-      />
-      <div style={{ textAlign: "center" }}>
-        <Progress
-          type="circle"
-          percent={
-            activeTask.requestedCount > 0
-              ? Math.round(
-                  ((activeTask.completedCount + activeTask.failedCount) /
-                    activeTask.requestedCount) *
-                    100,
-                )
-              : 0
-          }
-          size={96}
-        />
-        <div style={{ marginTop: 8 }}>
-          <Typography.Text strong>
-            {t("jobMatchBatch.running.progress", {
-              done: activeTask.completedCount + activeTask.failedCount,
-              total: activeTask.requestedCount,
-            })}
-          </Typography.Text>
-          {activeTask.failedCount > 0 ? (
-            <Typography.Text type="secondary">
-              {t("jobMatchBatch.running.failed", { count: activeTask.failedCount })}
-            </Typography.Text>
-          ) : null}
-        </div>
-        {activeTask.currentJobTitle ? (
-          <Typography.Text type="secondary">
-            {t("jobMatchBatch.running.current", { title: activeTask.currentJobTitle })}
-          </Typography.Text>
-        ) : (
-          <Typography.Text type="secondary">{t("jobMatchBatch.running.waiting")}</Typography.Text>
-        )}
-      </div>
-      <Space wrap style={{ justifyContent: "center", width: "100%" }}>
-        <Button danger loading={cancelling} onClick={() => void cancelRunning()}>
-          {t("jobMatchBatch.action.cancel")}
-        </Button>
-        <Button onClick={onClose}>{t("jobMatchBatch.action.background")}</Button>
-      </Space>
-    </Space>
+    <JobMatchBatchRunning
+      task={activeTask}
+      cancelling={cancelling}
+      onCancel={() => void cancelRunning()}
+      onClose={onClose}
+    />
   ) : (
     <LoadingBlock />
   );
@@ -301,8 +259,13 @@ export default function JobMatchBatchPanel({
       <Alert
         type="info"
         showIcon
-        title={t("jobMatchBatch.setup.title", { count: jobIds.length })}
-        description={t("jobMatchBatch.setup.body")}
+        title={t(
+          mode === "compare" ? "jobMatchBatch.setup.title.compare" : "jobMatchBatch.setup.title",
+          { count: jobIds.length },
+        )}
+        description={t(
+          mode === "compare" ? "jobMatchBatch.setup.body.compare" : "jobMatchBatch.setup.body",
+        )}
       />
       <Checkbox checked={force} onChange={(event) => setForce(event.target.checked)}>
         {t("jobMatchBatch.setup.force")}
@@ -327,10 +290,23 @@ export default function JobMatchBatchPanel({
           ]}
         >
           <ListyMeta
-            title={t("jobMatchBatch.history.batchTitle", {
-              id: item.id,
-              time: formatTime(item.created_at),
-            })}
+            title={
+              <Space size={6} wrap>
+                <Tag color={item.mode === "compare" ? "purple" : "blue"}>
+                  {t(
+                    item.mode === "compare"
+                      ? "jobMatchBatch.history.mode.compare"
+                      : "jobMatchBatch.history.mode.match",
+                  )}
+                </Tag>
+                <span>
+                  {t("jobMatchBatch.history.batchTitle", {
+                    id: item.id,
+                    time: formatTime(item.created_at),
+                  })}
+                </span>
+              </Space>
+            }
             description={t(
               item.top_score === null
                 ? "jobMatchBatch.history.summary"
@@ -372,7 +348,7 @@ export default function JobMatchBatchPanel({
         title={
           <Space>
             <RobotOutlined />
-            {t("jobMatchBatch.title")}
+            {t(mode === "compare" ? "jobMatchBatch.title.compare" : "jobMatchBatch.title")}
           </Space>
         }
         width={900}
@@ -398,7 +374,11 @@ export default function JobMatchBatchPanel({
                 loading={starting}
                 onClick={() => void startAnalysis(force)}
               >
-                {t("jobMatchBatch.action.start")}
+                {t(
+                  mode === "compare"
+                    ? "jobMatchBatch.action.start.compare"
+                    : "jobMatchBatch.action.start",
+                )}
               </Button>
             </Space>
           ) : phase === "result" && batch && jobIds.length > 0 ? (

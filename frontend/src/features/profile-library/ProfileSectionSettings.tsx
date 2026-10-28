@@ -18,6 +18,7 @@ import { t } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
 import { createSection, deleteSection, getSectionDeletionImpact, renameSection } from "./api";
 import { profileErrorMessage } from "./errors";
+import { profileSectionLabel } from "./profileLabels";
 import { invalidateProjectionCache } from "./projectionCache";
 import type { SectionDeletionImpactOut, WorkspaceOut } from "./types";
 
@@ -114,7 +115,7 @@ export default function ProfileSectionSettings({
   const renderActions = (section: WorkspaceOut["sections"][number]) => (
     <span className="profile-settings-row-actions">
       <SectionVisibilitySwitch
-        sectionName={section.name}
+        sectionName={profileSectionLabel(section)}
         visible={section.key === "basic_info" || visibleKeys.has(section.key)}
         locked={section.key === "basic_info"}
         busy={visibilityBusy}
@@ -167,7 +168,7 @@ export default function ProfileSectionSettings({
             icon={<DeleteOutlined />}
             aria-label={t("profileLibrary.sectionSettings.delete")}
             disabled={busy}
-            onClick={() => requestDelete(section.key, section.name)}
+            onClick={() => requestDelete(section.key, profileSectionLabel(section))}
           />
         </Tooltip>
       ) : null}
@@ -176,7 +177,7 @@ export default function ProfileSectionSettings({
 
   const renderRowMain = (section: WorkspaceOut["sections"][number]) => (
     <span className="profile-settings-row-main">
-      <span className="profile-settings-row-title">{section.name}</span>
+      <span className="profile-settings-row-title">{profileSectionLabel(section)}</span>
       <span className="profile-settings-row-meta">
         {t("profileLibrary.sectionSettings.fieldsCount", { count: section.fields.length })}
       </span>

@@ -3,6 +3,7 @@
 import { App as AntdApp } from "antd";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { InterviewAnswerReview } from "../types";
 import QuestionBankPanel from "./QuestionBankPanel";
 
 const apiMocks = vi.hoisted(() => ({
@@ -141,11 +142,15 @@ describe("QuestionBankPanel 自动保存与历史富还原", () => {
     fireEvent.click(answerButtons[0]);
 
     expect(await screen.findByText(/围绕经历/)).toBeInTheDocument();
-    expect(apiMocks.generateQuestionAnswer).toHaveBeenCalledWith({
-      question: "请自我介绍",
-      job_id: RECORD.job_id ?? null,
-      resume_id: RECORD.resume_id ?? null,
-    });
+    expect(apiMocks.generateQuestionAnswer).toHaveBeenCalledWith(
+      {
+        question: "请自我介绍",
+        job_id: RECORD.job_id ?? null,
+        resume_id: RECORD.resume_id ?? null,
+      },
+      // T04-d：参考答案可被「停止」掐断，第二个参数是 AbortSignal。
+      expect.anything(),
+    );
 
     // 生成结果写回同一条历史记录（PATCH）。
     await waitFor(() =>
@@ -174,5 +179,33 @@ describe("QuestionBankPanel 自动保存与历史富还原", () => {
     expect(screen.getByText(/旧版纯文本题库内容/)).toBeInTheDocument();
     // 富还原的答案按钮不应出现。
     expect(screen.queryByRole("button", { name: /参考答案/ })).not.toBeInTheDocument();
+  });
+
+  it("历史记录里的 review 是空对象时不崩：按「没批改过」处理", async () => {
+    // 后端 `InterviewQuestionItem.review` 的默认值就是 `{}`，每道题都会带一个空对象回来。
+    // 若把它当成"有批改结果"，打开详情就会去读 `strengths.length` 而整页白屏。
+    const recordWithEmptyReview = {
+      ...RECORD,
+      groups: [
+        {
+          type: "基础题",
+          questions: [
+            {
+              question: "请自我介绍",
+              purpose: "考察表达",
+              answer_hint: "按 STAR 展开",
+              my_answer: "",
+              // 后端就是这么返回的（空对象），所以这里刻意照抄，不加类型上的美化。
+              review: {} as InterviewAnswerReview,
+            },
+          ],
+        },
+      ],
+    };
+    renderPanel({ record: recordWithEmptyReview });
+
+    await waitFor(() => expect(document.querySelector(".question-bank-question")).not.toBeNull());
+    // 没有批改结果 → 不该出现分数环与三段清单。
+    expect(document.querySelector(".answer-review-view")).toBeNull();
   });
 });

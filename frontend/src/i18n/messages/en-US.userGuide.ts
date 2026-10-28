@@ -155,9 +155,9 @@ const userGuide = {
   "userGuide.workflow.step1.point13.lead": "Match analysis",
   "userGuide.workflow.step1.point13.text":
     "“Match analysis” on the Job detail reads your Profile and Resumes and gives five verdicts — “matched / wording gap / insufficient evidence / real gap / needs confirmation” — plus a 0–100 reference score (see the next point); unlike “Job requirement reading”, which only reads the posting.",
-  "userGuide.workflow.step1.point14.lead": "Batch analysis",
+  "userGuide.workflow.step1.point14.lead": "AI job comparison",
   "userGuide.workflow.step1.point14.text":
-    "On the Job board click “Select” to tick several Jobs, then “Analyze fit with AI”; the dropdown can run it in the background, results are sorted by reference score and saved to “Analysis records” for later.",
+    "On the Job board click “Select” to tick 2–12 Jobs, then “AI job comparison”: each Job is checked first, then ranked against the others with reasons. It runs in the background and is saved to “Analysis records”. The “Bulk actions” menu can also generate resumes, read requirements, run match analysis, enqueue, export or delete one by one.",
   "userGuide.workflow.step1.point15.lead": "Reference score",
   "userGuide.workflow.step1.point15.text":
     "There is also a 0–100 reference score with five sub-scores; it only helps you sense the distance, **takes no part in apply admission**, and comes with a disclaimer.",

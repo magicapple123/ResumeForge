@@ -37,6 +37,12 @@ const conflict = {
   "workbench.history.label.bold": "Bold text",
   "workbench.history.summary": "{name} · {entries} entries · {pages} pages",
   "workbench.history.current": "Current state",
+  "workbench.history.undo.hint": "Nothing to undo",
+  "workbench.history.redo.hint": "Nothing to redo",
+  "workbench.history.jumpTo": "Go back to this step",
+  "workbench.history.backToCurrent": "Back to current",
+  "workbench.history.jumpTo.confirm":
+    "Going back to this step discards every change after it. Continue?",
   "workbench.selection.entry": "Entry",
 } as const;
 

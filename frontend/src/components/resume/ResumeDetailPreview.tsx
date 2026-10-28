@@ -19,7 +19,6 @@ import ExportConfigModal from "./delivery/ExportConfigModal";
 import { createExportDeliveryApi } from "../../features/resume-delivery";
 import { getResume } from "../../api/resumes";
 import ResumeZoomModal from "./ResumeZoomModal";
-import ResumeEditorModal from "../ResumeEditorModal";
 import { useResumeTemplateCatalog } from "../../hooks/useResumeTemplateCatalog";
 import ResumeMeasureControls from "./ResumeMeasureControls";
 import ResumeTemplateControls from "./ResumeTemplateControls";
@@ -78,8 +77,6 @@ export default function ResumeDetailPreview({
 }: Props) {
   useLocale();
   const navigate = useNavigate();
-  const [editorOpen, setEditorOpen] = useState(false);
-  const [editorTarget, setEditorTarget] = useState<string | null>(null);
   const [suggestionsOpen, setSuggestionsOpen] = useState(false);
   const [reviseOpen, setReviseOpen] = useState(false);
   const [reviseInstructions, setReviseInstructions] = useState("");
@@ -99,14 +96,14 @@ export default function ResumeDetailPreview({
   });
   const [zoomOpen, setZoomOpen] = useState(autoOpenWorkbench);
   // 制作台中栏有没有未保存的内容：有值时禁用底部「手动调整」（两个编辑器同时开会互相覆盖草稿）。
-  const [workbenchDirty, setWorkbenchDirty] = useState(false);
   // 预览口径（草稿 / 精确）住在这一层：主预览与「简历制作台」共用它，任何一处切换，
   // 另一处和制作台都会跟着走（2026-10-21 用户要求）。
   const [previewMode, setPreviewMode] = useState<PreviewMode>("draft");
   const [sharePackageOpen, setSharePackageOpen] = useState(false);
   // 「从我的资料追加一条」的候选：**打开编辑器/制作台时才取一次**（`useProfileFillSources`），
   // 资料接口失败则静默降级成"没有这条入口"，编辑器照常可开。中栏与弹窗共用同一份。
-  const { fillSources } = useResumeEditorFillSources(editorOpen || zoomOpen, detail);
+  // 预览里不再有手动编辑（详细编辑走制作台），候选只在制作台弹层打开时取。
+  const { fillSources } = useResumeEditorFillSources(zoomOpen, detail);
   // 内部再包一层引用：父组件可能传 null（尚未量到），子组件需要一份稳定的 ref 传入 ResumePreview。
   const fallbackRef = useRef<ResumePreviewHandle>(null);
   const resolvedPreviewRef = previewRef ?? fallbackRef;
@@ -143,10 +140,6 @@ export default function ResumeDetailPreview({
   );
   // 事实来源标注（RF-13）：证据面板用它列出"这条内容从哪来"；预览上的悬停角标随编辑模式一起去掉了（2026-10-21），标注数据本身仍然有效。
   const factAnnotations = useMemo(() => detail.fact_annotations ?? [], [detail.fact_annotations]);
-  const openAtPath = (path: string) => {
-    setEditorTarget(path);
-    setEditorOpen(true);
-  };
   return (
     <div>
       <Space style={{ marginBottom: 12 }} wrap>
@@ -223,10 +216,8 @@ export default function ResumeDetailPreview({
           setReviseInstructions(instructions);
           setReviseOpen(true);
         }}
-        onOpenEditor={() => {
-          setEditorTarget(null);
-          setEditorOpen(true);
-        }}
+        // 预览里不再提供手动编辑：这条提示指向「简历制作台」，详细编辑都在那边做。
+        onOpenEditor={() => setZoomOpen(true)}
       />
       {/* 事实来源展示（RF-13）：回答"写进去的内容从哪来"，挂在 coverage Alert 之后、预览之前。 */}
       {factAnnotations.length > 0 && (
@@ -234,6 +225,8 @@ export default function ResumeDetailPreview({
       )}
       <ResumePreview
         ref={resolvedPreviewRef}
+        // 2026-10-28：预览里不再提供「草稿模式编辑」，详细编辑去制作台。
+        showClickToEdit={false}
         // 具名插槽（P2/D4）：结构类第一行、度量类第二行；目录本组件取一次两组共用。
         // 渲染中不禁用（D12）：禁用会让用户以为坏了；边距合并保证最后一次生效。
         templateControls={
@@ -279,7 +272,6 @@ export default function ResumeDetailPreview({
         previewMode={previewMode}
         onPreviewModeChange={setPreviewMode}
         // 点纸面字段 → 打开「手动调整」并定位；右键加粗只在制作台提供（主预览没有保存入口）。
-        onPickField={openAtPath}
         warnings={fabricationWarnings}
         onLayoutStatus={onLayoutStatus}
         onMeasure={onMeasure}
@@ -293,11 +285,6 @@ export default function ResumeDetailPreview({
         showRevise={showRevise}
         suggestionsGenerated={suggestionsGenerated}
         jobId={detail.job_id ?? null}
-        editorBlocked={workbenchDirty}
-        onOpenEditor={() => {
-          setEditorTarget(null);
-          setEditorOpen(true);
-        }}
         onOpenZoom={() => setZoomOpen(true)}
         onOpenRevise={() => setReviseOpen(true)}
         onOpenSuggestions={() => setSuggestionsOpen(true)}
@@ -311,23 +298,6 @@ export default function ResumeDetailPreview({
         onOpenExportOptions={openExportByFlow}
       />
 
-      <ResumeEditorModal
-        open={editorOpen}
-        content={detail.content}
-        initialTarget={editorTarget}
-        // `resumeId` 决定编辑器的草稿作用域（`resume.edit#<id>`）；写作增强搬到右键之后
-        // 不再由它挂页签，但"这份草稿属于哪份简历"仍然只能靠它区分。
-        resumeId={detail.id}
-        onClose={() => {
-          setEditorOpen(false);
-          setEditorTarget(null);
-        }}
-        // 「从我的资料追加一条」：编辑**已有**简历也要这条入口（新建简历那边一直有）。
-        // 只给候选项，不给 `fillAll`——那是"整份重新带入"，编辑已有简历时会把整份
-        // 内容替换掉；`entryFill` 用缺省 true（条目级填进本条同样需要）。
-        fillSources={fillSources}
-        onSave={onSaveEditedResume}
-      />
       <ResumeSuggestionsModal
         open={suggestionsOpen}
         recordId={detail.id}
@@ -423,15 +393,13 @@ export default function ResumeDetailPreview({
         richDirty={richDirty}
         onDiscardRichText={onDiscardRichText}
         onSaveContent={onSaveEditedResume}
-        // 加粗也算中栏的改动：并进上报值，宿主才会禁用「手动调整」（两个编辑器各持一份内容）。
-        onEditorDirtyChange={(next) => setWorkbenchDirty(next || Boolean(richDirty))}
+        // 预览里已经没有第二个编辑器会和制作台抢草稿，脏值不再需要上报。
+        // （`richDirty` 仍在中栏内部参与"保存"按钮的可用性判断。）
         richEdit={richEdit}
         // 中栏与「手动调整」共用同一份候选（只给一处开，用户就得关掉制作台才能从资料带一条进来）。
         fillSources={fillSources}
         onClose={() => {
           setZoomOpen(false);
-          // 制作台关掉后中栏已经销毁，它的脏值不再有出口——不清掉会永久禁用「手动调整」。
-          setWorkbenchDirty(false);
         }}
         onExport={openExportByFlow}
       />

@@ -11,6 +11,7 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { t } from "../../i18n";
 import ProfileFieldInputs from "./ProfileFieldInputs";
+import { ProfileBaselineContext } from "../profile/profileBaselineContext";
 import { makeField, makeSection } from "../../test/profileWorkspaceFixture";
 import type { FieldOut, SectionOut } from "./types";
 
@@ -29,9 +30,11 @@ const SECTION: SectionOut = makeSection("basic_info", "Basic Info", "singleton",
 function Harness({
   section,
   onSetPreference,
+  disabled,
 }: {
   section: SectionOut;
   onSetPreference: (field: FieldOut, patch: { hidden?: boolean }) => void;
+  disabled?: boolean;
 }) {
   const [form] = Form.useForm();
   return (
@@ -53,12 +56,17 @@ function Harness({
           },
         }}
       >
+        {/* 与生产一致：entry_key 必须注册进表单，"已修改"标记要靠它找到基线。 */}
+        <Form.Item name={["sections", "basic_info", 0, "entry_key"]} hidden>
+          <input type="hidden" />
+        </Form.Item>
         <ProfileFieldInputs
           section={section}
           namePrefix={["sections", "basic_info", 0, "values"]}
           singleLineMax={200}
           multiLineMax={2000}
           onSetPreference={onSetPreference}
+          disabled={disabled}
         />
         <Form.Item shouldUpdate noStyle>
           {() => (
@@ -190,5 +198,44 @@ describe("ProfileFieldInputs 的字段渲染与隐藏", () => {
     render(<Harness section={custom} onSetPreference={vi.fn()} />);
 
     expect(screen.getAllByRole("checkbox", { name: "至今" })).toHaveLength(1);
+  });
+
+  it("编辑态：只有相对已保存基线改过的字段带 is-dirty", () => {
+    const onSetPreference = vi.fn();
+    // 基线里 name=Alice、nickname=Ali；下面把 nickname 改成 Bob。
+    const baseline = { "basic_info.name": "Alice", "basic_info.nickname": "Ali" };
+    render(
+      <ProfileBaselineContext.Provider
+        value={(entryKey) => (entryKey === "entry-1" ? baseline : null)}
+      >
+        <Harness section={SECTION} onSetPreference={onSetPreference} />
+      </ProfileBaselineContext.Provider>,
+    );
+
+    // 刚打开时没有改动：一个 is-dirty 都不该有。
+    expect(document.querySelectorAll(".profile-field-grid-item.is-dirty")).toHaveLength(0);
+
+    fireEvent.change(screen.getByLabelText("Nickname"), { target: { value: "Bob" } });
+    // eslint-disable-next-line no-console
+
+    const dirty = document.querySelectorAll(".profile-field-grid-item.is-dirty");
+    expect(dirty).toHaveLength(1);
+    // 标出来的是昵称那一格，不是姓名那一格。
+    expect(dirty[0].textContent).toContain("Nickname");
+    expect(dirty[0].textContent).not.toContain("Name");
+
+    // 改回原值就不再算"已修改"。
+    fireEvent.change(screen.getByLabelText("Nickname"), { target: { value: "Ali" } });
+    expect(document.querySelectorAll(".profile-field-grid-item.is-dirty")).toHaveLength(0);
+  });
+
+  it("只读态（disabled）不标已修改", () => {
+    const onSetPreference = vi.fn();
+    render(
+      <ProfileBaselineContext.Provider value={() => ({ "basic_info.name": "Alice" })}>
+        <Harness section={SECTION} onSetPreference={onSetPreference} disabled />
+      </ProfileBaselineContext.Provider>,
+    );
+    expect(document.querySelectorAll(".profile-field-grid-item.is-dirty")).toHaveLength(0);
   });
 });

@@ -17,8 +17,8 @@
  * - 已下载时给出「删除」，二次确认正文由 `fontDownload.deleteConfirmBody` 提供
  *   （直删、没有恢复入口，这句话必须出现在确认里）。
  */
-import { CheckOutlined } from "@ant-design/icons";
-import { App, Button, Tag, Tooltip, Typography } from "antd";
+import { CheckOutlined, DeleteOutlined, MoreOutlined } from "@ant-design/icons";
+import { App, Button, Dropdown, Tag, Tooltip, Typography } from "antd";
 import { useCallback, useState } from "react";
 import {
   BUILTIN_FONT_FILE,
@@ -229,9 +229,29 @@ export default function BuiltinFontRow({ status, onChanged, activeName = null }:
           </Button>
         ) : null}
         {!downloading && !failed && downloaded ? (
-          <Button size="small" danger loading={busy} onClick={confirmRemove}>
-            {t("fontDownload.delete")}
-          </Button>
+          // 删除是低频且不可恢复的动作：收进「更多操作」，不与「设为当前」并排裸露。
+          <Dropdown
+            trigger={["click"]}
+            menu={{
+              items: [
+                {
+                  key: "delete",
+                  danger: true,
+                  icon: <DeleteOutlined />,
+                  label: t("fontDownload.delete"),
+                  onClick: confirmRemove,
+                },
+              ],
+            }}
+          >
+            <Button
+              size="small"
+              type="text"
+              loading={busy}
+              icon={<MoreOutlined />}
+              aria-label={t("common.action.more")}
+            />
+          </Dropdown>
         ) : null}
         {!downloading && !failed && !downloaded ? (
           <Tooltip title={t("fonts.builtin.source-tooltip")}>

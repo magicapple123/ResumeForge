@@ -30,6 +30,7 @@ import { runPreflight } from "../../../features/resume-preflight/preflightApi";
 import TrialCapabilityStrip from "./TrialCapabilityStrip";
 import TrialColumn from "./TrialColumn";
 import { useLocale } from "../../../i18n/i18nContext";
+import { resumeTemplateLabel } from "../../../i18n/enum/resumeCatalog";
 
 interface Props {
   layout: ResumeLayout;
@@ -105,7 +106,7 @@ export default function TemplateTrialPanel({
       ? { ...(layout.format_config ?? {}) }
       : {};
     onAdopt({ template, formatConfig });
-    message.success(t("trial.adopt.done", { name: optionOf(template).label }));
+    message.success(t("trial.adopt.done", { name: resumeTemplateLabel(optionOf(template)) }));
   };
 
   return (

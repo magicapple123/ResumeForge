@@ -50,4 +50,33 @@ describe("D08 字体覆盖卡", () => {
     expect(screen.getByText(t("preflight.font.truncated"))).toBeInTheDocument();
     expect(screen.getByText(t("preflight.font.hint"))).toBeInTheDocument();
   });
+
+  /**
+   * 回归：后端 `missing` 是 `dict[str, list[str]]`（默认空字典），`checked=true` 时也可能
+   * 一个键都没有。旧实现直接读 `coverage.missing.regular.length` → 用户看到的
+   * `Cannot read properties of undefined (reading 'length')`，整个检查面板白屏。
+   */
+  it("missing 为空字典时不崩：显示缺字 0 个", () => {
+    renderCard({
+      checked: true,
+      font: "Noto Sans CJK",
+      bold_available: true,
+      missing: {},
+      truncated: false,
+    });
+    expect(screen.getByText(t("preflight.font.missing", { count: 0 }))).toBeInTheDocument();
+    expect(screen.getByText(t("preflight.font.boldAvailable"))).toBeInTheDocument();
+  });
+
+  it("只给了 regular 键、bold 缺失时也不崩", () => {
+    renderCard({
+      checked: true,
+      font: "Noto Sans CJK",
+      bold_available: true,
+      missing: { regular: [GLYPH] },
+      truncated: false,
+    });
+    expect(screen.getByText(t("preflight.font.missing", { count: 1 }))).toBeInTheDocument();
+    expect(screen.getByText(t("preflight.font.missingList", { chars: GLYPH }))).toBeInTheDocument();
+  });
 });

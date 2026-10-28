@@ -1,0 +1,44 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/* 模型用量汇总：数字改成 3 列统计卡，填满宽度、便于扫读。 */
+.usage-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px 16px;
+  margin: 8px 0 6px;
+}
+
+.usage-stat {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 12px;
+  border: 1px solid var(--rf-border);
+  border-radius: 8px;
+  background: var(--rf-surface-alt);
+}
+
+.usage-stat-label {
+  color: var(--rf-text-secondary);
+  font-size: 12px;
+}
+
+.usage-stat-value {
+  font-size: 16px;
+}
+
+.usage-stat-hint,
+.usage-stat-note {
+  font-size: 11px;
+}
+
+.usage-stat-note {
+  display: block;
+  margin-top: 2px;
+}
+
+@media (max-width: 767px) {
+  .usage-stat-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

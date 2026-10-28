@@ -1,0 +1,6 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/* 设置页 · 联网搜索：没有保存按钮，改动后只在底部留一行保存状态。 */
+.search-save-status {
+  display: block;
+  font-size: 12px;
+}

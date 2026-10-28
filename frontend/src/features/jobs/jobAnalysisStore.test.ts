@@ -1,12 +1,28 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * jobAnalysisStore：模块级岗位解读状态机（T1）。
+ * `jobAnalysisStore`：岗位解读的**显示状态**（执行已交给统一任务地基）。
  *
- * 单例 store 在用例之间共享同一份 Map，所以每条前后都 `resetJobAnalysisStoreForTests()`
- * 并清 mock；断言全部基于真实状态变化，用 deferred 手动 resolve，不 sleep。
+ * 这一版只验三件事，且都不依赖任何网络/轮询细节：
+ * 1. 发起时立刻进入 `running`（界面不会空着等第一次轮询）；
+ * 2. **成功**由 `aiTaskResultSink` 派发（这条路径也覆盖"刷新后恢复"），store 再去读一次
+ *    服务端缓存并把结果写进槽；
+ * 3. **失败 / 取消**由 `onFinished` 收尾，且取消不会被写成 error。
+ *
+ * 用替身替换 `utils/aiTaskEntry` 而不是替换 `api/aiTasks`：那三个函数就是 store 与任务
+ * 地基之间的**全部**契约，替掉它们等于把 store 的行为边界钉死；再往下一层去 mock HTTP
+ * 会让用例重新测一遍任务地基（那由 `utils/backgroundTasks.aiTasks.test.ts` 负责）。
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { ApiError } from "../../api/client";
+
+const entryMocks = vi.hoisted(() => ({
+  startAiTask: vi.fn(),
+  cancelAiTaskEntry: vi.fn(),
+  attachAiTaskUi: vi.fn(),
+}));
+vi.mock("../../utils/aiTaskEntry", () => entryMocks);
+
+import { dispatchAiTaskResult } from "../../utils/aiTaskResultSink";
+import type { BackgroundTask } from "../../utils/backgroundTasks.types";
 import type { JobAnalysisResult } from "../../types";
 import {
   attachJobAnalysis,
@@ -18,35 +34,6 @@ import {
   startJobAnalysis,
 } from "./jobAnalysisStore";
 
-const apiMocks = vi.hoisted(() => ({ generateJobAnalysis: vi.fn() }));
-// store 只从 api/jobs 取这一个函数，mock 到这个粒度就够。
-vi.mock("../../api/jobs", () => apiMocks);
-
-const noticeMocks = vi.hoisted(() => ({
-  announceBackgroundResult: vi.fn(),
-  announceBackgroundFailure: vi.fn(),
-}));
-// 通知出口换成替身：这里要断言"用户走了才通知"，不是去测弹窗怎么画。
-vi.mock("../../utils/backgroundTask", () => noticeMocks);
-
-const mockedGenerate = apiMocks.generateJobAnalysis;
-
-interface Deferred<T> {
-  promise: Promise<T>;
-  resolve: (value: T) => void;
-  reject: (reason?: unknown) => void;
-}
-
-function deferred<T>(): Deferred<T> {
-  let resolve!: (value: T) => void;
-  let reject!: (reason?: unknown) => void;
-  const promise = new Promise<T>((res, rej) => {
-    resolve = res;
-    reject = rej;
-  });
-  return { promise, resolve, reject };
-}
-
 function analysis(summary: string): JobAnalysisResult {
   return {
     summary,
@@ -57,14 +44,45 @@ function analysis(summary: string): JobAnalysisResult {
   };
 }
 
-/** 让 store 里 promise 回调（微任务）跑完。 */
+/** 一个终态任务快照（只填 store 会用到的字段）。 */
+function finishedTask(status: BackgroundTask["status"], error = ""): BackgroundTask {
+  return {
+    key: "job_analysis#1",
+    kind: "job_analysis",
+    id: 1,
+    label: "岗位解读",
+    status,
+    message: "",
+    progressPercent: null,
+    receivedChars: 0,
+    resumeId: null,
+    refId: null,
+    deepLink: null,
+    resultData: null,
+    error,
+    unknown: false,
+  };
+}
+
+/** 让 store 里的 promise 回调（微任务）跑完。 */
 async function flush(): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, 0));
+}
+
+/** 取出 `startAiTask` 收到的 `onFinished`（收尾路径由它驱动）。 */
+function capturedOnFinished(call = 0) {
+  const input = entryMocks.startAiTask.mock.calls[call][0] as {
+    onFinished?: (task: BackgroundTask) => void;
+  };
+  return input.onFinished;
 }
 
 beforeEach(() => {
   resetJobAnalysisStoreForTests();
   vi.clearAllMocks();
+  entryMocks.startAiTask.mockResolvedValue({ id: 1, key: "job_analysis#1" });
+  entryMocks.cancelAiTaskEntry.mockResolvedValue(undefined);
+  entryMocks.attachAiTaskUi.mockReturnValue(() => undefined);
 });
 
 afterEach(() => {
@@ -72,10 +90,7 @@ afterEach(() => {
 });
 
 describe("jobAnalysisStore", () => {
-  it("start 进入 running（带 title/company/startedAt），resolve 后变 done", async () => {
-    const pending = deferred<JobAnalysisResult>();
-    mockedGenerate.mockReturnValue(pending.promise);
-
+  it("start 立刻进入 running（带 title/company/startedAt），成功后由 sink 交付结果", async () => {
     startJobAnalysis({ jobId: 7, title: "算法工程师", company: "字节跳动" });
 
     const running = getJobAnalysisState(7);
@@ -84,10 +99,11 @@ describe("jobAnalysisStore", () => {
     expect(running.company).toBe("字节跳动");
     expect(running.startedAt).toEqual(expect.any(Number));
     expect(running.background).toBe(false);
-    // 顶部任务条据此出 chip。
+    // 页头计数据此出 chip。
     expect(getRunningJobAnalyses().map((entry) => entry.jobId)).toEqual([7]);
 
-    pending.resolve(analysis("第一版结论"));
+    // 任务成功：结论随 result_ref 一起回来，直接填进槽（不必再读一次缓存）。
+    dispatchAiTaskResult("job_analysis", 1, { job_id: 7, analysis: analysis("第一版结论") });
     await flush();
 
     const done = getJobAnalysisState(7);
@@ -95,132 +111,90 @@ describe("jobAnalysisStore", () => {
     expect(done.result?.summary).toBe("第一版结论");
     expect(done.finishedAt).toEqual(expect.any(Number));
     expect(getRunningJobAnalyses()).toHaveLength(0);
-    // 有人在看的时候不弹全局通知（结果已经画在弹窗里了）。
-    expect(noticeMocks.announceBackgroundResult).not.toHaveBeenCalled();
   });
 
-  it("cancel 真的 abort 请求，并把状态退回 idle（不留 error、不留结果）", async () => {
-    let signal: AbortSignal | undefined;
-    mockedGenerate.mockImplementation((_id: number, nextSignal?: AbortSignal) => {
-      signal = nextSignal;
-      return new Promise<JobAnalysisResult>(() => undefined);
-    });
+  it("同一任务被派发两次只交付一次（刷新恢复 + 正常轮询会各派发一次）", async () => {
+    startJobAnalysis({ jobId: 7 });
+    dispatchAiTaskResult("job_analysis", 1, { job_id: 7, analysis: analysis("第一次") });
+    const finishedAt = getJobAnalysisState(7).finishedAt;
+    dispatchAiTaskResult("job_analysis", 1, { job_id: 7, analysis: analysis("第二次") });
+    await flush();
 
+    expect(getJobAnalysisState(7).result?.summary).toBe("第一次");
+    expect(getJobAnalysisState(7).finishedAt).toBe(finishedAt);
+  });
+
+  it("任务失败写 error 并把后端原因透出", async () => {
+    startJobAnalysis({ jobId: 12 });
+    capturedOnFinished()?.(finishedTask("failed", "模型不可用"));
+    await flush();
+
+    expect(getJobAnalysisState(12).status).toBe("error");
+    expect(getJobAnalysisState(12).error).toBe("模型不可用");
+  });
+
+  it("任务被取消 / 未配置模型时退回 idle（取消不是错误）", async () => {
+    startJobAnalysis({ jobId: 8 });
+    capturedOnFinished()?.(finishedTask("cancelled"));
+    await flush();
+
+    expect(getJobAnalysisState(8).status).toBe("idle");
+    expect(getJobAnalysisState(8).error).toBeUndefined();
+  });
+
+  it("cancel 取消的是后端任务（真停），并把状态退回 idle", async () => {
     startJobAnalysis({ jobId: 8, title: "运营" });
-    expect(signal?.aborted).toBe(false);
+    await flush(); // 等 startAiTask 的 then 把 task id 记下来
 
     cancelJobAnalysis(8);
+    await flush();
 
-    expect(signal?.aborted).toBe(true);
+    expect(entryMocks.cancelAiTaskEntry).toHaveBeenCalledWith("job_analysis#1");
     expect(getJobAnalysisState(8).status).toBe("idle");
     expect(getJobAnalysisState(8).result).toBeUndefined();
     expect(getJobAnalysisState(8).error).toBeUndefined();
     expect(getRunningJobAnalyses()).toHaveLength(0);
   });
 
-  it("请求被 abort 后落地的 cancelled 失败不会把状态写成 error", async () => {
-    const pending = deferred<JobAnalysisResult>();
-    mockedGenerate.mockReturnValue(pending.promise);
-
-    startJobAnalysis({ jobId: 11 });
-    cancelJobAnalysis(11);
-    pending.reject(new ApiError("已取消", undefined, { code: "cancelled" }));
+  it("重复 start 先取消上一次的任务（两次生成不该并行烧 token）", async () => {
+    startJobAnalysis({ jobId: 14 });
+    await flush();
+    startJobAnalysis({ jobId: 14 });
     await flush();
 
-    expect(getJobAnalysisState(11).status).toBe("idle");
-    expect(noticeMocks.announceBackgroundFailure).not.toHaveBeenCalled();
+    expect(entryMocks.cancelAiTaskEntry).toHaveBeenCalledWith("job_analysis#1");
+    expect(entryMocks.startAiTask).toHaveBeenCalledTimes(2);
   });
 
-  it("detach 之后完成会发统一通知，且结果照样留在槽里", async () => {
-    const pending = deferred<JobAnalysisResult>();
-    mockedGenerate.mockReturnValue(pending.promise);
+  it("force 透传进任务 payload（只有「重新生成」才绕过缓存）", async () => {
+    startJobAnalysis({ jobId: 15, force: true });
 
-    startJobAnalysis({ jobId: 9, title: "护士", company: "示例医院" });
-    detachJobAnalysis(9);
-    expect(getJobAnalysisState(9).background).toBe(true);
-
-    pending.resolve(analysis("后台跑完的结论"));
-    await flush();
-
-    expect(getJobAnalysisState(9).status).toBe("done");
-    expect(noticeMocks.announceBackgroundResult).toHaveBeenCalledTimes(1);
-    expect(noticeMocks.announceBackgroundResult).toHaveBeenCalledWith(
-      "岗位解读",
-      expect.stringContaining("岗位需求解读"),
+    expect(entryMocks.startAiTask).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: "job_analysis",
+        payload: { job_id: 15, force: true },
+      }),
     );
   });
 
-  it("detach 之后失败也会通知（失败更需要知道）", async () => {
-    const pending = deferred<JobAnalysisResult>();
-    mockedGenerate.mockReturnValue(pending.promise);
-
-    startJobAnalysis({ jobId: 12 });
-    detachJobAnalysis(12);
-    pending.reject(new Error("模型不可用"));
+  it("attach 声明「有人在看」，detach 收回（完成提醒据此决定是否打断）", async () => {
+    startJobAnalysis({ jobId: 9, title: "护士", company: "示例医院" });
     await flush();
 
-    expect(getJobAnalysisState(12).status).toBe("error");
-    expect(getJobAnalysisState(12).error).toBe("模型不可用");
-    expect(noticeMocks.announceBackgroundFailure).toHaveBeenCalledWith("岗位解读", "模型不可用");
+    attachJobAnalysis(9);
+    expect(entryMocks.attachAiTaskUi).toHaveBeenCalledWith("job_analysis#1");
+    expect(getJobAnalysisState(9).background).toBe(false);
+
+    detachJobAnalysis(9);
+    expect(getJobAnalysisState(9).background).toBe(true);
   });
 
-  it("重新打开弹窗（attach）之后完成就不再弹全局通知", async () => {
-    const pending = deferred<JobAnalysisResult>();
-    mockedGenerate.mockReturnValue(pending.promise);
-
-    startJobAnalysis({ jobId: 13 });
-    detachJobAnalysis(13);
-    attachJobAnalysis(13);
-    expect(getJobAnalysisState(13).background).toBe(false);
-
-    pending.resolve(analysis("回填的结论"));
-    await flush();
-
-    expect(getJobAnalysisState(13).status).toBe("done");
-    expect(noticeMocks.announceBackgroundResult).not.toHaveBeenCalled();
-  });
-
-  it("重复 start 只保留最新一次：旧请求的结果被丢弃", async () => {
-    const first = deferred<JobAnalysisResult>();
-    const second = deferred<JobAnalysisResult>();
-    mockedGenerate.mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise);
-
-    startJobAnalysis({ jobId: 14 });
-    const firstSignal = mockedGenerate.mock.calls[0][1] as AbortSignal;
-    startJobAnalysis({ jobId: 14 });
-
-    // 旧请求被主动 abort（用户连点 / 换了个入口重来）。
-    expect(firstSignal.aborted).toBe(true);
-
-    first.resolve(analysis("旧结果"));
-    await flush();
-    expect(getJobAnalysisState(14).status).toBe("running");
-
-    second.resolve(analysis("新结果"));
-    await flush();
-    expect(getJobAnalysisState(14).status).toBe("done");
-    expect(getJobAnalysisState(14).result?.summary).toBe("新结果");
-  });
-
-  it("force 透传给 api（只有「重新生成」才绕过缓存）", async () => {
-    mockedGenerate.mockResolvedValue(analysis("x"));
-
-    startJobAnalysis({ jobId: 15, force: true });
-
-    expect(mockedGenerate).toHaveBeenCalledWith(15, expect.any(AbortSignal), true);
-  });
-
-  it("reset 清空全部槽，并 abort 在途请求", async () => {
-    let signal: AbortSignal | undefined;
-    mockedGenerate.mockImplementation((_id: number, nextSignal?: AbortSignal) => {
-      signal = nextSignal;
-      return new Promise<JobAnalysisResult>(() => undefined);
-    });
-
+  it("reset 清空全部槽并释放附着声明", async () => {
     startJobAnalysis({ jobId: 16 });
+    await flush();
+    attachJobAnalysis(16);
     resetJobAnalysisStoreForTests();
 
-    expect(signal?.aborted).toBe(true);
     expect(getJobAnalysisState(16).status).toBe("idle");
     expect(getRunningJobAnalyses()).toHaveLength(0);
   });

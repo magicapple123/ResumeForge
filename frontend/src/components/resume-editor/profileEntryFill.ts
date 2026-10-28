@@ -12,6 +12,7 @@
  * - 写完调用 `fill.onFilled()`，脏值与保存链路与手打完全一样。
  */
 import { Form } from "antd";
+import type { ResumeCustomEntry } from "../../types";
 import {
   PROFILE_FILL_KEYS,
   type ProfileFillItem,
@@ -42,6 +43,62 @@ export function fillBlankFields(
     next[key] = Array.isArray(value) ? [...value] : value;
   }
   return next;
+}
+
+/** 「标签」的比对口径：首尾空白不算区别（用户手打空格不该多出一行）。 */
+function normalizedLineLabel(value: unknown): string {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+/** 自建板块条目填入结果：`changed=false` 时调用方不写表单，避免凭空多一条脏值。 */
+export interface CustomEntryFillResult {
+  entry: ResumeCustomEntry;
+  changed: boolean;
+}
+
+/**
+ * 自建板块条目级的「从资料填入本条」：**只补空值**，且不复制身份。
+ *
+ * 与系统板块的 `fillBlankFields` 分开，因为数据形状不同：
+ * - `text` 是单个大字段：空才填；
+ * - `lines` 是「标签：值」行：按 label 合并——已有同 label 的非空值不覆盖、空值补上、
+ *   缺失 label 按资料顺序追加到末尾，已有行顺序不变（那是用户看得见的结构）；
+ * - **不复制 `entry_id`**：它是资料条目的稳定身份，写进当前条目会与正文身份冲突。
+ */
+export function fillCustomEntryFromSource(
+  entry: Partial<ResumeCustomEntry> | null | undefined,
+  source: Partial<Pick<ResumeCustomEntry, "text" | "lines">> | null | undefined,
+): CustomEntryFillResult {
+  const base: ResumeCustomEntry = {
+    entry_id: typeof entry?.entry_id === "string" ? entry.entry_id : "",
+    text: typeof entry?.text === "string" ? entry.text : "",
+    lines: Array.isArray(entry?.lines) ? entry.lines : [],
+  };
+  let changed = false;
+  let nextText = base.text;
+  if (isBlankValue(base.text) && !isBlankValue(source?.text)) {
+    nextText = String(source?.text);
+    changed = true;
+  }
+  const lines = base.lines.map((line) => ({ ...line }));
+  const sourceLines = Array.isArray(source?.lines) ? source.lines : [];
+  for (const sourceLine of sourceLines) {
+    const label = normalizedLineLabel(sourceLine?.label);
+    const value = typeof sourceLine?.value === "string" ? sourceLine.value : "";
+    if (!label || isBlankValue(value)) continue;
+    const existing = lines.find((line) => normalizedLineLabel(line.label) === label);
+    if (!existing) {
+      lines.push({
+        label: typeof sourceLine.label === "string" ? sourceLine.label : label,
+        value,
+      });
+      changed = true;
+    } else if (isBlankValue(existing.value)) {
+      existing.value = value;
+      changed = true;
+    }
+  }
+  return { entry: { ...base, text: nextText, lines }, changed };
 }
 
 export interface ProfileEntryFill {

@@ -53,6 +53,10 @@ const interview = {
   "interview.hint.dontKnow":
     "If you cannot answer, say “I don't know” — the interviewer will suggest an approach.",
   "interview.action.submit": "Submit answer",
+  "interview.action.stopRound": "Stop this round",
+  "interview.action.retryRound": "Answer again",
+  "interview.interrupted.hint":
+    "This round never finished (it was stopped part-way). You can answer again.",
   "interview.listSeparator": "; ",
 
   "interview.experienceForm.title.edit": "Edit interview note",

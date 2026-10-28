@@ -13,8 +13,14 @@ const backgroundTasks = {
   "backgroundTasks.progress.received": "已接收 {count} 字",
   "backgroundTasks.progress.processed": "已处理 {done}/{total} 个岗位",
   "backgroundTasks.progress.currentJob": "当前：{title}",
+  /** 通用 AI 任务的可信百分比（后端 progress 字段）。 */
+  "backgroundTasks.progress.percent": "{percent}%",
   "backgroundTasks.action.cancel": "取消",
   "backgroundTasks.action.remove": "移除",
+  /** 完成通知上那颗跳转按钮（地址由 `utils/taskDeepLinks` 生成）。 */
+  "backgroundTasks.action.view": "去查看",
+  /** 弹窗标题的空值兜底：调用方没给标题时不要让用户对着一个没有标题的窗。 */
+  "backgroundTasks.notice.done.title": "任务已完成",
   "backgroundTasks.jobAnalysis.label": "岗位解读",
   "backgroundTasks.jobAnalysis.running": "正在生成岗位解读…",
   "backgroundTasks.toast.cancelled": "已取消「{name}」",
@@ -44,8 +50,43 @@ const backgroundTasks = {
   "backgroundTasks.suggestion.done.description": "回到简历详情点「{action}」即可看到。",
   "backgroundTasks.suggestion.failed.title": "岗位优化建议生成失败",
   "backgroundTasks.suggestion.failed.description": "回到简历详情重新生成。",
+  // ── 通用 AI 任务（岗位解读 / 风险扫描 / 岗位化建议 / 网申字段识别）──
+  // 四组文案形状一致：完成说"结果在哪、怎么看到"，失败说"回哪重试"，取消只说取消。
+  "backgroundTasks.aiTask.jobAnalysis.label": "岗位解读",
+  "backgroundTasks.aiTask.jobAnalysis.done.title": "岗位解读已生成",
+  "backgroundTasks.aiTask.jobAnalysis.done.description":
+    "已保存到该岗位，打开「岗位解读」即可查看。",
+  "backgroundTasks.aiTask.jobAnalysis.failed.title": "岗位解读失败",
+  "backgroundTasks.aiTask.jobAnalysis.failed.description": "打开该岗位重新生成。",
+  "backgroundTasks.aiTask.jobAnalysis.cancelled.title": "已取消岗位解读",
+  "backgroundTasks.aiTask.jobAnalysis.action.viewJob": "查看解读",
+  "backgroundTasks.aiTask.risk.label": "简历风险扫描",
+  "backgroundTasks.aiTask.risk.done.title": "风险扫描完成",
+  "backgroundTasks.aiTask.risk.done.description":
+    "回到简历详情打开「质量检测」即可看到这次的风险点。",
+  "backgroundTasks.aiTask.risk.failed.title": "风险扫描失败",
+  "backgroundTasks.aiTask.risk.failed.description": "回到简历详情重新扫描。",
+  "backgroundTasks.aiTask.risk.cancelled.title": "已取消风险扫描",
+  "backgroundTasks.aiTask.risk.action.viewResume": "查看简历",
+  "backgroundTasks.aiTask.rewrite.label": "岗位优化建议",
+  "backgroundTasks.aiTask.rewrite.done.title": "岗位优化建议已生成",
+  "backgroundTasks.aiTask.rewrite.done.description":
+    "回到简历详情打开「岗位优化建议」，逐条查看与采纳。",
+  "backgroundTasks.aiTask.rewrite.failed.title": "岗位优化建议生成失败",
+  "backgroundTasks.aiTask.rewrite.failed.description": "回到简历详情重新生成。",
+  "backgroundTasks.aiTask.rewrite.cancelled.title": "已取消岗位优化建议",
+  "backgroundTasks.aiTask.rewrite.action.viewResume": "查看建议",
+  "backgroundTasks.aiTask.webform.label": "网申字段识别",
+  "backgroundTasks.aiTask.webform.done.title": "网申字段识别完成",
+  "backgroundTasks.aiTask.webform.done.description":
+    "AI 建议已暂存，回到网申填表核对后由你自己勾选填入。",
+  "backgroundTasks.aiTask.webform.failed.title": "网申字段识别失败",
+  "backgroundTasks.aiTask.webform.failed.description": "回到网申填表重新生成预览。",
+  "backgroundTasks.aiTask.webform.cancelled.title": "已取消网申字段识别",
+  "backgroundTasks.aiTask.webform.action.viewWebform": "去网申填表",
   // ── 简历生成的完成 / 失败 / 取消提醒 ────────────────────────
   "backgroundTasks.resume.done.title": "简历已生成",
+  "backgroundTasks.resume.action.viewResume": "查看简历",
   "backgroundTasks.resume.done.description": "已自动保存到简历中心，可以继续微调或导出。",
   "backgroundTasks.resume.restored.description":
     "刷新前开始的生成任务已完成，简历已自动保存到简历中心。",
@@ -72,6 +113,14 @@ const backgroundTasks = {
   "backgroundTasks.jobMatch.failed.description": "请稍后重试。",
   "backgroundTasks.jobMatch.cancelled.title": "岗位适配度分析已取消",
   "backgroundTasks.jobMatch.cancelled.description": "取消前已完成的结果仍已保存。",
+  // ── 通用 AI 任务（单条岗位适配，走 /ai-tasks）───────────────
+  "backgroundTasks.aiTask.jobMatch.label": "岗位适配度分析",
+  "backgroundTasks.aiTask.jobMatch.done.title": "岗位适配度分析完成",
+  "backgroundTasks.aiTask.jobMatch.done.description": "结论已保存，回到岗位即可看到五类判断。",
+  "backgroundTasks.aiTask.jobMatch.failed.title": "岗位适配度分析失败",
+  "backgroundTasks.aiTask.jobMatch.failed.description": "回到岗位可以再分析一次。",
+  "backgroundTasks.aiTask.jobMatch.cancelled.title": "岗位适配度分析已取消",
+  "backgroundTasks.aiTask.jobMatch.action.viewJob": "查看岗位",
   "backgroundTasks.jobMatch.label": "分析 {count} 个岗位",
   // ── 投递 / 采集批次完成通知 ──────────────────────────────────
   "backgroundTasks.batch.kindApply": "投递",

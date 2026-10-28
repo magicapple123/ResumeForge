@@ -49,25 +49,25 @@ export default function VariantLayoutEditor({
     label: fontLabel(scale),
   }));
   return (
-    <section data-variant-layout="1" style={{ marginTop: 8 }}>
-      <Space size={6} wrap align="center" style={{ marginBottom: 4 }}>
+    <section data-variant-layout="1" className="variant-layout">
+      <Space size={6} wrap align="center" className="variant-layout__head">
         <Typography.Text strong>{bt("bilingual.layout.title")}</Typography.Text>
         <Tag color={inherited ? "default" : "blue"}>
           {inherited ? bt("bilingual.layout.inherited") : bt("bilingual.layout.own")}
         </Tag>
       </Space>
-      <div style={{ fontSize: 12, color: "var(--rf-text-secondary)", marginBottom: 6 }}>
-        {bt("bilingual.layout.hint")}
-      </div>
-      <Space size={10} wrap align="end">
-        <label style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-          <Typography.Text style={{ fontSize: 12 }}>
+      <div className="variant-layout__hint">{bt("bilingual.layout.hint")}</div>
+      <Space size={10} wrap align="end" className="variant-layout__controls">
+        <label className="variant-layout__field">
+          <Typography.Text className="variant-layout__label">
             {bt("bilingual.layout.template")}
           </Typography.Text>
           <Typography.Text code>{fields.template || "-"}</Typography.Text>
         </label>
-        <label style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-          <Typography.Text style={{ fontSize: 12 }}>{bt("bilingual.layout.pages")}</Typography.Text>
+        <label className="variant-layout__field">
+          <Typography.Text className="variant-layout__label">
+            {bt("bilingual.layout.pages")}
+          </Typography.Text>
           <Select
             size="small"
             value={fields.page_limit}
@@ -77,12 +77,12 @@ export default function VariantLayoutEditor({
             }))}
             disabled={disabled || saving}
             aria-label={bt("bilingual.layout.pages")}
-            style={{ width: 72 }}
+            className="variant-layout__pages"
             onChange={(value) => onChange({ ...fields, page_limit: value })}
           />
         </label>
-        <label style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-          <Typography.Text style={{ fontSize: 12 }}>
+        <label className="variant-layout__field">
+          <Typography.Text className="variant-layout__label">
             {bt("bilingual.layout.fontScale")}
           </Typography.Text>
           <Select
@@ -91,7 +91,7 @@ export default function VariantLayoutEditor({
             options={fontOptions}
             disabled={disabled || saving}
             aria-label={bt("bilingual.layout.fontScale")}
-            style={{ width: 120 }}
+            className="variant-layout__font"
             onChange={(value) => onChange({ ...fields, font_scale: value })}
           />
         </label>
@@ -112,7 +112,7 @@ export default function VariantLayoutEditor({
           {bt("bilingual.layout.reset")}
         </Button>
       </Space>
-      <div style={{ fontSize: 12, color: "var(--rf-text-secondary)", marginTop: 4 }}>
+      <div className="variant-layout__hint variant-layout__hint--foot">
         {bt("bilingual.layout.templateHint")}
       </div>
     </section>

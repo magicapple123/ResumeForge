@@ -4,8 +4,10 @@ import { App, Button, Listy, Modal, Space, Tag, Typography } from "antd";
 import PageSkeleton from "../../components/common/PageSkeleton";
 import { useCallback, useEffect, useState } from "react";
 import { listRehearsal, rehearse } from "../../api/drill";
+import AbortButton from "../../components/common/AbortButton";
 import { ListyItem } from "../../components/common/ListyItem";
 import { LISTY_ITEM_PADDING_SMALL } from "../../components/common/listyPadding";
+import { errorText, useAbortableRequest } from "../../hooks/useAbortableRequest";
 import { t } from "../../i18n";
 import { REHEARSE_KIND_LABEL_KEYS } from "../../i18n/enum/drill";
 import { useLocale } from "../../i18n/i18nContext";
@@ -26,6 +28,8 @@ export function RehearsalPanel({ sessionId }: { sessionId: number }) {
   const { message } = App.useApp();
   const [rows, setRows] = useState<DrillRehearsalRow[]>([]);
   const [loading, setLoading] = useState(false);
+  // 复练出题同样是一次现场生成：等的时候可以停，停完这一条还能立刻再点。
+  const askRequest = useAbortableRequest();
   const [busy, setBusy] = useState("");
   const [result, setResult] = useState<{ question: string; expect: string; label: string } | null>(
     null,
@@ -61,15 +65,28 @@ export function RehearsalPanel({ sessionId }: { sessionId: number }) {
   }, [fetchRows, sessionId]);
 
   const run = async (row: DrillRehearsalRow) => {
-    setBusy(`${row.claim_title}-${row.kind}`);
-    try {
-      const fresh = await rehearse(sessionId, row);
-      setResult({ question: fresh.question, expect: fresh.expect, label: fresh.claim_title });
-    } catch (error) {
-      message.error(error instanceof Error ? error.message : t("drill.rehearsal.error.failed"));
-    } finally {
-      setBusy("");
+    const key = `${row.claim_title}-${row.kind}`;
+    setBusy(key);
+    const outcome = await askRequest.run((signal) => rehearse(sessionId, row, signal));
+    setBusy("");
+    if (outcome.status === "ok") {
+      setResult({
+        question: outcome.data.question,
+        expect: outcome.data.expect,
+        label: outcome.data.claim_title,
+      });
+      return;
     }
+    if (outcome.status === "error") {
+      message.error(errorText(outcome.error, t("drill.rehearsal.error.failed")));
+    }
+    // aborted：用户自己停的，不弹错误；上一次的复练结果原样留着。
+  };
+
+  /** 停止：把这一条的行内 loading 一起收起，行内按钮立刻可再点。 */
+  const cancel = () => {
+    askRequest.cancel();
+    setBusy("");
   };
 
   if (loading) return <PageSkeleton rows={2} card={false} />;
@@ -96,6 +113,9 @@ export function RehearsalPanel({ sessionId }: { sessionId: number }) {
               >
                 {t("drill.rehearsal.action.ask")}
               </Button>,
+              busy === `${row.claim_title}-${row.kind}` ? (
+                <AbortButton key="stop" size="small" onClick={cancel} />
+              ) : null,
             ]}
           >
             <Space orientation="vertical" size={2} style={{ width: "100%" }}>

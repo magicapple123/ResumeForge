@@ -11,6 +11,7 @@
 import { CheckOutlined, CopyOutlined } from "@ant-design/icons";
 import { Alert, App, Button, Checkbox, Input, Radio, Segmented, Space, Typography } from "antd";
 import LoadingBlock from "./common/LoadingBlock";
+import AbortButton from "./common/AbortButton";
 import { useMemo, useState } from "react";
 import {
   generatePhrases,
@@ -18,6 +19,7 @@ import {
   rewriteStar,
   translateResumeText,
 } from "../api/resumeWriting";
+import { errorText, useAbortableRequest } from "../hooks/useAbortableRequest";
 import { t, type MessageKey } from "../i18n";
 import { useLocale } from "../i18n/i18nContext";
 import type {
@@ -81,7 +83,9 @@ export default function ResumeWritingPanel({ resumeId, initialText = "", onApply
   const [polishStyle, setPolishStyle] = useState<PolishStyle>("concise_tech");
   const [direction, setDirection] = useState<TranslateDirection>("zh2en");
   const [modes, setModes] = useState<PhraseMode[]>(["star", "resume", "interview"]);
-  const [loading, setLoading] = useState(false);
+  // 四个动作都是一次现场生成：等着的时候可以停，停完还能立刻换一个动作再点。
+  const writingRequest = useAbortableRequest();
+  const loading = writingRequest.loading;
   const [singleResult, setSingleResult] = useState("");
   const [phrasesResult, setPhrasesResult] = useState<PhrasesResult | null>(null);
 
@@ -89,23 +93,44 @@ export default function ResumeWritingPanel({ resumeId, initialText = "", onApply
 
   const run = async () => {
     if (!canRun || loading) return;
-    setLoading(true);
-    setSingleResult("");
-    setPhrasesResult(null);
-    try {
+    const trimmed = text.trim();
+    // **不先清空**上一次的结果：用户点了停止就该看到自己原来那份还在。
+    const outcome = await writingRequest.run(async (signal) => {
       if (operation === "star") {
-        setSingleResult((await rewriteStar(resumeId, text.trim())).result);
-      } else if (operation === "phrases") {
-        setPhrasesResult(await generatePhrases(resumeId, text.trim(), modes));
-      } else if (operation === "polish") {
-        setSingleResult((await polishResumeText(resumeId, text.trim(), polishStyle)).result);
-      } else {
-        setSingleResult((await translateResumeText(resumeId, text.trim(), direction)).result);
+        return {
+          kind: "single" as const,
+          text: (await rewriteStar(resumeId, trimmed, undefined, signal)).result,
+        };
       }
-    } catch (err) {
-      message.error(err instanceof Error ? err.message : t("writing.generate.failed"));
-    } finally {
-      setLoading(false);
+      if (operation === "phrases") {
+        return {
+          kind: "phrases" as const,
+          data: await generatePhrases(resumeId, trimmed, modes, signal),
+        };
+      }
+      if (operation === "polish") {
+        return {
+          kind: "single" as const,
+          text: (await polishResumeText(resumeId, trimmed, polishStyle, signal)).result,
+        };
+      }
+      return {
+        kind: "single" as const,
+        text: (await translateResumeText(resumeId, trimmed, direction, signal)).result,
+      };
+    });
+    if (outcome.status === "error") {
+      message.error(errorText(outcome.error, t("writing.generate.failed")));
+      return;
+    }
+    // 停止：不回填半截内容，也不动上一次的结果，更不弹错误。
+    if (outcome.status === "aborted") return;
+    if (outcome.data.kind === "phrases") {
+      setPhrasesResult(outcome.data.data);
+      setSingleResult("");
+    } else {
+      setSingleResult(outcome.data.text);
+      setPhrasesResult(null);
     }
   };
 
@@ -194,9 +219,12 @@ export default function ResumeWritingPanel({ resumeId, initialText = "", onApply
         />
       )}
 
-      <Button type="primary" loading={loading} disabled={!canRun} onClick={() => void run()}>
-        {t("writing.action.generate")}
-      </Button>
+      <Space wrap>
+        <Button type="primary" loading={loading} disabled={!canRun} onClick={() => void run()}>
+          {t("writing.action.generate")}
+        </Button>
+        {loading && <AbortButton onClick={() => writingRequest.cancel()} />}
+      </Space>
 
       {loading && <LoadingBlock />}
 

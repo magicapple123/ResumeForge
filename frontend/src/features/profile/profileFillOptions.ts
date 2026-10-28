@@ -21,6 +21,7 @@ import type {
   ResumeAward,
   ResumeCampusExperience,
   ResumeContent,
+  ResumeCustomEntry,
   ResumeEducation,
   ResumeExperience,
   ResumeProject,
@@ -56,14 +57,20 @@ export interface ProfileFillSources {
    * 扩展分区候选（任务 #9）：科研三栏 / 证照 / 语言能力也要支持「从资料填入本条」。
    *
    * **可选**：旧宿主 / 旧夹具没给时按"没有候选"处理（入口不渲染），既有用例语义不变。
-   * 自建板块刻意不在这里：它的正文形状是 {text, lines}，没有"字段"可只填空字段，
-   * 硬填会覆盖用户的标签行，所以不提供该入口。
    */
   publications?: ProfileFillItem[];
   researchProjects?: ProfileFillItem[];
   patents?: ProfileFillItem[];
   credentials?: ProfileFillItem[];
   languages?: ProfileFillItem[];
+  /**
+   * 自建板块的条目候选：**按完整 section key**（`custom:<id>`）分组。
+   *
+   * 自建板块的数据形状是 `{text, lines}`，没有系统板块那样的"字段"，所以不放进
+   * `PROFILE_FILL_KEYS`；合并规则见 `fillCustomEntryFromSource`（text 空才填、lines
+   * 按 label 只补空值/追加缺失行）。**可选**：旧宿主 / 旧夹具没给时入口不渲染。
+   */
+  customSections?: Record<string, ProfileFillItem[]>;
   /** 资料里的个人总结；空串表示没写过。 */
   summary: string;
   /**
@@ -172,6 +179,27 @@ export function languageFillKey(item: { name?: string } | null | undefined): str
   return joinKey([item?.name]);
 }
 
+/**
+ * 自建板块条目的形状键：`text` + 非空「标签：值」行。
+ *
+ * 两点取舍：
+ * - **行顺序不参与**：填入时缺失行追加到末尾，内容相同的两条资料不能因为行顺序不同就被
+ *   当成"还没加入"（否则同一份资料会被填两遍）；
+ * - **空白行不参与**：编辑器挂载对齐时会补出空值行（见 `customSectionAlignment.ts`），
+ *   服务端投影只写有值的行——两边必须能对上。
+ */
+export function customEntryFillKey(
+  entry: Partial<Pick<ResumeCustomEntry, "text" | "lines">> | null | undefined,
+): string {
+  const lines = Array.isArray(entry?.lines) ? entry.lines : [];
+  const lineKeys = lines
+    .map((line) => [text(line?.label), text(line?.value)] as const)
+    .filter(([label, value]) => label.length > 0 && value.length > 0)
+    .map(([label, value]) => JSON.stringify([label, value]))
+    .sort();
+  return joinKey([entry?.text, ...lineKeys]);
+}
+
 /** 各模块的形状键实现，供 `ResumeListSection` / `ResearchListSection` 计算"已加入"集合时复用。 */
 export const PROFILE_FILL_KEYS: Record<ProfileFillSection, (item: unknown) => string> = {
   education: (item) => educationFillKey(item as Partial<ResumeEducation>),
@@ -187,7 +215,7 @@ export const PROFILE_FILL_KEYS: Record<ProfileFillSection, (item: unknown) => st
   languages: (item) => languageFillKey(item as { name?: string }),
 };
 
-/** 消费分区键 → 简历正文数组字段 + 下拉模块名；自建板块的正文是 {text, lines}，不进填入下拉。 */
+/** 消费分区键 → 简历正文数组字段 + 下拉模块名；自建板块不在表里，候选桶单独构建。 */
 const SECTION_BY_CONSUMED_KEY: Record<
   string,
   { contentField: keyof ResumeContent; section: ProfileFillSection }
@@ -229,6 +257,60 @@ function contentEntryAt(content: ResumeContent, path: string): Record<string, un
   if (!Array.isArray(list) || !Number.isInteger(index) || index < 0) return null;
   const value = list[index];
   return value !== null && typeof value === "object" ? (value as Record<string, unknown>) : null;
+}
+
+/**
+ * 自建板块的 paper_content_path 有 4 段：`custom_sections/<完整 section key>/entries/<i>`
+ * （section key 本身不含 `/`，形如 `custom:<id>`），与系统分区的 `field/index` 不同。
+ */
+function customEntryAt(
+  content: ResumeContent,
+  path: string,
+  sectionKey: string,
+): ResumeCustomEntry | null {
+  const prefix = `custom_sections/${sectionKey}/entries/`;
+  if (!path.startsWith(prefix)) return null;
+  const index = Number(path.slice(prefix.length));
+  if (!Number.isInteger(index) || index < 0) return null;
+  const sections = Array.isArray(content.custom_sections) ? content.custom_sections : [];
+  const section = sections.find((item) => item?.key === sectionKey);
+  const value = section?.entries?.[index];
+  return value !== null && typeof value === "object" ? value : null;
+}
+
+/**
+ * 自建板块：每个 `custom:<id>` 一个候选桶（顺序沿用 candidates）。
+ *
+ * 与系统分区同一口径（R-16/R-37）：value 直接取投影 content 里那一条现成的
+ * `{entry_id, text, lines}`，不按标题猜、不重拼标签行。空条目在投影里没有位置
+ * （path 为空 / 越界），自然也不会成为候选。
+ */
+function buildCustomFillSources(projection: PaperProjectionOut): Record<string, ProfileFillItem[]> {
+  const content = projection?.content;
+  const buckets: Record<string, ProfileFillItem[]> = {};
+  if (!content) return buckets;
+  const candidates = Array.isArray(projection?.candidates) ? projection.candidates : [];
+  const seenBySection = new Map<string, Set<string>>();
+  for (const candidate of candidates) {
+    const sectionKey = candidate.section_key;
+    if (typeof sectionKey !== "string" || !sectionKey.startsWith("custom:")) continue;
+    const value = customEntryAt(content, candidate.paper_content_path, sectionKey);
+    if (value === null) continue;
+    const matchKey = customEntryFillKey(value);
+    if (isBlankKey(matchKey)) continue;
+    const identity = text(candidate.entry_id) || matchKey;
+    const seen = seenBySection.get(sectionKey) ?? new Set<string>();
+    if (seen.has(identity)) continue;
+    seen.add(identity);
+    seenBySection.set(sectionKey, seen);
+    (buckets[sectionKey] ??= []).push({
+      key: identity,
+      ...describeCandidate(candidate),
+      value,
+      matchKey,
+    });
+  }
+  return buckets;
 }
 
 function describeCandidate(candidate: ProjectionCandidateOut): { label: string; hint?: string } {
@@ -291,7 +373,8 @@ export function projectionSectionFill(
  * 投影 content 里的现成对象，与纸面逐字相同，所以"填入"就是一次 `[...current, value]`。
  * 科研三栏 / 证照 / 语言能力从 2026-10 起也进"从资料填入本条"（任务 #9）：每条都能从
  * 当前组资料里把空字段补齐，不再需要板块级的"追加一条"入口。
- * 自建板块不提供候选：正文形状是 {text, lines}，没有"字段"可只填空字段。
+ * 自建板块也提供条目级候选（2026-10-28）：形状是 `{text, lines}`，按完整 section key
+ * 分桶；怎么"只填空值"由 `fillCustomEntryFromSource` 决定，不再是"没有字段可填"。
  */
 export function buildProfileFillSources(projection: PaperProjectionOut): ProfileFillSources {
   const content = projection?.content;
@@ -313,6 +396,7 @@ export function buildProfileFillSources(projection: PaperProjectionOut): Profile
       patents: [],
       credentials: [],
       languages: [],
+      customSections: {},
       summary: "",
       ...(participatingKeys ? { participatingKeys } : {}),
       ...(editorView ? { editorView } : {}),
@@ -330,6 +414,7 @@ export function buildProfileFillSources(projection: PaperProjectionOut): Profile
     patents: buildBucket(projection, "patents", "patents"),
     credentials: buildBucket(projection, "credentials", "credentials"),
     languages: buildBucket(projection, "languages", "languages"),
+    customSections: buildCustomFillSources(projection),
     summary: text(content.summary),
     ...(participatingKeys ? { participatingKeys } : {}),
     ...(editorView ? { editorView } : {}),

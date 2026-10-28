@@ -9,6 +9,7 @@
  */
 import { App as AntdApp } from "antd";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { t } from "../../i18n";
 import { createRef } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ResumeFitCandidate, ResumeLayoutAnalysis } from "../../types";
@@ -98,8 +99,25 @@ function cardElement(props: Partial<React.ComponentProps<typeof ResumeLayoutDiag
   );
 }
 
-function renderCard(props: Partial<React.ComponentProps<typeof ResumeLayoutDiagnosisCard>> = {}) {
-  return render(cardElement(props));
+function renderCard(
+  props: Partial<React.ComponentProps<typeof ResumeLayoutDiagnosisCard>> = {},
+  { expand = true }: { expand?: boolean } = {},
+) {
+  const view = render(cardElement(props));
+  if (!expand) return view;
+  // 详情默认收起（2026-10-28）：关心正文的用例先点一下展开；"默认收起"本身由
+  // 专门的一条用例守着。
+  const toggle = screen.queryByRole("button", { name: t("resume.diagnosis.expand") });
+  if (toggle) fireEvent.click(toggle);
+  return view;
+}
+
+/**
+ * 详情默认收起（2026-10-28）：标题与占用率一直可见，结论正文与优化候选要点一下才出来。
+ * 断言正文的用例先点这一次——顺手把"默认收起"这条口径钉在这里。
+ */
+function expandDetails() {
+  fireEvent.click(screen.getByRole("button", { name: t("resume.diagnosis.expand") }));
 }
 
 beforeEach(() => {
@@ -157,6 +175,28 @@ describe("ResumeLayoutDiagnosisCard", () => {
     });
   });
 
+  it("默认收起详情：标题与占用率可见，结论正文要点一下才出来", async () => {
+    const healthy = analysis();
+    apiMocks.analyzeResumeLayout.mockResolvedValue({
+      ...healthy,
+      diagnosis: {
+        ...healthy.diagnosis!,
+        status: "healthy",
+        status_label: "合适",
+        fill: 0.9,
+        summary: "占用 90%，留有余量。",
+      },
+    });
+    renderCard({ overflow: false }, { expand: false });
+
+    // 标题与状态一直在：用户得先知道"现在到底行不行"（用容器断言，避免新增中文 ByText）。
+    await waitFor(() => expect(document.querySelector(".resume-diagnosis-head")).not.toBeNull());
+    // 正文不在，直到点「展开详情」。
+    expect(document.querySelector(".resume-diagnosis-summary")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: t("resume.diagnosis.expand") }));
+    expect(document.querySelector(".resume-diagnosis-summary")?.textContent).toContain("留有余量");
+  });
+
   it("hides the whole card when the diagnosis is unavailable and nothing looks wrong", async () => {
     // 诊断接口打不通、预览也没判定溢出时，整块消失——留一个只有标题的空面板
     // 只会让用户以为功能坏了。
@@ -189,6 +229,8 @@ describe("ResumeLayoutDiagnosisCard", () => {
     renderCard({ overflow: false });
 
     expect(await screen.findByText("合适")).toBeInTheDocument();
+    // 诊断是异步到的：这张卡在结果回来之前整块不渲染，所以"展开"只能等它出现后再点。
+    expandDetails();
     expect(screen.getByText("占用 90%，保持即可")).toBeInTheDocument();
     // 放得下就不该出现「自动一页」。
     expect(screen.queryByRole("button", { name: /自动一页/ })).not.toBeInTheDocument();

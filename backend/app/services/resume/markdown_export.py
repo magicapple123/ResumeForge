@@ -15,7 +15,8 @@ from __future__ import annotations
 from collections.abc import Iterable
 
 from ...schemas.resume import ResumeContent
-from .profile_field_lines import profile_field_lines
+from .profile_field_lines import profile_field_rows, profile_row_text
+from .resume_field_layout import resolve_field_layout
 from .resume_labels import (
     DEFAULT_RESUME_LANGUAGE,
     authors_text,
@@ -44,6 +45,7 @@ def export_markdown(
     *,
     section_order: list[str] | None = None,
     language: str = DEFAULT_RESUME_LANGUAGE,
+    format_config: dict | None = None,
 ) -> str:
     """导出不包含照片的 Markdown 文本。
 
@@ -63,11 +65,13 @@ def export_markdown(
     titles = section_titles(language)
     fields = field_labels(language)
     sep = list_separator(language)
+    # W4：条目字段排版（无配置 = 每字段一行，产物与改造前逐字一致）。
+    field_layout = resolve_field_layout(format_config)
 
     def profile_lines(item, section_key: str, indent: str = "") -> None:
-        """F8：条目既有内容之后的新增字段「标签：值」行（空值跳过，顺序单源）。"""
-        for label, value in profile_field_lines(item, section_key, fields):
-            lines.append(f"{indent}- {label}：{value}")
+        """F8 + W4：条目既有内容之后的新增字段行（空值跳过，顺序/装箱单源）。"""
+        for row in profile_field_rows(item, section_key, fields, field_layout):
+            lines.append(f"{indent}- {profile_row_text(row)}")
     header = resume.name
     # 性别在预览里是姓名后缀（与 `_resume_sections.j2` 的位置一致）。
     if resume.gender:
@@ -172,8 +176,8 @@ def export_markdown(
             for skill in resume.skills:
                 text = level_text(skill.name, skill.level, language)
                 extra = " ｜ ".join(
-                    f"{label}：{value}"
-                    for label, value in profile_field_lines(skill, "skills", fields)
+                    profile_row_text(row)
+                    for row in profile_field_rows(skill, "skills", fields, field_layout)
                 )
                 skill_lines.append(f"{text} ｜ {extra}" if extra else text)
             lines.append(_join_bullets(skill_lines))
@@ -298,15 +302,16 @@ def export_markdown(
                 + (f" · {award.description}" if award.description else "")
                 for award in resume.awards
             ]
-            award_extras = [
-                profile_field_lines(award, "awards", fields) for award in resume.awards
+            award_rows = [
+                profile_field_rows(award, "awards", fields, field_layout)
+                for award in resume.awards
             ]
-            if any(award_extras):
+            if any(award_rows):
                 # F8：新字段行挂在各自 award 行下（两空格缩进），旧产物仍走一次拼接。
-                for line, rows in zip(award_lines, award_extras, strict=True):
+                for line, rows in zip(award_lines, award_rows, strict=True):
                     lines.append(f"- {line}")
-                    for label, value in rows:
-                        lines.append(f"  - {label}：{value}")
+                    for row in rows:
+                        lines.append(f"  - {profile_row_text(row)}")
             else:
                 lines.append(_join_bullets(award_lines))
             lines.append("")

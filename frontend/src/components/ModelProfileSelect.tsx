@@ -23,6 +23,7 @@ import { useLocale } from "../i18n/i18nContext";
 import { subscribeLLMConfig } from "../features/settings/llmConfigEvents";
 import { getLLMConfig, listLLMConfigRecords, activateLLMRecord, testLLM } from "../api/settings";
 import { configFromRecord } from "./settings/SettingsConfig";
+import { llmRecordDisplayName } from "../utils/displayNames";
 import type { LLMConfigRecord } from "../types";
 
 /**
@@ -137,25 +138,30 @@ export default function ModelProfileSelect() {
       if (!result.ok) {
         message.error(
           t("componentsMisc2.modelProfile.testFailed", {
-            name: record.name,
+            name: llmRecordDisplayName(record),
             reason: result.message || t("componentsMisc2.modelProfile.unknownReason"),
           }),
         );
       } else if (result.latency_ms != null) {
         message.success(
           t("componentsMisc2.modelProfile.testOkLatency", {
-            name: record.name,
+            name: llmRecordDisplayName(record),
             latency: result.latency_ms,
           }),
         );
       } else {
-        message.success(t("componentsMisc2.modelProfile.testOk", { name: record.name }));
+        message.success(
+          t("componentsMisc2.modelProfile.testOk", { name: llmRecordDisplayName(record) }),
+        );
       }
     } catch (error) {
       const detail =
         error instanceof Error ? error.message : t("componentsMisc2.modelProfile.unknownReason");
       message.error(
-        t("componentsMisc2.modelProfile.testFailed", { name: record.name, reason: detail }),
+        t("componentsMisc2.modelProfile.testFailed", {
+          name: llmRecordDisplayName(record),
+          reason: detail,
+        }),
       );
     } finally {
       setTestingId(null);
@@ -196,7 +202,9 @@ export default function ModelProfileSelect() {
       }}
       options={records.map((record) => ({
         value: record.id,
-        label: record.model ? `${record.name} · ${record.model}` : record.name,
+        label: record.model
+          ? `${llmRecordDisplayName(record)} · ${record.model}`
+          : llmRecordDisplayName(record),
       }))}
       optionRender={(option) => {
         const id = String(option.value);

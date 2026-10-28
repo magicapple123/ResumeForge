@@ -83,6 +83,14 @@ const conflict = {
   "workbench.history.summary": "{name} · {entries} 条 · {pages} 页",
   /** 当前状态行。 */
   "workbench.history.current": "当前状态",
+  /** 撤销 / 恢复禁用时的说明（Tooltip）。 */
+  "workbench.history.undo.hint": "没有可撤销的步骤",
+  "workbench.history.redo.hint": "没有可恢复的步骤",
+  /** 预览某一步时的两个动作：真正回退到那一步 / 取消选中。 */
+  "workbench.history.jumpTo": "回到这一步",
+  "workbench.history.backToCurrent": "回到当前",
+  /** 回退的二次确认（不可逆的是"它之后的那几步"，所以要说清后果）。 */
+  "workbench.history.jumpTo.confirm": "回到这一步会丢掉它之后的改动，确定吗？",
   /** 选中对象没有可读名字时的回退名（W07/W08 上下文面板共用）。 */
   "workbench.selection.entry": "条目",
 } as const;

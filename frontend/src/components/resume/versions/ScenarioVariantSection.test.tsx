@@ -139,10 +139,16 @@ describe("场景变体面板", () => {
       await screen.findByRole("button", { name: t("careerScenarios.variant.generate") }),
     );
     await waitFor(() => {
-      expect(api.previewScenarioVariant).toHaveBeenCalledWith(7, 9, {
-        career_context: { scenario_id: 12, expected_revision: 3 },
-        instructions: "",
-      });
+      expect(api.previewScenarioVariant).toHaveBeenCalledWith(
+        7,
+        9,
+        {
+          career_context: { scenario_id: 12, expected_revision: 3 },
+          instructions: "",
+        },
+        // T04-d：生成候选可被「停止」掐断，末尾参数是 AbortSignal。
+        expect.anything(),
+      );
     });
     await screen.findByText(t("careerScenarios.variant.diffTitle"));
 

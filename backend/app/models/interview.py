@@ -52,6 +52,16 @@ class InterviewSession(Base):
     )
     job_title: Mapped[str] = mapped_column(String(128), default="")
     company: Mapped[str] = mapped_column(String(128), default="")
+    # 关联简历（0066）：真实面试里面试官只拿得到你提交的那份简历 + 该岗位的 JD，
+    # 所以这场面试只读这份简历的内容（不再读个人资料）。同样是快照语义：简历被删后
+    # 外键置 NULL，但 resume_title 留着，历史列表仍能显示"当时面的是哪份简历"。
+    resume_id: Mapped[int | None] = mapped_column(
+        ForeignKey("resume_record.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    resume_title: Mapped[str] = mapped_column(String(256), default="")
+    # 有效面试时长（秒，0066）：由前端累计后上报"本次已累计秒数"，服务端取大值防回退。
+    # 界面会在候选人点「准备好了」之后才开始计时、离开页面暂停，所以它不是墙上时间。
+    duration_seconds: Mapped[int] = mapped_column(Integer, default=0)
     interview_type: Mapped[str] = mapped_column(String(32), default="技术面")
     difficulty: Mapped[str] = mapped_column(String(16), default="中级")
     interviewer_style: Mapped[str] = mapped_column(String(32), default="严谨专业")

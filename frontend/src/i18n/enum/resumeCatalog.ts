@@ -10,6 +10,7 @@
  * 只放常量表：不放组件、不在模块作用域求值 `t()`（模块级求值会把首帧语言钉死）。
  */
 import type { ResumeFontScale } from "../../types";
+import { t } from "../index";
 import type { MessageKey } from "../index";
 
 /**
@@ -65,3 +66,65 @@ export const RESUME_CATALOG_FONT_SCALE_LABEL_KEYS: Record<ResumeFontScale, Messa
   standard: "resume.fontScale.standard",
   large: "resume.fontScale.large",
 };
+
+/**
+ * 内置简历模板 `name` → 界面文案 key（后端 `RESUME_TEMPLATES` 的九个 name）。
+ *
+ * 三个已下线模板（technical / editorial / split）也要登记：老简历记录里存的就是这三个
+ * 名字，重新打开时标题仍要能翻成英文。用户自制模板（`custom === true`）一律不查表。
+ */
+export const RESUME_CATALOG_TEMPLATE_LABEL_KEYS: Record<string, MessageKey> = {
+  classic: "enumsResumeCatalog.template.classic",
+  modern: "enumsResumeCatalog.template.modern",
+  compact: "enumsResumeCatalog.template.compact",
+  elegant: "enumsResumeCatalog.template.elegant",
+  technical: "enumsResumeCatalog.template.technical",
+  minimal: "enumsResumeCatalog.template.minimal",
+  scholar: "enumsResumeCatalog.template.scholar",
+  editorial: "enumsResumeCatalog.template.editorial",
+  split: "enumsResumeCatalog.template.split",
+};
+
+/** 内置简历模板 `name` → 说明文字 key（后端 `RESUME_TEMPLATES[].description` 的稳定 name 映射）。 */
+export const RESUME_CATALOG_TEMPLATE_DESCRIPTION_KEYS: Record<string, MessageKey> = {
+  classic: "enumsResumeCatalog.templateDescription.classic",
+  modern: "enumsResumeCatalog.templateDescription.modern",
+  compact: "enumsResumeCatalog.templateDescription.compact",
+  elegant: "enumsResumeCatalog.templateDescription.elegant",
+  technical: "enumsResumeCatalog.templateDescription.technical",
+  minimal: "enumsResumeCatalog.templateDescription.minimal",
+  scholar: "enumsResumeCatalog.templateDescription.scholar",
+  editorial: "enumsResumeCatalog.templateDescription.editorial",
+  split: "enumsResumeCatalog.templateDescription.split",
+};
+
+/**
+ * 模板的展示名：内置模板走语言包，自制模板回退**后端原文**（那是用户自己输入的名字，
+ * 翻译它等于改用户数据）。
+ *
+ * 这里是函数而不是常量：`t()` 必须在渲染期求值，模块作用域求值会把首帧语言钉死。
+ */
+export function resumeTemplateLabel(item: {
+  name: string;
+  label: string;
+  custom?: boolean;
+}): string {
+  const key = item.custom ? undefined : RESUME_CATALOG_TEMPLATE_LABEL_KEYS[item.name];
+  return key ? t(key) : item.label;
+}
+
+/** 模板说明：与展示名同一套判据（自制模板的说明同样是用户数据）。 */
+export function resumeTemplateDescription(item: {
+  name: string;
+  description: string;
+  custom?: boolean;
+}): string {
+  const key = item.custom ? undefined : RESUME_CATALOG_TEMPLATE_DESCRIPTION_KEYS[item.name];
+  return key ? t(key) : item.description;
+}
+
+/** 字号档位的展示名：已知档位走语言包，后端新增的未知档位回退原文。 */
+export function resumeFontScaleLabel(item: { name: string; label: string }): string {
+  const key = RESUME_CATALOG_FONT_SCALE_LABEL_KEYS[item.name as ResumeFontScale];
+  return key ? t(key) : item.label;
+}

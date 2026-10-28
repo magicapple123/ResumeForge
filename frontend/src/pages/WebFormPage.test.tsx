@@ -43,6 +43,22 @@ const apiMocks = vi.hoisted(() => ({
 
 vi.mock("../api/webform", () => apiMocks);
 
+/**
+ * 任务地基的替身（见 `src/test/aiTaskEntryBridge.ts`）：开着 AI 时，「读取当前表单」不再
+ * 走一条同步请求，而是建一个 `/ai-tasks` 任务（关页面也继续跑），结果**暂存**后由页面
+ * 应用。桥这里仍调用同一个 `previewWebForm` 桩，所以"是不是用 AI 读的"照样可断言。
+ */
+vi.mock("../utils/aiTaskEntry", async () => {
+  const { createAiTaskEntryBridge } = await import("../test/aiTaskEntryBridge");
+  return createAiTaskEntryBridge({
+    run: async (payload) => {
+      const snapshotId = String(payload.snapshot_id);
+      const report = await apiMocks.previewWebForm(snapshotId, true);
+      return { snapshot_id: snapshotId, webform: 1, preview: report };
+    },
+  });
+});
+
 const settingsMocks = vi.hoisted(() => ({ getLLMConfig: vi.fn() }));
 
 vi.mock("../api/settings", () => settingsMocks);

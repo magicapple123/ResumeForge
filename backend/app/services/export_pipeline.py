@@ -121,6 +121,7 @@ def _render_markdown(resume: ResumeContent, context: RenderContext) -> RenderedA
             resume,
             section_order=resolved_section_order(context.format_config),
             language=context.language,
+            format_config=context.format_config,
         ).encode("utf-8"),
         media_type="text/markdown; charset=utf-8",
     )
@@ -189,6 +190,7 @@ def _render_txt(resume: ResumeContent, context: RenderContext) -> RenderedArtifa
             resume,
             section_order=resolved_section_order(context.format_config),
             language=context.language,
+            format_config=context.format_config,
         ).encode("utf-8"),
         media_type="text/plain; charset=utf-8",
     )

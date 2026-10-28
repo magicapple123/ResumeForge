@@ -21,6 +21,12 @@ import {
 } from "../api/interview";
 import ReviewHistoryCard from "./interview/ReviewHistoryCard";
 import SuggestionsCard from "./interview/SuggestionsCard";
+import AbortButton from "./common/AbortButton";
+import {
+  normalizeReviewAnalysis,
+  normalizeSuggestions,
+} from "../features/interview/normalizeReview";
+import { errorText, useAbortableRequest } from "../hooks/useAbortableRequest";
 import { useApi } from "../hooks/useApi";
 import { useJobSearchSelect, useResumeSearchSelect } from "../hooks/remoteSearchOptions";
 import type { InterviewAnalysis, InterviewOptimizeResult, InterviewReviewRecord } from "../types";
@@ -59,25 +65,29 @@ export default function InterviewReviewPanel({
   const [question, setQuestion] = useState("");
   const [jobId, setJobId] = useState<number | undefined>();
   const [resumeId, setResumeId] = useState<number | undefined>();
-  const [analyzing, setAnalyzing] = useState(false);
+  // 分析思路与反向优化都是一次「点一下等十几秒」的生成：各自可停，互不影响。
+  const analyzeRequest = useAbortableRequest();
+  const optimizeRequest = useAbortableRequest();
+  const analyzing = analyzeRequest.loading;
+  const optimizing = optimizeRequest.loading;
   const [analysis, setAnalysis] = useState<InterviewAnalysis | null>(null);
-  const [optimizing, setOptimizing] = useState(false);
   const [optimizeResult, setOptimizeResult] = useState<InterviewOptimizeResult | null>(null);
   const [saving, setSaving] = useState(false);
   const reviews = useApi(listReviews, []);
 
   // 历史富还原：用历史记录的 analysis/suggestions 充当展示数据。
-  // 旧版纯文本记录（analysis 为字符串）不是结构化对象，不能当 analysis 用，置空以免渲染时崩。
+  // **必须过 normalizeReviewAnalysis**：历史记录是模型输出直接落库的，可能是纯文本（旧版），
+  // 也可能只有 framework 而缺 key_points/follow_up/pitfalls——直接读 `.length` 会抛
+  // TypeError（"查看详情"白屏的真实原因）。归一化后用 null 表示"没有可展示的分析"。
   const viewAnalysis: InterviewAnalysis | null = record
-    ? typeof record.analysis === "string"
-      ? null
-      : (record.analysis as InterviewAnalysis)
-    : analysis;
+    ? normalizeReviewAnalysis(record.analysis)
+    : normalizeReviewAnalysis(analysis);
   // 建议展示：刚生成的 optimizeResult 优先（含记录模式下反向优化新产出的建议），否则回退历史记录里已持久化的建议。
+  // 同样归一化：历史建议可能缺 evidence / 字段类型不对。
   const viewSuggestions: InterviewOptimizeResult["suggestions"] = optimizeResult?.suggestions
-    ? optimizeResult.suggestions
+    ? normalizeSuggestions(optimizeResult.suggestions)
     : record
-      ? (record.suggestions as InterviewOptimizeResult["suggestions"])
+      ? normalizeSuggestions(record.suggestions)
       : [];
 
   // 旧版纯文本记录（analysis 为字符串）兼容：只展示提示，不崩。
@@ -89,12 +99,14 @@ export default function InterviewReviewPanel({
   if (prevRecord !== record) {
     setPrevRecord(record);
     if (record) {
-      setAnalysis((record.analysis as InterviewAnalysis) ?? null);
+      // 归一化后再进 state：否则后续「反向优化」会把缺字段的对象原样写回服务端。
+      setAnalysis(normalizeReviewAnalysis(record.analysis));
+      const storedSuggestions = normalizeSuggestions(record.suggestions);
       setOptimizeResult(
-        record.suggestions && record.suggestions.length
+        storedSuggestions.length
           ? {
               resume_id: record.resume_id ?? 0,
-              suggestions: record.suggestions,
+              suggestions: storedSuggestions,
               llm_used: true,
               notes: [],
             }
@@ -119,24 +131,27 @@ export default function InterviewReviewPanel({
       message.error(t("interviewReview.error.needQuestion"));
       return;
     }
-    setAnalyzing(true);
-    try {
-      const result = await analyzeInterviewQuestion({
-        question: (record?.questions?.[0] ?? question).trim(),
-        job_id: jobId ?? null,
-        resume_id: resumeId ?? null,
-      });
-      setAnalysis(result);
+    const outcome = await analyzeRequest.run((signal) =>
+      analyzeInterviewQuestion(
+        {
+          question: (record?.questions?.[0] ?? question).trim(),
+          job_id: jobId ?? null,
+          resume_id: resumeId ?? null,
+        },
+        signal,
+      ),
+    );
+    if (outcome.status === "ok") {
+      setAnalysis(outcome.data);
       setOptimizeResult(null);
       // 分析出思路后自动保存为历史（无需用户手点保存）。
-      await persistReview(result, []);
-    } catch (error) {
-      message.error(
-        error instanceof Error ? error.message : t("interviewReview.error.analyzeFailed"),
-      );
-    } finally {
-      setAnalyzing(false);
+      await persistReview(outcome.data, []);
+      return;
     }
+    if (outcome.status === "error") {
+      message.error(errorText(outcome.error, t("interviewReview.error.analyzeFailed")));
+    }
+    // aborted：用户自己按了停止——不弹错误、不动上一次的分析结果。
   };
 
   const persistReview = async (
@@ -180,34 +195,35 @@ export default function InterviewReviewPanel({
       message.error(t("interviewReview.error.needAnalysis"));
       return;
     }
-    setOptimizing(true);
-    try {
-      const result = await optimizeResumeFromInterview({
-        resume_id: resumeId,
-        job_id: jobId ?? null,
-        weaknesses: viewAnalysis.pitfalls,
-        follow_ups: viewAnalysis.follow_up,
-      });
-      setOptimizeResult(result);
-      // 历史记录富还原：把新生成的建议写回同一条记录。
-      if (record) {
-        try {
-          await updateReview(record.id, {
-            analysis: viewAnalysis,
-            suggestions: result.suggestions,
-          });
-        } catch (error) {
-          message.warning(
-            error instanceof Error ? error.message : t("interviewReview.error.writeBackFailed"),
-          );
-        }
+    const outcome = await optimizeRequest.run((signal) =>
+      optimizeResumeFromInterview(
+        {
+          resume_id: resumeId,
+          job_id: jobId ?? null,
+          weaknesses: viewAnalysis.pitfalls,
+          follow_ups: viewAnalysis.follow_up,
+        },
+        signal,
+      ),
+    );
+    if (outcome.status === "error") {
+      message.error(errorText(outcome.error, t("interviewReview.error.optimizeFailed")));
+      return;
+    }
+    if (outcome.status === "aborted") return;
+    setOptimizeResult(outcome.data);
+    // 历史记录富还原：把新生成的建议写回同一条记录。
+    if (record) {
+      try {
+        await updateReview(record.id, {
+          analysis: viewAnalysis,
+          suggestions: outcome.data.suggestions,
+        });
+      } catch (error) {
+        message.warning(
+          error instanceof Error ? error.message : t("interviewReview.error.writeBackFailed"),
+        );
       }
-    } catch (error) {
-      message.error(
-        error instanceof Error ? error.message : t("interviewReview.error.optimizeFailed"),
-      );
-    } finally {
-      setOptimizing(false);
     }
   };
 
@@ -278,6 +294,7 @@ export default function InterviewReviewPanel({
               >
                 {t("interviewReview.action.analyze")}
               </Button>
+              {analyzing && <AbortButton onClick={() => analyzeRequest.cancel()} />}
             </Space>
           </Space>
         </Card>
@@ -334,6 +351,7 @@ export default function InterviewReviewPanel({
             >
               {t("interviewReview.action.optimize")}
             </Button>
+            {optimizing && <AbortButton onClick={() => optimizeRequest.cancel()} />}
             {!record && (
               <Button
                 icon={<SaveOutlined />}

@@ -10,6 +10,22 @@ const apiMocks = vi.hoisted(() => ({ scanResumeRisks: vi.fn() }));
 
 vi.mock("../api/resumeRisk", () => apiMocks);
 
+/**
+ * 任务地基的替身（见 `src/test/aiTaskEntryBridge.ts`）：面板验的是界面语义，
+ * 轮询与通知出口由 `utils/backgroundTasks*.test.ts` 负责。
+ */
+vi.mock("../utils/aiTaskEntry", async () => {
+  const { createAiTaskEntryBridge } = await import("../test/aiTaskEntryBridge");
+  return createAiTaskEntryBridge({
+    run: async (payload, signal) => {
+      const resumeId = Number(payload.resume_id);
+      const risk = await apiMocks.scanResumeRisks(resumeId, Boolean(payload.enhance), signal);
+      // 扫描报告不入库，只随 result_ref 回来——这正是本入口与岗位解读的实质差别。
+      return { resume_id: resumeId, risk_scan: risk };
+    },
+  });
+});
+
 const RESULT = {
   resume_id: 7,
   points: [

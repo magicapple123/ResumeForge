@@ -279,3 +279,44 @@ def test_api_status_endpoint_reports_the_builtin_entry(client):
     assert body["label"] == "思源黑体"
     assert body["downloaded"] is False
     assert body["total_bytes"] == total_bytes()
+
+
+# ---- 普通轮询不得改写用户已选的字体 -------------------------------------------
+#
+# 回归的是"字体改完又变回去"：`GET /fonts/builtin` 是前端**每次进设置页**都会打的
+# 只读端点（`ResumeFontCard` 挂载即取），而 `take_auto_activate()` 没有下载在跑时恒为
+# True，于是它退化成"每次轮询都接管一次当前字体"。`active=None`（用户点了「回到系统
+# 字体」）是唯一没有守卫的分支，所以表现固定成"切回系统字体 → 又变回思源黑体"，刷新
+# 也治不好。修法是把"刚完成"做成一次性令牌（`consume_completion`），这两条用例钉住它。
+
+
+def _download_and_poll(client) -> None:
+    """真下载一轮并把它收尾（顺便让"刚完成"令牌被正常消费掉）。"""
+    assert client.post("/api/settings/fonts/builtin/download").status_code == 202
+    assert _wait_until_settled()["state"] == "done"
+    assert client.get("/api/settings/fonts/builtin/download").json()["downloaded"] is True
+
+
+def test_plain_poll_keeps_the_system_font_choice(client):
+    """用户点了「回到系统字体」之后，普通轮询不得把它改回内置 Regular。"""
+    _download_and_poll(client)
+    # 用户主动回到系统字体：active.json 被删除，active 变成 None。
+    assert client.put("/api/settings/fonts/active", json={"name": None}).status_code == 200
+    assert user_fonts.active_font_name() is None
+
+    # 设置页 / 制作台每次挂载都会打这条 GET（带写副作用的正是它）。
+    body = client.get("/api/settings/fonts/builtin").json()
+    assert body["downloaded"] is True
+    assert user_fonts.active_font_name() is None, "只读轮询不得改写当前字体"
+    assert not (user_fonts.fonts_dir() / "active.json").exists()
+
+
+def test_plain_poll_keeps_the_builtin_bold_choice(client):
+    """当前字体是内置粗体时，普通轮询不得把它改成 Regular。"""
+    _download_and_poll(client)
+    bold_name = str(resume_font_builtin.BUILTIN_FILES[1]["name"])
+    assert client.put("/api/settings/fonts/active", json={"name": bold_name}).status_code == 200
+    assert user_fonts.active_font_name() == bold_name
+
+    assert client.get("/api/settings/fonts/builtin").json()["downloaded"] is True
+    assert user_fonts.active_font_name() == bold_name

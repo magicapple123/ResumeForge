@@ -3,7 +3,6 @@
 
 from __future__ import annotations
 
-import json
 import logging
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -14,6 +13,7 @@ from sqlalchemy.orm import Session
 
 from ...models.job import Job
 from ...models.job_match_batch import JobMatchBatch
+from ...schemas.job_comparison import JobComparisonResult
 from ...schemas.job_match import JobMatchResult
 from ...schemas.job_match_batch import (
     JobMatchBatchItem,
@@ -23,7 +23,14 @@ from ..apply import apply_service
 from ..llm import create_provider
 from ..llm.base import LLMError
 from ..match_scoring import score_match_result
-from ..profile.profile_service import project_legacy_profile
+from ..profile.ai_profile import load_ai_profile
+from .job_comparison import (
+    analyze_comparison,
+    build_digests,
+    local_comparison,
+    reorder_by_comparison,
+)
+from .job_comparison_store import load_comparisons, save_comparison
 from .job_match import (
     MAX_MATCH_ATTEMPTS_PER_JOB,
     analyze_match_with_retry,
@@ -31,7 +38,7 @@ from .job_match import (
     job_payload,
     local_match_result,
 )
-from .job_match_context import profile_is_empty, profile_text
+from .job_match_context import job_resume_text, profile_is_empty, profile_text
 
 logger = logging.getLogger(__name__)
 
@@ -64,18 +71,16 @@ class BatchMatchCancelled(Exception):
 
 
 def build_batch_inputs(db: Session, jobs: list[Job], *, force: bool) -> list[BatchMatchInput]:
-    """在数据库连接仍可用时准备所有匹配输入，随后即可安全释放连接等待模型。"""
-    profile = project_legacy_profile(db)
+    """在数据库连接仍可用时准备所有匹配输入，随后即可安全释放连接等待模型。
+
+    资料口径与单岗匹配完全一致（当前组 + 去隐藏）：这里直接复用
+    ``load_ai_profile`` / ``profile_text`` / ``job_resume_text``，不再自读一份。
+    """
+    profile = load_ai_profile(db)
     personal_text = profile_text(profile)
     inputs: list[BatchMatchInput] = []
     for job in jobs:
-        resume = apply_service.resolve_resume(db, job.id, None)
-        resume_text = ""
-        if resume is not None:
-            resume_text = json.dumps(
-                {"title": resume.title, "job_title": resume.job_title, "content": resume.content},
-                ensure_ascii=False,
-            )
+        resume_text = job_resume_text(db, job)
         existing_result: JobMatchResult | None = None
         existing_model = ""
         if not force:
@@ -256,29 +261,47 @@ def sort_batch_items(items: list[JobMatchBatchItem]) -> list[JobMatchBatchItem]:
 
 
 def persist_batch(
-    db: Session, run: BatchMatchRun, *, requested_count: int | None = None
+    db: Session,
+    run: BatchMatchRun,
+    *,
+    requested_count: int | None = None,
+    comparison: JobComparisonResult | None = None,
 ) -> JobMatchBatch:
-    """保存批次快照，并同步成功结论到每个岗位的最近一次匹配结果。"""
-    for item in run.items:
+    """保存批次快照，并同步成功结论到每个岗位的最近一次匹配结果。
+
+    ``comparison`` 非空表示这是一次横向对比：条目顺序改成对比名次，对比结论随批次
+    一起保存（存储位置见 ``job_comparison_store``，不新增表列）。
+    """
+    items = (
+        reorder_by_comparison(run.items, comparison)
+        if comparison is not None and comparison.items
+        else run.items
+    )
+    for item in items:
         if item.status != "completed" or item.result is None:
             continue
         job = db.get(Job, item.job_id)
         if job is not None:
             apply_service.persist_match(db, job, item.result, model=item.model)
     row = JobMatchBatch(
-        requested_count=requested_count if requested_count is not None else len(run.items),
-        completed_count=sum(item.status == "completed" for item in run.items),
-        failed_count=sum(item.status == "failed" for item in run.items),
-        items=[item.model_dump(mode="json") for item in run.items],
+        requested_count=requested_count if requested_count is not None else len(items),
+        completed_count=sum(item.status == "completed" for item in items),
+        failed_count=sum(item.status == "failed" for item in items),
+        items=[item.model_dump(mode="json") for item in items],
         model=run.model,
     )
     db.add(row)
     db.commit()
     db.refresh(row)
+    if comparison is not None:
+        save_comparison(db, row.id, comparison)
+        db.commit()
     return row
 
 
-def batch_summary(row: JobMatchBatch) -> JobMatchBatchSummary:
+def batch_summary(
+    row: JobMatchBatch, comparison: JobComparisonResult | None = None
+) -> JobMatchBatchSummary:
     """把完整批次压缩成历史列表使用的轻量摘要。"""
     top_score: int | None = None
     for item in row.items or []:
@@ -292,6 +315,7 @@ def batch_summary(row: JobMatchBatch) -> JobMatchBatchSummary:
         failed_count=row.failed_count,
         top_score=top_score,
         model=row.model,
+        mode="compare" if comparison is not None else "match",
         created_at=row.created_at,
     )
 
@@ -303,7 +327,52 @@ def list_batch_summaries(db: Session, *, limit: int = 30) -> list[JobMatchBatchS
         .limit(limit)
         .all()
     )
-    return [batch_summary(row) for row in rows]
+    comparisons = load_comparisons(db, [row.id for row in rows])
+    return [batch_summary(row, comparisons.get(row.id)) for row in rows]
+
+
+def _comparison_available(config: Any) -> bool:
+    return bool(
+        str(getattr(config, "base_url", "") or "").strip()
+        and str(getattr(config, "model", "") or "").strip()
+    )
+
+
+async def run_batch_comparison(
+    inputs: list[BatchMatchInput],
+    run: BatchMatchRun,
+    config: Any,
+    *,
+    should_cancel: Callable[[], bool] | None = None,
+) -> JobComparisonResult:
+    """逐岗结论之后的横向对比（N+1 的第 N+1 次调用）。
+
+    对比失败**不影响**逐岗结论：返回带 ``error`` 的空结果，前端照常展示逐岗卡片并给出
+    "对比没生成"的说明。未配置模型时按参考分做本地降级，理由只复述已有缺口。
+    """
+    completed = [
+        item for item in run.items if item.status == "completed" and item.result is not None
+    ]
+    if len(completed) < 2:
+        return JobComparisonResult(error="可对比的岗位不足 2 个，无法横向排序")
+    if not _comparison_available(config):
+        return local_comparison(run.items)
+    profile_text = inputs[0].profile_text if inputs else ""
+    try:
+        provider = create_provider(config)
+        result = await analyze_comparison(
+            provider,
+            profile_text,
+            build_digests(run.items),
+            should_cancel=should_cancel,
+        )
+    except LLMError as exc:
+        logger.warning("岗位横向对比失败：%s", exc)
+        return JobComparisonResult(error=f"横向对比生成失败：{exc}")
+    except Exception:  # noqa: BLE001 - 外部模型异常统一降级，不吞掉逐岗结果
+        logger.exception("岗位横向对比发生内部错误")
+        return JobComparisonResult(error="横向对比生成失败，请稍后重试")
+    return result.model_copy(update={"model": str(getattr(config, "model", "") or "")})
 
 
 __all__ = [
@@ -316,6 +385,7 @@ __all__ = [
     "is_retryable_failure",
     "list_batch_summaries",
     "persist_batch",
+    "run_batch_comparison",
     "run_batch_match",
     "sort_batch_items",
 ]

@@ -8,14 +8,15 @@
  */
 
 import { FolderOpenOutlined, SearchOutlined } from "@ant-design/icons";
-import { App, Button, Drawer, Empty, Image, Input, Table, Tag, Typography } from "antd";
+import { Alert, App, Button, Drawer, Empty, Image, Input, Table, Tag, Typography } from "antd";
 import LoadingBlock from "../common/LoadingBlock";
 import type { TableColumnsType, TablePaginationConfig } from "antd";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   listUserFiles,
   revealUserFile,
   userFileRawUrl,
+  userFileTextPreview,
   type UserFileItem,
   type UserFileListResult,
 } from "../../api/userFiles";
@@ -50,6 +51,38 @@ function isPdf(item: UserFileItem): boolean {
   return item.mime.split(";", 1)[0].trim().toLowerCase() === "application/pdf";
 }
 
+/**
+ * 能当**文本**预览的扩展名：浏览器自己渲染不了 docx，这类只能让后端提取文字。
+ * txt/md/csv 走同一条路，省得在浏览器里出现"点开就下载"的尴尬。
+ */
+const TEXT_PREVIEW_SUFFIXES = new Set([
+  "docx",
+  "txt",
+  "md",
+  "markdown",
+  "csv",
+  "tsv",
+  "json",
+  "log",
+  "yaml",
+  "yml",
+  "xml",
+  "html",
+  "htm",
+]);
+
+function fileSuffix(name: string): string {
+  const index = name.lastIndexOf(".");
+  return index >= 0 ? name.slice(index + 1).toLowerCase() : "";
+}
+
+/** 三种可预览形态；`null` = 浏览器和文本提取都处理不了，只留「打开文件夹」。 */
+function previewKind(item: UserFileItem): "image" | "pdf" | "text" | null {
+  if (canPreviewImage(item.mime)) return "image";
+  if (isPdf(item)) return "pdf";
+  return TEXT_PREVIEW_SUFFIXES.has(fileSuffix(item.original_name)) ? "text" : null;
+}
+
 export default function UserFilesPanel() {
   useLocale();
   const { message } = App.useApp();
@@ -58,8 +91,14 @@ export default function UserFilesPanel() {
   const [page, setPage] = useState(1);
   const [keyword, setKeyword] = useState("");
   const [loading, setLoading] = useState(true);
-  const [pdfPreview, setPdfPreview] = useState<UserFileItem | null>(null);
+  // 预览：图片 / PDF / 文档三条路共用一个抽屉。文档要现取提取文字，所以另存一份状态。
+  const [preview, setPreview] = useState<UserFileItem | null>(null);
+  const [previewText, setPreviewText] = useState("");
+  const [previewTextError, setPreviewTextError] = useState("");
+  const [previewLoading, setPreviewLoading] = useState(false);
   const [openingId, setOpeningId] = useState<number | null>(null);
+  // 连续点开不同文件时，先到的旧响应不能覆盖新文件的内容。
+  const previewSeq = useRef(0);
 
   // 纯取数（不含 setState）：effect 内联调用时 Compiler 才能验证非同步更新。
   const fetchFiles = useCallback(async (): Promise<UserFileListResult | null> => {
@@ -86,6 +125,45 @@ export default function UserFilesPanel() {
       cancelled = true;
     };
   }, [fetchFiles]);
+
+  /**
+   * 打开预览。图片 / PDF 交给浏览器（`/raw` 直链）；文档走后端提取文字。
+   * 失败不弹全局错误：抽屉里就地说明，用户还能继续用「打开文件夹」。
+   */
+  const openPreview = (item: UserFileItem) => {
+    const seq = ++previewSeq.current;
+    setPreview(item);
+    setPreviewText("");
+    setPreviewTextError("");
+    if (previewKind(item) !== "text") {
+      setPreviewLoading(false);
+      return;
+    }
+    setPreviewLoading(true);
+    void userFileTextPreview(item.id)
+      .then((result) => {
+        if (seq !== previewSeq.current) return;
+        setPreviewText(result.text);
+      })
+      .catch((error: unknown) => {
+        if (seq !== previewSeq.current) return;
+        setPreviewTextError(
+          error instanceof Error ? error.message : t("materials.files.toast.loadFailed"),
+        );
+      })
+      .finally(() => {
+        if (seq !== previewSeq.current) return;
+        setPreviewLoading(false);
+      });
+  };
+
+  const closePreview = () => {
+    previewSeq.current += 1;
+    setPreview(null);
+    setPreviewText("");
+    setPreviewTextError("");
+    setPreviewLoading(false);
+  };
 
   const revealInFolder = async (item: UserFileItem) => {
     setOpeningId(item.id);
@@ -153,8 +231,8 @@ export default function UserFilesPanel() {
       width: 170,
       render: (_: unknown, item: UserFileItem) => (
         <div style={{ display: "flex", gap: 4 }}>
-          {isPdf(item) && (
-            <Button type="link" size="small" onClick={() => setPdfPreview(item)}>
+          {previewKind(item) !== null && (
+            <Button type="link" size="small" onClick={() => openPreview(item)}>
               {t("materials.files.action.preview")}
             </Button>
           )}
@@ -211,18 +289,44 @@ export default function UserFilesPanel() {
       )}
 
       <Drawer
-        title={pdfPreview?.original_name || t("materials.files.pdfPreviewTitle")}
-        open={pdfPreview !== null}
-        size={720}
-        onClose={() => setPdfPreview(null)}
+        title={preview?.original_name || t("materials.files.previewTitle")}
+        open={preview !== null}
+        size={760}
+        onClose={closePreview}
         destroyOnHidden
       >
-        {pdfPreview && (
+        {preview && previewKind(preview) === "pdf" && (
           <iframe
-            title={pdfPreview.original_name}
-            src={userFileRawUrl(pdfPreview.id)}
+            title={preview.original_name}
+            src={userFileRawUrl(preview.id)}
             style={{ width: "100%", height: "80vh", border: "none" }}
           />
+        )}
+        {preview && previewKind(preview) === "image" && (
+          <Image
+            src={userFileRawUrl(preview.id)}
+            alt={preview.original_name}
+            style={{ maxHeight: "80vh", objectFit: "contain" }}
+          />
+        )}
+        {preview && previewKind(preview) === "text" && (
+          <div className="user-file-text-preview">
+            {previewLoading ? (
+              <LoadingBlock tip={t("materials.files.previewLoading")} />
+            ) : previewTextError ? (
+              <Alert type="error" showIcon title={previewTextError} />
+            ) : (
+              <>
+                <Alert
+                  type="info"
+                  showIcon
+                  title={t("materials.files.previewTextNote")}
+                  style={{ marginBottom: 12 }}
+                />
+                <pre className="user-file-text-body">{previewText}</pre>
+              </>
+            )}
+          </div>
         )}
       </Drawer>
     </div>

@@ -1,0 +1,340 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/* 双语版本面板（W16）：工具条 / 版本信息 / 页签 / 字段对照 / 翻译候选 / 术语表。
+   这些结构原先一个类名都没有（组件里全是裸 inline 样式），于是窄栏里"字段对照"的
+   中文列与英文列会糊成一片、翻译候选也挤成一坨。颜色一律取 `--rf-*` token。 */
+
+/* 面板整体：一列、块间 16px（与来源核对面板同一节奏）。
+   `container-type: inline-size` 让「字段对照」按**面板实际宽度**切换版式：
+   这块面板住在制作台左栏（默认 380px，可拖到 640px），视口断点在这里没有意义
+   （1680px 的窗口里左栏仍只有 380px，`@media` 永远认为"够宽"）。 */
+.bilingual-workspace {
+  display: flex;
+  flex-direction: column;
+  gap: var(--rf-space-3);
+  min-width: 0;
+  container-type: inline-size;
+}
+
+/* 顶部一行：切换语言版本 / 创建翻译版本 / 生成翻译候选。窄栏自动换行，不挤出横向滚动。 */
+.bilingual-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--rf-space-2) var(--rf-space-3);
+  min-width: 0;
+}
+
+.bilingual-toolbar__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--rf-space-2);
+}
+
+/* 创建后自动翻译的进度提示：整块面板"现在在做什么"，不能和空态混在一起。 */
+.bilingual-progress {
+  margin: 0;
+}
+
+/* 页签条单独一行并与内容分层：上面是版本信息（版本名/页数/排版卡），这条是页签。 */
+.bilingual-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  padding-bottom: var(--rf-space-2);
+  border-bottom: 1px solid var(--rf-border-subtle);
+}
+
+.bilingual-body {
+  min-width: 0;
+}
+
+/* ── 语言版本切换条 ─────────────────────────────────────────── */
+.variant-bar {
+  display: flex;
+  flex: 1 1 280px;
+  flex-direction: column;
+  gap: var(--rf-space-1);
+  min-width: 0;
+}
+
+.variant-bar__switcher {
+  min-width: 0;
+}
+
+.variant-bar__versions {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.variant-bar__version,
+.variant-bar__hint {
+  font-size: 12px;
+}
+
+/* ── 这份版本自己的排版（独立于另一份语言版本）────────────────── */
+.variant-layout {
+  display: flex;
+  flex-direction: column;
+  gap: var(--rf-space-1);
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--rf-border-subtle);
+  border-radius: var(--rf-radius-control);
+  background: var(--rf-surface-alt);
+}
+
+.variant-layout__head {
+  margin-bottom: 0;
+}
+
+.variant-layout__hint {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--rf-text-secondary);
+}
+
+.variant-layout__hint--foot {
+  margin-top: var(--rf-space-1);
+}
+
+.variant-layout__controls {
+  row-gap: var(--rf-space-2);
+}
+
+.variant-layout__field {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.variant-layout__label {
+  font-size: 12px;
+}
+
+.variant-layout__pages {
+  width: 72px;
+}
+
+.variant-layout__font {
+  width: 120px;
+}
+
+/* ── 字段对照 ────────────────────────────────────────────────
+   默认（窄栏，也就是左栏的真实宽度）：每行两段——「字段名 + 操作」一行，
+   下面中文一段、英文一段，各自带一个小语种标签。三列并排在 380px 里会把
+   「商业分析师（用户方向）」折成每行两个字，读起来像乱码（用户 2026-11 反馈）。
+   容器 ≥620px 时才切回「字段名 | 中文 | 英文 | 操作」四栏（见文件末尾的
+   `@container`），表头也只在那一档出现。 */
+.bilingual-compare {
+  --bilingual-compare-columns: minmax(96px, 140px) minmax(0, 1fr) minmax(0, 1fr) 72px;
+
+  display: flex;
+  flex-direction: column;
+  gap: var(--rf-space-1);
+  min-width: 0;
+}
+
+.bilingual-compare__head {
+  display: none;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--rf-border-strong);
+}
+
+/* 行：默认堆叠。`grid-template-areas` 让 DOM 顺序保持「字段 → 中文 → 英文 → 操作」，
+   版式怎么排都不影响读屏顺序。 */
+.bilingual-compare__row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas:
+    "field action"
+    "primary primary"
+    "secondary secondary";
+  gap: 4px 8px;
+  align-items: start;
+  min-width: 0;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--rf-border-subtle);
+}
+
+.bilingual-compare__head-cell {
+  font-size: 12px;
+  color: var(--rf-text-secondary);
+}
+
+.bilingual-compare__group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: var(--rf-space-2);
+  min-width: 0;
+}
+
+.bilingual-compare__group-title {
+  font-size: 13px;
+}
+
+.bilingual-compare__row:last-child {
+  border-bottom: 0;
+}
+
+.bilingual-compare__field {
+  grid-area: field;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.bilingual-compare__field-label {
+  font-size: 12px;
+  color: var(--rf-text-secondary);
+}
+
+.bilingual-compare__lock {
+  margin-inline-end: 0;
+}
+
+/* 一个语种一格：窄栏时是「小标签 + 正文」，宽栏时标签隐藏、正文独占一列。 */
+.bilingual-compare__cell {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.bilingual-compare__cell--primary {
+  grid-area: primary;
+}
+
+.bilingual-compare__cell--secondary {
+  grid-area: secondary;
+}
+
+.bilingual-compare__lang {
+  font-size: 11px;
+  line-height: 16px;
+  color: var(--rf-text-secondary);
+}
+
+.bilingual-compare__value {
+  min-width: 0;
+  font-size: 13px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  /* 窄栏用左侧细色条区分「哪一段是中文/英文」，与标签同义、但扫读更快。 */
+  padding-left: var(--rf-space-2);
+  border-left: 2px solid var(--rf-border);
+}
+
+.bilingual-compare__value--primary {
+  color: var(--rf-text-body);
+  border-left-color: var(--rf-info);
+}
+
+.bilingual-compare__value--secondary {
+  color: var(--rf-text-secondary);
+  border-left-color: var(--rf-accent-violet);
+}
+
+.bilingual-compare__action {
+  grid-area: action;
+  display: flex;
+  justify-content: flex-end;
+  min-width: 0;
+}
+
+/* 宽栏（左栏被拖到 ≥620px，或将来放进更宽的面板）：回到四栏并排。 */
+@container (min-width: 620px) {
+  .bilingual-compare__head {
+    display: grid;
+    grid-template-columns: var(--bilingual-compare-columns);
+    gap: 6px 12px;
+    align-items: start;
+  }
+
+  .bilingual-compare__row {
+    grid-template-columns: var(--bilingual-compare-columns);
+    grid-template-areas: "field primary secondary action";
+    gap: 6px 12px;
+  }
+
+  .bilingual-compare__field-label {
+    font-size: 12px;
+    color: var(--rf-text-body);
+  }
+
+  /* 并排时表头已经写明语种，行内标签就是重复信息。 */
+  .bilingual-compare__lang {
+    display: none;
+  }
+
+  .bilingual-compare__value {
+    padding-left: 0;
+    border-left: 0;
+  }
+}
+
+/* ── 翻译候选：一条一张卡（目标文案 + 勾选）──────────────────── */
+.translation-candidates {
+  display: flex;
+  flex-direction: column;
+  gap: var(--rf-space-2);
+  min-width: 0;
+}
+
+.translation-candidates__list {
+  width: 100%;
+}
+
+.translation-candidates__actions {
+  flex-wrap: wrap;
+}
+
+.translation-candidate {
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--rf-border-subtle);
+  border-radius: var(--rf-radius-control);
+  background: var(--rf-surface-alt);
+}
+
+.translation-candidate__head {
+  margin-bottom: 4px;
+}
+
+.translation-candidate__text {
+  font-size: 13px;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+/* ── 术语表：表格在容器里横向滚动，不把面板撑出横向滚动条 ───── */
+.glossary-table {
+  display: flex;
+  flex-direction: column;
+  gap: var(--rf-space-2);
+  min-width: 0;
+}
+
+.glossary-table__head {
+  margin-bottom: 0;
+}
+
+.glossary-table__hint {
+  font-size: 12px;
+}
+
+.glossary-table__scroll {
+  width: 100%;
+  overflow-x: auto;
+}
+
+.glossary-table__scroll .ant-table {
+  min-width: 520px;
+}

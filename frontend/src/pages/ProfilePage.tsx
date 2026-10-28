@@ -6,6 +6,7 @@ import type { PointerEvent as ReactPointerEvent } from "react";
 import ErrorState from "../components/common/ErrorState";
 import PageSkeleton from "../components/common/PageSkeleton";
 import ProfilePageHeader from "../components/profile/ProfilePageHeader";
+import ProfileEditActionBar from "../components/profile/ProfileEditActionBar";
 import ProfileLeaveConfirmModal from "../components/profile/ProfileLeaveConfirmModal";
 import ProfilePageModals from "../components/profile/ProfilePageModals";
 import ProfileSectionStack from "../components/profile/ProfileSectionStack";
@@ -17,6 +18,10 @@ import ProfileGroupManagerModal from "../features/profile-groups/ProfileGroupMan
 import { useCurrentProfileGroup } from "../features/profile-groups/useCurrentProfileGroup";
 import ProfilePlacementGuide from "../features/profile-library/ProfilePlacementGuide";
 import ProfileUpgradeNotice from "../features/profile-library/ProfileUpgradeNotice";
+import {
+  buildProfileBaseline,
+  ProfileBaselineContext,
+} from "../features/profile/profileBaselineContext";
 import { useProfileLeaveGuard } from "../features/profile/useProfileLeaveGuard";
 import { useProfilePage } from "../features/profile/useProfilePage";
 import { useProfileWebFormBridge } from "../features/profile/useProfileWebFormBridge";
@@ -26,11 +31,12 @@ import {
   setProfileEditControl,
   setProfileSaveControl,
 } from "../features/tou-tou/profileSaveBridge";
+import { profileSectionLabel } from "../features/profile-library/profileLabels";
 import { t } from "../i18n";
 import { useLocale } from "../i18n/i18nContext";
 
 export default function ProfilePage() {
-  useLocale();
+  const locale = useLocale();
   const { message } = App.useApp();
   const toast = useToast();
   const navigate = useNavigate();
@@ -82,10 +88,12 @@ export default function ProfilePage() {
   const sectionNames = useMemo(() => {
     const names: Record<string, string> = {};
     workspace?.sections.forEach((section) => {
-      names[section.key] = section.name;
+      // 展示名：内置分区按界面语言取，自建/改名的分区用后端下发的名字。
+      names[section.key] = profileSectionLabel(section);
     });
     return names;
-  }, [workspace]);
+    // locale 进依赖：分区名是渲染期按语言取的，切语言后这张表要重算。
+  }, [workspace, locale]);
   const participatingKeys = workspace?.current_group?.participating_keys ?? [];
   // 离开守卫（R-26）：路由离页 / 取消编辑 / 程序触发切组共用同一个出口；
   // dirty 时先出居中确认卡片，确认放弃才执行动作，继续编辑则原样留下（当前组与草稿不动）。
@@ -226,43 +234,50 @@ export default function ProfilePage() {
     promptDismissed,
   ]);
 
+  // 编辑态的"已修改"标记要拿已保存的值做基线：每次工作区变化（含保存成功后的重新加载）
+  // 重建，否则刚保存完的字段还挂着"已修改"。
+  const baselineLookup = useMemo(() => buildProfileBaseline(workspace), [workspace]);
+
   const resumeContent = useMemo(
     () =>
       workspace ? (
-        <ProfileSectionStack
-          sections={workspace.sections}
-          participatingKeys={participatingKeys}
-          reorderStore={profile.sectionOrderStore}
-          editing={profile.editing}
-          saving={profile.saving}
-          photo={profile.photo}
-          limits={workspace.limits}
-          collapsedSections={collapsedSections}
-          onToggleCollapsed={toggleSection}
-          onPhotoSelect={profile.setPhoto}
-          onHandlePointerDown={handleSectionPointerDown}
-          onMoveByOffset={handleMoveByOffset}
-          onAddEntry={profile.addEntry}
-          onRemoveEntry={(sectionKey, entryKey, title) =>
-            void profile.removeEntry(sectionKey, entryKey, title)
-          }
-          onSetPreference={(field, patch) => void profile.setPreference(field, patch)}
-          onOpenFieldSettings={(sectionKey) => {
-            setManagerSectionKey(sectionKey);
-            setManagerView("sections");
-            setManagerOpen(true);
-          }}
-          onOpenGuide={() => setGuideOpen(true)}
-          onRequestEdit={handleStartEditing}
-          onOpenGroupManager={() => {
-            setManagerView("groups");
-            setManagerOpen(true);
-          }}
-          onSetSectionVisible={handleSetSectionVisible}
-          sectionVisibilityBusy={groupApi.busy}
-        />
+        <ProfileBaselineContext.Provider value={baselineLookup}>
+          <ProfileSectionStack
+            sections={workspace.sections}
+            participatingKeys={participatingKeys}
+            reorderStore={profile.sectionOrderStore}
+            editing={profile.editing}
+            saving={profile.saving}
+            photo={profile.photo}
+            limits={workspace.limits}
+            collapsedSections={collapsedSections}
+            onToggleCollapsed={toggleSection}
+            onPhotoSelect={profile.setPhoto}
+            onHandlePointerDown={handleSectionPointerDown}
+            onMoveByOffset={handleMoveByOffset}
+            onAddEntry={profile.addEntry}
+            onRemoveEntry={(sectionKey, entryKey, title) =>
+              void profile.removeEntry(sectionKey, entryKey, title)
+            }
+            onSetPreference={(field, patch) => void profile.setPreference(field, patch)}
+            onOpenFieldSettings={(sectionKey) => {
+              setManagerSectionKey(sectionKey);
+              setManagerView("sections");
+              setManagerOpen(true);
+            }}
+            onOpenGuide={() => setGuideOpen(true)}
+            onRequestEdit={handleStartEditing}
+            onOpenGroupManager={() => {
+              setManagerView("groups");
+              setManagerOpen(true);
+            }}
+            onSetSectionVisible={handleSetSectionVisible}
+            sectionVisibilityBusy={groupApi.busy}
+          />
+        </ProfileBaselineContext.Provider>
       ) : null,
     [
+      baselineLookup,
       collapsedSections,
       groupApi.busy,
       handleMoveByOffset,
@@ -358,6 +373,11 @@ export default function ProfilePage() {
         onToggleExpandAll={toggleExpandAll}
         onStartEditing={handleStartEditing}
         onOpenGuide={() => setGuideOpen(true)}
+        onOpenSettings={() => {
+          setManagerSectionKey("");
+          setManagerView("groups");
+          setManagerOpen(true);
+        }}
       />
 
       {workspace?.pending_notice ? (
@@ -386,6 +406,22 @@ export default function ProfilePage() {
       ) : null}
 
       {workspaceTabs}
+
+      {/* 编辑且有未保存改动时，操作条常驻内容区底部（需求 6）：页头的保存/取消只在页顶，
+          资料页又长，改到下面几条就够不着了。动作**复用** submitAll / handleCancelEditing，
+          所以校验、冲突提示、离开守卫都还是同一条路径。
+          未保存确认卡片弹出时收起：同一屏不要再摆第二组"保存/取消"——这与上面三处
+          `leaveGuard.confirmOpen` 让位是同一条理由。 */}
+      {leaveGuard.confirmOpen ? null : (
+        <ProfileEditActionBar
+          editing={profile.editing}
+          dirty={dirty}
+          saving={profile.saving || webform.extraSaving}
+          blocked={profile.photoReading}
+          onSave={() => void submitAll()}
+          onCancel={handleCancelEditing}
+        />
+      )}
 
       {/* 未保存修改的确认卡片：与三个 Modal 并列挂在页面上，打开时遮罩 + 居中，
           不再挤在页面最顶部（触发它的按钮可能在页头甚至页外，用户根本看不到）。 */}

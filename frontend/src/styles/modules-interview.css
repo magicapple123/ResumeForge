@@ -27,6 +27,12 @@
   background: var(--rf-surface);
 }
 
+/* 计时器（0066）：跟着轮次一起放在房间头部右侧，等宽数字避免每秒跳动时抖行。 */
+.interview-timer {
+  font-variant-numeric: tabular-nums;
+  font-size: 13px;
+}
+
 .interview-messages {
   display: flex;
   flex-direction: column;
@@ -79,6 +85,14 @@
   font-size: 13px;
   color: var(--rf-text-body);
   white-space: pre-wrap;
+}
+
+/* 「这一轮没答完」的标记 + 重新回答入口：虚线边框，读起来是"待续"而不是"出错"。 */
+.interview-interrupted {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--rf-border-subtle);
+  font-size: 13px;
 }
 
 /* 「简」面试官头像：素材自带透明底与球形轮廓，方形直出、无需裁圆。 */
@@ -219,4 +233,243 @@
 .assistant-quote-chip-close {
   flex: 0 0 auto;
   margin-left: auto;
+}
+
+/* ===== 「准备好了」闸门（0066）=====
+   点在作答区的位置上，视觉上像一条"面试开始前的提示条"而不是一张大卡片：
+   左头像是面试官，右侧主按钮是唯一动作，说明文字独占一行。 */
+.interview-ready-gate-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.interview-ready-gate-action {
+  margin-top: 12px;
+}
+
+/* 窄屏下头像 + 文案改成两行，避免标题被挤成两三个字一换行。 */
+@media (max-width: 767px) {
+  .interview-ready-gate-head {
+    align-items: flex-start;
+  }
+}
+
+/* ===== 题库：分组卡 / 参考答案 / 我的作答与批改 =====
+   卡片之间刻意留 16px：24 道题分三张卡时，卡与卡黏在一起会让"换了一类题"看不出来。 */
+.question-bank-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.question-bank-item {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 14px 0;
+  border-top: 1px solid var(--rf-border-subtle);
+}
+
+.question-bank-item:first-child {
+  padding-top: 0;
+  border-top: none;
+}
+
+.question-bank-item:last-child {
+  padding-bottom: 0;
+}
+
+.question-bank-question {
+  font-size: 14px;
+  line-height: 1.65;
+}
+
+.question-bank-purpose,
+.question-bank-hint {
+  margin: 0;
+  font-size: 12.5px;
+}
+
+.question-bank-item-actions {
+  margin-top: 2px;
+}
+
+/* 参考答案面板：与题目本体拉开一层底色，避免"正文里混着答案"。 */
+.question-answer-panel {
+  margin: 4px 0 2px;
+  padding: 12px 14px;
+  border: 1px solid var(--rf-border-subtle);
+  border-radius: 10px;
+  background: var(--rf-surface-alt);
+}
+
+.question-answer-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.question-answer-paragraph {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.85;
+  white-space: pre-wrap;
+}
+
+.question-answer-section-title {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 13px;
+}
+
+.question-answer-points {
+  margin-top: 12px;
+}
+
+.question-answer-points ul {
+  margin: 0;
+  padding-left: 0;
+  list-style: none;
+}
+
+.question-answer-points li {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  padding: 3px 0;
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.question-answer-point-icon {
+  margin-top: 4px;
+  color: var(--rf-brand);
+  flex: 0 0 auto;
+}
+
+.question-answer-phrasing {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border-left: 3px solid var(--rf-brand);
+  border-radius: 0 8px 8px 0;
+  background: var(--rf-surface);
+}
+
+.question-answer-phrasing-text {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.75;
+  font-style: italic;
+}
+
+.question-answer-phrasing-hint {
+  font-size: 12px;
+}
+
+/* ===== 我的作答 ===== */
+.my-answer-block {
+  margin-top: 4px;
+}
+
+.my-answer-toggle {
+  padding-left: 0;
+}
+
+.my-answer-saved-hint,
+.my-answer-counter,
+.my-answer-dirty {
+  font-size: 12px;
+}
+
+.my-answer-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 6px;
+  padding: 12px;
+  border: 1px dashed var(--rf-border-strong);
+  border-radius: 10px;
+}
+
+.my-answer-actions {
+  align-items: center;
+}
+
+/* ===== 批改结果 ===== */
+.answer-review-view {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 4px;
+  padding-top: 12px;
+  border-top: 1px solid var(--rf-border-subtle);
+}
+
+.answer-review-head {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+}
+
+.answer-review-score {
+  font-size: 18px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.answer-review-score small {
+  margin-left: 2px;
+  font-size: 11px;
+  font-weight: 400;
+}
+
+.answer-review-summary {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 13px;
+}
+
+.answer-review-summary p {
+  line-height: 1.75;
+}
+
+.answer-review-block ul {
+  margin: 4px 0 0;
+  padding-left: 20px;
+}
+
+.answer-review-block li {
+  font-size: 13px;
+  line-height: 1.75;
+}
+
+.answer-review-block-title {
+  font-size: 13px;
+}
+
+.answer-review-block--strengths li::marker {
+  color: #16a34a;
+}
+
+.answer-review-block--gaps li::marker {
+  color: #dc2626;
+}
+
+.answer-review-block--suggestions li::marker {
+  color: var(--rf-brand);
+}
+
+.answer-review-revised-body p {
+  margin: 0 0 8px;
+  font-size: 13px;
+  line-height: 1.8;
+  white-space: pre-wrap;
+}
+
+/* 收尾语已流出、报告还在生成时的补充说明。 */
+.interview-finishing-hint {
+  display: block;
+  margin-top: 8px;
+  font-size: 12px;
 }

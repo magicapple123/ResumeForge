@@ -68,6 +68,11 @@ export interface LLMConfigRecord extends LLMConfig {
   /** 全局记录 id（后端是 `p_` 前缀的字符串）。 */
   id: string;
   name: string;
+  /**
+   * 名字仍是内置默认名（用户没改过）。为 true 时界面按语言包显示，
+   * 否则原样显示 `name`——那是用户自己输入的数据。
+   */
+  name_is_default?: boolean;
   /** 该记录保存过的模型清单（供下拉选择）。 */
   models: string[];
   /** 是否为「使用中」的记录。 */
@@ -133,7 +138,10 @@ export interface SearchConfig {
 export interface DatasetInfo {
   id: string;
   name: string;
+  /** 落盘的来源展示名（可能是中文，也可能是导入包里自定义的写法）。 */
   source: string;
+  /** 来源的稳定代码（`machine` / `created` / `imported` / `restored` / `sample`）；旧后端没有。 */
+  source_code?: string;
   size_bytes: number;
   created_at: string | null;
   is_active: boolean;

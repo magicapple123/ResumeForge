@@ -18,6 +18,7 @@ from app.services.interview.interview import (
     parse_turn,
 )
 from app.services.llm.base import LLMError
+from tests.interview_target_support import start_interview as _start
 
 _DEFAULT_REPORT = {
     "score": 80,
@@ -132,32 +133,10 @@ def test_parse_report_normalizes_messy_output():
     assert report["strengths"] == ["只写了一条字符串"]
 
 
-def test_profile_text_is_json_serializable(client, monkeypatch):
-    """真实 E2E 暴露的问题：资料里带 datetime，`model_dump()` 后 json.dumps 会直接抛 TypeError。
-
-    这条测试刻意**不**打桩 ``_ask_next_question``——它要覆盖的正是那段代码路径
-    （打桩会把出错的位置一起绕过，这正是当初没测出来的原因）。
-    """
-    from app.api.interview import _profile_text
-
-    client.put(
-        "/api/profile",
-        json={"name": "张三", "phone": "13800000000", "city": "上海", "summary": "3 年经验"},
-    )
-
-    from app.database import SessionLocal
-
-    with SessionLocal() as db:
-        text = _profile_text(db)
-    assert "张三" in text
-    # 能被 json.loads 解析回来，说明 datetime 已经被转成字符串。
-    assert json.loads(text)["name"] == "张三"
-
-
-def test_messages_include_profile_job_and_rules():
+def test_messages_include_resume_job_and_rules():
     session = _session()
     messages = build_interview_messages(
-        session, index=2, profile_text="张三，3 年经验", job_text="岗位：后端开发"
+        session, index=2, resume_text="张三，3 年经验", job_text="岗位：后端开发"
     )
     system = messages[0]["content"]
     assert "当前是第 2 轮" in system
@@ -170,6 +149,9 @@ def test_messages_include_profile_job_and_rules():
     # 进度同时给模型一份：它需要知道还剩几轮来决定是否收尾。
     assert "第 2 / 3 轮" in user
     assert "张三，3 年经验" in user
+    # 信息边界（0066）：面试官只拿「简历 + 岗位」，个人资料这一类字段不再出现。
+    assert "候选人的简历" in user
+    assert "个人资料" not in user
 
 
 def test_report_prompt_carries_rules():
@@ -179,7 +161,7 @@ def test_report_prompt_carries_rules():
 
 
 def test_rounds_and_choice_validation():
-    assert InterviewCreate().rounds == 6
+    assert InterviewCreate(job_id=1, resume_id=1).rounds == 6
     assert answered_rounds(_session()) == 0
     with pytest.raises(Exception):
         InterviewCreate(interview_type="不存在的类型")
@@ -187,7 +169,7 @@ def test_rounds_and_choice_validation():
         InterviewCreate(rounds=99)
 
 
-def test_api_flow_finishes_after_planned_rounds(client, monkeypatch):
+def test_api_flow_finishes_after_planned_rounds(client, db_session, monkeypatch):
     """三轮的计划：第三次回答后必须自动收尾并给出报告。"""
     _configure(
         monkeypatch,
@@ -198,7 +180,7 @@ def test_api_flow_finishes_after_planned_rounds(client, monkeypatch):
         ],
     )
 
-    created = client.post("/api/interview", json={"interview_type": "技术面", "rounds": 3})
+    created = _start(client, db_session, interview_type="技术面", rounds=3)
     assert created.status_code == 201, created.text
     session = created.json()
     assert session["messages"][0]["content"].startswith("第一个问题")
@@ -223,9 +205,9 @@ def test_api_flow_finishes_after_planned_rounds(client, monkeypatch):
     assert again.status_code == 409
 
 
-def test_api_finish_early_requires_an_answer(client, monkeypatch):
+def test_api_finish_early_requires_an_answer(client, db_session, monkeypatch):
     _configure(monkeypatch, [{"question": "第一题", "feedback": "", "done": False}])
-    session_id = client.post("/api/interview", json={"rounds": 3}).json()["id"]
+    session_id = _start(client, db_session, rounds=3).json()["id"]
 
     # 一题都没答就出报告没有意义。
     assert client.post(f"/api/interview/{session_id}/finish").status_code == 400
@@ -237,7 +219,7 @@ def test_api_finish_early_requires_an_answer(client, monkeypatch):
     assert client.post(f"/api/interview/{session_id}/finish").status_code == 200
 
 
-def test_report_failure_keeps_the_session_usable(client, monkeypatch):
+def test_report_failure_keeps_the_session_usable(client, db_session, monkeypatch):
     """报告生成失败时留下说明，而不是让整场面试不可用或接口 500。"""
 
     async def broken(_provider, _session_):
@@ -246,7 +228,7 @@ def test_report_failure_keeps_the_session_usable(client, monkeypatch):
     _configure(monkeypatch, [{"question": "第一题", "feedback": "", "done": False}])
     monkeypatch.setattr("app.api.interview.generate_report", broken)
 
-    session_id = client.post("/api/interview", json={"rounds": 3}).json()["id"]
+    session_id = _start(client, db_session, rounds=3).json()["id"]
     client.post(f"/api/interview/{session_id}/answers", json={"content": "我的回答"})
     finished = client.post(f"/api/interview/{session_id}/finish")
 
@@ -258,15 +240,15 @@ def test_report_failure_keeps_the_session_usable(client, monkeypatch):
     assert finished.json()["messages"]
 
 
-def test_api_requires_model_configuration(client):
-    # 没有配置模型时不该创建一个空的面试会话。
-    assert client.post("/api/interview", json={}).status_code == 400
+def test_api_requires_model_configuration(client, db_session):
+    # 没有配置模型时不该创建一个空的面试会话（关联目标齐备，卡在模型配置这一步）。
+    assert _start(client, db_session).status_code == 400
     assert client.get("/api/interview").json() == []
 
 
-def test_report_to_material_creates_a_review(client, monkeypatch):
+def test_report_to_material_creates_a_review(client, db_session, monkeypatch):
     _configure(monkeypatch, [{"question": "第一题：自我介绍", "feedback": "", "done": False}])
-    session_id = client.post("/api/interview", json={"rounds": 3}).json()["id"]
+    session_id = _start(client, db_session, rounds=3).json()["id"]
     client.post(f"/api/interview/{session_id}/answers", json={"content": "我是张三"})
     client.post(f"/api/interview/{session_id}/finish")
 
@@ -283,7 +265,9 @@ def test_delete_and_missing_session(client):
     assert client.post("/api/interview/999/answers", json={"content": "x"}).status_code == 404
 
 
-def test_the_last_answer_does_not_produce_a_dangling_question(client, monkeypatch):
+def test_the_last_answer_does_not_produce_a_dangling_question(
+    client, db_session, monkeypatch
+):
     """答满轮数后不该再问一道没人会回答的题。
 
     此前是"先生成下一题、再判断是否满轮"，于是 6 轮的面试会存下 7 道面试官消息，
@@ -296,7 +280,7 @@ def test_the_last_answer_does_not_produce_a_dangling_question(client, monkeypatc
             for index in range(1, 10)
         ],
     )
-    session_id = client.post("/api/interview", json={"rounds": 3}).json()["id"]
+    session_id = _start(client, db_session, rounds=3).json()["id"]
 
     for _round_index in range(1, 4):
         response = client.post(f"/api/interview/{session_id}/answers", json={"content": "回答"})
@@ -310,7 +294,9 @@ def test_the_last_answer_does_not_produce_a_dangling_question(client, monkeypatc
     assert detail["status"] == "finished"
 
 
-def test_the_maximum_round_count_can_actually_be_finished(client, monkeypatch):
+def test_the_maximum_round_count_can_actually_be_finished(
+    client, db_session, monkeypatch
+):
     """轮数取到上限时最后一答不能报错。
 
     之前 generate_question 的 index 会算成 13 > MAX_INTERVIEW_ROUNDS，最后一答直接 502，
@@ -322,7 +308,7 @@ def test_the_maximum_round_count_can_actually_be_finished(client, monkeypatch):
     # generate_question 里面，替换掉就等于把要测的那行代码删了（这个用例第一版
     # 正是这样写的，去掉修复后依然通过）。改成只替换 provider，让真实流程跑起来。
     _configure_provider(monkeypatch, _turn_jsons(30))
-    session_id = client.post("/api/interview", json={"rounds": MAX_INTERVIEW_ROUNDS}).json()["id"]
+    session_id = _start(client, db_session, rounds=MAX_INTERVIEW_ROUNDS).json()["id"]
 
     for _ in range(MAX_INTERVIEW_ROUNDS):
         response = client.post(f"/api/interview/{session_id}/answers", json={"content": "回答"})
@@ -365,16 +351,18 @@ def test_prompt_conditionals_are_actually_rendered():
 def test_auto_rounds_validation():
     from app.schemas.interview import MAX_INTERVIEW_ROUNDS, MIN_INTERVIEW_ROUNDS
 
-    assert InterviewCreate().rounds_min is None
+    assert InterviewCreate(job_id=1, resume_id=1).rounds_min is None
     # 下限必须小于上限，否则区间退化成一个数，"未知感"无从谈起。
     with pytest.raises(Exception):
-        InterviewCreate(rounds=6, rounds_min=6)
+        InterviewCreate(job_id=1, resume_id=1, rounds=6, rounds_min=6)
     with pytest.raises(Exception):
-        InterviewCreate(rounds=3, rounds_min=5)
-    assert InterviewCreate(rounds=9, rounds_min=3).rounds_min == 3
+        InterviewCreate(job_id=1, resume_id=1, rounds=3, rounds_min=5)
+    assert InterviewCreate(job_id=1, resume_id=1, rounds=9, rounds_min=3).rounds_min == 3
     # 前端「自动」档的实际提交对：rounds=硬性保险上限、rounds_min=产品允许的最小轮数
     # （曾经提交过模式开关值 1，被这里的 ge=MIN_INTERVIEW_ROUNDS 拦成 422）。
-    assert InterviewCreate(rounds=MAX_INTERVIEW_ROUNDS, rounds_min=MIN_INTERVIEW_ROUNDS)
+    assert InterviewCreate(
+        job_id=1, resume_id=1, rounds=MAX_INTERVIEW_ROUNDS, rounds_min=MIN_INTERVIEW_ROUNDS
+    )
 
 
 def test_prompt_auto_rounds_branch_hides_exact_total():
@@ -410,32 +398,65 @@ def test_prompt_auto_rounds_branch_hides_exact_total():
     assert "第 2 / 3 轮" in fixed_user
 
 
-def test_api_auto_rounds_model_driven_finish(client, monkeypatch):
-    """自动轮数：AI 置 done 就收尾；rounds_min 原样落库并随详情返回。"""
+def test_api_auto_rounds_model_driven_finish(client, db_session, monkeypatch):
+    """自动轮数：到了最早收尾轮数之后，AI 置 done 就收尾；rounds_min 原样落库并随详情返回。
+
+    0066 起 ``rounds_min`` 是**硬性下限**（见 ``test_api_auto_rounds_ignores_early_done``），
+    所以这里必须先把 ``rounds_min`` 轮答满，AI 的 done 才会被接受。
+    """
     _configure(
         monkeypatch,
         [
             {"question": "第一题", "feedback": "", "done": False},
             {"question": "第二题", "feedback": "不错", "done": False},
+            {"question": "第三题", "feedback": "继续", "done": False},
             {"question": "收尾语：面试结束", "feedback": "可以", "done": True},
         ],
     )
-    created = client.post("/api/interview", json={"rounds": 9, "rounds_min": 3})
+    created = _start(client, db_session, rounds=9, rounds_min=3)
     assert created.status_code == 201, created.text
     session = created.json()
     assert session["rounds_min"] == 3
     assert session["status"] == "active"
 
-    for index in range(2):
+    for index in range(3):
         result = client.post(f"/api/interview/{session['id']}/answers", json={"content": "回答"})
         assert result.status_code == 200
-        assert result.json()["finished"] is (index == 1)
+        assert result.json()["finished"] is (index == 2)
     detail = client.get(f"/api/interview/{session['id']}").json()
     assert detail["status"] == "finished"
     assert detail["rounds_min"] == 3
 
 
-def test_api_auto_rounds_cap_forces_finish(client, monkeypatch):
+def test_api_auto_rounds_ignores_early_done(client, db_session, monkeypatch):
+    """AI 在 rounds_min 之前就置 done：忽略这次收尾，面试继续。
+
+    真实场景：选「自动」后模型第 2 轮就说"聊得差不多了"，用户看到的就是"He 只问了两个
+    问题"。提示词已经要求别过早收束，但提示词拦不住，所以接口层必须有这层兜底。
+    """
+    _configure(
+        monkeypatch,
+        [
+            {"question": "第一题", "feedback": "", "done": False},
+            {"question": "收尾语：今天先到这里", "feedback": "可以", "done": True},
+            {"question": "第二题", "feedback": "继续", "done": False},
+        ],
+    )
+    session_id = _start(client, db_session, rounds=9, rounds_min=3).json()["id"]
+
+    first = client.post(f"/api/interview/{session_id}/answers", json={"content": "回答"})
+    assert first.status_code == 200
+    # 第 1 个回答之后远未到 rounds_min=3：done 被忽略，会话仍是 active。
+    assert first.json()["finished"] is False
+    assert first.json()["session"]["status"] == "active"
+
+    # 模型给的那句话仍然作为下一题存下来，用户不会卡在"没有问题可答"。
+    detail = client.get(f"/api/interview/{session_id}").json()
+    assert detail["messages"][-1]["content"] == "收尾语：今天先到这里"
+    assert detail["answered_rounds"] == 1
+
+
+def test_api_auto_rounds_cap_forces_finish(client, db_session, monkeypatch):
     """AI 一直不置 done：答满区间上限（rounds）时代码强制收尾，不会无限问下去。"""
     _configure(
         monkeypatch,
@@ -444,7 +465,7 @@ def test_api_auto_rounds_cap_forces_finish(client, monkeypatch):
             for index in range(1, 5)
         ],
     )
-    session_id = client.post("/api/interview", json={"rounds": 4, "rounds_min": 3}).json()["id"]
+    session_id = _start(client, db_session, rounds=4, rounds_min=3).json()["id"]
 
     for index in range(1, 5):
         result = client.post(f"/api/interview/{session_id}/answers", json={"content": "回答"})

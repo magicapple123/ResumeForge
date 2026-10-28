@@ -161,6 +161,26 @@ describe("technical syntax is not a translation task", () => {
     expect(scan("<span>  · → </span>")).toEqual([]);
     expect(scan("<span>100%</span>")).toEqual(["100%"]);
   });
+
+  it("ignores backend resume-role enum values in record mappings, not real copy", () => {
+    // textLevels.ts 的 FIELD_PATH_SCOPE 形态：右侧是后端 resume_style_schema.ROLES
+    // 的枚举值（该纸面字段属于哪个段落角色），是技术标识不是界面文案。
+    // description/summary 恰好在 COPY_PROPERTIES 清单里——只有这两行曾误触发棘轮。
+    const fieldPathScope = [
+      "const FIELD_PATH_SCOPE = {",
+      '  school: "entry_title",',
+      '  start_date: "meta",',
+      '  achievements: "body",',
+      '  description: "body",',
+      '  summary: "body",',
+      "};",
+    ].join("\n");
+    expect(scan(fieldPathScope)).toEqual([]);
+    // 全等集合匹配不放宽：非枚举值、或枚举值出现在真正的输出位（JSX 属性/文本），
+    // 仍按文案处理。
+    expect(scan('const tips = { description: "正文请按条目书写" };')).toEqual(["正文请按条目书写"]);
+    expect(scan('<Button title="body">Save</Button>')).toEqual(["body", "Save"]);
+  });
 });
 
 describe("guard integrity", () => {

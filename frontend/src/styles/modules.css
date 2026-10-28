@@ -9,6 +9,9 @@
 @import "./modules-workspace.css";
 @import "./modules-interview.css";
 @import "./modules-templates.css";
+/* 模板"试用与对比"视图（`template-trial/*`）：原先类名写了但没有任何样式，
+   两栏预览上下堆叠。单独成片是因为 modules-templates.css 已贴到 500 行预算。 */
+@import "./modules-template-trial.css";
 @import "./modules-layout.css";
 @import "./modules-home.css";
 @import "./modules-settings-fonts.css";

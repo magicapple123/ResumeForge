@@ -20,6 +20,7 @@ from ...schemas.webform import (
 from ...services import diagnostics
 from ...services import webform as webform_service
 from ...services.settings_service import get_webform_relaxed_mode
+from ...services.ui_locale import get_ui_locale
 from ._shared import _raise
 
 router = APIRouter(prefix="/api/webform", tags=["webform"])
@@ -45,7 +46,9 @@ def set_live_enabled(payload: WebFormLiveEnabledIn):
     """只切换智能逐项填表，不销毁监听会话和页面上的悬浮球。"""
     webform_service.set_live_enabled(payload.enabled)
     status = webform_service.live_status()
-    diagnostics.record_event("webform.live_enabled", enabled=payload.enabled, running=status.get("running", False))
+    diagnostics.record_event(
+        "webform.live_enabled", enabled=payload.enabled, running=status.get("running", False)
+    )
     return status
 
 
@@ -76,7 +79,9 @@ def set_browser_target_live(
     target_id: str, payload: dict[str, bool], db: Session = Depends(get_db)
 ):
     del db
-    enabled = webform_service.live_targets.set_enabled(target_id, bool(payload.get("enabled", True)))
+    enabled = webform_service.live_targets.set_enabled(
+        target_id, bool(payload.get("enabled", True))
+    )
     return {"target_id": target_id, "live_enabled": enabled}
 
 
@@ -85,9 +90,7 @@ def live_start(payload: WebFormLiveIn | None = None, db: Session = Depends(get_d
     return _start_live_session(db, want_ai=payload.ai if payload is not None else None)
 
 
-def _start_live_session(
-    db: Session, want_ai: bool | None = None, *, close_db: bool = True
-) -> dict:
+def _start_live_session(db: Session, want_ai: bool | None = None, *, close_db: bool = True) -> dict:
     """开启（或复用正在跑的）实时填表会话；浏览器与页面路由共用这段主体。
 
     ``start_live`` 本身是幂等的：已在跑的会话只刷新资料与客户端，不会重复注入、
@@ -123,6 +126,14 @@ def _start_live_session(
         session = SessionLocal()
         try:
             return webform_service.build_form_data(session)
+        finally:
+            session.close()
+
+    def load_ui_locale() -> str | None:
+        """注入脚本的文案语言：每次装脚本现读，切了界面语言不用重启会话。"""
+        session = SessionLocal()
+        try:
+            return get_ui_locale(session)
         finally:
             session.close()
 
@@ -205,6 +216,8 @@ def _start_live_session(
         finally:
             session.close()
 
+    # 界面语言要在关会话之前读：此时请求带着数据集身份，读到的是用户正在用的那份设置。
+    ui_locale = get_ui_locale(db)
     if close_db:
         db.close()  # 会话会开线程跑模型调用，别占着连接池
     try:
@@ -222,6 +235,8 @@ def _start_live_session(
             memory_targets_loader=load_memory_targets,
             target_clients_loader=load_live_clients,
             relaxed_mode_loader=load_relaxed_mode,
+            ui_locale_loader=load_ui_locale,
+            ui_locale=ui_locale,
         )
     except webform_service.WebFormError as exc:
         _raise(exc)

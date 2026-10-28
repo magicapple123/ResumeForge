@@ -16,10 +16,12 @@ export function rewriteStar(
   id: number,
   text: string,
   claimId?: number,
+  signal?: AbortSignal,
 ): Promise<StarRewriteResult> {
   return request(`/resumes/${id}/writing/star`, {
     method: "POST",
     body: JSON.stringify({ text, claim_id: claimId }),
+    signal,
   });
 }
 
@@ -27,10 +29,12 @@ export function generatePhrases(
   id: number,
   text: string,
   modes: PhraseMode[],
+  signal?: AbortSignal,
 ): Promise<PhrasesResult> {
   return request(`/resumes/${id}/writing/phrases`, {
     method: "POST",
     body: JSON.stringify({ text, modes }),
+    signal,
   });
 }
 
@@ -38,10 +42,12 @@ export function polishResumeText(
   id: number,
   text: string,
   style: PolishStyle,
+  signal?: AbortSignal,
 ): Promise<PolishResult> {
   return request(`/resumes/${id}/writing/polish`, {
     method: "POST",
     body: JSON.stringify({ text, style }),
+    signal,
   });
 }
 
@@ -49,10 +55,12 @@ export function translateResumeText(
   id: number,
   text: string,
   direction: TranslateDirection,
+  signal?: AbortSignal,
 ): Promise<TranslateResult> {
   return request(`/resumes/${id}/writing/translate`, {
     method: "POST",
     body: JSON.stringify({ text, direction }),
+    signal,
   });
 }
 

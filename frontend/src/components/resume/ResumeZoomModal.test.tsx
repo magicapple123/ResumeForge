@@ -53,7 +53,7 @@ describe("简历制作台 · 三栏结构", () => {
     expect(screen.getByTestId("workbench-preview")).toBeInTheDocument();
   });
 
-  it("左栏六个分组按 模板·版式 / 排版参数 / 层次与间距 / 外观 / 局部排版 / 分页 排列", () => {
+  it("左栏七个分组按 模板·版式 / 排版参数 / 层次与间距 / 外观 / 局部排版 / 条目字段排版 / 分页 排列", () => {
     renderModal();
 
     const params = document.querySelector(".resume-wb-col-params") as HTMLElement;
@@ -64,6 +64,8 @@ describe("简历制作台 · 三栏结构", () => {
       t("workbench.group.appearance"),
       // W07：角色级局部排版（姓名 / 板块标题 / 条目 / 正文 / 元信息 / 重点文字）。
       t("typography.group.title"),
+      // W4：条目字段排版（承载区补充字段分行 / 顺序 / 独占行）。
+      t("typography.fieldLayout.groupTitle"),
       // W08：分页意图（板块级先挂，条目级等选择状态上提）。
       t("pagination.group.title"),
     ];

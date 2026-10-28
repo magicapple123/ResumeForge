@@ -17,6 +17,7 @@ import type {
 import type { TemplateCapability } from "../../../features/resume-template-trial/templateProfile";
 import { withHiddenScrollbar } from "../../../utils/iframeDocument";
 import { useLocale } from "../../../i18n/i18nContext";
+import { resumeTemplateLabel } from "../../../i18n/enum/resumeCatalog";
 
 interface Props {
   /** 侧名（左侧/右侧）。 */
@@ -71,8 +72,8 @@ export default function TrialColumn({
 }: Props) {
   useLocale();
   const isCurrent = state.template === currentTemplate;
-  const templateLabel =
-    templates.find((item) => item.name === state.template)?.label ?? state.template;
+  const chosen = templates.find((item) => item.name === state.template);
+  const templateLabel = chosen ? resumeTemplateLabel(chosen) : state.template;
   // 只放模板档事实（篇幅 / 照片）；格式能力由 `TrialCapabilityStrip` 按 W11 矩阵显示。
   const capabilityChips = [
     capability.density ? t(DENSITY_LABEL[capability.density]) : null,
@@ -88,7 +89,10 @@ export default function TrialColumn({
           style={{ minWidth: 120 }}
           value={state.template}
           aria-label={t("trial.template.label")}
-          options={templates.map((item) => ({ value: item.name, label: item.label }))}
+          options={templates.map((item) => ({
+            value: item.name,
+            label: resumeTemplateLabel(item),
+          }))}
           onChange={onTemplateChange}
         />
         <Tag color={isCurrent ? "green" : "blue"}>

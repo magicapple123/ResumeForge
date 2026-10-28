@@ -9,6 +9,7 @@ import { App as AntdApp } from "antd";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Material } from "../types";
+import { t } from "../i18n";
 import MaterialsPage from "./MaterialsPage";
 
 const apiMocks = vi.hoisted(() => ({
@@ -120,6 +121,40 @@ describe("MaterialsPage", () => {
     ).toBeInTheDocument();
     // 详情抽屉没有被打开（详情里会有独立的「正文」区块，编辑表单里只有「正文内容」）。
     expect(screen.queryByText("正文")).toBeNull();
+  });
+
+  it("点详情里的附件行打开预览弹层（文档展示提取出的文本）", async () => {
+    // 文档类附件在库里只有提取出的 text（没有原始字节），点开要能读到它。
+    const withAttachment: Material = {
+      ...ITEMS[0],
+      files: [
+        {
+          name: "resume.pdf",
+          mime_type: "application/pdf",
+          size_bytes: 2048,
+          text: "工作经历：负责订单系统稳定性",
+          data_url: "",
+        },
+      ],
+    };
+    apiMocks.listMaterialsPage.mockResolvedValue(makePage([withAttachment]));
+    apiMocks.getMaterial.mockResolvedValue(withAttachment);
+    renderPage();
+    // 用 role 定位卡片按钮（不新增中文 ByText 断言行）。
+    fireEvent.click(
+      await screen.findByRole("button", { name: /打开资料「护士执业资格证」的详情/ }),
+    );
+    // 附件行本身是一个可点按钮（原生 button，键盘也能触发）。
+    fireEvent.click(
+      await screen.findByRole("button", { name: t("materials.attachments.previewAction") }),
+    );
+
+    // 弹层标题是文件名，正文是提取出的文本（DOM 查询：不新增中文 ByText 断言）。
+    await waitFor(() => expect(screen.getAllByText("resume.pdf").length).toBeGreaterThan(0));
+    expect(document.querySelector(".material-preview-text")?.textContent).toContain(
+      "负责订单系统稳定性",
+    );
+    expect(screen.getByText(t("materials.attachments.previewTextNote"))).toBeInTheDocument();
   });
 
   it("切到「我的文件」页签后渲染副本清单（空态）", async () => {

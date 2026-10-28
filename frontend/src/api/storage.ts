@@ -125,12 +125,15 @@ export function previewCleanup(
 export function runCleanup(
   olderThanDays = 30,
   categories?: CleanupCategoryKey[],
+  paths?: string[],
 ): Promise<CleanupResult> {
   return request("/stats/storage/cleanup", {
     method: "POST",
     body: JSON.stringify({
       older_than_days: olderThanDays,
       ...(categories ? { categories } : {}),
+      // 逐文件勾选：不传 = 整类清理；传空数组 = 一个都不选（后端不会当成"全部"）。
+      ...(paths ? { paths } : {}),
     }),
   });
 }

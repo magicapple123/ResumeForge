@@ -63,8 +63,8 @@ export default function TranslationCandidatePanel({
   };
 
   return (
-    <div data-translation-candidates="1">
-      <Space size={8} wrap style={{ marginBottom: 8 }}>
+    <div className="translation-candidates" data-translation-candidates="1">
+      <Space size={8} wrap className="translation-candidates__bulk">
         <Checkbox
           checked={allChecked}
           indeterminate={selected.length > 0 && !allChecked}
@@ -76,19 +76,14 @@ export default function TranslationCandidatePanel({
           {bt("bilingual.candidate.hint")}
         </Checkbox>
       </Space>
-      <Space orientation="vertical" size={8} style={{ width: "100%" }}>
+      <Space orientation="vertical" size={8} className="translation-candidates__list">
         {candidates.map((candidate, index) => (
           <div
             key={candidate.path}
+            className="translation-candidate"
             data-candidate-path={candidate.path}
-            style={{
-              border: "1px solid var(--rf-border-subtle)",
-              borderRadius: 8,
-              padding: "8px 10px",
-              background: "var(--rf-surface-alt)",
-            }}
           >
-            <Space size={8} wrap align="center" style={{ marginBottom: 4 }}>
+            <Space size={8} wrap align="center" className="translation-candidate__head">
               <Checkbox
                 checked={selected.includes(candidate.path)}
                 disabled={candidate.blocked || undefined}
@@ -104,13 +99,13 @@ export default function TranslationCandidatePanel({
                 </Tooltip>
               ) : null}
             </Space>
-            <div style={{ fontSize: 13, wordBreak: "break-word" }}>
+            <div className="translation-candidate__text">
               <DiffTokenText tokens={candidate.tokens} />
             </div>
           </div>
         ))}
       </Space>
-      <Space size={8} style={{ marginTop: 8 }} wrap>
+      <Space size={8} className="translation-candidates__actions" wrap>
         <Tooltip title={selected.length === 0 ? bt("bilingual.candidate.adoptNone") : undefined}>
           <Button
             type="primary"

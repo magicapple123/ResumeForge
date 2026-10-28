@@ -4,6 +4,7 @@
 任务状态只保存轻量的岗位 ID、进度和最终批次 ID，结果仍由 job_match_batch 快照表保存。
 这样页面刷新后可以恢复进度，又不会把完整岗位描述或个人资料复制到任务设置里。
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -35,6 +36,7 @@ from .job_match_batch import (
     BatchMatchRun,
     build_batch_inputs,
     persist_batch,
+    run_batch_comparison,
     run_batch_match,
 )
 
@@ -81,7 +83,7 @@ def list_active_job_match_background_tasks(db: Session) -> list[JobMatchBackgrou
 
 
 def create_job_match_background_task(
-    db: Session, job_ids: list[int], *, force: bool
+    db: Session, job_ids: list[int], *, force: bool, mode: str = "match"
 ) -> JobMatchBackgroundTask:
     current = _read_task(db)
     if current is not None and current.status in ACTIVE_JOB_MATCH_BACKGROUND_STATUSES:
@@ -92,6 +94,7 @@ def create_job_match_background_task(
         status="pending",
         job_ids=job_ids,
         force=force,
+        mode="compare" if mode == "compare" else "match",
         requested_count=len(job_ids),
         created_at=now,
         message="等待后台任务启动",
@@ -183,7 +186,7 @@ class JobMatchBackgroundRunner:
             prepared = self._prepare(task_id)
             if prepared is None:
                 return
-            inputs, config = prepared
+            inputs, config, mode = prepared
             try:
                 run = asyncio.run(
                     run_batch_match(
@@ -204,12 +207,17 @@ class JobMatchBackgroundRunner:
                     message="后台分析已取消，已保留取消前完成的结果",
                 )
                 return
-            batch_id = self._persist_partial(run, len(inputs))
+            comparison = None
+            if mode == "compare" and not self._stop.is_set():
+                comparison = asyncio.run(
+                    run_batch_comparison(inputs, run, config, should_cancel=self._stop.is_set)
+                )
+            batch_id = self._persist_partial(run, len(inputs), comparison)
             self._finish(
                 task_id,
                 status="completed",
                 batch_id=batch_id,
-                message="岗位适配度分析已完成",
+                message="岗位横向对比已完成" if mode == "compare" else "岗位适配度分析已完成",
             )
         except Exception as exc:  # noqa: BLE001 - 工作线程必须把异常落成可读状态
             logger.exception("岗位匹配后台任务执行失败 task_id=%s", task_id)
@@ -221,7 +229,7 @@ class JobMatchBackgroundRunner:
                     self._thread = None
                     self._stop.clear()
 
-    def _prepare(self, task_id: str) -> tuple[list[BatchMatchInput], Any] | None:
+    def _prepare(self, task_id: str) -> tuple[list[BatchMatchInput], Any, str] | None:
         db = self._session_factory()
         try:
             task = get_job_match_background_task(db, task_id)
@@ -248,7 +256,7 @@ class JobMatchBackgroundRunner:
                     }
                 ),
             )
-            return inputs, config
+            return inputs, config, task.mode
         finally:
             db.close()
 
@@ -275,10 +283,15 @@ class JobMatchBackgroundRunner:
         finally:
             db.close()
 
-    def _persist_partial(self, run: BatchMatchRun, requested_count: int) -> int:
+    def _persist_partial(
+        self,
+        run: BatchMatchRun,
+        requested_count: int,
+        comparison: Any = None,
+    ) -> int:
         db = self._session_factory()
         try:
-            row = persist_batch(db, run, requested_count=requested_count)
+            row = persist_batch(db, run, requested_count=requested_count, comparison=comparison)
             return row.id
         finally:
             db.close()

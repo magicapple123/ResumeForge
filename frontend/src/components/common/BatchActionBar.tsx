@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-/** 批量选择模式的操作条：已选计数 + 「全选本页」(可选) + 调用方操作 + 退出多选。 */
+/** 批量选择模式的操作条：已选计数 + 「全选本页」(可选) + 调用方操作 + 退出选择。 */
 import { Button, Checkbox, Space, Typography } from "antd";
 import type { ReactNode } from "react";
 import { t } from "../../i18n";
@@ -39,7 +39,9 @@ export default function BatchActionBar({
       style={{ marginBottom: 12 }}
     >
       <Space size={12} wrap>
-        <Typography.Text strong>{t("common.batchBar.selected", { count })}</Typography.Text>
+        <Typography.Text type="secondary">
+          {t("common.batchBar.selected", { count })}
+        </Typography.Text>
         {pageSelectAll && (
           <Checkbox
             checked={pageSelectAll.allSelected}

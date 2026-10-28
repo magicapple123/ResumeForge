@@ -28,7 +28,11 @@ vi.mock("../api/settings", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../api/settings")>()),
   getLLMConfig: vi.fn().mockResolvedValue({ base_url: "https://example.com", model: "fixture" }),
 }));
-vi.mock("../utils/backgroundTasks", () => ({ attachTaskUi: vi.fn(), watchResumeTask: vi.fn() }));
+vi.mock("../utils/backgroundTasks", () => ({
+  attachTaskUi: vi.fn(),
+  resumeTaskKey: (id: number) => `resume_generate#${id}`,
+  watchResumeTask: vi.fn(),
+}));
 vi.mock("../features/profile-library/useCurrentProjection", () => ({
   useCurrentProjection: () => ({
     data: projectionOf({ content: { name: "Alex" } }),

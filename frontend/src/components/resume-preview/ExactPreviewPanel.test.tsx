@@ -69,11 +69,12 @@ function pdf(pages = 1, extra: { pagesNeeded?: number; overflow?: boolean } = {}
 type PanelProps = Parameters<typeof ExactPreviewPanel>[0];
 
 /**
- * iframe 的 src 契约：blob URL + `#zoom=page-width`。
+ * iframe 的 src 契约：blob URL + `#zoom=page-width`，并关掉查看器自带的工具栏与侧栏
+ * （`toolbar=0&navpanes=0`，2026-11：那块工具栏在 A4 相框里就是纸上方多出的一条灰带）。
  * 相框高度按 A4 比例算（页数 × 页高），这个算式只在查看器"按宽度缩放"时成立，
  * 所以缩放口径是契约的一部分，不能悄悄丢（见 `withPageWidthZoom`）。
  */
-const zoomed = (url: string) => `${url}#zoom=page-width`;
+const zoomed = (url: string) => `${url}#zoom=page-width&toolbar=0&navpanes=0`;
 /** 版式默认值与真实宿主一致（草稿值原样传进来）；各用例只写自己要改的那一项。 */
 function panel(overrides: Partial<PanelProps> = {}) {
   return (

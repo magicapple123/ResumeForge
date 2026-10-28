@@ -45,7 +45,13 @@ describe("ResumeWritingPanel", () => {
     fireEvent.click(screen.getByRole("button", { name: /生\s*成/ }));
 
     expect(await screen.findByText(/性能提升 30%/)).toBeInTheDocument();
-    expect(apiMocks.rewriteStar).toHaveBeenCalledWith(7, "负责后端服务开发");
+    expect(apiMocks.rewriteStar).toHaveBeenCalledWith(
+      7,
+      "负责后端服务开发",
+      undefined,
+      // T04-d：生成可被「停止」掐断，末尾参数是 AbortSignal。
+      expect.anything(),
+    );
 
     // 不传 `onApply` = 宿主没有可写目标（右键落在普通段落上），此时只能复制。
     expect(screen.queryByRole("button", { name: "回填" })).toBeNull();
@@ -95,11 +101,13 @@ describe("ResumeWritingPanel", () => {
     expect(await screen.findByText("STAR 改写结果")).toBeInTheDocument();
     expect(screen.getByText("简历话术")).toBeInTheDocument();
     expect(screen.getByText("口述内容")).toBeInTheDocument();
-    expect(apiMocks.generatePhrases).toHaveBeenCalledWith(7, "负责后端服务开发", [
-      "star",
-      "resume",
-      "interview",
-    ]);
+    expect(apiMocks.generatePhrases).toHaveBeenCalledWith(
+      7,
+      "负责后端服务开发",
+      ["star", "resume", "interview"],
+      // T04-d：生成可被「停止」掐断，末尾参数是 AbortSignal。
+      expect.anything(),
+    );
   });
 
   it("接口报错时透出中文错误", async () => {

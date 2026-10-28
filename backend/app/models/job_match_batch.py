@@ -13,7 +13,7 @@ from .profile import utcnow
 
 
 class JobMatchBatch(Base):
-    """一次岗位广场批量适配度分析的完整结果快照。"""
+    """一次岗位广场批量分析（逐岗匹配或横向对比）的完整结果快照。"""
 
     __tablename__ = "job_match_batch"
 

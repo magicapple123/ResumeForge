@@ -14,6 +14,9 @@
  */
 const interviewPage = {
   "interviewPage.avatarAlt": "Interviewer Jane",
+  // Author name on interviewer bubbles: a given name, not translatable prose.
+  "interviewPage.interviewerName": "Jane",
+  // Author name shown on interviewer bubbles.
 
   // ===== Interview history card =====
   "interviewPage.history.cardTitle": "Interview history",
@@ -40,11 +43,30 @@ const interviewPage = {
   "interviewPage.report.improvements": "What to improve next time",
   "interviewPage.report.saveToMaterial": "Save this interview to the material library",
 
+  // ===== Timer / ready gate =====
+  "interviewPage.timer.label": "Duration",
+  "interviewPage.thinkingFinishReport": "This interview has ended — generating your report…",
+  "interviewPage.ready.title": "Jane is ready — are you?",
+  "interviewPage.ready.body":
+    "We start when you say so: the timer starts when you click, pauses while you are away, and continues when you come back.",
+  "interviewPage.ready.start": "I'm ready",
+  "interviewPage.ready.resume": "Continue interview",
+  "interviewPage.ready.hint":
+    "The timer starts when you click, and the final report includes how long this interview took.",
+
   // ===== Interviewer setup card =====
   "interviewPage.setup.title": "Interviewer setup",
   "interviewPage.setup.greeting": "Hi, I'm Jane and I'll be interviewing you today.",
-  "interviewPage.setup.jobLabel": "Related job (optional)",
+  "interviewPage.setup.jobLabel": "Related job",
   "interviewPage.setup.jobPlaceholder": "Questions follow this job's JD (type keywords to search)",
+  "interviewPage.setup.jobRequired": "Select the related job",
+  "interviewPage.setup.resumeLabel": "Related resume",
+  "interviewPage.setup.resumePlaceholder":
+    "Resumes linked to this job plus general ones (type keywords to search)",
+  "interviewPage.setup.resumePlaceholderNoJob": "Pick the job first, then choose a resume",
+  "interviewPage.setup.resumeRequired": "Select the related resume",
+  "interviewPage.setup.scopeHint":
+    "The interviewer only sees this resume and the job's JD; nothing else is passed in.",
   "interviewPage.setup.typeLabel": "Interview type",
   "interviewPage.setup.difficultyLabel": "Difficulty",
   "interviewPage.setup.styleLabel": "Interviewer style",

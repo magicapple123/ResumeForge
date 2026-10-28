@@ -21,7 +21,9 @@ from ..schemas.resume_generation import mode_page_limit
 # Markdown 正文导出（含 TXT 复用的 writers）已迁至 services/resume/markdown_export.py；
 # 这里 re-export，保持 "from app.services.exporter import export_markdown" 等既有导入路径不变。
 from .resume.markdown_export import export_markdown  # noqa: F401  (re-export：保持既有导入路径)
+from .resume.profile_field_lines import profile_field_row_cells
 from .resume.resume_contact import CONTACT_BREAKS_KEY, contact_items
+from .resume.resume_field_layout import FIELD_LAYOUT_SECTIONS, field_layout_css
 from .resume.resume_labels import (
     DEFAULT_RESUME_LANGUAGE,
     authors_text,
@@ -173,6 +175,19 @@ def render_html(
         style_values["column_count"] = 2
     format_values = validated_format_config(format_config)
     overrides = {**style_values, **format_values}
+    # W4 条目字段排版：有配置的分区才预计算行（.sub-row 模板分支只读这份结果）；
+    # 无配置时 field_rows 为空字典，模板走**原有**逐行标记，产物逐字节不变。
+    field_layout = render_overrides.field_layout
+    paper_fields = field_labels(language)
+    field_rows: dict[str, list] = {}
+    for section_key in FIELD_LAYOUT_SECTIONS:
+        if section_key not in field_layout:
+            continue
+        entries = getattr(resume, section_key, ()) or ()
+        field_rows[section_key] = [
+            profile_field_row_cells(item, section_key, paper_fields, field_layout)
+            for item in entries
+        ]
     base_px = float(scale["base_px"])
     adjust = overrides.get("font_scale_adjust")
     if isinstance(adjust, (int, float)):
@@ -200,12 +215,17 @@ def render_html(
         # 模板里写的是 `{{ section_titles.summary }}`，缺了这个键 Jinja 会渲染成空串——
         # 产物看起来只是"没有标题"，不会报错，是最难被发现的一类故障。
         "section_titles": section_titles(language),
-        "field_labels": field_labels(language),
+        "field_labels": paper_fields,
+        # W4 条目字段排版：field_layout = 解析后的域（模板据此选 .sub-row 分支）；
+        # profile_rows = 每个条目按列数/顺序/独占行装箱后的单元格（含字段名）。
+        # 两者都**无条件**注入：缺键会让模板的 if 分支静默走错（同 section_titles 的教训）。
+        "field_layout": field_layout,
+        "profile_rows": field_rows,
         # #3 页眉联系方式：字段顺序 / 文案 / 强制换行都在 `resume_contact` 里定义一次，
         # 模板只负责把 break_before 译成 <br>（强制换行）与 <wbr>（字段间自动换行点）。
         # 旧简历没有 contact_breaks → 只有 <wbr>，行为 = "字段整体不拆行、字段间可换行"。
         "contact_items": contact_items(
-            resume, field_labels(language), format_values.get(CONTACT_BREAKS_KEY)
+            resume, paper_fields, format_values.get(CONTACT_BREAKS_KEY)
         ),
         "list_separator": list_separator(language),
         # 等级括号要拆成左右两半：模板得在括号中间放带 `data-resume-path` 的 `<span>`，
@@ -239,6 +259,8 @@ def render_html(
         format_css(style_values),
         format_css(format_values),
         render_overrides_css(render_overrides),
+        # W4：只在存在条目字段排版配置时注入（默认产物一个字符都不多）。
+        field_layout_css(field_layout),
     ]
     css = "\n".join(block for block in css_blocks if block)
     if css:

@@ -129,3 +129,47 @@ describe("history · 撤销/恢复与清栈", () => {
     expect(redoValues[redoValues.length - 1]).toBe(30);
   });
 });
+
+describe("history · 时间戳与位置（历史面板要显示「几点」）", () => {
+  it("每个历史点带 commit 时的 Time.now()，labels() 仍然只返回动作名", () => {
+    const history = setup();
+    vi.setSystemTime(new Date(2026, 9, 29, 10, 5, 0));
+    history.push("b", "edit");
+    history.flush();
+    vi.setSystemTime(new Date(2026, 9, 29, 10, 9, 0));
+    history.push("c", "layout");
+    history.flush();
+
+    // 向后兼容：labels() 的老调用点一字未改。
+    expect(history.labels()).toEqual({ past: ["edit", "layout"], future: [] });
+    expect(history.entries().past).toEqual([
+      { label: "edit", at: new Date(2026, 9, 29, 10, 5, 0).getTime() },
+      { label: "layout", at: new Date(2026, 9, 29, 10, 9, 0).getTime() },
+    ]);
+  });
+
+  it("撤销/恢复搬运历史点时沿用原时间（不是「此刻又发生了一次」）", () => {
+    const history = setup();
+    vi.setSystemTime(new Date(2026, 9, 29, 10, 5, 0));
+    history.push("b", "edit");
+    history.flush();
+    const committedAt = new Date(2026, 9, 29, 10, 5, 0).getTime();
+
+    vi.setSystemTime(new Date(2026, 9, 29, 11, 30, 0));
+    history.undo();
+    expect(history.entries()).toEqual({ past: [], future: [{ label: "edit", at: committedAt }] });
+    history.redo();
+    expect(history.entries()).toEqual({ past: [{ label: "edit", at: committedAt }], future: [] });
+  });
+
+  it("position() 给出 past / future 各有几步（「回到这一步」按它算撤销几次）", () => {
+    const history = createDocumentHistory<number>({ initial: 0 });
+    for (let step = 1; step <= 3; step += 1) {
+      history.push(step);
+      history.flush();
+    }
+    expect(history.position()).toEqual({ past: 3, future: 0 });
+    history.undo();
+    expect(history.position()).toEqual({ past: 2, future: 1 });
+  });
+});

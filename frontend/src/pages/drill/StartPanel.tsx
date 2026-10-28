@@ -7,6 +7,8 @@ import { ThunderboltOutlined } from "@ant-design/icons";
 import { useEffect, useState } from "react";
 import { createDrillSession } from "../../api/drill";
 import { listClaims } from "../../api/claims";
+import AbortButton from "../../components/common/AbortButton";
+import { errorText, useAbortableRequest } from "../../hooks/useAbortableRequest";
 import { useApi } from "../../hooks/useApi";
 import { useJobSearchSelect } from "../../hooks/remoteSearchOptions";
 import { t, type MessageKey } from "../../i18n";
@@ -32,7 +34,9 @@ export function StartPanel({ onStarted }: { onStarted: (session: DrillSession) =
   const [jobId, setJobId] = useState<number | null>(null);
   const [maxQuestions, setMaxQuestions] = useState(6);
   const [policy, setPolicy] = useState<FeedbackPolicy>("deferred");
-  const [busy, setBusy] = useState(false);
+  // 开场也要现场调大模型（第一题的评分契约在这一步定下来）：等着的时候可以停。
+  const startRequest = useAbortableRequest();
+  const busy = startRequest.loading;
   // 关联岗位下拉改为远程搜索（P0-1）：不再预拉"前 100 条"当全量。
   const jobSelect = useJobSearchSelect();
 
@@ -55,24 +59,27 @@ export function StartPanel({ onStarted }: { onStarted: (session: DrillSession) =
   const available = claims.data ?? [];
 
   const start = async () => {
-    setBusy(true);
-    try {
-      const session = await createDrillSession({
-        claim_ids: claimIds,
-        job_id: jobId,
-        max_questions: maxQuestions,
-        feedback_policy: policy,
-      });
+    const outcome = await startRequest.run((signal) =>
+      createDrillSession(
+        {
+          claim_ids: claimIds,
+          job_id: jobId,
+          max_questions: maxQuestions,
+          feedback_policy: policy,
+        },
+        signal,
+      ),
+    );
+    if (outcome.status === "ok") {
       message.success(t("drill.startPanel.toast.started"));
       setOpen(false);
-      onStarted(session);
-    } catch (error) {
-      message.error(
-        error instanceof Error ? error.message : t("drill.startPanel.error.startFailed"),
-      );
-    } finally {
-      setBusy(false);
+      onStarted(outcome.data);
+      return;
     }
+    if (outcome.status === "error") {
+      message.error(errorText(outcome.error, t("drill.startPanel.error.startFailed")));
+    }
+    // aborted：用户自己按了停止——界面上什么都不用说，弹窗保持打开可再点。
   };
 
   return (
@@ -88,6 +95,7 @@ export function StartPanel({ onStarted }: { onStarted: (session: DrillSession) =
         footer={
           <Space>
             <Button onClick={() => setOpen(false)}>{t("common.action.cancel")}</Button>
+            {busy && <AbortButton onClick={() => startRequest.cancel()} />}
             <Button type="primary" loading={busy} onClick={() => void start()}>
               {t("drill.startPanel.action.start")}
             </Button>

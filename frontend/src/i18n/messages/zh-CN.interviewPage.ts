@@ -20,6 +20,9 @@
 const interviewPage = {
   /** 面试官头像的替代文本（设定卡与报告卡共用）。 */
   "interviewPage.avatarAlt": "面试官 Jane",
+  /** 对话气泡里的面试官作者名：两种语言都写作 "Jane"（人名不翻译）。 */
+  "interviewPage.interviewerName": "Jane",
+  /** 对话气泡里的面试官作者名（界面文案，走语言包）。 */
 
   // ===== 历史面试卡 =====
   "interviewPage.history.cardTitle": "历史面试",
@@ -45,11 +48,27 @@ const interviewPage = {
   "interviewPage.report.improvements": "下次可以改进",
   "interviewPage.report.saveToMaterial": "把这场面试存进资料箱",
 
+  // ===== 面试计时器 / 准备好了 =====
+  "interviewPage.timer.label": "面试用时",
+  "interviewPage.thinkingFinishReport": "本场面试结束，正在生成报告…",
+  "interviewPage.ready.title": "Jane 已就位，准备好了吗？",
+  "interviewPage.ready.body":
+    "准备好后我们再开始：计时从你点下按钮开始，中途离开会自动暂停，回来点一下就接着走。",
+  "interviewPage.ready.start": "准备好了",
+  "interviewPage.ready.resume": "继续面试",
+  "interviewPage.ready.hint": "计时从你点下按钮开始，结束时报告里会带上这场面试的用时。",
+
   // ===== 面试官设定卡 =====
   "interviewPage.setup.title": "面试官设定",
   "interviewPage.setup.greeting": "你好，我是 Jane，今天由我来面试你。",
-  "interviewPage.setup.jobLabel": "关联岗位（选填）",
+  "interviewPage.setup.jobLabel": "关联岗位",
   "interviewPage.setup.jobPlaceholder": "选中后按该岗位的 JD 提问（输入关键词搜索）",
+  "interviewPage.setup.jobRequired": "请选择关联岗位",
+  "interviewPage.setup.resumeLabel": "关联简历",
+  "interviewPage.setup.resumePlaceholder": "该岗位关联的简历与通用简历（输入关键词搜索）",
+  "interviewPage.setup.resumePlaceholderNoJob": "先选关联岗位，再来挑简历",
+  "interviewPage.setup.resumeRequired": "请选择关联简历",
+  "interviewPage.setup.scopeHint": "面试官只会看到这份简历与该岗位的 JD，其它资料不会进入面试。",
   "interviewPage.setup.typeLabel": "面试类型",
   "interviewPage.setup.difficultyLabel": "难度",
   "interviewPage.setup.styleLabel": "面试官风格",

@@ -5,21 +5,20 @@
  * 与页头 `BackgroundTasksIndicator` 的分工：这里是常驻可见的"还有几件活在跑"，
  * 一眼就能看到并就地取消/查看；页头那个是点开的详情面板（带进度文案）。
  *
- * 三个来源聚合在一处：简历生成（`utils/backgroundTasks`）、批量匹配
- * （`utils/jobMatchBackgroundTasks`）、岗位解读（`features/jobs/jobAnalysisStore`）。
+ * **两个来源**：统一任务登记表 `utils/backgroundTasks`（简历生成 + 所有 `/ai-tasks`
+ * 入口：单条岗位适配、岗位解读、风险扫描、岗位化建议、网申字段识别），以及批量匹配
+ * 自己的登记表 `utils/jobMatchBackgroundTasks`（那是一批任务，形状不同）。
+ *
+ * 本轮把"岗位解读"从独立 store 并入统一登记表之后，这个组件不再需要逐个 store 去聚合：
+ * 新增一个 AI 入口时，只要它登记进统一表，这里**一行都不用改**。
  * 没有任务时**完全不渲染**——留一条空横条只会白占视口。
  */
 import { CloseCircleOutlined, LoadingOutlined } from "@ant-design/icons";
 import { App, Button, Space, Tag, Typography } from "antd";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useBackgroundTasks } from "../hooks/useBackgroundTasks";
 import { useJobMatchBackgroundTasks } from "../hooks/useJobMatchBackgroundTasks";
-import {
-  cancelJobAnalysis,
-  useRunningJobAnalyses,
-  type JobAnalysisEntry,
-} from "../features/jobs/jobAnalysisStore";
 import { cancelBackgroundTask, type BackgroundTask } from "../utils/backgroundTasks";
 import {
   cancelJobMatchBackgroundTask,
@@ -27,22 +26,6 @@ import {
 } from "../utils/jobMatchBackgroundTasks";
 import { t } from "../i18n";
 import { useLocale } from "../i18n/i18nContext";
-
-/** 任务条自身的每秒心跳：chip 上的「已运行 N 秒」靠它推进。 */
-function useSecondTick(active: boolean): number {
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    if (!active) return undefined;
-    const timer = window.setInterval(() => setNow(Date.now()), 1000);
-    return () => window.clearInterval(timer);
-  }, [active]);
-  return now;
-}
-
-function elapsedSeconds(startedAt: number | undefined, now: number): number {
-  if (startedAt === undefined) return 0;
-  return Math.max(0, Math.floor((now - startedAt) / 1000));
-}
 
 /** 一枚 chip：图标 + 名称 + 一句进度 + 查看 + 取消。 */
 function TaskChip({
@@ -95,14 +78,13 @@ export default function BackgroundTaskBar() {
   useLocale();
   const { message } = App.useApp();
   const navigate = useNavigate();
-  const resumeTasks = useBackgroundTasks();
+  // 统一登记表：简历生成与所有 `/ai-tasks` 入口都在这一份里。
+  const tasks = useBackgroundTasks();
   const matchTasks = useJobMatchBackgroundTasks();
-  const analyses = useRunningJobAnalyses();
   const [cancelling, setCancelling] = useState<string | null>(null);
   const busy = cancelling !== null;
-  const now = useSecondTick(analyses.length > 0 || resumeTasks.length > 0 || matchTasks.length > 0);
 
-  if (resumeTasks.length === 0 && matchTasks.length === 0 && analyses.length === 0) return null;
+  if (tasks.length === 0 && matchTasks.length === 0) return null;
 
   const cancelJobMatch = async (task: JobMatchBackgroundTaskView) => {
     if (busy) return;
@@ -121,9 +103,9 @@ export default function BackgroundTaskBar() {
 
   const cancelResume = async (task: BackgroundTask) => {
     if (busy) return;
-    setCancelling(String(task.id));
+    setCancelling(task.key);
     try {
-      await cancelBackgroundTask(task.id);
+      await cancelBackgroundTask(task.key);
       message.info(t("backgroundTasks.toast.cancelled", { name: task.label }));
     } catch (error) {
       message.error(
@@ -143,34 +125,15 @@ export default function BackgroundTaskBar() {
       <Typography.Text type="secondary" className="background-task-bar-title">
         {t("backgroundTasks.bar.heading")}
       </Typography.Text>
-      {analyses.map((entry: JobAnalysisEntry) => {
-        const label = [
-          t("backgroundTasks.jobAnalysis.label"),
-          entry.state.company,
-          entry.state.title,
-        ]
-          .filter(Boolean)
-          .join(" · ");
-        return (
-          <TaskChip
-            key={`analysis-${entry.jobId}`}
-            label={label}
-            meta={t("backgroundTasks.bar.elapsed", {
-              seconds: elapsedSeconds(entry.state.startedAt, now),
-            })}
-            busy={busy}
-            onView={() => navigate(`/jobs?job_id=${entry.jobId}&analysis=1`)}
-            onCancel={() => cancelJobAnalysis(entry.jobId)}
-          />
-        );
-      })}
-      {resumeTasks.map((task) => (
+      {tasks.map((task) => (
         <TaskChip
-          key={`resume-${task.id}`}
+          key={task.key}
           label={task.label}
           meta={task.message || t("backgroundTasks.bar.generating")}
           busy={busy}
-          onView={() => navigate("/resumes")}
+          // 有深链就落到那条记录上（简历/岗位），没有就退回简历中心：
+          // 地址由 taskDeepLinks 生成，这里不手拼。
+          onView={task.deepLink ? () => navigate(task.deepLink ?? "/resumes") : undefined}
           onCancel={() => void cancelResume(task)}
         />
       ))}
