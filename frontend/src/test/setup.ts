@@ -2,7 +2,7 @@
 import "@testing-library/jest-dom/vitest";
 import { createElement } from "react";
 import type { ComponentType, ReactNode } from "react";
-import { beforeEach, vi } from "vitest";
+import { afterEach, beforeEach, vi } from "vitest";
 
 // Existing component tests stay on a fixed zh-CN provider. Locale-specific tests
 // may pass their own wrapper, which is nested inside this baseline provider.
@@ -39,7 +39,7 @@ vi.mock("@testing-library/react", async (importOriginal) => {
   };
 });
 
-import { configure } from "@testing-library/react";
+import { cleanup, configure } from "@testing-library/react";
 
 // Existing component tests exercise the established zh-CN behavior. Module-level
 // t() reads the same store as React hooks, so reset both before each legacy case.
@@ -64,6 +64,31 @@ beforeEach(async () => {
 // 上限刻意**低于** vitest.config.ts 的 `testTimeout: 30000`：断言窗口和用例总预算取同一个值的话，
 // 一次真正的"元素找不到"要等满 30 秒才报出来，失败的反馈速度会明显变差。
 configure({ asyncUtilTimeout: 15000 });
+
+// ===== 每个用例结束都要真正卸载组件 =====
+//
+// RTL 的自动 cleanup 只在检测到**全局** `afterEach` 时才注册（它自己判
+// `typeof afterEach === "function"`），而本配置没有 `globals: true`，于是它静默跳过：
+// 在没写 `afterEach(cleanup)` 的文件里，React 树和它排队中的 passive effects 会一直挂到
+// 文件结束；文件结束先销毁 jsdom 环境，scheduler 的宏任务随后执行
+// `schedulerEvent = window.event` 就是 `ReferenceError: window is not defined`。
+// CI 上这表现为 4319 个用例全绿、覆盖率达标，却 `Errors 1 error` 退出码 1
+// （2026-10-28 run 40609517189，来源 ResumeEditorPanel.perf.test.tsx：它用
+// `document.body.innerHTML = ""` 代替卸载，等于"清掉了 DOM 但没卸载 React 树"）。
+//
+// 此前是 371 个测试文件各自手工注册的，这里补成全局默认：**漏写不再等于泄漏**，
+// 已注册的文件重复调用也只是幂等空转（cleanup 卸载它自己记录的那些 container）。
+afterEach(async () => {
+  cleanup();
+  // 卸载只是把 passive effects 排进宏任务，回调执行时仍然要读 `window`。主动让出两轮宏任务，
+  // 让队列里的回调在 jsdom 还活着的时候跑完，而不是飘到环境销毁之后。
+  // 假定时器文件里 `setTimeout` 已被接管，这个 await 会永不 resolve（用例直接超时），故跳过：
+  // 那些文件本来也不靠真实调度跑 React。
+  if (vi.isFakeTimers()) return;
+  for (let pass = 0; pass < 2; pass += 1) {
+    await new Promise((resolve) => setTimeout(() => resolve(undefined), 0));
+  }
+});
 
 const jsdomGetComputedStyle = window.getComputedStyle.bind(window);
 
