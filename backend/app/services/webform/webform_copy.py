@@ -57,6 +57,8 @@ _COPY: dict[str, dict[str, str]] = {
         "panel.nav.title": "分组快速定位",
         "panel.nav.fold": "收起分组跳转条",
         "panel.nav.unfold": "点开快速跳转到某个分组",
+        # 跳转条的两段小标题：左边是跟着简历走的分区，右边是只在网申表里补的资料。
+        "panel.nav.sectionResume": "简历资料",
         "panel.nav.summary": "{groups} 组 · {entries} 条",
         "panel.nav.chip": "跳到「{group}」（{count} 条）",
         "panel.nav.grip": "上下拖动调整跳转条高度",
@@ -153,6 +155,7 @@ _COPY: dict[str, dict[str, str]] = {
         "panel.nav.title": "Jump to a group",
         "panel.nav.fold": "Collapse the group jump bar",
         "panel.nav.unfold": "Open the group jump bar",
+        "panel.nav.sectionResume": "Resume Profile",
         "panel.nav.summary": "{groups} groups · {entries} entries",
         "panel.nav.chip": "Jump to “{group}” ({count})",
         "panel.nav.grip": "Drag up or down to resize the jump bar",

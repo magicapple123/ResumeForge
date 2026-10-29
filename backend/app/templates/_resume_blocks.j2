@@ -8,13 +8,46 @@
 
 
 {# W4 条目字段排版：某分区在 `field_layout` 里有配置时，尾部补充字段按「行」输出
-   （`.sub-row` 行容器 + `.sub-cell` 单元格，行内用 list_separator 连接）。行装箱由
-   后端 `profile_field_rows` 完成，这里只画标记；`data-resume-path` 仍指到具体字段，
-   前端「点纸面字段定位编辑」照旧。没有配置时调用方走**原来的**逐字段一行标记，
-   产物逐字节不变（黄金基线守着）。 #}
+   （`.sub-row` 容器 + `.sub-cell` 单元格）。行装箱由后端 `profile_field_rows` 完成，
+   这里只画标记；`data-resume-path` 仍指到具体字段，前端「点纸面字段定位编辑」照旧。
+   没有配置时调用方走**原来的**逐字段一行标记，产物逐字节不变（黄金基线守着）。
+
+   列数 / 对齐方式 / gap 类名都取**条目级**的生效值（后端 `entry_field_layout[分区][序号]`
+   = 分区默认叠上 `entries.<分区>.<id>` 覆盖）；取不到时才退回分区级（防御性兜底，
+   正常渲染里两者总是一致的）。
+
+   `sub-cols-N` 决定列数，`sub-gap-<分区>` 是**固定**类名（具体倍数由后端
+   `field_layout_css` 的分区级规则给，用户没调过时没有对应规则 → 走各自的兜底间距）；
+   条目有自己的 gap 时再**加挂** `sub-gap-<分区>-<条目 id>`（条目级规则写在分区级之后，
+   同特异性靠顺序覆盖）。两个类名同时挂在容器上：条目级规则不存在时自动落回分区级。
+
+   **两种对齐方式两个分支，结构性差别只有一个**：
+
+   * 等宽（`align != "flow"`，默认）：一个 entry **只有一个** `.sub-grid` 容器，该 entry 的
+     所有 cell 平铺进去。跨行列宽才一致（每行各一个 grid 的话列宽各自算），`column-gap`
+     也才是真实的两列间距（列宽由 `repeat(N, auto)` 内容自适应）。solo cell 由
+     `.sub-cell-solo` 的 `grid-column: 1 / -1` 强制独占整行。
+   * 按内容（`align == "flow"`）：一个 row 一个 div，行内 cell 用 `list_separator` 连接
+     ——与改造前完全一致（想还原顺排的用户）。等宽模式**不留** `·`：列间距本身就是分隔。
+
+   两个分支都保持 `sub-row` 类（`sub-cols-*` / `sub-gap-*` 规则挂在 `.sub-row` 上）。
+   容器内容必须**整段写成一行**：cell 之间一旦换行，HTML 里就多出空白文本节点，`auto`
+   列宽会把这些空白算进内容宽度。 #}
 {% macro profile_field_rows_block(section_key, entry_index) -%}
+{%- set layout = (field_layout.get(section_key) or {}) if field_layout else {} -%}
+{%- set entry_rows = (entry_field_layout.get(section_key) or []) if entry_field_layout else [] -%}
+{%- set ecfg = entry_rows[entry_index] if entry_index < entry_rows|length else {} -%}
+{%- set cols = ecfg.get("columns") or layout.get("columns") or 1 -%}
+{%- set align = ecfg.get("align") or layout.get("align") or "equal" -%}
+{%- set entry_id = ecfg.get("id") or "" -%}
+{%- set gap_class = (" sub-gap-" ~ section_key ~ "-" ~ entry_id ~ " sub-gap-" ~ section_key) if entry_id else (" sub-gap-" ~ section_key) -%}
+{%- if align == "flow" -%}
 {%- for row in profile_rows[section_key][entry_index] %}
-<div class="sub sub-row" data-role="meta">{% for cell in row %}<span class="sub-cell">{{ cell.label }}：<span data-resume-path="{{ section_key }}.{{ entry_index }}.{{ cell.field }}">{{ cell.value }}</span>{% if not loop.last %}{{ list_separator }}{% endif %}</span>{% endfor %}</div>{% endfor -%}
+<div class="sub sub-row sub-cols-{{ cols }}{{ gap_class }} sub-flow" data-role="meta">{% for cell in row %}<span class="sub-cell{% if row|length == 1 and cols > 1 %} sub-cell-solo{% endif %}">{{ cell.label }}：<span data-resume-path="{{ section_key }}.{{ entry_index }}.{{ cell.field }}">{{ cell.value }}</span>{% if not loop.last %}{{ list_separator }}{% endif %}</span>{% endfor %}</div>
+{% endfor -%}
+{%- else -%}
+<div class="sub sub-row sub-grid sub-cols-{{ cols }}{{ gap_class }}" data-role="meta">{% for row in profile_rows[section_key][entry_index] %}{% for cell in row %}<span class="sub-cell{% if row|length == 1 and cols > 1 %} sub-cell-solo{% endif %}">{{ cell.label }}：<span data-resume-path="{{ section_key }}.{{ entry_index }}.{{ cell.field }}">{{ cell.value }}</span></span>{% endfor %}{% endfor %}</div>
+{%- endif -%}
 {%- endmacro %}
 
 {% macro summary_block(resume) %}

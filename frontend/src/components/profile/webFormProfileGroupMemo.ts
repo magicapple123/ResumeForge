@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
+import type { ReactNode } from "react";
 import type { WebFormExtraEntry, WebFormField } from "../../types";
 
 export interface WebFormProfileGroupProps {
@@ -14,6 +15,14 @@ export interface WebFormProfileGroupProps {
   onChange: (key: string, value: string) => void;
   onRename: (key: string, label: string) => string | undefined;
   onDelete: (key: string) => void;
+  /**
+   * 卡片底部的插槽（「自定义」分组用它承载"添加自定义字段"的输入框）。
+   *
+   * 传 `ReactNode` 就必须**按引用**参与判等——这是本节最容易踩的坑：调用方若每 render
+   * 新建一个元素，判等永远失败，组内字段会跟着每次击键重渲（memo 形同虚设）。所以
+   * `WebFormProfileSection` 用 `useMemo` 固定了那一个元素。
+   */
+  footer?: ReactNode;
 }
 
 function sameFieldKeys(previous: WebFormField[], next: WebFormField[]): boolean {
@@ -53,6 +62,8 @@ export function areGroupPropsEqual(
     previous.onChange === next.onChange &&
     previous.onRename === next.onRename &&
     previous.onDelete === next.onDelete &&
+    // 插槽按引用比较：稳定引用时（`useMemo` 出来的那一个元素）才是真的没变。
+    previous.footer === next.footer &&
     sameFieldKeys(previous.fields, next.fields) &&
     sameFieldValues(next.fields, previous.values, next.values)
   );

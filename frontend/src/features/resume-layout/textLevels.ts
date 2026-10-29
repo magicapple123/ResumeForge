@@ -32,7 +32,7 @@ import type { MessageKey } from "../../i18n";
 import type { ResumeFormatConfig } from "../../types/resumeFormat";
 import type { StylePropKey } from "../../utils/resumeStyleParams";
 import { isStylePropSet, readStylePropValue, styleIsEmpty } from "../../utils/resumeStyleParams";
-import { ROLE_STYLE_PROPS, type ResumeRoleKey } from "./styleCatalog";
+import { OBJECT_STYLE_PROPS, ROLE_STYLE_PROPS, type ResumeRoleKey } from "./styleCatalog";
 import type { ResumeRoleStyle, ResumeStyleDomains } from "./styleOverrides";
 import {
   objectRoleKey,
@@ -55,6 +55,20 @@ export const TEXT_LEVEL_PROPS: readonly StylePropKey[] = [
   "space_before",
   "space_after",
 ];
+
+/**
+ * 对象层里**级别不管**的那部分属性：细调面板（`ObjectStylePanel`）只列这些。
+ *
+ * 为什么取差集而不是各自写一份清单：级别与细调面板写的是同一个
+ * `format_config.objects[<id>]`。两边都列字号 / 加粗 / 段前 / 段后时，用户拖着细调
+ * 滑杆到 1.15×、再点「二级标题」，整组四项会被级别定义**整体替换**——看起来像
+ * "手改的不生效"，实际是两个控件抢同一批键（2026-10-29 用户截图反馈的正是这块）。
+ *
+ * 口径只有这一处：加属性时先想清楚它归级别还是归细调，别在面板里再 filter 一遍。
+ */
+export const OBJECT_EXTRA_STYLE_PROPS: readonly StylePropKey[] = OBJECT_STYLE_PROPS.filter(
+  (prop) => !TEXT_LEVEL_PROPS.includes(prop),
+);
 
 /** 级别的显示名（词条键；界面与成功提示共用，不在组件里写中文常量）。 */
 export const TEXT_LEVEL_LABELS: Record<TextLevelId, MessageKey> = {

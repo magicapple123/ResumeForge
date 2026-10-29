@@ -24,6 +24,7 @@ from dataclasses import dataclass
 
 from ....schemas.date_format import normalize_partial_date
 from ....schemas.profile_projection import ConsumedEntry, ConsumedProfile
+from ..panel_labels import WEBFORM_GROUP_KEY as WEBFORM_EXTRA_GROUP_KEY
 
 # 这些 key 是"网申 data 字典"里的最终字段名（与 FORM_FIELDS 对齐）。
 POLITICAL_STATUS = "political_status"
@@ -298,6 +299,9 @@ def catalog_entries(resolved: Mapping[str, ResolvedValue]) -> list[dict[str, str
                 "key": key,
                 "source": source,
                 "source_detail": item.source_detail,
+                # 显示层用的稳定 key（见 ``panel_labels``）：这两组分别是「基本信息」板块与
+                # 网申侧补充，英文界面下不能把中文组名直接印在跳转条上。
+                "group_key": WEBFORM_EXTRA_GROUP_KEY if source == "extra" else "basic_info",
             }
         )
     return rows

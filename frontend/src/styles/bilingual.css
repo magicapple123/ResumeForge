@@ -292,8 +292,27 @@
   width: 100%;
 }
 
+/* 「采纳选中 / 全选 / 清空」这一条：**吸附在滚动视口底部**。
+   候选动辄几十条，按钮原来跟在列表末尾，用户要一路滚到底才点得到（2026-11 反馈）。
+
+   为什么是 sticky 而不是 fixed：吸附对象是制作台左栏自己的滚动视口
+   （`.resume-wb-col` 是 `overflow-y: auto`），左栏宽度可拖、窄屏还会整块挂进抽屉；
+   `fixed` 钉的是窗口，会跑到面板外面去。sticky 只跟着最近的滚动祖先走。
+   底色 + 上边框 + 向上柔和阴影是为了让滚到下面的候选项不"透"出来。 */
 .translation-candidates__actions {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
   flex-wrap: wrap;
+  padding: var(--rf-space-2) 0;
+  background: var(--rf-surface);
+  border-top: 1px solid var(--rf-border-subtle);
+  box-shadow: 0 -8px 12px -10px rgb(0 0 0 / 24%);
+}
+
+/* 对照视图顶部的提示条（"这份版本还是原样副本、还没翻译"）：与表格留一点呼吸。 */
+.bilingual-compare-notice {
+  margin-bottom: var(--rf-space-2);
 }
 
 .translation-candidate {

@@ -14,34 +14,35 @@
  * 复杂简历上是肉眼可见的几百毫秒到一秒多。如果直接把 iframe 的 `src` 换掉，这段时间里
  * 用户看到的是一片空白——而加载标志早在 HTTP 请求返回时就关掉了，于是"标志闪一下就消失、
  * 然后干等很久"。现在的做法是：**旧图一直留着可见**，新 PDF 在同一个位置上以完全透明的
- * iframe 预加载，等它 `onLoad` 再一次性换上来。用户全程有东西看，等待感被"旧图 → 新图"
- * 的瞬时切换替代。
+ * iframe 预加载，等它 `onLoad` 再一次性换上来。
  *
- * 另外三条约束：
- * - **请求要有去抖**：用户拖字号滑块时每次 change 都会走到这里，逐帧发请求会把后端排满；
- * - **旧请求必须中止**：慢的那次回来得比新的晚，会把新结果覆盖成旧版式（经典的竞态）；
- * - **objectURL 必须释放**：每次请求生成一个，不释放就是整份 PDF 的内存泄漏。
+ * 另外三条约束：**请求要有去抖**（拖滑块时每次 change 都会走到这里）、**旧请求必须中止**
+ * （慢的那次回来得比新的晚，会把新结果覆盖成旧版式）、**objectURL 必须释放**。
  *
  * **同一份 PDF 只排一次（2026-10-21）**：`formatKey` 把内容签名与整组版式参数压成一个
- * 稳定字符串，它既是请求依赖也是缓存键。已经有这一版就不再请求——切回精确模式、打开
- * 「简历制作台」、把滑块拖回原值，走的都是这条路。缓存只存 Blob（见 `exactPreviewCache`），
- * URL 仍归本组件所有。
+ * 稳定字符串，它既是请求依赖也是缓存键（见 `exactPreviewCache`，URL 仍归本组件所有）。
  *
- * `active` 区分"看得见"与"还在页面上"：草稿模式下本组件**保留挂载**（这样切回来时
- * PDF 查看器不用重建、画面不会空一下），但绝不发起请求——否则拖一次草稿滑块就会白排
- * 一份看不见的 PDF。
+ * `active` 区分"看得见"与"还在页面上"：草稿模式下本组件**保留挂载**（切回来时查看器
+ * 不用重建），但绝不发起请求——否则拖一次草稿滑块就会白排一份看不见的 PDF。
  */
-import { Alert, Button, Space, Typography } from "antd";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { ReactNode } from "react";
 import { t } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
 import { fetchResumePreviewPdf } from "../../api/resumes";
 import type { ResumeContent } from "../../types/resume";
 import LoadingBlock from "../common/LoadingBlock";
-import { ExactPreviewAlerts, ExactPreviewStatus } from "./ExactPreviewNotes";
+import {
+  ExactNoViewer,
+  ExactPreviewAlerts,
+  ExactPreviewError,
+  ExactPreviewStatus,
+} from "./ExactPreviewNotes";
 import { readCachedPreview, writeCachedPreview, type PreviewShot } from "./exactPreviewCache";
-import { INLINE_PDF_OK, withPageWidthZoom } from "./pdfViewerSupport";
-import { useExactPreviewFrameHeight } from "./useExactPreviewFrameHeight";
+import { A4_WIDTH_PX } from "./config";
+import { INLINE_PDF_OK, zoomedPdfUrl } from "./pdfViewerSupport";
+import { exactPreviewFrameHeight, useExactPreviewFrameHeight } from "./useExactPreviewFrameHeight";
+import ExactPreviewPaper from "./ExactPreviewPaper";
 interface Props {
   resumeId: number;
   /** 草稿的模板名（内置或自制）：换完还没保存也要按新的排。 */
@@ -99,6 +100,11 @@ interface Props {
    * 请求根本不会重发。
    */
   content?: ResumeContent;
+  /**
+   * 状态行的出口：宿主传了它，本组件就**不再自己渲染**那一行，而是把节点交出去
+   * （主预览要把它并进缩放条，省掉一条横栏）。
+   */
+  onStatus?: (status: ReactNode) => void;
 }
 
 /**
@@ -126,6 +132,7 @@ export default function ExactPreviewPanel({
   headingSerif = false,
   scale = 1,
   content,
+  onStatus,
 }: Props) {
   useLocale();
 
@@ -243,6 +250,7 @@ export default function ExactPreviewPanel({
         setError(null);
         showShot({
           key: formatKey,
+          blob: cached.blob,
           url: keep(URL.createObjectURL(cached.blob)),
           pages: cached.pages,
           pagesNeeded: cached.pagesNeeded,
@@ -287,6 +295,7 @@ export default function ExactPreviewPanel({
           setLoading(false);
           showShot({
             key: formatKey,
+            blob: result.blob,
             url: keep(URL.createObjectURL(result.blob)),
             pages: result.pages,
             pagesNeeded: result.pagesNeeded,
@@ -360,109 +369,52 @@ export default function ExactPreviewPanel({
   // 唯一诚实的下界（用户 2026-10-23 反馈"选了 3 页却没补白纸"，成因就是走了 `?? 0`）。
   const renderedPages = current ? (current.pages ?? 1) : 0;
 
-  // 高度按**实际页数**算（算式见 `useExactPreviewFrameHeight`）；必须在提前 `return` 之前调用。
-  // 纸宽 = 相框宽 × 缩放：PDF 查看器按 `#zoom=page-width` 铺满 iframe，所以把 iframe 宽度
-  // 按比例改掉，查看器会**重新排一遍**（矢量，放大不糊），而不是把位图拉大。
-  const { frameRef, frameHeight } = useExactPreviewFrameHeight(renderedPages, height, scale);
+  // 高度按**实际页数**算（算式见 `useExactPreviewFrameHeight`），必须在提前 `return` 之前调用。
+  const { frameRef, frameHeight, frameWidth } = useExactPreviewFrameHeight(
+    renderedPages,
+    height,
+    scale,
+  );
+  /**
+   * 缩放用 CSS `zoom`：它让整棵子树**重新布局**，PDF 查看器按新的设备比例重绘（清晰）。
+   * 另两条路都试过、都不行——改 iframe 尺寸（Chrome 在 iframe 里忽略 `#zoom=page-width`，纸恒定 100%）与 `transform: scale()`（拉大位图，糊）。
+   */
+  const scalable = frameWidth > 0;
+  const baseHeight = scalable
+    ? exactPreviewFrameHeight(frameWidth, renderedPages, height)
+    : frameHeight;
+  const paperWidth = scalable ? Math.round(frameWidth * scale) : 0;
+  const paperHeight = scalable ? Math.round(baseHeight * scale) : frameHeight;
+  /** 缩放走查看器自己的 `#zoom=<百分比>`（唯一既真缩放又清晰的路径，见 `zoomedPdfUrl`），
+   *  每换一档都换一个新 objectURL；iframe 至少与相框同宽，放大时的横向滚动交给 `.is-zoomed`。 */
+  const zoomPct = scalable ? Math.max(10, Math.round((100 * paperWidth) / A4_WIDTH_PX)) : null;
+  const viewWidth = Math.max(frameWidth, paperWidth);
+  const framedUrl = useMemo(
+    () => (current ? zoomedPdfUrl(current, zoomPct) : null),
+    [current, zoomPct],
+  );
+  const pendingUrl = useMemo(
+    () => (pending ? zoomedPdfUrl(pending, zoomPct) : null),
+    [pending, zoomPct],
+  );
+  // 每换一档缩放都会造新的 objectURL：旧的必须释放，否则每次缩放都留一份 PDF 的内存。
+  useEffect(
+    () => () => {
+      for (const url of [framedUrl, pendingUrl]) {
+        if (url?.startsWith("blob:")) URL.revokeObjectURL(url.split("#")[0]);
+      }
+    },
+    [framedUrl, pendingUrl],
+  );
 
-  if (error) {
-    return (
-      <Alert
-        type="error"
-        showIcon
-        title={t("preview.exact.errorTitle")}
-        description={
-          <Space orientation="vertical" size={4}>
-            <Typography.Text>{error}</Typography.Text>
-            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-              {t("preview.exact.errorHint")}
-            </Typography.Text>
-          </Space>
-        }
-      />
-    );
-  }
-
-  return (
-    <>
-      <ExactPreviewAlerts current={current} busy={busy} pageLimit={pageLimit} />
-      {/* 相框**不设**高度：高度只给 stack（纸）与 iframe，外层自然包住"纸 + 状态行"——写死会裁掉状态行。
-          `is-zoomed` 只在**放大**（scale > 1）时挂上：100% 时纸列宽度恰好等于相框宽，
-          浮点累计出来的半像素会让 `overflow-x: auto` 凭空多出一条横向滚动条，
-          而横向滚动正是"纸被推歪"的来源（2026-11 用户反馈）。 */}
-      <div className={`exact-preview${scale > 1 ? " is-zoomed" : ""}`} ref={frameRef}>
-        {/* 只在这个口径可见时才摆加载占位：草稿模式下这块是隐藏的，占位没有意义
-            （而且会让每份简历的弹窗里都多一个空壳）。 */}
-        {active && busy && !current ? (
-          <LoadingBlock tip={t("preview.exact.typesetting")} minHeight={height} />
-        ) : null}
-
-        {current && INLINE_PDF_OK ? (
-          /* 缩放靠**改纸宽**而不是 `transform: scale()`：PDF 查看器按 `page-width` 铺满
-             iframe，宽度一变它就重新排一遍（矢量，放大不糊）；而 `transform` 只是把位图
-             拉大，还会让"外层高度"与"看得见的纸"脱节。
-             只画**实际排出来的页**：PDF 里没有的页这里也不补（2026-10-24 用户口径：
-             "多页状态下后面补出来的空白页要去掉"），预览与下载到的文件永远一致。 */
-          <div className="exact-preview-paper-column" style={{ width: `${scale * 100}%` }}>
-            <div
-              className="exact-preview-stack"
-              style={{ height: frameHeight }}
-              // jsdom 量不出像素，把"这版实际几页 / 相框多高"写进 data 属性供测试断言。
-              data-pages={renderedPages}
-              data-frame-height={frameHeight}
-            >
-              <iframe
-                // 与导出的 PDF 是同一份字节。`#zoom=page-width` 是相框高度的契约（见 `withPageWidthZoom`）。
-                src={withPageWidthZoom(current.url)}
-                title={t("preview.exact.frameTitle")}
-                className="exact-preview-frame"
-                style={{ height: frameHeight }}
-              />
-              {pending ? (
-                // 透明的预加载层：`onLoad` 前谁也看不见它，但浏览器已经在解析新 PDF。
-                <iframe
-                  src={withPageWidthZoom(pending.url)}
-                  title={t("preview.exact.pendingFrameTitle")}
-                  aria-hidden="true"
-                  tabIndex={-1}
-                  className="exact-preview-frame exact-preview-frame-pending"
-                  style={{ height: frameHeight }}
-                  onLoad={swapIn}
-                />
-              ) : null}
-              {busy ? (
-                <div className="exact-preview-overlay" aria-busy="true">
-                  <span className="exact-preview-overlay-text">{t("exact.status.busy")}</span>
-                </div>
-              ) : null}
-            </div>
-          </div>
-        ) : null}
-
-        {current && !INLINE_PDF_OK ? (
-          <div style={{ padding: 16 }}>
-            <Alert
-              type="info"
-              showIcon
-              title={t("preview.exact.noViewerTitle")}
-              description={
-                <Space orientation="vertical" size={6}>
-                  <Typography.Text>{t("preview.exact.noViewerBody")}</Typography.Text>
-                  <Button
-                    type="primary"
-                    onClick={() => window.open(current.url, "_blank", "noopener,noreferrer")}
-                  >
-                    {t("preview.exact.openInSystemViewer")}
-                  </Button>
-                </Space>
-              }
-            />
-          </div>
-        ) : null}
-      </div>
-      {/* 状态行是**整块预览的页脚**，不是相框的一部分：放进 `.exact-preview` 会在
-          最后一页纸上盖一条横栏（草稿模式也把页码条放在整块最底部）。 */}
-      {current ? (
+  /**
+   * 状态行（实际页数 / 在新标签打开 / 字族与未保存说明）**由宿主决定放哪**：
+   * 主预览把它并进缩放条那一行；`onStatus` 缺省时仍渲染在这块的最后（老行为）。
+   * 元素用 memo 固定引用——它进 effect 依赖，每次渲染新建会让宿主每帧 setState。
+   */
+  const statusNode = useMemo(
+    () =>
+      current ? (
         <ExactPreviewStatus
           current={current}
           busy={busy}
@@ -472,7 +424,54 @@ export default function ExactPreviewPanel({
           hasUnsavedContent={Boolean(content)}
           onOpenInNewTab={() => window.open(current.url, "_blank", "noopener,noreferrer")}
         />
-      ) : null}
+      ) : null,
+    [active, busy, content, current, headingSerif, pageLimit],
+  );
+  useEffect(() => {
+    onStatus?.(statusNode);
+  }, [onStatus, statusNode]);
+
+  if (error) return <ExactPreviewError error={error} />;
+
+  return (
+    <>
+      <ExactPreviewAlerts current={current} busy={busy} pageLimit={pageLimit} />
+      {/* 相框高度由 `useExactPreviewFrameHeight` 给。`is-zoomed` 只在**放大**（scale > 1）时挂上：
+          100% 时纸列宽度恰好等于相框宽，半像素误差会让 `overflow-x: auto` 凭空多出一条横向滚动条。 */}
+      <div
+        className={`exact-preview${scale > 1 ? " is-zoomed" : ""}`}
+        ref={frameRef}
+        // 缩小停在 fit 高度、放大才跟着长（见 `useExactPreviewFrameHeight` 的「相框高度」那节）。
+        style={scalable ? { height: frameHeight } : undefined}
+      >
+        {/* 只在这个口径可见时才摆加载占位：草稿模式下这块是隐藏的，占位没有意义
+            （而且会让每份简历的弹窗里都多一个空壳）。 */}
+        {active && busy && !current ? (
+          <LoadingBlock tip={t("preview.exact.typesetting")} minHeight={height} />
+        ) : null}
+        {current && INLINE_PDF_OK ? (
+          <ExactPreviewPaper
+            current={current}
+            pending={pending}
+            framedUrl={framedUrl}
+            pendingUrl={pendingUrl}
+            renderedPages={renderedPages}
+            frameHeight={frameHeight}
+            paperHeight={paperHeight}
+            viewWidth={viewWidth}
+            scale={scale}
+            scalable={scalable}
+            busy={busy}
+            onSwapIn={swapIn}
+          />
+        ) : null}
+
+        {current && !INLINE_PDF_OK ? <ExactNoViewer url={current.url} /> : null}
+      </div>
+      {/* 状态行交给宿主的那一半（`onStatus`）：主预览把它并进**缩放条同一行**（2026-10-29
+          用户要求"这两行放到一行"），制作台右栏空间窄，并进去之后自然会折成两行，高度不变。
+          宿主没接（`onStatus` 缺省）时仍按老位置渲染在这里——单测与只读宿主不用改 */}
+      {onStatus ? null : statusNode}
     </>
   );
 }

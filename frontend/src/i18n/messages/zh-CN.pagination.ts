@@ -37,6 +37,12 @@ const pagination = {
   "pagination.mode.note": "板块默认自然续排，只有设了「从新页开始」的板块才从新页开始",
   /** 部分板块有断页时的小结（自然填充模式下显示，把隐藏状态变可见）。 */
   "pagination.mode.partial": "{count} 个板块从新页开始",
+  /** 切回「自然填充」会清掉全部板块断页：这是不可撤销的批量操作，先确认一次。 */
+  "pagination.mode.confirmTitle": "切回自然填充？",
+  "pagination.mode.confirmBody":
+    "会清掉 {count} 个板块的「从新页开始」，条目级断页与续页信息都不受影响",
+  "pagination.mode.confirmOk": "切回自然填充",
+  "pagination.mode.confirmCancel": "取消",
 
   // ── 已设置的板块断页（可见 / 可清除）──────────────────────────
   "pagination.breaks.title": "已设置断页",
@@ -45,6 +51,12 @@ const pagination = {
   /** 一键恢复默认：清全部板块断页（条目级不动）。 */
   "pagination.breaks.restore": "恢复自然分页",
   "pagination.breaks.restoreHint": "清除所有板块的断页设置，条目级断页不受影响",
+  /** 条目芯片：条目已从简历里删掉、但断页意图还在（仍可清除）。 */
+  "pagination.breaks.unknownEntry": "已删除的条目",
+  /** 条目芯片的清除按钮：动作写清是哪一条。 */
+  "pagination.breaks.clearEntry": "清除「{label}」的条目断页",
+  /** 条目芯片的说明：两层断页互不干扰，别让用户以为「恢复自然分页」能清掉条目断页。 */
+  "pagination.breaks.entryHint": "条目断页只作用于这一条，「恢复自然分页」不会清除它",
 
   // ── 逐板块设置（可折叠，不默认占满高度）──────────────────────
   "pagination.sections.settings": "逐板块设置",
@@ -55,14 +67,19 @@ const pagination = {
 
   // ── 条目级分页（选中条目时出现）──────────────────────────────
   "pagination.entry.title": "这一条的断页",
+  /** 没选中条目时的指路：告诉用户"选中一条才会出现这一条的控件"。 */
+  "pagination.entry.pick": "在大纲或纸面选中一条内容，这里会多出「这一条的断页」",
 
   // ── 三种分页意图 ───────────────────────────────────────────
   "pagination.breakBefore": "从新页开始",
   /** 说明：只在打印/导出生效。 */
   "pagination.breakBefore.hint": "打印与导出从新页开始，草稿预览不显示断页",
   "pagination.keepWithNext": "标题跟随",
-  /** 不跟随（0 行）。 */
-  "pagination.keepWithNext.none": "不跟随",
+  /** 标题跟随的用途说明：解释「避免标题单独落在页尾」这件事本身。 */
+  "pagination.keepWithNext.hint":
+    "避免标题单独落在页尾：让标题与后续 N 行保持同页；「默认」按模板默认处理",
+  /** 0 档 = 按模板默认（板块级预留高度里本来就保底 1 行，"不跟随"是错的描述）。 */
+  "pagination.keepWithNext.none": "默认",
   /** 跟随后续 N 行。 */
   "pagination.keepWithNext.lines": "跟随 {count} 行",
   /** 跟随行数选择器的无障碍名。 */
@@ -84,7 +101,8 @@ const pagination = {
 
   // ── 格式支持（矩阵口径）─────────────────────────────────────
   "pagination.capability.title": "格式支持",
-  "pagination.capability.pending": "格式支持以检查模块的能力矩阵为准",
+  /** 没有矩阵时的指引：说清"去哪里能拿到"，而不是让用户自己去猜"检查"在哪。 */
+  "pagination.capability.pending": "在「检查」里生成一次报告后，这里会按能力矩阵说明各格式的支持情况",
   "pagination.capability.allSupported": "三种格式都支持",
   "pagination.capability.details": "分页报告",
   "pagination.capability.entryBreak": "手动分页",
@@ -98,6 +116,8 @@ const pagination = {
   "pagination.thumbnails.empty": "还没有分页报告",
   /** 空态指引：点名真实的「获取分页报告」按钮（用户指南引用必须逐字一致）。 */
   "pagination.thumbnails.hint": "点「获取分页报告」后按真实 PDF 排版测量",
+  /** 缩略图内的取报告按钮：用户就在看缩略图，不必回画布顶部找。 */
+  "pagination.thumbnails.refresh": "获取分页报告",
   /** 单页的读屏名。 */
   "pagination.thumbnails.page": "第 {page} 页",
   /** 末页徽标。 */

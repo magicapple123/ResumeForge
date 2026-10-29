@@ -55,6 +55,8 @@ const outline = {
   "outline.point.cloned": "Duplicated this bullet point",
   "outline.point.hiddenHint":
     "Hidden: the original remains in the editor and is excluded from final exports",
+  /** Drop target shown while dragging for a declared-but-empty bullet field (moved-away courses). */
+  "outline.point.emptyTarget": "Drop here",
   "outline.search.label": "Search outline",
   "outline.search.placeholder": "Search names, Sections, Entries or bullet points",
   "outline.search.clear": "Clear search",

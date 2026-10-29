@@ -48,6 +48,11 @@ const TITLE_FIELD: Record<EntryField, string> = {
   awards: "name",
 };
 
+/**
+ * 要点行上的**字段归属标签**在 `pointFieldLabels.ts`（文案表 + 显示判据）。
+ * 这一层只管"有哪些要点、它们属于哪个数组"，不掺界面文案。
+ */
+
 export interface OutlinePoint {
   /** 要点所在数组字段（`description` / `highlights` / `courses` …）。 */
   pointField: string;

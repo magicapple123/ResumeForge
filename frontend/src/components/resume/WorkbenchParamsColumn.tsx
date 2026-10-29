@@ -31,10 +31,13 @@ import WorkbenchTypographyTools from "./WorkbenchTypographyTools";
 import RoleStylePanel from "./typography/RoleStylePanel";
 import FieldLayoutPanel from "./FieldLayoutPanel";
 import PhraseLibraryContainer from "./assets/PhraseLibraryContainer";
-import ObjectStylePanel from "./typography/ObjectStylePanel";
 import { modeLimitsFromCatalog, saveDocumentMode } from "../../features/resume-research/api";
 import type { ResumeDetail } from "../../types";
 import { nonEmptySectionKeys } from "../../features/resume-pagination/sectionPresence";
+import { entryFieldLayoutOptions } from "../../features/resume-layout/entryOptions";
+import { entryMoveHandler } from "../../features/resume-layout/entryReorder";
+import { paginationEntryOptions } from "../../features/resume-pagination/paginationEntryLabels";
+import { collectPaginationEntryIds } from "../../features/resume-pagination/paginationEntryIds";
 import PaginationControls from "./pagination/PaginationControls";
 import { pt } from "../../features/resume-provenance/i18n";
 import type { OutlineSelection } from "../../features/resume-outline/types";
@@ -214,6 +217,28 @@ export default function WorkbenchParamsColumn({
     () => nonEmptySectionKeys(draftContent ?? content ?? null, sectionOptionKeys),
     [content, draftContent, sectionOptionKeys],
   );
+  // W4 条目级：把「这个分区里带稳定 id 的条目」列给面板（草稿优先，与预览一致）。
+  // 提取逻辑住在 features/resume-layout/entryOptions.ts（纯函数、可单测），本文件只接线。
+  const entryOptions = useMemo(
+    () => entryFieldLayoutOptions(draftContent ?? content ?? null),
+    [content, draftContent],
+  );
+  // 分页面板的条目清单（W08）：`paginationEntries` 给「已设置断页」的芯片取名，`paginationEntryIds`
+  // 是正文里仍然存在的全部对象 id（供面板裁掉已删条目的残留芯片）。
+  // **取名不能用 W4 的 `entryOptions`**：那份按 `FIELD_LAYOUT_SECTIONS`（七个分区、**不含 skills**）
+  // 准备，而技能条目在大纲里可以选中、也就能设断页——用错数据源的后果实测过：芯片查不到名字，
+  // 退化成「已删除的条目」，用户会以为自己的技能被删了。所以取名走 `paginationEntryOptions`
+  // （W4 七个分区 + 补一层 skills，见该函数头注释）。
+  const paginationEntries = useMemo(
+    () => paginationEntryOptions(draftContent ?? content ?? null),
+    [content, draftContent],
+  );
+  const paginationEntryIds = useMemo(
+    () => collectPaginationEntryIds(draftContent ?? content ?? null),
+    [content, draftContent],
+  );
+  // 条目上移 / 下移的宿主出口（面板只报"哪一条往哪边一格"，这里翻译成大纲的结构命令）。
+  const reorderEntry = entryMoveHandler(entryOptions, onOutlineCommand, draftContent ?? content);
   return (
     <div className="resume-wb-col resume-wb-col-params">
       {/* 页签条：可换行的 chip 页签（见 `WorkbenchLeftTabs` 头注释）。
@@ -314,29 +339,27 @@ export default function WorkbenchParamsColumn({
               onChange={onChange}
             />
           </ResumeParamGroup>
-          {/* W4 条目字段排版：教育等条目的补充字段分行 / 顺序 / 独占行（四格式同源）。 */}
+          {/* W4 条目字段排版：教育等条目的补充字段分行 / 顺序 / 独占行（四格式同源）。
+              条目级：把「这条简历里带稳定 id 的条目」交给面板，用户可以只改其中一条。 */}
           <ResumeParamGroup title={t("typography.fieldLayout.groupTitle")} storageKey="fieldLayout">
-            <FieldLayoutPanel layout={layout} disabled={relayouting} onChange={onChange} />
+            <FieldLayoutPanel
+              layout={layout}
+              entryOptions={entryOptions}
+              disabled={relayouting}
+              onChange={onChange}
+              // 条目上移 / 下移：改的是正文顺序，走大纲同一份 `reorder-entry` 执行器。
+              onReorderEntry={reorderEntry}
+            />
           </ResumeParamGroup>
           {/* 只在内容栏不在栅格里时显示（两栏 / 单栏）：告诉用户它去哪了，而不是让他找。
               三栏时这句描述的是不存在的问题（`display: none` 也在管这件事，两处同源）。 */}
           {tier !== "three" && editorEnabled ? (
             <span className="resume-wb-narrow-hint">{t("workbench.narrow.editor")}</span>
           ) : null}
-          {selectedObjectId ? (
-            <ObjectStylePanel
-              layout={layout}
-              catalog={catalog}
-              objectId={selectedObjectId}
-              objectLabel={selectedObjectLabel}
-              disabled={relayouting}
-              previewRef={previewRef}
-              onChange={onChange}
-            />
-          ) : null}
-          {/* W07 局部排版：文字级别 / 多选批量 / 格式刷。没有选中时也渲染一句指路
-              （见 WorkbenchTypographyTools 的 empty 分支）——否则用户只看到角色级滑杆，
-              根本找不到"文字级别"藏在哪里（2026-10-28 用户反馈）。 */}
+          {/* W07 局部排版：文字级别 / 细调（「更多参数」）/ 多选批量 / 格式刷。没有选中时
+              也渲染一句指路（见 WorkbenchTypographyTools 的 empty 分支）——否则用户只看
+              到角色级滑杆，根本找不到"文字级别"藏在哪里（2026-10-28 用户反馈）。
+              对象级细调 2026-10-29 并入本组件（原来单独沉在左栏最底部，与级别抢同一批键）。 */}
           <WorkbenchTypographyTools
             layout={layout}
             catalog={catalog}
@@ -347,6 +370,7 @@ export default function WorkbenchParamsColumn({
             onChange={onChange}
             onClearSelection={() => onClearMultiSelect?.()}
             pickedPath={pickTarget?.path ?? null}
+            previewRef={previewRef}
           />
           <ResumeParamGroup title={t("pagination.group.title")} storageKey="pagination">
             <PaginationControls
@@ -358,6 +382,8 @@ export default function WorkbenchParamsColumn({
               section={paginationSection}
               onSectionChange={setPaginationSection}
               entry={paginationEntry ?? null}
+              entries={paginationEntries}
+              validEntryIds={paginationEntryIds}
             />
           </ResumeParamGroup>
         </>

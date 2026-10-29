@@ -36,6 +36,12 @@ export interface Reminder {
 /** 首页待办提醒：在 Reminder 之外补紧急度与展示标签（由后端 /upcoming 计算）。 */
 export interface ReminderUpcoming extends Reminder {
   urgency: ReminderUrgency;
+  /**
+   * 结构化倒计时：负数=逾期天数，0=今天，1=明天，N=N 天后。
+   * 可选——旧后端没有这个字段，此时界面回退到 `due_label`。
+   */
+  days_until?: number;
+  /** 后端拼好的中文标签，仅作旧后端/旧数据的回退（界面文案由前端按语言组合）。 */
   due_label: string;
 }
 

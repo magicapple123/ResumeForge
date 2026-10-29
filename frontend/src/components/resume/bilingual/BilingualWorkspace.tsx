@@ -24,6 +24,7 @@ import {
   adoptItems,
   buildTranslationCandidates,
   glossaryOutToTerm,
+  isSameContent,
   termToCreatePayload,
   undoItems,
   variantToLanguageVariant,
@@ -444,7 +445,12 @@ export default function BilingualWorkspace({
       <div className="bilingual-body">
         {tab === "compare" ? (
           detail ? (
-            <BilingualCompareView pairs={pairs} />
+            <BilingualCompareView
+              pairs={pairs}
+              identical={isSameContent(detail.content, currentContent)}
+              primaryLabel={bt("bilingual.compare.columnCurrent")}
+              secondaryLabel={selected?.name || bt("bilingual.compare.columnVariant")}
+            />
           ) : (
             <Typography.Text type="secondary">{bt("bilingual.variant.missing")}</Typography.Text>
           )

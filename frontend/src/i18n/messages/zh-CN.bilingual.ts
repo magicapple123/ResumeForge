@@ -24,6 +24,10 @@ const bilingual = {
   "bilingual.compare.title": "字段对照",
   "bilingual.compare.columnPrimary": "中文",
   "bilingual.compare.columnSecondary": "英文",
+  "bilingual.compare.columnCurrent": "当前简历",
+  "bilingual.compare.columnVariant": "选中版本",
+  "bilingual.compare.identical":
+    "这份版本和当前简历内容一样，还没翻译：点右上角「生成翻译候选」，勾选后点「采纳选中」写入译文",
   "bilingual.compare.same": "一致",
   "bilingual.compare.changed": "有差异",
   "bilingual.compare.empty": "两边都还空着",

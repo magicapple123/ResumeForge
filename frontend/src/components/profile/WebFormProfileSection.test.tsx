@@ -150,3 +150,70 @@ describe("WebFormProfileSection 只看已填写", () => {
     expect(apiMocks.getWebFormExtraProfile).toHaveBeenCalledTimes(2);
   });
 });
+
+/**
+ * 「自定义」板块默认就要在（用户原话："默认有一个空的自定义板块"），而且加字段的输入框
+ * 长在这张卡片里，不是挂在一屏分组之后。上面那份目录**没有**自定义字段，正好覆盖这个默认。
+ */
+describe("WebFormProfileSection custom group", () => {
+  /** 分组卡片容器：空态提示 → 底部插槽容器 → 卡片（再上一层就是整块 Section 的 Card）。 */
+  function customGroupCard(hintText: string): HTMLElement {
+    const hint = screen.getByText(hintText);
+    const card = hint.closest("div")?.parentElement;
+    expect(card).toBeTruthy();
+    return card as HTMLElement;
+  }
+
+  it("renders the empty custom card with its add-field input while editing", async () => {
+    renderSection();
+
+    expect(
+      await screen.findByText(t("profileLibrary.webform.customGroupName")),
+    ).toBeInTheDocument();
+    // 空态提示与添加入口都在**同一张**卡片里；编辑态那一句才提"在下方添加"。
+    const card = customGroupCard(t("profileLibrary.webform.customEmptyEditing"));
+    expect(within(card).getByText(t("profileLibrary.webform.customGroupName"))).toBeInTheDocument();
+    expect(
+      within(card).getByLabelText(t("profileLibrary.webform.addFieldAria")),
+    ).toBeInTheDocument();
+    expect(
+      within(card).getByRole("button", { name: t("profileLibrary.webform.addFieldAction") }),
+    ).toBeInTheDocument();
+    // 这不是"整块 Section"：别的分组的字段不在里面。
+    expect(within(card).queryByText(PROFILE.fields[0].label)).toBeNull();
+  });
+
+  it("keeps the empty custom card in view mode without the add-field input", async () => {
+    renderSection({ editing: false, values: { birth_date: "2000-01-01" } });
+
+    expect(
+      await screen.findByText(t("profileLibrary.webform.customGroupName")),
+    ).toBeInTheDocument();
+    // 查看态没有输入框，所以提示不能指向"下方添加"。
+    expect(screen.getByText(t("profileLibrary.webform.customEmpty"))).toBeInTheDocument();
+    expect(
+      screen.queryByText(t("profileLibrary.webform.customEmptyEditing")),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByLabelText(t("profileLibrary.webform.addFieldAria")),
+    ).not.toBeInTheDocument();
+  });
+
+  it("keeps the add-field input reachable while a filter hides the custom card", async () => {
+    renderSection();
+    expect(
+      await screen.findByText(t("profileLibrary.webform.customGroupName")),
+    ).toBeInTheDocument();
+
+    // 「只看已填」把空的自定义卡片整张过滤掉——添加入口不能跟着消失，否则正在编辑的
+    // 用户会突然找不到加字段的地方（它现在长在那张卡片里）。
+    fireEvent.click(
+      screen.getByRole("button", { name: t("profileLibrary.webform.showFilledFields") }),
+    );
+
+    expect(screen.queryByText(t("profileLibrary.webform.customGroupName"))).toBeNull();
+    expect(
+      screen.getByLabelText(t("profileLibrary.webform.addFieldAria")),
+    ).toBeInTheDocument();
+  });
+});

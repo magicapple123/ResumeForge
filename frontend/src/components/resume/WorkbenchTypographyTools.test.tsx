@@ -69,6 +69,9 @@ function objectsOf(layout: ResumeLayout): Record<string, Record<string, unknown>
 afterEach(() => {
   cleanup();
   document.body.innerHTML = "";
+  // 分组的开合偏好存在 localStorage：不清掉会让"上一条用例展开过"传染给下一条
+  // （展开后细调区里也有一个「行距」输入框，按名字取元素会撞名）。
+  window.localStorage.clear();
 });
 
 describe("参数栏 · 局部排版的批量动作", () => {
@@ -101,5 +104,24 @@ describe("参数栏 · 局部排版的批量动作", () => {
     expect(objects.exp_target02).toMatchObject({ space_after: 0.4 });
     // 来源对象不被写坏。
     expect(objects[SOURCE]).toEqual({ space_after: 0.4 });
+  });
+
+  it("对象级细调并入「更多参数」：默认收起，展开后只列级别管不到的项", () => {
+    renderColumn(vi.fn());
+
+    // 默认收起：细调行不在 DOM 里（也因此不会和批量条的「行距」输入框撞名）。
+    expect(document.querySelector('[data-testid="style-row-object-indent"]')).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: t("typography.object.more") }));
+
+    // 展开后能确认作用对象是当前选中的那一条。
+    expect(
+      screen.getByText(t("typography.object.scope", { name: "Alpha Corp" })),
+    ).toBeInTheDocument();
+    expect(document.querySelector('[data-testid="style-row-object-indent"]')).not.toBeNull();
+    // 级别管住的四项不重复出现（否则两个控件抢同一批键）。
+    for (const prop of ["font_scale", "bold", "space_before", "space_after"]) {
+      expect(document.querySelector(`[data-testid="style-row-object-${prop}"]`)).toBeNull();
+    }
   });
 });

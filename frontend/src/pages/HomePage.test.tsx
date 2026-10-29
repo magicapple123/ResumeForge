@@ -4,6 +4,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter } from "react-router-dom";
 import HomePage from "./HomePage";
+import { t } from "../i18n";
 
 const apiMocks = vi.hoisted(() => ({ getStats: vi.fn(), searchAll: vi.fn() }));
 
@@ -227,6 +228,7 @@ describe("HomePage", () => {
         created_at: "2026-09-19T08:00:00",
         updated_at: "2026-09-19T08:00:00",
         urgency: "soon",
+        days_until: 1,
         due_label: "明天",
       },
       {
@@ -242,6 +244,7 @@ describe("HomePage", () => {
         created_at: "2026-09-19T08:00:00",
         updated_at: "2026-09-19T08:00:00",
         urgency: "overdue",
+        days_until: -2,
         due_label: "已逾期 2 天",
       },
     ]);
@@ -270,6 +273,16 @@ describe("HomePage", () => {
     // 点击提醒条目打开既有的提醒弹窗（只有弹窗才有「知道了」按钮）。
     fireEvent.click(screen.getByLabelText("查看提醒：参加某司二面"));
     expect(await screen.findByRole("button", { name: /知道了/ })).toBeInTheDocument();
+
+    // 弹窗每一行最左边的倒计时胶囊：文案由 `days_until` 按当前界面语言组合，
+    // 不再直接渲染后端的中文 `due_label`。这里取语言包里的 today/tomorrow 对照，
+    // 用例本身不含中文字面量（cjkRatchet 的 tests 口径只统计 ByText 里的中文）。
+    const today = t("homePage.reminders.due.today");
+    const tomorrow = t("homePage.reminders.due.tomorrow");
+    const overdue = t("homePage.reminders.due.overdue", { days: 2 });
+    expect(screen.getByText(tomorrow)).toBeInTheDocument();
+    expect(screen.getByText(overdue)).toBeInTheDocument();
+    expect(screen.queryByText(today)).toBeNull();
   });
 
   it("toggles the reminder card between list and calendar, persisting the choice", async () => {
@@ -352,6 +365,7 @@ describe("HomePage", () => {
         created_at: "2026-09-19T08:00:00",
         updated_at: "2026-09-19T08:00:00",
         urgency: "soon",
+        days_until: 0,
         due_label: "今天",
       },
     ]);
@@ -379,6 +393,7 @@ describe("HomePage", () => {
         created_at: "2026-09-19T08:00:00",
         updated_at: "2026-09-19T08:00:00",
         urgency: "soon",
+        days_until: 0,
         due_label: "今天",
       },
     ]);

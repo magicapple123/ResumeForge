@@ -70,6 +70,11 @@ from .live_scripts import (
     _show_panel_script,
 )
 from .panel_copy import localize_panel
+from .panel_labels import (
+    indexed_field_label,
+    panel_field_display_name,
+    with_display_fields,
+)
 from .repeated_fields import field_key_for_block, field_label_for_key, split_repeated_key
 from .service import (
     AI_NOTE,
@@ -269,7 +274,7 @@ class LiveSession(LiveRememberMixin):
             # 资料页可能在实时会话仍运行时被另一个界面更新。除了匹配数据要刷新，
             # 浏览器里的「换个资料」清单也必须立刻看到新条目。
             try:
-                self._client.evaluate(_catalog_script(next_catalog))
+                self._client.evaluate(_catalog_script(self._display_catalog(next_catalog)))
             except Exception as error:  # noqa: BLE001 - 页面跳转时下一轮会重新装载
                 logger.debug("网申填表：刷新浏览器资料清单失败：%s", error)
 
@@ -298,6 +303,16 @@ class LiveSession(LiveRememberMixin):
         if self._ui_locale_loader is None:
             return locale_key(None)
         return locale_key(self._ui_locale_loader())
+
+    def _display_catalog(self, rows: list[dict[str, str]]) -> list[dict[str, str]]:
+        """给清单补英文显示名（``display`` / ``display_group``）。
+
+        清单在面板上是 ``textContent`` 原样渲染的，界面文案那套整句替换够不到它；这里按
+        稳定 key（板块 key / field_id / FormField.key）补一份显示名。**``label`` 与 ``group``
+        原样保留**——它们被「填入」回传、被 ``dataset.group`` 用于定位与折叠；``zh-CN`` 下
+        两个显示字段恒等于原值。
+        """
+        return with_display_fields(rows, self._locale())
 
     def _relaxed_enabled(self) -> bool:
         if self._relaxed_mode_loader is None:
@@ -359,6 +374,20 @@ class LiveSession(LiveRememberMixin):
             except Exception as error:  # noqa: BLE001 - 资料刷新失败不应弄死实时监听
                 logger.warning("网申填表：刷新记忆目标失败，继续使用上一份目录：%s", error)
 
+    def _refresh_related(self) -> None:
+        """重算「可能是这几个」。
+
+        这份清单是**聚焦那一刻**算好的快照（`_on_focus`）。「记住这条」刚把值写进资料，
+        不重算的话面板上那几条仍是保存前的样子——用户要等到下一次换框才看见刚记下的
+        字段（反馈原话："记住了之后卡片上没有立即刷新"）。
+        """
+        control = self._current_control()
+        if control is None:
+            return
+        with self._lock:
+            catalog = list(self._catalog)
+        self._related = self._display_catalog(related_entries(control, catalog))
+
     def _attach(self) -> None:
         """把「给人挑」的清单与焦点监听装进**当前文档**。
 
@@ -369,7 +398,7 @@ class LiveSession(LiveRememberMixin):
         会看到空列表；少了监听，点哪个框都没反应。
         """
         locale = self._locale()
-        self._client.evaluate(_catalog_script(self._catalog))
+        self._client.evaluate(_catalog_script(self._display_catalog(self._catalog)))
         self._client.evaluate(localize_panel(FOCUS_LISTENER_SCRIPT, locale))
         self._client.evaluate(install_live_control_script(self._enabled, locale))
         self._client.evaluate(memory_targets_script(self._memory_targets))
@@ -599,8 +628,9 @@ class LiveSession(LiveRememberMixin):
             data = dict(self._data)
             catalog = list(self._catalog)
         # 「可能是这几个」：**在算建议之前定下来**，所以每一个分支（命中 / 认不出 /
-        # AI 在想 / AI 回来了）推出去的面板都带着同一份。
-        self._related = related_entries(control, catalog)
+        # AI 在想 / AI 回来了）推出去的面板都带着同一份。显示名与清单同源（英文界面下
+        # 也不能露中文），`label` / `group` 仍是原值——点这一行时回传的就是它们。
+        self._related = self._display_catalog(related_entries(control, catalog))
         custom_labels = custom_labels_from_catalog(catalog)
         suggestion = self._suggest_custom_field(control, data) or suggest_for(
             control,
@@ -806,12 +836,19 @@ class LiveSession(LiveRememberMixin):
         return ""
 
     def _field_display_label(self, key: str) -> str:
-        """面板上给用户看的字段名；自定义字段用保存时的名字，不带 ``CUSTOM_`` 前缀。"""
+        """面板上给用户看的字段名；自定义字段用保存时的名字，不带 ``CUSTOM_`` 前缀。
+
+        **只影响显示**：这里的返回值只会进面板标题（``field_label``）与备选行的标签，
+        匹配与写入仍然按 ``key`` 走（``_custom_value_by_label`` 用的是目录里的中文标签，
+        不是这个显示名），所以翻成英文不会改变"认得出哪个字段"。
+        """
         base = split_repeated_key(key)[0]
         default = FIELD_LABELS.get(base, base)
         if key.startswith("CUSTOM_"):
             default = self._custom_field_labels().get(key, key.removeprefix("CUSTOM_"))
-        return field_label_for_key(key, default)
+        # 内置字段按 FormField.key 取英文名；自定义字段（用户起的名字）原样返回。
+        shown = panel_field_display_name(key, default, self._locale())
+        return indexed_field_label(key, shown, self._locale())
 
     def _publish_unmatched(
         self,

@@ -6,6 +6,10 @@
  * 纯展示 + 键盘转发：状态全部由 `ProviewLayer` 持有（偏好、命令、裁剪参数）。
  * 单独成文件的原因是 ProviewLayer 还要管命令表、覆盖层注入与弹窗，堆在一起会超
  * 单文件 300 行目标。
+ *
+ * **悬停提示只留「辅助线」一处在 `GuidesControl` 里**（2026-10-29 用户要求：制作台
+ * 右栏只保留「草稿模式编辑」「恢复默认布局」「辅助线」三条提示）。本条其余入口一律
+ * 不弹 Tooltip——信息改由按钮文字与 aria-label 承担，少一层浮层也就少一次误挡操作。
  */
 import {
   BgColorsOutlined,
@@ -13,7 +17,7 @@ import {
   ScissorOutlined,
   ThunderboltOutlined,
 } from "@ant-design/icons";
-import { Button, Segmented, Tooltip, Typography } from "antd";
+import { Button, Segmented, Typography } from "antd";
 import type { KeyboardEvent, RefObject } from "react";
 import { t } from "../../../i18n";
 import { useLocale } from "../../../i18n/i18nContext";
@@ -29,14 +33,21 @@ import PageNavigator from "./PageNavigator";
 import PrintCheckControl from "./PrintCheckControl";
 import WorkspacePresetControl from "./WorkspacePresetControl";
 
+/**
+ * 三个缩放档位。
+ *
+ * 2026-10-29 用户要求：**只保留**「辅助线」「恢复默认布局」「草稿模式编辑」三处悬停提示，
+ * 其余（缩放档位 / 翻页 / 灰度校样 / 打印检查 / 工作区预设 / 照片裁剪 / 命令）一律不再弹
+ * Tooltip。这里因此不再带 `hintKey`——按钮文字本身已经说清它做什么，无障碍名由 aria-label
+ * 提供，不靠悬浮层传递信息。
+ */
 const ZOOM_MODES: readonly {
   value: ZoomMode;
   labelKey: "proview.zoom.page" | "proview.zoom.width" | "proview.zoom.actual";
-  hintKey: "proview.zoom.pageHint" | "proview.zoom.widthHint" | "proview.zoom.actualHint";
 }[] = [
-  { value: "page", labelKey: "proview.zoom.page", hintKey: "proview.zoom.pageHint" },
-  { value: "width", labelKey: "proview.zoom.width", hintKey: "proview.zoom.widthHint" },
-  { value: "actual", labelKey: "proview.zoom.actual", hintKey: "proview.zoom.actualHint" },
+  { value: "page", labelKey: "proview.zoom.page" },
+  { value: "width", labelKey: "proview.zoom.width" },
+  { value: "actual", labelKey: "proview.zoom.actual" },
 ];
 
 export interface ProviewBarProps {
@@ -104,8 +115,9 @@ export default function ProviewBar({
         display: "flex",
         flexWrap: "wrap",
         alignItems: "center",
-        gap: "6px 10px",
-        padding: "6px 4px 8px",
+        // 2026-10-29 用户要求把右栏头部整体压低（下面要多放纸面）：内边距与行距各收一档。
+        gap: "4px 8px",
+        padding: "2px 4px",
       }}
     >
       <Segmented
@@ -114,7 +126,7 @@ export default function ProviewBar({
         value={zoomMode ?? undefined}
         options={ZOOM_MODES.map((mode) => ({
           value: mode.value,
-          label: <Tooltip title={t(mode.hintKey)}>{t(mode.labelKey)}</Tooltip>,
+          label: t(mode.labelKey),
         }))}
         onChange={(next) => onZoomModeChange(next as ZoomMode)}
       />
@@ -123,24 +135,18 @@ export default function ProviewBar({
           {t("proview.zoom.actualNote")}
         </Typography.Text>
       ) : null}
-      <Tooltip title={t("proview.pageNav.keyboardHint")}>
-        <span>
-          <PageNavigator navigation={navigation} markers={markers} />
-        </span>
-      </Tooltip>
+      <PageNavigator navigation={navigation} markers={markers} />
       <GuidesControl value={guides} onChange={onGuidesChange} />
-      <Tooltip title={proof ? t("proview.proof.onHint") : t("proview.proof.offHint")}>
-        <Button
-          size="small"
-          type={proof ? "primary" : "text"}
-          icon={proof ? <CheckOutlined /> : <BgColorsOutlined />}
-          aria-pressed={proof}
-          aria-label={t("proview.proof.label")}
-          onClick={() => onProofChange(!proof)}
-        >
-          {t("proview.proof.label")}
-        </Button>
-      </Tooltip>
+      <Button
+        size="small"
+        type={proof ? "primary" : "text"}
+        icon={proof ? <CheckOutlined /> : <BgColorsOutlined />}
+        aria-pressed={proof}
+        aria-label={t("proview.proof.label")}
+        onClick={() => onProofChange(!proof)}
+      >
+        {t("proview.proof.label")}
+      </Button>
       <PrintCheckControl viewportRef={viewportRef} />
       {workspace ? (
         <WorkspacePresetControl
@@ -150,29 +156,25 @@ export default function ProviewBar({
         />
       ) : null}
       {showPhotoCrop ? (
-        <Tooltip title={t("proview.photo.hint")}>
-          <Button
-            size="small"
-            type="text"
-            icon={<ScissorOutlined />}
-            aria-label={t("proview.photo.button")}
-            onClick={onOpenPhotoCrop}
-          >
-            {t("proview.photo.button")}
-          </Button>
-        </Tooltip>
-      ) : null}
-      <Tooltip title={t("proview.command.buttonAria", { shortcut: paletteShortcut })}>
         <Button
           size="small"
           type="text"
-          icon={<ThunderboltOutlined />}
-          aria-label={t("proview.command.buttonAria", { shortcut: paletteShortcut })}
-          onClick={onOpenPalette}
+          icon={<ScissorOutlined />}
+          aria-label={t("proview.photo.button")}
+          onClick={onOpenPhotoCrop}
         >
-          {t("proview.command.button")}
+          {t("proview.photo.button")}
         </Button>
-      </Tooltip>
+      ) : null}
+      <Button
+        size="small"
+        type="text"
+        icon={<ThunderboltOutlined />}
+        aria-label={t("proview.command.buttonAria", { shortcut: paletteShortcut })}
+        onClick={onOpenPalette}
+      >
+        {t("proview.command.button")}
+      </Button>
       <Typography.Text type="secondary" style={{ fontSize: 12 }}>
         {t("proview.zoom.percent", { value: Math.round(scale * 100) })}
       </Typography.Text>

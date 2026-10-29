@@ -9,7 +9,15 @@
  * 末页占用：后端目前只在 report 里给 pages/pages_needed/overflow；`last_page_fill`
  * 是可选扩展字段。没有该字段时显示"未测量"；溢出时显示"已截断（满页）"——这是从
  * overflow 得出的确定事实，不是估算百分比。
+ *
+ * ## 就地取报告（2026-10-29）
+ *
+ * 缩略图原本只"看"，用户改完版式要先滚到画布顶部找「获取分页报告」。现在空态与有报告时
+ * 的标题行各有一个同样的按钮，点它触发**宿主注册的那一次请求**（`paginationRefreshStore`）：
+ * 缩略图拿不到 `usePaginationReport` 的句柄（它在另一条 props 链上），通过 store 注册动作
+ * 比再开一条 props 链便宜得多。没注册时按钮 disabled（如实告诉用户"现在拿不到"）。
  */
+import { Button, Flex } from "antd";
 import { useMemo } from "react";
 import { t } from "../../../i18n";
 import { useLocale } from "../../../i18n/i18nContext";
@@ -21,6 +29,10 @@ import {
   type PageThumbnailModel,
 } from "../../../features/resume-pagination/pageThumbnails";
 import { usePaginationReportSnapshot } from "../../../features/resume-pagination/paginationReportStore";
+import {
+  triggerPaginationReportRefresh,
+  usePaginationReportRefresh,
+} from "../../../features/resume-pagination/paginationRefreshStore";
 import "./pagination.css";
 
 function fillLabel(model: PageThumbnailModel, page: PageThumbnail): string {
@@ -61,21 +73,40 @@ export default function PageThumbnailStrip({ report }: PageThumbnailStripProps) 
   useLocale();
   const stored = usePaginationReportSnapshot();
   const model = useMemo(() => buildPageThumbnails(report ?? stored), [report, stored]);
+  // 宿主注册的"取一次报告"动作；没有（诊断/只读宿主）时按钮 disabled，不假装能点。
+  const refresh = usePaginationReportRefresh();
+  const measured = model.measured && model.pages.length > 0;
 
   return (
     <section className="resume-page-thumbnails" aria-label={t("pagination.thumbnails.title")}>
       <div className="resume-page-thumbnails-head">
         <span className="resume-page-thumbnails-title">{t("pagination.thumbnails.title")}</span>
-        {model.measured && model.pages.length > 0 ? (
-          <span className="resume-page-thumbnails-summary">{summary(model)}</span>
+        {measured ? (
+          <Flex gap={8} align="center" wrap>
+            <span className="resume-page-thumbnails-summary">{summary(model)}</span>
+            <Button
+              size="small"
+              type="link"
+              disabled={!refresh}
+              onClick={triggerPaginationReportRefresh}
+            >
+              {t("pagination.thumbnails.refresh")}
+            </Button>
+          </Flex>
         ) : null}
       </div>
-      {!model.measured || model.pages.length === 0 ? (
-        <p className="resume-page-thumbnails-hint">
-          {t("pagination.thumbnails.empty")}
-          {" · "}
-          {t("pagination.thumbnails.hint")}
-        </p>
+      {!measured ? (
+        <Flex gap={6} wrap align="center" className="resume-page-thumbnails-hint">
+          <span>{t("pagination.thumbnails.empty")}</span>
+          <Button
+            size="small"
+            disabled={!refresh}
+            onClick={triggerPaginationReportRefresh}
+          >
+            {t("pagination.thumbnails.refresh")}
+          </Button>
+          <span>{t("pagination.thumbnails.hint")}</span>
+        </Flex>
       ) : (
         <>
           <ol className="resume-page-thumbnails-list">

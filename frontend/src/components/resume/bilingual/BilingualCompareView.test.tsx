@@ -53,4 +53,21 @@ describe("BilingualCompareView", () => {
     );
     expect(screen.getByText(bt("bilingual.compare.nothing"))).toBeTruthy();
   });
+
+  it("identical 时提示「这份版本还没翻译」，不传则没有提示", () => {
+    const first = render(
+      <AntdApp>
+        <BilingualCompareView pairs={PAIRS} identical />
+      </AntdApp>,
+    );
+    expect(screen.getByText(bt("bilingual.compare.identical"))).toBeTruthy();
+    first.unmount();
+
+    render(
+      <AntdApp>
+        <BilingualCompareView pairs={PAIRS} />
+      </AntdApp>,
+    );
+    expect(screen.queryByText(bt("bilingual.compare.identical"))).toBeNull();
+  });
 });

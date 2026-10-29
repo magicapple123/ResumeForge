@@ -149,7 +149,8 @@
   flex: 1 1 auto;
   flex-direction: column;
   min-height: 0;
-  overflow-x: hidden;
+  /* 横向也交给这一层：精确预览放大后纸比相框宽，滚动条只能有一个（精确相框自己不再滚）。 */
+  overflow-x: auto;
   overflow-y: auto;
   overscroll-behavior: contain;
 }
@@ -233,4 +234,64 @@
   .resume-wb-canvas-bar {
     padding: 4px 8px;
   }
+}
+
+/* ===== 头部压缩（2026-10-29 用户要求：红框那一块矮一点，下面多放纸） ===== */
+/* 右栏里固定不滚的那几行（分页报告横幅 / 工具条 / 专业视图工具条 / 溢出提示）叠起来能吃掉
+   两三百像素，而纸的缩放是**按剩余高度**算的。这里只收内边距与行距，不动任何控件的尺寸与
+   字号——控件高度一改，换行数就跟着变，头部反而更难预测。
+   不要写死像素高度：工具条在"有没有版式控件"两种宿主下换行数不同。 */
+.resume-wb-canvas-scroll .resume-preview-toolbar {
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+/* 溢出提示：字号收一档（省高度），但**内边距要留够**——2026-10-29 反馈"文字离边框太近"，
+   上一版把 padding 压到 6/10 确实贴脸了；现在 10/14 与 12px 字号配起来才像一条正常的提示。 */
+.resume-wb-canvas-scroll .resume-preview-alerts .ant-alert {
+  padding: 10px 14px;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+/* 精确口径的页数提示与草稿口径**同字号同内边距**（用户 2026-10-29：两栏的提示大小要一致）。
+   它不在 `.resume-preview-alerts` 里（那是草稿侧的容器），所以单列一条选择器。 */
+.resume-wb-canvas-scroll .exact-preview-overflow,
+.resume-wb-canvas-scroll .exact-preview-stale {
+  padding: 10px 14px;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+/* 标题比正文大半档即可：同字号时分不出"这是结论"和"这是解释"。 */
+.resume-wb-canvas-scroll .resume-preview-alerts .ant-alert-title,
+.resume-wb-canvas-scroll .exact-preview-overflow .ant-alert-title,
+.resume-wb-canvas-scroll .exact-preview-stale .ant-alert-title {
+  font-size: 13px;
+}
+
+.resume-wb-canvas-scroll .resume-preview-alerts .ant-alert-description,
+.resume-wb-canvas-scroll .exact-preview-overflow .ant-alert-description,
+.resume-wb-canvas-scroll .exact-preview-stale .ant-alert-description {
+  margin-top: 2px;
+}
+
+/* 分页报告横幅：**一行说完**（标题 + 获取按钮 + 当前状态）。
+   它原先没有任何样式，`Flex`（块级）之后那句"还没有分页报告"被顶到第二行——空状态也要占
+   两行高。有报告时溢出的 Alert 用 `flex-basis: 100%` 独占一行，不会被压成一条细缝。 */
+.resume-pagination-report {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  font-size: 12px;
+}
+
+.resume-pagination-report .ant-typography {
+  margin: 0;
+  font-size: 12px;
+}
+
+.resume-pagination-report > .ant-alert {
+  flex: 1 1 100%;
 }

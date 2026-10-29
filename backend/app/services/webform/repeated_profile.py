@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 """网申资料可重复记录的读写与填表展开。"""
+
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
@@ -9,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from ...models.web_form_profile_record import WebFormProfileRecord
 from ...schemas.date_format import normalize_partial_date
+from .panel_repeat_labels import REPEAT_KEY_PREFIX
 from .repeated_fields import field_key_for_block, field_label_for_key
 from .repeated_profile_catalog import (
     REPEATED_PROFILE_GROUPS,
@@ -39,7 +41,9 @@ def _records_by_group(db: Session) -> dict[str, list[dict[str, Any]]]:
     result: dict[str, list[dict[str, Any]]] = {group.key: [] for group in REPEATED_PROFILE_GROUPS}
     rows = (
         db.query(WebFormProfileRecord)
-        .order_by(WebFormProfileRecord.group_key, WebFormProfileRecord.sort_order, WebFormProfileRecord.id)
+        .order_by(
+            WebFormProfileRecord.group_key, WebFormProfileRecord.sort_order, WebFormProfileRecord.id
+        )
         .all()
     )
     for row in rows:
@@ -103,9 +107,7 @@ def save_groups(
         normalized[group.key] = records
 
     existing = (
-        db.query(WebFormProfileRecord)
-        .filter(WebFormProfileRecord.group_key.in_(normalized))
-        .all()
+        db.query(WebFormProfileRecord).filter(WebFormProfileRecord.group_key.in_(normalized)).all()
     )
     for row in existing:
         db.delete(row)
@@ -158,6 +160,12 @@ def catalog_entries(db: Session) -> list[dict[str, str]]:
                         "value": value,
                         "key": key,
                         "source": "extra",
+                        # **只服务显示层**的稳定 key（``panel_labels`` 按它查英文名）：
+                        # `group` / `label` / `key` 的语义不变——它们分别用于分组聚合、
+                        # 「填入」回传与写入定位。自建/未知组查不到就原样显示。
+                        "group_key": f"{REPEAT_KEY_PREFIX}{group.key}",
+                        "group_index": str(index),
+                        "label_key": f"{REPEAT_KEY_PREFIX}{group.key}.{field.key}",
                     }
                 )
     return entries

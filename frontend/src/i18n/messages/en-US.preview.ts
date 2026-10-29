@@ -13,7 +13,7 @@ const preview = {
   "preview.mode.exact.hint":
     "Rendered from the real PDF produced by the export engine, identical to the file you download",
   "preview.exact.note":
-    "This view is laid out by the export engine and matches the downloaded PDF exactly; zoom with Ctrl+scroll in the PDF viewer",
+    "This view is laid out by the export engine and matches the downloaded PDF exactly; zoom with the buttons below the page (Ctrl+scroll also works)",
 
   "preview.exact.errorTitle": "Could not generate the exact preview",
   "preview.exact.errorHint":

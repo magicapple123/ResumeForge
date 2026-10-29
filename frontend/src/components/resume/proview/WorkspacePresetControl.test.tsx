@@ -55,22 +55,22 @@ describe("工作区预设切换（D14）", () => {
     ).toBeInTheDocument();
   });
 
-  it("悬停预设选项只弹一个提示（外层与选项两层 Tooltip 不叠加）", async () => {
+  it("悬停预设选项不再弹提示；只有「恢复默认布局」保留一条（2026-10-29 用户要求）", async () => {
     renderControl();
-    const option = screen.getByText(t("proview.workspace.default"));
-    fireEvent.mouseEnter(option);
-    // antd Tooltip 默认 0.1s 延迟；等它真的出现后再数，避免把"还没弹出来"当成"只有一个"。
     const visibleTip = () =>
       [...document.querySelectorAll(".ant-tooltip")].filter(
         (node) => !node.classList.contains("ant-tooltip-hidden"),
       );
+
+    // 预设那一段：撤掉了外层提示，也不许给选项各套一层——悬停必须是**零**浮层。
+    fireEvent.mouseEnter(screen.getByText(t("proview.workspace.default")));
+    await new Promise((resolve) => setTimeout(resolve, 350));
+    expect(visibleTip()).toHaveLength(0);
+
+    // 恢复默认这颗按钮仍在提示里说明它是干什么的（用户点名保留的三条之一）。
+    fireEvent.mouseEnter(screen.getByRole("button", { name: t("proview.workspace.reset") }));
     await waitFor(() => expect(visibleTip()).toHaveLength(1), { timeout: 2000 });
-    // 再等一小会儿，确认没有第二个提示随后加入。
-    await new Promise((resolve) => setTimeout(resolve, 250));
-    expect(visibleTip()).toHaveLength(1);
-    const text = visibleTip()[0]?.textContent ?? "";
-    expect(text).toContain(t("proview.workspace.hint"));
-    expect(text).toContain(t("proview.workspace.persistHint"));
+    expect(visibleTip()[0]?.textContent ?? "").toContain(t("proview.workspace.reset"));
   });
 
   it("恢复默认布局是独立入口（不占预设列表一格）", async () => {

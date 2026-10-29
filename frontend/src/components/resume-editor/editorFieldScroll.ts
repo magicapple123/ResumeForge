@@ -31,9 +31,30 @@ export const EDITOR_FIELD_SCROLL_OPTIONS = {
  * （TextArea 的 autoSize、图片的加载），第一枪可能落在旧位置；下一帧补一次，
  * `scrollMode: "if-needed"` 保证已经对准时它什么也不做。
  */
+/**
+ * 把焦点落到字段上并（可选）选中整段文字。
+ *
+ * 选中的实现走 `document.activeElement` 而不是 `form.getFieldInstance()` 的返回对象：
+ * antd 给回来的是组件实例（`Input` / `TextArea`），能不能 `select()` 取决于它内部结构；
+ * 而聚焦之后真正的输入元素就是 activeElement，直接对它调 `select()` 最稳。
+ * 空字段 / 非文本控件（Select、日期）什么都不做——那是"选中文字"没有意义的场景。
+ */
+function focusAndMaybeSelect(selectText: boolean): void {
+  const element = document.activeElement;
+  if (!(element instanceof HTMLTextAreaElement || element instanceof HTMLInputElement)) return;
+  if (element.readOnly || element.disabled) return;
+  if (!selectText || element.value.length === 0) return;
+  try {
+    element.select();
+  } catch {
+    // 某些输入类型（number/date）不支持 select()：忽略，聚焦本身已经达到目的。
+  }
+}
+
 export function scrollAndFocusEditorField(
   form: FormInstance,
   name: (string | number)[],
+  options: { selectText?: boolean } = {},
 ): () => void {
   let cancelled = false;
   let rafId = 0;
@@ -42,6 +63,7 @@ export function scrollAndFocusEditorField(
     form.scrollToField(name, EDITOR_FIELD_SCROLL_OPTIONS);
     const field = form.getFieldInstance(name) as { focus?: () => void } | undefined;
     field?.focus?.();
+    focusAndMaybeSelect(options.selectText ?? false);
     rafId = window.requestAnimationFrame(() => {
       if (cancelled) return;
       form.scrollToField(name, EDITOR_FIELD_SCROLL_OPTIONS);

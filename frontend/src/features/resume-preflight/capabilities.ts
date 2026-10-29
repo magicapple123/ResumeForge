@@ -10,7 +10,12 @@ import type { MessageKey } from "../../i18n";
 
 export type CapabilityLevel = "supported" | "approx" | "unsupported" | "unknown";
 
-/** 已知能力键 → 词条。未知键仍会显示（原始机器码是 ASCII，可接受）。 */
+/**
+ * 已知能力键 → 词条。未知键仍会显示（原始机器码是 ASCII，可接受）。
+ *
+ * 覆盖后端 `CAPABILITY_KEYS` 全量 14 项：少一项就会在界面上漏出 `manual_page_break`
+ * 这类机器码（2026-10-29 试用对比里可见），而这份字典是**唯一**的翻译点。
+ */
 export const CAPABILITY_LABEL_KEY: Record<string, MessageKey> = {
   italic: "preflight.capability.italic",
   link_clickable: "preflight.capability.linkClickable",
@@ -21,6 +26,16 @@ export const CAPABILITY_LABEL_KEY: Record<string, MessageKey> = {
   text_order: "preflight.capability.textOrder",
   tables: "preflight.capability.tables",
   section_breaks: "preflight.capability.sectionBreaks",
+  custom_font: "preflight.capability.customFont",
+  section_order: "preflight.capability.sectionOrder",
+  hidden_entries: "preflight.capability.hiddenEntries",
+  manual_page_break: "preflight.capability.manualPageBreak",
+  keep_with_next: "preflight.capability.keepWithNext",
+  entry_spacing: "preflight.capability.entrySpacing",
+  body_color: "preflight.capability.bodyColor",
+  scholar_skills_grid: "preflight.capability.scholarSkillsGrid",
+  research_fields: "preflight.capability.researchFields",
+  long_cv: "preflight.capability.longCv",
 };
 
 /** 格式键 → 展示名；未知格式原样显示。 */

@@ -6,7 +6,7 @@
 2. ``upcoming`` 只返回 pending 且按 ``remind_at`` 升序；
 3. 绑定漏斗/岗位/简历后，被绑对象删除不连坐（外键 SET NULL）。
 """
-from datetime import timedelta
+from datetime import UTC, timedelta
 
 from app.models.job import Job
 from app.models.profile import utcnow
@@ -14,7 +14,7 @@ from app.models.reminder import Reminder
 from app.models.resume import ResumeRecord
 from app.models.tracker import ApplicationTrack
 from app.services import trash
-from app.services.reminder_service import reminder_urgency
+from app.services.reminder_service import reminder_days_until, reminder_urgency
 
 
 def _job(db_session, title="后端开发工程师", company="示例公司") -> Job:
@@ -153,6 +153,23 @@ def test_reminder_urgency_mapping_and_labels():
     assert reminder_urgency(now + timedelta(days=4), now) == ("later", "4 天后")
 
 
+def test_reminder_days_until_matches_label_semantics():
+    """结构化倒计时必须与历史中文标签同一口径（前端靠它自己拼文案）。"""
+    now = utcnow().replace(hour=12, minute=0, second=0, microsecond=0)
+
+    # 逾期不足 24 小时也按"1 天"算——与「已逾期 1 天」逐字一致。
+    assert reminder_days_until(now - timedelta(hours=2), now) == -1
+    assert reminder_urgency(now - timedelta(hours=2), now) == ("overdue", "已逾期 1 天")
+    # 逾期 3 天整 → -3（不会因为多出的 0 小时变成 -2）。
+    assert reminder_days_until(now - timedelta(days=3), now) == -3
+    # 今天稍后 → 0；明天同一时刻 → 1；5 天后 → 5。
+    assert reminder_days_until(now + timedelta(hours=2), now) == 0
+    assert reminder_days_until(now + timedelta(days=1), now) == 1
+    assert reminder_days_until(now + timedelta(days=5), now) == 5
+    # 带时区的入参与无时区 now 混用时不抛 TypeError（统一走 _naive_utc）。
+    assert reminder_days_until((now + timedelta(days=2)).replace(tzinfo=UTC), now) == 2
+
+
 def test_upcoming_enriches_urgency_and_sorts(client):
     now = utcnow()
 
@@ -173,6 +190,16 @@ def test_upcoming_enriches_urgency_and_sorts(client):
     assert by_title["upcoming"]["due_label"] == "2 天后"
     assert by_title["later"]["urgency"] == "later"
     assert by_title["later"]["due_label"] == "5 天后"
+
+    # 新增的结构化倒计时：出参必须带上，且与 due_label 同一口径。
+    # （due_label 上面几条断言逐字未变——它是给旧前端/其它调用方的兼容字段。）
+    for item in data:
+        assert "days_until" in item
+        assert isinstance(item["days_until"], int)
+    assert by_title["overdue"]["days_until"] == -2
+    assert by_title["soon"]["days_until"] in {0, 1}
+    assert by_title["upcoming"]["days_until"] == 2
+    assert by_title["later"]["days_until"] == 5
 
 
 def test_reminder_popup_setting_default_and_toggle(client):

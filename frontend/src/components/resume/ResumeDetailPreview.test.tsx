@@ -8,17 +8,26 @@
  *
  * 2026-10-24：原「写作增强」页签搬到右键菜单（`features/ai-polish/AiPolishLayer`），
  * 页签列表少一项；这里同时断言它**没有**作为空壳页签留下来。
+ *
+ * 夹具、渲染入口与 CSS 断言辅助在 `src/test/resumeDetailPreviewHarness.tsx`
+ * （2026-11 行数预算）；`vi.mock` 仍留在本文件——vitest 的 mock 注册是文件级的。
  */
-import { App as AntdApp } from "antd";
 import { t } from "../../i18n";
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { fireEvent, screen, within } from "@testing-library/react";
 // @ts-expect-error Node 内置模块：@types/node 未安装，但 vitest 运行在 Node 里。
 import { readFileSync } from "node:fs";
 import type { ReactNode } from "react";
-import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { ResumeDetail, ResumeLayout } from "../../types";
-import ResumeDetailPreview from "./ResumeDetailPreview"; // 预览是真的 iframe + 量高，与本用例无关，替掉以免拖慢/拖挂。
+import {
+  cssDeclarations,
+  DETAIL,
+  LAYOUT,
+  PROFILE,
+  renderPreview,
+  renderPreviewWith,
+  resetResumeDetailDom,
+  stripCssComments,
+} from "../../test/resumeDetailPreviewHarness";
 
 // 与 `styles/color-regression.test.ts` 同一套写法：从磁盘读 CSS 原文（jsdom 不求值网格位置）。
 declare const process: { cwd(): string };
@@ -29,27 +38,6 @@ declare const process: { cwd(): string };
  */
 const profileMocks = vi.hoisted(() => ({ getProfile: vi.fn() }));
 vi.mock("../../api/profile", () => ({ getProfile: profileMocks.getProfile }));
-
-/** 只需要让 `profileToResumeContent` 走得通：六个列表给空数组，个人总结非空即可。 */
-const PROFILE = {
-  photo: "",
-  name: "张三",
-  gender: "",
-  birth_year: "",
-  phone: "",
-  email: "",
-  city: "",
-  personal_website: "",
-  github: "",
-  job_intent: "",
-  summary: "Backend engineer, five years.",
-  educations: [],
-  experiences: [],
-  campus_experiences: [],
-  projects: [],
-  skills: [],
-  awards: [],
-};
 
 // 预览本身由 ResumePreview.test.tsx 覆盖；这里把它替成一个**只做插槽接线**的桩：
 // 两个具名插槽（结构类 / 度量类）原样渲染出来，好让"调用点有没有把两组喂进去"被钉住。
@@ -92,7 +80,7 @@ vi.mock("./ResumeTemplateControls", () => ({
 }));
 // 度量类控件的桩会把**收到的 props** 记下来：P0-6 的验收口径原话就是
 // "以 `showMarginSides={false}` 断言"，而它是调用点决定的，桩以外看不见。
-const mockMeasureProps: { current?: Record<string, unknown> } = {};
+const mockMeasureProps = vi.hoisted<{ current?: Record<string, unknown> }>(() => ({}));
 vi.mock("./ResumeMeasureControls", () => ({
   default: (props: Record<string, unknown>) => {
     mockMeasureProps.current = props;
@@ -103,91 +91,7 @@ vi.mock("./ResumeMeasureControls", () => ({
 // （`导出选项` 是弹出面板里的另一个文案，不会撞）。
 vi.mock("../ExportButtons", () => ({ default: () => <button type="button">导出</button> }));
 
-const DETAIL: ResumeDetail = {
-  id: 42,
-  title: "后端开发-示例科技",
-  job_id: 7,
-  job_title: "后端开发",
-  company: "示例科技",
-  source: "ai",
-  favorite: false,
-  note: "",
-  model: "demo-model",
-  enhancement_enabled: false,
-  enhancement_level: "balanced",
-  template: "classic",
-  format_name: "",
-  format_config: {},
-  page_limit: 1,
-  font_scale: "standard",
-  created_at: "2026-09-20T08:00:00",
-  content: {
-    photo: "",
-    name: "张三",
-    gender: "",
-    birth_year: "",
-    phone: "",
-    email: "",
-    city: "",
-    personal_website: "",
-    github: "",
-    job_intent: "后端开发",
-    summary: "",
-    education: [],
-    experience: [],
-    campus_experience: [],
-    projects: [],
-    skills: [],
-    awards: [],
-  },
-  warnings: [],
-  parse_error: "",
-  rationale: "",
-  parent_revision_id: null,
-  coverage_notes: [],
-};
-
-const LAYOUT: ResumeLayout = {
-  template: "classic",
-  format_name: "",
-  page_limit: 1,
-  font_scale: "standard",
-  format_config: {},
-};
-
-function renderPreview(extraActions?: ReactNode) {
-  const previewRef = { current: null };
-  return render(
-    <MemoryRouter>
-      <AntdApp>
-        <ResumeDetailPreview
-          detail={DETAIL}
-          html="<html></html>"
-          layout={LAYOUT}
-          layoutStatus={null}
-          measure={null}
-          pdfDirectAvailable
-          relayouting={false}
-          previewRef={previewRef}
-          onLayoutStatus={vi.fn()}
-          onMeasure={vi.fn()}
-          onApplyLayout={vi.fn()}
-          onApplyFittedFormat={vi.fn()}
-          onSaveEditedResume={vi.fn()}
-          extraActions={extraActions}
-          suggestionsGenerated={false}
-          suggestionsResetKey={0}
-          onSuggestionsGenerated={vi.fn()}
-        />
-      </AntdApp>
-    </MemoryRouter>,
-  );
-}
-
-afterEach(() => {
-  cleanup();
-  document.body.innerHTML = "";
-});
+afterEach(resetResumeDetailDom);
 
 beforeEach(() => {
   // 缺省有一份可用的资料：绝多数用例只关心"入口在不在"，不关心接口本身。
@@ -236,45 +140,8 @@ describe("ResumeDetailPreview 的工具栏两行插槽", () => {
 });
 
 describe("生成说明与警告分级", () => {
-  function detailWith(overrides: Partial<ResumeDetail>): ResumeDetail {
-    return {
-      ...DETAIL,
-      ...overrides,
-      content: { ...DETAIL.content, ...overrides.content },
-    };
-  }
-
-  function renderWith(overrides: Partial<ResumeDetail>) {
-    const previewRef = { current: null };
-    return render(
-      <MemoryRouter>
-        <AntdApp>
-          <ResumeDetailPreview
-            detail={detailWith(overrides)}
-            html="<html></html>"
-            layout={LAYOUT}
-            layoutStatus={null}
-            measure={null}
-            pdfDirectAvailable
-            relayouting={false}
-            previewRef={previewRef}
-            onLayoutStatus={vi.fn()}
-            onMeasure={vi.fn()}
-            onApplyLayout={vi.fn()}
-            onApplyFittedFormat={vi.fn()}
-            onSaveEditedResume={vi.fn()}
-            suggestionsGenerated={false}
-            suggestionsResetKey={0}
-            onSuggestionsGenerated={vi.fn()}
-            onResumeRevised={vi.fn()}
-          />
-        </AntdApp>
-      </MemoryRouter>,
-    );
-  }
-
   it("shows the generation rationale in a collapsible section", async () => {
-    renderWith({ rationale: "目标岗位「产品运营」：候选资料组成：项目 2 条。" });
+    renderPreviewWith({ rationale: "目标岗位「产品运营」：候选资料组成：项目 2 条。" });
 
     fireEvent.click(await screen.findByText("为什么是这样一份简历（生成说明）"));
 
@@ -282,7 +149,7 @@ describe("生成说明与警告分级", () => {
   });
 
   it("renders structured coverage notes as a neutral group with an action button", async () => {
-    renderWith({
+    renderPreviewWith({
       coverage_notes: [
         {
           section: "projects",
@@ -306,7 +173,7 @@ describe("生成说明与警告分级", () => {
   });
 
   it("覆盖提示里的「打开手动调整」改为打开简历制作台", async () => {
-    renderWith({
+    renderPreviewWith({
       coverage_notes: [
         {
           section: "projects",
@@ -326,7 +193,7 @@ describe("生成说明与警告分级", () => {
   });
 
   it("routes legacy plain-text coverage warnings away from the fabrication group", () => {
-    renderWith({
+    renderPreviewWith({
       warnings: [
         "专业技能中出现本岗位候选资料未包含的技能「Excel」，请核对是否为虚构",
         "项目经历中有 1 条没有出现在这份简历里：「Amazon ESG」与这个岗位的关键词交集不足。",
@@ -479,16 +346,41 @@ describe("ResumeDetailPreview 底部按钮排满整行", () => {
     expect(tailChildren[tailChildren.length - 1]).toBe(exportBox);
     expect(footer.querySelectorAll(".resume-detail-footer-export")).toHaveLength(1);
 
-    // 位置在 CSS 里、jsdom 不求值：读原文断言它从第 4 列跨到**最后一列**的右边界。
-    // 2026-11 起写 `4 / -1` 而不是 `4 / 6`：`auto-fill` 的列数随容器宽变（960px 弹窗里
-    // 是 5～6 列），写死列号时列数一变导出就不再贴右边缘。
+    // 位置在 CSS 里、jsdom 不求值：读原文断言尾行的排布规则。
     // 2026 年样式表拆分后，`.resume-detail-footer*` 落在 resume-panels.css
     // （resume.css 现为 @import 清单，读它只剩两行 import）。
     const css = readFileSync(
       [process.cwd(), "src", "styles", "resume-panels.css"].join("/"),
       "utf8",
     );
-    expect(css).toContain("grid-column: 4 / -1");
-    expect(css).toContain("justify-self: end");
+    const tailRule = cssDeclarations(css, ".resume-detail-footer-tail");
+    // 尾行独占页脚一整行，并且**自己换行**：装不下时整组落到下一行，而不是挤出卡片。
+    expect(tailRule).toContain("grid-column: 1 / -1");
+    expect(tailRule).toContain("flex-wrap: wrap");
+
+    const rightGroupRule = cssDeclarations(
+      css,
+      ".resume-detail-footer-tail > .resume-detail-footer-export",
+    );
+    // 贴右收尾（同一行时吃中间空档、换行后把自己推到右边界）+ 极窄时不撑破行宽。
+    expect(rightGroupRule).toContain("margin-left: auto");
+    expect(rightGroupRule).toContain("min-width: 0");
+    expect(rightGroupRule).toContain("flex-wrap: wrap");
+
+    // 左侧两个次动作不许伸展：一伸展就把右侧动作组挤到下一行（2026-11 的排版事故之一）。
+    const tailButtonRule = cssDeclarations(css, ".resume-detail-footer-tail > .ant-btn");
+    expect(tailButtonRule).toContain("flex: 0 0 auto");
+    // antd 的 `.ant-btn-block` 是 `width: 100%`，放进 flex 必须覆盖回 auto。
+    expect(tailButtonRule).toContain("width: auto");
+
+    // 反例守卫：不许再出现「从第 N 列起」。`auto-fill` 的列数随宽度在 2～5 之间变，
+    // 5 列时 `4 / -1` 只剩 2 格（~330px）、4 列时只剩 1 格（~165px），列数再少一档时
+    // 起止线相等还会补出一个隐式列——三条路都会让右侧动作组被压成一格一行，
+    // 或者（`extraActions` 里有不可收缩的行时）直接画出页脚右边界。
+    //
+    // **在剥注释后的原文上断言**：上面 tail 的注释里逐字留着旧写法（"这里原来是
+    // `grid-column: 4 / -1`"），直接匹配注释会命中它自己。剥完之后全文件只剩
+    // `.resume-detail-footer-tail` 那条 `grid-column: 1 / -1`。
+    expect(stripCssComments(css)).not.toMatch(/grid-column:\s*[2-9]/);
   });
 });

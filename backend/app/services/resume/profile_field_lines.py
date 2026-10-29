@@ -42,6 +42,7 @@ ROW_SEPARATOR = " · "
 __all__ = [
     "PROFILE_FIELD_ORDER",
     "ROW_SEPARATOR",
+    "effective_profile_field_layout",
     "profile_field_lines",
     "profile_field_row_cells",
     "profile_field_rows",
@@ -72,6 +73,28 @@ def _section_layout(layout: object, section_key: str) -> dict | None:
         return None
     payload = layout.get(section_key)
     return payload if isinstance(payload, dict) else None
+
+
+def effective_profile_field_layout(item: object, section_key: str, layout: object) -> dict | None:
+    """该**条目**实际生效的排版（分区配置 ← 条目级覆盖）；`None` = 该分区没配置。
+
+    单条条目可以有自己的列数 / 对齐 / 间距 / 顺序 / 独占行（`entries.<section>.<id>`），
+    叠加规则只在 `resume_field_layout.merge_entry_layout` 里写一份。四个渲染器全都经由
+    ``profile_field_rows`` / ``profile_field_row_cells`` 取行，所以它们**一行都不用改**；
+    PDF 需要单独算列几何（`column_geometry` 吃的是这个函数的返回值）。
+
+    延迟导入：`resume_field_layout` 在模块顶层从本模块取 `PROFILE_FIELD_ORDER` /
+    `ROW_SEPARATOR`，顶层互相 import 会成环（本模块先被加载时对方还拿不到字段表）。
+    """
+    section_layout = _section_layout(layout, section_key)
+    if section_layout is None:
+        return None
+    from .resume_field_layout import merge_entry_layout
+
+    entries = section_layout.get("entries")
+    entry_id = getattr(item, "id", "") or ""
+    entry_layout = entries.get(entry_id) if isinstance(entries, dict) else None
+    return merge_entry_layout(section_layout, entry_layout, section_key)
 
 
 def _ordered_fields(section_key: str, section_layout: dict | None) -> tuple[str, ...]:
@@ -146,12 +169,15 @@ def profile_field_rows(
     ``layout`` 是 ``resolve_field_layout`` 的整张表（``None`` / 该分区没配置时）。
     **无配置时每字段一行**——与改造前的逐行渲染完全一致（四格式默认产物不变）。
     空值跳过；``solo`` 字段独占一行；``columns`` 控制一行最多几个单元格。
+
+    装箱用的是**该条目实际生效的**配置（分区默认 + `entries.<分区>.<id>` 覆盖，
+    见 ``effective_profile_field_layout``）：同分区的两条教育可以一条 3 列、另一条 2 列。
     """
-    section_layout = _section_layout(layout, section_key)
-    cells = _collect_cells(item, section_key, labels, section_layout)
-    if section_layout is None:
+    effective = effective_profile_field_layout(item, section_key, layout)
+    cells = _collect_cells(item, section_key, labels, effective)
+    if effective is None:
         return [[(label, value)] for _field, label, value in cells]
-    rows = _pack_cells(cells, _columns_of(section_layout), _solo_of(section_layout))
+    rows = _pack_cells(cells, _columns_of(effective), _solo_of(effective))
     return [[(label, value) for _field, label, value in row] for row in rows]
 
 
@@ -163,12 +189,12 @@ def profile_field_row_cells(
     装箱逻辑只有 ``_pack_cells`` 一份；这里只把三元组转成模板可直接点属性访问的 dict，
     避免 HTML 模板自己再排一次（那样四格式就又分叉了）。
     """
-    section_layout = _section_layout(layout, section_key)
-    cells = _collect_cells(item, section_key, labels, section_layout)
-    if section_layout is None:
+    effective = effective_profile_field_layout(item, section_key, layout)
+    cells = _collect_cells(item, section_key, labels, effective)
+    if effective is None:
         rows = [[cell] for cell in cells]
     else:
-        rows = _pack_cells(cells, _columns_of(section_layout), _solo_of(section_layout))
+        rows = _pack_cells(cells, _columns_of(effective), _solo_of(effective))
     return [
         [{"field": field, "label": label, "value": value} for field, label, value in row]
         for row in rows

@@ -16,6 +16,8 @@ import { act, cleanup, render } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ResumeContent, ResumeLayout } from "../../types";
 import { createResumeDraftStore } from "../../features/resume/resumeDraftContent";
+import { ENTRY_POINT_FIELDS } from "../../features/resume-document/types";
+import { isObjectId, resetEntryIdCache } from "../../features/resume-document/identity";
 import ResumeWorkbenchLiveCanvas from "./ResumeWorkbenchLiveCanvas";
 
 /** `useResumeLivePreview` 收到的入参（每帧覆盖一份，断言读最后一次）。 */
@@ -64,13 +66,52 @@ const SAVED: ResumeContent = {
 
 const LAYOUT = { template: "classic" } as unknown as ResumeLayout;
 
-function renderCanvas(props: {
+/**
+ * 一份**带条目但没有 W01 条目 id** 的草稿。
+ *
+ * 制作台会把草稿交给 `ensureEntryIds` 补齐条目 id（面板的条目下拉 / 对象排版按 id 落点），
+ * 所以喂给重排的那一份**必然是新对象**——夹具里放一条真条目，`id` 断言才有内容可查。
+ */
+function draftWithEntry(): ResumeContent {
+  return {
+    ...SAVED,
+    name: "草稿版本",
+    experience: [
+      {
+        company: "Acme",
+        role: "后端工程师",
+        start_date: "",
+        end_date: "",
+        description: ["负责核心链路"],
+        highlights: [],
+        tech_stack: [],
+      },
+    ],
+  } as unknown as ResumeContent;
+}
+
+/** 正文里**全部**条目 id（按 `ENTRY_POINT_FIELDS` 逐分区收集，不写死分区名）。 */
+function entryIds(content: ResumeContent | null): string[] {
+  if (!content) return [];
+  const source = content as unknown as Record<string, unknown>;
+  return Object.keys(ENTRY_POINT_FIELDS).flatMap((field) => {
+    const entries = source[field];
+    if (!Array.isArray(entries)) return [];
+    return (entries as Array<Record<string, unknown> | null>).map((entry) =>
+      entry && typeof entry === "object" && typeof entry.id === "string" ? entry.id : "",
+    );
+  });
+}
+
+interface CanvasProps {
   draftStore?: ReturnType<typeof createResumeDraftStore>;
   mergeLive?: (content: ResumeContent | null) => ResumeContent | null;
   content?: ResumeContent | null;
   previewMode?: "draft" | "exact";
-}) {
-  return render(
+}
+
+function canvasElement(props: CanvasProps) {
+  return (
     <ResumeWorkbenchLiveCanvas
       html="<html>saved</html>"
       warnings={[]}
@@ -81,14 +122,21 @@ function renderCanvas(props: {
       previewMode={props.previewMode}
       draftStore={props.draftStore}
       mergeLive={props.mergeLive}
-    />,
+    />
   );
+}
+
+function renderCanvas(props: CanvasProps) {
+  return render(canvasElement(props));
 }
 
 afterEach(() => {
   cleanup();
   live.content = null;
   live.enabled = false;
+  // id 表按内容签名缓存（同一份正文多处补 id 要得到同一批 id）；用例之间必须清掉，
+  // 否则上一条的 id 会被下一条同形内容读到。
+  resetEntryIdCache();
 });
 
 describe("ResumeWorkbenchLiveCanvas · 草稿优先", () => {
@@ -99,25 +147,46 @@ describe("ResumeWorkbenchLiveCanvas · 草稿优先", () => {
     expect(live.enabled).toBe(true);
   });
 
-  it("草稿一上来就压在宿主正文上面", () => {
+  it("草稿一上来就压在宿主正文上面（并把 W01 条目 id 一起补上）", () => {
     const store = createResumeDraftStore(0);
-    const draft = { ...SAVED, name: "草稿版本" };
+    const draft = draftWithEntry();
     store.set(draft, "sig-1");
 
-    renderCanvas({ draftStore: store });
+    const view = renderCanvas({ draftStore: store });
 
-    expect(live.content).toBe(draft);
+    // 草稿赢过宿主正文：正文来自草稿（名字 + 那条经历），而不是宿主那一份对象。
+    expect(live.content).not.toBe(SAVED);
+    expect(live.content).toMatchObject({
+      name: "草稿版本",
+      experience: [expect.objectContaining({ company: "Acme" })],
+    });
+    // 喂给重排的草稿必须带 W01 条目 id：面板的条目下拉 / 对象排版都按 id 落点。
+    const ids = entryIds(live.content);
+    expect(ids).toHaveLength(1);
+    expect(isObjectId(ids[0])).toBe(true);
+
+    // 同一份草稿在多次渲染之间必须是**同一引用**：否则每一帧都给实时预览一个"内容变了"的
+    // 信号，重排防抖被反复重置，预览永远停在"更新中"（自激）。
+    const first = live.content;
+    view.rerender(canvasElement({ draftStore: store }));
+    expect(live.content).toBe(first);
   });
 
   it("草稿到达时（挂载之后）也会立刻接管预览", () => {
     const store = createResumeDraftStore(0);
     renderCanvas({ draftStore: store });
+    // 还没有草稿：喂给重排的就是宿主那一份引用。
     expect(live.content).toBe(SAVED);
 
-    const draft = { ...SAVED, name: "草稿版本" };
+    const draft = draftWithEntry();
     act(() => store.set(draft, "sig-1"));
 
-    expect(live.content).toBe(draft);
+    expect(live.content).not.toBe(SAVED);
+    expect(live.content).toMatchObject({
+      name: "草稿版本",
+      experience: [expect.objectContaining({ company: "Acme" })],
+    });
+    expect(entryIds(live.content).every(isObjectId)).toBe(true);
   });
 
   it("clear 之后回落到宿主那一版（保存成功 / 放弃修改的出口）", () => {
@@ -132,23 +201,37 @@ describe("ResumeWorkbenchLiveCanvas · 草稿优先", () => {
 
   it("加粗 overlay 叠在草稿上（mergeLive），而不是叠在宿主那一版上", () => {
     const store = createResumeDraftStore(0);
-    const draft = { ...SAVED, name: "草稿版本" };
+    const draft = draftWithEntry();
     store.set(draft, "sig-1");
     const merged = { ...draft, summary: "加粗后的总结" };
 
     renderCanvas({ draftStore: store, mergeLive: () => merged });
 
-    expect(live.content).toBe(merged);
+    // overlay 真的叠上去了（宿主那一版 summary 是空串）。
+    expect(live.content).toMatchObject({ summary: "加粗后的总结" });
+    // 底子是**草稿**那一份而不是宿主那一版：宿主没有这条经历。
+    expect(live.content).toMatchObject({
+      name: "草稿版本",
+      experience: [expect.objectContaining({ company: "Acme" })],
+    });
+    expect(entryIds(live.content).every(isObjectId)).toBe(true);
   });
 
   it("mergeLive 返回 null 时退回草稿本身（不能把正文变成空）", () => {
     const store = createResumeDraftStore(0);
-    const draft = { ...SAVED, name: "草稿版本" };
+    const draft = draftWithEntry();
     store.set(draft, "sig-1");
 
     renderCanvas({ draftStore: store, mergeLive: () => null });
 
-    expect(live.content).toBe(draft);
+    expect(live.content).not.toBeNull();
+    expect(live.content).not.toBe(SAVED);
+    // 退回的是草稿本身（名字 + 那条经历都在），不是空正文。
+    expect(live.content).toMatchObject({
+      name: "草稿版本",
+      experience: [expect.objectContaining({ company: "Acme" })],
+    });
+    expect(entryIds(live.content).every(isObjectId)).toBe(true);
   });
 
   it("精确模式不发实时重排（enabled=false），即使有草稿", () => {

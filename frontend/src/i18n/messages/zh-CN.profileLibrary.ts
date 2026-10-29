@@ -248,6 +248,8 @@ const profileLibrary = {
   "profileLibrary.webform.addFieldPlaceholder": "字段名称，如：实验室、导师姓名",
   "profileLibrary.webform.addFieldAria": "新增自定义网申字段名称",
   "profileLibrary.webform.addFieldAction": "添加",
+  "profileLibrary.webform.customEmpty": "还没有自定义字段",
+  "profileLibrary.webform.customEmptyEditing": "还没有自定义字段，可在下方添加",
   "profileLibrary.webform.repeatedIntro":
     "下面这些资料可以按教育、经历或成果分别新增多条；学校、单位、项目名称等基础内容会按条序自动用于填表，不需要重复录入。",
   "profileLibrary.webform.recordTitle": "第{index}条",

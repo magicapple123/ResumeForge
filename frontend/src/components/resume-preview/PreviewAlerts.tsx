@@ -12,7 +12,7 @@
 import { Alert } from "antd";
 import { t } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
-import { APPROXIMATE_PAGINATION_NOTE_KEY, OVERFLOW_NOTE_KEY } from "./config";
+import { APPROXIMATE_PAGINATION_NOTE_KEY, OVERFLOW_NOTE_KEY, type PreviewMode } from "./config";
 
 interface Props {
   warnings: string[];
@@ -22,6 +22,16 @@ interface Props {
   pagesNeeded: number;
   pageCount: number;
   overflowAmountText: string;
+  /**
+   * 当前预览口径。**精确模式下不渲染溢出那条**（渲染警告不受影响）。
+   *
+   * 精确那一栏的页数结论来自服务端排出的真实 PDF（`ExactPreviewAlerts`），而这里的
+   * `overflow` / `pagesNeeded` 来自草稿画布的浏览器分页。两套引擎算出 6 页和 5 页是常态，
+   * 同时挂着就是**同屏两条页数提醒**（2026-10-29 用户截图：5 页、6 页各一条）。
+   * 精确模式下草稿画布仍在后台排版（只为测量，见 `ResumePreview` 的 `measuringOnly`），
+   * 所以不按口径主动关掉它，它就会一直重复报同一件事。
+   */
+  mode?: PreviewMode;
 }
 
 export default function PreviewAlerts({
@@ -31,16 +41,18 @@ export default function PreviewAlerts({
   pagesNeeded,
   pageCount,
   overflowAmountText,
+  mode = "draft",
 }: Props) {
   useLocale();
-  if (warnings.length === 0 && !overflow) return null;
+  const showOverflowAlert = overflow && mode !== "exact";
+  if (warnings.length === 0 && !showOverflowAlert) return null;
   return (
     <div className="resume-preview-alerts">
       {warnings.length > 0 && (
         <Alert
           type="warning"
           showIcon
-          style={{ marginBottom: 12 }}
+          style={{ marginBottom: 8 }}
           title={t("preview.canvas.warningsTitle")}
           description={
             <ul style={{ margin: 0, paddingLeft: 18 }}>
@@ -51,7 +63,7 @@ export default function PreviewAlerts({
           }
         />
       )}
-      {overflow && (
+      {showOverflowAlert && (
         <Alert
           type="warning"
           showIcon

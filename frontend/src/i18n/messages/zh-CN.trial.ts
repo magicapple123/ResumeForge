@@ -98,7 +98,9 @@ const trial = {
   "trial.export.wordNote": "Word 保留结构与文字，不承诺与模板像素一致",
 
   // ── 格式能力（矩阵口径，W11 下发）────────────────────────────
-  "trial.capability.title": "格式能力",
+  "trial.capability.title": "导出格式差异",
+  /** 标题旁的说明：解释为什么这里只列了几项（全支持的不列）。 */
+  "trial.capability.hint": "只列与预览不完全一致的项",
   "trial.capability.allSupported": "HTML / PDF / Word 均支持",
   "trial.capability.pending": "格式能力矩阵暂不可用",
   "trial.capability.more": "导出与格式差异见「试用与对比」",

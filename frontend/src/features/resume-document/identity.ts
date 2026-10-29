@@ -12,6 +12,7 @@
  */
 
 import type { ResumeContent } from "../../types/resume";
+import { contentSignature } from "../../utils/contentSignature";
 import { ENTRY_POINT_FIELDS, type EntryField } from "./types";
 
 /** 与后端 `OBJECT_ID_PATTERN` 同一口径：8–32 位字母、数字、下划线或连字符。 */
@@ -98,19 +99,66 @@ export function ensureIds(content: ResumeContent): ResumeContent {
  * 在增删要点行时不会同步 `point_ids`，若把 `ensureIds` 生成的要点 id 一起塞进表单，
  * 用户改一行要点后保存就会被 W01 的"要点 id 与文本等长"校验 422。这里只补条目 id，
  * 要点身份仍由大纲结构命令按需维护。
+ *
+ * ## 为什么"同一份内容"必须得到"同一批 id"（2026-11 用户实测缺陷）
+ *
+ * 这份函数的调用方不止一处：制作台外壳（大纲 / 参数面板 / 保存通道）要补一次，宿主重排
+ * 那条链路（`/resumes/render`）也要补一次，而它们各自拿到的是**同一份正文的不同引用**
+ * （`detail.content`、`overlays.merged`、宿主重排时的入参…）。随机 id 的语义是"每次调用都
+ * 给一套新的"，于是面板写进 `format_config.field_layout.entries.<id>` 的键，在渲染正文里
+ * 根本不存在——后端取不到该条目就继承分区默认，条目级排版**静默失效**（纸面上仍是每行
+ * 一个字段）。所以这里按**内容签名**记住"这份正文补出来的 id 表"：内容相同 → id 相同，
+ * 与对象引用、调用次数、调用方都无关。
+ *
+ * 缓存只在"缺少 id"的路径上起作用：已有合法 id 的条目一律原样返回，不查表也不改写。
+ * 签名变了（用户真的改了正文）才会拿到新的一批——那是"新内容"，与既有语义一致。
  */
 export function ensureEntryIds(content: ResumeContent): ResumeContent {
+  const signature = contentSignature(content);
+  const remembered = entryIdTableCache.get(signature);
   const next = { ...content } as ResumeContent & Record<string, unknown>;
+  const table: EntryIdTable = {};
   for (const field of Object.keys(ENTRY_POINT_FIELDS) as EntryField[]) {
     const entries = (content as unknown as Record<string, unknown>)[field];
     if (!Array.isArray(entries)) continue;
-    next[field] = entries.map((entry) => {
+    const previous = remembered?.[field] ?? [];
+    const ids: string[] = [];
+    next[field] = entries.map((entry, index) => {
       if (!entry || typeof entry !== "object") return entry;
       const item = entry as AnyEntry;
-      return isObjectId(item.id) ? item : { ...item, id: newObjectId() };
+      // 已有的合法 id 一律不动：每次调用都换一遍等于把所有关联打散（W01 第 3 条规则）。
+      const id = isObjectId(item.id) ? item.id : (previous[index] ?? newObjectId());
+      ids.push(id);
+      return isObjectId(item.id) ? item : { ...item, id };
     });
+    table[field] = ids;
   }
+  rememberEntryIds(signature, table);
   return next as ResumeContent;
+}
+
+/** 一条内容里"各分区的条目 id，按数组下标对齐"。 */
+type EntryIdTable = Record<string, string[]>;
+
+/** 只留最近若干份：缓存是"同一份正文被多处补 id"的短期一致性手段，不是内容存储。 */
+const ENTRY_ID_CACHE_MAX = 8;
+
+const entryIdTableCache = new Map<string, EntryIdTable>();
+
+function rememberEntryIds(signature: string, table: EntryIdTable): void {
+  // 先删后插：`Map` 的迭代顺序是插入顺序，这样最久没用到的签名会被第一个淘汰。
+  entryIdTableCache.delete(signature);
+  entryIdTableCache.set(signature, table);
+  while (entryIdTableCache.size > ENTRY_ID_CACHE_MAX) {
+    const oldest = entryIdTableCache.keys().next();
+    if (oldest.done) break;
+    entryIdTableCache.delete(oldest.value);
+  }
+}
+
+/** 清空 id 缓存（**只给测试用**：用例之间不能互相喂上一份内容的 id）。 */
+export function resetEntryIdCache(): void {
+  entryIdTableCache.clear();
 }
 
 /** 正文里是否存在缺少合法条目 id 的条目（用于判断保存版式时是否要顺带物化身份）。 */

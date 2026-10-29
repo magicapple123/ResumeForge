@@ -30,6 +30,9 @@ const HEADER_STYLE: CSSProperties = {
 
 const COUNT_TEXT_STYLE: CSSProperties = { fontSize: 12 };
 
+/** 卡片底部插槽的间距：与字段行的 `gutter` 视觉上留一口气。 */
+const FOOTER_STYLE: CSSProperties = { marginTop: 10 };
+
 /**
  * **自定义 memo**：Group 本身很薄（一个容器 + 计数），真正的开销在每个字段的输入控件。
  * Field 已接收稳定回调（见 WebFormProfileField），加上这里只按「本组 fields 的值」判等，
@@ -48,6 +51,7 @@ function WebFormProfileGroupImpl({
   onChange,
   onRename,
   onDelete,
+  footer,
 }: WebFormProfileGroupProps) {
   useLocale();
   return (
@@ -77,8 +81,10 @@ function WebFormProfileGroupImpl({
           />
         ))}
       </Row>
+      {footer ? <div style={FOOTER_STYLE}>{footer}</div> : null}
     </div>
   );
 }
 
+/** 底部插槽的载荷（「自定义」分组用它承载"添加自定义字段"；判等见 memo 模块）。 */
 export default memo(WebFormProfileGroupImpl, areGroupPropsEqual);

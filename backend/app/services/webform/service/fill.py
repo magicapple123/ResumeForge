@@ -15,7 +15,7 @@ from ...browser.cdp_client import CdpClient
 from .._base import WebFormBadRequest, WebFormConflict
 from ..engine import ApplyOutcome, Control, FieldMapping, FormEngine
 from ..engine.recovery import REASON_VALUE_MISMATCH
-from ..extra_profile import custom_fields_of
+from ..extra_profile import CUSTOM_GROUP, custom_fields_of
 from ..field_types import normalize_group_id
 from ..fields import FORM_FIELDS, SOURCE_EXTRA
 from ..matching import (
@@ -131,6 +131,11 @@ def list_extra_fields(db: Session | None = None) -> dict[str, Any]:
     自定义字段统一归到 ``自定义`` 那一组（放最后），``kind`` 给 ``text``：它们是用户在填表
     时攒的，没有目录里那份"这是长文本还是电话"的信息。它们只在用户主动开启放宽模式时参与
     受约束的文本匹配；普通模式保持保守。
+
+    **``自定义`` 组无条件出现在 ``groups`` 里**（字段清单仍然只含真实存在的 ``CUSTOM_``
+    行）。界面默认就要有这张空卡片——用户可以在里面加自定义字段；只在"已经有自定义字段"
+    时才给组，会让人以为没有这个功能。空组不产生任何字段，所以整份覆盖保存、识别与填充
+    链路都拿不到多余的东西。
     """
     groups: list[str] = []
     for field_item in FORM_FIELDS:
@@ -156,6 +161,9 @@ def list_extra_fields(db: Session | None = None) -> dict[str, Any]:
 
     if db is not None:
         fields.extend(custom_fields_of(db, groups))
+
+    if CUSTOM_GROUP not in groups:
+        groups.append(CUSTOM_GROUP)
 
     return {"fields": fields, "groups": groups}
 

@@ -16,6 +16,10 @@ const bilingual = {
   "bilingual.compare.title": "Field comparison",
   "bilingual.compare.columnPrimary": "Chinese",
   "bilingual.compare.columnSecondary": "English",
+  "bilingual.compare.columnCurrent": "Current resume",
+  "bilingual.compare.columnVariant": "Selected version",
+  "bilingual.compare.identical":
+    "This version is still a copy of the current resume: run “Generate candidates”, select the entries, then “Adopt selected”.",
   "bilingual.compare.same": "Match",
   "bilingual.compare.changed": "Different",
   "bilingual.compare.empty": "Both sides are empty",

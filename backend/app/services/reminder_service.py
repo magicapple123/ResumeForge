@@ -58,9 +58,30 @@ def _naive_utc(value: datetime) -> datetime:
     return value.astimezone(UTC).replace(tzinfo=None)
 
 
+def reminder_days_until(remind_at: datetime, now: datetime) -> int:
+    """结构化倒计时：负数=逾期天数，0=今天，1=明天，``N``=N 天后。
+
+    这是"离开提醒时间还有多久"的**唯一口径**：后端只给这个整数（以及兼容用的中文
+    ``due_label``），展示文案由前端按界面语言自己组合——把中文成品串下发给英文界面，
+    就会出现"同一行里 Tag 是中文、其余都是英文"的割裂。
+
+    口径必须与历史标签**逐字一致**（``reminder_urgency`` 的中文标签就是照它拼的）：
+
+    - 逾期：``-max(1, (now - remind_at).days)``——刚过 2 小时也算"已逾期 1 天"，
+      那个 ``max(1, …)`` 不能丢，否则不足一天会被显示成"今天"。
+    - 未逾期：``max(0, (remind_at.date() - now.date()).days)``——按**日历日**差，
+      所以"今天稍后"是 0 而不是按小时取整。
+    """
+    remind_at = _naive_utc(remind_at)
+    now = _naive_utc(now)
+    if remind_at < now:
+        return -max(1, (now - remind_at).days)
+    return max(0, (remind_at.date() - now.date()).days)
+
+
 def _due_label(remind_at: datetime, now: datetime) -> str:
     """非逾期提醒的展示标签：今天 / 明天 / N 天后。"""
-    days_until = (remind_at.date() - now.date()).days
+    days_until = reminder_days_until(remind_at, now)
     if days_until <= 0:
         return "今天"
     if days_until == 1:
@@ -77,7 +98,8 @@ def reminder_urgency(remind_at: datetime, now: datetime) -> tuple[ReminderUrgenc
     now = _naive_utc(now)
     delta = remind_at - now
     if delta < timedelta(0):
-        days = max(1, (now - remind_at).days)
+        # 天数不在这里再算一遍：``reminder_days_until`` 是唯一口径，取负即逾期天数。
+        days = -reminder_days_until(remind_at, now)
         return REMINDER_URGENCY_OVERDUE, f"已逾期 {days} 天"
     label = _due_label(remind_at, now)
     if delta <= timedelta(hours=24):
@@ -136,9 +158,10 @@ def upcoming_reminders(db: Session, *, limit: int = 50) -> list[Reminder]:
 
 
 def upcoming_reminder_out(reminder: Reminder, now: datetime) -> ReminderUpcomingOut:
-    """把一条待办提醒转成首页回显结构，补上紧急度与展示标签。"""
+    """把一条待办提醒转成首页回显结构，补上紧急度、结构化倒计时与兼容标签。"""
     out = ReminderUpcomingOut.model_validate(reminder)
     out.urgency, out.due_label = reminder_urgency(reminder.remind_at, now)
+    out.days_until = reminder_days_until(reminder.remind_at, now)
     return out
 
 
@@ -214,6 +237,7 @@ __all__ = [
     "delete_reminder",
     "list_reminders",
     "reminder_or_none",
+    "reminder_days_until",
     "reminder_urgency",
     "reminder_urgency_counts",
     "upcoming_reminder_out",

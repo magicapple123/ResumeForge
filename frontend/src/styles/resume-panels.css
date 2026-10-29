@@ -55,9 +55,10 @@
 }
 
 /* 简历预览弹窗的底部操作条：**吸附在弹窗底部**，内容再长也不用翻到最后才点得到。
-   按钮区是 CSS Grid：每个按钮独占一格、block 拉满整格，自动铺满整行、不留右侧空当
-   （原先 flex space-between 在窄一档时右边会留出大片空白）。「下载 PDF」主按钮独占
-   底部一整行，保持醒目。 */
+   主网格是 CSS Grid：每个主按钮独占一格、block 拉满整格，自动铺满整行、不留右侧空当
+   （原先 flex space-between 在窄一档时右边会留出大片空白）。
+   列数随宽度在 2～5 之间变（正文 912px → 5 列，700px → 4 列，500px → 3 列），所以
+   尾行里**任何"从第 N 列起"的写法都会在某个宽度档上失效**——原因见 tail 的注释。 */
 .resume-detail-footer {
   position: sticky;
   bottom: 0;
@@ -72,12 +73,11 @@
   border-top: 1px solid var(--rf-border, var(--rf-border));
 }
 
-/* 「下载 PDF」主按钮组：独占整行、保持醒目，不再和上方按钮挤在同一排抢宽度。 */
-/* T4：导出按钮落到「离线分享」所在行的**最后一格**（`auto-fill` 网格的 `-2 / -1`
-   就是这一行的末尾），也就是整张卡片的右下角——导出是这一步的终点动作，位置对了
-   才不必在整排按钮里找它。 */
+/* 「导出」按钮组：只按内容宽度渲染、靠右收尾（它是这一步的终点动作，位置固定才好找）。
+   旧规则在这里写过 `grid-column: -2 / -1`（导出当时还是页脚的直接网格项）；现在导出
+   恒在 `.resume-detail-footer-tail` 内部（见 ResumeDetailFooter 的两个分支），网格列号
+   对它已不起作用，删掉以免下次误读成"导出仍参与列布局"。 */
 .resume-detail-footer-export {
-  grid-column: -2 / -1;
   display: flex;
   align-items: center;
   justify-content: flex-end;
@@ -85,11 +85,20 @@
   gap: 8px 12px;
 }
 
-/* 最后一行：左侧两个次动作（质量 / 离线分享）与右侧的
-   「取消修改 / 保存修改 / 导出」**合并成同一行**（2026-10-20 用户要求；
-   2026-11 起「咨询求职助手」上提到主网格，这一行只剩两个次动作）。
-   容器用 subgrid 复用页脚的列，左侧按钮因此仍与上面几排逐列对齐；
-   右侧动作从第 4 列一直收到**最后一列**的右边界。 */
+/* 尾行：左侧两个次动作（质量检测 / 离线分享）+ 右侧动作组（完成… + 导出）。
+   2026-10-20 的用户要求是：宽度够时两者**在同一行**、右侧靠右收尾，不要各占一行。
+
+   2026-11 定位并修掉的排版事故：这里原来是 subgrid + 右侧动作 `grid-column: 4 / -1`。
+   右侧动作组（生成弹窗是「去简历中心 / 重新生成 / 完成 / 导出」）需要一整块 ~360px，
+   而「第 4 列到最后一列」在 5 列时只有 2 列（~330px）、4 列时只剩 1 列（~165px），
+   列数再少一档时起止线相等，浏览器还会按 `4 / 5` 补一个**隐式列**（把网格撑宽）。
+   三条路最后都是"内容比格子宽"：要么整组被压成一格一行（完成、导出上下错开），
+   要么直接画出页脚右边界（`extraActions` 里有不可收缩的行时必然发生）。
+
+   改成 flex 换行：装得下 → 左右同一行、右侧靠 `margin-left: auto` 贴右；装不下 →
+   整组落到自己的一行、仍然贴右。换行与列数无关，因此没有会失效的魔法数字。
+   代价：左侧两个次动作不再与上排按钮逐列对齐（那是 subgrid 才有的能力），观感是
+   "一组靠左、一组靠右"。用一点对齐感换"任何宽度都不溢出、不拆散"。 */
 .resume-detail-footer-tail {
   grid-column: 1 / -1;
   display: flex;
@@ -98,25 +107,36 @@
   gap: 10px 12px;
 }
 
-@supports (grid-template-columns: subgrid) {
-  .resume-detail-footer-tail {
-    display: grid;
-    grid-template-columns: subgrid;
-  }
+/* 左侧两个次动作：宽度取主网格的最小列宽 150px（即 `minmax(150px, 1fr)` 的下界，
+   与上排按钮同宽量级），并且**不伸展**——伸展会把右侧动作组挤到下一行。
+   视口 ≤720px 时降到 120px（见文件末尾该媒体查询）：那时正文只剩 ~640px。
+
+   "左右同排"的换行阈值按最宽形态算（右侧是「去简历中心 / 重新生成 / 完成 / 导出」，
+   浏览器实测自然宽度 ≈299px；生成弹窗以外只有「导出」一项，阈值更低）：
+   150 + 150 + 299 + 两处 12px 列间距 ≈ **623px** 页脚宽度。
+   视口 ≤720px 时左侧降到 120px，阈值随之降到 ≈563px。
+   两个数字都是上面几项的和，不是新引入的魔法数字；改了任一侧括号里的量就要重算。 */
+.resume-detail-footer-tail > .ant-btn {
+  flex: 0 0 auto;
+  width: auto;
+  min-width: 150px;
 }
 
-/* 右侧动作按内容宽度靠右收尾，**跨度到最后一列**（`4 / -1`）而不是写死 `4 / 6`：
-   `auto-fill` 的列数随容器宽变（960px 弹窗里是 5～6 列），写死列号时列数一变导出
-   就不再贴着右边缘（多出一个空列，看起来像按钮掉到了中间）。`-1` 永远等于右边界。 */
+/* 右侧动作组（确认行，或只有导出）：贴右 + 装不下时整组换行。
+   - `margin-left: auto` 是"贴右"的唯一手段：同一行时吃掉中间空档，换到下一行时
+     把自己推到右边界（换成 `justify-self` 之类的网格属性在这里已无效）。
+   - `min-width: 0` + `max-width: 100%`：极窄屏（~340px 正文）不许它撑破行宽。
+   - `flex-wrap: wrap` 只在"整组比一整行还宽"时才让里面的按钮换行——那是物理极限
+     （正文 < ~380px），此时无论怎么写都放不下，只能保证不溢出。 */
 .resume-detail-footer-tail > .resume-detail-footer-confirm-row,
 .resume-detail-footer-tail > .resume-detail-footer-export {
-  grid-column: 4 / -1;
-  justify-self: end;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: flex-end;
-  flex-wrap: wrap;
   gap: 8px;
+  min-width: 0;
+  max-width: 100%;
   margin-left: auto;
 }
 
@@ -124,29 +144,41 @@
   display: flex;
   align-items: center;
   gap: 8px;
+  min-width: 0;
 }
 
 .resume-detail-footer-confirm-row .ant-space {
   display: inline-flex;
 }
 
-/* 右侧三个动作比左侧按钮小一档：这里只按内容宽度渲染，不再铺满整格。 */
+/* 右侧动作比左侧按钮小一档：只按内容宽度渲染，不铺满整格。
+   `flex: 0 0 auto` 是"任何宽度下都不被压缩"的兜底：`.ant-btn` 缺省是
+   `flex-shrink: 1`，当一个按钮自己就比容器宽时（正文 < ~380px，右侧组连一行都
+   放不下，`flex-wrap` 已无处可换）它会被按比例压到比文字还窄——实测「完成」只剩
+   39px、文字折成两行。basis 用 `auto` 而不是某个 px：宽度仍由文案决定，
+   不引入新的魔法数字。
+   这两个选择器合起来覆盖右侧组的全部按钮：确认行里的 `extraActions`（去简历中心 /
+   重新生成 / 完成）走后代选择器，导出按钮走 `.resume-detail-footer-export`。 */
 .resume-detail-footer-confirm-row .ant-btn,
 .resume-detail-footer-tail > .resume-detail-footer-export .ant-btn {
+  flex: 0 0 auto;
   width: auto;
 }
 
-/* 窄屏：塌成一列，左侧三个在上、右侧动作在下并靠右。 */
-@media (max-width: 720px) {
-  .resume-detail-footer-tail {
-    grid-template-columns: 1fr;
-  }
+/* `extraActions` 恒为 antd `<Space>`，而 Space 会把每个子项包一层 `.ant-space-item`：
+   **按钮不是 flex item，收缩发生在这一层包壳上**。只压 `.ant-btn` 的 `flex` 对
+   「完成」这类按钮无效（它根本不在 flex 上下文里），所以包壳也要一起钉住。
+   生成流程那份 Space 带 `wrap`，于是"装不下"表现为换行；制作台那份只有取消/保存，
+   自然宽度合计 ~130px，走不到这一步。 */
+.resume-detail-footer-confirm-row .ant-space-item {
+  flex: 0 0 auto;
+}
 
-  .resume-detail-footer-tail > .resume-detail-footer-confirm-row,
-  .resume-detail-footer-tail > .resume-detail-footer-export {
-    grid-column: 1 / -1;
-    justify-self: stretch;
-    margin-left: 0;
+/* 窄屏（≤720px 视口 ≈ 正文 640px 以下）：左侧两个次动作降到 120px，
+   把"左右同排"的换行阈值从 ≈623px 降到 ≈563px，少白换一行。 */
+@media (max-width: 720px) {
+  .resume-detail-footer-tail > .ant-btn {
+    min-width: 120px;
   }
 }
 

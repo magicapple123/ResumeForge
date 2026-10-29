@@ -18,6 +18,7 @@ import {
   fetchTrialPreview,
   measureOptions,
   measureTrial,
+  previewPageCount,
   templatePreviewPayload,
 } from "./trialRequests";
 
@@ -38,7 +39,7 @@ beforeEach(() => {
 });
 
 describe("trialRequests · 预览请求体", () => {
-  it("示例模式不传 resume_id / content", () => {
+  it("示例模式不传 resume_id / content，纸面恒按 1 页要", () => {
     const payload = templatePreviewPayload({
       context: { ...CONTEXT, mode: "demo" },
       template: "modern",
@@ -48,9 +49,23 @@ describe("trialRequests · 预览请求体", () => {
       template_name: "modern",
       format_name: "compact",
       format_config: { accent: "#123456" },
-      page_limit: 2,
+      // 示例内容是一页外观样例：沿用用户的最大篇幅（2 页）会多出半张空白纸。
+      page_limit: 1,
       font_scale: "large",
     });
+  });
+
+  it("我的内容沿用用户设定的最大篇幅", () => {
+    expect(
+      templatePreviewPayload({ context: CONTEXT, template: "modern", useOverrides: true })
+        .page_limit,
+    ).toBe(2);
+  });
+
+  it("previewPageCount 与请求体同口径（示例 1 页 / 我的内容按篇幅）", () => {
+    expect(previewPageCount("demo", 3)).toBe(1);
+    expect(previewPageCount("current", 3)).toBe(3);
+    expect(previewPageCount("current", undefined)).toBe(1);
   });
 
   it("当前内容优先用未保存正文，其次用简历 id", () => {

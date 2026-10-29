@@ -8,7 +8,7 @@
  * 只读：结果只用来显示提示，没有写回颜色的路径（任务要求"不自动改稿"）。
  */
 import { InfoCircleOutlined } from "@ant-design/icons";
-import { Button, Popover, Space, Tag, Tooltip, Typography } from "antd";
+import { Button, Popover, Space, Tag, Typography } from "antd";
 import { t } from "../../../i18n";
 import { useLocale } from "../../../i18n/i18nContext";
 import type { MessageKey } from "../../../i18n";
@@ -95,16 +95,16 @@ export default function PrintCheckControl({ viewportRef }: Props) {
         if (next) measure();
       }}
     >
-      <Tooltip title={t("proview.diagnostics.hint")}>
-        <Button
-          size="small"
-          type="text"
-          icon={<InfoCircleOutlined />}
-          aria-label={t("proview.diagnostics.label")}
-        >
-          {t("proview.diagnostics.label")}
-        </Button>
-      </Tooltip>
+      {/* 入口按钮不挂 Tooltip（2026-10-29 用户要求）：那句"只提示风险、不改设置"的说明
+          已经在弹层里，悬浮层只是重复一遍，还会盖住旁边的按钮。 */}
+      <Button
+        size="small"
+        type="text"
+        icon={<InfoCircleOutlined />}
+        aria-label={t("proview.diagnostics.label")}
+      >
+        {t("proview.diagnostics.label")}
+      </Button>
     </Popover>
   );
 }

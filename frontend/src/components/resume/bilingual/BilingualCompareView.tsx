@@ -16,7 +16,7 @@
  * 面板宽度由用户拖动决定，与窗口宽度不是一回事。
  */
 import { LockOutlined } from "@ant-design/icons";
-import { Button, Tag, Tooltip, Typography } from "antd";
+import { Alert, Button, Tag, Tooltip, Typography } from "antd";
 import EmptyState from "../../common/EmptyState";
 import { bt } from "../../../features/resume-bilingual/i18n";
 import { useLocale } from "../../../i18n/i18nContext";
@@ -29,6 +29,14 @@ interface Props {
   onAdopt?: (path: string) => void;
   primaryLabel?: string;
   secondaryLabel?: string;
+  /**
+   * 这份版本与当前简历内容**字节级相同**（还没翻过）。
+   *
+   * 新建语言版本的流程是「先复制正文，再翻译」：翻译没跑成时两列一字不差，
+   * 用户会以为功能坏了。此时在表格上方给一条"去生成翻译候选"的提示，
+   * 不改变任何行数据（对照本身是真实的）。
+   */
+  identical?: boolean;
 }
 
 const GROUP_LABEL_KEYS: Record<BilingualGroup, string> = {
@@ -47,6 +55,7 @@ export default function BilingualCompareView({
   onAdopt,
   primaryLabel,
   secondaryLabel,
+  identical,
 }: Props) {
   useLocale();
   const visible = changedPairs(pairs);
@@ -63,34 +72,46 @@ export default function BilingualCompareView({
   }
 
   return (
-    <div className="bilingual-compare" data-bilingual-compare="1">
-      <div className="bilingual-compare__head">
-        <span className="bilingual-compare__head-cell">{bt("bilingual.compare.title")}</span>
-        <span className="bilingual-compare__head-cell">
-          {primaryLabel ?? bt("bilingual.compare.columnPrimary")}
-        </span>
-        <span className="bilingual-compare__head-cell">
-          {secondaryLabel ?? bt("bilingual.compare.columnSecondary")}
-        </span>
-        <span className="bilingual-compare__head-cell" />
+    <>
+      {/* 提示条必须在 `.bilingual-compare` **外面**：那个容器的子元素直接参与网格排版，
+          插进去会打乱表头/行/分组的列对齐。 */}
+      {identical ? (
+        <Alert
+          type="info"
+          showIcon
+          className="bilingual-compare-notice"
+          title={bt("bilingual.compare.identical")}
+        />
+      ) : null}
+      <div className="bilingual-compare" data-bilingual-compare="1">
+        <div className="bilingual-compare__head">
+          <span className="bilingual-compare__head-cell">{bt("bilingual.compare.title")}</span>
+          <span className="bilingual-compare__head-cell">
+            {primaryLabel ?? bt("bilingual.compare.columnPrimary")}
+          </span>
+          <span className="bilingual-compare__head-cell">
+            {secondaryLabel ?? bt("bilingual.compare.columnSecondary")}
+          </span>
+          <span className="bilingual-compare__head-cell" />
+        </div>
+        {groups.map((group) => (
+          <section key={group.group} className="bilingual-compare__group">
+            <Typography.Text strong className="bilingual-compare__group-title">
+              {bt(GROUP_LABEL_KEYS[group.group] as Parameters<typeof bt>[0])}
+            </Typography.Text>
+            {group.rows.map((pair) => (
+              <Row
+                key={pair.id}
+                pair={pair}
+                onAdopt={pair.locked ? undefined : onAdopt}
+                primaryLabel={primaryLabel ?? bt("bilingual.compare.columnPrimary")}
+                secondaryLabel={secondaryLabel ?? bt("bilingual.compare.columnSecondary")}
+              />
+            ))}
+          </section>
+        ))}
       </div>
-      {groups.map((group) => (
-        <section key={group.group} className="bilingual-compare__group">
-          <Typography.Text strong className="bilingual-compare__group-title">
-            {bt(GROUP_LABEL_KEYS[group.group] as Parameters<typeof bt>[0])}
-          </Typography.Text>
-          {group.rows.map((pair) => (
-            <Row
-              key={pair.id}
-              pair={pair}
-              onAdopt={pair.locked ? undefined : onAdopt}
-              primaryLabel={primaryLabel ?? bt("bilingual.compare.columnPrimary")}
-              secondaryLabel={secondaryLabel ?? bt("bilingual.compare.columnSecondary")}
-            />
-          ))}
-        </section>
-      ))}
-    </div>
+    </>
   );
 }
 

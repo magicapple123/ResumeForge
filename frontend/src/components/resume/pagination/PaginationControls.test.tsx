@@ -5,100 +5,32 @@
  *
  * 断言走 t()/role/testid，不写中文字面量（i18n 棘轮）；板块夹具用 ASCII 名，
  * 这样芯片/选择的断言不依赖真实板块文案。
+ *
+ * 夹具与 DOM 查询辅助在 `src/test/paginationControlsHarness.tsx`（2026-11 行数预算）；
+ * 条目级断页清单与 prune 两支在 `PaginationControls.breaks.test.tsx`。
  */
-import { App as AntdApp } from "antd";
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import type { ComponentProps } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { t } from "../../../i18n";
-import type { ResumeLayout } from "../../../types";
-import PaginationControls from "./PaginationControls";
+import { paginationEntryOptions } from "../../../features/resume-pagination/paginationEntryLabels";
+import {
+  cleanupPaginationPanel,
+  confirmButton,
+  ENTRY,
+  last,
+  layoutWith,
+  openSubGroup,
+  paginationOf,
+  pickOption,
+  pickSegment,
+  renderPanel,
+  SECTIONS,
+  selectedSegment,
+  skillsContent,
+  waitForConfirm,
+} from "../../../test/paginationControlsHarness";
 
-const LAYOUT: ResumeLayout = {
-  template: "classic",
-  format_name: "",
-  page_limit: 1,
-  font_scale: "standard",
-  format_config: { accent: "#123456" },
-};
-
-const SECTIONS = [
-  { key: "education", label: "Education" },
-  { key: "experience", label: "Experience" },
-  { key: "projects", label: "Projects" },
-];
-
-const ENTRY = { id: "exp_12345678", label: "Acme" };
-
-/** 造带分页域的版式：format_config 的值类型是扁平的，域对象要显式收窄。 */
-function layoutWith(pagination: Record<string, unknown>): ResumeLayout {
-  return {
-    ...LAYOUT,
-    format_config: { accent: "#123456", pagination } as unknown as ResumeLayout["format_config"],
-  };
-}
-
-function renderPanel(
-  props: Partial<ComponentProps<typeof PaginationControls>> = {},
-  onChange = vi.fn(),
-) {
-  render(
-    <AntdApp>
-      <PaginationControls layout={LAYOUT} onChange={onChange} {...props} />
-    </AntdApp>,
-  );
-  return onChange;
-}
-
-function last(onChange: ReturnType<typeof vi.fn>): ResumeLayout {
-  const calls = onChange.mock.calls;
-  return calls[calls.length - 1]?.[0] as ResumeLayout;
-}
-
-/** 每次 onChange 之后宿主会拿到的分页域（没有域时是 undefined）。 */
-function paginationOf(layout: ResumeLayout): unknown {
-  return (layout.format_config as { pagination?: unknown }).pagination;
-}
-
-/** antd Segmented：点内部的 radio 输入（与用户点标签同一条 onChange 链）。 */
-function pickSegment(text: string) {
-  const item = Array.from(document.querySelectorAll(".ant-segmented-item")).find(
-    (el) => el.textContent?.trim() === text,
-  );
-  expect(item).toBeTruthy();
-  fireEvent.click((item?.querySelector("input") ?? item) as Element);
-}
-
-function selectedSegment(): string | null {
-  return document.querySelector(".ant-segmented-item-selected")?.textContent?.trim() ?? null;
-}
-
-/** 展开可折叠分组：antd Collapse 的标题是 role=button，点内层文字会冒泡上去。 */
-function openSubGroup(text: string) {
-  fireEvent.click(screen.getByText(text));
-}
-
-/** antd Select 的选项在 jsdom 里以 .ant-select-item-option 渲染；按可见文本点选。 */
-async function pickOption(text: string) {
-  await waitFor(() => {
-    const texts = Array.from(document.querySelectorAll(".ant-select-item-option")).map((el) =>
-      el.textContent?.trim(),
-    );
-    expect(texts).toContain(text);
-  });
-  const option = Array.from(document.querySelectorAll(".ant-select-item-option")).find(
-    (el) => el.textContent?.trim() === text,
-  );
-  expect(option).toBeTruthy();
-  const content = option?.querySelector(".ant-select-item-option-content");
-  fireEvent.click((content ?? option) as Element);
-}
-
-afterEach(() => {
-  cleanup();
-  document.body.innerHTML = "";
-  vi.restoreAllMocks();
-});
+afterEach(cleanupPaginationPanel);
 
 describe("PaginationControls · 全局板块分页方式", () => {
   it("默认自然填充；切「每板块新页」给全部板块写断页，条目级意图原样保留", () => {
@@ -182,7 +114,7 @@ describe("PaginationControls · 全局板块分页方式", () => {
     });
   });
 
-  it("切回自然填充：清掉所有板块断页，条目级断页与续页信息不动", () => {
+  it("切回自然填充：先二次确认，确认后清掉所有板块断页（条目级与续页信息不动）", async () => {
     const onChange = renderPanel({
       layout: layoutWith({
         version: 1,
@@ -197,12 +129,40 @@ describe("PaginationControls · 全局板块分页方式", () => {
       sections: SECTIONS,
     });
     pickSegment(t("pagination.mode.flow"));
+    // 一次抹掉全部板块断页不可撤销：确认前**不能**已经改掉宿主状态。
+    await waitForConfirm();
+    expect(document.querySelector(".ant-modal-confirm-content")?.textContent).toContain(
+      t("pagination.mode.confirmBody", { count: 3 }),
+    );
+    expect(onChange).not.toHaveBeenCalled();
+
+    fireEvent.click(confirmButton("ok"));
+    await waitFor(() => expect(onChange).toHaveBeenCalled());
     expect(paginationOf(last(onChange))).toEqual({
       version: 1,
       entries: { [ENTRY.id]: { break_before: "page" } },
       sections: { experience: { keep_with_next: 2 } },
       continuation: { page_numbers: true },
     });
+  });
+
+  it("确认框里点「取消」：一个断页都不清", async () => {
+    const onChange = renderPanel({
+      layout: layoutWith({
+        version: 1,
+        // 三个板块都有断页 → 当前显示「每板块新页」，切「自然填充」才会进确认框。
+        sections: {
+          education: { break_before: "page" },
+          experience: { break_before: "page" },
+          projects: { break_before: "page" },
+        },
+      }),
+      sections: SECTIONS,
+    });
+    pickSegment(t("pagination.mode.flow"));
+    await waitForConfirm();
+    fireEvent.click(confirmButton("cancel"));
+    expect(onChange).not.toHaveBeenCalled();
   });
 
   it("没有板块清单时不渲染全局方式（宿主还没拿到模板目录）", () => {
@@ -374,5 +334,28 @@ describe("PaginationControls · 格式支持（矩阵口径，收在可折叠分
     renderPanel();
     openSubGroup(t("pagination.capability.title"));
     expect(screen.getByText(t("pagination.capability.pending"))).toBeInTheDocument();
+  });
+});
+
+describe("PaginationControls · 条目级断页清单的芯片取名", () => {
+  /**
+   * P1 回归：芯片的名字必须由 `paginationEntryOptions` 提供（W4 七个分区 **+ skills**）。
+   * 宿主曾直接摊平 W4 的条目下拉数据源（`FIELD_LAYOUT_SECTIONS` 七个分区、不含 skills），
+   * 技能条目于是显示成「已删除的条目」——而这条意图不会被 prune 掉，芯片会长期挂着这句
+   * 误导文案。
+   */
+  it("skills 条目的断页芯片显示技能名，而不是「已删除的条目」", () => {
+    const skillsEntries = paginationEntryOptions(
+      skillsContent([{ id: "skl_12345678", name: "TypeScript" }]),
+    );
+    renderPanel({
+      layout: layoutWith({ version: 1, entries: { skl_12345678: { break_before: "page" } } }),
+      sections: SECTIONS,
+      entries: skillsEntries,
+      validEntryIds: ["skl_12345678"],
+    });
+    const list = screen.getByTestId("pagination-section-breaks");
+    expect(within(list).getByText("TypeScript")).toBeInTheDocument();
+    expect(within(list).queryByText(t("pagination.breaks.unknownEntry"))).toBeNull();
   });
 });

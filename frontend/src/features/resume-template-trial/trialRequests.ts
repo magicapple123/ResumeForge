@@ -19,7 +19,7 @@
  */
 import { fetchResumePreviewPdf, previewResumeTemplate } from "../../api/resumes";
 import type { ResumeContent, ResumeFontScale, ResumeFormatConfig } from "../../types";
-import type { TrialMeasurement, TrialSideRequest } from "./types";
+import type { TrialContentMode, TrialMeasurement, TrialSideRequest } from "./types";
 
 /** `previewResumeTemplate` 的请求体（后端 `TemplatePreviewRequest` 的字段镜像）。 */
 export interface TemplatePreviewPayload {
@@ -40,6 +40,20 @@ export function adoptFormatConfig(layout: {
 }
 
 /**
+ * 这一侧预览的纸面按几页给（请求体的 `page_limit` 与画布 `pages` **必须同一个值**）。
+ *
+ * - 示例模式恒 **1 页**：内置示例本身就是"一页外观样例"（`sample_resume_content` 按档位
+ *   定详略，18 组模板 × 字号都要求 1 页装得下），图库缩略图也是 `page_limit: 1`。
+ *   此前这里沿用用户的「最大篇幅」（如 2 页），于是切到示例后正文只有一页、纸面却仍是
+ *   两页高，下半张全是空白——用户看到的是"切到示例内容，页面长度不跟着收"（2026-10-29）。
+ * - 我的内容：按用户设定的最大篇幅（纸面与导出同口径）。
+ */
+export function previewPageCount(mode: TrialContentMode, pageLimit: unknown): number {
+  if (mode === "demo") return 1;
+  return Number(pageLimit) || 1;
+}
+
+/**
  * 拼预览请求：模板固定，预览内容按模式给（示例 = 什么都不传）。
  *
  * 覆盖策略同时作用于 `format_name` 与 `format_config`：用户选"采用模板默认"时，
@@ -51,7 +65,8 @@ export function templatePreviewPayload(input: TrialSideRequest): TemplatePreview
     template_name: template,
     format_name: useOverrides ? context.layout.format_name : "",
     format_config: useOverrides ? { ...(context.layout.format_config ?? {}) } : {},
-    page_limit: Number(context.layout.page_limit) || 1,
+    // 纸面高度由 `page_limit` 决定（后端 body 高 = N × A4）：示例 1 页，与画布一致。
+    page_limit: previewPageCount(context.mode, context.layout.page_limit),
     font_scale: context.layout.font_scale,
   };
   if (context.mode === "current") {

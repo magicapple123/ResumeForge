@@ -148,7 +148,7 @@ describe("排序会话与预览", () => {
     expect(committed.map((entry) => entry.title)).toEqual(previewed.map((entry) => entry.title));
   });
 
-  it("要点会话：下标是 pointField 分组内的，预览不跨语义数组搬内容", () => {
+  it("要点会话：下标是条目内扁平下标（字段声明顺序），同字段移动不跨语义数组搬内容", () => {
     const ids = pointIdsOf(projectA, "description");
     const selection: OutlineSelection = {
       kind: "point",
@@ -158,8 +158,10 @@ describe("排序会话与预览", () => {
       pointId: ids[2],
     };
     const session = pointSortSession(model, selection);
-    expect(session).toMatchObject({ kind: "point", startIndex: 2, currentIndex: 2, total: 3 });
-    const preview = previewModel(model, { ...session!, currentIndex: 0 });
+    // 扁平列表 = tech_stack 1 条 + description 3 条：「甲三」在第 4 位（下标 3）。
+    expect(session).toMatchObject({ kind: "point", startIndex: 3, currentIndex: 3, total: 4 });
+    // 仍在 description 组内上移一格（扁平下标 3 → 1）：「甲三」插到「甲一」前面。
+    const preview = previewModel(model, { ...session!, currentIndex: 1 });
     const entry = preview.sections
       .find((section) => section.field === "projects")
       ?.entries.find((item) => item.objectId === projectAId);

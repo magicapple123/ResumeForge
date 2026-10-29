@@ -111,6 +111,10 @@ const typography = {
   /** 面板头部的对象名：范围说清。 */
   "typography.object.scope": "只作用于「{name}」",
   "typography.object.untitled": "未命名条目",
+  /** 细调区的分组标题（合并后不再叫「这条的排版」）。 */
+  "typography.object.more": "更多参数",
+  /** 级别管得住的那四项去哪儿了：不写会让用户以为功能被删。 */
+  "typography.object.levelHint": "字号、加粗、段前段后由上面的「文字级别」统一管理",
 
   // ── 格式刷 ─────────────────────────────────────────────────
   "typography.painter.title": "格式刷",
@@ -213,12 +217,32 @@ const typography = {
   "typography.fieldLayout.columns.1": "1 列",
   "typography.fieldLayout.columns.2": "2 列",
   "typography.fieldLayout.columns.3": "3 列",
+  "typography.fieldLayout.alignLabel": "对齐方式",
+  "typography.fieldLayout.align.equal": "等宽对齐",
+  "typography.fieldLayout.align.flow": "按内容",
+  "typography.fieldLayout.alignHint": "等宽对齐自动隐藏「·」分隔符，各行列对齐更整齐",
+  "typography.fieldLayout.gapLabel": "列间距",
+  /** 滑杆读数与气泡（{value} 是字号倍数，保留 1 位小数）。 */
+  "typography.fieldLayout.gapValue": "{value}×",
+  /** 列间距滑杆两侧的加减按钮（读屏标签：只有图标，没有可见文案）。 */
+  "typography.fieldLayout.gapDecrease": "减小列间距",
+  "typography.fieldLayout.gapIncrease": "增大列间距",
   "typography.fieldLayout.fieldsTitle": "字段顺序",
   "typography.fieldLayout.moveUp": "上移{label}",
   "typography.fieldLayout.moveDown": "下移{label}",
   "typography.fieldLayout.solo": "独占一行",
   "typography.fieldLayout.soloAria": "{label}独占一行",
   "typography.fieldLayout.reset": "恢复默认",
+  /** 条目级：`entryLabel` 是下拉标题，`entryAll` = 分区级（整栏统一）。 */
+  "typography.fieldLayout.entryLabel": "条目",
+  "typography.fieldLayout.entryAll": "全部条目",
+  /** 条目模式提示：{label} 是条目标题（学校 / 公司 / 项目名）。 */
+  "typography.fieldLayout.entryEditing": "正在单独设置：{label}（未改的项继承分区默认）",
+  "typography.fieldLayout.entryRestore": "恢复继承",
+  /** 条目上移 / 下移（{label} 是条目标题）。与字段的上移 / 下移分开：改的是条目顺序。 */
+  "typography.fieldLayout.entryMoveUp": "上移条目{label}",
+  "typography.fieldLayout.entryMoveDown": "下移条目{label}",
+  "typography.fieldLayout.entryNone": "该分区还没有可单独设置的条目",
   "typography.fieldLayout.summary": "当前：{columns} 列，{solo} 个字段独占一行",
 } as const;
 

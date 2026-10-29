@@ -11,9 +11,9 @@
  * ## 拖拽落点语义（2026-10-28 修）
  *
  * 拖动是"抓行"而不是"抓 18px 手柄"：整行可拖（行内动作按钮不劫持拖动），手柄保留给键盘。
- * 落点解析在树容器上做（`useOutlineDragDrop` + `outlineDropTargets`）：松在同类行上是
- * "移动到该行当前下标"；松在缝隙 / 分组容器 / 同板块标题上时按指针纵向找同组最近行；
- * 松在被拖对象自己或别的板块上则不动。**不能只挂行级 drop**——28px 高的行之间满是缝隙，
+ * 落点解析在树容器上做（`useOutlineDragDrop` + `outlineDropTargets`）：**指针压在某条同类行
+ * 的行矩形里**就是"移动到该行当前下标"；落在缝隙 / 分组容器 / 板块标题 / 空白处一律**不猜**
+ * （hover 维持现状，drop 提交拖动中看到的那一版）；松在别的板块/别的条目上则不动。**不能只挂行级 drop**——28px 高的行之间满是缝隙，
  * 差一两像素就会静默取消（用户反馈"大部分情况下拖不动"的真机原形）。精确的首尾控制
  * 仍由键盘的 Home/End 负责。
  */
@@ -153,6 +153,25 @@ export function useOutlineSort({
     [model],
   );
 
+  /**
+   * 会话所属条目的**扁平要点列表**（字段声明顺序，与模型 `entry.points` 同序）。
+   *
+   * 跨字段搬移的目标字段/下标由它唯一推出（`pointMove.pointMoveOf`）：键盘、拖拽提交与
+   * 画布预览三处都传这一份，落点与看到的顺序不可能分叉。条目会话返回空数组。
+   */
+  const sessionPoints = useCallback(
+    (session: OutlineSortSession): OutlinePoint[] => {
+      if (session.kind !== "point") return [];
+      const entry = findOutlineEntry(model, {
+        kind: "entry",
+        field: session.field,
+        objectId: session.objectId,
+      });
+      return entry ? entry.points : [];
+    },
+    [model],
+  );
+
   const announceSort = useCallback(
     (session: OutlineSortSession) => {
       announce(
@@ -213,11 +232,11 @@ export function useOutlineSort({
     if (!sortSession) return;
     const session = sortSession;
     const name = nameOfSession(session);
-    if (dispatch(sortSessionCommand(session))) {
+    if (dispatch(sortSessionCommand(session, sessionPoints(session)))) {
       announce(t("outline.sort.committed", { name, position: session.currentIndex + 1 }));
     }
     setSortSession(null);
-  }, [announce, dispatch, nameOfSession, sortSession]);
+  }, [announce, dispatch, nameOfSession, sessionPoints, sortSession]);
 
   const cancelSort = useCallback(() => {
     if (!sortSession) return;
@@ -284,12 +303,12 @@ export function useOutlineSort({
     const session = sortSession;
     if (session && session.currentIndex !== session.startIndex) {
       const name = nameOfSession(session);
-      if (dispatch(sortSessionCommand(session))) {
+      if (dispatch(sortSessionCommand(session, sessionPoints(session)))) {
         announce(t("outline.sort.committed", { name, position: session.currentIndex + 1 }));
       }
     }
     endDrag();
-  }, [announce, dispatch, endDrag, nameOfSession, sortSession]);
+  }, [announce, dispatch, endDrag, nameOfSession, sessionPoints, sortSession]);
 
   const beginEntryDrag = useCallback(
     (entry: OutlineEntry) => {
@@ -359,8 +378,9 @@ export function useOutlineSort({
   const dragOverPoint = useCallback(
     (entry: OutlineEntry, point: OutlinePoint, event: DragEvent<HTMLDivElement>) => {
       if (dragPayload?.kind !== "point") return;
-      if (dragPayload.objectId !== entry.objectId || dragPayload.pointField !== point.pointField)
-        return;
+      // 同一条目内的**任意**要点行都是合法落点（跨字段搬移：courses ↔ achievements …），
+      // 跨条目一律不接（那会改另一条经历的内容）。
+      if (dragPayload.field !== entry.field || dragPayload.objectId !== entry.objectId) return;
       event.preventDefault();
       if (dragPayload.pointId === point.pointId) return;
       const key = pointTreeKey(entry.field, entry.objectId, point.pointField, point.pointId);
@@ -387,6 +407,10 @@ export function useOutlineSort({
   /**
    * 拖动悬停（树容器上算）：行在拖动中被设成 `pointer-events:none`（否则被拖行会挡住指针、
    * 浏览器扣掉 drop），所以行级 dragover 在真机收不到——预览换位改由这里驱动。
+   *
+   * 悬停在**空要点字段的占位行**上时，`index` 是被拖要点自己的基准下标（= 不产生位移），
+   * 所以既有分支天然把预览**复位**成真实顺序（`currentIndex` 回 `startIndex`）：
+   * 占位行的落点是"搬进那个字段的第 0 位"，用户看到的高亮槽位就是松手后的位置。
    */
   const handleDragHover = useCallback((target: { key: string; index: number } | null) => {
     if (!target) return;
@@ -413,8 +437,15 @@ export function useOutlineSort({
   // 拖动是一次持续手势，用户期待纸面跟着手走。会话对象只在目标下标变化时换新引用，
   // 所以 applyOutlineCommand 不会在每帧 dragOver 里重算。
   const structurePreview = useMemo(
-    () => (dragPayload ? structurePreviewContent(previewBase, sortSession) : null),
-    [dragPayload, previewBase, sortSession],
+    () =>
+      dragPayload
+        ? structurePreviewContent(
+            previewBase,
+            sortSession,
+            sortSession ? sessionPoints(sortSession) : [],
+          )
+        : null,
+    [dragPayload, previewBase, sessionPoints, sortSession],
   );
   useEffect(() => {
     onStructurePreview?.(structurePreview);

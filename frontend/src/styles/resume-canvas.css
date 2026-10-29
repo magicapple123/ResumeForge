@@ -134,13 +134,31 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
+  /* 精确模式的状态块也住这一行（见下一条）：整行允许换行，窄屏不会撑出横向滚动条。 */
+  flex-wrap: wrap;
+  gap: 6px 8px;
   margin-top: 12px;
 }
 
-/* 溢出警告条与画布之间同样留一档；首条警告已有内联 marginBottom: 12。 */
+/* 精确模式的状态（「实际 N 页（上限 M 页）」+「在新标签打开」）与缩放控件**同一行**
+   （2026-10-29 用户要求）。它原来是纸面下方单独一条，两条各自居中、中间还夹一档间距，
+   读起来像两块无关的东西。 */
+.resume-preview-zoom-status {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+}
+
+/* 状态块自己在家时有一档上边距与内缩，搬进这一行之后要归零，否则整行会比按钮高出一截。 */
+.resume-preview-zoom-status .exact-preview-status {
+  margin-top: 0;
+  padding: 0;
+}
+
+/* 溢出警告条与画布之间同样留一档（2026-10-29 从 12px 收到 8px：制作台右栏的头部要矮，
+   这一档省下来的高度直接变成纸面）。 */
 .resume-preview-overflow {
-  margin-bottom: 12px;
+  margin-bottom: 8px;
 }
 
 /* 页与页之间的“裁切间隙”：把连续纸面在分页处切开，观感等同两张并排的独立 A4 纸。
@@ -288,21 +306,28 @@
      纸就歪了（2026-11 反馈"精确预览有时候可以左右滑动、简历歪斜"）。
      `overflow-x: hidden` 与 `overflow-y: hidden` 配对，不会按规范把 `overflow-y`
      连带算成 `auto`——纵向高度是按页数算出来的，再出一条竖向滚动条就回到"两个滚动条"。 */
-  overflow-x: hidden;
-  overflow-y: hidden;
+  /* **这一层不滚动**（2026-10-29 用户反馈"下方/右侧黑粗的无效滚轮"）：它自己的滚动条是
+     浏览器默认的粗样式（没被全局 `::-webkit-scrollbar` 覆盖），而且 `pointer-events: none`
+     的 PDF 让它们根本拖不动。横竖滚动一律交给外层 `.resume-preview-body`。 */
+  overflow: visible;
   position: relative;
 }
 
 /* 只有放大之后才让纸溢出相框（相框高度由 `useExactPreviewFrameHeight` 按宽度算，
    横向滚动条只会压缩高度，不影响 `clientWidth`，所以宽度测量不会自激）。 */
 .exact-preview.is-zoomed {
-  overflow-x: auto;
+  /* 放大时也不在这里滚：外层 body 负责，避免两条滚动条同时出现（见上一条注释）。 */
+  overflow-x: visible;
 }
 
 .exact-preview-frame {
   display: block;
   width: 100%;
   border: none;
+  /* PDF 只当"图"看：指针交给外层视口。否则 iframe 会把滚轮与拖动全吃掉——
+     Ctrl+滚轮落进查看器里成了**它自己的**缩放，与缩放条不是同一套状态（用户 2026-10-29：
+     "按钮缩放没有和滚轮缩放同步"）；顺手也避免查看器内部滚动条与外层滚动打架。 */
+  pointer-events: none;
 }
 
 /* 双缓冲的两层叠在一起：可见层在下（不透明），预加载层在上（完全透明）。
@@ -330,9 +355,14 @@
   max-width: none;
 }
 
+/* 相框里的 iframe 必须**铺满 stack**：`inset: 0` 单独用时，`width: 100%`（见
+   `.exact-preview-frame`）会让 `height: auto` 退回 iframe 的默认 150px——PDF 只画一小条。
+   高度显式写 100%，由 stack 的宽高决定；缩放时改的是 stack 的尺寸，不再用 transform。 */
 .exact-preview-stack > .exact-preview-frame {
   position: absolute;
   inset: 0;
+  width: 100%;
+  height: 100%;
 }
 
 /* 预加载层：`onLoad` 之前谁也看不见它，但浏览器已经在解析新 PDF。 */

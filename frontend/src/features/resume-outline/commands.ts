@@ -36,6 +36,7 @@ import {
   writeHiddenPoints,
 } from "./flags";
 import { entriesOf, entryIdOf, findEntryIndex, pointIdsOf, pointFieldsFor } from "./model";
+import { movePointInContent } from "./pointMove";
 import type {
   EntryField,
   EntryFlag,
@@ -129,35 +130,16 @@ function reorderPoint(
   content: ResumeContent,
   command: Extract<OutlineCommand, { type: "reorder-point" }>,
 ): OutlineApplyResult {
-  const entries = entriesOf(content, command.field);
-  const entryIndex = findEntryIndex(content, command.field, command.objectId);
-  if (entryIndex < 0) return { ok: false, reason: "not-found" };
-  const entry = entries[entryIndex];
-  if (!canMovePoint(entry)) return { ok: false, reason: "locked-layout" };
-  if (!pointFieldsFor(command.field).includes(command.pointField))
-    return { ok: false, reason: "not-found" };
-  const rawPoints = entry[command.pointField];
-  const points = Array.isArray(rawPoints) ? [...(rawPoints as unknown[])] : [];
-  const ids = pointIdsOf(entry, command.pointField);
-  // 身份不完整（旧记录没物化 id / 长度对不上）时拒绝：按下标移动会把身份挂到别的要点上。
-  if (points.length === 0 || ids.length !== points.length)
-    return { ok: false, reason: "not-found" };
-  const from = ids.indexOf(command.pointId);
-  if (from < 0) return { ok: false, reason: "not-found" };
-  const to = clampIndex(command.toIndex, points.length);
-  if (to === from) return { ok: true, content, changed: false };
-  const sourcePointIds =
-    entry.point_ids && typeof entry.point_ids === "object"
-      ? (entry.point_ids as Record<string, unknown>)
-      : {};
-  const nextEntry: RawEntry = {
-    ...entry,
-    [command.pointField]: reorderPreservingIds(points, from, to),
-    point_ids: { ...sourcePointIds, [command.pointField]: reorderPreservingIds(ids, from, to) },
-  };
-  const nextEntries = entries.slice();
-  nextEntries[entryIndex] = nextEntry;
-  return { ok: true, content: withField(content, command.field, nextEntries), changed: true };
+  // 同字段重排 = 跨字段搬移的特例：只有 `movePointInContent` 一份实现，两处不可能分叉。
+  return movePointInContent(content, {
+    type: "move-point",
+    field: command.field,
+    objectId: command.objectId,
+    fromPointField: command.pointField,
+    toPointField: command.pointField,
+    pointId: command.pointId,
+    toIndex: command.toIndex,
+  });
 }
 
 function cloneEntry(
@@ -314,6 +296,8 @@ export function applyOutlineCommand(
       return reorderEntry(content, command);
     case "reorder-point":
       return reorderPoint(content, command);
+    case "move-point":
+      return movePointInContent(content, command);
     case "clone-entry":
       return cloneEntry(content, command);
     case "clone-point":

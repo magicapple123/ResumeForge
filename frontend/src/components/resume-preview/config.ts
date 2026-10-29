@@ -141,11 +141,17 @@ export function columnsCss({
     `column-gap:${columnGap.toFixed(2)}px!important;` +
     `column-count:${count}!important;column-fill:auto!important;` +
     "orphans:2;widows:2}" +
-    // 分页列里不能把"一个条目"劈成两半：`.entry-head` 是 flex（左标题、右日期），
-    // 列边界一旦落在它中间，就会出现"标题留在上一页、日期孤零零跑到下一页"
-    // （2026-10-20 用户截图）。整条一起挪到下一页才符合"这是一段内容"的直觉。
-    "body .header,body .entry,body .entry-head," +
+    // 分页列里不能把"一行"劈成两半：`.entry-head` 是 flex（左标题、右日期），列边界一旦
+    // 落在它中间，就会出现"标题留在上一页、日期孤零零跑到下一页"（2026-10-20 用户截图）。
+    //
+    // 2026-10-29 调整：**`.entry` 本身不再整条 avoid**。整条 avoid 的代价是"装不下就整条
+    // 挪走"，于是换页处常常空掉一大块（实测三页里分别空 130 / 110 / 184px），而导出的 PDF
+    // 是按行续排的——预览与导出在这里本该说的是同一件事。现在只禁止"把条目头和条目下的
+    // 单行/单元格劈开"，条目正文可以在页边界续排，`orphans/widows` 保证不留孤行。
+    "body .header,body .entry-head," +
     "body .item,body li,body table,body tr{break-inside:avoid;page-break-inside:avoid}" +
+    // 条目头之后不许立刻换页：标题+日期那一行不能成为一页的结尾（否则翻过去只剩正文）。
+    "body .entry-head{break-after:avoid;page-break-after:avoid}" +
     // 小节标题不落在页尾（标题与正文被拆开同样像错位）。
     "body .section-title,body h1,body h2,body h3,body h4{break-after:avoid;page-break-after:avoid}"
   );

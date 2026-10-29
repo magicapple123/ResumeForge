@@ -6,6 +6,7 @@ import {
   buildTranslationCandidates,
   displayTokens,
   glossaryOutToTerm,
+  isSameContent,
   sameLanguage,
   termToCreatePayload,
   undoItems,
@@ -92,6 +93,65 @@ describe("翻译候选", () => {
     expect(displayTokens("", "hello")).toEqual([{ type: "added", text: "hello" }]);
     expect(displayTokens("旧", "")).toEqual([{ type: "unchanged", text: "旧" }]);
     expect(displayTokens("旧", "新").map((item) => item.type)).toEqual(["removed", "added"]);
+  });
+});
+
+/**
+ * 真实 content 形状（`ResumeContent`）：education 是对象数组，courses 是字符串数组。
+ *
+ * 下面几条用例专门钉住 2026-11 的采纳失败：候选路径必须带数组下标
+ * （`education.0.courses.1`），提交整条数组路径时后端会把整批请求拒掉。
+ */
+const REAL_ORIGINAL = {
+  name: "张三",
+  summary: "负责后端服务开发与性能优化。",
+  education: [{ school: "某大学", major: "计算机", courses: ["甲", "乙"] }],
+  experience: [],
+  projects: [],
+  campus_experience: [],
+  skills: [],
+  awards: [],
+};
+
+/** 只把 courses 的第 2 条换成译文，其它字段一字不动。 */
+const REAL_TRANSLATED = {
+  ...REAL_ORIGINAL,
+  education: [{ school: "某大学", major: "计算机", courses: ["甲", "Second"] }],
+};
+
+describe("数组字段的翻译候选（真实 content 形状）", () => {
+  it("按元素下标展开：只有改了的 courses[1] 出现，采纳路径带 .1", () => {
+    const candidates = buildTranslationCandidates(REAL_ORIGINAL, REAL_TRANSLATED, []);
+    const paths = candidates.map((item) => item.path);
+    // 整条数组路径不能出现：后端读到 list 就会整批拒绝。
+    expect(paths).not.toContain("education.0.courses");
+    expect(paths.filter((path) => path.startsWith("education.0.courses"))).toEqual([
+      "education.0.courses.1",
+    ]);
+    expect(adoptItems(candidates, paths)).toEqual([
+      { path: "education.0.courses.1", text: "Second" },
+    ]);
+  });
+
+  it("blocked 支持条目级前缀：education.0 覆盖它下面的每条子路径", () => {
+    const candidates = buildTranslationCandidates(REAL_ORIGINAL, REAL_TRANSLATED, ["education.0"]);
+    const item = candidates.find((candidate) => candidate.path === "education.0.courses.1");
+    expect(item?.blocked).toBe(true);
+  });
+
+  it("数组项的标签按「板块 + 字段名」反查，不回落成个人总结", () => {
+    const candidates = buildTranslationCandidates(REAL_ORIGINAL, REAL_TRANSLATED, []);
+    const item = candidates.find((candidate) => candidate.path === "education.0.courses.1");
+    expect(item?.labelKey).toBe("bilingual.field.courses");
+  });
+});
+
+describe("isSameContent", () => {
+  it("同源内容（仍是原样副本）判为相同；改过字段或整体为空则不同", () => {
+    expect(isSameContent(REAL_ORIGINAL, { ...REAL_ORIGINAL })).toBe(true);
+    expect(isSameContent(REAL_ORIGINAL, REAL_TRANSLATED)).toBe(false);
+    expect(isSameContent(null, null)).toBe(false);
+    expect(isSameContent({}, {})).toBe(false);
   });
 });
 

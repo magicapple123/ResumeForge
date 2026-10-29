@@ -81,28 +81,17 @@ export default function ResumePreviewToolbar({
           {/* 预览口径（方案 A）：草稿 = CSS 多列，改一下立刻看到；精确 = 服务端 PDF，
               与导出逐点相同。两者不是"新旧版本"，是两种用途，所以做成并列切换。 */}
           {canExactPreview ? (
+            // 两个口径的标签**不挂 Tooltip**（2026-10-29 用户要求：制作台右栏只保留
+            // 「草稿模式编辑」「恢复默认布局」「辅助线」三条悬停提示）。两者差别由纸面
+            // 本身与精确模式下方那句说明承担，悬浮层不再叠一层解释。
             <Segmented
               size="small"
               aria-label={t("preview.mode.ariaLabel")}
               value={previewMode}
               onChange={(value) => onPreviewModeChange?.(value as "draft" | "exact")}
               options={[
-                {
-                  value: "draft",
-                  label: (
-                    <Tooltip title={t("preview.mode.draft.hint")}>
-                      {t("preview.mode.draft")}
-                    </Tooltip>
-                  ),
-                },
-                {
-                  value: "exact",
-                  label: (
-                    <Tooltip title={t("preview.mode.exact.hint")}>
-                      {t("preview.mode.exact")}
-                    </Tooltip>
-                  ),
-                },
+                { value: "draft", label: t("preview.mode.draft") },
+                { value: "exact", label: t("preview.mode.exact") },
               ]}
             />
           ) : null}
@@ -125,9 +114,13 @@ export default function ResumePreviewToolbar({
         </div>
         <div className="resume-preview-toolbar-controls">{templateControls}</div>
       </div>
-      <div className="resume-preview-toolbar-row resume-preview-toolbar-row-measure">
-        <div className="resume-preview-toolbar-cluster">{measureControls}</div>
-      </div>
+      {/* 度量那一行**没有控件时整行不渲染**：制作台右栏不传 `measureControls`（版式参数都在
+          左栏），渲染一个空行只会白白多出一档 8px 的行间距（2026-10-29 用户要求压低头部）。 */}
+      {measureControls ? (
+        <div className="resume-preview-toolbar-row resume-preview-toolbar-row-measure">
+          <div className="resume-preview-toolbar-cluster">{measureControls}</div>
+        </div>
+      ) : null}
       {/* 说明放在**度量控件下方**单独一行（2026-10-21 用户要求）：它解释的是"你现在拖的
           这些值在精确模式下由谁排版"，贴在这一组控件下面才对得上；原先挂在第二行右端，
           窄屏一折行就跑到控件上面去了。 */}

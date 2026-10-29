@@ -27,6 +27,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { RefObject } from "react";
 import {
+  hasTextSelection,
   paintClickToEdit,
   paintLoadedFrames,
   readStoredClickToEdit,
@@ -122,6 +123,14 @@ export function useClickToEditPreview({
 
   const handleClick = useCallback((event: MouseEvent) => {
     if (!activeRef.current) return;
+    /*
+     * 纸面上**有选中文字**时不接管这一拍（2026-10-29 用户要求："预览里的文字也要能选中"）。
+     * 拖选结束必然跟一发 click：如果照样跳去编辑栏，焦点会被 textarea 拿走，用户刚拖出来的
+     * 选区立刻作废——体感就是"预览里根本选不中字"。所以有非空选区就原样放行，既不改默认行为
+     * 也不回调；清掉选区之后的**下一次单击**仍然正常定位（那才是"点一下跳到字段"）。
+     */
+    const doc = (event.target as Node | null)?.ownerDocument ?? null;
+    if (hasTextSelection(doc)) return;
     const path = resolvePickPath(event.target);
     // 没命中（点空白、点分页间隙）：什么都不做，别把"点错了"变成一个跳转。
     if (!path) return;
@@ -169,6 +178,13 @@ export function useClickToEditPreview({
   const handleWheel = useCallback(
     (event: WheelEvent) => {
       if (!activeRef.current) return;
+      /*
+       * Ctrl/Cmd 按下时**让路**：那一拍归 `ResumePreview` 的缩放（同一个文档上还有它注册的
+       * wheel 监听）。不判断的话两只手会同时动——缩放一下、纸又滚一段，用户看到的就是
+       * "按住 Ctrl 滚轮反而上下移动"（2026-10-29 用户实测，只在勾了「草稿模式编辑」时出现，
+       * 因为只有这时本 hook 才往 iframe 里挂监听）。
+       */
+      if (event.ctrlKey || event.metaKey) return;
       if (forwardWheelToParent(containerRef.current, event)) event.preventDefault();
     },
     [containerRef],

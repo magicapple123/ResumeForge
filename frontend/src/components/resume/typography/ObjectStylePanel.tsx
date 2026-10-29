@@ -1,34 +1,34 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * W07 的对象级排版面板：选中一条内容后，只调**这一条**的段落级属性。
+ * 「更多参数」：选中一条内容后，只调**这一条**级别管不到的那些细项（W07 对象级，L5）。
+ *
+ * ## 为什么不再是独立面板（2026-10-29 合并）
+ *
+ * 它原来单独占左栏最底部一段（用户截图「这条的排版 只作用于「上海大学」」），和上面的
+ * 「文字级别」写的是同一个 `format_config.objects[<id>]`：字号比例、加粗、段前、段后
+ * 两边各有一套控件，改一边另一边就"看起来没生效"。现在它作为文字级别的可展开细调区
+ * 挂在 `WorkbenchTypographyTools` 里，行清单取 `OBJECT_EXTRA_STYLE_PROPS`（差集口径，
+ * 见 `textLevels.ts`），两个控件不再抢同一批键。
  *
  * ## 与角色面板的关系
  *
  * 角色面板改"同类段落"（L4），这里改"单条"（L5）。写入都是 `format_config` 的域数据，
  * 不碰内容、不产生第二次保存链路（宿主把新 layout 交给既有版式保存）。
  *
- * ## 可调属性是段落级的
- *
- * 字号等角色级概念不在这里（一条里的字号要跟同类段落走）；字符级标记（斜体/链接）由正文
- * 标记协议负责，也不在属性面板里伪装成开关。
- *
  * ## 挂载归 shell
  *
  * 只接收 `objectId / objectLabel / onChange`；"选中哪一条"是宿主（大纲 / 纸面点击）的
  * 状态，本组件不自己维护第二份选择。
  */
-import { CloseOutlined } from "@ant-design/icons";
-import { Button, Space, Tooltip, Typography } from "antd";
+import { Space, Typography } from "antd";
 import type { RefObject } from "react";
 import type { ResumeLayout, ResumeTemplateCatalog } from "../../../types";
 import type { ResumePreviewHandle } from "../../ResumePreview";
 import { t } from "../../../i18n";
 import { styleProbeCss } from "../../../utils/resumeFormatProbe";
 import { STYLE_PROP_LABELS, type StylePropKey } from "../../../utils/resumeStyleParams";
-import {
-  OBJECT_STYLE_PROPS,
-  type ResumeRoleKey,
-} from "../../../features/resume-layout/styleCatalog";
+import type { ResumeRoleKey } from "../../../features/resume-layout/styleCatalog";
+import { OBJECT_EXTRA_STYLE_PROPS } from "../../../features/resume-layout/textLevels";
 import {
   readStyleCatalog,
   templateRoleDefaults,
@@ -59,7 +59,6 @@ interface Props {
   disabled?: boolean;
   previewRef?: RefObject<ResumePreviewHandle | null>;
   onChange: (layout: ResumeLayout) => void;
-  onClose?: () => void;
 }
 
 export default function ObjectStylePanel({
@@ -71,7 +70,6 @@ export default function ObjectStylePanel({
   disabled = false,
   previewRef,
   onChange,
-  onClose,
 }: Props) {
   useLocale();
   if (!objectId) {
@@ -96,24 +94,10 @@ export default function ObjectStylePanel({
   };
 
   return (
-    <section className="resume-typography-panel" aria-label={t("typography.object.title")}>
-      <Space size={6} wrap>
-        <Typography.Text strong>{t("typography.object.title")}</Typography.Text>
-        <Typography.Text type="secondary">{t("typography.object.scope", { name })}</Typography.Text>
-        {onClose ? (
-          <Tooltip title={t("typography.object.close")}>
-            <Button
-              size="small"
-              type="text"
-              icon={<CloseOutlined />}
-              aria-label={t("typography.object.close")}
-              onClick={onClose}
-            />
-          </Tooltip>
-        ) : null}
-      </Space>
+    <section className="resume-typography-panel" aria-label={t("typography.object.more")}>
+      <Typography.Text type="secondary">{t("typography.object.scope", { name })}</Typography.Text>
       <div className="resume-typography-rows">
-        {OBJECT_STYLE_PROPS.map((prop) => (
+        {OBJECT_EXTRA_STYLE_PROPS.map((prop) => (
           <StyleValueRow
             key={prop}
             prop={prop}
@@ -137,6 +121,9 @@ export default function ObjectStylePanel({
           />
         ))}
       </div>
+      {/* 字号 / 加粗 / 段前 / 段后为什么不在这一区：级别已经管住它们，再列一遍会互相
+          覆盖。把去处写出来，用户不会以为功能被删。 */}
+      <Typography.Text type="secondary">{t("typography.object.levelHint")}</Typography.Text>
       <Space size={8} wrap>
         <Typography.Link
           role="button"

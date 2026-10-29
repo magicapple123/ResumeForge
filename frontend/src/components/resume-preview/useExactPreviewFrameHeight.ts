@@ -29,6 +29,18 @@
  * 这时**不能**按 0 宽去算（那会得到 0 高的相框），也不能自己编一个兜底宽度：
  * 宿主给的 `height` 才是"这一屏有多高"的唯一已知值，退回它，占位与真实结果都不跳。
  * 高度算式因此抽成纯函数 `exactPreviewFrameHeight()`，可以脱离 DOM 单测。
+ *
+ * ## 缩放的两次修正（2026-10-29 用户反馈）
+ *
+ * 1. 旧实现只把纸列宽度改成 `scale × 相框宽`，指望查看器按新宽度重排——**它不会**：
+ *    Chromium 的内置查看器只在**加载时**按 `#zoom=page-width` 适配一次，iframe 变窄之后纸
+ *    还是原来那么大，只是被相框裁掉。用户看到的正是"点放大缩小，动的只有纸两边那圈灰边"。
+ * 2. 于是先改成整块图层 `transform: scale()`——比例对了，但放大的是**已经栅格化**的图层，
+ *    100% 以上肉眼可见变糊（用户截图："分辨率明显降低"）。
+ *
+ * 现在的做法：缩放时**换 iframe 的布局尺寸并重挂查看器**（面板里 `key` 带宽度），查看器按新
+ * 宽度重新适配一次 —— 任何比例都是原生矢量渲染。相框高度跟着 `max(1, scale)`：缩小停在 fit
+ * 高度（和 Ctrl+滚轮一样，只让纸变小、相框不跳），放大才跟着长。
  */
 import { useLayoutEffect, useRef, useState } from "react";
 import type { RefObject } from "react";
@@ -88,8 +100,10 @@ export function exactPreviewFrameHeight(
 export interface ExactPreviewFrame {
   /** 挂到相框元素上（`.exact-preview`）：它的宽度就是 PDF 页的宽度。 */
   frameRef: RefObject<HTMLDivElement | null>;
-  /** 相框该有的高度，见 `exactPreviewFrameHeight()`。 */
+  /** 相框该有的高度，见 `exactPreviewFrameHeight()`（已按 `scale` 折算）。 */
   frameHeight: number;
+  /** 相框的**实测宽度**（0 = 还没量到）。缩放要用它算"纸本来多宽"，不能只看百分比。 */
+  frameWidth: number;
 }
 
 /**
@@ -120,11 +134,18 @@ export function useExactPreviewFrameHeight(
     return () => observer.disconnect();
   }, []);
 
-  // 缩放只改变"纸有多宽"，相框宽度本身不变（水平滚动条不影响 clientWidth），
+  // 缩放只改变"纸有多大"，相框宽度本身不变（水平滚动条不影响 clientWidth），
   // 所以这里不会出现"变宽 → 出滚动条 → 变窄"的自激。
-  const paperWidth = frameWidth * scale;
+  const baseHeight = exactPreviewFrameHeight(frameWidth, pages, fallbackHeight);
   return {
     frameRef,
-    frameHeight: exactPreviewFrameHeight(paperWidth, pages, fallbackHeight),
+    // 量到宽度之后：相框高度 = **未缩放高度 × max(1, scale)**（见文件头那节）。缩小不改相框
+    // 高度，放大才跟着长；用"宽度 × scale 再算一遍"还会把页间距按原尺寸算进去，缩小后多灰。
+    // 量不到宽度时按旧口径算，单页时两者数值相同。
+    frameHeight:
+      frameWidth > 0
+        ? Math.round(baseHeight * scale)
+        : exactPreviewFrameHeight(frameWidth * scale, pages, fallbackHeight),
+    frameWidth,
   };
 }

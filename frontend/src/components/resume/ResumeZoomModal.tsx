@@ -120,6 +120,24 @@ export default function ResumeZoomModal({
    * 会让保存被 W01 的等长校验 422（详见 `ensureEntryIds` 的注释）。
    */
   const identifiedContent = useMemo(() => (content ? ensureEntryIds(content) : null), [content]);
+  /**
+   * 制作台里**所有"要送去渲染的正文"的唯一出口**：补过条目 id 的那一份再叠上加粗 overlay。
+   *
+   * 为什么要单独算一份，而不是直接用宿主的 `liveContent`：宿主传下来的 `liveContent` 是
+   * `overlays.merged`，没有加粗时它**就是 `detail.content` 本身**（同一个引用）——也就是
+   * 后端读旧记录时那份**没有条目 id** 的正文。任何"叠完 overlay 就用 liveContent 渲染"的
+   * 路径都会把 id 丢掉，于是 `format_config.field_layout.entries.<id>` / `objects.<id>` 的
+   * 键在渲染正文里找不到对应条目，条目级排版静默退回分区默认（2026-11 用户实测：
+   * 「面板显示正在单独设置：上海大学，纸面仍是每行一个字段」的根因）。
+   *
+   * 所以这里改成**先补 id，再叠 overlay**（`mergeLive` 按路径比对原文，键路径与 id 无关，
+   * 结果与宿主那一份逐字相同，只是条目带着 id）。
+   */
+  const identifiedLive = useMemo(() => {
+    const base = identifiedContent ?? (liveContent ? ensureEntryIds(liveContent) : null);
+    if (!base) return null;
+    return mergeLive?.(base) ?? base;
+  }, [identifiedContent, liveContent, mergeLive]);
   /** 正文里还有没物化的条目 id：保存版式时顺带把身份写回，否则对象样式重开就断链。 */
   const contentLacksEntryIds = useMemo(
     () => (content ? hasMissingEntryIds(content) : false),
@@ -195,7 +213,7 @@ export default function ResumeZoomModal({
   const serverSync = useWorkbenchServerSync({
     resumeId,
     currentRevision: documentPipeline?.revision,
-    currentContent: liveContent ?? identifiedContent ?? null,
+    currentContent: identifiedLive,
     history,
     onDocumentSynced,
   });
@@ -225,15 +243,15 @@ export default function ResumeZoomModal({
     content: identifiedContent,
     resumeId,
     layout,
-    draftContent: liveContent ?? identifiedContent ?? null,
+    draftContent: identifiedLive,
     sectionOptions: catalog?.section_options,
     onLocateField: pickFromPaper,
     onApplyContent: history.commitContent,
   });
   const preflight = useWorkbenchPreflight({
     resumeId,
-    content,
-    liveContent,
+    content: identifiedContent,
+    liveContent: identifiedLive,
     layout,
     onApplyLayout,
     onPreviewModeChange,
@@ -356,7 +374,7 @@ export default function ResumeZoomModal({
         // 勾上「草稿模式编辑」后，右栏纸面点哪里，中栏就跳到哪一栏的输入框。
         onPickField={editorEnabled ? pickFromPaper : undefined}
         // 实时预览优先级在画布里定：结构预览（拖动中）→ 草稿（叠加加粗）→ 宿主已保存 / 已加粗。
-        content={outline.preview ?? liveContent ?? identifiedContent ?? null}
+        content={outline.preview ?? identifiedLive}
         draftStore={draftStore}
         mergeLive={mergeLive}
         layout={layout}

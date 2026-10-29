@@ -24,10 +24,19 @@ import {
   type OutlinePoint,
   type OutlineSection,
 } from "../../../features/resume-outline/model";
+import {
+  needsPointFieldTags,
+  pointFieldGroupLeaders,
+  pointFieldLabelKey,
+} from "../../../features/resume-outline/pointFieldLabels";
+import {
+  emptyFieldInsertIndex,
+  emptyPointFields,
+} from "../../../features/resume-outline/pointMove";
 import type { OutlineSelection } from "../../../features/resume-outline/types";
 import type { ResumeContent } from "../../../types/resume";
 import { EntryRowContent, PointRowContent, SectionHeaderContent } from "./OutlineRows";
-import { pointTreeKey } from "./outlineTree";
+import { emptyFieldTreeKey, pointTreeKey } from "./outlineTree";
 import type { OutlineRowDragApi } from "./useOutlineRowDrag";
 import type { OutlineStateApi } from "./useOutlineState";
 
@@ -79,10 +88,21 @@ export default function OutlineTreeView({
   const selectedKind = state.selection?.kind ?? null;
   const selectedKey = selectionKey(state.selection);
 
-  const renderPoint = (entry: OutlineEntry, point: OutlinePoint, order: number) => {
+  const renderPoint = (
+    entry: OutlineEntry,
+    point: OutlinePoint,
+    order: number,
+    tagLeaders: ReadonlySet<string> | null,
+  ) => {
     const key = pointTreeKey(entry.field, entry.objectId, point.pointField, point.pointId);
     const pointSelection = pointSelectionOf(entry, point);
     const selected = selectedKey === selectionKey(pointSelection);
+    // 字段归属标签：条目有 ≥2 个非空要点字段时才显示，且**每组只标第一条**
+    // （同组连续多行重复同一个词很啰嗦）。登记不到的字段不显示，不造文案。
+    const labelKey =
+      tagLeaders?.has(point.pointId) === true
+        ? pointFieldLabelKey(entry.field, point.pointField)
+        : null;
     const moving =
       state.sortSession?.kind === "point" &&
       state.sortSession.objectId === entry.objectId &&
@@ -104,6 +124,7 @@ export default function OutlineTreeView({
           dropTarget={state.dropTargetKey === key}
           readOnly={readonly}
           query={query || undefined}
+          fieldLabel={labelKey ? t(labelKey) : undefined}
           sortBlockedReason={entry.lockLayout ? t("outline.blocked.locked-layout") : undefined}
           onSelect={() => state.select(pointSelection)}
           onToggleHidden={() => state.setHiddenPoints(entry, [point], !point.hidden)}
@@ -125,6 +146,42 @@ export default function OutlineTreeView({
     );
   };
 
+  /**
+   * 空要点字段的**占位行**（只在拖动中出现）：一个虚线槽位，松在它上面 = 把这条搬进这个字段。
+   *
+   * 它不是要点：没有 pointId、不可拖、不可选、`tabIndex=-1`、键前缀 `point-empty:`
+   * （`selectionForTreeKey` / `visibleTreeKeys` 都不会认它）。
+   */
+  const renderEmptyTarget = (entry: OutlineEntry, pointField: string, order: number) => {
+    const key = emptyFieldTreeKey(entry.field, entry.objectId, pointField);
+    const labelKey = pointFieldLabelKey(entry.field, pointField);
+    return (
+      <div
+        key={key}
+        role="treeitem"
+        aria-selected={false}
+        data-tree-key={key}
+        tabIndex={-1}
+        className="resume-outline-treeitem"
+        style={{ order }}
+      >
+        <div
+          className={
+            "resume-outline-row is-empty-target" +
+            (state.dropTargetKey === key ? " is-drop-target" : "")
+          }
+        >
+          {labelKey ? (
+            <span className="resume-outline-field-tag" data-point-field={pointField}>
+              {t(labelKey)}
+            </span>
+          ) : null}
+          <span className="resume-outline-empty-target-text">{t("outline.point.emptyTarget")}</span>
+        </div>
+      </div>
+    );
+  };
+
   const renderEntry = (
     entry: OutlineEntry,
     order: number,
@@ -132,17 +189,30 @@ export default function OutlineTreeView({
   ) => {
     const key = entryKey(entry.field, entry.objectId);
     const entrySelection = entrySelectionOf(entry);
-    /** 要点在当前**预览**顺序里的位置（DOM 顺序不变，只改 CSS order）。 */
+    /** 要点在当前**预览**顺序里的视觉位置：`2 * i + 1`，给占位行留出偶数槽位。 */
     const pointOrder = (point: OutlinePoint): number => {
       const list = visualEntry?.points ?? entry.points;
-      const index = list.findIndex(
-        (item) => item.pointField === point.pointField && item.pointId === point.pointId,
-      );
-      return index >= 0 ? index : 0;
+      // 只按 point id 找：跨字段搬移的预览里被搬那条的 `pointField` 已经变成目标字段，
+      // 按 (字段, id) 匹配会找不到它 → 落回 0，拖动中整行会跳到条目要点区的顶部。
+      const index = list.findIndex((item) => item.pointId === point.pointId);
+      return 2 * (index >= 0 ? index : 0) + 1;
     };
     // 搜索时让命中条目的要点直接展开：命中就在要点里，不展开等于没显示结果。
     const expanded = searching ? entry.points.length > 0 : state.expandedEntries.has(key);
     const selected = selectedKey === selectionKey(entrySelection);
+    // 字段标签只挂在每组第一条上（见 `pointFieldGroupLeaders`）；只有 1 个字段时整组不标。
+    const tagLeaders = needsPointFieldTags(entry) ? pointFieldGroupLeaders(entry.points) : null;
+    // 空要点字段的**占位行**：只在"正在拖本条目的要点"时出现（平时不渲染，不增噪音）。
+    // 用**基准** `entry.points` 而非预览树，拖动中占位行不会闪。
+    const emptyFields =
+      !searching &&
+      state.dragPayload?.kind === "point" &&
+      state.dragPayload.field === entry.field &&
+      state.dragPayload.objectId === entry.objectId &&
+      !readonly &&
+      !entry.lockLayout
+        ? emptyPointFields(entry)
+        : [];
     const moving =
       state.sortSession?.kind === "entry" &&
       state.sortSession.field === entry.field &&
@@ -187,7 +257,10 @@ export default function OutlineTreeView({
         {expanded && entry.points.length > 0 ? (
           <div role="group" className="resume-outline-group">
             {entry.points.map((point) =>
-              point.pointId ? renderPoint(entry, point, pointOrder(point)) : null,
+              point.pointId ? renderPoint(entry, point, pointOrder(point), tagLeaders) : null,
+            )}
+            {emptyFields.map((pointField) =>
+              renderEmptyTarget(entry, pointField, 2 * emptyFieldInsertIndex(entry, pointField)),
             )}
           </div>
         ) : null}

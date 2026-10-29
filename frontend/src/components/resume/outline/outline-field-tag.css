@@ -1,0 +1,28 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/**
+ * 「文档大纲」要点行的**字段归属标签**（W06）。
+ *
+ * 为什么单独成文件：`outline.css` 已到 489/500 行（硬预算），再塞 17 行就超线；
+ * 拆法与 `outline-batch.css` 一致——一个小组件样式一个文件，由 `OutlinePanel` 统一 import。
+ *
+ * 什么时候出现：条目的**非空要点字段 ≥2**（教育经历的 `courses` + `achievements`、项目的
+ * `tech_stack` + `description` + `highlights`），且**只在每组第一条上**标一次（同组连续多行
+ * 重复同一个词很啰嗦）。扁平展示时这些行长得一模一样，不标出字段归属用户就看不出
+ * "第一条其实是课程行"——跨字段搬移之后，"搬走的是哪一条"才成立。
+ * 只有 1 个字段时不渲染（每行都写「工作内容」没有任何信息量）。
+ *
+ * 颜色只用既有 `--rf-*` 语义 token：浅色与深色主题都不需要第二套值。
+ */
+.resume-outline-field-tag {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  border: 1px solid var(--rf-border-subtle);
+  border-radius: var(--rf-radius-control);
+  padding: 0 5px;
+  background: var(--rf-surface-alt);
+  color: var(--rf-text-tertiary);
+  font-size: 11px;
+  line-height: 16px;
+  white-space: nowrap;
+}

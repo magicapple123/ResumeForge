@@ -10,6 +10,7 @@ import { Link } from "react-router-dom";
 import { REMINDER_URGENCY_COLORS } from "../../types";
 import type { ReminderUpcoming } from "../../types";
 import { formatDateTime } from "../../utils/format";
+import { reminderDueLabel } from "../../utils/reminderDueLabel";
 import { t } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
 import "./reminderPopupSurface.css";
@@ -54,7 +55,11 @@ export function ReminderPopup({
             <ListyItem>
               <Space size={6} wrap>
                 <Tag color={REMINDER_URGENCY_COLORS[item.urgency] ?? "default"}>
-                  {item.due_label}
+                  {/*
+                    倒计时文案按当前界面语言组合（后端只说"还有几天"，`due_label` 只作
+                    旧后端的回退）——直接渲染 due_label 会让英文界面里冒出中文胶囊。
+                  */}
+                  {reminderDueLabel(item.days_until, item.due_label)}
                 </Tag>
                 <Link to="/tracker" onClick={onClose}>
                   {item.title}

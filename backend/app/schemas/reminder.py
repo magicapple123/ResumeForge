@@ -124,12 +124,16 @@ class ReminderOut(ReminderCreate):
 
 
 class ReminderUpcomingOut(ReminderOut):
-    """待办提醒的首页回显：在 ReminderOut 之外补紧急度与展示标签。
+    """待办提醒的首页回显：在 ReminderOut 之外补紧急度、结构化倒计时与展示标签。
 
-    ``urgency`` / ``due_label`` 不在表里，由 ``services/reminder_service`` 统一计算。
+    ``urgency`` / ``days_until`` / ``due_label`` 不在表里，由 ``services/reminder_service``
+    统一计算。
     """
 
     urgency: ReminderUrgency = "later"
+    # 结构化倒计时（负数=逾期天数，0=今天，1=明天，N=N 天后）；前端按界面语言自行组合文案。
+    days_until: int = 0
+    # 后端拼好的中文标签：保留给旧前端/其它调用方，新界面用 days_until。
     due_label: str = ""
 
 

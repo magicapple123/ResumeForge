@@ -49,6 +49,8 @@ import { useOutlineSearch } from "./useOutlineSearch";
 import { useOutlineState } from "./useOutlineState";
 import "./outline.css";
 import "./outline-batch.css";
+import "./outline-field-tag.css";
+import "./outline-empty-target.css";
 
 export type { OutlineMultiEntry, OutlineMultiSelectionApi };
 

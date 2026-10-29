@@ -4,19 +4,24 @@
 页头整段（照片取景 / 装饰 / 姓名-意向-联系方式）拆到 ``header.py``：本文件贴着 500 行
 生产代码预算，而页头是"版式计算 + 照片 + 三段文字 + 装饰"的四合一，与"各分区怎么画"
 不是同一件事。拆分是纯搬迁，行为零变化（见 ``header.draw_header`` 的 docstring）。
+
+摘要 / 技能 / 语言 / 奖项这四个"短分区"同样拆到 ``short_sections.py``（2026-11，同一件
+事：贴着预算）。它们需要同一组上下文（排版参数、角色覆盖、分页计划、摘要用的 ``body``
+闭包），因此由本文件的 ``brief()`` 用 ``functools.partial`` 一次绑定，字典里仍是统一的
+``drawer(pdf, leading) -> bool`` 形态。同样是纯搬迁，行为零变化。
 """
 
 from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
+from functools import partial
 from pathlib import Path
 
 from fpdf import FPDF
 from fpdf.enums import XPos, YPos
 
 from ...schemas.resume import ResumeContent
-from ..resume.profile_field_lines import profile_field_rows
 from ..resume.resume_field_layout import resolve_field_layout
 from ..resume.resume_labels import (
     DEFAULT_RESUME_LANGUAGE,
@@ -33,12 +38,7 @@ from .fonts import FONT_FAMILY, ResumePDFError
 from .header import draw_header
 from .layout import _PX_TO_MM, _PX_TO_PT
 from .media import _join
-from .profile_fields import (
-    draw_bullets_with_profile_fields,
-    draw_profile_meta,
-    language_tag_text,
-    skill_tag_text,
-)
+from .profile_fields import draw_profile_meta
 from .research_render import (
     draw_credentials,
     draw_patents,
@@ -48,6 +48,7 @@ from .research_render import (
     project_extra_line,
 )
 from .section_presence import section_has_content
+from .short_sections import draw_awards, draw_languages, draw_skills, draw_summary
 from .style_blocks import parse_color, start_forced_page
 
 logger = logging.getLogger(__name__)
@@ -149,11 +150,19 @@ def _draw_resume(
     def body(pdf: _ResumePDF, text: str, object_id: str | None = None) -> None:
         """分区正文（一段 multi_cell）。宽度/起点跟列框走；W07 起消费 body 角色/对象覆盖。"""
         body_style = role_style("body", object_id)
-        size = base * (float(body_style.font_scale) if body_style is not None and body_style.font_scale else 1.0)
-        line_height = base * _PX_TO_MM * (
-            float(body_style.line_height)
-            if body_style is not None and body_style.line_height
-            else layout.line_height
+        size = base * (
+            float(body_style.font_scale)
+            if body_style is not None and body_style.font_scale
+            else 1.0
+        )
+        line_height = (
+            base
+            * _PX_TO_MM
+            * (
+                float(body_style.line_height)
+                if body_style is not None and body_style.line_height
+                else layout.line_height
+            )
         )
         align = {"left": "L", "center": "C", "right": "R", "justify": "J"}
         pdf.set_font(FONT_FAMILY, "", size * _PX_TO_PT)
@@ -174,20 +183,36 @@ def _draw_resume(
             pdf.ln(layout.gap_mm(float(body_style.space_after)))
         pdf.set_text_color(*pdf.body_text)
 
-    def draw_summary(pdf: _ResumePDF, leading: float) -> bool:
-        text = resume.summary.strip()
-        if not text:
-            return False
-        # W08：标题 + 整段摘要整体预留（keep_together）——页尾不留一行孤行，下一页页首也不留。
-        pdf.ensure_title_paragraph(text, base, leading_gap=leading, style=role_style("section_title"), body_style=role_style("body"), keep_lines=pagination.section("summary").keep_with_next)
-        pdf.section_title(labels["summary"], base, leading_gap=leading, style=role_style("section_title"), section="summary", keep_lines=pagination.section("summary").keep_with_next)
-        body(pdf, text)
-        return True
+    # 短分区（摘要 / 技能 / 语言 / 奖项）共用的上下文：绘制细节在 `short_sections.py`
+    # （本文件贴着 500 行预算）。它们是纯搬迁，`body` 也一并注入，所以短分区拿到的就是
+    # "量的与画的同一份"画布参数，而不是另起一套。
+    brief_context = dict(
+        resume=resume,
+        base=base,
+        labels=labels,
+        fields=fields,
+        language=language,
+        role_style=role_style,
+        pagination=pagination,
+        field_layout=field_layout,
+        body=body,
+    )
+
+    def brief(drawer, **extra):
+        """绑成 ``drawer(pdf, leading)``——与其余 drawer 同一形态，单栏/双栏共用。"""
+        return partial(drawer, **brief_context, **extra)
 
     def draw_education(pdf: _ResumePDF, leading: float) -> bool:
         if not resume.education:
             return False
-        pdf.section_title(labels["education"], base, leading_gap=leading, style=role_style("section_title"), section="education", keep_lines=pagination.section("education").keep_with_next)
+        pdf.section_title(
+            labels["education"],
+            base,
+            leading_gap=leading,
+            style=role_style("section_title"),
+            section="education",
+            keep_lines=pagination.section("education").keep_with_next,
+        )
         for index, edu in enumerate(resume.education):
             start_forced_page(pdf, pagination.entry(edu.id), margin_top=layout.margin_top)
             # 同一分区内条目之间的留白 = 模板 `.entry { margin-bottom }`（此前 PDF 没有）。
@@ -199,20 +224,49 @@ def _draw_resume(
                 _join([edu.degree, f"{edu.start_date} - {edu.end_date}"], " · "),
                 base,
                 style=entry_style,
-                meta_style=role_style("meta", edu.id), section="education", object_id=edu.id, keep_lines=pagination.entry(edu.id).keep_with_next,
+                meta_style=role_style("meta", edu.id),
+                section="education",
+                object_id=edu.id,
+                keep_lines=pagination.entry(edu.id).keep_with_next,
             )
             if edu.gpa:
                 pdf.meta_line(f"{fields['gpa']}：{edu.gpa}", base, style=role_style("meta", edu.id))
             if edu.courses:
-                pdf.meta_line(f"{fields['courses']}：{sep.join(edu.courses)}", base, style=role_style("meta", edu.id))
-            pdf.bullets(edu.achievements, base, style=role_style("body", edu.id), section="education", object_id=edu.id, split_ok=pagination.entry(edu.id).allow_split)
-            draw_profile_meta(pdf, edu, "education", base=base, fields=fields, style=role_style("meta", edu.id), field_layout=field_layout)
+                pdf.meta_line(
+                    f"{fields['courses']}：{sep.join(edu.courses)}",
+                    base,
+                    style=role_style("meta", edu.id),
+                )
+            pdf.bullets(
+                edu.achievements,
+                base,
+                style=role_style("body", edu.id),
+                section="education",
+                object_id=edu.id,
+                split_ok=pagination.entry(edu.id).allow_split,
+            )
+            draw_profile_meta(
+                pdf,
+                edu,
+                "education",
+                base=base,
+                fields=fields,
+                style=role_style("meta", edu.id),
+                field_layout=field_layout,
+            )
         return True
 
     def draw_experience(pdf: _ResumePDF, leading: float) -> bool:
         if not resume.experience:
             return False
-        pdf.section_title(labels["experience"], base, leading_gap=leading, style=role_style("section_title"), section="experience", keep_lines=pagination.section("experience").keep_with_next)
+        pdf.section_title(
+            labels["experience"],
+            base,
+            leading_gap=leading,
+            style=role_style("section_title"),
+            section="experience",
+            keep_lines=pagination.section("experience").keep_with_next,
+        )
         for index, exp in enumerate(resume.experience):
             start_forced_page(pdf, pagination.entry(exp.id), margin_top=layout.margin_top)
             if index:
@@ -222,20 +276,45 @@ def _draw_resume(
                 f"{exp.start_date} - {exp.end_date}",
                 base,
                 style=role_style("entry_title", exp.id),
-                meta_style=role_style("meta", exp.id), section="experience", object_id=exp.id, keep_lines=pagination.entry(exp.id).keep_with_next,
+                meta_style=role_style("meta", exp.id),
+                section="experience",
+                object_id=exp.id,
+                keep_lines=pagination.entry(exp.id).keep_with_next,
             )
             # A4：实践/服务经历的关系类型（空值不画，旧产物不变）。
             kind_line = experience_kind_line(exp.experience_kind, language)
             if kind_line:
                 pdf.meta_line(kind_line, base, style=role_style("meta", exp.id))
-            pdf.bullets(exp.description, base, style=role_style("body", exp.id), section="experience", object_id=exp.id, split_ok=pagination.entry(exp.id).allow_split)
-            draw_profile_meta(pdf, exp, "experience", base=base, fields=fields, style=role_style("meta", exp.id), field_layout=field_layout)
+            pdf.bullets(
+                exp.description,
+                base,
+                style=role_style("body", exp.id),
+                section="experience",
+                object_id=exp.id,
+                split_ok=pagination.entry(exp.id).allow_split,
+            )
+            draw_profile_meta(
+                pdf,
+                exp,
+                "experience",
+                base=base,
+                fields=fields,
+                style=role_style("meta", exp.id),
+                field_layout=field_layout,
+            )
         return True
 
     def draw_campus(pdf: _ResumePDF, leading: float) -> bool:
         if not resume.campus_experience:
             return False
-        pdf.section_title(labels["campus_experience"], base, leading_gap=leading, style=role_style("section_title"), section="campus_experience", keep_lines=pagination.section("campus_experience").keep_with_next)
+        pdf.section_title(
+            labels["campus_experience"],
+            base,
+            leading_gap=leading,
+            style=role_style("section_title"),
+            section="campus_experience",
+            keep_lines=pagination.section("campus_experience").keep_with_next,
+        )
         for index, item in enumerate(resume.campus_experience):
             start_forced_page(pdf, pagination.entry(item.id), margin_top=layout.margin_top)
             if index:
@@ -245,16 +324,41 @@ def _draw_resume(
                 f"{item.start_date} - {item.end_date}",
                 base,
                 style=role_style("entry_title", item.id),
-                meta_style=role_style("meta", item.id), section="campus_experience", object_id=item.id, keep_lines=pagination.entry(item.id).keep_with_next,
+                meta_style=role_style("meta", item.id),
+                section="campus_experience",
+                object_id=item.id,
+                keep_lines=pagination.entry(item.id).keep_with_next,
             )
-            pdf.bullets(item.description, base, style=role_style("body", item.id), section="campus_experience", object_id=item.id, split_ok=pagination.entry(item.id).allow_split)
-            draw_profile_meta(pdf, item, "campus_experience", base=base, fields=fields, style=role_style("meta", item.id), field_layout=field_layout)
+            pdf.bullets(
+                item.description,
+                base,
+                style=role_style("body", item.id),
+                section="campus_experience",
+                object_id=item.id,
+                split_ok=pagination.entry(item.id).allow_split,
+            )
+            draw_profile_meta(
+                pdf,
+                item,
+                "campus_experience",
+                base=base,
+                fields=fields,
+                style=role_style("meta", item.id),
+                field_layout=field_layout,
+            )
         return True
 
     def draw_projects(pdf: _ResumePDF, leading: float) -> bool:
         if not resume.projects:
             return False
-        pdf.section_title(labels["projects"], base, leading_gap=leading, style=role_style("section_title"), section="projects", keep_lines=pagination.section("projects").keep_with_next)
+        pdf.section_title(
+            labels["projects"],
+            base,
+            leading_gap=leading,
+            style=role_style("section_title"),
+            section="projects",
+            keep_lines=pagination.section("projects").keep_with_next,
+        )
         for index, project in enumerate(resume.projects):
             start_forced_page(pdf, pagination.entry(project.id), margin_top=layout.margin_top)
             if index:
@@ -265,73 +369,73 @@ def _draw_resume(
                 _join([project.role, f"{project.start_date} - {project.end_date}"], " · "),
                 base,
                 style=role_style("entry_title", project.id),
-                meta_style=role_style("meta", project.id), section="projects", object_id=project.id, keep_lines=pagination.entry(project.id).keep_with_next,
+                meta_style=role_style("meta", project.id),
+                section="projects",
+                object_id=project.id,
+                keep_lines=pagination.entry(project.id).keep_with_next,
             )
             if project.tech_stack:
-                pdf.meta_line(f"{fields['tech_stack']}：{sep.join(project.tech_stack)}", base, style=role_style("meta", project.id))
+                pdf.meta_line(
+                    f"{fields['tech_stack']}：{sep.join(project.tech_stack)}",
+                    base,
+                    style=role_style("meta", project.id),
+                )
             # A4 作品项目：成果类型 + 公开链接（空值不画，旧产物不变）。
             project_meta = project_extra_line(project, language)
             if project_meta:
                 pdf.meta_line(project_meta, base, style=role_style("meta", project.id))
             project_body = role_style("body", project.id)
-            pdf.bullets(project.description, base, style=project_body, section="projects", object_id=project.id, split_ok=pagination.entry(project.id).allow_split)
-            pdf.bullets(project.highlights, base, style=project_body, section="projects", object_id=project.id, split_ok=pagination.entry(project.id).allow_split)
-            draw_profile_meta(pdf, project, "projects", base=base, fields=fields, style=role_style("meta", project.id), field_layout=field_layout)
-        return True
-
-    def draw_skills(pdf: _ResumePDF, leading: float) -> bool:
-        if not resume.skills:
-            return False
-        pdf.section_title(labels["skills"], base, leading_gap=leading, style=role_style("section_title"), section="skills", keep_lines=pagination.section("skills").keep_with_next)
-        # 标签文案与预览一致（`level_text`：技能名 + 本语言的等级括号）。用标签绘制而不是
-        # 用分隔符连成一行文本——后者在预览里是带底色的小框，导出后却看不出任何标签形状。
-        pdf.skill_tags(
-            [skill_tag_text(skill, language, fields) for skill in resume.skills],
-            base,
-            style=role_style("body"),
-        )
-        return True
-
-    def draw_languages(pdf: _ResumePDF, leading: float) -> bool:
-        if not resume.languages:
-            return False
-        pdf.section_title(labels["languages"], base, leading_gap=leading, style=role_style("section_title"), section="languages", keep_lines=pagination.section("languages").keep_with_next)
-        # 与技能同一类短标签行：语言（水平 · 证书 · 分数）· 取得时间。
-        tags = [
-            language_tag_text(item, language, fields)
-            for item in resume.languages
-            if language_tag_text(item, language, fields)
-        ]
-        if not tags:
-            return False
-        pdf.skill_tags(tags, base, style=role_style("body"))
-        return True
-
-    def draw_awards(pdf: _ResumePDF, leading: float) -> bool:
-        if not resume.awards:
-            return False
-        pdf.section_title(labels["awards"], base, leading_gap=leading, style=role_style("section_title"), section="awards", keep_lines=pagination.section("awards").keep_with_next)
-        award_lines = [_join([award.name, award.date, award.description]) for award in resume.awards]
-        draw_bullets_with_profile_fields(
-            pdf, award_lines, [profile_field_rows(a, "awards", fields, field_layout) for a in resume.awards],
-            base=base, style=role_style("body"), section="awards",
-        )
+            pdf.bullets(
+                project.description,
+                base,
+                style=project_body,
+                section="projects",
+                object_id=project.id,
+                split_ok=pagination.entry(project.id).allow_split,
+            )
+            pdf.bullets(
+                project.highlights,
+                base,
+                style=project_body,
+                section="projects",
+                object_id=project.id,
+                split_ok=pagination.entry(project.id).allow_split,
+            )
+            draw_profile_meta(
+                pdf,
+                project,
+                "projects",
+                base=base,
+                fields=fields,
+                style=role_style("meta", project.id),
+                field_layout=field_layout,
+            )
         return True
 
     # 分区顺序由版式配置里的 section_order 决定（见 services/resume/resume_sections.py）。
     # 用字典而不是 if/elif 链：漏一个键时字典会直接 KeyError，而 if 链的表现是
     # "那个分区在 PDF 里默默消失"——同一个错误，早失败比晚失败好。
     drawers: dict[str, SectionDrawer] = {
-        "summary": draw_summary,
+        "summary": brief(draw_summary),
         "education": draw_education,
         "experience": draw_experience,
         "campus_experience": draw_campus,
         "publications": lambda pdf, leading: draw_publications(
-            pdf, resume, base=base, leading=leading, labels=labels, language=language,
+            pdf,
+            resume,
+            base=base,
+            leading=leading,
+            labels=labels,
+            language=language,
             field_layout=field_layout,
         ),
         "research_projects": lambda pdf, leading: draw_research_projects(
-            pdf, resume, base=base, leading=leading, labels=labels, language=language,
+            pdf,
+            resume,
+            base=base,
+            leading=leading,
+            labels=labels,
+            language=language,
             field_layout=field_layout,
         ),
         "patents": lambda pdf, leading: draw_patents(
@@ -341,9 +445,9 @@ def _draw_resume(
             pdf, resume, base=base, leading=leading, labels=labels, language=language
         ),
         "projects": draw_projects,
-        "skills": draw_skills,
-        "languages": draw_languages,
-        "awards": draw_awards,
+        "skills": brief(draw_skills),
+        "languages": brief(draw_languages),
+        "awards": brief(draw_awards),
     }
     section_keys = [
         key for key in resolved_section_order(format_config) if section_has_content(resume, key)

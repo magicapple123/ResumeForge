@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * 对象面板：三层范围里的"单条内容"那一层。
- * 守三件事：写 objects[id] 不伤角色域、恢复继承是删键、探针按 data-object-id 注入。
+ * 「更多参数」细调区（对象面板）：
+ * 守四件事：写 objects[id] 不伤角色域、恢复继承是删键、探针按 data-object-id 注入、
+ * 以及**级别管住的四项不在这里**（2026-10-29 与「文字级别」合并后的去重口径）。
  */
 import { App as AntdApp } from "antd";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
@@ -70,11 +71,33 @@ describe("ObjectStylePanel", () => {
     ).toBeInTheDocument();
   });
 
+  it("只列级别管不到的属性：字号 / 加粗 / 段前 / 段后不再出现", () => {
+    renderPanel();
+    for (const prop of ["font_scale", "bold", "space_before", "space_after"]) {
+      expect(document.querySelector(`[data-testid="style-row-object-${prop}"]`)).toBeNull();
+    }
+    // 差集里的属性仍在（缩进是这批里最好认的一行）。
+    expect(document.querySelector('[data-testid="style-row-object-indent"]')).not.toBeNull();
+    // 去处写明了，用户不会以为功能被删。
+    expect(screen.getByText(t("typography.object.levelHint"))).toBeInTheDocument();
+  });
+
   it("改一个属性只写 objects[该条]，角色覆盖与其它条目不丢", async () => {
-    const onChange = renderPanel();
+    const layout = {
+      ...LAYOUT,
+      format_config: {
+        ...LAYOUT.format_config,
+        objects: {
+          version: 1,
+          prj_87654321: { bullet: "none" },
+          [OBJECT_ID]: { indent: 0.5 },
+        },
+      },
+    } as unknown as ResumeLayout;
+    const onChange = renderPanel({ layout });
     fireEvent.click(
       screen.getByRole("button", {
-        name: t("typography.row.increaseAria", { label: t("typography.prop.space_before") }),
+        name: t("typography.row.increaseAria", { label: t("typography.prop.indent") }),
       }),
     );
     await waitFor(() => expect(onChange).toHaveBeenCalledTimes(1));
@@ -84,7 +107,7 @@ describe("ObjectStylePanel", () => {
       objects: {
         version: 1,
         prj_87654321: { bullet: "none" },
-        [OBJECT_ID]: { space_before: 0.05 },
+        [OBJECT_ID]: { indent: 0.55 },
       },
     });
   });
@@ -115,14 +138,21 @@ describe("ObjectStylePanel", () => {
 
   it("探针按 data-object-id 注入预览", () => {
     const { ref, setLiveProbe } = makePreviewRef();
-    renderPanel({ previewRef: ref });
+    const layout = {
+      ...LAYOUT,
+      format_config: {
+        ...LAYOUT.format_config,
+        objects: { version: 1, [OBJECT_ID]: { indent: 0.5 } },
+      },
+    } as unknown as ResumeLayout;
+    renderPanel({ layout, previewRef: ref });
     fireEvent.click(
       screen.getByRole("button", {
-        name: t("typography.row.increaseAria", { label: t("typography.prop.space_before") }),
+        name: t("typography.row.increaseAria", { label: t("typography.prop.indent") }),
       }),
     );
     expect(setLiveProbe).toHaveBeenCalledWith(
-      `  [data-object-id="${OBJECT_ID}"] { margin-top: calc(var(--fs) * 0.05) !important; }`,
+      `  [data-object-id="${OBJECT_ID}"] { padding-left: calc(var(--fs) * 0.55) !important; }`,
     );
   });
 });

@@ -25,6 +25,7 @@ import {
   type ResumeDraftStore,
 } from "../../features/resume/resumeDraftContent";
 import { useResumeLivePreview } from "../../features/resume/useResumeLivePreview";
+import { ensureEntryIds } from "../../features/resume-document/identity";
 import { contentSignature } from "../../utils/contentSignature";
 import type { ExactPreviewOptions, ResumePreviewHandle } from "../ResumePreview";
 import type { PreviewMode } from "../resume-preview/config";
@@ -120,10 +121,14 @@ export default function ResumeWorkbenchLiveCanvas({
    * 防抖，于是每次渲染都重置计时器，实时预览永远停在"更新中"（自激）。按"草稿这一版"缓存
    * 之后，同一份草稿在整个渲染期间是同一个引用。
    */
-  const mergedDraft = useMemo(
-    () => (draft ? (mergeLive?.(draft) ?? draft) : null),
-    [draft, mergeLive],
-  );
+  const mergedDraft = useMemo(() => {
+    if (!draft) return null;
+    const merged = mergeLive?.(draft) ?? draft;
+    // 草稿也要补条目 id（W01）：面板的条目下拉读的是历史里那份草稿，两边各自补一次
+    // 也必须是**同一批 id**（`ensureEntryIds` 按内容签名记住补出来的 id 表）。
+    // 已有合法 id 的条目原样返回，所以这条对正常编辑是零变化。
+    return ensureEntryIds(merged);
+  }, [draft, mergeLive]);
   /**
    * 正文优先级（只此三条分支，不许多一条）：
    * 草稿（叠加加粗）→ 宿主的实时正文。
@@ -152,15 +157,22 @@ export default function ResumeWorkbenchLiveCanvas({
    * 只在这一层算：本组件本来就随每次草稿变化重渲染（订阅点在这里），而
    * `ResumeZoomModal` 刻意不订阅草稿——在那一层订阅会让每键输入重渲染整个三栏。
    * 签名同步改成这份草稿的签名，否则 `formatKey` 不变、请求根本不会重发。
+   *
+   * **没有草稿时也要覆盖 content**：`exactPreview` 是宿主用 `detail.content`（后端读旧记录
+   * 时**没有条目 id** 的那一份）组出来的，直接透传会让精确预览按"没有身份"的正文排版，
+   * `format_config.field_layout.entries.<id>` / `objects.<id>` 一律失效（条目级排版在精确
+   * 预览里静默退回分区默认）。本组件的 `content` prop 已经是补过 id 的那一份。
    */
   const exactPreviewWithDraft = useMemo(() => {
-    if (!exactPreview || !mergedDraft) return exactPreview;
+    if (!exactPreview) return exactPreview;
+    const nextContent = mergedDraft ?? content;
+    if (!nextContent) return exactPreview;
     return {
       ...exactPreview,
-      content: mergedDraft,
-      contentSignature: contentSignature(mergedDraft),
+      content: nextContent,
+      contentSignature: contentSignature(nextContent),
     };
-  }, [exactPreview, mergedDraft]);
+  }, [exactPreview, mergedDraft, content]);
 
   const { state, retry, suspend, resume } = useResumeLivePreview({
     enabled: Boolean(previewContent) && previewMode !== "exact",

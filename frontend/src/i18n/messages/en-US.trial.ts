@@ -53,7 +53,8 @@ const trial = {
   "trial.export.all": "HTML / PDF / Word",
   "trial.export.wordNote":
     "Word preserves structure and text; a pixel-perfect match to the template is not guaranteed",
-  "trial.capability.title": "Format capabilities",
+  "trial.capability.title": "Export format differences",
+  "trial.capability.hint": "Only items that differ from the preview",
   "trial.capability.allSupported": "Supported in HTML / PDF / Word",
   "trial.capability.pending": "The format capability matrix is currently unavailable",
   "trial.capability.more": "See Try and compare for export and format differences",

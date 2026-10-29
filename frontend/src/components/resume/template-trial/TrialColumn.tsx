@@ -14,6 +14,7 @@ import type {
   TrialMeasurement,
   TrialSideState,
 } from "../../../features/resume-template-trial/types";
+import { previewPageCount } from "../../../features/resume-template-trial/trialRequests";
 import type { TemplateCapability } from "../../../features/resume-template-trial/templateProfile";
 import { withHiddenScrollbar } from "../../../utils/iframeDocument";
 import { useLocale } from "../../../i18n/i18nContext";
@@ -106,7 +107,9 @@ export default function TrialColumn({
             html={withHiddenScrollbar(state.html)}
             title={templateLabel}
             fit="width"
-            pages={pageLimit}
+            // 与请求体的 `page_limit` 同一个口径（示例恒 1 页）：HTML 的 body 高度与画布
+            // 页数必须一致，否则"示例只有一页正文、纸面仍按最大篇幅撑高"（见 previewPageCount）。
+            pages={previewPageCount(mode, pageLimit)}
           />
         ) : state.htmlError ? (
           <Space orientation="vertical" size={6}>

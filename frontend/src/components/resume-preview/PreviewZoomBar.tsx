@@ -8,10 +8,18 @@
  */
 import { ReloadOutlined, ZoomInOutlined, ZoomOutOutlined } from "@ant-design/icons";
 import { Button, Tooltip, Typography } from "antd";
+import type { ReactNode } from "react";
 import { t } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
 
 interface Props {
+  /**
+   * 行首的状态块（精确模式的「实际 N 页（上限 M 页）· 在新标签打开」）。
+   *
+   * 2026-10-29 用户要求把它和缩放控件**并到一行**：两行各自居中、中间还夹一档间距，
+   * 读起来像两块无关的东西。并进来之后它只是这一行里的第一个 flex item，窄屏照常换行。
+   */
+  status?: ReactNode;
   /** 当前实际缩放（已含可读下限与大屏上限的夹取）。 */
   scale: number;
   /** 是否停在下限上：为真时读数换成可聚焦的提示胶囊。 */
@@ -30,6 +38,7 @@ interface Props {
 }
 
 export default function PreviewZoomBar({
+  status,
   scale,
   clampedToMin,
   hint,
@@ -40,6 +49,7 @@ export default function PreviewZoomBar({
   useLocale();
   return (
     <div className="resume-preview-zoom-row">
+      {status ? <div className="resume-preview-zoom-status">{status}</div> : null}
       <Tooltip title={t("preview.zoom.out")}>
         <Button
           type="text"

@@ -427,6 +427,44 @@ describe("ResumePreview · 宿主给的真实高度（简历制作台右栏）",
     expect(screen.getByText(t("responsive.a4.minScaleLabel", { value: 55 }))).toBeInTheDocument();
   });
 
+  /**
+   * 2026-10-29 用户截图：右栏写着「整页」、读数 88%，纸却被切掉一截、还得滚。成因是旧的
+   * "根节点减草稿宿主"推算法：纸比容器高时宿主的盒子反而**更大**，差值被夹成 0，预算退回
+   * 整栏高度、纸更高，永远收敛不了。现在直接量纸面那一层（`.resume-preview-body`）——
+   * 它的高度是 flex 算出来的，与纸多高无关。
+   *
+   * jsdom 的 `clientHeight` 恒为 0，所以这里把它打桩成"纸面层 700、其它 0"，并故意给一个
+   * 更大的总预算 960：fit 必须按 700 算（62.3%），按 960 会是 85.5%。
+   */
+  it("纸面那一层量得到高度时，fit 只按它算（头部吃掉的高度不再算漏）", () => {
+    const original = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "clientHeight");
+    Object.defineProperty(HTMLElement.prototype, "clientHeight", {
+      configurable: true,
+      get(this: HTMLElement) {
+        return this.classList.contains("resume-preview-body") ? 700 : 0;
+      },
+    });
+    try {
+      render(
+        <ResumePreview
+          html="<!doctype html><html><body></body></html>"
+          warnings={[]}
+          availableHeight={960}
+        />,
+      );
+      const viewport = document.querySelector<HTMLElement>(".resume-preview-viewport");
+      expect(viewport).not.toBeNull();
+      // 一页恰好装进 700（1123 × 700/1123）；按总预算 960 会算出 960 并多出一条滚动条。
+      expect(Number.parseFloat(viewport!.style.height)).toBeCloseTo(700, 0);
+    } finally {
+      // jsdom 把 `clientHeight` 定义在 `Element.prototype` 上，所以 `original` 通常是
+      // `undefined`——这时必须**删掉**本用例加在 `HTMLElement.prototype` 上的假值，
+      // 否则它会漏给后面的用例（曾经漏出去一次，「适应页面」那条就从 55% 变成 62%）。
+      if (original) Object.defineProperty(HTMLElement.prototype, "clientHeight", original);
+      else delete (HTMLElement.prototype as unknown as Record<string, unknown>).clientHeight;
+    }
+  });
+
   it("不传 availableHeight 时仍用窗口比例口径，且同样受可读下限约束", () => {
     render(<ResumePreview html="<!doctype html><html><body></body></html>" warnings={[]} />);
 

@@ -14,7 +14,7 @@
  * 溢出定位（OverflowLocator）也在这里接：报告是**用户手动点才取**（不自动请求），
  * 页标记经 `usePaginationReportMarkers` 写进画布既有 store（PageNavigator 已订阅）。
  */
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode, RefObject } from "react";
 import type { ResumeContent, ResumeLayout } from "../../types";
 import { t } from "../../i18n";
@@ -29,6 +29,7 @@ import {
 import type { LocateTarget } from "../../features/resume-pagination/paginationReport";
 import { usePaginationReport } from "../../features/resume-pagination/usePaginationReport";
 import { usePaginationReportMarkers } from "../../features/resume-pagination/paginationPageMarkers";
+import { setPaginationReportRefresh } from "../../features/resume-pagination/paginationRefreshStore";
 import OverflowLocator from "./pagination/OverflowLocator";
 import { useWorkbenchProvenancePanels } from "./useWorkbenchProvenancePanels";
 import type { PaginationSectionOption } from "./pagination/PaginationControls";
@@ -183,6 +184,69 @@ export function useWorkbenchContextPanels({
   const report = usePaginationReport({ resumeId, buildRequest });
   usePaginationReportMarkers(report.report);
 
+  /**
+   * 报告是否基于"上一版"。
+   *
+   * 报告里的 `contentSha256/renderConfigSha256` 前端无法复算（哈希在后端），所以改用
+   * **请求快照字符串**比较：取报告时的请求体 vs 当前请求体。关键在下面那个 effect
+   * **只依赖 `report.report`**——若把 `requestSignature` 也放进去，用户一改内容就会把
+   * 刚记下的快照刷新成新值，"过期"提示永远不出现。
+   */
+  const requestSignature = useMemo(() => {
+    const request = buildRequest();
+    return request ? JSON.stringify(request) : null;
+  }, [buildRequest]);
+  const [reportSignature, setReportSignature] = useState<string | null>(null);
+  /**
+   * **这次请求发起时**的签名。
+   *
+   * 只在报告落地时读"当前签名"是不够的：报告要真排一遍版，几百毫秒到几秒；用户在这段时间里
+   * 又改了正文的话，落地时读到的签名正好等于请求时的新值，这份**按旧内容排出来的报告**
+   * 反而不会被标"过期"。所以发起那一刻就把签名记下来。
+   */
+  const pendingSignatureRef = useRef<string | null>(null);
+
+  /**
+   * 「最新一版」的 run 与请求签名。
+   *
+   * `triggerReport` 要读**调用那一刻**的最新值（画布横幅与页缩略图随时可能被点），而它自己
+   * 必须是稳定身份——它在模块级 store 里注册，身份一变就会在用户每次改字时反复注册、连带给
+   * 缩略图发一串无意义的通知。"稳定身份 + 最新值"只能靠一个可变盒子，但**不能在渲染期写它**：
+   * 新 eslint 规则（react-hooks/refs）把渲染期写 ref 判为错误。写入改到 layout effect——
+   * 它在同一个 commit 内、浏览器绘制与任何事件回调之前跑完，所以 `triggerReport` 读到的仍是
+   * "已提交的最新一版"，不会有一拍滞后。
+   */
+  const latestRef = useRef({ run: report.run, signature: requestSignature });
+  useLayoutEffect(() => {
+    latestRef.current = { run: report.run, signature: requestSignature };
+  });
+
+  /**
+   * 把「获取分页报告」这个动作注册到模块级 store：左栏分页面板里的**页缩略图**也能点。
+   *
+   * 用盒子读最新值（而不是把 `report.run` 当 effect 依赖），effect 只在挂载/卸载时各跑一次。
+   * 卸载时清空：不能让缩略图握住已卸载组件的闭包。画布横幅与页缩略图都走同一个
+   * `triggerReport`，签名快照才不会漏记。
+   */
+  const triggerReport = useCallback(() => {
+    pendingSignatureRef.current = latestRef.current.signature;
+    void latestRef.current.run();
+  }, []);
+  useEffect(() => {
+    setPaginationReportRefresh(triggerReport);
+    return () => setPaginationReportRefresh(null);
+  }, [triggerReport]);
+
+  useEffect(() => {
+    if (!report.report) return;
+    // 发起时记下的签名优先；没有（例如测试里直接塞报告）就退回当前签名。
+    setReportSignature(pendingSignatureRef.current ?? latestRef.current.signature);
+    pendingSignatureRef.current = null;
+  }, [report.report]);
+  const reportStale = Boolean(
+    report.report && reportSignature && requestSignature && reportSignature !== requestSignature,
+  );
+
   const sectionLabels = useMemo(() => {
     const labels: Record<string, string> = {};
     for (const option of sectionOptions ?? []) labels[option.key] = option.label;
@@ -208,7 +272,9 @@ export function useWorkbenchContextPanels({
     <div
       style={{
         flex: "0 0 auto",
-        padding: "8px 12px",
+        // 2026-10-29 用户要求压低头部：上下内边距从 8px 收到 6px，配合
+        // `.resume-pagination-report` 的一行排版，空状态从两行高降到一行。
+        padding: "6px 12px",
         borderBottom: "1px solid var(--rf-border-subtle)",
         background: "var(--rf-surface)",
       }}
@@ -217,7 +283,8 @@ export function useWorkbenchContextPanels({
         report={report.report}
         loading={report.loading}
         error={report.error || null}
-        onRefresh={() => void report.run()}
+        stale={reportStale}
+        onRefresh={triggerReport}
         onLocate={handleLocate}
         sectionLabels={sectionLabels}
       />

@@ -40,6 +40,12 @@ export interface PreviewShot {
   key: string;
   /** 面板持有的 objectURL；释放时机由面板决定。 */
   url: string;
+  /**
+   * 这份 PDF 的原始字节。存它是因为**缩放要换一个新的 objectURL**：`#zoom=<百分比>`
+   * 只在"重新导航"时被查看器读取，只改 hash 不会重新加载（Chrome 实测），而 blob URL
+   * 不能再拼查询串。字节本来就跟着缓存活（`CachedPreview.blob`），这里只是同引用。
+   */
+  blob: Blob;
   pages: number | null;
   /** 按当时那份版式真实需要的页数（未截断）。 */
   pagesNeeded: number | null;

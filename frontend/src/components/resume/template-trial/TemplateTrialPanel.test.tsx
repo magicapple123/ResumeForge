@@ -11,6 +11,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { t } from "../../../i18n";
 import { TEMPLATE_CATALOG } from "../../../test/resumeFixtures";
 import type { ResumeLayout } from "../../../types";
+// 断言纸面页数用同一份 A4 常量，避免测试里再写死一个 1123。
+import { A4_HEIGHT_PX } from "../../resume-preview/config";
 import TemplateTrialPanel from "./TemplateTrialPanel";
 
 const apiMocks = vi.hoisted(() => ({
@@ -50,7 +52,7 @@ function renderPanel(
   onAdopt = vi.fn(),
   onBack = vi.fn(),
 ) {
-  render(
+  const view = render(
     <AntdApp>
       <TemplateTrialPanel
         layout={LAYOUT}
@@ -63,7 +65,7 @@ function renderPanel(
       />
     </AntdApp>,
   );
-  return { onAdopt, onBack };
+  return { onAdopt, onBack, container: view.container };
 }
 
 beforeEach(() => {
@@ -108,6 +110,29 @@ describe("TemplateTrialPanel · 两套模板并排", () => {
     expect(screen.getAllByText(t("trial.measure.overflow")).length).toBeGreaterThan(0);
     // measurement 走真 PDF 端点，按两份模板各测一次。
     expect(apiMocks.fetchResumePreviewPdf).toHaveBeenCalledTimes(2);
+  });
+
+  it("切到示例内容后纸面按 1 页收起，不再沿用用户的最大篇幅", async () => {
+    const { container } = renderPanel({ layout: { ...LAYOUT, page_limit: 2 }, resumeId: 5 });
+    await waitFor(() => expect(apiMocks.previewResumeTemplate).toHaveBeenCalledTimes(2));
+    // jsdom 量不到容器宽度 → 缩放保持 1，纸高就是页数 × A4（正好可以直接断言页数）。
+    // 我的内容：按用户设定的 2 页。
+    const paperHeights = () =>
+      Array.from(container.querySelectorAll<HTMLElement>(".a4-preview-paper")).map(
+        (paper) => paper.style.height,
+      );
+    expect(paperHeights()).toEqual([`${A4_HEIGHT_PX * 2}px`, `${A4_HEIGHT_PX * 2}px`]);
+
+    apiMocks.previewResumeTemplate.mockClear();
+    fireEvent.click(screen.getByText(t("trial.mode.demo")));
+    await waitFor(() => expect(apiMocks.previewResumeTemplate).toHaveBeenCalledTimes(2));
+    // 示例：1 页（纸面与请求体同口径），空白下半张不再出现。
+    expect(paperHeights()).toEqual([`${A4_HEIGHT_PX}px`, `${A4_HEIGHT_PX}px`]);
+    expect(
+      apiMocks.previewResumeTemplate.mock.calls.every(
+        (call) => (call[0] as { page_limit?: number }).page_limit === 1,
+      ),
+    ).toBe(true);
   });
 
   it("示例模式不测量页数，也不带 resume_id", async () => {
@@ -173,17 +198,48 @@ describe("TemplateTrialPanel · 采纳与取消", () => {
 });
 
 describe("TemplateTrialPanel · 格式能力（矩阵口径）", () => {
-  it("只显示矩阵里不是 supported 的格子", async () => {
+  it("一项能力一行，行内只列不是 supported 的格式", async () => {
     renderPanel({ resumeId: 5 });
     await waitFor(() => expect(apiMocks.previewResumeTemplate).toHaveBeenCalledTimes(2));
     const section = screen.getByLabelText(t("trial.capability.title"));
+    // 值写成"格式 + 等级"的短标签，同一项能力不再重复格式前缀。
     expect(
       within(section).getByText(
-        `${t("preflight.format.pdf")} ${t("preflight.capability.linkClickable")} ${t("preflight.capability.unsupported")}`,
+        `${t("preflight.format.pdf")} ${t("preflight.capability.unsupported")}`,
       ),
     ).toBeInTheDocument();
-    // html 全支持 → 不出现 html 行
+    // 斜体那行 docx 仍支持 → 不出现；只有"链接可点击"那行标出 Word 近似。
+    expect(
+      within(section).getAllByText(
+        `${t("preflight.format.docx")} ${t("preflight.capability.approx")}`,
+      ),
+    ).toHaveLength(1);
+    // html 那一列全支持 → 整列不出现（这正是"只列差异"的口径）。
     expect(within(section).queryByText(new RegExp(t("preflight.format.html")))).toBeNull();
+  });
+
+  it("能力名走词条，界面上不漏后端机器码", async () => {
+    renderPanel({
+      resumeId: 5,
+      capabilities: {
+        "html:manual_page_break": "approx",
+        "html:keep_with_next": "approx",
+        "pdf:entry_spacing": "approx",
+        "pdf:body_color": "unsupported",
+      },
+    });
+    await waitFor(() => expect(apiMocks.previewResumeTemplate).toHaveBeenCalledTimes(2));
+    const section = screen.getByLabelText(t("trial.capability.title"));
+    expect(
+      within(section).getByText(t("preflight.capability.manualPageBreak")),
+    ).toBeInTheDocument();
+    expect(within(section).getByText(t("preflight.capability.keepWithNext"))).toBeInTheDocument();
+    expect(within(section).getByText(t("preflight.capability.entrySpacing"))).toBeInTheDocument();
+    expect(within(section).getByText(t("preflight.capability.bodyColor"))).toBeInTheDocument();
+    // 契约键是 ASCII，漏翻时会原样印出来（2026-10-29 截图里就是 manual_page_break）。
+    expect(
+      within(section).queryByText(/manual_page_break|keep_with_next|entry_spacing|body_color/),
+    ).toBeNull();
   });
 
   it("能力矩阵缺失时给出暂不可用提示，不自己编支持情况", async () => {

@@ -110,6 +110,27 @@ async function pickSection(label: string) {
   fireEvent.click((content ?? option) as Element);
 }
 
+/**
+ * 确认「切回自然填充」。
+ *
+ * 不按 role 名点确定：「切回自然填充」是 5 个字，antd 的 `autoInsertSpace` 只对两字按钮生效，
+ * 所以这里名匹配本来可用；但同一套确认框在别处会是「取 消」，统一按位置（`[取消, 确定]`）
+ * 取更不容易随文案变坏。
+ */
+async function confirmFlowSwitch() {
+  await waitFor(() =>
+    expect(document.querySelector(".ant-modal-confirm-title")?.textContent).toContain(
+      t("pagination.mode.confirmTitle"),
+    ),
+  );
+  const dialogs = document.querySelectorAll(".ant-modal-confirm");
+  const buttons = Array.from(
+    (dialogs[dialogs.length - 1] as Element).querySelectorAll(".ant-modal-confirm-btns button"),
+  );
+  expect(buttons).toHaveLength(2);
+  fireEvent.click(buttons[1] as Element);
+}
+
 afterEach(() => {
   cleanup();
   document.body.innerHTML = "";
@@ -183,6 +204,8 @@ describe("W08-INT · 分页控件真实挂载与保存通道", () => {
     expect(sections["education"]).toEqual({ break_before: "page" });
 
     pickMode(t("pagination.mode.flow"));
+    // 切回自然填充会一次清掉全部板块断页 → 真实界面上要过一次确认框。
+    await confirmFlowSwitch();
     await waitFor(() => expect(onApplyLayout.mock.calls.length).toBeGreaterThan(1));
     const latest = onApplyLayout.mock.calls[onApplyLayout.mock.calls.length - 1][0] as {
       format_config: { pagination?: unknown };

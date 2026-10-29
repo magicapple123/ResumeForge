@@ -69,6 +69,17 @@ const homePage = {
   "homePage.reminders.urgencyAria": "Urgency: {level}",
   /** Accessible name of a reminder row: clicking it opens the dialog. */
   "homePage.reminders.openAria": "View reminder: {title}",
+  /**
+   * Countdown tag: the reminder time has passed. `{days}` is the overdue day count.
+   * Kept compact ("3d overdue") so a single-day count never reads "1 days".
+   */
+  "homePage.reminders.due.overdue": "{days}d overdue",
+  /** Countdown tag: the reminder is due today. */
+  "homePage.reminders.due.today": "Today",
+  /** Countdown tag: the reminder is due tomorrow. */
+  "homePage.reminders.due.tomorrow": "Tomorrow",
+  /** Countdown tag: `{days}` days out (only reached for 2+, so the plural holds). */
+  "homePage.reminders.due.inDays": "In {days} days",
 
   // -- Global search card -----------------------------------------
   /** Card title. */

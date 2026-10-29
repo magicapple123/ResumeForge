@@ -3,7 +3,7 @@
  * 简历详情预览的底部操作条（P2 抽取，P4 改视觉形态）。
  *
  * 从 `ResumeDetailPreview` **逐字搬来**：DOM 结构与 class 名一个字都没改（`.resume-detail-footer`
- * / `.resume-detail-footer-extra-row` / `.resume-detail-footer-export`），CSS 的网格回填规则
+ * / `.resume-detail-footer-tail` / `.resume-detail-footer-export`），CSS 的网格回填规则
  * 因此原样生效。抽出来的唯一原因是 `ResumeDetailPreview` 已贴到 500 行预算（497），
  * 而 P2 要往里加两个具名插槽（净增）。
  *
@@ -104,8 +104,9 @@ export default function ResumeDetailFooter({
         {t("resume.footer.assistant")}
       </Button>
       {/* 最后一行：左边两个次动作（质量 / 离线分享）与右边的「取消 / 保存 / 导出」**同一行**。
-          `.resume-detail-footer-tail` 用 subgrid 复用上面的列，所以左边两个按钮
-          仍与上排按钮逐列对齐；右侧动作按内容宽度、靠右收尾（不占满列）。 */}
+          这一行是 flex（不是 subgrid）：宽度够时左右同排、右侧贴右；宽度不够时整组换到
+          自己的一行再贴右。写死"从第 N 列起"会随主网格列数变化而失效，详见
+          `resume-panels.css` 里 `.resume-detail-footer-tail` 的注释。 */}
       <div className="resume-detail-footer-tail">
         <Button block icon={<SafetyCertificateOutlined />} onClick={onOpenQuality}>
           {t("resume.footer.quality")}
@@ -114,7 +115,7 @@ export default function ResumeDetailFooter({
           {t("resume.footer.share")}
         </Button>
         {/* 两种形态（D8）：语义不同，不能统一成一种。
-          - **没有待确认改动**：导出是"一排动作里的终点"，落右下角最顺手（`-2 / -1`）。
+          - **没有待确认改动**：导出是"一排动作里的终点"，贴在最右下角最顺手。
           - **有待确认改动**：用户视线在「取消/保存」上，导出若跑到新行只剩最后一格，
             视觉上像"按钮丢了"，所以这时把它们并到**同一行**（左确认 / 右导出）。
           两个分支里只有一个是渲染出来的，所以 `.resume-detail-footer-export` 全页始终

@@ -241,7 +241,10 @@ export function useResumeEditorPanel(options: ResumeEditorPanelOptions): ResumeE
     if (!active || !pickTarget) return;
     const target = resolveEditorTarget(pickTarget.path);
     if (target.name.length === 0) return;
-    return scrollAndFocusEditorField(form, target.name);
+    // 从纸面点进来的这一路要**选中整段文字**：用户点它就是想改这一栏（加粗 / 斜体 / 链接
+    // 全部要求有选区，不选中就等于三个按钮都点不动）。打开面板时的 `initialTarget` 不选，
+    // 那种场景是"带我到这里"，把整段高亮反而会让人以为要点一下才算数。
+    return scrollAndFocusEditorField(form, target.name, { selectText: true });
   }, [active, form, pickTarget]);
 
   // 页签装配拆到 `resumeEditorTabs`（本文件贴着 500 行预算）：key 与 content 字段名逐字一致。

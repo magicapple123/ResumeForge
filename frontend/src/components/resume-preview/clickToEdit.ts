@@ -94,6 +94,20 @@ export function paintLoadedFrames(container: HTMLElement | null, enabled: boolea
 }
 
 /**
+ * 纸面上有没有**非空文本选区**（用户正在拖选文字）。
+ *
+ * 拖选结束必然跟一发 `click`：那一拍如果照常"点哪跳哪"，编辑栏的 textarea 会把焦点抢走，
+ * 刚拖出来的选区立刻作废——体感就是"预览里根本选不中字"（2026-10-29 用户反馈）。
+ * 所以"有没有选区"要能被单独判定，且能脱离真实 iframe 单测（`defaultView` 在
+ * `createHTMLDocument()` 造出来的文档里是 null，真实 iframe 里一定不是）。
+ */
+export function hasTextSelection(doc: Document | null): boolean {
+  const selection = doc?.defaultView?.getSelection?.() ?? null;
+  if (!selection || selection.isCollapsed) return false;
+  return selection.toString().trim().length > 0;
+}
+
+/**
  * 从事件目标往上找最近的「带路径的节点」，返回它的 `data-resume-path`。
  *
  * 用 `getAttribute` 而不是 `dataset`：跨文档时（iframe 里的 Element 与父窗口的 `Element`

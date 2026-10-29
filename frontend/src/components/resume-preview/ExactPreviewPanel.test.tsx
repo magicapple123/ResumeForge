@@ -74,7 +74,12 @@ type PanelProps = Parameters<typeof ExactPreviewPanel>[0];
  * 相框高度按 A4 比例算（页数 × 页高），这个算式只在查看器"按宽度缩放"时成立，
  * 所以缩放口径是契约的一部分，不能悄悄丢（见 `withPageWidthZoom`）。
  */
-const zoomed = (url: string) => `${url}#zoom=page-width&toolbar=0&navpanes=0`;
+/**
+ * jsdom 量不到相框宽度（`ResizeObserverMock` 只占位），面板走的是"不缩放"那条分支：
+ * iframe 直接用原始 objectURL。真实宽度下的 `#zoom=<百分比>` 由浏览器实测覆盖
+ * （Chrome 只认数值百分比，且必须换新 URL 才会重新读参数）。
+ */
+const framed = (url: string) => url;
 /** 版式默认值与真实宿主一致（草稿值原样传进来）；各用例只写自己要改的那一项。 */
 function panel(overrides: Partial<PanelProps> = {}) {
   return (
@@ -159,7 +164,7 @@ describe("ExactPreviewPanel", () => {
     expect(options.format_config).toEqual({ page_padding: 14 });
 
     const frame = await screen.findByTitle("简历精确预览（导出 PDF）");
-    expect(frame.getAttribute("src")).toBe(zoomed("blob:preview-1"));
+    expect(frame.getAttribute("src")).toBe(framed("blob:preview-1"));
     expect(screen.getByText(/实际 1 页/)).toBeTruthy();
   });
 
@@ -199,10 +204,10 @@ describe("ExactPreviewPanel", () => {
     // 新图先挂在透明的预加载层上：**旧图仍然可见**，用户不会看到一块白。
     expect(screen.getByTitle("简历精确预览（导出 PDF）")).toHaveAttribute(
       "src",
-      zoomed("blob:preview-1"),
+      framed("blob:preview-1"),
     );
     const pending = screen.getByTitle("正在加载的精确预览");
-    expect(pending).toHaveAttribute("src", zoomed("blob:preview-2"));
+    expect(pending).toHaveAttribute("src", framed("blob:preview-2"));
     // 遮罩与状态行都会说"正在重排"，这里只钉遮罩本身（它是"旧图仍在、但看得出在算"的载体）。
     expect(document.querySelector(".exact-preview-overlay")).not.toBeNull();
 
@@ -211,7 +216,7 @@ describe("ExactPreviewPanel", () => {
     await waitFor(() =>
       expect(screen.getByTitle("简历精确预览（导出 PDF）")).toHaveAttribute(
         "src",
-        zoomed("blob:preview-2"),
+        framed("blob:preview-2"),
       ),
     );
     expect(revoked).toContain("blob:preview-1");
@@ -408,7 +413,7 @@ describe("ExactPreviewPanel", () => {
     // 图还在（切换没有把它弄丢），用户看到的仍是同一份 PDF。
     expect(screen.getByTitle("简历精确预览（导出 PDF）")).toHaveAttribute(
       "src",
-      zoomed("blob:preview-1"),
+      framed("blob:preview-1"),
     );
   });
 

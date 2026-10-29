@@ -24,6 +24,7 @@ import {
   CLICK_TO_EDIT_PATH_ATTR,
   CLICK_TO_EDIT_STORAGE_KEY,
   CLICK_TO_EDIT_STYLE_ID,
+  hasTextSelection,
   paintClickToEdit,
   readStoredClickToEdit,
   resolvePickPath,
@@ -88,6 +89,21 @@ describe("resolvePickPath · 命中判定", () => {
     expect(resolvePickPath(doc.querySelector(".plain"))).toBeNull();
     expect(resolvePickPath(doc.body)).toBeNull();
     expect(resolvePickPath(null)).toBeNull();
+  });
+
+  it("hasTextSelection：拖选之后为真，折叠/空串/没有视图都为假", () => {
+    const withSelection = (isCollapsed: boolean, text: string) =>
+      ({
+        defaultView: { getSelection: () => ({ isCollapsed, toString: () => text }) },
+      }) as unknown as Document;
+    expect(hasTextSelection(withSelection(false, "selected text"))).toBe(true);
+    // 折叠的光标不算"用户选中了文字"。
+    expect(hasTextSelection(withSelection(true, ""))).toBe(false);
+    // 只有空白也不算。
+    expect(hasTextSelection(withSelection(false, "   "))).toBe(false);
+    // createHTMLDocument() 造出来的文档 defaultView 是 null（真实 iframe 里不是）。
+    expect(hasTextSelection(paperDocument())).toBe(false);
+    expect(hasTextSelection(null)).toBe(false);
   });
 
   it("属性为空串时也算没命中", () => {

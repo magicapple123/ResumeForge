@@ -37,16 +37,34 @@ _REMEMBER_EDITOR_TEMPLATE = r"""(() => { /* rf:live-memory-editor */
   let pickerInlineDisplay = '';
   let moreInlineDisplay = '';
   let collapsedGroups = new Set();
+  // 清单里**只有已存在的保存目标**。「按上方字段名新建」不再是单独一行：它没有自己的
+  // 名字和值，混进清单会被读成"已经有一条叫这个名字的字段"（用户截图里那行绿框），
+  // 而且它还得和真实自定义分组抢同一个组名。新建本来就是默认行为——名字对不上任何
+  // 目标时 `selectedId` 保持 `'custom'`，提示语会说"将按上方字段名新增"。
 
   const style = document.createElement('style');
   style.textContent = [
-    '.rf-memory{display:none;border-top:1px solid #e8e8e8;padding:16px;background:linear-gradient(180deg,#f7fbff 0%,#fff 42%);max-height:min(680px,76vh);overflow:hidden}',
+    // 编辑器**吃掉面板剩下的高度**：面板 `.p` 是 `display:flex;flex-direction:column`，
+    // 用户拖高面板之后，原来写死的 `max-height:min(680px,76vh)` 会让卡片底部留一大片
+    // 空白（用户截图里的那块白）。所以这里只说"我参与分配、可以缩"（`flex:1 1 auto` +
+    // `min-height:0`），高度由面板决定；默认仍然 `display:none`，打开时脚本设成 'flex'。
+    //
+    // `overflow:auto` 是**兜底**：面板被拖到 `MIN_PANEL_H = 300` 那种极端矮的时候，
+    // 标题 + 两个输入 + 按钮行本身就放不下，此时让编辑器整体可滚，而不是把目标清单压成
+    // 0 高（那样用户什么都点不到）。两种取舍：正常情况下清单内部滚（下面 `.rf-memory-targets`
+    // 的 min-height 保证它仍有可用高度），极端情况下编辑器整体滚。
+    '.rf-memory{display:none;flex:1 1 auto;min-height:0;flex-direction:column;overflow:auto;border-top:1px solid #e8e8e8;padding:16px;background:linear-gradient(180deg,#f7fbff 0%,#fff 42%)}',
+    // 除清单以外的每一块都**不被压扁**：标题、副标题、label+input、hint、按钮行都按内容
+    // 高度走（否则面板一矮，它们会跟着按比例缩，输入框先变成一条缝）。
+    '.rf-memory > :not(.rf-memory-targets){flex:0 0 auto}',
     '.rf-memory-title{font-weight:700;color:#1557a6;margin-bottom:3px;font-size:14px}',
     '.rf-memory-subtitle{color:#718096;font-size:11px;line-height:1.6;margin-bottom:10px}',
     '.rf-memory-label{display:block;color:#44546a;font-size:12px;font-weight:600;margin:8px 0}',
     '.rf-memory input[type=text]{display:block;width:100%;min-height:32px;border:1px solid #d9e2ef;border-radius:8px;padding:7px 9px;font-size:12px;outline:none;background:#fff}',
     '.rf-memory input[type=text]:focus{border-color:#1677ff;box-shadow:0 0 0 2px rgba(22,119,255,.12)}',
-    '.rf-memory-targets{max-height:min(430px,50vh);overflow:auto;border:1px solid #dfe8f3;border-radius:10px;background:#fff;box-shadow:0 2px 8px rgba(31,56,88,.04)}',
+    // 目标清单跟着面板长；短了就在**自己内部**滚（不再写死 430/50vh 那个上限）。
+    // `min-height:96px` 是"还点得到东西"的下限：约等于一个组头 + 一行目标。
+    '.rf-memory-targets{flex:1 1 auto;min-height:96px;max-height:none;overflow:auto;border:1px solid #dfe8f3;border-radius:10px;background:#fff;box-shadow:0 2px 8px rgba(31,56,88,.04)}',
     // 选择器必须带 `button` 前缀：焦点面板的基础规则 `button:not(.rf-live-switch)`（深蓝底
     // 白字）特异性是 (0,1,1)，裸 `.rf-memory-group`(0,1,0) 会输给它——分组头全被染成
     // 深蓝、糊成选中态（用户反馈）。本样式表挂在面板样式之后，同特异性即可胜出，
@@ -153,6 +171,12 @@ _REMEMBER_EDITOR_TEMPLATE = r"""(() => { /* rf:live-memory-editor */
     return false;
   };
   const selected = () => targets().find((item) => item.target_id === selectedId);
+  // 清单默认**全部折叠**（分组太多）。选中的那条所在的组必须展开，否则提示语说"将更新
+  // …"，而指向的那一行藏在折叠组里看不见。（合成行默认展开过，去掉它之后要自己补这一步。）
+  const revealSelected = () => {
+    const target = selected();
+    if (target) { collapsedGroups.delete(String(target.group || '其他')); }
+  };
   // 目标**只来自「网申资料」**（见 services/webform/profile_targets.py）。这里没有
   // "我的资料"那一支：简历资料会被生成进简历正文，按一下「记住这条」不该改到它。
   const defaultTarget = (label) => {
@@ -173,8 +197,8 @@ _REMEMBER_EDITOR_TEMPLATE = r"""(() => { /* rf:live-memory-editor */
       : '%%copy:memory.createHint%%';
   };
   const render = () => {
-    const custom = {target_id: 'custom', source: 'extra', group: '自定义', label: name.value || '新增自定义字段', value: ''};
-    const matches = [custom, ...targets()].filter((item) => fuzzy(
+    // 只列已存在的保存目标；"新建"由 `selectedId === 'custom'` 隐式表达（见文件头注释）。
+    const matches = targets().filter((item) => fuzzy(
       [item.group, item.label, item.value, item.field_key, '网申资料'].join(' '), search.value,
     ));
     list.textContent = '';
@@ -219,7 +243,8 @@ _REMEMBER_EDITOR_TEMPLATE = r"""(() => { /* rf:live-memory-editor */
       for (const item of items) {
         const row = document.createElement('div');
         row.className = 'rf-memory-row' + (item.target_id === selectedId ? ' selected' : '');
-        row.title = `${item.label || ''}: ${item.target_id === 'custom' ? '%%copy:panel.pick.useLabel%%' : (item.value || '%%copy:panel.pick.empty%%')}`;
+        // 清单里只剩已存在的目标，"新建"没有自己的行——不再需要给 `custom` 分支。
+        row.title = `${item.label || ''}: ${item.value || '%%copy:panel.pick.empty%%'}`;
         const icon = document.createElement('span');
         icon.className = 'rf-memory-radio';
         icon.textContent = item.target_id === selectedId ? '●' : '○';
@@ -230,7 +255,7 @@ _REMEMBER_EDITOR_TEMPLATE = r"""(() => { /* rf:live-memory-editor */
         label.textContent = item.label;
         const value = document.createElement('div');
         value.className = 'rf-memory-value';
-        value.textContent = item.target_id === 'custom' ? '%%copy:panel.pick.useLabel%%' : '%%copy:memory.currentValue%%'.replace('{value}', item.value || '%%copy:panel.pick.empty%%');
+        value.textContent = '%%copy:memory.currentValue%%'.replace('{value}', item.value || '%%copy:panel.pick.empty%%');
         content.append(label, value);
         row.append(icon, content);
         row.addEventListener('click', () => {
@@ -270,13 +295,15 @@ _REMEMBER_EDITOR_TEMPLATE = r"""(() => { /* rf:live-memory-editor */
     valueInput.value = formValue();
     search.value = '';
     collapsedGroups = new Set(targets().map((item) => String(item.group || '其他')));
-    collapsedGroups.delete('自定义');
+    revealSelected();
     pickerWasOpen = Boolean(picker && picker.classList.contains('on'));
     pickerInlineDisplay = picker ? picker.style.display : '';
     moreInlineDisplay = moreButton ? moreButton.style.display : '';
     if (picker) { picker.classList.remove('on'); picker.style.display = 'none'; }
     if (moreButton) { moreButton.style.display = 'none'; }
-    editor.style.display = 'block';
+    // 打开时必须是 `flex`：编辑器现在是"纵向 flex 撑满面板剩余高度"的容器，
+    // 用 `block` 打开就等于丢掉 `flex:1 1 auto`，高度又退回按内容算。
+    editor.style.display = 'flex';
     panel.style.width = 'min(680px,calc(100vw - 16px))';
     // 宽度与高度同时变了（编辑器比资料区高得多），落点要**立刻**重算：
     // 面板变高之后 top 的上限跟着变小，不重算它会先在原地撑出视口底部，
@@ -290,7 +317,7 @@ _REMEMBER_EDITOR_TEMPLATE = r"""(() => { /* rf:live-memory-editor */
   name.addEventListener('input', () => {
     // 改名意味着新自定义字段；用户随后仍可手动选回原有字段。
     if (selected() && normalize(name.value) !== normalize(selected().label)) { selectedId = 'custom'; }
-    collapsedGroups.delete('自定义');
+    revealSelected();
     render();
     updateHint();
   });

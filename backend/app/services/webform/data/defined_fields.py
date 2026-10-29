@@ -248,7 +248,20 @@ def catalog_from_consumed(
         value = _flatten(text) if spec.field_type == "multi_line" else text
         if key == "job_intent" and title:
             value = title
-        rows.append({"group": group, "label": label, "value": value, "key": key})
+        rows.append(
+            {
+                "group": group,
+                "label": label,
+                "value": value,
+                "key": key,
+                # **只服务显示层**的稳定 key（``panel_labels`` 按它查英文显示名）：
+                # `group` / `label` 的语义不变——它们被「填入」回传、被 `dataset.group`
+                # 用于定位/折叠/配色。自建板块的 key 是 `custom:…`，查不到就原样显示。
+                "group_key": section.key,
+                "group_index": "" if section.form == "singleton" else str(position),
+                "label_key": spec.field_id,
+            }
+        )
     return rows
 
 

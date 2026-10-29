@@ -282,6 +282,12 @@ export interface PointRowContentProps {
   /** 搜索命中的查询串（把命中片段标出来）。 */
   query?: string;
   sortBlockedReason?: string;
+  /**
+   * 字段归属标签（已翻译）。条目有 ≥2 个非空要点字段时才给：
+   * 一个条目的要点可能来自多个数组（`courses` / `achievements`…），扁平展示时各行长得一样，
+   * 不标出来用户看不出"第一条其实是课程行"（跨字段搬移后才有的分辨需求）。
+   */
+  fieldLabel?: string;
   onSelect: () => void;
   /** 手柄获得焦点即选中这一行（见 EntryRowContentProps.onSortFocus）。 */
   onSortFocus: () => void;
@@ -306,6 +312,7 @@ export function PointRowContent({
   readOnly,
   query,
   sortBlockedReason,
+  fieldLabel,
   onSelect,
   onSortFocus,
   onSortStart,
@@ -353,6 +360,11 @@ export function PointRowContent({
           onDragEnd={onDragEnd}
         />
       )}
+      {fieldLabel ? (
+        <span className="resume-outline-field-tag" data-point-field={point.pointField}>
+          {fieldLabel}
+        </span>
+      ) : null}
       <span className={"resume-outline-point-text" + (point.text ? "" : " is-empty")}>
         <HighlightedText text={displayText} query={query} />
       </span>

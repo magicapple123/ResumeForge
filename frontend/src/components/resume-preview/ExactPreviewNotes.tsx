@@ -9,7 +9,7 @@
  * 文案与草稿侧**同一措辞**（2026-10-21 用户要求）：同一个事实在两处换两种说法，
  * 用户会以为是两件事。
  */
-import { Alert, Button, Typography } from "antd";
+import { Alert, Button, Space, Typography } from "antd";
 import { t } from "../../i18n";
 import { EXACT_OVERFLOW_NOTE_KEY } from "./config";
 import type { PreviewShot } from "./exactPreviewCache";
@@ -57,6 +57,62 @@ export function ExactPreviewAlerts({ current, busy, pageLimit }: AlertsProps) {
         />
       ) : null}
     </>
+  );
+}
+
+/**
+ * 环境没有内置 PDF 查看器（Electron 默认 `plugins=false`）时的出口。
+ *
+ * 从 `ExactPreviewPanel` 搬出来（那份文件贴着 500 行预算）：它只是"说清楚 + 给一条在新
+ * 标签打开的路"，不碰请求与双缓冲。
+ */
+export function ExactNoViewer({ url }: { url: string }) {
+  useLocale();
+  return (
+    <div style={{ padding: 16 }}>
+      <Alert
+        type="info"
+        showIcon
+        title={t("preview.exact.noViewerTitle")}
+        description={
+          <Space orientation="vertical" size={6}>
+            <Typography.Text>{t("preview.exact.noViewerBody")}</Typography.Text>
+            <Button
+              type="primary"
+              onClick={() => window.open(url, "_blank", "noopener,noreferrer")}
+            >
+              {t("preview.exact.openInSystemViewer")}
+            </Button>
+          </Space>
+        }
+      />
+    </div>
+  );
+}
+
+/**
+ * 精确预览请求失败时的整块错误态。
+ *
+ * 从 `ExactPreviewPanel` 搬出来（那份文件贴着 500 行预算）：它纯粹是"把 error 摆出来 +
+ * 给一句怎么办"，不碰请求状态机。文案口径不变：第一行是服务端原话，第二行才是我们能给的
+ * 建议（检查后端 / 稍后重试），别把两件事混成一句。
+ */
+export function ExactPreviewError({ error }: { error: string }) {
+  useLocale();
+  return (
+    <Alert
+      type="error"
+      showIcon
+      title={t("preview.exact.errorTitle")}
+      description={
+        <Space orientation="vertical" size={4}>
+          <Typography.Text>{error}</Typography.Text>
+          <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+            {t("preview.exact.errorHint")}
+          </Typography.Text>
+        </Space>
+      }
+    />
   );
 }
 

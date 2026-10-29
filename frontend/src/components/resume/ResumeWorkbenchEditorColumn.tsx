@@ -34,6 +34,7 @@
 import { SaveOutlined } from "@ant-design/icons";
 import { Button, Space } from "antd";
 import type { Ref } from "react";
+import type { MouseEvent as ReactMouseEvent } from "react";
 import { useCallback, useEffect, useImperativeHandle, useRef, useState } from "react";
 import type { ResumeContent } from "../../types";
 import { contentSignature } from "../../utils/contentSignature";
@@ -210,6 +211,31 @@ export default function ResumeWorkbenchEditorColumn({
    * 换 resumeId 时 hook 自动把旧 textarea 作废；只读宿主根本不渲染这一栏。
    */
   const inlineMarks = useWorkbenchInlineMarks(resumeId);
+
+  /**
+   * 点字段的**框**（标签、行内空白、边框）也把这一栏文字选中。
+   *
+   * 用户口径（2026-10-29）："点这个框，然后加粗这一整段"。而加粗/斜体/链接都要求有选区，
+   * 点一下只落一个光标的话，三个按钮全是死的。所以点到字段行里**不是输入控件**的地方时，
+   * 主动聚焦并选中该字段的值；点输入框内部的文字仍然只放光标——那是正常编辑，不能抢。
+   */
+  const handleBodyClick = useCallback((event: ReactMouseEvent<HTMLDivElement>) => {
+    const target = event.target as HTMLElement | null;
+    if (!target) return;
+    // 输入控件、按钮、下拉/日期/开关这类自带交互的部件：一律放行，不做"选中整段"。
+    if (
+      target.closest(
+        "textarea,input,button,a,select,.ant-select,.ant-picker,.ant-switch,.ant-checkbox,.ant-upload,.ant-segmented",
+      )
+    ) {
+      return;
+    }
+    const row = target.closest(".ant-form-item-row");
+    const field = row?.querySelector<HTMLTextAreaElement | HTMLInputElement>("textarea,input");
+    if (!field || field.readOnly || field.disabled || field.value.length === 0) return;
+    field.focus();
+    field.select();
+  }, []);
 
   // 一次性保存的"结算回调"：动作条要等这一次宿主写入真的落地（成功 / 409 / 失败）才能
   // 决定收起按钮还是进冲突态。普通保存（底部按钮、快捷键）不设结算回调，行为不变。
@@ -424,7 +450,7 @@ export default function ResumeWorkbenchEditorColumn({
           disabled={api.saving || relayouting || undefined}
         />
       </div>
-      <div className="resume-wb-editor-body">
+      <div className="resume-wb-editor-body" onClick={handleBodyClick}>
         <ResumeEditorPanel
           api={api}
           variant="inline"

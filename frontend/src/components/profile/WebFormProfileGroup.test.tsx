@@ -79,4 +79,11 @@ describe("areGroupPropsEqual", () => {
     expect(areGroupPropsEqual(base, props({ onChange: () => {} }))).toBe(false);
     expect(areGroupPropsEqual(base, props({ editing: false }))).toBe(false);
   });
+
+  it("footer 插槽按引用判等 → 换了就重渲（否则会渲染陈旧的插槽）", () => {
+    const base = props();
+    expect(areGroupPropsEqual(base, props({ footer: <span /> }))).toBe(false);
+    const footer = <span />;
+    expect(areGroupPropsEqual(props({ footer }), props({ footer }))).toBe(true);
+  });
 });

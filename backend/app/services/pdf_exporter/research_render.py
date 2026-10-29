@@ -9,7 +9,6 @@
 
 from __future__ import annotations
 
-from ..resume.profile_field_lines import profile_field_rows, profile_row_text
 from ..resume.resume_labels import (
     authors_text,
     credential_detail,
@@ -22,6 +21,7 @@ from ..resume.resume_labels import (
     publication_detail,
     publication_status_text,
 )
+from .profile_fields import draw_profile_meta
 
 
 def _join(values, separator: str = " · ") -> str:
@@ -31,11 +31,19 @@ def _join(values, separator: str = " · ") -> str:
 def _profile_meta(
     pdf, item, section_key: str, base: float, language: str, field_layout=None
 ) -> None:
-    """F8 + W4：条目既有内容之后的新增字段行（空值跳过，顺序/装箱单源）。"""
-    for row in profile_field_rows(
-        item, section_key, field_labels(language), field_layout
-    ):
-        pdf.meta_line(profile_row_text(row), base)
+    """F8 + W4：条目既有内容之后的新增字段行（空值跳过，顺序/装箱/分栏单源）。
+
+    委托 ``profile_fields.draw_profile_meta``：多列的几何与主分区同一份实现，
+    学术分区（论文 / 科研项目）才不会"主分区并排、这里仍是一行连接"。
+    """
+    draw_profile_meta(
+        pdf,
+        item,
+        section_key,
+        base=base,
+        fields=field_labels(language),
+        field_layout=field_layout,
+    )
 
 
 def experience_kind_line(kind: str, language: str) -> str:

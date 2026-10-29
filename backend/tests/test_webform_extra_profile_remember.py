@@ -167,15 +167,23 @@ def test_custom_fields_show_up_in_the_field_list(db_session):
     assert by_key["height"]["matchable"] is True
 
 
-def test_an_empty_custom_field_is_not_listed(db_session):
-    """没有值的自定义字段不进清单——与目录字段同一口径（空值不落库，也就不显示）。"""
+def test_an_empty_custom_field_is_not_listed_but_the_group_stays(db_session):
+    """没有自定义字段时：**组在、字段不在**。
+
+    字段口径不变——与目录字段一致（空值不落库，也就不显示）。但分组必须无条件出现：
+    界面默认就要有那张空的「自定义」卡片，用户才能在里面加字段；只在"已经有值"时才给组，
+    等于让人以为没有这个功能（用户反馈）。
+    """
     from app.services.webform import service
 
     _seed_profile(db_session)
 
     listing = service.list_extra_fields(db_session)
 
-    assert extra_profile.CUSTOM_GROUP not in listing["groups"]
+    assert extra_profile.CUSTOM_GROUP in listing["groups"]
+    assert [field for field in listing["fields"] if field["key"].startswith("CUSTOM_")] == []
+    # 空组只在 ``groups`` 里出现一次（重复会让界面渲染出两张同名卡片）。
+    assert listing["groups"].count(extra_profile.CUSTOM_GROUP) == 1
 
 
 def test_custom_values_never_reach_the_resume_generation_path(db_session):

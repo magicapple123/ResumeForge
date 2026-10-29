@@ -195,9 +195,13 @@ describe("W08-INT · 真实壳 e2e", () => {
     reportMocks.fetchPaginationReport.mockResolvedValue(REPORT);
     render(<Harness />);
     expect(reportMocks.fetchPaginationReport).not.toHaveBeenCalled();
-    expect(screen.getByText(t("pagination.report.empty"))).toBeInTheDocument();
+    // 断言只落在**画布横幅**里：页缩略图现在也有一个同名「获取分页报告」按钮（就地取报告），
+    // 全屏范围内的空态文案与按钮名都会命中两处。
+    const banner = document.querySelector(".resume-pagination-report") as HTMLElement;
+    expect(banner).toBeTruthy();
+    expect(within(banner).getByText(t("pagination.report.empty"))).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: t("pagination.report.refresh") }));
+    fireEvent.click(within(banner).getByRole("button", { name: t("pagination.report.refresh") }));
     await waitFor(() => expect(reportMocks.fetchPaginationReport).toHaveBeenCalledTimes(1));
     expect(
       await screen.findByText(t("pagination.report.pages", { pages: 2, limit: 1 })),

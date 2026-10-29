@@ -23,7 +23,11 @@ from ..schemas.resume_generation import mode_page_limit
 from .resume.markdown_export import export_markdown  # noqa: F401  (re-export：保持既有导入路径)
 from .resume.profile_field_lines import profile_field_row_cells
 from .resume.resume_contact import CONTACT_BREAKS_KEY, contact_items
-from .resume.resume_field_layout import FIELD_LAYOUT_SECTIONS, field_layout_css
+from .resume.resume_field_layout import (
+    FIELD_LAYOUT_SECTIONS,
+    field_layout_css,
+    merge_entry_layout,
+)
 from .resume.resume_labels import (
     DEFAULT_RESUME_LANGUAGE,
     authors_text,
@@ -180,6 +184,9 @@ def render_html(
     field_layout = render_overrides.field_layout
     paper_fields = field_labels(language)
     field_rows: dict[str, list] = {}
+    # W4 条目级：模板需要**每个条目**实际生效的列数 / 对齐方式 + 稳定 id（拼 gap 类名）。
+    # 无条件注入（缺键会让模板 if 分支静默走错，同 section_titles 的教训）；无配置时是 {}。
+    entry_field_layout: dict[str, list[dict]] = {}
     for section_key in FIELD_LAYOUT_SECTIONS:
         if section_key not in field_layout:
             continue
@@ -188,6 +195,24 @@ def render_html(
             profile_field_row_cells(item, section_key, paper_fields, field_layout)
             for item in entries
         ]
+        section_cfg = field_layout.get(section_key) or {}
+        entry_overrides = section_cfg.get("entries")
+        overrides_map = entry_overrides if isinstance(entry_overrides, dict) else {}
+        resolved_entries: list[dict] = []
+        for item in entries:
+            entry_id = getattr(item, "id", "") or ""
+            effective = (
+                merge_entry_layout(section_cfg, overrides_map.get(entry_id), section_key) or {}
+            )
+            resolved_entries.append(
+                {
+                    "id": entry_id,
+                    "columns": effective.get("columns") or 1,
+                    "align": effective.get("align") or "equal",
+                }
+            )
+        entry_field_layout[section_key] = resolved_entries
+
     base_px = float(scale["base_px"])
     adjust = overrides.get("font_scale_adjust")
     if isinstance(adjust, (int, float)):
@@ -221,6 +246,8 @@ def render_html(
         # 两者都**无条件**注入：缺键会让模板的 if 分支静默走错（同 section_titles 的教训）。
         "field_layout": field_layout,
         "profile_rows": field_rows,
+        # 每条条目实际生效的列数 / 对齐 + 稳定 id（条目级列数与 gap 类名的唯一取数点）。
+        "entry_field_layout": entry_field_layout,
         # #3 页眉联系方式：字段顺序 / 文案 / 强制换行都在 `resume_contact` 里定义一次，
         # 模板只负责把 break_before 译成 <br>（强制换行）与 <wbr>（字段间自动换行点）。
         # 旧简历没有 contact_breaks → 只有 <wbr>，行为 = "字段整体不拆行、字段间可换行"。

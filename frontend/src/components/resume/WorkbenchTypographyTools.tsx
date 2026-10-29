@@ -11,12 +11,16 @@
  */
 import { App, Space, Typography } from "antd";
 import { useState } from "react";
+import type { RefObject } from "react";
 import type { ResumeLayout, ResumeTemplateCatalog } from "../../types";
+import type { ResumePreviewHandle } from "../ResumePreview";
 import { t } from "../../i18n";
 import type { OutlineMultiEntry } from "./outline/OutlinePanel";
 import MultiStyleBar from "./typography/MultiStyleBar";
 import FormatPainterButton from "./typography/FormatPainterButton";
+import ObjectStylePanel from "./typography/ObjectStylePanel";
 import TextLevelBar from "./typography/TextLevelBar";
+import ResumeParamGroup from "./ResumeParamGroup";
 import { TEXT_LEVEL_LABELS } from "../../features/resume-layout/textLevels";
 import {
   readStyleDomains,
@@ -52,6 +56,8 @@ interface Props {
   onClearSelection: () => void;
   /** 纸面最后点中的字段路径：文字级别据此把「作用范围」调到对应角色。 */
   pickedPath?: string | null;
+  /** 右栏预览实例：细调区的滑杆用它注入探针 CSS（与角色面板同一个实例）。 */
+  previewRef?: RefObject<ResumePreviewHandle | null>;
 }
 
 export default function WorkbenchTypographyTools({
@@ -64,6 +70,7 @@ export default function WorkbenchTypographyTools({
   onChange,
   onClearSelection,
   pickedPath = null,
+  previewRef,
 }: Props) {
   useLocale();
   const { message } = App.useApp();
@@ -131,6 +138,26 @@ export default function WorkbenchTypographyTools({
           )
         }
       />
+      {/* 细调区：级别管不到的那 8 项（颜色 / 斜体 / 行距 / 缩进 / 项目符号 / 对齐 /
+          日期位置 / 字距）。原来它是左栏最底部一块独立面板，和这里的级别抢同一批键，
+          2026-10-29 按用户要求合并进来并默认收起——先给级别，需要再展开。 */}
+      {selectedObjectId ? (
+        <ResumeParamGroup
+          title={t("typography.object.more")}
+          storageKey="typographyMore"
+          defaultOpen={false}
+        >
+          <ObjectStylePanel
+            layout={layout}
+            catalog={catalog}
+            objectId={selectedObjectId}
+            objectLabel={selectedObjectLabel}
+            disabled={disabled}
+            previewRef={previewRef}
+            onChange={onChange}
+          />
+        </ResumeParamGroup>
+      ) : null}
       {selected.length > 0 ? (
         <MultiStyleBar
           layout={layout}

@@ -41,6 +41,8 @@ class LiveRememberMixin:
 
         def _refresh_data(self) -> None: ...
 
+        def _refresh_related(self) -> None: ...
+
         def _publish(self, panel: dict[str, Any]) -> None: ...
 
     # ===== 用户点了「记住这条」 =====
@@ -111,6 +113,10 @@ class LiveRememberMixin:
             if ok
             else f"「{shown}」没能记住，稍后再试"
         )
+        if ok:
+            # 与 `_store_remember_entry` 同一条链路：资料变了，面板上的清单也要立刻跟上。
+            self._refresh_data()
+            self._refresh_related()
         self._publish_remember(note)
 
     def _store_remember_entry(self, entry: dict[str, str], *, pending: bool) -> bool:
@@ -133,9 +139,12 @@ class LiveRememberMixin:
             if ok
             else f"「{entry.get('label') or '这条资料'}」没能记住，稍后再试"
         )
-        self._publish_remember(note)
         if ok:
+            # **先刷新资料、再重算清单，最后才推面板**：面板里那几条「可能是这几个」
+            # 是聚焦时的快照，不重算的话刚记下的字段要等换框才出现（用户反馈）。
             self._refresh_data()
+            self._refresh_related()
+        self._publish_remember(note)
         return ok
 
     def _remember_key(self, control: Control | None, label: str) -> tuple[str, str]:
@@ -224,6 +233,9 @@ class LiveRememberMixin:
             logger.warning("网申填表：选择后写入失败：%s", error)
             ok = False
         if ok:
+            # 与逐框编辑同一条链路：资料变了就重算清单，面板上「可能是这几个」立刻跟上。
+            self._refresh_data()
+            self._refresh_related()
             destination = str(entry.get("destination") or "").strip()
             self._publish_remember(
                 f"已保存到「{destination}」，下次遇到就能使用"

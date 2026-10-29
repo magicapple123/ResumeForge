@@ -30,6 +30,7 @@ import BoldContextMenu, { type RichTextEditAdapter } from "./resume-preview/Bold
 import { useClickToEditPreview } from "./resume-preview/useClickToEditPreview";
 import { layoutFrame } from "./resume-preview/layout";
 import { forwardWheelToParent, useFrameInteractions } from "./resume-preview/useFrameInteractions";
+import { usePreviewBodyHeight } from "./resume-preview/usePreviewBodyHeight";
 
 // `ExactPreviewOptions` 的定义在 `resume-preview/exactPreviewOptions.ts`，这里 re-export 保持调用点不变。
 
@@ -126,13 +127,15 @@ const ResumePreview = forwardRef<ResumePreviewHandle, Props>(function ResumePrev
   const pageCount = Math.max(1, Math.round(pages));
   const paperHeight = A4_HEIGHT_PX * pageCount;
   const containerRef = useRef<HTMLDivElement>(null);
+  const bodyRef = useRef<HTMLDivElement>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const panStartRef = useRef<PanStart | null>(null);
-  // 只在给了 `availableHeight` 时才有意义：根节点与"草稿画布宿主"盒子的高度差就是预览
-  // 自己的工具条 + 缩放条 + 间距（见下面测 `chromeHeight` 的 effect）。
-  const rootRef = useRef<HTMLDivElement>(null);
-  const draftHostRef = useRef<HTMLDivElement>(null);
-  const [chromeHeight, setChromeHeight] = useState(0);
+  /**
+   * 纸面滚动区的真实高度（0 = 还没量到）。只在宿主给了 `availableHeight`（制作台右栏）时量：
+   * 主预览走窗口比例口径，一行都不变。算不出来的部分（工具条、提示条、缩放条）由这一层直接
+   * 让位给它——**不再靠"根节点减草稿宿主"去推**，那个差值在纸比容器高时会塌成 0。
+   */
+  const bodyHeight = usePreviewBodyHeight(bodyRef, availableHeight !== undefined);
   const [availableSpace, setAvailableSpace] = useState<AvailableSpace>({
     width: 0,
     height: height ?? paperHeight,
@@ -143,6 +146,11 @@ const ResumePreview = forwardRef<ResumePreviewHandle, Props>(function ResumePrev
   const maxFitScale = useMaxFitScale();
   /** iframe 每次加载/重排后自增：专业视图的覆盖层与页位置据此重新同步。 */
   const [frameEpoch, setFrameEpoch] = useState(0);
+  /**
+   * 精确模式的状态行（实际页数 / 在新标签打开）。由 `ExactPreviewPanel` 通过 `onStatus`
+   * 交出来，和缩放条并成一行——两行各自居中会读成两块无关的东西（2026-10-29 用户要求）。
+   */
+  const [exactStatus, setExactStatus] = useState<ReactNode>(null);
   // 专业视图能力由画布宿主注入；主预览（列表页）没有 Provider → 整块不渲染。
   const proviewConfig = useProviewConfig();
   const [isPanning, setIsPanning] = useState(false);
@@ -165,11 +173,12 @@ const ResumePreview = forwardRef<ResumePreviewHandle, Props>(function ResumePrev
   const updateAvailableSpace = useCallback(() => {
     const container = containerRef.current;
     if (!container) return;
-    // 宿主给了真实高度就以它为准（扣掉本组件自己的工具条/缩放条），不再猜窗口比例。
+    // 宿主给了真实高度就以它为准：优先用纸面那一层量到的高度（已扣掉工具条/提示条/缩放条），
+    // 量不到（首帧、jsdom）时退回宿主给的总预算。两条都不猜窗口比例。
     if (availableHeight !== undefined) {
       setAvailableSpace({
         width: container.clientWidth,
-        height: Math.max(1, Math.round(availableHeight - chromeHeight)),
+        height: bodyHeight > 0 ? bodyHeight : Math.max(1, Math.round(availableHeight)),
       });
       return;
     }
@@ -181,7 +190,7 @@ const ResumePreview = forwardRef<ResumePreviewHandle, Props>(function ResumePrev
       width: container.clientWidth,
       height: Math.min(ceiling, Math.max(MIN_PREVIEW_HEIGHT, budget)),
     });
-  }, [availableHeight, chromeHeight, height, paperHeight]);
+  }, [availableHeight, bodyHeight, height, paperHeight]);
 
   /**
    * 对**一个** iframe 应用分页样式，并把它滚到第 `index` 列。
@@ -221,10 +230,11 @@ const ResumePreview = forwardRef<ResumePreviewHandle, Props>(function ResumePrev
 
   const handleWheel = useCallback(
     (event: globalThis.WheelEvent) => {
-      // 普通滚轮交给弹窗/页面的纵向滚动；只有 Ctrl/Cmd + 滚轮才缩放预览（夹取逻辑在
-      // usePreviewZoom，与拆分前逐字一致），避免鼠标停在简历上时误触发缩放。
-      if (zoomByWheel(event)) {
+      if (event.defaultPrevented) return; // 内层（草稿视口）已经处理过这一拍
+      // Ctrl/Cmd：**只缩放、不滚动**（先 preventDefault 挡掉浏览器整页缩放；靠 zoomByWheel 的返回值会掉进"转交滚动"）。
+      if (event.ctrlKey || event.metaKey) {
         event.preventDefault();
+        zoomByWheel(event);
         return;
       }
       if (forwardWheelToParent(containerRef.current, event)) event.preventDefault();
@@ -236,6 +246,7 @@ const ResumePreview = forwardRef<ResumePreviewHandle, Props>(function ResumePrev
     containerRef,
     panStartRef,
     onZoomWheel: handleWheel,
+    wheelRootRef: bodyRef,
     onPanningChange: setIsPanning,
     // 草稿画布在「草稿 / 精确」之间切换时会卸载再挂载，视口元素随之换新；
     // 不把这件事告诉 hook，滚轮/拖动就会绑在已卸载的那个 div 上（缩放失效）。
@@ -298,8 +309,17 @@ const ResumePreview = forwardRef<ResumePreviewHandle, Props>(function ResumePrev
     [pageCount],
   );
 
+  // 换 html / 换页数 = 换了一份文档：把用户缩放复位（`setZoom` 来自 usePreviewZoom，引用稳定）。
   useEffect(() => {
     setZoom(1);
+  }, [html, pageCount, setZoom]);
+
+  /**
+   * 量可用空间。**与上面那条拆开**（2026-10-29）：它依赖 `updateAvailableSpace`，而后者会
+   * 随 `bodyHeight` 变化重建——合成一条的话，头部一变高（提示条出现、工具条换行）就会顺手
+   * 执行 `setZoom(1)`，把用户刚拖到的 150% 悄悄打回 100%。
+   */
+  useEffect(() => {
     updateAvailableSpace();
     const container = containerRef.current;
     const observer =
@@ -310,9 +330,7 @@ const ResumePreview = forwardRef<ResumePreviewHandle, Props>(function ResumePrev
       observer?.disconnect();
       window.removeEventListener("resize", updateAvailableSpace);
     };
-    // setZoom 来自 usePreviewZoom（稳定 useCallback）：换 html 时把用户缩放复位，
-    // 与拆分前的 useState setter 语义一致。
-  }, [html, pageCount, setZoom, updateAvailableSpace]);
+  }, [updateAvailableSpace]);
 
   const handleFrameLoad = useCallback(
     (event: SyntheticEvent<HTMLIFrameElement>, index: number) => {
@@ -360,31 +378,8 @@ const ResumePreview = forwardRef<ResumePreviewHandle, Props>(function ResumePrev
   const measuringOnly = canExactPreview && activeMode === "exact";
   const mountDraftCanvas = !measuringOnly || Boolean(onMeasure || onLayoutStatus);
 
-  /*
-   * `availableHeight` 是"整块预览"的预算，而纸张只能拿减去工具条与缩放条之后的那部分。
-   *
-   * 工具条与缩放条的高度不该写成常量：缩放条是 antd 按钮（尺寸随主题变），工具条在
-   * "有没有版式控件"两种宿主下高度完全不同。这里用**根节点减草稿画布宿主**的差值实测——
-   * 两者之间只夹着工具条、可能存在的警告条外壳与缩放条，而这个差值不受纸张高度影响
-   * （纸张高度是被算出来的，工具条是它自己的内容），所以一次测量就稳定，不会自激。
-   *
-   * 只在给了 `availableHeight` 时才量：主预览走窗口比例口径，一行都没变。
-   */
-  useEffect(() => {
-    if (availableHeight === undefined) return;
-    const root = rootRef.current;
-    const host = draftHostRef.current;
-    if (!root || !host) return;
-    const measured = Math.max(
-      0,
-      Math.round(root.getBoundingClientRect().height - host.getBoundingClientRect().height),
-    );
-    setChromeHeight((previous) => (previous === measured ? previous : measured));
-    // 只在"宿主刚给出预算"那一轮量一次：工具条的构成不会随纸张尺寸变化。
-  }, [availableHeight]);
-
   return (
-    <div className="resume-preview-root" ref={rootRef}>
+    <div className="resume-preview-root">
       {/* 固定头部：工具条 + 专业视图行 + 两条提示；制作台只让纸面滚动，这一层不滚。 */}
       <div className="resume-preview-chrome">
         <ResumePreviewToolbar
@@ -421,10 +416,13 @@ const ResumePreview = forwardRef<ResumePreviewHandle, Props>(function ResumePrev
           pagesNeeded={geometry.pagesNeeded}
           pageCount={pageCount}
           overflowAmountText={geometry.overflowAmountText}
+          // 精确模式只要**一条**页数提醒：那一栏的结论来自服务端真实 PDF
+          // （`ExactPreviewAlerts`），草稿侧这条是浏览器分页的另一套数字。
+          mode={activeMode}
         />
       </div>
       {/* 纸张区域：制作台里**只有这一层滚动**——精确模式的多页 PDF 也在这里滚。 */}
-      <div className="resume-preview-body">
+      <div className="resume-preview-body" ref={bodyRef}>
         {/*
          * 精确面板**常驻**：草稿模式下只是把它藏起来（`hidden`），不卸载。
          *
@@ -448,6 +446,7 @@ const ResumePreview = forwardRef<ResumePreviewHandle, Props>(function ResumePrev
               // 制作台里还没保存的正文（W04）：没有这一项，精确预览就停在上一版内容。
               content={exactPreview!.content}
               headingSerif={exactPreview!.headingSerif}
+              onStatus={setExactStatus}
               height={Math.max(MIN_PREVIEW_HEIGHT, viewportHeight)}
               // 精确模式的缩放与草稿共用同一个 `zoom`：两边都从 100% 起，
               // 用户的心理模型只有"这张纸现在多大"，没有第二套比例。
@@ -457,7 +456,6 @@ const ResumePreview = forwardRef<ResumePreviewHandle, Props>(function ResumePrev
         ) : null}
         {mountDraftCanvas ? (
           <div
-            ref={draftHostRef}
             // 精确模式下它只是"测量用的尸体"：看不见、不占位，但仍在排版。
             style={measuringOnly ? { height: 0, overflow: "hidden" } : undefined}
             aria-hidden={measuringOnly || undefined}
@@ -481,6 +479,8 @@ const ResumePreview = forwardRef<ResumePreviewHandle, Props>(function ResumePrev
       {/* 缩放条是**页脚**：跟着纸面区域一起不出现在滚动流里，制作台里它因此永远贴底
           （2026-10-29：原来是 sticky 在滚动容器里，滚到底会与纸面之间留出一条缝）。 */}
       <PreviewZoomBar
+        // 精确模式把页面状态并进这一行；草稿模式没有状态块，缩放条原样居中。
+        status={activeMode === "exact" ? exactStatus : null}
         scale={canExactPreview && activeMode === "exact" ? zoom : geometry.scale}
         // `clampedToMin` 的文案说的是"容器装不下"，只对草稿的按宽自适应成立；
         // 精确模式的 50% 是用户自己缩到的，不该冒出一句对不上的解释。

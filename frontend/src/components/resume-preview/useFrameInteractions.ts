@@ -29,6 +29,15 @@ interface Options {
    * （2026-10-21 用户实测）。把画布的身份传进来，换代时重绑即可。
    */
   viewportKey?: unknown;
+  /**
+   * 额外的滚轮监听节点（纸面滚动区 `.resume-preview-body`）。
+   *
+   * 精确模式的 PDF iframe **不在** `containerRef`（草稿视口）里，而是它的兄弟——只绑视口的话
+   * 滚轮落进 PDF 就没人接，Ctrl+滚轮会变成**浏览器整页缩放**（2026-10-29 用户反馈"整个页面
+   * 的缩放也跟着动了"）。绑在这一层，两种口径都走同一套缩放。已处理过的事件靠
+   * `defaultPrevented` 判重，不会缩两格。
+   */
+  wheelRootRef?: RefObject<HTMLElement | null>;
 }
 
 /** 找到弹窗或页面真正负责纵向滚动的容器。 */
@@ -68,6 +77,7 @@ export function useFrameInteractions({
   onZoomWheel,
   onPanningChange,
   viewportKey,
+  wheelRootRef,
 }: Options) {
   /**
    * 每个 iframe 一份清理函数：同一个 iframe 刷新（换简历 / 切页数）时会再绑一次，
@@ -141,6 +151,13 @@ export function useFrameInteractions({
       viewport.removeEventListener("lostpointercapture", stopPanning);
     };
   }, [containerRef, onPanningChange, onZoomWheel, panStartRef, viewportKey]);
+
+  useEffect(() => {
+    const node = wheelRootRef?.current;
+    if (!node) return;
+    node.addEventListener("wheel", onZoomWheel, { passive: false });
+    return () => node.removeEventListener("wheel", onZoomWheel);
+  }, [onZoomWheel, wheelRootRef, viewportKey]);
 
   return { bindFrame, clearFrames };
 }

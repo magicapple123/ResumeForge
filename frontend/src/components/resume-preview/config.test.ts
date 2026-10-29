@@ -7,8 +7,9 @@
  *
  * 1. **列宽与列间距必须由页边距算出来**（2026-10-20 用户实测）：写死 182mm/28mm 只在
  *    默认 14mm 页边距下成立，调到 20mm 正文会溢到第二页、调到 10mm 正文会被页边界切掉。
- * 2. 列边界是**硬切**的，必须显式禁止在条目内部断开——否则 `.entry-head`（左标题 /
- *    右日期 的 flex 行）会被切成"标题留在上一页、日期孤零零出现在下一页"。
+ * 2. 列边界是**硬切**的：`.entry-head`（左标题 / 右日期 的 flex 行）、列表项、表行不能被切开
+ *    ——否则会出现"标题留在上一页、日期孤零零出现在下一页"。**条目正文**则允许续排
+ *    （2026-10-29 调整）：整条 avoid 会让换页处空掉一大块，与导出 PDF 的行为也不一致。
  */
 import { describe, expect, it } from "vitest";
 import { PAGE_GAP_PX, columnGeometry, columnsCss } from "./config";
@@ -78,12 +79,18 @@ describe("多页预览的列布局", () => {
     expect(PAGE_GAP_PX).toBeCloseTo((28 / 25.4) * 96, 0);
   });
 
-  it("条目 / 表行不会被列边界切断", () => {
+  it("条目头 / 列表项 / 表行不会被列边界切断，但条目正文可以在换页处续排", () => {
     const css = columnsCss({ ...PAGE_14MM, columnCount: 3 });
-    expect(css).toContain("break-inside:avoid");
-    expect(css).toContain("body .entry");
-    expect(css).toContain("body .entry-head");
+    // 2026-10-29：整条 `.entry` 不再 avoid——"装不下就整条搬走"会在换页处空掉一大块
+    // （实测 130 / 110 / 184px），而导出的 PDF 是按行续排的。
+    expect(css).not.toContain("body .entry,");
+    expect(css).toContain("body .entry-head,");
+    expect(css).toContain("body .entry-head{break-after:avoid");
+    expect(css).toContain("body .item");
+    expect(css).toContain("body li");
     expect(css).toContain("body tr");
+    // 允许续排但不许留孤行：一行在页尾、一行在页首都要被推开。
+    expect(css).toContain("orphans:2;widows:2");
   });
 
   it("小节标题不会孤零零落在页尾", () => {

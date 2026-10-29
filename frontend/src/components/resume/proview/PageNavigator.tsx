@@ -4,6 +4,9 @@
  *
  * 三件必备：按钮有 aria-label、页码输入框有可读名、读数用 `aria-live="polite"`
  * （滚动翻页时读屏用户也能知道现在是第几页）。
+ *
+ * 翻页按钮**不挂 Tooltip**（2026-10-29 用户要求）：箭头本身是通用符号，无障碍名仍在
+ * aria-label 上；同一条工具条里的悬浮层越少，越不会挡住相邻的点击区。
  */
 import { LeftOutlined, RightOutlined } from "@ant-design/icons";
 import { Button, InputNumber, Space, Tooltip, Typography } from "antd";
@@ -33,16 +36,14 @@ export default function PageNavigator({ navigation, markers = [] }: Props) {
   const visibleMarkers = markers.filter((marker) => marker.page >= 1 && marker.page <= totalPages);
   return (
     <Space size={4} role="navigation" aria-label={t("proview.pageNav.label")}>
-      <Tooltip title={t("proview.pageNav.prev")}>
-        <Button
-          size="small"
-          type="text"
-          icon={<LeftOutlined />}
-          aria-label={t("proview.pageNav.prev")}
-          disabled={single || currentPage <= 1}
-          onClick={previousPage}
-        />
-      </Tooltip>
+      <Button
+        size="small"
+        type="text"
+        icon={<LeftOutlined />}
+        aria-label={t("proview.pageNav.prev")}
+        disabled={single || currentPage <= 1}
+        onClick={previousPage}
+      />
       <Typography.Text type="secondary" style={{ fontSize: 12 }} aria-live="polite">
         {t("proview.pageNav.status", { page: currentPage, total: totalPages })}
       </Typography.Text>
@@ -59,16 +60,14 @@ export default function PageNavigator({ navigation, markers = [] }: Props) {
         }}
         style={{ width: 52 }}
       />
-      <Tooltip title={t("proview.pageNav.next")}>
-        <Button
-          size="small"
-          type="text"
-          icon={<RightOutlined />}
-          aria-label={t("proview.pageNav.next")}
-          disabled={single || currentPage >= totalPages}
-          onClick={nextPage}
-        />
-      </Tooltip>
+      <Button
+        size="small"
+        type="text"
+        icon={<RightOutlined />}
+        aria-label={t("proview.pageNav.next")}
+        disabled={single || currentPage >= totalPages}
+        onClick={nextPage}
+      />
       {single ? (
         <Typography.Text type="secondary" style={{ fontSize: 12 }}>
           {t("proview.pageNav.single")}

@@ -58,20 +58,23 @@ export function buildPathRemap(before: ResumeContent, after: ResumeContent): Pat
         if (key === "id" || typeof value !== "string") continue;
         remap.set(`${field}.${oldIndex}.${key}`, `${field}.${newIndex}.${key}`);
       }
-      // ② 要点：按下标数字典序无关的要点 id 对齐（排序后 id 数组与文本数组同步移动）。
+      // ② 要点：按稳定 id 对齐。**先在整个条目里**给每个 id 找到它的新位置，再回填旧路径——
+      // 要点跨字段搬移（`courses` → `achievements`）之后 id 换了字段，只在同一个字段里找会把
+      // 这条要点的加粗/来源标注留在一个已经不存在的路径上（`education.0.courses.0`）。
       const afterEntry = afterEntries[newIndex];
+      const newPointPathById = new Map<string, string>();
       for (const pointField of ENTRY_POINT_FIELDS[field]) {
-        const oldIds = pointIdsOf(entry, pointField);
-        if (oldIds.length === 0) continue;
-        const newIds = pointIdsOf(afterEntry, pointField);
-        const newIndexById = new Map<string, number>();
-        newIds.forEach((pointId, index) => newIndexById.set(pointId, index));
-        oldIds.forEach((pointId, oldPointIndex) => {
-          const newPointIndex = newIndexById.get(pointId);
-          if (newPointIndex === undefined) return;
+        pointIdsOf(afterEntry, pointField).forEach((pointId, index) => {
+          newPointPathById.set(pointId, `${pointField}.${index}`);
+        });
+      }
+      for (const pointField of ENTRY_POINT_FIELDS[field]) {
+        pointIdsOf(entry, pointField).forEach((pointId, oldPointIndex) => {
+          const target = newPointPathById.get(pointId);
+          if (target === undefined) return;
           remap.set(
             `${field}.${oldIndex}.${pointField}.${oldPointIndex}`,
-            `${field}.${newIndex}.${pointField}.${newPointIndex}`,
+            `${field}.${newIndex}.${target}`,
           );
         });
       }

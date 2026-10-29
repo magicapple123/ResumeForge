@@ -90,6 +90,55 @@
   font-size: 12px;
 }
 
+/* 导出格式差异（`TrialCapabilityStrip`）：一项能力一行。
+   原先是一串没有分隔的 `精确 PDF 斜体 近似 精确 PDF 链接可点击 不支持 …`——同一个
+   格式前缀反复出现，读起来是一行没有结构的字（2026-10-29 用户反馈"看着有点乱"）。 */
+.template-trial-capability {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* 标题 + 一句说明：说明是长句，窄栏时整句掉到下一行，不挤标题。 */
+.template-trial-capability-head {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+}
+
+.template-trial-capability-hint {
+  font-size: 12px;
+}
+
+/* dl 作两列网格：dt 自成第一列（列宽按最长的能力名定，跨行对齐），
+   dd 里放"格式 + 等级"的短标签，窄栏时折行。`minmax(0, 1fr)` 是为了 dd 能折，
+   而不是把整块撑出容器（默认 `auto` 列宽会被最长一行顶宽）。 */
+.template-trial-capability-list {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  align-items: baseline;
+  gap: 8px 14px;
+  margin: 0;
+  padding: 0;
+  font-size: 12px;
+}
+
+/* 浏览器默认给 dd 一段左缩进（约 40px），去掉后两列才真的对齐。 */
+.template-trial-capability-list dd {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+}
+
+/* 标签自带的右外边距会与上面的 gap 叠加，收掉只留 gap 一档间距。 */
+.template-trial-capability-tag {
+  margin-inline-end: 0;
+  font-size: 12px;
+  line-height: 18px;
+}
+
 /* 采纳按钮顶到栏底：两栏的"已知差异"条数不同（一边可能多一行说明），
    `margin-top: auto` 让两栏的按钮始终停在同一水平线上，不跟着文字长度上下错位。 */
 .template-trial-column > .ant-btn {

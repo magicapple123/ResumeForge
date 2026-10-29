@@ -98,6 +98,25 @@ export type OutlineCommand =
       pointId: string;
       toIndex: number;
     }
+  | {
+      /**
+       * 要点**跨字段搬移**：把一条要点从 `fromPointField` 的数组搬到 `toPointField` 的
+       * 目标位置（文本与 point id 一起搬，源数组搬空后保留 `[]`）。
+       *
+       * 纸面按字段渲染（`courses` 是行内「主修课程：…」，`achievements` 是项目符号），
+       * 所以"跨字段互换"的正确语义就是"这一条随之变成目标字段的条目"。
+       * `fromPointField === toPointField` 时它**等价于** `reorder-point`（同一份实现，
+       * 见 `pointMove.ts`）——两条命令只差一个字段，不需要两套算法。
+       */
+      type: "move-point";
+      field: EntryField;
+      objectId: string;
+      fromPointField: string;
+      toPointField: string;
+      pointId: string;
+      /** 目标字段数组里的插入下标（0..目标数组长度，等于长度即追加到末尾）。 */
+      toIndex: number;
+    }
   | { type: "clone-entry"; field: EntryField; objectId: string }
   | {
       type: "clone-point";

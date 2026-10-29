@@ -99,8 +99,11 @@ afterEach(() => {
 describe("制作台 · 大纲选中状态上提", () => {
   it("画布顶部常驻溢出定位（空态，不自动请求）", () => {
     renderWorkbench();
-    expect(screen.getByText(t("pagination.report.title"))).toBeInTheDocument();
-    expect(screen.getByText(t("pagination.report.empty"))).toBeInTheDocument();
+    // 空态文案在 zh-CN 里与页缩略图的空态是**同一句话**（本批缩略图也开始在画布上渲染），
+    // 所以查询必须收窄到报告横幅本体，而不是靠全页唯一的文本。
+    const banner = screen.getByRole("region", { name: t("pagination.report.title") });
+    expect(within(banner).getByText(t("pagination.report.title"))).toBeInTheDocument();
+    expect(within(banner).getByText(t("pagination.report.empty"))).toBeInTheDocument();
   });
 
   it("在大纲选中一条 → 分页条目级 + 对象排版面板出现", async () => {
@@ -119,7 +122,12 @@ describe("制作台 · 大纲选中状态上提", () => {
     await waitFor(() => {
       expect(screen.getByTestId("pagination-entry")).toBeInTheDocument();
     });
-    expect(screen.getByText(t("typography.object.title"))).toBeInTheDocument();
+    // 2026-10-29：对象细调并入「更多参数」折叠区（默认收起），旧标题「这条的排版」不再渲染。
+    // 作用对象仍要在面板里说清楚，所以展开后断言「只作用于「<公司名>」」那一行——
+    // 只看分组标题存在是不够的（那证明不了选中的是哪一条）。
+    expect(screen.getByText(t("typography.object.more"))).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: t("typography.object.more") }));
+    expect(screen.getByText(t("typography.object.scope", { name: COMPANY }))).toBeInTheDocument();
     expect(screen.getByText(COMPANY)).toBeInTheDocument();
   });
 });

@@ -248,6 +248,8 @@ const profileLibrary = {
   "profileLibrary.webform.addFieldPlaceholder": "Field name, e.g. Lab or advisor name",
   "profileLibrary.webform.addFieldAria": "New custom Web form Field name",
   "profileLibrary.webform.addFieldAction": "Add",
+  "profileLibrary.webform.customEmpty": "No custom Fields yet",
+  "profileLibrary.webform.customEmptyEditing": "No custom Fields yet — add one below",
   "profileLibrary.webform.repeatedIntro":
     "Add multiple education, experience or achievement Entries here. Schools, organizations and project names are reused in form filling, so you do not need to enter them again.",
   "profileLibrary.webform.recordTitle": "Entry {index}",

@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any, Literal
 
@@ -18,6 +19,7 @@ from .layout import (
     PAGE_HEIGHT_MM,
     ResumeLayout,
 )
+from .meta_columns import draw_meta_columns
 from .rich_text import disable_markdown_links, drawn_text, to_fpdf_markup
 from .skill_tags import draw_skill_tags, soft_accent
 from .style_blocks import (
@@ -455,6 +457,16 @@ class _ResumePDF(FPDF):
     def meta_line(self, text: str, base: float, *, style=None) -> None:
         """条目副行：绘制在 style_blocks（字号/颜色可被覆盖）。"""
         draw_meta_line(self, text, base, style=style)
+
+    def meta_columns(
+        self, cells, widths: Sequence[float], gap: float, base: float, *, style=None
+    ) -> None:
+        """W4 条目字段多列：一行按**预算好的列宽**并排绘制（几何与 meta_line 同口径）。
+
+        ``widths`` 是 ``meta_columns.column_widths`` 按该 entry 每列最宽内容算出的结果（mm），
+        同一个 entry 的所有行共用一份，跨行列起点才对得齐。
+        """
+        draw_meta_columns(self, cells, widths, gap, base, style=style)
 
     def skill_tags(self, labels: list[str], base: float, *, style=None) -> None:
         """把专业技能画成**模板真实的标签形状**，与 HTML 预览一致。

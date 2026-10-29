@@ -24,37 +24,30 @@ interface Props {
 export default function WorkspacePresetControl({ value, onChange, onReset }: Props) {
   useLocale();
   const { message } = App.useApp();
-  // 选项标签必须是**纯文本**：外层 Tooltip 已经把「只切换面板可见性…」解释了一遍，
-  // 再给每个选项套一层同样的 Tooltip 会在悬停时同时弹出两个（2026-10-25 用户截图：
-  // 两句话叠在一起）。一个触发区只留一个提示。
+  // 选项标签必须是**纯文本**：一个触发区只留一个提示。外层那层解释已在 2026-10-29 撤掉
+  // （用户要求只保留「恢复默认布局」一条），所以这里更不能给每个选项各套一层 Tooltip——
+  // 悬停时同时弹两个浮层是 2026-10-25 就已经踩过的坑。
   const options = WORKSPACE_PRESET_IDS.map((id) => ({
     value: id,
     label: t(WORKSPACE_PRESET_LABEL_KEY[id]),
   }));
   return (
     <Space size={4}>
-      <Tooltip
-        title={
-          <>
-            <div>{t("proview.workspace.hint")}</div>
-            <div>{t("proview.workspace.persistHint")}</div>
-          </>
-        }
-      >
-        <Segmented
-          size="small"
-          aria-label={t("proview.workspace.label")}
-          value={value}
-          options={options}
-          onChange={(next) => {
-            const preset = next as WorkspacePresetId;
-            onChange(preset);
-            message.success(
-              t("proview.workspace.switched", { name: t(WORKSPACE_PRESET_LABEL_KEY[preset]) }),
-            );
-          }}
-        />
-      </Tooltip>
+      {/* 预设那一段**不挂 Tooltip**（2026-10-29 用户要求）：四个预设名本身就是"切面板"，
+          悬浮层只会挡住恢复默认那颗按钮；真正需要解释的「恢复默认布局」保留提示。 */}
+      <Segmented
+        size="small"
+        aria-label={t("proview.workspace.label")}
+        value={value}
+        options={options}
+        onChange={(next) => {
+          const preset = next as WorkspacePresetId;
+          onChange(preset);
+          message.success(
+            t("proview.workspace.switched", { name: t(WORKSPACE_PRESET_LABEL_KEY[preset]) }),
+          );
+        }}
+      />
       <Tooltip title={t("proview.workspace.reset")}>
         <Button
           size="small"

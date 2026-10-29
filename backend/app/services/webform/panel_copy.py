@@ -31,6 +31,9 @@ _PHRASES: list[tuple[str, str]] = [
     ("搜索资料（如：手机、学校、实习）", "panel.search"),
     ("点开快速跳转到某个分组", "panel.nav.unfold"),
     ("收起分组跳转条", "panel.nav.fold"),
+    # 跳转条上「简历资料 / 网申资料」两段小标题。右边那段与来源徽标同一句
+    # （``panel.source.webform``），左边这段原先漏了，英文界面里只剩它一个中文。
+    ("简历资料", "panel.nav.sectionResume"),
     # —— 按钮与状态 ——
     ("已填入", "panel.filled"),
     ("记住这条", "panel.remember"),

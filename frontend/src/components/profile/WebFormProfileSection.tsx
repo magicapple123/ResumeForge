@@ -18,6 +18,12 @@
  * 字段清单由后端 `services/webform/fields.py` 下发（`GET /api/webform/extra-profile`），
  * 前端**不写死字段名**。这样加字段只改后端一处，这里自动多出一个输入框。
  *
+ * ## 「自定义」分组空着也要显示
+ *
+ * 用户要求"默认有一个空的自定义板块，可以在里面加自定义字段"。所以这个组不看有没有字段
+ * （见下面的 `grouped` / `filteredGrouped`），而"添加自定义字段"的输入框就长在这张卡片的
+ * 底部（`WebFormProfileCustomGroupFooter`），添加逻辑仍只有一份（`useWebFormCustomFields`）。
+ *
  * ## 编辑/保存
  *
  * 跟随「我的资料」现有的流程：查看态只读、编辑态可改，保存由页面顶部的「保存全部资料」
@@ -32,7 +38,6 @@ import {
   useEffect,
   useImperativeHandle,
   useMemo,
-  useRef,
   useState,
 } from "react";
 import { getWebFormExtraProfile } from "../../api/webform";
@@ -47,8 +52,8 @@ import type {
 import type { RecognitionReviewRow } from "./RecognitionReviewList";
 import PageSkeleton from "../common/PageSkeleton";
 import WebFormProfileCustomFieldAdder from "./WebFormProfileCustomFieldAdder";
+import WebFormProfileCustomGroupFooter from "./WebFormProfileCustomGroupFooter";
 import WebFormProfileGroup from "./WebFormProfileGroup";
-import { customFieldKey, isCustomField, normalizeFieldLabel } from "./WebFormProfileFieldUtils";
 import WebFormProfileRecords from "./WebFormProfileRecords";
 import {
   WebFormProfileEmpty,
@@ -58,9 +63,11 @@ import {
 import { WEBFORM_CUSTOM_GROUP } from "../../features/webform/groupIdentity";
 import { webformFieldLabel } from "../../features/webform/webformFieldLabels";
 import WebFormProfileToolbar from "./WebFormProfileToolbar";
+import { useWebFormCustomFields } from "./useWebFormCustomFields";
+import type { ExtraProfileValues } from "./useWebFormCustomFields";
 
-/** 编辑态的值由父组件持有（这样它能和资料表单一起提交）。 */
-export type ExtraProfileValues = Record<string, string>;
+/** 编辑态的值由父组件持有（这样它能和资料表单一起提交）。改由 hook 模块给出，见其注释。 */
+export type { ExtraProfileValues } from "./useWebFormCustomFields";
 
 /** 暴露给宿主的命令式能力（项 12：校对结果要写进这里自持的字段清单）。 */
 export interface WebFormProfileSectionHandle {
@@ -108,7 +115,6 @@ const WebFormProfileSection = forwardRef<WebFormProfileSectionHandle, Props>(
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
     const [loadAttempt, setLoadAttempt] = useState(0);
-    const [customLabel, setCustomLabel] = useState("");
     const [searchTerm, setSearchTerm] = useState("");
     // 搜索防抖：输入静置 300ms 才提交。搜索会改变字段集合（remount），每敲一个字符
     // 重挂载一批控件的代价太高；输入框仍即时回显（searchTerm），只是过滤动作延后。
@@ -168,15 +174,44 @@ const WebFormProfileSection = forwardRef<WebFormProfileSectionHandle, Props>(
         (entries[field.key]?.label?.trim() || webformFieldLabel(field.key, field.label)),
       [displayLabels, entries],
     );
-    /** 按分组切分，供分区展示（分组顺序来自后端目录）。 */
+    /** 自定义字段的增 / 改名 / 删（唯一实现，见 hook 文件的注释）。 */
+    const {
+      customLabel,
+      setCustomLabel,
+      addCustomField,
+      handleAddCustomField,
+      handleRenameCustomField,
+      handleDeleteCustomField,
+    } = useWebFormCustomFields({
+      profile,
+      setProfile,
+      values,
+      details,
+      displayLabel,
+      onChange,
+      onFieldLabelChange,
+      onFieldDelete,
+      onLoaded,
+      onError: setError,
+    });
+    /**
+     * 按分组切分，供分区展示（分组顺序来自后端目录）。
+     *
+     * 「自定义」组**空着也留着**：它默认就是一张空卡片。后端的 `list_extra_fields` 现在
+     * 无条件给这个组，这里再兜一次——前端可能比后端新（后端没重启时目录里还没有它），
+     * 缺了它只该少一张卡片，不该让用户没地方加字段。
+     */
     const grouped = useMemo(() => {
       if (!profile) return [];
-      return profile.groups
+      const groupNames = profile.groups.includes(WEBFORM_CUSTOM_GROUP)
+        ? profile.groups
+        : [...profile.groups, WEBFORM_CUSTOM_GROUP];
+      return groupNames
         .map((group) => ({
           group,
           fields: profile.fields.filter((field) => field.group === group),
         }))
-        .filter((entry) => entry.fields.length > 0);
+        .filter((entry) => entry.fields.length > 0 || entry.group === WEBFORM_CUSTOM_GROUP);
     }, [profile]);
     /**
      * 查看态只显示**已填**的项——否则一屏空标签，用户找不到自己填过什么。
@@ -228,6 +263,11 @@ const WebFormProfileSection = forwardRef<WebFormProfileSectionHandle, Props>(
      * Group 的自定义比较器才能对未编辑的组整体 bail。
      */
     const needsFilter = !editing || showOnlyFilled || Boolean(normalizedSearch);
+    /**
+     * 空的「自定义」组只在**没有筛选意图**时保留：它是"加字段"的入口，藏起来用户就没地方
+     * 加；而搜索时保留它，会让"没有匹配"变成一张空卡片，看不出搜索其实没命中。
+     */
+    const keepEmptyCustomGroup = !showOnlyFilled && !normalizedSearch;
     /** 先筛选再渲染，避免每个分组里重复写一套查看态/编辑态判断。 */
     const filteredGrouped = useMemo(() => {
       return grouped
@@ -247,12 +287,17 @@ const WebFormProfileSection = forwardRef<WebFormProfileSectionHandle, Props>(
             }),
           };
         })
-        .filter((entry) => entry.fields.length > 0);
+        .filter(
+          (entry) =>
+            entry.fields.length > 0 ||
+            (entry.group === WEBFORM_CUSTOM_GROUP && keepEmptyCustomGroup),
+        );
     }, [
       displayLabel,
       editing,
       fieldsByGroup,
       grouped,
+      keepEmptyCustomGroup,
       needsFilter,
       normalizedSearch,
       showOnlyFilled,
@@ -263,139 +308,25 @@ const WebFormProfileSection = forwardRef<WebFormProfileSectionHandle, Props>(
     const visibleGroups =
       editing && !showOnlyFilled && !normalizedSearch ? grouped : filteredGrouped;
 
-    const handleRenameCustomField = useCallback(
-      (key: string, nextLabel: string): string | undefined => {
-        const label = nextLabel.trim();
-        if (!label) return t("profileLibrary.webform.fieldNameEmpty");
-        const duplicate = profile?.fields.some(
-          (field) =>
-            field.key !== key &&
-            isCustomField(field) &&
-            normalizeFieldLabel(displayLabel(field)) === normalizeFieldLabel(label),
-        );
-        if (duplicate) return t("profileLibrary.webform.duplicateName");
-        setError("");
-
-        setProfile((current) => {
-          if (!current) return current;
-          return {
-            ...current,
-            fields: current.fields.map((field) =>
-              field.key === key ? { ...field, label } : field,
-            ),
-          };
-        });
-        onFieldLabelChange(key, label);
-        setError("");
-        return undefined;
-      },
-      [displayLabel, onFieldLabelChange, profile],
-    );
-    const handleDeleteCustomField = useCallback(
-      (key: string) => {
-        setProfile((current) => {
-          if (!current) return current;
-          return { ...current, fields: current.fields.filter((field) => field.key !== key) };
-        });
-        onFieldDelete(key);
-        setError("");
-      },
-      [onFieldDelete],
-    );
-
-    // values/details 每击键都换新，会把 handleAddCustomField 每次重建。改用 ref 读最新值
-    // （点击发生在渲染提交之后，ref 已是最新），把该回调的依赖收敛到稳定项。
-    const addCustomFieldContextRef = useRef({ values, details });
-    useEffect(() => {
-      addCustomFieldContextRef.current = { values, details };
-    });
-
+    const customFieldCount = fieldsByGroup.get(WEBFORM_CUSTOM_GROUP)?.length ?? 0;
     /**
-     * 字段清单的 ref：**同一批**里连续新增多个自定义字段时，`setProfile` 还没落地，
-     * 闭包里的 `profile` 会对每一次调用都是旧的（第二次会把第一次建的字段覆盖掉）。
-     * ref 在调用瞬间同步推进，所以"一次识别新增 3 个字段"能全部留住。
-     */
-    const profileRef = useRef(profile);
-    useEffect(() => {
-      profileRef.current = profile;
-    });
-
-    /** 找已存在的自定义字段：同 key（后端给的 `CUSTOM_`）或同显示名都算。 */
-    const findExistingCustomField = useCallback(
-      (label: string, keyOverride?: string): string | null => {
-        const target = normalizeFieldLabel(label);
-        for (const field of profileRef.current?.fields ?? []) {
-          if (!isCustomField(field)) continue;
-          if (keyOverride && field.key === keyOverride) return field.key;
-          if (target && normalizeFieldLabel(displayLabel(field)) === target) return field.key;
-        }
-        return null;
-      },
-      [displayLabel],
-    );
-
-    /**
-     * 新增一个自定义字段（**唯一实现**：手动添加与识别写入都走它）。
+     * 「自定义」卡片底部的那一块：空态提示 + 编辑态的添加输入框。
      *
-     * @param label 用户看到的栏目名。
-     * @param keyOverride 后端给的 key（识别链路用）。只接受 `CUSTOM_` 前缀——D32：
-     *   **前端不重新生成 key**，识别结果里的 key 是后端按 label 定的，前端只负责沿用它。
-     * @returns 最终 key；空名或无法成 key 时返回 `null`（**已存在不算失败**，返回已有 key）。
+     * **必须 `useMemo` 固定引用**：`WebFormProfileGroup` 的判等按引用比较 `footer`，
+     * 每 render 新建一个元素会让这张卡片在每次击键时整块重渲（memo 形同虚设）。
      */
-    const addCustomField = useCallback(
-      (label: string, keyOverride?: string): string | null => {
-        const name = label.trim();
-        if (!name) return null;
-        const existing = findExistingCustomField(name, keyOverride);
-        if (existing) return existing;
-        const key =
-          keyOverride && keyOverride.startsWith("CUSTOM_") && keyOverride.length > "CUSTOM_".length
-            ? keyOverride
-            : customFieldKey(name);
-        if (!key || key === "CUSTOM_") return null;
-
-        const current = profileRef.current;
-        const field: WebFormField = {
-          key,
-          label: name,
-          group: WEBFORM_CUSTOM_GROUP,
-          kind: "text",
-          sensitive: false,
-          matchable: true,
-        };
-        const nextProfile: WebFormExtraProfile = {
-          ...(current as WebFormExtraProfile),
-          groups: current?.groups.includes(WEBFORM_CUSTOM_GROUP)
-            ? current.groups
-            : [...(current?.groups ?? []), WEBFORM_CUSTOM_GROUP],
-          fields: [...(current?.fields ?? []), field],
-        };
-        profileRef.current = nextProfile;
-        setProfile(nextProfile);
-        // onLoaded 会重置父组件的草稿：新增目录项时必须保留用户刚输入、尚未保存的值。
-        const { values: latestValues, details: latestDetails } = addCustomFieldContextRef.current;
-        onLoaded({ ...nextProfile, values: latestValues, details: latestDetails });
-        // 名字先落（`details[key].label`）：反过来的话会闪一帧"有值没名字"的字段。
-        onFieldLabelChange(key, name);
-        return key;
-      },
-      [findExistingCustomField, onFieldLabelChange, onLoaded],
+    const customGroupFooter = useMemo(
+      () => (
+        <WebFormProfileCustomGroupFooter
+          empty={customFieldCount === 0}
+          editing={editing}
+          value={customLabel}
+          onChange={setCustomLabel}
+          onAdd={handleAddCustomField}
+        />
+      ),
+      [customFieldCount, customLabel, editing, handleAddCustomField, setCustomLabel],
     );
-
-    const handleAddCustomField = useCallback(() => {
-      const label = customLabel.trim();
-      if (!label) return;
-      if (findExistingCustomField(label)) {
-        setError(t("profileLibrary.webform.duplicateField"));
-        return;
-      }
-      const key = addCustomField(label);
-      if (!key) return;
-      // 新建的字段值先置空；名字已在 `addCustomField` 里写过。
-      onChange(key, "");
-      setCustomLabel("");
-      setError("");
-    }, [addCustomField, customLabel, findExistingCustomField, onChange]);
 
     useImperativeHandle(
       ref,
@@ -481,11 +412,17 @@ const WebFormProfileSection = forwardRef<WebFormProfileSectionHandle, Props>(
               onChange={onChange}
               onRename={handleRenameCustomField}
               onDelete={handleDeleteCustomField}
+              footer={group === WEBFORM_CUSTOM_GROUP ? customGroupFooter : undefined}
             />
           );
         })}
 
-        {editing ? (
+        {/*
+          筛选态（只看已填 / 搜索词）下「自定义」卡片可能整张被过滤掉，而添加输入框长在那张
+          卡片里——于是正在编辑的用户会突然找不到加字段的入口。这里补一个**只在自定义卡片
+          不可见时**出现的兜底输入框：卡片可见时由它的 footer 承担，两者不会同时出现。
+        */}
+        {editing && !visibleGroups.some((entry) => entry.group === WEBFORM_CUSTOM_GROUP) ? (
           <WebFormProfileCustomFieldAdder
             value={customLabel}
             onChange={setCustomLabel}

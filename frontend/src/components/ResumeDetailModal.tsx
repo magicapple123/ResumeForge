@@ -19,6 +19,7 @@ import {
   DEFAULT_RESUME_LAYOUT,
   layoutFromDetail,
 } from "../features/resume-document/resumeDocumentHost";
+import { ensureEntryIds } from "../features/resume-document/identity";
 import { revisionOf } from "../features/resume-document/saveOutcome";
 import { remapAnnotationPaths } from "../features/resume-outline";
 import type { PathRemap } from "../features/resume-outline/paths";
@@ -100,7 +101,9 @@ export default function ResumeDetailModal({ recordId, onClose, autoOpenWorkbench
   const handleDocumentSynced = useCallback(
     (synced: ResumeDetail) => {
       setDetail({ ...synced, draft: false });
-      void renderResume(synced.content, layout).then((rendered) => setHtml(rendered));
+      void renderResume(ensureEntryIds(synced.content), layout).then((rendered) =>
+        setHtml(rendered),
+      );
     },
     [layout],
   );
@@ -136,7 +139,11 @@ export default function ResumeDetailModal({ recordId, onClose, autoOpenWorkbench
   const { relayouting, request: requestLayout } = useResumeRelayout({
     render: async (next) => {
       if (!detail) return;
-      setHtml(await renderResume(detail.content, next));
+      // 重排用的是**补过条目 id** 的那份正文（见文件头 W01 说明）：`format_config` 里的
+      // `field_layout.entries.<id>` / `objects.<id>` 全靠条目 id 定位，后端读旧记录时不物化
+      // id，直接送 `detail.content` 会让条目级排版在这一份 html 里退回分区默认——制作台右栏
+      // 在版式提交后回落的正是这一份。已有合法 id 的条目原样保留，保存过的记录零变化。
+      setHtml(await renderResume(ensureEntryIds(detail.content), next));
     },
     onRendered: (next) => setLayout(next),
     onError: (err) => {

@@ -71,6 +71,17 @@ const homePage = {
   "homePage.reminders.urgencyAria": "紧急度：{level}",
   /** 整行提醒的无障碍名：点它可以打开提醒弹窗。 */
   "homePage.reminders.openAria": "查看提醒：{title}",
+  /**
+   * 倒计时胶囊：已过提醒时间。`{days}` 是逾期天数（后端 `days_until` 取负）。
+   * 文案与后端历史 `due_label` 逐字相同——同一颗胶囊在两种语言下只说同一件事。
+   */
+  "homePage.reminders.due.overdue": "已逾期 {days} 天",
+  /** 倒计时胶囊：提醒时间就是今天。 */
+  "homePage.reminders.due.today": "今天",
+  /** 倒计时胶囊：提醒时间是明天。 */
+  "homePage.reminders.due.tomorrow": "明天",
+  /** 倒计时胶囊：`{days}` 天后（只在 ≥2 天时命中，中文无单复数问题）。 */
+  "homePage.reminders.due.inDays": "{days} 天后",
 
   // ── 全局搜索卡 ────────────────────────────────────────────
   /** 卡片标题。 */

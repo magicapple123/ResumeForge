@@ -48,3 +48,20 @@ export function withPageWidthZoom(url: string): string {
   const separator = url.includes("#") ? "&" : "#";
   return `${url}${separator}${params}`;
 }
+
+/**
+ * 按**数值百分比**重新生成一个 PDF 的 URL（2026-10-29 实测结论）。
+ *
+ * Chrome 只认 `#zoom=<百分比>`，**不认** `#zoom=page-width`（那是 PDF.js 的写法）——
+ * 认不出的参数会被忽略，页面退回查看器默认缩放。而且要**换一个新 URL**：同一个 PDF 只改
+ * hash 属于同文档导航，查看器不会重新读参数。所以这里用同一份字节再造一个 objectURL。
+ *
+ * @param shot 面板手上那一份（字节 + 现有 URL）
+ * @param pct 目标百分比；`null` = 不缩放，直接用原 URL
+ */
+export function zoomedPdfUrl(shot: { url: string; blob: Blob }, pct: number | null): string {
+  if (pct === null) return shot.url;
+  // `toolbar=0&navpanes=0` 一并带上：Chrome 的 iframe 会忽略它们（仍画自己的工具栏），
+  // 但 Electron / 旧版内核认——用户那边一直是靠它们把查看器外壳藏掉的。
+  return `${URL.createObjectURL(shot.blob)}#zoom=${pct}&toolbar=0&navpanes=0`;
+}

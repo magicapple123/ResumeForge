@@ -281,3 +281,35 @@ def test_live_session_refreshes_profile_data_before_the_next_focus():
         assert client.panels[-1]["value"] == "李四"
     finally:
         session.stop()
+
+
+def test_remembering_refreshes_the_related_entries_on_the_panel():
+    """记住之后，面板上的「可能是这几个」要立刻出现刚记下的字段。
+
+    这份清单是**聚焦那一刻**算好的快照（`_on_focus`）。保存后不重算的话，用户得换一个
+    框才看得见刚记的东西——反馈原话是"记住了字段之后卡片上没有立即刷新"。
+    """
+    client = FakeLiveClient()
+    catalog: list[dict[str, str]] = []
+    session, saved = _remember_session(
+        client, data_loader=lambda: (AI_DATA, list(catalog))
+    )
+    session.start()
+    try:
+        control = raw_control(label="身高(cm)")
+        client.focus_on(control)
+        session._tick()
+        assert client.panels[-1]["related"] == []
+
+        # 落库之后 `load_live_data` 会读到这一条——这里用可变清单模拟同一件事。
+        catalog.append(
+            {"group": "identity", "label": "身高(cm)", "value": "178", "key": "height"}
+        )
+        client.remember_on(control, "178")
+        session._tick()
+
+        assert saved and saved[-1]["value"] == "178"
+        related = client.panels[-1]["related"]
+        assert [item["value"] for item in related] == ["178"]
+    finally:
+        session.stop()

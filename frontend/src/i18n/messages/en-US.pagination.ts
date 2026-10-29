@@ -12,20 +12,33 @@ const pagination = {
   "pagination.mode.note":
     "Sections flow naturally by default. Only Sections with Start on new page begin on a new page",
   "pagination.mode.partial": "{count} Sections start on new pages",
+  "pagination.mode.confirmTitle": "Switch back to natural flow?",
+  "pagination.mode.confirmBody":
+    "This clears “start on a new page” for {count} section(s). Entry breaks and continuation info are unaffected",
+  "pagination.mode.confirmOk": "Switch to natural flow",
+  "pagination.mode.confirmCancel": "Cancel",
   "pagination.breaks.title": "Configured page breaks",
   "pagination.breaks.clearOne": "Clear the page break for {label}",
   "pagination.breaks.restore": "Restore natural flow",
   "pagination.breaks.restoreHint":
     "Clear all Section page breaks without changing Entry page breaks",
+  "pagination.breaks.unknownEntry": "Deleted entry",
+  "pagination.breaks.clearEntry": "Clear the entry break for “{label}”",
+  "pagination.breaks.entryHint":
+    "Entry breaks affect that item only; “Restore natural pagination” does not clear them",
   "pagination.sections.settings": "Section settings",
   "pagination.sections.pick": "Select a Section to adjust its pagination",
   "pagination.sections.summary": "{count} Sections have page breaks",
   "pagination.entry.title": "This Entry's page break",
+  "pagination.entry.pick":
+    "Select an item in the outline or on the page to get its own break controls here",
   "pagination.breakBefore": "Start on new page",
   "pagination.breakBefore.hint":
     "Start on a new page in print and exports. Draft preview does not show page breaks",
   "pagination.keepWithNext": "Keep heading with content",
-  "pagination.keepWithNext.none": "Do not keep together",
+  "pagination.keepWithNext.hint":
+    "Keeps a heading with the next N lines so it does not sit alone at a page bottom; “Default” follows the template default",
+  "pagination.keepWithNext.none": "Default",
   "pagination.keepWithNext.lines": "Keep with {count} following lines",
   "pagination.keepWithNext.aria": "How many following lines to keep with {label}",
   "pagination.allowSplit": "Allow page splits",
@@ -39,7 +52,8 @@ const pagination = {
   "pagination.draft.note":
     "Draft preview does not show manual page breaks. Use exact preview to check actual breaks",
   "pagination.capability.title": "Format support",
-  "pagination.capability.pending": "See the checks capability matrix for format support",
+  "pagination.capability.pending":
+    "Run a check once and this section lists each format’s support from the capability matrix",
   "pagination.capability.allSupported": "Supported in all three formats",
   "pagination.capability.details": "Pagination report",
   "pagination.capability.entryBreak": "Manual page breaks",
@@ -48,6 +62,7 @@ const pagination = {
   "pagination.thumbnails.title": "Page thumbnails",
   "pagination.thumbnails.empty": "No pagination report yet",
   "pagination.thumbnails.hint": "Select Get pagination report to measure the actual PDF layout",
+  "pagination.thumbnails.refresh": "Get pagination report",
   "pagination.thumbnails.page": "Page {page}",
   "pagination.thumbnails.last": "Last page",
   "pagination.thumbnails.summary": "{pages} actual pages (limit: {limit} pages)",
