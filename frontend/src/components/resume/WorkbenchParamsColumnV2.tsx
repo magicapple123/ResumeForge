@@ -60,6 +60,8 @@ export interface WorkbenchParamsColumnV2Props {
   canvasContainer?: HTMLElement | null;
   history?: WorkbenchHistoryTab;
   fieldCatalog?: DocumentFieldCatalog | null;
+  /** 「我的资料」板块顺序（已翻成文档 key）；结构面板「顺序」里的同步按钮用。 */
+  profileSectionOrder?: readonly string[];
   onNotify?: (message: string) => void;
   pagesNeeded?: number | null;
   /** 记录 id：文档模式保存 / 后续双语·资产·来源页签都需要它；null = 只读宿主。 */
@@ -105,6 +107,7 @@ export default function WorkbenchParamsColumnV2({
   canvasContainer,
   history,
   fieldCatalog,
+  profileSectionOrder,
   onNotify,
   pagesNeeded,
   resumeId,
@@ -304,6 +307,7 @@ export default function WorkbenchParamsColumnV2({
             onMultiSelectedPathsChange={onMultiSelectedPathsChange}
             // Q20：结构树在字段没有值时显示字段目录里的中文标签。
             fieldCatalog={fieldCatalog}
+            profileSectionOrder={profileSectionOrder}
             isMaterialOnlyField={(key) => {
               if (!fieldCatalog) return false;
               for (const section of fieldCatalog.sections) {

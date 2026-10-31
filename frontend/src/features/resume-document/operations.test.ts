@@ -30,6 +30,7 @@ import {
   addItem,
   addSection,
   moveSection,
+  reorderSections,
   removeHeaderItem,
   removeItem,
   removeSection,
@@ -44,6 +45,7 @@ import {
   updateSection,
   updateTextItem,
 } from "./mutations";
+import { clearDocumentContent } from "./defaults";
 import type { HeaderItem, ResumeSection } from "../../types/resumeDocument";
 
 describe("位置规则", () => {
@@ -298,6 +300,19 @@ describe("内容写入", () => {
     expect(up.sections.map((section) => section.key)).toEqual(keys);
     expect(moveSection(document, keys[0], "up")).toBe(document);
     expect(moveSection(document, keys[keys.length - 1], "down")).toBe(document);
+    const reordered = reorderSections(document, [keys[1], keys[0]]);
+    expect(reordered.sections.map((section) => section.key)).toEqual([keys[1], keys[0]]);
+  });
+
+  it("clearDocumentContent：保留板块与页眉字段结构，清空条目与值", () => {
+    const document = makeDocument();
+    const cleared = clearDocumentContent(document);
+    expect(cleared.sections.map((section) => section.key)).toEqual(
+      document.sections.map((section) => section.key),
+    );
+    expect(cleared.sections.every((section) => section.entries.length === 0)).toBe(true);
+    expect(cleared.header.items.every((item) => item.value === "")).toBe(true);
+    expect(cleared.header.items).toHaveLength(document.header.items.length);
   });
 
   it("页眉：addHeaderItem / updateHeaderItem / removeHeaderItem", () => {

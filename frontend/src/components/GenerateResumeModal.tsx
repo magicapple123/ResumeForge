@@ -8,7 +8,6 @@ import { isDocumentHidden, onVisibilityChange } from "../utils/visibility";
 import {
   cancelResumeGenerateTask,
   fetchResumeTemplates,
-  getResume,
   getResumeGenerateTask,
   renderResume,
   startResumeGeneration,
@@ -39,6 +38,7 @@ import GenerationProgressStage from "./generate-resume/GenerationProgressStage";
 import GenerationErrorStage from "./generate-resume/GenerationErrorStage";
 import GenerationPreviewStage from "./generate-resume/GenerationPreviewStage";
 import type { GenerateResult } from "./generate-resume/GenerationPreviewStage";
+import { useGenerationPreviewLoader } from "./generate-resume/useGenerationPreviewLoader";
 
 type Stage = "config" | "generating" | "preview" | "error";
 
@@ -55,13 +55,14 @@ export default function GenerateResumeModal({ job, open, initialTitle = "", onCl
   useLocale();
   const { message, notification } = App.useApp();
   const navigate = useNavigate();
-
   const [stage, setStage] = useState<Stage>("config");
   const [title, setTitle] = useState("");
   const [enhance, setEnhance] = useState(false);
   const [enhancementLevel, setEnhancementLevel] = useState<EnhancementLevel>("balanced");
-  // 默认 1 页 A4 + 标准字号：绝大多数简历就该是一页。
   const [layout, setLayout] = useState<ResumeLayout>(newResumeLayout);
+  const [sectionOptions, setSectionOptions] = useState<{ key: string; label: string }[]>([]);
+  const [builtInSectionOrder, setBuiltInSectionOrder] = useState(DEFAULT_RESUME_SECTION_ORDER);
+  const [profileSectionOrder, setProfileSectionOrder] = useState(DEFAULT_RESUME_SECTION_ORDER);
   const [customInstruction, setCustomInstruction] = useState("");
   // 文档模式 / 本次生成场景（契约 §5、§2.5）：默认都不发送，关闭弹窗时复位。
   const generation = useGenerationExtras();
@@ -81,11 +82,9 @@ export default function GenerateResumeModal({ job, open, initialTitle = "", onCl
   const [previewHtml, setPreviewHtml] = useState("");
   const [suggestionsGenerated, setSuggestionsGenerated] = useState(false);
   const [suggestionsResetKey, setSuggestionsResetKey] = useState(0);
-
   // 生成开始时的版式快照：后台完成后用它渲染预览，避免完成后用户又改了配置导致
   // 预览参数与生成参数不一致。
   const generationLayoutRef = useRef<ResumeLayout>(layout);
-  // 预览句柄：拖动字号时用它把探针 CSS 即时注入预览（本地缩放，无网络往返）。
   const previewRef = useRef<ResumePreviewHandle>(null);
 
   /**
@@ -174,6 +173,9 @@ export default function GenerateResumeModal({ job, open, initialTitle = "", onCl
         // 一样"应当是同一种存储形态）；其它 format_config 键（夹带进来的字号系数等）保留。
         const builtInOrder = catalog.default_section_order ?? DEFAULT_RESUME_SECTION_ORDER;
         const profileOrder = catalog.profile_section_order ?? builtInOrder;
+        setSectionOptions(catalog.section_options ?? []);
+        setBuiltInSectionOrder(builtInOrder);
+        setProfileSectionOrder(profileOrder);
         // 三个参数都要重置。此前漏了 page_limit（只覆盖 template / font_scale），
         // 于是上一次选过 3 页的话，下次打开默认就是 3 页，与"默认一页 A4"相矛盾。
         setLayout((current) => ({
@@ -210,18 +212,13 @@ export default function GenerateResumeModal({ job, open, initialTitle = "", onCl
     generation.resetExtras();
   }, [generation, initialTitle]);
 
-  const loadPreview = useCallback(async (resumeId: number) => {
-    try {
-      const detail = await getResume(resumeId);
-      const html = await renderResume(detail.content, generationLayoutRef.current);
-      setResult({ detail });
-      setPreviewHtml(html);
-      setStage("preview");
-    } catch (err) {
-      setStage("error");
-      setErrorMsg(err instanceof Error ? err.message : t("generate.loadResultFailed"));
-    }
-  }, []);
+  const loadPreview = useGenerationPreviewLoader({
+    layoutRef: generationLayoutRef,
+    setResult,
+    setPreviewHtml,
+    setStage,
+    setErrorMsg,
+  });
 
   const startGenerate = async () => {
     if (!open) return;
@@ -444,6 +441,9 @@ export default function GenerateResumeModal({ job, open, initialTitle = "", onCl
           setEnhancementLevel={setEnhancementLevel}
           layout={layout}
           setLayout={setLayout}
+          sectionOptions={sectionOptions}
+          builtInSectionOrder={builtInSectionOrder}
+          profileSectionOrder={profileSectionOrder}
           customInstruction={customInstruction}
           setCustomInstruction={setCustomInstruction}
           llmReady={llmReady}

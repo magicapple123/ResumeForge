@@ -380,6 +380,7 @@ export default function ResumeWorkbenchV2({
       canvasContainer={canvasNode}
       history={history.historyTab}
       fieldCatalog={fieldCatalog}
+      profileSectionOrder={catalog?.profile_section_order}
       onNotify={(text) => message.info(text)}
       pagesNeeded={pagesNeeded}
       resumeId={resumeId ?? null}

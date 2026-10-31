@@ -248,6 +248,8 @@ const workbench = {
   "resume.manual.load-failed": "读取当前方案资料失败",
   "resume.manual.retry": "重新读取",
   "resume.manual.close": "关闭",
+  "resume.manual.clearAll": "清空所有内容",
+  "resume.manual.clearConfirm": "清空所有内容？板块结构会保留，字段值会清空",
   "resume.manual.unsaved": "有未保存的修改，关闭后会丢失",
   "resume.manual.keep-editing": "继续编辑",
   "resume.manual.discard-close": "关闭不保存",

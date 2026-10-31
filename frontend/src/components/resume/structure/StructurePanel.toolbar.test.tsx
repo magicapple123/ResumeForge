@@ -71,12 +71,19 @@ function makeDocument(): ResumeDocument {
   };
 }
 
-function Harness({ onDoc }: { onDoc?: (doc: ResumeDocument) => void }) {
+function Harness({
+  onDoc,
+  profileSectionOrder,
+}: {
+  onDoc?: (doc: ResumeDocument) => void;
+  profileSectionOrder?: string[];
+}) {
   const [document, setDocument] = useState(makeDocument());
   return (
     <StructurePanel
       document={document}
       pagesNeeded={1}
+      profileSectionOrder={profileSectionOrder}
       fieldCatalog={null as DocumentFieldCatalog | null}
       onChange={(next) => {
         setDocument(next);
@@ -99,6 +106,21 @@ describe("StructurePanel · 顶栏工具", () => {
     expect(treeRow(container, "education.entry_edu_01.#title")).toBeNull();
     expect(treeRow(container, "education")).not.toBeNull();
     expect(treeRow(container, "custom:sec_0001")).not.toBeNull();
+  });
+
+  it("板块顺序：可与「我的资料」顺序同步", async () => {
+    const onDoc = vi.fn();
+    render(<Harness onDoc={onDoc} profileSectionOrder={["custom:sec_0001", "education"]} />);
+    fireEvent.click(
+      screen.getByRole("button", { name: t("sections.templateControls.orderTriggerAriaLabel") }),
+    );
+    fireEvent.click(
+      await screen.findByRole("button", { name: t("sections.templateControls.orderSyncProfile") }),
+    );
+    expect(onDoc.mock.calls[0][0].sections.map((section: { key: string }) => section.key)).toEqual([
+      "custom:sec_0001",
+      "education",
+    ]);
   });
 
   it("板块顺序：Popover 里上移 / 下移真实写回文档", async () => {

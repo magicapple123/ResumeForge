@@ -20,6 +20,7 @@ const sections = {
   "sections.templateControls.orderReset": "Restore default order",
   "sections.templateControls.orderListAriaLabel": "Resume section order",
   "sections.templateControls.orderTriggerAriaLabel": "Reorder Resume sections",
+  "sections.templateControls.orderSyncProfile": "Sync with profile order",
   "sections.templateControls.orderTriggerHint":
     "Reorder Summary, Education, Projects and other sections within this Resume",
   "sections.templateControls.orderTrigger": "Order",

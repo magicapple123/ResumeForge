@@ -14,6 +14,7 @@ import { App as AntdApp } from "antd";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { t } from "../i18n";
 import { TEMPLATE_CATALOG } from "../test/resumeFixtures";
 import { makeResumeDocument } from "../test/documentHarness";
 import type { ResumeDetail, ResumeGenerateTask } from "../types";
@@ -184,6 +185,27 @@ describe("GenerateResumeModal 版式覆盖落库（R6）", () => {
 
     await waitFor(() => expect(apiMocks.startResumeGeneration).toHaveBeenCalledOnce());
     expect(apiMocks.startResumeGeneration.mock.calls[0][0].options.format_config).toEqual({});
+  });
+
+  it("配置页可以手动调整板块顺序，并随生成请求提交", async () => {
+    renderModal();
+    await waitForCatalog();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: t("sections.templateControls.orderTriggerAriaLabel") }),
+    );
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: t("sections.templateControls.orderMoveDownAria", { label: "教育经历" }),
+      }),
+    );
+    fireEvent.click(await screen.findByRole("button", { name: /开始生成/ }));
+
+    await waitFor(() => expect(apiMocks.startResumeGeneration).toHaveBeenCalledOnce());
+    const order = apiMocks.startResumeGeneration.mock.calls[0][0].options.format_config
+      .section_order as string[];
+    expect(order[0]).toBe("experience");
+    expect(order[1]).toBe("education");
   });
 
   it("重新打开后仍然把同一份默认顺序发出去（回填是幂等的）", async () => {

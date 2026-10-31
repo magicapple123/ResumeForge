@@ -221,6 +221,24 @@ export function removeSection(document: ResumeDocument, sectionKey: string): Res
     : ({ ...document, sections } as ResumeDocument);
 }
 
+/** 按给定 key 顺序重排板块；缺失/未知 key 忽略，未列出的板块按原顺序补末尾。 */
+export function reorderSections(
+  document: ResumeDocument,
+  order: readonly string[],
+): ResumeDocument {
+  const byKey = new Map(document.sections.map((section) => [section.key, section]));
+  const sections: ResumeSection[] = [];
+  for (const key of order) {
+    const section = byKey.get(key);
+    if (section && !sections.includes(section)) sections.push(section);
+  }
+  for (const section of document.sections) {
+    if (!sections.includes(section)) sections.push(section);
+  }
+  if (sections.every((section, index) => section === document.sections[index])) return document;
+  return { ...document, sections } as ResumeDocument;
+}
+
 /** 上移 / 下移一个板块；越界或 key 不存在返回原文档引用。 */
 export function moveSection(
   document: ResumeDocument,

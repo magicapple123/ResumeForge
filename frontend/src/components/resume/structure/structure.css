@@ -217,31 +217,6 @@
   visibility: visible;
 }
 
-.rf-structure-section-order {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 220px;
-  max-height: 360px;
-  overflow: auto;
-}
-
-.rf-structure-section-order-row {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  min-height: 28px;
-}
-
-.rf-structure-section-order-label {
-  flex: 1 1 auto;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: var(--rf-font-size-sm, 13px);
-}
-
 .rf-structure-hint {
   flex: none;
   font-size: 11px;

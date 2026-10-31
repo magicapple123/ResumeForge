@@ -10,10 +10,10 @@
  * 已移除：v1 草稿条/自动重同步/fillSources 逐条填入（v2 编辑器链没有这些机制；「从资料填入」
  * 由独立 ProfileFillMenu 承担，本弹窗的初始内容已整份来自投影）。
  */
-import { App, Button, Input, Modal, Space, Tooltip, Typography } from "antd";
-import { useMemo, useState } from "react";
+import { App, Button, Input, Modal, Popconfirm, Space, Tooltip, Typography } from "antd";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { createManualResume } from "../api/resumes";
+import { createManualResume, fetchResumeTemplates } from "../api/resumes";
 import { useCurrentProjection } from "../features/profile-library/useCurrentProjection";
 import { bumpResumeList } from "../features/resume/resumeListEvents";
 import { t } from "../i18n";
@@ -21,11 +21,14 @@ import { useLocale } from "../i18n/i18nContext";
 import { getSnapshot } from "../i18n/localeStore";
 import type { Job, ProfileCreationContext, ResumeDocument, ResumeLanguage } from "../types";
 import { projectionToResumeDocument } from "../utils/profileToResume";
+import { clearDocumentContent, reorderSections } from "../features/resume-document";
 import { layer } from "../theme/tokens";
 import LoadingBlock from "./common/LoadingBlock";
 import JobRequirementPanel from "./JobRequirementPanel";
 import DocumentEditor from "./resume-editor/DocumentEditor";
 import ResumeLanguageSelect from "./resume/ResumeLanguageSelect";
+import SectionOrderControl from "./resume/SectionOrderControl";
+import { sectionDisplayLabel } from "./resume/sectionLabels";
 
 interface Props {
   /** null 表示从头编写**通用简历**（不关联任何岗位）。 */
@@ -52,10 +55,13 @@ export default function ManualResumeModal({
   const [title, setTitle] = useState(initialTitle);
   const [creationLanguage, setCreationLanguage] = useState<ResumeLanguage>(getSnapshot().locale);
   const [document, setDocument] = useState<ResumeDocument | null>(null);
+  const [selectedPath, setSelectedPath] = useState<string | null>(null);
+  const [profileOrder, setProfileOrder] = useState<string[]>([]);
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
   const [startingInWorkbench, setStartingInWorkbench] = useState(false);
   const [confirmingClose, setConfirmingClose] = useState(false);
+  const [syncedBase, setSyncedBase] = useState<ResumeDocument | null>(null);
 
   // 开/关时的状态归位（同步 setState 用渲染期守卫）：每次打开都从新的投影开始。
   const [prevOpen, setPrevOpen] = useState<boolean | null>(null);
@@ -65,6 +71,9 @@ export default function ManualResumeModal({
       setTitle(initialTitle);
       setCreationLanguage(getSnapshot().locale);
       setDocument(null);
+      setSyncedBase(null);
+      setSelectedPath(null);
+      setProfileOrder([]);
       setDirty(false);
       setConfirmingClose(false);
     }
@@ -72,11 +81,27 @@ export default function ManualResumeModal({
 
   // 投影内容 -> 合法 v2 文档（岗位模式覆盖求职意向）。资料在别的窗口被改 → 未编辑时自动
   // 重同步；已编辑时保留用户的修改（不在未保存时静默覆盖）。
-  const baseDocument = useMemo<ResumeDocument | null>(
-    () => (projection.data ? projectionToResumeDocument(projection.data, job) : null),
-    [job, projection.data],
-  );
-  const [syncedBase, setSyncedBase] = useState<ResumeDocument | null>(null);
+  const baseDocument = useMemo<ResumeDocument | null>(() => {
+    if (!projection.data) return null;
+    return reorderSections(projectionToResumeDocument(projection.data, job), profileOrder);
+  }, [job, profileOrder, projection.data]);
+
+  // 打开时拉一次当前模板目录：`profile_section_order` 是后端把「我的资料」顺序翻译成
+  // 文档板块 key 的结果，用于新建简历的默认顺序和「与资料顺序同步」。
+  useEffect(() => {
+    if (!open) return;
+    let alive = true;
+    void fetchResumeTemplates()
+      .then((catalog) => {
+        if (alive) setProfileOrder(catalog.profile_section_order ?? []);
+      })
+      .catch(() => {
+        // 目录失败不影响新建；只是默认顺序退回投影已有顺序。
+      });
+    return () => {
+      alive = false;
+    };
+  }, [open]);
   if (baseDocument !== syncedBase) {
     setSyncedBase(baseDocument);
     if (baseDocument && (!document || !dirty)) {
@@ -165,6 +190,14 @@ export default function ManualResumeModal({
     navigate("/profile");
   };
 
+  /** 通用简历的「清空所有内容」：板块与页眉字段保留，只清空当前值/条目。 */
+  const clearAll = () => {
+    if (!document) return;
+    setDocument(clearDocumentContent(document));
+    setSelectedPath(null);
+    setDirty(true);
+  };
+
   const loading = open && projection.loading && !projection.data;
   const failed =
     open && projection.loading === false && projection.error !== null && !projection.data;
@@ -179,6 +212,20 @@ export default function ManualResumeModal({
     </Space>
   ) : (
     <Space size={8} wrap>
+      {!job ? (
+        <Popconfirm
+          title={t("resume.manual.clearConfirm")}
+          okText={t("resume.manual.clearAll")}
+          cancelText={t("common.action.cancel")}
+          okButtonProps={{ danger: true }}
+          onConfirm={clearAll}
+          disabled={saving}
+        >
+          <Button danger disabled={saving}>
+            {t("resume.manual.clearAll")}
+          </Button>
+        </Popconfirm>
+      ) : null}
       {onOpenWorkbench ? (
         <Tooltip title={dirty ? t("resume.manual.workbench-blocked") : undefined}>
           <span>
@@ -271,13 +318,38 @@ export default function ManualResumeModal({
         <div style={{ display: "flex", gap: 16, alignItems: "flex-start" }}>
           <div style={{ flex: 1, minWidth: 0 }}>
             {document ? (
-              <DocumentEditor
-                document={document}
-                onChange={(next) => {
-                  setDocument(next);
-                  setDirty(true);
-                }}
-              />
+              <>
+                <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 8 }}>
+                  <SectionOrderControl
+                    items={document.sections.map((section) => ({
+                      key: section.key,
+                      label: sectionDisplayLabel(section),
+                    }))}
+                    order={document.sections.map((section) => section.key)}
+                    onChange={(next) => {
+                      setDocument(reorderSections(document, next));
+                      setDirty(true);
+                    }}
+                    onSyncProfile={
+                      profileOrder.length
+                        ? () => {
+                            setDocument(reorderSections(document, profileOrder));
+                            setDirty(true);
+                          }
+                        : undefined
+                    }
+                  />
+                </div>
+                <DocumentEditor
+                  document={document}
+                  selectedPath={selectedPath}
+                  onSelectPath={setSelectedPath}
+                  onChange={(next) => {
+                    setDocument(next);
+                    setDirty(true);
+                  }}
+                />
+              </>
             ) : null}
           </div>
           {job ? (

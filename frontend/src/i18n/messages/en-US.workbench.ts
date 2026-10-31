@@ -121,6 +121,9 @@ const workbench = {
   "resume.manual.load-failed": "Could not load Profile content from the current Plan",
   "resume.manual.retry": "Load again",
   "resume.manual.close": "Close",
+  "resume.manual.clearAll": "Clear all content",
+  "resume.manual.clearConfirm":
+    "Clear all content? Section structure stays; field values are cleared",
   "resume.manual.unsaved": "Unsaved changes will be lost if you close now",
   "resume.manual.keep-editing": "Keep editing",
   "resume.manual.discard-close": "Close without saving",

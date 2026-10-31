@@ -9,13 +9,12 @@
  * 所有写操作都走 `features/resume-document` 的不可变实现（见 `structureCommands.ts`），
  * 面板只把新文档交给宿主的 `onChange`——历史 / 保存仍由工作台统一负责。
  */
-import { Button, Input, Popover, Tooltip } from "antd";
+import { Button, Input, Tooltip } from "antd";
 import {
   ArrowDownOutlined,
   ArrowUpOutlined,
   NodeCollapseOutlined,
   SearchOutlined,
-  SwapOutlined,
 } from "@ant-design/icons";
 import { useEffect, useMemo, useRef } from "react";
 import { useLocale } from "../../../i18n/i18nContext";
@@ -29,10 +28,11 @@ import type {
 } from "../../../types/resumeDocument";
 import type { StructureNode } from "../../../features/resume-document/summarize";
 import { fieldCatalogLabelResolver } from "../../../features/resume-document/fieldCatalog";
-import { moveSection } from "../../../features/resume-document/mutations";
+import { reorderSections } from "../../../features/resume-document/mutations";
 import { parseDocumentPath } from "../../../features/resume-document/paths";
 import { sectionDisplayLabel, sectionKeyLabel } from "../sectionLabels";
 import { entryIdFromPath, entryIdsFromPaths } from "../typography/v2Selection";
+import SectionOrderControl from "../SectionOrderControl";
 import StructureRows from "./StructureRows";
 import { useStructurePanel } from "./useStructurePanel";
 import "./structure.css";
@@ -74,6 +74,8 @@ export interface StructurePanelProps {
    */
   fieldCatalog?: DocumentFieldCatalog | null;
   pagesNeeded?: number | null;
+  /** 当前「我的资料」的板块顺序（已翻成文档 key）；用于「顺序」面板里的同步动作。 */
+  profileSectionOrder?: readonly string[];
   readOnly?: boolean;
   className?: string;
   /**
@@ -97,6 +99,7 @@ export default function StructurePanel({
   isMaterialOnlyField,
   fieldCatalog = null,
   pagesNeeded,
+  profileSectionOrder,
   readOnly = false,
   className,
   multiSelectedPaths = [],
@@ -247,52 +250,19 @@ export default function StructurePanel({
             />
           </Tooltip>
           {!readOnly ? (
-            <Popover
-              trigger="click"
-              placement="bottomRight"
-              title={t("sections.templateControls.orderTitle")}
-              content={
-                <div
-                  className="rf-structure-section-order"
-                  role="group"
-                  aria-label={t("sections.templateControls.orderListAriaLabel")}
-                >
-                  {document.sections.map((section, index) => {
-                    const label = sectionDisplayLabel(section);
-                    return (
-                      <div className="rf-structure-section-order-row" key={section.key}>
-                        <span className="rf-structure-section-order-label">{label}</span>
-                        <Button
-                          type="text"
-                          size="small"
-                          aria-label={t("sections.templateControls.orderMoveUpAria", { label })}
-                          disabled={index === 0}
-                          icon={<ArrowUpOutlined />}
-                          onClick={() => onChange(moveSection(document, section.key, "up"))}
-                        />
-                        <Button
-                          type="text"
-                          size="small"
-                          aria-label={t("sections.templateControls.orderMoveDownAria", { label })}
-                          disabled={index === document.sections.length - 1}
-                          icon={<ArrowDownOutlined />}
-                          onClick={() => onChange(moveSection(document, section.key, "down"))}
-                        />
-                      </div>
-                    );
-                  })}
-                </div>
+            <SectionOrderControl
+              items={document.sections.map((section) => ({
+                key: section.key,
+                label: sectionDisplayLabel(section),
+              }))}
+              order={document.sections.map((section) => section.key)}
+              onChange={(next) => onChange(reorderSections(document, next))}
+              onSyncProfile={
+                profileSectionOrder?.length
+                  ? () => onChange(reorderSections(document, profileSectionOrder))
+                  : undefined
               }
-            >
-              <Button
-                type="text"
-                size="small"
-                aria-label={t("sections.templateControls.orderTriggerAriaLabel")}
-                icon={<SwapOutlined />}
-              >
-                {t("sections.templateControls.orderTrigger")}
-              </Button>
-            </Popover>
+            />
           ) : null}
         </div>
       </div>

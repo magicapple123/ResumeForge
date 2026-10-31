@@ -96,6 +96,18 @@ export function defaultTextItem(text = "", style: BodyStyle = "bullet"): TextIte
   return { kind: "text", id: newObjectId(), style, text, hidden: false };
 }
 
+/** 「一键清空所有内容」：保留板块与页眉字段结构，只把值/条目清空，页签不消失。 */
+export function clearDocumentContent(document: ResumeDocument): ResumeDocument {
+  return {
+    ...document,
+    header: {
+      ...document.header,
+      items: document.header.items.map((item) => ({ ...item, value: "" })),
+    },
+    sections: document.sections.map((section) => ({ ...section, entries: [] })),
+  };
+}
+
 export interface FieldItemInit {
   key: string;
   value?: string;

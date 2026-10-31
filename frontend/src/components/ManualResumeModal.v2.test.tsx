@@ -24,11 +24,15 @@ import ManualResumeModal from "./ManualResumeModal";
 
 const apiMocks = vi.hoisted(() => ({
   createManualResume: vi.fn(),
+  fetchResumeTemplates: vi.fn(),
   projection: null as unknown,
   navigate: vi.fn(),
 }));
 
-vi.mock("../api/resumes", () => ({ createManualResume: apiMocks.createManualResume }));
+vi.mock("../api/resumes", () => ({
+  createManualResume: apiMocks.createManualResume,
+  fetchResumeTemplates: apiMocks.fetchResumeTemplates,
+}));
 vi.mock("../features/profile-library/useCurrentProjection", () => ({
   useCurrentProjection: () => ({
     data: apiMocks.projection,
@@ -78,6 +82,9 @@ beforeEach(() => {
   vi.clearAllMocks();
   apiMocks.projection = projection7();
   apiMocks.createManualResume.mockResolvedValue({ id: 77, title: "新简历" });
+  apiMocks.fetchResumeTemplates.mockResolvedValue({
+    profile_section_order: ["education", "summary"],
+  });
 });
 
 afterEach(() => cleanup());
@@ -92,7 +99,7 @@ function renderModal(
 ) {
   const onClose = options.onClose ?? vi.fn();
   const onOpenWorkbench = options.onOpenWorkbench ?? vi.fn();
-  render(
+  const result = render(
     <AntdApp>
       <ManualResumeModal
         job={options.job ?? null}
@@ -102,7 +109,7 @@ function renderModal(
       />
     </AntdApp>,
   );
-  return { onClose, onOpenWorkbench };
+  return { onClose, onOpenWorkbench, rerender: result.rerender };
 }
 
 function savedContent(): ResumeDocument {
@@ -196,5 +203,62 @@ describe("ManualResumeModal（v2）", () => {
     fireEvent.click(close);
     expect(onClose).toHaveBeenCalledTimes(1);
     expect(screen.queryByText(t("resume.manual.unsaved"))).toBeNull();
+  });
+
+  it("关闭后再次打开仍渲染编辑器（open false → true）", async () => {
+    const onClose = vi.fn();
+    const renderWithOpen = (open: boolean) => (
+      <AntdApp>
+        <ManualResumeModal job={null} open={open} onClose={onClose} />
+      </AntdApp>
+    );
+    const { rerender } = render(renderWithOpen(true));
+    expect(
+      await screen.findByRole("button", { name: t("resume.manual.save") }),
+    ).toBeInTheDocument();
+    rerender(renderWithOpen(false));
+    rerender(renderWithOpen(true));
+    expect(
+      await screen.findByRole("button", { name: t("resume.manual.save") }),
+    ).toBeInTheDocument();
+  });
+
+  it("新建界面里的字段可以点击并打开编辑器", async () => {
+    renderModal();
+    fireEvent.click(await screen.findByRole("tab", { name: t("editor.section.education") }));
+    const chip = await screen.findByRole("group", { name: /示例大学/ });
+    fireEvent.click(within(chip).getAllByRole("button")[0]);
+    expect(await screen.findByLabelText(t("document.field.value"))).toBeInTheDocument();
+  });
+
+  it("清空所有内容：保留板块与页眉字段，条目和值清空", async () => {
+    renderModal();
+    expect(
+      await screen.findByRole("button", { name: t("resume.manual.clearAll") }),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: t("resume.manual.clearAll") }));
+    const confirmButtons = await screen.findAllByRole("button", {
+      name: t("resume.manual.clearAll"),
+    });
+    fireEvent.click(confirmButtons[confirmButtons.length - 1]);
+    fireEvent.click(screen.getByRole("button", { name: t("resume.manual.save") }));
+    await waitFor(() => expect(apiMocks.createManualResume).toHaveBeenCalledTimes(1));
+    const content = savedContent();
+    expect(content.sections.map((section) => section.key)).toEqual(["education", "summary"]);
+    expect(content.sections.every((section) => section.entries.length === 0)).toBe(true);
+    expect(content.header.items.every((item) => item.value === "")).toBe(true);
+  });
+
+  it("默认板块顺序跟随「我的资料」", async () => {
+    apiMocks.fetchResumeTemplates.mockResolvedValue({
+      profile_section_order: ["summary", "education"],
+    });
+    renderModal();
+    await waitFor(() => {
+      const tabs = screen.getAllByRole("tab").map((tab) => tab.textContent?.replace(/\s+/g, ""));
+      expect(tabs.indexOf(t("editor.field.summary").replace(/\s+/g, ""))).toBeLessThan(
+        tabs.indexOf(t("editor.section.education").replace(/\s+/g, "")),
+      );
+    });
   });
 });

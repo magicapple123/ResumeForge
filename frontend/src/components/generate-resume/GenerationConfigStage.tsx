@@ -21,6 +21,8 @@ import type {
 } from "../../features/career-scenarios/useGenerationExtras";
 import { MaxLengthHint } from "../common/MaxLengthHint";
 import ResumeLayoutControls from "../ResumeLayoutControls";
+import SectionOrderControl from "../resume/SectionOrderControl";
+import { buildSectionOrderConfig } from "../../utils/resumeSectionOrder";
 
 /** 自定义提示词上限，与后端 GenerateOptions.custom_instruction 一致。 */
 export const MAX_CUSTOM_INSTRUCTION = 2000;
@@ -37,6 +39,10 @@ interface Props {
   setEnhancementLevel: (value: EnhancementLevel) => void;
   layout: ResumeLayout;
   setLayout: (next: ResumeLayout) => void;
+  /** 目录下发的可选板块与顺序（生成配置页的「顺序」控件）。 */
+  sectionOptions?: { key: string; label: string }[];
+  builtInSectionOrder?: string[];
+  profileSectionOrder?: string[];
   customInstruction: string;
   setCustomInstruction: (value: string) => void;
   llmReady: boolean;
@@ -56,6 +62,9 @@ export default function GenerationConfigStage({
   setEnhancementLevel,
   layout,
   setLayout,
+  sectionOptions = [],
+  builtInSectionOrder = [],
+  profileSectionOrder = [],
   customInstruction,
   setCustomInstruction,
   llmReady,
@@ -181,6 +190,44 @@ export default function GenerationConfigStage({
       <Typography.Text type="secondary" style={{ display: "block", marginTop: 8 }}>
         {t("generate.config.layoutHintEssential")}
       </Typography.Text>
+      {sectionOptions.length > 0 ? (
+        <div style={{ marginTop: 10, display: "flex", alignItems: "center", gap: 8 }}>
+          <Typography.Text type="secondary">
+            {t("sections.templateControls.orderTitle")}
+          </Typography.Text>
+          <SectionOrderControl
+            items={sectionOptions}
+            order={
+              Array.isArray(layout.format_config?.section_order)
+                ? layout.format_config.section_order
+                : profileSectionOrder
+            }
+            onChange={(next) =>
+              setLayout({
+                ...layout,
+                format_config: buildSectionOrderConfig(
+                  next,
+                  builtInSectionOrder,
+                  layout.format_config ?? {},
+                ),
+              })
+            }
+            onSyncProfile={
+              profileSectionOrder.length
+                ? () =>
+                    setLayout({
+                      ...layout,
+                      format_config: buildSectionOrderConfig(
+                        profileSectionOrder,
+                        builtInSectionOrder,
+                        layout.format_config ?? {},
+                      ),
+                    })
+                : undefined
+            }
+          />
+        </div>
+      ) : null}
 
       <Typography.Title level={5} style={{ marginTop: 20 }}>
         {t("careerScenarios.generate.title")}

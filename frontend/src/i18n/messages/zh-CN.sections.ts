@@ -40,6 +40,8 @@ const sections = {
   "sections.templateControls.orderListAriaLabel": "简历板块顺序",
   /** 触发按钮的无障碍名。 */
   "sections.templateControls.orderTriggerAriaLabel": "调整简历板块顺序",
+  /** 顺序弹层里的主动同步动作。 */
+  "sections.templateControls.orderSyncProfile": "与资料顺序同步",
   /** 触发按钮的悬停说明：点明调整的是哪些板块。 */
   "sections.templateControls.orderTriggerHint":
     "调整个人总结、教育经历、项目经历等板块在简历里的先后顺序",
