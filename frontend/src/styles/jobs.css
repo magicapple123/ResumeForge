@@ -29,6 +29,18 @@
   text-align: left;
 }
 
+/* 简历中心标题列：antd Button 默认 inline-flex + justify-content:center，长标题换行后
+   内容比按钮宽时会被居中溢出并裁掉左侧第一个字。改成块级文本、从头换行。 */
+.resume-title-link {
+  display: block;
+  width: 100%;
+  height: auto;
+  padding: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  text-align: left;
+}
+
 .job-detail-title-row {
   display: flex;
   align-items: flex-start;

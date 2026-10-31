@@ -245,8 +245,7 @@ export default function ResumeTable({
       render: (_, record) => (
         <Button
           type="link"
-          className="table-text-link"
-          style={{ maxWidth: "100%", overflow: "hidden", textOverflow: "ellipsis" }}
+          className="table-text-link resume-title-link"
           onClick={() => setPreviewId(record.id)}
         >
           {record.title}

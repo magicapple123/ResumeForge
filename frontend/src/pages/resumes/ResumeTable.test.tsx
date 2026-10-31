@@ -105,7 +105,7 @@ afterEach(() => {
 });
 
 describe("ResumeTable 标题列（R14-b）", () => {
-  it("给出宽度下限并省略，且不再有悬停提示", async () => {
+  it("给出宽度下限；长标题从左侧换行，不被居中裁掉，且不再有悬停提示", async () => {
     render(<Harness item={RESUME} />);
     const cell = await screen.findByRole("columnheader", { name: "简历标题" });
 
@@ -115,7 +115,11 @@ describe("ResumeTable 标题列（R14-b）", () => {
     expect(document.querySelectorAll("colgroup col")[1]).toHaveStyle({ width: "220px" });
 
     const title = screen.getByRole("button", { name: RESUME.title });
-    expect(title).toHaveStyle({ textOverflow: "ellipsis", overflow: "hidden" });
+    // 标题按钮曾经是 antd 默认 inline-flex / center，长标题比按钮宽时左右同时溢出，
+    // 左侧第一个字被裁掉；现在用块级文本从左侧换行（Q35）。
+    expect(title.className).toContain("resume-title-link");
+    const css = readFileSync([process.cwd(), "src", "styles", "jobs.css"].join("/"), "utf8");
+    expect(css).toMatch(/\.resume-title-link\s*\{[^}]*display:\s*block/);
 
     // 2026-11 用户要求去掉标题的悬停提示：鼠标扫过列表时那个黑框会挡住相邻行，
     // 而"看完整标题"已经由点击打开预览满足。antd 的 Tooltip 是克隆子节点 + 挂事件，
