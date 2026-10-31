@@ -31,7 +31,7 @@ from .definition_catalog import (
     BUILTIN_SECTIONS,
     SECTION_BY_KEY,
 )
-from .errors import Conflict, LimitReached, NotFound, RevisionConflict, ValidationError
+from .errors import Conflict, NotFound, RevisionConflict, ValidationError
 from .field_preferences import (
     MergedField,
     MergedSection,
@@ -39,8 +39,6 @@ from .field_preferences import (
     active_custom_section,
     build_section,
     build_sections,
-    custom_field_rows,
-    merged_custom_field,
     merged_custom_section,
 )
 
@@ -57,6 +55,8 @@ _BUILTIN_FIELD_PROTECTED = "系统内置的默认字段不能改名或删除：�
 _SECTION_MISSING = "大字段不存在或已删除：请刷新页面后重试"
 _FIELD_MISSING = "自定义字段不存在或已删除：请刷新页面后重试"
 _ATOMIC_FAILED = "保存失败：内容可能刚被其他窗口修改或名称已被占用，请刷新页面后重试"
+# 三态更新的哨兵：字段没传 = 保持原值；传 None = 恢复"按类型自动"（同 field_preferences）。
+_UNSET: Any = object()
 
 
 def _atomic(func: Any) -> Any:
@@ -349,122 +349,20 @@ def section_deletion_impact(db: Session, key: str) -> dict[str, Any]:
     )
 
 
-@_atomic
-def create_custom_field(
-    db: Session,
-    section_key: str,
-    label: str,
-    field_type: str,
-    *,
-    expected_revision: int | None = None,
-) -> MergedField:
-    """给任意活动分区（13 个内置或自建）新增自定义小字段（R-11）；每分区 ≤20 个。"""
-    state = workspace_bootstrap.ensure_workspace(db)
-    active_key = _require_active_section(db, section_key)
-    _require_state_revision(state, expected_revision)
-    clean_label, label_key = _validate_field_label(db, active_key, label)
-    clean_type = _validated(value_validation.validate_field_type, field_type)
-    active_rows = custom_field_rows(db, section_key=active_key)
-    if len(active_rows) >= _MAX_CUSTOM_FIELDS:
-        raise LimitReached(
-            f"每个大字段最多只能添加 {_MAX_CUSTOM_FIELDS} 个自定义字段"
-            f"（当前已有 {len(active_rows)} 个）：请先删除不用的字段后再试",
-            code="limit_reached",
-        )
-    max_sort = (
-        db.query(func.max(ProfileCustomField.sort_order))
-        .filter(ProfileCustomField.section_key == active_key)
-        .scalar()
-    )
-    row = ProfileCustomField(
-        field_id=workspace_bootstrap.generate_external_id(db, ProfileCustomField, "field_id"),
-        section_key=active_key,
-        label=clean_label,
-        label_key=label_key,
-        field_type=clean_type,
-        sort_order=0 if max_sort is None else int(max_sort) + 1,
-        revision=1,
-    )
-    db.add(row)
-    _touch_state(db, state)
-    db.commit()
-    db.refresh(row)
-    return merged_custom_field(db, row)
-
-
-@_atomic
-def update_custom_field(
-    db: Session,
-    section_key: str,
-    field_id: str,
-    *,
-    label: str | None = None,
-    sort_order: int | None = None,
-    expected_revision: int,
-) -> MergedField:
-    """改名/调整自建小字段顺序；默认字段只能隐藏（R-12）。"""
-    row, current = _prepare_field_change(db, section_key, field_id, expected_revision)
-    updates: dict[str, Any] = {}
-    if label is not None:
-        clean_label, label_key = _validate_field_label(
-            db, row.section_key, label, exclude_pk=int(row.id)
-        )
-        updates["label"] = clean_label
-        updates["label_key"] = label_key
-    if sort_order is not None:
-        updates["sort_order"] = int(sort_order)
-    if not updates:
-        return merged_custom_field(db, row)
-    _conditional_update(db, ProfileCustomField, int(row.id), current, updates)
-    _touch_state(db, workspace_bootstrap.ensure_workspace(db))
-    db.commit()
-    db.refresh(row)
-    return merged_custom_field(db, row)
-
-
-@_atomic
-def delete_custom_field(
-    db: Session,
-    section_key: str,
-    field_id: str,
-    *,
-    expected_revision: int,
-    confirm_with_values: bool = False,
-) -> dict[str, Any]:
-    """软删自定义字段：值保留在条目 JSON；含值且未确认 → 409 field_has_values。"""
-    state = workspace_bootstrap.ensure_workspace(db)
-    row, current = _prepare_field_change(db, section_key, field_id, expected_revision)
-    affected = _entry_counts(db, row.section_key, row.field_id)["affected_entries"]
-    if affected and not confirm_with_values:
-        raise Conflict(
-            f"已有 {affected} 条记录填写了这个字段，删除后它们不再显示但值会保留："
-            "请确认后重试（可先导出备份）",
-            code="field_has_values",
-            affected_entries=affected,
-        )
-    _conditional_update(db, ProfileCustomField, int(row.id), current, {"deleted_at": utcnow()})
-    _touch_state(db, state)
-    db.commit()
-    return _impact(current + 1, affected_entries=affected)
-
-
-def field_deletion_impact(db: Session, section_key: str, field_id: str) -> dict[str, Any]:
-    """删除前影响面：多少条记录已填写、恢复位置、当前 revision（R-14）。"""
-    section = str(section_key or "").strip()
-    field_key = str(field_id or "").strip()
-    affected = _entry_counts(db, section, field_key)["affected_entries"]
-    if field_key in _BUILTIN_FIELD_IDS:
-        return _impact(0, can_delete=False, affected_entries=affected)
-    row = active_custom_field(db, section, field_key)
-    if row is None:
-        raise NotFound(_FIELD_MISSING)
-    return _impact(int(row.revision or 1), affected_entries=affected)
-
 
 def ensure_section_order(db: Session) -> list[str]:
     """规范全局顺序（契约 §4：见 workspace_bootstrap.repair_section_order）。"""
     return workspace_bootstrap.repair_section_order(db)
 
+
+# 自定义小字段的定义读写拆到 definition_field_store（单文件行数预算）；这里 re-export，
+# 保持 definition_store.create_custom_field 等既有导入路径与 `from ... import` 语义不变。
+from .definition_field_store import (  # noqa: E402
+    create_custom_field,
+    delete_custom_field,
+    field_deletion_impact,
+    update_custom_field,
+)
 
 __all__ = [
     "MergedField",

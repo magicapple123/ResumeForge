@@ -28,6 +28,13 @@ from app.services.export_pipeline import ExportRequest, RenderContext, build_exp
 from app.services.resume.resume_visibility import visible_resume
 from pydantic import ValidationError
 from test_pdf_exporter import needs_font
+from tests.document_test_support import (
+    as_document,
+    items,
+    make_document,
+    stored_document,
+    values,
+)
 
 EXPORT = "/api/resumes/{id}/export"
 
@@ -115,6 +122,56 @@ def _assert_point_visibility(text: str) -> None:
 # ===== 1. 序列化三态 =====
 
 
+def test_v1_hidden_points_become_hidden_text_items():
+    """v1 的 point_ids/hidden_points 在 v2 里折叠成 TextItem.hidden（不再有下标等长不变量）。"""
+    document = as_document(_point_content())
+    experience = {
+        item["text"]: item["hidden"]
+        for item in items(document, "experience", 0)
+        if item["kind"] == "text"
+    }
+    assert experience == {"可见要点甲": False, "隐藏要点甲": True, "可见要点乙": False}
+    projects = {
+        item["text"]: item["hidden"] for item in items(document, "projects", 0) if item["kind"] == "text"
+    }
+    assert projects == {"隐藏要点乙": True, "可见要点丙": False, "可见亮点": False}
+
+
+def test_v2_hidden_text_item_roundtrips_through_save(client):
+    """v2 直接存 hidden TextItem：保存 → 详情读回 hidden 标记不丢。"""
+    content = make_document(
+        sections=[
+            {
+                "key": "experience",
+                "kind": "entries",
+                "entries": [
+                    {
+                        "items": [
+                            {
+                                "kind": "field",
+                                "key": "company",
+                                "value": "甲公司",
+                                "placement": "title",
+                            },
+                            {"kind": "text", "id": "tx_hidden_0001", "text": "隐藏要点", "hidden": True},
+                            {"kind": "text", "id": "tx_visible_0001", "text": "可见要点"},
+                        ]
+                    }
+                ],
+            }
+        ]
+    )
+    created = client.post("/api/resumes/manual", json={"title": "v2 隐藏要点", "content": content})
+    assert created.status_code == 201, created.text
+    detail = stored_document(client, created.json()["id"])
+    hidden = {
+        item["text"]: item["hidden"]
+        for item in items(detail, "experience", 0)
+        if item["kind"] == "text"
+    }
+    assert hidden == {"隐藏要点": True, "可见要点": False}
+
+
 def test_hidden_points_is_tri_state_and_empty_is_omitted():
     for kwargs in ({}, {"hidden_points": None}, {"hidden_points": []}):
         assert "hidden_points" not in ResumeExperience(company="甲", **kwargs).model_dump()
@@ -177,11 +234,14 @@ def test_html_and_text_products_exclude_hidden_points():
 
 
 def test_delivery_json_excludes_hidden_point_text():
+    """投递 JSON 是 v2 文档：隐藏要点整条剔除，可见要点按原顺序保留（不再有 point_ids）。"""
     payload = json.loads(_build("json").decode("utf-8"))
-    assert payload["experience"][0]["description"] == ["可见要点甲", "可见要点乙"]
-    assert payload["experience"][0]["point_ids"] == {"description": ["pnt0000001", "pnt0000003"]}
-    assert payload["projects"][0]["description"] == ["可见要点丙"]
-    assert payload["projects"][0]["highlights"] == ["可见亮点"]
+    assert payload["version"] == 2
+    rendered = values(payload)
+    for hidden in POINT_HIDDEN_PROBES:
+        assert hidden not in rendered, f"隐藏要点泄漏到投递 JSON：{hidden}"
+    for visible in POINT_VISIBLE_PROBES:
+        assert visible in rendered, f"可见要点被误删：{visible}"
 
 
 def test_docx_excludes_hidden_point_text():
@@ -197,9 +257,15 @@ def test_pdf_text_excludes_hidden_point_text():
 
 
 def test_save_and_clear_roundtrip_for_hidden_points(client):
+    """v1 hidden_points 转换后落到 TextItem.hidden；保存/读回都保留隐藏标记。"""
     resume_id = _create(client, _point_content())
-    detail = client.get(f"/api/resumes/{resume_id}").json()["content"]
-    assert detail["experience"][0]["hidden_points"] == ["pnt0000002"]
+    detail = stored_document(client, resume_id)
+    experience_texts = {
+        item["text"]: item["hidden"]
+        for item in items(detail, "experience", 0)
+        if item["kind"] == "text"
+    }
+    assert experience_texts == {"可见要点甲": False, "隐藏要点甲": True, "可见要点乙": False}
 
     cleared = _point_content()
     for section in ("experience", "projects"):
@@ -207,9 +273,12 @@ def test_save_and_clear_roundtrip_for_hidden_points(client):
             item.pop("hidden_points", None)
     response = client.put(f"/api/resumes/{resume_id}/content", json={"content": cleared})
     assert response.status_code == 200, response.text
-    again = client.get(f"/api/resumes/{resume_id}").json()["content"]
-    assert "hidden_points" not in again["experience"][0]
-    assert "hidden_points" not in again["projects"][0]
+    again = stored_document(client, resume_id)
+    for section in ("experience", "projects"):
+        hidden_flags = [
+            item["hidden"] for item in items(again, section, 0) if item["kind"] == "text"
+        ]
+        assert hidden_flags and not any(hidden_flags), f"{section} 的隐藏标记没有清掉"
 
 
 def test_api_rejects_non_list_hidden_points(client):
@@ -231,9 +300,9 @@ def test_engineering_snapshot_keeps_hidden_point_text(client):
     with SessionLocal() as db:
         snapshots = db.query(ResumeDeliveryRecord).all()
     assert snapshots, "record_delivery=true 必须落一份投递快照"
-    snapshot = snapshots[-1].content
-    assert snapshot["experience"][0]["description"] == ["可见要点甲", "隐藏要点甲", "可见要点乙"]
-    assert snapshot["experience"][0]["hidden_points"] == ["pnt0000002"]
+    snapshot_text = json.dumps(snapshots[-1].content, ensure_ascii=False)
+    for hidden in POINT_HIDDEN_PROBES:
+        assert hidden in snapshot_text, "内部投递快照必须保留隐藏正文"
 
 
 def test_product_text_expectations_skip_hidden_points_and_metadata():

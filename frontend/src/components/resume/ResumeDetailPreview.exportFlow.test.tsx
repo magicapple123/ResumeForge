@@ -12,6 +12,7 @@ import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { t } from "../../i18n";
 import { TEMPLATE_CATALOG } from "../../test/resumeFixtures";
+import { makeResumeDocument } from "../../test/documentHarness";
 import type { ResumeDetail, ResumeLayout } from "../../types";
 import ResumeDetailPreview from "./ResumeDetailPreview";
 
@@ -78,25 +79,7 @@ const DETAIL = {
   page_limit: 1,
   font_scale: "standard",
   created_at: "2026-10-20T08:00:00",
-  content: {
-    photo: "",
-    name: "张三",
-    gender: "",
-    birth_year: "",
-    phone: "",
-    email: "",
-    city: "",
-    personal_website: "",
-    github: "",
-    job_intent: "",
-    summary: "",
-    education: [],
-    experience: [],
-    campus_experience: [],
-    projects: [],
-    skills: [],
-    awards: [],
-  },
+  content: makeResumeDocument(),
   warnings: [],
 } as unknown as ResumeDetail;
 

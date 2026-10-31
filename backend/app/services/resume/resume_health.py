@@ -20,9 +20,9 @@ from sqlalchemy.orm import Session
 
 from ...models.claim import VERIFICATION_PENDING, ClaimRecord
 from ...models.resume import ResumeRecord, saved_only
-from ...schemas.resume import ResumeContent
 from .. import trash
-from .resume_completeness import find_incomplete
+from . import document_io
+from .resume_completeness import find_incomplete_document
 
 logger = logging.getLogger(__name__)
 
@@ -47,12 +47,13 @@ def resume_health(db: Session) -> dict:
         if record.warnings:
             with_warnings += 1
         try:
-            content = ResumeContent.model_validate(record.content)
+            content, _conversion = document_io.document_for_record(db, record)
+            incomplete = find_incomplete_document(content)
         except Exception:  # noqa: BLE001 - 脏数据不能拖垮整个看板
             # 解析不了的简历不计入待补（宁少算也不猜），但要留一条日志。
             logger.warning("简历 #%s 的 content 无法解析，健康度统计已跳过", record.id)
             continue
-        if find_incomplete(content):
+        if incomplete:
             with_placeholders += 1
 
     unverified_claims = (

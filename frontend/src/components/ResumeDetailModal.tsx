@@ -7,10 +7,11 @@
  */
 import { CloseOutlined } from "@ant-design/icons";
 import { Alert, App, Button, Modal, Popconfirm, Space, Typography } from "antd";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { fetchResumeHtml, fetchResumeTemplates, getResume, renderResume } from "../api/resumes";
 import type { ResumeDetail, ResumeLayout } from "../types";
+import type { ResumeDocument } from "../types/resumeDocument";
 import type { LayoutMeasure } from "../utils/resumeLayoutMeasure";
 import { t } from "../i18n";
 import { useLocale } from "../i18n/i18nContext";
@@ -19,16 +20,10 @@ import {
   DEFAULT_RESUME_LAYOUT,
   layoutFromDetail,
 } from "../features/resume-document/resumeDocumentHost";
-import { ensureEntryIds } from "../features/resume-document/identity";
 import { revisionOf } from "../features/resume-document/saveOutcome";
-import { remapAnnotationPaths } from "../features/resume-outline";
-import type { PathRemap } from "../features/resume-outline/paths";
 import type { ResumeDocumentPipeline } from "../features/resume-document/types";
 import { setActiveWritingResume } from "../features/resume-writing/activeResume";
 import { useResumeRelayout } from "../features/resume/useResumeRelayout";
-import { useRichTextOverrides } from "../features/resume/useRichTextOverrides";
-import type { RichTextOverlayMap } from "../features/resume/useRichTextOverrides";
-import type { RichTextEditAdapter } from "./resume-preview/richText";
 import ResumeDeliveryInfo from "./resume/ResumeDeliveryInfo";
 import ResumeDetailPreview from "./resume/ResumeDetailPreview";
 import ResumeProfileUsage from "./resume/ResumeProfileUsage";
@@ -59,17 +54,6 @@ export default function ResumeDetailModal({ recordId, onClose, autoOpenWorkbench
   // 预览量到的实测高度：只有浏览器能量准，所以由预览上报、这里转交给诊断面板。
   const [measure, setMeasure] = useState<LayoutMeasure | null>(null);
   const previewRef = useRef<ResumePreviewHandle>(null);
-  /**
-   * 「右键加粗」的乐观叠加层：把还没保存的粗体记在 `detail.content` 之外（见
-   * `useRichTextOverrides` 文件头）。这里是它**唯一**的持有者——只有这一层同时握着
-   * `detail.content`、`setHtml`、保存链路与制作台的历史。受控模式把 state 放在这里，
-   * 制作台只是读取并回写，于是撤销/恢复能连粗体一起退回去（W02/W03）。
-   */
-  const [overlayMap, setOverlayMap] = useState<RichTextOverlayMap>({});
-  const overlays = useRichTextOverrides(detail?.content ?? null, {
-    overlays: overlayMap,
-    onChange: setOverlayMap,
-  });
 
   /**
    * 把"正在看哪份简历"登记给全局右键菜单（写作增强的四个动作都要 `resume_id`）。
@@ -78,32 +62,28 @@ export default function ResumeDetailModal({ recordId, onClose, autoOpenWorkbench
    * 用户都可能选中文字右键，而它们是同一个弹窗的三个子视图。关掉弹窗即注销，
    * 免得在岗位页右键时冒出一个属于上一份简历的写作增强。
    */
-  /**
-   * W06 大纲结构命令之后：加粗 overlay 与事实标注的 path 跟着对象换到新下标。
-   * 不做这一步，把第二个项目移到第一位后，experience.1.* 的加粗会绑到别的项目上。
-   */
-  const handleRemapPaths = useCallback(
-    (remap: PathRemap) => {
-      overlays.remapPaths(remap);
-      setDetail((previous) =>
-        previous
-          ? {
-              ...previous,
-              fact_annotations: remapAnnotationPaths(previous.fact_annotations ?? [], remap),
-            }
-          : previous,
-      );
-    },
-    [overlays],
-  );
 
   /** 服务端已有新版本（表达资产插入等）：刷新 detail 并重渲染预览（不写库）。 */
   const handleDocumentSynced = useCallback(
     (synced: ResumeDetail) => {
       setDetail({ ...synced, draft: false });
-      void renderResume(ensureEntryIds(synced.content), layout).then((rendered) =>
-        setHtml(rendered),
+      void renderResume(synced.content, layout).then((rendered) => setHtml(rendered));
+    },
+    [layout],
+  );
+
+  /**
+   * 服务端已落库的文档替换（表达资产插入 / 双语采纳 / 来源采纳）：
+   * 只更新 detail.content + revision 并重渲染，不重复写库；转换提示已消费完，一并清掉。
+   */
+  const handleReplaceDocument = useCallback(
+    (document: ResumeDocument, revision: number) => {
+      setDetail((previous) =>
+        previous
+          ? { ...previous, content: document, revision, document_conversion: null, draft: false }
+          : previous,
       );
+      void renderResume(document, layout).then((rendered) => setHtml(rendered));
     },
     [layout],
   );
@@ -113,22 +93,6 @@ export default function ResumeDetailModal({ recordId, onClose, autoOpenWorkbench
     setActiveWritingResume(activeResumeId);
     return () => setActiveWritingResume(null);
   }, [activeResumeId]);
-  /**
-   * 预览用的加粗契约。**这里刻意不重渲染 html**：
-   *
-   * 纸面上那一栏已经被 `useClickToEditPreview` 就地改过（立刻看到粗体），随后由制作台的实时
-   * 预览（合并内容整份重排）或保存后的重渲染收口。若在这里再发一次 `/render`，iframe 会白屏
-   * 重载一次，把用户刚恢复的选区一并丢掉——用户的感受是"点加粗，页面闪了一下"。
-   */
-  const richEdit = useMemo<RichTextEditAdapter | undefined>(() => {
-    if (!detail) return undefined;
-    return {
-      read: (path) => overlays.read(path),
-      toggle: (path, next, base) => {
-        overlays.apply(path, next, base);
-      },
-    };
-  }, [detail, overlays]);
   /**
    * 版式重排：尾随合并（`useResumeRelayout`，项 6 / D11）。
    *
@@ -143,7 +107,7 @@ export default function ResumeDetailModal({ recordId, onClose, autoOpenWorkbench
       // `field_layout.entries.<id>` / `objects.<id>` 全靠条目 id 定位，后端读旧记录时不物化
       // id，直接送 `detail.content` 会让条目级排版在这一份 html 里退回分区默认——制作台右栏
       // 在版式提交后回落的正是这一份。已有合法 id 的条目原样保留，保存过的记录零变化。
-      setHtml(await renderResume(ensureEntryIds(detail.content), next));
+      setHtml(await renderResume(detail.content, next));
     },
     onRendered: (next) => setLayout(next),
     onError: (err) => {
@@ -188,8 +152,6 @@ export default function ResumeDetailModal({ recordId, onClose, autoOpenWorkbench
     setHtml("");
     setError("");
     setLayoutStatus(null);
-    // 换一份简历：上一条留下的加粗 overlay 绝不能跟过来（同名字段很可能就是同一句原文）。
-    overlays.clear();
     // 换一份简历：上一份留下的"要不要丢弃排版"卡片不能跟过来。
     setCloseConfirmOpen(false);
   }
@@ -258,7 +220,6 @@ export default function ResumeDetailModal({ recordId, onClose, autoOpenWorkbench
     layout,
     layoutDirty,
     layoutSaving,
-    overlays,
     message,
     readRequestVersion,
     readSaveRequestVersion,
@@ -288,9 +249,6 @@ export default function ResumeDetailModal({ recordId, onClose, autoOpenWorkbench
         fetchLatest: () => getResume(detail.id),
         adoptLatest: hostDocument.adoptLatest,
         saveAsCopy: hostDocument.saveAsCopy,
-        // 纸面加粗的唯一状态：制作台的统一历史把它并进快照，撤销/恢复经这里回写。
-        overlays: overlayMap,
-        onOverlaysChange: setOverlayMap,
       }
     : undefined;
 
@@ -402,14 +360,6 @@ export default function ResumeDetailModal({ recordId, onClose, autoOpenWorkbench
             html={html}
             layout={layout}
             autoOpenWorkbench={autoOpenWorkbench}
-            // 叠加了纸面上加粗的那几条：只给制作台的实时预览用（中栏编辑器仍吃服务端内容）。
-            liveContent={overlays.merged ?? undefined}
-            // 加粗也是"还没保存的改动"：不并进脏值，关制作台时会静默丢掉。
-            richDirty={overlays.dirty}
-            onDiscardRichText={overlays.clear}
-            // 中栏草稿也要叠上加粗再送预览：草稿里没有 overlay，不合并就会"改了字、加粗消失"。
-            mergeLive={overlays.merge}
-            richEdit={richEdit}
             layoutStatus={layoutStatus}
             measure={measure}
             pdfDirectAvailable={pdfDirectAvailable}
@@ -424,8 +374,8 @@ export default function ResumeDetailModal({ recordId, onClose, autoOpenWorkbench
             onCommitLayout={saveLayout}
             // W02 条件写 + 409 冲突三选一：见 `documentPipeline`。
             documentPipeline={documentPipeline}
-            onRemapPaths={handleRemapPaths}
             onDocumentSynced={handleDocumentSynced}
+            onReplaceDocument={handleReplaceDocument}
             // 草稿且什么都没脏时点「保存到简历中心」：见 `publishDraft`。
             onPublishDraft={publishDraft}
             // 版式 PATCH 在飞时制作台顶部的「保存修改」必须禁用：这条链路此刻返回 `false`
@@ -453,7 +403,7 @@ export default function ResumeDetailModal({ recordId, onClose, autoOpenWorkbench
                 </Space>
               ) : null
             }
-            onSaveEditedResume={(content) => saveEditedResume(content)}
+            onSaveEditedResume={saveEditedResume}
             onResumeRevised={(updated) => applyRevisedDetail(updated)}
             suggestionsGenerated={suggestionsGenerated}
             suggestionsResetKey={suggestionsResetKey}

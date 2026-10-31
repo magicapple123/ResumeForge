@@ -16,7 +16,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type { RefObject } from "react";
 import { t } from "../../../i18n";
 import { useLocale } from "../../../i18n/i18nContext";
-import { useProviewConfig } from "../../../features/resume-proview/ProviewContext";
+import { useProviewConfig } from "../../../features/resume-proview/proviewShellContext";
 import { useProviewPreferences } from "../../../features/resume-proview/preferences";
 import { photoSha256, type PhotoCropParams } from "../../../features/resume-proview/photoCrop";
 import {
@@ -111,7 +111,9 @@ export default function ProviewLayer({
   const shellCrop = config?.photo?.crop ?? null;
   const resumeId = config?.resumeId;
   useEffect(() => {
-    setCrop(resolveInitialPhotoCrop(shellCrop, resumeId));
+    // 读 format_config / 会话桥属于外部同步：setState 放进微任务，避免 effect 体里
+    // 同步 setState 的级联渲染告警（仍在本帧内生效）。
+    queueMicrotask(() => setCrop(resolveInitialPhotoCrop(shellCrop, resumeId)));
   }, [resumeId, shellCrop]);
 
   // 照片裁剪**不进覆盖层**：后端已按 format_config.photo_crop 派生裁剪图，再叠一层

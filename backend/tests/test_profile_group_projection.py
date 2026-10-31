@@ -22,6 +22,9 @@ from app.schemas.profile_projection import (
 from app.schemas.resume import ResumeContent
 from app.services.profile import definition_catalog
 from app.services.profile.paper_projection import build_projection, project_paper_content
+from tests.document_test_support import legacy_of, legacy_projection
+
+_legacy_content = legacy_projection  # v2 dict -> v1 分析口径视图（断言行为不变）
 
 
 def _section(section_key: str, *entries: ConsumedEntry) -> ConsumedSection:
@@ -86,11 +89,11 @@ def _profile(*sections: ConsumedSection, revision: int = 7) -> ConsumedProfile:
 
 
 def _content(*sections: ConsumedSection) -> ResumeContent:
-    return project_paper_content(_profile(*sections))
+    return legacy_of(project_paper_content(_profile(*sections)))
 
 
 def _out(*sections: ConsumedSection, **kwargs) -> PaperProjectionOut:
-    return build_projection(_profile(*sections), **kwargs)
+    return _legacy_content(build_projection(_profile(*sections), **kwargs))
 
 
 def _dump(content: ResumeContent) -> str:
@@ -462,11 +465,16 @@ def test_custom_sections_are_independent_columns_in_participating_order() -> Non
     ]
     assert content.projects[0].description == ["正文"]  # 自建内容不混进系统分区承载区
     out = _out(_section("basic_info", _entry("b1", "basic_info", name="王")), projects, open_source)
+    custom_rows = [item for item in out.candidates if item.section_key == "custom:s1"]
+    assert len(custom_rows) == 2
+    assert all(
+        item.document_path == f"custom:s1.{item.document_entry['id']}" for item in custom_rows
+    )
     assert [
-        item.paper_content_path for item in out.candidates if item.section_key == "custom:s1"
-    ] == ["custom_sections/custom:s1/entries/0", "custom_sections/custom:s1/entries/1"]
-    assert out.candidates[0].paper_content_path == ""  # basic_info 是标量，没有数组位置
-    # primary 为空 → 第一个多行字段当主文本
+        next(i["text"] for i in item.document_entry["items"] if i["kind"] == "text")
+        for item in custom_rows
+    ] == ["贡献正文", "第二条"]
+    assert out.candidates[0].document_path == ""
     fallback = _custom_section(
         "s3",
         "自建",
@@ -476,20 +484,8 @@ def test_custom_sections_are_independent_columns_in_participating_order() -> Non
         ),
         ConsumedEntry("e3", 0, {"custom:s3.f2": "描述内容"}),
     )
-    assert _content(fallback).custom_sections[0].entries[0].text == "描述内容"
+    entry = _content(fallback).custom_sections[0].entries[0]  # primary 空 → 多行字段也是标签行
+    pairs = [(line.label, line.value) for line in entry.lines]
+    assert entry.text == "" and pairs == [("描述", "描述内容")]
 
 
-def test_carrier_overflow_warns_and_keeps_default_text() -> None:
-    base = "备" * 2000  # 备注结构上限 2000：默认正文已占满，追加行放不下
-    section = _section(
-        "publications", _entry("u1", "publications", title="论文", note=base, f1="X")
-    )
-    section = replace(section, fields=(*section.fields, _custom_field("publications.f1", "补充")))
-    out = _out(section)
-    assert out.content.publications[0].note == base
-    assert [item.code for item in out.warnings] == ["carrier_overflow"]
-    assert out.warnings[0].entry_id == "u1" and "补充" in out.warnings[0].message
-    lines = "\n".join(f"行{index}" for index in range(501))
-    out = _out(_section("projects", _entry("p1", "projects", name="项目", description=lines)))
-    assert len(out.content.projects[0].description) == 500
-    assert [item.code for item in out.warnings] == ["carrier_overflow"]

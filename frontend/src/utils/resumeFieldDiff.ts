@@ -9,6 +9,9 @@
  * 求最小编辑脚本，再映射成 added / removed / unchanged 三态 token。
  */
 import type { ResumeContent } from "../types/resume";
+import type { ResumeDocument } from "../types/resumeDocument";
+import { isDocument } from "../features/resume-document/view";
+import { compareDocumentFields } from "./documentFieldDiff";
 import type { DiffToken } from "../types/resumeWriting";
 import type {
   FieldDiffResult,
@@ -385,11 +388,16 @@ function listFieldDiff(key: string, oldList: unknown, newList: unknown): ListSec
 
 /** 计算两份简历的字段级差异，供 ResumeFieldDiffView 渲染。 */
 export function computeFieldDiff(
-  base: ResumeContent,
-  against: ResumeContent,
+  baseInput: ResumeContent | ResumeDocument,
+  againstInput: ResumeContent | ResumeDocument,
   baseTitle: string,
   againstTitle: string,
 ): FieldDiffResult {
+  if (isDocument(baseInput) || isDocument(againstInput)) {
+    return compareDocumentFields(baseInput, againstInput, baseTitle, againstTitle, wordDiff);
+  }
+  const base = baseInput;
+  const against = againstInput;
   const changed: SectionDiff[] = [];
   const unchangedLabels: string[] = [];
   const baseObj = base as unknown as RawItem;

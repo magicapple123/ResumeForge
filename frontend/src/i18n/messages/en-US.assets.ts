@@ -20,6 +20,7 @@ const assets = {
   "assets.insert.done": "Inserted into the Resume",
   "assets.insert.newObject": "New Entry {id}",
   "assets.insert.failed": "Could not insert the expression",
+  "assets.insert.conflict": "The resume changed elsewhere. Reopen it before inserting.",
   "assets.insert.noTarget": "Select an insertion position first",
   "assets.insert.locked": "Save your current changes before inserting an asset",
   "assets.filter.search": "Search expressions",

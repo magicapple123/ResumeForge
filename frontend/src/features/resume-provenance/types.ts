@@ -56,11 +56,30 @@ export interface ProvenanceCoverage {
   unlinked: number;
 }
 
+/**
+ * 一条无法在当前正文里定位的旧关联（P5-2，只读暴露）。
+ * 旧行不迁移、不改写；界面据此前去删除或重新关联，绝不自动猜目标。
+ */
+export interface UnresolvedLinkOut {
+  link_id: number;
+  source_id: number;
+  source_title: string;
+  source_kind: string;
+  object_id: string | null;
+  point_id: string | null;
+  path: string;
+  field: string;
+  /** 稳定原因码：object_id_invalid / no_locator / target_missing。 */
+  reason: string;
+}
+
 export interface ResumeProvenanceOut {
   resume_id: number;
   revision: number;
   sources: SourceOut[];
   objects: DocumentObjectOut[];
+  /** P5-2 只增字段：解析不到的旧关联（后端恒返回，旧客户端忽略即可）。 */
+  unresolved_links: UnresolvedLinkOut[];
   coverage: ProvenanceCoverage;
 }
 
@@ -163,8 +182,24 @@ export interface RevisionTextViewOut {
 export interface ManualSourceOut {
   id: number;
   kind: string;
+  /** P5-1 只增字段：带 external_ref 新建/复用时回显来源身份。 */
+  external_ref?: string | null;
   title: string;
   revision: SourceRevisionItemOut;
+}
+
+/**
+ * POST /sources 的请求体（P5-1）。
+ *
+ * 兼容性：只给 title 时与旧请求等价（kind=manual、不带 external_ref/payload），
+ * 后端据此走 {"title": title} 的旧默认 payload，历史来源指纹不变。
+ */
+export interface ManualSourceCreateInput {
+  title: string;
+  kind?: SourceKind;
+  external_ref?: string | null;
+  /** 原文摘要：只参与指纹/修订判断，不落来源表（后端上限 2000 字符）。 */
+  payload?: string | null;
 }
 
 export interface ProvenanceSourceListOut {

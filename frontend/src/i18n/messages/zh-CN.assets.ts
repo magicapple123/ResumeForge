@@ -28,6 +28,7 @@ const assets = {
   "assets.insert.done": "已插入到简历",
   "assets.insert.newObject": "新条目 {id}",
   "assets.insert.failed": "插入没有成功",
+  "assets.insert.conflict": "简历已在别处更新，请重新打开后再插入",
   "assets.insert.noTarget": "先选中要插入的位置",
   "assets.insert.locked": "先保存当前修改，再插入资产",
 

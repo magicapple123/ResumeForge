@@ -159,13 +159,15 @@ def remove_template(template_id: int, db: Session = Depends(get_db)):
     delete_user_template(db, _template_or_404(db, template_id))
 
 
-def _preview_content(payload: TemplatePreviewRequest, db: Session) -> ResumeContent:
+def _preview_content(payload: TemplatePreviewRequest, db: Session) -> dict | ResumeContent:
+    # T4b：render_html 内部 coerce_document 同时接 v1 dict 与 v2 文档，这里**原样透传**，
+    # 不再折一次 v1 分析视图（折返会丢掉 v2 的字段位置/隐藏/自建板块）。
     if payload.content is not None:
         return payload.content
     if payload.resume_id is not None:
         record = db.get(ResumeRecord, payload.resume_id)
         if record is not None:
-            return ResumeContent.model_validate(record.content)
+            return record.content or {}
     # 内置示例按档位给详略：小字号一页装得下更多字，示例就该更密——否则大字号档的
     # 缩略图里只剩半页内容，用户会以为"选大字号以后模板就变空了"。模板名一并传：
     # compact / scholar 的默认行高比其余模板低约 25%，同一份内容在它们里面会显得空。

@@ -233,9 +233,9 @@ def test_custom_section_keeps_user_name_and_custom_section_key(client) -> None:
     # 字段行只带定义身份（field_id/key/label/field_type 之外的展示数据由前端决定）。
     assert custom["fields"][0]["label"] == "补充说明"
     assert custom["fields"][0]["field_type"] == "multi_line"
-    # 主文本标记：唯一的多行字段就是纸面投影写进 `ResumeCustomEntry.text` 的那个，
-    # 前端据此把它绑定到主文本框、其余字段绑定到「标签：值」行。两处必须是同一判定。
-    assert custom["fields"][0]["primary"] is True
+    # 主文本标记只认显式 primary_field_id（R1-E/R-37 单源）：多行字段不再自动当主文本，
+    # 与纸面投影写「标签：值」行的判定一致，避免正文 ↔ 标签行互串。
+    assert custom["fields"][0]["primary"] is False
 
     # 内置分区上挂的自建小字段同样只借道承载区，不占独立输入框。
     mentor = _create_field(client, "projects", "导师姓名", "single_line")
@@ -251,11 +251,11 @@ def test_custom_section_keeps_user_name_and_custom_section_key(client) -> None:
     assert all(item["primary"] is False for item in projects["fields"])
 
 
-def test_custom_section_primary_field_is_first_multiline(client) -> None:
-    """自建板块的主文本字段：`primary_field_id` 之外，取**第一个多行文本字段**。
+def test_custom_section_primary_requires_explicit_primary_field_id(client) -> None:
+    """自建板块的主文本字段**只认显式 primary_field_id**（R1-E/R-37 单源）。
 
-    这条与 `paper_policy.custom_section_text_field()` 同一个判定：编辑器如果把单行字段
-    当成主文本，用户改的值保存后会落到另一种列里（正文 ↔ 标签行互串）。
+    没有显式主文本时 multi_line 也是「标签：值」行，与填充/生成两条链同一形状，
+    避免“正文 ↔ 标签行”互串。
     """
     created = _create_section(client, "开源贡献")
     key = created["key"]
@@ -264,7 +264,7 @@ def test_custom_section_primary_field_is_first_multiline(client) -> None:
 
     custom = _section(_projection(client)["editor_schema"], key)
     flags = {item["field_id"]: item["primary"] for item in custom["fields"]}
-    assert flags[multi["field_id"]] is True
+    assert flags[multi["field_id"]] is False
     assert flags[single["field_id"]] is False
 
 

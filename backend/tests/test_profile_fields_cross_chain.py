@@ -283,7 +283,10 @@ def test_html_renders_f8_field_lines_in_contract_order(db_session):
     positions = [html.index(f"{label}：") for label, _ in EDUCATION_LINES]
     assert positions == sorted(positions)
     for label, value in EDUCATION_LINES:
-        assert re.search(f"{label}：<span[^>]*>{re.escape(value)}</span>", html), label
+        # v2 标签与值是相邻的两个 span（标签 span 内带全角冒号）。
+        assert re.search(
+            f"{label}：</span><span[^>]*>{re.escape(value)}</span>", html
+        ), label
     assert 'data-role="meta"' in html
 
 

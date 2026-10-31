@@ -8,7 +8,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { t } from "../../../i18n";
 import { createMockExportDeliveryApi } from "../../../features/resume-delivery";
-import type { ResumeContent } from "../../../types/resume";
+import { makeResumeDocument } from "../../../test/documentHarness";
 import ExportConfigModal from "./ExportConfigModal";
 
 const { previewMock, unsupportedError } = vi.hoisted(() => {
@@ -21,19 +21,7 @@ vi.mock("../../../features/resume-delivery/configPreview", () => ({
   previewExportConfig: previewMock,
 }));
 
-const CONTENT = {
-  photo: "",
-  name: "张三",
-  phone: "13800000000",
-  email: "",
-  summary: "",
-  education: [],
-  experience: [],
-  campus_experience: [],
-  projects: [],
-  skills: [],
-  awards: [],
-} as unknown as ResumeContent;
+const CONTENT = makeResumeDocument();
 
 function renderModal() {
   const api = createMockExportDeliveryApi({

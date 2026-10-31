@@ -18,7 +18,6 @@ from dataclasses import dataclass, field
 
 from .document_identity import ENTRY_FIELDS
 from .resume_config_domains import DOMAIN_KEYS
-from .resume_field_layout import resolve_field_layout
 from .resume_pagination import PaginationPlan, pagination_css, resolve_pagination
 from .resume_photo_crop import (
     PhotoCropPlan,
@@ -37,23 +36,16 @@ _ENTRY_FIELDS: tuple[str, ...] = ENTRY_FIELDS
 
 @dataclass(frozen=True)
 class RenderOverrides:
-    """一次渲染的全部扩展覆盖（五个 format_config 域的解析结果）。"""
+    """一次渲染的全部扩展覆盖（四个 format_config 域的解析结果）。"""
 
     style: ResolvedStyle
     pagination: PaginationPlan = field(default_factory=PaginationPlan)
     photo_crop: PhotoCropPlan | None = None
-    # W4 条目字段排版：{分区: {columns, order, solo}}；空字典 = 没有配置（默认逐字段一行）。
-    field_layout: dict = field(default_factory=dict)
 
     @property
     def empty(self) -> bool:
-        """五域全空（默认路径零变化的判据）。"""
-        return (
-            self.style.empty
-            and self.pagination.empty
-            and self.photo_crop is None
-            and not self.field_layout
-        )
+        """四域全空（默认路径零变化的判据）。"""
+        return self.style.empty and self.pagination.empty and self.photo_crop is None
 
     def photo_for_render(self, photo: str | None) -> str:
         """渲染用的照片：有裁剪计划时返回**派生**的裁剪后 data URL，否则原图。
@@ -68,12 +60,15 @@ class RenderOverrides:
 def resolve_render_overrides(
     *, template: str, format_config: dict | None, photo: str | None = None
 ) -> RenderOverrides:
-    """唯一构造点：解析 L4/L5 + 分页 + 照片裁剪 + 条目字段排版（纯函数，不抛异常）。"""
+    """唯一构造点：解析 L4/L5 角色覆盖 + 分页 + 照片裁剪（纯函数，不抛异常）。
+
+    v1 的 field_layout 域不再属于渲染配置：converter 已把它一次性迁移进 v2 文档的
+    SectionLayout/EntryLayout（planner 唯一消费），渲染器不再接收第二份列布局。
+    """
     return RenderOverrides(
         style=resolve_style(template=template, format_config=format_config),
         pagination=resolve_pagination(format_config),
         photo_crop=resolve_photo_crop(format_config, photo),
-        field_layout=resolve_field_layout(format_config),
     )
 
 
@@ -92,10 +87,20 @@ def render_overrides_css(overrides: RenderOverrides) -> str:
 
 
 def _content_object_ids(content: dict | None) -> set[str]:
-    """content 里现存的条目对象 id（只有条目 id 可作为 objects/pagination 的键）。"""
+    """content 里现存的条目对象 id（只有条目 id 可作为 objects/pagination 的键）。
+
+    v2 存储后对象 id 在 sections[].entries[].id；旧 v1 内容仍按分区数组读（兼容旧调用方，
+    例如对旧快照做一次裁剪）。item id 不是对象级样式/分页的键，不纳入。
+    """
     if not isinstance(content, dict):
         return set()
     found: set[str] = set()
+    if content.get("version") == 2:
+        for section in content.get("sections") or []:
+            for entry in (section or {}).get("entries") or []:
+                if isinstance(entry, dict) and isinstance(entry.get("id"), str):
+                    found.add(entry["id"])
+        return found
     for field_name in _ENTRY_FIELDS:
         for entry in content.get(field_name) or []:
             if isinstance(entry, dict) and isinstance(entry.get("id"), str):

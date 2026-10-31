@@ -115,10 +115,6 @@ _EXEMPTIONS: dict[str, Exemption] = {
     "backend/app/services/webform/engine/core.py": Exemption(
         "单一类内聚，无拆分缝", _STRUCTURED_BACKSTOP
     ),
-    # 3 个端点编排函数被 test_interview 以模块属性 patch
-    # （_require_provider/_ask_next_question/generate_report），读取方
-    # 必须留在本模块。触发条件：>700 行且先把 patch 改依赖注入。
-    "backend/app/api/interview.py": Exemption("monkeypatch 钉死端点编排", _STRUCTURED_BACKSTOP),
     # install_live_control_script 主体是单一注入脚本字符串（canary 整脚本
     # 断言），且 _load_face_data_uri 被 patch、_ASSET_DIR 为 __file__ 深度耦合。
     "backend/app/services/webform/live_control.py": Exemption(

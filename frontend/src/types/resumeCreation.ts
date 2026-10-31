@@ -6,7 +6,8 @@
  * 「创建态快照」字段（profile_context）。从 `types/resume` 或 `types` 的导入路径
  * 由 `resume.ts` 的 re-export 保持兼容。
  */
-import type { GenerateOptions, ResumeContent, ResumeLanguage } from "./resume";
+import type { GenerateOptions, ResumeLanguage } from "./resume";
+import type { ResumeDocument } from "./resumeDocument";
 
 /** 创建简历时冻结的「来源布局」一行（服务端会按当前组重建权威 layout，这里只作展示）。 */
 export interface ProfileCreationLayoutItem {
@@ -29,7 +30,7 @@ export interface ProfileCreationContext {
 export interface ManualResumeCreatePayload {
   job_id?: number | null;
   title?: string;
-  content: ResumeContent;
+  content: ResumeDocument;
   draft?: boolean;
   language?: ResumeLanguage;
   profile_context?: ProfileCreationContext;

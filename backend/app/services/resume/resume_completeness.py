@@ -9,6 +9,7 @@
 而"这句话对应哪条台账"需要模糊匹配，判错了会拦下本来没问题的简历。宁可少拦、
 不可误拦——误拦会让用户直接关掉这个功能。
 """
+
 from __future__ import annotations
 
 from ...models.claim import placeholder_hit
@@ -117,4 +118,58 @@ def incomplete_detail(found: list[str]) -> str:
     )
 
 
-__all__ = ["MAX_REPORTED", "find_incomplete", "incomplete_detail"]
+def find_incomplete_document(document: dict) -> list[str]:
+    """Scan the same visible v2 items as exports, including custom sections."""
+    from .document_catalog import field_label, header_field_spec, resolve_section_title
+    from .document_html import coerce_document, paper_document
+    from .resume_labels import field_labels
+
+    paper = paper_document(coerce_document(document))
+    found: list[str] = []
+
+    def add(label: str, value: str) -> None:
+        message = _check(label, value)
+        if message:
+            found.append(message)
+
+    for item in paper.header.items:
+        if item.placement not in {"hidden", "photo"}:
+            spec = header_field_spec(item.key)
+            label = field_labels(None).get(spec.label_key, item.key) if spec else item.key
+            add(item.label or label, item.value)
+    for section in paper.sections:
+        title = resolve_section_title(section.key, section.title)
+        for index, entry in enumerate(section.entries, start=1):
+            entry_title = next(
+                (
+                    str(getattr(item, "value", ""))
+                    for item in entry.items
+                    if getattr(item, "placement", None) == "title" and getattr(item, "value", "")
+                ),
+                "",
+            )
+            label = (
+                title
+                if section.kind == "text"
+                else f"{title}「{entry_title}」"
+                if entry_title
+                else f"{title} 第 {index} 条"
+            )
+            for item in entry.items:
+                key = getattr(item, "key", "")
+                name = getattr(item, "label", "") or field_label(section.key, key)
+                location = f"{label} {name}".strip()
+                if item.kind == "text":
+                    add(location, item.text)
+                elif item.kind == "list":
+                    for value in item.values:
+                        add(location, value)
+                elif item.kind == "authors":
+                    for author in item.authors:
+                        add(location, author.name)
+                else:
+                    add(location, item.value)
+    return found
+
+
+__all__ = ["MAX_REPORTED", "find_incomplete", "find_incomplete_document", "incomplete_detail"]

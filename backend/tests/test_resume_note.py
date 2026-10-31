@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """简历备注：列表可见、详情可编辑（B5）。"""
 from app.models.resume import ResumeRecord
+from tests.document_test_support import header_value
 
 
 def _create_resume(db_session, *, title: str = "测试简历", note: str = "") -> ResumeRecord:
@@ -30,7 +31,7 @@ def test_update_resume_note_persists_and_does_not_touch_content(client, db_sessi
     detail = client.get(f"/api/resumes/{record.id}").json()
     assert detail["note"] == "重点突出量化成果"
     # 备注只改备注，不覆盖正文/名称。
-    assert detail["content"]["name"] == "测试用户"
+    assert header_value(detail["content"], "name") == "测试用户"
     assert detail["title"] == "测试简历"
     assert client.get("/api/resumes").json()["items"][0]["note"] == "重点突出量化成果"
 

@@ -270,9 +270,10 @@ describe("ResumeDetailPreview 底部按钮排满整行", () => {
     fireEvent.click(screen.getByRole("button", { name: /简历制作台/ }));
     await screen.findByRole("dialog", { name: "简历制作台" });
 
-    const nameInput = document.getElementById("name") as HTMLInputElement;
-    expect(nameInput).not.toBeNull();
+    // V2 中栏：页眉姓名是「基本信息」面板里的受控 Input（aria-label = 字段目录标签）。
+    const nameInput = screen.getByRole("textbox", { name: "姓名" });
     fireEvent.change(nameInput, { target: { value: "李四" } });
+    expect(nameInput).toHaveValue("李四");
 
     // 预览里已经没有「手动调整」，脏值不再需要禁用任何按钮。
     expect(screen.queryByRole("button", { name: /手动调整/ })).toBeNull();

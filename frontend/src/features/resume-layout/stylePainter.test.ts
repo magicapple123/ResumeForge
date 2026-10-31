@@ -5,7 +5,12 @@
  */
 import { describe, expect, it } from "vitest";
 import { readStyleDomains, withObjectProp, withRoleProp } from "./styleOverrides";
-import { applyPainterPatch, freezeObjectStyle, painterPatch } from "./stylePainter";
+import {
+  applyPainterPatch,
+  freezeObjectRoleStyle,
+  freezeObjectStyle,
+  painterPatch,
+} from "./stylePainter";
 
 const SRC = "exp_12345678";
 const DST = "prj_87654321";
@@ -66,6 +71,32 @@ describe("stylePainter · 固化为局部调整", () => {
     } as never);
     expect(config).toEqual({
       objects: { version: 1, [SRC]: { font_scale: 1.1, line_height: 1.4 } },
+    });
+  });
+});
+
+describe("stylePainter · 子范围固化（Q12/Q14）", () => {
+  it("只写 object_roles，不动 objects 与其它角色（条目头 / 正文 / 灰字按范围执行）", () => {
+    const config = freezeObjectRoleStyle({}, SRC, "body", {
+      indent: 0.5,
+      line_height: 1.4,
+      bold: true,
+    } as never);
+    expect(config).toEqual({
+      object_roles: {
+        version: 1,
+        [`${SRC}:body`]: { indent: 0.5, line_height: 1.4, bold: true },
+      },
+    });
+  });
+
+  it("角色不允许的属性被丢弃（灰字没有段距 / 缩进）", () => {
+    const config = freezeObjectRoleStyle({}, SRC, "meta", {
+      color: "#123c69",
+      indent: 0.5,
+    } as never);
+    expect(config).toEqual({
+      object_roles: { version: 1, [`${SRC}:meta`]: { color: "#123c69" } },
     });
   });
 });

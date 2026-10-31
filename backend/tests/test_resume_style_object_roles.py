@@ -231,8 +231,10 @@ def test_html_rule_only_forwards_text_appearance_props():
     )
     declarations = _rules(css)[f'[data-object-id="{ENTRY_ID}"] [data-role="body"]']
     assert "font-size: calc(var(--fs) * 1.2 * 1);" in declarations
-    # 空间/对齐/符号仍只落在对象根（这里没有对象根覆盖，所以一个都不出现）。
-    for token in ("margin-top", "margin-bottom", "padding-left", "text-align", "list-style"):
+    # Q12：对齐属于「正文」范围，允许转发到该角色的文字元素。
+    assert "text-align: center;" in declarations
+    # 段距 / 缩进 / 符号仍只落在对象根与定向规则（这里没有对象根覆盖，所以一个都不出现）。
+    for token in ("margin-top", "margin-bottom", "padding-left", "list-style"):
         assert token not in declarations
 
 

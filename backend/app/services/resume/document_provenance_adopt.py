@@ -26,9 +26,10 @@ from sqlalchemy.orm import Session
 
 from ...models.provenance import ResumeBlockSource, ResumeSource, ResumeSourceRevision
 from ...models.resume import ResumeRecord
-from . import fact_locks
-from .document_identity import resolve_object_path, resolve_point_path
+from . import document_io, fact_locks
+from .document_paths import resolve_document_path, write_document_value
 from .document_provenance import canonical_fingerprint
+from .document_provenance_nodes import resolved_link_path
 from .document_provenance_source_text import resolve_current_source_text
 from .document_save import save_content
 
@@ -53,88 +54,42 @@ class SourceRevisionStale(ValueError):
         self.expected_fingerprint = expected_fingerprint
 
 
-def _read_path(payload: Any, path: str) -> Any:
-    current: Any = payload
-    for segment in path.split("."):
-        if isinstance(current, dict):
-            if segment not in current:
-                return _MISSING
-            current = current[segment]
-        elif isinstance(current, list):
-            try:
-                current = current[int(segment)]
-            except (ValueError, IndexError):
-                return _MISSING
-        else:
-            return _MISSING
-    return current
-
-
-def _write_text_at_path(payload: Any, path: str, text: str) -> bool:
-    """只把**已存在的字符串叶子**改成新文本；不新建键、不改数组长度。"""
-    segments = path.split(".")
-    current: Any = payload
-    for segment in segments[:-1]:
-        if isinstance(current, dict):
-            if segment not in current:
-                return False
-            current = current[segment]
-        elif isinstance(current, list):
-            try:
-                current = current[int(segment)]
-            except (ValueError, IndexError):
-                return False
-        else:
-            return False
-    leaf = segments[-1]
-    if isinstance(current, dict):
-        if not isinstance(current.get(leaf), str):
-            return False
-        current[leaf] = text
-        return True
-    if isinstance(current, list):
-        try:
-            index = int(leaf)
-        except ValueError:
-            return False
-        if not 0 <= index < len(current) or not isinstance(current[index], str):
-            return False
-        current[index] = text
-        return True
-    return False
-
-
-def _block_base_path(record: ResumeRecord, link: ResumeBlockSource) -> str | None:
-    content = record.content or {}
-    if link.object_id:
-        resolved = (
-            resolve_point_path(content, link.object_id, link.point_id)
-            if link.point_id
-            else resolve_object_path(content, link.object_id)
-        )
-        if resolved is not None:
-            return resolved
-    if link.path and _read_path(content, link.path) is not _MISSING:
-        return link.path
-    return None
+def _block_base_path(
+    record: ResumeRecord, link: ResumeBlockSource, document: dict | None = None
+) -> str | None:
+    document = (
+        document if document is not None else document_io.document_for_record(None, record)[0]
+    )
+    return resolved_link_path(document, link)
 
 
 def resolve_adopt_target(
-    record: ResumeRecord, link: ResumeBlockSource, requested_path: str | None
+    record: ResumeRecord,
+    link: ResumeBlockSource,
+    requested_path: str | None,
+    *,
+    document: dict | None = None,
 ) -> str:
-    """解析「把这段来源文本写到哪」：返回当前正文里的叶子路径；解析不到抛 AdoptError。"""
-    base = _block_base_path(record, link)
+    document = (
+        document if document is not None else document_io.document_for_record(None, record)[0]
+    )
+    base = _block_base_path(record, link, document)
     if base is None:
         raise AdoptError("关联的目标块在当前正文里找不到（可能已被删除或标识过期）")
-    if requested_path:
-        candidate = requested_path.strip()
-        if candidate != base and not candidate.startswith(base + "."):
-            raise AdoptError("写入路径必须位于所关联的目标块内")
-    else:
-        candidate = base
-    value = _read_path(record.content or {}, candidate)
-    if isinstance(value, str):
-        return candidate
+    target = resolve_document_path(document, requested_path.strip() if requested_path else base)
+    if target is None:
+        raise AdoptError("目标位置在当前正文里找不到")
+    if target.path != base and not target.path.startswith(base + "."):
+        raise AdoptError("写入路径必须位于所关联的目标块内")
+    if isinstance(target.read(), str):
+        return target.path
+    if (
+        target.item is not None
+        and target.item.get("kind") == "list"
+        and not target.suffix
+        and link.point_id == target.item.get("id")
+    ):
+        return target.path
     raise AdoptError("这条关联指向条目而不是一段文字，请指定要写入的字段路径")
 
 
@@ -188,10 +143,19 @@ def adopt_source_text(
             resolved_text
         ):
             raise SourceRevisionStale(expected_fingerprint)
-    target = resolve_adopt_target(record, link, path)
-    new_content = copy.deepcopy(record.content or {})
-    if not _write_text_at_path(new_content, target, cleaned):
-        raise AdoptError("目标位置不是一段文本，无法写入")
+    document = document_io.document_for_record(db, record)[0]
+    target = resolve_adopt_target(record, link, path, document=document)
+    new_content = copy.deepcopy(document)
+    node = resolve_document_path(new_content, target)
+    value: str | list[str] = cleaned
+    if node.item is not None and node.item.get("kind") == "list" and not node.suffix:
+        hidden = set(node.item.get("hidden_values") or [])
+        value = [
+            cleaned,
+            *(v for v in node.item.get("values") or [] if v in hidden and v != cleaned),
+        ]
+    if not write_document_value(new_content, target, value):
+        raise AdoptError("目标位置不是一段可写入的文本，无法采纳")
     # 锁闸门在写库之前：事实锁与 lock_content 共用同一份 violations 形状。
     violations = fact_locks.validate_document_locks(db, record, new_content)
     if violations:
@@ -199,7 +163,12 @@ def adopt_source_text(
     outcome = save_content(
         db,
         record_id=record.id,
-        content=new_content,
+        content=document_io.prepare_document_for_save(
+            new_content,
+            language=record.language,
+            format_config=record.format_config or {},
+            custom_fields=document_io.custom_field_definitions(db),
+        ),
         expected_revision=expected_revision,
     )
     if outcome is None:

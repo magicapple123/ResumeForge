@@ -55,6 +55,12 @@ const pagination = {
   "pagination.breaks.unknownEntry": "已删除的条目",
   /** 条目芯片的清除按钮：动作写清是哪一条。 */
   "pagination.breaks.clearEntry": "清除「{label}」的条目断页",
+  /** 汇总芯片上的 ✕：label 已包含板块/条目名与开关名，这里只补动作。 */
+  "pagination.breaks.clearChip": "清除断页设置：{label}",
+  /** 还没有任何断页时的空态（不编造数字）。 */
+  "pagination.breaks.empty": "还没有设置断页",
+  /** 芯片点击跳转的说明：这是唯一能"看它落在哪"的入口。 */
+  "pagination.breaks.jumpHint": "跳到结构页签的这条设置",
   /** 条目芯片的说明：两层断页互不干扰，别让用户以为「恢复自然分页」能清掉条目断页。 */
   "pagination.breaks.entryHint": "条目断页只作用于这一条，「恢复自然分页」不会清除它",
 
@@ -98,11 +104,16 @@ const pagination = {
 
   // ── 草稿说明 ───────────────────────────────────────────────
   "pagination.draft.note": "手动分页在草稿预览里不显示，用精确预览核对实际断页",
+  /** Q09：面板顶部固定说明旁的「切到精确预览」。 */
+  "pagination.exactPreview.switch": "切到精确预览",
+  "pagination.exactPreview.hint": "断页只在精确预览与导出里生效",
+  "pagination.exactPreview.already": "当前已在精确预览",
 
   // ── 格式支持（矩阵口径）─────────────────────────────────────
   "pagination.capability.title": "格式支持",
   /** 没有矩阵时的指引：说清"去哪里能拿到"，而不是让用户自己去猜"检查"在哪。 */
-  "pagination.capability.pending": "在「检查」里生成一次报告后，这里会按能力矩阵说明各格式的支持情况",
+  "pagination.capability.pending":
+    "在「检查」里生成一次报告后，这里会按能力矩阵说明各格式的支持情况",
   "pagination.capability.allSupported": "三种格式都支持",
   "pagination.capability.details": "分页报告",
   "pagination.capability.entryBreak": "手动分页",

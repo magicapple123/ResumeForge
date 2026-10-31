@@ -1,0 +1,498 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/*
+ * 制作台「简历结构示例」弹窗：示意 A4 纸 + 图例。
+ *
+ * 这张纸是**画出来的说明图**，不是真实简历渲染：内容固定、尺寸按 A4 比例（210:297）
+ * 写死在示意稿里，只负责回答「哪个排版参数管纸上的哪一块」。
+ *
+ * ## 颜色分两层
+ *
+ * - 纸外（图例、弹窗）用全局 --rf-* token，跟随深色主题；
+ * - 纸内用本文件顶部那组 --rf-structure-* 局部常量。A4 纸在两种主题下都是白纸
+ *   （--rf-paper 的语义：导出与打印看到的就是屏幕上这张纸），如果纸内墨色用会随主题
+ *   翻转的 --rf-text-*，深色主题下就变成"白纸浅字"。这组常量只服务这一张示意图，
+ *   不进 design-tokens（它们不是全站语义色，放进主题层反而会被要求有深色副本）。
+ */
+
+/* ── 弹窗与两栏布局 ─────────────────────────────────────────────── */
+
+.resume-structure-layout {
+  display: flex;
+  align-items: flex-start;
+  gap: 24px;
+}
+
+.resume-structure-paper-wrap {
+  flex: 0 0 340px;
+  min-width: 0;
+}
+
+/* ── 示意 A4 纸 ─────────────────────────────────────────────────── */
+
+.resume-structure-page {
+  /* 纸面墨色：刻意不跟随主题翻转，理由见文件头。 */
+  --rf-structure-ink: #223047;
+  --rf-structure-ink-soft: #5f6b7a;
+  --rf-structure-wash: #f3f6f9;
+  --rf-structure-rule: #dfe6ee;
+  --rf-structure-rule-strong: #b9c4d0;
+  --rf-structure-accent: #0958d9;
+  --rf-structure-tint: #e6f4ff;
+  position: relative;
+  box-sizing: border-box;
+  width: 100%;
+  aspect-ratio: 210 / 297;
+  overflow: hidden;
+  padding: 26px 30px;
+  border: 1px solid var(--rf-structure-rule);
+  border-radius: 4px;
+  background: var(--rf-paper);
+  box-shadow: 0 2px 10px var(--rf-scrim);
+  color: var(--rf-structure-ink);
+  font-size: 9px;
+  line-height: 1.5;
+}
+
+/* 可高亮的区域共用这一层：高亮只换底色/描边，不改变布局，纸面不会被高亮挤动。 */
+.resume-structure-hit {
+  position: relative;
+  border-radius: 3px;
+}
+
+.resume-structure-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.resume-structure-identity {
+  padding: 2px 4px;
+}
+
+.resume-structure-name {
+  color: var(--rf-structure-ink);
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  line-height: 1.25;
+}
+
+.resume-structure-contact {
+  margin-top: 3px;
+  color: var(--rf-structure-ink-soft);
+  font-size: 8.5px;
+  letter-spacing: 0.02em;
+}
+
+.resume-structure-photo {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 48px;
+  border: 1px dashed var(--rf-structure-rule-strong);
+  border-radius: 2px;
+  background: var(--rf-structure-wash);
+  color: var(--rf-structure-ink-soft);
+  font-size: 8px;
+}
+
+/* ── 板块 / 条目 ────────────────────────────────────────────────── */
+
+.resume-structure-section {
+  padding: 2px 0;
+}
+
+/* 没有「板块间距」标注的相邻板块（示意稿末段）用固定留白，别让第三段贴住上一段。 */
+.resume-structure-section + .resume-structure-section {
+  margin-top: 10px;
+}
+
+.resume-structure-section-title {
+  margin: 0 0 5px;
+  padding-bottom: 2px;
+  border-bottom: 1px solid var(--rf-structure-rule);
+  color: var(--rf-structure-ink);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+}
+
+.resume-structure-entry {
+  padding: 1px 0;
+}
+
+.resume-structure-entry-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 1px 0;
+}
+
+.resume-structure-entry-title {
+  color: var(--rf-structure-ink);
+  font-size: 9.5px;
+  font-weight: 600;
+}
+
+.resume-structure-entry-date {
+  flex: 0 0 auto;
+  color: var(--rf-structure-ink-soft);
+  font-size: 8.5px;
+  white-space: nowrap;
+}
+
+/* ── 正文 / 要点 / 行距 / 缩进 ──────────────────────────────────── */
+
+.resume-structure-body {
+  margin-top: 3px;
+  padding-left: 2px;
+}
+
+.resume-structure-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.resume-structure-list-item {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  font-size: 9px;
+  line-height: 1.65;
+}
+
+.resume-structure-dot {
+  flex: 0 0 auto;
+  min-width: 10px;
+  color: var(--rf-structure-ink-soft);
+  font-size: 9px;
+  text-align: center;
+}
+
+/* 行距示意：贴在要点右侧的一条竖向标尺（高亮时只换虚线颜色）。 */
+.resume-structure-ruler {
+  position: absolute;
+  top: 0;
+  right: -12px;
+  bottom: 0;
+  width: 2px;
+  border-left: 1px dashed var(--rf-structure-rule-strong);
+}
+
+.resume-structure-text {
+  margin: 0;
+  color: var(--rf-structure-ink);
+  font-size: 9px;
+  line-height: 1.6;
+}
+
+.resume-structure-text--indent {
+  padding-left: 18px;
+}
+
+/* 缩进量的示意线：让「缩进」不只靠一块底色解释。 */
+.resume-structure-text--indent::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 6px;
+  border-left: 1px dashed var(--rf-structure-rule-strong);
+}
+
+.resume-structure-text--align {
+  text-align: justify;
+}
+
+/* ── 段前段后 / 板块间距 / 条目间距 / 分页线 ────────────────────── */
+
+.resume-structure-space {
+  height: 9px;
+  margin: 1px 0;
+  border-top: 1px dashed var(--rf-structure-rule);
+}
+
+.resume-structure-gap {
+  border-top: 1px dashed var(--rf-structure-rule-strong);
+  border-bottom: 1px dashed var(--rf-structure-rule-strong);
+}
+
+.resume-structure-gap--entry {
+  height: 10px;
+  margin: 2px 0;
+}
+
+.resume-structure-gap--section {
+  height: 14px;
+  margin: 8px 0 10px;
+}
+
+.resume-structure-page-break {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  left: 12px;
+  height: 0;
+  border-top: 1px dashed var(--rf-structure-rule-strong);
+}
+
+/* ── 页边距：内容框 + 四边短标注 ───────────────────────────────── */
+
+.resume-structure-margin-frame {
+  position: absolute;
+  top: 24px;
+  right: 28px;
+  bottom: 24px;
+  left: 28px;
+  border: 1px dashed var(--rf-structure-rule-strong);
+  pointer-events: none;
+}
+
+.resume-structure-margin-tag {
+  position: absolute;
+  color: var(--rf-structure-ink-soft);
+  font-size: 7px;
+  letter-spacing: 0.08em;
+}
+
+.resume-structure-margin-tag--top {
+  top: -14px;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.resume-structure-margin-tag--right {
+  top: 50%;
+  right: -22px;
+  transform: translateY(-50%);
+}
+
+.resume-structure-margin-tag--bottom {
+  bottom: -14px;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.resume-structure-margin-tag--left {
+  top: 50%;
+  left: -22px;
+  transform: translateY(-50%);
+}
+
+/* ── 编号圆点 ───────────────────────────────────────────────────── */
+
+.resume-structure-marker {
+  position: absolute;
+  z-index: 2;
+  top: -8px;
+  right: -22px;
+  display: flex;
+  width: 15px;
+  height: 15px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--rf-structure-accent);
+  border-radius: 50%;
+  background: var(--rf-paper);
+  color: var(--rf-structure-accent);
+  font-size: 8px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+/*
+ * 编号排进纸面两侧的页边距里（而不是压在正文上）：正文右缘外侧一排、左缘外侧一排，
+ * 同一个区域里的相邻标注再按上下错开。改成"贴边"之前 4/6/9 会盖住正文首字、7 会盖住日期。
+ */
+.resume-structure-marker--1 {
+  top: -10px;
+  right: auto;
+  left: -18px;
+}
+
+.resume-structure-marker--3 {
+  top: 18px;
+  right: auto;
+  left: -22px;
+}
+
+.resume-structure-marker--4,
+.resume-structure-marker--6,
+.resume-structure-marker--8 {
+  right: auto;
+  left: -22px;
+}
+
+/* 9 锚在项目符号上：往下挪一档，避免和同一列的 8（正文）叠在一起。 */
+.resume-structure-marker--9 {
+  top: 18px;
+  right: auto;
+  left: -22px;
+}
+
+.resume-structure-marker--11 {
+  right: auto;
+  left: -22px;
+}
+
+/* 15 在两条条目之间：往下挪半格，避开上方 10（行距标尺）的编号。 */
+.resume-structure-marker--15 {
+  top: 6px;
+}
+
+/* 10（行距标尺）与 16（分页线）自己的右缘已经贴到纸边：编号往回收，别被纸面裁掉。 */
+.resume-structure-marker--10,
+.resume-structure-marker--16 {
+  right: -8px;
+}
+
+/* ── 高亮：唯一的交互反馈（悬停 / 点击图例时给对应区域加 .is-active）── */
+
+.resume-structure-hit.is-active {
+  background: var(--rf-structure-tint);
+  box-shadow: inset 0 0 0 1px var(--rf-structure-accent);
+}
+
+/* 页边距只让内容框虚线与四边标注变色，别把整张纸刷成蓝底。 */
+.resume-structure-margin-frame.is-active {
+  border-color: var(--rf-structure-accent);
+  background: transparent;
+  box-shadow: none;
+}
+
+.resume-structure-margin-frame.is-active .resume-structure-margin-tag {
+  color: var(--rf-structure-accent);
+}
+
+/* 一条线 / 一个小点：底色会显得像一块砖，只换描边或前景色。 */
+.resume-structure-photo.is-active {
+  border-color: var(--rf-structure-accent);
+  background: var(--rf-structure-tint);
+}
+
+.resume-structure-dot.is-active {
+  background: transparent;
+  box-shadow: none;
+  color: var(--rf-structure-accent);
+}
+
+.resume-structure-ruler.is-active,
+.resume-structure-page-break.is-active {
+  border-color: var(--rf-structure-accent);
+  background: transparent;
+  box-shadow: none;
+}
+
+/* 段前段后 / 板块间距 / 条目间距本来就是空白，高亮时铺一层浅底。 */
+.resume-structure-space.is-active,
+.resume-structure-gap.is-active {
+  border-color: var(--rf-structure-accent);
+  background: var(--rf-structure-tint);
+  box-shadow: none;
+}
+
+/* ── 图例 ───────────────────────────────────────────────────────── */
+
+.resume-structure-legend-panel {
+  display: flex;
+  flex: 1 1 320px;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.resume-structure-legend-hint {
+  margin: 0;
+  color: var(--rf-text-secondary);
+  font-size: 12px;
+}
+
+.resume-structure-legend {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: min(56vh, 520px);
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+
+/* antd-override: 私有形态 —— 图例行是整块可点的两行文本（编号 + 标题 + 说明），
+   antd Button 的定高 / 单行省略 / 居中在这里都不适用，用自定义类把它展开成列表行。 */
+.resume-structure-legend-item.ant-btn {
+  display: flex;
+  height: auto;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  color: var(--rf-text-body);
+  text-align: left;
+  white-space: normal;
+}
+
+.resume-structure-legend-item.ant-btn:hover {
+  background: var(--rf-surface-alt);
+}
+
+.resume-structure-legend-item.is-pinned.ant-btn {
+  border-color: var(--rf-info);
+  background: var(--rf-info-bg);
+}
+
+.resume-structure-legend-num {
+  display: inline-flex;
+  flex: 0 0 auto;
+  width: 20px;
+  height: 20px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--rf-brand-fill);
+  color: var(--rf-on-brand);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.resume-structure-legend-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.resume-structure-legend-title {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.resume-structure-legend-desc {
+  color: var(--rf-text-secondary);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+/* 窄屏（标准断点 767）：纸在上、图例在下；图例不再内部滚动，跟弹窗一起滚。 */
+@media (max-width: 767px) {
+  .resume-structure-layout {
+    flex-direction: column;
+  }
+
+  .resume-structure-paper-wrap {
+    flex: 0 0 auto;
+    align-self: center;
+    width: min(100%, 340px);
+  }
+
+  .resume-structure-legend {
+    max-height: none;
+  }
+}

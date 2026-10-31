@@ -136,13 +136,13 @@ def appended_field_specs(section_key: str) -> tuple[ConsumedFieldSpec, ...]:
 
 
 def custom_section_text_field(section: ConsumedSection) -> str | None:
-    """自建分区的主文本字段 id：primary_field_id 优先，否则第一个多行文本字段。"""
+    """自建分区的主文本字段 id：**只认显式 primary_field_id**（R1-E/R-37 单源）。
+
+    不做多行字段回退：否则两条链形状不一致且丢 label/source；无主文本时全走「标签：值」行。
+    """
     primary = str(section.primary_field_id or "").strip()
     if primary and any(spec.field_id == primary for spec in section.fields):
         return primary
-    for spec in section.fields:
-        if spec.field_type == "multi_line":
-            return spec.field_id
     return None
 
 

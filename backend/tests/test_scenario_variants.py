@@ -17,7 +17,14 @@ import json
 
 from app.schemas.setting import LLMConfig
 from app.services.resume.resume_delivery import canonical_content_sha256
+from tests.document_test_support import body_texts, entries_of
 
+
+def _summary(content: dict) -> str:
+    """v2 content 的个人总结文本（summary 是 text 分区里的 TextItem）。"""
+    texts = body_texts(content, "summary")
+    assert texts, "v2 content 里没有 summary 文本"
+    return texts[0]
 CONTENT = {
     "name": "张示例",
     "phone": "13800000000",
@@ -125,11 +132,11 @@ def test_create_scenario_variant_freezes_context_and_leaves_source_untouched(cli
     assert variant["context_snapshot"]["scenario_id"] == scenario["id"]
     # 源简历零写入：内容、revision、context_snapshot 都不变。
     source = client.get(f"/api/resumes/{resume['id']}").json()
-    assert source["content"]["summary"] == "原始总结"
+    assert _summary(source["content"]) == "原始总结"
     assert source["revision"] == resume["revision"]
     assert source["context_snapshot"] is None
     # 变体内容从源简历复制。
-    assert _variant_content(client, resume["id"], variant["id"])["summary"] == "原始总结"
+    assert _summary(_variant_content(client, resume["id"], variant["id"])) == "原始总结"
 
 
 def test_create_with_unknown_scenario_fails_without_variant(client):
@@ -167,7 +174,7 @@ def test_preview_returns_candidate_without_writing(client, monkeypatch):
     )
     assert response.status_code == 200, response.text
     body = response.json()
-    assert body["candidate_content"]["summary"] == "场景改写后的总结"
+    assert _summary(body["candidate_content"]) == "场景改写后的总结"
     assert body["base_content_sha256"] == before_sha
     assert body["context_sha256"] == variant["context_snapshot"]["context_sha256"]
     # 提示词确实带上了场景表达块与用户指令；事实字段仍在。
@@ -176,9 +183,9 @@ def test_preview_returns_candidate_without_writing(client, monkeypatch):
     assert "跨行转岗" in prompt
     assert "突出可转移技能" in prompt
     # 预览不落库：变体内容与源简历都没变。
-    assert _variant_content(client, resume["id"], variant["id"])["summary"] == "原始总结"
+    assert _summary(_variant_content(client, resume["id"], variant["id"])) == "原始总结"
     source = client.get(f"/api/resumes/{resume['id']}").json()
-    assert source["content"]["summary"] == "原始总结"
+    assert _summary(source["content"]) == "原始总结"
     assert source["revision"] == resume["revision"]
 
 
@@ -228,17 +235,17 @@ def test_adopt_writes_only_the_variant(client, monkeypatch):
     )
     assert response.status_code == 200, response.text
     adopted = response.json()
-    assert adopted["content"]["summary"] == "采纳后的总结"
+    assert _summary(adopted["content"]) == "采纳后的总结"
     assert adopted["context_snapshot"]["display_name"] == "跨行转岗"
     # 锁标记随采纳保留（模型输出通常不带锁字段）。
-    assert adopted["content"]["experience"][0]["lock_content"] is True
+    assert entries_of(adopted["content"], "experience")[0]["lock_content"] is True
     # 源简历一个字段都不写。
     source = client.get(f"/api/resumes/{resume['id']}").json()
-    assert source["content"]["summary"] == "原始总结"
+    assert _summary(source["content"]) == "原始总结"
     assert source["revision"] == resume["revision"]
     # 变体详情与列表都反映新内容。
     detail = _variant_content(client, resume["id"], variant["id"])
-    assert detail["summary"] == "采纳后的总结"
+    assert _summary(detail) == "采纳后的总结"
 
 
 def test_adopt_rejects_when_variant_changed_after_preview(client, monkeypatch):
@@ -271,7 +278,7 @@ def test_adopt_rejects_when_variant_changed_after_preview(client, monkeypatch):
     )
     assert response.status_code == 409
     assert response.json()["code"] == "variant_content_conflict"
-    assert _variant_content(client, resume["id"], variant["id"])["summary"] == "原始总结"
+    assert _summary(_variant_content(client, resume["id"], variant["id"])) == "原始总结"
 
 
 def test_adopt_rejects_when_scenario_changed_after_preview(client, monkeypatch):
@@ -328,7 +335,7 @@ def test_adopt_respects_variant_content_locks(client, monkeypatch):
     assert response.status_code == 409
     assert response.json()["code"] == "fact_lock_conflict"
     assert response.json()["violations"]
-    assert _variant_content(client, resume["id"], variant["id"])["summary"] == "原始总结"
+    assert _summary(_variant_content(client, resume["id"], variant["id"])) == "原始总结"
 
 
 def test_canonical_sha_is_stable_for_untouched_content():

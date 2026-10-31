@@ -21,6 +21,7 @@ from fpdf.enums import XPos, YPos
 from .fonts import FONT_FAMILY
 from .layout import _PX_TO_MM, _PX_TO_PT
 from .rich_text import drawn_text
+from .text_fit import entry_head_columns, truncate_to_width
 
 if TYPE_CHECKING:  # pragma: no cover - 只为类型检查，运行期不能导入 canvas（会循环导入）
     from ..resume.resume_style import RoleStyle
@@ -29,6 +30,19 @@ if TYPE_CHECKING:  # pragma: no cover - 只为类型检查，运行期不能导�
 # 列表项符号（与 canvas 之前的值逐字一致；canvas 仍 re-export 给既有测试/调用方）。
 _BULLET_MARK = "· "
 _BULLET_CHARS = {"dot": "· ", "dash": "– ", "none": ""}
+# 圆点符号与正文同号时在纸面上几乎看不见（2026-10-29 用户截图：精确预览里的点"快看不清"）：
+# 只把「圆点」类符号放大到正文的 1.35 倍；破折号 / 无符号保持原样（改字形大小，不改项目内容）。
+_BULLET_SIZE_SCALE = 1.35
+
+
+def _bullet_font_size(font_size: float, bullet: str) -> float:
+    """项目符号自身的字号：圆点放大，其它符号（破折号等）沿用正文。"""
+    return font_size * _BULLET_SIZE_SCALE if bullet.strip() == "·" else font_size
+
+# 条目头左右两栏之间要留出的间距（mm）：左栏 cell 只包到"实测标题宽 + 这一段"，右栏
+# 从它后面开始并占满剩余宽度。右栏文字预算再扣掉 cell 的左右内边距（各 1mm），所以两段
+# 文字之间的实际留白不小于 2.5mm——日期/会议名再长也不会贴到标题上。
+_ENTRY_HEAD_GAP_MM = 2.5
 
 
 def parse_color(value: str | None) -> tuple[int, int, int] | None:
@@ -65,6 +79,18 @@ def _bold(pdf: _ResumePDF, style: RoleStyle | None, default: bool) -> bool:
     if style is not None and style.bold is not None:
         return bool(style.bold)
     return default
+
+
+def _letter_spacing_mm(base: float, style: RoleStyle | None) -> float:
+    """角色/对象覆盖的字距（× 基准字号）→ 文档单位 mm；未设置返回 0。
+
+    Q11：fpdf2 2.8.9 的 set_char_spacing 以**文档单位**收值（本画布 unit=mm），而
+    HTML 的 letter-spacing 是 px × 基准字号；两处都从 base_px 派生，不会出现第二套数字。
+    """
+    value = style.letter_spacing if style is not None else None
+    if not isinstance(value, (int, float)) or isinstance(value, bool):
+        return 0.0
+    return float(base) * float(value) * _PX_TO_MM
 
 
 def _wrapmode_args(pdf: _ResumePDF, text: str, width: float, size_pt: float) -> dict:
@@ -245,8 +271,14 @@ def draw_bullets(
     )
     align = (style.align if style is not None and style.align else None) or "L"
     color = _color(style, pdf.body_text)
+    # Q11：正文加粗用 B 字重；字距用 fpdf2 的 set_char_spacing（文档单位 mm，用完复位）。
+    bold = _bold(pdf, style, False)
+    letter_spacing = _letter_spacing_mm(base, style)
+    if letter_spacing:
+        pdf.set_char_spacing(letter_spacing)
     li_gap = layout.gap_mm(layout.li_gap)
-    pdf.set_font(FONT_FAMILY, "", font_size * _PX_TO_PT)
+    marker_size = _bullet_font_size(font_size, bullet)
+    pdf.set_font(FONT_FAMILY, "", marker_size * _PX_TO_PT)
     marker_width = float(pdf.get_string_width(bullet)) if bullet else 0.0
     text_left = pdf.frame_left + indent
     width = max(1.0, pdf.frame_width - indent)
@@ -272,8 +304,15 @@ def draw_bullets(
         top = pdf.get_y()
         pdf.set_text_color(*color)
         if bullet:
-            pdf.set_xy(text_left - marker_width - pad, top)
+            pdf.set_font(FONT_FAMILY, "", marker_size * _PX_TO_PT)
+            # 圆点放大后（_BULLET_SIZE_SCALE）它与正文的基线会差 0.3×字号差：把符号那格
+            # 上移这么多，符号基线与首行正文基线重合（与 CSS list-style 的视觉对齐一致）。
+            marker_baseline_gap = 0.3 * (marker_size - font_size) * _PX_TO_MM
+            pdf.set_xy(text_left - marker_width - pad, top - marker_baseline_gap)
             pdf.cell(marker_width + 2 * pad, line_height, bullet, new_x=XPos.LEFT, new_y=YPos.TOP)
+            pdf.set_font(FONT_FAMILY, "B" if bold else "", font_size * _PX_TO_PT)
+            # 上移只作用在符号那一格：正文仍从行首 top 起排（否则整条要点跟着抬高）。
+            pdf.set_y(top)
         pdf.set_x(text_left)
         item_top = pdf.get_y()
         pdf.multi_cell(
@@ -294,6 +333,8 @@ def draw_bullets(
                 point_index=item_index,
                 text=text,
             )
+    if letter_spacing:
+        pdf.set_char_spacing(0)
     pdf.set_text_color(*pdf.body_text)
 
 
@@ -324,11 +365,25 @@ def draw_entry_head(
     title_width = available if inline_meta else available * 0.68
     pdf.set_font(FONT_FAMILY, "B" if _bold(pdf, style, True) else "", size * _PX_TO_PT)
     pdf.set_text_color(*_color(style, pdf.body_text))
+    # 左栏标题：cell 不会折行也不会缩略，超宽会盖到右栏（没有右栏时则越过右边距）。
+    # 先按栏宽量宽截断；放得下时原样返回，所以常规标题不受影响。
+    left_budget = available if not right else title_width
+    left_text = truncate_to_width(
+        left, max(0.0, left_budget - _ENTRY_HEAD_GAP_MM), pdf.get_string_width
+    )
+    # 非 inline 时左 cell 只包住"实测标题宽 + 栏间距"，右栏从它后面开始、占满剩余宽度：
+    # 左标题短时右栏自动变宽（固定 68/32 会把正常长度的日期/期刊名/专利状态误截掉）。
+    left_width = float(pdf.get_string_width(left_text))
+    left_cell_width = (
+        title_width
+        if inline_meta
+        else entry_head_columns(available, left_width, _ENTRY_HEAD_GAP_MM)[0]
+    )
     pdf.set_x(pdf.frame_left)
     pdf.cell(
-        title_width,
+        left_cell_width,
         line_height,
-        left,
+        left_text,
         new_x=XPos.RIGHT,
         new_y=YPos.TOP,
     )
@@ -346,10 +401,17 @@ def draw_entry_head(
     if inline_meta:
         pdf.cell(0, line_height, right, new_x=XPos.LMARGIN, new_y=YPos.NEXT)
     else:
+        # 右栏从"左栏 cell 的右缘"开始、宽 = 版心剩余宽度；右对齐的文字因此仍停在版心
+        # 右缘。只有超过"右栏宽 - cell 左右内边距"才截断——正常长度的日期/期刊名/状态
+        # 在左标题较短时不会被误砍。
+        meta_width = available - left_cell_width
+        right_text = truncate_to_width(
+            right, max(0.0, meta_width - 2 * float(pdf.c_margin)), pdf.get_string_width
+        )
         pdf.cell(
-            available - title_width,
+            meta_width,
             line_height,
-            right,
+            right_text,
             align="R",
             new_x=XPos.LMARGIN,
             new_y=YPos.NEXT,

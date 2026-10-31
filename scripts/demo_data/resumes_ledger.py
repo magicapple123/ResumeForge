@@ -2,24 +2,33 @@
 """简历与事实台账域：resume_record + claim_record。
 
 搬迁自 ``scripts/seed_demo_data.py`` 第 571–814 行（原文的 ``# ── 简历 ──`` 与
-``# ── 事实台账 ──`` 两段）。``base_content`` / ``resume_content()`` / ``RESUMES`` 留在
-模块顶层：投递队列域要按 ``RESUMES[n]["title"]`` 引用它们。
+``# ── 事实台账 ──`` 两段）。``RESUMES`` 留在模块顶层：投递队列域要按
+``RESUMES[n]["title"]`` 引用它们，所以改内容不要改顺序。
+
+v2 之后演示库同时有两种内容：
+- 索引 0/1 是 **v1 旧格式**（v1_resume_sample.json 冻结的夹具）——用来验证"打开旧简历 →
+  读时一次性转换"（计划 D11/§17.3），所以它们必须原样保存 v1 JSON，不能预转成 v2；
+- 索引 2/3 是 **v2 文档**（document_v2.build_document 构造，含自定义字段/自建板块/三种条目头
+  布局），用来验证新模型、四出口与截图。
 """
 
 from __future__ import annotations
 
 from datetime import timedelta
 
-from app.services.resume.resume_sample import sample_resume_content
-
 from demo_data.base import NOW, ins, row
+from demo_data.document_v2 import build_document, load_v1_sample
 from demo_data.jobs import JOBS
 
-base_content = sample_resume_content().model_dump()
+# v1 旧简历夹具（纯虚构）：来自 v1 代码冻结的 sample_resume_content。演示库里保留两份
+# 旧格式内容，用来验证读时转换；它们不能被预转成 v2，否则测不到转换路径。
+V1_BASE = load_v1_sample()
+V2_PHOTO = str(V1_BASE.get("photo") or "")
 
 
-def resume_content(intent: str, summary: str) -> dict:
-    data = dict(base_content)
+def v1_content(intent: str, summary: str) -> dict:
+    """v1 内容 = 基础夹具 + 一份简历的岗位意向/总结覆盖（与 v1 时代生成结果同形）。"""
+    data = dict(V1_BASE)
     data["job_intent"] = intent
     data["summary"] = summary
     return data
@@ -32,26 +41,25 @@ RESUMES = [
         job_id=1,
         job_title=JOBS[0]["title"],
         company=JOBS[0]["company"],
-        content=resume_content(
+        content=v1_content(
             "市场运营专员",
             "3 年市场与运营经验，主导季度主题营销活动，参与人数 1.2 万、转化率环比提升 18%；"
             "擅长把活动经验沉淀为可复用 SOP。",
         ),
         source="ai",
-        favorite=True,
+        favorite=False,
         tone="",
         enhancement_enabled=True,
         enhancement_level="strong",
-        # 首屏展示用的那份：technical 的实心色块标题层次最分明，强调色换成
-        # 应用的 colorPrimary（#16365c），让截图与界面本身是同一个调子。
-        template="technical",
+        # 旧格式：打开时触发读时转换（计划 D11），所以模板/版式仍按 v1 时代的值给。
+        template="classic",
         format_name="standard",
         format_config={"accent": "#16365c"},
         page_limit=1,
         font_scale="standard",
         custom_instruction="突出活动转化率与流程沉淀",
-        note="投递示例科技用，重点写转化率",
-        created_at=NOW - timedelta(days=3),
+        note="旧版内容：打开会触发「旧简历转换」，用于验收读时转换",
+        created_at=NOW - timedelta(days=21),
     ),
     dict(
         id=2,
@@ -59,7 +67,7 @@ RESUMES = [
         job_id=4,
         job_title=JOBS[3]["title"],
         company=JOBS[3]["company"],
-        content=resume_content(
+        content=v1_content(
             "用户增长运营",
             "3 年运营经验，做过会员拉新与留存实验，习惯用数据解释结论。",
         ),
@@ -74,8 +82,8 @@ RESUMES = [
         page_limit=2,
         font_scale="standard",
         custom_instruction="",
-        note="",
-        created_at=NOW - timedelta(days=1),
+        note="旧版内容：第二份转换样本",
+        created_at=NOW - timedelta(days=15),
     ),
     dict(
         id=3,
@@ -83,7 +91,9 @@ RESUMES = [
         job_id=None,
         job_title="",
         company="",
-        content=resume_content("市场 / 运营方向", "跨行业的通用版本，方向未定时使用。"),
+        # content 要等 init_db() 之后才能构造（build_document 会读资料库自定义字段定义），
+        # 所以这里给的是延迟构造器，由 seed() 统一 materialize。
+        content_builder=lambda: build_document(variant="general", photo=V2_PHOTO),
         source="manual",
         favorite=True,
         tone="",
@@ -98,24 +108,51 @@ RESUMES = [
         note="通用版，先投不明确方向的岗位",
         created_at=NOW - timedelta(days=8),
     ),
+    dict(
+        id=4,
+        # 首屏展示用的那份：technical 的实心色块标题层次最分明，强调色换成应用的
+        # colorPrimary（#16365c），让截图与界面本身是同一个调子。
+        title="市场运营专员（字段版） - 示例科技（上海）有限公司",
+        job_id=1,
+        job_title=JOBS[0]["title"],
+        company=JOBS[0]["company"],
+        content_builder=lambda: build_document(variant="job", photo=V2_PHOTO),
+        source="ai",
+        favorite=True,
+        tone="",
+        enhancement_enabled=True,
+        enhancement_level="strong",
+        template="technical",
+        format_name="standard",
+        format_config={"accent": "#16365c"},
+        page_limit=1,
+        font_scale="standard",
+        custom_instruction="突出活动转化率与流程沉淀",
+        note="v2 字段版：教育/实习的自定义字段与自建板块都落进纸面",
+        created_at=NOW - timedelta(days=3),
+    ),
 ]
 
 
 def seed() -> None:
-    """写入 3 份简历与 6 条事实台账。"""
-    ins(
-        "resume_record",
-        [
+    """写入 4 份简历（2 份 v1 旧格式 + 2 份 v2 文档）与 6 条事实台账。"""
+    records = []
+    for spec in RESUMES:
+        data = dict(spec)
+        builder = data.pop("content_builder", None)
+        if builder is not None:
+            # v2 文档必须等资料库写完之后再构造（自定义字段 id / 默认位置都从库里读）。
+            data["content"] = builder()
+        records.append(
             row(
-                **r,
+                **data,
                 warnings=[],
-                model="" if r["source"] == "manual" else "deepseek-v4-flash",
+                model="" if data["source"] == "manual" else "deepseek-v4-flash",
                 parse_error="",
                 deleted_at=None,
             )
-            for r in RESUMES
-        ],
-    )
+        )
+    ins("resume_record", records)
 
     # ── 事实台账 ────────────────────────────────────────────────────────────────
     ins(

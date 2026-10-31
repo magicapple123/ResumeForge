@@ -168,9 +168,6 @@ export default function GenerationConfigStage({
         layout={layout}
         disabled={!llmReady}
         onChange={setLayout}
-        // 生成场景：默认板块顺序跟随「我的资料」里排好的顺序。预览 / 编辑已保存简历
-        // 时不传（它们读这份简历自己的 section_order，老简历外观因此不被追溯改变）。
-        preferProfileOrder
         // 长 CV 时页数上限放宽到 10（后端按 MODE_PAGE_LIMITS 再校验一次）。
         pageLimitOptions={
           generation.documentMode === "long_cv" ? pageLimitOptions("long_cv") : undefined

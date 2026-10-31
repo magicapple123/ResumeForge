@@ -75,12 +75,11 @@ _REQUIRED_FILES: Final[tuple[tuple[str, str], ...]] = (
     ("app/templates/resume_scholar.html.j2", "学术简历模板"),
     ("app/templates/resume_editorial.html.j2", "社论简历模板"),
     ("app/templates/resume_split.html.j2", "分栏简历模板"),
-    # `_resume_sections.j2` 里 `{% import "_resume_blocks.j2" %}`：少了它，任何一次
-    # 简历渲染都会在 Jinja 编译阶段失败（而且报错信息不会指出缺的是哪个文件）。
-    # 这个文件曾经只存在于工作区、没进版本库，于是按 HEAD 打包的发行版缺它——
-    # 打包脚本的必需文件清单先一步拦下了，这里补上是为了运行时也能给出明确诊断。
-    ("app/templates/_resume_blocks.j2", "简历正文区块宏（被 _resume_sections 引用）"),
-    ("app/templates/_resume_sections.j2", "简历正文片段（三套模板共用）"),
+    # v2 起正文只有一个实现（`_resume_document.j2`，消费 DocumentPlan）；
+    # `_resume_sections.j2` 是自制模板契约的稳定别名（一行 include）。少了任何一个，
+    # 任何一次简历渲染都会在 Jinja 编译阶段失败，而且报错信息不会指出缺的是哪个文件。
+    ("app/templates/_resume_document.j2", "简历正文片段（通用外壳，消费 DocumentPlan）"),
+    ("app/templates/_resume_sections.j2", "简历正文片段（自制模板兼容别名）"),
     ("app/templates/_resume_fit_script.j2", "简历放不下时的测量脚本"),
     ("alembic.ini", "数据库迁移配置"),
 )

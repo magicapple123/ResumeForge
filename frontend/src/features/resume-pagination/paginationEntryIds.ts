@@ -70,9 +70,7 @@ function collectFromValue(value: unknown, depth: number, found: Set<string>): vo
  * `content` 为 `null`/非对象时返回空数组——调用方据此判断"没有可核对的清单"，
  * 不要把它当成"所有意图都过期"（那会把用户的设置一次清空）。
  */
-export function collectPaginationEntryIds(
-  content: ResumeContent | null | undefined,
-): string[] {
+export function collectPaginationEntryIds(content: ResumeContent | null | undefined): string[] {
   const found = new Set<string>();
   if (!isRecord(content)) return [];
   collectFromValue(content, 0, found);

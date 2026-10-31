@@ -303,9 +303,9 @@ def _drag_panel(page_client, dx: int, dy: int) -> None:
         " const root = document.getElementById('__rf_live_host__').shadowRoot;"
         " const panel = root.querySelector('.p');"
         f" panel.dispatchEvent(new MouseEvent('mousedown',"
-        f"   {{bubbles: true, button: 0, clientX: {x}, clientY: {y}}}));"
+        f"   {{bubbles: true, button: 0, buttons: 1, clientX: {x}, clientY: {y}}}));"
         f" window.dispatchEvent(new MouseEvent('mousemove',"
-        f"   {{bubbles: true, clientX: {x + dx}, clientY: {y + dy}}}));"
+        f"   {{bubbles: true, buttons: 1, clientX: {x + dx}, clientY: {y + dy}}}));"
         " window.dispatchEvent(new MouseEvent('mouseup', {bubbles: true}));"
         "})()"
     )
@@ -323,9 +323,9 @@ def _drag_resize(page_client, dx: int, dy: int) -> None:
         " const root = document.getElementById('__rf_live_host__').shadowRoot;"
         " const handle = root.querySelector('.rs');"
         f" handle.dispatchEvent(new MouseEvent('mousedown',"
-        f"   {{bubbles: true, button: 0, clientX: {corner['x']}, clientY: {corner['y']}}}));"
+        f"   {{bubbles: true, button: 0, buttons: 1, clientX: {corner['x']}, clientY: {corner['y']}}}));"
         f" window.dispatchEvent(new MouseEvent('mousemove',"
-        f"   {{bubbles: true, clientX: {corner['x'] + dx}, clientY: {corner['y'] + dy}}}));"
+        f"   {{bubbles: true, buttons: 1, clientX: {corner['x'] + dx}, clientY: {corner['y'] + dy}}}));"
         " window.dispatchEvent(new MouseEvent('mouseup', {bubbles: true}));"
         "})()"
     )
@@ -339,6 +339,10 @@ def test_dragging_the_title_bar_moves_the_panel_by_exactly_that_much(page_client
     """
     _open_panel(page_client)
 
+    # 先把面板往下挪出一段**上方余量**：面板默认贴着输入框顶部，视口里它上面只剩
+    # 个位数像素，直接往上拖会被视口上沿正确夹住（那不是缺陷，是边界）。挪下来之后
+    # 再测"往上拖多少就走多少"才有意义，且与浏览器窗口高度无关。
+    _drag_panel(page_client, 0, DRAG_DELTA)
     before = _panel_rect(page_client)
     _drag_panel(page_client, 0, -DRAG_DELTA)
     after = _panel_rect(page_client)

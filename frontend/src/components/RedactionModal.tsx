@@ -3,7 +3,8 @@
 import { App, Button, Checkbox, Descriptions, Modal, Space, Spin, Typography } from "antd";
 import { useState } from "react";
 import { exportResumeWithOptions, redactResume } from "../api/resumes";
-import type { ResumeContent } from "../types";
+import type { ResumeDocument } from "../types/resumeDocument";
+import { headerValue, entryValue } from "../features/resume-document/view";
 import {
   DEFAULT_REDACTION_OPTIONS,
   REDACTION_FIELDS,
@@ -24,7 +25,7 @@ export default function RedactionModal({ recordId, open, onClose }: Props) {
   // 本弹窗用模块级 t() 取文案：必须订阅语言变化。
   useLocale();
   const [options, setOptions] = useState<RedactionOptions>(DEFAULT_REDACTION_OPTIONS);
-  const [preview, setPreview] = useState<ResumeContent | null>(null);
+  const [preview, setPreview] = useState<ResumeDocument | null>(null);
   const [loading, setLoading] = useState(false);
   const [exporting, setExporting] = useState(false);
 
@@ -105,16 +106,19 @@ export default function RedactionModal({ recordId, open, onClose }: Props) {
         {!loading && preview && (
           <Descriptions column={1} size="small" bordered>
             <Descriptions.Item label={t("componentsMisc2.redaction.field.name")}>
-              {preview.name}
+              {headerValue(preview, "name")}
             </Descriptions.Item>
             <Descriptions.Item label={t("componentsMisc2.redaction.field.phone")}>
-              {preview.phone}
+              {headerValue(preview, "phone")}
             </Descriptions.Item>
             <Descriptions.Item label={t("componentsMisc2.redaction.field.email")}>
-              {preview.email}
+              {headerValue(preview, "email")}
             </Descriptions.Item>
             <Descriptions.Item label={t("componentsMisc2.redaction.field.company")}>
-              {preview.experience[0]?.company ?? "-"}
+              {entryValue(
+                preview.sections.find((section) => section.key === "experience")?.entries[0],
+                "company",
+              ) || "-"}
             </Descriptions.Item>
           </Descriptions>
         )}

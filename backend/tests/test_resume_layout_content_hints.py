@@ -8,6 +8,9 @@ fixture 覆盖三件事：有岗位时能给出可定位的提示；信息不足
 
 from __future__ import annotations
 
+from app.schemas.resume_document import OBJECT_ID_PATTERN
+from tests.document_test_support import entries_of
+
 MEASURE = {"measure": {"used_height": 120.0, "page_content_height": 260.0}}
 
 
@@ -86,14 +89,28 @@ def test_content_hints_flag_the_low_relevance_point(client):
     assert hint["reason"]
 
 
-def test_entries_without_stable_ids_get_no_hint(client):
+def test_entries_without_ids_get_stable_ids_and_hints(client):
+    """v2 存储总会归一化出稳定 id：旧语义「没有 id 就不提示」在 v2 下已不存在。
+
+    改成钉 v2 等价性质：输入无 id → 转换后条目/要点仍有 W01 合法 id，且 hint 的
+    object_id/point_id 指向这些稳定 id（不再是空）。
+    """
     job = _create_job(client)
     content = _content()
     content["experience"][0].pop("id")
     content["experience"][0].pop("point_ids")
     resume_id = _create_resume(client, content, job_id=job["id"])
+    stored = client.get(f"/api/resumes/{resume_id}").json()["content"]
+    entry = entries_of(stored, "experience")[0]
+    assert OBJECT_ID_PATTERN.fullmatch(entry["id"])
+    text_ids = [item["id"] for item in entry["items"] if item["kind"] == "text"]
+    assert all(OBJECT_ID_PATTERN.fullmatch(item_id) for item_id in text_ids)
+
     payload = _analyze(client, resume_id)
-    assert payload["content_hints"] == []
+    hints = payload["content_hints"]
+    assert hints, payload
+    assert hints[0]["object_id"] == entry["id"]
+    assert hints[0]["point_id"] in text_ids
 
 
 def test_content_hints_are_deterministic_and_capped(client):

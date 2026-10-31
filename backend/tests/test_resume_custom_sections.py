@@ -31,6 +31,7 @@ from app.services.pdf_exporter import build_resume_pdf, font_available
 from app.services.resume.resume_sample import sample_resume_content
 from app.services.resume.resume_templates import RESUME_TEMPLATES
 from pydantic import ValidationError
+from tests.document_test_support import entries_of, section_of
 
 TEMPLATES = sorted(RESUME_TEMPLATES)
 # 页头 / 系统分区的已知文案：自建分区必须排在它们之后。
@@ -195,12 +196,12 @@ def test_html_renders_custom_section(template: str):
     html = render_html(_resume(_open_source()), template=template)
     assert "开源贡献" in html
     assert "维护统一网关平台的开源插件生态。" in html
-    assert "角色：<span" in html
+    assert "角色：" in html and "维护者" in html
     assert "https://example.com/gateway-plugins?a=1&amp;b=2" in html
-    assert 'data-resume-path="custom_sections.0.entries.0.text"' in html
-    assert 'data-resume-path="custom_sections.0.entries.1.text"' in html
-    assert 'data-resume-path="custom_sections.0.entries.0.lines.0.value"' in html
-    assert 'data-resume-path="custom_sections.0.entries.0.lines.1.value"' in html
+    # v2 锚点 = 自建分区 section.entry_id.item_id（自建板块与系统板块同构）。
+    paths = set(re.findall(r'data-resume-path="(custom:open-source\.[^"]+)"', html))
+    assert len(paths) >= 4, f"自建分区字段锚点缺失：{sorted(paths)}"
+    assert "custom_sections." not in html, "渲染产物里还有 v1 下标路径"
     # 顺序：13 个系统分区之后（渲染端不排序，顺序由内容冻结）。
     assert html.index("开源贡献") > html.index(SYSTEM_END_MARKER)
 
@@ -232,7 +233,9 @@ def test_docx_renders_custom_section():
 
 def test_pdf_renders_custom_section():
     _require_pdf()
-    text = _pdf_text(build_resume_pdf(_resume(_open_source())).content)
+    # page_limit=3：样例内容在"联系方式按字段正确装行"的页头下需要 2 页；
+    # 这条用例验的是"自建分区字段真的画到纸上"，不是溢出截断（截断有其他用例守着）。
+    text = _pdf_text(build_resume_pdf(_resume(_open_source()), page_limit=3).content)
     assert "开源贡献" in text
     assert "维护统一网关平台的开源插件生态。" in text
     assert "角色：维护者" in text
@@ -240,9 +243,13 @@ def test_pdf_renders_custom_section():
 
 
 def test_json_export_carries_custom_sections():
+    """v2 JSON 导出：自建分区就是 sections 里 key=custom:* 的一段（不再有 custom_sections 顶层键）。"""
     payload = json.loads(export_json(_resume(_open_source())))
-    assert payload["custom_sections"][0]["key"] == "custom:open-source"
-    assert payload["custom_sections"][0]["entries"][0]["lines"][0]["label"] == "角色"
+    section = section_of(payload, "custom:open-source")
+    assert section is not None and section["title"] == "开源贡献"
+    items = entries_of(payload, "custom:open-source")[0]["items"]
+    role = next(item for item in items if item.get("label") == "角色")
+    assert role["value"] == "维护者"
 
 
 def test_content_order_is_preserved():
@@ -304,4 +311,4 @@ def test_custom_template_gets_custom_sections_too():
         template_html='<!doctype html><html><body>{% include "_resume_sections.j2" %}</body></html>',
     )
     assert "开源贡献" in html
-    assert "角色：<span" in html
+    assert "角色：" in html and "维护者" in html

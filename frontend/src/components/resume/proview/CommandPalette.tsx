@@ -74,10 +74,13 @@ export default function CommandPalette({ open, onClose, commands }: Props) {
   // 每次打开都从"空查询 + 最新最近使用"开始：上一次的搜索词与高亮不该带进来。
   useEffect(() => {
     if (!open) return;
-    setQuery("");
-    setActiveIndex(0);
-    setRecentIds(readRecentCommandIds());
-    inputRef.current?.focus();
+    // 打开时重置搜索态属于外部同步：放进微任务，避开 effect 体里同步 setState 的级联渲染告警。
+    queueMicrotask(() => {
+      setQuery("");
+      setActiveIndex(0);
+      setRecentIds(readRecentCommandIds());
+      inputRef.current?.focus();
+    });
   }, [open]);
 
   const filtered = useMemo(() => filterCommands(commands, query), [commands, query]);

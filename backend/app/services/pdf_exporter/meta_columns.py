@@ -34,7 +34,6 @@ from typing import TYPE_CHECKING
 
 from fpdf.enums import XPos, YPos
 
-from ..resume.profile_field_lines import ROW_SEPARATOR
 from .fonts import FONT_FAMILY
 from .layout import _PX_TO_PT
 from .style_blocks import _color, _line_height, _scale, _wrapmode_args, draw_meta_line
@@ -43,6 +42,9 @@ if TYPE_CHECKING:  # pragma: no cover - 只为类型检查，运行期不能导�
     from ..resume.resume_style import RoleStyle
     from .canvas import _ResumePDF
 
+# 一行里多个 cell 退回单段绘制时的连接符（与 v1 profile_field_lines.ROW_SEPARATOR 同值；
+# v1 排版模块已删除，常量内联在这里，少一个跨模块依赖）。
+_ROW_SEPARATOR = " · "
 # 列数防御性上限：解析层已夹取 1–3，这里再兜一次，绝不因坏数据画出负宽度。
 _MAX_COLUMNS = 3
 # 列宽小于这个值（mm）就没有排字的意义了：整行退回单段绘制（宁可少一列，也不能画成竖排）。
@@ -57,6 +59,10 @@ def _cell_texts(cells: Sequence[Sequence[str]]) -> list[str]:
     """
     texts: list[str] = []
     for cell in cells:
+        if isinstance(cell, str):
+            # v2：planner 已把「标签：值」写进 Inline 段，调用方直接传成品字符串。
+            texts.append(cell)
+            continue
         parts = list(cell)
         label = str(parts[0]) if len(parts) > 0 else ""
         value = str(parts[1]) if len(parts) > 1 else ""
@@ -151,7 +157,7 @@ def draw_meta_columns(
     if count <= 1 or count < len(texts) or any(width < _MIN_COLUMN_WIDTH for width in used):
         # 只剩一栏 / 栏数不够放完 / 栏太窄（间距过大或压缩后）：整行退回单段绘制，
         # 内容一个都不丢（宁可少一列，也不能把正文画成竖排或裁掉）。
-        draw_meta_line(pdf, ROW_SEPARATOR.join(texts), base, style=style)
+        draw_meta_line(pdf, _ROW_SEPARATOR.join(texts), base, style=style)
         return
 
     size = base * layout.entry_sub_ratio * _scale(style)

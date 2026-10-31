@@ -1,16 +1,16 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * 新建弹窗的**唯一适配层**：`projectionToResumeContent` 只做岗位意向覆盖，
- * 其余字段（含承载区「标签：值」、语言→技能、自建分区）一律是服务端投影的现成对象。
+ * 新建弹窗的**唯一适配层**（v2）：`projectionToResumeDocument` 只做岗位意向覆盖。
+ *
+ * 字段映射、承载区「标签：值」、语言→技能、自建分区全部由服务端投影生成；前端任何
+ * 二次加工都会产生"填充链路"与"生成链路"两份真相（R-37 单一来源）。这里钉住：
+ * 正文（v2 section/entry/item）原样透传、只覆盖 header 的 subtitle item、空白内容不多键。
  */
 import { describe, expect, it } from "vitest";
+import type { ResumeDocument } from "../types/resumeDocument";
 import { projectionOf } from "../test/profileProjectionFixture";
 import type { Job } from "../types";
-import {
-  blankResumeContent,
-  hasAnyResumeContent,
-  projectionToResumeContent,
-} from "../utils/profileToResume";
+import { projectionToResumeDocument } from "../utils/profileToResume";
 
 const JOB = { id: 8, title: "AI 应用客户端开发工程师" } as Job;
 
@@ -48,57 +48,41 @@ function projection() {
   });
 }
 
-describe("projectionToResumeContent", () => {
-  it("岗位模式只覆盖求职意向，其余正文原样透传（不做第二份字段映射）", () => {
-    const data = projection();
-    const result = projectionToResumeContent(data, JOB);
+function sectionTitles(document: ResumeDocument): string[] {
+  return document.sections.map((section) => section.key);
+}
 
-    expect(result.job_intent).toBe(JOB.title);
-    // 正文全部来自服务端投影：数组字段与服务端产出的形状逐字相同，没有前端再拆分。
-    expect(result.education).toBe(data.content.education);
-    expect(result.education[0].courses).toEqual(["数据结构", "操作系统"]);
-    expect(result.projects[0].tech_stack).toEqual(["React", "FastAPI"]);
-    expect(result.skills).toEqual([{ name: "TypeScript", level: "熟练" }]);
-    expect(result.summary).toBe("个人总结");
+describe("projectionToResumeDocument", () => {
+  it("通用模式返回规范化后的 v2 文档（正文/section 结构原样保留）", () => {
+    const data = projection();
+    const document = projectionToResumeDocument(data, null);
+    expect(document.version).toBe(2);
+    expect(sectionTitles(document)).toEqual(["education", "projects", "skills", "summary"]);
+    // 正文条目不丢：教育条目里有 school/period/courses 等 item。
+    const education = document.sections.find((section) => section.key === "education");
+    const entry = education?.entries[0];
+    const keyOf = (item: { kind: string; key?: string }) => item.key ?? "";
+    expect(entry?.items.some((item) => keyOf(item) === "school")).toBe(true);
+    expect(entry?.items.some((item) => keyOf(item) === "courses")).toBe(true);
+  });
+
+  it("岗位模式只覆盖 header 的求职意向（subtitle item），其余正文逐字透传", () => {
+    const data = projection();
+    const before = projectionToResumeDocument(data, null);
+    const after = projectionToResumeDocument(data, JOB);
+
+    const subtitleOf = (document: typeof after): string =>
+      document.header.items.find((item) => item.placement === "subtitle")?.value ?? "";
+    expect(subtitleOf(before)).toBe("旧求职意向");
+    expect(subtitleOf(after)).toBe(JOB.title);
+    // 除 header 外逐字相同：正文没有第二份字段映射。
+    expect(after.sections).toEqual(before.sections);
   });
 
   it("岗位没有标题时退回投影里的求职意向（空串也不丢）", () => {
     const data = projection();
-    expect(projectionToResumeContent(data, { id: 1, title: "" } as Job).job_intent).toBe(
-      "旧求职意向",
-    );
-    expect(projectionToResumeContent(data, { id: 1, title: "" } as Job).job_intent).not.toBe("");
-  });
-
-  it("通用模式直接返回服务端 content（整份填充 = 确定性纸面内容）", () => {
-    const data = projection();
-    expect(projectionToResumeContent(data, null)).toBe(data.content);
-  });
-});
-
-describe("blankResumeContent / hasAnyResumeContent", () => {
-  it("空白内容不凭空塞可选的科研/证照/自建分区键（旧简历指纹口径不变）", () => {
-    const blank = blankResumeContent();
-    for (const key of [
-      "publications",
-      "research_projects",
-      "patents",
-      "credentials",
-      "custom_sections",
-    ]) {
-      expect(key in blank).toBe(false);
-    }
-    expect(hasAnyResumeContent(blank)).toBe(false);
-  });
-
-  it("可选栏目有内容时也算「有内容」（整份填充后不会被当成空表覆盖确认绕过）", () => {
-    const withCustom = {
-      ...blankResumeContent(),
-      custom_sections: [{ key: "custom:x", title: "开源贡献", entries: [] }],
-    };
-    expect(hasAnyResumeContent(withCustom)).toBe(true);
-    expect(
-      hasAnyResumeContent({ ...blankResumeContent(), credentials: [{ name: "CET-6" }] as never }),
-    ).toBe(true);
+    const document = projectionToResumeDocument(data, { id: 1, title: "" } as Job);
+    const subtitle = document.header.items.find((item) => item.placement === "subtitle");
+    expect(subtitle?.value).toBe("旧求职意向");
   });
 });

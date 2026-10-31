@@ -17,6 +17,8 @@ const preview = {
   "preview.zoom.fit": "适应页面（重置缩放）",
   /** 「适应页面」按钮的无障碍名（比 Tooltip 短，读屏不念括号）。 */
   "preview.zoom.reset": "适应页面",
+  /** 纸面比相框宽（放大 / 触到可读下限）时，缩放条给出的可见状态（Q21）。 */
+  "preview.zoom.scrollHint": "纸面比相框宽：可以左右拖动查看",
   /** 缩放条尾部的快捷键提示。 */
   "preview.zoom.hint": "按住 Ctrl 滚滚轮可缩放",
 
@@ -51,6 +53,11 @@ const preview = {
   /** 环境里没有内置 PDF 查看器时的正文：文件已排好，给出去系统阅读器打开的出路。 */
   "preview.exact.noViewerBody":
     "PDF 已经按导出引擎排好了，但这里没法直接嵌在页面里显示。点下面的按钮用系统的 PDF 阅读器打开——内容与点「导出」下载到的完全一样。",
+  /** 内嵌查看器 8 秒内没加载出来时的标题（Q18 兜底：不留空白）。 */
+  "preview.exact.loadTimeoutTitle": "内嵌预览加载超时",
+  /** 超时兜底正文：文件已排好，给出路而不是只报错。 */
+  "preview.exact.loadTimeoutBody":
+    "PDF 已经排好，但查看器没有在预期时间内就绪。可以先在新标签页打开这份预览，或切到草稿再切回精确重试一次。",
   /** 用系统 PDF 阅读器打开预览的按钮。 */
   "preview.exact.openInSystemViewer": "用系统阅读器打开",
   /** 精确预览的溢出说明（整句；待清单外消费者改用它，见 config.ts 的说明）。 */

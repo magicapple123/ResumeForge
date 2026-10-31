@@ -95,6 +95,14 @@ class ProfileCustomField(Base):
     # single_line / multi_line / date_text 之一；取值校验在 value_validation，
     # 不在数据库加 CHECK——服务层需要给出"发生了什么 + 怎么办"的中文提示。
     field_type: Mapped[str] = mapped_column(String(16))
+    # 纸面默认位置（v2 文档模型 D6，0069）：title / meta / lead / trail / body / hidden。
+    # NULL = 按 field_type 自动（single_line/date_text → trail，multi_line → body），
+    # 转换器据此决定自定义字段首次落进哪个抽屉；用户可在资料页改。
+    default_placement: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    # 仅素材（0069）：只进 AI / 网申素材、不上纸面。false 是历史行与"默认字段"的行为。
+    material_only: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="0", nullable=False
+    )
     # 同分区自建字段之间的展示顺序（渲染在默认字段之后）。
     sort_order: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     revision: Mapped[int] = mapped_column(Integer, default=1, server_default="1")

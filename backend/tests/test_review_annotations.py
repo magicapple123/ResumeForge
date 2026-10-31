@@ -245,7 +245,7 @@ def test_status_machine_resolve_reopen_dismiss_and_reattach(client):
     assert good.status_code == 200, good.text
     assert good.json()["status"] == "open"
     assert good.json()["object_id"] == "expobj0001"
-    assert good.json()["path"] == "experience.0"
+    assert good.json()["path"] == "experience.expobj0001"
 
 
 def test_review_package_zip_contains_template_and_instructions(client):

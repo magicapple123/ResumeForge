@@ -27,20 +27,19 @@ from app.services.resume.resume_template_catalog import (
 )
 from app.services.resume.resume_templates import TEMPLATES_DIR
 from test_resume_layout_templates import _fs_scale, _selector_block
+from tests.document_test_support import as_document, item_path
 
 TEMPLATE_NAME = "scholar"
 
-# 参考版式里必须有正文锚点的几处（名称 → 该字段的 data-resume-path 值）。
-REQUIRED_PATHS = (
-    "name",
-    "job_intent",
-    "phone",
-    "email",
-    "education.0.school",
-    "education.0.gpa",
-    "experience.0.company",
-    "projects.0.name",
-    "skills.0.name",
+# 参考版式里必须有正文锚点的几处：页眉按 key 取 header item 的路径，正文按
+# (section, field_key) 由同一份 v2 文档算出 section.entry_id.item_id。
+HEADER_PATH_KEYS = ("name", "job_intent", "phone", "email")
+BODY_PATH_FIELDS = (
+    ("education", "school"),
+    ("education", "gpa"),
+    ("experience", "company"),
+    ("projects", "name"),
+    ("skills", "name"),
 )
 
 
@@ -71,10 +70,15 @@ def test_scholar_renders_through_the_shared_sections_fragment():
     模板若自己重写正文标记，前端「点纸面字段定位编辑」会静默失效（点上去没有目标），
     而这件事在视觉上完全看不出来——所以这条断言盯的是标记的**来处**，不只是"页面能渲染"。
     """
-    html = render_html(sample_resume_content(), template=TEMPLATE_NAME)
+    document = as_document(sample_resume_content())
+    html = render_html(document, template=TEMPLATE_NAME)
 
     assert "<html" in html
-    for path in REQUIRED_PATHS:
+    for item in document["header"]["items"]:
+        if item["key"] in HEADER_PATH_KEYS:
+            assert f'data-resume-path="header.{item["id"]}"' in html, item["key"]
+    for section, field_key in BODY_PATH_FIELDS:
+        path = item_path(document, section, field_key)
         assert f'data-resume-path="{path}"' in html, path
     # 共用片段与测量脚本都真的被 include 进来了。
     assert "dataset.overflow" in html

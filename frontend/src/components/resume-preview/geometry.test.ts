@@ -87,6 +87,38 @@ function fitIn(width: number, height: number, extra: { zoom?: number; maxFitScal
   });
 }
 
+describe("制作台按宽度适应（Q21）", () => {
+  function widthFit(width: number, height: number) {
+    return calculatePreviewGeometry({
+      availableSpace: { width, height },
+      paperHeight: A4_HEIGHT_PX,
+      pageCount: 1,
+      zoom: 1,
+      overflow: false,
+      naturalWidth: A4_WIDTH_PX,
+      pageGap: 0,
+      measure: null,
+      fitMode: "width",
+    });
+  }
+
+  it("默认纸宽 = 相框宽，高度不再缩纸（纵向滚动看全）", () => {
+    // 右栏实测 654×698：按整页算会缩到 62%，两侧留灰边；按宽算是 82%，纸铺满右栏。
+    const result = widthFit(654, 698);
+    expect(Math.round(A4_WIDTH_PX * result.scale)).toBe(654);
+    expect(result.scaledHeight).toBeGreaterThan(698);
+  });
+
+  it("纸宽 ≤ 相框宽：正常宽度下不会横向溢出", () => {
+    // 低于可读下限（437px）时纸不再缩（设计如此，与"缩字号塞进一页"无关），
+    // 那一档不在这里断言——它由 `clampedToMin` + 缩放条提示承担。
+    for (const width of [480, 654, 1024, 1920]) {
+      const result = widthFit(width, 700);
+      expect(Math.round(A4_WIDTH_PX * result.scale)).toBeLessThanOrEqual(width);
+    }
+  });
+});
+
 describe("A4 可读下限（2026-10-23）", () => {
   it("容器矮到只允许 0.34 时不再缩小：scale 停在 0.55，纸面宽 437", () => {
     // 1092×614 实测：画布 672×382 —— 按旧算法这里会缩到 0.339（正文 4.7px）。

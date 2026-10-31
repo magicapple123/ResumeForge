@@ -11,13 +11,15 @@ import type { BilingualPair } from "./types";
 function pair(primary: string, secondary: string, path = "summary"): BilingualPair {
   return {
     id: path,
-    group: "summary",
+    sectionKey: "summary",
+    groupLabel: "summary",
     path,
-    labelKey: "bilingual.field.summary",
+    label: "summary",
     primary,
     secondary,
-    locked: false,
     status: primary === secondary ? "same" : "changed",
+    adoptable: true,
+    locked: false,
   };
 }
 

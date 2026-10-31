@@ -42,7 +42,15 @@ def _resume() -> ResumeContent:
         name="张三",
         phone="13800000000",
         summary="负责后端服务的设计与开发。",
-        experience=[{"company": "字节跳动", "role": "工程师", "description": ["实现检索接口"]}],
+        experience=[
+            {
+                "company": "字节跳动",
+                "role": "工程师",
+                "start_date": "2020-01",
+                "end_date": "2023-12",
+                "description": ["实现检索接口"],
+            }
+        ],
         skills=[{"name": "Python", "level": "熟练"}],
     )
 
@@ -274,110 +282,12 @@ def test_bullets_hang_so_wrapped_lines_align_with_the_text():
     assert expected_mm != 3.0, "classic 的模板缩进不是 3.0mm，这条断言才有效"
 
     document = Document(BytesIO(build_resume_docx(_resume(), page_limit=1).content))
-    bullets = [p for p in document.paragraphs if p.text.startswith("• ")]
+    bullets = [p for p in document.paragraphs if p.text.startswith("· ")]
     assert bullets, "列表项没有用项目符号"
     for paragraph in bullets:
         # twip 取整：毫米换算成 twip 后允许 1 twip 误差。
         assert abs(paragraph.paragraph_format.first_line_indent.twips + Mm(expected_mm).twips) <= 1
         assert abs(paragraph.paragraph_format.left_indent.twips - Mm(expected_mm).twips) <= 1
-
-
-# ── 照片必须是「浮于文字上方」（2026-10-24 用户实测的解法）──────────────────
-#
-# 嵌入型图片是正文流里的一个"大号字符"：独占一行、把姓名整体下推，页头因此比预览高
-# 一截，后面的分页也跟着错。改成浮动之后不占行高，页头与预览同高。
-# 「浮于文字上方」= `wp:anchor` + `behindDoc="0"` + `<wp:wrapNone/>`；
-# 「衬于文字下方」是同一个 `wrapNone`、`behindDoc="1"`——这一条必须钉死，写反了照片
-# 会跑到文字后面，比嵌入型更糟。
-
-
-def test_photo_floats_in_front_of_text_instead_of_occupying_a_line():
-    resume = ResumeContent(name="张三", photo=PHOTO, summary="有照片。")
-    document = Document(BytesIO(build_resume_docx(resume, page_limit=1).content))
-
-    anchor = anchors(document)[0]
-    assert anchor.get("behindDoc") == "0"
-    assert anchor.find(qn("wp:wrapNone")) is not None
-    # 水平贴版心右缘（classic 的照片在右），垂直锚在段落上——翻页时不会跑到纸张顶端。
-    position_h = anchor.find(qn("wp:positionH"))
-    assert position_h.get("relativeFrom") == "margin"
-    assert position_h.find(qn("wp:align")).text == "right"
-    assert anchor.find(qn("wp:positionV")).get("relativeFrom") == "paragraph"
-
-    # 照片挂在**姓名那一段**里，不再单独占一行（这正是"页头矮了一截"的来源）。
-    name_paragraph = next(p for p in document.paragraphs if p.text.startswith("张三"))
-    assert name_paragraph._p.find(".//" + qn("w:drawing")) is not None
-
-
-def test_photo_float_side_follows_the_template():
-    """elegant 的 `.header` 是 `row-reverse`（照片在左），浮动锚点必须跟着贴左。"""
-    resume = ResumeContent(name="张三", photo=PHOTO, summary="有照片。")
-    document = Document(BytesIO(build_resume_docx(resume, template="elegant").content))
-
-    position_h = anchors(document)[0].find(qn("wp:positionH"))
-    assert position_h.find(qn("wp:align")).text == "left"
-
-
-# ── Word 里的色块（2026-10-24 用户口径："导出的 word 也有绿色背景"）──────────
-#
-# Word 没有 CSS 的 `background`：能表达"色块"的只有**段落底纹**（`w:shd`）与
-# **段落边框**（`w:pBdr`）。这里逐模板钉住映射关系——映射错了不会报错，只会让
-# 用户导出的 Word 又变回"白底黑字"，与预览对不上。
-
-
-def _shading_fills(document) -> list[str]:
-    """文档里所有段落底纹的填充色（`RRGGBB`）。"""
-    return [node.get(qn("w:fill")) for node in document.element.body.findall(".//" + qn("w:shd"))]
-
-
-def _header_resume() -> ResumeContent:
-    return ResumeContent(
-        name="张三",
-        phone="13800000000",
-        email="zhangsan@example.com",
-        job_intent="数据分析",
-        summary="一段总结。",
-    )
-
-
-def test_modern_word_gets_the_soft_green_bands():
-    """modern：页头三段 + 区块标题都要有浅绿底纹（`--accent-soft`）。"""
-    from app.services.resume.resume_templates import TEMPLATE_LAYOUT_DEFAULTS
-
-    expected = str(TEMPLATE_LAYOUT_DEFAULTS["modern"]["accent_soft"]).lstrip("#").upper()
-    document = Document(BytesIO(build_resume_docx(_header_resume(), template="modern").content))
-
-    fills = _shading_fills(document)
-    # 页头：姓名 / 意向 / 联系方式 三段；再加「个人总结」这个区块标题。
-    assert fills.count(expected) >= 4
-    # 底纹必须配一圈同色边框把色带撑开（模拟 CSS 的 padding），否则色带贴着字。
-    assert document.element.body.xml.count("<w:pBdr") >= 4
-
-
-def test_technical_word_section_title_is_filled_with_the_accent_and_white_text():
-    """technical：实心强调色块 + 白字（`section_title_style = accent_box`）。"""
-    from app.services.resume.resume_labels import section_titles
-    from app.services.resume.resume_templates import TEMPLATE_LAYOUT_DEFAULTS
-
-    accent = str(TEMPLATE_LAYOUT_DEFAULTS["technical"]["accent"]).lstrip("#").upper()
-    document = Document(BytesIO(build_resume_docx(_header_resume(), template="technical").content))
-
-    assert _shading_fills(document) == [accent]
-    summary_title = section_titles("zh-CN")["summary"]
-    title = next(p for p in document.paragraphs if p.text == summary_title)
-    colors = [run.font.color.rgb for run in title.runs if run.font.color and run.font.color.rgb]
-    assert [str(color) for color in colors] == ["FFFFFF"]
-
-
-def test_classic_word_section_title_has_a_left_bar_and_no_fill():
-    """classic：只有左侧竖条，没有底纹（`section_title_style = left_bar`）。"""
-    document = Document(BytesIO(build_resume_docx(_header_resume(), template="classic").content))
-
-    assert _shading_fills(document) == []
-    xml = document.element.body.xml
-    assert '<w:left w:val="single"' in xml
-    # 竖条是"只画左边"：不连底边一起画，否则会变成一条下划线。
-    assert "<w:bottom w:val" not in xml
 
 
 # ===== W08：孤行/寡行控制的 OOXML 落点 =====

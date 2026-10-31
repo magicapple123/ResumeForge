@@ -134,7 +134,7 @@ def insert_phrase(phrase_id: int, payload: PhraseInsertRequest, db: Session = De
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return PhraseInsertOut(
-        resume=_to_resume_out(saved),
+        resume=_to_resume_out(saved, db),
         phrase=PhraseOut.model_validate(resume_assets.phrase_brief(phrase)),
         inserted_object_id=object_id,
         inserted_point_id=point_id,

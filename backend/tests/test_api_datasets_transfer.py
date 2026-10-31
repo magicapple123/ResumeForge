@@ -22,6 +22,7 @@ from dataset_api_helpers import (
     _list_datasets,
     _stored_llm_api_key,
 )
+from tests.document_test_support import values
 
 
 def test_import_requires_a_loopback_client(client, tmp_path, monkeypatch):
@@ -164,7 +165,7 @@ def test_a_round_trip_preserves_every_kind_of_content_including_the_trash(
     )
     rendered = client.get(f"/api/resumes/{resume_id}").json()
     # 正文与版式都要原样带过来（版式丢了的话，导入回来的简历会长得不一样）。
-    assert rendered["content"]["summary"] == "SUMMARY_SENTINEL"
+    assert "SUMMARY_SENTINEL" in values(rendered["content"])
     assert rendered["template"] == "technical"
     assert rendered["page_limit"] == 2
     assert rendered["format_config"] == {"accent": "#0f766e"}

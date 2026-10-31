@@ -57,8 +57,31 @@ def _known_names(source_data: dict, key: str, field: str) -> list[str]:
     return [item[field] for item in _items(source_data, key) if item.get(field)]
 
 
+def _custom_field_evidence(profile: ConsumedProfile) -> list[str]:
+    """R1-F：消费快照里的自定义字段值（含自建分区）也必须算“资料提供过”。
+
+    量化核对只拿内置字段的候选数据当合法来源，会把用户在自定义字段里写的数字
+    （例如「团队协作说明」里的「从 3 天压到 1 天」）误报成虚构。
+    """
+    values: list[str] = []
+    for section in profile.sections.values():
+        specs = [spec for spec in section.fields if not spec.is_builtin and not spec.private]
+        if not specs:
+            continue
+        for entry in section.entries:
+            for spec in specs:
+                value = str(entry.values.get(spec.field_id) or "").strip()
+                if value:
+                    values.append(value)
+    return values
+
+
 def _check_source_data(
-    resume: ResumeContent, source_data: dict, label: str
+    resume: ResumeContent,
+    source_data: dict,
+    label: str,
+    *,
+    extra_evidence: list[str] | None = None,
 ) -> list[str]:
     """一致性检查的唯一实现：只依赖候选数据（本次实际发给模型的那份）。
 
@@ -66,6 +89,8 @@ def _check_source_data(
     （R-29/R-30：七项组不能因为 skills 不在候选里就抛 KeyError）。
     """
     warnings: list[str] = []
+    # 自定义字段值作为补充证据：量化核对时与内置候选同等对待（R1-F）。
+    evidence_suffix = "\n" + "\n".join(extra_evidence) if extra_evidence else ""
     known_schools = _known_names(source_data, "educations", "school")
     known_companies = _known_names(source_data, "experiences", "company")
     known_campus_organizations = _known_names(
@@ -88,7 +113,8 @@ def _check_source_data(
         source = _find_source(exp, _items(source_data, "experiences"), "company", "role")
         if source:
             unsupported = _unsupported_quantified_values(
-                exp.description, _source_evidence_text(source, ("description",))
+                exp.description,
+                _source_evidence_text(source, ("description",)) + evidence_suffix,
             )
             if unsupported:
                 warnings.append(
@@ -107,7 +133,8 @@ def _check_source_data(
         )
         if source:
             unsupported = _unsupported_quantified_values(
-                item.description, _source_evidence_text(source, ("description",))
+                item.description,
+                _source_evidence_text(source, ("description",)) + evidence_suffix,
             )
             if unsupported:
                 warnings.append(
@@ -122,7 +149,7 @@ def _check_source_data(
         if source:
             source_text = _source_evidence_text(source, ("description", "highlights"))
             unsupported = _unsupported_quantified_values(
-                project.description + project.highlights, source_text
+                project.description + project.highlights, source_text + evidence_suffix
             )
             if unsupported:
                 warnings.append(
@@ -168,7 +195,7 @@ def _check_source_data(
                     f"{section_label}中出现{label}未包含的「{value}」，请核对是否为虚构"
                 )
     unsupported_summary = _unsupported_quantified_values(
-        resume.summary, json.dumps(source_data, ensure_ascii=False)
+        resume.summary, json.dumps(source_data, ensure_ascii=False) + evidence_suffix
     )
     if unsupported_summary:
         warnings.append(
@@ -195,7 +222,9 @@ def check_consistency(
         candidate = selected_data.get("data") if isinstance(selected_data, dict) else None
         source_data = candidate if isinstance(candidate, dict) else {}
         label = source_label or "本岗位候选资料"
-        return _check_source_data(resume, source_data, label)
+        return _check_source_data(
+            resume, source_data, label, extra_evidence=_custom_field_evidence(profile)
+        )
     source_data = selected_data or build_profile_prompt_data(profile)
     label = source_label or ("本岗位候选资料" if selected_data is not None else "个人资料")
     return _check_source_data(resume, source_data, label)

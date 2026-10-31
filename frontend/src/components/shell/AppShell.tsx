@@ -158,23 +158,23 @@ export default function AppShell() {
     },
     [preloaders],
   );
-  const menuItems = useMemo(
-    () =>
-      visiblePrimaryItems.map((item) => ({
-        key: item.key,
-        icon: item.icon,
-        "aria-label": t(item.labelKey),
-        label: (
-          <span
-            onMouseEnter={() => void preloadPage(item.key)}
-            onFocus={() => void preloadPage(item.key)}
-          >
-            {t(item.labelKey)}
-          </span>
-        ),
-      })),
-    [locale, preloadPage, visiblePrimaryItems],
-  );
+  const menuItems = useMemo(() => {
+    // t() 是模块级函数，不会自己触发重算；语言变了要重新生成侧栏文案。
+    void locale;
+    return visiblePrimaryItems.map((item) => ({
+      key: item.key,
+      icon: item.icon,
+      "aria-label": t(item.labelKey),
+      label: (
+        <span
+          onMouseEnter={() => void preloadPage(item.key)}
+          onFocus={() => void preloadPage(item.key)}
+        >
+          {t(item.labelKey)}
+        </span>
+      ),
+    }));
+  }, [locale, preloadPage, visiblePrimaryItems]);
   const selectedKey =
     NAVIGATION_ITEMS.find((item) => pathMatchesNavigationItem(location.pathname, item))?.key ?? "/";
 

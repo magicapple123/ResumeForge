@@ -58,7 +58,7 @@ export function checkPair(pair: BilingualPair): BilingualHint[] {
       id: "punctuation:" + pair.id,
       kind: "punctuation",
       path: pair.path,
-      labelKey: pair.labelKey,
+      label: pair.label,
     });
   }
 
@@ -67,7 +67,7 @@ export function checkPair(pair: BilingualPair): BilingualHint[] {
       id: "spacing:" + pair.id,
       kind: "spacing",
       path: pair.path,
-      labelKey: pair.labelKey,
+      label: pair.label,
     });
   }
 
@@ -78,7 +78,7 @@ export function checkPair(pair: BilingualPair): BilingualHint[] {
       id: "date_format:" + pair.id,
       kind: "date_format",
       path: pair.path,
-      labelKey: pair.labelKey,
+      label: pair.label,
     });
   }
 
@@ -87,7 +87,7 @@ export function checkPair(pair: BilingualPair): BilingualHint[] {
       id: "long_url:" + pair.id,
       kind: "long_url",
       path: pair.path,
-      labelKey: pair.labelKey,
+      label: pair.label,
     });
   }
   return hints;

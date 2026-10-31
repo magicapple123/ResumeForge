@@ -22,6 +22,7 @@ import { useProfileItemListDrag } from "../../components/profile/useProfileItemL
 import { t } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
 import ProfileFieldInputs from "./ProfileFieldInputs";
+import { makeTempEntryKey } from "./tempEntryKey";
 import type { FieldOut, ProfileEntryDraft, SectionOut } from "./types";
 
 interface Props {
@@ -326,11 +327,4 @@ function MultiEntryList({
       <span hidden>{keys.length}</span>
     </div>
   );
-}
-
-let tempCounter = 0;
-/** 新建条目的临时键：保存成功后由服务端 entry_id 替换。 */
-export function makeTempEntryKey(): string {
-  tempCounter += 1;
-  return "new:" + Date.now().toString(36) + ":" + tempCounter;
 }

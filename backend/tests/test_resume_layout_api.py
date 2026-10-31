@@ -5,6 +5,7 @@
 用户会在下载 PDF 之后才发现字号没变——而那时他已经按预览的样子投出去了。
 所以这里显式钉住"导出走的是同一条解析路径"。
 """
+import pytest
 from app.models.resume import ResumeRecord
 from app.services.resume.resume_record import record_format_config
 
@@ -125,6 +126,52 @@ def test_analyze_rejects_an_impossible_measurement(client):
         json={"measure": {"used_height": 100, "page_content_height": 0, "page_limit": 1}},
     )
     # page_content_height 必须是正数——0 表示"还没渲染完就量了"，那是客户端的问题。
+    assert response.status_code == 422
+
+
+def test_analyze_accepts_long_cv_page_limit(client):
+    """Q19：长 CV 上限 5 页的诊断请求不能按普通模式的 3 页上限 422。
+
+    根因是同一个 ``ResumeLayoutMeasure.page_limit`` 被两种文档模式共用，而校验写死了
+    ``MAX_RESUME_PAGES``（3）。普通模式的 1–3 由 ``mode_page_limit`` 在保存/渲染路径夹紧，
+    诊断这一侧只需接受长 CV 的 1–10。
+    """
+    resume_id = _make_resume(client)
+    patched = client.patch(
+        f"/api/resumes/{resume_id}/layout",
+        json={"document_mode": "long_cv", "page_limit": 5},
+    )
+    assert patched.status_code == 200, patched.text
+    assert patched.json()["page_limit"] == 5
+    response = client.post(
+        f"/api/resumes/{resume_id}/layout/analyze",
+        json={"measure": {"used_height": PAGE * 1.2, "page_content_height": PAGE, "page_limit": 5}},
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["diagnosis"]["page_limit"] == 5
+    assert body["diagnosis"]["pages_needed"] == 2
+
+
+@pytest.mark.parametrize("page_limit", [5, 10])
+def test_analyze_accepts_both_long_cv_page_limit_bounds(client, page_limit):
+    """长 CV 的页数上限两端（5 / 10）都能通过 Schema 校验。"""
+    resume_id = _make_resume(client)
+    response = client.post(
+        f"/api/resumes/{resume_id}/layout/analyze",
+        json={"measure": {"used_height": PAGE * 0.9, "page_content_height": PAGE, "page_limit": page_limit}},
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["diagnosis"]["page_limit"] == page_limit
+
+
+def test_analyze_rejects_page_limit_above_long_cv_max(client):
+    """上限仍是长 CV 的 10：超过它才 422，而不是把 5/10 一起拒掉。"""
+    resume_id = _make_resume(client)
+    response = client.post(
+        f"/api/resumes/{resume_id}/layout/analyze",
+        json={"measure": {"used_height": PAGE * 0.9, "page_content_height": PAGE, "page_limit": 11}},
+    )
     assert response.status_code == 422
 
 

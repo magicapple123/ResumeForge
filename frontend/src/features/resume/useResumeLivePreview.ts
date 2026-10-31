@@ -31,14 +31,14 @@
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { RefObject } from "react";
-import type { ResumeContent, ResumeLayout } from "../../types";
+import type { ResumeDocument, ResumeLayout } from "../../types";
 
 /** 状态机：空闲 / 正在输入（防抖中）/ 正在渲染 / 上一次失败。 */
 export type ResumeLivePreviewState = "idle" | "typing" | "rendering" | "error";
 
 /** 一次待渲染的"内容 + 版式"快照。 */
 export interface ResumeLivePreviewJob {
-  content: ResumeContent;
+  content: ResumeDocument;
   layout: ResumeLayout;
 }
 
@@ -48,14 +48,31 @@ const BURST_BUDGET = 2;
 /** 与 `ResumeLayoutControls` 的"拖完就重排"体感一致：短到不像卡顿，长到能合并一次输入。 */
 const DEFAULT_DEBOUNCE_MS = 600;
 
+/**
+ * 从节点向上找真正的滚动容器（overflow-y 可滚且内容超出）。
+ *
+ * 制作台传给 hook 的 scrollRef 指向 .resume-wb-canvas-scroll——它自己 overflow:hidden，
+ * 真正滚的是外层弹窗正文（.ant-modal-body）。找不到时退回传进来的节点，保持旧行为。
+ */
+export function nearestScrollableAncestor(node: HTMLElement | null): HTMLElement | null {
+  let element: HTMLElement | null = node;
+  while (element) {
+    const style = window.getComputedStyle(element);
+    const scrollable = style.overflowY === "auto" || style.overflowY === "scroll";
+    if (scrollable && element.scrollHeight > element.clientHeight) return element;
+    element = element.parentElement;
+  }
+  return node;
+}
+
 export interface UseResumeLivePreviewOptions {
   /** 制作台打开且中栏可见时为真；为假时一次请求都不发。 */
   enabled: boolean;
   /** 合并 overlay 之后的整份内容。 */
-  content: ResumeContent | null;
+  content: ResumeDocument | null;
   layout?: ResumeLayout;
   /** 注入 `api/renderResume`：保留 `signal` 才能真的取消在飞请求。 */
-  render: (content: ResumeContent, layout: ResumeLayout, signal: AbortSignal) => Promise<string>;
+  render: (content: ResumeDocument, layout: ResumeLayout, signal: AbortSignal) => Promise<string>;
   onHtml: (html: string) => void;
   onStateChange?: (state: ResumeLivePreviewState) => void;
   /** 滚动容器：替换 html 后按它恢复滚动位置。 */
@@ -119,7 +136,7 @@ export function useResumeLivePreview({
   const suspendedRef = useRef(false);
   const disposedRef = useRef(false);
   /** 首帧基线：内容引用 + 版式签名。 */
-  const lastContentRef = useRef<ResumeContent | null>(null);
+  const lastContentRef = useRef<ResumeDocument | null>(null);
   const lastLayoutRef = useRef<string | null>(null);
   /** `pump` / `rearm` 互相调用（完成后再跑末版 / 预算用完就重新防抖），只能靠 ref 打破环。 */
   const pumpRef = useRef<() => void>(() => undefined);
@@ -133,13 +150,15 @@ export function useResumeLivePreview({
 
   /** 写入 html，并把滚动位置按"高度没变就还原、变了按比例"放回去。 */
   const applyHtml = useCallback((html: string) => {
-    const node = scrollRefOf.current?.current ?? null;
+    // 制作台传进来的 ref 是 flex 布局层（本身 overflow:hidden），真正滚的是弹窗正文；
+    // 必须向上找到真正的滚动容器，否则每次刷新都只"恢复"一个永远为 0 的 scrollTop。
+    const node = nearestScrollableAncestor(scrollRefOf.current?.current ?? null);
     const previousTop = node ? node.scrollTop : 0;
     const previousHeight = node ? node.scrollHeight : 0;
     htmlRef.current(html);
     if (!node) return;
     const restore = () => {
-      const target = scrollRefOf.current?.current ?? null;
+      const target = nearestScrollableAncestor(scrollRefOf.current?.current ?? null);
       if (!target) return;
       const nextHeight = target.scrollHeight;
       if (nextHeight <= 0) return;
@@ -150,6 +169,8 @@ export function useResumeLivePreview({
     };
     if (typeof window.requestAnimationFrame === "function") window.requestAnimationFrame(restore);
     else restore();
+    // iframe 重排会把高度再撑一次并触发滚动锚定；分几拍再写回同一位置，末次写回赢。
+    for (const delay of [120, 400, 1200]) window.setTimeout(restore, delay);
   }, []);
 
   const pump = useCallback(() => {

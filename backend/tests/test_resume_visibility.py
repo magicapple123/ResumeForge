@@ -38,6 +38,14 @@ from app.services.pdf_exporter import build_resume_pdf
 from app.services.resume.resume_visibility import is_hidden_entry, visible_resume
 from pydantic import ValidationError
 from test_pdf_exporter import needs_font
+from tests.document_test_support import (
+    entries_of,
+    entry_of,
+    make_document,
+    require_entry,
+    stored_document,
+    values,
+)
 
 EXPORT = "/api/resumes/{id}/export"
 RENDER = "/api/resumes/render"
@@ -199,20 +207,21 @@ def test_visible_resume_filters_all_six_and_keeps_input_intact():
 
 def test_save_and_read_back_roundtrips_flags_for_all_six(client):
     resume_id = _create(client)
-    content = client.get(f"/api/resumes/{resume_id}").json()["content"]
-    assert content["education"][1]["hidden"] is True
-    assert content["experience"][1]["hidden"] is True
-    assert content["experience"][1]["lock_content"] is True
-    assert content["campus_experience"][1]["hidden"] is True
-    assert content["projects"][1]["hidden"] is True
-    assert content["skills"][0]["lock_content"] is True
-    assert content["skills"][0]["lock_layout"] is True
-    assert content["skills"][1]["hidden"] is True
-    assert content["awards"][1]["hidden"] is True
+    content = stored_document(client, resume_id)
+    # v2 把可见性/锁标志放在 entry 上（不再是 v1 的分区数组元素）。
+    assert require_entry(content, "education", 1)["hidden"] is True
+    assert require_entry(content, "experience", 1)["hidden"] is True
+    assert require_entry(content, "experience", 1)["lock_content"] is True
+    assert require_entry(content, "campus_experience", 1)["hidden"] is True
+    assert require_entry(content, "projects", 1)["hidden"] is True
+    assert require_entry(content, "skills", 0)["lock_content"] is True
+    assert require_entry(content, "skills", 0)["lock_layout"] is True
+    assert require_entry(content, "skills", 1)["hidden"] is True
+    assert require_entry(content, "awards", 1)["hidden"] is True
 
 
 def test_omitting_a_flag_clears_it(client):
-    """W06-FE 的取消口径：**省略键**（不写 false）也要让键从 content JSON 里消失。"""
+    """v1 的"省略键=清除"在 v2 落库时表现为条目标志回到默认 False。"""
     resume_id = _create(client)
     cleared = _content()
     for section in ("education", "experience", "skills"):
@@ -222,23 +231,25 @@ def test_omitting_a_flag_clears_it(client):
             item.pop("lock_layout", None)
     response = client.put(f"/api/resumes/{resume_id}/content", json={"content": cleared})
     assert response.status_code == 200, response.text
-    content = client.get(f"/api/resumes/{resume_id}").json()["content"]
+    content = stored_document(client, resume_id)
     for section in ("education", "experience", "skills"):
-        for item in content[section]:
-            for key in ("hidden", "lock_content", "lock_layout"):
-                assert key not in item, f"{section} 的 {key} 没有被省略语义清掉"
+        for entry in entries_of(content, section):
+            assert entry["hidden"] is False, f"{section} 的 hidden 没有被省略语义清掉"
+            assert entry["lock_content"] is False
+            assert entry["lock_layout"] is False
 
 
-def test_legacy_record_reads_back_without_visibility_keys(client, db_session):
+def test_legacy_record_reads_back_with_visibility_defaults(client, db_session):
+    """旧内容没有可见性键：读回是 v2 默认 False；旧客户端整份保存也不会把标志变成 True。"""
     legacy = {"name": "李四", "experience": [{"company": "甲公司"}], "skills": [{"name": "Go"}]}
     resume_id = _create(client, legacy)
-    detail = client.get(f"/api/resumes/{resume_id}").json()["content"]
-    assert "hidden" not in detail["experience"][0]
-    # 旧客户端（不知道这三个字段）整份保存回来，也不能长出 null/false 键。
+    detail = stored_document(client, resume_id)
+    assert require_entry(detail, "experience")["hidden"] is False
+    # 旧客户端（不知道这三个字段）整份保存回来：标志仍是默认 False。
     response = client.put(f"/api/resumes/{resume_id}", json=legacy)
     assert response.status_code == 200, response.text
-    again = client.get(f"/api/resumes/{resume_id}").json()["content"]
-    assert "hidden" not in again["experience"][0]
+    again = stored_document(client, resume_id)
+    assert require_entry(again, "experience")["hidden"] is False
 
 
 def test_non_bool_flag_is_rejected_by_the_api(client):
@@ -252,16 +263,37 @@ def test_non_bool_flag_is_rejected_by_the_api(client):
 
 def test_visibility_flags_do_not_participate_in_id_validation(client):
     resume_id = _create(client, {"name": "张三"})
-    # 只有可见性标志、没有 id：id 校验必须放行（它只管 id / point_ids）。
+    # 只有可见性标志、没有 id：id 校验必须放行（服务端 normalize 会补 id）。
     ok = client.put(
-        f"/api/resumes/{resume_id}",
-        json={"name": "张三", "experience": [{"company": "甲", "hidden": True}]},
+        f"/api/resumes/{resume_id}/content",
+        json={"content": {"name": "张三", "experience": [{"company": "甲", "hidden": True}]}},
     )
     assert ok.status_code == 200, ok.text
-    # 反过来，非法 id 仍然 422——隐藏标志不会把 id 校验绕过去。
+    # 反过来，v2 里非法 id 仍然 422——隐藏标志不会把 id 校验绕过去。
+    bad_content = make_document(
+        sections=[
+            {
+                "key": "experience",
+                "kind": "entries",
+                "entries": [
+                    {
+                        "items": [
+                            {
+                                "kind": "field",
+                                "key": "company",
+                                "value": "甲",
+                                "placement": "title",
+                            }
+                        ]
+                    }
+                ],
+            }
+        ]
+    )
+    bad_content["sections"][0]["entries"][0]["id"] = "bad id"
     bad = client.put(
-        f"/api/resumes/{resume_id}",
-        json={"name": "张三", "experience": [{"company": "甲", "id": "bad id", "hidden": True}]},
+        f"/api/resumes/{resume_id}/content",
+        json={"content": bad_content},
     )
     assert bad.status_code == 422, bad.text
     assert "对象标识" in bad.text
@@ -281,16 +313,22 @@ def test_markdown_and_txt_exports_exclude_hidden_entries():
 
 
 def test_delivery_json_excludes_hidden_entries():
+    """投递 JSON 是 v2 文档：隐藏条目整条剔除，锁定标志只是标志不影响出现。"""
     payload = json.loads(_build("json").decode("utf-8"))
-    assert [item["school"] for item in payload["education"]] == ["可见教育大学"]
-    assert [item["company"] for item in payload["experience"]] == ["可见科技"]
-    assert [item["organization"] for item in payload["campus_experience"]] == ["可见社团"]
-    assert [item["name"] for item in payload["projects"]] == ["可见项目"]
-    assert [item["name"] for item in payload["skills"]] == ["Python"]
-    assert [item["name"] for item in payload["awards"]] == ["可见奖项"]
+    assert payload["version"] == 2
+    assert len(entries_of(payload, "education")) == 1
+    assert [item["value"] for item in entries_of(payload, "education")[0]["items"] if item["key"] == "school"] == ["可见教育大学"]
+    assert len(entries_of(payload, "experience")) == 1
+    assert "可见科技" in values(payload)
+    assert "可见社团" in values(payload)
+    assert "可见项目" in values(payload)
+    assert "Python" in values(payload)
+    assert "可见奖项" in values(payload)
+    for hidden_probe in HIDDEN_PROBES:
+        assert hidden_probe not in json.dumps(payload, ensure_ascii=False), hidden_probe
     # 锁只是标志：可见条目带着 lock_* 仍然必须出现在投递 JSON 里。
-    assert payload["skills"][0]["lock_content"] is True
-    assert payload["skills"][0]["lock_layout"] is True
+    assert entry_of(payload, "skills", 0)["lock_content"] is True
+    assert entry_of(payload, "skills", 0)["lock_layout"] is True
 
 
 def test_docx_excludes_hidden_entries():
@@ -324,8 +362,8 @@ def test_exact_preview_pdf_excludes_hidden_entries(client):
 
 def test_detail_and_delivery_snapshot_keep_hidden_content(client):
     resume_id = _create(client)
-    detail = client.get(f"/api/resumes/{resume_id}").json()["content"]
-    assert detail["experience"][1]["hidden"] is True, "详情接口是编辑态，必须保留隐藏正文"
+    detail = stored_document(client, resume_id)
+    assert require_entry(detail, "experience", 1)["hidden"] is True, "详情接口是编辑态，必须保留隐藏正文"
 
     response = client.post(
         EXPORT.format(id=resume_id), json={"format": "html", "record_delivery": True}
@@ -337,9 +375,10 @@ def test_detail_and_delivery_snapshot_keep_hidden_content(client):
         snapshots = db.query(ResumeDeliveryRecord).all()
     assert snapshots, "record_delivery=true 必须落一份投递快照"
     snapshot = snapshots[-1].content
-    companies = [item.get("company") for item in snapshot["experience"]]
-    assert "隐藏科技" in companies, "内部投递快照必须保留隐藏正文（否则恢复显示成了删除）"
-    assert "hidden" in snapshot["experience"][1]
+    # 快照存的是投递时刻的完整内容（v1 旧记录 / v2 都可能），隐藏正文必须还在。
+    assert "隐藏科技" in json.dumps(snapshot, ensure_ascii=False), (
+        "内部投递快照必须保留隐藏正文（否则恢复显示成了删除）"
+    )
 
 
 # ===== 6. 导出闸门只看纸面：隐藏条目里的【待补】不拦导出 =====

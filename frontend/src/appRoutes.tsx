@@ -63,5 +63,3 @@ export const APP_ROOT_ROUTE: ReactElement = (
     <Route path="*" element={<Navigate to="/" replace />} />
   </Route>
 );
-
-export default APP_ROOT_ROUTE;

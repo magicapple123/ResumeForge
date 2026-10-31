@@ -30,6 +30,16 @@ interface PreviewGeometryInput {
    * 不传 = 1，即"永不放大"——与 2026-10-23 之前的行为逐像素一致。
    */
   maxFitScale?: number;
+  /**
+   * 「适应」按哪一边算（Q21）：
+   *
+   * - `"page"`（默认，主预览）：宽高都放得下 —— 一页完整可见；
+   * - `"width"`（制作台右栏）：**只按纸宽 ≤ 相框宽**，纵向滚动看全。
+   *
+   * 制作台右栏窄而高：按整页算会把纸缩到 62%，两侧留出大片灰边；按宽度算才是用户说的
+   * "适应画布"（纸铺满右栏、右边框可见），纵向滚动本来就是右栏的常态。
+   */
+  fitMode?: "page" | "width";
 }
 
 export interface PreviewGeometry {
@@ -68,6 +78,7 @@ export function calculatePreviewGeometry({
   pageGap,
   measure,
   maxFitScale = MAX_FIT_SCALE_DEFAULT,
+  fitMode = "page",
 }: PreviewGeometryInput): PreviewGeometry {
   const viewportWidth = availableSpace.width || A4_WIDTH_PX;
   const viewportHeight = availableSpace.height || paperHeight;
@@ -90,7 +101,11 @@ export function calculatePreviewGeometry({
   // 1) `maxFitScale` 封顶（大屏允许放大，默认 1）；
   // 2) 可读下限往上抬——**fit 不做吸附**，它必须"恰好装得下"，否则纸比容器宽一像素
   //    就会凭空多出一条横向滚动条。手动 `zoom` 另有一档，同样不许低于下限。
-  const rawFit = Math.min(viewportWidth / A4_WIDTH_PX, viewportHeight / contentUnitHeight);
+  // 按宽度适应（制作台）时**不看高度**：纸宽恰好等于相框宽，纵向由滚动承接（Q21）。
+  const rawFit =
+    fitMode === "width"
+      ? viewportWidth / contentTotalWidth
+      : Math.min(viewportWidth / A4_WIDTH_PX, viewportHeight / contentUnitHeight);
   const fitScale = Math.min(maxFitScale, Math.max(MIN_READABLE_SCALE, rawFit));
   const scale = Math.min(MAX_ZOOM, Math.max(MIN_READABLE_SCALE, fitScale * zoom));
   const viewportHeightForPage = Math.min(contentUnitHeight * fitScale, viewportHeight);

@@ -64,10 +64,13 @@ export function useVersions({ resumeId, onRestored }: UseVersionsOptions) {
 
   // 切简历/切数据集：清状态再重拉（旧版本的列表不能留在新简历上）。
   useEffect(() => {
-    setVersions([]);
-    setConflict(null);
-    setActionError("");
-    void reload();
+    // 切简历先清列表再重拉：同步 setState 放进微任务，避开级联渲染告警（仍在本帧内生效）。
+    queueMicrotask(() => {
+      setVersions([]);
+      setConflict(null);
+      setActionError("");
+      void reload();
+    });
   }, [reload]);
 
   const create = useCallback(

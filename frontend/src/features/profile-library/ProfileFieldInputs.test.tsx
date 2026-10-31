@@ -216,7 +216,6 @@ describe("ProfileFieldInputs 的字段渲染与隐藏", () => {
     expect(document.querySelectorAll(".profile-field-grid-item.is-dirty")).toHaveLength(0);
 
     fireEvent.change(screen.getByLabelText("Nickname"), { target: { value: "Bob" } });
-    // eslint-disable-next-line no-console
 
     const dirty = document.querySelectorAll(".profile-field-grid-item.is-dirty");
     expect(dirty).toHaveLength(1);

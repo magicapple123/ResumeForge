@@ -30,7 +30,6 @@ from ...schemas.preflight import (
     PreflightRequest,
     PreflightSnapshot,
 )
-from ...schemas.resume import ResumeContent
 from ...schemas.resume_generation import mode_page_limit
 from ...services import trash
 from ...services.export_pipeline import (
@@ -40,7 +39,6 @@ from ...services.export_pipeline import (
     render_config_fingerprint,
 )
 from ...services.resume import export_bundle as bundle_service
-from ...services.resume.document_identity import ENTRY_FIELDS, sanitize_document_ids
 from ...services.resume.preflight import run_preflight
 from ...services.resume.resume_delivery import canonical_content_sha256
 from ...services.resume.resume_labels import DEFAULT_RESUME_LANGUAGE
@@ -51,10 +49,9 @@ from ...services.resume.resume_template_store import (
     resolve_style_config,
     resolve_style_template,
 )
-from ...services.resume.resume_visibility import is_hidden_entry
 from ...services.settings_service import get_llm_config
 from .. import settings as settings_api
-from ._shared import _get_live_resume
+from ._shared import _get_live_resume, document_or_422
 
 router = APIRouter()
 
@@ -181,11 +178,11 @@ def _export_request_and_context(
 
 
 def _export_snapshot(
-    content: ResumeContent, request: ExportRequest, context: RenderContext, record
+    document: dict, request: ExportRequest, context: RenderContext, record
 ) -> PreflightSnapshot:
-    """D20 快照：content + 与导出首格式完全一致的渲染配置指纹。"""
+    """D20 快照：v2 文档 + 与导出首格式完全一致的渲染配置指纹。"""
     return PreflightSnapshot(
-        content_sha256=canonical_content_sha256(content.model_dump()),
+        content_sha256=canonical_content_sha256(document),
         render_config_sha256=render_config_fingerprint(request, context),
         template=context.template,
         page_limit=(
@@ -197,19 +194,28 @@ def _export_snapshot(
     )
 
 
-def _hidden_entry_count(content: ResumeContent) -> int:
-    """六类/科研条目里被隐藏的条数（D20：导出会排除它们）。"""
+def _hidden_entry_count(document: dict) -> int:
+    """被隐藏的条目数（D20：导出会排除它们）。
+
+    **必须数 v2 文档**：v1 分析视图按定义不含 hidden 条目/隐藏字段，用它计数会恒为 0。
+    """
     return sum(
         1
-        for field in ENTRY_FIELDS
-        for entry in (getattr(content, field, None) or [])
-        if is_hidden_entry(entry)
+        for section in document.get("sections") or []
+        for entry in section.get("entries") or []
+        if entry.get("hidden")
     )
 
 
-def _export_summary(
-    record, content: ResumeContent, payload: PreflightRequest
-) -> ExportCheckSummary:
+def _document_contact_present(document: dict) -> bool:
+    """Read contact values from the v2 header for the export summary."""
+    for item in document.get("header", {}).get("items", []):
+        if item.get("key") in {"phone", "email"} and str(item.get("value") or "").strip():
+            return True
+    return False
+
+
+def _export_summary(record, document: dict, payload: PreflightRequest) -> ExportCheckSummary:
     """D20 核对摘要：字段取值与 export_bundle manifest 的 target 块同口径。"""
     revision = int(record.revision or 0)
     document_mode = getattr(record, "document_mode", None) or "resume"
@@ -217,14 +223,14 @@ def _export_summary(
         target_company=(record.company or "").strip(),
         target_job_title=(record.job_title or "").strip(),
         resume_title=(record.title or "").strip(),
-        contact_present=bool((content.phone or "").strip() or (content.email or "").strip()),
+        contact_present=_document_contact_present(document),
         document_mode="long_cv" if document_mode == "long_cv" else "resume",
         revision=revision,
         revision_changed=(
             payload.resume_revision is not None
             and int(payload.resume_revision) != revision
         ),
-        hidden_count=_hidden_entry_count(content),
+        hidden_count=_hidden_entry_count(document),
     )
 
 
@@ -252,14 +258,21 @@ def preflight_resume(
         if variant_options:
             content_source = variant_options.get("content") or {}
         elif payload.content is not None:
-            content_source = payload.content.model_dump()
+            content_source = payload.content
         else:
             content_source = record.content
-        content = ResumeContent.model_validate(sanitize_document_ids(content_source) or {})
+        # 请求边界统一为 v2 文档；尚未迁移的检查规则在 run_preflight 内部使用只读分析视图。
+        # 结构不合法（含非法照片）统一 422，不让检查接口 500。
+        document = document_or_422(
+            content_source or {},
+            db,
+            language=record.language or None,
+            format_config=record.format_config or {},
+        )
         export_request, export_context, export_options = _export_request_and_context(
             db, record, payload, variant_options
         )
-        snapshot = _export_snapshot(content, export_request, export_context, record)
+        snapshot = _export_snapshot(document, export_request, export_context, record)
         template = export_context.template
         page_limit = snapshot.page_limit
         font_scale = snapshot.font_scale
@@ -268,10 +281,11 @@ def preflight_resume(
         redact = bool(export_options["redact"])
     else:
         # 编辑态：行为与 D20 之前逐字一致（不看导出字段，不返回 export_summary）。
-        content = (
-            ResumeContent.model_validate(payload.content)
-            if payload.content is not None
-            else ResumeContent.model_validate(record.content)
+        document = document_or_422(
+            payload.content if payload.content is not None else record.content,
+            db,
+            language=record.language or None,
+            format_config=record.format_config or {},
         )
         export_template, _export_html, format_config = _resolve_style(
             db, record, payload, variant_options
@@ -297,7 +311,7 @@ def preflight_resume(
             include_photo=True,
         )
         snapshot = PreflightSnapshot(
-            content_sha256=canonical_content_sha256(content.model_dump()),
+            content_sha256=canonical_content_sha256(document),
             render_config_sha256=render_config_fingerprint(probe, context),
             template=export_template,
             page_limit=page_limit,
@@ -310,7 +324,7 @@ def preflight_resume(
 
     claims = db.query(ClaimRecord).filter(trash.live_only(ClaimRecord)).all()
     result = run_preflight(
-        content,
+        document,
         request=payload,
         snapshot=snapshot,
         template=template,
@@ -329,7 +343,7 @@ def preflight_resume(
     if payload.purpose != "export":
         return result
     return result.model_copy(
-        update={"export_summary": _export_summary(record, content, payload)}
+        update={"export_summary": _export_summary(record, document, payload)}
     )
 
 

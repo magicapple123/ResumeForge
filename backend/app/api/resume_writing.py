@@ -21,7 +21,6 @@ from sqlalchemy.orm import Session
 from ..database import get_db
 from ..models.claim import ClaimRecord
 from ..models.resume import ResumeRecord
-from ..schemas.resume import ResumeContent
 from ..schemas.resume_writing import (
     PhrasesOut,
     PhrasesRequest,
@@ -41,6 +40,7 @@ from ..schemas.resume_writing import (
 from ..services import trash
 from ..services.llm import create_provider
 from ..services.llm.base import LLMError
+from ..services.resume import document_io
 from ..services.resume.resume_diff import build_resume_diff
 from ..services.resume.resume_field_rewrite import (
     FieldPathError,
@@ -173,7 +173,7 @@ async def rewrite_resume_field(
     用户看过、点保存，才算数。
     """
     record = _load_record(db, resume_id)
-    content = ResumeContent.model_validate(record.content or {})
+    content, _conversion = document_io.document_for_record(db, record)
     try:
         target = resolve_field_target(content, payload.path)
     except FieldPathError as exc:

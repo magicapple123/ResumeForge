@@ -322,6 +322,9 @@ describe("ProfileGroupManagerModal", () => {
         "Research",
         "single_line",
         WORKSPACE.workspace_revision,
+        // v2 迁移后 createField 多了第 5 个参数（纸面位置/仅素材标记）：
+        // 自定义短字段默认跟随目录（defaultPlacement=null），不是仅素材。
+        { defaultPlacement: null, materialOnly: false },
       ),
     );
     // 成功路径不应出现 409 的「内容已在其他窗口修改」提示。

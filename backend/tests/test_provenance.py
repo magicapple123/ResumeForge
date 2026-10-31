@@ -65,7 +65,7 @@ def test_link_creates_source_with_first_revision_and_coverage(client):
     link = response.json()
     assert link["status"] == "linked"
     assert link["object_id"] == "expobj0001"
-    assert link["path"] == "experience.0"
+    assert link["path"] == "experience.expobj0001"
     assert len(link["source_fingerprint"]) == 64
 
     view = client.get(f"/api/provenance/resumes/{resume_id}").json()
@@ -79,10 +79,10 @@ def test_link_creates_source_with_first_revision_and_coverage(client):
     assert len(source["blocks"]) == 1
     # 共 3 个可关联块：实习条目 + 它的 1 个要点 + 教育条目。
     assert view["coverage"] == {"total": 3, "linked": 1, "unlinked": 2}
-    experience_entry = _object(view, "experience.0")
+    experience_entry = _object(view, "experience.expobj0001")
     assert experience_entry["label"] == "示例科技有限公司"
     assert experience_entry["link"] is not None
-    point = _object(view, "experience.0.description.0")
+    point = _object(view, "experience.expobj0001.pnt0000001")
     assert point["point_id"] == "pnt0000001"
     assert experience_entry["link"]["status"] == "linked"
 
@@ -120,8 +120,8 @@ def test_source_change_appends_revision_and_marks_impact_stale(client):
     source = view["sources"][0]
     assert source["latest_revision_no"] == 2
     assert [item["revision_no"] for item in source["revisions"]] == [1, 2]
-    assert _object(view, "experience.0")["link"]["status"] == "stale"
-    assert _object(view, "education.0")["link"]["status"] == "linked"
+    assert _object(view, "experience.expobj0001")["link"]["status"] == "stale"
+    assert _object(view, "education.eduobj0001")["link"]["status"] == "linked"
 
     impact = client.get(f"/api/provenance/sources/{source_id}/impact")
     assert impact.status_code == 200
@@ -167,7 +167,7 @@ def test_chain_returns_sources_and_revisions(client):
 
     assert response.status_code == 200
     chain = response.json()
-    assert chain["path"] == "experience.0"
+    assert chain["path"] == "experience.expobj0001"
     assert len(chain["sources"]) == 1
     assert len(chain["sources"][0]["revisions"]) == 1
     # 缺少目标定位参数：400（不是静默返回空链）。
@@ -207,7 +207,7 @@ def test_source_detail_and_404(client):
 
     detail = client.get(f"/api/provenance/sources/{source_id}")
     assert detail.status_code == 200
-    assert detail.json()["blocks"][0]["path"] == "experience.0"
+    assert detail.json()["blocks"][0]["path"] == "experience.expobj0001"
     assert client.get("/api/provenance/sources/999999").status_code == 404
     assert client.get("/api/provenance/sources/999999/impact").status_code == 404
 

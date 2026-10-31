@@ -22,6 +22,7 @@ import { App } from "antd";
 import { useCallback, useState } from "react";
 import { createManualResume, getResume } from "../../api/resumes";
 import type { ResumeContent, ResumeDetail, ResumeLanguage } from "../../types";
+import type { ResumeDocument } from "../../types/resumeDocument";
 import { summarizeDraftDiff, type DraftDiffEntry } from "../../utils/draftDiff";
 import { t } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
@@ -31,8 +32,15 @@ interface Props {
   /** 记录原标题：另存副本的标题 = 原标题 +（副本）。 */
   resumeTitle: string;
   resumeLanguage?: ResumeLanguage;
-  /** 本地还没保存的内容（比较与另存副本取它）；返回 null = 没有可比较的内容。 */
-  readLocalContent: () => ResumeContent | null;
+  /** Read the current document without constructing an older content model. */
+  readLocalContent: () => ResumeContent | ResumeDocument | null;
+  /**
+   * 本地还没保存的 v2 文档（"另存副本"取它）：v2 文案就是服务端要的格式，
+   * 不能拿 v1 投影副本去建新记录。
+   */
+  readLocalDocument?: () => ResumeDocument | null;
+  /** 宿主注入的"另存副本"（走条件写宿主，标题带（副本））。 */
+  saveAsCopy?: (content: ResumeDocument) => Promise<ResumeDetail>;
   /** 「用最新的」：把服务端最新交给宿主（替换 detail/html/layout、清 overlay 与草稿）。 */
   onAdoptLatest: (latest: ResumeDetail) => Promise<void> | void;
   /** 冲突已处理完（用最新的 / 另存副本成功）：宿主清冲突态、恢复动作条。 */
@@ -48,6 +56,8 @@ export default function ResumeWorkbenchConflict({
   resumeTitle,
   resumeLanguage = "zh-CN",
   readLocalContent,
+  readLocalDocument,
+  saveAsCopy,
   onAdoptLatest,
   onResolved,
   onCopyCreated,
@@ -100,16 +110,22 @@ export default function ResumeWorkbenchConflict({
    * "副本已保存、原简历没同步"，不再把冲突条挂回来（那会让用户以为副本也没成）。
    */
   const saveCopy = async (): Promise<void> => {
+    const localDocument = readLocalDocument?.() ?? null;
     const local = readLocalContent();
-    if (!local) return;
+    if (!local && !localDocument) return;
     setBusy("copy");
     try {
-      const copy = await createManualResume({
-        title: t("workbench.conflict.copy.title", { title: resumeTitle }),
-        content: local,
-        draft: false,
-        language: resumeLanguage,
-      });
+      const copy =
+        saveAsCopy && localDocument
+          ? await saveAsCopy(localDocument)
+          : await createManualResume({
+              title: t("workbench.conflict.copy.title", { title: resumeTitle }),
+              // 旧宿主（v1 工作台，已停用）：把投影当 v2 传，只为让旧链路编译与旧测试可跑，
+              // 新宿主一定走上面的 saveAsCopy 分支。
+              content: local as unknown as ResumeDocument,
+              draft: false,
+              language: resumeLanguage,
+            });
       onCopyCreated?.(copy);
       message.success(t("workbench.conflict.copy.done", { title: copy.title }));
       const latest = await fetchLatest();

@@ -11,7 +11,7 @@
  * `components/resume/delivery/**` + i18n；`api/` 与 `types/` 由 lead 统一登记。
  */
 import { ApiError } from "../../api/apiError";
-import type { ResumeContent } from "../../types/resume";
+import type { ResumeDocument } from "../../types/resumeDocument";
 import { buildExportCheckSummary } from "./check";
 import {
   defaultPresetConfig,
@@ -212,7 +212,7 @@ export interface MockExportApiOptions {
   presets?: ExportPreset[];
   artifacts?: ExportArtifactRecord[];
   /** 当前内容：用于 mock 的 D20 核对摘要。 */
-  content?: ResumeContent | null;
+  content?: ResumeDocument | null;
   company?: string;
   jobTitle?: string;
   resumeTitle?: string;

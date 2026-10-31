@@ -212,8 +212,6 @@ describe("WebFormProfileSection custom group", () => {
     );
 
     expect(screen.queryByText(t("profileLibrary.webform.customGroupName"))).toBeNull();
-    expect(
-      screen.getByLabelText(t("profileLibrary.webform.addFieldAria")),
-    ).toBeInTheDocument();
+    expect(screen.getByLabelText(t("profileLibrary.webform.addFieldAria"))).toBeInTheDocument();
   });
 });

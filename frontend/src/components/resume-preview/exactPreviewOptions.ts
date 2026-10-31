@@ -14,7 +14,8 @@
  *
  * 全部走**草稿值**而不是记录值：换完模板还没点保存时，精确预览就得按新的排。
  */
-import type { ResumeContent, ResumeDetail, ResumeLayout, ResumeTemplateCatalog } from "../../types";
+import type { ResumeDetail, ResumeLayout, ResumeTemplateCatalog } from "../../types";
+import type { ResumeDocument } from "../../types/resumeDocument";
 
 /** 精确预览需要的那组上下文（与 `ResumeDetailPreview` 手里的草稿值一致）。 */
 export interface ExactPreviewOptions {
@@ -49,7 +50,7 @@ export interface ExactPreviewOptions {
    * 塞进来——精确预览显示的就是导出产物本身，正文不一样，"预览"就没有意义了。
    * 只走预览端点：不落库、不冻结交付、不触发 AI。
    */
-  content?: ResumeContent;
+  content?: ResumeDocument;
 }
 
 export function buildExactPreviewOptions(

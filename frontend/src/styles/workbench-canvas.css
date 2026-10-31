@@ -83,6 +83,18 @@
   background: var(--rf-wb-canvas);
 }
 
+/* 画布这一栏必须能被压缩（Q21）。`.resume-wb-canvas` 是 `.resume-wb-body` 的 flex 项，
+   默认的 `min-width: auto` 会取"纸面内容的最小宽度"——精确预览里纸列有内联 px 宽度，
+   两者互相推高（量宽 → 纸变宽 → 栏变宽 → 量宽更大），于是右栏越过窗口右边框、整列被裁。
+   给 flex 链上每一层都写上 `min-width: 0`，栏宽就只由「剩余空间」决定，纸面超宽交给
+   纸面层自己横向滚动。 */
+.resume-wb-canvas,
+.resume-wb-canvas-scroll,
+.resume-wb-canvas-scroll .resume-preview-root,
+.resume-wb-canvas-scroll .resume-preview-body {
+  min-width: 0;
+}
+
 /* 画布条：**只装实时预览状态**（2026-11 起）。原先那两句说明（分页虚线 / 缩放怎么用）
    已经并成一句交给纸面下方的缩放条，所以这条现在通常只有一枚状态胶囊；
    没有状态时 `ResumeWorkbenchCanvas` 整条都不渲染，不会留一个空盒子。
@@ -149,8 +161,10 @@
   flex: 1 1 auto;
   flex-direction: column;
   min-height: 0;
-  /* 横向也交给这一层：精确预览放大后纸比相框宽，滚动条只能有一个（精确相框自己不再滚）。 */
-  overflow-x: auto;
+  /* 横向**只允许纸面层自己滚**（Q21）：草稿的纸在 `.resume-preview-viewport` 里滚，
+     精确的纸在 `.exact-preview.is-zoomed` 里滚。这一层若也开 `overflow-x: auto`，
+     1–2px 的亚像素余量就会多出一条横条，放大时更是整块画布内容一起被右侧裁切。 */
+  overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
 }

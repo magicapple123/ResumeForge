@@ -4,7 +4,8 @@ import { App as AntdApp } from "antd";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { t } from "../../i18n";
-import MaterialPickView, { defaultKindForCategory, materialToDraft } from "./MaterialPickView";
+import MaterialPickView from "./MaterialPickView";
+import { defaultKindForCategory, materialToDraft } from "./materialPickModel";
 
 const api = vi.hoisted(() => ({ listMaterials: vi.fn() }));
 

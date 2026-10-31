@@ -23,7 +23,6 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict, Field
 
 from .generation_context import CareerContextRequest
-from .resume import ResumeContent
 from .resume_generation import MAX_CUSTOM_INSTRUCTION_CHARS
 from .resume_writing import ResumeDiffOut
 from .versions import VariantOut
@@ -71,7 +70,8 @@ class ScenarioVariantAdoptRequest(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    content: ResumeContent
+    # v2 文档 JSON（兼容旧 v1：采纳路由统一 ensure_document_version 后落库）。
+    content: dict
     expected_content_sha256: str = Field(min_length=SHA256_LENGTH, max_length=SHA256_LENGTH)
     expected_context_sha256: str = Field(min_length=SHA256_LENGTH, max_length=SHA256_LENGTH)
     career_context: CareerContextRequest

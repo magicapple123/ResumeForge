@@ -58,6 +58,7 @@ from ..services.job_analysis_cache import read_cached_analysis, store_analysis
 from ..services.llm import create_provider
 from ..services.llm.client_pool import aclose_clients_for_current_loop
 from ..services.profile.ai_profile import load_ai_profile
+from ..services.resume import document_io
 from ..services.resume.resume_risk import scan_resume_risks
 from ..services.resume.resume_suggestions import generate_suggestions
 from ..services.settings_service import get_llm_config, get_webform_relaxed_mode
@@ -178,10 +179,11 @@ def handle_job_analysis(ctx: Any) -> None:
 
 
 def _resume_content(record: ResumeRecord) -> ResumeContent:
-    """落库 JSON → 结构体；排除照片，与 ``api/resume_risk`` 的口径一致。"""
-    content_data = dict(record.content or {})
-    content_data["photo"] = ""
-    return ResumeContent.model_validate(content_data)
+    """落库 JSON → v1 分析视图；排除照片，与 ``api/resume_risk`` 的口径一致。"""
+    content = document_io.ensure_document_version(
+        record.content or {}, language=record.language, format_config=record.format_config
+    )
+    return content
 
 
 def handle_resume_risk(ctx: Any) -> None:
@@ -261,7 +263,7 @@ def handle_resume_rewrite(ctx: Any) -> None:
         raise AiTaskHandlerError("关联岗位已被删除，无法生成岗位化建议")
 
     config = _llm_config(session)
-    resume = ResumeContent.model_validate(record.content or {})
+    resume, _conversion = document_io.document_for_record(session, record)
     job_out = JobOut.model_validate(job)
     # 建议也是"读我的资料"的 AI 功能：当前组 + 去隐藏（与匹配/助手同一口径）。
     profile = load_ai_profile(session)

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * W07 / P1-02 的角色级排版面板：六个段落角色（姓名 / 板块标题 / 条目标题 / 正文 / 日期与
- * 元信息 / 重点文字）各自一组属性。
+ * W07 / P1-02 的角色级排版面板：五个段落角色（姓名 / 板块标题 / 条目标题 / 正文 / 日期与
+ * 元信息）各自一组属性。
  *
  * ## 作用范围与来源
  *
@@ -20,6 +20,7 @@
  * （契约 §2.5 的挂载点约定），这里不 import 任何 shell 文件。
  */
 import { Collapse, Typography } from "antd";
+import { useState } from "react";
 import type { RefObject } from "react";
 import type { ResumeLayout, ResumeTemplateCatalog } from "../../../types";
 import type { ResumePreviewHandle } from "../../ResumePreview";
@@ -60,6 +61,30 @@ interface Props {
   defaultOpenRoles?: readonly ResumeRoleKey[];
 }
 
+/** 「上次展开到哪儿」只存角色 key 数组；用户偏好，存 localStorage（不是简历数据）。 */
+const OPEN_ROLES_STORAGE_KEY = "resumeforge.typography.openRoles.v1";
+
+function readStoredOpenRoles(): string[] | null {
+  try {
+    const raw = window.localStorage.getItem(OPEN_ROLES_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return null;
+    const known = new Set<string>(RESUME_ROLES);
+    return parsed.filter((item): item is string => typeof item === "string" && known.has(item));
+  } catch {
+    return null;
+  }
+}
+
+function writeStoredOpenRoles(keys: readonly string[]): void {
+  try {
+    window.localStorage.setItem(OPEN_ROLES_STORAGE_KEY, JSON.stringify(keys));
+  } catch {
+    // 隐私模式 / 配额满：偏好存不进去不影响面板本身。
+  }
+}
+
 export default function RoleStylePanel({
   layout,
   catalog,
@@ -69,6 +94,11 @@ export default function RoleStylePanel({
   defaultOpenRoles,
 }: Props) {
   useLocale();
+  // 展开状态跨挂载保留：局部排版每次重新打开不该又回到"姓名 + 正文"，
+  // 用户上次展开到哪儿，回来还是哪儿（偏好存 localStorage，不写进简历）。
+  const [openRoles, setOpenRoles] = useState<string[]>(
+    () => readStoredOpenRoles() ?? [...(defaultOpenRoles ?? ["name", "body"])],
+  );
   const config = layout.format_config;
   const domains = readStyleDomains(config);
   const styleCatalog = readStyleCatalog(catalog);
@@ -151,7 +181,12 @@ export default function RoleStylePanel({
       <Collapse
         size="small"
         items={items}
-        defaultActiveKey={[...(defaultOpenRoles ?? ["name", "body"])]}
+        activeKey={openRoles}
+        onChange={(keys) => {
+          const next = (Array.isArray(keys) ? keys : [keys]).map(String);
+          setOpenRoles(next);
+          writeStoredOpenRoles(next);
+        }}
       />
       <Typography.Text type="secondary">{t("typography.capability.pdf")}</Typography.Text>
     </section>

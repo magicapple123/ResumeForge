@@ -7,7 +7,7 @@
  */
 import { Alert, App, Button, Input, Modal, Select, Space, Switch } from "antd";
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { ResumeContent } from "../../../types";
+import type { ResumeDocument } from "../../../types/resumeDocument";
 import { t } from "../../../i18n";
 import { useLocale } from "../../../i18n/i18nContext";
 import {
@@ -38,7 +38,7 @@ export interface ExportConfigModalProps {
   onClose: () => void;
   api: ExportDeliveryApi;
   resumeId: number | null;
-  content?: ResumeContent | null;
+  content?: ResumeDocument | null;
   /** 服务端当前 revision；null = 还没拿到（此时只读核对，不允许 strict 导出）。 */
   revision: number | null;
   resumeTitle: string;
@@ -122,9 +122,11 @@ export default function ExportConfigModal({
   const [presetDefault, setPresetDefault] = useState(false);
   const [savingPreset, setSavingPreset] = useState(false);
 
+  const documentName =
+    content?.header.items.find((item) => item.kind === "field" && item.key === "name")?.value ?? "";
   const namingContext = useMemo<NamingContext>(
     () => ({
-      name: content?.name ?? "",
+      name: documentName,
       company,
       job_title: jobTitle,
       template,
@@ -132,7 +134,7 @@ export default function ExportConfigModal({
       revision: revision ?? 0,
       language,
     }),
-    [company, content?.name, jobTitle, language, revision, template, today],
+    [company, documentName, jobTitle, language, revision, template, today],
   );
 
   const issues = validatePresetConfig(bundle.config);

@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data: blob:; style-src 'unsafe-inline'; font-src data:; script-src 'nonce-{{ csp_nonce }}'; base-uri 'none'; form-action 'none'" />
-<title>{{ resume.name }} - {{ resume.job_intent }} - 简历</title>
+<title>{{ page_title }} - 简历</title>
 <style>
   /* 学术模板：纯黑白、无彩色色块。姓名大而重、右上角方形照片；
      分区标题加粗靠左 + 一条整宽细线（不是色块、不是竖条）；
@@ -67,7 +67,7 @@
 </style>
 </head>
 <body>
-{% include "_resume_sections.j2" %}
+{% include "_resume_document.j2" %}
 {% include "_resume_fit_script.j2" %}
 </body>
 </html>

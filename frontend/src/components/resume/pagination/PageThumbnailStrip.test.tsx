@@ -66,9 +66,7 @@ describe("PageThumbnailStrip", () => {
     const hint = document.querySelector(".resume-page-thumbnails-hint")?.textContent ?? "";
     expect(hint).toContain(t("pagination.thumbnails.empty"));
     expect(hint).toContain(t("pagination.thumbnails.hint"));
-    expect(
-      screen.getByRole("button", { name: t("pagination.thumbnails.refresh") }),
-    ).toBeDisabled();
+    expect(screen.getByRole("button", { name: t("pagination.thumbnails.refresh") })).toBeDisabled();
   });
 
   it("空态里点「获取分页报告」触发行人注册的动作（不必回画布顶部找）", () => {
@@ -88,9 +86,7 @@ describe("PageThumbnailStrip", () => {
     renderStrip(REPORT);
     act(() => setPaginationReportRefresh(run));
     const head = document.querySelector(".resume-page-thumbnails-head") as HTMLElement;
-    fireEvent.click(
-      within(head).getByRole("button", { name: t("pagination.thumbnails.refresh") }),
-    );
+    fireEvent.click(within(head).getByRole("button", { name: t("pagination.thumbnails.refresh") }));
     expect(run).toHaveBeenCalledTimes(1);
   });
 

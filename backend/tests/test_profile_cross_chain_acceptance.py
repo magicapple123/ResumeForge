@@ -164,9 +164,12 @@ def test_fill_chain_projection_from_real_storage_has_lines_and_c2_and_languages(
     assert "开源贡献" in custom_titles
     custom = custom_titles["开源贡献"]
     assert custom.key == ids["custom_section_key"]
-    assert custom.entries[0].text == "维护开源项目"
+    # R1-E/R-37 单源：没有 primary_field_id 时不存在主文本，multi_line 字段也是「标签：值」行
+    # （否则 multi_line 自定义字段会丢 label/source，且与生成链形状不一致）。
+    assert custom.entries[0].text == ""
     assert [(line.label, line.value) for line in custom.entries[0].lines] == [
-        ("仓库链接", "https://example.com/repo")
+        ("贡献描述", "维护开源项目"),
+        ("仓库链接", "https://example.com/repo"),
     ]
     assert all("维护开源项目" not in "\n".join(item.description) for item in content.projects)
     # 空自建分区不产生纸面占位，但仍参与/存在于消费快照（C1）。

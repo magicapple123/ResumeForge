@@ -16,7 +16,6 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from .resume import (
     LONG_CV_MAX_PAGES,
-    ResumeContent,
     ResumeFontScale,
     ResumeLanguage,
 )
@@ -74,7 +73,8 @@ class ExportRequest(BaseModel):
     allow_incomplete: bool = False
     # W19：下载与预览同快照——请求可带当前草稿 content（未保存正文）。给定则不读库内
     # 正文、不落库、不冻结交付；响应头 X-Content-Sha256 与预览是同一口径。
-    content: ResumeContent | None = None
+    # v2 文档 JSON（兼容旧 v1：路由先 ensure_document_version 转 v2 再交给导出管线）。
+    content: dict | None = None
     # 正式投递存档（RF-17）：为真时这次导出冻结一份投递快照；默认不落库（预览零膨胀）。
     record_delivery: bool = False
     # **预览请求**（2026-10-24）：简历中心每次点开一份简历都要取一次渲染产物（`format=html`），
@@ -123,10 +123,10 @@ class PreviewPdfRequest(BaseModel):
     include_photo: bool = True
     # **未保存正文**（W04 / P0-03）：制作台里改了几句话还没点保存，精确预览也要按新内容排。
     #
-    # 边界：只用于预览——不落库、不冻结交付、不触发 AI。整份内容走 schema 校验（与保存
-    # 同一条 `ResumeContent`），所以长度/图片/字段上限全部继承，不会变成"预览管道
-    # 可以塞任意 JSON"的后门。`None` = 用记录里已保存的那一版（旧客户端逐字不变）。
-    content: ResumeContent | None = None
+    # 边界：只用于预览——不落库、不冻结交付、不触发 AI。v2 文档 JSON（也接受旧 v1，路由
+    # 统一 ensure_document_version 转 v2 再进管线），长度/图片/字段上限在转换/校验层继承，
+    # 不会变成"预览管道可以塞任意 JSON"的后门。`None` = 用记录里已保存的那一版。
+    content: dict | None = None
     # 最终交付配置预览（W04）：与 `ExportRequest` 同字段名、同语义；预览管线里脱敏是
     # 渲染前置、水印是渲染后叠加，仍是"不落库/不冻结交付/不写副本"的一次查看。
     watermark: str = Field(default="", max_length=200)

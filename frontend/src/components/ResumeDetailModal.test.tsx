@@ -6,6 +6,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-libra
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ResumeDetail, ResumeLayout } from "../types";
+import { makeResumeDocument } from "../test/documentHarness";
 import ResumeDetailModal from "./ResumeDetailModal";
 
 const apiMocks = vi.hoisted(() => ({
@@ -62,25 +63,7 @@ function makeDetail(overrides: Partial<ResumeDetail>): ResumeDetail {
     page_limit: 1,
     font_scale: "standard",
     created_at: "2026-08-20T10:00:00",
-    content: {
-      photo: "",
-      name: "",
-      gender: "",
-      birth_year: "",
-      phone: "",
-      email: "",
-      city: "",
-      personal_website: "",
-      github: "",
-      job_intent: "",
-      summary: "",
-      education: [],
-      experience: [],
-      campus_experience: [],
-      projects: [],
-      skills: [],
-      awards: [],
-    },
+    content: makeResumeDocument(),
     warnings: [],
     parse_error: "",
     parent_revision_id: null,

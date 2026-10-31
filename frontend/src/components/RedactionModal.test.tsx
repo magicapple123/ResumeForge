@@ -3,6 +3,8 @@
 import { App as AntdApp } from "antd";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { makeResumeDocument } from "../test/documentHarness";
+import type { ResumeDocument } from "../types";
 import RedactionModal from "./RedactionModal";
 
 const apiMocks = vi.hoisted(() => ({
@@ -17,23 +19,20 @@ const downloadMocks = vi.hoisted(() => ({
 vi.mock("../api/resumes", () => apiMocks);
 vi.mock("../utils/download", () => downloadMocks);
 
-const REDACTED = {
-  photo: "",
-  name: "***",
-  gender: "",
-  birth_year: "",
-  phone: "***",
-  email: "***",
-  city: "",
-  job_intent: "",
-  summary: "负责后端服务。",
-  education: [],
-  experience: [{ company: "***", role: "工程师", start_date: "", end_date: "", description: [] }],
-  campus_experience: [],
-  projects: [],
-  skills: [],
-  awards: [],
-};
+/** 脱敏后的 v2 文档：姓名/手机/邮箱/最近公司被遮成 ***，其余字段保持可读。 */
+function redactedDocument(): ResumeDocument {
+  const document = makeResumeDocument();
+  for (const key of ["name", "phone", "email"]) {
+    const header = document.header.items.find((item) => item.key === key);
+    if (header) header.value = "***";
+  }
+  const experience = document.sections.find((section) => section.key === "experience");
+  const company = experience?.entries[0]?.items.find(
+    (item) => item.kind === "field" && item.key === "company",
+  );
+  if (company && company.kind === "field") company.value = "***";
+  return document;
+}
 
 function renderModal() {
   return render(
@@ -44,7 +43,7 @@ function renderModal() {
 }
 
 beforeEach(() => {
-  apiMocks.redactResume.mockReset().mockResolvedValue(REDACTED);
+  apiMocks.redactResume.mockReset().mockResolvedValue(redactedDocument());
   apiMocks.exportResumeWithOptions.mockReset().mockResolvedValue({
     blob: new Blob(["pdf"]),
     filename: "简历.pdf",

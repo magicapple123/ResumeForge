@@ -60,6 +60,7 @@ export default function ProfilePage() {
   });
   const workspace = profile.workspace;
   const profileSetEditing = profile.setEditing;
+  const profileReloadWorkspace = profile.reloadWorkspace;
   const handleStartEditing = useCallback(() => {
     if (!profile.loading && !profile.loadError) profileSetEditing(true);
   }, [profile.loadError, profile.loading, profileSetEditing]);
@@ -72,8 +73,8 @@ export default function ProfilePage() {
   const groupApi = useCurrentProfileGroup(
     workspace,
     useCallback(async () => {
-      await profile.reloadWorkspace();
-    }, [profile.reloadWorkspace]),
+      await profileReloadWorkspace();
+    }, [profileReloadWorkspace]),
   );
   // 资料页「已隐藏的大字段」里的「显示」：写当前组参与清单，成功后 hook 内部已重取
   // workspace，这里不再进编辑态（Lead 裁决 3：查看态也能恢复）。
@@ -86,6 +87,8 @@ export default function ProfilePage() {
   );
 
   const sectionNames = useMemo(() => {
+    // t() 是模块级函数，不会自己触发重算；语言变了要重取分区展示名。
+    void locale;
     const names: Record<string, string> = {};
     workspace?.sections.forEach((section) => {
       // 展示名：内置分区按界面语言取，自建/改名的分区用后端下发的名字。
@@ -94,7 +97,11 @@ export default function ProfilePage() {
     return names;
     // locale 进依赖：分区名是渲染期按语言取的，切语言后这张表要重算。
   }, [workspace, locale]);
-  const participatingKeys = workspace?.current_group?.participating_keys ?? [];
+  // 包一层 useMemo：`?? []` 每次渲染都是新数组，会让下面的分区子树 memo 失效。
+  const participatingKeys = useMemo(
+    () => workspace?.current_group?.participating_keys ?? [],
+    [workspace],
+  );
   // 离开守卫（R-26）：路由离页 / 取消编辑 / 程序触发切组共用同一个出口；
   // dirty 时先出居中确认卡片，确认放弃才执行动作，继续编辑则原样留下（当前组与草稿不动）。
   const leaveGuard = useProfileLeaveGuard({ dirty });
@@ -175,6 +182,15 @@ export default function ProfilePage() {
   // 不能写成 [profile]——profile 每次页面重渲都是新对象，会把整棵简历分区子树一起重建。
   const profileHandlePointerDown = profile.handleSectionPointerDown;
   const profileMoveSectionByOffset = profile.moveSectionByOffset;
+  // 简历分区子树按这些稳定切片渲染（不整包依赖 profile 对象）。
+  const profileSectionOrderStore = profile.sectionOrderStore;
+  const profileEditing = profile.editing;
+  const profileSaving = profile.saving;
+  const profilePhoto = profile.photo;
+  const profileSetPhoto = profile.setPhoto;
+  const profileAddEntry = profile.addEntry;
+  const profileRemoveEntry = profile.removeEntry;
+  const profileSetPreference = profile.setPreference;
   const handleSectionPointerDown = useCallback(
     (event: ReactPointerEvent<HTMLButtonElement>, sectionKey: string) => {
       profileHandlePointerDown(event, sectionKey);
@@ -245,21 +261,21 @@ export default function ProfilePage() {
           <ProfileSectionStack
             sections={workspace.sections}
             participatingKeys={participatingKeys}
-            reorderStore={profile.sectionOrderStore}
-            editing={profile.editing}
-            saving={profile.saving}
-            photo={profile.photo}
+            reorderStore={profileSectionOrderStore}
+            editing={profileEditing}
+            saving={profileSaving}
+            photo={profilePhoto}
             limits={workspace.limits}
             collapsedSections={collapsedSections}
             onToggleCollapsed={toggleSection}
-            onPhotoSelect={profile.setPhoto}
+            onPhotoSelect={profileSetPhoto}
             onHandlePointerDown={handleSectionPointerDown}
             onMoveByOffset={handleMoveByOffset}
-            onAddEntry={profile.addEntry}
+            onAddEntry={profileAddEntry}
             onRemoveEntry={(sectionKey, entryKey, title) =>
-              void profile.removeEntry(sectionKey, entryKey, title)
+              void profileRemoveEntry(sectionKey, entryKey, title)
             }
-            onSetPreference={(field, patch) => void profile.setPreference(field, patch)}
+            onSetPreference={(field, patch) => void profileSetPreference(field, patch)}
             onOpenFieldSettings={(sectionKey) => {
               setManagerSectionKey(sectionKey);
               setManagerView("sections");
@@ -285,16 +301,16 @@ export default function ProfilePage() {
       handleSetSectionVisible,
       handleStartEditing,
       participatingKeys,
-      // 只列真正参与渲染的切片（actions/字段），不整包依赖 profile 对象：
+      // 只列真正参与渲染的稳定切片（actions/字段），不整包依赖 profile 对象：
       // 否则每次页面重渲（哪怕只是 dirty 翻转）都会重建整个分区子树。
-      profile.addEntry,
-      profile.editing,
-      profile.photo,
-      profile.removeEntry,
-      profile.saving,
-      profile.sectionOrderStore,
-      profile.setPhoto,
-      profile.setPreference,
+      profileAddEntry,
+      profileEditing,
+      profilePhoto,
+      profileRemoveEntry,
+      profileSaving,
+      profileSectionOrderStore,
+      profileSetPhoto,
+      profileSetPreference,
       toggleSection,
       workspace,
     ],

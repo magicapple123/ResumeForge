@@ -137,12 +137,13 @@ def _read_back_script(selector: str, *, rich: bool = False) -> str:
         if rich
         else "String(el.value == null ? '' : el.value)"
     )
+    # rich 的显示值就是它自己的 textContent：contenteditable 没有 select 语义，
+    # 引用 `selected` 会在页面上抛 TypeError（CdpError「页面结构已变化」），
+    # 富文本回读于是永远判 unverified——canary 真机用例抓到的就是这个。
     display_expr = (
-        "(selected.textContent || '').trim()"
+        "String(el.textContent == null ? '' : el.textContent).trim()"
         if rich
-        else (
-            "selected ? (selected.textContent || '').trim() : boxText"
-        )
+        else "selected ? (selected.textContent || '').trim() : boxText"
     )
     box_read = (
         ""

@@ -22,7 +22,6 @@ from ...schemas.resume import (
     LayoutFitRoomOut,
     LayoutPageOut,
     LayoutSuggestionOut,
-    ResumeContent,
     ResumeLayoutUpdate,
     ResumeOut,
     ResumeRenderRequest,
@@ -51,6 +50,7 @@ from ...services.resume.resume_record import (
     resolved_format_name,
     resolved_style_name,
 )
+from ...services.resume.resume_sections import persistable_format_config
 from ...services.resume.resume_template_store import (
     resolve_format_config,
     resolve_style_config,
@@ -60,7 +60,11 @@ from ...services.resume.resume_templates import (
     font_scale_spec,
     validated_format_config,
 )
-from ._shared import _get_live_resume, _to_resume_out
+from ._shared import (
+    _get_live_resume,
+    _to_resume_out,
+    document_or_422,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -95,7 +99,11 @@ def update_resume_layout(
     }
     # None = 这次不涉及这一项，保持原样；空字典 = 明确清掉覆盖。
     if payload.format_config is not None:
-        values["format_config"] = validated_format_config(payload.format_config)
+        # T7：v2 记录不再写 v1 的 section_order（唯一真相是 document.sections）。
+        # 旧客户端/旧草稿仍可能带这个键：结构落位已由文档自身完成，保存时直接剥离。
+        values["format_config"] = validated_format_config(
+            persistable_format_config(payload.format_config)
+        )
     # 语言与本接口的其它字段一样是"整体替换"语义，所以**必须先判 None**：给默认值
     # 就等于"拖动一次字号滑杆把英文简历静默改回中文"，而用户完全看不出发生了什么。
     # None = 这次不涉及，保持原样（见 §9.1 R1）。
@@ -217,9 +225,18 @@ def render_resume(payload: ResumeRenderRequest, db: Session = Depends(get_db)):
     template_name, template_html = resolve_style_template(db, payload.template)
     config = dict(resolve_format_config(db, payload.format_name))
     config.update(validated_format_config(payload.format_config))
+    # 渲染入口收口：请求体可能是 v1 旧草稿或 v2 文档；渲染器自己负责唯一的
+    # v1 -> v2 兼容转换，v2 草稿保持原样进入 planner，不能绕回 v1 分析视图。
+    # 结构不合法（例如非法照片 data URL）统一 422 + 可读提示，不冒泡成 500。
+    document = document_or_422(
+        payload.content,
+        db,
+        language=payload.language or DEFAULT_RESUME_LANGUAGE,
+        format_config=config,
+    )
     return Response(
         render_html(
-            payload.content,
+            document,
             template=template_name,
             page_limit=normalize_page_limit(payload.page_limit, payload.document_mode),
             font_scale=payload.font_scale,
@@ -242,10 +259,11 @@ def pagination_report(resume_id: int, payload: PreviewPdfRequest, db: Session = 
     snapshot 两个指纹让前端丢弃过时响应（W11 同一机制）。导出响应头不变。
     """
     record = _get_live_resume(db, resume_id)
-    resume = (
-        payload.content
-        if payload.content is not None
-        else ResumeContent.model_validate(record.content)
+    document = document_or_422(
+        payload.content if payload.content is not None else record.content,
+        db,
+        language=record.language or DEFAULT_RESUME_LANGUAGE,
+        format_config=record.format_config or {},
     )
     effective_style = payload.template or record.template
     export_template, export_html = resolve_style_template(db, effective_style)
@@ -272,7 +290,7 @@ def pagination_report(resume_id: int, payload: PreviewPdfRequest, db: Session = 
         include_photo=payload.include_photo,
     )
     return build_pagination_report(
-        resume,
+        document,
         template=export_template,
         format_config=base_format_config,
         page_limit=page_limit,
@@ -280,7 +298,7 @@ def pagination_report(resume_id: int, payload: PreviewPdfRequest, db: Session = 
         include_photo=payload.include_photo,
         language=language,
         snapshot={
-            "content_sha256": canonical_content_sha256(resume.model_dump()),
+            "content_sha256": canonical_content_sha256(document),
             "render_config_sha256": render_config_fingerprint(
                 ExportRequest(
                     format="pdf",

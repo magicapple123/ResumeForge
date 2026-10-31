@@ -7,8 +7,8 @@ source_content_sha256 会整体漂移。本文件第一组用例钉这一条。
 
 证据分工（报告里按此引用）：
 - 序列化/指纹：第 1 节；- 往返/coerce/校验：第 2 节；- 身份：第 3 节；
-- 锁：第 4 节；- 标签正名：第 5 节；- 六格式与模板：第 6 节；
-- 完整性/分页/ATS/隐私/预检：第 7 节；- 长 CV 误拦：第 8 节。
+- 锁：第 4 节；- 标签正名：第 5 节；- 六格式与模板：test_resume_credentials_formats.py；
+- 完整性/分页/ATS/隐私/预检：test_resume_credentials_quality.py；- 长 CV 误拦：第 8 节。
 """
 
 from __future__ import annotations
@@ -23,7 +23,6 @@ from app.services.resume.document_identity import (
     restore_entry_identity,
     validate_document_ids,
 )
-from app.services.resume.resume_completeness import find_incomplete
 from app.services.resume.resume_content import coerce_resume
 from app.services.resume.resume_delivery import canonical_content_sha256
 from app.services.resume.resume_labels import (
@@ -31,13 +30,8 @@ from app.services.resume.resume_labels import (
     experience_kind_text,
     section_title,
 )
-from app.services.resume.resume_pagination import (
-    SECTION_KEYS,
-    resolve_pagination,
-    validate_pagination_domain,
-)
-from app.services.resume.resume_sections import DEFAULT_SECTION_ORDER
 from pydantic import ValidationError
+from tests.document_test_support import entries_of, field_value
 
 CREDENTIAL_NAME = "注册信息安全专业人员"
 ISSUER = "中国信息安全测评中心"
@@ -188,15 +182,15 @@ def test_save_and_read_back_preserves_credentials_and_new_fields(client):
     )
     assert created.status_code == 201, created.text
     detail = client.get(f"/api/resumes/{created.json()['id']}").json()["content"]
-    credential = detail["credentials"][0]
-    assert credential["name"] == CREDENTIAL_NAME
-    assert credential["issuer"] == ISSUER
-    assert credential["status"] == "active"
-    assert credential["verify_url"] == VERIFY_URL
-    assert credential["id"] == "cred_12345678"
-    assert detail["projects"][0]["public_url"] == PUBLIC_URL
-    assert detail["projects"][0]["artifact_type"] == ARTIFACT_TYPE
-    assert detail["experience"][0]["experience_kind"] == "contract"
+    # v2：字段是 item，按 key 取；条目 id 在 entry 上。
+    assert field_value(detail, "name", section="credentials") == CREDENTIAL_NAME
+    assert field_value(detail, "issuer", section="credentials") == ISSUER
+    assert field_value(detail, "status", section="credentials") == "active"
+    assert field_value(detail, "verify_url", section="credentials") == VERIFY_URL
+    assert entries_of(detail, "credentials")[0]["id"] == "cred_12345678"
+    assert field_value(detail, "public_url", section="projects") == PUBLIC_URL
+    assert field_value(detail, "artifact_type", section="projects") == ARTIFACT_TYPE
+    assert field_value(detail, "experience_kind", section="experience") == "contract"
 
 
 def test_coerce_keeps_credentials_and_sanitizes_them():
@@ -337,76 +331,21 @@ def test_credential_status_lock_rejects_an_upgrade(client, db_session):
     upgraded = _content()
     upgraded["credentials"][0]["status"] = "expired"
     violations = fact_locks.validate_fact_locks(db_session, record, upgraded)
-    assert any(item.path == "credentials.0.status" for item in violations)
-
-
-# ===== 6. 完整性 / 分页 / ATS / 隐私 / 预检 =====
-
-
-def test_completeness_flags_unfinished_credential_fields():
-    data = _content()
-    data["credentials"][0]["issuer"] = "颁发机构【待补：机构全称】"
-    found = find_incomplete(ResumeContent.model_validate(data))
-    assert any("证书资质" in message and "颁发机构" in message for message in found)
-
-
-def test_pagination_domain_accepts_credentials_section():
-    assert SECTION_KEYS == DEFAULT_SECTION_ORDER
-    domain = {
-        "version": 1,
-        "sections": {"credentials": {"break_before": "page"}},
-        "entries": {"cred_12345678": {"keep_with_next": 2}},
-    }
-    kept = validate_pagination_domain(domain)
-    assert kept is not None
-    assert kept["sections"]["credentials"]["break_before"] == "page"
-    plan = resolve_pagination({"pagination": domain})
-    assert plan.section("credentials").break_before_page is True
-
-
-def test_ats_section_texts_include_credentials():
-    from app.services.ats_keywords import _SECTION_ORDER, _section_texts
-
-    sections = _section_texts(_resume())
-    assert "credentials" in sections
-    assert "credentials" in _SECTION_ORDER
-    assert CREDENTIAL_NAME in sections["credentials"]
-    assert ISSUER in sections["credentials"]
-
-
-def test_redact_masks_credential_name_and_issuer():
-    from app.services.privacy import RedactionOptions, redact
-
-    resume = _resume()
-    masked = redact(
-        resume,
-        RedactionOptions(mask_name=True, mask_school=True, mask_project=True),
-    )
-    assert masked.credentials[0].name != CREDENTIAL_NAME
-    assert masked.credentials[0].issuer != ISSUER
-    # 原文不被改动（redact 返回新对象）。
-    assert resume.credentials[0].name == CREDENTIAL_NAME
-
-
-def test_preflight_maps_credential_completeness_to_section():
-    from app.services.resume.preflight_rules_content import _section_for
-
-    assert _section_for("证书资质「注册会计师」 颁发机构 里还有「【待补】」") == "credentials"
-    assert _section_for("学术成果「论文 A」 题目 里还有「【待补】」") == "publications"
+    assert any(item.path == lock.json()["path"] and item.current_value == "expired" for item in violations)
 
 
 # ===== 7. 长 CV 不被旧 3 页校验误拦（A4 §8.6）=====
 
 
 def test_variant_layout_accepts_long_cv_page_limit():
-    from app.services.resume.document_variants import _normalize_layout
+    from app.services.resume.document_variants_view import normalize_layout
 
     # 旧变体没有 document_mode = resume：仍是 1–3 页（旧行为不变）。
-    assert _normalize_layout({"page_limit": 3}) == {"page_limit": 3}
+    assert normalize_layout({"page_limit": 3}) == {"page_limit": 3}
     with pytest.raises(ValueError):
-        _normalize_layout({"page_limit": 10})
+        normalize_layout({"page_limit": 10})
     # 长 CV 变体：10 页合法。
-    assert _normalize_layout({"page_limit": 10, "document_mode": "long_cv"}) == {
+    assert normalize_layout({"page_limit": 10, "document_mode": "long_cv"}) == {
         "page_limit": 10,
         "document_mode": "long_cv",
     }
@@ -439,7 +378,10 @@ def test_version_restore_keeps_long_cv_page_limit(client, db_session):
     assert restored.json()["resume"]["page_limit"] == 10
     assert restored.json()["resume"]["document_mode"] == "long_cv"
     # 版本就是 content JSON：恢复回来的正文里证照栏目逐字还在（不是只恢复了版式）。
-    assert restored.json()["resume"]["content"]["credentials"][0]["name"] == CREDENTIAL_NAME
+    assert (
+        field_value(restored.json()["resume"]["content"], "name", section="credentials")
+        == CREDENTIAL_NAME
+    )
 
 # ===== 8. 来源定位（A4：profile-fact:<stable-id>）=====
 

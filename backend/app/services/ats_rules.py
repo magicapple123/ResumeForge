@@ -19,6 +19,7 @@ import re
 
 from ..schemas.ats import AtsIssue
 from ..schemas.resume import ResumeContent
+from .resume.document_view import document_text, header_text, section_texts
 
 # 容易被 ATS 误解析、或让版面显得不专业的符号：emoji、方框线、带圈数字、杂项符号。
 _SPECIAL_CHAR_RE = re.compile(
@@ -51,8 +52,8 @@ _DIGIT_RE = re.compile(r"\d")
 _PERCENT_RE = re.compile(r"[%％]")
 
 
-def _find_special_chars(resume: ResumeContent) -> list[str]:
-    text = json.dumps(resume.model_dump(exclude={"photo"}), ensure_ascii=False)
+def _find_special_chars(resume: ResumeContent | dict) -> list[str]:
+    text = document_text(resume) if isinstance(resume, dict) else json.dumps(resume.model_dump(exclude={"photo"}), ensure_ascii=False)
     found: list[str] = []
     for match in _SPECIAL_CHAR_RE.finditer(text):
         char = match.group(0)
@@ -61,10 +62,10 @@ def _find_special_chars(resume: ResumeContent) -> list[str]:
     return found
 
 
-def _format_issues(resume: ResumeContent) -> list[AtsIssue]:
+def _format_issues(resume: ResumeContent | dict) -> list[AtsIssue]:
     """格式类问题：必填项缺失与特殊符号（联系方式/日期/段落见各自的判定函数）。"""
     issues: list[AtsIssue] = []
-    if not resume.name.strip():
+    if not (header_text(resume, "name") if isinstance(resume, dict) else resume.name).strip():
         issues.append(
             AtsIssue(
                 category="format",
@@ -74,7 +75,9 @@ def _format_issues(resume: ResumeContent) -> list[AtsIssue]:
                 suggestion="在简历顶部补上真实姓名，不要只写「个人简历」或昵称。",
             )
         )
-    if not resume.phone.strip() and not resume.email.strip():
+    phone = header_text(resume, "phone") if isinstance(resume, dict) else resume.phone
+    email = header_text(resume, "email") if isinstance(resume, dict) else resume.email
+    if not phone.strip() and not email.strip():
         issues.append(
             AtsIssue(
                 category="format",
@@ -99,10 +102,10 @@ def _format_issues(resume: ResumeContent) -> list[AtsIssue]:
     return issues
 
 
-def _contact_format_issues(resume: ResumeContent) -> list[AtsIssue]:
+def _contact_format_issues(resume: ResumeContent | dict) -> list[AtsIssue]:
     """联系方式**格式**：非空但不像手机号/邮箱时提示（不猜用户想写什么）。"""
     issues: list[AtsIssue] = []
-    phone = resume.phone.strip()
+    phone = (header_text(resume, "phone") if isinstance(resume, dict) else resume.phone).strip()
     if phone and not _PHONE_RE.match(phone):
         issues.append(
             AtsIssue(
@@ -114,7 +117,7 @@ def _contact_format_issues(resume: ResumeContent) -> list[AtsIssue]:
                 suggestion="改成 11 位连续数字（可带 +86 前缀），删掉空格与短横线。",
             )
         )
-    email = resume.email.strip()
+    email = (header_text(resume, "email") if isinstance(resume, dict) else resume.email).strip()
     if email and not _EMAIL_RE.match(email):
         issues.append(
             AtsIssue(
@@ -129,12 +132,16 @@ def _contact_format_issues(resume: ResumeContent) -> list[AtsIssue]:
     return issues
 
 
-def _dated_records(resume: ResumeContent) -> list[tuple[str, str, str]]:
+def _dated_records(resume: ResumeContent | dict) -> list[tuple[str, str, str]]:
     """所有带起止时间的条目：(说明, start_date, end_date)。
 
     ``awards`` 只有一个日期字段、没有区间，因此不参与"倒置"判断。
     """
     records: list[tuple[str, str, str]] = []
+    if isinstance(resume, dict):
+        from .resume.document_analysis import dated_records
+
+        return dated_records(resume)
     for item in resume.education:
         records.append((f"教育经历「{item.school or '未命名'}」", item.start_date, item.end_date))
     for item in resume.experience:
@@ -166,7 +173,7 @@ def _is_date_text(value: str) -> bool:
     return text == _DATE_PRESENT or _parse_date(text) is not None
 
 
-def _date_issues(resume: ResumeContent) -> list[AtsIssue]:
+def _date_issues(resume: ResumeContent | dict) -> list[AtsIssue]:
     """日期格式与区间：格式不统一 → low；起止倒置 → high（明显写错，HR 会当成造假）。"""
     issues: list[AtsIssue] = []
     malformed: list[str] = []
@@ -205,9 +212,13 @@ def _date_issues(resume: ResumeContent) -> list[AtsIssue]:
     return issues
 
 
-def _description_items(resume: ResumeContent) -> list[str]:
+def _description_items(resume: ResumeContent | dict) -> list[str]:
     """所有"描述/成果"条目（不含课程列表这类名词短语）。"""
     items: list[str] = []
+    if isinstance(resume, dict):
+        from .resume.document_analysis import body_points
+
+        return [value for location, value in body_points(resume) if location != "个人总结"]
     for item in resume.education:
         items.extend(item.achievements)
     for item in resume.experience:
@@ -225,7 +236,7 @@ def _is_quantified(text: str) -> bool:
     return bool(_DIGIT_RE.search(text) or _PERCENT_RE.search(text))
 
 
-def quantified_ratio(resume: ResumeContent) -> float:
+def quantified_ratio(resume: ResumeContent | dict) -> float:
     """描述条目里含数字/百分比的比例（无条目时为 0）。"""
     items = _description_items(resume)
     if not items:
@@ -233,7 +244,7 @@ def quantified_ratio(resume: ResumeContent) -> float:
     return sum(1 for text in items if _is_quantified(text)) / len(items)
 
 
-def _description_issues(resume: ResumeContent) -> list[AtsIssue]:
+def _description_issues(resume: ResumeContent | dict) -> list[AtsIssue]:
     """段落可读性与量化程度：过长段落不利解析，全无数字无法体现成果。"""
     issues: list[AtsIssue] = []
     items = _description_items(resume)
@@ -269,9 +280,11 @@ def _description_issues(resume: ResumeContent) -> list[AtsIssue]:
     return issues
 
 
-def _position_issues(resume: ResumeContent) -> list[AtsIssue]:
+def _position_issues(resume: ResumeContent | dict) -> list[AtsIssue]:
     issues: list[AtsIssue] = []
-    if not resume.job_intent.strip():
+    texts = section_texts(resume) if isinstance(resume, dict) else {}
+    intent = header_text(resume, "job_intent", header_text(resume, "intent")) if isinstance(resume, dict) else resume.job_intent
+    if not intent.strip():
         issues.append(
             AtsIssue(
                 category="position",
@@ -281,7 +294,7 @@ def _position_issues(resume: ResumeContent) -> list[AtsIssue]:
                 suggestion="在姓名下方加一行「求职意向：后端开发工程师」这类明确表述。",
             )
         )
-    if not resume.summary.strip():
+    if not (texts.get("summary", "") if isinstance(resume, dict) else resume.summary).strip():
         issues.append(
             AtsIssue(
                 category="position",
@@ -291,7 +304,7 @@ def _position_issues(resume: ResumeContent) -> list[AtsIssue]:
                 suggestion="用 2–3 句话写清年限、方向与最强的一项成果。",
             )
         )
-    if not resume.education:
+    if not (texts.get("education") if isinstance(resume, dict) else resume.education):
         issues.append(
             AtsIssue(
                 category="position",
@@ -301,7 +314,7 @@ def _position_issues(resume: ResumeContent) -> list[AtsIssue]:
                 suggestion="补上学校、专业、学历与起止时间。",
             )
         )
-    if not resume.skills:
+    if not (texts.get("skills") if isinstance(resume, dict) else resume.skills):
         issues.append(
             AtsIssue(
                 category="position",

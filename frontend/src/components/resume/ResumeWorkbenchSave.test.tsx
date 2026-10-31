@@ -1,17 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * 简历制作台 · 中栏保存的**宿主接线**（P0-3 / P0-7 的最后一段）。
+ * 简历制作台 · 中栏保存的**宿主接线**（v2 文档模型）。
  *
- * 中栏自己那一层（脏值、三个出口、不关面板）由 `ResumeWorkbenchEditorColumn.test.tsx` 钉住；
- * 这里补的是它**上面**那一层：宿主要把中栏的保存接到既有的落库链路（PATCH → 重渲染 →
- * `detail.html` 换新），右栏画布再按新 html 重排——这是"改一句措辞就能看到版面变化"的闭环，
- * 也是 PRD 里唯一可度量的目标（跳窗次数 2 → 0）。
+ * 原 v1 版经旧 ResumeZoomModal 壳验证同一行为；旧壳随 v1 链路删除后（Lead 拍板）把这组
+ * 行为断言改写到 V2 壳（ResumeWorkbenchV2，经 ResumeDetailPreview 真实宿主挂载）：
+ * 1. 中栏改内容 → 顶部「保存修改」→ 宿主收到**当前 v2 文档**（没在表单里的字段不得被清空）；
+ * 2. 存完**不关**制作台（用户下一步往往是接着调参数看排版）；
+ * 3. 宿主换新 html 重渲染后，主预览与画布一起换、动作条里的简历名跟着换。
  *
- * 为什么必须在调用点这一层测：`ResumeZoomModal` 只要漏传 `onSaveContent`，中栏就整体不渲染，
- * 组件级用例照样全绿；`onSaveContent` 接错一根线（比如接成 `onSave` 之外的东西），表现是
- * "点了保存什么都没发生"。两种失效都只有在这里能看见。
- *
- * 断言文案一律走 `t()`：`cjkRatchet` 的 tests 口径逐文件卡中文 `getByText`，新文件基线为 0。
+ * 断言文案一律走 `t()`：`cjkRatchet` 的 tests 口径按文件卡中文。
  */
 import { App as AntdApp } from "antd";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
@@ -19,15 +16,10 @@ import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { t } from "../../i18n";
 import { TEMPLATE_CATALOG } from "../../test/resumeFixtures";
-import type { ResumeDetail, ResumeLayout } from "../../types";
+import { makeResumeDocument } from "../../test/documentHarness";
+import type { ResumeDetail, ResumeDocument, ResumeLayout } from "../../types";
 import ResumeDetailPreview from "./ResumeDetailPreview";
 
-/**
- * 预览桩：把收到的 `html` 原样渲染出来。
- *
- * 本轮要证明的正是"宿主换了 html 之后，画布与主预览都跟着换"——真实 `ResumePreview` 走
- * iframe，jsdom 里读不到结果，所以这里只保留这根数据线。
- */
 vi.mock("../ResumePreview", () => ({
   default: ({ html }: { html: string }) => <div data-testid="preview-html">{html}</div>,
 }));
@@ -37,7 +29,6 @@ vi.mock("./ResumeMeasureControls", () => ({ default: () => null }));
 vi.mock("../../hooks/useResumeTemplateCatalog", () => ({
   useResumeTemplateCatalog: () => ({ catalog: TEMPLATE_CATALOG }),
 }));
-// 中栏会按需取「我的资料」候选：让它成功返回空资料，避免用例被无关请求干扰。
 vi.mock("../../api/profile", () => ({
   getProfile: vi.fn(async () => ({
     photo: "",
@@ -60,6 +51,25 @@ vi.mock("../../api/profile", () => ({
   })),
 }));
 
+const PHOTO = "data:image/png;base64,AAAA";
+
+/** v2 文档：页眉有姓名与照片（照片不在中栏表单里，保存不得把它清空）。 */
+function documentWithPhoto(): ResumeDocument {
+  const document = makeResumeDocument();
+  const name = document.header.items.find((item) => item.key === "name");
+  if (name) name.value = "\u5f20\u4e09";
+  document.header.items.push({
+    kind: "field",
+    id: "doc_photo_001",
+    key: "photo",
+    label: "",
+    value: PHOTO,
+    placement: "photo",
+    format: "text",
+  });
+  return document;
+}
+
 const DETAIL: ResumeDetail = {
   id: 42,
   title: "backend",
@@ -78,33 +88,7 @@ const DETAIL: ResumeDetail = {
   page_limit: 1,
   font_scale: "standard",
   created_at: "2026-09-20T08:00:00",
-  content: {
-    photo: "data:image/png;base64,AAAA",
-    name: "张三",
-    gender: "",
-    birth_year: "",
-    phone: "",
-    email: "",
-    city: "",
-    personal_website: "",
-    github: "",
-    job_intent: "",
-    summary: "",
-    education: [],
-    experience: [
-      {
-        company: "字节跳动",
-        role: "工程师",
-        start_date: "",
-        end_date: "",
-        description: ["实现检索接口"],
-      },
-    ],
-    campus_experience: [],
-    projects: [],
-    skills: [],
-    awards: [],
-  },
+  content: documentWithPhoto(),
   warnings: [],
   parse_error: "",
   rationale: "",
@@ -126,7 +110,7 @@ const NEW_HTML = "<html><body>new</body></html>";
 interface RenderOptions {
   detail?: ResumeDetail;
   html?: string;
-  onSaveEditedResume?: (content: ResumeDetail["content"]) => Promise<void>;
+  onSaveEditedResume?: (content: ResumeDocument) => Promise<void>;
 }
 
 function renderPreview({
@@ -162,36 +146,32 @@ function renderPreview({
   return { ...utils, save };
 }
 
-/** 打开制作台：底栏那颗按钮的文案就是弹窗标题（`workbench.title`）。 */
 async function openWorkbench() {
   fireEvent.click(screen.getByRole("button", { name: new RegExp(t("workbench.title")) }));
   await screen.findByRole("dialog", { name: t("workbench.title") });
 }
 
+/** V2 中栏的页眉姓名输入（aria-label = 字段目录标签）。 */
 function nameInput(): HTMLInputElement {
-  const input = document.getElementById("name");
-  expect(input).not.toBeNull();
-  return input as HTMLInputElement;
+  return screen.getByRole("textbox", {
+    name: t("document.headerField.name"),
+  }) as HTMLInputElement;
 }
 
-/**
- * 顶部动作条里的「保存修改」（2026-11 起这是制作台**唯一**的保存入口）。
- *
- * 中栏底部那一对「保存内容 / 放弃修改」已在制作台里摘掉（`hideActions`）：一份改动
- * 却有两个"保存"按钮，用户得先判断它们管的是不是同一件事。带图标，所以可访问名是
- * 「icon label + 文案」，按子串匹配。
- */
+function actionbar(): HTMLElement {
+  const node = document.querySelector<HTMLElement>(".resume-wb-actionbar");
+  expect(node).not.toBeNull();
+  return node as HTMLElement;
+}
+
 function saveButton(): HTMLElement {
   return within(actionbar()).getByRole("button", {
     name: new RegExp(t("workbench.action.save-changes")),
   });
 }
 
-/** 制作台顶部动作条（按钮已经不在中栏底部了）。 */
-function actionbar(): HTMLElement {
-  const node = document.querySelector<HTMLElement>(".resume-wb-actionbar");
-  expect(node).not.toBeNull();
-  return node as HTMLElement;
+function headerValue(document: ResumeDocument, key: string): string {
+  return document.header.items.find((item) => item.key === key)?.value ?? "";
 }
 
 beforeEach(() => {
@@ -210,14 +190,14 @@ describe("制作台中栏 · 保存落到宿主，预览按新内容重排", () 
     const { save } = renderPreview();
 
     await openWorkbench();
-    fireEvent.change(nameInput(), { target: { value: "李四" } });
+    fireEvent.change(nameInput(), { target: { value: "\u674e\u56db" } });
     fireEvent.click(saveButton());
 
     await waitFor(() => expect(save).toHaveBeenCalledTimes(1));
     const saved = vi.mocked(save).mock.calls[0][0];
-    expect(saved.name).toBe("李四");
+    expect(headerValue(saved, "name")).toBe("\u674e\u56db");
     // 照片不在中栏表单里：保存不能把它清空（与「手动调整」同一条语义）。
-    expect(saved.photo).toBe(DETAIL.content.photo);
+    expect(headerValue(saved, "photo")).toBe(PHOTO);
     // 存完**不关**制作台：用户下一步往往是接着调参数看排版。
     expect(screen.getByRole("dialog", { name: t("workbench.title") })).toBeInTheDocument();
   });
@@ -226,16 +206,14 @@ describe("制作台中栏 · 保存落到宿主，预览按新内容重排", () 
     const { save, rerender } = renderPreview();
 
     await openWorkbench();
-    fireEvent.change(nameInput(), { target: { value: "李四" } });
+    fireEvent.change(nameInput(), { target: { value: "\u674e\u56db" } });
     fireEvent.click(saveButton());
     await waitFor(() => expect(save).toHaveBeenCalledTimes(1));
 
-    // 宿主的落库链路（`saveEditedResume`：PATCH → render → setDetail/setHtml）在父组件里，
-    // 这里用"换一份 detail + html 重渲染"复刻它的结果。
-    const updated: ResumeDetail = {
-      ...DETAIL,
-      content: { ...DETAIL.content, name: "李四" },
-    };
+    // 宿主的落库链路（PATCH → render → setDetail/setHtml）在父组件里；这里用"换一份
+    // detail + html 重渲染"复刻它的结果。
+    const updatedDocument = vi.mocked(save).mock.calls[0][0];
+    const updated: ResumeDetail = { ...DETAIL, content: updatedDocument };
     rerender(
       <MemoryRouter>
         <AntdApp>
@@ -267,9 +245,8 @@ describe("制作台中栏 · 保存落到宿主，预览按新内容重排", () 
       expect(instances.length).toBeGreaterThanOrEqual(2);
       expect(instances.every((node) => node.textContent === NEW_HTML)).toBe(true);
     });
-    // 制作台标题行里的简历名也跟着换（用户能确认"改的是这一份"）。
-    // 不用 `getByText`：`cjkRatchet` 的 tests 口径按文件卡中文断言，新文件基线为 0。
+    // 制作台动作条里的简历名也跟着换（用户能确认"改的是这一份"）。
     const actionbarName = document.querySelector(".resume-wb-actionbar-name");
-    expect(actionbarName?.textContent).toBe(updated.content.name);
+    expect(actionbarName?.textContent).toBe(headerValue(updatedDocument, "name"));
   });
 });

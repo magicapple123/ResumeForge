@@ -45,13 +45,12 @@ const typography = {
   /** 来源胶囊的 Tooltip：对象档。 */
   "typography.source.object.title": "只改了这一条",
 
-  // ── 六个段落角色 ───────────────────────────────────────────
+  // ── 五个段落角色 ───────────────────────────────────────────
   "typography.role.name": "姓名",
   "typography.role.section_title": "板块标题",
   "typography.role.entry_title": "条目标题",
   "typography.role.body": "正文",
   "typography.role.meta": "日期与元信息",
-  "typography.role.emphasis": "重点文字",
   /** 角色 header 上的覆盖计数胶囊：不写裸数字（读屏与视觉都要能自解释）。 */
   "typography.role.ownCount": "{count} 项已调整",
   /** 恢复某个角色的全部覆盖。 */
@@ -116,24 +115,58 @@ const typography = {
   /** 级别管得住的那四项去哪儿了：不写会让用户以为功能被删。 */
   "typography.object.levelHint": "字号、加粗、段前段后由上面的「文字级别」统一管理",
 
-  // ── 格式刷 ─────────────────────────────────────────────────
+  // ── 条目排版的作用范围（Q12：整条 / 条目头 / 正文 / 灰字）──────────
+  /** 段控标签。 */
+  "typography.entryStyle.scope.label": "作用范围",
+  "typography.entryStyle.scope.aria": "选择条目排版的作用范围",
+  /** 四个范围名：与文字级别的同名范围刻意用不同措辞（这里是"条目排版"的入口）。 */
+  "typography.entryStyle.scope.object": "整条",
+  "typography.entryStyle.scope.entry_title": "条目头",
+  "typography.entryStyle.scope.body": "正文",
+  "typography.entryStyle.scope.meta": "灰字",
+  /** 段控下方的一句范围说明：说清这次只动哪一块。 */
+  "typography.entryStyle.scopeHint.object": "整条一起改：标题、正文、灰字都跟随",
+  "typography.entryStyle.scopeHint.entry_title": "只改条目标题这一行",
+  "typography.entryStyle.scopeHint.body": "只改正文与要点",
+  "typography.entryStyle.scopeHint.meta": "只改时间、地点等灰字",
+  /** 状态行：目标 + 范围，避免"当前：跟随模板"被误读成范围。 */
+  "typography.entryStyle.status": "正在调整：{name} · 范围：{scope}",
+  /** 来源胶囊：这个范围当前是"已调整"还是"跟随模板"。 */
+  "typography.entryStyle.source.template": "跟随模板",
+  "typography.entryStyle.source.object": "整条已调整",
+  "typography.entryStyle.source.entry_title": "条目头已调整",
+  "typography.entryStyle.source.body": "正文已调整",
+  "typography.entryStyle.source.meta": "灰字已调整",
+  /** 恢复按钮：只清当前作用范围的键（整条 → objects；子范围 → object_roles）。 */
+  "typography.entryStyle.restore": "恢复「{scope}」跟随模板",
+  /** 无关项说明（不是隐藏得莫名其妙）。 */
+  "typography.entryStyle.noMeta": "这条没有日期或灰字字段，日期位置不适用",
+  "typography.entryStyle.noBullets": "这条正文没有要点，项目符号不适用",
+
+  // ── 格式刷（Q14：说清"复制的是什么"与"下一步做什么"）──────────
   "typography.painter.title": "格式刷",
-  /** 复制源对象的局部调整。 */
-  "typography.painter.copy": "复制局部调整",
+  /** 格式刷区的一句话说明：只复制局部排版，不动正文。 */
+  "typography.painter.hint": "把一条的局部排版复制到其它条目",
+  /** 复制按钮：带上条目名，并说明可复制多少项（属性名由宿主拼进 copyProps）。 */
+  "typography.painter.copy": "复制「{name}」的排版",
+  /** 可复制项数与属性名（Q14：按钮下面一行，避免"点了才知道复制了什么"）。 */
+  "typography.painter.copyProps": "可复制 {count} 项：{props}",
+  /** 属性名之间的分隔符（放在语言包里，组件里不写中文标点）。 */
+  "typography.painter.propSeparator": "、",
   /** 源对象没有局部调整时的禁用说明。 */
   "typography.painter.empty": "这条没有局部调整，先改一处",
   /** 已复制差异、等待目标时的状态说明。 */
-  "typography.painter.armed": "已复制，选中目标后应用",
-  "typography.painter.apply": "应用格式刷",
+  "typography.painter.armed": "已复制这条的排版，在上方选择目标条目",
+  "typography.painter.apply": "应用到 {count} 条",
   "typography.painter.cancel": "退出格式刷",
-  /** 把当前生效值固化成本条覆盖（显式第二动作）。 */
-  "typography.painter.freeze": "固化为局部调整",
-  /** 固化的代价：这是用户必须看见的语义变化。 */
-  "typography.painter.freezeHint": "固化后这条不再随同类段落变化",
-  /** 格式刷来源名。 */
-  "typography.painter.source": "来源「{name}」",
+  /** 把当前生效值固定成本条覆盖（显式第二动作；按钮在条目排版面板底部，与恢复成对）。 */
+  "typography.painter.freeze": "固定这条的当前样式",
+  /** 固定的代价：这是用户必须看见的语义变化（Q12 起按当前作用范围执行）。 */
+  "typography.painter.freezeHint": "固定后这个范围不再随模板变化",
   /** 应用成功提示（含对象数）。 */
   "typography.painter.applied": "已应用到 {count} 条",
+  /** 固定当前样式的成功提示（按作用范围执行）。 */
+  "typography.painter.frozen": "已固定当前范围的样式",
 
   // ── 多选批量调整（D03）──────────────────────────────────────
   "typography.multi.title": "批量调整",
@@ -184,13 +217,21 @@ const typography = {
   "typography.level.scope.object": "整个条目",
   "typography.level.scope.entry_title": "条目标题",
   "typography.level.scope.body": "正文",
-  "typography.level.scope.meta": "说明",
+  /** Q13：与术语表统一为「元信息（灰字）」，不再叫「说明」。 */
+  "typography.level.scope.meta": "元信息（灰字）",
+  /** 段控下方的一句范围说明（Q13）：四个范围各一句，说清这次只动哪一块。 */
+  "typography.level.scopeHint.object": "整条一起改：标题、正文、灰字都跟随",
+  "typography.level.scopeHint.entry_title": "只改条目标题这一行",
+  "typography.level.scopeHint.body": "只改正文与要点",
+  "typography.level.scopeHint.meta": "只改时间、地点等灰字",
   /** 一句口径：级别作用在段落上，不是整份缩放，且可撤销。 */
   "typography.level.hint": "级别只改选中段落的字号层级与段距，每次应用可撤销",
   /** 没有选中任何内容时的去处。 */
   "typography.level.empty": "先在大纲或纸面选中一条内容",
-  "typography.level.count": "作用于 {count} 条",
-  "typography.level.current": "当前：{level}",
+  /** 状态行（Q13）：先说在改哪一条，再说级别；不再写"作用于 N 条"这种不指名的说法。 */
+  "typography.level.status": "正在调整：{name}",
+  "typography.level.statusMany": "{count} 条内容",
+  "typography.level.current": "级别：{level}",
   /** 反推结果：对象上没有任何级别覆盖。 */
   "typography.level.currentInherit": "跟随模板",
   /** 反推结果：有级别属性但和任一固定级别都对不上（在对象面板手改过）。 */
@@ -227,7 +268,17 @@ const typography = {
   /** 列间距滑杆两侧的加减按钮（读屏标签：只有图标，没有可见文案）。 */
   "typography.fieldLayout.gapDecrease": "减小列间距",
   "typography.fieldLayout.gapIncrease": "增大列间距",
+  /** 补充字段整体在正文之前 / 之后（七个承载分区都提供这个开关）。 */
+  "typography.fieldLayout.metaPositionLabel": "短字段位置",
+  "typography.fieldLayout.metaPosition.below": "正文后",
+  "typography.fieldLayout.metaPosition.above": "正文前",
+  "typography.fieldLayout.metaPositionAwardsSectionOnly": "奖项的短字段位置只按分区设置",
+  "typography.fieldLayout.metaPositionHint": "置顶后补充字段排在要点/描述上面；长字段建议独占一行",
   "typography.fieldLayout.fieldsTitle": "字段顺序",
+  /** 字段可见性：隐藏后不上纸面，但内容仍保留在正文里。 */
+  "typography.fieldLayout.hideField": "隐藏{label}",
+  "typography.fieldLayout.showField": "显示{label}",
+  "typography.fieldLayout.hiddenHint": "隐藏的字段不上纸面，内容仍保留",
   "typography.fieldLayout.moveUp": "上移{label}",
   "typography.fieldLayout.moveDown": "下移{label}",
   "typography.fieldLayout.solo": "独占一行",
@@ -244,6 +295,109 @@ const typography = {
   "typography.fieldLayout.entryMoveDown": "下移条目{label}",
   "typography.fieldLayout.entryNone": "该分区还没有可单独设置的条目",
   "typography.fieldLayout.summary": "当前：{columns} 列，{solo} 个字段独占一行",
+
+  // ── 简历结构示例（制作台只读对照弹窗）──────────────────────────
+  // 示意图里的文字也是给人看的，所以一并放进语言包：组件里不留中文字面量，
+  // 切到英文界面时示例简历与图例一起换。
+  /** 弹窗标题（也用作入口按钮文案，≤6 字）。 */
+  "typography.structureExample.title": "简历结构示例",
+  /** 顶部一句话：这是一张示意图，不是用户数据。 */
+  "typography.structureExample.hint": "这是一张示例简历，只用于对照，不会改动你的简历",
+  /** 示意图的无障碍名（纸内都是示意内容，读屏只需要这一句）。 */
+  "typography.structureExample.paperAria": "简历结构示例示意图",
+  /** 图例列表的无障碍名。 */
+  "typography.structureExample.legendAria": "结构示例图例",
+  /** 图例上方的操作提示：悬停或点击会高亮纸面对应位置。 */
+  "typography.structureExample.legendHint": "悬停或点击图例，纸上会高亮对应位置",
+  // 四边页边距在示意图边缘上的短标注。
+  "typography.structureExample.margin.top": "上",
+  "typography.structureExample.margin.right": "右",
+  "typography.structureExample.margin.bottom": "下",
+  "typography.structureExample.margin.left": "左",
+  // 示意简历的内容：虚构样本，纸面上不出现任何真实资料。
+  "typography.structureExample.sample.name": "林晓",
+  "typography.structureExample.sample.contact": "138-0000-0000 · linxiao@example.com",
+  "typography.structureExample.sample.photo": "照片",
+  "typography.structureExample.sample.sectionExperience": "工作经历",
+  "typography.structureExample.sample.company": "星河科技 · 后端工程师",
+  "typography.structureExample.sample.dateExperience": "2022.03 – 至今",
+  "typography.structureExample.sample.bullet1": "负责订单服务重构，接口耗时下降 40%",
+  "typography.structureExample.sample.bullet2": "主导缓存治理，命中率提升到 95%",
+  "typography.structureExample.sample.companySecond": "明州科技 · 前端工程师",
+  "typography.structureExample.sample.dateSecond": "2019.07 – 2022.02",
+  "typography.structureExample.sample.sectionEducation": "教育经历",
+  "typography.structureExample.sample.school": "明州大学 · 计算机科学",
+  "typography.structureExample.sample.dateEducation": "2018.09 – 2022.06",
+  "typography.structureExample.sample.paragraph": "GPA 3.8 / 4.0，专业排名前 5%",
+  "typography.structureExample.sample.courses": "主修课程：数据结构、操作系统、数据库系统",
+  "typography.structureExample.sample.sectionSkills": "专业技能",
+  "typography.structureExample.sample.skills": "后端开发 · 数据库 · 缓存 · 分布式系统",
+  // 1..16 号标注：标题是「这一处是什么」，说明是「在左栏哪里调、影响什么」。
+  // 引用左栏控件时与界面上的名字逐字一致，用户才能按图索骥。
+  "typography.structureExample.item.1.title": "页边距",
+  "typography.structureExample.item.1.desc":
+    "纸面四边的留白；在左栏「排版参数」的「页边距」里调，可四边一起或分边调",
+  "typography.structureExample.item.2.title": "照片大小",
+  "typography.structureExample.item.2.desc":
+    "页眉右侧的照片；在左栏「排版参数」的「照片」里拖滑杆改大小，没上传照片时不生效",
+  "typography.structureExample.item.3.title": "字体与字号",
+  "typography.structureExample.item.3.desc":
+    "整份简历的字体和基准字号；在左栏「排版参数」里选「字体」、拖「字号」",
+  "typography.structureExample.item.4.title": "板块标题",
+  "typography.structureExample.item.4.desc":
+    "如「工作经历」这样的标题；在左栏「局部排版」的「板块标题」里调字号与加粗",
+  "typography.structureExample.item.5.title": "板块",
+  "typography.structureExample.item.5.desc":
+    "简历按板块分区；顺序在左栏「模板与版式」里调，是否新起一页在「分页」里设",
+  "typography.structureExample.item.6.title": "条目",
+  "typography.structureExample.item.6.desc": "板块里的每条记录；两条之间的距离用「条目间距」调",
+  "typography.structureExample.item.7.title": "条目标题行",
+  "typography.structureExample.item.7.desc":
+    "标题在左、日期在右；在左栏「局部排版」的「日期位置」里改日期靠右还是紧跟标题",
+  "typography.structureExample.item.8.title": "正文与要点",
+  "typography.structureExample.item.8.desc":
+    "条目标题下的描述与要点；在左栏「局部排版」的「正文」里调字号、加粗与对齐",
+  "typography.structureExample.item.9.title": "项目符号",
+  "typography.structureExample.item.9.desc":
+    "要点前的圆点；在左栏「局部排版」的「正文」里切换「项目符号」：圆点、短横或不显示",
+  "typography.structureExample.item.10.title": "行距",
+  "typography.structureExample.item.10.desc":
+    "正文行与行之间；整份简历在左栏「排版参数」的「行距」里调，也可按段落类型单独调",
+  "typography.structureExample.item.11.title": "段前距与段后距",
+  "typography.structureExample.item.11.desc":
+    "段落上下的空白；在左栏「局部排版」里按段落类型调，套用「文字级别」也会改这两项",
+  "typography.structureExample.item.12.title": "缩进",
+  "typography.structureExample.item.12.desc":
+    "正文左边往里缩多少；在左栏「局部排版」的「缩进」里调",
+  "typography.structureExample.item.13.title": "对齐",
+  "typography.structureExample.item.13.desc":
+    "左对齐、居中、右对齐或两端对齐；在左栏「局部排版」的「对齐」里选",
+  "typography.structureExample.item.14.title": "区块间距",
+  "typography.structureExample.item.14.desc":
+    "两个板块之间的空白；在左栏「层次与间距」的「区块间距」里调",
+  "typography.structureExample.item.15.title": "条目间距",
+  "typography.structureExample.item.15.desc":
+    "两条记录之间的空白；在左栏「层次与间距」的「条目间距」里调",
+  "typography.structureExample.item.16.title": "分页线",
+  "typography.structureExample.item.16.desc":
+    "一页纸的边界，内容装不下就从这里分页；页面四周的留白由「页边距」决定",
+  // ── v2 局部排版工具容器（2026-10-30 第二批）──────────────────
+  /** 选择列表标题：容器自己提供条目多选，不依赖结构面板。 */
+  "typography.tools.selectionTitle": "选择条目",
+  /** 多选控件的无障碍名。 */
+  "typography.tools.selectionAria": "选择要批量调整的条目",
+  "typography.tools.selectionPlaceholder": "选择条目后可批量调整",
+  "typography.tools.selectionEmpty": "这份简历还没有条目",
+  "typography.tools.focused": "当前条目：{name}",
+  "typography.tools.noFocused": "先在纸面或结构面板点选一条内容",
+  "typography.tools.targets": "格式刷目标：{count} 条",
+  "typography.tools.targetsHint": "先在上方选择目标条目，再应用格式刷",
+  "typography.tools.sectionObject": "条目排版",
+  "typography.tools.sectionLevel": "文字级别",
+  "typography.tools.sectionPainter": "格式刷",
+  "typography.tools.sectionBatch": "批量调整",
+  "typography.tools.sectionRole": "同类段落",
+  "typography.tools.roleHint": "同类段落默认按条目正文继承",
 } as const;
 
 export default typography;

@@ -7,31 +7,13 @@ import { App as AntdApp } from "antd";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { t } from "../../../i18n";
-import { ensureIds } from "../../../features/resume-document/identity";
 import { createMockExportDeliveryApi } from "../../../features/resume-delivery";
-import type { ResumeContent } from "../../../types/resume";
+import { makeResumeDocument } from "../../../test/documentHarness";
 import ExportConfigModal from "./ExportConfigModal";
 
 const TARGET_TEXT = "甲公司 · 后端工程师";
-const CONTENT: ResumeContent = ensureIds({
-  photo: "",
-  name: "张三",
-  gender: "",
-  birth_year: "",
-  phone: "13800000000",
-  email: "",
-  city: "",
-  personal_website: "",
-  github: "",
-  job_intent: "",
-  summary: "",
-  education: [],
-  experience: [],
-  campus_experience: [],
-  projects: [],
-  skills: [],
-  awards: [],
-});
+/** v2 文档：页眉带姓名与联系方式，正文无隐藏项（D20 核对六项的取值口径）。 */
+const CONTENT = makeResumeDocument();
 
 function button(label: string): HTMLElement {
   const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");

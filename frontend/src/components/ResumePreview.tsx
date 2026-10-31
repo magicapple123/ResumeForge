@@ -1,24 +1,25 @@
 // SPDX-License-Identifier: Apache-2.0
 /** 简历预览：负责装配版面、工具栏与 iframe 交互，不在入口文件里堆叠测量细节。 */
-import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from "react";
+import { forwardRef, useCallback, useMemo, useRef, useState } from "react";
 import type { ReactNode, SyntheticEvent } from "react";
-import { measureResumeLayout, type LayoutMeasure } from "../utils/resumeLayoutMeasure";
+import type { LayoutMeasure } from "../utils/resumeLayoutMeasure";
 import { calculatePreviewGeometry } from "./resume-preview/geometry";
 import {
   A4_HEIGHT_PX,
   A4_WIDTH_PX,
-  LIVE_PROBE_STYLE_ID,
   MIN_PREVIEW_HEIGHT,
-  PREVIEW_BOTTOM_RESERVE,
-  PREVIEW_HEIGHT_RATIO,
-  PROBE_STYLE_ID,
-  type AvailableSpace,
   type PanStart,
   type PreviewMode,
   type ResumePreviewHandle,
 } from "./resume-preview/config";
-import { useProviewConfig } from "../features/resume-proview/ProviewContext";
-import { useMaxFitScale, usePreviewZoom } from "../features/resume-proview/usePreviewZoom";
+import { t } from "../i18n";
+import { useLocale } from "../i18n/i18nContext";
+import { useProviewConfig } from "../features/resume-proview/proviewShellContext";
+import { useStablePreviewScale } from "../features/resume-proview/useStablePreviewScale";
+import { useMaxFitScale } from "../features/resume-proview/usePreviewZoom";
+import { usePreviewAvailableSpace } from "./resume-preview/usePreviewAvailableSpace";
+import { usePreviewProbeHandle } from "./resume-preview/usePreviewProbeHandle";
+import { usePreviewZoomPair } from "./resume-preview/usePreviewZoomPair";
 import ProviewLayer from "./resume/proview/ProviewLayer";
 import ExactPreviewPanel from "./resume-preview/ExactPreviewPanel";
 import type { ExactPreviewOptions } from "./resume-preview/exactPreviewOptions";
@@ -31,6 +32,7 @@ import { useClickToEditPreview } from "./resume-preview/useClickToEditPreview";
 import { layoutFrame } from "./resume-preview/layout";
 import { forwardWheelToParent, useFrameInteractions } from "./resume-preview/useFrameInteractions";
 import { usePreviewBodyHeight } from "./resume-preview/usePreviewBodyHeight";
+import { stripPreviewScripts } from "./resume-preview/previewHtml";
 
 // `ExactPreviewOptions` 的定义在 `resume-preview/exactPreviewOptions.ts`，这里 re-export 保持调用点不变。
 
@@ -72,6 +74,11 @@ interface Props {
   measureControls?: ReactNode;
   /** 缩放条提示语的覆盖（制作台把分页说明并进那一行）；不传时用默认文案。 */
   zoomHint?: string;
+  /**
+   * 「适应」的口径（Q21）：`"page"` = 整页可见（默认，主预览）；`"width"` = 纸宽等于相框宽
+   * （制作台右栏，纵向滚动看全）。制作台自己的缩放条读数在这个口径下才是"适应画布"。
+   */
+  fitMode?: "page" | "width";
   /**
    * 精确预览（方案 A）：给出简历 id 与**当前草稿版式**，就用服务端排出的真实 PDF 渲染。
    *
@@ -116,6 +123,7 @@ const ResumePreview = forwardRef<ResumePreviewHandle, Props>(function ResumePrev
     templateControls,
     measureControls,
     zoomHint,
+    fitMode = "page",
     exactPreview,
     previewMode,
     onPreviewModeChange,
@@ -124,8 +132,16 @@ const ResumePreview = forwardRef<ResumePreviewHandle, Props>(function ResumePrev
   },
   ref,
 ) {
+  useLocale();
   const pageCount = Math.max(1, Math.round(pages));
   const paperHeight = A4_HEIGHT_PX * pageCount;
+  /**
+   * 预览 iframe 的正文：去掉模板里的排页探针脚本（Q22）。
+   *
+   * iframe 是 `sandbox="allow-same-origin"`（禁脚本），那段脚本只会让控制台刷
+   * `Blocked script execution`；预览的溢出测量由前端自己做，不依赖它。**导出 HTML 不走这里**。
+   */
+  const previewHtml = useMemo(() => stripPreviewScripts(html), [html]);
   const containerRef = useRef<HTMLDivElement>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
@@ -136,13 +152,15 @@ const ResumePreview = forwardRef<ResumePreviewHandle, Props>(function ResumePrev
    * 让位给它——**不再靠"根节点减草稿宿主"去推**，那个差值在纸比容器高时会塌成 0。
    */
   const bodyHeight = usePreviewBodyHeight(bodyRef, availableHeight !== undefined);
-  const [availableSpace, setAvailableSpace] = useState<AvailableSpace>({
-    width: 0,
-    height: height ?? paperHeight,
+  // 可用空间的测量（宿主高度口径 / 窗口比例口径 + observer 注册）拆到
+  // `usePreviewAvailableSpace`（行预算）。
+  const availableSpace = usePreviewAvailableSpace({
+    containerRef,
+    availableHeight,
+    bodyHeight,
+    height,
+    paperHeight,
   });
-  // 缩放系数 + Ctrl 滚轮 + 大屏上限：W15 拆到 `usePreviewZoom`（行为逐字保留），
-  // 这样专业视图的缩放档位有一个独立测试面，不必整棵预览一起挂。
-  const { zoom, setZoom, adjustZoom, resetZoom, zoomByWheel } = usePreviewZoom();
   const maxFitScale = useMaxFitScale();
   /** iframe 每次加载/重排后自增：专业视图的覆盖层与页位置据此重新同步。 */
   const [frameEpoch, setFrameEpoch] = useState(0);
@@ -161,6 +179,16 @@ const ResumePreview = forwardRef<ResumePreviewHandle, Props>(function ResumePrev
   const [innerMode, setInnerMode] = useState<PreviewMode>("draft");
   const activeMode = previewMode ?? innerMode;
   const canExactPreview = Boolean(exactPreview?.resumeId);
+  const exactActive = activeMode === "exact";
+  // 草稿 / 精确各一套缩放（Q18/Q21）：两套状态、当前口径取哪一套、进入精确时复位都在
+  // `usePreviewZoomPair` 里（拆出后本文件只留一行取用）。
+  const { draftZoom, exactZoom, zoom: activeZoom } = usePreviewZoomPair(activeMode);
+  /** 当前口径的缩放状态（缩放条 / Ctrl+滚轮 / 快捷键都只作用于看得见的那一档）。 */
+  const zoom = activeZoom.zoom;
+  const setZoom = activeZoom.setZoom;
+  const adjustZoom = activeZoom.adjustZoom;
+  const resetZoom = activeZoom.resetZoom;
+  const zoomByWheel = activeZoom.zoomByWheel;
 
   const changeMode = useCallback(
     (mode: PreviewMode) => {
@@ -169,28 +197,6 @@ const ResumePreview = forwardRef<ResumePreviewHandle, Props>(function ResumePrev
     },
     [onPreviewModeChange],
   );
-
-  const updateAvailableSpace = useCallback(() => {
-    const container = containerRef.current;
-    if (!container) return;
-    // 宿主给了真实高度就以它为准：优先用纸面那一层量到的高度（已扣掉工具条/提示条/缩放条），
-    // 量不到（首帧、jsdom）时退回宿主给的总预算。两条都不猜窗口比例。
-    if (availableHeight !== undefined) {
-      setAvailableSpace({
-        width: container.clientWidth,
-        height: bodyHeight > 0 ? bodyHeight : Math.max(1, Math.round(availableHeight)),
-      });
-      return;
-    }
-    const viewportHeight =
-      typeof window === "undefined" ? (height ?? paperHeight) : window.innerHeight;
-    const budget = Math.round(viewportHeight * PREVIEW_HEIGHT_RATIO);
-    const ceiling = Math.max(MIN_PREVIEW_HEIGHT, viewportHeight - PREVIEW_BOTTOM_RESERVE);
-    setAvailableSpace({
-      width: container.clientWidth,
-      height: Math.min(ceiling, Math.max(MIN_PREVIEW_HEIGHT, budget)),
-    });
-  }, [availableHeight, bodyHeight, height, paperHeight]);
 
   /**
    * 对**一个** iframe 应用分页样式，并把它滚到第 `index` 列。
@@ -267,71 +273,11 @@ const ResumePreview = forwardRef<ResumePreviewHandle, Props>(function ResumePrev
     boldMenu,
   } = useClickToEditPreview({ containerRef, draftMode, onPickField, richEdit });
 
-  useImperativeHandle(
-    ref,
-    () => ({
-      measureWithProbe(css: string) {
-        const document = iframeRef.current?.contentDocument;
-        if (!document?.body) return null;
-        const style = document.getElementById("resume-preview-style") as HTMLStyleElement | null;
-        const previousLayoutCss = style?.textContent ?? null;
-        if (style) style.textContent = "";
-        document.getElementById(PROBE_STYLE_ID)?.remove();
-        if (css) {
-          const probe = document.createElement("style");
-          probe.id = PROBE_STYLE_ID;
-          probe.textContent = css;
-          document.head.appendChild(probe);
-        }
-        try {
-          void document.body.offsetHeight;
-          return measureResumeLayout(document, pageCount);
-        } finally {
-          if (css) document.getElementById(PROBE_STYLE_ID)?.remove();
-          if (style && previousLayoutCss !== null) style.textContent = previousLayoutCss;
-        }
-      },
-      setLiveProbe(css: string) {
-        const document = iframeRef.current?.contentDocument;
-        const head = document?.head;
-        if (!document || !head) return;
-        const existing = document.getElementById(LIVE_PROBE_STYLE_ID) as HTMLStyleElement | null;
-        if (!css) {
-          existing?.remove();
-          return;
-        }
-        const style = existing ?? document.createElement("style");
-        style.id = LIVE_PROBE_STYLE_ID;
-        style.textContent = css;
-        if (!existing) head.appendChild(style);
-      },
-    }),
-    [pageCount],
-  );
+  // 命令式测量接口（"自动一页"逐档试版式 / 滑块实时探针）拆到 `usePreviewProbeHandle`。
+  usePreviewProbeHandle(ref, iframeRef, pageCount);
 
-  // 换 html / 换页数 = 换了一份文档：把用户缩放复位（`setZoom` 来自 usePreviewZoom，引用稳定）。
-  useEffect(() => {
-    setZoom(1);
-  }, [html, pageCount, setZoom]);
-
-  /**
-   * 量可用空间。**与上面那条拆开**（2026-10-29）：它依赖 `updateAvailableSpace`，而后者会
-   * 随 `bodyHeight` 变化重建——合成一条的话，头部一变高（提示条出现、工具条换行）就会顺手
-   * 执行 `setZoom(1)`，把用户刚拖到的 150% 悄悄打回 100%。
-   */
-  useEffect(() => {
-    updateAvailableSpace();
-    const container = containerRef.current;
-    const observer =
-      typeof ResizeObserver === "undefined" ? null : new ResizeObserver(updateAvailableSpace);
-    if (container) observer?.observe(container);
-    window.addEventListener("resize", updateAvailableSpace);
-    return () => {
-      observer?.disconnect();
-      window.removeEventListener("resize", updateAvailableSpace);
-    };
-  }, [updateAvailableSpace]);
-
+  // 换 html / 换页数不再复位缩放（2026-10-29 用户要求）：复位等于每调一个参数就被打回
+  // 100%；缩放是会话级视图状态，只有「适应页面」才回到 fit。滚动位置由实时预览链路恢复。
   const handleFrameLoad = useCallback(
     (event: SyntheticEvent<HTMLIFrameElement>, index: number) => {
       const frame = event.currentTarget;
@@ -353,7 +299,10 @@ const ResumePreview = forwardRef<ResumePreviewHandle, Props>(function ResumePrev
     availableSpace,
     paperHeight,
     pageCount,
-    zoom,
+    // 草稿几何只由草稿缩放决定：精确那套比例与它无关。
+    zoom: draftZoom.zoom,
+    // 制作台右栏按宽度适应（Q21）：纸宽 ≤ 相框宽，纵向滚动看全。
+    fitMode,
     overflow,
     naturalWidth,
     maxFitScale,
@@ -361,9 +310,29 @@ const ResumePreview = forwardRef<ResumePreviewHandle, Props>(function ResumePrev
     pageGap: 0,
     measure,
   });
+  // 刷新（换 html / 页数）时按新旧 fit 的比值补偿缩放，保持纸面显示大小不变。
+  // 只对草稿口径生效（Q21）：精确模式下草稿画布隐藏/裁零，fit 抖动不该改任何一套缩放。
+  useStablePreviewScale(
+    html,
+    geometry.scale,
+    geometry.fitScale,
+    draftZoom.zoom,
+    draftZoom.setZoom,
+    activeMode === "draft",
+  );
   // 纵向空间归外层弹窗/页面管理：多页竖排后整块会比一屏高，靠外层滚动看下一页，
   // 不再制造第二条内部纵向滚动条。
   const viewportHeight = Math.max(geometry.viewportHeightForPage, geometry.scaledHeight);
+  /**
+   * 纸面比相框宽吗（Q21）：为真时缩放条要给一句可见状态，告诉用户"可以左右拖动"。
+   *
+   * - 精确：只有用户自己放大（scale > 1）才会比相框宽——默认的 1 = 适应画布；
+   * - 草稿：fit 被可读下限（55%）抬起时，纸本来就比容器宽（触底后改为横向滚动）。
+   *   几何里 `clampedToMin` 只覆盖"停在下限"这一种，放大后同样可能超宽，所以直接比宽度。
+   */
+  const needsHorizontalScroll = exactActive
+    ? canExactPreview && exactZoom.zoom > 1.0001
+    : geometry.viewportWidth > 0 && geometry.scaledWidth > geometry.viewportWidth + 1;
 
   /*
    * 精确模式下草稿画布**不卸载**，只是被裁成 0 高。
@@ -467,7 +436,7 @@ const ResumePreview = forwardRef<ResumePreviewHandle, Props>(function ResumePrev
               scaledHeight={geometry.scaledHeight}
               scale={geometry.scale}
               totalVisualPages={geometry.totalVisualPages}
-              html={html}
+              html={previewHtml}
               containerRef={containerRef}
               iframeRef={iframeRef}
               onIframeLoad={handleFrameLoad}
@@ -485,6 +454,7 @@ const ResumePreview = forwardRef<ResumePreviewHandle, Props>(function ResumePrev
         // `clampedToMin` 的文案说的是"容器装不下"，只对草稿的按宽自适应成立；
         // 精确模式的 50% 是用户自己缩到的，不该冒出一句对不上的解释。
         clampedToMin={canExactPreview && activeMode === "exact" ? false : geometry.clampedToMin}
+        overflowHint={needsHorizontalScroll ? t("preview.zoom.scrollHint") : undefined}
         hint={zoomHint}
         onZoomOut={() => adjustZoom(-0.1)}
         onZoomIn={() => adjustZoom(0.1)}

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * 版式控件 · 第一组「结构类」：样式模板 / 版式模板 / 板块顺序 / 最大篇幅。
+ * 版式控件 · 第一组「结构类」：样式模板 / 版式模板 / 最大篇幅。
  *
  * P2 把 `ResumeLayoutControls` 拆成"壳 + 两组"（D4），本文件守的是**拆分后接口没走样**：
  * 四个控件各自只写自己那一个 `layout` 键，而且都把"当前 layout 的其余字段"原样带过去
@@ -12,7 +12,6 @@ import { App as AntdApp } from "antd";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { ComponentProps } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { t } from "../../i18n";
 import { TEMPLATE_CATALOG } from "../../test/resumeFixtures";
 import type { ResumeLayout } from "../../types";
 import { DEFAULT_LAYOUT } from "../ResumeLayoutControls.testkit";
@@ -116,53 +115,6 @@ describe("ResumeTemplateControls · 版式模板", () => {
   });
 });
 
-describe("ResumeTemplateControls · 板块顺序", () => {
-  it("上移写完整排列进 format_config.section_order，其余覆盖保留", async () => {
-    const onChange = renderGroup();
-
-    fireEvent.click(await screen.findByRole("button", { name: "调整简历板块顺序" }));
-    await screen.findByRole("list", { name: "简历板块顺序" });
-    fireEvent.click(screen.getByRole("button", { name: "把项目经历上移" }));
-
-    await waitFor(() => expect(onChange).toHaveBeenCalledTimes(1));
-    const next = lastLayout(onChange);
-    expect(next.format_config?.section_order).toEqual([
-      "education",
-      "projects",
-      "experience",
-      "skills",
-      "campus_experience",
-      "awards",
-      "summary",
-    ]);
-    // 强调色是另一项覆盖，不该被这次移动覆盖掉。
-    expect(next.format_config?.accent).toBe("#123456");
-  });
-
-  it("已调整时按钮标出「顺序·已调整」", async () => {
-    renderGroup({
-      layout: {
-        ...BASE,
-        format_config: {
-          section_order: [
-            "projects",
-            "summary",
-            "education",
-            "experience",
-            "campus_experience",
-            "skills",
-            "awards",
-          ],
-        },
-      },
-    });
-
-    expect(await screen.findByRole("button", { name: "调整简历板块顺序" })).toHaveTextContent(
-      "顺序·已调整",
-    );
-  });
-});
-
 describe("ResumeTemplateControls · 版式下拉的弹层", () => {
   it("弹层带专属收窄类（6 个汉字宽）而不是按内容撑开；每个选项带全名 title", async () => {
     renderGroup();
@@ -215,90 +167,3 @@ describe("ResumeTemplateControls · 最大篇幅", () => {
  * 2. 资料里没有**可排序分区**（`basic_info` 不算：它是页眉）→ 这动作无从谈起；
  * 3. 其余 → 可用。
  */
-describe("ResumeTemplateControls · 按我的资料顺序排列", () => {
-  /** 资料顺序与内置默认不同（项目在第一），且资料里有可排序分区。 */
-  const PROFILE_FIRST_CATALOG = {
-    ...TEMPLATE_CATALOG,
-    profile_section_order: [
-      "projects",
-      "summary",
-      "education",
-      "experience",
-      "campus_experience",
-      "skills",
-      "awards",
-    ],
-    profile_section_keys: [
-      "basic_info",
-      "projects",
-      "educations",
-      "experiences",
-      "campus_experiences",
-      "skills",
-      "awards",
-      "summary",
-    ],
-  };
-
-  function arrangeButton(): HTMLElement {
-    return screen.getByRole("button", { name: t("sections.arrangeByProfile") });
-  }
-
-  it("可用时点击：把资料顺序写成这份简历的快照，其它覆盖原样保留", async () => {
-    const onChange = renderGroup({ catalog: PROFILE_FIRST_CATALOG });
-
-    fireEvent.click(await screen.findByRole("button", { name: "调整简历板块顺序" }));
-    await screen.findByRole("list", { name: "简历板块顺序" });
-    fireEvent.click(arrangeButton());
-
-    await waitFor(() => expect(onChange).toHaveBeenCalledTimes(1));
-    const next = lastLayout(onChange);
-    // 快照 = 目录里那份完整排列（补齐成七个键），项目排在第一。
-    expect(next.format_config?.section_order).toEqual([
-      "projects",
-      "summary",
-      "education",
-      "experience",
-      "campus_experience",
-      "skills",
-      "awards",
-    ]);
-    // 强调色是另一项覆盖，不该被这次快照清掉。
-    expect(next.format_config?.accent).toBe("#123456");
-  });
-
-  it("资料顺序与内置默认相同 → 不可用（点了没有任何变化）", async () => {
-    renderGroup();
-
-    fireEvent.click(await screen.findByRole("button", { name: "调整简历板块顺序" }));
-    await screen.findByRole("list", { name: "简历板块顺序" });
-
-    expect(arrangeButton()).toBeDisabled();
-  });
-
-  it("资料里只有页眉（`basic_info`）→ 不可用（页眉不参与正文排序）", async () => {
-    renderGroup({
-      catalog: {
-        ...PROFILE_FIRST_CATALOG,
-        profile_section_keys: ["basic_info"],
-      },
-    });
-
-    fireEvent.click(await screen.findByRole("button", { name: "调整简历板块顺序" }));
-    await screen.findByRole("list", { name: "简历板块顺序" });
-
-    expect(arrangeButton()).toBeDisabled();
-  });
-
-  it("旧后端不下发 `profile_section_keys` → 不可用（不提供这个动作）", async () => {
-    // 显式摘掉这个字段：`undefined` 与空数组同义（当作"资料里没有可排序分区"）。
-    renderGroup({
-      catalog: { ...PROFILE_FIRST_CATALOG, profile_section_keys: undefined },
-    });
-
-    fireEvent.click(await screen.findByRole("button", { name: "调整简历板块顺序" }));
-    await screen.findByRole("list", { name: "简历板块顺序" });
-
-    expect(arrangeButton()).toBeDisabled();
-  });
-});

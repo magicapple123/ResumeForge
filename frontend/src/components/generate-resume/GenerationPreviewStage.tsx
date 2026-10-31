@@ -11,7 +11,8 @@ import { t } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
 import ResumeDetailPreview from "../resume/ResumeDetailPreview";
 import type { ResumePreviewHandle } from "../ResumePreview";
-import type { ResumeContent, ResumeDetail, ResumeLayout } from "../../types";
+import type { ResumeDetail, ResumeLayout } from "../../types";
+import type { ResumeDocument } from "../../types/resumeDocument";
 import type { ResumeFormatConfig } from "../../types/resumeFormat";
 import type { LayoutMeasure } from "../../utils/resumeLayoutMeasure";
 
@@ -33,7 +34,7 @@ interface Props {
   setMeasure: (measure: LayoutMeasure | null) => void;
   applyLayout: (next: ResumeLayout) => void;
   applyFittedFormat: (formatConfig: ResumeFormatConfig) => void;
-  saveEditedResume: (content: ResumeContent) => Promise<void>;
+  saveEditedResume: (content: ResumeDocument) => Promise<void>;
   applyRevisedDetail: (updated: ResumeDetail) => Promise<void>;
   suggestionsGenerated: boolean;
   suggestionsResetKey: number;

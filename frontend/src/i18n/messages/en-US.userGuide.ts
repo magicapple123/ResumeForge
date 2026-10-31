@@ -63,10 +63,10 @@ const userGuide = {
     "Fields no longer collapse by default — enter edit mode and every visible field in the Current Plan is right there; to keep one out of AI and export, set it hidden in the field settings. The value still stays in the database and can be restored at any time.",
   "userGuide.setupProfile.step2.point6.lead": "Hiding",
   "userGuide.setupProfile.step2.point6.text":
-    "Fields hidden in “Field settings” take no part in AI or export, but their values stay in the database; click the hidden-field entry to restore them at any time (the button reads “Show again”). Sections also have a “Show on the Profile page” switch — that one controls whether the whole section is in the Current Plan, a separate layer from hiding a field.",
+    "Fields hidden in “Field settings” take no part in AI or export, but their values stay in the database; click the hidden-field entry to restore them at any time (the button reads “Show again”). This is the **Profile-level** hide; setting a field's position to Hidden in the Workbench only affects that one Resume's paper — the two are not the same. Sections also have a “Show on the Profile page” switch — that one controls whether the whole section is in the Current Plan, a separate layer from hiding a field.",
   "userGuide.setupProfile.step2.point7.lead": "Field settings",
   "userGuide.setupProfile.step2.point7.text":
-    "Every section accepts custom fields (single line, multi-line, date text) and lets you reorder them; default fields can only be hidden — not renamed or deleted.",
+    "Every section's “Field settings” lets you add custom fields (single line, multi-line, date text): when adding one you can pick its “Paper placement” (including “Automatic by field type”) and turn on “Material only” (its placement is then fixed to “Not printed”, used only for AI generation and Web form filling); existing fields can change placement, and built-in fields follow the field catalog.",
   "userGuide.setupProfile.step2.point8.lead": "Which section",
   "userGuide.setupProfile.step2.point8.text":
     "The table behind the Profile page's help entry covers “one experience belongs to one section”: choose the section by what the material is, so the same experience never appears twice on paper.",

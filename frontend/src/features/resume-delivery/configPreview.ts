@@ -9,7 +9,7 @@
  * 为什么单独成文件：导出弹层已经接近 300 行预算；HTTP/头解析只放在这一层，
  * 组件只负责"按钮 → loading → iframe"。
  */
-import type { ResumeContent } from "../../types/resume";
+import type { ResumeDocument } from "../../types/resumeDocument";
 import { ApiError } from "../../api/apiError";
 import { requestRaw } from "../../api/client";
 import { DEFAULT_REDACTION_OPTIONS, type RedactionOptions } from "../../types/export";
@@ -24,7 +24,7 @@ export interface ConfigPreviewInput {
   language?: string;
   formatConfig?: Record<string, unknown>;
   includePhoto?: boolean;
-  content?: ResumeContent | null;
+  content?: ResumeDocument | null;
   watermark?: string;
   redact?: boolean;
   redactOptions?: RedactionOptions;

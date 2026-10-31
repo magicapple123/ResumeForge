@@ -12,10 +12,12 @@
 
 from __future__ import annotations
 
+import copy
 import json
 
 from app.schemas.setting import LLMConfig
 from app.services.resume import fact_locks
+from tests.document_test_support import body_texts, field_value, section_of
 
 
 def _content(company: str = "示例科技有限公司", description: str = "负责合成数据接口") -> dict:
@@ -84,7 +86,10 @@ def test_lock_crud_and_unknown_path(client):
     lock = _lock(client, resume_id, path="experience.0.company")
     assert lock["kind"] == "institution"
     assert lock["locked_value"] == "示例科技有限公司"
-    assert lock["path"] == "experience.0.company"
+    entry = section_of(_resume_record(client, resume_id)["content"], "experience")["entries"][0]
+    company = next(item for item in entry["items"] if item.get("key") == "company")
+    assert lock["path"] == f"experience.{entry['id']}.{company['id']}"
+    assert lock["object_id"] == entry["id"] and lock["point_id"] == company["id"]
 
     listed = client.get(f"/api/provenance/resumes/{resume_id}/fact-locks").json()
     assert [item["id"] for item in listed["locks"]] == [lock["id"]]
@@ -135,7 +140,7 @@ def test_ai_revision_that_changes_a_locked_value_is_rejected(client, monkeypatch
     assert violation["current_value"] == "另一家公司"
     # 被拒绝 = 一个字段都没写：正文、revision 不变。
     after = _resume_record(client, resume_id)
-    assert after["content"]["experience"][0]["company"] == "示例科技有限公司"
+    assert field_value(after["content"], "company", section="experience") == "示例科技有限公司"
     assert after["revision"] == before["revision"]
 
 
@@ -164,8 +169,8 @@ def test_ai_revision_that_only_changes_wording_is_allowed(client, monkeypatch):
 
     assert response.status_code == 200, response.text
     after = response.json()
-    assert after["content"]["experience"][0]["company"] == "示例科技有限公司"
-    assert after["content"]["experience"][0]["description"] == ["主导合成数据接口的设计与实现"]
+    assert field_value(after["content"], "company", section="experience") == "示例科技有限公司"
+    assert body_texts(after["content"], "experience") == ["主导合成数据接口的设计与实现"]
     locks = client.get(f"/api/provenance/resumes/{resume_id}/fact-locks").json()["locks"]
     assert [item["id"] for item in locks] == [lock["id"]]
 
@@ -201,7 +206,7 @@ def test_ai_late_return_does_not_overwrite_or_clear_locks(client, monkeypatch):
     assert response.status_code == 409, response.text
     assert response.json()["code"] == "resume_revision_conflict"
     after = _resume_record(client, resume_id)
-    assert after["content"]["experience"][0]["description"] == ["用户刚写的新描述"]
+    assert body_texts(after["content"], "experience") == ["用户刚写的新描述"]
     assert after["revision"] == before["revision"] + 1
     assert client.get(f"/api/provenance/resumes/{resume_id}/fact-locks").json()["locks"]
 
@@ -213,15 +218,27 @@ def test_object_id_lock_follows_reordering(client, db_session):
     from app.models.resume import ResumeRecord
 
     record = db_session.get(ResumeRecord, resume_id)
-    reordered = dict(record.content)
-    reordered["experience"] = [
-        {"id": "otheroo001", "company": "另一家公司", "role": "产品", "description": []},
-        record.content["experience"][0],
+    # Preserve item identities when testing a value edit; deleted identities are tested separately.
+    reordered = copy.deepcopy(record.content)
+    experience_section = section_of(reordered, "experience")
+    original_entry = copy.deepcopy(experience_section["entries"][0])
+    experience_section["entries"] = [
+        {
+            "id": "otheroo001",
+            "items": [
+                {"kind": "field", "key": "company", "value": "另一家公司", "placement": "title"},
+                {"kind": "field", "key": "role", "value": "产品", "placement": "title"},
+            ],
+        },
+        original_entry,
     ]
     assert fact_locks.validate_fact_locks(db_session, record, reordered) == []
 
-    changed = dict(record.content)
-    changed["experience"] = [{"id": "expobj0001", "company": "另一家公司", "role": "后端"}]
+    changed = copy.deepcopy(record.content)
+    changed_section = section_of(changed, "experience")
+    for item in changed_section["entries"][0]["items"]:
+        if item.get("key") == "company":
+            item["value"] = "另一家公司"
     violations = fact_locks.validate_fact_locks(db_session, record, changed)
     assert len(violations) == 1
     assert violations[0].lock_id == lock["id"]
@@ -235,7 +252,11 @@ def test_missing_locked_object_is_a_violation(client, db_session):
     from app.models.resume import ResumeRecord
 
     record = db_session.get(ResumeRecord, resume_id)
-    without_entry = {**record.content, "experience": []}
+    # 记录本体是 v2：删"experience 分区"而不是塞一个 v1 的顶层键。
+    without_entry = dict(record.content)
+    without_entry["sections"] = [
+        section for section in without_entry["sections"] if section["key"] != "experience"
+    ]
 
     violations = fact_locks.validate_fact_locks(db_session, record, without_entry)
     assert len(violations) == 1
@@ -249,8 +270,10 @@ def test_name_lock_rejects_renamed_candidate(client, db_session):
     from app.models.resume import ResumeRecord
 
     record = db_session.get(ResumeRecord, resume_id)
-    content = dict(record.content)
-    content["name"] = "李示例"
+    content = copy.deepcopy(dict(record.content))
+    for item in content["header"]["items"]:
+        if item["key"] == "name":
+            item["value"] = "李示例"
     violations = fact_locks.validate_fact_locks(db_session, record, content)
     assert len(violations) == 1
     assert violations[0].kind == "name"
@@ -313,24 +336,31 @@ def test_research_status_change_is_rejected_by_lock(client, db_session):
     from app.models.resume import ResumeRecord
 
     resume_id = _create_resume(client, _research_content())
-    client.post(
+    created = client.post(
         f"/api/provenance/resumes/{resume_id}/fact-locks",
         json={"path": "publications.0.status", "label": "发表状态"},
     )
     record = db_session.get(ResumeRecord, resume_id)
     assert record is not None
 
-    violations = fact_locks.validate_fact_locks(
-        db_session, record, _research_content(status="retracted")
+    candidate = copy.deepcopy(record.content)
+    publication = section_of(candidate, "publications")["entries"][0]
+    next(item for item in publication["items"] if item.get("key") == "status")["value"] = (
+        "retracted"
     )
+    violations = fact_locks.validate_fact_locks(db_session, record, candidate)
 
-    assert any(item.path == "publications.0.status" for item in violations)
+    assert any(
+        item.path == created.json()["path"] and item.current_value == "retracted"
+        for item in violations
+    )
 
 
 def test_author_order_year_and_patent_number_locks_are_enforced(client, db_session):
     from app.models.resume import ResumeRecord
 
     resume_id = _create_resume(client, _research_content())
+    expected_paths = set()
     for path in (
         "publications.0.authors.0.is_self",
         "publications.0.year",
@@ -341,6 +371,7 @@ def test_author_order_year_and_patent_number_locks_are_enforced(client, db_sessi
             json={"path": path, "label": path},
         )
         assert response.status_code == 201, response.text
+        expected_paths.add(response.json()["path"])
     record = db_session.get(ResumeRecord, resume_id)
     changed = _research_content(is_self=False)
     changed["publications"][0]["year"] = "2023"
@@ -349,8 +380,5 @@ def test_author_order_year_and_patent_number_locks_are_enforced(client, db_sessi
     violations = fact_locks.validate_fact_locks(db_session, record, changed)
 
     paths = {item.path for item in violations}
-    assert {
-        "publications.0.authors.0.is_self",
-        "publications.0.year",
-        "patents.0.patent_number",
-    } <= paths
+    assert len(expected_paths) == 3
+    assert expected_paths <= paths

@@ -25,6 +25,7 @@ from app.services.exporter import (
 )
 from app.services.resume.resume_sample import sample_resume_content
 from app.services.resume.resume_template_catalog import RESUME_TEMPLATES
+from tests.document_test_support import doc_of, document_text, header_value, values
 from tests.font_fixtures import build_test_font, write_font
 
 RESUME = ResumeContent(
@@ -81,9 +82,11 @@ def _activate_test_font() -> None:
 
 
 def test_export_json_roundtrip():
+    """JSON 导出是 v2 文档（version=2 + header/sections）；不再回 v1 ResumeContent。"""
     data = json.loads(export_json(RESUME))
-    assert data["name"] == "张三"
-    assert ResumeContent.model_validate(data) == RESUME
+    assert data["version"] == 2
+    assert header_value(data, "name") == "张三"
+    assert doc_of(data).version == 2
 
 
 def test_export_json_excludes_photo_data_url():
@@ -95,7 +98,8 @@ def test_export_json_excludes_photo_data_url():
 def test_export_markdown_contains_sections():
     markdown = export_markdown(RESUME)
     for section in (
-        "# 张三 · 后端开发工程师",
+        # planner 会在姓名后补「求职意向：」前缀（A2 语言口径），这里只钉姓名标题在。
+        "# 张三",
         "## 教育经历",
         "## 实习/工作经历",
         "## 校园经历",
@@ -194,12 +198,20 @@ def test_markdown_export_covers_every_field_the_preview_shows():
 
 
 def test_json_export_keeps_every_field_except_the_photo():
-    """JSON 必须字段完整；照片的排除是**有意**的（内嵌 data URL 会撑出无意义的大字段）。"""
+    """JSON 是 v2 文档：v1 的每个非照片字段值都能在 header/items 里找到；照片有意排除。"""
     resume = sample_resume_content()
 
     data = json.loads(export_json(resume))
 
-    assert set(data) == set(resume.model_dump().keys()) - {"photo"}
+    assert data["version"] == 2
+    assert set(data) == {"version", "language", "header", "sections"}
+    rendered = values(data)
+    # 日期在 v2 里存规范日期串，planner 渲染时再格式化（如 2019.09 -> 2019.09 - 2023.06），
+    # 所以"值还在"要同时看 item 值与纸面文本，不能只比原始 v1 字符串。
+    paper = document_text(data)
+    for name, value in resume.model_dump(exclude={"photo"}).items():
+        for text in _flatten_texts(value):
+            assert text in rendered or text in paper, (name, text)
 
 
 # ===== R10：预览 / 导出 HTML 与 PDF 同字体（内嵌子集化 @font-face）=====
@@ -233,7 +245,8 @@ def test_render_html_inlines_font_for_custom_templates_too():
 
     html = render_html(
         RESUME,
-        template_html="<html><head><title>t</title></head><body>{{ resume.name }}</body></html>",
+        # 自制模板只拿渲染上下文（page_title 等），不再有 v1 的 resume.* 对象。
+        template_html="<html><head><title>t</title></head><body>{{ page_title }}</body></html>",
     )
 
     assert '<style id="rf-font">' in html

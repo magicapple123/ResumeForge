@@ -5,7 +5,6 @@ from __future__ import annotations
 
 from .resume_config_domains import DOMAIN_KEYS, HEX_COLOR_RE, domain_version, is_supported
 from .resume_contact import CONTACT_BREAKS_KEY, validate_contact_breaks
-from .resume_field_layout import validate_field_layout_domain
 from .resume_layout_overrides import (
     EXTRA_FORMAT_KEYS,
     PAGE_MARGIN_KEYS,
@@ -119,7 +118,6 @@ _DOMAIN_VALIDATORS: dict[str, object] = {
     "pagination": validate_pagination_domain,
     "photo_crop": validate_photo_crop_domain,
     "object_roles": validate_object_roles_domain,
-    "field_layout": validate_field_layout_domain,
 }
 
 

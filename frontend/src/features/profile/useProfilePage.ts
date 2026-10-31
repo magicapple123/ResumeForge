@@ -20,7 +20,7 @@ import { t } from "../../i18n";
 import { deleteEntry, getWorkspace, patchFieldPreference } from "../profile-library/api";
 import { profileErrorMessage } from "../profile-library/errors";
 import { invalidateProjectionCache } from "../profile-library/projectionCache";
-import { makeTempEntryKey } from "../profile-library/ProfileEntrySection";
+import { makeTempEntryKey } from "../profile-library/tempEntryKey";
 import { restoreRecentlyDeleted } from "../profile-library/trashUndo";
 import type {
   FieldOut,
@@ -156,7 +156,10 @@ export function useProfilePage(options: Options) {
 
   useEffect(() => {
     let active = true;
-    setLoading(true);
+    // 首次取数置加载态：同步 setState 放进微任务，避开级联渲染告警（仍在请求前生效）。
+    queueMicrotask(() => {
+      if (active) setLoading(true);
+    });
     void getWorkspace()
       .then((next) => {
         if (!active) return;

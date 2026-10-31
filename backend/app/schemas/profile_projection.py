@@ -12,9 +12,10 @@
 也保留该分区（entries 为空元组）——13 个大字段统一为「在组里就出现、没数据就是空数组」；
 未参与分区则整键不出现。因此 sections 字典的键集合 == scope.participating_keys。
 
-**纸面投影响应**：服务器解析当前组后返回确定性纸面内容（ResumeContent 同构，含 C2 的
-custom_sections）、逐条候选、来源分区布局、长度警告与 snapshot token。前端不再自行拼
-「标签：值」或语言映射（R-37/R-72/R-79 的唯一来源在 services/profile/paper_projection.py）。
+**纸面投影响应**：服务器解析当前组后返回确定性纸面内容（**v2 文档 JSON**，投影内部先
+组装 v1 中间态再在响应边界转 v2）、逐条候选、来源分区布局、长度警告与 snapshot token。
+前端不再自行拼「标签：值」或语言映射（R-37/R-72/R-79 的唯一来源在
+services/profile/paper_projection.py）。
 
 **私密字段**：consumed 值里保留 private 字段（证书编号）供本地编辑/备份，但在
 ConsumedFieldSpec.private / llm_allowed / webform_allowed 上标明；下游（生成白名单、
@@ -29,12 +30,16 @@ from dataclasses import dataclass
 from pydantic import BaseModel, Field
 
 from .profile_editor import EditorSchemaOut
-from .resume import ResumeContent
 
 
 @dataclass(frozen=True)
 class ConsumedFieldSpec:
-    """消费层的字段定义：只有参与取数需要的属性，**没有 collapsed**。"""
+    """消费层的字段定义：只有参与取数需要的属性，**没有 collapsed**。
+
+    ``default_placement`` / ``material_only``（0069）：自定义字段的纸面默认抽屉与
+    "仅素材"标记，供 v1→v2 转换器/生成结果落 v2 时决定 item 的 placement。内置字段
+    这两项保持 None/False——它们的位置由文档字段目录（document_catalog）决定。
+    """
 
     field_id: str
     key: str
@@ -45,6 +50,8 @@ class ConsumedFieldSpec:
     webform_allowed: bool
     private: bool
     is_builtin: bool
+    default_placement: str | None = None
+    material_only: bool = False
 
 
 @dataclass(frozen=True)
@@ -106,10 +113,13 @@ class ProjectionCandidateOut(BaseModel):
     entry_id: str
     title: str = ""
     subtitle: str = ""
-    # 该候选在 PaperProjectionOut.content 里的位置（如 "projects/2"、
-    # "custom_sections/custom:abc/entries/1"）。前端“追加这一条”据此从服务端投影里取
-    # 现成条目，不再按 title 猜第二份映射（R-16/R-37 单源）。
-    paper_content_path: str = ""
+    #: **v2 文档路径**（`{section}.{v2_entry_id}`；自建分区同为 `{section}.{v2_entry_id}`）。
+    #: 注意：上面的 `entry_id` 是**资料条目 id**；本字段里的第二段是纸面 v2 entry 的
+    #: 稳定 id，二者通常不同（v1 中间态不携带资料 entry_id）。定位以本字段为准。
+    document_path: str = ""
+    #: 该候选在 content 里的 **v2 entry JSON 原样**（与 document_path 指向同一对象）；
+    #: 前端直接拿它拼新条目，不必再按 path 二次解析。为空 = 该条目没进纸面（如仅素材）。
+    document_entry: dict | None = None
 
 
 class ProjectionSourceSectionOut(BaseModel):
@@ -132,10 +142,15 @@ class ProjectionWarningOut(BaseModel):
 
 
 class PaperProjectionOut(BaseModel):
-    """GET /api/profile/current/projection 的响应：确定性纸面内容 + 候选 + 布局 + 警告。"""
+    """GET /api/profile/current/projection 的响应：确定性纸面内容 + 候选 + 布局 + 警告。
+
+    ``content`` 是 **v2 文档 JSON**（ResumeDocument 序列化后的 dict，D11 起存储/编辑
+    唯一格式）；投影内部仍先组装 v1 中间态，再在响应边界转 v2（自定义字段元数据来自
+    当前方案的定义），这样字段位置与制作台 converter 完全同源。
+    """
 
     scope: ProjectionScopeOut
-    content: ResumeContent
+    content: dict
     candidates: list[ProjectionCandidateOut] = Field(default_factory=list)
     source_layout: list[ProjectionSourceSectionOut] = Field(default_factory=list)
     # F10/R-82 编辑器视图：参与分区的可见板块 + 每个板块的可见字段（按当前方案投影）。

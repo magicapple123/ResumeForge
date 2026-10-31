@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * 语言版本切换条（W16）：中/英版本切换 + 当前版本自己的排版摘要 + 缺版本时的创建入口。
+ * 语言版本切换条（W16 / v2）：中/英版本切换 + 缺版本时的创建入口。
  *
- * "两份版本各自排版"是 W16 的硬口径，所以这里**同时显示当前版本的模板/页数**——
- * 用户切过去就能确认"切语言没有连带改排版"。切语言本身只调回调，不改任何内容。
+ * v2 口径：版本"自己的排版"仍独立保存（`resume_variant.layout`），但列表接口只回
+ * 摘要（`VariantOut` 不含排版字段）；排版详情由 `VariantLayoutSection` 在选中版本后
+ * 用 `export-input` 读取，所以这里只展示版本名与语言，不编造模板/页数。
  *
  * 创建入口在"创建后自动翻译"那条流程里要跑几十秒：`busy` 期间按钮转圈、禁用，
  * 文案换成 `busyLabel`（进度提示由宿主通过 i18n 传入，本组件不写死文案）。
@@ -25,6 +26,8 @@ interface Props {
   busy?: boolean;
   /** busy 期间的按钮文案（宿主按阶段给"正在创建"/"正在翻译…"）。 */
   busyLabel?: string;
+  /** 只读模式（无 revision）：版本仍可查看，但不能再创建。 */
+  disabled?: boolean;
 }
 
 export default function VariantBar({
@@ -34,6 +37,7 @@ export default function VariantBar({
   onCreate,
   busy = false,
   busyLabel,
+  disabled = false,
 }: Props) {
   useLocale();
   const zh = variants.find((item) => item.language === "zh-CN");
@@ -60,7 +64,7 @@ export default function VariantBar({
             size="small"
             icon={<PlusOutlined />}
             loading={busy || undefined}
-            disabled={busy || undefined}
+            disabled={busy || disabled || undefined}
             aria-label={bt("bilingual.variant.create")}
             onClick={() => onCreate(zh ? "en-US" : "zh-CN")}
           >
@@ -78,11 +82,7 @@ export default function VariantBar({
               type={variant.language === current ? undefined : "secondary"}
               className="variant-bar__version"
             >
-              {variant.name} ·{" "}
-              {bt("bilingual.variant.layout", {
-                template: variant.template,
-                pages: variant.page_limit,
-              })}
+              {variant.name}
             </Typography.Text>
           ))}
         </div>

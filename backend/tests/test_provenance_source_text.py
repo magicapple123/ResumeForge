@@ -12,6 +12,7 @@ from app.models.claim import ClaimRecord
 from app.models.material import Material
 from app.models.profile import UserProfile
 from app.models.provenance import ResumeSource, ResumeSourceRevision
+from tests.document_test_support import body_texts
 
 
 def _content() -> dict:
@@ -116,7 +117,7 @@ def test_claim_source_text_resolves_and_adopt_closes_the_loop(client, db_session
     )
     assert adopted.status_code == 200, adopted.text
     body = adopted.json()
-    assert body["content"]["summary"] == "主导合成数据接口的设计与实现"
+    assert body_texts(body["content"], "summary") == ["主导合成数据接口的设计与实现"]
     assert body["revision"] == before_revision + 1
     assert body["link"]["status"] == "linked"
 
@@ -156,7 +157,7 @@ def test_material_and_profile_sources_resolve_their_body(client, db_session):
         json={"text": material_text["text"]},
     )
     assert adopted.status_code == 200, adopted.text
-    assert adopted.json()["content"]["summary"] == "一段可采纳的资料正文"
+    assert body_texts(adopted.json()["content"], "summary") == ["一段可采纳的资料正文"]
 
     profile = db_session.query(UserProfile).first()
     if profile is None:
@@ -302,4 +303,4 @@ def test_adopt_rejects_arbitrary_pasted_text_even_for_resolvable_source(client, 
     )
     assert rejected.status_code == 409, rejected.text
     assert rejected.json()["code"] == "source_revision_stale"
-    assert _resume(client, resume_id)["content"]["summary"] == "负责示例模块"
+    assert body_texts(_resume(client, resume_id)["content"], "summary") == ["负责示例模块"]

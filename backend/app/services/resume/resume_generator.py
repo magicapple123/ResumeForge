@@ -36,6 +36,7 @@ from .resume_coverage import (
     all_entry_names,
     confirmed_claims_about,
     find_unwritten_details,
+    find_unwritten_field_details,
 )
 from .resume_generation_helpers import (
     parse_resume,
@@ -299,6 +300,8 @@ class ResumeGenerator:
                 apply_profile_field_backfill,
                 attach_custom_sections,
                 ensure_custom_field_lines_in_resume,
+                merge_missing_consumed_fields,
+                normalize_generated_content,
             )
             from .grounding_entries import (
                 ground_resume_facts_with_annotations as ground_consumed_facts,
@@ -321,16 +324,26 @@ class ResumeGenerator:
                 enhance=options.enhance,
                 enhancement_level=options.enhancement_level,
             )
-            resume, custom_field_annotations = ensure_custom_field_lines_in_resume(resume, consumed)
+            # 计划 §8.2「按 key 合并/补值」在本批的实现：模型没写全的自定义字段在 v1
+            # 中间态补回承载区「标签：值」行（保证资料里的非空字段不因模型漏写而丢失），
+            # 自建分区确定性追加；落库前由 converter 按 custom_fields hints 把这些行/
+            # 分区解析成 v2 的 item / 自建 section。
+            resume, custom_field_annotations = ensure_custom_field_lines_in_resume(
+                resume, consumed
+            )
             resume = attach_custom_sections(resume, consumed)
             # F8（R-81）：资料有值、结果槽位空 → 确定性回填；不改 AI 已写值、不阻断保存。
             resume = apply_profile_field_backfill(resume, consumed)
+            # R1-G：条目内被模型写空的字段（tech_stack / 技能水平等）按 key 合并回来。
+            resume = merge_missing_consumed_fields(resume, consumed, selection_data)
             try:
                 resume, language_annotations = restore_languages(resume, consumed)
             except LanguageCapacityError as exc:
                 # C14：技能 + 语言合并超过 200 条是结构化超限，不静默截断。
                 yield {"type": "error", "message": exc.detail}
                 return
+            # R1-A/R1-B：正文行保序去重 + 剥掉行首 markdown 列表前缀（含自建分区文本）。
+            resume = normalize_generated_content(resume)
             resume = resume.model_copy(update={"photo": consumed_photo(consumed)})
             annotations = [
                 *fact_annotations,
@@ -346,7 +359,11 @@ class ResumeGenerator:
         # 覆盖度检查必须在所有修复/回填之后（比对用户最终看到的内容）；它是中性的
         # coverage_notes，不混进"疑似虚构"的 warnings 红墙。
         coverage_details = (
-            find_unwritten_details(resume, consumed, selection_data)
+            [
+                *find_unwritten_details(resume, consumed, selection_data),
+                # R1-G：条目内字段/技能/总结层面的遗漏也要如实记录（不是只说整条）。
+                *find_unwritten_field_details(resume, consumed),
+            ]
             if scoped
             else find_unwritten_details(resume, selection.entry_names, selection.data)
         )

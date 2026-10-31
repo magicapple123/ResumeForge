@@ -26,6 +26,13 @@ from app.schemas.resume import ResumeContent
 from app.schemas.resume_entries import ResumeLanguageItem, ResumeSkill
 from app.services.profile import definition_catalog, paper_projection
 from app.services.profile.projection_views import editor_schema
+from tests.document_test_support import legacy_of
+
+
+def _legacy_content(out):
+    """投影 content 已是 v2 dict：本文件按 v1 分析口径断言（断言行为不变）。"""
+    out.content = legacy_of(out.content)
+    return out
 
 
 def _fields() -> tuple[ConsumedFieldSpec, ...]:
@@ -132,7 +139,7 @@ def test_five_profile_fields_round_trip_into_languages() -> None:
             "languages.obtained_at": "2020-06",
         },
     )
-    out = paper_projection.build_projection(_consumed(_section(entry)))
+    out = _legacy_content(paper_projection.build_projection(_consumed(_section(entry))))
     assert len(out.content.languages) == 1
     item = out.content.languages[0]
     assert isinstance(item, ResumeLanguageItem)
@@ -155,14 +162,14 @@ def test_entries_keep_source_order_and_empty_entries_are_skipped() -> None:
         # 只有取得时间也是有效内容（不能因为主字段空就整条丢掉）。
         _entry("l3", {"languages.obtained_at": "2024-06"}, 2),
     )
-    out = paper_projection.build_projection(_consumed(section))
+    out = _legacy_content(paper_projection.build_projection(_consumed(section)))
     assert [item.name for item in out.content.languages] == ["英语", "日语", ""]
     assert out.content.languages[2].obtained_at == "2024-06"
 
 
 def test_overlong_level_is_truncated_to_schema_limit() -> None:
     entry = _entry("l1", {"languages.language": "英语", "languages.level": "级" * 80})
-    out = paper_projection.build_projection(_consumed(_section(entry)))
+    out = _legacy_content(paper_projection.build_projection(_consumed(_section(entry))))
     assert len(out.content.languages[0].level) == 64
 
 
@@ -172,14 +179,19 @@ def test_language_candidates_expose_languages_content_path() -> None:
         _entry("l2", {"languages.language": "日语"}, 1),
     )
     out = paper_projection.build_projection(_consumed(section))
-    paths = [item.paper_content_path for item in out.candidates if item.section_key == "languages"]
-    assert paths == ["languages/0", "languages/1"]
+    rows = [item for item in out.candidates if item.section_key == "languages"]
+    assert len(rows) == 2
+    assert all(item.document_path == f"languages.{item.document_entry['id']}" for item in rows)
+    assert [
+        next(i["value"] for i in item.document_entry["items"] if i.get("key") == "name")
+        for item in rows
+    ] == ["英语", "日语"]
 
 
 def test_languages_follow_system_skills_and_do_not_merge_into_them() -> None:
     skills = _skills_section(_entry("s1", {"skills.name": "Python", "skills.level": "熟练"}))
     languages = _section(_entry("l1", {"languages.language": "英语", "languages.level": "CET-6"}))
-    out = paper_projection.build_projection(_profile(skills, languages))
+    out = _legacy_content(paper_projection.build_projection(_profile(skills, languages)))
     assert [(item.name, item.level) for item in out.content.skills] == [("Python", "熟练")]
     assert [(item.name, item.level) for item in out.content.languages] == [("英语", "CET-6")]
 

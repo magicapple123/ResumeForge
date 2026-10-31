@@ -18,11 +18,12 @@
  * 三个纯函数 + 一条"可复制差异"判定；按钮组件只负责把状态与文案摆出来。
  */
 import type { ResumeFormatConfig } from "../../types/resumeFormat";
-import { OBJECT_STYLE_PROPS } from "./styleCatalog";
+import { OBJECT_STYLE_PROPS, ROLE_STYLE_PROPS, type ResumeRoleKey } from "./styleCatalog";
 import {
   readObjectStyle,
   storedStyleValue,
   withObjectProps,
+  withObjectRoleProps,
   type ResumeRoleStyle,
   type ResumeStyleDomains,
 } from "./styleOverrides";
@@ -78,4 +79,29 @@ export function freezeObjectStyle(
     if (stored !== null) patch[prop] = stored;
   }
   return withObjectProps(config, [objectId], patch);
+}
+
+/**
+ * 「把当前生效值固定为局部调整」的**子范围**版本（Q12/Q14：条目头 / 正文 / 灰字）。
+ *
+ * 与整条版（freezeObjectStyle → objects）只差落点：这里写
+ * `object_roles["<object_id>:<role>"]`，只固定该范围的角色属性，不影响同一条的其它范围。
+ * 只收该角色**允许**的属性（与后端 ROLE_PROPS 同一白名单；写进去也会被 validate 丢掉）。
+ */
+export function freezeObjectRoleStyle(
+  config: ResumeFormatConfig | undefined | null,
+  objectId: string,
+  role: ResumeRoleKey,
+  resolvedStyle: ResumeRoleStyle,
+  baseRatio = 1,
+): ResumeFormatConfig {
+  const patch: ResumeRoleStyle = {};
+  for (const prop of ROLE_STYLE_PROPS[role]) {
+    const displayed = resolvedStyle[prop];
+    if (displayed === undefined) continue;
+    // 传入的是显示值（字号 = 系数 × 基准）；落库要转回系数，否则后端会再乘一次。
+    const stored = storedStyleValue(prop, displayed, baseRatio);
+    if (stored !== null) patch[prop] = stored;
+  }
+  return withObjectRoleProps(config, [objectId], role, patch);
 }

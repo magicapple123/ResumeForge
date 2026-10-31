@@ -132,7 +132,7 @@ def _font_issues(font_coverage: dict) -> list[CheckIssue]:
 
 
 def layout_issues(
-    content: ResumeContent,
+    content: ResumeContent | dict,
     *,
     page_limit: int,
     measure: dict | None,

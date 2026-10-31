@@ -20,7 +20,8 @@
  * - 量不到（首帧、jsdom 里 `clientHeight` 恒为 0）时传 `undefined`，预览退回它自己的
  *   窗口比例口径——**主预览一行代码都没变**。
  *
- * 目标很具体：制作台打开时**恰好一页 A4 完整可见**，缩放读数就是那个 fit 比例。
+ * 目标很具体（Q21）：制作台打开时**纸宽恰好等于右栏宽度**（`fitMode="width"`），
+ * 纵向滚动看全。不按"整页可见"算——右栏窄而高，按整页会把纸缩到六成、两侧留大片灰边。
  *
  * ## 说明文字为什么在纸面**下方**（2026-11 改）
  *
@@ -37,7 +38,6 @@ import ResumePreview, {
   type ResumePreviewHandle,
 } from "../ResumePreview";
 import type { PreviewMode } from "../resume-preview/config";
-import type { RichTextEditAdapter } from "../resume-preview/richText";
 import { t } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
 
@@ -57,8 +57,6 @@ interface Props {
    * 不传时预览不渲染那个复选框，也不挂任何监听。
    */
   onPickField?: (path: string) => void;
-  /** 右键加粗的最小契约：不传 = 纸面上没有加粗菜单（右键交给浏览器）。 */
-  richEdit?: RichTextEditAdapter;
   /**
    * 滚动容器的句柄。实时预览替换 html 后要按它恢复滚动位置，而容器住在这里——
    * 不传时用组件自己的内部 ref（行为与之前逐字相同）。
@@ -91,7 +89,6 @@ export default function ResumeWorkbenchCanvas({
   onPreviewModeChange,
   exactPreview,
   onPickField,
-  richEdit,
   scrollRef: externalScrollRef,
   status,
 }: Props) {
@@ -134,8 +131,9 @@ export default function ResumeWorkbenchCanvas({
           onPreviewModeChange={onPreviewModeChange}
           exactPreview={exactPreview}
           availableHeight={availableHeight}
+          // 右栏窄而高：按宽度适应（纸宽 = 相框宽），高度交给纵向滚动（Q21）。
+          fitMode="width"
           onPickField={onPickField}
-          richEdit={richEdit}
           // 说明并进纸面下方那行缩放条（分页口径 + 缩放怎么用，用「 · 」连成一句）。
           zoomHint={`${t("workbench.note.canvas", { pages })} · ${t("workbench.note.zoomInline")}`}
         />

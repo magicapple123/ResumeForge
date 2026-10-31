@@ -8,7 +8,9 @@
 - 未关联 = objects[].link 为 None，**不是**一种猜测出来的状态；
 - status 是算出来的：关联时的来源指纹与来源当前指纹不同即 stale；
 - 影响反查按"简历块"给出，不推测文本相似度；
-- 来源列表只返回展示用元信息（title/metadata/修订号），**不返回任何正文**。
+- 来源列表只返回展示用元信息（title/metadata/修订号），**不返回任何正文**；
+- 旧关联解析不到时进入「unresolved_links」（P5-2）：只读暴露原因，**不迁移、不改写、
+  不按同下标猜目标**；旧客户端忽略这个只增字段即可。
 """
 
 from __future__ import annotations
@@ -24,11 +26,13 @@ from ...models.provenance import (
     ResumeSourceRevision,
 )
 from ...models.resume import ResumeRecord
+from . import document_io
 from .document_provenance import (
     iter_document_objects,
     link_status,
     resolve_target,
 )
+from .document_provenance_nodes import resolved_link_path, unresolved_link_reason
 
 MAX_SOURCE_LIST_LIMIT = 200
 DEFAULT_SOURCE_LIST_LIMIT = 50
@@ -73,9 +77,29 @@ def provenance_view(db: Session, record: ResumeRecord) -> dict[str, Any]:
     )
     revisions = _revisions_by_source(db, source_ids)
     source_by_id = {source.id: source for source in sources}
-    link_by_key: dict[tuple[str, str | None], ResumeBlockSource] = {}
+    document = document_io.document_for_record(db, record)[0]
+    link_by_path: dict[str, ResumeBlockSource] = {}
+    unresolved_links: list[dict[str, Any]] = []
     for link in links:
-        link_by_key.setdefault((link.object_id or link.path, link.point_id), link)
+        resolved = resolved_link_path(document, link)
+        if resolved is not None:
+            link_by_path.setdefault(resolved, link)
+            continue
+        # P5-2：身份失联的旧行不再静默丢弃——只读暴露给界面，由用户删除或重新关联。
+        source = source_by_id.get(link.source_id)
+        unresolved_links.append(
+            {
+                "link_id": link.id,
+                "source_id": link.source_id,
+                "source_title": source.title if source is not None else "",
+                "source_kind": source.kind if source is not None else "",
+                "object_id": link.object_id,
+                "point_id": link.point_id,
+                "path": link.path,
+                "field": link.field,
+                "reason": unresolved_link_reason(link),
+            }
+        )
 
     def _link_payload(link: ResumeBlockSource) -> dict[str, Any] | None:
         source = source_by_id.get(link.source_id)
@@ -125,12 +149,8 @@ def provenance_view(db: Session, record: ResumeRecord) -> dict[str, Any]:
 
     objects: list[dict[str, Any]] = []
     linked_count = 0
-    for item in iter_document_objects(record.content or {}):
-        link = link_by_key.get((item.object_id or item.path, item.point_id))
-        if item.object_id is not None and link is not None and link.object_id != item.object_id:
-            link = None
-        if item.object_id is None and link is not None and link.object_id is not None:
-            link = None
+    for item in iter_document_objects(document):
+        link = link_by_path.get(item.path)
         payload = _link_payload(link) if link is not None else None
         if payload is not None:
             linked_count += 1
@@ -149,6 +169,7 @@ def provenance_view(db: Session, record: ResumeRecord) -> dict[str, Any]:
         "revision": int(record.revision or 0),
         "sources": source_payload,
         "objects": objects,
+        "unresolved_links": unresolved_links,
         "coverage": {
             "total": len(objects),
             "linked": linked_count,
@@ -218,7 +239,10 @@ def source_chain(
     """某个块的来源链：关联到的来源及其全部修订（按修订号升序）。"""
     try:
         resolved_path, _field = resolve_target(
-            record.content or {}, object_id=object_id, point_id=point_id, path=path
+            document_io.document_for_record(db, record)[0],
+            object_id=object_id,
+            point_id=point_id,
+            path=path,
         )
     except ValueError:
         resolved_path = path or ""
@@ -226,12 +250,13 @@ def source_chain(
         db.execute(
             select(ResumeBlockSource).where(
                 ResumeBlockSource.resume_id == record.id,
-                ResumeBlockSource.path == resolved_path,
             )
         )
         .scalars()
         .all()
     )
+    document = document_io.document_for_record(db, record)[0]
+    links = [link for link in links if resolved_link_path(document, link) == resolved_path]
     source_ids = sorted({link.source_id for link in links})
     sources = (
         db.execute(select(ResumeSource).where(ResumeSource.id.in_(source_ids))).scalars().all()
@@ -315,9 +340,7 @@ def list_sources(
     cleaned_keyword = (keyword or "").strip()
     if cleaned_keyword:
         statement = statement.where(ResumeSource.title.like(f"%{cleaned_keyword}%"))
-    total = db.execute(
-        select(func.count()).select_from(statement.subquery())
-    ).scalar_one()
+    total = db.execute(select(func.count()).select_from(statement.subquery())).scalar_one()
     safe_limit = max(1, min(int(limit), MAX_SOURCE_LIST_LIMIT))
     rows = (
         db.execute(

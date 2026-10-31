@@ -24,6 +24,7 @@ from app.database import SessionLocal
 from app.models.resume_delivery import ResumeDeliveryRecord
 from app.services.settings_service import save_export_save_location
 from test_pdf_exporter import _text_runs, needs_font
+from tests.document_test_support import values
 
 PREVIEW = "/api/resumes/{id}/preview-pdf"
 EXPORT = "/api/resumes/{id}/export"
@@ -171,7 +172,7 @@ def test_export_uses_variant_content_snapshot(client):
     # 单格式导出的交付指纹就是产物字节；与预览同一口径。
     assert response.headers["X-Content-Sha256"] == hashlib.sha256(response.content).hexdigest()
     after = client.get(f"/api/resumes/{resume_id}").json()
-    assert after["content"]["summary"] == before["content"]["summary"]
+    assert values(after["content"]) == values(before["content"])
     assert after["revision"] == before["revision"]
 
 

@@ -1,0 +1,250 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/* 「本份简历结构」面板（components/resume/structure/StructurePanel.tsx）。
+   颜色/间距全部走 --rf-* 变量；位置分组是紧凑树行，不用 antd 列表组件。 */
+
+.rf-structure-panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1 1 auto;
+  gap: 8px;
+  padding: 4px 2px 8px;
+}
+
+.rf-structure-panel-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.rf-structure-panel-title h3 {
+  margin: 0;
+  font-size: var(--rf-font-size-md, 14px);
+  font-weight: 600;
+  color: var(--rf-color-text);
+}
+
+.rf-structure-panel-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 2px;
+  font-size: var(--rf-font-size-xs, 12px);
+  color: var(--rf-color-text-secondary);
+}
+
+.rf-structure-panel-tools {
+  display: inline-flex;
+  gap: 2px;
+  flex: none;
+}
+
+.rf-structure-search {
+  flex: none;
+}
+
+.rf-structure-search-hint {
+  font-size: var(--rf-font-size-xs, 12px);
+  color: var(--rf-color-text-secondary);
+  padding: 0 4px;
+}
+
+.rf-structure-tree {
+  flex: 1 1 auto;
+  min-height: 120px;
+  overflow: auto;
+  border: 1px solid var(--rf-color-border);
+  border-radius: var(--rf-radius-md, 8px);
+  padding: 4px;
+  background: var(--rf-color-bg-container);
+}
+
+.rf-structure-empty {
+  padding: 24px 12px;
+  text-align: center;
+  font-size: var(--rf-font-size-sm, 13px);
+  color: var(--rf-color-text-secondary);
+}
+
+.rf-structure-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 26px;
+  padding: 2px 6px;
+  border-radius: var(--rf-radius-sm, 4px);
+  cursor: pointer;
+  outline: none;
+  position: relative;
+  color: var(--rf-color-text);
+  font-size: var(--rf-font-size-sm, 13px);
+}
+
+.rf-structure-row:hover {
+  background: var(--rf-color-fill-tertiary);
+}
+
+.rf-structure-row:focus-visible {
+  box-shadow: 0 0 0 2px var(--rf-color-primary-border);
+}
+
+.rf-structure-row.is-selected {
+  background: var(--rf-color-primary-bg);
+  color: var(--rf-color-primary-text);
+}
+
+.rf-structure-row.is-hidden .rf-structure-row-label {
+  opacity: 0.55;
+  text-decoration: line-through;
+}
+
+.rf-structure-row.is-matched .rf-structure-row-label {
+  font-weight: 600;
+}
+
+.rf-structure-row-entry .rf-structure-row-label {
+  font-weight: 600;
+}
+
+.rf-structure-row-group .rf-structure-row-label {
+  color: var(--rf-color-text-secondary);
+  font-size: var(--rf-font-size-xs, 12px);
+}
+
+.rf-structure-row-section .rf-structure-row-label {
+  font-weight: 600;
+  font-size: var(--rf-font-size-sm, 13px);
+}
+
+.rf-structure-row-section {
+  margin-top: 4px;
+}
+
+.rf-structure-row.is-drop-before {
+  box-shadow: inset 0 2px 0 var(--rf-color-primary);
+}
+
+.rf-structure-row.is-drop-after {
+  box-shadow: inset 0 -2px 0 var(--rf-color-primary);
+}
+
+.rf-structure-row.is-drop-inside {
+  background: var(--rf-color-primary-bg);
+  box-shadow: inset 0 0 0 1px var(--rf-color-primary-border);
+}
+
+.rf-structure-row-caret,
+.rf-structure-caret-spacer {
+  display: inline-flex;
+  width: 18px;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+}
+
+.rf-structure-caret-button {
+  border: none;
+  background: transparent;
+  color: var(--rf-color-text-secondary);
+  cursor: pointer;
+  padding: 0;
+  font-size: 11px;
+  line-height: 1;
+}
+
+.rf-structure-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex: none;
+}
+
+.rf-structure-dot-profile {
+  background: var(--rf-color-text);
+}
+
+.rf-structure-dot-manual {
+  background: var(--rf-color-border-strong, var(--rf-color-border));
+}
+
+.rf-structure-row-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rf-structure-row-count {
+  flex: none;
+  font-size: 11px;
+  color: var(--rf-color-text-secondary);
+}
+
+.rf-structure-badge {
+  flex: none;
+  font-size: 11px;
+  padding: 0 4px;
+  border-radius: 3px;
+  background: var(--rf-color-fill-secondary);
+  color: var(--rf-color-text-secondary);
+}
+
+.rf-structure-badge-material {
+  background: var(--rf-color-error-bg);
+  color: var(--rf-color-error-text);
+}
+
+.rf-structure-multi-check {
+  flex: none;
+  margin-inline-end: 4px;
+}
+
+/* 行内操作按钮始终占位，只用 visibility 切换：
+   若在 :hover 时才 display:flex，行内 flex 宽度会突变，右侧计数/徽标与字段名
+   会跟着左右跳（用户反馈的“悬停明显抖动”）。visibility 不触发布局。 */
+.rf-structure-row-actions {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 2px;
+  visibility: hidden;
+}
+
+.rf-structure-row:hover .rf-structure-row-actions,
+.rf-structure-row:focus-within .rf-structure-row-actions {
+  visibility: visible;
+}
+
+.rf-structure-section-order {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 220px;
+  max-height: 360px;
+  overflow: auto;
+}
+
+.rf-structure-section-order-row {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-height: 28px;
+}
+
+.rf-structure-section-order-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--rf-font-size-sm, 13px);
+}
+
+.rf-structure-hint {
+  flex: none;
+  font-size: 11px;
+  color: var(--rf-color-text-secondary);
+  padding: 0 2px;
+}

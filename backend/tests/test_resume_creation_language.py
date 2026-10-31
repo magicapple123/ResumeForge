@@ -5,6 +5,7 @@ import json
 
 import pytest
 from app.services.resume.resume_generate_runner import reset_resume_generate_runner
+from tests.document_helpers import items
 from tests.resume_generate_task_support import (
     SuccessfulProvider,
     _configure,
@@ -26,7 +27,9 @@ def test_manual_creation_persists_language_and_keeps_old_default(client, languag
     assert response.status_code == 201, response.text
     record = response.json()
     assert record["language"] == (language or "zh-CN")
-    assert record["content"]["summary"] == content["summary"]
+    assert [item["text"] for item in items(record["content"], "summary") if item["kind"] == "text"] == [
+        content["summary"]
+    ]
     assert client.get(f"/api/resumes/{record['id']}").json()["language"] == (language or "zh-CN")
 
 

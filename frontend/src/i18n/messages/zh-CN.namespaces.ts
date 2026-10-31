@@ -17,6 +17,7 @@ import careerScenarios from "./zh-CN.careerScenarios";
 import conflict from "./zh-CN.conflict";
 import common from "./zh-CN.common";
 import credentials from "./zh-CN.credentials";
+import documentPack from "./zh-CN.document";
 import delivery from "./zh-CN.delivery";
 import fontDownload from "./zh-CN.fontDownload";
 import fonts from "./zh-CN.fonts";
@@ -46,6 +47,7 @@ import webformFields from "./zh-CN.webformFields";
 import settingsPage from "./zh-CN.settingsPage";
 import exportPanel from "./zh-CN.exportPanel";
 import resumeEditor from "./zh-CN.resumeEditor";
+import structure from "./zh-CN.structure";
 import trash from "./zh-CN.trash";
 import reminder from "./zh-CN.reminder";
 import materials from "./zh-CN.materials";
@@ -248,6 +250,10 @@ const namespaces = {
   ...settingsPage,
   ...exportPanel,
   ...resumeEditor,
+  /** v2 字段级文档编辑器（2026-10-30）。 */
+  ...documentPack,
+  /** v2 结构面板（2026-10-30，frontend-workbench）。 */
+  ...structure,
   ...trash,
   ...reminder,
   ...materials,

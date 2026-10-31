@@ -351,3 +351,79 @@ def test_preference_null_restores_default_and_rejects_foreign_field(client):
     )
     conflict = _assert_error(stale, 409, code="revision_conflict")
     assert conflict["revision"] == kept.json()["preference_revision"]  # 409 带当前 revision
+
+def test_custom_field_paper_placement_attributes_roundtrip(client):
+    """0069 / D6：自定义字段可设"纸面默认位置"与"仅素材"，并给出有效位置。
+
+    旧客户端不传这两个属性 = 按类型自动、上纸面（行为逐字节不变）；仅素材字段的
+    有效位置恒为 hidden（不上纸面）。
+    """
+    section = _create_section(client, "开源贡献")
+    key = section["key"]
+    legacy = _create_field(client, key, "仓库地址", "single_line")
+    # 不传纸面属性：保留 NULL/False，有效位置按类型自动（单行 → trail）。
+    assert legacy["default_placement"] is None
+    assert legacy["material_only"] is False
+    assert legacy["effective_placement"] == "trail"
+
+    multi = client.post(
+        FIELDS_API.format(section_key=key),
+        json={
+            "label": "项目说明",
+            "field_type": "multi_line",
+            "default_placement": "lead",
+            "material_only": False,
+        },
+    )
+    assert multi.status_code == 201, multi.text
+    body = multi.json()
+    assert body["default_placement"] == "lead"
+    assert body["effective_placement"] == "lead"
+
+    auto_multi = client.post(
+        FIELDS_API.format(section_key=key),
+        json={"label": "补充说明", "field_type": "multi_line"},
+    )
+    # 多行文本的自动位置是正文（D6），不是灰色短字段。
+    assert auto_multi.json()["default_placement"] is None
+    assert auto_multi.json()["effective_placement"] == "body"
+
+    # 改成仅素材：有效位置恒 hidden（不上纸面），即便显式位置是 trail。
+    hidden = client.patch(
+        FIELD_API.format(section_key=key, field_id=legacy["field_id"]),
+        json={"material_only": True, "expected_revision": legacy["revision"]},
+    )
+    assert hidden.status_code == 200, hidden.text
+    assert hidden.json()["material_only"] is True
+    assert hidden.json()["effective_placement"] == "hidden"
+    assert _field(_workspace(client), key, legacy["field_id"])["material_only"] is True
+
+    # 只改 material_only 时 default_placement 保持原值（没传 = 不改）。
+    assert hidden.json()["default_placement"] is None
+    # 传 null = 恢复"按类型自动"，传具体值 = 改到该位置。
+    current = hidden.json()["revision"]
+    reset = client.patch(
+        FIELD_API.format(section_key=key, field_id=multi.json()["field_id"]),
+        json={"default_placement": None, "expected_revision": multi.json()["revision"]},
+    )
+    assert reset.status_code == 200, reset.text
+    assert reset.json()["default_placement"] is None
+    assert reset.json()["effective_placement"] == "body"
+    moved = client.patch(
+        FIELD_API.format(section_key=key, field_id=legacy["field_id"]),
+        json={"material_only": False, "expected_revision": current},
+    )
+    assert moved.status_code == 200, moved.text
+    assert moved.json()["effective_placement"] == "trail"
+
+
+def test_custom_field_rejects_unknown_placement(client):
+    """纸面位置只接受六个抽屉：未知值在校验层 422（不静默落成默认）。"""
+    section = _create_section(client, "开源贡献")
+    response = client.post(
+        FIELDS_API.format(section_key=section["key"]),
+        json={"label": "仓库地址", "field_type": "single_line", "default_placement": "sidebar"},
+    )
+    assert response.status_code == 422, response.text
+    assert "Traceback" not in response.text
+

@@ -16,15 +16,20 @@ from __future__ import annotations
 import logging
 from datetime import datetime
 
+from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from ...models.job import Job
 from ...models.resume import ResumeRecord
 from ...schemas.job import JobOut
 from ...schemas.resume import ResumeContent
+from ...schemas.resume_document import DocumentValidationError
 from ...schemas.resume_generation import RESUME_MODES, ResumeLanguage
 from ..exporter import normalize_page_limit
-from .resume_sections import default_section_order_config
+from . import document_io
+from .document_conversion_types import ConversionError
+from .document_view import header_text
+from .resume_sections import default_section_order_config, persistable_format_config
 from .resume_template_store import (
     resolve_format_config,
     resolve_style_config,
@@ -65,12 +70,12 @@ def resolved_style_name(db: Session, name: str) -> str:
     return key if user_html else builtin_name
 
 
-def build_manual_title(content: ResumeContent, job: Job | None, requested_title: str) -> str:
+def build_manual_title(content: ResumeContent | dict, job: Job | None, requested_title: str) -> str:
     """生成手写简历默认标题；允许用户传入标题以便在简历中心区分版本。"""
     title = requested_title.strip()
     if title:
         return title[:256]
-    name = content.name.strip()[:48] or "未命名"
+    name = (header_text(content, "name") if isinstance(content, dict) else content.name).strip()[:48] or "未命名"
     company = (job.company.strip() if job else "").strip()[:80]
     job_title = (job.title.strip() if job else "").strip()[:80]
     target = "-".join(part for part in (company, job_title) if part) or "自定义简历"
@@ -102,6 +107,7 @@ def save_record(
     context_snapshot: dict | None = None,
     commit: bool = True,
     language: ResumeLanguage = "zh-CN",
+    document: dict | None = None,
 ) -> ResumeRecord:
     """生成结果落库（在流结束后的同一请求内调用）。
 
@@ -143,12 +149,25 @@ def save_record(
         title = f"{name}-{company}-{job_title}-{timestamp}"
     title = requested_title.strip()[:256] or title
     mode = document_mode if document_mode in RESUME_MODES else "resume"
+    # 落库的永远是 v2：生成链路内部仍按 v1（模型只写值），在唯一落库点一次性转换。
+    # 标题/岗位意图在上面已按 v1 视图取过，不受影响；自定义字段位置来自当前方案定义。
+    # document 参数供 SSE 复用**同一个转换结果**（done 事件与落库内容 id 一致）。
+    if document is None:
+        try:
+            document = document_io.prepare_document_for_save(
+                content,
+                language=language,
+                format_config=merged_config,
+                custom_fields=document_io.custom_field_definitions(db),
+            )
+        except (ConversionError, DocumentValidationError) as exc:
+            raise HTTPException(status_code=422, detail=f"生成内容无法落库：{exc}") from exc
     record = ResumeRecord(
         title=title,
         job_id=job.id if job is not None else None,
         job_title=job_title,
         company=company,
-        content=content,
+        content=document,
         warnings=warnings,
         source=source,
         model=model,
@@ -159,7 +178,9 @@ def save_record(
         page_limit=normalize_page_limit(page_limit, mode),
         document_mode=mode,
         font_scale=font_scale_spec(font_scale)["name"],
-        format_config=validated_format_config(merged_config),
+        # T7：section_order 只服务本次 v1→v2 转换（上面已用它排出 document.sections），
+        # 不再落库——v2 的分区顺序唯一真相是 document.sections。
+        format_config=validated_format_config(persistable_format_config(merged_config)),
         custom_instruction=custom_instruction.strip()[:2000],
         coverage_notes=coverage_notes or [],
         rationale=rationale or "",

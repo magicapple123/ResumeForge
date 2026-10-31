@@ -9,6 +9,7 @@ import conflict from "./en-US.conflict";
 import common from "./en-US.common";
 import core from "./en-US.core";
 import credentials from "./en-US.credentials";
+import documentPack from "./en-US.document";
 import delivery from "./en-US.delivery";
 import fontDownload from "./en-US.fontDownload";
 import fonts from "./en-US.fonts";
@@ -38,6 +39,7 @@ import webformFields from "./en-US.webformFields";
 import settingsPage from "./en-US.settingsPage";
 import exportPanel from "./en-US.exportPanel";
 import resumeEditor from "./en-US.resumeEditor";
+import structure from "./en-US.structure";
 import trash from "./en-US.trash";
 import reminder from "./en-US.reminder";
 import materials from "./en-US.materials";
@@ -205,6 +207,8 @@ const enUS = {
   ...settingsPage,
   ...exportPanel,
   ...resumeEditor,
+  ...documentPack,
+  ...structure,
   ...trash,
   ...reminder,
   ...materials,

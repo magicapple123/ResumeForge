@@ -15,6 +15,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-libra
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { TEMPLATE_CATALOG } from "../test/resumeFixtures";
+import { makeResumeDocument } from "../test/documentHarness";
 import type { ResumeDetail, ResumeGenerateTask } from "../types";
 import { resetBackgroundTasks } from "../utils/backgroundTasks";
 import { registerNotifyHost } from "../utils/taskNotify";
@@ -276,25 +277,7 @@ describe("GenerateResumeModal 预览期版式重排（P3）", () => {
     page_limit: 1,
     font_scale: "standard",
     created_at: "2026-10-20T08:00:00",
-    content: {
-      photo: "",
-      name: "张三",
-      gender: "",
-      birth_year: "",
-      phone: "",
-      email: "",
-      city: "",
-      personal_website: "",
-      github: "",
-      job_intent: "",
-      summary: "",
-      education: [],
-      experience: [],
-      campus_experience: [],
-      projects: [],
-      skills: [],
-      awards: [],
-    },
+    content: makeResumeDocument(),
     warnings: [],
     parse_error: "",
     parent_revision_id: null,

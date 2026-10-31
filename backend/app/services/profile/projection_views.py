@@ -89,7 +89,6 @@ def candidates(
                     entry_id=entry.entry_id,
                     title=title,
                     subtitle=subtitle,
-                    paper_content_path=entry_paths.get(entry.entry_id, ""),
                 )
             )
     return result

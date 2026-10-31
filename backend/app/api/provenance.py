@@ -216,6 +216,24 @@ def delete_fact_lock(resume_id: int, lock_id: int, db: Session = Depends(get_db)
 
 # ===== W12 可达性补充：已有来源的列表 / 手工登记 / 修订 / 关联 / 采纳 =====
 
+# 手工来源的原文摘要上限：只参与指纹/摘要，不落库全文；前端 TextArea 用同一个值。
+_MANUAL_PAYLOAD_MAX_CHARS = 2000
+
+
+def _manual_source_payload(payload: object, title: str) -> object:
+    """旧请求（只带 title）的默认 payload 必须原样保留：{"title": title}。
+
+    P5-1 扩展后 payload 只接受文本摘要。类型/长度不合法一律 400 而不是 pydantic 的
+    422：旧调用方见过的错误码不因这次「只增字段」而漂移。
+    """
+    if payload is None:
+        return {"title": title}
+    if not isinstance(payload, str):
+        raise ValueError("来源原文必须是文本")
+    if len(payload) > _MANUAL_PAYLOAD_MAX_CHARS:
+        raise ValueError(f"来源原文最长 {_MANUAL_PAYLOAD_MAX_CHARS} 个字符")
+    return payload
+
 
 @router.get("/sources", response_model=SourceListOut)
 def list_sources(
@@ -234,21 +252,31 @@ def list_sources(
 def create_manual_source(
     payload: ManualSourceCreateRequest, db: Session = Depends(get_db)
 ) -> ManualSourceOut:
-    """手工登记一条外部资料（没有稳定业务行可复用，每次新建一条来源）。"""
+    """手工登记一条外部资料（P5-1：可选类型/外部引用/原文摘要）。
+
+    兼容性红线：只带 title 的旧请求**行为不变**——每次新建一条 manual 来源、payload
+    仍是 {"title": title}、指纹与历史一致（否则历史关联会集体变 stale）。带
+    external_ref 时按 (kind, external_ref) 复用同一条来源（与内联 upsert 同一套语义）。
+    """
     title = payload.title.strip()
     if not title:
         raise HTTPException(status_code=400, detail="来源标题不能为空")
-    snapshot = write_side.upsert_source(
-        db,
-        kind=payload.kind,
-        external_ref=None,
-        title=title,
-        payload={"title": title},
-        metadata={},
-    )
+    try:
+        source_payload = _manual_source_payload(payload.payload, title)
+        snapshot = write_side.upsert_source(
+            db,
+            kind=payload.kind,
+            external_ref=payload.external_ref,
+            title=title,
+            payload=source_payload,
+            metadata={},
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     return ManualSourceOut(
         id=snapshot.source.id,
         kind=snapshot.source.kind,
+        external_ref=snapshot.source.external_ref,
         title=snapshot.source.title,
         revision=SourceRevisionItemOut(
             id=snapshot.revision.id,

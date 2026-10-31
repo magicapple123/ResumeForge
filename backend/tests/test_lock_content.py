@@ -12,6 +12,7 @@ import json
 
 from app.schemas.setting import LLMConfig
 from app.services.resume import fact_locks
+from tests.document_test_support import body_texts, entries_of, field_value, section_of
 
 
 def _locked_content(*, lock_content: bool = True) -> dict:
@@ -106,7 +107,7 @@ def test_ai_revision_changing_locked_entry_is_rejected(client, monkeypatch):
     assert violation["reason"] == "锁定条目正文被改动"
     assert violation["path"] == "experience.0"
     after = _resume(client, resume_id)
-    assert after["content"]["experience"][0]["description"] == ["负责合成数据接口"]
+    assert body_texts(after["content"], "experience") == ["负责合成数据接口"]
     assert after["revision"] == before["revision"]
 
 
@@ -134,8 +135,8 @@ def test_ai_revision_only_toggling_layout_or_hidden_is_allowed(client, monkeypat
     assert response.status_code == 200, response.text
     after = response.json()
     # 正文一个字节没变（隐藏/排版标记不算正文）；锁标记由服务端带回，不依赖模型回显。
-    assert after["content"]["experience"][0]["description"] == ["负责合成数据接口"]
-    assert after["content"]["experience"][0]["lock_content"] is True
+    assert body_texts(after["content"], "experience") == ["负责合成数据接口"]
+    assert entries_of(after["content"], "experience")[0]["lock_content"] is True
 
 
 def test_ai_revision_deleting_locked_entry_is_rejected(client, monkeypatch):
@@ -160,7 +161,7 @@ def test_user_save_is_not_blocked_but_adopt_is(client):
     )
     # 锁的是 AI/采纳类写入，不拦用户的手。
     assert saved.status_code == 200, saved.text
-    assert saved.json()["content"]["experience"][0]["description"] == ["用户自己手写的新描述"]
+    assert body_texts(saved.json()["content"], "experience") == ["用户自己手写的新描述"]
 
     text = "来源里的新表述"
     source = client.post(
@@ -186,7 +187,7 @@ def test_user_save_is_not_blocked_but_adopt_is(client):
     body = adopted.json()
     assert body["code"] == "fact_lock_conflict"
     assert body["violations"][0]["kind"] == "lock_content"
-    assert _resume(client, resume_id)["content"]["experience"][0]["description"] == [
+    assert body_texts(_resume(client, resume_id)["content"], "experience") == [
         "用户自己手写的新描述"
     ]
 
@@ -219,7 +220,10 @@ def test_adopt_still_respects_fact_locks_on_locked_field(client):
     violation = adopted.json()["violations"][0]
     assert violation["kind"] == "institution"
     assert violation["locked_value"] == "示例科技有限公司"
-    assert _resume(client, resume_id)["content"]["experience"][0]["company"] == "示例科技有限公司"
+    assert (
+        field_value(_resume(client, resume_id)["content"], "company", section="experience")
+        == "示例科技有限公司"
+    )
 
 
 def test_validate_content_locks_follows_object_id_and_ignores_meta(client, db_session):
@@ -234,23 +238,37 @@ def test_validate_content_locks_follows_object_id_and_ignores_meta(client, db_se
     same = copy.deepcopy(original)
     assert fact_locks.validate_content_locks(record, same) == []
     meta_only = copy.deepcopy(original)
-    meta_only["experience"][0]["hidden"] = True
+    entries_of(meta_only, "experience")[0]["hidden"] = True
     assert fact_locks.validate_content_locks(record, meta_only) == []
-    # 2) 正文变了：违规。
+    # 2) 正文变了：违规（v2：改 experience 条目里的 TextItem 文本）。
     changed = copy.deepcopy(original)
-    changed["experience"][0]["description"] = ["新描述"]
+    for item in entries_of(changed, "experience")[0]["items"]:
+        if item.get("kind") == "text":
+            item["text"] = "新描述"
+            break
     violations = fact_locks.validate_content_locks(record, changed)
     assert len(violations) == 1
     assert violations[0].path == "experience.0"
     # 3) 条目按 object_id 跟住排序：换到下标的锁条目没改正文 → 不违规。
     reordered = copy.deepcopy(original)
-    reordered["experience"] = [
-        {"id": "other0001", "company": "另一家公司", "description": ["无关"]},
-        original["experience"][0],
+    experience_section = section_of(reordered, "experience")
+    locked_entry = copy.deepcopy(experience_section["entries"][0])
+    experience_section["entries"] = [
+        {
+            "id": "other0001",
+            "items": [
+                {"kind": "field", "key": "company", "value": "另一家公司", "placement": "title"}
+            ],
+        },
+        locked_entry,
     ]
     assert fact_locks.validate_content_locks(record, reordered) == []
-    # 4) 同一对象在新下标上被改正文：报告新路径。
+    # 4) 同一对象在新下标上被改正文：报告新路径（v2：改该条目里的 TextItem 文本）。
     reordered_changed = copy.deepcopy(reordered)
-    reordered_changed["experience"][1]["description"] = ["换位置后改了正文"]
+    second_entry = entries_of(reordered_changed, "experience")[1]
+    for item in second_entry["items"]:
+        if item.get("kind") == "text":
+            item["text"] = "换位置后改了正文"
+            break
     violations = fact_locks.validate_content_locks(record, reordered_changed)
     assert [item.path for item in violations] == ["experience.1"]

@@ -115,8 +115,8 @@ describe("W07 对拍 · 前端属性表 = 后端 STYLE_PROPS", () => {
     }
   });
 
-  it("六个角色与每角色可用属性逐项相等", () => {
-    expect([...RESUME_ROLES]).toHaveLength(6);
+  it("五个角色与每角色可用属性逐项相等", () => {
+    expect([...RESUME_ROLES]).toHaveLength(5);
     for (const role of RESUME_ROLES) {
       const expected = backend
         .filter((prop) => prop.roles.includes(role))
@@ -131,19 +131,23 @@ describe("W07 对拍 · 前端属性表 = 后端 STYLE_PROPS", () => {
     expect(cssSource).toMatch(
       /font-size: calc\(var\(--fs\) \* \{_css_number\(style\.font_scale\)\} \* \{_css_number\(ratio\)\}\)/,
     );
-    // bullet 字面量与前端探针一致。
-    expect(cssSource).toContain('{"dot": "disc", "dash": "\'–\'", "none": "none"}');
+    // bullet 字面量与前端探针一致（Q11：三出口统一 · / – / 空）。
+    expect(cssSource).toContain('{"dot": "\'·\'", "dash": "\'–\'", "none": "none"}');
     // meta_align：right → space-between（前端探针同字面量）。
     expect(cssSource).toContain('"space-between" if style.meta_align == "right" else "flex-start"');
     // 规则行两空格缩进 + data-role 选择器（前端探针同格式）。
     expect(cssSource).toContain('[data-role="{role}"]');
+    // Q11 定向选择器：项目符号 / 缩进 / 日期位置必须写在与探针相同的载体元素上。
+    expect(cssSource).toContain('_BULLET_SELECTOR = "ul"');
+    expect(cssSource).toContain('_INDENT_SELECTOR = "ul, .body-paragraph"');
+    expect(cssSource).toContain('_ENTRY_HEAD_SELECTOR = ".entry-head"');
   });
 
   it("catalog 端点已下发前端读取的三个扩展字段（W07-BE 契约 §2.8）", () => {
     expect(catalogRoute).toContain('"role_fields": role_fields_catalog()');
     expect(catalogRoute).toContain('"template_role_defaults"');
     expect(catalogRoute).toContain('"style_props"');
-    // 六个角色的模板基准都要有（投影自 TEMPLATE_LAYOUT_DEFAULTS，不新增第二份数字）。
+    // 五个角色的模板基准都要有（投影自 TEMPLATE_LAYOUT_DEFAULTS，不新增第二份数字）。
     for (const role of RESUME_ROLES) {
       // 函数体里每个角色都是一行 `"name": {"font_scale": …}`。
       expect(source).toContain('"' + role + '": {"font_scale"');

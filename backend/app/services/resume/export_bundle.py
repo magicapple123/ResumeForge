@@ -32,7 +32,6 @@ from sqlalchemy.orm import Session
 
 from ...config import get_settings
 from ...models.resume import ResumeRecord
-from ...schemas.resume import ResumeContent
 from ...schemas.resume_generation import mode_page_limit
 from ...services.export_pipeline import (
     RenderContext,
@@ -41,7 +40,9 @@ from ...services.export_pipeline import (
 from ..docx_fonts import resolve_docx_font_name
 from ..export_pipeline import ExportRequest
 from ..pdf_exporter import resolve_font_paths
-from .document_identity import sanitize_document_ids
+from ..privacy import redact_document
+from . import document_io
+from .document_view import header_text
 from .export_archive import save_artifact
 from .export_naming import render_filename
 from .resume_delivery import canonical_content_sha256, default_render_context, freeze_delivery
@@ -246,7 +247,7 @@ def resolve_variant_export_options(
             options[key] = explicit
     explicit_content = getattr(payload, "content", None)
     if explicit_content is not None:
-        options["content"] = explicit_content.model_dump()
+        options["content"] = explicit_content
     return options
 
 
@@ -260,12 +261,15 @@ def build_bundle(db: Session, record: ResumeRecord, payload) -> dict[str, Any]: 
     # W16：variant_id 存在时以变体快照为内容/版式基线（显式 content/format_config 仍可覆盖）。
     variant_options = resolve_variant_export_options(db, record, payload)
     if variant_options:
-        content = sanitize_document_ids(variant_options["content"])
+        content = variant_options["content"]
     elif payload.content is not None:
-        content = sanitize_document_ids(payload.content.model_dump())
+        content = payload.content
     else:
         content = record.content
-    resume = ResumeContent.model_validate(content)
+    document = document_io.ensure_document_version(
+        content, language=record.language, format_config=record.format_config,
+        custom_fields=document_io.custom_field_definitions(db),
+    )
     context = (
         _variant_layout_context(db, record, variant_options["layout"])
         if variant_options
@@ -318,13 +322,13 @@ def build_bundle(db: Session, record: ResumeRecord, payload) -> dict[str, Any]: 
             )
             try:
                 delivery = build_export_delivery(
-                    request, resume, context, source_resume_id=record.id
+                    request, document, context, source_resume_id=record.id
                 )
             except Exception as exc:  # noqa: BLE001 - 单格式失败不牵连其它格式
                 failures.append({"format": doc_format, "error": str(exc)[:300]})
                 continue
             artifact = delivery.artifact
-            name = render_filename(naming, resume=resume, record=record, doc_format=doc_format)
+            name = render_filename(naming, resume=document, record=record, doc_format=doc_format)
             if name in seen_names:
                 stem, dot, extension = name.rpartition(".")
                 name = f"{stem}-{len(seen_names) + 1}{dot}{extension}"
@@ -364,7 +368,7 @@ def build_bundle(db: Session, record: ResumeRecord, payload) -> dict[str, Any]: 
                 except ValueError as exc:
                     failures.append({"format": doc_format, "error": str(exc)[:300]})
                     continue
-                effective_content = resume.model_dump()
+                effective_content = redact_document(document) if redact else document
                 freeze_delivery(
                     db,
                     record=record,
@@ -394,7 +398,7 @@ def build_bundle(db: Session, record: ResumeRecord, payload) -> dict[str, Any]: 
             "generated_at": datetime.now(UTC).isoformat(timespec="seconds"),
             "resume_revision": int(record.revision or 0),
             "snapshot": {
-                "content_sha256": canonical_content_sha256(resume.model_dump()),
+                "content_sha256": canonical_content_sha256(document),
                 "render_config_sha256": first_config_sha,
             },
             "files": files,
@@ -404,7 +408,7 @@ def build_bundle(db: Session, record: ResumeRecord, payload) -> dict[str, Any]: 
                 "target_job_title": record.job_title or "",
                 "target_company": record.company or "",
                 "document_mode": getattr(record, "document_mode", "resume") or "resume",
-                "contact_present": bool(resume.phone or resume.email),
+                "contact_present": bool(header_text(document, "phone") or header_text(document, "email")),
             },
             "resource_manifest": _resource_manifest(context, first_config_sha),
             # W16：这次导出是不是按岗位变体快照出的（None = 用记录本身）。

@@ -66,17 +66,31 @@ export function ExactPreviewAlerts({ current, busy, pageLimit }: AlertsProps) {
  * 从 `ExactPreviewPanel` 搬出来（那份文件贴着 500 行预算）：它只是"说清楚 + 给一条在新
  * 标签打开的路"，不碰请求与双缓冲。
  */
-export function ExactNoViewer({ url }: { url: string }) {
+export function ExactNoViewer({
+  url,
+  fallback = "no-viewer",
+}: {
+  url: string;
+  /**
+   * 为什么落到这个兜底：环境没有内置查看器 / 查看器 8 秒内没加载出来（Q18）。
+   * 两种情况的标题与正文不同——"这里放不了 PDF"和"PDF 有了但没加载出来"是两件事。
+   * 属性名刻意不叫 `reason`：它在产品文案守卫的 COPY_PROPERTIES 清单里（Q18 收口时踩到）。
+   */
+  fallback?: "no-viewer" | "timeout";
+}) {
   useLocale();
+  const timedOut = fallback === "timeout";
   return (
     <div style={{ padding: 16 }}>
       <Alert
         type="info"
         showIcon
-        title={t("preview.exact.noViewerTitle")}
+        title={t(timedOut ? "preview.exact.loadTimeoutTitle" : "preview.exact.noViewerTitle")}
         description={
           <Space orientation="vertical" size={6}>
-            <Typography.Text>{t("preview.exact.noViewerBody")}</Typography.Text>
+            <Typography.Text>
+              {t(timedOut ? "preview.exact.loadTimeoutBody" : "preview.exact.noViewerBody")}
+            </Typography.Text>
             <Button
               type="primary"
               onClick={() => window.open(url, "_blank", "noopener,noreferrer")}

@@ -18,10 +18,10 @@ from sqlalchemy.orm import Session
 from ..database import get_db
 from ..models.claim import ClaimRecord
 from ..models.resume import ResumeRecord
-from ..schemas.resume import ResumeContent
 from ..schemas.resume_risk import RiskScanOut, RiskScanRequest
 from ..services import trash
 from ..services.llm import create_provider
+from ..services.resume import document_io
 from ..services.resume.resume_risk import scan_resume_risks
 from ..services.settings_service import get_llm_config
 
@@ -35,11 +35,10 @@ def _load_record(db: Session, resume_id: int) -> ResumeRecord:
     return record
 
 
-def _to_content(record: ResumeRecord) -> ResumeContent:
+def _to_content(record: ResumeRecord) -> dict:
     """把落库的 JSON 转回结构体；排除 photo 避免照片校验干扰旧数据的体检。"""
-    content_data = dict(record.content or {})
-    content_data["photo"] = ""
-    return ResumeContent.model_validate(content_data)
+    return document_io.ensure_document_version(record.content or {}, language=record.language,
+                                               format_config=record.format_config)
 
 
 @router.post("/{resume_id}/risk-scan", response_model=RiskScanOut)

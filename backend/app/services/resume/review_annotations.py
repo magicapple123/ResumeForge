@@ -44,7 +44,9 @@ from ...models.review_annotation import (
 from ...models.share_package import SHARE_PERMISSION_COMMENT, SharePackage
 from ...models.versions import ResumeVersion
 from ..share_package import ensure_package_files, package_directory, verify_share_token
+from . import document_io
 from .document_identity import is_object_id, resolve_object_path, resolve_point_path
+from .document_paths import identity_path, read_document_value, resolve_document_path
 from .document_provenance import canonical_fingerprint
 from .resume_delivery import canonical_content_sha256
 
@@ -191,6 +193,8 @@ def parse_annotation_file(raw: str, package: SharePackage) -> dict[str, Any]:
 
 
 def _lookup_value(content: Any, path: str) -> Any:
+    if isinstance(content, dict) and content.get("version") == 2:
+        return read_document_value(content, path)
     current: Any = content
     for segment in path.split("."):
         if isinstance(current, dict):
@@ -211,6 +215,21 @@ def resolve_anchor(
     content: dict[str, Any], object_id: str | None, point_id: str | None, path: str | None
 ) -> tuple[bool, str | None, str | None, str | None]:
     """解析批注锚点：返回 (是否命中, 当前路径, object_id, point_id)。"""
+    if content.get("version") == 2:
+        if object_id:
+            target = identity_path(content, object_id, point_id)
+        else:
+            target = resolve_document_path(content, path or "")
+            if target is not None and point_id and (target.item or {}).get("id") != point_id:
+                target = None
+        if target is None:
+            return False, None, object_id, point_id
+        if target.item is not None:
+            object_id = target.entry["id"] if target.entry is not None else target.item["id"]
+            point_id = target.item["id"]
+        elif target.entry is not None:
+            object_id, point_id = target.entry["id"], None
+        return True, target.path, object_id, point_id
     if object_id and is_object_id(object_id):
         if point_id and is_object_id(point_id):
             resolved = resolve_point_path(content, object_id, point_id)
@@ -254,7 +273,7 @@ def import_annotations(db: Session, package: SharePackage, raw: str) -> dict[str
     duplicates = 0
     dismissed_existing = 0
     stale_count = 0
-    content = record.content or {} if record is not None else {}
+    content = document_io.document_for_record(db, record)[0] if record is not None else {}
     for item in parsed["annotations"]:
         if item["external_id"] in existing_status:
             duplicates += 1
@@ -385,7 +404,7 @@ def reattach_annotation(
     if record is None or record.deleted_at is not None:
         raise ReviewAnnotationError("原简历不存在或已被删除，无法重挂")
     hit, resolved_path, resolved_object, resolved_point = resolve_anchor(
-        record.content or {}, object_id, point_id, None
+        document_io.document_for_record(db, record)[0], object_id, point_id, None
     )
     if not hit:
         raise ReviewAnnotationError("要重挂的对象在当前简历里找不到")

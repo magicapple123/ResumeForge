@@ -22,10 +22,18 @@ import type {
 } from "./types";
 import type { ProvenanceMessageKey } from "./i18n";
 
+/**
+ * 新建来源时可选的类型（与后端 SourceKind 对齐）。
+ * phrase（收藏的表达资产）由自己的采集链路产生，不作为手工来源选项。
+ */
+export const SOURCE_KIND_CHOICES = ["claim", "material", "job", "profile", "manual"] as const;
+
+/** 手工来源原文摘要上限（与后端 _MANUAL_PAYLOAD_MAX_CHARS 一致；只进指纹不落全文）。 */
+export const MANUAL_SOURCE_PAYLOAD_MAX_CHARS = 2000;
+
 /** 来源类型 → 文案 key。未知值按"手工登记"显示（不编造类别）。 */
 export function sourceKindKey(kind: string): ProvenanceMessageKey {
-  const known = ["claim", "material", "job", "profile", "manual"];
-  const value = known.includes(kind) ? kind : "manual";
+  const value = (SOURCE_KIND_CHOICES as readonly string[]).includes(kind) ? kind : "manual";
   return ("provenance.source.kind." + value) as ProvenanceMessageKey;
 }
 

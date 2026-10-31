@@ -133,7 +133,7 @@ def test_objects_domain_requires_stable_ids_and_bounds_entries():
 
 
 def test_style_props_and_bounds_are_the_frozen_contract():
-    assert ROLES == ("name", "section_title", "entry_title", "body", "meta", "emphasis")
+    assert ROLES == ("name", "section_title", "entry_title", "body", "meta")
     keys = tuple(prop["key"] for prop in STYLE_PROPS)
     assert len(keys) == 12 and len(set(keys)) == 12
     assert PROP_BOUNDS["font_scale"] == (0.70, 2.40)

@@ -32,14 +32,7 @@
  */
 import { Card, Tag } from "antd";
 import EmptyState from "../common/EmptyState";
-import {
-  forwardRef,
-  useCallback,
-  useEffect,
-  useImperativeHandle,
-  useMemo,
-  useState,
-} from "react";
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useState } from "react";
 import { getWebFormExtraProfile } from "../../api/webform";
 import { t } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";

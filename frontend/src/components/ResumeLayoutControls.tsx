@@ -42,15 +42,6 @@ interface Props {
    */
   hasPhoto?: boolean;
   /**
-   * 默认板块顺序是否跟随「我的资料」。
-   *
-   * 只在**生成**场景为 true：新简历的默认顺序应当等于用户在资料页排好的顺序。
-   * 已保存简历（预览 / 编辑）与生成后的预览阶段都不传——它们读的是这份简历自己的
-   * `section_order`，没有则用内置默认。否则用户在资料页拖一下，所有老简历的外观都会
-   * 跟着变，而"老简历不追溯改变"是这条功能的前提。
-   */
-  preferProfileOrder?: boolean;
-  /**
    * 页数选项：缺省 1–3（`RESUME_PAGE_LIMITS`）。生成配置的长 CV 模式传 1–10；
    * 其他宿主不传，行为与拆出前逐字一致。
    */
@@ -58,7 +49,7 @@ interface Props {
   /**
    * 只要「模板 / 最大篇幅 / 简历语言 / 字体」这 5 个参数（岗位广场的生成配置）。
    *
-   * 其余版式（版式预设、板块顺序、字号、行距、页边距、分边、照片大小）留给用户
+   * 其余版式（版式预设、字号、行距、页边距、分边、照片大小）留给用户
    * **生成之后**去简历界面调——真实场景里用户在这个弹窗里只想定个大致样子。
    */
   essentialOnly?: boolean;
@@ -71,7 +62,6 @@ export default function ResumeLayoutControls({
   compact = false,
   previewRef,
   hasPhoto,
-  preferProfileOrder = false,
   pageLimitOptions,
   essentialOnly = false,
 }: Props) {
@@ -86,10 +76,8 @@ export default function ResumeLayoutControls({
         disabled={disabled}
         compact={compact}
         catalog={catalog}
-        preferProfileOrder={preferProfileOrder}
         pageLimitOptions={pageLimitOptions}
         showFormat={!essentialOnly}
-        showSections={!essentialOnly}
         onChange={onChange}
       />
       <ResumeMeasureControls

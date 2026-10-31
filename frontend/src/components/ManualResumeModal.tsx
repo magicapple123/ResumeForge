@@ -1,33 +1,31 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * 用户手写简历弹窗（F4）：初始内容与候选**只来自当前组投影**。
+ * 用户手写简历弹窗（F4）：初始内容与候选**只来自当前组投影**（v2 文档）。
  *
- * - **初始内容 = 当前组投影内容**（F9/R1）：岗位模式只额外把求职意向覆盖成岗位名；
- *   通用模式同样预填——"新建简历里的大字段/小字段信息与我的资料当前组同步"。
- * - 编辑器页签随当前组参与清单过滤（参与清单搭在 fillSources 上，见 profileFillOptions）。
- * - 打开期间别的窗口改资料/切组：未编辑则自动重同步；已编辑则编辑器内联提示二选一
- *   （不静默覆盖用户的输入，见 `useEditorContentSync`）。
- * - 「资料来源」面板由投影的 `source_layout` 驱动（7/13 个分区），不提供选组器（R-27），
- *   只给「去切换组」跳资料页；逐条/整份填入都不改已有正文（R-34）。
- * - 新建简历里的修改**不回写资料**：保存只写这份简历记录。
- * - 投影读取失败可重试；不阻塞其它入口（失败时给「重新读取 / 关闭」）。
+ * 2026-10-30 文档模型 v2：弹窗内嵌的编辑器从 v1 ResumeEditorModal 换成 v2 DocumentEditor；
+ * projection.data.content 已是 v2 ResumeDocument（经 normalizeDocument 收口），保存时
+ * createManualResume 直接提交 v2 content。岗位模式只覆盖求职意向（见 profileToResume）。
+ *
+ * 保留：简历名称、岗位参考栏、资料来源页签、保存、「前往简历制作台（草稿）」、快照过期提示。
+ * 已移除：v1 草稿条/自动重同步/fillSources 逐条填入（v2 编辑器链没有这些机制；「从资料填入」
+ * 由独立 ProfileFillMenu 承担，本弹窗的初始内容已整份来自投影）。
  */
 import { App, Button, Input, Modal, Space, Tooltip, Typography } from "antd";
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { createManualResume } from "../api/resumes";
-import { buildProfileFillSources } from "../features/profile/profileFillOptions";
 import { useCurrentProjection } from "../features/profile-library/useCurrentProjection";
 import { bumpResumeList } from "../features/resume/resumeListEvents";
 import { t } from "../i18n";
 import { useLocale } from "../i18n/i18nContext";
 import { getSnapshot } from "../i18n/localeStore";
-import type { Job, ProfileCreationContext, ResumeContent, ResumeLanguage } from "../types";
-import { projectionToResumeContent } from "../utils/profileToResume";
+import type { Job, ProfileCreationContext, ResumeDocument, ResumeLanguage } from "../types";
+import { projectionToResumeDocument } from "../utils/profileToResume";
+import { layer } from "../theme/tokens";
 import LoadingBlock from "./common/LoadingBlock";
 import JobRequirementPanel from "./JobRequirementPanel";
-import ResumeEditorModal from "./ResumeEditorModal";
-import ProfileSourceTabs from "./resume-editor/profileSourceTabs";
+import DocumentEditor from "./resume-editor/DocumentEditor";
+import ResumeLanguageSelect from "./resume/ResumeLanguageSelect";
 
 interface Props {
   /** null 表示从头编写**通用简历**（不关联任何岗位）。 */
@@ -53,43 +51,40 @@ export default function ManualResumeModal({
   const projection = useCurrentProjection(open);
   const [title, setTitle] = useState(initialTitle);
   const [creationLanguage, setCreationLanguage] = useState<ResumeLanguage>(getSnapshot().locale);
+  const [document, setDocument] = useState<ResumeDocument | null>(null);
+  const [dirty, setDirty] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [startingInWorkbench, setStartingInWorkbench] = useState(false);
-  /** 编辑器里有没有未保存的修改（"前往简历制作台"用初始内容建草稿，脏时不能用）。 */
-  const [editorDirty, setEditorDirty] = useState(false);
+  const [confirmingClose, setConfirmingClose] = useState(false);
 
-  // 开/关时的状态归位（Compiler 规范：同步 setState 用渲染期守卫，放在 effect 外）。
+  // 开/关时的状态归位（同步 setState 用渲染期守卫）：每次打开都从新的投影开始。
   const [prevOpen, setPrevOpen] = useState<boolean | null>(null);
   if (prevOpen !== open) {
     setPrevOpen(open);
-    // 每次打开都从初始名称重新开始：上一次改了一半的名字不该留到下一份简历。
     if (open) {
       setTitle(initialTitle);
       setCreationLanguage(getSnapshot().locale);
+      setDocument(null);
+      setDirty(false);
+      setConfirmingClose(false);
     }
   }
 
-  /**
-   * 初始内容 = **当前组投影内容**（F9/R1，两种模式一致）。
-   *
-   * 岗位模式只额外覆盖求职意向（"我要投这个岗位"是这一次新建的意图，资料里那份可能不同）；
-   * 其余字段逐字来自服务端投影——前端不再有第二份"岗位模式留空哪些模块"的规则。
-   * 用户在这个弹窗里的修改只写进新建的简历记录，**不回写资料**。
-   */
-  const content = useMemo<ResumeContent | null>(
-    () => (projection.data ? projectionToResumeContent(projection.data, job) : null),
+  // 投影内容 -> 合法 v2 文档（岗位模式覆盖求职意向）。资料在别的窗口被改 → 未编辑时自动
+  // 重同步；已编辑时保留用户的修改（不在未保存时静默覆盖）。
+  const baseDocument = useMemo<ResumeDocument | null>(
+    () => (projection.data ? projectionToResumeDocument(projection.data, job) : null),
     [job, projection.data],
   );
+  const [syncedBase, setSyncedBase] = useState<ResumeDocument | null>(null);
+  if (baseDocument !== syncedBase) {
+    setSyncedBase(baseDocument);
+    if (baseDocument && (!document || !dirty)) {
+      setDocument(baseDocument);
+      setDirty(false);
+    }
+  }
 
-  // 「从资料填入本条」的候选：服务端投影 candidates（当前组），value 是 content 现成条目。
-  const fillSources = useMemo(
-    () => (projection.data ? buildProfileFillSources(projection.data) : null),
-    [projection.data],
-  );
-
-  /**
-   * 创建态快照（F4-BE）：把这次打开面板时看到的投影 token 与来源布局一起交给服务端。
-   * token 与保存时不一致 → 409 profile_snapshot_stale（服务端拒绝用旧组数据建简历）。
-   */
   const profileContext = useMemo<ProfileCreationContext | undefined>(() => {
     if (!projection.data) return undefined;
     return {
@@ -103,7 +98,6 @@ export default function ManualResumeModal({
     };
   }, [projection.data]);
 
-  /** 创建失败：快照过期要引导"重新打开面板"，其余错误如实显示后端原因。 */
   const handleCreateFailure = (error: unknown): void => {
     const code = (error as { businessCode?: string } | null)?.businessCode;
     if (code === "profile_snapshot_stale") {
@@ -114,38 +108,37 @@ export default function ManualResumeModal({
     message.error(error instanceof Error ? error.message : String(error));
   };
 
-  const save = async (nextContent: ResumeContent) => {
+  const save = async () => {
+    if (!document || saving) return;
+    setSaving(true);
     try {
       await createManualResume({
         job_id: job?.id ?? null,
         title: job ? "" : title.trim(),
-        content: nextContent,
+        content: document,
         language: creationLanguage,
         profile_context: profileContext,
       });
     } catch (error) {
       handleCreateFailure(error);
-      throw error;
+      return;
+    } finally {
+      setSaving(false);
     }
-    // T12：保存成功就广播。列表由订阅方各自重取。
     bumpResumeList();
     message.success(job ? t("resume.manual.saved.job") : t("resume.manual.saved.general"));
+    onClose();
   };
 
-  /**
-   * 「前往简历制作台」：用**初始内容**建一份草稿，然后让宿主打开制作台。
-   *
-   * 建的是**草稿**（0051）：用户在制作台里保存过才出现在简历中心，所以这里不广播列表刷新。
-   */
+  /** 「前往简历制作台」：用当前内容建一份草稿；有未保存修改时不可用（会丢那些修改）。 */
   const startInWorkbench = async () => {
-    // 脏值时按钮已禁用；这里再判一次，避免将来有第二个入口绕过禁用把改动丢掉。
-    if (!content || startingInWorkbench || editorDirty || !onOpenWorkbench) return;
+    if (!document || dirty || startingInWorkbench || !onOpenWorkbench) return;
     setStartingInWorkbench(true);
     try {
       const created = await createManualResume({
         job_id: job?.id ?? null,
         title: job ? "" : title.trim(),
-        content,
+        content: document,
         draft: true,
         language: creationLanguage,
         profile_context: profileContext,
@@ -158,14 +151,60 @@ export default function ManualResumeModal({
     }
   };
 
-  /** 「去切换组」：不选组、只跳资料页（R-27 同口径）。 */
+  const requestClose = () => {
+    if (saving) return;
+    if (dirty) {
+      setConfirmingClose(true);
+      return;
+    }
+    onClose();
+  };
+
   const switchGroup = () => {
     onClose();
     navigate("/profile");
   };
 
   const loading = open && projection.loading && !projection.data;
-  const failed = open && !projection.loading && projection.error !== null && !projection.data;
+  const failed =
+    open && projection.loading === false && projection.error !== null && !projection.data;
+
+  const footer = confirmingClose ? (
+    <Space size={8} wrap>
+      <Typography.Text type="warning">{t("resume.manual.unsaved")}</Typography.Text>
+      <Button onClick={() => setConfirmingClose(false)}>{t("resume.manual.keep-editing")}</Button>
+      <Button danger onClick={onClose}>
+        {t("resume.manual.discard-close")}
+      </Button>
+    </Space>
+  ) : (
+    <Space size={8} wrap>
+      {onOpenWorkbench ? (
+        <Tooltip title={dirty ? t("resume.manual.workbench-blocked") : undefined}>
+          <span>
+            <Button
+              disabled={dirty || undefined}
+              loading={startingInWorkbench}
+              onClick={() => void startInWorkbench()}
+            >
+              {t("workbench.action.open-from-new")}
+            </Button>
+          </span>
+        </Tooltip>
+      ) : null}
+      <ResumeLanguageSelect
+        value={creationLanguage}
+        onChange={setCreationLanguage}
+        disabled={saving}
+      />
+      <Button onClick={requestClose} disabled={saving}>
+        {t("resume.manual.close")}
+      </Button>
+      <Button type="primary" loading={saving} onClick={() => void save()}>
+        {t("resume.manual.save")}
+      </Button>
+    </Space>
+  );
 
   return (
     <>
@@ -194,70 +233,77 @@ export default function ManualResumeModal({
           <Button onClick={onClose}>{t("resume.manual.close")}</Button>
         </Space>
       </Modal>
-      <ResumeEditorModal
-        open={open && !loading && !failed && !!content}
-        content={content}
+      <Modal
+        open={open && !loading && !failed && !!document}
         title={
           job
             ? t("resume.manual.title.job", { title: job.title })
             : t("resume.manual.title.general")
         }
-        // 打开期间资料被别的窗口改掉：未编辑自动重同步、已编辑内联提示（不静默覆盖）。
-        deferRefreshWhenDirty
-        onDirtyChange={setEditorDirty}
-        // 草稿作用域必须带岗位维度：这里不传 resumeId，只按 id 分槽会让所有岗位共用
-        // resume.edit#new——在岗位 A 放弃修改后打开岗位 B，B 会看到 A 的草稿。
-        draftScopeKey={job ? `resume.edit#new@job-${job.id}` : undefined}
-        headerExtra={
-          job ? undefined : (
-            <Input
-              aria-label={t("resume.manual.name.aria")}
-              value={title}
-              maxLength={64}
-              placeholder={t("resume.manual.name.placeholder")}
-              onChange={(event) => setTitle(event.target.value)}
-              style={{ maxWidth: 360, marginBottom: 12 }}
-            />
-          )
-        }
-        description={
-          job ? t("resume.manual.description.job") : t("resume.manual.description.general")
-        }
-        saveLabel={t("resume.manual.save")}
-        referencePanel={job ? <JobRequirementPanel job={job} /> : undefined}
-        fillSources={fillSources}
-        // T11：通用模式才给「重新带入全部」；数据来自当前组投影（服务端确定性纸面内容）。
-        fillAll={
-          job || !projection.data
-            ? undefined
-            : () =>
-                projectionToResumeContent(projection.data as NonNullable<typeof projection.data>)
-        }
-        sourcePanel={
-          projection.data ? (
-            <ProfileSourceTabs projection={projection.data} onSwitchGroup={switchGroup} />
-          ) : undefined
-        }
-        footerExtra={
-          onOpenWorkbench ? (
-            // 这条入口用的是**初始内容**（不是表单里的编辑）：有未保存修改时点了会丢改动，
-            // 所以脏时就地禁用并说明原因（功能提示必须用 Tooltip 而不是原生 title）。
-            <Tooltip title={editorDirty ? t("resume.manual.workbench-blocked") : undefined}>
-              <span>
-                <Button
-                  disabled={editorDirty || undefined}
-                  loading={startingInWorkbench}
-                  onClick={() => void startInWorkbench()}
-                >
-                  {t("workbench.action.open-from-new")}
-                </Button>
-              </span>
-            </Tooltip>
-          ) : undefined
-        }
-        onClose={onClose}
-        onSave={save}
-      />
+        width={job ? "min(1320px, calc(100vw - 24px))" : "min(1000px, calc(100vw - 24px))"}
+        zIndex={layer.editorModal}
+        destroyOnHidden
+        mask={{ closable: false }}
+        keyboard={!saving}
+        onCancel={requestClose}
+        footer={footer}
+        styles={{
+          body: {
+            maxHeight: "var(--rf-modal-body-max-h)",
+            overflowY: "auto",
+            overflowX: "hidden",
+          },
+        }}
+      >
+        <Typography.Paragraph type="secondary" style={{ marginBottom: 12 }}>
+          {job ? t("resume.manual.description.job") : t("resume.manual.description.general")}
+        </Typography.Paragraph>
+        {job ? null : (
+          <Input
+            aria-label={t("resume.manual.name.aria")}
+            value={title}
+            maxLength={64}
+            placeholder={t("resume.manual.name.placeholder")}
+            onChange={(event) => setTitle(event.target.value)}
+            style={{ maxWidth: 360, marginBottom: 12 }}
+          />
+        )}
+        <div style={{ display: "flex", gap: 16, alignItems: "flex-start" }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            {document ? (
+              <DocumentEditor
+                document={document}
+                onChange={(next) => {
+                  setDocument(next);
+                  setDirty(true);
+                }}
+              />
+            ) : null}
+          </div>
+          {job ? (
+            <div style={{ width: 320, flex: "0 0 auto" }}>
+              <JobRequirementPanel job={job} />
+            </div>
+          ) : projection.data ? (
+            // 资料来源：v2 里只读展示当前组投影的分区清单（v1 ProfileSourceTabs 依赖 v1
+            // content 字段，已随 v1 编辑器链删除；逐条/整份填入不在新建弹窗里）。
+            <div style={{ width: 320, flex: "0 0 auto" }}>
+              <Typography.Text strong>{t("editor.sources.title")}</Typography.Text>
+              <ul style={{ paddingLeft: 18, margin: "8px 0 12px" }}>
+                {projection.data.source_layout.map((section) => (
+                  <li key={section.section_key}>
+                    {section.section_name}
+                    {section.entry_count > 0 ? " · " + section.entry_count : ""}
+                  </li>
+                ))}
+              </ul>
+              <Button size="small" onClick={switchGroup}>
+                {t("profileLibrary.empty.switchGroup")}
+              </Button>
+            </div>
+          ) : null}
+        </div>
+      </Modal>
     </>
   );
 }

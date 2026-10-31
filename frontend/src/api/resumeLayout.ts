@@ -9,7 +9,7 @@
  * `vi.mock("../api/resumes")` 的落点）一个都不动。
  */
 import type {
-  ResumeContent,
+  ResumeDocument,
   ResumeDetail,
   ResumeLayout,
   ResumeLayoutAnalysis,
@@ -59,8 +59,8 @@ export function analyzeResumeLayout(
  * 真的取消（而不是等它回来再丢弃）。缺省不传 = 行为与之前逐字相同。
  */
 export async function renderResume(
-  content: ResumeContent,
-  layout: Partial<ResumeLayout> = {},
+  content: ResumeDocument,
+  layout: Partial<ResumeLayout> & { document_mode?: "resume" | "long_cv" } = {},
   signal?: AbortSignal,
 ): Promise<string> {
   const resp = await requestRaw("/resumes/render", {

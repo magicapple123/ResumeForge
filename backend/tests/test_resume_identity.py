@@ -15,12 +15,12 @@
 from __future__ import annotations
 
 from app.models.resume import ResumeRecord
+from app.schemas.resume_document import OBJECT_ID_PATTERN
 from app.services.resume.document_identity import (
     DocumentIdentityError,
-    resolve_object_path,
-    resolve_point_path,
     sanitize_document_ids,
 )
+from tests.document_test_support import entries_of, make_document, stored_document
 
 ID_A = "exp_00000001"
 ID_B = "exp_00000002"
@@ -50,6 +50,7 @@ def _two_experiences() -> list[dict]:
 
 
 def test_legacy_content_is_read_back_without_materializing_ids(client, db_session):
+    """读旧记录只是看：响应是 v2（id 在响应里现补），但库里的 content / updated_at 不动。"""
     resume_id = _create(client, {"name": "张三", "experience": [{"company": "甲公司"}]})
     record = db_session.get(ResumeRecord, resume_id)
     before_updated_at = record.updated_at
@@ -58,17 +59,19 @@ def test_legacy_content_is_read_back_without_materializing_ids(client, db_sessio
 
     detail = client.get(f"/api/resumes/{resume_id}")
     assert detail.status_code == 200
-    # 没有身份时**连键都不出现**（不是 `"id": null`）：旧记录、旧客户端、内容指纹
-    # 因此一个字节都不受影响（见 `schemas/resume_identity.py`）。
-    assert "id" not in detail.json()["content"]["experience"][0]
+    content = detail.json()["content"]
+    assert content["version"] == 2
+    # 旧记录没有身份：读路径补出的 id 必须符合 W01 口径（8-32 位字母/数字/_/-）。
+    assert OBJECT_ID_PATTERN.fullmatch(entries_of(content, "experience")[0]["id"])
 
     db_session.expire_all()
     after = db_session.get(ResumeRecord, resume_id)
-    assert after.content == before_content
+    assert after.content == before_content  # 读不写库：库里仍是旧 v1 内容
     assert after.updated_at == before_updated_at
 
 
 def test_save_persists_the_ids_sent_by_the_client(client, db_session):
+    """客户端带的 id 完整往返：条目 id 落在 entry 上，v1 要点 id 沿用到 TextItem.id。"""
     resume_id = _create(client, {"name": "张三"})
 
     response = client.put(
@@ -76,9 +79,11 @@ def test_save_persists_the_ids_sent_by_the_client(client, db_session):
         json={"content": {"name": "张三", "experience": _two_experiences()}},
     )
     assert response.status_code == 200, response.text
-    detail = client.get(f"/api/resumes/{resume_id}").json()
-    assert [item["id"] for item in detail["content"]["experience"]] == [ID_A, ID_B]
-    assert detail["content"]["experience"][0]["point_ids"]["description"] == [
+    content = stored_document(client, resume_id)
+    entries = entries_of(content, "experience")
+    assert [entry["id"] for entry in entries] == [ID_A, ID_B]
+    # v2 没有 point_ids 伴随映射：要点 id 就是 TextItem.id（模板沿用原 point id）。
+    assert [item["id"] for item in entries[0]["items"] if item["kind"] == "text"] == [
         POINT_A1,
         "pt_00000002",
     ]
@@ -93,20 +98,40 @@ def test_reorder_keeps_ids_and_resolves_to_the_new_index(client, db_session):
         json={"content": {"name": "张三", "experience": reversed_entries}},
     )
     assert response.status_code == 200, response.text
-    detail = client.get(f"/api/resumes/{resume_id}").json()
-    assert [item["id"] for item in detail["content"]["experience"]] == [ID_B, ID_A]
-
-    # 排序之后，同一个对象的路径由**当前下标**现算，不保存绝对位置。
-    assert resolve_object_path(detail["content"], ID_A) == "experience.1"
-    assert resolve_point_path(detail["content"], ID_A, POINT_A1) == "experience.1.description.0"
+    content = stored_document(client, resume_id)
+    entries = entries_of(content, "experience")
+    assert [entry["id"] for entry in entries] == [ID_B, ID_A]
+    # 顺序变了，甲条目与它的要点 id 仍绑定在一起；v2 不保存绝对路径，路径按当前文档现算。
+    assert [item["id"] for item in entries[1]["items"] if item["kind"] == "text"] == [
+        POINT_A1,
+        "pt_00000002",
+    ]
 
 
 def test_invalid_id_characters_are_rejected(client, db_session):
     resume_id = _create(client, {"name": "张三"})
-    response = client.put(
-        f"/api/resumes/{resume_id}",
-        json={"name": "张三", "experience": [{"company": "甲", "id": "has space"}]},
+    content = make_document(
+        sections=[
+            {
+                "key": "experience",
+                "kind": "entries",
+                "entries": [
+                    {
+                        "items": [
+                            {
+                                "kind": "field",
+                                "key": "company",
+                                "value": "甲",
+                                "placement": "title",
+                            }
+                        ]
+                    }
+                ],
+            }
+        ]
     )
+    content["sections"][0]["entries"][0]["id"] = "has space"
+    response = client.put(f"/api/resumes/{resume_id}/content", json={"content": content})
     assert response.status_code == 422, response.text
     assert "对象标识" in response.text
 
@@ -121,51 +146,36 @@ def test_too_long_id_is_rejected_by_the_schema(client, db_session):
 
 
 def test_duplicate_ids_in_one_array_are_rejected(client, db_session):
+    """v2 写侧严格：同一份文档里对象 id 重复 → 422（不静默重生成）。"""
     resume_id = _create(client, {"name": "张三"})
-    response = client.put(
-        f"/api/resumes/{resume_id}",
-        json={
-            "name": "张三",
-            "experience": [
-                {"company": "甲", "id": ID_A},
-                {"company": "乙", "id": ID_A},
-            ],
-        },
-    )
+    content = {
+        "version": 2,
+        "language": "zh-CN",
+        "header": {"items": []},
+        "sections": [
+            {
+                "key": "experience",
+                "kind": "entries",
+                "entries": [
+                    {
+                        "id": ID_A,
+                        "items": [
+                            {"kind": "field", "key": "company", "value": "甲", "placement": "title"}
+                        ],
+                    },
+                    {
+                        "id": ID_A,
+                        "items": [
+                            {"kind": "field", "key": "company", "value": "乙", "placement": "title"}
+                        ],
+                    },
+                ],
+            }
+        ],
+    }
+    response = client.put(f"/api/resumes/{resume_id}/content", json={"content": content})
     assert response.status_code == 422, response.text
     assert "重复" in response.text
-
-
-def test_point_ids_length_must_match_its_field(client, db_session):
-    resume_id = _create(client, {"name": "张三"})
-    response = client.put(
-        f"/api/resumes/{resume_id}",
-        json={
-            "name": "张三",
-            "experience": [
-                {
-                    "company": "甲",
-                    "description": ["做了甲", "做了乙"],
-                    "point_ids": {"description": [POINT_A1]},
-                }
-            ],
-        },
-    )
-    assert response.status_code == 422, response.text
-    assert "数量" in response.text
-
-
-def test_unknown_point_ids_key_is_rejected(client, db_session):
-    resume_id = _create(client, {"name": "张三"})
-    response = client.put(
-        f"/api/resumes/{resume_id}",
-        json={
-            "name": "张三",
-            "experience": [{"company": "甲", "point_ids": {"phone": [POINT_A1]}}],
-        },
-    )
-    assert response.status_code == 422, response.text
-    assert "未知要点字段" in response.text
 
 
 def test_sanitize_drops_only_the_invalid_ids():

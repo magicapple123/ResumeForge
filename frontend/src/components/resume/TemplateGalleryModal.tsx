@@ -15,7 +15,7 @@ import A4PreviewFrame from "../templates/A4PreviewFrame";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { fetchResumeTemplates, previewResumeTemplate } from "../../api/resumes";
 import type {
-  ResumeContent,
+  ResumeDocument,
   ResumeFontScale,
   ResumeFormatConfig,
   ResumeLayout,
@@ -55,7 +55,7 @@ interface Props {
   /** 当前简历 id：试用"我的内容 + 真实页数"需要。不传时只能看示例。 */
   resumeId?: number | null;
   /** 未保存的当前正文（W04 覆盖）：试用按它预览与测量，不落库。 */
-  content?: ResumeContent | null;
+  content?: ResumeDocument | null;
 }
 
 const FONT_SCALES: { value: ResumeFontScale; labelKey: MessageKey }[] = [

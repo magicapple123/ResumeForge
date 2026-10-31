@@ -25,6 +25,12 @@ interface Props {
   /** 是否停在下限上：为真时读数换成可聚焦的提示胶囊。 */
   clampedToMin: boolean;
   /**
+   * 纸面比相框宽时的可见状态（Q21）：传了才渲染，文案由宿主给。
+   *
+   * 缩放条本身不判"要不要横滚"——那需要相框宽度与纸宽的几何，只在 `ResumePreview` 里有。
+   */
+  overflowHint?: string;
+  /**
    * 右侧提示语的**覆盖**（不传时用默认的「按住 Ctrl 滚滚轮可缩放」）。
    *
    * 简历制作台把"虚线是分页位置"那句说明并到这一行来（2026-11 用户要求：说明不该
@@ -41,6 +47,7 @@ export default function PreviewZoomBar({
   status,
   scale,
   clampedToMin,
+  overflowHint,
   hint,
   onZoomOut,
   onZoomIn,
@@ -94,6 +101,13 @@ export default function PreviewZoomBar({
           onClick={onReset}
         />
       </Tooltip>
+      {/* 横滚状态（Q21）：纸比相框宽时，"怎么才能看全"必须有一条可见说明，
+          否则用户只会看到右侧被裁掉的一块。 */}
+      {overflowHint ? (
+        <Typography.Text type="secondary" className="resume-preview-zoom-overflow-hint">
+          {overflowHint}
+        </Typography.Text>
+      ) : null}
       {/* 快捷键提示：Ctrl+滚轮缩放早已实现，但没有任何地方告诉用户——用户只能一个个
           按钮试。常驻在缩放控件旁边而不是做成一次性引导，因为"想放大看一眼"随时会发生。
           制作台会传 `hint` 进来（把分页说明并进这一行），主预览仍用默认那一句。 */}

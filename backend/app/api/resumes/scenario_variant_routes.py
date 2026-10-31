@@ -30,6 +30,7 @@ from ...schemas.versions import VariantDetailOut, VariantOut
 from ...services import trash
 from ...services.career_scenarios.resolve import CareerContextError, resolve_context
 from ...services.llm.base import LLMError
+from ...services.resume import document_io
 from ...services.resume import document_variants as variants
 from ...services.resume import scenario_variant as service
 from ...services.resume.document_versions import VersionNotFound
@@ -126,21 +127,25 @@ async def preview_scenario_variant(
         raise HTTPException(status_code=502, detail=f"生成场景候选失败：{exc}") from exc
     if candidate is None:
         raise client_gone("场景候选生成")
-    candidate_dump = candidate.model_dump()
+    # 候选出厂即 v2（服务层已收口）；差异算法仍按 v1 分析口径，两侧折成视图再比。
+    candidate_content = candidate
     return ScenarioVariantPreviewOut(
         variant=VariantOut.model_validate(variants.variant_brief(variant)),
-        candidate_content=candidate_dump,
+        candidate_content=candidate_content,
         base_content_sha256=canonical_content_sha256(variant.content or {}),
-        candidate_content_sha256=canonical_content_sha256(candidate_dump),
+        candidate_content_sha256=canonical_content_sha256(candidate_content),
         context_snapshot=snapshot.model_dump(),
         context_sha256=str(snapshot.context_sha256 or ""),
         content_diff=build_resume_diff(
             variant.id,
             variant.name or "当前变体",
-            variant.content or {},
+            document_io.ensure_document_version(
+                variant.content,
+                format_config=(variant.render_context or {}).get("format_config") or {},
+            ),
             0,
             "场景候选",
-            candidate_dump,
+            candidate_content,
         ),
     )
 

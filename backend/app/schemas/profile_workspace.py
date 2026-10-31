@@ -32,6 +32,9 @@ from .profile_projection import WorkspaceUpgradeFieldOut
 
 FieldTypeLiteral = Literal["single_line", "multi_line", "date_text", "photo"]
 CustomFieldTypeLiteral = Literal["single_line", "multi_line", "date_text"]
+# 自定义字段的纸面默认位置（v2 文档模型 D6）：null = 按 field_type 自动
+# （单行/日期 → trail，多行 → body）；hidden = 只保留数据、不上纸面。
+CustomFieldPlacementLiteral = Literal["title", "meta", "lead", "trail", "body", "hidden"]
 SectionFormLiteral = Literal["singleton", "multi"]
 
 SECTION_NAME_MAX_CHARS = 40
@@ -70,6 +73,14 @@ class FieldOut(BaseModel):
     is_builtin: bool = True
     # 私密字段（证书编号）：可以本地录入与备份，但永不进模型/网申/纸面（需求 §3.1 细则 2）。
     private: bool = False
+    # 纸面默认位置（0069）：null = 按 field_type 自动；仅对自建字段可写（内置字段由
+    # 文档字段目录决定，见 /api/profile/field-placement-catalog）。
+    default_placement: str | None = None
+    # 有效位置（只读计算值）：自建字段 = 仅素材→hidden、显式值优先、否则按类型默认；
+    # 内置字段为 null（由字段目录接口给）。前端显示"纸面位置"时读它，不自行复制默认规则。
+    effective_placement: str | None = None
+    # 仅素材（0069）：只进 AI / 网申素材、不上纸面；只有自建字段可为 true。
+    material_only: bool = False
     llm_allowed: bool = True
     webform_allowed: bool = True
     hidden: bool = False
@@ -194,18 +205,31 @@ class SectionUpdateIn(_StrictModel):
 
 
 class CustomFieldCreateIn(_StrictModel):
-    """自定义小字段：只允许三种文本类型（R-10/R-11）。"""
+    """自定义小字段：只允许三种文本类型（R-10/R-11）。
+
+    ``default_placement`` / ``material_only`` 是 v2 文档模型的纸面属性（0069）：
+    缺省 = 按 field_type 自动（单行/日期 → trail、多行 → body）且不是仅素材，
+    旧客户端不传这两个字段时行为逐字节不变。
+    """
 
     label: str = Field(default="", max_length=CUSTOM_FIELD_LABEL_MAX_CHARS)
     field_type: CustomFieldTypeLiteral
+    default_placement: CustomFieldPlacementLiteral | None = None
+    material_only: bool | None = None
     expected_revision: int | None = Field(default=None, ge=0)
 
 
 class CustomFieldUpdateIn(_StrictModel):
-    """自定义字段改名/排序；排序只作用于同分区自建字段之间。"""
+    """自定义字段改名/排序/纸面位置；排序只作用于同分区自建字段之间。
+
+    纸面属性用 ``model_fields_set`` 区分三态：没传 = 不改；
+    ``default_placement=null`` = 恢复"按类型自动"；传具体值 = 改到该位置。
+    """
 
     label: str | None = Field(default=None, max_length=CUSTOM_FIELD_LABEL_MAX_CHARS)
     sort_order: int | None = Field(default=None, ge=0)
+    default_placement: CustomFieldPlacementLiteral | None = None
+    material_only: bool | None = None
     expected_revision: int = Field(ge=0)
 
 

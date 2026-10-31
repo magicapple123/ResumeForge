@@ -203,6 +203,7 @@ def _seed_new_profile_model() -> None:
     from app.database import SessionLocal
     from app.schemas.profile import (
         AwardIn,
+        CampusExperienceIn,
         EducationIn,
         ExperienceIn,
         ProfileUpdate,
@@ -244,7 +245,17 @@ def _seed_new_profile_model() -> None:
         experiences=[
             ExperienceIn(**_allowed(ExperienceIn, item)) for item in _legacy_rows("experience")
         ],
-        campus_experiences=[],
+        # 校园经历：v2 演示版要覆盖 campus_experience 板块，也让 AI 生成有素材可用。
+        # 事实与简历样例同源（示例大学学生会宣传部 / 副部长）。
+        campus_experiences=[
+            CampusExperienceIn(
+                organization="示例大学学生会宣传部",
+                role="副部长",
+                start_date="2021-09-01",
+                end_date="2022-06-30",
+                description="统筹 6 场校园活动的宣传排期，协调 8 人小组分工，累计触达 3000 余人次。",
+            )
+        ],
         projects=projects,
         skills=[SkillIn(**_allowed(SkillIn, item)) for item in _legacy_rows("skill")],
         awards=[AwardIn(**_allowed(AwardIn, item)) for item in _legacy_rows("award")],
@@ -255,9 +266,91 @@ def _seed_new_profile_model() -> None:
         # 自建大字段 + 自定义小字段 + 一条条目：覆盖 F1 的 profile_definition 链路，
         # 让「资料页截图」能看到自建分区，也让自检接口真的读到自建定义。
         section = definition_store.create_custom_section(db, "证书与作品")
-        field_row = definition_store.create_custom_field(db, section.key, "作品链接", "single_line")
+        field_row = definition_store.create_custom_field(
+            db, section.key, "作品链接", "single_line", default_placement="trail"
+        )
+
+        # ── v2 字段级文档模型的资料素材（D6）─────────────────────────────────
+        # 演示数据必须覆盖三种自定义字段形态，否则 e2e 与截图看不到 v2 的卖点：
+        #   1. 自定义短字段（默认落 trail 灰字段）；
+        #   2. 自定义长文本字段（默认落 body 正文块）；
+        #   3. 仅素材字段（material_only：进 AI/网申素材，永远不上纸面）。
+        # 字段挂在系统分区上（教育/实习），与"用户在资料页加字段"是同一链路。
+        education_field = definition_store.create_custom_field(
+            db, "educations", "课题组", "single_line", default_placement="trail"
+        )
+        _merge_first_entry_values(
+            db, "educations", {education_field.field_id: "消费者行为研究组（示例）"}
+        )
+        report_field = definition_store.create_custom_field(
+            db, "experiences", "汇报对象", "single_line", default_placement="trail"
+        )
+        collaboration_field = definition_store.create_custom_field(
+            db, "experiences", "团队协作说明", "multi_line", default_placement="body"
+        )
+        background_field = definition_store.create_custom_field(
+            db,
+            "experiences",
+            "背调联系人",
+            "single_line",
+            default_placement="hidden",
+            material_only=True,
+        )
+        _merge_first_entry_values(
+            db,
+            "experiences",
+            {
+                report_field.field_id: "示例市场总监",
+                collaboration_field.field_id: (
+                    "活动期与内容、设计、销售三个小组按周对齐目标与排期，"
+                    "把跨部门确认时间从 3 天压到 1 天。"
+                ),
+                background_field.field_id: "示例背调人（虚构）",
+            },
+        )
+
+        # 自建板块补齐"标题 + 链接 + 说明"三种字段与两条条目：演示 v2 自建板块与系统
+        # 板块同构（可编排、可导出），也是 §17.2「自定义字段 + 自建板块」的素材来源。
+        work_name = definition_store.create_custom_field(
+            db, section.key, "作品名称", "single_line", default_placement="title"
+        )
+        work_note = definition_store.create_custom_field(
+            db, section.key, "作品说明", "multi_line", default_placement="body"
+        )
         entry_store.upsert_entry(
             db,
             section.key,
-            values={field_row.field_id: "https://example.com/zhang-portfolio"},
+            values={
+                work_name.field_id: "校园招聘会一页纸招募说明",
+                field_row.field_id: "https://example.com/zhang-portfolio",
+                work_note.field_id: (
+                    "按企业侧决策路径重写招募说明，把宣讲信息压缩到一页纸，"
+                    "3 天内完成 40 家企业邀约确认。"
+                ),
+            },
         )
+        entry_store.upsert_entry(
+            db,
+            section.key,
+            values={
+                work_name.field_id: "季度活动复盘 SOP",
+                field_row.field_id: "https://example.com/zhang-portfolio/sop",
+                work_note.field_id: (
+                    "把单次活动复盘沉淀成 9 个检查点的模板，团队复用后单场筹备时间"
+                    "从 10 天压缩到 4 天。"
+                ),
+            },
+        )
+
+
+def _merge_first_entry_values(db, section_key: str, extra: dict[str, str]) -> None:
+    """把自定义字段值并进该分区第一条条目的 values（演示种子只往第一条挂）。"""
+    from app.services.profile import entry_store
+
+    rows = entry_store.list_entries(db, section_key=section_key)
+    if not rows:
+        return
+    first = rows[0]
+    values = dict(first.values or {})
+    values.update(extra)
+    entry_store.upsert_entry(db, section_key, entry_id=first.entry_id, values=values)

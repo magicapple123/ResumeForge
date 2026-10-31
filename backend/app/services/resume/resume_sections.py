@@ -115,8 +115,26 @@ def normalized_section_order(raw: object) -> list[str]:
     return ordered
 
 
+def persistable_format_config(raw: object) -> dict:
+    """v2 的保存边界：**不再把 v1 的 `section_order` 写进记录**。
+
+    v2 的分区顺序就是 `document.sections` 本身（planner 按它出计划）。`section_order`
+    只剩一个用途：旧数据 / 生成请求在 **v1→v2 转换**时决定分区落位（`document_converter`
+    仍读入参里的这个键）。转换完成后它就不该再落库——否则它会变成"第二真相"：
+    用户在结构页签改了顺序，这个旧键还在，备份/诊断/兼容读取会继续把它当真。
+
+    未知类型一律返回空 dict（与 `validated_format_config` 的宽容口径一致）。
+    """
+    if not isinstance(raw, dict):
+        return {}
+    return {str(key): value for key, value in raw.items() if str(key) != "section_order"}
+
+
 def resolved_section_order(format_config: dict | None) -> list[str]:
-    """从版式覆盖里取分区顺序；没设过就用默认顺序。"""
+    """从版式配置里取分区顺序；没设过就用默认顺序。
+
+    **只用于旧数据兼容**：v2 记录不再写这个键（见 `persistable_format_config`）。
+    """
     if not isinstance(format_config, dict):
         return list(DEFAULT_SECTION_ORDER)
     if "section_order" not in format_config:
@@ -216,6 +234,7 @@ __all__ = [
     "SECTION_LABELS",
     "default_section_order_config",
     "normalized_section_order",
+    "persistable_format_config",
     "profile_order_to_section_order",
     "profile_section_order_keys",
     "profile_to_resume_order",

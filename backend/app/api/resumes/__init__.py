@@ -28,6 +28,7 @@ from . import (
     delivery_archive_routes,
     export_bundle_routes,
     export_routes,
+    export_share_routes,
     generate_routes,
     layout_render_routes,
     preflight_routes,
@@ -79,5 +80,7 @@ router.include_router(scenario_variant_routes.router, prefix="/api/resumes")
 router.include_router(review_routes.router, prefix="/api/resumes")
 router.include_router(layout_render_routes.router, prefix="/api/resumes")
 router.include_router(export_routes.router, prefix="/api/resumes")
+# 分享包 / 脱敏预览从 export_routes 拆出：路径更深（/{resume_id}/share-zip|redact），顺序无关。
+router.include_router(export_share_routes.router, prefix="/api/resumes")
 # W11 统一检查：路径含 /{resume_id}/preflight，与既有端点不冲突；放最后保持原顺序不变量。
 router.include_router(preflight_routes.router, prefix="/api/resumes")

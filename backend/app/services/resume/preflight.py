@@ -32,6 +32,7 @@ from ...schemas.preflight import (
     TextOrderDiff,
 )
 from ...schemas.resume import ResumeContent
+from . import document_io
 from .format_capabilities import matrix
 from .preflight_rules_content import content_issues
 from .preflight_rules_layout import layout_issues
@@ -61,7 +62,7 @@ def _finalize(issues: list[CheckIssue]) -> list[CheckIssue]:
 
 
 def run_preflight(
-    content: ResumeContent,
+    content: ResumeContent | dict,
     *,
     request: PreflightRequest,
     snapshot: PreflightSnapshot,
@@ -81,6 +82,11 @@ def run_preflight(
     "联系方式脱敏未开启"；编辑态检查保持原样。
     """
     started = time.perf_counter()
+    analyzed_content = (
+        document_io.ensure_document_version(content)
+        if isinstance(content, dict) and content.get("version") != 2
+        else content
+    )
     layers = set(request.layers)
     issues: list[CheckIssue] = []
     # 规则层产出的是松散 dict（PreflightOut 构造时由 pydantic 统一校验成模型），
@@ -93,7 +99,7 @@ def run_preflight(
     if "content" in layers:
         issues.extend(
             content_issues(
-                content,
+                analyzed_content,
                 jd_text=request.jd_text,
                 claims=claims,
                 include_risk="risk" in layers,
@@ -121,7 +127,7 @@ def run_preflight(
 
     if "layout" in layers:
         layout_list, raw_font_coverage = layout_issues(
-            content,
+            analyzed_content,
             page_limit=page_limit,
             measure=request.measure.model_dump() if request.measure else None,
             font_name=format_config.get(FONT_KEY),
@@ -132,7 +138,7 @@ def run_preflight(
 
     if "product" in layers:
         product_list, raw_machine_text, raw_order_diffs = product_issues(
-            content,
+            analyzed_content,
             template=template,
             page_limit=page_limit,
             font_scale=font_scale,

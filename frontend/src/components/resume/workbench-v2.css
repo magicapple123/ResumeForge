@@ -1,0 +1,81 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/* v2 制作台外壳（components/resume/ResumeWorkbenchV2.tsx / 左栏 / 中栏）。
+   颜色与间距全部走 --rf-* 变量；三栏布局复用旧 workbench-shell.css 的列/分隔条样式，
+   这里只补 v2 新增的三个容器。 */
+
+.resume-wb-v2-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+  height: 100%;
+  padding: 8px 10px 4px;
+  overflow: hidden;
+}
+
+.resume-wb-v2-editor > .document-editor {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+}
+
+.resume-wb-v2-conversion {
+  flex: none;
+}
+
+.resume-wb-v2-conversion-body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: var(--rf-font-size-xs, 12px);
+}
+
+.resume-wb-v2-conversion-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.resume-wb-v2-conversion-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px 8px;
+  border-radius: var(--rf-radius-sm, 4px);
+  background: var(--rf-color-fill-quaternary);
+}
+
+.resume-wb-v2-conversion-summary ul {
+  margin: 2px 0 0;
+  padding-left: 18px;
+}
+
+.resume-wb-v2-params {
+  overflow-y: auto;
+  gap: 8px;
+}
+
+.resume-wb-v2-panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1 1 auto;
+}
+
+/* 结构页签：树 + 条目字段排版是同一列的两段内容，整列滚动。
+   不能让树被压到内容高度以下——树的 min-height 会溢出到下方排版区，
+   把树行盖住（截图里文字重叠、勾选框点不到，2026-10-31 M7 复跑暴露）。 */
+.resume-wb-v2-panel.resume-wb-structure-tab {
+  overflow-y: auto;
+  gap: 8px;
+}
+
+.resume-wb-structure-tab .rf-structure-panel {
+  flex: 0 0 auto;
+}
+
+.resume-wb-structure-tab .rf-structure-tree {
+  flex: 0 0 auto;
+  min-height: 160px;
+  max-height: 40vh;
+}

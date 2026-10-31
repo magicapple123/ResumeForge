@@ -22,6 +22,7 @@ PDF 曾经**完全忽略 `format_config`**、还内置了一套与模板不一�
 needs_font / _MM_TO_PT 等）按契约留在本文件，兄弟文件单向导入。
 """
 
+import re
 from io import BytesIO
 
 import pytest
@@ -301,18 +302,18 @@ def test_fitting_without_scaling_reuses_the_first_render(monkeypatch):
     那一版产物；这条用例把"复用"钉住，防止将来有人改回两遍（性能直接翻倍，而且没人会
     在功能测试里发现）。
 
-    计数落在 `_draw_resume` 上：它是"真排一遍"的唯一入口，比计时稳定得多。
+    计数落在 `fit.draw_document` 上（模块级 import 的"真排一遍"入口），比计时稳定得多。
     """
     from app.services.pdf_exporter import fit as fit_module
 
     calls: list[int] = []
-    original = fit_module._draw_resume
+    original = fit_module.draw_document
 
     def counting(*args, **kwargs):
         calls.append(1)
         return original(*args, **kwargs)
 
-    monkeypatch.setattr(fit_module, "_draw_resume", counting)
+    monkeypatch.setattr(fit_module, "draw_document", counting)
 
     # sample 简历在 3 页上限下本来就装得下 → 走复用分支。
     result = build_resume_pdf(sample_resume_content(), template="classic", page_limit=3)
@@ -362,6 +363,33 @@ def test_pdf_header_contact_keeps_every_field_the_preview_renders():
         "个人主页：zhangsan.dev",
     ):
         assert value in compact, f"PDF 页头缺少联系方式字段：{value!r}"
+
+
+@needs_font
+def test_pdf_header_contact_keeps_field_separators_in_drawn_text():
+    """页头联系方式字段之间必须**有分隔空白**（2026-10-30 实机六出口检查发现）。
+
+    `header.py` 曾把 planner 的"每行若干字段段"整行 `"".join` 之后只在外层拼分隔符，
+    于是 PDF 页头画出来是 "138-0000-0000zhangsan@example.com上海2001"，HTML / Word
+    正常——六出口布局不一致，且 pypdf 提取文本也丢空格。这里从真实 PDF 首页读回
+    未压缩空白的文本，断言字段之间仍有空白（PDF_SEPARATOR 是四空格，留出余量）。
+    """
+    resume = ResumeContent(
+        name="张三",
+        phone="139-0000-0000",
+        email="zhangsan@example.com",
+        city="杭州",
+        summary="一句话总结，用来占住一页的下半部分。",
+    )
+    result = build_resume_pdf(resume, template="classic", page_limit=1, font_scale="standard")
+    first_page = (
+        "".join(page.extract_text() or "" for page in PdfReader(BytesIO(result.content)).pages)
+        .replace("\x00", "")
+    )
+    assert re.search(r"139-0000-0000\s{2,}zhangsan@example\.com", first_page), (
+        "PDF 页头联系方式字段粘在一起了（缺少分隔空白）：" + first_page[:300]
+    )
+    assert re.search(r"zhangsan@example\.com\s{2,}杭州", first_page), first_page[:300]
 
 
 # ===== 正文 / 辅助文字颜色由模板决定 =====

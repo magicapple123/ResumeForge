@@ -17,6 +17,8 @@ export default function MySpaceMenu({ hiddenKeys }: Props) {
   const navigate = useNavigate();
   const location = useLocation();
   const items = useMemo<MenuProps["items"]>(() => {
+    // t() 是模块级函数，不会自己触发重算；语言变了要重新生成菜单文案。
+    void locale;
     const visible = filterNavigationItems(SPACE_NAVIGATION_ITEMS, hiddenKeys, location.pathname);
     return visible.map((item) => ({
       key: item.key,

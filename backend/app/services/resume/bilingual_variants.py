@@ -28,9 +28,12 @@ from ...models.resume import ResumeRecord
 from ...models.versions import ResumeVariant
 from ..llm.base import BaseLLMProvider, LLMError
 from ..llm.structured_output import parse_json_object
-from . import fact_locks, resume_glossary
+from . import document_io, fact_locks, resume_glossary
 from .content_locks import entry_content_payload, validate_content_locks_for
 from .document_identity import ENTRY_FIELDS, is_object_id
+from .document_paths import read_document_value
+from .document_variants import read_document_path, write_document_path
+from .document_view import header_items, iter_entries
 from .resume_delivery import canonical_content_sha256
 from .resume_diff import build_resume_diff
 
@@ -79,55 +82,46 @@ def _direction(source: str, target: str) -> str:
 
 
 def _read_path(content: Any, path: str) -> Any:
-    current: Any = content
-    for segment in path.split("."):
-        if isinstance(current, dict):
-            if segment not in current:
-                return None
-            current = current[segment]
-        elif isinstance(current, list):
-            try:
-                current = current[int(segment)]
-            except (ValueError, IndexError):
-                return None
-        else:
-            return None
-    return current
+    return read_document_value(content, path)
 
 
 def _write_path(content: Any, path: str, value: str) -> bool:
-    segments = path.split(".")
-    current: Any = content
-    for segment in segments[:-1]:
-        if isinstance(current, dict):
-            if segment not in current:
-                return False
-            current = current[segment]
-        elif isinstance(current, list):
-            try:
-                current = current[int(segment)]
-            except (ValueError, IndexError):
-                return False
-        else:
-            return False
-    leaf = segments[-1]
-    if isinstance(current, dict) and leaf in current and isinstance(current[leaf], str):
-        current[leaf] = value
-        return True
-    if isinstance(current, list):
-        try:
-            index = int(leaf)
-        except ValueError:
-            return False
-        if 0 <= index < len(current) and isinstance(current[index], str):
-            current[index] = value
-            return True
-    return False
+    return write_document_path(content, path, value)
 
 
 def translatable_paths(content: dict[str, Any]) -> list[str]:
     """列出参与翻译的文本路径（只含描述性文本；身份/机构/日期/数字不在内）。"""
     paths: list[str] = []
+    if content.get("version") == 2:
+        for item in header_items(content):
+            if item.get("placement") == "subtitle" and item.get("value"):
+                paths.append(f"header.{item['id']}")
+        for section, entry in iter_entries(content):
+            if entry.get("hidden"):
+                continue
+            for item in entry.get("items") or []:
+                if item.get("hidden") or item.get("placement") == "hidden":
+                    continue
+                path = f"{section}.{entry['id']}.{item['id']}"
+                kind, key = item.get("kind"), item.get("key")
+                if (
+                    kind == "text"
+                    or kind == "field"
+                    and (
+                        key == "role"
+                        or item.get("placement") == "body"
+                        and key not in {"name", "title", "school", "company", "organization"}
+                    )
+                ):
+                    paths.append(path)
+                elif kind == "list" and key in _POINT_LIST_FIELDS.get(section, ()):
+                    hidden = set(item.get("hidden_values") or [])
+                    paths.extend(
+                        f"{path}.{index}"
+                        for index, value in enumerate(item.get("values") or [])
+                        if value and value not in hidden
+                    )
+        return paths
     for field in _TOP_LEVEL_FIELDS:
         if isinstance(content.get(field), str) and content[field].strip():
             paths.append(field)
@@ -273,7 +267,11 @@ async def build_translation_candidate(
     if source == target_language:
         raise BilingualError("目标语言与当前变体语言相同")
     direction = _direction(source, target_language)
-    original = copy.deepcopy(variant.content or {})
+    original = document_io.ensure_document_version(
+        variant.content,
+        language=source,
+        format_config=(variant.render_context or {}).get("format_config") or {},
+    )
     candidate = copy.deepcopy(original)
     glossary_terms = resume_glossary.list_locked_terms(
         db, language_from=source, language_to=target_language
@@ -308,11 +306,17 @@ async def build_translation_candidate(
         "翻译候选",
         candidate,
     )
+    # 候选出厂必须是 v2：前端拿到后既可直接预览，也会被采纳路径按 v2 路径写回。
+    candidate_document = document_io.ensure_document_version(
+        candidate,
+        language=target_language,
+        format_config=(variant.render_context or {}).get("format_config") or {},
+    )
     return {
         "variant_id": variant.id,
         "source_language": source,
         "target_language": target_language,
-        "candidate": candidate,
+        "candidate": candidate_document,
         "diff": diff,
         "glossary_hits": glossary_hits,
         "blocked_fields": sorted(set(blocked)),
@@ -327,14 +331,34 @@ def _fact_lock_blocked(db: Session, variant: ResumeVariant, candidate: dict[str,
     return [item.path for item in violations]
 
 
-def _restore_locked_entries(
-    variant: ResumeVariant, candidate: dict[str, Any]
-) -> list[str]:
+def _restore_locked_entries(variant: ResumeVariant, candidate: dict[str, Any]) -> list[str]:
     """正文锁在候选里也不展示改动：锁定条目整条回填原文，并记入 blocked_fields。
 
     基准是**变体自己的旧内容**（候选与采纳都写变体），不能用当前简历的 lock 标记：
     变体是独立表达对象，母版的锁/未锁状态与它无关。
     """
+    if candidate.get("version") == 2:
+        old_document = document_io.ensure_document_version(variant.content)
+        blocked: list[str] = []
+        for key, old_entry in iter_entries(old_document):
+            if not old_entry.get("lock_content"):
+                continue
+            target = next(
+                (
+                    entry
+                    for section, entry in iter_entries(candidate)
+                    if section == key and entry.get("id") == old_entry.get("id")
+                ),
+                None,
+            )
+            if target is None:
+                blocked.append(f"{key}.{old_entry['id']}")
+                continue
+            if entry_content_payload(old_entry) != entry_content_payload(target):
+                blocked.append(f"{key}.{old_entry['id']}")
+            target.clear()
+            target.update(copy.deepcopy(old_entry))
+        return blocked
     old_content = variant.content or {}
     blocked: list[str] = []
     for field in ENTRY_FIELDS:
@@ -362,9 +386,7 @@ def _restore_locked_entries(
                     target_index = index
             if target_index is None:
                 continue
-            if entry_content_payload(old_entry) != entry_content_payload(
-                new_entries[target_index]
-            ):
+            if entry_content_payload(old_entry) != entry_content_payload(new_entries[target_index]):
                 blocked.append(f"{field}.{target_index}")
             new_entries[target_index] = copy.deepcopy(old_entry)
     return blocked
@@ -378,19 +400,26 @@ def adopt_translation(
     锁校验的两个基准必须分开：事实锁挂在当前简历上（按路径比对锁定值），正文锁挂在
     **变体自己的旧内容**上（变体是独立表达对象，母版的 lock_content 标记与它无关）。
     """
-    content = copy.deepcopy(variant.content or {})
+    # 采纳写的是 v2 文档本身：路径支持 v2 item path（{section}.{entry}.{item} / header.{item}）
+    # 与 v1 旧路径（映射到对应 item），未列出的 item（位置/版式/隐藏）一个都不动。
+    content = document_io.ensure_document_version(
+        variant.content or {},
+        language=(variant.render_context or {}).get("language") or None,
+        format_config=(variant.render_context or {}).get("format_config") or {},
+    )
     applied: list[str] = []
     for item in items:
         path = str(item.get("path") or "").strip()
         text = item.get("text")
         if not path or not isinstance(text, str) or not text.strip():
             raise BilingualError("采纳项缺少路径或正文")
-        current = _read_path(content, path)
+        current = read_document_path(content, path)
         if not isinstance(current, str):
             raise BilingualError(f"采纳路径不存在或不是文本：{path}")
-        if not _write_path(content, path, text.strip()):
+        if not write_document_path(content, path, text.strip()):
             raise BilingualError(f"采纳路径写入失败：{path}")
         applied.append(path)
+    # 锁校验两侧都折成 v1 分析视图（validate_content_locks_for 内部统一收口）。
     violations = validate_content_locks_for(variant.content or {}, content)
     record = db.get(ResumeRecord, variant.resume_id) if variant.resume_id else None
     if record is not None:

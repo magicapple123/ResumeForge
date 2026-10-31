@@ -10,7 +10,7 @@
  * - **交付原件** = 可选归档的**文件字节**（sha256 + 资源版本清单），与投递快照（结构化数据）分开；
  * - 工作区预设（localStorage）不是导出配置，两者不混。
  */
-import type { ResumeContent } from "../../types/resume";
+import type { ResumeDocument } from "../../types/resumeDocument";
 
 /** 可成套导出的格式（顺序即界面顺序：先交付主格式，后机器可读）。 */
 export const EXPORT_FORMATS = ["pdf", "docx", "html", "md", "txt", "json"] as const;
@@ -77,7 +77,7 @@ export interface ExportBundleRequest {
   resume_revision?: number;
   strict_revision?: boolean;
   /** 当前草稿正文（W04 缺口）：与预览同一份内容，后端不落库、不冻结。 */
-  content?: ResumeContent;
+  content?: ResumeDocument;
   /** 草稿版式：仅当宿主把未保存的版式传进来时带。 */
   margin_mm?: number;
   font_scale?: string;
@@ -100,7 +100,7 @@ export interface ExportBundleRequest {
  * 不摊平导出字段——preflight 是 extra="forbid"，多一个键就 422。
  */
 export interface ExportCheckRequest {
-  content?: ResumeContent | null;
+  content?: ResumeDocument | null;
   layout?: {
     template?: string | null;
     format_name?: string | null;

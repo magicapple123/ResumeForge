@@ -109,7 +109,9 @@ def fit_lines(
     dropped: list[str] = []
     if len(lines) > limit:
         dropped.append("默认正文（超出部分）")
-        lines = lines[:limit]
+        # 文字不丢：超出上限的行并入最后一行（列表仍 ≤ 上限，不静默丢整行）；
+        # warning 仍如实说明这些行未按独立行上纸面。
+        lines = lines[: limit - 1] + ["\n".join(lines[limit - 1 :])]
     for label, text in extras:
         if len(lines) >= limit:
             dropped.append(label)

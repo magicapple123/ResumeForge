@@ -50,7 +50,7 @@ export default function PreflightModal({
   onOpenAts,
   fetcher,
 }: Props) {
-  const locale = useLocale();
+  useLocale();
   const preflight = usePreflight({
     resumeId: open ? resumeId : null,
     currentKey,
@@ -100,19 +100,7 @@ export default function PreflightModal({
         children: <CapabilitiesTable capabilities={preflight.result?.capabilities} />,
       },
     ],
-    [
-      availableFixActions,
-      onFix,
-      onOpenAts,
-      preflight.cancel,
-      preflight.error,
-      preflight.result,
-      preflight.running,
-      preflight.run,
-      preflight.stale,
-      preflight.status,
-      locale,
-    ],
+    [availableFixActions, onFix, onOpenAts, preflight],
   );
 
   return (

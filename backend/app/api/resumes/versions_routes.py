@@ -150,7 +150,7 @@ def restore_version(
         raise _version_not_found(exc) from exc
     return VersionRestoreOut(
         version=VersionOut.model_validate(versions.version_brief(new_version)),
-        resume=_to_resume_out(saved),
+        resume=_to_resume_out(saved, db),
         revision=int(saved.revision or 0),
     )
 

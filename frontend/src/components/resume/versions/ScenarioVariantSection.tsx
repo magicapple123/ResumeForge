@@ -133,7 +133,11 @@ export default function ScenarioVariantSection({ resumeId, onChanged, variants }
   }, []);
 
   useEffect(() => {
-    void loadOptions();
+    // 先让出这一帧再触发首拉：loadOptions 开头会同步 setLoading，直接在 effect 体里调用
+    // 会触发 react-hooks/set-state-in-effect（级联渲染告警）。
+    queueMicrotask(() => {
+      void loadOptions();
+    });
   }, [loadOptions]);
 
   const options = useMemo(() => {

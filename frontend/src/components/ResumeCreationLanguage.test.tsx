@@ -1,18 +1,18 @@
 // SPDX-License-Identifier: Apache-2.0
 import { App as AntdApp } from "antd";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { selectLocale } from "../i18n/localeStore";
 import { t } from "../i18n";
 import I18nProvider from "../i18n/I18nProvider";
 import { projectionOf } from "../test/profileProjectionFixture";
 import { TEMPLATE_CATALOG } from "../test/resumeFixtures";
-import type { ResumeContent, ResumeLayout } from "../types";
+import type { ResumeLayout } from "../types";
 import GenerateResumeModal from "./GenerateResumeModal";
 import ManualResumeModal from "./ManualResumeModal";
 
 const mocks = vi.hoisted(() => ({
+  projection: null as unknown,
   createManualResume: vi.fn(),
   fetchResumeTemplates: vi.fn(),
   startResumeGeneration: vi.fn(),
@@ -35,28 +35,11 @@ vi.mock("../utils/backgroundTasks", () => ({
 }));
 vi.mock("../features/profile-library/useCurrentProjection", () => ({
   useCurrentProjection: () => ({
-    data: projectionOf({ content: { name: "Alex" } }),
+    data: mocks.projection,
     loading: false,
     error: null,
     reload: vi.fn(),
   }),
-}));
-vi.mock("./resume-editor/profileSourceTabs", () => ({ default: () => null }));
-vi.mock("./ResumeEditorModal", () => ({
-  default: ({
-    content,
-    onSave,
-    footerExtra,
-  }: {
-    content: ResumeContent;
-    onSave: (content: ResumeContent) => Promise<void>;
-    footerExtra: ReactNode;
-  }) => (
-    <>
-      <button aria-label="creation.save" onClick={() => void onSave(content)} />
-      {footerExtra}
-    </>
-  ),
 }));
 vi.mock("./generate-resume/GenerationConfigStage", () => ({
   default: ({
@@ -82,6 +65,7 @@ vi.mock("./generate-resume/GenerationProgressStage", () => ({ default: () => nul
 
 beforeEach(() => {
   selectLocale("zh-CN");
+  mocks.projection = projectionOf({ content: { name: "Alex" } });
   mocks.createManualResume.mockReset().mockResolvedValue({ id: 71 });
   mocks.fetchResumeTemplates.mockReset().mockResolvedValue(TEMPLATE_CATALOG);
   mocks.startResumeGeneration.mockReset().mockResolvedValue({ id: 72, status: "running" });
@@ -103,12 +87,13 @@ describe("new Resume language transport", () => {
         </I18nProvider>
       </AntdApp>,
     );
-    fireEvent.click(screen.getByRole("button", { name: "creation.save" }));
+    fireEvent.click(screen.getByRole("button", { name: t("resume.manual.save") }));
     await waitFor(() =>
       expect(mocks.createManualResume).toHaveBeenCalledWith(
         expect.objectContaining({
           language: locale,
-          content: expect.objectContaining({ name: "Alex" }),
+          // v2 文档：初始内容整份来自投影（header.items 里是姓名）。
+          content: expect.objectContaining({ version: 2 }),
         }),
       ),
     );

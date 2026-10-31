@@ -11,6 +11,9 @@
  * 能改的路径集合两边必须相同，否则会出现"前端让改、后端说指不到"。
  */
 import type { ResumeContent } from "../types";
+import type { ResumeDocument } from "../types/resumeDocument";
+import { isDocument, entryValue } from "../features/resume-document/view";
+import { buildFallbackCatalog } from "../features/resume-document/fieldCatalog";
 import { t } from "../i18n";
 import type { MessageKey } from "../i18n";
 
@@ -174,7 +177,46 @@ export function writeResumeFieldByPath(
 }
 
 /** 人话说明"这是哪一栏"，用于弹窗标题与错误提示。 */
-export function describeResumeFieldPath(path: string, content?: ResumeContent | null): string {
+export function describeResumeFieldPath(
+  path: string,
+  content?: ResumeContent | ResumeDocument | null,
+): string {
+  if (isDocument(content)) {
+    const parts = path.split(".");
+    const catalog = buildFallbackCatalog(t);
+    if (parts[0] === "header" || (parts.length === 1 && parts[0] !== "summary")) {
+      const item = content.header.items.find(
+        (item) => item.id === parts[1] || item.key === parts[0],
+      );
+      if (item)
+        return (
+          item.label ||
+          catalog.header_fields.find((field) => field.key === item.key)?.label ||
+          item.key
+        );
+    }
+    const section = content.sections.find((section) => section.key === parts[0]);
+    const spec = catalog.sections.find((spec) => spec.key === parts[0]);
+    const label = section?.layout.title_override || section?.title || spec?.title || parts[0];
+    const entry =
+      section?.entries.find((entry) => entry.id === parts[1]) ??
+      (Number.isInteger(Number(parts[1])) ? section?.entries[Number(parts[1])] : undefined);
+    if (!entry) return label;
+    const identity = entryValue(entry, ITEM_IDENTITY[parts[0]] || "name");
+    const subject = identity
+      ? t("fieldPath.sectionWithIdentity", { section: label, identity })
+      : label;
+    if (parts.length === 2) return subject;
+    const item = entry.items.find(
+      (item) => item.id === parts[2] || (item.kind !== "text" && item.key === parts[2]),
+    );
+    const key = item?.kind === "text" ? "description" : item && "key" in item ? item.key : parts[2];
+    const field =
+      (item && "label" in item && item.label) ||
+      spec?.fields.find((field) => field.key === key)?.label ||
+      (LIST_FIELD_LABELS[key] ? t(LIST_FIELD_LABELS[key]) : key);
+    return t("fieldPath.scalar", { section: subject, field });
+  }
   const segments = parseResumeFieldPath(path);
   if (segments.length === 0) return t("fieldPath.unspecified");
   const head = String(segments[0]);

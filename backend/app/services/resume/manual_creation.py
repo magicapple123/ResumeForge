@@ -28,10 +28,16 @@ from sqlalchemy.orm import Session
 from ...models.job import Job
 from ...models.resume import ResumeRecord
 from ...schemas.resume import ManualResumeRequest
+from ...schemas.resume_document import DocumentValidationError
 from ...services import trash
-from ...services.resume.document_identity import DocumentIdentityError, validate_document_ids
+from ...services.resume import document_io
+from ...services.resume.document_conversion_types import ConversionError
+from ...services.resume.document_view import header_text
 from ...services.resume.resume_record import build_manual_title
-from ...services.resume.resume_sections import default_section_order_config
+from ...services.resume.resume_sections import (
+    default_section_order_config,
+    persistable_format_config,
+)
 from ...services.resume.resume_template_format import validated_format_config
 from .generate_snapshot import (
     GenerationSnapshot,
@@ -62,24 +68,28 @@ def profile_snapshot_stale_response() -> JSONResponse:
     )
 
 
-def create_manual_resume_record(db: Session, payload: ManualResumeRequest) -> ResumeRecord:
-    """按旧流程创建手写简历（不提交）；带 profile_context 时同事务挂创建态快照。
+def create_manual_resume_record(
+    db: Session, payload: ManualResumeRequest
+) -> tuple[ResumeRecord, dict | None]:
+    """按旧流程创建手写简历（不提交）；返回记录与 v1→v2 转换摘要（None = 本来就是 v2）。
+
+    带 profile_context 时同事务挂创建态快照。
 
     调用方负责 db.commit()/db.refresh() 与响应组装——提交点保持原样，快照行与简历行
     因此天然同事务。
     """
     job = _resolve_job(db, payload.job_id)
-    content = _validated_content(payload)
     frozen = _freeze_creation_snapshot(db, payload)
     # P0-5：板块顺序在创建时物化（先资料顺序、再请求体显式覆盖）。与提取前逐行一致。
     format_config = {
         **(default_section_order_config(db) or {}),
         **validated_format_config(payload.format_config),
     }
+    content, conversion = _validated_content(db, payload, format_config=format_config)
     record = ResumeRecord(
-        title=build_manual_title(payload.content, job, payload.title),
+        title=build_manual_title(content, job, payload.title),
         job_id=job.id if job else None,
-        job_title=job.title if job else payload.content.job_intent,
+        job_title=job.title if job else header_text(content, "job_intent", header_text(content, "intent")),
         company=job.company if job else "",
         content=content,
         warnings=[],
@@ -88,7 +98,8 @@ def create_manual_resume_record(db: Session, payload: ManualResumeRequest) -> Re
         enhancement_enabled=False,
         enhancement_level="balanced",
         parse_error="",
-        format_config=format_config,
+        # T7：section_order 已在上面用于 v1→v2 转换（document.sections 落位），不再落库。
+        format_config=persistable_format_config(format_config),
         draft=payload.draft,
         language=payload.language,
     )
@@ -101,7 +112,7 @@ def create_manual_resume_record(db: Session, payload: ManualResumeRequest) -> Re
         # 先把历史引用解绑（快照行本身保留），再绑定本次简历。
         detach_snapshot_resume(db, record.id, keep_snapshot_id=snapshot.id)
         snapshot.resume_id = record.id
-    return record
+    return record, document_io.conversion_summary(conversion)
 
 
 def _resolve_job(db: Session, job_id: int | None) -> Job | None:
@@ -113,14 +124,23 @@ def _resolve_job(db: Session, job_id: int | None) -> Job | None:
     return job
 
 
-def _validated_content(payload: ManualResumeRequest) -> dict:
-    """与 api/resumes/_shared.py::_validated_content 同口径（W01 对象标识校验）。"""
-    data = payload.content.model_dump()
+def _validated_content(
+    db: Session, payload: ManualResumeRequest, *, format_config: dict | None = None
+) -> tuple[dict, document_io.ConversionReport | None]:
+    """与 api/resumes/_shared.py::_validated_content 同口径：转 v2 + 校验对象标识。
+
+    请求体接受 v1 与 v2；非法结构返回 422（不做静默修复）。返回值附带转换报告，
+    让创建响应能告诉用户"旧内容已升级为 v2"（只在真的转换过时非 None）。
+    """
     try:
-        validate_document_ids(data)
-    except DocumentIdentityError as exc:
+        return document_io.prepare_document_for_save_with_report(
+            payload.content,
+            language=payload.language,
+            format_config=format_config or payload.format_config,
+            custom_fields=document_io.custom_field_definitions(db),
+        )
+    except (ConversionError, DocumentValidationError) as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
-    return data
 
 
 def _freeze_creation_snapshot(

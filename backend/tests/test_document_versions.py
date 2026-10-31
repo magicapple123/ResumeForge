@@ -15,6 +15,14 @@ from app.database_migrations import application_tables
 from app.dataset_registry import dataset_database_file
 from app.models.resume_delivery import ResumeDeliveryRecord
 from app.services.datasets import create_dataset
+from tests.document_test_support import body_texts
+
+
+def _summary(content: dict) -> str:
+    """v2 content 的个人总结文本（summary 是 text 分区里的 TextItem）。"""
+    texts = body_texts(content, "summary")
+    assert texts, "v2 content 里没有 summary 文本"
+    return texts[0]
 
 
 def _content(summary: str = "版本 A", description: str = "A") -> dict:
@@ -68,7 +76,7 @@ def test_create_list_and_detail_versions(client):
     assert [item["id"] for item in listed["items"]] == [version["id"]]
 
     detail = client.get(f"/api/resumes/{resume_id}/versions/{version['id']}").json()
-    assert detail["content"]["summary"] == "版本 A"
+    assert _summary(detail["content"]) == "版本 A"
     assert detail["render_context"]["document_mode"] == "resume"
     assert detail["render_context"]["page_limit"] >= 1
 
@@ -81,10 +89,10 @@ def test_version_snapshot_is_immutable(client, db_session):
     _save_content(client, resume_id, _content("版本 B", "B"))
 
     detail = client.get(f"/api/resumes/{resume_id}/versions/{version['id']}").json()
-    assert detail["content"]["summary"] == "版本 A"
+    assert _summary(detail["content"]) == "版本 A"
     assert detail["content_sha256"] == original_hash
     # 后续编辑只改当前简历，不回写历史版本行。
-    assert _resume(client, resume_id)["content"]["summary"] == "版本 B"
+    assert _summary(_resume(client, resume_id)["content"]) == "版本 B"
 
 
 def test_freeze_flag_persists(client):
@@ -139,10 +147,10 @@ def test_restore_creates_new_current_version_and_keeps_history(client, db_sessio
     assert body["version"]["source"] == "restore"
     assert body["version"]["parent_version_id"] == version["id"]
     after = _resume(client, resume_id)
-    assert after["content"]["summary"] == "版本 A"
+    assert _summary(after["content"]) == "版本 A"
     # 历史版本与已冻结的交付记录都不变；版本列表多了一条 restore。
     original = client.get(f"/api/resumes/{resume_id}/versions/{version['id']}").json()
-    assert original["content"]["summary"] == "版本 A"
+    assert _summary(original["content"]) == "版本 A"
     versions = client.get(f"/api/resumes/{resume_id}/versions").json()["items"]
     assert len(versions) == 2
     assert db_session.query(ResumeDeliveryRecord).count() == delivery_before
@@ -161,7 +169,7 @@ def test_restore_revision_conflict_does_not_write(client):
 
     assert response.status_code == 409, response.text
     assert response.json()["code"] == "resume_revision_conflict"
-    assert _resume(client, resume_id)["content"]["summary"] == "版本 B"
+    assert _summary(_resume(client, resume_id)["content"]) == "版本 B"
     assert len(client.get(f"/api/resumes/{resume_id}/versions").json()["items"]) == 1
 
 
@@ -179,7 +187,7 @@ def test_variant_is_independent_from_current_resume(client):
 
     _save_content(client, resume_id, _content("版本 B", "B"))
     detail = client.get(f"/api/resumes/{resume_id}/variants/{variant['id']}").json()
-    assert detail["content"]["summary"] == "版本 A"
+    assert _summary(detail["content"]) == "版本 A"
     assert len(client.get(f"/api/resumes/{resume_id}/variants").json()["items"]) == 1
 
 
@@ -206,9 +214,9 @@ def test_selective_sync_only_changes_listed_paths(client):
     body = response.json()
     assert body["items"][0]["applied_paths"] == ["summary"]
     detail = client.get(f"/api/resumes/{resume_id}/variants/{variant['id']}").json()
-    assert detail["content"]["summary"] == "版本 B"
+    assert _summary(detail["content"]) == "版本 B"
     # 没列出的路径保留岗位定制（还是 v1 的内容）。
-    assert detail["content"]["experience"][0]["description"] == ["A"]
+    assert body_texts(detail["content"], "experience") == ["A"]
     assert detail["last_synced_version_id"] == second["id"]
 
 
@@ -282,7 +290,7 @@ def test_variant_layout_is_independent_from_current_resume(client, db_session):
     assert detail["layout"] is None
     baseline = _export_input(client, resume_id, variant["id"])
     assert baseline["layout_source"] == "snapshot"
-    assert baseline["content"]["summary"] == "版本 A"
+    assert _summary(baseline["content"]) == "版本 A"
 
     # PATCH 独立排版：只改变体，不动当前简历。
     layout = {"template": "classic", "format_config": {"font_size": 11}, "page_limit": 2}
@@ -303,7 +311,7 @@ def test_variant_layout_is_independent_from_current_resume(client, db_session):
     db_session.commit()
     snapshot = _export_input(client, resume_id, variant["id"])
     assert snapshot["layout_source"] == "variant"
-    assert snapshot["content"]["summary"] == "版本 A"
+    assert _summary(snapshot["content"]) == "版本 A"
     assert snapshot["layout"]["page_limit"] == 2
     assert snapshot["layout"]["format_config"] == {"font_size": 11}
     assert len(snapshot["content_sha256"]) == 64

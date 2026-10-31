@@ -16,9 +16,14 @@ export interface PhotoDimensions {
 /** 解码 data URL 得到原图像素尺寸；失败（损坏 / 非图片）返回 `null`。 */
 export function usePhotoDimensions(dataUrl: string | null | undefined): PhotoDimensions | null {
   const [size, setSize] = useState<PhotoDimensions | null>(null);
+  // 换图先清尺寸：渲染期对齐（不在 effect 里同步 setState，旧尺寸也不会挂在新图上）。
+  const [activeDataUrl, setActiveDataUrl] = useState<string | null>(dataUrl ?? null);
+  if ((dataUrl ?? null) !== activeDataUrl) {
+    setActiveDataUrl(dataUrl ?? null);
+    setSize(null);
+  }
 
   useEffect(() => {
-    setSize(null);
     if (!dataUrl) return undefined;
     let cancelled = false;
     const image = new Image();

@@ -18,7 +18,7 @@
  * 两侧只渲染外观，界面显示"示例内容不测页数"。
  */
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { ResumeContent, ResumeLayout, ResumeTemplateCatalog } from "../../types";
+import type { ResumeDocument, ResumeLayout, ResumeTemplateCatalog } from "../../types";
 import { contentSignature } from "../../utils/contentSignature";
 import { templateChoices } from "./templateProfile";
 import { fetchTrialPreview, measureTrial } from "./trialRequests";
@@ -45,7 +45,7 @@ export interface UseTemplateTrialArgs {
   layout: ResumeLayout;
   catalog?: ResumeTemplateCatalog;
   resumeId?: number | null;
-  content?: ResumeContent | null;
+  content?: ResumeDocument | null;
   /** 从图库某张卡片点"试用"进来时指定右侧模板。 */
   initialTemplate?: string | null;
 }

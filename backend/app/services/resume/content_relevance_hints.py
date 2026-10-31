@@ -14,20 +14,18 @@
 
 from __future__ import annotations
 
-from typing import Any
-
 from sqlalchemy.orm import Session
 
 from ...models.job import Job
 from ...models.resume import ResumeRecord
 from ...schemas.job import JobOut
-from ...schemas.resume import ResumeContent
 from ...schemas.resume_analysis import ContentHint
 from .. import trash
 from ..profile.profile_relevance import _score_item, build_job_focus
 from ..profile.profile_service import project_legacy_profile
+from . import document_io
 from .document_identity import ENTRY_FIELDS, POINT_FIELDS, is_object_id
-from .resume_visibility import is_hidden_entry
+from .document_view import entry_texts, iter_entries
 
 # 一次最多给几条：候选清单是"建议看看"，不是"必须处理"；一条墙纸只会被无视。
 MAX_CONTENT_HINTS = 10
@@ -89,11 +87,6 @@ def _hint(
     )
 
 
-def _entry_point_ids(entry: Any) -> dict[str, list[str]]:
-    point_ids = getattr(entry, "point_ids", None)
-    return point_ids if isinstance(point_ids, dict) else {}
-
-
 def build_content_hints(db: Session, record: ResumeRecord) -> list[ContentHint]:
     """当前简历的"低相关要点"提示（最多 MAX_CONTENT_HINTS 条）。
 
@@ -117,55 +110,59 @@ def build_content_hints(db: Session, record: ResumeRecord) -> list[ContentHint]:
         # 岗位文本里提取不到任何信号：这时"低相关"没有依据，不猜。
         return []
 
-    content = ResumeContent.model_validate(record.content or {})
+    content, _conversion = document_io.document_for_record(db, record)
     hints: list[ContentHint] = []
-    for section in ENTRY_FIELDS:
-        for entry in getattr(content, section, None) or []:
-            if is_hidden_entry(entry):
+    for section, entry in iter_entries(content):
+        if section not in ENTRY_FIELDS or entry.get("hidden"):
+            continue
+        object_id = entry.get("id")
+        if not is_object_id(object_id):
+            continue
+        emitted_for_entry = False
+        point_fields = POINT_FIELDS.get(section, ())
+        for item in entry.get("items") or []:
+            if item.get("hidden") or item.get("placement") == "hidden":
                 continue
-            object_id = getattr(entry, "id", None)
-            if not is_object_id(object_id):
-                continue
-            point_ids = _entry_point_ids(entry)
-            point_fields = POINT_FIELDS.get(section, ())
-            emitted_for_entry = False
-            for point_field in point_fields:
-                values = getattr(entry, point_field, None) or []
-                ids = point_ids.get(point_field) or []
-                for index, text in enumerate(values):
-                    if not isinstance(text, str) or len(text.strip()) < _MIN_POINT_CHARS:
-                        continue
-                    if _score_item({point_field: text}, _profile_section(section), focus) > 0:
-                        continue
-                    point_id = ids[index] if index < len(ids) else None
-                    hints.append(
-                        _hint(
-                            section=section,
-                            object_id=object_id,
-                            point_field=point_field,
-                            point_id=point_id if is_object_id(point_id) else None,
-                            text=text,
-                            focus=focus,
-                        )
-                    )
-                    emitted_for_entry = True
-                    if len(hints) >= MAX_CONTENT_HINTS:
-                        return hints
-            if emitted_for_entry or section not in _ENTRY_LEVEL_SECTIONS:
-                continue
-            entry_text = " ".join(
-                value
-                for value in (
-                    getattr(entry, "name", ""),
-                    getattr(entry, "level", ""),
-                    getattr(entry, "description", ""),
+            kind = item.get("kind")
+            if kind == "text":
+                field = (
+                    "description" if "description" in point_fields else next(iter(point_fields), "")
                 )
-                if isinstance(value, str) and value.strip()
-            )
-            if len(entry_text.strip()) < _MIN_POINT_CHARS:
+                values = [item.get("text") or ""]
+            elif kind == "list" and item.get("key") in point_fields:
+                field = item["key"]
+                hidden = set(item.get("hidden_values") or [])
+                values = [v for v in item.get("values") or [] if v not in hidden]
+            elif kind == "field" and item.get("key") in point_fields:
+                field, values = item["key"], [item.get("value") or ""]
+            else:
                 continue
-            if _score_item({section: entry_text}, _profile_section(section), focus) > 0:
-                continue
+            for text in values:
+                if (
+                    len(text.strip()) < _MIN_POINT_CHARS
+                    or _score_item({field: text}, _profile_section(section), focus) > 0
+                ):
+                    continue
+                hints.append(
+                    _hint(
+                        section=section,
+                        object_id=object_id,
+                        point_field=field,
+                        point_id=item.get("id"),
+                        text=text,
+                        focus=focus,
+                    )
+                )
+                emitted_for_entry = True
+                if len(hints) >= MAX_CONTENT_HINTS:
+                    return hints
+        if emitted_for_entry or section not in _ENTRY_LEVEL_SECTIONS:
+            continue
+        entry_text = " ".join(entry_texts(entry))
+        if (
+            len(entry_text.strip()) >= _MIN_POINT_CHARS
+            and _score_item({section: entry_text}, _profile_section(section), focus) == 0
+        ):
             hints.append(
                 _hint(
                     section=section,

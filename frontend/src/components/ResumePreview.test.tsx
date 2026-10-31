@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // @ts-expect-error Node 内置模块：@types/node 未安装，但 vitest 运行在 Node 里。
 import { readFileSync } from "node:fs";
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { t } from "../i18n";
 import ResumePreview from "./ResumePreview";
@@ -43,6 +43,20 @@ function getPreviewFrame(): HTMLIFrameElement {
 }
 
 describe("ResumePreview", () => {
+  it("预览 iframe 不执行排页探针脚本（Q22）：srcdoc 里没有 script", () => {
+    render(
+      <ResumePreview
+        html={"<!doctype html><html><body><p>hi</p><script>void 0;</script></body></html>"}
+        warnings={[]}
+      />,
+    );
+    const iframe = getPreviewFrame();
+    const srcdoc = iframe.getAttribute("srcdoc") ?? "";
+    expect(srcdoc).not.toContain("<script");
+    // 正文照常进 iframe —— 去的只是脚本，不是整块 HTML。
+    expect(srcdoc).toContain("<p>hi</p>");
+  });
+
   it("预览只读：不给纸面字段注入任何点击 / 键盘语义", () => {
     render(<ResumePreview html="<!doctype html><html><body></body></html>" warnings={[]} />);
     const iframe = getPreviewFrame();
@@ -165,109 +179,6 @@ describe("ResumePreview 两行工具栏与缩放下移（P2b）", () => {
     // 两行的理由（P2 风险表最后一条）：结构类与度量类性质不同，挤一行会互相抢位置。
     // 曾经还有一枚「正指向」chip 住在第二行；它随编辑模式一起退场（2026-10-21）。
     expect(container.querySelector(".resume-preview-hover-chip")).toBeNull();
-  });
-});
-
-describe("ResumePreview 预览口径切换（精确 / 草稿）", () => {
-  /** 精确面板会创建 objectURL；jsdom 没有这份实现，用例里换成可数的桩。 */
-  function stubObjectUrls() {
-    Object.defineProperty(URL, "createObjectURL", {
-      configurable: true,
-      value: () => "blob:exact",
-    });
-    Object.defineProperty(URL, "revokeObjectURL", { configurable: true, value: () => {} });
-  }
-
-  const exactPreview = {
-    resumeId: 7,
-    template: "classic",
-    formatName: "",
-    fontScale: "standard",
-    // 语言是 `ExactPreviewOptions` 的必填项（它决定纸面文案），这里与真实宿主一样显式给出。
-    language: "zh-CN",
-    formatConfig: {},
-    contentSignature: "c1",
-  };
-
-  function renderWithExact() {
-    return render(
-      <ResumePreview
-        html="<!doctype html><html><body></body></html>"
-        warnings={[]}
-        pages={1}
-        exactPreview={exactPreview}
-      />,
-    );
-  }
-
-  it("切回精确模式**不重排**：同一组参数只问服务端要一次", async () => {
-    stubObjectUrls();
-    fetchPreviewPdf.mockResolvedValueOnce({
-      blob: new Blob(["%PDF-1.3"], { type: "application/pdf" }),
-      pages: 1,
-      pagesNeeded: 1,
-      pageLimit: 1,
-      overflow: false,
-    });
-
-    renderWithExact();
-    act(() => {
-      screen.getByRole("radio", { name: /精确/ }).click();
-    });
-    // 去抖 150ms + 一次请求：等它把 PDF 拿到、挂上 iframe。
-    expect(await screen.findByTitle("简历精确预览（导出 PDF）")).toBeTruthy();
-    expect(fetchPreviewPdf).toHaveBeenCalledTimes(1);
-
-    // 草稿 → 精确：面板是**常驻**的（只是藏起来），所以这里既不该发请求，
-    // 也不该把已经排好的那份丢掉——用户看到的还是同一份 PDF。
-    act(() => {
-      screen.getByRole("radio", { name: /草稿/ }).click();
-    });
-    // 草稿模式下纸面回来了（精确面板只是隐藏，不是卸载）。
-    expect(screen.getByTitle("简历预览")).toBeTruthy();
-    expect(screen.getByTitle("简历精确预览（导出 PDF）").closest("[hidden]")).not.toBeNull();
-
-    act(() => {
-      screen.getByRole("radio", { name: /精确/ }).click();
-    });
-    await waitFor(() =>
-      expect(screen.getByTitle("简历精确预览（导出 PDF）").closest("[hidden]")).toBeNull(),
-    );
-    expect(fetchPreviewPdf).toHaveBeenCalledTimes(1);
-  });
-
-  it("精确模式下草稿画布**不卸载**：版面诊断的测量来源必须还活着", () => {
-    stubObjectUrls();
-    measureState.value = { usedHeight: 1000, pageContentHeight: 1000, pageLimit: 1 };
-    const onMeasure = vi.fn();
-    const { container } = render(
-      <ResumePreview
-        html="<!doctype html><html><body></body></html>"
-        warnings={[]}
-        pages={1}
-        exactPreview={exactPreview}
-        onMeasure={onMeasure}
-      />,
-    );
-    fireEvent.load(getPreviewFrame());
-    expect(onMeasure).toHaveBeenCalled();
-
-    act(() => {
-      screen.getByRole("radio", { name: /精确/ }).click();
-    });
-    onMeasure.mockClear();
-
-    // 画布仍在：精确模式里它只是被裁成 0 高（`display: none` 会让 iframe 根本不排版，
-    // 量出来全是 0，所以不能用 `hidden` 属性）。卸载它等于掐掉唯一的测量来源——
-    // 表现就是"在精确模式里改参数，版面诊断整块不动"（2026-10-21 用户实测）。
-    const viewport = container.querySelector(".resume-preview-viewport");
-    const shell = viewport?.closest('[aria-hidden="true"]') as HTMLElement | null;
-    expect(shell).not.toBeNull();
-    expect(shell!.style.height).toBe("0px");
-
-    // 而且真的还能量：再触发一次 load，测量结果照旧上报。
-    fireEvent.load(screen.getAllByTitle(/^简历预览/)[0] as HTMLIFrameElement);
-    expect(onMeasure).toHaveBeenCalled();
   });
 });
 

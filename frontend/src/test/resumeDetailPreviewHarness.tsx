@@ -17,6 +17,7 @@ import { MemoryRouter } from "react-router-dom";
 import { vi } from "vitest";
 import type { ResumeDetail, ResumeLayout } from "../types";
 import ResumeDetailPreview from "../components/resume/ResumeDetailPreview";
+import { makeResumeDocument } from "./documentHarness";
 
 /**
  * 「从我的资料填入」的候选来自 `/profile`：这条入口是**按需**取的（打开编辑器/制作台才
@@ -61,25 +62,7 @@ export const DETAIL: ResumeDetail = {
   page_limit: 1,
   font_scale: "standard",
   created_at: "2026-09-20T08:00:00",
-  content: {
-    photo: "",
-    name: "张三",
-    gender: "",
-    birth_year: "",
-    phone: "",
-    email: "",
-    city: "",
-    personal_website: "",
-    github: "",
-    job_intent: "后端开发",
-    summary: "",
-    education: [],
-    experience: [],
-    campus_experience: [],
-    projects: [],
-    skills: [],
-    awards: [],
-  },
+  content: makeResumeDocument(),
   warnings: [],
   parse_error: "",
   rationale: "",
@@ -129,6 +112,7 @@ export function detailWith(overrides: Partial<ResumeDetail>): ResumeDetail {
   return {
     ...DETAIL,
     ...overrides,
+    // v2 文档按顶层字段合并（调用方只覆盖需要断言的那一块，例如 sections）。
     content: { ...DETAIL.content, ...overrides.content },
   };
 }

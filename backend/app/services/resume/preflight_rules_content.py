@@ -16,14 +16,22 @@ from __future__ import annotations
 
 import re
 from typing import Any
-from urllib.parse import urlsplit
 
 from ...models.claim import ClaimRecord
 from ...schemas.preflight import CheckFix, CheckIssue, CheckLocator, PreflightSeverity
 from ...schemas.resume import ResumeContent
 from ..ats_check import check_ats
 from .document_identity import ENTRY_FIELDS
-from .resume_completeness import find_incomplete
+from .document_view import header_items, text_slots
+from .preflight_links import (  # noqa: F401 - preserve established private test imports
+    _DANGEROUS_SCHEME_RE,
+    _LINK_TITLE_KEY,
+    _LINK_TOKEN_RE,
+    _MAX_LINK_ISSUES,
+    _invalid_link_reason,
+    link_issues,
+)
+from .resume_completeness import find_incomplete, find_incomplete_document
 from .resume_risk_rules import scan_local
 from .resume_visibility import is_hidden_entry
 
@@ -54,9 +62,11 @@ def _section_for(message: str) -> str | None:
     return None
 
 
-def _incomplete_issues(content: ResumeContent) -> list[CheckIssue]:
+def _incomplete_issues(content: ResumeContent | dict) -> list[CheckIssue]:
     issues: list[CheckIssue] = []
-    for message in find_incomplete(content):
+    for message in (
+        find_incomplete_document(content) if isinstance(content, dict) else find_incomplete(content)
+    ):
         section = _section_for(message)
         issues.append(
             CheckIssue(
@@ -92,7 +102,7 @@ _ATS_TITLE_KEY = {
 }
 
 
-def _ats_issues(content: ResumeContent, jd_text: str) -> list[CheckIssue]:
+def _ats_issues(content: ResumeContent | dict, jd_text: str) -> list[CheckIssue]:
     if not jd_text.strip():
         return []
     report = check_ats(content, jd_text)
@@ -125,7 +135,7 @@ _RISK_SEVERITY: dict[str, PreflightSeverity] = {
 }
 
 
-def _risk_issues(content: ResumeContent, claims: list[ClaimRecord]) -> list[CheckIssue]:
+def _risk_issues(content: ResumeContent | dict, claims: list[ClaimRecord]) -> list[CheckIssue]:
     points = scan_local(content, claims)
     issues: list[CheckIssue] = []
     for point in points[:30]:
@@ -149,7 +159,7 @@ def _risk_issues(content: ResumeContent, claims: list[ClaimRecord]) -> list[Chec
 
 
 def content_issues(
-    content: ResumeContent,
+    content: ResumeContent | dict,
     *,
     jd_text: str = "",
     claims: list[ClaimRecord] | None = None,
@@ -164,13 +174,19 @@ def content_issues(
     """
     # 隐藏条目（W06）不进入检查：它们不会出现在任何正式产物里，为它们报待补/风险
     # 等于让用户为一个明确隐藏掉的段子白改一次。
-    visible = content.model_copy(
-        update={
-            field: [
-                item for item in (getattr(content, field, None) or []) if not is_hidden_entry(item)
-            ]
-            for field in ENTRY_FIELDS
-        }
+    visible = (
+        content
+        if isinstance(content, dict)
+        else content.model_copy(
+            update={
+                field: [
+                    item
+                    for item in (getattr(content, field, None) or [])
+                    if not is_hidden_entry(item)
+                ]
+                for field in ENTRY_FIELDS
+            }
+        )
     )
     issues = _incomplete_issues(visible)
     issues.extend(_ats_issues(visible, jd_text))
@@ -197,68 +213,8 @@ def content_issues(
 # - 只扫**带协议或 www. 开头的 token**，不把正文里普通英文域名当链接（如 Node.js），
 #   宁可少报也不误报——blocker 误报会挡用户导出。
 
-_ALLOWED_LINK_SCHEMES = frozenset({"http", "https", "mailto"})
-_LINK_TOKEN_RE = re.compile(
-    r"(?i)(?:[a-z][a-z0-9+.\-]*://[^\s<>\"'，。；、）】]+|mailto:[^\s<>\"'，。；、）】]+"
-    r"|www\.[^\s<>\"'，。；、）】]+)"
-)
-_BARE_DOMAIN_RE = re.compile(r"(?i)^(?:[a-z0-9\-]+\.)+[a-z]{2,}(?:[/:?#].*)?$")
 # 没有 // 的危险协议（javascript:/data:/file:/vbscript:/ftp:）：正文里也要能识别。
 # 只列这几个已知前缀，避免把英文句子的 "Note:" 误判成协议。
-_DANGEROUS_SCHEME_RE = re.compile(
-    r"(?i)\b(?:javascript|data|file|vbscript|ftp):[^\s<>\"'，。；、）】]+"
-)
-_SCHEME_WORD_RE = re.compile(r"(?i)^[a-z][a-z0-9+\-]*$")
-_MAX_LINK_ISSUES = 20
-
-
-def _invalid_link_reason(value: str) -> tuple[str, str] | None:
-    """返回 (问题代码, 人类可读原因)；链接合法返回 None。
-
-    代码只有两个稳定值（前端按 code 做标题映射）：
-    - link_scheme_unsupported：有协议但不在白名单；
-    - link_invalid：格式非法（缺协议头 / 无有效域名 / mailto 缺地址 / 含空白）。
-    """
-    text = value.strip()
-    if not text:
-        return None
-    if any(ch.isspace() for ch in text):
-        return "link_invalid", "链接里包含空白字符，复制或点击时会断开"
-    scheme = ""
-    if "://" in text:
-        scheme = text.split("://", 1)[0].strip().lower()
-    elif text.lower().startswith("mailto:"):
-        scheme = "mailto"
-    if scheme:
-        if scheme not in _ALLOWED_LINK_SCHEMES:
-            return "link_scheme_unsupported", f"协议 {scheme}: 不在 http/https/mailto 白名单"
-        if scheme == "mailto":
-            address = text.split(":", 1)[1].strip()
-            local, _, domain = address.rpartition("@")
-            if not local or "." not in domain:
-                return "link_invalid", "mailto 链接缺少有效的邮箱地址"
-            return None
-        parsed = urlsplit(text)
-        host = (parsed.hostname or "").strip()
-        if not host or "." not in host:
-            return "link_invalid", "链接缺少有效域名（例如 https://example.com/me）"
-        return None
-    # 没有 // 的协议写法（javascript:alert(1) / ftp:example.com）：协议名必须是
-    # 单个英文单词，避免把 "github.com:8080" 这种主机名误判成协议。
-    if ":" in text:
-        head = text.split(":", 1)[0].strip().lower()
-        if _SCHEME_WORD_RE.match(head) and head not in _ALLOWED_LINK_SCHEMES:
-            return "link_scheme_unsupported", f"协议 {head}: 不在 http/https/mailto 白名单"
-    # 没有协议头：www. 或裸域名都是"格式非法但可修"，明确告诉用户补什么。
-    if text.lower().startswith("www.") or _BARE_DOMAIN_RE.match(text):
-        return "link_invalid", "链接缺少 http:// 或 https:// 协议头"
-    return "link_invalid", "不是可识别的网址格式"
-
-
-_LINK_TITLE_KEY = {
-    "link_invalid": "preflight.issue.link_invalid",
-    "link_scheme_unsupported": "preflight.issue.link_scheme_unsupported",
-}
 
 
 def _entry_text_slots(
@@ -299,62 +255,46 @@ def _entry_text_slots(
     return slots
 
 
-def _link_issues(content: ResumeContent) -> list[CheckIssue]:
-    """关键链接失效（blocker）：专属字段 + 条目文本里的链接 token。"""
-    issues: list[CheckIssue] = []
-
-    # 1) 专属链接字段：整值是链接，直接按完整值校验。
-    for field in ("personal_website", "github"):
-        value = str(getattr(content, field, "") or "")
-        reason = _invalid_link_reason(value)
-        if reason is None:
-            continue
-        code, detail = reason
-        issues.append(
-            CheckIssue(
-                id="",
-                layer="content",
-                severity="blocker",
-                code=code,
-                title_key=_LINK_TITLE_KEY[code],
-                detail=f"{field} 字段：{detail}",
-                impact="招聘方点不开或复制后打不开，作品与主页信息等于丢失",
-                locator=CheckLocator(scope="field", field=field),
-                fix=CheckFix(
-                    action="focus_field",
-                    payload={"field": field},
-                    label_key="preflight.fix.focus_field",
-                ),
+def _link_issues(content: ResumeContent | dict) -> list[CheckIssue]:
+    dedicated: list[tuple[str, str, CheckLocator]] = []
+    prose: list[tuple[str, str, CheckLocator]] = []
+    if isinstance(content, dict):
+        for slot in text_slots(content):
+            locator = CheckLocator(
+                scope="field" if slot.section == "header" else "point",
+                section=slot.section,
+                object_id=slot.object_id,
+                point_id=slot.point_id,
+                field=slot.field,
+                path=slot.path,
             )
-        )
-        if len(issues) >= _MAX_LINK_ISSUES:
-            return issues
-
-    # 2) 条目正文里的链接 token（项目链接常写在描述里）。
-    for section in ENTRY_FIELDS:
-        for index, raw_entry in enumerate(getattr(content, section, None) or []):
-            if is_hidden_entry(raw_entry):
-                continue
-            entry = raw_entry.model_dump() if hasattr(raw_entry, "model_dump") else raw_entry
-            object_id = entry.get("id") if isinstance(entry, dict) else None
-            for field, value, path, point_id in _entry_text_slots(entry, section, index):
-                tokens = _LINK_TOKEN_RE.findall(value)
-                tokens.extend(_DANGEROUS_SCHEME_RE.findall(value))
-                for token in dict.fromkeys(tokens):
-                    reason = _invalid_link_reason(token)
-                    if reason is None:
-                        continue
-                    code, detail = reason
-                    issues.append(
-                        CheckIssue(
-                            id="",
-                            layer="content",
-                            severity="blocker",
-                            code=code,
-                            title_key=_LINK_TITLE_KEY[code],
-                            detail=f"正文里的链接 {token[:120]}：{detail}",
-                            impact="招聘方点不开或复制后打不开，作品与主页信息等于丢失",
-                            locator=CheckLocator(
+            is_url = (
+                slot.format == "url"
+                or slot.section == "header"
+                and slot.field in {"personal_website", "github"}
+            )
+            (dedicated if is_url else prose).append((slot.field, slot.value, locator))
+    else:
+        for field in ("personal_website", "github"):
+            dedicated.append(
+                (
+                    field,
+                    str(getattr(content, field, "") or ""),
+                    CheckLocator(scope="field", field=field),
+                )
+            )
+        for section in ENTRY_FIELDS:
+            for index, raw_entry in enumerate(getattr(content, section, None) or []):
+                if is_hidden_entry(raw_entry):
+                    continue
+                entry = raw_entry.model_dump() if hasattr(raw_entry, "model_dump") else raw_entry
+                object_id = entry.get("id") if isinstance(entry, dict) else None
+                for field, value, path, point_id in _entry_text_slots(entry, section, index):
+                    prose.append(
+                        (
+                            field,
+                            value,
+                            CheckLocator(
                                 scope="point" if point_id else "object",
                                 section=section,
                                 object_id=object_id,
@@ -362,16 +302,9 @@ def _link_issues(content: ResumeContent) -> list[CheckIssue]:
                                 field=field,
                                 path=path,
                             ),
-                            fix=CheckFix(
-                                action="focus_field",
-                                payload={"section": section, "path": path},
-                                label_key="preflight.fix.focus_field",
-                            ),
                         )
                     )
-                    if len(issues) >= _MAX_LINK_ISSUES:
-                        return issues
-    return issues
+    return link_issues(dedicated, prose)
 
 
 # ===== R03 ②：联系方式脱敏状态（verify，只提示不阻断） =====
@@ -385,8 +318,14 @@ _EMAIL_RE = re.compile(r"[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}")
 _MAX_CONTACT_EVIDENCE = 5
 
 
-def _iter_visible_text(content: ResumeContent) -> list[tuple[str, str]]:
+def _iter_visible_text(content: ResumeContent | dict) -> list[tuple[str, str]]:
     """可见正文里的 (位置, 文本)：用于联系方式的"正文里有没有"判断。"""
+    if isinstance(content, dict):
+        return [
+            (slot.path, slot.value)
+            for slot in text_slots(content)
+            if slot.section != "header" or slot.field not in {"phone", "email"}
+        ]
     slots: list[tuple[str, str]] = [
         ("summary", content.summary or ""),
         ("job_intent", content.job_intent or ""),
@@ -401,12 +340,23 @@ def _iter_visible_text(content: ResumeContent) -> list[tuple[str, str]]:
     return slots
 
 
-def _contact_evidence(content: ResumeContent) -> list[str]:
+def _contact_evidence(content: ResumeContent | dict) -> list[str]:
     """能找到联系方式的证据位置（最多 5 条）：先看专属字段，再看正文正则。"""
     evidence: list[str] = []
-    if (content.phone or "").strip():
+    fields = (
+        {
+            item.get("key"): item.get("value")
+            for item in header_items(content)
+            if item.get("placement") not in {"hidden", "photo"}
+        }
+        if isinstance(content, dict)
+        else {}
+    )
+    phone = fields.get("phone", "") if isinstance(content, dict) else content.phone
+    email = fields.get("email", "") if isinstance(content, dict) else content.email
+    if (phone or "").strip():
         evidence.append("phone")
-    if (content.email or "").strip():
+    if (email or "").strip():
         evidence.append("email")
     for location, text in _iter_visible_text(content):
         if len(evidence) >= _MAX_CONTACT_EVIDENCE:
@@ -418,7 +368,7 @@ def _contact_evidence(content: ResumeContent) -> list[str]:
     return evidence[:_MAX_CONTACT_EVIDENCE]
 
 
-def _contact_masking_issue(content: ResumeContent, *, redact: bool) -> list[CheckIssue]:
+def _contact_masking_issue(content: ResumeContent | dict, *, redact: bool) -> list[CheckIssue]:
     """purpose=export 且未开启脱敏时，提示核对联系方式。**不阻断导出**（verify）。"""
     if redact:
         return []

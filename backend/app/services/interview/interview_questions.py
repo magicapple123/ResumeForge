@@ -27,6 +27,7 @@ from ...schemas.interview import (
 from ...schemas.resume import ResumeContent, ResumeSuggestion
 from ..llm.base import BaseLLMProvider, LLMError
 from ..llm.structured_output import parse_json_object
+from ..resume.document_view import document_text
 from ..resume.resume_suggestions import (
     MAX_SUGGESTIONS,
     parse_suggestions,
@@ -307,13 +308,13 @@ async def analyze_question(    provider: BaseLLMProvider,
 async def optimize_resume(
     provider: BaseLLMProvider,
     *,
-    resume: ResumeContent,
+    resume: ResumeContent | dict,
     job_text: str,
     weaknesses: list[str],
     follow_ups: list[str],
 ) -> list[ResumeSuggestion]:
     """把面试暴露的短板与高频追问反向转成简历改写建议（**只产出建议，不改正文**）。"""
-    resume_json = serialize_resume_prompt_data(resume)
+    resume_json = document_text(resume)[:12_000] if isinstance(resume, dict) else serialize_resume_prompt_data(resume)
     prompt = (
         _load_prompt("interview_optimize_resume.md")
         .replace("{{ job_text }}", (job_text or "（未关联岗位）").strip())

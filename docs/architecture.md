@@ -52,12 +52,12 @@ backend/app/
 ├── database_compat.py  # 早期未版本化 SQLite 的兼容字段定义
 ├── database_migrations.py # Alembic 编排与 SQLite 升级前备份
 ├── models/            # ORM 模型（profile/profile_definition/profile_entry/profile_group/profile_usage_snapshot/job/resume/setting/assistant/apply/claim/tracker/drill/referral/reminder/interview_experience/share_package/official）
-├── schemas/           # Pydantic 数据结构（前后端契约）
+├── schemas/           # Pydantic 数据结构（前后端契约；resume_document.py 是 v2 简历文档模型）
 ├── api/               # 路由层：校验参数、编排服务、组装响应
 ├── middleware/        # 请求关联 ID 与请求体大小限制
 ├── services/          # 业务层：核心逻辑，与框架解耦
-│   ├── resume/         # 简历域：生成/落地/一致性/版式/模板/写作增强/风险/建议/分享
-│   ├── profile/        # 资料域：13 板块定义/条目/方案/消费快照/纸面投影/升级检测 + 读写/相关性/上下文/预算/照片/引用/匹配
+│   ├── resume/         # 简历域：生成/落地/一致性/版式/模板/写作增强/风险/建议/分享；文档模型 v2（catalog/converter/planner）
+│   ├── profile/        # 资料域：13 板块定义/条目/方案/消费快照/纸面投影（→ v2 items）/升级检测 + 读写/相关性/上下文/预算/照片/引用/匹配
 │   ├── job/            # 岗位域：服务/匹配/多源解析/需求解读
 │   ├── jd/             # JD 规则：常量/匹配/过滤/要求提取
 │   ├── assistant/      # 助手域：服务/技能/来源/联网搜索
@@ -77,7 +77,7 @@ backend/app/
 │   ├── profile_text_parser.py # 个人资料解析兼容门面
 │   ├── job_text_parser.py     # 粘贴招聘文本解析兼容门面
 │   ├── jd_parser.py           # JD 规则解析兼容门面（技能标签/学历/年限）
-│   ├── pdf_exporter/ docx_exporter.py / txt_exporter.py # 服务端多格式导出（复用同一版式口径）
+│   ├── pdf_exporter/ docx_document_render.py / docx_exporter.py / txt_exporter.py # 服务端多格式导出（消费同一份 DocumentPlan）
 │   ├── exporter.py / export_pipeline.py / watermark.py / privacy.py # 导出管线（渲染→水印→脱敏）
 │   ├── data_backup/ datasets.py # 备份包导出、校验、恢复与多数据集切换
 │   ├── analytics.py / tracker.py / tracker_extract.py # 求职统计与进度
@@ -92,7 +92,7 @@ backend/app/
 │   ├── conversation_export.py / drill.py / trash.py # 会话导出 / 面试深挖 / 回收站
 │   └── settings_service.py / api_key_crypto.py # 运行时配置 / API Key 静态加密
 ├── prompts/           # 提示词模板（独立于代码，方便调参）
-├── templates/         # 简历 HTML 模板（Jinja2）
+├── templates/         # 简历 HTML 模板（Jinja2；通用外壳 _resume_document.j2 + 9 套主题 CSS）
 └── data/              # 技能词典
 ```
 
@@ -111,7 +111,7 @@ backend/app/
 - 两个批量接口都会先去重并校验全部岗位 ID；只要有 ID 不存在就不执行任何修改，全部有效时才在单一事务中提交，提交异常会回滚。
 - 个人照片以通过格式、文件签名和体积校验的 data URL 保存在本地资料中。照片不会发送给大模型，而是在模型输出解析完成后注入结构化简历，供 HTML 预览、浏览器打印及导出使用。
 - 每份 `ResumeRecord` 保存可空 `job_id`、岗位快照和来源 `source`。一个岗位可以关联多份 AI 生成或用户编写的简历；简历中心可按岗位筛选并展示来源，岗位详情和简历详情支持双向跳转。岗位删除后保留历史简历，但无法再生成新的岗位化建议。
-- 用户编写简历时，编辑器右侧只读展示目标岗位职责、要求、技能和其他信息；该参考面板不参与保存。预览模板为可编辑字段输出 `data-resume-path`，前端在“编辑”模式下把纸面点击或键盘操作映射到统一结构化编辑器中的相应字段，保存后重新渲染 HTML。
+- 用户编写简历时，编辑器右侧只读展示目标岗位职责、要求、技能和其他信息；该参考面板不参与保存。预览由 planner 生成的每段文本带 `data-resume-path`（`{section_key}.{entry_id}.{item_id}`，页眉为 `header.{item_id}`），前端在「编辑」模式下把纸面点击或键盘操作映射到三区卡编辑器里对应的 item，保存后重新渲染 HTML。
 - 教育、实习/工作、校园和项目条目各可保存一份 UTF-8 Markdown/TXT 参考文件。浏览器只保存文件名与正文，不保存本机路径；生成器只把与目标 JD 相关的正文片段放入候选上下文。
 
 个人资料粘贴解析采用 `profile_text_parser.py` 兼容门面，具体规则按常量、规范化、分区识别、基本字段、条目头部、技能字段和结果边界拆分到 `services/profile_parser/`。岗位文本规则同样由 `job_text_parser.py` 门面和 `services/job_parser/` 组成。两个粘贴接口会先运行本地规则，再在已配置模型时调用 `text_extraction.py` 的结构化 Prompt 纠正字段分类；模型失败、超时或输出非法 JSON 时自动返回本地草稿，并通过 `recognition_source` 和 warnings 告知前端。门面继续导出原有符号，因此 API 层和外部调用方无需改变导入路径；内部模块不反向依赖门面。
@@ -213,7 +213,7 @@ flowchart LR
 | 链路 | 过滤位置 | 行为 |
 | --- | --- | --- |
 | ① 按岗位 / 通用生成 | 资料 → 候选字典最前端 | 未参与分区整键不出现，不占名额与预算；诊断不误报 |
-| ② 新建简历 / 从资料填充 | 资料 → `ResumeContent` 映射入口 | 候选只含参与分区；语言能力映射为 skills 尾部条目 |
+| ② 新建简历 / 从资料填充 | 资料 → v2 文档投影入口 | 候选只含参与分区；字段按目录默认位置落 item（lead / trail / body） |
 | ③ 网申填表 | 网申取数最前端 | 简历侧按方案裁剪；网申专用项不受方案过滤（R-39） |
 
 **F9（2026-10-26）起前端消费者与当前方案实时同步**：「新建简历 / 手动调整 / 制作台中栏」的编辑页签由
@@ -235,14 +235,15 @@ DTO 读取时已被裁掉）。`GET /api/profile/current/projection` 带 `editor
 不变。写端点（PUT/PATCH）的 `ResumeOut` 有意仍不带 `profile_usage`，前端按 resume id 黏住首次读到的
 快照，保存一次不会跳回当前方案；没有快照的旧简历保持原有完整字段显示。
 
-**纸面投影唯一来源**：`services/profile/paper_policy.py` 是 13 个系统分区的承载区映射与「仅素材」标志的
-唯一数据表；`paper_projection.py` 做确定性转换（`GET /api/profile/current/projection` 与生成链路共用）：
-C1 空分区不产生占位；自建板块**独立成栏**（`ResumeContent.custom_sections`，排在 13 个系统分区之后，C2/R-79）；
-自定义字段以「标签：值」追加到承载区，空值跳过、超长如实 warning（R-44）；`ensure_custom_field_lines` 是
-C5-B 的唯一实现（正文可被 AI 改写，逐字段检测、缺失则按定义顺序补回，不拒绝保存）；语言能力
-（2026-10 起）按 `language_projection.py` 映射为**独立的 `ResumeContent.languages` 分区**（五字段
-语言/水平/证书/分数/取得时间，空列表不序列化；旧版 R-72 的"并入 skills"已废弃），HTML / PDF / Word /
-Markdown / TXT 五条产物都渲染独立「语言能力」小节。证书编号等私密字段在承载区投影前就被跳过。
+**纸面投影唯一来源**：`services/profile/paper_projection.py` 把消费者 DTO 确定性投影成
+**v2 简历文档**（`ResumeDocument`；2026-10-30 起，`GET /api/profile/current/projection`、新建简历与 AI
+生成链路共用）。字段的默认纸面位置与「仅素材」标志只在 `services/resume/document_catalog.py`（一处）：
+C1 空字段不产生 item；自建板块**独立成 section**（排在系统板块之后，C2/R-79）；自定义字段成为真实
+`FieldItem`（`custom:<uuid>` + `source`），按定义上的 `default_placement` 落位，空值跳过、超长
+如实 warning（R-44），**不再有「标签：值」承载区文本与 `ensure_custom_field_lines` 补回**；语言能力按
+`language_projection.py` 映射为独立的 `inline` section（语言 / 水平 / 证书 / 分数 / 取得时间），
+HTML / PDF / Word / Markdown / TXT 五条产物都渲染独立「语言能力」小节。证书编号等私密字段在投影前
+就被跳过；`material_only` 字段投影成 hidden item，资料页与制作台都标注「不上纸面，仅生成素材」。
 
 **升级与旧数据**：旧六表 / `profile_fact` / `profile_fact_field_pref` 不删、不迁、也不再被新界面读取
 （R-46）；`services/profile/legacy_status.py` 用 `SELECT 1 ... LIMIT 1` 只探测「旧表里是否还有实际内容」，
@@ -258,6 +259,67 @@ collapsed_override），投影响应**不得出现 collapsed**。
 `test_profile_editor_schema.py`（编辑器视图：可见字段派生 / 自建板块名 / 创建冻结 / 旧快照降级）、
 `test_profile_group_projection.py`、`test_profile_group_paper_contract.py`、`test_profile_upgrade_status.py`、
 `test_profile_legacy_compat.py`、`test_migration_0064.py`。
+
+## 核心数据流：简历文档模型 v2（字段级，2026-10-30 起）
+
+简历内容从「11 个按分区写死的数组 + 承载区文本 + 固定灰行」换成**字段级文档模型 v2**：每个字段是
+一条有序 item，位置（`title/meta/lead/trail/body/hidden`）是 item 上的数据；一个布局规划器产出唯一
+`DocumentPlan`，HTML / PDF / Word / Markdown 四出口只消费它。实现说明见
+[resume-document-model.md](resume-document-model.md)。
+
+```mermaid
+flowchart LR
+    DB[(resume_record.content<br/>v2 JSON)] -->|读取| READ[document_io<br/>ensure_document_version]
+    READ -->|v1| CONV[document_converter<br/>v1→v2，仅内存]
+    READ -->|v2| DOC[ResumeDocument]
+    CONV --> DOC
+    CAT[document_catalog<br/>默认位置/标签/仅素材] --> DOC
+    DOC --> PLAN[document_plan<br/>唯一 planner]
+    PLAN --> HTML[HTML<br/>_resume_document.j2 + 9 套主题]
+    PLAN --> PDF[PDF<br/>document_render]
+    PLAN --> DOCX[Word<br/>docx_document_render]
+    PLAN --> MD[Markdown / TXT / JSON]
+    CFG[format_config<br/>角色/字号/页边距] --> HTML
+    CFG --> PDF
+    CFG --> DOCX
+    HTML --> PIPE[export_pipeline<br/>水印 → 脱敏]
+    PDF --> PIPE
+    DOCX --> PIPE
+    MD --> PIPE
+```
+
+- **读写边界只有一道门**：`services/resume/document_io.py` 是 API / 服务层访问 `resumes.content` 的
+  唯一入口——**读**走 `ensure_document_version`（v2 直通并归一化；v1 在内存里透明转换、不写库）；
+  **写**走 `prepare_document_for_save`（v1 / v2 都接受 → 统一转 v2 → 校验 id → normalize），落库的
+  永远是 v2 dict。详情响应带可选 `document_conversion` 摘要（`conversion_summary(report)`），制作台
+  据此显示一次性升级提示；完整逐条报告只由 `scripts/convert_resume_documents.py` 产出（默认 dry-run）。
+- **分析与写作直接读取 v2**：ATS / 面试 / 风险 / 内容精简提示用 `document_view` 和 `document_analysis`；
+  版本比较直接比较文档；导出 / 分享 / 交付 / 模板预览使用原生文档。AI 修订按稳定路径更新字段值，
+  在源文档上保留 ID、位置、格式、隐藏与仅素材内容；模型不接触身份页眉。
+- **历史路径读时兼容**：`document_paths` 将旧字段路径解析到现有节点，`document_lock_paths` 解释
+  旧相对字段、日期两端与作者属性。新来源关联 / 事实锁 / 批注使用稳定路径；旧行、列和快照不迁移。
+  显式身份失联时不按旧下标猜对象；只有 path-only 旧行采用原可见顺序解析。来源采纳直接写解析出的 item。
+  检查与导出共用可见性过滤、格式化和布局规划，隐藏字段 / 列表值也参与产物泄漏检查。
+- **制作台左栏按 v2 语义分三组**：`模板`（shell + CSS + 版式预设）/ `版面`（文档模式、篇幅上限、分页与页缩略图、
+  联系方式换行）/ `样式`（字体字号、行距、页边距、颜色、角色/对象/文字级别/格式刷/批量）。分区顺序与条目排版
+  属于**结构**，全部在「本份简历结构」页签（结构树 + 条目字段排版）；`format_config.section_order` 只在
+  v1→v2 转换时读取，**新保存不再写入**（写边界：生成 / 手写创建 / 版式 PATCH 三处剥离）。
+- **字段目录唯一来源**：`services/resume/document_catalog.py` 定义每个字段的标签键、format、
+  `default_placement`、`material_only` 与 `private`；改字段默认上纸面位置只改这里。
+  资料页与制作台通过 `GET /api/profile/field-placement-catalog` 拿同一份目录（含自定义字段的
+  0069 纸面属性），前端不复制映射。
+- **planner 唯一真相**：`services/resume/document_plan.py` 是纯函数（文档 + 语言 → `DocumentPlan`；
+  format_config 里的角色样式由渲染层消费，planner 不碰），负责 head 三种布局、lead / trail 列装箱、
+  正文块、inline / text 板块、页眉联系方式换行、路径与格式化；模板与渲染器不写第二份字段拼装逻辑。
+- **四出口同源**：入口先 `coerce_document()` 归一化、再 `paper_document()` 做纸面过滤，然后**都消费
+  同一份 plan**——`_resume_document.j2` 只遍历 plan 画 `data-role` / `data-resume-path`；PDF 按 plan
+  测宽排表；Word 用 plan 出段落 / 无框表格；Markdown 展平、TXT 由 Markdown 去掉标记、JSON 直接输出
+  v2 document + layout。四格式文本对拍由测试守着（同字段、同顺序，差异只在版式层）。
+- **旧简历兼容只存在 converter 里**：转换保证「文字不丢、条目数不丢、顺序可解释」，识别不了的原文
+  一律变 `TextItem`；批量转换脚本默认 dry-run、只产出报告。本批已删除 v1 渲染 / 导出 / 字段排版路径
+  （旧模板宏、四份分区渲染、字段排版模块）；新建简历与制作台共用 `DocumentEditor`。
+  生成后处理的 v1 中间态辅助函数按 T5 审计保留；它们只服务向前转换，不参与读取已存 v2 文档。
+  旧的反向投影模块和包装已删除；测试专用冻结基线只用于历史兼容断言，生产代码不依赖它。
 
 ## 核心数据流：AI 生成简历
 
@@ -300,6 +362,11 @@ sequenceDiagram
     end
 ```
 
+生成结果由 `generation_postprocess` / `resume_generator` 直接写 **v2 items**：模型只填 value / label，
+placement / format 由字段目录补；**渲染与导出链路不再有「承载区补回」**。生成后处理里的 v1 承载区
+辅助函数（`ensure_custom_field_lines_in_resume` 等）仍服务生成中间态并按 T5 审计保留；
+已存 v2 文档的分析、修订与来源采纳不经过该中间态。
+
 ## 核心数据流：用户编写简历
 
 ```mermaid
@@ -311,17 +378,17 @@ sequenceDiagram
 
     U->>F: 在岗位页选择“自行编写”
     F->>B: GET /api/profile/current/projection
-    B-->>F: 当前方案投影（纸面内容 + 候选 + 板块清单 + snapshot_token）
-    F->>F: 按当前方案预填 ResumeContent；页签按板块清单过滤
-    U->>F: 选择、调整或补充简历内容（修改不回写资料）
+    B-->>F: 当前方案投影（v2 文档条目 + 候选 + 板块清单 + snapshot_token）
+    F->>F: 按当前方案投影预填 v2 文档（section / entry / items）；页签按板块清单过滤
+    U->>F: 三区卡编辑条目（标题行 / 元信息 / 正文前灰字 / 正文 / 正文后灰字 / 隐藏，拖拽改位置；修改不回写资料）
     F->>B: POST /api/resumes/manual（可带 profile_context 创建态快照）
-    B->>B: 校验内容、可选 job_id 与快照 token
+    B->>B: 校验 v2 文档（normalize + 服务端补 id）、可选 job_id 与快照 token
     B->>DB: 保存 source=manual、岗位快照与创建态资料快照
     B-->>F: 返回简历记录
     F->>U: 在简历中心展示“用户编写”来源
 ```
 
-AI 生成与用户编写最终使用相同的 `ResumeContent`、预览、编辑和导出链路，避免维护两套简历格式。用户编写路径不调用大模型；打开期间若资料在其它窗口被修改或切换方案，前端通过投影缓存失效广播自动刷新（已有未保存编辑时提示二选一，不静默覆盖）。
+AI 生成与用户编写最终都产出 v2 `ResumeDocument`：AI 只写字段值与标签，placement / format 由字段目录与用户决定；之后共用同一套 planner、预览、编辑与四出口链路，避免维护两套简历格式。用户编写路径不调用大模型；打开期间若资料在其它窗口被修改或切换方案，前端通过投影缓存失效广播自动刷新（已有未保存编辑时提示二选一，不静默覆盖）。
 
 ## 岗位需求解读与求职助手
 
@@ -556,19 +623,31 @@ score_match_result(result, job_payload, profile_text, resume_text)
 
 ## 核心数据流：导出管线（多格式 / 水印 / 脱敏）
 
-导出从"四种格式各自为政"收敛到一条管线（`services/export_pipeline.py`）：
+导出从「每种格式各自拼字段」收敛到「归一化 + 纸面过滤 + 一份 plan + 一条管线」（`services/export_pipeline.py`）：
 
-```
-导出请求(format, watermark, redact)
-      │
-      ▼
-格式渲染（html / pdf / docx / md / txt / json）──▶ 水印后处理（watermark.apply_watermark）
-      │                                              │
-      └──────────── 脱敏（privacy.redact）◀──────────┘
+```mermaid
+flowchart LR
+    DOC[ResumeDocument v2] --> PLAN[document_plan<br/>唯一 planner]
+    PLAN --> R1[HTML<br/>_resume_document.j2 + 主题]
+    PLAN --> R2[PDF<br/>document_render]
+    PLAN --> R3[Word<br/>docx_document_render]
+    PLAN --> R4[Markdown / TXT / JSON]
+    CFG[format_config<br/>角色/字号/页边距] --> R1
+    CFG --> R2
+    CFG --> R3
+    R1 --> W[水印后处理<br/>watermark.apply_watermark]
+    R2 --> W
+    R3 --> W
+    R4 --> W
+    W --> P[脱敏 privacy.redact]
 ```
 
-- **六种格式**：`ExportFormat = json | md | html | pdf | docx | txt`。Word 复用 `ResumeLayout`
-  版式口径、不引入第二套排版引擎；纯文本走 `txt_exporter`。
+- **六种格式**：`ExportFormat = json | md | html | pdf | docx | txt`。四个有版面的出口都走同两个前置步骤
+  ——`document_html.coerce_document()`（v1 → v2，读时转换）与 `document_html.paper_document()`
+  （剔除 hidden 条目 / 文本块 / placement=hidden，纸面视角的唯一过滤点）——然后消费同一份
+  `DocumentPlan`；纯文本走 `txt_exporter`（由 Markdown 展平），JSON 直接输出 v2 document + layout。
+- **字段拼装只发生在 planner**：日期范围 / 枚举 / 作者 / 列表 / 标签都在 planner 格式化好，渲染器只画
+  `Inline` 段；模板只负责外壳与 CSS。四格式「同字段、同顺序」由文本对拍测试守住。
 - **水印是后处理**（`services/watermark.py`）：输入已经是渲染好的字节，输出加水印后的字节；
   HTML 覆盖层 / PDF 用 `PdfWriter(clone_from=...)` 叠加 / Word 页眉；纯文本与 JSON 无版面概念、报明确错误。
 - **脱敏是 `privacy.redact`**：姓名 / 电话 / 邮箱 / 公司 / 学校等字段替换为占位符，始终基于脱敏内容导出。
@@ -619,6 +698,10 @@ score_match_result(result, job_payload, profile_text, resume_text)
 
 ## 核心数据流：简历文档的版本、保存与冲突（W02 / A06）
 
+- **content 是 v2 JSON**：`resume_record.content` 存 `ResumeDocument`（`version: 2`）。读取入口对 v1
+  透明转换（不写库）、保存写 v2，详情响应带可选 `document_conversion` 摘要。文档结构本身不新增表 /
+  列；资料侧自定义字段的纸面属性由迁移 `0069` **只加两列**（`default_placement` / `material_only`，
+  旧库兼容、可降级）。
 - **唯一写库出口**：内容/版式/AI 修订三条写路径都走 `services/resume/document_save.py`。它用
   单条 Core `UPDATE ... WHERE id=? AND revision=?` 做**原子条件写**（`revision = revision + 1`
   同一条语句），命中才 commit；不命中**一个字段都不写**并返回 409。用 Core 语句而不是
@@ -640,16 +723,16 @@ score_match_result(result, job_payload, profile_text, resume_text)
 
 ## 核心数据流：对象可见性与锁定（W06）
 
-- 六类正文条目（教育/经历/校园/项目/技能/奖项）各增加可选 `hidden` / `lock_content` / `lock_layout`。
-  **取消 = 删除键，而不是写 false**：历史 JSON 序列化与内容指纹必须逐字节不变
-  （`services/resume/resume_visibility.py` 的 `OptionalVisibilityMixin` 用 `model_serializer(mode="wrap")`
-  把值为 `None` 的字段从结果里摘掉，旧记录/旧客户端/旧交付指纹一个字节都不变）。
-- **唯一过滤出口**：`visible_resume()` 在 HTML/精确 PDF/下载 PDF/Word/Markdown/TXT/交付 JSON 渲染前
-  统一过滤；内部快照、工程 JSON、备份保留隐藏正文。导出闸门（【待补】409）也只检查可见内容——
-  隐藏条目里的占位符不会被打出来，不该拦住导出。
-- 大纲/结构操作（排序、复制、隐藏、锁定）在 `features/resume-outline/`：排序不换 id、复制生成全新
-  id（`point_ids` 全部重生成）、恢复保留 id；加粗 overlay 与事实标注按 `object_id` 现算路径，
-  排序后自动跟着对象走，只有旧记录的下标 path 允许错位（明确退化、界面可见）。
+- 条目级可见性与锁定在 v2 模型里是**数据**：`ResumeEntry.hidden / lock_content / lock_layout`、
+  item 的 `hidden` placement 与 `TextItem.hidden`。hidden 的内容保留在文档、内部快照与备份里，
+  **不上纸面**；锁定只约束 AI 改写，不拦用户手动编辑。
+- **唯一纸面过滤入口**：`document_html.paper_document()` 在规划前剔除 hidden 条目、`TextItem.hidden`
+  与 `placement=hidden` 字段；HTML / 精确 PDF / 下载 PDF / Word / Markdown / 交付 JSON 都基于过滤后的
+  文档（planner 另有同语义的 hidden 跳过作为兜底）。源内容、内部快照与备份保留隐藏正文。导出闸门
+  （【待补】409）也只检查可见内容——隐藏条目里的占位符不会被打出来，不该拦住导出。
+- 结构操作（排序、复制、隐藏 / 恢复、锁内容 / 锁排版）在结构面板：复用旧大纲命令 / 多选 / 高亮能力、
+  数据源换成 v2 items——排序不换 id、复制生成全新 id、恢复保留 id；加粗 overlay 与事实标注按 item 路径
+  现算，排序后自动跟着对象走。
 
 ## 核心数据流：统一检查与格式能力矩阵（W11 / R03）
 
@@ -677,7 +760,7 @@ score_match_result(result, job_payload, profile_text, resume_text)
 | 用户 API Key 存本地 DB         | 普通接口只返回脱敏引用；显式查看仅限回环客户端、禁止缓存且不写回表单                                 |
 | Prompt 独立成文件              | 模板与代码分离，调参改 `prompts/*.md` 即可，无需动代码                                              |
 | PDF 用浏览器打印实现           | 服务端 PDF 在中文环境依赖系统字体，跨平台极易踩坑；浏览器打印零依赖且排版稳定                       |
-| A4 单页预览与打印              | HTML 模板固定 210×297mm；预览和导出在内容超长时整体缩放，保证投递打印尺寸一致                       |
+| A4 单页预览与打印              | HTML 模板固定 210×297mm；预览视口只缩放「显示」（整页 / 适宽），不改纸面字号；内容超出按页数上限截断并如实提示，禁止自动缩字号（`noAutoShrinkGuard` 守着） |
 | 岗位化建议按需生成             | 用户确认预览后再调用一次非流式模型，避免每次生成增加成本；建议不覆盖简历内容                        |
 | 模型输出宽松解析 + 修复重试    | 大模型输出不稳定，先容错提取 JSON，失败后用修复 Prompt 重试一次，再失败友好降级                     |
 | 深度美化质量门槛               | 在事实回填前识别合法但空洞的附件项目，最多非流式重试一次，避免前端拼接两份 JSON；失败时保留首轮结果 |
@@ -716,7 +799,7 @@ score_match_result(result, job_payload, profile_text, resume_text)
 | 照片在模型调用后注入           | 避免把无意义的 base64 内容发送给模型，同时保证预览与导出使用已校验的本地照片                        |
 | 旧 SQLite 库补齐已知列         | 只对未版本化旧库运行兼容建表与幂等补列；空库和已版本化数据库由 Alembic 独立管理                     |
 | Alembic revision + 升级前备份  | 早期数据库平滑进入正式迁移链；有用户数据时先备份，再执行可审查、可测试的版本化变更                  |
-| AI 与手写共用内容结构          | 两种来源只在创建方式和元数据上不同，预览、编辑、导出与岗位关联行为保持一致                          |
+| AI 与手写共用内容结构          | 两种来源只在创建方式和元数据上不同，都产出 v2 `ResumeDocument`：AI 只写 value / label，placement 与 format 由字段目录 + 用户决定；预览、编辑、四出口与岗位关联行为一致 |
 | 发行包只从 git 档案出包         | 手工压缩包漏掉过 `backend/app/data/`：后端在导入阶段抛 `FileNotFoundError`，用户只看到一句 "Backend exited ... See runtime\backend.stderr.log"，无从下手。改为 `scripts/Build-Release.ps1` 用 `git archive` 从标签出包，写完**重新打开压缩包**校验必需文件都在、个人数据库与 `.env` 都不在，校验失败就删掉压缩包而不是发出去。缺文件的另一侧防线在运行时：`backend/app/preflight.py` 由 `app/__init__.py` 在任何子模块导入之前调用，把"缺什么、怎么办"直接写进日志，启动器再把日志尾部打印到控制台 |
 | 对外访问全部封在浏览器桥接层   | 驱动真实浏览器与理解陌生表单最不可测（站点会改版、会风控）。把 CDP 传输与站点选择器分别封在 `services/browser` 与 `services/sites` 之后，业务层只调「站点无关」接口，且两层都可用假传输层离线测试，不必真的连网 |
 | 不伪装身份，需要浏览器就用真的 | UA 如实标识为 `ResumeForge/<版本>`。需要 JS 渲染或登录态的场景走 CDP 用用户本机已装的真实浏览器——那是真的而不是假装。伪装 UA 的唯一作用是让站点无法识别访问者身份，而那恰好也是最不受欢迎的行为，代价是被误伤时连可追溯的联系方式都没有 |
@@ -728,7 +811,7 @@ score_match_result(result, job_payload, profile_text, resume_text)
 | 弹窗确认前后端分权             | 证据不足 / 待确认 / 真实缺口需要逐条确认：后端在入队时返回结构化 409（哪类缺口、缺什么），前端据此弹对应确认并把 `confirm_*` 回传；服务端仍以 `admission_of` 复核，不信任前端传入的确认 |
 | 前端类型镜像后端枚举           | 五类状态、任务 / 队列 / 浏览器状态等字符串字面量联合类型与 `models/apply.py` 的常量**逐字一致**，改一处必须同步另一处；前端只读后端判定结果，镜像仅用于展示与说明 |
 | 参考分只展示、不参与准入       | 参考分是 `match_scoring.score_match_result` 现算的派生值，不落库、不回写分析结果，也**不进入** `admission_of` 的「能投 / 需确认 / 不投」；分数旁固定免责文案，信号缺失给中性分 50，避免"没信息"被读成"不匹配" |
-| Word 复用同一版式口径         | docx 导出走 `ResumeLayout`、不引入第二套排版引擎，保证 Word 与预览 / PDF / 浏览器打印的行距、页边距、区块间距一致；水印与脱敏作为导出管线里的后处理步骤，不改动版式决策 |
+| Word 复用同一份 plan          | docx 导出消费 `DocumentPlan` + `format_config` 的版式口径、不引入第二套排版引擎，保证 Word 与预览 / PDF / 浏览器打印的行距、页边距、区块间距一致；水印与脱敏作为导出管线里的后处理步骤，不改动版式决策 |
 | 水印是后处理、脱敏在导出前     | `watermark.apply_watermark` 只给已渲染的字节叠加水印（HTML 覆盖层 / PDF 用 `PdfWriter(clone_from=...)` 叠加 / Word 页眉），不参与排版；`privacy.redact` 在导出前把姓名 / 电话 / 邮箱 / 公司 / 学校等替换为占位符，分享产物始终基于脱敏内容 |
 | 离线分享包不带敏感信息         | 分享包由脱敏 HTML/PDF + 只读快照 + 评论回传文件 + 本地 token 组成，token 仅离线校验、不做在线鉴权；删除走回收站软删除、磁盘产物不清理 |
 | ATS 检测带免责                 | `ats_check` 只做格式 / JD 关键词覆盖 / 信息位置三类静态规则检查，**不连接、不模拟真实招聘系统**，结果仅供参考、不构成通过保证 |
@@ -737,7 +820,11 @@ score_match_result(result, job_payload, profile_text, resume_text)
 | 方案不拥有数据 / 当前方案唯一       | 方案只记「名称 + 板块清单」，共享同一份 `profile_entry`；当前方案是单行状态表 + `CHECK(id = 1)`，默认方案由 CHECK 保证不可软删。这样"每个方案一份副本"与"无当前方案"在结构上就写不进库，不靠调用方自觉（R-17/R-24/R-25） |
 | 消费 DTO 与折叠态物理隔离       | 资料页编辑 DTO 含 hidden / collapsed_override；投影、生成、网申只吃 `ConsumedProfile`（类型里没有 collapsed）。否则"收起"迟早被某条取数链当成"不参与"，而它只该影响输入框展不展示（R-66/R-67） |
 | 旧资料不迁移、不删除           | 迁移 0064 只加表；旧六表与旧事实表继续存在并进备份，新界面不读；资料页用"旧表有内容且新模型为空"的探测给出重填说明。迁移工具看起来省事，但会改写用户历史且无法回退（R-46/R-47/R-49） |
-| 纸面承载区只有一份定义         | 承载区映射、仅素材分区、自定义字段追加顺序全在 `paper_policy.py`；`paper_projection.py` 与生成链路共用它。第二份映射必然漂移成"生成有、填充没有"（R-37/R-42/R-77） |
+| 字段默认位置只有一份定义       | 字段目录 `document_catalog.py` 是标签、format、默认位置、仅素材标志的唯一来源；`paper_projection.py` 与生成链路共用它。第二份映射必然漂移成"生成有、填充没有"（R-37/R-42/R-77） |
+| 字段位置是数据                 | v2 把 title / meta / lead / trail / body / hidden 存在 item 上，拖拽 = 改顺序 + 改 placement；「看起来都能调、实际很多调不了」从模型层消失（D1–D5） |
+| 唯一 planner / 四出口同源      | `document_plan.py` 产出 `DocumentPlan`，HTML / PDF / Word / Markdown 只消费它；模板只负责外壳与 CSS。字段拼装与列装箱只写一次（D10） |
+| 旧简历读取时转换、保存写 v2    | `ensure_document_version` 在内存里把 v1 转 v2、不写库；转换规则只在 converter 里，文字不丢、条目数不丢、顺序可解释（D11/D12） |
+| 六个位置是产品边界             | 不做自由画布 / 任意嵌套 / 逐字符排版；位置只有六个抽屉，装不下就换行 + 按页数上限截断，不自动缩字号 |
 
 ## 部署与安全边界
 
@@ -758,7 +845,7 @@ score_match_result(result, job_payload, profile_text, resume_text)
 1. **新增模型提供商**：非 OpenAI 兼容协议时，在 `services/llm/` 新增 Provider 类，并在 `create_provider` 中按 `provider` 字段分发。
 2. **扩展岗位文本识别规则**：在 `services/job_parser/` 对应职责模块增加字段标签、候选值或章节规则，并补充 `tests/test_job_text_parser.py` 或 `tests/test_job_text_parser_edge_cases.py` 离线测试；`services/job_text_parser.py` 仅保留兼容门面和解析流程装配。
 3. **扩展 JD 标签规则**：在 `services/jd/jd_parser_constants.py` 增加学历、年限或技能别名，在 `jd_parser_filters.py` 增加必要的上下文过滤，并补充 `tests/test_jd_parser.py`；`services/jd_parser.py` 仅负责公共入口和流程编排。
-4. **新增导出格式**：在 `services/export_pipeline.py` 写一个 `_render_<格式>` 渲染函数，挂进 `FORMAT_RENDERERS` 注册表加一行（管线自动接入脱敏与水印），并补充 `tests/test_export_pipeline.py` 测试。
+4. **新增导出格式**：在 `services/export_pipeline.py` 写一个 `_render_<格式>` 渲染函数（消费 `DocumentPlan`），挂进 `FORMAT_RENDERERS` 注册表加一行（管线自动接入脱敏与水印），并补充 `tests/test_export_pipeline.py` 测试。
 5. **调整美化拓展策略**：后端 `resume_generator.py` 的分级指令与前端 `config.ts` 的 `RESUME_ENHANCEMENT_LEVELS` 保持一致，并补充 `tests/test_resume_generator.py` 或 `tests/test_resume_quality_retry.py` 测试。
 6. **扩展助手附件格式**：先在 `services/attachments.py` 增加扩展名、MIME 与文件头校验（图片还要在 `image_conversion.py` 补转码），再在 `assistant_service.py` 接入上下文转换并补充边界测试；不要只改前端 `accept`。新增文档类型时把解析放在 `document_text.py`，并同时给识别接口的 `documents` 字段留出入口。
 7. **新增招聘站点适配器**：在 `services/sites/` 增加一个实现 `base.py` 契约的适配器并在 `registry.py` 注册其域名即可，采集与投递业务层不改；站点改版只影响该适配器。表单填写的通用启发式在 `services/webform/engine/`，与具体站点解耦。**前端无需跟着改**：`GET /api/apply/sites` 下发的站点列表（`SiteOptionOut` / `SiteListOut`）是界面展示"当前招聘网站"与站点清单的唯一来源，前端组件里不写死任何站点名，因此新注册的站点会自动出现在界面上；适配器可用 `supports_collect` / `supports_apply` 如实声明本站点支持的能力。
@@ -768,7 +855,7 @@ score_match_result(result, job_payload, profile_text, resume_text)
 11. **扩展求职进度**：状态与来源的取值只在 `models/tracker.py` 定义一次，新增要同步 `frontend/src/types/tracker.ts`（前端枚举逐字对应）并在 `api/tracker.py` 的筛选校验里放行。**改合并规则只改 `resolve_status()` 一处**——预览、执行、投递台回写都走它。识别提示词改 `prompts/application_status.md`；本地降级的状态信号表在 `services/tracker_extract.py` 的 `_STATUS_SIGNALS`，顺序是"越明确越优先"，调整时注意别让「感谢投递…安排面试」这类自动回执被判成面试邀请。
 12. **扩展事实台账**：核实状态、承担程度、分类的取值只在 `models/claim.py` 定义一次；新增取值要同步 `frontend/src/types/claim.ts`（前端枚举逐字对应）并在 `api/claims.py` 的过滤校验里放行。改进建议规则集中在 `services/claims.py` 的 `claim_warnings()`——它是单选函数，新增规则不影响其它链路。新增**未完成标记**要同时改 `models/claim.py` 的 `PLACEHOLDER_MARKERS` 与前端同名常量，否则界面不会高亮、导出也不会拦。草拟提示词改 `prompts/claim_draft.md` 与 `schemas/claim.py` 的对应字段。
 13. **新增匹配参考分维度**：在 `services/match_scoring.py` 的 `MATCH_SCORE_DIMENSIONS` 追加一条 `DimensionSpec` 并给 `_SUB_SCORERS` 注册同 key 的打分函数；维度权重与总分口径集中在这一处。参考分**只读、不落库、不参与准入**，新增维度不得改 `admission_of`。
-14. **扩展导出管线 / 水印 / 脱敏**：新增导出格式在 `services/export_pipeline.py` 的格式渲染注册表加一行，并给 `watermark.apply_watermark` 与 `privacy.redact` 声明支持范围（无版面概念的格式报明确错误）；`schemas/export.py` 的 `ExportFormat` 与前端 `types/export.ts` 逐字一致。
+14. **扩展导出管线 / 水印 / 脱敏**：新增导出格式在 `services/export_pipeline.py` 的格式渲染注册表加一行（渲染函数消费 `DocumentPlan`），并给 `watermark.apply_watermark` 与 `privacy.redact` 声明支持范围（无版面概念的格式报明确错误）；`schemas/export.py` 的 `ExportFormat` 与前端 `types/export.ts` 逐字一致。
 15. **新增回收站类型**：新表若带 `deleted_at` 列，必须在 `services/trash.py` 的 `TRASH_SPECS` 加一行，否则会出现"删了就找不到"的半软删；`tests/test_trash.py::test_every_deleted_at_table_is_registered` 会扫全库钉住这层一一对应。
 16. **扩展简历写作增强**：变换的取值（话术 mode / 润色 style / 翻译 direction）与 `frontend/src/types/resumeWriting.ts` 逐字一致；提示词在 `prompts/resume_{star,phrases,polish,translate}.md`，输出结构变化需同步 `schemas/resume_writing.py`。质量合规的规则在 `services/resume/resume_risk.py` 与 `services/ats_check.py`，新增检查项补 `tests/test_resume_risk.py` / `tests/test_ats.py`。
 17. **调整网申填表的识别**：识别是**四档证据，从强到弱**——① 站点声明的 `autocomplete`
@@ -987,11 +1074,19 @@ score_match_result(result, job_payload, profile_text, resume_text)
 
 29. **新增/调整内置资料板块或默认字段**：改 `services/profile/catalog_{basic,experience,research}.py` 的数据行
     （字段 id 固定为 `<section>.<key>`），`definition_catalog.py` 的导入期自检会核对 13 条 key/顺序/计数/枚举/私密标志，
-    漏改计数会直接 import 失败；承载区映射只在 `paper_policy.py`（一处），新字段要上纸面时再补槽位或追加策略，
-    并补 `test_profile_definition_catalog.py` / `test_profile_group_projection.py` 的契约用例。**用户级扩展不要改代码**：
+    漏改计数会直接 import 失败；字段的默认纸面位置只在 `services/resume/document_catalog.py`（一处），
+    新字段要上纸面时再补一行 FieldSpec（placement / format / material_only），并补 `test_profile_definition_catalog.py` /
+    `test_document_converter.py` / `test_document_plan.py` 的契约用例。**用户级扩展不要改代码**：
     自建板块与自定义字段走 `/api/profile/sections`，软删与恢复由回收站策略处理。
 
+30. **新增简历字段 / 位置 / 格式 / 模板**（v2 文档模型）：字段默认位置改 `document_catalog.py`；新增 `format`
+    要同时改 `schemas/resume_document.py` 的 `Format`、`document_plan.py` 的格式化分支与前端
+    `types/resumeDocument.ts`；模板只写「外壳 + CSS + include `_resume_document.j2`」。**六个位置是产品边界**，
+    新增位置等于同时改模型 / planner / 四出口 / 编辑器 / 语言包，需要单独评审（本批不做）。
+
 ## 测试策略
+
+- 简历文档模型 v2 按层拆测试：`test_document_model.py` 钉住 v2 schema 的 normalize / 校验 / 长度 / 私密字段 / hidden 保留 / 重复 key；`test_document_converter.py` 逐分区 fixtures 钉住「文字不丢、条目数不变、位置符合映射、幂等」与转换报告字段；`test_document_plan.py` 钉住 head 三种布局、lead / trail 列装箱（1/2/3 列、equal/flow、gap=0、solo）、inline / text 板块、页眉联系方式换行与路径唯一性；`test_document_html.py` / `test_document_pdf.py` / `test_document_docx.py` / `test_document_markdown.py` 用文本对拍钉住四出口「同字段、同顺序」，以及 PDF 右对齐 / 分页 / 溢出、Word 制表位、Markdown 展平。旧 v1 分区渲染用例随 v1 渲染路径删除或改写为 v2 等价用例，golden 基线重建。
 
 - 资料板块 / 方案 / 当前方案按层拆测试：`test_profile_definition_catalog.py` 钉住 13 项与 106 个默认字段契约；`test_profile_*_store.py` 钉住定义/条目/方案/偏好的语义与上限；`test_profile_scope_boundaries.py` 钉住消费 DTO 无折叠态、hidden 与 collapsed 的差异、三链外全量读；`test_profile_group_projection.py` / `test_profile_group_paper_contract.py` / `test_profile_group_languages.py` 钉住纸面投影、自建板块与语言映射；`test_profile_upgrade_status.py` 钉住旧表探测与升级提示分支；`test_profile_legacy_compat.py` 钉住旧 /api/profile 适配；`test_migration_0064.py` 钉住只加表、旧表集合与内容不变、downgrade 可用。
 - 后端核心业务（跨行业岗位文本/JD 解析、资料参考文件、岗位相关片段筛选、分级生成、照片校验与渲染、岗位解读、助手附件/历史/搜索摘要解析、导出、防虚构校验）有单元测试；模型链路使用模拟传输或假 Provider，默认不依赖真实网络。较长测试已按主题拆分为 `test_job_text_parser_edge_cases.py`、`test_job_text_parser_metadata.py`、`test_profile_text_parser_inference.py`、`test_assistant_search.py` 和 `test_resume_quality_retry.py`，岗位元数据/英文标题/分隔符规则与核心字段测试分别维护，便于定向回归。

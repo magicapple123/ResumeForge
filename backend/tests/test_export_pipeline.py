@@ -15,6 +15,7 @@ from app.services.export_pipeline import (
     build_export,
 )
 from app.services.privacy import MASK, RedactionOptions
+from tests.document_test_support import field_value, header_value
 
 
 def _resume() -> ResumeContent:
@@ -176,14 +177,16 @@ def test_redact_preview_returns_redacted_content_without_persisting(client):
     response = client.post(f"/api/resumes/{resume_id}/redact", json={})
 
     assert response.status_code == 200
+    # /redact 返回 v2 文档 JSON：身份字段在 header items 里。
     body = response.json()
-    assert body["name"] == "***"
-    assert body["phone"] == "***"
+    assert body["version"] == 2
+    assert header_value(body, "name") == "***"
+    assert header_value(body, "phone") == "***"
 
     # 不落库、不回写：原记录仍是真实值。
     detail = client.get(f"/api/resumes/{resume_id}").json()["content"]
-    assert detail["name"] == "张三"
-    assert detail["phone"] == "13800000000"
+    assert header_value(detail, "name") == "张三"
+    assert header_value(detail, "phone") == "13800000000"
 
 
 def test_redact_preview_options_are_configurable(client):
@@ -203,5 +206,5 @@ def test_redact_preview_options_are_configurable(client):
 
     assert response.status_code == 200
     body = response.json()
-    assert body["name"] == "张三"  # mask_name=False：不遮罩
-    assert body["education"][0]["school"] == "***"  # mask_school=True：遮罩
+    assert header_value(body, "name") == "张三"  # mask_name=False：不遮罩
+    assert field_value(body, "school", section="education") == "***"  # mask_school=True：遮罩

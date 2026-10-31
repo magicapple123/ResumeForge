@@ -306,18 +306,30 @@
      纸就歪了（2026-11 反馈"精确预览有时候可以左右滑动、简历歪斜"）。
      `overflow-x: hidden` 与 `overflow-y: hidden` 配对，不会按规范把 `overflow-y`
      连带算成 `auto`——纵向高度是按页数算出来的，再出一条竖向滚动条就回到"两个滚动条"。 */
-  /* **这一层不滚动**（2026-10-29 用户反馈"下方/右侧黑粗的无效滚轮"）：它自己的滚动条是
-     浏览器默认的粗样式（没被全局 `::-webkit-scrollbar` 覆盖），而且 `pointer-events: none`
-     的 PDF 让它们根本拖不动。横竖滚动一律交给外层 `.resume-preview-body`。 */
+  /* 不放大时这一层不滚动：纸列宽度恰好等于相框宽，任何 `overflow-x: auto` 都会因为
+     半像素误差凭空多出一条横向滚动条（2026-11 反馈"精确预览有时候可以左右滑动"）。 */
   overflow: visible;
   position: relative;
 }
 
-/* 只有放大之后才让纸溢出相框（相框高度由 `useExactPreviewFrameHeight` 按宽度算，
-   横向滚动条只会压缩高度，不影响 `clientWidth`，所以宽度测量不会自激）。 */
+/* 只有用户显式放大之后才让纸溢出相框，而且**横向滚动就发生在纸面层**（Q21）：
+   头部/提示/工具条/缩放条都是这一层的兄弟节点（在 `.resume-preview-chrome` 与页脚里），
+   不参与横向滚动。相框高度由 `useExactPreviewFrameHeight` 按宽度算；横向滚动条只会压缩
+   高度、不影响 `clientWidth`，所以宽度测量不会自激。 */
 .exact-preview.is-zoomed {
-  /* 放大时也不在这里滚：外层 body 负责，避免两条滚动条同时出现（见上一条注释）。 */
-  overflow-x: visible;
+  overflow-x: auto;
+  overflow-y: visible;
+  overscroll-behavior-x: contain;
+}
+
+/* 相框自己的横向滚动条收窄一点，别抢纸面（全局细滚动条不一定覆盖到这里）。 */
+.exact-preview.is-zoomed::-webkit-scrollbar {
+  height: 8px;
+}
+
+.exact-preview.is-zoomed::-webkit-scrollbar-thumb {
+  border-radius: 4px;
+  background: var(--rf-border);
 }
 
 .exact-preview-frame {
@@ -403,6 +415,13 @@
   gap: 8px;
   margin-top: 8px;
   padding: 2px 10px 4px;
+}
+
+/* 纸面比相框宽时的可见状态（Q21）：与读数同一行，提醒"可以左右拖动看全"。 */
+.resume-preview-zoom-overflow-hint {
+  font-size: 12px;
+  color: var(--rf-warning-text);
+  white-space: normal;
 }
 
 /* 缩放读数触底（`MIN_READABLE_SCALE`）：它不再是"当前比例"，而是一句提示的入口——

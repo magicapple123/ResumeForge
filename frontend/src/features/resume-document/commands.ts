@@ -20,9 +20,8 @@
  * ## 为什么路径辅助函数写在这里
  *
  * W00 契约规定 `commands.ts` 只依赖 `types.ts` + `identity.ts`（依赖方向：命令层在
- * 状态容器之下、不反向依赖渲染层工具）。`useRichTextOverrides` 里有一份同型实现，但它
- * 属于渲染层，命令层 import 它会把方向倒过来——两份各自很小、改动理由也不同（那边给
- * 加粗 overlay 用，这边给命令用），不合并。
+ * 状态容器之下、不反向依赖渲染层工具）。路径辅助函数保持在这一层，调用方不需要 import
+ * 渲染层工具，也不会把依赖方向倒过来。
  */
 import type { ResumeContent } from "../../types/resume";
 import { applyOutlineCommand, type OutlineCommand } from "../resume-outline";

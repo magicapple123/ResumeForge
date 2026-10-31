@@ -29,7 +29,8 @@ from ...models.claim import (
 from ...schemas.resume import ResumeContent
 from ...schemas.resume_risk import RiskPoint, RiskSeverity
 from ...services.llm.base import LLMError
-from ..privacy import MASK, mask_outbound_text, redact
+from ..privacy import MASK, mask_outbound_text, redact, redact_document
+from .document_view import document_text, field_text, header_text, iter_entries
 from .resume_risk_rules import _resume_full_text
 
 PROMPTS_DIR = Path(__file__).resolve().parent.parent.parent / "prompts"
@@ -65,7 +66,7 @@ def _mask_sensitive_text(text: str) -> str:
     return mask_outbound_text(text)
 
 
-def _outbound_resume_text(resume: ResumeContent) -> str:
+def _outbound_resume_text(resume: ResumeContent | dict) -> str:
     """远端增强的最小化简历输入（出站口径的唯一实现处）。
 
     复用 ``privacy.redact``（全仓库唯一的结构化脱敏实现）遮罩姓名/电话/邮箱/公司，
@@ -74,6 +75,16 @@ def _outbound_resume_text(resume: ResumeContent) -> str:
     数字串（手机号/证件号/银行卡号）兜底遮罩——测试钉住出站消息里不出现合成
     姓名/手机号/邮箱。完整文本仅留在本地扫描使用。
     """
+    if isinstance(resume, dict):
+        text = document_text(redact_document(resume))
+        identity_keys = {"experience": "company", "education": "school",
+                         "projects": "name", "campus_experience": "organization"}
+        tokens = {header_text(resume, "name")}
+        tokens.update(field_text(entry, identity_keys[key]) for key, entry in iter_entries(resume)
+                      if key in identity_keys)
+        for token in sorted(filter(None, tokens), key=len, reverse=True):
+            text = text.replace(token, MASK)
+        return _mask_sensitive_text(text)
     redacted = redact(resume)
     data = redacted.model_dump(exclude={"photo"})
     text = json.dumps(data, ensure_ascii=False)
@@ -88,7 +99,7 @@ def _outbound_resume_text(resume: ResumeContent) -> str:
     return _mask_sensitive_text(text)
 
 
-def _split_linked_claims(resume: ResumeContent, claims: list[ClaimRecord]) -> list[ClaimRecord]:
+def _split_linked_claims(resume: ResumeContent | dict, claims: list[ClaimRecord]) -> list[ClaimRecord]:
     """选出与当前简历关联、可进入远端增强上下文的强责任台账条目。
 
     关联键：台账 ``subject``（公司/项目/学校/技能名）出现在简历正文里。未关联条目
@@ -159,7 +170,7 @@ def _entry_count(value: object) -> int:
 
 
 def _build_enhancement_messages(
-    resume: ResumeContent, claims: list[ClaimRecord]
+    resume: ResumeContent | dict, claims: list[ClaimRecord]
 ) -> list[dict[str, str]]:
     """构造远端增强的全部出站消息（**唯一出口**，隐私边界测试断言在这里生效）。"""
     linked = _split_linked_claims(resume, claims)

@@ -5,9 +5,7 @@
 """
 
 import asyncio
-import json
 import logging
-import re
 from collections.abc import AsyncIterator
 from typing import get_args
 
@@ -16,7 +14,6 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from ..database import get_db
-from ..models.claim import ClaimRecord, can_enter_final
 from ..models.interview import (
     INTERVIEW_STATUS_ACTIVE,
     INTERVIEW_STATUS_FINISHED,
@@ -26,8 +23,6 @@ from ..models.interview import (
 from ..models.job import Job
 from ..models.resume import ResumeRecord
 from ..schemas.interview import (
-    InterviewAnalysisOut,
-    InterviewAnalysisRequest,
     InterviewAnswerCreate,
     InterviewAnswerResult,
     InterviewBrief,
@@ -35,37 +30,34 @@ from ..schemas.interview import (
     InterviewDetail,
     InterviewDurationUpdate,
     InterviewMessageOut,
-    InterviewOptimizeOut,
-    InterviewOptimizeRequest,
-    InterviewQuestionAnswerOut,
-    InterviewQuestionAnswerRequest,
-    InterviewQuestionGenerateRequest,
     InterviewStatus,
-    QuestionBankOut,
 )
 from ..schemas.material import MaterialCreate, MaterialOut
-from ..schemas.resume import ResumeContent
 from ..services import trash
-from ..services.interview import interview_questions as interview_questions_service
+from ..services.interview import interview_questions as interview_questions_service  # noqa: F401
 from ..services.interview.interview import (
     add_message,
     answered_rounds,
-    build_interview_messages,
     generate_question,
     generate_report,
     mark_answer_interrupted,
     mark_finished,
-    parse_turn,
     reuse_interrupted_answer,
     session_persona,
 )
+from ..services.interview.interview_context import _claims_json
+from ..services.interview.interview_report_markdown import _report_markdown
 from ..services.llm import create_provider
 from ..services.llm.base import LLMError
 from ..services.materials import create_material as create_material_record
 from ..services.profile.profile_relevance import build_job_prompt_text
-from ..services.resume.resume_suggestions import serialize_resume_prompt_data
+from ..services.resume import document_io
+from ..services.resume.document_view import document_text
 from ..services.settings_service import get_llm_config
 from ._disconnect import client_gone, run_until_disconnect
+from .interview_question_routes import register_question_routes
+from .interview_stream import _QuestionDeltaExtractor as _QuestionDeltaExtractor
+from .interview_stream import make_answer_stream
 
 logger = logging.getLogger(__name__)
 
@@ -102,7 +94,7 @@ def _resume_text(db: Session, session: InterviewSession) -> str:
         # 简历被彻底删除：会话仍可用（只按岗位 JD 提问），不阻断面试。
         return ""
     try:
-        return serialize_resume_prompt_data(ResumeContent.model_validate(record.content or {}))
+        return document_text(document_io.document_for_record(db, record)[0])
     except Exception:  # noqa: BLE001 - 简历形状异常不该让整场面试 500
         logger.warning("序列化关联简历失败 session=%s", session.id, exc_info=True)
         return ""
@@ -239,36 +231,6 @@ def _resume_record_or_none(db: Session, resume_id: int) -> ResumeRecord | None:
     if record is None or trash.is_deleted(record):
         return None
     return record
-
-
-def _claims_json(db: Session) -> str:
-    """已确认的事实台账基线，序列化后进题库/思路提示词。
-
-    只用 ``已确认`` 状态：它们是可以进入正式材料的唯一事实来源，与生成链路一致。
-    """
-    claims = [
-        item
-        for item in db.query(ClaimRecord).filter(trash.live_only(ClaimRecord)).all()
-        if can_enter_final(item.verification_status)
-    ]
-    if not claims:
-        return ""
-    return json.dumps(
-        [
-            {
-                "title": item.title,
-                "category": item.category,
-                "subject": item.subject,
-                "candidate_wording": item.candidate_wording,
-                "responsibility_level": item.responsibility_level,
-                "boundary": item.boundary,
-                "interview_details": item.interview_details or {},
-                "risk_notes": item.risk_notes or [],
-            }
-            for item in claims
-        ],
-        ensure_ascii=False,
-    )
 
 
 @router.get("", response_model=list[InterviewBrief])
@@ -472,50 +434,6 @@ def delete_session(session_id: int, db: Session = Depends(get_db)):
     db.commit()
 
 
-def _report_markdown(session: InterviewSession) -> str:
-    """把面试记录与报告整理成一份 Markdown，存进资料箱当复盘材料。"""
-    report = session.report or {}
-    lines = [
-        f"# {session.title or '模拟面试'}",
-        "",
-        f"- 面试类型：{session.interview_type}",
-        f"- 难度：{session.difficulty}",
-        f"- 面试官风格：{session.interviewer_style}",
-        f"- 目标岗位：{session.job_title or '未关联'}"
-        + (f" @ {session.company}" if session.company else ""),
-        # 自动轮数模式：总轮数本来就不固定，如实记"自动收尾"（硬上限是实现细节，不进报告）。
-        (
-            f"- 问答轮数：{answered_rounds(session)} 轮（自动收尾）"
-            if session.rounds_min is not None
-            else f"- 问答轮数：{answered_rounds(session)} / {session.rounds}"
-        ),
-    ]
-    if report.get("score"):
-        lines.append(f"- 总评分：{report['score']}")
-    lines.extend(["", "## 问答记录", ""])
-    for item in session.messages:
-        if item.role == "interviewer":
-            lines.append(f"**面试官**：{item.content}")
-        elif item.role == "user":
-            lines.append(f"**我**：{item.content}")
-        else:
-            lines.append(f"（{item.content}）")
-        lines.append("")
-    if report.get("dimensions") or report.get("summary"):
-        lines.extend(["## 评分报告", ""])
-        for item in report.get("dimensions") or []:
-            lines.append(
-                f"- **{item.get('name')}**：{item.get('score')} 分 —— {item.get('comment', '')}"
-            )
-        if report.get("strengths"):
-            lines.extend(["", "### 做得好", *[f"- {text}" for text in report["strengths"]]])
-        if report.get("improvements"):
-            lines.extend(["", "### 可以改进", *[f"- {text}" for text in report["improvements"]]])
-        if report.get("summary"):
-            lines.extend(["", f"> {report['summary']}"])
-    return "\n".join(lines).rstrip() + "\n"
-
-
 @router.post("/{session_id}/to-material", response_model=MaterialOut, status_code=201)
 def report_to_material(session_id: int, db: Session = Depends(get_db)):
     """把这场面试的记录与报告存进资料箱（面试复盘）。"""
@@ -531,192 +449,6 @@ def report_to_material(session_id: int, db: Session = Depends(get_db)):
     )
 
 
-@router.post("/questions", response_model=QuestionBankOut)
-async def generate_question_bank(
-    payload: InterviewQuestionGenerateRequest,
-    request: Request,
-    db: Session = Depends(get_db),
-):
-    """生成个性化题库（三类：基础/项目深挖/反问 HR），**即时计算、不落库**。"""
-    provider, _model = _require_provider(db)
-    job = db.get(Job, payload.job_id) if payload.job_id else None
-
-    resume_record = None
-    resume_json = ""
-    if payload.resume_id is not None:
-        resume_record = _resume_record_or_none(db, payload.resume_id)
-        if resume_record is None:
-            raise HTTPException(status_code=404, detail="简历记录不存在或已被删除")
-        resume_json = serialize_resume_prompt_data(
-            ResumeContent.model_validate(resume_record.content or {})
-        )
-
-    job_text = (
-        build_job_prompt_text(job, MAX_JOB_CONTEXT_FOR_INTERVIEW)
-        if job is not None
-        else _job_text(db, resume_record.job_id if resume_record is not None else None)
-    )
-    claims_json = _claims_json(db)
-    db.close()
-    try:
-        # 客户端断开就真的停：题库是一次十几秒的生成，人走了没人收这份结果。
-        result = await run_until_disconnect(
-            request,
-            interview_questions_service.generate_question_bank(
-                provider,
-                job_text=job_text,
-                resume_json=resume_json,
-                claims_json=claims_json,
-            ),
-            what="面试题库生成",
-        )
-        if result is None:
-            raise client_gone("面试题库生成")
-    except LLMError as exc:
-        raise HTTPException(status_code=502, detail=f"生成题库失败：{exc}") from exc
-    return QuestionBankOut(
-        job_id=job.id if job is not None else None,
-        job_title=job.title if job is not None else "",
-        company=job.company if job is not None else "",
-        resume_id=payload.resume_id,
-        groups=result["groups"],
-        llm_used=True,
-        notes=result["notes"],
-    )
-
-
-@router.post("/analyze", response_model=InterviewAnalysisOut)
-async def analyze_question(
-    payload: InterviewAnalysisRequest, request: Request, db: Session = Depends(get_db)
-):
-    """输入一道真实问题，分析答题思路（框架/要点/追问/误区）。"""
-    provider, _model = _require_provider(db)
-
-    parts: list[str] = []
-    if payload.job_id is not None:
-        job = db.get(Job, payload.job_id)
-        if job is not None:
-            parts.append(
-                f"## 目标岗位\n{build_job_prompt_text(job, MAX_JOB_CONTEXT_FOR_INTERVIEW)}"
-            )
-    if payload.resume_id is not None:
-        record = _resume_record_or_none(db, payload.resume_id)
-        if record is None:
-            raise HTTPException(status_code=404, detail="简历记录不存在或已被删除")
-        parts.append(
-            "## 候选人简历\n"
-            + serialize_resume_prompt_data(ResumeContent.model_validate(record.content or {}))
-        )
-    claims_json = _claims_json(db)
-    if claims_json:
-        parts.append(f"## 事实台账\n{claims_json}")
-    if payload.context.strip():
-        parts.append(f"## 用户补充\n{payload.context.strip()}")
-
-    context = "\n\n".join(parts)
-    db.close()
-    try:
-        analysis = await run_until_disconnect(
-            request,
-            interview_questions_service.analyze_question(
-                provider, question=payload.question, context=context
-            ),
-            what="答题思路分析",
-        )
-    except LLMError as exc:
-        raise HTTPException(status_code=502, detail=f"分析答题思路失败：{exc}") from exc
-    if analysis is None:
-        raise client_gone("答题思路分析")
-    return analysis
-
-
-@router.post("/questions/answer", response_model=InterviewQuestionAnswerOut)
-async def generate_question_answer_entry(
-    payload: InterviewQuestionAnswerRequest,
-    request: Request,
-    db: Session = Depends(get_db),
-):
-    """为单道题生成详细参考答案（正文 + 要点 + 话术），**即时计算、不落库**。"""
-    provider, _model = _require_provider(db)
-
-    job_payload = ""
-    if payload.job_id is not None:
-        job = db.get(Job, payload.job_id)
-        if job is not None:
-            job_payload = build_job_prompt_text(job, MAX_JOB_CONTEXT_FOR_INTERVIEW)
-
-    resume_text = ""
-    if payload.resume_id is not None:
-        record = _resume_record_or_none(db, payload.resume_id)
-        if record is None:
-            raise HTTPException(status_code=404, detail="简历记录不存在或已被删除")
-        resume_text = serialize_resume_prompt_data(
-            ResumeContent.model_validate(record.content or {})
-        )
-
-    db.close()
-    try:
-        answer = await run_until_disconnect(
-            request,
-            interview_questions_service.generate_question_answer(
-                provider,
-                question=payload.question,
-                job_payload=job_payload,
-                resume_text=resume_text,
-            ),
-            what="参考答案生成",
-        )
-    except LLMError as exc:
-        raise HTTPException(status_code=502, detail=f"生成参考答案失败：{exc}") from exc
-    if answer is None:
-        raise client_gone("参考答案生成")
-    return answer
-
-
-@router.post("/optimize-resume", response_model=InterviewOptimizeOut)
-async def optimize_resume(
-    payload: InterviewOptimizeRequest, request: Request, db: Session = Depends(get_db)
-):
-    """把面试暴露的短板与高频追问反向转成简历改写建议（**只产出建议、不改正文**）。"""
-    provider, _model = _require_provider(db)
-    record = _resume_record_or_none(db, payload.resume_id)
-    if record is None:
-        raise HTTPException(status_code=404, detail="简历记录不存在或已被删除")
-    resume = ResumeContent.model_validate(record.content or {})
-
-    job = (
-        db.get(Job, payload.job_id)
-        if payload.job_id
-        else (db.get(Job, record.job_id) if record.job_id else None)
-    )
-    job_text = build_job_prompt_text(job, MAX_JOB_CONTEXT_FOR_INTERVIEW) if job is not None else ""
-    weaknesses = [str(item).strip() for item in payload.weaknesses if str(item).strip()]
-    follow_ups = [str(item).strip() for item in payload.follow_ups if str(item).strip()]
-    db.close()
-    try:
-        suggestions = await run_until_disconnect(
-            request,
-            interview_questions_service.optimize_resume(
-                provider,
-                resume=resume,
-                job_text=job_text,
-                weaknesses=weaknesses,
-                follow_ups=follow_ups,
-            ),
-            what="面试反向优化",
-        )
-    except LLMError as exc:
-        raise HTTPException(status_code=502, detail=f"反向优化失败：{exc}") from exc
-    if suggestions is None:
-        raise client_gone("面试反向优化")
-    return InterviewOptimizeOut(
-        resume_id=payload.resume_id,
-        suggestions=suggestions,
-        llm_used=True,
-        notes=[],
-    )
-
-
 # ===== 流式提交回答（AI 提速）：问题像打字一样逐字出现 =====
 #
 # 此前的回答端点是非流式的：模型把"点评 + 下一题"的 JSON 全部生成完，界面才一次性
@@ -725,150 +457,14 @@ async def optimize_resume(
 # 存档，协议与数据完全一致。同时这类结构化调用固定 ``thinking=False``（方案 1）。
 
 
-class _QuestionDeltaExtractor:
-    """从模型输出流里增量提取 ``question`` 字段的明文。
-
-    维护原始缓冲与"已下发明文对应的 raw 指针"：每次 feed 返回新解码出来的部分。
-    尾部可能悬着半个转义序列（反斜杠、反斜杠加 u 的四角数字），那种片段留到下一个 delta 再处理，
-    绝不下发半截转义。question 在提示词里固定是第一个键，输出形状稳定。
-    """
-
-    _KEY_RE = re.compile(r'"question"\s*:\s*"')
-    # \n 在 JSON 里表示换行；值的形态是"反转义后的目标字符"。
-    _SIMPLE_ESCAPES = {
-        "n": "\n",
-        "t": "\t",
-        "r": "\r",
-        "b": "\b",
-        "f": "\f",
-        '"': '"',
-        "\\": "\\",
-        "/": "/",
-    }
-
-    def __init__(self) -> None:
-        self._buffer = ""
-        self._raw_ptr = 0
-        self._value_start: int | None = None
-        self._finished = False
-
-    def feed(self, delta: str) -> str:
-        if self._finished:
-            return ""
-        self._buffer += delta
-        if self._value_start is None:
-            match = self._KEY_RE.search(self._buffer)
-            if not match:
-                return ""
-            self._value_start = match.end()
-            self._raw_ptr = self._value_start
-        out: list[str] = []
-        i = max(self._raw_ptr, self._value_start)
-        while i < len(self._buffer):
-            ch = self._buffer[i]
-            if ch == "\\":
-                if i + 1 >= len(self._buffer):
-                    break
-                esc = self._buffer[i + 1]
-                if esc in self._SIMPLE_ESCAPES:
-                    out.append(self._SIMPLE_ESCAPES[esc])
-                    i += 2
-                elif esc == "u":
-                    hex4 = self._buffer[i + 2 : i + 6]
-                    if len(hex4) < 4:
-                        break
-                    out.append(chr(int(hex4, 16)))
-                    i += 6
-                else:
-                    break
-            elif ch == '"':
-                self._finished = True
-                break
-            else:
-                out.append(ch)
-                i += 1
-        self._raw_ptr = i
-        return "".join(out)
-
-
-def _sse(data: dict) -> str:
-    return f"data: {json.dumps(data, ensure_ascii=False)}\n\n"
-
-
-async def _answer_stream_events(
-    db: Session,
-    session: InterviewSession,
-    provider,
-    index: int,
-    answer: InterviewMessage,
-) -> AsyncIterator[str]:
-    """流式生成一轮回答的 SSE 事件流。
-
-    ``answer`` 是这一轮刚写库的候选人回答。只有"面试官那句回应真的落库了"才算这一轮
-    走完（``completed``）；中途被取消（客户端断开、用户点「停止本轮」）或模型这一轮
-    失败时，``finally`` 把这条回答标成 ``interrupted``——**不删它**，用户可以重答。
-    """
-    completed = False
-    try:
-        if index >= session.rounds:
-            # 先说一句"进入收尾"，再花十几秒生成报告：否则界面会一直显示"正在思考下一个
-            # 问题"，用户根本不知道这场面试已经结束了（见 phase 事件的用途）。
-            yield _sse({"type": "phase", "phase": "finishing"})
-            await _finish_with_report(db, session, provider)
-            result = InterviewAnswerResult(session=_to_detail(session), feedback="", finished=True)
-            yield _sse({"type": "done", "result": json.loads(result.model_dump_json())})
-            return
-
-        extractor = _QuestionDeltaExtractor()
-        parts: list[str] = []
-        try:
-            messages = build_interview_messages(
-                session,
-                index=index,
-                resume_text=_resume_text(db, session),
-                job_text=_job_text(db, session.job_id),
-            )
-            async for delta in provider.stream_chat_events(messages):
-                if delta.text:
-                    parts.append(delta.text)
-                    piece = extractor.feed(delta.text)
-                    if piece:
-                        yield _sse({"type": "question_delta", "text": piece})
-            question, feedback, done = parse_turn("".join(parts))
-        except LLMError:
-            # Provider errors are deliberately reduced to a fixed public message;
-            # model responses and validation details can contain private resume data.
-            # 这一轮没走完（回答已落库、下一问没生成）：由 finally 标成 interrupted。
-            yield _sse({"type": "error", "detail": "面试助手暂时无法完成本轮"})
-            return
-
-        add_message(
-            session,
-            role="interviewer",
-            content=question,
-            context={"index": index, "rounds": session.rounds, "feedback": feedback},
-        )
-        db.commit()
-        # 面试官这句回应落库了 → 这一轮就结束了。之后再被取消（比如正赶上出报告）只是
-        # "报告没来得及生成"，属于另一件事：面试官已经接上话，不该再让用户重答这一轮。
-        completed = True
-        if done:
-            # 模型提前收尾：question 按提示词约定是收尾语。同样先报"进入收尾"，
-            # 再生成报告（报告是整场转录再跑一次模型，最慢的一段）。
-            yield _sse({"type": "phase", "phase": "finishing"})
-            await _finish_with_report(db, session, provider)
-            result = InterviewAnswerResult(
-                session=_to_detail(session), feedback=feedback, finished=True
-            )
-        else:
-            db.refresh(session)
-            result = InterviewAnswerResult(
-                session=_to_detail(session), feedback=feedback, finished=False
-            )
-        yield _sse({"type": "done", "result": json.loads(result.model_dump_json())})
-    finally:
-        if not completed:
-            _mark_interrupted(db, answer)
+def _answer_stream_events(db, session, provider, index, answer) -> AsyncIterator[str]:
+    return make_answer_stream(
+        _finish_with_report,
+        _to_detail,
+        _resume_text,
+        _job_text,
+        _mark_interrupted,
+    )(db, session, provider, index, answer)
 
 
 @router.post("/{session_id}/answers/stream")
@@ -890,3 +486,12 @@ async def submit_answer_stream(
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
+
+
+register_question_routes(
+    router,
+    lambda db: _require_provider(db),
+    lambda db, resume_id: _resume_record_or_none(db, resume_id),
+    lambda db, job_id: _job_text(db, job_id),
+    lambda db: _claims_json(db),
+)

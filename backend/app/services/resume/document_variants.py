@@ -13,7 +13,6 @@ NULL = 继承（render_context 基底快照 → 当前简历 layout_snapshot）�
 from __future__ import annotations
 
 import copy
-import json
 from datetime import UTC, datetime
 from typing import Any
 
@@ -22,95 +21,38 @@ from sqlalchemy.orm import Session
 
 from ...models.resume import ResumeRecord
 from ...models.versions import ResumeVariant, ResumeVersion
-from ...schemas.resume_generation import MODE_PAGE_LIMITS
+from .document_paths import read_document_value, write_document_value
+from .document_variants_view import (
+    MAX_LAYOUT_BYTES,
+    normalize_layout,
+)
+from .document_variants_view import (
+    variant_brief as variant_brief_view,
+)
+from .document_variants_view import (
+    variant_detail as variant_detail_view,
+)
 from .document_versions import (
     VersionNotFound,
     _get_version,
     _job_snapshot,
-    _snapshot_content,
+    document_content,
     layout_snapshot,
 )
 from .resume_delivery import canonical_content_sha256
 
 _MISSING = object()
 
-# 变体独立排版的大小上限：排版上下文只有模板名/版式名/页数/字号/语言与 format_config，
-# 64KB 足够且能拦住"把整份正文塞进 layout"的误用（layout 不是第二个 content）。
-MAX_LAYOUT_BYTES = 64 * 1024
-_LAYOUT_STRING_KEYS = ("template", "format_name", "font_scale", "language", "document_mode")
-
-
-def _normalize_layout(layout: Any) -> dict[str, Any] | None:
-    """校验并复制变体排版；None 表示"清除独立排版、回到继承"。
-
-    只校验会影响渲染的类型（页数/字符串键/format_config），未知顶层键原样保留：
-    渲染层新增参数时不需要同步改这里（与 format_config 的扩展机制同一思路）。
-    """
-    if layout is None:
-        return None
-    if not isinstance(layout, dict):
-        raise ValueError("排版配置必须是对象")
-    try:
-        serialized = json.dumps(layout, ensure_ascii=False, sort_keys=True)
-    except (TypeError, ValueError) as exc:
-        raise ValueError("排版配置包含无法序列化的值") from exc
-    if len(serialized.encode("utf-8")) > MAX_LAYOUT_BYTES:
-        raise ValueError("排版配置过大")
-    cleaned = copy.deepcopy(layout)
-    page_limit = cleaned.get("page_limit")
-    if page_limit is not None:
-        if isinstance(page_limit, bool) or not isinstance(page_limit, int):
-            raise ValueError("page_limit 必须是整数")
-        # A4 长 CV：上限按这份排版自己的 document_mode 判定（旧变体没有该键 →
-        # resume → 仍是 1–3 页，旧行为不变）。此前固定按 MAX_RESUME_PAGES 校验会把
-        # 10 页的长 CV 变体当成非法输入——那是"模式切换后旧页数规则误拦"。
-        low, high = MODE_PAGE_LIMITS.get(
-            str(cleaned.get("document_mode") or "resume"), MODE_PAGE_LIMITS["resume"]
-        )
-        if not low <= page_limit <= high:
-            raise ValueError(f"page_limit 必须在 {low} 到 {high} 之间")
-    for key in _LAYOUT_STRING_KEYS:
-        value = cleaned.get(key)
-        if value is not None and not isinstance(value, str):
-            raise ValueError(f"{key} 必须是字符串")
-    format_config = cleaned.get("format_config")
-    if format_config is not None and not isinstance(format_config, dict):
-        raise ValueError("format_config 必须是对象")
-    return cleaned
-
 
 def variant_brief(variant: ResumeVariant) -> dict[str, Any]:
-    return {
-        "id": variant.id,
-        "resume_id": variant.resume_id,
-        "name": variant.name,
-        "job_id": variant.job_id,
-        "job_title": variant.job_title,
-        "company": variant.company,
-        "content_sha256": variant.content_sha256,
-        # A5：派生变体继承的生成上下文（命名版本优先，否则当前简历）。NULL = 未记录。
-        # 变体另选场景不在本批：这里只做继承与只读展示，不提供改写入参。
-        "context_snapshot": copy.deepcopy(variant.context_snapshot),
-        "base_version_id": variant.base_version_id,
-        "last_synced_version_id": variant.last_synced_version_id,
-        "synced_at": variant.synced_at,
-        # W16 语言变体字段（旧变体为 ""/None）与独立排版覆盖标记。
-        "language": variant.language or "",
-        "variant_group_id": variant.variant_group_id,
-        "has_layout": variant.layout is not None,
-        "created_at": variant.created_at,
-        "updated_at": variant.updated_at,
-    }
+    """变体只读摘要（实现见 document_variants_view）。"""
+    return variant_brief_view(variant)
 
 
 def variant_detail(variant: ResumeVariant) -> dict[str, Any]:
-    return {
-        **variant_brief(variant),
-        "content": variant.content or {},
-        "render_context": variant.render_context or {},
-        # 原始覆盖值（None = 继承）；生效排版走 resolve_variant_export。
-        "layout": copy.deepcopy(variant.layout) if variant.layout is not None else None,
-    }
+    """变体详情：旧快照（v1）在读取边界统一收口为 v2。"""
+    content = document_content(variant.content, variant.render_context)
+    return variant_detail_view(variant, content)
 
 
 def _get_variant(db: Session, resume_id: int, variant_id: int) -> ResumeVariant:
@@ -148,20 +90,22 @@ def create_variant(
     resolved_job_id, job_title, company = _job_snapshot(db, record, job_id)
     if resolved_job_id is None and base is not None:
         resolved_job_id = base.job_id
-    content = _snapshot_content(base.content if base is not None else record.content)
     context = (
         copy.deepcopy(base.render_context or {})
         if base is not None
         else layout_snapshot(db, record)
+    )
+    # 落库的永远是 v2：旧命名版本（v1 快照）在这里一次性转换，新版本/当前简历直通。
+    content = document_content(
+        base.content if base is not None else record.content,
+        base.render_context if base is not None else context,
     )
     # A5：显式给定的上下文优先（按职业场景派生变体）；否则继承"哪个来源的上下文"与
     # 内容/排版同源——指定命名版本时用版本的冻结快照，否则用当前简历的。之后
     # **互不影响**（同步/翻译都不改它）。
     if context_snapshot is None:
         context_snapshot = copy.deepcopy(
-            base.context_snapshot
-            if base is not None
-            else getattr(record, "context_snapshot", None)
+            base.context_snapshot if base is not None else getattr(record, "context_snapshot", None)
         )
     else:
         context_snapshot = copy.deepcopy(context_snapshot)
@@ -173,7 +117,7 @@ def create_variant(
         company=company,
         content=content,
         render_context=context,
-        layout=_normalize_layout(layout),
+        layout=normalize_layout(layout),
         content_sha256=canonical_content_sha256(content),
         base_version_id=base.id if base is not None else None,
         context_snapshot=context_snapshot,
@@ -198,23 +142,6 @@ def list_variants(db: Session, resume_id: int) -> list[ResumeVariant]:
 
 def get_variant(db: Session, resume_id: int, variant_id: int) -> ResumeVariant:
     return _get_variant(db, resume_id, variant_id)
-
-
-def _read_path(payload: Any, path: str) -> Any:
-    current: Any = payload
-    for segment in path.split("."):
-        if isinstance(current, dict):
-            if segment not in current:
-                return _MISSING
-            current = current[segment]
-        elif isinstance(current, list):
-            try:
-                current = current[int(segment)]
-            except (ValueError, IndexError):
-                return _MISSING
-        else:
-            return _MISSING
-    return current
 
 
 def _write_path(payload: Any, path: str, value: Any) -> bool:
@@ -251,6 +178,24 @@ def _write_path(payload: Any, path: str, value: Any) -> bool:
     return False
 
 
+# v1 顶层标量 -> v2 页眉 item key（photo 不同步：它是二进制派生值，不走文本同步）。
+
+
+def read_document_path(document: dict, path: str) -> Any:
+    return read_document_value(document, path, _MISSING)
+
+
+def write_document_path(document: dict, path: str, value: Any) -> bool:
+    if document.get("version") != 2:
+        return _write_path(document, path, value)
+    return write_document_value(document, path, value)
+
+
+def _variant_document(variant: ResumeVariant) -> dict:
+    """变体内容 -> v2 文档（旧变体 v1 快照在这里一次性转换，之后按 v2 原生改）。"""
+    return document_content(variant.content, variant.render_context)
+
+
 def sync_variants(
     db: Session,
     record: ResumeRecord,
@@ -275,7 +220,7 @@ def sync_variants(
         cleaned = (path or "").strip()
         if not cleaned or len(cleaned) > 256:
             raise ValueError("同步路径不合法")
-        if _read_path(source_content, cleaned) is _MISSING:
+        if read_document_path(source_content, cleaned) is _MISSING:
             raise ValueError(f"来源内容里没有这条路径：{cleaned}")
         if cleaned not in normalized_paths:
             normalized_paths.append(cleaned)
@@ -286,13 +231,14 @@ def sync_variants(
             continue
         seen.add(variant_id)
         variant = _get_variant(db, record.id, variant_id)
-        content = copy.deepcopy(variant.content or {})
+        # 变体内容统一收口为 v2 后在文档上原生写入：不同步的 item（位置/版式/隐藏）原样保留。
+        content = _variant_document(variant)
         applied: list[str] = []
         for path in normalized_paths:
-            value = _read_path(source_content, path)
+            value = read_document_path(source_content, path)
             if value is _MISSING:
                 continue
-            if _write_path(content, path, value):
+            if write_document_path(content, path, value):
                 applied.append(path)
         if applied:
             # 选择性同步只写勾选路径：content_snapshot 是"派生时的场景上下文"，
@@ -318,7 +264,7 @@ def set_variant_layout(
     db: Session, variant: ResumeVariant, layout: dict[str, Any] | None
 ) -> ResumeVariant:
     """保存/清除变体的独立排版覆盖（None = 清除，回到继承）。"""
-    variant.layout = _normalize_layout(layout)
+    variant.layout = normalize_layout(layout)
     db.commit()
     db.refresh(variant)
     return variant
@@ -355,7 +301,7 @@ def resolve_variant_export(
     else:
         layout = layout_snapshot(db, resume)
         layout_source = "resume"
-    content = copy.deepcopy(variant.content or {})
+    content = document_content(variant.content, layout)
     return {
         "resume_id": resume.id,
         "variant_id": variant.id,
@@ -375,9 +321,11 @@ __all__ = [
     "create_variant",
     "get_variant",
     "list_variants",
+    "read_document_path",
     "resolve_variant_export",
     "set_variant_layout",
     "sync_variants",
     "variant_brief",
     "variant_detail",
+    "write_document_path",
 ]

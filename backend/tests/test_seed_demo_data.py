@@ -37,7 +37,14 @@ FICTIONAL_MARKER = "示例"
 def demo_db(tmp_path_factory: pytest.TempPathFactory) -> Path:
     """跑一次脚本（带自检），返回生成的演示库路径。"""
     target = tmp_path_factory.mktemp("demo") / "demo.db"
-    env = dict(os.environ, PYTHONUTF8="1")
+    # 隔离 DATA_DIR：--check 会读设置类接口，其中 /settings/llm/records 首次调用会把
+    # 演示库的假模型配置迁移进全局设置文件。不隔离就会写进开发环境的 backend/data
+    # （真实用户设置目录）——演示数据的虚构配置不该出现在那里。
+    env = dict(
+        os.environ,
+        PYTHONUTF8="1",
+        RF_DATA_DIR=str(tmp_path_factory.mktemp("demo-data")),
+    )
     result = subprocess.run(
         [sys.executable, str(SCRIPT), "--out", str(target), "--check"],
         cwd=REPO_ROOT,
@@ -87,7 +94,7 @@ def test_demo_persona_covers_the_main_pages(demo_db: Path):
     expectations = {
         "user_profile": 1,
         "job": 12,
-        "resume_record": 3,
+        "resume_record": 4,
         "claim_record": 6,
         "material": 5,
         "knowledge_entry": 6,
@@ -274,3 +281,158 @@ def test_profiles_two_models_share_the_same_fictional_persona(demo_db: Path):
         str(value) for key, values in entries if key == "experiences" for value in values.values()
     )
     assert "示例科技有限公司" in experience_text
+
+# ── v2 演示内容的守卫（2026-10-30 字段级文档模型）──────────────────────────────
+
+
+def _resume_contents(db: Path) -> list[tuple[int, str, dict]]:
+    """读出 (id, title, content)——演示库现在同时存在 v1 与 v2 两种内容。"""
+    return [
+        (row[0], row[1], json.loads(row[2]))
+        for row in _rows(db, "select id, title, content from resume_record order by id")
+    ]
+
+
+def _items(content: dict) -> list[dict]:
+    return [
+        item
+        for section in content.get("sections") or []
+        for entry in section.get("entries") or []
+        for item in entry.get("items") or []
+    ]
+
+
+def test_demo_db_has_both_v1_and_v2_resumes(demo_db: Path):
+    """演示库必须同时保留旧格式样本与新格式内容。
+
+    少任何一边都会让一类验收失去数据：只有 v2 就测不到"打开旧简历 → 读时转换"，
+    只有 v1 就测不到新模型 / 四出口 / 截图。
+    """
+    contents = _resume_contents(demo_db)
+    v1 = [item for item in contents if item[2].get("version") != 2]
+    v2 = [item for item in contents if item[2].get("version") == 2]
+    assert len(v1) >= 2, f"v1 旧简历样本只有 {len(v1)} 份"
+    assert len(v2) >= 2, f"v2 演示简历只有 {len(v2)} 份"
+
+    from app.schemas.resume_document import parse_document
+
+    for resume_id, title, content in v2:
+        document = parse_document(content)  # 结构不合法会抛错 = 演示库打不开
+        assert document.version == 2
+        assert document.sections, f"v2 简历 {resume_id} {title} 没有任何板块"
+
+
+def test_v2_demo_resumes_cover_field_level_placement(demo_db: Path):
+    """v2 样本必须覆盖验收口径的字段位置（计划 §4/§10.4）。
+
+    这些位置是产品承诺本身：学校 / 专业在标题，学历 / 日期在元信息，绩点 / 课程在 lead，
+    自定义短字段在 trail，自定义长文本在 body，仅素材字段 hidden 不上纸面。
+    演示数据缺一样，实机截图与 e2e 就看不见那一项能力。
+    """
+    v2 = [item for item in _resume_contents(demo_db) if item[2].get("version") == 2]
+    assert v2
+    for resume_id, title, content in v2:
+        items = _items(content)
+        by_key = {item.get("key"): item for item in items if item.get("kind") != "text"}
+        labels = {item.get("label"): item for item in items}
+        assert by_key["school"]["placement"] == "title", (resume_id, title)
+        assert by_key["major"]["placement"] == "title"
+        assert by_key["degree"]["placement"] == "meta"
+        assert by_key["period"]["placement"] == "meta"
+        assert by_key["gpa"]["placement"] == "lead"
+        assert by_key["courses"]["placement"] == "lead"
+        assert labels["课题组"]["placement"] == "trail", (resume_id, title)
+        hidden = [item for item in items if item.get("placement") == "hidden"]
+        assert hidden, f"v2 简历 {resume_id} 没有仅素材 / 隐藏字段样本"
+
+        custom_sections = [
+            section
+            for section in content.get("sections") or []
+            if str(section.get("key", "")).startswith("custom:")
+        ]
+        assert custom_sections, f"v2 简历 {resume_id} 没有自建板块"
+        custom_items = [
+            item
+            for section in custom_sections
+            for entry in section.get("entries") or []
+            for item in entry.get("items") or []
+        ]
+        assert {item.get("placement") for item in custom_items} >= {"title", "trail", "body"}
+
+    long_text_items = [
+        item
+        for _resume_id, _title, content in v2
+        for item in _items(content)
+        if item.get("label") == "团队协作说明"
+    ]
+    assert long_text_items, "v2 样本没有自定义长文本字段"
+    assert long_text_items[0]["placement"] == "body"
+
+
+def test_v2_demo_resumes_cover_three_head_layouts(demo_db: Path):
+    """三种条目头布局（split / stacked / meta_first）都要在演示数据里出现。"""
+    layouts: set[str] = set()
+    for _resume_id, _title, content in _resume_contents(demo_db):
+        if content.get("version") != 2:
+            continue
+        for section in content.get("sections") or []:
+            for entry in section.get("entries") or []:
+                head = (entry.get("layout") or {}).get("head")
+                if head:
+                    layouts.add(head)
+    assert {"split", "stacked", "meta_first"} <= layouts, layouts
+
+
+def test_v2_demo_resume_facts_are_grounded_in_profile(demo_db: Path):
+    """v2 样本的事实必须与演示资料同源（学校 / 公司来自资料，联系方式是占位）。"""
+    profile_entries = [
+        (row[0], json.loads(row[1]))
+        for row in _rows(demo_db, 'select section_key, "values" from profile_entry')
+    ]
+    profile_text = " ".join(
+        str(value) for _key, values in profile_entries for value in values.values()
+    )
+    assert "示例大学" in profile_text and "示例科技有限公司" in profile_text
+
+    v2_text = " ".join(
+        json.dumps(content, ensure_ascii=False)
+        for _resume_id, _title, content in _resume_contents(demo_db)
+        if content.get("version") == 2
+    )
+    for fact in ("示例大学", "市场营销", "示例科技有限公司", "示例文化传播有限公司"):
+        assert fact in v2_text, fact
+    assert "zhang.example@example.com" in v2_text
+    assert "138-0000-0000" in v2_text
+
+
+def test_profile_custom_fields_carry_v2_placement(demo_db: Path):
+    """资料页自定义字段必须带 v2 的纸面位置 / 仅素材属性，演示数据覆盖三种形态。"""
+    rows = {
+        (row[0], row[1]): (row[2], row[3], row[4])
+        for row in _rows(
+            demo_db,
+            "select section_key, label, field_type, default_placement, material_only "
+            "from profile_custom_field",
+        )
+    }
+    assert ("educations", "课题组") in rows
+    assert rows[("educations", "课题组")][1] == "trail"
+    assert rows[("experiences", "团队协作说明")][0] == "multi_line"
+    assert rows[("experiences", "团队协作说明")][1] == "body"
+    material = rows[("experiences", "背调联系人")]
+    assert material[2] == 1, material
+
+    custom_section_keys = {
+        row[0] for row in _rows(demo_db, "select key from profile_custom_section")
+    }
+    assert custom_section_keys
+    custom_fields = {
+        row[1]: row[2]
+        for row in _rows(
+            demo_db,
+            "select section_key, label, default_placement from profile_custom_field",
+        )
+        if row[0] in custom_section_keys
+    }
+    assert {"作品名称", "作品链接", "作品说明"} <= set(custom_fields)
+

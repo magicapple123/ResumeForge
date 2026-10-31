@@ -30,7 +30,7 @@ import type { ReactNode } from "react";
 import { t } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
 import { fetchResumePreviewPdf } from "../../api/resumes";
-import type { ResumeContent } from "../../types/resume";
+import type { ResumeDocument } from "../../types/resumeDocument";
 import LoadingBlock from "../common/LoadingBlock";
 import {
   ExactNoViewer,
@@ -40,9 +40,11 @@ import {
 } from "./ExactPreviewNotes";
 import { readCachedPreview, writeCachedPreview, type PreviewShot } from "./exactPreviewCache";
 import { A4_WIDTH_PX } from "./config";
-import { INLINE_PDF_OK, zoomedPdfUrl } from "./pdfViewerSupport";
+import { INLINE_PDF_OK } from "./pdfViewerSupport";
 import { exactPreviewFrameHeight, useExactPreviewFrameHeight } from "./useExactPreviewFrameHeight";
 import ExactPreviewPaper from "./ExactPreviewPaper";
+import { useFrameLoadStall } from "./useFrameLoadStall";
+import { useZoomedPdfUrl } from "./useZoomedPdfUrl";
 interface Props {
   resumeId: number;
   /** 草稿的模板名（内置或自制）：换完还没保存也要按新的排。 */
@@ -99,7 +101,7 @@ interface Props {
    * 草稿内容传进来；`contentSignature` 必须同步换成这份内容的签名，否则缓存键不变、
    * 请求根本不会重发。
    */
-  content?: ResumeContent;
+  content?: ResumeDocument;
   /**
    * 状态行的出口：宿主传了它，本组件就**不再自己渲染**那一行，而是把节点交出去
    * （主预览要把它并进缩放条，省掉一条横栏）。
@@ -162,7 +164,8 @@ export default function ExactPreviewPanel({
 
   const release = useCallback((url: string | null) => {
     if (!url) return;
-    URL.revokeObjectURL(url);
+    // 缩放 URL 形如 `blob:…#zoom=120`：revoke 要按"没有 hash 的本体"去撤。
+    URL.revokeObjectURL(url.split("#")[0]);
     urlsRef.current.delete(url);
   }, []);
 
@@ -185,10 +188,10 @@ export default function ExactPreviewPanel({
     [configKey],
   );
 
-  // 卸载时把没释放的 URL 全清掉。
+  // 卸载时把没释放的 URL 全清掉（唯一释放点之一：组件销毁）。
   useEffect(
     () => () => {
-      for (const url of urlsRef.current) URL.revokeObjectURL(url);
+      for (const url of urlsRef.current) URL.revokeObjectURL(url.split("#")[0]);
       urlsRef.current.clear();
     },
     [],
@@ -324,6 +327,7 @@ export default function ExactPreviewPanel({
     language,
     formatKey,
     normalizedConfig,
+    content,
     release,
     keep,
     showShot,
@@ -389,22 +393,27 @@ export default function ExactPreviewPanel({
    *  每换一档都换一个新 objectURL；iframe 至少与相框同宽，放大时的横向滚动交给 `.is-zoomed`。 */
   const zoomPct = scalable ? Math.max(10, Math.round((100 * paperWidth) / A4_WIDTH_PX)) : null;
   const viewWidth = Math.max(frameWidth, paperWidth);
-  const framedUrl = useMemo(
-    () => (current ? zoomedPdfUrl(current, zoomPct) : null),
-    [current, zoomPct],
-  );
-  const pendingUrl = useMemo(
-    () => (pending ? zoomedPdfUrl(pending, zoomPct) : null),
-    [pending, zoomPct],
-  );
-  // 每换一档缩放都会造新的 objectURL：旧的必须释放，否则每次缩放都留一份 PDF 的内存。
-  useEffect(
-    () => () => {
-      for (const url of [framedUrl, pendingUrl]) {
-        if (url?.startsWith("blob:")) URL.revokeObjectURL(url.split("#")[0]);
-      }
-    },
-    [framedUrl, pendingUrl],
+  // 缩放 URL 只在 effect 里创建（禁止渲染期造 blob URL，见 `useZoomedPdfUrl` 文件头）：
+  // 两个 iframe 各一份，旧的由 hook 在换档时释放、卸载由上面的 urlsRef 单点清空。
+  const framedUrl = useZoomedPdfUrl(current, zoomPct, keep, release);
+  const pendingUrl = useZoomedPdfUrl(pending, zoomPct, keep, release);
+  /**
+   * iframe 的 `key`：换 URL / 换页数 / 换缩放都要**干净重建**查看器。
+   *
+   * Chromium 的 PDF 查看器不会因为 src 的 hash 变了就重新读缩放参数（必须换一个 objectURL），
+   * 换 URL 时若 React 复用同一个 iframe 节点，某些版本会保留旧查看器状态——加 key 让它是
+   * 一次真正的卸载 + 挂载，这是 Q18"缩放后内容消失"的兜底之一。
+   */
+  const currentFrameKey = current
+    ? `${current.key}|${framedUrl ?? "plain"}|${zoomPct ?? "fit"}`
+    : null;
+  const pendingFrameKey = pending
+    ? `${pending.key}|${pendingUrl ?? "plain"}|${zoomPct ?? "fit"}`
+    : null;
+  // 可见层加载兜底（Q18）：8s 没 onLoad 就切 ExactNoViewer，状态机拆到 `useFrameLoadStall`。
+  const { stalled: frameStalled, handleLoaded: handleCurrentLoad } = useFrameLoadStall(
+    currentFrameKey,
+    INLINE_PDF_OK,
   );
 
   /**
@@ -449,12 +458,14 @@ export default function ExactPreviewPanel({
         {active && busy && !current ? (
           <LoadingBlock tip={t("preview.exact.typesetting")} minHeight={height} />
         ) : null}
-        {current && INLINE_PDF_OK ? (
+        {current && INLINE_PDF_OK && !frameStalled ? (
           <ExactPreviewPaper
             current={current}
             pending={pending}
             framedUrl={framedUrl}
             pendingUrl={pendingUrl}
+            currentFrameKey={currentFrameKey ?? "current"}
+            pendingFrameKey={pendingFrameKey}
             renderedPages={renderedPages}
             frameHeight={frameHeight}
             paperHeight={paperHeight}
@@ -462,11 +473,14 @@ export default function ExactPreviewPanel({
             scale={scale}
             scalable={scalable}
             busy={busy}
+            onCurrentLoad={handleCurrentLoad}
             onSwapIn={swapIn}
           />
         ) : null}
 
-        {current && !INLINE_PDF_OK ? <ExactNoViewer url={current.url} /> : null}
+        {current && (!INLINE_PDF_OK || frameStalled) ? (
+          <ExactNoViewer url={current.url} fallback={frameStalled ? "timeout" : "no-viewer"} />
+        ) : null}
       </div>
       {/* 状态行交给宿主的那一半（`onStatus`）：主预览把它并进**缩放条同一行**（2026-10-29
           用户要求"这两行放到一行"），制作台右栏空间窄，并进去之后自然会折成两行，高度不变。

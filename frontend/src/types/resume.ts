@@ -20,7 +20,9 @@ export type {
   ResumeCustomLine,
   ResumeCustomSection,
 } from "./resumeContent";
-import type { ResumeContent } from "./resumeContent";
+import type { ResumeDocument } from "./resumeDocument";
+import type { DocumentConversionSummary } from "./resumeConversion";
+import type { ResumeCoverageNote } from "./resumeCoverage";
 
 export type EnhancementLevel = "light" | "balanced" | "strong";
 
@@ -296,8 +298,14 @@ export type {
   StartResumeGenerationPayload,
 } from "./resumeCreation";
 
+/** 旧简历 v1 → v2 转换摘要：定义在 `types/resumeConversion`，此处 re-export 保持导入路径不变。 */
+export type { DocumentConversionSummary } from "./resumeConversion";
+
 export interface ResumeDetail extends ResumeBrief {
-  content: ResumeContent;
+  /** v2 字段级文档；制作台、预览、导出、编辑器与分析均直接读取它。 */
+  content: ResumeDocument;
+  /** 这次读取触发了 v1→v2 转换时的摘要；已是 v2 的记录为 null/缺省。 */
+  document_conversion?: DocumentConversionSummary | null;
   warnings: string[];
   parse_error: string;
   /** 版本血缘（RF-17）：由哪份简历派生而来；null = 独立版本，不做推断。 */
@@ -323,19 +331,8 @@ export interface ResumeDetail extends ResumeBrief {
   profile_usage?: ResumeProfileUsageSnapshot | null;
 }
 
-/** 一条"没写进这份简历"的分区级清单。 */
-export interface ResumeCoverageNote {
-  /** 资料分区键（projects/experience/...），与简历字段同名。 */
-  section: string;
-  section_label: string;
-  /** 全部未写入的条目身份名。 */
-  names: string[];
-  /** 被岗位筛选/预算拦下的（没进候选资料）。 */
-  filtered: string[];
-  /** 进了候选但模型没写的。 */
-  model_omitted: string[];
-  total: number;
-}
+/** 分区级覆盖清单：定义在 `types/resumeCoverage`，此处 re-export 保持导入路径不变。 */
+export type { ResumeCoverageNote } from "./resumeCoverage";
 
 export type ResumeSuggestionPriority = "high" | "medium" | "low";
 
@@ -467,7 +464,7 @@ export type StreamEvent =
   | { type: "delta"; text: string }
   | {
       type: "done";
-      resume: ResumeContent;
+      resume: ResumeDocument;
       warnings: string[];
       coverage_notes?: ResumeCoverageNote[];
       rationale?: string;

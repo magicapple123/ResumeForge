@@ -15,14 +15,10 @@
  * `onTrialAdopt` 落一次 layout（进统一历史），返回图库即结束试用。
  */
 import { App, Button, Radio, Segmented, Space, Tooltip, Typography } from "antd";
+import type { ResumeDocument } from "../../../types/resumeDocument";
 import { useEffect, useState } from "react";
 import { t } from "../../../i18n";
-import type {
-  ResumeContent,
-  ResumeFormatConfig,
-  ResumeLayout,
-  ResumeTemplateCatalog,
-} from "../../../types";
+import type { ResumeFormatConfig, ResumeLayout, ResumeTemplateCatalog } from "../../../types";
 import { templateCapability } from "../../../features/resume-template-trial/templateProfile";
 import { useTemplateTrial } from "../../../features/resume-template-trial/useTemplateTrial";
 import type { TrialAdoptRequest } from "../../../features/resume-template-trial/types";
@@ -36,7 +32,7 @@ interface Props {
   layout: ResumeLayout;
   catalog?: ResumeTemplateCatalog;
   resumeId?: number | null;
-  content?: ResumeContent | null;
+  content?: ResumeDocument | null;
   /** 从图库某张卡片点"试用"进来时指定右侧模板。 */
   initialTemplate?: string | null;
   /** 宿主是否提供"重设排版覆盖"的通道（没有时如实禁用该选项）。 */

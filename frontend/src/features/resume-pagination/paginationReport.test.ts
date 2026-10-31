@@ -14,6 +14,30 @@ import {
   parsePaginationReport,
   truncationLocateTarget,
 } from "./paginationReport";
+import type { ResumeDocument } from "../../types/resumeDocument";
+
+const V2_DOCUMENT: ResumeDocument = {
+  version: 2,
+  language: "zh-CN",
+  header: { items: [], contact_breaks: [] },
+  sections: [
+    {
+      key: "projects",
+      title: "项目",
+      kind: "entries",
+      layout: {
+        columns: 1,
+        align: "equal",
+        gap: null,
+        hide_title: false,
+        keep_together: false,
+        start_on_new_page: false,
+        title_override: "",
+      },
+      entries: [],
+    },
+  ],
+};
 
 const RAW = {
   pages: 2,
@@ -154,7 +178,7 @@ describe("fetchPaginationReport", () => {
     const controller = new AbortController();
     const report = await fetchPaginationReport(
       7,
-      { template: "classic", page_limit: 2, content: { summary: ["x"] } as never },
+      { template: "classic", page_limit: 2, content: V2_DOCUMENT },
       controller.signal,
     );
     expect(report.pagesNeeded).toBe(3);
@@ -166,7 +190,7 @@ describe("fetchPaginationReport", () => {
       (clientMocks.request.mock.calls[0][1] as { body: string }).body,
     ) as Record<string, unknown>;
     expect(body).toMatchObject({ template: "classic", page_limit: 2 });
-    expect(body.content).toEqual({ summary: ["x"] });
+    expect(body.content).toEqual(V2_DOCUMENT);
   });
 
   it("响应不可解析时抛错（不把空报告当成功）", async () => {

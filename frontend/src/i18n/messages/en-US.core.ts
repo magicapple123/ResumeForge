@@ -206,6 +206,7 @@ const core = {
   "toast.restored.batch": "Restored {count} items",
   "toast.restore.failed": "Could not restore; retry in Trash",
   "toast.undo.label": "Undo",
+  "toast.pageBreakApplied": "Page breaks apply in exact preview and exports",
   "announcement.region": "App announcements",
   "announcement.dismiss": "Dismiss this announcement",
   "announcement.update.ready": "A new version is available",

@@ -9,7 +9,7 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict, Field
 
 from .export import ExportFormat
-from .resume import ResumeContent, ResumeFontScale, ResumeLanguage
+from .resume import ResumeFontScale, ResumeLanguage
 from .resume_generation import LONG_CV_MAX_PAGES
 
 ALL_FORMATS: tuple[str, ...] = ("json", "md", "html", "pdf", "docx", "txt")
@@ -59,7 +59,8 @@ class ExportBundleRequest(BaseModel):
     resume_revision: int | None = Field(default=None, ge=0)
     strict_revision: bool = False
     # 当前草稿（W04 缺口）：与预览同一份内容；给定则不读库内正文，不落库不冻结正文。
-    content: ResumeContent | None = None
+    # v2 文档 JSON（兼容旧 v1：路由统一 ensure_document_version 转 v2 再进管线）。
+    content: dict | None = None
     margin_mm: float | None = Field(default=None, ge=4, le=40)
     font_scale: ResumeFontScale | None = None
     # A4 长 CV：请求可带到 10；服务层按记录的 document_mode 用 mode_page_limit 夹紧。

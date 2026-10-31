@@ -4,6 +4,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { App as AntdApp } from "antd";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import ResumeReviseModal from "./ResumeReviseModal";
+import { makeResumeDocument } from "../../test/documentHarness";
 import { reviseResume } from "../../api/resumes";
 import type { ResumeDetail } from "../../types";
 
@@ -59,9 +60,7 @@ describe("ResumeReviseModal", () => {
   });
 
   it("submits the instruction and hands the updated record back", async () => {
-    vi.mocked(reviseResume).mockResolvedValue(
-      detail({ content: { summary: "新的总结" } as ResumeDetail["content"] }),
-    );
+    vi.mocked(reviseResume).mockResolvedValue(detail({ content: makeResumeDocument() }));
     const onApplied = vi.fn().mockResolvedValue(undefined);
     const onClose = vi.fn();
     renderModal(<ResumeReviseModal open recordId={7} onClose={onClose} onApplied={onApplied} />);

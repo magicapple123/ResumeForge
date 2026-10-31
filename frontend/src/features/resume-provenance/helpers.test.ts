@@ -80,6 +80,7 @@ function provenance(objects: DocumentObjectOut[]): ResumeProvenanceOut {
     revision: 7,
     sources: [source()],
     objects,
+    unresolved_links: [],
     coverage: { total: objects.length, linked: objects.filter((o) => o.link).length, unlinked: 0 },
   };
 }

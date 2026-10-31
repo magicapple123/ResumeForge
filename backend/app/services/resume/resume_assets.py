@@ -32,21 +32,14 @@ from ...models.phrase import (
     ResumePhrase,
 )
 from ...models.resume import ResumeRecord
-from .document_identity import ENTRY_FIELDS, is_object_id
+from . import document_io
+from .document_identity import ENTRY_FIELDS
+from .document_phrase_ops import collect_document_text, insert_document_phrase
 from .document_provenance import create_link, upsert_source
 from .document_save import save_content
 
-_MISSING = object()
-
 # 新条目的主文本字段（用于 entry_id 为空时追加一条新条目）。
-_SECTION_PRIMARY_FIELD: dict[str, str] = {
-    "education": "achievements",
-    "experience": "description",
-    "campus_experience": "description",
-    "projects": "description",
-}
 # 没有要点数组的栏目：插入 = 新建一条条目，文本写到标量字段。
-_SECTION_SCALAR_FIELD: dict[str, str] = {"skills": "name", "awards": "description"}
 
 # 从字段名推断表达类型（收藏时用，只做展示分类，不影响正文）。
 _FIELD_KIND = {
@@ -214,59 +207,12 @@ def update_phrase(db: Session, phrase: ResumePhrase, **fields: Any) -> ResumePhr
     return phrase
 
 
-def _read_path(payload: Any, path: str) -> Any:
-    current: Any = payload
-    for segment in path.split("."):
-        if isinstance(current, dict):
-            if segment not in current:
-                return _MISSING
-            current = current[segment]
-        elif isinstance(current, list):
-            try:
-                current = current[int(segment)]
-            except (ValueError, IndexError):
-                return _MISSING
-        else:
-            return _MISSING
-    return current
-
-
 def _collect_target(record: ResumeRecord, path: str) -> tuple[str, str | None, str | None, str]:
-    """解析 data-resume-path → (文本, object_id, point_id, kind)；解析不到抛 ValueError。"""
-    segments = [segment for segment in (path or "").split(".") if segment != ""]
-    if len(segments) < 2 or segments[0] not in ENTRY_FIELDS:
-        raise ValueError("路径不在可收藏的简历条目里")
-    field = segments[0]
-    try:
-        index = int(segments[1])
-    except ValueError as exc:
-        raise ValueError("路径格式不正确") from exc
-    entries = (record.content or {}).get(field) or []
-    if not isinstance(entries, list) or not 0 <= index < len(entries):
-        raise ValueError("路径对应的条目不存在")
-    entry = entries[index]
-    if not isinstance(entry, dict):
-        raise ValueError("路径对应的条目不存在")
-    value = _read_path(record.content, path)
-    if not isinstance(value, str) or not value.strip():
-        raise ValueError("只能收藏一段非空文本")
-    raw_id = entry.get("id")
-    object_id = raw_id if is_object_id(raw_id) else None
-    point_id: str | None = None
-    if len(segments) == 4:
-        key, raw_point = segments[2], segments[3]
-        point_ids = entry.get("point_ids") or {}
-        ids = point_ids.get(key) if isinstance(point_ids, dict) else None
-        try:
-            point_index = int(raw_point)
-        except ValueError:
-            point_index = -1
-        if isinstance(ids, list) and 0 <= point_index < len(ids):
-            candidate = ids[point_index]
-            if is_object_id(candidate):
-                point_id = candidate
-    kind = _FIELD_KIND.get(segments[2] if len(segments) >= 3 else "", PHRASE_KIND_CUSTOM)
-    return value.strip(), object_id, point_id, kind
+    text, object_id, point_id, field = collect_document_text(
+        document_io.document_for_record(None, record)[0],
+        path,
+    )
+    return text, object_id, point_id, _FIELD_KIND.get(field, PHRASE_KIND_CUSTOM)
 
 
 def collect_phrase(
@@ -286,85 +232,6 @@ def collect_phrase(
     )
 
 
-def _find_entry(content: dict[str, Any], section: str, entry_id: str) -> dict[str, Any] | None:
-    entries = content.get(section) or []
-    if not isinstance(entries, list):
-        return None
-    for entry in entries:
-        if isinstance(entry, dict) and entry.get("id") == entry_id:
-            return entry
-    return None
-
-
-def _point_ids_for(entry: dict[str, Any], field: str, values: list[Any]) -> list[str]:
-    """取/补齐某要点数组的 id 列表（缺 id 或长度不符时按当前内容重建，保证等长）。"""
-    point_ids = entry.get("point_ids")
-    if not isinstance(point_ids, dict):
-        point_ids = {}
-        entry["point_ids"] = point_ids
-    existing = point_ids.get(field)
-    if (
-        isinstance(existing, list)
-        and len(existing) == len(values)
-        and all(is_object_id(item) for item in existing)
-    ):
-        return list(existing)
-    rebuilt = [new_object_id() for _ in values]
-    point_ids[field] = rebuilt
-    return rebuilt
-
-
-def _insert_into_existing_entry(
-    content: dict[str, Any],
-    section: str,
-    entry_id: str,
-    text: str,
-    point_index: int | None,
-) -> tuple[str, str, str]:
-    entry = _find_entry(content, section, entry_id)
-    if entry is None:
-        raise ValueError("条目不在当前简历里")
-    object_id = entry["id"]
-    preview_fields = [name for name in ENTRY_FIELDS if name == section]
-    if not preview_fields:  # pragma: no cover - 上方已保证 section 合法
-        raise ValueError("栏目不支持插入")
-    from .document_identity import POINT_FIELDS
-
-    point_fields = POINT_FIELDS[section]
-    if not point_fields:
-        raise ValueError("这个栏目没有可插入的要点数组，请不指定 entry_id 以新建条目")
-    field = "description" if "description" in point_fields else point_fields[0]
-    values = entry.get(field)
-    if not isinstance(values, list):
-        values = []
-        entry[field] = values
-    ids = _point_ids_for(entry, field, values)
-    index = len(values) if point_index is None else max(0, min(point_index, len(values)))
-    values.insert(index, text)
-    point_id = new_object_id()
-    ids.insert(index, point_id)
-    entry["point_ids"][field] = ids
-    entry_index = content[section].index(entry)
-    return object_id, point_id, f"{section}.{entry_index}.{field}.{index}"
-
-
-def _append_new_entry(content: dict[str, Any], section: str, text: str) -> tuple[str, str, str]:
-    object_id = new_object_id()
-    if section in _SECTION_SCALAR_FIELD:
-        content.setdefault(section, []).append(
-            {"id": object_id, _SECTION_SCALAR_FIELD[section]: text}
-        )
-        return object_id, "", f"{section}.{len(content[section]) - 1}"
-    primary = _SECTION_PRIMARY_FIELD.get(section)
-    if primary is None:
-        raise ValueError("栏目不支持插入")
-    point_id = new_object_id()
-    content.setdefault(section, []).append(
-        {"id": object_id, primary: [text], "point_ids": {primary: [point_id]}}
-    )
-    return object_id, point_id, f"{section}.{len(content[section]) - 1}.{primary}.0"
-
-
 def insert_phrase(
     db: Session,
     phrase: ResumePhrase,
@@ -381,19 +248,23 @@ def insert_phrase(
         raise LookupError("简历记录不存在或已被删除")
     if section not in ENTRY_FIELDS:
         raise ValueError("栏目不受支持")
-    content = copy.deepcopy(record.content or {})
-    if not isinstance(content.get(section), list):
-        content[section] = []
-    if entry_id is not None:
-        object_id, point_id, link_path = _insert_into_existing_entry(
-            content, section, entry_id, phrase.text, point_index
-        )
-    else:
-        object_id, point_id, link_path = _append_new_entry(content, section, phrase.text)
+    content = copy.deepcopy(document_io.document_for_record(db, record)[0])
+    object_id, point_id, link_path = insert_document_phrase(
+        content,
+        section,
+        entry_id,
+        phrase.text,
+        point_index,
+        new_object_id,
+    )
     outcome = save_content(
         db,
         record_id=record.id,
-        content=content,
+        content=document_io.prepare_document_for_save(
+            content,
+            language=record.language,
+            format_config=record.format_config or {},
+        ),
         expected_revision=expected_revision,
         mark_saved=True,
     )

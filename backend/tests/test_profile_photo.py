@@ -5,6 +5,7 @@ import base64
 import pytest
 from app.models.resume import ResumeRecord
 from app.schemas.profile import MAX_PROFILE_PHOTO_BYTES
+from tests.document_test_support import header_value
 
 PHOTO_DATA_URL = (
     "data:image/png;base64,"
@@ -89,7 +90,7 @@ def test_saved_resume_preserves_photo_in_detail_and_exports(client, db_session):
     exported_json = client.get(f"/api/resumes/{record.id}/export", params={"format": "json"})
 
     assert detail.status_code == 200
-    assert detail.json()["content"]["photo"] == PHOTO_DATA_URL
+    assert header_value(detail.json()["content"], "photo") == PHOTO_DATA_URL
     assert html.status_code == 200 and f'src="{PHOTO_DATA_URL}"' in html.text
     assert markdown.status_code == 200
     assert markdown.headers["content-type"].startswith("text/markdown")

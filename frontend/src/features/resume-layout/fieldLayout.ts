@@ -20,7 +20,27 @@
 import { readFormatDomain, withFormatDomain } from "./formatDomains";
 import type { MessageKey } from "../../i18n";
 import type { ResumeLayout } from "../../types";
+import {
+  DEFAULT_META_POSITION,
+  normalizeMetaPosition,
+  storedEntryPatch,
+} from "./fieldMetaPosition";
+import type { FieldMetaPosition } from "./fieldMetaPosition";
+import { FIELD_LABEL_KEYS, FIELD_LAYOUT_FIELDS } from "./fieldLayoutLabels";
 
+export {
+  DEFAULT_META_POSITION,
+  FIELD_META_POSITIONS,
+  META_POSITION_LABEL_KEYS,
+} from "./fieldMetaPosition";
+export type { FieldMetaPosition } from "./fieldMetaPosition";
+export {
+  ALIGN_LABEL_KEYS,
+  COLUMN_LABEL_KEYS,
+  FIELD_LABEL_KEYS,
+  FIELD_LAYOUT_FIELDS,
+  SECTION_LABEL_KEYS,
+} from "./fieldLayoutLabels";
 /** 允许调整字段排版的七个分区（与后端 `FIELD_LAYOUT_SECTIONS` 逐字一致）。 */
 export const FIELD_LAYOUT_SECTIONS = [
   "education",
@@ -77,8 +97,12 @@ export interface SectionFieldLayout {
   align: FieldLayoutAlign;
   /** 字号倍数；`null` = 未设置（渲染端按 align 的兜底值，两种模式不同）。 */
   gap: number | null;
+  /** 补充字段相对正文的位置（below 默认 / above 置顶）。 */
+  metaPosition: FieldMetaPosition;
   order: string[];
   solo: string[];
+  /** 不在纸面上显示的字段（数据保留；渲染端过滤，AI 回填照常写内容）。 */
+  hidden: string[];
 }
 
 export type FieldLayoutMap = Partial<Record<FieldLayoutSection, SectionFieldLayout>>;
@@ -94,8 +118,10 @@ export interface EntryFieldLayoutPatch {
   columns?: FieldLayoutColumns;
   align?: FieldLayoutAlign;
   gap?: number;
+  metaPosition?: FieldMetaPosition;
   order?: string[];
   solo?: string[];
+  hidden?: string[];
 }
 
 /** 条目级覆盖表：`{分区: {条目 id: 覆盖}}`（没有覆盖的分区缺键）。 */
@@ -108,60 +134,11 @@ interface StoredSectionFieldLayout {
   columns?: number;
   align?: FieldLayoutAlign;
   gap?: number;
+  meta_position?: FieldMetaPosition;
   order?: string[];
   solo?: string[];
+  hidden?: string[];
 }
-
-/** 各分区可调整的字段（顺序 = 默认顺序，与后端 `PROFILE_FIELD_ORDER` 一致）。 */
-export const FIELD_LAYOUT_FIELDS: Record<FieldLayoutSection, readonly string[]> = {
-  education: ["study_form", "degree_type", "department", "rank", "advisor", "research_direction"],
-  experience: ["team_size"],
-  campus_experience: ["activity_type"],
-  projects: ["project_size"],
-  awards: ["issuer", "level", "ratio"],
-  publications: ["outcome_type", "my_rank"],
-  research_projects: ["level"],
-};
-
-/** 字段标签复用编辑器既有词条（不新造一批同义词）。 */
-export const FIELD_LABEL_KEYS: Record<string, MessageKey> = {
-  "education:study_form": "editor.field.studyForm",
-  "education:degree_type": "editor.field.degreeType",
-  "education:department": "editor.field.department",
-  "education:rank": "editor.field.classRank",
-  "education:advisor": "editor.field.advisor",
-  "education:research_direction": "editor.field.researchDirection",
-  "experience:team_size": "editor.field.teamSize",
-  "campus_experience:activity_type": "editor.field.activityType",
-  "projects:project_size": "editor.field.projectSize",
-  "awards:issuer": "editor.field.issuer",
-  "awards:level": "editor.field.awardLevel",
-  "awards:ratio": "editor.field.awardRatio",
-  "publications:outcome_type": "research.publications.outcomeType",
-  "publications:my_rank": "research.publications.myRank",
-  "research_projects:level": "research.projects.level",
-};
-
-export const SECTION_LABEL_KEYS: Record<FieldLayoutSection, MessageKey> = {
-  education: "outline.section.education",
-  experience: "outline.section.experience",
-  campus_experience: "outline.section.campus_experience",
-  projects: "outline.section.projects",
-  awards: "outline.section.awards",
-  publications: "research.tab.publications",
-  research_projects: "research.tab.projects",
-};
-
-export const COLUMN_LABEL_KEYS: Record<FieldLayoutColumns, MessageKey> = {
-  1: "typography.fieldLayout.columns.1",
-  2: "typography.fieldLayout.columns.2",
-  3: "typography.fieldLayout.columns.3",
-};
-
-export const ALIGN_LABEL_KEYS: Record<FieldLayoutAlign, MessageKey> = {
-  equal: "typography.fieldLayout.align.equal",
-  flow: "typography.fieldLayout.align.flow",
-};
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -207,7 +184,9 @@ export function isSectionDefault(section: FieldLayoutSection, config: SectionFie
     config.columns === 1 &&
     config.align === DEFAULT_FIELD_LAYOUT_ALIGN &&
     gapIsDefault(config.gap, config.align) &&
+    config.metaPosition === DEFAULT_META_POSITION &&
     config.solo.length === 0 &&
+    config.hidden.length === 0 &&
     sameOrder(config.order, FIELD_LAYOUT_FIELDS[section])
   );
 }
@@ -217,8 +196,10 @@ export function defaultSectionLayout(section: FieldLayoutSection): SectionFieldL
     columns: 1,
     align: DEFAULT_FIELD_LAYOUT_ALIGN,
     gap: null,
+    metaPosition: DEFAULT_META_POSITION,
     order: [...FIELD_LAYOUT_FIELDS[section]],
     solo: [],
+    hidden: [],
   };
 }
 
@@ -240,12 +221,16 @@ export function normalizeSectionLayout(
   }
   const rawSolo = Array.isArray(raw.solo) ? raw.solo : [];
   const solo = order.filter((field) => rawSolo.some((item) => item === field));
+  const rawHidden = Array.isArray(raw.hidden) ? raw.hidden : [];
+  const hidden = order.filter((field) => rawHidden.some((item) => item === field));
   return {
     columns: clampColumns(raw.columns),
     align: normalizeAlign(raw.align),
     gap: normalizeGap(raw.gap),
+    metaPosition: normalizeMetaPosition(raw.meta_position),
     order,
     solo,
+    hidden,
   };
 }
 
@@ -292,8 +277,9 @@ function storedSection(
   config: SectionFieldLayout,
 ): StoredSectionFieldLayout {
   const entry: StoredSectionFieldLayout = { columns: config.columns };
-  // align / gap 与 order 同口径：只有非默认才写，默认值永远能从常量重建。
+  // align / gap / meta_position 与 order 同口径：只有非默认才写，默认值永远能从常量重建。
   if (config.align !== DEFAULT_FIELD_LAYOUT_ALIGN) entry.align = config.align;
+  if (config.metaPosition !== DEFAULT_META_POSITION) entry.meta_position = config.metaPosition;
   // gap 的"默认"取决于当前 align（equal 1.6 / flow 1.2），所以判据不是固定常数；
   // 写入前再归一一次：滑杆的浮点步进（1.6+0.1）会带出 1.7000000000000002 这类噪声，
   // 落库必须是干净的 1 位小数（与后端 round(…, 1) 同口径）。
@@ -301,6 +287,7 @@ function storedSection(
   if (gap !== null && !gapIsDefault(gap, config.align)) entry.gap = gap;
   if (!sameOrder(config.order, FIELD_LAYOUT_FIELDS[section])) entry.order = config.order;
   if (config.solo.length > 0) entry.solo = config.solo;
+  if (config.hidden.length > 0) entry.hidden = config.hidden;
   return entry;
 }
 
@@ -326,7 +313,7 @@ function writeFieldLayout(
     if (!map) continue;
     const patches: Record<string, EntryFieldLayoutPatch> = {};
     for (const [entryId, patch] of Object.entries(map)) {
-      if (entryId && Object.keys(patch).length > 0) patches[entryId] = patch;
+      if (entryId && Object.keys(patch).length > 0) patches[entryId] = storedEntryPatch(patch);
     }
     if (Object.keys(patches).length > 0) storedEntries[key] = patches;
   }
@@ -353,8 +340,10 @@ function normalizeEntryPatch(
     const gap = normalizeGap(raw.gap);
     if (gap !== null) patch.gap = gap;
   }
+  if ("meta_position" in raw) patch.metaPosition = normalized.metaPosition;
   if ("order" in raw) patch.order = normalized.order;
   if ("solo" in raw) patch.solo = normalized.solo;
+  if ("hidden" in raw) patch.hidden = normalized.hidden;
   return Object.keys(patch).length > 0 ? patch : null;
 }
 
@@ -423,12 +412,15 @@ export function effectiveSectionLayout(
       ? normalizeSectionLayout(section, { order: patch.order }).order
       : [...base.order];
   const wanted = patch.solo ?? base.solo;
+  const hiddenWanted = patch.hidden ?? base.hidden;
   return {
     columns: patch.columns ?? base.columns,
     align: patch.align ?? base.align,
     gap: patch.gap ?? base.gap,
+    metaPosition: patch.metaPosition ?? base.metaPosition,
     order,
     solo: order.filter((field) => wanted.includes(field)),
+    hidden: order.filter((field) => hiddenWanted.includes(field)),
   };
 }
 
@@ -449,6 +441,7 @@ export function entryPatchFromEffective(
   const patch: EntryFieldLayoutPatch = {};
   if (effective.columns !== base.columns) patch.columns = effective.columns;
   if (effective.align !== base.align) patch.align = effective.align;
+  if (effective.metaPosition !== base.metaPosition) patch.metaPosition = effective.metaPosition;
   // 判"间距改过"用生效值：省略与"恰好等于该对齐模式的兜底值"在纸面上完全一样。
   const fallback = defaultGapFor(effective.align);
   const baseGap = base.gap ?? fallback;
@@ -459,6 +452,7 @@ export function entryPatchFromEffective(
   }
   if (!sameOrder(effective.order, base.order)) patch.order = [...effective.order];
   if (!sameFieldSet(effective.solo, base.solo)) patch.solo = [...effective.solo];
+  if (!sameFieldSet(effective.hidden, base.hidden)) patch.hidden = [...effective.hidden];
   return Object.keys(patch).length > 0 ? patch : null;
 }
 

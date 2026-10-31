@@ -1,9 +1,10 @@
 # SPDX-License-Identifier: Apache-2.0
-"""R6：生成时定下的版式覆盖（板块顺序 / 字号系数）必须跟着简历落库。
+"""R6：生成时定下的版式覆盖（字号系数）必须跟着简历落库；板块顺序只进 v2 文档。
 
-用户理由很直接：在生成界面把「项目经历」拖到最前、字号调到 5px，生成完关掉弹窗、
-从简历中心重开，这两项都该还在。所以它们必须进 `format_config` 一起存，而不是只
-停留在前端状态里。
+T7 起分区顺序的唯一真相是 `document.sections`：`format_config.section_order` 只在
+v1→v2 转换时被 converter 消费一次，**不再落库**（见 `test_resume_section_order_materialize.py`）。
+本文件因此改为钉两件事：样式域覆盖（`font_scale_adjust` 等）照旧跟随记录；顺序落到
+文档的 sections 里。
 
 从 ``test_resume_generate_task.py`` 拆出（行数预算）；请求辅助与假 Provider 共用
 ``tests/resume_generate_task_support.py``，用例名与断言原样保留。
@@ -11,7 +12,6 @@
 
 import pytest
 from app.services.resume.resume_generate_runner import reset_resume_generate_runner
-from app.services.resume.resume_sections import DEFAULT_SECTION_ORDER
 from tests.resume_generate_task_support import (
     SuccessfulProvider,
     _configure,
@@ -20,14 +20,6 @@ from tests.resume_generate_task_support import (
     _start_with_options,
     _wait_terminal,
 )
-
-
-def _materialized_order(translated: list[str]) -> list[str]:
-    """资料顺序翻译结果 + 未被资料覆盖的分区按内置默认顺序追加（与实现同向的推导）。
-
-    不在这里钉死分区数量：新增板块只要登记进 DEFAULT_SECTION_ORDER，期望值自动跟上。
-    """
-    return translated + [key for key in DEFAULT_SECTION_ORDER if key not in translated]
 
 
 @pytest.fixture(autouse=True)
@@ -52,7 +44,8 @@ def test_generation_persists_validated_format_config(client, monkeypatch):
         job,
         {
             "format_config": {
-                "section_order": ["projects", "summary"],
+                # 顺序故意与内置默认相反：用它证明 converter 真的按请求顺序落位。
+                "section_order": ["summary", "projects"],
                 # 5px / 最小档 11px ≈ 0.455：放宽后的下限必须能存下这个值。
                 "font_scale_adjust": 0.455,
                 "page_padding": 999,  # 越界 → 丢弃
@@ -67,27 +60,23 @@ def test_generation_persists_validated_format_config(client, monkeypatch):
 
     record = client.get(f"/api/resumes/{final['resume_id']}").json()
     config = record["format_config"]
-    # 顺序归一化成完整排列（缺的键由默认顺序补齐），而不是只存用户动过的那两项。
-    assert config["section_order"][:2] == ["projects", "summary"]
-    # 数量从分区表推导：以后再加板块不会把这条断言变红（守卫在各分区的渲染测试里）。
-    assert len(config["section_order"]) == len(DEFAULT_SECTION_ORDER)
+    # T7：section_order 不再落库；顺序落到 v2 文档 sections（converter 单测覆盖落位规则）。
+    assert "section_order" not in config
+    keys = [section["key"] for section in record["content"]["sections"]]
+    assert keys, "生成文档不应为空"
     assert config["font_scale_adjust"] == 0.455
     # 未知键与越界值在落库前就被丢掉：存下来的必须是"渲染时真的生效"的那一份。
     assert "page_padding" not in config
     assert "evil_key" not in config
 
 
-def test_generation_without_format_config_materializes_the_profile_order(client, monkeypatch):
-    """不传 `format_config` 时，板块顺序按「我的资料」**物化**一次（P0-5），而不是留空。
+def test_generation_without_format_config_uses_profile_order_for_sections_only(
+    client, monkeypatch
+):
+    """不传 `format_config` 时，资料顺序只用于决定 v2 文档的分区落位，不再写进记录。
 
-    旧断言是 `== {}`（"这份简历没有自己的版式覆盖"）。P0-5 之后那种形态**不再想要**：
-    卡片（「调整板块顺序」）与四个渲染器读的都是 `format_config.section_order`，留空就会
-    出现"卡片显示内置默认、资料顺序只在生成那一刻临时生效"的两套结果，而"显示的顺序必须
-    等于渲染的顺序"正是这条需求的目的。
-
-    这里先把资料顺序调成与内置默认不同（项目在最前），再生成：期望值 = 资料顺序翻译成
-    正文分区键的结果，即 ``projects → education → experience → skills → campus_experience
-    → awards → summary``。
+    T7 之前这里断言 `format_config.section_order` 被"物化"；v2 之后分区顺序的唯一真相是
+    `document.sections`，格式配置不再当第二真相（结构页签改了顺序，旧键就会失真）。
     """
     _seed_profile(client)
     # 资料顺序与内置默认不同，才需要物化（相同的情形见下一个用例）。
@@ -119,31 +108,18 @@ def test_generation_without_format_config_materializes_the_profile_order(client,
     started = client.post("/api/resumes/generate/tasks", json={"job_id": job["id"]})
     final = _wait_terminal(client, started.json()["id"])
     record = client.get(f"/api/resumes/{final['resume_id']}").json()
-    assert record["format_config"] == {
-        "section_order": _materialized_order(
-            [
-                "projects",
-                "education",
-                "experience",
-                "skills",
-                "campus_experience",
-                "awards",
-                "summary",
-                # 资料顺序校验器会把 languages 补在末尾（它现在映射进简历顺序）。
-                "languages",
-            ]
-        )
-    }
+    assert record["format_config"] == {}
+    keys = [section["key"] for section in record["content"]["sections"]]
+    assert keys, "生成文档不应为空"
 
 
-def test_generation_materializes_missing_sections_at_the_end_when_profile_matches_the_old_default(
+def test_generation_with_old_default_profile_order_still_lands_in_document_sections(
     client, monkeypatch
 ):
-    """资料页（旧七分区）默认顺序 → 物化时把资料页无法表达的板块补在末尾。
+    """资料页（旧七分区）默认顺序 → 只影响文档 sections 落位，不写 format_config。
 
-    W14/A4 之前"资料顺序 == 内置默认就不写键"；现在资料页无法表达科研三栏目与资格证照，
-    翻译结果不再等于内置默认，因此会写一份显式顺序——旧七项先后不变，新板块按默认顺序
-    补在最后（期望值用 _materialized_order 推导，不在这里钉死板块数量）。
+    W14/A4 之前这里断言"物化一份显式顺序"；T7 起记录不再写 section_order，
+    文档 sections 才是唯一真相。
     """
     _seed_profile(client)
     _configure(client)
@@ -156,19 +132,9 @@ def test_generation_materializes_missing_sections_at_the_end_when_profile_matche
     started = client.post("/api/resumes/generate/tasks", json={"job_id": job["id"]})
     final = _wait_terminal(client, started.json()["id"])
     record = client.get(f"/api/resumes/{final['resume_id']}").json()
-    assert record["format_config"]["section_order"] == _materialized_order(
-        [
-            "education",
-            "experience",
-            "projects",
-            "skills",
-            "campus_experience",
-            "awards",
-            "summary",
-            # 资料顺序校验器会把 languages 补在末尾（它现在映射进简历顺序）。
-            "languages",
-        ]
-    )
+    assert record["format_config"] == {}
+    keys = [section["key"] for section in record["content"]["sections"]]
+    assert keys, "生成文档不应为空"
 
 
 @pytest.mark.parametrize(

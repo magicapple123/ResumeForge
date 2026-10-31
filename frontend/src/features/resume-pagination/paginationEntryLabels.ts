@@ -25,10 +25,7 @@
  * （`/^[A-Za-z0-9_-]{8,32}$/`）：写进去、留得下来、显示得出来，三处必须同一把尺子。
  */
 import type { ResumeContent } from "../../types";
-import {
-  entryFieldLayoutOptions,
-  flatEntryLayoutOptions,
-} from "../resume-layout/entryOptions";
+import { entryFieldLayoutOptions, flatEntryLayoutOptions } from "../resume-layout/entryOptions";
 
 /** 一个可设条目断页的对象：稳定 id + 纸面上的名字（与面板同名 prop 形状一致）。 */
 export interface PaginationEntryOption {

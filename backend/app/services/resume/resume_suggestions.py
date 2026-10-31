@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 """根据已保存简历与目标岗位 JD 生成可核对的修改建议。"""
+
 import json
 import logging
 import re
@@ -152,8 +153,32 @@ def _trim_prompt_strings(value: Any, max_chars: int) -> Any:
     return value
 
 
-def serialize_resume_prompt_data(resume: ResumeContent, max_chars: int = MAX_RESUME_CHARS) -> str:
+def serialize_resume_prompt_data(
+    resume: ResumeContent | dict, max_chars: int = MAX_RESUME_CHARS
+) -> str:
     """在字段边界内压缩简历，始终返回完整且不超预算的 JSON。"""
+    if isinstance(resume, dict):
+        from .document_revision import editable_document_values
+        from .document_view import iter_entries
+
+        sections: dict[str, int] = {}
+        for key, _entry in iter_entries(resume):
+            sections[key] = sections.get(key, 0) + 1
+        items = deepcopy(editable_document_values(resume))
+        candidate_v2 = {"version": 2, "sections": sections, "items": items, "omitted_items": 0}
+        for limit in (8000, 2000, 400, 96):
+            for item in items:
+                item["value"] = _trim_prompt_strings(item["value"], limit)
+            text = json.dumps(candidate_v2, ensure_ascii=False, separators=(",", ":"))
+            if len(text) <= max_chars:
+                return text
+        while items:
+            items.pop()
+            candidate_v2["omitted_items"] += 1
+            text = json.dumps(candidate_v2, ensure_ascii=False, separators=(",", ":"))
+            if len(text) <= max_chars:
+                return text
+        raise ValueError("简历内容过长，无法在安全预算内生成建议")
     candidate = deepcopy(_resume_prompt_data(resume))
 
     def dump() -> str:
@@ -196,10 +221,7 @@ def serialize_resume_prompt_data(resume: ResumeContent, max_chars: int = MAX_RES
         candidate = {
             "job_intent": _trim_prompt_strings(candidate.get("job_intent", ""), 128),
             "summary": "",
-            **{
-                section: (candidate.get(section) or [])[:1]
-                for section in _RESUME_SECTION_FIELDS
-            },
+            **{section: (candidate.get(section) or [])[:1] for section in _RESUME_SECTION_FIELDS},
         }
         candidate = _trim_prompt_strings(candidate, 32)
         serialized = json.dumps(candidate, ensure_ascii=False, separators=(",", ":"))
@@ -235,7 +257,7 @@ def _protect_existing_project_facts(
 
 async def generate_suggestions(
     provider: BaseLLMProvider,
-    resume: ResumeContent,
+    resume: ResumeContent | dict,
     job: JobOut,
     profile: ProfileOut,
 ) -> list[ResumeSuggestion]:
@@ -243,11 +265,14 @@ async def generate_suggestions(
     resume_json = serialize_resume_prompt_data(resume)
     profile_data = build_llm_profile_prompt_data(build_profile_prompt_data(profile))
     profile_json = serialize_profile_prompt_data(profile_data, MAX_PROFILE_CHARS)
-    prompt = _load_prompt().replace("{{ resume_json }}", resume_json).replace(
-        "{{ job_title }}", job.title
-    ).replace("{{ company }}", job.company or "-").replace(
-        "{{ jd }}", build_job_prompt_text(job, MAX_JD_CHARS)
-    ).replace("{{ profile_json }}", profile_json)
+    prompt = (
+        _load_prompt()
+        .replace("{{ resume_json }}", resume_json)
+        .replace("{{ job_title }}", job.title)
+        .replace("{{ company }}", job.company or "-")
+        .replace("{{ jd }}", build_job_prompt_text(job, MAX_JD_CHARS))
+        .replace("{{ profile_json }}", profile_json)
+    )
     raw = await provider.chat(
         [
             {

@@ -202,9 +202,7 @@ def test_link_scheme_outside_whitelist_is_a_blocker(client):
         {**BASE, "personal_website": "ftp://example.com/resume"},
     )
     payload = _preflight(client, record_id, layers=["content"]).json()
-    issue = next(
-        item for item in payload["issues"] if item["code"] == "link_scheme_unsupported"
-    )
+    issue = next(item for item in payload["issues"] if item["code"] == "link_scheme_unsupported")
     assert issue["severity"] == "blocker"
     assert "ftp" in issue["detail"]
 
@@ -214,20 +212,22 @@ def test_project_description_link_is_located_at_the_point(client):
         **BASE,
         "projects": [
             {
+                "id": "ob_linkproject01",
                 "name": "示例项目",
                 "role": "开发",
                 "description": ["项目地址：javascript:alert(1)"],
+                "point_ids": {"description": ["pt_linkproject01"]},
             }
         ],
     }
     record_id = _create(client, content)
     payload = _preflight(client, record_id, layers=["content"]).json()
-    issue = next(
-        item for item in payload["issues"] if item["code"] == "link_scheme_unsupported"
-    )
+    issue = next(item for item in payload["issues"] if item["code"] == "link_scheme_unsupported")
     assert issue["locator"]["section"] == "projects"
-    assert issue["locator"]["scope"] in {"object", "point"}
-    assert issue["locator"]["path"] == "projects.0.description.0"
+    assert issue["locator"]["scope"] == "point"
+    assert issue["locator"]["path"] == "projects.ob_linkproject01.pt_linkproject01"
+    assert issue["locator"]["object_id"] == "ob_linkproject01"
+    assert issue["locator"]["point_id"] == "pt_linkproject01"
 
 
 def test_valid_links_and_hidden_entries_do_not_raise(client):
@@ -236,7 +236,10 @@ def test_valid_links_and_hidden_entries_do_not_raise(client):
         "personal_website": "https://portfolio.example.com/me",
         "github": "https://github.com/example",
         "projects": [
-            {"name": "可见项目", "description": ["见 https://example.com/demo 与 mailto:me@example.com"]},
+            {
+                "name": "可见项目",
+                "description": ["见 https://example.com/demo 与 mailto:me@example.com"],
+            },
             {
                 "name": "隐藏项目",
                 "description": ["坏链接 ftp://example.com/x"],
@@ -261,14 +264,8 @@ def test_contact_masking_hint_only_for_export_purpose(client):
     edit_payload = _preflight(client, record_id, layers=["content"]).json()
     assert "contact_masking_off" not in _codes(edit_payload)
     # 导出态且未开脱敏：verify 提示（不阻断）。
-    export_payload = _preflight(
-        client, record_id, layers=["content"], purpose="export"
-    ).json()
-    issue = next(
-        item
-        for item in export_payload["issues"]
-        if item["code"] == "contact_masking_off"
-    )
+    export_payload = _preflight(client, record_id, layers=["content"], purpose="export").json()
+    issue = next(item for item in export_payload["issues"] if item["code"] == "contact_masking_off")
     assert issue["severity"] == "verify"
     assert issue["fix"]["action"] == "open_settings"
     assert "phone" in issue["evidence"]
@@ -283,9 +280,7 @@ def test_contact_found_in_body_text_still_hints(client):
     content = {**BASE, "summary": "联系方式 13800000000，欢迎联系"}
     record_id = _create(client, content)
     payload = _preflight(client, record_id, layers=["content"], purpose="export").json()
-    issue = next(
-        item for item in payload["issues"] if item["code"] == "contact_masking_off"
-    )
+    issue = next(item for item in payload["issues"] if item["code"] == "contact_masking_off")
     assert issue["evidence"]
 
 
@@ -441,9 +436,7 @@ def test_export_snapshot_fingerprint_matches_the_export_pipeline(client):
 
 def test_export_variant_id_uses_the_variant_snapshot(client):
     record_id = _create(client)
-    variant = client.post(
-        f"/api/resumes/{record_id}/variants", json={"name": "后端岗变体"}
-    )
+    variant = client.post(f"/api/resumes/{record_id}/variants", json={"name": "后端岗变体"})
     assert variant.status_code == 201, variant.text
     variant_id = variant.json()["id"]
 
@@ -457,13 +450,8 @@ def test_export_variant_id_uses_the_variant_snapshot(client):
     ).json()
     assert with_variant["export_summary"]["revision"] == baseline["export_summary"]["revision"]
     # 新建变体派生自当前正文：同一份内容 → 快照内容哈希一致（解析走了变体自己的内容）。
-    assert (
-        with_variant["snapshot"]["content_sha256"]
-        == baseline["snapshot"]["content_sha256"]
-    )
+    assert with_variant["snapshot"]["content_sha256"] == baseline["snapshot"]["content_sha256"]
 
     other = _create(client)
-    missing = _preflight(
-        client, other, layers=["content"], purpose="export", variant_id=variant_id
-    )
+    missing = _preflight(client, other, layers=["content"], purpose="export", variant_id=variant_id)
     assert missing.status_code == 404

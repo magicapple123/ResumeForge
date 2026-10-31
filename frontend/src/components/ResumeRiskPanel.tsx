@@ -15,7 +15,7 @@ import {
   Card,
   Collapse,
   Empty,
-  List,
+  Listy,
   Space,
   Switch,
   Tag,
@@ -23,6 +23,7 @@ import {
   Typography,
 } from "antd";
 import LoadingBlock from "./common/LoadingBlock";
+import { ListyItem } from "./common/ListyItem";
 import { useEffect, useMemo, useState } from "react";
 import {
   cancelRiskScan,
@@ -270,16 +271,16 @@ function IntroCard({
         <Typography.Paragraph style={{ margin: 0 }}>
           {t("riskPanel.intro.summary")}
         </Typography.Paragraph>
-        <List
-          size="small"
-          dataSource={CATEGORY_ORDER}
-          renderItem={(item) => (
-            <List.Item style={{ paddingBlock: 4 }}>
+        <Listy
+          items={CATEGORY_ORDER}
+          rowKey={(item) => item.key}
+          itemRender={(item) => (
+            <ListyItem style={{ paddingBlock: 4 }}>
               <Space size="small" align="start">
                 <Tag color={item.color}>{t(item.labelKey)}</Tag>
                 <Typography.Text type="secondary">{t(item.descriptionKey)}</Typography.Text>
               </Space>
-            </List.Item>
+            </ListyItem>
           )}
         />
         <Space wrap size="small">

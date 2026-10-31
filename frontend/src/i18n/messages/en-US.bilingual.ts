@@ -165,6 +165,28 @@ const bilingual = {
     "Automatic translation did not finish; the new version was kept — retry with Generate translation candidates",
   "bilingual.workspace.translateRejected":
     "Translation did not start: {reason}. Check the model configuration in Settings → AI model; the new version was kept",
+
+  // v2 document model additions (item-path comparison / read-only fields / read-only mode)
+  "bilingual.v2.customHint":
+    "Custom sections and custom fields are shown for comparison only and are not adopted item by item",
+  "bilingual.v2.blockedHint":
+    "{count} fields kept in the original language by fact or glossary locks; they are not listed as candidates",
+  "bilingual.v2.readOnly":
+    "Read-only mode: this resume cannot be saved right now; comparison and glossary stay available",
+  "bilingual.v2.openInWorkbench": "Open this translation in the workbench",
+  "bilingual.preview.title": "Translation preview",
+  "bilingual.preview.loading": "Loading translation preview",
+  "bilingual.preview.failed": "Could not load the translation preview",
+  "bilingual.preview.retry": "Reload preview",
+  "bilingual.preview.close": "Hide preview",
+  "bilingual.compare.readOnlyTag": "Read-only",
+  "bilingual.compare.readOnlyHint":
+    "Lists, authors and custom fields are shown for comparison only and are not adopted item by item",
+  "bilingual.compare.group.custom": "Custom section",
+  "bilingual.field.body": "Body paragraph",
+  "bilingual.field.list": "List field",
+  "bilingual.field.authors": "Authors",
+  "bilingual.field.custom": "Custom field",
 } as const;
 
 export default bilingual;

@@ -19,6 +19,7 @@ from app.services.resume.resume_labels import patent_status_text, publication_st
 from app.services.resume.resume_visibility import visible_resume
 from pydantic import ValidationError
 from test_pdf_exporter import needs_font
+from tests.document_test_support import as_document, entries_of, field_value, item_by_key
 
 PUB_TITLE = "高并发交易链路稳定性实践"
 RESEARCH_NAME = "分布式交易一致性研究"
@@ -134,14 +135,16 @@ def test_save_and_read_back_preserves_research_fields(client):
     )
     assert created.status_code == 201, created.text
     detail = client.get(f"/api/resumes/{created.json()['id']}").json()["content"]
-    publication = detail["publications"][0]
-    assert publication["title"] == PUB_TITLE
-    assert [author["name"] for author in publication["authors"]] == ["张三", "李四"]
-    assert publication["authors"][0]["is_self"] is True
-    assert publication["status"] == "under_review"
+    # v2：条目 id 在 entry 上，字段是 item；作者保持结构化。
+    publication = entries_of(detail, "publications")[0]
     assert publication["id"] == "pub_12345678"
-    assert detail["research_projects"][0]["funding"] == "国家自然科学基金"
-    assert detail["patents"][0]["patent_number"] == "CN202310000001"
+    assert field_value(detail, "title", section="publications") == PUB_TITLE
+    authors = item_by_key(detail, "authors", section="publications")
+    assert [author["name"] for author in authors["authors"]] == ["张三", "李四"]
+    assert authors["authors"][0]["is_self"] is True
+    assert field_value(detail, "status", section="publications") == "under_review"
+    assert field_value(detail, "funding", section="research_projects") == "国家自然科学基金"
+    assert field_value(detail, "patent_number", section="patents") == "CN202310000001"
 
 
 def test_research_ids_participate_in_identity_validation():
@@ -195,20 +198,26 @@ def test_all_six_formats_include_the_research_sections():
         for probe in expected[:3]:
             assert probe in text, f"{fmt} 缺少科研内容：{probe}"
     json_payload = json.loads(build_export(ExportRequest(format="json"), resume, context).content)
-    assert json_payload["publications"][0]["status"] == "under_review"
+    assert field_value(json_payload, "status", section="publications") == "under_review"
 
 
 def test_html_research_sections_have_resume_paths():
+    """v2 锚点 = section.entry_id.item_id：先按同一份文档算路径，再断言渲染里有。"""
     from app.services.exporter import render_html
 
-    html = render_html(ResumeContent.model_validate(_content()))
-    for path in (
-        "publications.0.title",
-        "publications.0.authors.0.name",
-        "research_projects.0.name",
-        "patents.0.title",
+    document = as_document(_content())
+    html = render_html(document)
+    for section, item_key in (
+        ("publications", "title"),
+        ("research_projects", "name"),
+        ("patents", "title"),
     ):
-        assert f'data-resume-path="{path}"' in html, path
+        entry = entries_of(document, section)[0]
+        item = item_by_key(document, item_key, section=section)
+        assert f'data-resume-path="{section}.{entry["id"]}.{item["id"]}"' in html, (section, item_key)
+    # 作者是 AuthorsItem，渲染按 is_self/corresponding 处理成姓名串（不是普通字段行）；
+    # 这里钉住"作者确实上了纸面"，路径锚点只要求普通字段。
+    assert "张三" in html and "李四" in html
 
 
 def test_hidden_research_entries_are_excluded_from_delivery_formats():

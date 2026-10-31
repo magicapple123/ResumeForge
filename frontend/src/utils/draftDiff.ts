@@ -27,6 +27,7 @@
  * （那个目录被 `cjkScan` 排除）。
  */
 import type { ResumeContent } from "../types/resume";
+import type { ResumeDocument } from "../types/resumeDocument";
 import { t } from "../i18n";
 import { computeFieldDiff } from "./resumeFieldDiff";
 
@@ -56,7 +57,10 @@ function preview(text: string): string {
  * 顺序与 `computeFieldDiff(base, against)` 的参数一致，所以 `before` 永远是"现在"、
  * `after` 永远是"草稿里"。这个方向不能反：用户点开差异是想知道"恢复会把什么改掉"。
  */
-export function summarizeDraftDiff(base: ResumeContent, against: ResumeContent): DraftDiffEntry[] {
+export function summarizeDraftDiff(
+  base: ResumeContent | ResumeDocument,
+  against: ResumeContent | ResumeDocument,
+): DraftDiffEntry[] {
   const { changed } = computeFieldDiff(base, against, "", "");
   return changed.map((section) => {
     if (section.type === "string") {

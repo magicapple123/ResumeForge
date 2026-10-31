@@ -7,6 +7,8 @@
 _filler / _MM_TO_PT）。
 """
 
+from io import BytesIO
+
 import pytest
 from app.schemas.resume import ResumeContent
 from app.services.pdf_exporter import (
@@ -22,6 +24,7 @@ from app.services.resume.resume_templates import (
     RESUME_TEMPLATES,
     TEMPLATE_LAYOUT_DEFAULTS,
 )
+from pypdf import PdfReader
 from test_pdf_exporter import (
     _MM_TO_PT,
     _body_lines,
@@ -459,3 +462,38 @@ def test_pdf_left_origin_follows_only_the_left_margin():
     left_asymmetric = min(run[0] for run in _text_runs(asymmetric.content))
     left_uniform = min(run[0] for run in _text_runs(uniform.content))
     assert left_asymmetric == pytest.approx(left_uniform, abs=0.2)
+
+
+@needs_font
+def test_bullet_marker_is_visually_bigger_than_body_without_changing_text():
+    """精确预览里的圆点太小时放大字形：圆点 1.35×、破折号/无符号不动，项目文本不变。"""
+    from app.services.pdf_exporter.style_blocks import (
+        _BULLET_MARK,
+        _BULLET_SIZE_SCALE,
+        _bullet_font_size,
+    )
+
+    assert _bullet_font_size(10.0, _BULLET_MARK) == pytest.approx(10.0 * _BULLET_SIZE_SCALE)
+    assert _bullet_font_size(10.0, "– ") == _bullet_font_size(10.0, "") == pytest.approx(10.0)
+    resume = ResumeContent(
+        name="A",
+        summary="S",
+        projects=[
+            {
+                "id": "ob_prj_0001",
+                "name": "P",
+                "role": "R",
+                "start_date": "2024-01",
+                "end_date": "2024-02",
+                "description": ["一句项目描述。"],
+                "highlights": ["第一条要点。", "第二条要点。"],
+            }
+        ],
+    )
+    content = build_resume_pdf(
+        resume, template="classic", page_limit=1, font_scale="standard"
+    ).content
+    text = "".join(page.extract_text() or "" for page in PdfReader(BytesIO(content)).pages)
+    assert "第一条要点。" in text and "第二条要点。" in text
+    # 符号本身没有变成别的字符（只改字号）：提取文本里仍是圆点。
+    assert "·" in text

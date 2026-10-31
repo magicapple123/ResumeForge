@@ -95,6 +95,124 @@ def _locate_locked_entry(
     return None, old_index
 
 
+def _is_v2_document(content: Any) -> bool:
+    return isinstance(content, dict) and content.get("version") == 2
+
+
+def _v2_entry_payload(entry: dict[str, Any]) -> tuple[Any, ...]:
+    """v2 条目的正文载荷：只看 item 的值（kind/key/value|values|authors|text）。
+
+    可见性（entry.hidden / item.placement=hidden）、排版（solo/wrap/format/show_label/
+    body_style）与锁/身份标记都不算正文——W06 契约是"锁正文不锁排版/隐藏"；
+    隐藏条目也照常参与比对（否则"隐藏"会被误判成"删除"）。
+    """
+    parts: list[Any] = []
+    for item in entry.get("items") or []:
+        kind = item.get("kind")
+        if kind == "text":
+            parts.append(("text", str(item.get("text") or "")))
+        elif kind == "list":
+            parts.append(
+                (
+                    "list",
+                    str(item.get("key") or ""),
+                    tuple(str(value) for value in item.get("values") or []),
+                )
+            )
+        elif kind == "authors":
+            parts.append(
+                (
+                    "authors",
+                    tuple(str(author.get("name") or "") for author in item.get("authors") or []),
+                )
+            )
+        else:
+            parts.append(
+                (
+                    "field",
+                    str(item.get("key") or ""),
+                    str(item.get("value") or ""),
+                )
+            )
+    return tuple(parts)
+
+
+def _v2_entry_label(entry: dict[str, Any]) -> str:
+    """锁违规提示里的条目名：取第一个非空的标题/名称类字段值。"""
+    preferred = ("title", "name", "company", "school", "organization", "role")
+    values = {
+        str(item.get("key") or ""): str(item.get("value") or "").strip()
+        for item in entry.get("items") or []
+        if item.get("kind") == "field"
+    }
+    for key in preferred:
+        text = values.get(key)
+        if text:
+            return text[:60]
+    return ""
+
+
+def _validate_v2_content_locks(
+    old_document: dict[str, Any], document: dict[str, Any]
+) -> list[FactLockViolation]:
+    """v2 文档之间的正文锁比对：按 section+entry id（回退同下标）定位锁定条目。"""
+    violations: list[FactLockViolation] = []
+    for old_section in old_document.get("sections") or []:
+        section_key = str(old_section.get("key") or "")
+        new_section = next(
+            (item for item in document.get("sections") or [] if item.get("key") == section_key),
+            None,
+        )
+        new_entries = (new_section or {}).get("entries") or []
+        for old_index, old_entry in enumerate(old_section.get("entries") or []):
+            if not isinstance(old_entry, dict) or not old_entry.get("lock_content"):
+                continue
+            entry_id = old_entry.get("id")
+            target: dict[str, Any] | None = None
+            target_index = old_index
+            if entry_id:
+                for new_index, candidate in enumerate(new_entries):
+                    if isinstance(candidate, dict) and candidate.get("id") == entry_id:
+                        target = candidate
+                        target_index = new_index
+                        break
+            if target is None and 0 <= old_index < len(new_entries):
+                target = new_entries[old_index]
+                target_index = old_index
+            label = _v2_entry_label(old_entry)
+            # 违规路径沿用 W06 既有口径 {section}.{当前下标}：前端用它定位并高亮锁定条目；
+            # v2 item/entry id 路径用于预览联动，两套并存但锁冲突面板这里必须稳定可解析。
+            path = f"{section_key}.{target_index if target is not None else old_index}"
+            if target is None:
+                violations.append(
+                    FactLockViolation(
+                        lock_id=0,
+                        kind=LOCK_CONTENT_KIND,
+                        label=label,
+                        path=path,
+                        field="content",
+                        reason=LOCK_CONTENT_MISSING_REASON,
+                        locked_value="",
+                        current_value="",
+                    )
+                )
+                continue
+            if _v2_entry_payload(old_entry) != _v2_entry_payload(target):
+                violations.append(
+                    FactLockViolation(
+                        lock_id=0,
+                        kind=LOCK_CONTENT_KIND,
+                        label=label,
+                        path=path,
+                        field="content",
+                        reason=LOCK_CONTENT_CHANGED_REASON,
+                        locked_value="",
+                        current_value="",
+                    )
+                )
+    return violations
+
+
 def validate_content_locks_for(
     old_content: dict[str, Any] | None, content: dict[str, Any]
 ) -> list[FactLockViolation]:
@@ -104,7 +222,18 @@ def validate_content_locks_for(
     新正文是准备写入的那一份。**基准必须与写入对象一致**——用 record.content 当变体
     译文采纳的基准会把"变体本来就和母版不同"误判成改锁。
     """
-    old_payload = old_content if isinstance(old_content, dict) else {}
+    from .document_io import ensure_document_version
+
+    # 两侧都是 v2 时在文档上原生比对：v1 分析视图按定义丢弃 hidden 条目，
+    # 用它比较会把"把条目隐藏"误判成"锁定条目被删除"（可见性不是正文）。
+    if _is_v2_document(old_content) and _is_v2_document(content):
+        return _validate_v2_content_locks(old_content, content)  # type: ignore[arg-type]
+    # Mixed inputs move forward only; hidden entries stay in the comparison.
+    if _is_v2_document(old_content) or _is_v2_document(content):
+        return _validate_v2_content_locks(
+            ensure_document_version(old_content or {}), ensure_document_version(content or {})
+        )
+    old_payload = old_content or {}
     violations: list[FactLockViolation] = []
     for field in ENTRY_FIELDS:
         old_entries = old_payload.get(field) or []

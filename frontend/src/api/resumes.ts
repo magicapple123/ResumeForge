@@ -10,7 +10,7 @@ import type {
   Page,
   RedactionOptions,
   ResumeBrief,
-  ResumeContent,
+  ResumeDocument,
   ResumeDetail,
   ResumeFontScale,
   ResumePendingChange,
@@ -111,7 +111,7 @@ export function batchDeleteResumes(resumeIds: number[]): Promise<{ deleted: numb
 }
 
 /** 替换一份已保存简历的结构化内容。 */
-export function updateResume(id: number, content: ResumeContent): Promise<ResumeDetail> {
+export function updateResume(id: number, content: ResumeDocument): Promise<ResumeDetail> {
   return request(`/resumes/${id}`, { method: "PUT", body: JSON.stringify(content) });
 }
 
@@ -200,7 +200,7 @@ export async function previewResumeTemplate(payload: {
   font_scale?: ResumeFontScale;
   resume_id?: number;
   /** 未保存正文（W10 试用按它渲染/量页数）；不传 = resume_id 已保存版，再缺省用示例。 */
-  content?: ResumeContent;
+  content?: ResumeDocument;
   /** 调用方取消：把还在飞的渲染掐掉（防换字号/关弹窗后白占连接）。 */
   signal?: AbortSignal;
 }): Promise<string> {
@@ -332,7 +332,7 @@ export async function fetchResumePreviewPdf(
      * 正文停在上一版的话，用户看到的不是自己正在写的那份。不传 = 用记录里的值。
      * 服务端只把它用于这一趟渲染（不落库、不冻结交付）。
      */
-    content?: ResumeContent;
+    content?: ResumeDocument;
   },
   signal?: AbortSignal,
 ): Promise<{
@@ -379,7 +379,7 @@ export async function downloadResumeShareZip(
 }
 
 /** 脱敏预览：返回脱敏后的简历内容，不落库、不改动原记录。 */
-export function redactResume(id: number, options: RedactionOptions): Promise<ResumeContent> {
+export function redactResume(id: number, options: RedactionOptions): Promise<ResumeDocument> {
   return request(`/resumes/${id}/redact`, {
     method: "POST",
     body: JSON.stringify(options),

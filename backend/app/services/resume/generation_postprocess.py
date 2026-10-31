@@ -41,6 +41,11 @@ from ..profile.paper_projection import (
     normalize_for_match,
     project_paper_content,
 )
+from .generation_normalize import (
+    merge_missing_consumed_fields,
+    normalize_generated_content,
+    strip_markdown_prefix,
+)
 from .resume_grounding_helpers import _similar, _similar_skill
 
 logger = logging.getLogger(__name__)
@@ -231,7 +236,11 @@ def ensure_custom_field_lines_in_resume(
 
 
 def attach_custom_sections(resume: ResumeContent, consumed: ConsumedProfile) -> ResumeContent:
-    """C2：用服务端确定性投影写入 content.custom_sections（顺序/标题/行都由投影冻结）。"""
+    """C2：用服务端确定性投影写入 content.custom_sections（顺序/标题/行都由投影冻结）。
+
+    R-37 单源：自建分区的「主文本 / 标签行」判定只在 paper_policy.custom_section_text_field，
+    生成链与填充链共用同一份投影（不做第二套生成期映射）。
+    """
     projected = project_paper_content(consumed)
     custom_sections = list(getattr(projected, "custom_sections", None) or [])
     return resume.model_copy(update={"custom_sections": custom_sections})
@@ -480,4 +489,7 @@ __all__ = [
     "block_material_only_echo",
     "enforce_material_only_echo",
     "ensure_custom_field_lines_in_resume",
+    "merge_missing_consumed_fields",
+    "normalize_generated_content",
+    "strip_markdown_prefix",
 ]

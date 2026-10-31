@@ -114,6 +114,18 @@ $env:PYTHONUTF8 = "1"
   npx vite build --outDir D:\rf_build_tmp --emptyOutDir
   ```
 
+- **webform canary 的本地跑法与 CI skip 契约**：canary 家族（`backend/tests/test_webform_js_canary*.py`）
+  只在**本机有可控的 CDP 浏览器**时才有意义——并行跑与 CI 下按契约恒 **skip**，它不是 CI 门禁；也
+  别指向用户日常浏览器窗口（canary 共用同一浏览器，会互相抢标签页）。一次性跑法（起独立 headless
+  Chrome → 跑家族 → 只杀自己启动的进程树）：
+
+  ```powershell
+  python runtime/investigation/phase5/canary-local.py   # 默认 9344；--port 可改；脚本是本地证据工具，不进源码
+  ```
+
+  等价手工命令：`chrome --headless=new --remote-debugging-port=9344 --user-data-dir=<临时目录> about:blank`
+  + `cd backend` 后 `RF_WEBFORM_CDP_PORT=9344 PYTHONUTF8=1 .venv\Scripts\python.exe -m pytest -q tests/test_webform_js_canary*.py`。
+
 - **测试里的等待预算要分两档，别用同一个很小的值。** 期望**超时**的用例需要预算真的到期，
   所以越小越快；期望**成功**的用例就绪即刻返回，预算大小不影响耗时，它只是安全网。
   2026-09-23 修过一处：`tests/test_boss_apply.py` 里两类共用 `timeout=0.02`，于是

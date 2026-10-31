@@ -34,6 +34,7 @@ from app.runtime import dataset_scope
 from app.services import pdf_preview_cache
 from fastapi.testclient import TestClient
 from test_pdf_exporter import _text_runs, needs_font
+from tests.document_test_support import values
 
 MAIN = "main"
 
@@ -189,7 +190,7 @@ def test_be07_inflight_request_blocks_switch_and_never_mixes_datasets(client, mo
         session.commit()
     detail_b = client.get(f"/api/resumes/{record_id}")
     assert detail_b.status_code == 200, detail_b.text
-    assert "B 库正文" in detail_b.json()["content"]["summary"]
+    assert any("B 库正文" in text for text in values(detail_b.json()["content"]))
     preview_b = client.post(f"/api/resumes/{record_id}/preview-pdf", json={"page_limit": 1})
     assert preview_b.status_code == 200, preview_b.text
     text_b = _pdf_text(preview_b.content)
@@ -200,7 +201,7 @@ def test_be07_inflight_request_blocks_switch_and_never_mixes_datasets(client, mo
     assert _activate(client, MAIN).status_code == 200
     detail_a = client.get(f"/api/resumes/{record_id}")
     assert detail_a.status_code == 200, detail_a.text
-    assert "A 库正文" in detail_a.json()["content"]["summary"]
+    assert any("A 库正文" in text for text in values(detail_a.json()["content"]))
     preview_a = client.post(f"/api/resumes/{record_id}/preview-pdf", json={"page_limit": 1})
     assert preview_a.status_code == 200, preview_a.text
     text_a = _pdf_text(preview_a.content)

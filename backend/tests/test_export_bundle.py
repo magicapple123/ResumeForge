@@ -13,6 +13,7 @@ from app.models.resume_export import ResumeExportArtifact
 from app.services.data_backup import MANIFEST_MEMBER, create_backup_archive
 from app.services.resume.export_archive import archive_root
 from app.services.resume.resume_delivery import canonical_content_sha256
+from tests.document_test_support import values
 
 
 def _content() -> dict:
@@ -116,7 +117,7 @@ def test_bundle_manifest_records_real_resources(client):
 
 def test_bundle_uses_draft_content_without_writing(client):
     resume_id = _create_resume(client)
-    before = client.get(f"/api/resumes/{resume_id}").json()["content"]["summary"]
+    before_content = values(client.get(f"/api/resumes/{resume_id}").json()["content"])
     draft = _content()
     draft["summary"] = "DRAFT-MARKER 草稿总结"
 
@@ -128,10 +129,10 @@ def test_bundle_uses_draft_content_without_writing(client):
         next(name for name in archive.namelist() if name.endswith(".md"))
     ).decode("utf-8")
     # 不落库：记录正文没变。
-    assert client.get(f"/api/resumes/{resume_id}").json()["content"]["summary"] == before
-    from app.schemas.resume import ResumeContent
+    assert values(client.get(f"/api/resumes/{resume_id}").json()["content"]) == before_content
+    from app.services.resume.document_io import ensure_document_version
 
-    expected = canonical_content_sha256(ResumeContent.model_validate(draft).model_dump())
+    expected = canonical_content_sha256(ensure_document_version(draft))
     assert response.headers["X-Content-Sha256"] == expected
 
 
@@ -240,6 +241,7 @@ def test_single_format_download_uses_draft_snapshot(client):
     """W19①：单格式下载支持当前草稿 content，与预览同一快照，不落库不冻结。"""
     resume_id = _create_resume(client)
     before = client.get(f"/api/resumes/{resume_id}").json()
+    before_content = values(before["content"])
     draft = _content()
     draft["summary"] = "DRAFT-DOWNLOAD-MARKER"
 
@@ -260,5 +262,5 @@ def test_single_format_download_uses_draft_snapshot(client):
     assert repeated.content == response.content
     assert repeated.headers["X-Render-Config-Sha256"] == response.headers["X-Render-Config-Sha256"]
     after = client.get(f"/api/resumes/{resume_id}").json()
-    assert after["content"]["summary"] == before["content"]["summary"]
+    assert values(after["content"]) == before_content
     assert after["revision"] == before["revision"]

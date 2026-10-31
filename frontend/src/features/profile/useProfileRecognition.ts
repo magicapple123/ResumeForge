@@ -21,7 +21,7 @@ import type { RecognitionReviewRow } from "../../components/profile/RecognitionR
 import { attachmentInputs, useRecognitionFiles } from "../../hooks/useRecognitionFiles";
 import { t } from "../../i18n";
 import type { ProfileTextParseResult, RecognitionSource } from "../../types";
-import { makeTempEntryKey } from "../profile-library/ProfileEntrySection";
+import { makeTempEntryKey } from "../profile-library/tempEntryKey";
 import type { ProfileEntryDraft, ProfileFormValues, WorkspaceOut } from "../profile-library/types";
 
 interface Options {

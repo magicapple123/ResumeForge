@@ -67,6 +67,17 @@ afterEach(() => {
 });
 
 describe("ResumeRiskPanel", () => {
+  it("opens the native list without a deprecated List console error", () => {
+    const errors = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    try {
+      render(<ResumeRiskPanel resumeId={7} contentSignature="sig-list" />);
+      expect(errors.mock.calls.flat().join(" ")).not.toContain("[antd: List]");
+      expect(screen.getByRole("button", { name: "开始扫描" })).toBeInTheDocument();
+    } finally {
+      errors.mockRestore();
+    }
+  });
+
   it("挂载时不发请求，只显示说明卡", () => {
     render(<ResumeRiskPanel resumeId={7} contentSignature="sig-1" />);
 

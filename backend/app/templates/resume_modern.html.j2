@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data: blob:; style-src 'unsafe-inline'; font-src data:; script-src 'nonce-{{ csp_nonce }}'; base-uri 'none'; form-action 'none'" />
-<title>{{ resume.name }} - {{ resume.job_intent }} - 简历</title>
+<title>{{ page_title }} - 简历</title>
 <style>
   /* 现代模板：青绿强调色、浅底分区标题、圆形照片，适合互联网岗位。 */
   :root {
@@ -59,7 +59,7 @@
 </style>
 </head>
 <body>
-{% include "_resume_sections.j2" %}
+{% include "_resume_document.j2" %}
 {% include "_resume_fit_script.j2" %}
 </body>
 </html>

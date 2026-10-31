@@ -47,8 +47,6 @@ interface Props {
   saveFailed: boolean;
   /** 版式 PATCH 在飞。 */
   layoutSaving: boolean;
-  /** 内容 PATCH 在飞。 */
-  editorSaving: boolean;
   /** 整体保存的两步正在跑。 */
   saving: boolean;
   /** 「取消修改」被按过、就地确认条正亮着。 */
@@ -93,7 +91,6 @@ export default function ResumeWorkbenchActionBar({
   conflict,
   saveFailed,
   layoutSaving,
-  editorSaving,
   saving,
   discardConfirm,
   closeConfirmOpen,
@@ -157,7 +154,7 @@ export default function ResumeWorkbenchActionBar({
             icon={<SaveOutlined />}
             // 版式 PATCH 与内容 PATCH 任一在飞都上 loading：这两步在 `useWorkbenchOverallSave`
             // 里是串行的（先版式后内容），只在内容那一步转圈会让前一段看起来像点了没反应。
-            loading={editorSaving || saving}
+            loading={saving}
             // 版式 PATCH 在飞时禁用：那段时间落库只会返回 `false`，点得下去就等于
             // "点了没反应、内容也没存"，不如直接不给点。
             // 冲突态也禁用：再点一次保存 = 硬覆盖，正是 W02 要消灭的那条路。
@@ -175,7 +172,7 @@ export default function ResumeWorkbenchActionBar({
               size="small"
               // 冲突态连"取消修改"也禁用：本地这份是基于旧版本改的，丢弃之后编辑器会回填
               // 服务端**旧**内容（不是最新版），用户会以为放弃成功了、其实看到的是过期数据。
-              disabled={editorSaving || saving || conflict}
+              disabled={saving || conflict}
               onClick={() => onRequestDiscardConfirm(true)}
             >
               {t("workbench.action.cancel-changes")}

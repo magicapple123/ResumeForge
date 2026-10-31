@@ -8,6 +8,24 @@
 
 from __future__ import annotations
 
+from tests.document_test_support import body_texts, field_value
+
+
+def _set_summary(content: dict, text: str) -> dict:
+    """v2 content 的改总结：替换 summary 分区的 TextItem 文本。"""
+    import copy
+
+    edited = copy.deepcopy(content)
+    for section in edited["sections"]:
+        if section["key"] != "summary":
+            continue
+        for entry in section["entries"]:
+            for item in entry["items"]:
+                if item.get("kind") == "text":
+                    item["text"] = text
+                    return edited
+    raise AssertionError("v2 content 里没有 summary 文本")
+
 
 def _content() -> dict:
     return {
@@ -153,12 +171,13 @@ def test_source_list_create_and_revisions(client):
     assert [item["revision_no"] for item in revisions["revisions"]] == [1]
     assert revisions["revisions"][0]["id"] == manual["revision"]["id"]
 
-    # 形状校验：空标题 422、纯空白 400、过长 422、非 manual 类型 422。
+    # 形状校验：空标题 422、纯空白 400、过长 422、未知类型 422。
+    # （P5-1 起 kind 可显式指定——claim 等类型不再是 422；未知类型仍被 Literal 拒绝。）
     assert client.post("/api/provenance/sources", json={"title": ""}).status_code == 422
     assert client.post("/api/provenance/sources", json={"title": "   "}).status_code == 400
     assert client.post("/api/provenance/sources", json={"title": "x" * 257}).status_code == 422
     assert (
-        client.post("/api/provenance/sources", json={"title": "x", "kind": "claim"}).status_code
+        client.post("/api/provenance/sources", json={"title": "x", "kind": "unknown"}).status_code
         == 422
     )
     assert client.get("/api/provenance/sources/9999/revisions").status_code == 404
@@ -174,7 +193,7 @@ def test_link_existing_source_dedupes_and_validates(client):
     )
     assert first.status_code == 201, first.text
     link = first.json()
-    assert link["path"] == "experience.0"
+    assert link["path"] == "experience.expobj0001"
     assert link["status"] == "linked"
     # 重复关联 = 去重刷新同一行，不是第二条关联。
     second = client.post(
@@ -196,7 +215,7 @@ def test_link_existing_source_dedupes_and_validates(client):
         json={"resume_id": resume_id, "source_id": manual["id"], "path": "education.0"},
     )
     assert by_path.status_code == 201, by_path.text
-    assert by_path.json()["path"] == "education.0"
+    assert by_path.json()["path"] == "education.eduobj0001"
 
     # 错误语义：简历/来源/修订不存在 → 404；块解析不到 → 400。
     assert (
@@ -284,14 +303,14 @@ def test_adopt_source_text_writes_content_and_refreshes_link(client):
     )
     assert adopted.status_code == 200, adopted.text
     body = adopted.json()
-    assert body["applied_path"] == "experience.0.description.0"
+    assert body["applied_path"] == "experience.expobj0001.pnt0000001"
     assert body["revision"] == before["revision"] + 1
-    assert body["content"]["experience"][0]["description"] == [new_text]
+    assert body_texts(body["content"], "experience") == [new_text]
     assert body["link"]["status"] == "linked"
     assert body["source_revision_no"] == 2
 
     after = _resume_record(client, resume_id)
-    assert after["content"]["experience"][0]["description"] == [new_text]
+    assert body_texts(after["content"], "experience") == [new_text]
     assert after["revision"] == before["revision"] + 1
     # 反查影响：采纳后这个块不再 stale。
     impact = client.get(f"/api/provenance/sources/{link['source_id']}/impact").json()
@@ -300,7 +319,7 @@ def test_adopt_source_text_writes_content_and_refreshes_link(client):
     assert impact["stale_count"] == 0
 
     # 采纳成功不改变其它字段（只动那一个要点）。
-    assert after["content"]["experience"][0]["company"] == "示例科技有限公司"
+    assert field_value(after["content"], "company", section="experience") == "示例科技有限公司"
 
 
 def test_adopt_source_text_rejects_conflicts_and_stale_source(client):
@@ -320,8 +339,7 @@ def test_adopt_source_text_rejects_conflicts_and_stale_source(client):
 
     # 1) 迟到：expected_revision 已过期 → 409 resume_revision_conflict，不写。
     moved = _resume_record(client, resume_id)
-    moved_content = moved["content"]
-    moved_content["summary"] = "另一个窗口刚保存的总结"
+    moved_content = _set_summary(moved["content"], "另一个窗口刚保存的总结")
     saved = client.put(
         f"/api/resumes/{resume_id}/content",
         json={"content": moved_content, "expected_revision": moved["revision"]},
@@ -343,7 +361,7 @@ def test_adopt_source_text_rejects_conflicts_and_stale_source(client):
     assert stale.status_code == 409, stale.text
     assert stale.json()["code"] == "source_revision_stale"
     # 两次拒绝都没有改动正文（description 仍是原句）。
-    assert _resume_record(client, resume_id)["content"]["experience"][0]["description"] == [
+    assert body_texts(_resume_record(client, resume_id)["content"], "experience") == [
         "负责合成数据接口"
     ]
 
@@ -352,7 +370,9 @@ def test_adopt_source_text_rejects_conflicts_and_stale_source(client):
         client.post("/api/provenance/links/9999/adopt", json={"text": new_text}).status_code == 404
     )
     removed = _resume_record(client, resume_id)["content"]
-    removed["experience"] = []
+    removed["sections"] = [
+        section for section in removed["sections"] if section["key"] != "experience"
+    ]
     saved = client.put(
         f"/api/resumes/{resume_id}/content",
         json={
@@ -386,4 +406,68 @@ def test_adopt_into_entry_level_link_requires_explicit_path(client):
         json={"text": text, "path": "experience.0.description.0"},
     )
     assert with_path.status_code == 200, with_path.text
-    assert with_path.json()["content"]["experience"][0]["description"] == [text]
+    assert body_texts(with_path.json()["content"], "experience") == [text]
+
+
+def test_adopt_keeps_hidden_and_material_only_items(client):
+    """采纳只改目标段：隐藏项（含仅素材字段）必须原样保留。
+
+    回归 2026-10-30 实机问题：此前采纳走「v2 → v1 分析视图 → 改字符串 → 转回 v2」，
+    而 legacy 视图按定义不含 hidden 条目/字段，于是采纳一次就把「背调联系人」这类
+    仅素材/隐藏内容写没了。修复后按 v2 身份锚点直接改 item，隐藏项不受影响。
+    """
+    resume_id = _create_resume(client)
+    detail = _resume_record(client, resume_id)
+    document = detail["content"]
+    entry = next(
+        entry
+        for section in document["sections"]
+        if section["key"] == "experience"
+        for entry in section["entries"]
+        if entry["id"] == "expobj0001"
+    )
+    entry["items"].append(
+        {
+            "kind": "field",
+            "id": "it_hidden0001",
+            "key": "custom:backcheck",
+            "label": "背调联系人",
+            "value": "示例证明人",
+            "placement": "hidden",
+            "format": "text",
+            "wrap": "none",
+            "show_label": True,
+            "solo": False,
+            "body_style": "bullet",
+        }
+    )
+    saved = client.put(
+        f"/api/resumes/{resume_id}/content",
+        json={"content": document, "expected_revision": detail["revision"]},
+    )
+    assert saved.status_code == 200, saved.text
+
+    text = "负责合成数据接口（更新版）"
+    link = _link_point(client, resume_id, payload=_text_source_payload(text))
+    adopted = client.post(
+        f"/api/provenance/links/{link['link_id']}/adopt",
+        json={
+            "text": text,
+            "path": "experience.0.description.0",
+            "expected_revision": saved.json()["revision"],
+        },
+    )
+    assert adopted.status_code == 200, adopted.text
+
+    after = _resume_record(client, resume_id)["content"]
+    hidden = [
+        item
+        for section in after["sections"]
+        for entry in section.get("entries") or []
+        for item in entry.get("items") or []
+        if item.get("id") == "it_hidden0001"
+    ]
+    assert hidden, "采纳后隐藏/仅素材字段被删掉了"
+    assert hidden[0]["value"] == "示例证明人"
+    assert hidden[0]["placement"] == "hidden"
+    assert body_texts(after, "experience") == [text]

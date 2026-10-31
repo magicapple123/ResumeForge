@@ -13,6 +13,7 @@ from datetime import datetime
 
 from ...schemas.resume import ResumeContent
 from ...services.exporter import build_filename, sanitize_filename
+from .document_view import header_text
 
 NAMED_TOKENS: tuple[str, ...] = (
     "name",
@@ -62,7 +63,7 @@ def _token_values(record) -> dict[str, str]:  # noqa: ANN001 - ORM 记录
 def render_filename(
     pattern: str,
     *,
-    resume: ResumeContent,
+    resume: ResumeContent | dict,
     record,
     doc_format: str,
 ) -> str:
@@ -70,7 +71,7 @@ def render_filename(
     if not pattern:
         return build_filename(resume, f".{doc_format}")
     values = _token_values(record)
-    values["name"] = resume.name or values["name"]
+    values["name"] = (header_text(resume, "name") if isinstance(resume, dict) else resume.name) or values["name"]
     stem = pattern
     for token, value in values.items():
         stem = stem.replace("{" + token + "}", value)

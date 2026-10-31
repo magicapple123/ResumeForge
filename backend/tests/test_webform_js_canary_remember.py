@@ -305,8 +305,9 @@ def test_the_remember_editor_lists_exactly_the_targets_it_was_given(page_client)
     text = page_client.evaluate(_shadow("querySelector('.rf-memory').textContent"))
     assert "网申资料" in text, f"编辑器没渲染出来：{text!r}"
     assert "身体情况" in text, f"目标分组没列出来：{text!r}"
-    # 默认只展开「自定义」；已有网申字段先折叠，避免一打开就把屏幕撑满。
-    assert page_client.evaluate(_shadow("querySelectorAll('.rf-memory-row').length")) == 1, (
+    # 清单**只列已存在的保存目标**（HEAD 起没有合成的「自定义」行），且默认全部折叠：
+    # 打开编辑器时一行候选都不展开，避免一打开就把屏幕撑满。
+    assert page_client.evaluate(_shadow("querySelectorAll('.rf-memory-row').length")) == 0, (
         f"编辑器默认展开了过多候选：{text!r}"
     )
     assert page_client.evaluate(
@@ -326,8 +327,10 @@ def test_the_remember_editor_records_the_chosen_target_without_writing_the_page(
         "window.__rfShowPanel({status: 'matched', field_label: '姓名', value: '张三'})"
     )
     page_client.evaluate(_shadow("querySelector('.remember').click()"))
+    # 只有「身体情况」一个真实目标分组（合成的「自定义」行已随 HEAD 移除），
+    # 它默认是折叠的，点开后才看得到目标行。
     page_client.evaluate(
-        _shadow("querySelectorAll('.rf-memory-group')[1].click()")
+        _shadow("querySelectorAll('.rf-memory-group')[0].click()")
     )
     rows = _shadow("querySelectorAll('.rf-memory-row')")
     page_client.evaluate(f"[...{rows}].find((r) => r.textContent.includes('身高')).click()")
@@ -379,8 +382,10 @@ def test_remember_editor_switches_views_instead_of_stacking_on_the_picker(page_c
         " more: getComputedStyle(r.querySelector('.more')).display,"
         " groupPosition: getComputedStyle(r.querySelector('.rf-memory-group')).position}; })()"
     )
+    # 打开时是纵向 flex：编辑器要"吃掉面板剩余高度"（HEAD 起 .rf-memory 是
+    # flex:1 1 auto 的列容器；用 block 打开会丢掉这段高度分配）。
     assert state == {
-        "editor": "block",
+        "editor": "flex",
         "pick": "none",
         "more": "none",
         "groupPosition": "relative",

@@ -1,0 +1,106 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/* 「条目字段排版」面板（components/resume/EntryLayoutPanel.tsx）。
+   紧凑参数面板：行内 label + 控件；颜色走 --rf-*。 */
+
+.rf-entry-layout {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.rf-entry-layout-hint,
+.rf-entry-layout-fields-hint {
+  font-size: var(--rf-font-size-xs, 12px);
+  color: var(--rf-color-text-secondary);
+  line-height: 1.5;
+}
+
+.rf-entry-layout-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.rf-entry-layout-label {
+  flex: none;
+  width: 72px;
+  font-size: var(--rf-font-size-xs, 12px);
+  color: var(--rf-color-text-secondary);
+}
+
+.rf-entry-layout-locked {
+  font-size: var(--rf-font-size-xs, 12px);
+  color: var(--rf-color-warning-text, var(--rf-color-text-secondary));
+  background: var(--rf-color-warning-bg);
+  border-radius: var(--rf-radius-sm, 4px);
+  padding: 4px 8px;
+}
+
+/* Q08：条目级「分页」小分组（从分页面板搬到结构页签），与上面条目头布局同节奏。 */
+.rf-entry-layout-pagination {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  border-top: 1px solid var(--rf-color-border);
+  padding-top: 8px;
+}
+
+.rf-entry-layout-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.rf-entry-layout-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border-top: 1px solid var(--rf-color-border);
+  padding-top: 8px;
+}
+
+.rf-entry-layout-fields-title {
+  font-size: var(--rf-font-size-xs, 12px);
+  font-weight: 600;
+  color: var(--rf-color-text);
+}
+
+.rf-entry-layout-field-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.rf-entry-layout-field {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 30px;
+  padding: 2px 4px;
+  border-radius: var(--rf-radius-sm, 4px);
+  background: var(--rf-color-fill-quaternary);
+}
+
+.rf-entry-layout-field.is-hidden .rf-entry-layout-field-label {
+  opacity: 0.6;
+  text-decoration: line-through;
+}
+
+.rf-entry-layout-field-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--rf-font-size-xs, 12px);
+}
+
+.rf-entry-layout-empty {
+  padding: 12px;
+  font-size: var(--rf-font-size-xs, 12px);
+  color: var(--rf-color-text-secondary);
+}

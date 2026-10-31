@@ -30,7 +30,7 @@ from ...models.profile_definition import (
     ProfileCustomSection,
     ProfileFieldPreference,
 )
-from . import workspace_bootstrap
+from . import field_placement, workspace_bootstrap
 from .definition_catalog import (
     BUILTIN_SECTION_KEYS,
     BUILTIN_SECTIONS,
@@ -55,6 +55,10 @@ class MergedField:
     enum_suggestions: tuple[str, ...]
     is_builtin: bool
     private: bool
+    # 纸面默认位置与仅素材（0069，v2 文档模型 D6）：只对自建字段可写；
+    # 内置字段的默认位置由文档字段目录（document_catalog）决定，这里保持 None/False。
+    default_placement: str | None
+    material_only: bool
     llm_allowed: bool
     webform_allowed: bool
     section_key: str
@@ -62,6 +66,15 @@ class MergedField:
     collapsed_override: bool | None
     preference_revision: int
     revision: int
+
+    @property
+    def effective_placement(self) -> str | None:
+        """自建字段真正落到的纸面位置；内置字段由文档字段目录决定（这里给 None）。"""
+        if self.is_builtin:
+            return None
+        return field_placement.effective_placement(
+            self.field_type, self.default_placement, self.material_only
+        )
 
 
 @dataclass(frozen=True)
@@ -97,6 +110,8 @@ def _builtin_field(spec: Any, pref: Any) -> MergedField:
         spec.enum_suggestions,
         True,
         spec.private,
+        None,
+        False,
         spec.llm_allowed,
         spec.webform_allowed,
         spec.section_key,
@@ -119,6 +134,8 @@ def _custom_field(row: ProfileCustomField, pref: Any, *, order: int) -> MergedFi
         (),
         False,
         False,
+        row.default_placement,
+        bool(row.material_only),
         True,
         True,
         row.section_key,

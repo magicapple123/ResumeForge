@@ -4,6 +4,7 @@ const preview = {
   "preview.zoom.in": "Zoom in",
   "preview.zoom.fit": "Fit page (reset zoom)",
   "preview.zoom.reset": "Fit page",
+  "preview.zoom.scrollHint": "The page is wider than the frame: drag sideways to see it all",
   "preview.zoom.hint": "Hold Ctrl and scroll to zoom",
 
   "preview.mode.ariaLabel": "Preview mode",
@@ -21,6 +22,9 @@ const preview = {
   "preview.exact.typesetting": "Typesetting with the export engine...",
   "preview.exact.frameTitle": "Exact resume preview (exported PDF)",
   "preview.exact.pendingFrameTitle": "Exact preview loading",
+  "preview.exact.loadTimeoutTitle": "Embedded preview timed out",
+  "preview.exact.loadTimeoutBody":
+    "The PDF is ready but the viewer did not finish loading in time. Open it in a new tab, or switch to Draft and back to Exact to retry.",
   "preview.exact.noViewerTitle": "This environment has no built-in PDF viewer",
   "preview.exact.noViewerBody":
     "The PDF has already been laid out by the export engine, but it cannot be embedded here. Use the button below to open it in your system PDF reader — the content is exactly what Export downloads.",

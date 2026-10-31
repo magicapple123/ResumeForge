@@ -18,6 +18,15 @@
    Word 的默认中文字体，同一份简历在 Word 里的字形与 PDF 完全不同。
 
 颜色与字号一律从 ``ResumeLayout`` 与模板注册表读，本模块**不存第二份数值**。
+
+## 2026-10-31 拆分（纯搬迁，行为不变）
+
+Q11 补齐字距 / 加粗 / 斜体后本文件超过 500 行预算，按职责拆出两个同目录内聚模块：
+
+- ``docx_run_style.py``：run 级样式（``set_run_font`` / ``set_letter_spacing``）；
+- ``docx_photo.py``：照片锚定（``float_picture``，OOXML 结构拼装）。
+
+本模块 re-export 这三个函数，既有 import 路径不变；调用方无需改动。
 """
 
 from __future__ import annotations
@@ -26,14 +35,17 @@ from dataclasses import dataclass
 from functools import partial
 
 from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_TAB_ALIGNMENT
-from docx.oxml import OxmlElement
-from docx.oxml.ns import qn
-from docx.shared import Mm, Pt, RGBColor
+from docx.shared import Mm
 
 # 段落底纹/边框（纯 OOXML 拼装）拆到 docx_decorate；本模块 re-export 维持既有导入路径。
 from .docx_decorate import decorate_paragraph
 from .docx_fonts import DOCX_FONT, resolve_docx_font_name
+
+# run 级样式 / 照片锚定拆到同目录内聚模块；re-export 维持既有导入路径
+# （docx_exporter / docx_document_parts / 测试都从 docx_blocks 取这三个函数）。
+from .docx_photo import float_picture
 from .docx_rich import add_rich_runs
+from .docx_run_style import set_letter_spacing, set_run_font
 from .pdf_exporter import _PX_TO_MM, _PX_TO_PT, PAGE_WIDTH_MM
 from .resume.resume_template_format import FONT_KEY
 
@@ -87,6 +99,20 @@ def _style_color(style, fallback: tuple[int, int, int]) -> tuple[int, int, int]:
     except ValueError:
         return fallback
 
+def _style_bool(style, prop: str, default: bool = False) -> bool:
+    """角色覆盖里的布尔项；未设置（None）时用默认值。"""
+    value = getattr(style, prop, None) if style is not None else None
+    return bool(value) if isinstance(value, bool) else default
+
+
+def _style_letter_spacing_pt(base: float, style) -> float | None:
+    """角色覆盖的字距（× 基准字号）→ 磅；未设置返回 None（不写 w:spacing）。"""
+    value = getattr(style, "letter_spacing", None) if style is not None else None
+    if not isinstance(value, (int, float)) or isinstance(value, bool):
+        return None
+    return float(base) * float(value) * _PX_TO_PT
+
+
 def resolve_docx_theme(template: str, format_config: dict | None) -> DocxTheme:
     """一次导出的主题：字体族 + 正文/辅助色（颜色与 PDF 同一条解析：版式覆盖 → 模板 → 兜底）。"""
     from .pdf_exporter import resolve_muted, resolve_text
@@ -97,32 +123,6 @@ def resolve_docx_theme(template: str, format_config: dict | None) -> DocxTheme:
         body_text=resolve_text(template, format_config),
         muted_text=resolve_muted(template, format_config),
     )
-
-
-def set_run_font(
-    run,
-    *,
-    size_pt: float,
-    bold: bool = False,
-    italic: bool = False,
-    color: tuple[int, int, int] | None = None,
-    font_name: str = DOCX_FONT,
-) -> None:
-    """统一设置 run 的字体 / 字号 / 颜色，并补上 east-asian 字体（否则中文会回退默认字体）。
-
-    `font_name` 由调用方从 DocxTheme 取（= 这份简历所选字体的真实族名）；缺省保持历史
-    默认值，所以既有调用点（测试、其它导出）行为不变。
-    """
-    run.font.name = font_name
-    run.font.size = Pt(size_pt)
-    run.font.bold = bold
-    # W07 协议 v2：斜体只在为真时写属性（显式 False 会在 OOXML 落 w:i val="0"，
-    # 让所有旧产物平白多一层属性）。加粗仍按历史口径显式写。
-    if italic:
-        run.font.italic = True
-    run._element.get_or_add_rPr().get_or_add_rFonts().set(qn("w:eastAsia"), font_name)
-    if color is not None:
-        run.font.color.rgb = RGBColor(color[0], color[1], color[2])
 
 
 def paragraph(
@@ -245,27 +245,46 @@ def bullets(
     theme: DocxTheme = DEFAULT_DOCX_THEME,
     style=None,
 ) -> None:
-    """项目符号列表：与预览 ``<ul><li>`` 一样**悬挂缩进**（圆点挂左、文字对齐到 3mm）。"""
+    """项目符号列表：与预览 ``<ul><li>`` 一样**悬挂缩进**（符号挂左、文字对齐到 indent）。
+
+    Q11：缩进读角色/对象覆盖的 ``style.indent``（此前固定用模板 ``li_indent``，用户在
+    「正文 → 缩进」里调了 Word 不动）、正文对齐落到段落、加粗/斜体/字距落到 run、符号字形
+    与 PDF/HTML 统一为「· / – / 空」。
+    """
     size = base * _style_scale(style)
     color = _style_color(style, theme.body_text)
-    bullet = {"dot": "•", "dash": "–", "none": ""}.get(
-        style.bullet if style is not None and style.bullet else "dot", "•"
+    indent = (
+        base * _PX_TO_MM * float(style.indent)
+        if style is not None and style.indent is not None
+        else indent_mm
+    )
+    align = _ALIGN.get(str(style.align)) if style is not None and style.align else None
+    bold = _style_bool(style, "bold")
+    italic = _style_bool(style, "italic")
+    letter_spacing_pt = _style_letter_spacing_pt(base, style)
+    bullet = {"dot": "·", "dash": "–", "none": ""}.get(
+        style.bullet if style is not None and style.bullet else "dot", "·"
     )
     for item in items:
         text = str(item).strip()
         if not text:
             continue
         # W08：一条要点不跨页（Word 的 w:keepLines）；超高条目由 Word 自己劈开。
-        node = paragraph(doc, indent_mm=indent_mm, keep_together=True)
-        node.paragraph_format.first_line_indent = Mm(-indent_mm)
+        node = paragraph(doc, indent_mm=indent, keep_together=True)
+        node.paragraph_format.first_line_indent = Mm(-indent)
+        if align is not None:
+            node.paragraph_format.alignment = align
         if style is not None and style.line_height:
             node.paragraph_format.line_spacing = float(style.line_height)
         add_rich_runs(
             node,
             f"{bullet} {text}" if bullet else text,
             partial(set_run_font, font_name=theme.font_name),
+            bold=bold,
+            italic=italic,
             size_pt=size * _PX_TO_PT,
             color=color,
+            letter_spacing_pt=letter_spacing_pt,
         )
 
 
@@ -321,16 +340,20 @@ def entry_head(
         left,
         partial(set_run_font, font_name=theme.font_name),
         bold=style.bold if style is not None and style.bold is not None else True,
+        italic=_style_bool(style, "italic"),
         size_pt=title_size * _PX_TO_PT,
         color=_style_color(style, theme.body_text),
+        letter_spacing_pt=_style_letter_spacing_pt(base, style),
     )
     if not right:
         return
     if meta_style is not None and meta_style.meta_align == "inline":
+        # 日期位置 = 紧随标题（Q11/Q12「灰字」范围）：不再用制表位顶到版心右缘。
         add_rich_runs(
             node,
             f" · {right}",
             partial(set_run_font, font_name=theme.font_name),
+            italic=_style_bool(meta_style, "italic"),
             size_pt=base * layout.entry_meta_ratio * _PX_TO_PT * _style_scale(meta_style),
             color=_style_color(meta_style, theme.muted_text),
         )
@@ -343,102 +366,23 @@ def entry_head(
         node,
         f"\t{right}",
         partial(set_run_font, font_name=theme.font_name),
+        italic=_style_bool(meta_style, "italic"),
         size_pt=base * layout.entry_meta_ratio * _PX_TO_PT * _style_scale(meta_style),
         color=_style_color(meta_style, theme.muted_text),
     )
 
 
-def float_picture(run, *, align: str = "right", vertical_offset_mm: float = 0.0) -> bool:
-    """把 ``run`` 里刚插入的图片从**嵌入型**改成「**浮于文字上方**」（不占行高）。
-
-    ## 为什么必须改
-
-    ``add_picture()`` 只会产出 `wp:inline`：图片是正文流里的一个"大号字符"，独占一行
-    并按行高把后面的内容整体下推。而预览里的照片是页头右侧的一列——姓名、意向、联系
-    方式在左边同一行。于是同一份简历：
-
-    * 预览：页头高度 = 姓名那几行；
-    * Word（嵌入型）：照片先占掉整整一行（约 7mm + 段距），姓名被顶到下面，
-      页头凭空高出一截，后面的分页跟着往后错。
-
-    改成浮动之后图片脱离正文流，姓名回到第一行、照片贴右上角，页头高度与预览一致。
-    用户实测过：手动把照片改成「浮于文字上方」，Word 版就对上了。
-
-    ## OOXML 口径
-
-    「浮于文字上方」= `wp:anchor` + `behindDoc="0"` + `<wp:wrapNone/>`。
-    「衬于文字下方」用的是**同一个** `wrapNone`，区别只在 `behindDoc="1"`，别写反。
-    `wrapNone` 意味着文字**不绕排**、会从图片底下穿过去——所以照片要贴在版心边缘，
-    页头文字本来就短，重合概率很低；真压住了，调小照片或缩短姓名即可。
-
-    子元素顺序由 schema 固定（`simplePos → positionH → positionV → extent →
-    effectExtent → wrap* → docPr → cNvGraphicFramePr → graphic`），顺序错了 Word 会
-    判定文件损坏、直接拒绝打开——这是本函数唯一需要小心的地方。
-
-    :param run: 已经 `add_picture()` 过的 run。
-    :param align: ``"right"``（默认，贴版心右缘）/ ``"left"``（elegant 这类照片在左的模板）。
-    :param vertical_offset_mm: 相对锚点段落顶部的下移量（mm）。照片改成"按原图比例装进
-        照片框（contain）"之后，框内上下留白由调用方算好传进来，与 CSS
-        `object-fit: contain` 的垂直居中同一定位；默认 0 = 贴段首（旧行为）。
-    :returns: 是否真的转换成功；没有图片或结构不认识时返回 ``False``（调用方决定是否回退）。
-    """
-    drawing = run._element.find(qn("w:drawing"))
-    if drawing is None:
-        return False
-    inline = drawing.find(qn("wp:inline"))
-    if inline is None:
-        return False
-
-    anchor = OxmlElement("wp:anchor")
-    for name, value in (
-        ("distT", "0"),
-        ("distB", "0"),
-        ("distL", "0"),
-        ("distR", "0"),
-        ("simplePos", "0"),
-        # z 序：数值越大越靠上。给一个"高于普通文字、低于批注"的常规值即可。
-        ("relativeHeight", "251658240"),
-        # 「浮于文字上方」：不进背景层。
-        ("behindDoc", "0"),
-        ("locked", "0"),
-        ("layoutInCell", "1"),
-        ("allowOverlap", "1"),
-    ):
-        anchor.set(name, value)
-
-    simple_pos = OxmlElement("wp:simplePos")
-    simple_pos.set("x", "0")
-    simple_pos.set("y", "0")
-    anchor.append(simple_pos)
-
-    # 水平：以**版心**为参照对齐，照片因此贴正文右缘（左缘），不受段落缩进影响。
-    position_h = OxmlElement("wp:positionH")
-    position_h.set("relativeFrom", "margin")
-    align_node = OxmlElement("wp:align")
-    align_node.text = align
-    position_h.append(align_node)
-    anchor.append(position_h)
-
-    # 垂直：以**所在段落**为参照、偏移 0——锚在姓名那一段上，页头一动它跟着动，
-    # 不会跑到纸张最顶上（那样翻到第 2 页时照片会跟着"消失"在页首）。
-    position_v = OxmlElement("wp:positionV")
-    position_v.set("relativeFrom", "paragraph")
-    offset = OxmlElement("wp:posOffset")
-    # 0mm 仍写 "0"（与改动前的字节完全一致）；有偏移时用 EMU（1mm = 36000 EMU）。
-    offset.text = "0" if vertical_offset_mm == 0 else str(int(round(Mm(vertical_offset_mm).emu)))
-    position_v.append(offset)
-    anchor.append(position_v)
-
-    # 以下节点原样搬过来（不重建），保证图片数据、alt 文本与尺寸一个字节都不丢。
-    for tag in ("wp:extent", "wp:effectExtent"):
-        node = inline.find(qn(tag))
-        if node is not None:
-            anchor.append(node)
-    anchor.append(OxmlElement("wp:wrapNone"))
-    for tag in ("wp:docPr", "wp:cNvGraphicFramePr", "a:graphic"):
-        node = inline.find(qn(tag))
-        if node is not None:
-            anchor.append(node)
-
-    drawing.replace(inline, anchor)
-    return True
+__all__ = [
+    "DEFAULT_DOCX_THEME",
+    "DOCX_FONT",
+    "DocxTheme",
+    "bullets",
+    "entry_head",
+    "float_picture",
+    "meta_line",
+    "paragraph",
+    "resolve_docx_theme",
+    "section_title",
+    "set_letter_spacing",
+    "set_run_font",
+]

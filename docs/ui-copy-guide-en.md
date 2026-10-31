@@ -1,6 +1,6 @@
 # 英文界面文案口径（English UI copy guide）
 
-> **状态**：v1.0 · 2026-10-28（i18n 收尾批次 S3 产出）
+> **状态**：v1.1 · 2026-10-30（v2 文档模型批次补 §1.10；v1.0 为 2026-10-28 i18n 收尾批次 S3）
 > **上游口径**：[docs/ui-copy-guide.md](ui-copy-guide.md)（中文界面文案口径）。那份文件是**判定基准的唯一真相**：它回答"这个实体叫什么、这个动作叫什么、这个位置该写什么句式"。本文件是它的**英文对照层**，只回答"同一个概念在英文界面里怎么拼、怎么大小写"。
 > **适用**：`frontend/src/i18n/messages/en-US.*.ts`（本批 7,757 条 key，2026-10-28 统计）。
 > **不覆盖**：简历**纸面**英文（唯一来源是 `backend/app/services/resume/resume_labels.py` 的 `SECTION_TITLES["en-US"]` / `FIELD_LABELS["en-US"]`）、README / docs 行文、代码注释、CHANGELOG 语气。
@@ -151,6 +151,34 @@
 | 求职进度 | **Job tracker** | Tracker / Application tracker | 功能区名 |
 | 求职助手 | **Job assistant** | job assistant（句中）/ Assistant | 功能区名 |
 
+### 1.10 简历文档模型 v2 的位置（2026-10-30）
+
+中文口径见 `docs/ui-copy-guide.md` §2.8；英文以本表为准（值取自 `en-US.document.ts` / `en-US.structure.ts`，两包必须逐字一致）。
+
+| 中文正名 | 英文正名 | 不要写成 | 说明 |
+|---|---|---|---|
+| 标题行 | **Title line** | Title row / Heading line | 条目头左侧 |
+| 元信息 | **Metadata** | Meta / Meta info | 条目头右侧 |
+| 正文前灰字 | **Gray fields before body** | Grey… / Pre-body fields / Short fields above | 灰 = gray（S1；不要 grey） |
+| 正文后灰字 | **Gray fields after body** | Grey… / Post-body fields / Additional fields | 旧文案的 "additional fields" 不再用 |
+| 正文 | **Body** | Content / Description area | 黑色正文块 |
+| 隐藏（位置） | **Hidden** | Not printed（作位置名时） | 说明句里可以用 "never printed" |
+| 仅素材 | **Material only** | AI only / Material field（裸用） | 资料页属性与结构树徽标 |
+| 纸面位置 | **Paper placement** | Position type / Field type | 资料页「纸面位置」下拉 |
+| 本份简历结构（面板） | **Resume structure** | Outline / Document outline | 旧「文档大纲」的英文名停用 |
+
+条目头布局（`structure.layout.head.*` / `document.entry.headLayout.*`）：`split` = **Side by side**、
+`stacked` = **Stacked**、`meta_first` = **Metadata first**。
+
+页眉位置（`document.headerPlacement.*`）：`name` = **Name line**、`name_meta` = **Text next to name**、
+`subtitle` = **Job intent**、`contact` = **Contact line**、`photo` = **Photo**、`hidden` = **Hidden**。
+
+两条语境差异（合法，不要求统一）：
+
+- 三区卡的区名用短名 **Before body / After body / Gray short fields**（`document.zone.*`），对应中文
+  「正文前 / 正文后 / 灰色短字段」；正式位置名仍是 **Gray fields before body / Gray fields after body**。
+- 结构树的页眉分组短名 **Name line / Text next to name / Job intent / Contact / Photo**（`structure.placement.*`）；
+  字段位置全名仍是 **Contact line**。这是「分组标题 vs 字段位置」，与中文「联系方式 vs 联系方式行」同构。
 ## 2. 大小写规则（E1–E8）
 
 | # | 规则 | 正例 | 反例 |
@@ -245,3 +273,4 @@ E1 / E2 的分界：**说的是"那条岗位记录"还是"某一类岗位"**。�
 | 日期 | 版本 | 改了什么 | 为什么 |
 |---|---|---|---|
 | 2026-10-28 | v1.0 | 首版：核心术语表、大小写 / 拼写 / 标点规则、语境差异表、本批统一记录 | i18n 收尾批次 S3：英文包同一中文含义多写法收口，并把"为什么这样写"沉淀成可判定的文档 |
+| 2026-10-30 | v1.1 | 新增 §1.10：v2 文档模型的位置 / 条目头布局 / 页眉位置英文名；与 `en-US.document.ts`、`en-US.structure.ts` 对齐（gray 按 S1 美式拼写） | v2 批次：位置成为数据，需要跨包统一定名 |

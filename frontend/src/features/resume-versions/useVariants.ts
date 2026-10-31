@@ -43,9 +43,12 @@ export function useVariants({ resumeId }: UseVariantsOptions) {
   }, [resumeId]);
 
   useEffect(() => {
-    setVariants([]);
-    setActionError("");
-    void reload();
+    // 切简历先清列表再重拉：同步 setState 放进微任务，避开级联渲染告警（仍在本帧内生效）。
+    queueMicrotask(() => {
+      setVariants([]);
+      setActionError("");
+      void reload();
+    });
   }, [reload]);
 
   const create = useCallback(

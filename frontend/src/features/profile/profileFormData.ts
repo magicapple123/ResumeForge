@@ -12,7 +12,7 @@
  *   判空按空串处理——直接 trim 会在保存时抛异常中断整条链路；
  * - collectEntryChanges：已有条目只提交变化的 field_id（带 expected_revision），新建条目整条提交。
  */
-import { makeTempEntryKey } from "../profile-library/ProfileEntrySection";
+import { makeTempEntryKey } from "../profile-library/tempEntryKey";
 import type {
   BulkEntryItem,
   ProfileEntryDraft,

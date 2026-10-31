@@ -5,8 +5,10 @@
 输出 added / removed / unchanged 三态；前端只渲染、不重算——这是全仓库唯一实现，
 共享知识第 11 条。
 """
+
 from __future__ import annotations
 
+import copy
 import difflib
 import json
 from typing import Any
@@ -26,9 +28,13 @@ def _to_lines(content: dict[str, Any]) -> list[str]:
     # 照片是 base64 data URL：原样混进 diff 会输出一大段乱码。序列化前用占位符替换
     # （**占位而非剔除**，保留"这一行是照片"的结构线索，两端都换成同一占位才不会被
     # 误判成内容变化）。
-    serializable = dict(content)
+    serializable = copy.deepcopy(content)
     if serializable.get("photo"):
         serializable["photo"] = "[图片]"
+    if serializable.get("version") == 2:
+        for item in (serializable.get("header") or {}).get("items") or []:
+            if item.get("placement") == "photo" and item.get("value"):
+                item["value"] = "[图片]"
     serialized = json.dumps(serializable, ensure_ascii=False, indent=2, sort_keys=True)
     # 差异对比是**纯文本消费方**：只把 `**` 标记从每行里剥掉（成对的才剥），
     # 让"只给一句话加粗"不被报成"这一行改写了"。

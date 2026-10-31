@@ -18,7 +18,7 @@
  * 因此测量只在"我的内容 + 有简历 id"时发生；示例模式界面如实显示"示例内容不测页数"。
  */
 import { fetchResumePreviewPdf, previewResumeTemplate } from "../../api/resumes";
-import type { ResumeContent, ResumeFontScale, ResumeFormatConfig } from "../../types";
+import type { ResumeDocument, ResumeFontScale, ResumeFormatConfig } from "../../types";
 import type { TrialContentMode, TrialMeasurement, TrialSideRequest } from "./types";
 
 /** `previewResumeTemplate` 的请求体（后端 `TemplatePreviewRequest` 的字段镜像）。 */
@@ -29,7 +29,7 @@ export interface TemplatePreviewPayload {
   page_limit: number;
   font_scale: ResumeFontScale;
   resume_id?: number;
-  content?: ResumeContent;
+  content?: ResumeDocument;
 }
 
 /** 采纳时的最终排版覆盖：保留 = 原样；采用模板默认 = 清空覆盖与具名版式。 */

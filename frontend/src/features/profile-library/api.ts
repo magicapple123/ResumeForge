@@ -92,6 +92,7 @@ export function createField(
   label: string,
   fieldType: CustomFieldType,
   expectedRevision: number | null,
+  placement?: { defaultPlacement?: string | null; materialOnly?: boolean },
 ): Promise<FieldOut> {
   return request(sectionPath(sectionKey) + "/fields", {
     method: "POST",
@@ -99,6 +100,11 @@ export function createField(
       label,
       field_type: fieldType,
       expected_revision: expectedRevision,
+      // 纸面属性（0069）：不传 = 按类型自动且上纸面（旧客户端行为不变）。
+      ...(placement?.defaultPlacement !== undefined
+        ? { default_placement: placement.defaultPlacement }
+        : {}),
+      ...(placement?.materialOnly !== undefined ? { material_only: placement.materialOnly } : {}),
     }),
   });
 }
@@ -106,7 +112,14 @@ export function createField(
 export function updateField(
   sectionKey: string,
   fieldId: string,
-  updates: { label?: string; sort_order?: number; expected_revision: number },
+  updates: {
+    label?: string;
+    sort_order?: number;
+    /** null = 恢复"按类型自动"；不传 = 不改（后端用 model_fields_set 区分三态）。 */
+    default_placement?: string | null;
+    material_only?: boolean;
+    expected_revision: number;
+  },
 ): Promise<FieldOut> {
   return request(sectionPath(sectionKey) + "/fields/" + encodeURIComponent(fieldId), {
     method: "PATCH",

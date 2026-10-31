@@ -4,7 +4,7 @@
 分享包 = 一份**脱敏后**的简历产物目录，包含：
 
 - ``resume.html`` / ``resume.pdf``：脱敏后的 HTML 与 PDF（复用导出管线）；
-- ``resume_snapshot.json``：只读 ``ResumeContent`` 快照（不含照片，与 ``export_json`` 一致）；
+- ``resume_snapshot.json``：只读 v2 文档快照（不含照片，与 ``export_json`` 一致）；
 - ``manifest.json``：本地离线 token + 权限 + 生成时间（token 落本地目录、可离线校验）；
 - ``comments.md``：仅 ``comment`` 权限生成，收件人写评论后交回，导入写回本目录。
 
@@ -35,7 +35,6 @@ from ..models.share_package import (
     SharePackage,
 )
 from ..runtime.log_fields import safe_log_text
-from ..schemas.resume import ResumeContent
 from ..schemas.share_package import (
     ShareCommentsOut,
     ShareFileOut,
@@ -45,7 +44,10 @@ from ..schemas.share_package import (
 from . import trash
 from .export_pipeline import ExportRequest, RenderContext, build_export
 from .pdf_exporter import ResumePDFError
-from .privacy import RedactionOptions, redact
+from .privacy import RedactionOptions, redact_document
+from .resume import document_io
+from .resume.document_html import coerce_document, document_for_delivery, with_document_photo
+from .resume.document_view import header_text
 from .resume.resume_labels import DEFAULT_RESUME_LANGUAGE
 from .resume.resume_record import record_format_config
 from .resume.resume_template_store import resolve_style_config, resolve_style_template
@@ -142,7 +144,7 @@ def ensure_package_files(db: Session, package: SharePackage) -> list[str]:
         return []
 
     directory.mkdir(parents=True, exist_ok=True)
-    resume = ResumeContent.model_validate(package.snapshot)
+    resume = document_io.ensure_document_version(package.snapshot)
     # 风格上下文优先取原简历；简历被删了就退回默认版式——内容仍然逐字一致，只是版式不再是
     # 当初那一套。**不去猜**当初用的是什么模板，那只会造出一个看起来对、其实对不上的东西。
     record = trash.get_live(db, ResumeRecord, package.resume_id) if package.resume_id else None
@@ -213,8 +215,8 @@ def verify_share_token(package: SharePackage, token: str) -> bool:
     return bool(token) and secrets.compare_digest(package.share_token or "", token)
 
 
-def _build_title(resume: ResumeContent) -> str:
-    name = (resume.name or "简历").strip() or "简历"
+def _build_title(resume: dict) -> str:
+    name = header_text(resume, "name") or "简历"
     timestamp = datetime.now().strftime("%Y%m%d%H%M")
     return f"{name}-分享包-{timestamp}"[:200]
 
@@ -261,12 +263,12 @@ def create_share_package(
     if permission not in SHARE_PERMISSIONS:
         raise SharePackageError(f"无效的分享权限，可选值：{'、'.join(SHARE_PERMISSIONS)}", 422)
 
-    resume = ResumeContent.model_validate(record.content)
+    resume, _conversion = document_io.document_for_record(db, record)
     options = redact_options or RedactionOptions()
-    # 脱敏唯一复用 privacy.redact：分享包与导出、脱敏预览用同一套掩码规则。
-    redacted_resume = redact(resume, options)
+    # 分享包与导出、脱敏预览复用同一套 v2 掩码规则。
+    redacted_resume = redact_document(resume, options)
     # 快照与 export_json 同口径：不带照片 data URL，避免大字段与无意义的个人影像残留。
-    snapshot = redacted_resume.model_dump(exclude={"photo"})
+    snapshot = document_for_delivery(coerce_document(redacted_resume))
 
     template_name, template_html = resolve_style_template(db, record.template)
     context = RenderContext(
@@ -285,7 +287,7 @@ def create_share_package(
     # 这个开关（只有 PDF/DOCX 消费），所以关掉照片时单独把 HTML 那份内容里的照片清空，
     # 保证「HTML 与 PDF 都不含照片」和界面上那句话一致。
     html_resume = (
-        redacted_resume if include_photo else redacted_resume.model_copy(update={"photo": ""})
+        redacted_resume if include_photo else with_document_photo(coerce_document(redacted_resume), "")
     )
     html_artifact = build_export(
         ExportRequest(format="html", include_photo=include_photo), html_resume, context

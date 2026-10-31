@@ -14,7 +14,11 @@ import os
 import pytest
 from app.services.browser.cdp_client import WebsocketCdpClient
 
-PORT = 9333
+# 默认连应用投递台拉起的那个受控浏览器（127.0.0.1:9333，用户日常在用的那个窗口）。
+# `RF_WEBFORM_CDP_PORT` 允许把它指向一个**临时/一次性**的浏览器实例（例如仓库启动器或
+# CI 用独立 profile 在 9344 上拉起），用于"不打扰正在使用的浏览器"地跑这套真机验证。
+# 只改端口，不改 skip 契约：端口没人答话仍然 skip。
+PORT = int(os.environ.get("RF_WEBFORM_CDP_PORT") or 9333)
 
 # 合成 DOM：两种真实站点的结构各一份。
 # - deep：字节那套 `ud__` 组件库的形状（input 埋在 6 层里，标签在第 6 层的 form item）
@@ -86,7 +90,10 @@ def browser_or_skip() -> WebsocketCdpClient:
         client.list_targets()
     except Exception:  # noqa: BLE001 - 连不上就跳过
         client.close()
-        pytest.skip("本机没有受控浏览器（127.0.0.1:9333），跳过 JS 真机验证")
+        pytest.skip(
+            f"本机没有受控浏览器（127.0.0.1:{PORT}），跳过 JS 真机验证"
+            "（可用 RF_WEBFORM_CDP_PORT 指向临时实例）"
+        )
     return client
 
 

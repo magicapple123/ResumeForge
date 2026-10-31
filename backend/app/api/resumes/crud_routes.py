@@ -20,7 +20,6 @@ from ...schemas.resume import (
     ResumeBatchDeleteResult,
     ResumeBatchRequest,
     ResumeBrief,
-    ResumeContent,
     ResumeContentSave,
     ResumeFavoriteUpdate,
     ResumeNoteUpdate,
@@ -39,6 +38,7 @@ from ...services.resume.manual_creation import (
     profile_snapshot_stale_response,
 )
 from ...services.resume.profile_usage import profile_usage_for_resume
+from ...services.resume.resume_labels import normalize_language
 from ._shared import _get_live_resume, _mark_saved, _to_resume_out, _validated_content
 
 logger = logging.getLogger(__name__)
@@ -54,14 +54,14 @@ def create_manual_resume(payload: ManualResumeRequest, db: Session = Depends(get
     HTTP 编排：过期投影 token → 409 profile_snapshot_stale，其余沿用旧的提交/响应形状。
     """
     try:
-        record = create_manual_resume_record(db, payload)
+        record, document_conversion = create_manual_resume_record(db, payload)
     except ProfileSnapshotStale:
         return profile_snapshot_stale_response()
     # 提交点保持在原处：快照行与简历行同事务落库（服务层不自行 commit）。
     db.commit()
     db.refresh(record)
     logger.info("用户手写简历已保存 record_id=%s job=%s", record.id, record.job_title)
-    return _to_resume_out(record)
+    return _to_resume_out(record, db, document_conversion=document_conversion)
 
 
 @router.post("/batch-delete", response_model=ResumeBatchDeleteResult)
@@ -278,30 +278,36 @@ def get_resume(resume_id: int, db: Session = Depends(get_db)):
     record = db.get(ResumeRecord, resume_id)
     if record is None or trash.is_deleted(record):
         raise HTTPException(status_code=404, detail="简历记录不存在或已被删除")
-    detail = _to_resume_out(record)
+    detail = _to_resume_out(record, db)
     # R-33 追溯元数据：只在详情端点补（列表不需要；独立 GET /profile-usage 还带过时判定）。
     detail.profile_usage = profile_usage_for_resume(db, record.id)
     return detail
 
 
 @router.put("/{resume_id}", response_model=ResumeOut)
-def update_resume(resume_id: int, payload: ResumeContent, db: Session = Depends(get_db)):
-    """保存用户对生成简历的手工修改（**旧形状，一个字节都没变**）。
+def update_resume(resume_id: int, payload: dict, db: Session = Depends(get_db)):
+    """保存用户对生成简历的手工修改（**旧请求形状**：请求体就是正文 JSON）。
 
-    内部等价于 ``expected_revision=None`` 的无条件写：老客户端不知道版本号，强行要求
-    它会直接 422。但它写完**仍然推进一版**，于是新客户端的下一次条件写必然 409——
-    用户因此看见"别处改过"，而不是被静默覆盖（审计 W02 / §4.3）。
+    正文是 v2 文档 JSON（也接受旧 v1，服务端转换后落 v2）。内部等价于
+    ``expected_revision=None`` 的无条件写：老客户端不知道版本号，强行要求它会直接 422。
+    但它写完**仍然推进一版**，于是新客户端的下一次条件写必然 409——用户因此看见
+    "别处改过"，而不是被静默覆盖（审计 W02 / §4.3）。
     """
     record = _get_live_resume(db, resume_id)
     outcome = save_content(
         db,
         record_id=record.id,
-        content=_validated_content(payload),
+        content=_validated_content(
+            payload,
+            db,
+            language=normalize_language(record.language),
+            format_config=record.format_config or {},
+        ),
         expected_revision=None,
     )
     if outcome is None:  # 读到之后被删（竞态）：与一开始就没有这一行同一口径。
         raise HTTPException(status_code=404, detail="简历记录不存在或已被删除")
-    return _to_resume_out(outcome.record)
+    return _to_resume_out(outcome.record, db)
 
 
 @router.put("/{resume_id}/content", response_model=ResumeOut)
@@ -317,14 +323,19 @@ def save_resume_content(resume_id: int, payload: ResumeContentSave, db: Session 
         outcome = save_content(
             db,
             record_id=record.id,
-            content=_validated_content(payload.content),
+            content=_validated_content(
+                payload.content,
+                db,
+                language=normalize_language(record.language),
+                format_config=record.format_config or {},
+            ),
             expected_revision=payload.expected_revision,
         )
     except RevisionConflict as exc:
         return revision_conflict_response(exc.current_revision)
     if outcome is None:
         raise HTTPException(status_code=404, detail="简历记录不存在或已被删除")
-    return _to_resume_out(outcome.record)
+    return _to_resume_out(outcome.record, db)
 
 
 @router.patch("/{resume_id}", response_model=ResumeOut)
@@ -342,7 +353,7 @@ def rename_resume(
     _mark_saved(record)
     db.commit()
     db.refresh(record)
-    return _to_resume_out(record)
+    return _to_resume_out(record, db)
 
 
 @router.patch("/{resume_id}/note", response_model=ResumeOut)
@@ -358,7 +369,7 @@ def update_resume_note(
     record.note = payload.note
     db.commit()
     db.refresh(record)
-    return _to_resume_out(record)
+    return _to_resume_out(record, db)
 
 
 @router.patch("/{resume_id}/favorite", response_model=ResumeOut)
@@ -374,7 +385,7 @@ def update_resume_favorite(
     record.favorite = payload.favorite
     db.commit()
     db.refresh(record)
-    return _to_resume_out(record)
+    return _to_resume_out(record, db)
 
 
 @router.delete("/{resume_id}", status_code=204)

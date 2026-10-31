@@ -36,6 +36,7 @@ from ...services import trash
 from ...services.career_scenarios.resolve import CareerContextError, resolve_context
 from ...services.claims import build_baseline
 from ...services.llm.base import LLMError
+from ...services.resume import document_io
 from ...services.resume.generate_snapshot import (
     consumed_has_content,
     delete_generation_snapshot,
@@ -191,6 +192,7 @@ async def generate_resume(payload: GenerateRequest, db: Session = Depends(get_db
     async def event_stream():
         raw_parts: list[str] = []
         parsed: dict | None = None
+        document: dict | None = None
         warnings: list[str] = []
         done_event: dict | None = None
         try:
@@ -220,6 +222,14 @@ async def generate_resume(payload: GenerateRequest, db: Session = Depends(get_db
                     yield _format_sse({"type": "error", "message": echo_error})
                     return
                 with factory() as save_db:
+                    # SSE 的 done.resume 与详情/保存接口必须同一种形状（v2）：
+                    # 在保存同一事务的快照里取自定义字段定义，转换一次供事件使用。
+                    document = document_io.ensure_document_version(
+                        parsed,
+                        language=payload.options.language,
+                        format_config=payload.options.format_config,
+                        custom_fields=document_io.custom_field_definitions(save_db),
+                    )
                     record = save_record(
                         save_db,
                         parsed,
@@ -242,6 +252,8 @@ async def generate_resume(payload: GenerateRequest, db: Session = Depends(get_db
                         fact_annotations=done_event.get("fact_annotations") or [],
                         document_mode=payload.options.document_mode,
                         context_snapshot=context_snapshot,
+                        # 与 SSE done.resume 复用同一份转换结果（只转一次，id 一致）。
+                        document=document,
                         commit=False,
                     )
                     # F3 §1：简历记录与快照行同事务提交（resume_id 回写）。
@@ -256,6 +268,8 @@ async def generate_resume(payload: GenerateRequest, db: Session = Depends(get_db
                     save_db.refresh(record)
                 # 只有持久化成功后才宣布完成；断流不会留下“成功但无历史记录”的状态。
                 yield _format_sse({"type": "saved", "record_id": record.id})
+                if document is not None:
+                    done_event = {**done_event, "resume": document}
                 yield _format_sse(done_event)
         except LLMError:
             logger.warning("简历生成失败（模型错误，用户可见错误已固定脱敏）")

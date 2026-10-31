@@ -10,7 +10,8 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { TEMPLATE_CATALOG } from "../test/resumeFixtures";
-import type { ResumeContent, ResumeDetail, ResumeGenerateTask } from "../types";
+import { makeResumeDocument } from "../test/documentHarness";
+import type { ResumeDetail, ResumeGenerateTask } from "../types";
 import { resetBackgroundTasks } from "../utils/backgroundTasks";
 import { registerNotifyHost } from "../utils/taskNotify";
 import GenerateResumeModal from "./GenerateResumeModal";
@@ -93,25 +94,8 @@ function makeTask(overrides: Partial<ResumeGenerateTask> = {}): ResumeGenerateTa
   };
 }
 
-const EMPTY_CONTENT: ResumeContent = {
-  photo: "",
-  name: "",
-  gender: "",
-  birth_year: "",
-  phone: "",
-  email: "",
-  city: "",
-  personal_website: "",
-  github: "",
-  job_intent: "",
-  summary: "",
-  education: [],
-  experience: [],
-  campus_experience: [],
-  projects: [],
-  skills: [],
-  awards: [],
-};
+/** 生成结果的正文：v2 文档（后端已统一返回 v2，生成预览由 ResumeDetailPreview 渲染）。 */
+const EMPTY_CONTENT = makeResumeDocument();
 
 const RESUME_DETAIL: ResumeDetail = {
   id: 7,

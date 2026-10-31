@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import unicodedata
 from collections.abc import Iterable, Mapping
 
@@ -28,9 +29,11 @@ from ...schemas.profile_projection import (
     ConsumedFieldSpec,
     ConsumedProfile,
     PaperProjectionOut,
+    ProjectionCandidateOut,
     ProjectionWarningOut,
 )
 from ...schemas.resume import ResumeContent
+from ..resume import document_io
 from . import paper_policy
 from .paper_content_builder import clean_values, is_http_url, project_content
 from .paper_limits import PhotoResolver
@@ -170,23 +173,91 @@ def project_paper_content(
     return project_content(consumed, resolve_photo, []).content
 
 
+def _custom_field_hints(consumed: ConsumedProfile) -> dict[str, list[dict]]:
+    """当前方案的自定义字段元数据（v1→v2 转换器用来识别「标签：值」行与落位置）。"""
+    hints: dict[str, list[dict]] = {}
+    for key, section in consumed.sections.items():
+        rows = [
+            {
+                "section_key": key,
+                "field_id": spec.field_id,
+                "label": spec.label,
+                "field_type": spec.field_type,
+                "default_placement": spec.default_placement or "trail",
+                "material_only": spec.material_only,
+            }
+            for spec in section.fields
+            if not spec.is_builtin
+        ]
+        if rows:
+            hints[key] = rows
+    return hints
+
+
 def build_projection(
     consumed: ConsumedProfile,
     *,
     resolve_photo: PhotoResolver | None = None,
+    language: str | None = None,
 ) -> PaperProjectionOut:
-    """投影响应：确定性纸面内容 + 逐条候选 + 来源布局 + 警告 + 快照指纹。"""
+    """投影响应：确定性纸面内容 + 逐条候选 + 来源布局 + 警告 + 快照指纹。
+
+    ``content`` 在响应边界转成 **v2 文档 JSON**（自定义字段位置来自当前方案定义）；
+    内部仍先组装 v1 中间态，因为候选/快照指纹与生成链路的同一份 v1 视图对齐
+    （snapshot_token 继续基于 v1 内容计算，F4 的冻结/比对语义不变）。
+    """
     warnings: list[ProjectionWarningOut] = []
     assembly = project_content(consumed, resolve_photo, warnings)
-    content = assembly.content
+    legacy = assembly.content
+    document = document_io.ensure_document_version(
+        legacy.model_dump(mode="json"),
+        language=language,
+        custom_fields=_custom_field_hints(consumed),
+    )
+    # 候选的 v2 定位：document_path 与 document_entry 都由同一份 content 派生，
+    # 前端「从资料填入」直接取现成 entry，不再按 v1 paper_content_path 反查 v2。
+    #
+    # v1 中��态不携带消费 entry_id（converter 会为条目生成新的稳定 id），所以这里按
+    # **条目顺序**对齐：paper_content_path 的尾号即为该分区内 v1 条目下标，而 converter
+    # 保持 v1 条目顺序（空条目不产生纸面占位 → path 为空，不定位）。顺序对不上的条目
+    # 宁可不给 document_entry，也不猜错条目。
+    located: dict[tuple[str, int], tuple[str, dict]] = {}
+    for section in document.get("sections") or []:
+        section_key = str(section.get("key") or "")
+        for index, entry in enumerate(section.get("entries") or []):
+            entry_id = str(entry.get("id") or "")
+            if section_key and entry_id:
+                located[(section_key, index)] = (f"{section_key}.{entry_id}", entry)
+    candidate_rows: list[ProjectionCandidateOut] = []
+    for row in candidates(consumed, assembly.entry_paths):
+        index: int | None = None
+        internal_path = assembly.entry_paths.get(row.entry_id, "")
+        if internal_path:
+            match = re.search(r"(\d+)$", internal_path)
+            index = int(match.group(1)) if match else None
+        elif row.section_key == "summary":
+            index = 0
+        document_section = (
+            internal_path.split("/", 1)[0]
+            if internal_path and not internal_path.startswith("custom_sections/")
+            else row.section_key
+        )
+        found = located.get((document_section, index)) if index is not None else None
+        if found is None:
+            candidate_rows.append(row)
+            continue
+        path, entry = found
+        candidate_rows.append(
+            row.model_copy(update={"document_path": path, "document_entry": entry})
+        )
     return PaperProjectionOut(
         scope=scope_out(consumed),
-        content=content,
-        candidates=candidates(consumed, assembly.entry_paths),
+        content=document,
+        candidates=candidate_rows,
         source_layout=source_layout(consumed),
         editor_schema=editor_schema(consumed),
         warnings=warnings,
-        snapshot_token=snapshot_token(consumed, content),
+        snapshot_token=snapshot_token(consumed, legacy),
     )
 
 

@@ -94,7 +94,8 @@ def test_a_custom_style_template_reaches_the_rendered_html():
     和"存进去的东西有没有真的拿去渲染"是两件事。这里用哨兵串把后者钉住。
     """
     custom = (
-        "<!DOCTYPE html><html><head><title>{{ resume.name }}</title>"
+        # v2 自制模板上下文：page_title（不再有 v1 的 resume.* 对象）。
+        "<!DOCTYPE html><html><head><title>{{ page_title }}</title>"
         f'<style>body {{ --marker: "{SENTINEL}"; }}</style></head><body>'
         '{% include "_resume_sections.j2" %}'
         "</body></html>"

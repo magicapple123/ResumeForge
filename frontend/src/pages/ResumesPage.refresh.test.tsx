@@ -16,6 +16,7 @@ import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { TEMPLATE_CATALOG } from "../test/resumeFixtures";
 import type { ResumeBrief } from "../types";
+import { t } from "../i18n";
 import { bumpResumeList, resetResumeListEventsForTests } from "../features/resume/resumeListEvents";
 import ResumesPage from "./ResumesPage";
 
@@ -181,8 +182,17 @@ describe("ResumesPage 列表刷新（T12）", () => {
     fireEvent.click(screen.getByRole("button", { name: /新建简历/ }));
     await waitFor(() => expect(apiMocks.getCurrentProjection).toHaveBeenCalled());
 
-    // 直接关掉编辑器（未改动 → 不弹未保存确认）。
-    fireEvent.click(await screen.findByRole("button", { name: /取\s*消/ }));
+    // 直接关掉编辑器（未改动 → 不弹未保存确认；v2 弹窗的关闭动作是「关闭」）。
+    // antd 会在两个汉字之间插入空格（autoInsertSpace），按去空白后的文本匹配。
+    const compact = (text: string | null) => (text ?? "").replace(/\s+/g, "");
+    const close = await waitFor(() => {
+      const button = screen
+        .getAllByRole("button")
+        .find((candidate) => compact(candidate.textContent) === compact(t("resume.manual.close")));
+      if (!button) throw new Error("close button not found");
+      return button;
+    });
+    fireEvent.click(close);
 
     // 关弹窗本身不该产生任何列表请求。
     expect(apiMocks.listResumes).toHaveBeenCalledOnce();

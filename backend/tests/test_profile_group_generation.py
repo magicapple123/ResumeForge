@@ -14,6 +14,7 @@ from app.schemas.resume import GenerateOptions
 from app.services import claims
 from app.services.profile import definition_store, entry_store
 from app.services.resume.resume_generator import ResumeGenerator
+from tests.document_test_support import has_custom_field, legacy_of
 from tests.test_profile_group_budget import (
     UNPARTICIPATING,
     all_sections_consumed,
@@ -130,8 +131,8 @@ async def test_custom_fields_enter_prompt_as_lines_and_are_restored(db_session):
     system_prompt = provider.messages[0]["content"]
     assert "标签：值" in system_prompt and "标签名必须逐字保留" in system_prompt
     done = next(event for event in events if event["type"] == "done")
-    description = "\n".join(done["resume"]["projects"][0]["description"])
-    assert "导师姓名：张伟" in description, "缺失的自定义字段行必须自动补回承载区"
+    # D6/§17.3：位置以 hint 为准（短字段 trail），断言字段补回来而不是强制正文行。
+    assert has_custom_field(done["resume"], "导师姓名", "张伟"), "缺失的自定义字段必须自动补回"
     restore_annotations = [
         annotation
         for annotation in done["fact_annotations"]
@@ -165,9 +166,15 @@ async def test_custom_section_is_projected_deterministically_and_privacy_bound(d
     assert "SECRET-CRED-001" not in candidate_text
     assert "credential_number" not in candidate_text
     done = next(event for event in events if event["type"] == "done")
-    custom_sections = done["resume"].get("custom_sections") or []
-    assert [item["title"] for item in custom_sections] == ["开源贡献"]
-    assert custom_sections[0]["entries"][0]["text"] == "维护内部组件库"
+    legacy = legacy_of(done["resume"])
+    assert [section.title for section in legacy.custom_sections] == ["开源贡献"]
+    # R1-E：没有 primary_field_id 的自建分区里，multi_line 字段不再吞成主文本 TextItem，
+    # 而是「标签：值」行（converter 按 hints 落成带 label/source 的 FieldItem）。
+    custom_entry = legacy.custom_sections[0].entries[0]
+    assert custom_entry.text == ""
+    assert [(line.label, line.value) for line in custom_entry.lines] == [
+        ("贡献说明", "维护内部组件库")
+    ]
 
 
 def test_claims_baseline_filters_by_snapshot_entry_ids(db_session):

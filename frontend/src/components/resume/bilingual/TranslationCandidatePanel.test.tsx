@@ -4,7 +4,7 @@ import { App as AntdApp } from "antd";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { bt } from "../../../features/resume-bilingual/i18n";
-import { MOCK_CANDIDATES } from "../../../features/resume-bilingual/mock";
+import { MOCK_CANDIDATES } from "../../../test/bilingualMock";
 import TranslationCandidatePanel from "./TranslationCandidatePanel";
 
 afterEach(() => cleanup());
@@ -56,7 +56,9 @@ describe("TranslationCandidatePanel", () => {
     expect(onAdopt).toHaveBeenCalledTimes(1);
     const paths = onAdopt.mock.calls[0][0] as string[];
     expect(paths).toHaveLength(2);
-    expect(paths).not.toContain("experience.0.company");
+    // 事实锁候选（姓名）不在可勾选集合里；路径是 v2 item 路径。
+    expect(paths).not.toContain("header.mock_head_name");
+    expect(paths.every((path) => !path.startsWith("header."))).toBe(true);
   });
 
   it("事实锁候选的勾选框被禁用", () => {

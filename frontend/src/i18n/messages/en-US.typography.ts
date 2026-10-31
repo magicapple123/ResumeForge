@@ -19,7 +19,6 @@ const typography = {
   "typography.role.entry_title": "Entry heading",
   "typography.role.body": "Body text",
   "typography.role.meta": "Dates and metadata",
-  "typography.role.emphasis": "Emphasized text",
   "typography.role.ownCount": "{count} settings adjusted",
   "typography.role.clear": "Restore this paragraph type",
   "typography.role.clearAria": "Restore inheritance for all {role} properties",
@@ -63,17 +62,41 @@ const typography = {
   "typography.object.more": "More options",
   "typography.object.levelHint":
     "Size, bold and paragraph spacing are managed by the text level above",
+  // ── Entry typography scope (Q12: whole entry / heading / body / metadata) ──
+  "typography.entryStyle.scope.label": "Scope",
+  "typography.entryStyle.scope.aria": "Choose which part of the Entry the settings apply to",
+  "typography.entryStyle.scope.object": "Whole entry",
+  "typography.entryStyle.scope.entry_title": "Entry heading",
+  "typography.entryStyle.scope.body": "Body text",
+  "typography.entryStyle.scope.meta": "Metadata (gray)",
+  "typography.entryStyle.scopeHint.object":
+    "Changes the whole entry: heading, body and metadata all follow",
+  "typography.entryStyle.scopeHint.entry_title": "Changes the entry heading line only",
+  "typography.entryStyle.scopeHint.body": "Changes body text and bullets only",
+  "typography.entryStyle.scopeHint.meta": "Changes dates, locations and other gray text only",
+  "typography.entryStyle.status": "Editing: {name} · Scope: {scope}",
+  "typography.entryStyle.source.template": "Follows template",
+  "typography.entryStyle.source.object": "Whole entry adjusted",
+  "typography.entryStyle.source.entry_title": "Entry heading adjusted",
+  "typography.entryStyle.source.body": "Body text adjusted",
+  "typography.entryStyle.source.meta": "Metadata adjusted",
+  "typography.entryStyle.restore": "Restore {scope} to template",
+  "typography.entryStyle.noMeta": "This entry has no date or metadata fields",
+  "typography.entryStyle.noBullets": "This entry body has no bullets",
   "typography.painter.title": "Format painter",
-  "typography.painter.copy": "Copy local adjustments",
+  "typography.painter.hint": "Copy local typography from one entry to others",
+  "typography.painter.copy": "Copy {name} typography",
+  "typography.painter.copyProps": "Copy {count} settings: {props}",
+  "typography.painter.propSeparator": "; ",
   "typography.painter.empty": "This Entry has no local adjustments. Change a setting first",
-  "typography.painter.armed": "Copied; select a target to apply",
-  "typography.painter.apply": "Apply format painter",
+  "typography.painter.armed": "Copied. Select target entries above",
+  "typography.painter.apply": "Apply to {count}",
   "typography.painter.cancel": "Exit format painter",
-  "typography.painter.freeze": "Save as local adjustments",
+  "typography.painter.freeze": "Fix this range's current style",
   "typography.painter.freezeHint":
-    "After saving locally, this Entry no longer follows changes to its paragraph type",
-  "typography.painter.source": "Source: {name}",
+    "After fixing, this scope no longer follows changes to the template",
   "typography.painter.applied": "Applied to {count} items",
+  "typography.painter.frozen": "Fixed the current scope style",
   "typography.multi.title": "Batch adjustments",
   "typography.multi.count": "{count} items selected",
   "typography.multi.empty":
@@ -111,12 +134,18 @@ const typography = {
   "typography.level.scope.object": "Whole entry",
   "typography.level.scope.entry_title": "Entry heading",
   "typography.level.scope.body": "Body text",
-  "typography.level.scope.meta": "Details",
+  "typography.level.scope.meta": "Metadata (gray)",
+  "typography.level.scopeHint.object":
+    "Changes the whole entry: heading, body and metadata all follow",
+  "typography.level.scopeHint.entry_title": "Changes the entry heading line only",
+  "typography.level.scopeHint.body": "Changes body text and bullets only",
+  "typography.level.scopeHint.meta": "Changes dates, locations and other gray text only",
   "typography.level.hint":
     "Levels only change the font scale and spacing of selected paragraphs; every apply can be undone",
   "typography.level.empty": "Select content in the outline or preview first",
-  "typography.level.count": "Applies to {count} items",
-  "typography.level.current": "Current: {level}",
+  "typography.level.status": "Editing: {name}",
+  "typography.level.statusMany": "{count} entries",
+  "typography.level.current": "Level: {level}",
   "typography.level.currentInherit": "Follows template",
   "typography.level.currentCustom": "Custom",
   "typography.level.currentMixed": "Multiple levels",
@@ -143,7 +172,17 @@ const typography = {
   "typography.fieldLayout.gapValue": "{value}x",
   "typography.fieldLayout.gapDecrease": "Decrease column gap",
   "typography.fieldLayout.gapIncrease": "Increase column gap",
+  "typography.fieldLayout.metaPositionLabel": "Short fields",
+  "typography.fieldLayout.metaPosition.below": "After body",
+  "typography.fieldLayout.metaPosition.above": "Before body",
+  "typography.fieldLayout.metaPositionAwardsSectionOnly":
+    "Short-field position for awards is section-wide",
+  "typography.fieldLayout.metaPositionHint":
+    "Moves extra fields above the bullets or description; keep long fields on their own row",
   "typography.fieldLayout.fieldsTitle": "Field order",
+  "typography.fieldLayout.hideField": "Hide {label}",
+  "typography.fieldLayout.showField": "Show {label}",
+  "typography.fieldLayout.hiddenHint": "Hidden fields stay in the content but not on paper",
   "typography.fieldLayout.moveUp": "Move {label} up",
   "typography.fieldLayout.moveDown": "Move {label} down",
   "typography.fieldLayout.solo": "Own row",
@@ -158,6 +197,104 @@ const typography = {
   "typography.fieldLayout.entryMoveDown": "Move entry {label} down",
   "typography.fieldLayout.entryNone": "No entries with stable ids yet",
   "typography.fieldLayout.summary": "Current: {columns} columns, {solo} fields on their own row",
+
+  // ── Resume structure example (read-only reference popup in the workbench) ──
+  // The schematic's own labels also live here, so switching the interface
+  // language swaps the sample resume and the legend together.
+  "typography.structureExample.title": "Resume structure example",
+  "typography.structureExample.hint":
+    "This is a sample resume for reference only; it does not change your resume",
+  "typography.structureExample.paperAria": "Sample resume structure diagram",
+  "typography.structureExample.legendAria": "Structure example legend",
+  "typography.structureExample.legendHint":
+    "Hover or select a legend item to highlight it on the page",
+  "typography.structureExample.margin.top": "Top",
+  "typography.structureExample.margin.right": "Right",
+  "typography.structureExample.margin.bottom": "Bottom",
+  "typography.structureExample.margin.left": "Left",
+  "typography.structureExample.sample.name": "Lin Xiao",
+  "typography.structureExample.sample.contact": "+1 555-0100 · linxiao@example.com",
+  "typography.structureExample.sample.photo": "Photo",
+  "typography.structureExample.sample.sectionExperience": "Work experience",
+  "typography.structureExample.sample.company": "Nova Tech · Backend Engineer",
+  "typography.structureExample.sample.dateExperience": "Mar 2022 - Present",
+  "typography.structureExample.sample.bullet1":
+    "Rebuilt the order service and cut API latency by 40%",
+  "typography.structureExample.sample.bullet2": "Led cache cleanup and raised the hit rate to 95%",
+  "typography.structureExample.sample.companySecond": "Mingzhou Tech · Frontend Engineer",
+  "typography.structureExample.sample.dateSecond": "Jul 2019 - Feb 2022",
+  "typography.structureExample.sample.sectionEducation": "Education",
+  "typography.structureExample.sample.school": "Mingzhou University · Computer Science",
+  "typography.structureExample.sample.dateEducation": "Sep 2018 - Jun 2022",
+  "typography.structureExample.sample.paragraph": "GPA 3.8 / 4.0, top 5% of the major",
+  "typography.structureExample.sample.courses":
+    "Coursework: data structures, operating systems, databases",
+  "typography.structureExample.sample.sectionSkills": "Skills",
+  "typography.structureExample.sample.skills":
+    "Backend · databases · caching · distributed systems",
+  "typography.structureExample.item.1.title": "Page margins",
+  "typography.structureExample.item.1.desc":
+    "Space around the page; adjust all four sides together or one side at a time under Typography settings",
+  "typography.structureExample.item.2.title": "Photo size",
+  "typography.structureExample.item.2.desc":
+    "Photo at the top right of the page; change it with the Photo slider under Typography settings",
+  "typography.structureExample.item.3.title": "Font and size",
+  "typography.structureExample.item.3.desc":
+    "Font and base size of the whole resume; pick a font and adjust the size under Typography settings",
+  "typography.structureExample.item.4.title": "Section heading",
+  "typography.structureExample.item.4.desc":
+    "Headings such as Work experience; adjust size and bold under Local typography, Section heading",
+  "typography.structureExample.item.5.title": "Section",
+  "typography.structureExample.item.5.desc":
+    "Sections of the resume; reorder them under Templates and layout presets, and start a new page under Pagination",
+  "typography.structureExample.item.6.title": "Entry",
+  "typography.structureExample.item.6.desc":
+    "One record inside a section; change the space between entries with Entry spacing",
+  "typography.structureExample.item.7.title": "Entry heading row",
+  "typography.structureExample.item.7.desc":
+    "Title on the left and date on the right; move the date under Local typography, Date position",
+  "typography.structureExample.item.8.title": "Body and bullets",
+  "typography.structureExample.item.8.desc":
+    "Description and bullets below an entry heading; adjust them under Local typography, Body text",
+  "typography.structureExample.item.9.title": "Bullet",
+  "typography.structureExample.item.9.desc":
+    "Marker before a bullet line; switch between dot, dash and none under Local typography",
+  "typography.structureExample.item.10.title": "Line spacing",
+  "typography.structureExample.item.10.desc":
+    "Space between lines of body text; set it for the whole resume or per paragraph type",
+  "typography.structureExample.item.11.title": "Space before and after",
+  "typography.structureExample.item.11.desc":
+    "Space above and below a paragraph; adjust it per paragraph type under Local typography",
+  "typography.structureExample.item.12.title": "Indent",
+  "typography.structureExample.item.12.desc":
+    "How far body text is inset from the left edge; adjust it under Local typography, Indent",
+  "typography.structureExample.item.13.title": "Alignment",
+  "typography.structureExample.item.13.desc":
+    "Left, center, right or justify; choose one under Local typography, Alignment",
+  "typography.structureExample.item.14.title": "Section spacing",
+  "typography.structureExample.item.14.desc":
+    "Space between two sections; adjust it under Hierarchy and spacing, Section spacing",
+  "typography.structureExample.item.15.title": "Entry spacing",
+  "typography.structureExample.item.15.desc":
+    "Space between two records; adjust it under Hierarchy and spacing, Entry spacing",
+  "typography.structureExample.item.16.title": "Page break",
+  "typography.structureExample.item.16.desc":
+    "The edge of one page; content that does not fit moves to the next page, and Page margins set the white space around it",
+  // ── v2 local typography tools container (batch 2026-10-30) ──
+  "typography.tools.selectionTitle": "Select entries",
+  "typography.tools.selectionAria": "Select entries for batch adjustments",
+  "typography.tools.selectionPlaceholder": "Select entries to adjust in batch",
+  "typography.tools.selectionEmpty": "This resume has no entries yet",
+  "typography.tools.focused": "Current entry: {name}",
+  "typography.tools.noFocused": "Click an entry on the page or in the structure panel first",
+  "typography.tools.targets": "Format painter targets: {count}",
+  "typography.tools.targetsHint": "Select target entries above before applying the painter",
+  "typography.tools.sectionObject": "Entry typography",
+  "typography.tools.sectionLevel": "Text level",
+  "typography.tools.sectionPainter": "Format painter",
+  "typography.tools.sectionBatch": "Batch adjust",
+  "typography.tools.sectionRole": "Paragraph roles",
+  "typography.tools.roleHint": "Paragraph roles inherit from the entry body by default",
 } as const;
 
 export default typography;

@@ -5,6 +5,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { bt } from "../../../features/resume-bilingual/i18n";
 import type { VariantDetailOut } from "../../../features/resume-bilingual/api";
+import { MOCK_PRIMARY } from "../../../test/bilingualMock";
 import VariantLayoutSection from "./VariantLayoutSection";
 
 const apiMocks = vi.hoisted(() => ({
@@ -16,14 +17,11 @@ vi.mock("../../../features/resume-bilingual/api", () => apiMocks);
 const VARIANT: VariantDetailOut = {
   id: 8,
   resume_id: 5,
-  name: "英文版",
+  name: "English version",
   language: "en-US",
   variant_group_id: 1,
-  template: "scholar",
-  page_limit: 2,
-  font_scale: "standard",
   created_at: "2026-10-01T00:00:00Z",
-  content: {},
+  content: MOCK_PRIMARY,
   render_context: { template: "scholar" },
   layout: null,
 };
@@ -32,9 +30,9 @@ function exportInput(layoutSource: string) {
   return {
     resume_id: 5,
     variant_id: 8,
-    name: "英文版",
+    name: "English version",
     language: "en-US",
-    content: {},
+    content: MOCK_PRIMARY,
     layout: { template: "scholar", page_limit: 2, font_scale: "standard" },
     layout_source: layoutSource,
     content_sha256: "sha",

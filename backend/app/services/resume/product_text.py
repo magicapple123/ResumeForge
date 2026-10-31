@@ -27,7 +27,9 @@ from .resume_visibility import hidden_point_ids, is_hidden_entry
 _TOKEN_RE = re.compile(r"[A-Za-z0-9]+|[\u4e00-\u9fff]+")
 _MAX_DIFFS = 50
 # 可见性/身份元数据不是"纸面上该出现的正文"：既不该当文本比较，也不该参与缺字判定。
-_VISIBILITY_KEYS = frozenset({"id", "point_ids", "hidden", "hidden_points", "lock_content", "lock_layout"})
+_VISIBILITY_KEYS = frozenset(
+    {"id", "point_ids", "hidden", "hidden_points", "lock_content", "lock_layout"}
+)
 
 
 def normalize_text(text: str) -> str:
@@ -81,11 +83,23 @@ def extract_docx_text(content: bytes) -> str:
     return "".join(chunks)
 
 
-def expected_lines(content: ResumeContent, *, language: str | None = None) -> list[str]:
+def expected_lines(content: ResumeContent | dict, *, language: str | None = None) -> list[str]:
     """按纸面顺序列出"应该出现在产物里"的文本行。
 
     只收结构化正文里用户真正看得见的字段：照片（base64）不参与、隐藏条目（W06）不参与。
     """
+    if isinstance(content, dict):
+        from .document_html import coerce_document, paper_document
+        from .document_plan import build_document_plan, plan_to_text
+
+        plan = build_document_plan(paper_document(coerce_document(content)), language=language)
+        # Headings are presentation, not source facts; hide_title must not create a missing-text blocker.
+        plan = plan.model_copy(
+            update={
+                "sections": [section.model_copy(update={"title": ""}) for section in plan.sections]
+            }
+        )
+        return plan_to_text(plan)
     lang = normalize_language(language)
     del lang  # 语言只影响小节标题；正文比较用不到标题，保留参数便于将来对齐
     lines: list[str] = []

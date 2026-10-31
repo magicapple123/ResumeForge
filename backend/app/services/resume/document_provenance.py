@@ -29,6 +29,7 @@ from ...models.provenance import (
     ResumeSourceRevision,
 )
 from ...models.resume import ResumeRecord
+from . import document_io
 from .document_identity import (
     ENTRY_FIELDS,
     POINT_FIELDS,
@@ -36,10 +37,18 @@ from .document_identity import (
     resolve_object_path,
     resolve_point_path,
 )
+from .document_paths import read_document_value, resolve_document_path
+from .document_provenance_nodes import native_objects, resolve_native_target, resolved_link_path
 
 _MAX_TITLE = 256
 _MAX_SUMMARY = 300
 _MAX_METADATA_VALUE = 200
+
+
+def _content_view(record: ResumeRecord, db: Session | None = None) -> dict[str, Any]:
+    """Native read boundary; old records convert forward in memory only."""
+    return document_io.document_for_record(db, record)[0]
+
 
 _MISSING = object()
 
@@ -222,6 +231,8 @@ def iter_document_objects(content: dict[str, Any] | None) -> list[DocumentObject
     objects: list[DocumentObject] = []
     if not isinstance(content, dict):
         return objects
+    if content.get("version") == 2:
+        return [DocumentObject(**item) for item in native_objects(content)]
     for field_name in ENTRY_FIELDS:
         points = POINT_FIELDS[field_name]
         entries = content.get(field_name) or []
@@ -262,6 +273,8 @@ def iter_document_objects(content: dict[str, Any] | None) -> list[DocumentObject
 
 
 def _lookup_value(content: Any, path: str) -> Any:
+    if isinstance(content, dict) and content.get("version") == 2:
+        return read_document_value(content, path, _MISSING)
     current: Any = content
     for segment in path.split("."):
         if isinstance(current, dict):
@@ -286,6 +299,9 @@ def resolve_target(
     path: str | None,
 ) -> tuple[str, str]:
     """把请求里的目标块解析成 (当前路径, 字段)；解析不到抛 ValueError。"""
+    if content.get("version") == 2:
+        target = resolve_native_target(content, object_id, point_id, path)
+        return target.path, target.section
     if object_id is not None:
         if not is_object_id(object_id):
             raise ValueError("对象标识不合法")
@@ -328,21 +344,33 @@ def _upsert_link(
     关联时记的来源指纹 = 所选修订的指纹（缺修订时回退来源当前指纹）。这样
     ``link_status`` 才能如实区分"关联的就是最新版"与"关联的是旧版"。
     """
+    document = _content_view(record, db)
     resolved_path, resolved_field = resolve_target(
-        record.content or {}, object_id=object_id, point_id=point_id, path=path
+        document, object_id=object_id, point_id=point_id, path=path
     )
+    target = resolve_document_path(document, resolved_path)
+    if target is not None and target.item is not None:
+        object_id = target.entry["id"] if target.entry is not None else target.item["id"]
+        point_id = target.item["id"]
+    elif target is not None and target.entry is not None:
+        object_id, point_id = target.entry["id"], None
     fingerprint = revision.fingerprint if revision is not None else source.current_fingerprint
     revision_id = revision.id if revision is not None else None
-    existing = db.execute(
-        select(ResumeBlockSource).where(
-            ResumeBlockSource.resume_id == record.id,
-            ResumeBlockSource.source_id == source.id,
-            ResumeBlockSource.object_id == object_id,
-            ResumeBlockSource.point_id == point_id,
-            ResumeBlockSource.path == resolved_path,
+    candidates = (
+        db.execute(
+            select(ResumeBlockSource).where(
+                ResumeBlockSource.resume_id == record.id,
+                ResumeBlockSource.source_id == source.id,
+            )
         )
-    ).scalar_one_or_none()
+        .scalars()
+        .all()
+    )
+    existing = next(
+        (link for link in candidates if resolved_link_path(document, link) == resolved_path), None
+    )
     if existing is not None:
+        existing.object_id, existing.point_id = object_id, point_id
         existing.path = resolved_path
         existing.field = resolved_field if field is None else field
         existing.source_revision_id = revision_id

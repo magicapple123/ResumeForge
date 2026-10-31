@@ -12,7 +12,7 @@
  * `resumes.ts` 仍 re-export 这两个函数：既有导入路径与测试里
  * `vi.mock("../api/resumes")` 的落点一个都不动。
  */
-import type { ResumeContent, ResumeDetail, ResumeLayout } from "../types";
+import type { ResumeDetail, ResumeDocument, ResumeLayout } from "../types";
 import { request } from "./client";
 
 /**
@@ -24,7 +24,7 @@ import { request } from "./client";
  */
 export function saveResumeContent(
   id: number,
-  content: ResumeContent,
+  content: ResumeDocument,
   expectedRevision?: number,
 ): Promise<ResumeDetail> {
   return request(`/resumes/${id}/content`, {

@@ -24,7 +24,7 @@ import { formatErrorGuidance } from "../api/errorGuidance";
 import type {
   EnhancementLevel,
   Job,
-  ResumeContent,
+  ResumeDocument,
   ResumeDetail,
   ResumeGenerateTask,
   ResumeLayout,
@@ -374,7 +374,7 @@ export default function GenerateResumeModal({ job, open, initialTitle = "", onCl
     onClose();
   };
 
-  const saveEditedResume = async (content: ResumeContent) => {
+  const saveEditedResume = async (content: ResumeDocument) => {
     const recordId = result?.detail.id;
     if (!recordId) {
       throw new Error(t("generate.recordNotSaved"));

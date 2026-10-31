@@ -6,7 +6,7 @@
 """
 
 import json
-from typing import Literal, get_args
+from typing import Any, Literal, get_args
 
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
@@ -14,12 +14,13 @@ from sqlalchemy.orm import Session
 from ...models.resume import ResumeRecord
 from ...schemas.resume import (
     FactAnnotation,
-    ResumeContent,
     ResumeFontScale,
     ResumeOut,
 )
+from ...schemas.resume_document import DocumentValidationError
 from ...services import trash
-from ...services.resume.document_identity import DocumentIdentityError, validate_document_ids
+from ...services.resume import document_io
+from ...services.resume.document_conversion_types import ConversionError
 from ...services.resume.resume_labels import normalize_language
 from ...services.resume.resume_templates import DEFAULT_FONT_SCALE, DEFAULT_TEMPLATE
 
@@ -80,21 +81,82 @@ def _format_sse(payload: dict) -> str:
     return f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
 
 
-def _validated_content(payload: ResumeContent) -> dict:
-    """把请求体转成落库字典，并按 W01 规则校验对象标识。
+# v1 内容的 pydantic 校验错误（尤其照片 data URL）对用户没有可读性：这里统一翻成人话。
+_UNSUPPORTED_PHOTO_DETAIL = (
+    "简历照片格式不受支持：照片必须是 JPEG、PNG 或 WebP 格式的 base64 data URL，请重新上传后再预览或导出"
+)
 
-    只在**写路径**调用：读取旧记录必须宽容（历史脏数据不能让详情接口 500），
-    而写入非法 id 会 422 而不是静默重生成——重生成等于把用户设备上的标识换掉。
-    """
-    data = payload.model_dump()
+
+def conversion_error_detail(exc: Exception) -> str:
+    """把 ConversionError / pydantic 校验错误翻成可读的 422 detail（照片单独给指引）。"""
+    text = str(exc).strip()
+    lowered = text.lower()
+    if "photo" in lowered or "data url" in lowered or "data_url" in lowered:
+        return _UNSUPPORTED_PHOTO_DETAIL
+    if text:
+        return f"简历内容无法解析：{text[:300]}"
+    return "简历内容无法解析：请检查内容结构后重试"
+
+
+def document_or_422(
+    payload: Any,
+    db: Session | None = None,
+    *,
+    language: str | None = None,
+    format_config: dict | None = None,
+) -> dict:
+    """读/渲染入口的版本收口：v1/v2 -> v2 dict；结构不合法统一 422（不 500）。"""
     try:
-        validate_document_ids(data)
-    except DocumentIdentityError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
-    return data
+        return document_io.ensure_document_version(
+            payload,
+            language=language,
+            format_config=format_config,
+            custom_fields=document_io.custom_field_definitions(db),
+        )
+    except (ConversionError, DocumentValidationError) as exc:
+        raise HTTPException(status_code=422, detail=conversion_error_detail(exc)) from exc
 
 
-def _to_resume_out(record: ResumeRecord) -> ResumeOut:
+
+def _validated_content(
+    payload: Any,
+    db: Session | None = None,
+    *,
+    language: str | None = None,
+    format_config: dict | None = None,
+) -> dict:
+    """写路径收口：接受 v1 / v2 内容 JSON，返回**归一化后的 v2 dict**（落库格式）。
+
+    只在写路径调用：读取旧记录必须宽容（v1 在读路径一次性转换），而写入非法结构/非法
+    对象标识会 422 而不是静默重生成——重生成等于把用户设备上的标识悄悄换掉。
+    """
+    try:
+        return document_io.prepare_document_for_save(
+            payload,
+            language=language,
+            format_config=format_config,
+            custom_fields=document_io.custom_field_definitions(db),
+        )
+    except (ConversionError, DocumentValidationError) as exc:
+        raise HTTPException(status_code=422, detail=conversion_error_detail(exc)) from exc
+
+
+def _to_resume_out(
+    record: ResumeRecord,
+    db: Session | None = None,
+    *,
+    document_conversion: dict | None = None,
+) -> ResumeOut:
+    """记录 -> 详情响应。读路径统一收口：v1 记录一次性转 v2（不写库）。
+
+    document_conversion 由**写路径**传入（创建时请求体是 v1，响应要告诉用户已升级）；
+    读路径下它是 None = 库内本来就是 v2，或转换发生在本次读取（document_for_record 返回摘要）。
+    """
+    content, conversion = document_io.document_for_record(db, record)
+    if document_conversion is not None:
+        conversion_summary = document_conversion
+    else:
+        conversion_summary = document_io.conversion_summary(conversion)
     return ResumeOut(
         id=record.id,
         title=record.title,
@@ -120,7 +182,8 @@ def _to_resume_out(record: ResumeRecord) -> ResumeOut:
         language=normalize_language(record.language),
         created_at=record.created_at,
         parent_revision_id=record.parent_revision_id,
-        content=ResumeContent.model_validate(record.content),
+        content=content,
+        document_conversion=conversion_summary,
         warnings=record.warnings or [],
         parse_error=record.parse_error,
         rationale=record.rationale or "",

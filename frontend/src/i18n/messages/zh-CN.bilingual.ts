@@ -180,6 +180,24 @@ const bilingual = {
     "自动翻译没完成，新版本已保留；可稍后点「生成翻译候选」重试",
   "bilingual.workspace.translateRejected":
     "翻译没开始：{reason}。先去「设置 → AI 模型」确认模型配置；新版本已保留",
+
+  // ── v2 文档模型补充（item 路径对照 / 只读字段 / 只读模式） ──
+  "bilingual.v2.customHint": "自建板块与自定义字段只在对照里展示，不参与逐项采纳",
+  "bilingual.v2.blockedHint": "{count} 条因事实锁/术语锁定保留原文，未列入候选",
+  "bilingual.v2.readOnly": "只读模式：这份简历当前不可写，只能查看对照与术语表",
+  "bilingual.v2.openInWorkbench": "在工作台查看这份译文",
+  "bilingual.preview.title": "译文预览",
+  "bilingual.preview.loading": "正在加载译文预览",
+  "bilingual.preview.failed": "译文预览没加载出来",
+  "bilingual.preview.retry": "重新加载",
+  "bilingual.preview.close": "收起预览",
+  "bilingual.compare.readOnlyTag": "只读",
+  "bilingual.compare.readOnlyHint": "列表、作者与自建字段不参与逐项采纳，只在对照里展示",
+  "bilingual.compare.group.custom": "自建板块",
+  "bilingual.field.body": "正文段落",
+  "bilingual.field.list": "列表字段",
+  "bilingual.field.authors": "作者",
+  "bilingual.field.custom": "自定义字段",
 } as const;
 
 export default bilingual;

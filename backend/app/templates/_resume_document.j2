@@ -1,0 +1,184 @@
+{# 简历正文的通用渲染片段（v2 字段级文档模型）：只遍历 DocumentPlan 画语义标记。
+
+   为什么只有这一份：v2 里「哪个字段在标题行 / 元信息 / 正文前灰字 / 正文 / 正文后灰字」
+   是 item 上的 placement，位置与顺序由 planner（services/resume/document_plan.py）算好；
+   模板不再知道任何具体字段名，也不再按分区写宏。9 套内置模板与自制模板都 include 本文件
+   （自制模板沿用的 _resume_sections.j2 现在是本文件的别名）。
+
+   标记契约（与 W07 角色样式注入 / 前端点纸面定位绑定，不要改）：
+   * data-role 五角色：name / section_title / entry_title / body / meta；
+     角色属性注入靠 [data-role="…"] 选择器，容器上的角色必须保留。
+   * data-resume-path 用 v2 路径 {section_key}.{entry_id}.{item_id}（header 用
+     header.{item_id}），前端据此把纸面点击映射回编辑器里的 item。
+   * data-object-id 用条目 id（对象级样式覆盖 [data-object-id="…"] 依赖它）。
+   * 字号一律由 CSS 的 --fs 推算，这里不出现任何缩放系数（禁止自动缩字号）。 #}
+
+{# 一段带角色的行内文本：cell / inline 板块里同一行可能混排黑字（body）与灰字（meta），
+   所以逐段带 data-role；容器上不再挂角色，避免继承覆盖段落自己的角色。 #}
+{% macro role_spans(segments) -%}
+{%- for seg in segments -%}
+{%- set href = safe_link(seg.link) -%}
+{%- if href -%}
+<a href="{{ href }}"{% if seg.path %} data-resume-path="{{ seg.path }}"{% endif %} data-role="{{ seg.role }}">{{ seg.text }}</a>
+{%- elif seg.strong -%}
+<strong{% if seg.path %} data-resume-path="{{ seg.path }}"{% endif %} data-role="{{ seg.role }}">{{ seg.text }}</strong>
+{%- elif seg.italic -%}
+<em{% if seg.path %} data-resume-path="{{ seg.path }}"{% endif %} data-role="{{ seg.role }}">{{ seg.text }}</em>
+{%- else -%}
+<span{% if seg.path %} data-resume-path="{{ seg.path }}"{% endif %} data-role="{{ seg.role }}">{{ seg.text }}</span>
+{%- endif -%}
+{%- endfor -%}
+{%- endmacro %}
+
+{# 容器已带 data-role 的场合（姓名 / 标题 / 元信息 / 正文）：逐段只补定位路径。 #}
+{% macro path_spans(segments) -%}
+{%- for seg in segments -%}
+{%- set href = safe_link(seg.link) -%}
+{%- if href -%}
+<a href="{{ href }}"{% if seg.path %} data-resume-path="{{ seg.path }}"{% endif %}>{{ seg.text }}</a>
+{%- elif seg.strong -%}
+<strong{% if seg.path %} data-resume-path="{{ seg.path }}"{% endif %}>{{ seg.text }}</strong>
+{%- elif seg.italic -%}
+<em{% if seg.path %} data-resume-path="{{ seg.path }}"{% endif %}>{{ seg.text }}</em>
+{%- else -%}
+<span{% if seg.path %} data-resume-path="{{ seg.path }}"{% endif %}>{{ seg.text }}</span>
+{%- endif -%}
+{%- endfor -%}
+{%- endmacro %}
+
+{# 条目头：split = 标题左、元信息右（模板 CSS 的 flex 布局）；stacked = 标题一行、
+   元信息下一行左对齐；meta_first = 元信息在上、标题在下。DOM 顺序按 **布局顺序** 输出
+   （不是只靠 CSS 视觉交换）：文本提取 / ATS / 读屏拿到的顺序与纸面一致。 #}
+{% macro entry_head(head) -%}
+{%- if head.title or head.meta -%}
+<div class="entry-head head-{{ head.layout }}">
+  {%- if head.layout == "meta_first" -%}
+  {%- if head.meta %}<span class="meta" data-role="meta">{{ path_spans(head.meta) }}</span>{% endif %}
+  {%- if head.title %}<span class="title" data-role="entry_title">{{ path_spans(head.title) }}</span>{% endif %}
+  {%- else -%}
+  {%- if head.title %}<span class="title" data-role="entry_title">{{ path_spans(head.title) }}</span>{% endif %}
+  {%- if head.meta %}<span class="meta" data-role="meta">{{ path_spans(head.meta) }}</span>{% endif %}
+  {%- endif -%}
+</div>
+{%- endif -%}
+{%- endmacro %}
+
+{# 灰色短字段组（lead / trail）：planner 已按分区/条目生效布局装箱成行。
+   equal = 一个网格容器（跨行列宽一致，solo 独占整行）；flow = 一行一个 div、行内用
+   列表分隔符连接（沿用 v1 的 flow 口径）。gap 以字号倍数写进列间距（不缩字号）。 #}
+{% macro sub_rows(rows, columns, align, gap) -%}
+{%- if rows -%}
+{%- if align == "flow" -%}
+{%- for row in rows %}
+<div class="sub sub-row sub-flow" data-role="meta">{% for cell in row %}<span class="sub-cell">{{ role_spans(cell.segments) }}</span>{% endfor %}</div>
+{%- endfor -%}
+{%- else -%}
+<div class="sub sub-row sub-grid sub-cols-{{ columns }}" data-role="meta"{% if gap is not none %} style="column-gap: calc(var(--fs) * {{ gap }})"{% endif %}>{% for row in rows %}{% for cell in row %}<span class="sub-cell{% if cell.solo %} sub-cell-solo{% endif %}">{{ role_spans(cell.segments) }}</span>{% endfor %}{% endfor %}</div>
+{%- endif -%}
+{%- endif -%}
+{%- endmacro %}
+
+{# 正文块：连续要点合成一个 <ul>；段落块（body_style=paragraph）单独成 <p>。
+   每个块带自己的 data-resume-path，前端点纸面任意一段都能定位回 item。 #}
+{% macro body_blocks(blocks) -%}
+{%- set state = namespace(bullets=[]) -%}
+{%- for block in blocks -%}
+{%- if block.kind == "bullet" -%}
+{%- set state.bullets = state.bullets + [block] -%}
+{%- else -%}
+{%- if state.bullets -%}
+<ul>{% for item in state.bullets %}<li data-role="body" data-resume-path="{{ item.path }}">{{ path_spans(item.segments) }}</li>{% endfor %}</ul>
+{%- set state.bullets = [] -%}
+{%- endif -%}
+<p class="body-paragraph" data-role="body" data-resume-path="{{ block.path }}">{{ path_spans(block.segments) }}</p>
+{%- endif -%}
+{%- endfor -%}
+{%- if state.bullets -%}
+<ul>{% for item in state.bullets %}<li data-role="body" data-resume-path="{{ item.path }}">{{ path_spans(item.segments) }}</li>{% endfor %}</ul>
+{%- endif -%}
+{%- endmacro %}
+
+{# inline 板块（技能 / 语言）：SectionPlan.rows 每个元素是一个条目（一行），一行一个
+   <li>——9 套模板的标签观感全部来自 `.skill-list li` 的 CSS（填充/描边胶囊/项目符号…），
+   所以这里必须输出真正的 `ul.skill-list > li`，否则 9 套模板的标签样式全部失配（2026-10-31
+   Q26）。条目内多个字段用「 · 」分隔（计划 §6.4 的 inline 口径）；HTML 靠 <li> 分行，
+   不再输出「；」条目分隔符（row_separator 只留给 Word/Markdown 那种连续文本渲染器）。 #}
+{% macro inline_block(section) -%}
+{%- if section.rows %}
+<ul class="skill-list" data-role="body">
+{%- for row in section.rows %}
+<li>{% for cell in row %}{% if not loop.first and cell_needs_separator(cell) %} · {% endif %}{{ role_spans(cell.segments) }}{% endfor %}</li>
+{%- endfor %}
+</ul>
+{%- endif -%}
+{%- endmacro %}
+
+{% macro section_block(section) -%}
+{%- if section.entries or section.rows %}
+<div class="section" data-section="{{ section.key }}">
+  {%- if not section.layout.hide_title and section.title %}
+  <div class="section-title" data-role="section_title">{{ section.title }}</div>
+  {%- endif %}
+  {%- if section.kind == "inline" %}
+  {{ inline_block(section) }}
+  {%- elif section.kind == "text" %}
+  {%- if section.entries %}{{ body_blocks(section.entries[0].body) }}{% endif %}
+  {%- else %}
+  {%- for entry in section.entries %}
+  {%- set el = entry.layout if entry.layout is defined and entry.layout else none %}
+  {%- set break_before = el and el.start_on_new_page %}
+  {%- set keep_entry = el and el.keep_together %}
+  <div class="entry{% if break_before %} entry-break-before{% endif %}{% if keep_entry %} entry-keep{% endif %}" data-object-id="{{ entry.id }}">
+    {{ entry_head(entry.head) }}
+    {%- set columns = (el.columns if el and el.columns is not none else section.layout.columns) %}
+    {%- set align = (el.align if el and el.align is not none else section.layout.align) %}
+    {%- set gap = (el.gap if el and el.gap is not none else section.layout.gap) %}
+    {%- if gap is none %}{% set gap = default_cell_gap(align) %}{% endif %}
+    {{ sub_rows(entry.lead_rows, columns, align, gap) }}
+    {{ body_blocks(entry.body) }}
+    {{ sub_rows(entry.trail_rows, columns, align, gap) }}
+  </div>
+  {%- endfor %}
+  {%- endif %}
+</div>
+{%- endif -%}
+{%- endmacro %}
+
+<div class="header">
+  <div class="header-main">
+    <div class="name" data-role="name">{{ path_spans(document_plan.header.name) }}{% if document_plan.header.name_meta %} <span class="name-extra" data-role="meta">{{ path_spans(document_plan.header.name_meta) }}</span>{% endif %}</div>
+    {%- if document_plan.header.subtitle %}
+    <div class="intent" data-role="meta">{{ path_spans(document_plan.header.subtitle) }}</div>
+    {%- endif %}
+    {%- if document_plan.header.contact_lines %}
+    <div class="contact" data-role="meta">
+      {%- for line in document_plan.header.contact_lines -%}
+      {%- for seg in line -%}
+      {%- set href = safe_link(seg.link) -%}
+      {%- if href %}<a href="{{ href }}" data-resume-path="{{ seg.path }}">{{ seg.text }}</a>{% else %}<span data-resume-path="{{ seg.path }}">{{ seg.text }}</span>{% endif -%}
+      {%- if not loop.last %}<wbr />{% endif -%}
+      {%- endfor -%}
+      {%- if not loop.last %}<br />{% endif -%}
+      {%- endfor %}
+    </div>
+    {%- endif %}
+    {%- if template_config.badges %}
+    <div class="template-badges" aria-label="模板装饰">
+      {% for badge in template_config.badges %}
+      <span class="template-badge">
+        {% if badge.image %}<img src="{{ badge.image }}" alt="{{ badge.alt }}" />{% endif %}
+        {% if badge.label %}<span>{{ badge.label }}</span>{% endif %}
+      </span>
+      {% endfor %}
+    </div>
+    {%- endif %}
+  </div>
+  {%- if document_plan.header.photo %}<img class="profile-photo" src="{{ document_plan.header.photo }}" alt="{{ photo_alt }}" />{% endif %}
+</div>
+
+{% set use_section_grid = template_config.column_count|default(1) == 2 -%}
+{%- if use_section_grid %}<div class="resume-sections" data-columns="2">{% endif -%}
+{%- for section in document_plan.sections -%}
+{{ section_block(section) }}
+{%- endfor -%}
+{%- if use_section_grid %}</div>{% endif -%}

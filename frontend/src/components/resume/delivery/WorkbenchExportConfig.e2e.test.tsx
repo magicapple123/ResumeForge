@@ -14,6 +14,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { t } from "../../../i18n";
 import { TEMPLATE_CATALOG } from "../../../test/resumeFixtures";
 import type { ResumeDetail, ResumeLayout } from "../../../types";
+import { makeResumeDocument } from "../../../test/documentHarness";
 import ResumeDetailPreview from "../ResumeDetailPreview";
 
 vi.mock("../../ResumePreview", () => ({
@@ -24,6 +25,10 @@ vi.mock("../../ResumeTemplateControls", () => ({ default: () => null }));
 vi.mock("../../ResumeMeasureControls", () => ({ default: () => null }));
 vi.mock("../../../hooks/useResumeTemplateCatalog", () => ({
   useResumeTemplateCatalog: () => ({ catalog: TEMPLATE_CATALOG }),
+}));
+// 字段目录接口：本用例只关心导出链路，目录给 null（编辑器用内置 fallback）。
+vi.mock("../../../features/profile-library/fieldPlacement", () => ({
+  useFieldPlacementCatalog: () => ({ catalog: null, loading: false, error: null }),
 }));
 vi.mock("../../../api/profile", () => ({
   getProfile: vi.fn(async () => ({
@@ -66,25 +71,8 @@ const DETAIL: ResumeDetail = {
   page_limit: 1,
   font_scale: "standard",
   created_at: "2026-10-20T08:00:00",
-  content: {
-    photo: "",
-    name: "张三",
-    gender: "",
-    birth_year: "",
-    phone: "13800000000",
-    email: "",
-    city: "",
-    personal_website: "",
-    github: "",
-    job_intent: "",
-    summary: "",
-    education: [],
-    experience: [],
-    campus_experience: [],
-    projects: [],
-    skills: [],
-    awards: [],
-  },
+  // v2 文档：页眉姓名/联系方式齐全（D20 核对与导出内容快照的取值口径）。
+  content: makeResumeDocument(),
   warnings: [],
   parse_error: "",
   rationale: "",
@@ -273,8 +261,11 @@ describe("W19 制作台导出交付包端到端（真实 shell + HTTP 适配层�
         resume_revision: 7,
         strict_revision: true,
       });
-      // 同快照：草稿正文随请求发（后端不落库、不冻结）。
-      expect((bundle?.body.content as { name?: string } | undefined)?.name).toBe("张三");
+      // 同快照：草稿正文随请求发（后端不落库、不冻结）。v2 的"名字"是页眉 item。
+      const sentContent = bundle?.body.content as
+        { version?: number; header?: { items?: { key: string; value: string }[] } } | undefined;
+      expect(sentContent?.version).toBe(2);
+      expect(sentContent?.header?.items?.find((item) => item.key === "name")?.value).toBe("张三");
     });
     // 导出后仍在制作台：不把用户踢回主预览界面。
     // 用 queryAll 判存在：antd 叠层时同一标题会出现在多个 dialog 节点上。

@@ -51,6 +51,24 @@
   max-width: 100%;
 }
 
+/*
+ * Q25：下拉在 antd `Space` 的 `.ant-space-item` 里，item 默认 `min-width: auto`，
+ * 长选中值把卡片撑出横向滚动；而 `.provenance-selection__select` 上的 flex 对非 flex
+ * 父元素不生效。三条一起给：item 允许收缩、第一项（下拉）吃掉剩余宽度、下拉自身可缩。
+ */
+.provenance-selection__controls .ant-space-item {
+  min-width: 0;
+}
+
+.provenance-selection__controls .ant-space-item:first-child {
+  flex: 1 1 220px;
+}
+
+.provenance-selection__select {
+  width: 100%;
+  min-width: 0;
+}
+
 .provenance-selection__state {
   font-size: 12px;
 }

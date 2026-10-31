@@ -17,7 +17,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from .ats import MAX_JD_TEXT_CHARS
 from .export import ExportFormat
-from .resume import ResumeContent, ResumeLanguage
+from .resume import ResumeLanguage
 from .resume_generation import LONG_CV_MAX_PAGES, ResumeFontScale, _validate_format_config_shape
 
 PreflightLayer = Literal["content", "layout", "product"]
@@ -83,8 +83,8 @@ class PreflightRequest(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    # 未保存正文；`None` = 用记录里已保存的那一版（与精确预览同一条边界）。
-    content: ResumeContent | None = None
+    # 未保存正文（v2 文档 JSON，兼容旧 v1：路由统一转 v2）；`None` = 用记录里已保存的那一版。
+    content: dict | None = None
     layout: PreflightLayoutInput | None = None
     # 默认三层；product 最贵（真渲染），但仍然只在用户主动点检查时跑。
     layers: list[PreflightRequestLayer] = Field(

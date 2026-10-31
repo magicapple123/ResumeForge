@@ -7,17 +7,38 @@
  * - 逐项采纳 `POST .../adopt` 的写入目标是**该语言变体**（返回 `VariantDetailOut`），
  *   不覆盖当前语言正文——所以「撤销采纳」= 用旧值再采纳一次（正文任何时刻都可回退）；
  * - 术语软删进回收站第 18 类（`glossary_term`），恢复走既有 `restoreTrashItem`。
+ *
+ * v2 口径：变体 `content` 已在后端读边界统一收口为 `ResumeDocument`；翻译候选同样返回
+ * v2 文档，采纳接口直接按 v2 item 路径（`header.{itemId}` / `{section}.{entry}.{item}`）写入。
  */
 import { request } from "../../api/client";
+import type { ResumeDocument } from "../../types/resumeDocument";
 import type { GlossaryTerm, LanguageVariant, TranslationCandidate } from "./types";
 
-export interface VariantListOut {
-  items: LanguageVariant[];
+/** 变体摘要（后端 `VariantOut`）：列表接口返回的形状，不含正文。 */
+export interface VariantBriefOut {
+  id: number;
+  resume_id: number;
+  name: string;
+  language: LanguageVariant["language"];
+  variant_group_id: number | null;
+  job_id?: number | null;
+  job_title?: string;
+  company?: string;
+  has_layout?: boolean;
+  created_at: string;
+  updated_at?: string;
 }
-export interface VariantDetailOut extends LanguageVariant {
-  content: Record<string, unknown>;
-  /** 派生时的基底排版快照（0060 之前字段；导出以 layout/export-input 为准）。 */
-  render_context?: Record<string, unknown>;
+
+export interface VariantListOut {
+  items: VariantBriefOut[];
+}
+
+/** 变体详情：`content` 是**已收口为 v2** 的 ResumeDocument（后端读边界统一转换）。 */
+export interface VariantDetailOut extends VariantBriefOut {
+  content: ResumeDocument;
+  /** 派生时的基底排版快照（旧变体兼容；导出以 layout/export-input 为准）。 */
+  render_context?: Record<string, unknown> | null;
   /** W16 独立排版覆盖（0060）：null/缺省 = 继承。 */
   layout?: Record<string, unknown> | null;
 }
@@ -33,29 +54,37 @@ export interface VariantExportInputOut {
   variant_id: number;
   name: string;
   language: string;
-  content: Record<string, unknown>;
+  content: ResumeDocument;
   layout: Record<string, unknown>;
   /** 生效排版来源：variant = 独立覆盖；其它 = 继承。 */
   layout_source: string;
   content_sha256: string;
 }
+
 export interface TranslateVariantOut {
   variant_id: number;
   source_language: string;
   target_language: string;
-  candidate: Record<string, unknown>;
+  /** 翻译候选文档（v2）：与变体正文同构，按 item 路径逐项采纳。 */
+  candidate: ResumeDocument;
+  /** 后端按行 diff（前端不用它做采纳，保留字段以便诊断/日志）。 */
+  diff?: Record<string, unknown>;
   glossary_hits: { source: string; target: string }[];
+  /** 因事实锁/术语锁定而保留原文的路径（v1 分析路径；界面按 item key 匹配后禁用）。 */
   blocked_fields: string[];
 }
+
 export interface AdoptTranslationOut {
   variant: VariantDetailOut;
   applied_paths: string[];
   content_sha256: string;
 }
+
 export interface TranslateVariantPayload {
   target_language: "zh-CN" | "en-US";
   glossary_locked_only?: boolean;
 }
+
 export interface GlossaryTermIn {
   source_term: string;
   target_term: string;
@@ -85,8 +114,8 @@ export async function createLanguageVariant(
   resumeId: number,
   language: "zh-CN" | "en-US",
   name: string,
-): Promise<VariantDetailOut> {
-  const created = await request<VariantDetailOut>(variantBase(resumeId), {
+): Promise<VariantBriefOut> {
+  const created = await request<VariantBriefOut>(variantBase(resumeId), {
     method: "POST",
     body: JSON.stringify({ name, language }),
   });
@@ -113,8 +142,9 @@ export function patchVariantLayout(
 export function fetchVariantExportInput(
   resumeId: number,
   variantId: number,
+  signal?: AbortSignal,
 ): Promise<VariantExportInputOut> {
-  return request(variantBase(resumeId) + "/" + variantId + "/export-input");
+  return request(variantBase(resumeId) + "/" + variantId + "/export-input", { signal });
 }
 
 export function translateVariant(

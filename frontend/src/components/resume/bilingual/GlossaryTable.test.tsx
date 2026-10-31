@@ -4,7 +4,7 @@ import { App as AntdApp } from "antd";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { bt } from "../../../features/resume-bilingual/i18n";
-import { MOCK_GLOSSARY } from "../../../features/resume-bilingual/mock";
+import { MOCK_GLOSSARY } from "../../../test/bilingualMock";
 import { t } from "../../../i18n";
 import I18nProvider from "../../../i18n/I18nProvider";
 import { selectLocale } from "../../../i18n/localeStore";

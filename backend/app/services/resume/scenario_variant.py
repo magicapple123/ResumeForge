@@ -28,10 +28,10 @@ from ...models.resume import ResumeRecord
 from ...models.versions import ResumeVariant
 from ...schemas.generation_context import CareerContextRequest, GenerationContextSnapshot
 from ...schemas.job import JobOut
-from ...schemas.resume import ResumeContent
 from ..career_scenarios.resolve import resolve_context
+from . import document_io
 from . import document_variants as variants
-from .content_locks import restore_lock_flags, validate_content_locks_for
+from .content_locks import validate_content_locks_for
 from .resume_delivery import canonical_content_sha256
 from .resume_revision import revise_resume
 from .scenario_context import build_scenario_prompt_block
@@ -92,17 +92,53 @@ async def preview_scenario_candidate(
     job: JobOut | None,
     snapshot: GenerationContextSnapshot,
     instructions: str,
-) -> ResumeContent:
-    """按场景表达指南生成候选内容；**内存返回，不写库**。"""
+) -> dict:
+    """按场景表达指南生成候选内容；**内存返回 v2 文档，不写库**。"""
     del record  # 只用于权限/归属校验（路由层已做），预览不需要母版内容
-    resume = ResumeContent.model_validate(variant.content)
-    return await revise_resume(
+    resume = document_io.ensure_document_version(variant.content,
+        language=variant.language or None, format_config=(variant.render_context or {}).get("format_config") or {})
+    revised = await revise_resume(
         provider,
         resume,
         job,
         instructions,
         career_context_block=build_scenario_prompt_block(snapshot),
     )
+    return document_io.ensure_document_version(
+        revised if isinstance(revised, dict) else revised.model_dump(),
+        language=(variant.render_context or {}).get("language") or variant.language or None,
+        format_config=(variant.render_context or {}).get("format_config") or {},
+    )
+
+
+def _restore_lock_flags_v2(old_document: dict, document: dict) -> None:
+    """把旧变体条目的 lock_content/lock_layout 标记按 id（回退同下标）带回新文档。
+
+    锁标记是服务端状态，模型不回显；v2 落库后不能再用 v1 的 restore_lock_flags。
+    """
+    for old_section in old_document.get("sections") or []:
+        section_key = old_section.get("key")
+        new_section = next(
+            (item for item in document.get("sections") or [] if item.get("key") == section_key),
+            None,
+        )
+        if new_section is None:
+            continue
+        new_entries = new_section.get("entries") or []
+        for index, old_entry in enumerate(old_section.get("entries") or []):
+            flags = [key for key in ("lock_content", "lock_layout") if old_entry.get(key)]
+            if not flags:
+                continue
+            target = next(
+                (entry for entry in new_entries if entry.get("id") == old_entry.get("id")),
+                None,
+            )
+            if target is None and 0 <= index < len(new_entries):
+                target = new_entries[index]
+            if target is None:
+                continue
+            for key in flags:
+                target[key] = True
 
 
 def adopt_scenario_candidate(
@@ -110,16 +146,21 @@ def adopt_scenario_candidate(
     *,
     record: ResumeRecord,
     variant: ResumeVariant,
-    content: ResumeContent,
+    content: dict,
     expected_content_sha256: str,
     expected_context_sha256: str,
     snapshot: GenerationContextSnapshot,
 ) -> ResumeVariant:
-    """把候选写进这条变体（条件写；源简历零写入）。"""
+    """把候选写进这条变体（条件写；源简历零写入）。候选是 v2 文档 JSON。"""
     current_snapshot_hash = str(snapshot.context_sha256 or "")
     if current_snapshot_hash != expected_context_sha256:
         raise ScenarioVariantError(409, CONTEXT_CHANGED_DETAIL, CONTEXT_CHANGED_CODE)
-    payload = content.model_dump()
+    # v2 是唯一存储格式：入参可能是 v2（预览候选）或旧 v1，先收口再比较/落库。
+    payload = document_io.ensure_document_version(
+        content,
+        language=(variant.render_context or {}).get("language") or variant.language or None,
+        format_config=(variant.render_context or {}).get("format_config") or {},
+    )
     violations = validate_content_locks_for(variant.content or {}, payload)
     if violations:
         raise ScenarioVariantError(
@@ -128,7 +169,7 @@ def adopt_scenario_candidate(
             LOCK_CONFLICT_CODE,
             violations=[item.to_dict() for item in violations],
         )
-    restore_lock_flags(variant.content or {}, payload)
+    _restore_lock_flags_v2(variant.content or {}, payload)
     new_sha = canonical_content_sha256(payload)
     # 条件写必须读 `rowcount`；显式收窄成 DML 的运行时真实类型（同 document_save.py）。
     result = cast(

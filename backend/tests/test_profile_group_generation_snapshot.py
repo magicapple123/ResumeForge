@@ -27,6 +27,7 @@ from app.services.resume.generate_snapshot import (
     snapshot_for_resume,
     snapshot_for_task,
 )
+from tests.document_test_support import has_custom_field, legacy_of
 
 WORKSPACE_API = "/api/profile/workspace"
 GROUPS_API = "/api/profile/groups"
@@ -331,13 +332,11 @@ def test_group_changes_during_generation_do_not_change_result_or_snapshot(
     assert _record_content_hash(client, final["resume_id"]) == baseline_hash
 
     record = client.get(f"/api/resumes/{final['resume_id']}").json()
-    content = record["content"]
-    assert content.get("projects"), content
-    # C5-B/R-80：模型没写的自定义字段「标签：值」在后处理补回承载区。
-    descriptions = content["projects"][0]["description"]
-    assert any("导师姓名：张伟" in line for line in descriptions), descriptions
+    # D6/§17.3：自定义字段位置以 hint 为准（短字段 trail），在任意 placement 找到即可。
+    assert has_custom_field(record["content"], "导师姓名", "张伟"), "生成结果缺少自定义字段"
+    legacy = legacy_of(record["content"])
     # C2/R-79：自建大字段独立成栏，内容由服务端确定性写入。
-    assert [section["title"] for section in content["custom_sections"]] == ["开源贡献"]
+    assert [section.title for section in legacy.custom_sections] == ["开源贡献"]
     # F3 契约 §4：后台任务入口的台账基线带本次快照 entry_id 集合（组外/旧资料不自动带入）。
     assert baseline_calls and all(call == expected_entry_ids for call in baseline_calls), (
         baseline_calls

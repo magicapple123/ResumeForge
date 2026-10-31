@@ -29,6 +29,7 @@ import type {
   RewriteFieldOut,
   SourceChainOut,
   SourceImpactOut,
+  ManualSourceCreateInput,
   ManualSourceOut,
   SourceLinkCreateRequest,
   SourceOut,
@@ -74,12 +75,19 @@ export function listProvenanceSources(
   return request(PROVENANCE + "/sources" + (suffix ? "?" + suffix : ""));
 }
 
-/** 新建手工来源（POST /api/provenance/sources；只有 title 与 kind=manual，正文不进来源表）。 */
-export function createManualSource(title: string): Promise<ManualSourceOut> {
-  return request(PROVENANCE + "/sources", {
-    method: "POST",
-    body: JSON.stringify({ title, kind: "manual" }),
-  });
+/**
+ * 新建来源（POST /api/provenance/sources；P5-1 支持 kind / external_ref / payload）。
+ *
+ * 只给 title 时请求体与旧版逐字段一致（kind=manual、不带新字段），后端旧默认 payload
+ * {"title": title} 因此保持不变——历史关联不会因为这次扩展集体变 stale。
+ */
+export function createManualSource(input: ManualSourceCreateInput): Promise<ManualSourceOut> {
+  const body: Record<string, unknown> = { title: input.title, kind: input.kind ?? "manual" };
+  const externalRef = (input.external_ref ?? "").trim();
+  if (externalRef) body.external_ref = externalRef;
+  const payload = input.payload ?? "";
+  if (payload.trim()) body.payload = payload;
+  return request(PROVENANCE + "/sources", { method: "POST", body: JSON.stringify(body) });
 }
 
 /** 某来源的修订列表（GET /sources/{id}/revisions）。 */

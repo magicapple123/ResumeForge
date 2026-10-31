@@ -342,14 +342,12 @@ describe("基线比较的边界", () => {
 it("打印当前中文计数（只读，不写文件）", () => {
   if (!WRITE_MODE) return;
   const current = scanTree(SRC_ROOT, "src");
-  // eslint-disable-next-line no-console
   console.log(`[i18n] total=${current.total}`);
   const rows = Object.entries(current.files)
     .filter(([, count]) => count > 0)
     .sort((a, b) => b[1] - a[1])
     .slice(0, 400);
   for (const [file, count] of rows) {
-    // eslint-disable-next-line no-console
     console.log(`[i18n] ${count}	${file}`);
   }
 });

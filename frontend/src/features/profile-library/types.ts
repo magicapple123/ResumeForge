@@ -33,6 +33,18 @@ export interface FieldOut {
   hidden: boolean;
   /** 后端兼容字段：字段折叠已从界面移除（只保留隐藏/恢复），前端不读不写。 */
   collapsed_override: boolean | null;
+  /**
+   * 纸面默认位置（0069）：null = 按 field_type 自动；只有自建字段可写。
+   * 位置枚举与 v2 文档模型一致（title/meta/lead/trail/body/hidden）。
+   */
+  default_placement?: string | null;
+  /**
+   * 有效位置（后端只读计算值）：自建字段 = 仅素材→hidden、显式值优先、否则按类型默认；
+   * 内置字段为 null（由字段位置目录接口给）。前端显示徽标读它，不自行复制默认规则。
+   */
+  effective_placement?: string | null;
+  /** 仅素材（0069）：只进 AI / 网申素材、不上纸面；只有自建字段可为 true。 */
+  material_only?: boolean;
   preference_revision: number;
   revision: number;
 }
@@ -136,11 +148,21 @@ export interface ProjectionScopeOut {
 export interface ProjectionCandidateOut {
   section_key: string;
   section_name: string;
+  /** 资料条目 id（**不是**纸面条目 id；资料数据的稳定身份，用于去重/禁用）。 */
   entry_id: string;
   title: string;
   subtitle: string;
-  /** 该候选在 projection.content 里的位置（如 projects/2），"追加这一条"据此取现成条目。 */
-  paper_content_path: string;
+  /**
+   * v2 文档路径 `{section_key}.{v2_entry_id}`（自建板块同样 `{section}.{v2_entry_id}`）。
+   * **第二段是纸面 v2 entry id，不等于 entry_id**；空串 = 该条目没进纸面（仅素材/空条目）。
+   * 新代码优先用 `document_entry`，需要按路径定位时才用本字段。
+   */
+  document_path?: string;
+  /**
+   * 该候选在 `projection.content`（v2）里的**原样 entry JSON**，可直接拼进新简历条目；
+   * null = 没有纸面条目。
+   */
+  document_entry?: import("../../types/resumeDocument").ResumeEntry | null;
 }
 
 export interface ProjectionSourceSectionOut {
@@ -221,7 +243,13 @@ export interface EditorView {
 
 export interface PaperProjectionOut {
   scope: ProjectionScopeOut;
-  content: import("../../types/resumeContent").ResumeContent;
+  /**
+   * **v2 文档**（`ResumeDocument`）：`GET /api/profile/current/projection` 自 v2 批次起在
+   * 响应边界把 v1 中间态转成 v2（item 自带 `source`），新建简历/从资料填入只认它。
+   * 消费方用 `projectionDocument()`
+   * 做运行时判定，不要自行 cast。
+   */
+  content: import("../../types/resumeDocument").ResumeDocument;
   candidates: ProjectionCandidateOut[];
   source_layout: ProjectionSourceSectionOut[];
   warnings: ProjectionWarningOut[];

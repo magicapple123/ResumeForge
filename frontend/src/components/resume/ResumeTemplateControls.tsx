@@ -1,15 +1,19 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * 简历版式控件 · 第一组：**结构类**（模板 / 版式 / 板块顺序 / 最大篇幅）。
+ * 简历版式控件 · 第一组：**结构类**（模板 / 版式 / 最大篇幅）。
+ *
+ * 2026-10-30（T7）：v1 的「板块顺序」Popover 已删除——v2 的分区顺序就是 document.sections
+ * 本身（planner 按它出计划），由结构页签拖拽排序；converter 只在旧数据迁移时读
+ * format_config.section_order。
  *
  * 从 `ResumeLayoutControls` 拆出（P2 / D4）：主控件当时已 495 行贴预算；"结构"与"度量"
  * 正好是工具栏两个插槽的天然边界；生成配置阶段仍要"一行全都要"，所以壳 + 两组零重复。
  * 本组只管**结构**（长什么样、板块怎么排、最多几页）；字号/行距/页边距在
  * `ResumeMeasureControls`，两者共用壳里取到的那一份模板目录。
  */
-import { ArrowDownOutlined, ArrowUpOutlined, PictureOutlined } from "@ant-design/icons";
-import { Button, Popover, Segmented, Select, Space, Tooltip, Typography } from "antd";
-import { useMemo, useState } from "react";
+import { PictureOutlined } from "@ant-design/icons";
+import { Button, Segmented, Select, Space, Tooltip, Typography } from "antd";
+import { useState } from "react";
 import { RESUME_PAGE_LIMITS } from "../../types";
 import type {
   ResumeContent,
@@ -17,28 +21,17 @@ import type {
   ResumeLayout,
   ResumeTemplateCatalog,
 } from "../../types";
+import type { ResumeDocument } from "../../types/resumeDocument";
 import type { ResumeFormatConfig } from "../../types/resumeFormat";
 import { useI18n } from "../../i18n/i18nContext";
 import {
   RESUME_CATALOG_FORMAT_DESCRIPTION_KEYS,
-  RESUME_CATALOG_FORMAT_LABEL_KEYS,
-  RESUME_CATALOG_SECTION_LABEL_KEYS,
   resumeTemplateDescription,
   resumeTemplateLabel,
 } from "../../i18n/enum/resumeCatalog";
 import { layoutWithFormatPreset } from "./layoutWithFormatPreset";
-import {
-  buildSectionOrderConfig,
-  DEFAULT_RESUME_SECTION_ORDER,
-  normalizeSectionOrder,
-  RESUME_SECTION_LABELS,
-} from "../../utils/resumeSectionOrder";
 import ContactBreaksControl from "../../features/resume-layout/ContactBreaksControl";
-import {
-  customSectionRows as collectCustomSectionRows,
-  moveVisibleSection,
-  presentSectionKeys,
-} from "../../features/resume-layout/sectionPresence";
+import { formatPresetLabelOf } from "./resumeTemplatePresetLabel";
 import ResumeLanguageSelect from "./ResumeLanguageSelect";
 import TemplateGalleryModal from "./TemplateGalleryModal";
 
@@ -49,15 +42,10 @@ interface Props {
   compact?: boolean;
   /** 模板目录（由壳 `ResumeLayoutControls` 取一次后下发，避免两组各拉一次）。 */
   catalog?: ResumeTemplateCatalog;
-  /** 岗位广场的生成配置只让用户定 5 个参数，版式预设与板块顺序留到简历界面再调。缺省都渲染。 */
+  /** 岗位广场的生成配置只让用户定 5 个参数，版式预设留到简历界面再调。缺省都渲染。 */
   showFormat?: boolean;
-  showSections?: boolean;
-  /**
-   * 默认板块顺序是否跟随「我的资料」：只在**生成**场景为 true（新简历的默认顺序等于用户在
-   * 资料页排好的顺序）。已保存简历与生成后的预览阶段都不传——它们读这份简历自己的
-   * `section_order`，否则用户在资料页拖一下，所有老简历的外观都会跟着变。
-   */
-  preferProfileOrder?: boolean;
+  /** 最大篇幅控件：缺省渲染；制作台把它收进「版面」组（同一键只保留一处），传 false。 */
+  showPageLimit?: boolean;
   /**
    * W10 模板图库的试用能力（都可选；不传 = 试用只能看示例，行为与之前逐字相同）：
    * - `resumeId`：启用「我的内容 + 真实页数/溢出」；
@@ -81,9 +69,8 @@ export default function ResumeTemplateControls({
   disabled = false,
   compact = false,
   showFormat = true,
-  showSections = true, // 缺省 true = 现有行为逐字不变（工具栏 / 制作台 / 预览）
+  showPageLimit = true,
   catalog,
-  preferProfileOrder = false,
   resumeId,
   content,
   onTrialAdopt,
@@ -101,122 +88,9 @@ export default function ResumeTemplateControls({
    * 版式预设的展示名：内置预设按稳定 `name` 映射到语言包；自制版式的名字是用户输入，
    * 后端新增的未知预设也映射不到——两者一律回退后端原文（不丢信息）。
    */
-  const formatPresetLabel = (item: ResumeFormatPreset): string => {
-    const labelKey = item.custom ? undefined : RESUME_CATALOG_FORMAT_LABEL_KEYS[item.name];
-    return labelKey ? t(labelKey) : item.label;
-  };
+  const formatPresetLabel = (item: ResumeFormatPreset): string => formatPresetLabelOf(item, t);
 
   const currentTemplate = templates.find((item) => item.name === layout.template);
-
-  // 正文分区顺序：键与标签由后端下发（改默认值只改一处），归一化在前端做同样的事，
-  // 因为控件展示的是"完整排列"，而存储里可能只有用户动过的那几项。
-  const builtInSectionOrder = useMemo(
-    () => catalog?.default_section_order ?? DEFAULT_RESUME_SECTION_ORDER,
-    [catalog?.default_section_order],
-  );
-  // 生效的默认顺序：生成场景跟随资料页，其余场景用内置默认。两个字段刻意分开下发
-  // （`profile_section_order` / `default_section_order`），这里按场景选一个。
-  const defaultSectionOrder = useMemo(
-    () =>
-      preferProfileOrder
-        ? (catalog?.profile_section_order ?? builtInSectionOrder)
-        : builtInSectionOrder,
-    [preferProfileOrder, catalog?.profile_section_order, builtInSectionOrder],
-  );
-  const sectionOptions = useMemo(() => catalog?.section_options ?? [], [catalog?.section_options]);
-  const sectionOrder = useMemo(
-    () => normalizeSectionOrder(layout.format_config?.section_order, defaultSectionOrder),
-    [layout.format_config?.section_order, defaultSectionOrder],
-  );
-  // 当前简历里真的有内容的板块；内容为空时退回完整列表（空简历仍能看到默认顺序）。
-  const presentKeys = useMemo(
-    () => presentSectionKeys(content, sectionOptions),
-    [content, sectionOptions],
-  );
-  const visibleSectionOrder = useMemo(
-    () =>
-      presentKeys && presentKeys.size > 0
-        ? sectionOrder.filter((key) => presentKeys.has(key))
-        : sectionOrder,
-    [sectionOrder, presentKeys],
-  );
-  // 自建板块固定排在系统板块之后（渲染器口径），只列出有内容的，不给上下移。
-  const customSectionRows = useMemo(() => collectCustomSectionRows(content), [content]);
-  /**
-   * 「顺序·已调整」的判据 = **`section_order` 这个键在不在**（P0-5），不是"和默认顺序比"。
-   *
-   * 两者只在"用户把顺序调成了恰好等于默认"时给出不同答案，而那时键还在存储里——它确实是
-   * 被调过的（也解释了为什么"恢复默认"这个入口该出现）。更关键的是：键存在与否是**渲染器
-   * 用的同一个判据**（`resolved_section_order`），显示与渲染从此看同一件事。
-   */
-  const isCustomOrder = "section_order" in (layout.format_config ?? {});
-
-  /**
-   * 在**可见列表**里上下移一格：只交换当前简历里有的那两个板块在完整 `section_order`
-   * 里的位置，空板块的位置原样保留（它们不显示，但存储里仍是一份完整排列）。
-   */
-  const handleSectionMove = (key: string, direction: -1 | 1) => {
-    const next = moveVisibleSection(sectionOrder, visibleSectionOrder, key, direction);
-    if (!next) return;
-    onChange({ ...layout, format_config: { ...layout.format_config, section_order: next } });
-  };
-
-  /**
-   * 「按我的资料顺序排列」（P0-6）——**一次性快照**，不是一条持续的跟随。
-   *
-   * 语义：把资料页当前那套顺序写进**这份简历**的 `format_config.section_order`。写完就与资料
-   * 脱钩：用户再去资料页拖动，这份简历不会跟着变（"老简历不追溯改变"是这条功能的前提）。
-   * 与内置默认相同时 `buildSectionOrderConfig` 会删掉这个键——"调成和默认一样"与"没调过"
-   * 在存储里是同一种形态。
-   */
-  const profileSectionOrder = useMemo(
-    () => catalog?.profile_section_order ?? builtInSectionOrder,
-    [catalog?.profile_section_order, builtInSectionOrder],
-  );
-  /**
-   * 可用性的两个否决项（顺序即提示优先级：先说"根本没有可排序的分区"，再谈"顺序相同"）。
-   *
-   * 判 `profile_section_keys` 时**必须先滤掉 `basic_info`**：它是页眉（姓名 / 联系方式 /
-   * 照片），不参与正文排序，而资料行几乎总是带着它——直接判数组是否为空会让这个分支永远
-   * 不成立，用户点下去的按钮实际上什么都不会变。
-   */
-  const sortableProfileKeys = (catalog?.profile_section_keys ?? []).filter(
-    (key) => key !== "basic_info",
-  );
-  const profileOrderSameAsDefault = profileSectionOrder.join(",") === builtInSectionOrder.join(",");
-  const canArrangeByProfile = sortableProfileKeys.length > 0 && !profileOrderSameAsDefault;
-  const arrangeByProfileHint =
-    sortableProfileKeys.length === 0
-      ? t("sections.profileOrderUnavailable")
-      : profileOrderSameAsDefault
-        ? t("sections.profileOrderSame")
-        : t("sections.arrangeByProfileHint");
-
-  const handleArrangeByProfile = () => {
-    onChange({
-      ...layout,
-      format_config: buildSectionOrderConfig(
-        profileSectionOrder,
-        builtInSectionOrder,
-        layout.format_config ?? {},
-      ),
-    });
-  };
-
-  const handleSectionOrderReset = () => {
-    if (!isCustomOrder) return;
-    // 「默认」在生成场景下就是资料顺序：写回它，用户才真的回到他看到的那一版；
-    // 与内置默认相同时 helper 会把这个键删掉——"没调过"与"调成和默认一样"在存储里
-    // 应当是同一种形态。非生成场景传内置默认，因此等于删除这个键（保持原行为）。
-    onChange({
-      ...layout,
-      format_config: buildSectionOrderConfig(
-        preferProfileOrder ? defaultSectionOrder : builtInSectionOrder,
-        builtInSectionOrder,
-        layout.format_config ?? {},
-      ),
-    });
-  };
 
   return (
     // 分组间距与壳的间距一致（compact 8 / 非 compact 16），所以拆开之后每个分组之间的
@@ -328,145 +202,31 @@ export default function ResumeTemplateControls({
         onFontScaleChange={(font_scale) => onChange({ ...layout, font_scale })}
         onSelect={(template) => onChange({ ...layout, template })}
         resumeId={resumeId}
-        content={content}
+        content={content as unknown as ResumeDocument | null}
         onTrialAdopt={onTrialAdopt}
         onClose={() => setGalleryOpen(false)}
       />
-      {showSections && (
-        <Space size={6}>
+      {showPageLimit && (
+        <Space size={6} className="resume-page-limit-group">
           {!compact && (
             <Typography.Text type="secondary">
-              {t("sections.templateControls.sectionsLabel")}
+              {t("sections.templateControls.pageLimitLabel")}
             </Typography.Text>
           )}
-          <Popover
-            trigger="click"
-            placement="bottomRight"
-            arrow={false}
-            title={
-              <span className="resume-section-order-title">
-                {t("sections.templateControls.orderTitle")}
-                <Tooltip title={arrangeByProfileHint}>
-                  {/* 包一层 span：禁用态的按钮不接收指针事件，Tooltip 只能挂在外层。 */}
-                  <span>
-                    <Button
-                      size="small"
-                      type="link"
-                      disabled={!canArrangeByProfile}
-                      onClick={handleArrangeByProfile}
-                    >
-                      {t("sections.arrangeByProfile")}
-                    </Button>
-                  </span>
-                </Tooltip>
-                {isCustomOrder && (
-                  <Button size="small" type="link" onClick={handleSectionOrderReset}>
-                    {t("sections.templateControls.orderReset")}
-                  </Button>
-                )}
-              </span>
-            }
-            content={
-              <div
-                className="resume-section-order-list"
-                role="list"
-                aria-label={t("sections.templateControls.orderListAriaLabel")}
-              >
-                {visibleSectionOrder.map((key, index) => {
-                  // 后端下发的是中文展示名，先按稳定分区 key 映射到语言包；未知分区
-                  // （后端新增的）再回退目录原文，最后才是前端内置的七个兜底 key。
-                  const labelKey = RESUME_CATALOG_SECTION_LABEL_KEYS[key];
-                  const fallbackLabelKey = RESUME_SECTION_LABELS[key];
-                  const label =
-                    (labelKey ? t(labelKey) : undefined) ??
-                    sectionOptions.find((item) => item.key === key)?.label ??
-                    (fallbackLabelKey ? t(fallbackLabelKey) : key);
-                  return (
-                    <div className="resume-section-order-row" role="listitem" key={key}>
-                      <span className="resume-section-order-index">{index + 1}</span>
-                      <span className="resume-section-order-label">{label}</span>
-                      <Space size={0}>
-                        <Tooltip title={t("sections.templateControls.orderMoveUp")}>
-                          <Button
-                            size="small"
-                            type="text"
-                            icon={<ArrowUpOutlined />}
-                            aria-label={t("sections.templateControls.orderMoveUpAria", { label })}
-                            disabled={index === 0}
-                            onClick={() => handleSectionMove(key, -1)}
-                          />
-                        </Tooltip>
-                        <Tooltip title={t("sections.templateControls.orderMoveDown")}>
-                          <Button
-                            size="small"
-                            type="text"
-                            icon={<ArrowDownOutlined />}
-                            aria-label={t("sections.templateControls.orderMoveDownAria", { label })}
-                            disabled={index === visibleSectionOrder.length - 1}
-                            onClick={() => handleSectionMove(key, 1)}
-                          />
-                        </Tooltip>
-                      </Space>
-                    </div>
-                  );
-                })}
-                {customSectionRows.map((row, index) => (
-                  <div className="resume-section-order-row" role="listitem" key={row.key}>
-                    <span className="resume-section-order-index">
-                      {visibleSectionOrder.length + index + 1}
-                    </span>
-                    <span className="resume-section-order-label">{row.title}</span>
-                    <Tooltip title={t("sections.templateControls.customFixedHint")}>
-                      <Typography.Text type="secondary">
-                        {t("sections.templateControls.customFixedTag")}
-                      </Typography.Text>
-                    </Tooltip>
-                  </div>
-                ))}
-                {visibleSectionOrder.length === 0 && customSectionRows.length === 0 ? (
-                  <Typography.Paragraph type="secondary">
-                    {t("sections.templateControls.orderEmpty")}
-                  </Typography.Paragraph>
-                ) : null}
-                <Typography.Paragraph type="secondary" className="resume-section-order-hint">
-                  {t("sections.templateControls.orderHint")}
-                </Typography.Paragraph>
-              </div>
-            }
-          >
-            <Tooltip title={t("sections.templateControls.orderTriggerHint")}>
-              <Button
-                size="small"
-                disabled={disabled}
-                aria-label={t("sections.templateControls.orderTriggerAriaLabel")}
-              >
-                {isCustomOrder
-                  ? t("sections.templateControls.orderTriggerAdjusted")
-                  : t("sections.templateControls.orderTrigger")}
-              </Button>
-            </Tooltip>
-          </Popover>
+          <Tooltip title={t("sections.templateControls.pageLimitHint")}>
+            <Segmented
+              size="small"
+              value={layout.page_limit}
+              disabled={disabled}
+              options={(pageLimitOptions ?? RESUME_PAGE_LIMITS).map((value) => ({
+                value,
+                label: t("sections.templateControls.pageLimitPages", { count: value }),
+              }))}
+              onChange={(value) => onChange({ ...layout, page_limit: value as number })}
+            />
+          </Tooltip>
         </Space>
       )}
-      <Space size={6} className="resume-page-limit-group">
-        {!compact && (
-          <Typography.Text type="secondary">
-            {t("sections.templateControls.pageLimitLabel")}
-          </Typography.Text>
-        )}
-        <Tooltip title={t("sections.templateControls.pageLimitHint")}>
-          <Segmented
-            size="small"
-            value={layout.page_limit}
-            disabled={disabled}
-            options={(pageLimitOptions ?? RESUME_PAGE_LIMITS).map((value) => ({
-              value,
-              label: t("sections.templateControls.pageLimitPages", { count: value }),
-            }))}
-            onChange={(value) => onChange({ ...layout, page_limit: value as number })}
-          />
-        </Tooltip>
-      </Space>
       {/* 联系方式换行（#3）：页眉那几个字段在哪断行。默认"字段整体不拆行、字段之间
           自动换行"，这里只是给用户一个显式控制点；参数随简历保存，四条渲染链路同源。 */}
       <ContactBreaksControl

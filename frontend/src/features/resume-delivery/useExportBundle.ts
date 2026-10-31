@@ -11,7 +11,7 @@
  *    `resume_revision_changed` 转成 `revisionChanged` 状态，**不自动重试**。
  */
 import { useCallback, useMemo, useState } from "react";
-import type { ResumeContent } from "../../types/resume";
+import type { ResumeDocument } from "../../types/resumeDocument";
 import { buildExportCheckSummary } from "./check";
 import type { ExportBundleDownload, ExportDeliveryApi } from "./exportApi";
 import { toRevisionChangedError } from "./exportApi";
@@ -33,7 +33,7 @@ export interface ExportBundleOptions {
   api: ExportDeliveryApi;
   resumeId: number | null;
   /** 当前草稿正文：随请求发给后端做"同快照"（不落库、不冻结）。 */
-  content?: ResumeContent | null;
+  content?: ResumeDocument | null;
   /** 服务端当前 revision；null = 还没拿到（此时不允许 strict 导出）。 */
   revision: number | null;
   resumeTitle: string;

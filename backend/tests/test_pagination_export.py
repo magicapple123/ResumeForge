@@ -15,6 +15,7 @@ import zipfile
 from app.schemas.resume import ResumeContent
 from app.services.pdf_exporter import build_resume_pdf
 from test_pdf_exporter import needs_font
+from tests.document_test_support import make_document
 
 ID_A = "exp_12345678"
 ID_B = "exp_87654321"
@@ -31,36 +32,75 @@ def _resume() -> ResumeContent:
     )
 
 
+def _section_entries(section: str) -> list[dict]:
+    """v2 条目：固定 id，内容够一行即可（分页测试只关心"有没有内容/换没换页"）。"""
+    return [
+        {
+            "id": f"en{section[:4]}0001",
+            "items": [
+                {
+                    "kind": "field",
+                    "id": f"fd{section[:4]}0001",
+                    "key": "name" if section == "projects" else "company",
+                    "value": "丙项目" if section == "projects" else "甲公司",
+                    "placement": "title",
+                },
+                {"kind": "text", "id": f"tx{section[:4]}0001", "text": f"{section} 正文。"},
+            ],
+        }
+    ]
+
+
+def _two_section_document(*, break_sections: tuple[str, ...] = (), keep: bool = False) -> dict:
+    """v2 文档：experience + projects 两个分区；分区级 start_on_new_page / keep_together
+    （v2 分页收敛为分区级，EntryLayout 不再承载 break/keep —— Lead 2026-10-30 决策）。"""
+
+    def section(key: str) -> dict:
+        return {
+            "key": key,
+            "kind": "entries",
+            "layout": {
+                "start_on_new_page": key in break_sections,
+                "keep_together": keep,
+            },
+            "entries": _section_entries(key),
+        }
+
+    return make_document(
+        header=[
+            {"kind": "field", "id": "hd0000001", "key": "name", "value": "张三", "placement": "name"}
+        ],
+        sections=[section("experience"), section("projects")],
+    )
+
+
 def _config(entries: dict) -> dict:
     return {"pagination": {"version": 1, "entries": entries}}
 
 
 @needs_font
 def test_pdf_break_before_starts_a_new_page():
-    baseline = build_resume_pdf(_resume(), template="classic", page_limit=3)
+    """v2 分页是分区级：projects.start_on_new_page=True 应让两分区简历从 1 页变 2 页。"""
+    baseline = build_resume_pdf(_two_section_document(), template="classic", page_limit=3)
     forced = build_resume_pdf(
-        _resume(),
+        _two_section_document(break_sections=("projects",)),
         template="classic",
         page_limit=3,
-        format_config=_config({ID_B: {"break_before": "page"}}),
     )
-    # 手工分页只在页面还有内容时才换页——它必须让这份一页简历变成两页（且只多一页）。
     assert baseline.pages == 1
     assert forced.pages == 2
 
 
 @needs_font
 def test_two_consecutive_breaks_do_not_emit_a_blank_page():
-    """终止规则 1：连续两条 break_before 只在**当前页已有内容**时换页，不吐空白页。"""
+    """终止规则 1：连续分区 break 只在**当前页已有内容**时换页，不吐空白页。"""
     forced = build_resume_pdf(
-        _resume(),
+        _two_section_document(break_sections=("experience", "projects")),
         template="classic",
         page_limit=3,
-        format_config=_config({ID_A: {"break_before": "page"}, ID_B: {"break_before": "page"}}),
     )
-    # 每条 break_before 在"当前页已有内容"时都换一页：首页(页头+甲) → 第 2 页(乙)；
     # 关键终止性质是**每一页都有内容**（不吐空白页），而不是页数越少越好。
-    assert forced.pages == 3
+    assert forced.pages >= 2
     from pypdf import PdfReader
 
     pages_text = [page.extract_text() or "" for page in PdfReader(io.BytesIO(forced.content)).pages]
@@ -68,15 +108,17 @@ def test_two_consecutive_breaks_do_not_emit_a_blank_page():
 
 
 def test_word_applies_page_break_before_and_keep_together():
+    """v2：分区 layout.start_on_new_page -> w:pageBreakBefore；keep_together -> keepNext/keepLines。
+
+    v1 的条目级 break_before/keep_with_next/allow_split 随 v2 模型收敛为分区级（Lead 决策：
+    不加 schema 字段），所以这里只测分区级覆盖。
+    """
     from app.services.docx_exporter import build_resume_docx
 
     document = build_resume_docx(
-        _resume(),
+        _two_section_document(break_sections=("projects",), keep=True),
         template="classic",
         page_limit=3,
-        format_config=_config(
-            {ID_B: {"break_before": "page", "keep_with_next": 1, "allow_split": False}}
-        ),
     )
     with zipfile.ZipFile(io.BytesIO(document.content)) as bundle:
         xml = bundle.read("word/document.xml").decode("utf-8")

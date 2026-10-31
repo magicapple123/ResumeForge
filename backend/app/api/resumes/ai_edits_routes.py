@@ -19,7 +19,6 @@ from ...models.job import Job
 from ...models.resume import ResumeRecord
 from ...schemas.job import JobOut
 from ...schemas.resume import (
-    ResumeContent,
     ResumeOut,
     ResumeReviseRequest,
     ResumeSuggestionsOut,
@@ -28,7 +27,7 @@ from ...services import trash
 from ...services.llm import usage_ledger
 from ...services.llm.base import LLMError
 from ...services.profile.ai_profile import load_ai_profile
-from ...services.resume import fact_locks
+from ...services.resume import document_io, fact_locks
 from ...services.resume.document_identity import sanitize_document_ids
 from ...services.resume.document_save import (
     RevisionConflict,
@@ -64,7 +63,7 @@ async def suggest_resume_edits(resume_id: int, db: Session = Depends(get_db)):
     try:
         # 建议也是"读我的资料"的 AI 功能：当前组 + 去隐藏（与匹配/助手同一口径）。
         profile = load_ai_profile(db)
-        resume = ResumeContent.model_validate(record.content)
+        resume, _conversion = document_io.document_for_record(db, record)
         job_out = JobOut.model_validate(job)
         # 经包命名空间调用期读取，保住 test_resume_suggestions 对
         # app.api.resumes.create_provider 的 patch 契约。
@@ -114,7 +113,7 @@ async def revise_existing_resume(
     if not config.base_url or not config.model:
         raise HTTPException(status_code=400, detail="尚未配置大模型 API")
     try:
-        resume = ResumeContent.model_validate(record.content)
+        resume, _conversion = document_io.document_for_record(db, record)
         job_out = JobOut.model_validate(job) if job is not None else None
         # 经包命名空间调用期读取，保住 test_resume_revision 对
         # app.api.resumes.create_provider 的 patch 契约（FakeProvider 演练）。
@@ -122,6 +121,8 @@ async def revise_existing_resume(
         # 这里**不**像建议接口那样先 close：修订要更新这条记录，模型返回后还要
         # 用同一个 session 落库；先关再重取反而容易拿到过期的对象状态。
         revised = await revise_resume(provider, resume, job_out, payload.instructions)
+    except fact_locks.FactLockError as exc:
+        return fact_locks.fact_lock_conflict_response(exc.violations)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except LLMError as exc:
@@ -133,13 +134,15 @@ async def revise_existing_resume(
 
     # 模型可能回显或臆造对象标识；这里**丢弃不合法的**而不是 422——AI 不是可以回
     # 错误码的客户端，整份修订因为一个 id 被拒会让用户白等一次生成。
-    sanitized = sanitize_document_ids(revised.model_dump()) or {}
+    sanitized = (
+        revised if isinstance(revised, dict) else sanitize_document_ids(revised.model_dump()) or {}
+    )
 
     # W12 事实锁：AI 可以改表达，不能改姓名/机构/时间/数字/职责边界。校验在**落库前**
     # 完成且是服务端硬校验（不是提示词约束）；有违规就一个字段都不写，返回 409 让
     # 用户看见哪条被锁的值会被改动。翻译/片段插入/优化器走同一个门（enforce_ai_content）。
     try:
-        fact_locks.enforce_ai_content(db, record, sanitized)
+        fact_locks.enforce_ai_content(db, record, sanitized, old_content=resume)
     except fact_locks.FactLockError as exc:
         logger.info("AI 修订被事实锁拒绝 record_id=%s locks=%s", record.id, len(exc.violations))
         return fact_locks.fact_lock_conflict_response(exc.violations)
@@ -154,7 +157,13 @@ async def revise_existing_resume(
         outcome = save_ai_revision(
             db,
             record_id=record.id,
-            content=sanitized,
+            # 落库的永远是 v2：修订算法产出的 v1 内容在写回前统一转换（带当前方案定义）。
+            content=document_io.prepare_document_for_save(
+                sanitized,
+                language=record.language,
+                format_config=record.format_config or {},
+                custom_fields=document_io.custom_field_definitions(db),
+            ),
             fact_annotations=[],
             base_revision=payload.base_revision,
         )
@@ -177,4 +186,4 @@ async def revise_existing_resume(
         )
     except Exception:  # noqa: BLE001 - 账本不能反向破坏保存成功的结果
         logger.warning("模型用量记录失败 record_id=%s", record.id, exc_info=True)
-    return _to_resume_out(outcome.record)
+    return _to_resume_out(outcome.record, db)

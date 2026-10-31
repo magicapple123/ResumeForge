@@ -151,7 +151,7 @@ export function sectionGapProbeCss(value: number): string {
 
 // ── W07 局部排版：角色 / 对象覆盖的探针（D02 的直接反馈）────────────────────
 
-/** 探针作用目标：角色（同类段落）或对象（单条内容）。 */
+/** 探针作用目标：角色（同类段落）、对象（单条内容），或对象 + 角色（Q12 子范围）。 */
 export interface StyleProbeTarget {
   /** 角色名（`name` / `body` …）；与后端模板里的 `data-role` 同名。 */
   role?: string;
@@ -186,16 +186,44 @@ const PROBE_PROP_ORDER = [
 
 /** 对象 id 只允许稳定身份字符集：探针 CSS 的字符串里不接受任意用户输入。 */
 const PROBE_OBJECT_ID = /^[A-Za-z0-9_-]{8,32}$/;
+/** 角色名只允许 `[a-z_]`（与后端 ROLES 的字符集一致）。 */
+const PROBE_ROLE = /^[a-z_]+$/;
 
-/** 给探针选一个选择器；对象优先于角色（对象覆盖在角色之上）。 */
-function styleProbeSelector(target: StyleProbeTarget): string | null {
+/** 探针要落到哪几个选择器上（Q11：文字 / 项目符号 / 缩进 / 日期位置各一个目标）。 */
+interface ProbeSelectors {
+  text: string;
+  bullet: string;
+  indent: string;
+  metaAlign: string;
+}
+
+/**
+ * 给探针选选择器：与后端 `role_style_css` / `entry_style_css` 的 Q11 定向选择器逐项同步。
+ *
+ * - 文字属性：对象 → `[data-object-id]`；对象+角色 → `[data-object-id] [data-role]`
+ *   （object_roles 的落点）；角色 → `[data-role]`；
+ * - 项目符号 / 缩进 / 日期位置：写载体元素（ul / .body-paragraph / .entry-head），
+ *   与后端一致——写在条目根上时"符号不动 / 日期位置没反应"。
+ */
+function styleProbeSelectors(target: StyleProbeTarget): ProbeSelectors | null {
+  const role = target.role && PROBE_ROLE.test(target.role) ? target.role : null;
   if (target.objectId) {
-    return PROBE_OBJECT_ID.test(target.objectId) ? `[data-object-id="${target.objectId}"]` : null;
+    if (!PROBE_OBJECT_ID.test(target.objectId)) return null;
+    const prefix = `[data-object-id="${target.objectId}"]`;
+    return {
+      text: role ? `${prefix} [data-role="${role}"]` : prefix,
+      bullet: `${prefix} ul`,
+      indent: `${prefix} ul, ${prefix} .body-paragraph`,
+      metaAlign: `${prefix} .entry-head`,
+    };
   }
-  if (target.role) {
-    return /^[a-z_]+$/.test(target.role) ? `[data-role="${target.role}"]` : null;
-  }
-  return null;
+  if (!role) return null;
+  return {
+    text: `[data-role="${role}"]`,
+    bullet: "ul",
+    indent: "ul, .body-paragraph",
+    metaAlign: ".entry-head",
+  };
 }
 
 /** 单个属性 → 一条 CSS 声明；不支持 / 值非法时返回 `null`（不产生半条规则）。 */
@@ -227,7 +255,8 @@ function styleDeclaration(
   }
   if (prop === "bullet") {
     // 与后端 \`_role_rule\` 的 bullet_css 逐字一致。
-    if (value === "dot") return "list-style-type: disc";
+    // Q11：三出口统一符号字形（HTML 不是 disc 实心圆点）。
+    if (value === "dot") return "list-style-type: '·'";
     if (value === "dash") return "list-style-type: '–'";
     if (value === "none") return "list-style-type: none";
     return null;
@@ -252,11 +281,23 @@ function styleDeclaration(
   return null;
 }
 
+/** 属性 → 探针规则组（与后端 Q11 的定向选择器同步）。 */
+function styleProbeGroup(prop: string): keyof ProbeSelectors {
+  if (prop === "bullet") return "bullet";
+  if (prop === "indent") return "indent";
+  if (prop === "meta_align") return "metaAlign";
+  return "text";
+}
+
 /**
  * 局部排版的即时探针 CSS：拖动滑杆/步进时注入预览 iframe，零网络往返。
  *
- * 空覆盖 / 非法目标 → 空串（调用方据此清掉探针）。每条规则都带 `!important`：探针要
+ * 空覆盖 / 非法目标 → 空串（调用方据此清掉探针）。每条声明都带 `!important`：探针要
  * 盖过模板自己的角色尺寸，否则拖了没反应。
+ *
+ * Q11 起可能产出多条规则：项目符号 / 缩进 / 日期位置分别落到 ul / ul+.body-paragraph /
+ * .entry-head 上——与后端 `role_style_css` / `entry_style_css` 的定向选择器逐项对应，
+ * 否则"拖动中"与"松手后"看到的不是同一块内容。
  *
  * **它不是渲染契约**：落库后的真实渲染由后端 `role_style_css` / `format_css` 决定
  * （wave2 契约 §2.5 的唯一实现）。两者数值等价，同一条值在"拖动中"与"松手后"看到的
@@ -267,18 +308,27 @@ export function styleProbeCss(
   style: StyleProbeValues,
   options: StyleProbeOptions = {},
 ): string {
-  const selector = styleProbeSelector(target);
-  if (!selector) return "";
-  const declarations: string[] = [];
+  const selectors = styleProbeSelectors(target);
+  if (!selectors) return "";
+  const groups: Record<keyof ProbeSelectors, string[]> = {
+    text: [],
+    bullet: [],
+    indent: [],
+    metaAlign: [],
+  };
   for (const prop of PROBE_PROP_ORDER) {
     const value = style[prop];
     if (value === undefined) continue;
     const declaration = styleDeclaration(prop, value, target, options);
-    if (declaration) declarations.push(`${declaration} !important;`);
+    if (declaration) groups[styleProbeGroup(prop)].push(`${declaration} !important;`);
   }
-  if (declarations.length === 0) return "";
-  // 两空格缩进与后端 role_style_css 的规则行一致（探针与真实 CSS 更容易对照）。
-  return `  ${selector} { ${declarations.join(" ")} }`;
+  const rules: string[] = [];
+  for (const key of ["text", "bullet", "indent", "metaAlign"] as const) {
+    if (groups[key].length === 0) continue;
+    // 两空格缩进与后端 role_style_css 的规则行一致（探针与真实 CSS 更容易对照）。
+    rules.push(`  ${selectors[key]} { ${groups[key].join(" ")} }`);
+  }
+  return rules.join("\n");
 }
 
 /**

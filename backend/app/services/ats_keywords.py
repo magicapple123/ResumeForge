@@ -22,8 +22,13 @@ from typing import NamedTuple
 
 from ..schemas.ats import AtsIssue
 from ..schemas.resume import ResumeContent
-from .ats_research import credential_section_texts, research_section_texts
-from .resume.resume_rich_text import strip_markers
+from .ats_text import (  # noqa: F401
+    _SECTION_ORDER,
+    _header_text,
+    _join_parts,
+    _resume_text,
+    _section_texts,
+)
 
 _ATS_KEYWORDS_PATH = Path(__file__).resolve().parent.parent / "data" / "ats_keywords.json"
 
@@ -197,20 +202,6 @@ _PHRASE_NOISE_CHARS = "的和与及在对为并或等有之其这那"
 
 # 十一个分区（同时也是 ``keyword_hits[*].sections`` 的取值集合；W14 加科研三栏目，
 # A4 加资格证照；顺序与 resume_sections.DEFAULT_SECTION_ORDER 的相对顺序一致）。
-_SECTION_ORDER = (
-    "summary",
-    "education",
-    "experience",
-    "campus_experience",
-    "projects",
-    "publications",
-    "research_projects",
-    "patents",
-    "credentials",
-    "skills",
-    "languages",
-    "awards",
-)
 
 
 class KeywordAnalysis(NamedTuple):
@@ -239,95 +230,6 @@ def load_keywords() -> list[str]:
             seen.add(key)
             words.append(word.strip())
     return words
-
-
-def _join_parts(*parts: str) -> str:
-    """拼接可检索文本；**先剥字符级加粗标记**。
-
-    关键词匹配比的是用户读到的字。``**Python**`` 里的标记会让 ``Python`` 与
-    ``**Python**`` 变成两个不同的串，词库命中率凭空下降——同一个词在预览里加粗一次，
-    ATS 分数就掉一档，这种"看不见的扣分"最难解释。
-    """
-    return strip_markers(" ".join(part for part in parts if part and part.strip()))
-
-
-def _section_texts(resume: ResumeContent) -> dict[str, str]:
-    """十个分区的可检索文本（保持字段原貌，匹配时再转小写）。
-
-    分区的划分与简历模板一致：``sections`` 字段就是按这份清单报出来的，前端据此
-    告诉用户"这个词出现在技能区"而不是笼统说"出现在简历里"。
-    """
-    return {
-        "summary": strip_markers(resume.summary),
-        "education": _join_parts(
-            *[
-                _join_parts(
-                    item.school,
-                    item.major,
-                    item.degree,
-                    item.gpa,
-                    " ".join(item.courses),
-                    " ".join(item.achievements),
-                )
-                for item in resume.education
-            ]
-        ),
-        "experience": _join_parts(
-            *[
-                _join_parts(item.company, item.role, " ".join(item.description))
-                for item in resume.experience
-            ]
-        ),
-        "campus_experience": _join_parts(
-            *[
-                _join_parts(item.organization, item.role, " ".join(item.description))
-                for item in resume.campus_experience
-            ]
-        ),
-        "projects": _join_parts(
-            *[
-                _join_parts(
-                    item.name,
-                    item.role,
-                    " ".join(item.tech_stack),
-                    " ".join(item.description),
-                    " ".join(item.highlights),
-                )
-                for item in resume.projects
-            ]
-        ),
-        **research_section_texts(resume),
-        **credential_section_texts(resume),
-        "skills": _join_parts(*[_join_parts(item.name, item.level) for item in resume.skills]),
-        "languages": _join_parts(
-            *[
-                _join_parts(item.name, item.level, item.certificate, item.score)
-                for item in resume.languages
-            ]
-        ),
-        "awards": _join_parts(
-            *[_join_parts(item.name, item.description) for item in resume.awards]
-        ),
-    }
-
-
-def _header_text(resume: ResumeContent) -> str:
-    """页头字段（姓名/求职意向/联系方式/主页）：不含 photo，且不参与分区归属判断。"""
-    return _join_parts(
-        resume.name,
-        resume.job_intent,
-        resume.city,
-        resume.phone,
-        resume.email,
-        resume.personal_website,
-        resume.github,
-    )
-
-
-def _resume_text(resume: ResumeContent) -> str:
-    """简历全量可检索文本（小写，排除 photo）。"""
-    sections = _section_texts(resume)
-    return f"{_header_text(resume)} {' '.join(sections.values())}".lower()
 
 
 def _jd_library_hits(jd_text: str, library: list[str]) -> list[str]:
@@ -409,7 +311,7 @@ def _target_keywords(jd_text: str, library: list[str]) -> list[str]:
     return target or library
 
 
-def _keyword_analysis(resume: ResumeContent, jd_text: str) -> KeywordAnalysis:
+def _keyword_analysis(resume: ResumeContent | dict, jd_text: str) -> KeywordAnalysis:
     """关键词命中清单 + 缺失清单 + 覆盖率。"""
     library = load_keywords()
     target = _target_keywords(jd_text, library)
@@ -428,7 +330,7 @@ def _keyword_analysis(resume: ResumeContent, jd_text: str) -> KeywordAnalysis:
                 "keyword": word,
                 "matched": hit,
                 "count": count,
-                "sections": [name for name in _SECTION_ORDER if needle in sections_lower[name]],
+                "sections": [name for name in sections_lower if needle in sections_lower[name]],
             }
         )
         (matched if hit else missing).append(word)

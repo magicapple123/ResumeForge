@@ -25,6 +25,14 @@ from app.services.profile.paper_projection import (
     normalize_for_match,
     project_carrier_text,
 )
+from tests.document_test_support import legacy_of
+
+
+def _legacy_content(out):
+    """投影 content 已是 v2 dict：本文件按 v1 分析口径断言（断言行为不变）。"""
+    out.content = legacy_of(out.content)
+    return out
+
 
 # v3 §5.7 的 13 行承载区映射：只有这 10 行有承载区，三行仅素材。
 EXPECTED_CARRIERS = {
@@ -202,12 +210,11 @@ def test_custom_section_text_field_priority_and_fallback() -> None:
     )
     assert paper_policy.custom_section_text_field(base) == "custom:s1.f1"
     assert paper_policy.custom_section_line_fields(base, "custom:s1.f1") == (other,)
-    # primary 指向已删除字段 → 回退第一个多行字段；都没有 → 无主文本
-    assert paper_policy.custom_section_text_field(replace(base, primary_field_id="deleted")) == (
-        "custom:s1.f2"
-    )
-    no_text = replace(base, primary_field_id=None, fields=(primary,))
+    # primary 指向已删除字段 → **不再**回退第一个多行字段（否则两条链语义分叉）
+    assert paper_policy.custom_section_text_field(replace(base, primary_field_id="deleted")) is None
+    no_text = replace(base, primary_field_id=None, fields=(primary, other))
     assert paper_policy.custom_section_text_field(no_text) is None
+    assert paper_policy.custom_section_line_fields(no_text, None) == (primary, other)
 
 
 def test_candidate_title_fields_cover_all_13_sections() -> None:
@@ -320,15 +327,17 @@ def test_project_carrier_text_orders_custom_fields_and_falls_back_unknown_enum()
 
 
 def test_candidates_and_source_layout_follow_global_order() -> None:
-    out = build_projection(
-        _profile(
-            _section("basic_info", _entry("b1", "basic_info", name="王小明")),
-            _section(
-                "educations",
-                _entry("e2", "educations", 1, school="某大学", major="计算机"),
-                _entry("e1", "educations", 2, school="某中学"),
-            ),
-            _section("projects", _entry("p1", "projects")),
+    out = _legacy_content(
+        build_projection(
+            _profile(
+                _section("basic_info", _entry("b1", "basic_info", name="王小明")),
+                _section(
+                    "educations",
+                    _entry("e2", "educations", 1, school="某大学", major="计算机"),
+                    _entry("e1", "educations", 2, school="某中学"),
+                ),
+                _section("projects", _entry("p1", "projects")),
+            )
         )
     )
     assert [item.section_key for item in out.candidates] == [
@@ -342,13 +351,14 @@ def test_candidates_and_source_layout_follow_global_order() -> None:
     assert (out.candidates[1].title, out.candidates[1].subtitle) == ("某大学", "计算机")
     assert out.candidates[3].title == "项目经历"  # 空条目也作为候选出现
     assert out.content.projects == []  # 但空条目不产生纸面占位
-    # paper_content_path：真的投影进 content 的条目才有位置（单例/空条目为 ""）
-    assert [item.paper_content_path for item in out.candidates] == [
-        "",
-        "education/0",
-        "education/1",
-        "",
-    ]
+    # Native candidate locations point to the exact projected row, in source order.
+    assert out.candidates[0].document_path == out.candidates[3].document_path == ""
+    for candidate in out.candidates[1:3]:
+        assert candidate.document_path == f"education.{candidate.document_entry['id']}"
+    assert [
+        next(i["value"] for i in row.document_entry["items"] if i.get("key") == "school")
+        for row in out.candidates[1:3]
+    ] == ["某大学", "某中学"]
     layout = [
         (item.section_key, item.form, item.entry_count, item.material_only)
         for item in out.source_layout
@@ -365,28 +375,30 @@ def test_snapshot_token_is_deterministic_and_revision_sensitive() -> None:
         _section("skills", _entry("s1", "skills", name="Python", level="熟练")),
         _section("languages", _entry("l1", "languages", language="英语")),
     )
-    first = build_projection(_profile(*sections, revision=3))
-    second = build_projection(_profile(*sections, revision=3))
+    first = _legacy_content(build_projection(_profile(*sections, revision=3)))
+    second = _legacy_content(build_projection(_profile(*sections, revision=3)))
     assert first.snapshot_token == second.snapshot_token and len(first.snapshot_token) == 64
     assert first.content.model_dump() == second.content.model_dump()
-    changed = build_projection(_profile(*sections, revision=4))
+    changed = _legacy_content(build_projection(_profile(*sections, revision=4)))
     assert changed.snapshot_token != first.snapshot_token
     assert (first.scope.workspace_revision, first.scope.group_name) == (3, "默认组")
 
 
 def test_credential_number_never_leaks_to_any_output() -> None:
-    out = build_projection(
-        _profile(
-            _section(
-                "credentials",
-                _entry(
-                    "c1",
+    out = _legacy_content(
+        build_projection(
+            _profile(
+                _section(
                     "credentials",
-                    title="PMP",
-                    status="有效",
-                    note="备注",
-                    credential_number="SECRET-123",
-                ),
+                    _entry(
+                        "c1",
+                        "credentials",
+                        title="PMP",
+                        status="有效",
+                        note="备注",
+                        credential_number="SECRET-123",
+                    ),
+                )
             )
         )
     )

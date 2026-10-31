@@ -19,6 +19,7 @@ from test_document_versions import (
     _resume,
     _save_content,
 )
+from tests.document_test_support import values
 
 # ===== A5：生成上下文快照随版本/变体继承（0061）=====
 # 快照是 server-owned 只读元数据：版本要冻结它、恢复要写回它、派生变体继承它，
@@ -132,7 +133,7 @@ def test_selective_sync_does_not_touch_variant_context_snapshot(client, db_sessi
     )
     assert response.status_code == 200, response.text
     detail = client.get(f"/api/resumes/{resume_id}/variants/{variant['id']}").json()
-    assert detail["content"]["summary"] == "版本 B"
+    assert "版本 B" in values(detail["content"])
     assert detail["context_snapshot"] == _SNAPSHOT
 
 

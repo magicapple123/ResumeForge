@@ -23,6 +23,10 @@ interface Props {
   framedUrl: string | null;
   /** 同上，给预加载层用。 */
   pendingUrl: string | null;
+  /** 可见层 iframe 的 key（含版本 + 缩放档位）：换 URL 时强制干净重建查看器（Q18）。 */
+  currentFrameKey: string;
+  /** 预加载层 iframe 的 key；没有 pending 时为 null。 */
+  pendingFrameKey: string | null;
   /** PDF 里**实际排出来**的页数（缺省按 1 页算，见宿主）。 */
   renderedPages: number;
   frameHeight: number;
@@ -33,6 +37,8 @@ interface Props {
   scalable: boolean;
   /** 请求在飞或新图还没顶上来——遮罩要与状态行同一口径。 */
   busy: boolean;
+  /** 可见层 `onLoad`：清掉「加载超时」兜底状态。 */
+  onCurrentLoad: () => void;
   onSwapIn: () => void;
 }
 
@@ -41,6 +47,8 @@ export default function ExactPreviewPaper({
   pending,
   framedUrl,
   pendingUrl,
+  currentFrameKey,
+  pendingFrameKey,
   renderedPages,
   frameHeight,
   paperHeight,
@@ -48,6 +56,7 @@ export default function ExactPreviewPaper({
   scale,
   scalable,
   busy,
+  onCurrentLoad,
   onSwapIn,
 }: Props) {
   useLocale();
@@ -66,15 +75,18 @@ export default function ExactPreviewPaper({
       >
         {/* 与导出的 PDF 是同一份字节；`#zoom=page-width` 是相框高度的契约（见 `withPageWidthZoom`）。 */}
         <iframe
+          key={`current:${currentFrameKey}`}
           src={framedUrl ?? withPageWidthZoom(current.url)}
           title={t("preview.exact.frameTitle")}
           className="exact-preview-frame"
           // 查看器内部那两条黑粗滚动条是它自己画的，外层 CSS 管不到，只能用这个旧属性关掉。
           scrolling="no"
+          onLoad={onCurrentLoad}
         />
         {pending ? (
           // 透明的预加载层：`onLoad` 前谁也看不见它，但浏览器已经在解析新 PDF。
           <iframe
+            key={`pending:${pendingFrameKey ?? "pending"}`}
             src={pendingUrl ?? withPageWidthZoom(pending.url)}
             title={t("preview.exact.pendingFrameTitle")}
             aria-hidden="true"

@@ -9,6 +9,7 @@ import json
 from pathlib import Path
 
 from app.api import share_packages as share_packages_api
+from app.services.resume.document_view import document_text, header_text
 from app.services.share_package import (
     share_package_or_none,
     verify_share_token,
@@ -51,9 +52,11 @@ def test_create_share_package_redacts_snapshot_and_writes_files(client):
     assert body["share_token"]
     assert body["permission"] == "read_only"
     # 只读快照已脱敏：姓名 / 手机 / 邮箱 / 公司都不出现真实值。
-    assert body["snapshot"]["name"] == "***"
-    assert body["snapshot"]["phone"] == "***"
-    assert body["snapshot"]["experience"][0]["company"] == "***"
+    assert body["snapshot"]["version"] == 2
+    assert header_text(body["snapshot"], "name") == "***"
+    assert header_text(body["snapshot"], "phone") == "***"
+    experience = next(s for s in body["snapshot"]["sections"] if s["key"] == "experience")
+    assert next(i for i in experience["entries"][0]["items"] if i.get("key") == "company")["value"] == "***"
     # 快照不含照片 data URL（与 export_json 同口径）。
     assert "photo" not in body["snapshot"]
 
@@ -333,7 +336,7 @@ def test_download_regenerates_missing_artifacts_from_the_snapshot(client):
     snapshot = json.loads(
         client.get(f"/api/share-packages/{share_id}/files/resume_snapshot.json").text
     )
-    assert snapshot["summary"] == "负责后端服务。"
+    assert "负责后端服务。" in document_text(snapshot)
     # 脱敏过的快照不会把姓名带回来——重新生成不能成为绕过脱敏的口子。
     assert "张三" not in html
 

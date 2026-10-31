@@ -5,6 +5,7 @@ import json
 
 from app.schemas.setting import LLMConfig
 from app.services.llm.base import BaseLLMProvider
+from tests.document_helpers import values
 
 
 def test_generate_requires_profile_and_llm(client):
@@ -92,6 +93,7 @@ def test_generate_saves_before_done_and_persists_resume(client, monkeypatch):
 
     persisted = client.get(f"/api/resumes/{saved_event['record_id']}")
     assert persisted.status_code == 200
-    assert persisted.json()["content"] == done_event["resume"]
+    # done 事件与落库是同一份文档的两次序列化（对象 id 各自生成），按内容值对拍。
+    assert values(persisted.json()["content"]) == values(done_event["resume"])
     assert persisted.json()["job_id"] == job["id"]
     assert persisted.json()["company"] == "示例公司"

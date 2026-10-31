@@ -17,6 +17,7 @@ import base64
 
 from app.models.profile import ProfilePhoto, UserProfile
 from app.services.profile import group_store
+from tests.document_test_support import field_value, header_value, values
 
 PROJECTION_API = "/api/profile/current/projection"
 ENTRIES_API = "/api/profile/sections/{section_key}/entries"
@@ -50,8 +51,8 @@ def test_projection_returns_scope_content_candidates_and_stable_token(client):
     assert first["scope"]["group_name"] == "默认组"
     assert first["scope"]["is_default"] is True
     assert first["scope"]["participating_keys"][0] == "basic_info"
-    assert first["content"]["name"] == "张三"
-    assert first["content"]["projects"][0]["name"] == "项目A"
+    assert header_value(first["content"], "name") == "张三"
+    assert field_value(first["content"], "name", section="projects") == "项目A"
     assert [item["section_key"] for item in first["source_layout"]][:2] == [
         "basic_info",
         "educations",
@@ -67,7 +68,8 @@ def test_projection_returns_scope_content_candidates_and_stable_token(client):
 
     second = _projection(client)
     assert second["snapshot_token"] == first["snapshot_token"]  # 同数据必须确定性
-    assert second["content"] == first["content"]
+    # v2 的 entry/item id 由服务端在每次转换时生成，不参与内容比较；比"内容值"同一口径。
+    assert values(second["content"]) == values(first["content"])
 
 
 def test_projection_scope_follows_current_group(client, db_session):
@@ -104,10 +106,10 @@ def test_projection_resolves_photo_resource_id_and_warns_when_unresolved(client,
         "basic_info",
         {"basic_info.name": "张三", "basic_info.photo": f"profile_photo:{photo.id}"},
     )
-    assert _projection(client)["content"]["photo"] == _PNG_DATA_URL
+    assert header_value(_projection(client)["content"], "photo") == _PNG_DATA_URL
 
     # 指向不存在的照片：纸面留空 + photo_unresolved，但整份投影响应仍可返回。
     _create_entry(client, "basic_info", {"basic_info.photo": "profile_photo:999999"})
     body = _projection(client)
-    assert body["content"]["photo"] == ""
+    assert header_value(body["content"], "photo") == ""
     assert any(warning["code"] == "photo_unresolved" for warning in body["warnings"])

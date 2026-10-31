@@ -5,7 +5,7 @@
  * 纯受控表单：保存/取消由宿主（单弹层）处理；名称 1–40 字符提示、提交中禁用。
  */
 import { Button, Checkbox, Input, Typography } from "antd";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { t } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
 import type { SectionOut } from "../profile-library/types";
@@ -23,11 +23,13 @@ export default function ProfileGroupForm({ group, sections, busy, onSubmit, onCa
   useLocale();
   const [name, setName] = useState(group.name);
   const [memberKeys, setMemberKeys] = useState<string[]>(group.participating_keys);
-
-  useEffect(() => {
+  // 换组时渲染期对齐（React 官方「props 变化时调整 state」模式），不在 effect 里同步 setState。
+  const [syncedGroup, setSyncedGroup] = useState(group);
+  if (group !== syncedGroup) {
+    setSyncedGroup(group);
     setName(group.name);
     setMemberKeys(group.participating_keys);
-  }, [group]);
+  }
 
   const submit = async () => {
     const trimmed = name.trim();

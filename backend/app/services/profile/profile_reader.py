@@ -36,7 +36,13 @@ from ...schemas.profile_projection import (
     ConsumedProfile,
     ConsumedSection,
 )
-from . import entry_store, field_preferences, legacy_status, workspace_bootstrap
+from . import (
+    entry_store,
+    field_placement,
+    field_preferences,
+    legacy_status,
+    workspace_bootstrap,
+)
 from .definition_catalog import SECTION_BY_KEY
 from .errors import Conflict
 from .group_scope import ProfileScope, all_sections_scope
@@ -89,6 +95,12 @@ def _custom_specs(
             webform_allowed=True,
             private=False,
             is_builtin=False,
+            # v2 纸面位置（0069）：消费层也要拿到"有效位置"，生成结果转 v2 与投影转 v2
+            # 才能与资料页显示一致；仅素材字段恒 hidden。
+            default_placement=field_placement.effective_placement(
+                field.field_type, field.default_placement, bool(field.material_only)
+            ),
+            material_only=bool(field.material_only),
         )
         for index, field in enumerate(
             field for field in custom_fields if field.field_id not in hidden

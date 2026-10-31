@@ -82,8 +82,8 @@ export const TEXT_LEVEL_LABELS: Record<TextLevelId, MessageKey> = {
 /**
  * 「作用范围」的界面取值（W3）：`object` = 整个条目（既有行为），其余是段落角色。
  *
- * 只开放条目内部实际存在的三个角色：条目标题 / 正文 / 说明。name、section_title、
- * emphasis 不在条目子树里，选它们只会写出一条永远匹配不到的覆盖。
+ * 只开放条目内部实际存在的三个角色：条目标题 / 正文 / 元信息（灰字）。name、
+ * section_title 不在条目子树里，选它们只会写出一条永远匹配不到的覆盖。
  */
 export type TextLevelScope = "object" | "entry_title" | "body" | "meta";
 
@@ -99,6 +99,18 @@ export const TEXT_LEVEL_SCOPE_LABELS: Record<TextLevelScope, MessageKey> = {
   entry_title: "typography.level.scope.entry_title",
   body: "typography.level.scope.body",
   meta: "typography.level.scope.meta",
+};
+
+/**
+ * 每个作用范围的一句说明（Q13）：段控下方常驻，避免"作用范围"只是个标签。
+ *
+ * 文案只说会影响哪里，不写操作步骤（不写"点这里"）；四个键与 TEXT_LEVEL_SCOPES 一一对应。
+ */
+export const TEXT_LEVEL_SCOPE_HINTS: Record<TextLevelScope, MessageKey> = {
+  object: "typography.level.scopeHint.object",
+  entry_title: "typography.level.scopeHint.entry_title",
+  body: "typography.level.scopeHint.body",
+  meta: "typography.level.scopeHint.meta",
 };
 
 /** 作用范围 → 后端角色；`null` = 整个条目（写 `objects` 域）。 */

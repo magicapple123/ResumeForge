@@ -102,7 +102,7 @@ def test_en_uses_halfwidth_separators_and_level_brackets():
     raw_html = render_html(_separator_sample(), language="en-US")
     assert "数据结构, 操作系统" in _without_tags(raw_html)
 
-    # 性别括号（只出现在 Markdown 链路）跟着语言换成半角 + 前导空格。
+    # 页眉 gender 保持 v1 显示口径：英文半角括号 + 前导空格。
     assert "林致远 (男)" in products["md"]
 
 
@@ -121,4 +121,5 @@ def test_zh_keeps_the_fullwidth_separator_and_brackets():
         assert "Python、MySQL" in compact, f"{fmt} 的技术栈分隔符变了"
         assert "Python（Expert）" in compact, f"{fmt} 的等级括号变了"
 
+    # 页眉 gender 保持 v1 显示口径：中文全角括号。
     assert "林致远（男）" in products["md"]

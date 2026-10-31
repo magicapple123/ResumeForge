@@ -17,6 +17,7 @@ import base64
 
 from app.models.profile_usage_snapshot import ProfileUsageSnapshot
 from app.models.resume import ResumeRecord
+from tests.document_test_support import entries_of, field_value, header_value
 
 PROJECTION_API = "/api/profile/current/projection"
 MANUAL_API = "/api/resumes/manual"
@@ -102,7 +103,7 @@ def test_create_without_profile_context_keeps_old_behavior(client, db_session) -
     response = _create(client)
     assert response.status_code == 201, response.text
     body = response.json()
-    assert body["source"] == "manual" and body["content"]["name"] == "张三"
+    assert body["source"] == "manual" and header_value(body["content"], "name") == "张三"
     assert body["id"] > 0
     assert _snapshot_rows(db_session) == []
     # 同一份简历仍可被列表读到（旧流程的提交点没变）
@@ -157,7 +158,7 @@ def test_snapshot_layout_is_frozen_and_not_rewritten_later(client, db_session) -
     # 简历本身也不因之后的资料变化而改变
     detail = client.get(f"/api/resumes/{resume_id}")
     assert detail.status_code == 200
-    assert detail.json()["content"]["projects"] == []
+    assert entries_of(detail.json()["content"], "projects") == []
 
 
 def test_stale_token_returns_409_and_writes_nothing(client, db_session) -> None:
@@ -223,9 +224,9 @@ def test_snapshot_participating_follows_current_group_and_content_is_not_filtere
     assert response.status_code == 201, response.text
     saved = response.json()["content"]
     # 创建不按当前组裁剪正文：不参与分区的条目原样保存（R-34）
-    assert saved["experience"][0]["company"] == "某公司"
-    assert saved["projects"][0]["name"] == "项目"
-    assert saved["skills"][0]["name"] == "Python"
+    assert field_value(saved, "company", section="experience") == "某公司"
+    assert field_value(saved, "name", section="projects") == "项目"
+    assert field_value(saved, "name", section="skills") == "Python"
 
     snapshot = _snapshot_rows(db_session)[0]
     assert [item["key"] for item in snapshot.participating] == [
@@ -294,8 +295,8 @@ def test_snapshot_token_accounts_for_resolved_photo(client) -> None:
     assert saved.status_code in (200, 201), saved.text
 
     projection = _projection(client)
-    assert projection["content"]["photo"] == _png_data_url()  # 端点已解析成 data URL
+    assert header_value(projection["content"], "photo") == _png_data_url()  # 端点已解析成 data URL
     content = {**_content(), "photo": _png_data_url()}
     response = _create(client, content=content, context=_profile_context(projection))
     assert response.status_code == 201, response.text
-    assert response.json()["content"]["photo"] == _png_data_url()
+    assert header_value(response.json()["content"], "photo") == _png_data_url()

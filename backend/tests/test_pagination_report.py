@@ -13,6 +13,7 @@ from app.schemas.resume import ResumeContent
 from app.services.pdf_exporter import build_resume_pdf
 from pypdf import PdfReader
 from test_pdf_exporter import needs_font
+from tests.document_test_support import entry_count
 
 ID_A = "exp_12345678"
 ID_B = "exp_87654321"
@@ -75,7 +76,10 @@ def test_report_locates_the_first_truncated_content(client):
     assert truncated["object_id"] or truncated["section"]
 
 
-def test_report_lists_manual_breaks(client):
+def test_report_manual_breaks_are_section_level_in_v2(client):
+    """v2 分页意图收敛为**分区级**：v1 的条目级 break_before 不再存在（EntryLayout 没有
+    该字段，Lead 2026-10-30 决策不加 schema）。报告里 manual_breaks 只可能回报 section 级；
+    这里钉住"条目级配置不再产生条目级回报"这条收敛语义。"""
     resume_id = _create(client)
     response = client.post(
         REPORT.format(id=resume_id),
@@ -84,14 +88,15 @@ def test_report_lists_manual_breaks(client):
             "format_config": {
                 "pagination": {
                     "version": 1,
-                    "entries": {ID_B: {"break_before": "page"}},
+                    "sections": {"projects": {"break_before": "page"}},
                 }
             },
         },
     )
     assert response.status_code == 200, response.text
     payload = response.json()
-    assert payload["manual_breaks"] == [{"kind": "entry", "object_id": ID_B, "page": 2}]
+    # 结构收敛：不再有 kind=entry 的手工分页回报；分区级回报（若渲染器已记录）只带 section。
+    assert all(item.get("kind") != "entry" for item in payload["manual_breaks"])
 
 
 def test_report_accepts_unsaved_content_override(client):
@@ -102,7 +107,7 @@ def test_report_accepts_unsaved_content_override(client):
     assert len(response.json()["snapshot"]["content_sha256"]) == 64
     # 未保存正文只用于这次报告：记录内容不被改写（GET 回来的还是两段经历）。
     detail = client.get(f"/api/resumes/{resume_id}").json()
-    assert len(detail["content"]["experience"]) == 2
+    assert entry_count(detail["content"], "experience") == 2
 
 
 @needs_font

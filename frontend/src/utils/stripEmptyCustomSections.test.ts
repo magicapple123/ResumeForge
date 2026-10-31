@@ -6,9 +6,32 @@
  * 前端必须在提交前剔除，否则保存必然 422。
  */
 import { describe, expect, it } from "vitest";
-import type { ResumeCustomSection } from "../types";
-import { makeResumeContent } from "../components/ResumeEditorModal.testkit";
+import type { ResumeContent, ResumeCustomSection } from "../types";
 import { stripEmptyCustomSections } from "./stripEmptyCustomSections";
+
+/** 一份空白 v1 内容（只补本次用例关心的 custom_sections）。 */
+function makeResumeContent(overrides: Partial<ResumeContent> = {}): ResumeContent {
+  return {
+    photo: "",
+    name: "",
+    gender: "",
+    birth_year: "",
+    phone: "",
+    email: "",
+    city: "",
+    personal_website: "",
+    github: "",
+    job_intent: "",
+    summary: "",
+    education: [],
+    experience: [],
+    campus_experience: [],
+    projects: [],
+    skills: [],
+    awards: [],
+    ...overrides,
+  };
+}
 
 function section(entries: ResumeCustomSection["entries"]): ResumeCustomSection {
   return { key: "custom:22333", title: "22333", entries };

@@ -227,7 +227,7 @@ export default function AppHeaderContext({ beforeAvatar }: Props = {}) {
     } finally {
       setCreating(false);
     }
-  }, [createName, creating, message, modal]);
+  }, [createName, creating, message, modal, scheduleReload]);
 
   const datasetMenuItems = useMemo<MenuProps["items"]>(() => {
     // t() 是模块级的，不会自己触发重算；语言变了要重新生成菜单文案。

@@ -19,11 +19,11 @@ from sqlalchemy.orm import Session
 from ..database import get_db
 from ..models.job import Job
 from ..schemas.interview import InterviewAnswerReviewOut, InterviewAnswerReviewRequest
-from ..schemas.resume import ResumeContent
 from ..services.interview import interview_questions as interview_questions_service
 from ..services.llm.base import LLMError
 from ..services.profile.profile_relevance import build_job_prompt_text
-from ..services.resume.resume_suggestions import serialize_resume_prompt_data
+from ..services.resume import document_io
+from ..services.resume.document_view import document_text
 
 # 通过模块访问而不是 `from .interview import _require_provider`：测试用 monkeypatch 把
 # `app.api.interview._require_provider` 换成了假 provider（"monkeypatch 钉死端点编排"
@@ -52,9 +52,7 @@ async def review_question_answer(
         record = interview_api._resume_record_or_none(db, payload.resume_id)
         if record is None:
             raise HTTPException(status_code=404, detail="简历记录不存在或已被删除")
-        resume_text = serialize_resume_prompt_data(
-            ResumeContent.model_validate(record.content or {})
-        )
+        resume_text = document_text(document_io.document_for_record(db, record)[0])
 
     db.close()
     try:

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * 版式控件：模板"选中即见预览"与板块顺序。
+ * 版式控件：模板"选中即见预览"与结构页签。
  *
  * 两块都是**看不见的错最容易溜过去**的地方：模板入口合并后如果只是换了个名字、
  * 预览没真的渲染出来，用户还是盲选；板块顺序如果只改内存不落库，用户下次打开
@@ -85,195 +85,21 @@ describe("ResumeLayoutControls · 选模板即见预览（C2）", () => {
   });
 });
 
-describe("ResumeLayoutControls · 生成时默认顺序跟随「我的资料」（R6）", () => {
-  /** 资料页把「项目经历」拖到最前的那种顺序（与内置默认不同）。 */
-  const PROFILE_ORDER = [
-    "projects",
-    "education",
-    "summary",
-    "experience",
-    "campus_experience",
-    "skills",
-    "awards",
-  ];
-
-  function mockCatalog(profileOrder: string[]) {
-    apiMocks.fetchResumeTemplates.mockResolvedValue({
-      ...TEMPLATE_CATALOG,
-      profile_section_order: profileOrder,
-    });
-  }
-
-  async function openOrderPanel() {
-    fireEvent.click(await screen.findByRole("button", { name: "调整简历板块顺序" }));
-    return screen.findByRole("list", { name: "简历板块顺序" });
-  }
-
-  it("preferProfileOrder 时默认顺序取资料顺序", async () => {
-    mockCatalog(PROFILE_ORDER);
-    renderControls({ preferProfileOrder: true });
-
-    const list = await openOrderPanel();
-    const labels = Array.from(list.querySelectorAll(".resume-section-order-label")).map(
-      (node) => node.textContent,
-    );
-    expect(labels[0]).toBe("项目经历");
-    // 跟随资料顺序时，没调过就不该标成"已调整"。
-    expect(screen.getByRole("button", { name: "调整简历板块顺序" })).not.toHaveTextContent(
-      "顺序·已调整",
-    );
-  });
-
-  it("不传 preferProfileOrder 时仍用内置默认（老简历外观不追溯改变）", async () => {
-    mockCatalog(PROFILE_ORDER);
+describe("ResumeLayoutControls · v1 板块顺序入口已删除（v2 结构由结构页签负责）", () => {
+  it("不再渲染「调整简历板块顺序」按钮", async () => {
     renderControls();
-
-    const list = await openOrderPanel();
-    const labels = Array.from(list.querySelectorAll(".resume-section-order-label")).map(
-      (node) => node.textContent,
-    );
-    expect(labels[0]).toBe("教育经历");
+    // 等目录就绪（模板入口是控件组渲染完成的标志）。
+    await screen.findByRole("button", { name: "选择简历模板并预览效果" });
+    expect(
+      screen.queryByRole("button", { name: t("sections.templateControls.orderTriggerAriaLabel") }),
+    ).toBeNull();
   });
 
-  it("生成场景的「恢复默认」写回资料顺序", async () => {
-    mockCatalog(PROFILE_ORDER);
-    const onChange = renderControls({
-      preferProfileOrder: true,
-      layout: {
-        ...DEFAULT_LAYOUT,
-        format_config: {
-          accent: "#123456",
-          section_order: [
-            "skills",
-            "awards",
-            "summary",
-            "education",
-            "experience",
-            "campus_experience",
-            "projects",
-          ],
-        },
-      },
-    });
-
-    await openOrderPanel();
-    fireEvent.click(screen.getByRole("button", { name: "恢复默认" }));
-
-    expect(onChange).toHaveBeenCalledTimes(1);
-    const nextLayout = onChange.mock.calls[0][0] as ResumeLayout;
-    // 资料顺序与内置默认不同 → 显式写进 format_config，用户才真的回到他看到的那一版。
-    expect(nextLayout.format_config?.section_order).toEqual(PROFILE_ORDER);
-    // 其它覆盖不被这次操作清掉。
-    expect(nextLayout.format_config).toMatchObject({ accent: "#123456" });
-  });
-
-  it("资料顺序等于内置默认时「恢复默认」不写 section_order", async () => {
-    mockCatalog(TEMPLATE_CATALOG.default_section_order);
-    const onChange = renderControls({
-      preferProfileOrder: true,
-      layout: {
-        ...DEFAULT_LAYOUT,
-        format_config: {
-          section_order: [
-            "projects",
-            "summary",
-            "education",
-            "experience",
-            "campus_experience",
-            "skills",
-            "awards",
-          ],
-        },
-      },
-    });
-
-    await openOrderPanel();
-    fireEvent.click(screen.getByRole("button", { name: "恢复默认" }));
-
-    const nextLayout = onChange.mock.calls[0][0] as ResumeLayout;
-    // "没调过"与"调成和默认一样"在存储里应当是同一种形态。
-    expect(nextLayout.format_config).not.toHaveProperty("section_order");
-  });
-});
-
-describe("ResumeLayoutControls · 板块顺序", () => {
-  async function openOrderPanel() {
-    fireEvent.click(await screen.findByRole("button", { name: "调整简历板块顺序" }));
-    const list = await screen.findByRole("list", { name: "简历板块顺序" });
-    return list;
-  }
-
-  it("弹层里按当前顺序列出全部分区", async () => {
+  it("默认仍渲染最大篇幅（其它宿主不变），制作台改用「版面」组去重", async () => {
     renderControls();
-    const list = await openOrderPanel();
-    const labels = Array.from(list.querySelectorAll(".resume-section-order-label")).map(
-      (node) => node.textContent,
-    );
-    expect(labels).toEqual([
-      "教育经历",
-      "实习/工作经历",
-      "项目经历",
-      "专业技能",
-      "校园经历",
-      "荣誉奖项",
-      "个人总结",
-    ]);
-  });
-
-  it("上移会以完整排列写入 format_config.section_order", async () => {
-    const onChange = renderControls();
-    await openOrderPanel();
-
-    // 把「项目经历」（默认第 3 位）上移一格。
-    fireEvent.click(screen.getByRole("button", { name: "把项目经历上移" }));
-
-    expect(onChange).toHaveBeenCalledTimes(1);
-    const nextLayout = onChange.mock.calls[0][0] as ResumeLayout;
-    expect(nextLayout.format_config?.section_order).toEqual([
-      "education",
-      "projects",
-      "experience",
-      "skills",
-      "campus_experience",
-      "awards",
-      "summary",
-    ]);
-    // 其余版式覆盖不被这次操作清掉。
-    expect(nextLayout.template).toBe("classic");
-  });
-
-  it("已调整时按钮会标出来，「恢复默认」清掉 section_order 但保留其它覆盖", async () => {
-    const onChange = renderControls({
-      layout: {
-        ...DEFAULT_LAYOUT,
-        format_config: {
-          accent: "#123456",
-          section_order: [
-            "projects",
-            "summary",
-            "education",
-            "experience",
-            "campus_experience",
-            "skills",
-            "awards",
-          ],
-        },
-      },
-    });
-
-    expect(await screen.findByRole("button", { name: "调整简历板块顺序" })).toHaveTextContent(
-      "顺序·已调整",
-    );
-
-    await openOrderPanel();
-    // 精确匹配：工具条上还有一个「恢复默认字号」按钮，用正则会撞车。
-    fireEvent.click(screen.getByRole("button", { name: "恢复默认" }));
-
-    expect(onChange).toHaveBeenCalledTimes(1);
-    const nextLayout = onChange.mock.calls[0][0] as ResumeLayout;
-    expect(nextLayout.format_config).not.toHaveProperty("section_order");
-    // accent 是用户自己的覆盖，不动它。
-    expect(nextLayout.format_config).toMatchObject({ accent: "#123456" });
+    expect(
+      await screen.findByText(t("sections.templateControls.pageLimitLabel")),
+    ).toBeInTheDocument();
   });
 });
 

@@ -97,8 +97,12 @@ def _section_title(item: object, section: str) -> str:
     return str(value or "未命名").strip()
 
 
-def _descriptive_points(resume: ResumeContent) -> list[tuple[str, str]]:
+def _descriptive_points(resume: ResumeContent | dict) -> list[tuple[str, str]]:
     """收集会被写进简历的描述性文本，返回 (位置, 文本) 列表，顺序稳定。"""
+    if isinstance(resume, dict):
+        from .document_analysis import body_points
+
+        return body_points(resume)
     points: list[tuple[str, str]] = []
     if resume.summary and resume.summary.strip():
         points.append(("个人总结", resume.summary.strip()))
@@ -114,13 +118,17 @@ def _descriptive_points(resume: ResumeContent) -> list[tuple[str, str]]:
     return points
 
 
-def _resume_full_text(resume: ResumeContent) -> str:
+def _resume_full_text(resume: ResumeContent | dict) -> str:
     """把简历序列化成可全文检索的文本；排除 photo（base64 会制造假命中）。
 
     **只限本地使用**（敏感词/夸大/合规扫描与台账关联匹配都要完整文本）；
     远端增强的出站输入一律走 :func:`resume_risk_outbound._outbound_resume_text`
     的最小化脱敏口径。
     """
+    if isinstance(resume, dict):
+        from .document_view import document_text
+
+        return document_text(resume)
     return json.dumps(resume.model_dump(exclude={"photo"}), ensure_ascii=False)
 
 
@@ -128,7 +136,7 @@ def _normalize(text: str) -> str:
     return re.sub(r"\s+", " ", text).strip().lower()
 
 
-def _duplicate_risks(resume: ResumeContent, notes: list[str] | None = None) -> list[RiskPoint]:
+def _duplicate_risks(resume: ResumeContent | dict, notes: list[str] | None = None) -> list[RiskPoint]:
     """查重：完全相同的要点只报一次；相似比较只在精确去重后的唯一文本间做。
 
     预算三重上限（超限截断并写入 ``notes`` 注明）：候选条数、比较次数、告警条数。
@@ -211,7 +219,7 @@ def _duplicate_risks(resume: ResumeContent, notes: list[str] | None = None) -> l
     return risks
 
 
-def _sensitive_risks(resume: ResumeContent) -> list[RiskPoint]:
+def _sensitive_risks(resume: ResumeContent | dict) -> list[RiskPoint]:
     """敏感词：数字规律类（身份证/银行卡/出生日期）与关键词类（住址/薪资等）。"""
     text = _resume_full_text(resume)
     risks: list[RiskPoint] = []
@@ -246,7 +254,7 @@ def _sensitive_risks(resume: ResumeContent) -> list[RiskPoint]:
     return risks
 
 
-def _exaggeration_risks(resume: ResumeContent) -> list[RiskPoint]:
+def _exaggeration_risks(resume: ResumeContent | dict) -> list[RiskPoint]:
     """夸大：绝对化表述与 ≥100% 的量化。"""
     text = _resume_full_text(resume)
     risks: list[RiskPoint] = []
@@ -295,7 +303,7 @@ def _claim_follow_up(claim: ClaimRecord) -> list[str]:
     return items
 
 
-def _deep_dive_risks(resume: ResumeContent, claims: list[ClaimRecord]) -> list[RiskPoint]:
+def _deep_dive_risks(resume: ResumeContent | dict, claims: list[ClaimRecord]) -> list[RiskPoint]:
     """深挖风险点：正文强主张措辞 + 事实台账 LED/OWNER 强主张联动（只读不写）。"""
     risks: list[RiskPoint] = []
     for location, text in _descriptive_points(resume):
@@ -334,7 +342,7 @@ def _deep_dive_risks(resume: ResumeContent, claims: list[ClaimRecord]) -> list[R
     return risks
 
 
-def _compliance_risks(resume: ResumeContent) -> list[RiskPoint]:
+def _compliance_risks(resume: ResumeContent | dict) -> list[RiskPoint]:
     """合规：保密 / 未公开 / 涉密等 NDA 相关表述。"""
     text = _resume_full_text(resume)
     risks: list[RiskPoint] = []
@@ -355,7 +363,7 @@ def _compliance_risks(resume: ResumeContent) -> list[RiskPoint]:
 
 
 def scan_local(
-    resume: ResumeContent,
+    resume: ResumeContent | dict,
     claims: list[ClaimRecord],
     *,
     notes: list[str] | None = None,

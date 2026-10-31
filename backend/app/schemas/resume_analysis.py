@@ -3,7 +3,7 @@
 
 拆分动机：``schemas/resume.py`` 已贴住 500 行预算（零豁免），而这一组模型在依赖上
 是**自洽的最小闭包**——它只用到 ``Literal`` / ``pydantic`` 与版式参数常量
-（``MAX_RESUME_PAGES`` / ``ResumeFontScale``，同在 ``schemas/resume_generation.py``），
+（``LONG_CV_MAX_PAGES`` / ``ResumeFontScale``，同在 ``schemas/resume_generation.py``），
 不引用任何简历内容结构，因此可以整组搬走。
 
 依赖方向约束：**本模块不 import ``schemas.resume``**（否则循环导入）。
@@ -17,7 +17,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from .resume_generation import MAX_RESUME_PAGES, ResumeFontScale
+from .resume_generation import LONG_CV_MAX_PAGES, ResumeFontScale
 
 
 class ResumeLayoutMeasure(BaseModel):
@@ -29,7 +29,11 @@ class ResumeLayoutMeasure(BaseModel):
     used_height: float = Field(ge=0)
     # 一页里正文可用的高度：页高减去上下页边距。
     page_content_height: float = Field(gt=0)
-    page_limit: int = Field(default=1, ge=1, le=MAX_RESUME_PAGES)
+    # 上限按**两种文档模式里最大的那个**（长 CV 1–10）取，不是普通模式的 3：
+    # 诊断请求只是"把屏幕上这一版量到的高度交回来算结论"，page_limit 是客户端当前
+    # 草稿的页数上限。普通模式的 1–3 已由 ``mode_page_limit`` 在保存/渲染路径夹紧，
+    # 这里再用 3 校验只会让长 CV（用户设置 5/10 页）的每次诊断都 422（2026-10-31 Q19）。
+    page_limit: int = Field(default=1, ge=1, le=LONG_CV_MAX_PAGES)
 
 
 class LayoutSuggestionOut(BaseModel):

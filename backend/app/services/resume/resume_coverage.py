@@ -22,6 +22,7 @@ selection_data) 入口保留给既有单元测试，行为不变。
 
 from __future__ import annotations
 
+import difflib
 import json
 from collections.abc import Mapping, Sequence
 from typing import Any
@@ -29,6 +30,8 @@ from typing import Any
 from ...schemas.claim import ClaimDigestOut
 from ...schemas.profile_projection import ConsumedProfile
 from ...schemas.resume import ResumeContent
+from ..profile.paper_projection import project_paper_content
+from .resume_grounding_helpers import _similar, _similar_skill
 
 # 简历字段 ↔ 资料分区的对应关系：
 #   (简历上的字段, 资料里的分区, 身份字段, 用户看得见的分区名)
@@ -161,6 +164,128 @@ def find_unwritten_details(
         )
     return details
 
+
+
+
+_LIST_FIELD_LABELS: tuple[tuple[tuple[str, str], str], ...] = (
+    (("projects", "tech_stack"), "技术栈"),
+    (("projects", "highlights"), "项目亮点"),
+    (("research_projects", "outcomes"), "科研成果"),
+)
+
+
+def _normalized_values(raw: Any) -> list[str]:
+    if isinstance(raw, (list, tuple)):
+        values = [str(value or "").strip() for value in raw]
+    else:
+        values = [
+            part.strip()
+            for line in str(raw or "").splitlines()
+            for part in line.split("，")
+        ]
+    return [value for value in values if value]
+
+
+def _normalize_field_text(value: Any) -> str:
+    return "".join(str(value or "").split()).casefold()
+
+
+def find_unwritten_field_details(
+    resume: ResumeContent, consumed: ConsumedProfile
+) -> list[dict[str, Any]]:
+    """R1-G：条目内字段/技能/总结层面“资料里有、简历里没写”的结构化明细。
+
+    与 find_unwritten_details 互补：后者按**条目**比对（整条没写），这里补上
+    “条目在、但字段值被丢掉”（项目 tech_stack/亮点、技能条目、个人总结只写一部分）
+    的情况，供 coverage_notes 如实告知用户。只做确定性集合比对，不猜语义。
+    """
+    fallback = project_paper_content(consumed)
+    details: list[dict[str, Any]] = []
+    # 1) 条目内列表字段：按身份匹配到同一条目后比较集合。
+    for (section_key, field), label in _LIST_FIELD_LABELS:
+        resume_field = "projects" if section_key == "projects" else "research_projects"
+        identity_attr = "name"
+        written_entries = list(getattr(resume, resume_field, None) or [])
+        fallback_entries = list(getattr(fallback, resume_field, None) or [])
+        for source_entry in fallback_entries:
+            name = str(getattr(source_entry, identity_attr, "") or "").strip()
+            if not name:
+                continue
+            target = next(
+                (
+                    item
+                    for item in written_entries
+                    if _similar(str(getattr(item, identity_attr, "") or ""), name)
+                ),
+                None,
+            )
+            if target is None:
+                continue  # 整条没写 → 已由 find_unwritten_details 报过
+            source_values = _normalized_values(getattr(source_entry, field, None))
+            written_values = [
+                _normalize_field_text(value)
+                for value in _normalized_values(getattr(target, field, None))
+            ]
+            missing = [
+                value
+                for value in source_values
+                if _normalize_field_text(value) not in written_values
+            ]
+            if not missing:
+                continue
+            prefix = "项目" if section_key == "projects" else "科研项目"
+            details.append(
+                {
+                    "section": section_key,
+                    "section_label": f"{prefix}「{name}」的{label}",
+                    "names": missing,
+                    "filtered": [],
+                    "model_omitted": missing,
+                    "total": len(missing),
+                }
+            )
+    # 2) 技能条目：整条没写的技能单列（说明是模型取舍，不是资料里没有）。
+    written_skills = [
+        str(skill.name or "").strip()
+        for skill in resume.skills
+        if str(skill.name or "").strip()
+    ]
+    missing_skills = [
+        str(skill.name or "").strip()
+        for skill in fallback.skills
+        if str(skill.name or "").strip()
+        and not any(_similar_skill(str(skill.name or ""), name) for name in written_skills)
+    ]
+    if missing_skills:
+        details.append(
+            {
+                "section": "skills",
+                "section_label": "专业技能",
+                "names": missing_skills,
+                "filtered": [],
+                "model_omitted": missing_skills,
+                "total": len(missing_skills),
+            }
+        )
+    # 3) 个人总结：资料有总结、简历只写一小部分时如实提示（不要求逐字）。
+    source_summary = str(fallback.summary or "").strip()
+    written_summary = str(resume.summary or "").strip()
+    if source_summary:
+        ratio = difflib.SequenceMatcher(
+            None, _normalize_field_text(written_summary), _normalize_field_text(source_summary)
+        ).ratio()
+        if ratio < 0.5:
+            details.append(
+                {
+                    "section": "summary",
+                    "section_label": "个人总结",
+                    "names": [f"个人总结（与资料原文相似度 {ratio:.0%}）"],
+                    "filtered": [],
+                    "model_omitted": ["个人总结"],
+                    "total": 1,
+                }
+            )
+    return details
 
 def all_entry_names(entry_names: dict[str, tuple[str, ...]]) -> set[str]:
     """把各分区的身份名合并成一个集合（给台账主张的包含判断用）。"""

@@ -234,9 +234,8 @@ def replay_delivery_export(delivery: ResumeDeliveryRecord) -> ExportArtifact:
         # 同 freeze_delivery：旧快照缺 language 就回落 zh-CN，那是保真而非降级。
         language=context_data.get("language") or DEFAULT_RESUME_LANGUAGE,
     )
-    from ...schemas.resume import ResumeContent
-
-    resume = ResumeContent.model_validate(delivery.content)
+    # T4b：存档 content 就是 v2 文档，导出管线（build_export）v2 直通，不再折 v1 分析视图。
+    resume = delivery.content
     # 重放不做脱敏：存档 content 已经是"实际导出用的那一份"（脱敏导出存脱敏内容），
     # 再脱敏一次会双重遮罩。请求参数里的 redact 仅作存档备查。
     return build_export(

@@ -5,31 +5,13 @@
  */
 import { describe, expect, it } from "vitest";
 import { ApiError } from "../../api/apiError";
-import { ensureIds } from "../resume-document/identity";
-import type { ResumeContent } from "../../types/resume";
+import { defaultFieldItem, makeResumeDocument } from "../../test/documentHarness";
 import { createMockExportDeliveryApi, toRevisionChangedError } from "./exportApi";
 import { defaultPresetConfig } from "./types";
 
-function content(): ResumeContent {
-  return ensureIds({
-    photo: "",
-    name: "张三",
-    gender: "",
-    birth_year: "",
-    phone: "13800000000",
-    email: "",
-    city: "",
-    personal_website: "",
-    github: "",
-    job_intent: "",
-    summary: "",
-    education: [],
-    experience: [],
-    campus_experience: [],
-    projects: [],
-    skills: [],
-    awards: [],
-  });
+/** v2 文档：页眉带姓名与联系方式（D20 摘要的取值口径）。 */
+function content() {
+  return makeResumeDocument();
 }
 
 describe("mock 导出适配器", () => {
@@ -66,10 +48,16 @@ describe("mock 导出适配器", () => {
   });
 
   it("核对摘要来自当前内容（隐藏/联系方式/目标）", async () => {
-    const hiddenContent: ResumeContent = {
-      ...content(),
-      skills: [{ name: "Python", level: "熟练", hidden: true }],
-    };
+    // v2 的"隐藏"是 item 级：placement=hidden 的字段与 hidden 的文本块都不上纸面。
+    const hiddenContent = content();
+    hiddenContent.sections[0].entries[0].items.push(
+      defaultFieldItem({
+        id: "hidden_gpa_01",
+        key: "gpa",
+        value: "3.8",
+        placement: "hidden",
+      }),
+    );
     const api = createMockExportDeliveryApi({
       content: hiddenContent,
       company: "甲公司",

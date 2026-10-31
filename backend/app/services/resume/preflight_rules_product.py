@@ -33,8 +33,31 @@ _MAX_EVIDENCE = 20
 _MAX_PAGE_CHARS = 50_000
 
 
-def _hidden_lines(content: ResumeContent) -> list[str]:
+def _hidden_lines(content: ResumeContent | dict) -> list[str]:
     lines: list[str] = []
+    if isinstance(content, dict):
+        from .document_paths import item_value
+        from .document_view import header_items, iter_entries
+
+        for item in header_items(content):
+            if item.get("placement") == "hidden" and item.get("key") != "photo":
+                lines.append(str(item.get("value") or ""))
+        for _key, entry in iter_entries(content):
+            for item in entry.get("items") or []:
+                hidden = (
+                    entry.get("hidden") or item.get("hidden") or item.get("placement") == "hidden"
+                )
+                if hidden:
+                    value = item_value(item)
+                    if item.get("kind") == "authors":
+                        lines.extend(str(author.get("name") or "") for author in value)
+                    elif isinstance(value, list):
+                        lines.extend(str(v) for v in value)
+                    else:
+                        lines.append(str(value))
+                if item.get("kind") == "list":
+                    lines.extend(str(v) for v in item.get("hidden_values") or [])
+        return lines
     # 从正文分区表推导条目数组，**不要再手写第二份栏目清单**：W14 科研三栏目与
     # A4 资格证照都在 DEFAULT_SECTION_ORDER 里登记过，手写清单会让"隐藏的科研/证照
     # 条目泄漏到产物"这类 blocker 静默漏检。
@@ -57,7 +80,9 @@ def _hidden_lines(content: ResumeContent) -> list[str]:
     return lines
 
 
-def _hidden_leak_issue(content: ResumeContent, extracted_tokens: set[str]) -> CheckIssue | None:
+def _hidden_leak_issue(
+    content: ResumeContent | dict, extracted_tokens: set[str]
+) -> CheckIssue | None:
     hidden_tokens = [token for line in _hidden_lines(content) for token in tokens_of(line)]
     leaked = [token for token in hidden_tokens if token in extracted_tokens]
     if not leaked:
@@ -139,7 +164,7 @@ def _text_diff_issues(
 
 
 def product_issues(
-    content: ResumeContent,
+    content: ResumeContent | dict,
     *,
     template: str,
     page_limit: int,

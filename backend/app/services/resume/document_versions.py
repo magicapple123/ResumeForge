@@ -31,6 +31,7 @@ from ...models.versions import (
     ResumeVersion,
 )
 from ...schemas.resume_generation import mode_page_limit
+from . import document_io
 from .document_save import _conditional_update
 from .resume_delivery import canonical_content_sha256, default_render_context
 from .resume_diff import build_resume_diff
@@ -67,6 +68,22 @@ def params_sha256(context: dict[str, Any] | None) -> str:
 
 def _snapshot_content(content: dict[str, Any] | None) -> dict[str, Any]:
     return copy.deepcopy(content or {})
+
+
+def document_content(
+    content: dict[str, Any] | None, render_context: dict[str, Any] | None
+) -> dict[str, Any]:
+    """旧版本快照的 content 可能是 v1：读侧统一收口为 v2（不写库、幂等）。
+
+    format_config 取自该版本自己的排版快照（旧 field_layout 在转换时迁移）；自定义字段
+    提示在无 db 的只读路径不提供——转换器对"短标签+冒号"行有保守正则兜底。
+    """
+    context = render_context or {}
+    return document_io.ensure_document_version(
+        content or {},
+        language=context.get("language") or None,
+        format_config=context.get("format_config") or {},
+    )
 
 
 def _latest_version(db: Session, resume_id: int) -> ResumeVersion | None:
@@ -108,13 +125,14 @@ def _auto_change_summary(
     previous = parent or _latest_version(db, resume_id)
     if previous is None:
         return ""
+    # 差异算法仍按 v1 分析口径：两侧先折成 v1 视图（旧快照 v1 直通）。
     diff = build_resume_diff(
         0,
         "当前",
-        record.content or {},
+        document_content(record.content, layout_snapshot(db, record)),
         previous.id,
         previous.name,
-        previous.content or {},
+        document_content(previous.content, previous.render_context),
     )
     added, removed = diff.stats.added, diff.stats.removed
     if not added and not removed:
@@ -147,7 +165,8 @@ def version_brief(version: ResumeVersion) -> dict[str, Any]:
 def version_detail(version: ResumeVersion) -> dict[str, Any]:
     return {
         **version_brief(version),
-        "content": version.content or {},
+        # 快照读取统一 v2：本批之后新建的版本本来就是 v2，旧版本在读取时一次性转换。
+        "content": document_content(version.content, version.render_context),
         "render_context": version.render_context or {},
     }
 
@@ -254,13 +273,14 @@ def compare_versions(
         against_name = against_version.name
         against_content = against_version.content or {}
         against_layout = against_version.render_context or {}
+    # 差异算法仍按 v1 分析口径（本批不重写 diff）：两侧统一折成 v1 视图再比较。
     content_diff = build_resume_diff(
         base.id,
         base.name,
-        base.content or {},
+        document_content(base.content, base.render_context),
         against_id,
         against_name,
-        against_content,
+        document_content(against_content, against_layout),
     )
     return {
         "base_id": base.id,
@@ -276,14 +296,21 @@ def _restore_values(version: ResumeVersion, record: ResumeRecord) -> dict[str, A
     context = version.render_context or {}
     # A4 长 CV：页数上限按这版快照自己的文档模式（旧版本没有该键 → resume → 1–3，
     # 旧行为不变；长 CV 版本的 10 页不再被固定 3 页规则判成非法并回落）。
-    document_mode = context.get("document_mode") or getattr(record, "document_mode", None) or "resume"
+    document_mode = (
+        context.get("document_mode") or getattr(record, "document_mode", None) or "resume"
+    )
     page_limit = context.get("page_limit")
     if isinstance(page_limit, int):
         page_limit = mode_page_limit(page_limit, document_mode)
     else:
         page_limit = int(record.page_limit or 1)
     return {
-        "content": _snapshot_content(version.content),
+        # 恢复写回的永远是 v2：旧版本快照（v1）在这里一次性转换，避免把 v1 写进库。
+        "content": document_io.prepare_document_for_save(
+            _snapshot_content(version.content),
+            language=context.get("language") or record.language or "zh-CN",
+            format_config=context.get("format_config") or {},
+        ),
         # 恢复 = 内容回到那一版；与内容绑定的告警/解析错误同样清掉。
         "warnings": [],
         "parse_error": "",
@@ -346,6 +373,7 @@ __all__ = [
     "VersionNotFound",
     "compare_versions",
     "create_version",
+    "document_content",
     "freeze_version",
     "get_version",
     "layout_snapshot",

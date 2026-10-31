@@ -6,9 +6,7 @@ PDF 响应头常量改从 ``_shared`` 导入。
 """
 
 import logging
-import zipfile
 from dataclasses import asdict
-from io import BytesIO
 from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -25,14 +23,10 @@ from ...schemas.export import (
 from ...schemas.export import (
     PreviewPdfRequest,
 )
-from ...schemas.export import (
-    RedactionOptions as RedactionOptionsSchema,
-)
-from ...schemas.resume import ResumeContent, mode_page_limit
+from ...schemas.resume import mode_page_limit
 from ...services.export_pipeline import (
     ExportRequest,
     RenderContext,
-    build_export,
     build_export_delivery,
     effective_format_config,
     render_config_fingerprint,
@@ -43,9 +37,9 @@ from ...services.pdf_preview_cache import CachedPreviewPdf
 from ...services.pdf_preview_cache import get as get_cached_preview
 from ...services.pdf_preview_cache import put as put_cached_preview
 from ...services.privacy import RedactionOptions as PrivacyRedactionOptions
-from ...services.privacy import redact
+from ...services.privacy import plain_text_document, redact_document
 from ...services.resume.export_bundle import resolve_variant_export_options
-from ...services.resume.resume_completeness import find_incomplete, incomplete_detail
+from ...services.resume.resume_completeness import find_incomplete_document, incomplete_detail
 from ...services.resume.resume_delivery import (
     canonical_content_sha256,
     freeze_delivery,
@@ -58,7 +52,6 @@ from ...services.resume.resume_template_store import (
     resolve_style_config,
     resolve_style_template,
 )
-from ...services.resume.resume_visibility import visible_resume
 from ...services.settings_service import get_export_save_location
 from ...services.watermark import WatermarkError
 from .. import settings as settings_api
@@ -70,6 +63,7 @@ from ._shared import (
     PDF_PAGES_NEEDED_HEADER,
     RESUME_OVERFLOW_HEADER,
     _get_live_resume,
+    document_or_422,
 )
 
 logger = logging.getLogger(__name__)
@@ -81,6 +75,21 @@ def _require_local_export_request(request: HTTPRequest) -> None:
     """Resume exports expose private profile data and are a loopback-only capability."""
     if not settings_api._is_loopback_request(request) or not is_non_cross_site_request(request):
         raise HTTPException(status_code=403, detail="简历导出仅允许从本机前端访问")
+
+
+def _document_for_request(
+    db: Session, record: ResumeRecord, content_override: dict | None
+) -> dict:
+    """导出输入的版本收口：v2 直通；旧记录/旧草稿一次性转换（不写库）。
+
+    结构不合法（例如非法照片 data URL）统一 422 + 可读提示，不冒泡成 500。
+    """
+    return document_or_422(
+        content_override if content_override is not None else record.content,
+        db,
+        language=record.language or DEFAULT_RESUME_LANGUAGE,
+        format_config=record.format_config or {},
+    )
 
 
 def _export_record(
@@ -112,15 +121,14 @@ def _export_record(
     ``render_context`` / ``request_params`` 记录**实际生效**的参数（覆盖值按生效规则折算）；
     ``source_content_sha256`` 与 ``artifact_sha256`` 分开回答"存的是哪份内容"与"产出的文件是哪份"。
     """
-    resume = ResumeContent.model_validate(
-        content_override if content_override is not None else record.content
-    )
+    # 唯一的版本收口：v2 直通、旧记录转换（内容为空导致"导出空壳"的根因就在这里）。
+    document = _document_for_request(db, record, content_override)
     # 导出闸门：正文里还留着【待补】之类的标记时拦下来。带占位符的简历投出去，
     # 用户往往直到面试被问起才发现——这道检查的价值全在"导出那一刻"。
     if not allow_incomplete:
         # 导出闸门只看**纸面上会出现的内容**（W06）：隐藏条目里的【待补】不会被打出来，
         # 拦下导出等于让用户为一个他明确隐藏掉的占位符白等一次。完整正文仍在库里。
-        incomplete = find_incomplete(visible_resume(resume))
+        incomplete = find_incomplete_document(document)
         if incomplete:
             raise HTTPException(status_code=409, detail=incomplete_detail(incomplete))
     # W14：页数上限按文档模式夹紧（普通 1–3 / 长 CV 1–10）；请求给了就用请求值。
@@ -156,7 +164,7 @@ def _export_record(
     cache_key: str | None = None
     if cache_result and not save_copy:
         cache_key = (
-            f"{canonical_content_sha256(resume.model_dump())}:"
+            f"{canonical_content_sha256(document)}:"
             f"{render_config_fingerprint(request, context)}"
         )
         cached = get_cached_preview(cache_key)
@@ -166,7 +174,8 @@ def _export_record(
             )
     try:
         # 带交付标识的出口（RF-16）：内容指纹 + 渲染配置指纹与响应头同源。
-        delivery = build_export_delivery(request, resume, context, source_resume_id=record.id)
+        # 导出管线接受 v2 文档（本批入口做 v2-native 脱敏，渲染器仍按分析视图绘制）。
+        delivery = build_export_delivery(request, document, context, source_resume_id=record.id)
         artifact = delivery.artifact
     except ResumePDFError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
@@ -217,8 +226,11 @@ def _export_record(
     if record_delivery:
         # 实际导出的那份内容（PR-09）：脱敏导出存脱敏内容，保证存档与下载产物同源——
         # 与管线内部 ``build_export`` 的脱敏前置是同一条规则、同一份实现（privacy.redact）。
-        effective_resume = redact(resume, request.redact_options) if request.redact else resume
-        effective_content = effective_resume.model_dump()
+        effective_content = (
+            redact_document(document, request.redact_options)
+            if request.redact
+            else plain_text_document(document)
+        )
         # 实际生效的渲染上下文（PR-09）：请求覆盖值按 build_export 的生效规则折算——
         # 修复"请求 page_limit=2、存档里却是记录默认 1"的错位。
         effective_render_context = {
@@ -334,7 +346,7 @@ def export_resume_with_options(
     privacy_options = PrivacyRedactionOptions(**payload.redact_options.model_dump())
     # W16：variant_id 的解析由 be-prov 的 resolve_variant_export 统一提供（helper 内按名调用）。
     variant_options = resolve_variant_export_options(db, record, payload)
-    explicit_content = payload.content.model_dump() if payload.content is not None else None
+    explicit_content = payload.content
     export_options = ExportRequest(
         format=payload.format,
         watermark=payload.watermark,
@@ -388,7 +400,7 @@ def preview_resume_pdf(
     _require_local_export_request(request)
     record = _get_live_resume(db, resume_id)
     variant_options = resolve_variant_export_options(db, record, payload)
-    explicit_content = payload.content.model_dump() if payload.content is not None else None
+    explicit_content = payload.content
     return _export_record(
         db,
         record,
@@ -420,75 +432,4 @@ def preview_resume_pdf(
     )
 
 
-@router.get("/{resume_id}/share-zip")
-def share_resume_zip(request: HTTPRequest, resume_id: int, db: Session = Depends(get_db)):
-    """离线分享包（R3）：一个 zip，内含单文件 HTML + PDF + 打开说明。
 
-    为什么是 zip 而不是链接：接收方可能是招聘方或朋友，没有这个应用、也不该被要求
-    装一个。HTML 双击就能看（样式与照片全内嵌），PDF 直接转发；说明里写清怎么打开、
-    怎么打印成 A4。**PDF 生成失败不影响整包**（例如本机没有中文字体）：这时只带 HTML
-    并在说明里写明原因——比"打包失败"更有用。
-    """
-    _require_local_export_request(request)
-    record = _get_live_resume(db, resume_id)
-    resume = ResumeContent.model_validate(record.content)
-    export_template, export_html = resolve_style_template(db, record.template)
-    context = RenderContext(
-        template=export_template,
-        template_html=export_html,
-        style_config=resolve_style_config(db, record.template),
-        page_limit=record.page_limit,
-        font_scale=record.font_scale,
-        format_config=record_format_config(db, record),
-        # 分享包里的 HTML/PDF 也是"发给别人看的那一份"，语言必须跟着记录走。
-        language=record.language or DEFAULT_RESUME_LANGUAGE,
-    )
-    html = build_export(ExportRequest(format="html"), resume, context)
-    pdf_bytes: bytes | None = None
-    pdf_note = ""
-    try:
-        pdf_bytes = build_export(ExportRequest(format="pdf"), resume, context).content
-    except (ResumePDFError, ValueError) as exc:
-        logger.warning("分享包未能生成 PDF（用 HTML 兜底）：%s", exc)
-        pdf_note = f"（本机未能生成 PDF：{exc}）"
-
-    stem = (resume.name or "简历").strip()[:48] or "简历"
-    readme = "\n".join(
-        [
-            f"{stem} · 简历离线包",
-            "",
-            "1. 双击「简历.html」用浏览器打开即可查看（样式与照片都在这一个文件里）。",
-            "2. 「简历.pdf」可以直接转发或打印；如需 A4 打印，选择「实际大小 / 100%」。",
-            "3. HTML 与 PDF 由同一份版式生成，排版一致。",
-            "",
-            "这份包只包含这份简历本身，不含账号、其他数据或个人资料库。",
-            pdf_note,
-        ]
-    ).strip()
-
-    buffer = BytesIO()
-    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
-        archive.writestr("简历.html", html.content)
-        if pdf_bytes is not None:
-            archive.writestr("简历.pdf", pdf_bytes)
-        archive.writestr("说明.txt", readme.encode("utf-8"))
-
-    filename = f"{stem}-离线包.zip"
-    headers = {
-        "Content-Disposition": f"attachment; filename*=UTF-8''{quote(filename, safe='')}",
-        "Cache-Control": "no-store",
-    }
-    return Response(buffer.getvalue(), media_type="application/zip", headers=headers)
-
-
-@router.post("/{resume_id}/redact", response_model=ResumeContent)
-def redact_resume_preview(
-    resume_id: int,
-    payload: RedactionOptionsSchema,
-    db: Session = Depends(get_db),
-):
-    """脱敏预览：返回脱敏后的 ``ResumeContent``，不落库、不改动原记录。"""
-    record = _get_live_resume(db, resume_id)
-    resume = ResumeContent.model_validate(record.content)
-    options = PrivacyRedactionOptions(**payload.model_dump())
-    return redact(resume, options)

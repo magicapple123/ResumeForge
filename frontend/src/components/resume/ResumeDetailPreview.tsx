@@ -18,7 +18,7 @@ import ExportOptionsModal from "../ExportOptionsModal";
 import ExportConfigModal from "./delivery/ExportConfigModal";
 import { createExportDeliveryApi } from "../../features/resume-delivery";
 import { getResume } from "../../api/resumes";
-import ResumeZoomModal from "./ResumeZoomModal";
+import ResumeWorkbenchV2 from "./ResumeWorkbenchV2";
 import { useResumeTemplateCatalog } from "../../hooks/useResumeTemplateCatalog";
 import ResumeMeasureControls from "./ResumeMeasureControls";
 import ResumeTemplateControls from "./ResumeTemplateControls";
@@ -37,7 +37,8 @@ import ResumeLayoutDiagnosisCard from "./ResumeLayoutDiagnosisCard";
 import ResumeCoverageNotes from "./ResumeCoverageNotes";
 import ResumeDetailFooter from "./ResumeDetailFooter";
 import EvidencePanel from "./EvidencePanel";
-import { useResumeEditorFillSources } from "./useResumeEditorFillSources";
+import { documentHasPhoto } from "../../features/resume-document/view";
+import { useFieldPlacementCatalog } from "../../features/profile-library/fieldPlacement";
 import { useVariants } from "../../features/resume-versions/useVariants";
 /** W19 导出交付包：模块级单例（与 DeliveryArchiveModal 同一注入模式，测试可替换）。 */
 const deliveryApi = createExportDeliveryApi();
@@ -66,14 +67,9 @@ export default function ResumeDetailPreview({
   onResumeRevised,
   showReviseAction,
   extraActions,
-  liveContent,
-  richEdit,
-  richDirty,
-  onDiscardRichText,
-  mergeLive,
-  onRemapPaths,
-  onDocumentSynced,
   exportFlow = "delivery",
+  onDocumentSynced,
+  onReplaceDocument,
 }: Props) {
   useLocale();
   const navigate = useNavigate();
@@ -100,15 +96,18 @@ export default function ResumeDetailPreview({
   // 另一处和制作台都会跟着走（2026-10-21 用户要求）。
   const [previewMode, setPreviewMode] = useState<PreviewMode>("draft");
   const [sharePackageOpen, setSharePackageOpen] = useState(false);
-  // 「从我的资料追加一条」的候选：**打开编辑器/制作台时才取一次**（`useProfileFillSources`），
-  // 资料接口失败则静默降级成"没有这条入口"，编辑器照常可开。中栏与弹窗共用同一份。
-  // 预览里不再有手动编辑（详细编辑走制作台），候选只在制作台弹层打开时取。
-  const { fillSources } = useResumeEditorFillSources(zoomOpen, detail);
+  /**
+   * v2 文档 → v1 只读投影（唯一一处转换）：版面诊断卡、事实来源面板与导出核对还按 v1 形状
+   * 读内容，它们不渲染纸面、也不写库；等这些组件迁到 v2 后本投影随之删除。
+   */
   // 内部再包一层引用：父组件可能传 null（尚未量到），子组件需要一份稳定的 ref 传入 ResumePreview。
   const fallbackRef = useRef<ResumePreviewHandle>(null);
   const resolvedPreviewRef = previewRef ?? fallbackRef;
   // 版式目录：**只取一次**，工具栏两行的两组控件共用（见 `useResumeTemplateCatalog`）。
   const { catalog } = useResumeTemplateCatalog();
+  // 资料字段目录（纸面位置 / 仅素材）：制作台的「仅素材」徽标与添加字段菜单都读它。
+  // 会话级缓存；接口失败时保持 null，编辑器退回内置 fallback（不阻塞编辑）。
+  const { catalog: fieldCatalog } = useFieldPlacementCatalog();
   const variantsState = useVariants({ resumeId: detail.id }); // W16 导出变体选择器数据源
   // 缺省跟随 onResumeRevised：能刷新预览就有意义，不能刷新就不该摆出这个入口。
   const showRevise = showReviseAction ?? Boolean(onResumeRevised);
@@ -205,8 +204,8 @@ export default function ResumeDetailPreview({
         disabled={relayouting}
         onApplied={(formatConfig) => onApplyFittedFormat(formatConfig)}
         onAddPage={() => onApplyLayout({ ...layout, page_limit: layout.page_limit + 1 })}
-        content={liveContent ?? detail.content}
-        onApplyContent={onSaveEditedResume}
+        // v2 下「按诊断建议改正文」的入口先关掉：它写回的是 v1 分区结构，会把 v2 文档
+        // 打回旧模型。等版面优化器迁到 v2 item 后再接回来。
       />
       {/* 「没写进这份简历」的中性分组（#3/#5）：与"疑似虚构"分开；细节在 ResumeCoverageNotes。 */}
       <ResumeCoverageNotes
@@ -221,7 +220,7 @@ export default function ResumeDetailPreview({
       />
       {/* 事实来源展示（RF-13）：回答"写进去的内容从哪来"，挂在 coverage Alert 之后、预览之前。 */}
       {factAnnotations.length > 0 && (
-        <EvidencePanel annotations={factAnnotations} content={detail.content} />
+        <EvidencePanel annotations={factAnnotations} content={detail.content as never} />
       )}
       <ResumePreview
         ref={resolvedPreviewRef}
@@ -245,7 +244,7 @@ export default function ResumeDetailPreview({
               previewRef={resolvedPreviewRef}
               // 没有照片时照片滑杆禁用并说明原因：photo_scale 在没有照片时完全惰性，
               // 让用户拖一个"什么都没发生"的滑杆是最差的反馈。
-              hasPhoto={Boolean(detail.content?.photo)}
+              hasPhoto={documentHasPhoto(detail.content)}
               // 显式写 false：分边页边距只在「简历制作台」里出现（那一栏有纵向空间），
               // 主预览的工具栏是两行紧凑形态，多一行折叠标题会把它顶宽。
               showMarginSides={false}
@@ -329,7 +328,7 @@ export default function ResumeDetailPreview({
           onClose={() => setDeliveryExportOpen(false)}
           api={deliveryApi}
           resumeId={detail.id}
-          content={liveContent ?? detail.content ?? null}
+          content={detail.content}
           revision={documentPipeline?.revision ?? null}
           resumeTitle={detail.title}
           company={detail.company}
@@ -359,18 +358,17 @@ export default function ResumeDetailPreview({
           onClose={() => setExportOptionsOpen(false)}
         />
       ) : null}
-      <ResumeZoomModal
+      <ResumeWorkbenchV2
         open={zoomOpen}
         html={html}
         warnings={detail.warnings}
         pages={layout.page_limit}
         layout={layout}
         resumeId={detail.id}
+        resumeTitle={detail.title}
         resumeLanguage={detail.language}
         relayouting={relayouting}
-        hasPhoto={Boolean(detail.content?.photo)}
-        documentMode={detail.document_mode}
-        contextSnapshot={detail.context_snapshot ?? null}
+        hasPhoto={documentHasPhoto(detail.content)}
         pagesNeeded={layoutStatus?.pages ?? null}
         onApplyLayout={onApplyLayout}
         onCommitLayout={onCommitLayout}
@@ -379,25 +377,18 @@ export default function ResumeDetailPreview({
         isDraft={Boolean(detail.draft)}
         onPublishDraft={onPublishDraft}
         documentPipeline={documentPipeline}
-        resumeTitle={detail.title}
         previewMode={previewMode}
         onPreviewModeChange={setPreviewMode}
         exactPreview={exactPreview}
-        // 中栏编辑与保存都走宿主已有的那份（PATCH + setDetail + 重渲染）。
-        content={detail.content}
-        // 右栏实时预览要按"加上还没保存的粗体"那一版重排。
-        liveContent={liveContent}
-        mergeLive={mergeLive}
-        onRemapPaths={onRemapPaths}
-        onDocumentSynced={onDocumentSynced}
-        richDirty={richDirty}
-        onDiscardRichText={onDiscardRichText}
+        // v2 文档就是中栏编辑与保存的唯一内容；转换摘要在第一次读旧简历时显示。
+        document={detail.content}
+        fieldCatalog={fieldCatalog}
+        documentMode={detail.document_mode}
+        onDocumentModeSaved={onDocumentSynced}
+        onAdoptDocument={onReplaceDocument}
         onSaveContent={onSaveEditedResume}
-        // 预览里已经没有第二个编辑器会和制作台抢草稿，脏值不再需要上报。
-        // （`richDirty` 仍在中栏内部参与"保存"按钮的可用性判断。）
-        richEdit={richEdit}
-        // 中栏与「手动调整」共用同一份候选（只给一处开，用户就得关掉制作台才能从资料带一条进来）。
-        fillSources={fillSources}
+        conversion={detail.document_conversion ?? null}
+        contextSnapshot={detail.context_snapshot ?? null}
         onClose={() => {
           setZoomOpen(false);
         }}

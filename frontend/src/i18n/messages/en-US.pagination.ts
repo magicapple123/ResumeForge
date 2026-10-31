@@ -24,6 +24,9 @@ const pagination = {
     "Clear all Section page breaks without changing Entry page breaks",
   "pagination.breaks.unknownEntry": "Deleted entry",
   "pagination.breaks.clearEntry": "Clear the entry break for “{label}”",
+  "pagination.breaks.clearChip": "Clear page break setting: {label}",
+  "pagination.breaks.empty": "No page breaks configured yet",
+  "pagination.breaks.jumpHint": "Jump to this setting in the structure tab",
   "pagination.breaks.entryHint":
     "Entry breaks affect that item only; “Restore natural pagination” does not clear them",
   "pagination.sections.settings": "Section settings",
@@ -51,6 +54,9 @@ const pagination = {
   "pagination.continuation.note": "Applies only to exact PDF and Word. Draft preview has no pages",
   "pagination.draft.note":
     "Draft preview does not show manual page breaks. Use exact preview to check actual breaks",
+  "pagination.exactPreview.switch": "Switch to exact preview",
+  "pagination.exactPreview.hint": "Page breaks only apply in exact preview and exports",
+  "pagination.exactPreview.already": "Exact preview is already active",
   "pagination.capability.title": "Format support",
   "pagination.capability.pending":
     "Run a check once and this section lists each format’s support from the capability matrix",

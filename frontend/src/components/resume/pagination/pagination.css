@@ -70,9 +70,72 @@
   cursor: help;
 }
 
+/* ===== Q08：板块级开关 + 已设置断页汇总 ===== */
+.resume-section-pagination {
+  min-width: 0;
+}
+
+/* 顶部说明与「切到精确预览」并排：说明可换行，按钮不被挤变形。 */
+.resume-section-pagination-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 4px 8px;
+  min-width: 0;
+}
+
+.resume-section-pagination-hint {
+  min-width: 0;
+  flex: 1 1 160px;
+  font-size: 12px;
+  line-height: 18px;
+  overflow-wrap: anywhere;
+}
+
+.resume-section-pagination-row {
+  min-width: 0;
+  font-size: 12px;
+  line-height: 20px;
+}
+
+.resume-section-pagination-name {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* 汇总区：与板块开关之间用一条细线分层，避免"两个开关 + 芯片"糊成一片。 */
+.resume-section-pagination-summary {
+  min-width: 0;
+  border-top: 1px solid var(--rf-border-subtle);
+  padding-top: 8px;
+}
+
 /* ===== 已设置的板块断页：芯片列表 ===== */
 .resume-pagination-break-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
   min-width: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* 芯片里的可点击标签：antd 链接按钮默认内边距与高度会撑高 24px 芯片。
+   antd-override: 私有形态 —— 芯片尺寸由外层 .resume-pagination-break-chip 决定 */
+.resume-pagination-break-label.ant-btn {
+  height: 20px;
+  padding: 0;
+  font-size: 12px;
+  line-height: 20px;
+}
+
+.resume-pagination-break-label {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .resume-pagination-break-chip {

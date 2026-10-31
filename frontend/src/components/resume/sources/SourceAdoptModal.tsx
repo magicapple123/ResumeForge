@@ -11,6 +11,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { pt } from "../../../features/resume-provenance/i18n";
 import { adoptSourceLink, fetchRevisionText } from "../../../features/resume-provenance/api";
 import type {
+  AdoptLinkOut,
   FactLockViolationOut,
   RevisionTextViewOut,
   SourceImpactEntryOut,
@@ -23,9 +24,12 @@ interface Props {
   entry: SourceImpactEntryOut | null;
   /** 当前简历 revision（条件写；缺省不伪造）。 */
   expectedRevision?: number;
+  disabled?: boolean;
   onCancel: () => void;
   /** 采纳成功：宿主刷新影响面/来源链。 */
   onAdopted?: (appliedPath: string) => void;
+  /** 采纳成功的完整写回结果（v2 工作台用于更新文档与 revision）。 */
+  onAdoptedResult?: (result: AdoptLinkOut) => void;
 }
 
 const REASON_KEYS: Record<string, Parameters<typeof pt>[0]> = {
@@ -53,8 +57,10 @@ export default function SourceAdoptModal({
   open,
   entry,
   expectedRevision,
+  disabled = false,
   onCancel,
   onAdopted,
+  onAdoptedResult,
 }: Props) {
   useLocale();
   const [text, setText] = useState("");
@@ -105,7 +111,7 @@ export default function SourceAdoptModal({
   };
 
   const submit = async () => {
-    if (!entry || !text.trim()) {
+    if (disabled || !entry || !text.trim()) {
       setError(pt("provenance.adopt.empty"));
       return;
     }
@@ -119,6 +125,7 @@ export default function SourceAdoptModal({
         ...(typeof expectedRevision === "number" ? { expected_revision: expectedRevision } : {}),
       });
       onAdopted?.(result.applied_path);
+      onAdoptedResult?.(result);
       close();
     } catch (caught) {
       if (caught instanceof ApiError) {
@@ -164,7 +171,7 @@ export default function SourceAdoptModal({
           key="submit"
           type="primary"
           loading={submitting || undefined}
-          disabled={!text.trim() || undefined}
+          disabled={disabled || !text.trim() || undefined}
           onClick={() => void submit()}
         >
           {pt("provenance.adopt.submit")}
@@ -228,6 +235,7 @@ export default function SourceAdoptModal({
           value={text}
           maxLength={20000}
           showCount
+          disabled={disabled || undefined}
           aria-label={pt("provenance.adopt.text")}
           placeholder={pt("provenance.adopt.textPlaceholder")}
           onChange={(event) => {

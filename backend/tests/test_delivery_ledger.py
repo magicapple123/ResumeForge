@@ -15,6 +15,7 @@ from app.schemas.tracker import TrackCreate
 from app.services.resume.resume_delivery import canonical_content_sha256
 from app.services.tracker import create_track, record_applied, update_track
 from sqlalchemy import select
+from tests.document_test_support import header_value
 
 
 def _content(name: str = "林致远") -> dict:
@@ -159,7 +160,7 @@ def test_redacted_export_archive_matches_download(db_session, client):
 
     delivery = _deliveries(db_session)[0]
     # 存档 content 与下载产物同源：同样是脱敏后的内容。
-    assert delivery.content["name"] != "林致远"
+    assert header_value(delivery.content, "name") != "林致远"
     assert delivery.source_content_sha256 == canonical_content_sha256(delivery.content)
     # 双指纹：artifact = 导出字节哈希（与响应头一致）；content_sha256 语义不变。
     assert delivery.artifact_sha256 == hashlib.sha256(response.content).hexdigest()
@@ -184,7 +185,7 @@ def test_plain_export_archive_records_default_effective_params(db_session, clien
     assert delivery.request_params["redact"] is False
     assert delivery.request_params["watermark"] == ""
     # 未脱敏存档：内容就是原内容。
-    assert delivery.content["name"] == "林致远"
+    assert header_value(delivery.content, "name") == "林致远"
 
 
 def test_duplicate_export_does_not_duplicate_archive(db_session, client):
@@ -247,7 +248,7 @@ def test_delivery_detail_and_download_survive_resume_deletion(db_session, client
     download = client.get(f"/api/resumes/deliveries/{delivery_id}/download")
     assert download.status_code == 200
     payload = json.loads(download.content)
-    assert payload["content"]["name"] == "林致远"
+    assert header_value(payload["content"], "name") == "林致远"
     # RR-04：哈希按**响应字节**算（返回的是带说明的 JSON 封装，不是 content 字段本身）；
     # 存档里那份内容的规范化哈希另用 X-Source-Content-Sha256 报出来。
     assert download.headers["X-Content-Sha256"] == hashlib.sha256(download.content).hexdigest()

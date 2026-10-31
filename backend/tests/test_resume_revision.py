@@ -14,6 +14,7 @@ from app.schemas.resume import ResumeContent
 from app.schemas.setting import LLMConfig
 from app.services.llm.base import LLMError
 from app.services.resume.resume_revision import MAX_INSTRUCTION_CHARS, revise_resume
+from tests.document_helpers import header_value, items
 
 
 def _content() -> ResumeContent:
@@ -283,9 +284,11 @@ def test_revise_updates_the_record_and_clears_warnings(client, _resume_record, m
     )
     assert response.status_code == 200, response.text
     body = response.json()
-    assert body["content"]["summary"] == "修订后的总结"
+    assert [item["text"] for item in items(body["content"], "summary") if item["kind"] == "text"] == [
+        "修订后的总结"
+    ]
     # 身份字段由服务端回填，即使模型输出里没有。
-    assert body["content"]["name"] == "张示例"
+    assert header_value(body["content"], "name") == "张示例"
     assert body["warnings"] == []
 
     # 修订写回的是同一条记录，不新建。

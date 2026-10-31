@@ -2,20 +2,28 @@
 /**
  * 局部排版探针 CSS：拖动中即时反馈（D02）。
  *
- * 字符串逐字断言——**与后端 resume_style._role_rule 的产出保持同一结构**：
- * 两空格缩进、声明顺序同 STYLE_PROPS、字号是 calc(var(--fs) * 系数 * 基准)、
- * bullet/meta_align 的取值与后端逐字一致。改这里等于改"拖动中看到的样子"。
+ * 字符串逐字断言——**与后端 resume_style._role_rule / _object_spatial_rules 的产出保持
+ * 同一结构**：两空格缩进、声明顺序同 STYLE_PROPS、字号是 calc(var(--fs) * 系数 * 基准)，
+ * 项目符号 / 缩进 / 日期位置落到与后端相同的定向选择器上。改这里等于改"拖动中看到的样子"。
  */
 import { describe, expect, it } from "vitest";
 import { styleProbeCss } from "./resumeFormatProbe";
 
 describe("styleProbeCss · 选择器与结构", () => {
-  it("角色目标用 data-role，对象目标用 data-object-id（对象优先）", () => {
+  it("角色目标用 data-role；对象目标用 data-object-id", () => {
     expect(styleProbeCss({ role: "body" }, { line_height: 1.55 })).toBe(
       `  [data-role="body"] { line-height: 1.55 !important; }`,
     );
-    expect(styleProbeCss({ role: "body", objectId: "exp_12345678" }, { bold: true })).toBe(
+    expect(styleProbeCss({ objectId: "exp_12345678" }, { bold: true })).toBe(
       `  [data-object-id="exp_12345678"] { font-weight: 700 !important; }`,
+    );
+  });
+
+  it("对象 + 角色（Q12 子范围）→ 文字属性落 [data-object-id] [data-role]", () => {
+    expect(
+      styleProbeCss({ objectId: "exp_12345678", role: "entry_title" }, { color: "#abcdef" }),
+    ).toBe(
+      `  [data-object-id="exp_12345678"] [data-role="entry_title"] { color: #abcdef !important; }`,
     );
   });
 
@@ -34,9 +42,10 @@ describe("styleProbeCss · 选择器与结构", () => {
 });
 
 describe("styleProbeCss · 与后端 role_style_css 输出的逐条对拍", () => {
-  it("同一份覆盖：声明、顺序、字面量一致（探针只多 !important 用于覆盖模板）", () => {
-    // 后端（2026-10-24 实测，classic）：
-    //   '  [data-role="body"] { font-size: calc(var(--fs) * 1.05 * 1); line-height: 1.55; list-style-type: '–'; }'
+  it("同一份覆盖：文字属性一条规则 + 项目符号一条 ul 规则", () => {
+    // 后端（Q11 起，classic）：
+    //   '  [data-role="body"] { font-size: calc(var(--fs) * 1.05 * 1); line-height: 1.55; }'
+    //   '  ul { list-style-type: '–'; }'
     expect(
       styleProbeCss(
         { role: "body" },
@@ -44,14 +53,34 @@ describe("styleProbeCss · 与后端 role_style_css 输出的逐条对拍", () =
         { baseRatios: { body: 1 } },
       ),
     ).toBe(
-      `  [data-role="body"] { font-size: calc(var(--fs) * 1.05 * 1) !important; line-height: 1.55 !important; list-style-type: '–' !important; }`,
+      [
+        `  [data-role="body"] { font-size: calc(var(--fs) * 1.05 * 1) !important; line-height: 1.55 !important; }`,
+        `  ul { list-style-type: '–' !important; }`,
+      ].join("\n"),
     );
-    // 对象级（后端 entry_style_css 对对象基准恒为 1.0）：
-    //   '  [data-object-id="exp_12345678"] { margin-top: calc(var(--fs) * 0.6); justify-content: space-between; }'
+    // 对象级（后端 entry_style_css：根规则 + .entry-head 定向规则）。
     expect(
       styleProbeCss({ objectId: "exp_12345678" }, { space_before: 0.6, meta_align: "right" }),
     ).toBe(
-      `  [data-object-id="exp_12345678"] { margin-top: calc(var(--fs) * 0.6) !important; justify-content: space-between !important; }`,
+      [
+        `  [data-object-id="exp_12345678"] { margin-top: calc(var(--fs) * 0.6) !important; }`,
+        `  [data-object-id="exp_12345678"] .entry-head { justify-content: space-between !important; }`,
+      ].join("\n"),
+    );
+  });
+
+  it("缩进 / 日期位置落到载体元素（Q11：写在条目根/li 上不生效）", () => {
+    expect(styleProbeCss({ role: "body" }, { indent: 1.6 })).toBe(
+      `  ul, .body-paragraph { padding-left: calc(var(--fs) * 1.6) !important; }`,
+    );
+    expect(styleProbeCss({ objectId: "exp_12345678" }, { indent: 1.6 })).toBe(
+      `  [data-object-id="exp_12345678"] ul, [data-object-id="exp_12345678"] .body-paragraph { padding-left: calc(var(--fs) * 1.6) !important; }`,
+    );
+    expect(styleProbeCss({ role: "meta" }, { meta_align: "inline" })).toBe(
+      `  .entry-head { justify-content: flex-start !important; }`,
+    );
+    expect(styleProbeCss({ objectId: "exp_12345678" }, { meta_align: "inline" })).toBe(
+      `  [data-object-id="exp_12345678"] .entry-head { justify-content: flex-start !important; }`,
     );
   });
 });
@@ -65,25 +94,20 @@ describe("styleProbeCss · 声明", () => {
       `  [data-role="body"] { color: #AbCdEf !important; }`,
     );
     expect(styleProbeCss({ role: "body" }, { bullet: "dash" })).toBe(
-      `  [data-role="body"] { list-style-type: '–' !important; }`,
+      `  ul { list-style-type: '–' !important; }`,
+    );
+    // 三出口统一符号字形：圆点 = 「·」（不是 disc 实心圆点）。
+    expect(styleProbeCss({ role: "body" }, { bullet: "dot" })).toBe(
+      `  ul { list-style-type: '·' !important; }`,
     );
     expect(styleProbeCss({ role: "section_title" }, { align: "center" })).toBe(
       `  [data-role="section_title"] { text-align: center !important; }`,
-    );
-    expect(styleProbeCss({ role: "meta" }, { meta_align: "right" })).toBe(
-      `  [data-role="meta"] { justify-content: space-between !important; }`,
-    );
-    expect(styleProbeCss({ role: "meta" }, { meta_align: "inline" })).toBe(
-      `  [data-role="meta"] { justify-content: flex-start !important; }`,
     );
   });
 
   it("系数字段合成 calc(var(--fs) * N)", () => {
     expect(styleProbeCss({ role: "body" }, { space_before: 0.6 })).toBe(
       `  [data-role="body"] { margin-top: calc(var(--fs) * 0.6) !important; }`,
-    );
-    expect(styleProbeCss({ role: "body" }, { indent: 1.6 })).toBe(
-      `  [data-role="body"] { padding-left: calc(var(--fs) * 1.6) !important; }`,
     );
     expect(styleProbeCss({ role: "name" }, { letter_spacing: 0.05 })).toBe(
       `  [data-role="name"] { letter-spacing: calc(var(--fs) * 0.05) !important; }`,

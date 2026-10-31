@@ -36,8 +36,10 @@ from types import SimpleNamespace
 
 import pytest
 from app.models.resume import ResumeRecord
+from app.schemas.resume_document import OBJECT_ID_PATTERN
 from test_pdf_exporter import _text_runs, needs_font
 from test_preview_pdf import PREVIEW
+from tests.document_test_support import values
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DRILL_ENTRY = REPO_ROOT / "scripts" / "backup_restore_drill.py"
@@ -57,20 +59,27 @@ OLD_SHAPE_CONTENT = {
     "skills": [{"name": "示例技能", "level": "熟练"}],
 }
 
-IDENTITY_KEYS = ("id", "point_ids")
-CONTENT_SECTIONS = ("education", "experience", "campus_experience", "projects", "skills", "awards")
+
 
 
 # ===== 共用小工具 =====
 
 
-def _create_legacy_resume(client) -> int:
-    response = client.post(
-        "/api/resumes/manual",
-        json={"job_id": None, "title": "W21 场景 · 旧形状", "content": OLD_SHAPE_CONTENT},
+def _create_legacy_resume(db_session) -> int:
+    """直接写一条 v1 content 的历史行（模拟 v2 之前的库）：走 API 创建会被写路径升级成 v2，
+    那样"旧记录读路径"就测不到了。"""
+    record = ResumeRecord(
+        title="W21 场景 · 旧形状",
+        job_title="示例岗位",
+        content=copy.deepcopy(OLD_SHAPE_CONTENT),
+        warnings=[],
+        model="test-model",
+        source="manual",
     )
-    assert response.status_code == 201, response.text
-    return response.json()["id"]
+    db_session.add(record)
+    db_session.commit()
+    db_session.refresh(record)
+    return record.id
 
 
 def _row(db_session, record_id: int) -> ResumeRecord:
@@ -86,14 +95,40 @@ def _detail(client, record_id: int) -> dict:
     return response.json()
 
 
-def _assert_no_identity_fields(content: dict) -> None:
-    """旧形状内容在任何出口都不许凭空出现 id / point_ids。"""
-    for key in IDENTITY_KEYS:
-        assert key not in content, f"顶层出现 {key}"
-    for section in CONTENT_SECTIONS:
-        for index, item in enumerate(content.get(section) or []):
-            for key in IDENTITY_KEYS:
-                assert key not in item, f"{section}[{index}] 出现 {key}"
+def _assert_v2_document(content: dict) -> None:
+    """v2 写/读口径：version=2，每个条目与对象的 id 符合 W01（读路径在响应里补，不写库）。"""
+    assert content["version"] == 2
+    for section in content["sections"]:
+        for entry in section["entries"]:
+            assert OBJECT_ID_PATTERN.fullmatch(entry["id"]), (section["key"], entry["id"])
+            for item in entry["items"]:
+                assert OBJECT_ID_PATTERN.fullmatch(item["id"]), (section["key"], item.get("id"))
+
+
+def _summary_text(content: dict) -> str:
+    """v2 content 的个人总结文本（summary 是 text 分区里的 TextItem）。"""
+    for section in content["sections"]:
+        if section["key"] != "summary":
+            continue
+        for entry in section["entries"]:
+            for item in entry["items"]:
+                if item.get("kind") == "text":
+                    return item["text"]
+    raise AssertionError("v2 content 里没有 summary 文字")
+
+
+def _set_summary(content: dict, text: str) -> dict:
+    """v2 content 的"改总结"：替换 summary 分区的 TextItem（v2 顶层没有 summary 键）。"""
+    edited = copy.deepcopy(content)
+    for section in edited["sections"]:
+        if section["key"] != "summary":
+            continue
+        for entry in section["entries"]:
+            for item in entry["items"]:
+                if item.get("kind") == "text":
+                    item["text"] = text
+                    return edited
+    raise AssertionError("v2 content 里没有可改的 summary 文字")
 
 
 def _pdf_text(content: bytes) -> str:
@@ -105,24 +140,24 @@ def _pdf_text(content: bytes) -> str:
 
 def test_e01_legacy_shape_editing_round_trip(client, db_session):
     """旧形状 → GET 不生成身份字段也不写库 → 条件保存 → GET 一致。"""
-    record_id = _create_legacy_resume(client)
+    record_id = _create_legacy_resume(db_session)
     before = _row(db_session, record_id)
     content_before = copy.deepcopy(before.content)
     updated_before = before.updated_at
-    _assert_no_identity_fields(content_before)
+    assert "version" not in content_before  # 库里仍是旧 v1 内容
 
-    # GET：读出旧形状，绝不在读取路径上"补齐"身份字段。
+    # GET：读出 v2 文档（id 在响应里补），但读取路径不写库。
     detail = _detail(client, record_id)
     assert detail["revision"] == 0
-    _assert_no_identity_fields(detail["content"])
-    assert detail["content"]["summary"] == OLD_SHAPE_CONTENT["summary"]
+    _assert_v2_document(detail["content"])
+    assert _summary_text(detail["content"]) == OLD_SHAPE_CONTENT["summary"]
 
-    # GET 不写库：内容与 updated_at 都不许变（W01 的硬性质）。
+    # GET 不写库：库内旧内容与 updated_at 都不许变（W01 的硬性质）。
     after_get = _row(db_session, record_id)
     assert after_get.content == content_before
     assert after_get.updated_at == updated_before
 
-    # 条件保存：旧形状内容 + expected_revision=0 → 200 且版本 +1。
+    # 条件保存：旧形状内容 + expected_revision=0 → 200 且版本 +1（落库为 v2）。
     edited = copy.deepcopy(content_before)
     edited["summary"] = "W21 场景：旧形状记录在制作台编辑后的总结。"
     edited["experience"][0]["description"] = ["W21 场景：编辑后的要点"]
@@ -133,24 +168,24 @@ def test_e01_legacy_shape_editing_round_trip(client, db_session):
     assert saved.status_code == 200, saved.text
     body = saved.json()
     assert body["revision"] == 1
-    assert body["content"]["summary"] == edited["summary"]
-    _assert_no_identity_fields(body["content"])
+    assert _summary_text(body["content"]) == edited["summary"]
+    _assert_v2_document(body["content"])
 
-    # GET 一致：同一份内容、同一版本，且身份字段仍不存在。
+    # GET 一致：同一份内容、同一版本；库里已升级为 v2。
     again = _detail(client, record_id)
     assert again["revision"] == 1
-    assert again["content"]["summary"] == edited["summary"]
-    assert again["content"]["experience"][0]["description"] == ["W21 场景：编辑后的要点"]
-    _assert_no_identity_fields(again["content"])
+    assert _summary_text(again["content"]) == edited["summary"]
+    assert "W21 场景：编辑后的要点" in values(again["content"])
     row = _row(db_session, record_id)
     assert row.revision == 1
-    assert row.content["summary"] == edited["summary"]
+    assert row.content["version"] == 2
+    assert _summary_text(row.content) == edited["summary"]
 
 
 @needs_font
 def test_e01_unsaved_preview_does_not_persist_or_bump_revision(client, db_session):
     """未保存 content 的精确预览：PDF 里是新内容，库里一个字节不动、revision 不涨。"""
-    record_id = _create_legacy_resume(client)
+    record_id = _create_legacy_resume(db_session)
     before = _row(db_session, record_id)
     content_before = copy.deepcopy(before.content)
     revision_before = before.revision
@@ -195,7 +230,7 @@ def test_e01_export_with_draft_content_keeps_library_untouched(client, db_sessio
     """
     from app.models.resume_delivery import ResumeDeliveryRecord
 
-    record_id = _create_legacy_resume(client)
+    record_id = _create_legacy_resume(db_session)
     before = _row(db_session, record_id)
     content_before = copy.deepcopy(before.content)
     revision_before = before.revision
@@ -239,14 +274,12 @@ def test_e01_export_with_draft_content_keeps_library_untouched(client, db_sessio
 
 def test_e04_stale_conditional_write_conflicts_without_overwriting(client, db_session):
     """两个窗口基于同一 revision：后写者 409 + 当前 revision，库内保留先写者内容。"""
-    record_id = _create_legacy_resume(client)
+    record_id = _create_legacy_resume(db_session)
     base = _detail(client, record_id)
     assert base["revision"] == 0
 
-    window_a = copy.deepcopy(base["content"])
-    window_a["summary"] = "W21 E04：窗口 A 的修改"
-    window_b = copy.deepcopy(base["content"])
-    window_b["summary"] = "W21 E04：窗口 B 的修改"
+    window_a = _set_summary(base["content"], "W21 E04：窗口 A 的修改")
+    window_b = _set_summary(base["content"], "W21 E04：窗口 B 的修改")
 
     first = client.put(
         f"/api/resumes/{record_id}/content",
@@ -267,7 +300,7 @@ def test_e04_stale_conditional_write_conflicts_without_overwriting(client, db_se
 
     row = _row(db_session, record_id)
     assert row.revision == 1
-    assert row.content["summary"] == "W21 E04：窗口 B 的修改"
+    assert _summary_text(row.content) == "W21 E04：窗口 B 的修改"
     assert "窗口 A" not in json.dumps(row.content, ensure_ascii=False)
 
     # 冲突之后带上正确 revision 仍可继续写（不是永久锁死）。

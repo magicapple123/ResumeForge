@@ -165,12 +165,17 @@ class FactAnnotation(OptionalIdentityMixin, BaseModel):
 
 
 class ManualResumeRequest(BaseModel):
-    """用户手写简历的保存请求；内容仍使用统一的结构化格式。"""
+    """用户手写简历的保存请求；内容为 v2 文档 JSON（也接受旧 v1，服务端转换后落 v2）。
+
+    写侧用 ``dict`` 承载：v2 是唯一存储格式，但旧客户端/旧测试仍可能提交 v1
+    ``ResumeContent`` 形状。路由/服务层统一走 ``document_io.prepare_document_for_save``
+    收口（转 v2 + 校验 id），非法结构返回 422。
+    """
 
     model_config = ConfigDict(extra="forbid")
     job_id: int | None = Field(default=None, ge=1)
     title: str = Field(default="", max_length=256)
-    content: ResumeContent
+    content: dict
     # 建**草稿**（见 ``models.resume`` 的 ``draft`` 说明）：只有「前往简历制作台」传 true，
     # 缺省 false 让手写保存与通用简历的调用方逐字不变；草稿在制作台里保存过才进列表。
     draft: bool = Field(default=False)
@@ -230,7 +235,11 @@ class ResumeBrief(BaseModel):
 
 
 class ResumeOut(ResumeBrief):
-    content: ResumeContent
+    # v2 文档 JSON（读取时 v1 记录会一次性转换，不写库）；渲染/编辑/导出都消费它。
+    content: dict
+    # 读路径发生 v1→v2 转换时的一次性摘要（字段识别数/保留行数/警告/空分区）；
+    # 本来就是 v2 时为 None（前端据此决定是否显示"旧简历已升级"提示）。
+    document_conversion: dict | None = None
     warnings: list[str] = []
     parse_error: str = ""
     # 版本血缘（RF-17）：由哪份简历派生而来；NULL = 独立版本，不做推断。
@@ -266,7 +275,8 @@ class ResumeContentSave(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    content: ResumeContent
+    # v2 文档 JSON；接受 v1（服务端转换后落 v2）。校验与转换在路由/服务层收口。
+    content: dict
     expected_revision: int | None = Field(default=None, ge=0)
 
 
@@ -389,11 +399,14 @@ class ResumeSuggestionsOut(BaseModel):
 
 
 class ResumeRenderRequest(BaseModel):
-    """生成完成后、未落库前的即时预览渲染；版式参数可选，缺省用默认单页标准字号。"""
+    """生成完成后、未落库前的即时预览渲染；版式参数可选，缺省用默认单页标准字号。
+
+    ``content`` 是 v2 文档 JSON（也接受旧 v1，服务端转换后渲染）。
+    """
 
     model_config = ConfigDict(extra="forbid")
 
-    content: ResumeContent
+    content: dict
     template: str = Field(default="classic", max_length=64)
     format_name: str = Field(default="", max_length=64)
     # W14：无记录的即时预览也要知道文档模式，否则长 CV 草稿的 10 页请求会被 422。

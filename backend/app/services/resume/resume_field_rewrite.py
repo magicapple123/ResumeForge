@@ -153,7 +153,7 @@ def _item_context(item: object, section: str) -> str:
     return "".join(parts)
 
 
-def resolve_field_target(content: ResumeContent, path: str) -> FieldTarget:
+def resolve_field_target(content: ResumeContent | dict, path: str) -> FieldTarget:
     """把字段路径解析成可改写的一栏；指不到就抛 :class:`FieldPathError`。
 
     支持的写法（与前端 ``data-resume-path`` 一致）：
@@ -163,6 +163,51 @@ def resolve_field_target(content: ResumeContent, path: str) -> FieldTarget:
     raw = (path or "").strip()
     if not raw:
         raise FieldPathError("没有指定要改写的字段")
+    if isinstance(content, dict):
+        from .document_catalog import field_label, resolve_section_title
+        from .document_paths import resolve_document_path
+        from .document_view import field_text
+
+        target = resolve_document_path(content, raw)
+        if target is None:
+            # Historical optional scalar slots could be empty without a materialized node.
+            # This endpoint only proposes text; it does not create or write a document item.
+            if raw in _SCALAR_FIELD_LABELS:
+                return FieldTarget(path=raw, label=_SCALAR_FIELD_LABELS[raw], text="", context="")
+            section_label = _SECTION_LABELS.get(raw.split(".")[0], "当前正文")
+            raise FieldPathError(f"{section_label}里没有这个位置")
+        value = target.read()
+        if not isinstance(value, str) and not (
+            isinstance(value, list) and all(isinstance(v, str) for v in value)
+        ):
+            raise FieldPathError("只能改写文本或文本列表")
+        item = target.item or {}
+        key = item.get("key") or "description"
+        label = (
+            item.get("label")
+            or field_label(target.section, key)
+            or _LIST_FIELD_LABELS.get(key, key)
+        )
+        context = ""
+        if target.entry is not None:
+            section = next(
+                (s for s in content.get("sections") or [] if s.get("key") == target.section), {}
+            )
+            title = resolve_section_title(target.section, section.get("title") or "")
+            identity = field_text(target.entry, _ITEM_IDENTITY.get(target.section, "name"))
+            context = f"{title}「{identity}」" if identity else title
+            role, period = field_text(target.entry, "role"), field_text(target.entry, "period")
+            if role:
+                context += f"（角色：{role}）"
+            if period:
+                context += f"（{period.replace('|', ' - ')}）"
+        return FieldTarget(
+            path=raw,
+            label=f"{context}的{label}" if context else label,
+            text="\n".join(value) if isinstance(value, list) else value,
+            context=context,
+            kind="lines" if isinstance(value, list) else "text",
+        )
     segments = [segment for segment in raw.split(".") if segment != ""]
     if not segments:
         raise FieldPathError("没有指定要改写的字段")

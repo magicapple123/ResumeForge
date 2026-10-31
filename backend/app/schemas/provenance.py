@@ -109,11 +109,32 @@ class ProvenanceCoverage(BaseModel):
     unlinked: int = 0
 
 
+class UnresolvedLinkOut(BaseModel):
+    """一条无法在当前正文里定位的旧关联（P5-2）。
+
+    只读暴露：**不迁移、不改写、不按同下标猜目标**。用户据此前去删除或重新关联；
+    旧客户端忽略这个只增字段即可（默认空列表）。
+    """
+
+    link_id: int
+    source_id: int
+    source_title: str = ""
+    source_kind: str = ""
+    object_id: str | None = None
+    point_id: str | None = None
+    path: str = ""
+    field: str = ""
+    # 稳定原因码：object_id_invalid / no_locator / target_missing。
+    reason: str = ""
+
+
 class ResumeProvenanceOut(BaseModel):
     resume_id: int
     revision: int
     sources: list[SourceOut] = Field(default_factory=list)
     objects: list[DocumentObjectOut] = Field(default_factory=list)
+    # P5-2 只增字段：当前正文里定位不到的旧关联（旧客户端忽略即可）。
+    unresolved_links: list[UnresolvedLinkOut] = Field(default_factory=list)
     coverage: ProvenanceCoverage = Field(default_factory=ProvenanceCoverage)
 
 
@@ -221,13 +242,27 @@ class SourceListOut(BaseModel):
 
 
 class ManualSourceCreateRequest(BaseModel):
-    """手工登记一条外部资料：不绑定任何业务表行，每次新建（不按 external_ref 复用）。"""
+    """手工登记一条外部资料。
+
+    兼容性红线（P5-1）：只传 title 的旧请求**行为逐字节不变**——kind 仍是 manual、
+    external_ref 仍是 None、payload 仍按 {"title": title} 参与指纹，所以历史关联不会
+    因为这次扩展集体变 stale。
+
+    - 给 external_ref 时按 (kind, external_ref) 复用同一条来源（与内联关联共用同一套
+      upsert_source 语义）；不给 external_ref 时仍是每次新建。
+    - payload 只参与内容指纹与摘要，**不落全文**（来源表只存 summary/指纹）；
+      类型与长度由路由校验（非法值 400），不放进 pydantic 的 422 校验里，
+      这样历史调用方看到的错误码不会因扩展而漂移。
+    """
 
     model_config = ConfigDict(extra="forbid")
 
     title: str = Field(min_length=1, max_length=256)
-    # 只允许 manual：claim/material/job/profile 的 external_ref 语义由各自的采集链路负责。
-    kind: Literal["manual"] = "manual"
+    # 默认 manual：旧请求不带 kind 时语义不变；显式传其它类型表示用户自己登记的外部资料。
+    kind: SourceKind = "manual"
+    external_ref: str | None = Field(default=None, max_length=64)
+    # 原文摘要（可选）：只参与指纹/摘要，不落库全文。路由按 _MANUAL_PAYLOAD_MAX_CHARS 校验。
+    payload: Any = None
 
 
 class SourceRevisionItemOut(BaseModel):
@@ -240,6 +275,8 @@ class SourceRevisionItemOut(BaseModel):
 class ManualSourceOut(BaseModel):
     id: int
     kind: str
+    # 可选回显（P5-1 只增字段）：带 external_ref 新建/复用时前端能直接核对来源身份。
+    external_ref: str | None = None
     title: str
     revision: SourceRevisionItemOut
 

@@ -1,0 +1,93 @@
+{
+  "name": "张示例",
+  "photo": "data:image/jpeg;base64,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",
+  "gender": "女",
+  "birth_year": "2001",
+  "phone": "138-0000-0000",
+  "email": "zhang@example.com",
+  "city": "上海",
+  "personal_website": "https://portfolio.example.com/zhangshili",
+  "github": "https://github.example.com/zhangshili",
+  "job_intent": "市场运营专员",
+  "summary": "3 年市场与运营经验，主导过从 0 到 1 的会员增长项目。",
+  "education": [
+    {
+      "school": "示例大学",
+      "major": "市场营销",
+      "degree": "本科",
+      "start_date": "2019.09",
+      "end_date": "2023.06",
+      "gpa": "3.7/4.0",
+      "courses": [
+        "市场调研",
+        "消费者行为"
+      ],
+      "achievements": []
+    }
+  ],
+  "experience": [
+    {
+      "company": "示例科技有限公司",
+      "role": "市场运营专员",
+      "start_date": "2023.07",
+      "end_date": "至今",
+      "description": [
+        "主导季度主题营销活动，参与 1.2 万人，转化率环比提升 18%。",
+        "把活动复盘沉淀成 9 个检查点的 SOP，单场筹备从 10 天压到 4 天。"
+      ]
+    }
+  ],
+  "campus_experience": [
+    {
+      "organization": "示例大学学生会宣传部",
+      "role": "副部长",
+      "start_date": "2021.09",
+      "end_date": "2022.06",
+      "description": [
+        "统筹 6 场校园活动的宣传排期，协调 8 人小组分工，累计触达 3000 余人次。"
+      ]
+    }
+  ],
+  "projects": [
+    {
+      "name": "校园招聘会策划",
+      "role": "项目负责人",
+      "start_date": "2024.03",
+      "end_date": "2024.06",
+      "tech_stack": [
+        "活动策划",
+        "渠道对接",
+        "预算管理"
+      ],
+      "description": [
+        "从 0 到 1 策划校园招聘会，到会企业 40 家、学生 1200 人。"
+      ],
+      "highlights": []
+    }
+  ],
+  "skills": [
+    {
+      "name": "活动策划",
+      "level": "熟练"
+    },
+    {
+      "name": "Excel",
+      "level": "熟练"
+    },
+    {
+      "name": "数据复盘",
+      "level": "掌握"
+    },
+    {
+      "name": "沟通协作",
+      "level": "熟练"
+    }
+  ],
+  "awards": [
+    {
+      "name": "示例大学一等奖学金",
+      "date": "2021.10",
+      "description": ""
+    }
+  ]
+}

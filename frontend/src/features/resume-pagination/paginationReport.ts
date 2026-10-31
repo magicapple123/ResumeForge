@@ -15,8 +15,9 @@
  * 3. 组装请求体（复用预览/导出的版式字段，content 支持未保存草稿，不落库）。
  */
 import { request } from "../../api/client";
-import type { ResumeContent, ResumeFontScale } from "../../types";
+import type { ResumeFontScale } from "../../types";
 import type { ResumeFormatConfig } from "../../types/resumeFormat";
+import type { ResumeDocument } from "../../types/resumeDocument";
 
 /** 报告请求体：与 `PreviewPdfRequest` 的版式字段同形（不新建第二套形状）。 */
 export interface PaginationReportRequest {
@@ -27,7 +28,7 @@ export interface PaginationReportRequest {
   language?: string;
   format_config?: ResumeFormatConfig | Record<string, unknown>;
   /** 未保存正文；不传 = 用记录里已保存的那一版（不落库，与 W04 同边界）。 */
-  content?: ResumeContent;
+  content?: ResumeDocument;
 }
 
 export type TruncationKind = "section" | "entry" | "point" | "meta";

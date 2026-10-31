@@ -11,6 +11,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import ExactPreviewPanel from "./ExactPreviewPanel";
 import { clearPreviewCache, previewCacheStats } from "./exactPreviewCache";
+import { withPageWidthZoom } from "./pdfViewerSupport";
 
 const fetchPreview = vi.hoisted(() => vi.fn());
 
@@ -76,10 +77,10 @@ type PanelProps = Parameters<typeof ExactPreviewPanel>[0];
  */
 /**
  * jsdom 量不到相框宽度（`ResizeObserverMock` 只占位），面板走的是"不缩放"那条分支：
- * iframe 直接用原始 objectURL。真实宽度下的 `#zoom=<百分比>` 由浏览器实测覆盖
- * （Chrome 只认数值百分比，且必须换新 URL 才会重新读参数）。
+ * 不额外造缩放 objectURL，iframe 直接用 shot URL 加 `#zoom=page-width`（`withPageWidthZoom`）。
+ * 真实宽度下的 `#zoom=<百分比>` 由浏览器实测覆盖（Chrome 只认数值百分比，且必须换新 URL）。
  */
-const framed = (url: string) => url;
+const framed = (url: string) => withPageWidthZoom(url);
 /** 版式默认值与真实宿主一致（草稿值原样传进来）；各用例只写自己要改的那一项。 */
 function panel(overrides: Partial<PanelProps> = {}) {
   return (

@@ -29,7 +29,7 @@ import {
   updateResume,
   updateResumeLayout,
 } from "../../api/resumes";
-import type { ResumeContent, ResumeDetail, ResumeLayout } from "../../types";
+import type { ResumeDocument, ResumeDetail, ResumeLayout } from "../../types";
 import { t } from "../../i18n";
 import { bumpResumeList } from "../../features/resume/resumeListEvents";
 import { isRevisionConflict, revisionOf } from "./saveOutcome";
@@ -61,16 +61,16 @@ export function layoutFromDetail(detail: ResumeDetail): ResumeLayout {
   };
 }
 
+/** v2 文档的姓名（页眉 key=name 的 item）；冲突"另存副本"没标题时用它兜底。 */
+export function documentName(document: ResumeDocument): string {
+  return document.header.items.find((item) => item.key === "name")?.value ?? "";
+}
+
 export interface ResumeDocumentHostOptions {
   detail: ResumeDetail | null;
   layout: ResumeLayout;
   layoutDirty: boolean;
   layoutSaving: boolean;
-  /** 右键加粗的乐观叠加层：保存前合并、保存成功后清空。 */
-  overlays: {
-    merge: (content: ResumeContent | null) => ResumeContent | null;
-    clear: () => void;
-  };
   message: MessageApi;
   /**
    * 预览请求序号：换记录后旧回包不能覆盖新界面（既有守卫，原样搬用）。
@@ -91,15 +91,15 @@ export interface ResumeDocumentHostOptions {
   /** 保存成功后旧建议 / 风险扫描结论失效。 */
   resetSuggestions: () => void;
   /** 渲染 HTML（宿主注入 `renderResume`，保证"预览与保存"同一条管线）。 */
-  render: (content: ResumeContent, layout: ResumeLayout) => Promise<string>;
+  render: (content: ResumeDocument, layout: ResumeLayout) => Promise<string>;
 }
 
 export interface ResumeDocumentHost {
   /** 老链路：无条件写（「手动调整」弹窗、生成流程复用）。 */
-  saveEditedResume: (content: ResumeContent) => Promise<void>;
+  saveEditedResume: (content: ResumeDocument) => Promise<void>;
   /** W02：条件写，返回新 revision；失败/冲突**抛出**（编辑器负责提示与保草稿）。 */
   saveEditedResumeConditional: (
-    content: ResumeContent,
+    content: ResumeDocument,
     expectedRevision: number,
   ) => Promise<number>;
   /** 老链路：版式无条件写，`false` = 没落库（主预览底部那颗「保存」）。 */
@@ -110,10 +110,10 @@ export interface ResumeDocumentHost {
   publishDraft: () => Promise<boolean>;
   /** W02：草稿发布条件写。 */
   publishDraftConditional: (expectedRevision: number) => Promise<SaveOutcome>;
-  /** 冲突"用最新的"：整份替换本地（含清 overlay / 重渲染），不写库。 */
+  /** 冲突"用最新的"：整份替换本地（重渲染），不写库。 */
   adoptLatest: (latest: ResumeDetail) => Promise<void>;
   /** 冲突"另存副本"：用本地内容建新记录（draft=false，标题带（副本））。 */
-  saveAsCopy: (content: ResumeContent) => Promise<ResumeDetail>;
+  saveAsCopy: (content: ResumeDocument) => Promise<ResumeDetail>;
 }
 
 export function createResumeDocumentHost(options: ResumeDocumentHostOptions): ResumeDocumentHost {
@@ -122,7 +122,6 @@ export function createResumeDocumentHost(options: ResumeDocumentHostOptions): Re
     layout,
     layoutDirty,
     layoutSaving,
-    overlays,
     message,
     readRequestVersion,
     readSaveRequestVersion,
@@ -143,19 +142,16 @@ export function createResumeDocumentHost(options: ResumeDocumentHostOptions): Re
    * 不能等宿主 `setDetail` 之后的下一轮渲染——那之间还有一次网络往返。
    */
   const persistContent = async (
-    content: ResumeContent,
+    content: ResumeDocument,
     expectedRevision?: number,
   ): Promise<number> => {
     if (!detail) throw new Error(t("workbench.save.no-record"));
     const requestAtStart = readRequestVersion();
     const saveAtStart = nextSaveRequestVersion();
-    // overlay 里**仍然有效**的那几条叠在表单值上：`base` 对得上的说明用户没在中栏改过这个
-    // 字段（改了 base 就变了，overlay 自动失效）。合并只在这一处做，另一处不再重复。
-    const merged = overlays.merge(content) ?? content;
     const updated =
       expectedRevision === undefined
-        ? await updateResume(detail.id, merged)
-        : await saveResumeContent(detail.id, merged, expectedRevision);
+        ? await updateResume(detail.id, content)
+        : await saveResumeContent(detail.id, content, expectedRevision);
     if (requestAtStart !== readRequestVersion() || saveAtStart !== readSaveRequestVersion()) {
       return revisionOf(updated);
     }
@@ -168,8 +164,6 @@ export function createResumeDocumentHost(options: ResumeDocumentHostOptions): Re
     // 「保存到简历中心」的形态上）。
     setDetail({ ...updated, draft: false });
     setHtml(rendered);
-    // 内容已经落到服务端：overlay 再留着就会"盖住"刚存下去的值。
-    overlays.clear();
     resetSuggestions();
     // 刷新广播放在**保存成功之后**：进制作台、点开预览都不该让列表白跑一次请求。
     bumpResumeList();
@@ -229,21 +223,15 @@ export function createResumeDocumentHost(options: ResumeDocumentHostOptions): Re
     // 已经不是草稿：没什么可发布（按钮本就不会出现，这里只是把契约写清）。
     if (!detail.draft) return { status: "unchanged", revision: revisionOf(detail) };
     try {
-      // 纸面上加过的粗体也要一起落库：`merged` 在没有 overlay 时**就是** `detail.content`
-      // （同一引用），所以"什么都没改"的路径一个字节都没变。
-      const merged = overlays.merge(detail.content) ?? detail.content;
       const updated =
         expectedRevision === undefined
-          ? await updateResume(detail.id, merged)
-          : await saveResumeContent(detail.id, merged, expectedRevision);
+          ? await updateResume(detail.id, detail.content)
+          : await saveResumeContent(detail.id, detail.content, expectedRevision);
       // 正文一个字节都没变：不重渲染 html（省一次 /render），也**保留 `content` 的旧引用**
       // ——编辑器靠内容签名判断要不要回填，换一个等值的新引用虽不会误判，但没必要。
-      const changed = merged !== detail.content;
-      if (changed) setHtml(await render(merged, layout));
       setDetail((prev) =>
-        prev ? { ...updated, content: merged, draft: false } : { ...updated, draft: false },
+        prev ? { ...updated, content: prev.content, draft: false } : { ...updated, draft: false },
       );
-      overlays.clear();
       bumpResumeList();
       message.success(t("workbench.draft.published"));
       return { status: "saved", revision: revisionOf(updated) };
@@ -260,20 +248,17 @@ export function createResumeDocumentHost(options: ResumeDocumentHostOptions): Re
     setDetail(latest);
     setLayout(nextLayout);
     setSavedLayout(nextLayout);
-    // 加粗 overlay 基于旧正文的路径，正文换了就必须作废（否则会盖在别的句子上）。
-    overlays.clear();
     setHtml(await render(latest.content, nextLayout));
     resetSuggestions();
   };
 
-  const saveAsCopy = async (content: ResumeContent): Promise<ResumeDetail> => {
-    const merged = overlays.merge(content) ?? content;
+  const saveAsCopy = async (content: ResumeDocument): Promise<ResumeDetail> => {
     const copy = await createManualResume({
-      // 标题在宿主持有（`detail.title`）；没加载完时退回正文里的名字，仍保证带（副本）。
+      // 标题在宿主持有（`detail.title`）；没加载完时退回页眉里的姓名，仍保证带（副本）。
       title: t("workbench.conflict.copy.title", {
-        title: detail?.title || content.name || "",
+        title: detail?.title || documentName(content) || "",
       }),
-      content: merged,
+      content,
       draft: false,
       language: detail?.language ?? layout.language ?? "zh-CN",
     });

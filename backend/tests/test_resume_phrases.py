@@ -12,6 +12,7 @@ from app import database
 from app.database_migrations import application_tables
 from app.dataset_registry import dataset_database_file
 from app.services.datasets import create_dataset
+from tests.document_test_support import body_texts, entries_of
 
 
 def _content() -> dict:
@@ -125,9 +126,12 @@ def test_insert_into_existing_entry_creates_new_identity_and_counts(client):
     assert body["inserted_point_id"] and body["inserted_point_id"] != "pnt0000001"
     assert body["phrase"]["usage_count"] == 1
     record = _resume(client, resume_id)
-    entry = record["content"]["experience"][0]
-    assert entry["description"][0] == phrase["text"]
-    assert len(entry["point_ids"]["description"]) == len(entry["description"])
+    content = record["content"]
+    entry = entries_of(content, "experience")[0]
+    # v2：要点 = TextItem，id 就是要点身份（没有 point_ids 伴随映射，长度不变量由结构保证）。
+    text_items = [item for item in entry["items"] if item["kind"] == "text"]
+    assert text_items[0]["text"] == phrase["text"]
+    assert len(text_items) == len([item for item in entry["items"] if item["kind"] == "text"])
     # 来源关联复用 W12：插入的块来自 kind=phrase 的来源。
     view = client.get(f"/api/provenance/resumes/{resume_id}").json()
     assert view["sources"][0]["kind"] == "phrase"
@@ -143,8 +147,10 @@ def test_insert_new_entry_and_revision_conflict(client):
     )
     assert created.status_code == 200, created.text
     record = _resume(client, resume_id)
-    new_entry = record["content"]["education"][-1]
-    assert new_entry["achievements"] == [phrase["text"]]
+    content = record["content"]
+    entries = entries_of(content, "education")
+    new_entry = entries[-1]
+    assert body_texts(content, "education", len(entries) - 1) == [phrase["text"]]
     assert new_entry["id"] != "eduobj0001"
 
     stale = client.post(

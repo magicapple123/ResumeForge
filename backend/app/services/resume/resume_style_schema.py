@@ -22,14 +22,15 @@ from typing import Any
 from .resume_config_domains import HEX_COLOR_RE, is_object_id
 from .resume_template_scalars import template_float
 
-# 六个固定角色。顺序就是契约 §2.2 的顺序，也是 catalog role_fields 的下发顺序。
+# 五个固定角色。顺序就是契约 §2.2 的顺序，也是 catalog role_fields 的下发顺序。
+# 「重点文字」（emphasis）在 Q15 删除：planner 从不产出该角色、模板也没有对应
+# data-role，PDF/Word 从不查询它——留着只会让用户在面板里调一个永不生效的项。
 ROLES: tuple[str, ...] = (
     "name",
     "section_title",
     "entry_title",
     "body",
     "meta",
-    "emphasis",
 )
 
 # 属性表：key → 类型 + 区间/枚举 + 可用角色。前端同名表必须逐键相等（测试钉住）。
@@ -44,7 +45,7 @@ STYLE_PROPS: tuple[dict[str, Any], ...] = (
         "min": 0.0,
         "max": 3.0,
         "step": 0.05,
-        "roles": ("section_title", "entry_title", "body", "emphasis"),
+        "roles": ("section_title", "entry_title", "body"),
     },
     {
         "key": "space_after",
@@ -52,7 +53,7 @@ STYLE_PROPS: tuple[dict[str, Any], ...] = (
         "min": 0.0,
         "max": 3.0,
         "step": 0.05,
-        "roles": ("section_title", "entry_title", "body", "emphasis"),
+        "roles": ("section_title", "entry_title", "body"),
     },
     {
         "key": "line_height",
@@ -60,7 +61,7 @@ STYLE_PROPS: tuple[dict[str, Any], ...] = (
         "min": 1.0,
         "max": 2.6,
         "step": 0.01,
-        "roles": ("body", "entry_title", "emphasis"),
+        "roles": ("body", "entry_title"),
     },
     {"key": "indent", "type": "number", "min": 0.0, "max": 4.0, "step": 0.05, "roles": ("body",)},
     {
@@ -87,7 +88,9 @@ STYLE_PROPS: tuple[dict[str, Any], ...] = (
         "min": -0.10,
         "max": 0.30,
         "step": 0.01,
-        "roles": ("name", "section_title"),
+        # Q11：字距放开到正文 / 条目头——四出口都能表达（HTML letter-spacing / Word
+        # w:spacing / PDF set_char_spacing）；此前只允许姓名与板块标题，用户调不到。
+        "roles": ("name", "section_title", "body", "entry_title"),
     },
 )
 
@@ -234,7 +237,7 @@ def template_role_defaults(template: str) -> dict[str, dict[str, float]]:
     投影关系（契约 §2.8）：``name_ratio → name.font_scale``、``section_title_ratio →
     section_title.font_scale``、``entry_title_ratio → entry_title.font_scale``、
     ``entry_meta_ratio → meta.font_scale``、``line_height → body.line_height``；
-    body/emphasis 的基准字号是 1.0（正文就是基准）。
+    body 的基准字号是 1.0（正文就是基准）。
     """
     from .resume_template_layout import template_layout_defaults
     from .resume_templates import template_spec
@@ -246,7 +249,6 @@ def template_role_defaults(template: str) -> dict[str, dict[str, float]]:
         "entry_title": {"font_scale": template_float(defaults["entry_title_ratio"])},
         "body": {"font_scale": 1.0, "line_height": template_float(defaults["line_height"])},
         "meta": {"font_scale": template_float(defaults["entry_meta_ratio"])},
-        "emphasis": {"font_scale": 1.0},
     }
 
 

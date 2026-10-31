@@ -105,9 +105,7 @@ export function useWebFormCustomFields({
         if (!current) return current;
         return {
           ...current,
-          fields: current.fields.map((field) =>
-            field.key === key ? { ...field, label } : field,
-          ),
+          fields: current.fields.map((field) => (field.key === key ? { ...field, label } : field)),
         };
       });
       onFieldLabelChange(key, label);

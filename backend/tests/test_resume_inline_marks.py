@@ -38,6 +38,7 @@ from app.services.resume.resume_rich_text import (
 from app.services.txt_exporter import export_txt
 from pypdf import PdfReader
 from test_pdf_exporter import needs_font
+from tests.document_test_support import values
 
 MARKED_SUMMARY = (
     "**负责** *高并发* 交易系统，作品见 [官网](https://example.com/work?x=1&y=2) "
@@ -318,7 +319,7 @@ def test_markdown_and_delivery_json_keep_the_source_markers() -> None:
     assert "*高并发*" in markdown
     assert f"[官网]({LINK_URL})" in markdown
     payload = json.loads(export_json(resume))
-    assert payload["summary"] == MARKED_SUMMARY
+    assert MARKED_SUMMARY in values(payload)
 
 
 # ===== 6. 能力矩阵与实现同口径 =====

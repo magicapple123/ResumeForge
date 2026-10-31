@@ -1,21 +1,15 @@
 # SPDX-License-Identifier: Apache-2.0
-"""简历正文的分区顺序：定义、归一化，以及"四个渲染器读的是同一份"。
+"""简历正文的分区顺序：定义、归一化、资料顺序物化（纯函数与读写语义）。
 
-为什么值得一个测试文件：顺序一旦在某个渲染器里写死，用户在预览里拖好的顺序就会
-**只在预览生效**——导出的 PDF / Word / Markdown / txt 还是老顺序。那类问题不报错，
-用户只会说"导出的和看到的不一样"，而这正是本项目最忌讳的一类差异
-（`exporter.py` 的 docstring 记着一次同源教训：预览里有性别与出生年、md 里没有）。
+"顺序是否真的被四个渲染器照做"的用例在 test_resume_section_order_render.py（行数预算拆出）：
+顺序一旦在某个渲染器里写死，用户拖好的顺序就只在预览生效，导出还是老顺序——这类差异不报错，
+用户只会说"导出的和看到的不一样"。
 """
 
 from __future__ import annotations
 
-import io
-import re
-
 from app.schemas.profile import PROFILE_SECTION_KEYS
 from app.schemas.resume import ResumeContent
-from app.services.docx_exporter import build_resume_docx
-from app.services.exporter import export_markdown, render_html
 from app.services.profile import group_store
 from app.services.resume.resume_sections import (
     DEFAULT_SECTION_ORDER,
@@ -26,7 +20,6 @@ from app.services.resume.resume_sections import (
     profile_to_resume_order,
     resolved_section_order,
 )
-from app.services.txt_exporter import export_txt
 
 # 各分区对应的标题文案。渲染器写的是文案，测试按文案找位置——文案本身在
 # resume_labels.py 的 SECTION_TITLES 里定义，这里只负责"顺序"这一件事。
@@ -430,64 +423,3 @@ def test_a_saved_custom_order_is_only_rewritten_by_an_explicit_put(client):
     assert client.get("/api/profile").json()["section_order"] == list(PROFILE_SECTION_KEYS)
 
 
-def test_html_preview_follows_the_custom_order():
-    html = render_html(_sample_resume(), format_config=CUSTOM_CONFIG)
-    _assert_follows_order({"html": html})
-    # data-resume-path 是「点击纸面字段定位编辑」的锚点，重排不能动它。
-    for path in ("projects.0.name", "experience.0.company", "education.0.school"):
-        assert f'data-resume-path="{path}"' in html
-
-
-def test_markdown_and_txt_follow_the_custom_order():
-    order = CUSTOM_ORDER
-    markdown = export_markdown(_sample_resume(), section_order=order)
-    plain = export_txt(_sample_resume(), section_order=order)
-    _assert_follows_order({"markdown": markdown, "txt": plain})
-    # txt 是从 markdown 剥出来的，两者天然同源。
-    assert re.sub(r"[#*`\-\s]", "", markdown) == re.sub(r"[#*`\-\s]", "", plain)
-
-
-def test_word_document_follows_the_custom_order():
-    from docx import Document
-
-    document = build_resume_docx(_sample_resume(), format_config=CUSTOM_CONFIG)
-    doc = Document(io.BytesIO(document.content))
-    _assert_follows_order({"docx": "\n".join(p.text for p in doc.paragraphs)})
-
-
-def test_pdf_renders_with_the_custom_order_without_changing_page_count_semantics():
-    """服务端 PDF 用同一份顺序渲染；这里只验证它不报错、仍是合法 PDF。
-
-    PDF 的分区顺序藏在绘制调用里，抽文本会受字体子集化影响，所以不在字节层面断言顺序
-    （HTML / Word / Markdown 三处已经钉住了同一个顺序定义）。这里要守住的是：
-    带顺序渲染不会让「一页适配」的决策与渲染分家。
-    """
-    from app.services.pdf_exporter import (
-        build_resume_pdf,
-        measure_content_height,
-        resolve_layout,
-    )
-    from app.services.resume.resume_templates import validated_format_config
-
-    overrides = validated_format_config(CUSTOM_CONFIG)
-    layout = resolve_layout(template="classic", base_px=14, format_config=overrides)
-    document = build_resume_pdf(_sample_resume(), format_config=CUSTOM_CONFIG)
-    assert document.content.startswith(b"%PDF-")
-    assert document.pages >= 1
-    height = measure_content_height(
-        _sample_resume(), accent=(22, 54, 92), layout=layout, format_config=overrides
-    )
-    assert height > 0
-
-
-def test_section_order_survives_template_validation():
-    """格式模板校验要保留 section_order，而不是把它当成未知键丢掉。"""
-    from app.services.resume.resume_templates import validated_format_config
-
-    validated = validated_format_config(CUSTOM_CONFIG)
-    assert validated["section_order"] == CUSTOM_ORDER
-    # 没给就不出现：让「没设过」与「设成默认」可以区分。
-    assert "section_order" not in validated_format_config({"accent": "#16365c"})
-    # 非法输入（空列表 / 字符串以外的东西）不会炸掉整份配置。
-    assert "section_order" not in validated_format_config({"section_order": []})
-    assert "section_order" not in validated_format_config({"section_order": "projects"})

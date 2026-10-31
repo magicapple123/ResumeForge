@@ -12,6 +12,7 @@ from __future__ import annotations
 import json
 
 from app.schemas.setting import LLMConfig
+from tests.document_test_support import body_texts, entries_of
 
 CONTENT_LOCK_CHANGED = "锁定条目正文被改动"
 CONTENT_LOCK_MISSING = "锁定条目在本次修改后已不存在"
@@ -91,8 +92,8 @@ def test_revision_without_locks_still_writes_body(client, monkeypatch):
 
     response = _revise(client, resume_id, before["revision"])
     assert response.status_code == 200, response.text
-    assert response.json()["content"]["summary"] == "改过的总结"
-    assert _record(client, resume_id)["content"]["summary"] == "改过的总结"
+    assert body_texts(response.json()["content"], "summary") == ["改过的总结"]
+    assert body_texts(_record(client, resume_id)["content"], "summary") == ["改过的总结"]
 
 
 def test_locked_entry_content_change_is_rejected_with_stable_code(client, monkeypatch):
@@ -175,11 +176,12 @@ def test_partial_lock_keeps_locked_entry_and_allows_unlocked_change(client, monk
     response = _revise(client, resume_id, before["revision"])
 
     assert response.status_code == 200, response.text
-    saved = _record(client, resume_id)["content"]["experience"]
-    assert saved[0]["description"] == ["锁定条目的原文"]
+    content = _record(client, resume_id)["content"]
+    first, second = entries_of(content, "experience")
+    assert body_texts(content, "experience", 0) == ["锁定条目的原文"]
     # 锁标记是服务端状态：模型没回显也必须还在，否则"AI 一改写，锁自动消失"。
-    assert saved[0]["lock_content"] is True
-    assert saved[1]["description"] == ["未锁条目改写后的正文"]
+    assert first["lock_content"] is True
+    assert body_texts(content, "experience", 1) == ["未锁条目改写后的正文"]
 
 
 def test_deleting_a_locked_entry_is_rejected(client, monkeypatch):
@@ -220,10 +222,11 @@ def test_hidden_and_lock_flags_are_not_content_changes(client, monkeypatch):
     response = _revise(client, resume_id, before["revision"])
 
     assert response.status_code == 200, response.text
-    saved = _record(client, resume_id)["content"]["experience"][0]
+    content = _record(client, resume_id)["content"]
+    saved = entries_of(content, "experience")[0]
     # 隐藏标记属于可见性状态、由客户端保存；AI 输出里的 hidden 不进入正文。
     assert saved["lock_content"] is True
-    assert saved["description"] == ["负责合成数据接口"]
+    assert body_texts(content, "experience") == ["负责合成数据接口"]
 
 
 def test_lock_flag_and_hidden_changes_are_not_content_payload():
@@ -297,10 +300,15 @@ def test_manual_content_save_by_the_user_is_not_blocked(client):
     resume_id = _create_resume(client)
     before = _record(client, resume_id)
     content = before["content"]
-    content["experience"][0]["description"] = ["用户自己改的正文"]
+    # v2：改锁定条目里的 TextItem 文本（用户手写保存不受正文锁拦截）。
+    for item in entries_of(content, "experience")[0]["items"]:
+        if item.get("kind") == "text":
+            item["text"] = "用户自己改的正文"
+            break
 
     response = client.put(f"/api/resumes/{resume_id}/content", json={"content": content})
     assert response.status_code == 200, response.text
-    saved = _record(client, resume_id)["content"]["experience"][0]
-    assert saved["description"] == ["用户自己改的正文"]
+    saved_content = _record(client, resume_id)["content"]
+    saved = entries_of(saved_content, "experience")[0]
+    assert body_texts(saved_content, "experience") == ["用户自己改的正文"]
     assert saved["lock_content"] is True

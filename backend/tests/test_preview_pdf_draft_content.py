@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from test_pdf_exporter import _text_runs, needs_font
 from test_preview_pdf import PREVIEW, _create_resume, _resume
+from tests.document_test_support import values
 
 
 @needs_font
@@ -50,4 +51,4 @@ def test_preview_pdf_renders_the_unsaved_content(client):
 
     # 覆盖不会落库：详情里的正文仍是已保存那一版。
     detail = client.get(f"/api/resumes/{resume_id}").json()
-    assert detail["content"]["summary"] == saved.summary
+    assert saved.summary in values(detail["content"])

@@ -72,7 +72,7 @@ async def _close_provider_quietly(provider: BaseLLMProvider) -> None:
 
 
 async def _llm_deep_dive(
-    provider: BaseLLMProvider, resume: ResumeContent, claims: list[ClaimRecord]
+    provider: BaseLLMProvider, resume: ResumeContent | dict, claims: list[ClaimRecord]
 ) -> tuple[list[RiskPoint], list[str]]:
     """可选模型增强：出站走最小化消息，返回 (深挖点, 截断类提示)。
 
@@ -87,7 +87,7 @@ async def _llm_deep_dive(
 
 
 async def scan_resume_risks(
-    resume: ResumeContent,
+    resume: ResumeContent | dict,
     claims: list[ClaimRecord],
     provider: BaseLLMProvider | None = None,
     *,

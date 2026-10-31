@@ -89,17 +89,16 @@ A2_ZH_LITERALS: tuple[str, ...] = (
 # 注释里出现中文词是合理的（历史说明、边界解释：`exporter.py` 的 docstring 就写着
 # "以前漏掉了性别与出生年"），**代码**里出现则一律算漏改。模板另按 `{# … #}` 处理。
 GUARDED_SOURCES: dict[str, bool] = {
-    "services/pdf_exporter/render.py": True,
+    # v2：字段标签/日期格式由 planner 统一产出，四个出口不再各自拼中文前缀。
+    "services/resume/document_plan_format.py": True,
+    "services/resume/document_html.py": True,
+    "services/pdf_exporter/document_render.py": True,
+    "services/docx_document_render.py": True,
     "services/docx_exporter.py": True,
-    # W05 把七个分区渲染拆到 docx_sections；拆分后必须继续被这条守卫覆盖。
-    "services/docx_sections.py": True,
-    # W21 又把学术三节（论文 / 科研项目 / 专利）拆到 docx_academic_sections：
-    # 新文件同样画中文/英文字段前缀，必须一起被这条守卫覆盖。
-    "services/docx_academic_sections.py": True,
     "services/exporter.py": True,
     # A4 从 exporter 拆出的 Markdown 正文渲染器：同样画中英文字段前缀。
     "services/resume/markdown_export.py": True,
-    "templates/_resume_blocks.j2": False,
+    "templates/_resume_document.j2": False,
     "templates/_resume_sections.j2": False,
 }
 
@@ -362,28 +361,27 @@ def test_every_non_empty_section_has_a_non_empty_title_in_html(language: str):
 # ===== 7. 自制模板仍能取到标题（防 `with context` 写错） =====
 
 
-def test_a_custom_template_still_receives_the_section_titles():
-    """自制模板的契约是 `{% include "_resume_sections.j2" %}`。
+def test_a_custom_template_receives_document_plan_and_page_title():
+    """v2 自制模板契约：外壳上下文 = page_title + document_plan，正文靠 include 片段。
 
-    `_resume_blocks.j2` 是**宏文件**，宏看不到父模板上下文——所以引入那行必须是
-    `with context`。写错了的表现是"自制模板导出的简历一个标题都没有"，而默认模板全正常，
-    最容易漏。
+    不再提供 v1 的 section_titles 上下文（标签/标题统一由 planner 决定）；写错了的表现是
+    "自制模板导出的简历没有标题/标题为空"，默认模板却全正常，最容易漏。
     """
     custom = (
-        "<!DOCTYPE html><html><head><title>{{ resume.name }}</title></head><body>"
+        "<!DOCTYPE html><html><head><title>{{ page_title }}</title></head><body>"
         '{% include "_resume_sections.j2" %}'
+        '<p id="plan-count">{{ document_plan.sections | length }}</p>'
         "</body></html>"
     )
 
     for language in ("zh-CN", "en-US"):
         rendered = render_html(_resume(), template_html=custom, language=language)
-        for title in section_titles(language).values():
-            assert html.escape(title) in rendered, f"自制模板在 {language} 下缺标题：{title}"
-
-
-# ===== 8. 页数估算跟着语言走 =====
-
-
+        title = re.search(r"<title>(.*?)</title>", rendered, re.S)
+        assert title and title.group(1).strip(), f"自制模板在 {language} 下 page_title 为空"
+        assert 'id="plan-count">0<' not in rendered, f"自制模板在 {language} 下没有 document_plan"
+        # include 的正文片段真的带出了分区标题（planner 的 section_title 角色）。
+        for title_text in section_titles(language).values():
+            assert html.escape(title_text) in rendered, f"自制模板在 {language} 下缺标题：{title_text}"
 @needs_font
 @pytest.mark.parametrize("language", ["zh-CN", "en-US"])
 def test_the_page_count_matches_what_that_language_actually_renders(language: str):

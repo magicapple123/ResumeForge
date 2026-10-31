@@ -24,6 +24,7 @@ from app.schemas.resume import ResumeContent
 from app.services.llm.base import LLMError
 from app.services.resume.resume_content import coerce_resume
 from app.services.resume.resume_revision import revise_resume
+from tests.document_helpers import entry_of, field_value, items
 
 RESEARCH_PAYLOAD = {
     "name": "张三",
@@ -446,11 +447,15 @@ def test_revise_api_restores_locks_and_research_fields(client, monkeypatch):
     response = client.post(f"/api/resumes/{record_id}/revise", json={"instructions": "改总结"})
     assert response.status_code == 200, response.text
     content = response.json()["content"]
-    assert content["summary"] == "修订后的总结"
-    assert content["experience"][0]["id"] == "exp_12345678"
-    assert content["experience"][0]["lock_content"] is True
-    assert content["publications"][0]["id"] == "pub_12345678"
-    assert content["publications"][0]["status"] == "under_review"
+    assert [item["text"] for item in items(content, "summary") if item["kind"] == "text"] == [
+        "修订后的总结"
+    ]
+    experience = entry_of(content, "experience")
+    assert experience["id"] == "exp_12345678"
+    assert experience["lock_content"] is True
+    publication = entry_of(content, "publications")
+    assert publication["id"] == "pub_12345678"
+    assert field_value(content, "status", section="publications") == "under_review"
 
     # 落库后重新读取仍是同一份（不是只在响应里临时拼好）。
     db = SessionLocal()
@@ -458,8 +463,8 @@ def test_revise_api_restores_locks_and_research_fields(client, monkeypatch):
         stored = db.get(ResumeRecord, record_id).content
     finally:
         db.close()
-    assert stored["publications"][0]["id"] == "pub_12345678"
-    assert stored["experience"][0]["lock_content"] is True
+    assert entry_of(stored, "publications")["id"] == "pub_12345678"
+    assert entry_of(stored, "experience")["lock_content"] is True
 
 
 @pytest.mark.asyncio

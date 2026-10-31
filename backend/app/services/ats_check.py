@@ -94,7 +94,7 @@ from .ats_rules import (  # noqa: F401  (对外的兼容导入面)
 )
 
 
-def check_ats(resume: ResumeContent, jd_text: str = "", *, resume_id: int = 0) -> AtsCheckOut:
+def check_ats(resume: ResumeContent | dict, jd_text: str = "", *, resume_id: int = 0) -> AtsCheckOut:
     """ATS 本地检测：三类结论 + 分项分数 + 免责声明。纯本地计算，不调用模型。"""
     analysis = _keyword_analysis(resume, jd_text)
     issues = (

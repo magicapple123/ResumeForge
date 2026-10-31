@@ -40,6 +40,7 @@ from ...models.provenance import (
     ResumeFactLock,
 )
 from ...models.resume import ResumeRecord
+from . import document_io
 
 # 正文锁实现拆在 content_locks（行数预算）；这里既有 re-export 保持外部 import 不变：
 #   fact_locks.validate_content_locks / FactLockViolation / LOCK_CONTENT_*（be-doc 的集成
@@ -54,6 +55,8 @@ from .content_locks import (  # noqa: F401 - re-export
     validate_content_locks_for,
 )
 from .document_identity import is_object_id, resolve_object_path, resolve_point_path
+from .document_lock_paths import current_lock_path, legacy_object_lock_matches, resolve_lock_target
+from .document_paths import read_document_value, resolve_document_path
 
 _MISSING = object()
 
@@ -64,14 +67,24 @@ _MISSING = object()
 # 关系类型/成果类型是"分类状态"（AI 不得把它们升级成更有利的取值）。
 _FIELD_KIND_HINTS: tuple[tuple[tuple[str, ...], str], ...] = (
     (("status", "experience_kind", "artifact_type"), FACT_LOCK_STATUS),
-    (("doi", "patent_number", "isbn", "arxiv_id", "verify_url", "public_url", "url"), FACT_LOCK_IDENTIFIER),
+    (
+        ("doi", "patent_number", "isbn", "arxiv_id", "verify_url", "public_url", "url"),
+        FACT_LOCK_IDENTIFIER,
+    ),
     (("is_self", "corresponding", "author_order", "author_position"), FACT_LOCK_AUTHORSHIP),
     (("year", "start_date", "end_date", "date", "published_at", "filed_at"), FACT_LOCK_TIME),
     (("company", "school", "organization", "institution", "issuer"), FACT_LOCK_INSTITUTION),
     (("boundary", "responsibility", "responsibility_boundary"), FACT_LOCK_RESPONSIBILITY),
     (("name",), FACT_LOCK_NAME),
 )
-_RESEARCH_PREFIXES = ("publications", "patents", "publication", "patent", "credentials", "credential")
+_RESEARCH_PREFIXES = (
+    "publications",
+    "patents",
+    "publication",
+    "patent",
+    "credentials",
+    "credential",
+)
 
 
 def infer_fact_lock_kind(path: str) -> str:
@@ -93,6 +106,8 @@ _MAX_LOCK_VALUE = 500
 
 
 def _read_path(content: Any, path: str) -> Any:
+    if isinstance(content, dict) and content.get("version") == 2:
+        return read_document_value(content, path, _MISSING)
     current: Any = content
     for segment in path.split("."):
         if isinstance(current, dict):
@@ -164,6 +179,11 @@ def _resolve_lock_target(
     传了 object_id 又传了 path 时，path 是对象内部字段的完整路径（例如
     experience.0.company）：相对字段随对象身份保存，条目排序后仍能跟住同一条目。
     """
+    if content.get("version") == 2:
+        if object_id is not None and not is_object_id(object_id):
+            raise ValueError("对象标识不合法")
+        resolved, relative, field, value = resolve_lock_target(content, object_id, point_id, path)
+        return resolved, relative, field, normalize_lock_value(value)
     if object_id is not None:
         if not is_object_id(object_id):
             raise ValueError("对象标识不合法")
@@ -201,11 +221,20 @@ def create_fact_lock(
     label: str = "",
 ) -> ResumeFactLock:
     """锁定当前位置的值；同一对象/路径 + 同一类型重复锁定时刷新锁定值。"""
+    document = document_io.ensure_document_version(record.content or {})
     resolved_path, relative_path, resolved_field, locked_value = _resolve_lock_target(
-        record.content or {}, object_id=object_id, point_id=point_id, path=path
+        document, object_id=object_id, point_id=point_id, path=path
     )
+    target = resolve_document_path(document, resolved_path)
+    if target is not None and target.item is not None:
+        object_id = target.entry["id"] if target.entry is not None else target.item["id"]
+        point_id = target.item["id"]
+    elif target is not None and target.entry is not None:
+        object_id, point_id = target.entry["id"], None
     # kind 缺省时按路径识别（W14 科研字段：status/identifier/authorship/年份…）。
-    kind = _validate_kind(kind or infer_fact_lock_kind(resolved_path))
+    kind = _validate_kind(
+        kind or infer_fact_lock_kind(f"{resolved_path.split('.')[0]}.{resolved_field}")
+    )
     if object_id is not None:
         conditions = (
             ResumeFactLock.resume_id == record.id,
@@ -269,6 +298,8 @@ def delete_fact_lock(db: Session, *, resume_id: int, lock_id: int) -> bool:
 
 
 def _current_path_for_lock(content: dict[str, Any], lock: ResumeFactLock) -> str | None:
+    if content.get("version") == 2:
+        return current_lock_path(content, lock)
     if lock.object_id and is_object_id(lock.object_id):
         base = (
             resolve_point_path(content, lock.object_id, lock.point_id)
@@ -298,6 +329,7 @@ def validate_fact_locks(
     db: Session, record: ResumeRecord, content: dict[str, Any]
 ) -> list[FactLockViolation]:
     """逐条比对锁定值；返回全部违规（一次说清，不让用户逐次试错）。"""
+    content = document_io.ensure_document_version(content or {})
     violations: list[FactLockViolation] = []
     for lock in list_fact_locks(db, record.id):
         current_path = _current_path_for_lock(content, lock)
@@ -314,6 +346,8 @@ def validate_fact_locks(
                     current_value="",
                 )
             )
+            continue
+        if legacy_object_lock_matches(content, lock, current_path) is True:
             continue
         current_value = normalize_lock_value(_read_path(content, current_path))
         if current_value != lock.locked_value:
@@ -332,13 +366,24 @@ def validate_fact_locks(
     return violations
 
 
-def enforce_ai_content(db: Session, record: ResumeRecord, content: dict[str, Any]) -> None:
+def enforce_ai_content(
+    db: Session,
+    record: ResumeRecord,
+    content: dict[str, Any],
+    *,
+    old_content: dict[str, Any] | None = None,
+) -> None:
     """AI/来源采纳落库前的唯一闸门：有违规就抛 FactLockError，调用方不得继续写库。
 
     通过校验后会把旧正文的锁标记带回新正文（见 :func:`content_locks.restore_lock_flags`）：
     模型没有回显锁字段，不补就会"改写一次 = 锁没了"。
+
+    ``old_content`` 是旧文档；历史路径只在读取锁值时解析，不转换或改写持久行。
     """
-    violations = validate_document_locks(db, record, content)
+    base_content = record.content or {} if old_content is None else old_content
+    violations = validate_fact_locks(db, record, content) + validate_content_locks_for(
+        base_content, content
+    )
     if violations:
         raise FactLockError(violations)
-    restore_lock_flags(record.content or {}, content)
+    restore_lock_flags(base_content, content)

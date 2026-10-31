@@ -21,6 +21,7 @@ import json
 
 from app.models.resume import ResumeRecord
 from app.schemas.setting import LLMConfig
+from tests.document_test_support import values
 
 CONTENT = {"name": "张示例", "summary": "原始总结"}
 
@@ -70,9 +71,9 @@ def test_conditional_save_bumps_revision(client, db_session):
     )
     assert response.status_code == 200, response.text
     assert response.json()["revision"] == 1
-    assert response.json()["content"]["summary"] == "改过的总结"
+    assert "改过的总结" in values(response.json()["content"])
     # 库里也真的变了（不是只改了响应）。
-    assert _row(db_session, record_id).content["summary"] == "改过的总结"
+    assert "改过的总结" in values(_row(db_session, record_id).content)
     assert _row(db_session, record_id).revision == 1
 
 
@@ -98,7 +99,7 @@ def test_stale_expected_revision_returns_409_with_business_code(client, db_sessi
 
     # 冲突请求一个字节都不许写：正文仍是窗口甲那份。
     row = _row(db_session, record_id)
-    assert row.content["summary"] == "窗口甲的版本"
+    assert "窗口甲的版本" in values(row.content)
     assert row.revision == 1
 
 
@@ -111,7 +112,7 @@ def test_legacy_put_still_works_and_bumps_revision(client, db_session):
     )
     assert response.status_code == 200, response.text
     assert response.json()["revision"] == 1
-    assert _row(db_session, record_id).content["summary"] == "旧客户端写的"
+    assert "旧客户端写的" in values(_row(db_session, record_id).content)
 
 
 def test_legacy_put_then_conditional_save_conflicts(client, db_session):
@@ -136,7 +137,7 @@ def test_legacy_put_then_conditional_save_conflicts(client, db_session):
     )
     assert response.status_code == 409, response.text
     assert response.json()["revision"] == 1
-    assert _row(db_session, record_id).content["summary"] == "旧客户端覆盖"
+    assert "旧客户端覆盖" in values(_row(db_session, record_id).content)
 
 
 def test_identical_content_save_does_not_bump(client, db_session):
@@ -254,7 +255,7 @@ def test_ai_revise_with_stale_base_revision_does_not_write(client, db_session, m
     assert response.json()["revision"] == 1
 
     row = _row(db_session, record_id)
-    assert row.content["summary"] == "别处保存的正文"  # 模型结果没落库
+    assert "别处保存的正文" in values(row.content)  # 模型结果没落库
     assert row.warnings == ["旧的告警"]
     assert row.fact_annotations and row.fact_annotations[0]["status"] == "grounded"
     assert row.revision == 1
@@ -280,7 +281,7 @@ def test_ai_revise_with_matching_base_revision_bumps_it(client, db_session, monk
         json={"instructions": "改一下总结", "base_revision": 0},
     )
     assert response.status_code == 200, response.text
-    assert response.json()["content"]["summary"] == "修订后的总结"
+    assert "修订后的总结" in values(response.json()["content"])
     assert response.json()["revision"] == 1
     assert _row(db_session, record_id).revision == 1
 

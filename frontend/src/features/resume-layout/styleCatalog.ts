@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * W07 局部排版的**角色目录**：六个段落角色、每个角色可用的属性、对象级属性、角色名。
+ * W07 局部排版的**角色目录**：五个段落角色、每个角色可用的属性、对象级属性、角色名。
  *
  * 与操作层（`styleOverrides.ts`）拆开的理由：这张表是"界面做减法"的数据，被角色面板、
  * 对象面板、格式刷、来源标签共用；操作层只负责按域读写。两张表混在一个文件里时，
@@ -12,15 +12,13 @@
 import type { MessageKey } from "../../i18n";
 import type { StylePropKey } from "../../utils/resumeStyleParams";
 
-/** 六个段落角色（与后端 `resume_style_schema.ROLES` 逐字相等）。 */
-export const RESUME_ROLES = [
-  "name",
-  "section_title",
-  "entry_title",
-  "body",
-  "meta",
-  "emphasis",
-] as const;
+/**
+ * 五个段落角色（与后端 `resume_style_schema.ROLES` 逐字相等）。
+ *
+ * Q15 删掉了 emphasis（「重点文字」）：planner 从不产出该角色、模板也没有对应
+ * `data-role`，PDF/Word 从不查询它——留着只会让用户在面板里调一个永不生效的项。
+ */
+export const RESUME_ROLES = ["name", "section_title", "entry_title", "body", "meta"] as const;
 
 export type ResumeRoleKey = (typeof RESUME_ROLES)[number];
 
@@ -50,6 +48,8 @@ export const ROLE_STYLE_PROPS: Record<ResumeRoleKey, readonly StylePropKey[]> = 
     "space_after",
     "line_height",
     "align",
+    // Q11：字距放开到条目头（HTML / Word / PDF 三个出口都能表达）。
+    "letter_spacing",
   ],
   body: [
     "font_scale",
@@ -62,9 +62,10 @@ export const ROLE_STYLE_PROPS: Record<ResumeRoleKey, readonly StylePropKey[]> = 
     "indent",
     "bullet",
     "align",
+    // Q11：字距放开到正文。
+    "letter_spacing",
   ],
   meta: ["font_scale", "color", "bold", "italic", "meta_align"],
-  emphasis: ["font_scale", "color", "bold", "italic", "space_before", "space_after", "line_height"],
 };
 
 /**
@@ -95,5 +96,4 @@ export const ROLE_LABELS: Record<ResumeRoleKey, MessageKey> = {
   entry_title: "typography.role.entry_title",
   body: "typography.role.body",
   meta: "typography.role.meta",
-  emphasis: "typography.role.emphasis",
 };

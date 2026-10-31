@@ -8,9 +8,10 @@
 
 import json
 
-from app.schemas.resume import GenerateOptions, ResumeContent
+from app.schemas.resume import GenerateOptions
 from app.services.llm.base import BaseLLMProvider
 from app.services.resume.resume_generator import ResumeGenerator
+from tests.document_test_support import values
 
 
 class CapturingProvider(BaseLLMProvider):
@@ -168,9 +169,8 @@ def test_resume_without_placeholders_is_not_affected_by_the_gate(client):
         {"name": "张三", "summary": "待补充说明的能力？没有，这里写的是完整句子。"},
     )
     # 「待补充」不是标记，「待补充说明」里的「待补」也不算——只有【待补…】这类才算。
-    assert ResumeContent.model_validate(
-        client.get(f"/api/resumes/{resume_id}").json()["content"]
-    ).summary.startswith("待补充说明")
+    stored = client.get(f"/api/resumes/{resume_id}").json()["content"]
+    assert any(text.startswith("待补充说明") for text in values(stored))
     assert (
         client.get(f"/api/resumes/{resume_id}/export", params={"format": "json"}).status_code == 200
     )

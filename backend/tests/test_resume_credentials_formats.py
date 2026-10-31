@@ -28,6 +28,7 @@ from test_resume_credentials import (
     _content,
     _resume,
 )
+from tests.document_test_support import as_document, field_value, item_path
 
 # ===== 5. 六格式与模板 =====
 
@@ -61,9 +62,10 @@ def test_all_six_formats_include_credentials_and_new_fields():
             assert probe in products[fmt], f"{fmt} 缺少扩展栏目内容：{probe}"
 
     payload = json.loads(products["json"])
-    assert payload["credentials"][0]["status"] == "active"
-    assert payload["projects"][0]["public_url"] == PUBLIC_URL
-    assert payload["experience"][0]["experience_kind"] == "contract"
+    # 导出 JSON 是 v2 文档：字段按 key 取（条目级隐藏/锁定标志不影响这里的字段值）。
+    assert field_value(payload, "status", section="credentials") == "active"
+    assert field_value(payload, "public_url", section="projects") == PUBLIC_URL
+    assert field_value(payload, "experience_kind", section="experience") == "contract"
 
 
 @needs_font
@@ -118,14 +120,17 @@ def test_en_us_credentials_exports_use_translated_labels():
 
 
 def test_html_credentials_have_resume_paths():
-    html = render_html(_resume())
-    for path in (
-        "credentials.0.name",
-        "credentials.0.issuer",
-        "projects.0.public_url",
-        "projects.0.artifact_type",
-        "experience.0.experience_kind",
+    """v2 的字段锚点是 section.entry_id.item_id：先按同一份文档算路径，再断言渲染里有。"""
+    document = as_document(_resume())
+    html = render_html(document)
+    for section, field_key in (
+        ("credentials", "name"),
+        ("credentials", "issuer"),
+        ("projects", "public_url"),
+        ("projects", "artifact_type"),
+        ("experience", "experience_kind"),
     ):
+        path = item_path(document, section, field_key)
         assert f'data-resume-path="{path}"' in html, path
 
 

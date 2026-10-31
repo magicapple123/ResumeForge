@@ -16,6 +16,7 @@ from app.schemas.resume import ResumeContent
 from app.schemas.tracker import TrackCreate
 from app.services.tracker import create_track, record_applied, update_track
 from sqlalchemy import select
+from tests.document_helpers import values
 
 
 def _content(name: str = "林致远") -> dict:
@@ -138,11 +139,13 @@ def test_editing_resume_after_delivery_leaves_snapshot_untouched(db_session, cli
     db_session.expire_all()
     after = db_session.get(ResumeDeliveryRecord, before.id)
     assert after.content_sha256 == original_sha
-    assert after.content["summary"] != "投递后润色过的summary"
+    # 快照是投递时刻的冻结副本：不含投递后润色的文本（v1/v2 形状差异用 values 统一口径）。
+    assert "投递后润色过的summary" not in values(after.content)
+    assert "十年后端开发经验。" in values(after.content)
     assert after.rendered_config_sha256 == before.rendered_config_sha256
     # record 本身确实变了——变的只是"当前版"，不是证据。
     db_session.refresh(resume)
-    assert resume.content["summary"] == "投递后润色过的summary"
+    assert "投递后润色过的summary" in values(resume.content)
 
 
 # ===== 删除后证据仍可读 =====

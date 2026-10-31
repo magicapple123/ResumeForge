@@ -20,7 +20,6 @@ DOMAIN_KEYS: tuple[str, ...] = (
     "pagination",
     "photo_crop",
     "object_roles",
-    "field_layout",
 )
 
 # 本端当前读写的版本。域里 ``version`` 缺省按 1 读（宽容旧数据）。

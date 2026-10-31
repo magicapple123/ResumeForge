@@ -1,9 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * 翻译候选面板（W16 / D15）：逐条看差异、勾选采纳、被事实锁拦下的不可勾选。
+ * 翻译候选面板（W16 / D15，v2 文档模型）：逐条看差异、勾选采纳、被事实锁拦下的不可勾选。
  *
  * 差异渲染复用版本对比的 `DiffTokenText`（同一套三态配色），不重算 diff、不另写高亮。
- * **取消/失败不改正文**：本组件只发回调，采纳由宿主在校验通过后统一写库。
+ * **取消/失败不改正文**：本组件只发回调，采纳由宿主持有路径与译文后统一写库。
+ *
+ * v2 口径：候选的 `path` 是 `ResumeDocument` 的 item 路径（`header.{itemId}` /
+ * `{section}.{entry}.{item}`），采纳接口原样接收；`label` 已由上层按字段目录解析成显示名，
+ * 组件不再自己查文案 key。
  */
 import { Alert, Button, Checkbox, Space, Tag, Tooltip, Typography } from "antd";
 import { useState } from "react";
@@ -90,9 +94,7 @@ export default function TranslationCandidatePanel({
                 aria-label={bt("bilingual.compare.adoptAria", { index: index + 1 })}
                 onChange={() => toggle(candidate.path)}
               />
-              <Typography.Text strong>
-                {bt(candidate.labelKey as Parameters<typeof bt>[0])}
-              </Typography.Text>
+              <Typography.Text strong>{candidate.label}</Typography.Text>
               {candidate.blocked ? (
                 <Tooltip title={bt("bilingual.candidate.blocked")}>
                   <Tag color="gold">{bt("bilingual.compare.locked")}</Tag>

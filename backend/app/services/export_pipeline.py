@@ -15,14 +15,14 @@ from __future__ import annotations
 
 import hashlib
 import json
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import asdict, dataclass
 
 from ..schemas.resume import ResumeContent
 from .docx_exporter import build_resume_docx
 from .exporter import build_filename, export_json, export_markdown, render_html
 from .pdf_exporter import build_resume_pdf
-from .privacy import RedactionOptions, redact
+from .privacy import RedactionOptions, plain_text_document, redact, redact_document
 from .resume.resume_labels import DEFAULT_RESUME_LANGUAGE
 from .resume.resume_sections import resolved_section_order
 from .resume.resume_template_format import validated_format_config
@@ -108,14 +108,14 @@ class ExportArtifact:
     overflow: bool = False
 
 
-def _render_json(resume: ResumeContent, context: RenderContext) -> RenderedArtifact:
+def _render_json(resume: ResumeContent | dict, context: RenderContext) -> RenderedArtifact:
     return RenderedArtifact(
         content=export_json(resume).encode("utf-8"),
         media_type="application/json; charset=utf-8",
     )
 
 
-def _render_markdown(resume: ResumeContent, context: RenderContext) -> RenderedArtifact:
+def _render_markdown(resume: ResumeContent | dict, context: RenderContext) -> RenderedArtifact:
     return RenderedArtifact(
         content=export_markdown(
             resume,
@@ -127,7 +127,7 @@ def _render_markdown(resume: ResumeContent, context: RenderContext) -> RenderedA
     )
 
 
-def _render_html(resume: ResumeContent, context: RenderContext) -> RenderedArtifact:
+def _render_html(resume: ResumeContent | dict, context: RenderContext) -> RenderedArtifact:
     return RenderedArtifact(
         content=render_html(
             resume,
@@ -143,7 +143,7 @@ def _render_html(resume: ResumeContent, context: RenderContext) -> RenderedArtif
     )
 
 
-def _render_pdf(resume: ResumeContent, context: RenderContext) -> RenderedArtifact:
+def _render_pdf(resume: ResumeContent | dict, context: RenderContext) -> RenderedArtifact:
     pdf = build_resume_pdf(
         resume,
         template=context.template,
@@ -164,7 +164,7 @@ def _render_pdf(resume: ResumeContent, context: RenderContext) -> RenderedArtifa
     )
 
 
-def _render_docx(resume: ResumeContent, context: RenderContext) -> RenderedArtifact:
+def _render_docx(resume: ResumeContent | dict, context: RenderContext) -> RenderedArtifact:
     docx = build_resume_docx(
         resume,
         template=context.template,
@@ -184,7 +184,7 @@ def _render_docx(resume: ResumeContent, context: RenderContext) -> RenderedArtif
     )
 
 
-def _render_txt(resume: ResumeContent, context: RenderContext) -> RenderedArtifact:
+def _render_txt(resume: ResumeContent | dict, context: RenderContext) -> RenderedArtifact:
     return RenderedArtifact(
         content=export_txt(
             resume,
@@ -197,7 +197,7 @@ def _render_txt(resume: ResumeContent, context: RenderContext) -> RenderedArtifa
 
 
 # 格式渲染器注册表：新增格式（docx/txt）时在此挂一个渲染器即可，不改管线。
-FORMAT_RENDERERS: dict[str, Callable[[ResumeContent, RenderContext], RenderedArtifact]] = {
+FORMAT_RENDERERS: dict[str, Callable[[ResumeContent | dict, RenderContext], RenderedArtifact]] = {
     "json": _render_json,
     "md": _render_markdown,
     "html": _render_html,
@@ -219,18 +219,39 @@ def effective_format_config(request: ExportRequest, context: RenderContext) -> d
     return merged
 
 
+def _prepare_for_render(
+    request: ExportRequest, resume: ResumeContent | dict
+) -> ResumeContent | dict:
+    """脱敏 + 版本归一：v2 文档走 v2-native 脱敏，**原样（脱敏后）交给渲染器**。
+
+    四出口（HTML/PDF/Word/Markdown/TXT/JSON）已全部切到 v2 / DocumentPlan 渲染器，
+    所以这里不能再把 v2 折成 v1 分析视图——那样会退回按 v1 槽位默认位置重排，用户在
+    制作台里改过的字段位置（placement / 顺序 / 隐藏）会在导出里丢失。v1 输入继续走旧
+    redact，渲染器自己会做一次 conversion（与读旧记录同一套规则）。
+    """
+    if isinstance(resume, Mapping) and resume.get("version") == 2:
+        if request.redact:
+            return redact_document(resume, request.redact_options)
+        return plain_text_document(dict(resume))
+    return redact(resume, request.redact_options) if request.redact else resume
+
+
 def build_export(
     request: ExportRequest,
-    resume: ResumeContent,
+    resume: ResumeContent | dict,
     context: RenderContext,
 ) -> ExportArtifact:
-    """把一份简历按请求导出成最终产物（脱敏 → 格式渲染 → 可选水印）。"""
+    """把一份简历按请求导出成最终产物（脱敏 → 格式渲染 → 可选水印）。
+
+    resume 接受 v1 模型（旧调用方）与 v2 文档 dict（API 切换后 v2 是唯一存储格式）；
+    v2 在管线入口做 v2-native 脱敏，再按当前渲染器能力适配。
+    """
     renderer = FORMAT_RENDERERS.get(request.format)
     if renderer is None:
         raise ValueError(f"不支持的导出格式：{request.format}")
 
     # 脱敏是可组合的前置步骤（共享知识第 7 条：规则只在 privacy 一份实现）。
-    effective_resume = redact(resume, request.redact_options) if request.redact else resume
+    effective_resume = _prepare_for_render(request, resume)
 
     # 请求里显式给出的版式覆盖优先，否则沿用记录里存的值。
     effective_context = RenderContext(

@@ -5,8 +5,6 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from .resume import ResumeContent
-
 TemplateKind = Literal["style", "format"]
 
 MAX_TEMPLATE_HTML_CHARS = 200_000
@@ -77,7 +75,8 @@ class TemplatePreviewRequest(BaseModel):
     style_config: dict[str, Any] = Field(default_factory=dict)
     page_limit: int = Field(default=1, ge=1, le=3)
     font_scale: Literal["small", "standard", "large"] = "standard"
-    content: ResumeContent | None = None
+    # v2 文档 JSON（兼容旧 v1：预览路由统一 ensure_document_version 转 v2）。
+    content: dict | None = None
     # 用哪份已保存的简历做预览（优先于内置示例，低于显式传入的 content）。
     resume_id: int | None = Field(default=None, ge=1)
 
