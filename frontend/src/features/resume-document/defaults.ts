@@ -33,6 +33,7 @@ import type {
   TextItem,
 } from "../../types/resumeDocument";
 import { newObjectId } from "./identity";
+import { effectiveFieldFormat } from "./fieldCatalog";
 
 export function defaultSectionLayout(): SectionLayout {
   return {
@@ -223,7 +224,7 @@ export function fieldItemFromCatalog(spec: FieldCatalogField): FieldItem {
     key: spec.key,
     label: "",
     placement,
-    format: spec.format,
+    format: effectiveFieldFormat(spec),
     source: { section_key: "", field_id: spec.source_field_id } as FieldSource,
   });
 }

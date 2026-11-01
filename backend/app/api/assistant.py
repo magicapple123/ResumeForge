@@ -46,6 +46,11 @@ from ..services.conversation_export import (
 )
 from ..services.feature_catalog import build_capability_map
 from ..services.llm import create_provider
+from ..services.llm.usage_tasks import (
+    DEFAULT_AUDIT_BUDGET,
+    DEFAULT_AUDIT_LANGUAGE,
+    set_ambient_scope,
+)
 from ..services.materials import create_material as create_material_record
 from ..services.product_knowledge import build_platform_note
 from ..services.search import aggregate_search
@@ -54,6 +59,7 @@ from ..services.settings_service import (
     get_llm_config,
     get_search_config,
 )
+from ..services.ui_locale import get_ui_locale
 from ..services.user_files import save_from_data_url
 from .assistant_context import load_local_context
 from .assistant_conversations import (
@@ -386,6 +392,18 @@ async def send_message(
     # 放宽模式在这里读出来：默认上下文（load_local_context）、系统提示与工具下发
     # 都要用；流式响应期间请求会话已关闭，设置值绑进闭包。
     relaxed_mode = get_assistant_relaxed_mode(db)
+    # #35：助手入口的输入边界——放宽模式决定是否带身份字段（masked = 非放宽）。
+    # 目标语言优先取用户显式保存的界面语言（`/api/settings/locale`，数据集内持久化，
+    # 是唯一权威值）；用户还没保存过时退回本次请求可选携带的 `locale`；两者都没有就留空
+    # （＝本次不涉及语言选择），而不是记成缺失。
+    set_ambient_scope(
+        input_scope="assistant_context",
+        masked=not relaxed_mode,
+        language=get_ui_locale(db) or payload.locale or DEFAULT_AUDIT_LANGUAGE,
+        # 助手是多轮工具循环，单轮输出仍受 provider 默认约束；审计按应用默认输出
+        # 上界声明预算（A1：不再留 None，否则分不清"没声明"与"不限制"）。
+        budget=DEFAULT_AUDIT_BUDGET,
+    )
     try:
         context_blocks, context_metadata = load_local_context(db, payload, relaxed=relaxed_mode)
     except ValueError as exc:

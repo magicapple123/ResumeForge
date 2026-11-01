@@ -72,17 +72,6 @@ export function collectExpandableKeys(tree: StructureTree): string[] {
   return keys;
 }
 
-/** 「收起所有条目」只折叠 section 下的 entry，板块标题保持展开。 */
-export function collapseEntryKeys(sections: readonly StructureNode[]): Set<string> {
-  const keys = new Set<string>();
-  for (const section of sections) {
-    for (const child of section.children ?? []) {
-      if (child.kind === "entry") keys.add(child.key);
-    }
-  }
-  return keys;
-}
-
 export interface StructureCounts {
   sections: number;
   entries: number;
@@ -156,20 +145,42 @@ export interface SearchResult {
   hitKeys: Set<string>;
 }
 
+export interface SearchOptions {
+  /**
+   * 节点 → 它在树上**看得见**的文案（R-09）。
+   *
+   * 树行的 label 是文档原始数据（板块 key、字段值、位置枚举值），而用户搜的是屏幕上
+   * 那几个字：中文板块名、字段目录标签、位置名。不传就退回 `node.label`（纯数据匹配）。
+   */
+  labelOf?: (node: StructureNode) => string;
+}
+
 /**
  * 搜索过滤：只显示"标签包含查询"的节点与它们的祖先，祖先自动展开。
  *
  * 自命中时保留整棵子树（用户搜板块名，多半想看到它下面的内容）；只有子节点命中时
  * 只保留命中的分支，兄弟不显示（否则搜"学校"会显示整个教育板块的所有字段）。
  */
-export function searchTree(tree: StructureTree, query: string): SearchResult {
+export function searchTree(
+  tree: StructureTree,
+  query: string,
+  options: SearchOptions = {},
+): SearchResult {
   const normalized = normalizeQuery(query);
   const matchedKeys = new Set<string>();
   const hitKeys = new Set<string>();
   if (!normalized) return { rows: flattenVisible(tree, new Set()), matchedKeys, hitKeys };
 
+  const labelOf = options.labelOf;
+  const displayText = (node: StructureNode): string => {
+    const text = labelOf?.(node) ?? "";
+    return text.trim() ? text : node.label;
+  };
+  const matches = (node: StructureNode): boolean =>
+    displayText(node).toLocaleLowerCase().includes(normalized);
+
   const prune = (node: StructureNode): StructureNode | null => {
-    const selfHit = node.label.toLocaleLowerCase().includes(normalized);
+    const selfHit = matches(node);
     const keptChildren: StructureNode[] = [];
     for (const child of node.children ?? []) {
       const kept = prune(child);
@@ -182,7 +193,7 @@ export function searchTree(tree: StructureTree, query: string): SearchResult {
   const append = (node: StructureNode, depth: number) => {
     rows.push({ node, depth });
     matchedKeys.add(node.key);
-    if (node.label.toLocaleLowerCase().includes(normalized)) hitKeys.add(node.key);
+    if (matches(node)) hitKeys.add(node.key);
     for (const child of node.children ?? []) append(child, depth + 1);
   };
   for (const top of [...tree.header, ...tree.sections]) {

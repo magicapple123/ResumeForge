@@ -37,6 +37,8 @@ _REQUIRED_FILES: Final[tuple[tuple[str, str], ...]] = (
     ("app/prompts/interview_analysis.md", "面试答题思路分析提示词"),
     ("app/prompts/interview_answer.md", "面试单题参考答案提示词"),
     ("app/prompts/interview_answer_review.md", "面试作答批改与示范提示词"),
+    ("app/prompts/interview_followup.md", "面试结束后继续追问的答疑提示词"),
+    ("app/prompts/interview_material_image.md", "面试材料截图逐字抄录提示词"),
     ("app/prompts/interview_optimize_resume.md", "面试短板反向优化简历提示词"),
     ("app/prompts/interview_questions.md", "个性化面试题库提示词"),
     ("app/prompts/interview_report.md", "模拟面试评分报告提示词"),

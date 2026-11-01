@@ -61,7 +61,6 @@ const typography = {
   "typography.prop.font_scale": "字号比例",
   "typography.prop.color": "颜色",
   "typography.prop.bold": "加粗",
-  "typography.prop.italic": "斜体",
   "typography.prop.space_before": "段前距",
   "typography.prop.space_after": "段后距",
   "typography.prop.line_height": "行距",
@@ -97,6 +96,10 @@ const typography = {
   "typography.row.sliderAria": "{label}（拖动调整）",
   "typography.row.decreaseAria": "减少{label}",
   "typography.row.increaseAria": "增加{label}",
+  /** R-34B：未覆盖 = 继承模板时的三处提示（尾部读数 / 输入框占位 / 滑杆悬停）。 */
+  "typography.row.inherited": "继承模板",
+  "typography.row.inheritedPlaceholder": "继承",
+  "typography.row.inheritedSliderHint": "这一项继承模板；拖动滑杆即写入本条的覆盖值",
   /** 输入越界被夹回区间时的提示（不静默吞掉用户的输入）。 */
   "typography.row.invalid": "数值超出范围，已回到允许区间",
   /** 字号的 pt 对照读数（只显示，不换算落库值）。 */
@@ -112,8 +115,8 @@ const typography = {
   "typography.object.untitled": "未命名条目",
   /** 细调区的分组标题（合并后不再叫「这条的排版」）。 */
   "typography.object.more": "更多参数",
-  /** 级别管得住的那四项去哪儿了：不写会让用户以为功能被删。 */
-  "typography.object.levelHint": "字号、加粗、段前段后由上面的「文字级别」统一管理",
+  /** 那四项不在本浮层里：写明边界，但**不许**指向已下线的左栏「文字级别」控件（#7）。 */
+  "typography.object.levelHint": "字号、加粗、段前段后不在此处调整",
 
   // ── 条目排版的作用范围（Q12：整条 / 条目头 / 正文 / 灰字）──────────
   /** 段控标签。 */
@@ -144,27 +147,17 @@ const typography = {
   "typography.entryStyle.noBullets": "这条正文没有要点，项目符号不适用",
 
   // ── 格式刷（Q14：说清"复制的是什么"与"下一步做什么"）──────────
-  "typography.painter.title": "格式刷",
   /** 格式刷区的一句话说明：只复制局部排版，不动正文。 */
-  "typography.painter.hint": "把一条的局部排版复制到其它条目",
   /** 复制按钮：带上条目名，并说明可复制多少项（属性名由宿主拼进 copyProps）。 */
-  "typography.painter.copy": "复制「{name}」的排版",
   /** 可复制项数与属性名（Q14：按钮下面一行，避免"点了才知道复制了什么"）。 */
-  "typography.painter.copyProps": "可复制 {count} 项：{props}",
   /** 属性名之间的分隔符（放在语言包里，组件里不写中文标点）。 */
-  "typography.painter.propSeparator": "、",
   /** 源对象没有局部调整时的禁用说明。 */
-  "typography.painter.empty": "这条没有局部调整，先改一处",
   /** 已复制差异、等待目标时的状态说明。 */
-  "typography.painter.armed": "已复制这条的排版，在上方选择目标条目",
-  "typography.painter.apply": "应用到 {count} 条",
-  "typography.painter.cancel": "退出格式刷",
   /** 把当前生效值固定成本条覆盖（显式第二动作；按钮在条目排版面板底部，与恢复成对）。 */
   "typography.painter.freeze": "固定这条的当前样式",
   /** 固定的代价：这是用户必须看见的语义变化（Q12 起按当前作用范围执行）。 */
   "typography.painter.freezeHint": "固定后这个范围不再随模板变化",
   /** 应用成功提示（含对象数）。 */
-  "typography.painter.applied": "已应用到 {count} 条",
   /** 固定当前样式的成功提示（按作用范围执行）。 */
   "typography.painter.frozen": "已固定当前范围的样式",
 
@@ -185,17 +178,15 @@ const typography = {
   // ── 格式能力说明（不支持 ≠ 假装等价）─────────────────────────
   "typography.capability.title": "格式支持",
   /** 精确 PDF：斜体不倾斜、字距不支持；其余属性已支持。 */
-  "typography.capability.pdf": "精确 PDF：斜体与字距按模板值，其余已支持",
+  "typography.capability.pdf": "精确 PDF：斜体已移除，字距按模板值，其余已支持",
   "typography.capability.word": "Word 与 HTML 支持全部属性",
   "typography.capability.draft": "草稿预览为 CSS 近似，以精确 PDF 为准",
 
   // ── 字符级标记（斜体 / 链接；加粗沿用右键菜单的既有语义）────────
   "typography.inline.groupAria": "字符格式",
   "typography.inline.bold": "加粗",
-  "typography.inline.italic": "斜体",
   "typography.inline.link": "链接",
   "typography.inline.boldAria": "加粗所选文字",
-  "typography.inline.italicAria": "斜体所选文字",
   "typography.inline.linkAria": "给所选文字加链接",
   /** 链接输入弹层的标题（≤7 字）。 */
   "typography.inline.linkTitle": "插入链接",
@@ -231,6 +222,9 @@ const typography = {
   /** 状态行（Q13）：先说在改哪一条，再说级别；不再写"作用于 N 条"这种不指名的说法。 */
   "typography.level.status": "正在调整：{name}",
   "typography.level.statusMany": "{count} 条内容",
+  // R-18：批量目标单独成句，避免"正在调整：2 条内容"读起来像单条。
+  "typography.level.statusBatch": "批量：{count} 个条目",
+  "typography.level.clearBatch": "只改当前条目",
   "typography.level.current": "级别：{level}",
   /** 反推结果：对象上没有任何级别覆盖。 */
   "typography.level.currentInherit": "跟随模板",
@@ -345,7 +339,7 @@ const typography = {
     "整份简历的字体和基准字号；在左栏「排版参数」里选「字体」、拖「字号」",
   "typography.structureExample.item.4.title": "板块标题",
   "typography.structureExample.item.4.desc":
-    "如「工作经历」这样的标题；在左栏「局部排版」的「板块标题」里调字号与加粗",
+    "如「工作经历」这样的标题；在左栏「样式」组的「层次与间距」里拖「小节标题大小」改字号",
   "typography.structureExample.item.5.title": "板块",
   "typography.structureExample.item.5.desc":
     "简历按板块分区；顺序在左栏「模板与版式」里调，是否新起一页在「分页」里设",
@@ -353,25 +347,25 @@ const typography = {
   "typography.structureExample.item.6.desc": "板块里的每条记录；两条之间的距离用「条目间距」调",
   "typography.structureExample.item.7.title": "条目标题行",
   "typography.structureExample.item.7.desc":
-    "标题在左、日期在右；在左栏「局部排版」的「日期位置」里改日期靠右还是紧跟标题",
+    "标题在左、日期在右；右键日期字段选「调整排版」，在浮层「日期位置」里改日期靠右还是紧跟标题",
   "typography.structureExample.item.8.title": "正文与要点",
   "typography.structureExample.item.8.desc":
-    "条目标题下的描述与要点；在左栏「局部排版」的「正文」里调字号、加粗与对齐",
+    "条目标题下的描述与要点；右键正文或要点选「调整排版」，在浮层里改颜色、行距、缩进、对齐与字距",
   "typography.structureExample.item.9.title": "项目符号",
   "typography.structureExample.item.9.desc":
-    "要点前的圆点；在左栏「局部排版」的「正文」里切换「项目符号」：圆点、短横或不显示",
+    "要点前的圆点；右键正文或要点选「调整排版」，在浮层「项目符号」里切圆点、短横或不显示",
   "typography.structureExample.item.10.title": "行距",
   "typography.structureExample.item.10.desc":
     "正文行与行之间；整份简历在左栏「排版参数」的「行距」里调，也可按段落类型单独调",
   "typography.structureExample.item.11.title": "段前距与段后距",
   "typography.structureExample.item.11.desc":
-    "段落上下的空白；在左栏「局部排版」里按段落类型调，套用「文字级别」也会改这两项",
+    "段落上下的空白；跟随模板的段落样式，当前界面不单独提供调整入口",
   "typography.structureExample.item.12.title": "缩进",
   "typography.structureExample.item.12.desc":
-    "正文左边往里缩多少；在左栏「局部排版」的「缩进」里调",
+    "正文左边往里缩多少；右键正文或要点选「调整排版」，在浮层「缩进」里调",
   "typography.structureExample.item.13.title": "对齐",
   "typography.structureExample.item.13.desc":
-    "左对齐、居中、右对齐或两端对齐；在左栏「局部排版」的「对齐」里选",
+    "左对齐、居中、右对齐或两端对齐；右键正文、要点或条目标题选「调整排版」，在浮层「对齐」里选",
   "typography.structureExample.item.14.title": "区块间距",
   "typography.structureExample.item.14.desc":
     "两个板块之间的空白；在左栏「层次与间距」的「区块间距」里调",
@@ -390,11 +384,8 @@ const typography = {
   "typography.tools.selectionEmpty": "这份简历还没有条目",
   "typography.tools.focused": "当前条目：{name}",
   "typography.tools.noFocused": "先在纸面或结构面板点选一条内容",
-  "typography.tools.targets": "格式刷目标：{count} 条",
-  "typography.tools.targetsHint": "先在上方选择目标条目，再应用格式刷",
   "typography.tools.sectionObject": "条目排版",
   "typography.tools.sectionLevel": "文字级别",
-  "typography.tools.sectionPainter": "格式刷",
   "typography.tools.sectionBatch": "批量调整",
   "typography.tools.sectionRole": "同类段落",
   "typography.tools.roleHint": "同类段落默认按条目正文继承",

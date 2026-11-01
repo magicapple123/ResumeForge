@@ -78,6 +78,27 @@ const enumsApply = {
   "enumsApply.failure.unconfirmed": "无法确认投递结果，请到浏览器核对",
   "enumsApply.failure.unknown": "未知失败",
 
+  // #39：失败三段码的展示名（协议值见 services/apply/failure_taxonomy.py）。
+  "enumsApply.failureReason.site_changed": "页面改版",
+  "enumsApply.failureReason.render_timeout": "页面加载超时",
+  "enumsApply.failureReason.page_not_navigated": "页面没有跳到目标地址",
+  "enumsApply.failureReason.selector_missing": "控件未找到",
+  "enumsApply.failureReason.login_required": "需要登录",
+  "enumsApply.failureReason.captcha_required": "需要验证码",
+  "enumsApply.failureReason.greeting_missing": "招呼语缺失",
+  "enumsApply.failureReason.network_timeout": "网络超时",
+  "enumsApply.failureReason.upload_failed": "简历上传失败",
+  "enumsApply.failureReason.site_unsupported": "岗位来源不支持",
+  "enumsApply.failureReason.profile_insufficient": "资料不足",
+  "enumsApply.failureReason.unconfirmed": "无法确认结果",
+  "enumsApply.failureReason.unknown": "未知原因",
+  "enumsApply.failureTarget.chat_input": "聊天输入框",
+  "enumsApply.failureTarget.send_button": "发送按钮",
+  "enumsApply.failureTarget.apply_entry": "投递入口",
+  "enumsApply.failureTarget.job_card": "岗位卡片",
+  "enumsApply.failureTarget.search_results": "搜索结果",
+  "enumsApply.failureTarget.resume_upload": "简历上传",
+
   // ===== 执行步骤（STEP_LABELS；键是后端步骤码，未登记的码原样显示）=====
   "enumsApply.step.opening": "打开岗位页",
   "enumsApply.step.filling": "填写表单",

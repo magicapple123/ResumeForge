@@ -9,7 +9,10 @@ import { Button, Popover } from "antd";
 import { ArrowDownOutlined, ArrowUpOutlined, SyncOutlined, SwapOutlined } from "@ant-design/icons";
 import { useLocale } from "../../i18n/i18nContext";
 import { t } from "../../i18n";
-import "./sectionOrderControl.css";
+// R-33/R-15 守卫（`test_frontend_module_naming`）：样式文件名不能与组件只差大小写，
+// 否则在 Windows 上 `SectionOrderControl.tsx` 与 `sectionOrderControl.css` 会互相遮蔽
+// （同一路径的大小写不敏感文件系统只有一份）。改用具名分隔的写法。
+import "./section-order-control.css";
 
 export interface SectionOrderItem {
   key: string;

@@ -28,6 +28,14 @@ const globalSearch = {
   "globalSearch.group.jobs": "Jobs",
   "globalSearch.group.resumes": "Resumes",
   "globalSearch.group.more": "Other",
+
+  /** Data-domain tags of a hit come from the language pack, never the raw code. */
+  "globalSearch.type.referral": "Referral",
+  "globalSearch.type.reminder": "Reminder",
+  "globalSearch.type.experience": "Interview notes",
+  "globalSearch.type.claim": "Fact ledger",
+  "globalSearch.type.material": "Material",
+  "globalSearch.type.skill": "Skill",
 } as const;
 
 export default globalSearch;

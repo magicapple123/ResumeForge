@@ -106,6 +106,7 @@ export default function VariantLayoutSection({ resumeId, variant, onChanged }: P
   const inherited = !layoutIsVariantOwned(input?.layout_source);
   return (
     <VariantLayoutEditor
+      name={variant.name}
       fields={fields}
       inherited={inherited}
       dirty={!sameVariantLayout(fields, saved)}

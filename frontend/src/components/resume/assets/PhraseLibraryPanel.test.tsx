@@ -115,21 +115,24 @@ describe("PhraseLibraryPanel · 动作与禁用", () => {
     expect(onInsert).not.toHaveBeenCalled();
   });
 
-  it("删除与复制都只是回调", () => {
+  it("删除与复制收在「⋯」菜单里，点击仍只是回调（#19）", async () => {
     const { onRequestDelete, onCopy } = renderPanel();
-    fireEvent.click(screen.getAllByRole("button", { name: at("assets.action.delete") })[0]);
+    fireEvent.click(
+      screen.getAllByRole("button", { name: at("assets.action.moreAria", { index: 1 }) })[0],
+    );
+    fireEvent.click(await screen.findByText(at("assets.action.delete")));
     expect(onRequestDelete).toHaveBeenCalledTimes(1);
     fireEvent.click(
-      screen.getAllByRole("button", { name: at("assets.action.copyAria", { index: 1 }) })[0],
+      screen.getAllByRole("button", { name: at("assets.action.moreAria", { index: 1 }) })[0],
     );
+    fireEvent.click(await screen.findByText(at("assets.action.copy")));
     expect(onCopy).toHaveBeenCalledTimes(1);
   });
 
-  it("宿主没提供回调时不渲染对应按钮", () => {
-    renderPanel({ onCopy: undefined, onRequestDelete: undefined });
-    expect(screen.queryByRole("button", { name: at("assets.action.delete") })).toBeNull();
+  it("宿主没提供任何卡片动作回调时不渲染「⋯」入口", () => {
+    renderPanel({ onCopy: undefined, onRequestDelete: undefined, onEdit: undefined });
     expect(
-      screen.queryByRole("button", { name: at("assets.action.copyAria", { index: 1 }) }),
+      screen.queryByRole("button", { name: at("assets.action.moreAria", { index: 1 }) }),
     ).toBeNull();
   });
 
@@ -149,6 +152,48 @@ describe("PhraseLibraryPanel · 动作与禁用", () => {
       .getByText(MOCK_PHRASES[0].text)
       .closest("[data-phrase-id]") as HTMLElement;
     expect(within(firstCard).getByText("backend")).toBeTruthy();
-    expect(within(firstCard).getByText(at("assets.kind.achievement"))).toBeTruthy();
+    const meta = firstCard.querySelector(".resume-phrase-card-meta") as HTMLElement;
+    expect(meta.textContent).toContain(
+      at("assets.meta.kind", { value: at("assets.kind.achievement") }),
+    );
+  });
+
+  it("#19：卡片元信息读出类型 / 语言 / 来源 / 已用于 N 份简历四个维度", () => {
+    renderPanel();
+    const firstCard = screen
+      .getByText(MOCK_PHRASES[0].text)
+      .closest("[data-phrase-id]") as HTMLElement;
+    const meta = firstCard.querySelector(".resume-phrase-card-meta") as HTMLElement;
+    expect(meta.textContent).toContain(
+      at("assets.meta.language", { value: at("assets.language.en-US") }),
+    );
+    expect(meta.textContent).toContain(
+      at("assets.meta.source", { value: at("assets.source.claim") }),
+    );
+    expect(meta.textContent).toContain(
+      at("assets.meta.usage", { count: MOCK_PHRASES[0].usage_count }),
+    );
+  });
+
+  it("#19：未标注语言时读作「语言：未标注」而不是裸词", () => {
+    renderPanel();
+    const unlabeled = screen
+      .getByText(MOCK_PHRASES[4].text)
+      .closest("[data-phrase-id]") as HTMLElement;
+    const meta = unlabeled.querySelector(".resume-phrase-card-meta") as HTMLElement;
+    expect(meta.textContent).toContain(
+      at("assets.meta.language", { value: at("assets.language.unknown") }),
+    );
+  });
+
+  it("#19：没选中要点时收藏按钮禁用 + 给出原因，而不是整块不渲染", () => {
+    const { onCollectCurrent } = renderPanel({
+      collectEnabled: false,
+      collectDisabledReason: at("assets.collect.needSelection"),
+    });
+    const collect = screen.getByRole("button", { name: at("assets.action.collectAria") });
+    expect(collect).toBeDisabled();
+    fireEvent.click(collect);
+    expect(onCollectCurrent).not.toHaveBeenCalled();
   });
 });

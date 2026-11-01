@@ -11,7 +11,7 @@ const webFormPage = {
   "webFormPage.notice.body":
     "填充完成后请回到浏览器窗口逐项核对，确认无误后由你自己点击页面上的提交按钮。",
   "webFormPage.hint.expandLater":
-    "浏览器就绪后，安全说明、AI 辅助、放宽模式等控制项会在这里逐步展开。",
+    "浏览器就绪后，安全说明、AI 辅助等控制项会在这里逐步展开（放宽模式的边界说明一直可见）。",
   "webFormPage.stagedAi.ready":
     "上一次后台的 AI 字段识别已完成，结果先存着；点「应用」切到那份预览，页面仍不会被自动修改。",
   "webFormPage.stagedAi.apply": "应用",
@@ -145,7 +145,8 @@ const webFormPage = {
   "webFormPage.relaxed.enabledHint":
     "已开启——点选类控件若匹配到资料值，程序会代点并回读核对；同意/声明类会先问你。",
   "webFormPage.relaxed.risk":
-    "开启后程序会尝试代点下拉/弹层选项并代勾你逐条确认过的声明项，存在选错可能， 填完请核对；日期选择器与文件上传仍不代做。",
+    "开启后程序会尝试代点下拉/弹层选项并代勾你逐条确认过的声明项，存在选错可能，填完请核对。 " +
+    "四类始终不代填：日期选择器、文件上传、密码/验证码/银行卡、无弹层的只读点选框——这些都需要你自己操作。",
   "webFormPage.liveStatus.thinking": "正在看这个框",
   "webFormPage.liveStatus.aiThinking": "AI 正在识别",
   "webFormPage.liveStatus.matched": "已给出建议",

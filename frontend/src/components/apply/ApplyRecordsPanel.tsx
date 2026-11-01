@@ -26,6 +26,7 @@ import {
   deleteRecord,
   deleteRecordBatch,
   listRecordBatches,
+  retryFailedRecords,
   retryRecord,
 } from "../../api/apply";
 import { useApi } from "../../hooks/useApi";
@@ -43,7 +44,12 @@ import {
   type Page,
 } from "../../types";
 import { t } from "../../i18n";
-import { TASK_ITEM_STATUS_LABEL_KEYS, failureCategoryKey } from "../../i18n/enum/apply";
+import {
+  STEP_LABEL_KEYS,
+  TASK_ITEM_STATUS_LABEL_KEYS,
+  failureCategoryKey,
+  failureReasonKey,
+} from "../../i18n/enum/apply";
 import { useLocale } from "../../i18n/i18nContext";
 
 interface Props {
@@ -68,8 +74,12 @@ export default function ApplyRecordsPanel({ disabled, onRetried }: Props) {
     setSearchText(keyword);
   }
   const [result, setResult] = useState("");
+  // #39：按失败分类筛选（与后端 records/grouped 的 query 参数同名同义）。
+  const [failureCategory, setFailureCategory] = useState("");
   const [page, setPage] = useState(1);
   const [retrying, setRetrying] = useState<number | null>(null);
+  // #39：「只重试这 N 条」进行中的批次 id（按钮 loading 用）。
+  const [retryingFailed, setRetryingFailed] = useState<number | null>(null);
   const [detail, setDetail] = useState<ApplyRecord | null>(null);
   // 当前展开的批次 id 集合（分组展示：点击组头展开/收起）。
   const [expanded, setExpanded] = useState<number[]>([]);
@@ -82,11 +92,12 @@ export default function ApplyRecordsPanel({ disabled, onRetried }: Props) {
       listRecordBatches({
         keyword,
         result,
+        failure_category: failureCategory,
         page,
         page_size: BATCH_PAGE_SIZE,
         include_items: false,
       }),
-    [keyword, result, page],
+    [keyword, result, failureCategory, page],
   );
 
   useEffect(() => {
@@ -98,6 +109,7 @@ export default function ApplyRecordsPanel({ disabled, onRetried }: Props) {
     data,
     keyword,
     result,
+    failureCategory,
     expanded,
     onBatchError,
   );
@@ -112,6 +124,30 @@ export default function ApplyRecordsPanel({ disabled, onRetried }: Props) {
       message.error(err instanceof Error ? err.message : t("applyRecords.error.retryFailed"));
     } finally {
       setRetrying(null);
+    }
+  };
+
+  /**
+   * #39「只重试这 N 条」：把本批里命中当前筛选的失败记录一起重投。
+   *
+   * 只传筛选条件（keyword/result/failure_category），由服务端按同一套筛选选出可重投的
+   * 记录——组头显示的 N 与真正重投的条数因此一定对得上。
+   */
+  const retryFailed = async (batch: ApplyRecordBatch) => {
+    setRetryingFailed(batch.id);
+    try {
+      const { retried, task } = await retryFailedRecords({
+        task_id: batch.id,
+        keyword,
+        result,
+        failure_category: failureCategory,
+      });
+      message.success(t("applyRecords.toast.retriedFailed", { count: retried }));
+      onRetried(task);
+    } catch (err) {
+      message.error(err instanceof Error ? err.message : t("applyRecords.error.retryFailedBatch"));
+    } finally {
+      setRetryingFailed(null);
     }
   };
 
@@ -210,10 +246,35 @@ export default function ApplyRecordsPanel({ disabled, onRetried }: Props) {
         if (!record.failure_category) return "-";
         // 已知分类走语言包；后端新增、尚未登记的分类回退后端文案 / 原码（旧行为）。
         const key = failureCategoryKey(record.failure_category);
+        const reasonKey = failureReasonKey(record.failure_reason ?? "");
+        const step = record.failure_step ?? "";
+        const stepLabelText = STEP_LABEL_KEYS[step] ? t(STEP_LABEL_KEYS[step]) : "";
+        // #39：具体原因随分类一起显示（failure_detail 是后端诊断串，截一行摘要）。
+        const detail = record.failure_detail.trim().split(String.fromCharCode(10))[0];
         return (
-          <Tag color="red">
-            {key ? t(key) : failureLabel(record.failure_category, record.failure_label)}
-          </Tag>
+          <Space orientation="vertical" size={0}>
+            {/* Tag=大类；子码=稳定码（可筛选、可给建议）；第三行=诊断摘要。 */}
+            <Space size={4} wrap>
+              <Tag color="red">
+                {key ? t(key) : failureLabel(record.failure_category, record.failure_label)}
+              </Tag>
+              {record.failure_reason ? (
+                <Typography.Text code style={{ fontSize: 12 }}>
+                  {record.failure_reason}
+                </Typography.Text>
+              ) : null}
+              {reasonKey ? (
+                <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                  {t(reasonKey)}
+                </Typography.Text>
+              ) : null}
+            </Space>
+            {detail || stepLabelText ? (
+              <Typography.Text type="secondary" style={{ fontSize: 12 }} ellipsis>
+                {[stepLabelText, detail].filter(Boolean).join(" · ")}
+              </Typography.Text>
+            ) : null}
+          </Space>
         );
       },
     },
@@ -316,6 +377,11 @@ export default function ApplyRecordsPanel({ disabled, onRetried }: Props) {
       <ApplyRecordsToolbar
         searchText={searchText}
         result={result}
+        failureCategory={failureCategory}
+        onFailureCategoryChange={(value) => {
+          setFailureCategory(value);
+          setPage(1);
+        }}
         onSearchTextChange={(value) => {
           setSearchText(value);
           if (value === "" && keyword !== "") {
@@ -361,6 +427,10 @@ export default function ApplyRecordsPanel({ disabled, onRetried }: Props) {
             }
             onEnterSelecting={() => enterBatchSelect(batch.id)}
             batchToolbar={selectingBatches.includes(batch.id) ? batchToolbarFor(batch) : undefined}
+            /* #39：组头「只重试这 N 条」——N 与明细同一套筛选（后端算好的 retryable_count）。 */
+            retryableCount={batch.retryable_count ?? 0}
+            retryingFailed={retryingFailed === batch.id}
+            onRetryFailed={() => void retryFailed(batch)}
           />
         ))}
       </div>

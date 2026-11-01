@@ -130,6 +130,11 @@ export default function ActionProposalCard({ proposal: initial }: Props) {
         </Typography.Text>
       </div>
       {preview.changes.length > 0 && (
+        <Typography.Text strong className="assistant-write-proposal-diff-title">
+          {t("assistantUi.actionProposal.diffTitle")}
+        </Typography.Text>
+      )}
+      {preview.changes.length > 0 && (
         <ul className="assistant-write-proposal-changes">
           {preview.changes.map((change, index) => (
             <li key={`${change.field}-${index}`}>
@@ -153,6 +158,13 @@ export default function ActionProposalCard({ proposal: initial }: Props) {
             </li>
           ))}
         </ul>
+      )}
+      {/* 执行结果摘要：写工具真正改了什么（简历文档写入还含自动留档的撤销点版本名）。
+          以前卡片在 executed 之后只剩一个状态标签，用户不知道留档在哪、怎么恢复。 */}
+      {proposal.status === "executed" && proposal.result_summary && (
+        <Typography.Text type="secondary" className="assistant-write-proposal-result">
+          {proposal.result_summary}
+        </Typography.Text>
       )}
       <Typography.Text type="secondary" style={{ fontSize: 12 }}>
         {t("assistantUi.actionProposal.notice")}

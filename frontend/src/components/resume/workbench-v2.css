@@ -17,6 +17,8 @@
   flex: 1 1 auto;
   min-height: 0;
   overflow: auto;
+  /* #3：编辑器内滚动到底/顶时不要把滚动链传给外层工作台（防"整个工作台被抬起"复发）。 */
+  overscroll-behavior: contain;
 }
 
 .resume-wb-v2-conversion {
@@ -42,7 +44,7 @@
   gap: 4px;
   padding: 6px 8px;
   border-radius: var(--rf-radius-sm, 4px);
-  background: var(--rf-color-fill-quaternary);
+  background: var(--rf-fill-quaternary);
 }
 
 .resume-wb-v2-conversion-summary ul {
@@ -50,9 +52,13 @@
   padding-left: 18px;
 }
 
+/* R-28：页签条吸顶。顶部那 20px 内边距从容器挪进页签条自己（`padding: 20px 20px 8px`），
+   否则 `position: sticky; top: 0` 的页签条与容器内边距之间会露出一条滚动中的内容。
+   只改 v2 这一个类：基类 `.resume-wb-col-params` 还挂在旧面板上。 */
 .resume-wb-v2-params {
   overflow-y: auto;
   gap: 8px;
+  padding-top: 0;
 }
 
 .resume-wb-v2-panel {

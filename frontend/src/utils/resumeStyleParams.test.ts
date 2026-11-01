@@ -43,8 +43,8 @@ describe("resumeStyleParams · 属性表", () => {
     expect(STYLE_ENUM_OPTIONS.meta_align?.map((item) => item.value)).toEqual(["right", "inline"]);
   });
 
-  it("十二个属性都有控件形态与标签", () => {
-    expect(Object.keys(STYLE_PROP_KINDS)).toHaveLength(12);
+  it("十一个属性都有控件形态与标签（#5d 起无斜体）", () => {
+    expect(Object.keys(STYLE_PROP_KINDS)).toHaveLength(11);
     expect(isNumberStyleProp("line_height")).toBe(true);
     expect(isNumberStyleProp("bold")).toBe(false);
     expect(styleNumberStep("line_height")).toBe(0.01);
@@ -75,7 +75,6 @@ describe("resumeStyleParams · 取值归一", () => {
     expect(coerceStylePropValue("color", "#ABCDEF")).toBe("#abcdef");
     expect(coerceStylePropValue("color", "#abc")).toBe("#abc");
     expect(isHexColor("#12")).toBe(false);
-    expect(coerceStylePropValue("italic", true)).toBe(true);
     expect(coerceStylePropValue("bullet", "dash")).toBe("dash");
   });
 

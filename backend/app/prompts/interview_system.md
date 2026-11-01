@@ -13,6 +13,12 @@
 
 {{ persona }}
 {% endif %}
+{% if behavior_directives %}
+## 本场行为约定（按本场参数生成，与上面的角色设定冲突时以这里为准）
+
+{{ behavior_directives }}
+
+{% endif %}
 ## 提问规则
 
 1. **一次只问一个问题**，不要在一轮里连着抛出三四个问题。

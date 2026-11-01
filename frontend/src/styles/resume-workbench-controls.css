@@ -256,9 +256,10 @@
    2. 标签是 `min-width: 34px` + 内容宽（「强调色」36 /「辅助文字颜色」72），四行的
       第二列起点因此各不相同；
    3. 来源胶囊靠 `margin-left: auto` 收口，而色板行里没有那一条"auto"。
-   改法：把行本身做成四列 grid，`head` 用 `display: contents` 让它的四段**直接**落进列里，
-   色板跨"第 2 列 → 行尾"——于是"色板左边界 = 取色器左边界"、"右边界 = 尾部右边界"，
-   标签列定宽之后四行共用同一条起跑线。 */
+   改法：把行本身做成 grid，`head` 用 `display: contents` 让它的几段**直接**落进列里，
+   色板跨"取色器那一列 → 行尾"——于是"色板左边界 = 取色器左边界"、"右边界 = 尾部右边界"，
+   标签列定宽之后四行共用同一条起跑线。
+   #12 起多了第一列（展开箭头），列数 4 → 5、色板起点 2 → 3，其余对齐结论不变。 */
 .resume-wb-rows {
   /* 颜色行的标签列宽：目录里最长的一条是「辅助文字颜色」（6 字 × 12px = 72px，78 留一点
      字宽取整的余量）。用固定值而不是 `max-content`——每一行都是**独立的** grid，
@@ -268,14 +269,44 @@
 
 .resume-wb-color-row {
   display: grid;
-  grid-template-columns: var(--resume-wb-color-label-w) auto minmax(0, 1fr) auto;
+  /* 五列：展开箭头 / 标签 / 取色器 / 读数 / 来源（#12 加了行头箭头，四列会把来源挤到第二行）。 */
+  grid-template-columns: auto var(--resume-wb-color-label-w) auto minmax(0, 1fr) auto;
   align-items: center;
   column-gap: 6px;
   row-gap: 6px;
   min-width: 0;
+  cursor: pointer;
 }
 
-/* 四段直接成为行 grid 的项：中间再包一层 flex，列宽就由内容各自决定，跨列对不上。 */
+/* #12：行头展开箭头。原生 button 画成一颗 caret：透明底、无边框，20×20 触达区。
+   antd-override 不适用——这不是 .ant-* 覆写，是私有形态的私有类。 */
+.resume-wb-color-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  min-width: 16px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--rf-text-tertiary);
+  font-size: 10px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.resume-wb-color-toggle:hover {
+  color: var(--rf-text-body);
+}
+
+.resume-wb-color-toggle:focus-visible {
+  border-radius: 2px;
+  outline: 2px solid var(--rf-focus-visible);
+  outline-offset: 1px;
+}
+
+/* 各段直接成为行 grid 的项：中间再包一层 flex，列宽就由内容各自决定，跨列对不上。 */
 .resume-wb-color-head {
   display: contents;
 }
@@ -300,10 +331,10 @@
 }
 
 /* 色板：从**取色器那一列**起，一直铺到行尾。`padding-left` 去掉了——它正是当初
-   "色板比上面那行左移 2px"的来源。 */
+   "色板比上面那行左移 2px"的来源。列号随 #12 的五行网格 +1。 */
 .resume-wb-swatches {
   display: flex;
-  grid-column: 2 / -1;
+  grid-column: 3 / -1;
   grid-row: 2;
   gap: 6px;
 }

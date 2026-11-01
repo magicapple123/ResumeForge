@@ -36,6 +36,24 @@ export interface VersionListOut {
   items: VersionOut[];
 }
 
+/** 字段级变更（#28b）：一条 = 一个字段/条目的新增、删除或修改。 */
+export interface VersionChangeOut {
+  /** 稳定路径：header.<itemId> / <sectionKey>.<entryId> / <sectionKey>.<entryId>.<itemId>。 */
+  path: string;
+  kind: "added" | "removed" | "changed";
+  scope: "header" | "section" | "entry" | "item";
+  section_key: string;
+  section_title: string;
+  entry_id: string;
+  entry_label: string;
+  item_key: string;
+  item_label: string;
+  /** 可读旧值（新增项为 null）。 */
+  old_value: string | null;
+  /** 可读新值（删除项为 null）。 */
+  new_value: string | null;
+}
+
 /** 排版上下文差异：只按顶层键报增/删/改。 */
 export interface LayoutDiffOut {
   added: string[];
@@ -52,6 +70,10 @@ export interface VersionCompareOut {
   against_name: string;
   content: ResumeDiff;
   layout: LayoutDiffOut;
+  /** #28b：字段级变更集（界面只渲染这一份，不再展示整份文档的行级 JSON diff）。 */
+  changes: VersionChangeOut[];
+  /** 变更条数超过后端上限时只返回前 N 条。 */
+  changes_truncated: boolean;
 }
 
 export interface VersionRestoreOut {

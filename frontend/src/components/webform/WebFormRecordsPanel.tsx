@@ -64,6 +64,28 @@ interface Props {
   refreshKey?: number;
 }
 
+/** #36: masked ID number display; click reveal to show (no copy shortcut). */
+function MaskedValue({ value }: { value: string }) {
+  const [revealed, setRevealed] = useState(false);
+  const masked =
+    value.length <= 7
+      ? "*".repeat(value.length)
+      : `${value.slice(0, 3)}${"*".repeat(Math.max(1, value.length - 7))}${value.slice(-4)}`;
+  return (
+    <Space size={6}>
+      <span>{revealed ? value : masked}</span>
+      <Button
+        type="link"
+        size="small"
+        style={{ padding: 0 }}
+        onClick={() => setRevealed((current) => !current)}
+      >
+        {revealed ? t("webFormRecords.hide") : t("webFormRecords.reveal")}
+      </Button>
+    </Space>
+  );
+}
+
 export default function WebFormRecordsPanel({ refreshKey = 0 }: Props) {
   // 本组件用模块级 t()：必须订阅语言变化，否则切语言后这一块不重渲染。
   useLocale();
@@ -172,6 +194,9 @@ export default function WebFormRecordsPanel({ refreshKey = 0 }: Props) {
   }
 
   // 列定义放在组件内：列名要按当前语言取，模块作用域调 t() 切语言不会重渲染。
+  // #36: ID number is the most sensitive field in fill records; mask by default.
+  const isIdNumber = (item: WebFormRecordItem) => item.field === "id_number";
+
   const itemColumns: TableColumnsType<WebFormRecordItem> = [
     {
       title: t("webFormRecords.column.field"),
@@ -184,6 +209,7 @@ export default function WebFormRecordsPanel({ refreshKey = 0 }: Props) {
       dataIndex: "value",
       key: "value",
       ellipsis: true,
+      render: (_, item) => (isIdNumber(item) ? <MaskedValue value={item.value} /> : item.value),
     },
     {
       title: t("webFormRecords.column.status"),

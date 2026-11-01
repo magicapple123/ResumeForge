@@ -13,11 +13,11 @@ export type CapabilityLevel = "supported" | "approx" | "unsupported" | "unknown"
 /**
  * 已知能力键 → 词条。未知键仍会显示（原始机器码是 ASCII，可接受）。
  *
- * 覆盖后端 `CAPABILITY_KEYS` 全量 14 项：少一项就会在界面上漏出 `manual_page_break`
- * 这类机器码（2026-10-29 试用对比里可见），而这份字典是**唯一**的翻译点。
+ * 覆盖后端 `CAPABILITY_KEYS` 全量 13 项（#5d 起 italic 已移除）：少一项就会在界面上
+ * 漏出 `manual_page_break` 这类机器码（2026-10-29 试用对比里可见），而这份字典是
+ * **唯一**的翻译点。
  */
 export const CAPABILITY_LABEL_KEY: Record<string, MessageKey> = {
-  italic: "preflight.capability.italic",
   link_clickable: "preflight.capability.linkClickable",
   page_numbers: "preflight.capability.pageNumbers",
   missing_glyph: "preflight.capability.missingGlyph",
@@ -118,3 +118,39 @@ export const LEVEL_LABEL_KEY: Record<CapabilityLevel, MessageKey> = {
   unsupported: "preflight.capability.unsupported",
   unknown: "preflight.capability.unknown",
 };
+
+/**
+ * 原因码 → 词条（R-26）。码由后端 `capability_notes` 下发，**文案在这里**：
+ * 后端写中文会让英文界面漏出中文（英文名为证：R-26 验收要看英文界面）。
+ *
+ * 未收录的码不显示提示（而不是显示裸码）——这样后端加新码时界面退化成"没有 Tooltip"，
+ * 而不是把 `plain_text_no_style` 这种内部字符串怼到用户脸上。
+ */
+export const NOTE_MESSAGE_KEY: Record<string, MessageKey> = {
+  browser_print: "preflight.capability.note.browser_print",
+  browser_no_page_number: "preflight.capability.note.browser_no_page_number",
+  no_italic_glyph: "preflight.capability.note.no_italic_glyph",
+  link_text_only: "preflight.capability.note.link_text_only",
+  font_substitute: "preflight.capability.note.font_substitute",
+  table_approx: "preflight.capability.note.table_approx",
+  plain_text_no_style: "preflight.capability.note.plain_text_no_style",
+  plain_text_no_pagination: "preflight.capability.note.plain_text_no_pagination",
+  plain_text_no_layout: "preflight.capability.note.plain_text_no_layout",
+  plain_text_only: "preflight.capability.note.plain_text_only",
+  data_only: "preflight.capability.note.data_only",
+};
+
+/** `{format: {capability: code}}`（后端形状）→ 扁平查找表。坏数据一律忽略。 */
+export function parseCapabilityNotes(
+  raw: Record<string, unknown> | null | undefined,
+): Record<string, string> {
+  const notes: Record<string, string> = {};
+  if (!raw) return notes;
+  for (const [format, value] of Object.entries(raw)) {
+    if (!value || typeof value !== "object") continue;
+    for (const [capability, code] of Object.entries(value as Record<string, unknown>)) {
+      if (typeof code === "string" && code.trim()) notes[`${format}:${capability}`] = code;
+    }
+  }
+  return notes;
+}

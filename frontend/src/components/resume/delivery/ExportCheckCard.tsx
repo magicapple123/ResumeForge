@@ -5,10 +5,11 @@
  * 只读展示（只读核对不新开弹层）；版本已变/缺联系方式等以 `Alert` 逐条给"怎么办"，
  * 不把个人审美或"必须填"这类非硬性项当阻断。数据来自与导出同一份快照的摘要。
  */
-import { Alert, Button } from "antd";
+import { Alert, Button, Tooltip } from "antd";
 import { t } from "../../../i18n";
 import { useLocale } from "../../../i18n/i18nContext";
 import type { MessageKey } from "../../../i18n";
+import { formatStampTime } from "../../../utils/formatDateTime";
 import { collectExportWarnings, type ExportCheckWarning } from "../../../features/resume-delivery";
 import type { ExportCheckSource, ExportCheckSummary } from "../../../features/resume-delivery";
 
@@ -32,7 +33,8 @@ export interface ExportCheckCardProps {
   onRefresh?: () => void;
 }
 
-function Row({ label, children }: { label: string; children: React.ReactNode }) {
+// label 收 ReactNode：投递目标那一行的标签要包 Tooltip（R-22）。
+function Row({ label, children }: { label: React.ReactNode; children: React.ReactNode }) {
   return (
     <div className="resume-delivery-check-row">
       <dt>{label}</dt>
@@ -77,7 +79,15 @@ export default function ExportCheckCard({
         {source === "server" ? t("delivery.check.source.server") : t("delivery.check.source.local")}
       </p>
       <dl className="resume-delivery-check-list">
-        <Row label={t("delivery.check.target")}>
+        {/* R-22：标签改成「投递目标」并挂来源说明——它取自投递记录/进度关联，
+            与简历里的「求职意向」是两回事，用户对着"会员运营专员"和"用户增长"发懵过。 */}
+        <Row
+          label={
+            <Tooltip title={t("delivery.check.targetHint")}>
+              <span className="resume-delivery-check-label">{t("delivery.check.target")}</span>
+            </Tooltip>
+          }
+        >
           {summary.target_company || summary.target_job_title
             ? `${summary.target_company}${summary.target_company && summary.target_job_title ? " · " : ""}${summary.target_job_title}`
             : t("delivery.check.targetEmpty")}
@@ -88,7 +98,15 @@ export default function ExportCheckCard({
             ? t("delivery.check.contactPresent")
             : t("delivery.check.contactMissing")}
         </Row>
-        <Row label={t("delivery.check.revision")}>#{summary.revision}</Row>
+        {/* R-22：有改动时间就显示「第 4 版 · 10-28 17:40」；旧后端没有这个字段时回退 #4。 */}
+        <Row label={t("delivery.check.revision")}>
+          {summary.updated_at
+            ? t("delivery.check.revisionAt", {
+                revision: summary.revision,
+                time: formatStampTime(summary.updated_at),
+              })
+            : `#${summary.revision}`}
+        </Row>
         <Row label={t("delivery.check.documentMode")}>{t(modeKey)}</Row>
         <Row label={t("delivery.check.hidden")}>
           {summary.hidden_count > 0

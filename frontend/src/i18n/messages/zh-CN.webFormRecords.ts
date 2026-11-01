@@ -33,6 +33,8 @@ const webFormRecords = {
   "webFormRecords.snapshot.summary":
     "填完后页面上共 {filled} 个框是我们填的；其余为你原有的内容或页面自己算出来的。",
   "webFormRecords.pagination.total": "共 {count} 条",
+  "webFormRecords.reveal": "显示",
+  "webFormRecords.hide": "隐藏",
 } as const;
 
 export default webFormRecords;
