@@ -31,7 +31,6 @@ def add_rich_runs(
     set_font: RunSetter,
     *,
     bold: bool = False,
-    italic: bool = False,
     **font_kwargs: Any,
 ) -> None:
     """按协议 v2 把 text 拆成若干 run 追加到 paragraph。
@@ -41,8 +40,9 @@ def add_rich_runs(
         text: 正文原文，可能含成对的行内标记（不配对的按字面保留）。
         set_font: 设置 run 字体的可调用对象，签名形如
             set_font(run, *, bold: bool, italic: bool, **font_kwargs)。
-        bold / italic: 整段的"基础样式"（条目头这类本来就加粗的段落传 True）。
+        bold: 整段的"基础样式"（条目头这类本来就加粗的段落传 True）。
             片段自身的标记只会让它**更多样式**，不会把整段取消。
+            斜体已整体移除（#5d）：单星号剥壳后按普通字重输出。
         **font_kwargs: 原样透传给 set_font（字号、颜色等）。
 
     Notes:
@@ -56,7 +56,6 @@ def add_rich_runs(
         set_font(
             run,
             bold=bold or span.bold,
-            italic=italic or span.italic,
             **font_kwargs,
         )
 

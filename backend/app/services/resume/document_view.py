@@ -49,7 +49,9 @@ def header_items(document: Mapping[str, Any] | None) -> list[dict[str, Any]]:
     if not isinstance(header, Mapping):
         return []
     items = header.get("items")
-    return [item for item in items if isinstance(item, Mapping)] if isinstance(items, list) else []
+    # 用 dict 而不是 Mapping 收窄：本模块（读侧）产出的形状契约就是 JSON dict
+    # （见模块 docstring "v2 文档是 dict"），调用方拿到的是可下标的 dict 而不是只读视图。
+    return [item for item in items if isinstance(item, dict)] if isinstance(items, list) else []
 
 
 def header_text(document: Mapping[str, Any] | None, key: str, default: str = "") -> str:
@@ -103,7 +105,7 @@ def iter_entries(
         if not isinstance(entries, list):
             continue
         for entry in entries:
-            if isinstance(entry, Mapping):
+            if isinstance(entry, dict):
                 result.append((section_key, entry))
     return result
 

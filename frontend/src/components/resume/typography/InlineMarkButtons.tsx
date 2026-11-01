@@ -7,8 +7,8 @@
  * - **不持有内容**：只读当前聚焦 textarea 的选区，调 `features/resume-layout/inlineMarks`
  *   的纯规则算出新文本与新选区，再交给宿主 `onCommit`（宿主 setState + 恢复选区）。
  *   渲染的唯一实现仍在后端（HTML/PDF/Word 共用）；这里只负责"在选区上插入标记"。
- * - **不做第二套标记协议**：全部走 toggleBoldMark / toggleItalicMark / insertLinkMark
- *   （先 `**` 再 `*`、URL 只收 http(s) 且 ≤512）。
+ * - **不做第二套标记协议**：全部走 toggleBoldMark / insertLinkMark
+ *   （URL 只收 http(s) 且 ≤512；#5d 起斜体标记不再提供写入入口）。
  * - **无选区的语义分两种**（2026-10-29 用户反馈「添加链接还需要选取文字」后的调整）：
  *   加粗/斜体仍然要求有选区（空选区给一句 t() 提示，不猜一段文字去加粗）；
  *   **链接**允许"在光标处插入，用 URL 当链接文字"——用户先点图标再填地址是自然顺序，
@@ -27,14 +27,13 @@
  * `getTarget`（读最近聚焦的 textarea）、`getRememberedRange` 与 `onCommit`，不 import 任何
  * shell 文件。
  */
-import { BoldOutlined, ItalicOutlined, LinkOutlined } from "@ant-design/icons";
+import { BoldOutlined, LinkOutlined } from "@ant-design/icons";
 import { App, Button, Input, Popover, Space, Tooltip } from "antd";
 import { useState, type ReactNode } from "react";
 import { t, type MessageKey } from "../../../i18n";
 import {
   insertLinkMark,
   toggleBoldMark,
-  toggleItalicMark,
   type InlineEdit,
   type InlineRange,
 } from "../../../features/resume-layout/inlineMarks";
@@ -177,11 +176,6 @@ export default function InlineMarkButtons({
     if (picked) commitIfChanged(picked, toggleBoldMark(picked.text, picked.range));
   };
 
-  const applyItalic = () => {
-    const picked = requireSelection();
-    if (picked) commitIfChanged(picked, toggleItalicMark(picked.text, picked.range));
-  };
-
   const openLink = () => {
     // 链接允许空选区：URL 会被当成链接文字（insertLinkMark 的口径）。
     const picked = readPicked();
@@ -215,13 +209,6 @@ export default function InlineMarkButtons({
         ariaKey="typography.inline.boldAria"
         icon={<BoldOutlined />}
         onClick={applyBold}
-        disabled={disabled}
-      />
-      <MarkButton
-        labelKey="typography.inline.italic"
-        ariaKey="typography.inline.italicAria"
-        icon={<ItalicOutlined />}
-        onClick={applyItalic}
         disabled={disabled}
       />
       <Popover

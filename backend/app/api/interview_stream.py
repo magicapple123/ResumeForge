@@ -92,7 +92,9 @@ def _sse(data: dict) -> str:
     return f"data: {json.dumps(data, ensure_ascii=False)}\n\n"
 
 
-def make_answer_stream(_finish_with_report, _to_detail, _resume_text, _job_text, _mark_interrupted):
+def make_answer_stream(
+    _finish_with_report, _to_detail, _resume_text, _session_job_text, _mark_interrupted
+):
     async def _answer_stream_events(
         db: Session,
         session: InterviewSession,
@@ -126,7 +128,7 @@ def make_answer_stream(_finish_with_report, _to_detail, _resume_text, _job_text,
                     session,
                     index=index,
                     resume_text=_resume_text(db, session),
-                    job_text=_job_text(db, session.job_id),
+                    job_text=_session_job_text(db, session),
                 )
                 async for delta in provider.stream_chat_events(messages):
                     if delta.text:

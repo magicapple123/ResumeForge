@@ -140,7 +140,8 @@ const settingsUi = {
   "settingsUi.webFormRelaxed.disableToast": "Off: back to fill-only, the default boundary",
   "settingsUi.webFormRelaxed.saveFailed": "Could not save the relaxed mode setting",
   "settingsUi.webFormRelaxed.warning":
-    "Once on, the program tries to click dropdown and popup options for you and to tick the declaration items you confirmed one by one; something can be picked wrong, so check the form afterwards. Date pickers and file uploads are still left to you.",
+    "Once on, the program tries to click dropdown and popup options for you and to tick the declaration items you confirmed one by one; something can be picked wrong, so check the form afterwards. " +
+    "Four categories are never filled for you: date pickers, file uploads, password / verification code / bank card, and read-only radio or checkbox options without a popup - you need to handle these yourself.",
 } as const;
 
 export default settingsUi;

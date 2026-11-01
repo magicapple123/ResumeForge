@@ -157,12 +157,14 @@ describe("ManualResumeModal（v2）", () => {
     expect(savedContent().sections).toEqual(generic.sections);
   });
 
-  it("资料来源面板的行数来自 source_layout（13 分区不硬编码）", async () => {
+  it("#31：资料来源改为顶部 chips，行数来自 source_layout（13 分区不硬编码）", async () => {
     apiMocks.projection = projectionWithThirteenSections();
     renderModal();
-    const title = await screen.findByText(t("editor.sources.title"));
-    const block = title.closest("div") as HTMLElement;
-    expect(within(block).getAllByRole("listitem")).toHaveLength(13);
+    const title = await screen.findByText((content) =>
+      content.startsWith(t("editor.sources.title")),
+    );
+    void title.closest;
+    expect(document.querySelectorAll(".ant-tag")).toHaveLength(13);
   });
 
   it("「去切换组」只关闭弹窗并跳资料页（不换组、不发请求）", async () => {
@@ -223,11 +225,11 @@ describe("ManualResumeModal（v2）", () => {
     ).toBeInTheDocument();
   });
 
-  it("新建界面里的字段可以点击并打开编辑器", async () => {
+  it("新建界面里的字段可以双击并打开编辑器（#8：单击只选中）", async () => {
     renderModal();
     fireEvent.click(await screen.findByRole("tab", { name: t("editor.section.education") }));
     const chip = await screen.findByRole("group", { name: /示例大学/ });
-    fireEvent.click(within(chip).getAllByRole("button")[0]);
+    fireEvent.doubleClick(within(chip).getAllByRole("button")[0]);
     expect(await screen.findByLabelText(t("document.field.value"))).toBeInTheDocument();
   });
 

@@ -276,6 +276,25 @@ def patch_variant(
     return VariantDetailOut.model_validate(variants.variant_detail(variant))
 
 
+@router.post("/{resume_id}/variants/{variant_id}/overwrite", response_model=VariantDetailOut)
+def overwrite_variant(
+    resume_id: int,
+    variant_id: int,
+    db: Session = Depends(get_db),
+) -> VariantDetailOut:
+    """#17b：用当前简历的正文覆盖变体内容（修复被译文污染的源语言变体）。
+
+    名称/语言标签/分组/独立排版/生成上下文都不动；二次确认由界面负责。
+    """
+    record = _resume_or_404(db, resume_id)
+    try:
+        variant = variants.get_variant(db, record.id, variant_id)
+        variant = variants.overwrite_variant_content(db, record, variant)
+    except versions.VersionNotFound as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return VariantDetailOut.model_validate(variants.variant_detail(variant))
+
+
 @router.post("/{resume_id}/variants/{variant_id}/translate", response_model=TranslateVariantOut)
 async def translate_variant(
     resume_id: int,
@@ -325,11 +344,24 @@ def adopt_translation(
     record = _resume_or_404(db, resume_id)
     try:
         variant = variants.get_variant(db, record.id, variant_id)
+    except versions.VersionNotFound as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    # #17a：译文只能写进与目标语言一致的变体。源语言变体被误写是本轮修的数据污染源头，
+    # 前端入口已禁用，这里拦住绕过前端的直接调用。
+    if payload.target_language:
+        variant_language = (variant.language or "").strip()
+        if variant_language and variant_language != payload.target_language:
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    f"译文目标语言是 {payload.target_language}，"
+                    f"但这个变体的语言是 {variant_language}（译文只能采纳进对应语言的版本）"
+                ),
+            )
+    try:
         variant, applied = bilingual_variants.adopt_translation(
             db, variant, [item.model_dump() for item in payload.items]
         )
-    except versions.VersionNotFound as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
     except fact_locks.FactLockError as exc:
         return fact_locks.fact_lock_conflict_response(exc.violations)
     except bilingual_variants.BilingualError as exc:

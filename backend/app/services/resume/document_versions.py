@@ -33,6 +33,7 @@ from ...models.versions import (
 from ...schemas.resume_generation import mode_page_limit
 from . import document_io
 from .document_save import _conditional_update
+from .document_versions_diff import build_field_changes
 from .resume_delivery import canonical_content_sha256, default_render_context
 from .resume_diff import build_resume_diff
 
@@ -274,14 +275,22 @@ def compare_versions(
         against_content = against_version.content or {}
         against_layout = against_version.render_context or {}
     # 差异算法仍按 v1 分析口径（本批不重写 diff）：两侧统一折成 v1 视图再比较。
+    base_document = document_content(base.content, base.render_context)
+    against_document = document_content(against_content, against_layout)
     content_diff = build_resume_diff(
         base.id,
         base.name,
-        document_content(base.content, base.render_context),
+        base_document,
         against_id,
         against_name,
-        document_content(against_content, against_layout),
+        against_document,
     )
+    # #28b：界面不再展示整份文档序列化后的行级 diff，改用字段级「旧值 → 新值」。
+    # 旧值/新值按时间序：版本是不可变快照，id 越大越新；与当前简历比时当前在右。
+    if against_id != 0 and against_id < base.id:
+        changes, changes_truncated = build_field_changes(against_document, base_document)
+    else:
+        changes, changes_truncated = build_field_changes(base_document, against_document)
     return {
         "base_id": base.id,
         "against_id": against_id,
@@ -289,6 +298,8 @@ def compare_versions(
         "against_name": against_name,
         "content": content_diff,
         "layout": _layout_diff(base.render_context or {}, against_layout),
+        "changes": changes,
+        "changes_truncated": changes_truncated,
     }
 
 

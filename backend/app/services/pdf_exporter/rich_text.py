@@ -73,7 +73,7 @@ def to_fpdf_markup(text: str) -> tuple[str, bool]:
     """
     spans = parse_rich_runs(text)
     has_bold = any(span.bold for span in spans)
-    if not has_bold and all(span.link is None and not span.italic for span in spans):
+    if not has_bold and all(span.link is None for span in spans):
         # 快速路径：没有协议 v2 标记 → 原串原样返回（历史产物逐字节不变）。
         return text, False
     pieces: list[str] = []

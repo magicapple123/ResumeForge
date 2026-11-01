@@ -79,6 +79,17 @@ class AssistantMessageCreate(BaseModel):
     # 「引用某条消息追问」：指向同一会话里的某条消息，模型会在引用上下文中作答。
     quoted_message_id: int | None = Field(default=None, ge=1)
     attachments: list[AssistantAttachmentInput] = Field(default_factory=list, max_length=4)
+    # 本次请求的界面语言（`zh-CN` / `en-US` 这类 BCP 47 标记）。**前端可选传**：
+    # 不传就是空串，旧客户端零改动。它不是简历输出语言，只服务 #35 数据边界审计的
+    # `language` 一列；权威值仍是用户显式保存的界面语言（`PUT /api/settings/locale`），
+    # 这里只是"用户还没保存过界面语言"时的一次补充。
+    locale: str = Field(default="", max_length=16)
+
+    @field_validator("locale")
+    @classmethod
+    def strip_locale(cls, value: str) -> str:
+        # 审计日志按 `language=<值>` 直接 grep，前后的空白会破坏这个契约。
+        return (value or "").strip()
 
     @model_validator(mode="after")
     def require_content_or_attachment(self):

@@ -156,13 +156,70 @@ describe("ProfileFillMenu", () => {
     expect(items.length).toBeGreaterThan(1);
   });
 
-  it("selectedPath 指向别的条目：跨分区候选禁用并给原因，点击不写入", async () => {
+  it("selectedPath 指向某个条目：菜单只列该条目的候选（不再摆全量 disabled）", async () => {
     const { onChange } = setup(WORKING, "education.ob_edu000001.it_school00001");
-    await screen.findByText(/别的项目/);
-    const disabledItem = screen.getByText(/别的项目/).closest('[role="menuitem"]');
-    expect(disabledItem).toHaveAttribute("aria-disabled", "true");
-    expect(disabledItem?.textContent).toContain(t("editor.profileFill.needTarget"));
-    if (disabledItem) fireEvent.click(disabledItem);
-    expect(onChange).not.toHaveBeenCalled();
+    // 有目标：只留下填得进这个条目的那一条，别的板块的候选根本不渲染。
+    await screen.findByTitle("示例大学 · 软件工程");
+    // 用 title 定位候选（`*ByText` 里不写中文：cjkRatchet 的 tests 口径）。
+    expect(screen.queryByTitle(/别的项目/)).toBeNull();
+    fireEvent.click(screen.getByText("示例大学 · 软件工程"));
+    await waitFor(() => expect(onChange).toHaveBeenCalledTimes(1));
+  });
+
+  it("有目标时按钮文案带目标条目名，且候选单行省略带 title", async () => {
+    // 目标条目里有标题字段 → 按钮读作「填入「示例大学」」。
+    const withSchool = makeResumeDocument({
+      sections: [
+        {
+          key: "education",
+          title: "",
+          kind: "entries",
+          layout: {} as never,
+          entries: [makeEntry([SCHOOL], { id: "ob_edu000001" })],
+        },
+      ],
+    });
+    setup(withSchool, "education.ob_edu000001");
+    const button = screen.getByRole("button", { name: t("editor.profileFill.aria.entry") });
+    expect(button.textContent).toContain(
+      t("editor.profileFill.title.fillTarget", { title: "示例大学" }),
+    );
+    const option = await screen.findByTitle("示例大学 · 软件工程");
+    expect(option.className).toContain("rf-profile-fill-option");
+    cleanup();
+    // 没有目标时是「添加」语义。
+    setup();
+    expect(
+      screen.getByRole("button", { name: t("editor.profileFill.aria.entry") }).textContent,
+    ).toContain(t("editor.profileFill.title.add"));
+  });
+
+  it("过滤后为空：给一行说明而不是空菜单", async () => {
+    setup(WORKING, "education.ob_nomatch001");
+    expect(await screen.findByText(t("editor.profileFill.emptyTarget"))).toBeInTheDocument();
+  });
+
+  it("#22：输入关键字过滤候选（菜单项变少），清空后恢复全量", async () => {
+    setup();
+    const search = await screen.findByPlaceholderText(t("editor.profileFill.search"));
+    // 全量：两个板块各一条。
+    expect(await screen.findByTitle("示例大学 · 软件工程")).toBeInTheDocument();
+    expect(screen.getByTitle("别的项目")).toBeInTheDocument();
+    // 过滤：只剩「别的项目」，教育那条不渲染。
+    fireEvent.change(search, { target: { value: "别的" } });
+    expect(await screen.findByTitle("别的项目")).toBeInTheDocument();
+    expect(screen.queryByTitle(/示例大学/)).toBeNull();
+    // 清空（allowClear 置空）：全量回来。
+    fireEvent.change(search, { target: { value: "" } });
+    expect(await screen.findByTitle("示例大学 · 软件工程")).toBeInTheDocument();
+    expect(screen.getByTitle("别的项目")).toBeInTheDocument();
+  });
+
+  it("#22：过滤后的候选仍可点选填入（搜索框事件拦截不影响正常选择）", async () => {
+    const { onChange } = setup();
+    const search = await screen.findByPlaceholderText(t("editor.profileFill.search"));
+    fireEvent.change(search, { target: { value: "别的" } });
+    fireEvent.click(await screen.findByTitle("别的项目"));
+    await waitFor(() => expect(onChange).toHaveBeenCalledTimes(1));
   });
 });

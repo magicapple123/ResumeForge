@@ -192,6 +192,14 @@ class DocumentObject:
     object_id: str | None = None
     point_id: str | None = None
     label: str = ""
+    # 「这个块是哪个字段」的稳定标识（审计 R-16）：条目块为空串，要点块是字段 key
+    # （自定义字段则是用户写的字段名）。**只回 key / 原文，不回中文译名**——译名由前端的
+    # 字段目录负责，后端硬编码一份中文会在英文界面里漏出来。
+    #
+    # 为什么必须有它：下拉里原来拼的是 "label · path 末段"，而末段是 `ob_…` / `it_…`
+    # 这类内部标识，用户看到的是「上海财经大学 · it_512bcf29aabfad2e」。
+    # 给默认值是因为 `DocumentObject(**item)` 按 dict 展开构造（v1 分支不带这个键）。
+    field_label: str = ""
 
 
 _ENTRY_LABEL_KEYS = (

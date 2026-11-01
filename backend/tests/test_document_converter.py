@@ -274,3 +274,47 @@ def test_conversion_is_deterministic() -> None:
     内容指纹每次变化，历史/缓存/黄金基线全部失准。
     """
     assert ensure_document_version(_v1_content()) == ensure_document_version(_v1_content())
+
+
+def test_section_order_places_custom_sections_at_requested_positions() -> None:
+    """#24：section_order 里的 custom:* 键按用户拖的位置插入，而不是一律排末尾。"""
+    from app.schemas.resume_document import ResumeSection
+    from app.services.resume.document_converter import _ordered_sections
+
+    def section(key: str) -> ResumeSection:
+        return ResumeSection(key=key, kind="entries")
+
+    sections = [
+        section("education"),
+        section("experience"),
+        section("projects"),
+        section("custom:sec_a"),
+        section("custom:sec_b"),
+    ]
+    config = {
+        "section_order": [
+            "education",
+            "custom:sec_a",
+            "projects",
+            "experience",
+            "custom:sec_b",
+        ]
+    }
+    ordered = _ordered_sections(sections, config)
+    assert [s.key for s in ordered] == [
+        "education",
+        "custom:sec_a",
+        "projects",
+        "experience",
+        "custom:sec_b",
+    ]
+
+
+def test_section_order_tolerates_stale_custom_keys() -> None:
+    """已删除的自建板块不产生空位，也不影响内置键的相对顺序。"""
+    from app.schemas.resume_document import ResumeSection
+    from app.services.resume.document_converter import _ordered_sections
+
+    sections = [ResumeSection(key="education", kind="entries"), ResumeSection(key="custom:gone", kind="entries")]
+    ordered = _ordered_sections(sections, {"section_order": ["custom:missing", "education", "custom:gone"]})
+    assert [s.key for s in ordered] == ["education", "custom:gone"]

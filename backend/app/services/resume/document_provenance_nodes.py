@@ -31,6 +31,9 @@ def native_objects(document: dict) -> list[dict]:
                 "object_id": object_id,
                 "point_id": None,
                 "label": label[:60],
+                # 条目块没有"字段"这一层：它的标题就是几个字段拼出来的（学校·专业），
+                # 再挂一个字段名只会在下拉里重复一遍。
+                "field_label": "",
             }
         )
         for item in entry.get("items") or []:
@@ -49,6 +52,9 @@ def native_objects(document: dict) -> list[dict]:
                         "object_id": object_id,
                         "point_id": item["id"],
                         "label": texts[0][:160],
+                        # 要点块带字段 key（"核心课程"这类自定义字段则带用户写的字段名）。
+                        # 取 label 优先：自定义字段的 key 是 `it_…` 派生的，没有可读性。
+                        "field_label": str(item.get("label") or item.get("key") or ""),
                     }
                 )
     return result

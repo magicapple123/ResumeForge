@@ -45,7 +45,7 @@ def strip_markdown(text: str) -> str:
 
 
 def export_txt(
-    resume: ResumeContent,
+    resume: ResumeContent | dict,
     *,
     section_order: list[str] | None = None,
     language: str = DEFAULT_RESUME_LANGUAGE,
@@ -56,6 +56,9 @@ def export_txt(
     直接复用 ``export_markdown`` 生成正文，再剥离标记——保证七个分区的标题、顺序与
     每个字段的文案都和 Markdown 同源（``resume_labels.section_titles`` 是唯一来源）。
     分区顺序由 ``section_order`` 决定（用户的版式设置），不传则用默认顺序。
+
+    入参口径与 ``export_markdown`` 完全一致（v1 模型或 v1/v2 dict）：本函数只做"去标记"，
+    不碰内容形状，所以管线里 Format 注册表传进来的 ``ResumeContent | dict`` 原样透传。
 
     ``language`` 原样透传给 ``export_markdown``：纯文本的**标题与 Markdown 同源**，
     不自己判语言、也不自己存文案——否则同一份简历的 .md 与 .txt 会印出两种标题。

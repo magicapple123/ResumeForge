@@ -305,11 +305,32 @@
   font-size: 12px;
 }
 
-/* 「查看大图」不再有专属 iframe 样式：它复用 `A4PreviewFrame` 的 `fit="width"`
-   （794×1123 的文档整体缩放到弹窗宽度，高度按页数走），纸张外框由
-   `.a4-preview-paper` 提供。原先那颗固定 794×1123 的 iframe 正是"三个滚动条"的成因：
-   弹窗窄于 794px 出横向滚动条，文档高于一页时 iframe 内部再出一条竖向滚动条。 */
+/* 「查看大图」= 一张 A4 纸（R-02）。这一层是"纸外面的桌子"：20px 内边距 + 灰底。
+   内边距必须加在**这一层**——`.a4-preview-stage` 按 `clientWidth` 算比例，而它包含
+   padding，加在舞台里会让纸窄 40px。 */
+.template-gallery-zoom {
+  box-sizing: border-box;
+  padding: 20px;
+  /* 比 --rf-surface-alt 再压深一点：弹窗 body 是纯白，只差 4 个灰阶时"桌子"看不出来。 */
+  background: color-mix(in srgb, var(--rf-surface-alt) 72%, var(--rf-border) 28%);
+}
 
+/* 舞台只当画布：外壳交给灰底那一层，纸的边界交给纸自己（同缩略图）。 */
+.template-gallery-zoom .a4-preview-stage {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+/* 纸：1px 描边 + 投影。`border-box` 同缩略图：宽高内联写死，content-box 下描边会外扩。 */
+.template-gallery-zoom .a4-preview-paper {
+  box-sizing: border-box;
+  border: 1px solid var(--rf-border);
+  border-radius: 2px;
+  box-shadow: 0 4px 16px rgb(15 23 42 / 18%);
+}
+
+/* 灰底由外面那层给，这里只负责占位高度。 */
 .template-gallery-zoom-loading {
   display: flex;
   align-items: center;

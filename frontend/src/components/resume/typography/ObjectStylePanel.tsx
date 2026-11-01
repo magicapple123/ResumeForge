@@ -76,6 +76,8 @@ interface Props {
   pickedPath?: string | null;
   /** 宿主从纸面路径推出的默认范围（`scopeForDocumentPath`）；缺省 = 整条。 */
   defaultScope?: EntryStyleScope;
+  /** #7：右键浮层里锁定范围——不提供范围切换（浮层只改右键命中那一块）。 */
+  lockScope?: boolean;
   disabled?: boolean;
   previewRef?: RefObject<ResumePreviewHandle | null>;
   onChange: (layout: ResumeLayout) => void;
@@ -91,6 +93,7 @@ export default function ObjectStylePanel({
   entry = null,
   pickedPath = null,
   defaultScope = "object",
+  lockScope = false,
   disabled = false,
   previewRef,
   onChange,
@@ -101,6 +104,10 @@ export default function ObjectStylePanel({
   const [manual, setManual] = useState<{ path: string | null; scope: EntryStyleScope } | null>(
     null,
   );
+  const setManualScope = (next: { path: string | null; scope: EntryStyleScope }) => {
+    if (lockScope) return;
+    setManual(next);
+  };
   if (!objectId) {
     return <Typography.Text type="secondary">{t("typography.object.empty")}</Typography.Text>;
   }
@@ -161,25 +168,29 @@ export default function ObjectStylePanel({
           scope: t(ENTRY_STYLE_SCOPE_LABELS[scope]),
         })}
       </Typography.Text>
-      <div className="resume-typography-scope" data-entry-style-scope="1">
-        <Space size={6} wrap>
-          <Typography.Text type="secondary">
-            {t("typography.entryStyle.scope.label")}
-          </Typography.Text>
-          <Segmented
-            size="small"
-            value={scope}
-            disabled={disabled}
-            aria-label={t("typography.entryStyle.scope.aria")}
-            options={ENTRY_STYLE_SCOPES.map((value) => ({
-              value,
-              label: t(ENTRY_STYLE_SCOPE_LABELS[value]),
-            }))}
-            onChange={(value) => setManual({ path: pickedPath, scope: value as EntryStyleScope })}
-          />
-        </Space>
-        <Typography.Text type="secondary">{t(ENTRY_STYLE_SCOPE_HINTS[scope])}</Typography.Text>
-      </div>
+      {!lockScope && (
+        <div className="resume-typography-scope" data-entry-style-scope="1">
+          <Space size={6} wrap>
+            <Typography.Text type="secondary">
+              {t("typography.entryStyle.scope.label")}
+            </Typography.Text>
+            <Segmented
+              size="small"
+              value={scope}
+              disabled={disabled}
+              aria-label={t("typography.entryStyle.scope.aria")}
+              options={ENTRY_STYLE_SCOPES.map((value) => ({
+                value,
+                label: t(ENTRY_STYLE_SCOPE_LABELS[value]),
+              }))}
+              onChange={(value) =>
+                setManualScope({ path: pickedPath, scope: value as EntryStyleScope })
+              }
+            />
+          </Space>
+          <Typography.Text type="secondary">{t(ENTRY_STYLE_SCOPE_HINTS[scope])}</Typography.Text>
+        </div>
+      )}
       <div className="resume-typography-rows">
         {rows.map((prop) => {
           // 正文没有要点时项目符号无效：灰显 + 下方说明，而不是让用户拖了没反应。

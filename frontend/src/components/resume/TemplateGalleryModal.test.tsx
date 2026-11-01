@@ -10,6 +10,7 @@ import { App as AntdApp } from "antd";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { TEMPLATE_CATALOG } from "../../test/resumeFixtures";
+import { t } from "../../i18n";
 import type { ResumeLayout } from "../../types";
 import TemplateGalleryModal from "./TemplateGalleryModal";
 
@@ -116,6 +117,54 @@ describe("TemplateGalleryModal · 缩略图反映字号系数（洞2）", () => 
 
     // 只动这一份简历的 `font_scale`：owner 收到回调后会重排，缩略图也跟着重取。
     expect(onFontScaleChange).toHaveBeenCalledWith("large");
+  });
+});
+
+// ── R-02：「完整预览」= 一张 A4 纸 ──────────────────────────────────────
+//
+// 以前大图按「最大篇幅」渲染 1–3 页、`fit="width"` 铺满弹窗宽，弹窗里是一条 3600px
+// 长图（纸的下沿永远在视口外）。现在固定 1 页 + `fit="contain"`，外面包一层灰底。
+
+describe("TemplateGalleryModal · 完整预览固定一张 A4 纸", () => {
+  function labelOf(name: string): string {
+    const item = TEMPLATE_CATALOG.templates.find((entry) => entry.name === name);
+    return item ? item.label : name;
+  }
+
+  it("大图只取 1 页、只挂一张纸，舞台按 contain 收进可视区", async () => {
+    renderModal({ ...LAYOUT_WITH_ADJUST, page_limit: 3 });
+    await waitFor(() =>
+      expect(apiMocks.previewResumeTemplate).toHaveBeenCalledTimes(
+        TEMPLATE_CATALOG.templates.length,
+      ),
+    );
+    const callsBefore = apiMocks.previewResumeTemplate.mock.calls.length;
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: t("gallery.zoom.openAria", { name: labelOf("classic") }),
+      }),
+    );
+
+    // 大图的 iframe 出现 = 弹窗真的开了（标题是「模板完整预览」）。
+    expect(await screen.findByTitle(t("gallery.zoom.frameTitle"))).toBeInTheDocument();
+    await waitFor(() =>
+      expect(apiMocks.previewResumeTemplate.mock.calls.length).toBeGreaterThan(callsBefore),
+    );
+
+    // 无论用户把「最大篇幅」设成几页，大图请求都是 1 页。
+    const calls = apiMocks.previewResumeTemplate.mock.calls;
+    const zoomCall = calls[calls.length - 1][0] as Record<string, unknown>;
+    expect(zoomCall.template_name).toBe("classic");
+    expect(zoomCall.page_limit).toBe(1);
+
+    // 只有一张纸，且舞台走 contain（高度钉上限），不是 width（aspect-ratio 撑高）。
+    const zoomRoot = document.querySelector(".template-gallery-zoom");
+    expect(zoomRoot).not.toBeNull();
+    expect(zoomRoot?.querySelectorAll(".a4-preview-paper")).toHaveLength(1);
+    const stage = zoomRoot?.querySelector(".a4-preview-stage") as HTMLElement | null;
+    expect(stage?.style.height).not.toBe("");
+    expect(stage?.style.aspectRatio).toBe("");
   });
 });
 

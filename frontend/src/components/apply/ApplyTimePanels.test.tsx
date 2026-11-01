@@ -90,6 +90,7 @@ function record(): ApplyRecord {
 beforeEach(() => {
   vi.clearAllMocks();
   const batch: ApplyRecordBatch = {
+    failure_summary: [],
     id: 7,
     status: "completed",
     total: 1,

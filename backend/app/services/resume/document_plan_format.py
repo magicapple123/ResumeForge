@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from ...schemas.resume_document import (
     AuthorsItem,
+    BodyStyle,
     FieldItem,
     Inline,
     ListItem,
@@ -18,6 +19,10 @@ from ...schemas.resume_document import (
 )
 from . import document_catalog as catalog
 from .resume_labels import (
+    CREDENTIAL_STATUS_LABELS,
+    EXPERIENCE_KIND_LABELS,
+    PATENT_STATUS_LABELS,
+    PUBLICATION_STATUS_LABELS,
     credential_status_text,
     date_range,
     experience_kind_text,
@@ -30,6 +35,7 @@ from .resume_labels import (
 
 __all__ = [
     "authors_inlines",
+    "body_style_of",
     "enum_text",
     "field_label_text",
     "item_inlines",
@@ -37,6 +43,7 @@ __all__ = [
     "join_values",
     "normalized_date_range",
     "plain_text",
+    "wants_paren",
 ]
 
 _PRESENT_MARKERS = frozenset(("present", "至今", "现在", "now"))
@@ -50,6 +57,31 @@ def item_path(section_key: str, entry_id: str, item_id: str) -> str:
     return section_key + "." + entry_id + "." + item_id
 
 
+#: 四族枚举词表（A5 的跨家族兜底用；顺序无关）。
+_ENUM_LABEL_MAPS = (
+    PUBLICATION_STATUS_LABELS,
+    PATENT_STATUS_LABELS,
+    CREDENTIAL_STATUS_LABELS,
+    EXPERIENCE_KIND_LABELS,
+)
+
+
+def _custom_enum_text(value: str, language: str) -> str | None:
+    """自建板块 / 自定义枚举字段的纸面文案（A5）：目录里没有 enum_kind 时按值兜底。
+
+    只在**四张已知词表对同一个 code 给出同一个显示名**时才翻译；像 pending 这种
+    在论文 / 专利 / 证书里含义不同的歧义值一律不猜，交回原值——把「审稿中」写成
+    「待核实」比露 code 更糟。
+    """
+    normalized = normalize_language(language)
+    displays = {
+        labels[normalized][value]
+        for labels in _ENUM_LABEL_MAPS
+        if labels[normalized].get(value)
+    }
+    return displays.pop() if len(displays) == 1 else None
+
+
 def enum_text(item: FieldItem, enum_kind: str, language: str) -> str:
     """枚举字段的显示文案（事实锁词表唯一来源在 resume_labels）。"""
     kind = enum_kind
@@ -61,6 +93,9 @@ def enum_text(item: FieldItem, enum_kind: str, language: str) -> str:
         return credential_status_text(item.value, language)
     if kind == "experience_kind":
         return experience_kind_text(item.value, language) or item.value
+    if not kind:
+        # A5：自建板块 / 自定义枚举字段的目录项没有 enum_kind，纸面此前直接露 code。
+        return _custom_enum_text(item.value, language) or item.value
     return item.value
 
 
@@ -135,6 +170,27 @@ def authors_inlines(item: AuthorsItem, language: str, *, path: str = "") -> list
     return segments
 
 
+def wants_paren(item: ResumeItem) -> bool:
+    """这条 item 的值是否要包一层括号（``wrap == "paren"``）。
+
+    ``wrap`` 是 **FieldItem 独有**的字段（ListItem / AuthorsItem 没有它：列表值与作者名
+    本来就是多值拼接，套括号没有意义）。以前在 planner 里直接写 ``item.wrap``，一旦有
+    用户把列表字段拖到 body / inline 板块（placement 是用户数据，拖拽就能改）就会
+    AttributeError 打成 500；这里统一判型，非字段项一律"不加括号"。
+    """
+    return isinstance(item, FieldItem) and item.wrap == "paren"
+
+
+def body_style_of(item: ResumeItem) -> BodyStyle:
+    """正文块的样式（bullet / paragraph）。
+
+    ``body_style`` 只有 FieldItem 与 ListItem 有（AuthorsItem 没有：作者名永远排一行），
+    缺省与 FieldItem 的默认值一致取 ``bullet``——同样避免"AuthorsItem 被拖到 body"
+    时 ``item.body_style`` 打成 500。
+    """
+    return item.body_style if isinstance(item, (FieldItem, ListItem)) else "bullet"
+
+
 def item_inlines(
     item: ResumeItem,
     section_key: str,
@@ -179,7 +235,7 @@ def item_inlines(
         # 标签不是可点击的字段本体：path 留空。定位粒度是 item——列表值/作者名这类
         # 多值字段的每个值段共享同一 item path（见 join_values / authors_inlines）。
         segments.append(Inline(text=label_text + "：", role="meta", path=""))
-    if wrap_paren and item.wrap == "paren":
+    if wrap_paren and wants_paren(item):
         from .resume_labels import level_parens
 
         before, after = level_parens(lang)

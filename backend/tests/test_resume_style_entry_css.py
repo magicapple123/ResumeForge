@@ -158,7 +158,6 @@ def test_text_overrides_reach_inner_roles_with_classic_base_ratios():
                     "font_scale": 1.4,
                     "bold": True,
                     "color": "#123c69",
-                    "italic": True,
                     "line_height": 1.5,
                 }
             }
@@ -180,15 +179,15 @@ def test_text_overrides_reach_inner_roles_with_classic_base_ratios():
     shared = _shared_rule(css, f'[data-object-id="{ENTRY_ID}"]')
     assert "color: #123c69;" in shared
     assert "font-weight: 700;" in shared
-    assert "font-style: italic;" in shared
     assert "line-height: 1.5;" in shared
+    # #5d：斜体整体移除——任何输入都不再产出 font-style。
+    assert "font-style" not in css
 
 
-def test_font_weight_and_italic_are_forwarded_as_concrete_values():
-    css = entry_style_css(_style({ENTRY_ID: {"bold": False, "italic": False}}))
+def test_font_weight_is_forwarded_as_concrete_value():
+    css = entry_style_css(_style({ENTRY_ID: {"bold": False}}))
     shared = _shared_rule(css, f'[data-object-id="{ENTRY_ID}"]')
     assert "font-weight: 400;" in shared
-    assert "font-style: normal;" in shared
     assert "font-size" not in css
 
 
@@ -268,10 +267,14 @@ def test_spatial_props_target_the_elements_that_carry_them():
 
 
 def test_bullet_glyph_matches_pdf_and_word():
-    """三出口统一符号字形：圆点 = 「·」（HTML 不是 disc 实心圆点）。"""
+    """圆点在三个出口都是**实心圆**：HTML `disc` ↔ PDF 画的实心圆（审计 R-20）。
+
+    上一版这里断的是「HTML 用 `'·'` 字形、与 PDF/Word 逐字一致」。R-20 把 PDF 改成
+    画圆之后，字形的「·」反而与纸面不一致了（草稿的点儿明显更小），所以口径反过来。
+    """
     css = entry_style_css(_style({ENTRY_ID: {"bullet": "dot"}}))
-    assert "list-style-type: '·';" in css
-    assert "disc" not in css
+    assert "list-style-type: disc;" in css
+    assert "list-style-type: '·';" not in css
 
 
 def test_spatial_only_override_keeps_a_single_root_rule():

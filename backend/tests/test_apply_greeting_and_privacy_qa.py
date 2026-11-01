@@ -202,6 +202,10 @@ def test_apply_tables_match_the_design_contract():
         "status",
         "failure_category",
         "failure_detail",
+        # 0073：失败三段稳定码（环节 / 控件 / 原因子码）。
+        "failure_step",
+        "failure_target",
+        "failure_reason",
         "attempt",
         "sort_order",
         "started_at",

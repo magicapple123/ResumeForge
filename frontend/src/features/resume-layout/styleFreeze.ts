@@ -1,61 +1,29 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * W07 格式刷的**规则层**（wave2 契约 §2.5 的"格式刷口径"）。
+ * 「固定这条的当前样式」的规则层（原 `stylePainter.ts` 的一半，审计 R-19 拆分出来）。
  *
- * ## 复制的是"差异"，不是"绝对值"
+ * ## 为什么会从格式刷模块里拆出来
  *
- * 格式刷拷贝源对象 `objects[srcId]` 里**用户显式设过的键**。若拷贝解析后的绝对值，
- * 目标条目会把"当时的角色样式"固化成局部覆盖——以后改全局角色样式对它永久失效。
- * 那正是 plan P1-02 要避免的静默丢继承。
+ * 2026-10-31 的审计把**格式刷**整个功能删掉了（用户口径：复制样式这条路与"多选批量调整"
+ * 重复，而且它复制的是"差异"，用户很难预期会粘上哪几个键）。但同一个模块里还有两件事
+ * 与本功能无关、且仍在使用：把"当前生效值"固化成局部覆盖。删格式刷时把它们一起删掉
+ * 会连带删掉「固定这条的当前样式」——清单的坑里明确写了 `typography.painter.freeze*`
+ * 属于另一个功能，**不要删**。所以这里只搬实现，语义一个字没改。
  *
- * ## 第二个动作是显式的
+ * ## 与格式刷的本质区别（也是它被保留的原因）
  *
- * 有时用户**就是要**把当前生效值固化下来（"这条以后不跟随正文样式"）。这不是格式刷的
- * 默认语义，所以单独一个按钮 `freezeObjectStyle`，并且界面必须写清代价。
- *
- * ## 本模块不碰 UI
- *
- * 三个纯函数 + 一条"可复制差异"判定；按钮组件只负责把状态与文案摆出来。
+ * 格式刷搬的是"源对象**显式设过**的键"（复制差异）；固定写的是"**当前生效**的段落级值"
+ * （固化现状）。前者会丢失目标自己的继承，后者是明确宣告"这条以后不跟随正文样式"，
+ * 界面必须写清这个代价（`typography.painter.freezeHint`）。
  */
 import type { ResumeFormatConfig } from "../../types/resumeFormat";
 import { OBJECT_STYLE_PROPS, ROLE_STYLE_PROPS, type ResumeRoleKey } from "./styleCatalog";
 import {
-  readObjectStyle,
   storedStyleValue,
   withObjectProps,
   withObjectRoleProps,
   type ResumeRoleStyle,
-  type ResumeStyleDomains,
 } from "./styleOverrides";
-
-/**
- * 格式刷：取出源对象的显式差异。
- *
- * 没有显式覆盖时返回 `null`——界面据此置灰并给 Tooltip（"先改一处再复制"），
- * 而不是让用户点一下之后什么都没发生。
- */
-export function painterPatch(
-  domains: ResumeStyleDomains,
-  sourceObjectId: string | null | undefined,
-): ResumeRoleStyle | null {
-  if (!sourceObjectId) return null;
-  const style = readObjectStyle(domains, sourceObjectId);
-  const props = OBJECT_STYLE_PROPS.filter((prop) => style[prop] !== undefined);
-  if (props.length === 0) return null;
-  const patch: ResumeRoleStyle = {};
-  for (const prop of props) patch[prop] = style[prop];
-  return patch;
-}
-
-/** 应用格式刷：把差异补丁写到每个目标对象的显式覆盖上（逐条保留各自其它覆盖）。 */
-export function applyPainterPatch(
-  config: ResumeFormatConfig | undefined | null,
-  targetObjectIds: readonly string[],
-  patch: ResumeRoleStyle | null,
-): ResumeFormatConfig {
-  if (!patch || Object.keys(patch).length === 0) return (config ?? {}) as ResumeFormatConfig;
-  return withObjectProps(config, targetObjectIds, patch);
-}
 
 /**
  * 「把当前生效值固化为局部调整」：把对象当前生效的段落级值全部写成显式覆盖。

@@ -165,9 +165,10 @@ def test_ats_severity_mapping_uses_verify_not_blocker(client):
 def test_capabilities_matrix_is_shipped_but_not_faked(client):
     record_id = _create(client)
     payload = _preflight(client, record_id, layers=["content"]).json()
-    assert payload["capabilities"]["pdf"]["italic"] == "approx"
+    # #5d：italic 能力项已整体移除——检查响应不再下发该键，查询一律 unsupported。
+    assert "italic" not in payload["capabilities"]["pdf"]
     assert payload["capabilities"]["pdf"]["link_clickable"] == "unsupported"
-    assert payload["capabilities"]["docx"]["italic"] == "supported"
+    assert "italic" not in payload["capabilities"]["docx"]
 
 
 # ===== R03 ①：关键链接失效（blocker） =====

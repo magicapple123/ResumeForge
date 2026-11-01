@@ -69,6 +69,7 @@ const assistantUi = {
   "assistantUi.actionProposal.status.fallback": "状态未知",
   "assistantUi.actionProposal.aria": "写入提案：{target}",
   "assistantUi.actionProposal.heading": "助手请求写入数据",
+  "assistantUi.actionProposal.diffTitle": "改动预览",
   "assistantUi.actionProposal.changeField": "{field}：",
   "assistantUi.actionProposal.noContent": "（无内容）",
   "assistantUi.actionProposal.notice": "在你确认之前，这条写入不会执行；助手也无法替你确认。",

@@ -229,6 +229,9 @@ class ExportCheckSummary(BaseModel):
     revision: int = 0
     revision_changed: bool = False
     hidden_count: int = 0
+    # R-22：版本行的文案要「第 4 版 · 10-28 17:40」。**必须带默认值**——测试里到处
+    # 手工构造这个模型，加一个必填字段会一次性红掉一整片（审计清单把它列在坑里）。
+    updated_at: str = ""
 
 
 class PreflightOut(BaseModel):
@@ -238,6 +241,10 @@ class PreflightOut(BaseModel):
     summary: dict[str, int] = Field(default_factory=dict)
     # format -> capability -> level；前端不另写一份矩阵。
     capabilities: dict[str, dict[str, str]] = Field(default_factory=dict)
+    # R-26：format -> capability -> **原因码**（只出现在 approx / unsupported 的格子上）。
+    # 码是稳定契约，文案在 `i18n/messages/*.preflight.ts` 里按语言给——后端不写中文，
+    # 否则英文界面会漏出中文。
+    capability_notes: dict[str, dict[str, str]] = Field(default_factory=dict)
     # ATS / 产物免责声明（逐字复用 `ATS_DISCLAIMER`）。
     disclaimer: str = ""
     # 本轮实际执行的层（前端据此说明"产物层未检查"是没点还是不支持）。

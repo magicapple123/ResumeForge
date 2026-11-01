@@ -102,10 +102,21 @@ export function updateTextItem(
   return patchItemByKind(document, path, "text", patch as Record<string, unknown>);
 }
 
-/** 切换 item 隐藏：field/list/authors 改 placement，text 改 hidden 布尔。 */
+/**
+ * 切换 item 隐藏：field/list/authors 改 placement，text 改 hidden 布尔。
+ *
+ * #10：页眉字段也走这里（chip 菜单只有一份，右键页眉 chip 的"隐藏/显示"必须真的生效）。
+ * 页眉没有 `hidden_from` 字段，恢复位置统一回落到 `contact`——与结构面板
+ * （`structureCommands`）对页眉的处置保持一致。
+ */
 export function toggleItemHidden(document: ResumeDocument, path: string): ResumeDocument {
   const located = locatePath(document, path);
-  if (!located || located.kind !== "item") return document;
+  if (!located) return document;
+  if (located.kind === "header") {
+    const hidden = located.item.placement === "hidden";
+    return updateHeaderItem(document, path, { placement: hidden ? "contact" : "hidden" });
+  }
+  if (located.kind !== "item") return document;
   const item = located.item;
   if (item.kind === "text") {
     return replaceItem(document, path, { ...item, hidden: !item.hidden } as ResumeItem);
@@ -146,9 +157,12 @@ export function addItem(
   });
 }
 
+/** 删除一条字段：页眉路径（`header.<id>`）转给 removeHeaderItem（#10 同一份菜单）。 */
 export function removeItem(document: ResumeDocument, path: string): ResumeDocument {
   const located = locatePath(document, path);
-  if (!located || located.kind !== "item") return document;
+  if (!located) return document;
+  if (located.kind === "header") return removeHeaderItem(document, path);
+  if (located.kind !== "item") return document;
   const items = located.entry.items.filter((_, index) => index !== located.itemIndex);
   return replaceEntryAt(document, located.sectionIndex, located.entryIndex, {
     ...located.entry,

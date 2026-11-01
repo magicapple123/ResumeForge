@@ -95,7 +95,8 @@ def test_docx_body_indent_uses_the_object_role_override():
     )
 
 
-def test_docx_body_align_and_bold_italic_reach_the_bullet_paragraph():
+def test_docx_body_align_and_bold_reach_the_bullet_paragraph():
+    """#5d：斜体已整体移除——italic 样式输入不再产出倾斜 run（对齐/加粗照常生效）。"""
     from docx.enum.text import WD_ALIGN_PARAGRAPH
 
     document = _styled_document(
@@ -110,7 +111,7 @@ def test_docx_body_align_and_bold_italic_reach_the_bullet_paragraph():
     assert paragraph.paragraph_format.alignment == WD_ALIGN_PARAGRAPH.CENTER
     run = paragraph.runs[-1]
     assert run.font.bold is True
-    assert run.font.italic is True
+    assert run.font.italic is not True
 
 
 def test_docx_letter_spacing_lands_as_ooxml_spacing_before_sz():

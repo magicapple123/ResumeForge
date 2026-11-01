@@ -52,7 +52,6 @@ class RoleStyle:
     font_scale: float | None = None
     color: str | None = None
     bold: bool | None = None
-    italic: bool | None = None
     space_before: float | None = None
     space_after: float | None = None
     line_height: float | None = None
@@ -204,7 +203,6 @@ _TEXT_PROPS: tuple[str, ...] = (
     "font_scale",
     "color",
     "bold",
-    "italic",
     "space_before",
     "space_after",
     "line_height",
@@ -229,7 +227,7 @@ def _declarations(
     * font_scale 是"在模板该角色基准字号上再乘 k"：calc(var(--fs) * k * 基准)；
     * space_before/after 以基准字号为单位的 calc（和模板 CSS 同口径）；
     * line_height 直接写倍数；letter_spacing 按 × 基准字号；
-    * italic 只在 HTML 是真斜体。项目符号 / 缩进 / 日期位置见下面三个定向函数。
+    * 斜体已整体移除（#5d）。项目符号 / 缩进 / 日期位置见下面三个定向函数。
     """
     wanted = set(props)
     declarations: list[str] = []
@@ -241,8 +239,6 @@ def _declarations(
         declarations.append(f"color: {style.color};")
     if "bold" in wanted and style.bold is not None:
         declarations.append(f"font-weight: {'700' if style.bold else '400'};")
-    if "italic" in wanted and style.italic is not None:
-        declarations.append(f"font-style: {'italic' if style.italic else 'normal'};")
     if "space_before" in wanted and style.space_before is not None:
         declarations.append(f"margin-top: calc(var(--fs) * {_css_number(style.space_before)});")
     if "space_after" in wanted and style.space_after is not None:
@@ -259,11 +255,16 @@ def _declarations(
 
 
 def _bullet_declarations(style: RoleStyle) -> list[str]:
-    """项目符号 → list-style-type。三种字形与 PDF/Word 逐字一致：圆点 / 短横 / 不显示。"""
+    """项目符号 → list-style-type。
+
+    圆点用 **`disc`（实心圆）** 而不是「·」字形：PDF 侧改成画实心圆之后（审计 R-20），
+    字形的「·」在纸面上比它小一圈，草稿与精确预览并排就能看出"草稿的点儿更小"。
+    `disc` 的直径由浏览器按字号算，与 PDF 的 0.32×字号直径同一量级。
+    短横 / 不显示与 PDF、Word 逐字一致。
+    """
     if style.bullet is None:
         return []
-    # HTML 的 disc 是"实心圆点"，与 PDF/Word 的「·」字形不一致；三出口统一用「·」。
-    bullet_css = {"dot": "'·'", "dash": "'–'", "none": "none"}[style.bullet]
+    bullet_css = {"dot": "disc", "dash": "'–'", "none": "none"}[style.bullet]
     return [f"list-style-type: {bullet_css};"]
 
 
@@ -326,7 +327,7 @@ _OBJECT_ROLES: tuple[str, ...] = ("entry_title", "body", "meta")
 
 # 对象级覆盖里的"文字外观"属性：转发到对象内部角色元素，与 PDF/Word 的
 # role_style(role, object_id) 逐角色合并对等；空间属性（段距/符号/对齐）仍只落在根。
-_OBJECT_TEXT_PROPS: tuple[str, ...] = ("font_scale", "color", "bold", "italic", "line_height")
+_OBJECT_TEXT_PROPS: tuple[str, ...] = ("font_scale", "color", "bold", "line_height")
 
 # 对象**角色**级（Q12「条目头 / 正文 / 灰字」作用范围）：比对象级多转发对齐与字距——
 # 它们只作用于该角色的文字，放回对象根会把整条一起改（字距只允许 body / entry_title）。
@@ -423,7 +424,6 @@ def entry_style_css(style: ResolvedStyle) -> str:
                     RoleStyle(
                         color=text_style.color,
                         bold=text_style.bold,
-                        italic=text_style.italic,
                         line_height=text_style.line_height,
                     ),
                     ratio=1.0,
@@ -465,3 +465,7 @@ __all__ = [
     "resolve_style",
     "role_style_css",
 ]
+
+
+# 拆分后的 re-export（document_html 旧 import 路径不断）。
+from .resume_meta_align_css import meta_align_css  # noqa: E402,F401

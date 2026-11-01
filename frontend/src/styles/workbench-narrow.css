@@ -69,3 +69,75 @@
     }
   }
 }
+
+/* ===== 左栏面板的窄栏四条规则（审计 R-33） =====
+ *
+ * 左栏宽度**由用户拖动决定**（360–640，见 `useWorkbenchColumns.ts`），所以这里一条
+ * 视口断点都不能用：同一块面板在 1920 屏上也可能只有 360px 宽。四条规则的判据一律是
+ * "这一栏自己有多宽"，靠容器查询。
+ *
+ * R1（前提）：flex / grid 子项的默认 `min-width` 是 `auto`，含义是"不许窄于内容"。
+ *   只要链路上有一层没写 `min-width: 0`，整列就会被最长的那个不换行子串顶宽，
+ *   表现为"面板内容比面板还宽，右边被裁掉"。**每一层都要写**，只加最外层没用——
+ *   所以这里用一个后代选择器一次性兜住 antd 的整套栅格/表单结构，而不是逐个组件补。
+ *   用 `:where()` 把特异性压成 0：任何组件自己写的 `min-width`（含 antd 的）都能盖过它，
+ *   这条只是"没人管的时候的默认值"。
+ *
+ * R2（降级）：`@container (max-width: 420px)` 下标签与控件竖排、Segmented 竖排、
+ *   Select 全宽。420 是"一行里放下 4 字标签 + 控件 + 尾部读数"的下限（见
+ *   `resume-workbench-controls.css` 里的 72 + 6 + 152 + 6 + 102 算式）。
+ *
+ * R3（全文）：一切 `text-overflow: ellipsis` 必须配 `title` / `Tooltip`。
+ *   这条在 CSS 里无法表达，落点是各组件（结构树 `StructureRows.tsx` 已按此补 `title`）。
+ *
+ * R4（去重）：同一份信息只在一处显示——表头写一次的就不在每行重复。
+ */
+
+/* 参数栏成为容器查询的锚点。与中栏（`.resume-wb-col-editor` / `wb-editor`）同一套写法：
+   中栏那条的注释解释了为什么不能用媒体查询，这里同理。 */
+.resume-wb-v2-params {
+  container-type: inline-size;
+  container-name: wb-params;
+}
+
+/* R1：面板内的 flex / grid 子项默认允许收缩。 */
+:where(.resume-wb-v2-params)
+  :where(
+    .ant-space,
+    .ant-space-item,
+    .ant-flex,
+    .ant-row,
+    .ant-col,
+    .ant-form-item,
+    .ant-form-item-row,
+    .ant-form-item-label,
+    .ant-form-item-control,
+    .ant-select,
+    .ant-input-number,
+    .ant-typography
+  ) {
+  min-width: 0;
+}
+
+/* R2：窄档竖排。只作用于"标签 + 控件"这类并排行，不动纯文本段落。 */
+@container wb-params (max-width: 420px) {
+  .resume-wb-v2-params .ant-form-item-label,
+  .resume-wb-v2-params .resume-measure-label {
+    flex-basis: 100%;
+    max-width: 100%;
+    padding-bottom: 2px;
+    text-align: left;
+  }
+
+  .resume-wb-v2-params .ant-form-item-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  /* Select / InputNumber 在窄档吃满整行：它们的最长选项文案比一半宽度还长。 */
+  .resume-wb-v2-params .ant-select,
+  .resume-wb-v2-params .ant-input-number,
+  .resume-wb-v2-params .ant-picker {
+    width: 100%;
+  }
+}

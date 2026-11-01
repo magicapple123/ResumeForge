@@ -50,7 +50,6 @@ from ..models.job import Job
 from ..models.resume import ResumeRecord
 from ..schemas.job import JobOut
 from ..schemas.job_analysis import JobAnalysisResult
-from ..schemas.resume import ResumeContent
 from ..schemas.resume_risk import RiskScanOut
 from ..services import trash
 from ..services.job.job_analysis import generate_job_analysis
@@ -178,8 +177,12 @@ def handle_job_analysis(ctx: Any) -> None:
 # ===== 2. 简历风险扫描 =====
 
 
-def _resume_content(record: ResumeRecord) -> ResumeContent:
-    """落库 JSON → v1 分析视图；排除照片，与 ``api/resume_risk`` 的口径一致。"""
+def _resume_content(record: ResumeRecord) -> dict:
+    """落库 JSON → v2 文档 dict（读路径统一入口，与 ``api/resume_risk`` 同一口径）。
+
+    返回 dict 而不是 v1 模型：``scan_resume_risks`` 两种形状都接受，而
+    ``ensure_document_version`` 的产物本来就是 v2 dict——不要在这里谎报成 ResumeContent。
+    """
     content = document_io.ensure_document_version(
         record.content or {}, language=record.language, format_config=record.format_config
     )

@@ -31,6 +31,7 @@ import { useBatchSelection } from "../hooks/useBatchSelection";
 import { useInterviewTimer } from "../features/interview/useInterviewTimer";
 import { useInterviewTurn } from "../features/interview/useInterviewTurn";
 import { Composer } from "./interview/Composer";
+import { FollowUpCard } from "./interview/FollowUpCard";
 import { HistoryCard } from "./interview/HistoryCard";
 import { InterviewMessageList } from "./interview/MessageList";
 import { ReadyGate } from "./interview/ReadyGate";
@@ -178,10 +179,13 @@ export default function InterviewPage() {
   const start = async (values: SetupForm) => {
     setStarting(true);
     try {
+      // 每一侧材料都是"从记录选 / 导入文件"二选一（#41）：给了文件就不再传 id，
+      // 后端据此只读文件里提取出的文本。
       const session = await createInterview({
-        // 关联岗位与关联简历都是必选（表单已校验）：面试官只读这两份材料。
-        job_id: values.jobId!,
-        resume_id: values.resumeId!,
+        job_id: values.jobMaterial ? undefined : values.jobId!,
+        resume_id: values.resumeMaterial ? undefined : values.resumeId!,
+        job_material: values.jobMaterial ?? undefined,
+        resume_material: values.resumeMaterial ?? undefined,
         interview_type: values.interviewType,
         difficulty: values.difficulty,
         interviewer_style: values.interviewerStyle,
@@ -397,7 +401,9 @@ export default function InterviewPage() {
               已经答过题（中途离开又回来）的会话始终显示历史，否则回来会看不到自己说过什么。 */}
           {ready || answered > 0 || finished ? (
             <InterviewMessageList
-              messages={active.messages}
+              /* 只渲染正式问答：追问（#41）自成一段，放在报告下方的 FollowUpCard 里，
+                 两段记录分开，轮次读数才不会被追问带偏。 */
+              messages={active.messages.filter((item) => item.phase !== "followup")}
               interviewerStyle={active.interviewer_style}
               pendingAnswer={turn.pendingAnswer}
               pendingInterrupted={turn.pendingInterrupted}
@@ -411,11 +417,14 @@ export default function InterviewPage() {
           ) : null}
 
           {finished ? (
-            <ReportCard
-              session={active}
-              onSaveToMaterial={() => void saveReport()}
-              saving={savingReport}
-            />
+            <>
+              <ReportCard
+                session={active}
+                onSaveToMaterial={() => void saveReport()}
+                saving={savingReport}
+              />
+              <FollowUpCard session={active} onSession={setActive} />
+            </>
           ) : !ready ? (
             // 还没点「准备好了」：**整块不渲染作答区**（不是禁用）——计时从点下按钮开始，
             // 这之前连输入框都不该出现，否则用户会以为已经在计时了。

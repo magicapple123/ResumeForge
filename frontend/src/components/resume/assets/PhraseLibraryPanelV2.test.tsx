@@ -112,7 +112,7 @@ describe("PhraseLibraryPanelV2", () => {
     expect(onInsertDocument).not.toHaveBeenCalled();
   });
 
-  it("没有选中位置时禁用插入并说明原因", () => {
+  it("没有选中位置时禁用插入 / 收藏，原因走 tooltip 而不是常驻脚注（#19）", async () => {
     lib.usePhraseLibrary.mockReturnValue({
       phrases: [PHRASE],
       loading: false,
@@ -140,7 +140,13 @@ describe("PhraseLibraryPanelV2", () => {
     expect(
       screen.getByRole("button", { name: at("assets.action.insertAria", { index: 1 }) }),
     ).toBeDisabled();
-    expect(screen.getByText(at("assets.insert.noTarget"))).toBeTruthy();
+    expect(screen.getByRole("button", { name: at("assets.action.collectAria") })).toBeDisabled();
+    // #19 ⑦：卡片列表下方不再常驻「先选中要插入的位置」；原因在按钮 tooltip 里。
+    expect(screen.queryByText(at("assets.insert.noTarget"))).toBeNull();
+    const insertWrap = document.querySelector(".resume-phrase-card-insert");
+    expect(insertWrap).not.toBeNull();
+    fireEvent.mouseEnter(insertWrap as Element);
+    expect(await screen.findByText(at("assets.insert.noTarget"))).toBeTruthy();
     expect(t("assets.panel.title")).toBeTruthy();
   });
 });
