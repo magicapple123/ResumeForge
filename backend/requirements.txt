@@ -31,7 +31,7 @@ pypdfium2==5.14.0
 # the first-run install reproducible. 4.66+ requires Python >=3.11, which is
 # the repo floor since 3.10 went EOL (2026-10).
 fpdf2==2.8.9
-fonttools==4.67.0
+fonttools==4.68.0
 # Browser automation for the apply center: the CDP client talks to a user's real
 # Chrome/Edge over the DevTools WebSocket. Pure Python (no compiler, has wheels),
 # and the HTTP side reuses the existing httpx dependency.
