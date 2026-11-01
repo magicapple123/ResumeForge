@@ -56,6 +56,18 @@ import { A4_HEIGHT_PX, A4_WIDTH_PX } from "./config";
  */
 export const FRAME_PAGE_GAP_PX = 8;
 
+/**
+ * PDF 查看器**自己在 iframe 里占掉的高度**（顶部那条深色工具栏：页码 / 缩放 / 下载 / 打印）。
+ *
+ * 2026-10-31 实测（有头 Chromium，一页 A4 @794×1123）：工具栏压掉页面可视高度约 52px，
+ * 相框按"页数 × 页高"给高时右侧出现滚动条、末页下沿被裁；补 56px 后整页完整。
+ * 取 56 而不是 52 是往"多一点"的一侧取：多出来的几像素只是页下留白，少给则会裁纸。
+ *
+ * 它**不随缩放变化**（工具栏是查看器自己的 UI），所以只在 `exactPreviewFrameHeight`
+ * 里加一次，缩放只乘页面高度。
+ */
+export const VIEWER_CHROME_PX = 56;
+
 /** A4 的高宽比（297 / 210）。用 `config.ts` 的常量相除，两处只有一个 794/1123 口径。 */
 export const A4_RATIO = A4_HEIGHT_PX / A4_WIDTH_PX;
 
@@ -74,15 +86,14 @@ export function exactPreviewPageHeight(widthPx: number): number {
  * - `pages <= 0`（还没有任何结果，仍在等第一次排版）→ `fallbackHeight`；
  * - `widthPx <= 0`（量不到宽度：首次布局前 / 面板隐藏 / jsdom）→ `fallbackHeight`，
  *   **绝不算出 0 高**；
- * - 其余 → `pages × 单页高 + (pages - 1) × 页间距`。
+ * - 其余 → `pages × 单页高 + (pages - 1) × 页间距 + VIEWER_CHROME_PX`。
  *
- * ## 已知未补偿项：查看器自带的悬浮工具栏（**改这里**）
+ * ## 查看器工具栏：已实测，按 56px 补偿
  *
- * Chromium 内置 PDF 查看器会在 iframe **内部**叠一条悬浮工具栏（约 56px，含页码/缩放/
- * 下载），它盖住的是 iframe 的顶部——也就是说第一页顶部会被遮掉一截、末页可能要多滚一点。
- * 2026-11-06 明确**先不加这个常数**（是否真的压住最后一页要等真机截图确认）。
- * 若确认需要补偿，**唯一该改的位置就是这个函数的返回值**：给 `pages × 单页高` 再加一个
- * `VIEWER_CHROME_PX`。别在组件里加偏移——否则"相框高度只有这一处来源"这条就不成立了。
+ * Chromium 内置 PDF 查看器把工具栏画在 iframe **内部**（占的是 iframe 的可视高度，不是
+ * 浮在纸面上）：只按 `pages × 页高` 给相框高度，纸会比相框高 50 多像素，右侧出竖条、
+ * 末页下沿被裁。`VIEWER_CHROME_PX` 就是这 56px；补偿**只在这里**加一次，
+ * 别在组件里加偏移——否则"相框高度只有这一处来源"这条就不成立了。
  *
  * @param widthPx 相框实测宽度；0 或负数表示"没量到"。
  * @param pages 已排出的实际页数（调用方已把 `null` 归一成 1）。
@@ -94,6 +105,14 @@ export function exactPreviewFrameHeight(
   fallbackHeight: number,
 ): number {
   if (pages <= 0 || widthPx <= 0) return fallbackHeight;
+  return (
+    pages * exactPreviewPageHeight(widthPx) + (pages - 1) * FRAME_PAGE_GAP_PX + VIEWER_CHROME_PX
+  );
+}
+
+/** 只算"纸面内容"的高度（不含查看器工具栏）：缩放要乘的是这一段。 */
+export function exactPreviewPagesHeight(widthPx: number, pages: number): number {
+  if (pages <= 0 || widthPx <= 0) return 0;
   return pages * exactPreviewPageHeight(widthPx) + (pages - 1) * FRAME_PAGE_GAP_PX;
 }
 
@@ -136,15 +155,19 @@ export function useExactPreviewFrameHeight(
 
   // 缩放只改变"纸有多大"，相框宽度本身不变（水平滚动条不影响 clientWidth），
   // 所以这里不会出现"变宽 → 出滚动条 → 变窄"的自激。
-  const baseHeight = exactPreviewFrameHeight(frameWidth, pages, fallbackHeight);
   return {
     frameRef,
     // 量到宽度之后：相框高度 = **未缩放高度 × max(1, scale)**（见文件头那节）。缩小不改相框
     // 高度，放大才跟着长；用"宽度 × scale 再算一遍"还会把页间距按原尺寸算进去，缩小后多灰。
     // 量不到宽度时按旧口径算，单页时两者数值相同。
+    //
+    // R-27：这里原来漏了 `max(1, …)` —— 注释写的是"缩小不改相框高度"，代码却乘了 scale，
+    // 于是缩到 80% 时相框比纸短一截、末页下沿被裁（用户看到的是"缩小后反而看不全"）。
     frameHeight:
       frameWidth > 0
-        ? Math.round(baseHeight * scale)
+        ? Math.round(
+            exactPreviewPagesHeight(frameWidth, pages) * Math.max(1, scale) + VIEWER_CHROME_PX,
+          )
         : exactPreviewFrameHeight(frameWidth * scale, pages, fallbackHeight),
     frameWidth,
   };

@@ -61,6 +61,24 @@ export function layoutFromDetail(detail: ResumeDetail): ResumeLayout {
   };
 }
 
+/**
+ * 宿主可能传 v1 夹具 / 未加载内容进来：非合法 v2 文档一律当"没有文档"。
+ *
+ * 判定只认三个结构标记（version=2 + sections 数组 + header.items 数组）：这是"能不能进
+ * 编辑器"的最低门槛，内容字段的完整性由后端 schema 保证，不在这里二次校验。
+ */
+export function asResumeDocument(value: ResumeDocument | null | undefined): ResumeDocument | null {
+  if (!value) return null;
+  if (
+    value.version !== 2 ||
+    !Array.isArray(value.sections) ||
+    !Array.isArray(value.header?.items)
+  ) {
+    return null;
+  }
+  return value;
+}
+
 /** v2 文档的姓名（页眉 key=name 的 item）；冲突"另存副本"没标题时用它兜底。 */
 export function documentName(document: ResumeDocument): string {
   return document.header.items.find((item) => item.key === "name")?.value ?? "";

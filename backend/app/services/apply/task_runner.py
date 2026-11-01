@@ -387,9 +387,20 @@ class TaskRunner:
     # ===== 状态写入 =====
 
     def _mark_failed(
-        self, session: Any, task: ApplyTask, item: ApplyTaskItem, category: str, detail: str
+        self,
+        session: Any,
+        task: ApplyTask,
+        item: ApplyTaskItem,
+        category: str,
+        detail: str,
+        *,
+        step: str = "",
+        target: str = "",
+        reason: str = "",
     ) -> None:
-        task_apply.mark_failed(session, task, item, category, detail)
+        task_apply.mark_failed(
+            session, task, item, category, detail, step=step, target=target, reason=reason
+        )
 
     def _pause_with_message(self, session: Any, task: ApplyTask, message: str) -> None:
         task_apply.pause_with_message(self, session, task, message)

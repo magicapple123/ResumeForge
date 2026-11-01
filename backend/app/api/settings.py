@@ -52,6 +52,13 @@ from ..services.llm.base import LLMError
 from ..services.llm.connection_probe import connection_probe_config
 from ..services.llm.model_catalog import list_available_models
 from ..services.llm.thinking import probe_thinking, thinking_support
+from ..services.llm.usage_tasks import (
+    DEFAULT_AUDIT_LANGUAGE,
+    SETTINGS_PROBE_TOKEN_BUDGET,
+    TASK_SETTINGS_PROBE,
+    set_ambient_scope,
+    set_ambient_task,
+)
 from ..services.settings_service import (
     get_assistant_orb_setting,
     get_assistant_relaxed_mode,
@@ -71,6 +78,7 @@ from ..services.settings_service import (
     save_search_config,
     save_webform_relaxed_mode,
 )
+from ..services.ui_locale import get_ui_locale
 
 logger = logging.getLogger(__name__)
 
@@ -269,6 +277,17 @@ async def check_llm_thinking(payload: LLMThinkingRequest, db: Session = Depends(
     )
     if not payload.probe:
         return result
+    # 思考能力检测（probe=True）实发一次最小请求（R40）：按「设置自检」落一条用量账，
+    # 与前端「计入你的模型用量」的说明保持一致；provider 调用结束时自动落账。
+    set_ambient_task(TASK_SETTINGS_PROBE)
+    # #35：设置自检只发最小请求（无业务数据）。
+    # #35/A1：设置自检只发最小请求（无业务数据）；语言取界面语言、预算见常量。
+    set_ambient_scope(
+        input_scope="none",
+        masked=True,
+        language=get_ui_locale(db) or DEFAULT_AUDIT_LANGUAGE,
+        budget=SETTINGS_PROBE_TOKEN_BUDGET,
+    )
     probed = await probe_thinking(resolved)
     return result.model_copy(
         update={
@@ -291,6 +310,17 @@ async def test_llm(payload: LLMTestRequest, db: Session = Depends(get_db)):
         return LLMTestResult(ok=False, message=str(exc))
     # 不继承用户的思考参数；默认思考的已知模型由能力表显式关闭，未知服务商不加参数。
     probe_config = connection_probe_config(resolved_payload)
+    # 「测试连接」真实发了一次模型请求（R40）：按「设置自检」（settings_probe）落一条
+    # 用量账，让用户在「模型用量」里看得到这次消耗；失败调用也如实留痕（finish_reason）。
+    set_ambient_task(TASK_SETTINGS_PROBE)
+    # #35：设置自检只发最小请求（无业务数据）。
+    # #35/A1：连接测试与思考检测同口径——只发最小请求，语言取界面语言、预算 64。
+    set_ambient_scope(
+        input_scope="none",
+        masked=True,
+        language=get_ui_locale(db) or DEFAULT_AUDIT_LANGUAGE,
+        budget=SETTINGS_PROBE_TOKEN_BUDGET,
+    )
     started = time.perf_counter()
     try:
         provider = create_provider(probe_config)

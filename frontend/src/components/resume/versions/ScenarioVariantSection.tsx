@@ -1,32 +1,23 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * A5：按职业场景派生已有简历变体（创建 → 生成候选 → 看差异 → 采纳）。
+ * A5 / #29a：场景变体的**候选生成**区（创建入口已合并到 VariantCreatePanel）。
  *
- * 流程刻意分三步，源简历全程只读：派生独立变体（后端冻结场景快照）→ 生成候选
- * （受控修订服务，不落库）→ 看三态差异后采纳（内容指纹 + 场景哈希双条件写）。
- * 复用：场景目录/已保存场景接口、ResumeDiffView（仓库唯一三态差异渲染）、versionsApi。
- * 不新造 diff 算法、不引入第二套弹层。
+ * 流程刻意分三步，源简历全程只读：派生独立变体（VariantCreatePanel 里"从职业场景派生"，
+ * 后端冻结场景快照）→ 这里生成候选（受控修订服务，不落库）→ 看三态差异后采纳
+ * （内容指纹 + 场景哈希双条件写）。复用：ResumeDiffView（仓库唯一三态差异渲染）、versionsApi。
+ * 没有带场景上下文的变体时整块不渲染——不给用户一块空的"生成候选"区。
  */
-import { App, Button, Input, Select, Space, Tag, Typography } from "antd";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { App, Button, Input, Space, Tag, Typography } from "antd";
+import { useState } from "react";
 import { ApiError } from "../../../api/client";
 import AbortButton from "../../common/AbortButton";
 import { useAbortableRequest } from "../../../hooks/useAbortableRequest";
-import {
-  fetchCareerScenarioCatalog,
-  listCareerScenarios,
-} from "../../../features/career-scenarios/api";
-import type {
-  CareerScenario,
-  CareerScenarioCatalog,
-} from "../../../features/career-scenarios/types";
 import type {
   ScenarioVariantPreviewOut,
   VariantOut,
 } from "../../../features/resume-versions/types";
 import {
   adoptScenarioVariant,
-  createScenarioVariant,
   previewScenarioVariant,
 } from "../../../features/resume-versions/versionsApi";
 import { t } from "../../../i18n";
@@ -40,16 +31,6 @@ interface Props {
   onChanged?: () => void;
   /** 宿主已知的变体列表（用于只展示带场景上下文的那些）。 */
   variants: VariantOut[];
-}
-
-const SAVED_PREFIX = "saved:";
-const PRESET_PREFIX = "preset:";
-
-function displayName(variant: VariantOut): string {
-  const snapshot = variant.context_snapshot as { display_name?: unknown } | null | undefined;
-  return typeof snapshot?.display_name === "string" && snapshot.display_name.trim()
-    ? snapshot.display_name
-    : t("careerScenarios.generate.source", { name: variant.name });
 }
 
 /** 从**服务端下发的快照**还原本次请求引用（引用而已，不接受快照本体）。 */
@@ -94,16 +75,16 @@ function conflictMessage(error: unknown, fallbackKey: I18nKey): string {
   return t(fallbackKey);
 }
 
+function displayName(variant: VariantOut): string {
+  const snapshot = variant.context_snapshot as { display_name?: unknown } | null | undefined;
+  return typeof snapshot?.display_name === "string" && snapshot.display_name.trim()
+    ? snapshot.display_name
+    : t("careerScenarios.generate.source", { name: variant.name });
+}
+
 export default function ScenarioVariantSection({ resumeId, onChanged, variants }: Props) {
-  const locale = useLocale();
+  useLocale();
   const { message } = App.useApp();
-  const [catalog, setCatalog] = useState<CareerScenarioCatalog | null>(null);
-  const [scenarios, setScenarios] = useState<CareerScenario[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState(false);
-  const [name, setName] = useState("");
-  const [selected, setSelected] = useState("");
-  const [creating, setCreating] = useState(false);
   const [previewLoadingId, setPreviewLoadingId] = useState<number | null>(null);
   const [adopting, setAdopting] = useState(false);
   const [instructions, setInstructions] = useState("");
@@ -111,91 +92,7 @@ export default function ScenarioVariantSection({ resumeId, onChanged, variants }
   const [actionError, setActionError] = useState("");
   // 生成候选是一次现场长调用：每一条都能单独停，停了已有的差异预览原样留着。
   const previewRequest = useAbortableRequest();
-
-  const loadOptions = useCallback(async () => {
-    setLoading(true);
-    setLoadError(false);
-    const [catalogResult, scenariosResult] = await Promise.allSettled([
-      fetchCareerScenarioCatalog(),
-      listCareerScenarios(),
-    ]);
-    if (catalogResult.status === "fulfilled") setCatalog(catalogResult.value);
-    if (scenariosResult.status === "fulfilled") {
-      // 防御：旧/异常响应可能没有 items（测试替身或代理错误页），不能让控件崩溃。
-      const items = scenariosResult.value?.items;
-      setScenarios(Array.isArray(items) ? items : []);
-    }
-    // 目录失败不阻断已保存场景；两者都失败才提示（旧生成流程也不应被这里卡住）。
-    if (catalogResult.status === "rejected" && scenariosResult.status === "rejected") {
-      setLoadError(true);
-    }
-    setLoading(false);
-  }, []);
-
-  useEffect(() => {
-    // 先让出这一帧再触发首拉：loadOptions 开头会同步 setLoading，直接在 effect 体里调用
-    // 会触发 react-hooks/set-state-in-effect（级联渲染告警）。
-    queueMicrotask(() => {
-      void loadOptions();
-    });
-  }, [loadOptions]);
-
-  const options = useMemo(() => {
-    // Group labels are translated inside this memo.
-    void locale;
-    const saved = scenarios.map((scenario) => ({
-      value: SAVED_PREFIX + String(scenario.id),
-      label: scenario.name,
-    }));
-    const presets = (catalog?.presets ?? []).map((preset) => ({
-      value: PRESET_PREFIX + preset.key,
-      label: preset.name,
-    }));
-    return [
-      ...(saved.length ? [{ label: t("careerScenarios.selector.saved"), options: saved }] : []),
-      ...(presets.length
-        ? [{ label: t("careerScenarios.selector.preset"), options: presets }]
-        : []),
-    ];
-  }, [catalog, scenarios, locale]);
-
-  const selectedContext = useCallback((): CareerContextRequest | null => {
-    if (selected.startsWith(SAVED_PREFIX)) {
-      const id = Number(selected.slice(SAVED_PREFIX.length));
-      const scenario = scenarios.find((item) => item.id === id);
-      if (!scenario) return null;
-      return { scenario_id: scenario.id, expected_revision: scenario.revision };
-    }
-    if (selected.startsWith(PRESET_PREFIX) && catalog) {
-      return {
-        preset_key: selected.slice(PRESET_PREFIX.length),
-        catalog_version: catalog.catalog_version,
-      };
-    }
-    return null;
-  }, [catalog, scenarios, selected]);
-
   const contextVariants = variants.filter((variant) => variant.context_snapshot);
-
-  const submitCreate = async () => {
-    const context = selectedContext();
-    if (!resumeId || !name.trim() || !context) {
-      message.warning(t("careerScenarios.variant.createRequired"));
-      return;
-    }
-    setCreating(true);
-    setActionError("");
-    try {
-      await createScenarioVariant(resumeId, { name: name.trim(), career_context: context });
-      setName("");
-      message.success(t("careerScenarios.variant.createSuccess"));
-      onChanged?.();
-    } catch (error) {
-      setActionError(conflictMessage(error, "careerScenarios.variant.createFailed"));
-    } finally {
-      setCreating(false);
-    }
-  };
 
   const runPreview = async (variant: VariantOut) => {
     if (!resumeId) return;
@@ -254,9 +151,12 @@ export default function ScenarioVariantSection({ resumeId, onChanged, variants }
     }
   };
 
+  // 没有场景变体时整块不渲染（创建入口已合并到顶部 VariantCreatePanel）。
+  if (contextVariants.length === 0) return null;
+
   return (
     <section
-      aria-label={t("careerScenarios.variant.title")}
+      aria-label={t("versions.variants.scenario.title")}
       style={{
         display: "flex",
         flexDirection: "column",
@@ -266,48 +166,10 @@ export default function ScenarioVariantSection({ resumeId, onChanged, variants }
         borderRadius: "var(--rf-radius-control)",
       }}
     >
-      <Typography.Text strong>{t("careerScenarios.variant.title")}</Typography.Text>
+      <Typography.Text strong>{t("versions.variants.scenario.title")}</Typography.Text>
       <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-        {t("careerScenarios.variant.hint")}
+        {t("versions.variants.scenario.hint")}
       </Typography.Text>
-      <Space wrap size={8}>
-        <Input
-          value={name}
-          onChange={(event) => setName(event.target.value)}
-          placeholder={t("careerScenarios.variant.namePlaceholder")}
-          aria-label={t("careerScenarios.variant.nameAria")}
-          maxLength={256}
-          style={{ width: 200 }}
-        />
-        <Select
-          value={selected || undefined}
-          onChange={(value: string) => setSelected(value)}
-          placeholder={t("careerScenarios.variant.scenarioPlaceholder")}
-          aria-label={t("careerScenarios.variant.scenario")}
-          loading={loading}
-          showSearch
-          optionFilterProp="label"
-          options={options}
-          style={{ width: 240 }}
-        />
-        <Button
-          type="primary"
-          loading={creating}
-          disabled={!name.trim() || !selected}
-          onClick={() => void submitCreate()}
-        >
-          {t("careerScenarios.variant.create")}
-        </Button>
-        <Button onClick={() => void loadOptions()}>{t("careerScenarios.variant.refresh")}</Button>
-      </Space>
-      {loadError ? (
-        <Typography.Text type="danger">{t("careerScenarios.variant.loadFailed")}</Typography.Text>
-      ) : null}
-      {contextVariants.length === 0 ? (
-        <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-          {t("careerScenarios.variant.empty")}
-        </Typography.Text>
-      ) : null}
       {contextVariants.map((variant) => (
         <div
           key={variant.id}
@@ -325,16 +187,14 @@ export default function ScenarioVariantSection({ resumeId, onChanged, variants }
           {previewLoadingId === variant.id && <AbortButton size="small" onClick={cancelPreview} />}
         </div>
       ))}
-      {contextVariants.length > 0 ? (
-        <Input.TextArea
-          value={instructions}
-          onChange={(event) => setInstructions(event.target.value)}
-          placeholder={t("careerScenarios.variant.instructionsPlaceholder")}
-          aria-label={t("careerScenarios.variant.instructions")}
-          autoSize={{ minRows: 1, maxRows: 3 }}
-          maxLength={500}
-        />
-      ) : null}
+      <Input.TextArea
+        value={instructions}
+        onChange={(event) => setInstructions(event.target.value)}
+        placeholder={t("careerScenarios.variant.instructionsPlaceholder")}
+        aria-label={t("careerScenarios.variant.instructions")}
+        autoSize={{ minRows: 1, maxRows: 3 }}
+        maxLength={500}
+      />
       {actionError ? <Typography.Text type="danger">{actionError}</Typography.Text> : null}
       {preview ? (
         <div

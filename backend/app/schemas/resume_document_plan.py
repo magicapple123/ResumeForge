@@ -37,7 +37,7 @@ class Inline(BaseModel):
     text: str = ""
     role: str = "body"
     strong: bool = False
-    italic: bool = False
+    # #5d：italic 已整体移除（旧计划里的斜体字段不再产出、不再消费）。
     link: str | None = None
     path: str = ""
 

@@ -48,8 +48,11 @@ const drill = {
   "drill.startPanel.intro.description":
     "A deep dive gives no overall score. It answers one question: can you explain this claim clearly, and where does it still not hold up?",
   "drill.startPanel.claims.label": "Claims to test",
-  "drill.startPanel.claims.hint": "(leave blank for all confirmed claims)",
-  "drill.startPanel.claims.placeholder": "All confirmed claims",
+  "drill.startPanel.claims.hint": "Only confirmed claims can be tested; pick one or more",
+  "drill.startPanel.claims.placeholder": "Pick confirmed claims to test",
+  "drill.startPanel.claims.required": "Pick at least one confirmed claim",
+  "drill.startPanel.claims.ignored": "{count} unconfirmed entries were skipped",
+  "drill.startPanel.claims.selectAll": "Select all ({count})",
   "drill.startPanel.claims.empty":
     "No confirmed entries in the fact ledger yet. Go to the fact ledger and confirm a few first.",
   "drill.startPanel.claims.option": "{title} ({level})",
@@ -62,7 +65,9 @@ const drill = {
   "drill.startPanel.job.hint": "(optional, to pick questions closer to the job)",
   "drill.startPanel.job.placeholder": "No job (type keywords to search)",
   "drill.startPanel.action.open": "Start deep dive",
-  "drill.startPanel.action.start": "Start",
+  "drill.startPanel.action.start": "Start deep dive ({claims} claims · {questions} questions)",
+  "drill.startPanel.buffer.hint":
+    "After you start, the bar for the first question is generated from your claims — usually 10–20 seconds.",
   "drill.startPanel.toast.started": "The bar is set — get started",
   "drill.startPanel.error.startFailed": "Could not start the deep dive",
   "drill.rehearsal.intro":

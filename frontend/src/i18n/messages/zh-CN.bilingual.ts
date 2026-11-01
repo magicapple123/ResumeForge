@@ -16,7 +16,8 @@ const bilingual = {
   "bilingual.variant.missing": "这个语言还没有版本",
   "bilingual.variant.create": "创建翻译版本",
   "bilingual.variant.layout": "排版：{template} · {pages} 页",
-  "bilingual.variant.layoutHint": "两份版本各自保存模板与排版参数，互不影响",
+  "bilingual.variant.viewing": "正在查看：{name}",
+  "bilingual.variant.createOption": "+ 未创建",
   "bilingual.variant.count": "共 {count} 个语言版本",
   "bilingual.variant.current": "当前版本",
 
@@ -27,10 +28,13 @@ const bilingual = {
   "bilingual.compare.columnCurrent": "当前简历",
   "bilingual.compare.columnVariant": "选中版本",
   "bilingual.compare.identical":
-    "这份版本和当前简历内容一样，还没翻译：点右上角「生成翻译候选」，勾选后点「采纳选中」写入译文",
+    "这份版本和当前简历内容一样，还没翻译：点右上角「生成翻译」，勾选后点「采纳选中」写入译文",
   "bilingual.compare.same": "一致",
   "bilingual.compare.changed": "有差异",
   "bilingual.compare.empty": "两边都还空着",
+  "bilingual.compare.statusAria": "字段状态：{status}",
+  "bilingual.compare.sameMore": "另有 {count} 个字段一致",
+  "bilingual.compare.sameLess": "收起这 {count} 个一致字段",
   "bilingual.compare.locked": "事实锁",
   "bilingual.compare.lockedHint": "姓名、机构、时间、数字由事实锁保护，不参与翻译改写",
   "bilingual.compare.adopt": "采纳这条翻译",
@@ -62,6 +66,8 @@ const bilingual = {
   // ── 术语表 ──────────────────────────────────────────────────
   "bilingual.glossary.title": "术语表",
   "bilingual.glossary.hint": "锁定的术语在翻译里必须逐字出现",
+  "bilingual.glossary.purpose":
+    "固定「原词 → 译法」：生成翻译时命中这些词，就强制使用这里的译法，前后两版读起来一致",
   "bilingual.glossary.empty": "还没有术语，添加一条即可固定译法",
   "bilingual.glossary.add": "添加术语",
   "bilingual.glossary.source": "原词",
@@ -127,8 +133,20 @@ const bilingual = {
   "bilingual.workspace.tabCompare": "字段对照",
   "bilingual.workspace.tabCandidates": "翻译候选",
   "bilingual.workspace.tabGlossary": "术语表",
-  "bilingual.workspace.translate": "生成翻译候选",
-  "bilingual.workspace.translating": "正在生成翻译候选",
+  "bilingual.workspace.translate": "生成翻译",
+  "bilingual.workspace.translateHint": "生成{language}译文，结果进「翻译候选」，逐条确认后才写回",
+  "bilingual.workspace.translateBlockedOnSource":
+    "这个版本和当前简历同语言，只作为翻译的源：请切换到目标语言版本再生成翻译",
+  "bilingual.workspace.overwrite.label": "用当前简历覆盖此变体",
+  "bilingual.workspace.overwrite.hint":
+    "把这个变体的正文恢复成当前简历（修复被译文污染的版本）；名称与排版不动",
+  "bilingual.workspace.overwrite.confirmTitle": "用当前简历覆盖这个变体？",
+  "bilingual.workspace.overwrite.confirmDescription":
+    "该变体当前的全部改动会被当前简历替换，无法撤销；覆盖后可重新生成翻译。",
+  "bilingual.workspace.overwrite.confirmOk": "覆盖",
+  "bilingual.workspace.overwrite.done": "已用当前简历覆盖这个变体",
+  "bilingual.workspace.overwrite.failed": "覆盖没有成功",
+  "bilingual.workspace.translating": "正在生成翻译",
   "bilingual.workspace.noVariant": "这个语言还没有版本，先在版本列表里创建一个",
   "bilingual.workspace.adopted": "已采纳 {count} 条翻译",
   "bilingual.workspace.undoAdopted": "已撤销这次采纳",
@@ -147,7 +165,8 @@ const bilingual = {
   "bilingual.variant.createFailed": "创建语言版本没有成功",
   "bilingual.variant.name.zh": "中文版",
   "bilingual.variant.name.en": "英文版",
-  "bilingual.layout.title": "这份版本的排版",
+  "bilingual.layout.title": "「{name}」的排版",
+  "bilingual.layout.resetInherited": "已经继承简历排版，无需恢复",
   "bilingual.layout.hint": "独立保存；不改当前语言正文，也不影响另一份版本",
   "bilingual.layout.inherited": "当前继承简历排版",
   "bilingual.layout.own": "这份版本使用独立排版",
@@ -177,7 +196,7 @@ const bilingual = {
   "bilingual.workspace.autoTranslate.done": "已自动采纳 {count} 条译文",
   "bilingual.workspace.autoTranslate.nothing": "没有可翻译的字段，新版本已保留，可稍后手动生成候选",
   "bilingual.workspace.autoTranslate.failed":
-    "自动翻译没完成，新版本已保留；可稍后点「生成翻译候选」重试",
+    "自动翻译没完成，新版本已保留；可稍后点「生成翻译」重试",
   "bilingual.workspace.translateRejected":
     "翻译没开始：{reason}。先去「设置 → AI 模型」确认模型配置；新版本已保留",
 
@@ -185,12 +204,16 @@ const bilingual = {
   "bilingual.v2.customHint": "自建板块与自定义字段只在对照里展示，不参与逐项采纳",
   "bilingual.v2.blockedHint": "{count} 条因事实锁/术语锁定保留原文，未列入候选",
   "bilingual.v2.readOnly": "只读模式：这份简历当前不可写，只能查看对照与术语表",
-  "bilingual.v2.openInWorkbench": "在工作台查看这份译文",
+  "bilingual.v2.openInWorkbench": "预览英文版",
+  "bilingual.v2.openInWorkbenchZh": "预览中文版",
+  "bilingual.v2.previewReadOnly": "只读预览",
   "bilingual.preview.title": "译文预览",
   "bilingual.preview.loading": "正在加载译文预览",
   "bilingual.preview.failed": "译文预览没加载出来",
   "bilingual.preview.retry": "重新加载",
   "bilingual.preview.close": "收起预览",
+  /** #18：预览缩放徽标的悬停说明（Ctrl+滚轮缩放，0.5–2.0）。 */
+  "bilingual.preview.zoom": "预览缩放（Ctrl+滚轮）",
   "bilingual.compare.readOnlyTag": "只读",
   "bilingual.compare.readOnlyHint": "列表、作者与自建字段不参与逐项采纳，只在对照里展示",
   "bilingual.compare.group.custom": "自建板块",

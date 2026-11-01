@@ -144,9 +144,18 @@
   margin-inline-end: 0;
 }
 
-.resume-phrase-card-usage {
+/* #19：四维元信息（类型/语言/来源/已用于 N 份简历）一行弱化显示；窄栏允许换行，
+   不参与卡片的 gap 节奏（它是正文的附属说明，不是独立一段）。 */
+.resume-phrase-card-meta {
   color: var(--rf-text-secondary);
   font-size: 12px;
+  line-height: 18px;
+  overflow-wrap: anywhere;
+}
+
+/* 插入按钮的 tooltip 挂在 span 上（antd disabled Button 不派发鼠标事件）。 */
+.resume-phrase-card-insert {
+  display: inline-flex;
 }
 
 /* 动作按钮小号、右对齐。 */
@@ -158,10 +167,7 @@
   gap: 4px;
 }
 
-/* 面板下方的一行状态说明（插入成功 / 插入不可用原因）：12px secondary。 */
-.resume-assets-footnote {
-  margin-top: 6px;
-  color: var(--rf-text-secondary);
-  font-size: 12px;
-  line-height: 18px;
+/* #19：收藏按钮的 tooltip 包裹层（disabled Button 不派发鼠标事件，需要 span 承担 hover）。 */
+.resume-assets-head-action-wrap {
+  display: inline-flex;
 }

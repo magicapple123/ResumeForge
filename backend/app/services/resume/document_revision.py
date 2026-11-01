@@ -174,7 +174,15 @@ async def revise_document(
         ):
             raise LLMError("模型返回的字段类型不正确，请重试")
         target = resolve_document_path(revised, path)
-        if target.item.get("kind") == "list":
+        if target is None:
+            # path 已在 allowed 里（来自本份文档），解析不出节点说明文档结构对不上：
+            # 按「不存在的字段路径」处理，不静默跳过。
+            raise LLMError("模型返回了不存在或重复的字段路径，请重试")
+        if (
+            target.item is not None
+            and target.item.get("kind") == "list"
+            and isinstance(value, list)
+        ):
             hidden = set(target.item.get("hidden_values") or [])
             value = [
                 *value,

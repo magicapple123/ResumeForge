@@ -231,6 +231,9 @@ def _export_summary(record, document: dict, payload: PreflightRequest) -> Export
             and int(payload.resume_revision) != revision
         ),
         hidden_count=_hidden_entry_count(document),
+        # 时间口径：`updated_at` 是本地 naive datetime，按 ISO 原样下发，
+        # 由前端按项目既有口径格式化（不要让前端猜它是 UTC）。
+        updated_at=record.updated_at.isoformat() if record.updated_at else "",
     )
 
 

@@ -72,6 +72,7 @@ const assistantUi = {
   "assistantUi.actionProposal.status.fallback": "Unknown status",
   "assistantUi.actionProposal.aria": "Write proposal: {target}",
   "assistantUi.actionProposal.heading": "The assistant wants to write data",
+  "assistantUi.actionProposal.diffTitle": "Proposed changes",
   "assistantUi.actionProposal.changeField": "{field}: ",
   "assistantUi.actionProposal.noContent": "(no content)",
   "assistantUi.actionProposal.notice":

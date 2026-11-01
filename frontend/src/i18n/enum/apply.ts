@@ -152,12 +152,59 @@ export function failureCategoryKey(category: string): MessageKey | undefined {
 }
 
 /**
+ * #39：失败子码（failure_reason）→ 展示名 key。
+ *
+ * 子码是后端下发的稳定协议值（见 services/apply/failure_taxonomy.py），未登记的新码返回
+ * undefined，调用方回退显示原码——与失败分类的回退策略一致。
+ */
+export const FAILURE_REASON_LABEL_KEYS: Record<string, MessageKey> = {
+  site_changed: "enumsApply.failureReason.site_changed",
+  render_timeout: "enumsApply.failureReason.render_timeout",
+  page_not_navigated: "enumsApply.failureReason.page_not_navigated",
+  selector_missing: "enumsApply.failureReason.selector_missing",
+  login_required: "enumsApply.failureReason.login_required",
+  captcha_required: "enumsApply.failureReason.captcha_required",
+  greeting_missing: "enumsApply.failureReason.greeting_missing",
+  network_timeout: "enumsApply.failureReason.network_timeout",
+  upload_failed: "enumsApply.failureReason.upload_failed",
+  site_unsupported: "enumsApply.failureReason.site_unsupported",
+  profile_insufficient: "enumsApply.failureReason.profile_insufficient",
+  unconfirmed: "enumsApply.failureReason.unconfirmed",
+  unknown: "enumsApply.failureReason.unknown",
+};
+
+/** #39：卡住的环节（failure_target）→ 展示名 key；空串 / 未登记返回 undefined。 */
+export const FAILURE_TARGET_LABEL_KEYS: Record<string, MessageKey> = {
+  chat_input: "enumsApply.failureTarget.chat_input",
+  send_button: "enumsApply.failureTarget.send_button",
+  apply_entry: "enumsApply.failureTarget.apply_entry",
+  job_card: "enumsApply.failureTarget.job_card",
+  search_results: "enumsApply.failureTarget.search_results",
+  resume_upload: "enumsApply.failureTarget.resume_upload",
+};
+
+/**
  * 执行步骤的 key；未登记的步骤码返回 `undefined`。
  *
  * 回退交给 `stepLabel(step)`：它把空串映射成「空闲」、把未知码原样显示。
  */
 export function stepKey(step: string): MessageKey | undefined {
   return STEP_LABEL_KEYS[step];
+}
+
+/** #39：失败子码的 key；未登记的码返回 undefined（调用方回退显示原码）。 */
+export function failureReasonKey(reason: string): MessageKey | undefined {
+  return Object.prototype.hasOwnProperty.call(FAILURE_REASON_LABEL_KEYS, reason)
+    ? FAILURE_REASON_LABEL_KEYS[reason]
+    : undefined;
+}
+
+/** #39：失败环节的 key；空串或未登记的码返回 undefined。 */
+export function failureTargetKey(target: string): MessageKey | undefined {
+  if (!target) return undefined;
+  return Object.prototype.hasOwnProperty.call(FAILURE_TARGET_LABEL_KEYS, target)
+    ? FAILURE_TARGET_LABEL_KEYS[target]
+    : undefined;
 }
 
 /**

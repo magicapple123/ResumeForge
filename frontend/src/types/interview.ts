@@ -39,6 +39,14 @@ export const AUTO_ROUNDS_FLAG = 8;
 export interface InterviewMessage {
   id: number;
   role: "interviewer" | "user" | "note";
+  /**
+   * 阶段（#41）：`interview` = 正式问答（计入轮次），`followup` = 结束后的追问（不计轮次）。
+   *
+   * 服务端总会带这个字段（后端 schema 把缺失值补成 `interview`）；这里仍是可选的，
+   * 因为"缺失"的语义就是正式问答——老会话、以及按旧结构构造的测试数据都落在这个分支上，
+   * 让它们继续按"正式问答"渲染才是对的。
+   */
+  phase?: InterviewMessagePhase;
   content: string;
   context: {
     index?: number;
@@ -49,6 +57,25 @@ export interface InterviewMessage {
   status: string;
   error: string;
   created_at: string;
+}
+
+/** 消息所属阶段。历史消息（0071 之前）一律是 `interview`，服务端已补齐默认值。 */
+export type InterviewMessagePhase = "interview" | "followup";
+
+/** 材料来源（#41）：岗位侧导入 JD 文件，简历侧导入截图。 */
+export type InterviewMaterialKind = "job" | "resume";
+
+/** 开面试时随请求带上的、**已提取**的材料（文件名 + 正文）。 */
+export interface InterviewMaterialPayload {
+  name: string;
+  text: string;
+}
+
+/** 上传端点返回的提取结果：用户在上传那一刻就能看到"识别出什么、有什么警告"。 */
+export interface InterviewMaterialExtract {
+  name: string;
+  text: string;
+  warnings: string[];
 }
 
 export interface InterviewReportDimension {
@@ -76,6 +103,12 @@ export interface InterviewBrief {
   /** 关联简历（面试官只读这份简历 + 关联岗位的 JD）；历史会话可能为 null。 */
   resume_id: number | null;
   resume_title: string;
+  /**
+   * 导入的材料文件名（#41）：缺失/空串表示该侧材料来自记录（历史会话也是如此）。
+   * 后端总会带上这两个字段；写成可选是因为"没有文件"就是它们的常态。
+   */
+  job_material_name?: string;
+  resume_material_name?: string;
   /** 累计有效面试时长（秒）：点「准备好了」之后才开始计时、离开暂停。 */
   duration_seconds: number;
   interview_type: InterviewType | string;
@@ -87,6 +120,11 @@ export interface InterviewBrief {
   status: InterviewStatus;
   created_at: string;
   updated_at: string;
+  /**
+   * 追问区收起的时刻（#41）：非空 = 用户点了「停止追问」，输入框收起。
+   * 它不改 status、不影响 answered_rounds——历史会话没有这个字段时为 undefined（= 开放）。
+   */
+  follow_up_closed_at?: string | null;
   answered_rounds: number;
 }
 
@@ -100,10 +138,14 @@ export interface InterviewDetail extends InterviewBrief {
 
 export interface InterviewCreatePayload {
   title?: string;
-  /** 关联岗位（必填）：面试官只能看到这个岗位的 JD。 */
-  job_id: number;
-  /** 关联简历（必填）：面试官只能看到这份简历里的内容。 */
-  resume_id: number;
+  /** 关联岗位：与 `job_material` **二选一**（每侧必须有一个来源，后端会校验）。 */
+  job_id?: number;
+  /** 关联简历：与 `resume_material` 二选一。 */
+  resume_id?: number;
+  /** 导入的 JD 文件（已提取的文本）。 */
+  job_material?: InterviewMaterialPayload;
+  /** 导入的简历截图（已识别出的文本）。 */
+  resume_material?: InterviewMaterialPayload;
   interview_type: InterviewType;
   difficulty: InterviewDifficulty;
   interviewer_style: InterviewerStyle;
@@ -117,6 +159,12 @@ export interface InterviewAnswerResult {
   session: InterviewDetail;
   feedback: string;
   finished: boolean;
+}
+
+/** 一次追问的结果（#41）：面试官的回答 + 刷新后的整场会话。 */
+export interface InterviewFollowUpResult {
+  session: InterviewDetail;
+  answer: string;
 }
 
 // ===== R-11 个性化题库 / 答题思路 / 反向优化简历 =====

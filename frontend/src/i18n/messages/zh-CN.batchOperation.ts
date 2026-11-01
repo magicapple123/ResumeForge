@@ -17,7 +17,8 @@ const batchOperation = {
   "batchOperation.field.template": "版式模板",
   "batchOperation.field.fontScale": "字号",
   "batchOperation.field.pageLimit": "页数上限",
-  "batchOperation.field.language": "简历语言",
+  // #18：这里控制的是产物的小节标题与字段名（不翻译正文），叫「字段语言」更准确。
+  "batchOperation.field.language": "字段语言",
   "batchOperation.field.exportFormat": "导出格式",
   "batchOperation.field.enhance": "AI 润色",
   "batchOperation.field.enhancementLevel": "润色强度",

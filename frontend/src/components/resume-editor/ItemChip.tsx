@@ -13,8 +13,6 @@
  * 这样"取消"在界面上看得见，也不依赖编辑器自己维护第二份文档。
  */
 import { HolderOutlined } from "@ant-design/icons";
-import { Dropdown } from "antd";
-import type { MenuProps } from "antd";
 import type { DragEvent, KeyboardEvent, ReactNode } from "react";
 
 type DragSourceEvent = DragEvent<HTMLElement>;
@@ -23,12 +21,13 @@ import { useRef, useState } from "react";
 import { useI18n } from "../../i18n/i18nContext";
 import type { ResumeDocument, ResumeItem } from "../../types/resumeDocument";
 import { itemDisplayLabel, itemDisplayValue } from "../../features/resume-document/format";
+import { enumLabelOf } from "../../features/resume-document/fieldCatalog";
 import { getItemPlacement, moveItem } from "../../features/resume-document";
 import { keyboardMoveTarget, slotOf } from "../../features/resume-document/drag";
 import { itemPath as buildItemPath } from "../../features/resume-document/paths";
-import { toggleItemHidden } from "../../features/resume-document/mutations";
-import { removeItem } from "../../features/resume-document/mutations";
 import { useDocumentDrag } from "./documentDragContext";
+import { useDocumentChipMenu } from "./documentChipMenuContext";
+import { useChipExpandGesture } from "./useChipExpandGesture";
 
 interface Props {
   document: ResumeDocument;
@@ -68,7 +67,13 @@ export default function ItemChip({
   const drag = useDocumentDrag();
   const [grabbed, setGrabbed] = useState(false);
   const [announcement, setAnnouncement] = useState("");
-  const [chipMenuOpen, setChipMenuOpen] = useState(false);
+  // R-30：菜单不在这里，交给编辑器那一份（见 documentChipMenuContext）。
+  const chipMenuHost = useDocumentChipMenu();
+  // #8：展开态与手势判定来自编辑器级 context（单击选中 / 双击展开分离）。
+  // 双击的第二下 click 自己就是展开/收起，不再依赖 dblclick 是否送达，
+  // 原因见 useChipExpandGesture 的文件注释。
+  const { expanded, consumePairSecondClick, handleDoubleClick, toggleFromKeyboard, setExpanded } =
+    useChipExpandGesture(path, onSelect);
   // 指针按下时的选中态：focus 会先于 click 触发并选中这一行，若 click 再读实时
   // selected，就会“第一次点开、同一帧又收起”。click 只认按下前的那一刻。
   const selectedAtPointerDownRef = useRef<boolean | null>(null);
@@ -77,7 +82,13 @@ export default function ItemChip({
   const snapshotRef = useRef<ResumeDocument | null>(null);
   const hidden = getItemPlacement(item) === "hidden";
   const label = itemDisplayLabel(item, catalogLabel);
-  const value = itemDisplayValue(item);
+  // #11a：枚举字段显示本地化标签（后端纸面渲染同源），目录没有时回落原值。
+  const value = itemDisplayValue(item, {
+    resolveEnum:
+      item.kind === "field" && item.format === "enum"
+        ? (raw) => enumLabelOf(null, sectionKey, item.key, raw, t)
+        : undefined,
+  });
   const canMove = item.kind !== "text" && !readOnly;
 
   const startGrab = () => {
@@ -93,33 +104,17 @@ export default function ItemChip({
     setAnnouncement("");
   };
 
-  const chipMenu: MenuProps = {
-    items: [
-      {
-        key: "toggle",
-        label: hidden ? t("document.item.show") : t("document.item.hide"),
-      },
-      { key: "remove", label: t("document.item.remove"), danger: true },
-    ],
-    onClick: ({ key }) => {
-      setChipMenuOpen(false);
-      if (key === "toggle") {
-        onChange(toggleItemHidden(document, path));
-        onNotice(hidden ? t("document.toast.shown") : t("document.toast.hidden"), "info");
-        return;
-      }
-      if (key === "remove") {
-        onChange(removeItem(document, path));
-        onNotice(t("document.toast.fieldRemoved"), "info");
-      }
-    },
-  };
-
   const handleKeyDown = (event: ChipKeyEvent) => {
     // Shift+F10 / 菜单键是右键菜单的键盘等价物：字段的隐藏/删除不再有可见按钮。
     if (!readOnly && (event.key === "ContextMenu" || (event.shiftKey && event.key === "F10"))) {
       event.preventDefault();
-      setChipMenuOpen(true);
+      // 键盘等价物也走同一份菜单：拿 chip 自己的矩形中心当锚点，位置和右键点差不多。
+      const box = event.currentTarget.getBoundingClientRect();
+      chipMenuHost.request?.({
+        path,
+        x: box.left + box.width / 2,
+        y: box.top + box.height / 2,
+      });
       return;
     }
     if (!grabbed) {
@@ -127,10 +122,28 @@ export default function ItemChip({
         event.preventDefault();
         startGrab();
       }
-      // 键盘等价于“再点一次收起”：Esc 收起当前展开的 item 编辑器。
-      if (event.key === "Escape" && selected) {
+      // #8：F2 = 键盘的「展开/收起字段编辑器」（与双击同路）。
+      if (event.key === "F2") {
         event.preventDefault();
-        onSelect(null);
+        toggleFromKeyboard();
+        return;
+      }
+      // A3：Esc 分层——先收字段编辑器（焦点留在 chip 上），再收选中；只有两者都不在时
+      // 才把事件放行给 antd Modal（它会关掉整个制作台）。stopPropagation 是必须的：
+      // Modal 的 Esc 监听在 window 冒泡阶段，不拦就会"收编辑器"和"关制作台"一起发生。
+      if (event.key === "Escape") {
+        if (expanded) {
+          event.preventDefault();
+          event.stopPropagation();
+          setExpanded(null);
+          return;
+        }
+        if (selected) {
+          event.preventDefault();
+          event.stopPropagation();
+          onSelect(null);
+          return;
+        }
       }
       return;
     }
@@ -195,71 +208,70 @@ export default function ItemChip({
 
   return (
     <>
-      <Dropdown
-        menu={chipMenu}
-        trigger={["contextMenu"]}
-        disabled={readOnly}
-        open={chipMenuOpen}
-        onOpenChange={setChipMenuOpen}
+      <div
+        className={[
+          "document-chip",
+          selected ? "is-selected" : "",
+          grabbed ? "is-grabbed" : "",
+          hidden ? "is-hidden" : "",
+        ]
+          .filter(Boolean)
+          .join(" ")}
+        data-document-path={path}
+        data-item-kind={item.kind}
+        role="group"
+        aria-label={`${label}${value ? `\uFF1A${value}` : ""}`}
       >
-        <div
-          className={[
-            "document-chip",
-            selected ? "is-selected" : "",
-            grabbed ? "is-grabbed" : "",
-            hidden ? "is-hidden" : "",
-          ]
-            .filter(Boolean)
-            .join(" ")}
-          data-document-path={path}
-          data-item-kind={item.kind}
-          role="group"
-          aria-label={`${label}${value ? `\uFF1A${value}` : ""}`}
+        <button
+          type="button"
+          className="document-chip-main"
+          aria-pressed={selected}
+          aria-expanded={expanded}
+          aria-describedby={grabbed ? `${path}-drag-hint` : undefined}
+          draggable={canMove}
+          onDragStart={handleDragStart}
+          onDragEnd={() => drag.setDraggedPath(null)}
+          onPointerDown={() => {
+            selectedAtPointerDownRef.current = selected;
+            pointerFocusRef.current = true;
+            window.setTimeout(() => {
+              pointerFocusRef.current = false;
+            }, 0);
+          }}
+          // #8：单击只选中（高亮/结构树联动），双击/F2 才展开字段编辑器——
+          // 扫视字段时点一下就弹出一大块编辑器，容易误触。焦点事件只负责选中。
+          onClick={(event) => {
+            const wasSelected = selectedAtPointerDownRef.current ?? selected;
+            selectedAtPointerDownRef.current = null;
+            // 双击的第二下 = 展开/收起，并且**不**翻转选中——否则「没展开 + 取消选中」。
+            if (consumePairSecondClick(event.detail)) return;
+            onSelect(wasSelected ? null : path);
+          }}
+          onDoubleClick={(event) => {
+            event.preventDefault();
+            handleDoubleClick();
+          }}
+          onFocus={() => {
+            if (!selected && !pointerFocusRef.current) onSelect(path);
+          }}
+          onKeyDown={handleKeyDown}
         >
-          <button
-            type="button"
-            className="document-chip-main"
-            aria-pressed={selected}
-            aria-expanded={selected}
-            aria-describedby={grabbed ? `${path}-drag-hint` : undefined}
-            draggable={canMove}
-            onDragStart={handleDragStart}
-            onDragEnd={() => drag.setDraggedPath(null)}
-            onPointerDown={() => {
-              selectedAtPointerDownRef.current = selected;
-              pointerFocusRef.current = true;
-              window.setTimeout(() => {
-                pointerFocusRef.current = false;
-              }, 0);
-            }}
-            // 再点一次同一个 chip = 收起下方的 item 编辑器；焦点事件只负责“打开”，
-            // 否则 click 前先触发 focus 会把刚收起的再选中。鼠标点击用按下前的选中态判定。
-            onClick={() => {
-              const wasSelected = selectedAtPointerDownRef.current ?? selected;
-              selectedAtPointerDownRef.current = null;
-              onSelect(wasSelected ? null : path);
-            }}
-            onFocus={() => {
-              if (!selected && !pointerFocusRef.current) onSelect(path);
-            }}
-            onKeyDown={handleKeyDown}
+          {canMove ? <HolderOutlined className="document-chip-drag" aria-hidden="true" /> : null}
+          {label ? <span className="document-chip-label">{label}</span> : null}
+          <span
+            className={`document-chip-value${value ? "" : " document-chip-placeholder"}`}
+            title={value || undefined}
           >
-            {canMove ? <HolderOutlined className="document-chip-drag" aria-hidden="true" /> : null}
-            {label ? <span className="document-chip-label">{label}</span> : null}
-            <span className={`document-chip-value${value ? "" : " document-chip-placeholder"}`}>
-              {value || t("document.item.untitled")}
-            </span>
-          </button>
-          {materialOnly ? (
-            <span className="document-chip-badge is-material">
-              {t("document.item.materialOnly")}
-            </span>
-          ) : null}
-          {hidden ? (
-            <span className="document-chip-badge">{t("document.item.hiddenBadge")}</span>
-          ) : null}
-        </div>
-      </Dropdown>
+            {value || t("document.item.untitled")}
+          </span>
+        </button>
+        {materialOnly ? (
+          <span className="document-chip-badge is-material">{t("document.item.materialOnly")}</span>
+        ) : null}
+        {hidden ? (
+          <span className="document-chip-badge">{t("document.item.hiddenBadge")}</span>
+        ) : null}
+      </div>
       {grabbed ? (
         <div className="document-drag-hint" role="status">
           {t("document.drag.aria")}
@@ -268,7 +280,7 @@ export default function ItemChip({
       <span className="document-live-region" role="status" aria-live="polite">
         {announcement}
       </span>
-      {selected ? children : null}
+      {expanded ? children : null}
     </>
   );
 }

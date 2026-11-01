@@ -35,6 +35,7 @@ from ..models.share_package import (
     SharePackage,
 )
 from ..runtime.log_fields import safe_log_text
+from ..schemas.resume_document import document_to_json
 from ..schemas.share_package import (
     ShareCommentsOut,
     ShareFileOut,
@@ -287,7 +288,9 @@ def create_share_package(
     # 这个开关（只有 PDF/DOCX 消费），所以关掉照片时单独把 HTML 那份内容里的照片清空，
     # 保证「HTML 与 PDF 都不含照片」和界面上那句话一致。
     html_resume = (
-        redacted_resume if include_photo else with_document_photo(coerce_document(redacted_resume), "")
+        redacted_resume
+        if include_photo
+        else document_to_json(with_document_photo(coerce_document(redacted_resume), ""))
     )
     html_artifact = build_export(
         ExportRequest(format="html", include_photo=include_photo), html_resume, context

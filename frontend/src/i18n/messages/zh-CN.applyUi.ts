@@ -18,6 +18,33 @@ const applyUi = {
   "applyUi.recordDetail.failureDetail": "失败信息（含页面 URL / 标题）",
   "applyUi.recordDetail.batchAttempt": "批次 #{id} · 第 {attempt} 次尝试",
 
+  // #39：失败详情抽屉的三段结构（发生了什么 / 在哪一步 / 你该怎么做）。
+  "applyUi.recordDetail.section.what": "发生了什么",
+  "applyUi.recordDetail.section.where": "在哪一步",
+  "applyUi.recordDetail.section.advice": "你该怎么做",
+  "applyUi.recordDetail.failureCode": "失败子码",
+  "applyUi.recordDetail.step": "步骤",
+  "applyUi.recordDetail.target": "环节",
+  "applyUi.recordDetail.unidentified": "未识别",
+  "applyUi.recordDetail.advice.site_changed":
+    "把这条诊断反馈给维护者；急着投就先到浏览器里手动投这一家。",
+  "applyUi.recordDetail.advice.render_timeout": "稍后重试；一直超时先确认网络能正常打开该站点。",
+  "applyUi.recordDetail.advice.page_not_navigated":
+    "确认浏览器能访问该站点后重试；仍不行就手动打开岗位页投递。",
+  "applyUi.recordDetail.advice.selector_missing":
+    "重试一次；还失败就反馈诊断（多半是页面结构又变了）。",
+  "applyUi.recordDetail.advice.login_required": "到投递浏览器里扫码登录一次，再点「重投」。",
+  "applyUi.recordDetail.advice.captcha_required":
+    "到投递浏览器窗口里手动完成验证码，再点「继续」。",
+  "applyUi.recordDetail.advice.greeting_missing":
+    "到投递队列里给这个岗位填一句招呼语，或设置默认招呼语。",
+  "applyUi.recordDetail.advice.network_timeout": "稍后重试；检查网络与代理。",
+  "applyUi.recordDetail.advice.upload_failed": "检查简历文件能否打开、格式是否支持，再重投。",
+  "applyUi.recordDetail.advice.site_unsupported": "这个岗位来源不支持自动投递，请到原站手动投递。",
+  "applyUi.recordDetail.advice.profile_insufficient": "先在简历中心补一份可用简历，再重投。",
+  "applyUi.recordDetail.advice.unconfirmed": "到投递浏览器里核对是否已经投出；确认前不要重复重投。",
+  "applyUi.recordDetail.advice.unknown": "先重试一次；仍失败就把这条诊断反馈给维护者。",
+
   "applyUi.batch.selectMode": "批量选择",
   "applyUi.batch.deleteBatch": "删除本批（{count} 条）",
   "applyUi.batch.deleteConfirm": "删除这一批的记录？",
@@ -28,6 +55,7 @@ const applyUi = {
   "applyUi.batch.succeeded": "成功 {count}",
   "applyUi.batch.failed": "失败 {count}",
   "applyUi.batch.skipped": "跳过 {count}",
+  "applyUi.batch.retryFailed": "只重试这 {count} 条",
   "applyUi.batch.loadingItems": "正在加载明细…",
   "applyUi.batch.emptyItems": "该批次没有命中的记录",
 

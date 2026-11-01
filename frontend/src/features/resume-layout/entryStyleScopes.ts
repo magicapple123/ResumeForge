@@ -74,8 +74,9 @@ const PANEL_PROPS: readonly StylePropKey[] = OBJECT_STYLE_PROPS.filter(
 /**
  * 某个作用范围下「条目排版」面板的行清单（按后端角色白名单收窄）。
  *
- * 整条 = 8 项（与 Q12 前逐项一致）；条目头 = 颜色 / 斜体 / 行距 / 对齐 / 字距；
- * 正文 = 颜色 / 斜体 / 行距 / 缩进 / 项目符号 / 对齐 / 字距；灰字 = 颜色 / 斜体 / 日期位置。
+ * 整条 = 8 项；条目头 = 颜色 / 行距 / 对齐 / 字距；
+ * 正文 = 颜色 / 行距 / 缩进 / 项目符号 / 对齐 / 字距；灰字 = 颜色 / 日期位置。
+ * （#5d 起斜体不在任何清单里。）
  */
 export function entryStyleScopeProps(scope: EntryStyleScope): readonly StylePropKey[] {
   if (scope === "object") return PANEL_PROPS;

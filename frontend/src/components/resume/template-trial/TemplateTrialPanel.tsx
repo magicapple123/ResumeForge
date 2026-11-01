@@ -167,6 +167,7 @@ export default function TemplateTrialPanel({
           measureEnabled={trial.measureEnabled}
           pageLimit={pageLimit}
           hasResumeContent={hasResumeContent}
+          resetOverrides={!trial.useOverrides}
           onTemplateChange={(name) => trial.setSideTemplate("left", name)}
           onRetry={() => trial.retry("left")}
           onAdopt={() => adopt(trial.left)}
@@ -181,6 +182,7 @@ export default function TemplateTrialPanel({
           measureEnabled={trial.measureEnabled}
           pageLimit={pageLimit}
           hasResumeContent={hasResumeContent}
+          resetOverrides={!trial.useOverrides}
           onTemplateChange={(name) => trial.setSideTemplate("right", name)}
           onRetry={() => trial.retry("right")}
           onAdopt={() => adopt(trial.right)}

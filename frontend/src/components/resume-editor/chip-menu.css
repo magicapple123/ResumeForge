@@ -1,0 +1,40 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/**
+ * 字段右键菜单的锚点（R-30 第 5 项）。
+ *
+ * 独立成文件是为了守住 500 行预算：`document-editor.css` 加上这几行正好顶到上限，
+ * 再往里加规则就得先拆。规则本身只有一个 1px 的定位点——菜单由 `DocumentEditor`
+ * 渲染一份，靠这个点定位到右键处，所以它必须 `pointer-events: none`。
+ */
+.document-chip-menu-anchor {
+  position: fixed;
+  width: 1px;
+  height: 1px;
+  pointer-events: none;
+}
+
+/* #7：右键「调整排版」浮层（fixed 定位在右键坐标；窄卡不超出视口由 max-width 兜底）。 */
+.document-chip-style-popover {
+  position: fixed;
+  z-index: 1200;
+  width: 300px;
+  max-width: calc(100vw - 24px);
+  max-height: min(70vh, 560px);
+  overflow: auto;
+  padding: 10px 12px 12px;
+  border-radius: 8px;
+  background: var(--rf-surface, #fff);
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.18);
+}
+
+.document-chip-style-popover-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.document-chip-style-popover-title {
+  font-size: 12px;
+  color: var(--rf-text-secondary, #666);
+}

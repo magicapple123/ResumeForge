@@ -1,11 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * U7 宿主接线契约：结构树勾选 ↔ 样式页签的批量目标**同一份状态**。
+ * U7 宿主接线契约：结构树多选 ↔ 样式页签的批量目标**同一份状态**。
  *
  * 这个文件守的是"死控件"不会回来：
- * - 宿主不提供多选回调时，结构树不渲染勾选框；
- * - 结构页签勾选一条 → 样式页签的多选批量条立刻显示同一条数；
+ * - 宿主不提供多选回调时，结构树怎么点都不会出现多选高亮（不留死交互）；
+ * - 结构页签 Shift 连选两条 → 样式页签的多选批量条立刻显示同一条数；
  * - 用该批量目标写一次 format_config（一次 onChange = 历史一步），且不动正文。
+ *
+ * R-12 起结构树的勾选框已删除，多选入口是 **Shift + 点击**（本文件因此改成按 Shift 事件驱动）。
  */
 import { App as AntdApp } from "antd";
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
@@ -78,15 +80,8 @@ function entryRow(container: HTMLElement, path: string): HTMLElement {
   return row;
 }
 
-function readObjects(): Record<string, unknown> {
-  const config = JSON.parse(screen.getByTestId("layout").textContent ?? "{}") as {
-    objects?: Record<string, unknown>;
-  };
-  return config.objects ?? {};
-}
-
-describe("WorkbenchParamsColumnV2 · U7 结构树多选宿主接线", () => {
-  it("结构树勾选 → 样式页签批量目标同源，批量写一次 format_config", () => {
+describe("WorkbenchParamsColumnV2 · 结构树多选宿主接线", () => {
+  it("structure multi-select stays wired while the batch typography panel is offline (#7)", () => {
     const onLayoutChange = vi.fn();
     const onDocumentChange = vi.fn();
     const { container } = render(
@@ -95,23 +90,30 @@ describe("WorkbenchParamsColumnV2 · U7 结构树多选宿主接线", () => {
       </AntdApp>,
     );
     fireEvent.click(screen.getByRole("tab", { name: t("structure.panel.title") }));
-    fireEvent.click(within(entryRow(container, "education.edu_entry_01")).getByRole("checkbox"));
-    // 切到样式页签：多选批量条显示同一条（说明两处共用宿主状态）。
+    // 先普通点一条（建立锚点），再 Shift 点下一条 → 区间选中两条。
+    fireEvent.click(entryRow(container, "education.edu_entry_01"));
+    fireEvent.click(entryRow(container, "experience.exp_entry_01"), { shiftKey: true });
+    // 宿主仍持有这两条多选（结构面板的高亮由它驱动）。
+    expect(container.querySelectorAll(".rf-structure-row.is-multi-selected")).toHaveLength(2);
+    // 切回排版参数页签：左栏不再有「局部排版工具」面板，也就没有批量条（#7 已下线）。
     fireEvent.click(screen.getByRole("tab", { name: t("responsive.action.params") }));
-    expect(screen.getByText(t("typography.multi.count", { count: 1 }))).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: t("typography.level.caption") }));
-    expect(readObjects().edu_entry_01).toMatchObject({ font_scale: 0.9 });
-    expect(onLayoutChange).toHaveBeenCalledTimes(1);
+    expect(container.querySelectorAll(".resume-typography-panel")).toHaveLength(0);
+    expect(screen.queryByText(t("typography.multi.count", { count: 2 }))).toBeNull();
+    expect(onLayoutChange).not.toHaveBeenCalled();
     expect(onDocumentChange).not.toHaveBeenCalled();
   });
 
-  it("宿主不提供多选回调：结构树不渲染勾选框（不留死控件）", () => {
+  it("宿主不提供多选回调：Shift 点击也不产生多选高亮（不留死交互）", () => {
     const { container } = render(
       <AntdApp>
         <Harness withMulti={false} onLayoutChange={() => {}} onDocumentChange={() => {}} />
       </AntdApp>,
     );
     fireEvent.click(screen.getByRole("tab", { name: t("structure.panel.title") }));
+    fireEvent.click(entryRow(container, "education.edu_entry_01"));
+    fireEvent.click(entryRow(container, "experience.exp_entry_01"), { shiftKey: true });
+    // 没有宿主回调 → 不出现多选高亮类，也不出现勾选框。
+    expect(container.querySelectorAll(".rf-structure-row.is-multi-selected")).toHaveLength(0);
     expect(
       within(entryRow(container, "education.edu_entry_01")).queryByRole("checkbox"),
     ).toBeNull();

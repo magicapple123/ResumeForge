@@ -389,6 +389,7 @@ def list_records(
 def list_record_batches(
     keyword: str = Query(default=""),
     result: str = Query(default="", description="success / failed / skipped"),
+    failure_category: str = Query(default="", description="#39：按失败分类筛选（空 = 不过滤）"),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=10, ge=1, le=20, description="每页批次（组）数"),
     include_items: bool = Query(
@@ -408,6 +409,7 @@ def list_record_batches(
         db,
         keyword=keyword,
         result=result,
+        failure_category=failure_category,
         page=page,
         page_size=page_size,
         include_items=include_items,

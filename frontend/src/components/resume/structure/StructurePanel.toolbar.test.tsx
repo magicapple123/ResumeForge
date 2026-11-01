@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * 结构面板顶栏工具（收起所有条目 / 板块顺序）的交互测试。
+ * 结构面板顶栏工具（折叠开关 / 板块顺序）的交互测试。
  * 从 StructurePanel.test.tsx 拆出，保持单文件 500 行预算。
  */
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { t } from "../../../i18n";
@@ -98,14 +98,32 @@ function treeRow(container: HTMLElement, key: string): HTMLElement | null {
 }
 
 describe("StructurePanel · 顶栏工具", () => {
-  it("一键收起所有条目：板块保持展开，条目行保留为可再展开的标题", () => {
+  it("顶栏只有一个折叠开关：点一次全收起，再点一次全展开", () => {
     const { container } = render(<Harness />);
+    // 三个按钮（展开全部 / 收起全部 / 收起所有条目）已合成一个（R-01）。
+    const tools = container.querySelector<HTMLElement>(".rf-structure-panel-tools");
+    if (!tools) throw new Error("missing tools");
+    const foldButtons = within(tools)
+      .getAllByRole("button")
+      .filter((button) => {
+        const label = button.getAttribute("aria-label") ?? "";
+        return (
+          label === t("structure.action.expandAll") || label === t("structure.action.collapseAll")
+        );
+      });
+    expect(foldButtons).toHaveLength(1);
     expect(treeRow(container, "education.entry_edu_01")).not.toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: t("structure.action.collapseEntries") }));
-    expect(treeRow(container, "education.entry_edu_01")).toHaveAttribute("aria-expanded", "false");
-    expect(treeRow(container, "education.entry_edu_01.#title")).toBeNull();
-    expect(treeRow(container, "education")).not.toBeNull();
-    expect(treeRow(container, "custom:sec_0001")).not.toBeNull();
+    // 初始全展开 → 按钮语义是「收起全部」。收起全部会把板块也收起，子行随之不见。
+    fireEvent.click(screen.getByRole("button", { name: t("structure.action.collapseAll") }));
+    expect(treeRow(container, "education")).toHaveAttribute("aria-expanded", "false");
+    expect(treeRow(container, "custom:sec_0001")).toHaveAttribute("aria-expanded", "false");
+    expect(treeRow(container, "education.entry_edu_01")).toBeNull();
+    // 收起后按钮语义翻成「展开全部」，再点回全展开（条目与分组都回来）。
+    fireEvent.click(screen.getByRole("button", { name: t("structure.action.expandAll") }));
+    expect(treeRow(container, "education")).toHaveAttribute("aria-expanded", "true");
+    expect(treeRow(container, "education.entry_edu_01")).toHaveAttribute("aria-expanded", "true");
+    expect(treeRow(container, "education.entry_edu_01.#title")).not.toBeNull();
+    expect(screen.getByRole("button", { name: t("structure.action.collapseAll") })).toBeVisible();
   });
 
   it("板块顺序：可与「我的资料」顺序同步", async () => {

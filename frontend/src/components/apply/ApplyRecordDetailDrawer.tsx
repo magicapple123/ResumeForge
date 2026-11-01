@@ -1,19 +1,63 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * 投递记录详情抽屉（纯展示子组件，PR-18 拆分批从 ApplyRecordsPanel 纯搬迁）：
- * 展示单条记录的完整快照（岗位、简历、招呼语、结果、失败分类与失败信息、时间、批次）。
- * `record` 为 null 时抽屉关闭；打开/关闭由主组件 state 驱动，这里只渲染。
+ * 投递记录详情抽屉（#39 终版：按「发生了什么 / 在哪一步 / 你该怎么做」三段重排）。
+ *
+ * 旧版是 8 行平铺的 Descriptions（岗位/简历/招呼语/结果/失败分类/失败信息/时间/批次）。
+ * 它把三类完全不同的信息混在一张表里：**事实**（投哪个岗、第几次）、**定位**（失败发生在
+ * 哪一步、哪个控件）、**行动**（现在该干什么）。失败原因只有一个中文分类 + 一段长诊断，
+ * 用户得自己从长句里读出"这次该等一等，还是该去登录，还是该反馈给我们"。
+ *
+ * 新版按这三段拆开，并且「你该怎么做」**由失败子码决定**（子码 → 建议的映射在下面
+ * ADVICE_KEYS 里，文案在语言包）：同一个「页面结构变化 / 选择器失效」大类下，
+ * site_changed 和 render_timeout 给的是两条不同的建议，这正是 #39 要的"建议与子码对应"。
+ *
+ * 没失败的记录（成功 / 跳过）只渲染第一段（含时间与批次），不显示空的三段标题。
  */
-import { Descriptions, Drawer } from "antd";
+import { Alert, Descriptions, Space, Tag, Typography, Drawer } from "antd";
 import { failureLabel, type ApplyRecord } from "../../types";
 import { formatDateTime } from "../../utils/format";
-import { t } from "../../i18n";
-import { TASK_ITEM_STATUS_LABEL_KEYS, failureCategoryKey } from "../../i18n/enum/apply";
+import { t, type MessageKey } from "../../i18n";
+import {
+  STEP_LABEL_KEYS,
+  TASK_ITEM_STATUS_LABEL_KEYS,
+  failureCategoryKey,
+  failureReasonKey,
+  failureTargetKey,
+} from "../../i18n/enum/apply";
 import { useLocale } from "../../i18n/i18nContext";
 
 interface Props {
   record: ApplyRecord | null;
   onClose: () => void;
+}
+
+/**
+ * 失败子码 → 「你该怎么做」的文案 key。
+ *
+ * 键是后端下发的稳定子码（services/apply/failure_taxonomy.py），不是展示文案；未登记的子码
+ * 不给建议（抽屉里显示"未识别"），而不是编一条放之四海而皆准的"请重试"——那正是这条
+ * 验收要消灭的空话。
+ */
+const ADVICE_KEYS: Record<string, MessageKey> = {
+  site_changed: "applyUi.recordDetail.advice.site_changed",
+  render_timeout: "applyUi.recordDetail.advice.render_timeout",
+  page_not_navigated: "applyUi.recordDetail.advice.page_not_navigated",
+  selector_missing: "applyUi.recordDetail.advice.selector_missing",
+  login_required: "applyUi.recordDetail.advice.login_required",
+  captcha_required: "applyUi.recordDetail.advice.captcha_required",
+  greeting_missing: "applyUi.recordDetail.advice.greeting_missing",
+  network_timeout: "applyUi.recordDetail.advice.network_timeout",
+  upload_failed: "applyUi.recordDetail.advice.upload_failed",
+  site_unsupported: "applyUi.recordDetail.advice.site_unsupported",
+  profile_insufficient: "applyUi.recordDetail.advice.profile_insufficient",
+  unconfirmed: "applyUi.recordDetail.advice.unconfirmed",
+  unknown: "applyUi.recordDetail.advice.unknown",
+};
+
+function adviceKey(reason: string): MessageKey | undefined {
+  return Object.prototype.hasOwnProperty.call(ADVICE_KEYS, reason)
+    ? ADVICE_KEYS[reason]
+    : undefined;
 }
 
 export default function ApplyRecordDetailDrawer({ record, onClose }: Props) {
@@ -25,6 +69,17 @@ export default function ApplyRecordDetailDrawer({ record, onClose }: Props) {
     const key = failureCategoryKey(item.failure_category);
     return key ? t(key) : failureLabel(item.failure_category, item.failure_label);
   };
+  const stepLabelText = record?.failure_step
+    ? STEP_LABEL_KEYS[record.failure_step]
+      ? t(STEP_LABEL_KEYS[record.failure_step])
+      : record.failure_step
+    : "";
+  const targetKey = record ? failureTargetKey(record.failure_target ?? "") : undefined;
+  const reason = record?.failure_reason ?? "";
+  const reasonKey = failureReasonKey(reason);
+  const advice = adviceKey(reason);
+  const failed = Boolean(record?.failure_category);
+
   return (
     <Drawer
       title={t("applyUi.recordDetail.title")}
@@ -35,36 +90,101 @@ export default function ApplyRecordDetailDrawer({ record, onClose }: Props) {
       destroyOnHidden
     >
       {record && (
-        <Descriptions column={1} bordered size="small" colon>
-          <Descriptions.Item label={t("applyRecords.column.job")}>
-            {record.job_title || t("applyRecords.deletedJob")}
-            {record.company ? ` · ${record.company}` : ""}
-          </Descriptions.Item>
-          <Descriptions.Item label={t("applyRecords.column.resume")}>
-            {record.resume_title || "-"}
-          </Descriptions.Item>
-          <Descriptions.Item label={t("applyRecords.column.greeting")}>
-            {record.greeting || t("applyUi.recordDetail.defaultGreeting")}
-          </Descriptions.Item>
-          <Descriptions.Item label={t("applyRecords.column.result")}>
-            {t(TASK_ITEM_STATUS_LABEL_KEYS[record.status])}
-          </Descriptions.Item>
-          <Descriptions.Item label={t("applyRecords.column.failureKind")}>
-            {failureText(record)}
-          </Descriptions.Item>
-          <Descriptions.Item label={t("applyUi.recordDetail.failureDetail")}>
-            {record.failure_detail || "-"}
-          </Descriptions.Item>
-          <Descriptions.Item label={t("applyUi.recordDetail.time")}>
-            {formatDateTime(record.finished_at || record.created_at)}
-          </Descriptions.Item>
-          <Descriptions.Item label={t("applyUi.recordDetail.taskBatch")}>
-            {t("applyUi.recordDetail.batchAttempt", {
-              id: record.task_id,
-              attempt: record.attempt,
-            })}
-          </Descriptions.Item>
-        </Descriptions>
+        <Space orientation="vertical" size={16} style={{ width: "100%" }}>
+          {/* ===== 第一段：发生了什么（事实 + 分类 + 子码 + 诊断）===== */}
+          <section>
+            <Typography.Title level={5} style={{ marginTop: 0 }}>
+              {t("applyUi.recordDetail.section.what")}
+            </Typography.Title>
+            <Descriptions column={1} bordered size="small" colon>
+              <Descriptions.Item label={t("applyRecords.column.job")}>
+                {record.job_title || t("applyRecords.deletedJob")}
+                {record.company ? " · " + record.company : ""}
+              </Descriptions.Item>
+              <Descriptions.Item label={t("applyRecords.column.result")}>
+                <Tag>{t(TASK_ITEM_STATUS_LABEL_KEYS[record.status])}</Tag>
+              </Descriptions.Item>
+              <Descriptions.Item label={t("applyRecords.column.resume")}>
+                {record.resume_title || "-"}
+              </Descriptions.Item>
+              <Descriptions.Item label={t("applyRecords.column.greeting")}>
+                {record.greeting || t("applyUi.recordDetail.defaultGreeting")}
+              </Descriptions.Item>
+              {failed ? (
+                <Descriptions.Item label={t("applyRecords.column.failureKind")}>
+                  {failureText(record)}
+                </Descriptions.Item>
+              ) : null}
+              {failed ? (
+                <Descriptions.Item label={t("applyUi.recordDetail.failureCode")}>
+                  <Space size={6} wrap>
+                    {reason ? (
+                      <Typography.Text code>{reason}</Typography.Text>
+                    ) : (
+                      <Typography.Text type="secondary">
+                        {t("applyUi.recordDetail.unidentified")}
+                      </Typography.Text>
+                    )}
+                    {reasonKey ? (
+                      <Typography.Text type="secondary">{t(reasonKey)}</Typography.Text>
+                    ) : null}
+                  </Space>
+                </Descriptions.Item>
+              ) : null}
+              {failed ? (
+                <Descriptions.Item label={t("applyUi.recordDetail.failureDetail")}>
+                  {record.failure_detail || "-"}
+                </Descriptions.Item>
+              ) : null}
+            </Descriptions>
+          </section>
+
+          {/* ===== 第二段：在哪一步（阶段 + 环节 + 时间 + 批次）===== */}
+          <section>
+            <Typography.Title level={5} style={{ marginTop: 0 }}>
+              {t("applyUi.recordDetail.section.where")}
+            </Typography.Title>
+            <Descriptions column={1} bordered size="small" colon>
+              {failed ? (
+                <Descriptions.Item label={t("applyUi.recordDetail.step")}>
+                  {stepLabelText || t("applyUi.recordDetail.unidentified")}
+                </Descriptions.Item>
+              ) : null}
+              {failed ? (
+                <Descriptions.Item label={t("applyUi.recordDetail.target")}>
+                  {targetKey ? t(targetKey) : t("applyUi.recordDetail.unidentified")}
+                </Descriptions.Item>
+              ) : null}
+              <Descriptions.Item label={t("applyUi.recordDetail.time")}>
+                {formatDateTime(record.finished_at || record.created_at)}
+              </Descriptions.Item>
+              <Descriptions.Item label={t("applyUi.recordDetail.taskBatch")}>
+                {t("applyUi.recordDetail.batchAttempt", {
+                  id: record.task_id,
+                  attempt: record.attempt,
+                })}
+              </Descriptions.Item>
+            </Descriptions>
+          </section>
+
+          {/* ===== 第三段：你该怎么做（建议由子码决定）===== */}
+          {failed ? (
+            <section>
+              <Typography.Title level={5} style={{ marginTop: 0 }}>
+                {t("applyUi.recordDetail.section.advice")}
+              </Typography.Title>
+              {advice ? (
+                <Alert type="info" showIcon description={t(advice)} />
+              ) : (
+                <Alert
+                  type="warning"
+                  showIcon
+                  description={t("applyUi.recordDetail.unidentified")}
+                />
+              )}
+            </section>
+          ) : null}
+        </Space>
       )}
     </Drawer>
   );

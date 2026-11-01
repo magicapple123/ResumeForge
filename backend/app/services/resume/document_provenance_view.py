@@ -161,6 +161,8 @@ def provenance_view(db: Session, record: ResumeRecord) -> dict[str, Any]:
                 "object_id": item.object_id,
                 "point_id": item.point_id,
                 "label": item.label,
+                # R-16：下拉里不再显示 `ob_…` / `it_…`；要点块带上字段 key 供前端翻中文。
+                "field_label": item.field_label,
                 "link": payload,
             }
         )
@@ -199,9 +201,28 @@ def source_impact(db: Session, source_id: int) -> dict[str, Any] | None:
         else []
     )
     resume_by_id = {record.id: record for record in resumes}
+    # #20a：影响行显示可读标签（条目名/要点文本 + 字段名），内部 path 只进 tooltip。
+    # 每份简历的文档只解析一次：同一条来源可能被多份简历引用，避免 N 次全文解析。
+    object_index_cache: dict[int, dict[str, Any]] = {}
+
+    def object_index_for(record: ResumeRecord) -> dict[str, Any]:
+        index = object_index_cache.get(record.id)
+        if index is None:
+            document = document_io.document_for_record(db, record)[0]
+            index = {obj.path: obj for obj in iter_document_objects(document)}
+            object_index_cache[record.id] = index
+        return index
+
     affected = []
     for link in links:
         record = resume_by_id.get(link.resume_id)
+        target_label = ""
+        field_label = ""
+        if record is not None:
+            found = object_index_for(record).get(link.path)
+            if found is not None:
+                target_label = (found.label or "").strip()
+                field_label = (found.field_label or "").strip()
         affected.append(
             {
                 "resume_id": link.resume_id,
@@ -212,6 +233,8 @@ def source_impact(db: Session, source_id: int) -> dict[str, Any] | None:
                 "point_id": link.point_id,
                 "path": link.path,
                 "field": link.field,
+                "target_label": target_label,
+                "field_label": field_label,
                 "linked_fingerprint": link.source_fingerprint,
                 "current_fingerprint": source.current_fingerprint,
                 "stale": link.source_fingerprint != source.current_fingerprint,

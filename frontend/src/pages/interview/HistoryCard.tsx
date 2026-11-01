@@ -158,6 +158,13 @@ export function HistoryCard({
                           {/* 关联简历（0066）：让用户一眼看出这场面试面的是哪份简历；
                               0066 之前的会话没有这项，为空就不显示。 */}
                           {item.resume_title ? <Tag color="cyan">{item.resume_title}</Tag> : null}
+                          {/* 导入的材料文件名（#41）：用的是哪个文件也要能一眼看到。 */}
+                          {item.job_material_name ? (
+                            <Tag color="geekblue">{item.job_material_name}</Tag>
+                          ) : null}
+                          {item.resume_material_name ? (
+                            <Tag color="cyan">{item.resume_material_name}</Tag>
+                          ) : null}
                         </Space>
                       }
                       description={

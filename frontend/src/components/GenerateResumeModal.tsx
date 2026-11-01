@@ -1,6 +1,16 @@
 // SPDX-License-Identifier: Apache-2.0
+/** 与简历中心的预览弹窗同一套滚动口径：右留 12px 防贴滚动条，负 margin 借回宽度。 */
+const SCROLL_BODY_STYLES = {
+  body: {
+    maxHeight: "var(--rf-modal-body-max-h)",
+    overflowY: "auto",
+    overflowX: "hidden",
+    paddingRight: 12,
+    marginRight: -12,
+  },
+} as const;
 /** AI 生成简历弹窗：配置岗位导向美化/篇幅 -> 流式生成 -> 预览结果（自动保存历史）。 */
-import { App, Modal } from "antd";
+import { App, Button, Modal, Space } from "antd";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { attachTaskUi, resumeTaskKey, watchResumeTask } from "../utils/backgroundTasks";
@@ -30,7 +40,7 @@ import type {
 } from "../types";
 import type { ResumeFormatConfig } from "../types/resumeFormat";
 import type { LayoutMeasure } from "../utils/resumeLayoutMeasure";
-import { buildSectionOrderConfig, DEFAULT_RESUME_SECTION_ORDER } from "../utils/resumeSectionOrder";
+import { DEFAULT_RESUME_SECTION_ORDER } from "../utils/resumeSectionOrder";
 import { useResumeRelayout } from "../features/resume/useResumeRelayout";
 import type { ResumePreviewHandle } from "./ResumePreview";
 import GenerationConfigStage from "./generate-resume/GenerationConfigStage";
@@ -39,6 +49,8 @@ import GenerationErrorStage from "./generate-resume/GenerationErrorStage";
 import GenerationPreviewStage from "./generate-resume/GenerationPreviewStage";
 import type { GenerateResult } from "./generate-resume/GenerationPreviewStage";
 import { useGenerationPreviewLoader } from "./generate-resume/useGenerationPreviewLoader";
+import { buildGenerateRequest } from "./generate-resume/generateRequest";
+import { readTemplateCatalogDefaults } from "./generate-resume/templateCatalogDefaults";
 
 type Stage = "config" | "generating" | "preview" | "error";
 
@@ -64,7 +76,7 @@ export default function GenerateResumeModal({ job, open, initialTitle = "", onCl
   const [builtInSectionOrder, setBuiltInSectionOrder] = useState(DEFAULT_RESUME_SECTION_ORDER);
   const [profileSectionOrder, setProfileSectionOrder] = useState(DEFAULT_RESUME_SECTION_ORDER);
   const [customInstruction, setCustomInstruction] = useState("");
-  // 文档模式 / 本次生成场景（契约 §5、§2.5）：默认都不发送，关闭弹窗时复位。
+  // 文档模式 / 生成场景（契约 §5、§2.5）：默认不发送，关弹窗时复位。
   const generation = useGenerationExtras();
   const [layoutStatus, setLayoutStatus] = useState<{
     pages: number;
@@ -82,8 +94,7 @@ export default function GenerateResumeModal({ job, open, initialTitle = "", onCl
   const [previewHtml, setPreviewHtml] = useState("");
   const [suggestionsGenerated, setSuggestionsGenerated] = useState(false);
   const [suggestionsResetKey, setSuggestionsResetKey] = useState(0);
-  // 生成开始时的版式快照：后台完成后用它渲染预览，避免完成后用户又改了配置导致
-  // 预览参数与生成参数不一致。
+  // 生成开始时的版式快照：后台完成后的预览用它，避免用户中途改配置导致不一致。
   const generationLayoutRef = useRef<ResumeLayout>(layout);
   const previewRef = useRef<ResumePreviewHandle>(null);
 
@@ -102,29 +113,27 @@ export default function GenerateResumeModal({ job, open, initialTitle = "", onCl
       try {
         await updateResumeLayout(detail.id, next);
       } catch (err) {
-        // 只提示、不回滚：版式本身已经渲染成功，弹出旧版式会让"我刚调好的"凭空消失。
+        // 只提示、不回滚：版式已渲染成功，弹旧版式会让「刚调好的」凭空消失。
         message.error(err instanceof Error ? err.message : t("generate.saveLayoutFailed"));
       }
     },
     onRendered: (next) => setLayout(next),
     onError: (err) => {
       message.error(err instanceof Error ? err.message : t("generate.relayoutFailed"));
-      // D13：探针是"我看到的"，渲染失败就必须清掉，不能继续呈现一个不存在的状态。
+      // D13：探针是「我看到的」，渲染失败必须清掉，不能呈现不存在的状态。
       previewRef.current?.setLiveProbe("");
     },
   });
 
-  // 后台生成是否仍在进行：决定"重新打开弹窗"时是接着看进度，还是回到配置页。
-  // 生成中关掉弹窗（后台继续）不 reset，所以 stage 会留在 generating；等它跑到终态
-  // （completed/cancelled/failed）后 taskId 被清空、stage 被改写，这里跟着变 false。
+  // 后台生成是否仍在进行：生成中关掉弹窗（后台继续）不 reset，stage 留在 generating；
+  // 跑到终态后 taskId 清空、stage 改写，这里跟着变 false。
   const generatingInBackground = stage === "generating" && taskId != null;
   const generatingRef = useRef(generatingInBackground);
   useEffect(() => {
     generatingRef.current = generatingInBackground;
   }, [generatingInBackground]);
 
-  // 打开时把资料页填的名称带进来。reset() 只在关闭时跑，不补这一步的话
-  // 名称输入框永远是空的。Compiler 规范：渲染期守卫式调整（哨兵 null 覆盖挂载即打开）。
+  // 打开时把资料页填的名称带进来（reset() 只在关闭时跑）。
   const [prevTitleSync, setPrevTitleSync] = useState<{
     open: boolean;
     initialTitle: string;
@@ -139,9 +148,7 @@ export default function GenerateResumeModal({ job, open, initialTitle = "", onCl
     if (open) setTitle(initialTitle);
   }
 
-  // 重新打开弹窗时回到配置页；唯一例外是上次的生成还在后台跑（生成中关掉的），
-  // 此时保持 generating 让用户接着看进度——否则"生成中关掉 → 后台完成 → 再打开"
-  // 会看到一份过期/错位的预览。
+  // 重新打开时回配置页；唯一例外是后台生成还在跑——保持 generating 接着看进度。
   useEffect(() => {
     if (!open) return;
     if (generatingRef.current) return;
@@ -162,34 +169,18 @@ export default function GenerateResumeModal({ job, open, initialTitle = "", onCl
       .catch(() => setLlmReady(false));
   }, [open]);
 
-  // 每次打开都按后端给的默认值重置版式，并记下服务端能不能直接生成 PDF。
+  // 每次打开按后端默认值重置版式，并记录服务端能否直接生成 PDF。
+  // 「目录 → 默认值 / 板块顺序」的口径在 `generate-resume/templateCatalogDefaults`（纯函数）。
   useEffect(() => {
     if (!open) return;
     void fetchResumeTemplates()
       .then((catalog) => {
-        setPdfDirectAvailable(catalog.pdf_direct_available);
-        // 默认板块顺序跟随「我的资料」：用户在资料页把项目拖到最前，生成出来的简历也
-        // 该是项目在前。与内置默认相同时不写 `section_order`（"没调过"与"调成和默认
-        // 一样"应当是同一种存储形态）；其它 format_config 键（夹带进来的字号系数等）保留。
-        const builtInOrder = catalog.default_section_order ?? DEFAULT_RESUME_SECTION_ORDER;
-        const profileOrder = catalog.profile_section_order ?? builtInOrder;
-        setSectionOptions(catalog.section_options ?? []);
-        setBuiltInSectionOrder(builtInOrder);
-        setProfileSectionOrder(profileOrder);
-        // 三个参数都要重置。此前漏了 page_limit（只覆盖 template / font_scale），
-        // 于是上一次选过 3 页的话，下次打开默认就是 3 页，与"默认一页 A4"相矛盾。
-        setLayout((current) => ({
-          ...current,
-          template: catalog.defaults.template,
-          format_name: catalog.defaults.format_name ?? "",
-          font_scale: catalog.defaults.font_scale,
-          page_limit: catalog.defaults.page_limit,
-          format_config: buildSectionOrderConfig(
-            profileOrder,
-            builtInOrder,
-            current.format_config ?? {},
-          ),
-        }));
+        const defaults = readTemplateCatalogDefaults(catalog);
+        setPdfDirectAvailable(defaults.pdfDirectAvailable);
+        setSectionOptions(defaults.sectionOptions);
+        setBuiltInSectionOrder(defaults.builtInSectionOrder);
+        setProfileSectionOrder(defaults.profileSectionOrder);
+        setLayout(defaults.applyTo);
       })
       .catch(() => {
         // 取不到目录就用内置默认值，不影响生成。
@@ -231,26 +222,18 @@ export default function GenerateResumeModal({ job, open, initialTitle = "", onCl
     setSuggestionsGenerated(false);
     setSuggestionsResetKey((value) => value + 1);
     try {
-      const started = await startResumeGeneration({
-        job_id: job?.id ?? null,
-        title: job ? "" : title.trim(),
-        options: {
+      // 请求体组装在 `generate-resume/generateRequest`（纯函数，含"默认不发新字段"的口径）。
+      const started = await startResumeGeneration(
+        buildGenerateRequest({
+          job,
+          title,
           enhance,
-          enhancement_level: enhancementLevel,
-          page_limit: layout.page_limit,
-          font_scale: layout.font_scale,
-          language: layout.language,
-          template: layout.template,
-          format_name: layout.format_name,
-          // 生成时定下的版式覆盖必须跟着请求走：不然用户在配置页调的顺序 / 字号
-          // 只影响"这次预览"，关掉弹窗再从简历中心打开就变回去了。
-          format_config: layout.format_config ?? {},
-          custom_instruction: customInstruction.trim(),
-          // 默认不发送新字段：两个条件展开保证"未启用场景 + 普通简历"的请求体与旧版逐字节相同。
-          ...(generation.documentMode === "long_cv" ? { document_mode: "long_cv" as const } : {}),
-          ...(generation.careerContext ? { career_context: generation.careerContext } : {}),
-        },
-      });
+          enhancementLevel,
+          layout,
+          customInstruction,
+          generation,
+        }),
+      );
       setTaskId(started.id);
       setTask(started);
       // 登记到模块级登记表：关掉弹窗后仍会被追踪，完成时统一弹窗 + 响铃。
@@ -406,6 +389,17 @@ export default function GenerateResumeModal({ job, open, initialTitle = "", onCl
     requestLayout({ ...layout, format_config: formatConfig });
   };
 
+  const configFooter = (
+    <div style={{ textAlign: "right" }}>
+      <Space>
+        <Button onClick={handleClose}>{t("common.action.cancel")}</Button>
+        <Button type="primary" disabled={!llmReady} onClick={() => void startGenerate()}>
+          {t("generate.config.start")}
+        </Button>
+      </Space>
+    </div>
+  );
+
   return (
     <Modal
       title={job ? t("generate.taskTitle", { job: job.title }) : t("generate.taskTitleGeneral")}
@@ -415,18 +409,8 @@ export default function GenerateResumeModal({ job, open, initialTitle = "", onCl
       // 同一个 ResumeDetailPreview，两边布局应一致；限高让超长的预览只滚弹窗内部，
       // 卡片整体始终完整呈现在视口内。
       width="min(960px, 96vw)"
-      footer={null}
-      styles={{
-        // 与简历中心的预览弹窗保持同一套滚动口径：右侧留 12px 让正文不贴滚动条，
-        // 负外边距把这 12px 从弹窗内边距借回来，内容宽度不变（见 ResumeDetailModal）。
-        body: {
-          maxHeight: "var(--rf-modal-body-max-h)",
-          overflowY: "auto",
-          overflowX: "hidden",
-          paddingRight: 12,
-          marginRight: -12,
-        },
-      }}
+      footer={stage === "config" ? configFooter : null}
+      styles={SCROLL_BODY_STYLES}
       destroyOnHidden
     >
       {stage === "config" && (
