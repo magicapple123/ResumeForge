@@ -36,6 +36,8 @@ const webFormRecords = {
   "webFormRecords.snapshot.summary":
     "After filling, {filled} boxes on the page were filled by us; the rest is your own content or computed by the page itself.",
   "webFormRecords.pagination.total": "{count} in total",
+  "webFormRecords.reveal": "Show",
+  "webFormRecords.hide": "Hide",
 } as const;
 
 export default webFormRecords;

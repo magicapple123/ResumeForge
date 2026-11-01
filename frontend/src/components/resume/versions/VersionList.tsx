@@ -6,13 +6,18 @@
  * "当前简历已被更新，刷新后再试"，**不自动重试覆盖**（契约 §2）。
  */
 import { ReloadOutlined } from "@ant-design/icons";
-import { Alert, Button, Input, Popconfirm, Space, Tag, Typography } from "antd";
+import { Alert, App, Button, Input, Popconfirm, Space, Tag, Typography } from "antd";
 import { useState } from "react";
 import EmptyState from "../../common/EmptyState";
 import ErrorState from "../../common/ErrorState";
 import LoadingBlock from "../../common/LoadingBlock";
 import { t } from "../../../i18n";
-import { versionChangeSummary, versionTimeText } from "../../../features/resume-versions/model";
+import {
+  autoNameTime,
+  compareTargetOf,
+  versionChangeSummary,
+  versionTimeText,
+} from "../../../features/resume-versions/model";
 import type { RestoreConflict } from "../../../features/resume-versions/useVersions";
 import type {
   VersionCompareOut,
@@ -55,26 +60,33 @@ export default function VersionList({
   onRefresh,
 }: Props) {
   useLocale();
+  const { message } = App.useApp();
   const [name, setName] = useState("");
   const [summary, setSummary] = useState("");
   const [creating, setCreating] = useState(false);
   const [compare, setCompare] = useState<VersionCompareOut | null>(null);
   const [comparing, setComparing] = useState<number | null>(null);
 
+  /**
+   * #28：名称留空也能保存——按钮不再因为"没有内容可命名"而禁用。
+   * 未填名称时按保存时间自动命名，用户总能先拿到一份快照、再点「比较」。
+   */
   const submit = async () => {
-    if (!name.trim()) return;
+    const effectiveName = name.trim() || t("versions.create.defaultName", { time: autoNameTime() });
     setCreating(true);
-    const created = await onCreate(name.trim(), summary.trim());
+    const created = await onCreate(effectiveName, summary.trim());
     setCreating(false);
     if (created) {
+      message.success(t("versions.create.success", { name: created.name }));
       setName("");
       setSummary("");
     }
   };
 
+  /** #28：刚保存完一版时与更早的一版比（没有更早版本才与当前简历比），差异才有内容。 */
   const runCompare = async (versionId: number) => {
     setComparing(versionId);
-    const result = await onCompare(versionId, "current");
+    const result = await onCompare(versionId, compareTargetOf(versions, versionId));
     setComparing(null);
     if (result) setCompare(result);
   };
@@ -109,12 +121,7 @@ export default function VersionList({
             style={{ width: 320 }}
             maxLength={2000}
           />
-          <Button
-            type="primary"
-            loading={creating}
-            disabled={!name.trim()}
-            onClick={() => void submit()}
-          >
+          <Button type="primary" loading={creating} onClick={() => void submit()}>
             {t("versions.create.action")}
           </Button>
           <Button icon={<ReloadOutlined />} onClick={onRefresh}>

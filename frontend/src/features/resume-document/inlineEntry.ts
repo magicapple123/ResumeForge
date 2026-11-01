@@ -12,7 +12,7 @@
  */
 import type { DocumentFieldCatalog, ResumeEntry, ResumeSection } from "../../types/resumeDocument";
 import { emptyEntry } from "./defaults";
-import { catalogFieldsOf, catalogSectionOf } from "./fieldCatalog";
+import { catalogFieldsOf, catalogSectionOf, effectiveFieldFormat } from "./fieldCatalog";
 import { defaultFieldItem } from "./defaults";
 
 export function defaultInlineEntry(
@@ -28,7 +28,7 @@ export function defaultInlineEntry(
       defaultFieldItem({
         key: field.key,
         placement: field.default_placement,
-        format: field.format,
+        format: effectiveFieldFormat(field),
         source:
           catalogSection?.profile_section_key && field.source_field_id
             ? { section_key: catalogSection.profile_section_key, field_id: field.source_field_id }

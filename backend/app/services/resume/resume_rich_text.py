@@ -56,13 +56,13 @@ _HREF_UNSAFE = frozenset('<">')
 class RichSpan:
     """一段同一样式的**可见文本**（标记已剥离，链接只保留 label 与 URL 两个字段）。
 
-    link 非空时 text 是链接的显示文字（label）；bold / italic 可以同时成立
-    （例：加粗的链接）。调用方**不要**假设"只有一个样式为真"。
+    #5d：斜体整体移除——单星号仍按斜体标记**剥壳**（存量内容不冒裸星号），但剥出的
+    文本一律是普通字重。link 非空时 text 是链接的显示文字（label）；bold 与链接可同时
+    成立。调用方**不要**假设"只有一个样式为真"。
     """
 
     text: str
     bold: bool = False
-    italic: bool = False
     link: str | None = None
 
     def readable(self, *, with_link: bool = False) -> str:
@@ -78,7 +78,6 @@ class _Run:
 
     text: str
     bold: bool = False
-    italic: bool = False
     link: str | None = None
 
 
@@ -145,11 +144,11 @@ def _bold_runs(text: str) -> list[_Run]:
     return [_Run(text[start:end], bold=bold) for start, end, bold in _spans(text)]
 
 
-# ===== 第 2 层：斜体（只认"孤立"的单星号）=====
+# ===== 第 2 层：单星号剥壳（#5d：标记仍剥离，但不再产出倾斜效果）=====
 
 
 def _italic_positions(text: str) -> list[int]:
-    """可作为斜体边界的星号起点：不与另一颗星号相邻（双星号是加粗字面量）。"""
+    """可作为斜体标记边界的星号起点：不与另一颗星号相邻（双星号是加粗字面量）。"""
     positions: list[int] = []
     for index, char in enumerate(text):
         if char != ITALIC_MARKER:
@@ -163,7 +162,10 @@ def _italic_positions(text: str) -> list[int]:
 
 
 def _italic_runs(run: _Run) -> list[_Run]:
-    """在一个同态区间里切斜体；落单的星号原样保留。"""
+    """在一个同态区间里剥掉成对的单星号；落单的星号原样保留。
+
+    #5d：只保留"去标记"行为（否则存量正文会突然冒出裸星号），剥出的文本不再带倾斜。
+    """
     markers = _italic_positions(run.text)
     if len(markers) < 2:
         return [run]
@@ -173,14 +175,14 @@ def _italic_runs(run: _Run) -> list[_Run]:
     while index + 1 < len(markers):
         start, end = markers[index], markers[index + 1]
         if start > cursor:
-            runs.append(_Run(run.text[cursor:start], run.bold, run.italic))
+            runs.append(_Run(run.text[cursor:start], run.bold, run.link))
         inner = run.text[start + 1 : end]
         if inner:
-            runs.append(_Run(inner, run.bold, True))
+            runs.append(_Run(inner, run.bold, run.link))
         cursor = end + 1
         index += 2
     if cursor < len(run.text):
-        runs.append(_Run(run.text[cursor:], run.bold, run.italic))
+        runs.append(_Run(run.text[cursor:], run.bold, run.link))
     return runs
 
 
@@ -216,12 +218,12 @@ def _link_runs(run: _Run) -> list[_Run]:
             search = open_bracket + 1
             continue
         if open_bracket > cursor:
-            runs.append(_Run(text[cursor:open_bracket], run.bold, run.italic))
-        runs.append(_Run(label, run.bold, run.italic, link=url))
+            runs.append(_Run(text[cursor:open_bracket], run.bold, run.link))
+        runs.append(_Run(label, run.bold, link=url))
         cursor = close_paren + 1
         search = cursor
     if cursor < len(text):
-        runs.append(_Run(text[cursor:], run.bold, run.italic))
+        runs.append(_Run(text[cursor:], run.bold, run.link))
     return runs
 
 
@@ -239,7 +241,7 @@ def parse_rich_runs(text: str) -> list[RichSpan]:
     runs = _bold_runs(text)
     runs = [piece for run in runs for piece in _italic_runs(run)]
     runs = [piece for run in runs for piece in _link_runs(run)]
-    return [RichSpan(run.text, run.bold, run.italic, run.link) for run in runs if run.text]
+    return [RichSpan(run.text, run.bold, run.link) for run in runs if run.text]
 
 
 def parse_runs(text: str) -> list[tuple[str, bool]]:
@@ -334,8 +336,6 @@ def _span_html(span: RichSpan) -> str:
     if span.link is not None:
         # label 与 URL 都来自文本段（已被上游转义），label 原样作为可见文本。
         body = f'<a href="{_href_of(span.link)}" rel="noopener noreferrer">{body}</a>'
-    if span.italic:
-        body = f"<em>{body}</em>"
     if span.bold:
         body = f"<strong>{body}</strong>"
     return body

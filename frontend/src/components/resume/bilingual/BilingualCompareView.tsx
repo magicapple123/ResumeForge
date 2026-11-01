@@ -13,13 +13,17 @@
  *
  * 版式：**窄栏堆叠、宽栏并排**（容器查询，见 `styles/bilingual.css`），不用视口断点——
  * 面板宽度由用户拖左栏决定，与窗口宽度不是一回事。
+ *
+ * 显示口径：**默认只列有差异的行**。事实字段（姓名/机构/时间/数字）在译文版本里按设计
+ * 一字不动，全部铺开时 189 行里只有 2 行要处理；一致的那些收进一行可展开的汇总。
  */
-import { LockOutlined } from "@ant-design/icons";
+import { DownOutlined, LockOutlined, UpOutlined } from "@ant-design/icons";
 import { Alert, Button, Tag, Tooltip, Typography } from "antd";
+import { useState } from "react";
 import EmptyState from "../../common/EmptyState";
 import { bt } from "../../../features/resume-bilingual/i18n";
 import { useLocale } from "../../../i18n/i18nContext";
-import { changedPairs } from "../../../features/resume-bilingual/fieldPairs";
+import { differentPairs, nonEmptyPairs } from "../../../features/resume-bilingual/fieldPairs";
 import type { BilingualPair } from "../../../features/resume-bilingual/types";
 
 interface Props {
@@ -37,6 +41,29 @@ interface Props {
   identical?: boolean;
 }
 
+interface RowGroup {
+  sectionKey: string;
+  groupLabel: string;
+  rows: BilingualPair[];
+}
+
+/** 分组：同一板块的行连成一块（只保留分组标题一次），渲染期不写任何外部变量。 */
+function groupRows(rows: readonly BilingualPair[]): RowGroup[] {
+  const groups: RowGroup[] = [];
+  for (const pair of rows) {
+    const last = groups[groups.length - 1];
+    if (last && last.sectionKey === pair.sectionKey) last.rows.push(pair);
+    else groups.push({ sectionKey: pair.sectionKey, groupLabel: pair.groupLabel, rows: [pair] });
+  }
+  return groups;
+}
+
+function statusLabel(status: BilingualPair["status"]): string {
+  if (status === "changed") return bt("bilingual.compare.changed");
+  if (status === "same") return bt("bilingual.compare.same");
+  return bt("bilingual.compare.empty");
+}
+
 export default function BilingualCompareView({
   pairs,
   onAdopt,
@@ -45,26 +72,41 @@ export default function BilingualCompareView({
   identical,
 }: Props) {
   useLocale();
-  const visible = changedPairs(pairs);
-  if (visible.length === 0) {
+  const [showSame, setShowSame] = useState(false);
+  const different = differentPairs(pairs);
+  const same = nonEmptyPairs(pairs).filter((pair) => pair.status === "same");
+  if (different.length === 0 && same.length === 0) {
     return <EmptyState inline description={bt("bilingual.compare.nothing")} />;
-  }
-
-  // 分组：同一板块的行连成一块（只保留分组标题一次），渲染期不写任何外部变量。
-  const groups: { sectionKey: string; groupLabel: string; rows: BilingualPair[] }[] = [];
-  for (const pair of visible) {
-    const last = groups[groups.length - 1];
-    if (last && last.sectionKey === pair.sectionKey) last.rows.push(pair);
-    else
-      groups.push({
-        sectionKey: pair.sectionKey,
-        groupLabel: pair.groupLabel,
-        rows: [pair],
-      });
   }
 
   const comparePrimary = primaryLabel ?? bt("bilingual.compare.columnPrimary");
   const compareSecondary = secondaryLabel ?? bt("bilingual.compare.columnSecondary");
+  // 图标自带 `aria-label="down/up"`，会把可访问名拼成 "down另有 7 个字段一致"；
+  // 显式给按钮一个与可见文字一致的名字，读屏不念图标。
+  const foldLabel = showSame
+    ? bt("bilingual.compare.sameLess", { count: same.length })
+    : bt("bilingual.compare.sameMore", { count: same.length });
+
+  // key 取组内首行的 path：一行只可能出现在"有差异"或"一致"其中一份列表里，
+  // 所以两块列表共用同一个渲染函数也不会撞 key（不需要额外的前缀字符串）。
+  const renderGroup = (group: RowGroup) => (
+    <section key={group.rows[0]?.id ?? group.sectionKey} className="bilingual-compare__group">
+      <Typography.Text strong className="bilingual-compare__group-title">
+        {group.groupLabel}
+      </Typography.Text>
+      {group.rows.map((pair) => (
+        <Row
+          key={pair.id}
+          pair={pair}
+          onAdopt={
+            pair.adoptable && !pair.locked && pair.status === "changed" ? onAdopt : undefined
+          }
+          primaryLabel={comparePrimary}
+          secondaryLabel={compareSecondary}
+        />
+      ))}
+    </section>
+  );
 
   return (
     <>
@@ -85,24 +127,22 @@ export default function BilingualCompareView({
           <span className="bilingual-compare__head-cell">{compareSecondary}</span>
           <span className="bilingual-compare__head-cell" />
         </div>
-        {groups.map((group) => (
-          <section key={group.sectionKey} className="bilingual-compare__group">
-            <Typography.Text strong className="bilingual-compare__group-title">
-              {group.groupLabel}
-            </Typography.Text>
-            {group.rows.map((pair) => (
-              <Row
-                key={pair.id}
-                pair={pair}
-                onAdopt={
-                  pair.adoptable && !pair.locked && pair.status === "changed" ? onAdopt : undefined
-                }
-                primaryLabel={comparePrimary}
-                secondaryLabel={compareSecondary}
-              />
-            ))}
-          </section>
-        ))}
+        {groupRows(different).map((group) => renderGroup(group))}
+        {same.length > 0 ? (
+          <div className="bilingual-compare__fold" data-bilingual-compare-summary="1">
+            <Button
+              type="text"
+              size="small"
+              aria-label={foldLabel}
+              aria-expanded={showSame}
+              icon={showSame ? <UpOutlined /> : <DownOutlined />}
+              onClick={() => setShowSame((value) => !value)}
+            >
+              {foldLabel}
+            </Button>
+          </div>
+        ) : null}
+        {showSame ? groupRows(same).map((group) => renderGroup(group)) : null}
       </div>
     </>
   );
@@ -120,6 +160,7 @@ function Row({
   secondaryLabel: string;
 }) {
   useLocale();
+  const status = statusLabel(pair.status);
   return (
     <div className="bilingual-compare__row" data-pair-path={pair.path}>
       <span className="bilingual-compare__field">
@@ -137,6 +178,15 @@ function Row({
             <Tag className="bilingual-compare__lock">{bt("bilingual.compare.readOnlyTag")}</Tag>
           </Tooltip>
         ) : null}
+        {/* 状态是**这一行**的属性，挂在字段行右端而不是另起一行：
+            窄栏里每多一行都会把行高推高一截（见 bilingual.css 的窄档算式）。 */}
+        <span
+          className="bilingual-compare__status"
+          data-pair-status={pair.status}
+          aria-label={bt("bilingual.compare.statusAria", { status })}
+        >
+          {status}
+        </span>
       </span>
       <PairCell tone="primary" label={primaryLabel} text={pair.primary} />
       <PairCell tone="secondary" label={secondaryLabel} text={pair.secondary} />
@@ -151,13 +201,6 @@ function Row({
           </Button>
         ) : null}
       </span>
-      <div className="bilingual-compare__status" data-pair-status={pair.status}>
-        {pair.status === "changed"
-          ? bt("bilingual.compare.changed")
-          : pair.status === "same"
-            ? bt("bilingual.compare.same")
-            : bt("bilingual.compare.empty")}
-      </div>
     </div>
   );
 }
@@ -165,9 +208,10 @@ function Row({
 /**
  * 一格译文（Q24）。
  *
- * 类名与 `styles/bilingual.css` 的既定契约对齐：宽布局（容器 ≥620px，四栏并排）里
+ * 类名与 `styles/bilingual.css` 的既定契约对齐：宽布局（容器 ≥480px，四栏并排）里
  * 表头已写明语种，行内 `.bilingual-compare__lang` 由容器查询隐藏，不再重复
  * 「当前简历 / 英文版」；窄布局（堆叠）没有表头，行内标签就是那个语种提示，必须保留。
+ * 窄档标签是**行内前缀**（与正文同基线），下面不再各占一行。
  */
 function PairCell({
   tone,

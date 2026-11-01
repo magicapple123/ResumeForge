@@ -36,13 +36,17 @@ const appConfig = {
 
   // ── 经历美化档位 ───────────────────────────────────────────
   "appConfig.enhancement.light.label": "轻度",
-  "appConfig.enhancement.light.description": "优化措辞与重点，基本保持原有篇幅",
+  "appConfig.enhancement.light.description":
+    "优化措辞与重点：每条要点 20-28 字、每条 1-2 条，基本保持原有篇幅",
   "appConfig.enhancement.balanced.label": "均衡",
-  "appConfig.enhancement.balanced.description": "补足方法、技术细节与成果表达",
+  "appConfig.enhancement.balanced.description":
+    "补足方法与业务目的：每条要点 28-36 字、每条 2-3 条",
   "appConfig.enhancement.strong.label": "深度",
-  "appConfig.enhancement.strong.description": "充分利用已有资料，强化岗位匹配度",
+  "appConfig.enhancement.strong.description":
+    "充分展开方法与结果：每条要点 40-55 字、每条 3-5 条；资料里缺少可引用细节时效果接近均衡档",
   /** 通用简历没有岗位可匹配，「深度」档换一个说法。 */
-  "appConfig.enhancement.strong.description-general": "充分利用已有资料，充分展开过程与成果",
+  "appConfig.enhancement.strong.description-general":
+    "充分展开过程与成果：每条要点 40-55 字、每条 3-5 条；资料里缺少可引用细节时效果接近均衡档",
 
   // ── 思考强度 ──────────────────────────────────────────────
   "appConfig.effort.minimal": "最低",

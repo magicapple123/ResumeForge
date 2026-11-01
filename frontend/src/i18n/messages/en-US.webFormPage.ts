@@ -14,7 +14,7 @@ const webFormPage = {
   "webFormPage.notice.body":
     "After filling, review each field in the browser window and click the page's own submit button yourself once everything is correct.",
   "webFormPage.hint.expandLater":
-    "Once the browser is ready, the safety note, AI assist and relaxed-mode controls expand here step by step.",
+    "Once the browser is ready, the safety note, AI assist and other controls expand here step by step (the relaxed-mode boundary stays visible).",
   "webFormPage.stagedAi.ready":
     "The AI field detection you started earlier is done. Its result is staged; click “Apply” to switch to that preview — the page itself is still untouched.",
   "webFormPage.stagedAi.apply": "Apply",
@@ -166,7 +166,8 @@ const webFormPage = {
   "webFormPage.relaxed.enabledHint":
     "On - clickable controls that match a profile value are clicked and read back for you; consent and declaration items ask you first.",
   "webFormPage.relaxed.risk":
-    "When on, the app tries to click dropdown and popup options and to tick the declaration items you confirmed one by one. It can pick the wrong one, so check after filling; date pickers and file uploads are still never done for you.",
+    "When enabled, the program will click dropdown/overlay options and check declarations you confirmed one by one; mistakes are possible, please review the form. " +
+    "Four categories are never automated: date pickers, file uploads, password/OTP/bank-card fields, and read-only toggles without a popup - you handle those yourself.",
   "webFormPage.liveStatus.thinking": "Looking at this box",
   "webFormPage.liveStatus.aiThinking": "AI is recognizing",
   "webFormPage.liveStatus.matched": "Suggestion ready",

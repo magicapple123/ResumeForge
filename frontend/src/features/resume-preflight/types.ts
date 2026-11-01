@@ -124,6 +124,11 @@ export interface PreflightOut {
   summary: Record<string, number>;
   /** format → 能力等级（或 "format:capability" → 等级），唯一来源是后端能力矩阵。 */
   capabilities: Record<string, string>;
+  /**
+   * R-26：`{format: {capability: 原因码}}`，只含 approx / unsupported 的格子。
+   * 码是稳定契约，中文/英文文案由 `capabilities.ts::NOTE_MESSAGE_KEY` 查。
+   */
+  capability_notes?: Record<string, Record<string, string>>;
   /** ATS/产物免责声明（逐字复用 ATS_DISCLAIMER）。 */
   disclaimer: string;
   /** 本次实际跑过的层（缺省 = 全部）。 */

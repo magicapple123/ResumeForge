@@ -107,8 +107,9 @@ export default function ResumeWorkbenchV2Canvas({
   const status =
     state === "error" ? (
       <Space size={4}>
-        <Typography.Text type="secondary" className="resume-wb-canvas-note">
-          {t("rich.preview.stale")}
+        {/* R-32：排版失败时纸面停在旧一版——这必须看成"警示"，不能是一行灰色说明。 */}
+        <Typography.Text type="warning" className="resume-wb-canvas-note">
+          {t("rich.preview.staleDetail")}
         </Typography.Text>
         <Button size="small" type="link" onClick={retry}>
           {t("rich.preview.retry")}
@@ -121,6 +122,9 @@ export default function ResumeWorkbenchV2Canvas({
     );
   return (
     <ResumeWorkbenchCanvas
+      // 刻意按 source 比对而非 seq：`source` 记的是"这一份实时结果对应的**宿主 html**"，
+      // 保存成功后宿主会换掉 html，旧实时结果自动失效（换成新宿主 html），不需要额外清除。
+      // 改成 seq 会让"保存返回的权威 html"被同序号的旧实时结果顶掉。
       html={live && live.source === html ? live.html : html}
       warnings={warnings}
       pages={pages}

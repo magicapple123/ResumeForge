@@ -9,12 +9,13 @@
 
 **本轮的事实边界（如实记录，不粉饰）**：
 
-* PDF 只有 regular + bold 两个字形（`pdf_exporter/render.py` 的 `_register_fonts`），
-  没有斜体文件 → `italic` 只能标 `approx`（不倾斜）；链接不可点击 → `link_clickable`
-  标 `unsupported`，替代是纸面上可见的 URL 文本（W07 协议 v2：`[label](url)` 画成
-  "label (URL)" 可见文本，并且禁用 fpdf2 markdown 的自动链接，见
-  `pdf_exporter/rich_text.py`）。
-* Word 的斜体是真斜体（`run.font.italic`）；链接同样画成 "label (URL)" 可见文本，
+* PDF 只有 regular + bold 两个字形（`pdf_exporter/render.py` 的 `_register_fonts`）；
+  链接不可点击 → `link_clickable` 标 `unsupported`，替代是纸面上可见的 URL 文本
+  （W07 协议 v2：`[label](url)` 画成 "label (URL)" 可见文本，并且禁用 fpdf2 markdown
+  的自动链接，见 `pdf_exporter/rich_text.py`）。
+* 斜体已整体移除（#5d）：PDF 无斜体字形、Word/HTML 行为不一，保留只会让"改了没反应"；
+  单星号标记仍按"去标记"剥壳（存量内容不冒裸星号），见 `resume_rich_text.py`。
+* Word 的链接同样画成 "label (URL)" 可见文本，
   不创建 OOXML 超链接关系，所以 `link_clickable` 维持 `approx`（可见 URL 文本替代点击）。
 * 手动分页/续页信息（W08）与科研三栏目/长 CV（W14）均已落地；后续新增能力项仍必须
   在完成时同步改这里（任务书里已写成完成条件）。
@@ -31,7 +32,6 @@ FORMATS: tuple[str, ...] = ("html", "pdf", "docx", "markdown", "txt", "json")
 # capability 键是稳定契约：W05 文档、前端面板、检查响应都引用它。
 CAPABILITY_KEYS: tuple[str, ...] = (
     "bold",
-    "italic",
     "link_clickable",
     "custom_font",
     "section_order",
@@ -49,7 +49,6 @@ CAPABILITY_KEYS: tuple[str, ...] = (
 # 中文说明（检查面板与能力矩阵都从这里取，避免两处措辞漂移）。
 _EXPLAIN: dict[str, str] = {
     "bold": "加粗",
-    "italic": "斜体",
     "link_clickable": "链接可点击",
     "custom_font": "使用所选字体",
     "section_order": "自定义板块顺序",
@@ -73,7 +72,6 @@ _LEVEL_TEXT: dict[CapabilityLevel, str] = {
 CAPABILITIES: dict[str, dict[str, CapabilityLevel]] = {
     "html": {
         "bold": "supported",
-        "italic": "supported",
         "link_clickable": "supported",
         "custom_font": "supported",
         "section_order": "supported",
@@ -89,7 +87,6 @@ CAPABILITIES: dict[str, dict[str, CapabilityLevel]] = {
     },
     "pdf": {
         "bold": "supported",
-        "italic": "approx",  # 无斜体字形：不倾斜（D6）
         "link_clickable": "unsupported",  # W07：画成 "label (URL)" 可见文本，不可点击
         "custom_font": "supported",
         "section_order": "supported",
@@ -105,7 +102,6 @@ CAPABILITIES: dict[str, dict[str, CapabilityLevel]] = {
     },
     "docx": {
         "bold": "supported",
-        "italic": "supported",
         "link_clickable": "approx",  # W07：可见 "label (URL)" 文本，不承诺点击
         "custom_font": "approx",  # 写入所选字体的真实族名，但 python-docx 不嵌入字体（查看端替代）
         "section_order": "supported",
@@ -121,7 +117,6 @@ CAPABILITIES: dict[str, dict[str, CapabilityLevel]] = {
     },
     "markdown": {
         "bold": "supported",
-        "italic": "supported",
         "link_clickable": "supported",
         "custom_font": "unsupported",
         "section_order": "supported",
@@ -137,7 +132,6 @@ CAPABILITIES: dict[str, dict[str, CapabilityLevel]] = {
     },
     "txt": {
         "bold": "unsupported",
-        "italic": "unsupported",
         "link_clickable": "unsupported",
         "custom_font": "unsupported",
         "section_order": "supported",
@@ -153,7 +147,6 @@ CAPABILITIES: dict[str, dict[str, CapabilityLevel]] = {
     },
     "json": {
         "bold": "unsupported",
-        "italic": "unsupported",
         "link_clickable": "unsupported",
         "custom_font": "unsupported",
         "section_order": "supported",
@@ -173,6 +166,82 @@ CAPABILITIES: dict[str, dict[str, CapabilityLevel]] = {
 def level_of(fmt: str, capability: str) -> CapabilityLevel:
     """某个格式下某项能力的等级；未知格式/能力一律按 `unsupported`（不吹牛）。"""
     return CAPABILITIES.get(fmt, {}).get(capability, "unsupported")
+
+
+# 「为什么是近似 / 不支持」的**原因码**（审计 R-26）。
+#
+# 只给 `approx` / `unsupported` 的格子写；前端拿码去查 i18n 文案，所以这里**不能写中文**——
+# 上面 `_EXPLAIN` 是后端日志用的中文说明，两者用途不同（坑：别把 _EXPLAIN 挪过来）。
+#
+# 码的粒度按"原因"而不是按"格子"：`browser_print` 同时解释手动分页与标题跟随，因为
+# 它们对 HTML 是同一件事（分页由浏览器决定）。`"*"` 是该格式的兜底码。
+_NOTES: dict[str, dict[str, str]] = {
+    "html": {
+        # 浏览器打印时分页由浏览器排版决定，CSS 的 break-* 只是建议。
+        "manual_page_break": "browser_print",
+        "keep_with_next": "browser_print",
+        "page_numbers": "browser_no_page_number",
+    },
+    "pdf": {
+        # PDF 导出只注册 regular + bold 两个字形文件。
+        "link_clickable": "link_text_only",
+    },
+    "docx": {
+        "link_clickable": "link_text_only",
+        "custom_font": "font_substitute",
+        "scholar_skills_grid": "table_approx",
+    },
+    "markdown": {
+        "custom_font": "plain_text_no_style",
+        "manual_page_break": "plain_text_no_pagination",
+        "keep_with_next": "plain_text_no_pagination",
+        "entry_spacing": "plain_text_no_style",
+        "body_color": "plain_text_no_style",
+        "scholar_skills_grid": "plain_text_no_layout",
+        "page_numbers": "plain_text_no_pagination",
+    },
+    "txt": {
+        "*": "plain_text_only",
+    },
+    "json": {
+        # JSON 是工程数据：只携带数据与排版参数，本就不渲染视觉。
+        "*": "data_only",
+    },
+}
+
+# 供前端做"有没有漏写原因"的自检（也用于测试）。
+NOTE_CODES: tuple[str, ...] = (
+    "browser_print",
+    "browser_no_page_number",
+    "link_text_only",
+    "font_substitute",
+    "table_approx",
+    "plain_text_no_style",
+    "plain_text_no_pagination",
+    "plain_text_no_layout",
+    "plain_text_only",
+    "data_only",
+)
+
+
+def note_of(fmt: str, capability: str) -> str:
+    """某格的原因码；`supported` 恒为空串（前端据此决定不弹 Tooltip）。"""
+    if level_of(fmt, capability) == "supported":
+        return ""
+    notes = _NOTES.get(fmt) or {}
+    return notes.get(capability) or notes.get("*") or ""
+
+
+def capability_notes(formats: list[str] | None = None) -> dict[str, dict[str, str]]:
+    """按需裁剪的原因码表（与被点名的格式对齐，未命中的格子不出现）。"""
+    wanted_formats = formats or list(FORMATS)
+    result: dict[str, dict[str, str]] = {}
+    for fmt in wanted_formats:
+        if fmt not in CAPABILITIES:
+            continue
+        per_format = {cap: note_of(fmt, cap) for cap in CAPABILITY_KEYS}
+        result[fmt] = {cap: code for cap, code in per_format.items() if code}
+    return result
 
 
 def explain(fmt: str, capability: str) -> str:
@@ -197,8 +266,11 @@ __all__ = [
     "CAPABILITIES",
     "CAPABILITY_KEYS",
     "FORMATS",
+    "NOTE_CODES",
     "CapabilityLevel",
+    "capability_notes",
     "explain",
     "level_of",
     "matrix",
+    "note_of",
 ]

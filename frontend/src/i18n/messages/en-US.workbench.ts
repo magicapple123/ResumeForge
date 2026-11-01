@@ -34,6 +34,8 @@ const workbench = {
   "workbench.color.navy": "Navy",
   "workbench.color.forest": "Forest green",
   "workbench.color.wine": "Dark red",
+  "workbench.color.followTemplate": "Template default",
+  "workbench.param.paletteAria": "Toggle palette for {label}",
   "workbench.column.editor": "Resume content",
   "workbench.resizer.params":
     "Settings column width (drag or use arrow keys, double-click to restore)",
@@ -181,6 +183,30 @@ const workbench = {
   "generate.cancelFailed": "Could not cancel; try again",
   "generate.recordNotSaved": "The Resume is still being saved; try again shortly",
   "generate.changesSaved": "Resume changes saved",
+
+  // Step summaries in the History tab (R-17)
+  "workbench.history.change.untitledSection": "Untitled Section",
+  "workbench.history.change.untitledEntry": "Untitled Entry",
+  "workbench.history.change.untitledField": "Untitled field",
+  "workbench.history.change.more": "{main} and {count} more",
+  "workbench.history.change.sectionAdd": "Added Section “{section}”",
+  "workbench.history.change.sectionRemove": "Removed Section “{section}”",
+  "workbench.history.change.sectionMove": "Moved Section “{section}” to position {index}",
+  "workbench.history.change.entryAdd": "“{section}”: added Entry “{entry}”",
+  "workbench.history.change.entryRemove": "“{section}”: removed Entry “{entry}”",
+  "workbench.history.change.entryMove": "“{section}”: moved Entry “{entry}” to position {index}",
+  "workbench.history.change.entryHide": "“{section}”: hid Entry “{entry}”",
+  "workbench.history.change.entryShow": "“{section}”: showed Entry “{entry}”",
+  "workbench.history.change.entryLayout": "“{section}”: changed the layout of Entry “{entry}”",
+  "workbench.history.change.fieldAdd": "“{entry}”: added field “{field}”",
+  "workbench.history.change.fieldRemove": "“{entry}”: removed field “{field}”",
+  "workbench.history.change.fieldMove": "“{entry}”: moved field “{field}” to position {index}",
+  "workbench.history.change.valueOne": "“{entry}”: edited “{field}”",
+  "workbench.history.change.valueMany": "“{entry}”: {count} text edits (first: “{field}”)",
+  "workbench.history.change.layoutPages": "Page limit set to {pages}",
+  "workbench.history.change.layoutFont": "Font scale set to {scale}",
+  "workbench.history.change.layoutTemplate": "Template set to {template}",
+  "workbench.history.change.layoutFormat": "{count} typography settings changed",
 } as const;
 
 export default workbench;

@@ -6,7 +6,7 @@
  * 宿主用 onInsertDocument(document, revision) 整份替换（进历史、触发重排）。组件本身
  * 不写 document（纯受控）；409 = 记录在别处更新 → 提示重新打开后重试。
  */
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { t } from "../../../i18n";
 import { useLocale } from "../../../i18n/i18nContext";
 import { useToast } from "../../../hooks/useToast";
@@ -71,6 +71,8 @@ interface Props {
   onSelectPath?: (path: string) => void;
   onApplyDocument?: (document: ResumeDocument) => void;
   disabled?: boolean;
+  /** 宿主侧收藏成功后的递增序号：变化即重载列表（#19 右键/头部两个入口共用）。 */
+  refreshToken?: number;
 }
 
 export default function PhraseLibraryPanelV2({
@@ -81,6 +83,7 @@ export default function PhraseLibraryPanelV2({
   onSelectPath,
   onApplyDocument,
   disabled = false,
+  refreshToken = 0,
 }: Props) {
   useLocale();
   const toast = useToast();
@@ -91,6 +94,10 @@ export default function PhraseLibraryPanelV2({
   const [inserting, setInserting] = useState(false);
   const target = parseTarget(selectedPath);
   const canInsert = !disabled && Boolean(resumeId) && target !== null;
+  // #19：右键「收藏当前要点」成功 → 宿主递增 refreshToken → 列表重载（含新的使用次数）。
+  useEffect(() => {
+    if (refreshToken > 0) void library.reload();
+  }, [refreshToken, library.reload]);
 
   const confirmInsert = async () => {
     if (!pendingInsert || !target) return;
@@ -169,13 +176,16 @@ export default function PhraseLibraryPanelV2({
         onEdit={(phrase) => setEditing(phrase)}
         onRequestDelete={(phrase) => void removePhrase(phrase)}
         onCopy={(phrase) => void copyText(stripMarkers(phrase.text))}
-        onCollectCurrent={selectedPath ? () => void collectCurrent() : undefined}
+        // #19：收藏入口不再整块消失——没选中要点时禁用 + tooltip 说明为什么不能点。
+        onCollectCurrent={() => void collectCurrent()}
+        collectEnabled={!disabled && Boolean(selectedPath)}
+        collectDisabledReason={
+          disabled ? at("assets.collect.locked") : at("assets.collect.needSelection")
+        }
+        // 插入禁用的两个原因分开说：没选中位置 / 有未保存修改。tooltip 挂在按钮上，
+        // 卡片列表下方不再常驻「先选中要插入的位置」这类提示（#19 ⑤）。
+        insertDisabledReason={disabled ? at("assets.insert.locked") : at("assets.insert.noTarget")}
       />
-      {canInsert ? null : (
-        <div className="resume-assets-footnote">
-          {disabled ? at("assets.insert.locked") : at("assets.insert.noTarget")}
-        </div>
-      )}
       {editing ? (
         <PhraseEditorModal
           key={editing.id}

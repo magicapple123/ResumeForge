@@ -5,18 +5,25 @@
  * 弹层规范：含表单 → `mask={{ closable: false }}`；footer 只放动作（取消 / 导出交付包），
  * 不另加「关闭」；版本冲突用**页内 Alert + 刷新按钮**，不新开第二个弹层。
  */
-import { Alert, App, Button, Input, Modal, Select, Space, Switch } from "antd";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Alert, App, Button, Input, Modal, Radio, Select, Space, Switch } from "antd";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ResumeDocument } from "../../../types/resumeDocument";
+import type { ExportRequest } from "../../../types";
 import { t } from "../../../i18n";
+import type { MessageKey } from "../../../i18n";
 import { useLocale } from "../../../i18n/i18nContext";
 import {
+  renderFilenamePreview,
+  runSingleFileExports,
   validatePresetConfig,
   type ExportBundleDownload,
   type ExportDeliveryApi,
+  type ExportFormat,
   type ExportPresetConfig,
   type NamingContext,
+  type SingleExportProgress,
 } from "../../../features/resume-delivery";
+import { exportResumeWithOptions } from "../../../api/resumes";
 import { downloadBlob } from "../../../utils/download";
 import ExportCheckCard from "./ExportCheckCard";
 import ExportConfigForm from "./ExportConfigForm";
@@ -121,6 +128,20 @@ export default function ExportConfigModal({
   const [presetName, setPresetName] = useState("");
   const [presetDefault, setPresetDefault] = useState(false);
   const [savingPreset, setSavingPreset] = useState(false);
+  // R-21：导出形式与"单独文件"的串行进度（交付包走 bundle 自己的 exporting）。
+  const [progress, setProgress] = useState<SingleExportProgress | null>(null);
+  const [singleRunning, setSingleRunning] = useState(false);
+  const mode = bundle.config.mode ?? "bundle";
+  const busy = bundle.exporting || singleRunning;
+
+  const setMode = (next: NonNullable<ExportPresetConfig["mode"]>) => {
+    // 切到单独文件时清掉归档开关：归档只属于交付包，留着会让人以为这份也会存原件。
+    bundle.setConfig({
+      ...bundle.config,
+      mode: next,
+      ...(next === "single" ? { archive_original: false } : {}),
+    });
+  };
 
   const documentName =
     content?.header.items.find((item) => item.kind === "field" && item.key === "name")?.value ?? "";
@@ -157,7 +178,8 @@ export default function ExportConfigModal({
       const saved = await presets.savePreset(
         {
           name: presetName.trim(),
-          config: bundle.config,
+          // 导出形式是这次操作的开关，不是预设的一部分（读回时也不恢复），不写进预设。
+          config: { ...bundle.config, mode: undefined },
           is_default: presetDefault,
         },
         selectedPresetId ?? undefined,
@@ -184,9 +206,63 @@ export default function ExportConfigModal({
     }
   };
 
+  const formatLabel = (format: ExportFormat) => t(`delivery.format.${format}` as MessageKey);
+
+  /** 单独文件：与交付包同一份草稿版式/后处理，只是把"打包"换成"逐个导出"。 */
+  const buildSingleRequest = useCallback(
+    (format: ExportFormat): ExportRequest => ({
+      format,
+      watermark: bundle.config.watermark.trim() || undefined,
+      redact: bundle.config.redact || undefined,
+      include_photo: bundle.config.include_photo,
+      ...(pageLimit !== undefined ? { page_limit: pageLimit } : {}),
+      ...(fontScale ? { font_scale: fontScale as ExportRequest["font_scale"] } : {}),
+      ...(formatConfig ? { format_config: formatConfig as ExportRequest["format_config"] } : {}),
+      ...(language ? { language: language as ExportRequest["language"] } : {}),
+      ...(marginMm !== undefined ? { margin_mm: marginMm } : {}),
+    }),
+    [bundle.config, formatConfig, fontScale, language, marginMm, pageLimit],
+  );
+
+  const runSingleExport = async () => {
+    if (resumeId === null) return;
+    const plans = bundle.config.formats.map((format) => ({
+      format,
+      filename: renderFilenamePreview(bundle.config.naming, namingContext, format),
+    }));
+    setSingleRunning(true);
+    try {
+      const outcome = await runSingleFileExports({
+        plans,
+        fetchOne: (plan) => exportResumeWithOptions(resumeId, buildSingleRequest(plan.format)),
+        save: downloadBlob,
+        onProgress: setProgress,
+      });
+      if (outcome.failed) {
+        message.error(
+          t("delivery.export.singleFailed", {
+            done: outcome.completed,
+            total: outcome.total,
+            format: formatLabel(outcome.failed.format),
+            reason: outcome.failed.reason,
+          }),
+        );
+        return;
+      }
+      message.success(t("delivery.export.singleSuccess", { count: outcome.completed }));
+    } finally {
+      setProgress(null);
+      setSingleRunning(false);
+    }
+  };
+
   const runExport = async () => {
     if (!issues.ok) {
       message.warning(t("delivery.export.emptyFormats"));
+      return;
+    }
+    if (mode === "single") {
+      await runSingleExport();
       return;
     }
     if (revision === null) {
@@ -215,12 +291,60 @@ export default function ExportConfigModal({
       onCancel={onClose}
       // 表单弹层：误点遮罩会丢配置草稿，必须显式禁掉。
       mask={{ closable: false }}
-      footer={null}
+      // R-21：动作放原生 footer——内容再长也只滚 body，按钮始终贴在弹层底部。
+      footer={
+        <div className="resume-delivery-footer">
+          {progress ? (
+            <span className="resume-delivery-progress" role="status">
+              {t("delivery.export.singleProgress", {
+                index: progress.index,
+                total: progress.total,
+                format: formatLabel(progress.format),
+              })}
+            </span>
+          ) : null}
+          <Space>
+            <Button onClick={onClose} disabled={busy}>
+              {t("common.action.cancel")}
+            </Button>
+            <Button type="primary" loading={busy} onClick={() => void runExport()}>
+              {mode === "single"
+                ? busy
+                  ? t("delivery.export.singleExporting")
+                  : t("delivery.export.actionSingle")
+                : busy
+                  ? t("delivery.export.exporting")
+                  : t("delivery.export.action")}
+            </Button>
+          </Space>
+        </div>
+      }
       width="min(760px, 94vw)"
       styles={{ body: { maxHeight: "var(--rf-modal-body-max-h)", overflowY: "auto" } }}
       destroyOnHidden
     >
       <div className="resume-delivery">
+        <div className="resume-delivery-mode">
+          <span className="resume-delivery-label">{t("delivery.mode.label")}</span>
+          <Radio.Group
+            value={mode}
+            disabled={busy}
+            optionType="button"
+            buttonStyle="solid"
+            onChange={(event) =>
+              setMode(event.target.value as NonNullable<ExportPresetConfig["mode"]>)
+            }
+            options={[
+              { value: "bundle", label: t("delivery.mode.bundle") },
+              { value: "single", label: t("delivery.mode.single") },
+            ]}
+          />
+          <p className="resume-delivery-hint">
+            {mode === "single"
+              ? t("delivery.mode.singleHint", { count: bundle.config.formats.length })
+              : t("delivery.mode.bundleHint")}
+          </p>
+        </div>
         <div className="resume-delivery-preset-bar">
           <span className="resume-delivery-label">{t("delivery.config.preset")}</span>
           <Select
@@ -279,7 +403,8 @@ export default function ExportConfigModal({
           config={bundle.config}
           onChange={bundle.setConfig}
           namingContext={namingContext}
-          disabled={bundle.exporting}
+          disabled={busy}
+          archiveDisabled={mode === "single"}
         />
 
         {variants.length > 0 || variantLoading ? (
@@ -309,7 +434,7 @@ export default function ExportConfigModal({
         />
 
         <p className="resume-delivery-hint">{t("delivery.export.snapshotKept")}</p>
-        {bundle.config.archive_original ? (
+        {mode === "bundle" && bundle.config.archive_original ? (
           <p className="resume-delivery-hint">{t("delivery.export.archiveKept")}</p>
         ) : null}
 
@@ -334,13 +459,6 @@ export default function ExportConfigModal({
           checkFailed={bundle.checkFailed}
           onRefresh={() => void bundle.refreshCheck()}
         />
-
-        <Space className="resume-delivery-actions">
-          <Button onClick={onClose}>{t("common.action.cancel")}</Button>
-          <Button type="primary" loading={bundle.exporting} onClick={() => void runExport()}>
-            {bundle.exporting ? t("delivery.export.exporting") : t("delivery.export.action")}
-          </Button>
-        </Space>
       </div>
     </Modal>
   );

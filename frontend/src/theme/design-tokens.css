@@ -77,6 +77,17 @@
   --rf-success-text: #176b41;
   --rf-warning-text: #875300;
   --rf-error-text: #b42318;
+  /* 三档「填充」底色（结构树 hover、徽标底、摘要块）：2026-10-31 之前这三处写的是
+     `--rf-color-fill-*`——那个变量族从来没有定义过，于是 `background` 整条失效，
+     结构树 hover 与选中态都看不见底色（审计 R-15）。
+     从正文色与容器底色派生而不是写死灰阶：深色主题下正文变浅、容器变深，
+     同一句 `color-mix` 自动派生出"深底上再浅一层"，不需要第二套硬编码。
+     同名同序的一份在 dark-tokens.css。 */
+  --rf-fill-secondary: color-mix(in srgb, var(--rf-text-body) 6%, var(--rf-surface));
+  --rf-fill-tertiary: color-mix(in srgb, var(--rf-text-body) 4%, var(--rf-surface));
+  --rf-fill-quaternary: color-mix(in srgb, var(--rf-text-body) 2.5%, var(--rf-surface));
+  /* 「资料缺失」徽标底：由错误文字色派生，保证与 --rf-error-text 同色系。 */
+  --rf-error-bg: color-mix(in srgb, var(--rf-error-text) 10%, var(--rf-surface));
   --rf-focus-visible: #0958d9;
   /* 收藏星标：只用在图标上（不上文字）。**亮琥珀**是它作为"可点击的收藏态"的语义，
      不能被换成正文/警示文字色——`--rf-warning-text`（#875300）在浅色下是深棕，

@@ -20,6 +20,40 @@ const applyUi = {
   "applyUi.recordDetail.failureDetail": "Failure details (page URL and title)",
   "applyUi.recordDetail.batchAttempt": "Batch #{id} · attempt {attempt}",
 
+  // #39: the failure drawer is three sections: what happened / where it stopped / what to do.
+  "applyUi.recordDetail.section.what": "What happened",
+  "applyUi.recordDetail.section.where": "Where it stopped",
+  "applyUi.recordDetail.section.advice": "What to do",
+  "applyUi.recordDetail.failureCode": "Failure code",
+  "applyUi.recordDetail.step": "Step",
+  "applyUi.recordDetail.target": "Target",
+  "applyUi.recordDetail.unidentified": "Not identified",
+  "applyUi.recordDetail.advice.site_changed":
+    "Send this diagnostic to the maintainer; to apply right away, do it manually in the browser.",
+  "applyUi.recordDetail.advice.render_timeout":
+    "Try again later; if it keeps timing out, check that this site opens normally.",
+  "applyUi.recordDetail.advice.page_not_navigated":
+    "Check the browser can reach the site and retry; if not, open the job page and apply manually.",
+  "applyUi.recordDetail.advice.selector_missing":
+    "Retry once; if it fails again, send the diagnostic (the page structure likely changed again).",
+  "applyUi.recordDetail.advice.login_required":
+    "Sign in once in the apply browser, then click Retry.",
+  "applyUi.recordDetail.advice.captcha_required":
+    "Finish the CAPTCHA in the apply browser window, then click Resume.",
+  "applyUi.recordDetail.advice.greeting_missing":
+    "Add a greeting for this job in the queue, or set a default greeting.",
+  "applyUi.recordDetail.advice.network_timeout": "Try again later; check your network and proxy.",
+  "applyUi.recordDetail.advice.upload_failed":
+    "Check that the resume file opens and its format is supported, then retry.",
+  "applyUi.recordDetail.advice.site_unsupported":
+    "This job source does not support auto-apply; apply manually on the original site.",
+  "applyUi.recordDetail.advice.profile_insufficient":
+    "Add a usable resume in the resume center first, then retry.",
+  "applyUi.recordDetail.advice.unconfirmed":
+    "Check in the apply browser whether it was actually sent; do not retry before that.",
+  "applyUi.recordDetail.advice.unknown":
+    "Retry once; if it still fails, send this diagnostic to the maintainer.",
+
   "applyUi.batch.selectMode": "Select multiple",
   "applyUi.batch.deleteBatch": "Delete this batch ({count} records)",
   "applyUi.batch.deleteConfirm": "Delete this batch of records?",
@@ -30,6 +64,8 @@ const applyUi = {
   "applyUi.batch.succeeded": "{count} succeeded",
   "applyUi.batch.failed": "{count} failed",
   "applyUi.batch.skipped": "{count} skipped",
+
+  "applyUi.batch.retryFailed": "Retry just these {count}",
   "applyUi.batch.loadingItems": "Loading records…",
   "applyUi.batch.emptyItems": "No records match in this batch",
 

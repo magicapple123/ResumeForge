@@ -100,6 +100,9 @@ class DocumentObjectOut(BaseModel):
     object_id: str | None = None
     point_id: str | None = None
     label: str = ""
+    # 块所属字段的稳定标识（条目块为空串；要点块为字段 key 或自定义字段名）。
+    # 给默认值：旧客户端 / 手工构造的响应对象不带它也能过（审计 R-16）。
+    field_label: str = ""
     link: BlockLinkOut | None = None
 
 
@@ -147,6 +150,9 @@ class ImpactEntryOut(BaseModel):
     point_id: str | None = None
     path: str
     field: str
+    # #20a：可读标签（条目名/要点文本 + 字段名）；path 只作 tooltip/调试，不直接展示。
+    target_label: str = ""
+    field_label: str = ""
     linked_fingerprint: str = ""
     current_fingerprint: str = ""
     stale: bool = False

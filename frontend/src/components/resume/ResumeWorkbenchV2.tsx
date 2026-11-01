@@ -20,7 +20,11 @@ import type { ResumeDetail, ResumeLanguage, ResumeLayout } from "../../types";
 import type { DocumentConversionSummary } from "../../types/resume";
 import type { DocumentFieldCatalog, ResumeDocument } from "../../types/resumeDocument";
 import type { ResumeDocumentPipeline } from "../../features/resume-document/types";
-import { layoutFromDetail, documentName } from "../../features/resume-document/resumeDocumentHost";
+import {
+  asResumeDocument,
+  documentName,
+  layoutFromDetail,
+} from "../../features/resume-document/resumeDocumentHost";
 import { useOpenLayoutBaseline } from "../../features/resume-document/useOpenLayoutBaseline";
 import { useMediaQuery } from "../../hooks/useMediaQuery";
 import { useResumeTemplateCatalog } from "../../hooks/useResumeTemplateCatalog";
@@ -40,6 +44,7 @@ import PhraseLibraryPanelV2 from "./assets/PhraseLibraryPanelV2";
 import SourceChainPanelV2 from "./sources/SourceChainPanelV2";
 import BilingualWorkspaceV2 from "./bilingual/BilingualWorkspaceV2";
 import ProfileFillMenu from "./ProfileFillMenu";
+import { useAssetCollect } from "../../features/resume-assets/useAssetCollect";
 import PreflightModal from "./preflight/PreflightModal";
 import VersionsModal from "./versions/VersionsModal";
 import type { VersionRestoreOut } from "../../features/resume-versions/types";
@@ -47,9 +52,15 @@ import { useWorkbenchV2Shortcuts } from "./useWorkbenchV2Shortcuts";
 import { useWorkbenchV2Preflight } from "./useWorkbenchV2Preflight";
 import { useWorkbenchColumns } from "./useWorkbenchColumns";
 import { useWorkbenchV2History } from "./useWorkbenchV2History";
+import { useWorkbenchSelectionSync } from "./useWorkbenchSelectionSync";
 import { useWorkbenchV2Save } from "./useWorkbenchV2Save";
 import { useWorkbenchCloseGuard } from "./useWorkbenchCloseGuard";
-import { highlightTargetsForPath, useCanvasPathHighlight } from "./structure/structureHighlight";
+import {
+  highlightTargetsForPath,
+  STRUCTURE_HIGHLIGHT_SELECTED_DECLARATION,
+  STRUCTURE_HIGHLIGHT_SELECTED_STYLE_ID,
+  useCanvasPathHighlight,
+} from "./structure/structureHighlight";
 import "./workbench-v2.css";
 
 export interface ResumeWorkbenchV2Props {
@@ -98,19 +109,6 @@ export interface ResumeWorkbenchV2Props {
   contextSnapshot?: GenerationContextSnapshot | null;
 }
 
-/** 宿主可能传 v1 夹具/未加载内容进来：非合法 v2 文档一律当"没有文档"。 */
-function asDocument(value: ResumeDocument | null | undefined): ResumeDocument | null {
-  if (!value) return null;
-  if (
-    value.version !== 2 ||
-    !Array.isArray(value.sections) ||
-    !Array.isArray(value.header?.items)
-  ) {
-    return null;
-  }
-  return value;
-}
-
 export default function ResumeWorkbenchV2({
   open,
   html,
@@ -153,19 +151,18 @@ export default function ResumeWorkbenchV2({
   const [canvasNode, setCanvasNode] = useState<HTMLElement | null>(null);
   const columns = useWorkbenchColumns();
   const [openPanel, setOpenPanel] = useState<"params" | "content" | null>(null);
-  const [selectedPath, setSelectedPath] = useState<string | null>(null);
-  // U7 结构树多选 = 样式页签的批量目标：同一份状态同时喂给 StructurePanel 与
-  // TypographyToolsPanelV2，勾选/多选框任一处理都写这里，不再各存一份。
-  const [multiSelectedPaths, setMultiSelectedPaths] = useState<string[]>([]);
+  // 选中态（R-14）：selectedPath / 多选 / hover / 两个定位 nonce 收进一个 hook，
+  // 组件里只保留"哪个来源"的判定。多选 = 样式页签的批量目标，同时喂给结构树与排版面板。
+  const selection = useWorkbenchSelectionSync(`${resumeId ?? ""}|${open ? "open" : "closed"}`);
+  const { selectedPath, multiSelectedPaths, hoverPath, selectPath } = selection;
   const [sourceAdoptOpen, setSourceAdoptOpen] = useState(false);
-  // 纸面点击的 nonce：同一路径连点两次也要重新展开/定位（与旧大纲同一口径）。
-  const [pickNonce, setPickNonce] = useState(0);
-  const [hoverPath, setHoverPath] = useState<string | null>(null);
   const [conversionDismissed, setConversionDismissed] = useState(false);
+  // #19：右键「收藏当前要点」的宿主接线（与资产库头部快捷同一套 API / Toast / 刷新）。
+  const { collectAsset, refreshToken: phraseRefreshToken } = useAssetCollect(resumeId);
   const baseline = useOpenLayoutBaseline(open, layout);
   // 只读宿主（生成流程未保存预览）可能没有 content：中栏与实时预览不启动，
   // 也不把 v1 结构写进 v2 保存链路；HTML 预览照常渲染。
-  const safeDocument = useMemo(() => asDocument(document), [document]);
+  const safeDocument = useMemo(() => asResumeDocument(document), [document]);
   const editorEnabled = Boolean(safeDocument && layout);
   const history = useWorkbenchV2History({
     resumeId,
@@ -203,20 +200,8 @@ export default function ResumeWorkbenchV2({
   useEffect(() => {
     onEditorDirtyChange?.(save.dirty);
   }, [onEditorDirtyChange, save.dirty]);
-  // 切换简历 / 关闭工作台后重开：多选是"当前这份文档"的批量目标，不能跨文档残留。
-  // 与 usePaginationReport 同一做法——在渲染期对齐到当前文档身份，而不是在 effect 里
-  // setState 多出一拍陈旧选中态。
-  const multiOwner = `${resumeId ?? ""}|${open ? "open" : "closed"}`;
-  const [prevMultiOwner, setPrevMultiOwner] = useState(multiOwner);
-  if (prevMultiOwner !== multiOwner) {
-    setPrevMultiOwner(multiOwner);
-    setMultiSelectedPaths([]);
-  }
-  // 纸面点击 → 选中字段（中栏 DocumentEditor 自动切页签并定位）。
-  const pickFromPaper = useCallback((path: string) => {
-    setSelectedPath(path);
-    setPickNonce((value) => value + 1);
-  }, []);
+  // 纸面点击 → 选中字段（中栏 DocumentEditor 自动切页签并定位；右栏不再二次滚动）。
+  const pickFromPaper = selection.pickFromPaper;
   // Q03：全站快捷键体系（设置页可改键；输入框内 undo/redo 让给浏览器原生）。
   useWorkbenchV2Shortcuts({
     undo: history.undo,
@@ -238,7 +223,7 @@ export default function ResumeWorkbenchV2({
   const handleVersionRestored = useCallback(
     (result: VersionRestoreOut) => {
       const restored = result.resume as unknown as ResumeDetail;
-      const nextDocument = asDocument(restored.content);
+      const nextDocument = asResumeDocument(restored.content);
       if (!nextDocument) return;
       const nextLayout = layoutFromDetail(restored);
       onAdoptDocument?.(nextDocument, result.revision);
@@ -248,11 +233,18 @@ export default function ResumeWorkbenchV2({
     [history, onAdoptDocument, onApplyLayout],
   );
   // 编辑器 hover → 右栏对应行描边（与结构面板同一套 iframe 注入）。
-  const highlightTargets = useMemo(
-    () => highlightTargetsForPath(hoverPath ?? selectedPath),
-    [hoverPath, selectedPath],
-  );
-  useCanvasPathHighlight({ targets: highlightTargets, container: canvasNode, reveal: null });
+  const selectedTargets = useMemo(() => highlightTargetsForPath(selectedPath), [selectedPath]);
+  const hoverTargets = useMemo(() => highlightTargetsForPath(hoverPath), [hoverPath]);
+  // R-14：选中档（20% / 2px）与悬停档（14% / 1px）用不同 style id 各画一层，
+  // 悬停扫过不会把刚选中的那一行擦淡；`reveal` 只吃编辑器/面板来源的 nonce。
+  useCanvasPathHighlight({
+    targets: selectedTargets,
+    container: canvasNode,
+    reveal: selection.canvasReveal,
+    styleId: STRUCTURE_HIGHLIGHT_SELECTED_STYLE_ID,
+    declaration: STRUCTURE_HIGHLIGHT_SELECTED_DECLARATION,
+  });
+  useCanvasPathHighlight({ targets: hoverTargets, container: canvasNode });
   const closeGuard = useWorkbenchCloseGuard({
     dirty: save.dirty,
     layoutDirty: save.layoutDirty,
@@ -287,8 +279,9 @@ export default function ResumeWorkbenchV2({
         revision={documentPipeline?.revision ?? null}
         selectedPath={selectedPath}
         onInsertDocument={adoptDocumentFromPanel}
-        onSelectPath={setSelectedPath}
+        onSelectPath={(path) => selectPath(path, "editor")}
         onApplyDocument={applyDocumentFromPanel}
+        refreshToken={phraseRefreshToken}
       />
     ) : null;
   /**
@@ -337,12 +330,17 @@ export default function ResumeWorkbenchV2({
         document={history.document}
         onChange={history.recordDraft}
         selectedPath={selectedPath}
-        onSelectPath={setSelectedPath}
-        onHoverPath={setHoverPath}
+        onSelectPath={(path) => selectPath(path, "editor")}
+        onHoverPath={selection.setHoverPath}
+        // R-14：任何来源的选中都让中栏滚到对应条目（纸面点击也滚，因为页签可能刚切过去）。
+        revealNonce={selection.editorReveal?.nonce ?? 0}
         readOnly={sourceAdoptOpen}
         fieldCatalog={fieldCatalog}
+        layout={history.layout}
+        onLayoutChange={history.recordLayout}
         conversion={showConversion ? conversion : null}
         onDismissConversion={() => setConversionDismissed(true)}
+        onCollectAsset={(path) => void collectAsset(path)}
         fillMenu={
           resumeId && safeDocument ? (
             <ProfileFillMenu
@@ -373,10 +371,12 @@ export default function ResumeWorkbenchV2({
       document={history.document}
       onDocumentChange={(next) => history.commitDocument(next)}
       selectedPath={selectedPath}
-      onSelectPath={setSelectedPath}
+      // 结构树自己会 `reveal`（useStructurePanel），这里只把来源标成 structure：
+      // 不额外递增 canvasReveal，避免同一目标被两路 smooth 滚动排队。
+      onSelectPath={(path) => selectPath(path, "structure")}
       multiSelectedPaths={multiSelectedPaths}
-      onMultiSelectedPathsChange={setMultiSelectedPaths}
-      pickTarget={selectedPath ? { path: selectedPath, nonce: pickNonce } : null}
+      onMultiSelectedPathsChange={selection.setMultiSelectedPaths}
+      pickTarget={selectedPath ? { path: selectedPath, nonce: selection.pickNonce } : null}
       canvasContainer={canvasNode}
       history={history.historyTab}
       fieldCatalog={fieldCatalog}
@@ -490,7 +490,7 @@ export default function ResumeWorkbenchV2({
         onClose={() => setVersionsOpen(false)}
         resumeId={resumeId ?? undefined}
         currentRevision={documentPipeline?.revision ?? undefined}
-        currentContent={history.document as unknown as Record<string, unknown>}
+        currentContent={history.document}
         onRestored={handleVersionRestored}
       />
     </WorkbenchModalFrame>

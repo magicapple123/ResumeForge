@@ -11,6 +11,7 @@ import json
 import logging
 from typing import Any
 
+from ...schemas.resume import ResumeContent
 from ..profile.profile_budget import build_job_prompt_text
 from ..profile.profile_relevance import (
     build_general_consumed_profile_context,
@@ -21,63 +22,11 @@ from ..profile.profile_relevance import (
 from .resume_generation_helpers import has_extended_facts
 from .resume_quality import _quality_reference_points
 from .resume_rationale import build_generation_rationale
-from .resume_templates import font_scale_spec
 
 # 控制总输入体积：先筛选资料，再为 JD 保留独立预算，避免超长资料/JD 挤掉彼此。
 MAX_JD_CHARS = 5_000
 MAX_PROFILE_CHARS = 9_000
 
-# 三档只控制对描述性字段的改写幅度；结构化事实始终由代码强制锚定。
-ENHANCEMENT_LEVEL_GUIDES = {
-    "light": (
-        "轻度美化：只优化语序、动词和专业表达，保持原有要点数量与职责边界；"
-        "每条内容应能直接对应原资料或参考事实。原描述为空但存在 reference_facts 时，"
-        "提炼 1-2 条最相关事实，不能继续留空。"
-    ),
-    "balanced": (
-        "均衡美化：可围绕 JD 重组原有事实，补足动作、方法和业务目的，使表达更扎实；"
-        "允许合并同一条目内的相关证据，但不得推导未明确提供的结果。含 reference_facts "
-        "的相关条目在可用事实达到 2 条时，应将 description/highlights 合计写成 2-4 条。"
-    ),
-    "strong": (
-        "深度美化：充分挖掘同一条目及 reference_facts/reference_excerpt 中的岗位相关证据，"
-        "以专业简历语言展开技术决策、实施过程和价值，可以增加描述要点。存在至少 3 条 "
-        "reference_facts 时，必须将 description/highlights 合计写成 3-5 条；不足 3 条时全部"
-        "使用，不得为凑数虚构。每个事实都必须能追溯到该条目来源。"
-    ),
-}
-
-_ENHANCEMENT_DISABLED_GUIDE = (
-    "美化拓展已关闭：只能选择、排序并精确回填候选资料中的原文要点；"
-    "不得合并、改写或扩充 description、highlights 和 summary。"
-)
-
-# 单页 A4 在不同字号下的汉字预算（含标题、联系方式等全部版面文字）。
-# 数字是经验值，只用来给模型一个明确的篇幅目标，不参与任何校验。
-_PAGE_CHAR_BUDGET = {
-    "small": (850, 1100),
-    "standard": (650, 880),
-    "large": (550, 720),
-}
-
-
-def build_layout_guide(page_limit: int, font_scale: str) -> str:
-    """把「页数 + 字号」翻译成模型可执行的篇幅要求。"""
-    spec = font_scale_spec(font_scale)
-    low, high = _PAGE_CHAR_BUDGET.get(spec["name"], _PAGE_CHAR_BUDGET["standard"])
-    if page_limit <= 1:
-        return (
-            f"目标篇幅：1 页 A4、{spec['label']}。整份简历（含联系方式与全部文字）"
-            f"控制在 {low}-{high} 个汉字以内：每段经历保留 2-3 条最相关的要点，"
-            "每条要点 25-35 字，个人总结不超过 100 字。宁可少写，也不要为了完整而超出篇幅。"
-        )
-    total_low = low * page_limit
-    total_high = high * page_limit
-    return (
-        f"目标篇幅：最多 {page_limit} 页 A4、{spec['label']}。整份简历控制在 "
-        f"{total_low}-{total_high} 个汉字以内：优先写满第一页，确有必要再用第二页；"
-        "不要为了填满页数而堆砌次要内容，也不要留下大半页空白。"
-    )
 # ===== F3：按当前组（消费快照）生成时的提示词补充 =====
 #
 # 旧路径（ProfileOut 全量候选）的提示词保持逐字节不变：以下补充文本只在生成链路
@@ -105,10 +54,11 @@ _CONSUMED_SYSTEM_SUPPLEMENT = '''
    校园经历、荣誉奖项、个人总结/自我评价、学术成果、科研项目、知识产权、证书资质、语言能力。
    只描述候选资料里**实际出现的分区**：没有出现的分区不要猜、不要补造，也不要把内容写进
    其它分区。某个分区出现但数组为空，表示用户这次没有提供该分区的内容。
-2. 自定义字段：候选条目里的 custom_fields 是用户自定义的小字段。必须逐条以「标签：值」的
-   独立行追加到该条目的承载区文本末尾（项目描述 / 工作内容 / 经历描述 / 奖项说明 / 备注 /
-   熟练度），**标签名必须逐字保留**，不得改写、不得合并进已有句子。仅素材分区（基本信息、
-   知识产权）的 custom_fields 只作事实参考，不得写进任何输出字段。
+2. 自定义字段：候选条目里的 custom_fields 是用户自定义的小字段。与目标岗位或简历主线
+   **相关**的自定义字段，以「标签：值」的独立行追加到该条目的承载区文本末尾（项目描述 /
+   工作内容 / 经历描述 / 奖项说明 / 备注 / 熟练度），标签名必须逐字保留，不得改写、
+   不得合并进已有句子；与主线无关的自定义字段可以省略（#23：干扰文本不自动入稿）。
+   仅素材分区（基本信息、知识产权）的 custom_fields 只作事实参考，不得写进任何输出字段。
 3. 语言能力：候选资料里的 languages 单独给出。必须把它们映射为输出的 skills 条目：
    name=语言，level 按「水平/等级 · 证书 · 分数」的顺序取非空段、以 「 · 」连接
    （例如「CET-6 · 550」）；不得把取得时间写进 level；语言条目排在所有技能条目之后，
@@ -237,7 +187,16 @@ def render_generation_messages(
     scoped: bool,
 ) -> list[dict[str, str]]:
     """渲染系统/用户提示词；scoped=True 时追加 v3（13 分区/语言/自定义字段）规则。"""
-    system_prompt = env.get_template("resume_generate_system.md").render(job=job) + "\n"
+    system_prompt = (
+        env.get_template("resume_generate_system.md").render(
+            job=job,
+            # #33：字数/条数上限随档位变化（写死会与深度档的展开指令互相抵消）。
+            point_rules=ENHANCEMENT_POINT_RULES.get(
+                options.enhancement_level, ENHANCEMENT_POINT_RULES["balanced"]
+            ),
+        )
+        + "\n"
+    )
     if scoped:
         system_prompt += _CONSUMED_SYSTEM_SUPPLEMENT
     user_prompt = env.get_template("resume_generate_user.md").render(
@@ -253,7 +212,12 @@ def render_generation_messages(
         focus_skills="、".join(selection.focus.skills) or "未识别到明确技能，请以 JD 原文为准",
         focus_domains="、".join(selection.focus.domains) or "通用岗位",
         omitted_count=sum(selection.omitted_counts.values()),
-        layout_guide=build_layout_guide(options.page_limit, options.font_scale),
+        layout_guide=build_layout_guide(
+            options.page_limit, options.font_scale, options.enhancement_level
+        ),
+        point_rules=ENHANCEMENT_POINT_RULES.get(
+            options.enhancement_level, ENHANCEMENT_POINT_RULES["balanced"]
+        ),
         custom_instruction=options.custom_instruction.strip(),
         claim_baseline=baseline.baseline_text if baseline else "",
         blocked_wording=baseline.blocked_wording if baseline else [],
@@ -292,8 +256,11 @@ async def repair_resume_json(
     budget: Any,
     total_budget: Any,
     usage_records: list[Any],
-) -> tuple[Any, str | None]:
-    """格式修复段（F3 拆分产物）：返回 (解析后的简历, 错误文案)；错误文案非空即终止。"""
+) -> tuple[ResumeContent | None, str | None]:
+    """格式修复段（F3 拆分产物）：返回 (解析后的简历, 错误文案)；错误文案非空即终止。
+
+    两个元素都可能为 None：错误文案非空时简历一定是 None（调用方据此直接报错）。
+    """
     from ..llm.base import LLMError
     from .resume_generation_helpers import (
         begin_budget_segment,
@@ -334,7 +301,7 @@ async def run_quality_retry(
     budget: Any,
     total_budget: Any,
     usage_records: list[Any],
-) -> Any | None:
+) -> ResumeContent | None:
     """质量重试段（F3 拆分产物）：返回通过门槛的重试结果；不通过返回 None 沿用首轮。"""
     from .resume_generation_helpers import (
         begin_budget_segment,
@@ -498,3 +465,12 @@ def build_rationale(
         baseline_confirmed=baseline_confirmed,
         fallback_sections=selection_data["fallback_sections"],
     )
+
+# 拆分后的 re-export（resume_generator / 测试的旧 import 路径不断）。
+from .resume_generation_levels import (  # noqa: E402,F401
+    _ENHANCEMENT_DISABLED_GUIDE,
+    _PAGE_CHAR_BUDGET,
+    ENHANCEMENT_LEVEL_GUIDES,
+    ENHANCEMENT_POINT_RULES,
+    build_layout_guide,
+)

@@ -13,6 +13,8 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-li
 import type { ComponentProps } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { TEMPLATE_CATALOG } from "../../test/resumeFixtures";
+import { MOCK_PRIMARY } from "../../test/bilingualMock";
+import { t } from "../../i18n";
 import type { ResumeLayout } from "../../types";
 import { DEFAULT_LAYOUT } from "../ResumeLayoutControls.testkit";
 import ResumeTemplateControls from "./ResumeTemplateControls";
@@ -151,6 +153,29 @@ describe("ResumeTemplateControls · 最大篇幅", () => {
 
     await waitFor(() => expect(onChange).toHaveBeenCalledTimes(1));
     expect(lastLayout(onChange)).toEqual({ ...BASE, page_limit: 2 });
+  });
+});
+
+/**
+ * R-03：试用通道的三个入参（`resumeId` / `content` / `onTrialAdopt`）必须原样传到对比视图，
+ * 少一个的表现是「我的内容」或「采用模板默认」在图库里静默变灰——用户只会觉得功能坏了。
+ */
+describe("ResumeTemplateControls · 模板试用通道", () => {
+  it("传了 content 与 onTrialAdopt：「我的内容」可用、「采用模板默认」可点", async () => {
+    renderGroup({ content: MOCK_PRIMARY, onTrialAdopt: vi.fn() });
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: t("sections.templateControls.templateAriaLabel") }),
+    );
+    fireEvent.click(await screen.findByRole("button", { name: t("trial.action.open") }));
+
+    // 有正文就默认看「我的内容」（不需要简历 id 也能预览，只是不测页数）：
+    // Segmented 的选中态在 jsdom 里只落 `checked` 属性，改用该模式的说明文字判定。
+    const current = await screen.findByRole("radio", { name: t("trial.mode.current") });
+    expect(current).not.toBeDisabled();
+    expect(screen.getByText(t("trial.mode.currentNote"))).toBeInTheDocument();
+    // 采纳入参在 → 宿主持有"清空覆盖"的通道，这一项才允许点。
+    expect(screen.getByRole("radio", { name: t("trial.override.reset") })).not.toBeDisabled();
   });
 });
 

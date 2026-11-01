@@ -54,6 +54,7 @@ from ..models.profile import utcnow
 from ..runtime import dataset_scope
 from ..runtime.dataset_scope import DatasetLease, DatasetScopeError
 from ..runtime.log_context import run_with_bound_context
+from ..services.llm import usage_tasks as _usage_scope
 from ..services.llm.base import LLMError
 from .ai_task_registry import (
     AiTaskCanceled,
@@ -64,6 +65,14 @@ from .ai_task_registry import (
 from .resume.resume_runner_loop import RunnerEventLoopHandle
 
 logger = logging.getLogger(__name__)
+
+
+# #35：kind → 输入范围（入口→范围 列来源；未登记 kind 记 unspecified）。
+_SCOPE_BY_KIND: dict[str, str] = {
+    "resume_generate": "resume+profile+job", "job_analysis": "job",
+    "job_match": "job+resume", "resume_risk": "resume",
+    "resume_rewrite": "resume+job", "webform_fill": "profile+webform",
+}
 
 
 class AiTaskRunnerError(Exception):
@@ -286,6 +295,15 @@ class AiTaskRunner:
         factory: Callable[[], Session],
     ) -> None:
         session = factory()
+        # R40 账本任务名 + #35 输入边界四字段（provider 结束时一并落账）。
+        _usage_scope.set_ambient_task(_usage_scope.task_for_ai_kind(kind))
+        # A1：payload 未声明 language/budget 时按 kind 默认口径补齐（审计不能是 null/空串）。
+        _usage_scope.set_ambient_scope(
+            input_scope=_SCOPE_BY_KIND.get(kind, "unspecified"),
+            masked=bool(payload.get("masked", True)),
+            language=str(payload.get("language") or _usage_scope.DEFAULT_AUDIT_LANGUAGE),
+            budget=payload["budget"] if isinstance(payload.get("budget"), int) else _usage_scope.budget_for_ai_kind(kind),
+        )
         context = AiTaskContext(
             task_id=task_id,
             kind=kind,

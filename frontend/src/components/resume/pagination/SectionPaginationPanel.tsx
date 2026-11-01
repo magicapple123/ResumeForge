@@ -16,6 +16,10 @@
  * Q09：顶部固定说明 +「切到精确预览」（宿主控制预览口径，不传则不渲染，避免死控件）；
  * 本会话第一次拨动任一断页开关时给一条 ≤20 字轻提示。
  *
+ * R-07（审计）：逐板块开关从「每行两段文字 + 两个开关」改成**表头化的 grid 表**
+ * （列名只在表头写一次、`aria-hidden`），行内只留开关；已设断页的板块名前置 5px 圆点。
+ * 两个开关的读屏名拆成「板块名」+ 开关名，`getAllByRole("switch")` 两两不重复。
+ *
  * 数据落点（v2 唯一真相）：
  * - 板块级：`document.sections[i].layout.start_on_new_page / keep_together`；
  * - 条目级：`document.sections[i].entries[j].layout.*`（本文件的汇总/清除与结构页签同源）。
@@ -147,50 +151,56 @@ export default function SectionPaginationPanel({
         ) : null}
       </div>
 
-      <Flex vertical gap={4} className="resume-section-pagination-sections">
+      {/* R-07：行改 grid（`minmax(0,1fr) 44px 52px`），列名只在表头写一次。
+          坑：antd `<Flex>` 是 div + inline style，`className` 上的 grid 会被 inline
+          `display:flex` 压住，所以行与表头都用原生 div。表头 aria-hidden ——
+          语义由每行的两个开关承载，不给读屏重复播报。 */}
+      <div className="resume-section-pagination-table">
+        <div className="resume-section-pagination-header" aria-hidden="true">
+          <span className="resume-section-pagination-col-name" />
+          <span className="resume-section-pagination-col-flag">
+            {t("pagination.header.startOnNewPage")}
+          </span>
+        </div>
         {document.sections.map((section) => {
           const name = sectionDisplayLabel(section);
+          // 已设置断页（任一开关为 true）的板块给一个 5px 圆点：一眼扫出"哪些板块设了"。
+          const configured = Boolean(section.layout.start_on_new_page);
           return (
-            <Flex
+            <div
               key={section.key}
-              align="center"
-              justify="space-between"
-              gap={8}
-              wrap
               className="resume-section-pagination-row"
               data-section-pagination={section.key}
             >
-              <span className="resume-section-pagination-name">{name}</span>
-              <Flex align="center" gap={12} wrap>
-                <Flex align="center" gap={4}>
-                  <Typography.Text>{t("pagination.breakBefore")}</Typography.Text>
-                  <Switch
-                    size="small"
-                    checked={section.layout.start_on_new_page}
-                    disabled={disabled || undefined}
-                    aria-label={t("structure.pagination.sectionAria", { name })}
-                    title={t("pagination.breakBefore.hint")}
-                    onChange={(checked) =>
-                      setSectionFlag(section.key, { start_on_new_page: checked })
-                    }
+              <span className="resume-section-pagination-name" title={name}>
+                {configured ? (
+                  <span
+                    className="resume-section-pagination-dot"
+                    aria-hidden="true"
+                    title={t("pagination.sectionConfigured")}
                   />
-                </Flex>
-                <Flex align="center" gap={4}>
-                  <Typography.Text>{t("structure.pagination.keepTogether")}</Typography.Text>
-                  <Switch
-                    size="small"
-                    checked={section.layout.keep_together}
-                    disabled={disabled || undefined}
-                    aria-label={t("structure.pagination.sectionAria", { name })}
-                    title={t("structure.pagination.keepTogetherHint")}
-                    onChange={(checked) => setSectionFlag(section.key, { keep_together: checked })}
-                  />
-                </Flex>
-              </Flex>
-            </Flex>
+                ) : null}
+                <span className="resume-section-pagination-name-text">{name}</span>
+              </span>
+              <span className="resume-section-pagination-switch">
+                <Switch
+                  size="small"
+                  checked={section.layout.start_on_new_page}
+                  disabled={disabled || undefined}
+                  aria-label={t("pagination.sectionAria", {
+                    name,
+                    flag: t("pagination.breakBefore"),
+                  })}
+                  title={t("pagination.breakBefore.hint")}
+                  onChange={(checked) =>
+                    setSectionFlag(section.key, { start_on_new_page: checked })
+                  }
+                />
+              </span>
+            </div>
           );
         })}
-      </Flex>
+      </div>
 
       <Flex
         vertical

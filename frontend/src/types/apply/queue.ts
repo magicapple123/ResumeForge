@@ -120,6 +120,14 @@ export interface ApplyRecord {
   failure_category: string;
   failure_label: string;
   failure_detail: string;
+  /**
+   * #39：失败三段稳定码（后端 0073）。都是协议值，展示名与「你该怎么做」在前端语言包：
+   * 在哪一步（opening/…/unknown）、卡在哪个控件（chat_input 等）、为什么失败
+   * （site_changed / render_timeout / page_not_navigated 等）。可选：旧响应没有。
+   */
+  failure_step?: string;
+  failure_target?: string;
+  failure_reason?: string;
   attempt: number;
   created_at: string;
   finished_at: string | null;
@@ -131,6 +139,13 @@ export interface ApplyRecord {
  * 一次「开始投递」= 一个批次；用户一次性投 N 个岗位时，这 N 条记录同属一组。
  * 组头上的统计是该批次自己的账（不随筛选变化），组内是命中的记录。
  */
+/** #39：组头同因聚合项——本批某个失败分类的条数（label 已由后端按枚举翻好）。 */
+export interface ApplyFailureCount {
+  category: string;
+  label: string;
+  count: number;
+}
+
 export interface ApplyRecordBatch {
   id: number;
   status: TaskStatus;
@@ -147,7 +162,13 @@ export interface ApplyRecordBatch {
    * items，组头用它展示「N 条记录」；展开时再拉明细。可选：旧响应里没有。
    */
   matched_count?: number;
+  /**
+   * #39：「只重试这 N 条」里的 N——命中当前筛选、状态为失败的记录数。
+   * 与 matched_count 分开：后者含成功/跳过，能重投的只有失败的那些。
+   */
+  retryable_count?: number;
   items: ApplyRecord[];
+  failure_summary: ApplyFailureCount[];
 }
 
 export interface GreetingPreview {

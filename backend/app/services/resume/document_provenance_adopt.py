@@ -147,6 +147,9 @@ def adopt_source_text(
     target = resolve_adopt_target(record, link, path, document=document)
     new_content = copy.deepcopy(document)
     node = resolve_document_path(new_content, target)
+    if node is None:
+        # 目标路径在文档里解析不出节点：这条采纳没有落点（与下面「不是一段可写文本」同口径）。
+        raise AdoptError("目标位置不是一段可写入的文本，无法采纳")
     value: str | list[str] = cleaned
     if node.item is not None and node.item.get("kind") == "list" and not node.suffix:
         hidden = set(node.item.get("hidden_values") or [])

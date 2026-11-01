@@ -109,6 +109,16 @@ describe("ActionProposalCard", () => {
     expect(screen.getByText("已执行")).toBeTruthy();
     expect(getWriteProposal).not.toHaveBeenCalled();
   });
+
+  it("执行后显示服务端给的结果摘要（含自动留档的撤销点）", () => {
+    renderCard(
+      proposal({
+        status: "executed",
+        result_summary: "snapshot note: rollback version saved",
+      }),
+    );
+    expect(screen.getByText(/rollback version saved/)).toBeTruthy();
+  });
 });
 
 describe("写入提案的终态渲染（RR-05）", () => {

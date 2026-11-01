@@ -21,6 +21,7 @@ import { useState } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { t } from "../../i18n";
 import { makeResumeDetail, makeResumeDocument } from "../../test/documentHarness";
+import { headerFieldInput } from "../../test/headerChip";
 import { TEMPLATE_CATALOG } from "../../test/resumeFixtures";
 import type { ResumeDetail, ResumeDocument, ResumeLayout } from "../../types";
 import type { ResumeDocumentPipeline } from "../../features/resume-document/types";
@@ -183,10 +184,9 @@ function topCancel(): HTMLElement | null {
   });
 }
 
+/** #10：页眉字段是 chip，值输入框在展开态里（见 src/test/headerChip.ts）。 */
 function nameInput(): HTMLInputElement {
-  return screen.getByRole("textbox", {
-    name: t("document.headerField.name"),
-  }) as HTMLInputElement;
+  return headerFieldInput("document.headerField.name");
 }
 
 /**

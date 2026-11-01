@@ -22,12 +22,11 @@
  */
 import type { MessageKey } from "../i18n";
 
-/** 12 个可覆盖属性（与后端 `STYLE_PROPS` 的键逐字相等）。 */
+/** 11 个可覆盖属性（与后端 `STYLE_PROPS` 的键逐字相等；#5d 移除斜体）。 */
 export type StylePropKey =
   | "font_scale"
   | "color"
   | "bold"
-  | "italic"
   | "space_before"
   | "space_after"
   | "line_height"
@@ -54,7 +53,6 @@ export const STYLE_PROP_KINDS: Record<StylePropKey, StylePropKind> = {
   font_scale: "number",
   color: "color",
   bold: "bool",
-  italic: "bool",
   space_before: "number",
   space_after: "number",
   line_height: "number",
@@ -106,7 +104,6 @@ export const STYLE_PROP_LABELS: Record<StylePropKey, MessageKey> = {
   font_scale: "typography.prop.font_scale",
   color: "typography.prop.color",
   bold: "typography.prop.bold",
-  italic: "typography.prop.italic",
   space_before: "typography.prop.space_before",
   space_after: "typography.prop.space_after",
   line_height: "typography.prop.line_height",
@@ -127,7 +124,6 @@ export const STYLE_PROP_LABELS: Record<StylePropKey, MessageKey> = {
 export const STYLE_PROP_FALLBACKS: Partial<Record<StylePropKey, number | string | boolean>> = {
   font_scale: 1,
   bold: false,
-  italic: false,
   space_before: 0,
   space_after: 0,
   line_height: 1.7,

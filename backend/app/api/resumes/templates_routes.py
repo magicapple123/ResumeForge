@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 from ...database import get_db
 from ...schemas.resume_generation import LONG_CV_DEFAULT_PAGE_LIMIT, MODE_PAGE_LIMITS
 from ...services.pdf_exporter import font_available
+from ...services.profile.workspace_bootstrap import active_custom_sections
 from ...services.resume.resume_sections import (
     DEFAULT_SECTION_ORDER,
     profile_section_order_keys,
@@ -75,8 +76,14 @@ def read_resume_templates(db: Session = Depends(get_db)):
         "style_fields": format_field_options() + style_field_options(),
         # 正文分区清单（给「调整板块顺序」用）。键名、标签与顺序定义都在
         # services/resume/resume_sections.py，四个渲染器读的是同一份。
+        # #24：自建板块（custom:<section_id>）也进列表——否则用户永远无法把它插进
+        # 生成顺序里；排序语义由 document_converter._ordered_sections 按同一份键处理。
         "section_options": [
-            {"key": key, "label": section_label(key)} for key in DEFAULT_SECTION_ORDER
+            *[{"key": key, "label": section_label(key)} for key in DEFAULT_SECTION_ORDER],
+            *[
+                {"key": row.key, "label": row.name, "custom": True}
+                for row in active_custom_sections(db)
+            ],
         ],
         "default_section_order": list(DEFAULT_SECTION_ORDER),
         # 生成界面用的默认顺序：跟随用户在「我的资料」里排好的顺序。

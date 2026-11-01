@@ -233,6 +233,13 @@ export default function ResumeDetailPreview({
           <ResumeTemplateControls
             layout={layout}
             catalog={catalog}
+            // R-03：模板试用通道与制作台同一套接线（「我的内容」/「采用模板默认」）。
+            // 这里是「预览 / 导出」入口，没有撤销栈——采纳一次即写 layout，由宿主保存。
+            resumeId={detail.id}
+            content={detail.content}
+            onTrialAdopt={({ template, formatConfig }) =>
+              onApplyLayout({ ...layout, template, format_config: formatConfig })
+            }
             onChange={(next) => onApplyLayout(next)}
           />
         }

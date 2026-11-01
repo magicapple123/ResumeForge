@@ -124,7 +124,6 @@ export function useResumeLivePreview({
   useEffect(() => {
     debounceRef.current = debounceMs;
   }, [debounceMs]);
-
   // ── 状态机（全部是 ref：它们描述"这一帧之外"的事实，不该触发渲染）──
   const pendingRef = useRef<ResumeLivePreviewJob | null>(null);
   const lastJobRef = useRef<ResumeLivePreviewJob | null>(null);
@@ -138,6 +137,14 @@ export function useResumeLivePreview({
   /** 首帧基线：内容引用 + 版式签名。 */
   const lastContentRef = useRef<ResumeDocument | null>(null);
   const lastLayoutRef = useRef<string | null>(null);
+  /** 最近一次渲染的入参：`resume()` 用它判断"挂起期间内容是否变过"。 */
+  const latestJobRef = useRef<{ content: ResumeDocument | null; layout?: ResumeLayout }>({
+    content: null,
+  });
+  // 最新入参跟着渲染走：`resume()` 是命令式回调，读不到渲染作用域的 props。
+  useEffect(() => {
+    latestJobRef.current = { content, layout };
+  }, [content, layout]);
   /** `pump` / `rearm` 互相调用（完成后再跑末版 / 预算用完就重新防抖），只能靠 ref 打破环。 */
   const pumpRef = useRef<() => void>(() => undefined);
   const rearmRef = useRef<(job: ResumeLivePreviewJob | null) => void>(() => undefined);
@@ -247,12 +254,14 @@ export function useResumeLivePreview({
     const signature = JSON.stringify(layout);
     const first = lastContentRef.current === null && lastLayoutRef.current === null;
     if (lastContentRef.current === content && lastLayoutRef.current === signature) return;
+    // R-32：**挂起期间不记基线**。以前这里先写 `lastContentRef/lastLayoutRef` 再 return，
+    // 保存期间隐藏/删除字段的改动被记成"已渲染过"，`resume()` 回来一比对就认为没变化，
+    // 纸面于是停在旧一版（用户看到"隐藏了但纸面还在"）。基线只描述"真的排过的那一版"。
+    if (suspendedRef.current) return;
     lastContentRef.current = content;
     lastLayoutRef.current = signature;
     // 首帧只记基线：宿主刚渲染过同一份内容，再发一次只是让 iframe 白屏一下。
-    // 保存期间（`suspend` 过）也只记基线：宿主保存完会把权威 html 写回来，此刻发请求既多余，
-    // 又会让状态条卡在「预览更新中…」（挂起时 `pump` 不跑，攒下的 pending 没人接）。
-    if (first || suspendedRef.current) return;
+    if (first) return;
     schedule({ content, layout });
   }, [enabled, content, layout, schedule]);
 
@@ -273,9 +282,24 @@ export function useResumeLivePreview({
     setState("idle");
   }, [clearTimer]);
 
+  /**
+   * 保存结束：交还控制权。
+   *
+   * R-32：挂起期间的内容变化没有记基线（见上面那条 effect），所以这里必须**主动比一次**——
+   * 否则"保存期间改内容"永远等不到下一次 effect（依赖没变），纸面就一直是保存那一刻的版本。
+   * 补排程走 `schedule`（同一套 budget/rearm），不直接 `pump()`：保存刚结束就撞上一次渲染，
+   * `pump` 会绕过防抖把还没敲完的字也排进去。
+   */
   const resume = useCallback(() => {
     suspendedRef.current = false;
-  }, []);
+    const latest = latestJobRef.current;
+    if (!latest.content || !latest.layout) return;
+    const signature = JSON.stringify(latest.layout);
+    if (lastContentRef.current === latest.content && lastLayoutRef.current === signature) return;
+    lastContentRef.current = latest.content;
+    lastLayoutRef.current = signature;
+    schedule({ content: latest.content, layout: latest.layout });
+  }, [schedule]);
 
   // ── 关闭 / 卸载：abort + 清定时器 + 清 pending ──────────────────
   useEffect(() => {

@@ -32,8 +32,17 @@ export function FieldValueEditor({
   const { t } = useI18n();
   if (item.format === "date_range") {
     const { start, end } = splitDateRange(item.value);
+    /**
+     * R-06 ②B：「至」只在**结束值是一个日期**时出现。
+     *
+     * 结束值有三种形态：真实日期（"2023-06"）、空串（还没填）、「至今」（在岗/在读）。
+     * 后两种都不该出现连接词——空串时第二个框自己写着占位「至今」，再挂一个「至」就成了
+     * 「至 至今」；而「至今」本身就是一句话的一部分，前面加「至」读作「至 至今」同样别扭。
+     */
+    const showSeparator = /\d/.test(end);
     return (
-      <div className="document-value-row">
+      <div className="document-field-row is-date-range">
+        <span className="document-field-label-spacer" aria-hidden="true" />
         <Input
           disabled={disabled || undefined}
           aria-label={t("document.field.dateStart")}
@@ -41,6 +50,9 @@ export function FieldValueEditor({
           value={start}
           onChange={(event) => onChange({ value: joinDateRange(event.target.value, end) })}
         />
+        <span className="document-field-sep" aria-hidden="true">
+          {showSeparator ? t("document.field.dateRangeSeparator") : ""}
+        </span>
         <Input
           disabled={disabled || undefined}
           aria-label={t("document.field.dateEnd")}
@@ -52,17 +64,36 @@ export function FieldValueEditor({
     );
   }
   if (item.format === "enum") {
-    const options = enumOptionsOf(catalog, sectionKey, item.key, t);
+    const options = enumOptionsOf(catalog, sectionKey, item.key, t, item.value);
+    // A5：自建枚举字段（key=custom:*、值表不在目录里）没有可枚举的选项——给一个自由输入
+    // 比给一个空下拉好：空下拉既改不了值，又把原始 code 卡在框里；自由输入至少能继续编辑。
+    if (options.length === 0) {
+      return (
+        <div className="document-field-row">
+          <span className="document-field-label">{t("document.field.value")}</span>
+          <Input
+            disabled={disabled || undefined}
+            aria-label={t("document.field.value")}
+            placeholder={t("document.field.enumPlaceholder")}
+            value={item.value}
+            onChange={(event) => onChange({ value: event.target.value })}
+          />
+        </div>
+      );
+    }
     return (
-      <Select
-        disabled={disabled || undefined}
-        aria-label={t("document.field.value")}
-        placeholder={t("document.field.enumPlaceholder")}
-        style={{ width: "100%" }}
-        value={item.value || undefined}
-        options={options}
-        onChange={(value: string) => onChange({ value })}
-      />
+      <div className="document-field-row">
+        <span className="document-field-label">{t("document.field.value")}</span>
+        <Select
+          disabled={disabled || undefined}
+          aria-label={t("document.field.value")}
+          placeholder={t("document.field.enumPlaceholder")}
+          style={{ width: "100%" }}
+          value={item.value || undefined}
+          options={options}
+          onChange={(value: string) => onChange({ value })}
+        />
+      </div>
     );
   }
   const placeholder =
@@ -70,23 +101,28 @@ export function FieldValueEditor({
       ? t("document.field.urlPlaceholder")
       : t("document.field.valuePlaceholder");
   const multiline = item.placement === "body";
-  return multiline ? (
-    <Input.TextArea
-      disabled={disabled || undefined}
-      aria-label={t("document.field.value")}
-      placeholder={t("document.field.textPlaceholder")}
-      autoSize={{ minRows: 2, maxRows: 8 }}
-      value={item.value}
-      onChange={(event) => onChange({ value: event.target.value })}
-    />
-  ) : (
-    <Input
-      disabled={disabled || undefined}
-      aria-label={t("document.field.value")}
-      placeholder={placeholder}
-      value={item.value}
-      onChange={(event) => onChange({ value: event.target.value })}
-    />
+  return (
+    <div className="document-field-row">
+      <span className="document-field-label">{t("document.field.value")}</span>
+      {multiline ? (
+        <Input.TextArea
+          disabled={disabled || undefined}
+          aria-label={t("document.field.value")}
+          placeholder={t("document.field.textPlaceholder")}
+          autoSize={{ minRows: 2, maxRows: 8 }}
+          value={item.value}
+          onChange={(event) => onChange({ value: event.target.value })}
+        />
+      ) : (
+        <Input
+          disabled={disabled || undefined}
+          aria-label={t("document.field.value")}
+          placeholder={placeholder}
+          value={item.value}
+          onChange={(event) => onChange({ value: event.target.value })}
+        />
+      )}
+    </div>
   );
 }
 

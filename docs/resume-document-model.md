@@ -604,7 +604,7 @@ class DocumentPlan(BaseModel):
 | 编辑器 | `components/resume-editor/` | 三区卡：HeadZone（标题 + 元信息）、DetailZone（lead / trail 灰字段行）、BodyZone（正文块）+ 字段位置下拉 + 添加字段；中栏顶部 `ProfileFillMenu`（点开才拉投影、按 source 去重、只补空字段） |
 | 工作台页签 | `components/resume/WorkbenchParamsColumnV2.tsx` | 排版参数 / 本份简历结构 / 双语版本 / 表达资产库 / 来源核对 / 历史（后四个按宿主是否挂载显示；窄屏抽屉同组件） |
 | 排版参数 | 同上 | 文档模式（顶部，仅已有记录）/ 模板与版式 / 排版参数 / 间距 / 外观 / 局部排版 / **局部排版工具** / **分页** / 条目字段排版 |
-| 局部排版工具 | `typography/TypographyToolsPanelV2.tsx` | 条目排版（作用范围：整条 / 条目头 / 正文 / 灰字，分别写 `objects` 与 `object_roles`）/ 文字级别 / 格式刷 / 多选批量；只写 `format_config` 的角色 / 对象域，不动正文 |
+| 局部排版工具 | `typography/TypographyToolsPanelV2.tsx` | 条目排版（作用范围：整条 / 条目头 / 正文 / 灰字，分别写 `objects` 与 `object_roles`）/ 文字级别 / 多选批量；只写 `format_config` 的角色 / 对象域，不动正文 |
 | 分页 | `pagination/SectionPaginationPanel.tsx` | 板块级 `start_on_new_page` / `keep_together` + 已设置断页汇总 / 恢复自然分页；条目级开关在结构页签的条目字段排版内（`EntryLayoutPanel`），经 `onChange` 交宿主记历史与保存 |
 | 结构面板 | `components/resume/structure/` | 树 = 页 / 栏提示 → 板块 → 条目 → 位置分组；拖拽排序、跨组移动、显示 / 隐藏、复制、锁内容 / 锁排版、搜索、与画布联动；条目勾选框 + Shift 连选，与样式页「多选批量」共用宿主的同一份选择状态 |
 | 双语版本 | `components/resume/bilingual/BilingualWorkspaceV2.tsx` | 字段对照基于 v2 **item path**；采纳只写语言变体，**不替换主稿、不推进简历 revision**；「在工作台查看这份译文」打开只读真实版式预览（关掉不影响主稿与脏值） |

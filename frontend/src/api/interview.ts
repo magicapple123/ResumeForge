@@ -17,6 +17,9 @@ import type {
   InterviewBrief,
   InterviewCreatePayload,
   InterviewDetail,
+  InterviewFollowUpResult,
+  InterviewMaterialExtract,
+  InterviewMaterialKind,
   InterviewOptimizePayload,
   InterviewOptimizeResult,
   InterviewReviewRecord,
@@ -50,8 +53,62 @@ export function createInterview(payload: InterviewCreatePayload): Promise<Interv
   });
 }
 
-/** 提交一轮回答：返回点评与下一题；满轮次时 finished 为真并且已带报告。 */
-export function submitInterviewAnswer(id: number, content: string): Promise<InterviewAnswerResult> {
+/**
+ * 上传一份面试材料（#41）：岗位侧 PDF / TXT 的 JD，简历侧截图（PNG / JPEG）。
+ *
+ * 提取/识别发生在**上传那一刻**，返回的是已经提取好的文本。所以开面试时只带结果
+ * （`InterviewMaterialPayload`），不需要为同一份文件再解析一次，也不会在开场那十几
+ * 秒里再插入一次可能失败的 OCR。
+ *
+ * 预算走 `analysis`（180s）：截图识别是一次完整的多模态模型调用。
+ */
+export function extractInterviewMaterial(
+  kind: InterviewMaterialKind,
+  file: File,
+): Promise<InterviewMaterialExtract> {
+  const body = new FormData();
+  body.append("kind", kind);
+  body.append("file", file);
+  // FormData 时不要预设 Content-Type：multipart 的 boundary 由浏览器生成。
+  return request("/interview/materials", { method: "POST", body, budget: "analysis" });
+}
+
+/**
+ * 面试结束后的追问（#41）：**不占正式轮次**，也不会让已结束的面试重新开始。
+ *
+ * 一次追问也是一次完整模型调用（要读报告 + 整场记录），所以同样走 `analysis` 预算。
+ */
+export function submitInterviewFollowUp(
+  id: number,
+  content: string,
+): Promise<InterviewFollowUpResult> {
+  return request(`/interview/${id}/followups`, {
+    method: "POST",
+    body: JSON.stringify({ content }),
+    budget: "analysis",
+  });
+}
+
+/**
+ * 收起 / 重新打开追问区（#41）：只影响"还能不能继续发问"。
+ *
+ * 服务端回传整场会话（含 follow_up_closed_at），界面据此换按钮文案与输入区；
+ * 已落库的追问记录、正式轮次与报告都不受影响。
+ */
+export function updateInterviewFollowUpState(
+  id: number,
+  closed: boolean,
+): Promise<InterviewDetail> {
+  return request(`/interview/${id}/followups`, {
+    method: "PATCH",
+    body: JSON.stringify({ closed }),
+  });
+}
+
+/** 提交一轮回答：返回点评与下一题；满轮次时 finished 为真并且已带报告。 */ export function submitInterviewAnswer(
+  id: number,
+  content: string,
+): Promise<InterviewAnswerResult> {
   // 非流式备用路径：同样是一次完整的"点评 + 下一题"生成。
   return request(`/interview/${id}/answers`, {
     method: "POST",

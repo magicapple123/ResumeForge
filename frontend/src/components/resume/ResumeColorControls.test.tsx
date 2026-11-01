@@ -85,6 +85,25 @@ describe("ResumeColorControls · 写入语义", () => {
     expect(next.format_config).toEqual({ line_height: 1.6, accent: "#1e3a8a" });
   });
 
+  it("clicking a color row expands its palette and writes that row's key", () => {
+    const onChange = renderGroup();
+    const rows = Array.from(document.querySelectorAll<HTMLElement>(".resume-wb-color-row"));
+    expect(rows).toHaveLength(4);
+    // 默认只有第一行展开。
+    expect(rows.filter((row) => row.querySelector(".resume-wb-swatches"))).toHaveLength(1);
+
+    // 点第二行（正文）的标签，而不是行头那颗小箭头：第二行展开、第一行自动收起。
+    fireEvent.click(rows[1].querySelector(".resume-measure-label") as HTMLElement);
+    const openRows = rows.filter((row) => row.querySelector(".resume-wb-swatches"));
+    expect(openRows).toHaveLength(1);
+    expect(openRows[0]).toBe(rows[1]);
+
+    // 该行色板能直接改色：写的是 text_color，不是 accent。
+    const navy = openRows[0].querySelectorAll<HTMLElement>(".resume-wb-swatch")[2];
+    fireEvent.click(navy);
+    expect(lastLayout(onChange).format_config).toEqual({ text_color: "#1e3a8a" });
+  });
+
   it("恢复默认：双击标题删掉该键（不是写回模板默认色）", () => {
     const onChange = renderGroup({
       layout: { ...BASE, format_config: { accent: "#1e3a8a", line_height: 1.6 } },
@@ -134,7 +153,7 @@ describe("ResumeColorControls · 写入语义", () => {
     renderGroup({ layout: { ...BASE, format_config: { accent: "red" } } });
 
     // 读数是占位符而不是 `red`：非法值不进入探针，也不当成用户的选择。
-    expect(screen.getAllByText("—").length).toBeGreaterThan(0);
+    expect(screen.getAllByText(t("workbench.color.followTemplate")).length).toBeGreaterThan(0);
     expect(firstRowSwatches()[0]).toHaveAttribute("aria-pressed", "false");
   });
 
@@ -191,18 +210,21 @@ describe("ResumeColorControls · 色板行对齐", () => {
     expect(rows).toHaveLength(4);
     for (const row of rows) {
       expect(row.querySelector(".resume-wb-color-head")?.parentElement).toBe(row);
-      expect(row.querySelector(".resume-wb-swatches")?.parentElement).toBe(row);
     }
+    // #12：色板手风琴——默认只有第一行展开渲染色板；色板仍是行 grid 的直接子级。
+    const expanded = rows.filter((row) => row.querySelector(".resume-wb-swatches"));
+    expect(expanded).toHaveLength(1);
+    expect(expanded[0].querySelector(".resume-wb-swatches")?.parentElement).toBe(expanded[0]);
   });
 
-  it("行是四列 grid，head 用 display: contents 让四段落进列里", () => {
+  it("行是五列 grid，head 用 display: contents 让各段落进列里", () => {
     const css = colorCss();
 
     const row = ruleBlock(css, ".resume-wb-color-row");
     expect(row).toMatch(/display:\s*grid/);
-    // 四列：标签 / 取色器 / 读数 / 来源。标签列用共用变量，不是各行自己的 auto。
+    // 五列：展开箭头 / 标签 / 取色器 / 读数 / 来源。标签列用共用变量，不是各行自己的 auto。
     expect(row).toMatch(
-      /grid-template-columns:\s*var\(--resume-wb-color-label-w\)\s+auto\s+minmax\(0,\s*1fr\)\s+auto/,
+      /grid-template-columns:\s*auto\s+var\(--resume-wb-color-label-w\)\s+auto\s+minmax\(0,\s*1fr\)\s+auto/,
     );
     expect(ruleBlock(css, ".resume-wb-color-head")).toMatch(/display:\s*contents/);
   });
@@ -211,7 +233,7 @@ describe("ResumeColorControls · 色板行对齐", () => {
     const css = colorCss();
 
     const swatches = ruleBlock(css, ".resume-wb-swatches");
-    expect(swatches).toMatch(/grid-column:\s*2\s*\/\s*-1/);
+    expect(swatches).toMatch(/grid-column:\s*3\s*\/\s*-1/);
     // 当初"色板比上面那行左移 2px"就是这条 padding 造成的；留着它左边界永远差 2px。
     expect(swatches).not.toMatch(/padding-left/);
   });

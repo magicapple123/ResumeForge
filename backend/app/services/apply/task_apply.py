@@ -21,6 +21,7 @@ from ...models.apply import (
     ITEM_STATUS_SKIPPED,
     ITEM_STATUS_SUCCESS,
     STEP_FILLING,
+    STEP_GREETING,
     STEP_IDLE,
     STEP_OPENING,
     STEP_SUBMITTING,
@@ -43,6 +44,7 @@ from .. import diagnostics, tracker
 from ..browser.cdp_client import CdpClient, CdpError
 from ..sites.base import SiteFailure
 from ..sites.registry import get_registry
+from .failure_taxonomy import classify_failure
 
 logger = logging.getLogger(__name__)
 
@@ -54,9 +56,14 @@ class ItemSkip(Exception):
     让"为什么跳过"有机器可读的分类（如 ``profile_insufficient``），而不是只有一句中文。
     """
 
-    def __init__(self, detail: str, *, category: str = "") -> None:
+    # #39：step / target 与 category 一样是可选的结构化线索；不给就由诊断文本推断。
+    def __init__(
+        self, detail: str, *, category: str = "", step: str = "", target: str = ""
+    ) -> None:
         super().__init__(detail)
         self.category = category
+        self.step = step
+        self.target = target
 
 
 def company_key(company: str) -> str:
@@ -106,12 +113,26 @@ def interruptible_sleep(runner: Any, interval: int, jitter: int) -> bool:
 
 
 def mark_failed(
-    session: Any, task: ApplyTask, item: ApplyTaskItem, category: str, detail: str
+    session: Any,
+    task: ApplyTask,
+    item: ApplyTaskItem,
+    category: str,
+    detail: str,
+    *,
+    step: str = "",
+    target: str = "",
+    reason: str = "",
 ) -> None:
     """把任务项标记为失败并记录失败分类。"""
+    # #39：三段稳定码（step/target/reason）。调用方已知的维度优先，其余从分类 +
+    # 诊断文本推断（classify_failure）；界面靠子码筛选与给建议。
+    codes = classify_failure(category, detail, step=step, target=target, reason=reason)
     item.status = ITEM_STATUS_FAILED
     item.failure_category = category
     item.failure_detail = detail
+    item.failure_step = codes.step
+    item.failure_target = codes.target
+    item.failure_reason = codes.reason
     item.finished_at = utcnow()
     task.processed += 1
     task.failed += 1
@@ -284,13 +305,31 @@ def run_apply(
                 item.status = ITEM_STATUS_SKIPPED
                 if getattr(exc, "category", ""):
                     item.failure_category = exc.category
+                    # 软跳过也带分类时，三段码一样要写——否则按失败分类筛出来的记录
+                    # 在详情里看不到"卡在哪一步"（#39）。
+                    codes = classify_failure(
+                        exc.category,
+                        str(exc),
+                        step=getattr(exc, "step", ""),
+                        target=getattr(exc, "target", ""),
+                    )
+                    item.failure_step = codes.step
+                    item.failure_target = codes.target
+                    item.failure_reason = codes.reason
                 item.failure_detail = str(exc)
                 item.finished_at = utcnow()
                 task.processed += 1
                 task.skipped += 1
                 session.commit()
             except SiteFailure as exc:
-                runner._mark_failed(session, task, item, exc.category, exc.detail)
+                runner._mark_failed(
+                    session,
+                    task,
+                    item,
+                    exc.category,
+                    exc.detail,
+                    step=getattr(exc, "stage", ""),
+                )
                 # 「无法确认」不是站点故障：页面可能已经投出去了，熔断重试反而会重复
                 # 投递。它与软跳过同一方向——不计入连续失败，留给用户去浏览器核对。
                 if exc.category != FAILURE_UNCONFIRMED:
@@ -385,6 +424,8 @@ def execute_item(
         raise ItemSkip(
             "未找到可用简历：请先在简历中心为该岗位生成简历后再投递",
             category=FAILURE_PROFILE_INSUFFICIENT,
+            step=STEP_FILLING,
+            target="resume_upload",
         )
     data = apply_service.build_apply_data(session, resume)
     greeting = (item.greeting or "").strip() or config.default_greeting
@@ -401,7 +442,12 @@ def execute_item(
         since=step_started,
     )
     step_started = time.monotonic()
-    adapter.open_apply(client, job)
+    try:
+        adapter.open_apply(client, job)
+    except SiteFailure as exc:
+        # 打上阶段标记：run_apply 的兜底分支据此写 failure_step，比从诊断文本猜更准。
+        exc.stage = STEP_OPENING
+        raise
     task.current_step = STEP_SUBMITTING
     session.commit()
     record_step(
@@ -413,7 +459,12 @@ def execute_item(
         since=step_started,
     )
     step_started = time.monotonic()
-    outcome = adapter.fill_and_submit(client, data, greeting)
+    try:
+        outcome = adapter.fill_and_submit(client, data, greeting)
+    except SiteFailure as exc:
+        # fill_and_submit 覆盖「填招呼语」与「发送」两段，按诊断里的控件名分辨。
+        exc.stage = STEP_GREETING if "输入框" in exc.detail else STEP_SUBMITTING
+        raise
     task.current_step = STEP_VERIFYING
     session.commit()
     record_step(
