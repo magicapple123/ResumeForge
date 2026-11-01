@@ -20,8 +20,10 @@ function renderRow(props: Partial<ComponentProps<typeof StyleValueRow>> = {}) {
         prop="line_height"
         label={LABEL}
         value={1.7}
-        own={undefined}
-        source="template"
+        // R-34B 起 `own === undefined` 是"继承模板"降级态（± 禁用、输入框空），
+        // 所以「能调」的用例一律给一个显式覆盖值。
+        own={1.7}
+        source="role"
         onCommit={onCommit}
         {...props}
       />
@@ -113,9 +115,61 @@ describe("StyleValueRow · 数值输入", () => {
     ).toBeNull();
   });
 
-  it("字号比例显示 pt 对照读数（只显示）", () => {
-    renderRow({ prop: "font_scale", label: t("typography.prop.font_scale"), value: 1, basePx: 14 });
-    expect(screen.getByText("1× · " + t("typography.value.pt", { pt: 10.5 }))).toBeInTheDocument();
+  it("字号比例：倍数并入输入框，pt 对照进 title（尾部不再重复数字）", () => {
+    renderRow({
+      prop: "font_scale",
+      label: t("typography.prop.font_scale"),
+      value: 1,
+      own: 1,
+      basePx: 14,
+    });
+    const input = screen.getByRole("spinbutton", {
+      name: t("typography.row.directInputAria", { label: t("typography.prop.font_scale") }),
+    });
+    expect(input).toHaveDisplayValue("1×");
+    expect(input).toHaveAttribute("title", t("typography.value.pt", { pt: 10.5 }));
+    // 尾部只剩「来自…」胶囊：读数不再出现第二次。
+    expect(screen.queryByText(/^1×$/)).toBeNull();
+  });
+});
+
+describe("StyleValueRow · 未覆盖 = 继承（R-34B）", () => {
+  it("继承态：输入框空 + 占位「继承」、尾部「继承模板」", () => {
+    renderRow({ value: 0, own: undefined, source: "template" });
+    const input = screen.getByRole("spinbutton", {
+      name: t("typography.row.directInputAria", { label: LABEL }),
+    });
+    expect(input).toHaveValue("");
+    expect(input).toHaveAttribute("placeholder", t("typography.row.inheritedPlaceholder"));
+    expect(screen.getByText(t("typography.row.inherited"))).toBeInTheDocument();
+    // 不再把 fallback 的 0 当成读数写出来。
+    expect(screen.queryByText(/^0(?:\.0+)?×?$/)).toBeNull();
+  });
+
+  it("继承态仍有从基准起算的入口：滑杆停在基准上，± 按一下就落成覆盖", () => {
+    const onCommit = renderRow({ prop: "line_height", value: 1.7, own: undefined });
+    // antd 的 aria-label 落在容器上、不转发到 handle，所以按 role 取（行内只有一个滑杆）。
+    const slider = screen.getByRole("slider");
+    expect(slider).toHaveAttribute("aria-valuenow", "1.7");
+    fireEvent.click(
+      screen.getByRole("button", { name: t("typography.row.increaseAria", { label: LABEL }) }),
+    );
+    // 起点是基准 1.7，不是 0：一步之后是 1.71。
+    expect(onCommit).toHaveBeenCalledTimes(1);
+    expect(last(onCommit)).toBe(1.71);
+  });
+
+  it("目录还没给基准（value undefined）：滑杆与 ± 都禁用", () => {
+    renderRow({ value: undefined, own: undefined, source: "template" });
+    expect(screen.getByRole("slider")).toHaveAttribute("aria-disabled", "true");
+    expect(
+      screen.getByRole("button", { name: t("typography.row.increaseAria", { label: LABEL }) }),
+    ).toBeDisabled();
+  });
+
+  it("覆盖态不显示「继承模板」", () => {
+    renderRow({ value: 1.7, own: 1.7 });
+    expect(screen.queryByText(t("typography.row.inherited"))).toBeNull();
   });
 });
 

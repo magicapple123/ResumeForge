@@ -64,6 +64,7 @@ const preflight = {
   "preflight.issue.product_pdf_text_missing": "Text missing from PDF",
   "preflight.issue.product_docx_text_missing": "Text missing from Word",
   "preflight.issue.product_pdf_text_empty": "Cannot read PDF text",
+  "preflight.issue.product_text_unreadable": "Text present but unreadable",
   "preflight.issue.product_pdf_order_diff": "Reading order differs",
   "preflight.issue.product_docx_order_diff": "Word reading order differs",
   "preflight.issue.product_pdf_overflow": "PDF exceeds the page limit",
@@ -110,7 +111,6 @@ const preflight = {
   "preflight.font.role.bold": "Bold",
   "preflight.font.role.heading": "Heading",
   "preflight.font.role.unknown": "Other roles",
-  "preflight.capability.italic": "Italic",
   "preflight.capability.linkClickable": "Clickable links",
   "preflight.capability.pageNumbers": "Page numbers",
   "preflight.capability.missingGlyph": "Missing glyph detection",
@@ -132,6 +132,23 @@ const preflight = {
   "preflight.capability.supported": "Supported",
   "preflight.capability.approx": "Approximate",
   "preflight.capability.unsupported": "Unsupported",
+  "preflight.capability.note.browser_print": "The browser decides pagination when printing",
+  "preflight.capability.note.browser_no_page_number":
+    "A web page has no page numbers; the browser adds them when printing",
+  "preflight.capability.note.link_text_only":
+    "Links are written as visible text (label (URL)) and are not clickable",
+  "preflight.capability.note.font_substitute":
+    "Rendered with an installed system font; Word substitutes missing glyphs",
+  "preflight.capability.note.table_approx":
+    "Approximated with a table; Word recomputes column widths",
+  "preflight.capability.note.plain_text_no_style": "Plain text carries no fonts, colors or spacing",
+  "preflight.capability.note.plain_text_no_pagination": "Plain text has no notion of pages",
+  "preflight.capability.note.plain_text_no_layout": "Plain text does not keep multi-column layout",
+  "preflight.capability.note.plain_text_only": "Plain text keeps the words only",
+  "preflight.capability.note.data_only":
+    "JSON carries data and layout parameters only; nothing is rendered",
+  "preflight.capability.note.no_italic_glyph":
+    "Italic has been removed entirely: PDF has no italic glyphs and Word/HTML behaved differently; paired single asterisks are unwrapped",
   "preflight.capability.unknown": "Unknown",
   "preflight.format.html": "HTML",
   "preflight.format.pdf": "Exact PDF",

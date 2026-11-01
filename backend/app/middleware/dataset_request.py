@@ -63,6 +63,17 @@ class DatasetRequestMiddleware:
         from ..services.llm import usage_ledger
 
         usage_ledger.set_ambient_task(usage_ledger.task_for_path(path))
+        # #35/A1：HTTP 入口的默认输入边界（按路径前缀；更细的入口在调用点覆盖）。
+        # masked 默认 True 是安全侧：未声明脱敏策略的入口一律按"已脱敏"审计标注。
+        # language/budget 必须给**有值**的兜底：审计要能区分"没声明"与"不限制"，
+        # 空串/null 会让四个入口的记录看起来一样（A1 的缺口就出在这里）。
+        # 声明了目标语言或预算的入口（生成 / 助手 / 岗位解读 / 设置自检）在调用点覆盖。
+        usage_ledger.set_ambient_scope(
+            input_scope=usage_ledger.scope_for_path(path),
+            masked=True,
+            language=usage_ledger.DEFAULT_AUDIT_LANGUAGE,
+            budget=usage_ledger.DEFAULT_AUDIT_BUDGET,
+        )
         headers = Headers(scope=scope)
         expected = headers.get("X-Dataset-Scope")
         method = scope.get("method", "GET")

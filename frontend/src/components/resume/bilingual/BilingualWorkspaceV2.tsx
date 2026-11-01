@@ -2,43 +2,40 @@
 /**
  * 双语版本工作区（W16 / D07、D15）— **v2 文档模型原生**，自包含容器。
  *
- * 挂载方式：V2 制作台左栏新增「双语」页签（仅 `resumeId` 存在时），宿主按契约传
- * `resumeId / document / layout / revision / onAdoptDocument`；
- * 组件内部自己发请求（版本表 / 翻译候选 / 采纳 / 术语表），失败自己提示，不改宿主状态之外的任何东西。
+ * 挂载：V2 制作台左栏「双语」页签（仅 `resumeId` 存在时），宿主传 `resumeId / document / layout /
+ * `revision / onAdoptDocument`；组件自己发请求（版本表 / 候选 / 采纳 / 术语表），失败自己提示。
  *
  * ## 关键口径
  *
- * - **采纳写的是该语言变体**（`POST .../adopt` 返回 `VariantDetailOut`），不覆盖当前语言主稿；
- * - 采纳成功后把服务端已落库的变体正文交给宿主：`onAdoptDocument(document, revision)`
- *   （宿主替换 detail/html/revision 并重排；`revision` 原样回传当前简历版本，变体采纳不推进它）；
+ * - **采纳写的是该语言变体**（`POST .../adopt` 返回 `VariantDetailOut`），不覆盖当前语言主稿；成功后把
+ *   服务端已落库的正文交给宿主 `onAdoptDocument(document, revision)`（`revision` 原样回传，不推进它）；
  * - **逐项采纳只针对可写文本 item**：字段 / 文本块；列表、作者、自建板块/自定义字段只读展示
  *   （见 `features/resume-bilingual/fieldPairs` 文件头的取舍）；
- * - 撤销采纳 = 用采纳前的旧文本再采纳一次（任一项失败整批不落，要么全成要么原文不动）。
+ * - 撤销采纳 = 用采纳前的旧文本再采纳一次（任一项失败整批不落，要么全成要么原文不动）；
+ * - 只读（`revision === null`）时创建项与翻译按钮都禁用，版本与对照仍可查看。
  */
-import { Alert, Button, Segmented, Typography } from "antd";
+import { Alert, Button, Segmented, Tooltip, Typography } from "antd";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ErrorState from "../../common/ErrorState";
 import LoadingBlock from "../../common/LoadingBlock";
 import { useToast } from "../../../hooks/useToast";
 import { t } from "../../../i18n";
 import { useLocale } from "../../../i18n/i18nContext";
-import { ApiError } from "../../../api/client";
 import type { ResumeDocument } from "../../../types/resumeDocument";
 import type { ResumeLayout } from "../../../types";
 import { useFieldPlacementCatalog } from "../../../features/profile-library/fieldPlacement";
-import { catalogSectionOf } from "../../../features/resume-document";
+import { buildPairLabels } from "./bilingualPairLabels";
 import { bt } from "../../../features/resume-bilingual/i18n";
 import {
   buildBilingualPairs,
   buildTranslationCandidates,
   adoptItems,
   hasCustomContent,
-  isCustomSection,
-  isCustomKey,
   undoItems,
   type PairLabels,
 } from "../../../features/resume-bilingual/fieldPairs";
 import { isSameContent, variantDocumentOf } from "../../../features/resume-bilingual/real";
+import VariantOverwriteButton from "./VariantOverwriteButton";
 import {
   adoptTranslation,
   createLanguageVariant,
@@ -47,16 +44,20 @@ import {
   translateVariant,
 } from "../../../features/resume-bilingual/api";
 import type { VariantBriefOut, VariantDetailOut } from "../../../features/resume-bilingual/api";
-import type {
-  LanguageVariant,
-  TranslationCandidate,
-} from "../../../features/resume-bilingual/types";
+import type { TranslationCandidate } from "../../../features/resume-bilingual/types";
 import BilingualCompareView from "./BilingualCompareView";
 import BilingualGlossaryPanel from "./BilingualGlossaryPanel";
 import TranslationCandidatePanel from "./TranslationCandidatePanel";
 import VariantBar from "./VariantBar";
 import VariantLayoutSection from "./VariantLayoutSection";
 import VariantReadOnlyPreviewDrawer from "./VariantReadOnlyPreviewDrawer";
+import {
+  briefToView,
+  errorText,
+  isRejectedByBackend,
+  type LanguageCode,
+  type WorkspaceTab,
+} from "./bilingualWorkspaceSupport";
 
 export interface BilingualWorkspaceV2Props {
   resumeId: number;
@@ -69,30 +70,6 @@ export interface BilingualWorkspaceV2Props {
   onAdoptDocument: (document: ResumeDocument, revision: number) => void;
   disabled?: boolean;
   className?: string;
-}
-
-type WorkspaceTab = "compare" | "candidates" | "glossary";
-type LanguageCode = "zh-CN" | "en-US";
-
-function errorText(error: unknown): string {
-  return error instanceof Error && error.message ? error.message : "";
-}
-
-/** 后端 400 = 「这次翻译没法开始」（最常见是还没配大模型 API，也可能是语言方向不对）。 */
-function isRejectedByBackend(error: unknown): boolean {
-  return error instanceof ApiError && error.status === 400;
-}
-
-function briefToView(variant: VariantBriefOut): LanguageVariant {
-  return {
-    id: variant.id,
-    resume_id: variant.resume_id,
-    name: variant.name,
-    language: variant.language,
-    variant_group_id: variant.variant_group_id,
-    created_at: String(variant.created_at ?? ""),
-    updated_at: variant.updated_at ?? undefined,
-  };
 }
 
 export default function BilingualWorkspaceV2({
@@ -110,6 +87,8 @@ export default function BilingualWorkspaceV2({
   const readOnly = revision === null || disabled;
   const sourceLanguage: LanguageCode = document.language === "en-US" ? "en-US" : "zh-CN";
   const targetLanguage: LanguageCode = sourceLanguage === "zh-CN" ? "en-US" : "zh-CN";
+  const targetLabel =
+    targetLanguage === "en-US" ? bt("bilingual.variant.en") : bt("bilingual.variant.zh");
 
   const [tab, setTab] = useState<WorkspaceTab>("compare");
   const [variants, setVariants] = useState<VariantBriefOut[]>([]);
@@ -132,33 +111,7 @@ export default function BilingualWorkspaceV2({
   }, []);
 
   /** 标签解析：目录优先（与制作台其它面板同一份字段目录），缺省按 item 类型给通用名。 */
-  const labels = useMemo<PairLabels>(() => {
-    return {
-      item: (sectionKey, item) => {
-        if ("label" in item && item.label) return item.label;
-        const key = "key" in item ? item.key : "";
-        if (sectionKey === "header") {
-          const header = catalog?.header_fields.find((field) => field.key === key);
-          return header?.label ?? (key || bt("bilingual.field.body"));
-        }
-        const field = catalogSectionOf(catalog, sectionKey)?.fields.find(
-          (candidate) => candidate.key === key,
-        );
-        if (field) return field.label;
-        if (item.kind === "text") return bt("bilingual.field.body");
-        if (item.kind === "list") return bt("bilingual.field.list");
-        if (item.kind === "authors") return bt("bilingual.field.authors");
-        return isCustomKey(key) ? bt("bilingual.field.custom") : key;
-      },
-      group: (sectionKey, sectionTitle) => {
-        if (sectionKey === "header") return bt("bilingual.compare.group.header");
-        if (sectionTitle) return sectionTitle;
-        const section = catalogSectionOf(catalog, sectionKey);
-        if (section) return section.title;
-        return isCustomSection(sectionKey) ? bt("bilingual.compare.group.custom") : sectionKey;
-      },
-    };
-  }, [catalog]);
+  const labels = useMemo<PairLabels>(() => buildPairLabels(catalog), [catalog]);
 
   const loadVariants = useCallback(async () => {
     if (!resumeId) {
@@ -215,6 +168,12 @@ export default function BilingualWorkspaceV2({
     if (!resumeId || !detail) return;
     const translateTarget: LanguageCode =
       detail.language && detail.language !== sourceLanguage ? detail.language : targetLanguage;
+    // #17a：源语言变体（与当前简历同语言）只当翻译的"源"，译文一律写进目标语言变体。
+    // 在这里生成、又写回自己就是把英文混进中文版——入口直接禁用并说明。
+    if (detail.language && detail.language === sourceLanguage) {
+      toast.warning(bt("bilingual.workspace.translateBlockedOnSource"));
+      return;
+    }
     setTranslating(true);
     setTab("candidates");
     try {
@@ -245,8 +204,13 @@ export default function BilingualWorkspaceV2({
       return;
     }
     setAdopting(true);
+    // #17a：后端按 target_language 与变体语言比对，语言不一致整批 422。
+    const adoptTarget: LanguageCode =
+      detail.language && detail.language !== sourceLanguage ? detail.language : targetLanguage;
     try {
-      const result = await adoptTranslation(resumeId, detail.id, items);
+      const result = await adoptTranslation(resumeId, detail.id, items, {
+        targetLanguage: adoptTarget,
+      });
       setDetail(result.variant);
       const adopted = variantDocumentOf(result.variant);
       if (adopted) onAdoptDocument(adopted, revision);
@@ -255,7 +219,9 @@ export default function BilingualWorkspaceV2({
         toast.undo(bt("bilingual.workspace.adopted", { count: result.applied_paths.length }), {
           label: t("toast.undo.label"),
           onClick: async () => {
-            const reverted = await adoptTranslation(resumeId, detail.id, undo);
+            const reverted = await adoptTranslation(resumeId, detail.id, undo, {
+              targetLanguage: adoptTarget,
+            });
             setDetail(reverted.variant);
             const revertedDocument = variantDocumentOf(reverted.variant);
             if (revertedDocument) onAdoptDocument(revertedDocument, revision);
@@ -316,7 +282,9 @@ export default function BilingualWorkspaceV2({
         if (alive.current) toast.info(bt("bilingual.workspace.autoTranslate.nothing"));
         return;
       }
-      const adopted = await adoptTranslation(resumeId, created.id, items);
+      const adopted = await adoptTranslation(resumeId, created.id, items, {
+        targetLanguage: language,
+      });
       if (!alive.current) return;
       setDetail(adopted.variant);
       setCandidates(null);
@@ -339,7 +307,6 @@ export default function BilingualWorkspaceV2({
       if (alive.current) setAutoTranslating(false);
     }
   };
-
   if (error) {
     return (
       <ErrorState
@@ -353,17 +320,16 @@ export default function BilingualWorkspaceV2({
     return <LoadingBlock tip={bt("bilingual.workspace.loading")} />;
   }
 
-  const selected = detail
-    ? (variants.find((item) => item.id === detail.id) ?? null)
-    : (variants.find((item) => item.id === selectedId) ?? null);
+  const selected = variants.find((item) => item.id === (detail?.id ?? selectedId)) ?? null;
   const pairs = buildBilingualPairs(document, detail?.content ?? null, labels);
   const blockedCount = candidates?.filter((candidate) => candidate.blocked).length ?? 0;
   const customHint = hasCustomContent(document) || hasCustomContent(detail?.content ?? null);
   const busy = creating !== null || autoTranslating;
+  // #17a：与当前简历同语言的变体 = 源语言变体，只当翻译源，不能当翻译目标。
+  const viewingSourceVariant = Boolean(detail?.language && detail.language === sourceLanguage);
   const createBusyLabel = autoTranslating
     ? bt("bilingual.variant.translating")
     : bt("bilingual.variant.creating");
-
   return (
     <div
       className={["bilingual-workspace", className].filter(Boolean).join(" ")}
@@ -383,20 +349,48 @@ export default function BilingualWorkspaceV2({
           disabled={readOnly}
         />
         <div className="bilingual-toolbar__actions">
-          <Button
-            type="primary"
-            size="small"
-            loading={translating || undefined}
-            disabled={!detail || busy || readOnly || undefined}
-            onClick={() => void handleTranslate()}
+          <Tooltip
+            title={
+              viewingSourceVariant ? bt("bilingual.workspace.translateBlockedOnSource") : undefined
+            }
           >
-            {bt("bilingual.workspace.translate")}
-          </Button>
+            <Button
+              type="primary"
+              size="small"
+              loading={translating || undefined}
+              disabled={!detail || busy || readOnly || viewingSourceVariant || undefined}
+              onClick={() => void handleTranslate()}
+            >
+              {bt("bilingual.workspace.translate")}
+            </Button>
+          </Tooltip>
           {detail ? (
-            <Button size="small" onClick={() => setPreviewOpen(true)}>
-              {bt("bilingual.v2.openInWorkbench")}
+            <VariantOverwriteButton
+              resumeId={resumeId}
+              variantId={detail.id}
+              disabled={readOnly || busy}
+              onOverwritten={(next) => {
+                setDetail(next);
+                void loadVariants();
+              }}
+            />
+          ) : null}
+          {detail ? (
+            <Button
+              type="text"
+              size="small"
+              title={bt("bilingual.v2.previewReadOnly")}
+              onClick={() => setPreviewOpen(true)}
+            >
+              {targetLanguage === "en-US"
+                ? bt("bilingual.v2.openInWorkbench")
+                : bt("bilingual.v2.openInWorkbenchZh")}
             </Button>
           ) : null}
+          {/* 主按钮旁直接写清"生成哪种语言、结果去哪"（R-13）。 */}
+          <Typography.Text type="secondary" className="bilingual-toolbar__note">
+            {bt("bilingual.workspace.translateHint", { language: targetLabel })}
+          </Typography.Text>
         </div>
       </div>
       {readOnly ? <Alert type="info" showIcon title={bt("bilingual.v2.readOnly")} /> : null}
@@ -463,11 +457,17 @@ export default function BilingualWorkspaceV2({
             />
           </>
         ) : (
-          <BilingualGlossaryPanel
-            sourceLanguage={sourceLanguage}
-            targetLanguage={targetLanguage}
-            readOnly={readOnly}
-          />
+          <>
+            {/* 术语表页签的一句话用途：这一页和"翻译"是什么关系，光看标题看不出来。 */}
+            <Typography.Text type="secondary" className="bilingual-tab-note">
+              {bt("bilingual.glossary.purpose")}
+            </Typography.Text>
+            <BilingualGlossaryPanel
+              sourceLanguage={sourceLanguage}
+              targetLanguage={targetLanguage}
+              readOnly={readOnly}
+            />
+          </>
         )}
       </div>
       <VariantReadOnlyPreviewDrawer

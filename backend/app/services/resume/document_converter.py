@@ -193,7 +193,8 @@ def _cap_items(items: list[Any], report: ConversionReport, section_key: str) -> 
     texts = [item for item in overflow if isinstance(item, TextItem)]
     other = [item for item in overflow if not isinstance(item, TextItem)]
     if texts and not other:
-        merged_style = getattr(texts[0], "style", "bullet")
+        # texts 里全是 TextItem（上面的 isinstance 筛过），style 一定存在。
+        merged_style = texts[0].style
         keep.append(
             TextItem(
                 style=merged_style,
@@ -307,15 +308,82 @@ def _entry_id(entry: Any, *, fallback_attr: str = "id") -> str | None:
 def _ordered_sections(
     sections: list[ResumeSection], format_config: Mapping[str, Any]
 ) -> list[ResumeSection]:
+    """按 `format_config.section_order` 排分区。
+
+    内置键沿用 `normalized_section_order`（七个键齐全、未知键按默认补齐）；
+    #24：`custom:*` 键**按它在 section_order 里的位置**插入——用户在生成弹窗把
+    自建板块拖到「项目经历」后面，落库的 `document.sections` 就是这个顺序，而不是
+    一律排在末尾。raw 里没有 / 已不存在的 custom 键不产生空位；没被插进去的
+    自建分区按出现顺序追加在末尾（与旧行为一致）。
+    """
     by_key = {section.key: section for section in sections}
+    raw_order = format_config.get("section_order")
+    keys_in_order: list[str] = []
+    if isinstance(raw_order, (list, tuple)):
+        seen: set[str] = set()
+        for item in raw_order:
+            key = str(item).strip()
+            if key and key not in seen:
+                seen.add(key)
+                keys_in_order.append(key)
+
+    def rank(key: str) -> int:
+        try:
+            return keys_in_order.index(key)
+        except ValueError:
+            return len(keys_in_order)
+
     ordered: list[ResumeSection] = []
-    for key in normalized_section_order(format_config.get("section_order")):
+    placed: set[str] = set()
+
+    def place_custom_before(builtin_key: str | None) -> None:
+        """把 raw 顺序里排在 builtin_key 之前、还没落位的自建板块依次插入。"""
+        while True:
+            pending = [
+                key
+                for key in keys_in_order
+                if key.startswith("custom:") and key in by_key and key not in placed
+            ]
+            nxt = next(
+                (
+                    key
+                    for key in pending
+                    if builtin_key is None or rank(key) < rank(builtin_key)
+                ),
+                None,
+            )
+            if nxt is None:
+                return
+            ordered.append(by_key.pop(nxt))
+            placed.add(nxt)
+
+    for key in normalized_section_order(raw_order):
+        place_custom_before(key)
         section = by_key.pop(key, None)
         if section is not None:
             ordered.append(section)
-    # 兜底：不在标准顺序里的系统分区（理论上不会发生）与自建分区按出现顺序追加。
+            placed.add(key)
+    place_custom_before(None)
+    # 兜底：不在标准顺序里的系统分区（理论上不会发生）与其余自建分区按出现顺序追加。
     ordered.extend(by_key.values())
     return ordered
+
+def _custom_before(custom_key: str, builtin_key: str | None, raw_order: Any) -> bool:
+    """custom_key 在 raw section_order 里是否排在 builtin_key 之前（builtin 不在表里=最后）。"""
+    if not isinstance(raw_order, (list, tuple)):
+        return False
+    keys = [str(item).strip() for item in raw_order]
+    try:
+        custom_at = keys.index(custom_key)
+    except ValueError:
+        return False
+    if builtin_key is None:
+        return True
+    try:
+        builtin_at = keys.index(builtin_key)
+    except ValueError:
+        return True
+    return custom_at < builtin_at
 
 
 def _apply_field_layout(sections: list[ResumeSection], format_config: Mapping[str, Any]) -> None:

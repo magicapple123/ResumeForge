@@ -42,6 +42,18 @@
   color: var(--rf-warning-text);
 }
 
+/*
+ * 网申填表页「放宽模式」卡：风险常驻文案与开启态提示同样用 antd `type="warning"`，
+ * 取 colorWarning #faad14，白底对比度 ~1.9:1，过不了 axe color-contrast 的 AA（4.5:1）
+ * ——`tests/smoke/a11y.spec.ts` / `ui-quality.spec.ts` 会因此变红。同上一条，改用站内
+ * warning 文字 token（#875300，theme/tokens.ts palette.warning，深浅底均 ≥6:1）；
+ * 语义仍是「风险提醒」，只是深到可读。不要改回 colorWarning。
+ */
+.relaxed-mode-risk.ant-typography,
+.relaxed-mode-enabled-hint.ant-typography {
+  color: var(--rf-warning-text);
+}
+
 .tt-profile-prompt-card-title {
   color: var(--rf-text-secondary);
 }

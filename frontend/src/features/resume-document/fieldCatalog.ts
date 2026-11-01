@@ -12,6 +12,7 @@ import type {
   FieldCatalogField,
   FieldCatalogSection,
   FieldSource,
+  ItemFormat,
   ResumeSection,
 } from "../../types/resumeDocument";
 import {
@@ -108,24 +109,152 @@ export function missingFieldSpecs(
   return specs.filter((spec) => !used.has(spec.key));
 }
 
-/** 枚举字段的选项（value → 已本地化 label）；目录/fallback 都没有时返回空数组。 */
+/**
+ * 枚举字段的「家族表」：fallback 目录里每个 enum 字段就是一张 值→文案 表。
+ *
+ * 4 类枚举（工作类型 / 发表状态 / 专利状态 / 凭证状态）各自一张；结构上是
+ * (板块 key 集合, 字段 key, 选项表)。
+ */
+interface EnumTable {
+  sectionKeys: readonly string[];
+  fieldKey: string;
+  options: readonly { value: string; labelKey: MessageKey }[];
+}
+
+const ENUM_TABLES: readonly EnumTable[] = FALLBACK_SECTIONS.flatMap((section) =>
+  section.fields
+    .filter((field) => field.format === "enum" && (field.enumOptions?.length ?? 0) > 0)
+    .map((field) => ({
+      sectionKeys: [section.key, section.profileSectionKey],
+      fieldKey: field.key,
+      options: field.enumOptions ?? [],
+    })),
+);
+
+/**
+ * 文档里的板块 key 变体 → fallback 板块 key。
+ *
+ * 目录里的 key 是唯一真相（`document_catalog.py` 的 SECTION_ORDER：publications/patents/
+ * credentials…），但历史简历与资料分区键会出现单数 / 别名写法；枚举本地化不能因为一个
+ * `patent` 与 `patents` 的差别就把 `granted` 裸显出来。
+ */
+const SECTION_ALIASES: Record<string, string> = {
+  experiences: "experience",
+  work_experiences: "experience",
+  publication: "publications",
+  patent: "patents",
+  credential: "credentials",
+  certificates: "credentials",
+};
+
+function enumTableFor(sectionKey: string, fieldKey: string): EnumTable | undefined {
+  const key = SECTION_ALIASES[sectionKey] ?? sectionKey;
+  return ENUM_TABLES.find(
+    (table) => table.sectionKeys.includes(key) && table.fieldKey === fieldKey,
+  );
+}
+
+function enumTableForSection(sectionKey: string): EnumTable | undefined {
+  const key = SECTION_ALIASES[sectionKey] ?? sectionKey;
+  return ENUM_TABLES.find((table) => table.sectionKeys.includes(key));
+}
+
+/**
+ * 全局「值 → 文案 key」索引：A5（自建板块 / 新加的枚举字段）没有目录表可查时，
+ * `full_time` 这类**跨家族唯一**的 code 仍然能翻；`pending` 这类不同家族文案不同的
+ * 值宁可回退原值也不猜（猜错比露 code 更糟）。
+ */
+const ENUM_VALUE_INDEX = new Map<string, { labelKeys: Set<MessageKey>; tables: EnumTable[] }>();
+for (const table of ENUM_TABLES) {
+  for (const option of table.options) {
+    const entry = ENUM_VALUE_INDEX.get(option.value) ?? {
+      labelKeys: new Set<MessageKey>(),
+      tables: [] as EnumTable[],
+    };
+    entry.labelKeys.add(option.labelKey);
+    if (!entry.tables.includes(table)) entry.tables.push(table);
+    ENUM_VALUE_INDEX.set(option.value, entry);
+  }
+}
+
+function localizedOptions(
+  table: EnumTable,
+  resolve: (key: MessageKey) => string,
+): { value: string; label: string }[] {
+  return table.options.map((option) => ({ value: option.value, label: resolve(option.labelKey) }));
+}
+
+/**
+ * 枚举字段的选项（value → 已本地化 label）。
+ *
+ * 查找顺序：本板块 + 本字段 → 同板块其它枚举字段（自建字段 key 是 `custom:*`）→
+ * 按当前值反推家族（值在四张表里只属于一个家族时）→ 空数组。
+ * `value` 可选：编辑器用它把自建枚举字段的当前值映射回某一家族的完整选项。
+ */
 export function enumOptionsOf(
   catalog: DocumentFieldCatalog | null | undefined,
   sectionKeyOrProfileKey: string,
   fieldKey: string,
   resolve: (key: MessageKey) => string,
+  value?: string,
 ): { value: string; label: string }[] {
   void catalog;
-  const fallback = FALLBACK_SECTIONS.find(
-    (section) =>
-      section.key === sectionKeyOrProfileKey ||
-      section.profileSectionKey === sectionKeyOrProfileKey,
-  )?.fields.find((field) => field.key === fieldKey);
-  if (!fallback?.enumOptions) return [];
-  return fallback.enumOptions.map((option) => ({
-    value: option.value,
-    label: resolve(option.labelKey),
-  }));
+  const exact = enumTableFor(sectionKeyOrProfileKey, fieldKey);
+  if (exact) return localizedOptions(exact, resolve);
+  // 自建字段的 key 是 custom:*，目录/fallback 里查不到字段名，只能按板块的特征枚举表兜底。
+  const bySection = fieldKey.startsWith("custom:")
+    ? enumTableForSection(sectionKeyOrProfileKey)
+    : undefined;
+  if (bySection) return localizedOptions(bySection, resolve);
+  if (value) {
+    const entry = ENUM_VALUE_INDEX.get(value);
+    const table = entry && entry.tables.length === 1 ? entry.tables[0] : undefined;
+    if (table) return localizedOptions(table, resolve);
+  }
+  return [];
+}
+
+/**
+ * 枚举字段在 UI 上的显示名（#11a / A5）。
+ *
+ * 后端 planner 渲染纸面时已把 code 翻成中文（`document_catalog.py` 的 `enum_kind`），
+ * 前端 chip / 结构树 / 填入菜单此前一直裸显 `full_time` 这类原始值——这里补上同一层
+ * 语义格式化。查找顺序：本板块+本字段 → 同板块枚举字段 → 跨家族唯一值（A5：自建板块 /
+ * 新加字段没有目录表可查）→ **回落原值**（绝不返回空串吞掉内容，也不猜有歧义的值）。
+ */
+export function enumLabelOf(
+  catalog: DocumentFieldCatalog | null | undefined,
+  sectionKey: string,
+  fieldKey: string,
+  value: string,
+  resolve: (key: MessageKey) => string,
+): string {
+  if (!value) return value;
+  const options = enumOptionsOf(catalog, sectionKey, fieldKey, resolve, value);
+  const hit = options.find((option) => option.value === value);
+  if (hit) return hit.label;
+  const entry = ENUM_VALUE_INDEX.get(value);
+  if (entry) {
+    const labels = [...entry.labelKeys].map(resolve);
+    // 多家族共用同一个值（other / pending / expired…）：只有各家族文案完全一致才敢翻，
+    // 否则回退原值——界面上宁可露一次 code，也不能显示错误的状态名。
+    if (labels.every((label) => label === labels[0])) return labels[0];
+  }
+  return value;
+}
+
+/**
+ * 目录字段在文档里的**实际** format。
+ *
+ * 自定义字段在目录接口里统一报 `format: "text"`（后端只保证内置字段的纸面格式），但
+ * `field_type: "enum"` 的自定义字段在文档里应当按枚举渲染——否则「添加字段」加进来的
+ * 枚举字段既没有下拉，值也没法本地化（A5）。
+ */
+export function effectiveFieldFormat(
+  spec: Pick<FieldCatalogField, "field_type" | "format">,
+): ItemFormat {
+  if (spec.format === "text" && spec.field_type === "enum") return "enum";
+  return spec.format;
 }
 
 /** item 的 source 构造：资料来源统一从这里出（资料分区键 + 资料字段 id）。 */

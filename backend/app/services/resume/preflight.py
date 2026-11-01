@@ -33,7 +33,7 @@ from ...schemas.preflight import (
 )
 from ...schemas.resume import ResumeContent
 from . import document_io
-from .format_capabilities import matrix
+from .format_capabilities import capability_notes, matrix
 from .preflight_rules_content import content_issues
 from .preflight_rules_layout import layout_issues
 from .preflight_rules_product import product_issues
@@ -145,6 +145,8 @@ def run_preflight(
             format_config=format_config,
             language=language,
             formats=list(request.product_formats),
+            # R-24 D：字体覆盖是版面层的结果，产物层用它区分"纸面缺字"与"文本层抽不出"。
+            font_coverage=font_coverage if isinstance(font_coverage, dict) else None,
         )
         issues.extend(product_list)
         machine_text = cast("list[MachineTextPage]", raw_machine_text)
@@ -156,11 +158,14 @@ def run_preflight(
     for issue in finalized:
         summary[issue.severity] = summary.get(issue.severity, 0) + 1
     capabilities = matrix()
+    # R-26：近似/不支持格子的「为什么」以原因码下发（前端查 i18n，不在这里写中文）。
+    notes = capability_notes()
     return PreflightOut(
         snapshot=snapshot,
         issues=finalized[:200],
         summary=summary,
         capabilities=capabilities,
+        capability_notes=notes,
         disclaimer=ATS_DISCLAIMER,
         layers_run=layers_run,
         elapsed_ms=int((time.perf_counter() - started) * 1000),

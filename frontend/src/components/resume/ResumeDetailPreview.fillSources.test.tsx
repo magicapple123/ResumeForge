@@ -258,8 +258,17 @@ describe("制作台中栏的资料填入候选", () => {
     fireEvent.click(menuButton as HTMLElement);
     await waitFor(() => expect(profileMocks.getCurrentProjection).toHaveBeenCalledTimes(1));
 
-    const menuitem = await screen.findByRole("menuitem");
-    fireEvent.click(menuitem);
+    // #22 起菜单前两行是搜索框（rf-profile-fill-search）与「N 项可添加」计数
+    // （rf-profile-fill-count，disabled）：两者都不是候选，跳过它们再点第一条候选。
+    const menuitems = await screen.findAllByRole("menuitem");
+    const menuitem = menuitems.find(
+      (node) =>
+        !node.classList.contains("rf-profile-fill-search") &&
+        !node.classList.contains("rf-profile-fill-count") &&
+        node.getAttribute("aria-disabled") !== "true",
+    );
+    expect(menuitem).toBeTruthy();
+    fireEvent.click(menuitem as HTMLElement);
     // 插入生效：中栏 chip 数增加（新增的普通字段 + 仅素材字段都是 item）。
     await waitFor(
       () => {

@@ -8,25 +8,21 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { KeyboardEvent } from "react";
 import type { ResumeDocument } from "../../../types/resumeDocument";
-import { summarize, STRUCTURE_PLACEMENT_ORDER } from "../../../features/resume-document/summarize";
+import { summarize } from "../../../features/resume-document/summarize";
 import type { StructureNode } from "../../../features/resume-document/summarize";
 import { parseDocumentPath } from "../../../features/resume-document/paths";
 import { t } from "../../../i18n";
 import {
   ancestorKeys,
-  collapseEntryKeys,
   collectExpandableKeys,
   countTree,
   flattenVisible,
   indexNodes,
-  nextRowKey,
   searchTree,
 } from "./structureView";
 import {
   applyDrop,
   duplicateEntry,
-  moveEntryOneStep,
-  moveItemOneStep,
   moveItemToPlacement,
   toggleNodeHidden,
   toggleNodeLock,
@@ -35,6 +31,11 @@ import {
 } from "./structureCommands";
 import { highlightTargetsForNode, useCanvasPathHighlight } from "./structureHighlight";
 import { useStructureHoverPaint } from "./useStructureHoverPaint";
+import { queryTreeRow } from "./structureDom";
+import { useStructureMultiSelect, type StructureMultiSelect } from "./useStructureMultiSelect";
+import { useStructureKeyNav } from "./useStructureKeyNav";
+
+export type { StructureMultiSelect } from "./useStructureMultiSelect";
 
 export interface StructurePanelOptions {
   document: ResumeDocument;
@@ -54,15 +55,19 @@ export interface StructurePanelOptions {
    * 由面板用 `fieldCatalogLabelResolver` 构造，hook 只负责透传给 summarize。
    */
   fieldLabel?: (key: string, sectionKey?: string) => string | undefined;
+  /** #11a：枚举字段值的显示名解析（工作类型等不再裸显 code）；透传给 summarize。 */
+  enumValue?: (sectionKey: string, fieldKey: string, value: string) => string;
+  /**
+   * 搜索用的展示文案（R-09）：搜索匹配的是用户**看得见**的字（板块中文名、字段目录标签、
+   * 位置名），不是文档里的原始 key / 枚举值。由面板构造（面板里有 t()）。
+   */
+  displayLabel?: (node: StructureNode) => string;
   /** 搜索：外部（如"在结构中搜索"入口）可注入初始值。 */
   initialQuery?: string;
   /** 树容器 ref 由组件持有（hook 不返回 ref，避免被渲染期规则判成"访问 ref 值"）。 */
   treeRef: React.RefObject<HTMLDivElement | null>;
-}
-
-/** 把键安全地放进属性选择器的引号里（key 只含 id/点/井号/冒号/连字符；引号与反斜杠兜底转义）。 */
-export function cssAttrEscape(value: string): string {
-  return value.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+  /** U7 多选（可选）：不传 / null = 树内没有多选行为（不出高亮、不响应 Shift）。 */
+  multiSelect?: StructureMultiSelect | null;
 }
 
 export interface StructurePanelApi {
@@ -73,14 +78,19 @@ export interface StructurePanelApi {
   matchedKeys: ReadonlySet<string>;
   counts: { sections: number; entries: number; items: number };
   selectedKey: string;
+  /** 选中行的全部祖先键（R-14：树上标出"选中项在这条链上"，折叠时也能看出归属）。 */
+  selectedAncestorKeys: ReadonlySet<string>;
   activeKey: string;
   reveal: { path: string; nonce: number } | null;
   drag: { node: StructureNode; overKey: string; side: DropSide } | null;
   readOnly: boolean;
   toggleCollapse: (key: string) => void;
   toggleAll: (expanded: boolean) => void;
-  /** 只收起所有条目：板块保持展开，页眉分组保持可见。 */
-  collapseEntries: () => void;
+  /**
+   * 全展开态（顶栏那个唯一的折叠开关的状态来源）：所有可展开行都没有被折叠。
+   * 只在 hook 里派生一次，组件不再自己算一遍（两处各算一份必然漂移）。
+   */
+  allExpanded: boolean;
   selectNode: (node: StructureNode | null) => void;
   handleRowHover: (node: StructureNode | null) => void;
   handlePointerDrop: (target: StructureNode, side: DropSide) => void;
@@ -92,6 +102,17 @@ export interface StructurePanelApi {
   toggleLock: (node: StructureNode, lock: "content" | "layout") => void;
   copyEntry: (node: StructureNode) => void;
   moveToPlacement: (node: StructureNode, placement: string) => void;
+  /** U7 多选是否可用（宿主给了状态且非只读）。 */
+  multiSelectEnabled: boolean;
+  /** 宿主持有的多选条目路径（不启用时是空数组）。 */
+  multiSelectedPaths: readonly string[];
+  /**
+   * Shift 连选：把「锚点 → 目标条目」之间**可见的**条目并入选择（只合并、不替换）。
+   * Shift 点击与 Shift + ↑/↓ 共用这一个实现。
+   */
+  extendSelectionTo: (node: StructureNode) => void;
+  /** 清空多选（非 Shift 的普通点击；R-12 起点击是唯一入口，也是唯一清空入口）。 */
+  clearSelection: () => void;
 }
 
 export function useStructurePanel({
@@ -105,14 +126,23 @@ export function useStructurePanel({
   onNotify,
   readOnly = false,
   fieldLabel,
+  enumValue,
+  displayLabel,
   initialQuery = "",
   treeRef,
+  multiSelect = null,
 }: StructurePanelOptions): StructurePanelApi {
   const tree = useMemo(
-    () => summarize(document, { resolveFieldLabel: fieldLabel }),
-    [document, fieldLabel],
+    () =>
+      summarize(document, {
+        resolveFieldLabel: fieldLabel,
+        resolveEnumValue: enumValue,
+      }),
+    [document, fieldLabel, enumValue],
   );
   const index = useMemo(() => indexNodes(tree), [tree]);
+  /** 有子节点的键（「展开/收起全部」与 allExpanded 共用一份，避免每次交互重走整棵树）。 */
+  const expandableKeys = useMemo(() => collectExpandableKeys(tree), [tree]);
   const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set());
   const [query, setQuery] = useState(initialQuery);
   const [activeKey, setActiveKey] = useState("");
@@ -121,13 +151,23 @@ export function useStructurePanel({
     null,
   );
   const handledPickNonce = useRef<number | null>(null);
+  /**
+   * R-12：树内点击不产生额外滚动。点击时把"这次选中来自树"记在 ref 上，
+   * 下面的同步 effect 见到就跳过 `scrollIntoView` 并复位（行就在用户眼皮底下）。
+   */
+  const internalSelectKey = useRef<string | null>(null);
 
-  const search = useMemo(() => searchTree(tree, query), [tree, query]);
+  const search = useMemo(
+    () => searchTree(tree, query, { labelOf: displayLabel }),
+    [tree, query, displayLabel],
+  );
   // 空查询走普通展开态（searchTree 的"空查询"分支是全展开的搜索视图，不读折叠集合）。
   const rows = useMemo(
     () => (query.trim() ? search.rows : flattenVisible(tree, collapsed)),
     [collapsed, query, search.rows, tree],
   );
+  // U7 多选（R-12）：区间计算与锚点维护拆到独立 hook（见 useStructureMultiSelect.ts）。
+  const multiSelectApi = useStructureMultiSelect({ multiSelect, readOnly, rows });
   const counts = useMemo(() => countTree(tree), [tree]);
   const selectedNode = useMemo(() => {
     if (!selectedPath) return null;
@@ -137,6 +177,10 @@ export function useStructurePanel({
     return null;
   }, [index, selectedPath]);
   const selectedKey = selectedNode?.key ?? "";
+  const selectedAncestorKeys = useMemo(
+    () => new Set(selectedNode ? ancestorKeys(tree, selectedNode.key) : []),
+    [selectedNode, tree],
+  );
   const active = rows.some((row) => row.node.key === activeKey)
     ? activeKey
     : (rows[0]?.node.key ?? "");
@@ -166,18 +210,20 @@ export function useStructurePanel({
   );
 
   // 外部选中（纸面点击 / 编辑器选中）→ 展开祖先、激活行、滚动到位。
+  // 树内点击（R-12）只展开与激活，不滚动：否则点第 5 行会把整棵树滚一下，看着像"跳帧"。
   useEffect(() => {
     if (!selectedNode) return;
+    const internal = internalSelectKey.current === selectedNode.key;
+    if (internal) internalSelectKey.current = null;
     // 展开/激活属于外部选中同步：放进微任务，避开 effect 体里同步 setState 的级联渲染告警。
     queueMicrotask(() => {
       expandAncestors(selectedNode.key);
       setActiveKey(selectedNode.key);
     });
+    if (internal) return;
     // 行可能还没渲染（展开是状态更新）：下一帧再找。
     const frame = requestAnimationFrame(() => {
-      const row = treeRef.current?.querySelector<HTMLElement>(
-        `[data-tree-key="${cssAttrEscape(selectedNode.key)}"]`,
-      );
+      const row = queryTreeRow(treeRef.current, selectedNode.key);
       // jsdom 没有 scrollIntoView；真实浏览器里它只是"把行滚到可视区"，缺了不影响选择。
       if (typeof row?.scrollIntoView === "function") row.scrollIntoView({ block: "nearest" });
     });
@@ -198,7 +244,8 @@ export function useStructurePanel({
         expandAncestors(target.key);
         setActiveKey(target.key);
       }
-      setReveal({ path: pickTarget.path, nonce: pickTarget.nonce });
+      // R-14：纸面点击**不**再让右栏滚一次——用户点的那个字段本来就在眼前，
+      // 再滚一次会把纸面挪到别处（验收口径："右栏不二次滚动"）。定位只走中栏。
     });
   }, [pickTarget, index, expandAncestors]);
 
@@ -229,11 +276,16 @@ export function useStructurePanel({
         onSelectPath?.(null);
         return;
       }
+      // R-12：先记下"这次来自树内"，同步 effect 会据此跳过 scrollIntoView。
+      internalSelectKey.current = node.key;
+      // Shift 连选的锚点也在这里落一次：点「已经选中」的那条时 selectedPath 没变化，
+      // 面板里跟随 selectedPath 的那个 effect 不会重跑，锚点会丢（Shift 点击只选到一条）。
+      multiSelectApi.rememberAnchor(node);
       onSelectPath?.(node.path ?? null);
       if (node.path) setReveal({ path: node.path, nonce: Date.now() });
       setActiveKey(node.key);
     },
-    [onSelectPath],
+    [multiSelectApi, onSelectPath],
   );
 
   const toggleCollapse = useCallback((key: string) => {
@@ -255,16 +307,17 @@ export function useStructurePanel({
   const toggleAll = useCallback(
     (expand: boolean) => {
       if (expand) setCollapsed(new Set());
-      else setCollapsed(new Set(collectExpandableKeys(tree)));
+      else setCollapsed(new Set(expandableKeys));
     },
-    [tree],
+    [expandableKeys],
   );
 
-  // 「收起所有条目」不是「收起全部」：板块标题和页眉分组要保持可见，只把每个
-  // 条目折叠起来，让用户一眼看到 13 个板块的骨架，而不是只剩最外层。
-  const collapseEntries = useCallback(() => {
-    setCollapsed(collapseEntryKeys(tree.sections));
-  }, [tree]);
+  // 顶栏只剩一个折叠开关（R-01）：全展开 = 没有任何可展开行处在折叠态。
+  // 折叠集合是唯一真相，这里只派生、不另存一份状态（两份状态一定会漂移）。
+  const allExpanded = useMemo(
+    () => expandableKeys.every((key) => !collapsed.has(key)),
+    [collapsed, expandableKeys],
+  );
 
   // 悬停高亮**不走 React state**：树有 160+ 行，若每次 mouseenter/leave 都重渲染
   // 整个面板并重挂 iframe 的 MutationObserver，滚轮经过行时会稳定掉到 100ms+ 一帧。
@@ -329,127 +382,25 @@ export function useStructurePanel({
   );
 
   // ── 键盘（与鼠标等价；Alt 组合做移动）──────────────────────
-  const handleKeyDown = useCallback(
-    (event: KeyboardEvent<HTMLDivElement>) => {
-      const rowElement = (event.target as HTMLElement | null)?.closest<HTMLElement>(
-        "[data-tree-key]",
-      );
-      const key = rowElement?.dataset.treeKey ?? active;
-      const row = rows.find((candidate) => candidate.node.key === key);
-      if (!row) return;
-      const node = row.node;
-      if (event.altKey) {
-        if (event.key === "ArrowUp" || event.key === "ArrowDown") {
-          event.preventDefault();
-          if (readOnly) return;
-          const delta = event.key === "ArrowUp" ? -1 : 1;
-          const result =
-            node.kind === "entry"
-              ? moveEntryOneStep(document, node, delta)
-              : moveItemOneStep(document, node, delta);
-          if (!result.changed) notify(t("structure.drag.invalid"));
-          else onChange(result.document);
-          return;
-        }
-        if (
-          (event.key === "ArrowLeft" || event.key === "ArrowRight") &&
-          node.kind === "item" &&
-          !node.key.startsWith("header.")
-        ) {
-          event.preventDefault();
-          if (readOnly) return;
-          const current = node.placement;
-          const order = STRUCTURE_PLACEMENT_ORDER;
-          const position = current ? order.indexOf(current) : -1;
-          const next = order[position + (event.key === "ArrowRight" ? 1 : -1)];
-          if (position < 0 || !next) {
-            notify(t("structure.drag.invalid"));
-            return;
-          }
-          const result = moveItemToPlacement(document, node, next);
-          if (!result.changed) notify(t("structure.drag.invalid"));
-          else onChange(result.document);
-          return;
-        }
-        return;
-      }
-      switch (event.key) {
-        case "ArrowDown":
-        case "ArrowUp":
-        case "Home":
-        case "End": {
-          event.preventDefault();
-          const next = nextRowKey(
-            rows,
-            key,
-            event.key === "ArrowDown"
-              ? "down"
-              : event.key === "ArrowUp"
-                ? "up"
-                : event.key === "Home"
-                  ? "home"
-                  : "end",
-          );
-          if (!next) return;
-          setActiveKey(next);
-          treeRef.current
-            ?.querySelector<HTMLElement>(`[data-tree-key="${cssAttrEscape(next)}"]`)
-            ?.focus();
-          break;
-        }
-        case "ArrowRight":
-          if (node.children && node.children.length > 0) {
-            event.preventDefault();
-            expandAncestors(node.key);
-            setCollapsed((previous) => {
-              if (!previous.has(node.key)) return previous;
-              const next = new Set(previous);
-              next.delete(node.key);
-              return next;
-            });
-          }
-          break;
-        case "ArrowLeft": {
-          if (collapsed.has(node.key) && node.children?.length) return;
-          event.preventDefault();
-          if (node.children && node.children.length > 0 && !collapsed.has(node.key)) {
-            toggleCollapse(node.key);
-          } else {
-            const ancestors = ancestorKeys(tree, node.key);
-            const parent = ancestors[ancestors.length - 1];
-            if (parent) {
-              setActiveKey(parent);
-              treeRef.current
-                ?.querySelector<HTMLElement>(`[data-tree-key="${cssAttrEscape(parent)}"]`)
-                ?.focus();
-            }
-          }
-          break;
-        }
-        case "Enter":
-        case " ":
-          event.preventDefault();
-          selectNode(node);
-          break;
-        default:
-          break;
-      }
-    },
-    [
-      active,
-      collapsed,
-      document,
-      expandAncestors,
-      notify,
-      onChange,
-      readOnly,
-      rows,
-      selectNode,
-      tree,
-      treeRef,
-      toggleCollapse,
-    ],
-  );
+  // R-12 之后键盘还多一条 Shift + ↑/↓ 连选；整块实现拆到 useStructureKeyNav.ts。
+  const handleKeyDown = useStructureKeyNav({
+    rows,
+    tree,
+    document,
+    activeKey: active,
+    collapsed,
+    readOnly,
+    treeRef,
+    multiSelectEnabled: multiSelectApi.enabled,
+    setActiveKey,
+    expandAncestors,
+    toggleCollapse,
+    setCollapsed,
+    selectNode,
+    notify,
+    run,
+    extendSelectionTo: multiSelectApi.extendSelectionTo,
+  });
 
   // ── 画布高亮：hover 为直接注入（见 handleRowHover），选中走 hook（重载后仍能恢复）──
   const selectedTargets = useMemo(() => highlightTargetsForNode(selectedNode), [selectedNode]);
@@ -466,13 +417,14 @@ export function useStructurePanel({
     matchedKeys: search.matchedKeys,
     counts,
     selectedKey,
+    selectedAncestorKeys,
     activeKey: active,
     reveal,
     drag,
     readOnly,
     toggleCollapse,
     toggleAll,
-    collapseEntries,
+    allExpanded,
     selectNode,
     handleRowHover,
     handlePointerDrop,
@@ -484,5 +436,9 @@ export function useStructurePanel({
     toggleLock,
     copyEntry,
     moveToPlacement,
+    multiSelectEnabled: multiSelectApi.enabled,
+    multiSelectedPaths: multiSelectApi.paths,
+    extendSelectionTo: multiSelectApi.extendSelectionTo,
+    clearSelection: multiSelectApi.clearSelection,
   };
 }

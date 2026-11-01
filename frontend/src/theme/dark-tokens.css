@@ -78,6 +78,13 @@
   --rf-success-text: #74d7a4;
   --rf-warning-text: #f2c66d;
   --rf-error-text: #ff9a91;
+  /* 三档「填充」底色与错误浅底：与 design-tokens.css **同名同序**（审计 R-15）。
+     值不是抄过去的——同一句 `color-mix` 在这里读到的是深色主题的正文色与容器底色，
+     所以派生出来的是"深底上再提亮一层"。缺了这一份，深色下结构树 hover 会白底透出。 */
+  --rf-fill-secondary: color-mix(in srgb, var(--rf-text-body) 6%, var(--rf-surface));
+  --rf-fill-tertiary: color-mix(in srgb, var(--rf-text-body) 4%, var(--rf-surface));
+  --rf-fill-quaternary: color-mix(in srgb, var(--rf-text-body) 2.5%, var(--rf-surface));
+  --rf-error-bg: color-mix(in srgb, var(--rf-error-text) 10%, var(--rf-surface));
   --rf-focus-ring: #3b5b86;
   --rf-focus-visible: #9dc3ef;
   /* 收藏星标在深底上要提亮：#d89614 与 #1a1e24 的对比只有 3.0 左右，星标会糊成一片。 */

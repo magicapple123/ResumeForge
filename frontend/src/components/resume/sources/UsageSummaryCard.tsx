@@ -11,6 +11,7 @@ import EmptyState from "../../common/EmptyState";
 import ErrorState from "../../common/ErrorState";
 import LoadingBlock from "../../common/LoadingBlock";
 import { pt } from "../../../features/resume-provenance/i18n";
+import { usageTaskLabel } from "../../../features/resume-provenance/usageTaskLabels";
 import {
   costAmount,
   durationText,
@@ -44,9 +45,15 @@ function finishReasonLabel(reason: string): string {
   return key ? pt(key as Parameters<typeof pt>[0]) : reason;
 }
 
-function bucketColumns(): TableColumnsType<UsageBucketOut> {
+function bucketColumns(valueLabel?: (value: string) => string): TableColumnsType<UsageBucketOut> {
   return [
-    { title: "", dataIndex: "key", ellipsis: true },
+    {
+      title: "",
+      dataIndex: "key",
+      ellipsis: true,
+      // 按任务视图把协议码翻译成标签；按模型视图（valueLabel 缺省）模型名原样显示。
+      render: (value: string) => (valueLabel ? valueLabel(value) : value),
+    },
     { title: pt("provenance.usage.calls"), dataIndex: "calls", width: 80 },
     {
       title: pt("provenance.usage.tokens"),
@@ -180,7 +187,7 @@ export default function UsageSummaryCard({
         size="small"
         rowKey="key"
         pagination={false}
-        columns={bucketColumns()}
+        columns={bucketColumns(usageTaskLabel)}
         dataSource={summary.tasks}
         locale={{ emptyText: "-" }}
       />

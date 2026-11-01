@@ -80,9 +80,9 @@ const education: StructureViewNode = {
 
 const headerGroup: StructureViewNode = {
   kind: "group",
-  key: "header.#name",
+  key: "header",
   path: null,
-  label: "name",
+  label: "header",
   children: [
     {
       kind: "item",
@@ -126,7 +126,7 @@ describe("structureView · 展开与计数", () => {
     const rows = flattenVisible(tree, new Set());
     // 页眉 1 + 教育板块(1) + 条目(1) + 4 组 + 5 字段 + 项目板块(1) + 条目(1) + 1 组 + 1 字段
     expect(rows.map((row) => row.node.key)).toEqual([
-      "header.#name",
+      "header",
       "header.header.name_1",
       "section:education",
       "entry:education.entry_1",
@@ -229,6 +229,26 @@ describe("structureView · 搜索", () => {
     const result = searchTree(tree, "根本不存在的字段");
     expect(result.rows).toEqual([]);
   });
+
+  it("R-09：传 labelOf 时按展示文案匹配（位置名也能搜到字段）", () => {
+    const labelOf = (node: StructureViewNode): string =>
+      node.key === "header" ? "基本信息" : node.label;
+    const byGroupName = searchTree(tree, "基本信息", { labelOf });
+    expect(byGroupName.hitKeys).toEqual(new Set(["header"]));
+    expect(byGroupName.rows.map((row) => row.node.key)).toContain("header.header.name_1");
+
+    // 展示文案里带位置名（"联系方式"）时，该位置下的字段也能被搜到。
+    const withPlacement = searchTree(tree, "联系方式", {
+      labelOf: (node) => `${node.label} 联系方式`,
+    });
+    expect(withPlacement.rows.length).toBeGreaterThan(0);
+    expect(withPlacement.hitKeys.size).toBeGreaterThan(0);
+  });
+
+  it("R-09：labelOf 返回空串时退回节点原始 label（不丢匹配）", () => {
+    const result = searchTree(tree, "学院", { labelOf: () => "" });
+    expect(result.hitKeys).toEqual(new Set(["item:education.entry_1.dept_1"]));
+  });
 });
 
 describe("structureView · 祖先与键盘", () => {
@@ -246,10 +266,10 @@ describe("structureView · 祖先与键盘", () => {
     const rows = flattenVisible(tree, new Set());
     expect(nextRowKey(rows, "section:education", "down")).toBe("entry:education.entry_1");
     expect(nextRowKey(rows, "section:education", "up")).toBe("header.header.name_1");
-    expect(nextRowKey(rows, "", "down")).toBe("header.#name");
+    expect(nextRowKey(rows, "", "down")).toBe("header");
     expect(nextRowKey(rows, "header.header.name_1", "end")).toBe(
       "item:custom:abc123.entry_2.summary_1",
     );
-    expect(nextRowKey(rows, "header.header.name_1", "up")).toBe("header.#name");
+    expect(nextRowKey(rows, "header.header.name_1", "up")).toBe("header");
   });
 });

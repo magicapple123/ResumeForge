@@ -32,8 +32,10 @@ CORE_TOOLS: tuple[Tool, ...] = (
     Tool(
         name="search_product_docs",
         description=(
-            "检索简历通本地产品文档，回答功能在哪里、怎么用、有哪些限制。"
-            "用户问简历通本身的问题时优先使用；不要用联网搜索替代本地文档。"
+            "检索简历通本地产品文档，回答功能在哪里、怎么用、按钮/提示叫什么、有哪些限制。"
+            "索引范围：README、CHANGELOG、docs 全目录（含 ADR/verification 子目录）与界面语言包"
+            "（zh-CN.*.ts，界面文案的唯一真相）。用户问简历通本身的问题时优先使用；"
+            "不要用联网搜索替代本地文档，也不要凭记忆回答旧说法。"
         ),
         parameters={
             "type": "object",

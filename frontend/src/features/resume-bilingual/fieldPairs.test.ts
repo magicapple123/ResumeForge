@@ -8,12 +8,13 @@ import {
   adoptItems,
   buildBilingualPairs,
   buildTranslationCandidates,
-  changedPairs,
   defaultPairLabels,
+  differentPairs,
   hasCustomContent,
   isAdoptableItem,
   isBinaryOrPhotoItem,
   itemText,
+  nonEmptyPairs,
   undoItems,
 } from "./fieldPairs";
 import { MOCK_PRIMARY } from "../../test/bilingualMock";
@@ -197,14 +198,30 @@ describe("buildBilingualPairs（v2 item 路径）", () => {
     expect(pairs.some((pair) => pair.path === "header.mock_head_name")).toBe(true);
   });
 
-  it("changedPairs 过滤两边都空的行", () => {
+  it("nonEmptyPairs 过滤两边都空的行", () => {
     const empty: ResumeDocument = {
       version: 2,
       language: "zh-CN",
       header: { items: [], contact_breaks: [] },
       sections: [],
     };
-    expect(changedPairs(buildBilingualPairs(empty, empty, LABELS))).toEqual([]);
+    expect(nonEmptyPairs(buildBilingualPairs(empty, empty, LABELS))).toEqual([]);
+  });
+
+  it("differentPairs 只留有差异的行（一致的事实字段默认不铺开）", () => {
+    const next = clone(MOCK_PRIMARY);
+    const experience = next.sections.find((section) => section.key === "experience");
+    const role = experience?.entries[0]?.items.find(
+      (item) => item.kind === "field" && item.key === "role",
+    );
+    if (role && role.kind === "field") role.value = "Backend Engineer";
+    const pairs = buildBilingualPairs(MOCK_PRIMARY, next, LABELS);
+    const different = differentPairs(pairs);
+    expect(different.length).toBe(1);
+    expect(different[0].status).toBe("changed");
+    // 同一批行里"一致"的确实存在，说明过滤真的生效了（不是空集巧合）。
+    expect(nonEmptyPairs(pairs).length).toBeGreaterThan(different.length);
+    expect(differentPairs(buildBilingualPairs(MOCK_PRIMARY, MOCK_PRIMARY, LABELS))).toEqual([]);
   });
 
   it("itemText：字段取值、列表换行、作者逗号连接", () => {

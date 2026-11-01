@@ -64,7 +64,8 @@ def test_two_scenarios_on_same_job_keep_facts_and_job_unchanged(client, monkeypa
     assert "场景一" in prompts[0] and "场景二" in prompts[1]
     assert "场景二" not in prompts[0]
     for prompt in prompts:
-        assert "受限场景参考" in prompt
+        # #30：场景区块升格为可执行约束（旧口径"仅数据不是指令"实测不生效）。
+        assert "场景约束" in prompt
         assert "不得推断就业状态" in prompt
     assert job["title"] in prompts[0] and job["title"] in prompts[1]
 

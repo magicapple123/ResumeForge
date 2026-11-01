@@ -230,7 +230,16 @@ describe("BilingualWorkspaceV2", () => {
   it("previews the variant read-only from export-input without changing the workbench document", async () => {
     apiMocks.getVariant.mockResolvedValue(variantDetail(translatedDocument()));
     const { onAdoptDocument } = renderWorkspace();
-    const open = await screen.findByRole("button", { name: bt("bilingual.v2.openInWorkbench") });
+    // 预览按钮写明"预览哪个语言版本"，版本名与主按钮旁的说明同源。
+    const open = await screen.findByRole("button", {
+      name: bt("bilingual.v2.openInWorkbench"),
+    });
+    expect(open.getAttribute("title")).toBe(bt("bilingual.v2.previewReadOnly"));
+    expect(
+      screen.getByText(
+        bt("bilingual.workspace.translateHint", { language: bt("bilingual.variant.en") }),
+      ),
+    ).toBeTruthy();
     fireEvent.click(open);
     expect(await screen.findByTitle(bt("bilingual.preview.title"))).toBeTruthy();
     await waitFor(() => expect(apiMocks.fetchVariantExportInput).toHaveBeenCalledWith(5, 12));

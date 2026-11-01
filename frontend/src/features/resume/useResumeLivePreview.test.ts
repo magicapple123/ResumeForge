@@ -306,7 +306,7 @@ describe("制作台实时预览 · 结果与失败", () => {
     expect(onHtml).not.toHaveBeenCalled();
   });
 
-  it("保存期间（挂起）的变化不发请求，恢复后也不补发（宿主写的 html 是权威的）", async () => {
+  it("保存期间（挂起）的变化不在挂起期发请求，恢复后补排一次（R-32）", async () => {
     const { render } = manualRender();
     const onHtml = vi.fn();
     const { rerender, result } = renderHook(
@@ -315,21 +315,35 @@ describe("制作台实时预览 · 结果与失败", () => {
     );
     act(() => result.current.suspend());
 
-    // 保存期间内容会变（宿主 setDetail / overlay 清空）：只更新基线，不发请求。
+    // 保存期间内容会变（宿主 setDetail / overlay 清空）：挂起期一次请求都不发。
     rerender(base({ render, onHtml, content: B }));
     await advance(600);
     expect(render).not.toHaveBeenCalled();
     // 挂起时状态必须归 idle，否则状态条会一直写着「预览更新中…」。
     expect(result.current.state).toBe("idle");
 
+    // R-32：挂起期不记基线，恢复时发现内容比"真排过的那一版"新 → 补排一次。
+    // 旧实现把变化记成"已渲染过"，恢复后纸面永远停在保存那一刻（隐藏/删除字段不生效）。
     act(() => result.current.resume());
     await advance(600);
-    expect(render).not.toHaveBeenCalled();
+    expect(render).toHaveBeenCalledTimes(1);
 
-    // 恢复之后的**新**变化照常触发。
+    // 恢复之后的**新**变化照常触发（上一次请求还在飞：这一版只排队，仍只发过 1 次）。
     rerender(base({ render, onHtml, content: C }));
     await advance(600);
     expect(render).toHaveBeenCalledTimes(1);
+  });
+
+  it("挂起期间内容没变：恢复后不补排（不制造多余重排）", async () => {
+    const { render } = manualRender();
+    const { result } = renderHook(
+      (props: UseResumeLivePreviewOptions) => useResumeLivePreview(props),
+      { initialProps: base({ render }) },
+    );
+    act(() => result.current.suspend());
+    act(() => result.current.resume());
+    await advance(600);
+    expect(render).not.toHaveBeenCalled();
   });
 
   it("enabled=false 时一个请求都不发", async () => {

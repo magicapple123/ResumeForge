@@ -40,6 +40,7 @@ import type { Claim, ClaimSummary } from "../types";
 import { CLAIM_CATEGORIES, VERIFICATION_STATUSES, claimPayload } from "../types";
 import { t } from "../i18n";
 import { CLAIM_CATEGORY_LABEL_KEYS, VERIFICATION_STATUS_LABEL_KEYS } from "../i18n/enum/claims";
+import { StartPanel } from "./drill/StartPanel";
 import { useLocale } from "../i18n/i18nContext";
 
 /** 列表一页 20 条，与后端 /claims/page 的默认口径一致。 */
@@ -57,6 +58,7 @@ export default function ClaimsPage() {
   const [keyword, setKeyword] = useState("");
   const [page, setPage] = useState(1);
   const [formOpen, setFormOpen] = useState(false);
+  const [drillOpen, setDrillOpen] = useState(false);
   const [editing, setEditing] = useState<Claim | null>(null);
   const [draftOpen, setDraftOpen] = useState(false);
 
@@ -168,7 +170,8 @@ export default function ClaimsPage() {
         </Space>
         <Space>
           {/* 深挖的输入就是台账条目，所以入口放在这里——从别处进它都要先绕一圈。 */}
-          <Button icon={<ThunderboltOutlined />} onClick={() => navigate("/claims/drill")}>
+          {/* #42：就地弹参数弹窗（预填当前勾选），确认后才进深挖页——不再一点就跳走。 */}
+          <Button icon={<ThunderboltOutlined />} onClick={() => setDrillOpen(true)}>
             {t("claimsPage.action.drill")}
           </Button>
           <Button icon={<FileAddOutlined />} onClick={() => setDraftOpen(true)}>
@@ -339,6 +342,19 @@ export default function ClaimsPage() {
         onClose={() => setDraftOpen(false)}
         onSaved={() => void refreshAll()}
       />
+      {/* #42：就地弹参数弹窗；确认后带着会话进深挖页（跳转仍发生，但那是确认之后）。 */}
+      {drillOpen ? (
+        <StartPanel
+          externalOpen
+          /* #42：把台账里已勾选的主张带进弹窗预填（未确认的由弹窗自己过滤并提示条数）。 */
+          initialClaimIds={[...batch.selectedIds]}
+          onExternalClose={() => setDrillOpen(false)}
+          onStarted={(session) => {
+            setDrillOpen(false);
+            navigate("/claims/drill", { state: { sessionId: session.id } });
+          }}
+        />
+      ) : null}
     </div>
   );
 }

@@ -178,7 +178,8 @@ export interface InlineSegment {
   text: string;
   role: InlineRole | string;
   strong: boolean;
-  italic: boolean;
+  /** #5d：斜体已移除；旧 planner 输出里的该字段前端不再消费。 */
+  italic?: boolean;
   link?: string | null;
   path: string;
 }

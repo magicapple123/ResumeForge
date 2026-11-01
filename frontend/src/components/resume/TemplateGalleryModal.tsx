@@ -29,6 +29,7 @@ import { resumeTemplateDescription, resumeTemplateLabel } from "../../i18n/enum/
 import { withHiddenScrollbar } from "../../utils/iframeDocument";
 import { templateCapability } from "../../features/resume-template-trial/templateProfile";
 import TemplateTrialPanel from "./template-trial/TemplateTrialPanel";
+import TemplateZoomModal from "./TemplateZoomModal";
 
 interface Props {
   open: boolean;
@@ -100,12 +101,8 @@ export default function TemplateGalleryModal({
   const [retryTick, setRetryTick] = useState(0);
   // 字号档位**就是这份简历的档位**（不再另存一份预览档位，见 Props 注释）。
   const previewScale = layout.font_scale ?? "standard";
-  // 「查看大图」：整页渲染另取一份（缩略图只渲染 1 页，看不到后面的内容）。
+  // 「查看大图」：单独一层弹窗（TemplateZoomModal），固定渲染一张 A4 纸。
   const [zoomTemplate, setZoomTemplate] = useState<ResumeTemplateOption | null>(null);
-  const [zoomHtml, setZoomHtml] = useState("");
-  const [zoomLoading, setZoomLoading] = useState(false);
-  /** 大图按几页排：与用户设定的「最大篇幅」同口径（后端上限 3）。 */
-  const zoomPages = Number(layout.page_limit) || 1;
   // 用户当前真实设定的格式覆盖（含 `font_scale_adjust` 字号系数）。缩略图必须带上它，
   // 否则"用户把字号拖到 14.3px、缩略图却仍是 14px"，选出来才发现不一样。
   const formatConfig = layout.format_config;
@@ -203,34 +200,9 @@ export default function TemplateGalleryModal({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, templates, layout.format_name, formatConfigKey, previewScale, retryTick]);
 
-  const openZoom = useCallback(
-    async (template: ResumeTemplateOption) => {
-      setZoomTemplate(template);
-      setZoomHtml("");
-      setZoomLoading(true);
-      try {
-        setZoomHtml(
-          await previewResumeTemplate({
-            template_name: template.name,
-            format_name: layout.format_name,
-            format_config: formatConfig,
-            // 用**用户当前设定的页数**（1~3，后端 MAX_RESUME_PAGES 上限即 3）：
-            // 大图要看的是"这个模板、这个页数下长什么样"，与导出同口径。
-            // 曾经写死 6，直接被后端校验挡下（page_limit 的取值上限是 3）。
-            page_limit: zoomPages,
-            font_scale: previewScale,
-          }),
-        );
-      } catch (error) {
-        message.error(error instanceof Error ? error.message : t("gallery.preview.failed"));
-        setZoomTemplate(null);
-      } finally {
-        setZoomLoading(false);
-      }
-    },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [layout.format_name, formatConfigKey, previewScale, zoomPages, message],
-  );
+  const openZoom = useCallback((template: ResumeTemplateOption) => {
+    setZoomTemplate(template);
+  }, []);
 
   /** 一张卡片的能力摘要（纯展示；目录缺基准时只显示能证实的两项）。 */
   const cardCapability = useCallback(
@@ -425,63 +397,16 @@ export default function TemplateGalleryModal({
       ) : (
         body
       )}
-      {/* 大图：整页缩放到窗口宽度（`fit="width"`，纸张按「最大篇幅」给足 1–3 页）。
-          这里**不再**用固定 794×1123 的 iframe —— 那是"大图界面三个滚动条"的成因：
-          弹窗窄于 794px 时出横向滚动条，文档比一页高时 iframe 内部再出一条竖向滚动条，
-          加上弹窗本体那条，一共三条。缩放成自适应宽度后，整块只剩弹窗本体一条。 */}
-      <Modal
-        title={
-          zoomTemplate
-            ? t("gallery.zoom.titleWithName", { name: zoomTemplate.label })
-            : t("gallery.zoom.title")
-        }
-        open={zoomTemplate !== null}
-        onCancel={() => setZoomTemplate(null)}
-        // 只留主动作（用这个模板）。先前那颗「关闭」与右上角 × 重复，属于同一弹窗的
-        // 第二/第三个关闭入口；Esc 与点遮罩同样映射 onCancel。
-        footer={
-          zoomTemplate ? (
-            <Button
-              type="primary"
-              disabled={zoomTemplate.name === selectedName}
-              onClick={() => {
-                onSelect(zoomTemplate.name);
-                setZoomTemplate(null);
-              }}
-            >
-              {zoomTemplate.name === selectedName
-                ? t("gallery.status.current")
-                : t("gallery.action.use")}
-            </Button>
-          ) : null
-        }
-        width="min(900px, 96vw)"
-        styles={{
-          body: {
-            maxHeight: "var(--rf-modal-body-max-h)",
-            // 只留竖向滚动：横向由 `fit="width"` 消化掉，`overflowX: hidden` 是
-            // 那道保险——纸张宽度就是容器宽度，不该再出现第二条横向滚动条。
-            overflowY: "auto",
-            overflowX: "hidden",
-            // 模板预览底色：深色主题下必须暗下去，否则 iframe 周围是一圈白边。
-            background: "var(--rf-surface-alt)",
-          },
-        }}
-        destroyOnHidden
-      >
-        {zoomLoading ? (
-          <div className="template-gallery-zoom-loading">
-            <LoadingBlock />
-          </div>
-        ) : (
-          <A4PreviewFrame
-            html={withHiddenScrollbar(zoomHtml)}
-            title={t("gallery.zoom.frameTitle")}
-            fit="width"
-            pages={zoomPages}
-          />
-        )}
-      </Modal>
+      {/* 大图：固定一张 A4 纸（`fit="contain"`，纸外 20px 灰底），见 TemplateZoomModal。 */}
+      <TemplateZoomModal
+        template={zoomTemplate}
+        formatName={layout.format_name}
+        formatConfig={formatConfig}
+        fontScale={previewScale}
+        selectedName={selectedName}
+        onSelect={onSelect}
+        onClose={() => setZoomTemplate(null)}
+      />
     </Modal>
   );
 }

@@ -120,14 +120,12 @@ def add_segments(
         style = style_of(role_style, role, object_id)
         size = base * role_ratio(layout, role) * scale_of(style)
         fallback = theme.body_text if role == "body" else theme.muted_text
-        # Q11：run 吃角色/对象覆盖的加粗、斜体与字距——此前只认段内的 ** ** / ❗标记，
-        # 面板里调「正文 → 加粗 / 斜体 / 字距」对 Word 完全无效。
+        # Q11：run 吃角色/对象覆盖的加粗与字距——此前只认段内的 ** ** / ❗标记，
+        # 面板里调「正文 → 加粗 / 字距」对 Word 完全无效。
+        # #5d：斜体整体移除；segment.italic 字段已不存在，不再读取。
         style_bold = style.bold if style is not None and style.bold is not None else None
         bold = bool(getattr(segment, "strong", False)) or (
             style_bold if style_bold is not None else bold_default
-        )
-        italic = bool(getattr(segment, "italic", False)) or bool(
-            style.italic if style is not None and style.italic is not None else False
         )
         letter_spacing_pt = (
             base * float(style.letter_spacing) * _PX_TO_PT
@@ -139,7 +137,6 @@ def add_segments(
             text,
             set_font,
             bold=bold,
-            italic=italic,
             size_pt=size * _PX_TO_PT,
             color=color_of(style, fallback),
             letter_spacing_pt=letter_spacing_pt,

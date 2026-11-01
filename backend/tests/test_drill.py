@@ -415,6 +415,16 @@ def test_drill_create_deduplicates_claim_ids():
     assert payload.claim_ids == [3, 1, 2]
 
 
+def test_drill_create_rejects_an_explicitly_empty_claim_selection():
+    """#42：显式传空列表 = 一条都没选，必须 422，不能退化成「全部已确认」。
+
+    不传字段仍是旧口径（全部已确认），两种"空"语义不同，所以这里两个都钉住。
+    """
+    with pytest.raises(Exception):
+        DrillCreate(claim_ids=[])
+    assert DrillCreate().claim_ids is None
+
+
 def test_drill_create_rejects_an_unknown_feedback_policy():
     with pytest.raises(Exception):
         DrillCreate(feedback_policy="随便")

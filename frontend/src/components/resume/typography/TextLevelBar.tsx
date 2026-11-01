@@ -65,6 +65,11 @@ interface Props {
   /** 应用/恢复成功（宿主据此播 Toast）；level=null 表示恢复跟随模板。 */
   onApplied?: (result: { level: TextLevelId | null; count: number }) => void;
   /**
+   * 批量目标 > 1 时提供"只改当前条目"：清空多选、只留聚焦条目。
+   * 不传 = 不给这条出口（无聚焦条目时也无从"只改当前"）。
+   */
+  onClearBatch?: () => void;
+  /**
    * 纸面上最后点中的字段路径（`data-resume-path`）。
    *
    * 只用来推**默认作用范围**：点"上海财经大学"（`education.0.school`）就落到"条目标题"，
@@ -90,6 +95,7 @@ export default function TextLevelBar({
   disabled = false,
   onChange,
   onApplied,
+  onClearBatch,
   pickedPath = null,
 }: Props) {
   useLocale();
@@ -153,9 +159,22 @@ export default function TextLevelBar({
       {/* Q13：外层分组标题已经叫「文字级别」，这里不再重复一个同名标题；改成状态行：
           在改哪一条（目标）+ 当前级别 + 来源胶囊。 */}
       <Space size={6} wrap data-text-level-status="1">
-        <Typography.Text strong>
-          {t("typography.level.status", { name: targetName })}
-        </Typography.Text>
+        {/* R-18：批量目标是"改哪几条"的独立语义，不能塞进「正在调整：…」的句式里
+            （"正在调整：2 条内容"读不出是批量）。有聚焦条目时再给一条退回单条的出口。 */}
+        {targets.length > 1 ? (
+          <Typography.Text strong>
+            {t("typography.level.statusBatch", { count: targets.length })}
+          </Typography.Text>
+        ) : (
+          <Typography.Text strong>
+            {t("typography.level.status", { name: targetName })}
+          </Typography.Text>
+        )}
+        {targets.length > 1 && onClearBatch ? (
+          <Typography.Link role="button" tabIndex={0} onClick={onClearBatch}>
+            {t("typography.level.clearBatch")}
+          </Typography.Link>
+        ) : null}
         <Typography.Text type="secondary">
           {t("typography.level.current", { level: currentLevelText(state) })}
         </Typography.Text>

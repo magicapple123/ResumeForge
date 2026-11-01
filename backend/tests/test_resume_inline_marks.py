@@ -106,8 +106,9 @@ def _html_body(html: str) -> str:
     [
         ("", []),
         # 斜体：成对生效，落单/相邻的星号按字面保留（双星号不是两个斜体）。
-        ("*斜体*", [RichSpan("斜体", italic=True)]),
-        ("前*中*后", [RichSpan("前"), RichSpan("中", italic=True), RichSpan("后")]),
+        # #5d：单星号仍剥壳（不冒裸星号），但不再产出倾斜效果。
+        ("*斜体*", [RichSpan("斜体")]),
+        ("前*中*后", [RichSpan("前"), RichSpan("中"), RichSpan("后")]),
         ("a*b", [RichSpan("a*b")]),
         ("**加粗**", [RichSpan("加粗", bold=True)]),
         # 先切双星号再切单星号：双星号内部即使含单星号也不会被拆成斜体。
@@ -126,7 +127,7 @@ def _html_body(html: str) -> str:
             ],
         ),
         # 斜体里放链接 / 加粗里放链接：两种样式同时成立。
-        ("*[官网](https://e.com)*", [RichSpan("官网", italic=True, link="https://e.com")]),
+        ("*[官网](https://e.com)*", [RichSpan("官网", link="https://e.com")]),
         ("**[官网](https://e.com)**", [RichSpan("官网", bold=True, link="https://e.com")]),
         # 非法 scheme / 落单括号 / 空 label 一律按字面文本保留，不吞字符。
         ("[x](javascript:alert)", [RichSpan("[x](javascript:alert)")]),
@@ -194,13 +195,15 @@ def test_strip_markers_keeps_link_label_only() -> None:
     assert strip_markers("落单 * 与 ** 原样") == "落单 * 与 ** 原样"
 
 
-# ===== 2. HTML：链接与斜体收口 =====
+# ===== 2. HTML：链接收口（#5d 起不再产出斜体标签） =====
 
 
-def test_html_renders_em_and_safe_anchor() -> None:
+def test_html_renders_strong_and_safe_anchor() -> None:
     html = apply_rich_html("<p>" + MARKED_SUMMARY + "</p>")
     assert "<strong>负责</strong>" in html
-    assert "<em>高并发</em>" in html
+    # #5d：斜体整体移除——单星号剥壳后按普通文字输出，不再产出 <em>。
+    assert "<em>" not in html
+    assert "高并发" in html
     assert f'<a href="{LINK_URL.replace("&", "&amp;")}" rel="noopener noreferrer">官网</a>' in html
     assert 'href="mailto:hr@example.com"' in html
 
@@ -228,14 +231,15 @@ def test_html_skips_style_script_and_attributes() -> None:
     )
     assert "<style>p::after{content:'*x*'}</style>" in html
     assert '<p title="*tip*">' in html
-    assert "<em>正文</em>" in html
+    assert "正文" in html and "<em>" not in html
     assert "<script>var a='*b*'</script>" in html
 
 
 def test_rendered_html_consumes_the_shared_parser() -> None:
     body = _html_body(render_html(_resume(), template="classic"))
     assert "<strong>负责</strong>" in body
-    assert "<em>高并发</em>" in body
+    assert "<em>" not in body
+    assert "高并发" in body
     assert 'rel="noopener noreferrer"' in body
     # 标记字面量不许泄漏到纸面（模板 CSS 注释在 style 里，不在此断言范围）。
     assert "**" not in body
@@ -257,25 +261,25 @@ def test_html_body_helper_strips_script_blocks_case_insensitively() -> None:
     assert "**" not in body
 
 
-# ===== 3. Word：真斜体 + 可见 URL 文本 =====
+# ===== 3. Word：可见 URL 文本（#5d 起斜体不再渲染） =====
 
 
-def test_docx_marks_italic_runs_and_expands_links() -> None:
+def test_docx_expands_links_and_never_produces_italic() -> None:
     content = build_resume_docx(_resume(), template="classic", page_limit=2).content
     text, xml = _docx_text_and_xml(content)
 
     assert "**" not in text and "*高并发*" not in text
     assert "官网" in text and LINK_URL in text, "Word 链接必须是可见文本 label (URL)"
-    assert "<w:i" in xml, "斜体应落成 run.font.italic"
-    assert "<w:b" in xml, "加粗应落成 run.font.bold"
-
+    # #5d：斜体整体移除——注意 "<w:i" 是 "<w:ind"（缩进）的前缀，必须按 run 属性断言。
     from docx import Document
 
     document = Document(io.BytesIO(content))
     italic_runs = [
         run.text for paragraph in document.paragraphs for run in paragraph.runs if run.italic
     ]
-    assert italic_runs and "高并发" in "".join(italic_runs)
+    assert not italic_runs, "#5d：不应再有斜体 run"
+    assert "<w:b" in xml, "加粗应落成 run.font.bold"
+    assert "高并发" in text
 
 
 # ===== 4. PDF：近似（不倾斜、文本可提取）+ 链接只做可见文本 =====
@@ -286,7 +290,7 @@ def test_pdf_uses_visible_text_and_never_prints_markers() -> None:
     artifact = build_resume_pdf(_resume(), template="classic", page_limit=2)
     text, annots = _pdf_page_texts(artifact.content)
 
-    assert "高并发" in text, "斜体近似渲染仍必须保留文字（不倾斜）"
+    assert "高并发" in text, "剥壳后的文本仍必须保留（不倾斜、不丢字）"
     assert LINK_TEXT.replace(" ", "") in text, "PDF 链接应输出 label (URL) 可见文本"
     assert "**" not in text and "*" not in text and "](https://" not in text
     assert all(annotation is None for annotation in annots), "PDF 不应生成可点击链接注释"
@@ -326,12 +330,12 @@ def test_markdown_and_delivery_json_keep_the_source_markers() -> None:
 
 
 def test_capability_matrix_matches_the_actual_rendering() -> None:
-    """矩阵是用户能看到的承诺：HTML 真斜体/真链接、docx 真斜体、pdf 只有近似与可见文本。"""
-    assert level_of("html", "italic") == "supported"
+    """矩阵是用户能看到的承诺：链接按格式近似，斜体已整体移除（#5d）。"""
+    assert level_of("html", "italic") == "unsupported"  # 能力项已删：查询一律不支持
     assert level_of("html", "link_clickable") == "supported"
-    assert level_of("docx", "italic") == "supported"
+    assert level_of("docx", "italic") == "unsupported"
     assert level_of("docx", "link_clickable") == "approx"
-    assert level_of("pdf", "italic") == "approx"
+    assert level_of("pdf", "italic") == "unsupported"
     assert level_of("pdf", "link_clickable") == "unsupported"
     for fmt in ("html", "pdf", "docx", "markdown", "txt", "json"):
-        assert "italic" in CAPABILITIES[fmt] and "link_clickable" in CAPABILITIES[fmt]
+        assert "italic" not in CAPABILITIES[fmt] and "link_clickable" in CAPABILITIES[fmt]

@@ -84,8 +84,33 @@ export function locatorForObject(object: DocumentObjectOut): ProvenanceLocator {
   };
 }
 
+/**
+ * 下拉里"字段名"那一截显示什么（R-16）。
+ *
+ * 三段口径：
+ * 1. 后端给了 `field_label`（要点块）= 用它；能翻译就翻（`school` → 学校），
+ *    翻不出来原样显示（自定义字段本来就是用户写的中文）；
+ * 2. 没给（条目块）→ 看 `fieldNameOf(path)`：**path 末段是内部标识时不显示后缀**。
+ *    条目块的 path 是 `education.ob_84c9…`，末段就是 object_id；要点块是
+ *    `…it_512bcf…`。把它们当字段名正是"下拉里出现 ob_/it_"的根因；
+ * 3. 都不是（v1 的 `experience.0.description` 这类）→ 保留原后缀。
+ */
+function fieldLabelOf(
+  object: DocumentObjectOut,
+  resolveFieldLabel?: (key: string, sectionKey?: string) => string | undefined,
+): string {
+  const raw = (object.field_label ?? "").trim();
+  if (raw) return resolveFieldLabel?.(raw, object.field) ?? raw;
+  const derived = fieldNameOf(object.path);
+  if (derived && (derived === object.object_id || derived === object.point_id)) return "";
+  return derived;
+}
+
 /** 整份来源视图 → 下拉选项（去重；保持后端顺序）。 */
-export function selectionOptions(provenance: ResumeProvenanceOut | null): SelectionOption[] {
+export function selectionOptions(
+  provenance: ResumeProvenanceOut | null,
+  resolveFieldLabel?: (key: string, sectionKey?: string) => string | undefined,
+): SelectionOption[] {
   if (!provenance) return [];
   const seen = new Set<string>();
   const options: SelectionOption[] = [];
@@ -96,7 +121,7 @@ export function selectionOptions(provenance: ResumeProvenanceOut | null): Select
     options.push({
       value,
       label: object.label ?? "",
-      field: fieldNameOf(object.path),
+      field: fieldLabelOf(object, resolveFieldLabel),
       section: object.field || "other",
       linked: object.link !== null && object.link !== undefined,
       locator: locatorForObject(object),

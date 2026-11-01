@@ -66,6 +66,8 @@ export interface ExportConfigFormProps {
   onChange: (next: ExportPresetConfig) => void;
   namingContext: NamingContext;
   disabled?: boolean;
+  /** R-21：单独文件模式没有归档这一步——开关禁用并解释原因，而不是让它看起来能用。 */
+  archiveDisabled?: boolean;
 }
 
 function Field({ label, hint, children }: { label: string; hint?: string; children: ReactNode }) {
@@ -83,6 +85,7 @@ export default function ExportConfigForm({
   onChange,
   namingContext,
   disabled = false,
+  archiveDisabled = false,
 }: ExportConfigFormProps) {
   useLocale();
   const patch = (next: Partial<ExportPresetConfig>) => onChange({ ...config, ...next });
@@ -198,14 +201,18 @@ export default function ExportConfigForm({
           <Switch
             size="small"
             checked={config.archive_original}
-            disabled={disabled}
+            disabled={disabled || archiveDisabled}
             aria-label={t("delivery.config.archive")}
             onChange={(checked) => patch({ archive_original: checked })}
           />
           <span>{t("delivery.config.archive")}</span>
         </label>
       </div>
-      <p className="resume-delivery-hint">{t("delivery.config.archiveHint")}</p>
+      <p className="resume-delivery-hint">
+        {archiveDisabled
+          ? t("delivery.config.archiveBundleOnly")
+          : t("delivery.config.archiveHint")}
+      </p>
 
       {issues.ok ? null : (
         <Alert

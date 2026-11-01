@@ -293,9 +293,7 @@ def extract_documents_text(documents: Sequence[Any]) -> ExtractedDocuments:
 _PLAIN_TEXT_SUFFIXES = frozenset(
     {"txt", "md", "markdown", "csv", "tsv", "json", "log", "yaml", "yml", "xml", "html", "htm"}
 )
-_UNSUPPORTED_PREVIEW_MESSAGE = (
-    "这种格式暂不支持在线预览；请用「打开所在文件夹」用系统程序查看。"
-)
+_UNSUPPORTED_PREVIEW_MESSAGE = "这种格式暂不支持在线预览；请用「打开所在文件夹」用系统程序查看。"
 
 
 def _decode_plain_text(raw: bytes) -> str:
@@ -310,6 +308,44 @@ def _decode_plain_text(raw: bytes) -> str:
         except UnicodeDecodeError:
             continue
     return raw.decode("utf-8", errors="replace")
+
+
+# 面试材料导入（#41）接受的文件：岗位侧的 JD 只能是能稳定抽出文本的两种格式。
+# 图片不走这里（截图识别在 ``services/interview/interview_material.py``）。
+MATERIAL_TEXT_SUFFIXES = frozenset({"pdf", "txt"})
+# 单份材料文件上限：10 MB。JD 与简历截图都在这个量级以内，超过它的基本是整本手册。
+MAX_MATERIAL_FILE_BYTES = 10 * 1024 * 1024
+
+_MATERIAL_TOO_LARGE = "文件超过 10 MB，无法导入"
+_MATERIAL_UNSUPPORTED = "岗位材料只接受 PDF 或 TXT 文件"
+_MATERIAL_NO_TEXT = "这份文件没有可提取的文字，可能是扫描件"
+_MATERIAL_EMPTY_FILE = "文件是空的"
+
+
+def extract_material_text(name: str, raw: bytes) -> tuple[str, list[str]]:
+    """把用户导入的材料文件（PDF / TXT）提取成纯文本；返回 ``(正文, 警告)``。
+
+    与 :func:`preview_text_of_file` 的区别是**用途不同所以口径不同**：这里是"用户主动
+    上传的一份新材料"，所以要卡体积（10 MB）、只认 PDF / TXT、并且把"没提到文字"说成
+    "可能是扫描件"——那是用户真正需要知道的事，而不是笼统一的"文件格式不支持"。
+
+    失败一律抛 ``ValueError``，文案是面向用户的**原因**（动作由前端补）。
+    """
+    safe_name = (name or "").strip().rsplit("/", 1)[-1].rsplit("\\", 1)[-1]
+    suffix = safe_name.rsplit(".", 1)[-1].lower() if "." in safe_name else ""
+    if suffix not in MATERIAL_TEXT_SUFFIXES:
+        raise ValueError(_MATERIAL_UNSUPPORTED)
+    if not raw:
+        raise ValueError(_MATERIAL_EMPTY_FILE)
+    if len(raw) > MAX_MATERIAL_FILE_BYTES:
+        raise ValueError(_MATERIAL_TOO_LARGE)
+
+    text = _pdf_text(raw) if suffix == "pdf" else _decode_plain_text(raw)
+    body = strip_markers(text).strip()
+    if not body:
+        raise ValueError(_MATERIAL_NO_TEXT)
+    truncated, warnings = _truncate(body)
+    return truncated, list(warnings)
 
 
 def preview_text_of_file(name: str, mime_type: str, raw: bytes) -> tuple[str, list[str]]:

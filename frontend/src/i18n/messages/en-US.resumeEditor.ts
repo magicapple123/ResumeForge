@@ -111,8 +111,16 @@ const resumeEditor = {
   // Control names match the wording the user guide quotes ("Add one from My Profile",
   // "Fill this entry from Profile", "Fill", "Added").
   "editor.header.fillAll": "Fill in all My Profile data",
-  "editor.profileFill.title.entry": "Fill this entry from Profile",
+  /** R-29：三档按场景切换。 */
+  "editor.profileFill.title.fill": "Fill from My Profile",
+  "editor.profileFill.title.fillTarget": "Fill “{title}”",
+  "editor.profileFill.title.add": "Add from My Profile",
+  /** 有目标但过滤后没有候选。 */
+  "editor.profileFill.emptyTarget": "No Profile record matches this entry yet",
   "editor.profileFill.placeholder.entry": "Choose a Profile entry",
+  /** #22: placeholder of the candidate search box (first row of the menu). */
+  "editor.profileFill.search": "Search profile…",
+  "editor.profileFill.count": "{count} items to add",
   "editor.profileFill.aria.entry": "Choose a Profile entry to fill this entry",
   "editor.profileFill.empty": "No entries to fill in",
   "editor.profileFill.success": "Filled {count} fields from your profile",

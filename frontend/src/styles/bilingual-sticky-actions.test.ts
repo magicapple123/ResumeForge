@@ -52,12 +52,14 @@ describe("翻译候选的动作条", () => {
     expect(notice).toContain("margin-bottom:");
   });
 
-  it("宽布局只在表头显示语种列名，行内语种标签由容器查询隐藏（Q24）", () => {
+  it("宽布局只在表头显示语种列名，行内语种标签由容器查询隐藏（Q24 / R-31）", () => {
     const source = css();
-    const at = source.indexOf("@container (min-width: 620px)");
+    // R-31：并排断点从 620 收到 480——左栏常用宽度就在 480~620 之间，620 时这一屏
+    // 一直是"窄档堆叠"，用户看不到并排对照。
+    const at = source.indexOf("@container (min-width: 480px)");
     expect(at).toBeGreaterThan(-1);
     const scoped = source.slice(at);
-    // 宽栏（≥620px 容器）里隐藏行内语种标签：表头已经写明「当前简历 / 英文版」。
+    // 宽栏（≥480px 容器）里隐藏行内语种标签：表头已经写明「当前简历 / 英文版」。
     const langAt = scoped.indexOf(".bilingual-compare__lang");
     expect(langAt).toBeGreaterThan(-1);
     expect(scoped.slice(langAt, langAt + 200)).toContain("display: none");

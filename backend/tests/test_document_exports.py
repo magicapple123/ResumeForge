@@ -159,3 +159,69 @@ def test_html_data_resume_paths_are_v2_item_paths():
         assert not re.match(r"^(education|experience|projects)\.[0-9]+\.[0-9]+$", path)
     # 定位粒度是 item：标签 + 值共享同一路径是契约（同一路径可多次出现）。
     assert "education.ob_edu000001.it_edu000001" in paths
+
+
+# ===== html_text 的标签处理是「确定性解析」而不是正则（CodeQL py/bad-tag-filter） =====
+#
+# 旧的实现用 `<script.*?</script>` / `<[^>]+>` 三连正则剥标签，漏得很有代表性：大小写
+# 混写、`</script >` 带空格、未闭合到文件尾会被当成正文留下来；属性值里出现 `>` 时又会
+# 从中间截断，把 `b'>` 这类碎片吐到「纸面文本」里。下面这几条钉的是**解析器行为**：
+# 换成标准库 html.parser 后，这些变体一律按 HTML 词法处理，与具体写法无关。
+
+
+def test_html_text_drops_script_and_style_variants_regex_missed():
+    """大小写混写 / `</script >` 带空格 / 属性引号：脚本与样式体都不进纸面文本。"""
+    assert html_text("<body><SCRIPT>alert(1)</SCRIPT><p>正文</p></body>") == "正文"
+    assert html_text("<body><script>alert(1)</script ><p>正文</p></body>") == "正文"
+    assert (
+        html_text("<body><script type='text/javascript'>alert(1)</script><p>正文</p></body>")
+        == "正文"
+    )
+    # CSS 里的 `>` 组合选择器不能把 style 块提前截断。
+    assert html_text("<body><STYLE>a>b{color:red}</STYLE><h1>标题</h1></body>") == "标题"
+    assert html_text("<body><style>.x{}</style><script>y()</script><p>留</p></body>") == "留"
+
+
+def test_html_text_drops_self_closing_and_unclosed_script():
+    """自闭合与未闭合到文件尾：标签本身不进文本，其后的正文照常提取。"""
+    # 自闭合 `<script src=x />` 没有内容体：标签被丢弃，后面的段落还在。
+    assert html_text("<body><script src=x /><p>正文</p></body>") == "正文"
+    # 未闭合的 `<script>`：余下内容都是脚本体，一个字都不吐（与浏览器同向）。
+    assert html_text("<body><p>正文</p><script>alert(1)") == "正文"
+
+
+def test_html_text_does_not_truncate_on_gt_inside_attribute():
+    """属性值里的 `>` 不再从中间截断（旧正则 `<[^>]+>` 会吐 `b'>` 碎片）。"""
+    assert html_text("<body><div data-resume-path='a>b'>正文</div></body>") == "正文"
+
+
+def test_html_text_keeps_character_references_verbatim():
+    """实体按**原文**保留：不 decode 成 `&` / `'`，与旧实现逐字节一致。"""
+    assert (
+        html_text("<body><p>&amp; &#x27; &#20013; &lt;b&gt;</p></body>")
+        == "&amp; &#x27; &#20013; &lt;b&gt;"
+    )
+
+
+def test_html_text_keeps_tag_boundaries_as_separators():
+    """每个标签只当一个分隔符：`<p>a</p><p>b</p>` 仍是 `a b`，不会粘成 `ab`。"""
+    assert html_text("<body><p>a</p><p>b</p></body>") == "a b"
+    # 长得像 script 的别的标签（`<scriptx>`）不能被当成脚本整体删掉。
+    assert html_text("<body><p>正文</p><scriptx>保留</scriptx></body>") == "正文 保留"
+
+
+def test_html_text_only_reads_after_body_tag():
+    """`split("<body>", 1)[-1]` 的既有语义：body 之前的 head/style 不参与提取。"""
+    assert (
+        html_text("<html><head><style>.a{color:red}</style></head><body><p>正文</p></body></html>")
+        == "正文"
+    )
+    # 没有 `<body>` 时按原样整段解析（与旧实现同口径）。
+    assert html_text("<p>正文</p>") == "正文"
+
+
+def test_html_text_never_emits_a_live_script_tag_from_nested_residue():
+    """`<scr<script>ipt>` 这类残片：`<script` 不会被当正文吐出来。"""
+    text = html_text("<body><scr<script>ipt>alert(1)</script><p>正文</p></body>")
+    assert "<script" not in text
+    assert "正文" in text

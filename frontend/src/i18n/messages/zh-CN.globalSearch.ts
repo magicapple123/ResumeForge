@@ -39,6 +39,14 @@ const globalSearch = {
   "globalSearch.group.jobs": "岗位",
   "globalSearch.group.resumes": "简历",
   "globalSearch.group.more": "其它",
+
+  /** #11b：命中条目的数据域标签走语言包，不裸显 referral / claim 这类原始码。 */
+  "globalSearch.type.referral": "内推",
+  "globalSearch.type.reminder": "提醒",
+  "globalSearch.type.experience": "面经",
+  "globalSearch.type.claim": "事实台账",
+  "globalSearch.type.material": "资料",
+  "globalSearch.type.skill": "技能",
 } as const;
 
 export default globalSearch;

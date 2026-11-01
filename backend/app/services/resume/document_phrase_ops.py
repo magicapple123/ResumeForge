@@ -35,6 +35,9 @@ def insert_document_phrase(
     target_section = next((s for s in document["sections"] if s["key"] == section), None)
     if target_section is None:
         spec = section_spec(section)
+        if spec is None:
+            # 目录里没有这个分区：与上面「栏目不支持插入」同一类错误（不静默建空板块）。
+            raise ValueError("栏目不支持插入")
         target_section = {"key": section, "kind": spec.kind, "entries": []}
         document["sections"].append(target_section)
     if entry_id is not None:

@@ -15,12 +15,7 @@ import { PictureOutlined } from "@ant-design/icons";
 import { Button, Segmented, Select, Space, Tooltip, Typography } from "antd";
 import { useState } from "react";
 import { RESUME_PAGE_LIMITS } from "../../types";
-import type {
-  ResumeContent,
-  ResumeFormatPreset,
-  ResumeLayout,
-  ResumeTemplateCatalog,
-} from "../../types";
+import type { ResumeFormatPreset, ResumeLayout, ResumeTemplateCatalog } from "../../types";
 import type { ResumeDocument } from "../../types/resumeDocument";
 import type { ResumeFormatConfig } from "../../types/resumeFormat";
 import { useI18n } from "../../i18n/i18nContext";
@@ -30,7 +25,6 @@ import {
   resumeTemplateLabel,
 } from "../../i18n/enum/resumeCatalog";
 import { layoutWithFormatPreset } from "./layoutWithFormatPreset";
-import ContactBreaksControl from "../../features/resume-layout/ContactBreaksControl";
 import { formatPresetLabelOf } from "./resumeTemplatePresetLabel";
 import ResumeLanguageSelect from "./ResumeLanguageSelect";
 import TemplateGalleryModal from "./TemplateGalleryModal";
@@ -46,6 +40,8 @@ interface Props {
   showFormat?: boolean;
   /** 最大篇幅控件：缺省渲染；制作台把它收进「版面」组（同一键只保留一处），传 false。 */
   showPageLimit?: boolean;
+  /** 字段语言控件：缺省渲染；制作台把它移到「版面」组（同一键只保留一处），传 false。 */
+  showLanguage?: boolean;
   /**
    * W10 模板图库的试用能力（都可选；不传 = 试用只能看示例，行为与之前逐字相同）：
    * - `resumeId`：启用「我的内容 + 真实页数/溢出」；
@@ -53,7 +49,11 @@ interface Props {
    * - `onTrialAdopt`：传了才可清空覆盖；不传时采纳退回 `onSelect(template)`。
    */
   resumeId?: number | null;
-  content?: ResumeContent | null;
+  /**
+   * 未保存的当前正文（v2 文档）：试用"我的内容"按它预览与测量。
+   * 与宿主同一份 `ResumeDocument`——v1 形状的 `ResumeContent` 在 v2 工作台里已经不存在。
+   */
+  content?: ResumeDocument | null;
   onTrialAdopt?: (request: { template: string; formatConfig: ResumeFormatConfig }) => void;
   /** 页数选项：缺省用内置 `RESUME_PAGE_LIMITS`（1–3 页）；生成配置的长 CV 模式传 1–10。 */
   pageLimitOptions?: readonly number[];
@@ -70,6 +70,7 @@ export default function ResumeTemplateControls({
   compact = false,
   showFormat = true,
   showPageLimit = true,
+  showLanguage = true,
   catalog,
   resumeId,
   content,
@@ -202,10 +203,32 @@ export default function ResumeTemplateControls({
         onFontScaleChange={(font_scale) => onChange({ ...layout, font_scale })}
         onSelect={(template) => onChange({ ...layout, template })}
         resumeId={resumeId}
-        content={content as unknown as ResumeDocument | null}
+        content={content}
         onTrialAdopt={onTrialAdopt}
         onClose={() => setGalleryOpen(false)}
       />
+      {/* 简历语言：与页数/字号同属"排出来长什么样"。提示**必须**用 Tooltip——
+          原生 title 在触屏上永远不出现；「只改小节标题与字段名、不翻译正文」
+          正是最容易被误解的一句。`undefined` = 这次不涉及，界面显示中文。
+          #13：制作台把它移进「版面」组（showLanguage={false}），模板组只留模板与版式。 */}
+      {showLanguage && (
+        <Space size={6}>
+          {!compact && (
+            <Typography.Text type="secondary">{t("resume.language.label")}</Typography.Text>
+          )}
+          <Tooltip title={t("resume.language.hint")}>
+            {/* 包一层 span：禁用态的下拉不接收指针事件，Tooltip 只能挂在外层。 */}
+            <span>
+              <ResumeLanguageSelect
+                value={layout.language ?? "zh-CN"}
+                disabled={disabled}
+                onChange={(language) => onChange({ ...layout, language })}
+              />
+            </span>
+          </Tooltip>
+        </Space>
+      )}
+
       {showPageLimit && (
         <Space size={6} className="resume-page-limit-group">
           {!compact && (
@@ -227,34 +250,6 @@ export default function ResumeTemplateControls({
           </Tooltip>
         </Space>
       )}
-      {/* 联系方式换行（#3）：页眉那几个字段在哪断行。默认"字段整体不拆行、字段之间
-          自动换行"，这里只是给用户一个显式控制点；参数随简历保存，四条渲染链路同源。 */}
-      <ContactBreaksControl
-        formatConfig={layout.format_config}
-        disabled={disabled}
-        compact={compact}
-        onChange={(format_config) => onChange({ ...layout, format_config })}
-      />
-      {/* 简历语言：与页数/字号同属"排出来长什么样"，所以跟在结构组最后。
-          提示**必须**用 Tooltip 而不是原生 title——原生 title 在触屏上永远不出现，
-          而"只改小节标题与字段名、不翻译正文"正是最容易被误解的一句：
-          用户选了 English 却发现正文还是中文，会以为功能坏了。
-          `undefined` = 这次不涉及，界面上一律显示中文（后端旧记录也是中文）。 */}
-      <Space size={6}>
-        {!compact && (
-          <Typography.Text type="secondary">{t("resume.language.label")}</Typography.Text>
-        )}
-        <Tooltip title={t("resume.language.hint")}>
-          {/* 包一层 span：禁用态的下拉不接收指针事件，Tooltip 只能挂在外层。 */}
-          <span>
-            <ResumeLanguageSelect
-              value={layout.language ?? "zh-CN"}
-              disabled={disabled}
-              onChange={(language) => onChange({ ...layout, language })}
-            />
-          </span>
-        </Tooltip>
-      </Space>
     </Space>
   );
 }

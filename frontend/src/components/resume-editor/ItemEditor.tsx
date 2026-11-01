@@ -22,6 +22,7 @@ import {
   updateTextItem,
 } from "../../features/resume-document";
 import { AuthorsValuesEditor, FieldValueEditor, ListValuesEditor } from "./itemValueEditors";
+import "./document-item-editor.css";
 
 const PLACEMENT_LABEL_KEYS: Record<Placement, MessageKey> = {
   title: "document.placement.title",
@@ -79,8 +80,8 @@ export default function ItemEditor({
   return (
     <div className="document-item-editor" data-document-item-editor={path}>
       {isCustomField && item.kind === "field" ? (
-        <div className="document-value-row">
-          <span className="document-zone-label">{t("document.field.label")}</span>
+        <div className="document-field-row">
+          <span className="document-field-label">{t("document.field.label")}</span>
           <Input
             aria-label={t("document.field.label")}
             placeholder={t("document.field.labelPlaceholder")}
@@ -111,18 +112,22 @@ export default function ItemEditor({
         />
       ) : null}
       {item.kind === "text" ? (
-        <Input.TextArea
-          aria-label={t("document.field.value")}
-          placeholder={t("document.field.textPlaceholder")}
-          autoSize={{ minRows: 2, maxRows: 8 }}
-          value={item.text}
-          disabled={readOnly}
-          onChange={(event) => updateText({ text: event.target.value })}
-        />
+        <div className="document-field-row">
+          <span className="document-field-label">{t("document.field.value")}</span>
+          <Input.TextArea
+            aria-label={t("document.field.value")}
+            placeholder={t("document.field.textPlaceholder")}
+            autoSize={{ minRows: 2, maxRows: 8 }}
+            value={item.text}
+            disabled={readOnly}
+            onChange={(event) => updateText({ text: event.target.value })}
+          />
+        </div>
       ) : null}
 
-      <div className="document-toggles">
-        {allowed.length > 0 ? (
+      {allowed.length > 0 ? (
+        <div className="document-field-row">
+          <span className="document-field-label">{t("document.placement.short")}</span>
           <Tooltip title={t("document.placement.aria")}>
             <Select
               size="small"
@@ -139,8 +144,10 @@ export default function ItemEditor({
               }}
             />
           </Tooltip>
-        ) : null}
+        </div>
+      ) : null}
 
+      <div className="document-toggles">
         {placement === "body" || item.kind === "text" ? (
           <Segmented
             disabled={readOnly || undefined}

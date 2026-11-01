@@ -6,6 +6,8 @@ const rich = {
   "rich.menu.edit": "Edit this Section",
   "rich.preview.updating": "Updating preview...",
   "rich.preview.stale": "Showing the last successful preview",
+  "rich.preview.staleDetail":
+    "The paper does not reflect your latest edits; showing the last successful preview",
   "rich.preview.retry": "Retry",
 } as const;
 

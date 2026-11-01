@@ -3,7 +3,7 @@
  * W07 局部排版的**角色目录**：五个段落角色、每个角色可用的属性、对象级属性、角色名。
  *
  * 与操作层（`styleOverrides.ts`）拆开的理由：这张表是"界面做减法"的数据，被角色面板、
- * 对象面板、格式刷、来源标签共用；操作层只负责按域读写。两张表混在一个文件里时，
+ * 对象面板、来源标签共用；操作层只负责按域读写。两张表混在一个文件里时，
  * 改一条属性可用性要滚过 300 行读写逻辑才能确认改的是唯一一份。
  *
  * 可用属性与后端 `resume_style_schema.STYLE_PROPS` 的"可用角色"列逐项相等
@@ -28,12 +28,11 @@ export type ResumeRoleKey = (typeof RESUME_ROLES)[number];
  * "姓名字号不会让你调行距、正文不会让你调字距"——替用户做减法就靠这张表。
  */
 export const ROLE_STYLE_PROPS: Record<ResumeRoleKey, readonly StylePropKey[]> = {
-  name: ["font_scale", "color", "bold", "italic", "letter_spacing"],
+  name: ["font_scale", "color", "bold", "letter_spacing"],
   section_title: [
     "font_scale",
     "color",
     "bold",
-    "italic",
     "space_before",
     "space_after",
     "align",
@@ -43,7 +42,6 @@ export const ROLE_STYLE_PROPS: Record<ResumeRoleKey, readonly StylePropKey[]> = 
     "font_scale",
     "color",
     "bold",
-    "italic",
     "space_before",
     "space_after",
     "line_height",
@@ -55,7 +53,6 @@ export const ROLE_STYLE_PROPS: Record<ResumeRoleKey, readonly StylePropKey[]> = 
     "font_scale",
     "color",
     "bold",
-    "italic",
     "space_before",
     "space_after",
     "line_height",
@@ -65,7 +62,7 @@ export const ROLE_STYLE_PROPS: Record<ResumeRoleKey, readonly StylePropKey[]> = 
     // Q11：字距放开到正文。
     "letter_spacing",
   ],
-  meta: ["font_scale", "color", "bold", "italic", "meta_align"],
+  meta: ["font_scale", "color", "bold", "meta_align"],
 };
 
 /**
@@ -78,7 +75,6 @@ export const OBJECT_STYLE_PROPS: readonly StylePropKey[] = [
   "font_scale",
   "color",
   "bold",
-  "italic",
   "space_before",
   "space_after",
   "line_height",

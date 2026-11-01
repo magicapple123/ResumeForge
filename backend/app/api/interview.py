@@ -2,12 +2,16 @@
 """模拟面试接口：开场、逐轮问答、结束评分与报告归档。
 
 不流式：一轮请求要同时拿到"对上一答的点评"和"下一题"，流式会让界面出现半成品状态。
+
+本模块只保留**流程控制**（什么时候收尾、什么时候出报告）与这些流程对应的路由；
+进/出 schema 的转换、材料取数、回答落库与中断标记都搬去了 ``interview_shared``
+（#41 加"材料导入 / 追问分相"时这支已经贴着 500 行预算）。材料上传与追问两个端点
+在 ``interview_material_routes`` 里，用 ``register_*`` 挂到同一个 router 上。
 """
 
 import asyncio
 import logging
 from collections.abc import AsyncIterator
-from typing import get_args
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
@@ -21,7 +25,6 @@ from ..models.interview import (
     InterviewSession,
 )
 from ..models.job import Job
-from ..models.resume import ResumeRecord
 from ..schemas.interview import (
     InterviewAnswerCreate,
     InterviewAnswerResult,
@@ -29,8 +32,6 @@ from ..schemas.interview import (
     InterviewCreate,
     InterviewDetail,
     InterviewDurationUpdate,
-    InterviewMessageOut,
-    InterviewStatus,
 )
 from ..schemas.material import MaterialCreate, MaterialOut
 from ..services import trash
@@ -40,129 +41,36 @@ from ..services.interview.interview import (
     answered_rounds,
     generate_question,
     generate_report,
-    mark_answer_interrupted,
     mark_finished,
-    reuse_interrupted_answer,
     session_persona,
 )
 from ..services.interview.interview_context import _claims_json
 from ..services.interview.interview_report_markdown import _report_markdown
-from ..services.llm import create_provider
 from ..services.llm.base import LLMError
 from ..services.materials import create_material as create_material_record
-from ..services.profile.profile_relevance import build_job_prompt_text
-from ..services.resume import document_io
-from ..services.resume.document_view import document_text
-from ..services.settings_service import get_llm_config
 from ._disconnect import client_gone, run_until_disconnect
+from .interview_material_routes import register_followup_routes, register_material_routes
 from .interview_question_routes import register_question_routes
+from .interview_shared import (
+    MAX_JOB_CONTEXT_FOR_INTERVIEW,  # noqa: F401  (re-export：interview_answer_review 从本模块取)
+    _default_title,
+    _job_text,
+    _mark_interrupted,
+    _record_answer,
+    _require_provider,
+    _resume_record_or_none,
+    _resume_text,
+    _session_job_text,
+    _session_or_404,
+    _to_detail,
+    _to_out,
+)
 from .interview_stream import _QuestionDeltaExtractor as _QuestionDeltaExtractor
 from .interview_stream import make_answer_stream
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/interview", tags=["interview"])
-
-MAX_JOB_CONTEXT_FOR_INTERVIEW = 6_000
-
-
-def _session_or_404(db: Session, session_id: int) -> InterviewSession:
-    session = db.get(InterviewSession, session_id)
-    if session is None:
-        raise HTTPException(status_code=404, detail="面试不存在或已被删除")
-    return session
-
-
-def _require_provider(db: Session):
-    """模拟面试每一轮都要调用模型，所以必须已配置。"""
-    config = get_llm_config(db)
-    if not config.base_url.strip() or not config.model.strip():
-        raise HTTPException(status_code=400, detail="尚未配置大模型 API")
-    return create_provider(config), config.model
-
-
-def _resume_text(db: Session, session: InterviewSession) -> str:
-    """把这场面试**关联的那份简历**序列化成文本，作为面试官唯一的候选人材料。
-
-    面试官拿到的就是"候选人提交的简历 + 岗位 JD"这两份东西（真实面试的边界），
-    所以这里既不再读个人资料，也不跨简历读取。
-    """
-    if session.resume_id is None:
-        return ""
-    record = _resume_record_or_none(db, session.resume_id)
-    if record is None:
-        # 简历被彻底删除：会话仍可用（只按岗位 JD 提问），不阻断面试。
-        return ""
-    try:
-        return document_text(document_io.document_for_record(db, record)[0])
-    except Exception:  # noqa: BLE001 - 简历形状异常不该让整场面试 500
-        logger.warning("序列化关联简历失败 session=%s", session.id, exc_info=True)
-        return ""
-
-
-def _job_text(db: Session, job_id: int | None) -> str:
-    if job_id is None:
-        return ""
-    job = db.get(Job, job_id)
-    if job is None:
-        return ""
-    return build_job_prompt_text(job, MAX_JOB_CONTEXT_FOR_INTERVIEW)
-
-
-_INTERVIEW_STATUS_VALUES: tuple[InterviewStatus, ...] = get_args(InterviewStatus)
-
-
-def _as_interview_status(value: str) -> InterviewStatus:
-    """模型层 ``status`` 是 ``str``，出口处收窄为 schema 的 ``Literal``。
-
-    取值由开场 / 结束链路用常量写入，正常不会走到兜底；万一库里出现未知值，在这里
-    大声失败（与 pydantic Literal 字段的校验语义一致——以前响应模型校验也会在同一
-    位置拦下它），不悄悄把非法状态发给前端。
-    """
-    if value not in _INTERVIEW_STATUS_VALUES:
-        raise ValueError(f"未知的面试状态：{value!r}")
-    return value
-
-
-def _to_out(session: InterviewSession) -> InterviewBrief:
-    return InterviewBrief(
-        id=session.id,
-        title=session.title,
-        job_id=session.job_id,
-        job_title=session.job_title,
-        company=session.company,
-        resume_id=session.resume_id,
-        resume_title=session.resume_title,
-        duration_seconds=session.duration_seconds,
-        interview_type=session.interview_type,
-        difficulty=session.difficulty,
-        interviewer_style=session.interviewer_style,
-        rounds=session.rounds,
-        rounds_min=session.rounds_min,
-        status=_as_interview_status(session.status),
-        created_at=session.created_at,
-        updated_at=session.updated_at,
-        answered_rounds=answered_rounds(session),
-    )
-
-
-def _to_detail(session: InterviewSession) -> InterviewDetail:
-    return InterviewDetail(
-        **_to_out(session).model_dump(),
-        persona=session.persona,
-        focus=session.focus,
-        model=session.model,
-        report=session.report or {},
-        messages=[InterviewMessageOut.model_validate(item) for item in session.messages],
-    )
-
-
-def _default_title(payload: InterviewCreate, job: Job | None) -> str:
-    if payload.title.strip():
-        return payload.title.strip()[:128]
-    if job is not None and job.title:
-        return f"{job.title} 模拟面试"[:128]
-    return f"{payload.interview_type}模拟面试"[:128]
 
 
 async def _ask_next_question(
@@ -172,7 +80,7 @@ async def _ask_next_question(
         provider,
         session,
         resume_text=_resume_text(db, session),
-        job_text=_job_text(db, session.job_id),
+        job_text=_session_job_text(db, session),
     )
 
 
@@ -192,45 +100,7 @@ async def _finish_with_report(
     db.refresh(session)
 
 
-def _record_answer(session: InterviewSession, content: str) -> InterviewMessage:
-    """把这一轮的候选人回答落库。
-
-    上一次被中断（客户端断开 / 用户点「停止本轮」/ 模型这一轮失败）会留下一条
-    ``status=interrupted`` 的回答；重答时**复用它**，不再追加第二条同样的用户消息
-    ——重答走的就是同一条提问链路，同一句话不该在记录里出现两遍（详见
-    ``reuse_interrupted_answer``）。
-    """
-    reused = reuse_interrupted_answer(session, content)
-    if reused is not None:
-        logger.info("重答复用被中断的一轮 session=%s message=%s", session.id, reused.id)
-        return reused
-    return add_message(session, role="user", content=content)
-
-
-def _mark_interrupted(db: Session, answer: InterviewMessage) -> None:
-    """把"这一轮没答完"写进记录：**只改状态，绝不删除用户那条消息**。
-
-    放在收尾/取消路径上调用，所以自己吞掉写库异常：中断标记失败只该降级成"这轮看起来
-    没答完但没标出来"，不能因为写状态把客户端断开这件事变成 500。
-    """
-    if not mark_answer_interrupted(answer):
-        return
-    try:
-        db.commit()
-        logger.info("面试一轮被中断 message=%s（用户回答保留，可重答）", answer.id)
-    except Exception:  # noqa: BLE001 - 取消路径不能再抛
-        logger.warning("标记面试中断状态失败 message=%s", answer.id, exc_info=True)
-        db.rollback()
-
-
-# ===== R-11 题库 / 答题思路 / 反向优化 的共用读取 =====
-
-
-def _resume_record_or_none(db: Session, resume_id: int) -> ResumeRecord | None:
-    record = db.get(ResumeRecord, resume_id)
-    if record is None or trash.is_deleted(record):
-        return None
-    return record
+# ===== R-11 题库 / 答题思路 / 反向优化 的共用读取（实现见 ``interview_shared``）=====
 
 
 @router.get("", response_model=list[InterviewBrief])
@@ -245,23 +115,41 @@ def list_sessions(limit: int = Query(default=50, ge=1, le=200), db: Session = De
 async def create_session(payload: InterviewCreate, request: Request, db: Session = Depends(get_db)):
     """开一场面试：先落库会话，再让面试官问第一个问题。
 
-    关联岗位与关联简历都是必填且必须**仍然存在**：面试官只会读这两份内容，指向一份
-    已删除的简历或岗位时，与其开一场看不到材料的面试，不如直接告诉用户。
+    每一侧材料都是**二选一**（记录 or 导入的文件，见 ``InterviewCreate``）：面试官只会读
+    这两份内容，所以指向一份已删除的简历/岗位时，与其开一场看不到材料的面试，不如直接
+    告诉用户。导入的文件已经是提取好的文本（上传时就校验过），这里不再解析。
     """
     provider, model = _require_provider(db)
-    job = db.get(Job, payload.job_id)
-    if job is None or trash.is_deleted(job):
+    job = db.get(Job, payload.job_id) if payload.job_id is not None else None
+    if payload.job_material is None and payload.job_id is None:
+        # 缺来源与"指向的已被删除"是两件事：前者是用户少选了一步，后者是数据变了，
+        # 说清是哪一种，用户才知道该去补选还是重选。
+        raise HTTPException(
+            status_code=422, detail="这场面试缺少岗位材料：既没有选记录，也没有导入文件"
+        )
+    if payload.job_material is None and (job is None or trash.is_deleted(job)):
         raise HTTPException(status_code=404, detail="关联岗位不存在或已被删除")
-    record = _resume_record_or_none(db, payload.resume_id)
-    if record is None:
+    record = (
+        _resume_record_or_none(db, payload.resume_id) if payload.resume_id is not None else None
+    )
+    if payload.resume_material is None and payload.resume_id is None:
+        raise HTTPException(
+            status_code=422, detail="这场面试缺少简历材料：既没有选记录，也没有导入文件"
+        )
+    if payload.resume_material is None and record is None:
         raise HTTPException(status_code=404, detail="关联简历不存在或已被删除")
     session = InterviewSession(
         title=_default_title(payload, job),
-        job_id=job.id,
-        job_title=job.title,
-        company=job.company,
-        resume_id=record.id,
-        resume_title=record.title[:256],
+        job_id=job.id if job is not None else None,
+        job_title=(job.title if job is not None else ""),
+        company=(job.company if job is not None else ""),
+        resume_id=record.id if record is not None else None,
+        resume_title=(record.title[:256] if record is not None else ""),
+        # 导入的材料是快照：文件名进列表，正文进提示词（#41）。
+        job_material_name=(payload.job_material.name if payload.job_material else ""),
+        job_material_text=(payload.job_material.text if payload.job_material else ""),
+        resume_material_name=(payload.resume_material.name if payload.resume_material else ""),
+        resume_material_text=(payload.resume_material.text if payload.resume_material else ""),
         interview_type=payload.interview_type,
         difficulty=payload.difficulty,
         interviewer_style=payload.interviewer_style,
@@ -462,7 +350,7 @@ def _answer_stream_events(db, session, provider, index, answer) -> AsyncIterator
         _finish_with_report,
         _to_detail,
         _resume_text,
-        _job_text,
+        _session_job_text,
         _mark_interrupted,
     )(db, session, provider, index, answer)
 
@@ -495,3 +383,8 @@ register_question_routes(
     lambda db, job_id: _job_text(db, job_id),
     lambda db: _claims_json(db),
 )
+
+# #41：材料上传（multipart）与面试结束后的追问。挂到同一个 router 上，前缀与鉴权
+# 完全一致；两块的校验与错误文案各自留在自己的模块里（见模块文档）。
+register_material_routes(router, lambda db: _require_provider(db))
+register_followup_routes(router, lambda db: _require_provider(db))

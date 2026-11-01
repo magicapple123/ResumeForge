@@ -27,6 +27,14 @@ export interface ExportCapability {
   reason?: ExportCapabilityReason;
 }
 
+/**
+ * 导出形式：交付包 = 一个 zip；单独文件 = 按格式逐个下载（R-21）。
+ *
+ * 只影响前端"怎么发请求"，不是导出配置的一部分：预设里不落这个字段，
+ * 读回时缺省按 `bundle` 处理（旧预设 / 旧后端都没有它）。
+ */
+export type ExportMode = "bundle" | "single";
+
 /** 一个命名导出配置的**可编辑部分**（不含 id/名称；名称在预设实体上）。 */
 export interface ExportPresetConfig {
   /** 至少一项；顺序即包内文件顺序。 */
@@ -40,6 +48,8 @@ export interface ExportPresetConfig {
   include_photo: boolean;
   /** 是否把本次导出的文件字节归档为"交付原件"（默认关，见契约 §6.9 Q1）。 */
   archive_original: boolean;
+  /** 导出形式（可选；缺省 = `bundle`，不写进预设以免旧数据形状变化）。 */
+  mode?: ExportMode;
 }
 
 /** 数据集级的命名导出预设（后端 `resume_export_preset`）。 */
@@ -164,6 +174,11 @@ export interface ExportCheckSummary {
   revision: number;
   revision_changed: boolean;
   hidden_count: number;
+  /**
+   * R-22：这份简历最后改动的时间（本地 naive ISO，如 `2026-10-28T17:40:00`）。
+   * 可选——旧后端不返回它时版本行回退成 `#4`，不显示时间。
+   */
+  updated_at?: string;
 }
 
 /** 严格版本核对失败时的业务码（形状与 `resume_revision_conflict` 一致）。 */

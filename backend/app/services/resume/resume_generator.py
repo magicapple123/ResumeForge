@@ -43,6 +43,7 @@ from .resume_generation_helpers import (
     record_call_usage,
     with_output_language,
 )
+from .resume_generation_levels import apply_enhancement_temperature
 from .resume_generator_prompts import (
     _ENHANCEMENT_DISABLED_GUIDE,
     ENHANCEMENT_LEVEL_GUIDES,
@@ -152,6 +153,9 @@ class ResumeGenerator:
         ``_stop``，generator 只接受预算检查、不接触取消信号。
         """
         general = job is None
+        # #33：美化档位也决定本次生成的 temperature（轻档收紧 / 深档放开）；
+        # 关闭美化时不改配置，请求体与改动前逐一字节一致。
+        apply_enhancement_temperature(self.provider, options)
         yield {
             "type": "progress",
             "message": "正在整理完整资料…" if general else "正在分析岗位要求与资料匹配度…",
@@ -253,7 +257,18 @@ class ResumeGenerator:
         # 措辞门槛与美化档位无关，但只在允许改写时生效：关闭美化时正文是用户资料原文。
         wording_enabled = options.enhance
         wording_shortfalls = cliche_shortfalls(resume) if wording_enabled else []
-        if content_shortfalls or wording_shortfalls:
+        # #34：核心板块缺口并入同一次重试（不多打一次模型调用）；没有其它 shortfall
+        # 时不单独为它重试——落库前的覆盖警告足以告知。
+        from .resume_space_gate import coverage_gaps as _coverage_gaps
+
+        gap_texts = _coverage_gaps(resume.model_dump()) if options.enhance else []
+        retry_shortfalls = [*content_shortfalls, *wording_shortfalls]
+        if gap_texts and retry_shortfalls:
+            retry_shortfalls.append(
+                "补上缺失的核心板块（只用候选资料里的事实，没有依据的除外）："
+                + "、".join(gap_texts)
+            )
+        if retry_shortfalls:
             yield {
                 "type": "progress",
                 "message": "生成内容较简略，正在重新生成…"
@@ -265,7 +280,7 @@ class ResumeGenerator:
                 provider=self.provider,
                 messages=messages,
                 selection_data=selection_data,
-                shortfalls=[*content_shortfalls, *wording_shortfalls],
+                shortfalls=retry_shortfalls,
                 job=job,
                 options=options,
                 budget=budget,
@@ -274,6 +289,43 @@ class ResumeGenerator:
             )
             if retry_resume is not None:
                 resume = retry_resume
+            quality_retry_ran = True
+        else:
+            quality_retry_ran = False
+
+        # #23/#34：篇幅的**模型重试**只在没有其它重试时发起（避免一次生成叠三次调用；
+        # 质量重试已跑过时，超页由定稿后的确定性裁剪兜底）。页数按真实渲染量。
+        from .resume_space_gate import finalize_page_budget, page_overage, run_space_retry
+
+        overage = page_overage(
+            resume,
+            page_limit=options.page_limit,
+            font_scale=options.font_scale,
+            language=options.language or "zh-CN",
+        )
+        # 预算已耗尽时不再发起篇幅重试（重试是真实模型调用，逃出预算=白烧钱）。
+        budget_alive = budget is None or not budget.is_expired()
+        if overage > 0 and not quality_retry_ran and budget_alive:
+            yield {
+                "type": "progress",
+                "message": "生成结果超出篇幅上限，正在压缩…",
+            }
+            space_resume = await run_space_retry(
+                provider=self.provider,
+                messages=messages,
+                resume=resume.model_dump(),
+                overage=overage,
+                page_limit=options.page_limit,
+                coverage_gap_texts=gap_texts,
+                usage_records=self.usage_records,
+                budget=budget,
+                total_budget=self._total_budget,
+            )
+            # 重试结果必须重新过一致性门槛：套话/黑话不因篇幅重试而放行。
+            if space_resume is not None and not (
+                wording_enabled and cliche_shortfalls(space_resume)
+            ):
+                resume = space_resume
 
         if scoped:
             # 一致性/覆盖度/说明都只读本次消费快照（R-30：不出现未参与分区）。
@@ -356,6 +408,25 @@ class ResumeGenerator:
                 resume, profile, job, selection_data, options
             )
             annotations = annotation_items
+        # #23 后半段 + #34 可观测：内容定稿后的确定性裁剪与如实警告（下沉到
+        # resume_space_gate.finalize_page_budget——生成器守 500 行预算，也便于单测）。
+        # 自定义字段回填行（C5-B "标签：值"）不参与篇幅裁剪——它们是确定性回填的
+        # 用户数据，删掉等于把资料里的非空字段又弄丢。
+        protected = frozenset(
+            line.strip()
+            for annotation in annotations
+            if annotation.get("origin") == "restored"
+            for line in str(annotation.get("source_fact") or "").split("；")
+            if line.strip()
+        )
+        resume = finalize_page_budget(
+            resume,
+            warnings,
+            page_limit=options.page_limit,
+            font_scale=options.font_scale,
+            language=options.language or "zh-CN",
+            protected_lines=protected,
+        )
         # 覆盖度检查必须在所有修复/回填之后（比对用户最终看到的内容）；它是中性的
         # coverage_notes，不混进"疑似虚构"的 warnings 红墙。
         coverage_details = (

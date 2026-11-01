@@ -109,6 +109,28 @@ export default function StyleValueRow({
 
   const numeric = typeof value === "number" ? value : null;
   const shown = draft ?? numeric ?? bounds?.min ?? 0;
+  /**
+   * R-34B：**没有显式覆盖** = 这一行是继承来的（`own === undefined`）。
+   *
+   * 此时 `value` 是模板/角色的基准（R-34A 之后才有真实值），把它当成"用户设成 0"来显示
+   * 是错的（缩进未覆盖时读数写 0.00，用户以为模板缩进真是 0）。
+   *
+   * 显示层改三处：输入框留空 + 占位「继承」、尾部写「继承模板」、滑杆压暗。
+   * **但滑杆与 ± 仍可操作**（只有"目录还没给基准"即 `value === undefined` 时才禁用）：
+   * 它们是"从当前基准开始改"的入口——把手停在基准上、按一下就从基准挪一步，
+   * 正好是这一条验收要求的那半句；把这些入口一并禁用会让"未覆盖"变成死路。
+   */
+  const inherited = kind === "number" && own === undefined;
+  /** 有没有可以当起点的基准；没有时滑杆与 ± 都无处可依。 */
+  const steppable = numeric !== null;
+  const unit = prop === "line_height" ? "" : "×";
+  /** R-34C：单位并入输入框（不再在尾部重复一遍数字）。 */
+  const numberFormatter = (raw?: string | number): string => {
+    if (raw === undefined || raw === null || raw === "") return "";
+    const text = String(raw);
+    return unit === "" || text.endsWith(unit) ? text : `${text}${unit}`;
+  };
+  const numberParser = (text?: string): string => (text ?? "").replace(/[^\d.-]/g, "");
 
   const probe = (next: StyleValue) => {
     if (!toProbeCss || !onProbe) return;
@@ -125,9 +147,9 @@ export default function StyleValueRow({
     onCommit(next);
   };
 
-  /** 步进：`Shift` 单击 = 五倍步进（D02 的"临时放大步进"）。 */
+  /** 步进：`Shift` 单击 = 五倍步进（D02 的"临时放大步进"）；从 `shown`（可能来自基准）起算。 */
   const step = (direction: 1 | -1, amplified: boolean) => {
-    if (!bounds || numeric === null) return;
+    if (!bounds || !steppable) return;
     const delta = bounds.step * (amplified ? 5 : 1) * direction;
     const next = roundToStyleStep(
       Math.min(bounds.max, Math.max(bounds.min, shown + delta)),
@@ -194,37 +216,41 @@ export default function StyleValueRow({
             type="text"
             icon={<MinusOutlined />}
             aria-label={t("typography.row.decreaseAria", { label })}
-            disabled={disabled || shown <= bounds.min}
+            disabled={disabled || !steppable || shown <= bounds.min}
             onClick={(event) => step(-1, event.shiftKey)}
           />
-          <Slider
-            className="resume-wb-slider"
-            min={bounds.min}
-            max={bounds.max}
-            step={bounds.step}
-            value={shown}
-            disabled={disabled}
-            aria-label={t("typography.row.sliderAria", { label })}
-            tooltip={{
-              formatter: (current) => (current == null ? "" : formatStyleNumber(prop, current)),
-            }}
-            onChange={(next) => {
-              const rounded = roundToStyleStep(next, bounds.step);
-              setDraft(rounded);
-              probe(rounded);
-            }}
-            onChangeComplete={(next) => {
-              const rounded = roundToStyleStep(next, bounds.step);
-              setDraft(rounded);
-              commit(rounded);
-            }}
-          />
+          <Tooltip title={inherited ? t("typography.row.inheritedSliderHint") : ""}>
+            <Slider
+              className="resume-wb-slider"
+              // 降级态压暗但**不 disabled**：位置停在当前基准，拖一下就落成覆盖。
+              style={inherited ? { opacity: 0.55 } : undefined}
+              min={bounds.min}
+              max={bounds.max}
+              step={bounds.step}
+              value={shown}
+              disabled={disabled || !steppable}
+              aria-label={t("typography.row.sliderAria", { label })}
+              tooltip={{
+                formatter: (current) => (current == null ? "" : formatStyleNumber(prop, current)),
+              }}
+              onChange={(next) => {
+                const rounded = roundToStyleStep(next, bounds.step);
+                setDraft(rounded);
+                probe(rounded);
+              }}
+              onChangeComplete={(next) => {
+                const rounded = roundToStyleStep(next, bounds.step);
+                setDraft(rounded);
+                commit(rounded);
+              }}
+            />
+          </Tooltip>
           <Button
             size="small"
             type="text"
             icon={<PlusOutlined />}
             aria-label={t("typography.row.increaseAria", { label })}
-            disabled={disabled || shown >= bounds.max}
+            disabled={disabled || !steppable || shown >= bounds.max}
             onClick={(event) => step(1, event.shiftKey)}
           />
           <Tooltip title={t("typography.row.stepHint")}>
@@ -234,12 +260,20 @@ export default function StyleValueRow({
               min={bounds.min}
               max={bounds.max}
               step={bounds.step}
-              value={shown}
+              // 降级态：空 + 占位「继承」；一旦拖过滑杆（draft 有值）就显示那个值。
+              value={inherited && draft === null ? null : shown}
+              placeholder={inherited ? t("typography.row.inheritedPlaceholder") : undefined}
+              formatter={numberFormatter}
+              parser={numberParser}
+              title={ptText ?? undefined}
               disabled={disabled}
               aria-label={t("typography.row.directInputAria", { label })}
               onChange={(next) => {
                 if (next === null) return;
-                setDraft(roundToStyleStep(next, bounds.step));
+                // `parser` 返回字符串（带单位时不能直接给 number），这里统一收敛成数值。
+                const parsed = typeof next === "string" ? Number(next) : next;
+                if (!Number.isFinite(parsed)) return;
+                setDraft(roundToStyleStep(parsed, bounds.step));
               }}
               onBlur={() => commitTyped(draft ?? numeric)}
               onPressEnter={() => commitTyped(draft ?? numeric)}
@@ -278,13 +312,16 @@ export default function StyleValueRow({
       )}
 
       <span className="resume-measure-tail resume-typography-tail">
-        <Typography.Text type="secondary" className="resume-measure-value">
-          {kind === "number"
-            ? `${formatStyleNumber(prop, shown)}${ptText ? ` · ${ptText}` : ""}`
-            : kind === "color" && typeof value === "string"
-              ? value
-              : null}
-        </Typography.Text>
+        {/* R-34C：数值只在输入框里出现一次；尾部只留"继承 / 来源 / 恢复"。 */}
+        {inherited ? (
+          <Typography.Text type="secondary" className="resume-measure-value">
+            {t("typography.row.inherited")}
+          </Typography.Text>
+        ) : kind === "color" && typeof value === "string" ? (
+          <Typography.Text type="secondary" className="resume-measure-value">
+            {value}
+          </Typography.Text>
+        ) : null}
         <StyleSourceTag source={source} />
         {own !== undefined ? <ParamResetButton label={label} onReset={reset} /> : null}
       </span>
