@@ -1,5 +1,177 @@
 {
-  "$comment": "Reviewed 2026-10-14: the @electron/get@3.1.0 -> global-agent dependency is pinned to compatible global-agent 4.1.3, removing roarr/sprintf-js and GHSA-hp3w-g68c-fv3c. Official-registry npm audit reports zero findings. No active waivers remain; the existing critical/high gate and expiry/escalation tests are unchanged. See docs/desktop-supply-chain-audit.md for history and proxy compatibility evidence.",
-  "reviewedAt": "2026-10-14",
-  "packages": []
+  "$comment": "Reviewed 2026-11-01. CI went red because GHSA-g3hv-75wg-m249 / CVE-2026-118764 (minimatch, moderate) was published 2026-10-30 and reaches 15 packages in the electron-builder build chain; there is NO semver-compatible fix (npm audit fix --dry-run changes 0 packages) and NO fixed release exists in any consumer's range. All 15 findings are devDependencies-only build tooling: desktop has no runtime npm dependency at all (npm audit --omit=dev reports 0 findings; the shipped app is the Electron kernel plus repository source), and the vulnerable code path needs an attacker-controlled glob pattern at package time, which the build never accepts. Every waiver below expires 2027-01-30 (90 days) to force a scheduled re-review; the gate's severity floor, escalation check and expiry check are unchanged. Remediation evidence and the rejected alternative are recorded in docs note 'desktop audit waiver 2026-11-01' (see team report): forcing minimatch@11.0.3 through npm overrides was tested in an isolated tree and breaks the toolchain -- @electron/asar silently produced an EMPTY app.asar (entries=[] instead of 3, unpackedDir=false), dir-compare threw 'TypeError: minimatch_1.default is not a function' and glob@7 threw 'Cannot read properties of undefined (reading charAt)'.",
+  "reviewedAt": "2026-11-01",
+  "gateChecklist": {
+    "gateScript": "scripts/check-npm-audit.js (judgement logic untouched)",
+    "severityThresholds": "unchanged: every low/moderate/high/critical finding must be registered, escalation and expiry are still fatal",
+    "runtimeImpact": "none: `npm audit --omit=dev` is 0 findings, desktop ships no runtime npm dependencies",
+    "nextReview": "2027-01-30 (waivers expire automatically and fail the gate)"
+  },
+  "packages": [
+    {
+      "package": "minimatch",
+      "severity": "moderate",
+      "category": "build",
+      "until": "2027-01-30",
+      "advisories": ["GHSA-g3hv-75wg-m249"],
+      "installedVersions": ["10.2.6 (root)", "9.0.9 (via @electron/universal)", "5.1.9 (via filelist)", "3.1.5 (via glob, @electron/asar, dir-compare)"],
+      "scope": "dev-only build chain, never reaches the runtime payload",
+      "reason": "GHSA-g3hv-75wg-m249 (CVE-2026-118764, CWE-405, CVSS v4 6.9, availability-only impact) is fixed only in minimatch >= 11.0.1, and no consumer in the electron-builder 26.18.0 tree accepts that major (app-builder-lib pins ^10, filelist ^5, @electron/universal ^9, glob@7 and dir-compare ^3). electron-builder 26.18.0 is the latest stable (27.x is alpha only) and its newest transitive versions still depend on minimatch < 11 (dir-compare 5.0.0 -> ^3.0.5, filelist 2.0.2 -> ^10.2.1, @electron/asar 4.3.1 -> ^10.0.1), so no upstream upgrade clears it. The amplification needs an attacker-controlled glob pattern with optimizationLevel >= 2; every pattern expanded here is repository-controlled build metadata.",
+      "remediationEvidence": "npm audit fix --dry-run: added=0 removed=0 changed=0. Forced npm overrides minimatch@11.0.3 tested in an isolated install: @electron/asar produced an empty app.asar, dir-compare threw TypeError (minimatch default export is no longer callable), glob@7 threw TypeError. Fix is blocked on upstream toolchain majors."
+    },
+    {
+      "package": "@electron/asar",
+      "severity": "moderate",
+      "category": "build",
+      "until": "2027-01-30",
+      "advisories": [],
+      "installedVersions": ["3.4.1"],
+      "scope": "dev-only build chain, never reaches the runtime payload",
+      "reason": "No advisory of its own; npm audit flags it as a dependency edge onto glob@7 and minimatch@3.1.5 (the reviewed GHSA-g3hv-75wg-m249 chain above). Executed only by electron-builder when writing app.asar on the build machine.",
+      "remediationEvidence": "Blocked with the minimatch waiver; latest @electron/asar 4.3.1 still requires minimatch ^10."
+    },
+    {
+      "package": "@electron/universal",
+      "severity": "moderate",
+      "category": "build",
+      "until": "2027-01-30",
+      "advisories": [],
+      "installedVersions": ["2.0.3"],
+      "scope": "dev-only build chain, never reaches the runtime payload",
+      "reason": "No advisory of its own; dependency edge onto dir-compare@4.2.0 (minimatch@3.1.5) and minimatch@9.0.9. Used only for the macOS universal merge step on a build machine.",
+      "remediationEvidence": "Blocked with the minimatch waiver; latest @electron/universal 3.0.6 still routes through dir-compare -> minimatch ^3."
+    },
+    {
+      "package": "app-builder-lib",
+      "severity": "moderate",
+      "category": "build",
+      "until": "2027-01-30",
+      "advisories": [],
+      "installedVersions": ["26.18.0"],
+      "scope": "dev-only build chain, never reaches the runtime payload",
+      "reason": "No advisory of its own; dependency edge onto minimatch@10.2.6 plus the asar/universal/dmg/ejs chains. Direct minimatch consumer for `files:` matchers, at package time only.",
+      "remediationEvidence": "Blocked: 26.18.0 is the current electron-builder release line and it pins minimatch ^10."
+    },
+    {
+      "package": "dir-compare",
+      "severity": "moderate",
+      "category": "build",
+      "until": "2027-01-30",
+      "advisories": [],
+      "installedVersions": ["4.2.0"],
+      "scope": "dev-only build chain, never reaches the runtime payload",
+      "reason": "No advisory of its own; dependency edge onto minimatch@3.1.5. Compares directory trees while merging universal macOS builds.",
+      "remediationEvidence": "Blocked: latest dir-compare 5.0.0 still requires minimatch ^3.0.5."
+    },
+    {
+      "package": "dmg-builder",
+      "severity": "moderate",
+      "category": "build",
+      "until": "2027-01-30",
+      "advisories": [],
+      "installedVersions": ["26.18.0"],
+      "scope": "dev-only build chain, never reaches the runtime payload",
+      "reason": "No advisory of its own; dependency edge onto app-builder-lib. Only used for macOS DMG targets during packaging.",
+      "remediationEvidence": "Blocked with the minimatch waiver."
+    },
+    {
+      "package": "ejs",
+      "severity": "moderate",
+      "category": "build",
+      "until": "2027-01-30",
+      "advisories": [],
+      "installedVersions": ["3.1.10"],
+      "scope": "dev-only build chain, never reaches the runtime payload",
+      "reason": "No advisory of its own; dependency edge onto jake@10.9.4 -> filelist@1.0.6 (minimatch@5.1.9). Renders packaging templates on the build machine.",
+      "remediationEvidence": "The reported ejs version is already current; the chain is blocked by filelist's minimatch range."
+    },
+    {
+      "package": "electron-builder",
+      "severity": "moderate",
+      "category": "build",
+      "until": "2027-01-30",
+      "advisories": [],
+      "installedVersions": ["26.18.0 (lockfile)"],
+      "scope": "dev-only build chain, never reaches the runtime payload",
+      "reason": "No advisory of its own; dependency edge onto app-builder-lib and dmg-builder. This is the packaging CLI itself, a devDependency, absent from the shipped app.",
+      "remediationEvidence": "26.18.0 is the latest stable release; the 27.0.0 line is alpha only, so a cross-major upgrade was rejected (and would not clear minimatch < 11 anyway)."
+    },
+    {
+      "package": "electron-builder-squirrel-windows",
+      "severity": "moderate",
+      "category": "build",
+      "until": "2027-01-30",
+      "advisories": [],
+      "installedVersions": ["26.18.0"],
+      "scope": "dev-only build chain, never reaches the runtime payload",
+      "reason": "No advisory of its own; dependency edge onto app-builder-lib and electron-winstaller. Windows installer target, build machine only.",
+      "remediationEvidence": "Blocked with the minimatch waiver."
+    },
+    {
+      "package": "electron-winstaller",
+      "severity": "moderate",
+      "category": "build",
+      "until": "2027-01-30",
+      "advisories": [],
+      "installedVersions": ["5.4.0"],
+      "scope": "dev-only build chain, never reaches the runtime payload",
+      "reason": "No advisory of its own; dependency edge onto @electron/asar and temp@0.9.4 -> rimraf@2.6.3 -> glob@7 -> minimatch@3.1.5.",
+      "remediationEvidence": "Blocked with the minimatch waiver."
+    },
+    {
+      "package": "filelist",
+      "severity": "moderate",
+      "category": "build",
+      "until": "2027-01-30",
+      "advisories": [],
+      "installedVersions": ["1.0.6"],
+      "scope": "dev-only build chain, never reaches the runtime payload",
+      "reason": "No advisory of its own; dependency edge onto minimatch@5.1.9 (used through minimatch.match for task file sets).",
+      "remediationEvidence": "Blocked: latest filelist 2.0.2 still requires minimatch ^10.2.1."
+    },
+    {
+      "package": "glob",
+      "severity": "moderate",
+      "category": "build",
+      "until": "2027-01-30",
+      "advisories": [],
+      "installedVersions": ["7.2.3"],
+      "scope": "dev-only build chain, never reaches the runtime payload",
+      "reason": "No advisory of its own; dependency edge onto minimatch@3.1.5. glob@7 is reached through @electron/asar and rimraf@2 during packaging.",
+      "remediationEvidence": "Blocked: raising glob to 14 would need @electron/asar/rimraf to move to the glob v9+ API (globSync) simultaneously; not possible without an electron-builder major."
+    },
+    {
+      "package": "jake",
+      "severity": "moderate",
+      "category": "build",
+      "until": "2027-01-30",
+      "advisories": [],
+      "installedVersions": ["10.9.4"],
+      "scope": "dev-only build chain, never reaches the runtime payload",
+      "reason": "No advisory of its own; dependency edge onto filelist@1.0.6 -> minimatch@5.1.9.",
+      "remediationEvidence": "Blocked with the minimatch waiver; jake 13 still depends on filelist -> minimatch ^10."
+    },
+    {
+      "package": "rimraf",
+      "severity": "moderate",
+      "category": "build",
+      "until": "2027-01-30",
+      "advisories": [],
+      "installedVersions": ["2.6.3"],
+      "scope": "dev-only build chain, never reaches the runtime payload",
+      "reason": "No advisory of its own; dependency edge onto glob@7.2.3 -> minimatch@3.1.5. Pinned by temp@0.9.4 inside electron-winstaller.",
+      "remediationEvidence": "Blocked with the minimatch waiver."
+    },
+    {
+      "package": "temp",
+      "severity": "moderate",
+      "category": "build",
+      "until": "2027-01-30",
+      "advisories": [],
+      "installedVersions": ["0.9.4"],
+      "scope": "dev-only build chain, never reaches the runtime payload",
+      "reason": "No advisory of its own; dependency edge onto rimraf@2.6.3 -> glob@7 -> minimatch@3.1.5. Temporary-directory helper used by electron-winstaller.",
+      "remediationEvidence": "Blocked with the minimatch waiver."
+    }
+  ]
 }
