@@ -70,6 +70,9 @@ class WriteProposalOut(BaseModel):
     created_at: str
     expires_at: str
     status: ProposalStatus
+    # 执行结果摘要（工具 handler 的 ToolResult.summary）。只有 executed 之后才有值：
+    # 前端据此在卡片上如实说明"改了什么"，以及写工具自动留下的撤销点版本名。
+    result_summary: str = ""
 
 
 class WriteProposalError(Exception):
@@ -116,6 +119,7 @@ class _ProposalRecord:
             created_at=self.created_at.isoformat(),
             expires_at=self.expires_at.isoformat(),
             status=self.status,
+            result_summary=self.result_summary,
         )
 
     def expired(self, now: datetime | None = None) -> bool:

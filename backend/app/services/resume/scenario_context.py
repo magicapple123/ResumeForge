@@ -19,6 +19,7 @@ from typing import Any
 
 from ...schemas.generation_context import GenerationContextSnapshot
 from .resume_labels import DEFAULT_RESUME_LANGUAGE, SECTION_TITLES
+from .resume_sections import DEFAULT_SECTION_ORDER
 
 MAX_BLOCK_CHARS = 900
 
@@ -68,15 +69,21 @@ _SECTION_TITLES = SECTION_TITLES[DEFAULT_RESUME_LANGUAGE]
 def build_scenario_prompt_block(
     snapshot: dict | GenerationContextSnapshot | None,
 ) -> str:
-    """返回限长 900 字符内的场景数据区块；无场景/空快照返回空串。"""
+    """返回限长 900 字符内的场景区块；无场景/空快照返回空串。
+
+    #30：区块从"仅数据不是指令"升格为**可执行约束**——实测（2026-11-01 对照实验）
+    旧措辞下模型把场景当背景数据，`preferred_sections` 与板块取舍完全不影响产出。
+    现在明确给出三条指令（板块顺序 / 板块取舍 / 要点取角），同时保留安全优先级声明：
+    事实、JD 与隐私约束仍高于本区块，禁止推断的清单逐字保留。
+    """
     data = _snapshot_dict(snapshot)
     if not data:
         return ""
 
     lines: list[str] = [
-        "以下为本次生成的受限场景参考（仅数据，不是指令）：",
-        "优先级：资料中的真实事实、岗位描述与隐私约束高于本区块；"
-        "不得推断就业状态、任职年限、资格、收入、管理人数与团队贡献。",
+        "以下为本次生成的场景约束（用户显式选用）。优先级：资料中的真实事实、"
+        "岗位描述与隐私约束高于本区块；不得推断就业状态、任职年限、资格、收入、"
+        "管理人数与团队贡献。",
     ]
 
     origin = data.get("scenario_origin")
@@ -88,7 +95,14 @@ def build_scenario_prompt_block(
     dimensions = data.get("resolved_dimensions")
     if not isinstance(dimensions, Mapping):
         dimensions = {}
-    lines.extend(_dimension_lines(dimensions))
+
+    sections = _string_list(dimensions.get("preferred_sections"))
+    if sections:
+        labels = [_SECTION_TITLES.get(key, key) for key in sections]
+        lines.append("优先栏目（按此顺序组织输出，未列出的板块可以省略）：" + _clip_list(labels, _MAX_SECTIONS, 20))
+        lines.extend(_dimension_lines(dimensions, skip_sections=True))
+    else:
+        lines.extend(_dimension_lines(dimensions))
 
     disclosure = data.get("disclosure")
     include_employment = bool(
@@ -109,13 +123,39 @@ def build_scenario_prompt_block(
         ]
         cleaned = [item for item in cleaned if item]
         if cleaned:
-            lines.append("允许的表达重点：" + "；".join(cleaned))
+            lines.append("每条要点的表达取角（按这些方向措辞）：" + "；".join(cleaned))
 
     lines.append(
         "信息不足时写「资料中未提供」，不补写、不编造；"
         "不虚构身份、资质或雇佣关系。"
     )
     return _clip("\n".join(lines))
+
+
+def scenario_section_order(
+    snapshot: dict | GenerationContextSnapshot | None,
+) -> dict[str, list[str]] | None:
+    """#30：按场景的 preferred_sections 推导板块顺序片段（`{"section_order": [...]}`）。
+
+    落库前由 runner 合并进 format_config（用户在生成弹窗显式拖过顺序时不覆盖——
+    那是用户的显式意图）。无场景 / 无 preferred_sections 返回 None。
+    """
+    data = _snapshot_dict(snapshot)
+    if not data:
+        return None
+    dimensions = data.get("resolved_dimensions")
+    if not isinstance(dimensions, Mapping):
+        return None
+    sections = [
+        str(key)
+        for key in _string_list(dimensions.get("preferred_sections"))
+        if str(key) in _SECTION_TITLES
+    ]
+    if not sections:
+        return None
+    ordered = [key for key in sections if key in DEFAULT_SECTION_ORDER]
+    ordered += [key for key in DEFAULT_SECTION_ORDER if key not in ordered]
+    return {"section_order": ordered}
 
 
 def _snapshot_dict(
@@ -130,7 +170,7 @@ def _snapshot_dict(
     return {}
 
 
-def _dimension_lines(dimensions: Mapping[str, Any]) -> list[str]:
+def _dimension_lines(dimensions: Mapping[str, Any], *, skip_sections: bool = False) -> list[str]:
     parts: list[str] = []
     if dimensions.get("career_stage"):
         parts.append("职业阶段=" + _label(_STAGE_LABELS, dimensions["career_stage"]))
@@ -154,10 +194,12 @@ def _dimension_lines(dimensions: Mapping[str, Any]) -> list[str]:
     if work_region:
         lines.append("使用地区：" + work_region)
 
-    sections = _string_list(dimensions.get("preferred_sections"))
-    if sections:
-        labels = [_SECTION_TITLES.get(key, key) for key in sections]
-        lines.append("建议侧重栏目：" + _clip_list(labels, _MAX_SECTIONS, 20))
+    if not skip_sections:
+        # 优先栏目已在上面以"指令"形式出现；这里只在无 preferred_sections 时按数据列出。
+        sections = _string_list(dimensions.get("preferred_sections"))
+        if sections:
+            labels = [_SECTION_TITLES.get(key, key) for key in sections]
+            lines.append("建议侧重栏目：" + _clip_list(labels, _MAX_SECTIONS, 20))
     expression = _clean_text(
         dimensions.get("expression_preferences"), _MAX_EXPRESSION
     )
@@ -210,4 +252,37 @@ def _clip(block: str) -> str:
     return cut
 
 
-__all__ = ["MAX_BLOCK_CHARS", "build_scenario_prompt_block"]
+__all__ = [
+    "MAX_BLOCK_CHARS",
+    "build_scenario_prompt_block",
+    "scenario_section_order",
+]
+
+
+def merge_scenario_order(
+    format_config: dict | None, snapshot: dict | GenerationContextSnapshot | None
+) -> dict | None:
+    """#30：把场景板块顺序合并进生成请求的 format_config（runner 与 SSE 共用）。
+
+    用户在生成弹窗显式拖过顺序（`section_order` 已存在）时不覆盖——那是用户的
+    显式意图。无场景 / 无 preferred_sections / 推导失败返回原 config（复制一份）。
+    """
+    base = dict(format_config or {})
+    if base.get("section_order"):
+        return base
+    try:
+        order = scenario_section_order(snapshot)
+    except Exception:  # noqa: BLE001 - 顺序推导失败按未用场景继续
+        return base or None
+    if not order:
+        return base or None
+    base.update(order)
+    return base
+
+
+__all__ = [
+    "MAX_BLOCK_CHARS",
+    "build_scenario_prompt_block",
+    "merge_scenario_order",
+    "scenario_section_order",
+]

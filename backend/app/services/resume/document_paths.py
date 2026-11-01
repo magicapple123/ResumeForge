@@ -24,10 +24,17 @@ _CARRIERS = {
 }
 
 
+#: item.kind -> 承载值的字段名（text / list / authors 的值不在 ``value`` 上）。
+_KIND_VALUE_KEY = {"text": "text", "list": "values", "authors": "authors"}
+
+
+def _value_key(kind: Any) -> str:
+    """item.kind 对应的"值字段名"；未知/缺失的 kind 一律按标量字段处理。"""
+    return _KIND_VALUE_KEY.get(str(kind or ""), "value")
+
+
 def item_value(item: dict) -> Any:
-    return item.get(
-        {"text": "text", "list": "values", "authors": "authors"}.get(item.get("kind"), "value"), ""
-    )
+    return item.get(_value_key(item.get("kind")), "")
 
 
 def _visible(item: dict) -> bool:
@@ -282,7 +289,7 @@ def write_document_value(document: dict, path: str, value: Any) -> bool:
 
 def _set_item(item: dict, value: Any) -> bool:
     kind = item.get("kind")
-    key = {"text": "text", "list": "values", "authors": "authors"}.get(kind, "value")
+    key = _value_key(kind)
     if kind in {"list", "authors"} and not isinstance(value, list):
         return False
     if kind not in {"list", "authors"} and not isinstance(value, str):

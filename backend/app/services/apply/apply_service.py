@@ -55,6 +55,7 @@ from ._records import (
     list_record_batches,
     list_records,
     mark_queue_done,
+    select_retryable_items,
     write_back_job_status,
 )
 from ._site_browser import (
@@ -130,6 +131,7 @@ __all__ = [
     "reorder_queue",
     "reset_browser_manager",
     "resolve_greeting",
+    "select_retryable_items",
     "resolve_resume",
     "save_apply_config",
     "save_collect_config",

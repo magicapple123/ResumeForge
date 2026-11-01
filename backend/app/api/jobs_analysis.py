@@ -26,7 +26,13 @@ from ..services.job.job_analysis import generate_job_analysis
 from ..services.job_analysis_cache import read_cached_analysis, store_analysis
 from ..services.llm import create_provider
 from ..services.llm.base import LLMError
+from ..services.llm.usage_tasks import (
+    DEFAULT_AUDIT_LANGUAGE,
+    JOB_ANALYSIS_TOKEN_BUDGET,
+    set_ambient_scope,
+)
 from ..services.settings_service import get_llm_config
+from ..services.ui_locale import get_ui_locale
 from ._disconnect import DISCONNECT_POLL_SECONDS, run_until_disconnect
 
 logger = logging.getLogger(__name__)
@@ -109,6 +115,14 @@ async def analyze_job(
     config = get_llm_config(db)
     if not config.base_url or not config.model:
         raise HTTPException(status_code=400, detail="尚未配置大模型 API")
+    # #35/A1：岗位解读入口的数据边界——只喂这一条岗位；语言取界面语言（未保存过用
+    # 应用默认值）；token 预算按"总结 + 要求 + 建议"三段的输出形态声明。
+    set_ambient_scope(
+        input_scope="job",
+        masked=True,
+        language=get_ui_locale(db) or DEFAULT_AUDIT_LANGUAGE,
+        budget=JOB_ANALYSIS_TOKEN_BUDGET,
+    )
     provider = create_provider(config)
     job_out = JobOut.model_validate(job)
     # 长调用期间不持有会话：先关掉，拿到结果再开一个写缓存。

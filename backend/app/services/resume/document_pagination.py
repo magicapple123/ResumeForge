@@ -80,6 +80,22 @@ def _document_manual_breaks(plan, spans: tuple) -> list[dict]:
     return breaks
 
 
+def _last_page_fill(pdf, layout) -> float | None:
+    """#2：末页内容占用比例（0-1）= 末页内容底部 / 可用内容高度。
+
+    末页没有绘制内容（空简历）或版心不可用时返回 None——「未测量」胜过伪造 0。
+    顶格/超版心都夹到 [0, 1]：这是给用户看的占用参考，不是渲染断言。
+    """
+    bottoms = [span.y_bottom for span in pdf.spans if span.page == pdf.pages]
+    if not bottoms:
+        return None
+    usable = layout.usable_height_per_page
+    if usable <= 0:
+        return None
+    fill = (max(bottoms) - layout.margin_top) / usable
+    return round(min(1.0, max(0.0, fill)), 3)
+
+
 def _warnings(plan, layout) -> list[dict]:
     warnings: list[dict] = []
     if plan.repeat_name and layout.margin_top < REPEAT_NAME_MIN_MARGIN:
@@ -132,6 +148,9 @@ def build_pagination_report(
         "pages": pdf.pages,
         "pages_needed": pdf.pages_needed if pdf.pages_needed is not None else pdf.pages,
         "overflow": pdf.overflow,
+        # #2：末页占用（0-1）。页数正好用满上限时，前端把「实际 N 页（上限 N 页）」
+        # 换成「已达上限」——占用数字比重复页数更有信息量。
+        "last_page_fill": _last_page_fill(pdf, layout),
         "page_limit": page_limit,
         "truncated_at": _truncated_at(pdf.spans, page_limit),
         "manual_breaks": _merge_manual_breaks(

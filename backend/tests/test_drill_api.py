@@ -152,6 +152,15 @@ def test_a_session_needs_confirmed_claims(client, monkeypatch):
     assert "已确认" in response.json()["detail"]
 
 
+def test_an_explicitly_empty_claim_selection_is_422(client):
+    """#42：`claim_ids: []` 在 schema 层就被拒——它不该悄悄变成「全部已确认」。"""
+    _make_claim(client)
+    response = client.post("/api/drill", json={"claim_ids": []})
+    assert response.status_code == 422
+    # 什么都没建出来。
+    assert client.get("/api/drill").json() == []
+
+
 def test_a_session_needs_a_configured_model(client):
     """没配模型就开不了深挖：detail 只报原因（"尚未配置"），去哪个页面改由前端拼。"""
     _make_claim(client)

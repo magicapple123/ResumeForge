@@ -50,7 +50,18 @@ COVERAGE: dict[str, tuple[str, ...] | str] = {
         "import_candidate_job",
     ),
     # ===== 简历 =====
-    "resume_record": ("list_resumes", "get_resume", "update_resume_layout", "update_resume"),
+    "resume_record": (
+        "list_resumes",
+        "get_resume",
+        "get_resume_status",
+        "get_entry",
+        "update_resume_layout",
+        "update_resume",
+        "update_resume_field",
+        "add_resume_entry",
+        "reorder_sections",
+        "set_entry_layout",
+    ),
     "resume_template": (
         "create_format_template",
         "update_format_template",
@@ -180,12 +191,10 @@ COVERAGE: dict[str, tuple[str, ...] | str] = {
     "usage_pricing_record": "不暴露：模型单价档案是费用估算的设置类数据，"
     "用户在「用量汇总」页显式维护（命名、切换生效、删除）；单价的数值与构成"
     "已由用量汇总界面呈现，助手读它没有增量，代改则会在用户不知情时改变计费口径。",
-    "resume_version": "不暴露：命名版本是不可变的内容与排版快照，属于制作台的版本工作流；"
-    "助手经 list_resumes / get_resume 读当前简历即可，历史快照应在版本面板由用户显式"
-    "查看或恢复，避免助手在对话里做不可见的历史覆盖。",
-    "resume_variant": "不暴露：岗位变体是面向不同岗位的独立表达稿，内容与当前简历并存；"
-    "助手处理「这份简历」时以当前记录为准，变体的派生与同步属于版本工作流，"
-    "由用户显式操作。",
+    # #38 P1：版本/变体开放**只读**工具（list_versions / list_variants）。恢复与派生
+    # 仍属版本工作流，由用户在制作台「版本」里显式操作——助手不代为覆盖当前正文。
+    "resume_version": ("list_versions",),
+    "resume_variant": ("list_variants",),
     "resume_phrase": "不暴露：私有表达资产是用户收藏的句库，正文只在本机、默认私有；"
     "若暴露给助手，这些话术会随用户提问进入模型服务商的上下文（隐私边界）；"
     "检索与插入都在制作台本地完成，不调用模型、不自动外发。",

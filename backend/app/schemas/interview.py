@@ -12,6 +12,7 @@ from ..models.interview import (
     INTERVIEW_STATUS_FINISHED,
     INTERVIEW_TYPES,
     INTERVIEWER_STYLES,
+    MESSAGE_PHASE_INTERVIEW,
 )
 from .resume import ResumeSuggestion
 
@@ -20,6 +21,10 @@ MIN_INTERVIEW_ROUNDS = 3
 MAX_ANSWER_CHARS = 8000
 MAX_PERSONA_CHARS = 2000
 MAX_FOCUS_CHARS = 255
+# 导入材料的正文上限（#41）：从 PDF / TXT / 截图里提取出来的文字会原样进提示词，
+# 与 ``MAX_RESUME_CONTEXT_CHARS`` 同一量级即可；超出部分在提取端就已截断并告知用户，
+# 这里的上限是防"前端塞一大段进来"的最后一道闸。
+MAX_MATERIAL_TEXT_CHARS = 24_000
 
 InterviewType = Literal[
     "技术面",
@@ -35,20 +40,60 @@ InterviewDifficulty = Literal["初级", "中级", "高级"]
 InterviewerStyle = Literal["严谨专业", "温和引导", "持续追问", "压力质询"]
 InterviewStatus = Literal["active", "finished"]
 
+# 材料来源（#41）：岗位侧导入 JD 文件（PDF / TXT），简历侧导入截图（视觉识别）。
+MaterialKind = Literal["job", "resume"]
+
+
+class InterviewMaterialIn(BaseModel):
+    """一份**已提取**的导入材料：文件名 + 正文。
+
+    为什么提交的是提取后的文本、而不是再传一次文件：提取发生在 ``/interview/materials``
+    上传那一刻，用户当场就能看到"解析成功 / 识别出多少字 / 有哪些警告"；开面试时只把
+    结果带进会话（快照），不需要为同一份文件解析两遍，也不会在开场那十几秒里再插入一次
+    可能失败的 OCR。
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(default="", max_length=256)
+    text: str = Field(min_length=1, max_length=MAX_MATERIAL_TEXT_CHARS)
+
+    @field_validator("text")
+    @classmethod
+    def text_must_not_be_blank(cls, value: str) -> str:
+        cleaned = value.strip()
+        if not cleaned:
+            raise ValueError("导入的材料没有可用的文字内容")
+        return cleaned
+
+
+class InterviewMaterialExtract(BaseModel):
+    """上传端点（multipart）的返回：提取出的文件名、正文与面向用户的警告。"""
+
+    name: str
+    text: str
+    warnings: list[str] = Field(default_factory=list)
+
 
 class InterviewCreate(BaseModel):
     """开一场模拟面试。
 
-    关联岗位与关联简历都是**必填**（真实面试里面试官只看得到这两份内容：你提交的简历
-    与他招聘的岗位要求）。其余都有默认值——用户可以"打开就能开始"，也可以把难度、
-    风格、轮数、人设都调一遍。
+    每一侧材料都是**二选一**（0071 / #41）：要么指向一条记录（``job_id`` /
+    ``resume_id``），要么带一份导入的材料（``job_material`` / ``resume_material``）。
+    真实面试里面试官只拿得到这两份内容，所以两侧都**必须**各有一份来源；具体校验在
+    接口层做（那里能给出"缺哪一侧"的完整原因，schema 只能给一条泛泛的校验错误）。
+
+    **回滚兼容**：老客户端只传 ``job_id`` + ``resume_id``，行为与 0066 完全一致。
     """
 
     model_config = ConfigDict(extra="forbid")
 
     title: str = Field(default="", max_length=128)
-    job_id: int = Field(ge=1)
-    resume_id: int = Field(ge=1)
+    job_id: int | None = Field(default=None, ge=1)
+    resume_id: int | None = Field(default=None, ge=1)
+    # 导入的材料（#41）：给了材料就不再读那条记录。
+    job_material: InterviewMaterialIn | None = None
+    resume_material: InterviewMaterialIn | None = None
     interview_type: InterviewType = "技术面"
     difficulty: InterviewDifficulty = "中级"
     interviewer_style: InterviewerStyle = "严谨专业"
@@ -101,11 +146,21 @@ class InterviewMessageOut(BaseModel):
 
     id: int
     role: str
+    # 阶段（0071）：``interview`` = 正式问答，``followup`` = 结束后的追问。
+    # 前端据此把追问区**独立渲染**，正式对话区不受影响。
+    phase: str = MESSAGE_PHASE_INTERVIEW
     content: str
     context: dict[str, Any] = Field(default_factory=dict)
     status: str
     error: str
     created_at: datetime
+
+    @field_validator("phase", mode="before")
+    @classmethod
+    def phase_defaults_to_interview(cls, value: Any) -> str:
+        """列默认值是 ``interview``；对象还没 flush 时属性可能是 ``None``，按默认处理。"""
+        text = str(value or "").strip()
+        return text or MESSAGE_PHASE_INTERVIEW
 
 
 class InterviewDurationUpdate(BaseModel):
@@ -131,6 +186,10 @@ class InterviewBrief(BaseModel):
     # 关联简历（0066）：面试官只读这份简历 + 关联岗位的 JD。
     resume_id: int | None = None
     resume_title: str = ""
+    # 导入的材料文件名（0071）：列表/详情要显示"这场面试用的是哪个文件"。
+    # 空串表示该侧材料来自记录（或历史会话没有材料）。
+    job_material_name: str = ""
+    resume_material_name: str = ""
     # 累计有效面试时长（秒）：界面在「准备好了」之后计时、离开暂停。
     duration_seconds: int = 0
     interview_type: str
@@ -142,6 +201,9 @@ class InterviewBrief(BaseModel):
     status: InterviewStatus
     created_at: datetime
     updated_at: datetime
+    # 追问区收起的时刻（0072 / #41）：非空表示用户点了「停止追问」，界面收起输入框，
+    # 只留一个「继续追问」把人放回来。它不改 status，也不影响 answered_rounds。
+    follow_up_closed_at: datetime | None = None
     # 已完成的问答轮数，列表里显示"第 3/6 轮"。
     answered_rounds: int = 0
 
@@ -161,6 +223,41 @@ class InterviewAnswerResult(BaseModel):
     feedback: str = ""
     # 为真表示这场面试已经结束（达到计划轮数或候选人要求收尾），此时应生成报告。
     finished: bool = False
+
+
+class InterviewFollowUpCreate(BaseModel):
+    """面试结束后的「追问」（#41）：不占正式轮次，只就这场面试继续聊。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    content: str = Field(min_length=1, max_length=MAX_ANSWER_CHARS)
+
+    @field_validator("content")
+    @classmethod
+    def content_must_not_be_blank(cls, value: str) -> str:
+        cleaned = value.strip()
+        if not cleaned:
+            raise ValueError("追问不能为空")
+        return cleaned
+
+
+class InterviewFollowUpResult(BaseModel):
+    """一次追问的结果：面试官的回答 + 刷新后的整场会话（含追问记录）。"""
+
+    session: InterviewDetail
+    answer: str = ""
+
+
+class InterviewFollowUpStateUpdate(BaseModel):
+    """收起 / 重新打开追问区（#41）。
+
+    只有两个状态，用布尔而不是时间戳：客户端不该能指定"关闭于何时"，那个时间由
+    服务端在关闭那一刻记下来（它只用于留痕，不参与任何排序或评分）。
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    closed: bool
 
 
 def _validate_choice(value: str, allowed: tuple[str, ...], label: str) -> str:
@@ -345,6 +442,7 @@ class InterviewAnswerReviewOut(BaseModel):
 
 class InterviewOptimizeRequest(BaseModel):
     """把面试暴露的短板与高频追问，反向转成简历改写建议。"""
+
     model_config = ConfigDict(extra="forbid")
 
     resume_id: int = Field(ge=1)

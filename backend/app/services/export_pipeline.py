@@ -229,10 +229,13 @@ def _prepare_for_render(
     制作台里改过的字段位置（placement / 顺序 / 隐藏）会在导出里丢失。v1 输入继续走旧
     redact，渲染器自己会做一次 conversion（与读旧记录同一套规则）。
     """
-    if isinstance(resume, Mapping) and resume.get("version") == 2:
-        if request.redact:
-            return redact_document(resume, request.redact_options)
-        return plain_text_document(dict(resume))
+    if isinstance(resume, Mapping):
+        if resume.get("version") == 2:
+            if request.redact:
+                return redact_document(dict(resume), request.redact_options)
+            return plain_text_document(dict(resume))
+        # 非 v2 的 dict = v1 内容的 dict 形式：``redact`` 只认 v1 模型，先按 v1 校验成模型。
+        resume = ResumeContent.model_validate(dict(resume))
     return redact(resume, request.redact_options) if request.redact else resume
 
 
@@ -334,7 +337,7 @@ def render_config_fingerprint(request: ExportRequest, context: RenderContext) ->
 
 def build_export_delivery(
     request: ExportRequest,
-    resume: ResumeContent,
+    resume: ResumeContent | dict,
     context: RenderContext,
     *,
     source_resume_id: int | None = None,

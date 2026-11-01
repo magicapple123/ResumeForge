@@ -10,9 +10,10 @@ from __future__ import annotations
 from collections import Counter
 
 import pytest
+from app.schemas.resume_document import FieldItem
 from app.services.resume.document_converter import ensure_document_version
 from app.services.resume.document_plan import build_document_plan, plan_to_text
-from app.services.resume.document_plan_format import plain_text
+from app.services.resume.document_plan_format import enum_text, plain_text
 
 
 def _document(**overrides) -> dict:
@@ -361,3 +362,22 @@ def test_plan_to_text_contains_all_values() -> None:
 def test_planner_rejects_v1_content() -> None:
     with pytest.raises(ValueError):
         build_document_plan({"name": "张三"})
+
+
+def test_custom_enum_field_without_catalog_kind_is_localized() -> None:
+    """A5：自建板块 / 自定义枚举字段的目录项没有 enum_kind，纸面不能露 code。
+
+    只有四族词表对同一个 code 给出同一个显示名时才翻译；pending 这类跨家族歧义值
+    一律不猜（审稿中 / 审中 / 待核实含义不同），未知值也原样返回。
+    """
+
+    def field(value: str, item_id: str) -> FieldItem:
+        return FieldItem(id=item_id, key="kind", value=value, placement="trail", format="enum")
+
+    assert enum_text(field("full_time", "ob_cust0001"), "", "zh-CN") == "全职"
+    assert enum_text(field("full_time", "ob_cust0001"), "", "en-US") == "Full-time"
+    assert enum_text(field("pending", "ob_cust0002"), "", "zh-CN") == "pending"
+    assert enum_text(field("whatever", "ob_cust0003"), "", "zh-CN") == "whatever"
+    # 已知 enum_kind 的旧路径不受影响（未知值仍按各自家族的兜底走）。
+    assert enum_text(field("published", "ob_cust0004"), "publication_status", "zh-CN") == "已发表"
+

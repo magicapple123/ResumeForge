@@ -11,7 +11,7 @@ from io import BytesIO
 import pytest
 from app.services.resume.resume_style import RoleStyle
 from pypdf import PdfReader
-from test_pdf_exporter import _MM_TO_PT, _PX_TO_MM, _pdf_with_font, _text_runs
+from test_pdf_exporter import _MM_TO_PT, _PX_TO_MM, _pdf_with_font, _text_runs, needs_font
 
 # ===== Q11：PDF 正文加粗 / 字距 / 段落缩进（局部排版四出口一致）=====
 #
@@ -69,3 +69,48 @@ def test_pdf_paragraph_letter_spacing_sets_the_tc_operator():
     expected = 14.0 * 0.05 * _PX_TO_MM
     assert f"{expected:.2f} Tc".encode() in data
     assert b"0.00 Tc" in data, "字距用完必须复位，否则后续段落全部被加宽"
+
+def _draw_entry_head_pdf(meta_style) -> bytes:
+    """画一条 split 条目头（画布/字体与真实导出同源），返回 PDF 字节。"""
+
+    pdf = _pdf_with_font()
+    pdf.entry_head(
+        "清华大学 · 计算机科学与技术",
+        "2018.09 - 2022.06",
+        14.0,
+        style=RoleStyle(),
+        meta_style=meta_style,
+    )
+    return bytes(pdf.output())
+
+
+def _meta_x(content: bytes) -> float:
+    for x, _y, _size, text in _text_runs(content):
+        if "2018.09" in text:
+            return x
+    raise AssertionError("PDF 里没找到 meta 日期")
+
+
+@needs_font
+def test_pdf_entry_head_inline_moves_meta_next_to_the_title():
+    """#5：日期位置=紧随标题（meta_align=inline）在 PDF 里必须真的挪到标题右侧。
+
+    旧实现 inline 分支把左 cell 给成「版心 - 间距 - meta 宽」，左 cell 几乎占满整行，
+    meta 被顶到版心右缘——与 right 档只差一个栏间距（实测 1.4pt），设置等于没生效。
+    """
+
+    inline_x = _meta_x(_draw_entry_head_pdf(RoleStyle(meta_align="inline")))
+    right_x = _meta_x(_draw_entry_head_pdf(RoleStyle(meta_align="right")))
+    assert inline_x < 300.0, f"inline 日期仍停在右缘: x={inline_x}"
+    assert right_x > 400.0, f"right 日期没有贴右缘: x={right_x}"
+    assert inline_x < right_x - 100.0, "inline 与 right 的日期位置差值太小，设置没生效"
+
+
+@needs_font
+def test_pdf_entry_head_meta_bold_uses_the_bold_face():
+    """#5c：meta 角色开启加粗后，PDF 的日期必须用粗体面（旧实现硬编码常规面）。"""
+
+    runs = _font_runs(_draw_entry_head_pdf(RoleStyle(meta_align="inline", bold=True)))
+    meta_fonts = [font for font, text in runs if "2018.09" in text]
+    assert meta_fonts and all("Bold" in font for font in meta_fonts), meta_fonts
+

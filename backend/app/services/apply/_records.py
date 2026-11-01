@@ -14,6 +14,7 @@ from sqlalchemy.orm import Query, Session
 
 from ...models.apply import (
     FAILURE_CATEGORY_LABELS,
+    ITEM_STATUS_FAILED,
     QUEUE_STATUS_DONE,
     TASK_KIND_APPLY,
     ApplyQueueItem,
@@ -22,7 +23,13 @@ from ...models.apply import (
 )
 from ...models.job import JOB_STATUS_APPLIED, JOB_STATUS_OPEN, Job
 from ...models.profile import utcnow
-from ...schemas.apply import ApplyRecordBatchOut, ApplyRecordOut, TaskItemStatus, TaskStatus
+from ...schemas.apply import (
+    ApplyFailureCountOut,
+    ApplyRecordBatchOut,
+    ApplyRecordOut,
+    TaskItemStatus,
+    TaskStatus,
+)
 from .. import trash
 
 _TASK_ITEM_STATUS_VALUES: tuple[TaskItemStatus, ...] = get_args(TaskItemStatus)
@@ -100,6 +107,10 @@ def _record_out(item: ApplyTaskItem) -> ApplyRecordOut:
         failure_category=item.failure_category,
         failure_label=FAILURE_CATEGORY_LABELS.get(item.failure_category, ""),
         failure_detail=item.failure_detail,
+        # #39：三段稳定码原样下发（协议值，展示名/建议在前端语言包里）。
+        failure_step=item.failure_step or "",
+        failure_target=item.failure_target or "",
+        failure_reason=item.failure_reason or "",
         attempt=item.attempt,
         created_at=item.created_at,
         finished_at=item.finished_at,
@@ -107,7 +118,7 @@ def _record_out(item: ApplyTaskItem) -> ApplyRecordOut:
 
 
 def _matched_items_query(
-    db: Session, *, keyword: str = "", result: str = ""
+    db: Session, *, keyword: str = "", result: str = "", failure_category: str = ""
 ) -> Query[ApplyTaskItem]:
     """命中筛选的投递记录查询（``list_records`` 与分组明细共用，保证过滤语义同源）。"""
     query = (
@@ -122,6 +133,9 @@ def _matched_items_query(
         )
     if result:
         query = query.filter(ApplyTaskItem.status == result)
+    # #39：失败分类与关键词/结果同源过滤——组头按它算 N，明细也按它取，两边才对得上。
+    if failure_category:
+        query = query.filter(ApplyTaskItem.failure_category == failure_category)
     return query
 
 
@@ -150,6 +164,7 @@ def list_record_batches(
     *,
     keyword: str = "",
     result: str = "",
+    failure_category: str = "",
     page: int = 1,
     page_size: int = 5,
     include_items: bool = True,
@@ -165,7 +180,9 @@ def list_record_batches(
     ``matched_count``（命中当前筛选的记录数）。5 批 × 每批可达 500 条时，一页不再
     搬 2500 行明细；明细由 ``list_batch_items`` 在批次展开时单独分页拉取。
     """
-    item_query = _matched_items_query(db, keyword=keyword, result=result)
+    item_query = _matched_items_query(
+        db, keyword=keyword, result=result, failure_category=failure_category
+    )
 
     matched_items = item_query.subquery()
     # 只统计"至少有一条命中记录"的批次，分页与总数都以它为准。
@@ -191,6 +208,42 @@ def list_record_batches(
         .all()
     )
     counts_by_task = {task_id: count for task_id, count in count_rows}
+    # #39：「只重试这 N 条」的 N——命中同一套筛选、且状态为失败的记录数。
+    retryable_rows = (
+        db.query(matched_items.c.task_id, func.count())
+        .filter(
+            matched_items.c.task_id.in_(batch_id_list),
+            matched_items.c.status == ITEM_STATUS_FAILED,
+        )
+        .group_by(matched_items.c.task_id)
+        .all()
+    )
+    retryable_by_task = {task_id: count for task_id, count in retryable_rows}
+    # #39：组头同因聚合——每个批次里各失败分类的条数（组头显示「选择器失效 ×2、验证码 ×1」）。
+    failure_rows = (
+        db.query(
+            ApplyTaskItem.task_id,
+            ApplyTaskItem.failure_category,
+            func.count(),
+        )
+        .filter(
+            ApplyTaskItem.task_id.in_(batch_id_list),
+            ApplyTaskItem.status == "failed",
+            ApplyTaskItem.failure_category != "",
+            trash.live_only(ApplyTaskItem),
+        )
+        .group_by(ApplyTaskItem.task_id, ApplyTaskItem.failure_category)
+        .all()
+    )
+    failure_by_task: dict[int, list[ApplyFailureCountOut]] = {task_id: [] for task_id in batch_id_list}
+    for task_id, category, count in failure_rows:
+        failure_by_task.setdefault(task_id, []).append(
+            ApplyFailureCountOut(
+                category=category,
+                label=FAILURE_CATEGORY_LABELS.get(category, category),
+                count=count,
+            )
+        )
     items_by_task: dict[int, list[ApplyRecordOut]] = {task_id: [] for task_id in batch_id_list}
     if include_items:
         item_rows = (
@@ -221,6 +274,8 @@ def list_record_batches(
             created_at=task.created_at,
             finished_at=task.finished_at,
             matched_count=counts_by_task.get(task.id, 0),
+            retryable_count=retryable_by_task.get(task.id, 0),
+            failure_summary=failure_by_task.get(task.id, []),
             items=items_by_task.get(task.id, []),
         )
         for task in batch_rows
@@ -234,6 +289,7 @@ def list_batch_items(
     *,
     keyword: str = "",
     result: str = "",
+    failure_category: str = "",
     page: int = 1,
     page_size: int = 20,
 ) -> tuple[list[ApplyRecordOut], int]:
@@ -242,9 +298,9 @@ def list_batch_items(
     过滤语义与 ``list_record_batches`` 完全同源（同一个 ``_matched_items_query``）：
     界面展开批次时按当前关键词/结果拉取明细，组内的记录与组头的 matched_count 对得上。
     """
-    query = _matched_items_query(db, keyword=keyword, result=result).filter(
-        ApplyTaskItem.task_id == task_id
-    )
+    query = _matched_items_query(
+        db, keyword=keyword, result=result, failure_category=failure_category
+    ).filter(ApplyTaskItem.task_id == task_id)
     total = query.count()
     rows = (
         query.order_by(ApplyTaskItem.sort_order, ApplyTaskItem.id)
@@ -253,6 +309,29 @@ def list_batch_items(
         .all()
     )
     return [_record_out(row) for row in rows], total
+
+
+def select_retryable_items(
+    db: Session,
+    task_id: int,
+    *,
+    keyword: str = "",
+    result: str = "",
+    failure_category: str = "",
+) -> list[ApplyTaskItem]:
+    """挑出一个批次里「命中当前筛选、且状态为失败」的记录（「只重试这 N 条」用）。
+
+    复用同一套 _matched_items_query + status=failed：组头显示的 retryable_count 与
+    这里选出来的条数必然一致。成功/跳过的记录不在这里——它们没有需要重投的失败。
+    """
+    return (
+        _matched_items_query(
+            db, keyword=keyword, result=result, failure_category=failure_category
+        )
+        .filter(ApplyTaskItem.task_id == task_id, ApplyTaskItem.status == ITEM_STATUS_FAILED)
+        .order_by(ApplyTaskItem.sort_order, ApplyTaskItem.id)
+        .all()
+    )
 
 
 # ===== 删除记录（软删，进退回收站）=====
