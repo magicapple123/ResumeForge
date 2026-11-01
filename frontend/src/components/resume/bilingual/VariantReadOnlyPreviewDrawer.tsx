@@ -1,13 +1,19 @@
 // SPDX-License-Identifier: Apache-2.0
 /** Read-only, isolated preview of a language variant using its effective export layout. */
 import { Alert, Button, Flex } from "antd";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import type { SyntheticEvent } from "react";
 import { renderResume } from "../../../api/resumeLayout";
 import { fetchVariantExportInput } from "../../../features/resume-bilingual/api";
 import { bt } from "../../../features/resume-bilingual/i18n";
 import type { ResumeLanguage, ResumeLayout } from "../../../types";
 import { useLocale } from "../../../i18n/i18nContext";
 import LoadingBlock from "../../common/LoadingBlock";
+
+/** #18：Ctrl+滚轮缩放边界（0.5–2.0，步进 10%）。 */
+const MIN_ZOOM = 0.5;
+const MAX_ZOOM = 2;
+const ZOOM_STEP = 0.1;
 
 interface Props {
   open: boolean;
@@ -57,6 +63,37 @@ export default function VariantReadOnlyPreviewDrawer({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [retry, setRetry] = useState(0);
+  // #18：预览缩放（只作用于预览内容，不影响界面其他部分）。
+  const [zoom, setZoom] = useState(1);
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+
+  const handleZoomWheel = useCallback((event: WheelEvent) => {
+    // 不按 Ctrl/Meta：交给浏览器默认滚动，不劫持。
+    if (!event.ctrlKey && !event.metaKey) return;
+    event.preventDefault();
+    setZoom((prev) =>
+      Math.min(
+        MAX_ZOOM,
+        Math.max(
+          MIN_ZOOM,
+          Math.round((prev + (event.deltaY < 0 ? ZOOM_STEP : -ZOOM_STEP)) * 10) / 10,
+        ),
+      ),
+    );
+  }, []);
+
+  // 滚动容器上的 Ctrl+滚轮（容器 padding / 未铺满处）。
+  useEffect(() => {
+    const node = scrollRef.current;
+    if (!node || !open || !html) return;
+    node.addEventListener("wheel", handleZoomWheel, { passive: false });
+    return () => node.removeEventListener("wheel", handleZoomWheel);
+  }, [handleZoomWheel, html, open]);
+
+  // 关闭抽屉（含 Esc）复位 100%；切换语种/重试时由下方取数流程复位。
+  useEffect(() => {
+    if (!open) setZoom(1);
+  }, [open]);
 
   useEffect(() => {
     if (!open || variantId === null) return;
@@ -68,6 +105,7 @@ export default function VariantReadOnlyPreviewDrawer({
       setLoading(true);
       setError("");
       setHtml("");
+      setZoom(1); // 换语种 / 重试：缩放回到 100%。
     });
     void (async () => {
       try {
@@ -95,13 +133,26 @@ export default function VariantReadOnlyPreviewDrawer({
     };
   }, [fallbackLayout, open, resumeId, retry, variantId]);
 
+  // iframe 是独立文档，滚轮事件不会冒泡到父文档——内容加载后到它的 document 上再绑一份
+  // （同 useFrameInteractions 的做法）。srcDoc 换内容时旧文档整体丢弃，无需手动清理。
+  const handleFrameLoad = (event: SyntheticEvent<HTMLIFrameElement>) => {
+    event.currentTarget.contentDocument?.addEventListener("wheel", handleZoomWheel, {
+      passive: false,
+    });
+  };
+
   return open ? (
     <section className="bilingual-variant-preview" aria-label={bt("bilingual.preview.title")}>
       <Flex justify="space-between" align="center" style={{ marginBottom: 8 }}>
         <strong>{bt("bilingual.preview.title")}</strong>
-        <Button size="small" onClick={onClose}>
-          {bt("bilingual.preview.close")}
-        </Button>
+        <Flex align="center" gap={8}>
+          <span className="bilingual-variant-preview-zoom" title={bt("bilingual.preview.zoom")}>
+            {Math.round(zoom * 100)}%
+          </span>
+          <Button size="small" onClick={onClose}>
+            {bt("bilingual.preview.close")}
+          </Button>
+        </Flex>
       </Flex>
       {loading ? (
         <LoadingBlock tip={bt("bilingual.preview.loading")} />
@@ -117,12 +168,21 @@ export default function VariantReadOnlyPreviewDrawer({
           }
         />
       ) : html ? (
-        <iframe
-          title={bt("bilingual.preview.title")}
-          srcDoc={html}
-          sandbox="allow-same-origin"
-          style={{ width: "100%", minHeight: "70vh", border: 0 }}
-        />
+        <div ref={scrollRef} className="bilingual-variant-preview-scroll">
+          <iframe
+            title={bt("bilingual.preview.title")}
+            srcDoc={html}
+            sandbox="allow-same-origin"
+            onLoad={handleFrameLoad}
+            style={{
+              width: `${100 / zoom}%`,
+              minHeight: "70vh",
+              border: 0,
+              transform: `scale(${zoom})`,
+              transformOrigin: "top center",
+            }}
+          />
+        </div>
       ) : null}
     </section>
   ) : null;

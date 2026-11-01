@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * v2 局部排版工具容器：条目选择（自管/受控）/ 对象级 / 文字级别 / 格式刷 / 多选批量 /
+ * v2 局部排版工具容器：条目选择（自管/受控）/ 对象级 / 文字级别 / 多选批量 /
  * 同类段落；以及「只改 format_config，不动正文」的不变量。
  */
 import { App as AntdApp } from "antd";
@@ -81,14 +81,13 @@ function readConfig(): Record<string, unknown> {
 }
 
 describe("TypographyToolsPanelV2", () => {
-  it("渲染选择列表与四个小节（默认含同类段落）", () => {
+  it("渲染选择列表与三个小节（默认含同类段落）", () => {
     renderPanel();
     expect(screen.getByText(t("typography.tools.selectionTitle"))).toBeInTheDocument();
     expect(
       screen.getByRole("combobox", { name: t("typography.tools.selectionAria") }),
     ).toBeInTheDocument();
     expect(screen.getByText(t("typography.tools.sectionLevel"))).toBeInTheDocument();
-    expect(screen.getByText(t("typography.tools.sectionPainter"))).toBeInTheDocument();
     expect(screen.getByText(t("typography.tools.sectionBatch"))).toBeInTheDocument();
     expect(screen.getByText(t("typography.tools.sectionRole"))).toBeInTheDocument();
   });
@@ -124,37 +123,6 @@ describe("TypographyToolsPanelV2", () => {
     fireEvent.click(screen.getByRole("button", { name: t("typography.level.heading3") }));
     const objectRoles = readConfig().object_roles as Record<string, unknown>;
     expect(objectRoles["ob_entry001:entry_title"]).toMatchObject({ font_scale: 1.08 });
-  });
-
-  it("格式刷：复制来源局部调整，应用到受控多选目标（Q14 文案带条目名与项数）", () => {
-    const harness = renderPanel(
-      {
-        selectedPath: "education.ob_entry001",
-        multiSelectedPaths: ["education.ob_entry002"],
-      },
-      baseLayout({ objects: { ob_entry001: { space_after: 0.4 } } }),
-    );
-    expect(screen.getByText(t("typography.painter.hint"))).toBeInTheDocument();
-    const copyLabel = t("typography.painter.copy", {
-      name: "Tsinghua University · Computer Science",
-    });
-    expect(
-      screen.getByText(
-        t("typography.painter.copyProps", {
-          count: 1,
-          props: t("typography.prop.space_after"),
-        }),
-      ),
-    ).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: copyLabel }));
-    expect(screen.getByText(t("typography.tools.targets", { count: 1 }))).toBeInTheDocument();
-    fireEvent.click(
-      screen.getByRole("button", { name: t("typography.painter.apply", { count: 1 }) }),
-    );
-    const objects = readConfig().objects as Record<string, Record<string, unknown>>;
-    expect(objects.ob_entry002).toMatchObject({ space_after: 0.4 });
-    expect(harness.onObjectStyleChange).toHaveBeenCalled();
-    expect(harness.onDocumentChange).not.toHaveBeenCalled();
   });
 
   it("「固定这条的当前样式」在条目排版面板底部，按当前作用范围写覆盖（Q14）", () => {

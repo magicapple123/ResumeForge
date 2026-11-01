@@ -120,8 +120,19 @@ class DrillCreate(BaseModel):
 
     title: str = Field(default="", max_length=MAX_DRILL_TITLE_CHARS)
     job_id: int | None = Field(default=None, ge=1)
-    # 只深挖这几条主张；留空表示全部「已确认」的。
-    claim_ids: list[int] = Field(default_factory=list, max_length=MAX_DRILL_CLAIMS)
+    # 只深挖这几条主张（#42：必须**显式选择**，所以给了 `min_length=1`）。
+    #
+    # 两种"空"要分开看：
+    # - **不传**（`None`）：沿用旧口径 = 全部「已确认」的主张。老客户端/深挖页自带的
+    #   开场入口不传这个字段，行为与 0066 完全一致；
+    # - **显式传空列表**（`[]`）：422。这正是 #42 要拦的用法——界面上"一条都没选"
+    #   曾经被当成"全选"，用户以为自己选了什么，实际按全部主张开了场。
+    #
+    # 用 `None` 而不是 `default_factory=list` + `min_length=1`：后者的默认值不参与校验
+    # （pydantic 默认 `validate_default=False`），"两个空看起来一样、结果不同"会更难解释。
+    claim_ids: list[int] | None = Field(
+        default=None, min_length=1, max_length=MAX_DRILL_CLAIMS
+    )
     max_questions: int = Field(default=DEFAULT_DRILL_QUESTIONS, ge=1, le=MAX_DRILL_QUESTIONS)
     feedback_policy: str = Field(default="deferred", max_length=16)
 
@@ -137,6 +148,8 @@ class DrillCreate(BaseModel):
 
     @model_validator(mode="after")
     def claim_ids_must_be_unique(self) -> DrillCreate:
+        if self.claim_ids is None:
+            return self
         seen: list[int] = []
         for claim_id in self.claim_ids:
             if claim_id not in seen:

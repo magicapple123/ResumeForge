@@ -23,9 +23,11 @@ const applyRecords = {
   "applyRecords.empty": "还没有投递记录",
   "applyRecords.pagination.total": "共 {count} 个批次",
   "applyRecords.toast.retried": "已新建一个重投批次",
+  "applyRecords.toast.retriedFailed": "已重投 {count} 条失败记录",
   "applyRecords.toast.movedToTrash": "已移入回收站",
   "applyRecords.toast.batchDeleted": "已删除 {count} 条投递记录，可在「回收站」里恢复",
   "applyRecords.error.retryFailed": "重投失败",
+  "applyRecords.error.retryFailedBatch": "批量重投失败",
   "applyRecords.error.deleteFailed": "删除失败",
   "applyRecords.error.batchDeleteFailed": "批量删除失败，请重试",
 } as const;

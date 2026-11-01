@@ -33,7 +33,7 @@ from ...schemas.resume_document import (
     parse_document,
 )
 from . import document_catalog as catalog
-from .document_plan_format import item_inlines, plain_text
+from .document_plan_format import body_style_of, item_inlines, plain_text, wants_paren
 from .resume_contact import validate_contact_breaks
 from .resume_labels import (
     field_labels,
@@ -121,7 +121,14 @@ def plan_header(header: ResumeHeader, language: str) -> HeaderPlan:
             lines.append(current)
             current = []
         label_key = _LABELLED_CONTACT.get(item.key)
-        display = labels.get(label_key, label_key) + "：" + item.value if label_key else item.value
+        if label_key:
+            display = labels.get(label_key, label_key) + "：" + item.value
+        elif item.label.strip():
+            # #10：自定义页眉字段把用户起的名字印在值前面（与 github/website 同形），
+            # 否则纸面上只剩裸值「13800000000」，看不出这项是什么。
+            display = item.label.strip() + "：" + item.value
+        else:
+            display = item.value
         current.append(Inline(text=display, role="meta", path="header." + item.id))
     if current:
         lines.append(current)
@@ -192,6 +199,7 @@ def _effective_layout(section: ResumeSection, entry: ResumeEntry) -> EntryLayout
 
 def _plan_entry(section: ResumeSection, entry: ResumeEntry, language: str) -> EntryPlan | None:
     layout = _effective_layout(section, entry)
+    entry_id = entry.id or ""
     head_items = [
         item
         for item in entry.items
@@ -199,11 +207,10 @@ def _plan_entry(section: ResumeSection, entry: ResumeEntry, language: str) -> En
     ]
     title_items = [item for item in head_items if item.placement == "title"]  # type: ignore[attr-defined]
     meta_items = [item for item in head_items if item.placement == "meta"]  # type: ignore[attr-defined]
-    title_segments = _joined_segments(title_items, section.key, entry.id, language, "entry_title")
-    meta_segments = _joined_segments(meta_items, section.key, entry.id, language, "meta")
+    title_segments = _joined_segments(title_items, section.key, entry_id, language, "entry_title")
+    meta_segments = _joined_segments(meta_items, section.key, entry_id, language, "meta")
     if not entry.items:
         return None
-    entry_id = entry.id or ""
     lead = [
         item for item in entry.items if not isinstance(item, TextItem) and item.placement == "lead"
     ]
@@ -311,11 +318,11 @@ def _body_blocks(
             entry_id,
             language,
             role="body",
-            wrap_paren=item.wrap == "paren",
+            wrap_paren=wants_paren(item),
         )
         if not segments:
             continue
-        blocks.append(BlockPlan(kind=item.body_style, segments=segments, path=path))
+        blocks.append(BlockPlan(kind=body_style_of(item), segments=segments, path=path))
     return blocks
 
 
@@ -352,7 +359,7 @@ def _inline_rows(section: ResumeSection, language: str) -> list[list[CellPlan]]:
                 language,
                 role=role,
                 show_label=item.placement != "body",
-                wrap_paren=item.wrap == "paren",
+                wrap_paren=wants_paren(item),
             )
             if segments:
                 row.append(CellPlan(segments=segments))

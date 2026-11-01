@@ -260,7 +260,6 @@ def bullets(
     )
     align = _ALIGN.get(str(style.align)) if style is not None and style.align else None
     bold = _style_bool(style, "bold")
-    italic = _style_bool(style, "italic")
     letter_spacing_pt = _style_letter_spacing_pt(base, style)
     bullet = {"dot": "·", "dash": "–", "none": ""}.get(
         style.bullet if style is not None and style.bullet else "dot", "·"
@@ -281,7 +280,6 @@ def bullets(
             f"{bullet} {text}" if bullet else text,
             partial(set_run_font, font_name=theme.font_name),
             bold=bold,
-            italic=italic,
             size_pt=size * _PX_TO_PT,
             color=color,
             letter_spacing_pt=letter_spacing_pt,
@@ -340,7 +338,6 @@ def entry_head(
         left,
         partial(set_run_font, font_name=theme.font_name),
         bold=style.bold if style is not None and style.bold is not None else True,
-        italic=_style_bool(style, "italic"),
         size_pt=title_size * _PX_TO_PT,
         color=_style_color(style, theme.body_text),
         letter_spacing_pt=_style_letter_spacing_pt(base, style),
@@ -353,7 +350,6 @@ def entry_head(
             node,
             f" · {right}",
             partial(set_run_font, font_name=theme.font_name),
-            italic=_style_bool(meta_style, "italic"),
             size_pt=base * layout.entry_meta_ratio * _PX_TO_PT * _style_scale(meta_style),
             color=_style_color(meta_style, theme.muted_text),
         )
@@ -366,7 +362,6 @@ def entry_head(
         node,
         f"\t{right}",
         partial(set_run_font, font_name=theme.font_name),
-        italic=_style_bool(meta_style, "italic"),
         size_pt=base * layout.entry_meta_ratio * _PX_TO_PT * _style_scale(meta_style),
         color=_style_color(meta_style, theme.muted_text),
     )

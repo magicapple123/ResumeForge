@@ -21,11 +21,20 @@ from typing import Any
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 from jinja2.sandbox import SandboxedEnvironment
 
-from ...schemas.resume_document import ResumeDocument, ResumeItem, document_to_json, parse_document
+from ...schemas.resume_document import (
+    AuthorsItem,
+    ListItem,
+    ResumeDocument,
+    ResumeItem,
+    TextItem,
+    document_to_json,
+    parse_document,
+)
 from ...schemas.resume_document_plan import DocumentPlan
 from .resume_contact import CONTACT_BREAKS_KEY
 from .resume_labels import field_labels, normalize_language
 from .resume_render_overrides import RenderOverrides, render_overrides_css
+from .resume_style import meta_align_css
 from .resume_template_catalog import TEMPLATES_DIR
 from .resume_template_format import format_css
 from .resume_template_style import style_css
@@ -157,20 +166,25 @@ def coerce_document(
 
 
 def _item_is_visible(item: ResumeItem) -> bool:
-    """纸面上的 item：hidden 放置 / 隐藏文本块 / 空值都不上纸面。"""
+    """纸面上的 item：hidden 放置 / 隐藏文本块 / 空值都不上纸面。
+
+    按具体 item 类型收窄（而不是 ``getattr(item, "kind", "")``）：ResumeItem 是
+    四个类的判别式联合，只有按类型收窄才能读到 FieldItem.text / ListItem.values /
+    AuthorsItem.authors 这些**只在某一个类上存在**的字段。
+    """
     placement = getattr(item, "placement", None)
     if placement == "hidden":
         return False
-    if getattr(item, "kind", "") == "text":
-        return not getattr(item, "hidden", False) and bool(str(item.text or "").strip())
-    if getattr(item, "kind", "") == "list":
-        hidden = {str(value or "").strip() for value in getattr(item, "hidden_values", ()) or ()}
+    if isinstance(item, TextItem):
+        return not item.hidden and bool(str(item.text or "").strip())
+    if isinstance(item, ListItem):
+        hidden = {str(value or "").strip() for value in item.hidden_values or ()}
         return any(
             str(value or "").strip() and str(value).strip() not in hidden for value in item.values
         )
-    if getattr(item, "kind", "") == "authors":
+    if isinstance(item, AuthorsItem):
         return any(str(author.name or "").strip() for author in item.authors)
-    return bool(str(getattr(item, "value", "") or "").strip())
+    return bool(str(item.value or "").strip())
 
 
 def paper_document(document: ResumeDocument) -> ResumeDocument:
@@ -194,7 +208,7 @@ def paper_document(document: ResumeDocument) -> ResumeDocument:
                 if not _item_is_visible(item):
                     section_changed = True
                     continue
-                if getattr(item, "kind", "") == "list" and getattr(item, "hidden_values", None):
+                if isinstance(item, ListItem) and item.hidden_values:
                     hidden = {
                         str(value or "").strip()
                         for value in item.hidden_values
@@ -319,7 +333,22 @@ _DOCUMENT_CSS = """
   .entry-head .title { flex: 1 1 auto; min-width: 0; }
   .entry-head .meta { flex: 0 1 auto; max-width: 55%; text-align: right; white-space: normal; }
   .entry-head.head-stacked, .entry-head.head-meta_first { display: block; }
+  /* title / meta 在模板里是「行内 span」：只把容器改成 block 并不能让它们换行，
+     两个 span 仍然拼在一行（审计 R-04 的实测症状）。必须逐个改成 block。
+     写注释注意两件事：① 这里会被原样写进产物的样式表，所以不许出现星号星号那种
+     markdown 加粗标记（`test_rich_export_consistency` 判它"漏进产物"）；
+     ② 不许出现尖括号标签名字面量（style / script 这类），`apply_rich_html` 按标签切
+     文本段，脏标签会让"跳过脚本样式"的深度算错，后面整段正文都不再做加粗转换。 */
+  .entry-head.head-stacked .title,
+  .entry-head.head-stacked .meta,
+  .entry-head.head-meta_first .title,
+  .entry-head.head-meta_first .meta { display: block; }
   .entry-head.head-stacked .meta, .entry-head.head-meta_first .meta { max-width: none; text-align: left; }
+  /* 模板给 `.entry-head .meta` 写的是 `white-space: nowrap`（右对齐时不许折行）。
+     上下 / 元信息在上两种布局里元信息独占一行，长元信息（"· 项目负责人 · 8 人团队"）
+     会顶出纸边——这里用 0,3,0 的选择器压过模板的 0,2,0，允许折行。 */
+  .entry-head.head-stacked .meta,
+  .entry-head.head-meta_first .meta { white-space: normal; }
   .entry-head.head-stacked .meta { margin-top: calc(var(--fs) * 0.14); }
   .entry-head.head-meta_first .title { margin-top: calc(var(--fs) * 0.14); }
   /* 灰字段：equal = 网格（跨行列宽一致，solo 独占整行）；flow = 行内顺排。 */
@@ -424,6 +453,9 @@ def build_resume_html(
         format_css(format_values),
         render_overrides_css(render_overrides) if render_overrides is not None else "",
         document_css(plan),
+        # #5a：inline 日期位置的伴随规则必须排在 document_css 之后——它要覆盖
+        # _DOCUMENT_CSS 里 `.entry-head .title { flex: 1 1 auto; }`，同权重下后来者胜。
+        meta_align_css(render_overrides.style) if render_overrides is not None else "",
     ]
     css = "\n".join(block for block in css_blocks if block)
     if css:

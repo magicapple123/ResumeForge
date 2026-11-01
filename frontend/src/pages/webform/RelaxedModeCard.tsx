@@ -44,10 +44,16 @@ export const RelaxedModeCard = memo(function RelaxedModeCard() {
         <Typography.Text type="secondary">
           {t("webFormPage.relaxed.defaultOff")}
           {enabled ? (
-            <Typography.Text type="warning">{t("webFormPage.relaxed.enabledHint")}</Typography.Text>
+            <Typography.Text type="warning" className="relaxed-mode-enabled-hint">
+              {t("webFormPage.relaxed.enabledHint")}
+            </Typography.Text>
           ) : null}
         </Typography.Text>
-        <Typography.Text type="warning">{t("webFormPage.relaxed.risk")}</Typography.Text>
+        {/* 风险常驻文案：antd 的 colorWarning 白底只有 ~1.9:1，过不了 axe AA；
+            改用站内 warning 文字 token（见 styles/accessibility.css `.relaxed-mode-risk`）。 */}
+        <Typography.Text type="warning" className="relaxed-mode-risk">
+          {t("webFormPage.relaxed.risk")}
+        </Typography.Text>
       </Space>
     </Card>
   );

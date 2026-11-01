@@ -100,7 +100,11 @@ export function useWorkbenchV2Save({
     setLayoutSnapshot(open && layout ? cloneLayout(layout) : null);
     setDocumentBaseline(serverDocument ? signature(serverDocument) : "");
   }
-  const serverSignature = serverDocument ? signature(serverDocument) : "";
+  // R-30：宿主那份文档每帧都一样，序列化一次就够（以前每帧都全文档 JSON.stringify）。
+  const serverSignature = useMemo(
+    () => (serverDocument ? signature(serverDocument) : ""),
+    [serverDocument],
+  );
   if (prevServer !== serverSignature) {
     setPrevServer(serverSignature);
     // 宿主换了一版（保存成功 / 用最新的）：把这版当新基线；内容与本地的差异仍算脏。

@@ -9,8 +9,8 @@ const bilingual = {
   "bilingual.variant.missing": "No version exists in this language yet",
   "bilingual.variant.create": "Create translated version",
   "bilingual.variant.layout": "Layout: {template} · {pages} pages",
-  "bilingual.variant.layoutHint":
-    "Each version saves its own template and typography settings independently",
+  "bilingual.variant.viewing": "Viewing: {name}",
+  "bilingual.variant.createOption": "+ Not created",
   "bilingual.variant.count": "{count} language versions",
   "bilingual.variant.current": "Current version",
   "bilingual.compare.title": "Field comparison",
@@ -23,6 +23,9 @@ const bilingual = {
   "bilingual.compare.same": "Match",
   "bilingual.compare.changed": "Different",
   "bilingual.compare.empty": "Both sides are empty",
+  "bilingual.compare.statusAria": "Field status: {status}",
+  "bilingual.compare.sameMore": "{count} more fields match",
+  "bilingual.compare.sameLess": "Hide these {count} matching fields",
   "bilingual.compare.locked": "Fact lock",
   "bilingual.compare.lockedHint":
     "Names, organizations, dates and numbers are protected by fact locks and are not rewritten during translation",
@@ -53,6 +56,8 @@ const bilingual = {
   "bilingual.candidate.placeholder": "Add content to both sides before generating candidates",
   "bilingual.glossary.title": "Glossary",
   "bilingual.glossary.hint": "Locked terms must appear exactly as specified in translations",
+  "bilingual.glossary.purpose":
+    "Pins source → target wording: when a translation hits these terms, the pinned wording is used so both versions read consistently",
   "bilingual.glossary.empty": "No terms yet; add a term to fix its translation",
   "bilingual.glossary.add": "Add term",
   "bilingual.glossary.source": "Source term",
@@ -112,7 +117,20 @@ const bilingual = {
   "bilingual.workspace.tabCompare": "Field comparison",
   "bilingual.workspace.tabCandidates": "Translation candidates",
   "bilingual.workspace.tabGlossary": "Glossary",
-  "bilingual.workspace.translate": "Generate translation candidates",
+  "bilingual.workspace.translate": "Generate translation",
+  "bilingual.workspace.translateHint":
+    "Generates the {language} text into “Translation candidates”; nothing is written back until you confirm each entry",
+  "bilingual.workspace.translateBlockedOnSource":
+    "This version is in the same language as the current resume and is the source only: switch to the target-language version before translating",
+  "bilingual.workspace.overwrite.label": "Overwrite with current resume",
+  "bilingual.workspace.overwrite.hint":
+    "Restore this variant's content from the current resume (repairs a translation-polluted variant); name and layout are kept",
+  "bilingual.workspace.overwrite.confirmTitle": "Overwrite this variant with the current resume?",
+  "bilingual.workspace.overwrite.confirmDescription":
+    "All changes in this variant will be replaced by the current resume and cannot be undone; you can generate translations again afterwards.",
+  "bilingual.workspace.overwrite.confirmOk": "Overwrite",
+  "bilingual.workspace.overwrite.done": "Variant overwritten with the current resume",
+  "bilingual.workspace.overwrite.failed": "Overwrite failed",
   "bilingual.workspace.translating": "Generating translation candidates",
   "bilingual.workspace.noVariant":
     "No version exists in this language; create one in the version list first",
@@ -131,7 +149,8 @@ const bilingual = {
   "bilingual.variant.createFailed": "Could not create the language version",
   "bilingual.variant.name.zh": "Chinese version",
   "bilingual.variant.name.en": "English version",
-  "bilingual.layout.title": "Layout for this version",
+  "bilingual.layout.title": "Layout of “{name}”",
+  "bilingual.layout.resetInherited": "This version already inherits the resume layout",
   "bilingual.layout.hint":
     "Saved independently; does not change the current language text or the other version",
   "bilingual.layout.inherited": "Inherits the Resume layout",
@@ -173,12 +192,16 @@ const bilingual = {
     "{count} fields kept in the original language by fact or glossary locks; they are not listed as candidates",
   "bilingual.v2.readOnly":
     "Read-only mode: this resume cannot be saved right now; comparison and glossary stay available",
-  "bilingual.v2.openInWorkbench": "Open this translation in the workbench",
+  "bilingual.v2.openInWorkbench": "Preview English version",
+  "bilingual.v2.openInWorkbenchZh": "Preview Chinese version",
+  "bilingual.v2.previewReadOnly": "Read-only preview",
   "bilingual.preview.title": "Translation preview",
   "bilingual.preview.loading": "Loading translation preview",
   "bilingual.preview.failed": "Could not load the translation preview",
   "bilingual.preview.retry": "Reload preview",
   "bilingual.preview.close": "Hide preview",
+  /** #18: tooltip of the zoom badge (Ctrl+wheel, 0.5–2.0). */
+  "bilingual.preview.zoom": "Preview zoom (Ctrl+wheel)",
   "bilingual.compare.readOnlyTag": "Read-only",
   "bilingual.compare.readOnlyHint":
     "Lists, authors and custom fields are shown for comparison only and are not adopted item by item",

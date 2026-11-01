@@ -118,8 +118,17 @@ const resumeEditor = {
   // 三个入口（模块顶部追加 / 条目级填入 / 分区底部的添加与删除）共用同一批候选与
   // 去重语义；后缀带前导空格，拼在候选标题（或「标题（说明）」）后面。
   "editor.header.fillAll": "填入我的资料全部数据",
-  "editor.profileFill.title.entry": "从资料填入本条",
+  /** R-29：按场景分三档（有目标 + 目标名 / 有目标无名 / 无目标）。 */
+  "editor.profileFill.title.fill": "从我的资料填入",
+  "editor.profileFill.title.fillTarget": "填入「{title}」",
+  "editor.profileFill.title.add": "从我的资料添加",
+  /** 有目标但过滤后没有候选（不再摆全量 disabled 列表，给一行说明）。 */
+  "editor.profileFill.emptyTarget": "这份资料里没有能填进这条的字段",
   "editor.profileFill.placeholder.entry": "选择资料条目",
+  /** #22：候选搜索框的占位符（菜单第一行）。 */
+  "editor.profileFill.search": "搜索资料…",
+  /** #22：搜索框下方一行的可添加项计数（随搜索/目标过滤实时变化）。 */
+  "editor.profileFill.count": "{count} 项可添加",
   "editor.profileFill.aria.entry": "从我的资料选择填入本条",
   "editor.profileFill.empty": "没有可填入的条目",
   "editor.profileFill.success": "已从资料填入 {count} 个字段",

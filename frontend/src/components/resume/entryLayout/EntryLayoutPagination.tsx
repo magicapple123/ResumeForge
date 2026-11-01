@@ -44,11 +44,11 @@ export default function EntryLayoutPagination({
   };
   return (
     <section
-      className="rf-entry-layout-pagination"
+      className="rf-entry-layout-group rf-entry-layout-pagination"
       aria-label={t("pagination.entry.title")}
       data-entry-layout-pagination="1"
     >
-      <div className="rf-entry-layout-fields-title">{t("pagination.entry.title")}</div>
+      <div className="rf-entry-layout-group-title">{t("pagination.entry.title")}</div>
       <div className="rf-entry-layout-fields-hint">{t("structure.layout.entryPaginationHint")}</div>
       <div className="rf-entry-layout-row">
         <span className="rf-entry-layout-label">{t("pagination.breakBefore")}</span>
@@ -56,7 +56,10 @@ export default function EntryLayoutPagination({
           size="small"
           checked={Boolean(entry.layout.start_on_new_page)}
           disabled={disabled || undefined}
-          aria-label={t("structure.pagination.entryAria", { name: entryName })}
+          aria-label={t("pagination.sectionAria", {
+            name: entryName,
+            flag: t("pagination.breakBefore"),
+          })}
           onChange={(checked) => setEntryPagination({ start_on_new_page: checked })}
         />
       </div>
@@ -66,7 +69,10 @@ export default function EntryLayoutPagination({
           size="small"
           checked={Boolean(entry.layout.keep_together)}
           disabled={disabled || undefined}
-          aria-label={t("structure.pagination.entryAria", { name: entryName })}
+          aria-label={t("pagination.sectionAria", {
+            name: entryName,
+            flag: t("structure.pagination.keepTogether"),
+          })}
           onChange={(checked) => setEntryPagination({ keep_together: checked })}
         />
       </div>

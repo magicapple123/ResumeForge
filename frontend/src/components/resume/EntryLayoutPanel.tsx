@@ -9,9 +9,18 @@
  * - 板块级 = `section.layout`；条目级 = `entry.layout`（null 表示继承板块）；
  * - 锁排版 / 锁内容会禁用对应控件并说明原因，不静默失败。
  *
+ * R-11（审计）重排：面板从"一列裸控件"改成三段结构，每个决定都有标题可依：
+ * 1. 顶部浅底卡片收「板块 / 应用范围 / 条目」——选对象的东西聚在一处；
+ * 2. 三个分组标题 `条目标题布局` / `分栏` / `断页（仅这一条）`，之间 1px 分隔；
+ * 3. **条目行与条目标题布局始终渲染**（范围=整个板块时禁用而不是消失）——切范围时
+ *    面板高度不跳，鼠标下的分段控件不会移位；
+ * 4. 「继承」成为每个分栏控件的第一个选项（哨兵 `"inherit"`，见
+ *    `EntryLayoutInheritanceControls`），删掉右侧来源标记与逐项恢复按钮；
+ * 5. 字段检查器移到**面板底部**——选中字段时它只会往下长，参数区位置不动。
+ *
  * 本组件只做「选板块/条目 + 组合」，三块独立 UI 按职责拆到 `entryLayout/`：
  * - `EntryLayoutPagination`：条目级断页（Q08/Q09）；
- * - `EntryLayoutShortFields`：灰色短字段顺序与显示（Q07/Q08/Q20）；
+ * - `EntryLayoutShortFields`：灰色短字段顺序与显示（Q07/Q08/Q20 + R-10）；
  * - `EntryLayoutNodeInspector`：选中字段的就地编辑（两处渲染共用）。
  */
 import { Button, Empty, Segmented, Select, Typography } from "antd";
@@ -24,9 +33,11 @@ import { findItem } from "../../features/resume-document/paths";
 import { entryDisplayLabel } from "../../features/resume-document/summarize";
 import type { DocumentFieldCatalog } from "../../types/resumeDocument";
 import EntryLayoutInheritanceControls from "./EntryLayoutInheritanceControls";
+import type { LayoutPatch } from "./EntryLayoutInheritanceControls";
 import EntryLayoutNodeInspector from "./entryLayout/EntryLayoutNodeInspector";
 import EntryLayoutPagination from "./entryLayout/EntryLayoutPagination";
 import EntryLayoutShortFields from "./entryLayout/EntryLayoutShortFields";
+import { usePanelNarrow } from "./entryLayout/usePanelNarrow";
 import { sectionKeyLabel } from "./sectionLabels";
 import "./entry-layout-panel.css";
 import {
@@ -40,8 +51,6 @@ import {
   patchSectionLayout,
   resetEntryLayout,
   resetSectionLayout,
-  restoreEntryLayoutField,
-  type InheritableLayoutField,
 } from "../../features/resume-layout/entryLayoutModel";
 
 const HEAD_LABEL_KEYS: Record<EntryLayout["head"], MessageKey> = {
@@ -49,6 +58,21 @@ const HEAD_LABEL_KEYS: Record<EntryLayout["head"], MessageKey> = {
   stacked: "structure.layout.head.stacked",
   meta_first: "structure.layout.head.meta_first",
 };
+
+/**
+ * 只把 patch 里**真正传了值**的键写回。
+ *
+ * `undefined` 表示"这次没改这一项"，不能参与合并：条目级布局里 `null` 是"继承"
+ * （合法值），而 `undefined` 会把同一条目已有的覆盖项抹掉——例如选「继承」列数时
+ * 顺手清掉对齐方式与列间距。
+ */
+function definedPatch<T extends object>(source: T): Partial<T> {
+  const out: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(source)) {
+    if (value !== undefined) out[key] = value;
+  }
+  return out as Partial<T>;
+}
 
 export interface EntryLayoutPanelProps {
   document: ResumeDocument;
@@ -74,6 +98,9 @@ export default function EntryLayoutPanel({
   className,
 }: EntryLayoutPanelProps) {
   useLocale();
+  // R-11-8：面板自己的宽度决定分段控件是否竖排（antd 的 vertical 属性，
+  // 纯 CSS 改 flex-direction 会让选中项失去高亮，见 usePanelNarrow 的注释）。
+  const { ref: panelRef, narrow } = usePanelNarrow<HTMLDivElement>();
   const sections = document.sections;
   const pathSection = selectedPath?.split(".")[0] ?? "";
   const pathEntry = selectedPath?.split(".")[1] ?? "";
@@ -127,35 +154,39 @@ export default function EntryLayoutPanel({
   const sectionLabel = (key: string, fallback: string): string => sectionKeyLabel(key, fallback);
 
   const patchLayout = useCallback(
-    (patch: Partial<SectionLayout> & Partial<EntryLayout>) => {
+    (patch: LayoutPatch) => {
       if (!section) return;
       if (scope === "entry" && entry?.id) {
         onChange(
-          patchEntryLayout(document, section.key, entry.id, {
-            columns: patch.columns as EntryLayout["columns"],
-            align: patch.align as EntryLayout["align"],
-            gap: patch.gap,
-            head: patch.head ?? undefined,
-          }),
+          patchEntryLayout(
+            document,
+            section.key,
+            entry.id,
+            definedPatch({
+              // `null` 是"恢复继承"的合法值：继承选项直接把它写回条目级。
+              columns: patch.columns as EntryLayout["columns"],
+              align: patch.align as EntryLayout["align"],
+              gap: patch.gap,
+              head: patch.head,
+            }) as Partial<EntryLayout>,
+          ),
         );
         return;
       }
       onChange(
-        patchSectionLayout(document, section.key, {
-          columns: patch.columns as SectionLayout["columns"],
-          align: patch.align as SectionLayout["align"],
-          gap: patch.gap,
-        }),
+        patchSectionLayout(
+          document,
+          section.key,
+          definedPatch({
+            columns: patch.columns as SectionLayout["columns"],
+            align: patch.align as SectionLayout["align"],
+            gap: patch.gap,
+          }) as Partial<SectionLayout>,
+        ),
       );
     },
     [document, entry, onChange, scope, section],
   );
-
-  /** P5-4：只把这一项恢复继承（置 null），不写板块、不动同一条目的其它覆盖。 */
-  const restoreLayoutField = (field: InheritableLayoutField) => {
-    if (!section || !entry?.id) return;
-    onChange(restoreEntryLayoutField(document, section.key, entry.id, field));
-  };
 
   const resetScope = () => {
     if (!section) return;
@@ -222,29 +253,39 @@ export default function EntryLayoutPanel({
     );
   }
 
+  const entryScoped = scope === "entry" && entry !== null;
+
   return (
-    <div className={`rf-entry-layout${className ? ` ${className}` : ""}`}>
+    <div className={`rf-entry-layout${className ? ` ${className}` : ""}`} ref={panelRef}>
       <div className="rf-entry-layout-hint">{t("structure.layout.hint")}</div>
-      {sectionSelectRow}
-      <Segmented
-        size="small"
-        block
-        value={scope}
-        disabled={disabled || noEntries}
-        aria-label={t("structure.layout.scope")}
-        options={[
-          { value: "entry", label: t("structure.layout.scope.entry") },
-          { value: "section", label: t("structure.layout.scope.section") },
-        ]}
-        onChange={(value) => setScope(value as "section" | "entry")}
-      />
-      {scope === "entry" ? (
+
+      {/* R-11-1：板块 / 应用范围 / 条目收进一块浅底卡片。 */}
+      <div className="rf-entry-layout-card" data-entry-layout-card="1">
+        {sectionSelectRow}
+        <div className="rf-entry-layout-row">
+          <span className="rf-entry-layout-label">{t("structure.layout.scope")}</span>
+          <Segmented
+            className="rf-entry-layout-control"
+            size="small"
+            block
+            vertical={narrow}
+            value={scope}
+            disabled={disabled || noEntries}
+            aria-label={t("structure.layout.scope")}
+            options={[
+              { value: "entry", label: t("structure.layout.scope.entry") },
+              { value: "section", label: t("structure.layout.scope.section") },
+            ]}
+            onChange={(value) => setScope(value as "section" | "entry")}
+          />
+        </div>
+        {/* R-11-2：条目行始终渲染（范围=整个板块时禁用），切范围高度不跳。 */}
         <div className="rf-entry-layout-row">
           <span className="rf-entry-layout-label">{t("structure.layout.entry")}</span>
           <Select
             size="small"
             value={entry?.id ?? undefined}
-            disabled={disabled || noEntries}
+            disabled={disabled || noEntries || scope === "section"}
             style={{ flex: 1, minWidth: 0 }}
             aria-label={t("structure.layout.entry")}
             placeholder={noEntries ? t("structure.layout.entryEmpty") : undefined}
@@ -255,40 +296,93 @@ export default function EntryLayoutPanel({
             }}
           />
         </div>
-      ) : null}
+      </div>
+
       {layoutLocked ? (
         <div className="rf-entry-layout-locked">{t("structure.layout.locked")}</div>
       ) : null}
       {contentLocked ? (
         <div className="rf-entry-layout-locked">{t("structure.layout.lockedContent")}</div>
       ) : null}
-      {scope === "entry" && entry ? (
-        <div className="rf-entry-layout-row">
-          <span className="rf-entry-layout-label">{t("structure.layout.head")}</span>
-          <Segmented
-            size="small"
-            block
-            value={effectiveHead(entry)}
-            disabled={controlsDisabled || contentLocked}
-            aria-label={t("structure.layout.head")}
-            options={(["split", "stacked", "meta_first"] as const).map((value) => ({
-              value,
-              label: t(HEAD_LABEL_KEYS[value]),
-            }))}
-            onChange={(value) => patchLayout({ head: value as EntryLayout["head"] })}
-          />
-        </div>
-      ) : null}
-      {scope === "entry" && entry ? (
+
+      {/* R-11-3：统一分组标题 + 1px 分隔；head 是条目属性，范围=整个板块时禁用。 */}
+      <section className="rf-entry-layout-group" aria-label={t("structure.layout.head")}>
+        <div className="rf-entry-layout-group-title">{t("structure.layout.head")}</div>
+        <Segmented
+          className="rf-entry-layout-control"
+          size="small"
+          block
+          vertical={narrow}
+          value={effectiveHead(entry)}
+          disabled={controlsDisabled || contentLocked || scope === "section"}
+          aria-label={t("structure.layout.head")}
+          options={(["split", "stacked", "meta_first"] as const).map((value) => ({
+            value,
+            label: t(HEAD_LABEL_KEYS[value]),
+          }))}
+          onChange={(value) => patchLayout({ head: value as EntryLayout["head"] })}
+        />
+      </section>
+
+      <section className="rf-entry-layout-group" aria-label={t("structure.layout.group.columns")}>
+        <div className="rf-entry-layout-group-title">{t("structure.layout.group.columns")}</div>
+        <EntryLayoutInheritanceControls
+          columns={columns}
+          align={align}
+          gap={gap}
+          overrides={entryScoped && entry ? entryLayoutOverrides(entry) : null}
+          disabled={controlsDisabled}
+          narrow={narrow}
+          onPatch={patchLayout}
+        />
+      </section>
+
+      {/*
+        R-11：断页组与灰字段顺序块**始终渲染**（范围=整个板块时整块禁用）。
+        它们本来只对条目有意义，但如果按范围隐藏，切范围时面板会整体缩短 600+px
+        ——正是验收里「切范围时面板总高不变」要治的那个跳。禁用 + 分组标题里的
+        「（仅这一条）」已经说清"为什么现在不能改"。
+      */}
+      {entry ? (
         <EntryLayoutPagination
           document={document}
           sectionKey={section.key}
           entry={entry}
-          disabled={controlsDisabled}
+          disabled={controlsDisabled || scope === "section"}
           onChange={onChange}
           onNotice={onNotice}
         />
       ) : null}
+
+      {entry ? (
+        <EntryLayoutShortFields
+          document={document}
+          sectionKey={section.key}
+          entry={entry}
+          fieldCatalog={fieldCatalog}
+          disabled={disabled || scope === "section"}
+          layoutLocked={layoutLocked}
+          onChange={onChange}
+        />
+      ) : null}
+
+      <div className="rf-entry-layout-actions">
+        <Button
+          size="small"
+          disabled={scope === "entry" ? controlsDisabled : disabled}
+          onClick={resetScope}
+        >
+          {t("structure.layout.reset")}
+        </Button>
+      </div>
+      {scope === "entry" && noEntries ? (
+        <Empty
+          image={Empty.PRESENTED_IMAGE_SIMPLE}
+          description={t("structure.layout.entryEmpty")}
+        />
+      ) : null}
+
+      {/* R-11-6：字段检查器在面板**底部**——选中字段时它只往下长，上面的参数区不动。 */}
       {selectedItem ? (
         <EntryLayoutNodeInspector
           document={document}
@@ -298,45 +392,6 @@ export default function EntryLayoutPanel({
           entry={selectedItem.entry}
           catalog={fieldCatalog}
           disabled={disabled}
-          onChange={onChange}
-        />
-      ) : null}
-      <EntryLayoutInheritanceControls
-        columns={columns}
-        align={align}
-        gap={gap}
-        overrides={scope === "entry" && entry ? entryLayoutOverrides(entry) : null}
-        disabled={controlsDisabled}
-        onPatch={patchLayout}
-        onRestore={restoreLayoutField}
-      />
-      {scope === "entry" && entry && !noEntries ? (
-        <div className="rf-entry-layout-actions">
-          <Button size="small" disabled={controlsDisabled} onClick={resetScope}>
-            {t("structure.layout.reset")}
-          </Button>
-        </div>
-      ) : (
-        <div className="rf-entry-layout-actions">
-          <Button size="small" disabled={disabled} onClick={resetScope}>
-            {t("structure.layout.reset")}
-          </Button>
-        </div>
-      )}
-      {scope === "entry" && noEntries ? (
-        <Empty
-          image={Empty.PRESENTED_IMAGE_SIMPLE}
-          description={t("structure.layout.entryEmpty")}
-        />
-      ) : null}
-      {scope === "entry" && entry ? (
-        <EntryLayoutShortFields
-          document={document}
-          sectionKey={section.key}
-          entry={entry}
-          fieldCatalog={fieldCatalog}
-          disabled={disabled}
-          layoutLocked={layoutLocked}
           onChange={onChange}
         />
       ) : null}

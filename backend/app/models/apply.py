@@ -302,6 +302,12 @@ class ApplyTaskItem(Base):
     failure_category: Mapped[str] = mapped_column(String(32), default="")
     # 可操作诊断（当前 URL / 页面标题 / 匹配控件数 / 期望控件描述）。
     failure_detail: Mapped[str] = mapped_column(Text, default="")
+    # #39：失败三段稳定码（迁移 0073，词表见 services/apply/failure_taxonomy.py）：
+    # 在哪一步失败 / 卡在哪个控件环节 / 为什么失败。分类只有 10 类，粒度太粗，界面
+    # 需要子码才能筛和给建议；三列都是稳定码（不是展示文案），展示名在语言包里。
+    failure_step: Mapped[str] = mapped_column(String(32), default="")
+    failure_target: Mapped[str] = mapped_column(String(64), default="")
+    failure_reason: Mapped[str] = mapped_column(String(40), default="")
     attempt: Mapped[int] = mapped_column(Integer, default=0)
     sort_order: Mapped[int] = mapped_column(Integer, default=0)
     started_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)

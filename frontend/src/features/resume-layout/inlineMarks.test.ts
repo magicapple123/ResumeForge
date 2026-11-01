@@ -1,41 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 /** 字符级标记编辑规则（协议 v2）：成对、不吞输入、链接只认 http(s)。 */
 import { describe, expect, it } from "vitest";
-import {
-  insertLinkMark,
-  isValidLinkUrl,
-  linkMarkAround,
-  toggleBoldMark,
-  toggleItalicMark,
-} from "./inlineMarks";
+import { insertLinkMark, isValidLinkUrl, linkMarkAround, toggleBoldMark } from "./inlineMarks";
 
-describe("inlineMarks · 斜体", () => {
-  it("包住选区后再点一次取消", () => {
-    const first = toggleItalicMark("abcdef", { start: 2, end: 4 });
-    expect(first).toEqual({ text: "ab*cd*ef", start: 3, end: 5 });
-    const second = toggleItalicMark(first.text, first);
-    expect(second.text).toBe("abcdef");
-  });
-
-  it("空选区插入一对并把光标放中间", () => {
-    expect(toggleItalicMark("ab", { start: 1, end: 1 })).toEqual({
-      text: "a**b",
-      start: 2,
-      end: 2,
-    });
-  });
-
-  it("选中加粗内容时斜体不拆加粗", () => {
-    expect(toggleItalicMark("**ab**", { start: 2, end: 4 }).text).toBe("**ab**");
-  });
-
-  it("不拆既有加粗（先切 ** 再切 *）", () => {
-    const text = "a**bc**d";
-    const edit = toggleItalicMark(text, { start: 4, end: 4 });
-    // 光标在加粗内容里：本次不做任何修改（不静默把加粗拆坏）
-    expect(edit.text).toBe(text);
-  });
-});
+// #5d：斜体写入入口（toggleItalicMark）已移除；单星号的"去标记"行为
+// 由后端 resume_rich_text 的解析侧测试钉住（剥标记、不倾斜）。
 
 describe("inlineMarks · 加粗", () => {
   it("包住与取消成对", () => {

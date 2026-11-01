@@ -1,0 +1,127 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/* 「从资料填入」下拉（R-29）：弹出菜单限宽 360px，候选标题单行省略。
+   挂载点见 ProfileFillMenu 的 `classNames={{ root: "rf-profile-fill-menu" }}`
+   （antd 6 推荐 API，`overlayClassName` 已废弃）。 */
+
+.rf-profile-fill-menu {
+  /* 候选是「标题 · 次要说明」，不限宽会撑到 600px+ 把纸面遮住。
+     #22：窄视口（380）下再压到视口内，避免弹层横向溢出。 */
+  max-width: min(360px, calc(100vw - 24px));
+}
+
+/* #22：高度上限——资料多时菜单不再延伸到视口外（内部滚动）。 */
+.rf-profile-fill-menu .ant-dropdown-menu {
+  max-height: min(60vh, 480px);
+  overflow-y: auto;
+}
+
+/* #22：窄视口（380）下内层菜单跟外层同一个上限，否则内层 360 会顶破 root 的 356。 */
+.rf-profile-fill-menu .ant-dropdown-menu {
+  max-width: min(360px, calc(100vw - 24px));
+}
+
+/* antd 的菜单项标题容器默认按内容撑宽；不给 min-width:0 的话，长候选会把
+   「条目 + 右侧板块名」那行顶出菜单（实测 380 宽时 scrollWidth 422 > 360）。 */
+.rf-profile-fill-menu .ant-dropdown-menu-item .ant-dropdown-menu-title-content {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+}
+
+/* #22：条目 = 主文案（缩进 + 单行省略）+ 右侧固定灰色板块名。
+   两者都 min-width:0 参与收缩，长标题不会把弹层撑宽（380/640 两档实测见结果 JSON）。 */
+.rf-profile-fill-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.rf-profile-fill-option-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  /* 层级：条目比分组标题再缩进一级（分组标题自带 12px 内边距）。 */
+  padding-inline-start: 10px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rf-profile-fill-option-section {
+  flex: none;
+  max-width: 96px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--rf-text-secondary);
+  font-size: 12px;
+}
+
+/* #22：搜索框固定在菜单顶部（不随候选滚动），不参与菜单项 hover 高亮。 */
+.rf-profile-fill-menu .rf-profile-fill-search {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--ant-color-bg-elevated, #fff);
+  cursor: default;
+}
+
+/* #22：计数行紧贴搜索框下方（同样 sticky），滚动候选时「N 项可添加」一直可见。
+   top 值是实测的搜索项高度（30px），改搜索框样式时要一起对。 */
+.rf-profile-fill-menu .rf-profile-fill-count {
+  position: sticky;
+  top: 30px;
+  z-index: 2;
+  cursor: default;
+  background: var(--ant-color-bg-elevated, #fff);
+  padding-block: 4px;
+}
+
+.rf-profile-fill-menu .rf-profile-fill-count:hover,
+.rf-profile-fill-menu .rf-profile-fill-count.ant-dropdown-menu-item-disabled {
+  background: var(--ant-color-bg-elevated, #fff);
+  color: var(--rf-text-secondary);
+  cursor: default;
+}
+
+.rf-profile-fill-count-text {
+  display: block;
+  width: 100%;
+  color: var(--rf-text-secondary);
+  font-size: 12px;
+  line-height: 20px;
+}
+
+/* #22：分组标题在长列表滚动时吸附——用户始终知道自己在哪个板块。
+   top 在搜索项（30）+ 计数行（28）之下。 */
+.rf-profile-fill-menu .ant-dropdown-menu-item-group-title {
+  position: sticky;
+  top: 58px;
+  z-index: 1;
+  background: var(--ant-color-bg-elevated, #fff);
+}
+
+.rf-profile-fill-menu .rf-profile-fill-search:hover,
+.rf-profile-fill-menu .rf-profile-fill-search.ant-dropdown-menu-item-active {
+  background: var(--ant-color-bg-elevated, #fff);
+}
+
+.rf-profile-fill-empty {
+  display: block;
+  max-width: 306px;
+  color: var(--rf-text-secondary);
+  font-size: 12px;
+  white-space: normal;
+}
+
+/* 按钮文案带目标条目名时会变长：省略号 + title（R-33 R3），不撑破工具栏。 */
+.rf-profile-fill-label {
+  display: inline-block;
+  max-width: 168px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: bottom;
+}

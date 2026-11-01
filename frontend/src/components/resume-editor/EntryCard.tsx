@@ -1,16 +1,15 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * 一条条目的**三区卡**：标题与元信息（HeadZone）/ 灰色短字段（DetailZone）/ 正文（BodyZone）。
+ * 一条条目的**三域卡**：标题与元信息 / 灰色短字段 / 正文。
  *
- * - 三个区都是拖放目标；chip 之间也可以拖（落在 chip 上 = 插到它前面）；
- * - 拖到非法位置给可读提示（区级校验 + moveItem 返回原引用双保险）；
- * - 条目头可切三种布局（左右 / 上下 / 元信息在上）并做条目的上移/复制/隐藏/移除。
+ * - 三个域都是拖放目标；chip 之间也可以拖（落在 chip 上 = 插到它前面）；非法目标给可读提示；
+ * - 条目头（序号 / 布局图标 / 「⋯」菜单）在 `EntryCardHead`；
+ * - R-05 的四区重整：域 = 带 `border-left` 竖线的三块（13px 标题 + 计数），域内每个位置组
+ *   是 `EntryZoneGroup`（11px 标签 + 等宽 chips 网格 + 右侧虚线 `+` 格）。"组"不再是容器，
+ *   一个 4 字段条目比改前少 3 行以上。
  */
-import { ArrowDownOutlined, ArrowUpOutlined, CopyOutlined } from "@ant-design/icons";
-import { Button, Dropdown, Segmented, Tooltip } from "antd";
-import type { MenuProps } from "antd";
-import type { CSSProperties, DragEvent } from "react";
-import { Fragment, useState } from "react";
+import type { DragEvent } from "react";
+import { memo, useEffect, useState } from "react";
 import type { MessageKey } from "../../i18n";
 import { useI18n } from "../../i18n/i18nContext";
 import type {
@@ -23,28 +22,27 @@ import type {
 } from "../../types/resumeDocument";
 import {
   canPlaceItem,
-  copyEntry,
   defaultTextItem,
   entryPath as buildEntryPath,
   getItemPlacement,
+  groupByPlacement,
   itemPath as buildItemPath,
-  moveEntry,
   moveItem,
   placementGroup,
-  removeEntry,
-  setEntryHeadLayout,
-  toggleEntryHidden,
 } from "../../features/resume-document";
 import { addItem as addEntryItem } from "../../features/resume-document/mutations";
 import AddFieldMenu from "./AddFieldMenu";
+import EntryCardHead from "./EntryCardHead";
+import EntryZoneGroup from "./EntryZoneGroup";
 import ItemChip from "./ItemChip";
 import ItemEditor from "./ItemEditor";
 import { useDocumentDrag } from "./documentDragContext";
+import { useDocumentExpand } from "./documentExpandContext";
 
 /**
- * 三区里的位置分组表（模块级常量）。
+ * 位置分组表（模块级常量）。
  *
- * 为什么不直接在 JSX 里写 `renderGroup("title", …)`：产品文案守卫会把**本地函数调用的
+ * 为什么不直接在 JSX 里写 `placement: "title"`：产品文案守卫会把**本地函数调用的
  * 字符串字面量参数**当成可能被渲染的文案（它无法区分这个参数是位置枚举还是用户可见文本）。
  * 位置是协议值，从表里取属性（`group.placement`）就绕开了"字面量 = 文案"的误判。
  */
@@ -99,7 +97,7 @@ interface Props {
   onNotice: (text: string, tone?: "info" | "warning") => void;
 }
 
-export default function EntryCard({
+function EntryCard({
   document,
   section,
   entry,
@@ -114,8 +112,15 @@ export default function EntryCard({
 }: Props) {
   const { t } = useI18n();
   const drag = useDocumentDrag();
+  // #8 返工：占满整行的 `is-editing` 只在**编辑器真的展开**时生效。之前它跟着"选中"走，
+  // 而单击就会选中——格子从半宽变成整行、相邻 chip 跟着换位，真实双击（两下间隔 ~100ms）
+  // 的第二下因此落到别的 chip 上（也就是"先单击选中再双击展不开"的根因）。
+  const { expandedPath } = useDocumentExpand();
   const [dragOverZone, setDragOverZone] = useState<string | null>(null);
-  const [entryMenuOpen, setEntryMenuOpen] = useState(false);
+  // #27：落点侧（插入线画在目标 chip 的前/后边缘）。与 draggedPath 同源清理。
+  const [dropTarget, setDropTarget] = useState<{ path: string; side: "before" | "after" } | null>(
+    null,
+  );
   const entryId = entry.id ?? "";
   const entryPath = buildEntryPath(section.key, entryId);
   const specFor = (item: ResumeItem) =>
@@ -127,13 +132,20 @@ export default function EntryCard({
   const selectedContainsEntry =
     selectedPath === entryPath || (selectedPath ?? "").startsWith(`${entryPath}.`);
 
-  const draggedItem = (() => {
-    const path = drag.draggedPath;
-    if (!path) return null;
-    return (
-      entry.items.find((item) => buildItemPath(section.key, entryId, item.id) === path) ?? null
-    );
-  })();
+  const draggedPath = drag.draggedPath;
+  const draggedItem = draggedPath
+    ? (entry.items.find((item) => buildItemPath(section.key, entryId, item.id) === draggedPath) ??
+      null)
+    : null;
+
+  // #26：高亮从"正在拖拽"这一事实派生，不再依赖 dragleave 成对出现——空白处松手、
+  // Esc 取消（只有 dragend）、拖去别的卡片时本卡都收不到 dragleave，虚线框因此残留。
+  useEffect(() => {
+    if (!draggedPath) {
+      setDragOverZone(null);
+      setDropTarget(null);
+    }
+  }, [draggedPath]);
 
   const dropAt = (path: string, placement: Placement, toIndex?: number) => {
     const item = entry.items.find(
@@ -164,24 +176,32 @@ export default function EntryCard({
   };
 
   const handleZoneOver = (placement: Placement) => (event: DragEvent<HTMLDivElement>) => {
-    if (!draggedItem || !canPlaceItem(draggedItem, placement)) return;
+    if (!draggedItem || !canPlaceItem(draggedItem, placement)) {
+      // #26：不允许放置时显式清掉上一个高亮（此前直接 return，旧高亮定格残留）。
+      setDragOverZone(null);
+      return;
+    }
     event.preventDefault();
     event.dataTransfer.dropEffect = "move";
     setDragOverZone(placement);
   };
 
   const columns = entry.layout.columns ?? section.layout.columns ?? 1;
-  const columnStyle = { ["--document-columns"]: String(columns) } as CSSProperties;
 
   const renderChip = (item: ResumeItem) => {
     const placement = getItemPlacement(item);
     const path = buildItemPath(section.key, entryId, item.id);
     const group = placementGroup(entry.items, placement);
     const indexInGroup = group.findIndex((candidate) => candidate.id === item.id);
+    // 展开（编辑器可见）决定槽位是否跨整行；选中只影响 chip 自己的边框/aria-pressed，
+    // 两者必须分开——之前 `is-editing` 跟着选中走，单击就会让格子变宽、相邻 chip 换位。
+    const expanded = expandedPath === path;
+    const selectedItem = selectedPath === path;
+    const dropSide = dropTarget?.path === path ? dropTarget.side : null;
     return (
       <div
         key={item.id}
-        className="document-chip-slot"
+        className={`document-chip-slot${expanded ? " is-editing" : ""}${dropSide ? ` is-drop-${dropSide}` : ""}`}
         data-document-path={path}
         onDragOver={(event) => {
           if (!draggedItem || draggedItem.id === item.id) return;
@@ -189,14 +209,30 @@ export default function EntryCard({
           event.preventDefault();
           event.stopPropagation();
           event.dataTransfer.dropEffect = "move";
+          // #27：按光标与 chip 中线的关系判定落点侧，画出"插到哪一行"的插入线。
+          const rect = event.currentTarget.getBoundingClientRect();
+          const side: "before" | "after" =
+            event.clientX < rect.left + rect.width / 2 ? "before" : "after";
+          setDropTarget({ path, side });
         }}
         onDrop={(event) => {
           event.preventDefault();
           event.stopPropagation();
           const draggedPath = event.dataTransfer.getData("text/plain") || drag.draggedPath;
+          setDropTarget(null);
           if (!draggedPath || draggedPath === path) return;
           drag.setDraggedPath(null);
-          dropAt(draggedPath, placement, indexInGroup);
+          // #27：moveItem 的 toIndex 是"摘除后"的组内下标；鼠标落点语义是可见下标，
+          // 同组且被拖项在目标之前时补回摘除偏移（拖 A 到 C 前/后不得差一位）。
+          const draggedVisibleIndex = group.findIndex(
+            (candidate) => candidate.id === draggedItem?.id,
+          );
+          const sameGroup = draggedVisibleIndex >= 0 && draggedItem !== null;
+          const shift = sameGroup && draggedVisibleIndex < indexInGroup ? 1 : 0;
+          const targetAfterRemoval = indexInGroup - shift;
+          const side = dropTarget?.path === path ? dropTarget.side : "before";
+          const toIndex = side === "after" ? targetAfterRemoval + 1 : targetAfterRemoval;
+          dropAt(draggedPath, placement, Math.max(0, toIndex));
         }}
         onMouseEnter={() => onHoverPath?.(path)}
         onMouseLeave={() => onHoverPath?.(null)}
@@ -207,7 +243,7 @@ export default function EntryCard({
           item={item}
           catalogLabel={specFor(item)?.label ?? ""}
           materialOnly={specFor(item)?.material_only === true}
-          selected={selectedPath === path}
+          selected={selectedItem}
           readOnly={readOnly}
           sectionKey={section.key}
           entryId={entryId}
@@ -229,77 +265,48 @@ export default function EntryCard({
     );
   };
 
-  const renderGroup = (
-    placement: Placement,
-    label: string,
-    emptyText: string,
-    addLabel?: string,
-  ) => {
-    const group = placementGroup(entry.items, placement);
-    const isGrey = placement === "lead" || placement === "trail";
-    return (
-      <div
-        className={`document-zone${dragOverZone === placement ? " is-dragover" : ""}`}
-        data-document-zone={placement}
-        onDragOver={handleZoneOver(placement)}
-        onDragLeave={() => setDragOverZone(null)}
-        onDrop={handleZoneDrop(placement)}
-      >
-        <div className="document-zone-head">
-          <span className="document-zone-label">{label}</span>
-          {addLabel ? (
-            <AddFieldMenu
-              document={document}
-              sectionKey={section.key}
-              entryId={entryId}
-              placement={placement}
-              catalog={catalog}
-              readOnly={readOnly}
-              label={addLabel}
-              onChange={onChange}
-              onSelectPath={onSelectPath}
-              onNotice={onNotice}
-            />
-          ) : null}
-        </div>
-        {group.length === 0 ? (
-          <span className="document-group-empty">{emptyText}</span>
-        ) : (
-          <div
-            className={`document-group${isGrey ? " document-group-lead" : ""}`}
-            style={isGrey ? columnStyle : undefined}
-          >
-            {group.map((item) => renderChip(item))}
-          </div>
-        )}
-      </div>
-    );
-  };
+  /** 一个域的标题行：13px 名称 + 计数（R-05 ②）。 */
+  const domainTitle = (labelKey: MessageKey, count: number) => (
+    <div className="document-zone-title-row">
+      <span className="document-zone-title">{t(labelKey)}</span>
+      <span className="document-zone-count">{count}</span>
+    </div>
+  );
 
-  const hiddenItems = entry.items.filter((item) => getItemPlacement(item) === "hidden");
-  const bodyItems = entry.items.filter((item) => getItemPlacement(item) === "body");
-  const entryMenu: MenuProps = {
-    items: [
-      {
-        key: "toggle",
-        label: entry.hidden ? t("document.entry.show") : t("document.entry.hide"),
-      },
-      { key: "remove", label: t("document.entry.remove"), danger: true },
-    ],
-    onClick: ({ key }) => {
-      setEntryMenuOpen(false);
-      if (key === "toggle") {
-        onChange(toggleEntryHidden(document, entryPath));
-        onNotice(entry.hidden ? t("document.toast.shown") : t("document.toast.hidden"), "info");
-        return;
-      }
-      if (key === "remove") {
-        onChange(removeEntry(document, entryPath));
-        onNotice(t("document.toast.entryRemoved"), "info");
-      }
-    },
-  };
+  /** 一个位置组的完整 props：位置枚举 + 三条已 `t()` 的文案 + 拖拽回调。 */
+  const zoneProps = (spec: ZoneGroupSpec) => ({
+    document,
+    sectionKey: section.key,
+    entry,
+    entryId,
+    catalog,
+    readOnly,
+    placement: spec.placement,
+    label: t(spec.labelKey),
+    emptyText: t(spec.emptyKey),
+    addLabel: readOnly ? "" : t(spec.addKey),
+    columns,
+    // #27：chip 级插入线出现时，分组大框降级为无——两种指示同时出现会互相打架。
+    dragOver: dropTarget === null && dragOverZone === spec.placement,
+    onZoneOver: handleZoneOver(spec.placement),
+    onZoneLeave: () => setDragOverZone(null),
+    onZoneDrop: handleZoneDrop(spec.placement),
+    renderChip,
+    onChange,
+    onSelectPath,
+    onNotice,
+    items: grouped[spec.placement],
+  });
 
+  // R-30：一次遍历分成 6 组，渲染期只查表（以前 6 个组各 filter 一遍、计数再 filter 一遍）。
+  // 一次遍历就够便宜，不需要 useMemo：条目内字段量级是 10 上下，而 memo 化这张表
+  // 会让 `zoneProps` 闭包读到的值无法被 React Compiler 保持（eslint 的 preserve-manual-memoization）。
+  const grouped = groupByPlacement(entry.items);
+  const hiddenItems = grouped.hidden;
+  const bodyItems = grouped.body;
+  /** 域的计数：该域里真正会显示出来的 chip 数（不含隐藏字段）。 */
+  const countOf = (specs: readonly ZoneGroupSpec[]) =>
+    specs.reduce((sum, spec) => sum + grouped[spec.placement].length, 0);
   return (
     <div
       className={[
@@ -311,142 +318,71 @@ export default function EntryCard({
         .join(" ")}
       data-document-entry={entryPath}
     >
-      <Dropdown
-        menu={entryMenu}
-        trigger={["contextMenu"]}
-        disabled={readOnly}
-        open={entryMenuOpen}
-        onOpenChange={setEntryMenuOpen}
-      >
-        <div
-          className="document-entry-head"
-          tabIndex={readOnly ? undefined : 0}
-          onKeyDown={(event) => {
-            // Shift+F10 / 菜单键是右键菜单的键盘等价物；只在条目头自身聚焦时响应，
-            // 不抢内部按钮与 Segmented 的按键。
-            if (event.target !== event.currentTarget) return;
-            if (event.key === "ContextMenu" || (event.shiftKey && event.key === "F10")) {
-              event.preventDefault();
-              setEntryMenuOpen(true);
-            }
-          }}
-        >
-          <span className="document-entry-index">#{entryIndex + 1}</span>
-          {entry.hidden ? (
-            <span className="document-chip-badge">{t("document.entry.hidden")}</span>
-          ) : null}
-          <Tooltip title={t("document.entry.headLayout")}>
-            <Segmented
-              className="document-entry-head-layout"
-              size="small"
-              aria-label={t("document.entry.headLayout")}
-              value={entry.layout.head}
-              disabled={readOnly}
-              options={[
-                { value: "split", label: t("document.entry.headLayout.split") },
-                { value: "stacked", label: t("document.entry.headLayout.stacked") },
-                { value: "meta_first", label: t("document.entry.headLayout.meta_first") },
-              ]}
-              onChange={(value) =>
-                onChange(
-                  setEntryHeadLayout(document, entryPath, value as ResumeEntry["layout"]["head"]),
-                )
-              }
-            />
-          </Tooltip>
-          {!readOnly ? (
-            <span className="document-entry-actions">
-              <Tooltip title={t("document.entry.moveUp")}>
-                <Button
-                  size="small"
-                  type="text"
-                  aria-label={t("document.entry.moveUp")}
-                  disabled={entryIndex === 0}
-                  icon={<ArrowUpOutlined />}
-                  onClick={() => onChange(moveEntry(document, entryPath, "up"))}
-                />
-              </Tooltip>
-              <Tooltip title={t("document.entry.moveDown")}>
-                <Button
-                  size="small"
-                  type="text"
-                  aria-label={t("document.entry.moveDown")}
-                  disabled={entryIndex >= section.entries.length - 1}
-                  icon={<ArrowDownOutlined />}
-                  onClick={() => onChange(moveEntry(document, entryPath, "down"))}
-                />
-              </Tooltip>
-              <Tooltip title={t("document.entry.copy")}>
-                <Button
-                  size="small"
-                  type="text"
-                  aria-label={t("document.entry.copy")}
-                  icon={<CopyOutlined />}
-                  onClick={() => {
-                    const copied = copyEntry(document, entryPath);
-                    onChange(copied.document);
-                    if (copied.entryId) onSelectPath(buildEntryPath(section.key, copied.entryId));
-                    onNotice(t("document.toast.entryCopied"), "info");
-                  }}
-                />
-              </Tooltip>
-            </span>
-          ) : null}
-        </div>
-      </Dropdown>
+      <EntryCardHead
+        document={document}
+        section={section}
+        entry={entry}
+        entryIndex={entryIndex}
+        entryPath={entryPath}
+        readOnly={readOnly}
+        onChange={onChange}
+        onSelectPath={onSelectPath}
+        onNotice={onNotice}
+      />
 
       <div className="document-zone document-zone-head" data-document-zone="head">
-        <div className="document-zone-label">{t("document.zone.head")}</div>
-        {HEAD_ZONE_GROUPS.map((group) => (
-          <Fragment key={group.placement}>
-            {renderGroup(group.placement, t(group.labelKey), t(group.emptyKey), t(group.addKey))}
-          </Fragment>
+        {domainTitle("document.zone.head", countOf(HEAD_ZONE_GROUPS))}
+        {HEAD_ZONE_GROUPS.map((spec) => (
+          <EntryZoneGroup key={spec.placement} {...zoneProps(spec)} />
         ))}
       </div>
 
       <div className="document-zone document-zone-detail" data-document-zone="detail">
-        <div className="document-zone-head">
-          <span className="document-zone-label">{t("document.zone.detail")}</span>
-        </div>
+        {domainTitle("document.zone.detail", countOf(DETAIL_ZONE_GROUPS))}
         <span className="document-section-hint">{t("document.zone.detailHint")}</span>
-        {DETAIL_ZONE_GROUPS.map((group) => (
-          <Fragment key={group.placement}>
-            {renderGroup(group.placement, t(group.labelKey), t(group.emptyKey), t(group.addKey))}
-          </Fragment>
+        {DETAIL_ZONE_GROUPS.map((spec) => (
+          <EntryZoneGroup key={spec.placement} {...zoneProps(spec)} />
         ))}
         {hiddenItems.length > 0 ? (
           <div
-            className={`document-zone${dragOverZone === "hidden" ? " is-dragover" : ""}`}
+            className={`document-zone document-zone-hidden${
+              dragOverZone === "hidden" ? " is-dragover" : ""
+            }`}
             data-document-zone="hidden"
             onDragOver={handleZoneOver("hidden")}
             onDragLeave={() => setDragOverZone(null)}
             onDrop={handleZoneDrop("hidden")}
           >
-            <div className="document-zone-head">
-              <span className="document-zone-label">
-                {t("document.zone.hidden")} ({hiddenItems.length})
-              </span>
+            <div className="document-zone-title-row">
+              <span className="document-zone-title">{t("document.zone.hidden")}</span>
+              <span className="document-zone-count">{hiddenItems.length}</span>
             </div>
-            <div className="document-group">{hiddenItems.map((item) => renderChip(item))}</div>
+            <div className="document-group document-group-cells">
+              {hiddenItems.map((item) => renderChip(item))}
+            </div>
           </div>
         ) : null}
       </div>
 
       <div
-        className={`document-zone document-zone-body${dragOverZone === "body" ? " is-dragover" : ""}`}
+        className={`document-zone document-zone-body${
+          dragOverZone === "body" ? " is-dragover" : ""
+        }`}
         data-document-zone="body"
         onDragOver={handleZoneOver("body")}
         onDragLeave={() => setDragOverZone(null)}
         onDrop={handleZoneDrop("body")}
       >
-        <div className="document-zone-head">
-          <span className="document-zone-label">{t("document.zone.body")}</span>
-          <span className="document-add-row">
+        {domainTitle("document.zone.body", bodyItems.length)}
+        <div className="document-group-row">
+          <div className="document-group document-group-cells">
+            {bodyItems.map((item) => renderChip(item))}
             {!readOnly ? (
-              <Button
-                size="small"
-                type="dashed"
+              <button
+                type="button"
+                className="document-add-cell is-wide"
                 aria-label={t("document.body.addBlock")}
+                title={t("document.body.addBlock")}
                 onClick={() => {
                   const item = defaultTextItem("", "bullet");
                   onChange(addEntryItem(document, section.key, entryId, item));
@@ -454,28 +390,31 @@ export default function EntryCard({
                 }}
               >
                 {t("document.body.addBlock")}
-              </Button>
+              </button>
             ) : null}
-            <AddFieldMenu
-              document={document}
-              sectionKey={section.key}
-              entryId={entryId}
-              placement="body"
-              catalog={catalog}
-              readOnly={readOnly}
-              label={t("document.body.addFieldBlock")}
-              onChange={onChange}
-              onSelectPath={onSelectPath}
-              onNotice={onNotice}
-            />
-          </span>
+          </div>
+          <AddFieldMenu
+            document={document}
+            sectionKey={section.key}
+            entryId={entryId}
+            placement="body"
+            catalog={catalog}
+            readOnly={readOnly}
+            label={t("document.body.addFieldBlock")}
+            hint={t("document.zone.emptyBody")}
+            variant="cell"
+            onChange={onChange}
+            onSelectPath={onSelectPath}
+            onNotice={onNotice}
+          />
         </div>
-        {bodyItems.length === 0 ? (
-          <span className="document-group-empty">{t("document.zone.emptyBody")}</span>
-        ) : (
-          <div className="document-body-list">{bodyItems.map((item) => renderChip(item))}</div>
-        )}
       </div>
     </div>
   );
 }
+
+/**
+ * R-30：条目卡 memo。props 里的 `document` 每次编辑都是新引用，所以真正的收益来自
+ * 上层对未变条目/未变位置组的跳过；这里先把边界稳定住，避免兄弟条目一动就整列重画。
+ */
+export default memo(EntryCard);

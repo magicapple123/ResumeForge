@@ -56,6 +56,11 @@ export function RoomHeader({
         {session.job_title ? <Tag color="geekblue">{session.job_title}</Tag> : null}
         {/* 关联简历（0066）：面试官读的就是这份简历，摆在头上让用户随时能确认。 */}
         {session.resume_title ? <Tag color="cyan">{session.resume_title}</Tag> : null}
+        {/* 导入的材料文件名（#41）：文件这一侧没有标题可显示，就把文件名摆出来。 */}
+        {session.job_material_name ? <Tag color="geekblue">{session.job_material_name}</Tag> : null}
+        {session.resume_material_name ? (
+          <Tag color="cyan">{session.resume_material_name}</Tag>
+        ) : null}
       </Space>
       <Space size={6} wrap>
         <Typography.Text type="secondary">

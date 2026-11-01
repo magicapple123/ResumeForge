@@ -66,6 +66,7 @@ README_FEATURE_KEYS: dict[str, tuple[str, ...]] = {
     "文件副本库": ("user_files",),
     "批量设置状态": ("job_batch_status",),
     "保存位置": ("export_save_location",),
+    "导出形式": ("export_bundle_delivery",),
     "助手放宽模式": ("assistant_relaxed_mode",),
     "AI 定制简历": ("resume_generate",),
     "自行编写简历": ("resume_manual",),

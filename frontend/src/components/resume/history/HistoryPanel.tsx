@@ -18,7 +18,7 @@
  */
 import { RedoOutlined, UndoOutlined } from "@ant-design/icons";
 import { Button, Popconfirm, Tooltip } from "antd";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import EmptyState from "../../common/EmptyState";
 import { t } from "../../../i18n";
 import { useLocale } from "../../../i18n/i18nContext";
@@ -28,8 +28,10 @@ import "./history.css";
 export interface HistoryPanelStep {
   /** 给用户看的动作名（"编辑正文" / "调整排版" / "结构操作"）。 */
   label: string;
-  /** 当时的可读摘要（姓名 · 条目数 · 页数）。 */
+  /** 这一步**改了什么**（R-17：板块/条目/字段级描述）。 */
   summary: string;
+  /** 规模信息（姓名 · 条目数 · 页数）：悬停可见，不占行宽。 */
+  title?: string;
   /** 这一步发生的时间（毫秒时间戳）；缺省/非法时不显示时间，不让一行变歪。 */
   at?: number;
 }
@@ -45,6 +47,8 @@ interface Props {
   onRedo: () => void;
   /** 真正回退到某一步（宿主连续 undo/redo 实现）；不传 = 只给「回到当前」。 */
   onJumpTo?: (group: "past" | "future", index: number) => void;
+  /** #21a：本页签挂载时先落地合并窗口里的待提交快照，避免"刚改完就切过来"看到空栈。 */
+  flush?: () => void;
   className?: string;
 }
 
@@ -58,10 +62,16 @@ export default function HistoryPanel({
   onUndo,
   onRedo,
   onJumpTo,
+  flush,
   className,
 }: Props) {
   useLocale();
   const [preview, setPreview] = useState<PreviewTarget>(null);
+  // #21a：文本键入有 300ms 合并窗口，挂载（= 用户切到历史页签）时先落地，
+  // 否则"打完最后一个字立刻切页签"会看到空栈。flush 内部触发 onChange → 重渲染。
+  useEffect(() => {
+    flush?.();
+  }, [flush]);
   const pastSteps = [...past].reverse();
   const futureSteps = [...future];
   const previewed =
@@ -214,6 +224,8 @@ function StepGroup({
             block
             className={`resume-history-step${selected ? " is-selected" : ""}`}
             aria-pressed={selected}
+            // R-17：行宽只放得下"改了什么"；姓名/条目数/页数这类规模信息挂在 title 上。
+            title={step.title}
             onClick={() => onToggle(group, dataIndex)}
           >
             <span className="resume-history-step-main">

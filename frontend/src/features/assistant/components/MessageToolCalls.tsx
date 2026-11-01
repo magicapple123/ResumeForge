@@ -89,6 +89,14 @@ const TOOL_LABELS: Record<string, MessageKey> = {
   get_web_form_fill: "toolLabel.get_web_form_fill",
   list_chat_conversations: "toolLabel.list_chat_conversations",
   get_chat_conversation: "toolLabel.get_chat_conversation",
+  get_resume_status: "toolLabel.get_resume_status",
+  list_versions: "toolLabel.list_versions",
+  list_variants: "toolLabel.list_variants",
+  get_entry: "toolLabel.get_entry",
+  update_resume_field: "toolLabel.update_resume_field",
+  add_resume_entry: "toolLabel.add_resume_entry",
+  reorder_sections: "toolLabel.reorder_sections",
+  set_entry_layout: "toolLabel.set_entry_layout",
 };
 
 export function MessageToolCalls({ calls }: { calls: AssistantToolCall[] }) {
@@ -105,10 +113,17 @@ export function MessageToolCalls({ calls }: { calls: AssistantToolCall[] }) {
   // 又没有把"它改了我的数据"藏进折叠里。
   const changedCount = calls.filter((call) => call.changed).length;
   const failedCount = calls.filter((call) => !call.ok).length;
+  // 「待确认改动」承载区标题：用户必须先看见"有东西等我确认"，再去看卡片里的差异。
+  const pendingProposals = proposals.filter((call) => call.proposal?.status === "pending").length;
   return (
     <>
       {proposals.length > 0 && (
         <div className="assistant-write-proposals">
+          {pendingProposals > 0 && (
+            <Typography.Text strong className="assistant-write-proposals-heading">
+              {t("toolCalls.pendingHeading", { count: pendingProposals })}
+            </Typography.Text>
+          )}
           {proposals.map((call, index) => (
             <ActionProposalCard
               key={call.proposal?.proposal_id ?? `proposal-${index}`}

@@ -10,6 +10,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "../../../api/client";
 import { t } from "../../../i18n";
 import VersionsModal from "./VersionsModal";
+import { makeDocument, section } from "../../../features/resume-document/documentFixtures";
 
 /** antd 会在两个汉字之间插空格（"比 较"），按角色查名字时用容忍空格的模式。 */
 function looseName(label: string): RegExp {
@@ -32,6 +33,12 @@ const VERSION = {
   source: "manual",
   created_at: "2026-10-20T10:00:00",
 };
+const OLDER_VERSION = {
+  ...VERSION,
+  id: 4,
+  name: "First draft",
+  created_at: "2026-10-19T10:00:00",
+};
 const VARIANT = {
   id: 9,
   resume_id: 7,
@@ -48,18 +55,34 @@ const VARIANT = {
 };
 const COMPARE = {
   base_id: 5,
-  against_id: 0,
+  against_id: 4,
   base_name: "Final draft",
-  against_name: "current",
+  against_name: "First draft",
   content: {
     base_id: 5,
-    against_id: 0,
+    against_id: 4,
     base_title: "Final draft",
-    against_title: "current",
+    against_title: "First draft",
     lines: [],
     stats: { added: 1, removed: 0, unchanged: 3 },
   },
   layout: { added: [], removed: [], changed: ["template"], equal: false },
+  changes: [
+    {
+      path: "header.ob_head0001",
+      kind: "changed",
+      scope: "header",
+      section_key: "",
+      section_title: "",
+      entry_id: "",
+      entry_label: "",
+      item_key: "name",
+      item_label: "",
+      old_value: "Li Si",
+      new_value: "Li Wu",
+    },
+  ],
+  changes_truncated: false,
 };
 
 const api = vi.hoisted(() => ({
@@ -75,6 +98,10 @@ const api = vi.hoisted(() => ({
 
 vi.mock("../../../features/resume-versions/versionsApi", () => api);
 
+vi.mock("../../../features/profile-library/fieldPlacement", () => ({
+  useFieldPlacementCatalog: () => ({ catalog: null, loading: false, error: false }),
+}));
+
 function renderModal() {
   return render(
     <AntdApp>
@@ -83,14 +110,14 @@ function renderModal() {
         onClose={vi.fn()}
         resumeId={7}
         currentRevision={3}
-        currentContent={{ summary: "后端", experience: [{ company: "Acme" }] }}
+        currentContent={makeDocument({ sections: [section({ key: "experience" })] })}
       />
     </AntdApp>,
   );
 }
 
 beforeEach(() => {
-  api.listVersions.mockResolvedValue({ items: [VERSION] });
+  api.listVersions.mockResolvedValue({ items: [VERSION, OLDER_VERSION] });
   api.createVersion.mockResolvedValue({ ...VERSION, id: 6, name: "New version" });
   api.freezeVersion.mockResolvedValue({ ...VERSION, frozen: true });
   api.compareVersions.mockResolvedValue(COMPARE);
@@ -109,7 +136,7 @@ afterEach(() => {
 });
 
 describe("版本与变体弹窗（W13）", () => {
-  it("加载命名版本列表；创建版本调用真实接口参数", async () => {
+  it("创建版本：填名称后按名称创建，并给出带对象的成功提示", async () => {
     renderModal();
     expect(await screen.findByText("Final draft")).toBeInTheDocument();
     const nameInput = screen.getByRole("textbox", { name: t("versions.create.name") });
@@ -121,19 +148,37 @@ describe("版本与变体弹窗（W13）", () => {
         change_summary: "",
       }),
     );
+    expect(
+      await screen.findByText(t("versions.create.success", { name: "New version" })),
+    ).toBeInTheDocument();
   });
 
-  it("比较：调用 compare(current) 并渲染正文+排版摘要", async () => {
+  it("#28 名称为空也可保存：按时间自动命名，按钮不再禁用", async () => {
     renderModal();
-    // 先等创建区出现（= tab 正文已挂载），再点行内按钮。
+    await screen.findByText("Final draft");
+    const create = screen.getByRole("button", { name: t("versions.create.action") });
+    expect((create as HTMLButtonElement).disabled).toBe(false);
+    fireEvent.click(create);
+    await waitFor(() => expect(api.createVersion).toHaveBeenCalledTimes(1));
+    const [, payload] = api.createVersion.mock.calls[0];
+    expect(typeof payload.name).toBe("string");
+    expect(payload.name.trim().length).toBeGreaterThan(0);
+    expect(payload.change_summary).toBe("");
+  });
+
+  it("比较：默认与更早一版比，并渲染字段级旧值/新值", async () => {
+    renderModal();
     await screen.findByRole("button", { name: t("versions.create.action") });
     await waitFor(() => expect(api.listVersions).toHaveBeenCalled());
-    fireEvent.click(
-      await screen.findByRole("button", { name: looseName(t("versions.action.compare")) }),
-    );
-    await waitFor(() => expect(api.compareVersions).toHaveBeenCalledWith(7, 5, "current"));
+    const compares = await screen.findAllByRole("button", {
+      name: looseName(t("versions.action.compare")),
+    });
+    fireEvent.click(compares[0]);
+    await waitFor(() => expect(api.compareVersions).toHaveBeenCalledWith(7, 5, 4));
+    expect(await screen.findByText("Li Si")).toBeInTheDocument();
+    expect(screen.getByText("Li Wu")).toBeInTheDocument();
     expect(
-      await screen.findByText(t("versions.compare.contentStats", { added: 1, removed: 0 })),
+      screen.getByText(t("versions.compare.changeStats", { added: 0, changed: 1, removed: 0 })),
     ).toBeInTheDocument();
     expect(
       screen.getByText(t("versions.compare.layoutChanged", { keys: "template" })),
@@ -149,11 +194,10 @@ describe("版本与变体弹窗（W13）", () => {
     );
     renderModal();
     await screen.findByText("Final draft");
-    fireEvent.click(
-      await screen.findByRole("button", {
-        name: looseName(t("versions.action.restore")),
-      }),
-    );
+    const restoreButtons = await screen.findAllByRole("button", {
+      name: looseName(t("versions.action.restore")),
+    });
+    fireEvent.click(restoreButtons[0]);
     const confirms = await screen.findAllByRole("button", {
       name: looseName(t("versions.restore.ok")),
     });
@@ -169,13 +213,14 @@ describe("版本与变体弹窗（W13）", () => {
     fireEvent.click(screen.getByRole("tab", { name: t("versions.tab.variants") }));
     expect((await screen.findAllByText("Backend variant")).length).toBeGreaterThan(0);
     fireEvent.click(screen.getByRole("checkbox", { name: "Backend variant" }));
-    fireEvent.click(screen.getByRole("checkbox", { name: "summary" }));
+    // R-23：分组名是板块显示名（不再是把 v1 顶层键当分组），路径是 <sectionKey>.<entryId>。
+    fireEvent.click(screen.getByRole("checkbox", { name: t("structure.section.experience") }));
     fireEvent.click(screen.getByRole("button", { name: t("versions.variants.syncAction") }));
     await waitFor(() =>
       expect(api.syncVariants).toHaveBeenCalledWith(7, {
         source_version_id: null,
         variant_ids: [9],
-        paths: ["summary"],
+        paths: ["experience.ob_entry001"],
       }),
     );
   });

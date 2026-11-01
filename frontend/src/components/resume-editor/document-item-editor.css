@@ -1,0 +1,100 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/* item 编辑器（字段行 / 列表值行 / 开关行）。从 document-editor.css 拆出：
+   R-05/R-06 让卡片侧涨到 500 行预算边缘，这里是职责最独立的一段。 */
+
+/* ── item 编辑器 ──────────────────────────────────────────── */
+
+.document-item-editor {
+  border: 1px solid var(--rf-border-subtle);
+  border-radius: 6px;
+  background: var(--rf-surface);
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.document-item-editor-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: start;
+}
+
+/* R-06 ②A：编辑器内部行 = 26px 标签列 + 内容列。`.document-value-row` 被列表值 /
+   作者行复用，所以**不改它的全局 flex 规则**，只给字段行加这个新 grid。 */
+.document-field-row {
+  display: grid;
+  grid-template-columns: 26px minmax(0, 1fr);
+  gap: 6px;
+  align-items: center;
+  min-width: 0;
+}
+
+.document-field-label {
+  color: var(--rf-text-secondary);
+  font-size: 11px;
+  line-height: 16px;
+  text-align: right;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.document-field-label-spacer {
+  display: block;
+}
+
+/* 日期范围：26px 标签列 + 开始 + 「至」 + 结束（「至」为空时不占宽度）。 */
+.document-field-row.is-date-range {
+  grid-template-columns: 26px minmax(0, 1fr) auto minmax(0, 1fr);
+}
+
+.document-field-sep {
+  color: var(--rf-text-tertiary);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+/* R-06 ①E：选中的 chip 展开编辑器时跨整行（不被 148px 的格子裁切）。 */
+.document-chip-slot.is-editing {
+  grid-column: 1 / -1;
+}
+
+.document-value-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.document-toggles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+/* #27：chip 落点插入线（画在目标 chip 的前/后边缘，不覆盖整个槽）。
+   线要贴边而不是盖住内容：用 ::before/::after 定位在槽的左右边缘。 */
+.document-chip-slot {
+  position: relative;
+}
+
+.document-chip-slot.is-drop-before::before,
+.document-chip-slot.is-drop-after::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  bottom: 2px;
+  width: 2px;
+  border-radius: 1px;
+  background: var(--rf-accent, #2563eb);
+  pointer-events: none;
+}
+
+.document-chip-slot.is-drop-before::before {
+  left: -3px;
+}
+
+.document-chip-slot.is-drop-after::after {
+  right: -3px;
+}

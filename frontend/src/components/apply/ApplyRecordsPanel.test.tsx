@@ -68,6 +68,7 @@ const BATCHES: Page<ApplyRecordBatch> = {
       created_at: "2026-09-17T08:00:00",
       finished_at: "2026-09-17T08:05:00",
       matched_count: 2,
+      failure_summary: [],
       items: [],
     },
     {
@@ -82,6 +83,7 @@ const BATCHES: Page<ApplyRecordBatch> = {
       created_at: "2026-09-16T08:00:00",
       finished_at: "2026-09-16T08:01:00",
       matched_count: 0,
+      failure_summary: [],
       items: [],
     },
   ],
@@ -180,6 +182,8 @@ describe("ApplyRecordsPanel (grouped by batch)", () => {
     expect(apiMocks.listRecordBatchItems).toHaveBeenCalledWith(7, {
       keyword: "",
       result: "",
+      // #39：明细必须与组头吃同一套筛选（漏传 failure_category 就是「组头 1 条、明细 6 条」）。
+      failure_category: "",
       page: 1,
       page_size: 20,
     });

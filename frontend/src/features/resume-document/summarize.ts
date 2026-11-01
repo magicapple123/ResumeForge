@@ -77,6 +77,14 @@ export const STRUCTURE_HEADER_PLACEMENT_ORDER: readonly HeaderPlacement[] = [
   "hidden",
 ];
 
+/**
+ * 页眉合成后的**唯一**分组键（R-09）：树里只有一行「基本信息」，`label` 也用它。
+ *
+ * 用常量而不是字面量：这是**协议值**（组件按它判定分组、搜索按它取显示文案），
+ * 不是界面文案——界面文案是 `structure.node.header`（「基本信息」/「Basic information」）。
+ */
+export const HEADER_GROUP_KEY = "header";
+
 /** 树行/下拉的条目名截断上限（按字符数，中文与 emoji 各算一个）。 */
 export const ENTRY_LABEL_MAX_CHARS = 32;
 
@@ -139,14 +147,25 @@ export function entryDisplayLabel(entry: ResumeEntry): string {
  */
 export type FieldLabelResolver = (key: string, sectionKey?: string) => string | undefined;
 
+/** #11a：枚举字段值的显示名解析（sectionKey + fieldKey + 原值 → 本地化标签或原值）。 */
+export type EnumValueResolver = (sectionKey: string, fieldKey: string, value: string) => string;
+
 function itemLabel(
   item: ResumeItem,
   sectionKey: string,
   resolveLabel?: FieldLabelResolver,
+  resolveEnumValue?: EnumValueResolver,
 ): string {
   if (item.kind === "text") return item.text;
   const catalogLabel = resolveLabel?.(item.key, sectionKey) ?? "";
-  if (item.kind === "field") return item.label || item.value || catalogLabel || item.key;
+  if (item.kind === "field") {
+    // #11a：枚举字段显示本地化标签（与 chip 同源），没有匹配再落回原值。
+    const value =
+      item.format === "enum" && resolveEnumValue
+        ? resolveEnumValue(sectionKey, item.key, item.value)
+        : item.value;
+    return item.label || value || catalogLabel || item.key;
+  }
   return item.label || catalogLabel || item.key;
 }
 
@@ -155,13 +174,14 @@ function itemNode(
   sectionKey: string,
   entryId: string,
   resolveLabel?: FieldLabelResolver,
+  resolveEnumValue?: EnumValueResolver,
 ): StructureNode {
   const placement = getItemPlacement(item);
   return {
     kind: "item",
     key: `${sectionKey}.${entryId}.${item.id}`,
     path: `${sectionKey}.${entryId}.${item.id}`,
-    label: itemLabel(item, sectionKey, resolveLabel),
+    label: itemLabel(item, sectionKey, resolveLabel, resolveEnumValue),
     sectionKey,
     entryId,
     itemId: item.id,
@@ -185,6 +205,7 @@ function groupNodes(
   entryId: string,
   options: { includeEmptyGroups: boolean },
   resolveLabel?: FieldLabelResolver,
+  resolveEnumValue?: EnumValueResolver,
 ): StructureNode[] {
   const byPlacement = new Map<Placement, ResumeItem[]>();
   for (const placement of STRUCTURE_PLACEMENT_ORDER) byPlacement.set(placement, []);
@@ -202,10 +223,22 @@ function groupNodes(
         path: null,
         label: placement,
         placement,
-        children: items.map((item) => itemNode(item, sectionKey, entryId, resolveLabel)),
+        children: items.map((item) =>
+          itemNode(item, sectionKey, entryId, resolveLabel, resolveEnumValue),
+        ),
       },
     ];
   });
+}
+
+/**
+ * 分组节点：`key` 与原始 `label` 同值（label 是**协议键**，界面文案由组件用 t() 映射）。
+ *
+ * 单独抽出来还有一层原因：`label: "<字面量>"` 会被 i18n 的 product-copy 守卫判成
+ * 新增界面文案（`label` 在 COPY_PROPERTIES 里）。走参数传值，那个位置就不是字面量。
+ */
+function groupNode(key: string, children: StructureNode[]): StructureNode {
+  return { kind: "group", key, path: null, label: key, children };
 }
 
 function entryNode(
@@ -214,6 +247,7 @@ function entryNode(
   index: number,
   options: { includeEmptyGroups: boolean },
   resolveLabel?: FieldLabelResolver,
+  resolveEnumValue?: EnumValueResolver,
 ): StructureNode {
   const entryId = entry.id ?? String(index);
   return {
@@ -227,7 +261,7 @@ function entryNode(
     lock: entry.lock_content ? "content" : entry.lock_layout ? "layout" : null,
     startOnNewPage: Boolean(entry.layout.start_on_new_page),
     keepTogether: Boolean(entry.layout.keep_together),
-    children: groupNodes(entry, sectionKey, entryId, options, resolveLabel),
+    children: groupNodes(entry, sectionKey, entryId, options, resolveLabel, resolveEnumValue),
   };
 }
 
@@ -235,6 +269,7 @@ function sectionNode(
   section: ResumeSection,
   options: { includeEmptyGroups: boolean },
   resolveLabel?: FieldLabelResolver,
+  resolveEnumValue?: EnumValueResolver,
 ): StructureNode {
   return {
     kind: "section",
@@ -243,7 +278,7 @@ function sectionNode(
     label: section.layout.title_override || section.title || section.key,
     sectionKey: section.key,
     children: section.entries.map((entry, index) =>
-      entryNode(entry, section.key, index, options, resolveLabel),
+      entryNode(entry, section.key, index, options, resolveLabel, resolveEnumValue),
     ),
   };
 }
@@ -281,13 +316,15 @@ export interface SummarizeOptions {
    * 代替原始英文 key；目录拿不到才退回 key。
    */
   resolveFieldLabel?: FieldLabelResolver;
+  /** #11a：枚举字段值的显示名解析（工作类型等四类枚举不再裸显 code）。 */
+  resolveEnumValue?: EnumValueResolver;
 }
 
 /**
  * 生成结构树。
  *
  * - 板块 → 条目 → 位置分组（非空才输出）→ item；
- * - 页眉单独一组，按页眉位置分组（`header` 字段），label 给的是页眉位置枚举值；
+ * - 页眉是**一个**「基本信息」分组（key = `header`），子节点按页眉位置顺序平铺；
  * - 条目/条目字段的隐藏与锁定标记都带上（结构面板的圆点 / 锁图标）。
  */
 export function summarize(document: ResumeDocument, options: SummarizeOptions = {}): StructureTree {
@@ -295,31 +332,36 @@ export function summarize(document: ResumeDocument, options: SummarizeOptions = 
     includeEmptyGroups: options.includeEmptyGroups === true,
     includeHeader: options.includeHeader !== false,
     resolveFieldLabel: options.resolveFieldLabel,
+    resolveEnumValue: options.resolveEnumValue,
   };
   const header: StructureNode[] = [];
   if (settings.includeHeader) {
-    const byPlacement = new Map<HeaderPlacement, HeaderItem[]>();
-    for (const placement of STRUCTURE_HEADER_PLACEMENT_ORDER) byPlacement.set(placement, []);
-    for (const item of document.header.items) {
-      (byPlacement.get(item.placement) ?? byPlacement.get("hidden") ?? []).push(item);
-    }
-    for (const placement of STRUCTURE_HEADER_PLACEMENT_ORDER) {
-      const items = byPlacement.get(placement) ?? [];
-      if (items.length === 0) continue;
-      header.push({
-        kind: "group",
-        key: `header.#${placement}`,
-        path: null,
-        label: placement,
-        headerPlacement: placement,
-        children: items.map((item) => headerNode(item, settings.resolveFieldLabel)),
-      });
+    // R-09：页眉不再按位置拆成「姓名行 / 联系方式 / 照片 …」多个分组，而是合成**一个**
+    // 「基本信息」分组，子节点按纸面顺序（STRUCTURE_HEADER_PLACEMENT_ORDER）平铺。
+    // 位置枚举仍是排序依据（也仍写在每个 item 的 headerPlacement 上，供搜索与徽标判定）。
+    const orderIndex = new Map<HeaderPlacement, number>(
+      STRUCTURE_HEADER_PLACEMENT_ORDER.map((placement, position) => [placement, position]),
+    );
+    // 未知位置（未来新增枚举 / 旧文档）落在「隐藏」之后，而不是被丢掉。
+    const rankOf = (placement: HeaderPlacement): number =>
+      orderIndex.get(placement) ?? STRUCTURE_HEADER_PLACEMENT_ORDER.length;
+    // `Array.prototype.sort` 自 ES2019 起稳定：同一位置内保持文档原序。
+    const ordered = [...document.header.items].sort(
+      (left, right) => rankOf(left.placement) - rankOf(right.placement),
+    );
+    if (ordered.length > 0) {
+      header.push(
+        groupNode(
+          HEADER_GROUP_KEY,
+          ordered.map((item) => headerNode(item, settings.resolveFieldLabel)),
+        ),
+      );
     }
   }
   return {
     header,
     sections: document.sections.map((section) =>
-      sectionNode(section, settings, settings.resolveFieldLabel),
+      sectionNode(section, settings, settings.resolveFieldLabel, settings.resolveEnumValue),
     ),
   };
 }

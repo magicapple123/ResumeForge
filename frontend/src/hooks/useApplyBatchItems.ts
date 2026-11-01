@@ -12,17 +12,21 @@ export function useApplyBatchItems(
   data: Page<ApplyRecordBatch> | undefined,
   keyword: string,
   result: string,
+  failureCategory: string,
   expanded: number[],
   onError: (error: string) => void,
 ) {
   const [cached, setCached] = useState<Record<number, BatchItemsState>>({});
-  const [previousScope, setPreviousScope] = useState({ data, keyword, result });
+  // 作用域里必须带上 failure_category：切了失败分类筛选项，缓存必须作废重拉，
+  // 否则明细仍是上一次筛选的结果（#39 的缺陷现象）。
+  const [previousScope, setPreviousScope] = useState({ data, keyword, result, failureCategory });
   if (
     previousScope.data !== data ||
     previousScope.keyword !== keyword ||
-    previousScope.result !== result
+    previousScope.result !== result ||
+    previousScope.failureCategory !== failureCategory
   ) {
-    setPreviousScope({ data, keyword, result });
+    setPreviousScope({ data, keyword, result, failureCategory });
     setCached({});
   }
 
@@ -36,7 +40,7 @@ export function useApplyBatchItems(
       scopeVersion.current += 1;
       activeRequests.clear();
     };
-  }, [data, keyword, result]);
+  }, [data, keyword, result, failureCategory]);
 
   // No synchronous UI update here: the missing cache entry already renders as loading.
   const load = useCallback(
@@ -49,6 +53,7 @@ export function useApplyBatchItems(
       return listRecordBatchItems(batchId, {
         keyword,
         result,
+        failure_category: failureCategory,
         page: itemPage,
         page_size: BATCH_ITEM_PAGE_SIZE,
       })
@@ -81,7 +86,7 @@ export function useApplyBatchItems(
           if (isCurrent()) requests.current.delete(batchId);
         });
     },
-    [keyword, result, onError],
+    [keyword, result, failureCategory, onError],
   );
 
   useEffect(() => {

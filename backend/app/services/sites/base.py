@@ -36,6 +36,10 @@ class SiteFailure(Exception):
         self.detail = detail
         self.url = url
         self.title = title
+        # 失败发生在哪一步（投递任务的阶段常量，由调用方打标；空串 = 未标注）。
+        # 显式声明成字段而不是靠调用方动态挂属性：read 侧 getattr(exc, "stage", "") 的
+        # 契约要能在这里看见，否则"忘了打标"和"没有这个属性"在类型上无法区分。
+        self.stage = ""
 
 
 # 筛选项清单的来源标记。**定义在站点无关的基类里**，因为"这份清单可信度如何"是通用的概念，

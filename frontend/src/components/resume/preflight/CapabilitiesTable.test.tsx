@@ -17,14 +17,15 @@ afterEach(() => cleanup());
 
 describe("格式能力矩阵（W11 消费 W05）", () => {
   it("扁平键 → 能力行 × 格式列，等级用统一词条", () => {
-    renderTable({ "pdf:italic": "approx", "docx:italic": "supported" });
+    // #5d：italic 已移除，用仍存在的能力项验证同一套渲染路径。
+    renderTable({ "pdf:link_clickable": "unsupported", "docx:link_clickable": "approx" });
     expect(screen.getAllByText(t("preflight.capabilities.capability")).length).toBeGreaterThan(0);
     // antd Table 的表头在测量行里会出现两份，按"至少一处"断言。
     expect(screen.getAllByText(t("preflight.format.pdf")).length).toBeGreaterThan(0);
     expect(screen.getAllByText(t("preflight.format.docx")).length).toBeGreaterThan(0);
-    expect(screen.getByText(t("preflight.capability.italic"))).toBeInTheDocument();
+    expect(screen.getByText(t("preflight.capability.linkClickable"))).toBeInTheDocument();
     expect(screen.getByText(t("preflight.capability.approx"))).toBeInTheDocument();
-    expect(screen.getByText(t("preflight.capability.supported"))).toBeInTheDocument();
+    expect(screen.getByText(t("preflight.capability.unsupported"))).toBeInTheDocument();
   });
 
   it("嵌套形状也兼容；未知等级按要求显示为未知", () => {

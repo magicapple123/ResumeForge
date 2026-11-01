@@ -132,7 +132,9 @@ describe("ResumesPage column hints", () => {
     // “均衡”两个字本身说明不了什么，悬停要给出这一档做了什么。
     fireEvent.mouseEnter(screen.getByText("均衡"));
 
-    expect(await screen.findByRole("tooltip")).toHaveTextContent("补足方法、技术细节与成果表达");
+    expect(await screen.findByRole("tooltip")).toHaveTextContent(
+      "补足方法与业务目的：每条要点 28-36 字、每条 2-3 条",
+    );
   });
 
   it("explains what a general resume is on hover", async () => {

@@ -46,6 +46,9 @@ def test_v2_entry_break_and_placement_share_pdf_report_pipeline():
     assert report["pages"] == pdf.pages
     assert report["pages_needed"] == pdf.pages_needed
     assert report["overflow"] is False
+    # #2：末页占用在 (0, 1]（有内容的简历末页不可能为 0）；「未测量」是 None 不是 0。
+    assert report["last_page_fill"] is not None
+    assert 0 < report["last_page_fill"] <= 1
 
 
 def test_v2_entry_break_changes_natural_page_count():

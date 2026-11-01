@@ -38,16 +38,16 @@ const appConfig = {
   // ── Resume enhancement levels ────────────────────────────────
   "appConfig.enhancement.light.label": "Light",
   "appConfig.enhancement.light.description":
-    "Refines wording and emphasis while keeping roughly the same length",
+    "Refines wording and emphasis: 20-28 chars per point, 1-2 points per entry",
   "appConfig.enhancement.balanced.label": "Balanced",
   "appConfig.enhancement.balanced.description":
-    "Adds methods, technical detail and concrete results",
+    "Adds methods and business purpose: 28-36 chars per point, 2-3 points per entry",
   "appConfig.enhancement.strong.label": "Deep",
   "appConfig.enhancement.strong.description":
-    "Uses all available material to strengthen the fit for the target job",
+    "Fully expands methods and results: 40-55 chars per point, 3-5 points per entry; approaches Balanced when the material lacks citable details",
   /** A general Resume has no target job, so the Deep level needs different wording. */
   "appConfig.enhancement.strong.description-general":
-    "Uses all available material to expand processes and results fully",
+    "Fully expands processes and results: 40-55 chars per point, 3-5 points per entry; approaches Balanced when the material lacks citable details",
 
   // ── Reasoning effort ────────────────────────────────────────
   "appConfig.effort.minimal": "Minimal",

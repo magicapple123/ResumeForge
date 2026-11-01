@@ -46,9 +46,9 @@ SYSTEM_FONT = "__system__"
 
 FORMAT_FIELDS: tuple[dict, ...] = (
     {"key": "accent", "label": "强调色", "type": "color", "css": "--accent"},
-    {"key": "text_color", "label": "正文颜色", "type": "color", "css": "--text"},
-    {"key": "muted_color", "label": "辅助文字颜色", "type": "color", "css": "--muted"},
-    {"key": "line_color", "label": "分隔线颜色", "type": "color", "css": "--line"},
+    {"key": "text_color", "label": "正文", "type": "color", "css": "--text"},
+    {"key": "muted_color", "label": "次要文字", "type": "color", "css": "--muted"},
+    {"key": "line_color", "label": "分隔线", "type": "color", "css": "--line"},
     {
         "key": "font_scale_adjust",
         "label": "字号系数",

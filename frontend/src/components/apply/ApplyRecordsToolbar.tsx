@@ -8,6 +8,8 @@ import { ReloadOutlined, SearchOutlined } from "@ant-design/icons";
 import { Button, Input, Select, Space, Typography } from "antd";
 import { Link } from "react-router-dom";
 import { t, type MessageKey } from "../../i18n";
+import { FAILURE_CATEGORIES } from "../../types/apply/failures";
+import { failureCategoryKey } from "../../i18n/enum/apply";
 import { useLocale } from "../../i18n/i18nContext";
 
 /** 结果筛选项：`value` 是提交给后端的协议值，展示名在渲染处按 labelKey 取。 */
@@ -20,6 +22,9 @@ const RESULT_OPTIONS: { value: string; labelKey: MessageKey }[] = [
 interface Props {
   searchText: string;
   result: string;
+  /** #39：按失败分类筛选（空 = 全部）。 */
+  failureCategory: string;
+  onFailureCategoryChange: (value: string) => void;
   onSearchTextChange: (value: string) => void;
   onSearch: (value: string) => void;
   onResultChange: (value: string) => void;
@@ -29,6 +34,8 @@ interface Props {
 export default function ApplyRecordsToolbar({
   searchText,
   result,
+  failureCategory,
+  onFailureCategoryChange,
   onSearchTextChange,
   onSearch,
   onResultChange,
@@ -57,6 +64,18 @@ export default function ApplyRecordsToolbar({
         }))}
         value={result || undefined}
         onChange={(value) => onResultChange(value ?? "")}
+      />
+      {/* #39：按失败分类筛选——枚举与后端 FAILURE_CATEGORY_LABELS 同源，未选 = 全部。 */}
+      <Select
+        placeholder={t("applyRecords.column.failureKind")}
+        allowClear
+        style={{ width: 170 }}
+        options={FAILURE_CATEGORIES.map((category) => ({
+          value: category,
+          label: t(failureCategoryKey(category) as MessageKey),
+        }))}
+        value={failureCategory || undefined}
+        onChange={(value) => onFailureCategoryChange(value ?? "")}
       />
       <Button icon={<ReloadOutlined />} onClick={onReload}>
         {t("common.action.refresh")}

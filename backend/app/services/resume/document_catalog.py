@@ -18,8 +18,10 @@ from ...schemas.resume_document import (
     BodyStyle,
     Format,
     HeaderPlacement,
+    Join,
     Placement,
     SectionKind,
+    Wrap,
 )
 from .resume_labels import field_labels, normalize_language, section_title
 
@@ -55,8 +57,10 @@ class FieldSpec:
     material_only: bool = False
     private: bool = False
     body_style: BodyStyle = "bullet"
-    wrap: str = "none"
-    join: str = "semicolon"
+    # 取值域与 schema 同源：``wrap``/``join`` 直接落进 FieldItem/ListItem，不让 str 混进
+    # 已经限死的 Literal（否则转换器写出一个 schema 不认识的枚举值，坏数据要等落库才报）。
+    wrap: Wrap = "none"
+    join: Join = "semicolon"
     # 枚举显示走 resume_labels 的哪个表：publication_status / patent_status /
     # credential_status / experience_kind。
     enum_kind: str = ""
@@ -96,8 +100,8 @@ def _field(
     *,
     fmt: Format = "text",
     body_style: BodyStyle = "bullet",
-    wrap: str = "none",
-    join: str = "semicolon",
+    wrap: Wrap = "none",
+    join: Join = "semicolon",
     enum_kind: str = "",
     material_only: bool = False,
     private: bool = False,

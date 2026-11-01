@@ -73,3 +73,31 @@ def test_extract_pdf_text_on_real_render():
     assert pages
     joined = "".join(text for _page, text in pages)
     assert "示例科技" in joined
+
+
+def test_missing_diffs_merge_into_whole_words():
+    """R-25：相邻缺字合并成片段——「激活」不再拆成两个黄块。
+
+    症状：前端把每条 diff 都渲染成一个高亮块，逐字返回就得到"黄色断断续续"。
+    合并条件是"期望序列相邻且同类"；单字缺失（记者）仍能单独定位。
+    """
+    expected = ["激活用户", "日更看板"]
+    extracted = [(1, "")]  # 全缺
+
+    diffs = compare_text_order(expected, extracted)
+    tokens = [diff["token"] for diff in diffs if diff["kind"] == "missing"]
+
+    assert tokens == ["激活用户", "日更看板"]
+    # 片段数量必须显著少于字数（否则就是没合并）。
+    assert len(tokens) < sum(len(token) for token in tokens)
+
+
+def test_missing_diffs_do_not_merge_across_pages_for_order():
+    """跨页的两段不合并：它们不是一处，合并会让用户在一页里找另一页的词。"""
+    expected = ["甲", "乙"]
+    extracted = [(1, "乙"), (2, "甲")]
+
+    diffs = compare_text_order(expected, extracted)
+    out_of_order = [diff for diff in diffs if diff["kind"] == "out_of_order"]
+    # 甲在第 2 页、乙在第 1 页：同类但不连续、不同页 → 各自成条。
+    assert all(len(diff["token"]) == 1 for diff in out_of_order)

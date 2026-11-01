@@ -176,7 +176,8 @@ const settingsUi = {
   "settingsUi.webFormRelaxed.saveFailed": "保存放宽模式设置失败",
   /** 开启后程序会代做什么、仍然不做什么、风险在哪。 */
   "settingsUi.webFormRelaxed.warning":
-    "开启后程序会尝试代点下拉/弹层选项并代勾你逐条确认过的声明项，存在选错可能，填完请核对；日期选择器与文件上传仍不代做。",
+    "开启后程序会尝试代点下拉/弹层选项并代勾你逐条确认过的声明项，存在选错可能，填完请核对；" +
+    "四类始终不代填：日期选择器、文件上传、密码/验证码/银行卡、无弹层的只读点选框——这些都需要你自己操作。",
 } as const;
 
 export default settingsUi;

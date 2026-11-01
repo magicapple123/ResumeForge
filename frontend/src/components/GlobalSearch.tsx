@@ -17,15 +17,34 @@ import { Button, Input, Space, Spin, Tag, Tooltip, Typography } from "antd";
 import type { InputRef } from "antd";
 import EmptyState from "./common/EmptyState";
 import { t } from "../i18n";
+import type { MessageKey } from "../i18n";
 import { useLocale } from "../i18n/i18nContext";
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import { searchAll } from "../api/search";
 import { useShortcut } from "../features/shortcuts/useShortcutKeymap";
-import type { SearchResult } from "../types";
+import type { SearchHitType, SearchResult } from "../types";
 
 const DEBOUNCE_MS = 250;
+
+/**
+ * #11b：命中条目的数据域标签（后端下发 `hit.type` 是原始码）。
+ * 表里没有的新数据域回落原码——宁可露一个 key，也不要空标签吞掉结果。
+ */
+const HIT_TYPE_KEYS: Record<SearchHitType, MessageKey> = {
+  referral: "globalSearch.type.referral",
+  reminder: "globalSearch.type.reminder",
+  experience: "globalSearch.type.experience",
+  claim: "globalSearch.type.claim",
+  material: "globalSearch.type.material",
+  skill: "globalSearch.type.skill",
+};
+
+function hitTypeLabel(type: SearchHitType): string {
+  const key = HIT_TYPE_KEYS[type];
+  return key ? t(key) : type;
+}
 
 interface Props {
   /**
@@ -323,7 +342,7 @@ export default function GlobalSearch({ showTrigger = true }: Props) {
                             onClick={() => go(hit.path)}
                           >
                             <span>
-                              <Tag>{hit.type}</Tag>
+                              <Tag>{hitTypeLabel(hit.type)}</Tag>
                               {hit.title}
                             </span>
                             <Typography.Text type="secondary">{hit.subtitle}</Typography.Text>
