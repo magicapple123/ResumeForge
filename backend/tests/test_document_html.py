@@ -47,6 +47,32 @@ def test_entry_head_layouts_and_gray_field_grid():
     assert text.index("Python") < text.index("SQL")
 
 
+def _compact_css(html: str) -> str:
+    """把注入的结构 CSS 压成便于断言的一行（去掉换行与多余空格）。"""
+    return re.sub(r"\s+", " ", html)
+
+
+def test_stacked_head_css_breaks_title_and_meta_onto_their_own_lines():
+    """R-04：只把容器改成 block 不够——`.title` / `.meta` 是行内 span，仍会拼在一行。
+
+    这条钉的是**声明**而不是类名：上一版测试只断 `head-stacked` 出现在 HTML 里，
+    于是"类名在、样式没生效"这种坏法一路绿到底（实机症状：切「上下」后仍是一行）。
+    """
+    css = _compact_css(_html())
+    assert (
+        ".entry-head.head-stacked .title, .entry-head.head-stacked .meta, "
+        ".entry-head.head-meta_first .title, .entry-head.head-meta_first .meta { display: block; }"
+    ) in css
+    # 模板给 `.entry-head .meta` 写的是 nowrap，这里必须是 0,3,0 的选择器才压得住。
+    assert (
+        ".entry-head.head-stacked .meta, .entry-head.head-meta_first .meta "
+        "{ max-width: none; text-align: left; }"
+    ) in css
+    assert (
+        ".entry-head.head-stacked .meta, .entry-head.head-meta_first .meta { white-space: normal; }"
+    ) in css
+
+
 def test_head_layout_variants_emit_dom_order_matching_paper():
     stacked = _html()
     # 项目条目是 stacked：标题在元信息之前（DOM 与纸面同序）。

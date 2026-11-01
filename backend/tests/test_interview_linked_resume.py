@@ -17,7 +17,6 @@ from __future__ import annotations
 
 import json
 
-import pytest
 from app.models.interview import InterviewSession
 from app.models.job import Job
 from app.schemas.interview import InterviewCreate
@@ -71,20 +70,25 @@ def test_messages_have_no_profile_section():
 # ===== 关联岗位 + 关联简历必填（0066）=====
 
 
-def test_create_requires_job_and_resume(client, db_session, monkeypatch):
-    """两项都必填：少一项就是 422，而不是开一场"看不到材料"的面试。"""
-    from pydantic import ValidationError
+def test_create_requires_material_on_both_sides(client, db_session, monkeypatch):
+    """每一侧都必须有材料来源：少一侧就是 422，而不是开一场"看不到材料"的面试。
 
+    #41 起"来源"有两种（从记录选 / 导入文件），所以这条契约从 schema 层移到了接口层：
+    ``InterviewCreate`` 允许两侧都缺字段（结构上合法），由 ``create_session`` 判决
+    "这一侧到底有没有材料"。断言的口径没变——**不能开出材料不全的面试**。
+    """
     prepared = targets(db_session)
     _configure(monkeypatch, [{"question": "第一题", "feedback": "", "done": False}])
 
     missing_resume = client.post("/api/interview", json={"job_id": prepared["job_id"]})
     assert missing_resume.status_code == 422
+    assert "简历" in missing_resume.json()["detail"]
     missing_job = client.post("/api/interview", json={"resume_id": prepared["resume_id"]})
     assert missing_job.status_code == 422
-    with pytest.raises(ValidationError):
-        InterviewCreate()
-    # 两项齐备才是合法请求。
+    assert "岗位" in missing_job.json()["detail"]
+    both_missing = client.post("/api/interview", json={})
+    assert both_missing.status_code == 422
+    # 两侧齐备（这里用记录）才是合法请求。
     assert InterviewCreate(**prepared).resume_id == prepared["resume_id"]
 
 

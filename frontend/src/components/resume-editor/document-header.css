@@ -1,0 +1,84 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/* 基本信息（页眉）面板：位置分组 + chip + 照片。从 document-editor.css 拆出：
+   页眉 chip 化（#10）与照片缩略图 / 裁剪入口（#25）让那一份涨到预算边缘。 */
+
+.document-header-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* 位置分组：组名在左，chip 流在右（与正文三区卡的「区名 + chips」同一观感）。 */
+.document-header-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px 8px;
+  border: 1px solid var(--rf-border-subtle);
+  border-radius: 8px;
+  background: var(--rf-surface-elevated);
+}
+
+.document-header-group > .document-zone-label {
+  font-size: 11px;
+  color: var(--rf-text-secondary);
+}
+
+/* 页眉 chip 的位置组只有一行，宽度按内容走（不撑满整行，避免"空盒子"）。 */
+.document-header-group .document-chip-slot {
+  max-width: 100%;
+}
+
+/* 照片 chip：缩略图固定 32×40（3:4 证件照比例），不显示 data URL 文本。 */
+.document-chip-photo {
+  display: block;
+  width: 32px;
+  height: 40px;
+  object-fit: cover;
+  border-radius: 3px;
+  border: 1px solid var(--rf-border-subtle);
+  background: var(--rf-surface-alt);
+  flex: none;
+}
+
+.document-chip-header.is-photo .document-chip-main {
+  align-items: center;
+}
+
+/* 展开态的页眉字段编辑器：label 输入 / 值输入 / 位置下拉 / 删除共处一列。 */
+.document-header-editor {
+  margin-left: 4px;
+}
+
+.document-photo-editor {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+
+.document-photo-frame {
+  width: 72px;
+  height: 90px;
+  border: 1px dashed var(--rf-border-subtle);
+  border-radius: 6px;
+  background: var(--rf-surface-alt);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  flex: none;
+}
+
+.document-photo-frame img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.document-photo-empty {
+  font-size: 11px;
+  color: var(--rf-text-tertiary);
+  text-align: center;
+  padding: 0 4px;
+}

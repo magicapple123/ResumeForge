@@ -7,6 +7,15 @@
  * 旁边就是「关联到来源」按钮——选中之后按钮才可用，未选中时直接说明为什么不能点。
  *
  * 组件只发回调：选中由宿主存（`useWorkbenchProvenancePanels`），弹窗也由宿主开。
+ *
+ * ## 下拉控件归类（#20 审计，components/resume/sources/**）
+ *
+ * - **选择类**（本组件）：内容块下拉 = 选一条要核对的内容，**可清空**（`allowClear`）。
+ *   清空 = 回到"未选中"：面板给 `provenance.selection.needSelect` 说明、来源链显示空态、
+ *   「关联到来源」按钮禁用——不是保留上一次的值。
+ * - **必填表单类**（`FactLockPanel` 的锁类型 / `SourceLinkModal` 的来源·修订·来源类型）：
+ *   有默认值或提交前必须选，**不可清空**、标签带必填标记（*）。
+ * - **筛选类**：sources 下当前没有筛选下拉；若新增，一律 `allowClear` + 「全部」首项。
  */
 import { LinkOutlined } from "@ant-design/icons";
 import { Button, Select, Space, Typography } from "antd";
@@ -25,7 +34,8 @@ interface Props {
   value: string | null;
   /** 当前选中块是否已关联来源（null = 没选中）。 */
   linked: boolean | null;
-  onChange: (key: string) => void;
+  /** 选中或清空（清空时给 null，宿主应回到"未选中"空态）。 */
+  onChange: (key: string | null) => void;
   /** 未选中时的说明（为什么不能关联）。 */
   note: string | null;
   /** 「关联到来源」按钮是否可用。 */
@@ -69,13 +79,15 @@ export default function ProvenanceSelectionCard({
         <Select
           className="provenance-selection__select"
           showSearch
+          allowClear
           value={value ?? undefined}
           placeholder={pt("provenance.selection.placeholder")}
           notFoundContent={pt("provenance.selection.empty")}
           options={selectOptions}
           optionFilterProp="label"
           aria-label={pt("provenance.selection.title")}
-          onChange={(next: string) => onChange(next)}
+          // #20：选择类下拉允许清空；antd 清空时给 undefined，统一归一成 null（= 未选中）。
+          onChange={(next?: string) => onChange(next ?? null)}
         />
         <Button
           type="primary"

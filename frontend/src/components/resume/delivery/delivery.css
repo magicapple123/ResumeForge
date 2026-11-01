@@ -106,6 +106,35 @@
   justify-content: flex-end;
 }
 
+/* 原生 footer（R-21）：进度在左、动作在右；按钮不再随 body 滚动。 */
+.resume-delivery-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+}
+
+.resume-delivery-progress {
+  margin-right: auto;
+  color: var(--rf-text-secondary);
+  font-size: 12px;
+}
+
+/* 导出形式：与预设条同一条横排，窄栏自动折行。 */
+.resume-delivery-mode {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  margin-bottom: 10px;
+}
+
+.resume-delivery-mode .resume-delivery-hint {
+  flex-basis: 100%;
+  margin: 0;
+}
+
 /* ===== 核对卡 ===== */
 .resume-delivery-check {
   display: flex;
@@ -149,6 +178,14 @@
 .resume-delivery-check-row dd {
   margin: 0;
   overflow-wrap: anywhere;
+}
+
+/* R-22：带悬停说明的标签（目前只有「投递目标」）。
+   虚线下划线是"这里可以悬停看解释"的通用暗示；没有它，用户不会想到去 hover 一个
+   静态文本。cursor: help 与浏览器对 abbr[title] 的处理一致。 */
+.resume-delivery-check-label {
+  border-bottom: 1px dashed var(--rf-border-strong);
+  cursor: help;
 }
 
 /* ===== 交付原件 ===== */

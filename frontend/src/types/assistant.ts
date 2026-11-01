@@ -126,6 +126,11 @@ export interface AssistantWriteProposal {
    * 已经落库，所以文案是"结果未知、先在数据里核对"，而不是"执行失败"。
    */
   status: "pending" | "approved" | "executed" | "expired" | "rejected" | "failed" | "unknown";
+  /**
+   * 执行结果摘要（只有 executed 之后才有值）：写工具真正做了什么、以及简历文档写入
+   * 自动留下的「助手修改前」撤销点版本名。可选：更早存下的历史消息里没有它。
+   */
+  result_summary?: string;
 }
 
 /** 助手调用过一次工具的记录；写在助手消息的 context 里，供历史回看。 */

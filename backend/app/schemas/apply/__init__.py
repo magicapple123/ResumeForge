@@ -174,6 +174,9 @@ from .queue import (
     ApplyQueueReorderRequest as ApplyQueueReorderRequest,
 )
 from .records import (
+    ApplyFailureCountOut as ApplyFailureCountOut,
+)
+from .records import (
     ApplyRecordBatchDeleteRequest as ApplyRecordBatchDeleteRequest,
 )
 from .records import (
@@ -184,6 +187,12 @@ from .records import (
 )
 from .records import (
     ApplyRecordOut as ApplyRecordOut,
+)
+from .records import (
+    ApplyRecordRetryBatchRequest as ApplyRecordRetryBatchRequest,
+)
+from .records import (
+    ApplyRecordRetryBatchResult as ApplyRecordRetryBatchResult,
 )
 from .records import (
     GreetingPreviewOut as GreetingPreviewOut,
@@ -213,10 +222,13 @@ __all__ = [
     "ApplyQueueItemUpdate",
     "ApplyQueueListOut",
     "ApplyQueueReorderRequest",
+    "ApplyFailureCountOut",
     "ApplyRecordBatchDeleteRequest",
     "ApplyRecordBatchDeleteResult",
     "ApplyRecordBatchOut",
     "ApplyRecordOut",
+    "ApplyRecordRetryBatchRequest",
+    "ApplyRecordRetryBatchResult",
     "ApplyTaskCreate",
     "ApplyTaskDetailOut",
     "ApplyTaskItemOut",

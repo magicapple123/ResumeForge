@@ -15,9 +15,12 @@ from app.services.resume.format_capabilities import (
     CAPABILITIES,
     CAPABILITY_KEYS,
     FORMATS,
+    NOTE_CODES,
+    capability_notes,
     explain,
     level_of,
     matrix,
+    note_of,
 )
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -45,17 +48,18 @@ def test_levels_are_only_known_values():
 
 
 def test_unknown_format_or_capability_is_not_optimistic():
-    assert level_of("docx", "italic") == "supported"
-    assert level_of("pdf", "italic") == "approx"
+    # #5d：italic 已从能力矩阵移除——查询它一律按"不支持"处理，不给乐观答案。
+    assert level_of("docx", "italic") == "unsupported"
+    assert level_of("pdf", "italic") == "unsupported"
     assert level_of("pdf", "link_clickable") == "unsupported"
-    assert level_of("nope", "italic") == "unsupported"
+    assert level_of("nope", "bold") == "unsupported"
     assert level_of("pdf", "nope") == "unsupported"
-    assert "PDF" in explain("pdf", "italic")
+    assert "PDF" in explain("pdf", "link_clickable")
 
 
 def test_matrix_can_be_sliced():
-    sliced = matrix(formats=["pdf"], capabilities=["italic", "bold"])
-    assert sliced == {"pdf": {"italic": "approx", "bold": "supported"}}
+    sliced = matrix(formats=["pdf"], capabilities=["bold", "link_clickable"])
+    assert sliced == {"pdf": {"bold": "supported", "link_clickable": "unsupported"}}
 
 
 def test_w05_document_uses_the_same_capability_keys():
@@ -129,3 +133,36 @@ def test_w05_document_states_the_known_boundaries():
     text = W05_DOC.read_text(encoding="utf-8")
     for keyword in ("D6", "斜体", "链接", "不嵌入", "W14", "W08"):
         assert keyword in text, f"W05 文档缺少已知边界说明：{keyword}"
+
+
+def test_every_non_supported_cell_has_a_reason_code():
+    """R-26：每个近似/不支持格都必须能解释"为什么"。
+
+    这是这张表最容易腐化的地方：新增能力或调整等级时，只要漏写原因码，用户就又会
+    看到一排没有解释的橙/红标签。所以判据是**全覆盖**，不是抽查。
+    """
+    missing = [
+        (fmt, cap)
+        for fmt in FORMATS
+        for cap in CAPABILITY_KEYS
+        if level_of(fmt, cap) != "supported" and not note_of(fmt, cap)
+    ]
+    assert not missing, f"这些格子没有原因码：{missing}"
+
+
+def test_supported_cells_have_no_note_and_codes_are_known():
+    """「支持」格不弹提示；原因码必须是稳定码（不能塞自由文案）。"""
+    for fmt in FORMATS:
+        for cap in CAPABILITY_KEYS:
+            if level_of(fmt, cap) == "supported":
+                assert note_of(fmt, cap) == ""
+            else:
+                assert note_of(fmt, cap) in NOTE_CODES
+
+
+def test_capability_notes_payload_is_scoped_to_requested_formats():
+    notes = capability_notes(["pdf", "nope"])
+    assert set(notes) == {"pdf"}
+    # 只下发需要解释的格子：pdf 的「支持」格不出现。
+    assert "link_clickable" in notes["pdf"]
+    assert "bold" not in notes["pdf"]

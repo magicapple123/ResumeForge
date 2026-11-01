@@ -74,9 +74,13 @@ function SourceRow({
           </Tooltip>
         ) : null}
         <Typography.Text type="secondary" className="source-chain__fingerprint">
-          {pt("provenance.chain.fingerprint", {
-            value: shortFingerprint(source.current_fingerprint),
-          })}
+          <Tooltip title={source.current_fingerprint}>
+            <span>
+              {pt("provenance.chain.fingerprint", {
+                value: shortFingerprint(source.current_fingerprint),
+              })}
+            </span>
+          </Tooltip>
         </Typography.Text>
       </Space>
       {revisionSummary(source) ? (

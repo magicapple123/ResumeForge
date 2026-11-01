@@ -22,7 +22,7 @@
  * 以后模板换配色时，这些简历才跟着变。
  */
 import { ColorPicker, Tooltip, Typography } from "antd";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { CSSProperties, RefObject } from "react";
 import type { ResumeLayout, ResumeTemplateCatalog } from "../../types";
 import type { ResumePreviewHandle } from "../ResumePreview";
@@ -74,6 +74,9 @@ export default function ResumeColorControls({
   onChange,
 }: Props) {
   useLocale();
+  // #12：色板手风琴——一次只展开一行（默认第一行）。四行各挂一排色块时，
+  // 外观组高得离谱且视觉噪音大；**点这一行任意位置**或行头箭头都展开它，展开新行时自动收起旧行。
+  const [openKey, setOpenKey] = useState<ColorKey | null>("accent");
   // 防抖/即时提交要读"提交那一刻"的 layout：与度量控件同一个理由（父组件可能在
   // 这期间改了页数或模板，用旧快照会把那些改动覆盖回去）。
   const layoutRef = useRef(layout);
@@ -154,9 +157,37 @@ export default function ResumeColorControls({
         const canRestore = baseline
           ? formatKeysDiffer(config, baseline.format_config, [key])
           : false;
+        const expanded = openKey === key;
         return (
-          <div className="resume-wb-color-row" key={key}>
+          <div
+            className="resume-wb-color-row"
+            key={key}
+            onClick={(event) => {
+              // 整行可点：不必先找到行头那颗小箭头。取色器 / 色板 / 恢复默认按钮 /
+              // 来源胶囊自己处理点击，冒泡到这一层时直接放行，否则点开取色器会顺手把行收起。
+              const target = event.target;
+              if (!(target instanceof Element)) return;
+              if (
+                target.closest(
+                  ".resume-wb-color-toggle, .resume-wb-swatches, .resume-measure-source, .ant-color-picker",
+                )
+              ) {
+                return;
+              }
+              setOpenKey(expanded ? null : key);
+            }}
+          >
             <div className="resume-wb-color-head">
+              {/* #12：行头箭头 = 展开该行色板（一次只展开一行）；整行点击与它同义。 */}
+              <button
+                type="button"
+                className="resume-wb-color-toggle"
+                aria-expanded={expanded}
+                aria-label={t("workbench.param.paletteAria", { label })}
+                onClick={() => setOpenKey(expanded ? null : key)}
+              >
+                {expanded ? "▾" : "▸"}
+              </button>
               {/* 双击标题恢复默认：与滑杆那几行同一套手势（键盘侧 Enter / 空格）。 */}
               <Tooltip title={t("workbench.param.reset")}>
                 <span
@@ -177,14 +208,15 @@ export default function ResumeColorControls({
               <ColorPicker
                 size="small"
                 disabled={disabled}
-                value={current ?? undefined}
+                // 无覆盖时显示中性深灰起步（红斜线占位会被当成"坏了"）；值列如实说「跟随模板」。
+                value={current ?? "#374151"}
                 aria-label={t("workbench.param.colorAria", { label })}
                 // 拖动色轮期间不要提交：`onChangeComplete` 只在选定后触发一次，
                 // 一次取色 = 一次重渲染请求。
                 onChangeComplete={(color) => commit(key, color.toHexString())}
               />
               <Typography.Text type="secondary" className="resume-measure-value">
-                {current ?? "—"}
+                {current ?? t("workbench.color.followTemplate")}
               </Typography.Text>
               <span className={`resume-measure-source${customized ? " is-empty" : ""}`}>
                 {canRestore ? (
@@ -196,25 +228,27 @@ export default function ResumeColorControls({
                 )}
               </span>
             </div>
-            {/* 预设色板：一行 5 个色块，键名说明色相；色值经自定义属性交给 CSS。 */}
-            <div
-              className="resume-wb-swatches"
-              role="group"
-              aria-label={t("workbench.color.palette")}
-            >
-              {PALETTE.map((item) => (
-                <button
-                  key={item.value}
-                  type="button"
-                  className={`resume-wb-swatch${current === item.value ? " is-active" : ""}`}
-                  aria-label={t(item.labelKey)}
-                  aria-pressed={current === item.value}
-                  disabled={disabled}
-                  style={{ "--resume-wb-swatch": item.value } as CSSProperties}
-                  onClick={() => commit(key, item.value)}
-                />
-              ))}
-            </div>
+            {/* 预设色板：手风琴展开行才渲染；色值经自定义属性交给 CSS。 */}
+            {expanded && (
+              <div
+                className="resume-wb-swatches"
+                role="group"
+                aria-label={t("workbench.color.palette")}
+              >
+                {PALETTE.map((item) => (
+                  <button
+                    key={item.value}
+                    type="button"
+                    className={`resume-wb-swatch${current === item.value ? " is-active" : ""}`}
+                    aria-label={t(item.labelKey)}
+                    aria-pressed={current === item.value}
+                    disabled={disabled}
+                    style={{ "--resume-wb-swatch": item.value } as CSSProperties}
+                    onClick={() => commit(key, item.value)}
+                  />
+                ))}
+              </div>
+            )}
           </div>
         );
       })}

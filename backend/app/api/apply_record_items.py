@@ -19,10 +19,14 @@ from ..schemas.apply import (
     ApplyRecordBatchDeleteRequest,
     ApplyRecordBatchDeleteResult,
     ApplyRecordOut,
+    ApplyRecordRetryBatchRequest,
+    ApplyRecordRetryBatchResult,
+    ApplyTaskCreate,
+    ApplyTaskOut,
 )
 from ..schemas.common import Page
 from ..services import trash
-from ..services.apply import apply_service
+from ..services.apply import apply_service, task_runner
 
 router = APIRouter(tags=["apply"])
 
@@ -32,6 +36,7 @@ def list_record_batch_items(
     task_id: int,
     keyword: str = Query(default=""),
     result: str = Query(default="", description="success / failed / skipped"),
+    failure_category: str = Query(default="", description="#39：按失败分类筛选（空 = 不过滤）"),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
     db: Session = Depends(get_db),
@@ -41,9 +46,51 @@ def list_record_batch_items(
     记录可软删：已删的记录不会出现（与 grouped 的口径一致）。
     """
     items, total = apply_service.list_batch_items(
-        db, task_id, keyword=keyword, result=result, page=page, page_size=page_size
+        db,
+        task_id,
+        keyword=keyword,
+        result=result,
+        failure_category=failure_category,
+        page=page,
+        page_size=page_size,
     )
     return Page(items=items, total=total)
+
+
+@router.post("/records/retry-batch", response_model=ApplyRecordRetryBatchResult)
+def retry_batch_records(payload: ApplyRecordRetryBatchRequest, db: Session = Depends(get_db)):
+    """「只重试这 N 条」（#39）：把某批次里命中当前筛选的失败记录一起重投。
+
+    按**筛选条件**收参而不是 record_ids：明细表是服务端分页的，前端手上没有全集；
+    服务端用与 grouped / items 同一套查询重新选，选出的条数与组头显示的
+    retryable_count 一致。
+
+    只选状态为失败的记录（成功/跳过没有需要重投的失败）。选出来的记录里若岗位已被
+    删除（job_id 为空）就跳过——重投需要岗位；一条都重投不了时给 404，不建空批次。
+    """
+    items = apply_service.select_retryable_items(
+        db,
+        payload.task_id,
+        keyword=payload.keyword,
+        result=payload.result,
+        failure_category=payload.failure_category,
+    )
+    if not items:
+        raise HTTPException(status_code=404, detail="该批次里没有命中筛选的失败记录可重投")
+    job_ids = list(dict.fromkeys(item.job_id for item in items if item.job_id is not None))
+    if not job_ids:
+        raise HTTPException(status_code=409, detail="这些记录对应的岗位已被删除，无法重投")
+    try:
+        task = apply_service.create_apply_task(
+            db, ApplyTaskCreate(job_ids=job_ids, use_queue=False)
+        )
+    except apply_service.ApplyServiceError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
+    except task_runner.TaskRunnerError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return ApplyRecordRetryBatchResult(
+        retried=len(job_ids), task=ApplyTaskOut.model_validate(task)
+    )
 
 
 @router.post("/records/batch-delete", response_model=ApplyRecordBatchDeleteResult)

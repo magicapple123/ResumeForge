@@ -194,7 +194,22 @@ class BaseLLMProvider(ABC):
         # R04：把"这次调用发生过"统一上报用量账本。任务名由 HTTP 中间件/后台上下文
         # 给出；没有环境任务时是空操作（llm 层单测直接构造 provider 不写库）。
         from .usage_ledger import record_ambient_usage
+        from .usage_tasks import ambient_scope, ambient_task
 
+        # #35：数据边界审计日志（任务名 + 四字段）。字段缺失时同样落一行，
+        # 便于审计脚本按 missing 筛出"没声明边界的入口"。
+        scope = ambient_scope()
+        logger.info(
+            "llm.call task=%s input_scope=%s masked=%s language=%s budget=%s "
+            "prompt_tokens=%s completion_tokens=%s",
+            ambient_task() or "unknown",
+            scope.get("input_scope", "missing"),
+            scope.get("masked", "missing"),
+            scope.get("language", "missing"),
+            scope.get("budget", "missing"),
+            prompt_tokens,
+            completion_tokens,
+        )
         record_ambient_usage(self)
 
     @abstractmethod

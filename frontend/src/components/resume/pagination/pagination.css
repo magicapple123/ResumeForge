@@ -93,15 +93,82 @@
   overflow-wrap: anywhere;
 }
 
-.resume-section-pagination-row {
+/* ===== R-07：板块开关表（表头化）=====
+ *
+ * 旧形态每行都重复「从新页开始 / 整块不跨页」两个文字标签：13 个板块 = 26 段重复文字，
+ * 把左栏撑成一堵墙，两个开关的列也不对齐（文字长短不一）。现在：
+ * - 行与表头共用同一套 grid 轨道（`minmax(0,1fr) 44px`）→ 开关天然同列；
+ * - 列名只在表头写一次，且 `aria-hidden`（语义由每行开关承载）；
+ * - 板块名 `min-width: 0` + 省略号（R1/R3）：360px 下不折行、不横向裁切。
+ */
+.resume-section-pagination-table {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
   min-width: 0;
+}
+
+.resume-section-pagination-header,
+.resume-section-pagination-row {
+  display: grid;
+  /* #1：板块级「不跨页」已删（渲染端从未消费，死开关）——只剩名称 + 断页两列。 */
+  grid-template-columns: minmax(0, 1fr) 44px;
+  align-items: center;
+  column-gap: 8px;
+  min-width: 0;
+}
+
+.resume-section-pagination-header {
+  padding-bottom: 2px;
+  color: var(--rf-text-tertiary);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.resume-section-pagination-row {
   font-size: 12px;
   line-height: 20px;
 }
 
-.resume-section-pagination-name {
+.resume-section-pagination-col-name {
   min-width: 0;
+}
+
+.resume-section-pagination-col-flag {
+  min-width: 0;
+  text-align: center;
   overflow-wrap: anywhere;
+}
+
+.resume-section-pagination-name {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+/* 省略号必须配 title（R3）：完整板块名挂在 name 单元格的 title 上。 */
+.resume-section-pagination-name-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 已设置断页的板块：5px 圆点（不占 1fr 的剩余宽度，固定 5px）。 */
+.resume-section-pagination-dot {
+  flex: none;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--rf-info);
+}
+
+.resume-section-pagination-switch {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
 }
 
 /* 汇总区：与板块开关之间用一条细线分层，避免"两个开关 + 芯片"糊成一片。 */
@@ -223,9 +290,12 @@
   line-height: 18px;
 }
 
+/* #2：格子必须等宽——第 1 页只有页码、末页多出「末页」「占用 N%」两行字，
+ * flex 的 auto 基准让字多的那格更宽（实测 70.0px vs 81.9px）。改成网格：一列一个
+ * 格子，列宽由容器均分（每列同宽 64px 起），页数再多也只是换行，不会出现"某格更宽"。 */
 .resume-page-thumbnails-list {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(64px, 1fr));
   gap: 4px;
   margin: 0;
   padding: 0;
@@ -236,7 +306,8 @@
   display: flex;
   flex-direction: column;
   gap: 1px;
-  min-width: 56px;
+  min-width: 0;
+  overflow-wrap: anywhere;
   border: 1px solid var(--rf-border);
   border-radius: 6px;
   padding: 3px 6px;

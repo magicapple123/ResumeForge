@@ -174,7 +174,7 @@ def test_chat_migration_builds_history_tables_and_cascades(tmp_path):
         with migration_engine.connect() as connection:
             assert (
                 connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one()
-                == "0069_profile_field_placement"
+                == "0073_apply_item_failure_taxonomy"
             )
 
         with Session(migration_engine) as session:

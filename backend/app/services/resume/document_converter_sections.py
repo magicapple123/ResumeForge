@@ -17,12 +17,15 @@ from typing import Any
 
 from ...schemas.resume_document import (
     AuthorsItem,
+    BodyStyle,
     FieldItem,
     FieldSource,
+    Format,
     ListItem,
     Placement,
     ResumeItem,
     TextItem,
+    Wrap,
 )
 from ...schemas.resume_research import ResumeAuthor
 from . import document_catalog as catalog
@@ -100,11 +103,11 @@ def _field_item(
     value: Any,
     *,
     placement: Placement | None = None,
-    fmt: str | None = None,
+    fmt: Format | None = None,
     label: str = "",
     show_label: bool | None = None,
-    wrap: str | None = None,
-    body_style: str | None = None,
+    wrap: Wrap | None = None,
+    body_style: BodyStyle | None = None,
     scope: str = "",
     report: ConversionReport,
 ) -> FieldItem | None:
@@ -162,6 +165,9 @@ def _list_item(
     spec = catalog.field_spec(section_key, item_key)
     resolved: Placement = placement or (spec.default_placement if spec is not None else "trail")
     report.fields_recognized += 1
+    # 注意：ListItem / AuthorsItem **没有** source 字段（见 schemas/resume_document.py：
+    # FieldSource 只挂在 FieldItem 上）。这里以前传 source= 是被 extra="ignore" 静默吃掉的，
+    # 不要以为"列表/作者项也记了来源"。
     return ListItem(
         id=stable_object_id("it_", section_key, scope, item_key, "list"),
         key=item_key,
@@ -170,7 +176,6 @@ def _list_item(
         placement=resolved,
         join=spec.join if spec is not None else "semicolon",
         show_label=resolved not in _TITLE_OR_META,
-        source=_source(section_key, item_key),
     )
 
 
@@ -199,13 +204,13 @@ def _authors_item(
     if not cleaned:
         return None
     report.fields_recognized += 1
+    # 同上：AuthorsItem 没有 source 字段（作者的来源沿用条目级 source）。
     return AuthorsItem(
         id=stable_object_id("it_", section_key, scope, item_key, "authors"),
         key=item_key,
         authors=cleaned,
         placement="trail",
         show_label=True,
-        source=_source(section_key, item_key),
     )
 
 

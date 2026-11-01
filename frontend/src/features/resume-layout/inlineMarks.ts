@@ -99,10 +99,7 @@ export function toggleBoldMark(text: string, range: InlineRange): InlineEdit {
   return toggleInlineMark(text, range, "**");
 }
 
-/** 斜体（`*`）：成对、不跨字段、不嵌套；落单星号原样保留。 */
-export function toggleItalicMark(text: string, range: InlineRange): InlineEdit {
-  return toggleInlineMark(text, range, "*");
-}
+// #5d：斜体标记的写入入口已移除；单星号在解析侧仍按"去标记"剥壳（存量内容不冒裸星号）。
 
 /**
  * 把选区变成链接：`[文字](url)`。

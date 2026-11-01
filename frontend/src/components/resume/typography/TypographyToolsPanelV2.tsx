@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * v2 局部排版工具容器（task-12）：对象级排版 / 文字级别 / 格式刷 / 多选批量 / 同类段落。
+ * v2 局部排版工具容器（task-12）：对象级排版 / 文字级别 / 多选批量 / 同类段落。
+ * （格式刷在 2026-10-31 审计 R-19 删除：与「多选批量」场景重复。）
  *
  * ## 自包含
  *
@@ -15,7 +16,7 @@
  *
  * ## 选择语义
  *
- * - `selectedPath`（宿主控制）：当前聚焦条目 → 对象面板、格式刷来源；
+ * - `selectedPath`（宿主控制）：当前聚焦条目 → 对象面板；
  * - `multiSelectedPaths`（可选，宿主控制）：批量目标；不传时由本组件的选择列表自管；
  * - 多选路径里的 header / 板块 / 失效路径会被忽略，不会把非法对象 id 写进 format_config。
  *
@@ -39,8 +40,6 @@ import {
 } from "../../../features/resume-layout/entryStyleScopes";
 import type { ResumeRoleKey } from "../../../features/resume-layout/styleCatalog";
 import {
-  explicitObjectProps,
-  readObjectStyle,
   readStyleDomains,
   resolvedPropValue,
   roleBaseRatio,
@@ -51,13 +50,10 @@ import {
   templateRoleDefaults,
 } from "../../../features/resume-layout/styleCatalogExtensions";
 import {
-  applyPainterPatch,
   freezeObjectRoleStyle,
   freezeObjectStyle,
-  painterPatch,
-} from "../../../features/resume-layout/stylePainter";
+} from "../../../features/resume-layout/styleFreeze";
 import ObjectStylePanel from "./ObjectStylePanel";
-import FormatPainterButton from "./FormatPainterButton";
 import MultiStyleBar from "./MultiStyleBar";
 import RoleStylePanel from "./RoleStylePanel";
 import TextLevelBar from "./TextLevelBar";
@@ -130,24 +126,14 @@ export default function TypographyToolsPanelV2({
     [document, fieldCatalog],
   );
   const [internalMultiIds, setInternalMultiIds] = useState<string[]>([]);
-  const [painter, setPainter] = useState<ResumeRoleStyle | null>(null);
   const controlledMulti = multiSelectedPaths !== undefined;
   const multiIds = controlledMulti ? entryIdsFromPaths(multiSelectedPaths) : internalMultiIds;
   const multiOptions = optionsForIds(options, multiIds);
   const focused = options.find((option) => option.id === entryIdFromPath(selectedPath)) ?? null;
   const domains = readStyleDomains(layout.format_config);
-  const sourcePatch = painterPatch(domains, focused?.id ?? null);
   // Q12：条目内容（无关项判断）与纸面路径推出的默认作用范围。
   const focusedEntry = findEntryById(document, focused?.id);
   const pickedScope = scopeForDocumentPath(document, selectedPath);
-  // Q14：格式刷按钮要显示"可复制几项、哪几项"（复制的是对象层显式差异）。
-  const painterSourceProps = focused
-    ? explicitObjectProps(readObjectStyle(domains, focused.id))
-    : [];
-  // 格式刷目标：多选条目里排除来源本身（把来源再刷一遍是无声无操作）。
-  const painterTargetIds = multiOptions
-    .map((option) => option.id)
-    .filter((id) => id !== focused?.id);
   const styleCatalog = readStyleCatalog(catalog ?? undefined);
   const defaults = templateRoleDefaults(styleCatalog, layout.template, OBJECT_ROLE);
   const baseRatio = roleBaseRatio(defaults);
@@ -217,16 +203,6 @@ export default function TypographyToolsPanelV2({
       ),
     });
     message.success(t("typography.painter.frozen"));
-  };
-
-  const applyPainter = () => {
-    if (!painter || painterTargetIds.length === 0) return;
-    commit({
-      ...layout,
-      format_config: applyPainterPatch(layout.format_config, painterTargetIds, painter),
-    });
-    message.success(t("typography.painter.applied", { count: painterTargetIds.length }));
-    setPainter(null);
   };
 
   const roleSection = includeRoleStyles ? (
@@ -319,6 +295,7 @@ export default function TypographyToolsPanelV2({
           disabled={disabled}
           pickedPath={selectedPath}
           onChange={commit}
+          onClearBatch={focused ? () => setMulti([]) : undefined}
           onApplied={({ level, count }) =>
             message.success(
               level
@@ -340,34 +317,6 @@ export default function TypographyToolsPanelV2({
             )
           }
         />
-      </section>
-
-      <section
-        className="resume-typography-panel"
-        aria-label={t("typography.tools.sectionPainter")}
-      >
-        <Typography.Text strong>{t("typography.tools.sectionPainter")}</Typography.Text>
-        {/* Q14：先说明这条流程只复制局部排版、不动正文，用户不用点了才知道。 */}
-        <Typography.Text type="secondary">{t("typography.painter.hint")}</Typography.Text>
-        <FormatPainterButton
-          sourceName={focused?.label}
-          hasSource={Boolean(focused)}
-          hasDiff={sourcePatch !== null}
-          sourceProps={painterSourceProps}
-          armed={painter !== null}
-          targetCount={painterTargetIds.length}
-          disabled={disabled}
-          onArm={() => setPainter(sourcePatch)}
-          onCancel={() => setPainter(null)}
-          onApply={applyPainter}
-        />
-        {painter ? (
-          <Typography.Text type="secondary">
-            {painterTargetIds.length > 0
-              ? t("typography.tools.targets", { count: painterTargetIds.length })
-              : t("typography.tools.targetsHint")}
-          </Typography.Text>
-        ) : null}
       </section>
 
       <section className="resume-typography-panel" aria-label={t("typography.tools.sectionBatch")}>

@@ -10,16 +10,11 @@
  * 面板只把新文档交给宿主的 `onChange`——历史 / 保存仍由工作台统一负责。
  */
 import { Button, Input, Tooltip } from "antd";
-import {
-  ArrowDownOutlined,
-  ArrowUpOutlined,
-  NodeCollapseOutlined,
-  SearchOutlined,
-} from "@ant-design/icons";
-import { useEffect, useMemo, useRef } from "react";
+import { ArrowDownOutlined, ArrowUpOutlined, SearchOutlined } from "@ant-design/icons";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import { useLocale } from "../../../i18n/i18nContext";
-import { t } from "../../../i18n";
-import type { MessageKey } from "../../../i18n";
+import { t, translate } from "../../../i18n";
+import type { MessageKey, MessageParams } from "../../../i18n";
 import type {
   DocumentFieldCatalog,
   HeaderPlacement,
@@ -27,11 +22,14 @@ import type {
   ResumeDocument,
 } from "../../../types/resumeDocument";
 import type { StructureNode } from "../../../features/resume-document/summarize";
-import { fieldCatalogLabelResolver } from "../../../features/resume-document/fieldCatalog";
+import { HEADER_GROUP_KEY } from "../../../features/resume-document/summarize";
+import {
+  enumLabelOf,
+  fieldCatalogLabelResolver,
+} from "../../../features/resume-document/fieldCatalog";
 import { reorderSections } from "../../../features/resume-document/mutations";
 import { parseDocumentPath } from "../../../features/resume-document/paths";
 import { sectionDisplayLabel, sectionKeyLabel } from "../sectionLabels";
-import { entryIdFromPath, entryIdsFromPaths } from "../typography/v2Selection";
 import SectionOrderControl from "../SectionOrderControl";
 import StructureRows from "./StructureRows";
 import { useStructurePanel } from "./useStructurePanel";
@@ -105,12 +103,95 @@ export default function StructurePanel({
   multiSelectedPaths = [],
   onMultiSelectedPathsChange,
 }: StructurePanelProps) {
-  useLocale();
+  const locale = useLocale();
+  /**
+   * 绑定当前语言的取文案函数：这几个标签回调都在 memo 里，只有 `tr` 的引用随语言变化，
+   * 依赖链才真实（直接用模块级 `t()` 时 `locale` 会被 lint 判成无用依赖）。
+   */
+  const tr = useCallback(
+    (key: MessageKey, params?: MessageParams) => translate(locale, key, params),
+    [locale],
+  );
   const treeRef = useRef<HTMLDivElement | null>(null);
   const resolveFieldLabel = useMemo(() => fieldCatalogLabelResolver(fieldCatalog), [fieldCatalog]);
+  // #11a：枚举字段值显示本地化标签（工作类型 full_time → 全职；无匹配回落原值）。
+  // 用 tr（随 locale 重建）保证切语言后树里枚举标签跟着换。
+  const resolveEnumValue = useCallback(
+    (sectionKey: string, fieldKey: string, value: string) =>
+      enumLabelOf(null, sectionKey, fieldKey, value, tr),
+    [tr],
+  );
   // U7：选择状态归宿主，面板只保留 Shift 连选的"最后点击条目"锚点（当前树视图的交互状态）。
   const multiAnchorRef = useRef<string | null>(null);
   const multiEnabled = Boolean(onMultiSelectedPathsChange) && !readOnly;
+
+  /** 非分组行的显示名（板块 / 条目 / 字段）。 */
+  const labelOf = useCallback(
+    (node: StructureNode): string => {
+      if (node.kind === "section") {
+        // 自建板块 title 在文档里；没有 title 时退回「自建板块」而不是 custom:uuid。
+        const customTitle = node.label && node.label !== node.sectionKey ? node.label : "";
+        return sectionKeyLabel(node.sectionKey ?? "", customTitle);
+      }
+      const label = node.label.trim();
+      if (label) return label;
+      if (node.kind === "entry") return tr("structure.badge.untitledEntry");
+      if (node.kind === "item") return tr("structure.badge.untitledItem");
+      return "";
+    },
+    [tr],
+  );
+  /** 分组行的显示名（位置名 / R-09 之后的「基本信息」）。 */
+  const placementLabelOf = useCallback(
+    (node: StructureNode): string => {
+      // R-09：页眉合成**一个**「基本信息」分组（key === `header`）。它的 key 与字段
+      // `header.<id>` 是前缀关系而不是同键，所以这里按整键精确判定，不会误伤字段行。
+      if (node.key === HEADER_GROUP_KEY) return tr("structure.node.header");
+      if (node.headerPlacement) return tr(HEADER_PLACEMENT_LABEL_KEYS[node.headerPlacement]);
+      if (node.placement) return tr(PLACEMENT_LABEL_KEYS[node.placement]);
+      return node.label;
+    },
+    [tr],
+  );
+  /**
+   * 搜索文案（R-09）：行上看得见的字 + 行内 Tooltip 的字段名 + 位置名。
+   *
+   * 页眉合并成一个「基本信息」行之后，位置名（联系方式 / 姓名行 …）不再单独占一行，
+   * 只有把它并进搜索文案，"联系方式" 才还能找到那一组字段（就是本次要补的能力）。
+   */
+  const displayLabelOf = useCallback(
+    (node: StructureNode): string => {
+      const rowLabel = node.kind === "group" ? placementLabelOf(node) : labelOf(node);
+      const placementText = node.headerPlacement
+        ? tr(HEADER_PLACEMENT_LABEL_KEYS[node.headerPlacement])
+        : node.placement
+          ? tr(PLACEMENT_LABEL_KEYS[node.placement])
+          : "";
+      return [rowLabel, node.fieldLabel ?? "", placementText].filter(Boolean).join(" ");
+    },
+    [labelOf, placementLabelOf, tr],
+  );
+
+  // U7 多选：宿主持有的路径集合 + 出口打包给 hook。Shift 连选的区间计算只在 hook 里
+  // 做一次（Shift 点击与 Shift + ↑↓ 两个入口共用），面板不再各写一份。
+  // 锚点 ref 只由面板读写（hook 经 getAnchor / setAnchor 转手），避免跨组件直接改对方的 ref。
+  const getAnchor = useCallback(() => multiAnchorRef.current, []);
+  const setAnchor = useCallback((path: string | null) => {
+    multiAnchorRef.current = path;
+  }, []);
+  const multiSelect = useMemo(
+    () =>
+      multiEnabled && onMultiSelectedPathsChange
+        ? {
+            paths: multiSelectedPaths,
+            onChange: onMultiSelectedPathsChange,
+            getAnchor,
+            setAnchor,
+          }
+        : null,
+    [getAnchor, multiEnabled, multiSelectedPaths, onMultiSelectedPathsChange, setAnchor],
+  );
+
   const api = useStructurePanel({
     treeRef,
     document,
@@ -123,6 +204,9 @@ export default function StructurePanel({
     onNotify,
     readOnly,
     fieldLabel: resolveFieldLabel,
+    enumValue: resolveEnumValue,
+    displayLabel: displayLabelOf,
+    multiSelect,
   });
 
   // Shift 连选的"最后点击条目"：普通点击/Shift 点击都会经 useStructurePanel 更新 selectedPath，
@@ -133,65 +217,6 @@ export default function StructurePanel({
     if (parsed?.kind === "entry") multiAnchorRef.current = selectedPath ?? null;
   }, [multiEnabled, selectedPath]);
 
-  /** 勾选框变化：新增的条目成为下一次 Shift 连选的锚点（取消锚点自身则丢弃过期锚点）。 */
-  const handleMultiSelectedPathsChange = (paths: string[]) => {
-    if (!onMultiSelectedPathsChange) return;
-    const current = new Set(multiSelectedPaths);
-    const added = paths.find((path) => !current.has(path));
-    if (added) multiAnchorRef.current = added;
-    else {
-      const removed = [...current].find((path) => !paths.includes(path));
-      if (removed && removed === multiAnchorRef.current) multiAnchorRef.current = null;
-    }
-    onMultiSelectedPathsChange(paths);
-  };
-
-  /**
-   * Shift 连选：在**可见条目行顺序**上取「最后点击条目 → 当前条目」区间并并入已有选择。
-   * 只合并不替换：批量样式是增量目标集合，Shift 不应悄悄丢掉之前勾选的条目。
-   */
-  const handleShiftSelect = (node: StructureNode) => {
-    if (!multiEnabled || !onMultiSelectedPathsChange || !node.path) return;
-    const entryPaths: string[] = [];
-    for (const row of api.rows) {
-      if (row.node.kind === "entry" && row.node.path) entryPaths.push(row.node.path);
-    }
-    const currentIndex = entryPaths.indexOf(node.path);
-    if (currentIndex < 0) return;
-    const anchorIndex = multiAnchorRef.current ? entryPaths.indexOf(multiAnchorRef.current) : -1;
-    const from = anchorIndex < 0 ? currentIndex : Math.min(anchorIndex, currentIndex);
-    const to = anchorIndex < 0 ? currentIndex : Math.max(anchorIndex, currentIndex);
-    // 路径先经既有 helper 清洗（只认合法条目路径），再回到可见行里的规范路径。
-    const pathById = new Map<string, string>();
-    for (const path of entryPaths) {
-      const id = entryIdFromPath(path);
-      if (id) pathById.set(id, path);
-    }
-    const next = new Set(multiSelectedPaths);
-    for (const id of entryIdsFromPaths(entryPaths.slice(from, to + 1))) {
-      const path = pathById.get(id);
-      if (path) next.add(path);
-    }
-    onMultiSelectedPathsChange([...next]);
-  };
-
-  const labelOf = (node: StructureNode): string => {
-    if (node.kind === "section") {
-      // 自建板块 title 在文档里；没有 title 时退回「自建板块」而不是 custom:uuid。
-      const customTitle = node.label && node.label !== node.sectionKey ? node.label : "";
-      return sectionKeyLabel(node.sectionKey ?? "", customTitle);
-    }
-    const label = node.label.trim();
-    if (label) return label;
-    if (node.kind === "entry") return t("structure.badge.untitledEntry");
-    if (node.kind === "item") return t("structure.badge.untitledItem");
-    return "";
-  };
-  const placementLabelOf = (node: StructureNode): string => {
-    if (node.headerPlacement) return t(HEADER_PLACEMENT_LABEL_KEYS[node.headerPlacement]);
-    if (node.placement) return t(PLACEMENT_LABEL_KEYS[node.placement]);
-    return node.label;
-  };
   const isMaterialOnly = (node: StructureNode): boolean => {
     if (node.kind !== "item" || !isMaterialOnlyField) return false;
     const key = keyOfNode(document, node);
@@ -222,31 +247,23 @@ export default function StructurePanel({
           </div>
         </div>
         <div className="rf-structure-panel-tools">
-          <Tooltip title={t("structure.action.expandAll")}>
+          {/* R-01：原来三个按钮（展开全部 / 收起全部 / 收起所有条目）合成一个开关。
+              图标与 aria-label 都随状态走：全展开时是「收起全部」，否则是「展开全部」。 */}
+          <Tooltip
+            title={
+              api.allExpanded ? t("structure.action.collapseAll") : t("structure.action.expandAll")
+            }
+          >
             <Button
               type="text"
               size="small"
-              aria-label={t("structure.action.expandAll")}
-              icon={<ArrowDownOutlined />}
-              onClick={() => api.toggleAll(true)}
-            />
-          </Tooltip>
-          <Tooltip title={t("structure.action.collapseAll")}>
-            <Button
-              type="text"
-              size="small"
-              aria-label={t("structure.action.collapseAll")}
-              icon={<ArrowUpOutlined />}
-              onClick={() => api.toggleAll(false)}
-            />
-          </Tooltip>
-          <Tooltip title={t("structure.action.collapseEntries")}>
-            <Button
-              type="text"
-              size="small"
-              aria-label={t("structure.action.collapseEntries")}
-              icon={<NodeCollapseOutlined />}
-              onClick={() => api.collapseEntries()}
+              aria-label={
+                api.allExpanded
+                  ? t("structure.action.collapseAll")
+                  : t("structure.action.expandAll")
+              }
+              icon={api.allExpanded ? <ArrowUpOutlined /> : <ArrowDownOutlined />}
+              onClick={() => api.toggleAll(!api.allExpanded)}
             />
           </Tooltip>
           {!readOnly ? (
@@ -301,13 +318,16 @@ export default function StructurePanel({
             labelOf={labelOf}
             placementLabelOf={placementLabelOf}
             isMaterialOnly={isMaterialOnlyField ? isMaterialOnly : undefined}
-            multiSelectedPaths={multiSelectedPaths}
-            onMultiSelectedPathsChange={multiEnabled ? handleMultiSelectedPathsChange : undefined}
-            onShiftSelect={multiEnabled ? handleShiftSelect : undefined}
           />
         )}
       </div>
-      <div className="rf-structure-hint">{t("structure.drag.keyboardHint")}</div>
+      {/* R-12：勾选框已删（它是 Shift 连选的唯一可发现入口），提示里补上键盘/鼠标等价操作。 */}
+      <div className="rf-structure-hint">
+        <span>{t("structure.drag.keyboardHint")}</span>
+        {multiEnabled ? (
+          <span className="rf-structure-hint-extra">{t("structure.multi.selectHint")}</span>
+        ) : null}
+      </div>
     </div>
   );
 }

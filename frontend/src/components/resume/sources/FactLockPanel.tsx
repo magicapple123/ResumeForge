@@ -5,6 +5,12 @@
  * **锁的是 AI 行为，不是用户的手**（契约 §3）：界面文案必须说清这一点，否则用户会以为
  * "锁定后自己也不能改"。冲突提示（409 fact_lock_conflict）由宿主把业务码传进来，
  * 面板只负责把它翻译成"发生了什么 + 怎么办"。
+ *
+ * ## 下拉控件归类（#20 审计）
+ *
+ * 本面板的「锁的类型」是**必填表单类**下拉，判定依据是"创建事实锁时它决定写入哪一类锁定、
+ * 没有它请求就不成立"，所以：有默认值（`initialValues.kind="name"`）、**不给 allowClear**、
+ * 标签带必填 *。不要按"筛选类"照抄 allowClear：清空后提交的锁会缺 kind。
  */
 import { DeleteOutlined, LockOutlined } from "@ant-design/icons";
 import { Alert, Button, Col, Form, Input, Row, Select, Space, Table, Tag, Typography } from "antd";
@@ -176,12 +182,18 @@ export default function FactLockPanel({
         >
           <Row gutter={8} align="bottom">
             <Col xs={24} md={8}>
+              {/* #20：必填表单类下拉——required 让标签渲染必填 *，且**不加 allowClear**。 */}
               <Form.Item
                 name="kind"
                 label={pt("provenance.lock.kind")}
                 rules={[{ required: true }]}
+                required
               >
-                <Select options={kindOptions} aria-label={pt("provenance.lock.kind")} />
+                <Select
+                  options={kindOptions}
+                  aria-label={pt("provenance.lock.kind")}
+                  aria-required
+                />
               </Form.Item>
             </Col>
             <Col xs={24} md={10}>

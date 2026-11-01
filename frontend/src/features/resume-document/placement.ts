@@ -113,6 +113,9 @@ export function moveItem(
   const moved = withItemPlacement(item, nextPlacement);
 
   // 目标位置组在"摘掉之后"的数组里的下标：插入点取该组第 toIndex 个元素之前。
+  // 注意：`toIndex` 是**摘除后**的组内下标（键盘等价移动 keyboardMoveTarget 依赖这一
+  // 语义：toIndex=当前可见下标±1 恰好换位）。鼠标拖放的"可见下标"换算在调用方做
+  // （EntryCard 的落点计算把"摘除自身"的偏移补回去）——两套语义不要混用。
   const groupIndexes = remaining.flatMap((candidate, index) =>
     getItemPlacement(candidate) === nextPlacement ? [index] : [],
   );

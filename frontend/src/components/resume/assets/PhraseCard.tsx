@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * 一条表达资产（W17 / D16）的卡片：正文 + 类型/语言/来源徽标 + 岗位标签 + 三个动作。
+ * 一条表达资产（W17 / D16）的卡片：正文 + 四维元信息（类型/语言/来源/使用）+ 岗位标签 + 动作。
  *
  * ## 边界
  *
@@ -14,9 +14,22 @@
  *
  * 2026-10-25（任务 C2）：排版从内联样式搬进 `assets.css`（正文 13px/1.6、标签行与动作行
  * 间距 8px、动作右对齐）。回调、aria-label 与文案 key 一律不动。
+ *
+ * 2026-11-01（#19）：
+ * - 元信息补维度前缀：类型 / 语言 / 来源 / 已用于 N 份简历（"未标注/用过"这类裸词读不出维度）；
+ * - 复制 / 编辑 / 删除收进「⋯」菜单（antd Dropdown 自带 Enter 打开、方向键选择、Esc 关闭），
+ *   每条动作的 aria-label 保留；插入仍是独立主按钮（它才是这一屏的主动作）。
  */
-import { CopyOutlined, DeleteOutlined, DownloadOutlined, EditOutlined } from "@ant-design/icons";
-import { Button, Tag, Tooltip } from "antd";
+import {
+  CopyOutlined,
+  DeleteOutlined,
+  DownloadOutlined,
+  EditOutlined,
+  MoreOutlined,
+} from "@ant-design/icons";
+import { useState } from "react";
+import { Button, Dropdown, Tag, Tooltip } from "antd";
+import type { MenuProps } from "antd";
 import { stripMarkers } from "../../resume-preview/richText";
 import { at } from "../../../features/resume-assets/i18n";
 import { phraseSourceKind, type ResumePhrase } from "../../../features/resume-assets/types";
@@ -28,10 +41,12 @@ interface Props {
   index: number;
   /** 当前有没有可插入的简历（没有时按钮禁用并说明原因）。 */
   insertEnabled: boolean;
+  /** 禁用插入的原因（tooltip 文案由宿主给：没选中位置 / 有未保存修改是两回事）。 */
+  insertDisabledReason?: string;
   onInsert?: (phrase: ResumePhrase) => void;
   onRequestDelete?: (phrase: ResumePhrase) => void;
   onCopy?: (phrase: ResumePhrase) => void;
-  /** 打开编辑弹窗（正文/类型/语言/岗位标签）；不传 = 不渲染入口。 */
+  /** 打开编辑弹窗（正文/类型/语言/岗位标签）；不传 = 菜单里不出现编辑项。 */
   onEdit?: (phrase: ResumePhrase) => void;
 }
 
@@ -53,16 +68,11 @@ function sourceLabel(phrase: ResumePhrase): string {
   return at("assets.source.manual");
 }
 
-function usageLabel(phrase: ResumePhrase): string {
-  return phrase.usage_count > 0
-    ? at("assets.usage", { count: phrase.usage_count })
-    : at("assets.usage.never");
-}
-
 export default function PhraseCard({
   phrase,
   index,
   insertEnabled,
+  insertDisabledReason,
   onInsert,
   onRequestDelete,
   onCopy,
@@ -70,67 +80,106 @@ export default function PhraseCard({
 }: Props) {
   useLocale();
   const plainText = stripMarkers(phrase.text);
+  // #19：四个维度必须能被读出来（"未标注"要说清标的是语言，"用过"要给单位）。
+  const meta = [
+    at("assets.meta.kind", { value: kindLabel(phrase) }),
+    at("assets.meta.language", { value: languageLabel(phrase) }),
+    at("assets.meta.source", { value: sourceLabel(phrase) }),
+    at("assets.meta.usage", { count: phrase.usage_count }),
+  ].join(" · ");
+
+  const menuItems: MenuProps["items"] = [];
+  if (onEdit)
+    menuItems.push({ key: "edit", icon: <EditOutlined />, label: at("assets.action.edit") });
+  if (onCopy)
+    menuItems.push({ key: "copy", icon: <CopyOutlined />, label: at("assets.action.copy") });
+  if (onRequestDelete) {
+    menuItems.push({
+      key: "delete",
+      icon: <DeleteOutlined />,
+      label: at("assets.action.delete"),
+      danger: true,
+    });
+  }
+  const handleMenuClick: MenuProps["onClick"] = ({ key }) => {
+    if (key === "edit") onEdit?.(phrase);
+    else if (key === "copy") onCopy?.(phrase);
+    else if (key === "delete") onRequestDelete?.(phrase);
+  };
+  // 「⋯」菜单的键盘层级（#19）：Enter 打开后焦点仍在触发按钮上，必须把 ↓/↑ 交给菜单，
+  // 否则"方向键选择"只有鼠标能用；Esc 只关菜单并拦住冒泡（别让工作台的 Esc 关掉整窗）。
+  const [menuOpen, setMenuOpen] = useState(false);
+  const handleMoreKeyDown = (event: React.KeyboardEvent) => {
+    if (!menuOpen) return;
+    if (event.key === "Escape") {
+      event.preventDefault();
+      event.stopPropagation();
+      setMenuOpen(false);
+      return;
+    }
+    if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
+    const menu = globalThis.document.querySelector<HTMLElement>(
+      ".resume-phrase-card-menu .ant-dropdown-menu",
+    );
+    if (!menu) return;
+    event.preventDefault();
+    menu.focus();
+  };
+
   return (
     <div data-phrase-id={phrase.id} className="resume-phrase-card">
       <p className="resume-phrase-card-text">{plainText}</p>
-      <div className="resume-phrase-card-tags">
-        <Tag>{kindLabel(phrase)}</Tag>
-        <Tag>{languageLabel(phrase)}</Tag>
-        <Tag color="blue">{sourceLabel(phrase)}</Tag>
-        {phrase.job_tags.map((tag) => (
-          <Tag key={tag} color="geekblue">
-            {tag}
-          </Tag>
-        ))}
-        <span className="resume-phrase-card-usage">{usageLabel(phrase)}</span>
-      </div>
+      <div className="resume-phrase-card-meta">{meta}</div>
+      {phrase.job_tags.length > 0 ? (
+        <div className="resume-phrase-card-tags">
+          {phrase.job_tags.map((tag) => (
+            <Tag key={tag} color="geekblue">
+              {tag}
+            </Tag>
+          ))}
+        </div>
+      ) : null}
       <div className="resume-phrase-card-actions">
-        <Tooltip title={insertEnabled ? undefined : at("assets.action.insertUnavailable")}>
-          <Button
-            size="small"
-            type="primary"
-            ghost
-            icon={<DownloadOutlined />}
-            disabled={!insertEnabled || !onInsert || undefined}
-            aria-label={at("assets.action.insertAria", { index })}
-            onClick={() => onInsert?.(phrase)}
-          >
-            {at("assets.action.insert")}
-          </Button>
+        <Tooltip
+          title={
+            insertEnabled
+              ? undefined
+              : insertDisabledReason || at("assets.action.insertUnavailable")
+          }
+        >
+          {/* antd 的 disabled Button 不派发鼠标事件；套一层 span 才能让 tooltip 有 hover 目标。 */}
+          <span className="resume-phrase-card-insert">
+            <Button
+              size="small"
+              type="primary"
+              ghost
+              icon={<DownloadOutlined />}
+              disabled={!insertEnabled || !onInsert || undefined}
+              aria-label={at("assets.action.insertAria", { index })}
+              onClick={() => onInsert?.(phrase)}
+            >
+              {at("assets.action.insert")}
+            </Button>
+          </span>
         </Tooltip>
-        {onCopy ? (
-          <Tooltip title={at("assets.action.copy")}>
+        {menuItems.length > 0 ? (
+          <Dropdown
+            menu={{ items: menuItems, onClick: handleMenuClick }}
+            trigger={["click"]}
+            placement="bottomRight"
+            classNames={{ root: "resume-phrase-card-menu" }}
+            open={menuOpen}
+            onOpenChange={setMenuOpen}
+          >
             <Button
               size="small"
               type="text"
-              icon={<CopyOutlined />}
-              aria-label={at("assets.action.copyAria", { index })}
-              onClick={() => onCopy(phrase)}
+              icon={<MoreOutlined />}
+              aria-label={at("assets.action.moreAria", { index })}
+              aria-haspopup="menu"
+              onKeyDown={handleMoreKeyDown}
             />
-          </Tooltip>
-        ) : null}
-        {onEdit ? (
-          <Tooltip title={at("assets.action.edit")}>
-            <Button
-              size="small"
-              type="text"
-              icon={<EditOutlined />}
-              aria-label={at("assets.action.editAria", { index })}
-              onClick={() => onEdit(phrase)}
-            />
-          </Tooltip>
-        ) : null}
-        {onRequestDelete ? (
-          <Tooltip title={at("assets.action.delete")}>
-            <Button
-              size="small"
-              type="text"
-              danger
-              icon={<DeleteOutlined />}
-              aria-label={at("assets.action.delete")}
-              onClick={() => onRequestDelete(phrase)}
-            />
-          </Tooltip>
+          </Dropdown>
         ) : null}
       </div>
     </div>

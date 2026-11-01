@@ -1,10 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 """简历生成后台任务运行器：进程内单例线程 + 状态落库 + 前端轮询。
 
-为什么不自建通用任务队列：单用户本地应用，生成是"几秒到几分钟的阻塞工艺"，一个
-threading.Thread 足够；不复用 apply 的 CDP 内核（采集/投递的浏览器驱动与限速）。
-纪律：工作线程自建自关 SessionLocal；流式循环每块事件后检查停止信号；异常不许被吞
-（兜底 failed + 中文 error）；完成才落库（取消/失败不写 resume_record）。
+不自建任务队列：单用户本地应用，生成是"几秒到几分钟的阻塞工艺"，一个 Thread 足够。
+纪律：线程自建自关 SessionLocal；每块事件后查停止信号；异常兜底 failed + 中文 error；完成才落库。
 """
 
 from __future__ import annotations
@@ -53,9 +51,15 @@ from ...services.resume.resume_task_state import (
     finalize_task,
     set_cancelled,
 )
-from ...services.resume.scenario_context import build_scenario_prompt_block
+from ...services.resume.scenario_context import (
+    build_scenario_prompt_block,
+    merge_scenario_order,
+)
 from ...services.settings_service import get_llm_config
-from .resume_generate_support import log_generation_usage, material_only_echo_error
+from .resume_generate_support import (
+    log_generation_usage,
+    material_only_echo_error,
+)
 from .resume_runner_loop import RunnerEventLoopHandle
 
 logger = logging.getLogger(__name__)
@@ -73,8 +77,7 @@ class ResumeGenerateRunner:
     """单例运行器：同一时刻只跑一个生成任务。"""
 
     def __init__(self, *, session_factory: Callable[[], Any] | None = None) -> None:
-        # session_factory 默认 None：任务启动时**按值冻结**当前身份的 engine（RF-03），
-        # rebind 后会话仍写旧库；显式传入（测试注入）时优先生效。
+        # session_factory 默认 None：启动时按值冻结 engine（RF-03，rebind 仍写旧库）；显式传入（测试注入）优先。
         self._session_factory = session_factory
         self._stop = threading.Event()
         self._lock = threading.Lock()
@@ -82,9 +85,8 @@ class ResumeGenerateRunner:
         self._current_task_id: int | None = None
         self._lease: DatasetLease | None = None
         self._frozen_factory: Callable[[], Any] | None = None
-        # 工作线程事件循环与主 task 句柄的管理委托给句柄对象（机制说明见
-        # resume_runner_loop 模块 docstring）：cancel()/shutdown() 借它跨线程
-        # 中止挂起的模型调用。
+        # 事件循环与主 task 句柄委托给句柄对象（机制见 resume_runner_loop docstring）：
+        # cancel()/shutdown() 借它跨线程中止挂起的模型调用。
         self._loop_handle = RunnerEventLoopHandle(self._stop)
         self._generation_snapshot: GenerationSnapshot | None = None
         self._snapshot_id: int | None = None
@@ -215,6 +217,14 @@ class ResumeGenerateRunner:
             except Exception:  # noqa: BLE001 - 历史/损坏快照不得让生成整体失败
                 logger.warning("生成任务场景快照无法解释，按未使用场景继续 task_id=%s", task_id)
                 career_block = ""
+            # #30 可观测：区块是否真的注入、多长（不记内容，只记长度）。
+            if career_block:
+                logger.info(
+                    "生成场景区块已注入 task_id=%s block_chars=%d", task_id, len(career_block)
+                )
+            # #30：场景 preferred_sections → 板块顺序（用户在生成弹窗显式拖过顺序时
+            # 不覆盖——那是用户的显式意图，见 resume_record 的 section_order 兜底口径）。
+            save_format_config = merge_scenario_order(options.format_config, task.context_snapshot)
             generator = ResumeGenerator(provider)
             resume: dict | None = None
             warnings: list[str] = []
@@ -245,9 +255,7 @@ class ResumeGenerateRunner:
                     )
                     try:
                         async for event in stream:
-                            # 每一块事件之后检查停止信号、总预算与数据集归属：取消/超时/
-                            # 切换都在下一次模型输出前生效（raise_if_stopped 合并了 _stop
-                            # 检查与预算检查；lease.check 是显式的写入前归属校验）。
+                            # 每块事件后检查停止信号/总预算/数据集归属（取消、超时、切换都在下一次模型输出前生效）。
                             budget.raise_if_stopped()
                             if self._lease is not None:
                                 self._lease.check()
@@ -270,19 +278,16 @@ class ResumeGenerateRunner:
                                 rationale = event.get("rationale") or ""
                                 # 事实来源标注（RF-13）：锚定的副产品，随记录一起落库。
                                 fact_annotations = event.get("fact_annotations") or []
-                                # token 估算遥测（RF-14 §2.5）：估算开启时由 generator 放进
-                                # done 事件，与真实 tokens 一起进同一条用量日志。
+                                # token 估算遥测（RF-14 §2.5）：与真实 tokens 进同一条用量日志。
                                 estimated_prompt_tokens = event.get("estimated_prompt_tokens")
                     finally:
                         await stream.aclose()
-                        # 事件循环即将关闭：先把共享池里属于本循环的客户端关掉
-                        # （审计 PR-08——生成 runner 每任务新建事件循环）。
+                        # 事件循环即将关闭：关掉本循环的共享池客户端（PR-08，每任务新建循环）。
                         await aclose_clients_for_current_loop()
 
                 self._loop_handle.drive(consume())
             except OperationCancelled as exc:
-                # 用户取消（cancel_event 即 _stop）→ cancelled；预算到期 → failed。
-                # 两者共用一条信号线，用 OperationCancelled 的 message 区分原因。
+                # 用户取消（cancel_event 即 _stop）→ cancelled；预算到期 → failed（message 区分）。
                 if self._stop.is_set():
                     self._finalize(session, task, GENERATE_STATUS_CANCELLED, error="已取消")
                 else:
@@ -294,8 +299,7 @@ class ResumeGenerateRunner:
                 self._finalize(session, task, GENERATE_STATUS_CANCELLED, error="已取消")
                 return
             except DatasetScopeError as exc:
-                # 数据集已切换（防御路径：租约正常时应挡住切换）：按 failed 收尾，
-                # 结果绝不写到新库去。会话是冻结的，终态落在任务所在的旧库里。
+                # 数据集已切换（防御路径）：按 failed 收尾，绝不写到新库；终态落旧库。
                 logger.warning("简历生成任务因数据集切换中止 task_id=%s：%s", task_id, exc)
                 self._finalize(session, task, GENERATE_STATUS_FAILED, error=str(exc))
                 return
@@ -313,18 +317,14 @@ class ResumeGenerateRunner:
                 )
                 return
             finally:
-                # 用量汇总日志（审计 PR-07-6，RF-14 §2.2-5）：主生成+修复+重试+失败
-                # 轮次合并为一条总口径；缺值保留 None（不伪造 0）。成功、取消、超时、
-                # 失败各路径都经过这里，恰好记一次。prompt/response 内容与密钥绝不
-                # 入日志（隐私边界）。
+                # 用量汇总日志（PR-07-6）：主生成+修复+重试合并一条；缺值保留 None；
+                # 成功/取消/超时/失败各路径恰好记一次；prompt/response 与密钥绝不入日志。
                 self._log_generation_usage(
                     task_id, generator, estimated_prompt_tokens=estimated_prompt_tokens
                 )
 
-            # consume() 正常返回（已拿到 done + 解析出简历）后、写库之前**必须**再复查一次
-            # 停止信号与预算：用户可能在 "done 已收到、completed 尚未提交" 这一窗口点取消，
-            # 预算也可能恰好在这条缝隙里到期。不查这里，取消/超时会被下面无条件写简历的
-            # 路径吞掉，造成"前端已取消/已超时、后端却悄悄落库"。
+            # 写库前必须再复查停止信号与预算："done 已收到、completed 尚未提交"窗口里的
+            # 取消/超时会被下方无条件写简历的路径吞掉（前端已取消、后端却悄悄落库）。
             try:
                 budget.raise_if_stopped()
                 if self._lease is not None:
@@ -380,7 +380,7 @@ class ResumeGenerateRunner:
                     page_limit=options.page_limit,
                     font_scale=options.font_scale,
                     language=options.language,
-                    format_config=options.format_config,
+                    format_config=save_format_config,
                     custom_instruction=options.custom_instruction,
                     coverage_notes=coverage_notes,
                     rationale=rationale,

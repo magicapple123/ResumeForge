@@ -102,9 +102,10 @@ describe("styleOverrides · 写角色", () => {
   });
 
   it("clearRole 只清该角色", () => {
-    const base = configWithRoles({ body: { bold: true }, meta: { italic: true } });
+    // #5d：italic 已整体移除（写入层不收）——fixture 换成仍合法的 line_height。
+    const base = configWithRoles({ body: { bold: true }, meta: { line_height: 1.5 } });
     expect(clearRole(base, "body")).toEqual({
-      roles: { version: 1, meta: { italic: true } },
+      roles: { version: 1, meta: { line_height: 1.5 } },
     });
   });
 });

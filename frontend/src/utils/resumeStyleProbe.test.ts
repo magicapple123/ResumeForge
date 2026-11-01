@@ -87,8 +87,9 @@ describe("styleProbeCss · 与后端 role_style_css 输出的逐条对拍", () =
 
 describe("styleProbeCss · 声明", () => {
   it("布尔 / 颜色 / 枚举逐一映射（与后端 bullet/meta_align 字面量一致）", () => {
-    expect(styleProbeCss({ role: "body" }, { bold: false, italic: true })).toBe(
-      `  [data-role="body"] { font-weight: 400 !important; font-style: italic !important; }`,
+    // #5d：斜体已从能力矩阵移除，StylePropKey 不再有 italic；布尔只剩 bold。
+    expect(styleProbeCss({ role: "body" }, { bold: false })).toBe(
+      `  [data-role="body"] { font-weight: 400 !important; }`,
     );
     expect(styleProbeCss({ role: "body" }, { color: "#AbCdEf" })).toBe(
       `  [data-role="body"] { color: #AbCdEf !important; }`,

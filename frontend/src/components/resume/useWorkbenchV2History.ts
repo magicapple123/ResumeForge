@@ -17,6 +17,12 @@ import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "r
 import type { ResumeLayout } from "../../types";
 import type { ResumeDocument } from "../../types/resumeDocument";
 import { createDocumentHistory } from "../../features/resume-document/history";
+import {
+  describeChange,
+  summarizeChange,
+  type ChangeSnapshot,
+  type ChangeSummary,
+} from "../../features/resume-document/changeSummary";
 import { t } from "../../i18n";
 import type { HistoryPanelStep } from "./history/HistoryPanel";
 
@@ -29,6 +35,8 @@ export interface WorkbenchHistoryTab {
   onUndo: () => void;
   onRedo: () => void;
   onJumpTo: (group: "past" | "future", index: number) => void;
+  /** #21a：进入历史页签时先落地 300ms 合并窗口里的待提交快照（避免空栈误导）。 */
+  flush?: () => void;
 }
 
 export interface WorkbenchV2Snapshot {
@@ -53,6 +61,34 @@ const EMPTY_DOCUMENT: ResumeDocument = {
 
 const DRAFT_MERGE_KEY = "draft";
 const LAYOUT_MERGE_KEY = "layout";
+
+/**
+ * #21b：recordDraft 的标签按操作类型取（不再一律「文本改动」）。
+ * 只覆盖 recordDraft 可能产生的类别；版式类走 recordLayout 自己的标签。
+ */
+function draftLabelOf(kind: ChangeSummary["kind"]): string {
+  switch (kind) {
+    case "value":
+      return t("workbench.history.label.text");
+    case "entry-layout":
+      return t("workbench.history.label.entryLayout");
+    case "entry-hide":
+    case "entry-show":
+    case "entry-add":
+    case "entry-remove":
+    case "entry-move":
+    case "section-add":
+    case "section-remove":
+    case "section-move":
+    case "field-add":
+    case "field-remove":
+    case "field-move":
+      return t("workbench.history.label.structure");
+    default:
+      // layout-*（页数/字号/模板/format_config）不该从 recordDraft 进来；兜底按结构类。
+      return t("workbench.history.label.structure");
+  }
+}
 
 function signature(value: unknown): string {
   try {
@@ -101,7 +137,9 @@ export function useWorkbenchV2History({
   debounceMs,
 }: UseWorkbenchV2HistoryOptions): WorkbenchV2History {
   // 历史栈在 React 之外提交（debounce 定时器），用一次自增渲染把它带进界面。
-  const [, forceRender] = useReducer((value: number) => value + 1, 0);
+  // 版本号要参与 historyTab 的 memo 依赖：定时器提交只有 forceRender 这一个信号，
+  // 不把版本号算进依赖的话 memo 会返回缓存的旧列表（"改完立刻切历史页签看到空栈"的根因之一）。
+  const [historyVersion, forceRender] = useReducer((value: number) => value + 1, 0);
   const [history] = useState(() => {
     const initial: WorkbenchV2Snapshot = {
       document: serverDocument ?? EMPTY_DOCUMENT,
@@ -135,7 +173,15 @@ export function useWorkbenchV2History({
 
   const record = useCallback(
     (next: WorkbenchV2Snapshot, mergeKey: string | null, label: string) => {
-      if (signature(next) === signature(snapshotRef.current)) return;
+      // R-30 改引用比较，#21c 补完它：整包 `next` 每次都是新建对象，整包比较永远为假，
+      // 真正的去重只剩 history.push 里的整份序列化指纹——那正是 R-30 要避免的开销。
+      // mutators 的既有约定是"找不到路径就返回原引用"，所以逐维度引用相等就能挡住无变化的写入。
+      if (
+        next.document === snapshotRef.current.document &&
+        next.layout === snapshotRef.current.layout
+      ) {
+        return;
+      }
       history.push(next, label);
       if (mergeKey === null) history.flush();
       write(next);
@@ -145,10 +191,28 @@ export function useWorkbenchV2History({
 
   const recordDraft = useCallback(
     (next: ResumeDocument) => {
+      const current = snapshotRef.current;
+      if (next === current.document) return;
+      // #21a/#21b：离散操作（条目排版开关 / 字段增删移动 / 条目隐藏等）立即入栈，
+      // 标签按操作类型取；连续文本输入仍走 300ms 合并。changeSummary（R-17）已有现成分类，
+      // 直接复用，不引入第二套判别逻辑。header 值编辑不在分类范围内，落回文本类合并。
+      const report = summarizeChange(
+        { document: current.document, layout: current.layout } satisfies ChangeSnapshot,
+        { document: next, layout: current.layout } satisfies ChangeSnapshot,
+      );
+      if (!report) {
+        record(
+          { document: next, layout: current.layout },
+          DRAFT_MERGE_KEY,
+          t("workbench.history.label.text"),
+        );
+        return;
+      }
+      const discrete = report.main.kind !== "value";
       record(
-        { document: next, layout: snapshotRef.current.layout },
-        DRAFT_MERGE_KEY,
-        t("workbench.history.label.text"),
+        { document: next, layout: current.layout },
+        discrete ? null : DRAFT_MERGE_KEY,
+        draftLabelOf(report.main.kind),
       );
     },
     [record],
@@ -225,7 +289,8 @@ export function useWorkbenchV2History({
     }
   }, [history, onApplyLayout, write]);
 
-  const summaryOf = useCallback((value: WorkbenchV2Snapshot | null): string => {
+  /** 规模信息（姓名 · 条目数 · 页数）：R-17 起只作 `title` 悬停提示。 */
+  const scaleOf = useCallback((value: WorkbenchV2Snapshot | null): string => {
     if (!value) return "";
     const entries = value.document.sections.reduce(
       (total, section) => total + section.entries.length,
@@ -237,6 +302,23 @@ export function useWorkbenchV2History({
       pages: value.layout.page_limit,
     });
   }, []);
+
+  /**
+   * 这一步**改了什么**（R-17）：拿相邻两个快照做差，翻成一句人话；
+   * 识别不出时退回规模信息，保证历史行永远有内容可读。
+   */
+  const summaryOf = useCallback(
+    (before: WorkbenchV2Snapshot | null, after: WorkbenchV2Snapshot | null): string => {
+      const fallback = scaleOf(after);
+      if (!before || !after) return fallback;
+      const report = summarizeChange(
+        { document: before.document, layout: before.layout } satisfies ChangeSnapshot,
+        { document: after.document, layout: after.layout } satisfies ChangeSnapshot,
+      );
+      return report ? describeChange(report) : fallback;
+    },
+    [scaleOf],
+  );
 
   /** 回到某一步：连续撤销/恢复，最后应用历史栈的基线快照（与旧接线同一口径）。 */
   const jumpTo = useCallback(
@@ -262,26 +344,38 @@ export function useWorkbenchV2History({
     [history, onApplyLayout, write],
   );
 
+  /** #21a：把 300ms 合并窗口里的待提交快照立刻落地（进入历史页签时调用）。 */
+  const flushPending = useCallback(() => {
+    history.flush();
+  }, [history]);
+
   // snapshot 参与依赖：历史点变化后 past/future 的摘要必须重算。
   const historyTab = useMemo<WorkbenchHistoryTab>(() => {
     const entries = history.entries();
+    // `past[i]` 是"第 i 步发生**之前**"的快照（push 时先存旧基线），所以一步的差异是
+    // `past[i] → past[i+1]`；最后一步的 after 就是当前基线。future 相反：
+    // `future[i]` 是 redo 会到达的状态，它的 before 是 `future[i+1]`（更早被撤销的那一版）。
+    const baseline = history.snapshot().baseline;
     return {
-      past: entries.past.map((entry, index) => ({
-        ...entry,
-        summary: summaryOf(history.previewPast(index)),
-      })),
-      future: entries.future.map((entry, index) => ({
-        ...entry,
-        summary: summaryOf(history.previewFuture(index)),
-      })),
+      past: entries.past.map((entry, index) => {
+        const before = history.previewPast(index);
+        const after = history.previewPast(index + 1) ?? baseline;
+        return { ...entry, summary: summaryOf(before, after), title: scaleOf(after) };
+      }),
+      future: entries.future.map((entry, index) => {
+        const after = history.previewFuture(index);
+        const before = history.previewFuture(index + 1) ?? baseline;
+        return { ...entry, summary: summaryOf(before, after), title: scaleOf(after) };
+      }),
       canUndo: history.canUndo(),
       canRedo: history.canRedo(),
       onUndo: undo,
       onRedo: redo,
       onJumpTo: jumpTo,
+      flush: flushPending,
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- snapshot 只用于刷新增量摘要
-  }, [history, snapshot, summaryOf, undo, redo, jumpTo]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- snapshot/historyVersion 只用于刷新增量摘要
+  }, [history, historyVersion, scaleOf, snapshot, summaryOf, undo, redo, jumpTo]);
 
   return {
     document: snapshot.document,

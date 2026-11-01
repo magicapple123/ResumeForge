@@ -399,6 +399,10 @@
   margin-bottom: 8px;
 }
 
+.assistant-write-proposals-heading {
+  font-size: 12px;
+}
+
 .assistant-write-proposal {
   padding: 10px 12px;
   border: 1px solid var(--rf-border-strong);
@@ -414,9 +418,17 @@
   align-items: center;
 }
 
+.assistant-write-proposal-diff-title {
+  font-size: 12px;
+}
+
 .assistant-write-proposal-changes {
   margin: 0;
   padding-left: 18px;
+}
+
+.assistant-write-proposal-result {
+  font-size: 12px;
 }
 
 .assistant-write-proposal-actions {

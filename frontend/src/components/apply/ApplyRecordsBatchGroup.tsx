@@ -6,8 +6,8 @@
  * 明细数据由父组件按需拉取（`/records/batches/{id}/items`，服务端分页），本组件
  * 只负责展示与翻页回调；批次的分组语义与删除入口见 ApplyRecordsPanel。
  */
-import { CheckSquareOutlined, DownOutlined, RightOutlined } from "@ant-design/icons";
-import { Table, Tag, Typography } from "antd";
+import { CheckSquareOutlined, DownOutlined, RedoOutlined, RightOutlined } from "@ant-design/icons";
+import { Button, Table, Tag, Typography } from "antd";
 import type { TableColumnsType } from "antd";
 import type { ReactNode } from "react";
 import { RowActions } from "../common/RowActions";
@@ -37,6 +37,12 @@ interface BatchGroupProps {
   onEnterSelecting: () => void;
   /** 多选模式下的操作条（BatchActionBar），渲染在明细表上方。 */
   batchToolbar?: ReactNode;
+  /** #39：命中当前筛选的失败记录数（「只重试这 N 条」的 N）；0 = 不显示按钮。 */
+  retryableCount?: number;
+  /** #39：批量重投请求进行中（按钮 loading，防止连点建多个批次）。 */
+  retryingFailed?: boolean;
+  /** #39：「只重试这 N 条」。 */
+  onRetryFailed?: () => void;
 }
 
 /** 一个批次 = 一个可展开的组：组头是"批次时间 + 统计"，展开后是组内记录表。 */
@@ -54,6 +60,9 @@ export default function BatchGroup({
   onSelectionChange,
   onEnterSelecting,
   batchToolbar,
+  retryableCount = 0,
+  retryingFailed = false,
+  onRetryFailed,
 }: BatchGroupProps) {
   // 本组件用模块级 t()：必须订阅语言变化，否则切语言后组头停在旧文案。
   useLocale();
@@ -91,6 +100,13 @@ export default function BatchGroup({
                   {t("applyUi.batch.failed", { count: batch.failed })}
                 </Typography.Text>
               )}
+              {/* #39：组头同因聚合——「选择器失效 ×2、验证码 ×1」，一眼看出这批为什么失败。 */}
+              {batch.failure_summary.map((item) => (
+                <Typography.Text key={item.category} type="danger">
+                  {" · "}
+                  {item.label} ×{item.count}
+                </Typography.Text>
+              ))}
               {batch.skipped > 0 && (
                 <Typography.Text type="secondary">
                   {" · "}
@@ -100,6 +116,18 @@ export default function BatchGroup({
             </Typography.Text>
           </span>
         </button>
+        {/* #39：组头同因聚合保留，另加「只重试这 N 条」——把这一批里按当前筛选出来的
+            失败记录一次重投，不用逐条点「重投」。 */}
+        {(retryableCount ?? 0) > 0 && onRetryFailed ? (
+          <Button
+            size="small"
+            icon={<RedoOutlined />}
+            loading={retryingFailed}
+            onClick={onRetryFailed}
+          >
+            {t("applyUi.batch.retryFailed", { count: retryableCount })}
+          </Button>
+        ) : null}
         <RowActions
           more={
             selecting

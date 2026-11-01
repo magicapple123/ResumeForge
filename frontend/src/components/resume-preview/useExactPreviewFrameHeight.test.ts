@@ -17,6 +17,7 @@ import { describe, expect, it } from "vitest";
 import { A4_HEIGHT_PX, A4_WIDTH_PX } from "./config";
 import {
   FRAME_PAGE_GAP_PX,
+  VIEWER_CHROME_PX,
   exactPreviewFrameHeight,
   exactPreviewPageHeight,
 } from "./useExactPreviewFrameHeight";
@@ -30,10 +31,13 @@ describe("精确预览 · 相框高度算术", () => {
 
   it("页数 × 单页高 + 页间距：1 页不额外加间距，3 页加两道", () => {
     const pageHeight = exactPreviewPageHeight(A4_WIDTH_PX);
-    expect(exactPreviewFrameHeight(A4_WIDTH_PX, 1, 600)).toBe(pageHeight);
-    expect(exactPreviewFrameHeight(A4_WIDTH_PX, 2, 600)).toBe(pageHeight * 2 + FRAME_PAGE_GAP_PX);
+    // R-27：每一档都要带查看器工具栏（它占 iframe 高度，不补就会裁末页）。
+    expect(exactPreviewFrameHeight(A4_WIDTH_PX, 1, 600)).toBe(pageHeight + VIEWER_CHROME_PX);
+    expect(exactPreviewFrameHeight(A4_WIDTH_PX, 2, 600)).toBe(
+      pageHeight * 2 + FRAME_PAGE_GAP_PX + VIEWER_CHROME_PX,
+    );
     expect(exactPreviewFrameHeight(A4_WIDTH_PX, 3, 600)).toBe(
-      pageHeight * 3 + FRAME_PAGE_GAP_PX * 2,
+      pageHeight * 3 + FRAME_PAGE_GAP_PX * 2 + VIEWER_CHROME_PX,
     );
   });
 
@@ -45,5 +49,32 @@ describe("精确预览 · 相框高度算术", () => {
     expect(exactPreviewFrameHeight(A4_WIDTH_PX, 0, 600)).toBe(600);
     // 任何输入都不该得到 0。
     expect(exactPreviewFrameHeight(0, 0, 1)).toBe(1);
+  });
+});
+
+/**
+ * R-27：缩放只许"往大处长"，缩小不许把相框压短。
+ *
+ * 这段守的是 hook 里那一行 `baseHeight * Math.max(1, scale)`。此前它漏了 `max(1, …)`：
+ * 注释写"缩小不改相框高度"，代码却乘了 scale —— 缩到 80% 时相框比纸短一截，末页下沿
+ * 被裁掉（用户看到的是"缩小后反而看不全"）。这里是纯算术，直接复现那条式子。
+ */
+describe("精确预览 · 缩放只放大相框", () => {
+  const width = 800;
+  const base = exactPreviewFrameHeight(width, 3, 900);
+
+  it("scale = 1 时就是未缩放高度", () => {
+    expect(Math.round(base * Math.max(1, 1))).toBe(base);
+  });
+
+  it("缩小（0.6 / 0.8）时相框高度不变", () => {
+    for (const scale of [0.6, 0.8, 0.95]) {
+      expect(Math.round(base * Math.max(1, scale))).toBe(base);
+    }
+  });
+
+  it("放大（1.5 / 2）时相框跟着长", () => {
+    expect(Math.round(base * Math.max(1, 1.5))).toBe(Math.round(base * 1.5));
+    expect(Math.round(base * Math.max(1, 2))).toBe(base * 2);
   });
 });

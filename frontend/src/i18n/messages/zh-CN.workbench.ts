@@ -96,6 +96,8 @@ const workbench = {
   "workbench.color.navy": "深蓝",
   "workbench.color.forest": "墨绿",
   "workbench.color.wine": "暗红",
+  "workbench.color.followTemplate": "跟随模板",
+  "workbench.param.paletteAria": "展开{label}的色板",
 
   // ── 编辑器（中栏与弹窗共用）────────────────────────────────
   /** 中栏标题。 */
@@ -321,6 +323,30 @@ const workbench = {
   "generate.cancelFailed": "取消失败，请重试",
   "generate.recordNotSaved": "简历记录尚未保存完成，请稍后再试",
   "generate.changesSaved": "简历修改已保存",
+
+  // ── 历史每一步的变更摘要（R-17）──────────────────────────────
+  "workbench.history.change.untitledSection": "未命名板块",
+  "workbench.history.change.untitledEntry": "未命名条目",
+  "workbench.history.change.untitledField": "未命名字段",
+  "workbench.history.change.more": "{main} 等 {count} 项",
+  "workbench.history.change.sectionAdd": "新增板块「{section}」",
+  "workbench.history.change.sectionRemove": "删除板块「{section}」",
+  "workbench.history.change.sectionMove": "板块「{section}」移到第 {index} 位",
+  "workbench.history.change.entryAdd": "「{section}」新增条目「{entry}」",
+  "workbench.history.change.entryRemove": "「{section}」删除条目「{entry}」",
+  "workbench.history.change.entryMove": "「{section}」条目「{entry}」移到第 {index} 位",
+  "workbench.history.change.entryHide": "「{section}」隐藏条目「{entry}」",
+  "workbench.history.change.entryShow": "「{section}」显示条目「{entry}」",
+  "workbench.history.change.entryLayout": "「{section}」调整条目「{entry}」的排版",
+  "workbench.history.change.fieldAdd": "「{entry}」新增字段「{field}」",
+  "workbench.history.change.fieldRemove": "「{entry}」删除字段「{field}」",
+  "workbench.history.change.fieldMove": "「{entry}」字段「{field}」移到第 {index} 位",
+  "workbench.history.change.valueOne": "「{entry}」修改「{field}」",
+  "workbench.history.change.valueMany": "「{entry}」正文 {count} 处修改（首个：「{field}」）",
+  "workbench.history.change.layoutPages": "页数上限改为 {pages} 页",
+  "workbench.history.change.layoutFont": "字号改为 {scale}",
+  "workbench.history.change.layoutTemplate": "模板改为 {template}",
+  "workbench.history.change.layoutFormat": "版式参数 {count} 项修改",
 } as const;
 
 export default workbench;

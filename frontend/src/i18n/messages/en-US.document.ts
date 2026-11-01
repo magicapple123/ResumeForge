@@ -16,6 +16,8 @@ const document = {
   "document.placement.body": "Body",
   "document.placement.hidden": "Hidden",
   "document.placement.aria": "Field position",
+  /** 位置选择器左侧的 11px 短标签（R-06 ③）。 */
+  "document.placement.short": "Position",
   "document.placement.hiddenHint": "Hidden fields stay in the document but are never printed",
 
   // ── Header positions ────────────────────────────────────────
@@ -55,6 +57,8 @@ const document = {
   "document.entry.headLayout.split": "Side by side",
   "document.entry.headLayout.stacked": "Stacked",
   "document.entry.headLayout.meta_first": "Metadata first",
+  /** 「⋯」按钮：上移 / 下移 / 复制 / 隐藏 / 移除都收在这个菜单里（R-05 ⑤）。 */
+  "document.entry.more": "More entry actions",
   "document.entry.lockContent": "Lock content",
   "document.entry.lockLayout": "Lock layout",
 
@@ -110,6 +114,8 @@ const document = {
   "document.field.dateStart": "Start date",
   "document.field.dateEnd": "End date",
   "document.field.datePresent": "Present",
+  /** 日期范围两个输入框之间的连接词；结束值为空时不渲染（R-06 ②B）。 */
+  "document.field.dateRangeSeparator": "to",
   "document.field.enumPlaceholder": "Choose one",
   "document.field.urlPlaceholder": "Enter a link starting with https://",
   "document.field.numberPlaceholder": "Enter a number",
@@ -166,6 +172,32 @@ const document = {
   "document.headerField.personal_website": "Personal site",
   "document.headerField.photo": "Photo",
   "document.headerField.unknown": "Custom field",
+  // #10: custom header field entry
+  "document.basic.customField": "Custom field name",
+  "document.basic.customAdd": "Add field",
+  "document.basic.customHint":
+    "The custom name shows in the editor only; the page prints the value at its placement",
+  // #25: photo chip and crop
+  "document.photo.chipValue": "Photo",
+  "document.photo.thumbnail": "Photo thumbnail",
+  "document.photo.empty": "No photo yet",
+  "document.photo.replace": "Replace photo",
+  "document.photo.crop": "Crop",
+  "document.photo.remove": "Remove photo",
+  "document.photo.cropTitle": "Crop resume photo",
+  "document.photo.cropHint":
+    "Drag the sliders to choose the frame. Applying writes this photo; the original stays in the photo library",
+  "document.photo.cropPreview": "Crop preview",
+  "document.photo.cropApply": "Apply crop",
+  "document.photo.cropLoading": "Reading the photo…",
+  "document.photo.cropFailed":
+    "Crop failed: this photo cannot be decoded in the browser. Replace it and retry",
+  "document.photo.cropped": "Photo cropped",
+  "document.photo.updated": "Photo replaced",
+  "document.photo.removed": "Photo removed",
+  "document.photo.formatError": "Only JPG / PNG / WebP photos are supported",
+  "document.photo.tooLarge": "Photo must be 5 MB or smaller",
+  "document.photo.readFailed": "Could not read the photo, please retry",
 
   // ── Toasts and accessibility ────────────────────────────────
   "document.toast.fieldAdded": "Field added",
@@ -192,6 +224,8 @@ const document = {
   "document.field.period": "Date range",
   "document.field.publicUrl": "Public link",
   "document.field.customContent": "Content",
+  "document.editor.styleEntry": "Adjust typography",
+  "document.editor.stylePopoverTitle": "Editing: {scope}",
 } as const;
 
 export default document;
