@@ -7,6 +7,8 @@ import { bt } from "../../../features/resume-bilingual/i18n";
 import {
   buildBilingualPairs,
   defaultPairLabels,
+  differentPairs,
+  nonEmptyPairs,
 } from "../../../features/resume-bilingual/fieldPairs";
 import { MOCK_PRIMARY } from "../../../test/bilingualMock";
 import type { ResumeDocument } from "../../../types/resumeDocument";
@@ -77,11 +79,18 @@ describe("BilingualCompareView", () => {
     fireEvent.click(adoptButtons[0]);
     expect(onAdopt).toHaveBeenCalledTimes(1);
     expect(typeof onAdopt.mock.calls[0][0]).toBe("string");
-    expect(screen.getAllByText(bt("bilingual.compare.locked")).length).toBeGreaterThan(0);
     const selectable = pairs.filter(
       (pair) => pair.status === "changed" && pair.adoptable && !pair.locked,
     );
     expect(adoptButtons.length).toBe(selectable.length);
+    // 事实锁字段在译文里按设计一字不动，所以默认收在汇总里：展开后才看得到锁标记。
+    const same = nonEmptyPairs(pairs).filter((pair) => pair.status === "same");
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: bt("bilingual.compare.sameMore", { count: same.length }),
+      }),
+    );
+    expect(screen.getAllByText(bt("bilingual.compare.locked")).length).toBeGreaterThan(0);
   });
 
   it("列表字段只读：显示只读标记且没有采纳按钮", () => {
@@ -126,6 +135,47 @@ describe("BilingualCompareView", () => {
       </AntdApp>,
     );
     expect(screen.getByText(bt("bilingual.compare.nothing"))).toBeTruthy();
+  });
+
+  it("默认只铺有差异的行，一致的收进可展开汇总", () => {
+    const pairs = buildBilingualPairs(MOCK_PRIMARY, translated(), LABELS);
+    const different = differentPairs(pairs);
+    const same = nonEmptyPairs(pairs).filter((pair) => pair.status === "same");
+    expect(same.length).toBeGreaterThan(0);
+    const { container } = render(
+      <AntdApp>
+        <BilingualCompareView pairs={pairs} />
+      </AntdApp>,
+    );
+    const rows = () => container.querySelectorAll(".bilingual-compare__row").length;
+    expect(rows()).toBe(different.length);
+    const fold = screen.getByRole("button", {
+      name: bt("bilingual.compare.sameMore", { count: same.length }),
+    });
+    expect(fold.getAttribute("aria-expanded")).toBe("false");
+    fireEvent.click(fold);
+    expect(rows()).toBe(different.length + same.length);
+    expect(fold.getAttribute("aria-expanded")).toBe("true");
+  });
+
+  it("状态徽标挂在字段行里，并带可读的状态说明", () => {
+    const pairs = buildBilingualPairs(MOCK_PRIMARY, translated(), LABELS);
+    const { container } = render(
+      <AntdApp>
+        <BilingualCompareView pairs={pairs} />
+      </AntdApp>,
+    );
+    const status = container.querySelector(
+      ".bilingual-compare__row .bilingual-compare__field .bilingual-compare__status",
+    );
+    expect(status).toBeTruthy();
+    // 状态不再单独占一行：它是字段行的子元素，且不在行尾的独立区块。
+    expect(
+      container.querySelector(".bilingual-compare__row > .bilingual-compare__status"),
+    ).toBeNull();
+    expect(status?.getAttribute("aria-label")).toBe(
+      bt("bilingual.compare.statusAria", { status: bt("bilingual.compare.changed") }),
+    );
   });
 
   it("identical 时提示「还没翻译」，不传则没有提示", () => {

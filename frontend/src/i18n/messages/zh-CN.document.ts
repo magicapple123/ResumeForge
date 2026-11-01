@@ -21,6 +21,8 @@ const document = {
   "document.placement.hidden": "隐藏",
   /** 位置选择器的无障碍名。 */
   "document.placement.aria": "字段位置",
+  /** 位置选择器左侧的 11px 短标签（R-06 ③）。 */
+  "document.placement.short": "位置",
   /** 隐藏的语义说明：数据保留，只是不上纸面。 */
   "document.placement.hiddenHint": "隐藏的字段仍留在文档里，只是不印到纸面上",
 
@@ -61,6 +63,8 @@ const document = {
   "document.entry.headLayout.split": "左右",
   "document.entry.headLayout.stacked": "上下",
   "document.entry.headLayout.meta_first": "元信息在上",
+  /** 「⋯」按钮：上移 / 下移 / 复制 / 隐藏 / 移除都收在这个菜单里（R-05 ⑤）。 */
+  "document.entry.more": "更多条目操作",
   "document.entry.lockContent": "锁定内容",
   "document.entry.lockLayout": "锁定排版",
 
@@ -116,6 +120,8 @@ const document = {
   "document.field.dateStart": "开始日期",
   "document.field.dateEnd": "结束日期",
   "document.field.datePresent": "至今",
+  /** 日期范围两个输入框之间的连接词；结束值为空时不渲染（R-06 ②B）。 */
+  "document.field.dateRangeSeparator": "至",
   "document.field.enumPlaceholder": "选择",
   "document.field.urlPlaceholder": "输入以 https:// 开头的链接",
   "document.field.numberPlaceholder": "输入数字",
@@ -171,6 +177,29 @@ const document = {
   "document.headerField.personal_website": "个人主页",
   "document.headerField.photo": "照片",
   "document.headerField.unknown": "自定义字段",
+  // #10：自定义页眉字段入口
+  "document.basic.customField": "自定义字段名",
+  "document.basic.customAdd": "添加字段",
+  "document.basic.customHint": "自定义字段的名字只在制作台显示，纸面按位置排值",
+  // #25：照片 chip 与裁剪
+  "document.photo.chipValue": "照片",
+  "document.photo.thumbnail": "照片缩略图",
+  "document.photo.empty": "还没有照片",
+  "document.photo.replace": "更换照片",
+  "document.photo.crop": "裁剪",
+  "document.photo.remove": "移除照片",
+  "document.photo.cropTitle": "裁剪简历照片",
+  "document.photo.cropHint": "拖动滑杆调整取景范围；应用后写入这张照片，原图仍留在资料照片库里",
+  "document.photo.cropPreview": "裁剪预览",
+  "document.photo.cropApply": "应用裁剪",
+  "document.photo.cropLoading": "正在读取照片尺寸…",
+  "document.photo.cropFailed": "裁剪失败：这张照片无法在浏览器里解码，请更换后重试",
+  "document.photo.cropped": "照片已裁剪",
+  "document.photo.updated": "照片已更换",
+  "document.photo.removed": "已移除照片",
+  "document.photo.formatError": "只支持 JPG / PNG / WebP 照片",
+  "document.photo.tooLarge": "照片不能超过 5 MB",
+  "document.photo.readFailed": "照片读取失败，请重试",
 
   // ── 提示与无障碍 ───────────────────────────────────────────
   "document.toast.fieldAdded": "已添加字段",
@@ -197,6 +226,8 @@ const document = {
   "document.field.period": "起止时间",
   "document.field.publicUrl": "公开链接",
   "document.field.customContent": "正文内容",
+  "document.editor.styleEntry": "调整排版",
+  "document.editor.stylePopoverTitle": "正在改：{scope}",
 } as const;
 
 export default document;

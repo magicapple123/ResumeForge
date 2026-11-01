@@ -118,7 +118,8 @@ describe("GenerateResumeModal 组摘要（F4-D）", () => {
     expect(screen.getByText(FAILED_TEXT)).toBeInTheDocument();
     // antd 会给两字中文按钮加空格（"重 试"），按正则可访问名断言。
     expect(screen.getByRole("button", { name: /重\s?试/ })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: START_TEXT })).toBeInTheDocument();
+    // #32：「开始生成」已提到宿主 Modal 的 footer（stage 本身不再渲染按钮）。
+    expect(screen.queryByRole("button", { name: START_TEXT })).toBeNull();
   });
 
   it("生成时长文案如实：几秒到几十秒（不再写死与实测不符的 1-2 分钟）", () => {

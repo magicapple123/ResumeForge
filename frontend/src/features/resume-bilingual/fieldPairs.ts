@@ -266,9 +266,19 @@ export function buildBilingualPairs(
   return rows;
 }
 
-/** 只保留有内容或有差异的行（对照视图的默认展开集合）。 */
-export function changedPairs(pairs: readonly BilingualPair[]): BilingualPair[] {
+/** 至少一侧有内容的行（"两边都空"的行在对照里没有信息量）。 */
+export function nonEmptyPairs(pairs: readonly BilingualPair[]): BilingualPair[] {
   return pairs.filter((pair) => pair.status !== "empty");
+}
+
+/**
+ * 两侧文本不一样的行——对照视图**默认只显示这些**。
+ *
+ * 派生出来的语言版本里，绝大多数事实字段（姓名/机构/时间/数字）按设计一字不动；
+ * 全部铺开会把真正要看的几行差异埋在上百行"一致"之间（2026-11 实测：189 行里只有 2 行有差异）。
+ */
+export function differentPairs(pairs: readonly BilingualPair[]): BilingualPair[] {
+  return pairs.filter((pair) => pair.status === "changed");
 }
 
 /** 整份文档是否含自建板块/自定义字段（对照里提示"这些不参与逐项采纳"）。 */

@@ -26,9 +26,11 @@ const applyRecords = {
   "applyRecords.empty": "No apply records yet",
   "applyRecords.pagination.total": "{count} batches in total",
   "applyRecords.toast.retried": "Created a new retry run",
+  "applyRecords.toast.retriedFailed": "Retried {count} failed records",
   "applyRecords.toast.movedToTrash": "Moved to Trash",
   "applyRecords.toast.batchDeleted": "Deleted {count} apply records - restore them from the trash",
   "applyRecords.error.retryFailed": "Could not re-apply",
+  "applyRecords.error.retryFailedBatch": "Batch retry failed",
   "applyRecords.error.deleteFailed": "Delete failed",
   "applyRecords.error.batchDeleteFailed": "Batch delete failed, try again",
 } as const;

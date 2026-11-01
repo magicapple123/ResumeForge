@@ -58,6 +58,14 @@ function summary(model: PageThumbnailModel): string {
   if (model.pageLimit === null) {
     return t("pagination.thumbnails.summaryNoLimit", { pages: model.totalPages });
   }
+  // #2：页数正好用满上限时说「已达上限」，比重复两个相同数字有用。
+  if (
+    model.pagesNeeded !== null &&
+    model.pageLimit !== null &&
+    model.pagesNeeded === model.pageLimit
+  ) {
+    return t("pagination.thumbnails.limitReached", { limit: model.pageLimit });
+  }
   return t("pagination.thumbnails.summary", {
     pages: model.totalPages,
     limit: model.pageLimit,

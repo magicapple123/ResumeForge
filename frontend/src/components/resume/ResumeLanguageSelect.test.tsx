@@ -54,7 +54,7 @@ describe("ResumeLanguageSelect", () => {
     expect(root.textContent).toContain("中文");
     // 无障碍名与语言包同源：改名只改语言包，测试跟着一起变。
     expect(combobox).toHaveAttribute("aria-label", t("resume.language.label"));
-    expect(combobox).toHaveAttribute("aria-label", "简历语言");
+    expect(combobox).toHaveAttribute("aria-label", "字段语言");
   });
 
   it("英文：选中态显示 English，不是 key 也不是空白", async () => {

@@ -33,9 +33,8 @@ import {
 } from "../../../features/resume-preflight/capabilities";
 import { useLocale } from "../../../i18n/i18nContext";
 
-/** 与"换模板"最相关的几项（键名是后端 CAPABILITY_KEYS 的字面量）。 */
+/** 与"换模板"最相关的几项（键名是后端 CAPABILITY_KEYS 的字面量；#5d 起无 italic）。 */
 const RELEVANT_CAPABILITIES = [
-  "italic",
   "link_clickable",
   "manual_page_break",
   "keep_with_next",

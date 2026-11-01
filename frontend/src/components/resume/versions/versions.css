@@ -1,0 +1,10 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/* #28：「版本与变体」弹窗——body 限高内部滚动；页签条 sticky（滚到底标题页签不动）。 */
+
+.rf-versions-body .ant-tabs-nav {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--rf-surface, #fff);
+  margin-bottom: 0;
+}

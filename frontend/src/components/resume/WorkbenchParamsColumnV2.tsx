@@ -13,7 +13,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { RefObject } from "react";
 import type { ReactNode } from "react";
-import { Typography } from "antd";
+import { Space, Tooltip, Typography } from "antd";
 import type { ResumeDetail, ResumeLayout, ResumeTemplateCatalog } from "../../types";
 import type { DocumentFieldCatalog, ResumeDocument } from "../../types/resumeDocument";
 import type { ResumePreviewHandle } from "../ResumePreview";
@@ -26,6 +26,7 @@ import ResumeTemplateControls from "./ResumeTemplateControls";
 import ResumeMeasureControls from "./ResumeMeasureControls";
 import ResumeSpacingControls from "./ResumeSpacingControls";
 import ResumeColorControls from "./ResumeColorControls";
+import ResumeLanguageSelect from "./ResumeLanguageSelect";
 import ContactBreaksControl from "../../features/resume-layout/ContactBreaksControl";
 import HistoryPanel from "./history/HistoryPanel";
 import StructurePanel from "./structure/StructurePanel";
@@ -33,7 +34,6 @@ import EntryLayoutPanel from "./EntryLayoutPanel";
 import DocumentModePanel from "./DocumentModePanel";
 import SectionPaginationPanel from "./pagination/SectionPaginationPanel";
 import PageThumbnailStrip from "./pagination/PageThumbnailStrip";
-import TypographyToolsPanelV2 from "./typography/TypographyToolsPanelV2";
 import { usePaginationReport } from "../../features/resume-pagination/usePaginationReport";
 import { usePaginationReportMarkers } from "../../features/resume-pagination/paginationPageMarkers";
 import { setPaginationReportRefresh } from "../../features/resume-pagination/paginationRefreshStore";
@@ -125,6 +125,15 @@ export default function WorkbenchParamsColumnV2({
 }: WorkbenchParamsColumnV2Props) {
   useLocale();
   const [tab, setTab] = useState<LeftTab>("params");
+  /** 整列（`.resume-wb-v2-params`）是滚动容器：切页签时要把它的 scrollTop 归零。 */
+  const columnRef = useRef<HTMLDivElement>(null);
+  const changeTab = useCallback((next: LeftTab) => {
+    setTab(next);
+    // R-28：上一页签滚到一半的位置会带到下一页签（页签条吸顶后尤其明显——
+    // 新页签的第一屏是"从中间开始"的）。切页签即回到顶部。
+    const column = columnRef.current;
+    if (column) column.scrollTop = 0;
+  }, []);
   const buildPaginationRequest = useCallback(
     () => ({
       template: layout.template,
@@ -166,11 +175,11 @@ export default function WorkbenchParamsColumnV2({
     return items;
   }, [assetsPanel, bilingualPanel, history, sourcesPanel]);
   return (
-    <div className="resume-wb-col resume-wb-col-params resume-wb-v2-params">
+    <div ref={columnRef} className="resume-wb-col resume-wb-col-params resume-wb-v2-params">
       <WorkbenchLeftTabs<LeftTab>
         ariaLabel={t("workbench.leftTabs.label")}
         value={tab}
-        onChange={setTab}
+        onChange={changeTab}
         items={tabs}
       />
       {tab === "params" ? (
@@ -183,6 +192,17 @@ export default function WorkbenchParamsColumnV2({
               disabled={relayouting}
               catalog={catalog}
               showPageLimit={false}
+              // #13：字段语言移进「版面」组（同一键只保留一处），模板组只剩模板 + 版式。
+              showLanguage={false}
+              // R-03：模板图库里的「试用与对比」要能看「我的内容」并真实测量页数，
+              // 采纳「采用模板默认」还要把**清空后的** format_config 一起写回——
+              // 三个通道缺一个，对比视图就会退回"只能看示例 / 不能清空覆盖"。
+              // 采纳走 onChange（= 工作台历史），所以「用这个模板」整体可撤销一次。
+              resumeId={resumeId ?? null}
+              content={document}
+              onTrialAdopt={({ template, formatConfig }) =>
+                onChange({ ...layout, template, format_config: formatConfig })
+              }
               onChange={onChange}
             />
           </ResumeParamGroup>
@@ -201,6 +221,20 @@ export default function WorkbenchParamsColumnV2({
                 onSaved={onDocumentModeSaved}
               />
             ) : null}
+            {/* #13：字段语言只决定纸面上固定文案（小节标题/字段名）的语种，和篇幅、分页
+                同属「版面」；放在文档模式之后，模板组不再为它挤第三行。 */}
+            <Space size={6}>
+              <Typography.Text type="secondary">{t("resume.language.label")}</Typography.Text>
+              <Tooltip title={t("resume.language.hint")}>
+                <span>
+                  <ResumeLanguageSelect
+                    value={layout.language ?? "zh-CN"}
+                    disabled={relayouting || undefined}
+                    onChange={(language) => onChange({ ...layout, language })}
+                  />
+                </span>
+              </Tooltip>
+            </Space>
             <ContactBreaksControl
               formatConfig={layout.format_config}
               disabled={relayouting}
@@ -219,7 +253,7 @@ export default function WorkbenchParamsColumnV2({
               onJumpToBreak={
                 onSelectPath
                   ? (path) => {
-                      setTab("structure");
+                      changeTab("structure");
                       onSelectPath(path);
                     }
                   : undefined
@@ -269,29 +303,13 @@ export default function WorkbenchParamsColumnV2({
               previewRef={previewRef}
               onChange={onChange}
             />
-            <div className="resume-wb-subgroup-title">
-              <Typography.Text strong>{t("structure.typographyTools.title")}</Typography.Text>
-            </div>
-            <TypographyToolsPanelV2
-              document={document}
-              layout={layout}
-              onLayoutChange={onChange}
-              selectedPath={selectedPath}
-              multiSelectedPaths={multiSelectedPaths}
-              onMultiSelectedPathsChange={onMultiSelectedPathsChange}
-              previewRef={previewRef}
-              fieldCatalog={fieldCatalog}
-              catalog={catalog}
-              disabled={relayouting || layoutSaving}
-              includeRoleStyles
-            />
           </ResumeParamGroup>
           {tier !== "three" && editorEnabled ? (
             <span className="resume-wb-narrow-hint">{t("workbench.narrow.editor")}</span>
           ) : null}
         </>
       ) : tab === "structure" ? (
-        <div className="resume-wb-v2-panel resume-wb-structure-tab">
+        <div className="resume-wb-v2-panel resume-wb-structure-tab" data-panel-scroll="structure">
           <StructurePanel
             document={document}
             onChange={onDocumentChange}

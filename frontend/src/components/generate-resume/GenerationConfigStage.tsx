@@ -4,7 +4,7 @@
  * 纯展示受控组件——全部配置状态与开始动作由 GenerateResumeModal 持有，经 props 回传；
  * 零 api 导入（职业场景区块自己加载目录，失败只降级不阻断）。
  */
-import { Alert, Button, Input, Segmented, Space, Switch, Tooltip, Typography } from "antd";
+import { Alert, Input, Segmented, Space, Switch, Tooltip, Typography } from "antd";
 import type { EnhancementLevel, Job, ResumeLayout } from "../../types";
 import { RESUME_ENHANCEMENT_LEVELS, enhancementLevelDescriptionKey } from "../../config";
 import { t } from "../../i18n";
@@ -69,8 +69,6 @@ export default function GenerationConfigStage({
   setCustomInstruction,
   llmReady,
   modelName,
-  onClose,
-  onStart,
 }: Props) {
   useLocale();
   /** 切换文档模式：只夹紧页数（不转换内容、不改模板），切回普通简历时 >3 页会被夹到 3。 */
@@ -254,14 +252,7 @@ export default function GenerationConfigStage({
         {t("generate.config.extraHint")}
       </Typography.Text>
 
-      <div style={{ marginTop: 24, textAlign: "right" }}>
-        <Space>
-          <Button onClick={onClose}>{t("common.action.cancel")}</Button>
-          <Button type="primary" disabled={!llmReady} onClick={onStart}>
-            {t("generate.config.start")}
-          </Button>
-        </Space>
-      </div>
+      {/* #32：取消/开始按钮已提到 Modal footer（随弹窗固定，不再跟着配置表单滚走）。 */}
     </div>
   );
 }

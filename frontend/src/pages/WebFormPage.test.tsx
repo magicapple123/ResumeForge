@@ -15,6 +15,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { BrowserStatus, WebFormLive, WebFormPreview, WebFormSnapshot } from "../types";
 import { webFormSessionStorageKey } from "../features/webform/webFormSessionStorage";
 import WebFormPage from "./WebFormPage";
+import webFormPageZh from "../i18n/messages/zh-CN.webFormPage";
 
 const apiMocks = vi.hoisted(() => ({
   listWebFormFields: vi.fn(),
@@ -190,6 +191,15 @@ describe("WebFormPage", () => {
 
     expect(screen.queryByRole("button", { name: /提交/ })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /投递/ })).not.toBeInTheDocument();
+  });
+
+  it("默认态（浏览器未运行）就能看到放宽模式的四类边界说明", async () => {
+    apiMocks.getWebFormBrowserStatus.mockResolvedValue(browserStatus({ state: "stopped" }));
+    renderPage();
+    await waitFor(() => expect(apiMocks.getWebFormBrowserStatus).toHaveBeenCalled());
+
+    // #37：这张卡不参与渐进展开，风险说明必须在最常见的默认入口可见。
+    expect(screen.getByText(webFormPageZh["webFormPage.relaxed.risk"])).toBeInTheDocument();
   });
 
   it("says out loud that it will not submit for the user", async () => {

@@ -97,7 +97,12 @@ export default function PreflightModal({
       {
         key: "capabilities",
         label: t("preflight.tab.capabilities"),
-        children: <CapabilitiesTable capabilities={preflight.result?.capabilities} />,
+        children: (
+          <CapabilitiesTable
+            capabilities={preflight.result?.capabilities}
+            notes={preflight.result?.capability_notes}
+          />
+        ),
       },
     ],
     [availableFixActions, onFix, onOpenAts, preflight],

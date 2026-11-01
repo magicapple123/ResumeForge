@@ -16,6 +16,18 @@
   flex-wrap: wrap;
   gap: 2px;
   min-width: 0;
+
+  /* R-28 吸顶：左栏滚到再深，页签条也停在栏顶（含窄栏两行时）。
+     负外边距 + 左右 20px 内边距把底色铺满整栏宽，滚动中的卡片不会从两侧缝隙里露出来；
+     上内边距 20px 顶替容器原来的 `padding-top`（见 workbench-v2.css）。
+     `z-index: 3`（与中栏栏目条同一档）：要盖住滚动上来的卡片内容，但不参与弹窗层级
+     ——下拉/弹层都 portal 到 body，不受这里影响。 */
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  margin: 0 -20px;
+  padding: 20px 20px 8px;
+  background: var(--rf-surface);
 }
 
 /* 高度 / 内边距 / 圆角没有对应 token（chip 形态本身），归在"布局无 token"这一类；

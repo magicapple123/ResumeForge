@@ -212,6 +212,8 @@ export function stopTask(taskId: number): Promise<ApplyTask> {
 export interface ApplyRecordParams {
   keyword?: string;
   result?: string;
+  /** #39：按失败分类筛选（空 = 不过滤；枚举同后端 failure_category）。 */
+  failure_category?: string;
   page?: number;
   page_size?: number;
   /** false = 轻量分页：批次不带明细，只返回 matched_count（B4 按需加载）。 */
@@ -232,8 +234,9 @@ export function listRecordBatches(params: ApplyRecordParams = {}): Promise<Page<
 
 /**
  * 展开某个批次时分页拉取组内明细（B4 按需加载）。
- * 过滤语义与 listRecordBatches 完全同源：传同样的 keyword/result，组内记录与组头
- * matched_count 对得上。
+ * 过滤语义与 listRecordBatches 完全同源：传同样的 keyword/result/failure_category，
+ * 组内记录与组头 matched_count 对得上（#39：旧版漏传 failure_category，导致组头 1 条、
+ * 明细仍 6 条）。
  */
 export function listRecordBatchItems(
   taskId: number,
@@ -244,6 +247,24 @@ export function listRecordBatchItems(
 
 export function retryRecord(itemId: number): Promise<ApplyTask> {
   return request(`/apply/records/${itemId}/retry`, { method: "POST" });
+}
+
+/**
+ * 「只重试这 N 条」（#39）：把某批次里命中当前筛选的失败记录一起重投。
+ *
+ * 传筛选条件而不是 record_ids：明细是服务端分页的，前端手上没有全集；服务端按同一套
+ * 筛选重新选，选出的条数与组头的 retryable_count 一致。
+ */
+export function retryFailedRecords(params: {
+  task_id: number;
+  keyword?: string;
+  result?: string;
+  failure_category?: string;
+}): Promise<{ retried: number; task: ApplyTask }> {
+  return request("/apply/records/retry-batch", {
+    method: "POST",
+    body: JSON.stringify(params),
+  });
 }
 
 /** 删掉单条投递记录（**软删**：进回收站，可恢复；也从统计与每日上限里去掉）。 */

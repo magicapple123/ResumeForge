@@ -5,12 +5,14 @@
  * 关联、手工来源、来源详情/影响面/修订、采纳写回与事实锁复用既有 provenance API。
  * 采纳写回带简历 revision 条件；有未保存修改时禁用，冲突或失败如实提示。
  */
-import { Alert, Button, Space, Tag, Typography } from "antd";
+import { Alert, Button, Space, Tag, Tooltip, Typography } from "antd";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import EmptyState from "../../common/EmptyState";
 import ErrorState from "../../common/ErrorState";
 import LoadingBlock from "../../common/LoadingBlock";
 import { pt } from "../../../features/resume-provenance/i18n";
+import { fieldCatalogLabelResolver } from "../../../features/resume-document/fieldCatalog";
+import { useFieldPlacementCatalog } from "../../../features/profile-library/fieldPlacement";
 import {
   createFactLock,
   deleteBlockLink,
@@ -51,9 +53,6 @@ import UnresolvedLinksCard from "./UnresolvedLinksCard";
 import type { LinkTargetInput } from "../../../features/resume-provenance/linkInput";
 import { isResumeDocument, textAtIdentity, textAtPath } from "./sourceChainText";
 
-// 纯文本定位（isResumeDocument / textAtPath / textAtIdentity）抽到 sourceChainText.ts，
-// 本文件只保留请求、状态与视图，守住单文件 500 行预算。
-
 interface Props {
   resumeId: number;
   resumeTitle?: string;
@@ -80,6 +79,9 @@ export default function SourceChainPanelV2({
 }: Props) {
   useLocale();
   const toast = useToast();
+  // R-16：下拉的"字段"把后端 key（`school` 等）翻成中文；目录是自取数 hook，本页签挂载时才请求。
+  const { catalog: fieldCatalog } = useFieldPlacementCatalog();
+  const resolveFieldLabel = useMemo(() => fieldCatalogLabelResolver(fieldCatalog), [fieldCatalog]);
   const [data, setData] = useState<ResumeProvenanceOut | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -89,9 +91,7 @@ export default function SourceChainPanelV2({
   // P5-2：从「失效旧关联」点重新关联时，只预选来源；目标块仍由用户自己选。
   const [initialSourceId, setInitialSourceId] = useState<number | null>(null);
   const [pendingUnresolvedId, setPendingUnresolvedId] = useState<number | null>(null);
-  const [adoptEntry, setAdoptEntry] = useState<
-    import("../../../features/resume-provenance/types").SourceImpactEntryOut | null
-  >(null);
+  const [adoptEntry, setAdoptEntry] = useState<SourceImpactEntryOut | null>(null);
   const [locks, setLocks] = useState<FactLockOut[]>([]);
   const [locksLoading, setLocksLoading] = useState(false);
   const [lockSaving, setLockSaving] = useState(false);
@@ -104,12 +104,12 @@ export default function SourceChainPanelV2({
 
   useEffect(() => {
     if (!resumeId || disabled) {
-      // 清空视图属于外部同步：放进微任务，避开 effect 体里同步 setState 的级联渲染告警。
+      // 外部同步清空：放进微任务，避开 effect 内同步 setState 的级联渲染告警。
       queueMicrotask(() => setData(null));
       return;
     }
     let alive = true;
-    // 置加载态属于 effect 内的同步 setState：放进微任务，避开级联渲染告警（仍在请求前生效）。
+    // 置加载态同理（微任务；仍在请求前生效）。
     queueMicrotask(() => {
       if (!alive) return;
       setLoading(true);
@@ -175,23 +175,17 @@ export default function SourceChainPanelV2({
   const selectedSource = selectedLink
     ? (data?.sources.find((source) => source.id === selectedLink.source_id) ?? null)
     : null;
+  const { object_id, point_id, path, field } = selectedObject ?? {};
   const target = selectedObject
-    ? ({
-        object_id: selectedObject.object_id,
-        point_id: selectedObject.point_id,
-        path: selectedObject.path,
-        field: selectedObject.field,
-      } satisfies LinkTargetInput)
+    ? ({ object_id, point_id, path, field } satisfies LinkTargetInput)
     : null;
-  const chain = selectedObject
-    ? {
-        resume_id: resumeId,
-        object_id: selectedObject.object_id,
-        point_id: selectedObject.point_id,
-        path: selectedObject.path,
-        sources: selectedSource ? [selectedSource] : [],
-      }
-    : null;
+  const chain = selectedObject && {
+    resume_id: resumeId,
+    object_id: selectedObject.object_id,
+    point_id: selectedObject.point_id,
+    path: selectedObject.path,
+    sources: selectedSource ? [selectedSource] : [],
+  };
   const currentText = selectedObject
     ? textAtIdentity(document, selectedObject.object_id, selectedObject.point_id) ||
       textAtPath(document, selectedObject.path)
@@ -377,7 +371,7 @@ export default function SourceChainPanelV2({
           ) : null}
         </Space>
         <ProvenanceSelectionCard
-          options={selectionOptions(data)}
+          options={selectionOptions(data, resolveFieldLabel)}
           value={selectedKey}
           linked={selectedLink ? true : selectedObject ? false : null}
           onChange={setSelectedKey}
@@ -432,19 +426,30 @@ export default function SourceChainPanelV2({
               <Space orientation="vertical" size={2}>
                 <Tag>{pt(sourceKindKey(sourceDetail.kind))}</Tag>
                 <span>
-                  {pt("provenance.chain.fingerprint", {
-                    value: shortFingerprint(sourceDetail.current_fingerprint),
-                  })}
+                  <Tooltip title={sourceDetail.current_fingerprint}>
+                    <span>
+                      {pt("provenance.chain.fingerprint", {
+                        value: shortFingerprint(sourceDetail.current_fingerprint),
+                      })}
+                    </span>
+                  </Tooltip>
                 </span>
                 <span>
                   {pt("provenance.source.impact", { count: sourceImpact?.affected.length ?? 0 })}
                 </span>
                 {sourceImpact?.affected.length ? (
-                  sourceImpact.affected.slice(0, 10).map((entry) => (
-                    <span key={entry.link_id}>
-                      {entry.resume_title} · {entry.path}
-                    </span>
-                  ))
+                  sourceImpact.affected.slice(0, 10).map((entry) => {
+                    // #20a：可读标签优先，内部 path 不直接展示（旧数据无标签时才兜底）。
+                    const readable = [entry.target_label, entry.field_label]
+                      .filter(Boolean)
+                      .join(" · ");
+                    return (
+                      <span key={entry.link_id}>
+                        {entry.resume_title}
+                        {readable ? ` · ${readable}` : ""}
+                      </span>
+                    );
+                  })
                 ) : (
                   <span>{pt("provenance.source.noImpact")}</span>
                 )}
@@ -475,6 +480,8 @@ export default function SourceChainPanelV2({
         resumeId={resumeId}
         target={target}
         initialSourceId={initialSourceId}
+        // #20a：弹层「位置」用人可读的条目名，不把 education.ob_xxx 内部 id 摆给用户。
+        targetLabelText={selectedObject ? selectedObject.label : ""}
         onClose={closeLinkModal}
         onLinked={() => void handleLinked()}
       />

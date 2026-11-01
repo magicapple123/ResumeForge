@@ -36,7 +36,7 @@ export interface EntryOption {
   label: string;
 }
 
-/** 灰色短字段行（lead / trail），顺序 = 纸上从左到右的排列。 */
+/** 灰色短字段行（正文前 / 正文后的灰字）。顺序 = `entry.items` 原序。 */
 export interface ShortFieldRow {
   /** 文档路径（`{section}.{entry}.{item}`）：面板按它调 placement 操作。 */
   path: string;
@@ -48,6 +48,8 @@ export interface ShortFieldRow {
   placement: "lead" | "trail";
   solo: boolean;
   showLabel: boolean;
+  /** `authors` 没有「独占一行」语义（它总是在元信息行里整行排），面板据此禁用该项。 */
+  canSolo: boolean;
   /** 值预览（列表拼成一行；太长由 UI 截断）。 */
   preview: string;
 }
@@ -106,7 +108,14 @@ export function entryOptions(
   });
 }
 
-/** 板块级"灰字段顺序"的行数据（lead 在前、trail 在后，各自保持文档顺序）。 */
+/**
+ * 灰色短字段行（顺序 = **`entry.items` 原序**，不按 placement 分组）。
+ *
+ * R-10（审计）：旧实现把 lead 组整体排到 trail 组之前，导致"把某行切到正文前"时
+ * 这一行会从列表底部跳到顶部——用户视线与滚动位置都被甩走。现在顺序与 items 一致，
+ * 每行的 `[前|后]` 只改去向、不重排列表；纸上仍按 lead → 正文 → trail 渲染
+ * （planner 负责），所以"行顺序"承担正交的另一件事：同一组内的先后。
+ */
 export function shortFieldRows(
   entry: ResumeEntry | null | undefined,
   sectionKey: string,
@@ -126,13 +135,11 @@ export function shortFieldRows(
       placement,
       solo: item.kind === "authors" ? false : item.solo,
       showLabel: item.show_label,
+      canSolo: item.kind !== "authors",
       preview: itemPreview(item),
     });
   }
-  // lead 组整体排在 trail 组前：面板分组展示，组内顺序就是纸面顺序。
-  return rows.sort((left, right) =>
-    left.placement === right.placement ? 0 : left.placement === "lead" ? -1 : 1,
-  );
+  return rows;
 }
 
 // ── 生效值（继承链）────────────────────────────────────────────
