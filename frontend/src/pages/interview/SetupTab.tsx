@@ -9,10 +9,15 @@
  * 提交给后端的仍是 `types/interview.ts` 的协议值，不随语言变。
  */
 import { PlayCircleOutlined } from "@ant-design/icons";
-import { Button, Card, Form, Input, Select, Space, Typography } from "antd";
+import { App, Button, Card, Form, Input, Select, Space, Typography } from "antd";
 import type { FormInstance } from "antd";
-import { useEffect } from "react";
-import type { InterviewDifficulty, InterviewType, InterviewerStyle } from "../../types";
+import { useEffect, useState } from "react";
+import type {
+  InterviewDifficulty,
+  InterviewMaterialExtract,
+  InterviewType,
+  InterviewerStyle,
+} from "../../types";
 import {
   useJobSearchSelect,
   useResumeSearchSelectForJobOrGeneral,
@@ -25,6 +30,7 @@ import {
 } from "../../i18n/enum/interview";
 import { useLocale } from "../../i18n/i18nContext";
 import { JANE_FACE_SOURCES } from "./janeFaces";
+import { MaterialSourceField, type MaterialSourceMode } from "./MaterialSourceField";
 import {
   INTERVIEW_DIFFICULTIES,
   INTERVIEW_TYPES,
@@ -45,10 +51,14 @@ const ROUNDS_OPTIONS: { value: number | typeof AUTO_ROUNDS_OPTION; labelKey: Mes
 ];
 
 export interface SetupForm {
-  /** 关联岗位（必填）：面试官只能看到这个岗位的 JD。 */
+  /** 关联岗位：与 `jobMaterial` 二选一（选了文件时这一项不出现在表单里）。 */
   jobId?: number;
-  /** 关联简历（必填）：候选范围 = 该岗位关联的简历 + 通用简历（0066）。 */
+  /** 关联简历：与 `resumeMaterial` 二选一。 */
   resumeId?: number;
+  /** 导入的 JD 文件（#41）：已在上传时解析成文本，非空表示这一侧用文件。 */
+  jobMaterial?: InterviewMaterialExtract | null;
+  /** 导入的简历截图（#41）：已在上传时识别成文本。 */
+  resumeMaterial?: InterviewMaterialExtract | null;
   interviewType: InterviewType;
   difficulty: InterviewDifficulty;
   interviewerStyle: InterviewerStyle;
@@ -73,12 +83,20 @@ export function SetupTab({
 }) {
   // 本卡用模块级 t()：必须订阅语言变化，否则切语言后表单文案不重渲染。
   useLocale();
+  const { message } = App.useApp();
   // 关联岗位下拉改为远程搜索（P0-1）：不再由页面预拉"前 100 条"当全量。
   const jobSelect = useJobSearchSelect();
   // 关联简历（0066）：候选 = 所选岗位关联的简历 **+** 通用简历。岗位没选之前不给候选
   // （面试官要读的就是"这份简历 + 那个岗位的 JD"，脱离岗位挑简历没有意义）。
   const watchedJobId = Form.useWatch("jobId", form) as number | undefined;
   const resumeSelect = useResumeSearchSelectForJobOrGeneral(watchedJobId ?? null);
+  // 材料来源（#41）：每侧都是"从记录选 / 导入文件"二选一。文件与记录是**互斥**的，
+  // 所以两者的状态分开存：切到文件时记录那一栏整个不渲染（连校验规则一起消失），
+  // 反过来切回记录时也不会把上一份文件悄悄带进面试。
+  const [jobSource, setJobSource] = useState<MaterialSourceMode>("record");
+  const [jobMaterial, setJobMaterial] = useState<InterviewMaterialExtract | null>(null);
+  const [resumeSource, setResumeSource] = useState<MaterialSourceMode>("record");
+  const [resumeMaterial, setResumeMaterial] = useState<InterviewMaterialExtract | null>(null);
 
   // 岗位一变就重拉简历候选：上一次的候选属于上一个岗位，留着会让用户挑到不该出现的简历。
   // hook 的 fetch 闭包跟随 jobId，`reload` 引用因此每次渲染都不同，只在 jobId 变化时执行。
@@ -95,6 +113,29 @@ export function SetupTab({
     // hook 的回调引用稳定，只跟随预填目标变化。
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialJobId]);
+
+  /**
+   * 提交前补齐"文件这一侧到底有没有材料"。
+   *
+   * 表单校验只能看到**渲染出来**的字段：切到"导入文件"时那条 `required` 规则随下拉框
+   * 一起消失，所以这里必须自己判一次——否则用户能在没选文件的情况下开出一场"没有材料"
+   * 的面试（后端会 422，但那时候点的是"开始面试"，体验很差）。
+   */
+  const submit = (values: SetupForm) => {
+    if (jobSource === "file" && !jobMaterial) {
+      message.error(t("interviewPage.setup.material.jobRequired"));
+      return;
+    }
+    if (resumeSource === "file" && !resumeMaterial) {
+      message.error(t("interviewPage.setup.material.resumeRequired"));
+      return;
+    }
+    onStart({
+      ...values,
+      jobMaterial: jobSource === "file" ? jobMaterial : null,
+      resumeMaterial: resumeSource === "file" ? resumeMaterial : null,
+    });
+  };
 
   return (
     <Card size="small" className="settings-card">
@@ -126,7 +167,7 @@ export function SetupTab({
           persona: "",
           ...(initialJobId !== undefined ? { jobId: initialJobId } : {}),
         }}
-        onFinish={(values) => void onStart(values)}
+        onFinish={(values) => void submit(values)}
         // 岗位变了就清掉已选简历：岗位与简历必须成对，"上一个岗位的简历"不该被带过来。
         // 用事件而不是 effect 守卫，避免"清空 → 校验失败 → 再清空"的渲染循环。
         onValuesChange={(changed) => {
@@ -136,26 +177,73 @@ export function SetupTab({
         }}
       >
         <div className="interview-setup-grid">
+          {/* 岗位材料（#41）：从记录选 / 导入 PDF·TXT 二选一。切到"导入文件"时下拉框
+              禁用且不再校验（材料由文件提供），文件区在 extra 里显示解析结果。 */}
           <Form.Item
             label={t("interviewPage.setup.jobLabel")}
             name="jobId"
-            rules={[{ required: true, message: t("interviewPage.setup.jobRequired") }]}
+            rules={
+              jobSource === "record"
+                ? [{ required: true, message: t("interviewPage.setup.jobRequired") }]
+                : []
+            }
+            extra={
+              <MaterialSourceField
+                kind="job"
+                mode={jobSource}
+                material={jobMaterial}
+                disabled={starting}
+                onModeChange={(mode) => {
+                  setJobSource(mode);
+                  if (mode === "file") form.setFieldValue("jobId", undefined);
+                }}
+                onMaterialChange={setJobMaterial}
+              />
+            }
           >
             <Select
               allowClear
+              disabled={jobSource === "file"}
               placeholder={t("interviewPage.setup.jobPlaceholder")}
               {...jobSelect.selectProps}
             />
           </Form.Item>
+          {/* 简历材料（#41）：从记录选 / 导入截图二选一。 */}
           <Form.Item
             label={t("interviewPage.setup.resumeLabel")}
             name="resumeId"
-            rules={[{ required: true, message: t("interviewPage.setup.resumeRequired") }]}
-            extra={t("interviewPage.setup.scopeHint")}
+            rules={
+              resumeSource === "record"
+                ? [{ required: true, message: t("interviewPage.setup.resumeRequired") }]
+                : []
+            }
+            extra={
+              <div>
+                <MaterialSourceField
+                  kind="resume"
+                  mode={resumeSource}
+                  material={resumeMaterial}
+                  disabled={starting}
+                  onModeChange={(mode) => {
+                    setResumeSource(mode);
+                    if (mode === "file") form.setFieldValue("resumeId", undefined);
+                  }}
+                  onMaterialChange={setResumeMaterial}
+                />
+                {/* #41：边界文案对两种材料来源都成立——不管这一侧是从记录选来的还是
+                    导入的文件，面试官看到的都只是"这两份"。所以它不能挂在"从记录选"
+                    那个分支里（文件态下曾经整句消失）。 */}
+                <Typography.Text type="secondary">
+                  {t("interviewPage.setup.scopeHint")}
+                </Typography.Text>
+              </div>
+            }
           >
             <Select
               allowClear
-              disabled={watchedJobId === undefined || watchedJobId === null}
+              disabled={
+                resumeSource === "file" || watchedJobId === undefined || watchedJobId === null
+              }
               placeholder={
                 watchedJobId === undefined || watchedJobId === null
                   ? t("interviewPage.setup.resumePlaceholderNoJob")

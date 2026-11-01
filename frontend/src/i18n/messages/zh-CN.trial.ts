@@ -51,9 +51,17 @@ const trial = {
   "trial.override.keep": "保留当前排版覆盖",
   "trial.override.keepHint": "行距、颜色等手动参数继续生效",
   "trial.override.reset": "采用模板默认",
-  "trial.override.resetHint": "清空手动排版覆盖，回到模板默认参数",
+  /** 写实：这一项不是"微调"，是整份 format_config 清零，界面上必须能提前读到。 */
+  "trial.override.resetHint":
+    "采纳时清空全部排版参数（字号、行距、颜色、局部排版），恢复模板默认值",
+  /** 采纳前二次确认（清空不可从模板里找回）。 */
+  "trial.override.confirmTitle": "采用模板默认会清空全部排版参数",
+  "trial.override.confirmBody":
+    "字号、行距、颜色、页边距与局部排版覆盖都会清除，换用「{name}」后这些设置找不回来。保存前可撤销一次。",
+  "trial.override.confirmOk": "清空并采用",
+  "trial.override.confirmCancel": "取消",
   /** 宿主没有提供"清空覆盖"的通道：如实禁用而不是假装生效。 */
-  "trial.override.unavailable": "当前入口不支持重设覆盖，请先在排版参数里清空",
+  "trial.override.unavailable": "当前入口不支持重置排版覆盖",
 
   // ── 采纳 ───────────────────────────────────────────────────
   "trial.adopt": "用这个模板",

@@ -92,9 +92,10 @@ async def test_generate_fails_gracefully():
 @pytest.mark.parametrize(
     ("level", "instruction"),
     [
-        ("light", "保持原有要点数量与职责边界"),
-        ("balanced", "补足动作、方法和业务目的"),
-        ("strong", "可以增加描述要点"),
+        # #33：三档差异必须可度量（字数区间 + 要点数），不再是"优化表达"式的条件文案。
+        ("light", "每条要点 20-28 字"),
+        ("balanced", "每条要点 28-36 字"),
+        ("strong", "每条要点 40-55 字"),
     ],
 )
 async def test_generate_uses_explicit_enhancement_level_guide(level, instruction):
@@ -218,14 +219,17 @@ def test_split_helpers():
     assert split_commas("Python, FastAPI、React") == ["Python", "FastAPI", "React"]
 
 
-def _render_system_prompt(job: bool) -> str:
-    """直接渲染系统提示模板：这两种口径都只存在于文本里，没有别的抓手。"""
+def _render_system_prompt(job: bool, point_rules: str = "每条描述性要点 28-36 字、最多不超过 40 字；同一段经历或项目的要点不超过 4 条。") -> str:
+    """直接渲染系统提示模板：这两种口径都只存在于文本里，没有别的抓手。
+
+    #33 起字数/条数随档位注入（与 resume_generator_prompts.ENHANCEMENT_POINT_RULES 同源）。
+    """
     env = Environment(
         loader=FileSystemLoader(PROMPTS_DIR),
         undefined=StrictUndefined,
         autoescape=select_autoescape(default=False, default_for_string=False),
     )
-    return env.get_template("resume_generate_system.md").render(job=job)
+    return env.get_template("resume_generate_system.md").render(job=job, point_rules=point_rules)
 
 
 def test_user_prompt_ends_with_a_measurable_checklist():
@@ -233,11 +237,12 @@ def test_user_prompt_ends_with_a_measurable_checklist():
 
     实测：只写在系统提示里时，一轮 0 条超标、一轮 5 条全超（最长 42 字）；把可度量的
     约束加到用户提示词末尾的自查清单后，那一轮落在 31-34 字（上限内）。
+    #33 起具体数字随档位由 `point_rules` 注入（系统与用户提示同源），模板只钉占位与固定项。
     """
     template = (PROMPTS_DIR / "resume_generate_user.md").read_text(encoding="utf-8")
 
     assert "输出前自查" in template
-    assert "最多不超过 35 字" in template
+    assert "{{ point_rules }}" in template
     assert "个人总结不超过 120 字" in template
     assert "没有" in template and "黑话" in template
 
@@ -250,9 +255,8 @@ def test_system_prompt_pins_writing_rules_for_both_modes():
     for prompt in (job_prompt, general_prompt):
         assert "分模块呈现要求" in prompt
         assert "不得升格职责范围" in prompt
-        # 字数写成区间：真机两轮里各有一条贴线超出，30 字是"左右"而不是硬边界
-        assert "30 字左右" in prompt and "不超过 35 字" in prompt
-        assert "不超过 6 条" in prompt
+        # 字数写成区间并随档位注入（#33）：模板里的占位被渲染成完整规则句。
+        assert "28-36 字" in prompt and "不超过 4 条" in prompt
         assert "个人总结保持 2-3 句、不超过 120 字" in prompt
         # 要点必须写清"做了什么 + 结果"，不是只堆名词（工具/技术栈那一栏尤其容易变成名词堆）。
         assert "不能只堆名词" in prompt

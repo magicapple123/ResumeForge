@@ -132,7 +132,9 @@ describe("W07 对拍 · 前端属性表 = 后端 STYLE_PROPS", () => {
       /font-size: calc\(var\(--fs\) \* \{_css_number\(style\.font_scale\)\} \* \{_css_number\(ratio\)\}\)/,
     );
     // bullet 字面量与前端探针一致（Q11：三出口统一 · / – / 空）。
-    expect(cssSource).toContain('{"dot": "\'·\'", "dash": "\'–\'", "none": "none"}');
+    // R-20 起「圆点」映射成 `disc`（实心圆）而不是「·」字形：PDF 侧改成画实心圆之后，
+    // 字形的点比纸面小一圈，草稿与精确预览并排就能看出差别。
+    expect(cssSource).toContain('{"dot": "disc", "dash": "\'–\'", "none": "none"}');
     // meta_align：right → space-between（前端探针同字面量）。
     expect(cssSource).toContain('"space-between" if style.meta_align == "right" else "flex-start"');
     // 规则行两空格缩进 + data-role 选择器（前端探针同格式）。
@@ -150,6 +152,8 @@ describe("W07 对拍 · 前端属性表 = 后端 STYLE_PROPS", () => {
     // 五个角色的模板基准都要有（投影自 TEMPLATE_LAYOUT_DEFAULTS，不新增第二份数字）。
     for (const role of RESUME_ROLES) {
       // 函数体里每个角色都是一行 `"name": {"font_scale": …}`。
+      // R-34A 给 body 追加的 indent 是**函数返回后**补进字典的（见 `result["body"]["indent"]`），
+      // 正是为了让这条"五个角色都投影出 font_scale"的判据仍然只认一行字面量。
       expect(source).toContain('"' + role + '": {"font_scale"');
     }
   });

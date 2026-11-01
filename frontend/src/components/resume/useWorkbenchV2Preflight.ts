@@ -9,6 +9,7 @@
 import { useCallback, useMemo, useState } from "react";
 import type { ComponentProps } from "react";
 import { contentSignature } from "../../utils/contentSignature";
+import { measureResumeLayout } from "../../utils/resumeLayoutMeasure";
 import type { ResumeLayout } from "../../types";
 import type { ResumeDocument } from "../../types/resumeDocument";
 import type { PreviewMode } from "../resume-preview/config";
@@ -40,6 +41,38 @@ const AVAILABLE_FIX_ACTIONS: ReadonlySet<CheckFixAction> = new Set([
   "add_page",
   "open_preview_exact",
 ]);
+
+/**
+ * 量制作台右栏那张纸（R-24 C）。
+ *
+ * 为什么在这里量而不是让用户先点「版面诊断」：检查面板里的「量不到版面」原本是
+ * **每次都会出现**的一条 verify——后端收不到 `measure` 就只能说"我没量"，
+ * 而用户眼前明明排好了一整页。制作台的草稿预览就是同源 iframe，直接量它的 body
+ * 即可（与「版面诊断」卡片同一个 `measureResumeLayout`）。
+ *
+ * 量不到时返回 null：那才是"真的没有版面可量"（精确模式没有 iframe、预览还没渲染）。
+ */
+function measureDraftPaper(
+  pageLimit: number,
+): { used_height: number; page_content_height: number } | null {
+  if (typeof document === "undefined") return null;
+  const frames = Array.from(document.querySelectorAll<HTMLIFrameElement>(".resume-iframe"));
+  for (const frame of frames) {
+    const rect = frame.getBoundingClientRect();
+    // 页面上同时存在弹窗背后的详情预览：只认视口内这一张。
+    if (rect.width < 200 || rect.bottom <= 0 || rect.top >= window.innerHeight) continue;
+    const doc = frame.contentDocument;
+    if (!doc) continue;
+    const measure = measureResumeLayout(doc, pageLimit);
+    if (measure) {
+      return {
+        used_height: measure.usedHeight,
+        page_content_height: measure.pageContentHeight,
+      };
+    }
+  }
+  return null;
+}
 
 export interface WorkbenchV2Preflight {
   open: boolean;
@@ -86,6 +119,8 @@ export function useWorkbenchV2Preflight({
         : null,
       layers: ["content", "layout", "product"],
       product_formats: ["pdf"],
+      // R-24 C：把眼前这张纸的实测高度一起送检；量不到才让后端说"量不到版面"。
+      measure: measureDraftPaper(layout?.page_limit ?? 1),
     };
   }, [document, layout]);
   const onFix = useCallback(

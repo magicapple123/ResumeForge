@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session
 from ..assistant.assistant_sources import SourceNumberer
 from ._tools_specs_core import CORE_TOOLS
 from ._tools_specs_data import DATA_TOOLS
+from ._tools_specs_document import DOCUMENT_TOOLS
 from ._tools_specs_relaxed import RELAXED_TOOLS
 from ._tools_specs_report import REPORT_TOOLS
 from ._tools_specs_search import SEARCH_TOOLS
@@ -25,8 +26,16 @@ from .policy import ToolExecutionContext, is_allowed, tool_visible
 logger = logging.getLogger(__name__)
 
 # 工具严格按原文件顺序拼接：core → data → relaxed（放宽模式，位置与拆分前一致）→
-# report → search。顺序是行为契约（tool_definitions 输出顺序 = 发给模型的工具列表顺序），不得重排。
-_TOOLS: tuple[Tool, ...] = (*CORE_TOOLS, *DATA_TOOLS, *RELAXED_TOOLS, *REPORT_TOOLS, *SEARCH_TOOLS)
+# report → search → document（#38 简历文档：版面读数/版本变体/单条读写）。顺序是行为契约
+# （tool_definitions 输出顺序 = 发给模型的工具列表顺序），不得重排。
+_TOOLS: tuple[Tool, ...] = (
+    *CORE_TOOLS,
+    *DATA_TOOLS,
+    *RELAXED_TOOLS,
+    *REPORT_TOOLS,
+    *SEARCH_TOOLS,
+    *DOCUMENT_TOOLS,
+)
 
 
 def tool_definitions(

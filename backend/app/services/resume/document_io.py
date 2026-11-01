@@ -141,12 +141,15 @@ def custom_field_definitions(db: Session | None) -> dict[str, list[dict]] | None
 def document_for_record(
     db: Session | None,
     record: ResumeRecord,
-) -> tuple[dict, dict | None]:
-    """读一份简历记录 -> (v2 dict, 转换摘要或 None)。
+) -> tuple[dict, ConversionReport | None]:
+    """读一份简历记录 -> (v2 dict, 转换报告或 None)。
 
     同一请求只调用一次并把返回值往下传（详情/render/export 不再各自转换第二遍）。
     ``format_config`` / ``language`` 都取记录自己的值：旧简历的 v1 field_layout 与
     contact_breaks 在转换时迁移进 v2 文档，不能丢。
+
+    第二个元素是 ``ConversionReport`` 而不是「摘要 dict」：摘要形状由
+    ``conversion_summary`` 一处生成，读路径把报告原样交给它（这里是 None 表示本来就是 v2）。
     """
     return ensure_document_version_with_report(
         record.content,

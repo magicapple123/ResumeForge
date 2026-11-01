@@ -71,6 +71,11 @@ class TrackRecordIn(BaseModel):
     note: str = Field(default="", max_length=MAX_TRACK_NOTE_CHARS)
     # 这一条是从哪句话看出来的。只存简短片段，不存整封邮件。
     evidence: str = Field(default="", max_length=MAX_TRACK_EVIDENCE_CHARS)
+    # #39 失败三列：失败发生在哪一步 / 卡在哪个具体环节 / 用户总结的一句话原因。
+    # 界面按 failure_step 聚合筛选；空串 = 未分类。失败才填，其它状态留空。
+    failure_step: str = Field(default="", max_length=32)
+    failure_target: str = Field(default="", max_length=128)
+    failure_reason: str = Field(default="", max_length=MAX_TRACK_NOTE_CHARS)
 
     @field_validator("status")
     @classmethod
@@ -99,6 +104,9 @@ class TrackRecordIn(BaseModel):
         self.next_action = self.next_action.strip()
         self.note = self.note.strip()
         self.evidence = self.evidence.strip()
+        self.failure_step = self.failure_step.strip()
+        self.failure_target = self.failure_target.strip()
+        self.failure_reason = self.failure_reason.strip()
         if not self.company or not self.title:
             raise ValueError("请填写公司和岗位名称——进度要按这两项合并")
         return self

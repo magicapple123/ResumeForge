@@ -16,6 +16,7 @@ import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { t } from "../../i18n";
 import { TEMPLATE_CATALOG } from "../../test/resumeFixtures";
+import { headerFieldInput } from "../../test/headerChip";
 import { makeResumeDocument } from "../../test/documentHarness";
 import type { ResumeDetail, ResumeDocument, ResumeLayout } from "../../types";
 import ResumeDetailPreview from "./ResumeDetailPreview";
@@ -151,11 +152,9 @@ async function openWorkbench() {
   await screen.findByRole("dialog", { name: t("workbench.title") });
 }
 
-/** V2 中栏的页眉姓名输入（aria-label = 字段目录标签）。 */
+/** #10：页眉字段是 chip，值输入框在展开态里（见 src/test/headerChip.ts）。 */
 function nameInput(): HTMLInputElement {
-  return screen.getByRole("textbox", {
-    name: t("document.headerField.name"),
-  }) as HTMLInputElement;
+  return headerFieldInput("document.headerField.name");
 }
 
 function actionbar(): HTMLElement {

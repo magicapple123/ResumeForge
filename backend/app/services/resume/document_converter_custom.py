@@ -13,6 +13,7 @@ from typing import Any
 from ...schemas.resume_document import (
     FieldItem,
     FieldSource,
+    Format,
     HeaderItem,
     Placement,
     ResumeItem,
@@ -78,11 +79,14 @@ def extract_custom_field_items(
             result.append(item)
             continue
         split = _split_label_line(item.text)
-        hint = hint_map.get(split[0]) if split else None
-        if hint is None:
+        if split is None:
             result.append(item)
             continue
         label = split[0]
+        hint = hint_map.get(label)
+        if hint is None:
+            result.append(item)
+            continue
         if label in claimed:
             report.warn(section_key + "：自定义字段「" + label + "」出现多次，后续行保留为正文文本")
             result.append(item)
@@ -121,7 +125,7 @@ def _hint_placement(hint: CustomFieldHint) -> Placement:
     return catalog.custom_field_placement(hint.field_type)
 
 
-def _hint_format(hint: CustomFieldHint) -> str:
+def _hint_format(hint: CustomFieldHint) -> Format:
     if hint.field_type == "date_text":
         return "date"
     if hint.field_type == "enum":

@@ -8,6 +8,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { App as AntApp } from "antd";
+import webFormPageZh from "../../i18n/messages/zh-CN.webFormPage";
 
 // vi.mock 会被提升到文件顶部，工厂在静态导入期执行——可变状态必须经 vi.hoisted
 // 携带，否则 `enabledMock` 还在 TDZ 里。
@@ -59,6 +60,15 @@ describe("RelaxedModeCard", () => {
     renderCard();
     expect(screen.getAllByText(/存在选错可能/).length).toBeGreaterThan(0);
     expect(screen.getByText(/已开启/)).toBeTruthy();
+  });
+
+  it("默认态就渲染完整风险说明（四类始终不代填的边界含在其中）", () => {
+    renderCard();
+    const risk = webFormPageZh["webFormPage.relaxed.risk"];
+    expect(screen.getByText(risk)).toBeTruthy();
+    // 四类边界按「日期 / 文件 / 凭据 / 无弹层只读点选」四段写在同一条文案里；
+    // 用文案自身的分句计数，避免在测试里复述中文。
+    expect(risk.split("、").length).toBeGreaterThanOrEqual(4);
   });
 
   it("切换开关会保存并把用户意图传给后端设置", async () => {

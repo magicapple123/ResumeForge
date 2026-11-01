@@ -270,6 +270,23 @@ def set_variant_layout(
     return variant
 
 
+def overwrite_variant_content(
+    db: Session, record: ResumeRecord, variant: ResumeVariant
+) -> ResumeVariant:
+    """#17b：用当前简历的正文覆盖变体内容（修复被译文污染的变体）。
+
+    只覆盖 content 与 content_sha256；名称/语言标签/分组/独立排版/生成上下文都不动。
+    覆盖后该变体与当前简历同语言同内容，界面再引导"重新生成翻译"补齐另一语言。
+    二次确认由界面（Popconfirm）负责，服务层不做确认交互。
+    """
+    content = document_content(record.content, variant.render_context)
+    variant.content = content
+    variant.content_sha256 = canonical_content_sha256(content)
+    db.commit()
+    db.refresh(variant)
+    return variant
+
+
 def _load_resume(db: Session, record: ResumeRecord | int) -> ResumeRecord:
     resume = db.get(ResumeRecord, record) if isinstance(record, int) else record
     if resume is None or getattr(resume, "deleted_at", None) is not None:

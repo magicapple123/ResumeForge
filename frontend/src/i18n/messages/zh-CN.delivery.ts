@@ -11,6 +11,12 @@ const delivery = {
   // ── 面板/弹层 ─────────────────────────────────────────────
   "delivery.config.title": "导出交付包",
   "delivery.config.formats": "格式",
+  // ── 导出形式（R-21）────────────────────────────────────────
+  "delivery.mode.label": "导出形式",
+  "delivery.mode.bundle": "交付包",
+  "delivery.mode.single": "单独文件",
+  "delivery.mode.bundleHint": "打包成一个压缩包，含清单与可选归档原件",
+  "delivery.mode.singleHint": "将保存 {count} 个文件，逐个下载",
   "delivery.config.preset": "导出配置",
   "delivery.config.presetPlaceholder": "选择已保存的配置",
   "delivery.config.noPresets": "还没有保存的导出配置",
@@ -61,6 +67,7 @@ const delivery = {
   "delivery.config.redact": "脱敏后导出（对外发送）",
   "delivery.config.archive": "归档原件",
   "delivery.config.archiveHint": "归档后可在交付原件里核对哈希；不会自动清理",
+  "delivery.config.archiveBundleOnly": "仅交付包模式可归档",
 
   // ── 配置校验（保存预设时）──────────────────────────────────
   "delivery.issue.no-formats": "至少选一种格式",
@@ -71,13 +78,15 @@ const delivery = {
 
   // ── D20 导出前核对 ─────────────────────────────────────────
   "delivery.check.title": "导出前核对",
-  "delivery.check.target": "目标岗位",
+  "delivery.check.target": "投递目标",
+  "delivery.check.targetHint": "来自投递记录或进度关联，不是简历里的求职意向",
   "delivery.check.targetEmpty": "未关联岗位",
   "delivery.check.resumeTitle": "简历标题",
   "delivery.check.contact": "联系方式",
   "delivery.check.contactPresent": "已填写",
   "delivery.check.contactMissing": "缺少电话或邮箱",
   "delivery.check.revision": "版本",
+  "delivery.check.revisionAt": "第 {revision} 版 · {time}",
   "delivery.check.documentMode": "文档模式",
   "delivery.check.mode.resume": "普通简历",
   "delivery.check.mode.long_cv": "长 CV",
@@ -105,6 +114,7 @@ const delivery = {
   "delivery.preview.pages": "按当前配置约需 {pages} 页（上限 {limit} 页）",
   "delivery.preview.overflow": "超出页数上限，内容会被截断",
   "delivery.preview.hide": "收起预览",
+  "delivery.preview.limitReached": "已达页数上限（{limit} 页）",
 
   // ── 岗位变体（W16：按变体导出）─────────────────────────────
   "delivery.variant.label": "岗位变体",
@@ -126,6 +136,11 @@ const delivery = {
   "delivery.export.noRevision": "还没拿到简历版本，请稍后重试",
   "delivery.export.snapshotKept": "导出使用当前内容与排版参数的同一次快照",
   "delivery.export.archiveKept": "本次会同时归档原件，可在「交付原件」里核对",
+  "delivery.export.actionSingle": "导出文件",
+  "delivery.export.singleExporting": "正在导出…",
+  "delivery.export.singleProgress": "正在导出 {index}/{total}：{format}",
+  "delivery.export.singleFailed": "已完成 {done}/{total}，{format} 失败：{reason}",
+  "delivery.export.singleSuccess": "已保存 {count} 个文件",
 
   // ── 交付原件列表 ──────────────────────────────────────────
   "delivery.archive.title": "交付原件",

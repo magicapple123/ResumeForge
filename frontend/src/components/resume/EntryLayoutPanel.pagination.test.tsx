@@ -48,10 +48,15 @@ describe("EntryLayoutPanel · 条目级断页（Q08）", () => {
     expect(latest(calls).sections[0].entries[0].layout.keep_together).toBe(true);
   });
 
-  it("切到「整个板块」后不显示条目级分页（板块级开关在分页面板里）", () => {
+  it("切到「整个板块」后条目级断页保留但禁用（R-11：切范围总高不变）", () => {
     const { container } = render(<Harness initial={makeDocument()} />);
     fireEvent.click(screen.getByText(t("structure.layout.scope.section")));
-    expect(container.querySelector("[data-entry-layout-pagination]")).toBeNull();
+    const group = container.querySelector<HTMLElement>("[data-entry-layout-pagination]");
+    if (!group) throw new Error("missing entry pagination group");
+    // 组还在（高度不跳），但两个开关禁用：板块级开关在分页面板里。
+    const switches = group.querySelectorAll('button[role="switch"]');
+    expect(switches).toHaveLength(2);
+    switches.forEach((node) => expect(node).toBeDisabled());
   });
 
   it("第一次拨动条目断页开关给一次轻提示", () => {

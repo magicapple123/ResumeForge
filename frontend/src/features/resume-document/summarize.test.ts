@@ -61,10 +61,45 @@ describe("summarize", () => {
     );
   });
 
-  it("页眉按位置分组，label 是页眉位置枚举值", () => {
+  it("R-09：页眉合成单个「基本信息」分组，子节点按页眉位置顺序平铺", () => {
     const tree = summarize(makeDocument());
-    expect(tree.header.map((node) => node.headerPlacement)).toEqual(["name", "contact"]);
-    expect(tree.header[0].children?.[0].path).toBe("header.ob_head0001");
+    expect(tree.header).toHaveLength(1);
+    const header = tree.header[0];
+    expect(header.kind).toBe("group");
+    expect(header.key).toBe("header");
+    expect(header.label).toBe("header");
+    // 子节点直接是字段（不再按 name/contact 分组），位置仍是纸面顺序。
+    expect(header.children?.map((node) => node.headerPlacement)).toEqual(["name", "contact"]);
+    expect(header.children?.map((node) => node.itemId)).toEqual(["ob_head0001", "ob_head0002"]);
+    expect(header.children?.[0].path).toBe("header.ob_head0001");
+  });
+
+  it("R-09：页眉里乱序的字段也按纸面位置重排（同位置内保持原序）", () => {
+    const document = makeDocument();
+    document.header.items = [
+      {
+        kind: "field",
+        id: "ob_head0101",
+        key: "photo",
+        label: "",
+        value: "data:image/png;base64,AAAA",
+        placement: "photo",
+        format: "text",
+      },
+      ...document.header.items,
+    ];
+    const header = summarize(document).header[0];
+    expect(header.children?.map((node) => node.headerPlacement)).toEqual([
+      "name",
+      "contact",
+      "photo",
+    ]);
+  });
+
+  it("R-09：没有页眉字段时不输出空分组", () => {
+    const document = makeDocument();
+    document.header.items = [];
+    expect(summarize(document).header).toEqual([]);
   });
 
   it("路径可直接用于定位 item（与 paths 的写法一致）", () => {

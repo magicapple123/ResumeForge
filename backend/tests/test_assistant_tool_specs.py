@@ -21,6 +21,7 @@ import pytest
 from app.services.assistant_tools import _TOOLS, tool_names
 from app.services.assistant_tools._tools_specs_core import CORE_TOOLS
 from app.services.assistant_tools._tools_specs_data import DATA_TOOLS
+from app.services.assistant_tools._tools_specs_document import DOCUMENT_TOOLS
 from app.services.assistant_tools._tools_specs_relaxed import RELAXED_TOOLS
 from app.services.assistant_tools._tools_specs_report import REPORT_TOOLS
 from app.services.assistant_tools._tools_specs_search import SEARCH_TOOLS
@@ -65,14 +66,15 @@ EXPECTED_DATA_TOOL_ORDER = (
     "list_user_files",
 )
 
-# 全量注册表顺序（CORE → DATA → RELAXED → REPORT → SEARCH）。这是提示词顺序的
-# 唯一契约来源；分组边界也在其中（写工具靠后的位置不要随手提前）。
+# 全量注册表顺序（CORE → DATA → RELAXED → REPORT → SEARCH → DOCUMENT）。这是提示词
+# 顺序的唯一契约来源；分组边界也在其中（写工具靠后的位置不要随手提前）。
 EXPECTED_TOOL_ORDER = (
     *(tool.name for tool in CORE_TOOLS),
     *EXPECTED_DATA_TOOL_ORDER,
     *(tool.name for tool in RELAXED_TOOLS),
     *(tool.name for tool in REPORT_TOOLS),
     *(tool.name for tool in SEARCH_TOOLS),
+    *(tool.name for tool in DOCUMENT_TOOLS),
 )
 
 

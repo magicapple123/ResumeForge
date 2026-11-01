@@ -9,6 +9,17 @@
  * - 提交 `POST /api/provenance/links`（resume_id + source_id + 目标 locator）。
  *
  * 兼容性：只填标题时提交的请求体与旧版一致（kind=manual、不带 external_ref/payload）。
+ *
+ * ## 下拉控件归类（#20 审计）
+ *
+ * 三个下拉都是**必填表单类**（决定提交哪条来源 / 哪一版 / 新建来源的类型）：
+ * 来源选择提交前必须选（提交按钮随之禁用）；修订选择有默认值「最新修订」；
+ * 来源类型有默认值「手工登记」。因此三者都**不加 allowClear**，也不属于"筛选类可清空"。
+ *
+ * ## 目标位置显示（#20a 延伸）
+ *
+ * 「位置」一行必须给**人可读**的条目/字段名（宿主传 `targetLabelText`）；没有可读名时
+ * 才退回内部 path，避免把 `education.ob_e436...` 这类内部 id 直接摆给用户。
  */
 import { Alert, Button, Divider, Input, Modal, Select, Space, Typography } from "antd";
 import { useCallback, useEffect, useState } from "react";
@@ -44,6 +55,8 @@ interface Props {
   target: LinkTargetInput | null;
   /** 打开时预选的来源（P5-2「重新关联」把失效旧关联的来源带回来；不自动选块）。 */
   initialSourceId?: number | null;
+  /** 目标块的人可读名字（条目/字段显示名）；缺省时退回内部 path 并在下方注释说明。 */
+  targetLabelText?: string;
   onClose: () => void;
   /** 关联成功：宿主据此刷新来源链/覆盖数。 */
   onLinked?: (link: BlockLinkOut) => void;
@@ -60,6 +73,7 @@ export default function SourceLinkModal({
   resumeId,
   target,
   initialSourceId = null,
+  targetLabelText = "",
   onClose,
   onLinked,
 }: Props) {
@@ -214,7 +228,9 @@ export default function SourceLinkModal({
     >
       <Space orientation="vertical" size={8} style={{ width: "100%" }}>
         <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-          {pt("provenance.link.targetPath", { path: targetLabel(target) || "-" })}
+          {pt("provenance.link.targetPath", {
+            path: targetLabelText || targetLabel(target) || "-",
+          })}
         </Typography.Text>
         {error ? <Alert type="error" showIcon title={error} /> : null}
         <label>

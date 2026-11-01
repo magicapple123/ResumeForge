@@ -11,6 +11,9 @@
 """
 import pytest
 from app.models.apply import (
+    FAILURE_CAPTCHA_REQUIRED,
+    FAILURE_CATEGORY_LABELS,
+    FAILURE_SELECTOR_INVALID,
     ITEM_STATUS_FAILED,
     ITEM_STATUS_SKIPPED,
     ITEM_STATUS_SUCCESS,
@@ -106,3 +109,77 @@ def test_keyword_filter_matches_title_or_company(db_session, batch_with_items):
     batches, total = apply_service.list_record_batches(db_session, keyword="C公司")
     assert total == 1 and batches[0].id == task_a.id
     assert [record.company for record in batches[0].items] == ["C公司"]
+
+
+def test_grouped_batches_summarise_failed_items_by_category(db_session, client):
+    """#39 回归：批次里**真有**带分类的失败明细时，组头聚合必须是 `[{category,label,count}]`。
+
+    这条正是"导出别名指错模型"能溜过既有用例的那个缺口：既有夹具里的失败条目
+    ``failure_category`` 都是空串，聚合查询被 ``!= ""`` 滤掉，于是 ``failure_summary``
+    恒为空列表——"用错模型"和"用对模型"在断言上完全等价，怎么跑都绿。
+    只有造出「恰好有 failed 且带 failure_category 的明细」，才能把这条链路真正压到。
+
+    同分类要真的累加（同因聚合的意义），无分类的失败条目不计入聚合（没有可展示的因）。
+    """
+    task = ApplyTask(
+        kind=TASK_KIND_APPLY,
+        status=TASK_STATUS_COMPLETED,
+        total=4,
+        processed=4,
+        succeeded=1,
+        failed=3,
+    )
+    db_session.add(task)
+    db_session.flush()
+
+    def failed(title: str, category: str) -> None:
+        db_session.add(
+            ApplyTaskItem(
+                task_id=task.id,
+                job_id=None,
+                job_title=title,
+                company="审计公司",
+                status=ITEM_STATUS_FAILED,
+                failure_category=category,
+            )
+        )
+
+    failed("后端开发", FAILURE_SELECTOR_INVALID)
+    failed("全栈工程师", FAILURE_SELECTOR_INVALID)
+    failed("测试工程师", FAILURE_CAPTCHA_REQUIRED)
+    # 失败但没有分类：能进「失败数」，但没有可聚合的因，不该出现在 failure_summary 里。
+    failed("数据工程师", "")
+    db_session.add(
+        ApplyTaskItem(
+            task_id=task.id,
+            job_id=None,
+            job_title="前端开发",
+            company="审计公司",
+            status=ITEM_STATUS_SUCCESS,
+        )
+    )
+    db_session.commit()
+
+    response = client.get("/api/apply/records/grouped")
+    assert response.status_code == 200
+    batch = next(item for item in response.json()["items"] if item["id"] == task.id)
+    assert batch["failed"] == 3
+    # 形状与取值都是契约：前端组头按 `category` 做筛选键、`label` 直接上屏、`count` 显示条数。
+    # 顺序不比：聚合成 SQL GROUP BY 的产物，顺序没有承诺（按分类键取值比较）。
+    summary = {entry["category"]: entry for entry in batch["failure_summary"]}
+    assert summary == {
+        FAILURE_SELECTOR_INVALID: {
+            "category": FAILURE_SELECTOR_INVALID,
+            "label": FAILURE_CATEGORY_LABELS[FAILURE_SELECTOR_INVALID],
+            "count": 2,
+        },
+        FAILURE_CAPTCHA_REQUIRED: {
+            "category": FAILURE_CAPTCHA_REQUIRED,
+            "label": FAILURE_CATEGORY_LABELS[FAILURE_CAPTCHA_REQUIRED],
+            "count": 1,
+        },
+    }
+    # 标签必须是给人看的中文说明，不是枚举值本身（后端已翻好）。
+    assert all(
+        entry["label"] != entry["category"] for entry in batch["failure_summary"]
+    )

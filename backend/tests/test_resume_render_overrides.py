@@ -135,7 +135,8 @@ def test_objects_domain_requires_stable_ids_and_bounds_entries():
 def test_style_props_and_bounds_are_the_frozen_contract():
     assert ROLES == ("name", "section_title", "entry_title", "body", "meta")
     keys = tuple(prop["key"] for prop in STYLE_PROPS)
-    assert len(keys) == 12 and len(set(keys)) == 12
+    # #5d：italic 移除后是 11 项；数字边界仍逐项冻结。
+    assert len(keys) == 11 and len(set(keys)) == 11 and "italic" not in keys
     assert PROP_BOUNDS["font_scale"] == (0.70, 2.40)
     assert PROP_BOUNDS["space_before"] == (0.0, 3.0)
     assert PROP_BOUNDS["line_height"] == (1.0, 2.6)

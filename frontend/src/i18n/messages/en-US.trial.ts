@@ -23,9 +23,13 @@ const trial = {
   "trial.override.keepHint": "Manual line spacing, color and other settings stay active",
   "trial.override.reset": "Use template defaults",
   "trial.override.resetHint":
-    "Clear manual layout overrides and return to the template's default settings",
-  "trial.override.unavailable":
-    "Overrides cannot be reset here; clear them in Typography settings first",
+    "On adoption this clears every layout setting (font size, line spacing, color, per-entry layout) and restores the template defaults",
+  "trial.override.confirmTitle": "Using template defaults clears every layout setting",
+  "trial.override.confirmBody":
+    "Font size, line spacing, color, page margins and per-entry layout overrides will all be removed, and switching to {name} cannot bring them back. You can undo once before saving.",
+  "trial.override.confirmOk": "Clear and use",
+  "trial.override.confirmCancel": "Cancel",
+  "trial.override.unavailable": "Overrides cannot be reset from this entry point",
   "trial.adopt": "Use this template",
   "trial.adopt.disabled": "This is already the current template",
   "trial.adopt.done": "Switched to {name}",

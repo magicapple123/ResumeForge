@@ -15,6 +15,7 @@ describe("VariantLayoutEditor", () => {
   it("继承态显示继承状态与可点保存前的禁用语义", () => {
     render(
       <VariantLayoutEditor
+        name="English version"
         fields={FIELDS}
         inherited
         dirty={false}
@@ -24,21 +25,31 @@ describe("VariantLayoutEditor", () => {
       />,
     );
     expect(screen.getByText(bt("bilingual.layout.inherited"))).toBeTruthy();
+    // 标题带版本名：面板里同时有中/英两份，"这份版本的排版"看不出是哪一份。
+    expect(
+      screen.getByText(bt("bilingual.layout.title", { name: "English version" })),
+    ).toBeTruthy();
     expect(screen.getByText("scholar")).toBeTruthy();
     const save = screen.getByRole("button", {
       name: bt("bilingual.layout.save"),
     }) as HTMLButtonElement;
     expect(save.disabled).toBe(true);
+    // 禁用原因要读得到（禁用按钮自身不触发 Tooltip，原生 title 兜底）。
+    expect(save.closest("span")?.getAttribute("title")).toBe(bt("bilingual.layout.unchanged"));
     const reset = screen.getByRole("button", {
       name: bt("bilingual.layout.reset"),
     }) as HTMLButtonElement;
     expect(reset.disabled).toBe(true);
+    expect(reset.closest("span")?.getAttribute("title")).toBe(
+      bt("bilingual.layout.resetInherited"),
+    );
   });
 
   it("改页数会回传完整字段并启用保存", () => {
     const onChange = vi.fn();
     render(
       <VariantLayoutEditor
+        name="English version"
         fields={FIELDS}
         inherited={false}
         dirty
@@ -60,6 +71,7 @@ describe("VariantLayoutEditor", () => {
     const onReset = vi.fn();
     render(
       <VariantLayoutEditor
+        name="English version"
         fields={FIELDS}
         inherited={false}
         dirty

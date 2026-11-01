@@ -25,7 +25,6 @@ const typography = {
   "typography.prop.font_scale": "Font size ratio",
   "typography.prop.color": "Color",
   "typography.prop.bold": "Bold",
-  "typography.prop.italic": "Italic",
   "typography.prop.space_before": "Space before",
   "typography.prop.space_after": "Space after",
   "typography.prop.line_height": "Line spacing",
@@ -51,6 +50,11 @@ const typography = {
   "typography.row.sliderAria": "{label} (drag to adjust)",
   "typography.row.decreaseAria": "Decrease {label}",
   "typography.row.increaseAria": "Increase {label}",
+  /** R-34B：未覆盖 = 继承模板时的三处提示。 */
+  "typography.row.inherited": "Inherited",
+  "typography.row.inheritedPlaceholder": "Inherit",
+  "typography.row.inheritedSliderHint":
+    "This property follows the template; drag to override it for this item",
   "typography.row.invalid": "Value was outside the allowed range and has been adjusted to fit",
   "typography.value.pt": "About {pt}pt",
   "typography.object.title": "Selected content typography",
@@ -60,8 +64,7 @@ const typography = {
   "typography.object.scope": "Applies only to {name}",
   "typography.object.untitled": "Untitled Entry",
   "typography.object.more": "More options",
-  "typography.object.levelHint":
-    "Size, bold and paragraph spacing are managed by the text level above",
+  "typography.object.levelHint": "Size, bold and paragraph spacing are not edited here",
   // ── Entry typography scope (Q12: whole entry / heading / body / metadata) ──
   "typography.entryStyle.scope.label": "Scope",
   "typography.entryStyle.scope.aria": "Choose which part of the Entry the settings apply to",
@@ -83,19 +86,9 @@ const typography = {
   "typography.entryStyle.restore": "Restore {scope} to template",
   "typography.entryStyle.noMeta": "This entry has no date or metadata fields",
   "typography.entryStyle.noBullets": "This entry body has no bullets",
-  "typography.painter.title": "Format painter",
-  "typography.painter.hint": "Copy local typography from one entry to others",
-  "typography.painter.copy": "Copy {name} typography",
-  "typography.painter.copyProps": "Copy {count} settings: {props}",
-  "typography.painter.propSeparator": "; ",
-  "typography.painter.empty": "This Entry has no local adjustments. Change a setting first",
-  "typography.painter.armed": "Copied. Select target entries above",
-  "typography.painter.apply": "Apply to {count}",
-  "typography.painter.cancel": "Exit format painter",
   "typography.painter.freeze": "Fix this range's current style",
   "typography.painter.freezeHint":
     "After fixing, this scope no longer follows changes to the template",
-  "typography.painter.applied": "Applied to {count} items",
   "typography.painter.frozen": "Fixed the current scope style",
   "typography.multi.title": "Batch adjustments",
   "typography.multi.count": "{count} items selected",
@@ -109,16 +102,14 @@ const typography = {
   "typography.multi.duplicateDetail": "{count} items have identical content: {names}",
   "typography.capability.title": "Format support",
   "typography.capability.pdf":
-    "Exact PDF uses template italic and letter-spacing values; other properties are supported",
+    "Exact PDF: italic has been removed; letter-spacing uses template values, other properties are supported",
   "typography.capability.word": "Word and HTML support all properties",
   "typography.capability.draft":
     "Draft preview uses a CSS approximation; exact PDF is authoritative",
   "typography.inline.groupAria": "Character formatting",
   "typography.inline.bold": "Bold",
-  "typography.inline.italic": "Italic",
   "typography.inline.link": "Link",
   "typography.inline.boldAria": "Make selected text bold",
-  "typography.inline.italicAria": "Make selected text italic",
   "typography.inline.linkAria": "Add a link to selected text",
   "typography.inline.linkTitle": "Insert link",
   "typography.inline.linkPlaceholder": "https://example.com",
@@ -145,6 +136,8 @@ const typography = {
   "typography.level.empty": "Select content in the outline or preview first",
   "typography.level.status": "Editing: {name}",
   "typography.level.statusMany": "{count} entries",
+  "typography.level.statusBatch": "Batch: {count} entries",
+  "typography.level.clearBatch": "Edit current entry only",
   "typography.level.current": "Level: {level}",
   "typography.level.currentInherit": "Follows template",
   "typography.level.currentCustom": "Custom",
@@ -243,7 +236,7 @@ const typography = {
     "Font and base size of the whole resume; pick a font and adjust the size under Typography settings",
   "typography.structureExample.item.4.title": "Section heading",
   "typography.structureExample.item.4.desc":
-    "Headings such as Work experience; adjust size and bold under Local typography, Section heading",
+    "Headings such as Work experience; set their size under Styles, Hierarchy and spacing, Section heading size",
   "typography.structureExample.item.5.title": "Section",
   "typography.structureExample.item.5.desc":
     "Sections of the resume; reorder them under Templates and layout presets, and start a new page under Pagination",
@@ -252,25 +245,25 @@ const typography = {
     "One record inside a section; change the space between entries with Entry spacing",
   "typography.structureExample.item.7.title": "Entry heading row",
   "typography.structureExample.item.7.desc":
-    "Title on the left and date on the right; move the date under Local typography, Date position",
+    "Title on the left and date on the right; right-click the date field, choose Adjust typography, then set Date position",
   "typography.structureExample.item.8.title": "Body and bullets",
   "typography.structureExample.item.8.desc":
-    "Description and bullets below an entry heading; adjust them under Local typography, Body text",
+    "Description and bullets below an entry heading; right-click the body text or a bullet, choose Adjust typography, then change color, line spacing, indent, alignment or letter spacing",
   "typography.structureExample.item.9.title": "Bullet",
   "typography.structureExample.item.9.desc":
-    "Marker before a bullet line; switch between dot, dash and none under Local typography",
+    "Marker before a bullet line; right-click the body text or a bullet, choose Adjust typography, then switch Bullet style between dot, dash and none",
   "typography.structureExample.item.10.title": "Line spacing",
   "typography.structureExample.item.10.desc":
     "Space between lines of body text; set it for the whole resume or per paragraph type",
   "typography.structureExample.item.11.title": "Space before and after",
   "typography.structureExample.item.11.desc":
-    "Space above and below a paragraph; adjust it per paragraph type under Local typography",
+    "Space above and below a paragraph; follows the template paragraph style, and there is no separate control for it",
   "typography.structureExample.item.12.title": "Indent",
   "typography.structureExample.item.12.desc":
-    "How far body text is inset from the left edge; adjust it under Local typography, Indent",
+    "How far body text is inset from the left edge; right-click the body text or a bullet, choose Adjust typography, then set Indent",
   "typography.structureExample.item.13.title": "Alignment",
   "typography.structureExample.item.13.desc":
-    "Left, center, right or justify; choose one under Local typography, Alignment",
+    "Left, center, right or justify; right-click the body text, a bullet or the entry heading, choose Adjust typography, then set Alignment",
   "typography.structureExample.item.14.title": "Section spacing",
   "typography.structureExample.item.14.desc":
     "Space between two sections; adjust it under Hierarchy and spacing, Section spacing",
@@ -287,11 +280,8 @@ const typography = {
   "typography.tools.selectionEmpty": "This resume has no entries yet",
   "typography.tools.focused": "Current entry: {name}",
   "typography.tools.noFocused": "Click an entry on the page or in the structure panel first",
-  "typography.tools.targets": "Format painter targets: {count}",
-  "typography.tools.targetsHint": "Select target entries above before applying the painter",
   "typography.tools.sectionObject": "Entry typography",
   "typography.tools.sectionLevel": "Text level",
-  "typography.tools.sectionPainter": "Format painter",
   "typography.tools.sectionBatch": "Batch adjust",
   "typography.tools.sectionRole": "Paragraph roles",
   "typography.tools.roleHint": "Paragraph roles inherit from the entry body by default",

@@ -28,10 +28,13 @@ from sqlalchemy.orm import Mapped, mapped_column
 from ..database import Base
 from .profile import utcnow
 
-# 版本的来源：用户手动命名 / 从历史版本恢复 / 导出前自动留档（W19 预留）。
+# 版本的来源：用户手动命名 / 从历史版本恢复 / 助手写入前的自动留档（#38 撤销点）。
+# 助手留档同样是**不可变快照**：恢复它就是把内容写回当前简历（revision +1），
+# 不会改动任何历史版本行——与 restore 的语义完全一致。
 VERSION_SOURCE_MANUAL = "manual"
 VERSION_SOURCE_RESTORE = "restore"
-VERSION_SOURCES = (VERSION_SOURCE_MANUAL, VERSION_SOURCE_RESTORE)
+VERSION_SOURCE_ASSISTANT = "assistant"
+VERSION_SOURCES = (VERSION_SOURCE_MANUAL, VERSION_SOURCE_RESTORE, VERSION_SOURCE_ASSISTANT)
 
 
 class ResumeVersion(Base):
@@ -118,6 +121,7 @@ class ResumeVariant(Base):
 
 __all__ = [
     "VERSION_SOURCES",
+    "VERSION_SOURCE_ASSISTANT",
     "VERSION_SOURCE_MANUAL",
     "VERSION_SOURCE_RESTORE",
     "ResumeVariant",

@@ -124,7 +124,8 @@ async def create_session(payload: DrillCreate, request: Request, db: Session = D
 
     契约在这一步就落库了——用户看到问题的时候，判定标准已经定下来。
     """
-    claims = select_claims(db, payload.claim_ids, payload.max_questions)
+    # 不传 claim_ids = 旧口径（全部已确认的）；显式空列表在 schema 层就被 422 拦下了。
+    claims = select_claims(db, payload.claim_ids or [], payload.max_questions)
     if not claims:
         raise HTTPException(
             status_code=400,

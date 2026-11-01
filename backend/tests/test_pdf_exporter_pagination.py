@@ -34,6 +34,7 @@ from io import BytesIO
 import pytest
 from app.schemas.resume import MAX_RESUME_PAGES, ResumeContent, ResumeExperience
 from app.services.pdf_exporter import _PX_TO_MM, _PX_TO_PT, build_resume_pdf, resolve_layout
+from app.services.pdf_exporter.bullet_dot import dot_circle_geometry
 from app.services.pdf_exporter.fonts import FONT_FAMILY
 from pypdf import PdfReader
 from test_pdf_exporter import _MM_TO_PT, _filler, _pdf_with_font, _text_runs, needs_font
@@ -326,10 +327,14 @@ def _resume_with_one_bullet(text: str) -> ResumeContent:
 
 
 def _bullet_runs(content: bytes) -> tuple[list, list]:
-    """把 PDF 里那条 li 的「符号 run」与「正文 run」分开返回。
+    """把 PDF 里那条 li 的「圆点 run」与「正文 run」分开返回。
 
-    以条目头的 y 为分界（PDF 坐标原点在左下角，条目头下方的 run 的 y 更小）：符号现在是
-    **单独一次 `cell`** 画的，所以它在文字流里也是一个独立的 run（文本就是「·」）。
+    以条目头的 y 为分界（PDF 坐标原点在左下角，条目头下方的 run 的 y 更小）。
+
+    R-20 之后**圆点不再是文本 run**：它改成在符号槽里画一个实心矢量圆（`dot_circle_geometry`），
+    画圆不进文字流。所以这里返回的 `marker` 现在是**空列表**，它的用途只剩一条：断言"符号
+    确实不再以字形出现"（万一有人把字形又加回来，`marker` 会重新有值）。圆点的位置与直径
+    由 `dot_circle_geometry` 的纯函数断言覆盖，见本文件末尾那组用例。
     """
     runs = _text_runs(content)
     entry = [run for run in runs if run[3].strip() == _ENTRY_TITLE]
@@ -356,7 +361,8 @@ def test_list_text_starts_at_the_template_indent(template: str, indent_ratio: fl
         ).content
     )
     assert len(lines) == 1, f"样本应当只有一行正文：{lines}"
-    assert marker, "符号没有单独画出来（它必须是一个独立的 run）"
+    # R-20：圆点是矢量圆，不再作为字形出现在文字流里。
+    assert not marker, f"圆点不该再以字形出现（它应该是一个矢量圆）：{marker}"
     layout = _layout_of(template)
     probe = _pdf_with_font()
     # 只有一个分区时它落在左栏；两个模板的左沿都是页边距（split 的左栏就是整页正文的左沿）。
@@ -365,8 +371,6 @@ def test_list_text_starts_at_the_template_indent(template: str, indent_ratio: fl
     # 而不是在 `bullets()` 里对列表单独补偿（那会让列表比同段正文左移 1mm）。
     expected = layout.margin_x + indent_ratio * layout.base_px * _PX_TO_MM + float(probe.c_margin)
     assert lines[0][0] / _MM_TO_PT == pytest.approx(expected, abs=0.1)
-    # 符号在正文左侧的留白里（`list-style-position: outside`），不占正文的行宽。
-    assert marker[0][0] < lines[0][0]
 
 
 @needs_font
@@ -384,15 +388,11 @@ def test_every_wrapped_line_of_a_bullet_starts_at_the_indent(template: str):
             _resume_with_one_bullet(_LONG_BULLET), template=template, page_limit=1
         ).content
     )
-    assert len(marker) == 1, f"符号不该跟着折行重复或独占一行：{marker}"
+    # 圆点只画一次、且不占文字流：折行时它不会被复制到续行（R-20 起它压根不是 run）。
+    assert not marker, f"圆点不该以字形出现，更不该跟着折行重复：{marker}"
     assert len(lines) >= 3, f"样本没有折成多行，测不出续行：{[run[3] for run in lines]}"
     xs = {round(run[0], 2) for run in lines}
     assert len(xs) == 1, f"续行缩回去了（各行的 x）：{[(run[0], run[1]) for run in lines]}"
-    # 符号与**首行**同一个 y（同一行盒），且落在正文左侧：拼进 `multi_cell` 的旧写法会在
-    # 正文贴着行宽时把整段挤到下一行，留下一整行只有圆点。
-    assert marker[0][1] == pytest.approx(lines[0][1], abs=0.5)
-    assert marker[0][0] < lines[0][0]
-
     layout = _layout_of(template)
     expected = (
         layout.margin_x
@@ -453,3 +453,31 @@ def test_entry_head_reserves_one_body_line_after_itself():
     pdf.entry_head("某某科技有限公司", "2023-03 - 至今", base)
 
     assert seen == pytest.approx([pdf.line_advance(title_size) + pdf.line_advance(base)])
+
+
+class TestDotCircleGeometry:
+    """R-20：圆点的几何（符号改成矢量圆之后，PDF 文字流里读不到它，只能直接核对数字）。"""
+
+    def test_radius_is_032_of_font_size(self):
+        """直径 = 0.32 × 字号：与浏览器 `disc` 的直径同量级，换字体也不会变。"""
+        _, _, radius = dot_circle_geometry(50.0, 3.0, 1.0, 14.0, 0.0, 6.0)
+        assert radius * 2 == pytest.approx(0.32 * 14.0 * _PX_TO_MM, abs=1e-9)
+
+    def test_radius_scales_with_font_size(self):
+        """字号翻倍，直径翻倍（旧实现用字形，点的大小由字体决定，做不到这条）。"""
+        a = dot_circle_geometry(50.0, 3.0, 1.0, 10.0, 0.0, 5.0)[2]
+        b = dot_circle_geometry(50.0, 3.0, 1.0, 20.0, 0.0, 5.0)[2]
+        assert b == pytest.approx(a * 2)
+
+    def test_center_sits_middle_of_the_marker_slot(self):
+        """圆心落在符号槽正中：槽位宽度未变，正文左边缘因此一个字都不动。"""
+        text_left, marker_width, pad = 50.0, 3.0, 1.0
+        cx, _, _ = dot_circle_geometry(text_left, marker_width, pad, 14.0, 0.0, 6.0)
+        slot_left = text_left - marker_width - pad
+        assert cx == pytest.approx(slot_left + (marker_width + 2 * pad) / 2)
+        # 圆心必须在正文左侧（list-style-position: outside），且整个圆不越出槽位。
+        assert cx < text_left
+
+    def test_center_is_half_a_line_below_the_line_top(self):
+        _, cy, _ = dot_circle_geometry(50.0, 3.0, 1.0, 14.0, 12.0, 6.0)
+        assert cy == pytest.approx(12.0 + 3.0)

@@ -8,6 +8,9 @@
  * 两者都需要简历上下文与全局提示，不该埋在一个列表组件里）。所以它是一组回调 + 一份受控数据，
  * 既能挂进制作台侧栏，也能挂在独立的资产库页。
  *
+ * 2026-11-01（#19）：收藏入口在没选中要点时**禁用**并用 tooltip 说明原因（以前是整块不渲染，
+ * 用户看不到"收藏"这个能力存在）；插入禁用原因与收藏原因都由宿主按场景传进来。
+ *
  * ## 四态只走项目统一出口
  *
  * loading → `LoadingBlock`；error → `ErrorState`（带重试）；一条都没有 → `EmptyState`；
@@ -50,6 +53,12 @@ export interface PhraseLibraryPanelProps {
   onEdit?: (phrase: ResumePhrase) => void;
   /** 把"当前选中的要点"收藏成资产；不传 = 不渲染这个入口。 */
   onCollectCurrent?: () => void;
+  /** 收藏入口是否可用（#19：没选中要点时**禁用**而不是整个不渲染，tooltip 说明原因）。 */
+  collectEnabled?: boolean;
+  /** 收藏不可用的原因（tooltip 文案由宿主给，随场景不同）。 */
+  collectDisabledReason?: string;
+  /** 插入不可用的原因（tooltip 文案由宿主给：没选中位置 / 有未保存修改是两回事）。 */
+  insertDisabledReason?: string;
   initialFilter?: Partial<PhraseFilterState>;
   className?: string;
 }
@@ -66,6 +75,9 @@ export default function PhraseLibraryPanel({
   onCopy,
   onEdit,
   onCollectCurrent,
+  collectEnabled = true,
+  collectDisabledReason,
+  insertDisabledReason,
   initialFilter,
   className,
 }: PhraseLibraryPanelProps) {
@@ -93,16 +105,20 @@ export default function PhraseLibraryPanel({
           </span>
         </div>
         {onCollectCurrent ? (
-          <Tooltip title={at("assets.action.collect")}>
-            <Button
-              size="small"
-              className="resume-assets-head-action"
-              icon={<StarOutlined />}
-              aria-label={at("assets.action.collectAria")}
-              onClick={onCollectCurrent}
-            >
-              {at("assets.action.collect")}
-            </Button>
+          <Tooltip title={collectEnabled ? at("assets.action.collect") : collectDisabledReason}>
+            {/* disabled Button 不派发鼠标事件：套 span 才能让「为什么不能收藏」的 tooltip 出现。 */}
+            <span className="resume-assets-head-action-wrap">
+              <Button
+                size="small"
+                className="resume-assets-head-action"
+                icon={<StarOutlined />}
+                disabled={!collectEnabled || undefined}
+                aria-label={at("assets.action.collectAria")}
+                onClick={onCollectCurrent}
+              >
+                {at("assets.action.collect")}
+              </Button>
+            </span>
           </Tooltip>
         ) : null}
       </div>
@@ -144,6 +160,7 @@ export default function PhraseLibraryPanel({
                   phrase={phrase}
                   index={index + 1}
                   insertEnabled={insertEnabled}
+                  insertDisabledReason={insertDisabledReason}
                   onInsert={onInsert}
                   onRequestDelete={onRequestDelete}
                   onCopy={onCopy}

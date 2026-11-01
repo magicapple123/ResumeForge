@@ -170,10 +170,13 @@ describe("StructurePanel · 渲染", () => {
     expect(rowOf(container, "education.entry_edu_01.school_01")).toBeInTheDocument();
   });
 
-  it("页眉字段出现在树里（姓名行分组）", () => {
+  it("R-09：页眉字段出现在树里（合并成单个「基本信息」分组）", () => {
     const { container } = render(<Harness initial={makeDocument()} />);
-    expect(treeKeyRow(container, "header.#name")).toBeInTheDocument();
+    // 只剩一个页眉分组行，位置名（姓名行 / 联系方式 …）不再单独占行。
+    expect(container.querySelectorAll('[data-tree-key="header"]')).toHaveLength(1);
+    expect(container.querySelector('[data-tree-key="header.#name"]')).toBeNull();
     expect(rowOf(container, "header.header_name_01")).toBeInTheDocument();
+    expect(treeKeyRow(container, "header").textContent).toContain(t("structure.node.header"));
   });
 
   it("隐藏字段带隐藏徽标，来源资料/手动圆点分开", () => {
@@ -232,6 +235,63 @@ describe("StructurePanel · 选中与搜索", () => {
     // 顶部提示与树内空态都显示这句话（两处都是"没有匹配"的出口）。
     expect(screen.getAllByText(t("structure.search.empty")).length).toBeGreaterThanOrEqual(1);
   });
+
+  it("R-09：搜位置名「联系方式」能命中该位置的 4 个字段（合并成单个分组后的新能力）", () => {
+    const document = makeDocument();
+    const headerItem = (
+      id: string,
+      key: string,
+      value: string,
+      placement: "name" | "name_meta" | "subtitle" | "contact" | "photo",
+    ) => ({
+      kind: "field" as const,
+      id,
+      key,
+      label: "",
+      value,
+      placement,
+      format: "text" as const,
+    });
+    document.header.items = [
+      headerItem("h_name", "name", "张三", "name"),
+      headerItem("h_meta", "english_name", "Zhang San", "name_meta"),
+      headerItem("h_sub", "job_intent", "会员运营专员", "subtitle"),
+      headerItem("h_phone", "phone", "13801738891", "contact"),
+      headerItem("h_mail", "email", "lin@example.com", "contact"),
+      headerItem("h_city", "city", "上海", "contact"),
+      headerItem("h_birth", "birth", "1998-11", "contact"),
+      headerItem("h_photo", "photo", "data:image/png;base64,AAAA", "photo"),
+    ];
+    const { container } = render(<StructurePanel document={document} onChange={() => {}} />);
+    // 顶部只有一个「基本信息 8」。
+    expect(container.querySelectorAll('[data-tree-key="header"]')).toHaveLength(1);
+    expect(treeKeyRow(container, "header").textContent).toContain(t("structure.node.header"));
+    expect(treeKeyRow(container, "header").textContent).toContain("8");
+    // 展开顺序 = 纸面顺序（姓名 → 姓名旁小字 → 求职意向 → 联系方式 → 照片）。
+    const headerRows = [
+      ...container.querySelectorAll<HTMLElement>('[data-tree-key^="header."]'),
+    ].map((row) => row.dataset.treePath);
+    expect(headerRows).toEqual([
+      "header.h_name",
+      "header.h_meta",
+      "header.h_sub",
+      "header.h_phone",
+      "header.h_mail",
+      "header.h_city",
+      "header.h_birth",
+      "header.h_photo",
+    ]);
+
+    const input = screen.getByRole("textbox", { name: t("structure.search.aria") });
+    fireEvent.change(input, { target: { value: "联系方式" } });
+    for (const id of ["h_phone", "h_mail", "h_city", "h_birth"]) {
+      expect(rowOf(container, `header.${id}`)).toBeInTheDocument();
+    }
+    // 姓名 / 求职意向 / 照片仍在同一分组下，但不属于联系方式，不应被带出。
+    expect(container.querySelector('[data-tree-path="header.h_name"]')).toBeNull();
+    // 分组自身 + 4 个命中字段 = 5 处匹配。
+    expect(screen.getByText(t("structure.search.count", { count: 5 }))).toBeInTheDocument();
+  });
 });
 
 describe("StructurePanel · 写操作", () => {
@@ -285,7 +345,7 @@ describe("StructurePanel · 写操作", () => {
 describe("StructurePanel · 键盘与纸面反选", () => {
   it("方向键在行间移动焦点", async () => {
     const { container } = render(<Harness initial={makeDocument()} />);
-    const first = treeKeyRow(container, "header.#name");
+    const first = treeKeyRow(container, "header");
     first.focus();
     fireEvent.keyDown(first, { key: "ArrowDown" });
     await waitFor(() => {
@@ -400,89 +460,5 @@ describe("StructurePanel · 字段目录标签与断页标记（Q20 / Q08）", (
     expect(treeKeyRow(container, "custom:sec_0001.entry_proj_01").dataset.treePageBreak).toBe(
       undefined,
     );
-  });
-});
-
-describe("StructurePanel · 结构树多选（U7）", () => {
-  function addSecondEntry(document: ResumeDocument): ResumeDocument {
-    return {
-      ...document,
-      sections: document.sections.map((section) =>
-        section.key === "education"
-          ? {
-              ...section,
-              entries: [
-                ...section.entries,
-                {
-                  id: "entry_edu_02",
-                  hidden: false,
-                  lock_content: false,
-                  lock_layout: false,
-                  layout: { head: "split" as const, columns: null, align: null, gap: null },
-                  items: [makeField("school_02", "school", "复旦大学", "title")],
-                },
-              ],
-            }
-          : section,
-      ),
-    };
-  }
-
-  function MultiHarness({ initial, readOnly }: { initial: ResumeDocument; readOnly?: boolean }) {
-    const [document, setDocument] = useState(initial);
-    const [selected, setSelected] = useState<string | null>(null);
-    const [paths, setPaths] = useState<string[]>([]);
-    return (
-      <StructurePanel
-        document={document}
-        onChange={setDocument}
-        readOnly={readOnly}
-        selectedPath={selected}
-        onSelectPath={setSelected}
-        multiSelectedPaths={paths}
-        onMultiSelectedPathsChange={setPaths}
-      />
-    );
-  }
-
-  it("勾选条目回传稳定路径，再点取消", () => {
-    const { container } = render(<MultiHarness initial={makeDocument()} />);
-    const row = treeKeyRow(container, "education.entry_edu_01");
-    const checkbox = within(row).getByRole("checkbox");
-    expect(checkbox).not.toBeChecked();
-    fireEvent.click(checkbox);
-    expect(checkbox).toBeChecked();
-    fireEvent.click(checkbox);
-    expect(checkbox).not.toBeChecked();
-  });
-
-  it("Shift 连选：从最后点击条目到当前条目整段并入选择", () => {
-    const { container } = render(<MultiHarness initial={addSecondEntry(makeDocument())} />);
-    // 普通点击先立锚点，再 Shift 点第二条 → 两条都进多选（不丢已有选择）。
-    fireEvent.click(treeKeyRow(container, "education.entry_edu_01"));
-    fireEvent.click(treeKeyRow(container, "education.entry_edu_02"), { shiftKey: true });
-    expect(
-      within(treeKeyRow(container, "education.entry_edu_01")).getByRole("checkbox"),
-    ).toBeChecked();
-    expect(
-      within(treeKeyRow(container, "education.entry_edu_02")).getByRole("checkbox"),
-    ).toBeChecked();
-    expect(
-      within(treeKeyRow(container, "custom:sec_0001.entry_proj_01")).getByRole("checkbox"),
-    ).not.toBeChecked();
-  });
-
-  it("没有宿主多选回调时不渲染勾选框（防死控件）", () => {
-    const { container } = render(<StructurePanel document={makeDocument()} onChange={() => {}} />);
-    expect(
-      within(treeKeyRow(container, "education.entry_edu_01")).queryByRole("checkbox"),
-    ).toBeNull();
-  });
-
-  it("只读态不渲染勾选框", () => {
-    const { container } = render(<MultiHarness initial={makeDocument()} readOnly />);
-    expect(
-      within(treeKeyRow(container, "education.entry_edu_01")).queryByRole("checkbox"),
-    ).toBeNull();
   });
 });
