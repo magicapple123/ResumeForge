@@ -18,7 +18,7 @@ const batchOperation = {
   "batchOperation.field.template": "Template",
   "batchOperation.field.fontScale": "Font size",
   "batchOperation.field.pageLimit": "Page limit",
-  "batchOperation.field.language": "Resume language",
+  "batchOperation.field.language": "Field language",
   "batchOperation.field.exportFormat": "Export format",
   "batchOperation.field.enhance": "AI polish",
   "batchOperation.field.enhancementLevel": "Polish strength",

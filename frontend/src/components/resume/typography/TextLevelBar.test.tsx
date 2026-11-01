@@ -99,11 +99,8 @@ describe("TextLevelBar（v2）", () => {
         selectedObjectId="ob_entry001"
       />,
     );
-    expect(
-      screen.getByText(
-        t("typography.level.status", { name: t("typography.level.statusMany", { count: 2 }) }),
-      ),
-    ).toBeInTheDocument();
+    // R-18：批量单独成句（不再拼进「正在调整：…」），多选时还要给"只改当前条目"的出口。
+    expect(screen.getByText(t("typography.level.statusBatch", { count: 2 }))).toBeInTheDocument();
     expect(screen.getByText(t("typography.level.scope.meta"))).toBeInTheDocument();
   });
 

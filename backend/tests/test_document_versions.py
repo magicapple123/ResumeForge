@@ -220,6 +220,107 @@ def test_selective_sync_only_changes_listed_paths(client):
     assert detail["last_synced_version_id"] == second["id"]
 
 
+def test_compare_returns_field_level_changes(client):
+    """#28b：比较给字段级「旧值 → 新值」，不给整份文档序列化后的行级 JSON。"""
+    resume_id = _create_resume(client)
+    first = _create_version(client, resume_id, "v1")
+    _save_content(client, resume_id, _content("版本 B", "B"))
+    second = _create_version(client, resume_id, "v2")
+
+    body = client.get(
+        f"/api/resumes/{resume_id}/versions/{first['id']}/compare/{second['id']}"
+    ).json()
+    changes = body["changes"]
+    assert body["changes_truncated"] is False
+    assert changes, "两份内容不同，字段级变更集不能为空"
+    scopes = {change["scope"] for change in changes}
+    # 个人总结是 summary 分区里的 text item，改文本 = 一条 item 级「修改」。
+    item_changes = [change for change in changes if change["scope"] == "item"]
+    assert item_changes, scopes
+    changed_values = {
+        (change["old_value"], change["new_value"])
+        for change in item_changes
+        if change["kind"] == "changed"
+    }
+    assert ("版本 A", "版本 B") in changed_values
+    # 旧值/新值是可读文本，不是文档 JSON 片段。
+    assert all("{" not in (old or "") + (new or "") for old, new in changed_values)
+
+    # 反过来比（选新版、与旧版比）也要按时间序输出「旧值 → 新值」。
+    reverse = client.get(
+        f"/api/resumes/{resume_id}/versions/{second['id']}/compare/{first['id']}"
+    ).json()
+    reverse_changes = [change for change in reverse["changes"] if change["scope"] == "item"]
+    assert ("版本 A", "版本 B") in {
+        (change["old_value"], change["new_value"]) for change in reverse_changes
+    }
+    # 排版相同时不报字段变化以外的噪声。
+    assert body["layout"]["equal"] is True
+
+
+def test_selective_sync_writes_header_field_by_id(client):
+    """#29c：基本信息走 header.<item id>；只改勾选的页眉字段，其余逐字节不变。"""
+    resume_id = _create_resume(client)
+    content = _resume(client, resume_id)["content"]
+    header = content["header"]
+    header["items"].extend(
+        [
+            {
+                "kind": "field",
+                "id": "ob_hd90000001",
+                "key": "phone",
+                "label": "",
+                "value": "13800000000",
+                "placement": "contact",
+                "format": "text",
+            },
+            {
+                "kind": "field",
+                "id": "ob_hd90000002",
+                "key": "email",
+                "label": "",
+                "value": "zhang@example.com",
+                "placement": "contact",
+                "format": "text",
+            },
+        ]
+    )
+    _save_content(client, resume_id, content)
+    variant = client.post(f"/api/resumes/{resume_id}/variants", json={"name": "页眉同步变体"}).json()
+    variant_detail = client.get(f"/api/resumes/{resume_id}/variants/{variant['id']}").json()
+    name_item = next(
+        item for item in variant_detail["content"]["header"]["items"] if item["key"] == "name"
+    )
+
+    # 改当前简历的姓名（v2 文档原样写回），再按 id 路径同步到变体。
+    current = _resume(client, resume_id)["content"]
+    next(
+        item for item in current["header"]["items"] if item["key"] == "name"
+    )["value"] = "张同步"
+    _save_content(client, resume_id, current)
+
+    response = client.post(
+        f"/api/resumes/{resume_id}/variants/sync",
+        json={"variant_ids": [variant["id"]], "paths": [f"header.{name_item['id']}"]},
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["items"][0]["applied_paths"] == [f"header.{name_item['id']}"]
+
+    detail = client.get(f"/api/resumes/{resume_id}/variants/{variant['id']}").json()
+    by_key = {item["key"]: item["value"] for item in detail["content"]["header"]["items"]}
+    assert by_key["name"] == "张同步"
+    # 未勾选的页眉字段与当前简历保持一致（没有被同步动作改掉）。
+    assert by_key["phone"] == "13800000000"
+    assert by_key["email"] == "zhang@example.com"
+    assert detail["last_synced_version_id"] is None
+
+    bad_path = client.post(
+        f"/api/resumes/{resume_id}/variants/sync",
+        json={"variant_ids": [variant["id"]], "paths": ["header.ob_hd0000dead"]},
+    )
+    assert bad_path.status_code == 400
+
+
 def test_sync_rejects_unknown_path_and_foreign_variant(client):
     resume_id = _create_resume(client)
     variant = client.post(f"/api/resumes/{resume_id}/variants", json={"name": "变体"}).json()

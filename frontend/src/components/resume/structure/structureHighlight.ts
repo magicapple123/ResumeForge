@@ -16,10 +16,24 @@ import type { StructureViewNode } from "./structureView";
 /** 注入到每个 iframe 的 `<style>` 的 id（与旧大纲高亮分开，两套可以同时存在）。 */
 export const STRUCTURE_HIGHLIGHT_STYLE_ID = "rf-structure-highlight";
 
-/** 高亮声明：底色 + 描边；两个强度值改这一处即可。 */
+/**
+ * R-14：选中与悬停分两档视觉。悬停是"你指的那一行"，选中是"你落下的那一行"——
+ * 同一强度会让用户在纸面上分不清"刚点的"和"鼠标扫过的"。
+ *
+ * 两档必须用**不同的 style id**：同一 id 谁后写谁覆盖，悬停扫过就会把选中态擦成 1px。
+ */
+export const STRUCTURE_HIGHLIGHT_SELECTED_STYLE_ID = "rf-structure-highlight-selected";
+
+/** 高亮声明：底色 + 描边；悬停档（14% / 1px）。 */
 export const STRUCTURE_HIGHLIGHT_DECLARATION =
   "background: color-mix(in srgb, currentColor 14%, transparent); " +
   "box-shadow: 0 0 0 1px color-mix(in srgb, currentColor 45%, transparent); " +
+  "border-radius: 2px";
+
+/** 选中档（20% / 2px）：明显重于悬停，但不至于盖住正文。 */
+export const STRUCTURE_HIGHLIGHT_SELECTED_DECLARATION =
+  "background: color-mix(in srgb, currentColor 20%, transparent); " +
+  "box-shadow: 0 0 0 2px color-mix(in srgb, currentColor 60%, transparent); " +
   "border-radius: 2px";
 
 /** 高亮目标：精确路径或前缀（条目级 = 该条目下所有字段）。 */
@@ -86,18 +100,19 @@ export function highlightTargetsForPath(path: string | null | undefined): Highli
 export function applyStructureHighlightToDocument(
   doc: Document | null | undefined,
   css: string,
+  styleId: string = STRUCTURE_HIGHLIGHT_STYLE_ID,
 ): void {
   if (!doc) return;
   const root = doc.head ?? doc.documentElement;
   if (!root) return;
-  let style = doc.getElementById(STRUCTURE_HIGHLIGHT_STYLE_ID) as HTMLStyleElement | null;
+  let style = doc.getElementById(styleId) as HTMLStyleElement | null;
   if (!css) {
     style?.remove();
     return;
   }
   if (!style) {
     style = doc.createElement("style");
-    style.id = STRUCTURE_HIGHLIGHT_STYLE_ID;
+    style.id = styleId;
     root.appendChild(style);
   }
   if (style.textContent !== css) style.textContent = css;
@@ -107,15 +122,45 @@ function framesOf(host: HTMLElement): HTMLIFrameElement[] {
   return Array.from(host.querySelectorAll<HTMLIFrameElement>("iframe"));
 }
 
-/** 给容器内所有预览 iframe 应用高亮（`css` 为空 = 清除）。可在非 React 单测里直接调用。 */
-export function paintStructureHighlight(host: HTMLElement | null | undefined, css: string): void {
+/**
+ * iframe 是否与容器视口相交（R-30）。
+ *
+ * 纸面是多页 iframe 并排/堆叠，一次高亮要往 **每个** iframe 的 head 写 `<style>`；
+ * 190 个字段选中时那是十几帧同时重排。只画当前看得到的页，滚动时再补一次。
+ * 判定用容器自身矩形 + 1px 容差：完全在容器外（上一屏/下一屏）才算不可见。
+ */
+function frameIsVisible(host: HTMLElement, frame: HTMLIFrameElement): boolean {
+  const box = frame.getBoundingClientRect();
+  if (box.width < 1 || box.height < 1) return false;
+  const hostBox = host.getBoundingClientRect();
+  return box.bottom > hostBox.top - 1 && box.top < hostBox.bottom + 1;
+}
+
+/**
+ * 给容器内的预览 iframe 应用高亮（`css` 为空 = 清除）。可在非 React 单测里直接调用。
+ *
+ * @param visibleOnly 只画当前可见页（勾选/悬停这种高频路径用）；清除时不要传——
+ *   否则滚出视口的那几页会留着上一版高亮。
+ */
+export function paintStructureHighlight(
+  host: HTMLElement | null | undefined,
+  css: string,
+  styleId: string = STRUCTURE_HIGHLIGHT_STYLE_ID,
+  visibleOnly = false,
+): void {
   if (!host) return;
-  for (const frame of framesOf(host)) applyStructureHighlightToDocument(frame.contentDocument, css);
+  for (const frame of framesOf(host)) {
+    if (visibleOnly && !frameIsVisible(host, frame)) continue;
+    applyStructureHighlightToDocument(frame.contentDocument, css, styleId);
+  }
 }
 
 /** 清除容器内所有预览 iframe 的高亮样式。 */
-export function clearStructureHighlight(host: HTMLElement | null | undefined): void {
-  paintStructureHighlight(host, "");
+export function clearStructureHighlight(
+  host: HTMLElement | null | undefined,
+  styleId: string = STRUCTURE_HIGHLIGHT_STYLE_ID,
+): void {
+  paintStructureHighlight(host, "", styleId);
 }
 
 /** 把纸面上某个 `data-resume-path` 滚进可视区（显式定位用）；返回是否命中。 */
@@ -163,6 +208,10 @@ export interface CanvasHighlightOptions {
   containerRef?: RefObject<HTMLElement | null>;
   /** 显式"定位"请求：只在用户点定位时把纸面元素滚进可视区；普通选中只换高亮。 */
   reveal?: { path: string; nonce: number } | null;
+  /** 样式 `<style>` 的 id：选中与悬停必须分开，否则后写的一方会覆盖另一方（R-14）。 */
+  styleId?: string;
+  /** 高亮声明；缺省 = 悬停档。 */
+  declaration?: string;
 }
 
 /**
@@ -174,8 +223,13 @@ export function useCanvasPathHighlight({
   container,
   containerRef,
   reveal,
+  styleId = STRUCTURE_HIGHLIGHT_STYLE_ID,
+  declaration = STRUCTURE_HIGHLIGHT_DECLARATION,
 }: CanvasHighlightOptions): void {
-  const css = useMemo(() => buildStructureHighlightCss(targets), [targets]);
+  const css = useMemo(
+    () => buildStructureHighlightCss(targets, declaration),
+    [declaration, targets],
+  );
 
   useEffect(() => {
     const resolve = (): HTMLElement | null => container ?? containerRef?.current ?? null;
@@ -184,13 +238,26 @@ export function useCanvasPathHighlight({
     let teardown: (() => void) | null = null;
 
     const attach = (host: HTMLElement) => {
-      const apply = () => paintStructureHighlight(host, css);
+      // R-30：高频路径（选中/悬停/iframe 重载）只画可见页；滚动时按帧补齐。
+      const apply = () => paintStructureHighlight(host, css, styleId, true);
       apply();
+      let scrollRaf = 0;
+      const onScroll = () => {
+        if (scrollRaf) return;
+        scrollRaf = requestAnimationFrame(() => {
+          scrollRaf = 0;
+          apply();
+        });
+      };
+      // 滚动发生在弹窗正文（.ant-modal-body）上，不在 host 自己身上：用 document 捕获阶段收。
+      document.addEventListener("scroll", onScroll, true);
       // iframe 的 load 不冒泡：捕获阶段才能在容器上统一收到。
       host.addEventListener("load", apply, true);
       const observer = typeof MutationObserver !== "undefined" ? new MutationObserver(apply) : null;
       observer?.observe(host, { childList: true, subtree: true });
       teardown = () => {
+        if (scrollRaf) cancelAnimationFrame(scrollRaf);
+        document.removeEventListener("scroll", onScroll, true);
         host.removeEventListener("load", apply, true);
         observer?.disconnect();
       };
@@ -212,10 +279,10 @@ export function useCanvasPathHighlight({
     return () => {
       if (raf) cancelAnimationFrame(raf);
       teardown?.();
-      // 组件卸载后纸面不该继续亮着。
-      clearStructureHighlight(resolve());
+      // 组件卸载后纸面不该继续亮着（只清自己这一档，另一档由它自己的 hook 负责）。
+      clearStructureHighlight(resolve(), styleId);
     };
-  }, [container, containerRef, css]);
+  }, [container, containerRef, css, styleId]);
 
   const revealNonce = reveal?.nonce ?? 0;
   const revealPath = reveal?.path ?? "";

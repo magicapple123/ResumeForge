@@ -165,10 +165,27 @@ export function adoptTranslation(
   resumeId: number,
   variantId: number,
   items: { path: string; text: string }[],
+  options?: { targetLanguage?: string; signal?: AbortSignal },
 ): Promise<AdoptTranslationOut> {
   return request(variantBase(resumeId) + "/" + variantId + "/adopt", {
     method: "POST",
-    body: JSON.stringify({ items }),
+    // #17a：带上本次翻译的目标语言，后端据此拦截"写回源语言变体"的误操作。
+    body: JSON.stringify(
+      options?.targetLanguage ? { items, target_language: options.targetLanguage } : { items },
+    ),
+    signal: options?.signal,
+  });
+}
+
+/** #17b：用当前简历的正文覆盖变体内容（修复被译文污染的源语言变体）。 */
+export function overwriteVariant(
+  resumeId: number,
+  variantId: number,
+  signal?: AbortSignal,
+): Promise<VariantDetailOut> {
+  return request(variantBase(resumeId) + "/" + variantId + "/overwrite", {
+    method: "POST",
+    signal,
   });
 }
 

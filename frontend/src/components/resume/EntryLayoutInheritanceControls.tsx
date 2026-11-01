@@ -1,77 +1,53 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * 条目字段排版的「继承链」控件（P5-4）：列数 / 对齐方式 / 列间距三行。
+ * 条目字段排版的「分栏」控件（列数 / 对齐方式 / 列间距）。
  *
- * - 板块级（overrides=null）：保持原样，只画控件；板块本身就是来源，不标「继承」。
- * - 条目级：每一项标注「继承板块 / 本条覆盖」，覆盖项另有逐项「恢复继承」按钮
- *   （把 entry.layout.X 置 null，**不写 section.layout**）。
+ * R-11（审计）改造：
+ * - 「继承」变成每个控件的**第一个选项**（列数：继承 / 1 / 2 / 3，对齐：继承 / 等宽列 /
+ *   按内容排），选它就等于把 `entry.layout.X` 置回 `null`，不再靠右侧的
+ *   SourceBadge + 逐项「恢复继承」按钮——那套标记在 360px 左栏里挤掉了控件本身；
+ * - Segmented 的 `value` **不能用 `null`**（antd 会当成"没有选中项"），所以用哨兵
+ *   字符串 `"inherit"`；
+ * - 列间距仍用 `InputNumber`（清空 = 继承），因为它没有天然的三选一形态。
  *
- * 从 EntryLayoutPanel 抽出：面板已到 500 行预算，且这三行是独立的展示规则。
+ * 板块级（`overrides === null`）没有"继承"可选：板块层就是来源本身。
  */
-import { Button, InputNumber, Radio, Segmented, Tag, Tooltip, Typography } from "antd";
-import { UndoOutlined } from "@ant-design/icons";
+import { InputNumber, Segmented } from "antd";
 import { t } from "../../i18n";
-import type { MessageKey } from "../../i18n";
 import type {
   EntryLayoutOverrides,
-  InheritableLayoutField,
   LayoutAlign,
   LayoutColumns,
 } from "../../features/resume-layout/entryLayoutModel";
 import type { EntryLayout, SectionLayout } from "../../types/resumeDocument";
 import { useLocale } from "../../i18n/i18nContext";
 
-export type LayoutPatch = Partial<SectionLayout> & Partial<EntryLayout>;
+/**
+ * 面板级的布局 patch。条目级三项可写 `null`（= 恢复继承），所以这里把 `columns` /
+ * `align` 单独放宽：`Partial<SectionLayout> & Partial<EntryLayout>` 的交集会收窄掉 null。
+ */
+export type LayoutPatch = Partial<Omit<SectionLayout, "columns" | "align">> &
+  Partial<Omit<EntryLayout, "columns" | "align">> & {
+    columns?: LayoutColumns | null;
+    align?: LayoutAlign | null;
+  };
 
 interface Props {
   columns: LayoutColumns;
   align: LayoutAlign;
   gap: number | null;
-  /** null = 板块级（不显示来源标记与逐项恢复）。 */
+  /** null = 板块级（没有可继承项，「继承」选项禁用）。 */
   overrides: EntryLayoutOverrides | null;
   disabled: boolean;
+  /** 面板宽度 ≤420px：分段控件竖排（antd 的 vertical，纯 CSS 会让选中态失高亮）。 */
+  narrow?: boolean;
   onPatch: (patch: LayoutPatch) => void;
-  onRestore: (field: InheritableLayoutField) => void;
 }
 
-const RESTORE_LABEL_KEYS: Record<InheritableLayoutField, MessageKey> = {
-  columns: "structure.layout.restore.columns",
-  align: "structure.layout.restore.align",
-  gap: "structure.layout.restore.gap",
-};
+/** Segmented 的"继承"哨兵值：antd 的 value 不能用 null。 */
+const INHERIT = "inherit";
 
-function SourceBadge({ inherited }: { inherited: boolean }) {
-  return (
-    <Tag
-      color={inherited ? undefined : "blue"}
-      style={{ marginInlineEnd: 0 }}
-      data-layout-source={inherited ? "section" : "entry"}
-    >
-      {t(inherited ? "structure.layout.source.inherited" : "structure.layout.source.overridden")}
-    </Tag>
-  );
-}
-
-function RestoreButton({
-  field,
-  onRestore,
-}: {
-  field: InheritableLayoutField;
-  onRestore: (field: InheritableLayoutField) => void;
-}) {
-  const label = t(RESTORE_LABEL_KEYS[field]);
-  return (
-    <Tooltip title={label}>
-      <Button
-        size="small"
-        type="text"
-        icon={<UndoOutlined />}
-        aria-label={label}
-        onClick={() => onRestore(field)}
-      />
-    </Tooltip>
-  );
-}
+const COLUMN_VALUES: LayoutColumns[] = [1, 2, 3];
 
 export default function EntryLayoutInheritanceControls({
   columns,
@@ -79,45 +55,70 @@ export default function EntryLayoutInheritanceControls({
   gap,
   overrides,
   disabled,
+  narrow = false,
   onPatch,
-  onRestore,
 }: Props) {
   useLocale();
+  const inheritable = overrides !== null;
+  const columnsInherited = inheritable && !overrides.columns;
+  const alignInherited = inheritable && !overrides.align;
+  // 条目级：覆盖项显示自己的值，没覆盖时显示哨兵值。
+  const columnsValue = columnsInherited ? INHERIT : String(columns);
+  const alignValue = alignInherited ? INHERIT : align;
+
+  const columnOptions = [
+    // 板块级没有可继承的对象：保留这一项（禁用）而不是删掉——选项数变化会让
+    // 360px 竖排的分段控件高度变 28px，切范围时面板就跟着跳（R-11 验收）。
+    { value: INHERIT, label: t("structure.layout.inherit"), disabled: !inheritable },
+    ...COLUMN_VALUES.map((value) => ({ value: String(value), label: String(value) })),
+  ];
+  const alignOptions = [
+    { value: INHERIT, label: t("structure.layout.inherit"), disabled: !inheritable },
+    { value: "equal", label: t("structure.layout.align.equal") },
+    { value: "flow", label: t("structure.layout.align.flow") },
+  ];
+
   return (
     <>
-      {overrides ? (
-        <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-          {t("structure.layout.sourceHint")}
-        </Typography.Text>
-      ) : null}
       <div className="rf-entry-layout-row">
         <span className="rf-entry-layout-label">{t("structure.layout.columns")}</span>
-        <Radio.Group
+        <Segmented
+          className="rf-entry-layout-control"
           size="small"
-          value={columns}
+          block
+          vertical={narrow}
+          value={columnsValue}
           disabled={disabled}
           aria-label={t("structure.layout.columns")}
-          options={[1, 2, 3].map((value) => ({ value, label: String(value) }))}
-          onChange={(event) => onPatch({ columns: event.target.value as LayoutColumns })}
+          options={columnOptions}
+          onChange={(value) => {
+            if (value === INHERIT) {
+              onPatch({ columns: null });
+              return;
+            }
+            onPatch({ columns: Number(value) as LayoutColumns });
+          }}
         />
-        {overrides ? <SourceBadge inherited={!overrides.columns} /> : null}
-        {overrides?.columns ? <RestoreButton field="columns" onRestore={onRestore} /> : null}
       </div>
       <div className="rf-entry-layout-row">
         <span className="rf-entry-layout-label">{t("structure.layout.align")}</span>
         <Segmented
+          className="rf-entry-layout-control"
           size="small"
-          value={align}
+          block
+          vertical={narrow}
+          value={alignValue}
           disabled={disabled}
           aria-label={t("structure.layout.align")}
-          options={[
-            { value: "equal", label: t("structure.layout.align.equal") },
-            { value: "flow", label: t("structure.layout.align.flow") },
-          ]}
-          onChange={(value) => onPatch({ align: value as LayoutAlign })}
+          options={alignOptions}
+          onChange={(value) => {
+            if (value === INHERIT) {
+              onPatch({ align: null });
+              return;
+            }
+            onPatch({ align: value as LayoutAlign });
+          }}
         />
-        {overrides ? <SourceBadge inherited={!overrides.align} /> : null}
-        {overrides?.align ? <RestoreButton field="align" onRestore={onRestore} /> : null}
       </div>
       <div className="rf-entry-layout-row">
         <span className="rf-entry-layout-label">{t("structure.layout.gap")}</span>
@@ -132,8 +133,6 @@ export default function EntryLayoutInheritanceControls({
           aria-label={t("structure.layout.gap")}
           onChange={(value) => onPatch({ gap: typeof value === "number" ? value : null })}
         />
-        {overrides ? <SourceBadge inherited={!overrides.gap} /> : null}
-        {overrides?.gap ? <RestoreButton field="gap" onRestore={onRestore} /> : null}
       </div>
     </>
   );

@@ -12,6 +12,7 @@ from __future__ import annotations
 import io
 import re
 import zipfile
+from html.parser import HTMLParser
 
 # 隐藏内容：任何出口的**纸面文本**里都不该出现。
 HIDDEN_VALUES = ("隐藏大学", "秘密字段", "隐藏要点", "秘密值")
@@ -239,13 +240,96 @@ def normalize_text(text: str) -> str:
     return re.sub(r"\s+", " ", str(text)).strip()
 
 
+class _PaperTextParser(HTMLParser):
+    """HTML -> 纸面文本的**确定性**解析器（标准库 ``html.parser``）。
+
+    为什么不用正则：标签是 HTML 词法，正则做不可靠——大小写混写（``<SCRIPT>``）、
+    ``</script >`` 带空格、自闭合 ``<script/>``、未闭合到文件尾、以及
+    ``<scr<script>ipt>`` 这类"替换一次又拼出新标签"的写法都会被漏掉
+    （CodeQL ``py/bad-tag-filter``）。标准库解析器按 HTML 词法切分，与输入写法无关。
+
+    吐字口径与旧的正则实现**逐字节等价**：
+
+    * ``script`` / ``style`` 元素连内容一起丢弃；
+    * 其余每个标签（含注释 / DOCTYPE / 处理指令）只充当一个分隔符（补一个空格），
+      因此 ``<p>a</p><p>b</p>`` 仍然是 ``a b`` 而不是 ``ab``；
+    * 文本按文档顺序收集；字符引用（``&amp;`` / ``&#x27;``）**按原文**拼回、不解码，
+      所以用 ``convert_charrefs=False``，交给 ``handle_entityref`` / ``handle_charref``
+      还原（``&#x27;`` 拼回 ``&#x27;``，而不是变成 ``'``）。
+    """
+
+    #: 内容不可见的元素：进标签置位，出标签复位。
+    _RAW_TEXT_TAGS = ("script", "style")
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=False)
+        self._chunks: list[str] = []
+        self._ignored_depth = 0
+
+    @property
+    def text(self) -> str:
+        """已收集的纸面文本（尚未压空白）。"""
+        return "".join(self._chunks)
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        """开标签：进入 script/style 时置忽略位，其余一律只当分隔符。"""
+        if tag in self._RAW_TEXT_TAGS:
+            self._ignored_depth += 1
+        self._chunks.append(" ")
+
+    def handle_startendtag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        """自闭合标签（``<script src=x />``）：没有内容体，只需占一个分隔符。"""
+        self._chunks.append(" ")
+
+    def handle_endtag(self, tag: str) -> None:
+        """闭标签：离开 script/style 时复位忽略位，其余一律只当分隔符。"""
+        if tag in self._RAW_TEXT_TAGS and self._ignored_depth > 0:
+            self._ignored_depth -= 1
+        self._chunks.append(" ")
+
+    def handle_data(self, data: str) -> None:
+        """文本节点：忽略状态内（script/style 体内）一个字都不收。"""
+        if self._ignored_depth == 0:
+            self._chunks.append(data)
+
+    def handle_entityref(self, name: str) -> None:
+        """命名实体：按原文拼回（``&amp;`` 仍是 ``&amp;``）。"""
+        if self._ignored_depth == 0:
+            self._chunks.append(f"&{name};")
+
+    def handle_charref(self, name: str) -> None:
+        """数字实体：按原文拼回（``&#x27;`` 仍是 ``&#x27;``）。"""
+        if self._ignored_depth == 0:
+            self._chunks.append(f"&#{name};")
+
+    def handle_comment(self, data: str) -> None:
+        """注释整体丢弃（只占一个分隔符）。"""
+        self._chunks.append(" ")
+
+    def handle_decl(self, decl: str) -> None:
+        """``<!DOCTYPE …>`` 等声明整体丢弃。"""
+        self._chunks.append(" ")
+
+    def handle_pi(self, data: str) -> None:
+        """处理指令整体丢弃。"""
+        self._chunks.append(" ")
+
+    def unknown_decl(self, data: str) -> None:
+        """``<![CDATA[…]]>`` 等未知声明整体丢弃。"""
+        self._chunks.append(" ")
+
+
 def html_text(html: str) -> str:
-    """HTML -> 纸面文本（去掉 style/script 与标签，保留顺序）。"""
+    """HTML -> 纸面文本（去掉 style/script 与标签，保留顺序）。
+
+    入参先按 ``<body>`` 截断（只取 body 之后的内容），与旧实现一致；解析交给
+    :class:`_PaperTextParser`，不再对标签用正则。
+    """
     body = html.split("<body>", 1)[-1]
-    body = re.sub(r"<script.*?</script>", " ", body, flags=re.S)
-    body = re.sub(r"<style.*?</style>", " ", body, flags=re.S)
-    body = re.sub(r"<[^>]+>", " ", body)
-    return normalize_text(body)
+    parser = _PaperTextParser()
+    parser.feed(body)
+    parser.close()
+    return normalize_text(parser.text)
 
 
 def pdf_text(data: bytes) -> str:

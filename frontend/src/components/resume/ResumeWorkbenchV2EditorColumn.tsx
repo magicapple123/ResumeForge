@@ -14,7 +14,7 @@ import { useState } from "react";
 import type { ReactNode } from "react";
 import { useLocale } from "../../i18n/i18nContext";
 import { t } from "../../i18n";
-import type { DocumentConversionSummary } from "../../types/resume";
+import type { DocumentConversionSummary, ResumeLayout } from "../../types/resume";
 import type { DocumentFieldCatalog, ResumeDocument } from "../../types/resumeDocument";
 import DocumentEditor from "../resume-editor/DocumentEditor";
 import "./workbench-v2.css";
@@ -25,14 +25,21 @@ export interface ResumeWorkbenchV2EditorColumnProps {
   selectedPath?: string | null;
   onSelectPath?: (path: string | null) => void;
   onHoverPath?: (path: string | null) => void;
+  /** 选中变化序号：变化时把对应条目卡滚到可视区顶部（R-14）。 */
+  revealNonce?: number;
   readOnly?: boolean;
   fieldCatalog?: DocumentFieldCatalog | null;
+  /** #7：右键「调整排版」浮层的版式通道。 */
+  layout?: ResumeLayout | null;
+  onLayoutChange?: (next: ResumeLayout) => void;
   onAddSection?: () => void;
   /** 旧简历转换摘要；null/缺省 = 不显示（本来就是 v2 或保存后）。 */
   conversion?: DocumentConversionSummary | null;
   onDismissConversion?: () => void;
   /** 中栏顶部的「从资料填入」入口（ProfileFillMenu；由宿主构造，组件本身只读文档+onChange）。 */
   fillMenu?: ReactNode;
+  /** #19：编辑器右键「收藏当前要点」→ 宿主收藏（不传 = 菜单不出现该项）。 */
+  onCollectAsset?: (path: string) => void;
 }
 
 export default function ResumeWorkbenchV2EditorColumn({
@@ -41,12 +48,16 @@ export default function ResumeWorkbenchV2EditorColumn({
   selectedPath,
   onSelectPath,
   onHoverPath,
+  revealNonce = 0,
   readOnly = false,
   fieldCatalog = null,
+  layout = null,
+  onLayoutChange,
   onAddSection,
   conversion = null,
   onDismissConversion,
   fillMenu = null,
+  onCollectAsset,
 }: ResumeWorkbenchV2EditorColumnProps) {
   useLocale();
   const [summaryOpen, setSummaryOpen] = useState(false);
@@ -110,9 +121,13 @@ export default function ResumeWorkbenchV2EditorColumn({
         selectedPath={selectedPath}
         onSelectPath={onSelectPath}
         onHoverPath={onHoverPath}
+        revealNonce={revealNonce}
         readOnly={readOnly}
         fieldCatalog={fieldCatalog}
+        layout={layout}
+        onLayoutChange={onLayoutChange}
         onAddSection={onAddSection}
+        onCollectAsset={onCollectAsset}
       />
     </div>
   );

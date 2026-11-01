@@ -109,10 +109,13 @@ export default function ConfigPreviewPanel({
           <div className="resume-delivery-check-row">
             <span className="resume-delivery-hint">
               {state.result.pagesNeeded !== null && state.result.pageLimit !== null
-                ? t("delivery.preview.pages", {
-                    pages: state.result.pagesNeeded,
-                    limit: state.result.pageLimit,
-                  })
+                ? state.result.pagesNeeded === state.result.pageLimit
+                  ? // #2：页数正好用满上限，说「已达上限」比重复两个相同数字有用。
+                    t("delivery.preview.limitReached", { limit: state.result.pageLimit })
+                  : t("delivery.preview.pages", {
+                      pages: state.result.pagesNeeded,
+                      limit: state.result.pageLimit,
+                    })
                 : null}
               {state.result.overflow ? ` · ${t("delivery.preview.overflow")}` : null}
             </span>

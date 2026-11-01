@@ -57,16 +57,16 @@ const interviewPage = {
   // ===== Interviewer setup card =====
   "interviewPage.setup.title": "Interviewer setup",
   "interviewPage.setup.greeting": "Hi, I'm Jane and I'll be interviewing you today.",
-  "interviewPage.setup.jobLabel": "Related job",
+  "interviewPage.setup.jobLabel": "Job material",
   "interviewPage.setup.jobPlaceholder": "Questions follow this job's JD (type keywords to search)",
   "interviewPage.setup.jobRequired": "Select the related job",
-  "interviewPage.setup.resumeLabel": "Related resume",
+  "interviewPage.setup.resumeLabel": "Resume material",
   "interviewPage.setup.resumePlaceholder":
     "Resumes linked to this job plus general ones (type keywords to search)",
   "interviewPage.setup.resumePlaceholderNoJob": "Pick the job first, then choose a resume",
   "interviewPage.setup.resumeRequired": "Select the related resume",
   "interviewPage.setup.scopeHint":
-    "The interviewer only sees this resume and the job's JD; nothing else is passed in.",
+    "The interviewer only sees the two materials you picked; nothing else enters the interview.",
   "interviewPage.setup.typeLabel": "Interview type",
   "interviewPage.setup.difficultyLabel": "Difficulty",
   "interviewPage.setup.styleLabel": "Interviewer style",
@@ -84,6 +84,48 @@ const interviewPage = {
   "interviewPage.setup.start": "Start interview",
   "interviewPage.setup.confidenceTip":
     "The interviewer asks from your materials and the job requirements; the more specific your answer (what you did, what the result was), the more useful the feedback.",
+
+  // ===== Material source (#41): each side is "pick a record / import a file" =====
+  "interviewPage.setup.material.sourceLabel": "Source",
+  "interviewPage.setup.material.fromRecord": "Pick a record",
+  "interviewPage.setup.material.fromFile": "Import a file",
+  "interviewPage.setup.material.jobFileHint": "PDF or TXT job description",
+  "interviewPage.setup.material.resumeFileHint":
+    "PNG or JPEG screenshot; the interviewer reads the text in the image",
+  "interviewPage.setup.material.pickFile": "Choose file",
+  "interviewPage.setup.material.repickFile": "Choose another",
+  "interviewPage.setup.material.parsing": "Reading the file...",
+  "interviewPage.setup.material.parsed": "{chars} characters read",
+  "interviewPage.setup.material.recognized": "{chars} characters recognized from the screenshot",
+  "interviewPage.setup.material.clear": "Remove this file",
+  "interviewPage.setup.material.jobRequired":
+    "Job material is required: pick a record or import a job description file",
+  "interviewPage.setup.material.resumeRequired":
+    "Resume material is required: pick a record or import a screenshot",
+  "interviewPage.setup.material.parseFailed": "This file could not be read",
+  "interviewPage.setup.material.emptyFile": "This file is empty - try another one",
+  "interviewPage.setup.material.tooLarge": "The file is over 10 MB and cannot be imported",
+  "interviewPage.setup.material.unsupported": "Unsupported file type",
+  "interviewPage.setup.material.warningTitle": "This material needs attention",
+
+  // ===== Follow-ups after the interview (#41): they do not use a round =====
+  "interviewPage.followUp.cardTitle": "Follow-up questions",
+  "interviewPage.followUp.hint":
+    "Follow-ups do not use a round and are not part of the score report",
+  "interviewPage.followUp.placeholder": "e.g. What did I miss on question 2?",
+  "interviewPage.followUp.submit": "Send follow-up",
+  "interviewPage.followUp.empty":
+    "No follow-ups yet. Ask about a question you found hard, or where you lost points.",
+  "interviewPage.followUp.thinking": "The interviewer is answering...",
+  "interviewPage.followUp.failed": "This follow-up could not be answered",
+  "interviewPage.followUp.role.user": "You",
+  "interviewPage.followUp.stop": "Stop follow-ups",
+  "interviewPage.followUp.resume": "Resume follow-ups",
+  "interviewPage.followUp.closedHint":
+    "Follow-ups are stopped. Past questions are still here - click Resume follow-ups to continue.",
+  "interviewPage.followUp.stoppedToast": "Follow-ups stopped",
+  "interviewPage.followUp.resumedToast": "Follow-ups resumed",
+  "interviewPage.followUp.stateFailed": "Could not switch the follow-up state",
 
   // Display names for interview type / difficulty / interviewer style (keys are protocol values).
   "interviewPage.setup.type.technical": "Technical",

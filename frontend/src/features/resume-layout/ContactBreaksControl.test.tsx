@@ -16,7 +16,6 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { t } from "../../i18n";
 import type { ResumeLayout } from "../../types";
-import ResumeTemplateControls from "../../components/resume/ResumeTemplateControls";
 import ContactBreaksControl from "./ContactBreaksControl";
 import {
   CONTACT_BREAKS_KEY,
@@ -123,7 +122,7 @@ describe("联系方式换行控件（排版参数）", () => {
     expect(wrap.style.maxWidth).toBe("100%");
   });
 
-  it("挂进 ResumeTemplateControls：写 layout.format_config，其余版式字段原样带过去", async () => {
+  it("#13：不再挂在 ResumeTemplateControls（只在版面组出现一次）；直接挂载时写 format_config", async () => {
     const onChange = vi.fn();
     const layout: ResumeLayout = {
       template: "classic",
@@ -134,7 +133,10 @@ describe("联系方式换行控件（排版参数）", () => {
     } as ResumeLayout;
     render(
       <AntdApp>
-        <ResumeTemplateControls layout={layout} onChange={onChange} />
+        <ContactBreaksControl
+          formatConfig={layout.format_config}
+          onChange={(fc) => onChange({ ...layout, format_config: fc })}
+        />
       </AntdApp>,
     );
 

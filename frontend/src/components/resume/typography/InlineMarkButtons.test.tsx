@@ -75,12 +75,7 @@ describe("InlineMarkButtons", () => {
     expect(onCommit).toHaveBeenCalledWith({ text: "ab**cd**ef", selection: { start: 4, end: 6 } });
   });
 
-  it("选中文字点斜体：成对插入 *", () => {
-    const { container, onCommit } = renderHarness();
-    select(container, 2, 4);
-    fireEvent.click(screen.getByRole("button", { name: t("typography.inline.italicAria") }));
-    expect(onCommit).toHaveBeenCalledWith({ text: "ab*cd*ef", selection: { start: 3, end: 5 } });
-  });
+  // #5d：斜体按钮已整体移除（工具区只剩加粗与链接两颗）。
 
   it("链接：输入合法地址后插入 [label](url)", () => {
     const { container, onCommit } = renderHarness();
@@ -122,13 +117,6 @@ describe("InlineMarkButtons", () => {
     const { onCommit } = renderHarness({ noTarget: true });
     fireEvent.click(screen.getByRole("button", { name: t("typography.inline.boldAria") }));
     expect(await screen.findByText(t("typography.inline.noTarget"))).toBeInTheDocument();
-    expect(onCommit).not.toHaveBeenCalled();
-  });
-
-  it("选区贴着成对加粗标记时点斜体：不拆标记、不产生空提交", () => {
-    const { container, onCommit } = renderHarness({ initial: "**ab**" });
-    select(container, 2, 4);
-    fireEvent.click(screen.getByRole("button", { name: t("typography.inline.italicAria") }));
     expect(onCommit).not.toHaveBeenCalled();
   });
 
@@ -175,9 +163,9 @@ describe("InlineMarkButtons", () => {
     });
   });
 
-  it("disabled 时三颗按钮都不可点", () => {
+  it("disabled 时两颗按钮都不可点", () => {
     renderHarness({ disabled: true });
-    for (const key of ["boldAria", "italicAria", "linkAria"] as const) {
+    for (const key of ["boldAria", "linkAria"] as const) {
       expect(screen.getByRole("button", { name: t(`typography.inline.${key}`) })).toBeDisabled();
     }
   });

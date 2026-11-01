@@ -1,17 +1,23 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * 岗位变体面板（W13）：派生变体 + 选择性同步。
+ * 岗位变体面板（W13 / #29a）：已有变体列表 + 选择性同步。
  *
- * 选择性同步的路径来自**当前简历内容**（`buildSyncPathOptions`：顶层字段 + 数组板块的
- * 每条）。契约 §3 的硬约束在这里落地：只提交勾选的变体与路径，其余岗位定制保持原样。
+ * 创建入口已合并到 VariantCreatePanel（Segmented 二选一 + 一个「创建变体」）；
+ * 这里只保留列表与"同步到已有变体"。同步的路径来自**当前简历内容**
+ * （`buildSyncPathOptions`）。契约 §3 的硬约束在这里落地：只提交勾选的变体与路径，
+ * 其余岗位定制保持原样。
  */
-import { Alert, App, Button, Checkbox, Input, Select, Space, Tag, Typography } from "antd";
+import { Alert, App, Button, Checkbox, Space, Tag, Typography } from "antd";
+import { CaretDownOutlined, CaretRightOutlined, ReloadOutlined } from "@ant-design/icons";
 import { useMemo, useState } from "react";
 import EmptyState from "../../common/EmptyState";
 import ErrorState from "../../common/ErrorState";
 import LoadingBlock from "../../common/LoadingBlock";
 import { t } from "../../../i18n";
 import { buildSyncPathOptions, versionTimeText } from "../../../features/resume-versions/model";
+import { fieldCatalogLabelResolver } from "../../../features/resume-document/fieldCatalog";
+import { useFieldPlacementCatalog } from "../../../features/profile-library/fieldPlacement";
+import type { ResumeDocument } from "../../../types/resumeDocument";
 import type {
   VariantOut,
   VariantSyncOut,
@@ -27,9 +33,10 @@ interface Props {
   actionError: string;
   syncing: boolean;
   versions: VersionOut[];
-  currentContent?: Record<string, unknown> | null;
-  onCreate: (name: string, baseVersionId?: number | null) => Promise<VariantOut | null>;
+  /** 当前 v2 文档：选择性同步的路径来源（`header.<itemId>` / `<sectionKey>.<entryId>`）。 */
+  currentDocument?: ResumeDocument | null;
   onSync: (payload: VariantSyncRequest) => Promise<VariantSyncOut | null>;
+  /** 刷新"已有变体"列表（页面里唯一的刷新入口）。 */
   onRefresh: () => void;
 }
 
@@ -40,37 +47,41 @@ export default function VariantsPanel({
   actionError,
   syncing,
   versions,
-  currentContent,
-  onCreate,
+  currentDocument,
   onSync,
   onRefresh,
 }: Props) {
   useLocale();
   const { message } = App.useApp();
-  const [name, setName] = useState("");
-  const [baseVersionId, setBaseVersionId] = useState<number | undefined>(undefined);
-  const [creating, setCreating] = useState(false);
   const [targetIds, setTargetIds] = useState<number[]>([]);
   const [selectedPaths, setSelectedPaths] = useState<string[]>([]);
+  const [collapsedGroups, setCollapsedGroups] = useState<string[]>([]);
 
-  const pathOptions = useMemo(() => buildSyncPathOptions(currentContent), [currentContent]);
+  // #29b：页眉字段名走字段目录本地化（「姓名」而不是 `name`）。
+  const { catalog: syncCatalog } = useFieldPlacementCatalog();
+  const pathOptions = useMemo(
+    () => buildSyncPathOptions(currentDocument, fieldCatalogLabelResolver(syncCatalog)),
+    [currentDocument, syncCatalog],
+  );
+  // 按板块分组（顺序 = 文档里的板块顺序，基本信息的 header 排最前）。
   const groups = useMemo(() => {
-    const map = new Map<string, { path: string; label: string }[]>();
+    const map = new Map<
+      string,
+      { key: string; label: string; options: { path: string; label: string }[] }
+    >();
     for (const option of pathOptions) {
-      const list = map.get(option.group) ?? [];
-      list.push({ path: option.path, label: option.label });
-      map.set(option.group, list);
+      const group = map.get(option.group) ?? {
+        key: option.group,
+        label: option.groupLabel,
+        options: [],
+      };
+      group.options.push({ path: option.path, label: option.label });
+      map.set(option.group, group);
     }
-    return [...map.entries()];
+    return [...map.values()];
   }, [pathOptions]);
-
-  const submitCreate = async () => {
-    if (!name.trim()) return;
-    setCreating(true);
-    const created = await onCreate(name.trim(), baseVersionId ?? null);
-    setCreating(false);
-    if (created) setName("");
-  };
+  const allSelected =
+    pathOptions.length > 0 && pathOptions.every((option) => selectedPaths.includes(option.path));
 
   const toggleGroup = (groupPaths: string[], checked: boolean) => {
     setSelectedPaths((current) => {
@@ -80,16 +91,28 @@ export default function VariantsPanel({
   };
 
   const runSync = async () => {
+    // 同步来源 = 当前简历（创建表单合并后不再有"基于哪份版本"的输入；命名版本同步走 API）。
     const result = await onSync({
-      source_version_id: baseVersionId ?? null,
+      source_version_id: null,
       variant_ids: targetIds,
       paths: selectedPaths,
     });
     if (result) {
       message.success(t("versions.variants.syncSuccess", { count: result.items.length }));
+      // 目标变体里没有这个 id（条目被删过）时后端不会写，`applied_paths` 会少一条：
+      // 只说"已同步 N 个变体"会让用户以为全都写进去了。
+      const applied = new Set(result.items.flatMap((item) => item.applied_paths));
+      const missing = selectedPaths.filter((path) => !applied.has(path)).length;
+      if (missing > 0) message.warning(t("versions.variants.syncPartial", { count: missing }));
       setSelectedPaths([]);
       setTargetIds([]);
     }
+  };
+
+  const toggleGroupCollapsed = (group: string) => {
+    setCollapsedGroups((current) =>
+      current.includes(group) ? current.filter((key) => key !== group) : [...current, group],
+    );
   };
 
   const baseLabel = (variant: VariantOut): string => {
@@ -102,45 +125,12 @@ export default function VariantsPanel({
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-      <div
-        style={{
-          display: "flex",
-          gap: 8,
-          flexWrap: "wrap",
-          alignItems: "center",
-          padding: 12,
-          border: "1px solid var(--rf-border-subtle)",
-          borderRadius: "var(--rf-radius-control)",
-        }}
-      >
-        <Typography.Text strong>{t("versions.variants.create.title")}</Typography.Text>
-        <Input
-          value={name}
-          onChange={(event) => setName(event.target.value)}
-          placeholder={t("versions.variants.create.namePlaceholder")}
-          aria-label={t("versions.variants.create.name")}
-          style={{ width: 220 }}
-          maxLength={256}
-        />
-        <Select
-          allowClear
-          value={baseVersionId}
-          onChange={(value) => setBaseVersionId(value)}
-          placeholder={t("versions.variants.base.current")}
-          aria-label={t("versions.variants.base.current")}
-          style={{ width: 200 }}
-          options={versions.map((version) => ({ value: version.id, label: version.name }))}
-        />
-        <Button
-          type="primary"
-          loading={creating}
-          disabled={!name.trim()}
-          onClick={() => void submitCreate()}
-        >
-          {t("versions.variants.create.action")}
+      <Space size={8} wrap>
+        <Typography.Text strong>{t("versions.variants.list.title")}</Typography.Text>
+        <Button size="small" icon={<ReloadOutlined />} onClick={onRefresh}>
+          {t("versions.variants.refreshAction")}
         </Button>
-        <Button onClick={onRefresh}>{t("versions.action.refresh")}</Button>
-      </div>
+      </Space>
 
       {actionError ? <Alert type="error" showIcon title={actionError} /> : null}
 
@@ -202,6 +192,10 @@ export default function VariantsPanel({
             background: "var(--rf-surface-alt)",
           }}
         >
+          <Typography.Text strong>{t("versions.variants.sync.title")}</Typography.Text>
+          <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+            {t("versions.variants.sync.groupHint")}
+          </Typography.Text>
           <Typography.Text strong>{t("versions.variants.selectTargets")}</Typography.Text>
           <Checkbox.Group
             value={targetIds}
@@ -211,33 +205,78 @@ export default function VariantsPanel({
               value: variant.id,
             }))}
           />
-          <Typography.Text strong>{t("versions.variants.selectPaths")}</Typography.Text>
-          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-            {groups.map(([group, options]) => {
-              const groupPaths = options.map((option) => option.path);
-              const allChecked = groupPaths.every((path) => selectedPaths.includes(path));
+          <Space size={8} wrap>
+            <Typography.Text strong>{t("versions.variants.selectPaths")}</Typography.Text>
+            <Button
+              size="small"
+              type="link"
+              onClick={() => setSelectedPaths(pathOptions.map((option) => option.path))}
+              disabled={allSelected}
+            >
+              {t("versions.variants.selectAll")}
+            </Button>
+            <Button
+              size="small"
+              type="link"
+              onClick={() => setSelectedPaths([])}
+              disabled={selectedPaths.length === 0}
+            >
+              {t("versions.variants.clearAll")}
+            </Button>
+            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+              {t("versions.variants.selectedCount", { count: selectedPaths.length })}
+            </Typography.Text>
+          </Space>
+          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            {groups.map((group) => {
+              const groupPaths = group.options.map((option) => option.path);
+              const checkedInGroup = selectedPaths.filter((path) => groupPaths.includes(path));
+              const allChecked = checkedInGroup.length === groupPaths.length;
+              const collapsed = collapsedGroups.includes(group.key);
               return (
-                <div key={group}>
-                  <Checkbox
-                    checked={allChecked}
-                    onChange={(event) => toggleGroup(groupPaths, event.target.checked)}
-                  >
-                    <Typography.Text strong>{group}</Typography.Text>
-                  </Checkbox>
-                  <Checkbox.Group
-                    value={selectedPaths.filter((path) => groupPaths.includes(path))}
-                    onChange={(values) => {
-                      setSelectedPaths((current) => {
-                        const rest = current.filter((path) => !groupPaths.includes(path));
-                        return [...rest, ...values.map((value) => String(value))];
-                      });
-                    }}
-                    options={options.map((option) => ({
-                      label: option.label || option.path,
-                      value: option.path,
-                    }))}
-                    style={{ display: "flex", flexDirection: "column", marginInlineStart: 24 }}
-                  />
+                <div
+                  key={group.key}
+                  style={{
+                    borderTop: "1px solid var(--rf-border-subtle)",
+                    paddingTop: 4,
+                  }}
+                >
+                  <Space size={4} wrap>
+                    <Button
+                      type="text"
+                      size="small"
+                      aria-expanded={!collapsed}
+                      aria-label={t("versions.variants.groupToggle", { name: group.label })}
+                      icon={collapsed ? <CaretRightOutlined /> : <CaretDownOutlined />}
+                      onClick={() => toggleGroupCollapsed(group.key)}
+                    />
+                    <Checkbox
+                      checked={allChecked}
+                      indeterminate={checkedInGroup.length > 0 && !allChecked}
+                      onChange={(event) => toggleGroup(groupPaths, event.target.checked)}
+                    >
+                      <Typography.Text strong>{group.label}</Typography.Text>
+                    </Checkbox>
+                    <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                      {t("versions.variants.groupCount", { count: groupPaths.length })}
+                    </Typography.Text>
+                  </Space>
+                  {collapsed ? null : (
+                    <Checkbox.Group
+                      value={checkedInGroup}
+                      onChange={(values) => {
+                        setSelectedPaths((current) => {
+                          const rest = current.filter((path) => !groupPaths.includes(path));
+                          return [...rest, ...values.map((value) => String(value))];
+                        });
+                      }}
+                      options={group.options.map((option) => ({
+                        label: option.label || option.path,
+                        value: option.path,
+                      }))}
+                      style={{ display: "flex", flexDirection: "column", marginInlineStart: 32 }}
+                    />
+                  )}
                 </div>
               );
             })}

@@ -46,6 +46,11 @@ export interface DocumentObjectOut {
   object_id: string | null;
   point_id: string | null;
   label: string;
+  /**
+   * 块所属字段的稳定标识（R-16）：条目块为空串，要点块是字段 key 或自定义字段名。
+   * 可选——旧后端不返回它，此时下拉退回"只显示 label"而不是把 `it_…` 当字段名。
+   */
+  field_label?: string;
   /** null = 未建立来源关联（旧记录不会被自动猜测）。 */
   link: BlockLinkOut | null;
 }
@@ -92,6 +97,9 @@ export interface SourceImpactEntryOut {
   point_id: string | null;
   path: string;
   field: string;
+  /** #20a：可读标签（条目名/要点文本 + 字段名）；path 只进 tooltip。 */
+  target_label?: string;
+  field_label?: string;
   linked_fingerprint: string;
   current_fingerprint: string;
   stale: boolean;

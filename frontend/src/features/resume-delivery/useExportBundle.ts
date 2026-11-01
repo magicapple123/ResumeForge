@@ -20,6 +20,7 @@ import type {
   ExportBundleRequest,
   ExportCheckRequest,
   ExportCheckSummary,
+  ExportFormat,
   ExportPreset,
   ExportPresetConfig,
 } from "./types";
@@ -28,6 +29,74 @@ import { configFromPreset } from "./useExportPresets";
 
 /** 核对摘要的来源：server = 服务端按导出同一快照算的；local = 后端未就绪时的同输入回退。 */
 export type ExportCheckSource = "server" | "local";
+
+// ── 单独文件导出（R-21）───────────────────────────────────────────
+
+/** 一个待导出的文件：格式 + 目标文件名（命名规则在前端渲染，与上面预览同口径）。 */
+export interface SingleExportPlan {
+  format: ExportFormat;
+  filename: string;
+}
+
+/** 串行进度（index 从 1 开始）：界面文案「正在导出 2/3：Word」。 */
+export interface SingleExportProgress {
+  index: number;
+  total: number;
+  format: ExportFormat;
+}
+
+export interface SingleExportOutcome {
+  /** 已成功保存的文件数（失败那一个不算）。 */
+  completed: number;
+  total: number;
+  failed: { format: ExportFormat; reason: string } | null;
+}
+
+/**
+ * 逐个导出多个格式并**串行**保存。
+ *
+ * 为什么串行：浏览器对"同一手势下的连续下载"会拦掉后几个（且被拒后静默失败），
+ * 所以一次只发一个请求、保存完再发下一个；之间留 `gapMs` 让上一份下载先落地。
+ * 失败立刻停：后面的文件大概率也是同一个原因（版本冲突 / 后端不可用），
+ * 继续发只会让用户以为"部分成功"。
+ */
+export async function runSingleFileExports({
+  plans,
+  fetchOne,
+  save,
+  onProgress,
+  gapMs = 300,
+}: {
+  plans: SingleExportPlan[];
+  fetchOne: (plan: SingleExportPlan) => Promise<{ blob: Blob; filename?: string }>;
+  save: (blob: Blob, filename: string) => void;
+  onProgress?: (progress: SingleExportProgress) => void;
+  gapMs?: number;
+}): Promise<SingleExportOutcome> {
+  let completed = 0;
+  for (let index = 0; index < plans.length; index += 1) {
+    const plan = plans[index];
+    onProgress?.({ index: index + 1, total: plans.length, format: plan.format });
+    try {
+      const result = await fetchOne(plan);
+      save(result.blob, plan.filename || result.filename || `resume.${plan.format}`);
+      completed += 1;
+    } catch (error) {
+      return {
+        completed,
+        total: plans.length,
+        failed: {
+          format: plan.format,
+          reason: error instanceof Error ? error.message : String(error),
+        },
+      };
+    }
+    if (index < plans.length - 1 && gapMs > 0) {
+      await new Promise((resolve) => setTimeout(resolve, gapMs));
+    }
+  }
+  return { completed, total: plans.length, failed: null };
+}
 
 export interface ExportBundleOptions {
   api: ExportDeliveryApi;

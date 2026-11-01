@@ -168,12 +168,11 @@ export interface StyleProbeOptions {
   baseRatios?: Partial<Record<string, number>>;
 }
 
-/** 声明顺序与后端 `resume_style_schema.STYLE_PROPS` 一致（属性面板行序同源）。 */
+/** 声明顺序与后端 `resume_style_schema.STYLE_PROPS` 一致（属性面板行序同源；#5d 起无 italic）。 */
 const PROBE_PROP_ORDER = [
   "font_scale",
   "color",
   "bold",
-  "italic",
   "space_before",
   "space_after",
   "line_height",

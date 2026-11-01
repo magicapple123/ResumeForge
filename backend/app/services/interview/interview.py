@@ -20,12 +20,14 @@ from jinja2 import Environment, select_autoescape
 
 from ...models.interview import (
     INTERVIEW_STATUS_FINISHED,
+    MESSAGE_PHASE_INTERVIEW,
     InterviewMessage,
     InterviewSession,
 )
 from ...schemas.interview import MAX_INTERVIEW_ROUNDS
 from ..llm.base import BaseLLMProvider, LLMError
 from ..llm.structured_output import parse_json_object
+from .interview_behavior import behavior_directives_for
 
 logger = logging.getLogger(__name__)
 
@@ -79,9 +81,23 @@ def _duration_label(seconds: int) -> str:
     return f"{seconds // 60} 分 {seconds % 60} 秒"
 
 
+def message_phase(message: InterviewMessage) -> str:
+    """一条消息所属的阶段；列默认值是 ``interview``，对象未 flush 时属性可能是 ``None``。"""
+    return (message.phase or MESSAGE_PHASE_INTERVIEW).strip() or MESSAGE_PHASE_INTERVIEW
+
+
 def answered_rounds(session: InterviewSession) -> int:
-    """已回答的轮数 = 用户写下过几次回答（被中断的那一轮也算，它可以重答）。"""
-    return sum(1 for item in session.messages if item.role == "user")
+    """已回答的**正式**轮数 = 用户写下过几次回答（被中断的那一轮也算，它可以重答）。
+
+    #41 起只数 ``phase="interview"`` 的那些：面试结束后的「追问」也写成 ``role="user"``
+    的消息，若一并计数，问两轮追问就会让"第 3/6 轮"变成"第 5/6 轮"、刷新页面后进度
+    还会比刚才大——这正是本轮要修掉的那个 bug。
+    """
+    return sum(
+        1
+        for item in session.messages
+        if item.role == "user" and message_phase(item) == MESSAGE_PHASE_INTERVIEW
+    )
 
 
 # 一轮问答的两个状态（写在 ``InterviewMessage.status``，复用既有字段，不新造第二套状态）：
@@ -110,7 +126,11 @@ def pending_interrupted_answer(session: InterviewSession) -> InterviewMessage | 
     if not session.messages:
         return None
     last = session.messages[-1]
-    if last.role == "user" and last.status == MESSAGE_STATUS_INTERRUPTED:
+    if (
+        last.role == "user"
+        and message_phase(last) == MESSAGE_PHASE_INTERVIEW
+        and last.status == MESSAGE_STATUS_INTERRUPTED
+    ):
         return last
     return None
 
@@ -179,6 +199,10 @@ def build_interview_messages(
             # 收在这里而不是依赖调用方：这是"进提示词"的唯一汇聚点，无论会话怎么创建都成立。
             # 考察重点同理（纯空白的 focus 会盖掉下面那句"未指定"的兜底文案）。
             "focus": (session.focus or "").strip() or "未指定，按面试类型通用考察点提问",
+            # #43：类型/难度/风格的行为定义表——不再是三个只进一行字的标签。
+            "behavior_directives": behavior_directives_for(
+                session.interview_type, session.difficulty, session.interviewer_style
+            ),
             "persona": (session.persona or "").strip(),
             "first_round": "true" if first_round else "",
         },
@@ -230,11 +254,17 @@ def parse_turn(raw: str) -> tuple[str, str, bool]:
 
 
 def build_report_messages(session: InterviewSession) -> list[dict[str, str]]:
-    """把面试问答记录渲染成给模型生成四维评分报告的消息。"""
+    """把面试问答记录渲染成给模型生成四维评分报告的消息。
+
+    只取 ``phase="interview"`` 的正式问答：报告是对**这场面试**的评分，结束后的追问
+    （#41）属于"考完再问"，把它算进评分依据会让同一场面试的分数据"用户聊了多少"浮动。
+    """
     rows = [
         {"role": item.role, "content": _clip(item.content, 4_000)}
         for item in session.messages
-        if item.role in {"interviewer", "user"} and item.content.strip()
+        if item.role in {"interviewer", "user"}
+        and item.content.strip()
+        and message_phase(item) == MESSAGE_PHASE_INTERVIEW
     ]
     system = _render(
         _load_prompt("interview_report.md"),
@@ -334,11 +364,18 @@ def add_message(
     role: str,
     content: str,
     context: dict[str, Any] | None = None,
+    phase: str = MESSAGE_PHASE_INTERVIEW,
 ) -> InterviewMessage:
-    """往面试会话追加一条消息。"""
+    """往面试会话追加一条消息。
+
+    ``phase`` 显式写进构造参数（而不是靠列默认值）：对象在 flush 之前属性还是 ``None``，
+    而 ``answered_rounds`` 可能在 **commit 之前**就被调用（接口里就是先算轮次再决定收尾），
+    那时候拿不到列默认值会让轮次算少一轮。
+    """
     message = InterviewMessage(
         session_id=session.id,
         role=role,
+        phase=phase,
         content=content,
         context=context or {},
     )
@@ -377,6 +414,7 @@ __all__ = [
     "generate_report",
     "mark_answer_interrupted",
     "mark_finished",
+    "message_phase",
     "parse_report",
     "parse_turn",
     "pending_interrupted_answer",

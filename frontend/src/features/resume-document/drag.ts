@@ -27,6 +27,29 @@ export function placementGroup(items: readonly ResumeItem[], placement: Placemen
   return items.filter((item) => getItemPlacement(item) === placement);
 }
 
+/** 位置分组表：`placement → items`。 */
+export type PlacementGroups = Record<Placement, ResumeItem[]>;
+
+/**
+ * 一次遍历把条目拆成全部位置组（R-30）。
+ *
+ * 条目卡以前对 6 个位置组各 `filter` 一遍（每次渲染 6 遍 190 项），再加上各组的计数
+ * 又各 filter 一遍。这里一次建成表，渲染期只查表——分组结果与 `placementGroup` 逐项一致，
+ * `placementGroup` 保留给单点调用（拖拽落点判定）。
+ */
+export function groupByPlacement(items: readonly ResumeItem[]): PlacementGroups {
+  const groups: PlacementGroups = {
+    title: [],
+    meta: [],
+    lead: [],
+    body: [],
+    trail: [],
+    hidden: [],
+  };
+  for (const item of items) groups[getItemPlacement(item)].push(item);
+  return groups;
+}
+
 /**
  * 计算一次方向键移动的目标槽位；不能移动返回 null。
  *

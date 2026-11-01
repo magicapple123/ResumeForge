@@ -46,13 +46,13 @@ describe("I18nProvider locale", () => {
 
     expect(screen.getByTestId("locale")).toHaveTextContent(DEFAULT_LOCALE);
     expect(screen.getByTestId("label")).toHaveTextContent(t("resume.language.label"));
-    expect(screen.getByTestId("label")).toHaveTextContent("简历语言");
+    expect(screen.getByTestId("label")).toHaveTextContent("字段语言");
   });
 
   it("模块级 t() 不依赖 React：在任何地方都能直接调", () => {
     expect(t("resume.language.en-US")).toBe("English");
     // 带参数调用不报错；本条 key 没有占位符，原样返回。
-    expect(t("resume.language.label", { name: "x" })).toBe("简历语言");
+    expect(t("resume.language.label", { name: "x" })).toBe("字段语言");
   });
 });
 

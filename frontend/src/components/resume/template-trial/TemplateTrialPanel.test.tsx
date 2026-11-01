@@ -165,13 +165,26 @@ describe("TemplateTrialPanel · 采纳与取消", () => {
     });
   });
 
-  it("选「采用模板默认」后采纳回传空覆盖（重设覆盖是显式选择）", async () => {
+  it("选「采用模板默认」后采纳要先确认，确认后才回传空覆盖", async () => {
     const { onAdopt } = renderPanel({ resumeId: 5 });
     await waitFor(() => expect(apiMocks.previewResumeTemplate).toHaveBeenCalledTimes(2));
     fireEvent.click(screen.getByText(t("trial.override.reset")));
     const buttons = screen.getAllByRole("button", { name: t("trial.adopt") });
     fireEvent.click(buttons[buttons.length - 1]);
+    // 清空整份 format_config 是不可从模板找回的动作：点采纳只弹确认，不写回。
+    expect(onAdopt).not.toHaveBeenCalled();
+    expect(await screen.findByText(t("trial.override.confirmTitle"))).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: t("trial.override.confirmOk") }));
     expect(onAdopt).toHaveBeenCalledWith({ template: "modern", formatConfig: {} });
+  });
+
+  it("保留覆盖时采纳不需要二次确认", async () => {
+    const { onAdopt } = renderPanel({ resumeId: 5 });
+    await waitFor(() => expect(apiMocks.previewResumeTemplate).toHaveBeenCalledTimes(2));
+    const buttons = screen.getAllByRole("button", { name: t("trial.adopt") });
+    fireEvent.click(buttons[buttons.length - 1]);
+    expect(onAdopt).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText(t("trial.override.confirmTitle"))).toBeNull();
   });
 
   it("取消/返回不采纳任何模板（试用不污染文档）", async () => {

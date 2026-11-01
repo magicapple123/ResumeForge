@@ -10,7 +10,7 @@ from ._types import ToolResult
 def _tool_search_product_docs(_db: Session, arguments: dict) -> ToolResult:
     query = str(arguments.get("query") or "").strip()
     if not query:
-        raise ValueError("需要提供要查找的简历通问题")
+        raise ValueError("需要提供要查找的产品使用问题（query 不能为空）")
     limit = int(arguments.get("limit") or 5)
     return ToolResult(
         text=format_product_doc_results(query, limit),

@@ -51,6 +51,13 @@ backend/*.sqlite3-*
 backend/backups/
 backend/test_resume_forge.db
 /runtime/
+# 后端运行期产物：本机调查脚本会在 backend/runtime/ 下写导出件。
+# 上面那行 `/runtime/` 是根锚定，挡不住 `backend/runtime/`，这里单独补一条。
+backend/runtime/
+# 验证期把 pytest / importer 的输出重定向到文件留下的日志，不是产物也不是输入。
+backend/rf_inv.txt
+# 脚本里变量未赋值时写出的字面 `undefined` 目录（历史遗留）。
+undefined/
 
 # ===== 编辑器 =====
 .vscode/

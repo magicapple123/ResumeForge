@@ -10,7 +10,7 @@
  * 已移除：v1 草稿条/自动重同步/fillSources 逐条填入（v2 编辑器链没有这些机制；「从资料填入」
  * 由独立 ProfileFillMenu 承担，本弹窗的初始内容已整份来自投影）。
  */
-import { App, Button, Input, Modal, Popconfirm, Space, Tooltip, Typography } from "antd";
+import { App, Button, Input, Modal, Popconfirm, Space, Tag, Tooltip, Typography } from "antd";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { createManualResume, fetchResumeTemplates } from "../api/resumes";
@@ -305,6 +305,21 @@ export default function ManualResumeModal({
         <Typography.Paragraph type="secondary" style={{ marginBottom: 12 }}>
           {job ? t("resume.manual.description.job") : t("resume.manual.description.general")}
         </Typography.Paragraph>
+        {/* #31: source sections as top chips (single-column body; job mode keeps the JD column). */}
+        {!job && projection.data ? (
+          <Space size={6} wrap style={{ marginBottom: 12 }}>
+            <Typography.Text strong>{t("editor.sources.title") + "\uFF1A"}</Typography.Text>
+            {projection.data.source_layout.map((section) => (
+              <Tag key={section.section_key}>
+                {section.section_name}
+                {section.entry_count > 0 ? ` · ${section.entry_count}` : ""}
+              </Tag>
+            ))}
+            <Button size="small" onClick={switchGroup}>
+              {t("profileLibrary.empty.switchGroup")}
+            </Button>
+          </Space>
+        ) : null}
         {job ? null : (
           <Input
             aria-label={t("resume.manual.name.aria")}
@@ -312,7 +327,7 @@ export default function ManualResumeModal({
             maxLength={64}
             placeholder={t("resume.manual.name.placeholder")}
             onChange={(event) => setTitle(event.target.value)}
-            style={{ maxWidth: 360, marginBottom: 12 }}
+            style={{ width: "min(520px, 100%)", minWidth: 420, marginBottom: 12 }}
           />
         )}
         <div style={{ display: "flex", gap: 16, alignItems: "flex-start" }}>
@@ -355,23 +370,6 @@ export default function ManualResumeModal({
           {job ? (
             <div style={{ width: 320, flex: "0 0 auto" }}>
               <JobRequirementPanel job={job} />
-            </div>
-          ) : projection.data ? (
-            // 资料来源：v2 里只读展示当前组投影的分区清单（v1 ProfileSourceTabs 依赖 v1
-            // content 字段，已随 v1 编辑器链删除；逐条/整份填入不在新建弹窗里）。
-            <div style={{ width: 320, flex: "0 0 auto" }}>
-              <Typography.Text strong>{t("editor.sources.title")}</Typography.Text>
-              <ul style={{ paddingLeft: 18, margin: "8px 0 12px" }}>
-                {projection.data.source_layout.map((section) => (
-                  <li key={section.section_key}>
-                    {section.section_name}
-                    {section.entry_count > 0 ? " · " + section.entry_count : ""}
-                  </li>
-                ))}
-              </ul>
-              <Button size="small" onClick={switchGroup}>
-                {t("profileLibrary.empty.switchGroup")}
-              </Button>
             </div>
           ) : null}
         </div>

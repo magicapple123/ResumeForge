@@ -14,7 +14,12 @@ import type {
   ResumeDocument,
   ResumeItem,
 } from "../../types/resumeDocument";
-import { defaultFieldItem, missingFieldSpecs, itemPath } from "../../features/resume-document";
+import {
+  defaultFieldItem,
+  effectiveFieldFormat,
+  missingFieldSpecs,
+  itemPath,
+} from "../../features/resume-document";
 import { addItem } from "../../features/resume-document/mutations";
 import { useMemo } from "react";
 import { newObjectId } from "../../features/resume-document/identity";
@@ -27,6 +32,16 @@ interface Props {
   catalog?: DocumentFieldCatalog | null;
   readOnly?: boolean;
   label: string;
+  /**
+   * 空组的说明（R-05）：`variant="cell"` 且组内没有 chip 时，这枚「+」只有图标，
+   * 说明改由 `title` 承载，悬停能看到"这里还没有字段"。
+   */
+  hint?: string;
+  /**
+   * `button`（默认）= 带文案的虚线按钮（正文区的「添加字段块」仍用它）；
+   * `cell` = chips 网格末尾的一枚虚线 `+` 格（R-05 ③）。
+   */
+  variant?: "button" | "cell";
   onChange: (next: ResumeDocument) => void;
   onSelectPath: (path: string) => void;
   onNotice: (text: string, tone?: "info" | "warning") => void;
@@ -40,6 +55,8 @@ export default function AddFieldMenu({
   catalog = null,
   readOnly = false,
   label,
+  hint = "",
+  variant = "button",
   onChange,
   onSelectPath,
   onNotice,
@@ -63,7 +80,7 @@ export default function AddFieldMenu({
       ? defaultFieldItem({
           key: spec.key,
           placement: spec.material_only ? "hidden" : placement,
-          format: spec.format,
+          format: effectiveFieldFormat(spec),
           source:
             catalogSection?.profile_section_key && spec.source_field_id
               ? { section_key: catalogSection.profile_section_key, field_id: spec.source_field_id }
@@ -115,9 +132,21 @@ export default function AddFieldMenu({
         },
       }}
     >
-      <Button size="small" type="dashed" icon={<PlusOutlined />} aria-label={label}>
-        {label}
-      </Button>
+      {variant === "cell" ? (
+        <button
+          type="button"
+          className="document-add-cell"
+          aria-label={label}
+          title={hint || label}
+          onClick={(event) => event.stopPropagation()}
+        >
+          <PlusOutlined aria-hidden="true" />
+        </button>
+      ) : (
+        <Button size="small" type="dashed" icon={<PlusOutlined />} aria-label={label}>
+          {label}
+        </Button>
+      )}
     </Dropdown>
   );
 }

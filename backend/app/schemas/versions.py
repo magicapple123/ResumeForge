@@ -66,6 +66,26 @@ class LayoutDiffOut(BaseModel):
     equal: bool = True
 
 
+class VersionChangeOut(BaseModel):
+    """字段级变更（#28b）：一条 = 一个字段/条目的新增、删除或修改。
+
+    ``scope`` 说明变更粒度；``old_value``/``new_value`` 是**可读文本**，
+    不是文档内部结构——界面只按"旧值 → 新值"展示。
+    """
+
+    path: str
+    kind: Literal["added", "removed", "changed"]
+    scope: Literal["header", "section", "entry", "item"]
+    section_key: str = ""
+    section_title: str = ""
+    entry_id: str = ""
+    entry_label: str = ""
+    item_key: str = ""
+    item_label: str = ""
+    old_value: str | None = None
+    new_value: str | None = None
+
+
 class VersionCompareOut(BaseModel):
     base_id: int
     against_id: int
@@ -74,6 +94,10 @@ class VersionCompareOut(BaseModel):
     # 0 表示"与当前简历比较"（伪 id，便于前端统一处理）。
     content: ResumeDiffOut
     layout: LayoutDiffOut
+    # #28b：字段级变更集（默认只含变化项，按文档顺序）。界面不再渲染原始 JSON 行 diff。
+    changes: list[VersionChangeOut] = Field(default_factory=list)
+    # 文档太大时变更集会被截断（上限见 document_versions_diff.MAX_CHANGES）。
+    changes_truncated: bool = False
 
 
 class VersionFreezeRequest(BaseModel):
@@ -231,6 +255,9 @@ class AdoptTranslationRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     items: list[AdoptItemIn] = Field(min_length=1, max_length=MAX_PATHS_PER_SYNC)
+    # #17a：本次翻译的目标语言。给了就和变体的语言标签比对，不一致整批 422——
+    # 防止"在中文版上生成英文候选后误写回中文版"这种数据污染（旧客户端不传 = 不校验）。
+    target_language: Literal["zh-CN", "en-US"] | None = None
 
 
 class AdoptTranslationOut(BaseModel):

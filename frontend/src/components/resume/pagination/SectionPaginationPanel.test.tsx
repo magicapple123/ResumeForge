@@ -111,8 +111,8 @@ describe("SectionPaginationPanel · 板块级开关（Q08）", () => {
     expect(screen.getByText(t("structure.pagination.hint"))).toBeInTheDocument();
     expect(screen.getByText("开源项目")).toBeInTheDocument();
     expect(screen.getByText(t("structure.section.education"))).toBeInTheDocument();
-    // 3 个板块 × 2 个开关 = 6；条目级开关已搬走。
-    expect(container.querySelectorAll('[data-section-pagination] [role="switch"]')).toHaveLength(6);
+    // #1：板块级「不跨页」删除（渲染端从未消费）——3 板块 × 1 个断页开关。
+    expect(container.querySelectorAll('[data-section-pagination] [role="switch"]')).toHaveLength(3);
     expect(container.querySelector("[data-entry-pagination]")).toBeNull();
   });
 
@@ -126,13 +126,17 @@ describe("SectionPaginationPanel · 板块级开关（Q08）", () => {
     expect(next.sections[1].layout.start_on_new_page).toBe(false);
   });
 
-  it("打开「整块不跨页」写 keep_together", () => {
+  it("#1：板块级「不跨页」不再提供开关（渲染端从未消费的死开关）", () => {
     const { container, onChange } = renderPanel(makeDocument());
-    const row = container.querySelector<HTMLElement>('[data-section-pagination="custom:sec_0001"]');
+    // 每行只有 1 个开关（断页）；点它写 start_on_new_page，keep_together 不再可达。
+    for (const row of container.querySelectorAll("[data-section-pagination]")) {
+      expect(row.querySelectorAll('button[role="switch"]')).toHaveLength(1);
+    }
+    const row = container.querySelector<HTMLElement>('[data-section-pagination="education"]');
     if (!row) throw new Error("missing row");
-    fireEvent.click(row.querySelectorAll('button[role="switch"]')[1]);
+    fireEvent.click(row.querySelector('button[role="switch"]') as HTMLElement);
     const next = onChange.mock.calls[0][0] as ResumeDocument;
-    expect(next.sections[2].layout.keep_together).toBe(true);
+    expect(next.sections[0].layout.start_on_new_page).toBe(true);
   });
 
   it("值没变化时不派发新文档（不制造脏值/历史点）", () => {
@@ -154,6 +158,67 @@ describe("SectionPaginationPanel · 板块级开关（Q08）", () => {
     )) {
       expect(sw).toBeDisabled();
     }
+  });
+});
+
+describe("SectionPaginationPanel · 表头化表格（R-07）", () => {
+  it("列名只在表头出现一次，且表头对读屏隐藏", () => {
+    const { container } = renderPanel(makeDocument());
+    const header = container.querySelector<HTMLElement>(".resume-section-pagination-header");
+    if (!header) throw new Error("missing header");
+    expect(header.getAttribute("aria-hidden")).toBe("true");
+    // 列名在整块面板里各只出现一次（3 个板块不再重复 3 遍）。
+    const text = header.textContent ?? "";
+    expect(text).toContain(t("pagination.header.startOnNewPage"));
+    // #1：「不跨页」列已删。
+    expect(text).not.toContain(t("pagination.header.keepTogether"));
+    // 行内不再有文字标签：行里只有开关与板块名。
+    const rows = container.querySelectorAll("[data-section-pagination]");
+    rows.forEach((row) => {
+      expect(row.textContent ?? "").not.toContain(t("pagination.header.startOnNewPage"));
+    });
+  });
+
+  it("#1：行与表头各 2 个子项（板块名 + 断页列）共用了同一套 grid 轨道", () => {
+    const { container } = renderPanel(makeDocument());
+    const row = container.querySelector("[data-section-pagination]");
+    if (!row) throw new Error("missing row");
+    expect(row.children).toHaveLength(2);
+    const header = container.querySelector(".resume-section-pagination-header");
+    if (!header) throw new Error("missing header");
+    expect(header.children).toHaveLength(2);
+  });
+
+  it('getAllByRole("switch") 的 name 两两不重复', () => {
+    renderPanel(makeDocument());
+    const names = screen
+      .getAllByRole("switch")
+      .map((node) => node.getAttribute("aria-label") ?? "");
+    expect(names).toHaveLength(3);
+    expect(new Set(names).size).toBe(3);
+    // 每个 name 都写清了「哪个板块 + 哪个开关」。
+    expect(names).toContain(
+      t("pagination.sectionAria", {
+        name: t("structure.section.education"),
+        flag: t("pagination.breakBefore"),
+      }),
+    );
+  });
+
+  it("已设置断页的板块名前置 5px 圆点，未设置的没有", () => {
+    const document = makeDocument();
+    document.sections[1].layout.start_on_new_page = true;
+    const { container } = renderPanel(document);
+    const rows = container.querySelectorAll("[data-section-pagination]");
+    expect(rows[1].querySelector(".resume-section-pagination-dot")).not.toBeNull();
+    expect(rows[0].querySelector(".resume-section-pagination-dot")).toBeNull();
+    expect(rows[2].querySelector(".resume-section-pagination-dot")).toBeNull();
+  });
+
+  it("板块名带 title（省略号必须有全文，R3）", () => {
+    renderPanel(makeDocument());
+    const name = screen.getByTitle("开源项目");
+    expect(name.className).toContain("resume-section-pagination-name");
   });
 });
 
@@ -261,7 +326,8 @@ describe("SectionPaginationPanel · 精确预览与轻提示（Q09）", () => {
     fireEvent.click(row.querySelectorAll('button[role="switch"]')[0]);
     expect(onNotify).toHaveBeenCalledTimes(1);
     expect(onNotify).toHaveBeenCalledWith(t("toast.pageBreakApplied"));
-    fireEvent.click(row.querySelectorAll('button[role="switch"]')[1]);
+    // 再拨（关掉）不再提示——提示只在会话第一次。
+    fireEvent.click(row.querySelectorAll('button[role="switch"]')[0]);
     expect(onNotify).toHaveBeenCalledTimes(1);
   });
 });

@@ -34,6 +34,7 @@ const conflict = {
   "workbench.history.label.text": "Edit content",
   "workbench.history.label.layout": "Adjust typography",
   "workbench.history.label.structure": "Change structure",
+  "workbench.history.label.entryLayout": "Adjust entry layout",
   "workbench.history.label.bold": "Bold text",
   "workbench.history.summary": "{name} · {entries} entries · {pages} pages",
   "workbench.history.current": "Current state",

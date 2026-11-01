@@ -64,6 +64,15 @@ const pagination = {
   /** 条目芯片的说明：两层断页互不干扰，别让用户以为「恢复自然分页」能清掉条目断页。 */
   "pagination.breaks.entryHint": "条目断页只作用于这一条，「恢复自然分页」不会清除它",
 
+  // ── 板块开关表（R-07：表头写一次，行内只留开关）──────────────
+  /** 表头列名。表头 `aria-hidden`：语义由每行的开关承载，不给读屏重复播报。 */
+  "pagination.header.startOnNewPage": "新页",
+  "pagination.header.keepTogether": "不跨页",
+  /** 行内开关的读屏名：「板块名」+ 开关名，两个开关两两不重复。 */
+  "pagination.sectionAria": "「{name}」{flag}",
+  /** 已设断页板块名前的 5px 圆点：视觉标记，悬停给出全称（读屏由开关状态承载）。 */
+  "pagination.sectionConfigured": "已设置断页",
+
   // ── 逐板块设置（可折叠，不默认占满高度）──────────────────────
   "pagination.sections.settings": "逐板块设置",
   /** 还没选板块时的提示。 */
@@ -72,7 +81,8 @@ const pagination = {
   "pagination.sections.summary": "{count} 个板块已设断页",
 
   // ── 条目级分页（选中条目时出现）──────────────────────────────
-  "pagination.entry.title": "这一条的断页",
+  /** 条目级分页分组标题（R-11 统一分组标题）：括注说清它只作用于这一条。 */
+  "pagination.entry.title": "断页（仅这一条）",
   /** 没选中条目时的指路：告诉用户"选中一条才会出现这一条的控件"。 */
   "pagination.entry.pick": "在大纲或纸面选中一条内容，这里会多出「这一条的断页」",
 
@@ -122,7 +132,7 @@ const pagination = {
 
   // ── 页缩略图（W08：实际页数 / 末页占用 / 问题位置）────────────
   /** 缩略图区标题。 */
-  "pagination.thumbnails.title": "页缩略图",
+  "pagination.thumbnails.title": "页面概览",
   /** 还没有分页报告时的空态（不编页数）。 */
   "pagination.thumbnails.empty": "还没有分页报告",
   /** 空态指引：点名真实的「获取分页报告」按钮（用户指南引用必须逐字一致）。 */
@@ -157,6 +167,7 @@ const pagination = {
   "pagination.thumbnails.pageIssues": "，{count} 个问题",
   /** 读屏名多段拼接用的分隔符（全角逗号；放在语言包里，源码里不写中文标点）。 */
   "pagination.thumbnails.ariaJoin": "，",
+  "pagination.thumbnails.limitReached": "已达页数上限（{limit} 页）",
 
   // ── 分页报告与溢出定位 ──────────────────────────────────────
   /** 报告区的标题。 */

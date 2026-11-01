@@ -32,6 +32,7 @@ const rich = {
   "rich.preview.updating": "预览更新中…",
   /** 渲染失败时说明"眼前这一版是哪来的"，并给出重试入口。 */
   "rich.preview.stale": "显示的是上一次成功预览",
+  "rich.preview.staleDetail": "纸面未反映最新修改，显示的是上一次成功预览",
   /** 失败后的重试按钮。 */
   "rich.preview.retry": "重试",
 } as const;

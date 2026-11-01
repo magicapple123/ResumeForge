@@ -6,7 +6,7 @@
  * 把文本写回该块（服务端事实锁 + 版本条件写；source_revision_stale 提示先刷新）；
  * 保持原稿只是本地标记；解除关联才 deleteBlockLink。失败给原因 + 重试，不假装成功。
  */
-import { Alert, Button, Space, Table, Tag, Typography } from "antd";
+import { Alert, Button, Space, Table, Tag, Tooltip, Typography } from "antd";
 import type { TableColumnsType } from "antd";
 import { useCallback, useEffect, useState } from "react";
 import EmptyState from "../../common/EmptyState";
@@ -118,14 +118,20 @@ export default function SourceImpactPanel({ sourceId, revision, onAdopted, class
     {
       title: pt("provenance.impact.title", { count: rows.length }),
       key: "target",
-      render: (_value, entry) => (
-        <Space orientation="vertical" size={0}>
-          <Typography.Text>{entry.resume_title}</Typography.Text>
-          <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-            {entry.path}
-          </Typography.Text>
-        </Space>
-      ),
+      render: (_value, entry) => {
+        // #20a：可读标签优先（条目名/要点 + 字段名），内部 path 只进 tooltip。
+        const readable = [entry.target_label, entry.field_label].filter(Boolean).join(" · ");
+        return (
+          <Tooltip title={readable ? undefined : entry.path}>
+            <Space orientation="vertical" size={0}>
+              <Typography.Text>{entry.resume_title}</Typography.Text>
+              <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                {readable || entry.path}
+              </Typography.Text>
+            </Space>
+          </Tooltip>
+        );
+      },
     },
     {
       title: "",
