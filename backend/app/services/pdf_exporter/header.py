@@ -29,7 +29,7 @@ from io import BytesIO
 from fpdf.enums import XPos, YPos
 
 from ...schemas.resume_document_plan import HeaderPlan
-from ..resume.resume_contact import PDF_SEPARATOR
+from ..resume.resume_contact import PDF_SEPARATOR, pack_contact_lines
 
 # 别名导入：本模块的 RoleStyle 是"查询函数"的类型别名（见下），与同名 dataclass 不同义。
 from ..resume.resume_style import RoleStyle as _RoleStyle
@@ -62,20 +62,12 @@ def _pack_contact_lines(pdf: _ResumePDF, groups: list[list[str]], width: float) 
     groups 是 planner 分好的行（每行是若干字段文本）；行内字段之间用 PDF_SEPARATOR
     （与历史输出一致的四空格）。单个字段本身比整行还宽时也让它独占一行并如实溢出：
     字段内不折行是硬约束（HTML 的 white-space: nowrap 同义）。
+
+    **2026-11 #9**：贪心循环已抽到 `resume.resume_contact.pack_contact_lines`，Word 侧
+    传字体度量、这里传画布度量，两端行分布因此只差字体本身——不再各写一份装行。
     """
-    lines: list[str] = []
-    for group in groups:
-        current = ""
-        for text in group:
-            candidate = current + PDF_SEPARATOR + text if current else text
-            if current and pdf.rich_text_width(candidate) > width:
-                lines.append(current)
-                current = text
-            else:
-                current = candidate
-        if current:
-            lines.append(current)
-    return lines
+    packed = pack_contact_lines(groups, width, pdf.rich_text_width, PDF_SEPARATOR)
+    return [PDF_SEPARATOR.join(line) for line in packed]
 
 
 def draw_header(

@@ -26,9 +26,8 @@ import { moveItem, reorderItems } from "../resume-document/placement";
 import { formatListValues } from "../resume-document/format";
 import { t } from "../../i18n";
 import { itemPath } from "../resume-document/paths";
-
-export type LayoutColumns = 1 | 2 | 3;
-export type LayoutAlign = "equal" | "flow";
+import type { LayoutColumns, LayoutAlign, LayoutJustify } from "./entryRowLayout";
+export * from "./entryRowLayout";
 
 /** 条目下拉的一个选项；`label` 用条目标题行里第一个非空字段，全空时退回「条目 N」。 */
 export interface EntryOption {
@@ -148,6 +147,8 @@ export function effectiveHead(entry: ResumeEntry | null | undefined): HeadLayout
   return entry?.layout.head ?? "split";
 }
 
+// ── 分侧（正文前 / 正文后）生效值（问题 4）────────────────────────
+
 /** entry 覆盖 → section 默认 → 1。 */
 export function effectiveColumns(
   section: ResumeDocument["sections"][number] | null | undefined,
@@ -170,6 +171,43 @@ export function effectiveGap(
   entry: ResumeEntry | null | undefined,
 ): number | null {
   return entry?.layout.gap ?? section?.layout.gap ?? null;
+}
+
+/**
+ * 「分布」的生效值（问题 4）：`entry.justify ?? section.justify ?? "start"`。
+ *
+ * 这是**共用**那一档；分侧（正文前 / 正文后）走 `entryRowLayout.effectiveSideJustify`。
+ * `start` 是拆开之前的唯一行为，所以旧文档（字段缺省）在面板上显示「靠左」。
+ */
+export function effectiveJustify(
+  section: ResumeDocument["sections"][number] | null | undefined,
+  entry: ResumeEntry | null | undefined,
+): LayoutJustify {
+  return entry?.layout.justify ?? section?.layout.justify ?? "start";
+}
+
+/**
+ * 逐列宽度（百分比）/ 逐间隔（字号倍数）的生效值（任务 13）。
+ *
+ * 长度与生效列数对不上时返回 null：后端 `resolved_column_geometry` 也是这条口径
+ * （整体作废、回落等宽），两边必须一致，否则面板显示"已设宽度"而纸面按等宽排。
+ */
+export function effectiveColumnWidths(
+  section: ResumeDocument["sections"][number] | null | undefined,
+  entry: ResumeEntry | null | undefined,
+): number[] | null {
+  const columns = effectiveColumns(section, entry);
+  const widths = entry?.layout.column_widths ?? section?.layout.column_widths ?? null;
+  return widths && widths.length === columns ? widths : null;
+}
+
+export function effectiveColumnGaps(
+  section: ResumeDocument["sections"][number] | null | undefined,
+  entry: ResumeEntry | null | undefined,
+): number[] | null {
+  const columns = effectiveColumns(section, entry);
+  const gaps = entry?.layout.column_gaps ?? section?.layout.column_gaps ?? null;
+  return gaps && gaps.length === columns - 1 ? gaps : null;
 }
 
 // ── 写回（不可变）─────────────────────────────────────────────
@@ -233,13 +271,14 @@ export function resetEntryLayout(
 
 // ── 继承链可视化（P5-4）──────────────────────────────────────
 
-/** 条目级可继承项：只有这三项能从板块默认继承；head 是条目自己的属性。 */
-export type InheritableLayoutField = "columns" | "align" | "gap";
+/** 条目级可继承项：只有这四项能从板块默认继承；head 是条目自己的属性。 */
+export type InheritableLayoutField = "columns" | "align" | "justify" | "gap";
 
 /** 条目自己覆盖了哪些可继承项（null = 这一项继承板块）。 */
 export interface EntryLayoutOverrides {
   columns: boolean;
   align: boolean;
+  justify: boolean;
   gap: boolean;
 }
 
@@ -247,6 +286,7 @@ export function entryLayoutOverrides(entry: ResumeEntry | null | undefined): Ent
   return {
     columns: entry?.layout.columns != null,
     align: entry?.layout.align != null,
+    justify: entry?.layout.justify != null,
     gap: entry?.layout.gap != null,
   };
 }

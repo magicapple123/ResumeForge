@@ -125,10 +125,35 @@ export interface ResumeHeader {
   contact_breaks: string[];
 }
 
+/**
+ * 一组灰字段（正文前 lead / 正文后 trail）的列布局（问题 4）。
+ *
+ * 全部字段可空：null/缺省 = 这一层没设置，继续往继承链上一层找
+ * （`entry.lead.X ?? entry.X ?? section.lead.X ?? section.X ?? 默认值`）。
+ */
+export interface RowLayout {
+  columns?: 1 | 2 | 3 | null;
+  align?: "equal" | "flow" | null;
+  /** 分布：start = 列宽按内容、整体靠左；between = 剩余空白均分到列之间（末列贴右边界）。 */
+  justify?: "start" | "between" | null;
+  gap?: number | null;
+  column_widths?: number[] | null;
+  column_gaps?: number[] | null;
+}
+
 export interface SectionLayout {
   columns: 1 | 2 | 3;
   align: "equal" | "flow";
   gap: number | null;
+  /** 分布（问题 4）：只在 equal + 多列 + 没有显式逐列宽度时生效。缺省 = start。 */
+  justify?: "start" | "between";
+  /** 逐列宽度（百分比，合计 100；长度必须等于 columns）。null/缺省 = 等宽。 */
+  column_widths?: number[] | null;
+  /** 逐间隔（字号倍数；长度必须等于 columns − 1）。null/缺省 = 统一用 gap。 */
+  column_gaps?: number[] | null;
+  /** 正文前 / 正文后各自的列布局（问题 4）。缺省 = 完全跟随上面的共用字段。 */
+  lead?: RowLayout | null;
+  trail?: RowLayout | null;
   hide_title: boolean;
   keep_together: boolean;
   start_on_new_page: boolean;
@@ -139,7 +164,15 @@ export interface EntryLayout {
   head: HeadLayout;
   columns?: 1 | 2 | 3 | null;
   align?: "equal" | "flow" | null;
+  /** 分布（问题 4）；null = 继承分区。 */
+  justify?: "start" | "between" | null;
   gap?: number | null;
+  /** 与分区级同口径；条目级可单独覆盖，null = 继承分区。 */
+  column_widths?: number[] | null;
+  column_gaps?: number[] | null;
+  /** 正文前 / 正文后各自的列布局（问题 4）；null = 继承分区（含分区级的分侧值）。 */
+  lead?: RowLayout | null;
+  trail?: RowLayout | null;
   /** 条目级分页（计划 §6.2）：true = 该条目另起一页；与分区级取「或」。缺省 = false。 */
   start_on_new_page?: boolean;
   /** 条目级分页：true = 尽量让该条目整条不跨页；与分区级取「或」。缺省 = false。 */

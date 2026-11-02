@@ -143,15 +143,34 @@ def test_docx_header_contact_keeps_every_field_the_preview_renders():
 
 
 def test_docx_header_contact_forced_breaks_are_word_line_breaks():
-    """`contact_breaks` 在 Word 里落成 `w:br`（与 HTML 的 `<br>` 同义），默认零个。
+    """联系方式在 Word 里按**行**输出：`contact_breaks` → 强制换行，宽度不够 → 装行换行。
 
-    Word 没有 CSS 的 `white-space`：强制换行只能写 OOXML `w:br`。默认（旧简历没有
-    这个键）一个字节都不加——否则"没设过换行的简历"会平白多一行。
+    2026-11 #9 起 Word 与 PDF 共用 `pack_contact_lines`：
+    * 默认（旧简历没有 `contact_breaks` 这个键）不再"整组一段交给 Word"，
+      而是按可用宽度装行——`w:br` 的数量 = 行数 − 1；
+    * 装行只在**字段边界**发生：六个字段各自完整地出现在某一行里（长 URL 不被劈开）；
+    * 字段间隔改成两个半角空格（旧的两个全角空格会在"显示编辑标记"时变成 `□□`）。
     """
     default_doc = Document(
         BytesIO(build_resume_docx(CONTACT_RESUME, template="classic", page_limit=1).content)
     )
-    assert default_doc.element.body.xml.count("<w:br") == 0
+    contact_paragraph = next(
+        paragraph for paragraph in default_doc.paragraphs if "13800001234" in paragraph.text
+    )
+    lines = contact_paragraph.text.split("\n")
+    assert default_doc.element.body.xml.count("<w:br") == len(lines) - 1
+    # 字段整体不折行：每个字段都完整落在某一行里。
+    for value in (
+        "13800001234",
+        "zhangsan@example.com",
+        "杭州",
+        "1998",
+        "GitHub：https://github.com/zhangsan",
+        "个人主页：https://zhangsan.dev",
+    ):
+        assert any(value in line for line in lines), f"字段被换行劈开了：{value!r}（{lines}）"
+    # 半角空格分隔：不再有全角空格。
+    assert "\u3000" not in contact_paragraph.text
 
     broken_doc = Document(
         BytesIO(
@@ -163,5 +182,12 @@ def test_docx_header_contact_forced_breaks_are_word_line_breaks():
             ).content
         )
     )
+    broken_paragraph = next(
+        paragraph for paragraph in broken_doc.paragraphs if "13800001234" in paragraph.text
+    )
+    broken_lines = broken_paragraph.text.split("\n")
     # 两个字段前各一个强制换行（第一个字段 phone 之前的 break 无意义，被丢弃）。
     assert broken_doc.element.body.xml.count("<w:br") == 2
+    assert len(broken_lines) == 3, broken_lines
+    assert broken_lines[1].startswith("GitHub："), broken_lines
+    assert broken_lines[2].startswith("个人主页："), broken_lines

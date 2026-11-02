@@ -28,6 +28,7 @@ from ...schemas.resume_document import (
     ResumeHeader,
     ResumeItem,
     ResumeSection,
+    RowLayout,
     SectionPlan,
     TextItem,
     parse_document,
@@ -184,12 +185,29 @@ def _section_title(section: ResumeSection, language: str) -> str:
 
 
 def _effective_layout(section: ResumeSection, entry: ResumeEntry) -> EntryLayout:
-    """条目级覆盖叠在分区默认上的生效列布局（渲染器不再自己算继承）。"""
+    """条目级覆盖叠在分区默认上的生效列布局（渲染器不再自己算继承）。
+
+    这里只保留**两侧共用**的那一套（旧口径）与分页 / head 开关；正文前 / 正文后各自的
+    生效列布局由 `_effective_row_layout` 单独算（问题 4）。
+    """
     return EntryLayout(
         head=entry.layout.head,
         columns=entry.layout.columns or section.layout.columns,
         align=entry.layout.align or section.layout.align,
+        justify=entry.layout.justify or section.layout.justify,
         gap=entry.layout.gap if entry.layout.gap is not None else section.layout.gap,
+        # 逐列宽度 / 逐间隔同口径继承。长度是否等于生效列数由渲染器判定
+        # （`resolved_column_geometry`）：对不上就整体回落等宽，不会"半个宽度生效"。
+        column_widths=(
+            entry.layout.column_widths
+            if entry.layout.column_widths is not None
+            else section.layout.column_widths
+        ),
+        column_gaps=(
+            entry.layout.column_gaps
+            if entry.layout.column_gaps is not None
+            else section.layout.column_gaps
+        ),
         # 分页只带**条目自己的**开关：分区级「另起一页」由渲染器在分区开头处理，
         # 若在这里与分区级取或，会让分区内每个条目都断页（不是生效值的语义）。
         start_on_new_page=bool(entry.layout.start_on_new_page),
@@ -197,8 +215,64 @@ def _effective_layout(section: ResumeSection, entry: ResumeEntry) -> EntryLayout
     )
 
 
+#: 侧别 → 该层"分侧覆盖"的字段名。lead/trail 之外没有第三种侧别。
+_ROLES = ("lead", "trail")
+
+
+def _effective_row_layout(
+    section: ResumeSection, entry: ResumeEntry, side: str
+) -> RowLayout:
+    """正文前 / 正文后各自的**生效**列布局（问题 4）。
+
+    继承链（scope 由近到远）：
+
+        entry.<side>.X ?? entry.X ?? section.<side>.X ?? section.X ?? 默认值
+
+    「条目共用值优先于板块分侧值」是刻意的：条目的共用值（`entry.columns` 等）是用户在
+    **这一条**上做的决定，比板块级的分侧默认更贴近使用场景。默认值取"1 列 / equal /
+    start"，与拆开之前完全一致，所以旧文档（lead/trail 都是 None）产物逐字节不变。
+
+    Args:
+        section: 所属分区。
+        entry: 当前条目。
+        side: ``"lead"`` 或 ``"trail"``。
+
+    Returns:
+        已解析的 `RowLayout`；``gap`` / ``column_widths`` / ``column_gaps`` 可能仍是 None
+        （= 交给渲染器按对齐方式取兜底值），与拆开之前的语义一致。
+    """
+    if side not in _ROLES:
+        raise ValueError(f"未知的灰字段侧别：{side!r}")
+    entry_side = getattr(entry.layout, side)
+    section_side = getattr(section.layout, side)
+
+    def pick(name: str):
+        """按继承链取第一个非 None 的值。"""
+        for layer in (entry_side, entry.layout, section_side, section.layout):
+            if layer is None:
+                continue
+            value = getattr(layer, name)
+            if value is not None:
+                return value
+        return None
+
+    columns = pick("columns")
+    align = pick("align")
+    justify = pick("justify")
+    return RowLayout(
+        columns=1 if columns is None else columns,
+        align="equal" if align is None else align,
+        justify="start" if justify is None else justify,
+        gap=pick("gap"),
+        column_widths=pick("column_widths"),
+        column_gaps=pick("column_gaps"),
+    )
+
+
 def _plan_entry(section: ResumeSection, entry: ResumeEntry, language: str) -> EntryPlan | None:
     layout = _effective_layout(section, entry)
+    lead_layout = _effective_row_layout(section, entry, "lead")
+    trail_layout = _effective_row_layout(section, entry, "trail")
     entry_id = entry.id or ""
     head_items = [
         item
@@ -220,15 +294,17 @@ def _plan_entry(section: ResumeSection, entry: ResumeEntry, language: str) -> En
     return EntryPlan(
         id=entry_id,
         layout=layout,
+        lead_layout=lead_layout,
+        trail_layout=trail_layout,
         head=HeadPlan(
             layout=layout.head,
             title=title_segments,
             meta=meta_segments,
             path=section.key + "." + entry_id,
         ),
-        lead_rows=_pack_rows(lead, layout, section.key, entry_id, language),
+        lead_rows=_pack_rows(lead, lead_layout, section.key, entry_id, language),
         body=_body_blocks(entry, section.key, entry_id, language),
-        trail_rows=_pack_rows(trail, layout, section.key, entry_id, language),
+        trail_rows=_pack_rows(trail, trail_layout, section.key, entry_id, language),
     )
 
 
@@ -254,12 +330,16 @@ def _joined_segments(
 
 def _pack_rows(
     items: Sequence[ResumeItem],
-    layout: EntryLayout,
+    layout: RowLayout,
     section_key: str,
     entry_id: str,
     language: str,
 ) -> list[list[CellPlan]]:
-    """lead/trail 装箱：solo 先冲行再独占整行；equal 每行 columns 个；flow 一行顺排。"""
+    """lead/trail 装箱：solo 先冲行再独占整行；equal 每行 columns 个；flow 一行顺排。
+
+    入参是**这一侧**的生效布局（问题 4）：正文前 2 列、正文后 3 列时，两侧的行数与每行
+    cell 数各不相同——这正是"分侧列数"的全部意义。
+    """
     columns = layout.columns or 1
     align = layout.align or "equal"
     cells: list[CellPlan] = []

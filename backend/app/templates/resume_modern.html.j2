@@ -34,7 +34,10 @@
   .header .intent { font-size: calc(var(--fs) * 1.07); color: var(--accent); margin-top: calc(var(--fs) * 0.3); }
   .header .contact { font-size: calc(var(--fs) * 0.93); color: var(--muted); margin-top: calc(var(--fs) * 0.5); }
   .header .contact span { margin-right: calc(var(--fs) * 1.14); white-space: nowrap; }
-  .profile-photo { width: calc(var(--fs) * 6.6 * var(--photo-scale, 1)); height: calc(var(--fs) * 6.6 * var(--photo-scale, 1)); flex: 0 0 auto; object-fit: contain; border-radius: 4px; border: 2px solid #ffffff; }
+  /* 2026-11 #19：照片不再画 2px 纯白描边——精确 PDF（services/pdf_exporter/header.py 只
+     `pdf.image(...)` 贴图）本来就没有边框，草稿与导出一致才是用户要的。`border-radius: 4px`
+     与 PDF 的直角仍严格说有差异，但 A4 上几乎不可见，保留以免影响既有观感。 */
+  .profile-photo { width: calc(var(--fs) * 6.6 * var(--photo-scale, 1)); height: calc(var(--fs) * 6.6 * var(--photo-scale, 1)); flex: 0 0 auto; object-fit: contain; border-radius: 4px; }
   .section { margin-bottom: calc(var(--fs) * 1.2); }
   .section-title { font-size: calc(var(--fs) * 1.14 * var(--section-title-scale, 1)); font-weight: 700; color: var(--accent); background: var(--accent-soft); border-radius: calc(var(--fs) * 0.4); padding: calc(var(--fs) * 0.28) calc(var(--fs) * 0.8); margin-bottom: calc(var(--fs) * 0.8); }
   .entry { margin-bottom: calc(var(--fs) * 0.9 * var(--entry-gap, 1)); padding-left: calc(var(--fs) * 0.3); }

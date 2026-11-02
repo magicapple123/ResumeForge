@@ -383,12 +383,20 @@ def profile_field_id(section_key: str, item_key: str) -> str:
 
 
 def field_label(section_key: str, item_key: str, language: str | None = None) -> str:
-    """字段的纸面标签：内置走 resume_labels 的唯一表；未知 key 回落 key 本身。"""
+    """字段的纸面标签：内置走 resume_labels 的唯一表；未知 key 回落 key 本身。
+
+    目录查不到的 key 先查一遍通用字段表再回落：自建板块可以**原样复用内置的 v1 字段键**
+    （典型的是 ``start_date`` / ``end_date``——内置模块里它们被合成 ``period``，自建板块
+    里则是两条独立 trail 字段）。这类键不属于任何系统板块，``field_spec`` 必然为 None，
+    若直接回落 key 就会把英文 ``start_date`` 印到纸上。先查通用表能覆盖"键本身是可读标签
+    的已知字段"，同时保留未知 key 回落 key 本身的可诊断行为（不编造文案）。
+    """
     field = field_spec(section_key, item_key)
     labels = field_labels(normalize_language(language))
+    key = str(item_key or "")
     if field is None:
-        return str(item_key or "")
-    return labels.get(field.label_key, str(item_key or ""))
+        return labels.get(key) or key
+    return labels.get(field.label_key, key)
 
 
 def resolve_section_title(key: str, title: str, language: str | None = None) -> str:

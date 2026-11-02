@@ -17,6 +17,7 @@ from app.services.resume.resume_contact import (
     contact_groups,
     contact_items,
     contact_lines,
+    pack_contact_lines,
     validate_contact_breaks,
 )
 from app.services.resume.resume_labels import field_labels
@@ -90,12 +91,52 @@ def test_contact_groups_split_on_forced_breaks_only():
 
 
 def test_contact_lines_join_each_group_with_the_word_separator():
-    """Word 用的行文本：组内字段用全角空格（Word 的断行点）连起来。"""
+    """Word 用的行文本：组内字段用**两个半角空格**连起来（#9 起不再用全角空格）。"""
     items = contact_items(RESUME, LABELS, ["personal_website"])
     lines = contact_lines(items, WORD_SEPARATOR)
     assert len(lines) == 2
     assert lines[0].startswith("13800001234")
     assert lines[1] == "个人主页：https://zhangsan.dev"
+    # 全角空格会在 Word「显示编辑标记」时变成 □□，2026-11 #9 已改成半角。
+    assert "\u3000" not in lines[0]
+
+
+# ===== 装行纯函数（2026-11 #9：PDF 与 Word 共用）========================
+
+
+def _measure_by_char(text: str) -> float:
+    """每字符 1 个宽度单位：让装行结果与具体字体无关、可期望。"""
+    return float(len(text))
+
+
+def test_pack_contact_lines_breaks_inside_a_group_by_width():
+    """组内按宽度装行：5 个字段、每行 10 个单位时切成多行。"""
+    groups = [["1234567890", "abcdefghij", "张三", "1998"]]
+    packed = pack_contact_lines(groups, 22, _measure_by_char, "  ")
+    assert packed == [["1234567890", "abcdefghij"], ["张三", "1998"]]
+
+
+def test_pack_contact_lines_never_merges_across_groups():
+    """跨组是用户显式要求的强制换行：装行只能在组内做，绝不能合并。"""
+    groups = [["13800001234"], ["GitHub：https://github.com/zhangsan"]]
+    packed = pack_contact_lines(groups, 1000, _measure_by_char, "  ")
+    assert packed == [["13800001234"], ["GitHub：https://github.com/zhangsan"]]
+
+
+def test_pack_contact_lines_keeps_an_overlong_field_on_its_own_line():
+    """单个字段比整行还宽时独占一行并如实溢出，不从中间劈开。"""
+    overlong = "https://example.com/" + "x" * 200
+    groups = [["13800001234", overlong, "杭州"]]
+    packed = pack_contact_lines(groups, 40, _measure_by_char, "  ")
+    assert [overlong] in packed
+    assert all("".join(line) != "" for line in packed)
+
+
+def test_pack_contact_lines_without_a_measure_falls_back_to_one_line_per_group():
+    """拿不到字体度量时退回"整组一行、交给下游自己换行"（不阻塞导出）。"""
+    groups = [["13800001234", "zhangsan@example.com"], ["杭州"]]
+    assert pack_contact_lines(groups, 10, None, "  ") == groups
+    assert pack_contact_lines(groups, 0, _measure_by_char, "  ") == groups
 
 
 @pytest.mark.parametrize(

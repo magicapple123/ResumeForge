@@ -25,6 +25,7 @@ import { enumLabelOf } from "../../features/resume-document/fieldCatalog";
 import { getItemPlacement, moveItem } from "../../features/resume-document";
 import { keyboardMoveTarget, slotOf } from "../../features/resume-document/drag";
 import { itemPath as buildItemPath } from "../../features/resume-document/paths";
+import { DRAG_REJECT_COPY } from "./dragRejectCopy";
 import { useDocumentDrag } from "./documentDragContext";
 import { useDocumentChipMenu } from "./documentChipMenuContext";
 import { useChipExpandGesture } from "./useChipExpandGesture";
@@ -203,7 +204,25 @@ export default function ItemChip({
     }
     event.dataTransfer.effectAllowed = "move";
     event.dataTransfer.setData("text/plain", path);
+    // 上一次拖拽的判断不能漏到这一次：先清空，等目标位的 dragover 重新写。
+    drag.markRejected(null);
     drag.setDraggedPath(path);
+  };
+
+  /**
+   * 问题 13：`dragend` 是**唯一**能兜底的地方。
+   *
+   * 非法落点会把 `dropEffect` 设成 `"none"`（用户要的禁止光标），浏览器因此不派发 `drop`，
+   * `EntryCard` 的 `onDrop` 里那些文案永远说不出口——退回"拖了一下，什么都没发生"。
+   * 所以原因由目标位记进来（`drag.markRejected`），这里在松手后补一条提示。
+   *
+   * 判据只认我们自己记的 ref，不读 `event.dataTransfer.dropEffect`：Chrome 里成功与失败
+   * 都可能读到 `none`，读它会把"已移动"误判成"被拒"。
+   */
+  const handleDragEnd = () => {
+    const reason = drag.takeRejectReason();
+    drag.setDraggedPath(null);
+    if (reason) onNotice(t(DRAG_REJECT_COPY[reason]), "warning");
   };
 
   return (
@@ -214,6 +233,8 @@ export default function ItemChip({
           selected ? "is-selected" : "",
           grabbed ? "is-grabbed" : "",
           hidden ? "is-hidden" : "",
+          // 问题 13：拖动源要明显弱化，否则用户看不到"被拿起来的是哪一条"。
+          drag.draggedPath === path ? "is-dragging" : "",
         ]
           .filter(Boolean)
           .join(" ")}
@@ -230,7 +251,7 @@ export default function ItemChip({
           aria-describedby={grabbed ? `${path}-drag-hint` : undefined}
           draggable={canMove}
           onDragStart={handleDragStart}
-          onDragEnd={() => drag.setDraggedPath(null)}
+          onDragEnd={handleDragEnd}
           onPointerDown={() => {
             selectedAtPointerDownRef.current = selected;
             pointerFocusRef.current = true;

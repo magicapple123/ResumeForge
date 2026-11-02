@@ -242,11 +242,6 @@ class ApplicationTrack(Base):
     next_action: Mapped[str] = mapped_column(String(255), default="")
     next_action_date: Mapped[str] = mapped_column(String(16), default="")
     note: Mapped[str] = mapped_column(Text, default="")
-    # #39：失败三列——失败发生在哪一步 / 卡在哪个具体环节 / 用户总结的一句话原因。
-    # 界面按 failure_step 聚合筛选；空串 = 未分类（历史行升级后行为不变）。
-    failure_step: Mapped[str] = mapped_column(String(32), default="")
-    failure_target: Mapped[str] = mapped_column(String(128), default="")
-    failure_reason: Mapped[str] = mapped_column(Text, default="")
     # 状态来源摘录（来自哪封通知/哪句话）。只存简短片段，不存整封邮件。
     evidence: Mapped[str] = mapped_column(Text, default="")
 

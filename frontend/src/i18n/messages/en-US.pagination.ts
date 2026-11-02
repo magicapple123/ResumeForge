@@ -29,6 +29,8 @@ const pagination = {
   "pagination.breaks.jumpHint": "Jump to this setting in the structure tab",
   "pagination.breaks.entryHint":
     "Entry breaks affect that item only; “Restore natural pagination” does not clear them",
+  "pagination.breaks.entryHintInStructure":
+    "Change entry-level breaks in “This resume’s structure”",
   "pagination.header.startOnNewPage": "New page",
   "pagination.header.keepTogether": "No split",
   "pagination.sectionAria": "“{name}”: {flag}",
@@ -106,6 +108,8 @@ const pagination = {
   "pagination.report.manualBreak": "From page {page}: {name}",
   "pagination.report.warnings": "Warnings",
   "pagination.report.stale": "Report uses the previous version. Get a new report after changes",
+  "pagination.measure.pageRatioWarn":
+    "[resume-layout] The HTML paper height equals {serverPages} page(s) but the layout is {limit} page(s): page counts use the measured single-page height. Check that /resumes/render received document_mode.",
 } as const;
 
 export default pagination;

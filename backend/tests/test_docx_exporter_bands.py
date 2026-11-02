@@ -72,3 +72,25 @@ def test_classic_word_section_title_has_a_left_bar_and_no_fill():
     assert '<w:left w:val="single"' in xml
     # 竖条是"只画左边"：不连底边一起画，否则会变成一条下划线。
     assert "<w:bottom w:val" not in xml
+
+
+def test_classic_word_section_title_bar_only_spans_the_line_box():
+    """classic 的左边框不许把段距框进去（2026-11 #9）。
+
+    Word 的段落边框包住「段前距 + 行盒 + 段后距」：标题段带着 1.3em 分区间距与 0.4em
+    段后距时，竖条高度 ≈ 3 倍行盒、悬在标题文字上方（用户截图里的样子）。改法是标题段
+    `w:spacing` 的 before/after 都写 0，把分区间距挪到**上一段段后**、0.4em 挪到
+    **下一段段前**——这里只钉住标题段自己那半边（相邻段的增量在 q09 对拍脚本里验）。
+    """
+    document = Document(BytesIO(build_resume_docx(_header_resume(), template="classic").content))
+    titles = [
+        paragraph
+        for paragraph in document.paragraphs
+        if paragraph._p.pPr is not None and paragraph._p.pPr.find(qn("w:pBdr")) is not None
+    ]
+    assert titles, "classic 的区块标题应该有左边框"
+    for title in titles:
+        spacing = title._p.pPr.find(qn("w:spacing"))
+        assert spacing is not None, title.text
+        assert spacing.get(qn("w:before")) == "0", title.text
+        assert spacing.get(qn("w:after")) == "0", title.text

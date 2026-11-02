@@ -246,3 +246,27 @@ class ChatEarlierMessagesOut(BaseModel):
 
     items: list[ChatMessageOut] = Field(default_factory=list)
     has_earlier: bool = False
+
+
+class AssistantToolOut(BaseModel):
+    """一个可调用工具的对外声明（**只读元数据**：名称、说明、参数 schema）。
+
+    说明文案直接来自工具注册表（就是发给模型的那份），不在这里另写一份人话版本——
+    两处文案一旦分叉，"界面上说能做的事"与"模型实际能做的事"就会不一致。
+
+    ``parameters`` 是 OpenAI 的 JSON Schema，**原样透出**（前端据此渲染参数说明）；
+    它只描述入参形状，不含任何密钥、提示词或用户数据。
+    """
+
+    name: str
+    description: str = ""
+    # 写工具会改动数据（新建/修改简历、台账等）；界面据此标注「会改动数据」。
+    writes: bool = False
+    parameters: dict[str, Any] = Field(default_factory=dict)
+
+
+class AssistantToolListOut(BaseModel):
+    """``GET /api/assistant/tools`` 的载荷：当前配置下可见的工具清单。"""
+
+    items: list[AssistantToolOut] = Field(default_factory=list)
+    count: int = 0

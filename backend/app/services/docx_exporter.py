@@ -149,6 +149,7 @@ def _build_document(
     include_photo: bool,
     theme: DocxTheme,
     overrides=None,
+    font_key: str | None = None,
 ) -> bytes:
     """把 plan 写成 docx 字节：页面设置（A4 + 四边距）→ 内容 → 续页信息。"""
     doc = Document()
@@ -172,6 +173,7 @@ def _build_document(
         accent=accent,
         accent_soft=accent_soft,
         role_style=_role_style_query(overrides),
+        font_key=font_key,
     )
     name = "".join(str(seg.text or "") for seg in plan.header.name).strip()
     _apply_continuation(doc, overrides, name)
@@ -294,6 +296,7 @@ def build_resume_docx(
         include_photo=include_photo,
         theme=theme,
         overrides=render_overrides,
+        font_key=overrides.get(FONT_KEY),
     )
     return ResumeDOCX(content=content, pages=pages, overflow=overflow)
 

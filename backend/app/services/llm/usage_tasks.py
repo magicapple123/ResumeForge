@@ -220,6 +220,12 @@ def record_ambient_usage(provider: Any) -> None:
     task = _AMBIENT_TASK.get()
     if not task:
         return
+    # #35：把 ContextVar 里的数据边界四字段一并落库，否则它们只活在日志里，
+    # 「模型用量」界面与接口事后无法自证这次调用喂了什么。缺项保持"未声明"语义
+    # （空串 / None），绝不填一个看起来合理的默认值。
+    scope = ambient_scope()
+    masked = scope.get("masked")
+    budget = scope.get("budget")
     try:
         # 延迟导入：usage_ledger 是 services.llm 的叶子模块，database 会反向 import 模型层，
         # 放在函数内避免导入环（provider 层 -> usage_ledger -> database -> ...）。
@@ -227,7 +233,15 @@ def record_ambient_usage(provider: Any) -> None:
         from .usage_ledger import record_provider_usage
 
         with SessionLocal() as db:
-            record_provider_usage(db, task=task, provider=provider)
+            record_provider_usage(
+                db,
+                task=task,
+                provider=provider,
+                input_scope=str(scope.get("input_scope") or ""),
+                masked=masked if isinstance(masked, bool) else None,
+                language=str(scope.get("language") or ""),
+                budget=budget if isinstance(budget, int) else None,
+            )
     except Exception:  # noqa: BLE001 - 账本是旁路，绝不反向破坏模型调用
         logger.warning("模型用量自动记录失败 task=%s", task, exc_info=True)
 

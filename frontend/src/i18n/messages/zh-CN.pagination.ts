@@ -63,6 +63,7 @@ const pagination = {
   "pagination.breaks.jumpHint": "跳到结构页签的这条设置",
   /** 条目芯片的说明：两层断页互不干扰，别让用户以为「恢复自然分页」能清掉条目断页。 */
   "pagination.breaks.entryHint": "条目断页只作用于这一条，「恢复自然分页」不会清除它",
+  "pagination.breaks.entryHintInStructure": "条目级断页请到「本份简历结构」修改",
 
   // ── 板块开关表（R-07：表头写一次，行内只留开关）──────────────
   /** 表头列名。表头 `aria-hidden`：语义由每行的开关承载，不给读屏重复播报。 */
@@ -194,6 +195,13 @@ const pagination = {
   "pagination.report.warnings": "注意事项",
   /** 快照不一致：报告基于上一版内容/参数。 */
   "pagination.report.stale": "报告基于上一版，改动后请重新获取",
+  /**
+   * 开发态诊断（`utils/resumeLayoutMeasure.ts`）：纸面总高反推出的页数与当前页数上限不一致，
+   * 说明拿到的是上一版 HTML、或请求漏了 `document_mode`。技术提示不面向终端用户，
+   * 但它所在文件的"中文棘轮"基线是 0——所以同样只能走 `t()`，不许写字面量。
+   */
+  "pagination.measure.pageRatioWarn":
+    "[resume-layout] HTML 纸面高度对应 {serverPages} 页，但当前版式是 {limit} 页：页数按实测单页高度计算，请检查 /resumes/render 是否带上了 document_mode。",
 } as const;
 
 export default pagination;

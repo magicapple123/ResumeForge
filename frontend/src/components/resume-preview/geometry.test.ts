@@ -1,7 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * 预览几何：**多页竖向堆叠**（2026-10-21 起，取代横向并排），
- * 唯一的例外是 **1 页上限**——那时不因溢出而多排一列，超出部分直接裁掉。
+ * 预览几何：**多页竖向堆叠**（2026-10-21 起，取代横向并排）。
+ *
+ * 2026-11-02 变更（问题 2 方案 A）：画布纸张数 = `max(页数上限, pages_needed)`，超限的页
+ * **照样画出来**并带超额角标。此前是"贴住上限、超出部分裁掉"，于是第 4 列之后的板块
+ * （知识产权、证书资质、作品集…）在纸面上凭空消失。
  *
  * 2026-10-23 追加「可读下限 / 大屏上限」两组：`MIN_READABLE_SCALE = 0.55` 之后
  * 缩放下限是硬约束（rubric R7：纸面 ≥ 437px），而 `maxFitScale` 只在大屏生效。
@@ -10,7 +13,10 @@ import { describe, expect, it } from "vitest";
 import { A4_HEIGHT_PX, A4_WIDTH_PX, MIN_READABLE_SCALE, PAGE_STACK_GAP_PX } from "./config";
 import { calculatePreviewGeometry } from "./geometry";
 
-function geometry(pageCount: number, options: { overflow?: boolean; naturalWidth?: number } = {}) {
+function geometry(
+  pageCount: number,
+  options: { overflow?: boolean; naturalWidth?: number; reportedPages?: number | null } = {},
+) {
   return calculatePreviewGeometry({
     availableSpace: { width: A4_WIDTH_PX, height: A4_HEIGHT_PX },
     paperHeight: A4_HEIGHT_PX * pageCount,
@@ -20,11 +26,12 @@ function geometry(pageCount: number, options: { overflow?: boolean; naturalWidth
     naturalWidth: options.naturalWidth ?? A4_WIDTH_PX * pageCount,
     pageGap: 106,
     measure: null,
+    reportedPages: options.reportedPages,
   });
 }
 
 describe("预览几何：多页竖向堆叠", () => {
-  it("2 / 3 页竖排：宽仍是一页，高 = 页数 × A4 + 页间距", () => {
+  it("2 / 3 页装得下：宽仍是一页，高 = 页数 × A4 + 页间距", () => {
     for (const pages of [2, 3]) {
       const result = geometry(pages);
       // 2026-10-21 起多页是**上下摞**（原来是左右并排）：横向并排要看第 2 页得先横滚。
@@ -33,19 +40,22 @@ describe("预览几何：多页竖向堆叠", () => {
         A4_HEIGHT_PX * pages + PAGE_STACK_GAP_PX * (pages - 1),
       );
       expect(result.totalVisualPages).toBe(pages);
+      expect(result.overflowPages).toBe(0);
       // 竖排后画布不再画"页间隙条"：页与页之间是真实空白。
       expect(result.separatorCount).toBe(0);
       expect(result.overflowClipped).toBe(false);
     }
   });
 
-  it("1 页上限 + 内容溢出：不再向右展开，超出的部分裁掉", () => {
-    // naturalWidth 说明"如果展开会有两列"，但 1 页上限不吃这一套。
+  it("1 页上限 + 内容溢出：把第 2 页也画出来（不再裁掉）", () => {
+    // `overflow` 为真但量不到具体页数 → 兜底成"上限 + 1"，第 2 页照样画（问题 2）。
     const result = geometry(1, { overflow: true, naturalWidth: A4_WIDTH_PX * 2 });
     expect(result.contentTotalWidth).toBe(A4_WIDTH_PX);
-    expect(result.contentTotalHeight).toBe(A4_HEIGHT_PX);
-    expect(result.totalVisualPages).toBe(1);
+    expect(result.contentTotalHeight).toBe(A4_HEIGHT_PX * 2 + PAGE_STACK_GAP_PX);
+    expect(result.totalVisualPages).toBe(2);
+    expect(result.overflowPages).toBe(1);
     expect(result.separatorCount).toBe(0);
+    // 这个标志现在只表示"超限的页不计入导出"，不再表示"内容被裁掉"。
     expect(result.overflowClipped).toBe(true);
     // 提示仍如实说"约需 2 页"。
     expect(result.pagesNeeded).toBe(2);
@@ -55,20 +65,40 @@ describe("预览几何：多页竖向堆叠", () => {
     const result = geometry(1);
     expect(result.contentTotalWidth).toBe(A4_WIDTH_PX);
     expect(result.totalVisualPages).toBe(1);
+    expect(result.overflowPages).toBe(0);
     expect(result.separatorCount).toBe(0);
     expect(result.overflowClipped).toBe(false);
   });
 
-  it("溢出时页数仍等于上限：不再多排一页（2026-10-21 截断）", () => {
-    // 1 页上限 + 溢出 → 仍然只画 1 页，内容被裁。
+  it("溢出时页数 = max(上限, 需求)：超限页照样画，角标由 pageLimit 决定", () => {
+    // 1 页上限 + 溢出 → 画 2 页（第 2 页是超额页）。
     const single = geometry(1, { overflow: true });
-    expect(single.totalVisualPages).toBe(1);
+    expect(single.totalVisualPages).toBe(2);
+    expect(single.overflowPages).toBe(1);
     expect(single.overflowClipped).toBe(true);
 
-    // 2 页上限 + 溢出 → 仍然只画 2 页，不再冒出第 3 页。
+    // 2 页上限 + 溢出 → 画 3 页，而不是只画 2 页把第 3 列裁掉。
     const double = geometry(2, { overflow: true });
-    expect(double.totalVisualPages).toBe(2);
+    expect(double.totalVisualPages).toBe(3);
+    expect(double.overflowPages).toBe(1);
     expect(double.overflowClipped).toBe(true);
+  });
+
+  it("服务端报告优先（问题 3）：28 号上限 3、报告 8 → 画 8 页", () => {
+    const result = geometry(3, { reportedPages: 8 });
+    expect(result.pagesNeeded).toBe(8);
+    expect(result.totalVisualPages).toBe(8);
+    expect(result.overflowPages).toBe(5);
+    expect(result.contentTotalHeight).toBe(A4_HEIGHT_PX * 8 + PAGE_STACK_GAP_PX * 7);
+  });
+
+  it("报告比上限小 → 需求页数取报告，画幅仍铺满上限", () => {
+    const result = geometry(3, { reportedPages: 2 });
+    // 需求页数 = 报告（内容其实只要 2 页），画布照样按用户设定的 3 页铺满。
+    expect(result.pagesNeeded).toBe(2);
+    expect(result.totalVisualPages).toBe(3);
+    expect(result.overflowPages).toBe(0);
+    expect(result.overflowClipped).toBe(false);
   });
 });
 

@@ -55,12 +55,7 @@ import { useWorkbenchV2History } from "./useWorkbenchV2History";
 import { useWorkbenchSelectionSync } from "./useWorkbenchSelectionSync";
 import { useWorkbenchV2Save } from "./useWorkbenchV2Save";
 import { useWorkbenchCloseGuard } from "./useWorkbenchCloseGuard";
-import {
-  highlightTargetsForPath,
-  STRUCTURE_HIGHLIGHT_SELECTED_DECLARATION,
-  STRUCTURE_HIGHLIGHT_SELECTED_STYLE_ID,
-  useCanvasPathHighlight,
-} from "./structure/structureHighlight";
+import { useStructureHighlightTargets } from "./structure/useStructureHighlightTargets";
 import "./workbench-v2.css";
 
 export interface ResumeWorkbenchV2Props {
@@ -232,19 +227,14 @@ export default function ResumeWorkbenchV2({
     },
     [history, onAdoptDocument, onApplyLayout],
   );
-  // 编辑器 hover → 右栏对应行描边（与结构面板同一套 iframe 注入）。
-  const selectedTargets = useMemo(() => highlightTargetsForPath(selectedPath), [selectedPath]);
-  const hoverTargets = useMemo(() => highlightTargetsForPath(hoverPath), [hoverPath]);
-  // R-14：选中档（20% / 2px）与悬停档（14% / 1px）用不同 style id 各画一层，
-  // 悬停扫过不会把刚选中的那一行擦淡；`reveal` 只吃编辑器/面板来源的 nonce。
-  useCanvasPathHighlight({
-    targets: selectedTargets,
+  // 编辑器 hover / 选中 → 右栏对应行描边（两档分层的接线见 useStructureHighlightTargets）。
+  useStructureHighlightTargets({
+    selectedPath,
+    hoverPath,
     container: canvasNode,
+    // 纸面点击不滚纸面：`canvasReveal` 只由结构树 / 中栏 / 面板来源写入。
     reveal: selection.canvasReveal,
-    styleId: STRUCTURE_HIGHLIGHT_SELECTED_STYLE_ID,
-    declaration: STRUCTURE_HIGHLIGHT_SELECTED_DECLARATION,
   });
-  useCanvasPathHighlight({ targets: hoverTargets, container: canvasNode });
   const closeGuard = useWorkbenchCloseGuard({
     dirty: save.dirty,
     layoutDirty: save.layoutDirty,
@@ -371,8 +361,9 @@ export default function ResumeWorkbenchV2({
       document={history.document}
       onDocumentChange={(next) => history.commitDocument(next)}
       selectedPath={selectedPath}
-      // 结构树自己会 `reveal`（useStructurePanel），这里只把来源标成 structure：
-      // 不额外递增 canvasReveal，避免同一目标被两路 smooth 滚动排队。
+      // 结构树也走同一个 selectPath(path, "structure")：定位出口已经收敛到
+      // useWorkbenchSelectionSync 的 canvasReveal 一处（useStructurePanel 只做高亮、
+      // 不再自己滚一份），所以这里只需把来源标成 structure。
       onSelectPath={(path) => selectPath(path, "structure")}
       multiSelectedPaths={multiSelectedPaths}
       onMultiSelectedPathsChange={selection.setMultiSelectedPaths}
@@ -435,6 +426,9 @@ export default function ResumeWorkbenchV2({
         document={editorEnabled ? history.document : null}
         layout={history.layout}
         suspended={save.saving || layoutSaving}
+        // Q11：实时渲染要带上文档模式，否则长 CV 的纸面高度按 `resume` 夹到 3 页，
+        // 测量分母随之缩到 3/10，「7 页内容」被算成「约需 21 页」。
+        documentMode={documentMode}
         onContainerReady={setCanvasNode}
       />
     </WorkbenchColumnsBody>

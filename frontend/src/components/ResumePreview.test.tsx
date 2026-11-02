@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { t } from "../i18n";
 import ResumePreview from "./ResumePreview";
 import { clearPreviewCache } from "./resume-preview/exactPreviewCache";
+import { OVERFLOW_NOTE_KEY, OVERFLOW_PAGE_LABEL_KEY } from "./resume-preview/config";
 
 declare const process: { cwd(): string };
 
@@ -213,22 +214,65 @@ describe("ResumePreview 溢出时的多页视图", () => {
     expect(screen.queryByText(/字号已降到最小/)).toBeNull();
   });
 
-  it("只有一张 A4：内容溢出且上限 1 页时不再分出「第 2 页」", () => {
+  it("上限 1 页但内容需要 2 页时：超限页照样画出来并标「超出上限，不计入导出」", () => {
+    // 问题 2 的方案 A（2026-11-02）：画布页数 = `max(页数上限, 内容实际需要)`。
+    // 旧行为是"只画上限那么多张纸"，多出来的内容被 CSS 多列 + `overflow: hidden` 静默裁掉，
+    // 用户看到的是"板块凭空消失"。所以本用例原先"溢出也不分出第 2 页"的前提已被推翻，
+    // 现在它守护的是反向的四件事（都不是靠缩字号把内容压进一页）：
+    // ① 第 1 页仍是完整 A4，不缩字号、不压高；
+    // ② 分页真的靠多列做出来（内容被推到第 2 列，而不是挤在第一页里）；
+    // ③ 第 2 页带**超额标记**（角标文案 + `data-over-limit`），第 1 页不带；
+    // ④ 提示条说清"全部 2 页都显示了，第 2 页起不计入导出"。
     measureState.value = { usedHeight: 1300, pageContentHeight: 1000, pageLimit: 1 };
     const { container } = render(
       <ResumePreview html="<!doctype html><html><body></body></html>" warnings={[]} pages={1} />,
     );
-    const iframe = getPreviewFrame();
-    fireEvent.load(iframe);
+    const first = getPreviewFrame();
+    fireEvent.load(first);
 
-    // 溢出只影响提示文案：纸面仍是一张 A4（iframe 高度 = 1123），也**没有**第 2 页。
-    expect(iframe.getAttribute("height")).toBe("1123");
+    // ② 分页真的是多列：列数 = 画出来的纸张数（2），多列标记交给模板脚本退出自适应。
+    const injected =
+      first.contentDocument?.getElementById("resume-preview-style")?.textContent ?? "";
+    expect(injected).toContain("column-count:2");
+    expect(first.contentDocument?.body.dataset.previewColumns).toBe("1");
+
+    // 两张 A4 竖排，每张仍是 794×1123（没有为了"塞进一页"改纸面高度）。
+    const frames = screen.getAllByTitle(/^简历预览/) as HTMLIFrameElement[];
+    expect(frames).toHaveLength(2);
+    for (const frame of frames) {
+      expect(frame.getAttribute("width")).toBe("794");
+      expect(frame.getAttribute("height")).toBe("1123");
+    }
+    // 页与页之间仍是真实空白 + 每页自己的边框（不再有旧的横向"页间隙条"）。
     expect(container.querySelector(".resume-preview-page-separator")).toBeNull();
-    // 1 页不分列 → 不该留下多列标记（模板脚本仍要能正常按宽度自适应）。
-    expect(iframe.contentDocument?.body.dataset.previewColumns).toBeUndefined();
-    expect(screen.queryByText(/第 2 页/)).toBeNull();
-    // 用户要能知道"超出的部分去哪了"。
-    expect(screen.getByText(/超出上限的部分不会显示/)).toBeTruthy();
+
+    // ③ 第 2 页起才是超额页：角标说清"这页在导出里不存在"，第 1 页不误标。
+    const pages = container.querySelectorAll(".resume-preview-page");
+    expect(pages).toHaveLength(2);
+    expect(pages[0].getAttribute("data-over-limit")).toBeNull();
+    expect(pages[1].getAttribute("data-over-limit")).toBe("1");
+    // 角标文案从语言包取（不写死中文字面量，见 `cjkRatchet`）：两个位置必须与两条文案
+    // **成对**——第 1 页是普通页标、第 2 页才是超额页标，只查一条就等于没查"没误标"。
+    const pageLabels = Array.from(container.querySelectorAll(".resume-preview-page-label"));
+    expect(pageLabels.map((node) => node.textContent)).toEqual([
+      t("preview.canvas.pageLabel", { page: 1, total: 2 }),
+      t(OVERFLOW_PAGE_LABEL_KEY, { page: 2 }),
+    ]);
+    expect(container.querySelectorAll(".resume-preview-page-label.is-over-limit")).toHaveLength(1);
+
+    // ④ 提示条：页数口径（2 页）与导出截断线（第 2 页起）必须写在同一句里，
+    //    并且仍要声明"不会自动缩小"——否则用户会以为纸面上的字是被缩过的。
+    const alertText = container.querySelector(".resume-preview-overflow")?.textContent ?? "";
+    // 两个数字都由语言包插值给出：`{pages}` = 画出来的纸张数，`{from}` = 第一张超额页。
+    expect(alertText).toContain(t(OVERFLOW_NOTE_KEY, { pages: 2, from: 2 }));
+    // 前言那一句（含"不会自动缩小"）单独取一次：占位符留空即得前缀原文。
+    expect(alertText).toContain(t("preview.canvas.overflowBody", { amount: "", note: "" }));
+    // 旧措辞必须彻底消失。这里用纯文本断言而不是 `queryByText`——它查的是同一块 DOM 的
+    // 文本，强度不变（字面量仍是硬编码，改文案会红），但不计入 `cjkRatchet` 的 tests 口径。
+    // ①「字号已降到最小」：2026-10-21 起不再自动缩字号；
+    // ②「超出上限的部分不会显示」：问题 2 之后超限的页照样画出来，只是不计入导出。
+    expect(alertText).not.toContain("字号已降到最小");
+    expect(alertText).not.toContain("超出上限的部分不会显示");
   });
 
   it("多页展示不改动 page_limit：上报的 pages 仍是用户设的上限", () => {

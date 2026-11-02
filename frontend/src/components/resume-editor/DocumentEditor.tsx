@@ -15,7 +15,7 @@
  * `selectedPath` 指向别的板块时自动切到那个页签——结构面板 / 预览点过来不需要工作台
  * 自己算页签。
  */
-import { Alert, Dropdown } from "antd";
+import { Dropdown } from "antd";
 import type { MenuProps } from "antd";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { KeyboardEvent as ReactKeyboardEvent, MouseEvent as ReactMouseEvent } from "react";
@@ -31,18 +31,24 @@ import {
   parseDocumentPath,
   sectionKeyOfPath,
 } from "../../features/resume-document";
-import { removeItem, toggleItemHidden } from "../../features/resume-document/mutations";
+import {
+  removeItem,
+  removeSection,
+  toggleItemHidden,
+} from "../../features/resume-document/mutations";
 import DocumentHeaderPanel from "./DocumentHeaderPanel";
 import DocumentSectionTabs, { type DocumentSectionTabItem } from "./DocumentSectionTabs";
 import SectionEditor from "./SectionEditor";
-import { DocumentDragContext } from "./documentDragContext";
+import { DocumentDragContext, useDocumentDragHost } from "./documentDragContext";
 import { DocumentChipMenuContext, type ChipMenuRequest } from "./documentChipMenuContext";
 import "./document-editor.css";
 import "./chip-menu.css";
 import { useChipMenuDismiss } from "./useChipMenuDismiss";
 import { DocumentExpandContext } from "./documentExpandContext";
 import ChipStylePopover, { type ChipStylePopoverState } from "./ChipStylePopover";
+import DocumentNotice, { type NoticeState } from "./DocumentNotice";
 import type { ResumeLayout } from "../../types";
+import type { ResumeFormatConfig } from "../../types/resumeFormat";
 
 const BASIC_TAB = "basic";
 
@@ -74,12 +80,13 @@ export interface DocumentEditorProps {
    * （资产面板由宿主按需接线；菜单的关闭/定位逻辑与这一项无关）。
    */
   onCollectAsset?: (path: string) => void;
+  /**
+   * 问题 14：提示条的宿主节点。宿主播在**滚动容器之外**（中栏 `.resume-wb-v2-editor`
+   * 的直接子级）时，提示条不再随内容滚走，长条目下停在顶部也能看到；
+   * 不传 = 回退成原来的流内渲染（生成预览等没有宿主的场景）。
+   */
+  noticeHost?: HTMLElement | null;
   className?: string;
-}
-
-interface NoticeState {
-  text: string;
-  tone: "info" | "warning";
 }
 
 export default function DocumentEditor({
@@ -96,6 +103,7 @@ export default function DocumentEditor({
   fieldCatalog = null,
   onAddSection,
   onCollectAsset,
+  noticeHost = null,
   className,
 }: DocumentEditorProps) {
   const { t } = useI18n();
@@ -231,6 +239,25 @@ export default function DocumentEditor({
   );
   const report = (text: string, tone: "info" | "warning" = "info") => setNotice({ text, tone });
 
+  /**
+   * 任务 11 返工：删除自建板块（`custom:` 前缀；系统板块只能隐藏/改标题，没有删除语义）。
+   * `section-remove` 是离散操作，`recordDraft` 会立刻 flush 成一步，Ctrl+Z 可整块还原。
+   * 删完把选中交给相邻板块：优先后一个，删的正好是最后一个就落到前一个，删空回「基本信息」。
+   */
+  const handleRemoveSection = (sectionKey: string) => {
+    if (!sectionKey.startsWith("custom:")) return;
+    const index = document.sections.findIndex((section) => section.key === sectionKey);
+    if (index < 0) return;
+    const removed = document.sections[index];
+    const neighbour = document.sections[index + 1] ?? document.sections[index - 1] ?? null;
+    onChange(removeSection(document, sectionKey));
+    setActiveKey(neighbour ? neighbour.key : BASIC_TAB);
+    select(neighbour ? neighbour.key : null);
+    // 提示必须排在 `select` 之后：`select` 的第一件事就是清掉上一条提示。
+    const section = removed.layout.title_override || removed.title || sectionKey;
+    report(t("document.section.removed", { section }));
+  };
+
   /** chip 请求开菜单（键盘 Shift+F10 / 菜单键走这条）；只读时不弹。 */
   const requestChipMenu = useCallback(
     (request: ChipMenuRequest) => {
@@ -239,11 +266,36 @@ export default function DocumentEditor({
     },
     [readOnly],
   );
-  const chipMenuHost = useMemo(() => ({ request: requestChipMenu }), [requestChipMenu]);
+  /**
+   * #7：条目卡右键菜单的「排版整条…」——范围锁定为**整条**（`objects[<entryId>]`），
+   * 走的还是同一个排版浮层；没有 layout 通道（宿主没给 onLayoutChange）时不接。
+   */
+  const requestEntryStyle = useCallback(
+    (request: ChipMenuRequest) => {
+      if (readOnly || !onLayoutChange) return;
+      setStylePopover({ path: request.path, x: request.x, y: request.y });
+    },
+    [onLayoutChange, readOnly],
+  );
+  const chipMenuHost = useMemo(
+    () => ({ request: requestChipMenu, requestStyle: requestEntryStyle }),
+    [requestChipMenu, requestEntryStyle],
+  );
+  /**
+   * 任务 6：`format_config` 的写回通道（照片裁剪参数住在它的 `photo_crop` 域里）。
+   * 宿主没接 `onLayoutChange` 时返回 `undefined`——那表示"这一屏没有版式通道"，
+   * 裁剪会明确禁用而不是静默丢掉结果。
+   */
+  const commitFormatConfig = useMemo(() => {
+    if (!onLayoutChange || !layout) return undefined;
+    return (next: ResumeFormatConfig) => onLayoutChange({ ...layout, format_config: next });
+  }, [layout, onLayoutChange]);
   const expandHost = useMemo(
     () => ({ expandedPath, toggleExpand, setExpanded }),
     [expandedPath, setExpanded, toggleExpand],
   );
+  // 拖拽上下文（`rejectRef` 身份稳定，文档变化不会让所有 chip 重渲染）。
+  const dragHost = useDocumentDragHost(draggedPath, setDraggedPath);
 
   /** 右键事件委托：命中最近的、带 `data-document-path` 的字段 chip 才接管。 */
   const handleContextMenu = (event: ReactMouseEvent<HTMLDivElement>) => {
@@ -354,7 +406,7 @@ export default function DocumentEditor({
 
   return (
     <DocumentExpandContext.Provider value={expandHost}>
-      <DocumentDragContext.Provider value={{ draggedPath, setDraggedPath }}>
+      <DocumentDragContext.Provider value={dragHost}>
         <DocumentChipMenuContext.Provider value={chipMenuHost}>
           <div
             ref={rootRef}
@@ -370,6 +422,8 @@ export default function DocumentEditor({
               activeKey={activeSection ? activeKey : BASIC_TAB}
               readOnly={readOnly}
               onAddSection={onAddSection}
+              // 只读时由 DocumentSectionTabs 自己关掉右键菜单（这里不必再判一次）。
+              onRemoveSection={handleRemoveSection}
               onSelect={(key) => {
                 setActiveKey(key);
                 select(key === BASIC_TAB ? null : key);
@@ -396,26 +450,17 @@ export default function DocumentEditor({
                 onSelectPath={select}
                 onChange={onChange}
                 onNotice={report}
+                formatConfig={layout?.format_config ?? null}
+                onFormatConfigChange={commitFormatConfig}
               />
             )}
             <span className="document-section-hint">{t("document.editor.selectHint")}</span>
             {/*
-            F1-b：提示条排在**字段区之后、正常布局流里**（不是浮层）。原先它在页签之上，
-            一出现/一消失就把字段区顶动（真机实测 52.3px），而第一次点击 chip 恰好会
-            `setNotice(null)`——"刚加完字段就快速双击"的第二下因此落到空处，双击看起来没反应。
-            放在内容尾部后，出现/消失不改变任何元素的流内位置；也试过 `position:absolute`
-            浮层，实测会整条盖住 `.document-tabs`（412×28），所以不用浮层。
+            问题 14：提示条交给 `DocumentNotice`——有浮层宿主时 portal 到**滚动容器之外**
+            （中栏底部，常驻留白保证零位移），没有宿主时回退成原来的流内渲染。
+            这一行「点纸面或结构树可以定位字段」是常驻说明、不是提示，留在内容末尾。
           */}
-            {notice ? (
-              <div className="document-editor-notice">
-                <Alert
-                  type={notice.tone === "warning" ? "warning" : "info"}
-                  title={notice.text}
-                  closable
-                  onClose={() => setNotice(null)}
-                />
-              </div>
-            ) : null}
+            <DocumentNotice notice={notice} host={noticeHost} onDismiss={() => setNotice(null)} />
             {/* 全编辑器唯一的一份字段菜单：锚点是个 1px 的定位点，不参与排版、不吃指针。 */}
             <Dropdown
               open={chipMenu !== null}

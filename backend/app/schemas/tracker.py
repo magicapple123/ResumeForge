@@ -12,7 +12,9 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Mapping
 from datetime import date, datetime
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -40,6 +42,12 @@ MAX_TRACK_RECORDS = 30
 MAX_TRACK_TEXT_CHARS = 50_000
 
 _DATE_RE = re.compile(r"\A\d{4}-\d{2}-\d{2}\Z")
+
+# 0070 时代挂在进度记录上的三个自由文本失败列，现已废弃（真实现是 0073 的投递任务项
+# 稳定码）。保留成常量只为兼容垫片能一眼被找到、并被测试引用。
+RETIRED_TRACK_FAILURE_KEYS: frozenset[str] = frozenset(
+    {"failure_step", "failure_target", "failure_reason"}
+)
 
 
 def _is_date_or_empty(value: str) -> bool:
@@ -71,11 +79,33 @@ class TrackRecordIn(BaseModel):
     note: str = Field(default="", max_length=MAX_TRACK_NOTE_CHARS)
     # 这一条是从哪句话看出来的。只存简短片段，不存整封邮件。
     evidence: str = Field(default="", max_length=MAX_TRACK_EVIDENCE_CHARS)
-    # #39 失败三列：失败发生在哪一步 / 卡在哪个具体环节 / 用户总结的一句话原因。
-    # 界面按 failure_step 聚合筛选；空串 = 未分类。失败才填，其它状态留空。
-    failure_step: str = Field(default="", max_length=32)
-    failure_target: str = Field(default="", max_length=128)
-    failure_reason: str = Field(default="", max_length=MAX_TRACK_NOTE_CHARS)
+
+    @model_validator(mode="before")
+    @classmethod
+    def drop_retired_failure_keys(cls, data: Any) -> Any:
+        """丢掉 0070 那三个已废弃的键（**向后兼容垫片**，不是业务逻辑）。
+
+        0070 的自由文本三列（failure_step / failure_target / failure_reason）已废弃，
+        真正的实现是 0073 的投递任务项稳定码（``apply_task_item``）。
+        这个垫片只为旧客户端不 422：本模型是 ``extra="forbid"``，删掉字段后旧 payload
+        会从"被接收"变成 422——那是对外契约的断崖式变更。
+
+        三条约束：
+
+        1. **静默丢弃**：不写库、不报错、不提示（这三个键在新模型里没有落点，
+           留着只会让人以为它们还有效）；
+        2. **不改调用方的对象**：入参可能是 dict / 其它 Mapping，复制一份再过滤；
+        3. **只丢这三个键**：其它未知键仍然由 ``extra="forbid"`` 拒成 422。
+
+        等一个发布周期（旧客户端都已升级）后可以删掉整个方法。
+        """
+        if not isinstance(data, Mapping):
+            # 已经在别的形态里（例如 ORM 对象走 from_attributes、或模型实例再过一遍校验）。
+            return data
+        retired = RETIRED_TRACK_FAILURE_KEYS.intersection(data.keys())
+        if not retired:
+            return data
+        return {key: value for key, value in data.items() if key not in RETIRED_TRACK_FAILURE_KEYS}
 
     @field_validator("status")
     @classmethod
@@ -104,9 +134,6 @@ class TrackRecordIn(BaseModel):
         self.next_action = self.next_action.strip()
         self.note = self.note.strip()
         self.evidence = self.evidence.strip()
-        self.failure_step = self.failure_step.strip()
-        self.failure_target = self.failure_target.strip()
-        self.failure_reason = self.failure_reason.strip()
         if not self.company or not self.title:
             raise ValueError("请填写公司和岗位名称——进度要按这两项合并")
         return self
@@ -252,6 +279,7 @@ class TrackApplyOut(BaseModel):
 
 __all__ = [
     "MAX_TRACK_RECORDS",
+    "RETIRED_TRACK_FAILURE_KEYS",
     "TrackApplyItemResult",
     "TrackApplyOut",
     "TrackApplyRequest",

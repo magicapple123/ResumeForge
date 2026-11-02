@@ -5,23 +5,43 @@ import {
   pagesNeededFor,
   type LayoutMeasure,
 } from "../../utils/resumeLayoutMeasure";
+import { resolvePageCounts } from "./overflow";
 
 export interface FrameLayoutResult {
   measure: LayoutMeasure | null;
   overflow: boolean;
-  /** 溢出内容被裁掉（而不是向右多排一列）。 */
+  /**
+   * 超出上限的页**不计入导出**（问题 2 的提示口径）。
+   *
+   * 2026-11-02 起这个标志不再表示"内容被裁掉"：超限的页现在照样画出来（只是带超额角标），
+   * 所以它恒等于 `overflow`。名字保留是因为提示条（`PreviewAlerts`）按它选文案。
+   */
   overflowClipped: boolean;
   naturalWidth: number;
+  /** 内容实际需要几页（报告优先，见 `overflow.ts`）。 */
   pagesNeeded: number;
+  /** 用户设定的篇幅上限。 */
+  pageLimit: number;
+  /** 画布要画几张纸 = `max(上限, 需要)`。 */
   visualPages: number;
+  /** 超出上限的纸张数。 */
+  overflowPages: number;
   /** 两页之间的间隙（未缩放 px）＝ 左右页边距之和；分页线按它画。 */
   pageGap: number;
 }
 
 interface Options {
   document: Document;
-  pageCount: number;
+  /** 用户设定的页数上限（导出按它截断）。 */
+  pageLimit: number;
   paperHeight: number;
+  /**
+   * 服务端分页报告给出的页数（问题 3）。
+   *
+   * `null` / 缺省 = 拿不到报告（无 `resumeId`、请求失败、断网），退回浏览器测量。
+   * 给了就以它为准 —— 导出的页数来自同一个引擎，草稿必须说同一个数。
+   */
+  reportedPages?: number | null;
 }
 
 /**
@@ -45,8 +65,9 @@ interface Options {
  */
 export function layoutFrame({
   document,
-  pageCount,
+  pageLimit,
   paperHeight,
+  reportedPages,
 }: Options): FrameLayoutResult | null {
   const body = document.body;
   const root = document.documentElement;
@@ -90,7 +111,7 @@ export function layoutFrame({
       ? { pageGap: A4_WIDTH_PX - measuredWidth, columnWidth: measuredWidth }
       : columnGeometry(PAGE_GAP_PX / 2, PAGE_GAP_PX / 2);
 
-  const measured = measureResumeLayout(document, pageCount);
+  const measured = measureResumeLayout(document, pageLimit);
 
   // **溢出判定只读、绝不改版式**（2026-10-21 用户要求）。
   //
@@ -101,25 +122,26 @@ export function layoutFrame({
   //
   // `scrollHeight` 不受 `body { overflow: hidden }` 影响，量的就是真实内容高；单页的溢出
   // 只体现在"高"上，多页则由下面的 `pagesNeeded`（列数）体现，两边都要看。
-  let overflow =
+  const overflowSignal =
     body.dataset.overflow === "1" ||
     body.scrollHeight > paperHeight + 1 ||
     root.scrollHeight > paperHeight + 1;
 
-  const pagesNeeded = measured ? pagesNeededFor(measured) : overflow ? pageCount + 1 : pageCount;
-  overflow = overflow || pagesNeeded > pageCount;
-  // 选择多页本身就是横向分页，不要等内容溢出后才切 columns；否则 2/3 页内容较少时
-  // 会被错误地画成一张纵向长纸。1 页时**不分列**，溢出的部分由 iframe 视口自然裁掉——
-  // 这正是"超出就截断"在草稿侧的落点（2026-10-21 用户要求）。
-  //
-  // **列数恒等于用户设定的页数**：多出来的内容不在任何一列里（`column-fill: auto` 会把它
-  // 排到容器外面，被 `overflow: hidden` 裁掉），而不是再顺延出第 N+1 页——否则用户会以为
-  // 导出也会多给一页。
-  const useColumns = pageCount > 1;
-  const visualPages = useColumns ? pageCount : 1;
+  // 页数的唯一口径在 `overflow.ts`（问题 2 + 问题 3）：报告优先、浏览器测量作下界、
+  // 上限是"导出的截断线"而不是"画布的画幅"。
+  const counts = resolvePageCounts({
+    pageLimit,
+    reportedPages,
+    measuredPages: measured ? pagesNeededFor(measured) : null,
+    overflowSignal,
+  });
+  // 多页就是横向分页：**列数 = 画布纸张数**（原来是恒等于用户设定的页数，于是第 4 列之后
+  // 的内容被 `overflow: hidden` 静默裁掉——问题 2）。1 页时不分列，内容由 iframe 视口自然裁掉，
+  // 但那时 `visualPages` 必然也是 1（上限 1 且内容装得下），不会丢东西。
+  const useColumns = counts.visualPages > 1;
   style.textContent = useColumns
     ? columnsCss({
-        columnCount: visualPages,
+        columnCount: counts.visualPages,
         pageWidth: A4_WIDTH_PX,
         columnWidth,
         columnGap: pageGap,
@@ -132,15 +154,19 @@ export function layoutFrame({
 
   // 令 columns 真正参与布局；宽度不再用于反推页数，只作为画布尺寸。
   if (useColumns) void body.offsetWidth;
-  const naturalWidth = useColumns ? A4_WIDTH_PX * visualPages : A4_WIDTH_PX;
+  const naturalWidth = useColumns ? A4_WIDTH_PX * counts.visualPages : A4_WIDTH_PX;
 
   return {
     measure: measured,
-    overflow,
-    overflowClipped: overflow && !useColumns,
+    overflow: counts.overflow,
+    // 超限页现在照样画出来（带超额角标），所以"被裁掉"这件事不再发生；
+    // 这个标志只用来让提示条选"超出上限的页不计入导出"那段文案。
+    overflowClipped: counts.overflow,
     naturalWidth,
-    pagesNeeded,
-    visualPages,
+    pagesNeeded: counts.pagesNeeded,
+    pageLimit: counts.pageLimit,
+    visualPages: counts.visualPages,
+    overflowPages: counts.overflowPages,
     pageGap,
   };
 }

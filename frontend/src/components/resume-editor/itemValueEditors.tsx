@@ -12,6 +12,7 @@ import type { DocumentFieldCatalog } from "../../types/resumeDocument";
 import type { AuthorsItem, FieldItem, ListItem } from "../../types/resumeDocument";
 import { enumOptionsOf } from "../../features/resume-document/fieldCatalog";
 import { joinDateRange, splitDateRange } from "../../features/resume-document/format";
+import ResizableValueTextArea from "./ResizableValueTextArea";
 
 interface FieldValueProps {
   item: FieldItem;
@@ -71,12 +72,13 @@ export function FieldValueEditor({
       return (
         <div className="document-field-row">
           <span className="document-field-label">{t("document.field.value")}</span>
-          <Input
-            disabled={disabled || undefined}
-            aria-label={t("document.field.value")}
+          {/* 问题 8：单行语义 + 可拖高的文本域（自由输入的枚举字段同样要能看全文）。 */}
+          <ResizableValueTextArea
+            ariaLabel={t("document.field.value")}
             placeholder={t("document.field.enumPlaceholder")}
             value={item.value}
-            onChange={(event) => onChange({ value: event.target.value })}
+            disabled={disabled}
+            onChange={(value) => onChange({ value })}
           />
         </div>
       );
@@ -114,12 +116,15 @@ export function FieldValueEditor({
           onChange={(event) => onChange({ value: event.target.value })}
         />
       ) : (
-        <Input
-          disabled={disabled || undefined}
-          aria-label={t("document.field.value")}
+        // 问题 8：单行值也换成"一行高、可拖高"的文本域。
+        // 多行字段（`placement === "body"`）仍然走上面的 `autoSize`——那里**要**自动长高，
+        // 与"可拖手柄"互斥，两者各自服务不同的语义。
+        <ResizableValueTextArea
+          ariaLabel={t("document.field.value")}
           placeholder={placeholder}
           value={item.value}
-          onChange={(event) => onChange({ value: event.target.value })}
+          disabled={disabled}
+          onChange={(value) => onChange({ value })}
         />
       )}
     </div>

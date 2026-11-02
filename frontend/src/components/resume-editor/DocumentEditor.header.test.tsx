@@ -11,9 +11,29 @@ import { fireEvent, render, screen, within } from "@testing-library/react";
 import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { t } from "../../i18n";
+import type { ResumeFormatConfig } from "../../types/resumeFormat";
+import type { ResumeLayout } from "../../types/resume";
 import type { ResumeDocument } from "../../types/resumeDocument";
 import { makeDocument } from "../../features/resume-document/documentFixtures";
+import {
+  photoSha256,
+  readPhotoCropFromFormatConfig,
+  withPhotoCrop,
+} from "../../features/resume-proview/photoCrop";
 import DocumentEditor from "./DocumentEditor";
+
+/**
+ * 任务 6：裁剪弹窗需要原图像素尺寸（`usePhotoDimensions` 用 `new Image()` 解码，jsdom 不会
+ * 解码任何图片）。默认仍是 `null`（保持既有用例里「正在读取照片尺寸…」那条），需要几何的
+ * 用例自己设 `photoState.dims`。
+ */
+const photoState = vi.hoisted(() => ({
+  dims: null as { width: number; height: number } | null,
+}));
+
+vi.mock("../../features/resume-proview/usePhotoDimensions", () => ({
+  usePhotoDimensions: () => photoState.dims,
+}));
 
 const PHOTO = "data:image/png;base64,iVBORw0KGgo=";
 const CUSTOM_NAME = "Expected city";
@@ -359,7 +379,7 @@ describe("DocumentEditor · 照片 chip（#25）", () => {
     ).toBeInTheDocument();
     fireEvent.click(crop);
     expect(await screen.findByText(t("document.photo.cropTitle"))).toBeInTheDocument();
-    expect(screen.getByText(t("document.photo.cropHint"))).toBeInTheDocument();
+    expect(screen.getByText(t("proview.photo.hint"))).toBeInTheDocument();
     // 图片尺寸还没读出来时给可读的占位（而不是一个空框 / 一张坏图）。
     expect(screen.getByText(t("document.photo.cropLoading"))).toBeInTheDocument();
   });
@@ -397,5 +417,107 @@ describe("DocumentEditor · 照片 chip（#25）", () => {
     const crop = screen.getByRole("button", { name: new RegExp(t("document.photo.crop")) });
     expect(crop).toBeDisabled();
     expect(screen.getByText(t("document.photo.empty"))).toBeInTheDocument();
+  });
+});
+
+// ===== 任务 6：照片裁剪改成非破坏（写 photo_crop，不动 item.value） =====
+
+const LAYOUT: ResumeLayout = {
+  template: "classic",
+  format_name: "standard",
+  page_limit: 1,
+  font_scale: "standard",
+};
+
+function renderWithLayout(
+  document: ResumeDocument,
+  formatConfig: ResumeFormatConfig | null = null,
+) {
+  const onChange = vi.fn();
+  const onLayoutChange = vi.fn();
+  render(
+    <DocumentEditor
+      document={document}
+      onChange={onChange}
+      onLayoutChange={onLayoutChange}
+      layout={{ ...LAYOUT, format_config: formatConfig ?? undefined }}
+    />,
+  );
+  return { onChange, onLayoutChange };
+}
+
+/** 已保存的裁剪参数（走生产同一条读取路径，避免测试自己解释域格式）。 */
+function cropOf(layout: ResumeLayout | undefined) {
+  return readPhotoCropFromFormatConfig(layout?.format_config ?? null);
+}
+
+function lastLayout(onLayoutChange: ReturnType<typeof vi.fn>): ResumeLayout {
+  const calls = onLayoutChange.mock.calls;
+  return calls[calls.length - 1][0] as ResumeLayout;
+}
+
+/** 一份"已裁过"的 format_config（写路径与产品同一个 helper）。 */
+function croppedConfig(rect = { x: 0.1, y: 0.1, w: 0.8, h: 0.8 }): ResumeFormatConfig {
+  return withPhotoCrop(null, {
+    version: 1,
+    source: { sha256: photoSha256(PHOTO), width: 1200, height: 1600 },
+    rect,
+    aspect: "free",
+  });
+}
+
+describe("DocumentEditor · 照片裁剪非破坏（任务 6）", () => {
+  it("应用裁剪写进 format_config.photo_crop，页眉照片值一个字节都不变", async () => {
+    photoState.dims = { width: 1200, height: 1600 };
+    try {
+      const { onChange, onLayoutChange } = renderWithLayout(withPhoto());
+      fireEvent.doubleClick(mainButton(headerChip("document.headerField.photo")));
+      fireEvent.click(screen.getByRole("button", { name: new RegExp(t("document.photo.crop")) }));
+      fireEvent.click(await screen.findByRole("button", { name: t("document.photo.cropApply") }));
+
+      // 照片值没被改：`onChange` 一次都不该因为裁剪而触发。
+      expect(onChange).not.toHaveBeenCalled();
+      // 哈希必须对应**原图**（后端用它对照片做失效判据）。
+      expect(cropOf(lastLayout(onLayoutChange))?.source.sha256).toBe(photoSha256(PHOTO));
+    } finally {
+      photoState.dims = null;
+    }
+  });
+
+  it("「恢复原图」删掉 photo_crop 域", async () => {
+    photoState.dims = { width: 1200, height: 1600 };
+    try {
+      const { onLayoutChange } = renderWithLayout(withPhoto(), croppedConfig());
+      fireEvent.doubleClick(mainButton(headerChip("document.headerField.photo")));
+      fireEvent.click(screen.getByRole("button", { name: new RegExp(t("document.photo.crop")) }));
+      fireEvent.click(await screen.findByRole("button", { name: t("proview.photo.reset") }));
+
+      expect(cropOf(lastLayout(onLayoutChange))).toBeNull();
+    } finally {
+      photoState.dims = null;
+    }
+  });
+
+  it("移除照片的同时清掉指向旧图的裁剪参数", () => {
+    const { onChange, onLayoutChange } = renderWithLayout(withPhoto(), croppedConfig());
+    fireEvent.doubleClick(mainButton(headerChip("document.headerField.photo")));
+    fireEvent.click(screen.getByRole("button", { name: new RegExp(t("document.photo.remove")) }));
+
+    const photo = lastDocument(onChange).header.items.find((item) => item.key === "photo");
+    expect(photo?.value).toBe("");
+    expect(cropOf(lastLayout(onLayoutChange))).toBeNull();
+  });
+
+  it("页眉 chip 的缩略图按裁剪参数显示取景（不再是整张原图）", () => {
+    renderWithLayout(withPhoto(), croppedConfig({ x: 0.25, y: 0.25, w: 0.5, h: 0.5 }));
+    const chip = headerChip("document.headerField.photo");
+    const thumb = chip.querySelector(".rf-crop-thumb") as HTMLElement | null;
+    expect(thumb).not.toBeNull();
+    // 取景是 1200×1600 原图的中间一半 → 600×800，外层盒子比例 0.75。
+    expect(thumb?.style.aspectRatio).toContain("0.75");
+    // 内层 img 放大 2 倍并左/上各偏移 50%：这就是"只看中间那 1/4"。
+    const img = thumb?.querySelector("img") as HTMLImageElement | null;
+    expect(img?.style.width).toBe("200%");
+    expect(img?.style.left).toBe("-50%");
   });
 });

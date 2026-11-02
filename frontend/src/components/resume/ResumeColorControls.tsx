@@ -74,9 +74,11 @@ export default function ResumeColorControls({
   onChange,
 }: Props) {
   useLocale();
-  // #12：色板手风琴——一次只展开一行（默认第一行）。四行各挂一排色块时，
-  // 外观组高得离谱且视觉噪音大；**点这一行任意位置**或行头箭头都展开它，展开新行时自动收起旧行。
-  const [openKey, setOpenKey] = useState<ColorKey | null>("accent");
+  // #12：色板手风琴——一次只展开一行，**默认全部收起**（规格：四行总高 ≤120px、先选行才
+  // 出色板）。四行各挂一排色块时外观组高得离谱且视觉噪音大；点这一行任意位置或行头箭头
+  // 展开它，展开新行时自动收起旧行。初值刻意不是 "accent"：默认展开一行会让"外观"一进来
+  // 就有 40px 的色板把后面几行挤出可视区。
+  const [openKey, setOpenKey] = useState<ColorKey | null>(null);
   // 防抖/即时提交要读"提交那一刻"的 layout：与度量控件同一个理由（父组件可能在
   // 这期间改了页数或模板，用旧快照会把那些改动覆盖回去）。
   const layoutRef = useRef(layout);

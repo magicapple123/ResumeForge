@@ -47,6 +47,15 @@ import { computeTabOverflow } from "./tabOverflow";
  */
 const MORE_BUTTON_WIDTH = 28;
 
+/**
+ * 右缘判定的容差（px，问题 22 ②）。
+ *
+ * `scrollLeft` / `offsetWidth` 都是小数参与运算的结果，滚到最右端时最后一个栏目的右边界
+ * 可能量出 `clientWidth + 0.5` 这种值。没有容差就会被判成"没显示完"——而那 0.5px
+ * 用户根本看不见，代价却是整个栏目被计入下拉 + 被渐隐吃掉。
+ */
+const RIGHT_EDGE_TOLERANCE = 1;
+
 /** 遮罩起点（CSS 自定义属性名，单位 px，写在轨道的行内 style 上）。 */
 const FADE_FROM_VARIABLE = "--wb-tab-fade-from";
 
@@ -71,6 +80,14 @@ interface Props {
   activeKey: string;
   /** 选中一个栏目。下拉项与按钮走同一个出口，内容面板才会跟着换。 */
   onSelect: (key: string) => void;
+  /**
+   * 右键某一个栏目的回调（任务 11 返工：板块页签要能删自建板块）。
+   *
+   * 给了就接管浏览器右键（`preventDefault` + 回传 key 与鼠标位置），**弹什么由宿主决定**
+   * ——"哪些栏目有菜单"是宿主的业务判据（比如只有 `custom:` 板块能删），这里不掺和。
+   * 不给 = 保持浏览器默认右键，其它宿主零行为变化。
+   */
+  onTabContextMenu?: (key: string, position: { x: number; y: number }) => void;
 }
 
 /** 只保留有 key 的条目：没有 key 就没法对齐 `activeKey`，也就没法切换。 */
@@ -87,7 +104,7 @@ function tabNodes(track: HTMLElement): HTMLElement[] {
   return Array.from(track.querySelectorAll<HTMLElement>('[role="tab"]'));
 }
 
-export default function EditorTabStrip({ items, activeKey, onSelect }: Props) {
+export default function EditorTabStrip({ items, activeKey, onSelect, onTabContextMenu }: Props) {
   useLocale();
   const entries = useMemo(() => toEntries(items), [items]);
   const trackRef = useRef<HTMLDivElement>(null);
@@ -108,9 +125,32 @@ export default function EditorTabStrip({ items, activeKey, onSelect }: Props) {
     const track = trackRef.current;
     if (!track) return;
     const nodes = tabNodes(track);
+    /**
+     * 问题 22 ②：**已经滚到最右端时不预留三角按钮的宽度**。
+     *
+     * 症状（真机巡检）：17 个板块页签装在 362px 里，切到最后一个（「自建板块2」）时它刚好
+     * 贴着轨道右边界；而"可用宽度"被扣掉了 28px，于是它被判成"没显示完"——既被塞进
+     * `…` 下拉，右缘渐隐又从它左边界开始，用户看到的就是"最后一个页签被 … 吃掉了"。
+     *
+     * 但滚到最右端时轨道右侧**没有**被藏起来的内容（三角按钮此时只负责左侧的历史栏目），
+     * 那 28px 不该再扣。放宽 1px 抵消亚像素（见 `RIGHT_EDGE_TOLERANCE`），于是末页签
+     * 的右边界落在可视区内、渐隐起点退到 100%（整条不透明）。
+     *
+     * `clientWidth > 0` 必须先判：首帧 / 没有布局引擎（jsdom）时 `clientWidth === 0`，
+     * 放宽的 1px 会把"未知宽度"变成"宽度 1px"，于是每个栏目都被判成没显示完——
+     * 那正是文件头「为什么宽度为 0 时判定"没有溢出"」那一节警告的"永远点开空菜单的
+     * 三角按钮"。宽度未知就老老实实交给 `computeTabOverflow` 的 0 宽分支（= 这一帧没有溢出）。
+     */
+    const atRightEnd =
+      track.clientWidth > 0 &&
+      track.scrollWidth - track.clientWidth - track.scrollLeft <= RIGHT_EDGE_TOLERANCE;
     const overflow = computeTabOverflow(
       nodes.map((node) => ({ offsetLeft: node.offsetLeft, offsetWidth: node.offsetWidth })),
-      { clientWidth: track.clientWidth, scrollLeft: track.scrollLeft, reserve: MORE_BUTTON_WIDTH },
+      {
+        clientWidth: atRightEnd ? track.clientWidth + RIGHT_EDGE_TOLERANCE : track.clientWidth,
+        scrollLeft: track.scrollLeft,
+        reserve: atRightEnd ? 0 : MORE_BUTTON_WIDTH,
+      },
     );
     track.style.setProperty(
       FADE_FROM_VARIABLE,
@@ -223,6 +263,14 @@ export default function EditorTabStrip({ items, activeKey, onSelect }: Props) {
               // 只有选中的那一栏在 Tab 序列里：整条栏目条只占一个停靠点。
               tabIndex={selected ? 0 : -1}
               onClick={() => onSelect(entry.key)}
+              onContextMenu={
+                onTabContextMenu
+                  ? (event) => {
+                      event.preventDefault();
+                      onTabContextMenu(entry.key, { x: event.clientX, y: event.clientY });
+                    }
+                  : undefined
+              }
             >
               {entry.label}
             </button>

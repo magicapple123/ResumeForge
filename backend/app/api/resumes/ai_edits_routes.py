@@ -177,12 +177,21 @@ async def revise_existing_resume(
     # R04：记录本次调用的用量（未知 token 落 NULL，不臆造）；失败不影响已提交的正文。
     # 修订是**唯一保留手工记账**的端点：它需要把 resume_id 关联到用量行；自动记账
     # （中间件 + provider 上报）对 /revise 路径已关闭，避免同一次调用落两条。
+    # #35：手工记账也必须带上数据边界四字段——自动记账那条路已经从 ContextVar 读它们，
+    # 这里不显式传就会留下一条 input_scope 为空的空洞记录。
+    scope = usage_ledger.ambient_scope()
+    masked = scope.get("masked")
+    budget = scope.get("budget")
     try:
         usage_ledger.record_provider_usage(
             db,
             task=usage_ledger.TASK_RESUME_REVISE,
             provider=provider,
             resume_id=record.id,
+            input_scope=str(scope.get("input_scope") or ""),
+            masked=masked if isinstance(masked, bool) else None,
+            language=str(scope.get("language") or ""),
+            budget=budget if isinstance(budget, int) else None,
         )
     except Exception:  # noqa: BLE001 - 账本不能反向破坏保存成功的结果
         logger.warning("模型用量记录失败 record_id=%s", record.id, exc_info=True)

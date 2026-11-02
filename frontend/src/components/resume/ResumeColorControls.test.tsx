@@ -50,8 +50,16 @@ function renderGroup(
   return onChange;
 }
 
-/** 第一行（强调色）的预设色板：色块顺序与 `PALETTE` 一致。 */
+/**
+ * 第一行（强调色）的预设色板：色块顺序与 `PALETTE` 一致。
+ *
+ * #12 之后默认**全部收起**，所以取色板前必须先展开该行；已展开就不要再点（再点会收起）。
+ */
 function firstRowSwatches(): HTMLElement[] {
+  const row = document.querySelectorAll<HTMLElement>(".resume-wb-color-row")[0];
+  if (!row.querySelector(".resume-wb-swatches")) {
+    fireEvent.click(row.querySelector(".resume-measure-label") as HTMLElement);
+  }
   const palettes = screen.getAllByRole("group", { name: t("workbench.color.palette") });
   return within(palettes[0]).getAllByRole("button");
 }
@@ -89,10 +97,10 @@ describe("ResumeColorControls · 写入语义", () => {
     const onChange = renderGroup();
     const rows = Array.from(document.querySelectorAll<HTMLElement>(".resume-wb-color-row"));
     expect(rows).toHaveLength(4);
-    // 默认只有第一行展开。
-    expect(rows.filter((row) => row.querySelector(".resume-wb-swatches"))).toHaveLength(1);
+    // #12：默认全部收起（一行色板都不渲染）。
+    expect(rows.filter((row) => row.querySelector(".resume-wb-swatches"))).toHaveLength(0);
 
-    // 点第二行（正文）的标签，而不是行头那颗小箭头：第二行展开、第一行自动收起。
+    // 点第二行（正文）的标签，而不是行头那颗小箭头：第二行展开、其它行保持收起。
     fireEvent.click(rows[1].querySelector(".resume-measure-label") as HTMLElement);
     const openRows = rows.filter((row) => row.querySelector(".resume-wb-swatches"));
     expect(openRows).toHaveLength(1);
@@ -102,6 +110,46 @@ describe("ResumeColorControls · 写入语义", () => {
     const navy = openRows[0].querySelectorAll<HTMLElement>(".resume-wb-swatch")[2];
     fireEvent.click(navy);
     expect(lastLayout(onChange).format_config).toEqual({ text_color: "#1e3a8a" });
+  });
+
+  it("#12 默认全部收起：初次渲染没有色板，四行 aria-expanded 全为 false", () => {
+    renderGroup();
+
+    expect(document.querySelectorAll(".resume-wb-swatches")).toHaveLength(0);
+    const toggles = Array.from(
+      document.querySelectorAll<HTMLButtonElement>(".resume-wb-color-toggle"),
+    );
+    expect(toggles).toHaveLength(4);
+    for (const toggle of toggles) {
+      expect(toggle).toHaveAttribute("aria-expanded", "false");
+    }
+  });
+
+  it("#12 点行才展开：一次只开一行，换行时前一行收起", () => {
+    renderGroup();
+    const rows = Array.from(document.querySelectorAll<HTMLElement>(".resume-wb-color-row"));
+
+    // 点「强调色」行 → 恰好一个色板，且该行展开。
+    fireEvent.click(rows[0].querySelector(".resume-measure-label") as HTMLElement);
+    expect(document.querySelectorAll(".resume-wb-swatches")).toHaveLength(1);
+    expect(rows[0].querySelector(".resume-wb-color-toggle")).toHaveAttribute(
+      "aria-expanded",
+      "true",
+    );
+
+    // 再点「正文」行 → 前者收起、后者展开。
+    fireEvent.click(rows[1].querySelector(".resume-measure-label") as HTMLElement);
+    const openRows = rows.filter((row) => row.querySelector(".resume-wb-swatches"));
+    expect(openRows).toHaveLength(1);
+    expect(openRows[0]).toBe(rows[1]);
+    expect(rows[0].querySelector(".resume-wb-color-toggle")).toHaveAttribute(
+      "aria-expanded",
+      "false",
+    );
+    expect(rows[1].querySelector(".resume-wb-color-toggle")).toHaveAttribute(
+      "aria-expanded",
+      "true",
+    );
   });
 
   it("恢复默认：双击标题删掉该键（不是写回模板默认色）", () => {
@@ -211,7 +259,8 @@ describe("ResumeColorControls · 色板行对齐", () => {
     for (const row of rows) {
       expect(row.querySelector(".resume-wb-color-head")?.parentElement).toBe(row);
     }
-    // #12：色板手风琴——默认只有第一行展开渲染色板；色板仍是行 grid 的直接子级。
+    // #12：色板手风琴默认全部收起；展开一行后色板仍是行 grid 的直接子级。
+    fireEvent.click(rows[0].querySelector(".resume-measure-label") as HTMLElement);
     const expanded = rows.filter((row) => row.querySelector(".resume-wb-swatches"));
     expect(expanded).toHaveLength(1);
     expect(expanded[0].querySelector(".resume-wb-swatches")?.parentElement).toBe(expanded[0]);

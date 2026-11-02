@@ -21,7 +21,7 @@ from typing import TYPE_CHECKING
 
 from fpdf.enums import XPos, YPos
 
-from ...schemas.resume_document import EntryLayout
+from ...schemas.resume_document import RowLayout
 from ...schemas.resume_document_plan import (
     BlockPlan,
     CellPlan,
@@ -36,7 +36,7 @@ from .canvas import _ResumePDF
 from .fonts import FONT_FAMILY
 from .header import draw_header
 from .layout import _PX_TO_PT
-from .meta_columns import column_widths, draw_meta_columns, set_meta_font
+from .meta_columns import draw_meta_columns, justify_gap, resolve_cell_widths, set_meta_font
 from .style_blocks import _bold, _color, _letter_spacing_mm, _line_height, _scale
 
 if TYPE_CHECKING:  # pragma: no cover - 只为类型检查
@@ -242,7 +242,7 @@ def _draw_head(
 def _draw_cell_rows(
     pdf: _ResumePDF,
     rows: Sequence[Sequence[CellPlan]],
-    layout: EntryLayout,
+    layout: RowLayout,
     *,
     section_key: str,
     entry_id: str,
@@ -251,7 +251,7 @@ def _draw_cell_rows(
 ) -> None:
     """lead / trail 的灰字段行：equal = 按内容预算列宽并排；flow = 一行顺排。
 
-    planner 已把标签文本（标签：值）与 flow 的分隔符写进 CellPlan.segments，这里只拼接。
+    ``layout`` 是**这一侧**的生效列布局（问题 4：正文前 / 正文后可以各是不同列数）。
     """
     if not rows:
         return
@@ -267,16 +267,28 @@ def _draw_cell_rows(
     if not texts:
         return
     if align == "flow":
+        # flow 的 HTML 是"一行一个 .sub"，每行各自带上下 margin，所以逐行都加段距才对
+        #（问题 17 的组语义只适用于 equal 的一个网格容器）。
         for row in texts:
             pdf.meta_line("".join(row), base, style=style)
         return
     set_meta_font(pdf, base, style)
-    widths = column_widths(pdf, texts, columns, gap_mm, pdf.frame_width)
-    for row in texts:
+    # 逐列宽度 / 逐间隔（任务 13）：与 HTML 同一份判据，长度对不上就整体作废。
+    widths, gap_arg = resolve_cell_widths(pdf, texts, columns, layout, gap_mm)
+    # 分布 = 两端（问题 4）：剩余空白均分进列间，最后一列右缘贴内容区右边界。
+    gap_arg = justify_gap(pdf, widths, gap_arg, layout.justify)
+    # 问题 17：equal 模式下 HTML 是**一个** `.sub-grid` 容器（组前 / 组后段距只加一次），
+    # PDF 逐行调用，所以只有首行加 sub_gap_top、末行加 sub_gap_bottom。
+    last_index = len(texts) - 1
+    for position, row in enumerate(texts):
+        first = position == 0
+        last = position == last_index
         if len(row) <= 1:
-            pdf.meta_line(row[0], base, style=style)
+            pdf.meta_line(row[0], base, style=style, first=first, last=last)
         else:
-            draw_meta_columns(pdf, row, widths, gap_mm, base, style=style)
+            draw_meta_columns(
+                pdf, row, widths, gap_arg, base, style=style, first=first, last=last
+            )
 
 
 def _draw_entry(
@@ -292,7 +304,7 @@ def _draw_entry(
     _draw_cell_rows(
         pdf,
         entry.lead_rows,
-        entry.layout,
+        entry.lead_layout,
         section_key=section_key,
         entry_id=entry.id,
         base=base,
@@ -310,7 +322,7 @@ def _draw_entry(
     _draw_cell_rows(
         pdf,
         entry.trail_rows,
-        entry.layout,
+        entry.trail_layout,
         section_key=section_key,
         entry_id=entry.id,
         base=base,

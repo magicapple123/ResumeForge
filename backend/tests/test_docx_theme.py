@@ -122,6 +122,20 @@ def _entry_space_before(content: bytes, company: str) -> float:
     return paragraph.paragraph_format.space_before.twips
 
 
+def _title_after_twips(layout) -> float:
+    """`left_bar` 标题段后的 0.4em 现在挂在**下一段段前**（2026-11 #9）。
+
+    为什么：Word 的段落左边框会把段前/段后距一起框进竖条，标题段因此比行盒高 3 倍。
+    把 0.4em 挪到紧随其后的第一段后，竖条只包行盒；条目间距的断言要跟着算上这份偏移。
+    其它标题样式（soft_box / accent_box / underline / plain）的边框本来就该包住 padding，
+    不做这次挪动，因此返回 0。
+    """
+    if getattr(layout, "section_title_style", "") != "left_bar":
+        return 0.0
+    base_px = float(FONT_SCALES["standard"]["base_px"])
+    return base_px * _PX_TO_MM_LAYOUT * 0.4 * MM_TO_TWIPS
+
+
 def test_docx_entry_spacing_matches_the_template_entry_gap():
     """同分区内第二条的段前距 = 固定段前 + 模板 entry_gap（HTML/PDF 的 .entry 下边距）。"""
     base_px = float(FONT_SCALES["standard"]["base_px"])
@@ -132,8 +146,10 @@ def test_docx_entry_spacing_matches_the_template_entry_gap():
     fixed = base_px * _PX_TO_MM_LAYOUT * 0.2 * MM_TO_TWIPS
     gap = layout.gap_mm(layout.entry_gap) * MM_TO_TWIPS
 
-    assert first == pytest.approx(fixed, abs=3.0)
-    assert second - first == pytest.approx(gap, abs=3.0)
+    # 第一个条目紧跟标题：它的段前距 = 固定 0.2em + 标题挪下来的 0.4em（仅 left_bar）。
+    title_after = _title_after_twips(layout)
+    assert first == pytest.approx(fixed + title_after, abs=3.0)
+    assert second - first == pytest.approx(gap - title_after, abs=3.0)
     assert gap > 100, "classic 的条目间距约 3.2mm，换算成 twips 应远大于 100"
 
 
@@ -148,7 +164,9 @@ def test_docx_entry_spacing_follows_the_template():
         content = _build(template)
         gap = _entry_space_before(content, "乙公司") - _entry_space_before(content, "甲公司")
         # twip 取整：每段各自四舍五入，允许 3 twips（≈0.05mm）误差。
-        assert gap == pytest.approx(layout.gap_mm(layout.entry_gap) * MM_TO_TWIPS, abs=3.0)
+        assert gap == pytest.approx(
+            layout.gap_mm(layout.entry_gap) * MM_TO_TWIPS - _title_after_twips(layout), abs=3.0
+        )
 
 
 # ===== 3. 正文 / 辅助色：与 PDF 同一份解析 =====

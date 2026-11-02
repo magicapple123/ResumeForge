@@ -14,10 +14,12 @@ import {
   pagesNeededFor,
   type LayoutMeasure,
 } from "../../utils/resumeLayoutMeasure";
+import { resolvePageCounts } from "./overflow";
 
 interface PreviewGeometryInput {
   availableSpace: AvailableSpace;
   paperHeight: number;
+  /** 用户设定的篇幅上限（导出按它截断）。 */
   pageCount: number;
   zoom: number;
   overflow: boolean;
@@ -25,6 +27,11 @@ interface PreviewGeometryInput {
   /** 两页之间的间隙（未缩放 px）＝ 左右页边距之和，由 `layoutFrame` 按当前页边距量出。 */
   pageGap: number;
   measure: LayoutMeasure | null;
+  /**
+   * 服务端分页报告给出的页数（问题 3）：给了就以它定纸张数，`measure` 退为下界。
+   * 不传 / null = 没有报告，退回浏览器测量。
+   */
+  reportedPages?: number | null;
   /**
    * 大屏放大上限（`--rf-a4-max-fit`，A 档 1.35）。
    * 不传 = 1，即"永不放大"——与 2026-10-23 之前的行为逐像素一致。
@@ -61,6 +68,8 @@ export interface PreviewGeometry {
   pagesNeeded: number;
   overflowAmount: number;
   totalVisualPages: number;
+  /** 超出上限的纸张数（0 = 没有超额页）。 */
+  overflowPages: number;
   separatorCount: number;
   /** 页间隙（未缩放 px）：画布按 `pageGap × scale` 画分页条。 */
   pageGap: number;
@@ -77,6 +86,7 @@ export function calculatePreviewGeometry({
   overflow,
   pageGap,
   measure,
+  reportedPages,
   maxFitScale = MAX_FIT_SCALE_DEFAULT,
   fitMode = "page",
 }: PreviewGeometryInput): PreviewGeometry {
@@ -85,12 +95,17 @@ export function calculatePreviewGeometry({
   // 多页时按 A4 **竖向堆叠**（2026-10-21 用户要求，取代原来的横向并排）：
   // 横向并排要看第 2 页得先横滚，而简历的阅读顺序是从上往下。
   //
-  // **页数恒等于用户设定的上限**（2026-10-21 第二次调整）：内容超出就截断，不再顺延出
-  // 第 N+1 页。以前"溢出多排一页"是为了让用户看见"还差多少"，但那份"多出来的预览页"
-  // 与导出的实际结果（同样超页）并不是一回事，反而让人以为导出也会多给一页。现在
-  // 溢出的提示交给告警条，纸面只画用户要的那几页——想看更多自己把篇幅调大。
-  const stackedPages = pageCount > 1;
-  const totalVisualPages = stackedPages ? pageCount : 1;
+  // **页数 ≠ 用户设定的上限**（2026-11-02，问题 2 + 问题 3）：上限只是"导出的篇幅约束"，
+  // 画布的画幅是"内容要几张纸"。两者取大：超限的页照样画出来并带超额角标，不再把第 4 列
+  // 之后的内容静默裁掉；而页数本身以服务端 `pagination/report` 为准（见 `overflow.ts`）。
+  const counts = resolvePageCounts({
+    pageLimit: pageCount,
+    reportedPages,
+    measuredPages: measure ? pagesNeededFor(measure) : null,
+    overflowSignal: overflow,
+  });
+  const stackedPages = counts.visualPages > 1;
+  const totalVisualPages = counts.visualPages;
   // 单页的"一页高"：`fitScale` 永远按**一页**算，保证任何一页都能完整落在视口里。
   const contentUnitHeight = stackedPages ? A4_HEIGHT_PX : paperHeight;
   const contentTotalWidth = A4_WIDTH_PX;
@@ -111,20 +126,29 @@ export function calculatePreviewGeometry({
   const viewportHeightForPage = Math.min(contentUnitHeight * fitScale, viewportHeight);
   const scaledWidth = contentTotalWidth * scale;
   const scaledHeight = contentTotalHeight * scale;
-  const pagesNeeded = measure ? pagesNeededFor(measure) : overflow ? pageCount + 1 : pageCount;
+  const pagesNeeded = counts.pagesNeeded;
   const overflowAmount = measure ? overflowHeightFor(measure) : 0;
   // 文案在**调用期**取（t() 只能在函数体里求值）；渲染它的 `ResumePreview` 不在本批
   // 清单内，切语言时需由宿主订阅 locale 才会重算。
-  const overflowAmountText = measure
-    ? (() => {
-        const ratio = overflowAmount / measure.pageContentHeight;
-        return ratio < 1
-          ? t("preview.geometry.overflowPercent", {
-              percent: Math.max(1, Math.round(ratio * 100)),
-            })
-          : t("preview.geometry.overflowPages", { pages: ratio.toFixed(1) });
-      })()
-    : t("preview.geometry.overflowUnknown");
+  //
+  // 有报告时按**报告的页数差**说超出量（`pages_needed − 上限`）：同一行里已经写着
+  // 「已显示全部 N 页，其中第 M 页起不计入导出」，若这里再报一个浏览器量出来的 3.7 页，
+  // 一条提示里就会出现两个互相打架的数字。
+  const overflowAmountText =
+    counts.overflow && reportedPages && reportedPages > 0
+      ? t("preview.geometry.overflowPages", {
+          pages: String(counts.pagesNeeded - counts.pageLimit),
+        })
+      : measure
+        ? (() => {
+            const ratio = overflowAmount / measure.pageContentHeight;
+            return ratio < 1
+              ? t("preview.geometry.overflowPercent", {
+                  percent: Math.max(1, Math.round(ratio * 100)),
+                })
+              : t("preview.geometry.overflowPages", { pages: ratio.toFixed(1) });
+          })()
+        : t("preview.geometry.overflowUnknown");
 
   return {
     viewportWidth,
@@ -143,12 +167,13 @@ export function calculatePreviewGeometry({
     pagesNeeded,
     overflowAmount,
     totalVisualPages,
+    overflowPages: counts.overflowPages,
     // 竖排后不再有"页间隙条"：页与页之间是真实的空白 + 每页自己的边框/阴影。
     separatorCount: 0,
     pageGap,
     overflowAmountText,
-    // 2026-10-21 起**溢出总是被裁**：页数恒等于上限，多出来的内容不在任何一页上。
-    // 这个标志只用来选提示文案（"超出上限的部分不会显示"）。
-    overflowClipped: overflow,
+    // 2026-11-02 起超限的页**会画出来**（带超额角标 + 虚线），不再裁掉；
+    // 这个标志只用来选提示文案（"第 M 页起不计入导出"）。
+    overflowClipped: counts.overflow,
   };
 }

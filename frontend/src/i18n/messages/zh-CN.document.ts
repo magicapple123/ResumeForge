@@ -25,6 +25,15 @@ const document = {
   "document.placement.short": "位置",
   /** 隐藏的语义说明：数据保留，只是不上纸面。 */
   "document.placement.hiddenHint": "隐藏的字段仍留在文档里，只是不印到纸面上",
+  /**
+   * 行内板块（技能 / 语言）的位置名：纸面上只有「黑字主文本 / 灰字补充 / 隐藏」三种结果，
+   * 其余位置在渲染上完全等价，所以单独一套文案（不复用上面的条目卡语义）。
+   */
+  "document.placement.inline.body": "主文本",
+  "document.placement.inline.trail": "灰字补充",
+  "document.placement.inline.hidden": "隐藏",
+  /** 当前值不在允许集里时并入下拉的兜底项后缀（只展示，不表示可选）。 */
+  "document.placement.currentOption": "{label}（当前）",
 
   // ── 页眉位置 ────────────────────────────────────────────────
   "document.headerPlacement.name": "姓名行",
@@ -58,6 +67,8 @@ const document = {
   "document.entry.show": "显示条目",
   "document.entry.moveUp": "上移条目",
   "document.entry.moveDown": "下移条目",
+  /** #7：条目右键菜单第一项——整条范围的对象级排版（画布条目卡与结构树条目行共用）。 */
+  "document.entry.styleWhole": "排版整条…",
   "document.entry.hidden": "条目已隐藏",
   "document.entry.headLayout": "标题布局",
   "document.entry.headLayout.split": "左右",
@@ -147,6 +158,7 @@ const document = {
   "document.drag.moved": "字段位置已更新",
   "document.drag.canceled": "已取消移动",
   "document.drag.boundary": "已经到边界了",
+  "document.drag.samePosition": "已经在这个位置",
   "document.drag.unsupported": "该字段不能放在这里",
   "document.drag.illegalTitle": "不能放到这里",
   "document.drag.illegalBody": "把标题类字段放回标题行或元信息，正文块只放在正文里",
@@ -160,6 +172,12 @@ const document = {
   "document.section.textHint": "单段文本板块只排正文",
   "document.section.titleLabel": "板块标题",
   "document.section.hideTitle": "不显示板块标题",
+  "document.section.addTitle": "新建板块（仅本份简历）",
+  "document.section.addBody": "只会加在这份简历里，资料库的板块不受影响",
+  "document.section.addNameHint": "板块名称，请一次输对——建好后暂无改名入口",
+  "document.section.addConfirm": "新建",
+  "document.section.removed": "已删除板块「{section}」",
+  "document.section.removeBody": "只从这份简历里删除「{section}」，资料库不受影响，可撤销",
 
   // ── 基本信息（页眉）──────────────────────────────────────
   "document.basic.title": "基本信息",
@@ -189,7 +207,8 @@ const document = {
   "document.photo.crop": "裁剪",
   "document.photo.remove": "移除照片",
   "document.photo.cropTitle": "裁剪简历照片",
-  "document.photo.cropHint": "拖动滑杆调整取景范围；应用后写入这张照片，原图仍留在资料照片库里",
+  "document.photo.cropHint": "拖动滑杆调整取景范围；原始照片不会被覆盖，随时可以恢复",
+  "document.photo.cropOffsetLocked": "取景大小为 100% 时是整张原图，先调小才能平移",
   "document.photo.cropPreview": "裁剪预览",
   "document.photo.cropApply": "应用裁剪",
   "document.photo.cropLoading": "正在读取照片尺寸…",

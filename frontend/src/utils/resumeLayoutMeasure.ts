@@ -15,6 +15,8 @@
  *   占了一行，让本来就空的版面显得更满。
  */
 
+import { t } from "../i18n";
+
 export interface LayoutMeasure {
   /** 正文最后一行底边到内容区顶边的距离。 */
   usedHeight: number;
@@ -24,6 +26,57 @@ export interface LayoutMeasure {
 }
 
 const MEDIA_TAGS = new Set(["IMG", "SVG", "CANVAS", "TABLE"]);
+
+/**
+ * 一页纸的物理高度（mm）。与模板里的 `body { height: {{ page_limit * 297 }}mm }` 同一个值。
+ *
+ * **为什么要单独量它，而不是"总高 ÷ 页数"**：总高由服务端按 `document_mode` 夹紧后的页数
+ * 决定（`resume` 最多 3 页 / `long_cv` 最多 10 页）。一旦请求没带模式、或 HTML 还是上一次
+ * 的，`总高 ÷ 用户选的页数` 就变成了"3 页总高 ÷ 10"，分母缩到 3/10——7 页内容会被算成
+ * 「约需 21 页」（本批问题 11）。量一页的物理高度只依赖 `mm→px`，与服务端夹紧无关。
+ */
+const PAGE_HEIGHT_MM = 297;
+
+/** 探针标记：测试用它把 `getComputedStyle` 里的高度单独打桩。 */
+const PAGE_PROBE_ATTR = "resumePageProbe";
+
+/**
+ * 在**同一个 iframe 的 body 里**量一页纸有多高（px）。
+ *
+ * 必须在 iframe 内量：`padding` 与 `mm→px` 都由它自己的文档决定，父页面量出来的不能用。
+ * 探针必须 `visibility: hidden; position: absolute; height: 297mm; width: 0`——
+ * `display: none` 不参与布局，量不到；`visibility: hidden` 仍参与布局，高度可读。
+ */
+function probePageHeightPx(body: HTMLElement): number {
+  const probe = body.ownerDocument.createElement("div");
+  probe.setAttribute("aria-hidden", "true");
+  probe.dataset[PAGE_PROBE_ATTR] = "1";
+  probe.style.cssText = [
+    "position: absolute",
+    "top: 0",
+    "left: 0",
+    "width: 0",
+    `height: ${PAGE_HEIGHT_MM}mm`,
+    "visibility: hidden",
+    "pointer-events: none",
+    "margin: 0",
+    "padding: 0",
+    "border: 0",
+  ].join("; ");
+  body.appendChild(probe);
+  try {
+    const rectHeight = probe.getBoundingClientRect().height;
+    if (rectHeight > 0) return rectHeight;
+    // jsdom / 尚未参与布局时退到 computed height（Chrome 会把 mm 解析成 px）。
+    const computedHeight = Number.parseFloat(window.getComputedStyle(probe).height);
+    return Number.isFinite(computedHeight) && computedHeight > 0 ? computedHeight : 0;
+  } finally {
+    probe.remove();
+  }
+}
+
+/** 只在开发态提示一次：避免每次编辑都刷一条同样的警告。 */
+let pageRatioWarned = false;
 
 function hasDirectText(element: Element): boolean {
   for (const node of Array.from(element.childNodes)) {
@@ -57,7 +110,27 @@ export function measureResumeLayout(document: Document, pageLimit: number): Layo
     const contentTop = rect.top + paddingTop;
     const totalContentHeight = rect.height - paddingTop - paddingBottom;
     if (!(totalContentHeight > 0)) return null;
-    const pageContentHeight = totalContentHeight / pageLimit;
+    // ① 单页可用高度 = 一页物理高度 − 上下页边距。这是唯一正确的分母：
+    //    "总高 ÷ 页数"只在服务端真的按这个页数排过时才成立（见 PAGE_HEIGHT_MM 的说明）。
+    const pageHeightPx = probePageHeightPx(body);
+    const singlePageContentHeight = pageHeightPx - paddingTop - paddingBottom;
+    const pageContentHeight =
+      singlePageContentHeight > 0 ? singlePageContentHeight : totalContentHeight / pageLimit;
+
+    // ② 兜底可诊断（问题 11 · P1）：body 高度反推出的页数与本页页数不一致，说明 HTML 与
+    //    `page_limit` 不是同一版（请求漏了 `document_mode`、或拿到的是上一版的 html）。
+    //    此时上面的分母仍是实测单页高度，页数不会因此放大；这条只在开发态提示一次。
+    //    文案走 `t()`（`pagination.measure.pageRatioWarn`）：本文件属于"中文棘轮"的
+    //    零基线文件，任何中文字面量都会让守卫变红。
+    if (pageHeightPx > 0 && !pageRatioWarned) {
+      const serverPages = Math.round(rect.height / pageHeightPx);
+      if (serverPages > 0 && serverPages !== pageLimit) {
+        pageRatioWarned = true;
+        if (import.meta.env?.DEV) {
+          console.warn(t("pagination.measure.pageRatioWarn", { serverPages, limit: pageLimit }));
+        }
+      }
+    }
 
     let lastBottom = contentTop;
     for (const element of Array.from(body.querySelectorAll("*"))) {

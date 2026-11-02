@@ -8,12 +8,13 @@
  */
 import type { Props } from "./ResumeDetailPreview.types";
 import { Collapse, Space, Tag, Tooltip, Typography } from "antd";
-import { useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { t } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
 import { useNavigate } from "react-router-dom";
 import { RESUME_ENHANCEMENT_LEVELS } from "../../config";
 import { contentSignature } from "../../utils/contentSignature";
+import { pagesNeededFor } from "../../utils/resumeLayoutMeasure";
 import ExportOptionsModal from "../ExportOptionsModal";
 import ExportConfigModal from "./delivery/ExportConfigModal";
 import { createExportDeliveryApi } from "../../features/resume-delivery";
@@ -95,6 +96,29 @@ export default function ResumeDetailPreview({
   // 预览口径（草稿 / 精确）住在这一层：主预览与「简历制作台」共用它，任何一处切换，
   // 另一处和制作台都会跟着走（2026-10-21 用户要求）。
   const [previewMode, setPreviewMode] = useState<PreviewMode>("draft");
+  /**
+   * 画布上报的页数（问题 3）。左栏结构面板的「按当前设置约需 N 页」必须与黄条、画布同源，
+   * 而页数的口径从"浏览器测量"换成了"服务端分页报告"——报告只有画布那条链路在取，
+   * 所以这里接住它上报的数字再传给左栏，不要在本层另算一份。
+   */
+  const [canvasPages, setCanvasPages] = useState<{ needed: number; rendered: number } | null>(null);
+  const handleLayoutStatus = useCallback(
+    (status: {
+      pages: number;
+      overflow: boolean;
+      pagesNeeded?: number;
+      pagesRendered?: number;
+    }) => {
+      if (typeof status.pagesNeeded === "number") {
+        setCanvasPages({
+          needed: status.pagesNeeded,
+          rendered: status.pagesRendered ?? status.pagesNeeded,
+        });
+      }
+      onLayoutStatus(status);
+    },
+    [onLayoutStatus],
+  );
   const [sharePackageOpen, setSharePackageOpen] = useState(false);
   /**
    * v2 文档 → v1 只读投影（唯一一处转换）：版面诊断卡、事实来源面板与导出核对还按 v1 形状
@@ -279,7 +303,7 @@ export default function ResumeDetailPreview({
         onPreviewModeChange={setPreviewMode}
         // 点纸面字段 → 打开「手动调整」并定位；右键加粗只在制作台提供（主预览没有保存入口）。
         warnings={fabricationWarnings}
-        onLayoutStatus={onLayoutStatus}
+        onLayoutStatus={handleLayoutStatus}
         onMeasure={onMeasure}
       />
       {/* 固定在弹窗底部：内容长（版面诊断 + 预览）时不必一路翻到最后才够得着这些按钮。 */}
@@ -376,7 +400,14 @@ export default function ResumeDetailPreview({
         resumeLanguage={detail.language}
         relayouting={relayouting}
         hasPhoto={documentHasPhoto(detail.content)}
-        pagesNeeded={layoutStatus?.pages ?? null}
+        // 页数与右栏黄条**同源**（Q20）：以前传的是 `layoutStatus.pages`——那是版式诊断
+        // 在**当前 page_limit 之下**跑出来的页数，天然被夹在上限内，于是同一屏出现
+        // 「约需 3 页」（左栏）与「约需 7 页（上限 3 页）」（右栏）两个数。
+        // 2026-11-02（问题 3）起页数的口径换成服务端分页报告：画布把 `pagesNeeded` 上报
+        // 回来，这里直接用它；还没上报时退回预览实测的 `measure`（与黄条同一个
+        // `pagesNeededFor`），量不到时传 null 让结构面板走「未知」，不要回落成
+        // `page_limit`（那就又变成"内容需求 = 上限"）。
+        pagesNeeded={canvasPages?.needed ?? (measure ? pagesNeededFor(measure) : null)}
         onApplyLayout={onApplyLayout}
         onCommitLayout={onCommitLayout}
         layoutSaving={layoutSaving}

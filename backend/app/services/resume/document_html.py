@@ -31,6 +31,7 @@ from ...schemas.resume_document import (
     parse_document,
 )
 from ...schemas.resume_document_plan import DocumentPlan
+from .column_geometry import resolved_column_geometry
 from .resume_contact import CONTACT_BREAKS_KEY
 from .resume_labels import field_labels, normalize_language
 from .resume_render_overrides import RenderOverrides, render_overrides_css
@@ -356,6 +357,9 @@ _DOCUMENT_CSS = """
   .sub-grid.sub-cols-1 { grid-template-columns: repeat(1, minmax(0, auto)); }
   .sub-grid.sub-cols-2 { grid-template-columns: repeat(2, minmax(0, auto)); }
   .sub-grid.sub-cols-3 { grid-template-columns: repeat(3, minmax(0, auto)); }
+  /* 分布 = 两端（问题 4）：列宽仍按内容，剩余空白均分到列之间，最后一列右缘贴住内容区
+     右边界。只由模板在 equal + 多列 + 无显式逐列宽度时挂上这个 class。 */
+  .sub-grid.sub-justify-between { justify-content: space-between; }
   .sub-cell-solo { grid-column: 1 / -1; }
   .sub-flow .sub-cell { margin-right: calc(var(--fs) * 0.4); }
   .sub-flow .sub-cell:last-child { margin-right: 0; }
@@ -397,6 +401,7 @@ def build_context(
         "photo_alt": field_labels(resolved_language).get("photo_alt", "照片"),
         "default_cell_gap": default_cell_gap,
         "cell_needs_separator": cell_needs_separator,
+        "column_geometry": resolved_column_geometry,
         "safe_link": safe_link,
         "template_config": template_config,
         "page_limit": page_limit,

@@ -71,15 +71,9 @@
   min-width: 28px;
 }
 
-/* R-05 ⑤：三种标题布局改图标按钮（原 Segmented 占 180px，窄中栏被挤到换行）。 */
-.document-entry-head-layout {
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-  margin-left: auto;
-  flex: none;
-}
-
+/* R-05 ⑤：三种标题布局的图标按钮。**位置已改**（问题 6）：这一组不再挂在条目头，
+   而是由 `EntryHeadLayoutSwitch` 渲染到「标题与元信息」域标题行右端，
+   尺寸/窄档降级都在 `entry-head-layout.css`。这里只保留选中态配色（两处共用私有类名）。 */
 .document-entry-layout-btn.is-active {
   color: var(--rf-brand);
   background: var(--rf-brand-tint);
@@ -303,8 +297,13 @@
   box-shadow: 0 0 0 1px var(--rf-brand-tint);
 }
 
+/* 问题 13：拖动源要明显弱化。以前只有 opacity，看不出"被拿起来的是哪一条"，
+   现在再加一层虚线描边；`pointer-events` 不能动——那会打断 `dragend`，
+   让「已经在这个位置 / 不能放到这里」永远说不出口。 */
 .document-chip.is-dragging {
-  opacity: 0.5;
+  opacity: 0.45;
+  outline: 1px dashed var(--rf-accent, #2563eb);
+  outline-offset: 1px;
 }
 
 .document-chip.is-grabbed {
@@ -477,9 +476,11 @@
   flex-wrap: wrap;
 }
 
-/* F1-b：通知条排在字段区之后、**在正常布局流里**——所以它出现/消失不会改变任何元素的
-   流内位置（那正是"快速双击第二下落空"的成因），也不会像浮层那样整条盖住页签条
-   （`position:absolute` 版本实测与 `.document-tabs` 相交 412×28）。别改回浮层。 */
+/* F1-b：没有浮层宿主时（生成预览等场景）通知条**回退**成流内渲染，排在字段区之后——
+   所以它出现/消失不会改变任何元素的流内位置（那正是"快速双击第二下落空"的成因），
+   也不会像浮层那样整条盖住页签条（`position:absolute` 版本实测与 `.document-tabs`
+   相交 412×28）。中栏有宿主时改由 `.resume-wb-notice-host` 绝对定位到中栏底部
+   （问题 14，见 workbench-v2.css），这条 `margin-top` 只服务回退路径。 */
 .document-editor-notice {
   margin-top: 12px;
 }

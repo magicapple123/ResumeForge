@@ -324,6 +324,20 @@
   justify-self: start;
 }
 
+/* 颜色行的读数不是数字而是**状态词**（无覆盖时写「随模板 / Template」），
+   所以它不能沿用参数栏给数字定的 44px 定宽：14px 下 4 个汉字要 56px，
+   实测 `clientWidth 44 / scrollWidth 56`，靠 `overflow: visible` 才"看起来没问题"，
+   代价是这一格的右边界失效、真放不下时会压到来源胶囊上。
+   这里改成"按内容定宽、下限 44"：中文 3 字 42px、英文 `Template` 约 58px 都装得下，
+   而 `min-width` 保住与上下数字行同一列的观感。所在列是 `minmax(0, 1fr)`，
+   宽度由内容决定、富余留白交给这一列的右半边（来源胶囊仍靠右收口）。
+   **只影响颜色行**：滑杆那几行的 44px 读数定宽是三条尾巴对齐的前提，不能顺手改。 */
+.resume-wb-col-params .resume-wb-color-row .resume-measure-value {
+  flex: 0 1 auto;
+  width: auto;
+  min-width: 44px;
+}
+
 /* 来源胶囊落在最后一列的右缘：与同栏其它参数行尾部那条竖线是同一条（那些行的尾部走
    `justify-self: end`，右边界都是行的内容盒右缘）。 */
 .resume-wb-color-row .resume-measure-source {

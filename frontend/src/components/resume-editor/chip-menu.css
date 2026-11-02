@@ -38,3 +38,22 @@
   font-size: 12px;
   color: var(--rf-text-secondary, #666);
 }
+
+/*
+ * 问题 15：样式浮层里的滑杆轨道整条消失（只剩「— ○ +」）。
+ *
+ * 根因：Slider 的内容宽度是 0（轨道 `.ant-slider-rail` 与握柄都是绝对定位），作为
+ * flex 子项默认 `flex: 0 1 auto`，没有显式宽度就被压到极限；全项目唯一给它定宽的
+ * 规则 `.resume-wb-col-params .ant-slider { flex: 0 0 88px }` 挂在**左栏参数栏**的
+ * 祖先类上，而本浮层是 `position: fixed` 挂在 `.document-editor` 内部，祖先链里没有它，
+ * 只剩 `.resume-wb-slider { min-width: 0 }` 这条豁免 —— 正好允许被压成 0。
+ *
+ * 所以这里必须给浮层内的滑杆自己的宽度约束：**能伸缩**（不能照抄左栏的 88px 定宽，
+ * 浮层还有 `max-width: calc(100vw - 24px)`），且有 80px 下限（300px 浮层里控件行可用
+ * 约 196px，减去两个 ± 按钮与两个 gap 还剩约 136px，80px 不会把 ± 挤出去）。
+ */
+.document-chip-style-popover .ant-slider {
+  flex: 1 1 120px;
+  min-width: 80px;
+  margin-inline: 4px;
+}

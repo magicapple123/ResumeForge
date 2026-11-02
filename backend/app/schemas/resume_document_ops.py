@@ -147,7 +147,11 @@ def normalize_document(document: ResumeDocument) -> ResumeDocument:
             if not items:
                 continue
             entries.append(entry.model_copy(update={"items": items}))
-        if not entries:
+        # 自建板块的「空」是合法中间态：新建后先保存、内容随后再填（任务 11）。
+        # 系统板块的空是真没内容，照旧丢弃。安全性：`custom:` 前缀只有本功能产出——
+        # document_converter 是 `if entries: sections.append(...)`（从不产出空板块），
+        # paper_content_builder 的 custom 走 content.custom_sections，不经过这里。
+        if not entries and not (key.startswith("custom:") and (section.title or "").strip()):
             continue
         sections.append(section.model_copy(update={"entries": entries}))
     doc.sections = sections

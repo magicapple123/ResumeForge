@@ -118,6 +118,66 @@ def test_a_record_needs_company_and_title(client):
     assert client.post("/api/tracker", json={"title": "后端开发"}).status_code == 422
 
 
+# ===== 已废弃失败列的向后兼容垫片（QA R1）=====
+
+# 0070 的三个自由文本失败列；真实现已换成 0073 的投递任务项稳定码。
+RETIRED_FAILURE_KEYS = {"failure_step", "failure_target", "failure_reason"}
+LEGACY_FAILURE_PAYLOAD = {
+    "failure_step": "filling",
+    "failure_target": "chat_input",
+    "failure_reason": "页面改版，选择器失效",
+}
+
+
+def _track_columns(db_session) -> set[str]:
+    """当前库里 ``application_track`` 的列名（用来证明这三列无处可落）。"""
+    from sqlalchemy import inspect
+
+    return {
+        column["name"] for column in inspect(db_session.get_bind()).get_columns("application_track")
+    }
+
+
+def test_create_tolerates_retired_failure_keys_and_stores_none_of_them(client, db_session):
+    """旧客户端仍会 POST 那三列：**静默丢弃**——201 而不是 422，且一处都不落库。
+
+    ``TrackRecordIn`` 是 ``extra="forbid"``：没有垫片时这三个键会从"被接收"变成 422，
+    那是对外契约的断崖式变更。垫片只丢这三个键，其它未知键仍然 422（见下一条用例）。
+    """
+    created = client.post("/api/tracker", json={**VALID, **LEGACY_FAILURE_PAYLOAD})
+    assert created.status_code == 201
+    body = created.json()
+    assert RETIRED_FAILURE_KEYS.isdisjoint(body)
+
+    track_id = body["id"]
+    # 详情与列表都不吐出这三列（契约里已经没有它们）。
+    assert RETIRED_FAILURE_KEYS.isdisjoint(client.get(f"/api/tracker/{track_id}").json())
+    assert RETIRED_FAILURE_KEYS.isdisjoint(client.get("/api/tracker").json()["items"][0])
+    # 库里也没有这三列：不是"存了空串"，而是根本没有落点。
+    assert RETIRED_FAILURE_KEYS.isdisjoint(_track_columns(db_session))
+
+
+def test_update_tolerates_retired_failure_keys(client):
+    """PUT 与 POST 同一条契约：整体替换时带上旧键也不能 422。"""
+    created = client.post("/api/tracker", json=VALID)
+    track_id = created.json()["id"]
+
+    updated = client.put(
+        f"/api/tracker/{track_id}",
+        json={**VALID, "status": "interview", **LEGACY_FAILURE_PAYLOAD},
+    )
+    assert updated.status_code == 200
+    assert updated.json()["status"] == "interview"
+    assert RETIRED_FAILURE_KEYS.isdisjoint(updated.json())
+
+
+def test_the_shim_does_not_relax_extra_forbid(client):
+    """垫片只认这三个名字：换个近义键仍然 422（``extra="forbid"`` 的严格性没被放宽）。"""
+    assert (
+        client.post("/api/tracker", json={**VALID, "failure_stage": "filling"}).status_code == 422
+    )
+
+
 # ===== 两步导入 =====
 
 

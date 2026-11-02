@@ -6,10 +6,27 @@
  *
  * | item 类型 | 允许的位置 | 理由 |
  * |---|---|---|
- * | field | title / meta / lead / trail / body / hidden | 六个抽屉都行 |
+ * | field | title / meta / lead / body / trail / hidden | 按纸面阅读序；body 见下 |
  * | list | lead / trail / hidden | 列表是灰色短字段；放头部会撑爆标题行 |
  * | authors | lead / trail / hidden | 作者列表是灰色短字段（论文 / 专利 trail） |
  * | text | 不参与位置拖拽（只有 hidden 开关） | 正文块不是"字段" |
+ *
+ * **inline 板块用另一套**（`allowedPlacementsForItem(item, "inline")` 返回
+ * `body / trail / hidden`）：纸面上行内板块只有两种角色——`_inline_rows` 里
+ * `role = body if placement == "body" else "meta"`，其余位置在渲染上完全等价。给用户
+ * 五个语义不同、结果相同的入口只会让人猜，所以行内只留「主文本 / 灰字补充 / 隐藏」。
+ *
+ * **field 可以在 body**（2026-11-02 修正）：`document_plan.py` 的 `_body_blocks` 明确支持
+ * 非 TextItem 的 body 分支，inline 板块的主文本与多行自定义字段都落在 body。之前把 body
+ * 从字段的允许列表里去掉，界面就把英文枚举 `body` 直接漏给了用户（antd Select 找不到
+ * 选项时回退显示原始值）。
+ *
+ * ## 域（zone）
+ *
+ * 六个位置分属四个域：`title/meta → head`、`lead/trail → detail`、`body`、`hidden`。
+ * **拖拽只在同域内允许**（`canDropIntoZone`）：跨域换位置得走位置下拉，因为下拉知道自己在
+ * 改什么，而拖过去只是一个"落在别的方框里"的动作，用户看不出发生了什么。`hidden` 与任何域
+ * 互通（隐藏/恢复是同一件事的两半）。
  *
  * 非法目标**静默返回原文档引用**（`=== before` 是调用方判断"没动"的依据），
  * 界面上必须据此给可读提示，不能假装成功。
@@ -24,32 +41,91 @@ import type {
   ResumeDocument,
   ResumeEntry,
   ResumeItem,
+  SectionKind,
 } from "../../types/resumeDocument";
 import { locatePath } from "./paths";
 
-const ALL_PLACEMENTS: readonly Placement[] = ["title", "meta", "lead", "body", "trail", "hidden"];
+/** field 能放的位置：按纸面阅读序，**含 body**（见文件头）。 */
+const FIELD_PLACEMENTS: readonly Placement[] = ["title", "meta", "lead", "body", "trail", "hidden"];
+
+/**
+ * 行内板块（`SectionKind === "inline"`）能放的位置：纸面上只有「黑字主文本 / 灰字补充 /
+ * 隐藏」三种结果，多出来的入口语义重复（见文件头）。
+ */
+const INLINE_PLACEMENTS: readonly Placement[] = ["body", "trail", "hidden"];
+
+/** 这个 item 在行内板块里的位置集（供 UI 判断"当前用的是哪一套文案"）。 */
+export function placementsForInlineSection(): readonly Placement[] {
+  return INLINE_PLACEMENTS;
+}
+
+/** 四个"方框"（域）：拖拽只在同域内允许。 */
+export type PlacementZone = "head" | "detail" | "body" | "hidden";
+
+const HEAD_PLACEMENTS: readonly Placement[] = ["title", "meta"];
+const DETAIL_PLACEMENTS: readonly Placement[] = ["lead", "trail"];
+
+/**
+ * 某个位置属于哪个方框。
+ *
+ * 刻意写成"白名单数组 + 判断"而不是 `Record<Placement, PlacementZone>` 表：后者是一个带
+ * `body:` 属性的对象字面量，会被 `i18n/cjkRatchet` 的产品文案扫描器当成文案
+ * （`COPY_PROPERTIES` 里有 `body`）而判成"新增未登记文案"。
+ */
+export function zoneOfPlacement(placement: Placement): PlacementZone {
+  if (HEAD_PLACEMENTS.includes(placement)) return "head";
+  if (DETAIL_PLACEMENTS.includes(placement)) return "detail";
+  return placement === "hidden" ? "hidden" : "body";
+}
 
 /** item 当前在哪个位置（TextItem 没有 placement，落 body / hidden 两个抽屉）。 */
 export function getItemPlacement(item: ResumeItem): Placement {
   return item.kind === "text" ? (item.hidden ? "hidden" : "body") : item.placement;
 }
 
-/** 这个 item 能放的位置列表（TextItem 返回空数组：它只能切换显示/隐藏）。 */
-export function allowedPlacementsForItem(item: ResumeItem): readonly Placement[] {
+/**
+ * 这个 item 能放的位置列表（TextItem 返回空数组：它只能切换显示/隐藏）。
+ *
+ * `sectionKind` 缺省 = 普通条目板块（`entries`）。传 `"inline"` 时用行内那一套
+ * （`body / trail / hidden`）——行内板块的纸面只有主文本与灰字两种角色。
+ * `list` / `authors` 在行内同样按行内那一套（它们没有标题行可放）。
+ */
+export function allowedPlacementsForItem(
+  item: ResumeItem,
+  sectionKind?: SectionKind,
+): readonly Placement[] {
+  if (item.kind === "text") return [];
+  if (sectionKind === "inline") return INLINE_PLACEMENTS;
   switch (item.kind) {
     case "field":
-      return ALL_PLACEMENTS;
+      return FIELD_PLACEMENTS;
     case "list":
     case "authors":
       return ["lead", "trail", "hidden"];
-    case "text":
     default:
+      // `text` 已在函数开头返回空数组，这里的 default 只是穷尽性兜底。
       return [];
   }
 }
 
-export function canPlaceItem(item: ResumeItem, placement: Placement): boolean {
-  return allowedPlacementsForItem(item).includes(placement);
+export function canPlaceItem(
+  item: ResumeItem,
+  placement: Placement,
+  sectionKind?: SectionKind,
+): boolean {
+  return allowedPlacementsForItem(item, sectionKind).includes(placement);
+}
+
+/**
+ * 能不能**拖着**放到这个位置：位置本身允许 + 同域（`hidden` 例外，与任何域互通）。
+ *
+ * 位置下拉不走这里——下拉按 `allowedPlacementsForItem` 列全部合法位置，那才是跨域的入口。
+ */
+export function canDropIntoZone(item: ResumeItem, placement: Placement): boolean {
+  if (!canPlaceItem(item, placement)) return false;
+  const from = getItemPlacement(item);
+  if (from === "hidden" || placement === "hidden") return true;
+  return zoneOfPlacement(from) === zoneOfPlacement(placement);
 }
 
 /** 把 item 的 placement 改成目标值；TextItem 只处理 hidden 开关，其余类型返回原引用。 */
@@ -106,7 +182,9 @@ export function moveItem(
   if (item.kind === "text") return document;
   const currentPlacement = getItemPlacement(item);
   const nextPlacement = target.placement ?? currentPlacement;
-  if (!canPlaceItem(item, nextPlacement)) return document;
+  // 换位置才校验白名单：历史数据里可能已经有 placement=body 的字段，它在原组内换序仍要能动
+  // （否则用户会看到"这条怎么拖都没反应"，且没有任何提示能解释）。
+  if (nextPlacement !== currentPlacement && !canPlaceItem(item, nextPlacement)) return document;
 
   const remaining = entry.items.slice();
   remaining.splice(itemIndex, 1);

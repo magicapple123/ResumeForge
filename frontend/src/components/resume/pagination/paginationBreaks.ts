@@ -1,13 +1,23 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * 分页面板的数据层（Q08）：把「已设置的断页」收集成芯片、单个清除、板块级一键恢复。
+ * 断页的数据层（Q08 / 任务 12）：把「已设置的断页」收集成芯片、单个清除、板块级一键恢复。
  *
  * 断页的落点只有两处（v2 文档模型，与 planner 一致）：
- * - 板块级：`section.layout.start_on_new_page / keep_together`；
- * - 条目级：`section.entries[j].layout.start_on_new_page / keep_together`（Q08 起条目级
- *   控件挪进「本份简历结构」页签，本芯片区仍是它的可见汇总）。
+ * - 板块级：`section.layout.start_on_new_page`；
+ * - 条目级：`section.entries[j].layout.start_on_new_page / keep_together`（控件在
+ *   「本份简历结构」页签，本芯片区只是它的可见汇总）。
  *
- * 面板只把新文档交给宿主（历史/保存由工作台负责），所以这里全部是纯函数、不改入参。
+ * ## 任务 12：谁能设置，谁才能清除
+ *
+ * 板块级的 `keep_together` 从来没有渲染端消费（planner 不读板块级 keep_together），
+ * 界面上也早已删掉那个开关——但汇总条曾经照样把它列出来并给 ✕，于是出现"面板能清、
+ * 却没有任何地方能设"的死字段。现在两个维度按 type 分开：
+ * - `SECTION_FLAGS` 只有 `start_on_new_page`（参数页签能设，也能清）；
+ * - `ENTRY_FLAGS` 两个都给（结构页签能设，也只能在结构页签清）。
+ *
+ * **字段不删**：历史 JSON 里可能已有 `section.layout.keep_together = true`，它继续留在
+ * 文档里（保存不丢），只是不再被收集、不再展示、也不被「恢复自然分页」触碰——删字段
+ * 会让老文档在下次保存时静默改变形状。
  */
 import type { ResumeDocument } from "../../../types/resumeDocument";
 import { entryDisplayLabel } from "../../../features/resume-document/summarize";
@@ -32,13 +42,17 @@ export interface ConfiguredPageBreak {
   entryLabel?: string;
 }
 
-const FLAGS: readonly PageBreakFlag[] = ["start_on_new_page", "keep_together"];
+/** 板块级能设的断页开关：只有「从新页开始」（`keep_together` 从未被渲染端消费）。 */
+export const SECTION_FLAGS: readonly PageBreakFlag[] = ["start_on_new_page"];
+
+/** 条目级能设的断页开关：两个都有效（planner 读 `entry.layout.*`）。 */
+export const ENTRY_FLAGS: readonly PageBreakFlag[] = ["start_on_new_page", "keep_together"];
 
 /** 扫描文档里所有显式打开的断页开关（隐藏条目也算：它的断页设置在解锁后仍生效）。 */
 export function collectPageBreaks(document: ResumeDocument): ConfiguredPageBreak[] {
   const rows: ConfiguredPageBreak[] = [];
   for (const section of document.sections) {
-    for (const flag of FLAGS) {
+    for (const flag of SECTION_FLAGS) {
       if (!section.layout[flag]) continue;
       rows.push({
         id: `section:${section.key}:${flag}`,
@@ -50,7 +64,7 @@ export function collectPageBreaks(document: ResumeDocument): ConfiguredPageBreak
     }
     for (const entry of section.entries) {
       if (!entry.id) continue;
-      for (const flag of FLAGS) {
+      for (const flag of ENTRY_FLAGS) {
         if (!entry.layout[flag]) continue;
         rows.push({
           id: `entry:${section.key}:${entry.id}:${flag}`,
@@ -81,16 +95,23 @@ export function clearPageBreak(
 
 /** 是否还有板块级断页（决定「恢复自然分页」是否可点）。 */
 export function hasSectionPageBreaks(document: ResumeDocument): boolean {
-  return document.sections.some((section) => FLAGS.some((flag) => Boolean(section.layout[flag])));
+  return document.sections.some((section) =>
+    SECTION_FLAGS.some((flag) => Boolean(section.layout[flag])),
+  );
 }
 
-/** 「恢复自然分页」：清掉**全部板块级**断页；条目级断页不受影响（面板上有这句说明）。 */
+/**
+ * 「恢复自然分页」：只清**板块级** `start_on_new_page`。
+ *
+ * 条目级断页由结构页签管理（面板上写明），历史遗留的 `section.layout.keep_together`
+ * 既不展示也不清除——它不在 `SECTION_FLAGS` 里，等于「不认识、也不动」。
+ */
 export function restoreSectionPagination(document: ResumeDocument): ResumeDocument {
   if (!hasSectionPageBreaks(document)) return document;
   let next = document;
   for (const section of document.sections) {
     const patch: Partial<Record<PageBreakFlag, boolean>> = {};
-    for (const flag of FLAGS) if (section.layout[flag]) patch[flag] = false;
+    for (const flag of SECTION_FLAGS) if (section.layout[flag]) patch[flag] = false;
     if (Object.keys(patch).length > 0) {
       next = patchSectionLayout(next, section.key, patch);
     }

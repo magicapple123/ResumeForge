@@ -34,9 +34,11 @@ from typing import TYPE_CHECKING
 
 from fpdf.enums import XPos, YPos
 
+from ..resume.column_geometry import resolved_column_geometry
 from .fonts import FONT_FAMILY
 from .layout import _PX_TO_PT
-from .style_blocks import _color, _line_height, _scale, _wrapmode_args, draw_meta_line
+from .meta_lines import draw_meta_line, sub_gaps
+from .style_blocks import _color, _line_height, _scale, _wrapmode_args
 
 if TYPE_CHECKING:  # pragma: no cover - 只为类型检查，运行期不能导入 canvas（会循环导入）
     from ..resume.resume_style import RoleStyle
@@ -128,14 +130,47 @@ def column_widths(
     return widths
 
 
+def resolve_cell_widths(
+    pdf: _ResumePDF,
+    rows: Sequence[Sequence[Sequence[str]]],
+    columns: int,
+    layout,
+    gap_mm: float,
+) -> tuple[list[float], float | Sequence[float]]:
+    """任务 13：把「逐列宽度 / 逐间隔」翻译成 PDF 的 (列宽列表, 间距)。
+
+    与 HTML 的 `grid-template-columns` 共用 `resolved_column_geometry` 的判据（长度对不上
+    就整体作废）。三种情况：
+
+    * 有逐列宽度：按百分比切**扣掉间距后的可用宽**（与 CSS 百分比相对网格内容宽同口径）；
+    * 只有逐间隔：等分剩余宽度（间距之和已变，再按内容量宽的口径对不上）；
+    * 都没有：沿用 `column_widths` 的"按内容量宽"，旧产物逐字节不变。
+    """
+    explicit_widths, explicit_gaps = resolved_column_geometry(
+        columns, layout.column_widths, layout.column_gaps
+    )
+    gap_list = [pdf.layout.gap_mm(ratio) for ratio in explicit_gaps] if explicit_gaps else None
+    total_gap = sum(gap_list) if gap_list else gap_mm * (columns - 1)
+    available = max(0.0, pdf.frame_width - total_gap)
+    if explicit_widths is not None:
+        widths = [available * share / 100.0 for share in explicit_widths]
+    elif gap_list is not None:
+        widths = [available / columns for _ in range(columns)]
+    else:
+        widths = column_widths(pdf, rows, columns, gap_mm, pdf.frame_width)
+    return widths, (gap_list if gap_list is not None else gap_mm)
+
+
 def draw_meta_columns(
     pdf: _ResumePDF,
     cells: Sequence[Sequence[str]],
     widths: Sequence[float],
-    gap: float,
+    gap: float | Sequence[float],
     base: float,
     *,
     style: RoleStyle | None = None,
+    first: bool = True,
+    last: bool = True,
 ) -> None:
     """一行 ``cells`` 按预算好的 ``widths`` 并排绘制（几何与 ``draw_meta_line`` 同口径）。
 
@@ -147,6 +182,12 @@ def draw_meta_columns(
         gap: 列间距（mm）。
         base: 基准字号（px，= 模板 ``--fs``）。
         style: ``meta`` 角色的样式覆盖（字号缩放 / 字色），与 ``meta_line`` 同一份语义。
+        first: 是否是这一组的**第一行**（问题 17：True 时加组前段距）。
+        last: 是否是这一组的**最后一行**（问题 17：True 时加组后段距）。
+
+    Note:
+        「一行多个 cell」本身属于**同一行**，组语义落在"行"上，不要把同一个 ``first``
+        分给行里的每个 cell（那等于按 cell 重复加段距，正是问题 17 的老毛病）。
     """
     texts = _cell_texts(cells)
     if not texts:
@@ -157,13 +198,13 @@ def draw_meta_columns(
     if count <= 1 or count < len(texts) or any(width < _MIN_COLUMN_WIDTH for width in used):
         # 只剩一栏 / 栏数不够放完 / 栏太窄（间距过大或压缩后）：整行退回单段绘制，
         # 内容一个都不丢（宁可少一列，也不能把正文画成竖排或裁掉）。
-        draw_meta_line(pdf, _ROW_SEPARATOR.join(texts), base, style=style)
+        draw_meta_line(pdf, _ROW_SEPARATOR.join(texts), base, style=style, first=first, last=last)
         return
 
     size = base * layout.entry_sub_ratio * _scale(style)
     line_height = _line_height(pdf, style, size)
-    gap_top = layout.gap_mm(layout.sub_gap_top)
-    gap_bottom = layout.gap_mm(layout.sub_gap_bottom)
+    # 问题 17：段距只在组的两端出现（与 draw_meta_line 共用 `sub_gaps` 一份判据）。
+    gap_top, gap_bottom = sub_gaps(layout, first=first, last=last)
     # 量宽与绘制同一个字体（见 `set_meta_font` 的 docstring）。
     set_meta_font(pdf, base, style)
     # 整行高度取各列折行后的最大值：否则高的一列会压到下一行（行距由最高的列决定）。
@@ -173,13 +214,14 @@ def draw_meta_columns(
         for width, text in zip(used, texts, strict=True)
     )
     pdf.ensure_space(gap_top + row_height)
-    pdf.ln(gap_top)
+    if gap_top:
+        pdf.ln(gap_top)
     pdf.set_text_color(*_color(style, pdf.muted_text))
     y_top = pdf.get_y()
     # 逐列起点 = 前面各列预算宽度之和 + 各 gap：第二列因此是"第一列内容宽之后 + gap"，
     # 而不是"容器一半"（后者会让 gap 变化时只有半个位移，与预览观感对不上）。
     x = pdf.frame_left
-    for text, width in zip(texts, used, strict=True):
+    for position, (text, width) in enumerate(zip(texts, used, strict=True)):
         pdf.set_xy(x, y_top)
         pdf.multi_cell(
             width,
@@ -190,12 +232,43 @@ def draw_meta_columns(
             new_y=YPos.TOP,
             **_wrapmode_args(pdf, text, width, size * _PX_TO_PT),
         )
-        x += width + gap
+        # 逐间隔（任务 13）：给了标量就所有列共用一个间距，否则取第 position 个。
+        # 正向 isinstance 收窄（pyright 无法从「非 list/tuple」排除任意 Sequence[float]）。
+        step = float(gap) if isinstance(gap, (int, float)) else float(gap[position])
+        x += width + step
     # 行高按"最高列"落定，光标的 y 才是下一行的起点（multi_cell 的 TOP 定位不改 y）。
     pdf.set_y(y_top + row_height)
     pdf.set_x(pdf.frame_left)
-    pdf.ln(gap_bottom)
+    if gap_bottom:
+        pdf.ln(gap_bottom)
     pdf.set_text_color(*pdf.body_text)
 
 
-__all__ = ["column_widths", "draw_meta_columns", "set_meta_font"]
+def justify_gap(
+    pdf: _ResumePDF,
+    widths: Sequence[float],
+    gap: float | Sequence[float],
+    justify: str | None,
+) -> float | Sequence[float]:
+    """分布 = 两端时把剩余空白均分进列间；其余情况原样返回（问题 4）。
+
+    与 HTML 的 `justify-content: space-between` 对齐：列宽**仍按内容**，只是把
+    「版心宽 − Σ列宽 − 原间距」平均加到每段间距上，于是最后一列的右缘正好落在内容区
+    右边界。以下情况不生效（与模板挂 class 的判据逐条对应）：
+
+    * ``justify != "between"``（默认「靠左」）；
+    * 只有一列（没有"之间"可言）；
+    * 给了**逐间隔**列表（间隔已由用户逐段设定，再摊剩余空间会把它改掉）；
+    * 给了逐列宽度（合计 100%，本就没有剩余空间；此时 remaining ≤ 0 自然跳过）。
+    """
+    # 正向收窄：gap 是标量才继续摊剩余空间（逐间隔列表原样返回）。
+    if justify != "between" or len(widths) <= 1 or not isinstance(gap, (int, float)):
+        return gap
+    base_gap = float(gap)
+    remaining = pdf.frame_width - sum(widths) - base_gap * (len(widths) - 1)
+    if remaining <= 0:
+        return gap
+    return base_gap + remaining / (len(widths) - 1)
+
+
+__all__ = ["column_widths", "draw_meta_columns", "justify_gap", "set_meta_font"]

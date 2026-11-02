@@ -13,9 +13,11 @@ from functools import partial
 from io import BytesIO
 
 from docx.enum.text import WD_ALIGN_PARAGRAPH
+from docx.oxml import OxmlElement
+from docx.oxml.ns import qn
 from docx.shared import Mm
 
-from ..schemas.resume_document import EntryLayout
+from ..schemas.resume_document import EntryLayout, RowLayout
 from ..schemas.resume_document_plan import BlockPlan, CellPlan, DocumentPlan, Inline
 from .docx_blocks import (
     DocxTheme,
@@ -26,8 +28,10 @@ from .docx_blocks import (
     set_run_font,
 )
 from .docx_rich import add_rich_runs
-from .pdf_exporter import _PX_TO_MM, _PX_TO_PT, _photo_bytes, fit_photo_size
-from .resume.resume_contact import WORD_SEPARATOR
+from .docx_text_measure import make_text_measure
+from .pdf_exporter import _PX_TO_MM, _PX_TO_PT, PAGE_WIDTH_MM, _photo_bytes, fit_photo_size
+from .resume.column_geometry import resolved_column_geometry
+from .resume.resume_contact import WORD_SEPARATOR, pack_contact_lines
 from .resume.resume_style import RoleStyle
 
 #: 角色/对象覆盖查询函数（与 PDF / HTML 同一形态）；None = 模板默认。
@@ -153,8 +157,13 @@ def draw_header(
     theme: DocxTheme,
     accent: tuple[int, int, int],
     accent_soft: tuple[int, int, int],
+    font_key: str | None = None,
 ) -> None:
-    """页眉：姓名 + 姓名附带字段 + 意向 + 联系方式（planner 已给好每行）+ 浮动照片。"""
+    """页眉：姓名 + 姓名附带字段 + 意向 + 联系方式（planner 已给好每行）+ 浮动照片。
+
+    `font_key` 是这份简历选的字体键（`format_config` 的字体项）：联系方式装行要用它
+    解析字体文件来量文本宽度（与 PDF 同一条解析链），不传则跟随当前全局字体/系统候选。
+    """
     set_font = partial(set_run_font, font_name=theme.font_name)
     name_text = plain_text(plan.header.name)
     meta_text = plain_text(plan.header.name_meta)
@@ -181,6 +190,9 @@ def draw_header(
         )
 
     photo = _photo_bytes(plan.header.photo) if (plan.header.photo and include_photo) else None
+    # 照片栏宽度（mm）：装行时要从可用宽度里扣掉，与 PDF 的 `text_width = inner - photo_box`
+    # 同口径。照片坏了/没有时为 0。
+    photo_box_mm = 0.0
     if photo:
         try:
             photo_w = layout.gap_mm(layout.photo_width_ratio)
@@ -193,6 +205,7 @@ def draw_header(
                 align="left" if layout.header_photo_side == "left" else "right",
                 vertical_offset_mm=max(0.0, (photo_h - draw_h) / 2),
             )
+            photo_box_mm = photo_w + 6
         except Exception:  # noqa: BLE001 - 照片坏了不能阻断导出
             pass
 
@@ -207,13 +220,27 @@ def draw_header(
             color=theme.muted_text,
         )
 
-    contact_lines = [
-        WORD_SEPARATOR.join(
-            str(seg.text or "").strip() for seg in line if str(seg.text or "").strip()
-        )
+    # 联系方式：**与 PDF 同一套装行算法**（2026-11 #9）。此前把 planner 分好的每组字段
+    # 拼成一个段落交给 Word 自己度量，行分布与预览/PDF 必然不同（字段间隔 2em 时代更明显）。
+    contact_groups = [
+        [str(seg.text or "").strip() for seg in line if str(seg.text or "").strip()]
         for line in plan.header.contact_lines
     ]
-    contact_lines = [line for line in contact_lines if line]
+    contact_groups = [group for group in contact_groups if group]
+    if contact_groups:
+        # 可用宽度 = 版心宽 − 页头左右内边距（PDF 的 inner_width）− 照片栏。
+        contact_width_mm = (
+            PAGE_WIDTH_MM
+            - float(layout.margin_left)
+            - float(layout.margin_right)
+            - 2 * layout.gap_mm(layout.header_pad_x)
+            - photo_box_mm
+        )
+        measure = make_text_measure(base * layout.contact_ratio, font_key)
+        packed = pack_contact_lines(contact_groups, contact_width_mm, measure, WORD_SEPARATOR)
+        contact_lines = [WORD_SEPARATOR.join(line) for line in packed]
+    else:
+        contact_lines = []
     if contact_lines:
         contact_node = paragraph(doc)
         header_paragraphs.append(contact_node)
@@ -303,10 +330,66 @@ def draw_blocks(
     flush()
 
 
+def apply_column_geometry(
+    table, doc, columns: int, layout: EntryLayout | RowLayout, *, base: float
+) -> None:
+    """把逐列宽度 / 逐间隔 / 分布写进 Word 表格（任务 13 + 问题 4）。
+
+    - 宽度：百分比按**扣掉间隔后的可用宽**折算，保证 40/30/30 与 HTML 的口径一致
+      （HTML 里百分比是相对网格内容宽，间隔由 padding 表达，不占百分比）；
+    - 间隔：Word 没有逐列 `column-gap`，只能落到每个单元格的右边距（`w:tcMar/w:right`）；
+    - 分布 = 两端（`justify="between"`）：Word 的表格没有 `space-between`，只能"表格铺满
+      版心 + 每列等宽"来近似（列宽无法按内容量），最后一列由 `draw_cell_rows` 右对齐，
+      于是最后一段文字的右缘同样落在版心右边界；
+    - 三者都没给（或长度对不上）就直接返回，不改表格任何属性——旧文档产物逐字节不变。
+    """
+    widths, gaps = resolved_column_geometry(columns, layout.column_widths, layout.column_gaps)
+    between = (getattr(layout, "justify", None) or "start") == "between" and widths is None
+    if widths is None and gaps is None and not between:
+        return
+    section = doc.sections[-1]
+    total_emu = int(section.page_width - section.left_margin - section.right_margin)
+    gap_mm = [float(gap) * base * _PX_TO_MM for gap in (gaps or [])]
+    usable_emu = total_emu - int(Mm(sum(gap_mm)))
+    if between:
+        # 铺满版心：每列均分（Word 没有"按内容量宽"，等宽是唯一稳定的近似）。
+        widths = [100.0 / columns for _ in range(columns)]
+    if widths is not None:
+        table.autofit = False
+        for index, share in enumerate(widths):
+            table.columns[index].width = int(usable_emu * share / 100.0)
+        for row in table.rows:
+            for index, cell in enumerate(row.cells):
+                if index < columns:
+                    cell.width = table.columns[index].width
+    if gaps is not None:
+        for row in table.rows:
+            for index, cell in enumerate(row.cells):
+                if index < len(gap_mm):
+                    set_cell_right_margin(cell, gap_mm[index])
+
+
+def set_cell_right_margin(cell, millimetres: float) -> None:
+    """单个单元格的右边距（twips）。python-docx 没有暴露 tcMar，只能碰 XML。"""
+    if millimetres <= 0:
+        return
+    tc_pr = cell._tc.get_or_add_tcPr()
+    margins = tc_pr.find(qn("w:tcMar"))
+    if margins is None:
+        margins = OxmlElement("w:tcMar")
+        tc_pr.append(margins)
+    right = margins.find(qn("w:right"))
+    if right is None:
+        right = OxmlElement("w:right")
+        margins.append(right)
+    right.set(qn("w:w"), str(int(Mm(millimetres).twips)))
+    right.set(qn("w:type"), "dxa")
+
+
 def draw_cell_rows(
     doc,
     rows: Sequence[Sequence[CellPlan]],
-    layout: EntryLayout,
+    layout: RowLayout,
     *,
     base: float,
     page_layout,
@@ -314,12 +397,24 @@ def draw_cell_rows(
     role_style: RoleStyleQuery | None,
     object_id: str | None,
 ) -> None:
-    """lead / trail：equal = 无框表格（solo 行合并）；flow = 一行段落。"""
+    """lead / trail：equal = 无框表格（solo 行合并）；flow = 一行段落。
+
+    ``layout`` 是**这一侧**的生效列布局（问题 4：正文前 / 正文后可以各是不同列数）。
+
+    逐列宽度 / 逐间隔（任务 13）：给了宽度就按内容宽的比例设每一列的列宽；给了间隔就
+    把间隔做成"右侧单元格边距"（Word 的表格只有统一 cell spacing，逐间隔只能落在单元格
+    边距上）。长度对不上时 `resolved_column_geometry` 返回 (None, None)，表格回到默认
+    等宽——产物字节与改前一致。
+
+    分布 = 两端（问题 4）：表格铺满版心（见 `apply_column_geometry`），**最后一列右对齐**，
+    于是最后一段文字的右缘与 PDF / HTML 一样落在内容区右边界。
+    """
     if not rows:
         return
     meta_style = style_of(role_style, "meta", object_id)
     align = layout.align or "equal"
     columns = int(layout.columns or 1)
+    between = (layout.justify or "start") == "between" and columns > 1
     if align == "flow" or columns <= 1:
         for row in rows:
             if not row:
@@ -334,6 +429,7 @@ def draw_cell_rows(
             )
         return
     table = doc.add_table(rows=len(rows), cols=columns)
+    apply_column_geometry(table, doc, columns, layout, base=base)
     for row_index, row in enumerate(rows):
         cells = [table.cell(row_index, index) for index in range(columns)]
         if len(row) == 1 and columns > 1:
@@ -341,6 +437,9 @@ def draw_cell_rows(
         for index, cell in enumerate(cells):
             node = cell.paragraphs[0]
             node.paragraph_format.space_after = Mm(0)
+            # 分布 = 两端：最后一列右对齐（表格已铺满版心），让末段文字贴住右边界。
+            if between and not (len(row) == 1 and columns > 1) and index == len(cells) - 1:
+                node.alignment = WD_ALIGN_PARAGRAPH.RIGHT
             segments = row[min(index, len(row) - 1)].segments if row else []
             add_segments(
                 node,

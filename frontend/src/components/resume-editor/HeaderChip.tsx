@@ -23,6 +23,8 @@ import { enumLabelOf } from "../../features/resume-document/fieldCatalog";
 import { useDocumentChipMenu } from "./documentChipMenuContext";
 import { useDocumentDrag } from "./documentDragContext";
 import { useChipExpandGesture } from "./useChipExpandGesture";
+import CroppedPhotoThumb from "./CroppedPhotoThumb";
+import type { PhotoCropParams } from "../../features/resume-proview/photoCrop";
 
 type ChipDragEvent = DragEvent<HTMLElement>;
 type ChipKeyEvent = KeyboardEvent<HTMLElement>;
@@ -40,6 +42,13 @@ interface Props {
   onNotice: (text: string, tone?: "info" | "warning") => void;
   /** 拖到本 chip 上：父级按"插到这一格之前"换算落点。 */
   onDropItem?: (draggedPath: string) => void;
+  /**
+   * 任务 6：照片字段的裁剪参数（`format_config.photo_crop`）。
+   *
+   * 非破坏裁剪后 `item.value` 永远是**原图**，缩略图必须按这个参数取景，否则用户裁完
+   * 看到 chip 里还是整张原图，会以为没生效。非照片字段传 `null` 即可。
+   */
+  photoCrop?: PhotoCropParams | null;
   /** 展开态渲染的字段编辑器。 */
   children?: ReactNode;
 }
@@ -55,6 +64,7 @@ export default function HeaderChip({
   onChange,
   onNotice,
   onDropItem,
+  photoCrop = null,
   children,
 }: Props) {
   const { t } = useI18n();
@@ -259,7 +269,12 @@ export default function HeaderChip({
           {canMove ? <HolderOutlined className="document-chip-drag" aria-hidden="true" /> : null}
           {label ? <span className="document-chip-label">{label}</span> : null}
           {photo ? (
-            <img className="document-chip-photo" src={photo} alt={t("document.photo.thumbnail")} />
+            <CroppedPhotoThumb
+              photo={photo}
+              crop={photoCrop}
+              className="document-chip-photo"
+              alt={t("document.photo.thumbnail")}
+            />
           ) : (
             <span
               className={`document-chip-value${valueText ? "" : " document-chip-placeholder"}`}

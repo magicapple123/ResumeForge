@@ -7,6 +7,7 @@ import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { t } from "../../i18n";
 import type { ResumeDocument } from "../../types/resumeDocument";
+import type { ResumeLayout } from "../../types";
 import { makeDocument } from "../../features/resume-document/documentFixtures";
 import DocumentEditor from "./DocumentEditor";
 
@@ -99,5 +100,62 @@ describe("DocumentEditor · 字段与条目右键菜单", () => {
     fireEvent.contextMenu(secondHead);
     fireEvent.click(await screen.findByText(t("document.entry.remove")));
     expect(lastDocument(second.onChange).sections[0].entries).toHaveLength(1);
+  });
+});
+
+/** #7 的排版浮层需要 layout 通道：给了 onLayoutChange 才会渲染（见 ChipStylePopover）。 */
+function makeLayout(): ResumeLayout {
+  return {
+    template: "classic",
+    font_scale: "standard",
+    format_config: {},
+  } as unknown as ResumeLayout;
+}
+
+describe("DocumentEditor · 条目菜单 #7（排版整条…）", () => {
+  it("条目头右键菜单共 6 项，首项「排版整条…」打开整条范围的浮层", async () => {
+    const onLayoutChange = vi.fn();
+    const { container } = renderEditor(makeDocument(), {
+      layout: makeLayout(),
+      onLayoutChange,
+    });
+    fireEvent.click(screen.getByRole("tab", { name: t("editor.section.education") }));
+
+    const head = container.querySelector(
+      '[data-document-entry="education.ob_entry001"] .document-entry-head',
+    ) as HTMLElement;
+    fireEvent.contextMenu(head, { clientX: 24, clientY: 36 });
+
+    // 6 项：排版整条… / 上移 / 下移 / 复制 / 隐藏 / 移除（分隔线不算项）。
+    const menu = await screen.findByRole("menu");
+    expect(within(menu).getAllByRole("menuitem")).toHaveLength(6);
+    expect(within(menu).getByText(t("document.entry.styleWhole"))).toBeInTheDocument();
+    expect(within(menu).getByText(t("document.entry.moveUp"))).toBeInTheDocument();
+    expect(within(menu).getByText(t("document.entry.remove"))).toBeInTheDocument();
+
+    fireEvent.click(within(menu).getByText(t("document.entry.styleWhole")));
+    // 范围锁定「整条」：标题里的 scope 就是它，浮层不再提供范围切换。
+    const dialog = await screen.findByRole("dialog");
+    expect(dialog.getAttribute("aria-label") ?? "").toContain(
+      t("typography.entryStyle.scope.object"),
+    );
+    // 排版走 layout 通道，不写正文：document 一次都没被改。
+    expect(onLayoutChange).not.toHaveBeenCalled();
+  });
+
+  it("「⋯」按钮打开的是同一份 6 项菜单", async () => {
+    const onLayoutChange = vi.fn();
+    const { container } = renderEditor(makeDocument(), {
+      layout: makeLayout(),
+      onLayoutChange,
+    });
+    fireEvent.click(screen.getByRole("tab", { name: t("editor.section.education") }));
+    const head = container.querySelector(
+      '[data-document-entry="education.ob_entry001"] .document-entry-head',
+    ) as HTMLElement;
+    fireEvent.click(within(head).getByRole("button", { name: t("document.entry.more") }));
+    const menu = await screen.findByRole("menu");
+    expect(within(menu).getAllByRole("menuitem")).toHaveLength(6);
+    expect(within(menu).getByText(t("document.entry.styleWhole"))).toBeInTheDocument();
   });
 });

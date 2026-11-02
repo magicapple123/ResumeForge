@@ -16,6 +16,14 @@ import {
   renderEducation,
 } from "./DocumentEditor.test";
 
+/**
+ * 自建板块的标题夹具。
+ *
+ * 刻意用非中文：`cjkRatchet` 的 tests 口径统计"中文断言行"，新增中文界面文案会被判红；
+ * 板块标题是**数据**而不是界面文案，用 ASCII 就与棘轮无关（同 `Society president` 先例）。
+ */
+const CUSTOM_TITLE = "Society life";
+
 describe("DocumentEditor 板块形态与页眉", () => {
   it("inline kind：渲染行内提示与已有技能 chip", () => {
     const document = makeDocument();
@@ -218,5 +226,64 @@ describe("DocumentEditor 板块形态与页眉", () => {
     fireEvent.click(await screen.findByText(t("editor.field.studyForm")));
     const items = lastDocument(onChange).sections[0].entries[0].items;
     expect(items.some((item) => (item as { key?: string }).key === "study_form")).toBe(true);
+  });
+
+  /**
+   * 任务 11 返工：删除自建板块的入口只挂在**自建板块的右键菜单**上。
+   * 系统板块不是"菜单项灰掉"，而是整个菜单都不出现（它们只能隐藏/改标题）。
+   */
+  it("任务 11 返工：自建板块页签右键有「删除这个板块」，系统板块没有", async () => {
+    const document = makeDocument();
+    const custom = makeSection({});
+    (custom as { title: string }).title = CUSTOM_TITLE;
+    document.sections.push(custom);
+
+    const customView = renderEditor(document);
+    fireEvent.contextMenu(screen.getByRole("tab", { name: CUSTOM_TITLE }));
+    expect(await screen.findByText(t("editor.custom-sections.remove-section"))).toBeInTheDocument();
+    customView.unmount();
+
+    // 系统板块（教育经历）右键：菜单根本不弹，所以文案查不到。
+    renderEditor(document);
+    fireEvent.contextMenu(screen.getByRole("tab", { name: t("editor.section.education") }));
+    expect(screen.queryByText(t("editor.custom-sections.remove-section"))).toBeNull();
+  });
+
+  /**
+   * 任务 11 返工：点菜单还没改文档——必须先过确认弹窗；确认后写回文档、选中落到相邻板块、
+   * 并给一条"已删除"的提示（提示里带板块名，用户才知道删掉的是哪一个）。
+   */
+  it("任务 11 返工：确认后删除自建板块，选中落到相邻板块并给提示", async () => {
+    const document = makeDocument();
+    const custom = makeSection({});
+    (custom as { title: string }).title = CUSTOM_TITLE;
+    // 页签顺序：基本信息 / 教育经历 / 个人总结 / 自建；删的是**最后一条**。
+    document.sections.push(custom);
+    const { onChange, onSelectPath } = renderEditor(document);
+
+    fireEvent.contextMenu(screen.getByRole("tab", { name: CUSTOM_TITLE }));
+    fireEvent.click(await screen.findByText(t("editor.custom-sections.remove-section")));
+
+    // 二次确认：正文说清"只删本份简历 + 可撤销"。
+    expect(
+      await screen.findByText(t("document.section.removeBody", { section: CUSTOM_TITLE })),
+    ).toBeInTheDocument();
+    expect(onChange).not.toHaveBeenCalled();
+
+    // 主按钮文案是两个汉字，antd 会自动插空格，按文案取不到；弹窗 footer 的最后一个按钮
+    // 就是主按钮（前面依次是 × 与「取消」）。
+    const dialog = await screen.findByRole("dialog");
+    const dialogButtons = within(dialog).getAllByRole("button");
+    fireEvent.click(dialogButtons[dialogButtons.length - 1]);
+
+    expect(lastDocument(onChange).sections.map((section) => section.key)).toEqual([
+      "education",
+      "summary",
+    ]);
+    // 删最后一条 → 选中交给前一条（个人总结），不留悬空选中。
+    expect(onSelectPath).toHaveBeenLastCalledWith("summary");
+    expect(
+      screen.getByText(t("document.section.removed", { section: CUSTOM_TITLE })),
+    ).toBeInTheDocument();
   });
 });

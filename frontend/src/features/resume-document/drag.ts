@@ -11,7 +11,13 @@
  * - TextItem 不参与拖拽（没有 placement），返回 null。
  */
 import type { Placement, ResumeItem } from "../../types/resumeDocument";
-import { allowedPlacementsForItem, getItemPlacement } from "./placement";
+import {
+  allowedPlacementsForItem,
+  canDropIntoZone,
+  canPlaceItem,
+  getItemPlacement,
+  zoneOfPlacement,
+} from "./placement";
 
 export type DragDirection = "up" | "down" | "left" | "right";
 
@@ -86,4 +92,78 @@ export function slotOf(items: readonly ResumeItem[], item: ResumeItem): DragSlot
   const group = placementGroup(items, placement);
   const index = group.findIndex((candidate) => candidate.id === item.id);
   return index < 0 ? null : { placement, index };
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// 鼠标拖放的落点语义（问题 13）
+// ────────────────────────────────────────────────────────────────────────────
+
+/** 落点侧：插到目标 chip 的前面 / 后面（由光标与 chip 中线的左右关系决定）。 */
+export type DropSide = "before" | "after";
+
+/** 一次落点判定的结果。 */
+export interface DropResolution {
+  /**
+   * 交给 `moveItem` 的组内下标。
+   *
+   * ⚠️ 语义是**摘除拖拽项之后**的下标（`moveItem` 的既定契约，键盘移动也依赖它）。
+   * 鼠标看到的是"可见下标"，同组且被拖项排在目标之前时要补回 1 位——这个换算**只在这里做一次**，
+   * 调用方（dragover / drop）必须共用本函数的输出，不允许各算一份：
+   * 两份实现一定会漂移，表现就是"线画在右边、落点却在左边"。
+   */
+  toIndex: number;
+  /** 插完不动（落点就是它原来的槽位）——不画插入线、光标禁止、松手给「已经在这个位置」。 */
+  noop: boolean;
+}
+
+/**
+ * 由「目标组 + 落点侧」算出 `moveItem` 的下标，并判出这次落点是不是 no-op。
+ *
+ * @param groupIds 目标位置组的 item id（**顺序即纸面顺序**，必须已完成拖拽项摘除之后的下标语义）
+ * @param draggedId 被拖动的 item id；不在该组里（跨组 / 跨条目）时按"插入"处理，永不 no-op
+ * @param targetIndex 目标 chip 在组内的**可见**下标
+ * @param side 落在目标 chip 的左半边（before）还是右半边（after）
+ */
+export function resolveDropIndex(
+  groupIds: readonly string[],
+  draggedId: string,
+  targetIndex: number,
+  side: DropSide,
+): DropResolution {
+  const draggedIndex = groupIds.indexOf(draggedId);
+  if (draggedIndex >= 0 && draggedIndex === targetIndex) {
+    // 落在**自己身上**：插到自己前面/后面都等于原地——把自己摘掉之后，那个"前/后"就不存在了。
+    // 不特判的话"拖到自己的右半边"会算出 toIndex = 下标 + 1 并画出一条假的插入线。
+    return { toIndex: draggedIndex, noop: true };
+  }
+  // 同组且被拖项排在目标之前：摘掉自己后，目标的下标会前移 1 位。
+  const shift = draggedIndex >= 0 && draggedIndex < targetIndex ? 1 : 0;
+  const targetAfterRemoval = targetIndex - shift;
+  const toIndex = side === "after" ? targetAfterRemoval + 1 : targetAfterRemoval;
+  return { toIndex, noop: draggedIndex >= 0 && toIndex === draggedIndex };
+}
+
+/**
+ * 落点被拒的原因。四种原因各用各的文案，合并成一句"不能放到这里"用户就不知道该怎么改：
+ *
+ * - `invalid`：这个 item 类型本身不允许这个位置（列表字段进标题行等）；
+ * - `illegalTitle`：跨方框，且目标是标题/元信息或正文前/后灰字区；
+ * - `illegalBody`：跨方框，且目标是正文块区；
+ * - `samePosition`：位置合法，但插完还是原地（no-op）。
+ */
+export type DropRejectReason = "invalid" | "illegalTitle" | "illegalBody" | "samePosition";
+
+/**
+ * 一次落点在**位置层面**是否被拒（与"插完会不会动"无关）。
+ *
+ * `sectionKind` 缺省 = 普通条目板块；行内板块走 `aligns` 的那套位置集时由调用方传入。
+ * 返回 null = 位置合法，是否真的换位还要再看 `resolveDropIndex().noop`。
+ */
+export function dropRejectReason(item: ResumeItem, placement: Placement): DropRejectReason | null {
+  if (!canPlaceItem(item, placement)) return "invalid";
+  if (!canDropIntoZone(item, placement)) {
+    // 「正文块区」与「标题/元信息 + 灰字区」的拒绝出口不一样，文案必须分开。
+    return zoneOfPlacement(placement) === "body" ? "illegalBody" : "illegalTitle";
+  }
+  return null;
 }

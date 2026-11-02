@@ -245,6 +245,29 @@ const proview = {
   "proview.photo.previewLabel": "裁剪预览",
   /** 裁剪比例锁定后，拖动时保持比例的状态说明。 */
   "proview.photo.lockedHint": "比例已锁定，调整取景大小时不会变形",
+  /** 四边可拖的裁剪框（#18）：整体区域的无障碍名。 */
+  "proview.photo.cropBoxAria": "照片裁剪框，拖动四边或四角调整裁剪范围",
+  /** 裁剪框下方的操作说明（含 Ctrl 等比与键盘步长）。 */
+  "proview.photo.boxHint":
+    "拖动四边或四角调整裁剪范围；按住 Ctrl 等比缩放；方向键微调 1%，Shift 加速到 5%",
+  /** 上边手柄。 */
+  "proview.photo.handle.n": "上边",
+  /** 下边手柄。 */
+  "proview.photo.handle.s": "下边",
+  /** 右边手柄。 */
+  "proview.photo.handle.e": "右边",
+  /** 左边手柄。 */
+  "proview.photo.handle.w": "左边",
+  /** 左上角手柄。 */
+  "proview.photo.handle.nw": "左上角",
+  /** 右上角手柄。 */
+  "proview.photo.handle.ne": "右上角",
+  /** 左下角手柄。 */
+  "proview.photo.handle.sw": "左下角",
+  /** 右下角手柄。 */
+  "proview.photo.handle.se": "右下角",
+  /** 手柄的当前值朗读文本（{value} 是百分比整数）。 */
+  "proview.photo.handleValue": "{value}%",
 
   // ── 命令面板里的内置命令名（D13，与宿主动作一起参与搜索）──────
   /** 保存（宿主提供时出现）。 */

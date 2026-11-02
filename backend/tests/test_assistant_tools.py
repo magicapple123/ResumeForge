@@ -367,3 +367,27 @@ def test_preview_update_helpers_execute_their_delayed_imports(db_session):
     assert preview_update_claim(db_session, {"claim_id": 0, "title": "x"}).scope
     assert preview_update_knowledge(db_session, {"knowledge_id": 0, "title": "x"}).scope
     assert preview_update_reminder(db_session, {"reminder_id": 0, "title": "x"}).scope
+
+
+# ===== #38：工具清单必须有一个对外入口（GET /api/assistant/tools）=====
+#
+# 此前"助手能做什么"只存在于 tool_definitions() 的返回值里，前端拿不到——界面上既没有
+# 能力清单，也没法核对"说了能做"与"实际能做"。这条只读路由把同一份 schema 透出去。
+
+
+def test_assistant_tools_endpoint_lists_the_registry(client):
+    response = client.get("/api/assistant/tools")
+    assert response.status_code == 200, response.text
+    body = response.json()
+    # 与注册表同源：数量必须逐条对齐（不新增第二份清单）。
+    assert body["count"] == len(tool_definitions())
+    assert body["count"] > 0
+    assert body["count"] == len(body["items"])
+
+    names = {item["name"] for item in body["items"]}
+    for expected in ("get_resume_status", "list_versions", "update_resume_field"):
+        assert expected in names, f"工具清单里缺 {expected}"
+    for item in body["items"]:
+        assert item["name"], item
+        assert item["description"], f"{item['name']} 没有说明文案"
+        assert isinstance(item["parameters"], dict)

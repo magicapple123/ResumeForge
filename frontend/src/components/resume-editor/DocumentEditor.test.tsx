@@ -11,8 +11,10 @@ import { describe, expect, it, vi } from "vitest";
 import { t } from "../../i18n";
 import type { ResumeDocument, ResumeSection } from "../../types/resumeDocument";
 import { defaultSectionLayout, emptyDocument } from "../../features/resume-document";
+import { dropRejectReason, locatePath } from "../../features/resume-document";
 import { makeDocument } from "../../features/resume-document/documentFixtures";
 import DocumentEditor from "./DocumentEditor";
+import { DRAG_REJECT_COPY } from "./dragRejectCopy";
 
 /** chip 的无障碍名：目录标签 + 全角冒号 + 值。 */
 export function chipName(labelKey: Parameters<typeof t>[0], value: string): string {
@@ -199,14 +201,27 @@ describe("DocumentEditor 三区卡", () => {
     expect(screen.getByText(t("document.drag.boundary"))).toBeInTheDocument();
   });
 
-  it("鼠标拖放跨区：把 lead 的绩点放进正文区，placement 改成 body", () => {
-    const { onChange } = renderEducation();
+  it("跨方框拖放被拒绝：lead 的绩点拖进正文区给提示、不改文档", () => {
+    // 2026-11-02 判定：正文只放正文块。字段进 body 会变成"中栏同时长出两套控件、纸面被静默
+    // 丢弃"，所以直接拒绝（白名单里已没有 body），并给可读提示。
+    //
+    // 问题 13 之后拒绝原因拆成 4 种（`DRAG_REJECT_COPY` 是文案的唯一真源），这条用例原来
+    // 钉的是"合并成一句"的旧 key `document.drag.invalid`，于是改文案就假红。现在断言
+    // 「真实路径 → 实际原因（`dropRejectReason`）→ 那张表 → `t()`」这条链：
+    // 文案改字、原因改归属，测试都不用跟着改；而"跨方框进正文块区 = illegalBody"这条
+    // **语义**仍然被钉住（`expect(reason).toBe("illegalBody")`）。
+    const doc = makeDocument();
+    const { onChange } = renderEducation(doc);
+    const located = locatePath(doc, "education.ob_entry001.ob_item0005");
+    if (!located || located.kind !== "item") throw new Error("夹具里找不到 lead 的绩点条目");
+    const reason = dropRejectReason(located.item, "body");
+    if (!reason) throw new Error("正文块区本该被判为非法落点");
+    expect(reason).toBe("illegalBody");
+    // 真实路径：把 `drop` 事件真的打进正文块区（不是直接调函数）。
     const bodyZone = document.querySelector('[data-document-zone="body"]') as HTMLElement;
     fireEvent.drop(bodyZone, dropPayload("education.ob_entry001.ob_item0005"));
-    const item = lastDocument(onChange).sections[0].entries[0].items.find(
-      (candidate) => candidate.id === "ob_item0005",
-    );
-    expect((item as { placement?: string } | undefined)?.placement).toBe("body");
+    expect(screen.getByText(t(DRAG_REJECT_COPY[reason]))).toBeInTheDocument();
+    expect(onChange).not.toHaveBeenCalled();
   });
 
   it("可由鼠标拖动：非 text 的 item chip 带 draggable", () => {

@@ -12,6 +12,7 @@ import type {
   Placement,
   ResumeDocument,
   ResumeItem,
+  SectionKind,
 } from "../../types/resumeDocument";
 import {
   allowedPlacementsForItem,
@@ -33,11 +34,26 @@ const PLACEMENT_LABEL_KEYS: Record<Placement, MessageKey> = {
   hidden: "document.placement.hidden",
 };
 
+/**
+ * 行内板块（技能 / 语言）的位置名：纸面上只有「黑字主文本 / 灰字补充 / 隐藏」三种结果，
+ * 所以不复用条目卡那套（`document.placement.*`：标题行 / 元信息 / 正文前灰字 …）。
+ */
+const INLINE_PLACEMENT_LABEL_KEYS: Record<Placement, MessageKey> = {
+  body: "document.placement.inline.body",
+  trail: "document.placement.inline.trail",
+  hidden: "document.placement.inline.hidden",
+  title: "document.placement.title",
+  meta: "document.placement.meta",
+  lead: "document.placement.lead",
+};
+
 interface Props {
   document: ResumeDocument;
   path: string;
   item: ResumeItem;
   sectionKey: string;
+  /** 板块类型：`inline` 用另一套位置名与位置集（问题 10）。缺省 = 普通条目板块。 */
+  sectionKind?: SectionKind;
   catalog?: DocumentFieldCatalog | null;
   readOnly?: boolean;
   onChange: (next: ResumeDocument) => void;
@@ -48,6 +64,7 @@ export default function ItemEditor({
   path,
   item,
   sectionKey,
+  sectionKind,
   catalog = null,
   readOnly = false,
   onChange,
@@ -64,7 +81,27 @@ export default function ItemEditor({
     onChange(updateTextItem(document, path, patch));
 
   const isCustomField = item.kind !== "text" && item.key.startsWith("custom:");
-  const allowed = allowedPlacementsForItem(item);
+  const isInlineSection = sectionKind === "inline" && item.kind !== "text";
+  const allowed = allowedPlacementsForItem(item, sectionKind);
+  const labelKeys = isInlineSection ? INLINE_PLACEMENT_LABEL_KEYS : PLACEMENT_LABEL_KEYS;
+  /**
+   * 下拉选项 = 允许集；**当前值不在允许集里时并进一条「（当前）」**（问题 10 的兜底）。
+   *
+   * 历史数据里存在"合法但已不在白名单"的组合（如 inline 行里出现 `lead`）。antd `Select`
+   * 找不到匹配 option 时会**回退显示原始枚举**，于是英文 `lead` 直接漏到界面。兜底项只做
+   * 展示，不假装用户能把它选回来，所以显式标「（当前）」。
+   */
+  const currentInAllowed = allowed.includes(placement);
+  const placementOptions: { value: Placement; label: string }[] = allowed.map((value) => ({
+    value,
+    label: t(labelKeys[value]),
+  }));
+  if (!currentInAllowed) {
+    placementOptions.push({
+      value: placement,
+      label: t("document.placement.currentOption", { label: t(labelKeys[placement]) }),
+    });
+  }
   const bodyStyleValue =
     item.kind === "text"
       ? item.style
@@ -135,7 +172,7 @@ export default function ItemEditor({
               style={{ width: 132 }}
               value={placement}
               disabled={readOnly}
-              options={allowed.map((value) => ({ value, label: t(PLACEMENT_LABEL_KEYS[value]) }))}
+              options={placementOptions}
               onChange={(value: Placement) => {
                 if (item.kind === "text") return;
                 if (item.kind === "field") updateField({ placement: value });

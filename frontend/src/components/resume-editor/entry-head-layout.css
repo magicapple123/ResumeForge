@@ -1,0 +1,48 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/**
+ * 「标题布局」三选一（问题 6）：从条目卡头部搬进「标题与元信息」域标题行。
+ *
+ * 与 `document-editor.css` 分开的原因：那份文件已经 490+ 行贴预算，而这块是
+ * "一个控件组的全部样式"，自带文件更好读（同类先例：`chip-menu.css`、`profile-fill-menu.css`）。
+ */
+
+/* 组在域标题行里靠右：标题 + 计数在左，这组按钮在右端收口。
+   `align-self: center` 而不是跟着标题行基线——那一行是 13px 文字、行高约 21px，
+   按钮是固定 20px 的方块，走基线会比文字低 2px。 */
+.document-zone-head-layout {
+  display: inline-flex;
+  align-items: center;
+  align-self: center;
+  gap: 4px;
+  margin-left: auto;
+  flex: none;
+}
+
+/* 11px 的「标题布局」：和「标题与元信息」13px 的域标题拉开层级，
+   又比 11px 的域计数略深（计数是 tertiary，这里用 secondary 才对得上"这是个控件标签"）。 */
+.document-zone-layout-label {
+  color: var(--rf-text-secondary);
+  font-size: 11px;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+/* 按钮压到 20px 高（`size="small"` 是 24px）：域标题行只有约 21px，24px 会把整行撑高
+   3px，三个域标题行高度就会互不一致。宽度 22px 保住 20px 以上的点击区
+   （不要为了"不撑高"把可点区域缩到 20px 以下）。 */
+.document-zone-head-layout .document-entry-layout-btn {
+  width: 22px;
+  min-width: 22px;
+  height: 20px;
+  padding: 0;
+}
+
+/* 窄中栏：先藏 11px 标签，只留图标 + Tooltip，而不是把按钮挤到换行。
+   用容器查询判断"这一列有多宽"（`wb-editor` 是 `.resume-wb-col-editor` 上既有的
+   容器名，见 `resume-workbench-tabs.css`）；阈值 440 对应中栏 380 档（渲染宽约 421）
+   藏、448 档（渲染宽约 489）显示。视口断点在这里没有意义——中栏宽由用户拖动决定。 */
+@container wb-editor (max-width: 440px) {
+  .document-zone-layout-label {
+    display: none;
+  }
+}

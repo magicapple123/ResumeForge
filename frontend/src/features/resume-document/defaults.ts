@@ -40,6 +40,10 @@ export function defaultSectionLayout(): SectionLayout {
     columns: 1,
     align: "equal",
     gap: null,
+    // 问题 4：分布默认「靠左」，分侧布局默认不设置（= 跟随共用字段）。
+    justify: "start",
+    lead: null,
+    trail: null,
     hide_title: false,
     keep_together: false,
     start_on_new_page: false,
@@ -52,7 +56,10 @@ export function defaultEntryLayout(): EntryLayout {
     head: "split",
     columns: null,
     align: null,
+    justify: null,
     gap: null,
+    lead: null,
+    trail: null,
     // 条目级分页默认关闭：与后端 schema 的 False 默认值一致（分区级另有开关）。
     start_on_new_page: false,
     keep_together: false,

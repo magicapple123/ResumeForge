@@ -15,6 +15,7 @@ from .resume_document import (
     BodyStyle,
     EntryLayout,
     HeadLayout,
+    RowLayout,
     SectionKind,
     SectionLayout,
 )
@@ -64,6 +65,11 @@ class EntryPlan(BaseModel):
     id: str = ""
     # 生效布局（分区默认叠上条目覆盖），渲染器不再自己算继承。
     layout: EntryLayout = Field(default_factory=EntryLayout)
+    # 正文前 / 正文后各自的**生效**列布局（问题 4）。planner 已把继承链算完：
+    # `columns` / `align` 非空，`gap` / `column_widths` / `column_gaps` 可能仍是 None
+    # （= 交给渲染器按对齐方式取兜底值），与拆开之前的语义一致。
+    lead_layout: RowLayout = Field(default_factory=RowLayout)
+    trail_layout: RowLayout = Field(default_factory=RowLayout)
     head: HeadPlan = Field(default_factory=HeadPlan)
     lead_rows: list[list[CellPlan]] = Field(default_factory=list)
     body: list[BlockPlan] = Field(default_factory=list)

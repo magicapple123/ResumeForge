@@ -1,34 +1,53 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * 制作台里的照片裁剪（#25）：把页眉照片**裁成新的 data URL**。
+ * 制作台里的照片裁剪弹窗（#25 / 任务 6 / 2026-11 #18）。
  *
- * ## 为什么不是复用预览那张裁剪弹窗
+ * ## 非破坏
  *
- * `proview` 的裁剪是**非破坏**的：它只产出 `photo_crop` 参数，纸面渲染时由后端派生。
- * v2 文档里没有这个参数域——页眉照片的值就是 data URL 本身（`basic_info.photo`）。
- * 因此这里的裁剪真的会写出一张新图：几何算法复用同一套（`computeCropRect` /
- * `buildPhotoSource` / 比例档位），落地方式换成 canvas。
+ * 原图引用（`content.photo`）一个字节都不动：这里只产出 `photo_crop` 参数
+ * （`version / source / rect / aspect`），后端 `resolve_photo_crop` 按它派生裁剪图，
+ * HTML / PDF / Word 三个渲染器都消费同一份，「恢复原图」= 删掉这个域。
  *
- * 原图不会被静默覆盖：资料里的照片库仍保有原图，制作台只改这份简历文档引用的那张；
- * 用户可以对同一张图重复裁剪（每次都在当前值上裁）。
+ * ## #18：从"三个滑块 + draft"改成"直接操作 CropRect"
+ *
+ * 旧实现的界面状态是 `PhotoCropDraft = {aspect, zoom, offsetX, offsetY}`，提交时才
+ * 换算成矩形。裁剪框（`PhotoCropBox`）只能表达"矩形"，于是这里改成**唯一状态就是
+ * `CropRect`**：
+ *
+ * - 打开时 `initialCrop.rect` 有就还原，没有就按当前比例给一个居中默认矩形；
+ * - 拖动 / 键盘 / 换比例都直接改 `rect`（局部状态，不落库）；
+ * - 「应用裁剪」一次提交 `createRectCropParams(source, rect, aspect)`。
+ *
+ * ## 换照片后旧裁剪自动失效（验收 6）
+ *
+ * `source.sha256` 是原图 data URL 的哈希。弹窗里比对 `initialCrop.source.sha256` 与
+ * **当前照片**的哈希：不一致就当作"没有裁剪"，避免"新照片套旧取景"。
  */
-import { Modal } from "antd";
 import Button from "antd/es/button";
+import Modal from "antd/es/modal";
 import Segmented from "antd/es/segmented";
-import Slider from "antd/es/slider";
 import Typography from "antd/es/typography";
-import { useRef } from "react";
+import { useEffect, useState } from "react";
 import { useI18n } from "../../i18n/i18nContext";
+import type { MessageKey } from "../../i18n";
 import {
   buildPhotoSource,
-  computeCropRect,
-  DEFAULT_CROP_DRAFT,
+  clampCropRect,
+  createRectCropParams,
+  cropRectAspect,
+  defaultCropRect,
+  fitCropRectToAspect,
   PHOTO_CROP_ASPECTS,
+  type CropRect,
   type PhotoAspect,
-  type PhotoCropDraft,
+  type PhotoCropParams,
 } from "../../features/resume-proview/photoCrop";
+import {
+  DEFAULT_PRINTED_WIDTH_MM,
+  estimateRectClarity,
+} from "../../features/resume-proview/photoClarity";
 import { usePhotoDimensions } from "../../features/resume-proview/usePhotoDimensions";
-import type { MessageKey } from "../../i18n";
+import PhotoCropBox from "../resume/photo-crop/PhotoCropBox";
 
 const ASPECT_KEYS: Record<PhotoAspect, MessageKey> = {
   free: "proview.photo.aspect.original",
@@ -37,67 +56,99 @@ const ASPECT_KEYS: Record<PhotoAspect, MessageKey> = {
   "4:5": "proview.photo.aspect.landscape",
 };
 
+/** 全幅（没有真正裁剪）：与「恢复原图」同义。 */
+const FULL_FRAME: CropRect = { x: 0, y: 0, w: 1, h: 1 };
+
 interface Props {
   open: boolean;
-  /** 原图 data URL（当前页眉照片的值）。 */
+  /** 原图 data URL（页眉照片当前的值；**不是**上次裁剪的结果）。 */
   photo: string;
-  draft: PhotoCropDraft;
-  onDraftChange: (next: PhotoCropDraft) => void;
+  /** 已保存的裁剪参数（打开时还原）；`null` = 还没裁过。 */
+  initialCrop: PhotoCropParams | null;
   onClose: () => void;
-  onApply: (dataUrl: string) => void;
+  /** `params = null` 表示「恢复原图」（删掉 `photo_crop` 域）。 */
+  onApply: (params: PhotoCropParams | null) => void;
   onNotice: (text: string, tone?: "info" | "warning") => void;
 }
 
 export default function PhotoCropDialog({
   open,
   photo,
-  draft,
-  onDraftChange,
+  initialCrop,
   onClose,
   onApply,
   onNotice,
 }: Props) {
   const { t } = useI18n();
-  const imageRef = useRef<HTMLImageElement>(null);
   const dimensions = usePhotoDimensions(open ? photo : null);
   const source = dimensions ? buildPhotoSource(photo, dimensions.width, dimensions.height) : null;
-  const rect = source ? computeCropRect(source, draft) : null;
-  const previewRatio =
-    source && rect && rect.h > 0 && rect.w > 0
-      ? (rect.w * source.width) / (rect.h * source.height)
-      : undefined;
+  // 照片换了（哈希不一致）→ 旧裁剪失效，不能把旧取景套到新照片上。
+  const cropInvalidated = Boolean(
+    source && initialCrop && initialCrop.source.sha256 !== source.sha256,
+  );
+  const activeCrop = cropInvalidated ? null : initialCrop;
+
+  const [aspect, setAspect] = useState<PhotoAspect>(activeCrop?.aspect ?? "free");
+  const [rect, setRect] = useState<CropRect>(
+    activeCrop ? clampCropRect(activeCrop.rect) : FULL_FRAME,
+  );
+
+  // 打开时按"已保存参数"还原；没有就从当前比例的默认矩形开始。
+  const [wasOpen, setWasOpen] = useState(open);
+  if (wasOpen !== open) {
+    setWasOpen(open);
+    if (open) {
+      const nextAspect: PhotoAspect = activeCrop?.aspect ?? "free";
+      setAspect(nextAspect);
+      setRect(activeCrop ? clampCropRect(activeCrop.rect) : FULL_FRAME);
+    }
+  }
+
+  // 换照片后旧裁剪失效：把框与比例一起复位，避免"新照片套旧取景"。
+  useEffect(() => {
+    if (!cropInvalidated) return;
+    setAspect("free");
+    setRect(FULL_FRAME);
+  }, [cropInvalidated]);
+
+  const sourceWidth = dimensions?.width ?? 0;
+  const sourceHeight = dimensions?.height ?? 0;
+  // 尺寸是异步解码出来的：首次打开时若锁定比例，拿到真尺寸后把"整幅"换成该比例的居中矩形
+  // （用户已经拖过就不动——`current` 不再是整幅时直接返回）。
+  useEffect(() => {
+    if (!open || sourceWidth <= 0 || sourceHeight <= 0 || activeCrop) return;
+    if (aspect === "free") return;
+    setRect((current) => {
+      if (current.w < 0.9999 || current.h < 0.9999) return current;
+      return defaultCropRect(aspect, { sha256: "", width: sourceWidth, height: sourceHeight });
+    });
+  }, [open, sourceWidth, sourceHeight, aspect, activeCrop]);
+
+  const safeRect = clampCropRect(rect);
+  const previewParams = source ? createRectCropParams(source, safeRect, aspect) : null;
+  const previewRatio = cropRectAspect(safeRect, source);
+  const clarity = source ? estimateRectClarity(source, safeRect, DEFAULT_PRINTED_WIDTH_MM) : null;
+
+  const selectAspect = (next: PhotoAspect) => {
+    setAspect(next);
+    setRect((current) => fitCropRectToAspect(current, next, source));
+  };
 
   const apply = () => {
-    const image = imageRef.current;
-    if (!source || !rect || !image || !image.complete || image.naturalWidth <= 0) {
+    if (!previewParams) {
       onNotice(t("document.photo.cropFailed"), "warning");
       return;
     }
-    const canvas = document.createElement("canvas");
-    const context = canvas.getContext("2d");
-    if (!context) {
-      onNotice(t("document.photo.cropFailed"), "warning");
-      return;
-    }
-    const sx = Math.round(rect.x * source.width);
-    const sy = Math.round(rect.y * source.height);
-    const sw = Math.max(1, Math.round(rect.w * source.width));
-    const sh = Math.max(1, Math.round(rect.h * source.height));
-    canvas.width = sw;
-    canvas.height = sh;
-    try {
-      context.drawImage(image, sx, sy, sw, sh, 0, 0, sw, sh);
-      const dataUrl = canvas.toDataURL("image/jpeg", 0.92);
-      if (!dataUrl) {
-        onNotice(t("document.photo.cropFailed"), "warning");
-        return;
-      }
-      onApply(dataUrl);
-      onNotice(t("document.photo.cropped"), "info");
-      onClose();
-    } catch {
-      onNotice(t("document.photo.cropFailed"), "warning");
-    }
+    onApply(previewParams);
+    onClose();
+  };
+
+  /** 「恢复原图」：删掉裁剪参数（`onApply(null)`），框同时复位到"整张原图"。 */
+  const restoreOriginal = () => {
+    setAspect("free");
+    setRect(FULL_FRAME);
+    onApply(null);
+    onClose();
   };
 
   return (
@@ -105,8 +156,11 @@ export default function PhotoCropDialog({
       open={open}
       title={t("document.photo.cropTitle")}
       onCancel={onClose}
-      width={560}
+      width={620}
       footer={[
+        <Button key="reset" onClick={restoreOriginal} disabled={!source}>
+          {t("proview.photo.reset")}
+        </Button>,
         <Button key="cancel" onClick={onClose}>
           {t("common.action.cancel")}
         </Button>,
@@ -116,103 +170,98 @@ export default function PhotoCropDialog({
       ]}
     >
       <Typography.Text type="secondary" style={{ display: "block", marginBottom: 10 }}>
-        {t("document.photo.cropHint")}
+        {t("proview.photo.hint")}
       </Typography.Text>
-      <div style={{ display: "flex", gap: 18, flexWrap: "wrap", alignItems: "flex-start" }}>
-        <div
-          role="img"
-          aria-label={t("document.photo.cropPreview")}
-          style={{
-            position: "relative",
-            flex: "0 1 200px",
-            minWidth: 150,
-            overflow: "hidden",
-            width: "100%",
-            aspectRatio: previewRatio ? String(previewRatio) : "3 / 4",
-            background: "var(--rf-surface-alt)",
-            borderRadius: 6,
-          }}
-        >
-          {rect ? (
-            <img
-              ref={imageRef}
-              src={photo}
-              alt={t("document.photo.cropPreview")}
-              style={{
-                position: "absolute",
-                width: `${100 / rect.w}%`,
-                height: `${100 / rect.h}%`,
-                left: `${(-rect.x / rect.w) * 100}%`,
-                top: `${(-rect.y / rect.h) * 100}%`,
-                maxWidth: "none",
-                userSelect: "none",
-              }}
-            />
-          ) : (
-            <Typography.Text
-              type="secondary"
-              style={{ position: "absolute", inset: 0, display: "grid", placeItems: "center" }}
-            >
-              {t("document.photo.cropLoading")}
-            </Typography.Text>
-          )}
-        </div>
-        {source ? (
+      <PhotoCropBox
+        photo={photo}
+        source={source}
+        rect={safeRect}
+        aspect={aspect}
+        disabled={!source}
+        onChange={setRect}
+      />
+      <div
+        style={{
+          display: "flex",
+          gap: 16,
+          flexWrap: "wrap",
+          alignItems: "flex-start",
+          marginTop: 12,
+        }}
+      >
+        <div style={{ flex: "1 1 260px", minWidth: 240 }}>
+          <Typography.Text style={{ fontSize: 12 }}>{t("proview.photo.aspect")}</Typography.Text>
+          <Segmented
+            size="small"
+            block
+            aria-label={t("proview.photo.aspect")}
+            value={aspect}
+            options={PHOTO_CROP_ASPECTS.map((value) => ({
+              value,
+              label: t(ASPECT_KEYS[value]),
+            }))}
+            onChange={(next) => selectAspect(next as PhotoAspect)}
+            style={{ marginBottom: 8 }}
+          />
           <Typography.Text type="secondary" style={{ display: "block", fontSize: 12 }}>
-            {t("proview.photo.source", { width: source.width, height: source.height })}
+            {source
+              ? t("proview.photo.source", { width: source.width, height: source.height })
+              : t("document.photo.cropLoading")}
           </Typography.Text>
-        ) : null}
-        <div style={{ flex: "1 1 240px", minWidth: 220, display: "grid", gap: 10 }}>
-          <div>
-            <Typography.Text style={{ fontSize: 12 }}>{t("proview.photo.aspect")}</Typography.Text>
-            <Segmented
-              size="small"
-              block
-              aria-label={t("proview.photo.aspect")}
-              value={draft.aspect}
-              options={PHOTO_CROP_ASPECTS.map((value) => ({
-                value,
-                label: t(ASPECT_KEYS[value]),
-              }))}
-              onChange={(next) => onDraftChange({ ...draft, aspect: next as PhotoAspect })}
-            />
+        </div>
+        <div style={{ flex: "0 0 120px" }}>
+          <div
+            role="img"
+            aria-label={t("document.photo.cropPreview")}
+            style={{
+              position: "relative",
+              width: "100%",
+              aspectRatio: previewRatio > 0 ? String(previewRatio) : "3 / 4",
+              overflow: "hidden",
+              background: "var(--rf-surface-alt)",
+              borderRadius: 4,
+            }}
+          >
+            {safeRect.w > 0 && safeRect.h > 0 ? (
+              <img
+                src={photo}
+                alt=""
+                style={{
+                  position: "absolute",
+                  width: `${100 / safeRect.w}%`,
+                  height: `${100 / safeRect.h}%`,
+                  left: `${(-safeRect.x / safeRect.w) * 100}%`,
+                  top: `${(-safeRect.y / safeRect.h) * 100}%`,
+                  maxWidth: "none",
+                  userSelect: "none",
+                }}
+              />
+            ) : null}
           </div>
-          <div>
-            <Typography.Text style={{ fontSize: 12 }}>{t("proview.photo.zoom")}</Typography.Text>
-            <Slider
-              min={35}
-              max={100}
-              step={1}
-              value={Math.round(draft.zoom * 100)}
-              ariaLabelForHandle={t("proview.photo.zoomAria")}
-              onChange={(value: number) => onDraftChange({ ...draft, zoom: value / 100 })}
-            />
-          </div>
-          <div>
-            <Typography.Text style={{ fontSize: 12 }}>{t("proview.photo.offsetX")}</Typography.Text>
-            <Slider
-              min={-100}
-              max={100}
-              value={Math.round(draft.offsetX * 100)}
-              ariaLabelForHandle={t("proview.photo.offsetXAria")}
-              onChange={(value: number) => onDraftChange({ ...draft, offsetX: value / 100 })}
-            />
-          </div>
-          <div>
-            <Typography.Text style={{ fontSize: 12 }}>{t("proview.photo.offsetY")}</Typography.Text>
-            <Slider
-              min={-100}
-              max={100}
-              value={Math.round(draft.offsetY * 100)}
-              ariaLabelForHandle={t("proview.photo.offsetYAria")}
-              onChange={(value: number) => onDraftChange({ ...draft, offsetY: value / 100 })}
-            />
-          </div>
+          <Typography.Text
+            type="secondary"
+            style={{ display: "block", marginTop: 4, fontSize: 12 }}
+          >
+            {t("proview.photo.previewLabel")}
+          </Typography.Text>
         </div>
       </div>
+      {clarity ? (
+        <Typography.Text
+          type={clarity.level === "ok" ? "secondary" : "warning"}
+          style={{ display: "block", marginTop: 10, fontSize: 12 }}
+        >
+          {clarity.level === "ok"
+            ? t("proview.photo.clarity.ok", {
+                width: clarity.pixelWidth,
+                height: clarity.pixelHeight,
+              })
+            : t("proview.photo.clarity.warn", {
+                width: clarity.pixelWidth,
+                height: clarity.pixelHeight,
+              })}
+        </Typography.Text>
+      ) : null}
     </Modal>
   );
 }
-
-/** 初始草稿（打开裁剪弹窗时用；比例跟随原图）。 */
-export const INITIAL_PHOTO_CROP_DRAFT: PhotoCropDraft = DEFAULT_CROP_DRAFT;

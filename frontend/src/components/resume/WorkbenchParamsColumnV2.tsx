@@ -10,10 +10,11 @@
  * W07 局部排版的角色面板保留（只改 format_config，不碰正文）；对象级/文字级别/分页
  * 等面板依赖 v1 正文字段路径，本批暂不挂在 v2 工作台（见计划执行记录的风险项）。
  */
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import type { RefObject } from "react";
 import type { ReactNode } from "react";
-import { Space, Tooltip, Typography } from "antd";
+import { DownOutlined } from "@ant-design/icons";
+import { Tooltip, Typography } from "antd";
 import type { ResumeDetail, ResumeLayout, ResumeTemplateCatalog } from "../../types";
 import type { DocumentFieldCatalog, ResumeDocument } from "../../types/resumeDocument";
 import type { ResumePreviewHandle } from "../ResumePreview";
@@ -34,6 +35,8 @@ import EntryLayoutPanel from "./EntryLayoutPanel";
 import DocumentModePanel from "./DocumentModePanel";
 import SectionPaginationPanel from "./pagination/SectionPaginationPanel";
 import PageThumbnailStrip from "./pagination/PageThumbnailStrip";
+import ChipStylePopover, { type ChipStylePopoverState } from "../resume-editor/ChipStylePopover";
+import { usePanelScrollAnchor } from "./entryLayout/usePanelScrollAnchor";
 import { usePaginationReport } from "../../features/resume-pagination/usePaginationReport";
 import { usePaginationReportMarkers } from "../../features/resume-pagination/paginationPageMarkers";
 import { setPaginationReportRefresh } from "../../features/resume-pagination/paginationRefreshStore";
@@ -41,6 +44,35 @@ import type { WorkbenchHistoryTab } from "./useWorkbenchV2History";
 import "./workbench-v2.css";
 
 type LeftTab = "params" | "structure" | "bilingual" | "assets" | "sources" | "history";
+
+/**
+ * 问题 22 ①：「新页」区块（`SectionPaginationPanel`，16 个板块的「从新页开始」开关）默认收起。
+ *
+ * 为什么放在 `sessionStorage` 而不是 `ResumeParamGroup` 用的 `localStorage`：
+ * "这次想看一眼分页"是**这一次编辑**里的动作，不是长期偏好。存 `localStorage` 会让昨天
+ * 顺手展开过的人今天一进制作台又是 477px 的开关墙——问题原样复发。会话级存储关掉标签页
+ * 就归零，与「本次会话」的语义正好对齐（`ResumeParamGroup` 头注释里那条"分组偏好是人的
+ * 属性"不适用于这里：分组偏好是长期习惯，这里是一次性动作）。
+ */
+const NEW_PAGE_STORAGE_KEY = "resume.wb.newpage.open";
+
+/** 读会话内的展开态：读不到（首次进制作台 / 隐私模式 / 存不下）就按默认**收起**。 */
+function readNewPageOpen(): boolean {
+  try {
+    return window.sessionStorage.getItem(NEW_PAGE_STORAGE_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+/** 写会话内的展开态：存不下就只保留组件内 state，不影响渲染。 */
+function writeNewPageOpen(open: boolean): void {
+  try {
+    window.sessionStorage.setItem(NEW_PAGE_STORAGE_KEY, open ? "1" : "0");
+  } catch {
+    // 隐私模式 / 配额满：折叠态记忆失效不影响功能。
+  }
+}
 
 export interface WorkbenchParamsColumnV2Props {
   layout: ResumeLayout;
@@ -125,6 +157,34 @@ export default function WorkbenchParamsColumnV2({
 }: WorkbenchParamsColumnV2Props) {
   useLocale();
   const [tab, setTab] = useState<LeftTab>("params");
+  /**
+   * #7：结构树条目行右键「排版整条…」的浮层状态。浮层与画布条目卡复用的是同一个
+   * `ChipStylePopover`（范围由路径推出：条目路径 = 整条 → `objects[<entryId>]`）。
+   */
+  const [entryStyleRequest, setEntryStyleRequest] = useState<ChipStylePopoverState | null>(null);
+  /** R-10：结构页签面板的滚动锚定（改动后重排时把 scrollTop 写回去，内容不上下跳）。 */
+  const structureScrollRef = usePanelScrollAnchor<HTMLDivElement>(document);
+  /**
+   * 问题 22 ①：「新页」区块的展开态（默认收起，会话内记住）。
+   *
+   * 收起时把整块从 DOM 里摘掉而不是 `display: none`：16 个 antd `Switch` 仍然挂着
+   * 会白白吃 16 份 `useState` 与 mousemove 监听，而"收起"的收益正是别为它们付成本。
+   */
+  const [newPageOpen, setNewPageOpen] = useState<boolean>(readNewPageOpen);
+  /** `aria-controls` 指向的展开体 id：同一屏可能挂两份左栏（整屏弹窗 + 窄屏宿主），用 `useId` 防撞。 */
+  const newPageBodyId = useId();
+  const toggleNewPage = useCallback(() => {
+    setNewPageOpen((prev) => {
+      const next = !prev;
+      writeNewPageOpen(next);
+      return next;
+    });
+  }, []);
+  /** 收起态那一行的摘要：「分页：N 个板块设了新页」，0 个时换一句空的说法。 */
+  const newPageBreakCount = useMemo(
+    () => document.sections.filter((section) => section.layout.start_on_new_page).length,
+    [document.sections],
+  );
   /** 整列（`.resume-wb-v2-params`）是滚动容器：切页签时要把它的 scrollTop 归零。 */
   const columnRef = useRef<HTMLDivElement>(null);
   const changeTab = useCallback((next: LeftTab) => {
@@ -176,6 +236,18 @@ export default function WorkbenchParamsColumnV2({
   }, [assetsPanel, bilingualPanel, history, sourcesPanel]);
   return (
     <div ref={columnRef} className="resume-wb-col resume-wb-col-params resume-wb-v2-params">
+      {/*
+        #7：结构树右键「排版整条…」的浮层。挂在整列（不随页签卸载），关掉即清空；
+        layout / catalog / onChange 都是本组件已有的 props，浮层自己按路径锁范围。
+      */}
+      <ChipStylePopover
+        state={entryStyleRequest}
+        document={document}
+        layout={layout}
+        catalog={catalog}
+        onClose={() => setEntryStyleRequest(null)}
+        onLayoutChange={onChange}
+      />
       <WorkbenchLeftTabs<LeftTab>
         ariaLabel={t("workbench.leftTabs.label")}
         value={tab}
@@ -222,11 +294,12 @@ export default function WorkbenchParamsColumnV2({
               />
             ) : null}
             {/* #13：字段语言只决定纸面上固定文案（小节标题/字段名）的语种，和篇幅、分页
-                同属「版面」；放在文档模式之后，模板组不再为它挤第三行。 */}
-            <Space size={6}>
-              <Typography.Text type="secondary">{t("resume.language.label")}</Typography.Text>
+                同属「版面」；放在文档模式之后，模板组不再为它挤第三行。
+                任务 4：与上下三行同一套「标签列 + 控件列」网格，控件左缘落在同一条竖线上。 */}
+            <div className="resume-wb-field-row">
+              <span className="resume-wb-field-label">{t("resume.language.label")}</span>
               <Tooltip title={t("resume.language.hint")}>
-                <span>
+                <span style={{ justifySelf: "start" }}>
                   <ResumeLanguageSelect
                     value={layout.language ?? "zh-CN"}
                     disabled={relayouting || undefined}
@@ -234,32 +307,61 @@ export default function WorkbenchParamsColumnV2({
                   />
                 </span>
               </Tooltip>
-            </Space>
+            </div>
             <ContactBreaksControl
               formatConfig={layout.format_config}
               disabled={relayouting}
               onChange={(format_config) => onChange({ ...layout, format_config })}
             />
-            <SectionPaginationPanel
-              document={document}
-              onChange={onDocumentChange}
-              disabled={relayouting}
-              // Q09：预览口径由宿主控制；没接线时按钮不渲染（不留死控件）。
-              previewMode={previewMode}
-              onSwitchToExactPreview={
-                onPreviewModeChange ? () => onPreviewModeChange("exact") : undefined
-              }
-              // Q08：汇总芯片跳到「本份简历结构」页签的对应节点。
-              onJumpToBreak={
-                onSelectPath
-                  ? (path) => {
-                      changeTab("structure");
-                      onSelectPath(path);
+            {/* 问题 22 ①：16 个板块的「从新页开始」开关默认收起（实测展开态 477px =
+                1000px 视口的 47.7%，把「页面概览」「获取分页报告」挤到折叠线以下）。
+                收起态只留一行：「分页：N 个板块设了新页」+ 折叠箭头。
+                「切到精确预览」不在这里重复一份：画布工具条上的预览口径切换
+                （`ResumePreviewToolbar` 的 draft/exact）是它的等价入口，收起后不会丢功能。 */}
+            <div className="resume-wb-newpage">
+              <button
+                type="button"
+                className="resume-wb-newpage-toggle"
+                aria-expanded={newPageOpen}
+                aria-controls={newPageBodyId}
+                // 可访问名就是这一行的全部可见文字（摘要），不再另写 aria-label：
+                // 摘要里已经带了「分页」与板块数，读屏不需要听第二遍。
+                onClick={toggleNewPage}
+              >
+                <DownOutlined
+                  className={`resume-wb-newpage-chevron${newPageOpen ? " is-open" : ""}`}
+                />
+                <span className="resume-wb-newpage-summary">
+                  {newPageBreakCount > 0
+                    ? t("workbench.newPage.summary", { count: newPageBreakCount })
+                    : t("workbench.newPage.summaryEmpty")}
+                </span>
+              </button>
+              {newPageOpen ? (
+                <div className="resume-wb-newpage-body" id={newPageBodyId}>
+                  <SectionPaginationPanel
+                    document={document}
+                    onChange={onDocumentChange}
+                    disabled={relayouting}
+                    // Q09：预览口径由宿主控制；没接线时按钮不渲染（不留死控件）。
+                    previewMode={previewMode}
+                    onSwitchToExactPreview={
+                      onPreviewModeChange ? () => onPreviewModeChange("exact") : undefined
                     }
-                  : undefined
-              }
-              onNotify={onNotify}
-            />
+                    // Q08：汇总芯片跳到「本份简历结构」页签的对应节点。
+                    onJumpToBreak={
+                      onSelectPath
+                        ? (path) => {
+                            changeTab("structure");
+                            onSelectPath(path);
+                          }
+                        : undefined
+                    }
+                    onNotify={onNotify}
+                  />
+                </div>
+              ) : null}
+            </div>
             <PageThumbnailStrip
               loading={pagination.loading}
               hasError={pagination.status === "error"}
@@ -309,7 +411,11 @@ export default function WorkbenchParamsColumnV2({
           ) : null}
         </>
       ) : tab === "structure" ? (
-        <div className="resume-wb-v2-panel resume-wb-structure-tab" data-panel-scroll="structure">
+        <div
+          ref={structureScrollRef}
+          className="resume-wb-v2-panel resume-wb-structure-tab"
+          data-panel-scroll="structure"
+        >
           <StructurePanel
             document={document}
             onChange={onDocumentChange}
@@ -319,6 +425,8 @@ export default function WorkbenchParamsColumnV2({
             canvasContainer={canvasContainer}
             onNotify={onNotify}
             pagesNeeded={pagesNeeded}
+            // #7：条目行右键「排版整条…」→ 本组件的浮层状态（范围整条）。
+            onRequestEntryStyle={(path, x, y) => setEntryStyleRequest({ path, x, y })}
             // 只读宿主（无正文的生成预览）：结构树不渲染勾选框，也不能改文档。
             readOnly={!editorEnabled}
             multiSelectedPaths={multiSelectedPaths}

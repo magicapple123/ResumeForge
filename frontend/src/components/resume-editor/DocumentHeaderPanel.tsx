@@ -30,6 +30,8 @@ import type {
   HeaderPlacement,
   ResumeDocument,
 } from "../../types/resumeDocument";
+import type { ResumeFormatConfig } from "../../types/resumeFormat";
+import { readPhotoCropFromFormatConfig } from "../../features/resume-proview/photoCrop";
 import {
   HEADER_PLACEMENT_LABEL_KEYS,
   HEADER_PLACEMENT_ORDER,
@@ -66,6 +68,10 @@ interface Props {
   onSelectPath: (path: string | null) => void;
   onChange: (next: ResumeDocument) => void;
   onNotice: (text: string, tone?: "info" | "warning") => void;
+  /** 当前版式的 `format_config`：照片裁剪参数住在它的 `photo_crop` 域里（任务 6）。 */
+  formatConfig?: ResumeFormatConfig | null;
+  /** 把 `format_config` 写回宿主的唯一通道（缺省 = 裁剪不可用，按钮仍开弹窗但保存不了）。 */
+  onFormatConfigChange?: (next: ResumeFormatConfig) => void;
 }
 
 export default function DocumentHeaderPanel({
@@ -76,9 +82,13 @@ export default function DocumentHeaderPanel({
   onSelectPath,
   onChange,
   onNotice,
+  formatConfig = null,
+  onFormatConfigChange,
 }: Props) {
   const { t } = useI18n();
   const [customName, setCustomName] = useState("");
+  // 照片 chip 的缩略图要按同一份裁剪参数显示（非破坏裁剪后，原图不动、取景只看参数）。
+  const photoCrop = useMemo(() => readPhotoCropFromFormatConfig(formatConfig), [formatConfig]);
 
   const labelOf = (item: HeaderItem): string => {
     if (item.label) return item.label;
@@ -130,53 +140,61 @@ export default function DocumentHeaderPanel({
   return (
     <div className="document-header-panel" data-document-section="header">
       <span className="document-section-hint">{t("document.basic.hint")}</span>
-      {document.header.items.length === 0 ? (
-        <span className="document-group-empty">{t("document.basic.empty")}</span>
-      ) : null}
-      {HEADER_PLACEMENT_ORDER.map((placement) => {
-        const items = headerGroupOf(document.header.items, placement);
-        if (items.length === 0) return null;
-        return (
-          <div
-            key={placement}
-            className="document-group document-header-group"
-            data-header-placement={placement}
-          >
-            <span className="document-zone-label">{t(HEADER_PLACEMENT_LABEL_KEYS[placement])}</span>
-            <div className="document-inline-row">
-              {items.map((item, index) => {
-                const path = buildHeaderPath(item.id);
-                return (
-                  <div key={item.id} className="document-chip-slot">
-                    <HeaderChip
-                      document={document}
-                      path={path}
-                      item={item}
-                      label={labelOf(item)}
-                      selected={selectedPath === path}
-                      readOnly={readOnly}
-                      onSelect={onSelectPath}
-                      onChange={onChange}
-                      onNotice={onNotice}
-                      onDropItem={(draggedPath) => dropOn(draggedPath, placement, index)}
-                    >
-                      <HeaderItemEditor
+      {/* R-05：页眉与条目卡同一形态——一层卡片，卡内位置组无容器、标签左对齐、chip 等宽网格。 */}
+      <div className="document-header-card">
+        {document.header.items.length === 0 ? (
+          <span className="document-group-empty">{t("document.basic.empty")}</span>
+        ) : null}
+        {HEADER_PLACEMENT_ORDER.map((placement) => {
+          const items = headerGroupOf(document.header.items, placement);
+          if (items.length === 0) return null;
+          return (
+            <div
+              key={placement}
+              className="document-group-block document-header-group"
+              data-header-placement={placement}
+            >
+              <span className="document-group-block-title">
+                {t(HEADER_PLACEMENT_LABEL_KEYS[placement])}
+              </span>
+              <div className="document-group document-group-cells">
+                {items.map((item, index) => {
+                  const path = buildHeaderPath(item.id);
+                  return (
+                    <div key={item.id} className="document-chip-slot">
+                      <HeaderChip
                         document={document}
                         path={path}
                         item={item}
                         label={labelOf(item)}
+                        selected={selectedPath === path}
                         readOnly={readOnly}
+                        photoCrop={item.key === "photo" ? photoCrop : null}
+                        onSelect={onSelectPath}
                         onChange={onChange}
                         onNotice={onNotice}
-                      />
-                    </HeaderChip>
-                  </div>
-                );
-              })}
+                        onDropItem={(draggedPath) => dropOn(draggedPath, placement, index)}
+                      >
+                        <HeaderItemEditor
+                          document={document}
+                          path={path}
+                          item={item}
+                          label={labelOf(item)}
+                          readOnly={readOnly}
+                          formatConfig={formatConfig}
+                          onFormatConfigChange={onFormatConfigChange}
+                          onChange={onChange}
+                          onNotice={onNotice}
+                        />
+                      </HeaderChip>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
-          </div>
-        );
-      })}
+          );
+        })}
+      </div>
       {!readOnly ? (
         <div className="document-add-row">
           <Select

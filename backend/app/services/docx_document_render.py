@@ -19,8 +19,10 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
+from docx.shared import Mm
+
 from ..schemas.resume_document_plan import DocumentPlan, EntryPlan, Inline, SectionPlan
-from .docx_blocks import DocxTheme, entry_head, paragraph, section_title
+from .docx_blocks import DocxTheme, entry_head, paragraph, section_title, section_title_gap_mm
 from .docx_document_parts import (
     RoleStyleQuery,
     add_segments,
@@ -144,7 +146,7 @@ def _draw_entry(
     draw_cell_rows(
         doc,
         entry.lead_rows,
-        entry.layout,
+        entry.lead_layout,
         base=base,
         page_layout=layout,
         theme=theme,
@@ -163,7 +165,7 @@ def _draw_entry(
     draw_cell_rows(
         doc,
         entry.trail_rows,
-        entry.layout,
+        entry.trail_layout,
         base=base,
         page_layout=layout,
         theme=theme,
@@ -189,6 +191,70 @@ def _chain_keep_with_next(doc, start_index: int, end_index: int | None = None) -
         node.paragraph_format.keep_with_next = True
 
 
+def _space_mm(length) -> float:
+    """python-docx 的段距（`Length` / `None`）→ 毫米；没设过按 0 算。"""
+    if length is None:
+        return 0.0
+    try:
+        return float(length.mm)
+    except Exception:  # noqa: BLE001 - 极端情况下按 0 处理，不能因此中断导出
+        return 0.0
+
+
+def _bump_space_before(node, extra_mm: float) -> None:
+    """给段落的段前距**累加** `extra_mm`（#9：把标题段距挪到相邻段落时用）。"""
+    if extra_mm <= 0:
+        return
+    node.paragraph_format.space_before = Mm(
+        _space_mm(node.paragraph_format.space_before) + extra_mm
+    )
+
+
+def _bump_space_after(node, extra_mm: float) -> None:
+    """给段落的段后距**累加** `extra_mm`。"""
+    if extra_mm <= 0:
+        return
+    node.paragraph_format.space_after = Mm(_space_mm(node.paragraph_format.space_after) + extra_mm)
+
+
+def _last_body_paragraph(doc):
+    """文档最后一个**块级**元素若是段落就返回它，否则 `None`。
+
+    #9 要把分区间距挪到"上一段的段后"。若上一块是无框表格（lead 行 equal 布局），
+    加在表格**上方**那个段落上会把间距放到错误的位置——这种时候调用方退回保留段前距。
+    """
+    paragraphs = doc.paragraphs
+    if not paragraphs:
+        return None
+    last = paragraphs[-1]._element
+    # 只看"段落 / 表格"两种块级元素：`w:body` 末尾还有一个 `w:sectPr`（页面设置），
+    # 直接拿最后一个子元素比较会永远不相等，竖条段距就永远挪不出去。
+    blocks = [
+        child
+        for child in last.getparent()
+        if child.tag.endswith("}p") or child.tag.endswith("}tbl")
+    ]
+    return paragraphs[-1] if blocks and blocks[-1] is last else None
+
+
+def _paragraph_after(doc, node):
+    """紧跟在 `node` 之后的**段落**（中间夹着表格 / 已是最后一块时返回 `None`）。"""
+    siblings = list(node._element.getparent())
+    try:
+        index = siblings.index(node._element)
+    except ValueError:
+        return None
+    if index + 1 >= len(siblings):
+        return None
+    following = siblings[index + 1]
+    if not following.tag.endswith("}p"):
+        return None
+    for candidate in doc.paragraphs:
+        if candidate._element is following:
+            return candidate
+    return None
+
+
 def _draw_section(
     doc,
     section: SectionPlan,
@@ -205,20 +271,60 @@ def _draw_section(
     page_break = bool(section.layout.start_on_new_page)
     keep = bool(section.layout.keep_together)
     section_start = len(doc.paragraphs)
+    title_style = style_of(role_style, "section_title")
+    bar_title = getattr(layout, "section_title_style", "plain") == "left_bar"
+    title_index: int | None = None
     if not section.layout.hide_title and section.title:
-        section_title(
-            doc,
-            section.title,
-            base,
-            layout,
-            accent,
-            accent_soft,
-            theme=theme,
-            style=style_of(role_style, "section_title"),
-        )
+        previous = _last_body_paragraph(doc)
+        gap_mm = section_title_gap_mm(base, layout, title_style)
+        if bar_title and previous is not None and not page_break:
+            # #9：Word 的段落左边框会把**段前距**一起框进竖条（行盒 1.7em + 间距 1.3em +
+            # 段后 0.4em ≈ 3.4em，正是用户截图里"三倍高、悬在标题上方"的样子）。把分区间距
+            # 挪到上一段的段后，竖条就只包住行盒。标题是第一段 / 紧跟分页符时没有"上一段"，
+            # 保留原段前距（竖条会略高，可接受）。
+            _bump_space_after(previous, gap_mm)
+            section_title(
+                doc,
+                section.title,
+                base,
+                layout,
+                accent,
+                accent_soft,
+                theme=theme,
+                style=title_style,
+                space_before_mm=0.0,
+                space_after_mm=0.0,
+            )
+        else:
+            section_title(
+                doc,
+                section.title,
+                base,
+                layout,
+                accent,
+                accent_soft,
+                theme=theme,
+                style=title_style,
+            )
+        title_index = len(doc.paragraphs) - 1
         if page_break:
             _mark_page_break(doc, section_start)
             page_break = False
+
+    def settle_title_spacing() -> None:
+        """标题后的 0.4em 挪到**下一段的段前**（只对 left_bar）。
+
+        同样是为了不让段落边框把段后距算进竖条高度。找不到"紧随其后的段落"时（下一块
+        是表格 / 本分区没有内容）这 0.4em 就**不写入**：宁可少 0.4em 的呼吸感，也不把
+        间距落到表格下方——那会在版面上凭空多出一个空档，且离标题很远。实际排版里
+        每个分区的第一块都是段落（条目头 / 正文块），这条兜底只防御性存在。
+        """
+        if not bar_title or title_index is None:
+            return
+        following = _paragraph_after(doc, doc.paragraphs[title_index])
+        if following is not None:
+            _bump_space_before(following, base * _PX_TO_MM * 0.4)
+
     if section.kind == "inline":
         # inline 板块是**一段**多 run 文本（条目内字段用 · 连接、条目之间用 planner 的
         # row_separator），与 HTML 的一个 div / Markdown 的一行同构。
@@ -259,6 +365,7 @@ def _draw_section(
             _mark_page_break(doc, block_start)
         if keep:
             _chain_keep_with_next(doc, section_start)
+        settle_title_spacing()
         return
     if section.kind == "text":
         block_start = len(doc.paragraphs)
@@ -276,6 +383,7 @@ def _draw_section(
             _mark_page_break(doc, block_start)
         if keep:
             _chain_keep_with_next(doc, section_start)
+        settle_title_spacing()
         return
     for index, entry in enumerate(section.entries):
         entry_start = len(doc.paragraphs)
@@ -298,6 +406,7 @@ def _draw_section(
             page_break = False
         if entry_keep:
             _chain_keep_with_next(doc, entry_start, entry_end)
+    settle_title_spacing()
     if keep:
         _chain_keep_with_next(doc, section_start)
 
@@ -313,6 +422,7 @@ def draw_document(
     accent: tuple[int, int, int],
     accent_soft: tuple[int, int, int],
     role_style: RoleStyleQuery | None,
+    font_key: str | None = None,
 ) -> None:
     """把 DocumentPlan 写成 Word 正文（页头 + 所有分区）。"""
     draw_header(
@@ -324,6 +434,7 @@ def draw_document(
         theme=theme,
         accent=accent,
         accent_soft=accent_soft,
+        font_key=font_key,
     )
     for section in plan.sections:
         _draw_section(

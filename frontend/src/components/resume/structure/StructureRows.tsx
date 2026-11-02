@@ -20,10 +20,12 @@ import {
   UnlockOutlined,
 } from "@ant-design/icons";
 import { useLocale } from "../../../i18n/i18nContext";
+import { useState } from "react";
 import { t } from "../../../i18n";
 import type { MessageKey } from "../../../i18n";
 import type { Placement } from "../../../types/resumeDocument";
 import type { StructureNode } from "../../../features/resume-document/summarize";
+import { buildEntryMenuItems, type EntryMenuKey } from "../../resume-editor/entryMenuItems";
 import type { StructurePanelApi } from "./useStructurePanel";
 
 /** R-08 行密度：缩进从 14px 收到 12px（4 层缩进少用 8px，窄栏留给字段名）。 */
@@ -39,14 +41,15 @@ const PLACEMENT_LABEL_KEYS: Record<Placement, MessageKey> = {
   hidden: "structure.placement.hidden",
 };
 
-const PLACEMENT_OPTIONS: readonly Placement[] = [
-  "title",
-  "meta",
-  "lead",
-  "body",
-  "trail",
-  "hidden",
-];
+/**
+ * 位置菜单的候选（`ItemActions` 的「移动位置」下拉）。
+ *
+ * **不含 `body`**：正文只放正文块（`TextItem`），字段进正文会变成"中栏长出两套控件、
+ * 纸面 `_body_blocks` 静默丢弃"（2026-11-02，与 `placement.ts` 的 field 白名单同一口径）。
+ * 这条菜单是位置下拉的第二个入口，两份候选必须一致——只在这里删 `body` 就够，
+ * 白名单本身由 `allowedPlacementsForItem` 守着。
+ */
+const PLACEMENT_OPTIONS: readonly Placement[] = ["title", "meta", "lead", "trail", "hidden"];
 
 export interface StructureRowsProps {
   api: StructurePanelApi;
@@ -167,7 +170,50 @@ function StructureRow({
     return event.clientY - rect.top > rect.height / 2 ? "after" : "before";
   };
 
-  return (
+  /**
+   * #7：条目行的右键菜单与画布条目卡是**同一份**（6 项，见 `entryMenuItems`）：
+   * 排版整条… ｜ 上移 / 下移 / 复制 ｜ 隐藏 / 移除。只读时整块不接（不弹空菜单）。
+   * 右键落点存进 state（不是 ref：渲染期要把它带进菜单项的回调，ref 在渲染期读会被
+   * `react-hooks/refs` 判红），供「排版整条…」当浮层锚点。
+   */
+  const [anchor, setAnchor] = useState({ x: 0, y: 0 });
+  const entryMenu: MenuProps | null =
+    node.kind === "entry" && node.path && !api.readOnly
+      ? {
+          items: buildEntryMenuItems(
+            {
+              style: t("document.entry.styleWhole"),
+              moveUp: t("document.entry.moveUp"),
+              moveDown: t("document.entry.moveDown"),
+              copy: t("document.entry.copy"),
+              toggle: node.hidden ? t("document.entry.show") : t("document.entry.hide"),
+              remove: t("document.entry.remove"),
+            },
+            {
+              canMoveUp: api.canMoveEntry(node, -1),
+              canMoveDown: api.canMoveEntry(node, 1),
+            },
+          ),
+          onClick: ({ key, domEvent }) => {
+            // 行本身点一下就选中：菜单项的点击不能再冒泡成一次选中。
+            domEvent.stopPropagation();
+            const path = node.path ?? "";
+            if (!path) return;
+            const action = key as EntryMenuKey;
+            if (action === "style") {
+              api.requestEntryStyle({ path, x: anchor.x, y: anchor.y });
+              return;
+            }
+            if (action === "moveUp") api.moveEntryUp(node);
+            else if (action === "moveDown") api.moveEntryDown(node);
+            else if (action === "copy") api.copyEntry(node);
+            else if (action === "toggle") api.toggleHidden(node);
+            else if (action === "remove") api.removeEntry(node);
+          },
+        }
+      : null;
+
+  const row = (
     <div
       className={rowClass}
       role="treeitem"
@@ -182,6 +228,9 @@ function StructureRow({
       tabIndex={api.activeKey === node.key ? 0 : -1}
       style={{ paddingLeft: rowPadding(depth) }}
       onClick={handleClick}
+      onContextMenuCapture={(event) => {
+        setAnchor({ x: event.clientX, y: event.clientY });
+      }}
       onMouseEnter={() => api.handleRowHover(node)}
       onMouseLeave={() => api.handleRowHover(null)}
       onFocus={() => api.handleRowHover(node)}
@@ -279,6 +328,14 @@ function StructureRow({
         <ItemActions node={node} api={api} allowMove={!isHeaderItem} />
       ) : null}
     </div>
+  );
+
+  // 条目行多一层右键菜单（Dropdown 不额外产生 DOM，树结构不变）；其余行原样返回。
+  if (!entryMenu) return row;
+  return (
+    <Dropdown trigger={["contextMenu"]} menu={entryMenu}>
+      {row}
+    </Dropdown>
   );
 }
 

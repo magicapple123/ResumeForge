@@ -1,6 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 """SQLite 兼容升级测试。"""
 
+from pathlib import Path
+
 from alembic import command
 from app.database import Base, build_engine, ensure_sqlite_columns
 from app.database_migrations import (
@@ -10,6 +12,8 @@ from app.database_migrations import (
 )
 from app.main import SQLITE_REQUIRED_COLUMNS
 from sqlalchemy import create_engine, inspect, text
+
+BACKEND_DIR = Path(__file__).resolve().parents[1]
 
 # 从模型注册表取，而不是手写清单：手写清单会漏掉新表，让"迁移后的表集合"这条
 # 断言悄悄变成过时的期望值（而真出问题时是用户先发现）。
@@ -35,8 +39,17 @@ _FTS_DERIVED_TABLES = {
     )
     for suffix in ("", "_data", "_idx", "_docsize", "_config")
 }
-# 当前迁移 head；每次新增 revision 时同步这里。
-_HEAD_REVISION = "0073_apply_item_failure_taxonomy"
+def _head_revision() -> str:
+    """当前迁移链的 head，从 Alembic 实际读（写死字符串会在下个迁移落地时静默过期）。"""
+    from alembic.config import Config
+    from alembic.script import ScriptDirectory
+
+    config = Config()
+    config.set_main_option("script_location", str(BACKEND_DIR / "migrations"))
+    return str(ScriptDirectory.from_config(config).get_current_head())
+
+
+_HEAD_REVISION = _head_revision()
 
 
 def _assert_head_schema(bind) -> None:

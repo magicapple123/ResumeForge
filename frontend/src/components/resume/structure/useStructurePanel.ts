@@ -29,6 +29,7 @@ import {
   type DropSide,
   type StructureCommandResult,
 } from "./structureCommands";
+import { useStructureEntryMenu, type StructureEntryMenuApi } from "./useStructureEntryMenu";
 import { highlightTargetsForNode, useCanvasPathHighlight } from "./structureHighlight";
 import { useStructureHoverPaint } from "./useStructureHoverPaint";
 import { queryTreeRow } from "./structureDom";
@@ -68,9 +69,14 @@ export interface StructurePanelOptions {
   treeRef: React.RefObject<HTMLDivElement | null>;
   /** U7 多选（可选）：不传 / null = 树内没有多选行为（不出高亮、不响应 Shift）。 */
   multiSelect?: StructureMultiSelect | null;
+  /**
+   * #7：条目行右键菜单的「排版整条…」出口。宿主接了就打开**整条范围**的排版浮层
+   * （`objects[<entryId>]`）；不传 = 这一项点了静默跳过（测试里单独渲染面板时）。
+   */
+  onRequestEntryStyle?: (request: { path: string; x: number; y: number }) => void;
 }
 
-export interface StructurePanelApi {
+export interface StructurePanelApi extends StructureEntryMenuApi {
   rows: ReturnType<typeof flattenVisible>;
   query: string;
   setQuery: (query: string) => void;
@@ -81,7 +87,6 @@ export interface StructurePanelApi {
   /** 选中行的全部祖先键（R-14：树上标出"选中项在这条链上"，折叠时也能看出归属）。 */
   selectedAncestorKeys: ReadonlySet<string>;
   activeKey: string;
-  reveal: { path: string; nonce: number } | null;
   drag: { node: StructureNode; overKey: string; side: DropSide } | null;
   readOnly: boolean;
   toggleCollapse: (key: string) => void;
@@ -131,6 +136,7 @@ export function useStructurePanel({
   initialQuery = "",
   treeRef,
   multiSelect = null,
+  onRequestEntryStyle,
 }: StructurePanelOptions): StructurePanelApi {
   const tree = useMemo(
     () =>
@@ -146,7 +152,6 @@ export function useStructurePanel({
   const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set());
   const [query, setQuery] = useState(initialQuery);
   const [activeKey, setActiveKey] = useState("");
-  const [reveal, setReveal] = useState<{ path: string; nonce: number } | null>(null);
   const [drag, setDrag] = useState<{ node: StructureNode; overKey: string; side: DropSide } | null>(
     null,
   );
@@ -281,8 +286,9 @@ export function useStructurePanel({
       // Shift 连选的锚点也在这里落一次：点「已经选中」的那条时 selectedPath 没变化，
       // 面板里跟随 selectedPath 的那个 effect 不会重跑，锚点会丢（Shift 点击只选到一条）。
       multiSelectApi.rememberAnchor(node);
+      // 纸面定位不在这里发起：宿主把这次选中标成 "structure" 来源，
+      // `useWorkbenchSelectionSync` 的 canvasReveal 是**唯一**的定位出口（见该文件头）。
       onSelectPath?.(node.path ?? null);
-      if (node.path) setReveal({ path: node.path, nonce: Date.now() });
       setActiveKey(node.key);
     },
     [multiSelectApi, onSelectPath],
@@ -354,6 +360,18 @@ export function useStructurePanel({
     [document, run],
   );
 
+  // ── #7 条目右键菜单：动作拆到 useStructureEntryMenu（预算 + 单一落点）──
+  const entryMenu = useStructureEntryMenu({
+    document,
+    readOnly,
+    run,
+    notify,
+    onChange,
+    onSelectPath,
+    clearSelection: multiSelectApi.clearSelection,
+    onRequestEntryStyle,
+  });
+
   // ── 拖拽 ───────────────────────────────────────────────────
   const handlePointerDragStart = useCallback((node: StructureNode) => {
     setDrag({ node, overKey: "", side: "inside" });
@@ -403,11 +421,12 @@ export function useStructurePanel({
   });
 
   // ── 画布高亮：hover 为直接注入（见 handleRowHover），选中走 hook（重载后仍能恢复）──
+  // 这里只管**高亮**：定位（scroll）由宿主的 canvasReveal 统一发起，面板不再自己滚一份。
   const selectedTargets = useMemo(() => highlightTargetsForNode(selectedNode), [selectedNode]);
   useEffect(() => {
     syncSelectedTargets(selectedTargets);
   }, [selectedTargets, syncSelectedTargets]);
-  useCanvasPathHighlight({ targets: selectedTargets, container: canvasContainer, reveal });
+  useCanvasPathHighlight({ targets: selectedTargets, container: canvasContainer });
 
   return {
     rows,
@@ -419,7 +438,6 @@ export function useStructurePanel({
     selectedKey,
     selectedAncestorKeys,
     activeKey: active,
-    reveal,
     drag,
     readOnly,
     toggleCollapse,
@@ -436,6 +454,7 @@ export function useStructurePanel({
     toggleLock,
     copyEntry,
     moveToPlacement,
+    ...entryMenu,
     multiSelectEnabled: multiSelectApi.enabled,
     multiSelectedPaths: multiSelectApi.paths,
     extendSelectionTo: multiSelectApi.extendSelectionTo,

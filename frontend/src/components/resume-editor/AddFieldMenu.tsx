@@ -16,6 +16,7 @@ import type {
 } from "../../types/resumeDocument";
 import {
   defaultFieldItem,
+  defaultTextItem,
   effectiveFieldFormat,
   missingFieldSpecs,
   itemPath,
@@ -74,6 +75,19 @@ export default function AddFieldMenu({
 
   if (readOnly) return null;
 
+  /**
+   * 正文区不加"字段"：纸面 `_body_blocks` 只处理 TextItem，字段进了 body 就是中栏有、纸面没有。
+   * 所以这个位置在这里只提供「添加正文块」，普通字段请回标题行 / 灰字段区。
+   */
+  const bodyOnly = placement === "body";
+
+  const addBodyBlock = () => {
+    const item = defaultTextItem("", "bullet");
+    onChange(addItem(document, sectionKey, entryId, item));
+    onSelectPath(itemPath(sectionKey, entryId, item.id));
+    onNotice(t("document.toast.fieldAdded"), "info");
+  };
+
   const addField = (key: string) => {
     const spec = fields.find((candidate) => candidate.key === key);
     const item: ResumeItem = spec
@@ -96,23 +110,27 @@ export default function AddFieldMenu({
     onNotice(t("document.toast.fieldAdded"), "info");
   };
 
-  const menuItems = [
-    ...(fields.length === 0
-      ? [{ key: "__empty", label: t("document.addField.empty"), disabled: true }]
-      : fields.map((spec) => ({
-          key: spec.key,
-          label: (
-            <span className="document-add-field-option">
-              {spec.label}
-              {spec.material_only ? (
-                <Tag className="document-add-field-tag">{t("document.addField.materialOnly")}</Tag>
-              ) : null}
-            </span>
-          ),
-        }))),
-    { type: "divider" as const, key: "__divider" },
-    { key: "__custom", label: t("document.addField.custom") },
-  ];
+  const menuItems = bodyOnly
+    ? [{ key: "__bodyBlock", label: t("document.body.addBlock") }]
+    : [
+        ...(fields.length === 0
+          ? [{ key: "__empty", label: t("document.addField.empty"), disabled: true }]
+          : fields.map((spec) => ({
+              key: spec.key,
+              label: (
+                <span className="document-add-field-option">
+                  {spec.label}
+                  {spec.material_only ? (
+                    <Tag className="document-add-field-tag">
+                      {t("document.addField.materialOnly")}
+                    </Tag>
+                  ) : null}
+                </span>
+              ),
+            }))),
+        { type: "divider" as const, key: "__divider" },
+        { key: "__custom", label: t("document.addField.custom") },
+      ];
 
   return (
     <Dropdown
@@ -120,6 +138,10 @@ export default function AddFieldMenu({
       menu={{
         items: menuItems,
         onClick: ({ key }) => {
+          if (key === "__bodyBlock") {
+            addBodyBlock();
+            return;
+          }
           if (key === "__empty" || key === "__divider") return;
           if (key === "__custom") {
             const item = defaultFieldItem({ key: `custom:${newObjectId()}`, placement });

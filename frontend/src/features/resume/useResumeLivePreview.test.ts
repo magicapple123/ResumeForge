@@ -358,6 +358,76 @@ describe("制作台实时预览 · 结果与失败", () => {
   });
 });
 
+/**
+ * 问题 12：切「精确」再切回「草稿」之后，草稿链路永久冻结。
+ *
+ * 成因是"保存挂起"与"模式暂停"共用一个 ref：`enabled` 变假时把它关掉，
+ * 变真时没有任何路径打开它，于是 `pump()` 永远在第一道门 return。
+ * 下面三个用例分别守住：恢复后能发、"恢复那一跳"不多发、保存闸门不被模式闸门带开。
+ */
+describe("制作台实时预览 · 模式切换（enabled 翻转）", () => {
+  it("enabled 由 false 转 true 后，修改 content 必须发出 render", async () => {
+    const { render } = manualRender();
+    const { rerender } = renderHook(
+      (props: UseResumeLivePreviewOptions) => useResumeLivePreview(props),
+      { initialProps: base({ render }) },
+    );
+
+    // 切到「精确」：草稿链路暂停。
+    rerender(base({ render, enabled: false }));
+    await advance(600);
+    expect(render).not.toHaveBeenCalled();
+
+    // 切回「草稿」：内容没变，不该补排（首帧不多发请求的同一条约束）。
+    rerender(base({ render, enabled: true }));
+    await advance(600);
+    expect(render).not.toHaveBeenCalled();
+
+    // 切回之后编辑：必须发请求（旧实现这里永远冻结）。
+    rerender(base({ render, enabled: true, content: B }));
+    await advance(600);
+    expect(render).toHaveBeenCalledTimes(1);
+  });
+
+  it("暂停期间改的内容，恢复时补排一次（不留过期纸面）", async () => {
+    const { render, calls } = manualRender();
+    const { rerender } = renderHook(
+      (props: UseResumeLivePreviewOptions) => useResumeLivePreview(props),
+      { initialProps: base({ render }) },
+    );
+
+    rerender(base({ render, enabled: false }));
+    rerender(base({ render, enabled: false, content: B }));
+    await advance(600);
+    expect(render).not.toHaveBeenCalled();
+
+    rerender(base({ render, enabled: true, content: B }));
+    await advance(600);
+    expect(render).toHaveBeenCalledTimes(1);
+    expect(summaryOf(calls[0].content)).toBe("b");
+  });
+
+  it("保存挂起期间切模式，不会解除保存挂起（两个闸门独立）", async () => {
+    const { render } = manualRender();
+    const { rerender, result } = renderHook(
+      (props: UseResumeLivePreviewOptions) => useResumeLivePreview(props),
+      { initialProps: base({ render }) },
+    );
+
+    act(() => result.current.suspend());
+    // 保存还在飞：切到精确再切回草稿，并改一次内容。
+    rerender(base({ render, enabled: false }));
+    rerender(base({ render, enabled: true, content: B }));
+    await advance(600);
+    expect(render).not.toHaveBeenCalled();
+
+    // 保存结束才交还控制权，此时才补排。
+    act(() => result.current.resume());
+    await advance(600);
+    expect(render).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe("预览刷新后的滚动位置", () => {
   function makeScrollHost(): { host: HTMLDivElement; layout: HTMLDivElement } {
     const host = document.createElement("div");

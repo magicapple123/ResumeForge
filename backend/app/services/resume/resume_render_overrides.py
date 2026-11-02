@@ -108,6 +108,30 @@ def _content_object_ids(content: dict | None) -> set[str]:
     return found
 
 
+def _content_photo_value(content: dict | None) -> str | None:
+    """content 里的页眉照片（``photo_crop.source.sha256`` 要比对的那一份）。
+
+    **v2 文档没有顶层 ``photo``**：照片是 ``header.items`` 里 ``placement == "photo"``
+    的字段值。只读顶层就会在保存时把 ``photo_crop`` 当成"照片已换"删掉——用户裁完保存、
+    重开发现裁剪没了。这里的取图口径与 ``document_html.document_photo_value`` 一致
+    （第一条 photo 位置的非空值），v1 仍读顶层 ``content["photo"]``。
+    """
+    if not isinstance(content, dict):
+        return None
+    if content.get("version") == 2:
+        header = content.get("header")
+        items = header.get("items") if isinstance(header, dict) else None
+        for item in items or []:
+            if not isinstance(item, dict) or item.get("placement") != "photo":
+                continue
+            value = item.get("value")
+            text = value.strip() if isinstance(value, str) else ""
+            return text or None
+        return None
+    photo = content.get("photo")
+    return photo if isinstance(photo, str) and photo.strip() else None
+
+
 def prune_overrides(content: dict | None, format_config: dict | None) -> dict | None:
     """裁掉指向不存在对象的 objects / object_roles / pagination.entries 与失效的 photo_crop。
 
@@ -175,14 +199,12 @@ def prune_overrides(content: dict | None, format_config: dict | None) -> dict | 
                 else:
                     result["pagination"] = pruned
 
-    photo = content.get("photo") if isinstance(content, dict) else None
+    photo = _content_photo_value(content)
     crop = result.get("photo_crop")
     if isinstance(crop, dict):
         source = crop.get("source")
         sha = source.get("sha256") if isinstance(source, dict) else None
-        if not isinstance(sha, str) or sha != photo_sha256(
-            photo if isinstance(photo, str) else None
-        ):
+        if not isinstance(sha, str) or sha != photo_sha256(photo):
             changed = True
             result.pop("photo_crop", None)
 

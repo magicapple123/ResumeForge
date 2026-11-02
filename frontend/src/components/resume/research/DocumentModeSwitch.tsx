@@ -15,7 +15,7 @@
  * （`MODE_PAGE_LIMITS`，旧后端兜底）并各有测试钉住。
  */
 import { InfoCircleOutlined } from "@ant-design/icons";
-import { Alert, Button, Col, Row, Segmented, Select, Space, Tooltip, Typography } from "antd";
+import { Alert, Button, Segmented, Select, Tooltip, Typography } from "antd";
 import { useState } from "react";
 import { rt } from "../../../features/resume-research/i18n";
 import {
@@ -97,47 +97,45 @@ export default function DocumentModeSwitch({
   };
 
   return (
-    <Space orientation="vertical" size={8} style={{ width: "100%" }}>
-      <Row gutter={8} align="middle">
-        <Col flex="none">
-          <Space size={4}>
-            <Typography.Text strong>{rt("research.mode.label")}</Typography.Text>
-            <Tooltip title={rt("research.mode.hint")}>
-              <Button
-                type="text"
-                size="small"
-                icon={<InfoCircleOutlined />}
-                aria-label={rt("research.mode.hint")}
-              />
-            </Tooltip>
-          </Space>
-        </Col>
-        <Col flex="auto">
-          <Segmented
-            value={current}
-            disabled={locked || undefined}
-            onChange={handleMode}
-            aria-label={rt("research.mode.label")}
-            options={[
-              { value: "resume", label: rt("research.mode.resume") },
-              { value: "long_cv", label: rt("research.mode.longCv") },
-            ]}
-          />
-        </Col>
-        <Col flex="none">
-          <Space size={4}>
-            <Typography.Text type="secondary">{rt("research.mode.limitLabel")}</Typography.Text>
-            <Select
-              value={clampFor(current, pageLimit)}
-              disabled={locked || undefined}
-              onChange={handleLimit}
-              options={limitOptions}
-              aria-label={rt("research.mode.limitLabel")}
-              style={{ width: 96 }}
+    <div className="resume-wb-field-rows">
+      {/* 任务 4：「文档模式」与「篇幅上限」各占一行，四行同一条标签列——
+          原先 `Row/Col` 的 `flex="auto"` 会把「篇幅上限」顶到最右，和下面三行对不齐。 */}
+      <div className="resume-wb-field-row">
+        <span className="resume-wb-field-label">
+          {rt("research.mode.label")}
+          <Tooltip title={rt("research.mode.hint")}>
+            <Button
+              type="text"
+              size="small"
+              icon={<InfoCircleOutlined />}
+              aria-label={rt("research.mode.hint")}
             />
-          </Space>
-        </Col>
-      </Row>
+          </Tooltip>
+        </span>
+        <Segmented
+          value={current}
+          disabled={locked || undefined}
+          onChange={handleMode}
+          aria-label={rt("research.mode.label")}
+          options={[
+            { value: "resume", label: rt("research.mode.resume") },
+            { value: "long_cv", label: rt("research.mode.longCv") },
+          ]}
+        />
+      </div>
+      <div className="resume-wb-field-row">
+        <span className="resume-wb-field-label">{rt("research.mode.limitLabel")}</span>
+        <span>
+          <Select
+            value={clampFor(current, pageLimit)}
+            disabled={locked || undefined}
+            onChange={handleLimit}
+            options={limitOptions}
+            aria-label={rt("research.mode.limitLabel")}
+            style={{ width: 96 }}
+          />
+        </span>
+      </div>
       {current === "long_cv" ? (
         <Alert type="info" showIcon title={rt("research.mode.budget")} />
       ) : null}
@@ -159,6 +157,6 @@ export default function DocumentModeSwitch({
           {rt("research.mode.readonlyHint")}
         </Typography.Text>
       ) : null}
-    </Space>
+    </div>
   );
 }

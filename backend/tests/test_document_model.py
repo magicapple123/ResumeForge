@@ -213,6 +213,33 @@ def test_iter_and_block_index() -> None:
     assert index == {VALID_ID: 0, VALID_ID_2: 1}
 
 
+def test_normalize_keeps_empty_custom_section_with_title() -> None:
+    """自建板块的「空」是合法中间态：新建后先保存、内容随后再填（任务 11）。"""
+    section = ResumeSection(key="custom:19b6a1c2d3e4", title="自建板块", entries=[])
+    document = normalize_document(_doc(section))
+    assert [item.key for item in document.sections] == ["custom:19b6a1c2d3e4"]
+    assert document.sections[0].title == "自建板块"
+    assert document.sections[0].kind == "entries"
+    assert document.sections[0].entries == []
+    # 幂等：保留下的空自建板块再归一化一次仍然在（不会第一轮留下、第二轮丢掉）。
+    again = normalize_document(document)
+    assert [item.key for item in again.sections] == ["custom:19b6a1c2d3e4"]
+
+
+def test_normalize_still_drops_empty_system_section_with_title() -> None:
+    """系统板块的空是真没内容：即使有 title 也照旧丢弃。"""
+    section = ResumeSection(key="education", title="教育经历", entries=[])
+    document = normalize_document(_doc(section))
+    assert document.sections == []
+
+
+def test_normalize_drops_empty_custom_section_without_title() -> None:
+    """连标题都没有的空自建板块是脏数据（用户看不到、也点不到），丢弃。"""
+    section = ResumeSection(key="custom:19b6a1c2d3e4", title="   ", entries=[])
+    document = normalize_document(_doc(section))
+    assert document.sections == []
+
+
 def test_header_contact_breaks_normalized() -> None:
     document = ResumeDocument(
         header=ResumeHeader(

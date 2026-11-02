@@ -81,6 +81,7 @@ export default function ItemChipRow({
                 path={path}
                 item={item}
                 sectionKey={section.key}
+                sectionKind={section.kind}
                 catalog={catalog}
                 readOnly={readOnly}
                 onChange={onChange}

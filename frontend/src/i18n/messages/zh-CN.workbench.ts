@@ -63,6 +63,13 @@ const workbench = {
   /** 第四组：外观（颜色 4 项）。 */
   "workbench.group.appearance": "外观",
 
+  // ── 问题 22 ①：左栏「新页」区块收起后的那一行 ──────────────
+  /** 板块数是**实测值**（`document.sections` 里 `start_on_new_page` 为真的个数），所以带参数：
+      写死「16 个板块」在用户删掉/新增板块之后就成了谎话。 */
+  "workbench.newPage.summary": "分页：{count} 个板块设了新页",
+  /** 一个都没设时换一句说法，而不是显示「0 个板块设了新页」。 */
+  "workbench.newPage.summaryEmpty": "分页：没有板块设新页",
+
   // ── 三个新系数的名字 ───────────────────────────────────────
   /** `name_scale`：姓名是唯一"字号只属于它自己"的元素。 */
   "workbench.param.name-scale": "姓名大小",
@@ -96,7 +103,9 @@ const workbench = {
   "workbench.color.navy": "深蓝",
   "workbench.color.forest": "墨绿",
   "workbench.color.wine": "暗红",
-  "workbench.color.followTemplate": "跟随模板",
+  /** 颜色行的值列：无覆盖时这一格写的不是色值而是状态。**最多 3 个字**——
+      参数栏里这一格是 44px（14px 字号 × 3 = 42），4 个汉字会溢出（问题 21）。 */
+  "workbench.color.followTemplate": "随模板",
   "workbench.param.paletteAria": "展开{label}的色板",
 
   // ── 编辑器（中栏与弹窗共用）────────────────────────────────

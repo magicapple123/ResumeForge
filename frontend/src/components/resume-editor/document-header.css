@@ -8,23 +8,36 @@
   gap: 8px;
 }
 
-/* 位置分组：组名在左，chip 流在右（与正文三区卡的「区名 + chips」同一观感）。 */
+/* 位置分组：R-05「位置组无容器」——组本身只有「11px 组名 + chips 网格」，
+   不再自成立卡片；卡片由下面那一层 `.document-header-card` 统一承担，与条目卡同形态。 */
 .document-header-group {
   display: flex;
   flex-direction: column;
   gap: 4px;
-  padding: 6px 8px;
+  align-items: stretch;
+  min-width: 0;
+}
+
+/* 页眉唯一的卡片层：与 `.document-entry` 同值（1px / 8px / 10px 12px / gap 8px）。
+   刻意不复用 `.document-entry` 类名——那一份会被 `.is-selected` / `.is-hidden` 误伤。 */
+.document-header-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
   border: 1px solid var(--rf-border-subtle);
   border-radius: 8px;
   background: var(--rf-surface-elevated);
+  min-width: 0;
 }
 
-.document-header-group > .document-zone-label {
+.document-header-group > .document-group-block-title {
   font-size: 11px;
   color: var(--rf-text-secondary);
 }
 
-/* 页眉 chip 的位置组只有一行，宽度按内容走（不撑满整行，避免"空盒子"）。 */
+/* 页眉 chip 走等宽网格（`.document-group-cells`），格子宽度由列数决定；
+   这里只兜住「不会横向溢出」这一条。 */
 .document-header-group .document-chip-slot {
   max-width: 100%;
 }
@@ -39,6 +52,25 @@
   border: 1px solid var(--rf-border-subtle);
   background: var(--rf-surface-alt);
   flex: none;
+}
+
+/* 非破坏裁剪（任务 6）：外层按取景比例定形，内层 img 的放大与偏移由
+   `CroppedPhotoThumb` 的内联百分比算好（与裁剪弹窗预览同一套算式）。
+   没有 `photo_crop` 时组件直接渲染原图 `<img>`，上面那条规则原样生效。 */
+.rf-crop-thumb {
+  display: block;
+  overflow: hidden;
+  position: relative;
+}
+
+.rf-crop-thumb > img {
+  max-width: none;
+}
+
+/* chip 里的照片：高度固定 40px，宽度由取景比例决定（3:4 时仍是 32px，与裁前一致）。 */
+.document-chip-photo.rf-crop-thumb {
+  width: auto;
+  height: 40px;
 }
 
 .document-chip-header.is-photo .document-chip-main {
@@ -74,6 +106,14 @@
   width: 100%;
   height: 100%;
   object-fit: cover;
+}
+
+/* 展开态的裁剪缩略图：按取景比例铺在 72×90 的框里，超出部分由框自身裁掉
+   （观感与改动前的 `object-fit: cover` 一致，但取景已经是裁剪后的那一段）。 */
+.document-photo-frame .rf-crop-thumb {
+  height: 100%;
+  width: auto;
+  max-width: none;
 }
 
 .document-photo-empty {

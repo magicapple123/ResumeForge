@@ -32,7 +32,7 @@ contact_breaks = ["email", "github"]   # 键取自 CONTACT_FIELDS；在列出的
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 
 from ...schemas.resume import ResumeContent
 
@@ -58,8 +58,11 @@ LABELLED_FIELDS: dict[str, str] = {
 
 #: PDF 同一行里字段之间的分隔符（与历史输出一致：四个半角空格）。
 PDF_SEPARATOR = "    "
-#: Word 同一行里字段之间的分隔符（与历史输出一致：两个全角空格）。
-WORD_SEPARATOR = "\u3000\u3000"
+#: Word 同一行里字段之间的分隔符（2026-11 #9 起：两个半角空格 ≈ 1em，向预览的 1.14em 靠）。
+#:
+#: 旧值是两个全角空格（`\u3000\u3000` = 2em）：既比预览宽一倍，又会在 Word 打开「显示
+#: 编辑标记」时渲染成两对 `□□`，用户以为乱码。改成半角后间隔与预览接近，也不再有那些方块。
+WORD_SEPARATOR = "  "
 
 
 def validate_contact_breaks(raw: object) -> list[str]:
@@ -143,8 +146,60 @@ def contact_groups(items: list[dict]) -> list[list[str]]:
 
 
 def contact_lines(items: list[dict], separator: str) -> list[str]:
-    """按强制换行分组后直接拼成行文本（Word 用；不需要再按宽度装行）。"""
+    """按强制换行分组后直接拼成行文本（不按宽度装行；仅用于「不需要装行」的调用方）。"""
     return [separator.join(group) for group in contact_groups(items)]
+
+
+def pack_contact_lines(
+    groups: Sequence[Sequence[str]],
+    width: float,
+    measure: Callable[[str], float] | None,
+    separator: str = PDF_SEPARATOR,
+) -> list[list[str]]:
+    """按可用宽度把每一组联系方式装成若干行（**纯函数**，2026-11 #9）。
+
+    ## 为什么四出口要共用这一份装行
+
+    同一份内容在预览里按「字段」断行（`.contact span` 是 `nowrap` + 字段间 `<wbr>`），
+    Word 却把整组拼成一段交给 Word 自己度量：字段间隔（旧值 2em）与字符宽度都不同，
+    行分布必然对不上（用户看到"预览 GitHub 起第二行、Word 个人主页才落第二行"）。
+    把贪心循环抽到这里之后，PDF 传 `pdf.rich_text_width`、Word 传字体文件量出来的
+    宽度，两端的**行分布口径就只剩字体度量这一处差异**。
+
+    ## 契约
+
+    - **组内装行、组间绝不合并**：`groups` 已经按 `contact_breaks` 切好，跨组是用户显式
+      要求的强制换行；
+    - **字段内不折行**：单个字段本身比整行还宽时（超长 URL）让它**独占一行**并如实溢出，
+      与 HTML 的 `white-space: nowrap` 同义；
+    - `measure` 为 `None`（拿不到字体度量）或 `width <= 0` 时**退化成一组一行**，即
+      "整段交给下游自己换行"，不阻塞导出。
+
+    返回 `[[字段文本, …], …]`：每行是字段列表，由调用方用各自的分隔符拼起来
+    （PDF 用四空格、Word 用两空格，分隔符宽度差异因此也计入了 `measure`）。
+    """
+    result: list[list[str]] = []
+    for group in groups:
+        fields = [str(text) for text in group if str(text or "").strip()]
+        if not fields:
+            continue
+        if measure is None or not (width > 0):
+            result.append(fields)
+            continue
+        current: list[str] = []
+        for text in fields:
+            if not current:
+                current = [text]
+                continue
+            candidate = separator.join([*current, text])
+            if measure(candidate) > width:
+                result.append(current)
+                current = [text]
+            else:
+                current.append(text)
+        if current:
+            result.append(current)
+    return result
 
 
 __all__ = [
@@ -157,5 +212,6 @@ __all__ = [
     "contact_groups",
     "contact_items",
     "contact_lines",
+    "pack_contact_lines",
     "validate_contact_breaks",
 ]

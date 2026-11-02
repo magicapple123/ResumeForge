@@ -18,6 +18,8 @@ const workbench = {
   "workbench.group.measure": "Typography settings",
   "workbench.group.spacing": "Hierarchy and spacing",
   "workbench.group.appearance": "Appearance",
+  "workbench.newPage.summary": "Page breaks: {count} sections start on a new page",
+  "workbench.newPage.summaryEmpty": "Page breaks: none set yet",
   "workbench.param.name-scale": "Name size",
   "workbench.param.section-title-scale": "Section heading size",
   "workbench.param.entry-gap": "Entry spacing",
@@ -34,7 +36,9 @@ const workbench = {
   "workbench.color.navy": "Navy",
   "workbench.color.forest": "Forest green",
   "workbench.color.wine": "Dark red",
-  "workbench.color.followTemplate": "Template default",
+  /** 颜色行的值列（同 zh-CN：与 `resume.measure.hintTemplate` 同批缩短，
+      原来 `Template default` 在参数栏那一格里要 103px，溢出到来源胶囊上）。 */
+  "workbench.color.followTemplate": "Template",
   "workbench.param.paletteAria": "Toggle palette for {label}",
   "workbench.column.editor": "Resume content",
   "workbench.resizer.params":

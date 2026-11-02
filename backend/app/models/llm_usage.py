@@ -12,13 +12,18 @@
 - `retries` 是传输层重试次数。
 - `cost_estimate` 只在**用户配置了单价**时估算；没配置就留 NULL，不臆造费用。
 - `task` 是任务类别（生成/修订/建议/翻译/优化/助手…），`model` 是模型标识。
+- `input_scope` / `masked` / `language` / `budget`（0074）：**#35 的数据边界审计四字段**。
+  它们回答"这次调用喂了什么范围的数据（`resume+profile+job` / `job` / `none`…）、
+  是否已脱敏、目标语言是什么、声明的 token 预算多少"。取值与日志里的
+  `llm.call input_scope=…` 同源（ContextVar），所以日志、接口、表三处可以逐条对齐；
+  仍然**只存枚举与数字**，不含任何正文片段。
 
 数据集隔离同样结构上成立：账本在每份数据集自己的库里。
 """
 
 from datetime import datetime
 
-from sqlalchemy import DateTime, Float, ForeignKey, Integer, String
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from ..database import Base
@@ -49,6 +54,13 @@ class LLMUsageRecord(Base):
     # 费用只在用户配置了单价时才有值；cost_currency 为空表示"未估算"。
     cost_estimate: Mapped[float | None] = mapped_column(Float, nullable=True)
     cost_currency: Mapped[str] = mapped_column(String(8), default="", server_default="")
+    # #35 数据边界四字段（0074）。空串 = 入口没声明（老账本与未声明入口都落在这一档），
+    # masked 的 NULL 与 False 必须能区分：NULL 是"没记录"，False 是"明确未脱敏"。
+    input_scope: Mapped[str] = mapped_column(String(64), default="", server_default="")
+    masked: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    language: Mapped[str] = mapped_column(String(16), default="", server_default="")
+    # token 预算声明（不是硬截断）；NULL = 未声明。
+    budget: Mapped[int | None] = mapped_column(Integer, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True)
 
 

@@ -20,6 +20,7 @@ from .layout import (
     ResumeLayout,
 )
 from .meta_columns import draw_meta_columns
+from .meta_lines import draw_meta_line
 from .rich_text import disable_markdown_links, drawn_text, to_fpdf_markup
 from .skill_tags import draw_skill_tags, soft_accent
 from .style_blocks import (
@@ -28,7 +29,6 @@ from .style_blocks import (
 from .style_blocks import (
     draw_bullets,
     draw_entry_head,
-    draw_meta_line,
     draw_section_title,
     section_title_total_height,
 )
@@ -454,19 +454,25 @@ class _ResumePDF(FPDF):
             keep_lines=keep_lines,
         )
 
-    def meta_line(self, text: str, base: float, *, style=None) -> None:
-        """条目副行：绘制在 style_blocks（字号/颜色可被覆盖）。"""
-        draw_meta_line(self, text, base, style=style)
+    def meta_line(
+        self, text: str, base: float, *, style=None, first: bool = True, last: bool = True
+    ) -> None:
+        """条目副行：绘制在 meta_lines。``first`` / ``last`` = 灰字段组的首/末条（问题 17），
+        组级段距只在首尾出现；默认都为 True = 旧行为（一条一组时逐像素不变）。
+        """
+        draw_meta_line(self, text, base, style=style, first=first, last=last)
 
     def meta_columns(
-        self, cells, widths: Sequence[float], gap: float, base: float, *, style=None
+        self, cells, widths: Sequence[float], gap: float, base: float, *, style=None,
+        first: bool = True, last: bool = True,
     ) -> None:
         """W4 条目字段多列：一行按**预算好的列宽**并排绘制（几何与 meta_line 同口径）。
 
         ``widths`` 是 ``meta_columns.column_widths`` 按该 entry 每列最宽内容算出的结果（mm），
-        同一个 entry 的所有行共用一份，跨行列起点才对得齐。
+        同一个 entry 的所有行共用一份，跨行列起点才对得齐。``first`` / ``last`` 的语义
+        与 ``meta_line`` 相同（问题 17：一行多个 cell 属于**同一行**，组语义落在行上）。
         """
-        draw_meta_columns(self, cells, widths, gap, base, style=style)
+        draw_meta_columns(self, cells, widths, gap, base, style=style, first=first, last=last)
 
     def skill_tags(self, labels: list[str], base: float, *, style=None) -> None:
         """把专业技能画成**模板真实的标签形状**，与 HTML 预览一致。

@@ -22,6 +22,7 @@ import { makeResumeDocument } from "../../test/documentHarness";
 import ResumeWorkbenchV2Canvas from "./ResumeWorkbenchV2Canvas";
 
 interface CanvasStubProps {
+  html?: string;
   exactPreview?: { content?: ResumeDocument; contentSignature?: string };
 }
 
@@ -85,6 +86,7 @@ function summaryOf(document: ResumeDocument | undefined): string {
 
 const SAVED = makeContent("saved");
 const EDITED = makeContent("edited");
+const EDITED_AGAIN = makeContent("edited-again");
 
 const EXACT_CONTEXT = {
   resumeId: 7,
@@ -107,21 +109,39 @@ async function advance(ms: number) {
   });
 }
 
-function mount(document: ResumeDocument | null, exactPreview: Record<string, unknown>) {
+/** Host-side html (what the saved resume rendered to) for the current render pass. */
+interface HostState {
+  html?: string;
+  suspended?: boolean;
+}
+
+const HOST_HTML = "<html><body>host</body></html>";
+const RENDERED = "<html><body>rendered</body></html>";
+
+function mount(
+  document: ResumeDocument | null,
+  exactPreview: Record<string, unknown>,
+  host: HostState = {},
+) {
   const previewRef = createRef<ResumePreviewHandle>();
-  const tree = (doc: ResumeDocument | null) => (
+  const tree = (doc: ResumeDocument | null, state: HostState) => (
     <ResumeWorkbenchV2Canvas
-      html="<html><body>preview</body></html>"
+      html={state.html ?? HOST_HTML}
       warnings={[]}
       pages={1}
       previewRef={previewRef}
       exactPreview={exactPreview as never}
       document={doc}
       layout={LAYOUT}
+      suspended={state.suspended}
     />
   );
-  const view = render(tree(document));
-  return { view, rerender: (doc: ResumeDocument | null) => view.rerender(tree(doc)) };
+  const view = render(tree(document, host));
+  return {
+    view,
+    rerender: (doc: ResumeDocument | null, state: HostState = host) =>
+      view.rerender(tree(doc, state)),
+  };
 }
 
 beforeEach(() => {
@@ -169,5 +189,74 @@ describe("workbench canvas follows the unsaved document", () => {
     await advance(1500);
     expect(mocks.renderResume).not.toHaveBeenCalled();
     expect(lastCanvasProps().exactPreview?.content).toBeUndefined();
+  });
+});
+
+/**
+ * Q05 follow-up: which html the paper shows when both the live re-render and the
+ * host disagree.
+ *
+ * The old rule compared `live.source` (the host html read *when the result came
+ * back*) with the current `html` prop. That is always equal, so it never expired
+ * anything — and reading it at request time instead would discard every live result
+ * whenever the host html changed, which is exactly the reported "structure edits do
+ * not reach the paper" bug. The rule is now: a live result is dropped only when it
+ * was requested **before** the last save wrote its authoritative html.
+ */
+describe("live preview vs saved html", () => {
+  it("keeps the live result when the host html changes for another reason", async () => {
+    const { rerender } = mount(SAVED, EXACT_CONTEXT, { html: "host-1" });
+    await advance(700);
+    rerender(EDITED);
+    await advance(700);
+    expect(mocks.renderResume).toHaveBeenCalledTimes(1);
+    expect(lastCanvasProps().html).toBe(RENDERED);
+
+    // Opening another version / adopting a snippet rewrites the host html without a
+    // save. The live result still describes the current document, so it stays.
+    rerender(EDITED, { html: "host-2" });
+    expect(lastCanvasProps().html).toBe(RENDERED);
+  });
+
+  it("shows the saved html and drops a render requested before the save", async () => {
+    let resolveRender: (html: string) => void = () => undefined;
+    mocks.renderResume.mockImplementationOnce(
+      () =>
+        new Promise<string>((resolve) => {
+          resolveRender = resolve;
+        }),
+    );
+    const { rerender } = mount(SAVED, EXACT_CONTEXT, { html: "host-1" });
+    await advance(700);
+    rerender(EDITED);
+    await advance(700);
+    expect(mocks.renderResume).toHaveBeenCalledTimes(1);
+
+    // Save starts, then the host writes the authoritative html.
+    rerender(EDITED, { html: "host-1", suspended: true });
+    rerender(EDITED, { html: "saved", suspended: false });
+    expect(lastCanvasProps().html).toBe("saved");
+
+    // The request that was in flight when the save started must never come back.
+    await act(async () => {
+      resolveRender("<html><body>stale</body></html>");
+      await Promise.resolve();
+    });
+    expect(lastCanvasProps().html).toBe("saved");
+  });
+
+  it("still shows renders requested after the save", async () => {
+    const { rerender } = mount(SAVED, EXACT_CONTEXT, { html: "host-1" });
+    await advance(700);
+    rerender(EDITED, { html: "host-1", suspended: true });
+    rerender(EDITED, { html: "saved", suspended: false });
+    expect(lastCanvasProps().html).toBe("saved");
+
+    // A render requested after the save has a higher stamp: the watermark that
+    // protects the saved html must not swallow it.
+    rerender(EDITED_AGAIN, { html: "saved", suspended: false });
+    await advance(700);
+    expect(mocks.renderResume).toHaveBeenCalledTimes(1);
+    expect(lastCanvasProps().html).toBe(RENDERED);
   });
 });

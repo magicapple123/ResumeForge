@@ -70,8 +70,13 @@ const preview = {
   /** 溢出正文：先声明不自动缩字号，再拼上超出量与分页口径说明。 */
   "preview.canvas.overflowBody":
     "字号、行距、页边距都按你设定的值原样渲染，不会自动缩小；{amount}{note}",
-  /** 1 页上限时，超出内容被裁掉的说明。 */
-  "preview.canvas.note.overflow": "超出上限的部分不会显示——先收紧排版或增加页数才能看全。",
+  /**
+   * 有超额页时的说明（问题 2 方案 A：超限的页**照样显示**，只是不计入导出）。
+   *
+   * `{pages}` = 画布上真正画出来的纸张数，`{from}` = 第一张超额页的页号
+   * （= 页数上限 + 1）。与页角标 `preview.canvas.pageLabelOverflow` 同一口径。
+   */
+  "preview.canvas.note.overflow": "已显示全部 {pages} 页，其中第 {from} 页起不计入导出。",
   /** 多页视图的近似分页说明。 */
   "preview.canvas.note.approximate":
     "多页视图为「按 A4 高度切分的近似分页」，真实分页以「浏览器打印 / 下载 PDF」为准。",
@@ -81,6 +86,8 @@ const preview = {
   "preview.canvas.frameTitlePage": "简历预览 第 {page} 页",
   /** 纸面右下角的页码标注。 */
   "preview.canvas.pageLabel": "第 {page} 页 / 共 {total} 页（近似）",
+  /** 超出页数上限那一页的页角标注（问题 2）：说清"这页在导出里不存在"。 */
+  "preview.canvas.pageLabelOverflow": "第 {page} 页 · 超出上限，不计入导出",
 
   // ── 几何层产生的溢出量说明（geometry.ts）──────────────────────
   /** 超出一页以内：按百分比给出。 */

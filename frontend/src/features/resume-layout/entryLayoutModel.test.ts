@@ -31,11 +31,12 @@ function makeDoc(entryLayout: Partial<EntryLayout>, sectionColumns: 1 | 2 | 3 = 
 }
 
 describe("entryLayoutOverrides", () => {
-  it("全部为 null = 三项都继承板块；head 不计入可继承项", () => {
+  it("全部为 null = 四项都继承板块；head 不计入可继承项", () => {
     const doc = makeDoc({ head: "stacked" });
     expect(entryLayoutOverrides(doc.sections[0].entries[0])).toEqual({
       columns: false,
       align: false,
+      justify: false,
       gap: false,
     });
   });
@@ -45,12 +46,28 @@ describe("entryLayoutOverrides", () => {
     expect(entryLayoutOverrides(doc.sections[0].entries[0])).toEqual({
       columns: true,
       align: true,
+      justify: false,
       gap: true,
     });
   });
 
+  it("分布也能被条目单独覆盖（问题 4）", () => {
+    const doc = makeDoc({ justify: "between" });
+    expect(entryLayoutOverrides(doc.sections[0].entries[0])).toEqual({
+      columns: false,
+      align: false,
+      justify: true,
+      gap: false,
+    });
+  });
+
   it("没有条目时按全继承处理，不抛错", () => {
-    expect(entryLayoutOverrides(null)).toEqual({ columns: false, align: false, gap: false });
+    expect(entryLayoutOverrides(null)).toEqual({
+      columns: false,
+      align: false,
+      justify: false,
+      gap: false,
+    });
   });
 });
 

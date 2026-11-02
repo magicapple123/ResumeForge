@@ -73,8 +73,10 @@
   align-items: center;
 }
 
-/* #27：chip 落点插入线（画在目标 chip 的前/后边缘，不覆盖整个槽）。
-   线要贴边而不是盖住内容：用 ::before/::after 定位在槽的左右边缘。 */
+/* #27 / 问题 13：chip 落点插入线（画在目标 chip 的前/后边缘，不覆盖整个槽）。
+   线要贴边而不是盖住内容：用 ::before/::after 定位在槽的左右边缘。
+   问题 13 把线从 2px 加粗到 3px、并且上下各溢出 2px —— 2px 线落在 8px 的网格间隙里
+   只 3px 宽，密集网格下更像"两个 chip 之间的一道缝"，不像"可以落在这里"。 */
 .document-chip-slot {
   position: relative;
 }
@@ -83,18 +85,24 @@
 .document-chip-slot.is-drop-after::after {
   content: "";
   position: absolute;
-  top: 2px;
-  bottom: 2px;
-  width: 2px;
-  border-radius: 1px;
+  top: -2px;
+  bottom: -2px;
+  width: 3px;
+  border-radius: 2px;
   background: var(--rf-accent, #2563eb);
   pointer-events: none;
 }
 
+/* 目标 chip 轻微高亮：让"线 + 目标"成为一个整体，而不是一道孤立的缝。 */
+.document-chip-slot.is-drop-before > .document-chip,
+.document-chip-slot.is-drop-after > .document-chip {
+  box-shadow: 0 0 0 2px var(--rf-brand-tint);
+}
+
 .document-chip-slot.is-drop-before::before {
-  left: -3px;
+  left: -4px;
 }
 
 .document-chip-slot.is-drop-after::after {
-  right: -3px;
+  right: -4px;
 }

@@ -102,16 +102,37 @@ describe("restoreSectionPagination", () => {
     expect(restoreSectionPagination(document)).toBe(document);
   });
 
-  it("板块级/条目级都能被看见与清除：结构完整（夹具自检）", () => {
+  it("板块级只收 start_on_new_page、条目级两个都收（任务 12）", () => {
     const document = makeDocument({
       sections: [
         section({
-          layout: { ...defaultSectionLayout(), keep_together: true },
+          // 历史遗留的死开关：planner 不消费板块级 keep_together，界面也不该再列它。
+          layout: { ...defaultSectionLayout(), start_on_new_page: true, keep_together: true },
           entries: [entry({ layout: { ...defaultEntryLayout(), start_on_new_page: true } })],
         }),
       ],
     });
     document.sections[0].entries[0].items = [fieldItem()];
-    expect(collectPageBreaks(document)).toHaveLength(2);
+    const rows = collectPageBreaks(document);
+    expect(rows.map((row) => `${row.kind}:${row.flag}`)).toEqual([
+      "section:start_on_new_page",
+      "entry:start_on_new_page",
+    ]);
+    // 字段本身不被删：历史 JSON 里的 section.keep_together 仍留在文档里。
+    expect(document.sections[0].layout.keep_together).toBe(true);
+  });
+
+  it("「恢复自然分页」不碰历史遗留的板块级 keep_together", () => {
+    const document = makeDocument({
+      sections: [
+        section({
+          layout: { ...defaultSectionLayout(), start_on_new_page: true, keep_together: true },
+          entries: [],
+        }),
+      ],
+    });
+    const next = restoreSectionPagination(document);
+    expect(next.sections[0].layout.start_on_new_page).toBe(false);
+    expect(next.sections[0].layout.keep_together).toBe(true);
   });
 });

@@ -9,10 +9,50 @@
   max-width: min(360px, calc(100vw - 24px));
 }
 
-/* #22：高度上限——资料多时菜单不再延伸到视口外（内部滚动）。 */
-.rf-profile-fill-menu .ant-dropdown-menu {
+/* 问题 5：固定头部（搜索 + 计数）+ 独立滚动列表。
+   滚动容器从 `.ant-dropdown-menu` 移到 `.rf-profile-fill-list`，
+   头部因此永不随候选滚走，分组标题的 sticky 参照系也只剩列表本身。 */
+.rf-profile-fill-shell {
+  display: flex;
+  flex-direction: column;
+  /* 上限而不是固定高度：候选少时（含空态）不会留一块白板。 */
   max-height: min(60vh, 480px);
+  max-width: min(360px, calc(100vw - 24px));
+  overflow: hidden;
+  background: var(--ant-color-bg-elevated, #fff);
+  border-radius: var(--ant-border-radius-lg, 8px);
+  box-shadow: var(--ant-box-shadow-secondary, 0 6px 16px rgba(0, 0, 0, 0.08));
+}
+
+.rf-profile-fill-head {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--rf-border-subtle, #f0f0f0);
+}
+
+.rf-profile-fill-head .rf-profile-fill-search-input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.rf-profile-fill-list {
+  flex: 1 1 auto;
+  /* min-height: 0 是 flex 子项能真正滚动的必要条件。 */
+  min-height: 0;
   overflow-y: auto;
+}
+
+/* 菜单本体不再承担滚动与"卡片外观"（背景/圆角/阴影都在 shell 上），
+   否则 shell 内会出现第二层卡片边框与双滚动条。 */
+.rf-profile-fill-menu .ant-dropdown-menu {
+  max-height: none;
+  overflow: visible;
+  background: transparent;
+  box-shadow: none;
+  border-radius: 0;
 }
 
 /* #22：窄视口（380）下内层菜单跟外层同一个上限，否则内层 360 会顶破 root 的 356。 */
@@ -59,52 +99,24 @@
   font-size: 12px;
 }
 
-/* #22：搜索框固定在菜单顶部（不随候选滚动），不参与菜单项 hover 高亮。 */
-.rf-profile-fill-menu .rf-profile-fill-search {
-  position: sticky;
-  top: 0;
-  z-index: 2;
-  background: var(--ant-color-bg-elevated, #fff);
-  cursor: default;
-}
-
-/* #22：计数行紧贴搜索框下方（同样 sticky），滚动候选时「N 项可添加」一直可见。
-   top 值是实测的搜索项高度（30px），改搜索框样式时要一起对。 */
-.rf-profile-fill-menu .rf-profile-fill-count {
-  position: sticky;
-  top: 30px;
-  z-index: 2;
-  cursor: default;
-  background: var(--ant-color-bg-elevated, #fff);
-  padding-block: 4px;
-}
-
-.rf-profile-fill-menu .rf-profile-fill-count:hover,
-.rf-profile-fill-menu .rf-profile-fill-count.ant-dropdown-menu-item-disabled {
-  background: var(--ant-color-bg-elevated, #fff);
-  color: var(--rf-text-secondary);
-  cursor: default;
-}
-
+/* 问题 5：搜索框与计数行已移出菜单项（见 `ProfileFillMenu` 的 `popupRender`），
+   原 `.rf-profile-fill-search` / `.rf-profile-fill-count` 的 sticky 规则一并删除——
+   它们正是「硬编码 top 叠三层 sticky」那个 bug 的现场。 */
 .rf-profile-fill-count-text {
-  display: block;
-  width: 100%;
+  flex: none;
   color: var(--rf-text-secondary);
   font-size: 12px;
   line-height: 20px;
+  white-space: nowrap;
 }
 
-/* #22：分组标题在长列表滚动时吸附——用户始终知道自己在哪个板块。
-   top 在搜索项（30）+ 计数行（28）之下。 */
+/* 问题 5：分组标题吸附在**列表容器**顶边。
+   top 写成 0（相对 `.rf-profile-fill-list`），不再依赖头部高度，
+   头部改样式也不会再出现"顶部 58px 的缝里穿出半截候选"。 */
 .rf-profile-fill-menu .ant-dropdown-menu-item-group-title {
   position: sticky;
-  top: 58px;
+  top: 0;
   z-index: 1;
-  background: var(--ant-color-bg-elevated, #fff);
-}
-
-.rf-profile-fill-menu .rf-profile-fill-search:hover,
-.rf-profile-fill-menu .rf-profile-fill-search.ant-dropdown-menu-item-active {
   background: var(--ant-color-bg-elevated, #fff);
 }
 

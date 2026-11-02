@@ -75,22 +75,48 @@
   min-width: 0;
 }
 
-/* 顶部说明与「切到精确预览」并排：说明可换行，按钮不被挤变形。 */
+/* 顶部说明与「切到精确预览」并排。问题 22 ③ 起这一行**不再换行**：
+   说明固定单行 + 省略号，按钮永远在它右边、随行居中。 */
 .resume-section-pagination-head {
   display: flex;
-  flex-wrap: wrap;
-  align-items: flex-start;
+  flex-wrap: nowrap;
+  align-items: center;
   justify-content: space-between;
-  gap: 4px 8px;
+  gap: 8px;
   min-width: 0;
 }
 
+/* 一条说明文字，三个使用点：head（与「切到精确预览」并排）、空态、已有断页的 entryHint。
+   `flex: 1 1 160px` 的原意是"宽度至少 160px 再伸缩"，但它被 `<Flex vertical>` 的 summary
+   复用后主轴变成**高度**，于是空态那一行被撑成 160px 高（实测 summary 195px 里 160px 是空白）。
+   现在按布局语义拆开：基础规则只管文字，弹性只在 head 里生效。 */
 .resume-section-pagination-hint {
   min-width: 0;
-  flex: 1 1 160px;
   font-size: 12px;
   line-height: 18px;
   overflow-wrap: anywhere;
+}
+
+/* 问题 22 ③：head 里那一句固定**一行**。
+ *
+ * 原来可用宽约 200px 时它折成两行，右侧按钮独占剩下的一整行并垂直居中，看起来像浮在
+ * 文字中间。现在：说明 `nowrap` + 省略号吃掉剩余宽度，按钮不收缩（`flex: 0 0 auto`），
+ * 全文由组件上的 `title` 兜底（悬停可读全）。
+ *
+ * 为什么不用"缩小字号硬塞"：12px 是这一栏的可读下限，再缩小在 125% 缩放的屏上就糊了；
+ * 而且那句说明是**低频参考信息**（断页只在精确预览与导出里生效），一眼看出主题即可。
+ * `flex: 1 1 auto` + `min-width: 0` 缺一不可：少了后者的 span 会按内容宽撑开整行。 */
+.resume-section-pagination-head > .resume-section-pagination-hint {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* 按钮不许被说明挤扁：它是这一行唯一可点的东西。 */
+.resume-section-pagination-head > .ant-btn {
+  flex: 0 0 auto;
 }
 
 /* ===== R-07：板块开关表（表头化）=====

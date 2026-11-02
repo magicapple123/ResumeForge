@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 /** 「从资料填入」菜单（v2）：候选 → 单一 helper 合并、source 去重、selectedPath 失配禁用。 */
+// @ts-expect-error Node 内置模块：@types/node 未安装，但 vitest 运行在 Node 里。
+import { readFileSync } from "node:fs";
 import { App as AntdApp } from "antd";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -11,6 +13,8 @@ import ProfileFillMenu from "./ProfileFillMenu";
 
 const api = vi.hoisted(() => ({ getCurrentProjection: vi.fn() }));
 vi.mock("../../features/profile-library/api", () => api);
+
+declare const process: { cwd(): string };
 
 const SOURCE = { section_key: "educations", field_id: "educations.school" };
 const SCHOOL: ResumeItem = {
@@ -221,5 +225,41 @@ describe("ProfileFillMenu", () => {
     fireEvent.change(search, { target: { value: "别的" } });
     fireEvent.click(await screen.findByTitle("别的项目"));
     await waitFor(() => expect(onChange).toHaveBeenCalledTimes(1));
+  });
+
+  it("问题 5：搜索框与计数行在固定头部里，不在滚动列表内", async () => {
+    setup();
+    const search = await screen.findByPlaceholderText(t("editor.profileFill.search"));
+    const head = search.closest(".rf-profile-fill-head");
+    expect(head).not.toBeNull();
+    // 头部必须装下「N 项可添加」计数。
+    expect(head?.querySelector(".rf-profile-fill-count-text")).not.toBeNull();
+    // 滚动列表里不能再有输入框（否则它会跟着候选滚走——就是本来的缺陷）。
+    const list = document.querySelector(".rf-profile-fill-list");
+    expect(list).not.toBeNull();
+    expect(list?.querySelector("input")).toBeNull();
+    // 顺序：头部在列表之前（视觉上才是"固定头部 + 下面滚动"）。
+    const shell = document.querySelector(".rf-profile-fill-shell");
+    const children = Array.from(shell?.children ?? []);
+    expect(children.indexOf(head as Element)).toBeLessThan(children.indexOf(list as Element));
+  });
+
+  it("问题 5：列表自己的滚动容器 + 分组标题 top 不再硬编码", () => {
+    // jsdom 不求值布局，只能读 CSS 原文（先例：styles/input-focus-ring.test.ts）。
+    const source = readFileSync(
+      [process.cwd(), "src", "components", "resume", "profile-fill-menu.css"].join("/"),
+      "utf8",
+    );
+    const listRule = /\.rf-profile-fill-list\s*\{([^}]*)\}/.exec(source)?.[1] ?? "";
+    expect(listRule).toContain("overflow-y: auto");
+    expect(listRule).toContain("min-height: 0");
+    // 分组标题：吸附参照系换成列表容器，`top` 归零，不能再有 58 / 30 这类魔法数字。
+    const titleRule =
+      /\.rf-profile-fill-menu \.ant-dropdown-menu-item-group-title\s*\{([^}]*)\}/.exec(
+        source,
+      )?.[1] ?? "";
+    expect(titleRule).toContain("top: 0");
+    expect(source).not.toContain("top: 58px");
+    expect(source).not.toContain("top: 30px");
   });
 });

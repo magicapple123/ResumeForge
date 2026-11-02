@@ -14,34 +14,42 @@
    * 字号一律由 CSS 的 --fs 推算，这里不出现任何缩放系数（禁止自动缩字号）。 #}
 
 {# 一段带角色的行内文本：cell / inline 板块里同一行可能混排黑字（body）与灰字（meta），
-   所以逐段带 data-role；容器上不再挂角色，避免继承覆盖段落自己的角色。 #}
+   所以逐段带 data-role；容器上不再挂角色，避免继承覆盖段落自己的角色。
+
+   问题 16：值里含换行（多行文本字段）的段必须带 `white-space: pre-wrap`，否则 CSS 会把
+   `\n` 折叠成空格，草稿一行、精确 PDF 三行（PDF 的 multi_cell 把 `\n` 当硬换行）。
+   判据只落在"这一段自己的文本"上——容器全局开 pre-wrap 会连模板里格式化用的换行与缩进
+   一起保留，正文会多出空行与大段缩进。 #}
 {% macro role_spans(segments) -%}
 {%- for seg in segments -%}
 {%- set href = safe_link(seg.link) -%}
+{%- set pre = ' class="is-pre" style="white-space: pre-wrap"' if '\n' in (seg.text or '') else '' -%}
 {%- if href -%}
-<a href="{{ href }}"{% if seg.path %} data-resume-path="{{ seg.path }}"{% endif %} data-role="{{ seg.role }}">{{ seg.text }}</a>
+<a href="{{ href }}"{{ pre|safe }}{% if seg.path %} data-resume-path="{{ seg.path }}"{% endif %} data-role="{{ seg.role }}">{{ seg.text }}</a>
 {%- elif seg.strong -%}
-<strong{% if seg.path %} data-resume-path="{{ seg.path }}"{% endif %} data-role="{{ seg.role }}">{{ seg.text }}</strong>
+<strong{{ pre|safe }}{% if seg.path %} data-resume-path="{{ seg.path }}"{% endif %} data-role="{{ seg.role }}">{{ seg.text }}</strong>
 {%- elif seg.italic -%}
-<em{% if seg.path %} data-resume-path="{{ seg.path }}"{% endif %} data-role="{{ seg.role }}">{{ seg.text }}</em>
+<em{{ pre|safe }}{% if seg.path %} data-resume-path="{{ seg.path }}"{% endif %} data-role="{{ seg.role }}">{{ seg.text }}</em>
 {%- else -%}
-<span{% if seg.path %} data-resume-path="{{ seg.path }}"{% endif %} data-role="{{ seg.role }}">{{ seg.text }}</span>
+<span{{ pre|safe }}{% if seg.path %} data-resume-path="{{ seg.path }}"{% endif %} data-role="{{ seg.role }}">{{ seg.text }}</span>
 {%- endif -%}
 {%- endfor -%}
 {%- endmacro %}
 
-{# 容器已带 data-role 的场合（姓名 / 标题 / 元信息 / 正文）：逐段只补定位路径。 #}
+{# 容器已带 data-role 的场合（姓名 / 标题 / 元信息 / 正文）：逐段只补定位路径。
+   问题 16 的 pre-wrap 判据与 role_spans 逐字相同（两处不能各写一套）。 #}
 {% macro path_spans(segments) -%}
 {%- for seg in segments -%}
 {%- set href = safe_link(seg.link) -%}
+{%- set pre = ' class="is-pre" style="white-space: pre-wrap"' if '\n' in (seg.text or '') else '' -%}
 {%- if href -%}
-<a href="{{ href }}"{% if seg.path %} data-resume-path="{{ seg.path }}"{% endif %}>{{ seg.text }}</a>
+<a href="{{ href }}"{{ pre|safe }}{% if seg.path %} data-resume-path="{{ seg.path }}"{% endif %}>{{ seg.text }}</a>
 {%- elif seg.strong -%}
-<strong{% if seg.path %} data-resume-path="{{ seg.path }}"{% endif %}>{{ seg.text }}</strong>
+<strong{{ pre|safe }}{% if seg.path %} data-resume-path="{{ seg.path }}"{% endif %}>{{ seg.text }}</strong>
 {%- elif seg.italic -%}
-<em{% if seg.path %} data-resume-path="{{ seg.path }}"{% endif %}>{{ seg.text }}</em>
+<em{{ pre|safe }}{% if seg.path %} data-resume-path="{{ seg.path }}"{% endif %}>{{ seg.text }}</em>
 {%- else -%}
-<span{% if seg.path %} data-resume-path="{{ seg.path }}"{% endif %}>{{ seg.text }}</span>
+<span{{ pre|safe }}{% if seg.path %} data-resume-path="{{ seg.path }}"{% endif %}>{{ seg.text }}</span>
 {%- endif -%}
 {%- endfor -%}
 {%- endmacro %}
@@ -65,15 +73,32 @@
 
 {# 灰色短字段组（lead / trail）：planner 已按分区/条目生效布局装箱成行。
    equal = 一个网格容器（跨行列宽一致，solo 独占整行）；flow = 一行一个 div、行内用
-   列表分隔符连接（沿用 v1 的 flow 口径）。gap 以字号倍数写进列间距（不缩字号）。 #}
-{% macro sub_rows(rows, columns, align, gap) -%}
+   列表分隔符连接（沿用 v1 的 flow 口径）。gap 以字号倍数写进列间距（不缩字号）。
+
+   逐列宽度 / 逐间隔（任务 13）：给了宽度就显式写 `grid-template-columns`；给了间隔就把
+   `column-gap` 归零、改由每个格子自己的 `padding-right` 表达——CSS grid 只有一个统一
+   `gap`，逐间隔只能这么做。长度对不上时 `column_geometry` 返回 (none, none)，整段回落
+   到等宽口径，输出的字节与改前完全一致。
+
+   分布（问题 4）：`justify="between"` 时加 `sub-justify-between`（`space-between`），
+   剩余空白均分到列之间、最后一列的右缘贴住内容区右边界。只在 equal + 多列 + **没有**
+   显式逐列宽度时生效：宽度合计 100% 时没有剩余空间，那个开关本来就无效。 #}
+{% macro sub_rows(rows, columns, align, gap, widths=none, gaps=none, justify="start") -%}
 {%- if rows -%}
 {%- if align == "flow" -%}
 {%- for row in rows %}
 <div class="sub sub-row sub-flow" data-role="meta">{% for cell in row %}<span class="sub-cell">{{ role_spans(cell.segments) }}</span>{% endfor %}</div>
 {%- endfor -%}
 {%- else -%}
-<div class="sub sub-row sub-grid sub-cols-{{ columns }}" data-role="meta"{% if gap is not none %} style="column-gap: calc(var(--fs) * {{ gap }})"{% endif %}>{% for row in rows %}{% for cell in row %}<span class="sub-cell{% if cell.solo %} sub-cell-solo{% endif %}">{{ role_spans(cell.segments) }}</span>{% endfor %}{% endfor %}</div>
+{%- set geo = column_geometry(columns, widths, gaps) -%}
+{%- set col_widths = geo[0] -%}
+{%- set col_gaps = geo[1] -%}
+{%- set between = (justify == "between" and columns > 1 and not col_widths) -%}
+{%- if col_widths or col_gaps -%}
+<div class="sub sub-row sub-grid{% if not col_widths %} sub-cols-{{ columns }}{% endif %}{% if between and not col_gaps %} sub-justify-between{% endif %}" data-role="meta" style="{% if col_widths %}grid-template-columns: {% for width in col_widths %}{{ width }}%{% if not loop.last %} {% endif %}{% endfor %}; {% endif %}column-gap: {% if col_gaps %}0{% else %}calc(var(--fs) * {{ gap }}){% endif %}">{% for row in rows %}{% for cell in row %}<span class="sub-cell{% if cell.solo %} sub-cell-solo{% endif %}"{% if col_gaps and not cell.solo and loop.index0 < col_gaps|length %} style="padding-right: calc(var(--fs) * {{ col_gaps[loop.index0] }})"{% endif %}>{{ role_spans(cell.segments) }}</span>{% endfor %}{% endfor %}</div>
+{%- else -%}
+<div class="sub sub-row sub-grid sub-cols-{{ columns }}{% if between %} sub-justify-between{% endif %}" data-role="meta"{% if gap is not none %} style="column-gap: calc(var(--fs) * {{ gap }})"{% endif %}>{% for row in rows %}{% for cell in row %}<span class="sub-cell{% if cell.solo %} sub-cell-solo{% endif %}">{{ role_spans(cell.segments) }}</span>{% endfor %}{% endfor %}</div>
+{%- endif -%}
 {%- endif -%}
 {%- endif -%}
 {%- endmacro %}
@@ -130,13 +155,30 @@
   {%- set keep_entry = el and el.keep_together %}
   <div class="entry{% if break_before %} entry-break-before{% endif %}{% if keep_entry %} entry-keep{% endif %}" data-object-id="{{ entry.id }}">
     {{ entry_head(entry.head) }}
+    {%- set lead = entry.lead_layout if entry.lead_layout is defined and entry.lead_layout else none %}
+    {%- set trail = entry.trail_layout if entry.trail_layout is defined and entry.trail_layout else none %}
+    {%- if lead is none or trail is none %}
+    {# 兜底：planner 一定会给两侧生效布局；真缺了就按共用字段算，别渲染出空组。 #}
     {%- set columns = (el.columns if el and el.columns is not none else section.layout.columns) %}
     {%- set align = (el.align if el and el.align is not none else section.layout.align) %}
+    {%- set justify = (el.justify if el and el.justify is not none else section.layout.justify) %}
     {%- set gap = (el.gap if el and el.gap is not none else section.layout.gap) %}
     {%- if gap is none %}{% set gap = default_cell_gap(align) %}{% endif %}
-    {{ sub_rows(entry.lead_rows, columns, align, gap) }}
+    {%- set widths = (el.column_widths if el and el.column_widths is not none else section.layout.column_widths) %}
+    {%- set gaps = (el.column_gaps if el and el.column_gaps is not none else section.layout.column_gaps) %}
+    {{ sub_rows(entry.lead_rows, columns, align, gap, widths, gaps, justify) }}
     {{ body_blocks(entry.body) }}
-    {{ sub_rows(entry.trail_rows, columns, align, gap) }}
+    {{ sub_rows(entry.trail_rows, columns, align, gap, widths, gaps, justify) }}
+    {%- else %}
+    {# 问题 4：正文前 / 正文后各自一套生效列布局（列数、对齐、分布、间距、逐列宽度都能分开）。 #}
+    {%- set lead_gap = lead.gap %}
+    {%- if lead_gap is none %}{% set lead_gap = default_cell_gap(lead.align) %}{% endif %}
+    {%- set trail_gap = trail.gap %}
+    {%- if trail_gap is none %}{% set trail_gap = default_cell_gap(trail.align) %}{% endif %}
+    {{ sub_rows(entry.lead_rows, lead.columns, lead.align, lead_gap, lead.column_widths, lead.column_gaps, lead.justify) }}
+    {{ body_blocks(entry.body) }}
+    {{ sub_rows(entry.trail_rows, trail.columns, trail.align, trail_gap, trail.column_widths, trail.column_gaps, trail.justify) }}
+    {%- endif %}
   </div>
   {%- endfor %}
   {%- endif %}

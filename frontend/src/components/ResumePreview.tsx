@@ -9,6 +9,7 @@ import {
   A4_WIDTH_PX,
   MIN_PREVIEW_HEIGHT,
   type PanStart,
+  type PreviewLayoutStatus,
   type PreviewMode,
   type ResumePreviewHandle,
 } from "./resume-preview/config";
@@ -32,6 +33,8 @@ import { useClickToEditPreview } from "./resume-preview/useClickToEditPreview";
 import { layoutFrame } from "./resume-preview/layout";
 import { forwardWheelToParent, useFrameInteractions } from "./resume-preview/useFrameInteractions";
 import { usePreviewBodyHeight } from "./resume-preview/usePreviewBodyHeight";
+import { useReportedPageCount } from "./resume-preview/useReportedPageCount";
+import { useFrameRelayout } from "./resume-preview/useFrameRelayout";
 import { stripPreviewScripts } from "./resume-preview/previewHtml";
 
 // `ExactPreviewOptions` 的定义在 `resume-preview/exactPreviewOptions.ts`，这里 re-export 保持调用点不变。
@@ -55,8 +58,11 @@ interface Props {
   availableHeight?: number;
   /** 是否渲染「草稿模式编辑」开关（预览弹窗传 false，详细编辑去制作台）。 */
   showClickToEdit?: boolean;
-  /** 渲染完成后的版式状态。pages 始终是用户设置的页数上限。 */
-  onLayoutStatus?: (status: { pages: number; overflow: boolean }) => void;
+  /**
+   * 画布报出的版式状态：`pages` 是用户设定的页数上限，`pagesNeeded` / `pagesRendered`
+   * 是问题 2/3 之后的"内容需要几页 / 画了几张纸"（见 `preview/config.ts` 的说明）。
+   */
+  onLayoutStatus?: (status: PreviewLayoutStatus) => void;
   /** 实测高度，交给版面诊断使用。 */
   onMeasure?: (measure: LayoutMeasure) => void;
   /**
@@ -142,6 +148,9 @@ const ResumePreview = forwardRef<ResumePreviewHandle, Props>(function ResumePrev
    * `Blocked script execution`；预览的溢出测量由前端自己做，不依赖它。**导出 HTML 不走这里**。
    */
   const previewHtml = useMemo(() => stripPreviewScripts(html), [html]);
+  // 服务端分页报告的页数（问题 3）：`null` = 拿不到，退回浏览器测量。`resumeId` 与版式字段
+  // 都从 `exactPreview` 取（它的唯一构造处）；没有它的宿主（生成流程的临时预览）一行都不用改。
+  const reportedPages = useReportedPageCount({ exactPreview, pageLimit: pageCount });
   const containerRef = useRef<HTMLDivElement>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
@@ -212,7 +221,7 @@ const ResumePreview = forwardRef<ResumePreviewHandle, Props>(function ResumePrev
     (frame: HTMLIFrameElement, index: number) => {
       const document = frame.contentDocument;
       if (!document?.body || !document.documentElement) return;
-      const result = layoutFrame({ document, pageCount, paperHeight });
+      const result = layoutFrame({ document, pageLimit: pageCount, paperHeight, reportedPages });
       if (!result) return;
       if (index === 0) {
         if (result.measure) {
@@ -221,18 +230,36 @@ const ResumePreview = forwardRef<ResumePreviewHandle, Props>(function ResumePrev
         }
         setOverflow(result.overflow);
         setNaturalWidth(result.naturalWidth);
-        onLayoutStatus?.({ pages: pageCount, overflow: result.overflow });
+        onLayoutStatus?.({
+          pages: pageCount,
+          overflow: result.overflow,
+          pagesNeeded: result.pagesNeeded,
+          pagesRendered: result.visualPages,
+        });
       }
       // `overflow: hidden` 的文档仍然可以编程滚动（只是不给用户拖滚动条）。
+      //
+      // **只保留一个滚动出口**（问题 1）：`columnsCss()` 给 `html,body` 都写了
+      // `overflow: hidden`，于是 `body` 自身也是一个横向滚动容器（`scrollWidth` 是整份
+      // 多列排版的宽度）。`overflow: hidden` 只是不给用户拖滚动条，**不阻止编程滚动**——
+      // 之前这里同时写 `documentElement.scrollLeft` 与 `body.scrollLeft`，两次位移叠加，
+      // 第 i 页实际偏移变成 `2 × i × 794`，于是第 2 列（项目经历…）与第 4 列从来没有
+      // 任何一页在显示。`window.scrollTo()` 滚的也是 `documentElement`，与上面那行等价，
+      // 一并收敛成一行，避免以后再出现"两个出口"。
       if (index > 0) {
-        const target = index * A4_WIDTH_PX;
-        document.documentElement.scrollLeft = target;
-        document.body.scrollLeft = target;
-        document.defaultView?.scrollTo(target, 0);
+        document.documentElement.scrollLeft = index * A4_WIDTH_PX;
       }
     },
-    [onLayoutStatus, onMeasure, pageCount, paperHeight],
+    [onLayoutStatus, onMeasure, pageCount, paperHeight, reportedPages],
   );
+
+  // 见 `resume-preview/useFrameRelayout.ts`：报告回来后要重排已有的纸（问题 3）。
+  useFrameRelayout({
+    containerRef,
+    applyLayout: applyLayoutToFrame,
+    pageLimit: pageCount,
+    reportedPages,
+  });
 
   const handleWheel = useCallback(
     (event: globalThis.WheelEvent) => {
@@ -309,6 +336,8 @@ const ResumePreview = forwardRef<ResumePreviewHandle, Props>(function ResumePrev
     // 竖排后画布自己不再画分页条（页与页之间是真实的空白），这个入参只为兼容旧签名。
     pageGap: 0,
     measure,
+    // 页数以服务端报告为准（问题 3）；`measure` 退为"不许裁掉内容"的下界。
+    reportedPages,
   });
   // 刷新（换 html / 页数）时按新旧 fit 的比值补偿缩放，保持纸面显示大小不变。
   // 只对草稿口径生效（Q21）：精确模式下草稿画布隐藏/裁零，fit 抖动不该改任何一套缩放。
@@ -436,6 +465,7 @@ const ResumePreview = forwardRef<ResumePreviewHandle, Props>(function ResumePrev
               scaledHeight={geometry.scaledHeight}
               scale={geometry.scale}
               totalVisualPages={geometry.totalVisualPages}
+              pageLimit={pageCount}
               html={previewHtml}
               containerRef={containerRef}
               iframeRef={iframeRef}

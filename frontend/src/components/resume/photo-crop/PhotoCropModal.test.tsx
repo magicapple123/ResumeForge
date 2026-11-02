@@ -1,11 +1,18 @@
 // SPDX-License-Identifier: Apache-2.0
+/**
+ * 照片裁剪弹窗（D09 / #18）：非破坏参数 + 四边可拖的裁剪框。
+ *
+ * 与制作台那张 `PhotoCropDialog` 的区别：这里多「移除照片」与"按纸面宽度算清晰度"，
+ * 所以单独守一遍；裁剪框本身的几何由 `cropGeometry` / `photoCrop.test.ts` 守。
+ */
 import { App as AntdApp } from "antd";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { t } from "../../../i18n";
 import {
-  createPhotoCropParams,
-  DEFAULT_CROP_DRAFT,
+  buildPhotoSource,
+  createRectCropParams,
+  type PhotoCropParams,
 } from "../../../features/resume-proview/photoCrop";
 import PhotoCropModal from "./PhotoCropModal";
 
@@ -15,14 +22,15 @@ vi.mock("../../../features/resume-proview/usePhotoDimensions", () => ({
 }));
 
 const PHOTO = "data:image/png;base64,AAAA";
-const SOURCE = { sha256: "a".repeat(64), width: 1200, height: 1600 };
+/** 与 `PHOTO` 同指纹的来源：换照片失效判据靠它，测试不能编一个假 sha。 */
+const SOURCE = buildPhotoSource(PHOTO, 1200, 1600);
 
 function renderModal(props: Partial<Parameters<typeof PhotoCropModal>[0]> = {}) {
   const base = {
     open: true,
     onClose: vi.fn(),
     photo: PHOTO,
-    initialCrop: null,
+    initialCrop: null as PhotoCropParams | null,
     onApply: vi.fn(),
   };
   return {
@@ -42,8 +50,8 @@ afterEach(() => {
   sessionStorage.clear();
 });
 
-describe("照片非破坏裁剪（D09）", () => {
-  it("打开显示原因片尺寸与「不会被覆盖」承诺；比例/位置控件可操作", () => {
+describe("照片非破坏裁剪（D09 / #18）", () => {
+  it("打开显示原因片尺寸与「不会被覆盖」承诺；裁剪框 8 个手柄可操作", () => {
     renderModal();
     expect(screen.getByText(t("proview.photo.title"))).toBeInTheDocument();
     expect(
@@ -54,7 +62,8 @@ describe("照片非破坏裁剪（D09）", () => {
     expect(
       screen.getByRole("radio", { name: t("proview.photo.aspect.original") }),
     ).toBeInTheDocument();
-    expect(screen.getByRole("slider", { name: t("proview.photo.zoomAria") })).toBeInTheDocument();
+    expect(screen.getAllByRole("slider")).toHaveLength(8);
+    expect(screen.getByText(t("proview.photo.boxHint"))).toBeInTheDocument();
   });
 
   it("应用裁剪：回传归一化参数（原图引用由 source 指纹表达，不是重编码图）", () => {
@@ -81,19 +90,20 @@ describe("照片非破坏裁剪（D09）", () => {
     expect(params.aspect).toBe("1:1");
     expect(params.rect.w).toBe(1);
     expect(params.rect.h).toBeCloseTo(0.75, 4);
+    expect(params.rect.y).toBeCloseTo(0.125, 4);
   });
 
-  it("有已保存参数时「恢复原图」可用并回传 null；没有时不显示为可用动作", () => {
+  it("有已保存参数时「恢复原图」可用并回传 null；没有时不可用", () => {
     const onApply = vi.fn();
     renderModal({ onApply, initialCrop: null });
     expect(screen.getByRole("button", { name: t("proview.photo.reset") })).toBeDisabled();
     cleanup();
-    const saved = createPhotoCropParams(SOURCE, { ...DEFAULT_CROP_DRAFT, zoom: 0.5 });
+    const saved = createRectCropParams(SOURCE, { x: 0.2, y: 0.1, w: 0.5, h: 0.4 }, "free");
     renderModal({ onApply, initialCrop: saved });
-    // 可恢复：重新打开时取景大小回到保存时的 50%。
-    expect(screen.getByRole("slider", { name: t("proview.photo.zoomAria") })).toHaveAttribute(
+    // 可恢复：重新打开时裁剪框回到保存时的左缘 20%。
+    expect(screen.getByRole("slider", { name: t("proview.photo.handle.w") })).toHaveAttribute(
       "aria-valuenow",
-      "50",
+      "20",
     );
     fireEvent.click(screen.getByRole("button", { name: t("proview.photo.reset") }));
     expect(onApply).toHaveBeenCalledWith(null);

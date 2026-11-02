@@ -55,12 +55,24 @@ function stubElement(element: Element, box: Box, styles: Record<string, string> 
   };
 }
 
+/** 探针（`data-resume-page-probe`）量到的一页高度：默认 0 = 量不到，退回"总高 ÷ 页数"。 */
+let pageProbeHeight: string | null = null;
+
+/** 打桩"一页纸有多高"：测量代码会给 iframe 里插一个 297mm 的隐藏探针再读它。 */
+function stubPageProbeHeight(px: number): void {
+  pageProbeHeight = `${px}px`;
+}
+
 beforeEach(() => {
+  pageProbeHeight = null;
   // jsdom 不做真实排版，computed style 也拿不到有意义的数值，所以整段换掉。
-  vi.spyOn(window, "getComputedStyle").mockImplementation(
-    (target: Element) =>
-      (stylesByElement.get(target) ?? DEFAULT_STYLE) as unknown as CSSStyleDeclaration,
-  );
+  vi.spyOn(window, "getComputedStyle").mockImplementation((target: Element) => {
+    const element = target as HTMLElement;
+    if (element.dataset?.resumePageProbe && pageProbeHeight) {
+      return { ...DEFAULT_STYLE, height: pageProbeHeight } as unknown as CSSStyleDeclaration;
+    }
+    return (stylesByElement.get(target) ?? DEFAULT_STYLE) as unknown as CSSStyleDeclaration;
+  });
 });
 
 function resetDom(): void {
@@ -100,6 +112,21 @@ describe("measureResumeLayout", () => {
 
     const measure = measureResumeLayout(document, 2);
     expect(measure!.pageContentHeight).toBeCloseTo((2246 - 106) / 2, 5);
+  });
+
+  it("measures one physical page instead of dividing by the page count", () => {
+    const { body, text } = buildPage();
+    // 纸面只有 3 页高（服务端按 resume 夹紧了），用户在版式里选的是 10 页。
+    stubElement(body, { top: 0, bottom: 3369 }, { paddingTop: "53px", paddingBottom: "53px" });
+    stubElement(text, { top: 53, bottom: 6900 });
+    // 一页纸 = 297mm = 1123px（探针量到的值）。
+    stubPageProbeHeight(1123);
+
+    const measure = measureResumeLayout(document, 10);
+    // 分母必须是"一页可用高度"1017，而不是 (3369 − 106) / 10 = 326。
+    expect(measure!.pageContentHeight).toBeCloseTo(1123 - 106, 5);
+    // 7 页内容不能因为分母错了被放大成 21 页。
+    expect(pagesNeededFor(measure!)).toBe(7);
   });
 
   it("counts the last element's bottom margin", () => {

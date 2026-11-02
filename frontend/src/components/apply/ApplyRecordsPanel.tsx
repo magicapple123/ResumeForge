@@ -251,21 +251,21 @@ export default function ApplyRecordsPanel({ disabled, onRetried }: Props) {
         const stepLabelText = STEP_LABEL_KEYS[step] ? t(STEP_LABEL_KEYS[step]) : "";
         // #39：具体原因随分类一起显示（failure_detail 是后端诊断串，截一行摘要）。
         const detail = record.failure_detail.trim().split(String.fromCharCode(10))[0];
+        // #39 返工：列首 Tag 直接显示**子码中文**（大类名只作兜底）——原先 Tag=大类、
+        // 右侧再排一条子码中文，同一条信息出现了两遍，窄列里还把原码挤到换行。
+        const primaryLabel = reasonKey
+          ? t(reasonKey)
+          : key
+            ? t(key)
+            : failureLabel(record.failure_category, record.failure_label);
         return (
           <Space orientation="vertical" size={0}>
-            {/* Tag=大类；子码=稳定码（可筛选、可给建议）；第三行=诊断摘要。 */}
+            {/* Tag=子码中文（可读结论）；原码小字（可筛选、可给建议）；第三行=诊断摘要。 */}
             <Space size={4} wrap>
-              <Tag color="red">
-                {key ? t(key) : failureLabel(record.failure_category, record.failure_label)}
-              </Tag>
+              <Tag color="red">{primaryLabel}</Tag>
               {record.failure_reason ? (
                 <Typography.Text code style={{ fontSize: 12 }}>
                   {record.failure_reason}
-                </Typography.Text>
-              ) : null}
-              {reasonKey ? (
-                <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                  {t(reasonKey)}
                 </Typography.Text>
               ) : null}
             </Space>

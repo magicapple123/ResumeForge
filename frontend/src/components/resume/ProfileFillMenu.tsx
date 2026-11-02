@@ -180,32 +180,6 @@ export default function ProfileFillMenu({ document, onChange, selectedPath = nul
     ),
   };
 
-  // #22：菜单第一行固定是搜索框——鼠标事件拦在输入框上，否则点一下会把整个下拉关掉。
-  // 键盘只拦"打字键"：↑↓/Enter 必须继续冒泡给菜单（输入时仍能选择），Esc 必须继续冒泡
-  // 才能关掉下拉（之前 stopPropagation 把所有键都拦了，Esc 在搜索框里按无效）。
-  const searchItem = {
-    key: "__search",
-    className: "rf-profile-fill-search",
-    label: (
-      <Input
-        size="small"
-        allowClear
-        className="rf-profile-fill-search-input"
-        value={query}
-        placeholder={t("editor.profileFill.search")}
-        onKeyDown={(event) => {
-          const key = event.key;
-          const menuKey =
-            key === "ArrowUp" || key === "ArrowDown" || key === "Enter" || key === "Escape";
-          if (!menuKey) event.stopPropagation();
-        }}
-        onMouseDown={(event) => event.stopPropagation()}
-        onClick={(event) => event.stopPropagation()}
-        onChange={(event) => setQuery(event.target.value)}
-      />
-    ),
-  };
-
   const candidateItems =
     visible.length === 0
       ? [emptyItem]
@@ -228,19 +202,10 @@ export default function ProfileFillMenu({ document, onChange, selectedPath = nul
             })),
           }));
 
-  // #22：搜索框下面再给一行「N 项可添加」计数（随搜索/目标过滤实时变化）；
-  // 用 disabled 菜单项渲染，方向键会跳过它，不会成为键盘陷阱。
-  const countItem = {
-    key: "__count",
-    disabled: true,
-    className: "rf-profile-fill-count",
-    label: (
-      <span className="rf-profile-fill-count-text">
-        {t("editor.profileFill.count", { count: visible.length })}
-      </span>
-    ),
-  };
-  const items = visibleBase.length === 0 ? [emptyItem] : [searchItem, countItem, ...candidateItems];
+  // 问题 5：搜索框与计数行**不再是菜单项**，改由 `popupRender` 渲染在固定头部
+  // （`.rf-profile-fill-head`）里；`items` 只剩候选（或空态说明）。
+  // 这样列表独立滚动，头部永不滚走，分组标题的 `top` 也不必再叠三层硬编码数字。
+  const items = candidateItems;
 
   const buttonText = target
     ? targetTitle
@@ -249,10 +214,36 @@ export default function ProfileFillMenu({ document, onChange, selectedPath = nul
     : t("editor.profileFill.title.add");
 
   /**
-   * 键盘层级（#22）：下拉打开且焦点还在触发按钮上时，
-   * - ↓/↑：把焦点交给菜单（菜单根 tabindex=0），之后的 ↓/↑/Enter 由 rc-menu 处理；
-   * - Esc：只关下拉并拦住冒泡（工作台的 Esc 处理器在 document 上，不拦会连制作台一起关）。
-   * 搜索框获得焦点时，这些键在 Input 的 onKeyDown 里放行给菜单/下拉。
+   * 下拉根节点（`classNames.root` 挂的那个 div）。props 里的 `document`（ResumeDocument）
+   * 会遮蔽全局 `document`，所以一律走 `globalThis.document`。
+   */
+  const dropdownRoot = (): HTMLElement | null =>
+    globalThis.document.querySelector<HTMLElement>(".rf-profile-fill-menu");
+
+  /** 固定头部里的搜索输入（allowClear 时 className 落在外层 affix 容器上，两种结构都兜住）。 */
+  const searchInputEl = (): HTMLInputElement | null => {
+    const root = dropdownRoot();
+    if (!root) return null;
+    const node = root.querySelector<HTMLElement>(".rf-profile-fill-search-input");
+    if (!node) return null;
+    if (node instanceof HTMLInputElement) return node;
+    return node.querySelector<HTMLInputElement>("input");
+  };
+
+  /** 候选列表的菜单根（rc-menu 会给它 tabindex=0，拿到焦点后 ↑↓/Enter 由 rc-menu 接管）。 */
+  const listMenuEl = (): HTMLElement | null =>
+    globalThis.document.querySelector<HTMLElement>(
+      ".rf-profile-fill-menu .rf-profile-fill-list .ant-dropdown-menu",
+    );
+
+  /**
+   * 键盘层级：
+   * - 触发按钮上 ↓/↑：焦点交给**搜索框**（问题 5 之后头部在菜单外，不再交给菜单）；
+   * - 搜索框里 ↓/↑：焦点交给候选列表（之后由 rc-menu 处理 ↑↓/Enter）；
+   * - 两处的 Esc：只关下拉并拦住冒泡（工作台的 Esc 处理器挂在 document 上，
+   *   不拦会把整个制作台一起关掉）。
+   * 鼠标事件仍拦在搜索框上，否则点输入框会把下拉关掉（它现在虽不在菜单里，
+   * 但仍在 `popupRender` 内，点击会冒泡到 Dropdown 的关闭逻辑）。
    */
   const handleButtonKeyDown = (event: React.KeyboardEvent) => {
     if (!menuOpen) return;
@@ -263,14 +254,28 @@ export default function ProfileFillMenu({ document, onChange, selectedPath = nul
       return;
     }
     if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
-    // 注意：本组件 props 里有个 `document`（ResumeDocument），会遮蔽全局 document；
-    // 这里必须走 globalThis 才能拿到 DOM（tsc 会抓出误用，运行时则是 querySelector 未定义）。
-    const menu = globalThis.document.querySelector<HTMLElement>(
-      ".rf-profile-fill-menu .ant-dropdown-menu",
-    );
-    if (!menu) return;
+    const input = searchInputEl();
     event.preventDefault();
-    menu.focus();
+    input?.focus();
+  };
+
+  const handleSearchKeyDown = (event: React.KeyboardEvent) => {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      event.stopPropagation();
+      setMenuOpen(false);
+      return;
+    }
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      const menu = listMenuEl();
+      if (!menu) return;
+      event.preventDefault();
+      menu.focus();
+      return;
+    }
+    // 打字键与 Enter 都不冒泡给工作台（Enter 在搜索框里没有"提交"语义，
+    // 选候选要先把焦点交给列表）。
+    event.stopPropagation();
   };
 
   const button = (
@@ -296,7 +301,7 @@ export default function ProfileFillMenu({ document, onChange, selectedPath = nul
       menu={{
         items,
         onClick: ({ key }) => {
-          if (key === "__empty" || key === "__search") return;
+          if (key === "__empty") return;
           const resolved = candidates.find((item) => candidateKey(item.candidate) === key);
           if (resolved) applyCandidate(resolved);
         },
@@ -305,6 +310,30 @@ export default function ProfileFillMenu({ document, onChange, selectedPath = nul
       // antd 6 起 `overlayClassName` 已废弃，Dropdown 也没有 popupClassName；
       // 挂到弹出菜单根节点的推荐写法是 classNames.root（与 MySpaceMenu 一致）。
       classNames={{ root: "rf-profile-fill-menu" }}
+      // 问题 5：固定头部 + 独立滚动列表。搜索框与计数行移出菜单项后，
+      // 它们不再随候选滚动，分组标题的 sticky top 也就有了确定的参照系（top: 0）。
+      // 注意：antd 6 里 `dropdownRender` 已废弃，必须用 `popupRender`。
+      popupRender={(menu) => (
+        <div className="rf-profile-fill-shell">
+          <div className="rf-profile-fill-head">
+            <Input
+              size="small"
+              allowClear
+              className="rf-profile-fill-search-input"
+              value={query}
+              placeholder={t("editor.profileFill.search")}
+              onKeyDown={handleSearchKeyDown}
+              onMouseDown={(event) => event.stopPropagation()}
+              onClick={(event) => event.stopPropagation()}
+              onChange={(event) => setQuery(event.target.value)}
+            />
+            <span className="rf-profile-fill-count-text">
+              {t("editor.profileFill.count", { count: visible.length })}
+            </span>
+          </div>
+          <div className="rf-profile-fill-list">{menu}</div>
+        </div>
+      )}
       open={menuOpen}
       onOpenChange={(open) => {
         setMenuOpen(open);

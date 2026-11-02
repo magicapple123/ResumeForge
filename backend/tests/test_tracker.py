@@ -389,6 +389,38 @@ def test_unknown_status_and_bad_dates_are_rejected():
     assert TrackRecordIn(company="A", title="B").status_date == ""
 
 
+def test_retired_failure_keys_are_dropped_from_a_copy_of_the_payload():
+    """兼容垫片要**静默丢弃** 0070 那三个键，且不能原地改调用方传进来的对象。
+
+    旧客户端升级前还会把这三列塞进 payload；本模型是 ``extra="forbid"``，没有垫片
+    就是 422（对外契约的断崖式变更）。同时钉住"只丢这三个键"：其它未知键仍要报错。
+    """
+    from types import MappingProxyType
+
+    from app.schemas.tracker import RETIRED_TRACK_FAILURE_KEYS
+
+    payload = {
+        "company": "示例科技",
+        "title": "后端开发",
+        "failure_step": "filling",
+        "failure_target": "chat_input",
+        "failure_reason": "页面改版",
+    }
+    snapshot = dict(payload)
+
+    record = TrackRecordIn.model_validate(payload)
+    assert record.company == "示例科技"
+    # 调用方的 dict 一个键都没少（复制一份再过滤，不是 pop 掉原对象）。
+    assert payload == snapshot
+    # 传进来的是只读 Mapping 也不能炸（说明垫片不依赖"能改"）。
+    assert TrackRecordIn.model_validate(MappingProxyType(payload)).title == "后端开发"
+    with pytest.raises(ValidationError):
+        TrackRecordIn.model_validate({**snapshot, "failure_stage": "filling"})
+    assert frozenset({"failure_step", "failure_target", "failure_reason"}) == (
+        RETIRED_TRACK_FAILURE_KEYS
+    )
+
+
 def test_plan_actions_are_the_documented_three():
     """合并结论只有三种，界面与导出都按这三种来呈现。"""
     from app.models.tracker import MERGE_RESULTS

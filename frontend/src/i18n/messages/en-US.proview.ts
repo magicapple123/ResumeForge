@@ -118,6 +118,18 @@ const proview = {
   "proview.photo.previewLabel": "Crop preview",
   "proview.photo.lockedHint":
     "Aspect ratio is locked; resizing the crop will preserve its proportions",
+  "proview.photo.cropBoxAria": "Photo crop box, drag an edge or corner to adjust the crop",
+  "proview.photo.boxHint":
+    "Drag an edge or corner to adjust the crop; hold Ctrl to keep the aspect ratio; arrow keys nudge 1%, Shift 5%",
+  "proview.photo.handle.n": "Top edge",
+  "proview.photo.handle.s": "Bottom edge",
+  "proview.photo.handle.e": "Right edge",
+  "proview.photo.handle.w": "Left edge",
+  "proview.photo.handle.nw": "Top left corner",
+  "proview.photo.handle.ne": "Top right corner",
+  "proview.photo.handle.sw": "Bottom left corner",
+  "proview.photo.handle.se": "Bottom right corner",
+  "proview.photo.handleValue": "{value}%",
   "proview.cmd.save": "Save changes",
   "proview.cmd.export": "Export Resume",
   "proview.cmd.template": "Open templates and layout presets",

@@ -20,6 +20,7 @@ from .api import (
     apply,
     assistant,
     assistant_proposals,
+    assistant_tools_api,
     ats,
     attachments,
     candidate_jobs,
@@ -163,6 +164,9 @@ ROUTERS = (
     glossary_api.router,
     assistant.router,
     assistant_proposals.router,
+    # #38 工具清单：`GET /api/assistant/tools` 单独一个模块（assistant.py 已贴 500 行预算），
+    # 前缀同 /api/assistant，路径 /tools 与既有 /conversations/* 不重叠。
+    assistant_tools_api.router,
     trash.router,
     # 附件预览（PDF 首页渲染）：独立前缀 /api/attachments，与识别链路无耦合。
     attachments.router,

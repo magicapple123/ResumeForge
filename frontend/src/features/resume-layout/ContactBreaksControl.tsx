@@ -10,7 +10,7 @@
  * 字段名复用 editor.field.* 语言包（手机 / 邮箱 / 城市 / 出生年份 / GitHub / 个人主页）：
  * 同一份简历里"编辑字段"与"排联系方式"讲的是同一个东西，不该有两套叫法。
  */
-import { Select, Space, Tooltip, Typography } from "antd";
+import { Select, Space, Tooltip } from "antd";
 import { useI18n } from "../../i18n/i18nContext";
 import type { MessageKey } from "../../i18n";
 import type { ResumeFormatConfig } from "../../types/resumeFormat";
@@ -54,34 +54,46 @@ export default function ContactBreaksControl({
     label: t(FIELD_LABEL_KEYS[key]),
   }));
 
+  /**
+   * 控件本体（两个分支共用一份，避免"compact 与组内"两处各写一遍选择器配置）。
+   *
+   * 包一层 span 的两个理由：① 禁用态的下拉不接收指针事件，Tooltip 只能挂在外层；
+   * ② 宽度——不设时限宽会让 antd Select 缩到内容宽（实测 34px），弹层变成一条缝；
+   * 但 260px 又太宽、空白比字多（2026-10-28 用户口径"能看见四个字就好"）。
+   * 104px 与同一行「版式」下拉同宽，四个中文字符放得下；多选的已选标签由
+   * `maxTagCount="responsive"` 收成 +N，`maxWidth: 100%` 让窄栏按容器收窄。
+   */
+  const control = (
+    <Tooltip title={t("workbench.contactBreak.hint")}>
+      <span style={{ display: "inline-block", width: 104, maxWidth: "100%" }}>
+        <Select
+          size="small"
+          mode="multiple"
+          allowClear
+          maxTagCount="responsive"
+          aria-label={t("workbench.contactBreak.label")}
+          placeholder={t("workbench.contactBreak.placeholder")}
+          className="resume-contact-break-select"
+          style={{ width: "100%" }}
+          disabled={disabled || undefined}
+          value={value}
+          options={options}
+          onChange={(next: ContactFieldKey[]) => onChange(withContactBreaks(formatConfig, next))}
+        />
+      </span>
+    </Tooltip>
+  );
+
+  // compact 分支（工具栏在用）保持原样：那里没有「版面」组的标签列，多一个标签格会留白。
+  if (compact) {
+    return <Space size={6}>{control}</Space>;
+  }
+
+  /* 任务 4：非 compact 分支进「版面」组的两列网格——控件列与其他三行同一条竖线。 */
   return (
-    <Space size={6}>
-      {!compact && (
-        <Typography.Text type="secondary">{t("workbench.contactBreak.label")}</Typography.Text>
-      )}
-      <Tooltip title={t("workbench.contactBreak.hint")}>
-        {/* 包一层 span：禁用态的下拉不接收指针事件，Tooltip 只能挂在外层。
-            宽度：不设时限宽会让 antd Select 缩到内容宽（实测 34px），弹层变成一条缝；
-            但 260px 又太宽——空白比字多（2026-10-28 用户口径"能看见四个字就好"）。
-            104px 与同一行「版式」下拉同宽，四个中文字符放得下；多选的已选标签由
-            `maxTagCount="responsive"` 收成 +N。maxWidth 100% 让窄屏按容器收窄。 */}
-        <span style={{ display: "inline-block", width: 104, maxWidth: "100%" }}>
-          <Select
-            size="small"
-            mode="multiple"
-            allowClear
-            maxTagCount="responsive"
-            aria-label={t("workbench.contactBreak.label")}
-            placeholder={t("workbench.contactBreak.placeholder")}
-            className="resume-contact-break-select"
-            style={{ width: "100%" }}
-            disabled={disabled || undefined}
-            value={value}
-            options={options}
-            onChange={(next: ContactFieldKey[]) => onChange(withContactBreaks(formatConfig, next))}
-          />
-        </span>
-      </Tooltip>
-    </Space>
+    <div className="resume-wb-field-row">
+      <span className="resume-wb-field-label">{t("workbench.contactBreak.label")}</span>
+      {control}
+    </div>
   );
 }

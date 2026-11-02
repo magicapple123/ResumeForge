@@ -83,6 +83,12 @@ export interface StructurePanelProps {
   multiSelectedPaths?: readonly string[];
   /** 多选变化出口；不传 = 勾选框不渲染（防死控件）。 */
   onMultiSelectedPathsChange?: (paths: string[]) => void;
+  /**
+   * #7：条目行右键菜单的「排版整条…」。宿主接到就在左栏打开整条范围的排版浮层
+   * （`objects[<entryId>]`）；不传 = 这一项静默跳过（结构树仍可用其余 5 项）。
+   * 路径 / 屏幕坐标分开传：宿主直接塞进浮层状态，不需要解构。
+   */
+  onRequestEntryStyle?: (path: string, x: number, y: number) => void;
 }
 
 export default function StructurePanel({
@@ -102,6 +108,7 @@ export default function StructurePanel({
   className,
   multiSelectedPaths = [],
   onMultiSelectedPathsChange,
+  onRequestEntryStyle,
 }: StructurePanelProps) {
   const locale = useLocale();
   /**
@@ -207,6 +214,11 @@ export default function StructurePanel({
     enumValue: resolveEnumValue,
     displayLabel: displayLabelOf,
     multiSelect,
+    // #7：宿主按「路径 + 坐标」接线，hook 与行组件收的是同一个请求对象。
+    // 行组件经 `api.requestEntryStyle` 调用，所以这里就是唯一的转接点。
+    onRequestEntryStyle: onRequestEntryStyle
+      ? (request) => onRequestEntryStyle(request.path, request.x, request.y)
+      : undefined,
   });
 
   // Shift 连选的"最后点击条目"：普通点击/Shift 点击都会经 useStructurePanel 更新 selectedPath，

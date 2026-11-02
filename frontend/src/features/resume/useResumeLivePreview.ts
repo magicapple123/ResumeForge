@@ -19,6 +19,23 @@
  *    `resume()` 交还控制权。**保存返回的 html 由宿主直接写，本 hook 不得覆盖**——这也是
  *    `suspend` 存在的唯一理由：保存期间回来的实时结果一定是旧的。
  *
+ * ## 两个闸门必须分开（`saveSuspendedRef` / `modePausedRef`）
+ *
+ * "保存开始"与"`enabled` 变假"的**后果相同、恢复路径不同**：前者由宿主在保存结束时叫
+ * `resume()`，后者由下一次 `enabled` 变真自己恢复。合成一个 `suspendedRef` 时，`enabled`
+ * 变真没有任何路径把它置回假值——切到「精确」再由「草稿」切回来，`pump()` 第一行就
+ * `return`，之后每一次编辑都只写 `pending` 而不发请求，界面静默冻结（本批问题 12）。
+ *
+ * 所以拆成两个 ref，`pump` / `retry` / `finally` 三个守卫同时看它们：
+ *
+ * - `saveSuspendedRef`：只由 `suspend()` / `resume()` 翻转，语义是"保存结果优先"；
+ * - `modePausedRef`：只由 `enabled` 翻转驱动，语义是"这一栏暂时不需要实时结果"。
+ *
+ * `enabled` 变真时走 `reconcile()`（保存结束也走它）：比对"最新入参"与"真的排过的那一版"，
+ * 不一致才补排一次。两者共用同一段比对，避免"保存期间改内容 / 精确模式期间改内容"两条
+ * 路径各写一份。**保存挂起中 `reconcile()` 直接返回**：否则它会解除保存的沉默，让实时渲染
+ * 抢在保存结果前面上屏。
+ *
  * ## 为什么"首帧不触发"
  *
  * 打开制作台时宿主刚渲染过一份 html，内容与版面与入参完全一致。首帧再发一次同样的请求，
@@ -132,16 +149,19 @@ export function useResumeLivePreview({
   const budgetRef = useRef(0);
   const timerRef = useRef<number | null>(null);
   const controllerRef = useRef<AbortController | null>(null);
-  const suspendedRef = useRef(false);
+  /** 闸门一：保存进行中（只由 `suspend()` / `resume()` 翻转）。 */
+  const saveSuspendedRef = useRef(false);
+  /** 闸门二：`enabled === false`（模式切到「精确」或制作台关闭）。见文件头「两个闸门」。 */
+  const modePausedRef = useRef(false);
   const disposedRef = useRef(false);
   /** 首帧基线：内容引用 + 版式签名。 */
   const lastContentRef = useRef<ResumeDocument | null>(null);
   const lastLayoutRef = useRef<string | null>(null);
-  /** 最近一次渲染的入参：`resume()` 用它判断"挂起期间内容是否变过"。 */
+  /** 最近一次渲染的入参：`reconcile()` 用它判断"暂停期间内容是否变过"。 */
   const latestJobRef = useRef<{ content: ResumeDocument | null; layout?: ResumeLayout }>({
     content: null,
   });
-  // 最新入参跟着渲染走：`resume()` 是命令式回调，读不到渲染作用域的 props。
+  // 最新入参跟着渲染走：`reconcile()` 是命令式回调，读不到渲染作用域的 props。
   useEffect(() => {
     latestJobRef.current = { content, layout };
   }, [content, layout]);
@@ -181,7 +201,8 @@ export function useResumeLivePreview({
   }, []);
 
   const pump = useCallback(() => {
-    if (disposedRef.current || suspendedRef.current) return;
+    // 两个闸门都要看：保存中不发（保存结果优先），模式暂停中也不发（这一栏不需要）。
+    if (disposedRef.current || saveSuspendedRef.current || modePausedRef.current) return;
     if (inflightRef.current) return;
     const job = pendingRef.current;
     if (!job) return;
@@ -214,7 +235,9 @@ export function useResumeLivePreview({
         // 旧请求（被挂起 / 被新一版取代）不驱动下一跳：`inflight` 归新请求管。
         if (seq === seqRef.current) {
           inflightRef.current = false;
-          if (!disposedRef.current && !suspendedRef.current) pumpRef.current();
+          if (!disposedRef.current && !saveSuspendedRef.current && !modePausedRef.current) {
+            pumpRef.current();
+          }
         }
       }
     })();
@@ -257,7 +280,8 @@ export function useResumeLivePreview({
     // R-32：**挂起期间不记基线**。以前这里先写 `lastContentRef/lastLayoutRef` 再 return，
     // 保存期间隐藏/删除字段的改动被记成"已渲染过"，`resume()` 回来一比对就认为没变化，
     // 纸面于是停在旧一版（用户看到"隐藏了但纸面还在"）。基线只描述"真的排过的那一版"。
-    if (suspendedRef.current) return;
+    // 模式暂停同理：精确模式期间改的内容要留给 `reconcile()` 判断。
+    if (saveSuspendedRef.current || modePausedRef.current) return;
     lastContentRef.current = content;
     lastLayoutRef.current = signature;
     // 首帧只记基线：宿主刚渲染过同一份内容，再发一次只是让 iframe 白屏一下。
@@ -266,13 +290,12 @@ export function useResumeLivePreview({
   }, [enabled, content, layout, schedule]);
 
   /**
-   * 保存开始：取消在飞请求、清 pending、状态归 `idle`。
+   * 收尾：取消在飞请求、清 timer / pending、状态归 `idle`。
    *
-   * 单独成一个动作而不是"再判断一次 enabled"：保存成功后宿主会把 html 换成权威版本，
-   * 此时任何在飞的实时结果都必然是旧的（见文件头第 8 条）。
+   * 只做"动作"，不碰两个闸门——闸门由 `suspend()` / `resume()` / `enabled` effect 各自翻转，
+   * 这样"保存中切模式"这类交叉场景不会把对方的闸门顺手关掉或打开（本批问题 12 的成因）。
    */
-  const suspend = useCallback(() => {
-    suspendedRef.current = true;
+  const pause = useCallback(() => {
     clearTimer();
     pendingRef.current = null;
     seqRef.current += 1;
@@ -283,15 +306,28 @@ export function useResumeLivePreview({
   }, [clearTimer]);
 
   /**
-   * 保存结束：交还控制权。
+   * 保存开始：关"保存闸门"并收尾。
    *
-   * R-32：挂起期间的内容变化没有记基线（见上面那条 effect），所以这里必须**主动比一次**——
-   * 否则"保存期间改内容"永远等不到下一次 effect（依赖没变），纸面就一直是保存那一刻的版本。
-   * 补排程走 `schedule`（同一套 budget/rearm），不直接 `pump()`：保存刚结束就撞上一次渲染，
-   * `pump` 会绕过防抖把还没敲完的字也排进去。
+   * 单独成一个动作而不是"再判断一次 enabled"：保存成功后宿主会把 html 换成权威版本，
+   * 此时任何在飞的实时结果都必然是旧的（见文件头第 8 条）。
    */
-  const resume = useCallback(() => {
-    suspendedRef.current = false;
+  const suspend = useCallback(() => {
+    saveSuspendedRef.current = true;
+    pause();
+  }, [pause]);
+
+  /**
+   * 比对"最新入参"与"真的排过的那一版"，不一致就补排一次。
+   *
+   * R-32：暂停期间的内容变化没有记基线（见上面那条 effect），所以恢复时必须**主动比一次**——
+   * 否则"保存期间改内容"永远等不到下一次 effect（依赖没变），纸面就一直是旧一版。
+   * 补排程走 `schedule`（同一套 budget/rearm），不直接 `pump()`：恢复刚结束就撞上一次渲染，
+   * `pump` 会绕过防抖把还没敲完的字也排进去。
+   *
+   * **保存闸门还关着就直接返回**：否则它会抢在保存结果前面把实时 html 推上屏。
+   */
+  const reconcile = useCallback(() => {
+    if (disposedRef.current || saveSuspendedRef.current) return;
     const latest = latestJobRef.current;
     if (!latest.content || !latest.layout) return;
     const signature = JSON.stringify(latest.layout);
@@ -301,16 +337,32 @@ export function useResumeLivePreview({
     schedule({ content: latest.content, layout: latest.layout });
   }, [schedule]);
 
-  // ── 关闭 / 卸载：abort + 清定时器 + 清 pending ──────────────────
+  /** 保存结束：打开"保存闸门"并补排暂停期间的变化。 */
+  const resume = useCallback(() => {
+    saveSuspendedRef.current = false;
+    reconcile();
+  }, [reconcile]);
+
+  // ── 精确模式 / 关闭：关"模式闸门"，切回时由 `reconcile()` 补排 ──────────
   useEffect(() => {
-    if (enabled) return;
-    // `enabled` 转假 = 这一栏不再需要实时结果，语义与"保存开始"完全一致。
-    // suspend 里的 setState("idle") 是对"结果已失效"的确定性收尾：enabled 翻转不
-    // 频繁，且此刻 inflight 已被 abort 清空，不存在同帧级联渲染（规则豁免同
-    // GenerateResumeModal 的收尾扇出写法）。
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    suspend();
-  }, [enabled, suspend]);
+    if (!enabled) {
+      // `enabled` 转假 = 这一栏不再需要实时结果（切到「精确」或制作台关闭）。
+      // 与"保存开始"共用收尾动作，但**各关各的闸门**：这里绝不能碰 `saveSuspendedRef`，
+      // 否则保存还没回来就切模式，实时渲染会立刻抢跑。
+      modePausedRef.current = true;
+      // pause 里的 setState("idle") 是对"结果已失效"的确定性收尾：enabled 翻转不
+      // 频繁，且此刻 inflight 已被 abort 清空，不存在同帧级联渲染（规则豁免同
+      // GenerateResumeModal 的收尾扇出写法）。
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      pause();
+      return;
+    }
+    // 只有"暂停 → 恢复"这一跳才补排。首次挂载时 `wasPaused` 是假：宿主刚渲染过同一份
+    // 内容，补排只会多一次全量渲染（见文件头「为什么首帧不触发」）。
+    const wasPaused = modePausedRef.current;
+    modePausedRef.current = false;
+    if (wasPaused) reconcile();
+  }, [enabled, pause, reconcile]);
 
   useEffect(() => {
     /**
@@ -342,7 +394,8 @@ export function useResumeLivePreview({
   }, [state]);
 
   const retry = useCallback(() => {
-    if (suspendedRef.current || !enabled) return;
+    // 两个闸门任一关着都不重试：保存中重试会盖掉保存结果，模式暂停中重试没必要。
+    if (saveSuspendedRef.current || modePausedRef.current || !enabled) return;
     const job = pendingRef.current ?? lastJobRef.current;
     if (!job) return;
     pendingRef.current = job;

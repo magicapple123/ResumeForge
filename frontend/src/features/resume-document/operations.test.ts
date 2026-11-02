@@ -18,7 +18,9 @@ import {
 } from "./entries";
 import {
   allowedPlacementsForItem,
+  canDropIntoZone,
   canPlaceItem,
+  zoneOfPlacement,
   getItemPlacement,
   moveItem,
   reorderItems,
@@ -55,7 +57,12 @@ describe("位置规则", () => {
     expect(getItemPlacement(textItem({ hidden: true }))).toBe("hidden");
   });
 
-  it("允许的位置：field 六个抽屉；list/authors 只能灰色/隐藏；text 不参与拖拽", () => {
+  it("允许的位置：field 六项含正文；list/authors 只能灰色/隐藏；text 不参与拖拽", () => {
+    // 2026-11-02 契约变更（问题 10）：`body` 加回字段的允许列表。
+    // 后端 `document_plan.py` 的 `_body_blocks` 有非 TextItem 的 body 分支，实测（28 号简历：
+    // 把 education 的 major 改成 body → 保存 → HTML / PDF）该字段确实以正文块出现在纸面上、
+    // 且**只出现一次**（标题行里那份消失）。所以下面钉的是三件事：顺序（纸面阅读序）、
+    // body 真的可选、以及"别的类型没有跟着放宽"。
     expect(allowedPlacementsForItem(fieldItem())).toEqual([
       "title",
       "meta",
@@ -64,9 +71,12 @@ describe("位置规则", () => {
       "trail",
       "hidden",
     ]);
+    expect(canPlaceItem(fieldItem(), "body")).toBe(true);
     expect(allowedPlacementsForItem(listItem())).toEqual(["lead", "trail", "hidden"]);
     expect(allowedPlacementsForItem(textItem())).toEqual([]);
     expect(canPlaceItem(listItem(), "title")).toBe(false);
+    // 列表 / 作者列表没有跟着放宽：进正文的是「字段」，不是这些灰色短字段。
+    expect(canPlaceItem(listItem(), "body")).toBe(false);
     expect(canPlaceItem(textItem(), "body")).toBe(false);
   });
 
@@ -77,6 +87,46 @@ describe("位置规则", () => {
     const field = fieldItem({ placement: "title" });
     expect(withItemPlacement(field, "body")).toMatchObject({ placement: "body" });
     expect(withItemPlacement(field, "title")).toBe(field);
+  });
+});
+
+describe("方框（zone）：拖拽只在同域内允许", () => {
+  it("六个位置分属四个方框", () => {
+    expect(zoneOfPlacement("title")).toBe("head");
+    expect(zoneOfPlacement("meta")).toBe("head");
+    expect(zoneOfPlacement("lead")).toBe("detail");
+    expect(zoneOfPlacement("trail")).toBe("detail");
+    expect(zoneOfPlacement("body")).toBe("body");
+    expect(zoneOfPlacement("hidden")).toBe("hidden");
+  });
+
+  it("同方框不同子格允许（学校→学历、绩点→学习形式），跨方框拒绝", () => {
+    const school = fieldItem({ placement: "title" });
+    const gpa = fieldItem({ placement: "lead" });
+    // 标题行 → 元信息、正文前 → 正文后：都是同一个方框，允许拖。
+    expect(canDropIntoZone(school, "meta")).toBe(true);
+    expect(canDropIntoZone(gpa, "trail")).toBe(true);
+    // 标题行 → 正文前灰字（head → detail）：拒绝，改位置请用位置下拉。
+    expect(canDropIntoZone(school, "lead")).toBe(false);
+    expect(canDropIntoZone(gpa, "title")).toBe(false);
+    // 跨方框到正文：仍然是拒绝，但理由变了（2026-11-02）——不是"字段不能进正文"，
+    // 而是 head / detail 与 body 不同域，跨域换位置必须走位置下拉（那里才说得清改了什么）。
+    expect(canDropIntoZone(school, "body")).toBe(false);
+    expect(canDropIntoZone(gpa, "body")).toBe(false);
+    // 反过来：已经是正文的字段拖回灰字区同样跨域，也不许直接拖。
+    expect(canDropIntoZone(fieldItem({ placement: "body" }), "lead")).toBe(false);
+    expect(canDropIntoZone(fieldItem({ placement: "body" }), "title")).toBe(false);
+  });
+
+  it("隐藏与任何方框互通（隐藏/恢复是同一件事的两半）", () => {
+    const school = fieldItem({ placement: "title" });
+    expect(canDropIntoZone(school, "hidden")).toBe(true);
+    const hidden = fieldItem({ placement: "hidden" });
+    expect(canDropIntoZone(hidden, "title")).toBe(true);
+    // 2026-11-02：`body` 进了字段的允许列表之后，隐藏的字段也能直接拖回正文（原先 false）。
+    expect(canDropIntoZone(hidden, "body")).toBe(true);
+    // 但"隐藏互通"只对**合法且同域/隐藏**的组合成立：隐藏的列表拖进正文依然是非法位置。
+    expect(canDropIntoZone(listItem({ placement: "hidden" }), "body")).toBe(false);
   });
 });
 
@@ -92,13 +142,28 @@ describe("moveItem / setPlacement / reorderItems", () => {
     expect(document.sections[0].entries[0].items[0].id).toBe("ob_item0001");
   });
 
-  it("跨位置：title → body，顺序落组内末尾", () => {
+  it("跨位置：title → lead / title → body 都允许，且原文档不被就地修改", () => {
     const document = makeDocument();
-    const moved = setPlacement(document, "education.ob_entry001.ob_item0002", "body");
+    const moved = setPlacement(document, "education.ob_entry001.ob_item0002", "lead");
     const item = moved.sections[0].entries[0].items.find(
       (candidate) => candidate.id === "ob_item0002",
     );
-    expect((item as { placement?: string } | undefined)?.placement).toBe("body");
+    expect((item as { placement?: string } | undefined)?.placement).toBe("lead");
+    // 2026-11-02（问题 10）：字段可以进正文——实测纸面上真的会多出一条正文块。
+    // 这里钉的是"改了位置 + 只出现一次 + 原文档没被就地改"三件事：
+    // 字段既不能静默丢失（=== document 的老断言已不适用），也不能同时留在标题行里（双份）。
+    const inBody = setPlacement(document, "education.ob_entry001.ob_item0002", "body");
+    expect(inBody).not.toBe(document);
+    const after = inBody.sections[0].entries[0].items;
+    expect(after.filter((candidate) => candidate.id === "ob_item0002")).toHaveLength(1);
+    expect(after.find((candidate) => candidate.id === "ob_item0002")).toMatchObject({
+      placement: "body",
+      hidden_from: null,
+    });
+    // 旧文档一个字节不动（不可变契约）：原位置仍是 title。
+    expect(
+      document.sections[0].entries[0].items.find((candidate) => candidate.id === "ob_item0002"),
+    ).toMatchObject({ placement: "title" });
   });
 
   it("非法位置 / TextItem / 路径不存在都返回原引用（===）", () => {

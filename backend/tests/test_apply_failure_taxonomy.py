@@ -11,11 +11,17 @@
 4. POST /records/retry-batch 只挑命中筛选的失败记录，一条都没有时 404，不建空批次。
 """
 
+import re
+from pathlib import Path
+from typing import get_args
+
 import pytest
 from app.models.apply import (
     FAILURE_CAPTCHA_REQUIRED,
+    FAILURE_CATEGORIES,
     FAILURE_LOGIN_REQUIRED,
     FAILURE_SELECTOR_INVALID,
+    FAILURE_UNKNOWN,
     ITEM_STATUS_FAILED,
     ITEM_STATUS_SUCCESS,
     STEP_GREETING,
@@ -26,7 +32,9 @@ from app.models.apply import (
     ApplyTaskItem,
 )
 from app.models.job import Job
+from app.schemas.apply.base import FailureCategory
 from app.services.apply.failure_taxonomy import (
+    REASON_BY_CATEGORY,
     REASON_CAPTCHA_REQUIRED,
     REASON_LOGIN_REQUIRED,
     REASON_PAGE_NOT_NAVIGATED,
@@ -265,3 +273,49 @@ def test_retry_batch_creates_one_task_for_the_matching_jobs(
     ).json()
     assert all_failed["retried"] == 3
     assert len(captured["job_ids"]) == 3
+
+
+# ===== 失败分类词表的跨端对齐守卫（三处后端 + 一处前端）=====
+#
+# 同一份分类写在四个地方：模型层 `FAILURE_CATEGORIES`（权威）、pydantic 的
+# `FailureCategory` Literal（校验入参）、服务层 `REASON_BY_CATEGORY`（分类 → 兜底子码）、
+# 前端 `FAILURE_CATEGORY_LABELS`（筛选与展示）。任何一处漏一个码，症状都是"不报错，只是
+# 静静少一类"：前端下拉里没有它，或者库里写进去的码在建议表里查不到。这里一次性钉住相等，
+# 失败信息点名缺的是哪个码——否则四个地方来回找一遍才知道差在哪。
+
+FRONTEND_FAILURES = Path(__file__).resolve().parents[2] / "frontend/src/types/apply/failures.ts"
+
+
+def _frontend_category_sets() -> tuple[set[str], set[str]]:
+    """从 ``failures.ts`` 抓两处词表：数组常量与标签表的键。"""
+    source = FRONTEND_FAILURES.read_text(encoding="utf-8")
+    categories_block = re.search(r"FAILURE_CATEGORIES\s*=\s*\[(.*?)\]\s*as const", source, re.S)
+    labels_block = re.search(r"FAILURE_CATEGORY_LABELS[^=]*=\s*\{(.*?)\}", source, re.S)
+    assert categories_block is not None, "前端 failures.ts 里找不到 FAILURE_CATEGORIES"
+    assert labels_block is not None, "前端 failures.ts 里找不到 FAILURE_CATEGORY_LABELS"
+    listed = set(re.findall(r'"([^"]+)"', categories_block.group(1)))
+    labelled = set(re.findall(r"(\w+):\s*\"", labels_block.group(1)))
+    return listed, labelled
+
+
+def test_failure_category_vocabulary_is_identical_everywhere():
+    """四份词表必须完全相等；不等时点名缺/多的是哪个码。"""
+    authoritative = set(FAILURE_CATEGORIES)
+    schema_literal = set(get_args(FailureCategory))
+    # 兜底表不列 unknown（未命中的分类按分类同名回落），所以补回来再比。
+    service_reasons = set(REASON_BY_CATEGORY) | {FAILURE_UNKNOWN}
+    frontend_listed, frontend_labelled = _frontend_category_sets()
+
+    sources = {
+        "schemas/apply/base.py 的 FailureCategory Literal": schema_literal,
+        "services/apply/failure_taxonomy.py 的 REASON_BY_CATEGORY": service_reasons,
+        "frontend failures.ts 的 FAILURE_CATEGORIES": frontend_listed,
+        "frontend failures.ts 的 FAILURE_CATEGORY_LABELS": frontend_labelled,
+    }
+    for label, found in sources.items():
+        missing = sorted(authoritative - found)
+        extra = sorted(found - authoritative)
+        assert not missing and not extra, (
+            f"{label} 与 models/apply.py 的 FAILURE_CATEGORIES 不一致："
+            f"缺 {missing}，多 {extra}"
+        )

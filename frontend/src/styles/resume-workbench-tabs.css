@@ -18,6 +18,34 @@
   background: var(--rf-surface);
 }
 
+/* 任务 2：`sticky` 的包含块是父级 padding box。`.resume-wb-tabstrip` 被包在 `.document-tabs`
+   里（`DocumentSectionTabs`），而那一层的高度**只等于页签条自身** → 可移动范围为 0，
+   粘顶等同 `static`，中栏一滚就跟着走。所以把 sticky 提到 `.document-tabs` 上，
+   内层退回 `static`（两条一起改，缺一条会出现两层各自 sticky 的错位）。 */
+.document-editor > .document-tabs {
+  position: sticky;
+  top: 0;
+  /* 压住下面的字段区；比浮层（notice 12 / 右键菜单更高）小一号，不与弹层抢层级。 */
+  z-index: 3;
+  background: var(--rf-surface);
+}
+
+.document-editor > .document-tabs > .resume-wb-tabstrip {
+  position: static;
+}
+
+/* `.document-editor` 的 `gap: 12px` 会在页签条下方留一条透明缝：中栏滚动时内容从缝里
+   透出来，看起来像"粘住了一条、下面还有一条在动"。用一条同色伪元素盖住这 12px。
+   `pointer-events: none` 保证它不吃点击（这条缝下面可能是内容区的第一行）。 */
+.document-editor > .document-tabs::after {
+  content: "";
+  position: absolute;
+  inset: 100% 0 auto;
+  height: 12px;
+  background: var(--rf-surface);
+  pointer-events: none;
+}
+
 /* ===== ② 轨道：横向滚动 + 右缘渐隐 ===== */
 .resume-wb-tabstrip-track {
   position: relative;

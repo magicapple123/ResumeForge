@@ -129,7 +129,17 @@ export default function SectionPaginationPanel({
   return (
     <Flex vertical gap={8} className="resume-section-pagination">
       <div className="resume-section-pagination-head">
-        <Typography.Text type="secondary" className="resume-section-pagination-hint">
+        {/*
+          问题 22 ③：这句话在窄左栏里只有约 200px 可用宽，原来按 `flex: 1 1 160px` 折成
+          两行，右侧「切到精确预览」按钮独占剩下的一整行、垂直居中——视觉上像浮在文字中间。
+          现在固定单行（`nowrap` + 省略号，见 pagination.css），全文用 `title` 兜底：
+          悬停能读全，**不靠缩小字号硬塞**（12px 是这一栏最小的可读字号）。
+        */}
+        <Typography.Text
+          type="secondary"
+          className="resume-section-pagination-hint"
+          title={t("structure.pagination.hint")}
+        >
           {t("structure.pagination.hint")}
         </Typography.Text>
         {onSwitchToExactPreview ? (
@@ -251,15 +261,33 @@ export default function SectionPaginationPanel({
                     ) : (
                       <span className="resume-pagination-break-label">{label}</span>
                     )}
-                    <Button
-                      type="text"
-                      size="small"
-                      className="resume-pagination-break-clear"
-                      aria-label={t("pagination.breaks.clearChip", { label })}
-                      onClick={() => clearBreak(item)}
-                    >
-                      ×
-                    </Button>
+                    {/* 任务 12：谁能设置，谁才能清除。板块级在这里能设（下方的表），所以这里给 ✕；
+                        条目级只能在「本份简历结构」里设，这里只给 → 跳过去，不再给一条清不掉的 ✕。 */}
+                    {item.kind === "entry" ? (
+                      onJumpToBreak ? (
+                        <Tooltip title={t("pagination.breaks.jumpHint")}>
+                          <Button
+                            type="text"
+                            size="small"
+                            className="resume-pagination-break-jump"
+                            aria-label={t("pagination.breaks.jumpHint")}
+                            onClick={() => onJumpToBreak(item.path)}
+                          >
+                            →
+                          </Button>
+                        </Tooltip>
+                      ) : null
+                    ) : (
+                      <Button
+                        type="text"
+                        size="small"
+                        className="resume-pagination-break-clear"
+                        aria-label={t("pagination.breaks.clearChip", { label })}
+                        onClick={() => clearBreak(item)}
+                      >
+                        ×
+                      </Button>
+                    )}
                   </li>
                 );
               })}
@@ -267,6 +295,11 @@ export default function SectionPaginationPanel({
             <Typography.Text type="secondary" className="resume-section-pagination-hint">
               {t("pagination.breaks.entryHint")}
             </Typography.Text>
+            {breaks.some((item) => item.kind === "entry") ? (
+              <Typography.Text type="secondary" className="resume-section-pagination-hint">
+                {t("pagination.breaks.entryHintInStructure")}
+              </Typography.Text>
+            ) : null}
           </>
         )}
       </Flex>

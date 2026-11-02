@@ -26,9 +26,14 @@ export interface ChipMenuRequest {
 export interface ChipMenuHost {
   /** 没挂宿主（例如单独渲染 chip 的测试）时为 null，调用方应静默跳过。 */
   request: ((request: ChipMenuRequest) => void) | null;
+  /**
+   * #7：条目卡右键菜单里的「排版整条…」——把**整条**（`objects[<entryId>]`）交给宿主的
+   * 排版浮层。宿主没接（或只读）时为 null，调用方静默跳过。
+   */
+  requestStyle: ((request: ChipMenuRequest) => void) | null;
 }
 
-const NO_HOST: ChipMenuHost = { request: null };
+const NO_HOST: ChipMenuHost = { request: null, requestStyle: null };
 
 export const DocumentChipMenuContext = createContext<ChipMenuHost>(NO_HOST);
 

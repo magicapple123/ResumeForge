@@ -459,42 +459,11 @@ def draw_entry_head(
         pdf.record(kind="entry", section=section, y_top=entry_top, object_id=object_id, text=left)
 
 
-def draw_meta_line(
-    pdf: _ResumePDF, text: str, base: float, *, style: RoleStyle | None = None
-) -> None:
-    """条目下的副行（绩点 / 课程 / 技术栈）：字号与颜色可被角色覆盖。"""
-    if not text.strip():
-        return
-    layout = pdf.layout
-    size = base * layout.entry_sub_ratio * _scale(style)
-    line_height = _line_height(pdf, style, size)
-    pdf.ensure_space(layout.gap_mm(layout.sub_gap_top) + line_height)
-    pdf.ln(layout.gap_mm(layout.sub_gap_top))
-    # #5c：副行（绩点/课程/技术栈）的加粗同样此前被 "" 硬编码丢掉。
-    pdf.set_font(FONT_FAMILY, "B" if _bold(pdf, style, False) else "", size * _PX_TO_PT)
-    pdf.set_text_color(*_color(style, pdf.muted_text))
-    pdf.set_x(pdf.frame_left)
-    pdf.multi_cell(
-        pdf.frame_width,
-        line_height,
-        text,
-        align="L",
-        new_x=XPos.LMARGIN,
-        new_y=YPos.NEXT,
-        **_wrapmode_args(pdf, text, pdf.frame_width, size * _PX_TO_PT),
-    )
-    pdf.ln(layout.gap_mm(layout.sub_gap_bottom))
-    pdf.set_text_color(*pdf.body_text)
-
-
-
-
 
 __all__ = [
     "_BULLET_MARK",
     "parse_color",
     "draw_bullets",
     "draw_entry_head",
-    "draw_meta_line",
     "draw_section_title",
 ]

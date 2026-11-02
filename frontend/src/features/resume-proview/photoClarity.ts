@@ -7,7 +7,7 @@
  * （从预览 iframe 里量 `.profile-photo` 的 CSS 宽度再换算成 mm），量不到时用兜底值
  * 并如实说明"按约 30mm 估算"——不编一个漂亮的数字。
  */
-import type { PhotoCropParams } from "./photoCrop";
+import type { CropRect, PhotoCropParams, PhotoSourceInfo } from "./photoCrop";
 
 /** 量不到纸面宽度时的兜底（mm）：常见简历照片框约 25–35mm 宽。 */
 export const DEFAULT_PRINTED_WIDTH_MM = 30;
@@ -21,8 +21,21 @@ export function printedWidthMm(cssPx: number): number {
 
 /** 裁剪后的有效像素。 */
 export function cropPixelSize(params: PhotoCropParams): { width: number; height: number } {
-  const width = Math.max(1, Math.round(params.source.width * params.rect.w));
-  const height = Math.max(1, Math.round(params.source.height * params.rect.h));
+  return rectPixelSize(params.source, params.rect);
+}
+
+/**
+ * 由「来源 + 矩形」算裁剪后的有效像素。
+ *
+ * 裁剪框拖动过程中还没有完整参数（`PhotoCropParams` 要 `version` 与 `aspect`），
+ * 而清晰度提示必须跟着框逐帧更新（#18 验收 7），所以单独给一个只吃 rect 的入口。
+ */
+export function rectPixelSize(
+  source: PhotoSourceInfo,
+  rect: CropRect,
+): { width: number; height: number } {
+  const width = Math.max(1, Math.round((source?.width ?? 1) * rect.w));
+  const height = Math.max(1, Math.round((source?.height ?? 1) * rect.h));
   return { width, height };
 }
 
@@ -47,7 +60,20 @@ export function estimatePrintClarity(
   params: PhotoCropParams,
   printedWidthMmValue: number = DEFAULT_PRINTED_WIDTH_MM,
 ): PrintClarity {
-  const { width, height } = cropPixelSize(params);
+  return estimateRectClarity(params.source, params.rect, printedWidthMmValue);
+}
+
+/**
+ * 只吃「来源 + 矩形」的清晰度估算（裁剪框拖动中逐帧调用）。
+ *
+ * 口径与 `estimatePrintClarity` 完全一致：纸面宽度决定 dpi，裁剪框越小可用像素越少。
+ */
+export function estimateRectClarity(
+  source: PhotoSourceInfo,
+  rect: CropRect,
+  printedWidthMmValue: number = DEFAULT_PRINTED_WIDTH_MM,
+): PrintClarity {
+  const { width, height } = rectPixelSize(source, rect);
   const mm = printedWidthMmValue > 0 ? printedWidthMmValue : DEFAULT_PRINTED_WIDTH_MM;
   const dpi = Math.round((width * 25.4) / mm);
   return {

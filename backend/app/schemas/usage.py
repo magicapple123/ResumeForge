@@ -70,6 +70,13 @@ class UsageRecordOut(BaseModel):
     # 记录时的费用快照（未配置单价时为 None/空串）；不含任何正文。
     cost_estimate: float | None = None
     cost_currency: str = ""
+    # #35 数据边界审计四字段（0074）：喂了什么范围、是否脱敏、目标语言、token 预算。
+    # ``masked`` 的 None 与 False 必须能区分：None = 未声明（老账本 / 未声明入口），
+    # False = 明确未脱敏。空串同理表示"该入口没有声明这一项"。
+    input_scope: str = ""
+    masked: bool | None = None
+    language: str = ""
+    budget: int | None = None
     created_at: datetime | None = None
 
 

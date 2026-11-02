@@ -13,7 +13,10 @@ import re
 
 import pytest
 from app.schemas.resume import ResumeContent
+from app.schemas.resume_document import FieldItem
 from app.services.exporter import render_html
+from app.services.resume.document_catalog import field_label
+from app.services.resume.document_plan_format import item_inlines, plain_text
 from app.services.resume.resume_labels import field_labels
 from tests.export_label_samples import _plain, _products, needs_font
 
@@ -123,3 +126,35 @@ def test_zh_keeps_the_fullwidth_separator_and_brackets():
 
     # 页眉 gender 保持 v1 显示口径：中文全角括号。
     assert "林致远（男）" in products["md"]
+
+
+# ===== A2'：目录查不到的字段键不能把英文 key 印到纸上 =====
+#
+# 自建板块可以**原样复用内置的 v1 字段键**（最典型的是 ``start_date`` / ``end_date``：
+# 内置模块把它们合成 ``period``，自建板块里是两条独立 trail 字段）。这类 key 不属于任何
+# 系统板块，``field_spec`` 必然返回 None——旧实现直接回落 key 本身，于是纸上印出
+# ``start_date：2021.09``。这一组断言钉住"先查通用字段表、查不到才回落 key"这个顺序。
+
+
+def test_field_label_falls_back_to_the_general_table():
+    """目录外的键：命中通用表就印可读标签，未命中才回落 key 本身。"""
+    assert field_label("custom:demo", "start_date") == "开始时间"
+    assert field_label("custom:demo", "end_date") == "结束时间"
+    assert field_label("custom:demo", "start_date", "en-US") == "Start"
+    assert field_label("custom:demo", "end_date", "en-US") == "End"
+    # 未知 key 仍回落 key 本身：不编造文案，坏数据在纸面上看得出来。
+    assert field_label("custom:demo", "no_such_key") == "no_such_key"
+
+
+def test_trail_date_field_prints_the_readable_label():
+    """计划文本级：trail 位置的 ``start_date`` item 印「开始时间：」而不是 ``start_date：``。"""
+    item = FieldItem(
+        id="it_0000000000000001",
+        key="start_date",
+        value="2021.09",
+        placement="trail",
+        show_label=True,
+    )
+    printed = plain_text(item_inlines(item, "custom:demo", "ob_0123456789abcdef", "zh-CN"))
+    assert "开始时间：" in printed, printed
+    assert "start_date" not in printed, printed

@@ -50,8 +50,23 @@ APPLY_TABLES = (
 PREVIOUS_REVISION = "0009_templates_and_interview"
 # 本文件的主角：只加表、不动既有列的那个迁移。
 APPLY_MIGRATION_REVISION = "0010_apply_center"
+
+
+def _head_revision() -> str:
+    """当前迁移链的 head，**从 Alembic 实际读**。
+
+    写死字符串的代价：每加一个迁移，这些"升级到底 / 声称在 head"的断言就集体过期，
+    而失败信息指向的是备份兼容性，看不出真正原因（本轮就漏改了四处）。
+    """
+    from alembic.config import Config
+
+    config = Config()
+    config.set_main_option("script_location", str(BACKEND_DIR / "migrations"))
+    return str(ScriptDirectory.from_config(config).get_current_head())
+
+
 # 当前迁移链的 head，用于"升级到底"与"声称在 head"的对照。
-HEAD_REVISION = "0073_apply_item_failure_taxonomy"
+HEAD_REVISION = _head_revision()
 
 EXPECTED_INDEXES = {
     "job_match_analysis": {

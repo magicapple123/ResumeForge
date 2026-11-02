@@ -186,3 +186,131 @@ def test_ai_entries_never_map_to_unspecified() -> None:
         "/api/drill",
     ):
         assert scope_for_path(path) != "unspecified", path
+
+
+# ===== 2026-11-10 返工：四字段不只进日志，还要**落库并出现在接口里** =====
+#
+# 此前四字段只写进 ``llm.call`` 日志与 ContextVar：用户问"这次到底喂了什么、有没有脱敏"
+# 时，``llm_usage_record`` 表与 ``GET /api/usage/records`` 都答不出来，日志也不能按条回查。
+# 下面三条守的是"声明 -> 落库 -> 接口"这条链，不是日志文本。
+
+
+def _audit_usage():  # noqa: ANN202 - 测试内的最小 LLMUsage 构造
+    from app.services.llm.usage import build_usage
+
+    return build_usage("audit-model", elapsed_ms=10, finish_reason="stop", prompt_tokens=7)
+
+
+def test_usage_record_persists_the_four_audit_fields(db_session) -> None:
+    from app.services.llm import usage_ledger
+
+    row = usage_ledger.record_llm_usage(
+        db_session,
+        task="assistant",
+        usage=_audit_usage(),
+        input_scope="assistant_context",
+        masked=False,
+        language="en-US",
+        budget=4096,
+    )
+    assert (row.input_scope, row.masked, row.language, row.budget) == (
+        "assistant_context",
+        False,
+        "en-US",
+        4096,
+    )
+
+
+def test_undeclared_scope_stays_empty_and_masked_stays_null(db_session) -> None:
+    """没声明的入口留空/None：``masked=NULL`` 与 ``False`` 必须能区分（后者是明确未脱敏）。"""
+    from app.services.llm import usage_ledger
+
+    row = usage_ledger.record_llm_usage(db_session, task="assistant", usage=_audit_usage())
+    assert (row.input_scope, row.language, row.budget) == ("", "", None)
+    assert row.masked is None
+
+
+def test_long_scope_is_truncated_to_the_column_width(db_session) -> None:
+    """记账是旁路：异常长的范围声明按列宽截断，不因为写库失败丢掉整条用量。"""
+    from app.services.llm import usage_ledger
+
+    row = usage_ledger.record_llm_usage(
+        db_session,
+        task="assistant",
+        usage=_audit_usage(),
+        input_scope="x" * 500,
+        language="y" * 500,
+    )
+    assert len(row.input_scope) == 64
+    assert len(row.language) == 16
+
+
+def test_records_endpoint_returns_the_audit_fields(client, db_session) -> None:
+    """``GET /api/usage/records`` 必须带这四个键，且值来自落库那一行。"""
+    from app.services.llm import usage_ledger
+
+    usage_ledger.record_llm_usage(
+        db_session,
+        task="job_analysis",
+        usage=_audit_usage(),
+        input_scope="job",
+        masked=True,
+        language="zh-CN",
+        budget=2048,
+    )
+    response = client.get("/api/usage/records")
+    assert response.status_code == 200, response.text
+    item = response.json()["items"][0]
+    assert item["input_scope"] == "job"
+    assert item["masked"] is True
+    assert item["language"] == "zh-CN"
+    assert item["budget"] == 2048
+
+
+def test_records_endpoint_sends_null_for_an_undeclared_scope(client, db_session) -> None:
+    """未声明 ≠ 未脱敏：接口层必须送 JSON ``null``，而且键**要在**（不是悄悄缺字段）。
+
+    模型层那条（``test_undeclared_scope_stays_empty_and_masked_stays_null``）只证明库里的
+    值是 NULL；序列化一层（``masked: bool | None``）如果被写成 ``bool``，NULL 会变成
+    ``false``——读者看到的就是"这次明确没脱敏"，这是语义反转。所以再钉一遍 HTTP 面：
+    直接落一条未声明范围的记录（不经中间件），``GET /api/usage/records`` 里该行三个字段
+    分别是 ``null`` / ``null`` / 空串。
+    """
+    from app.services.llm import usage_ledger
+
+    usage_ledger.record_llm_usage(db_session, task="assistant", usage=_audit_usage())
+    response = client.get("/api/usage/records")
+    assert response.status_code == 200, response.text
+    item = response.json()["items"][0]
+    # 键在，值是 null（区分"没声明"与明确 false）。
+    assert "masked" in item
+    assert item["masked"] is None
+    assert "budget" in item
+    assert item["budget"] is None
+    assert item["input_scope"] == ""
+
+
+def test_ambient_usage_writes_the_declared_scope(db_session) -> None:
+    """provider 旁路上报把 ContextVar 里的四字段一并落库（自动记账那条路）。"""
+    from app.models.llm_usage import LLMUsageRecord
+    from app.services.llm.usage_tasks import record_ambient_usage
+
+    class _Provider:
+        last_usage = _audit_usage()
+
+    set_ambient_task("assistant")
+    set_ambient_scope(input_scope="assistant_context", masked=True, language="en-US", budget=1024)
+    try:
+        record_ambient_usage(_Provider())
+    finally:
+        set_ambient_task(None)
+    # 自动记账走独立的 Session，本会话要先结束事务才看得到那一行。
+    db_session.rollback()
+    rows = db_session.query(LLMUsageRecord).filter_by(task="assistant").all()
+    assert len(rows) == 1
+    assert (rows[0].input_scope, rows[0].masked, rows[0].language, rows[0].budget) == (
+        "assistant_context",
+        True,
+        "en-US",
+        1024,
+    )

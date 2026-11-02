@@ -26,7 +26,25 @@ from app.services.data_backup import (
 
 # 投递功能出现之前的那一版 revision，用来伪造一份"旧版本导出的备份"。
 PREVIOUS_REVISION = "0009_templates_and_interview"
-HEAD_REVISION = "0073_apply_item_failure_taxonomy"
+BACKEND_DIR = Path(__file__).resolve().parents[1]
+
+
+def _head_revision() -> str:
+    """当前迁移链的 head，从 Alembic 实际读。
+
+    「按原始 revision 核对 → 迁移到 head → 校验表集合」这条链路必须用**真实** head：
+    写死字符串的话，每加一个迁移这里的"升级到底"就悄悄对不上了（而失败信息会指向
+    备份兼容性，看不出真正原因）。
+    """
+    from alembic.config import Config
+    from alembic.script import ScriptDirectory
+
+    config = Config()
+    config.set_main_option("script_location", str(BACKEND_DIR / "migrations"))
+    return str(ScriptDirectory.from_config(config).get_current_head())
+
+
+HEAD_REVISION = _head_revision()
 APPLY_TABLES = ("job_match_analysis", "apply_queue_item", "apply_task", "apply_task_item")
 
 

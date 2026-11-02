@@ -10,12 +10,20 @@
  * 保存成功后宿主把 conversion 置空，提示自然消失。
  */
 import { Alert, Button, Typography } from "antd";
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import type { ReactNode } from "react";
 import { useLocale } from "../../i18n/i18nContext";
 import { t } from "../../i18n";
 import type { DocumentConversionSummary, ResumeLayout } from "../../types/resume";
-import type { DocumentFieldCatalog, ResumeDocument } from "../../types/resumeDocument";
+import type {
+  DocumentFieldCatalog,
+  ResumeDocument,
+  ResumeSection,
+} from "../../types/resumeDocument";
+import { addSection } from "../../features/resume-document/mutations";
+import { defaultSectionLayout } from "../../features/resume-document/defaults";
+import { newObjectId } from "../../features/resume-document/identity";
+import AddSectionModal from "./AddSectionModal";
 import DocumentEditor from "../resume-editor/DocumentEditor";
 import "./workbench-v2.css";
 
@@ -32,7 +40,6 @@ export interface ResumeWorkbenchV2EditorColumnProps {
   /** #7：右键「调整排版」浮层的版式通道。 */
   layout?: ResumeLayout | null;
   onLayoutChange?: (next: ResumeLayout) => void;
-  onAddSection?: () => void;
   /** 旧简历转换摘要；null/缺省 = 不显示（本来就是 v2 或保存后）。 */
   conversion?: DocumentConversionSummary | null;
   onDismissConversion?: () => void;
@@ -53,7 +60,6 @@ export default function ResumeWorkbenchV2EditorColumn({
   fieldCatalog = null,
   layout = null,
   onLayoutChange,
-  onAddSection,
   conversion = null,
   onDismissConversion,
   fillMenu = null,
@@ -61,9 +67,44 @@ export default function ResumeWorkbenchV2EditorColumn({
 }: ResumeWorkbenchV2EditorColumnProps) {
   useLocale();
   const [summaryOpen, setSummaryOpen] = useState(false);
+  /**
+   * 任务 11：「新建板块（仅本份简历）」。
+   *
+   * 入口只有一个（页签末尾的「+」），所以状态放在中栏自己身上——宿主 `ResumeWorkbenchV2`
+   * 已经在 500 行预算边缘，再往那里加一个 state + 一个弹窗就超了。
+   *
+   * 写回走 `onChange`（宿主 = `history.recordDraft`）：它按 `summarizeChange` 分类，
+   * `section-add` 是既有的独立类型，所以新增板块天然是一条可撤销的历史步骤，
+   * 不需要 `commitDocument` 才能得到同样的效果。
+   */
+  const [addSectionOpen, setAddSectionOpen] = useState(false);
+  /**
+   * 问题 14：提示条的浮层宿主。必须是 `.document-editor`（滚动容器）**之外的**节点：
+   * 挂进去就跟着内容一起滚，等于没改。用 ref callback 存 state 是为了让
+   * `DocumentEditor` 在首次挂载后拿到真实节点（`useRef.current` 变化不触发重渲染）。
+   */
+  const [noticeHost, setNoticeHost] = useState<HTMLDivElement | null>(null);
+  const attachNoticeHost = useCallback((node: HTMLDivElement | null) => setNoticeHost(node), []);
+  const createSection = (title: string) => {
+    const section: ResumeSection = {
+      key: `custom:${newObjectId()}`,
+      title,
+      kind: "entries",
+      layout: defaultSectionLayout(),
+      entries: [],
+    };
+    onChange(addSection(document, section));
+    // 切到新板块：`DocumentEditor` 的页签跟随 `selectedPath` 所属板块自动切换。
+    onSelectPath?.(section.key);
+  };
   const warnings = conversion?.warnings ?? [];
   return (
     <div className="resume-wb-v2-editor">
+      <AddSectionModal
+        open={addSectionOpen}
+        onClose={() => setAddSectionOpen(false)}
+        onCreate={createSection}
+      />
       {conversion ? (
         <Alert
           type="info"
@@ -126,9 +167,12 @@ export default function ResumeWorkbenchV2EditorColumn({
         fieldCatalog={fieldCatalog}
         layout={layout}
         onLayoutChange={onLayoutChange}
-        onAddSection={onAddSection}
+        onAddSection={() => setAddSectionOpen(true)}
         onCollectAsset={onCollectAsset}
+        noticeHost={noticeHost}
       />
+      {/* 问题 14：中栏底部的提示浮层宿主——在滚动容器之外，提示不随内容滚走。 */}
+      <div className="resume-wb-notice-host" ref={attachNoticeHost} />
     </div>
   );
 }

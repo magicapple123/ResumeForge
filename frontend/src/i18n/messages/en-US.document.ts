@@ -19,6 +19,15 @@ const document = {
   /** 位置选择器左侧的 11px 短标签（R-06 ③）。 */
   "document.placement.short": "Position",
   "document.placement.hiddenHint": "Hidden fields stay in the document but are never printed",
+  /**
+   * Inline sections (skills / languages): the sheet only has "main text" and "gray note"
+   * plus "hidden"; other placements render identically, so they get their own wording.
+   */
+  "document.placement.inline.body": "Main text",
+  "document.placement.inline.trail": "Gray note",
+  "document.placement.inline.hidden": "Hidden",
+  /** Suffix for the fallback option when the current value is outside the allow list. */
+  "document.placement.currentOption": "{label} (current)",
 
   // ── Header positions ────────────────────────────────────────
   "document.headerPlacement.name": "Name line",
@@ -52,6 +61,8 @@ const document = {
   "document.entry.show": "Show entry",
   "document.entry.moveUp": "Move entry up",
   "document.entry.moveDown": "Move entry down",
+  /** #7: first item of the entry context menu (canvas card + structure tree row). */
+  "document.entry.styleWhole": "Style whole entry…",
   "document.entry.hidden": "Entry hidden",
   "document.entry.headLayout": "Title layout",
   "document.entry.headLayout.split": "Side by side",
@@ -141,6 +152,7 @@ const document = {
   "document.drag.moved": "Field position updated",
   "document.drag.canceled": "Move cancelled",
   "document.drag.boundary": "Already at the edge",
+  "document.drag.samePosition": "Already in this position",
   "document.drag.unsupported": "This field cannot be placed here",
   "document.drag.illegalTitle": "Cannot drop here",
   "document.drag.illegalBody":
@@ -155,6 +167,13 @@ const document = {
   "document.section.textHint": "A text section prints one paragraph",
   "document.section.titleLabel": "Section title",
   "document.section.hideTitle": "Hide section title",
+  "document.section.addTitle": "New section (this resume only)",
+  "document.section.addBody": "Adds to this resume only; library sections are untouched",
+  "document.section.addNameHint": "Section name — choose carefully, there is no rename entry yet",
+  "document.section.addConfirm": "Create",
+  "document.section.removed": "Deleted Section “{section}”",
+  "document.section.removeBody":
+    "Removes “{section}” from this resume only — library Sections stay, and you can undo",
 
   // ── Basic info (header) ─────────────────────────────────────
   "document.basic.title": "Basic info",
@@ -186,7 +205,9 @@ const document = {
   "document.photo.remove": "Remove photo",
   "document.photo.cropTitle": "Crop resume photo",
   "document.photo.cropHint":
-    "Drag the sliders to choose the frame. Applying writes this photo; the original stays in the photo library",
+    "Drag the sliders to choose the frame. The original photo is kept and can be restored anytime",
+  "document.photo.cropOffsetLocked":
+    "At 100% framing the whole photo is shown; shrink the frame first to pan",
   "document.photo.cropPreview": "Crop preview",
   "document.photo.cropApply": "Apply crop",
   "document.photo.cropLoading": "Reading the photo…",

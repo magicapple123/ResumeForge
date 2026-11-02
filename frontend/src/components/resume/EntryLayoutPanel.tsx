@@ -32,8 +32,8 @@ import type { ResumeDocument, SectionLayout, EntryLayout } from "../../types/res
 import { findItem } from "../../features/resume-document/paths";
 import { entryDisplayLabel } from "../../features/resume-document/summarize";
 import type { DocumentFieldCatalog } from "../../types/resumeDocument";
-import EntryLayoutInheritanceControls from "./EntryLayoutInheritanceControls";
 import type { LayoutPatch } from "./EntryLayoutInheritanceControls";
+import EntryLayoutRowLayoutControls from "./entryLayout/EntryLayoutRowLayoutControls";
 import EntryLayoutNodeInspector from "./entryLayout/EntryLayoutNodeInspector";
 import EntryLayoutPagination from "./entryLayout/EntryLayoutPagination";
 import EntryLayoutShortFields from "./entryLayout/EntryLayoutShortFields";
@@ -41,11 +41,7 @@ import { usePanelNarrow } from "./entryLayout/usePanelNarrow";
 import { sectionKeyLabel } from "./sectionLabels";
 import "./entry-layout-panel.css";
 import {
-  effectiveAlign,
-  effectiveColumns,
-  effectiveGap,
   effectiveHead,
-  entryLayoutOverrides,
   hasEntries,
   patchEntryLayout,
   patchSectionLayout,
@@ -147,9 +143,6 @@ export default function EntryLayoutPanel({
   const layoutLocked = entry?.lock_layout === true;
   const contentLocked = entry?.lock_content === true;
   const controlsDisabled = disabled || layoutLocked;
-  const columns = effectiveColumns(section, scope === "entry" ? entry : null);
-  const align = effectiveAlign(section, scope === "entry" ? entry : null);
-  const gap = effectiveGap(section, scope === "entry" ? entry : null);
 
   const sectionLabel = (key: string, fallback: string): string => sectionKeyLabel(key, fallback);
 
@@ -166,7 +159,10 @@ export default function EntryLayoutPanel({
               // `null` 是"恢复继承"的合法值：继承选项直接把它写回条目级。
               columns: patch.columns as EntryLayout["columns"],
               align: patch.align as EntryLayout["align"],
+              justify: patch.justify as EntryLayout["justify"],
               gap: patch.gap,
+              column_widths: patch.column_widths,
+              column_gaps: patch.column_gaps,
               head: patch.head,
             }) as Partial<EntryLayout>,
           ),
@@ -180,7 +176,10 @@ export default function EntryLayoutPanel({
           definedPatch({
             columns: patch.columns as SectionLayout["columns"],
             align: patch.align as SectionLayout["align"],
+            justify: patch.justify as SectionLayout["justify"],
             gap: patch.gap,
+            column_widths: patch.column_widths,
+            column_gaps: patch.column_gaps,
           }) as Partial<SectionLayout>,
         ),
       );
@@ -326,14 +325,15 @@ export default function EntryLayoutPanel({
 
       <section className="rf-entry-layout-group" aria-label={t("structure.layout.group.columns")}>
         <div className="rf-entry-layout-group-title">{t("structure.layout.group.columns")}</div>
-        <EntryLayoutInheritanceControls
-          columns={columns}
-          align={align}
-          gap={gap}
-          overrides={entryScoped && entry ? entryLayoutOverrides(entry) : null}
+        <EntryLayoutRowLayoutControls
+          document={document}
+          section={section}
+          entry={entry}
+          entryScoped={entryScoped}
           disabled={controlsDisabled}
           narrow={narrow}
-          onPatch={patchLayout}
+          onPatchShared={patchLayout}
+          onChange={onChange}
         />
       </section>
 

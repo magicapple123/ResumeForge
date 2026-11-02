@@ -86,11 +86,20 @@ logger = logging.getLogger(__name__)
 
 FINISH_UNKNOWN = "unknown"
 _MAX_TASK_LENGTH = 32
+# 与 0074 的列宽一致：审计四字段只存短枚举，超长就截断——记账是旁路，
+# 绝不能因为一个异常长的范围字符串把已经成功的模型调用反写成失败。
+_MAX_SCOPE_LENGTH = 64
+_MAX_LANGUAGE_LENGTH = 16
 
 # 未配置价格时的统一口径（不在日志/响应里出现任何用户内容）。
 def _normalize_task(task: str | None) -> str:
     cleaned = (task or "").strip()[:_MAX_TASK_LENGTH]
     return cleaned or TASK_UNKNOWN
+
+
+def _audit_text(value: object, limit: int) -> str:
+    """审计短文本列的统一收口：空/None -> 空串（= 未声明），超长按列宽截断。"""
+    return str(value or "").strip()[:limit]
 
 
 def record_llm_usage(
@@ -101,8 +110,17 @@ def record_llm_usage(
     model: str = "",
     resume_id: int | None = None,
     finish_reason: str | None = None,
+    input_scope: str = "",
+    masked: bool | None = None,
+    language: str = "",
+    budget: int | None = None,
 ) -> LLMUsageRecord:
-    """记录一次调用；usage=None 表示"调用发生但用量未知"（token 留 NULL）。"""
+    """记录一次调用；usage=None 表示"调用发生但用量未知"（token 留 NULL）。
+
+    ``input_scope`` / ``masked`` / ``language`` / ``budget`` 是 #35 的数据边界审计四字段：
+    调用方按自己**已经声明过**的取值传入（HTTP 入口经 ContextVar 下发）。默认值刻意是
+    "空串 / None"——它们表示**未声明**，不能用一个看起来合理的默认值把审计空洞填平。
+    """
     prompt_tokens = usage.prompt_tokens if usage is not None else None
     completion_tokens = usage.completion_tokens if usage is not None else None
     cache_hit_tokens = usage.cache_hit_tokens if usage is not None else None
@@ -136,6 +154,10 @@ def record_llm_usage(
         retries=usage.retries if usage is not None else 0,
         cost_estimate=cost,
         cost_currency=(pricing.currency if cost is not None and pricing is not None else ""),
+        input_scope=_audit_text(input_scope, _MAX_SCOPE_LENGTH),
+        masked=masked,
+        language=_audit_text(language, _MAX_LANGUAGE_LENGTH),
+        budget=budget,
     )
     db.add(record)
     db.commit()
@@ -151,16 +173,29 @@ def record_provider_usage(
     provider: Any,
     resume_id: int | None = None,
     finish_reason: str | None = None,
+    input_scope: str = "",
+    masked: bool | None = None,
+    language: str = "",
+    budget: int | None = None,
 ) -> LLMUsageRecord:
     """从 provider.last_usage（既有约定）取用量落库；FakeProvider 没有该属性时记未知。
 
     ``finish_reason`` 显式传入时优先（例如调用方在适配器返回值之外还有更准确的中断原因）。
+    数据边界四字段原样透传（见 ``record_llm_usage``）。
     """
     usage = getattr(provider, "last_usage", None)
     if not isinstance(usage, LLMUsage):
         usage = None
     return record_llm_usage(
-        db, task=task, usage=usage, resume_id=resume_id, finish_reason=finish_reason
+        db,
+        task=task,
+        usage=usage,
+        resume_id=resume_id,
+        finish_reason=finish_reason,
+        input_scope=input_scope,
+        masked=masked,
+        language=language,
+        budget=budget,
     )
 
 
@@ -301,6 +336,11 @@ def serialize_usage_record(row: LLMUsageRecord) -> dict[str, Any]:
         "retries": row.retries,
         "cost_estimate": row.cost_estimate,
         "cost_currency": row.cost_currency,
+        # #35 审计四字段：接口层据此回答"喂了什么、是否脱敏、给谁看、多少预算"。
+        "input_scope": row.input_scope or "",
+        "masked": row.masked,
+        "language": row.language or "",
+        "budget": row.budget,
         "created_at": row.created_at,
     }
 

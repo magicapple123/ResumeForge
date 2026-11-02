@@ -73,7 +73,13 @@ export default function PreviewAlerts({
           title={t("exact.overflow.title", { needed: pagesNeeded, limit: pageCount })}
           description={t("preview.canvas.overflowBody", {
             amount: overflowAmountText,
-            note: t(overflowClipped ? OVERFLOW_NOTE_KEY : APPROXIMATE_PAGINATION_NOTE_KEY),
+            // 2026-11-02（问题 2）：超限的页现在**照样画出来**，所以这段说明要说清
+            // "全部 N 页都显示了、第 M 页起不计入导出"。两个数字必须由这一层给：
+            // `pagesNeeded` / `pageCount` 已经是同一份 `resolvePageCounts` 的结果。
+            note: t(overflowClipped ? OVERFLOW_NOTE_KEY : APPROXIMATE_PAGINATION_NOTE_KEY, {
+              pages: Math.max(pageCount, pagesNeeded),
+              from: pageCount + 1,
+            }),
           })}
         />
       )}

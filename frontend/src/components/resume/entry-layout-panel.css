@@ -78,6 +78,41 @@
   max-width: 100%;
 }
 
+/* ===== 逐列宽度 / 逐间隔（任务 13）=====
+   一行里要放 N 个数字框 + 应用 + 恢复，360px 栏放不下：数字框固定 56px、整体允许换行，
+   换行后仍然左对齐（不要让 antd 的包装 span 自己撑成一列）。 */
+.rf-entry-layout-stack {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.rf-entry-layout-number-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.rf-entry-layout-number-row .ant-input-number {
+  flex: none;
+  width: 56px;
+}
+
+.rf-entry-layout-note {
+  font-size: var(--rf-font-size-xs, 12px);
+  line-height: 18px;
+  color: var(--rf-text-tertiary);
+}
+
+/* 合计不等于 100% 时那一行标红：应用按钮同时是禁用的，颜色只是提前说明原因。 */
+.rf-entry-layout-note[data-width-sum]:not([data-width-sum="100"]) {
+  color: var(--rf-warning-text, var(--rf-text-secondary));
+}
+
 .rf-entry-layout-locked {
   font-size: var(--rf-font-size-xs, 12px);
   color: var(--rf-warning-text, var(--rf-text-secondary));

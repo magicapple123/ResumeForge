@@ -193,6 +193,68 @@ body.is-slider-dragging iframe {
   min-width: 0;
 }
 
+/* ===== 「版面」组的参数行：一行一个网格（任务 4）=====
+ *
+ * 改前同一分组里有两套布局系统：文档模式用 antd `Row/Col`（`Col flex="auto"` 把「篇幅上限」
+ * 顶到最右），后三行用 `Space`（控件起点跟着标签字宽走，四行分别是 131 / 93 / 95 / 123）。
+ * 现在统一成「标签列 + 控件列」的两列网格：标签列宽由 `--resume-wb-field-label-w` 决定，
+ * 控件因此天然落在同一条竖线上，与标签字数无关。
+ *
+ * 标签列宽按语言切：中文最长是「联系方式换行」6 字（12px ≈ 72px），英文是
+ * 「Line breaks」这类 11 字符（≈ 88px），所以英文档给 112px。用 `html[lang^="en"]`
+ * 而不是 `navigator.language`：语言包切换会同步 `<html lang>`，而 `navigator` 不会变。
+ */
+.resume-wb-field-row {
+  display: grid;
+  grid-template-columns: var(--resume-wb-field-label-w) minmax(0, 1fr);
+  align-items: center;
+  /* 网格项默认 `stretch`：分段控件、下拉的包装 span 都会被拉到整格宽，宽栏下看着像
+     「控件贴到右边」。统一靠左按内容排，四行控件因此都是左对齐的一小截。 */
+  justify-items: start;
+  column-gap: 8px;
+  min-width: 0;
+}
+
+/* 组件内部自带两行以上时（文档模式 + 篇幅上限）用它包一层：行间距与
+   `.resume-wb-group-body` 同值 12px，否则会出现 12 / 8 / 12 / 12 的参差。 */
+.resume-wb-field-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+.resume-wb-field-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+  white-space: nowrap;
+  color: var(--rf-text-secondary);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+/* 「文档模式」那一行还要塞一个 ⓘ：antd 的 small 文字按钮左右各有 7px 内边距，
+   在 76px 的标签列里会把四个字挤成两行（实测标签高 36px = 折行）。
+   这里只压掉那颗图标按钮的内边距与固定宽度，不改 antd 的按钮口径。 */
+.resume-wb-field-label > .ant-btn {
+  flex: none;
+  width: 14px;
+  min-width: 14px;
+  height: 16px;
+  padding: 0;
+  font-size: 12px;
+}
+
+.resume-wb-col-params {
+  --resume-wb-field-label-w: 76px;
+}
+
+html[lang^="en"] .resume-wb-col-params {
+  --resume-wb-field-label-w: 112px;
+}
+
 /* 侧栏里的滑杆由本栏定宽：不做这一步会继承弹窗的 200px（modules-layout.css 的
    `.is-stacked` 规则），在 300px 栏宽里把读数与来源胶囊顶出格子。 */
 .resume-wb-col-params .resume-measure-grid.is-stacked {

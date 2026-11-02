@@ -192,10 +192,19 @@ function nameInput(): HTMLInputElement {
 /**
  * 点一次预设色板 = 改一处**版式**。
  *
+ * #12 把四行颜色改成了手风琴且**默认全部收起**（规格：四行总高 ≤120px、先选行才出色板），
+ * 所以这里要先展开一行——只点行头箭头，不动其它断言；色板已经在（上一次调用展开过）时
+ * 不再点，否则第二次调用会把它收起。
+ *
  * 四行颜色各有一块同名色块（读屏名就是颜色名），按 role 查会命中多颗；这里要的只是
  * "改一处版式"，改哪一行都一样。
  */
 function pickSwatch(): void {
+  if (!document.querySelector(".resume-wb-swatches")) {
+    const toggle = document.querySelector<HTMLElement>(".resume-wb-color-toggle");
+    expect(toggle).not.toBeNull();
+    fireEvent.click(toggle as HTMLElement);
+  }
   fireEvent.click(screen.getAllByRole("button", { name: t("workbench.color.navy") })[0]);
 }
 

@@ -37,12 +37,13 @@ const preview = {
   "preview.canvas.overflowBody":
     "Font size, line spacing and margins render exactly as you set them and are never shrunk automatically; {amount} {note}",
   "preview.canvas.note.overflow":
-    "The part over the limit will not be shown — tighten the layout or add more pages to see everything.",
+    "All {pages} pages are shown; pages {from} onward are left out of the export.",
   "preview.canvas.note.approximate":
     "The multi-page view is an approximate split at A4 height; browser print and the downloaded PDF are authoritative.",
   "preview.canvas.frameTitle": "Resume preview",
   "preview.canvas.frameTitlePage": "Resume preview, page {page}",
   "preview.canvas.pageLabel": "Page {page} of {total} (approximate)",
+  "preview.canvas.pageLabelOverflow": "Page {page} · over the limit, not exported",
 
   "preview.geometry.overflowPercent": "The content is about {percent}% of a page too long.",
   "preview.geometry.overflowPages": "The content is about {pages} pages too long.",

@@ -194,6 +194,116 @@ export function isFullFrame(params: PhotoCropParams): boolean {
   return rect.x <= 0.0001 && rect.y <= 0.0001 && rect.w >= 0.9999 && rect.h >= 0.9999;
 }
 
+// ===== 直接操作 rect 的几何（裁剪框 UI 用；不经过 draft 换算）=================
+//
+// 2026-11 #18：裁剪弹窗从"三个滑块 + draft"改成"四边可拖的裁剪框"，界面上的唯一状态
+// 就是 `CropRect` 本身。这一组是那次改动需要的**纯函数**：手柄拖动、松手夹比例、换比例、
+// 键盘微调都只在归一化矩形上做加减法与夹取，不碰 DOM、不碰 React。
+//
+// draft 那一套（`computeCropRect` / `draftFromParams`）**保留**：制作台页眉的
+// `PhotoCropDialog` 与 `HeaderItemEditor` 仍在用，删掉会让那两个入口直接红。
+
+/** 裁剪框最小边长（归一化）：再小就会除零、预览整块消失。 */
+export const MIN_CROP_SIZE = 0.1;
+
+/** 归一化矩形的**像素**宽高比（`rect.w × 原图宽 : rect.h × 原图高`）。 */
+export function cropRectAspect(rect: CropRect, source: PhotoSourceInfo | null | undefined): number {
+  const pixelWidth = rect.w * (source?.width ?? 1);
+  const pixelHeight = rect.h * (source?.height ?? 1);
+  if (!(pixelWidth > 0) || !(pixelHeight > 0)) return 1;
+  return pixelWidth / pixelHeight;
+}
+
+/** 把矩形夹回 `[0,1]` 且边长不小于 `minSize`；只夹不翻转，长宽比保持不变。 */
+export function clampCropRect(rect: CropRect, minSize: number = MIN_CROP_SIZE): CropRect {
+  const min = clampBetween(minSize, 0.01, 1);
+  const w = clampBetween(rect.w, min, 1);
+  const h = clampBetween(rect.h, min, 1);
+  const x = clampBetween(rect.x, 0, 1 - w);
+  const y = clampBetween(rect.y, 0, 1 - h);
+  return { x: round4(x), y: round4(y), w: round4(w), h: round4(h) };
+}
+
+/**
+ * 没有已保存参数时的默认矩形。
+ *
+ * `free` = 全幅（`{0,0,1,1}`，与"恢复原图"同义）；固定比例 = 原图内**居中**的最大
+ * 可用矩形（1:1 时 `w=h=min(1, 宽高比)`），与旧 draft 的 `zoom = 1` 落点一致。
+ */
+export function defaultCropRect(
+  aspect: PhotoAspect,
+  source: PhotoSourceInfo | null | undefined,
+): CropRect {
+  if (aspect === "free") return { x: 0, y: 0, w: 1, h: 1 };
+  const base = baseRectForRatio(sourceAspect(source), FIXED_ASPECT_RATIOS[aspect]);
+  return {
+    x: round4(base.x),
+    y: round4(base.y),
+    w: round4(base.w),
+    h: round4(base.h),
+  };
+}
+
+/**
+ * 以**中心**为锚把矩形夹到目标比例。
+ *
+ * 锚点必须是中心：以左上为锚会让框在松手瞬间整体左移/上移，用户会以为"裁歪了"。
+ * `aspect === "free"` 只做夹回（自由裁剪就是这个意思，不改比例）。
+ */
+export function fitCropRectToAspect(
+  rect: CropRect,
+  aspect: PhotoAspect,
+  source: PhotoSourceInfo | null | undefined,
+  minSize: number = MIN_CROP_SIZE,
+): CropRect {
+  const min = clampBetween(minSize, 0.01, 1);
+  if (aspect === "free") return clampCropRect(rect, min);
+  const target = FIXED_ASPECT_RATIOS[aspect];
+  if (!(target > 0)) return clampCropRect(rect, min);
+
+  const imageRatio = sourceAspect(source);
+  let w = clampBetween(rect.w, min, 1);
+  let h = clampBetween(rect.h, min, 1);
+  if (Math.abs(cropRectAspect({ ...rect, w, h }, source) - target) > 1e-6) {
+    // 先按宽度推高度；推出来装不下（超过 1 或低于下限）就改成按高度推宽度。
+    const heightFromWidth = (w * imageRatio) / target;
+    if (heightFromWidth >= min && heightFromWidth <= 1) {
+      h = heightFromWidth;
+    } else {
+      w = clampBetween((h * target) / imageRatio, min, 1);
+      h = (w * imageRatio) / target;
+      if (h > 1) {
+        h = 1;
+        w = (h * target) / imageRatio;
+      }
+      if (h < min) {
+        h = min;
+        w = (min * target) / imageRatio;
+      }
+    }
+  }
+
+  const centerX = rect.x + rect.w / 2;
+  const centerY = rect.y + rect.h / 2;
+  const x = clampBetween(centerX - w / 2, 0, 1 - w);
+  const y = clampBetween(centerY - h / 2, 0, 1 - h);
+  return { x: round4(x), y: round4(y), w: round4(w), h: round4(h) };
+}
+
+/** 由矩形直接生成可保存参数（弹窗"应用裁剪"的唯一出口）。 */
+export function createRectCropParams(
+  source: PhotoSourceInfo,
+  rect: CropRect,
+  aspect: PhotoAspect,
+): PhotoCropParams {
+  return {
+    version: PHOTO_CROP_VERSION,
+    aspect,
+    rect: clampCropRect(rect),
+    source: { ...source },
+  };
+}
+
 function isUnit(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value);
 }

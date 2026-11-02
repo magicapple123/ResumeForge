@@ -39,18 +39,26 @@ export const LIVE_PROBE_STYLE_ID = "resume-font-live-probe";
 export const APPROXIMATE_PAGINATION_NOTE_KEY: MessageKey = "preview.canvas.note.approximate";
 
 /**
- * 1 页上限时，溢出的内容要不要再向右排成第 2 列？
+ * 超出页数上限的页怎么处理？（2026-11-02 用户裁决：方案 A「全部页都显示 + 超额标记」）
  *
- * - `false`（当前）：**贴住上限**——只有一张 A4，超出的部分不显示
- *   （2026-10-20 用户要求：选 1 页时不要把放不下的内容又拉通成几页）。
- * - `true`：回到更早的行为，溢出内容继续向右展开成第 2 列（只看不改）。
- *
- * 选 2 / 3 页时不受这个开关影响：多页本来就是横向并排——用户 2026-10-20 再次确认
- * 要保留这种"几张 A4 并排"的形态，不接受上下叠。
+ * - 画布纸张数 = `max(页数上限, pages_needed)`，**超限的页照样画出来**：先前的做法是
+ *   "贴住上限，超出的部分不显示"，结果知识产权、证书资质、作品集、培训与课程、自建板块
+ *   在纸面上凭空消失，用户只能靠黄条上的一句话猜自己丢了什么（问题 2）。
+ * - 超限页带页角标记（`OverflowPageLabelKey`）与纸边淡红虚线，黄条说同一件事：
+ *   「已显示全部 N 页，其中第 M 页起不计入导出」。
+ * - **导出链路一行不动**：仍按页数上限截断，产物逐字节不变。
  *
  * 这段行为对应的提示文案是 `preview.canvas.note.overflow`（渲染处 `t(OVERFLOW_NOTE_KEY)`）。
  */
 export const OVERFLOW_NOTE_KEY: MessageKey = "preview.canvas.note.overflow";
+
+/**
+ * 超出上限那一页的页角标记：「第 N 页 · 超出上限，不计入导出」。
+ *
+ * 与黄条同一口径、同一批文案（`preview.canvas.pageLabelOverflow`）：用户在一张纸上看到的
+ * 结论，必须和顶上那条提示、以及导出时真的会被截断这件事完全一致。
+ */
+export const OVERFLOW_PAGE_LABEL_KEY: MessageKey = "preview.canvas.pageLabelOverflow";
 
 /**
  * 精确预览的溢出说明：比草稿侧多一句"不自动缩小"（整句，与 `preview.canvas.overflowBody`
@@ -86,6 +94,24 @@ export interface PanStart {
 export interface ResumePreviewHandle {
   measureWithProbe(css: string): LayoutMeasure | null;
   setLiveProbe(css: string): void;
+}
+
+/**
+ * 画布上报的版式状态（`onLayoutStatus`）。
+ *
+ * `pages` 始终是用户设定的**页数上限**；`pagesNeeded` / `pagesRendered` 是 2026-11-02
+ * （问题 2 + 问题 3）新增的两个数字，左栏结构面板与黄条都读同一份，避免"左栏 7 页、
+ * 右栏 8 页"这种同屏两个页数。
+ */
+export interface PreviewLayoutStatus {
+  /** 页数上限（导出按它截断）。 */
+  pages: number;
+  /** 有超额页（内容需要比上限更多的纸）。 */
+  overflow: boolean;
+  /** 内容实际需要几页：服务端 `pages_needed` 优先，拿不到报告时退回浏览器测量。 */
+  pagesNeeded?: number;
+  /** 画布实际画了几张纸 = `max(pages, pagesNeeded)`。 */
+  pagesRendered?: number;
 }
 
 /**

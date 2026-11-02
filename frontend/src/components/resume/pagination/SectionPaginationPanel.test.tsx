@@ -7,7 +7,7 @@
  * - 行内/单段板块不再出现条目级控件（面板里本就没有条目级行，这里守"没有回来"）。
  */
 import { App as AntdApp } from "antd";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { t } from "../../../i18n";
 import type { ResumeDocument } from "../../../types/resumeDocument";
@@ -243,19 +243,56 @@ describe("SectionPaginationPanel · 已设置断页汇总（Q08）", () => {
     expect(screen.getByText(t("pagination.breaks.entryHint"))).toBeInTheDocument();
   });
 
-  it("单个 ✕ 只清对应开关（不动同一条目的另一个开关）", () => {
+  it("条目芯片只有 →（跳转到结构页签），没有 ✕（任务 12：谁能设置谁才能清除）", () => {
     const document = makeDocument();
     document.sections[0].entries[0].layout.start_on_new_page = true;
-    document.sections[0].entries[0].layout.keep_together = true;
-    const { onChange } = renderPanel(document);
+    const onJumpToBreak = vi.fn();
+    const { onChange } = renderPanel(document, { onJumpToBreak });
     const chip = window.document.querySelector<HTMLElement>(
       '[data-break-chip="entry:education:entry_edu_01:start_on_new_page"]',
     );
     if (!chip) throw new Error("missing chip");
+    expect(chip.querySelector("button.resume-pagination-break-clear")).toBeNull();
+    fireEvent.click(chip.querySelector("button.resume-pagination-break-jump") as HTMLElement);
+    expect(onJumpToBreak).toHaveBeenCalledWith("education.entry_edu_01");
+    // 面板不再提供"清条目断页"的入口：不该产生任何文档变更。
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it("板块芯片的 ✕ 只清板块级开关，条目级断页保留", () => {
+    const document = makeDocument();
+    document.sections[0].layout.start_on_new_page = true;
+    document.sections[0].entries[0].layout.start_on_new_page = true;
+    const { onChange } = renderPanel(document);
+    const chip = window.document.querySelector<HTMLElement>(
+      '[data-break-chip="section:education:start_on_new_page"]',
+    );
+    if (!chip) throw new Error("missing chip");
     fireEvent.click(chip.querySelector("button.resume-pagination-break-clear") as HTMLElement);
     const next = onChange.mock.calls[0][0] as ResumeDocument;
-    expect(next.sections[0].entries[0].layout.start_on_new_page).toBe(false);
-    expect(next.sections[0].entries[0].layout.keep_together).toBe(true);
+    expect(next.sections[0].layout.start_on_new_page).toBe(false);
+    expect(next.sections[0].entries[0].layout.start_on_new_page).toBe(true);
+  });
+
+  it("历史遗留的板块级 keep_together 不再出现（字段仍在文档里）", () => {
+    const document = makeDocument();
+    document.sections[0].layout.keep_together = true;
+    renderPanel(document);
+    expect(screen.getByText(t("pagination.breaks.empty"))).toBeInTheDocument();
+    expect(document.sections[0].layout.keep_together).toBe(true);
+  });
+
+  it("有条目级断页时提示「到本份简历结构修改」，只有板块级时不提示", () => {
+    const withEntry = makeDocument();
+    withEntry.sections[0].entries[0].layout.start_on_new_page = true;
+    renderPanel(withEntry);
+    expect(screen.getByText(t("pagination.breaks.entryHintInStructure"))).toBeInTheDocument();
+    cleanup();
+
+    const sectionOnly = makeDocument();
+    sectionOnly.sections[0].layout.start_on_new_page = true;
+    renderPanel(sectionOnly);
+    expect(screen.queryByText(t("pagination.breaks.entryHintInStructure"))).toBeNull();
   });
 
   it("点击芯片标签跳转（宿主切结构页签并选中）", () => {

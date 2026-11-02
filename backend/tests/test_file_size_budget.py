@@ -89,6 +89,18 @@ _TEST_EXEMPTIONS: dict[str, Exemption] = {
     "backend/tests/test_webform_live.py": Exemption(
         "过线 27 行，monkeypatch 哨兵与脚手架耦合", _STRUCTURED_BACKSTOP
     ),
+    # 2026-11-02 界面修复批（任务 1 / 任务 6）的用例追加在既有文件末尾：
+    # 后端 549 行（超 49）、前端 523 行（超 23）。两处都不是"该拆的类没拆"，而是
+    # 拆分前得先把脚手架抽成共享 helper——后端是 `_png` / `PHOTO` / `photo_sha256` 一族，
+    # 前端是 `renderWithLayout` / `withPhoto` / `croppedConfig` 这一套 chip 编辑器夹具。
+    # 抽 helper 是独立补丁（会动到 3 个既有测试文件的 import），本批只豁免；
+    # 到期日 2026-11-15，届时按上述预案拆分或带新理由续期。
+    "backend/tests/test_resume_render_overrides.py": Exemption(
+        "任务 6 照片裁剪用例过线 49 行，拆分需先抽照片测试脚手架", "2026-11-15"
+    ),
+    "frontend/src/components/resume-editor/DocumentEditor.header.test.tsx": Exemption(
+        "任务 1/6 用例过线 23 行，拆分需先抽 chip 编辑器测试脚手架", "2026-11-15"
+    ),
     # TrackerPage.test.tsx 的豁免（2026-10-13 PR-13 批新增用例后 517 行，超线 17 行）
     # 已于 2026-10-22 到期执行：按其自身预案拆出 TrackerPage.import-modal.test.tsx
     # （导入预览/深链域）+ src/test/trackerPageHarness.tsx，不再豁免。

@@ -168,6 +168,22 @@ def _title_text_color(
     return accent
 
 
+def section_title_gap_mm(base: float, layout, style=None) -> float:
+    """分区间距（标题的段前距，mm）：角色覆盖的 `space_after` → 模板 `section_gap`。
+
+    **2026-11 #9**：`left_bar` 的竖条是**段落左边框**，而 Word 的段落边框会包住
+    段前距——不把它挪走，竖条高度就会是行盒 + 分区间距（≈3 倍高，用户截图里的样子）。
+    所以 `docx_document_render` 需要先把这段间距算出来、挪到上一段的段后，再调
+    `section_title(space_before_mm=0)`。计算口径只留这一份，标题与渲染流程不许各算一次。
+    """
+    gap_ratio = (
+        float(style.space_after)
+        if style is not None and style.space_after is not None
+        else layout.section_gap
+    )
+    return base * _PX_TO_MM * gap_ratio
+
+
 def section_title(
     doc,
     text: str,
@@ -177,6 +193,8 @@ def section_title(
     accent_soft: tuple[int, int, int],
     theme: DocxTheme = DEFAULT_DOCX_THEME,
     style=None,
+    space_before_mm: float | None = None,
+    space_after_mm: float | None = None,
 ) -> None:
     """区块标题：字号用 ``section_title_ratio``、形状用 ``section_title_style``。
 
@@ -184,19 +202,19 @@ def section_title(
     有的只有一条左竖条（classic）。Word 此前一律"加粗 + 强调色"，导出后看不到预览里
     那一条条色带——这是"Word 版和预览差别很大"的一部分。现在按 `section_title_style`
     补上底纹 / 左竖条（圆角表达不出来，见 `decorate_paragraph`）。
+
+    `space_before_mm` / `space_after_mm` 为 `None` 时用默认值（分区间距 / 0.4em）；
+    `left_bar` 的调用方会显式传 0，把这两段间距挪到相邻段落上（见 `section_title_gap_mm`）。
     """
     size = base * layout.section_title_ratio * _style_scale(style)
-    gap_ratio = (
-        float(style.space_after)
-        if style is not None and style.space_after is not None
-        else layout.section_gap
-    )
-    gap_mm = base * _PX_TO_MM * gap_ratio
+    gap_mm = section_title_gap_mm(base, layout, style)
     # W08：板块标题跟随后续内容（Word 的 w:keepNext；PDF 同语义用预留行数）。
     node = paragraph(
         doc,
-        space_before_mm=gap_mm,
-        space_after_mm=base * _PX_TO_MM * 0.4,
+        space_before_mm=gap_mm if space_before_mm is None else space_before_mm,
+        space_after_mm=(
+            base * _PX_TO_MM * 0.4 if space_after_mm is None else space_after_mm
+        ),
         keep_with_next=True,
     )
 
