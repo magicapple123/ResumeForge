@@ -55,7 +55,11 @@ $pipWheelVersion = "25.3"
 $pythonExe = Join-Path $staging "python\python.exe"
 $pipWheelUrl = "https://files.pythonhosted.org/packages/44/3c/d717024885424591d5376220b5e836c2d5293ce2011523c9de23ff7bf068/pip-25.3-py3-none-any.whl"
 $pipWheelSha256 = "9655943313a94722b7774661c21049070f6bbb0a1516bf02f7c8d5d9201514cd"
-$pipWheel = Join-Path $staging "pip-$pipWheelVersion-py3-none-any.whl"
+# Expand-Archive validates the extension and rejects ".whl" on older PowerShell
+# 7.x (CI: InvalidArgument/IOException), so download the wheel under a .zip
+# name. The archive contents (pip/ + pip-<version>.dist-info/) are what matters;
+# the file name is never used by pip because this wheel is only ever unpacked.
+$pipWheel = Join-Path $staging "pip-$pipWheelVersion-wheel.zip"
 Write-Host "Downloading pip $pipWheelVersion wheel..."
 curl.exe -sSL -o $pipWheel $pipWheelUrl
 if ($LASTEXITCODE -ne 0) { throw "download pip wheel failed ($LASTEXITCODE)" }
