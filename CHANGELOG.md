@@ -5,6 +5,8 @@
 ## Unreleased
 ### Fixed
 
+- **桌面打包的 Python 运行时重建在 CI 上稳定失败（get-pip 的 Windows 自我保护）。** 2026-11 起 bootstrap.pypa.io 的滚动版 get-pip.py 改为把内嵌 pip 解包后以 `python <tmp>\pip` 运行，`sys.argv[0]` 的 basename 恰为 `pip`，在 Windows 上命中 pip 自身的防自改保护（`protect_pip_from_modification_on_windows`，pypa/pip#1299）直接报错退出——缓存失效触发的「一次性重建」从此必挂。现改为绕开 get-pip：下载 pin 版本（25.3）+ SHA-256 校验的 pip wheel 直接解包进 site-packages，`python -m pip`（argv[0] 是 `__main__.py`）天然不受该保护影响；pin 版本让重建产物可复现。只影响打包机，用户侧产物与运行行为不变。
+
 - **制作台第二批修复（22 条，用户逐条实测上报）。** 逐条证据见 `.workbuddy/issues/report.md`，实机脚本在 `.workbuddy/issues/verify/qNN-*.mjs`，截图在 `.workbuddy/issues/shots/`。
   - **草稿预览与页数链**：草稿画布不再双重滚动、不再按列跳（1）；页数改由服务端分页报告驱动（`pages_needed`），左栏「约需 N 页」、黄条、画布三处同源，拿不到报告时自动退回浏览器测量且不阻塞编辑（3、20）；内容超过篇幅上限时**超限页照样画出来**，第 N 页起标「超出上限，不计入导出」并加淡红虚线，导出仍按上限截断（2）；12 号这类「上限 10 页」的简历不再被算成 21 页假超页（11）；切换精确/草稿模式后预览不再永久冻结（12）。
   - **渲染引擎**：多行字段在 HTML / PDF / Word 与草稿里都按原文换行（16）；灰字组的段距下沉到组首尾，PDF 行距与草稿一致（22.1px，原 28px），组高 168→132.8（17）；条目灰字段支持「正文前 / 正文后分侧列」与「分布：靠左 / 两端」，`gap` 上限由 8 调到 16 且单位为字号倍数，HTML / PDF / Word 同语义（4）；Word 导出的联系方式改为**组内按可用宽度装行**，与预览、PDF 的断点一致（9）。

@@ -42,13 +42,29 @@ $pthContent = $pthContent -replace "#Lib/site-packages", "Lib/site-packages"
 Set-Content -LiteralPath $pth.FullName -Value $pthContent -Encoding ASCII -NoNewline
 
 # 3. pip bootstrap.
+# 2026-11-03: the rolling get-pip.py (bootstrap.pypa.io/pip/get-pip.py) now
+# extracts its bundled pip and runs it as "python <tmpdir>\pip". On Windows,
+# sys.argv[0] basename "pip" trips pip's own self-modification guard
+# (pip/_internal/utils/misc.py::protect_pip_from_modification_on_windows,
+# pypa/pip#1299), which aborts with CommandError before pip is installed, so
+# every one-time rebuild on CI failed. Bypass get-pip entirely: pip is a pure
+# Python wheel, so unpack a pinned wheel into site-packages and "python -m pip"
+# (argv[0] is pip/__main__.py) just works. Pin + SHA-256 keeps rebuilds
+# reproducible; bump only after re-verifying the pair below together.
+$pipWheelVersion = "25.3"
 $pythonExe = Join-Path $staging "python\python.exe"
-$getPip = Join-Path $staging "get-pip.py"
-Write-Host "Bootstrapping pip..."
-curl.exe -sSL -o $getPip https://bootstrap.pypa.io/pip/get-pip.py
-if ($LASTEXITCODE -ne 0) { throw "download get-pip failed ($LASTEXITCODE)" }
-& $pythonExe $getPip --no-warn-script-location -q
-if ($LASTEXITCODE -ne 0) { throw "get-pip failed with $LASTEXITCODE" }
+$pipWheelUrl = "https://files.pythonhosted.org/packages/44/3c/d717024885424591d5376220b5e836c2d5293ce2011523c9de23ff7bf068/pip-25.3-py3-none-any.whl"
+$pipWheelSha256 = "9655943313a94722b7774661c21049070f6bbb0a1516bf02f7c8d5d9201514cd"
+$pipWheel = Join-Path $staging "pip-$pipWheelVersion-py3-none-any.whl"
+Write-Host "Downloading pip $pipWheelVersion wheel..."
+curl.exe -sSL -o $pipWheel $pipWheelUrl
+if ($LASTEXITCODE -ne 0) { throw "download pip wheel failed ($LASTEXITCODE)" }
+$pipWheelHash = (Get-FileHash -LiteralPath $pipWheel -Algorithm SHA256).Hash.ToLowerInvariant()
+if ($pipWheelHash -ne $pipWheelSha256) { throw "pip wheel sha256 mismatch ($pipWheelHash)" }
+Expand-Archive -LiteralPath $pipWheel -DestinationPath (Join-Path $staging "python\Lib\site-packages") -Force
+Remove-Item -LiteralPath $pipWheel
+& $pythonExe -m pip --version
+if ($LASTEXITCODE -ne 0) { throw "pip bootstrap failed with $LASTEXITCODE" }
 
 # 4. Backend requirements.
 Write-Host "Installing backend requirements..."
