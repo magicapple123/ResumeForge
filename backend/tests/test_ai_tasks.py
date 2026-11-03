@@ -10,6 +10,7 @@
 
 from __future__ import annotations
 
+import threading
 import time
 from typing import Any
 
@@ -84,8 +85,14 @@ def test_create_and_query_task_reports_progress_and_result(client):
 
 def test_cancel_really_stops_the_handler(client):
     observed: list[str] = []
+    # 必须等执行体真的开跑再取消：runner 的 ``_mark_running`` 与取消是竞态的，
+    # 取消若先落库，handler 根本不会被调用（observed 恒为空）——那是"正确地没启动"，
+    # 不是"取消没停下执行体"。CI 高负载时这个窗口会被放大（2026-11-03 实测 3.13 job
+    # 偶发 red，本地连跑 10 次全过）。用事件等到确定状态，而不是猜等待时长。
+    started = threading.Event()
 
     def handler(ctx: Any) -> None:
+        started.set()
         try:
             while True:
                 ctx.sleep(0.02)
@@ -97,6 +104,7 @@ def test_cancel_really_stops_the_handler(client):
 
     created = client.post(TASK_PATH, json={"kind": AI_TASK_KIND_JOB_MATCH, "payload": {}})
     task_id = created.json()["id"]
+    assert started.wait(5), "执行体没有在预算内启动（取消用例需要它真的在跑）"
 
     cancelled = client.post(f"{TASK_PATH}/{task_id}/cancel")
     assert cancelled.status_code == 200, cancelled.text
