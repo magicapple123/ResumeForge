@@ -27,6 +27,25 @@ def current_head_revision(bind: Engine) -> str | None:
     return ScriptDirectory.from_config(build_alembic_config(bind)).get_current_head()
 
 
+def _snapshot_revision(snapshot: Path) -> str | None:
+    """读**快照库文件**里登记的实际 revision（不是代码 head），表不存在返回 None。
+
+    build_manifest 的 snapshot 是本次导出拍下的库副本。平时代码 head 与库版本相等，
+    写哪个都一样；但归档旧库时（2.0 代码归档 1.x 库）两者天然不同——清单若写代码 head，
+    导入侧的「清单声明 vs 实际库」一致性校验永远对不上，包就再也导不回来了。
+    只读打开 mode=ro，不创建文件；没有 alembic_version 表（或没有已应用版本）返回 None。
+    """
+    with closing(sqlite3.connect(snapshot.as_uri() + "?mode=ro", uri=True)) as connection:
+        tables = {
+            row[0]
+            for row in connection.execute("SELECT name FROM sqlite_master WHERE type='table'")
+        }
+        if "alembic_version" not in tables:
+            return None
+        row = connection.execute("SELECT version_num FROM alembic_version").fetchone()
+        return str(row[0]) if row and row[0] is not None else None
+
+
 def _revision_chain(bind: Engine) -> list[str]:
     """从当前 head 到最初版本的 revision 列表（本项目是线性链路）。"""
     scripts = ScriptDirectory.from_config(build_alembic_config(bind))
@@ -105,11 +124,16 @@ def build_manifest(
         tables, missing_tables = _snapshot_table_counts(snapshot)
     else:
         tables, missing_tables = _table_counts(bind)
+    # 清单里的 revision 优先读快照库的**实际值**：归档旧库时代码已是 2.0、库还是 1.x，
+    # 写代码 head 会让导入侧一致性校验永远失败。没有 snapshot 的调用点（直接把现库的
+    # 内容写清单）才退回代码 head——不能改成读 bind 的库，因为 bind 可能是内存库。
     manifest: dict[str, Any] = {
         "format": format_version,
         "app": settings.app_name,
         "app_version": settings.app_version,
-        "alembic_revision": current_head_revision(bind),
+        "alembic_revision": (
+            _snapshot_revision(snapshot) if snapshot is not None else current_head_revision(bind)
+        ),
         "exported_at": datetime.now().astimezone().isoformat(timespec="seconds"),
         "tables": tables,
         # 与 export 侧的剥离/保留逻辑对应：False 是默认（密钥已清空），True 只能来自
