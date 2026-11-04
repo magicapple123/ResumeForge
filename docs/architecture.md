@@ -826,6 +826,7 @@ flowchart LR
 | 唯一 planner / 四出口同源      | `document_plan.py` 产出 `DocumentPlan`，HTML / PDF / Word / Markdown 只消费它；模板只负责外壳与 CSS。字段拼装与列装箱只写一次（D10） |
 | 旧简历读取时转换、保存写 v2    | `ensure_document_version` 在内存里把 v1 转 v2、不写库；转换规则只在 converter 里，文字不丢、条目数不丢、顺序可解释（D11/D12） |
 | 六个位置是产品边界             | 不做自由画布 / 任意嵌套 / 逐字符排版；位置只有六个抽屉，装不下就换行 + 按页数上限截断，不自动缩字号 |
+| 库版本闸门按 epoch 判，不按 revision 判 | epoch 表（`app_schema_epoch`，单行 `epoch=2`）由基线迁移创建；启动时先读 epoch 决定「升级 / 归档重置 / 拒绝」，只在 epoch==2 时才用 revision 判断是否在迁移链上。按 revision 判会把"老库 revision 不在新链上"误判成库损坏，也会让每次新增迁移天然变成一次不可升级变更 |
 
 ## 部署与安全边界
 

@@ -165,8 +165,9 @@ const profileLibrary = {
   "profileLibrary.fieldSettings.deleteConfirm": "删除「{label}」",
   "profileLibrary.fieldSettings.saveFailed": "保存失败：{detail}",
 
-  "profileLibrary.upgrade.title": "新版本使用新的资料模型",
-  "profileLibrary.upgrade.body": "旧资料不再显示；内容仍在本地与备份里，可先从备份取出后手动重填。",
+  "profileLibrary.upgrade.title": "旧资料库已归档",
+  "profileLibrary.upgrade.body":
+    "1.0 的资料库已整包归档到本地 legacy-archive 目录；2.0 使用新的空资料库，旧数据没有搬进来。",
   "profileLibrary.upgrade.backup": "打开备份",
   "profileLibrary.upgrade.start": "开始填写",
 

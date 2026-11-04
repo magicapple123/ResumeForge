@@ -73,9 +73,9 @@ const userGuide = {
   "userGuide.setupProfile.step2.point9.lead": "Training",
   "userGuide.setupProfile.step2.point9.text":
     "Training and courses are no longer a section: add a custom field under Projects or Education when you need one, or create a training-and-courses section yourself.",
-  "userGuide.setupProfile.step2.point10.lead": "Old data after an upgrade",
+  "userGuide.setupProfile.step2.point10.lead": "Upgrade to 2.0",
   "userGuide.setupProfile.step2.point10.text":
-    "Upgrading from an older version hides the old data, but it is still on this machine and in your backups; follow the hint at the top of the page to take it out of a backup and re-enter it by hand.",
+    "When a 1.0 library is upgraded to 2.0, the whole package is archived to the local legacy-archive folder and 2.0 starts with an empty library. The 1.0 series only showed a notice and never moved data.",
   "userGuide.setupProfile.step2.point11.lead": "Fact ledger",
   "userGuide.setupProfile.step2.point11.text":
     "At **the bottom of the sidebar, above Settings**: record every statement you want in a Resume as one entry — the original fact, the Resume wording, how much of it was yours (participated / owned a module / led / owner) and your personal boundaries.",

@@ -2,6 +2,26 @@
 
 所有值得关注的项目变化都会记录在此。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## 2.0.0
+
+### Changed
+
+- **2.0 以全新库为起点：迁移链只保留一条基线迁移。** 原 74 条历史迁移全部下线，空库执行一次 `upgrade head` 即建全 2.0 的表 / 列 / 索引；数据库只由这条基线代表当前结构，不再有"逐版本演进"的兼容分支。
+- **库版本闸门按 epoch 判定，不再按 revision 判定。** 新增单行表 `app_schema_epoch`（由基线迁移写入唯一一行 `epoch=2`）。启动时先读 epoch：缺失 epoch 表且库里有业务表 → 视为 pre-2.0 库，整包归档后建空库；epoch > 2 → 拒绝启动；epoch == 2 时 revision 才用于判断"在不在迁移链上"。这样"老库的 revision 不在新链上"不会再被误判成库损坏。
+- **1.x → 2.0 的启动顺序改为「判定 → 整包归档 → 校验 → 移走旧库 → 建空库 → 迁移」。** 任一步失败都中止启动、原库原样保留（不移动、不建库）。
+- **文档与界面文案同步到 2.0 口径。** README 版本号改 `2.0.0`、「旧资料升级说明」整行改为归档说明（功能条目数与表格行数一致）；`docs/upgrading.md` 新增「从 1.x 到 2.0：整包归档 + 全新库」；「我的资料」升级说明与使用指南改为"已归档、2.0 使用空库"。
+
+### Removed
+
+- **补充事实（`profile_facts`）整套下线。** 删除后端路由 / schema / 服务 / 模型与前端 `features/profile-facts/` 模块；2.0 基线不再创建 `profile_fact`、`profile_fact_field_pref`。
+- **74 条历史迁移与 57 个迁移测试文件下线。** 它们守住的不变量改由 2.0 基线 schema 测试重建：`upgrade → downgrade base → upgrade` 往返可用、表集合与模型注册表一致、`app_schema_epoch` 单行 = 2。
+
+### Migration
+
+- **1.0.x → 2.0 不搬数据。** 首次启动检测到 pre-2.0 库时，先把整个库导出成与「导出全部数据集」同格式的整包归档到 `backend/data/legacy-archive/<时间戳>/`（含 `package/` 内的 zip、`files/` 内的原库与数据集文件、`ARCHIVE-README.txt`），校验归档通过后才移走旧库并建空库。1.0 系列只提示、没有搬数据，新库从空白开始。
+- **1.x 备份包在 2.0 不导入。** 导入侧在迁移候选库之前校验候选库的 epoch：缺失 `app_schema_epoch` 的包直接拒收，提示用 ResumeForge 1.0.2 打开；2.0 自己导出的包照常可导入。
+- **2.0 的库 / 备份包在 1.0.2 上会被拒收。** 既有 revision 校验会以"来自更新版本"拒绝，方向正确，本轮不改 `BACKUP_FORMAT_VERSION`。
+
 ## Unreleased
 ### Fixed
 

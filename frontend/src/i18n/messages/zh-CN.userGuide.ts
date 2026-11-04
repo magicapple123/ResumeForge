@@ -72,9 +72,9 @@ const userGuide = {
   "userGuide.setupProfile.step2.point9.lead": "培训怎么办",
   "userGuide.setupProfile.step2.point9.text":
     "培训与课程不再是板块：需要时在项目或教育经历下加自定义字段，或自建一个培训与课程板块。",
-  "userGuide.setupProfile.step2.point10.lead": "升级后旧资料",
+  "userGuide.setupProfile.step2.point10.lead": "升级到 2.0",
   "userGuide.setupProfile.step2.point10.text":
-    "从旧版本升级时，旧资料不再显示、但仍在本地与备份里；可按页面顶部提示从备份取出后手动重填。",
+    "1.0 的资料库升级到 2.0 时整包归档到本地 legacy-archive 目录，2.0 使用空库；1.0 系列只提示、没有搬数据。",
   "userGuide.setupProfile.step2.point11.lead": "事实台账",
   "userGuide.setupProfile.step2.point11.text":
     "在**侧栏最下方、「设置」上面**：把每条要写进简历的话记成一条——原始事实、简历表述、承担程度（参与 / 负责模块 / 主导 / 负责人）与个人边界。",

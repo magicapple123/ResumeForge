@@ -69,7 +69,7 @@ describe("UserGuideModal", () => {
     // 2026-10：字段折叠已移除；指南改为"字段始终显示 + 不想参与就隐藏"。
     expect(screen.getAllByText(/字段不再默认折叠/).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/同一段经历只填一个板块/).length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/旧资料不再显示/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/整包归档到本地 legacy-archive 目录/).length).toBeGreaterThan(0);
     // 补充事实已下线：指南里不允许再出现旧入口（L 验收）。
     expect(screen.queryByText(/补充事实/)).toBeNull();
     // 文档识别是用户看得见的能力，指南必须提到，否则用户不会想到可以传 PDF。

@@ -152,9 +152,9 @@ const profileLibrary = {
     "Restore it from Trash; recreating the same name will not link to the old values.",
   "profileLibrary.fieldSettings.deleteConfirm": 'Delete "{label}"',
   "profileLibrary.fieldSettings.saveFailed": "Could not save Field settings: {detail}",
-  "profileLibrary.upgrade.title": "This version uses a new Profile model",
+  "profileLibrary.upgrade.title": "Old Profile library archived",
   "profileLibrary.upgrade.body":
-    "Old Profile data is no longer displayed. It remains locally and in backups; retrieve it from a backup and enter it again manually.",
+    "The 1.0 Profile library was archived as a whole package to the local legacy-archive folder. 2.0 uses a new, empty Profile library; no data was moved into it.",
   "profileLibrary.upgrade.backup": "Open backups",
   "profileLibrary.upgrade.start": "Start entering data",
   "profileLibrary.guide.title": "Entry guidelines",
