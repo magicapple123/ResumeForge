@@ -136,9 +136,7 @@ describe("ProfilePage deep link", () => {
 
     await screen.findByText(t("profileGroups.control.label"));
     const entryNode = await waitFor(() => {
-      const node = document.querySelector<HTMLElement>(
-        '[data-profile-entry-key="entry-skill-1"]',
-      );
+      const node = document.querySelector<HTMLElement>('[data-profile-entry-key="entry-skill-1"]');
       expect(node).not.toBeNull();
       expect(node).toHaveClass("is-deep-link-target");
       return node as HTMLElement;

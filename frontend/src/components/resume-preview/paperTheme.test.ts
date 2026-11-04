@@ -69,9 +69,9 @@ describe("深色草稿纸的样式注入", () => {
     expect(frames).toHaveLength(2);
     for (const frame of frames) {
       expect(frame.contentDocument).not.toBeNull();
-      expect(
-        frame.contentDocument?.documentElement.classList.contains(PAPER_DARK_CLASS),
-      ).toBe(true);
+      expect(frame.contentDocument?.documentElement.classList.contains(PAPER_DARK_CLASS)).toBe(
+        true,
+      );
     }
   });
 });

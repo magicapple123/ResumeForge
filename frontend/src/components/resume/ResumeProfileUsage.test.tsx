@@ -102,9 +102,7 @@ describe("ResumeProfileUsage 需重新生成提示（R-36 相邻口径）", () =
     renderBlock();
 
     // 2026-11 问题 8：正文不再占第二行，标题与一句「需重新生成」并成一行。
-    const line = await screen.findByText(
-      new RegExp(t("resume.detail.group-usage.stale-title")),
-    );
+    const line = await screen.findByText(new RegExp(t("resume.detail.group-usage.stale-title")));
     expect(line.textContent).toContain(t("resume.detail.group-usage.stale-action"));
     // 仍然是琥珀警告条（不能退化成纯文本）。
     expect(line.closest(".ant-alert")).not.toBeNull();
@@ -122,9 +120,7 @@ describe("ResumeProfileUsage 需重新生成提示（R-36 相邻口径）", () =
     });
     renderBlock();
 
-    const line = await screen.findByText(
-      new RegExp(t("resume.detail.group-usage.stale-title")),
-    );
+    const line = await screen.findByText(new RegExp(t("resume.detail.group-usage.stale-title")));
     // 原生 title 键盘用户拿不到，所以这一行必须可聚焦并走 Tooltip。
     // React 18 把 `onFocus` 接在 focusin 上，所以这里派发 focusin（fireEvent.focus 不冒泡）。
     expect(line).toHaveAttribute("tabindex", "0");

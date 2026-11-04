@@ -161,9 +161,7 @@ export default function ResumeWritingPanel({ resumeId, initialText = "", onApply
     const source = versions.current?.text ?? "";
     const trimmed = instruction.trim();
     if (!source || !trimmed || refineRequest.loading) return false;
-    const outcome = await refineRequest.run((signal) =>
-      polishSelection(source, trimmed, signal),
-    );
+    const outcome = await refineRequest.run((signal) => polishSelection(source, trimmed, signal));
     if (outcome.status === "aborted") return false;
     if (outcome.status === "error") {
       message.error(errorText(outcome.error, t("writing.refine.failed")));

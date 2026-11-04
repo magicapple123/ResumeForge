@@ -83,7 +83,7 @@ function scan(): Offender[] {
 }
 
 describe("服务端时间渲染守卫", () => {
-  it("除 serverTime.ts 与豁免册外，不再出现 replace(\"T\", \" \").slice 或 *_at 的裸 new Date(", () => {
+  it('除 serverTime.ts 与豁免册外，不再出现 replace("T", " ").slice 或 *_at 的裸 new Date(', () => {
     const offenders = scan();
     expect(
       offenders,

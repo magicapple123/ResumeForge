@@ -40,7 +40,8 @@ const interviewReview = {
   "interviewReview.optimize.needInput":
     "Write one thing the interview caught you on, or a question the interviewer kept asking",
   /** The backend caps this at 20 items; the frontend trims and says so before submitting. */
-  "interviewReview.optimize.truncated": "At most {limit} items are sent; the first {limit} are kept",
+  "interviewReview.optimize.truncated":
+    "At most {limit} items are sent; the first {limit} are kept",
   "interviewReview.empty": "Enter a question, then analyze the answer approach",
 
   "interviewReview.card.legacy": "Saved review",

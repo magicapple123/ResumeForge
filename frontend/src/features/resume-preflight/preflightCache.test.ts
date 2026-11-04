@@ -7,11 +7,7 @@
  */
 import { afterEach, describe, expect, it } from "vitest";
 import { makePreflightOut } from "../../test/preflightFixtures";
-import {
-  clearPreflightCache,
-  readPreflightCache,
-  writePreflightCache,
-} from "./preflightCache";
+import { clearPreflightCache, readPreflightCache, writePreflightCache } from "./preflightCache";
 
 const SCOPE = "scope-a";
 

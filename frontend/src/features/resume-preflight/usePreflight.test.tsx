@@ -28,20 +28,9 @@ function deferred<T>() {
 
 const BUILD = (): PreflightRequest => ({ layers: ["content"] });
 
-function useHarness(
-  fetcher: Fetcher,
-  currentKey: string | null,
-  debounceMs = 400,
-  resumeId = 7,
-) {
+function useHarness(fetcher: Fetcher, currentKey: string | null, debounceMs = 400, resumeId = 7) {
   // renderHook 的回调就是 Hook 宿主；用命名组件包一层，规则扫描器才认得出这是组件边界。
-  function Probe({
-    hookKey,
-    hookResumeId = 7,
-  }: {
-    hookKey: string | null;
-    hookResumeId?: number;
-  }) {
+  function Probe({ hookKey, hookResumeId = 7 }: { hookKey: string | null; hookResumeId?: number }) {
     return usePreflight({
       resumeId: hookResumeId,
       currentKey: hookKey,

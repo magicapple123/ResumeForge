@@ -46,7 +46,8 @@ const exportPanel = {
   "exportPanel.format.md": "Markdown",
   "exportPanel.format.txt": "Plain text",
   "exportPanel.format.json": "JSON",
-  "exportPanel.format.jsonNote": "JSON is the complete data set and is not subject to the page limit.",
+  "exportPanel.format.jsonNote":
+    "JSON is the complete data set and is not subject to the page limit.",
   "exportPanel.format.png": "Image (PNG)",
   "exportPanel.format.pngHint":
     "Images are for job boards that require an image upload; use PDF when the application goes through ATS screening.",

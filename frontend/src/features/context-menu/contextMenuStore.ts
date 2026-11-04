@@ -84,11 +84,7 @@ export function subscribeContextMenu(listener: () => void): () => void {
 
 /** 订阅入口：宿主组件用它拿当前菜单并重渲染。 */
 export function useContextMenuState(): ContextMenuOpenOptions | null {
-  return useSyncExternalStore(
-    subscribeContextMenu,
-    getContextMenuSnapshot,
-    getContextMenuSnapshot,
-  );
+  return useSyncExternalStore(subscribeContextMenu, getContextMenuSnapshot, getContextMenuSnapshot);
 }
 
 /** 测试用：单例 store 的用例之间必须复位（含订阅者）。 */

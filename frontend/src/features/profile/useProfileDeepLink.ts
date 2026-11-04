@@ -71,7 +71,8 @@ export function useProfileDeepLink({
 }: Options): ProfileDeepLinkApi {
   // 派生值而不是 state：方案/参与清单一变（比如用户点了「显示该板块」）提示自动消失，
   // 不需要在 effect 里同步 setState。
-  const sectionExists = workspace?.sections.some((section) => section.key === sectionParam) ?? false;
+  const sectionExists =
+    workspace?.sections.some((section) => section.key === sectionParam) ?? false;
   const sectionInScheme = participatingKeys.includes(sectionParam);
   const missingSectionKey =
     sectionParam && !loading && sectionExists && !sectionInScheme ? sectionParam : "";

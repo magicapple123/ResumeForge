@@ -141,7 +141,10 @@ describe("面试材料二选一", () => {
     pickFileSource("resume");
     await upload(0, new File([RESUME_TEXT], "resume.md", { type: "text/markdown" }));
 
-    expect(interviewMocks.extractInterviewMaterial).toHaveBeenCalledWith("resume", expect.any(File));
+    expect(interviewMocks.extractInterviewMaterial).toHaveBeenCalledWith(
+      "resume",
+      expect.any(File),
+    );
     await waitFor(() => expect(screen.getByText("resume.md")).toBeInTheDocument());
   });
 
@@ -189,7 +192,9 @@ describe("面试材料二选一", () => {
     pickFileSource("job");
     await upload(0, new File([JOB_TEXT], "jd.txt", { type: "text/plain" }));
     expect(
-      await screen.findByText(t("interviewPage.setup.material.recognized", { chars: JOB_TEXT.length })),
+      await screen.findByText(
+        t("interviewPage.setup.material.recognized", { chars: JOB_TEXT.length }),
+      ),
     ).toBeInTheDocument();
 
     await upload(0, new File([JOB_TEXT], "jd.txt", { type: "text/plain" }));

@@ -383,9 +383,7 @@ function EntryCard({
       </div>
 
       <div
-        className={`document-zone document-zone-body${
-          zoneDragOver("body") ? " is-dragover" : ""
-        }`}
+        className={`document-zone document-zone-body${zoneDragOver("body") ? " is-dragover" : ""}`}
         data-document-zone="body"
         onDragOver={handleZoneOver("body")}
         onDragLeave={handleZoneLeave}

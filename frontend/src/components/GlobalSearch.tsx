@@ -355,9 +355,7 @@ export default function GlobalSearch({ showTrigger = true }: Props) {
                               <Tag>{hitTypeLabel(hit.type)}</Tag>
                               {hit.title}
                             </span>
-                            <Typography.Text type="secondary">
-                              {hitSubtitle(hit)}
-                            </Typography.Text>
+                            <Typography.Text type="secondary">{hitSubtitle(hit)}</Typography.Text>
                           </button>
                         ))}
                       </div>

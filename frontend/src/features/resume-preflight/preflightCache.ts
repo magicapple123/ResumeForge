@@ -40,10 +40,7 @@ const entries = new Map<number, CachedPreflight>();
  * `usePreflight` 需要 `key` 来恢复 `resultKey`（否则 `stale` 恒为 true）；只关心结果的
  * 调用方用下面的 `readPreflightCache`。
  */
-export function readPreflightEntry(
-  resumeId: number,
-  scope: string | null,
-): CachedPreflight | null {
+export function readPreflightEntry(resumeId: number, scope: string | null): CachedPreflight | null {
   const hit = entries.get(resumeId);
   if (!hit) return null;
   if (hit.datasetScope !== scope) {

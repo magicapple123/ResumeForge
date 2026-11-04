@@ -368,48 +368,48 @@ export default function ResumeDetailModal({ recordId, onClose, autoOpenWorkbench
           }
           onLayoutStatus={setLayoutStatus}
           onMeasure={setMeasure}
-            onApplyLayout={(next) => requestLayout(next)}
-            // 制作台顶部「保存修改」要落库版式：把这条已有的 PATCH 链路直接交给它。
-            // 底部那颗「保存」按钮仍在（定位不同：它只存版式，不动内容），两者共用本函数
-            // 内部的 `layoutDirty / layoutSaving` 守卫，谁先点都不会发两次请求。
-            onCommitLayout={saveLayout}
-            // W02 条件写 + 409 冲突三选一：见 `documentPipeline`。
-            documentPipeline={documentPipeline}
-            onDocumentSynced={handleDocumentSynced}
-            onReplaceDocument={handleReplaceDocument}
-            // 草稿且什么都没脏时点「保存到简历中心」：见 `publishDraft`。
-            onPublishDraft={publishDraft}
-            // 版式 PATCH 在飞时制作台顶部的「保存修改」必须禁用：这条链路此刻返回 `false`
-            // （同一时刻不许发两次 PATCH），若按钮还能点，用户会看到"点了、按钮还在、没有提示"，
-            // 而内容其实一次都没存。
-            layoutSaving={layoutSaving}
-            onApplyFittedFormat={(formatConfig) =>
-              // 「自动一页」也只写入当前草稿：同一条重排通道，不另开一份"正在重排"口径。
-              requestLayout({ ...layout, format_config: formatConfig })
-            }
-            extraActions={
-              layoutDirty ? (
-                <Space size={8}>
-                  <Button onClick={cancelLayout} disabled={relayouting || layoutSaving}>
-                    {t("common.action.cancel")}
-                  </Button>
-                  <Button
-                    type="primary"
-                    loading={layoutSaving}
-                    disabled={relayouting}
-                    onClick={() => void saveLayout()}
-                  >
-                    {t("common.action.save")}
-                  </Button>
-                </Space>
-              ) : null
-            }
-            onSaveEditedResume={saveEditedResume}
-            onResumeRevised={(updated) => applyRevisedDetail(updated)}
-            suggestionsGenerated={suggestionsGenerated}
-            suggestionsResetKey={suggestionsResetKey}
-            onSuggestionsGenerated={() => setSuggestionsGenerated(true)}
-          />
+          onApplyLayout={(next) => requestLayout(next)}
+          // 制作台顶部「保存修改」要落库版式：把这条已有的 PATCH 链路直接交给它。
+          // 底部那颗「保存」按钮仍在（定位不同：它只存版式，不动内容），两者共用本函数
+          // 内部的 `layoutDirty / layoutSaving` 守卫，谁先点都不会发两次请求。
+          onCommitLayout={saveLayout}
+          // W02 条件写 + 409 冲突三选一：见 `documentPipeline`。
+          documentPipeline={documentPipeline}
+          onDocumentSynced={handleDocumentSynced}
+          onReplaceDocument={handleReplaceDocument}
+          // 草稿且什么都没脏时点「保存到简历中心」：见 `publishDraft`。
+          onPublishDraft={publishDraft}
+          // 版式 PATCH 在飞时制作台顶部的「保存修改」必须禁用：这条链路此刻返回 `false`
+          // （同一时刻不许发两次 PATCH），若按钮还能点，用户会看到"点了、按钮还在、没有提示"，
+          // 而内容其实一次都没存。
+          layoutSaving={layoutSaving}
+          onApplyFittedFormat={(formatConfig) =>
+            // 「自动一页」也只写入当前草稿：同一条重排通道，不另开一份"正在重排"口径。
+            requestLayout({ ...layout, format_config: formatConfig })
+          }
+          extraActions={
+            layoutDirty ? (
+              <Space size={8}>
+                <Button onClick={cancelLayout} disabled={relayouting || layoutSaving}>
+                  {t("common.action.cancel")}
+                </Button>
+                <Button
+                  type="primary"
+                  loading={layoutSaving}
+                  disabled={relayouting}
+                  onClick={() => void saveLayout()}
+                >
+                  {t("common.action.save")}
+                </Button>
+              </Space>
+            ) : null
+          }
+          onSaveEditedResume={saveEditedResume}
+          onResumeRevised={(updated) => applyRevisedDetail(updated)}
+          suggestionsGenerated={suggestionsGenerated}
+          suggestionsResetKey={suggestionsResetKey}
+          onSuggestionsGenerated={() => setSuggestionsGenerated(true)}
+        />
       )}
     </Modal>
   );

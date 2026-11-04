@@ -81,7 +81,9 @@ describe("ResumeWritingPanel", () => {
     );
 
     // 不传 `onApply` = 宿主没有可写目标（右键落在普通段落上），此时只能复制。
-    expect(screen.queryByRole("button", { name: buttonName(t("writing.action.apply")) })).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: buttonName(t("writing.action.apply")) }),
+    ).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: buttonName(t("writing.action.copy")) }));
     expect(clipboardMock.copyText).toHaveBeenCalledWith(FIRST);
   });
@@ -92,7 +94,9 @@ describe("ResumeWritingPanel", () => {
     renderPanel(onApply);
 
     fireEvent.click(screen.getByRole("button", { name: buttonName(t("writing.action.generate")) }));
-    fireEvent.click(await screen.findByRole("button", { name: buttonName(t("writing.action.apply")) }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: buttonName(t("writing.action.apply")) }),
+    );
 
     expect(onApply).toHaveBeenCalledWith(FIRST);
     // 回填与复制是两条互斥的出路：能写回就不该再往剪贴板塞一份。
@@ -105,7 +109,9 @@ describe("ResumeWritingPanel", () => {
     renderPanel();
 
     fireEvent.click(screen.getByRole("button", { name: buttonName(t("writing.action.generate")) }));
-    fireEvent.click(await screen.findByRole("button", { name: buttonName(t("writing.action.copy")) }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: buttonName(t("writing.action.copy")) }),
+    );
 
     expect(await screen.findByText(t("writing.copy.failed"))).toBeInTheDocument();
   });

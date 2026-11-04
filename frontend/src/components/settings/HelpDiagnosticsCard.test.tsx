@@ -131,18 +131,12 @@ describe("HelpDiagnosticsCard", () => {
     // 禁用的 Button 不接收鼠标事件，Tooltip 挂在包着它的 span 上。
     fireEvent.mouseEnter(button.parentElement as HTMLElement);
 
-    await waitFor(() =>
-      expect(
-        screen.getByText(t("settingsUi.help.reloadBlocked")),
-      ).toBeTruthy(),
-    );
+    await waitFor(() => expect(screen.getByText(t("settingsUi.help.reloadBlocked"))).toBeTruthy());
   });
 
   it("shows the consequence hint next to the reload button", () => {
     renderCard();
 
-    expect(
-      screen.getByText(t("settingsUi.help.reloadHint")),
-    ).toBeTruthy();
+    expect(screen.getByText(t("settingsUi.help.reloadHint"))).toBeTruthy();
   });
 });

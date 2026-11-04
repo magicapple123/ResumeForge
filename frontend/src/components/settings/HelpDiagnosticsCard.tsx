@@ -100,9 +100,7 @@ export default function HelpDiagnosticsCard() {
         <Space orientation="vertical" size={4}>
           <Tooltip
             title={
-              hasUnsavedDraft
-                ? t("settingsUi.help.reloadBlocked")
-                : t("settingsUi.help.reloadHint")
+              hasUnsavedDraft ? t("settingsUi.help.reloadBlocked") : t("settingsUi.help.reloadHint")
             }
           >
             {/* 禁用的 Button 不接收鼠标事件，套一层 span 才能出 Tooltip。 */}

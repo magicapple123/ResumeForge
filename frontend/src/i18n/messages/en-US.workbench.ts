@@ -75,7 +75,8 @@ const workbench = {
   "resume.measure.fontLabel": "Font",
   "resume.measure.more": "More typography",
   "resume.measure.moreHint": "Line spacing, page margins, font size and font",
-  "resume.measure.moreAria": "More typography settings (line spacing, page margins, font size, font)",
+  "resume.measure.moreAria":
+    "More typography settings (line spacing, page margins, font size, font)",
   "draft.diff.show": "Show differences",
   "draft.diff.hide": "Hide differences",
   "draft.diff.before": "Current",

@@ -17,9 +17,7 @@ describe("parseServerTime", () => {
   });
 
   it("已带 Z / +00:00 / +08:00 时不重复追加（幂等）", () => {
-    expect(parseServerTime("2026-11-03T15:50:11Z")?.toISOString()).toBe(
-      "2026-11-03T15:50:11.000Z",
-    );
+    expect(parseServerTime("2026-11-03T15:50:11Z")?.toISOString()).toBe("2026-11-03T15:50:11.000Z");
     expect(parseServerTime("2026-11-03T15:50:11+00:00")?.toISOString()).toBe(
       "2026-11-03T15:50:11.000Z",
     );
@@ -63,9 +61,7 @@ describe("formatServerTime", () => {
     expect(formatServerTime("2026-11-03T15:50:11", { timeZone: "America/New_York" })).toBe(
       "2026-11-03 10:50",
     );
-    expect(formatServerTime("2026-11-03T15:50:11", { timeZone: "UTC" })).toBe(
-      "2026-11-03 15:50",
-    );
+    expect(formatServerTime("2026-11-03T15:50:11", { timeZone: "UTC" })).toBe("2026-11-03 15:50");
   });
 
   it("seconds 输出到秒", () => {

@@ -68,7 +68,9 @@ describe("拖拽源不能被当成文本选区", () => {
    */
   it("编辑器里除可拖元素外的文本都不是拖拽源（-webkit-user-drag: none）", () => {
     const css = EDITOR;
-    expect(css).toMatch(/\.document-editor :not\(\[draggable="true"\]\)\s*\{[^}]*webkit-user-drag:\s*none/);
+    expect(css).toMatch(
+      /\.document-editor :not\(\[draggable="true"\]\)\s*\{[^}]*webkit-user-drag:\s*none/,
+    );
     // 可拖元素必须被排除：给它们置 none 等于把"拖不动"那条 bug 修回来。
     expect(css).toContain(':not([draggable="true"])');
   });
