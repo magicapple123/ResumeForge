@@ -7,7 +7,7 @@
 - G04/G05：任务创建时冻结快照，运行前后改名/归档场景不影响本次生成与落库；
 - G09/G10：未知场景 / 版本不符 / 归档场景明确失败且不创建任务；
 - G11：SSE 与后台任务对同一输入得到同一语义快照（context_sha256 一致）；
-- A3：补充事实进入候选提示词，证号绝不进入任何提示词文本；
+- A3：补充事实已退役（2.0 删除），生成输入只来自新资料模型；
 - C2：没有新增事实时提示词不出现扩展输出结构块。
 """
 
@@ -396,29 +396,7 @@ def test_new_model_entries_reach_candidate_prompt_without_private_number(client,
     assert "SECRET-NUMBER-123" not in prompt
 
 
-# ===== R-54/F3：旧"补充事实"模块退役，不再作为生成输入 =====
-
-
-def test_retired_profile_facts_do_not_count_as_content(client, db_session, monkeypatch):
-    """只有旧事实、新模型为空 → 明确 400；生成不再读旧事实表（R-46/R-54）。"""
-    from app.services.profile import fact_store
-
-    _configure(client)
-    job = _job(client)
-    _capture(monkeypatch, "app.services.resume.resume_generate_runner")
-    fact_store.create_fact(
-        db_session,
-        kind="publication",
-        payload={
-            "title": "只有旧论文的用户",
-            "authors": [{"name": "匿名作者", "is_self": True}],
-            "status": "under_review",
-        },
-    )
-
-    started = client.post("/api/resumes/generate/tasks", json={"job_id": job["id"]})
-    assert started.status_code == 400, started.text
-    assert "个人资料为空" in started.json()["detail"]
+# ===== 2.0：补充事实模块已删除，生成输入只来自新资料模型 =====
 
 
 def test_truly_empty_profile_still_rejected(client):

@@ -159,6 +159,8 @@ const webformFields = {
   "webformFields.work_end": "Work end date",
   "webformFields.work_start": "Work start date",
   "webformFields.written_test_city": "City for written tests",
+  "webformFields.certificate_name": "Certificate name",
+  "webformFields.paper": "Paper",
 } as const;
 
 export default webformFields;

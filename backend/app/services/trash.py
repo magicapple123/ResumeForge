@@ -5,7 +5,7 @@
 字段、去重判据全部要重建一遍，而这些现在都是好的。软删除只多一句"什么时候删的"，列表查询加
 ``IS NULL``、回收站看非 NULL、恢复就是清空时间戳——三处都极难写错。
 
-**范围克制**：只覆盖用户真正会心疼的二十三类——岗位、备选岗位、简历记录、投递记录、事实台账
+**范围克制**：只覆盖用户真正会心疼的二十二类——岗位、备选岗位、简历记录、投递记录、事实台账
 条目、资料箱材料、助手会话、面经、内推、提醒、分享包、题库历史、复盘历史、知识库、网申填充
 记录、资料组/自建大字段/自建小字段/资料条目。列级别、模板副本、数据集这类要么有明确的沿用
 关系、要么本来就能重建，不做回收站；每个可删项都进回收站，只会让回收站自己变成垃圾场。
@@ -54,7 +54,6 @@ from ..models.phrase import ResumePhrase
 from ..models.profile import utcnow
 from ..models.profile_definition import ProfileCustomField, ProfileCustomSection
 from ..models.profile_entry import ProfileEntry
-from ..models.profile_fact import ProfileFact
 from ..models.profile_group import ProfileGroup
 from ..models.question_bank_record import QuestionBankRecord
 from ..models.referral import Referral
@@ -89,24 +88,6 @@ class TrashSpec:
     title_builder: Callable[[Any], str] | None = None
 
 
-def _profile_fact_title(item: Any) -> str:
-    """补充事实的展示标题：按 kind 取最像"名字"的字段（缺项时如实显示无标题）。"""
-    payload = item.payload if isinstance(item.payload, dict) else {}
-    for key in ("title", "name", "organization"):
-        value = str(payload.get(key) or "").strip()
-        if value:
-            return value
-    kind_labels = {
-        "publication": "论文",
-        "research_project": "科研项目",
-        "patent": "专利",
-        "credential": "资格证照",
-        "work_project": "作品项目",
-        "practice": "实践/服务经历",
-    }
-    return kind_labels.get(item.kind, "补充事实")
-
-
 def _profile_entry_title(item: Any) -> str:
     """条目的展示标题：values 里第一个非空文本（条目没有固定的"标题列"）。
 
@@ -132,9 +113,8 @@ def _referral_title(item: Any) -> str:
 
 # 顺序即回收站的展示顺序（越靠前越常用）。
 # 前六类来自迁移 0016，中四类来自迁移 0018，后三类来自迁移 0019，再两类来自迁移 0027
-# （``apply_record`` / ``web_form_record``），最后是 0050 的 ``candidate_job``、0062 的
-# ``profile_fact`` 与 0064 的资料组/自建定义/条目——**全部含 ``deleted_at`` 列**，
-# 缺一类就是"半软删"。
+# （``apply_record`` / ``web_form_record``），最后是 0050 的 ``candidate_job`` 与
+# 0064 的资料组/自建定义/条目——**全部含 ``deleted_at`` 列**，缺一类就是"半软删"。
 TRASH_SPECS: tuple[TrashSpec, ...] = (
     TrashSpec("job", "岗位", Job, "title", "company"),
     # 备选岗位紧挨着岗位：两者只差一步导入，用户在回收站里找它们时想的是同一件事
@@ -168,8 +148,6 @@ TRASH_SPECS: tuple[TrashSpec, ...] = (
     TrashSpec("phrase", "表达资产", ResumePhrase, "text", "kind"),
     # 0058（W16）：数据集级术语表。标题取原文词，副标题是目标语言。
     TrashSpec("glossary_term", "术语表", ResumeGlossaryTerm, "source_term", "language_to"),
-    # 0062（A3）：补充事实。标题按 kind 从 payload 取，副标题是事实种类。
-    TrashSpec("profile_fact", "补充事实", ProfileFact, "kind", title_builder=_profile_fact_title),
     # 0064（F1）：新资料模型的四类用户内容。组名/自建大字段名/自建字段标签直接取列；
     # 条目没有固定标题列，取 values 里第一个非空文本（``_profile_entry_title``）。
     TrashSpec("profile_group", "组", ProfileGroup, "name"),

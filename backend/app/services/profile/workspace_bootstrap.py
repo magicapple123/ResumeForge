@@ -42,7 +42,7 @@ def _live(model: Any) -> Any:
 
 
 def generate_external_id(db: Session, model: Any, column_name: str) -> str:
-    """生成库内唯一的外部稳定 id（uuid4().hex[:24]，与 ProfileFact.fact_id 同规则）。
+    """生成库内唯一的外部稳定 id（uuid4().hex[:24]）。
 
     契约 §1.3 要求"生成函数带重试"：碰撞概率极低，但唯一约束一旦被撞就是 500，
     所以先查再返回，仍冲突由调用方的 IntegrityError 兜底。

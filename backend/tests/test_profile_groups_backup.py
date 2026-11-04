@@ -4,7 +4,11 @@
 钉住三件事：
 1. 新模型 8 张表都在备份清单里（表集合 == 模型注册表，台账守卫继续成立）；
 2. 旧格式样本包导入后**新表为空、旧表完整**（迁移链补齐空表，旧数据原样保留）；
-3. 含旧资料、停在 0063 的旧备份导入后触发升级状态（R-47：旧表有数据 + 新模型为空）。
+3. 2.0 起 has_legacy_data 恒 False（不再探测 1.x 旧表，旧库由启动闸门整包归档），
+   new_profile_has_entries 如实反映新资料模型是否有内容。
+
+注意：旧格式包/旧 revision 相关的用例正随 2.0 备份拒收（T05）与旧迁移测试下线
+（T02）重写；本文件在 T08 只解除对已删除 legacy_status 模块的依赖。
 """
 
 from __future__ import annotations
@@ -28,7 +32,6 @@ from app.services.data_backup import (
 )
 from app.services.data_backup.coverage import COVERED_DIRECTORIES, RUNTIME_ONLY
 from app.services.datasets import import_dataset
-from app.services.profile import legacy_status
 from app.services.profile.entry_store import upsert_entry
 from app.services.profile.profile_reader import load_workspace_upgrade_status
 from sqlalchemy.orm import Session
@@ -158,13 +161,7 @@ def test_old_backup_keeps_legacy_rows_and_triggers_upgrade_status(tmp_path, db_s
         },
     )
 
-    # 预热"旧表存在性"缓存：导入会迁移/重建 schema，完成后必须失效重算。
-    with Session(database.engine) as warm:
-        assert legacy_status.has_legacy_data(warm) is True
-    assert legacy_status._TABLE_CACHE
-
     result = import_dataset(old_archive, "旧版本资料包", database.engine, tmp_path / "import")
-    assert legacy_status._TABLE_CACHE == {}, "导入完成路径没有让升级检测的表缓存失效"
     imported = dataset_database_file(result["id"])
     # 导入落盘的是包里原始库；真正使用前由切换数据集跑迁移（这里显式跑一遍）。
     imported_engine = build_engine(database_url_for(imported))
@@ -183,24 +180,12 @@ def test_old_backup_keeps_legacy_rows_and_triggers_upgrade_status(tmp_path, db_s
             connection.close()
         assert (user_name, school) == ("旧姓名", "旧学校")
 
-        # R-47 升级检测：旧表有数据 + 新模型为空 → 必须提示（不得静默显示空资料页）。
+        # 2.0 起不再探测 1.x 旧表：has_legacy_data 恒 False；新模型为空。
         with Session(imported_engine) as session:
             has_legacy, new_has_entries = load_workspace_upgrade_status(session)
     finally:
         imported_engine.dispose()
-    assert (has_legacy, new_has_entries) == (True, False)
-
-
-def test_import_survives_table_cache_invalidation_failure(tmp_path, monkeypatch):
-    """缓存失效是锦上添花：即使它坏了，旧格式备份导入也不能被挡住。"""
-
-    def boom() -> None:
-        raise RuntimeError("cache down")
-
-    monkeypatch.setattr(legacy_status, "invalidate_table_cache", boom)
-
-    preview = inspect_archive(FIXTURE_DIR / "format-6.zip", database.engine, tmp_path / "staging")
-    assert preview["database"]["tables"]["profile_entry"] == 0
+    assert (has_legacy, new_has_entries) == (False, False)
 
 
 def test_new_model_write_makes_upgrade_status_disappear():

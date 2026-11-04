@@ -40,7 +40,6 @@ from .api import (
     materials,
     profile,
     profile_definitions,
-    profile_facts,
     profile_groups,
     profile_workspace,
     referrals,
@@ -106,9 +105,8 @@ ROUTERS = (
     jobs_analysis.router,
     resumes.router,
     resume_writing.router,
-    # A1/A3：职业场景与补充事实（独立前缀，不与 /api/resumes、/api/profile 抢路径）。
+    # A1：职业场景（独立前缀，不与 /api/resumes、/api/profile 抢路径）。
     career_scenarios.router,
-    profile_facts.router,
     # F1 资料大字段/组（存储层）：/api/profile/workspace|groups|sections|field-preferences。
     # 与 profile.router（/api/profile、/photos、/parse-text…）同前缀但路径互不重叠。
     profile_workspace.router,

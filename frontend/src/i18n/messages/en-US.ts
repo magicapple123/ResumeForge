@@ -19,8 +19,6 @@ import pagination from "./en-US.pagination";
 import params from "./en-US.params";
 import preflight from "./en-US.preflight";
 import preview from "./en-US.preview";
-import profileFacts from "./en-US.profileFacts";
-import profileFactsLegacy from "./en-US.profileFactsLegacy";
 import profileGroups from "./en-US.profileGroups";
 import profileField from "./en-US.profileField";
 import profileLibrary from "./en-US.profileLibrary";
@@ -187,8 +185,6 @@ const enUS = {
   ...params,
   ...preflight,
   ...preview,
-  ...profileFacts,
-  ...profileFactsLegacy,
   ...profileGroups,
   ...profileField,
   ...profileLibrary,

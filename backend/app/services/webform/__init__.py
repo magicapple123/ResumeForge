@@ -4,8 +4,8 @@
 **只填不交**：这个包里的任何代码都不会点击提交类控件，填完由用户自己在页面上核对并提交。
 详见 engine.py 的模块说明，守卫见 tests/test_webform_no_submit.py。
 
-F5 起取数链路是 build_webform_view（一份快照 → data/catalog/custom_labels）；
-补充事实（facts）已退出生产取数，但模块文件保留（旧表继续进备份），只是不再被引用。
+F5 起取数链路是 build_webform_view（一份快照 → data/catalog/custom_labels）。
+补充事实已在 2.0 删除，网申取数只来自资料快照。
 """
 
 # 把这些子模块挂成包属性（webform.browser 等）：api 层路由经 webform_service.* 属性访问

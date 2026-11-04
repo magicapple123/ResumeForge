@@ -26,8 +26,6 @@ import outline from "./zh-CN.outline";
 import pagination from "./zh-CN.pagination";
 import params from "./zh-CN.params";
 import preflight from "./zh-CN.preflight";
-import profileFacts from "./zh-CN.profileFacts";
-import profileFactsLegacy from "./zh-CN.profileFactsLegacy";
 import profileGroups from "./zh-CN.profileGroups";
 import profileField from "./zh-CN.profileField";
 import profileLibrary from "./zh-CN.profileLibrary";
@@ -233,17 +231,6 @@ const namespaces = {
   ...profileLibrary,
   /** F6 证书资质编辑槽（2026-10-25 从补充事实文案迁移，R-70）。 */
   ...credentials,
-  /**
-   * 补充事实（已退役）的旧键：**临时兼容注册**。
-   *
-   * F6-C 已解除生产挂载/入口，但 features/profile-facts/** 的源码与测试仍在 tsconfig 内
-   * （物理删除/回收站需单独授权）。保留本注册只为让该目录在迁移窗口内通过 tsc；
-   * 删除 facts 目录时必须同时删掉这一行 import 与 spread（Lead 2026-10-25 裁决 B）。
-   * 新代码禁止使用 profileFacts.* 任何 key。
-   */
-  ...profileFacts,
-  /** 旧前缀兼容别名（临时；facts 目录删除时一并删除，见 zh-CN.profileFactsLegacy.ts）。 */
-  ...profileFactsLegacy,
   /** 网申资料目录使用稳定分组 ID；这里是分组显示名。 */
   ...webformGroups,
   ...webformFields,

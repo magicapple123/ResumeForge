@@ -140,8 +140,6 @@ describe("ProfilePage 当前组与分区渲染", () => {
     await waitFor(() => {
       expect(document.querySelectorAll("[data-profile-section-key]")).toHaveLength(13);
     });
-    // 已退役的补充事实不再是页内分区。
-    expect(document.querySelector("[data-profile-section-key='profile_facts']")).toBeNull();
   });
 
   it("查看态可从「已隐藏的大字段」逐项恢复（写当前组参与清单，不进编辑态）", async () => {

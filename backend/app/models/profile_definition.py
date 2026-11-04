@@ -5,7 +5,7 @@
 本文件三张表只存用户自己创建的部分与用户的显示偏好，条目与值在 profile_entry。
 
 **为什么自建分区有 section_id 与 key 两列**（契约 §2.1）：section_id 是外部稳定 id
-（`uuid.uuid4().hex[:24]`，与 `ProfileFact.fact_id` 同规则），key 是分区键
+（`uuid.uuid4().hex[:24]`），key 是分区键
 `"custom:" + section_id`，与内置分区的 key 处在同一命名空间；两列都唯一，避免同一个
 自建分区被登记出两个 key。对外只认这两个稳定 id，不认自增主键。
 

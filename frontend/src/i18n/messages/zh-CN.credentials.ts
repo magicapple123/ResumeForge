@@ -5,7 +5,7 @@
  * 为什么单独成文件：这批 key 原来住在 `zh-CN.profileFacts.ts`——补充事实时代「资格证照」
  * 只是九类事实之一。2026-10 的 F6 把证书资质升级成 13 个大字段之一、补充事实从界面下线，
  * 编辑槽也从事实编辑器挪进简历编辑器中栏；文案随功能迁到本文件，key 前缀由 `profileFacts.`
- * 改为 `credentials.`。`zh-CN.profileFacts.ts` 本体保留给退役组件与历史测试，不再进命名空间聚合。
+ * 改为 `credentials.`。`zh-CN.profileFacts.ts` 已随 2.0 删除补充事实一并移除。
  *
  * 口径：状态是**用户自填的事实锁**（unknown / pending / active / expired），系统不自动认定
  * 资格是否有效；证号只在本地、永不进模型/导出，所以这里没有证号输入框。

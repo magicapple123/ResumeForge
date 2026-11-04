@@ -159,6 +159,9 @@ const webformFields = {
   "webformFields.work_end": "实习和工作结束时间",
   "webformFields.work_start": "实习和工作开始时间",
   "webformFields.written_test_city": "笔试意向城市",
+  // 以下两个键原住在已删除的 profileFacts 语言包里，网申字段标签仍在用。
+  "webformFields.certificate_name": "证书名称",
+  "webformFields.paper": "论文",
 } as const;
 
 export default webformFields;

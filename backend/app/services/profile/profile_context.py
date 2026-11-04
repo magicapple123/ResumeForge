@@ -83,8 +83,8 @@ def build_profile_prompt_data(
 ) -> dict[str, Any]:
     """把完整资料规范化为模型可读结构；默认不携带参考文件。
 
-    fact_sections 是 fact_context.prompt_sections 的输出；None/空时返回结构与历史
-    行为完全一致，非空时按契约 §3.3 合并六个补充事实 section。
+    fact_sections 是补充事实快照；2.0 已删除补充事实，调用方恒传 None，此时返回
+    结构与历史行为完全一致（合并逻辑保留以兼容历史调用）。
     """
     data = {
         "name": profile.name,

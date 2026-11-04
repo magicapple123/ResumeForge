@@ -98,9 +98,8 @@ def build_targeted_profile_context(
 ) -> ProfileSelection:
     """构建岗位专属候选资料，并在边界安全的预算内序列化。
 
-    fact_sections 是补充事实的六个 section（fact_context.prompt_sections 的输出）。
-    它们**不参与岗位相关性排序**（契约 §3.3：排序算法不改）：按资料顺序保留到各自
-    上限，进入预算压缩；作品/实践已在 build_profile_prompt_data 并入 projects/experiences。
+    fact_sections 是补充事实快照（2.0 已删除补充事实，恒为 None）。
+    它**不参与岗位相关性排序**（契约 §3.3：排序算法不改）。
     """
     full = build_profile_prompt_data(
         profile, include_references=include_references, fact_sections=fact_sections

@@ -58,13 +58,6 @@ export const SECTION_LABELS: Record<string, string> = new Proxy({} as Record<str
 });
 
 /**
- * 已退役的「补充事实」区块页内键（F6-C 会删除 facts 目录与所有引用）：
- * 保留导出只为让尚未同步的 facts 模块在迁移窗口内继续编译，新代码不得使用。
- * @deprecated 补充事实入口已下线（R-50/R-54），改用 13 个大字段与自建大字段。
- */
-export const PROFILE_FACTS_SECTION_KEY = "profile_facts";
-
-/**
  * 规范化为「basic_info 首位 + 服务端顺序 + 缺失项按兜底顺序补齐」。
  *
  * available 传当前活动分区 key（内置 + 自建）；服务端已经保证顺序，这里只防御

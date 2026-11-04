@@ -36,7 +36,7 @@ class ResumeCredential(OptionalVisibilityMixin, BaseModel):
     """一条资格证照。status 是事实锁字段（AI 不得改），默认 unknown。
 
     credential_number 刻意**不在这里**：证号是私密值，生成/导出/纸面都不需要它；
-    只存在于用户的本地资料里（profile_fact 的私密 payload），由用户显式查看。
+    只存在于用户的本地资料里（简历编辑器的证照条目），由用户显式查看。
     """
 
     name: str = Field(default="", max_length=MAX_CREDENTIAL_NAME_CHARS)

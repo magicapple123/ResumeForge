@@ -137,9 +137,8 @@ def read_workspace(db: Session = Depends(get_db)) -> WorkspaceOut:
 
 @router.get("/upgrade-status", response_model=UpgradeStatusOut)
 def read_upgrade_status(db: Session = Depends(get_db)) -> UpgradeStatusOut:
-    """R-47 升级检测：旧表有内容且新模型为空时，资料页展示"旧资料不再显示"说明。
-
-    只返回布尔状态；新模型已有实际内容时不再探测旧表（提示按条件自然消失）。
+    """升级状态：2.0 起旧库整包归档后建空库，has_legacy_data 恒 False（字段保留
+    供前端类型兼容）；new_profile_has_entries 如实报告新资料模型是否有内容。
     """
     has_legacy, new_has_entries = profile_reader.load_workspace_upgrade_status(db)
     return UpgradeStatusOut(

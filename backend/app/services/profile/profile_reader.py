@@ -40,7 +40,6 @@ from . import (
     entry_store,
     field_placement,
     field_preferences,
-    legacy_status,
     workspace_bootstrap,
 )
 from .definition_catalog import SECTION_BY_KEY
@@ -249,14 +248,13 @@ def workspace_has_entry_values(db: Session) -> bool:
 
 
 def load_workspace_upgrade_status(db: Session) -> tuple[bool, bool]:
-    """R-47 升级状态 (has_legacy_data, new_profile_has_entries)。
+    """升级状态 (has_legacy_data, new_profile_has_entries)。
 
-    新模型已经有实际内容时不再探测旧表：升级提示的前提是"新模型为空"，此时旧表探测
-    只会白白多查几轮；同时这也让"首次有效保存后提示自然消失"不需要任何失效通知。
+    2.0 路线是"旧库整包归档后建空库"（见启动闸门）：新库里没有任何 1.x 旧表，
+    因此 has_legacy_data 恒为 False，API 字段保留只为前端契约不炸。
+    new_profile_has_entries 仍如实报告新资料模型是否有实际内容。
     """
-    if workspace_has_entry_values(db):
-        return False, True
-    return legacy_status.has_legacy_data(db), False
+    return False, workspace_has_entry_values(db)
 
 
 __all__ = [

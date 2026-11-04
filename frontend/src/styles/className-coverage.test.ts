@@ -98,22 +98,6 @@ const EXEMPTIONS: Record<string, Exemption> = {
     reason: "条目区容器，子表单与 .profile-field-grid 自带样式",
     expires: REVIEW_DATE,
   },
-  "profile-facts-head-actions": {
-    reason: "antd Space 上的定位类，按钮间距由 Space 自身控制",
-    expires: REVIEW_DATE,
-  },
-  "profile-facts-people": {
-    reason: "人员列表容器，空态与行分别由 .profile-facts-people-empty / .profile-facts-row 承担",
-    expires: REVIEW_DATE,
-  },
-  "profile-facts-row": {
-    reason: "ListyItem 上的定位类，行内动作区由 .profile-facts-row-actions 承担",
-    expires: REVIEW_DATE,
-  },
-  "profile-facts-row-name": {
-    reason: "行标题的内层 span，字号与颜色由父级 .profile-facts-row-title 继承",
-    expires: REVIEW_DATE,
-  },
   "profile-field-inputs": {
     reason: "字段输入区容器，内部用 .profile-field-grid 栅格",
     expires: REVIEW_DATE,

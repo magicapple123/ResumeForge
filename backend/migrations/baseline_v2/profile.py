@@ -82,19 +82,6 @@ CREATE INDEX ix_profile_entry_section_key ON profile_entry (section_key)
 CREATE UNIQUE INDEX ux_profile_entry_active_section_sort ON profile_entry (section_key, sort_order) WHERE deleted_at IS NULL
 """,
     """\
-CREATE TABLE profile_fact_field_pref (
-	id INTEGER NOT NULL,
-	kind VARCHAR(24) NOT NULL,
-	hidden_fields JSON DEFAULT '[]' NOT NULL,
-	custom_fields JSON DEFAULT '[]' NOT NULL,
-	revision INTEGER DEFAULT '1' NOT NULL,
-	created_at DATETIME NOT NULL,
-	updated_at DATETIME,
-	PRIMARY KEY (id),
-	UNIQUE (kind)
-)
-""",
-    """\
 CREATE TABLE profile_field_preference (
 	id INTEGER NOT NULL,
 	section_key VARCHAR(48) NOT NULL,
@@ -238,35 +225,6 @@ CREATE TABLE experience (
 )
 """,
     """\
-CREATE TABLE profile_fact (
-	id INTEGER NOT NULL,
-	fact_id VARCHAR(32) NOT NULL,
-	profile_id INTEGER NOT NULL,
-	kind VARCHAR(24) NOT NULL,
-	schema_version INTEGER DEFAULT '1' NOT NULL,
-	revision INTEGER DEFAULT '1' NOT NULL,
-	payload JSON DEFAULT '{}' NOT NULL,
-	sort_order INTEGER DEFAULT '0' NOT NULL,
-	deleted_at DATETIME,
-	created_at DATETIME NOT NULL,
-	updated_at DATETIME,
-	PRIMARY KEY (id),
-	FOREIGN KEY(profile_id) REFERENCES user_profile (id) ON DELETE CASCADE
-)
-""",
-    """\
-CREATE INDEX ix_profile_fact_created_at ON profile_fact (created_at)
-""",
-    """\
-CREATE UNIQUE INDEX ix_profile_fact_fact_id ON profile_fact (fact_id)
-""",
-    """\
-CREATE INDEX ix_profile_fact_kind ON profile_fact (kind)
-""",
-    """\
-CREATE INDEX ix_profile_fact_profile_id ON profile_fact (profile_id)
-""",
-    """\
 CREATE TABLE profile_photo (
 	id INTEGER NOT NULL,
 	profile_id INTEGER NOT NULL,
@@ -314,7 +272,6 @@ DOWN_STATEMENTS: tuple[str, ...] = (
     "DROP TABLE IF EXISTS skill",
     "DROP TABLE IF EXISTS project",
     "DROP TABLE IF EXISTS profile_photo",
-    "DROP TABLE IF EXISTS profile_fact",
     "DROP TABLE IF EXISTS experience",
     "DROP TABLE IF EXISTS education",
     "DROP TABLE IF EXISTS campus_experience",
@@ -324,7 +281,6 @@ DOWN_STATEMENTS: tuple[str, ...] = (
     "DROP TABLE IF EXISTS profile_group_member",
     "DROP TABLE IF EXISTS profile_group",
     "DROP TABLE IF EXISTS profile_field_preference",
-    "DROP TABLE IF EXISTS profile_fact_field_pref",
     "DROP TABLE IF EXISTS profile_entry",
     "DROP TABLE IF EXISTS profile_custom_section",
     "DROP TABLE IF EXISTS profile_custom_field",

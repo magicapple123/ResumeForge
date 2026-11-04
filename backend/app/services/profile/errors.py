@@ -56,7 +56,7 @@ class RevisionConflict(Conflict):
     """条件写没命中：调用方手里的 revision 已过期。
 
     current_revision 是库里**现在**的值；extra 里的 revision 让 API 直接带进 409 响应体，
-    前端拿它去刷新比较，而不是盲目重试（与 fact_store.RevisionConflict 同语义）。
+    前端拿它去刷新比较，而不是盲目重试。
     """
 
     code = "revision_conflict"

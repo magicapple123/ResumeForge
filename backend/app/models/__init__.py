@@ -89,8 +89,6 @@ from .profile_definition import (
     ProfileFieldPreference,
 )
 from .profile_entry import ProfileEntry
-from .profile_fact import PROFILE_FACT_KINDS, ProfileFact
-from .profile_fact_field_pref import ProfileFactFieldPref
 from .profile_group import ProfileGroup, ProfileGroupMember, ProfileWorkspaceState
 from .profile_usage_snapshot import ProfileUsageSnapshot
 from .provenance import (
@@ -182,9 +180,6 @@ __all__ = [
     "AssistantSkillFile",
     "UserProfile",
     "ProfilePhoto",
-    "ProfileFact",
-    "ProfileFactFieldPref",
-    "PROFILE_FACT_KINDS",
     "ProfileCustomSection",
     "ProfileCustomField",
     "ProfileFieldPreference",

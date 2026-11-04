@@ -184,7 +184,11 @@ class PaperProjectionOut(BaseModel):
 
 
 class UpgradeStatusOut(BaseModel):
-    """R-47 升级检测：只返回布尔状态，不返回任何旧资料内容。"""
+    """升级状态：只返回布尔状态，不返回任何旧资料内容。
+
+    2.0 不再探测 1.x 旧表（旧库整包归档后建空库），has_legacy_data 恒 False；
+    字段保留只为前端契约不变。
+    """
 
     has_legacy_data: bool = False
     new_profile_has_entries: bool = False
@@ -192,7 +196,7 @@ class UpgradeStatusOut(BaseModel):
 
 
 class WorkspaceUpgradeFieldOut(BaseModel):
-    """工作区读取里的升级状态槽位（资料页顶部 Alert 的数据来源）。"""
+    """工作区读取里的升级状态槽位（2.0 起 has_legacy_data 恒 False，槽位保留）。"""
 
     has_legacy_data: bool = False
     new_profile_has_entries: bool = False

@@ -37,7 +37,6 @@ from ...services.claims import build_baseline
 from ...services.llm import create_provider
 from ...services.llm.base import LLMError
 from ...services.llm.client_pool import aclose_clients_for_current_loop
-from ...services.profile.fact_context import build_fact_sections, load_fact_context
 from ...services.profile.profile_service import get_profile_detail, to_profile_out
 from ...services.resume.generate_snapshot import (
     GenerationSnapshot,
@@ -442,10 +441,10 @@ class ResumeGenerateRunner:
             baseline = build_baseline(session, source_entry_ids=snapshot_entry_ids(frozen.consumed))
             return job_out, None, baseline, provider, None, frozen.consumed
         # 旧 ProfileOut 路径（legacy 兼容；生产链路始终有冻结快照）。
+        # 补充事实已在 2.0 删除，fact_sections 恒为 None。
         baseline = build_baseline(session)
         profile_out = to_profile_out(get_profile_detail(session))
-        fact_sections = build_fact_sections(load_fact_context(session))
-        return job_out, profile_out, baseline, provider, fact_sections, None
+        return job_out, profile_out, baseline, provider, None, None
 
     # ===== 状态写入 =====
     # 终态仲裁三件套拆在 resume_task_state.py；这里保留薄委托（测试 monkeypatch 锚点）。

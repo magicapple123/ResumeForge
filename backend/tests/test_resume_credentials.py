@@ -383,59 +383,8 @@ def test_version_restore_keeps_long_cv_page_limit(client, db_session):
         == CREDENTIAL_NAME
     )
 
-# ===== 8. 来源定位（A4：profile-fact:<stable-id>）=====
+# ===== 8. 来源定位 =====
 
-
-def test_profile_fact_payload_text_excludes_private_credential_number():
-    from app.services.resume.document_provenance_source_text import profile_fact_payload_text
-
-    text = profile_fact_payload_text(
-        {
-            "name": "注册会计师",
-            "issuer": "财政部",
-            "credential_number": "SECRET-2021-001",
-            "description": ["通过六科", "执业"],
-        }
-    )
-    assert "注册会计师" in text and "财政部" in text and "通过六科" in text
-    # 私密证号不参与来源正文（与模型/导出同一条边界）。
-    assert "SECRET-2021-001" not in text
-
-
-def test_profile_fact_source_text_resolves_by_stable_fact_id(db_session):
-    from types import SimpleNamespace
-
-    from app.models.profile_fact import ProfileFact
-    from app.services.profile.profile_service import get_or_create_profile
-    from app.services.resume.document_provenance_source_text import (
-        REASON_NOT_FOUND,
-        resolve_source_texts,
-    )
-
-    profile = get_or_create_profile(db_session)
-    fact = ProfileFact(
-        fact_id="fact_12345678",
-        profile_id=profile.id,
-        kind="credential",
-        payload={"name": "注册会计师", "issuer": "财政部", "credential_number": "SECRET-1"},
-        sort_order=0,
-    )
-    db_session.add(fact)
-    db_session.commit()
-
-    lookup = resolve_source_texts(
-        db_session, SimpleNamespace(kind="profile", external_ref="profile-fact:fact_12345678")
-    )
-    assert lookup.resolvable
-    assert "注册会计师" in lookup.candidates[0]
-    assert "SECRET-1" not in lookup.candidates[0]
-
-    # 软删 = 按不存在处理（不猜、不复活已删事实）。
-    fact.deleted_at = fact.created_at
-    db_session.commit()
-    deleted = resolve_source_texts(
-        db_session, SimpleNamespace(kind="profile", external_ref="profile-fact:fact_12345678")
-    )
-    assert not deleted.resolvable
-    assert deleted.reason == REASON_NOT_FOUND
+# 补充事实（profile-fact:<stable-id>）的来源正文定位已随 2.0 删除补充事实一并移除；
+# 其余来源类型（claim/material/profile/phrase）的解析由本文件前半部分覆盖。
 
