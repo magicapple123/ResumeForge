@@ -8,6 +8,7 @@
 import io
 import json
 import shutil
+import sqlite3
 import zipfile
 from pathlib import Path
 
@@ -85,6 +86,26 @@ def test_archive_pre_2_0_library_creates_verifiable_nested_package(tmp_path, mon
             # 全局模型配置/字体只在真的有内容时才写成员（空环境不写，格式号也不虚升）；
             # 归档校验不依赖它们，这里只确认 README 与嵌套结构齐全。
             assert "README.txt" in names
+
+            # T01 守卫：每个 datasets/<id>.zip 自己的清单 revision 必须等于它自己的库。
+            # 归档的是 1.x 库（0046）而代码 head 是 2.0 基线；清单若写代码 head，
+            # 导入侧的一致性校验会把这个包永久拒收。
+            inner_members = sorted(
+                name for name in names if name.startswith("datasets/") and name.endswith(".zip")
+            )
+            assert inner_members, "嵌套整包必须至少含一份数据集子包"
+            for index, member in enumerate(inner_members):
+                with zipfile.ZipFile(io.BytesIO(archive.read(member))) as sub_archive:
+                    sub_manifest = json.loads(sub_archive.read(MANIFEST_MEMBER))
+                    database_bytes = sub_archive.read(DATABASE_MEMBER)
+                extracted = tmp_path / f"inner-revision-{index}.db"
+                extracted.write_bytes(database_bytes)
+                with sqlite3.connect(extracted) as connection:
+                    actual_revision = connection.execute(
+                        "SELECT version_num FROM alembic_version"
+                    ).fetchone()[0]
+                assert sub_manifest["alembic_revision"] is not None
+                assert sub_manifest["alembic_revision"] == actual_revision
     finally:
         engine.dispose()
 
