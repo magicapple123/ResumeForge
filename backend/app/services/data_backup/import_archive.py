@@ -19,6 +19,7 @@ from typing import Any
 from sqlalchemy import Engine
 
 from ...database_migrations import _APPLICATION_TABLES, run_database_migrations
+from ..schema_epoch import read_epoch
 from .archive_guard import copy_archive_member, validate_archive, validate_manifest_assets
 from .asset_manifest import ASSET_MANIFEST_VERSION, verify_database_rows
 from .global_assets import GLOBAL_ASSETS_VERSION
@@ -171,7 +172,10 @@ def inspect_extra_dataset(
     candidate = staging_dir / f"dataset-{secrets.token_hex(8)}.db"
     try:
         extract_member(archive_path, member, candidate)
-        # 顺序不能调换：先按原始 revision 核对版本，再迁移，最后才校验表结构。
+        # 顺序不能调换：先按原始 epoch/revision 核对版本，再迁移，最后才校验表结构。
+        _check_candidate_epoch(
+            candidate, label=str(entry.get("name") or entry.get("id") or "")
+        )
         _check_candidate_revision(candidate, bind, {"alembic_revision": None})
         _upgrade_candidate(candidate)
         _database_info(candidate, bind)
@@ -251,6 +255,25 @@ def _read_candidate_revision(database: Path) -> str | None:
             return None
         row = connection.execute("SELECT version_num FROM alembic_version").fetchone()
         return row[0] if row else None
+
+
+def _check_candidate_epoch(database: Path, *, label: str | None = None) -> None:
+    """迁移**之前**核对库形态：没有 app_schema_epoch 表的一律视为 1.x 包并拒收。
+
+    必须排在 _check_candidate_revision 与 _upgrade_candidate 之前：迁移会把候选库改写
+    成本代 head，之后就读不出原来的 epoch/版本了。2.0 的路线是全新库（非 2.0 库整包
+    归档、永不原地迁移），所以 1.x 备份包不导入，提示用户用 1.0.2 打开并导回。
+
+    ``label`` 是随包数据集的展示名：多数据集包拒收时要能点出是哪一份，否则用户只能
+    看到一句笼统的"来自 1.x"。
+    """
+    if read_epoch(database) is not None:
+        return
+    subject = f"备份包中的数据集「{label}」" if label else "这个备份包"
+    raise BackupError(
+        f"{subject}来自 ResumeForge 1.x。2.0 使用全新的资料库，不导入 1.x 的数据："
+        "请用 ResumeForge 1.0.2 打开并导回这份备份，或直接继续使用 1.0.2。"
+    )
 
 
 def _check_candidate_revision(database: Path, bind: Engine, manifest: dict[str, Any]) -> None:
@@ -357,7 +380,8 @@ def inspect_archive(archive_path: Path, bind: Engine, staging_dir: Path) -> dict
     candidate = staging_dir / f"inspect-{secrets.token_hex(8)}.db"
     try:
         extract_database(archive_path, candidate)
-        # 顺序不能调换：先按原始 revision 核对版本，再迁移，最后才校验表结构。
+        # 顺序不能调换：先按原始 epoch/revision 核对版本，再迁移，最后才校验表结构。
+        _check_candidate_epoch(candidate)
         _check_candidate_revision(candidate, bind, manifest)
         _upgrade_candidate(candidate)
         info = _database_info(candidate, bind)
