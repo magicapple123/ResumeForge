@@ -2,7 +2,7 @@
 
 所有值得关注的项目变化都会记录在此。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
-## 2.0.0
+## 2.0.0 - 2026-11-05
 
 ### Changed
 
@@ -23,7 +23,6 @@
 - **1.x 备份包在 2.0 不导入。** 导入侧在迁移候选库之前校验候选库的 epoch：缺失 `app_schema_epoch` 的包直接拒收，提示用 ResumeForge 1.0.2 打开；2.0 自己导出的包照常可导入。
 - **2.0 的库 / 备份包在 1.0.2 上会被拒收。** 既有 revision 校验会以"来自更新版本"拒绝，方向正确，本轮不改 `BACKUP_FORMAT_VERSION`。
 
-## Unreleased
 ### Fixed
 
 - **「不限篇幅」在制作台里真的可选、可保存、可预览了；`PATCH /layout` 不再"只改一项、顺手重置其它项"。**
@@ -1154,6 +1153,13 @@
 
 - **已知限制三：生成链路（大模型）不消费这个字段。** 选英文只改变纸面固定文案，**不会**让已经生成好的中文内容变成英文；它也不是"下次生成时用英文写"的开关。让生成链路感知语言是下一个需求。
 
+## Unreleased
+
+### Added
+
+### Fixed
+
+### Changed
 
 ## 1.0.2 - 2026-10-18
 
