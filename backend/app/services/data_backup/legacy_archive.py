@@ -256,8 +256,9 @@ def _write_archive_readme(archive_root: Path, archive_path: Path) -> None:
         "3. 用 ResumeForge 1.0.2 打开该数据目录。",
         "",
         "注意：",
-        "- 归档包是嵌套整包，2.0 导入侧会以「来自 1.x」明确拒收；",
-        "  需要其中的数据时请用 ResumeForge 1.0.2 恢复，或从包内 resume_forge.db 手工提取。",
+        "- 归档包是嵌套整包（format 4/6）：1.0.2 只认 format ≤3，读不了它；2.0 会以「来自 1.x」拒收。",
+        "- 回退请走上面第 2 步：用本目录 files/ 里的原始库，不要试图导入这个 zip。",
+        "- 只想取某一份数据集时：解出包内 datasets/<id>.zip，再用 1.0.2 导入那一份。",
         "- 不要删除本目录；它不会随之后的自动备份再次进包，也不会被 2.0 改动。",
     ]
     readme = archive_root / ARCHIVE_README_NAME

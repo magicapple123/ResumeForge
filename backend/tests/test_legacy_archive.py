@@ -64,7 +64,13 @@ def test_archive_pre_2_0_library_creates_verifiable_nested_package(tmp_path, mon
         archive_root = archive_pre_2_0_library(engine, data_dir, "20261104-000000")
         zip_path = archive_zip_path(archive_root)
         assert zip_path.is_file()
-        assert (archive_root / ARCHIVE_README_NAME).is_file()
+        readme_text = (archive_root / ARCHIVE_README_NAME).read_text(encoding="utf-8")
+        assert "files/" in readme_text
+        assert "1.0.2" in readme_text
+        assert "datasets/" in readme_text
+        assert "请用 ResumeForge 1.0.2 恢复" not in readme_text, (
+            "归档说明不得把用户引向导入这个 zip（1.0.2 读不了嵌套整包）"
+        )
         verify_archive(zip_path)
 
         with zipfile.ZipFile(zip_path) as archive:
