@@ -9,6 +9,7 @@
 
 from __future__ import annotations
 
+from app.schemas import profile as profile_schemas
 from app.services.profile.definition_catalog import get_field
 from app.services.profile.field_limits_catalog import (
     BASIC_FIELD_MAP,
@@ -182,3 +183,61 @@ def test_limit_of_and_too_long_detail_keep_old_contract() -> None:
     assert "奖项名称" in detail
     assert "128" in detail
     assert "160" in detail
+
+
+_SECTION_OUT_MODELS = (
+    ("educations", profile_schemas.EducationOut),
+    ("experiences", profile_schemas.ExperienceOut),
+    ("campus_experiences", profile_schemas.CampusExperienceOut),
+    ("projects", profile_schemas.ProjectOut),
+    ("skills", profile_schemas.SkillOut),
+    ("awards", profile_schemas.AwardOut),
+)
+
+
+def _max_length(field) -> int | None:
+    for meta in field.metadata:
+        limit = getattr(meta, "max_length", None)
+        if isinstance(limit, int) and limit > 0:
+            return limit
+    return None
+
+
+def _derived_limits() -> dict[str, int]:
+    limits: dict[str, int] = {}
+    for section_key, model in _SECTION_OUT_MODELS:
+        for legacy_key, field_id in SECTION_FIELD_MAP.get(section_key, {}).items():
+            if field_id is None:
+                continue
+            info = model.model_fields.get(legacy_key)
+            if info is None:
+                continue
+            limit = _max_length(info)
+            if limit is not None:
+                limits[field_id] = limit
+    fields = profile_schemas.ProfileOut.model_fields
+    for legacy_key, field_id in BASIC_FIELD_MAP.items():
+        info = fields.get(legacy_key)
+        if info is None:
+            continue
+        limit = _max_length(info)
+        if limit is not None:
+            limits[field_id] = limit
+    summary = fields.get("summary")
+    if summary is not None:
+        limit = _max_length(summary)
+        if limit is not None:
+            limits["summary.content"] = limit
+    return limits
+
+
+def test_frozen_limits_match_read_models() -> None:
+    """冻结表必须与当前 *Out 模型派生的值一致：改读取模型就必须同步改写入上限。"""
+    derived = _derived_limits()
+    keys = set(derived) | set(READ_SIDE_LIMITS)
+    drifted = {
+        key: (derived.get(key), READ_SIDE_LIMITS.get(key))
+        for key in keys
+        if derived.get(key) != READ_SIDE_LIMITS.get(key)
+    }
+    assert not drifted, f"读取模型与冻结上限漂移（派生, 冻结）：{drifted}"
