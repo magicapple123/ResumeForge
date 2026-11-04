@@ -52,6 +52,12 @@ class ResumeRecord(Base):
     document_mode: Mapped[str] = mapped_column(
         String(16), default="resume", nullable=False, server_default="resume"
     )
+    # 文档形态代（2.0 单基线一次补齐的版本标记列）：``content`` 的解释版本。
+    # 2.0 库里新建行一律 2；1.x 库不原地升级（整包归档后建空库），所以不需要为
+    # 历史行回填。v1 内容形状仍由读取侧 ``ensure_document_version`` 读时转换、不写库。
+    document_version: Mapped[int] = mapped_column(
+        Integer, default=2, nullable=False, server_default="2"
+    )
     model: Mapped[str] = mapped_column(String(64), default="")
     # 旧数据库中的 tone 列为 NOT NULL 且没有服务端默认值。继续写入默认值仅为
     # 兼容历史表结构；API 和前端均不再暴露定制风格功能。

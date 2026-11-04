@@ -134,6 +134,7 @@ from .review_annotation import (
     REVIEW_KIND,
     ResumeReviewAnnotation,
 )
+from .schema_epoch import AppSchemaEpoch
 from .setting import AppSetting, LLMConfigRecord
 from .share_package import SHARE_PERMISSIONS, SharePackage
 from .tracker import (
@@ -171,6 +172,8 @@ __all__ = [
     "AI_TASK_STATUS_CANCELED",
     "AI_TASK_ACTIVE_STATUSES",
     "AI_TASK_TERMINAL_STATUSES",
+    # 2.0 schema epoch 单行表（基线迁移末尾播种 epoch=2）。
+    "AppSchemaEpoch",
     "Job",
     "JobMatchBatch",
     "ChatConversation",

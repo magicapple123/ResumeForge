@@ -67,6 +67,11 @@ class ProfileEntry(Base):
         JSON, default=list, server_default="[]"
     )
     revision: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
+    # 值形态代（2.0 单基线一次补齐的版本标记列）：``values`` 按哪一代字段定义解释。
+    # 默认/服务端默认 1 = 2.0 之前的形态；旧备份包没有这一列时靠 server_default 照旧导入。
+    values_schema: Mapped[int] = mapped_column(
+        Integer, default=1, nullable=False, server_default="1"
+    )
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     updated_at: Mapped[datetime | None] = mapped_column(
