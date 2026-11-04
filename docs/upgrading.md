@@ -26,6 +26,8 @@ macOS 用 `bash scripts/macos/update.sh --dry-run`。
 拦住（应用没关干净、或杀毒软件占着 `node_modules`）：**双击 `stop.cmd` 关掉应用，再跑一次更新**即可。
 无论更新在哪一步失败，`backend/data/` 与 `.env` 都不会被改动。
 
+Windows 更新器在覆盖程序文件之前会给用户数据拍一份快照，放在 `backend/data/pre-update/<时间戳>/`。2.0 起里面除旧的 `*.db` 兜底拷贝外，还有一份由 `backend/scripts/create_user_data_snapshot.py` 生成的完整 zip（与「导出全部数据集」同格式：数据库 + 附件 + 字体 + 全局模型配置），并且已经过归档校验确认能恢复；快照失败会直接中止更新，不会继续覆盖程序文件。**跨 major 升级**的那一份目录名是 `pre-major-<时间戳>`，不会被后续轮转清理；普通快照保留最近 3 份。
+
 ## 从 1.x 到 2.0：整包归档 + 全新库
 
 **2.0 不从 1.x 数据库原地升级，也不做数据回填。** 从 1.0.x（迁移 head `0046_search_fts`，46 张应用表）升到 2.0 时，应用首次启动会按下面的顺序处理：

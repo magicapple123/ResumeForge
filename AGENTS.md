@@ -498,6 +498,7 @@ README 是这个仓库的门面，也是对用户可见功能的**权威清单**
 - 改完必须跑两边的守卫测试：Windows 跑 `scripts/tests/Test-Start-ResumeForge.ps1`，macOS 跑 `bash scripts/tests/test-macos-launcher.sh`（Windows 上会因为缺 BSD `ps`/`pgrep` 跳过进程相关用例，这是刻意的能力探测，不是失败）。**真机首次安装、镜像可用性、下载摘要这些它们覆盖不到的，要在交付说明里写清楚验证到什么程度**——本地跑不了就说跑不了，别把"没测"说成"测过了"。
 - **`uninstall.cmd` / `scripts/Uninstall-ResumeForge.ps1` 是唯一会主动删东西的入口**，改它必须跑 `scripts/tests/Test-Uninstall-ResumeForge.ps1`。三条不能退让的性质：默认只删启动器生成的东西（`backend\data` 与 `backend\.env` 要留着，`-Purge` 才删）、**永远不删源码**、只在真正的 checkout 里运行。测试全部在临时目录里复制一份脚本来跑，不会碰当前仓库。
 - **往 `backend/app/preflight.py` 的 `_REQUIRED_FILES` 加资源时，必须同步加到 `scripts/Build-Release.ps1` 的 `$RequiredFiles`。** 这是单方向守卫：`scripts/tests/Test-Build-Release.ps1` 会断言"preflight 要的每一样，打包清单都要点名"，漏一项就会让 Windows 的「启动器 + 打包」测试抛 `Build-Release.ps1 does not require 'backend/app/data/xxx'` 而变红——2026-09-21 就是因为它落后 22 项（`ats_keywords.json`、`feature_catalog.py` 与 20 个提示词）让 Windows job 连续多轮失败。注意这份清单是**发布前自检网，不是打包过滤**：`git archive` 本来就会带上全部受追踪文件，漏登记只红测试、不丢文件。
+- **更新前用户数据快照由 `backend/scripts/create_user_data_snapshot.py` 生成**：复用「导出全部数据集」链路并走 `legacy_archive.verify_archive` 校验，成功打印 `SNAPSHOT=<zip 绝对路径>`、失败打印 `SNAPSHOT_ERROR=<原因>` 并退出 2。`scripts/Update-ResumeForge.ps1` 的 `Backup-UserData` 先调它（非 0 即中止更新，不再覆盖程序文件）、再保留 `*.db` 拷贝兜底；`scripts/tests/Test-Update-ResumeForge.ps1` 覆盖快照层与跨 major 目录名 `pre-major-<时间戳>` 永不清理的 pin。
 
 ## 桌面安装包（`desktop/` 与 `scripts/Build-Desktop.ps1`）
 
