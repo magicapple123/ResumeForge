@@ -1,13 +1,15 @@
 # SPDX-License-Identifier: Apache-2.0
-"""旧备份仍可导入的回归闸门（PRD P0-12）。
+"""2.0 备份包的表集合守卫：声称完整、实际缺表的包必须被拒收。
 
-背景：备份校验要求包里**包含全部应用表**，所以每加一张表都会悄悄拒收所有旧备份——
-一次加表就等于一次不兼容改动。``data_backup.inspect_archive`` 的顺序是
-「按原始 revision 核对 → 迁移到 head → 校验表集合」，因此一份停在 ``0009`` 的旧备份
-被迁到 head 后会自动补上本次新增的 4 张投递表，不该被拒。这里把这件事钉死。
+1.x 时代这里还有一条「旧备份仍可导入」的用例：少 4 张投递表、revision 退回 0009 的包
+由迁移补齐。2.0 走全新库路线——1.x 备份包在 ``_check_candidate_epoch`` 处就被拒收
+（文案提示用 1.0.2 打开），"迁移补出旧表"这条路径不再存在，对应用例随旧迁移链一起
+删除；"1.x 包被拒收"本身由 ``test_backup_reject_legacy.py``（T05）覆盖。
+
+本文件保留反向对照：包内库/清单声称是完整的 2.0 库、却真的缺表，说明包被改过，必须
+拒收——否则「表集合与模型注册表一致」这道校验形同虚设。
 """
 
-import json
 import sqlite3
 import zipfile
 from contextlib import contextmanager
@@ -15,36 +17,13 @@ from pathlib import Path
 
 import pytest
 from app.database import engine
-from app.models.job import Job
 from app.services.data_backup import (
     DATABASE_MEMBER,
-    MANIFEST_MEMBER,
     BackupError,
     create_backup_archive,
     inspect_archive,
 )
 
-# 投递功能出现之前的那一版 revision，用来伪造一份"旧版本导出的备份"。
-PREVIOUS_REVISION = "0009_templates_and_interview"
-BACKEND_DIR = Path(__file__).resolve().parents[1]
-
-
-def _head_revision() -> str:
-    """当前迁移链的 head，从 Alembic 实际读。
-
-    「按原始 revision 核对 → 迁移到 head → 校验表集合」这条链路必须用**真实** head：
-    写死字符串的话，每加一个迁移这里的"升级到底"就悄悄对不上了（而失败信息会指向
-    备份兼容性，看不出真正原因）。
-    """
-    from alembic.config import Config
-    from alembic.script import ScriptDirectory
-
-    config = Config()
-    config.set_main_option("script_location", str(BACKEND_DIR / "migrations"))
-    return str(ScriptDirectory.from_config(config).get_current_head())
-
-
-HEAD_REVISION = _head_revision()
 APPLY_TABLES = ("job_match_analysis", "apply_queue_item", "apply_task", "apply_task_item")
 
 
@@ -53,26 +32,13 @@ def _database_bytes(archive_path: Path) -> bytes:
         return archive.read(DATABASE_MEMBER)
 
 
-def _manifest(archive_path: Path) -> dict:
-    with zipfile.ZipFile(archive_path) as archive:
-        return json.loads(archive.read(MANIFEST_MEMBER))
-
-
-def _rebuild_archive(archive: Path, destination: Path, replacements: dict[str, bytes]) -> Path:
-    """一次成型重建压缩包，避免出现重名成员。"""
-    with zipfile.ZipFile(archive) as source, zipfile.ZipFile(destination, "w") as target:
-        for name in source.namelist():
-            target.writestr(name, replacements.get(name, source.read(name)))
-    return destination
-
-
 @contextmanager
 def _tweaked_sqlite(database: Path):
     """打开测试库做改动，退出时提交、checkpoint 并**真正关闭**连接。
 
     备份快照继承生产库的 WAL 文件头，WAL 模式下 ``with sqlite3.connect(...)``
-    只提交不关闭——未 checkpoint 的改动留在 ``-wal`` 文件里，随后裸读
-    ``.db`` 字节重建压缩包会拿到旧内容。
+    只提交不关闭——未 checkpoint 的改动留在 ``-wal`` 文件里，随后裸读 ``.db``
+    字节重建压缩包会拿到旧内容。
     """
     connection = sqlite3.connect(database)
     try:
@@ -83,51 +49,16 @@ def _tweaked_sqlite(database: Path):
         connection.close()
 
 
-def _set_revision(database: Path, revision: str) -> None:
-    with _tweaked_sqlite(database) as connection:
-        connection.execute(
-            "CREATE TABLE IF NOT EXISTS alembic_version (version_num VARCHAR(32) NOT NULL)"
-        )
-        connection.execute("DELETE FROM alembic_version")
-        connection.execute("INSERT INTO alembic_version VALUES (?)", (revision,))
-
-
-def test_inspect_accepts_a_backup_exported_before_the_apply_tables(db_session, tmp_path):
-    """旧备份必须仍然能导入：少 4 张投递表、revision 与清单一起退回 0009。"""
-    db_session.add(Job(title="旧数据里的岗位", description="职责", requirements="要求"))
-    db_session.commit()
-    archive = create_backup_archive(engine, tmp_path / "staging")
-
-    old_database = tmp_path / "old.db"
-    old_database.write_bytes(_database_bytes(archive))
-    with _tweaked_sqlite(old_database) as connection:
-        for name in APPLY_TABLES:
-            connection.execute(f"DROP TABLE {name}")
-    _set_revision(old_database, PREVIOUS_REVISION)
-
-    manifest = _manifest(archive)
-    manifest["alembic_revision"] = PREVIOUS_REVISION
-    for name in APPLY_TABLES:
-        manifest["tables"].pop(name)
-    old_archive = _rebuild_archive(
-        archive,
-        tmp_path / "old.zip",
-        {
-            DATABASE_MEMBER: old_database.read_bytes(),
-            MANIFEST_MEMBER: json.dumps(manifest).encode(),
-        },
-    )
-
-    preview = inspect_archive(old_archive, engine, tmp_path / "staging")
-
-    assert preview["database"]["tables"]["job"] == 1
-    # 4 张新表由迁移补齐（空的），否则表集合校验会把它判成"不是 ResumeForge 的备份"。
-    for name in APPLY_TABLES:
-        assert preview["database"]["tables"][name] == 0
+def _rebuild_archive(archive: Path, destination: Path, replacements: dict[str, bytes]) -> Path:
+    """一次成型重建压缩包，避免出现重名成员。"""
+    with zipfile.ZipFile(archive) as source, zipfile.ZipFile(destination, "w") as target:
+        for name in source.namelist():
+            target.writestr(name, replacements.get(name, source.read(name)))
+    return destination
 
 
 def test_inspect_rejects_a_head_revision_backup_missing_the_apply_tables(db_session, tmp_path):
-    """反向对照：清单/库都声称在 head、却缺投递表，说明包被改过，必须拒收。"""
+    """反向对照：库声称在 head、却缺投递表，说明包被改过，必须拒收。"""
     archive = create_backup_archive(engine, tmp_path / "staging")
 
     tampered_database = tmp_path / "head-but-missing.db"
@@ -135,8 +66,6 @@ def test_inspect_rejects_a_head_revision_backup_missing_the_apply_tables(db_sess
     with _tweaked_sqlite(tampered_database) as connection:
         for name in APPLY_TABLES:
             connection.execute(f"DROP TABLE {name}")
-    # 声明自己已经在 head：这样迁移不会补表，缺表就会被表集合校验抓到。
-    _set_revision(tampered_database, HEAD_REVISION)
 
     tampered = _rebuild_archive(
         archive,

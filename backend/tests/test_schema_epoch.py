@@ -9,21 +9,11 @@ from pathlib import Path
 
 import pytest
 from alembic import command
-from alembic.config import Config
-from alembic.script import ScriptDirectory
 from app.database_migrations import build_alembic_config, run_database_migrations
 from app.services import schema_epoch
 from app.services.schema_epoch import EpochDecision, decide
 from sqlalchemy import create_engine, text
-
-
-def _head_revision() -> str:
-    """当前迁移链 head，从 Alembic 实际读（不写死 revision 字符串）。"""
-    config = Config()
-    config.set_main_option(
-        "script_location", str(Path(__file__).resolve().parents[1] / "migrations")
-    )
-    return str(ScriptDirectory.from_config(config).get_current_head())
+from tests.migration_refs import LEGACY_1X_REVISION, head_revision
 
 
 def _baseline_engine(tmp_path: Path, name: str = "baseline.db"):
@@ -127,7 +117,9 @@ def test_decide_refuses_versioned_database_without_epoch_table(tmp_path):
             connection.exec_driver_sql(
                 "CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL PRIMARY KEY)"
             )
-            connection.exec_driver_sql("INSERT INTO alembic_version VALUES ('0046_search_fts')")
+            connection.exec_driver_sql(
+                "INSERT INTO alembic_version VALUES (?)", (LEGACY_1X_REVISION,)
+            )
     finally:
         engine.dispose()
     assert decide(database) is EpochDecision.REFUSE_UNKNOWN
@@ -145,7 +137,7 @@ def test_read_epoch_and_revision_for_baseline_database(tmp_path):
     try:
         database = Path(str(engine.url.database))
         assert schema_epoch.read_epoch(database) == 2
-        assert schema_epoch.read_revision(database) == _head_revision()
+        assert schema_epoch.read_revision(database) == head_revision()
     finally:
         engine.dispose()
 

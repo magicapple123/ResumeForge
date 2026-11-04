@@ -1,11 +1,13 @@
 # SPDX-License-Identifier: Apache-2.0
 """全局搜索 FTS 化的对照测试：FTS 路径与 LIKE 路径**逐条一致**。
 
-迁移 ``0046_search_fts`` 给 ``/api/search`` 覆盖的七个数据域建了 FTS5 trigram
-索引。这里的判定方式：**同一个端点跑两遍**——先在没建索引的库上跑（原 LIKE
-路径，行为基准），再用 alembic 把库升到 0046（索引 rebuild 会把既有行全部入
-索引），逐关键词比对两次响应的 JSON 是否完全相等。相等即"子串语义、排序、
-分页、软删除过滤全部保持"——这比逐字段断言更严格。
+基线迁移给 ``/api/search`` 覆盖的七个数据域建了 FTS5 trigram 索引。这里的判定
+方式：**同一个端点跑两遍**——先在没建索引的库上跑（LIKE 路径，行为基准），再就地
+执行基线里的 FTS DDL 并 rebuild（既有行全部入索引），逐关键词比对两次响应的 JSON
+是否完全相等。相等即"子串语义、排序、分页、软删除过滤全部保持"——这比逐字段断言
+更严格。conftest 的 ``clean_db`` 每个用例前都会删掉 FTS 派生表，所以默认只有 LIKE
+路径；"就地建表"而不是"升到某个旧 revision"，是因为 2.0 只有一条基线、没有可升的
+中间态。
 
 另钉：FTS 路径确实被走到（对照不可空转）、短关键词回退 LIKE、注入面关键词
 （FTS5 操作符）两路一致、``limit`` 分页一致。
@@ -16,9 +18,7 @@ from __future__ import annotations
 from contextlib import contextmanager
 from datetime import datetime
 
-from alembic import command
 from app import database
-from app.database_migrations import build_alembic_config
 from app.models.claim import ClaimRecord
 from app.models.interview_experience import InterviewExperience
 from app.models.job import Job
@@ -28,10 +28,7 @@ from app.models.referral import Referral
 from app.models.reminder import Reminder
 from app.models.resume import ResumeRecord
 from app.services import search_fts, trash
-from sqlalchemy import text
-
-PREVIOUS_REVISION = "0045_delivery_ledger"
-HEAD_REVISION = "0059_resume_export"
+from migrations.baseline_v2 import fts as baseline_fts
 
 # 对照关键词：中文 ≥3 字（trigram 主场）、ASCII 大小写折叠、2 字（回退 LIKE）、
 # FTS5 操作符（AND/OR/NOT/引号——作为字面量匹配才与 LIKE 等价）、无命中，
@@ -67,21 +64,16 @@ QUERIES = (
 
 @contextmanager
 def _fts_tables_enabled():
-    """把共享测试库升到 0046（建七张 FTS 表并 rebuild 既有行），结束时还原。
+    """就地执行基线里的 FTS DDL（虚拟表 + 触发器 + rebuild），让搜索改走 FTS 路径。
 
-    conftest 的 ``clean_db`` 会在用例前后删派生表，这里只需额外清掉 stamp 写入的
-    ``alembic_version``，避免污染同进程的后续用例。
+    conftest 的 ``clean_db`` 每个用例前都会删掉这些派生表，所以退出时不需要还原；
+    用基线 DDL 而不是"升到某个旧 revision"——2.0 只有一条基线，没有可升的中间态。
     """
-    config = build_alembic_config(database.engine)
-    command.stamp(config, PREVIOUS_REVISION)
-    command.upgrade(config, HEAD_REVISION)
+    with database.engine.begin() as connection:
+        for statement in baseline_fts.STATEMENTS:
+            connection.exec_driver_sql(statement)
     search_fts.reset_cache()
-    try:
-        yield
-    finally:
-        with database.engine.begin() as connection:
-            connection.execute(text("DROP TABLE IF EXISTS alembic_version"))
-        search_fts.reset_cache()
+    yield
 
 
 def _seed(db_session) -> None:

@@ -19,6 +19,7 @@ from pathlib import Path
 
 import pytest
 from sqlalchemy import inspect, text
+from tests.migration_refs import head_revision
 
 SCRIPTS_DIR = Path(__file__).resolve().parents[2] / "scripts"
 if str(SCRIPTS_DIR) not in sys.path:
@@ -27,14 +28,6 @@ if str(SCRIPTS_DIR) not in sys.path:
 import measure_api_perf as perf  # noqa: E402 - 模块导入必须无副作用（见 docstring）
 
 SMOKE_COUNTS = {"jobs": 12, "resumes": 3, "tracks": 12, "candidates": 2, "knowledge": 3}
-
-
-def _alembic_head(engine) -> str:
-    from alembic.script import ScriptDirectory
-    from app.database_migrations import build_alembic_config
-
-    config = build_alembic_config(engine)
-    return str(ScriptDirectory.from_config(config).get_current_head())
 
 
 @pytest.fixture()
@@ -86,11 +79,11 @@ def test_fixture_uses_real_alembic_head_with_fts(small_fixture):
     """fixture 库内 alembic_version==head、FTS 表存在、搜索计划走 FTS。"""
     _db_path, info = small_fixture
     engine = info["engine"]
-    assert info["schema_head"] == _alembic_head(engine)
+    assert info["schema_head"] == head_revision()
 
     with engine.connect() as conn:
         version = conn.execute(text("SELECT version_num FROM alembic_version")).scalar()
-    assert version == _alembic_head(engine)
+    assert version == head_revision()
     assert "knowledge_fts" in set(inspect(engine).get_table_names())
 
     terms = perf.derive_search_terms(engine)

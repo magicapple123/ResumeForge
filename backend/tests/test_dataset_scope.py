@@ -153,7 +153,9 @@ def test_a_failed_preview_keeps_the_current_dataset_usable(client):
     response = _activate(client, broken_id)
 
     assert response.status_code == 409
-    assert "预检" in response.json()["detail"]
+    # T03 起拒绝文案统一由 schema_epoch.dataset_switch_refusal 产出：损坏库走
+    # REFUSE_UNKNOWN 分支，detail 以「目标数据集无法识别…」开头（不再是旧的「预检失败」）。
+    assert "无法识别" in response.json()["detail"]
     assert current_dataset_id() == MAIN
     # 原库毫发无损：照常读写。
     _add_job(client, "预检失败后仍可写")

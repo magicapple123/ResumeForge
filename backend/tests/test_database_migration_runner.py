@@ -27,7 +27,7 @@ class _FakeScripts:
 
     @classmethod
     def from_config(cls, _config):
-        return cls("9999_fake_future")
+        return cls("future_head")
 
     def get_current_head(self) -> str:
         return self._head

@@ -1,8 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 """求职助手联网搜索与聊天迁移的离线测试。"""
 
-from pathlib import Path
-
 import pytest
 from alembic import command
 from app.database_migrations import build_alembic_config
@@ -18,18 +16,7 @@ from app.services.assistant.assistant_web_search import (
 )
 from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.orm import Session
-
-BACKEND_DIR = Path(__file__).resolve().parents[1]
-
-
-def _head_revision() -> str:
-    """当前迁移链的 head，从 Alembic 实际读（不用写死字符串，避免下个迁移落地时过期）。"""
-    from alembic.config import Config
-    from alembic.script import ScriptDirectory
-
-    config = Config()
-    config.set_main_option("script_location", str(BACKEND_DIR / "migrations"))
-    return str(ScriptDirectory.from_config(config).get_current_head())
+from tests.migration_refs import head_revision
 
 
 def test_parse_bing_rss_limits_and_sanitizes_results():
@@ -188,7 +175,7 @@ def test_chat_migration_builds_history_tables_and_cascades(tmp_path):
         with migration_engine.connect() as connection:
             assert (
                 connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one()
-                == _head_revision()
+                == head_revision()
             )
 
         with Session(migration_engine) as session:

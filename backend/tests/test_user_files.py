@@ -351,11 +351,6 @@ def test_migration_creates_user_file_table(tmp_path):
         "created_at",
     } <= columns
 
-    # 显式退到「创建 user_file 的迁移之前」：不能写 "-1"——那退的是*当前* head
-    # 的最后一步；0039 加列之后 "-1" 只会退到 0038，user_file 仍在，断言就失真了。
-    command.downgrade(config, "0037_resume_generation_notes")
-    assert "user_file" not in set(inspect(engine).get_table_names())
-
 
 # ---------- 备份往返（referral_images 缺口） ----------
 

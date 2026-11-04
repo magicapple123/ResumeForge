@@ -22,6 +22,7 @@ from app.services.data_backup.import_archive import (
 from app.services.data_backup.manifest import current_head_revision
 from app.services.data_backup.paths import DATABASE_MEMBER, ExtraDatabase
 from app.services.datasets import import_dataset
+from tests.migration_refs import LEGACY_1X_REVISION
 
 LEGACY_FIXTURE = Path(__file__).parent / "fixtures" / "legacy-1x" / "backup-1.0.2.zip"
 EXTRA_DATASET_ID = "0123456789abcdef"
@@ -64,11 +65,11 @@ def test_inspect_archive_rejects_1x_package(tmp_path) -> None:
 
 def test_candidate_epoch_check_does_not_touch_revision(tmp_path) -> None:
     candidate = _extract_legacy_database(tmp_path / "candidate.db")
-    assert _read_candidate_revision(candidate) == "0046_search_fts"
+    assert _read_candidate_revision(candidate) == LEGACY_1X_REVISION
     with pytest.raises(Exception) as excinfo:
         _check_candidate_epoch(candidate)
     assert "1.0.2" in str(excinfo.value)
-    assert _read_candidate_revision(candidate) == "0046_search_fts", "拒收必须是迁移前的只读判定"
+    assert _read_candidate_revision(candidate) == LEGACY_1X_REVISION, "拒收必须是迁移前的只读判定"
 
 
 def test_2_0_package_is_accepted(tmp_path, monkeypatch) -> None:

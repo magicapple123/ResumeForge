@@ -33,10 +33,6 @@ from app.services.settings_service import get_llm_config, save_llm_config
 # 足够长，保证在几 MB 的文件里做子串搜索不会误命中。
 SECRET = "sk-backup-canary-0123456789abcdef"
 
-# 技能表出现之前的那一版 revision，用来伪造一份"旧版本导出的备份"。
-PREVIOUS_REVISION = "0006_chat_conversation_flags"
-
-
 def _database_bytes(archive_path: Path) -> bytes:
     with zipfile.ZipFile(archive_path) as archive:
         return archive.read(DATABASE_MEMBER)
@@ -76,20 +72,6 @@ def _tweaked_sqlite(database: Path):
         connection.execute("PRAGMA wal_checkpoint(TRUNCATE)")
     finally:
         connection.close()
-
-
-def _set_revision(database: Path, revision: str) -> None:
-    """给测试库补上 ``alembic_version`` 并指定版本。
-
-    测试库是 ``create_all`` 建出来的，没有这张表；而真实导出物里它是存在的，伪造
-    旧备份时必须补上，否则"版本"这个维度根本没参与校验。
-    """
-    with _tweaked_sqlite(database) as connection:
-        connection.execute(
-            "CREATE TABLE IF NOT EXISTS alembic_version (version_num VARCHAR(32) NOT NULL)"
-        )
-        connection.execute("DELETE FROM alembic_version")
-        connection.execute("INSERT INTO alembic_version VALUES (?)", (revision,))
 
 
 def _settings_with_key(session, api_key: str = SECRET) -> None:
@@ -333,45 +315,6 @@ def test_inspect_rejects_a_newer_revision(db_session, tmp_path):
         inspect_archive(tampered, engine, tmp_path / "staging")
 
 
-def test_inspect_accepts_a_backup_exported_before_the_skill_tables(db_session, tmp_path):
-    """旧备份必须仍然能导入。
-
-    备份校验要求包里**包含全部应用表**，所以每加一张表都会悄悄拒收所有旧备份——一次
-    加表就等于一次不兼容改动。这里把一份备份改回"技能功能之前"的样子（少两张表、
-    revision 退回上一版、清单同步改旧）来钉住校验前的迁移。
-    """
-    db_session.add(Job(title="旧数据里的岗位", description="职责", requirements="要求"))
-    db_session.commit()
-    archive = _export(tmp_path)
-
-    old_database = tmp_path / "old.db"
-    old_database.write_bytes(_database_bytes(archive))
-    with _tweaked_sqlite(old_database) as connection:
-        connection.execute("DROP TABLE assistant_skill_file")
-        connection.execute("DROP TABLE assistant_skill")
-    _set_revision(old_database, PREVIOUS_REVISION)
-
-    manifest = _manifest(archive)
-    manifest["alembic_revision"] = PREVIOUS_REVISION
-    manifest["tables"].pop("assistant_skill")
-    manifest["tables"].pop("assistant_skill_file")
-    old_archive = _rebuild_archive(
-        archive,
-        tmp_path / "old.zip",
-        {
-            DATABASE_MEMBER: old_database.read_bytes(),
-            MANIFEST_MEMBER: json.dumps(manifest).encode(),
-        },
-    )
-
-    preview = inspect_archive(old_archive, engine, tmp_path / "staging")
-
-    assert preview["database"]["tables"]["job"] == 1
-    # 两张新表由迁移补齐（空的），否则表集合校验会把它判成"不是 ResumeForge 的备份"
-    assert preview["database"]["tables"]["assistant_skill"] == 0
-    assert preview["database"]["tables"]["assistant_skill_file"] == 0
-
-
 def test_inspecting_an_archive_leaves_no_files_behind(db_session, tmp_path):
     """校验是只读的：临时副本要删掉，迁移前备份更不能落在 staging 里。
 
@@ -384,15 +327,19 @@ def test_inspecting_an_archive_leaves_no_files_behind(db_session, tmp_path):
     assert list(staging.iterdir()) == []
 
 
-def test_inspect_rejects_a_database_that_disagrees_with_its_manifest(db_session, tmp_path):
-    """库里写着旧版本、清单却声称是新版本：这包被人动过，不能恢复。"""
+def test_inspect_rejects_a_manifest_that_disagrees_with_its_database(db_session, tmp_path):
+    """清单声称的 revision 与库里的不一致：这包被人动过，不能恢复。
+
+    2.0 只有一条基线，"库里是旧 revision"已经不可能通过版本链校验（会先以"来自
+    更新版本"拒收），所以这里改篡改**清单**：库仍是合法 2.0 库，清单却自称另一个
+    revision——不一致这条守卫必须独立于版本链生效。
+    """
     archive = _export(tmp_path)
-    database = tmp_path / "rewound.db"
-    database.write_bytes(_database_bytes(archive))
-    _set_revision(database, PREVIOUS_REVISION)
+    manifest = _manifest(archive)
+    manifest["alembic_revision"] = "deadbeef"
 
     tampered = _replace_member(
-        archive, DATABASE_MEMBER, database.read_bytes(), tmp_path / "rewound.zip"
+        archive, MANIFEST_MEMBER, json.dumps(manifest).encode(), tmp_path / "rewound.zip"
     )
 
     with pytest.raises(BackupError, match="清单与实际数据库内容不一致"):
