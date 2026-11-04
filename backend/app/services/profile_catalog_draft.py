@@ -25,7 +25,7 @@ from .profile import definition_catalog
 
 # 旧 ProfileUpdate 的标量/数组字段 → 新目录字段 id 的映射。只列**简历侧**字段；
 # 网申专用项（微信/证件号/家庭信息等）不进 13 分区，留在旧响应里由网申链路消费。
-_BASIC_FIELD_MAP: tuple[tuple[str, str], ...] = (
+_DRAFT_BASIC_MAP: tuple[tuple[str, str], ...] = (
     ("name", "basic_info.name"),
     ("gender", "basic_info.gender"),
     ("birth_year", "basic_info.birth_month"),
@@ -137,7 +137,7 @@ def _entries_for(section_key: str, result: ProfileTextParseResult) -> list[dict[
 
 
 def _basic_values(result: ProfileTextParseResult) -> dict[str, str]:
-    values = {target: str(getattr(result, source, "") or "") for source, target in _BASIC_FIELD_MAP}
+    values = {target: str(getattr(result, source, "") or "") for source, target in _DRAFT_BASIC_MAP}
     # R-75：旧网申"出生日期"与新"出生年月"共用一份值；解析只给了 birth_date 时回落到它。
     if not values.get("basic_info.birth_month") and getattr(result, "birth_date", ""):
         values["basic_info.birth_month"] = result.birth_date

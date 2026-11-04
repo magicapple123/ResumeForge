@@ -4,7 +4,7 @@
 背景：写入侧只按字段类型给上限（单行 200 / 多行 2000），而读取投影用 ``*Out`` 模型
 逐字段建模（``AwardOut.name`` 128）。160 字的奖项名称此前能写进库，读取投影当场
 ``ValidationError``，资料页整页 500。修法：写入收口（entry_store._validated_values）
-按读取模型注解本身（read_field_limits）校验，两侧永远同一套约束。
+按 field_limits_catalog 的冻结上限校验，两侧永远同一套约束。
 
 回归三步（与 QA 报告的复现路径一一对应）：
 1. 160 字奖项标题 → 400 value_too_long，不落库；
@@ -14,7 +14,7 @@
 
 from __future__ import annotations
 
-from app.services.profile.read_field_limits import READ_SIDE_LIMITS, limit_of
+from app.services.profile.field_limits_catalog import READ_SIDE_LIMITS, limit_of
 
 WORKSPACE_API = "/api/profile/workspace"
 LEGACY_PROFILE_API = "/api/profile"
@@ -63,12 +63,12 @@ def test_update_path_is_guarded_too(client):
     assert response.json()["code"] == "value_too_long"
 
 
-def test_limit_is_derived_from_the_read_model_not_copied(client):
-    """上限来自读取模型注解：AwardOut.name 改约束时写入侧自动跟上。"""
+def test_frozen_limit_matches_the_read_model_annotation(client):
+    """冻结值与读取模型当前注解一致：改了 *Out 约束却没改上限表，这里会变红。"""
     from app.schemas import profile as profile_schemas
 
     assert limit_of(AWARD_FIELD) == 128
-    # 与读取模型的注解逐字一致（防止有人把映射抄成另一份常数）。
+    # 与读取模型的注解逐字一致（改约束时必须同步改 field_limits_catalog 的冻结表）。
     assert (
         READ_SIDE_LIMITS[AWARD_FIELD]
         == profile_schemas.AwardOut.model_fields["name"].metadata[0].max_length

@@ -28,6 +28,7 @@ from ...schemas import profile as profile_schemas
 from . import workspace_bootstrap
 from .definition_catalog import BUILTIN_SECTION_KEYS, get_field
 from .errors import ValidationError as StoreValidationError
+from .field_limits_catalog import BASIC_FIELD_MAP, SECTION_FIELD_MAP
 from .value_validation import ValidationFailure, validate_value
 
 if TYPE_CHECKING:
@@ -49,21 +50,10 @@ _SECTION_MODELS = {
 # 就是一条永远显示不出来的空标签）。学历/经历不丢弃——空行至少还有可编辑字段。
 _BLANK_ROWS_DROPPED = ("skills",)
 
-# ===== 旧协议字段 → 新模型 field_id 的映射（F2 契约 §5.1，唯一一份）=====
+# ===== 旧协议字段 → 新模型 field_id 的映射（定义在 field_limits_catalog，唯一一份）=====
 _LEGACY_SECTIONS = ("educations", "experiences", "campus_experiences", "projects", "skills", "awards")
 _LEGACY_ORDER_KEYS = tuple(profile_schemas.PROFILE_SECTION_KEYS)  # 旧 ProfileOut 的 8 个 key
 _RAW_SECTION_KEYS = ("basic_info", "summary", *_LEGACY_SECTIONS)
-
-# 旧标量 → 新 field_id；birth_year/birth_date 合并到 basic_info.birth_month
-# （新模型只有一个"出生年月"位置，见 _project_basic / _basic_values）。
-_BASIC_FIELD_MAP = {
-    "name": "basic_info.name", "gender": "basic_info.gender",
-    "phone": "basic_info.phone", "email": "basic_info.email",
-    "city": "basic_info.city", "target_city": "basic_info.target_city",
-    "job_intent": "basic_info.job_intention", "personal_website": "basic_info.homepage",
-    "github": "basic_info.github", "political_status": "basic_info.political_status",
-    "photo": "basic_info.photo",
-}
 
 # 新模型没有位置的旧标量：写日志告警后丢弃，不静默。phone_country_code 的默认 +86
 # 不算内容（旧界面本来就默认带它），只有用户真的改了才告警。
@@ -74,43 +64,6 @@ _BASIC_UNSUPPORTED = (
 )
 _UNSUPPORTED_DEFAULTS = {"phone_country_code": "+86"}
 
-# 旧子项字段 → 新 field_id；None = 新模型没有这个位置（四六级分数、参考文件等）。
-_ITEM_FIELD_MAP: dict[str, dict[str, str | None]] = {
-    "educations": {
-        "school": "educations.school", "major": "educations.major",
-        "degree": "educations.degree", "study_mode": "educations.study_form",
-        "degree_type": "educations.degree_type", "department": "educations.department",
-        "start_date": "educations.start_date", "end_date": "educations.end_date",
-        "gpa": "educations.gpa", "courses": "educations.core_courses",
-        "achievements": "educations.achievements",
-        "cet4_score": None, "cet6_score": None,
-        "reference_file_name": None, "reference_content": None,
-    },
-    "experiences": {
-        "company": "experiences.company", "role": "experiences.title",
-        "start_date": "experiences.start_date", "end_date": "experiences.end_date",
-        "description": "experiences.description",
-        "reference_file_name": None, "reference_content": None,
-    },
-    "campus_experiences": {
-        "organization": "campus_experiences.organization", "role": "campus_experiences.role",
-        "start_date": "campus_experiences.start_date",
-        "end_date": "campus_experiences.end_date",
-        "description": "campus_experiences.description",
-        "reference_file_name": None, "reference_content": None,
-    },
-    "projects": {
-        "name": "projects.name", "role": "projects.role",
-        "start_date": "projects.start_date", "end_date": "projects.end_date",
-        "tech_stack": "projects.tech_stack", "description": "projects.description",
-        "highlights": "projects.highlights",
-        "reference_file_name": None, "reference_content": None,
-    },
-    "skills": {"name": "skills.name", "level": "skills.level"},
-    "awards": {
-        "name": "awards.title", "date": "awards.awarded_at", "description": "awards.description",
-    },
-}
 _FOUR_DIGIT_YEAR_RE = re.compile(r"^(\d{4})")
 
 # ===== 旧 ORM 读路径（尚未迁移的生成/网申/面试链路继续使用）=====
@@ -161,7 +114,7 @@ def _legacy_section_order(order: Sequence[Any]) -> list[str]:
 
 def _project_basic(values: Mapping[str, Any]) -> dict[str, str]:
     """基础条目 values → 旧标量；新模型没有的旧字段保留旧协议默认值（形状等价）。"""
-    data = {key: str(values.get(field_id, "") or "") for key, field_id in _BASIC_FIELD_MAP.items()}
+    data = {key: str(values.get(field_id, "") or "") for key, field_id in BASIC_FIELD_MAP.items()}
     month = str(values.get("basic_info.birth_month", "") or "")
     year_match = _FOUR_DIGIT_YEAR_RE.match(month)
     data["birth_year"] = year_match.group(1) if year_match else month
@@ -173,7 +126,7 @@ def _project_item(section_key: str, values: Mapping[str, Any]) -> dict[str, str]
     """一条条目的 values → 旧子项字段；新模型没有位置的旧字段留默认空串。"""
     return {
         key: str(values.get(field_id, "") or "")
-        for key, field_id in _ITEM_FIELD_MAP[section_key].items()
+        for key, field_id in SECTION_FIELD_MAP[section_key].items()
         if field_id is not None
     }
 
@@ -302,7 +255,7 @@ def _basic_values(
 ) -> dict[str, str]:
     """旧 PUT/PATCH 的基础字段 → 基础条目 values（PATCH 只取本次出现的键）。"""
     values: dict[str, str] = {}
-    for old_name, field_id in _BASIC_FIELD_MAP.items():
+    for old_name, field_id in BASIC_FIELD_MAP.items():
         if fields_set is not None and old_name not in fields_set:
             continue
         values[field_id] = _normalize_value(field_id, getattr(payload, old_name))
@@ -314,7 +267,7 @@ def _basic_values(
 def _map_item(section_key: str, item: Any, dropped: set[str]) -> dict[str, str]:
     """旧子项 → 新条目 values；不能映射的非空字段记入 dropped（日志告警）。"""
     values: dict[str, str] = {}
-    for old_name, field_id in _ITEM_FIELD_MAP[section_key].items():
+    for old_name, field_id in SECTION_FIELD_MAP[section_key].items():
         if field_id is None:
             if str(getattr(item, old_name, "") or "").strip():
                 dropped.add(f"{section_key}.{old_name}")

@@ -15,8 +15,8 @@ from sqlalchemy.orm import Session
 from . import value_validation
 from .definition_catalog import SECTION_BY_KEY
 from .errors import ValidationError
+from .field_limits_catalog import limit_of, too_long_detail
 from .field_preferences import custom_field_rows
-from .read_field_limits import limit_of, too_long_detail
 
 
 def _field_types(db: Session, section_key: str) -> dict[str, str]:
@@ -40,7 +40,7 @@ def _validated_values(db: Session, section_key: str, values: dict[str, Any]) -> 
     # 最后一道（2026-11 用户报告）：值必须能被读取投影原样读出来。读取模型上的
     # max_length（如 AwardOut.name 128）比类型上限（单行 200）紧，此前只按类型校验，
     # 160 字的奖项标题能写进库、资料页读取时当场 ValidationError 500。
-    # 上限来自 read_field_limits（读取模型注解本身），不是又抄了一份数字。
+    # 上限来自 field_limits_catalog（冻结的读取侧约束），不是又抄了一份数字。
     for field_id, value in checked.items():
         limit = limit_of(field_id)
         if limit is not None and len(value) > limit:
