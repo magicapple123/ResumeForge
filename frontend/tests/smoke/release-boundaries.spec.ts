@@ -69,7 +69,13 @@ test("a purged source resume is discoverable and downloadable from the independe
   await page.getByRole("button", { name: "交付存档", exact: true }).click();
   const archive = page.getByRole("dialog", { name: "交付存档", exact: true });
   await expect(archive.getByText("虚构已删原件的交付证据", { exact: true })).toBeVisible();
-  await expect(archive.getByText(/彻底删除不清除交付快照/)).toBeVisible();
+  // 说明条按设计**默认收起**（省掉约 90px）：收起时正文不渲染，点开才出现。
+  // 与 `DeliveryArchiveModal.test.tsx` 的「说明条默认收起，点开后才渲染正文」同口径。
+  const noticeBody = archive.getByText(/彻底删除不清除交付快照/);
+  await expect(archive.getByText("原简历删除后仍可查找历史存档", { exact: true })).toBeVisible();
+  await expect(noticeBody).toBeHidden();
+  await archive.locator(".ant-collapse-header").click();
+  await expect(noticeBody).toBeVisible();
   const [download, response] = await Promise.all([
     page.waitForEvent("download"),
     page.waitForResponse((item) => /\/deliveries\/\d+\/download$/.test(item.url())),
