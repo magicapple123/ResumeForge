@@ -132,6 +132,39 @@ from .import_archive import (
 from .import_archive import (
     inspect_extra_dataset as inspect_extra_dataset,
 )
+from .legacy_archive import (
+    ARCHIVE_DIRNAME as ARCHIVE_DIRNAME,
+)
+from .legacy_archive import (
+    ARCHIVE_FILES_DIRNAME as ARCHIVE_FILES_DIRNAME,
+)
+from .legacy_archive import (
+    ARCHIVE_PACKAGE_DIRNAME as ARCHIVE_PACKAGE_DIRNAME,
+)
+from .legacy_archive import (
+    ARCHIVE_README_NAME as ARCHIVE_README_NAME,
+)
+from .legacy_archive import (
+    ArchiveVerificationError as ArchiveVerificationError,
+)
+from .legacy_archive import (
+    LegacyArchiveError as LegacyArchiveError,
+)
+from .legacy_archive import (
+    archive_pre_2_0_library as archive_pre_2_0_library,
+)
+from .legacy_archive import (
+    archive_zip_path as archive_zip_path,
+)
+from .legacy_archive import (
+    move_library_aside as move_library_aside,
+)
+from .legacy_archive import (
+    restore_library as restore_library,
+)
+from .legacy_archive import (
+    verify_archive as verify_archive,
+)
 from .manifest import (
     _revision_chain as _revision_chain,
 )

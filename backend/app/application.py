@@ -32,7 +32,7 @@ from .middleware import (
 from .middleware.dataset_request import DatasetRequestMiddleware
 from .runtime.log_context import LogContextFilter
 from .runtime.log_redact import RedactExceptionFilter
-from .services import schema_epoch
+from .services import startup_gate
 from .services.ai_task_recovery import fail_orphaned_ai_tasks
 from .services.apply import apply_service
 from .services.apply.task_runner import get_task_runner
@@ -170,21 +170,10 @@ async def lifespan(_app: FastAPI):
     # 每一步都留一行日志。启动阶段是最容易"静默卡住"的地方：进程活着、端口没人监听、
     # 日志停在上一行——没有分段日志就只能靠猜（CI 的 macOS 作业上真发生过）。
     startup_logger = logging.getLogger(__name__)
-    # 库太新/版本不可识别时这一步抛 StartupGateError，零写入地拒绝启动。
+    # 库太新/版本不可识别时抛 StartupGateError（零写入）；pre-2.0 库在这里整包归档、
+    # 校验通过后才移走旧文件并重开空库，然后才轮到下面的迁移。
     startup_logger.info("启动自检：检查资料库版本闸门")
-    gate_database = schema_epoch.current_database_file()
-    if gate_database is not None:
-        gate_decision = schema_epoch.decide(gate_database)
-        if gate_decision is schema_epoch.EpochDecision.ARCHIVE_AND_RESET:
-            # T04 在这里接入 startup_gate.enforce()：整包归档 → 校验 → 移走旧库 →
-            # rebind 建空库。接线之前显式失败，绝不把 pre-2.0 库交给迁移执行器。
-            raise AssertionError("归档分支尚未接线：pre-2.0 库必须先归档再建空库")
-        if gate_decision not in (
-            schema_epoch.EpochDecision.FRESH,
-            schema_epoch.EpochDecision.UPGRADE,
-        ):
-            raise schema_epoch.refusal_error(gate_decision, gate_database)
-        startup_logger.info("启动自检：资料库版本闸门通过 decision=%s", gate_decision.value)
+    startup_gate.enforce(database.engine)
     # PR-03：先校验数据集指针与可用库一致（切换崩溃窗口的确定性恢复），再谈迁移
     # ——指针指向的库打不开时回退主数据，避免应用起在一份坏库上到处 500。
     startup_logger.info("启动自检：校验数据集指针")
