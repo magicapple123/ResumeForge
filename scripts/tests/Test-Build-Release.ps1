@@ -1,4 +1,4 @@
-﻿# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: Apache-2.0
 [CmdletBinding()]
 param()
 
@@ -221,7 +221,7 @@ try {
                 "backend/app/data/skills.json",
                 "backend/app/preflight.py",
                 "backend/app/prompts/resume_generate_user.md",
-                "backend/migrations/versions/0005_chat_assistant.py"
+                "backend/migrations/versions/0001_baseline_v2.py"
             )) {
             Assert-ReleaseTest `
                 -Condition ($relativePaths -contains $required) `
