@@ -21,9 +21,8 @@ from . import (
 from .api import datasets, resumes, skills
 from .application_routers import install_routers
 from .config import BACKEND_DIR, DATA_DIR, get_settings
-from .database import Base, ensure_sqlite_columns, run_sqlite_maintenance
-from .database_compat import SQLITE_REQUIRED_COLUMNS
-from .database_migrations import is_unversioned_legacy_database, run_database_migrations
+from .database import run_sqlite_maintenance
+from .database_migrations import run_database_migrations
 from .middleware import (
     LoopbackOriginGuardMiddleware,
     RequestContextMiddleware,
@@ -33,6 +32,7 @@ from .middleware import (
 from .middleware.dataset_request import DatasetRequestMiddleware
 from .runtime.log_context import LogContextFilter
 from .runtime.log_redact import RedactExceptionFilter
+from .services import schema_epoch
 from .services.ai_task_recovery import fail_orphaned_ai_tasks
 from .services.apply import apply_service
 from .services.apply.task_runner import get_task_runner
@@ -163,12 +163,28 @@ if settings.log_file_enabled:
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
-    # 只有早期未版本化数据库需要兼容建表/补列；空库与后续升级均由
-    # Alembic 独立管理，避免 create_all 提前创建结构而掩盖 revision。
+    # 启动顺序（2.0 起固定，不能调换）：版本闸门 → 数据集指针校验 → 迁移 → SQLite
+    # 维护。闸门必须早于任何写库/建库动作：pre-2.0 库要先整包归档、校验通过后才允许
+    # 建空库；反过来（先建库再备份）会把唯一路径覆盖成空库，不可逆。
     # 用属性访问而不是按值导入：切换数据集会重建 engine，按值引用会指向旧库。
     # 每一步都留一行日志。启动阶段是最容易"静默卡住"的地方：进程活着、端口没人监听、
     # 日志停在上一行——没有分段日志就只能靠猜（CI 的 macOS 作业上真发生过）。
     startup_logger = logging.getLogger(__name__)
+    # 库太新/版本不可识别时这一步抛 StartupGateError，零写入地拒绝启动。
+    startup_logger.info("启动自检：检查资料库版本闸门")
+    gate_database = schema_epoch.current_database_file()
+    if gate_database is not None:
+        gate_decision = schema_epoch.decide(gate_database)
+        if gate_decision is schema_epoch.EpochDecision.ARCHIVE_AND_RESET:
+            # T04 在这里接入 startup_gate.enforce()：整包归档 → 校验 → 移走旧库 →
+            # rebind 建空库。接线之前显式失败，绝不把 pre-2.0 库交给迁移执行器。
+            raise AssertionError("归档分支尚未接线：pre-2.0 库必须先归档再建空库")
+        if gate_decision not in (
+            schema_epoch.EpochDecision.FRESH,
+            schema_epoch.EpochDecision.UPGRADE,
+        ):
+            raise schema_epoch.refusal_error(gate_decision, gate_database)
+        startup_logger.info("启动自检：资料库版本闸门通过 decision=%s", gate_decision.value)
     # PR-03：先校验数据集指针与可用库一致（切换崩溃窗口的确定性恢复），再谈迁移
     # ——指针指向的库打不开时回退主数据，避免应用起在一份坏库上到处 500。
     startup_logger.info("启动自检：校验数据集指针")
@@ -181,9 +197,6 @@ async def lifespan(_app: FastAPI):
         startup_logger.warning("数据集指针校验失败（不阻断启动）", exc_info=True)
     bind = database.engine
     startup_logger.info("启动自检：检查数据库版本")
-    if is_unversioned_legacy_database(bind):
-        Base.metadata.create_all(bind=bind)
-        ensure_sqlite_columns(bind, SQLITE_REQUIRED_COLUMNS)
     run_database_migrations(bind)
     # WAL 截断与统计刷新都可能因并发读者失败：维护是保险不是门槛，绝不阻断启动。
     startup_logger.info("启动自检：SQLite 例行维护")

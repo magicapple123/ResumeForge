@@ -29,9 +29,7 @@ from typing import Any
 from sqlalchemy import Engine
 
 from .. import database
-from ..database import Base, ensure_sqlite_columns
-from ..database_compat import SQLITE_REQUIRED_COLUMNS
-from ..database_migrations import is_unversioned_legacy_database, run_database_migrations
+from ..database_migrations import run_database_migrations
 from ..dataset_registry import (
     MAIN_DATASET_ID,
     DatasetError,
@@ -44,6 +42,7 @@ from ..dataset_registry import (
     write_metadata,
 )
 from ..runtime.log_fields import safe_log_text
+from . import schema_epoch
 from .data_backup import (
     ARCHIVE_DATASETS_DIRNAME,
     cleanup_temp_directories,
@@ -371,11 +370,9 @@ def _preview_target(target: Path) -> None:
     预检引擎用完立即 dispose（Windows 文件句柄），随后提交段才能独占目标文件。
     预检把迁移也跑完一遍：提交段里再跑是幂等的（alembic 已在 head）。
     """
+    schema_epoch.require_dataset_switchable(target)
     preview = database.build_engine(database.database_url_for(target))
     try:
-        if is_unversioned_legacy_database(preview):
-            Base.metadata.create_all(bind=preview)
-            ensure_sqlite_columns(preview, SQLITE_REQUIRED_COLUMNS)
         run_database_migrations(preview)
     except Exception as exc:
         raise DatasetError(f"目标数据集无法使用（预检失败）：{exc}", status_code=409) from exc
@@ -401,15 +398,15 @@ def _commit_switch(dataset_id: str, target: Path) -> None:
 
     previous_engine = database.engine
     try:
+        schema_epoch.require_dataset_switchable(target)
         new_engine = database.build_engine(database.database_url_for(target))
+    except DatasetError:
+        raise
     except Exception as exc:
         logger.warning("切换到数据集 %s 失败，已保持原数据集不变：%s", dataset_id, exc)
         raise DatasetError(f"目标数据集无法使用（切换失败）：{exc}", status_code=409) from exc
     try:
-        # 数据集可能来自更早的版本：建表/补列/迁移要在这里补跑，否则旧表缺列会直接 500。
-        if is_unversioned_legacy_database(new_engine):
-            Base.metadata.create_all(bind=new_engine)
-            ensure_sqlite_columns(new_engine, SQLITE_REQUIRED_COLUMNS)
+        # 预检已经跑过一遍迁移；这里再跑是幂等的（alembic 已在 head）。
         run_database_migrations(new_engine)
         cleanup_temp_directories(new_engine)
     except Exception as exc:

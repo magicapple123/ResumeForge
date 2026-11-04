@@ -19,7 +19,6 @@ logger = logging.getLogger(__name__)
 
 BACKEND_DIR = Path(__file__).resolve().parents[1]
 ALEMBIC_INI = BACKEND_DIR / "alembic.ini"
-BASELINE_REVISION = "0001_existing_schema"
 
 
 def application_tables() -> tuple[str, ...]:
@@ -36,7 +35,10 @@ def application_tables() -> tuple[str, ...]:
 
 
 _APPLICATION_TABLES = application_tables()
-_USER_DATA_TABLES = _APPLICATION_TABLES
+# 版本标记表不是用户数据：全新空库迁移完成后 app_schema_epoch 恰好有一行（epoch=2），
+# 若把它算进来，每次首次迁移都会白做一份"迁移前快照"（之后没有任何东西引用它）。
+# 排除只影响"要不要备份"，不影响备份包/表覆盖清单（那份仍由 _APPLICATION_TABLES 推导）。
+_USER_DATA_TABLES = tuple(name for name in _APPLICATION_TABLES if name != "app_schema_epoch")
 
 
 def build_alembic_config(bind: Engine) -> Config:
@@ -65,16 +67,8 @@ def _database_has_user_data(bind: Engine) -> bool:
 
 
 def _database_has_application_tables(bind: Engine) -> bool:
-    """Return whether an unversioned database is a legacy ResumeForge database."""
+    """库是否已经包含当前模型认识的业务表（用于拒绝未版本化的库）。"""
     return bool(set(inspect(bind).get_table_names()).intersection(_APPLICATION_TABLES))
-
-
-def is_unversioned_legacy_database(bind: Engine) -> bool:
-    """Identify databases that predate Alembic but already contain app tables."""
-    if not _database_has_application_tables(bind):
-        return False
-    with bind.connect() as connection:
-        return MigrationContext.configure(connection).get_current_revision() is None
 
 
 def snapshot_sqlite_file(source: Path, destination: Path) -> None:
@@ -132,7 +126,12 @@ def backup_sqlite_database(bind: Engine, output_dir: Path | None = None) -> Path
     return destination
 
 def run_database_migrations(bind: Engine, *, backup: bool = True) -> Path | None:
-    """Upgrade an empty or legacy database to the current Alembic head.
+    """把当前库升级到 Alembic head；迁移前如有用户数据先做一次 SQLite 快照。
+
+    职责只有两件：迁移前快照 + ``upgrade head``。它不判定库的版本、不归档 pre-2.0
+    库、不建空库、不兼容建表——那些都属于启动闸门（``schema_epoch.decide()`` 与
+    ``startup_gate.enforce()``）。启动顺序（不能调换）：判定 →（必要时）归档并建空库
+    → 本函数 → SQLite 例行维护。
 
     ``backup=False`` is for migrating a throwaway copy of somebody else's data:
     the archive validation path in ``services/data_backup`` extracts a candidate
@@ -147,8 +146,15 @@ def run_database_migrations(bind: Engine, *, backup: bool = True) -> Path | None
         current_revision = MigrationContext.configure(connection).get_current_revision()
     if current_revision == head_revision:
         return None
-
-    legacy_database = current_revision is None and _database_has_application_tables(bind)
+    if current_revision is None and _database_has_application_tables(bind):
+        # 走到这里说明启动闸门的顺序错了：pre-2.0 库本应在 schema_epoch.decide() 里
+        # 判成 ARCHIVE_AND_RESET、由 startup_gate 整包归档后建空库，再进迁移。2.0 不再
+        # 兼容建表、也不再给旧库 stamp 基线——大声失败比把一份读不懂的库硬升成半新半旧
+        # 安全（原始库此时一个字节都没被改）。
+        raise RuntimeError(
+            "数据库已有业务表但没有版本号：启动闸门未先归档旧库，已拒绝迁移。"
+            "这属于启动顺序错误，请报告维护者；原始库未被修改。"
+        )
     backup_path = (
         backup_sqlite_database(bind) if backup and _database_has_user_data(bind) else None
     )
@@ -156,10 +162,6 @@ def run_database_migrations(bind: Engine, *, backup: bool = True) -> Path | None
     # place instead of creating and discarding a second in-memory database.
     with bind.begin() as connection:
         config.attributes["connection"] = connection
-        if legacy_database:
-            # Legacy startup creates/repairs the schema before this runner. Stamp
-            # only those databases; a genuinely empty database must execute 0001.
-            command.stamp(config, BASELINE_REVISION)
         command.upgrade(config, "head")
     logger.info("数据库迁移完成 revision=%s", head_revision)
     return backup_path

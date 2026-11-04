@@ -255,6 +255,7 @@ def clean_db():
     _storage_stats.reset_storage_cache()
     Base.metadata.drop_all(bind=database.engine)
     Base.metadata.create_all(bind=database.engine)
+    _seed_schema_gate_state()
     _drop_fts_derived_tables()
     yield
     _reset_to_test_database()
@@ -277,6 +278,49 @@ _FTS_DERIVED_TABLES = (
     "knowledge_fts_docsize",
     "knowledge_fts_config",
 ) + tuple(f"search_fts_{base}{suffix}" for base in _FTS_BASE_TABLES for suffix in _FTS_SUFFIXES)
+
+
+def _baseline_head_revision() -> str:
+    """当前迁移链 head（测试库每轮重建后要把它写回 alembic_version）。"""
+    from alembic.config import Config
+    from alembic.script import ScriptDirectory
+
+    config = Config()
+    config.set_main_option(
+        "script_location", str(Path(__file__).resolve().parents[1] / "migrations")
+    )
+    return str(ScriptDirectory.from_config(config).get_current_head())
+
+
+_BASELINE_HEAD_REVISION = _baseline_head_revision()
+
+
+def _seed_schema_gate_state() -> None:
+    """把 clean_db 重建出来的测试库补成"合法 2.0 库"。
+
+    clean_db 用 Base.metadata.create_all 建表：它不写 alembic_version，也没有
+    app_schema_epoch 的播种行。2.0 启动闸门在 lifespan 里只读判定库形态，看到
+    "有业务表但没有版本号"会判成 pre-2.0 库并走归档——测试库每轮都会被这么处理
+    一遍。这里把版本号与 epoch 单行补齐，让 TestClient 的 lifespan 走正常的
+    UPGRADE 分支（revision == head 时迁移是 no-op，不写库也不产生快照）。
+
+    这是测试夹具的职责，不是应用的兼容分支：生产库里这两个标记只由基线迁移写入。
+    """
+    with database.engine.begin() as connection:
+        connection.execute(
+            text(
+                "CREATE TABLE IF NOT EXISTS alembic_version ("
+                "version_num VARCHAR(32) NOT NULL, "
+                "CONSTRAINT alembic_version_pkc PRIMARY KEY (version_num))"
+            )
+        )
+        connection.execute(text("DELETE FROM alembic_version"))
+        connection.execute(
+            text("INSERT INTO alembic_version (version_num) VALUES (:revision)"),
+            {"revision": _BASELINE_HEAD_REVISION},
+        )
+        connection.execute(text("DELETE FROM app_schema_epoch"))
+        connection.execute(text("INSERT INTO app_schema_epoch (epoch) VALUES (2)"))
 
 
 def _drop_fts_derived_tables() -> None:
