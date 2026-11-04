@@ -322,25 +322,62 @@ function Stop-RunningApplication {
     }
 }
 
+function Test-CrossMajorUpdate {
+    param([string]$FromVersion, [string]$ToVersion)
+
+    # 都能用 [version] 解析且 Major 不同才算跨 major；任一解析失败按跨 major 保守处理
+    # （误把普通快照标成"永不清理"只是多留几份；反过来丢掉的是回滚到旧大版本的凭据）。
+    if (-not $FromVersion -or -not $ToVersion) { return $true }
+    try {
+        $from = [version]$FromVersion
+        $to = [version]$ToVersion
+    } catch {
+        return $true
+    }
+    return ($from.Major -ne $to.Major)
+}
+
 <#
 更新前给用户数据拍一份快照。
 
 程序文件覆盖失败可以重跑；但一旦新版本的数据库迁移在旧数据上出了问题，没有这份
-快照就没有回头路——这是更新链上最后一道数据保险。调用点都在"应用已被停掉"之后
-（三条覆盖路径都会先停），SQLite 进程干净退出后 WAL 已合并回主库，直接拷文件就是
-一致快照。
+快照就没有回头路——这是更新链上最后一道数据保险。调用点都在"应用已被停掉"之后，
+SQLite 进程干净退出后 WAL 已合并回主库。
 
-只拷数据库与其旁文件（backend\data\*.db + datasets\*.db）和轻量 json 指针；浏览器登录态、
-既有备份包、采集样例、日志都不属于"要回滚的数据"。保留最近 3 份在 backend\data\pre-update\。
+快照分两层：1）完整整包（首选）：backend\scripts\create_user_data_snapshot.py，复用
+「导出全部数据集」链路并校验包可恢复；非 0 退出即中止更新（脚本不存在时退回第 2 层）。
+2）文件拷贝兜底：backend\data\*.db（含 -wal/-shm/-journal）、轻量 json 指针与
+datasets\*.db；登录态、既有备份包、采集样例与日志不属于"要回滚的数据"。
+
+跨 major 的目录名用 pre-major-<时间戳> 且永不清理；普通快照保留最近 3 份。
 #>
+
+
 function Backup-UserData {
     if ($DryRun) { return }
     # 真实用户数据在 backend\data（见 backend/app/config.py 的 DATA_DIR）；项目根下的
     # data\ 不存在，读错了就会在这里静默提前 return、从不生成快照。
     $dataRoot = Join-Path $ProjectRoot "backend\data"
     if (-not (Test-Path -LiteralPath $dataRoot)) { return }
-    $destination = Join-Path $dataRoot ("pre-update\" + (Get-Date -Format "yyyyMMdd-HHmmss"))
+    if (Test-CrossMajorUpdate -FromVersion $FromVersion -ToVersion $TargetVersion) {
+        $folderName = "pre-major-" + (Get-Date -Format "yyyyMMdd-HHmmss")
+    } else {
+        $folderName = Get-Date -Format "yyyyMMdd-HHmmss"
+    }
+    $destination = Join-Path $dataRoot ("pre-update\" + $folderName)
     New-Item -ItemType Directory -Force -Path $destination | Out-Null
+
+    # 第 1 层：完整整包（含附件 / 字体 / 全局模型配置）；非 0 退出即中止更新。
+    $snapshotScript = Join-Path $ProjectRoot "backend\scripts\create_user_data_snapshot.py"
+    if (Test-Path -LiteralPath $snapshotScript) {
+        Write-Host "    Pre-update full data snapshot: $destination"
+        $backendPython = Resolve-BackendPython -ProjectRoot $ProjectRoot
+        Invoke-External -FilePath $backendPython -Arguments @($snapshotScript, "--destination", $destination) -WorkingDirectory $ProjectRoot
+    } else {
+        Write-Host "    Full snapshot script not found; using the database-file fallback." -ForegroundColor Yellow
+    }
+
+    # 第 2 层：*.db 与轻量 json 指针的兜底拷贝。
     $copied = 0
     foreach ($dbFile in @(Get-ChildItem -LiteralPath $dataRoot -Filter "*.db" -File -ErrorAction SilentlyContinue)) {
         Copy-Item -LiteralPath $dbFile.FullName -Destination $destination -Force
@@ -371,11 +408,18 @@ function Backup-UserData {
         }
     }
     Write-Host "    Pre-update data snapshot: $destination ($copied files)"
+
+    # 清理：普通快照只留最近 3 份；名字带 pre-major 的跨大版本快照永不清理。
     $preUpdateRoot = Join-Path $dataRoot "pre-update"
     $snapshots = @(Get-ChildItem -LiteralPath $preUpdateRoot -Directory -ErrorAction SilentlyContinue |
         Sort-Object Name -Descending)
-    foreach ($old in ($snapshots | Select-Object -Skip 3)) {
-        Remove-Item -LiteralPath $old.FullName -Recurse -Force
+    $kept = 0
+    foreach ($snapshot in $snapshots) {
+        if ($snapshot.Name -like "*pre-major*") { continue }
+        $kept++
+        if ($kept -gt 3) {
+            Remove-Item -LiteralPath $snapshot.FullName -Recurse -Force
+        }
     }
 }
 

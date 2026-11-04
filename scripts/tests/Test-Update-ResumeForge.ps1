@@ -98,7 +98,7 @@ foreach ($functionDefinition in $ast.FindAll({
     Invoke-Expression $functionDefinition.Extent.Text
 }
 
-foreach ($required in @("Test-Excluded", "Copy-ProgramFiles", "Resolve-ExtractedPackage", "Write-InstallStatus", "Backup-UserData", "Resolve-BackendPython", "Test-DesktopPayload")) {
+foreach ($required in @("Test-Excluded", "Copy-ProgramFiles", "Resolve-ExtractedPackage", "Write-InstallStatus", "Backup-UserData", "Test-CrossMajorUpdate", "Resolve-BackendPython", "Test-DesktopPayload")) {
     Assert-UpdaterTest -Condition ($null -ne (Get-Command $required -ErrorAction SilentlyContinue)) `
         -Message "更新器里找不到函数 $required。"
 }
@@ -375,13 +375,18 @@ echo spawned>"$spawnMarker"
 
     # ---- 3.5 更新前数据快照 -----------------------------------------------------
     # 三条覆盖路径都会先停应用再快照：SQLite 干净退出后直接拷文件就是一致快照。
-    # 只拷 .db 与旁文件（-wal / -shm / -journal）、轻量 json 指针；保留最近 3 份，
-    # 最旧的轮转删除。快照按真实数据布局铺在 backend/data/（backend/app/config.py
-    # 的 DATA_DIR）——此前测试自造假根 <root>/data，与实现一起错了三年没人报警。
+    # 快照分两层：完整整包由 create_user_data_snapshot.py 生成（这个假项目里没有该
+    # 脚本，所以这里走第二层 *.db/json 兜底；完整包由 test_create_user_data_snapshot.py
+    # 覆盖）。普通快照保留最近 3 份；跨 major 的 pre-major-* 快照永不清理，解析失败
+    # 按跨 major 保守处理。
     $realProjectRoot = $ProjectRoot
     $realDryRun = $DryRun
+    $realFromVersion = $FromVersion
+    $realTargetVersion = $TargetVersion
     $ProjectRoot = Join-Path $TestDirectory "fake-root"
     $DryRun = $false
+    $FromVersion = "1.0.2"
+    $TargetVersion = "1.0.3"
     $fakeDataRoot = Join-Path $ProjectRoot "backend\data"
     New-Item -ItemType Directory -Path (Join-Path $fakeDataRoot "datasets") -Force | Out-Null
     foreach ($name in @(
@@ -396,14 +401,13 @@ echo spawned>"$spawnMarker"
 
     Backup-UserData
     $snapshots = @(Get-ChildItem -LiteralPath (Join-Path $fakeDataRoot "pre-update") -Directory)
-    Assert-UpdaterTest -Condition ($snapshots.Count -eq 1) `
-        -Message "第一次快照应当恰好生成一份 pre-update 目录（实际 $($snapshots.Count)）。"
+    Assert-UpdaterTest -Condition ($snapshots.Count -eq 1) -Message "第一次快照应当恰好生成一份 pre-update 目录（实际 $($snapshots.Count)）。"
+    Assert-UpdaterTest -Condition ($snapshots[0].Name -notlike "*pre-major*") -Message "同 major 的快照不该用 pre-major 命名（实际 $($snapshots[0].Name)）。"
     foreach ($relative in @(
             "resume_forge.db", "resume_forge.db-wal", "resume_forge.db-shm", "resume_forge.db-journal",
             "active.json", "datasets\extra.db", "datasets\extra.db-wal", "datasets\extra.db-journal"
         )) {
-        Assert-UpdaterTest -Condition (Test-Path -LiteralPath (Join-Path $snapshots[0].FullName $relative)) `
-            -Message "数据快照必须包含 $relative。"
+        Assert-UpdaterTest -Condition (Test-Path -LiteralPath (Join-Path $snapshots[0].FullName $relative)) -Message "数据快照必须包含 $relative。"
     }
 
     # 再铺 3 份旧快照：下一次快照后只保留最近 3 份，最旧的被轮转删除。
@@ -412,17 +416,44 @@ echo spawned>"$spawnMarker"
     }
     Backup-UserData
     $snapshots = @(Get-ChildItem -LiteralPath (Join-Path $fakeDataRoot "pre-update") -Directory)
-    Assert-UpdaterTest -Condition ($snapshots.Count -eq 3) `
-        -Message "快照轮转后应当只保留 3 份（实际 $($snapshots.Count)）。"
-    Assert-UpdaterTest -Condition (-not (Test-Path -LiteralPath (Join-Path $fakeDataRoot "pre-update\20260101-000000"))) `
-        -Message "最旧的快照应当被轮转删除。"
+    Assert-UpdaterTest -Condition ($snapshots.Count -eq 3) -Message "快照轮转后应当只保留 3 份（实际 $($snapshots.Count)）。"
+    Assert-UpdaterTest -Condition (-not (Test-Path -LiteralPath (Join-Path $fakeDataRoot "pre-update\20260101-000000"))) -Message "最旧的快照应当被轮转删除。"
+
+    # 跨 major：目录名 pre-major-<时间戳>，且永不被轮转清理。
+    # 造 3 份更新的普通历史目录，再拍一份跨 major 快照：清理后应剩最近 3 份普通 +
+    # 1 份新的 pre-major（此前那份普通快照被轮转掉）。
+    $FromVersion = "1.0.2"
+    $TargetVersion = "2.0.0"
+    foreach ($index in 1..3) {
+        New-Item -ItemType Directory -Path (Join-Path $fakeDataRoot ("pre-update\2099010" + $index + "-000000")) -Force | Out-Null
+    }
+    Backup-UserData
+    $snapshots = @(Get-ChildItem -LiteralPath (Join-Path $fakeDataRoot "pre-update") -Directory)
+    $pinned = @($snapshots | Where-Object { $_.Name -like "*pre-major*" })
+    $plain = @($snapshots | Where-Object { $_.Name -notlike "*pre-major*" })
+    Assert-UpdaterTest -Condition ($pinned.Count -eq 1) -Message "跨 major 快照必须用 pre-major-<时间戳> 命名（实际 $($pinned.Count) 份）。"
+    Assert-UpdaterTest -Condition ($plain.Count -eq 3) -Message "普通快照只应保留最近 3 份（实际 $($plain.Count)）。"
+    Assert-UpdaterTest -Condition ($snapshots.Count -eq 4) -Message "清理后应剩 3 份普通 + 1 份 pre-major（共 4 份，实际 $($snapshots.Count)）。"
+    Assert-UpdaterTest -Condition (-not (Test-Path -LiteralPath (Join-Path $fakeDataRoot "pre-update\20260102-000000"))) -Message "跨 major 的清理同样要把普通快照轮转到只剩 3 份。"
+
+    # 版本解析失败按跨 major 保守处理：再拍一份，仍是 pre-major 且不参与轮转计数。
+    # 快照目录名精确到秒，同一秒内的第二次调用会复用同名目录；等过一秒再拍，
+    # 让"两份 pre-major"成为可断言的确定事实。
+    Start-Sleep -Milliseconds 1100
+    $FromVersion = ""
+    $TargetVersion = ""
+    Backup-UserData
+    $snapshots = @(Get-ChildItem -LiteralPath (Join-Path $fakeDataRoot "pre-update") -Directory)
+    Assert-UpdaterTest -Condition (@($snapshots | Where-Object { $_.Name -like "*pre-major*" }).Count -eq 2) -Message "版本解析失败必须按跨 major 生成 pre-major-* 快照。"
 
     # 演练模式绝不写快照。
     $DryRun = $true
     Backup-UserData
     $snapshots = @(Get-ChildItem -LiteralPath (Join-Path $fakeDataRoot "pre-update") -Directory)
-    Assert-UpdaterTest -Condition ($snapshots.Count -eq 3) -Message "DryRun 下不该再生成快照。"
+    Assert-UpdaterTest -Condition ($snapshots.Count -eq 5) -Message "DryRun 下不该再生成快照。"
     $DryRun = $realDryRun
+    $FromVersion = $realFromVersion
+    $TargetVersion = $realTargetVersion
     $ProjectRoot = $realProjectRoot
 
     # ---- 4. 顺序不变量（源码级） -----------------------------------------------
@@ -440,6 +471,10 @@ echo spawned>"$spawnMarker"
         -Message "更新器里找不到 Backup-UserData 的调用。"
     Assert-UpdaterTest -Condition ($backupOffset -lt $copyOffset) `
         -Message "覆盖程序文件之前必须先拍数据快照（现在 Copy-ProgramFiles 在 Backup-UserData 之前）。"
+
+    # 更新前快照必须真的调用完整快照脚本（否则只剩旧的 *.db 拷贝，附件与字体会丢）。
+    $updaterSource = Get-Content -LiteralPath $UpdaterPath -Raw -Encoding utf8
+    Assert-UpdaterTest -Condition ($updaterSource -match "create_user_data_snapshot\.py") -Message "Backup-UserData 必须调用 backend\scripts\create_user_data_snapshot.py。"
 
     # 状态文件要在解压之前写好：后端轮询它确认更新器起来了，收不到就不退出应用。
     $statusOffset = Get-FirstCommandOffset -Ast $ast -Name "Write-InstallStatus"
