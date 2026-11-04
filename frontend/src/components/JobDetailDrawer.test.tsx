@@ -202,6 +202,28 @@ describe("JobDetailDrawer 带 id 的跨模块动作（RF-11）", () => {
   });
 });
 
+describe("JobDetailDrawer 操作栏分档", () => {
+  it("操作栏拆成主行与辅助行：主行 3 个、辅助行 6 个", () => {
+    renderDrawer({ ...BASE_JOB, source_url: "" });
+
+    expect(document.querySelectorAll(".job-detail-actions-primary button")).toHaveLength(3);
+    expect(document.querySelectorAll(".job-detail-actions-secondary button")).toHaveLength(6);
+    // 主行只有一个实心按钮，辅助行整行都是无边框文字按钮——"主次一眼可分"的判据。
+    expect(document.querySelectorAll(".job-detail-actions-primary .ant-btn-primary")).toHaveLength(
+      1,
+    );
+    expect(document.querySelectorAll(".job-detail-actions-secondary .ant-btn-text")).toHaveLength(
+      6,
+    );
+  });
+
+  it("有 source_url 时辅助行多出「前往投递」，共 7 个", () => {
+    renderDrawer({ ...BASE_JOB, source_url: "https://example.com/apply" });
+
+    expect(document.querySelectorAll(".job-detail-actions-secondary button")).toHaveLength(7);
+  });
+});
+
 describe("JobDetailDrawer 来源字段", () => {
   it("填写了来源时独立展示，备注正文里不再有「来源：…」行", () => {
     renderDrawer({ ...BASE_JOB, origin_source: "内推", note: "王工帮我递的简历" });

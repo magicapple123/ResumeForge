@@ -59,6 +59,12 @@ class ProfileCustomSection(Base):
     # 承载区字段：自建分区可指定一个自建文本字段承载"标签：值"（R-42 自建大字段行）；
     # 为空 = 不上纸面承载区，只作为生成素材。指向的是 field_id（逻辑引用，不建外键）。
     primary_field_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    # 需求 6：板块级「参与岗位相关性筛选」开关（0075）。true = 该板块的条目也要与 JD
+    # 关键词有交集才进候选；false（默认）= 保持历史行为，无条件全量进简历。
+    # 默认 false 是升级契约：旧库/旧备份没有这一列，读出来必须是"不参与"，与今天逐字一致。
+    filter_by_job: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="0", nullable=False
+    )
     # 条件写的版本号：改名/调整顺序后 +1，写入方带 expected_revision 防多窗口覆盖。
     revision: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)

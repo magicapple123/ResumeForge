@@ -27,10 +27,13 @@ const profileGroups = {
   "profileGroups.manager.membersHint": "基本信息始终包含；勾选后该方案显示对应板块",
   "profileGroups.manager.saveMembers": "保存板块清单",
   "profileGroups.manager.setCurrent": "设为当前方案",
+  "profileGroups.manager.setCurrentAria": "设为当前方案：{name}",
   "profileGroups.manager.current": "当前方案",
   "profileGroups.manager.default": "默认方案",
   "profileGroups.manager.editTitle": "编辑方案",
   "profileGroups.manager.rename": "编辑",
+  "profileGroups.manager.renameMenu": "重命名这个方案",
+  "profileGroups.manager.more": "方案操作",
   "profileGroups.manager.membersVisibilityHint":
     "取消勾选即在该方案资料页隐藏；隐藏的板块不参与生成与网申",
   "profileGroups.manager.createVisibilityHint": "新方案默认只显示基本信息，其余板块可逐项打开",
@@ -39,6 +42,7 @@ const profileGroups = {
   "profileGroups.manager.createdKeepEditing":
     "已新建方案「{name}」；先保存或取消编辑，再把它设为当前方案",
   "profileGroups.manager.delete": "删除方案",
+  "profileGroups.manager.deleteMenu": "删除这个方案",
   "profileGroups.manager.defaultProtected": "默认方案不可删除",
   "profileGroups.manager.groupCount": "最多 20 个方案",
   "profileGroups.manager.membersRequired": "至少保留基本信息",

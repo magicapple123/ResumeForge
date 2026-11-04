@@ -12,6 +12,7 @@
 import asyncio
 import logging
 from collections.abc import AsyncIterator
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
@@ -39,6 +40,7 @@ from ..services.interview import interview_questions as interview_questions_serv
 from ..services.interview.interview import (
     add_message,
     answered_rounds,
+    close_with_closing_remark,
     generate_question,
     generate_report,
     mark_finished,
@@ -84,20 +86,74 @@ async def _ask_next_question(
     )
 
 
-async def _finish_with_report(
-    db: Session, session: InterviewSession, provider, *, closing: str = ""
-) -> None:
-    """结束面试并写入报告；报告失败时留下说明而不是让整场面试不可用。"""
+def _close_session(session: InterviewSession, closing: str = "") -> None:
+    """**收盘**：插收尾说明 + 把状态置为 finished。不出报告。
+
+    收盘与出报告是两件事（需求 4）：轮数用尽 / 模型 ``done`` 只该收盘，报告由用户在
+    决策卡上点「结束并生成报告」时才生成。这样"面试结束"与"报告已生成"才是两个独立
+    的事实，也让**报告前追问**成为可能（追问接口只要求 ``status == FINISHED``）。
+    """
     if closing.strip():
         add_message(session, role="note", content=closing.strip())
+    mark_finished(session)
+
+
+async def _ensure_report(db: Session, session: InterviewSession, provider) -> None:
+    """确保这场面试有报告：已有就直接返回，否则现生成一份（幂等）。
+
+    报告失败时留下说明而不是让整场面试不可用：重试要再烧一次整场转录的 token，而用户
+    真正需要的是"记录还在、能复盘"。所以错误报告也算"已有报告"，不重复生成。
+    """
+    if session.report:
+        return
     try:
         session.report = await generate_report(provider, session)
     except LLMError as exc:
         logger.warning("面试报告生成失败 session=%s：%s", session.id, exc)
         session.report = {"summary": f"报告生成失败：{exc}", "error": True}
+    # 兜一层：调用方可能只要求出报告、还没收盘（历史数据 / 直连测试）。
     mark_finished(session)
     db.commit()
     db.refresh(session)
+
+
+async def _auto_close(db: Session, session: InterviewSession, provider=None) -> None:
+    """自动收尾：轮数用尽或模型 ``done`` 时**先让面试官接一句话，再收盘**。
+
+    报告仍然留给用户决定（需求 4）；这里多做的只有"最后一答的回应"：
+    直接收盘的话，界面上最后一句话是候选人的回答，紧跟着就是「本场正式问答已结束」，
+    真实面试里不会这样。所以先用一次模型调用换一段"点评最后那段 + 收尾"（
+    ``close_with_closing_remark``），把这条面试官消息落库，再收盘。
+
+    失败不阻断：模型挂掉也照样收尾（前端会用本地化兜底文案补一句），否则用户会卡在
+    一场永远结束不了的面试里。
+    """
+    # 幂等：重复调用（重试、流式与非流式都走到这里）不能写第二条收尾。
+    if session.status == INTERVIEW_STATUS_FINISHED or _has_closing_remark(session):
+        _close_session(session)
+        db.commit()
+        db.refresh(session)
+        return
+
+    if provider is not None:
+        try:
+            reply = await close_with_closing_remark(provider, session)
+        except LLMError as exc:
+            logger.warning("面试收尾回应生成失败 session=%s：%s", session.id, exc)
+            reply = ""
+        if reply:
+            add_message(session, role="interviewer", content=reply, context={"closing": True})
+
+    _close_session(session)
+    db.commit()
+    db.refresh(session)
+
+
+def _has_closing_remark(session: InterviewSession) -> bool:
+    return any(
+        item.role == "interviewer" and bool((item.context or {}).get("closing"))
+        for item in session.messages
+    )
 
 
 # ===== R-11 题库 / 答题思路 / 反向优化 的共用读取（实现见 ``interview_shared``）=====
@@ -250,9 +306,15 @@ async def _answer_after_recording(
     #   · rounds 取到上限（MAX_INTERVIEW_ROUNDS）时 index 越界，generate_question 直接抛错，
     #     最后一答变成 502，面试卡在 active 状态回不来。
     # 最后一答的点评不会丢：报告基于完整问答记录生成，那一答也在里面。
+    #
+    # 只收盘、不出报告（需求 4）：出报告要整场转录再跑一次模型，而用户在这之后可能还想
+    # 追问几轮——报告一旦先生成，追问就落不到评分里（设计如此），顺序也说不清。交给
+    # 决策卡上的「结束并生成报告」。
     if index >= session.rounds:
-        await _finish_with_report(db, session, provider)
-        return InterviewAnswerResult(session=_to_detail(session), feedback="", finished=True)
+        await _auto_close(db, session, provider)
+        return InterviewAnswerResult(
+            session=_to_detail(session), feedback="", finished=True, needs_report=True
+        )
 
     try:
         question, feedback, done = await _ask_next_question(db, session, provider)
@@ -262,21 +324,22 @@ async def _answer_after_recording(
         _mark_interrupted(db, answer)
         raise HTTPException(status_code=502, detail="面试助手暂时无法完成本轮") from None
 
-    add_message(
-        session,
-        role="interviewer",
-        content=question,
-        context={"index": index, "rounds": session.rounds, "feedback": feedback},
-    )
-    db.commit()
-
     # 模型提前结束（done）：这里的 question 按提示词约定是收尾语，存下来给用户看。
     #
     # 「自动」档还有个**下限**：`rounds_min` 之前不允许收尾。提示词是建议不是约束——实测
     # 模型会在第 3、4 轮就宣称"聊得差不多了"。所以这里兜一层：没到最早轮数时忽略 done，
     # 把它当普通一轮继续（question 仍作为下一题，用户不会因此卡住）。不重新调模型：
     # 那样既贵又可能死循环，而且模型给的这句话本身通常还是能接着聊的。
+    #
+    # `early_close` 必须在落库**之前**算：落库时的 context 要标出"这句就是收尾语"，
+    # 否则 `_auto_close` 会以为还没收尾，再补一段收尾回应，界面上就出现两句告别。
     early_close = session.rounds_min is not None and answered_rounds(session) < session.rounds_min
+    context: dict[str, Any] = {"index": index, "rounds": session.rounds, "feedback": feedback}
+    if done and not early_close:
+        context["closing"] = True
+    add_message(session, role="interviewer", content=question, context=context)
+    db.commit()
+
     if done and early_close:
         logger.info(
             "面试官试图在第 %s 轮提前收尾（最早 %s 轮），已忽略 session=%s",
@@ -286,8 +349,10 @@ async def _answer_after_recording(
         )
         done = False
     if done:
-        await _finish_with_report(db, session, provider)
-        return InterviewAnswerResult(session=_to_detail(session), feedback=feedback, finished=True)
+        await _auto_close(db, session, provider)
+        return InterviewAnswerResult(
+            session=_to_detail(session), feedback=feedback, finished=True, needs_report=True
+        )
 
     db.refresh(session)
     return InterviewAnswerResult(session=_to_detail(session), feedback=feedback, finished=False)
@@ -295,20 +360,31 @@ async def _answer_after_recording(
 
 @router.post("/{session_id}/finish", response_model=InterviewDetail)
 async def finish_session(session_id: int, request: Request, db: Session = Depends(get_db)):
-    """提前结束并出报告（用户点"结束面试"）。"""
+    """结束并出报告（候选人在决策卡上点「结束并生成报告」）。
+
+    三个分支，一条共同的不变量：**同一场面试只会有一份报告**。
+
+    · 还没收盘 → 收盘 + 生成报告（"提前结束"语义，收尾说明仍是"候选人主动结束"）；
+    · 已收盘但没有报告 → **只生成报告**。自动收尾（轮数用尽 / 模型 done）走的就是这条：
+      以前这里直接 return，会把报告整个吞掉，用户看到一片空白；
+    · 已有报告 → 直接返回。重复点是幂等的，不会生成第二份。
+    """
     session = _session_or_404(db, session_id)
-    if session.status == INTERVIEW_STATUS_FINISHED:
+    if session.report:
         return _to_detail(session)
     if answered_rounds(session) == 0:
         raise HTTPException(status_code=400, detail="还没有回答任何问题，无法生成报告")
     provider, _model = _require_provider(db)
 
     async def _generate() -> bool:
-        await _finish_with_report(db, session, provider, closing="（候选人主动结束了这场面试）")
+        # 只在真正"提前结束"时补收尾说明；自动收尾那场已经收盘，再加一条就成了重复的话。
+        if session.status != INTERVIEW_STATUS_FINISHED:
+            _close_session(session, "（候选人主动结束了这场面试）")
+        await _ensure_report(db, session, provider)
         return True
 
     # 报告是整场转录再跑一次模型（最慢的一段）：客户端断开就停，报告一个字也不写，
-    # 用户回来点「结束面试」可以再来一次。
+    # 用户回来点「结束并生成报告」可以再来一次。
     finished = await run_until_disconnect(request, _generate(), what="面试报告生成")
     if finished is None:
         raise client_gone("面试报告生成")
@@ -346,8 +422,10 @@ def report_to_material(session_id: int, db: Session = Depends(get_db)):
 
 
 def _answer_stream_events(db, session, provider, index, answer) -> AsyncIterator[str]:
+    # 收尾钩子与请求链路同一个：走到轮数上限时先让面试官回应最后一答、再收盘，
+    # 报告仍交给决策卡（不在这里生成）。
     return make_answer_stream(
-        _finish_with_report,
+        _auto_close,
         _to_detail,
         _resume_text,
         _session_job_text,

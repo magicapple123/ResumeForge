@@ -11,7 +11,12 @@
 from __future__ import annotations
 
 import pytest
-from app.services.profile import definition_store, field_preferences
+from app.services.profile import (
+    definition_catalog,
+    definition_store,
+    field_preferences,
+    profile_reader,
+)
 from app.services.profile.errors import RevisionConflict, ValidationError
 
 PROJECT_TITLE = "projects.outcome_type"  # 目录里 default_collapsed=True
@@ -216,3 +221,64 @@ def test_preference_map_exposes_stored_state(db_session):
         field_id: bool(pref.hidden)
         for field_id, pref in field_preferences.load_preferences(db_session).items()
     } == {PROJECT_TITLE: True}
+
+
+# --- 7-B：hidden 的公开读取入口（唯一实现，全局搜索复用）---------------------------------
+def test_hidden_field_ids_is_empty_when_nothing_is_hidden(db_session):
+    """空集合：偏好行缺失 = 没隐藏（不为 106 个字段预建行）。"""
+    assert field_preferences.hidden_field_ids(db_session) == frozenset()
+    # 搜索判据在空库上只剩 private，且 private 来自目录（不来自偏好）。
+    assert field_preferences.search_excluded_field_ids(
+        db_session
+    ) == definition_catalog.private_field_ids()
+    assert definition_catalog.private_field_ids() == frozenset({"credentials.credential_number"})
+
+
+def test_hidden_field_ids_spans_sections_and_custom_fields(db_session):
+    """多分区 + 自建字段：一个入口覆盖内置与自建，显式 hidden=False 不算隐藏。"""
+    field_preferences.patch_preference(
+        db_session, PROJECT_TITLE, section_key="projects", hidden=True
+    )
+    # 显式恢复显示的内置字段：偏好行存在但 hidden=False，不属于隐藏集合。
+    field_preferences.patch_preference(db_session, "skills.name", section_key="skills", hidden=False)
+    custom = definition_store.create_custom_field(db_session, "projects", "导师姓名", "single_line")
+    field_preferences.patch_preference(
+        db_session, custom.field_id, section_key="projects", hidden=True
+    )
+
+    hidden = field_preferences.hidden_field_ids(db_session)
+    assert hidden == frozenset({PROJECT_TITLE, custom.field_id})
+    assert "skills.name" not in hidden
+    # 搜索判据 = hidden ∪ private。
+    assert field_preferences.search_excluded_field_ids(db_session) == hidden | frozenset(
+        {"credentials.credential_number"}
+    )
+
+
+def test_search_excluded_ids_ignore_material_only(db_session):
+    """仅素材 ≠ 不可搜索：material_only 字段即便恒不上纸面也必须留在可搜索集合外。"""
+    material = definition_store.create_custom_field(
+        db_session, "projects", "内部素材", "single_line", material_only=True
+    )
+    assert material.material_only is True
+    assert field_preferences.hidden_field_ids(db_session) == frozenset()
+    assert material.field_id not in field_preferences.search_excluded_field_ids(db_session)
+
+    # 用户手动隐藏它之后才进集合（两个开关彼此独立）。
+    field_preferences.patch_preference(
+        db_session, material.field_id, section_key="projects", hidden=True
+    )
+    assert material.field_id in field_preferences.search_excluded_field_ids(db_session)
+
+
+def test_profile_reader_consumes_the_shared_hidden_ids(db_session):
+    """消费层与搜索层读同一份 hidden：改一处两边同时变（不再是两份实现）。"""
+    field_preferences.patch_preference(
+        db_session, PROJECT_TITLE, section_key="projects", hidden=True
+    )
+    profile = profile_reader.load_all_consumed_profile(db_session)
+    visible_ids = {
+        spec.field_id for section in profile.sections.values() for spec in section.fields
+    }
+    assert PROJECT_TITLE not in visible_ids
+    assert PROJECT_TITLE in field_preferences.hidden_field_ids(db_session)

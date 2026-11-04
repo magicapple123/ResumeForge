@@ -85,6 +85,44 @@
   font-size: 12px;
 }
 
+/* 批量 AI 的跨页浮条（问题 15）：任务在跑、用户已切到别的页面时的唯一出口。
+   只在非岗位页渲染（岗位页有工具栏内联进度），空闲时组件自身 return null。
+   - 贴内容区左下（`--rf-sider-width` 与 `.app-main` 的 margin-left 同源，折叠/手机档自动对齐）；
+   - `bottom: 88px` 让开右下角投投悬浮球（距底 24 + 高 64）与「我的资料」底部编辑条（高 56）；
+   - 层级 40：高于页头（10）与页面局部浮层（个位数），远低于弹层基座（3100）。 */
+.bulk-ai-floating-bar {
+  position: fixed;
+  left: calc(var(--rf-sider-width) + 24px);
+  bottom: 88px;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  box-sizing: border-box;
+  max-width: min(520px, calc(100vw - var(--rf-sider-width) - 120px));
+  padding: 8px 10px 8px 14px;
+  border: 1px solid var(--rf-border);
+  border-radius: 10px;
+  background: var(--rf-surface);
+  box-shadow: 0 6px 18px color-mix(in srgb, var(--rf-brand) 16%, transparent);
+}
+
+.bulk-ai-floating-spin {
+  flex: 0 0 auto;
+  color: var(--rf-info);
+}
+
+/* 进度文案可能很长（岗位名）：让它自己省略，不把按钮挤出浮条。 */
+.bulk-ai-floating-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 12px;
+}
+
+.bulk-ai-floating-actions {
+  flex: 0 0 auto;
+}
+
 /* 岗位解读弹窗：计时文案与操作按钮（此前是内联 style，颜色/间距统一收到这里）。 */
 .job-analysis-elapsed {
   margin: 8px 0 0;
@@ -94,6 +132,17 @@
 .job-analysis-actions {
   margin-top: 12px;
   text-align: right;
+}
+
+/* 完成弹窗（`utils/taskNotify` 的 modal 分支）的动作区。
+   必须真的存在：此前动作按钮挂的 `.task-notice-actions` 全项目零命中，`Space` 保持
+   inline-flex 嵌在说明句子中间，把一句话挤断。这里让它自成一行并靠右，与 antd 弹窗
+   footer 的惯例一致；间距用 gap 而不是给每颗按钮加 margin，换行后也不会糊在一起。 */
+.task-notice-footer {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
 }
 
 /* 「上下文」与「全局动作」之间的一根细线：四个元素排一行时，靠它分组才不糊成一片。 */

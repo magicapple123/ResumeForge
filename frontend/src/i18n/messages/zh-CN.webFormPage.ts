@@ -17,6 +17,11 @@ const webFormPage = {
   "webFormPage.stagedAi.apply": "应用",
   "webFormPage.card.pending": "页面还要求这些",
   "webFormPage.card.records": "填充记录",
+  "webFormPage.scope.title": "取数范围",
+  "webFormPage.scope.group": "仅当前方案",
+  "webFormPage.scope.all": "全部资料",
+  "webFormPage.scope.hint":
+    "默认只用当前方案里的资料。切到「全部资料」后，预览、资料清单与自动填表会一起换成同一份数据。",
   "webFormPage.toast.targetOpened": "目标网申页面已打开；已有网页不会被覆盖",
   "webFormPage.toast.browserStarted":
     "浏览器已启动。请在这个窗口里打开目标公司的网申页面，再回来点「读取当前表单」",

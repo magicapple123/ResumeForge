@@ -20,13 +20,18 @@ const claimDraftModal = {
   "claimDraftModal.category.awards": "Awards",
   "claimDraftModal.category.other": "Other",
 
-  "claimDraftModal.placeholder.subject": "Subject (optional, e.g. the project name)",
+  "claimDraftModal.placeholder.subjectExample": "e.g. the project name",
   "claimDraftModal.placeholder.rawText":
     "Paste the original material here - the more specific the better. Anything you leave out will not be filled in.",
+  "claimDraftModal.label.category": "Category",
+  "claimDraftModal.label.subject": "Subject",
   "claimDraftModal.action.generate": "Generate drafts",
+  "claimDraftModal.action.regenerate": "Regenerate",
   "claimDraftModal.action.saveSelected": "Save {count} selected",
+  "claimDraftModal.regenerate.confirm": "Regenerating will overwrite edits to the current drafts",
 
-  "claimDraftModal.empty.noDrafts": "No drafts yet",
+  "claimDraftModal.empty.nothingExtracted":
+    "No facts worth saving were extracted from this material…",
   "claimDraftModal.placeholder.title": "Title",
   "claimDraftModal.placeholder.sourceFact": "Source fact",
   "claimDraftModal.placeholder.candidateWording":

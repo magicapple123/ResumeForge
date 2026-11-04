@@ -29,7 +29,8 @@ def _load_record(db: Session, resume_id: int) -> ResumeRecord:
 def ats_check(resume_id: int, payload: AtsCheckRequest, db: Session = Depends(get_db)):
     record = _load_record(db, resume_id)
     content, _conversion = document_io.document_for_record(db, record)
-    return check_ats(content, jd_text=payload.jd_text, resume_id=resume_id)
+    # 面板是唯一面向用户的 ATS 出口：这里打开产物解析检查（真渲染 PDF 再读回来）。
+    return check_ats(content, jd_text=payload.jd_text, resume_id=resume_id, parse_check=True)
 
 
 __all__ = ["router"]

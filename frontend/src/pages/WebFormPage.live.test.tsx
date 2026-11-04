@@ -293,7 +293,10 @@ describe("WebFormPage", () => {
 
     screen.getByRole("button", { name: /读取当前表单/ }).click();
 
-    await waitFor(() => expect(apiMocks.previewWebForm).toHaveBeenCalledWith("snap-1", false));
+    // 第二个参数是 AI 开关，第三个是取数范围：点「读取」读的必须是开关上的那个范围。
+    await waitFor(() =>
+      expect(apiMocks.previewWebForm).toHaveBeenCalledWith("snap-1", false, "group"),
+    );
   });
 
   it("turns the AI switch off-limits when no model is configured", async () => {
@@ -375,7 +378,8 @@ describe("WebFormPage", () => {
     );
     fireEvent.click(screen.getByRole("button", { name: "开启智能逐项填表" }));
 
-    await waitFor(() => expect(apiMocks.startWebFormLive).toHaveBeenLastCalledWith(false));
+    // 第二个参数是取数范围，未选择过时为默认的「仅当前方案」。
+    await waitFor(() => expect(apiMocks.startWebFormLive).toHaveBeenLastCalledWith(false, "group"));
   });
 
   it("lists the fields the page asks for but the profile has not got", async () => {

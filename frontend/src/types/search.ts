@@ -5,7 +5,13 @@ import type { JobList } from "./job";
 import type { ResumeBrief } from "./resume";
 
 /** 全局搜索"更多结果"覆盖的数据域。 */
-export type SearchHitType = "referral" | "reminder" | "experience" | "claim" | "material" | "skill";
+export type SearchHitType =
+  | "referral"
+  | "reminder"
+  | "experience"
+  | "claim"
+  | "material"
+  | "profile";
 
 /** 扩展数据域里的一条命中结果，放在 ``SearchResult.more`` 中。 */
 export interface SearchHit {
@@ -15,6 +21,8 @@ export interface SearchHit {
   subtitle: string;
   /** 指向真实前端路由，前端据此跳转。 */
   path: string;
+  /** 只对 ``profile`` 命中下发：条目所在板块 key（内置 key 或 `custom:<id>`）。 */
+  section_key?: string | null;
 }
 
 export interface SearchResult {
@@ -25,7 +33,7 @@ export interface SearchResult {
    */
   jobs: JobList[];
   resumes: ResumeBrief[];
-  /** 内推 / 提醒 / 面经 / 台账 / 资料 / 技能 的命中结果。 */
+  /** 内推 / 提醒 / 面经 / 台账 / 资料 / 我的资料 的命中结果。 */
   more: SearchHit[];
 }
 

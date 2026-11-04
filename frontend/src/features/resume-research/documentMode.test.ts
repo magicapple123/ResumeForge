@@ -18,6 +18,7 @@ import {
   pageLimitOptions,
   pageLimitRange,
 } from "./documentMode";
+import { UNLIMITED_PAGE_LIMIT } from "../../types/resume";
 
 describe("区间与默认值", () => {
   it("普通简历 1–3 页、长 CV 1–10 页（与后端一致）", () => {
@@ -34,9 +35,17 @@ describe("区间与默认值", () => {
     expect(defaultPageLimit("long_cv")).toBe(2);
   });
 
-  it("可选页数列表首尾正确", () => {
-    expect(pageLimitOptions("resume")).toEqual([1, 2, 3]);
-    expect(pageLimitOptions("long_cv")).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+  it("可选页数列表首尾正确（末尾追加「不限」= 0）", () => {
+    expect(pageLimitOptions("resume")).toEqual([1, 2, 3, 0]);
+    expect(pageLimitOptions("long_cv")).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 0]);
+  });
+
+  it("「不限」不会被 clampPageLimit 打回 1 页", () => {
+    expect(clampPageLimit("resume", UNLIMITED_PAGE_LIMIT)).toBe(UNLIMITED_PAGE_LIMIT);
+    expect(clampPageLimit("long_cv", UNLIMITED_PAGE_LIMIT)).toBe(UNLIMITED_PAGE_LIMIT);
+    // 正常档位仍按区间夹紧（回归：这条不能因为放行 0 而失效）
+    expect(clampPageLimit("resume", 9)).toBe(3);
+    expect(clampPageLimit("resume", 0.4)).toBe(1);
   });
 });
 
@@ -53,7 +62,8 @@ describe("normalizeDocumentMode", () => {
 describe("clampPageLimit", () => {
   it("按模式夹紧并取整", () => {
     expect(clampPageLimit("resume", 4)).toBe(3);
-    expect(clampPageLimit("resume", 0)).toBe(1);
+    // 0 是「不限」的合法取值（见上一条），越界由负数覆盖。
+    expect(clampPageLimit("resume", -3)).toBe(1);
     expect(clampPageLimit("long_cv", 10)).toBe(10);
     expect(clampPageLimit("long_cv", 11)).toBe(10);
     expect(clampPageLimit("long_cv", 2.6)).toBe(3);
@@ -82,5 +92,11 @@ describe("isOverBudget", () => {
     expect(isOverBudget(2, 2)).toBe(false);
     expect(isOverBudget(null, 2)).toBe(false);
     expect(isOverBudget(Number.NaN, 2)).toBe(false);
+  });
+
+  it("不限篇幅（0）永远不算超限：没有上限可比", () => {
+    // 缺陷族：把 0 当数字比大小的另一面——选了「不限」反而被告知"超出上限"。
+    expect(isOverBudget(5, 0)).toBe(false);
+    expect(isOverBudget(1, 0)).toBe(false);
   });
 });

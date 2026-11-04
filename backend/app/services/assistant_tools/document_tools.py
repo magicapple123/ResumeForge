@@ -19,6 +19,7 @@ from sqlalchemy.orm import Session
 
 from ...models.versions import ResumeVariant
 from ...schemas.preflight import PreflightRequest, PreflightSnapshot
+from ...schemas.resume_generation import UNLIMITED_PAGE_LIMIT
 from ..resume.document_pagination import build_pagination_report
 from ..resume.document_variants import list_variants, variant_brief
 from ..resume.document_versions import list_versions, version_brief
@@ -100,6 +101,9 @@ def _tool_get_resume_status(db: Session, arguments: dict) -> ToolResult:
         template=settings["template"],
         format_config=settings["format_config"],
         page_limit=settings["page_limit"],
+        # 与 /pagination/report 同口径：报告的布尔字段说的也是"用户选的是不限"，
+        # 不是"渲染保护上限正好 10 页"。助手话术本来就按这个语义说，报告别自相矛盾。
+        page_limit_is_unlimited=bool(settings.get("page_limit_is_unlimited")),
         font_scale=settings["font_scale"],
         include_photo=True,
         language=settings["language"],
@@ -116,11 +120,18 @@ def _tool_get_resume_status(db: Session, arguments: dict) -> ToolResult:
     pages = int(report.get("pages") or 0)
     page_limit = int(report.get("page_limit") or settings["page_limit"])
     overflow = bool(report.get("overflow"))
-    reading = (
-        f"按当前排版需要 {pages} 页（上限 {page_limit} 页），溢出={'是' if overflow else '否'}"
-    )
-    if truncated:
-        reading += f"；超出上限的内容从「{truncated['section_label']}」开始被截断"
+    # 「不限篇幅」：``settings["page_limit"]`` 已经是渲染保护上限（10），照它说成
+    # "上限 10 页"等于替用户改口；这里按语义把话说明白（汇报 0，与导出头/前端同一口径）。
+    unlimited = bool(settings.get("page_limit_is_unlimited"))
+    limit_phrase = "不限篇幅" if unlimited else f"上限 {page_limit} 页"
+    reading = f"按当前排版需要 {pages} 页（{limit_phrase}），溢出={'是' if overflow else '否'}"
+    where = truncated.get("section_label") if isinstance(truncated, dict) else None
+    if truncated and unlimited:
+        # 不限篇幅时这里不是"用户的篇幅上限"到了，而是渲染保护上限（10 页）到了：
+        # 必须说成保护上限，不能把 10 说成用户选的那一档。
+        reading += f"；内容已超出渲染保护上限（{page_limit} 页），「{where}」之后未进入预览"
+    elif truncated:
+        reading += f"；超出上限的内容从「{where}」开始被截断"
     payload = {
         "resume_id": record.id,
         "title": record.title,
@@ -129,7 +140,8 @@ def _tool_get_resume_status(db: Session, arguments: dict) -> ToolResult:
         "pages": pages,
         "pages_needed": int(report.get("pages_needed") or pages),
         "overflow": overflow,
-        "page_limit": page_limit,
+        # 语义值：0 = 不限篇幅（和导出头 ``X-Resume-Page-Limit``、前端 ``=== 0`` 一致）。
+        "page_limit": UNLIMITED_PAGE_LIMIT if unlimited else page_limit,
         "last_page_fill": report.get("last_page_fill"),
         "truncated_at": truncated,
         "manual_breaks": manual_breaks,

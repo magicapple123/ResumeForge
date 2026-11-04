@@ -9,9 +9,11 @@
 分页（Word 没有 fpdf 那种可回读的页数）用与 PDF **同一套连续流模型**估算：
 连续内容高 ÷ 每页可用高。这个估算是"连续流"模型，与 Word 的自动分页一致，因此与
 PDF 的真实页数差在 ±1 内（容差断言见 test_docx_exporter.py）。**不缩字号**：按版式参数
-原样写入，估算页数超过 page_limit 时标记 overflow，由界面提示用户——Word 自己会顺延出
-更多页，文档里不会丢内容。没有可用的中文字体时**仍能生成**（python-docx 只写字体名，
-渲染由 Word 完成），但无法做页数估算，此时 pages=None。
+原样写入，估算页数超过 page_limit 时标记 overflow。**内容裁剪不在这里**：1-D 起由
+``export_pipeline.build_export`` 先按 PDF 版式整块裁掉越界内容再交给本模块（Word 的估算
+用来做二次收敛与 overflow 判据），因此本模块的产物永远是"给定文档的完整渲染"。
+没有可用的中文字体时**仍能生成**（python-docx 只写字体名，渲染由 Word 完成），但无法做
+页数估算，此时 pages=None。
 
 入口接受 v1 ResumeContent（读时转换）或 v2 文档/JSON；converter 是唯一的版本归一化点，
 四个出口看到的是同一套字段与顺序。
@@ -236,8 +238,11 @@ def build_resume_docx(
     版式全部来自 ResumeLayout（复用 PDF 的同一来源），页数用连续流模型估算，与 PDF 的
     真实页数差在 ±1 内。没有中文字体时仍能生成文档，只是 pages=None。
 
-    **不缩字号**：估算页数超过 page_limit 时只标记 overflow，文档本身按用户设定的版式
-    写入——Word 会自己顺延页数，不会丢内容（与 PDF 的截断不同）。
+    **本函数不缩字号、也不删内容**：估算页数超过 page_limit 时只标记 overflow，文档按
+    用户设定的版式原样写入。**「最大篇幅」的裁剪不在这一层**——它在唯一出口
+    ``export_pipeline.build_export`` 里，由 ``resume.document_truncate`` 按 PDF 同一套
+    版式整块裁掉越界内容后再调本函数（1-D 方案 A），Word 的估算只用来做二次收敛与
+    overflow 判据。所以这里"不丢内容"是本函数的边界，不是整个导出的承诺。
     """
     resolved_language = normalize_language(language)
     # 投递视角（W06 / v2 hidden）：隐藏项在排版前剔除；页数估算与文档正文因此同源。

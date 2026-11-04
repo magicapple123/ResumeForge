@@ -11,6 +11,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { PreflightOut, PreflightRequest } from "./types";
 import { usePreflight } from "./usePreflight";
 import type { runPreflight } from "./preflightApi";
+import { clearPreflightCache } from "./preflightCache";
 import { makePreflightOut } from "../../test/preflightFixtures";
 
 type Fetcher = typeof runPreflight;
@@ -27,23 +28,36 @@ function deferred<T>() {
 
 const BUILD = (): PreflightRequest => ({ layers: ["content"] });
 
-function useHarness(fetcher: Fetcher, currentKey: string | null, debounceMs = 400) {
+function useHarness(
+  fetcher: Fetcher,
+  currentKey: string | null,
+  debounceMs = 400,
+  resumeId = 7,
+) {
   // renderHook 的回调就是 Hook 宿主；用命名组件包一层，规则扫描器才认得出这是组件边界。
-  function Probe({ hookKey }: { hookKey: string | null }) {
+  function Probe({
+    hookKey,
+    hookResumeId = 7,
+  }: {
+    hookKey: string | null;
+    hookResumeId?: number;
+  }) {
     return usePreflight({
-      resumeId: 7,
+      resumeId: hookResumeId,
       currentKey: hookKey,
       buildRequest: BUILD,
       fetcher,
       debounceMs,
     });
   }
-  return renderHook(Probe, { initialProps: { hookKey: currentKey } });
+  return renderHook(Probe, { initialProps: { hookKey: currentKey, hookResumeId: resumeId } });
 }
 
 afterEach(() => {
   vi.useRealTimers();
   vi.restoreAllMocks();
+  // 缓存是模块级单例：用例之间必须清掉，否则"卸载再挂载"会读到上一条用例的结果。
+  clearPreflightCache();
 });
 
 describe("usePreflight：请求编排", () => {
@@ -76,7 +90,7 @@ describe("usePreflight：请求编排", () => {
     act(() => {
       void result.current.run();
     });
-    rerender({ hookKey: "k2" });
+    rerender({ hookKey: "k2", hookResumeId: 7 });
     await act(async () => {
       pending.resolve(makePreflightOut());
       await pending.promise;
@@ -92,7 +106,7 @@ describe("usePreflight：请求编排", () => {
       await result.current.run();
     });
     expect(result.current.stale).toBe(false);
-    rerender({ hookKey: "k2" });
+    rerender({ hookKey: "k2", hookResumeId: 7 });
     expect(result.current.stale).toBe(true);
     expect(fetcher).toHaveBeenCalledTimes(1);
   });
@@ -145,5 +159,66 @@ describe("usePreflight：请求编排", () => {
       await Promise.resolve();
     });
     expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("usePreflight：跨页面保留（22a）", () => {
+  it("卸载再挂载（同一简历同一 key）：直接 ready，且不发第二次请求", async () => {
+    const fetcher = vi.fn(async () => makePreflightOut()) as unknown as Fetcher;
+    const first = useHarness(fetcher, "k1");
+    await act(async () => {
+      await first.result.current.run();
+    });
+    expect(first.result.current.status).toBe("ready");
+    first.unmount();
+
+    const second = useHarness(fetcher, "k1");
+    expect(second.result.current.status).toBe("ready");
+    expect(second.result.current.result).not.toBeNull();
+    // 恢复的 resultKey 就是当时的 key：内容没变，不该冒出"结果基于上一版"。
+    expect(second.result.current.stale).toBe(false);
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+
+  it("卸载后内容变了再回来：直接 ready 但 stale=true（提示重新检查）", async () => {
+    const fetcher = vi.fn(async () => makePreflightOut()) as unknown as Fetcher;
+    const first = useHarness(fetcher, "k1");
+    await act(async () => {
+      await first.result.current.run();
+    });
+    first.unmount();
+
+    const second = useHarness(fetcher, "k2");
+    expect(second.result.current.status).toBe("ready");
+    expect(second.result.current.result).not.toBeNull();
+    expect(second.result.current.stale).toBe(true);
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+
+  it("切换简历（resumeId 变）不显示上一份的清单", async () => {
+    const fetcher = vi.fn(async () => makePreflightOut()) as unknown as Fetcher;
+    const { result, rerender } = useHarness(fetcher, "k1", 400, 7);
+    await act(async () => {
+      await result.current.run();
+    });
+    expect(result.current.result).not.toBeNull();
+
+    rerender({ hookKey: "k1", hookResumeId: 8 });
+    expect(result.current.result).toBeNull();
+    expect(result.current.status).toBe("idle");
+  });
+
+  it("clear() 同时清掉缓存：下次挂载回到空态", async () => {
+    const fetcher = vi.fn(async () => makePreflightOut()) as unknown as Fetcher;
+    const first = useHarness(fetcher, "k1");
+    await act(async () => {
+      await first.result.current.run();
+    });
+    act(() => first.result.current.clear());
+    first.unmount();
+
+    const second = useHarness(fetcher, "k1");
+    expect(second.result.current.status).toBe("idle");
+    expect(second.result.current.result).toBeNull();
   });
 });

@@ -42,8 +42,10 @@ from ..services.profile import (
     definition_store,
     field_placement,
     field_preferences,
+    header_field_values,
     workspace_bootstrap,
 )
+from ..services.profile.ai_profile import load_ai_consumed_profile
 from ..services.resume import document_catalog
 from ..services.resume.resume_labels import field_labels, normalize_language
 
@@ -88,6 +90,8 @@ def section_out(section: Any) -> SectionOut:
         fields=[field_out(item) for item in section.fields],
         revision=section.revision,
         deleted_at=getattr(section, "deleted_at", None),
+        # 需求 6：板块级「参与岗位相关性筛选」开关（内置分区恒 False）。
+        filter_by_job=bool(getattr(section, "filter_by_job", False)),
     )
 
 
@@ -125,10 +129,16 @@ def read_field_placement_catalog(language: str = "zh-CN", db: Session = Depends(
 
     资料页与制作台共用这一份，避免前端复制 type→placement 的映射。自定义字段的默认
     位置来自 0069 的定义列；仅素材字段的 placement 恒为 hidden（D6）。
+
+    6-A（B 方案）：页眉段额外带上**当前值的只读拷贝**（``value``），制作台「添加页眉
+    字段」时直接带值落地。值是当前组 ``basic_info`` 那条 singleton 条目的快照，私密
+    字段 / 照片 / 未填字段为空串；旧前端忽略该字段即可（默认 ``""``）。
     """
     lang = normalize_language(language)
     labels = field_labels(lang)
     custom = field_placement.custom_field_definitions(db)
+    # 只读一次消费快照：目录端点本来就只在页面挂载时调一次（前端有会话级缓存）。
+    header_values = header_field_values.header_field_value_map(load_ai_consumed_profile(db))
 
     # 页眉目录：契约名 header_fields（header 保留同值别名，兼容旧读法）。
     header_fields = [
@@ -138,6 +148,7 @@ def read_field_placement_catalog(language: str = "zh-CN", db: Session = Depends(
             placement=spec.placement,
             format=spec.fmt,
             source_field_id=spec.profile_key,
+            value=header_values.get(spec.key, ""),
         )
         for spec in document_catalog.HEADER_FIELDS
     ]

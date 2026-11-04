@@ -19,6 +19,7 @@ import re
 
 from ..schemas.ats import AtsIssue
 from ..schemas.resume import ResumeContent
+from .ats_keywords import _STUFFING_TITLE
 from .resume.document_view import document_text, header_text, section_texts
 
 # 容易被 ATS 误解析、或让版面显得不专业的符号：emoji、方框线、带圈数字、杂项符号。
@@ -335,25 +336,54 @@ def _subscore(issues: list[AtsIssue], category: str) -> int:
     return max(0, 100 - penalty)
 
 
-def _subscore_format(issues: list[AtsIssue]) -> int:
-    return _subscore(issues, "format")
+def _subscore_format(issues: list[AtsIssue], ratio: float = 0.0) -> int:
+    """格式分项：基础扣分 + 量化加分（最多 10），clamp 到 100。
 
-
-def _subscore_keyword(issues: list[AtsIssue], ratio: float) -> int:
-    """关键词分项：基础扣分 + 量化加分（最多 10），再 clamp 到 100。"""
+    量化加分**从关键词分项挪到这里**（2026-11）：旧口径把"简历带数字的条目占比"加进
+    关键词分，与关键词覆盖率毫无关系——覆盖率 0% 的简历能靠 10 分加分拿到关键词 98。
+    加分量本身保留（``_QUANTIFY_BONUS_MAX``），只是现在加在"格式/量化"这个它真正
+    描述的维度上。``ratio`` 省略时按 0 处理，旧调用方（只传 issues）行为不变。
+    """
     bonus = min(_QUANTIFY_BONUS_MAX, round(ratio * _QUANTIFY_BONUS_MAX))
-    return min(100, _subscore(issues, "keyword") + bonus)
+    return min(100, _subscore(issues, "format") + bonus)
+
+
+def _subscore_keyword(issues: list[AtsIssue], coverage: float) -> int:
+    """关键词分项 = 覆盖率得分 − 堆砌扣分（量化加分已挪到格式分项）。
+
+    覆盖率就是这一项的得分（``round(100 * coverage)``），不再走"严重程度扣分"：
+    旧口径下缺 1 个核心词与缺 12 个都只扣 12 分，等于没有覆盖率。
+
+    ``coverage`` **必须是 float**（调用方只在有覆盖率时才计入这一项）：旧签名允许
+    ``None`` 并按满分计，于是"没有分母"能被算成 100 分——这是本次要删掉的陷阱。
+
+    堆砌与覆盖是两件事，必须分开扣：一个关键词写 20 遍不能把覆盖率的问题掩盖掉。
+    堆砌条目按标题识别（标题是 ``ats_keywords._STUFFING_TITLE``，与问题生成处同一常量）。
+    """
+    base = round(100 * coverage)
+    penalty = sum(
+        _SEVERITY_PENALTY.get(issue.severity, 0)
+        for issue in issues
+        if issue.category == "keyword" and issue.title == _STUFFING_TITLE
+    )
+    return max(0, base - penalty)
 
 
 def _subscore_position(issues: list[AtsIssue]) -> int:
     return _subscore(issues, "position")
 
 
-def _total_score(subscores: dict[str, int]) -> int:
-    """加权总分：格式 40% + 关键词 40% + 位置 20%。"""
+def _total_score(subscores: dict[str, int]) -> int | None:
+    """加权总分：格式 40% + 关键词 40% + 位置 20%。
+
+    缺 ``keyword`` 分项（没有 JD → 没有目标词）时返回 ``None``：三档权重固定，
+    少一档无论怎么补都会算出一个错的数。``None`` 在契约里就是"没有参考分"。
+    """
+    if "keyword" not in subscores:
+        return None
     total = (
         _WEIGHT_FORMAT * subscores.get("format", 0)
-        + _WEIGHT_KEYWORD * subscores.get("keyword", 0)
+        + _WEIGHT_KEYWORD * subscores["keyword"]
         + _WEIGHT_POSITION * subscores.get("position", 0)
     )
     return max(0, min(100, round(total)))

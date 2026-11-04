@@ -1,6 +1,13 @@
 /* SPDX-License-Identifier: Apache-2.0 */
-/* 简历面板（3/3）：设置分页、预览弹窗底部操作条、版面诊断/自动一页、板块顺序与缩放弹窗。
-拆分自 resume.css，纯搬迁、规则内容与顺序不变。 */
+/* 简历面板（3/4）：设置分页、预览弹窗底部操作条。
+拆分自 resume.css，纯搬迁、规则内容与顺序不变。
+2026-11 问题 20：版面诊断 / 自动一页 / 板块顺序 / 缩放提示另切成
+`resume-panels-diagnostics.css`（见下方 @import，纯搬迁）。
+@import 必须位于任何规则之前，所以分片在本文件顶部生效——两段的类名互不相交，
+层叠顺序对它们没有影响。 */
+@import "./resume-panels-diagnostics.css";
+@import "./resume-writing.css";
+@import "./resume-coverage.css";
 
 /* 设置卡片之间的留白。2026-10-24 从 16px 放宽到 22px：这些卡都带 1px 边框 + 独立标题栏，
    16px 时两张卡的边框几乎连成一条线（用户截图："公告提醒"与"帮助与诊断"挨得太近）。 */
@@ -57,6 +64,10 @@
 /* 简历预览弹窗的底部操作条：**吸附在弹窗底部**，内容再长也不用翻到最后才点得到。
    主网格是 CSS Grid：每个主按钮独占一格、block 拉满整格，自动铺满整行、不留右侧空当
    （原先 flex space-between 在窄一档时右边会留出大片空白）。
+   **必须是 `auto-fit`**：`auto-fill` 会为装不满的行保留空轨道——生成预览只有 4 个主按钮、
+   912px 正文下网格是 5 列，第 5 列恒为空；`auto-fit` 才把空轨道折叠掉（2026-11 问题 3）。
+   间距口径（2026-11 统一）：**组内 8px / 组间 12px**——同一行的按钮之间 8px，换行得到的
+   下一组之间 12px，与右侧动作组的 `gap: 8px` 对齐。
    列数随宽度在 2～5 之间变（正文 912px → 5 列，700px → 4 列，500px → 3 列），所以
    尾行里**任何"从第 N 列起"的写法都会在某个宽度档上失效**——原因见 tail 的注释。 */
 .resume-detail-footer {
@@ -64,13 +75,31 @@
   bottom: 0;
   z-index: 1;
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-  gap: 10px 12px;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 12px 8px;
   width: 100%;
   margin-top: 16px;
   padding: 12px 0 4px;
   background: var(--rf-surface, var(--rf-surface));
   border-top: 1px solid var(--rf-border, var(--rf-border));
+}
+
+/* 主按钮行允许折行（2026-11 问题 20b，只在英文界面暴露）。
+   格子宽度被 `1fr` 锁死在等分（五个按钮时约 176px），而 antd Button 默认
+   `white-space: nowrap` + `overflow: visible`——英文标签比格子宽时**从盒子里溢出来**，
+   压到右边那个按钮的左边框上，两个按钮之间看起来没有边界。
+   这里把"比格子宽"的兜底从"溢出"改成"折行"：`height: auto` + `min-height: 32px`
+   保住与同行按钮同一档的高度，`line-height: 1.35` 让两行不至于顶出格子。
+   **必须是直接子元素（`>`）**：尾行（质量检测 / 离线分享 / 导出）住在
+   `.resume-detail-footer-tail` 里，它的按钮高度不能被这条规则改掉。
+   不用 `text-overflow: ellipsis`：被截成「Revise with A…」比折行更难读，而且 antd 的
+   省略需要额外 `overflow: hidden`，会把图标一起裁掉。 */
+.resume-detail-footer > .ant-btn {
+  height: auto;
+  min-height: 32px;
+  padding-block: 4px;
+  line-height: 1.35;
+  white-space: normal;
 }
 
 /* 「导出」按钮组：只按内容宽度渲染、靠右收尾（它是这一步的终点动作，位置固定才好找）。
@@ -82,7 +111,7 @@
   align-items: center;
   justify-content: flex-end;
   flex-wrap: wrap;
-  gap: 8px 12px;
+  gap: 8px;
 }
 
 /* 尾行：左侧两个次动作（质量检测 / 离线分享）+ 右侧动作组（完成… + 导出）。
@@ -104,7 +133,7 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 10px 12px;
+  gap: 12px 8px;
 }
 
 /* 左侧两个次动作：宽度取主网格的最小列宽 150px（即 `minmax(150px, 1fr)` 的下界，
@@ -113,9 +142,10 @@
 
    "左右同排"的换行阈值按最宽形态算（右侧是「去简历中心 / 重新生成 / 完成 / 导出」，
    浏览器实测自然宽度 ≈299px；生成弹窗以外只有「导出」一项，阈值更低）：
-   150 + 150 + 299 + 两处 12px 列间距 ≈ **623px** 页脚宽度。
-   视口 ≤720px 时左侧降到 120px，阈值随之降到 ≈563px。
-   两个数字都是上面几项的和，不是新引入的魔法数字；改了任一侧括号里的量就要重算。 */
+   150 + 150 + 299 + 两处 8px 列间距 ≈ **615px** 页脚宽度。
+   视口 ≤720px 时左侧降到 120px：120 + 120 + 299 + 16 ≈ **555px**。
+   两个数字都是上面几项的和，不是新引入的魔法数字；改了任一侧括号里的量就要重算
+   （2026-11 问题 3 把列间距从 12px 收敛到 8px，阈值随之从 623 / 563 变成 615 / 555）。 */
 .resume-detail-footer-tail > .ant-btn {
   flex: 0 0 auto;
   width: auto;
@@ -182,6 +212,29 @@
   }
 }
 
+/* ===== 生成说明的按段渲染（ResumeDetailPreview / rationaleParagraphs）===== */
+/* 「为什么是这样一份简历」原来是 `pre-wrap` + `margin: 0` 的一整块：6 段之间只有一个
+   行高，1000 字左右的旧记录读起来是一坨密文（2026-11 问题 11）。这里给段间距 10px、
+   行高 1.7——13px 的密集中文靠行距救可读性比加大字号更省空间。
+   颜色沿用 secondary：它是说明性内容，不该和简历正文抢。 */
+.resume-rationale-body {
+  display: grid;
+  gap: 10px;
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--rf-text-secondary);
+}
+
+.resume-rationale-body p {
+  margin: 0;
+}
+
+/* 标题式段落（以「：」结尾且不含「。」）：只加粗到 500，不放大字号——它是分组标题，
+   不是一级标题，放大反而会盖过内容。 */
+.resume-rationale-body p.resume-rationale-heading {
+  font-weight: 500;
+}
+
 /* ===== 内容来源说明（EvidencePanel）===== */
 /* 折叠条紧贴在「草稿 / 精确」切换行上方（用户截图："这两个板块的间隙，当前挨得太近"）。
    面板根节点以前**一条样式都没有**（类名写上了、CSS 里查不到），所以它和下面的预览工具栏
@@ -190,116 +243,145 @@
   margin-bottom: 12px;
 }
 
-/* ===== 版面诊断与「自动一页」 ===== */
+/* ===== 详情顶部元信息一行 / 诊断条（2026-11 问题 8） ===== */
+/* 目标：让 A4 纸面回到首屏。原来标题到纸面之间堆了 12 段元信息（≈690px），这里把
+   「Tag 行 + 本次使用 + 独立版本 + 四条诊断入口 + 两行工具栏」压成 3 行（≈110px）。
+   信息一条都没删：次要项降级成小字，诊断四块进弹层。
+   元信息行：宽度由弹窗决定（min(960px, 96vw)），窄版用容器查询，不跟视口断点走。 */
+.resume-meta-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  margin-bottom: 8px;
+}
 
-.resume-diagnosis {
-  padding: 10px 12px;
-  margin-bottom: 12px;
-  background: var(--rf-surface, var(--rf-surface));
+/* 「模型：… · 创建于 … · 求职意向：…」这一段：次要信息，压到一行的正文大小。 */
+.resume-meta-line-detail {
+  font-size: 13px;
+  min-width: 0;
+}
+
+/* 宿主塞进来的那一段（关联岗位链接 / 本次使用 / 版本血缘与投递记录）。 */
+.resume-detail-meta-extra {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+  min-width: 0;
+  font-size: 13px;
+}
+
+/* 「本次使用：默认组（17 个板块）」：行内一段，不再是独立一块。 */
+.resume-profile-usage {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* 「资料已更新」压成一行（2a：72px → 28px）：完整原文在 Tooltip 里。 */
+.resume-profile-usage-stale {
+  padding: 2px 10px;
+}
+
+.resume-profile-usage-stale .ant-alert-title {
+  font-size: 13px;
+  line-height: 20px;
+}
+
+/* 诊断条：四个入口同一行。`nowrap` 是刻意的——960px 弹窗里短标签合计 ~500px，
+   换行会把行高翻倍；窄档交给 `.resume-detail-preview` 的容器查询（见下）。 */
+.resume-diagnostics-bar {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 8px;
+  padding: 2px 4px;
   border: 1px solid var(--rf-border, var(--rf-border));
   border-radius: 8px;
 }
 
-.resume-diagnosis-head {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
+/* 容器查询的锚点：详情预览根节点。宽度来自弹窗/抽屉（用户可拖动），不是视口。 */
+.resume-detail-preview {
+  container-type: inline-size;
+}
+
+/* 单个入口：antd 的 text Button + 一颗条数徽标，高度与正文行一致（≈28px）。 */
+.resume-diagnostics-entry {
+  display: inline-flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 6px;
+  flex: 0 0 auto;
+  white-space: nowrap;
+  padding-inline: 8px;
 }
 
-.resume-diagnosis-progress {
-  display: block;
-  margin-top: 6px;
+.resume-diagnostics-count {
   font-size: 12px;
+  line-height: 18px;
+  padding-inline: 6px;
 }
 
-.resume-diagnosis-summary {
-  margin: 8px 0 0;
-  font-size: 13px;
+/* 琥珀徽标：承载「偏空 / 拥挤 / 溢出」的警告语义（问题 8 风险项里唯一会丢的维度）。 */
+.resume-diagnostics-count.is-attention {
+  color: var(--rf-accent-amber, #faad14);
+  border-color: var(--rf-accent-amber, #faad14);
+  background: color-mix(in srgb, var(--rf-accent-amber, #faad14) 12%, transparent);
 }
 
-.resume-diagnosis-list {
-  margin: 8px 0 0;
-  padding-left: 20px;
-  font-size: 13px;
-  /* 建议可能有 5~6 条，整块展开会把下方的简历预览挤到很矮（预览区高度以前是跟随
-     上方内容算的）。这里给列表一个固定上限、超出内部滚动：诊断仍然完整可读，
-     但永远不会因为"建议条数多"而占掉预览的空间。 */
-  max-height: 176px;
+/* 入口左侧那颗点：偏空 / 溢出时仍能看见"这条不是中性的"。 */
+.resume-diagnostics-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--rf-accent-amber, #faad14);
+  flex: 0 0 auto;
+}
+
+/* 弹层内容：31 条清单可能很长，限高 + 内部滚动（不改成抽屉）。 */
+.resume-diagnostics-popover {
+  min-width: 280px;
+  max-width: min(560px, 88vw);
+  max-height: 360px;
   overflow-y: auto;
   overscroll-behavior: contain;
 }
 
-.resume-diagnosis-list li {
-  margin-bottom: 4px;
-}
+/* 窄档（用户把窗口拖窄 / 抽屉形态）：允许换行，别横向溢出。
+   查询的是 `.resume-detail-preview`（宽版弹窗 ≈912px，不会命中）。 */
+@container (max-width: 560px) {
+  .resume-diagnostics-bar {
+    flex-wrap: wrap;
+  }
 
-.resume-diagnosis-floor {
-  margin-top: 10px;
-}
-
-/* ── 板块顺序（预览工具条里的「顺序」弹层） ───────────────────────────── */
-/* 弹层里的每行是「序号 + 名称 + 上下移」，宽度固定是为了让 7 行的上下按钮
-   竖向对齐——用 auto 宽度时按钮会跟着名称长短左右跳，点起来很费劲。 */
-.resume-section-order-title {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.resume-section-order-list {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 232px;
-}
-
-.resume-section-order-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 2px 4px;
-  border-radius: 6px;
-}
-
-.resume-section-order-row:hover {
-  background: var(--rf-surface-alt);
-}
-
-.resume-section-order-index {
-  flex: 0 0 18px;
-  text-align: center;
-  font-size: 12px;
-  color: var(--rf-text-tertiary);
-  font-variant-numeric: tabular-nums;
-}
-
-.resume-section-order-label {
-  flex: 1 1 auto;
-  font-size: 13px;
-}
-
-.resume-section-order-hint {
-  margin: 10px 0 0 !important;
-  font-size: 12px;
-  line-height: 1.6;
-}
-
-/* 「按住 Ctrl 滚滚轮可缩放」：与缩放百分比同一行、字号更小。
-   窄屏（预览区被压扁）时隐藏——那一行会被挤到换行，反而更乱。 */
-.resume-preview-zoom-hint {
-  margin-left: 2px;
-  font-size: 12px;
-  white-space: nowrap;
-}
-
-@media (max-width: 1092px) {
-  .resume-preview-zoom-hint {
-    display: none;
+  .resume-diagnostics-entry {
+    padding-inline: 4px;
   }
 }
+
+/* 「更多排版」的触发器：与模板/版式/语言/页数同在第一行工具栏里。 */
+.resume-more-typography {
+  display: inline-flex;
+  align-items: center;
+}
+
+/* 弹层里就是原来那一整块 `resume-measure-grid`：太窄时滑杆会挤成两行，给足宽度。 */
+.resume-more-typography-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: min(560px, 88vw);
+}
+
+/* 导出按钮上的琥珀点（问题 8 的配套）：只做视觉提示，不拦导出。 */
+.resume-export-pending {
+  display: inline-flex;
+}
+
+/* 版面诊断 / 自动一页 / 板块顺序 / 缩放提示：2026-11 问题 20 时按分段机械切到
+   `resume-panels-diagnostics.css`（纯搬迁，规则内容与顺序不变），由本文件顶部的
+   @import 引入——本文件当时正好顶到 500 行预算，页脚那条折行兜底没地方放。 */
 
 /* 全屏简历制作台的三栏外壳（`.resume-wb-*` / `.resume-zoom-workbench-wrap`）在
    `resume-workbench.css`：那一块随三栏化重写过，不是纯搬迁，留在 400 行的本文件里
@@ -319,19 +401,3 @@
 
 /* 「填入我的资料全部数据」的样式已随项 9 并进 `.resume-editor-hint-row`：
    它不再是说明文字下方独立的一行，而是同一行里贴最右的按钮（见上方规则）。 */
-
-/* ===== 写作增强的用法提示（2026-10-24） ===== */
-/* 三句话说清"贴什么 / 选什么 / 结果去哪"，放在面板最上方常驻。 */
-.resume-writing-hint .ant-alert-description {
-  font-size: 12px;
-  line-height: 1.6;
-}
-
-/* 动作切换后那一句用途说明：与上面的 Alert 同字号，紧贴在动作选择器下方——
-   它是"你刚选的那个动作会怎么改我的句子"，不是另一段总说明。 */
-.resume-writing-hint-line {
-  display: block;
-  margin-top: -6px;
-  font-size: 12px;
-  line-height: 1.6;
-}

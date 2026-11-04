@@ -24,10 +24,21 @@ const exportPanel = {
   "exportPanel.toast.savedBoth": "Also saved to {path}",
   "exportPanel.toast.overLimit":
     "“{format}” is {pages} pages, over the {limit}-page limit you selected.",
+  "exportPanel.toast.truncated":
+    "“{format}” was trimmed to the {limit}-page limit; anything beyond it is not in the file.",
   "exportPanel.toast.started": "Export started",
   "exportPanel.toast.failed": "Export failed",
   "exportPanel.toast.printFailed": "Could not open the print window",
   "exportPanel.fileName": "{record}-Resume.pdf",
+
+  "exportPanel.preflight.overflowTitle":
+    "The content needs {pages} pages; the current limit is {limit}",
+  "exportPanel.preflight.overflowBody":
+    "Content from page {next} on will not be exported — raise the limit to {pages} pages first, or export the first {limit} pages now",
+  "exportPanel.preflight.blockedTitle": "Check did not pass",
+  "exportPanel.preflight.blockedBody": "{count} issues must be fixed; exporting now will keep them",
+  "exportPanel.preflight.exportAnyway": "Export anyway",
+  "exportPanel.preflight.adjustFirst": "Adjust first",
 
   "exportPanel.format.pdf": "PDF",
   "exportPanel.format.docx": "Word",
@@ -35,6 +46,7 @@ const exportPanel = {
   "exportPanel.format.md": "Markdown",
   "exportPanel.format.txt": "Plain text",
   "exportPanel.format.json": "JSON",
+  "exportPanel.format.jsonNote": "JSON is the complete data set and is not subject to the page limit.",
   "exportPanel.format.png": "Image (PNG)",
   "exportPanel.format.pngHint":
     "Images are for job boards that require an image upload; use PDF when the application goes through ATS screening.",

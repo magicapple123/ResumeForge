@@ -21,11 +21,17 @@ import { useState } from "react";
 import { t } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
 import { setLocale } from "../../i18n/localePersistence";
-import { SUPPORTED_LOCALES, type Locale } from "../../i18n/localeTypes";
+import { SUPPORTED_LOCALES, LOCALE_ENDONYM, type Locale } from "../../i18n/localeTypes";
 
-/** 语言的显示名复用语种自己的词条（`resume.language.*`），不另造一套翻译。 */
+/**
+ * 语言的显示名用**母语名**（`LOCALE_ENDONYM`），不随界面语言变。
+ *
+ * 早先这里走 `t("resume.language.*")`：英文界面下左卡变成「Chinese」，中文用户在这个
+ * 界面上要找的是"中文"。语言选择器显示母语名是通行做法，也是 `aria-label` 该有的值。
+ * `localeDescription` 不动——它解释"切换会影响什么"，属于说明文案，应当跟随界面语言。
+ */
 function localeName(value: Locale): string {
-  return t(`resume.language.${value}`);
+  return LOCALE_ENDONYM[value];
 }
 
 function localeDescription(value: Locale): string {

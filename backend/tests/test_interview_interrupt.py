@@ -161,6 +161,45 @@ def test_reanswer_can_carry_a_new_answer(client, db_session, monkeypatch):
     assert users[0]["content"] == "补充后的回答"
 
 
+def test_stream_last_round_is_complete_and_waits_for_the_report(client, db_session, monkeypatch):
+    """流式走完**最后一轮**：那条回答是"答完了"，不是"没答完"。
+
+    存量 bug：``index >= session.rounds`` 这条分支在置 ``completed`` 之前就 return，
+    ``finally`` 于是把最后那一答标成 ``interrupted``，界面上出现「重新回答」——而面试
+    已经 finished，点下去必然 409。需求 4 把决策卡放到这个位置后，这个死路会被直接
+    摆到用户眼前，所以在这里钉死。
+
+    同时钉住新契约：轮数用尽只收盘，``needs_report`` 为真、``report`` 仍为空，
+    事件序列里也不再出现 ``phase: finishing``（此刻并没有在生成报告）。
+    """
+    _configure(monkeypatch, _Provider(chunks=[_turn_json("下一题")]))
+    session_id = _start(client, db_session, rounds=3).json()["id"]
+
+    bodies: list[str] = []
+    for _ in range(3):
+        response = client.post(
+            f"/api/interview/{session_id}/answers/stream", json={"content": "回答"}
+        )
+        assert response.status_code == 200
+        bodies.append(response.text)
+
+    users = [item for item in _messages(client, session_id) if item["role"] == "user"]
+    assert [item["status"] for item in users] == [MESSAGE_STATUS_COMPLETE] * 3
+
+    events = [
+        json.loads(line.removeprefix("data: ").strip())
+        for line in bodies[-1].splitlines()
+        if line.startswith("data: ")
+    ]
+    assert [event["type"] for event in events] == ["done"], "不该再有 phase 事件"
+    assert events[0]["result"]["finished"] is True
+    assert events[0]["result"]["needs_report"] is True
+
+    detail = client.get(f"/api/interview/{session_id}").json()
+    assert detail["status"] == "finished"
+    assert detail["report"] == {}, "只收盘，报告等用户在决策卡上确认"
+
+
 def test_a_completed_round_is_not_marked_interrupted(client, db_session, monkeypatch):
     """正常走完的一轮保持 complete，下次回答也不会被"复用"成覆盖上一条。"""
     _configure(monkeypatch, _Provider(chunks=[_turn_json("第二题"), _turn_json("第三题")]))

@@ -40,6 +40,7 @@ from typing import TYPE_CHECKING, Any
 from ..browser.cdp_client import CdpClient
 from . import live_assistant
 from ._base import WebFormConflict
+from .data.profile_snapshot import normalize_scope
 from .engine import (
     FOCUS_LISTENER_SCRIPT,
     Control,
@@ -50,7 +51,15 @@ from .engine import (
 )
 from .fields import FIELD_LABELS
 from .live_ai_worker import _AiWorker
-from .live_autofill import AutoFillProgress, AutoFillWorker, fill_current_page
+from .live_autofill import (
+    AUTOFILL_STEP,
+    AUTOFILL_TARGET,
+    REASON_INTERNAL,
+    REASON_PAGE_UNREADABLE,
+    AutoFillProgress,
+    AutoFillWorker,
+    fill_current_page,
+)
 from .live_control import (
     install_live_control_script,
     set_assistant_reply_script,
@@ -62,17 +71,20 @@ from .live_remember import LiveRememberMixin
 from .live_scripts import (
     _ACK_ASSISTANT_ASK_SCRIPT,
     _ACK_AUTOFILL_SCRIPT,
+    _ACK_SCOPE_SCRIPT,
     _HIDE_SCRIPT,
     _STATE_SCRIPT,
     _UNINSTALL_SCRIPT,
     _catalog_script,
     _clear_state_script,
+    _scope_script,
     _show_panel_script,
 )
 from .panel_copy import localize_panel
 from .panel_labels import (
     indexed_field_label,
     panel_field_display_name,
+    section_display_name,
     with_display_fields,
 )
 from .repeated_fields import field_key_for_block, field_label_for_key, split_repeated_key
@@ -102,6 +114,15 @@ if TYPE_CHECKING:
     from .live_multi import MultiLiveSession
 
 logger = logging.getLogger(__name__)
+
+# data_loader 的返回形状：**2 元组是旧契约**（测试与外部调用方），3 元组多带一份
+# 范围/被过滤清单——它与 data/catalog 出自同一次 build_webform_view，_refresh_data 按
+# 元组长度分流。两个形状都收：live_routes 传 3 元组，类型收窄回 2 元组会让 pyright
+# 把那次传参判成错误（2026-11 全仓 pyright 归零）。
+LiveDataLoader = Callable[
+    [],
+    "tuple[dict[str, str], list[dict[str, str]]] | tuple[dict[str, str], list[dict[str, str]], dict[str, Any]]",
+]
 
 # 轮询间隔。CDP 是本地回环，350ms 足够跟手，又不至于把一秒钟塞满几十次往返。
 POLL_INTERVAL_SECONDS = 0.35
@@ -148,13 +169,15 @@ class LiveSession(LiveRememberMixin):
         ai_enabled: bool = False,
         store: Callable[[dict[str, str]], bool] | None = None,
         require_memory_choice: bool = False,
-        data_loader: Callable[[], tuple[dict[str, str], list[dict[str, str]]]] | None = None,
+        data_loader: LiveDataLoader | None = None,
         autofill_data_loader: Callable[[], dict[str, str]] | None = None,
         memory_targets: list[dict[str, Any]] | None = None,
         memory_targets_loader: Callable[[], list[dict[str, Any]]] | None = None,
         relaxed_mode_loader: Callable[[], bool] | None = None,
         ui_locale_loader: Callable[[], str | None] | None = None,
         ui_locale: str | None = None,
+        scope: str = "group",
+        scope_setter: Callable[[str], None] | None = None,
     ) -> None:
         self._client = client
         self._data = dict(data)
@@ -184,6 +207,14 @@ class LiveSession(LiveRememberMixin):
         # 开启会话那一刻的界面语言：请求里有数据集身份，读到的就是用户正在用的那份设置。
         # 后台轮询线程读同一个键时没有请求身份，可能落到主数据集上，所以**优先用这个值**。
         self._ui_locale = ui_locale
+        # 取数范围（group = 仅当前方案 / all = 全部资料）。**实际取数由 loader 按这里执行**：
+        # `_scope_setter` 把新值写回 API 层的范围持有者，下一次 data_loader 读到的就是新范围，
+        # 所以 data / catalog / 预填不会各按一个范围取数（需求 3 硬约束）。
+        self._scope = normalize_scope(scope)
+        self._scope_setter = scope_setter
+        # 被当前方案过滤掉的板块与它们的清单行：每次刷新随 data 一起更新。
+        self._filtered_sections: list[dict[str, str]] = []
+        self._filtered_rows: list[dict[str, str]] = []
         self._engine = FormEngine()
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
@@ -232,6 +263,10 @@ class LiveSession(LiveRememberMixin):
             # 会话结束原因："" = 正常（没结束或用户手动停）；browser_closed = 浏览器被
             # 关闭后自动结束。前端据此给一条中性提示而不是报错。
             "stop_reason": "",
+            # 取数范围与"自动填写时因范围被跳过"的统计（面板开关与跳过清单用）。
+            "scope": self._scope,
+            "skipped_count": 0,
+            "skipped_section": "",
         }
 
     # ===== 生命周期 =====
@@ -260,9 +295,17 @@ class LiveSession(LiveRememberMixin):
         self._thread.start()
 
     def update_data(
-        self, data: dict[str, str], catalog: list[dict[str, str]] | None = None
+        self,
+        data: dict[str, str],
+        catalog: list[dict[str, str]] | None = None,
+        scope_info: dict[str, Any] | None = None,
     ) -> None:
-        """更新当前会话使用的资料与人工挑选清单。"""
+        """更新当前会话使用的资料与人工挑选清单。
+
+        ``scope_info``（范围 / 被组过滤的板块 / 这些板块的清单行）与 data、catalog 出自
+        **同一次取数**（``build_webform_view``），所以面板上的角标、空态原因与清单内容
+        不会互相矛盾。
+        """
         with self._lock:
             self._data = dict(data)
             if catalog is not None:
@@ -270,6 +313,8 @@ class LiveSession(LiveRememberMixin):
                 next_catalog = list(self._catalog)
             else:
                 next_catalog = None
+            if scope_info is not None:
+                self._apply_scope_info(scope_info)
         if next_catalog is not None:
             # 资料页可能在实时会话仍运行时被另一个界面更新。除了匹配数据要刷新，
             # 浏览器里的「换个资料」清单也必须立刻看到新条目。
@@ -277,16 +322,82 @@ class LiveSession(LiveRememberMixin):
                 self._client.evaluate(_catalog_script(self._display_catalog(next_catalog)))
             except Exception as error:  # noqa: BLE001 - 页面跳转时下一轮会重新装载
                 logger.debug("网申填表：刷新浏览器资料清单失败：%s", error)
+            self._push_scope_state()
 
-    def set_data_loader(
-        self, loader: Callable[[], tuple[dict[str, str], list[dict[str, str]]]] | None
+    def _apply_scope_info(self, info: dict[str, Any]) -> None:
+        """记下范围与"被当前方案过滤掉的板块"（调用方已持有 ``_lock``）。"""
+        self._scope = normalize_scope(info.get("scope"))
+        self._filtered_sections = [dict(item) for item in info.get("filtered_sections") or ()]
+        self._filtered_rows = [dict(item) for item in info.get("filtered_rows") or ()]
+        self.state["scope"] = self._scope
+
+    def _filtered_display(self) -> tuple[list[dict[str, str]], dict[str, str]]:
+        """（板块显示名列表, 清单 key 基础名 → 板块显示名）。
+
+        输出给面板的名字**按当前界面语言**取（``section_display_name`` 只对英文生效），
+        所以英文界面里那句「当前方案未包含…」不会夹一个中文板块名。
+        """
+        locale = self._locale()
+        sections = [
+            {
+                "key": str(item.get("key") or ""),
+                "display": section_display_name(
+                    str(item.get("key") or ""), str(item.get("name") or ""), locale
+                ),
+            }
+            for item in self._filtered_sections
+        ]
+        names = {item["key"]: item["display"] for item in sections}
+        by_key: dict[str, str] = {}
+        for row in self._filtered_rows:
+            base = split_repeated_key(str(row.get("key") or ""))[0]
+            name = names.get(str(row.get("group_key") or ""))
+            if base and name:
+                by_key[base] = name
+        return sections, by_key
+
+    def _push_scope_state(self) -> None:
+        """把范围与"被组过滤的板块"推给页面（面板顶部的开关与空态要说清原因）。"""
+        sections, _by_key = self._filtered_display()
+        try:
+            self._client.evaluate(_scope_script(self._scope, sections))
+        except Exception as error:  # noqa: BLE001 - 页面跳转时下一轮会重新装载
+            logger.debug("网申填表：刷新取数范围失败：%s", error)
+
+    def request_scope(self, scope: str) -> None:
+        """切换取数范围并让三处入口同时换代（面板开关 → Python）。
+
+        重新走一次 data_loader：loader 里的范围持有者已被 ``_scope_setter`` 改掉，所以
+        资料、清单、空态原因在同一次刷新里一起变，不会出现"清单按全部、预填按当前组"。
+        """
+        next_scope = normalize_scope(scope)
+        if next_scope == self._scope:
+            return
+        if self._scope_setter is not None:
+            self._scope_setter(next_scope)
+        self._refresh_data()
+        self._attach()
+
+    def adopt_scope(
+        self, scope: str, scope_setter: Callable[[str], None] | None = None
     ) -> None:
+        """复用已有会话时对齐范围持有者（不重取数——调用方紧接着会 update_data）。"""
+        if scope_setter is not None:
+            self._scope_setter = scope_setter
+        self._scope = normalize_scope(scope)
+        self.state["scope"] = self._scope
+
+    def set_data_loader(self, loader: LiveDataLoader | None) -> None:
         """替换资料刷新回调，供页面切换回来时复用同一会话。"""
         self._data_loader = loader
 
     def set_autofill_data_loader(self, loader: Callable[[], dict[str, str]] | None) -> None:
         """替换悬浮球整页快捷填充使用的批量资料读取回调。"""
         self._autofill_data_loader = loader
+
+    def set_scope_setter(self, setter: Callable[[str], None] | None) -> None:
+        """替换范围写回回调（复用会话时接线，**不**改变当前范围）。"""
+        self._scope_setter = setter
 
     def set_relaxed_mode_loader(self, loader: Callable[[], bool] | None) -> None:
         """替换「放宽模式」开关的读取回调（每次聚焦现读，改动即时生效）。"""
@@ -364,8 +475,15 @@ class LiveSession(LiveRememberMixin):
     def _refresh_data(self) -> None:
         if self._data_loader is not None:
             try:
-                data, catalog = self._data_loader()
-                self.update_data(data, catalog)
+                loaded = self._data_loader()
+                # 2 元组是旧契约（测试与外部调用方）；3 元组多带一份范围/差异清单，
+                # 与 data/catalog 出自同一次 build_webform_view。
+                if len(loaded) == 3:
+                    data, catalog, scope_info = loaded
+                else:
+                    data, catalog = loaded
+                    scope_info = None
+                self.update_data(data, catalog, scope_info)
             except Exception as error:  # noqa: BLE001 - 资料刷新失败不应弄死实时监听
                 logger.warning("网申填表：刷新实时资料失败，继续使用上一份资料：%s", error)
         if self._memory_targets_loader is not None:
@@ -400,6 +518,9 @@ class LiveSession(LiveRememberMixin):
         locale = self._locale()
         self._client.evaluate(_catalog_script(self._display_catalog(self._catalog)))
         self._client.evaluate(localize_panel(FOCUS_LISTENER_SCRIPT, locale))
+        # 范围与"被组过滤的板块"：面板顶部的开关、空态原因与「方案外」角标都依赖它。
+        # **必须排在面板脚本之后**——面板脚本里才定义 `__rfPaintScope` / `__rfRefreshList`。
+        self._push_scope_state()
         self._client.evaluate(install_live_control_script(self._enabled, locale))
         self._client.evaluate(memory_targets_script(self._memory_targets))
         self._client.evaluate(remember_editor_script(locale))
@@ -535,6 +656,19 @@ class LiveSession(LiveRememberMixin):
                 }
             )
             return True
+
+        # 面板/清单顶部那个范围开关：页面只放一个请求全局，由这里消费并立刻换代。
+        scope_request = payload.get("scope_request")
+        if self._enabled and isinstance(scope_request, str) and scope_request:
+            busy = True
+            try:
+                self._client.evaluate(_ACK_SCOPE_SCRIPT)
+            except Exception as error:  # noqa: BLE001 - ACK 失败不该阻止范围切换
+                logger.debug("网申填表：确认范围切换失败：%s", error)
+            try:
+                self.request_scope(scope_request)
+            except Exception as error:  # noqa: BLE001 - 切范围失败保持旧范围，别让轮询垮掉
+                logger.warning("网申填表：切换取数范围失败，继续使用当前范围：%s", error)
 
         autofill = payload.get("autofill")
         if self._enabled and isinstance(autofill, dict):
@@ -692,8 +826,16 @@ class LiveSession(LiveRememberMixin):
             label = field_label_for_key(
                 shown_key, FIELD_LABELS.get(split_repeated_key(shown_key)[0], shown_key)
             )
+            # **"方案没带这块"与"你没填过"是两件事**：前者要说清是哪个板块被过滤了，
+            # 否则用户会去「我的资料」白找一遍（问题 8）。只在「仅当前方案」范围下出现。
+            filtered_section = self._filtered_display()[1].get(split_repeated_key(shown_key)[0])
+            note = (
+                ui_text(self._locale(), "note.sectionFiltered", section=filtered_section)
+                if filtered_section
+                else ui_text(self._locale(), "note.recognizeNoValue", label=label)
+            )
             self._publish_unmatched(
-                f"认出来是「{label}」，但你的资料里还没填这一项",
+                note,
                 source=SOURCE_RULE,
                 field_label=label,
                 field_key=shown_key,
@@ -1066,6 +1208,10 @@ class LiveSession(LiveRememberMixin):
             data = dict(self._data)
         has_custom_value = bool(self._custom_value_by_label(key, data))
         if not (data.get(key) or "").strip() and not has_custom_value:
+            # 与规则路径同一分支：这块被当前方案过滤掉时，说清板块名而不是"你没填"。
+            filtered_section = self._filtered_display()[1].get(split_repeated_key(key)[0])
+            if filtered_section:
+                return ui_text(self._locale(), "note.sectionFiltered", section=filtered_section)
             return f"AI 认出来是「{label}」，但你的资料里还没填这一项"
         return f"AI 认出来是「{label}」，但页面上的选项没有对应的值"
 
@@ -1187,6 +1333,8 @@ class LiveSession(LiveRememberMixin):
             "failed": progress.failed,
             "current_label": progress.current_label,
             "message": progress.message,
+            # 稳定原因码：界面/日志按它办事，长句只作补充（空串 = 没失败）。
+            "reason": progress.reason,
         }
         try:
             self._client.evaluate(set_autofill_status_script(payload))
@@ -1205,7 +1353,7 @@ class LiveSession(LiveRememberMixin):
             except Exception as error:  # noqa: BLE001 - 快捷填充失败时沿用当前会话资料
                 logger.warning("网申填表：刷新快捷填充资料失败，继续使用当前资料：%s", error)
         try:
-            fill_current_page(
+            result = fill_current_page(
                 self._client,
                 data,
                 engine=self._engine,
@@ -1214,9 +1362,21 @@ class LiveSession(LiveRememberMixin):
                 relaxed=self._relaxed_enabled(),
                 custom_labels=custom_labels_from_catalog(catalog),
                 locale=self._locale(),
+                # 被当前方案过滤掉的字段 → 板块显示名：填完要把"因范围跳过"说清楚，
+                # 而不是让用户以为资料里根本没有。
+                filtered_fields=self._filtered_display()[1],
             )
-        except Exception as error:  # noqa: BLE001 - 失败要回显在悬浮球而不是吞掉
-            logger.warning("网申填表：自动填写当前页面失败：%s", error)
+        except (TypeError, AttributeError) as error:
+            # **编程错误不冒充页面问题**：签名漂移/属性改名以前被吞成「请刷新页面重试」，
+            # 用户照着刷一辈子也不会好（本次 fill_current_page 缺 filtered_fields 就是这么
+            # 被埋掉的）。打全栈 + 独立稳定码，界面上照实说是内部错误。
+            logger.exception(
+                "网申填表：自动填写内部错误（step=%s target=%s reason=%s）：%s",
+                AUTOFILL_STEP,
+                AUTOFILL_TARGET,
+                REASON_INTERNAL,
+                error,
+            )
             self._publish_autofill(
                 AutoFillProgress(
                     state="error",
@@ -1224,9 +1384,35 @@ class LiveSession(LiveRememberMixin):
                     completed=0,
                     filled=0,
                     failed=1,
+                    reason=REASON_INTERNAL,
+                    message=(
+                        f"自动填写内部错误（{type(error).__name__}: {error}），"
+                        "请把这句话反馈给我们"
+                    ),
+                )
+            )
+            return
+        except Exception as error:  # noqa: BLE001 - 失败要回显在悬浮球而不是吞掉
+            logger.exception("网申填表：自动填写当前页面失败：%s", error)
+            self._publish_autofill(
+                AutoFillProgress(
+                    state="error",
+                    total=0,
+                    completed=0,
+                    filled=0,
+                    failed=1,
+                    reason=REASON_PAGE_UNREADABLE,
                     message="读取当前页面失败，请刷新页面后重试",
                 )
             )
+            return
+        # 跳过清单要能在 ResumeForge 页面上看到（那里才有「切换为全部资料」的可点入口）。
+        # ``fill_current_page`` 的契约是**永远**返回结果对象；这里的 None 判据只是给
+        # 替身/旧实现留的早退口——宁可不更新计数，也不要让线程抛出去。
+        if result is None:
+            return
+        self.state["skipped_count"] = result.filtered_skipped
+        self.state["skipped_section"] = result.filtered_section
 
     # ===== 「问投投」：精简版问答 =====
     #
@@ -1266,7 +1452,7 @@ def start_live(
     ai_enabled: bool = False,
     store: Callable[[dict[str, str]], bool] | None = None,
     require_memory_choice: bool = False,
-    data_loader: Callable[[], tuple[dict[str, str], list[dict[str, str]]]] | None = None,
+    data_loader: LiveDataLoader | None = None,
     autofill_data_loader: Callable[[], dict[str, str]] | None = None,
     memory_targets: list[dict[str, Any]] | None = None,
     memory_targets_loader: Callable[[], list[dict[str, Any]]] | None = None,
@@ -1274,6 +1460,8 @@ def start_live(
     relaxed_mode_loader: Callable[[], bool] | None = None,
     ui_locale_loader: Callable[[], str | None] | None = None,
     ui_locale: str | None = None,
+    scope: str | None = None,
+    scope_setter: Callable[[str], None] | None = None,
 ) -> LiveSession | MultiLiveSession:
     """开一次会话。**已经在跑就直接返回它**——注意 ``provider`` / ``ai_enabled`` 也一并
     被忽略，AI 开关是"开启时"的设置，改动要停掉再开才生效（界面上有这句提示）。"""
@@ -1286,6 +1474,11 @@ def start_live(
             _session.set_autofill_data_loader(autofill_data_loader)
             _session.set_relaxed_mode_loader(relaxed_mode_loader)
             _session.set_ui_locale_loader(ui_locale_loader)
+            # 复用会话时只接线、不覆盖当前范围：``scope=None`` 表示调用方没带偏好，
+            # 面板上刚切好的「全部资料」不该被下一次 /live/start 悄悄重置回 group。
+            _session.set_scope_setter(scope_setter)
+            if scope is not None:
+                _session.adopt_scope(scope)
             if ui_locale:
                 _session._ui_locale = ui_locale
             _session.set_memory_choice_required(require_memory_choice)
@@ -1312,6 +1505,8 @@ def start_live(
             relaxed_mode_loader=relaxed_mode_loader,
             ui_locale_loader=ui_locale_loader,
             ui_locale=ui_locale,
+            scope=normalize_scope(scope or "group"),
+            scope_setter=scope_setter,
             **(
                 {"target_clients_loader": target_clients_loader}
                 if target_clients_loader is not None
@@ -1335,6 +1530,17 @@ def set_live_enabled(enabled: bool) -> None:
     with _session_lock:
         if _session is not None and _session.is_running:
             _session.set_enabled(bool(enabled))
+
+
+def request_live_scope(scope: str) -> None:
+    """运行中切换取数范围（面板开关与前端开关都走这里）。
+
+    会话不在跑时**什么都不做**：范围偏好由调用方自己保存，等下次开启时随 ``start_live``
+    带进来——不在这里悄悄起一个没有浏览器的会话。
+    """
+    with _session_lock:
+        if _session is not None and _session.is_running:
+            _session.request_scope(scope)
 
 
 def live_status() -> dict[str, Any]:

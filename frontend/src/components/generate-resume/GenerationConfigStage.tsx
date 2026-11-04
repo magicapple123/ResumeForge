@@ -242,14 +242,17 @@ export default function GenerationConfigStage({
       <Input.TextArea
         value={customInstruction}
         maxLength={MAX_CUSTOM_INSTRUCTION}
-        disabled={!llmReady}
+        // 问题 13：enhance=false 时 grounding 会把 description/highlights 整段换成资料原文，
+        // 补充要求只能作用于"表达"这一层，因此在这个档位下填了也一定不生效。
+        // 与其让用户填完发现没变化，不如直接禁用并说明原因（后端同时会在 warnings 里告知）。
+        disabled={!llmReady || !enhance}
         autoSize={{ minRows: 2, maxRows: 5 }}
         placeholder={t("generate.config.extraPlaceholder")}
         onChange={(event) => setCustomInstruction(event.target.value)}
       />
       <MaxLengthHint value={customInstruction} maxLength={MAX_CUSTOM_INSTRUCTION} />
       <Typography.Text type="secondary" style={{ display: "block", marginTop: 8 }}>
-        {t("generate.config.extraHint")}
+        {enhance ? t("generate.config.extraHint") : t("generate.config.extraHintNoEnhance")}
       </Typography.Text>
 
       {/* #32：取消/开始按钮已提到 Modal footer（随弹窗固定，不再跟着配置表单滚走）。 */}

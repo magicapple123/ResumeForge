@@ -331,6 +331,25 @@ HEADER_FIELDS: tuple[HeaderFieldSpec, ...] = (
     HeaderFieldSpec("github", "github", "contact", "text", "basic_info.github"),
     HeaderFieldSpec("personal_website", "website", "contact", "text", "basic_info.homepage"),
     HeaderFieldSpec("photo", "photo_alt", "photo", "text", "basic_info.photo"),
+    # 6-A（2026-11-04）：资料「基本信息」剩下的 5 个字段也进页眉目录——它们此前既没有槽位、
+    # 又被禁止写进正文、也不在覆盖度清单里，用户填了却无处可去。这里只加**目录项**
+    # （"可加"），不给 ResumeContent 加字段：``build_header_items`` 走
+    # ``getattr(content, spec.key, "")``，这 5 个 key 在 v1 内容上不存在 → 取到空串 →
+    # 直接跳过，所以默认生成产物逐字节不变（B 方案要动 v1 schema / 快照指纹，未采纳）。
+    # 值由投影响应从 ``consumed.section("basic_info")`` 下发（见 paper_projection）。
+    HeaderFieldSpec("target_city", "target_city", "contact", "text", "basic_info.target_city"),
+    HeaderFieldSpec(
+        "portfolio_url", "portfolio_url", "contact", "text", "basic_info.portfolio_url"
+    ),
+    HeaderFieldSpec(
+        "political_status", "political_status", "contact", "text", "basic_info.political_status"
+    ),
+    HeaderFieldSpec(
+        "driver_license", "driver_license", "contact", "text", "basic_info.driver_license"
+    ),
+    HeaderFieldSpec(
+        "available_date", "available_date", "contact", "text", "basic_info.available_date"
+    ),
 )
 HEADER_FIELD_MAP: dict[str, HeaderFieldSpec] = {spec.key: spec for spec in HEADER_FIELDS}
 

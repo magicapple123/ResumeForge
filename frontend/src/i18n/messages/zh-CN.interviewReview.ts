@@ -26,12 +26,23 @@ const interviewReview = {
 
   "interviewReview.card.analysis": "答题思路",
   "interviewReview.section.keyPoints": "要点",
-  "interviewReview.section.followUp": "可能的追问",
-  "interviewReview.section.pitfalls": "常见误区",
+  /**
+   * 短板 / 追问是**可编辑输入**（问题 12），标签不能再用只读列表时的「常见误区」「可能的追问」：
+   * 那两句话描述的是模型给的展示内容，不是"这里要你填什么"。
+   */
+  "interviewReview.field.weaknesses": "面试暴露的短板",
+  "interviewReview.field.followUps": "面试官的高频追问",
+  "interviewReview.placeholder.weaknesses":
+    "每行一条，例如：被问到指标口径时答不上来；留空也可以，只要追问里写了内容",
+  "interviewReview.placeholder.followUps": "每行一条，例如：这个指标具体怎么算的",
 
   "interviewReview.action.optimize": "反向优化简历",
   "interviewReview.action.save": "保存复盘",
   "interviewReview.optimize.note": "只产出建议列表，不直接改简历正文。",
+  /** 两个输入都空时的说明，同时是按钮禁用原因（此前用户只看到"请至少填写一条…"却找不到地方填）。 */
+  "interviewReview.optimize.needInput": "先写一条面试里被问住的地方，或让面试官追问过的问题",
+  /** 超过后端 `MAX_OPTIMIZE_ITEMS` 时提示：前端已截断，提交不会 422。 */
+  "interviewReview.optimize.truncated": "一次最多提交 {limit} 条，已保留前 {limit} 条",
   "interviewReview.empty": "录入问题后，先分析答题思路",
 
   "interviewReview.card.legacy": "历史复盘",

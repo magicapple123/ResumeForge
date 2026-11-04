@@ -66,6 +66,7 @@ describe("parsePaginationReport", () => {
       pages: 2,
       pagesNeeded: 3,
       pageLimit: 2,
+      pageLimitIsUnlimited: false,
       overflow: true,
       lastPageFill: null,
       truncatedAt: {
@@ -95,6 +96,48 @@ describe("parsePaginationReport", () => {
   it("非对象返回 null（界面显示还没有报告）", () => {
     expect(parsePaginationReport(null)).toBeNull();
     expect(parsePaginationReport("x")).toBeNull();
+  });
+});
+
+describe("「不限篇幅」的映射（缺陷 B）", () => {
+  /**
+   * 「不限」时后端照样回一个数字（渲染保护上限 10 页，PDF 引擎要正数 max_pages）。
+   * 把那个 10 当成用户上限，缩略图就会说「实际 3 页（上限 10 页）」，
+   * `pagination.thumbnails.summaryNoLimit` 那条分支永远走不到。
+   */
+  const UNLIMITED = {
+    pages: 3,
+    pages_needed: 3,
+    overflow: false,
+    page_limit: 10,
+    page_limit_is_unlimited: true,
+    truncated_at: null,
+    manual_breaks: [],
+    warnings: [],
+    snapshot: { content_sha256: "a".repeat(64), render_config_sha256: "b".repeat(64) },
+  };
+
+  it("不限 → pageLimit 给 null（让「没有页数上限」的分支生效），布尔留下语义", () => {
+    const report = parsePaginationReport(UNLIMITED);
+    expect(report?.pageLimit).toBeNull();
+    expect(report?.pageLimitIsUnlimited).toBe(true);
+    expect(report?.pagesNeeded).toBe(3); // 页数本身照旧可用
+    expect(report?.overflow).toBe(false);
+  });
+
+  it("有上限 → pageLimit 是数字，布尔为假（不被「不限」逻辑吞掉）", () => {
+    const report = parsePaginationReport({ ...UNLIMITED, page_limit_is_unlimited: false });
+    expect(report?.pageLimit).toBe(10);
+    expect(report?.pageLimitIsUnlimited).toBe(false);
+  });
+
+  it("旧后端缺这个字段：按「有上限」处理（不把未知当不限）", () => {
+    // 逐字删掉那个键（旧后端的响应里没有它）。
+    const withoutFlag: Record<string, unknown> = { ...UNLIMITED };
+    delete withoutFlag["page_limit_is_unlimited"];
+    const report = parsePaginationReport(withoutFlag);
+    expect(report?.pageLimit).toBe(10);
+    expect(report?.pageLimitIsUnlimited).toBe(false);
   });
 });
 

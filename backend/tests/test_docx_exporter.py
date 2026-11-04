@@ -271,6 +271,9 @@ def test_bullets_hang_so_wrapped_lines_align_with_the_text():
 
     W07 之前 Word 固定 3.0mm、PDF/HTML 读模板值（classic 1.43 × 字号 ≈ 5.3mm），三种格式的
     列表缩进不一致；现在 Word 也从 layout.li_indent 派生——**这是有意的可见变化**。
+
+    1-C：符号是 U+2022「•」（≈0.3em），不是 U+00B7「·」（≈0.15em）——后者比 PDF 的矢量圆
+    小一圈，正是"Word 里的点明显比预览小"的根因。
     """
     from app.services.pdf_exporter import resolve_layout
     from app.services.resume.resume_templates import FONT_SCALES
@@ -282,8 +285,8 @@ def test_bullets_hang_so_wrapped_lines_align_with_the_text():
     assert expected_mm != 3.0, "classic 的模板缩进不是 3.0mm，这条断言才有效"
 
     document = Document(BytesIO(build_resume_docx(_resume(), page_limit=1).content))
-    bullets = [p for p in document.paragraphs if p.text.startswith("· ")]
-    assert bullets, "列表项没有用项目符号"
+    bullets = [p for p in document.paragraphs if p.text.startswith("• ")]
+    assert bullets, "列表项没有用项目符号（U+2022）"
     for paragraph in bullets:
         # twip 取整：毫米换算成 twip 后允许 1 twip 误差。
         assert abs(paragraph.paragraph_format.first_line_indent.twips + Mm(expected_mm).twips) <= 1
@@ -335,3 +338,79 @@ def test_docx_keep_flags_are_not_written_for_plain_header_paragraphs():
     flags = _pPr_flags(name)
     assert "keepNext" not in flags
     assert "keepLines" not in flags
+
+
+# ===== 1-B：技能标签的 run 级底色 =====
+#
+# 修之前 inline 分区（专业技能 / 语言能力）是"一整段连续文字"（条目内字段用「 · 」、
+# 条目之间用「；」连起来），模板的 `tag_*`（形状 / 底色 / 内边距）Word 侧零消费——预览里
+# 每条技能是浅灰色块，导出件里是「SQL（精通）· 技能分类：编程语言；Python（熟练）」。
+# 这里从**解包后的 run** 断言底色真的落在每个标签上，而不是"我以为加上了"。
+
+SKILL_RESUME = ResumeContent(
+    name="张三",
+    summary="一句话总结。",
+    skills=[
+        {"name": "Python", "level": "熟练"},
+        {"name": "SQL", "level": "精通"},
+    ],
+)
+
+
+def _run_fill(run) -> str | None:
+    """run 级底纹的填充色（`w:rPr/w:shd/@w:fill`）；没有底纹返回 None。"""
+    rPr = run._r.find(qn("w:rPr"))
+    if rPr is None:
+        return None
+    shd = rPr.find(qn("w:shd"))
+    return None if shd is None else shd.get(qn("w:fill"))
+
+
+def _skill_paragraph(document):
+    """含第一个技能名的段落（inline 分区的标签行）。"""
+    return next(paragraph for paragraph in document.paragraphs if "Python" in paragraph.text)
+
+
+def test_docx_skill_tags_carry_a_run_level_fill():
+    """每个技能标签的首个 run 带 `w:shd`（classic 的浅灰底 #eef2f7 → `EEF2F7`）。
+
+    底纹必须是**逐标签**的：标签之间的间距 run 不带底色，否则整段又变成一块连续色带。
+    """
+    document = Document(
+        BytesIO(build_resume_docx(SKILL_RESUME, template="classic", page_limit=1).content)
+    )
+    tags = _skill_paragraph(document)
+
+    assert "SQL" in tags.text, "两个技能应落在同一段标签行里"
+    filled = [run for run in tags.runs if _run_fill(run) == "EEF2F7"]
+    assert len(filled) == 2, f"两个标签各带一块底色（实际 {len(filled)} 个）"
+    assert _run_fill(tags.runs[0]) == "EEF2F7", "标签段的首个 run 就是第一个标签"
+    assert _run_fill(tags.runs[1]) is None, "标签之间的间距 run 不该有底色"
+    # 内边距：同色边框把底纹撑开（`w:bdr/@w:space` = tag_pad_x 换算出的磅值，> 0）。
+    rPr = tags.runs[0]._r.find(qn("w:rPr"))
+    assert int(rPr.find(qn("w:bdr")).get(qn("w:space"))) > 0
+
+
+def test_docx_plain_skill_tags_stay_unfilled():
+    """`tag_style` 为 plain 的模板（minimal / scholar / editorial）本来就没有底色。
+
+    Word 侧不"统一加底色"——那会把 5 种真实的标签形态又抹平成一种（PDF 侧修过同一条）。
+    """
+    document = Document(
+        BytesIO(build_resume_docx(SKILL_RESUME, template="minimal", page_limit=1).content)
+    )
+    tags = _skill_paragraph(document)
+    assert [_run_fill(run) for run in tags.runs] == [None] * len(tags.runs)
+
+
+def test_docx_outline_skill_tags_draw_a_border_instead_of_a_fill():
+    """modern 的标签是**描边胶囊**（`tag_style=outline`）：没有底色，边框取强调色。"""
+    document = Document(
+        BytesIO(build_resume_docx(SKILL_RESUME, template="modern", page_limit=1).content)
+    )
+    tags = _skill_paragraph(document)
+    assert _run_fill(tags.runs[0]) is None, "outline 形态没有底色"
+    border = tags.runs[0]._r.find(qn("w:rPr")).find(qn("w:bdr"))
+    assert border is not None, "outline 形态必须画边框"
+    # modern 的 `--accent` = #0f766e（注册表的 accent，与 PDF 同源）。
+    assert border.get(qn("w:color")) == "0F766E"

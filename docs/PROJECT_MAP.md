@@ -60,8 +60,8 @@
 
 | 目录 | 职责 | 一句话 |
 | ---- | ---- | ---- |
-| `api/` | 路由层（44 个文件） | 只做参数校验与编排，不写业务 |
-| `models/` | ORM 模型（29 个文件） | 一张表一个文件；**新增表必须注册进 `models/__init__.py`** |
+| `api/` | 路由层（约 70 个路由模块，另有 `resumes/`、`webform/` 两个子包） | 只做参数校验与编排，不写业务 |
+| `models/` | ORM 模型（约 40 个文件，70 余张表） | 一张表一个文件；**新增表必须注册进 `models/__init__.py`** |
 | `schemas/` | Pydantic 契约 | 前后端共用的请求/响应结构 |
 | `services/` | 业务层（最大） | 核心逻辑，与框架解耦、可离线测试 |
 | `services/resume/` `services/profile/` | 简历域 / 资料域 | 生成落地、一致性、版式、模板；读写、相关性、上下文、照片 |
@@ -74,7 +74,7 @@
 | `services/sites/` | 站点适配器 | base 契约 + registry 分发 + 单站点实现 |
 | `services/assistant_tools/` | 助手工具 | 工具注册表与 handler，按域拆 `job_tools`/`data_tools` 等 |
 | `services/job_parser/` `services/profile_parser/` | 文本规则解析 | 粘贴招聘信息/资料的本地规则 |
-| `middleware/` | 请求中间件 | 请求 ID + 请求体大小限制 |
+| `middleware/` | 请求中间件 | 请求上下文（请求 ID）/ 数据集租约 / 跨站来源校验 |
 | `prompts/` | 提示词模板 | 与代码分离，调参改 `.md` 不动代码 |
 | `templates/` | 简历 HTML 模板 | Jinja2 |
 
@@ -86,14 +86,14 @@
 | ---- | ---- |
 | `pages/` | 每个菜单项一个页面，`App.tsx` 里的 `MENU_ITEMS` 与 `Routes` 是唯一路由源 |
 | `components/` | 页面内可复用组件；`components/common/` 是跨模块交互原语（行操作、右键菜单、详情抽屉） |
-| `features/` | 重页面的专用 hooks 与子组件（目前只有 assistant、profile 两个） |
+| `features/` | 按领域组织（30 余个领域目录），以纯函数与 hooks 为主，UI 在 `components/` 的子目录里 |
 | `api/` | 所有 HTTP 请求的封装，前端唯一发起请求的地方 |
 | `types/` | TypeScript 类型，枚举与后端常量逐字镜像 |
 | `hooks/` | 通用 hooks（`useApi.ts` 等） |
 | `utils/` | 纯工具函数 |
 | `styles/` | 按视觉域拆分的样式 |
 
-前端没有 Redux / Zustand / React Query，状态是页面级 `useState` + `hooks/useApi.ts`，路由用 `React.lazy` 懒加载。
+前端没有 Redux / Zustand / React Query，页面状态是 `useState` + `hooks/useApi.ts`；另有 30 多个模块级 store（`useSyncExternalStore` 单例，跨路由存活）。路由用 `React.lazy` 懒加载。
 
 ## 我要改 X，该动哪
 

@@ -32,6 +32,7 @@ import {
 import { useJobMatchBackgroundTasks } from "../hooks/useJobMatchBackgroundTasks";
 import { t } from "../i18n";
 import { useLocale } from "../i18n/i18nContext";
+import { formatServerTime } from "../utils/serverTime";
 
 interface JobMatchBatchPanelProps {
   open: boolean;
@@ -44,8 +45,7 @@ interface JobMatchBatchPanelProps {
 }
 
 function formatTime(value: string): string {
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
+  return formatServerTime(value);
 }
 
 export default function JobMatchBatchPanel({

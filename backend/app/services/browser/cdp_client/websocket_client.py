@@ -15,6 +15,7 @@ import httpx
 
 from .base import (
     _MAX_FRAMES_PER_COMMAND,
+    DEFAULT_BROWSER_CLOSE_TIMEOUT,
     DEFAULT_COMMAND_TIMEOUT,
     DEFAULT_CONNECT_TIMEOUT,
     DEFAULT_HOST,
@@ -283,6 +284,53 @@ class WebsocketCdpClient(WindowAwareMixin, CdpClient):
 
     def navigate(self, url: str, *, timeout: float | None = None) -> dict[str, Any]:
         return self.send("Page.navigate", {"url": url}, timeout=timeout)
+
+    def _browser_websocket_url(self) -> str:
+        """浏览器级 WebSocket 地址（``/json/version`` 里那个，**不是**标签页的）。
+
+        ``Browser.close`` 只能发到浏览器端点：页面级连接上没有浏览器域，发过去会被拒。
+        """
+        response = self._request("GET", "/json/version")
+        if response.status_code != 200:
+            raise CdpError(f"读取浏览器版本信息失败（HTTP {response.status_code}）")
+        payload = self._decode(response)
+        url = payload.get("webSocketDebuggerUrl") if isinstance(payload, dict) else None
+        if not url:
+            raise CdpError("浏览器没有提供可用的关闭通道")
+        return str(url)
+
+    def close_browser(self, *, timeout: float | None = None) -> None:
+        """让 Chromium 走正常退出流程（CDP ``Browser.close``）。
+
+        单独开一条浏览器级连接、用完就关，**不复用** ``self._connection``：那条连的是
+        某个标签页，而且浏览器退出时会被对端直接掐断——顺手把它掺进来会让之后所有
+        命令都拿着一条死连接。
+
+        浏览器收到命令后会**直接断开**、不一定回响应帧，所以"读不到回执"算成功；
+        真正的失败只有连不上 / 发不出去。
+        """
+        effective = DEFAULT_BROWSER_CLOSE_TIMEOUT if timeout is None else timeout
+        connection: Any | None = None
+        try:
+            # 先落到 Any 局部量再调方法：``connection`` 声明成 `Any | None` 是给 finally
+            # 的"连没连上"判据用的，直接在它上面调方法会被 pyright 判成 Optional 成员访问。
+            created: Any = self._websocket_factory(self._browser_websocket_url())
+            connection = created
+            if hasattr(created, "settimeout"):
+                created.settimeout(effective)
+            created.send(json.dumps({"id": 1, "method": "Browser.close"}))
+            try:
+                created.recv()
+            except Exception:  # noqa: BLE001 - 浏览器退出会直接断开，这本身就是成功
+                return
+        except CdpError:
+            raise
+        except Exception as exc:  # noqa: BLE001 - 传输层异常统一收敛为可读提示
+            raise CdpError("无法通过调试通道关闭浏览器") from exc
+        finally:
+            if connection is not None:
+                with contextlib.suppress(Exception):
+                    connection.close()
 
     def start_event_capture(self, methods: Sequence[str]) -> None:
         """开始收集指定 CDP 方法的事件帧，直到 :meth:`stop_event_capture`。

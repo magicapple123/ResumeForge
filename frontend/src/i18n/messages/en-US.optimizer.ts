@@ -44,6 +44,8 @@ const optimizer = {
     "Your locked constraints exclude every candidate; relax one and try again",
   "optimizer.noFeasible.stillOverflow":
     "All candidates were tried and none fits; shorten the content or add pages",
+  "optimizer.noFeasible.stillOverflowNumbered":
+    "Target is {target} pages, but the best candidate still needs {pages}; shorten the content or allow more pages",
   "optimizer.noFeasible.noRoom":
     "Typography settings are already at their tightest; nothing can be tightened further",
   "optimizer.noMeasure":
@@ -62,6 +64,8 @@ const optimizer = {
   "optimizer.content.title": "Content reduction candidates",
   "optimizer.content.hint":
     "Remove duplicate or overly short content, then check the page count again after applying",
+  "optimizer.content.filteredByKeepEntries":
+    "{count} suggestion(s) filtered out by Keep Entries intact; uncheck it to review them",
   "optimizer.content.kind.duplicate-entries": "Merge duplicate Entries",
   "optimizer.content.kind.duplicate-points": "Delete duplicate bullet points",
   "optimizer.content.kind.merge-short-points": "Merge short bullet points",

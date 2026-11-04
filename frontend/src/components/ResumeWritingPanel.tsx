@@ -7,9 +7,18 @@
  * 用户刚选中的那一段，`onApply` 由宿主直接写回那个选区——所见即所得，不用再复制粘贴。
  * 没有可写目标时（右键落在普通段落上）宿主不传 `onApply`，面板退回「复制」，
  * 因为那种情况下"回填到哪里"根本没有答案，按钮点下去只会静默失败。
+ *
+ * ## 结果是可以接着改的（2026-11「功能更强大」）
+ *
+ * 生成完不是终点：结果区下方有一排快捷微调（更短 / 更具体 / 更口语 / 加量化）与一个
+ * 自定义要求输入，都走 `polish-selection`——**输入是当前这一版结果**，原文始终留在上方
+ * 输入框里不动。每次生成/迭代推入版本栈（最多 5 版），可点 v1/v2/v3 切回去再回填。
+ *
+ * 拆出去的三块：版本栈 `writing/useWritingVersions.ts`、结果区
+ * `writing/WritingResultPane.tsx`、微调入口 `writing/WritingRefineChips.tsx`。
  */
-import { CheckOutlined, CopyOutlined } from "@ant-design/icons";
-import { Alert, App, Button, Checkbox, Input, Radio, Segmented, Space, Typography } from "antd";
+import { InfoCircleOutlined } from "@ant-design/icons";
+import { App, Button, Checkbox, Input, Radio, Segmented, Space, Typography } from "antd";
 import LoadingBlock from "./common/LoadingBlock";
 import AbortButton from "./common/AbortButton";
 import { useMemo, useState } from "react";
@@ -19,6 +28,7 @@ import {
   rewriteStar,
   translateResumeText,
 } from "../api/resumeWriting";
+import { polishSelection } from "../api/writing";
 import { errorText, useAbortableRequest } from "../hooks/useAbortableRequest";
 import { t, type MessageKey } from "../i18n";
 import { useLocale } from "../i18n/i18nContext";
@@ -29,6 +39,8 @@ import type {
   TranslateDirection,
 } from "../types/resumeWriting";
 import { copyText } from "../utils/clipboard";
+import WritingResultPane, { WritingResultBlock } from "./writing/WritingResultPane";
+import { useWritingVersions } from "./writing/useWritingVersions";
 
 type Operation = "star" | "phrases" | "polish" | "translate";
 
@@ -83,10 +95,14 @@ export default function ResumeWritingPanel({ resumeId, initialText = "", onApply
   const [polishStyle, setPolishStyle] = useState<PolishStyle>("concise_tech");
   const [direction, setDirection] = useState<TranslateDirection>("zh2en");
   const [modes, setModes] = useState<PhraseMode[]>(["star", "resume", "interview"]);
+  /** 用法说明默认收成一行：它曾经占掉首屏，把结果区挤出可视范围。 */
+  const [hintOpen, setHintOpen] = useState(false);
   // 四个动作都是一次现场生成：等着的时候可以停，停完还能立刻换一个动作再点。
   const writingRequest = useAbortableRequest();
+  // 迭代（polish-selection）单独一条通道：生成与迭代是两种请求，各自的在飞状态互不覆盖。
+  const refineRequest = useAbortableRequest();
   const loading = writingRequest.loading;
-  const [singleResult, setSingleResult] = useState("");
+  const versions = useWritingVersions();
   const [phrasesResult, setPhrasesResult] = useState<PhrasesResult | null>(null);
 
   const canRun = useMemo(() => text.trim().length > 0, [text]);
@@ -126,12 +142,41 @@ export default function ResumeWritingPanel({ resumeId, initialText = "", onApply
     // 停止：不回填半截内容，也不动上一次的结果，更不弹错误。
     if (outcome.status === "aborted") return;
     if (outcome.data.kind === "phrases") {
+      // 话术是"三份不同用途的稿子"，没有版本概念：清掉单条结果的栈，避免旧版本被回填。
+      versions.clear();
       setPhrasesResult(outcome.data.data);
-      setSingleResult("");
-    } else {
-      setSingleResult(outcome.data.text);
-      setPhrasesResult(null);
+      return;
     }
+    setPhrasesResult(null);
+    versions.push(outcome.data.text);
+  };
+
+  /**
+   * 在一版结果上继续改（chip / 自定义要求共用）。
+   *
+   * `text` 用**当前这一版**而不是原文；成功后新一版进栈并选中，失败则结果与版本栈原样
+   * 保留（弹一条错误，绝不产生空版本）。
+   */
+  const refine = async (instruction: string): Promise<boolean> => {
+    const source = versions.current?.text ?? "";
+    const trimmed = instruction.trim();
+    if (!source || !trimmed || refineRequest.loading) return false;
+    const outcome = await refineRequest.run((signal) =>
+      polishSelection(source, trimmed, signal),
+    );
+    if (outcome.status === "aborted") return false;
+    if (outcome.status === "error") {
+      message.error(errorText(outcome.error, t("writing.refine.failed")));
+      return false;
+    }
+    const next = outcome.data.result.trim();
+    // 空结果等于把用户已有的版本换没了：当成失败处理，旧版本继续留着。
+    if (!next) {
+      message.error(t("writing.refine.failed"));
+      return false;
+    }
+    versions.push(next);
+    return true;
   };
 
   /**
@@ -157,17 +202,26 @@ export default function ResumeWritingPanel({ resumeId, initialText = "", onApply
   return (
     <Space orientation="vertical" style={{ width: "100%" }} size="middle">
       {/* 用法提示（2026-10-24 用户口径："功能不太明确"）：三件事说清——贴什么、
-          选什么、结果去哪。常驻而不是一次性引导：这几个动作对应的是不同场景，
-          用户是"想不起来该选哪个"时才回来看，藏起来等于没写。 */}
-      <Alert
-        type="info"
-        showIcon
-        className="resume-writing-hint"
-        title={t("writing.hint.title")}
-        description={t("writing.hint.body")}
-      />
+          选什么、结果去哪。默认收成一行（2026-11：整块常驻把结果区挤出首屏），
+          展开后才是完整说明；标题行本身就是"这卡能干什么"的一句话。 */}
+      <div className="resume-writing-hint">
+        <button
+          type="button"
+          className="resume-writing-hint-toggle"
+          aria-expanded={hintOpen}
+          onClick={() => setHintOpen((open) => !open)}
+        >
+          <InfoCircleOutlined aria-hidden />
+          <span className="resume-writing-hint-toggle-text">{t("writing.hint.title")}</span>
+          <span className="resume-writing-hint-toggle-action">
+            {hintOpen ? t("writing.hint.collapse") : t("writing.hint.expand")}
+          </span>
+        </button>
+        {hintOpen && <p className="resume-writing-hint-body">{t("writing.hint.body")}</p>}
+      </div>
+
       <Input.TextArea
-        rows={4}
+        rows={3}
         value={text}
         placeholder={t("writing.input.placeholder")}
         onChange={(event) => setText(event.target.value)}
@@ -180,10 +234,6 @@ export default function ResumeWritingPanel({ resumeId, initialText = "", onApply
         value={operation}
         onChange={(value) => setOperation(value as Operation)}
       />
-
-      <Typography.Text type="secondary" className="resume-writing-hint-line">
-        {t(OPERATION_HINTS[operation])}
-      </Typography.Text>
 
       {operation === "polish" && (
         <Radio.Group
@@ -219,26 +269,21 @@ export default function ResumeWritingPanel({ resumeId, initialText = "", onApply
         />
       )}
 
-      <Space wrap>
-        <Button type="primary" loading={loading} disabled={!canRun} onClick={() => void run()}>
-          {t("writing.action.generate")}
-        </Button>
-        {loading && <AbortButton onClick={() => writingRequest.cancel()} />}
-      </Space>
+      {/* 动作说明与「生成」同一行，按钮靠右：说明是"这个动作会怎么改我的句子"，
+          紧贴着触发它的那颗按钮才读得顺，也省下一行高度给结果区。 */}
+      <div className="resume-writing-actions-row">
+        <Typography.Text type="secondary" className="resume-writing-hint-line">
+          {t(OPERATION_HINTS[operation])}
+        </Typography.Text>
+        <Space size={8}>
+          <Button type="primary" loading={loading} disabled={!canRun} onClick={() => void run()}>
+            {t("writing.action.generate")}
+          </Button>
+          {loading && <AbortButton onClick={() => writingRequest.cancel()} />}
+        </Space>
+      </div>
 
       {loading && <LoadingBlock />}
-
-      {!loading && singleResult && (
-        <ResultBlock
-          label={t("writing.result.label")}
-          onApply={onApply ? () => apply(singleResult) : undefined}
-          onCopy={() => void copy(singleResult)}
-        >
-          <Typography.Paragraph style={{ whiteSpace: "pre-wrap", marginBottom: 0 }}>
-            {singleResult}
-          </Typography.Paragraph>
-        </ResultBlock>
-      )}
 
       {!loading && phrasesResult && (
         <Space orientation="vertical" style={{ width: "100%" }} size="small">
@@ -251,7 +296,7 @@ export default function ResumeWritingPanel({ resumeId, initialText = "", onApply
           )
             .filter(([key]) => phrasesResult[key])
             .map(([key, labelKey]) => (
-              <ResultBlock
+              <WritingResultBlock
                 key={key}
                 label={t(labelKey)}
                 onApply={onApply ? () => apply(phrasesResult[key]) : undefined}
@@ -260,42 +305,20 @@ export default function ResumeWritingPanel({ resumeId, initialText = "", onApply
                 <Typography.Paragraph style={{ whiteSpace: "pre-wrap", marginBottom: 0 }}>
                   {phrasesResult[key]}
                 </Typography.Paragraph>
-              </ResultBlock>
+              </WritingResultBlock>
             ))}
         </Space>
       )}
-    </Space>
-  );
-}
 
-function ResultBlock({
-  label,
-  onApply,
-  onCopy,
-  children,
-}: {
-  label: string;
-  /** 有可写目标时优先回填；没有才退回复制。 */
-  onApply?: () => void;
-  onCopy: () => void;
-  children: React.ReactNode;
-}) {
-  useLocale();
-  const run = onApply ?? onCopy;
-  return (
-    <div style={{ border: "1px solid var(--rf-border)", borderRadius: 8, padding: 12 }}>
-      <Space style={{ width: "100%", justifyContent: "space-between" }}>
-        <Typography.Text strong>{label}</Typography.Text>
-        <Button
-          size="small"
-          type="link"
-          icon={onApply ? <CheckOutlined /> : <CopyOutlined />}
-          onClick={run}
-        >
-          {onApply ? t("writing.action.apply") : t("writing.action.copy")}
-        </Button>
-      </Space>
-      {children}
-    </div>
+      {!loading && !phrasesResult && (
+        <WritingResultPane
+          versions={versions}
+          onApply={onApply ? apply : undefined}
+          onCopy={(result) => void copy(result)}
+          onRefine={refine}
+          refining={refineRequest.loading}
+        />
+      )}
+    </Space>
   );
 }

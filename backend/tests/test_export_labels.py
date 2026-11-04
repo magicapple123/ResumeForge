@@ -224,7 +224,14 @@ def test_an_unrecognised_language_falls_back_to_zh_cn(bogus: str):
     html_source = render_html(resume, language=bogus)
     assert all(title in html_source for title in titles)
 
-    artifact = build_export(ExportRequest(format="md"), resume, RenderContext(language=bogus))
+    # 管线出口同样走默认语言。`page_limit_is_unlimited=True`（1-D）：这条用例比的是
+    # "语言认不出时印的字"，不是篇幅上限——样本有两页，按默认的 1 页上限会被整块裁掉，
+    # 逐字比对就变成了在比"裁到哪里"。裁不裁由 test_export_page_parity 钉住。
+    artifact = build_export(
+        ExportRequest(format="md"),
+        resume,
+        RenderContext(language=bogus, page_limit_is_unlimited=True),
+    )
     assert artifact.content.decode("utf-8") == markdown
 
 

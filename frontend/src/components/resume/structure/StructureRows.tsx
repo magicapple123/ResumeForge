@@ -26,6 +26,7 @@ import type { MessageKey } from "../../../i18n";
 import type { Placement } from "../../../types/resumeDocument";
 import type { StructureNode } from "../../../features/resume-document/summarize";
 import { buildEntryMenuItems, type EntryMenuKey } from "../../resume-editor/entryMenuItems";
+import { useDropdownContextMenu } from "../../../features/context-menu/useDropdownContextMenu";
 import type { StructurePanelApi } from "./useStructurePanel";
 
 /** R-08 行密度：缩进从 14px 收到 12px（4 层缩进少用 8px，窄栏留给字段名）。 */
@@ -177,6 +178,11 @@ function StructureRow({
    * `react-hooks/refs` 判红），供「排版整条…」当浮层锚点。
    */
   const [anchor, setAnchor] = useState({ x: 0, y: 0 });
+  /**
+   * 条目行菜单的键盘等价物（问题 25）：`role="treeitem"` 的行本来就是可聚焦的，但
+   * 之前只有右键能打开。Shift+F10 / 菜单键走同一份菜单，键盘打开时回落到行锚点。
+   */
+  const entryMenuState = useDropdownContextMenu();
   const entryMenu: MenuProps | null =
     node.kind === "entry" && node.path && !api.readOnly
       ? {
@@ -231,6 +237,7 @@ function StructureRow({
       onContextMenuCapture={(event) => {
         setAnchor({ x: event.clientX, y: event.clientY });
       }}
+      onKeyDown={entryMenu ? entryMenuState.handleKeyDown : undefined}
       onMouseEnter={() => api.handleRowHover(node)}
       onMouseLeave={() => api.handleRowHover(null)}
       onFocus={() => api.handleRowHover(node)}
@@ -333,7 +340,7 @@ function StructureRow({
   // 条目行多一层右键菜单（Dropdown 不额外产生 DOM，树结构不变）；其余行原样返回。
   if (!entryMenu) return row;
   return (
-    <Dropdown trigger={["contextMenu"]} menu={entryMenu}>
+    <Dropdown {...entryMenuState.dropdownProps} menu={entryMenu}>
       {row}
     </Dropdown>
   );

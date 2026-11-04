@@ -34,6 +34,8 @@ const preview = {
 
   "preview.canvas.warningsTitle":
     "The following content needs a manual check (it may be AI-generated)",
+  "preview.canvas.warningsExpand": "Show {count} items",
+  "preview.canvas.warningsCollapse": "Hide",
   "preview.canvas.overflowBody":
     "Font size, line spacing and margins render exactly as you set them and are never shrunk automatically; {amount} {note}",
   "preview.canvas.note.overflow":

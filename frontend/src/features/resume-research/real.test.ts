@@ -67,7 +67,10 @@ describe("文档模式保存 payload", () => {
   it("切换模式时页数按新模式区间夹紧（long_cv 2 页 → resume 仍 2 页）", () => {
     const layout = { ...LAYOUT, page_limit: 2 } as ResumeLayout;
     expect(buildLayoutPayload(layout, { mode: "resume", pageLimit: 2 }).page_limit).toBe(2);
-    expect(buildLayoutPayload(layout, { mode: "resume", pageLimit: 0 }).page_limit).toBe(1);
+    // 0 = 不限篇幅（需求 7B）：它是合法取值，不能被夹回下限，否则用户一选「不限」就被打回 1 页。
+    expect(buildLayoutPayload(layout, { mode: "resume", pageLimit: 0 }).page_limit).toBe(0);
+    // 真正的越界仍要被夹住。
+    expect(buildLayoutPayload(layout, { mode: "resume", pageLimit: -3 }).page_limit).toBe(1);
   });
 });
 

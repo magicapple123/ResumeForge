@@ -14,6 +14,7 @@ import { t } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
 import type { ProfileSaveControl } from "./profileSaveBridge";
 import { usePrefersReducedMotion } from "./usePrefersReducedMotion";
+import { useTouTouAnchoredCard } from "./useTouTouAnchoredCard";
 
 /** 退场动效时长，与 tou-tou.css 的 tt-card-out 对齐；动画播完才真正卸载。 */
 const EXIT_MS = 180;
@@ -26,6 +27,11 @@ export interface TouTouSaveCardProps {
 export default function TouTouSaveCard({ control }: TouTouSaveCardProps) {
   useLocale();
   const prefersReducedMotion = usePrefersReducedMotion();
+  // 卡片原本写死右对齐（`right: 0`），球贴左时整卡会向左越出视口（问题 8-A）。
+  // hook 量出球与卡的实际位置后把 left 写进内联样式，尾巴与缩放原点一并跟着球走；
+  // 量不到尺寸（首帧 / jsdom）时它返回空样式，沿用 CSS 的默认定位。
+  const cardRef = useRef<HTMLDivElement>(null);
+  const anchoredStyle = useTouTouAnchoredCard(cardRef, { withTail: true });
   // 退场要留住最后一份 control：control 归 null 后仍需多留 EXIT_MS 播完反向动画。
   const [shown, setShown] = useState<ProfileSaveControl | null>(control);
   const [leaving, setLeaving] = useState(false);
@@ -60,7 +66,9 @@ export default function TouTouSaveCard({ control }: TouTouSaveCardProps) {
 
   return (
     <div
+      ref={cardRef}
       className={`tt-card tt-save-card${leaving ? " is-leaving" : ""}`}
+      style={anchoredStyle}
       role="group"
       aria-label={t("touTou.save.ariaLabel")}
     >

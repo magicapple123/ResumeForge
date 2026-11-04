@@ -102,6 +102,13 @@ FIELD_LABELS: dict[str, dict[str, str]] = {
         "present": "至今",
         # 2026-10：语言能力独立分区后的字段前缀（取得时间在同一行尾部展示）。
         "obtained": "取得时间",
+        # 6-A（2026-11-04）：基本信息的 5 个"可加页眉字段"的纸面前缀。
+        # 它们默认不上纸面，只有用户手动加进页眉后才需要这行字。
+        "target_city": "意向城市",
+        "portfolio_url": "作品集链接",
+        "political_status": "政治面貌",
+        "driver_license": "驾照",
+        "available_date": "到岗时间",
     },
     "en-US": {
         "intent": "Objective",
@@ -182,5 +189,11 @@ FIELD_LABELS: dict[str, dict[str, str]] = {
         "birth_year": "Birth Year",
         "present": "Present",
         "obtained": "Obtained",
+        # 与中文表同批（6-A）：5 个"可加页眉字段"的纸面前缀。
+        "target_city": "Target city",
+        "portfolio_url": "Portfolio",
+        "political_status": "Political status",
+        "driver_license": "Driver's license",
+        "available_date": "Available from",
     },
 }

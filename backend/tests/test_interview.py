@@ -170,7 +170,11 @@ def test_rounds_and_choice_validation():
 
 
 def test_api_flow_finishes_after_planned_rounds(client, db_session, monkeypatch):
-    """三轮的计划：第三次回答后必须自动收尾并给出报告。"""
+    """三轮的计划：最后一答只**收盘**，报告由 /finish 生成（需求 4 的新契约）。
+
+    以前这里一答完就出报告；现在"面试结束"和"报告已生成"是两件事——用户可能还想先
+    追问几轮，报告一旦先生成就再也追不进评分了。
+    """
     _configure(
         monkeypatch,
         [
@@ -189,6 +193,7 @@ def test_api_flow_finishes_after_planned_rounds(client, db_session, monkeypatch)
     first = client.post(f"/api/interview/{session['id']}/answers", json={"content": "我做过 A"})
     assert first.status_code == 200
     assert first.json()["finished"] is False
+    assert first.json()["needs_report"] is False
     assert first.json()["feedback"] == "讲得清楚"
     # 进度是代码算出来的，不是模型说的。
     assert first.json()["session"]["answered_rounds"] == 1
@@ -197,12 +202,21 @@ def test_api_flow_finishes_after_planned_rounds(client, db_session, monkeypatch)
     assert second.status_code == 200
     body = second.json()
     assert body["finished"] is True
+    # 收尾了，但报告**还没**生成：界面据此显示决策卡。
+    assert body["needs_report"] is True
     assert body["session"]["status"] == "finished"
-    assert body["session"]["report"]["score"] == 80
+    assert body["session"]["report"] == {}
 
     # 结束之后再提交回答应被拒绝，而不是静默追加到已完成的面试里。
     again = client.post(f"/api/interview/{session['id']}/answers", json={"content": "再补一句"})
     assert again.status_code == 409
+
+    # 决策卡上点「结束并生成报告」：只补报告，不再重复插收尾说明。
+    finished = client.post(f"/api/interview/{session['id']}/finish")
+    assert finished.status_code == 200
+    assert finished.json()["report"]["score"] == 80
+    notes = [item for item in finished.json()["messages"] if item["role"] == "note"]
+    assert notes == [], "自动收尾的那场不该再补一条「候选人主动结束」"
 
 
 def test_api_finish_early_requires_an_answer(client, db_session, monkeypatch):
@@ -316,7 +330,11 @@ def test_the_maximum_round_count_can_actually_be_finished(
 
     detail = client.get(f"/api/interview/{session_id}").json()
     assert detail["status"] == "finished"
-    assert detail["report"]["score"] == 80
+    # 收尾与出报告分开（需求 4）：上限到点只收盘，报告由 /finish 补。
+    assert detail["report"] == {}
+    finished = client.post(f"/api/interview/{session_id}/finish")
+    assert finished.status_code == 200
+    assert finished.json()["report"]["score"] == 80
 
 
 def test_prompt_conditionals_are_actually_rendered():
@@ -423,6 +441,8 @@ def test_api_auto_rounds_model_driven_finish(client, db_session, monkeypatch):
         result = client.post(f"/api/interview/{session['id']}/answers", json={"content": "回答"})
         assert result.status_code == 200
         assert result.json()["finished"] is (index == 2)
+        # 自动收尾同样只收盘：needs_report 让界面切到决策卡，而不是等一份不存在的报告。
+        assert result.json()["needs_report"] is (index == 2)
     detail = client.get(f"/api/interview/{session['id']}").json()
     assert detail["status"] == "finished"
     assert detail["rounds_min"] == 3

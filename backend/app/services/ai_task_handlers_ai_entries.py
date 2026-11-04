@@ -335,7 +335,9 @@ def handle_webform_fill(ctx: Any) -> None:
 
     ctx.check_canceled()
     ctx.set_progress(15, "正在核对页面控件与你的资料")
-    view = webform_service.build_webform_view(session)
+    # 取数范围随任务一起落进快照构造：批量预填与实时/清单必须同一口径（需求 3 硬约束）。
+    scope = str(handler_payload_field(ctx.payload, "scope") or "group")
+    view = webform_service.build_webform_view(session, scope=scope)
     data = view.data
     custom_labels = view.custom_labels
     report = webform_service.build_preview(

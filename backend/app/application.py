@@ -430,6 +430,11 @@ def create_app() -> FastAPI:
             # 不放行的话，跨源部署下前端读到的是 null，等于没设。
             resumes.PDF_ENGINE_HEADER,
             resumes.RESUME_OVERFLOW_HEADER,
+            # 1-D：这份文件按「最大篇幅」裁过没有、从哪一块开始没进去。常量定义在
+            # ``api/resumes/export_routes.py``（本条改动的落点），不放行的话跨源部署下
+            # 前端读到 null，"已按篇幅上限裁剪"的提示就永远不会出现。
+            "X-Resume-Truncated",
+            "X-Resume-Truncated-At",
             "Content-Disposition",
             "X-Content-Sha256",
             "X-Render-Config-Sha256",

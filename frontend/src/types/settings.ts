@@ -115,7 +115,7 @@ export interface LLMThinkingResult {
 }
 
 /** 联网搜索的来源。 */
-export type SearchSource = "bing" | "duckduckgo" | "searxng";
+export type SearchSource = "bing" | "duckduckgo" | "searxng" | "deepseek";
 
 /**
  * 联网搜索设置。
@@ -124,7 +124,7 @@ export type SearchSource = "bing" | "duckduckgo" | "searxng";
  * 字段就会在保存时被默认值填回去（与 `LLMConfig` 同一类坑）。
  */
 export interface SearchConfig {
-  /** 至少一个来源；后端要求 1~3 项且自动去重。 */
+  /** 至少一个来源；后端要求 1~4 项且自动去重。 */
   sources: SearchSource[];
   /** 自建 SearXNG 实例根地址（`http://` 或 `https://` 开头）；不用可留空。 */
   searxng_url: string;
@@ -132,6 +132,13 @@ export interface SearchConfig {
   fetch_pages: number;
   /** 每次搜索最多返回多少条，1~15。 */
   max_results: number;
+  /**
+   * DeepSeek Search / Fetch 的密钥。
+   *
+   * 服务端**只回显掩码**（`********`）或空串，真实密钥加密后单独存储。整份配置会原样
+   * PUT 回去，所以读到掩码时保持原值提交即可（后端识别掩码 = 不修改）；清空 = 移除密钥。
+   */
+  deepseek_api_key: string;
 }
 
 /** 一份数据集：一整个数据库，可切换。 */

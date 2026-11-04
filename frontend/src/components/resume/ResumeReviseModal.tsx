@@ -20,6 +20,29 @@ interface Props {
 
 const MAX_CHARS = 2000;
 
+/** 后端 `revision_not_applied` 409 里被事实锁挡下的字段（形状见 ai_edits_routes.py）。 */
+interface BlockedField {
+  path?: string;
+  label?: string;
+  value?: string;
+}
+
+/**
+ * 从抛出的错误里读「未执行」的字段清单。
+ *
+ * `ApiError.payload` 保留了解析后的错误响应体（见 `api/apiError.ts`），业务码与字段只能
+ * 从这里取——`message` 只是 detail 那一句。任何形状不符都返回空数组，不抛异常。
+ */
+function blockedFieldsOf(error: unknown): BlockedField[] {
+  const payload = (error as { payload?: unknown } | null | undefined)?.payload;
+  if (!payload || typeof payload !== "object") return [];
+  const record = payload as { code?: unknown; blocked_fields?: unknown };
+  if (record.code !== "revision_not_applied" || !Array.isArray(record.blocked_fields)) return [];
+  return record.blocked_fields.filter(
+    (item): item is BlockedField => typeof item === "object" && item !== null,
+  );
+}
+
 export default function ResumeReviseModal({
   open,
   recordId,
@@ -32,6 +55,7 @@ export default function ResumeReviseModal({
   const [instructions, setInstructions] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
+  const [blockedFields, setBlockedFields] = useState<BlockedField[]>([]);
 
   // 预填指令在每次打开时生效（父组件每次带入的都可能是不同条目的指令）。
   // Compiler 规范：随 prop 变化的重置用渲染期守卫式调整。
@@ -50,6 +74,7 @@ export default function ResumeReviseModal({
   const close = () => {
     setInstructions("");
     setError("");
+    setBlockedFields([]);
     setSubmitting(false);
     onClose();
   };
@@ -58,6 +83,7 @@ export default function ResumeReviseModal({
     if (!recordId || submitting) return;
     setSubmitting(true);
     setError("");
+    setBlockedFields([]);
     try {
       const updated = await reviseResume(recordId, instructions);
       await onApplied(updated);
@@ -67,6 +93,9 @@ export default function ResumeReviseModal({
       close();
     } catch (err) {
       setError(err instanceof Error ? err.message : t("resume.revise.failed"));
+      // 正文一个字都没改时，后端会给出"未执行"的业务码与被挡下的字段：只停转圈不够，
+      // 用户得看见是哪一项、为什么没改。
+      setBlockedFields(blockedFieldsOf(err));
     } finally {
       setSubmitting(false);
     }
@@ -101,7 +130,33 @@ export default function ResumeReviseModal({
         disabled={submitting}
       />
       <MaxLengthHint value={instructions} maxLength={MAX_CHARS} />
-      {error ? <Alert type="error" showIcon title={error} style={{ marginTop: 12 }} /> : null}
+      {error ? (
+        <Alert
+          type="error"
+          showIcon
+          style={{ marginTop: 12 }}
+          title={blockedFields.length ? t("resume.revise.notAppliedTitle") : error}
+          description={
+            blockedFields.length ? (
+              <div>
+                <div>{error}</div>
+                <div style={{ marginTop: 6 }}>{t("resume.revise.notAppliedFields")}</div>
+                <ul style={{ margin: "4px 0 0", paddingInlineStart: 20 }}>
+                  {blockedFields.map((field, index) => (
+                    <li key={`${field.path ?? ""}-${index}`}>
+                      {t("resume.revise.blockedField", {
+                        label: field.label || field.path || "",
+                        value: field.value || "",
+                      })}
+                    </li>
+                  ))}
+                </ul>
+                <div style={{ marginTop: 6 }}>{t("resume.revise.notAppliedAction")}</div>
+              </div>
+            ) : undefined
+          }
+        />
+      ) : null}
     </Modal>
   );
 }

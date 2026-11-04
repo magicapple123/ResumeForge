@@ -290,7 +290,8 @@ describe("WebFormPage", () => {
   it("turns 智能逐项填表 on automatically after the browser is ready", async () => {
     renderPage();
 
-    await waitFor(() => expect(apiMocks.startWebFormLive).toHaveBeenCalledWith(true));
+    // 第二个参数是取数范围：没有存过选择时就是默认的「仅当前方案」。
+    await waitFor(() => expect(apiMocks.startWebFormLive).toHaveBeenCalledWith(true, "group"));
     expect(screen.getByRole("button", { name: /关\s*闭/ })).toBeInTheDocument();
   });
 

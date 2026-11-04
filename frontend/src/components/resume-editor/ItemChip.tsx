@@ -28,6 +28,7 @@ import { itemPath as buildItemPath } from "../../features/resume-document/paths"
 import { DRAG_REJECT_COPY } from "./dragRejectCopy";
 import { useDocumentDrag } from "./documentDragContext";
 import { useDocumentChipMenu } from "./documentChipMenuContext";
+import { useBlockSelectStart } from "./useBlockSelectStart";
 import { useChipExpandGesture } from "./useChipExpandGesture";
 
 interface Props {
@@ -90,7 +91,15 @@ export default function ItemChip({
         ? (raw) => enumLabelOf(null, sectionKey, item.key, raw, t)
         : undefined,
   });
-  const canMove = item.kind !== "text" && !readOnly;
+  // 问题 12：正文块也能拖了。但它的正文区是可编辑文本，整块 draggable 会把「拖选一句话里
+  // 的几个字」变成「拖走整块」——所以正文块的 draggable 只挂在独立把手上，字段 chip 维持
+  // 整块可拖（原有手感不变）。
+  const canMove = !readOnly;
+  const dragOnHandleOnly = item.kind === "text";
+  // 这枚 chip 里永远不许有选区：有选区时 Chrome 会把"按住拖动"判成"拖动选中文字"
+  // （顶部弹「松开鼠标以搜索文本」），拖动排序就失效了。CSS 只管"从零框选"，
+  // 拦不住"按下落在既有选区里"，所以容器上再补一层（见 useBlockSelectStart）。
+  const chipRef = useBlockSelectStart<HTMLDivElement>();
 
   const startGrab = () => {
     if (!canMove) return;
@@ -228,6 +237,7 @@ export default function ItemChip({
   return (
     <>
       <div
+        ref={chipRef}
         className={[
           "document-chip",
           selected ? "is-selected" : "",
@@ -243,13 +253,30 @@ export default function ItemChip({
         role="group"
         aria-label={`${label}${value ? `\uFF1A${value}` : ""}`}
       >
+        {/* 正文块：draggable 只挂这个把手（见 canMove 上面的注释）。 */}
+        {canMove && dragOnHandleOnly ? (
+          <button
+            type="button"
+            className="document-chip-handle"
+            draggable
+            aria-label={t("document.item.drag")}
+            onDragStart={handleDragStart}
+            onDragEnd={handleDragEnd}
+            /* 这里**不能** `onMouseDown` 里 `preventDefault()`：那会连 HTML5 拖拽的起点
+               一起吃掉，表现为"按住把手拖不动"（2026-11-04 用户实测）。
+               防选区交给 `user-select: none` 与容器上的 `selectstart` 拦截（见
+               `useBlockSelectStart`），它们不碰默认拖拽行为。 */
+          >
+            <HolderOutlined aria-hidden="true" />
+          </button>
+        ) : null}
         <button
           type="button"
           className="document-chip-main"
           aria-pressed={selected}
           aria-expanded={expanded}
           aria-describedby={grabbed ? `${path}-drag-hint` : undefined}
-          draggable={canMove}
+          draggable={canMove && !dragOnHandleOnly}
           onDragStart={handleDragStart}
           onDragEnd={handleDragEnd}
           onPointerDown={() => {
@@ -277,7 +304,9 @@ export default function ItemChip({
           }}
           onKeyDown={handleKeyDown}
         >
-          {canMove ? <HolderOutlined className="document-chip-drag" aria-hidden="true" /> : null}
+          {canMove && !dragOnHandleOnly ? (
+            <HolderOutlined className="document-chip-drag" aria-hidden="true" />
+          ) : null}
           {label ? <span className="document-chip-label">{label}</span> : null}
           <span
             className={`document-chip-value${value ? "" : " document-chip-placeholder"}`}

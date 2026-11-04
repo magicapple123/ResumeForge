@@ -111,25 +111,25 @@
   "email": "",
   "city": "",
   "job_intent": "{% if job %}求职意向（针对目标岗位填写）{% else %}求职意向（沿用资料原文，可为空）{% endif %}",
-  "summary": "{% if job %}个人总结，2-3 句话，突出与岗位的匹配度{% else %}个人总结，2-3 句话，概括跨方向的能力与经历全貌{% endif %}",
+  "summary": "{% if job %}个人总结，2-3 句话，突出与岗位的匹配度{% else %}个人总结，2-3 句话，概括跨方向的能力与经历全貌{% endif %}"{% if "education" in resume_sections %},
   "education": [
     {
       "school": "学校", "major": "专业", "degree": "学历", "start_date": "开始时间", "end_date": "结束时间",
       "gpa": "绩点/排名", "courses": ["核心课程"], "achievements": ["在校成果，每条一个字符串"]
     }
-  ],
+  ]{% endif %}{% if "experience" in resume_sections %},
   "experience": [
     {
       "company": "公司", "role": "职位", "start_date": "开始时间", "end_date": "结束时间",
       "description": ["工作内容，每条一个要点，{% if job %}针对 JD 优化措辞{% else %}用专业表达陈述职责与成果{% endif %}"]
     }
-  ],
+  ]{% endif %}{% if "campus_experience" in resume_sections %},
   "campus_experience": [
     {
       "organization": "组织/部门", "role": "职务/角色", "start_date": "开始时间", "end_date": "结束时间",
       "description": ["校园工作、活动与成果，每条一个要点，{% if job %}针对 JD 优化措辞{% else %}用专业表达陈述职责与成果{% endif %}"]
     }
-  ],
+  ]{% endif %}{% if "projects" in resume_sections %},
   "projects": [
     {
       "name": "项目名", "role": "担任角色", "start_date": "开始时间", "end_date": "结束时间",
@@ -137,11 +137,15 @@
       "description": ["项目描述，每条一个要点"],
       "highlights": ["项目亮点/成果，{% if job %}针对 JD 突出量化结果{% else %}用专业表达陈述结果与影响{% endif %}"]
     }
-  ],
-  "skills": [{"name": "技能名", "level": "熟练/掌握/了解"}],
-  "awards": [{"name": "奖项名", "date": "时间", "description": "说明"}]
+  ]{% endif %}{% if "skills" in resume_sections %},
+  "skills": [{"name": "技能名", "level": "熟练/掌握/了解"}]{% endif %}{% if "awards" in resume_sections %},
+  "awards": [{"name": "奖项名", "date": "时间", "description": "说明"}]{% endif %}
 }
 ```
+
+上面这个结构里，**没有出现的内置分区不要输出对应的键**：不要用空数组占位，更不要替用户
+补造内容（"一份简历通常应该有奖学金"不是事实来源）。候选资料里出现了该分区但内容为空时，
+输出空数组。分区要不要写，只看候选资料里有没有出现它。
 
 {% if extended_facts %}
 ## 扩展事实栏目（候选资料提供时才输出）

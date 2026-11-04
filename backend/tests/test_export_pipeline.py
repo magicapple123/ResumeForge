@@ -4,6 +4,7 @@
 管线是唯一导出出口：这里钉住注册表含全部六种格式、脱敏作为前置步骤、水印后处理，
 以及 ``POST /export`` 全参数与 ``POST /redact`` 预览不落库、不回写。
 """
+
 import urllib.parse
 
 import pytest
@@ -79,7 +80,9 @@ def test_redacted_pdf_does_not_leak_contact_links():
 
     from pypdf import PdfReader
 
-    text = "\n".join(page.extract_text() or "" for page in PdfReader(BytesIO(artifact.content)).pages)
+    text = "\n".join(
+        page.extract_text() or "" for page in PdfReader(BytesIO(artifact.content)).pages
+    )
     assert "github.com/zhangsan" not in text
     assert "zhangsan.dev" not in text
     assert "13800000000" not in text
@@ -208,3 +211,46 @@ def test_redact_preview_options_are_configurable(client):
     body = response.json()
     assert header_value(body, "name") == "张三"  # mask_name=False：不遮罩
     assert field_value(body, "school", section="education") == "***"  # mask_school=True：遮罩
+
+
+# ===== 1-D 收口补：PDF 的裁剪事实与「不限」的 page-limit 头 =====
+
+
+def test_pdf_truncation_flag_matches_whether_pages_were_dropped(monkeypatch):
+    """PDF 少了页就要报 ``truncated``；「不限篇幅」下的 10 页保护不算裁剪。
+
+    以前 PDF 只回 ``overflow``（"裁完仍超限"），同一份简历 Word 会说"从某板块起没有"、
+    PDF 只说"溢出"，界面读到的口径不一致。这里把两个结论钉在同一个产物上。
+    """
+    from types import SimpleNamespace
+
+    from app.services import export_pipeline as pipeline
+
+    def _fake_pdf(*_args, **_kwargs):
+        # 自然 3 页、被裁到 1 页：文件里确实少了内容。
+        return SimpleNamespace(content=b"%PDF-1.4", pages=1, pages_needed=3, overflow=True)
+
+    monkeypatch.setattr(pipeline, "build_resume_pdf", _fake_pdf)
+
+    limited = build_export(
+        ExportRequest(format="pdf", page_limit=1), _resume(), RenderContext(page_limit=1)
+    )
+    assert limited.truncated is True
+    assert limited.pages == 1 and limited.pages_needed == 3
+    assert limited.truncated_at == "", "PDF 没有板块级裁点，只能报少了内容"
+
+    unlimited = build_export(
+        ExportRequest(format="pdf"),
+        _resume(),
+        RenderContext(page_limit=10, page_limit_is_unlimited=True),
+    )
+    assert unlimited.truncated is False, "用户选了不限，10 页保护不能报成按上限裁剪"
+
+
+def test_page_limit_header_value_tells_unlimited_apart():
+    """`X-Resume-Page-Limit`：「不限」回语义值 0，不把渲染保护上限 10 当用户上限。"""
+    from app.api.resumes._shared import page_limit_header_value
+
+    assert page_limit_header_value(10, is_unlimited=True) == "0"
+    assert page_limit_header_value(3, is_unlimited=False) == "3"
+    assert page_limit_header_value(None, is_unlimited=False) is None

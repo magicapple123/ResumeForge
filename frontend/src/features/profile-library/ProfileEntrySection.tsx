@@ -18,6 +18,8 @@ import {
 } from "@ant-design/icons";
 import { useMemo } from "react";
 import EmptyState from "../../components/common/EmptyState";
+import { RowContextMenu } from "../../components/common/RowActions";
+import type { RowMenuItem } from "../../components/common/rowActionMenu";
 import { useProfileItemListDrag } from "../../components/profile/useProfileItemListDrag";
 import { t } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
@@ -136,7 +138,13 @@ export default function ProfileEntrySection(props: Props) {
   if (section.form === "singleton") {
     const showEmpty = !editing && !hasAnyValue(section, entries);
     return (
-      <div className="profile-entry-section">
+      <div
+        className="profile-entry-section"
+        // 深链锚点：单例板块的条目同样可被搜索命中（`/profile?…&entry=`）。
+        data-profile-entry-key={entries[0]?.entry_key || undefined}
+        // 可编程聚焦的落点（不进 tab 序），与分区外壳同一手法。
+        tabIndex={-1}
+      >
         <Form.Item name={["sections", section.key, 0, "entry_key"]} hidden>
           <Input />
         </Form.Item>
@@ -237,81 +245,128 @@ function MultiEntryList({
           const itemClass = ["profile-list-item", dragging ? "is-dragging" : ""]
             .filter(Boolean)
             .join(" ");
+          /**
+           * 上移/下移的可用性只有一份（问题 26b）：图标按钮与右键菜单都读它，
+           * 两处各判一次迟早出现"按钮灰着、菜单还能点"。
+           */
+          const canMoveUp = editing && !saving && index > 0;
+          const canMoveDown = editing && !saving && index < listFields.length - 1;
+          const removeEntry = () => {
+            const entryKey = entry?.entry_key ?? "";
+            const title = entryTitle(section, entry, index);
+            operations.remove(item.name);
+            onRemoveEntry(section.key, entryKey, title);
+          };
+          /** 行内三个图标按钮的右键加速通道：同一批 handler，不改按钮形态。 */
+          const menuItems: RowMenuItem[] = [
+            {
+              key: "moveUp",
+              label: t("profileLibrary.entry.moveUp"),
+              icon: <ArrowUpOutlined />,
+              disabled: !canMoveUp,
+              onClick: () => operations.move(index, index - 1),
+            },
+            {
+              key: "moveDown",
+              label: t("profileLibrary.entry.moveDown"),
+              icon: <ArrowDownOutlined />,
+              disabled: !canMoveDown,
+              onClick: () => operations.move(index, index + 1),
+            },
+            {
+              key: "remove",
+              label: t("profileLibrary.entry.remove"),
+              icon: <DeleteOutlined />,
+              danger: true,
+              onClick: removeEntry,
+            },
+          ];
           return (
-            <div key={item.key} data-profile-list-item-index={item.name} className={itemClass}>
-              {/* 标题一行、右侧一个紧凑的动作簇（↑ ↓ 🗑 + 拖拽把手同处一行、右对齐）。
+            <RowContextMenu
+              key={item.key}
+              items={menuItems}
+              // 查看态/保存中不接管右键：这三项此刻都不可执行，弹出来只会是空壳。
+              disabled={!editing || saving}
+            >
+              <div
+                data-profile-list-item-index={item.name}
+                // 深链锚点：全局搜索命中条目时按 entry_key 精确定位到这里。
+                data-profile-entry-key={entry?.entry_key || undefined}
+                // 可编程聚焦的落点（不进 tab 序）。
+                tabIndex={-1}
+                className={itemClass}
+              >
+                {/* 标题一行、右侧一个紧凑的动作簇（↑ ↓ 🗑 + 拖拽把手同处一行、右对齐）。
                   此前把手是绝对定位（right 40px）、删除按钮 absolute 在最右，卡片还要
                   为此留 76px 右内边距——把手落在标题与内容之间，读起来像"标题下面的
                   一排小图标"。流式布局后卡片内边距回到统一的 14px 16px。 */}
-              <div className="profile-list-item-header">
-                <span className="profile-list-item-title">{entryTitle(section, entry, index)}</span>
-                <div className="profile-list-item-actions">
-                  <Tooltip title={t("profileLibrary.entry.moveUp")}>
-                    <Button
-                      size="small"
-                      type="text"
-                      icon={<ArrowUpOutlined />}
-                      disabled={!editing || saving || index === 0}
-                      aria-label={t("profileLibrary.entry.moveUp")}
-                      onClick={() => operations.move(index, index - 1)}
-                    />
-                  </Tooltip>
-                  <Tooltip title={t("profileLibrary.entry.moveDown")}>
-                    <Button
-                      size="small"
-                      type="text"
-                      icon={<ArrowDownOutlined />}
-                      disabled={!editing || saving || index === listFields.length - 1}
-                      aria-label={t("profileLibrary.entry.moveDown")}
-                      onClick={() => operations.move(index, index + 1)}
-                    />
-                  </Tooltip>
-                  {editing ? (
-                    <Tooltip title={t("profileLibrary.entry.remove")}>
+                <div className="profile-list-item-header">
+                  <span className="profile-list-item-title">
+                    {entryTitle(section, entry, index)}
+                  </span>
+                  <div className="profile-list-item-actions">
+                    <Tooltip title={t("profileLibrary.entry.moveUp")}>
                       <Button
                         size="small"
                         type="text"
-                        danger
-                        icon={<DeleteOutlined />}
-                        className="profile-list-item-delete"
-                        aria-label={t("profileLibrary.entry.remove")}
-                        onClick={() => {
-                          const entryKey = entry?.entry_key ?? "";
-                          const title = entryTitle(section, entry, index);
-                          operations.remove(item.name);
-                          onRemoveEntry(section.key, entryKey, title);
-                        }}
+                        icon={<ArrowUpOutlined />}
+                        disabled={!canMoveUp}
+                        aria-label={t("profileLibrary.entry.moveUp")}
+                        onClick={() => operations.move(index, index - 1)}
                       />
                     </Tooltip>
-                  ) : null}
-                  {editing ? (
-                    <Tooltip title={t("profileLibrary.entry.drag")}>
-                      <button
-                        type="button"
-                        className="profile-list-item-drag-handle"
-                        aria-label={t("profileLibrary.entry.drag")}
-                        onPointerDown={(event) =>
-                          drag.handleItemPointerDown(event, item.name, item.key)
-                        }
-                      >
-                        <HolderOutlined />
-                      </button>
+                    <Tooltip title={t("profileLibrary.entry.moveDown")}>
+                      <Button
+                        size="small"
+                        type="text"
+                        icon={<ArrowDownOutlined />}
+                        disabled={!canMoveDown}
+                        aria-label={t("profileLibrary.entry.moveDown")}
+                        onClick={() => operations.move(index, index + 1)}
+                      />
                     </Tooltip>
-                  ) : null}
+                    {editing ? (
+                      <Tooltip title={t("profileLibrary.entry.remove")}>
+                        <Button
+                          size="small"
+                          type="text"
+                          danger
+                          icon={<DeleteOutlined />}
+                          className="profile-list-item-delete"
+                          aria-label={t("profileLibrary.entry.remove")}
+                          onClick={removeEntry}
+                        />
+                      </Tooltip>
+                    ) : null}
+                    {editing ? (
+                      <Tooltip title={t("profileLibrary.entry.drag")}>
+                        <button
+                          type="button"
+                          className="profile-list-item-drag-handle"
+                          aria-label={t("profileLibrary.entry.drag")}
+                          onPointerDown={(event) =>
+                            drag.handleItemPointerDown(event, item.name, item.key)
+                          }
+                        >
+                          <HolderOutlined />
+                        </button>
+                      </Tooltip>
+                    ) : null}
+                  </div>
                 </div>
+                <Form.Item name={[item.name, "entry_key"]} hidden>
+                  <Input />
+                </Form.Item>
+                <ProfileFieldInputs
+                  section={section}
+                  namePrefix={[item.name, "values"]}
+                  disabled={!editing || saving}
+                  singleLineMax={singleLineMax}
+                  multiLineMax={multiLineMax}
+                  onSetPreference={onSetPreference}
+                />
               </div>
-              <Form.Item name={[item.name, "entry_key"]} hidden>
-                <Input />
-              </Form.Item>
-              <ProfileFieldInputs
-                section={section}
-                namePrefix={[item.name, "values"]}
-                disabled={!editing || saving}
-                singleLineMax={singleLineMax}
-                multiLineMax={multiLineMax}
-                onSetPreference={onSetPreference}
-              />
-            </div>
+            </RowContextMenu>
           );
         })}
       </div>

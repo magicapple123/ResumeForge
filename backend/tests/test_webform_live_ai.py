@@ -100,6 +100,8 @@ def test_recognized_but_empty_does_not_waste_a_call():
         panel = client.panels[-1]
         assert panel["status"] == "unmatched"
         assert "资料里还没填" in panel["note"]
+        # 反例断言：这一条**不是**范围问题，不能顺带说成"当前方案未包含"。
+        assert "当前方案未包含" not in panel["note"]
         assert panel["field_label"] == "研究方向"
         assert panel["source"] == "rule"
     finally:

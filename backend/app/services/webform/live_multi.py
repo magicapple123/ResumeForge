@@ -16,7 +16,8 @@ from typing import Any
 from ..browser.cdp_client import CdpClient
 from . import live_targets
 from ._base import WebFormConflict
-from .live import BROWSER_CLOSED_REASON, LiveSession
+from .data.profile_snapshot import normalize_scope
+from .live import BROWSER_CLOSED_REASON, LiveDataLoader, LiveSession
 from .live_control import LIVE_CONTROL_STATE_SCRIPT
 
 logger = logging.getLogger(__name__)
@@ -44,7 +45,7 @@ class MultiLiveSession:
         ai_enabled: bool = False,
         store: Callable[[dict[str, str]], bool] | None = None,
         require_memory_choice: bool = False,
-        data_loader: Callable[[], tuple[dict[str, str], list[dict[str, str]]]] | None = None,
+        data_loader: LiveDataLoader | None = None,
         autofill_data_loader: Callable[[], dict[str, str]] | None = None,
         memory_targets: list[dict[str, Any]] | None = None,
         memory_targets_loader: Callable[[], list[dict[str, Any]]] | None = None,
@@ -52,6 +53,8 @@ class MultiLiveSession:
         relaxed_mode_loader: Callable[[], bool] | None = None,
         ui_locale_loader: Callable[[], str | None] | None = None,
         ui_locale: str | None = None,
+        scope: str = "group",
+        scope_setter: Callable[[str], None] | None = None,
     ) -> None:
         self._initial_client = initial_client
         self._initial_client_used = False
@@ -69,6 +72,9 @@ class MultiLiveSession:
         self._relaxed_mode_loader = relaxed_mode_loader
         self._ui_locale_loader = ui_locale_loader
         self._ui_locale = ui_locale
+        # 取数范围与写回回调：所有标签页会话共用同一个持有者，范围只可能有一个值。
+        self._scope = scope
+        self._scope_setter = scope_setter
         self._sessions: dict[str, LiveSession] = {}
         self._clients: dict[str, CdpClient] = {}
         self._control_sequences: dict[str, int] = {}
@@ -89,6 +95,10 @@ class MultiLiveSession:
             "remember_pending": None,
             # 与 LiveSession.state 同名同义：browser_closed = 浏览器被关闭后自动结束。
             "stop_reason": "",
+            # 与 LiveSession.state 同名同义：取数范围与"因范围跳过"的统计。
+            "scope": self._scope,
+            "skipped_count": 0,
+            "skipped_section": "",
         }
 
     def _new_session(self, client: CdpClient) -> LiveSession:
@@ -107,6 +117,8 @@ class MultiLiveSession:
             relaxed_mode_loader=self._relaxed_mode_loader,
             ui_locale_loader=self._ui_locale_loader,
             ui_locale=self._ui_locale,
+            scope=self._scope,
+            scope_setter=self._on_child_scope,
         )
 
     def set_relaxed_mode_loader(self, loader: Callable[[], bool] | None) -> None:
@@ -281,9 +293,7 @@ class MultiLiveSession:
         for session in sessions:
             session.update_data(data, catalog)
 
-    def set_data_loader(
-        self, loader: Callable[[], tuple[dict[str, str], list[dict[str, str]]]] | None
-    ) -> None:
+    def set_data_loader(self, loader: LiveDataLoader | None) -> None:
         self._data_loader = loader
         with self._lock:
             sessions = list(self._sessions.values())
@@ -341,6 +351,38 @@ class MultiLiveSession:
         result["filled"] = sum(int(item.get("filled") or 0) for item in states)
         self.state = result
         return result
+
+    def _on_child_scope(self, scope: str) -> None:
+        """子会话要切范围：写回同一个持有者（loader 按它取数），并记住当前范围。"""
+        self._scope = normalize_scope(scope)
+        if self._scope_setter is not None:
+            self._scope_setter(self._scope)
+
+    def request_scope(self, scope: str) -> None:
+        """切换取数范围并广播给所有标签页会话（面板开关 / 页面开关都走这里）。"""
+        next_scope = normalize_scope(scope)
+        self._on_child_scope(next_scope)
+        with self._lock:
+            sessions = list(self._sessions.values())
+        for session in sessions:
+            session.request_scope(next_scope)
+
+    def set_scope_setter(self, setter: Callable[[str], None] | None) -> None:
+        """替换范围写回回调（复用会话时接线，**不**改变当前范围）。"""
+        self._scope_setter = setter
+
+    def adopt_scope(
+        self, scope: str, scope_setter: Callable[[str], None] | None = None
+    ) -> None:
+        """复用已有会话时对齐范围持有者（子会话接着走同一次取数）。"""
+        if scope_setter is not None:
+            self._scope_setter = scope_setter
+        self._scope = normalize_scope(scope)
+        self.state["scope"] = self._scope
+        with self._lock:
+            sessions = list(self._sessions.values())
+        for session in sessions:
+            session.adopt_scope(self._scope, self._on_child_scope)
 
     def set_enabled(self, enabled: bool) -> None:
         """同步切换所有网申标签页的智能逐项填表状态，悬浮球仍保留。"""

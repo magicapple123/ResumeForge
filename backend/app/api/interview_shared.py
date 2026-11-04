@@ -97,7 +97,8 @@ def _resume_record_or_none(db: Session, resume_id: int) -> ResumeRecord | None:
 def _resume_text(db: Session, session: InterviewSession) -> str:
     """把这场面试的**候选人材料**序列化成文本，作为面试官唯一的候选人材料。
 
-    优先用导入的简历截图识别结果（#41）；没有才回落到关联的那份简历记录。面试官拿到的
+    优先用导入的简历材料提取结果（#41，图片走识别、文本类走本机提取，两侧同一套格式）；
+    没有才回落到关联的那份简历记录。面试官拿到的
     就是"提交的简历 + 岗位 JD"这两份东西（真实面试的边界），所以这里既不再读个人资料，
     也不跨简历读取。
     """

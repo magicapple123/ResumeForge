@@ -93,8 +93,11 @@
   box-shadow: 0 12px 30px rgb(42 83 125 / 16%);
   /* 壳本身 pointer-events: none（拖拽命中只留给球），卡片要自己接住点击。 */
   pointer-events: auto;
-  /* 入场 / 退场都从贴球的那一侧（右下角）缩放上浮，像从球里长出来。 */
-  transform-origin: 100% 100%;
+  /* 入场 / 退场都从贴球的那一侧（右下角）缩放上浮，像从球里长出来。
+     球被拖到左边时卡片改向左展开，这一侧要跟着换：水平分量由 hook
+     （useTouTouAnchoredCard）按夹取结果写进 --tt-card-origin-x——右对齐是 100%，
+     左对齐是 0%，兜底值保持"球在右下角"的老假设。 */
+  transform-origin: var(--tt-card-origin-x, 100%) 100%;
   animation: tt-card-in 220ms var(--tt-ease-pop);
 }
 
@@ -125,12 +128,16 @@
 }
 
 /*
- * 指向悬浮球的尾巴。球固定居中于 .tt-shell（右下角），卡片右缘与壳右缘对齐，
- * 故球心距卡片右缘正好 --tt-size / 2；尾巴总宽 14px，右移半个宽度即对准球心。
+ * 指向悬浮球的尾巴。尾巴永远在卡片底部向下指，所以只需把它的**水平位置**对准球心。
+ *
+ * 原来的写法 `right: calc(var(--tt-size) / 2 - 7px)` 吃的是"球固定居中于 .tt-shell
+ * （即永远在右下角）、卡片右缘与壳右缘对齐"这个假设，它是 8-A 的根：球一旦被拖到
+ * 左边，卡片改向右展开，球心到卡右缘的距离就变了。现在这个距离由 hook
+ * （useTouTouAnchoredCard）实算后写进 --tt-tail-right；兜底值仍是老假设，供首帧使用。
  */
 .tt-card-tail {
   position: absolute;
-  right: calc(var(--tt-size) / 2 - 7px);
+  right: var(--tt-tail-right, calc(var(--tt-size) / 2 - 7px));
   bottom: -6px;
   width: 0;
   height: 0;

@@ -117,6 +117,26 @@ export function canPlaceItem(
 }
 
 /**
+ * 落点是否只涉及「组内换序」，不涉及「换位置」（问题 12）。
+ *
+ * 「能不能换位置」与「能不能换顺序」是两条判据：`canPlaceItem` 对正文块（text）恒为 false
+ * （它没有 placement 可选），但正文块当然可以在正文组里往前挪一格。所以这条判据只看
+ * "目标组就是当前组" + 可写，不看位置白名单。
+ *
+ * 正文块的 `hidden → body` 也算：隐藏态的正文必须能拖回正文区（否则只能删掉重打）。
+ * 反方向（显示 → 隐藏）不靠拖，走右键菜单的显示/隐藏。
+ */
+export function canReorderWithin(
+  item: ResumeItem,
+  placement: Placement,
+  readOnly = false,
+): boolean {
+  if (readOnly) return false;
+  if (getItemPlacement(item) === placement) return true;
+  return item.kind === "text" && placement === "body";
+}
+
+/**
  * 能不能**拖着**放到这个位置：位置本身允许 + 同域（`hidden` 例外，与任何域互通）。
  *
  * 位置下拉不走这里——下拉按 `allowedPlacementsForItem` 列全部合法位置，那才是跨域的入口。
@@ -169,7 +189,8 @@ function replaceEntry(
 /**
  * 移动一条 item（改位置 / 改同组顺序）。
  *
- * 找不到路径、item 是 TextItem、目标位置非法时返回**原文档引用**。
+ * 找不到路径、目标位置非法时返回**原文档引用**。正文块（text）没有可选位置，但可以在
+ * 正文组里换序（问题 12）——两者由 `canReorderWithin` 与 `canPlaceItem` 分别把关。
  */
 export function moveItem(
   document: ResumeDocument,
@@ -179,12 +200,19 @@ export function moveItem(
   const located = locatePath(document, path);
   if (!located || located.kind !== "item") return document;
   const { item, itemIndex, entry, entryIndex, sectionIndex } = located;
-  if (item.kind === "text") return document;
   const currentPlacement = getItemPlacement(item);
   const nextPlacement = target.placement ?? currentPlacement;
   // 换位置才校验白名单：历史数据里可能已经有 placement=body 的字段，它在原组内换序仍要能动
   // （否则用户会看到"这条怎么拖都没反应"，且没有任何提示能解释）。
-  if (nextPlacement !== currentPlacement && !canPlaceItem(item, nextPlacement)) return document;
+  // 正文块（text）没有可选位置，但**组内换序必须放行**（问题 12）：只有指定成 body/hidden
+  // 以外的位置才算"换位置"，一律拒绝；body ↔ hidden 是显示/隐藏两半，交给 withItemPlacement。
+  if (nextPlacement !== currentPlacement) {
+    if (item.kind === "text") {
+      if (nextPlacement !== "body") return document;
+    } else if (!canPlaceItem(item, nextPlacement)) {
+      return document;
+    }
+  }
 
   const remaining = entry.items.slice();
   remaining.splice(itemIndex, 1);

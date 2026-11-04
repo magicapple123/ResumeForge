@@ -218,3 +218,25 @@
   justify-content: flex-end;
   gap: 8px;
 }
+
+/* ===== 深链命中高亮（全局搜索 → 我的资料） =====
+ * 命中后由 useProfileDeepLink 给目标节点挂类：只描边 + 短暂底色，1.6s 后回到常态。
+ * 不用 overflow/opacity 做"看不见的定位"——滚动与聚焦必须真实发生，用户要能看见落点。 */
+.is-deep-link-target {
+  border-radius: 10px;
+  outline: 2px solid var(--rf-brand);
+  outline-offset: 2px;
+  animation: profile-deep-link-fade 1.6s ease-out;
+}
+
+@keyframes profile-deep-link-fade {
+  from {
+    outline-color: var(--rf-brand);
+    background-color: var(--rf-brand-wash);
+  }
+
+  to {
+    outline-color: transparent;
+    background-color: transparent;
+  }
+}

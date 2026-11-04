@@ -217,8 +217,12 @@ export default function ResumeColorControls({
                 // 一次取色 = 一次重渲染请求。
                 onChangeComplete={(color) => commit(key, color.toHexString())}
               />
+              {/* 读数格只放**值**：无覆盖时它是空的（问题 23）。原来这里回落到
+                  「随模板」，而右侧来源胶囊说的也是「随模板」——同一句话在一行里出现
+                  两次，既让人以为有两列状态，又白吃 44 + 6 = 50px。滑杆那几行的分工
+                  本来就是"读数放值、胶囊放来源"，颜色行跟着对齐。 */}
               <Typography.Text type="secondary" className="resume-measure-value">
-                {current ?? t("workbench.color.followTemplate")}
+                {current ?? ""}
               </Typography.Text>
               <span className={`resume-measure-source${customized ? " is-empty" : ""}`}>
                 {canRestore ? (

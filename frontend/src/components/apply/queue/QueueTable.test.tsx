@@ -14,6 +14,8 @@ import { App as AntdApp } from "antd";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { expectNoUnfocusableScroller } from "../../../test/a11yScrollRegion";
+import { ContextMenuHost } from "../../../features/context-menu/ContextMenuHost";
+import { layer } from "../../../theme/tokens";
 import type { ApplyQueueItem } from "../../../types";
 import { QueueTable } from "./QueueTable";
 
@@ -42,14 +44,16 @@ afterEach(() => {
 function renderTable(items: ApplyQueueItem[]) {
   return render(
     <AntdApp>
-      <QueueTable
-        items={items}
-        busy={false}
-        selectedIds={[]}
-        setSelectedIds={vi.fn()}
-        setDetail={vi.fn()}
-        rowMenuItems={() => [{ key: "x", label: "占位项" }]}
-      />
+      <ContextMenuHost>
+        <QueueTable
+          items={items}
+          busy={false}
+          selectedIds={[]}
+          setSelectedIds={vi.fn()}
+          setDetail={vi.fn()}
+          rowMenuItems={() => [{ key: "x", label: "占位项" }]}
+        />
+      </ContextMenuHost>
     </AntdApp>,
   );
 }
@@ -102,5 +106,18 @@ describe("QueueTable 横向滚动区（a11y）", () => {
     renderTable([BASE_ITEM]);
 
     expect(await screen.findByRole("button", { name: /查看队列条目详情/ })).toBeEnabled();
+  });
+
+  it("行右键菜单走统一浮层：层级取 layer.aiPolish（不再是写死的 1050/1060）", async () => {
+    const { container } = renderTable([BASE_ITEM]);
+    const row = container.querySelector<HTMLElement>(".ant-table-tbody tr.ant-table-row");
+    expect(row).not.toBeNull();
+    // 行本身要能接键盘：Shift+F10 是右键的键盘等价物。
+    expect(row).toHaveAttribute("tabindex", "0");
+
+    fireEvent.contextMenu(row as HTMLElement, { clientX: 120, clientY: 90 });
+    const menu = await screen.findByRole("menu");
+    expect(menu.style.zIndex).toBe(String(layer.aiPolish));
+    expect(screen.getByRole("menuitem", { name: "占位项" })).toBeInTheDocument();
   });
 });

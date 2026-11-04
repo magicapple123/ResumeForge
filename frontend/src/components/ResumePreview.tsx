@@ -139,8 +139,8 @@ const ResumePreview = forwardRef<ResumePreviewHandle, Props>(function ResumePrev
   ref,
 ) {
   useLocale();
-  const pageCount = Math.max(1, Math.round(pages));
-  const paperHeight = A4_HEIGHT_PX * pageCount;
+  const pageLimit = Math.max(0, Number.isFinite(pages) ? Math.round(pages) : 1); // 0 = 不限篇幅
+  const paperHeight = A4_HEIGHT_PX * Math.max(1, pageLimit);
   /**
    * 预览 iframe 的正文：去掉模板里的排页探针脚本（Q22）。
    *
@@ -150,7 +150,7 @@ const ResumePreview = forwardRef<ResumePreviewHandle, Props>(function ResumePrev
   const previewHtml = useMemo(() => stripPreviewScripts(html), [html]);
   // 服务端分页报告的页数（问题 3）：`null` = 拿不到，退回浏览器测量。`resumeId` 与版式字段
   // 都从 `exactPreview` 取（它的唯一构造处）；没有它的宿主（生成流程的临时预览）一行都不用改。
-  const reportedPages = useReportedPageCount({ exactPreview, pageLimit: pageCount });
+  const reportedPages = useReportedPageCount({ exactPreview, pageLimit });
   const containerRef = useRef<HTMLDivElement>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
@@ -221,7 +221,7 @@ const ResumePreview = forwardRef<ResumePreviewHandle, Props>(function ResumePrev
     (frame: HTMLIFrameElement, index: number) => {
       const document = frame.contentDocument;
       if (!document?.body || !document.documentElement) return;
-      const result = layoutFrame({ document, pageLimit: pageCount, paperHeight, reportedPages });
+      const result = layoutFrame({ document, pageLimit, paperHeight, reportedPages });
       if (!result) return;
       if (index === 0) {
         if (result.measure) {
@@ -231,7 +231,7 @@ const ResumePreview = forwardRef<ResumePreviewHandle, Props>(function ResumePrev
         setOverflow(result.overflow);
         setNaturalWidth(result.naturalWidth);
         onLayoutStatus?.({
-          pages: pageCount,
+          pages: pageLimit,
           overflow: result.overflow,
           pagesNeeded: result.pagesNeeded,
           pagesRendered: result.visualPages,
@@ -250,14 +250,14 @@ const ResumePreview = forwardRef<ResumePreviewHandle, Props>(function ResumePrev
         document.documentElement.scrollLeft = index * A4_WIDTH_PX;
       }
     },
-    [onLayoutStatus, onMeasure, pageCount, paperHeight, reportedPages],
+    [onLayoutStatus, onMeasure, pageLimit, paperHeight, reportedPages],
   );
 
   // 见 `resume-preview/useFrameRelayout.ts`：报告回来后要重排已有的纸（问题 3）。
   useFrameRelayout({
     containerRef,
     applyLayout: applyLayoutToFrame,
-    pageLimit: pageCount,
+    pageLimit,
     reportedPages,
   });
 
@@ -301,7 +301,7 @@ const ResumePreview = forwardRef<ResumePreviewHandle, Props>(function ResumePrev
   } = useClickToEditPreview({ containerRef, draftMode, onPickField, richEdit });
 
   // 命令式测量接口（"自动一页"逐档试版式 / 滑块实时探针）拆到 `usePreviewProbeHandle`。
-  usePreviewProbeHandle(ref, iframeRef, pageCount);
+  usePreviewProbeHandle(ref, iframeRef, Math.max(1, pageLimit));
 
   // 换 html / 换页数不再复位缩放（2026-10-29 用户要求）：复位等于每调一个参数就被打回
   // 100%；缩放是会话级视图状态，只有「适应页面」才回到 fit。滚动位置由实时预览链路恢复。
@@ -325,7 +325,7 @@ const ResumePreview = forwardRef<ResumePreviewHandle, Props>(function ResumePrev
   const geometry = calculatePreviewGeometry({
     availableSpace,
     paperHeight,
-    pageCount,
+    pageLimit,
     // 草稿几何只由草稿缩放决定：精确那套比例与它无关。
     zoom: draftZoom.zoom,
     // 制作台右栏按宽度适应（Q21）：纸宽 ≤ 相框宽，纵向滚动看全。
@@ -396,7 +396,7 @@ const ResumePreview = forwardRef<ResumePreviewHandle, Props>(function ResumePrev
         {proviewConfig && draftMode ? (
           <ProviewLayer
             viewportRef={containerRef}
-            pageCount={pageCount}
+            pageCount={Math.max(1, pageLimit)}
             pageWidth={A4_WIDTH_PX}
             pageHeight={A4_HEIGHT_PX}
             zoom={zoom}
@@ -412,7 +412,7 @@ const ResumePreview = forwardRef<ResumePreviewHandle, Props>(function ResumePrev
           overflow={overflow}
           overflowClipped={geometry.overflowClipped}
           pagesNeeded={geometry.pagesNeeded}
-          pageCount={pageCount}
+          pageLimit={pageLimit}
           overflowAmountText={geometry.overflowAmountText}
           // 精确模式只要**一条**页数提醒：那一栏的结论来自服务端真实 PDF
           // （`ExactPreviewAlerts`），草稿侧这条是浏览器分页的另一套数字。
@@ -436,7 +436,7 @@ const ResumePreview = forwardRef<ResumePreviewHandle, Props>(function ResumePrev
               resumeId={exactPreview!.resumeId}
               template={exactPreview!.template}
               formatName={exactPreview!.formatName}
-              pageLimit={pageCount}
+              pageLimit={pageLimit}
               fontScale={exactPreview!.fontScale}
               language={exactPreview!.language}
               formatConfig={exactPreview!.formatConfig}
@@ -465,7 +465,7 @@ const ResumePreview = forwardRef<ResumePreviewHandle, Props>(function ResumePrev
               scaledHeight={geometry.scaledHeight}
               scale={geometry.scale}
               totalVisualPages={geometry.totalVisualPages}
-              pageLimit={pageCount}
+              pageLimit={pageLimit}
               html={previewHtml}
               containerRef={containerRef}
               iframeRef={iframeRef}

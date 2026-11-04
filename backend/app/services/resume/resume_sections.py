@@ -66,6 +66,13 @@ SECTION_LABELS: dict[str, str] = SECTION_TITLES[DEFAULT_RESUME_LANGUAGE]
 #
 # `basic_info` 刻意**不在**映射里：姓名、联系方式、照片是页眉，不参与正文分区排序
 # （见上面的说明），资料页把它排在哪一位都不该影响简历。
+#
+# 2026-11-04（4-A 收口）：补上 publications / research_projects / patents / credentials。
+# 这四栏在资料侧（`definition_catalog.BUILTIN_SECTION_KEYS`）与正文侧
+# （`DEFAULT_SECTION_ORDER`）**都存在**，之前漏了映射，后果有两个：生成弹窗的「调整
+# 板块顺序」排不了它们（清单只有 9 项），以及 `profile_to_resume_order` 把它们一律丢到
+# 末尾（"科研四栏的落位"与资料页顺序不一致）。补表不会改变空板块的产物——所有渲染器
+# 对空分区都不产生节点；它只让"有内容的这四栏"跟随资料页顺序。
 PROFILE_SECTION_TO_RESUME: dict[str, str] = {
     "educations": "education",
     "experiences": "experience",
@@ -75,6 +82,10 @@ PROFILE_SECTION_TO_RESUME: dict[str, str] = {
     "languages": "languages",
     "awards": "awards",
     "summary": "summary",
+    "publications": "publications",
+    "research_projects": "research_projects",
+    "patents": "patents",
+    "credentials": "credentials",
 }
 
 # 页眉（姓名 / 求职意向 / 联系方式 / 照片）不在可排序的七个分区里，它永远在最前面。

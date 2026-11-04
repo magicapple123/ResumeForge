@@ -11,6 +11,7 @@
  */
 import { Alert, Button, Space, Typography } from "antd";
 import { t } from "../../i18n";
+import { UNLIMITED_PAGE_LIMIT } from "../../types";
 import { EXACT_OVERFLOW_NOTE_KEY } from "./config";
 import type { PreviewShot } from "./exactPreviewCache";
 import { useLocale } from "../../i18n/i18nContext";
@@ -166,7 +167,10 @@ export function ExactPreviewStatus({
             必然有一段空窗——静悄悄留着旧图会让人以为"没生效"。 */}
         {busy
           ? t("exact.status.busy")
-          : t("exact.status.pages", { pages: current.pages ?? "?", limit: pageLimit })}
+          : pageLimit === UNLIMITED_PAGE_LIMIT
+            ? // 不限篇幅没有上限可比：说「（上限 0 页）」既无意义又像出了错。
+              t("exact.status.pagesNoLimit", { pages: current.pages ?? "?" })
+            : t("exact.status.pages", { pages: current.pages ?? "?", limit: pageLimit })}
       </Typography.Text>
       {hasUnsavedContent && active ? (
         <Typography.Text type="secondary" style={{ fontSize: 12 }}>

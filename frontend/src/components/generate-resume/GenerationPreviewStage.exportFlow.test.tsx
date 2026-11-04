@@ -1,15 +1,19 @@
 // SPDX-License-Identifier: Apache-2.0
 /** 生成流程预览必须显式声明走旧导出链路（exportFlow="legacy"）。 */
-import { cleanup, render } from "@testing-library/react";
+import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { ComponentProps } from "react";
+import type { ComponentProps, ReactNode } from "react";
 import type { ResumeDetail } from "../../types";
 import GenerationPreviewStage from "./GenerationPreviewStage";
 
-const captured = vi.hoisted(() => ({ exportFlow: undefined as string | undefined }));
+const captured = vi.hoisted(() => ({
+  exportFlow: undefined as string | undefined,
+  extraActions: undefined as ReactNode,
+}));
 vi.mock("../resume/ResumeDetailPreview", () => ({
-  default: (props: { exportFlow?: string }) => {
+  default: (props: { exportFlow?: string; extraActions?: ReactNode }) => {
     captured.exportFlow = props.exportFlow;
+    captured.extraActions = props.extraActions;
     return <div data-testid="detail-preview" />;
   },
 }));
@@ -17,6 +21,7 @@ vi.mock("../resume/ResumeDetailPreview", () => ({
 afterEach(() => {
   cleanup();
   captured.exportFlow = undefined;
+  captured.extraActions = undefined;
 });
 
 function renderStage() {
@@ -55,5 +60,25 @@ describe("生成流程导出入口", () => {
   it("GenerationPreviewStage 给 ResumeDetailPreview 传 exportFlow=legacy", () => {
     renderStage();
     expect(captured.exportFlow).toBe("legacy");
+  });
+});
+
+describe("生成流程底栏的按钮层级（问题 3）", () => {
+  it("三个收尾动作里没有 primary：「完成」降级、「去简历中心」归入导航层", () => {
+    renderStage();
+    // extraActions 只由 ResumeDetailPreview 渲染，这里单独把它挂出来断言样式层级。
+    const { container } = render(<>{captured.extraActions}</>);
+
+    // 整条底栏唯一的实心主按钮是「导出」，所以「完成」不能再是 primary。
+    // （antd 会在两个汉字之间插一个空格，所以按正则取名字。）
+    expect(screen.getByRole("button", { name: /完\s*成/ }).className).not.toContain(
+      "ant-btn-primary",
+    );
+    // 「去简历中心」是导航而非动作：文字按钮，视觉明显弱于左右两侧。
+    expect(screen.getByRole("button", { name: "去简历中心" }).className).toContain("ant-btn-text"); // 「重新生成」保持默认描边。
+    expect(screen.getByRole("button", { name: /重新生成/ }).className).not.toContain(
+      "ant-btn-primary",
+    );
+    expect(container.querySelectorAll(".ant-btn-primary")).toHaveLength(0);
   });
 });

@@ -26,7 +26,7 @@ import { buildBulkRowActions } from "./jobs/bulkActionItems";
 import { JobFilterBar } from "./jobs/JobFilterBar";
 import type { BatchAction } from "./jobs/jobFilterOptions";
 import { useJobBulkActions } from "./jobs/useJobBulkActions";
-import { useBatchOperationGuard } from "../features/settings/useBatchOperationConfig";
+import BatchConfigModal from "../components/batch/BatchConfigModal";
 import { useJobBackfill } from "./jobs/useJobBackfill";
 import { useJobQueue } from "./jobs/useJobQueue";
 import { useJobsPageState } from "./jobs/useJobsPageState";
@@ -304,15 +304,13 @@ export default function JobsPage() {
     setMatchBatchOpen(true);
   };
 
-  // 批量 AI 生成简历前必须先有「设置 → 批量操作」保存过的一套参数。
-  const batchOp = useBatchOperationGuard("generation");
+  // 批量 AI 生成简历：点动作先弹「本次参数」，确认后才开跑（不跳设置页、勾选不丢）。
   const bulk = useJobBulkActions({
     jobs,
     selectedJobIds,
     removeSelectedJobs,
     enqueueSelectedJobs,
     openMatchBatch,
-    ensureBatchConfig: batchOp.ensure,
   });
   const busy = batchAction !== null || bulk.bulkAi.running;
 
@@ -365,6 +363,8 @@ export default function JobsPage() {
         selectAllPagesLoading={selectAllPagesLoading}
         onSelectAllPages={() => void selectAllPages()}
       />
+
+      <BatchConfigModal mode="generation" {...bulk.configModal} />
 
       {error ? (
         <ErrorState description={error} onRetry={() => void reload()} />

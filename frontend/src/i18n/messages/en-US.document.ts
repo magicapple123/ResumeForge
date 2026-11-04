@@ -43,6 +43,7 @@ const document = {
   "document.zone.body": "Body",
   "document.zone.detail": "Gray short fields",
   "document.zone.detailHint": "Short fields run in columns before and after the body",
+  "document.zone.bodyHint": "Drag the handle, or select and press ↑ ↓, to reorder",
   "document.zone.emptyLead": "No gray fields before the body yet",
   "document.zone.emptyTrail": "No gray fields after the body yet",
   "document.zone.emptyBody": "No body content yet",
@@ -98,8 +99,6 @@ const document = {
   "document.item.showLabel": "Show label",
   "document.item.hideLabel": "Hide label",
   "document.item.wrap": "Wrap value in parentheses",
-  "document.item.moveUp": "Move field up",
-  "document.item.moveDown": "Move field down",
   "document.item.format": "Format",
   "document.item.bodyStyle": "Body style",
   "document.item.bodyStyle.bullet": "Bullet",
@@ -196,6 +195,9 @@ const document = {
   "document.basic.customAdd": "Add field",
   "document.basic.customHint":
     "The custom name shows in the editor only; the page prints the value at its placement",
+  // 6-A: catalog fields arrive with the current profile value (a copy, not a live link)
+  "document.basic.addedValueHint":
+    "Added fields arrive with the current value from your profile; double-click to edit it here. Later profile edits are not synced automatically",
   // #25: photo chip and crop
   "document.photo.chipValue": "Photo",
   "document.photo.thumbnail": "Photo thumbnail",

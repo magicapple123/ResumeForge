@@ -283,11 +283,12 @@ class SearchConfig(BaseModel):
     """联网搜索设置。
 
     多个来源会并发查询后合并去重：Bing RSS 与 DuckDuckGo 开箱可用，SearXNG 需要
-    用户填自己的实例地址（公共实例经常限流，所以不预置默认值）。
+    用户填自己的实例地址（公共实例经常限流，所以不预置默认值）。DeepSeek 需要单独的
+    API Key，**默认不启用**——没配 key 时它不参与并发，不会"假装搜索成功"。
     """
 
-    sources: list[Literal["bing", "duckduckgo", "searxng"]] = Field(
-        default_factory=lambda: ["bing", "duckduckgo"], min_length=1, max_length=3
+    sources: list[Literal["bing", "duckduckgo", "searxng", "deepseek"]] = Field(
+        default_factory=lambda: ["bing", "duckduckgo"], min_length=1, max_length=4
     )
     # 自建 SearXNG 实例根地址，例如 http://localhost:8080
     searxng_url: str = Field(default="", max_length=512)
@@ -295,11 +296,20 @@ class SearchConfig(BaseModel):
     fetch_pages: int = Field(default=0, ge=0, le=3)
     # 每次搜索最多返回多少条
     max_results: int = Field(default=8, ge=1, le=15)
+    # DeepSeek Search / Fetch 的密钥。**这里永远不应出现明文**：读取时是掩码
+    # （``********``）或空串，真实密钥由 settings_service 加密后单独存储。
+    deepseek_api_key: str = Field(default="", max_length=200)
 
     @field_validator("sources")
     @classmethod
     def sources_must_be_unique(cls, value: list[str]) -> list[str]:
         return list(dict.fromkeys(value))
+
+    @field_validator("deepseek_api_key")
+    @classmethod
+    def deepseek_key_must_be_stripped(cls, value: str) -> str:
+        # 粘贴时带的首尾空白/换行不能进密文，否则鉴权必然失败。
+        return value.strip()
 
     @field_validator("searxng_url")
     @classmethod

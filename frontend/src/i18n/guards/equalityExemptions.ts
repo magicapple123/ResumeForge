@@ -33,6 +33,12 @@ export const EQUALITY_EXEMPT_KEYS = {
     "Technical term used verbatim in the original Chinese copy",
   // The interviewer's given name is spelled "Jane" in every locale (a name, not prose).
   "interviewPage.interviewerName": "Person name, identical in both languages",
+  // Search provider brand name, spelled the same in every locale.
+  "searchCard.source.deepseek": "Provider brand name, identical in both languages",
+  // The version badge is a token ("v1", "v2", …), not prose: the letter is part of the
+  // notation and must not become "第 1 版" on the Chinese side either, otherwise the
+  // version bar no longer matches how the same feature is described in docs and tests.
+  "writing.version.label": "Version token v1/v2, identical in both languages",
 } as const satisfies Readonly<Record<string, string>>;
 
 export function isEqualityExempt(key: string): boolean {

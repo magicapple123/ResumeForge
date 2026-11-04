@@ -129,15 +129,78 @@ describe("LayoutOptimizerPanel", () => {
     expect(document.querySelector('[data-optimizer-candidate="font"]')).toBeNull();
   });
 
-  it("最小页边距把所有候选排除时，明确说被锁定条件排除", () => {
+  it("最小页边距只排掉压页边距那一档，行高/字号候选仍然给出（问题 17）", () => {
     renderPanel();
     fireEvent.change(screen.getByLabelText(ot("optimizer.minMargin")), {
       target: { value: "20" },
     });
     generate();
-    // 标题与兜底说明都可能是这一句：只要出现即可。
-    expect(screen.getAllByText(ot("optimizer.noFeasible.locked")).length).toBeGreaterThan(0);
+    // 阶梯是累积覆盖：不该因为第一档越线就把后面所有档一起排掉。
+    expect(screen.queryAllByText(ot("optimizer.noFeasible.locked")).length).toBe(0);
+    expect(document.querySelectorAll("[data-optimizer-candidate]").length).toBeGreaterThan(0);
+    expect(document.querySelector('[data-optimizer-candidate="padding"]')).toBeNull();
+  });
+
+  it("目标 2 页：收到能装 2 页就停，不再试更紧的字号档（问题 17）", () => {
+    // 2 页可用高度 2000：padding 档 2080 仍溢出，line 档 1980 已装得下 → 后面不再探。
+    const { probe, calls } = makeProbe({
+      "css-padding": 2080,
+      "css-gap": 2050,
+      "css-line": 1980,
+      "css-font": 1500,
+    });
+    renderPanel({ before: { usedHeight: 2100, pageContentHeight: 1000, pageLimit: 1 }, probe });
+    fireEvent.click(screen.getByText(ot("optimizer.target.pages", { count: 2 })));
+    generate();
+    expect(calls).not.toContain("css-font");
+    expect(document.querySelectorAll("[data-optimizer-candidate]").length).toBe(2);
+  });
+
+  it("目标篇幅默认跟随简历的 page_limit（2 页不再按 1 页判溢出）", () => {
+    // 1500 高：1 页放不下、2 页放得下。目标若还默认 1 页，这里会给出候选而不是空态。
+    renderPanel({
+      pageLimit: 2,
+      before: { usedHeight: 1500, pageContentHeight: 1000, pageLimit: 2 },
+    });
+    generate();
+    expect(screen.getByText(ot("optimizer.empty"))).toBeTruthy();
     expect(document.querySelectorAll("[data-optimizer-candidate]").length).toBe(0);
+  });
+
+  it("不限篇幅（page_limit=0）：没有收敛目标，不试任何版式档", () => {
+    const { probe, calls } = makeProbe({ "css-padding": 1180, "css-gap": 1100 });
+    renderPanel({ pageLimit: 0, probe });
+    generate();
+    expect(calls).toHaveLength(0);
+    expect(document.querySelectorAll("[data-optimizer-candidate]").length).toBe(0);
+  });
+
+  it("试过仍放不下：提示写明目标几页、实际几页（不再只说超出）", () => {
+    const { probe } = makeProbe({
+      "css-padding": 2400,
+      "css-gap": 2350,
+      "css-line": 2300,
+      "css-font": 2250,
+    });
+    renderPanel({
+      pageLimit: 2,
+      before: { usedHeight: 2500, pageContentHeight: 1000, pageLimit: 2 },
+      probe,
+    });
+    generate();
+    expect(
+      screen.getAllByText(ot("optimizer.noFeasible.stillOverflowNumbered", { target: 2, pages: 3 }))
+        .length,
+    ).toBeGreaterThan(0);
+  });
+
+  it("最小页边距变化会通知宿主重算阶梯（边距是下界，不是本地丢档）", () => {
+    const onMinMarginChange = vi.fn();
+    renderPanel({ onMinMarginChange });
+    fireEvent.change(screen.getByLabelText(ot("optimizer.minMargin")), {
+      target: { value: "20" },
+    });
+    expect(onMinMarginChange).toHaveBeenCalledWith(20);
   });
 
   it("内容本来就放得下：给空态，不生成候选", () => {

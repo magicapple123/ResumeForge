@@ -113,8 +113,12 @@ describe("诊断卡 · 内容精简候选", () => {
     // 详情默认收起（2026-10-28）：优化候选在"详情"里，先展开再点它的开关。
     const expand = screen.getByRole("button", { name: t("resume.diagnosis.expand") });
     fireEvent.click(expand);
+    // 「保持条目完整」默认勾着：内容候选里不该出现"删条目"这类方案（问题 17）。
     fireEvent.click(screen.getByRole("button", { name: ot("optimizer.generate") }));
-    // 正文类候选不依赖诊断：重复条目会被列出来。
+    expect(screen.queryByText(ot("optimizer.content.kind.duplicate-entries"))).toBeNull();
+    // 取消勾选后它重新出现——这一条用例接下来要应用的就是它。
+    fireEvent.click(screen.getByRole("checkbox", { name: ot("optimizer.keepEntries") }));
+    fireEvent.click(screen.getByRole("button", { name: ot("optimizer.generate") }));
     expect(
       await screen.findByText(ot("optimizer.content.kind.duplicate-entries")),
     ).toBeInTheDocument();

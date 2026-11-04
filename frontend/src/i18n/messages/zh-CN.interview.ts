@@ -91,6 +91,10 @@ const interview = {
   "interview.suggestions.empty": "没有产出建议，试试补充更多面试暴露的短板或追问",
   "interview.suggestions.evidence": "依据：{evidence}",
   "interview.suggestions.goToResume": "去简历中心对照修改 →",
+  /** 建议条目的优先级标签（三档，与其它面板同义同色）。 */
+  "interview.suggestions.priority.high": "高",
+  "interview.suggestions.priority.medium": "中",
+  "interview.suggestions.priority.low": "低",
 } as const;
 
 export default interview;

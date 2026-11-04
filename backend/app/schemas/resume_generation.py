@@ -28,6 +28,12 @@ LONG_CV_MAX_PAGES = 10
 LONG_CV_DEFAULT_PAGE_LIMIT = 2
 ResumeMode = Literal["resume", "long_cv"]
 RESUME_MODES: tuple[str, ...] = ("resume", "long_cv")
+# 需求 7：0 = 不限篇幅（不是"零页"，也不是缺省值）。写成一个有名字的常量，
+# 避免各处出现裸 0 让人误读成"没配置"。
+UNLIMITED_PAGE_LIMIT = 0
+# 不限篇幅时渲染/导出侧的硬上限：PDF 总要有个 max_pages，取长 CV 的上限（10 页）。
+# 这是"渲染保护"，不是"篇幅约束"——用户选「不限」时我们不做裁剪也不发超页警告。
+UNLIMITED_RENDER_MAX_PAGES = LONG_CV_MAX_PAGES
 # 模式 → (最小页数, 最大页数)。前后端与所有写路径共用这一份，禁止各自写 if。
 MODE_PAGE_LIMITS: dict[str, tuple[int, int]] = {
     "resume": (1, MAX_RESUME_PAGES),
@@ -43,12 +49,19 @@ LONG_CV_RESOURCE_BUDGET: dict[str, int] = {
 
 
 def mode_page_limit(value: object, mode: str | None = None) -> int:
-    """按文档模式把页数上限夹紧（非法输入回落到最小页数，不抛异常）。"""
+    """按文档模式把页数上限夹紧（非法输入回落到最小页数，不抛异常）。
+
+    ``0``（``UNLIMITED_PAGE_LIMIT``）不是非法输入：它表示用户选了「不限篇幅」，
+    这里返回渲染侧的硬上限（``UNLIMITED_RENDER_MAX_PAGES``），让 PDF 有一个
+    max_pages 可用；生成链路的"不裁剪 / 不发警告"由调用方按 0 自行判断。
+    """
     low, high = MODE_PAGE_LIMITS.get(str(mode or "resume"), MODE_PAGE_LIMITS["resume"])
     try:
         number = int(value)  # type: ignore[arg-type]
     except (TypeError, ValueError):
         number = low
+    if number <= UNLIMITED_PAGE_LIMIT:
+        return UNLIMITED_RENDER_MAX_PAGES
     return max(low, min(number, high))
 ResumeFontScale = Literal["small", "standard", "large"]
 ResumeLanguage = Literal["zh-CN", "en-US"]
@@ -84,8 +97,8 @@ class GenerateOptions(BaseModel):
     # 文档形态（W14/A4）：普通简历 1–3 页；长 CV 1–10 页。**缺省 resume**，旧请求逐字兼容。
     # 长 CV 只在用户显式选择时生效（选择器不会自动切模式）。
     document_mode: ResumeMode = "resume"
-    # 目标篇幅：默认 1 页 A4。上限随文档模式变化（见 _check_page_limit_for_mode）。
-    page_limit: int = Field(default=1, ge=1, le=LONG_CV_MAX_PAGES)
+    # 目标篇幅：默认 1 页 A4。``0`` = 不限篇幅（需求 7B），其余上限随文档模式变化。
+    page_limit: int = Field(default=1, ge=UNLIMITED_PAGE_LIMIT, le=LONG_CV_MAX_PAGES)
     font_scale: ResumeFontScale = "standard"
     language: ResumeLanguage = "zh-CN"
     template: str = Field(default="classic", max_length=64)
@@ -108,6 +121,9 @@ class GenerateOptions(BaseModel):
         下超过 3 仍应像以前一样 422（旧协议语义不变），所以这里按模式抛校验错误。
         """
         low, high = MODE_PAGE_LIMITS[self.document_mode]
+        # 需求 7B：0 = 不限篇幅，两种模式都放行（"不限"与"长 CV 上限 10 页"是两个独立选项）。
+        if self.page_limit == UNLIMITED_PAGE_LIMIT:
+            return self
         if not low <= self.page_limit <= high:
             raise ValueError(
                 f"page_limit 超出当前文档模式的范围（{low}–{high} 页）"
@@ -134,6 +150,8 @@ __all__ = [
     "MAX_FORMAT_CONFIG_KEYS",
     "MAX_RESUME_PAGES",
     "MIN_CUSTOM_INSTRUCTION_CHARS",
+    "UNLIMITED_PAGE_LIMIT",
+    "UNLIMITED_RENDER_MAX_PAGES",
     "GenerateOptions",
     "GenerateRequest",
     "ResumeFontScale",

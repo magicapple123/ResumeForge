@@ -35,8 +35,15 @@ def build_generation_rationale(
     baseline_confirmed: list[str],
     skill_limit: int = 14,
     fallback_sections: tuple[str, ...] | list[str] = (),
+    custom_sections: list[dict[str, Any]] | tuple[dict[str, Any], ...] = (),
 ) -> str:
-    """拼装生成说明。输入全部来自生成流程的确定性中间产物。"""
+    """拼装生成说明。输入全部来自生成流程的确定性中间产物。
+
+    ``custom_sections``（需求 6）：参与了岗位相关性筛选的自建板块
+    （``profile_custom_filter.CustomSectionFilter.counts()``）。它们不进模型提示词，
+    所以单独并进「候选资料组成」与"另有 N 条没进候选"的计数，不能靠
+    ``selection_counts`` 里的键——那张表的键是 13 个内置分区。
+    """
     general = job is None
     lines: list[str] = []
     if general:
@@ -45,13 +52,30 @@ def build_generation_rationale(
             "各方向的经历都会保留。"
         )
     else:
+        custom_labels: dict[str, str] = {}
+        if custom_sections:
+            selection_counts = dict(selection_counts)
+            omitted_counts = dict(omitted_counts)
+            for item in custom_sections:
+                key = str(item.get("key") or "")
+                if not key:
+                    continue
+                selected = int(item.get("selected") or 0)
+                total = int(item.get("total") or 0)
+                custom_labels[key] = str(item.get("name") or key)
+                if selected:
+                    selection_counts[key] = selected
+                if total > selected:
+                    omitted_counts[key] = total - selected
         skills_text = "、".join(list(focus_skills)[:8]) or "未识别到明确技能"
         domains_text = "、".join(list(focus_domains)[:4]) or "通用方向"
         lines.append(
             f"目标岗位「{job.title}」：系统从 JD 里提取到的核心技能信号是 {skills_text}，"
             f"岗位方向判断为「{domains_text}」。"
         )
-        lines.append(f"候选资料组成：{_compose_counts(selection_counts)}。")
+        lines.append(
+            f"候选资料组成：{_compose_counts(selection_counts, custom_labels)}。"
+        )
         if fallback_sections:
             # A4/§8.5：岗位关键词与资料的直接交集不足，这些分区是按资料顺序保守保留
             # 的候选，不是"系统认为它们匹配"。资料里没写的岗位要求不会被编造。
@@ -70,15 +94,15 @@ def build_generation_rationale(
                 "没有进入候选资料——它们不是丢失了，仍完整保存在你的资料库里。"
             )
     if coverage_details:
-        dropped = [
-            f"{note['section_label']}：{'、'.join(f'「{name}」' for name in note['names'][:4])}"
-            for note in coverage_details
-        ]
-        lines.append(
-            "没有写进这份简历的内容（多为岗位相关性取舍）："
-            + "；".join(dropped)
-            + "。想补哪一条，把岗位关键词写进那条经历的描述后重新生成，或手动补上。"
-        )
+        # 旧写法把 11 个分区的资料名用「；」串成一句（实测 623 字，占全文 61%），
+        # 既是"理解为什么"最不需要的部分，又与上方蓝色覆盖块完全重复（同一份数据的
+        # 超集，且那边还能逐条「AI 补上这段」）。这里只留一句指路 + 条数。
+        total_unwritten = sum(int(note.get("total") or 0) for note in coverage_details)
+        if total_unwritten:
+            lines.append(
+                f"没有写进这份简历的内容：共 {total_unwritten} 条，见上方「这些资料内容没有写进"
+                "这份简历」，可在那里逐条补回；也可以把岗位关键词写进那条经历的描述后重新生成。"
+            )
     if baseline_confirmed:
         lines.append(
             "事实台账里你已确认过的与 "
@@ -97,7 +121,9 @@ def build_generation_rationale(
     return "\n".join(line for line in lines if line)
 
 
-def _compose_counts(selection_counts: dict[str, int]) -> str:
+def _compose_counts(
+    selection_counts: dict[str, int], extra_labels: dict[str, str] | None = None
+) -> str:
     # F3：候选组成扩展到 13 个大字段（新键只在有候选时出现，旧输出逐字不变）。
     labels = {
         "projects": "项目",
@@ -117,6 +143,11 @@ def _compose_counts(selection_counts: dict[str, int]) -> str:
         for key, label in labels.items()
         if selection_counts.get(key)
     ]
+    # 需求 6：自建板块用用户自己起的名字（后端原文，不翻译），排在 13 个内置之后。
+    for key, label in (extra_labels or {}).items():
+        if key in labels or not selection_counts.get(key):
+            continue
+        parts.append(f"{label} {selection_counts[key]} 条")
     return "、".join(parts) if parts else "（资料为空）"
 
 

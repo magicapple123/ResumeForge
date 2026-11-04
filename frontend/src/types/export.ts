@@ -63,6 +63,17 @@ export interface ExportResult {
   filename: string;
   pages: number | null;
   pageLimit: number | null;
+  /** 按当前版式**真实需要**几页（未裁剪）：界面用它说"约需 N 页"。 */
+  pagesNeeded?: number | null;
+  /**
+   * 文件里**确实**按「最大篇幅」裁掉了内容（1-D 响应头 `X-Resume-Truncated`）。
+   *
+   * 与 `overflow` 分开：裁过的文件页数通常正好等于上限（overflow=false），但少掉的部分
+   * 仍要提示用户——它不会出现在文件里。
+   */
+  truncated?: boolean;
+  /** 裁点 `section/object_id`：从这一段起的内容没有进文件（`X-Resume-Truncated-At`）。 */
+  truncatedAt?: string | null;
 }
 
 /**

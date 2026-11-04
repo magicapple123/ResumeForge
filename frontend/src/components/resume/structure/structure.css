@@ -83,6 +83,10 @@
   position: relative;
   color: var(--rf-text-body);
   font-size: var(--rf-font-size-sm, 13px);
+  /* 结构树只有"拖动排序"一种拖拽语义：行内文字一旦可选，在条目/分组行上按住拖动
+     就会先选中文字，Chrome 于是把它当成"拖动选中文本"（顶部弹「松开鼠标以搜索文本」），
+     而条目并没有被拖动。只读模式下整行没有 draggable，这个坑更容易踩到。 */
+  user-select: none;
 }
 
 /* 行内按钮（caret 与行尾操作）在结构树里一律 20×20：antd `size="small"` 是 24px 高，

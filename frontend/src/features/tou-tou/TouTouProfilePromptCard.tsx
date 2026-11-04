@@ -15,6 +15,7 @@ import { t } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
 import type { ProfileEditControl } from "./profileSaveBridge";
 import { usePrefersReducedMotion } from "./usePrefersReducedMotion";
+import { useTouTouAnchoredCard } from "./useTouTouAnchoredCard";
 
 /** 退场动效时长，与 tou-tou.css 的 tt-card-out 对齐；动画播完才真正卸载。 */
 const EXIT_MS = 180;
@@ -27,6 +28,10 @@ export interface TouTouProfilePromptCardProps {
 export default function TouTouProfilePromptCard({ control }: TouTouProfilePromptCardProps) {
   useLocale();
   const prefersReducedMotion = usePrefersReducedMotion();
+  // 这张卡的标题被裁成「…改资料？」就是 8-A 的原发现场：卡片写死右对齐，球贴左时
+  // 左半截跑到视口外。hook 把算好的 left 写进内联样式（尾巴与缩放原点一起跟着球走）。
+  const cardRef = useRef<HTMLDivElement>(null);
+  const anchoredStyle = useTouTouAnchoredCard(cardRef, { withTail: true });
   // 与 TouTouSaveCard 同一套状态机：control 归 null 后仍需多留 EXIT_MS 播完反向动画。
   const [shown, setShown] = useState<ProfileEditControl | null>(control);
   const [leaving, setLeaving] = useState(false);
@@ -58,7 +63,9 @@ export default function TouTouProfilePromptCard({ control }: TouTouProfilePrompt
 
   return (
     <div
+      ref={cardRef}
       className={`tt-card tt-profile-prompt-card${leaving ? " is-leaving" : ""}`}
+      style={anchoredStyle}
       role="group"
       aria-label={t("touTou.profilePrompt.ariaLabel")}
     >

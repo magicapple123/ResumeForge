@@ -38,8 +38,8 @@ export interface OptimizerConstraints {
   minMarginMm: number | null;
   /** 保持条目完整（见 constraints.ts 的诚实说明：只收紧间距/字号，不改结构）。 */
   keepEntriesWhole: boolean;
-  /** 目标篇幅（页）。 */
-  targetPages: 1 | 2;
+  /** 目标篇幅（页）：默认跟随简历的 page_limit；0 页 = 不限篇幅（不做版式收敛）。 */
+  targetPages: number;
 }
 
 /** 一个参数变化。 */

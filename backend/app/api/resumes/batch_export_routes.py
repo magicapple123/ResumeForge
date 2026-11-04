@@ -1,11 +1,12 @@
 # SPDX-License-Identifier: Apache-2.0
-"""简历中心的「批量导出」：按设置里的统一批量参数，把多份简历打成一个 zip。
+"""简历中心的「批量导出」：把多份简历打成一个 zip。
 
 **为什么是 zip 而不是 N 个下载**：浏览器会拦截连续多次自动下载，而"批量"本来就该是
 一个交付物。zip 里每份简历的文件名沿用单份导出的命名（标题 + 岗位），重名时追加序号。
 
-**为什么参数只从设置读**：这是"统一批量参数"的另一半——用户在设置里确认过一次版式与
-格式，批量导出就不再逐份询问。请求体只带 id 列表，避免"两个地方各存一套参数"。
+**参数有两个来源，本次优先**：请求体可以带 `config`（触发点弹窗里"本次参数"，只作用于
+这一批）；不带时读「设置 → 批量操作」里保存的默认值——老前端只传 id 列表，行为逐字不变。
+既没传本次参数、全局也没配置时才 409。
 
 单份失败（正文仍有 `【待补】` 标记、模板渲染失败等）不拖垮整批：跳过并在响应头里说明
 跳过几份、第一份为什么被跳过；全部失败才返回 409。
@@ -29,8 +30,9 @@ from sqlalchemy.orm import Session
 
 from ...database import get_db
 from ...models.resume import ResumeRecord
+from ...schemas.batch_operation import BatchExportConfig
 from ...services import trash
-from ...services.batch_operation import read_batch_operation_config
+from ...services.batch_operation import read_batch_operation_config, validate_batch_template
 from ...services.export_pipeline import ExportRequest
 from .export_routes import _export_record, _require_local_export_request
 
@@ -50,6 +52,9 @@ class BatchExportRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     resume_ids: list[int] = Field(min_length=1, max_length=MAX_BATCH_EXPORT)
+    # 「本次参数」：只在这一次请求里生效，不写回设置。缺省时退回全局默认值（老前端）。
+    # 字段与校验规则直接复用设置页那份 `BatchExportConfig`，不另写一套。
+    config: BatchExportConfig | None = None
 
 
 def _filename_from_headers(headers: dict[str, str], fallback: str) -> str:
@@ -74,21 +79,38 @@ def _unique_name(name: str, used: set[str]) -> str:
     return f"{stem}-{index}{suffix}"
 
 
+def _resolve_export_config(db: Session, payload: BatchExportRequest) -> BatchExportConfig:
+    """本次参数优先，缺省退回全局默认值；两者都没有才算未配置。
+
+    传进来的这一份必须过与设置页同一套校验：字号/页数/语言/格式由 `BatchExportConfig`
+    的字段类型与范围约束（pydantic 直接 422），模板名白名单在这里补一道——它是数据校验，
+    只信前端等于把设置页那条防线绕开。
+    """
+    if payload.config is not None:
+        try:
+            validate_batch_template(db, payload.config.template)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        return payload.config
+    stored = read_batch_operation_config(db).export
+    if not stored.configured:
+        # 后端 detail 只写原因，「请先设置」的指引由前端给。
+        raise HTTPException(
+            status_code=409,
+            detail="「批量导出简历」的批量参数尚未配置",
+        )
+    return stored
+
+
 @router.post("/batch-export")
 def batch_export_resumes(
     request: HTTPRequest,
     payload: BatchExportRequest,
     db: Session = Depends(get_db),
 ):
-    """把选中的简历按统一批量参数导出为一个 zip。"""
+    """把选中的简历按本次参数（缺省用全局默认）导出为一个 zip。"""
     _require_local_export_request(request)
-    export_config = read_batch_operation_config(db).export
-    if not export_config.configured:
-        # 后端 detail 只写原因，「请先到设置页操作」的指引由前端 errorGuidance 给。
-        raise HTTPException(
-            status_code=409,
-            detail="「批量导出简历」的批量参数尚未配置",
-        )
+    export_config = _resolve_export_config(db, payload)
     resume_ids = list(dict.fromkeys(payload.resume_ids))
     rows = (
         db.query(ResumeRecord)

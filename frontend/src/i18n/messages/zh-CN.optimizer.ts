@@ -45,6 +45,8 @@ const optimizer = {
   "optimizer.noFeasible": "在当前约束下没有可行方案",
   "optimizer.noFeasible.locked": "你锁定的条件把所有候选都排除了；放宽其中一项再试",
   "optimizer.noFeasible.stillOverflow": "候选都试过了，仍放不下；只能精简内容或增加页数",
+  "optimizer.noFeasible.stillOverflowNumbered":
+    "目标是 {target} 页，试过的方案最少也要 {pages} 页；只能精简内容或放宽篇幅",
   "optimizer.noFeasible.noRoom": "排版参数已经收到最紧，没有可再收紧的项",
   "optimizer.noMeasure": "还没有量到当前版面，等预览加载完再试",
   "optimizer.conflict": "参数已被其他窗口修改",
@@ -61,6 +63,8 @@ const optimizer = {
   // ── 内容精简候选（P1-04：先给差异候选，用户采纳才改；不自动删）──────
   "optimizer.content.title": "内容精简候选",
   "optimizer.content.hint": "删掉重复或过短内容，应用后重新诊断页数",
+  "optimizer.content.filteredByKeepEntries":
+    "已按「保持条目完整」过滤掉 {count} 条建议；取消勾选可以查看",
   "optimizer.content.kind.duplicate-entries": "合并重复条目",
   "optimizer.content.kind.duplicate-points": "删除重复要点",
   "optimizer.content.kind.merge-short-points": "合并短要点",

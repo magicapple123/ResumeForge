@@ -40,6 +40,7 @@ import { usePanelScrollAnchor } from "./entryLayout/usePanelScrollAnchor";
 import { usePaginationReport } from "../../features/resume-pagination/usePaginationReport";
 import { usePaginationReportMarkers } from "../../features/resume-pagination/paginationPageMarkers";
 import { setPaginationReportRefresh } from "../../features/resume-pagination/paginationRefreshStore";
+import { pageLimitOptions } from "../../features/resume-research/documentMode";
 import type { WorkbenchHistoryTab } from "./useWorkbenchV2History";
 import "./workbench-v2.css";
 
@@ -194,18 +195,21 @@ export default function WorkbenchParamsColumnV2({
     const column = columnRef.current;
     if (column) column.scrollTop = 0;
   }, []);
-  const buildPaginationRequest = useCallback(
-    () => ({
+  const buildPaginationRequest = useCallback(() => {
+    // `0` = 「不限篇幅」，必须原样发出去（后端 `PreviewPdfRequest.page_limit` 收 0）。
+    // 旧写法 `Number(...) || 1` 把不限折成 1 页：面板于是按 1 页排，屏幕上"实际 1 页"、
+    // 导出却是完整多页。只有**非数字**才回落到 1。
+    const limit = Number(layout.page_limit);
+    return {
       template: layout.template,
       format_name: layout.format_name,
-      page_limit: Number(layout.page_limit) || 1,
+      page_limit: Number.isFinite(limit) ? limit : 1,
       font_scale: layout.font_scale,
       language: layout.language,
       format_config: layout.format_config as Record<string, unknown>,
       content: document,
-    }),
-    [document, layout],
-  );
+    };
+  }, [document, layout]);
   const pagination = usePaginationReport({
     resumeId: resumeId ?? null,
     buildRequest: buildPaginationRequest,
@@ -264,6 +268,11 @@ export default function WorkbenchParamsColumnV2({
               disabled={relayouting}
               catalog={catalog}
               showPageLimit={false}
+              // 篇幅上限本组不渲染（`showPageLimit={false}`，同一键只留在「版面」组的
+              // 文档模式控件里），选项仍按**当前文档模式**给全：普通 1–3 + 不限、
+              // 长 CV 1–10 + 不限。缺省的 `RESUME_PAGE_LIMITS`（1–3）没有「不限」档，
+              // 一旦有宿主把这一组打开，用户就又选不到 0 了。
+              pageLimitOptions={pageLimitOptions(documentMode ?? "resume")}
               // #13：字段语言移进「版面」组（同一键只保留一处），模板组只剩模板 + 版式。
               showLanguage={false}
               // R-03：模板图库里的「试用与对比」要能看「我的内容」并真实测量页数，

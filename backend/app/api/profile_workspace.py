@@ -198,9 +198,20 @@ def create_custom_section(payload: SectionCreateIn, db: Session = Depends(get_db
 def rename_custom_section(
     section_key: str, payload: SectionUpdateIn, db: Session = Depends(get_db)
 ) -> SectionOut:
-    """自建大字段改名；内置定义拒绝（R-05/R-12）。"""
-    section = definition_store.rename_custom_section(
-        db, section_key, payload.name, expected_revision=payload.expected_revision
+    """自建大字段改名 / 切换「参与岗位相关性筛选」；内置定义拒绝（R-05/R-12）。
+
+    只用 ``model_fields_set`` 判断"要改哪一项"（需求 6）：前端切换开关时只发
+    ``filter_by_job``，不会因为 ``name`` 的默认空串把板块名清掉；改名时也只发 ``name``，
+    开关保持原值。
+    """
+    section = definition_store.update_custom_section(
+        db,
+        section_key,
+        name=payload.name if "name" in payload.model_fields_set else None,
+        filter_by_job=(
+            payload.filter_by_job if "filter_by_job" in payload.model_fields_set else None
+        ),
+        expected_revision=payload.expected_revision,
     )
     return section_out(section)
 

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from ...schemas.resume_generation import UNLIMITED_PAGE_LIMIT, UNLIMITED_RENDER_MAX_PAGES
 from .resume_templates import font_scale_spec
 
 # 三档只控制对描述性字段的改写幅度；结构化事实始终由代码强制锚定。
@@ -109,7 +110,14 @@ def generation_token_budget(options: Any) -> int:
     factor = {"light": 0.9, "balanced": 1.0, "strong": 1.3}.get(
         str(getattr(options, "enhancement_level", "balanced")), 1.0
     )
-    chars = int(high * factor) * max(1, int(getattr(options, "page_limit", 1) or 1))
+    # 需求 7B：``0`` = 「不限篇幅」。按 1 页算预算等于把"不限"当成最严的篇幅去声明，
+    # 模型会照着这个数自我压缩；这里取**渲染保护上限**的页数（长 CV 的 10 页），
+    # 常量只有一份来源，不在这里写裸 10。``None``（老调用方没这个字段）才回落 1 页。
+    raw_page_limit = getattr(options, "page_limit", 1)
+    page_limit = 1 if raw_page_limit is None else int(raw_page_limit)
+    if page_limit <= UNLIMITED_PAGE_LIMIT:
+        page_limit = UNLIMITED_RENDER_MAX_PAGES
+    chars = int(high * factor) * page_limit
     return int(chars * _OUTPUT_TOKENS_PER_CHAR) + _OUTPUT_BASE_TOKENS
 
 
@@ -125,6 +133,14 @@ def build_layout_guide(
     low, high = _PAGE_CHAR_BUDGET.get(spec["name"], _PAGE_CHAR_BUDGET["standard"])
     factor = {"light": 0.9, "balanced": 1.0, "strong": 1.3}.get(enhancement_level, 1.0)
     high = int(high * factor)
+    if page_limit <= 0:
+        # 需求 7B：不限篇幅。**不能**沿用"最多 N 页"的措辞——那会让模型自行压缩。
+        # 也不再给总字数上限（那本质上就是另一种篇幅约束）。
+        return (
+            f"目标篇幅：不限。字号档位 {spec['label']}。按内容需要展开，每条经历写清"
+            "「做了什么 + 怎么做的 + 结果如何」，不要为了控制页数删掉事实或压短要点；"
+            "但也**不要**为凑长度编造或重复内容。"
+        )
     if page_limit <= 1:
         return (
             f"目标篇幅：1 页 A4、{spec['label']}。整份简历（含联系方式与全部文字）"

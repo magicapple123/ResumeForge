@@ -102,6 +102,8 @@ class SectionOut(BaseModel):
     fields: list[FieldOut] = Field(default_factory=list)
     revision: int = 0
     deleted_at: datetime | None = None
+    # 需求 6：自建板块是否参与岗位相关性筛选。内置分区恒 False（不可改）。
+    filter_by_job: bool = False
 
 
 class EntryOut(BaseModel):
@@ -198,9 +200,14 @@ class SectionCreateIn(_StrictModel):
 
 
 class SectionUpdateIn(_StrictModel):
-    """自建大字段改名；内置定义由服务端拒绝（R-05/R-12）。"""
+    """自建大字段改名 / 改「参与岗位相关性筛选」；内置定义由服务端拒绝（R-05/R-12）。
+
+    ``name`` 与 ``filter_by_job`` 都是"没传 = 不改"（需求 6 的开关与改名共用一个
+    PATCH，前端只发变的那一项，不会因为改名把开关重置回 false）。
+    """
 
     name: str = Field(default="", max_length=SECTION_NAME_MAX_CHARS)
+    filter_by_job: bool | None = None
     expected_revision: int = Field(ge=0)
 
 

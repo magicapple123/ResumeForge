@@ -2,6 +2,11 @@
 /**
  * 面试材料来源（#41）：每侧材料都是**二选一**——从记录里挑一条，或直接导入一份文件。
  *
+ * **两侧接受同一组格式**（问题 6）：图片（png / jpg / jpeg / webp）、PDF、TXT、
+ * Word（.docx）、Markdown（.md / .markdown）。`kind` 只表示"放哪一侧"（界面左右栏），
+ * 不再决定能传什么——解析路径由**文件类型**在后端分派：文本类走本机提取，
+ * 图片与扫描件 PDF 走视觉识别。
+ *
  * 组件只负责"选来源 + 上传 + 显示解析结果"，两个副作用都在这里收口：
  *
  * - **上传即解析**：文件一选就走 `extractInterviewMaterial`，返回的是已经提取好的文本；
@@ -22,11 +27,14 @@ import type { InterviewMaterialExtract, InterviewMaterialKind } from "../../type
 /** 材料来源：从记录选，或导入文件。 */
 export type MaterialSourceMode = "record" | "file";
 
-/** 各侧接受的文件类型：岗位侧是可以抽文字的 JD，简历侧是截图。 */
-const ACCEPT_BY_KIND: Record<InterviewMaterialKind, string> = {
-  job: ".pdf,.txt",
-  resume: ".png,.jpg,.jpeg",
-};
+/**
+ * 两侧**共用**的接受列表（问题 6）。`accept` 属性与 `isAccepted` 必须读同一个常量：
+ * 两处各写一份的话，浏览器文件选择框和上传前的检查会慢慢漂开（能选到、选完才报不支持）。
+ */
+const MATERIAL_ACCEPT = ".pdf,.txt,.md,.markdown,.docx,.png,.jpg,.jpeg,.webp";
+
+/** Word 2003 的二进制格式：读不了就不假装能读，在选文件那一刻就说清怎么转。 */
+const LEGACY_WORD_SUFFIX = ".doc";
 
 /**
  * 上传前的客户端边界检查（与后端 MAX_MATERIAL_UPLOAD_BYTES 同一个数）。
@@ -36,15 +44,15 @@ const ACCEPT_BY_KIND: Record<InterviewMaterialKind, string> = {
  */
 const MAX_MATERIAL_BYTES = 10 * 1024 * 1024;
 
-/** 扩展名（小写、带点）是否被该侧接受；没有扩展名的文件一律按不支持处理。 */
+/** 扩展名（小写、带点）是否被接受；没有扩展名的文件一律按不支持处理。 */
 function fileExtension(name: string): string {
   const dot = name.lastIndexOf(".");
   if (dot <= 0) return "";
   return name.slice(dot).toLowerCase();
 }
 
-function isAccepted(kind: InterviewMaterialKind, name: string): boolean {
-  return ACCEPT_BY_KIND[kind].split(",").includes(fileExtension(name));
+function isAccepted(name: string): boolean {
+  return MATERIAL_ACCEPT.split(",").includes(fileExtension(name));
 }
 
 export function MaterialSourceField({
@@ -83,7 +91,13 @@ export function MaterialSourceField({
       message.error(t("interviewPage.setup.material.tooLarge"));
       return;
     }
-    if (!isAccepted(kind, file.name)) {
+    if (fileExtension(file.name) === LEGACY_WORD_SUFFIX) {
+      // .doc 是二进制格式，服务端也读不了；在选文件这一秒就说清怎么转（不等一次上传）。
+      onMaterialChange(null);
+      message.error(t("interviewPage.setup.material.legacyDoc"));
+      return;
+    }
+    if (!isAccepted(file.name)) {
       onMaterialChange(null);
       message.error(t("interviewPage.setup.material.unsupported"));
       return;
@@ -105,21 +119,22 @@ export function MaterialSourceField({
     }
   };
 
-  const hintKey: MessageKey =
-    kind === "job"
-      ? "interviewPage.setup.material.jobFileHint"
-      : "interviewPage.setup.material.resumeFileHint";
+  // 文案按**实际解析路径**选（问题 6），不再按左右侧：两侧都能传图片与文本类文件，
+  // "从截图识别出 N 字"对一份 Word 是假话，反之亦然。
   const sizeKey: MessageKey =
-    kind === "job"
-      ? "interviewPage.setup.material.parsed"
-      : "interviewPage.setup.material.recognized";
+    material?.parser === "vision"
+      ? "interviewPage.setup.material.recognized"
+      : "interviewPage.setup.material.parsed";
 
   return (
     <div className="interview-material-source">
+      {/* 次级开关：`outline` 而不是 `solid`——深蓝实心留给页面唯一的主操作「开始面试」，
+          否则页面上会出现两个同等权重的焦点。`size="small"` 也刻意不追平 32px 的 Select：
+          靠间距分层，不靠高度对齐。 */}
       <Radio.Group
         size="small"
         optionType="button"
-        buttonStyle="solid"
+        buttonStyle="outline"
         disabled={disabled}
         value={mode}
         onChange={(event) => onModeChange(event.target.value as MaterialSourceMode)}
@@ -131,7 +146,7 @@ export function MaterialSourceField({
       {mode === "file" ? (
         <Space size={6} wrap className="interview-material-file">
           <Upload
-            accept={ACCEPT_BY_KIND[kind]}
+            accept={MATERIAL_ACCEPT}
             showUploadList={false}
             disabled={busy}
             beforeUpload={(file) => {
@@ -169,7 +184,9 @@ export function MaterialSourceField({
               {t("interviewPage.setup.material.parsing")}
             </Typography.Text>
           ) : (
-            <Typography.Text type="secondary">{t(hintKey)}</Typography.Text>
+            <Typography.Text type="secondary">
+              {t("interviewPage.setup.material.fileHint")}
+            </Typography.Text>
           )}
         </Space>
       ) : null}

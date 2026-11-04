@@ -30,6 +30,7 @@ def _configure(monkeypatch, *, answers: list[str] | None = None) -> dict[str, in
     turns = [
         {"question": "第一题：介绍一个你做过的项目", "feedback": "", "done": False},
         {"question": "第二题：这个项目里最难的地方", "feedback": "讲得清楚", "done": False},
+        {"question": "第三题：还有什么想补充的", "feedback": "可以", "done": False},
     ]
     queue = list(turns)
     follow_ups = list(answers or ["我第二题答漏了容量规划。", "谢谢，我明白了。"])
@@ -180,6 +181,84 @@ def test_followup_does_not_change_the_report_input(client, db_session, monkeypat
     rendered = json.dumps(build_report_messages(session), ensure_ascii=False)
     assert "我是怎么被扣分的" not in rendered
     assert "我做过 A" in rendered
+
+
+def _close_without_report(client, db_session, *, rounds: int = 3) -> int:
+    """办一场**只收盘、没报告**的面试（自动收尾的新形态）：返回 session_id。
+
+    调用方要先用 ``_configure`` 装好三轮提问的假实现；``rounds`` 取到最小合法值 3。
+    """
+    session_id = _start(client, db_session, rounds=rounds).json()["id"]
+    last = None
+    for _ in range(rounds):
+        last = client.post(f"/api/interview/{session_id}/answers", json={"content": "我做过 A"})
+        assert last.status_code == 200, last.text
+    assert last is not None
+    body = last.json()
+    assert body["finished"] is True
+    assert body["needs_report"] is True
+    assert body["session"]["status"] == "finished"
+    assert body["session"]["report"] == {}, "自动收尾不该顺手把报告生成掉"
+    return session_id
+
+
+def test_followups_before_the_report_are_allowed(client, db_session, monkeypatch):
+    """报告生成**之前**就能追问：这是"先问是否追问，再出报告"成立的硬前提。
+
+    追问接口只要求 ``status == FINISHED``，而收盘已经发生、报告还没生成——所以这里必须
+    是 200，不是 409。
+    """
+    _configure(monkeypatch)
+    session_id = _close_without_report(client, db_session)
+
+    for index in range(3):
+        asked = client.post(
+            f"/api/interview/{session_id}/followups", json={"content": f"报告前的第 {index} 问"}
+        )
+        assert asked.status_code == 200, asked.text
+        assert asked.json()["session"]["status"] == "finished"
+        assert asked.json()["session"]["report"] == {}
+        # 追问不占正式轮次：读完仍是原来的轮数。
+        assert asked.json()["session"]["answered_rounds"] == 3
+
+
+def test_report_after_followups_excludes_every_followup_round(client, db_session, monkeypatch):
+    """报告前追问 3 轮，最终报告的转录里**一条追问都不能有**。
+
+    这是本需求的核心安全前提：``build_report_messages`` 只取 ``phase="interview"``。
+    一旦有人为了"报告前也有追问了"去放宽那条过滤，评分就会随"用户聊了多少"浮动。
+    这里断言的是报告真正拿到的那份提示词（不是自己拼一份）。
+    """
+    _configure(monkeypatch)
+    session_id = _close_without_report(client, db_session)
+    follow_ups = ["报告前追问甲", "报告前追问乙", "报告前追问丙"]
+    for content in follow_ups:
+        asked = client.post(f"/api/interview/{session_id}/followups", json={"content": content})
+        assert asked.status_code == 200
+
+    captured: list[list[dict[str, str]]] = []
+
+    async def build_report(_provider, session_):
+        from app.services.interview.interview import build_report_messages
+
+        captured.append(build_report_messages(session_))
+        return _REPORT
+
+    monkeypatch.setattr("app.api.interview.generate_report", build_report)
+
+    first = client.post(f"/api/interview/{session_id}/finish")
+    assert first.status_code == 200
+    assert first.json()["report"]["score"] == 78
+    rendered = json.dumps(captured[0], ensure_ascii=False)
+    for content in follow_ups:
+        assert content not in rendered
+    # 正式问答仍然在里面：过滤掉的是追问，不是整段转录。
+    assert "我做过 A" in rendered
+
+    # 重复点是幂等的：不会再生成第二份报告（也就不会再调一次模型）。
+    second = client.post(f"/api/interview/{session_id}/finish")
+    assert second.status_code == 200
+    assert len(captured) == 1
 
 
 def test_closing_and_reopening_the_followup_area(client, db_session, monkeypatch):

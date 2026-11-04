@@ -90,14 +90,17 @@ export default function GenerationPreviewStage({
       suggestionsResetKey={suggestionsResetKey}
       onSuggestionsGenerated={() => setSuggestionsGenerated(true)}
       extraActions={
+        // 层级（2026-11 问题 3）：整条底栏只留「导出」一个 primary——「完成」原本也是实心，
+        // 两个终点动作并列就看不出哪个是"拿走产物"。「去简历中心」是导航而非动作，
+        // 用 `text` 降到导航层（仍可 Tab 聚焦、有焦点环）。
         <Space wrap>
-          <Button onClick={onGoResumes}>{t("generateStages.preview.goResumes")}</Button>
+          <Button type="text" onClick={onGoResumes}>
+            {t("generateStages.preview.goResumes")}
+          </Button>
           <Button icon={<ReloadOutlined />} onClick={onRegenerate}>
             {t("generateStages.action.regenerate")}
           </Button>
-          <Button type="primary" onClick={onClose}>
-            {t("generateStages.preview.done")}
-          </Button>
+          <Button onClick={onClose}>{t("generateStages.preview.done")}</Button>
         </Space>
       }
     />

@@ -78,6 +78,25 @@ _REFERENCE_SECTIONS: tuple[str, ...] = (
     "projects",
 )
 
+# 输出 JSON 键 ← 候选数据键：两套名字不同（education / educations），映射只此一份。
+# 提示词要不要输出某个分区，判据与 check_consistency **完全一致**：候选数据里出现了这个键
+# （未参与分区整键不出现，R-29）。旧 ProfileOut 路径的候选始终含全部六键，所以旧请求拿到的
+# 提示词与改造前一致；只有"按当前组生成"时才会真的少掉未参与分区（问题 4 的源头修复）。
+_OUTPUT_SECTION_SOURCES: dict[str, str] = {
+    "education": "educations",
+    "experience": "experiences",
+    "campus_experience": "campus_experiences",
+    "projects": "projects",
+    "skills": "skills",
+    "awards": "awards",
+}
+
+
+def output_section_keys(candidate_data: Any) -> frozenset[str]:
+    """本次让模型输出的内置分区键（模板据此条件渲染 JSON 结构）。"""
+    data = candidate_data if isinstance(candidate_data, dict) else {}
+    return frozenset(out for out, source in _OUTPUT_SECTION_SOURCES.items() if source in data)
+
 
 def consumed_photo(consumed: Any) -> str:
     """当前组基本信息的照片引用（data URL 或资源 id 原样透传；缺失就是空串）。"""
@@ -223,6 +242,7 @@ def render_generation_messages(
         blocked_wording=baseline.blocked_wording if baseline else [],
         career_context_block=career_context_block.strip(),
         extended_facts=has_extended_facts(selection.data),
+        resume_sections=output_section_keys(selection.data),
     )
     if scoped:
         user_prompt += _CONSUMED_USER_SUPPLEMENT
@@ -464,6 +484,8 @@ def build_rationale(
         coverage_details=coverage_details,
         baseline_confirmed=baseline_confirmed,
         fallback_sections=selection_data["fallback_sections"],
+        # 需求 6：开了「参与岗位筛选」的自建板块条数（没有时为空，旧输出逐字不变）。
+        custom_sections=selection_data.get("custom_sections") or (),
     )
 
 # 拆分后的 re-export（resume_generator / 测试的旧 import 路径不断）。

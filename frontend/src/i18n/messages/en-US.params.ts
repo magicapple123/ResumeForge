@@ -55,6 +55,7 @@ const params = {
     "The running backend is an older version and did not report the pages needed for your settings. It may shrink the font automatically. Fully quit and restart the app to make exact preview use the slider values exactly.",
   "exact.status.busy": "Typesetting with new settings...",
   "exact.status.pages": "Exact preview - {pages} actual pages (limit: {limit} pages)",
+  "exact.status.pagesNoLimit": "Exact preview - {pages} actual pages (no limit)",
   "exact.openNewTab": "Open in new tab",
   "exact.unsavedNote": "This preview includes unsaved changes. Save before exporting",
   "workbench.contactBreak.label": "Contact line breaks",

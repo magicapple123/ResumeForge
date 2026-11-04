@@ -106,3 +106,65 @@
 .document-chip-slot.is-drop-after::after {
   right: -4px;
 }
+
+/* 问题 21a：非法 / 插完不动的落点用**禁用色虚线描边**。与蓝条互斥——同一个
+   `onDragOver` 分支里二选一，`is-drop-rejected` 出现时一定没有 `is-drop-before/after`。
+   选 dashed 是为了不和"选中"的实线边框混淆，也不做红底填充（那更像报错而不是落点提示）。
+   注意：本文件不在 colorGuard 的扫描范围（它只扫 `styles/*.css` 与 `features/tou-tou/*.css`），
+   所以颜色一律走 `var(--rf-*)`，不要写硬编码色值。 */
+.document-chip-slot.is-drop-rejected > .document-chip {
+  outline: 1px dashed var(--rf-danger);
+  outline-offset: 2px;
+}
+
+/* 问题 21b：正文块的唯一拖拽源是这枚 ⠿ 把手（正文区本身要留给选文字），而图标只有
+   约 14×14。热区扩到 24×24、视觉与排版不变：`padding` 撑开命中区，负 `margin` 把外框
+   尺寸还原成原样，网格一格不动。
+   用 `.document-chip >` 多一级特异性：基础规则（`document-editor.css`）只写
+   `.document-chip-handle`，两份样式表的加载先后不该决定谁生效。
+   代价：把手向右侵入主按钮左边缘 5px——那一段原本"点到就选中 chip"，等价入口还有
+   点击标签文字 / 整块。 */
+.document-chip > .document-chip-handle {
+  padding: 5px;
+  margin: -5px;
+}
+
+/* ── 拖动语义 vs. 文本选区 ─────────────────────────────────────
+   编辑器里"按住拖动"只有一种意图：拖动条目/chip 排序。可编辑区以外的文字一旦能被
+   选中，浏览器会先把这次按下判成"框选文字"，松手时 Chrome 弹「松开鼠标以搜索文本」，
+   条目反而没被拖动（用户反馈的原话）。所以整栏默认不可选中，只放行真正要打字/选字
+   的控件——不能逐个 chip 补：漏一个就重现，新加的 DOM 默认又是可选的。
+   规则放这里而不放 document-editor.css：那份已贴 500 行预算。 */
+.document-editor {
+  user-select: none;
+}
+
+.document-editor textarea,
+.document-editor input,
+.document-editor [contenteditable="true"] {
+  user-select: text;
+}
+
+/* chip 内部**每一段文本**都显式 none：既不靠 `.document-chip` 继承（主题/antd 里一条
+   `user-select: text` 就能把它放出来，而这正是"拖 chip 出搜索框"的入口），也不给未来
+   留"为了复制字段值把值放出来"的口子——真要复制走右键菜单，不是靠选区。 */
+.document-chip-main,
+.document-chip-label,
+.document-chip-value,
+.document-chip-badge,
+.document-chip-handle {
+  user-select: none;
+}
+
+/* 光有 `user-select: none` 不够（2026-11-04 用户截图实证）：Chrome 判断"这次拖动拖的是
+   文本还是元素"看的是**另一个属性** `-webkit-user-drag`。chip 里的文本节点仍是 `auto` 时，
+   按下拖动会被当成"拖动这段文字"——顶部弹「松开鼠标以搜索文本」，条目却没动；实测
+   `.document-chip-value` 的该属性就是 `auto`。
+
+   一条通用规则而不是逐个类补：漏一个类就重现（`user-select` 那轮已经踩过一次）。
+   只排除 `[draggable="true"]` —— 把手与 chip 本体靠这个属性才是拖拽源，
+   给它们置 `none` 会连拖动一起禁掉，等于把上一个 bug 修回来。输入框也一并覆盖：
+   `-webkit-user-drag` 只影响"把选中的字拖出去"，不影响框内选中、复制、剪切。 */
+.document-editor :not([draggable="true"]) {
+  -webkit-user-drag: none;
+}

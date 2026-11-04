@@ -6,7 +6,7 @@
  * 在其中一条路径上。现在收成一个入口 + 一份请求体（见 ExportOptionsModal）。
  */
 import { ExportOutlined } from "@ant-design/icons";
-import { Button } from "antd";
+import { Badge, Button, Tooltip } from "antd";
 import { useState } from "react";
 import { t } from "../i18n";
 import { useLocale } from "../i18n/i18nContext";
@@ -24,6 +24,13 @@ interface Props {
    * 提供时本组件只画按钮，不再自己挂一份弹窗——两份实例会各自持有一份表单状态。
    */
   onOpen?: () => void;
+  /**
+   * 还没人工核对过的条数（2026-11 问题 8）：> 0 时按钮右上角挂一颗琥珀点。
+   *
+   * 核对项被压成一行后，用户可能不展开就直接导出；角标把"还有东西没看"留在视野里。
+   * 这只是**提示**，不拦导出——拦截会让"我就想先导出看看"变成一条死路。
+   */
+  pendingReview?: number;
 }
 
 export default function ExportButtons({
@@ -31,19 +38,35 @@ export default function ExportButtons({
   layout,
   pdfDirectAvailable = true,
   onOpen,
+  pendingReview = 0,
 }: Props) {
   useLocale();
   const [open, setOpen] = useState(false);
 
+  const button = (
+    <Button
+      type="primary"
+      icon={<ExportOutlined />}
+      onClick={() => (onOpen ? onOpen() : setOpen(true))}
+    >
+      {t("componentsMisc.exportButtons.export")}
+    </Button>
+  );
+
   return (
     <>
-      <Button
-        type="primary"
-        icon={<ExportOutlined />}
-        onClick={() => (onOpen ? onOpen() : setOpen(true))}
-      >
-        {t("componentsMisc.exportButtons.export")}
-      </Button>
+      {pendingReview > 0 ? (
+        <Tooltip title={t("resume.footer.exportPending", { count: pendingReview })}>
+          {/* 包一层 span：Tooltip 需要一个能接 ref 的元素，Badge 的 dot 也挂在它内部。 */}
+          <span className="resume-export-pending">
+            <Badge dot color="gold">
+              {button}
+            </Badge>
+          </span>
+        </Tooltip>
+      ) : (
+        button
+      )}
       {onOpen ? null : (
         <ExportOptionsModal
           recordId={recordId}

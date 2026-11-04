@@ -11,12 +11,12 @@
  * （批量选择工具栏），共用同一套断言形态；为了不再多一个几乎重复的夹具文件，
  * 两个 describe 放在一起。
  */
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { App as AntdApp, Form } from "antd";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { t } from "../../i18n";
 import BatchDeleteButton from "./BatchDeleteButton";
-import { RowActions } from "./RowActions";
+import { RowActions, RowContextMenu } from "./RowActions";
 import { useRowActionMenu, type RowMenuItem } from "./rowActionMenu";
 
 afterEach(() => {
@@ -128,6 +128,78 @@ describe("二次确认的正文", () => {
       within(dialog).getByRole("button", { name: t("resumes.remove.confirm.cancel") }),
     ).toBeInTheDocument();
     expect(within(dialog).queryByRole("button", { name: "确 定" })).toBeNull();
+  });
+});
+
+describe("RowContextMenu 的键盘等价物（问题 25）", () => {
+  const items: RowMenuItem[] = [{ key: "edit", label: t("common.action.close"), onClick: vi.fn() }];
+
+  function renderRow() {
+    return render(
+      <AntdApp>
+        <table>
+          <tbody>
+            <RowContextMenu items={items}>
+              <tr>
+                <td>行</td>
+              </tr>
+            </RowContextMenu>
+          </tbody>
+        </table>
+      </AntdApp>,
+    );
+  }
+
+  it("<tr> 子元素（表格行）按 Shift+F10 打开同一份菜单", async () => {
+    renderRow();
+
+    const row = screen.getByRole("row");
+    // `<tr>` 本身不可聚焦：RowContextMenu 必须自己补 tabIndex，键盘用户才拿得到它。
+    expect(row).toHaveAttribute("tabindex", "0");
+    fireEvent.keyDown(row, { key: "F10", shiftKey: true });
+
+    expect(
+      await screen.findByRole("menuitem", { name: t("common.action.close") }),
+    ).toBeInTheDocument();
+  });
+
+  it("键盘打开后 Esc 关闭、焦点回到那一行", async () => {
+    renderRow();
+    const row = screen.getByRole("row");
+    fireEvent.keyDown(row, { key: "F10", shiftKey: true });
+    await screen.findByRole("menuitem", { name: t("common.action.close") });
+    // antd 的 autoFocus 走 `raf(…, 3)`：等它把焦点送进菜单再按 Esc，否则那几帧会把
+    // 焦点从"已归还的位置"再抢回菜单（真实用户的手速远慢于 3 帧，不会遇到）。
+    await waitFor(() =>
+      expect(screen.getByRole("menu")).toContainElement(document.activeElement as HTMLElement),
+    );
+
+    fireEvent.keyDown(document, { key: "Escape" });
+
+    await waitFor(() => expect(row).toHaveFocus());
+  });
+
+  it("子元素不转发 props 时包一层可聚焦容器（不再依赖 cloneElement 注入）", async () => {
+    // 模拟 ListyItem 这类"只画内容、不透传 onKeyDown"的组件。
+    function CardLike({ children }: { children: React.ReactNode }) {
+      return <span>{children}</span>;
+    }
+    const { container } = render(
+      <AntdApp>
+        <RowContextMenu items={items}>
+          <CardLike>整块卡片</CardLike>
+        </RowContextMenu>
+      </AntdApp>,
+    );
+
+    const trigger = container.querySelector<HTMLElement>(".rf-row-ctx-trigger");
+    expect(trigger).not.toBeNull();
+    expect(trigger).toHaveAttribute("tabindex", "0");
+
+    fireEvent.keyDown(trigger as HTMLElement, { key: "ContextMenu" });
+    expect(
+      await screen.findByRole("menuitem", { name: t("common.action.close") }),
+    ).toBeInTheDocument();
   });
 });
 

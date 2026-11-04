@@ -49,6 +49,7 @@ import { StartPanel } from "./drill/StartPanel";
 import { t } from "../i18n";
 import { FEEDBACK_POLICY_LABEL_KEYS } from "../i18n/enum/drill";
 import { useLocale } from "../i18n/i18nContext";
+import { formatServerTime } from "../utils/serverTime";
 
 export default function DrillPage() {
   useLocale();
@@ -372,7 +373,7 @@ export default function DrillPage() {
                           total: item.max_questions,
                         })}
                         {" · "}
-                        {item.created_at.replace("T", " ").slice(0, 16)}
+                        {formatServerTime(item.created_at)}
                       </Typography.Text>
                     </Space>
                   </ListyItem>

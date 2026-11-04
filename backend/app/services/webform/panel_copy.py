@@ -46,6 +46,12 @@ _PHRASES: list[tuple[str, str]] = [
     # —— 来源与空态 ——
     ("这条来自「网申资料」，不在简历里", "panel.source.webformTitle"),
     ("网申资料", "panel.source.webform"),
+    # —— 取数范围开关与「方案外」角标（需求 3）——
+    ("取数范围", "scope.aria"),
+    ("仅当前方案", "scope.group"),
+    ("全部资料", "scope.all"),
+    ("方案外", "panel.outOfScope"),
+    ("这条来自当前方案未包含的板块", "panel.outOfScopeTitle"),
     ("没有匹配的资料", "panel.hits.none"),
     ("资料还是空的，先去「我的资料」填一些", "panel.empty.list"),
     ("使用上方字段名", "panel.pick.useLabel"),
@@ -89,6 +95,12 @@ _PATTERNS: list[tuple[re.Pattern[str], str]] = [
     (
         re.compile(r"没有匹配「\$\{([^{}]+)\}」的资料。换个词，或者清空搜索看全部。"),
         r"Nothing matches “${\1}”. Try another word, or clear the search.",
+    ),
+    # 空态按原因分句（问题 8）：被当前方案过滤掉时要说清板块名，而不是说"资料是空的"。
+    # 句中的板块名是 JS 模板变量，整句只能按模式替换。
+    (
+        re.compile(r"当前方案未包含「\$\{([^{}]+)\}」，切到「全部资料」就能填"),
+        r"The current resume plan leaves out “${\1}”; switch to “All data” to use it",
     ),
     (re.compile(r"\$\{([^{}]+)\} 组 · \$\{([^{}]+)\} 条"), r"${\1} groups · ${\2} entries"),
     (re.compile(r"\$\{([^{}]+)\} 条"), r"${\1} entries"),

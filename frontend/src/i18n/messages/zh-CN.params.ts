@@ -92,6 +92,11 @@ const params = {
   /** 重排中的状态行（与画布上的遮罩同一句）。 */
   "exact.status.busy": "正在按新设置重新排版…",
   "exact.status.pages": "精确预览 · 实际 {pages} 页（上限 {limit} 页）",
+  /**
+   * 「不限篇幅」的状态行：没有上限可比，说「（上限 0 页）」既无意义又会让人以为出了错。
+   * 单独一个 key 而不是给原 key 加 0 分支：原 key 的措辞要保持逐字一致。
+   */
+  "exact.status.pagesNoLimit": "精确预览 · 实际 {pages} 页（不限篇幅）",
   "exact.openNewTab": "在新标签打开",
   /**
    * W04：预览里含还没保存的正文。

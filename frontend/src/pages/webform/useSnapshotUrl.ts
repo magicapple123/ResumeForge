@@ -10,7 +10,7 @@ import { useSearchParams } from "react-router-dom";
 import type { App } from "antd";
 import { previewWebForm } from "../../api/webform";
 import { t } from "../../i18n";
-import type { WebFormPreview, WebFormSnapshot } from "../../types";
+import type { WebFormPreview, WebFormScope, WebFormSnapshot } from "../../types";
 import type { WebFormBusyState } from "./constants";
 import { AI_PARAM, SNAPSHOT_PARAM } from "./constants";
 
@@ -21,6 +21,7 @@ export function useSnapshotUrl({
   setSnapshot,
   setBusy,
   message,
+  scope,
 }: {
   aiAvailable: boolean | null;
   restoredSessionPreview: WebFormPreview | null;
@@ -28,6 +29,11 @@ export function useSnapshotUrl({
   setSnapshot: (snapshot: WebFormSnapshot | null) => void;
   setBusy: (busy: WebFormBusyState) => void;
   message: ReturnType<typeof App.useApp>["message"];
+  /**
+   * Data range for replayed reads. A restored preview must be built from the range the
+   * switch is showing, otherwise the table silently describes a different data set.
+   */
+  scope: WebFormScope;
 }): {
   snapshotId: string | null;
   rememberSnapshot: (snapshotId: string, ai: boolean) => void;
@@ -100,7 +106,7 @@ export function useSnapshotUrl({
       const aiWas = searchParams.get(AI_PARAM) === "1";
       setBusy("read");
       try {
-        const report = await previewWebForm(snapshotId, aiWas && aiAvailable);
+        const report = await previewWebForm(snapshotId, aiWas && aiAvailable, scope);
         if (cancelled) return;
         setSnapshot({ snapshot_id: snapshotId, page: report.page });
         applyPreview(report);
@@ -124,7 +130,7 @@ export function useSnapshotUrl({
     };
     // 只在挂载时按 URL 重放一次；`restoring` 落下后就不再触发。
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [restoring, aiAvailable]);
+  }, [restoring, aiAvailable, scope]);
 
   return {
     snapshotId: searchParams.get(SNAPSHOT_PARAM),

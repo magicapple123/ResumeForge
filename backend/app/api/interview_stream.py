@@ -93,8 +93,14 @@ def _sse(data: dict) -> str:
 
 
 def make_answer_stream(
-    _finish_with_report, _to_detail, _resume_text, _session_job_text, _mark_interrupted
+    _close_session, _to_detail, _resume_text, _session_job_text, _mark_interrupted
 ):
+    """收尾钩子由调用方注入（``api/interview.py`` 传的是"只收盘"的 ``_auto_close``）。
+
+    钩子签名固定 ``(db, session, provider)``：需求 4 之后它不再生成报告，但仍然收
+    provider，这样以后要改回"收盘即出报告"时调用点不用动。
+    """
+
     async def _answer_stream_events(
         db: Session,
         session: InterviewSession,
@@ -104,19 +110,26 @@ def make_answer_stream(
     ) -> AsyncIterator[str]:
         """流式生成一轮回答的 SSE 事件流。
 
-        ``answer`` 是这一轮刚写库的候选人回答。只有"面试官那句回应真的落库了"才算这一轮
-        走完（``completed``）；中途被取消（客户端断开、用户点「停止本轮」）或模型这一轮
-        失败时，``finally`` 把这条回答标成 ``interrupted``——**不删它**，用户可以重答。
+        ``answer`` 是这一轮刚写库的候选人回答。只有"面试官那句回应真的落库了"、或者
+        "轮数用尽/模型收尾这类**正常答完**"才算这一轮走完（``completed``）；中途被取消
+        （客户端断开、用户点「停止本轮」）或模型这一轮失败时，``finally`` 把这条回答标成
+        ``interrupted``——**不删它**，用户可以重答。
         """
         completed = False
         try:
             if index >= session.rounds:
-                # 先说一句"进入收尾"，再花十几秒生成报告：否则界面会一直显示"正在思考下一个
-                # 问题"，用户根本不知道这场面试已经结束了（见 phase 事件的用途）。
-                yield _sse({"type": "phase", "phase": "finishing"})
-                await _finish_with_report(db, session, provider)
+                # 轮数用尽：**只收盘、不出报告**（需求 4）。报告由用户在决策卡上确认，
+                # 所以这里不再推 ``phase: finishing``——那一句等于告诉用户"正在生成报告"，
+                # 而此刻并没有在生成。
+                #
+                # 这条分支是"最后那一答**答完了**"，不是中断：面试官不会再接话（已经收盘），
+                # 但这跟"面试官没接上话"是两件事。``completed`` 必须在 return 之前置真，
+                # 否则 ``finally`` 会把这条答完的回答标成 interrupted，界面上出现一个点了
+                # 必然 409（面试已结束）的「重新回答」。
+                completed = True
+                await _close_session(db, session, provider)
                 result = InterviewAnswerResult(
-                    session=_to_detail(session), feedback="", finished=True
+                    session=_to_detail(session), feedback="", finished=True, needs_report=True
                 )
                 yield _sse({"type": "done", "result": json.loads(result.model_dump_json())})
                 return
@@ -144,23 +157,32 @@ def make_answer_stream(
                 yield _sse({"type": "error", "detail": "面试助手暂时无法完成本轮"})
                 return
 
+            # `done` 时这句 question 按提示词约定就是收尾语：标记出来，`_close_session`
+            # 之后的 `_auto_close` 才不会以为还没收尾、再补一段告别。
             add_message(
                 session,
                 role="interviewer",
                 content=question,
-                context={"index": index, "rounds": session.rounds, "feedback": feedback},
+                context={
+                    "index": index,
+                    "rounds": session.rounds,
+                    "feedback": feedback,
+                    **({"closing": True} if done else {}),
+                },
             )
             db.commit()
             # 面试官这句回应落库了 → 这一轮就结束了。之后再被取消（比如正赶上出报告）只是
             # "报告没来得及生成"，属于另一件事：面试官已经接上话，不该再让用户重答这一轮。
             completed = True
             if done:
-                # 模型提前收尾：question 按提示词约定是收尾语。同样先报"进入收尾"，
-                # 再生成报告（报告是整场转录再跑一次模型，最慢的一段）。
-                yield _sse({"type": "phase", "phase": "finishing"})
-                await _finish_with_report(db, session, provider)
+                # 模型提前收尾：question 按提示词约定是收尾语。同样只收盘、不出报告
+                # （需求 4）：报告要等用户在决策卡上点「结束并生成报告」。
+                await _close_session(db, session, provider)
                 result = InterviewAnswerResult(
-                    session=_to_detail(session), feedback=feedback, finished=True
+                    session=_to_detail(session),
+                    feedback=feedback,
+                    finished=True,
+                    needs_report=True,
                 )
             else:
                 db.refresh(session)

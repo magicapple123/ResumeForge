@@ -19,8 +19,13 @@ import { resolvePageCounts } from "./overflow";
 interface PreviewGeometryInput {
   availableSpace: AvailableSpace;
   paperHeight: number;
-  /** 用户设定的篇幅上限（导出按它截断）。 */
-  pageCount: number;
+  /**
+   * 用户设定的篇幅上限（导出按它截断）。**`0` = 不限篇幅**，是合法值。
+   *
+   * 字段名曾经叫 `pageCount`，与"纸张高度用的页数"混为一谈——正是那个混用让 0 被夹成 1，
+   * 画布于是声称"上限 1 页"。上限与纸张数是两个量：这里只收**上限**。
+   */
+  pageLimit: number;
   zoom: number;
   overflow: boolean;
   naturalWidth: number;
@@ -76,12 +81,17 @@ export interface PreviewGeometry {
   overflowAmountText: string;
   /** 溢出内容被裁掉（1 页上限）：提示里要说"超出的部分不会显示"，而不是"多页视图"。 */
   overflowClipped: boolean;
+  /**
+   * 用户选的是「不限篇幅」：没有上限就没有"超额页"，提示条与红框都不该出现
+   * （导出不裁剪，"第 N 页起不计入导出"那句话在这时是错的）。
+   */
+  unlimited: boolean;
 }
 
 export function calculatePreviewGeometry({
   availableSpace,
   paperHeight,
-  pageCount,
+  pageLimit,
   zoom,
   overflow,
   pageGap,
@@ -99,7 +109,7 @@ export function calculatePreviewGeometry({
   // 画布的画幅是"内容要几张纸"。两者取大：超限的页照样画出来并带超额角标，不再把第 4 列
   // 之后的内容静默裁掉；而页数本身以服务端 `pagination/report` 为准（见 `overflow.ts`）。
   const counts = resolvePageCounts({
-    pageLimit: pageCount,
+    pageLimit,
     reportedPages,
     measuredPages: measure ? pagesNeededFor(measure) : null,
     overflowSignal: overflow,
@@ -175,5 +185,6 @@ export function calculatePreviewGeometry({
     // 2026-11-02 起超限的页**会画出来**（带超额角标 + 虚线），不再裁掉；
     // 这个标志只用来选提示文案（"第 M 页起不计入导出"）。
     overflowClipped: counts.overflow,
+    unlimited: counts.unlimited,
   };
 }

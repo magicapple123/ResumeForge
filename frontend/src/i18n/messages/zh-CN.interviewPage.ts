@@ -91,8 +91,10 @@ const interviewPage = {
   "interviewPage.setup.material.sourceLabel": "材料来源",
   "interviewPage.setup.material.fromRecord": "从记录选",
   "interviewPage.setup.material.fromFile": "导入文件",
-  "interviewPage.setup.material.jobFileHint": "支持 PDF、TXT 格式的 JD",
-  "interviewPage.setup.material.resumeFileHint": "支持 PNG、JPEG 截图，面试官会读图里的文字",
+  // 两侧共用一句（问题 6）：类型与侧别无关，说明清楚"图片要走识别"这件事本身。
+  "interviewPage.setup.material.fileHint":
+    "支持图片 / PDF / TXT / Word / Markdown；图片会走文字识别，文本类文件更快更准",
+  "interviewPage.setup.material.legacyDoc": "Word 2003 的 .doc 读不了，另存为 .docx 再导入",
   "interviewPage.setup.material.pickFile": "选择文件",
   "interviewPage.setup.material.repickFile": "换一份",
   "interviewPage.setup.material.parsing": "正在读取文件…",
@@ -100,7 +102,7 @@ const interviewPage = {
   "interviewPage.setup.material.recognized": "已从截图识别出 {chars} 字",
   "interviewPage.setup.material.clear": "移除这份文件",
   "interviewPage.setup.material.jobRequired": "岗位材料二选一：从记录选一条，或导入 JD 文件",
-  "interviewPage.setup.material.resumeRequired": "简历材料二选一：从记录选一份，或导入截图",
+  "interviewPage.setup.material.resumeRequired": "简历材料二选一：从记录选一份，或导入简历文件",
   "interviewPage.setup.material.parseFailed": "这份文件没能读取",
   "interviewPage.setup.material.emptyFile": "这份文件是空的，换一份再试",
   "interviewPage.setup.material.tooLarge": "文件超过 10 MB，无法导入",
@@ -123,6 +125,19 @@ const interviewPage = {
   "interviewPage.followUp.stoppedToast": "已停止追问",
   "interviewPage.followUp.resumedToast": "已恢复追问",
   "interviewPage.followUp.stateFailed": "没能切换追问状态",
+
+  // 收尾语：答完最后一题时面试官要先回应这段、再说结束。正常路径由服务端多跑一次
+  // 模型生成；这次调用失败时页面用下面这句本地化文案补上（模型可空则拿不到）。
+  "interviewPage.closing.fallback":
+    "今天先聊到这里。你最后那段回答我记下了，后续流程会有通知；想接着聊刚才那段，随时可以追问。",
+
+  // ===== 正式问答结束后的决策卡（需求 4）：先问要不要追问，再出报告 =====
+  "interviewPage.decision.title": "本场正式问答已结束",
+  "interviewPage.decision.hint": "报告还没生成。可以先追问几轮，随时再结束并生成报告",
+  "interviewPage.decision.continue": "继续追问",
+  "interviewPage.decision.finish": "结束并生成报告",
+  "interviewPage.decision.finishing": "正在生成报告，请稍候",
+  "interviewPage.decision.failed": "报告没能生成",
 
   // 面试类型 / 难度 / 面试官风格的显示名（键是协议值，见文件头说明）。
   "interviewPage.setup.type.technical": "技术面",

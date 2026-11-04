@@ -191,3 +191,68 @@ def test_docx_header_contact_forced_breaks_are_word_line_breaks():
     assert len(broken_lines) == 3, broken_lines
     assert broken_lines[1].startswith("GitHub："), broken_lines
     assert broken_lines[2].startswith("个人主页："), broken_lines
+
+
+# ===== 1-A：页头下横线（模板 `.header { border-bottom: 2px solid var(--accent) }`）=====
+#
+# 值早就在 `resolve_layout()` 的返回值里（`header_border_width` / `header_border_color` /
+# `header_pad_bottom`）：PDF 画了，Word 的 `draw_header` 只读了 `header_bg`。这里从解包后的
+# `w:pBdr/w:bottom` 断言线真的落在页头**最后一段**上，而不是"看代码觉得该有"。
+
+
+def _bottom_border(paragraph):
+    """段落的下边框元素（`w:pPr/w:pBdr/w:bottom`）；没有则 None。"""
+    pPr = paragraph._p.find(qn("w:pPr"))
+    if pPr is None:
+        return None
+    pBdr = pPr.find(qn("w:pBdr"))
+    return None if pBdr is None else pBdr.find(qn("w:bottom"))
+
+
+def _header_last_paragraph(document):
+    """页头的最后一段（= 联系方式段）：1-A 的下横线画在它上面。"""
+    return next(paragraph for paragraph in document.paragraphs if "13800001234" in paragraph.text)
+
+
+def test_docx_header_draws_the_accent_bottom_rule():
+    """classic 页头下方那条 2px 强调色横线必须落成 `w:pBdr/w:bottom`。"""
+    document = Document(
+        BytesIO(build_resume_docx(CONTACT_RESUME, template="classic", page_limit=1).content)
+    )
+    border = _bottom_border(_header_last_paragraph(document))
+
+    assert border is not None, "页头最后一段没有下边框（预览/PDF 那条 2px 强调色横线）"
+    # 2px ≈ 1.5pt ≈ 12 个八分之一磅（见 `docx_decorate.border_sz_from_px`）。
+    assert border.get(qn("w:sz")) == "12"
+    # classic 的 `header_border_color` = accent = #16365c。
+    assert border.get(qn("w:color")) == "16365C"
+    # 线到文字的距离 = `header_pad_bottom`（1.1em × 14px ≈ 11.55pt → 取整 12）。
+    assert border.get(qn("w:space")) == "12"
+
+
+def test_docx_header_rule_width_follows_the_template():
+    """technical 是 3px 页头线：宽度按 px → 八分之一磅换算（3px ≈ 2.25pt ≈ 18）。"""
+    document = Document(
+        BytesIO(build_resume_docx(CONTACT_RESUME, template="technical", page_limit=1).content)
+    )
+    border = _bottom_border(_header_last_paragraph(document))
+
+    assert border is not None
+    assert border.get(qn("w:sz")) == "18", "页头线宽被写死成 12（应随 header_border_width 走）"
+    assert border.get(qn("w:color")) == "0B5FA5"
+
+
+def test_docx_header_rule_is_not_doubled_on_the_soft_accent_block():
+    """modern 的页头是浅底色块（`header_bg=soft_accent`）：下边框仍是**底色同色**（撑内边距
+    用），不会在色块里再插一条强调色横线；同一段落也只能有一个 `w:pBdr`。"""
+    document = Document(
+        BytesIO(build_resume_docx(CONTACT_RESUME, template="modern", page_limit=1).content)
+    )
+    header = _header_last_paragraph(document)
+    border = _bottom_border(header)
+
+    assert border is not None, "modern 的页头色块仍有四边框"
+    # #e6f4f1 = modern 的 `--accent-soft`；若是 #0F766E 说明色块里又插了一条强调色线。
+    assert border.get(qn("w:color")) == "E6F4F1"
+    pPr = header._p.find(qn("w:pPr"))
+    assert len(pPr.findall(qn("w:pBdr"))) == 1, "同一段落只能有一个 w:pBdr（两个会被判文件损坏）"

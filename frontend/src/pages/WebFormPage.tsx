@@ -35,6 +35,7 @@ import {
   previewWebForm,
   rememberWebFormLive,
   setWebFormLiveEnabled,
+  setWebFormLiveScope,
   startWebFormBrowser,
   startWebFormLive,
   stopWebFormBrowser,
@@ -68,7 +69,9 @@ import { LiveModeCard } from "./webform/LiveModeCard";
 import { PreviewCard } from "./webform/PreviewCard";
 import { ReadSnapshotCard } from "./webform/ReadSnapshotCard";
 import { RelaxedModeCard } from "./webform/RelaxedModeCard";
+import { ScopeSwitchCard } from "./webform/ScopeSwitchCard";
 import { WEB_FORM_STATUS_POLL_INTERVAL_MS } from "./webform/constants";
+import { readWebFormScope, writeWebFormScope } from "../features/webform/webFormScopeStorage";
 import { useAiAvailable } from "./webform/useAiAvailable";
 import { useLiveSession } from "./webform/useLiveSession";
 import { useSnapshotUrl } from "./webform/useSnapshotUrl";
@@ -81,6 +84,7 @@ import {
   type WebFormLive,
   type WebFormPreview,
   type WebFormSnapshot,
+  type WebFormScope,
   type WebFormUrlHistory,
 } from "../types";
 
@@ -133,6 +137,9 @@ export default function WebFormPage() {
   const [urlHistory, setUrlHistory] = useState<WebFormUrlHistory[]>([]);
   const aiAvailable = useAiAvailable();
   const [aiEnabled, setAiEnabled] = useState(restoredSession.aiEnabled);
+  // Data range: remembered per dataset in localStorage, defaulting to "current plan only"
+  // so the remembering mechanism cannot change anyone's pre-switch default.
+  const [scope, setScope] = useState<WebFormScope>(() => readWebFormScope(readActiveDatasetId()));
 
   /**
    * 把一份预览铺到界面上。**读取与重放共用这一处**——两处各写一遍的话，
@@ -185,6 +192,9 @@ export default function WebFormPage() {
     setSnapshot,
     setBusy,
     message,
+    // Replayed previews must use the range this visit is showing, otherwise the table
+    // would silently describe a different data set than the switch says.
+    scope,
   });
 
   const running = browser.data?.state === "running";
@@ -213,6 +223,7 @@ export default function WebFormPage() {
     running,
     aiAvailable,
     aiOn,
+    scope,
     setSessionActive,
     message,
   });
@@ -227,6 +238,25 @@ export default function WebFormPage() {
   const handleRequestMemoryDialog = useCallback(
     () => setMemoryDialogOpen(true),
     [setMemoryDialogOpen],
+  );
+
+  /**
+   * 切换取数范围：**一次改动要同时落到三处**——页面状态、记住的选择、以及正在跑的那次自动填写。
+   *
+   * 三处的判据是同一条（`scope === "group" | "all"`），差别只在消费方：清单与批量预览读页面
+   * 状态，浏览器面板的清单与自动填表读后端会话里的范围。只改前两处会让面板继续按旧范围取数，
+   * 用户会看到"页面说全部、面板还是当前方案"——所以运行中必须同步过去。
+   */
+  const handleScopeChange = useCallback(
+    (next: WebFormScope) => {
+      setScope(next);
+      writeWebFormScope(next, readActiveDatasetId());
+      if (!live?.running) return;
+      void setWebFormLiveScope(next)
+        .then((updated) => setLive(updated))
+        .catch(() => undefined);
+    },
+    [live?.running, setLive],
   );
 
   useEffect(() => {
@@ -466,7 +496,7 @@ export default function WebFormPage() {
       setSessionActive(true);
       const next = live?.running
         ? await setWebFormLiveEnabled(!liveEnabled)
-        : await startWebFormLive(aiOn);
+        : await startWebFormLive(aiOn, scope);
       setLive(next ?? null);
       setLiveOptOut(false);
       message.success(
@@ -482,7 +512,7 @@ export default function WebFormPage() {
       setBusy(null);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- setLive/setLiveOptOut 为 useLiveSession 返回的稳定 setter（依赖数组照抄拆分前写法）
-  }, [aiOn, live?.running, liveEnabled, message]);
+  }, [aiOn, live?.running, liveEnabled, message, scope]);
 
   const handleRead = useCallback(async () => {
     setBusy("read");
@@ -494,7 +524,7 @@ export default function WebFormPage() {
       rememberSnapshot(taken.snapshot_id, aiOn);
       if (!aiOn) {
         // 不调模型：本地规则秒出，没必要为了统一而多开一次任务。
-        const report = await previewWebForm(taken.snapshot_id, false);
+        const report = await previewWebForm(taken.snapshot_id, false, scope);
         applyPreview(report);
         if (!report.items.length) {
           message.info(t("webFormPage.toast.nothingToFill"));
@@ -503,9 +533,11 @@ export default function WebFormPage() {
       }
       // 调模型：交给统一任务地基。**离开页面也继续跑**，结果回来后先暂存
       // （见 features/webform/stagedAiPreview），由用户在页面上核对后再自己勾选填入。
+      // `scope` 必须跟着走：这条链路和下面那条规则链路读的必须是同一个范围，否则
+      // 用户切到「全部资料」后点读取，拿到的仍是「仅当前方案」的预览。
       const started = await startAiTask({
         kind: "webform_fill",
-        payload: { snapshot_id: taken.snapshot_id },
+        payload: { snapshot_id: taken.snapshot_id, scope },
         label: t("backgroundTasks.aiTask.webform.label"),
         onFinished: (task) => {
           if (task.status === "failed") {
@@ -521,7 +553,7 @@ export default function WebFormPage() {
     } finally {
       setBusy(null);
     }
-  }, [aiOn, applyPreview, message, rememberSnapshot]);
+  }, [aiOn, applyPreview, message, rememberSnapshot, scope]);
 
   const handleFill = useCallback(async () => {
     if (!preview) return;
@@ -678,6 +710,7 @@ export default function WebFormPage() {
         onExportDiagnostics={handleExportDiagnostics}
         onEndSession={handleEndSession}
       />
+      <ScopeSwitchCard scope={scope} disabled={busy === "read"} onChange={handleScopeChange} />
       {/* AI 兜底：规则能确定就不调用模型，只有认不出的框才问一次。
           渐进展开：就绪前收起（说明性长卡，与填表动作无直接关系）。 */}
       {controlsExpanded ? (

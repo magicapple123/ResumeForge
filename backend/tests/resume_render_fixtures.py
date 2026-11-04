@@ -1,0 +1,53 @@
+# SPDX-License-Identifier: Apache-2.0
+"""渲染覆盖用例的共享夹具（``test_resume_render_overrides`` 与
+``test_resume_photo_crop_render`` 共用；先例：``backup_asset_fixtures.py``）。
+
+一次拆分只为回到单文件行数预算：照片数据 URL、PNG 生成与简历骨架原样搬迁，
+行为不变。
+"""
+
+from __future__ import annotations
+
+import base64
+import io
+
+from app.schemas.resume import ResumeContent
+from app.services.resume.resume_photo_crop import photo_sha256
+from PIL import Image
+
+PHOTO = (
+    "data:image/png;base64,"
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk"
+    "YAAAAAYAAjCB0C8AAAAASUVORK5CYII="
+)
+
+
+def _png(width: int = 8, height: int = 8) -> str:
+    buffer = io.BytesIO()
+    Image.new("RGB", (width, height), (10, 120, 200)).save(buffer, format="PNG")
+    return "data:image/png;base64," + base64.b64encode(buffer.getvalue()).decode("ascii")
+
+
+def _render_resume() -> ResumeContent:
+    return ResumeContent(
+        name="张三",
+        job_intent="后端工程师",
+        summary="一段总结。",
+        experience=[
+            {
+                "company": "甲公司",
+                "role": "工程师",
+                "description": ["做了甲。"],
+                "id": "exp_12345678",
+            },
+            {
+                "company": "乙公司",
+                "role": "工程师",
+                "description": ["做了乙。"],
+                "id": "exp_87654321",
+            },
+        ],
+    )
+
+
+__all__ = ["PHOTO", "_png", "_render_resume", "photo_sha256"]

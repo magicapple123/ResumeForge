@@ -38,6 +38,7 @@ export function analyzeResumeLayout(
   id: number,
   measure: ResumeLayoutMeasure,
   layout?: Partial<ResumeLayout>,
+  minPaddingMm?: number | null,
 ): Promise<ResumeLayoutAnalysis> {
   return request(`/resumes/${id}/layout/analyze`, {
     method: "POST",
@@ -48,6 +49,8 @@ export function analyzeResumeLayout(
       format_name: layout?.format_name,
       font_scale: layout?.font_scale,
       format_config: layout?.format_config,
+      // 问题 17：最小页边距是阶梯**下界**，后端据此截断页边距档位；不传 = 不限制。
+      min_padding_mm: minPaddingMm ?? undefined,
     }),
   });
 }

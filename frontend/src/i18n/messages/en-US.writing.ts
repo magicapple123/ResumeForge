@@ -40,6 +40,32 @@ const writing = {
   "writing.generate.failed": "Generation failed; please try again",
   /** Title of a single result block. */
   "writing.result.label": "Result",
+  /** Accessible name for the result box, which is editable. */
+  "writing.result.ariaLabel": "Generated result; you can edit it",
+  /** Badge shown when the current version was edited by hand. */
+  "writing.result.edited": "Edited",
+  /** Version badge on the version bar: v1, v2, … */
+  "writing.version.label": "v{index}",
+  /** Accessible name for the version bar. */
+  "writing.version.ariaLabel": "Result versions",
+
+  // ── Refining the current result (polish-selection) ───────
+  /** Small heading in front of the four refine chips. */
+  "writing.refine.label": "Keep refining this version:",
+  "writing.refine.shorter": "Shorter",
+  "writing.refine.specific": "More specific",
+  "writing.refine.colloquial": "More conversational",
+  "writing.refine.quantify": "Add numbers",
+  "writing.refine.customPlaceholder": "Your own request, e.g. highlight growth numbers",
+  /** Accessible name for the custom request input. */
+  "writing.refine.customAriaLabel": "Custom refinement request",
+  "writing.refine.submit": "Apply my request",
+  /** Refining failed; the previous result is kept, and the message says so. */
+  "writing.refine.failed": "Could not refine; the previous result is kept",
+
+  // ── Hint block expand/collapse (collapsed by default) ────
+  "writing.hint.expand": "Show how it works",
+  "writing.hint.collapse": "Hide",
 
   // ── Text-selection context menu ──────────────────────────
   /** Accessible name for the menu container. */

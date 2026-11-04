@@ -297,6 +297,14 @@ export interface HeaderCatalogField {
   placement: HeaderPlacement;
   format: ItemFormat;
   source_field_id: string;
+  /**
+   * 资料里这个字段的**当前值**（6-A）：可选，旧后端 / 目录兜底不下发时按空串处理。
+   *
+   * 这是**拷贝**而不是活链接——「添加页眉字段」把它写进 `HeaderItem.value` 之后，
+   * 资料再改不会回写（`HeaderItem` 没有 source 字段）。私密 / 隐藏字段后端根本不下发值，
+   * 因此这里为空是正常结果，不是缺数据。
+   */
+  value?: string;
 }
 
 export interface DocumentFieldCatalog {

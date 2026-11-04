@@ -56,7 +56,22 @@ export interface PaginationWarning {
 export interface PaginationReport {
   pages: number | null;
   pagesNeeded: number | null;
+  /**
+   * 页数上限（**数字**上限）；`null` = 没有上限。
+   *
+   * 「不限篇幅」时后端仍会给一个数字（渲染保护上限 10 页，PDF 引擎要一个正数 max_pages），
+   * 那个数字**不是**用户选的上限——所以解析层在这里直接给 `null`：缩略图据此说
+   * 「实际 N 页」而不是「实际 N 页（上限 10 页）」，页标记也失去"越界过滤"的意义
+   * （不限本来就不会截断）。判据是后端单独带出的布尔 `page_limit_is_unlimited`。
+   */
   pageLimit: number | null;
+  /**
+   * 用户选的是「不限篇幅」（后端字段 `page_limit_is_unlimited`）。
+   *
+   * 保留这个布尔是为了让"不限"与"上限未知（旧后端缺字段）"分得开：
+   * 两者都会让 `pageLimit` 为 `null`，但只有前者能确定"一个字都不会被裁"。
+   */
+  pageLimitIsUnlimited: boolean;
   overflow: boolean;
   /**
    * 末页占用（0–1 比例）。后端分页报告目前**不返回**这个字段；解析层容忍它缺席
@@ -128,10 +143,14 @@ function readWarnings(raw: unknown): PaginationWarning[] {
 export function parsePaginationReport(raw: unknown): PaginationReport | null {
   if (!isRecord(raw)) return null;
   const snapshot = isRecord(raw["snapshot"]) ? raw["snapshot"] : {};
+  // 「不限篇幅」是**语义位**，不是数字：后端的 `page_limit` 永远是渲染保护上限（10 页），
+  // 拿它当用户上限就会把"实际 3 页"说成"上限 10 页"，`summaryNoLimit` 分支永远走不到。
+  const unlimited = raw["page_limit_is_unlimited"] === true;
   return {
     pages: intOrNull(raw["pages"]),
     pagesNeeded: intOrNull(raw["pages_needed"]),
-    pageLimit: intOrNull(raw["page_limit"]),
+    pageLimit: unlimited ? null : intOrNull(raw["page_limit"]),
+    pageLimitIsUnlimited: unlimited,
     overflow: raw["overflow"] === true,
     lastPageFill: ratioOrNull(raw["last_page_fill"]),
     truncatedAt: readTruncatedAt(raw["truncated_at"]),

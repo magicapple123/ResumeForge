@@ -163,8 +163,11 @@ def test_generation_rationale_explains_targeted_selection():
     )
     assert "产品运营" in text
     assert "候选资料组成" in text
-    assert "Amazon ESG" in text
     assert "没有进入候选资料" in text
+    # 问题 11：第 4 段从「逐条列资料名」改为「一句指路 + 条数」，
+    # 资料名清单（Amazon ESG）搬到上方覆盖块，不再重复出现在说明里。
+    assert "没有写进这份简历的内容：共 1 条" in text
+    assert "Amazon ESG" not in text
 
 
 def test_generation_rationale_for_general_resume_mentions_budget_only():

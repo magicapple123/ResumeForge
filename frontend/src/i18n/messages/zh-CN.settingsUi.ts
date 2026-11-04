@@ -89,6 +89,12 @@ const settingsUi = {
   "settingsUi.help.export": "导出诊断包",
   "settingsUi.help.exported": "诊断包已导出，里面没有简历数据与密钥",
   "settingsUi.help.exportFailed": "导出诊断包失败",
+  /** 次要按钮：界面卡在怪状态时的救急入口（不是全局刷新，只在设置里）。 */
+  "settingsUi.help.reload": "重新加载界面",
+  /** 按钮下方的说明：必须写清后果，否则用户会以为数据也会被重置。 */
+  "settingsUi.help.reloadHint": "只重新加载界面，不会改动任何数据；有未保存的内容请先保存。",
+  /** 有未保存草稿时按钮禁用，悬停说明原因。 */
+  "settingsUi.help.reloadBlocked": "有未保存的内容，请先保存或放弃修改，再重新加载界面。",
   /** 预览摘要；`{files}` 是括号里的文件清单（没有文件时为空串）。 */
   "settingsUi.help.previewSummary": "包内约 {count} 条脱敏事件{files}，{note}",
   /** 文件清单两侧的括号（中文全角；英文用半角并补前导空格）。 */

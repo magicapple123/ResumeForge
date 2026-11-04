@@ -227,14 +227,27 @@
   display: grid;
   gap: 4px;
   max-width: 440px;
+  /* 块级元素在 `text-align: center` 下不会自己居中：只有行内内容会被居中，
+     440px 的网格仍贴在父容器左边，于是文字比上方宣传图、下方快捷入口左偏 11px
+     （英文下更明显）。`margin-inline: auto` 把块本身也居中，三段共用同一条中轴。 */
+  margin-inline: auto;
+  text-align: center;
+  justify-items: center;
 }
 
+/* 快捷入口：四个 chip 由 `justify-content: center` 聚在中间，宽度上限只负责"什么时候
+   折行"。原来写死 560px 是按中文标签定的（中文四个合计约 400px，余量很大）；英文
+   四个标签的字符数约为中文的 2.5 倍（问题 20a：英文下折成 3 + 1，落单的那个居中）。
+   这里直接去掉上限：四个 chip 的 max-content 约 655–740px（14px 字号 + 5px/10px
+   内边距 + 8px 间距的估算），640 仍在边界上；而容器只有 4 个 chip，
+   `justify-content: center` 已经保证它们聚在中间，上限本身没有存在意义。
+   `flex-wrap: wrap` 保留——窄窗口（< 一排的自然宽）仍要折行，改成 `nowrap` 会横向溢出。 */
 .assistant-starter-prompts {
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
   gap: 8px;
-  max-width: 560px;
+  max-width: none;
   margin-top: 16px;
 }
 

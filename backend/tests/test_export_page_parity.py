@@ -32,6 +32,8 @@ PDF/Word 读这个字段（``pdf_exporter/layout.py``），预览与 HTML 只认
 
 from __future__ import annotations
 
+from io import BytesIO
+
 import pytest
 from app.schemas.resume import ResumeContent
 from app.services.export_pipeline import (
@@ -389,8 +391,7 @@ def test_zero_override_pages_stay_structurally_sane(template):
     assert artifact.pages >= 1, template
     assert artifact.pages_needed is not None and artifact.pages_needed >= 1, template
     assert artifact.pages == artifact.pages_needed, (
-        f"{template} 在 3 页上限下就被截断了（needed={artifact.pages_needed}），"
-        "零覆盖不该出现溢出"
+        f"{template} 在 3 页上限下就被截断了（needed={artifact.pages_needed}），零覆盖不该出现溢出"
     )
     assert artifact.overflow is False, template
 
@@ -408,3 +409,92 @@ def test_elegant_and_classic_need_a_similar_number_of_pages():
     assert abs(elegant.pages_needed - classic.pages_needed) <= 1, (
         f"elegant 需要 {elegant.pages_needed} 页、classic 需要 {classic.pages_needed} 页"
     )
+
+
+# ===== 1-D：「最大篇幅」对五个格式是**同一个承诺** =====
+
+
+def _three_page_resume() -> ResumeContent:
+    """必然排到 3 页的内容（14 段经历 × 3 条要点 + 项目 + 技能）。"""
+    return ResumeContent(
+        name="张三",
+        phone="13800000000",
+        email="zhangsan@example.com",
+        job_intent="后端工程师",
+        summary="三年后端开发经验，负责交易系统的设计与落地，熟悉 Python 与分布式存储。",
+        experience=[
+            {
+                "company": f"示例科技{index}",
+                "role": "后端工程师",
+                "start_date": "2021-03",
+                "end_date": "2024-06",
+                "description": [
+                    f"第{index}段要点一：负责订单核心链路优化，响应时间从 180ms 降到 45ms。",
+                    f"第{index}段要点二：主导分库分表改造，12 个业务表平滑迁移且零故障。",
+                    f"第{index}段要点三：搭建灰度发布体系，回滚时间从 20 分钟降到 30 秒。",
+                ],
+            }
+            for index in range(1, 15)
+        ],
+        projects=[
+            {"name": f"项目{index}", "role": "负责人", "description": ["支撑每日百万级任务。"]}
+            for index in range(1, 5)
+        ],
+        skills=[{"name": name, "level": "熟练"} for name in ("Python", "Go", "Redis", "Kafka")],
+    )
+
+
+def _squeeze(text: str) -> str:
+    """去掉全部空白再比：PDF 抽出来的文字会按断行插换行，逐字比较会假阴性。"""
+    return "".join(text.split())
+
+
+def _artifact_text(artifact, fmt: str) -> str:
+    """把产物读成可搜索的纯文本（docx 解包段落、pdf 抽文字、其余按 utf-8 解码）。"""
+    if fmt == "docx":
+        from docx import Document
+
+        return "\n".join(p.text for p in Document(BytesIO(artifact.content)).paragraphs)
+    if fmt == "pdf":
+        from pypdf import PdfReader
+
+        pdf = PdfReader(BytesIO(artifact.content))
+        return "\n".join(page.extract_text() or "" for page in pdf.pages)
+    return artifact.content.decode("utf-8")
+
+
+@needs_font
+def test_page_limit_one_drops_the_same_content_in_all_five_formats():
+    """3 页内容 + ``page_limit=1``：五个格式的正文都不含第二页的内容，JSON 必须完整。
+
+    1-D 验收口径：以前「最大篇幅」只约束 PDF（Word/HTML/MD/TXT 全部导出），现在五个格式以
+    PDF 的版式为准、整块裁掉越界内容；JSON 是数据交付物，**不受上限约束**，必须始终完整。
+    """
+    resume = _three_page_resume()
+    context = RenderContext(template="classic", page_limit=1)
+
+    measured = build_resume_pdf(resume, template="classic", page_limit=1)
+    needed = int(measured.pages_needed or 0)
+    assert needed >= 3, f"样本只有 {needed} 页，用例失去意义"
+    first_page = next(s for s in measured.spans if s.kind == "point" and s.page == 1)
+    over_limit = next(s for s in measured.spans if s.kind == "point" and s.page > 1)
+    kept, dropped = _squeeze(first_page.text), _squeeze(over_limit.text)
+
+    for fmt in ("pdf", "docx", "html", "md", "txt"):
+        artifact = build_export(ExportRequest(format=fmt, page_limit=1), resume, context)
+        body = _squeeze(_artifact_text(artifact, fmt))
+        assert kept in body, f"{fmt} 连第 1 页的内容都不见了"
+        assert dropped not in body, f"{fmt} 仍带着第 2 页首条要点"
+        if fmt == "pdf":
+            # PDF 由 fit 按页裁：overflow 说"裁完仍超限"，truncated 说"文件里少了页"。
+            assert artifact.overflow is True and artifact.truncated is True
+            assert artifact.truncated_at == "", "PDF 没有板块级裁点，只能报少了内容"
+        else:
+            # 其余格式是文档级裁剪：页数不超限（overflow=false）但文件里确实少了内容。
+            assert artifact.truncated is True, f"{fmt} 裁了却没说"
+            assert artifact.truncated_at.startswith("experience/"), fmt
+            assert artifact.pages_needed == needed, fmt
+
+    payload = build_export(ExportRequest(format="json", page_limit=1), resume, context)
+    assert dropped in _squeeze(payload.content.decode("utf-8")), "JSON 必须始终完整"
+    assert payload.truncated is False, "JSON 不该被标成已裁剪"

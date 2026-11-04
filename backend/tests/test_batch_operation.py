@@ -154,3 +154,85 @@ def test_legacy_flat_configuration_is_treated_as_unconfigured(client, db_session
     body = client.get("/api/settings/batch-operation").json()
     assert body["generation"]["configured"] is False
     assert body["export"]["configured"] is False
+
+
+def test_batch_export_uses_request_config_over_global_defaults(client, db_session, monkeypatch):
+    """请求体带 config 时按这一份导出：页数 / 字号 / 语言 / 模板都取传入值。"""
+    from app.api.resumes import batch_export_routes
+    from fastapi.responses import Response
+
+    record = _resume(db_session)
+    # 全局是 md + 1 页：如果实现读错了来源，下面四条断言会全部对不上。
+    client.put("/api/settings/batch-operation/export", json=_export())
+    seen: list[tuple[object, dict[str, object]]] = []
+
+    def fake_export(db, row, request, **kwargs):
+        seen.append((request, kwargs))
+        return Response(
+            b"html",
+            media_type="text/html",
+            headers={"Content-Disposition": 'attachment; filename="a.html"'},
+        )
+
+    monkeypatch.setattr(batch_export_routes, "_export_record", fake_export)
+
+    response = client.post(
+        "/api/resumes/batch-export",
+        json={
+            "resume_ids": [record.id],
+            "config": _export(
+                template="modern",
+                font_scale="large",
+                page_limit=3,
+                language="en-US",
+                export_format="html",
+            ),
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    request, kwargs = seen[0]
+    assert request.format == "html"
+    assert request.font_scale == "large"
+    assert request.page_limit == 3
+    assert request.language == "en-US"
+    assert kwargs["template_override"] == "modern"
+
+
+def test_batch_export_with_request_config_works_without_global_config(client, db_session):
+    """从未配置过的用户：这次传了参数，就不该再被 409 拦。"""
+    record = _resume(db_session)
+
+    response = client.post(
+        "/api/resumes/batch-export",
+        json={"resume_ids": [record.id], "config": _export(export_format="html")},
+    )
+
+    assert response.status_code == 200, response.text
+    with zipfile.ZipFile(io.BytesIO(response.content)) as archive:
+        assert all(name.endswith(".html") for name in archive.namelist())
+
+
+def test_batch_export_rejects_invalid_request_config(client, db_session):
+    """传入的 config 必须过与设置页同一套校验，非法值直接 422。"""
+    record = _resume(db_session)
+
+    bad_page_limit = client.post(
+        "/api/resumes/batch-export",
+        json={"resume_ids": [record.id], "config": _export(page_limit=9)},
+    )
+    assert bad_page_limit.status_code == 422
+
+    unknown_template = client.post(
+        "/api/resumes/batch-export",
+        json={"resume_ids": [record.id], "config": _export(template="not-a-template")},
+    )
+    assert unknown_template.status_code == 422
+    assert "版式模板" in unknown_template.json()["detail"]
+
+    # extra="forbid" 仍在：多带一个字段就是 422，不为兼容放宽。
+    extra_field = client.post(
+        "/api/resumes/batch-export",
+        json={"resume_ids": [record.id], "config": {**_export(), "unknown": 1}},
+    )
+    assert extra_field.status_code == 422

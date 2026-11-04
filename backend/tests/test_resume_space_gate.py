@@ -113,6 +113,20 @@ def test_finalize_page_budget_appends_honest_warnings():
     assert any("删减" in w or "超出" in w for w in warnings)
 
 
+def test_finalize_page_budget_warning_states_target_and_actual_pages(monkeypatch):
+    """收敛失败时要写清"目标 N 页、实际 M 页"，不能只说"超出"（需求 7A-4）。"""
+    from app.services.resume import resume_space_gate
+
+    monkeypatch.setattr(resume_space_gate, "page_overage", lambda *_a, **_k: 1)
+    monkeypatch.setattr(resume_space_gate, "trim_to_page_limit", lambda *a, **_k: (a[0], 0))
+    warnings: list[str] = []
+    finalize_page_budget(_resume(), warnings, page_limit=2, font_scale="standard", language="zh-CN")
+    overflow = [item for item in warnings if "实际渲染仍超出" in item]
+    assert overflow, warnings
+    assert "目标 2 页" in overflow[0]
+    assert "实际 3 页" in overflow[0]
+
+
 def test_space_retry_prompt_mentions_real_gap():
     prompt = space_retry_prompt({"experience": []}, overage=3, page_limit=1)
     assert "4 页" in prompt

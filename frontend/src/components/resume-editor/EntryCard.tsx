@@ -9,8 +9,8 @@
  *   是 `EntryZoneGroup`（11px 标签 + 等宽 chips 网格 + 右侧虚线 `+` 格）。"组"不再是容器，
  *   一个 4 字段条目比改前少 3 行以上。
  */
-import type { DragEvent, ReactNode } from "react";
-import { memo, useEffect, useState } from "react";
+import type { ReactNode } from "react";
+import { memo } from "react";
 import type { MessageKey } from "../../i18n";
 import { useI18n } from "../../i18n/i18nContext";
 import type {
@@ -28,14 +28,11 @@ import {
   getItemPlacement,
   groupByPlacement,
   itemPath as buildItemPath,
-  locatePath,
-  moveItem,
   placementGroup,
   resolveDropIndex,
 } from "../../features/resume-document";
 import type { DropSide } from "../../features/resume-document";
 import { addItem as addEntryItem } from "../../features/resume-document/mutations";
-import { DRAG_REJECT_COPY } from "./dragRejectCopy";
 import EntryCardHead from "./EntryCardHead";
 import EntryHeadLayoutSwitch from "./EntryHeadLayoutSwitch";
 import EntryZoneGroup from "./EntryZoneGroup";
@@ -43,6 +40,7 @@ import ItemChip from "./ItemChip";
 import ItemEditor from "./ItemEditor";
 import { useDocumentDrag } from "./documentDragContext";
 import { useDocumentExpand } from "./documentExpandContext";
+import { useEntryDragDrop } from "./useEntryDragDrop";
 
 /**
  * 位置分组表（模块级常量）。
@@ -121,11 +119,22 @@ function EntryCard({
   // 而单击就会选中——格子从半宽变成整行、相邻 chip 跟着换位，真实双击（两下间隔 ~100ms）
   // 的第二下因此落到别的 chip 上（也就是"先单击选中再双击展不开"的根因）。
   const { expandedPath } = useDocumentExpand();
-  const [dragOverZone, setDragOverZone] = useState<string | null>(null);
-  // #27：落点侧（插入线画在目标 chip 的前/后边缘）。与 draggedPath 同源清理。
-  const [dropTarget, setDropTarget] = useState<{ path: string; side: "before" | "after" } | null>(
-    null,
-  );
+  // 问题 21：三种落点指示（蓝条 / 禁用色描边 / 整框虚线）的状态机整体在
+  // `useEntryDragDrop` 里，由一组动作成套写入，避免"只复位一半"。
+  const {
+    draggedItem,
+    dropTarget,
+    rejectPath,
+    dropAt,
+    chipOver,
+    chipReject,
+    chipLeave,
+    chipDrop,
+    zoneDragOver,
+    handleZoneOver,
+    handleZoneDrop,
+    handleZoneLeave,
+  } = useEntryDragDrop({ document, entry, onChange, onNotice });
   const entryId = entry.id ?? "";
   const entryPath = buildEntryPath(section.key, entryId);
   const specFor = (item: ResumeItem) =>
@@ -136,88 +145,6 @@ function EntryCard({
           ?.fields.find((field) => field.key === item.key);
   const selectedContainsEntry =
     selectedPath === entryPath || (selectedPath ?? "").startsWith(`${entryPath}.`);
-
-  const draggedPath = drag.draggedPath;
-  // #9-B：被拿起的 item 从**整份文档**解析，不只看本条目。拖拽源可能在同板块的别的条目里，
-  // 只在本条目里找会拿不到 item → 既不判合法性、也给不出提示，表现为"拖了没反应"。
-  const draggedLocated = draggedPath ? locatePath(document, draggedPath) : null;
-  const draggedItem = draggedLocated?.kind === "item" ? draggedLocated.item : null;
-
-  // #26：高亮从"正在拖拽"这一事实派生，不再依赖 dragleave 成对出现——空白处松手、
-  // Esc 取消（只有 dragend）、拖去别的卡片时本卡都收不到 dragleave，虚线框因此残留。
-  useEffect(() => {
-    if (!draggedPath) {
-      setDragOverZone(null);
-      setDropTarget(null);
-    }
-  }, [draggedPath]);
-
-  const dropAt = (path: string, placement: Placement, toIndex?: number) => {
-    // 从整份文档解析：目标 item 可能与拖拽源同条目，也可能在别的条目里（同板块内拖动）。
-    const located = locatePath(document, path);
-    if (!located || located.kind !== "item") return;
-    const item = located.item;
-    // 问题 13：三种拒绝原因的文案在这里统一出口（跨方框 / 正文块区 / 位置不允许），
-    // 与 `dragend` 兜底用的是同一张 `DRAG_REJECT_COPY` 表——同一个原因不会有两种说法。
-    const reject = dropRejectReason(item, placement);
-    if (reject) {
-      onNotice(t(DRAG_REJECT_COPY[reject]), "warning");
-      return;
-    }
-    const next = moveItem(document, path, { placement, toIndex });
-    if (next === document) {
-      onNotice(t("document.drag.invalid"), "warning");
-      return;
-    }
-    onChange(next);
-    onNotice(t("document.drag.moved"), "info");
-  };
-
-  /**
-   * 落在大框空白处 = 追加到该位置组末尾。
-   *
-   * 问题 13 只改了"非法落点"这一半：目标方框本身允许拖入时，整组 `is-dragover` 淡蓝底 +
-   * 虚线已经足够明确，不改成禁止光标；但"本来就在末尾"必须明说，否则静默等于功能坏了。
-   */
-  const handleZoneDrop = (placement: Placement) => (event: DragEvent<HTMLDivElement>) => {
-    event.preventDefault();
-    event.stopPropagation();
-    setDragOverZone(null);
-    const path = event.dataTransfer.getData("text/plain") || drag.draggedPath;
-    // `drop` 真的到达 → 文案由这里给，`dragend` 不能再补一条（否则两条提示打架）。
-    drag.markRejected(null);
-    if (!path) return;
-    drag.setDraggedPath(null);
-    if (draggedItem) {
-      const group = placementGroup(entry.items, placement);
-      const indexInGroup = group.findIndex((candidate) => candidate.id === draggedItem.id);
-      if (indexInGroup >= 0 && indexInGroup === group.length - 1) {
-        onNotice(t("document.drag.samePosition"), "warning");
-        return;
-      }
-    }
-    dropAt(path, placement);
-  };
-
-  const handleZoneOver = (placement: Placement) => (event: DragEvent<HTMLDivElement>) => {
-    // 没有"我们发起的拖拽"就什么都不做（外部文件拖进来交给浏览器默认行为）。
-    if (!draggedItem) return;
-    // 2026-11-02 返工曾把 `dropEffect="none"` 全部去掉（它会让浏览器**不派发 drop**，
-    // 于是非法落点既没有动作也没有提示）。问题 13 把它请回来，但**只给真正非法的方框**：
-    // 原因记进来，松手后由拖拽源的 `dragend` 补一条可读提示。
-    event.preventDefault();
-    const reject = dropRejectReason(draggedItem, placement);
-    if (reject) {
-      drag.markRejected(reject);
-      event.dataTransfer.dropEffect = "none";
-      setDragOverZone(null);
-      return;
-    }
-    drag.markRejected(null);
-    event.dataTransfer.dropEffect = "move";
-    // 高亮只在能落下的方框上亮：指示"松手会发生什么"，不能连拒绝的位置也描边。
-    setDragOverZone(placement);
-  };
 
   const columns = entry.layout.columns ?? section.layout.columns ?? 1;
 
@@ -231,11 +158,16 @@ function EntryCard({
     const expanded = expandedPath === path;
     const selectedItem = selectedPath === path;
     const dropSide = dropTarget?.path === path ? dropTarget.side : null;
+    // 问题 21a：拒绝态与蓝条互斥——同一个 `onDragOver` 分支里二选一，这里只读结果。
+    const rejected = rejectPath === path;
     return (
       <div
         key={item.id}
-        className={`document-chip-slot${expanded ? " is-editing" : ""}${dropSide ? ` is-drop-${dropSide}` : ""}`}
+        className={`document-chip-slot${expanded ? " is-editing" : ""}${
+          dropSide ? ` is-drop-${dropSide}` : ""
+        }${rejected ? " is-drop-rejected" : ""}`}
         data-document-path={path}
+        onDragLeave={(event) => chipLeave(path, event)}
         onDragOver={(event) => {
           // 外部拖拽（没有 dragstart 来自 chip）不接管。
           if (!draggedItem) return;
@@ -251,7 +183,7 @@ function EntryCard({
           if (reject) {
             drag.markRejected(reject);
             event.dataTransfer.dropEffect = "none";
-            setDropTarget(null);
+            chipReject(path);
             return;
           }
           // `toIndex` 只有这一份实现（resolveDropIndex）；dragover 与 drop 共用它的输出，
@@ -265,18 +197,18 @@ function EntryCard({
           if (resolution.noop) {
             drag.markRejected("samePosition");
             event.dataTransfer.dropEffect = "none";
-            setDropTarget(null);
+            chipReject(path);
             return;
           }
           drag.markRejected(null);
           event.dataTransfer.dropEffect = "move";
-          setDropTarget({ path, side });
+          chipOver(path, side);
         }}
         onDrop={(event) => {
           event.preventDefault();
           event.stopPropagation();
           const droppedPath = event.dataTransfer.getData("text/plain") || drag.draggedPath;
-          setDropTarget(null);
+          chipDrop();
           // `drop` 真的到达 → 文案由这里给，`dragend` 不能再补一条。
           drag.markRejected(null);
           if (!droppedPath) return;
@@ -360,10 +292,11 @@ function EntryCard({
     emptyText: t(spec.emptyKey),
     addLabel: readOnly ? "" : t(spec.addKey),
     columns,
-    // #27：chip 级插入线出现时，分组大框降级为无——两种指示同时出现会互相打架。
-    dragOver: dropTarget === null && dragOverZone === spec.placement,
+    // 问题 21a：整框虚线只在**没有任何 chip 级指示**时才亮（chip 蓝条 / 拒绝描边都算），
+    // 门控是兜底，`useEntryDragDrop` 里的成套复位才是根治。
+    dragOver: zoneDragOver(spec.placement),
     onZoneOver: handleZoneOver(spec.placement),
-    onZoneLeave: () => setDragOverZone(null),
+    onZoneLeave: handleZoneLeave,
     onZoneDrop: handleZoneDrop(spec.placement),
     renderChip,
     onChange,
@@ -431,11 +364,11 @@ function EntryCard({
         {hiddenItems.length > 0 ? (
           <div
             className={`document-zone document-zone-hidden${
-              dragOverZone === "hidden" ? " is-dragover" : ""
+              zoneDragOver("hidden") ? " is-dragover" : ""
             }`}
             data-document-zone="hidden"
             onDragOver={handleZoneOver("hidden")}
-            onDragLeave={() => setDragOverZone(null)}
+            onDragLeave={handleZoneLeave}
             onDrop={handleZoneDrop("hidden")}
           >
             <div className="document-zone-title-row">
@@ -451,14 +384,19 @@ function EntryCard({
 
       <div
         className={`document-zone document-zone-body${
-          dragOverZone === "body" ? " is-dragover" : ""
+          zoneDragOver("body") ? " is-dragover" : ""
         }`}
         data-document-zone="body"
         onDragOver={handleZoneOver("body")}
-        onDragLeave={() => setDragOverZone(null)}
+        onDragLeave={handleZoneLeave}
         onDrop={handleZoneDrop("body")}
       >
         {domainTitle("document.zone.body", bodyItems.length)}
+        {/* 问题 21b：正文块的可拖区域是左侧那枚把手（正文区要留给选文字），
+            与灰字区的 `detailHint` 同构补一句提示；只有一个块时无顺序可调，不显示。 */}
+        {bodyItems.length > 1 && !readOnly ? (
+          <span className="document-section-hint">{t("document.zone.bodyHint")}</span>
+        ) : null}
         <div className="document-group-row">
           <div className="document-group document-group-cells">
             {bodyItems.map((item) => renderChip(item))}

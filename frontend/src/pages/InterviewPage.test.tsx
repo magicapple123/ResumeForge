@@ -64,6 +64,19 @@ const setupStubs = vi.hoisted(() => {
     AUTO_ROUNDS_OPTION: "auto",
     autoValues: { ...base, rounds: "auto" as const },
     fixedValues: { ...base, rounds: 6 },
+    // 问题 5：两侧都用导入文件。这里的材料故意带上 warnings——上传接口的读取 DTO
+    // 就是长这样，而写端点 extra="forbid" 不认它。
+    materialValues: {
+      ...base,
+      jobId: undefined,
+      resumeId: undefined,
+      jobMaterial: {
+        name: "jd.txt",
+        text: "Backend JD",
+        warnings: ["only the first part was read"],
+      },
+      resumeMaterial: { name: "shot.png", text: "Alex, backend engineer", warnings: [] },
+    },
   };
 });
 
@@ -76,6 +89,9 @@ vi.mock("./interview/SetupTab", () => ({
       </button>
       <button type="button" onClick={() => onStart(setupStubs.fixedValues)}>
         固定开始（桩）
+      </button>
+      <button type="button" onClick={() => onStart(setupStubs.materialValues)}>
+        导入材料开始（桩）
       </button>
     </div>
   ),
@@ -180,6 +196,25 @@ describe("InterviewPage：自动轮数提交契约", () => {
       expect.objectContaining({ rounds: 6, rounds_min: null }),
     );
     expect(await screen.findByText("第 1 / 6 轮")).toBeInTheDocument();
+  });
+});
+
+describe("InterviewPage：材料请求体的字段投影（问题 5）", () => {
+  it("两侧都用导入文件：请求体里的材料只有 name / text，不含上传接口的 warnings", async () => {
+    apiMocks.createInterview.mockResolvedValue(makeDetail());
+    renderPage();
+
+    fireEvent.click(await screen.findByRole("button", { name: /导入材料开始/ }));
+
+    await waitFor(() => expect(apiMocks.createInterview).toHaveBeenCalledTimes(1));
+    const [payload] = apiMocks.createInterview.mock.calls[0] as [Record<string, unknown>];
+    // 写端点 extra="forbid"：键集合必须恰好是 name + text，多一个就 422。
+    expect(Object.keys(payload.job_material as object)).toEqual(["name", "text"]);
+    expect(Object.keys(payload.resume_material as object)).toEqual(["name", "text"]);
+    expect(JSON.stringify(payload)).not.toContain("warnings");
+    // 用了文件就不再传记录 id（两侧二选一）。
+    expect(payload.job_id).toBeUndefined();
+    expect(payload.resume_id).toBeUndefined();
   });
 });
 

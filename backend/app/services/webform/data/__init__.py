@@ -8,6 +8,9 @@ F5 起，三份输出都从**同一份快照**派生（profile_snapshot：当前
 from .catalog import (
     build_catalog as build_catalog,
 )
+from .profile_snapshot import (
+    normalize_scope as normalize_scope,
+)
 from .source import (
     WebformDataView as WebformDataView,
 )
@@ -27,4 +30,5 @@ __all__ = [
     "build_form_data",
     "build_live_form_data",
     "build_webform_view",
+    "normalize_scope",
 ]

@@ -1,14 +1,16 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * D11「机器读到的正文」的展示规则：把 `order_diffs` 点名的 token 在抽取文本里高亮。
+ * D11「机器读到的正文」的展示规则：把后端给出的**字符区间**在抽取文本里切成高亮片段。
  *
- * 为什么高亮 token 而不是标红整段：后端给的差异单位就是 token（契约 §4.4
- * `compare_text_order` 返回 token），整段标红会让用户以为"整页都错了"。
+ * 为什么按区间而不是按 token 找子串（22b）：后端 `compare_text_order` 在比较时**已经知道**
+ * 每个差异 token 落在产物里的哪一处，以前把这个位置丢了，前端只能 `indexOf` 猜——片段是
+ * 常见字（「与」「内容」）时，正文里每一个同名片段都被涂上，`missing` 的片段甚至会把
+ * 别处的正常文字涂成"缺失"。现在位置由后端下发（`order_highlights`），前端只做切片。
  *
  * 双栏顺序差异（`out_of_order`）用"提示"色而不是错误色：契约 §4.2/§4.5 明确这是
  * **已知结构性近似**，不冒充缺陷。
  */
-import type { MachineTextPage, OrderDiff, OrderDiffKind } from "./types";
+import type { MachineTextPage, OrderDiff, OrderDiffKind, TextOrderHighlight } from "./types";
 
 export type ScannerTokenKind = OrderDiffKind;
 
@@ -17,7 +19,12 @@ export interface ScannerToken {
   kind: ScannerTokenKind;
 }
 
-/** 从后端 `order_diffs` 收集需要高亮的 token（同 token 取第一个差异类型）。 */
+/**
+ * 从后端 `order_diffs` 收集差异片段（同 token 取第一个差异类型）。
+ *
+ * 22b 起**不再参与涂色**（涂色只认 `order_highlights` 的区间）：保留是因为差异清单与
+ * 图例仍按"片段 → kind"展示，且这是前端唯一一处 token 归一化口径。
+ */
 export function tokensFromOrderDiffs(
   diffs: readonly OrderDiff[] | null | undefined,
 ): ScannerToken[] {
@@ -40,43 +47,49 @@ export function diffKindsPresent(diffs: readonly OrderDiff[] | null | undefined)
 
 export type HighlightSegment = { text: string; kind: "normal" | ScannerTokenKind };
 
+/** 区间是否可用于切片（后端应保证；前端防御脏数据/老响应）。 */
+function usableRange(range: TextOrderHighlight, length: number): boolean {
+  return (
+    Number.isInteger(range.start) &&
+    Number.isInteger(range.end) &&
+    range.start >= 0 &&
+    range.end > range.start &&
+    range.end <= length
+  );
+}
+
 /**
- * 把一段文本按 token 切成交替的普通/高亮片段。
+ * 按后端给的角色区间切成交替的普通/高亮片段（22b）。
  *
- * 长 token 优先匹配（"机器学习" 与 "机器" 同时存在时按长的切），不做大小写折叠：
- * 抽取文本与 token 来自同一个比较函数，折叠反而会把不同 token 混在一起。
+ * **偏移基准**：`start` / `end` 是该段文本的**码点**偏移（后端按 Python `str` 索引算）。
+ * 这里一律先 `Array.from(text)` 拆成码点数组再切——`String.prototype.slice` 按 UTF-16
+ * 码元走，一个 emoji 就占 2 个码元，直接切会把高亮涂到相邻的字上（而且不报错）。
+ *
+ * 区间按 `start` 升序；遇到与前一条重叠（含包含）的区间就丢弃后一条——后端保证不重叠，
+ * 这里只是防御，宁可不涂也不要把同一段文字涂两遍。
  */
-export function highlightSegments(
+export function sliceByHighlights(
   text: string,
-  tokens: readonly ScannerToken[],
+  ranges: readonly TextOrderHighlight[] | null | undefined,
 ): HighlightSegment[] {
   if (!text) return [];
-  const ordered = [...tokens]
-    .filter((item) => item.token.length > 0)
-    .sort((left, right) => right.token.length - left.token.length);
-  if (ordered.length === 0) return [{ text, kind: "normal" }];
+  const chars = Array.from(text);
+  const usable = (ranges ?? [])
+    .filter((range) => usableRange(range, chars.length))
+    .sort((left, right) => left.start - right.start);
+  if (usable.length === 0) return [{ text, kind: "normal" }];
   const segments: HighlightSegment[] = [];
   let cursor = 0;
-  while (cursor < text.length) {
-    let matched: ScannerToken | null = null;
-    let matchedIndex = -1;
-    for (const token of ordered) {
-      const index = text.indexOf(token.token, cursor);
-      if (index === -1) continue;
-      if (matchedIndex === -1 || index < matchedIndex) {
-        matched = token;
-        matchedIndex = index;
-      }
+  for (const range of usable) {
+    if (range.start < cursor) continue; // 重叠：丢弃后一条
+    if (range.start > cursor) {
+      segments.push({ text: chars.slice(cursor, range.start).join(""), kind: "normal" });
     }
-    if (!matched || matchedIndex === -1) {
-      segments.push({ text: text.slice(cursor), kind: "normal" });
-      break;
-    }
-    if (matchedIndex > cursor) {
-      segments.push({ text: text.slice(cursor, matchedIndex), kind: "normal" });
-    }
-    segments.push({ text: matched.token, kind: matched.kind });
-    cursor = matchedIndex + matched.token.length;
+    segments.push({ text: chars.slice(range.start, range.end).join(""), kind: range.kind });
+    cursor = range.end;
+  }
+  if (cursor < chars.length) {
+    segments.push({ text: chars.slice(cursor).join(""), kind: "normal" });
   }
   return segments.filter((segment) => segment.text.length > 0);
 }

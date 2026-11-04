@@ -37,16 +37,19 @@ function cssNumber(source: string, name: string): number {
 }
 
 /**
- * 参数栏的**内容宽**下限。
+ * 参数栏的**可用内容宽**。
  *
- * 现在全站没有 `box-sizing` 重置（antd 的 `genCommonStyle` 只覆盖 `[class^="ant-"]`），
- * 所以 `.resume-wb-col-params`（`width: 380` + `padding: 20`）是 **content-box**：
- * 真正的内容宽是 380。这里仍按"border-box 口径"的 340 算上限——它是**更严的那一侧**：
- * 设计要在两种解释下都成立（哪天补回全局 `border-box` 重置也不会溢出）。
- * 两种情况下三列都靠固定列宽对齐，多出来的宽度由尾部那一列（`minmax(0, 1fr)`）吸收，
- * 来源胶囊靠 `margin-left: auto` 始终贴行右缘。
+ * 参数栏是 `width: 380` + `padding: 20`，本项目没有全局 `box-sizing` 重置（antd 的
+ * `genCommonStyle` 只覆盖 `[class^="ant-"]`），所以内容是 content-box 的 380；按
+ * border-box 紧口径算则是 340——这里取后者，它在**两种解释下都是下界**。
+ *
+ * 2026-11 问题 23：340 是**内容盒**，而参数栏是滚动容器（`overflow-y: auto`），内容一长
+ * 就多出一条竖向滚动条，吃掉约 15px。`SCROLLBAR_RESERVE` 是**设计预留**而不是实测值：
+ * 各平台/缩放下的经典滚动条 0 / 6 / 15 / 17 都有，这里按最坏的那一档扣。
+ * 于是真正能用的宽度是 380 − 40 − 15 = **325**。
  */
-const CONTENT_WIDTH = WORKBENCH_PARAMS_WIDTH - 20 * 2;
+const SCROLLBAR_RESERVE = 15;
+const CONTENT_WIDTH = WORKBENCH_PARAMS_WIDTH - 20 * 2 - SCROLLBAR_RESERVE;
 
 describe("左栏参数行 · 列宽契约", () => {
   it("标签列 / 控件列 / 滑杆是三个固定值（四行才可能落在同一批竖线上）", () => {
@@ -55,16 +58,23 @@ describe("左栏参数行 · 列宽契约", () => {
     // ± 各 30（controlHeightSM）+ 两道 2px 间距 + 滑杆 88。
     expect(cssNumber(CONTROLS, "--resume-wb-controls-w")).toBe(152);
     expect(cssNumber(CONTROLS, "--resume-wb-slider-w")).toBe(88);
+    // 控件列的**下限**：± 30 + 2 + 滑杆 68 + 2 + 30 = 132（问题 23 的可收缩档）。
+    expect(cssNumber(CONTROLS, "--resume-wb-controls-min-w")).toBe(132);
     // 88 的滑杆必须清掉 antd 自带的 6px 左右外边距：不清零时它实际占 100px，
     // 控件列就不是 152 而是 164，四行的 `+` 各自偏一点（用户截图里那种错位）。
     expect(CONTROLS).toMatch(
       /\.resume-wb-col-params \.ant-slider \{[^}]*margin-inline: 0 !important/,
     );
+    // 滑杆必须能收缩（问题 23）：锁死在 88 时控件列压到 132 也没用，尾部照样被切。
+    expect(CONTROLS).toMatch(/\.resume-wb-col-params \.ant-slider \{[^}]*min-width: 56px/);
+    expect(CONTROLS).toMatch(/\.resume-wb-col-params \.ant-slider \{[^}]*width: 100%/);
   });
 
   it("三处行结构共用同一组列宽变量（层次与间距 / 行距页边距照片 / 字号）", () => {
+    // 三列：标签定宽、控件列在 132–152 之间可收缩、尾部按内容且不被压没。
+    // `minmax(min-content, 1fr)` 是"先压控件列、不切胶囊"的实现。
     const template =
-      /grid-template-columns: var\(--resume-wb-label-w\) var\(--resume-wb-controls-w\) minmax\(0, 1fr\);/g;
+      /grid-template-columns:\s+var\(--resume-wb-label-w\)\s+minmax\(var\(--resume-wb-controls-min-w\),\s*var\(--resume-wb-controls-w\)\)\s+minmax\(min-content,\s*1fr\);/g;
     // 三条 grid：`.resume-wb-row`（四行滑杆）、`.is-stacked > .ant-space:has(tail)`、
     // `> .resume-measure-cell:has(tail)`。少一条，那一组的第二列就会回到内容宽。
     expect(CONTROLS.match(template) ?? []).toHaveLength(3);
@@ -74,13 +84,15 @@ describe("左栏参数行 · 列宽契约", () => {
     expect(CONTROLS).not.toMatch(/\.resume-measure-tail \{\s*justify-self: end/);
   });
 
-  it("内容宽 340 内不溢出：72 + 6 + 152 + 6 +（读数 44 + 6 + 胶囊 52）", () => {
-    expect(CONTENT_WIDTH).toBe(340);
+  it("内容宽 325 内不溢出：72 + 6 + 132 + 6 +（读数 44 + 6 + 胶囊 52）", () => {
+    // 380 − 40（内边距）− 15（竖向滚动条预留）= 325。
+    expect(CONTENT_WIDTH).toBe(325);
     // 读数与胶囊的宽度分别声明在这两个文件里，一起读出来才是一份真算式。
     expect(CONTROLS).toMatch(/\.resume-wb-col-params \.resume-measure-value \{[^}]*flex: 0 0 44px/);
     expect(LAYOUT).toMatch(/\.resume-measure-source \{[^}]*min-width: 52px/);
 
-    const used = 72 + 6 + 152 + 6 + (44 + 6 + 52);
+    const used = 72 + 6 + cssNumber(CONTROLS, "--resume-wb-controls-min-w") + 6 + (44 + 6 + 52);
+    expect(used).toBe(318);
     expect(used).toBeLessThanOrEqual(CONTENT_WIDTH);
   });
 });

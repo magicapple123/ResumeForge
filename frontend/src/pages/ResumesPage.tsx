@@ -46,7 +46,7 @@ import ResumeSearchInput from "./resumes/ResumeSearchInput";
 import { useSelectAllResumes } from "./resumes/useSelectAllResumes";
 import { useResumeBatchActions } from "./resumes/useResumeBatchActions";
 import { buildResumeBatchRowActions } from "./resumes/resumeBatchActions";
-import { useBatchOperationGuard } from "../features/settings/useBatchOperationConfig";
+import BatchConfigModal from "../components/batch/BatchConfigModal";
 
 export default function ResumesPage() {
   useLocale();
@@ -56,8 +56,6 @@ export default function ResumesPage() {
   const { message } = App.useApp();
   // 批量选择：勾选若干份简历后一次删除（全部进回收站，可恢复）。
   const batch = useBatchSelection<number>();
-  // 批量导出前必须先有「设置 → 批量操作」保存过的一套参数（版式 + 导出格式）。
-  const batchOp = useBatchOperationGuard("export");
   // 筛选 / 分页初值从 URL 读，改动后用 replace 写回（模式同 WebFormPage / JobsPage）。
   const boolParam = (key: string): boolean | undefined => {
     const raw = searchParams.get(key);
@@ -158,6 +156,8 @@ export default function ResumesPage() {
         sort: toResumeSort(sortState),
       }),
     [keyword, page, pageSize, jobId, hasJobFilter, sortState, resumeListVersion],
+    // 回到前台静默重拉（问题 27a）：列表页最先开，避免"另一个窗口改完切回来还是旧的"。
+    { refetchOnFocus: {} },
   );
 
   useEffect(() => {
@@ -235,15 +235,14 @@ export default function ResumesPage() {
     [message, reload],
   );
 
-  const { exporting, handleBatchAction } = useResumeBatchActions({
+  const batchActions = useResumeBatchActions({
     selectedIds: batch.selectedIds,
     exitSelecting: batch.exitSelecting,
     onDeleted: () => void reload(),
-    ensureBatchConfig: batchOp.ensure,
   });
   const batchRowActions = buildResumeBatchRowActions(
-    handleBatchAction,
-    batch.selectedCount === 0 || exporting,
+    batchActions.handleBatchAction,
+    batch.selectedCount === 0 || batchActions.exporting,
   );
 
   const confirmRename = async () => {
@@ -388,12 +387,14 @@ export default function ResumesPage() {
           count={batch.selectedCount}
           total={data?.total ?? 0}
           selectAllLoading={selectAllPagesLoading}
-          exporting={exporting}
+          exporting={batchActions.exporting}
           onSelectAll={() => void selectAllPages()}
-          onAction={handleBatchAction}
+          onAction={batchActions.handleBatchAction}
           onExit={batch.exitSelecting}
         />
       )}
+      {/* 导出的「本次参数」弹窗：不随多选态卸载，确认后请求仍在跑时也能正常收起。 */}
+      <BatchConfigModal mode="export" {...batchActions.configModal} />
       {error ? (
         <ErrorState description={error} onRetry={() => void reload()} />
       ) : (

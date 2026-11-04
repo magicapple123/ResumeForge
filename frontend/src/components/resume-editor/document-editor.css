@@ -366,10 +366,24 @@
   text-align: left;
 }
 
-.document-chip-main:focus-visible {
+.document-chip-main:focus-visible,
+.document-chip-handle:focus-visible {
   outline: 2px solid var(--rf-brand);
   outline-offset: 2px;
   border-radius: 4px;
+}
+
+/* 问题 12：正文块的拖拽把手。draggable 只挂它，正文文本区保持可选中/可编辑。
+   focus 环与 `.document-chip-main` 共用一条规则，省下 4 行给文件预算。 */
+.document-chip-handle {
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+  background: none;
+  border: 0;
+  padding: 0;
+  color: var(--rf-text-tertiary);
+  cursor: grab;
 }
 
 /* ── Q16：字段 chip 溢出 ─────────────────────────────────────

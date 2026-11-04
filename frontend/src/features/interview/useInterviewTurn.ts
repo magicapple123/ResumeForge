@@ -34,6 +34,16 @@ export function isAborted(error: unknown): boolean {
   return isAbortError(error);
 }
 
+/**
+ * 这场面试有没有报告。
+ *
+ * 后端"空报告"是 ``{}``（``InterviewDetail.report`` 的默认值），所以不能只判真值——
+ * 空对象在 JS 里是真的，会把"还没生成"误判成"已经有报告"。
+ */
+export function hasInterviewReport(session: InterviewDetail | null | undefined): boolean {
+  return Boolean(session && Object.keys(session.report ?? {}).length > 0);
+}
+
 export interface InterviewTurn {
   /** 输入框里的文字（受控）。 */
   answer: string;
@@ -45,8 +55,14 @@ export interface InterviewTurn {
   pendingAnswer: string | null;
   /** 本地这条占位回答是被「停止本轮」掐断的。 */
   pendingInterrupted: boolean;
-  /** 本轮之后要出报告：思考气泡文案换成「正在生成报告」。 */
-  finishing: boolean;
+  /**
+   * 正式问答已收尾、报告还没生成：**等用户决定**（继续追问 / 结束并生成报告）。
+   * 与"正在出报告"是两件事——那一段由页面在调用 ``/finish`` 期间显示。
+   * 被判为真时追问输入区立刻可用，对话区末尾显示决策卡。
+   */
+  awaitingReport: boolean;
+  /** 用户放弃决策（重新开始 / 离开房间）时清掉等待态。 */
+  clearAwaitingReport: () => void;
   setAnswer: (value: string) => void;
   /** 提交输入框里的回答。 */
   submit: () => void;
@@ -79,7 +95,7 @@ export function useInterviewTurn({
   const [streamingQuestion, setStreamingQuestion] = useState<string | null>(null);
   const [pendingAnswer, setPendingAnswer] = useState<string | null>(null);
   const [pendingInterrupted, setPendingInterrupted] = useState(false);
-  const [finishing, setFinishing] = useState(false);
+  const [awaitingReport, setAwaitingReport] = useState(false);
   // 正在跑的这一轮请求：abort 即断开连接 → 服务端停下并标记 interrupted。
   const abortRef = useRef<AbortController | null>(null);
 
@@ -94,7 +110,6 @@ export function useInterviewTurn({
     setPendingAnswer(text);
     setPendingInterrupted(false);
     setStreamingQuestion("");
-    setFinishing(false);
     const controller = new AbortController();
     abortRef.current = controller;
     let succeeded = false;
@@ -105,14 +120,21 @@ export function useInterviewTurn({
         sessionId,
         text,
         (delta) => setStreamingQuestion((current) => (current ?? "") + delta),
-        (phase) => {
-          if (phase === "finishing") setFinishing(true);
-        },
+        // 不再有 phase 回调：需求 4 之后收尾只收盘，服务端不再推 ``finishing``
+        // （"正在生成报告"由页面在调用 /finish 期间显示）。
+        undefined,
         controller.signal,
       );
       succeeded = true;
       onSession(result.session);
-      if (result.finished) await onFinished();
+      // 收尾与出报告已拆开（需求 4）：``finished`` 只表示正式问答结束。报告还没生成时
+      // 切到"等用户决定"，**不能**当成"报告已就绪"（那会弹一句没发生的成功提示）。
+      // 旧后端不带这个字段，于是退回看会话本身：已结束且没有报告，同样是等待态。
+      const needsReport =
+        result.needs_report ??
+        (result.session.status === "finished" && !hasInterviewReport(result.session));
+      setAwaitingReport(needsReport);
+      if (result.finished && !needsReport) await onFinished();
     } catch (error) {
       if (isAborted(error)) {
         // 用户自己停了这一轮：**不是失败**——不弹错误、不把内容塞回输入框。服务端已经把
@@ -133,7 +155,6 @@ export function useInterviewTurn({
         onTurnComplete();
       }
       setStreamingQuestion(null);
-      setFinishing(false);
       setSubmitting(false);
     }
   };
@@ -151,8 +172,6 @@ export function useInterviewTurn({
    */
   const stop = () => {
     abortRef.current?.abort();
-    // 报告阶段被停也一样：这一轮没走完，界面不该继续显示"正在生成报告"。
-    setFinishing(false);
   };
 
   /** 重新回答某一轮：走原来的提问链路（不新建端点）。 */
@@ -166,7 +185,7 @@ export function useInterviewTurn({
     setPendingAnswer(null);
     setPendingInterrupted(false);
     setStreamingQuestion(null);
-    setFinishing(false);
+    setAwaitingReport(false);
   };
 
   return {
@@ -175,7 +194,8 @@ export function useInterviewTurn({
     streamingQuestion,
     pendingAnswer,
     pendingInterrupted,
-    finishing,
+    awaitingReport,
+    clearAwaitingReport: () => setAwaitingReport(false),
     setAnswer,
     submit,
     stop,

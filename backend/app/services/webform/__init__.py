@@ -36,6 +36,7 @@ from .data import (
     build_form_data,
     build_live_form_data,
     build_webform_view,
+    normalize_scope,
 )
 from .engine import ApplyOutcome, Control, FieldMapping, FormEngine, MatchResult, SkipNote
 from .extra_profile import EXTRA_FIELD_KEYS, list_entries, save_entries
@@ -46,6 +47,7 @@ from .live import (
     is_live_running,
     live_status,
     remember_live_choice,
+    request_live_scope,
     set_live_enabled,
     start_live,
     stop_live,
@@ -90,6 +92,7 @@ __all__ = [
     "get_snapshot_store", "is_apply_running", "is_filling", "is_live_running",
     "list_entries", "list_extra_fields", "list_fields", "list_records",
     "live_status", "read_snapshot", "recognize_field", "record_or_none",
+    "normalize_scope", "request_live_scope",
     "remember_live_choice", "remember_target", "resolve_choice",
     "resolve_select_option", "save_entries", "set_live_enabled", "start_live",
     "stop_live",

@@ -35,16 +35,19 @@
      整段掉到第二行，尾巴从"贴右"变成"另起一行靠左"；
    · 「照片」那一行用**不换行**的 `<Space>`：tail 紧跟控件，x 位置由控件宽度决定。
 
-   定案：三列**全部定宽**（标签 72 / 控件 152 / 尾部吃掉剩余），于是
+   定案：三列**定宽**（标签 72 / 控件 132–152 / 尾部按内容吃掉剩余），于是
    `−`、滑杆左缘、滑杆右缘、`+`、读数左缘在四行里落在同一批竖线上——
    与标签字数、读数宽度都无关。
 
-   宽度算式：72 + 6 + 152 + 6 + 尾部。参数栏是 `width: 380` + `padding: 20`，而本项目
-   没有全局 `box-sizing` 重置（antd 的 common style 只覆盖 `[class^="ant-"]`），
-   所以内容是 **content-box 的 380**；尾部那一列用 `minmax(0, 1fr)` 把余量全吸收，
-   胶囊再由 `margin-left: auto` 贴行右缘——**列宽固定之后，余量多少都不影响对齐**。
-   按"若哪天补回 border-box 重置"的紧口径算，尾部只剩 104，而它至少要 44 + 6 + 52 = 102，
-   所以两种解释下都不溢出（`workbenchLayoutContract.test.ts` 钉住这条算式）。
+   宽度算式（2026-11 问题 23 重算）：72 + 6 + 132 + 6 + 尾部。参数栏是 `width: 380`
+   + `padding: 20`，本项目没有全局 `box-sizing` 重置（antd 的 common style 只覆盖
+   `[class^="ant-"]`），所以内容是 content-box 的 380，按 border-box 的紧口径是 340；
+   **参数栏还是滚动容器，内容一长就多出一条竖向滚动条**，Windows 经典滚动条约 15px，
+   实际可用 ≈ **325**（15 是设计预留，不是实测值——各平台滚动条 0/6/15/17 都有，
+   取最坏的那个）。三列的下限合计 72 + 6 + 132 + 6 + (44 + 6 + 52) = 318，余 7px。
+   尾部那一列用 `minmax(min-content, 1fr)`：**先压控件列（滑杆 88 → 68），不切胶囊**；
+   胶囊再由 `margin-left: auto` 贴行右缘——列宽定下来之后，余量多少都不影响对齐。
+   （`workbenchLayoutContract.test.ts` 钉住这条算式与 15px 的滚动条预留。）
 
    顺带解决换行：`flex-wrap: wrap` 对 **grid 容器完全无效**，`SpacingRow` 那个 `wrap`
    从此失效——这就是"窄宽度不再掉到第二行"的真正原因（不是靠 `nowrap` 去盖它）。 */
@@ -57,11 +60,18 @@
   /* 控件列：± 各 30（controlHeightSM = 40 × 0.75）+ 两道 2px 间距 + 滑杆 88 = 152。
      滑杆的左右外边距在参数栏里被清零（见下面的滑杆段），所以 88 就是它占的全部宽度。 */
   --resume-wb-controls-w: 152px;
+  /* 控件列的**下限**（2026-11 问题 23）：± 各 30 + 两道 2px 间距 + 滑杆 68 = 132。
+     列模板写 `minmax(132px, 152px)`：余量不够时先压滑杆（88 → 68 还在能拖的范围），
+     而不是把尾部那格的「随模板」胶囊切掉。68 的来历见滑杆段。 */
+  --resume-wb-controls-min-w: 132px;
 }
 
 .resume-wb-rows > .resume-wb-row.ant-space {
   display: grid;
-  grid-template-columns: var(--resume-wb-label-w) var(--resume-wb-controls-w) minmax(0, 1fr);
+  grid-template-columns:
+    var(--resume-wb-label-w)
+    minmax(var(--resume-wb-controls-min-w), var(--resume-wb-controls-w))
+    minmax(min-content, 1fr);
   align-items: center;
   column-gap: 6px;
   width: 100%;
@@ -96,7 +106,10 @@
    两段、没有 tail，命中它会把它塞进三列网格（见下面单独那一条）。 */
 .resume-wb-col-params .resume-measure-grid.is-stacked > .ant-space:has(.resume-measure-tail) {
   display: grid;
-  grid-template-columns: var(--resume-wb-label-w) var(--resume-wb-controls-w) minmax(0, 1fr);
+  grid-template-columns:
+    var(--resume-wb-label-w)
+    minmax(var(--resume-wb-controls-min-w), var(--resume-wb-controls-w))
+    minmax(min-content, 1fr);
   align-items: center;
   column-gap: 6px;
   width: 100%;
@@ -117,7 +130,10 @@
   .resume-measure-grid.is-stacked
   > .resume-measure-cell:has(.resume-measure-tail) {
   display: grid;
-  grid-template-columns: var(--resume-wb-label-w) var(--resume-wb-controls-w) minmax(0, 1fr);
+  grid-template-columns:
+    var(--resume-wb-label-w)
+    minmax(var(--resume-wb-controls-min-w), var(--resume-wb-controls-w))
+    minmax(min-content, 1fr);
   align-items: center;
   column-gap: 6px;
 }
@@ -178,54 +194,50 @@
   grid-column: 1 / -1;
 }
 
-/* ===== 统一滑杆长度（2026-10-23 / 修订 2026-11-06：88px） ===== */
-/* 症状：左栏四组的滑杆长度各不相同——行距/页边距 132、层次与间距 90、分边四条更长、
-   字号与照片又各是一个值。四条控制项摆在同一栏里像四套控件（用户截图）。
-   根因是各组历史规则分别写死了自己的 `flex-basis` / `min-width` / `width`，而"谁更长"
-   取决于那一条规则落在这个 flex 行里剩多少空间。
-   改法：给左栏定一个唯一的宽度变量，**所有**滑杆都按它取固定宽（既不长也不缩）。
-   88 不是拍的：它等于"内容宽 340 − 标签列 72 − 控件列里两块按钮与两道间距 62 −
-   尾部列 104 − 两道列间距 12"，也就是"尾部胶囊仍贴行右缘"的前提下滑杆能有的最大宽度。
-   `!important` 是必需的：`PhotoScaleControl` 给它的滑杆写了内联
-   `style={{ flex: "1 1 70px", minWidth: 0 }}`，内联声明只有 `!important` 能压过。
-   `margin-inline: 0` 同样必须 `!important`（`LineHeightControl` / `FontSizeControl`
-   写的是内联 `margin: "0 2px"`）：antd 的 `.ant-slider` 自带 `margin: 14px 6px`，
-   不清零时"88px 的滑杆"实际占 100px，控件列就不是 152 而是 164，四行的 `+` 又各自偏一点。
-   代价：滑块圆点按轨道端点居中，值在两端时各自溢出轨道 6px——它落在 ± 按钮那片
-   透明内边距上（按钮 30px 宽、图标只占中间 12px），看不出重叠。
-   只作用于 `.resume-wb-col-params`：弹窗与预览工具栏里的滑杆由各自的 `.is-stacked`
-   规则定宽（200px），不受影响。 */
+/* ===== 统一滑杆长度（2026-10-23 / 修订 2026-11-06：88px / 2026-11 问题 23：窄档收到 68） ===== */
+/* 症状：左栏四组的滑杆长度各不相同（行距/页边距 132、层次 90、分边更长、字号与照片
+   又各一个值），四条控制项像四套控件。根因是各组规则各自写死 `flex-basis` /
+   `min-width` / `width`，谁更长取决于那一条落在这个 flex 行里剩多少空间。
+   改法：左栏一个唯一的宽度变量，**宽档**下滑杆固定 88（既不长也不缩）。
+   88 不是拍的：340 − 标签 72 − 按钮与两道间距 62 − 尾部 102 − 列间距 12 ≈ 92，取 88。
+   **窄档（问题 23）**：参数栏是滚动容器，内容一长就长出竖向滚动条（约 15px），可用宽
+   从 340 掉到 ≈325，88 的滑杆会把尾部那格的胶囊挤出去。于是控件列允许压到 132
+   （`--resume-wb-controls-min-w`），滑杆跟着收到 68（= 132 − 30 − 30 − 2 − 2；56 是
+   可拖动的下限）。**先压滑杆，不切胶囊**。
+   `!important` 必需：`PhotoScaleControl` / `LineHeightControl` / `PagePaddingControl`
+   都写了内联 `flex` / `minWidth` / `margin`，只有 `!important` 压得过。`width: 100%`
+   而不是固定 88——外面那一格（`.ant-space-item`）才是 flex item，它收缩时滑杆要跟着收。
+   同一条理由：`margin-inline: 0` 也带 `!important`（antd 的 `.ant-slider` 自带
+   `margin: 14px 6px`，不清零时"88px 的滑杆"实际占 100px，控件列就不是 152 而是 164）。
+   代价：滑块圆点按轨道端点居中，值在两端时各溢出轨道 6px——落在 ± 按钮的透明内边距上。
+   只作用于 `.resume-wb-col-params`：弹窗与预览工具栏的滑杆由各自的 `.is-stacked` 定宽。 */
 .resume-wb-col-params {
   --resume-wb-slider-w: 88px;
 }
 
 .resume-wb-col-params .ant-slider {
-  flex: 0 0 var(--resume-wb-slider-w) !important;
-  width: var(--resume-wb-slider-w) !important;
-  min-width: var(--resume-wb-slider-w) !important;
+  flex: 1 1 var(--resume-wb-slider-w) !important;
+  width: 100% !important;
+  min-width: 56px !important;
   max-width: var(--resume-wb-slider-w) !important;
   margin-inline: 0 !important;
 }
 
-/* 滑杆外面那一格也要定宽，否则它仍按 `flex: 1 1 90px` 抢空间，滑杆固定 88 之后
-   会在格子里左右乱飘（`±` 与读数之间的间距就不一致了）。
-   两个选择器各自比"常规版"多一层祖先类，靠特异性压过去：
-   · `.resume-wb-rows` 那条压 `resume-workbench.css` 的
-     `.resume-wb-row .ant-space-item:has(> .resume-wb-slider)`（0,3,0，且源序在后）；
-   · `.ant-space .ant-space-item` 那条压同文件里
-     `.resume-measure-grid.is-stacked .ant-space-item:has(> .ant-slider)` 的
-     `min-width: 112px`（0,5,0）——那是为"窄栏里让滑杆缩一点"写的，现在滑杆已经
-     定死 88，再留 112 的下限会让格子里凭空多出 24px 空档。
-     注意这里写的是**后代** `.ant-space .ant-space-item`（不是 `> .ant-space >`）：
-     antd 的 `Space` 给每个子节点各包一层 `.ant-space-item`，滑杆那一格实际在
-     「行 Space → item → 控件 Space → item → slider」的第四层上。 */
+/* 滑杆外面那一格才是真正占位的那一层（antd 的 `Space` 给每个子节点包一层
+   `.ant-space-item`）：它必须能收缩，滑杆才收得动；`max-width` 让它宽档时停在 88。
+   两条选择器各比"常规版"多一层祖先类，靠特异性压过本文件的
+   `.resume-wb-row .ant-space-item:has(> .resume-wb-slider)`（`flex: 1 1 90px`）与
+   `modules-layout.css` 的 `min-width: 112px`——112 比新下限 56 高，不改它滑杆永远
+   收不到 68。注意写的是**后代** `.ant-space .ant-space-item`（不是 `> .ant-space >`）：
+   滑杆那一格在「行 Space → item → 控件 Space → item → slider」的第四层上。 */
 .resume-wb-col-params .resume-wb-rows .ant-space-item:has(> .resume-wb-slider),
 .resume-wb-col-params
   .resume-measure-grid.is-stacked
   .ant-space
   .ant-space-item:has(> .ant-slider) {
-  flex: 0 0 auto;
-  min-width: 0;
+  flex: 1 1 auto;
+  min-width: 56px;
+  max-width: var(--resume-wb-slider-w);
 }
 
 /* ===== 滑杆宽度（2026-10-23 回退） ===== */

@@ -79,4 +79,17 @@ describe("ExportButtons", () => {
     // 自己没有挂第二份面板（否则页面上会出现两个「格式」区块 / 两个「导出」按钮）。
     expect(screen.queryByText("格式")).not.toBeInTheDocument();
   });
+
+  it("有待人工核对的条数时挂琥珀点；为 0 时不挂（问题 8 的配套）", () => {
+    const { container, unmount } = renderButtons({ pendingReview: 4 });
+    // 角标是视觉提示，不拦导出：按钮仍然可点、文案不变。
+    expect(container.querySelector(".ant-badge-dot")).not.toBeNull();
+    expect(screen.getByRole("button", { name: /导\s*出/ })).toBeEnabled();
+    // 条数同时进无障碍名（悬停提示），读屏用户也知道"还有东西没看"。
+    expect(container.querySelector(".resume-export-pending")).not.toBeNull();
+
+    unmount();
+    const { container: clean } = renderButtons({ pendingReview: 0 });
+    expect(clean.querySelector(".ant-badge-dot")).toBeNull();
+  });
 });

@@ -73,6 +73,18 @@ export function renameSection(
   });
 }
 
+/** 切换「参与岗位相关性筛选」（需求 6）：只发这个字段，服务端不会顺手改名字。 */
+export function setSectionJobFilter(
+  sectionKey: string,
+  enabled: boolean,
+  expectedRevision: number,
+): Promise<SectionOut> {
+  return request(sectionPath(sectionKey), {
+    method: "PATCH",
+    body: JSON.stringify({ filter_by_job: enabled, expected_revision: expectedRevision }),
+  });
+}
+
 export function deleteSection(
   sectionKey: string,
   expectedRevision: number,

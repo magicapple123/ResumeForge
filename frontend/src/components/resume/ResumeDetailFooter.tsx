@@ -13,13 +13,13 @@
  * ——它们与弹窗实例、快捷键、状态初值同处一地。
  */
 import {
+  BankOutlined,
   BulbOutlined,
-  FolderOpenOutlined,
+  EditOutlined,
   MessageOutlined,
   SafetyCertificateOutlined,
   ShareAltOutlined,
   ThunderboltOutlined,
-  ZoomInOutlined,
 } from "@ant-design/icons";
 import { Button } from "antd";
 import type { ReactNode } from "react";
@@ -56,6 +56,11 @@ interface Props {
   onOpenQuality: () => void;
   onOpenSharePackage: () => void;
   onOpenExportOptions: () => void;
+  /**
+   * 还没人工核对过的条数（2026-11 问题 8）：透传给 `ExportButtons` 画琥珀点。
+   * 不在这里算——父组件已经有 `fabricationWarnings`，再算一遍就是第二个口径。
+   */
+  pendingReview?: number;
 }
 
 export default function ResumeDetailFooter({
@@ -74,13 +79,14 @@ export default function ResumeDetailFooter({
   onOpenQuality,
   onOpenSharePackage,
   onOpenExportOptions,
+  pendingReview = 0,
 }: Props) {
   useLocale();
   return (
     // 固定在弹窗底部：内容长（版面诊断 + 预览）时不必一路翻到最后才够得着这些按钮。
     // 按钮区是 CSS Grid：每个按钮独占一格、block 拉满整格，自动铺满整行不留右侧空当。
     <div className="resume-detail-footer">
-      <Button block icon={<ZoomInOutlined />} onClick={onOpenZoom}>
+      <Button block icon={<EditOutlined />} onClick={onOpenZoom}>
         {t("workbench.title")}
       </Button>
       {showRevise && (
@@ -93,7 +99,7 @@ export default function ResumeDetailFooter({
           ? t("resume.footer.suggestionsView")
           : t("resume.footer.suggestionsGenerate")}
       </Button>
-      <Button block icon={<FolderOpenOutlined />} disabled={jobId === null} onClick={onOpenJob}>
+      <Button block icon={<BankOutlined />} disabled={jobId === null} onClick={onOpenJob}>
         {t("resume.footer.openJob")}
       </Button>
       {/* 「咨询求职助手」上提到**主网格**（2026-11 用户要求）：第一行排满 5 个动作，
@@ -129,6 +135,7 @@ export default function ResumeDetailFooter({
                 layout={layout}
                 pdfDirectAvailable={pdfDirectAvailable}
                 onOpen={onOpenExportOptions}
+                pendingReview={pendingReview}
               />
             </div>
           </div>
@@ -139,6 +146,7 @@ export default function ResumeDetailFooter({
               layout={layout}
               pdfDirectAvailable={pdfDirectAvailable}
               onOpen={onOpenExportOptions}
+              pendingReview={pendingReview}
             />
           </div>
         )}

@@ -18,6 +18,7 @@ from typing import Any
 from ..diagnostics import record_event
 from .engine import ApplyOutcome, FormEngine
 from .engine.recovery import REASON_WRITE_ERROR
+from .repeated_fields import split_repeated_key
 from .service import FillSelection, apply_fill, build_preview, default_selections
 from .service.fill import SETTLE_RECHECK_SECONDS
 from .session import Snapshot
@@ -39,6 +40,18 @@ class AutoFillProgress:
     recognized_total: int = 0
     current_label: str = ""
     message: str = ""
+    # 整页自动填写失败时的稳定原因码（见下方的 REASON_* ）。空串 = 没失败。
+    # 与 #39 的 apply 失败同口径：界面按码办事，长句只作补充说明。
+    reason: str = ""
+
+
+# 整页自动填写失败的稳定码（与 #39「step / target / reason」同口径）。
+# **两类失败必须分开**：页面读不出来是用户该刷新；我们自己的编程错误（签名漂移、
+# 属性改名）是开发该修的——把它降级成"请刷新页面重试"会让同一个 bug 再查半天。
+AUTOFILL_STEP = "filling"
+AUTOFILL_TARGET = "page"
+REASON_PAGE_UNREADABLE = "page_unreadable"
+REASON_INTERNAL = "internal_error"
 
 
 @dataclass(frozen=True)
@@ -49,6 +62,10 @@ class AutoFillResult:
     failed: int
     form_control_total: int = 0
     recognized_total: int = 0
+    # 因当前方案未包含对应板块而**没填**的字段数，以及第一个板块的显示名。
+    # 跳过清单要能说清"是范围挡住的，不是你资料里没有"（需求 3 / 问题 8）。
+    filtered_skipped: int = 0
+    filtered_section: str = ""
 
 
 def _fillable_items(
@@ -58,12 +75,16 @@ def _fillable_items(
     *,
     relaxed: bool = False,
     custom_labels: dict[str, str] | None = None,
-) -> tuple[Snapshot, list[Any]]:
+    filtered_fields: dict[str, str] | None = None,
+) -> tuple[Snapshot, list[Any], int, str]:
     """Build the same rule/default selection set as the main webform page.
 
     The floating-ball action is a shortcut, not a second matcher. Reusing
     build_preview and default_selections keeps conflict handling,
     low-confidence rows, and date formatting on the same path as the main UI.
+
+    后两个返回值是"因当前方案未包含板块而跳过"的字段数与板块名——不返回它，用户就只
+    看到"没填"，不知道是范围挡住的（需求 3 的静默漏填验收项）。
     """
     snapshot = Snapshot(id="live-autofill", controls=controls)
     report = build_preview(
@@ -74,7 +95,32 @@ def _fillable_items(
         custom_labels=custom_labels,
     )
     selected = {item.index for item in default_selections(report)}
-    return snapshot, [item for item in report.items if item.index in selected]
+    skipped, section = _filtered_skips(report, filtered_fields)
+    return snapshot, [item for item in report.items if item.index in selected], skipped, section
+
+
+def _filtered_skips(
+    report: Any, filtered_fields: dict[str, str] | None
+) -> tuple[int, str]:
+    """（因范围被跳过的字段数, 第一个被挡板块的显示名）。
+
+    只数 ``missing_data``（认得出字段、资料里没值）里属于组外板块的那些：
+    ``unrecognized`` 与 ``blocked`` 跟范围无关，算进去会把"没认出来"说成"方案没包含"。
+    这个统计与 ``live.py`` 的空态分支同源（都按基础字段名对板块）。
+    """
+    if not filtered_fields:
+        return 0, ""
+    count = 0
+    section = ""
+    for pending in getattr(report, "missing_data", ()):
+        base = split_repeated_key(getattr(pending, "field", "") or "")[0]
+        name = filtered_fields.get(base)
+        if not name:
+            continue
+        count += 1
+        if not section:
+            section = name
+    return count, section
 
 
 def fill_current_page(
@@ -88,6 +134,7 @@ def fill_current_page(
     relaxed: bool = False,
     custom_labels: dict[str, str] | None = None,
     locale: str | None = None,
+    filtered_fields: dict[str, str] | None = None,
 ) -> AutoFillResult:
     """读取当前页并逐个写入可安全识别的空控件。
 
@@ -96,12 +143,13 @@ def fill_current_page(
     """
     engine = engine or FormEngine()
     controls = engine.read_controls(client)
-    snapshot, items = _fillable_items(
+    snapshot, items, filtered_skipped, filtered_section = _fillable_items(
         controls,
         data,
         engine,
         relaxed=relaxed,
         custom_labels=custom_labels,
+        filtered_fields=filtered_fields,
     )
     total = len(items)
     form_control_total = len(controls)
@@ -235,6 +283,8 @@ def fill_current_page(
         failed=failed,
         form_control_total=form_control_total,
         recognized_total=total,
+        filtered_skipped=filtered_skipped,
+        filtered_section=filtered_section,
     )
 
 
@@ -286,4 +336,13 @@ class AutoFillWorker:
                     self._active = False
 
 
-__all__ = ["AutoFillProgress", "AutoFillResult", "AutoFillWorker", "fill_current_page"]
+__all__ = [
+    "AUTOFILL_STEP",
+    "AUTOFILL_TARGET",
+    "REASON_INTERNAL",
+    "REASON_PAGE_UNREADABLE",
+    "AutoFillProgress",
+    "AutoFillResult",
+    "AutoFillWorker",
+    "fill_current_page",
+]

@@ -8,13 +8,14 @@
  * 键盘模型：
  * - ↑ / ↓：在同一位置组内上/下移一位；到边界返回 null（界面提示「已经到边界了」）；
  * - ← / →：按允许位置列表循环切换位置（组内下标夹到末尾）；
- * - TextItem 不参与拖拽（没有 placement），返回 null。
+ * - TextItem 没有可选位置，← / → 返回 null；↑ / ↓ 仍可在正文组内换序（问题 12）。
  */
 import type { Placement, ResumeItem } from "../../types/resumeDocument";
 import {
   allowedPlacementsForItem,
   canDropIntoZone,
   canPlaceItem,
+  canReorderWithin,
   getItemPlacement,
   zoneOfPlacement,
 } from "./placement";
@@ -70,20 +71,23 @@ export function keyboardMoveTarget(
   slot: DragSlot,
   direction: DragDirection,
 ): DragSlot | null {
+  // ↑ / ↓ 只换同组顺序，不要求"能换位置"：正文块（text）的允许位置是空数组，但它在正文组里
+  // 同样要能用方向键前后挪（问题 12）。
+  if (direction === "up" || direction === "down") {
+    const group = placementGroup(items, slot.placement);
+    const targetIndex = slot.index + (direction === "up" ? -1 : 1);
+    if (targetIndex < 0 || targetIndex >= group.length) return null;
+    return { placement: slot.placement, index: targetIndex };
+  }
+  // ← / → 才是"换位置"，这里要看位置白名单；正文块没有可选位置 → null。
   const allowed = allowedPlacementsForItem(item);
   if (allowed.length === 0) return null;
-  if (direction === "left" || direction === "right") {
-    const currentIndex = allowed.indexOf(slot.placement);
-    if (currentIndex < 0) return null;
-    const delta = direction === "left" ? -1 : 1;
-    const nextPlacement = allowed[(currentIndex + delta + allowed.length) % allowed.length];
-    const groupSize = placementGroup(items, nextPlacement).length;
-    return { placement: nextPlacement, index: Math.min(slot.index, Math.max(groupSize, 0)) };
-  }
-  const group = placementGroup(items, slot.placement);
-  const targetIndex = slot.index + (direction === "up" ? -1 : 1);
-  if (targetIndex < 0 || targetIndex >= group.length) return null;
-  return { placement: slot.placement, index: targetIndex };
+  const currentIndex = allowed.indexOf(slot.placement);
+  if (currentIndex < 0) return null;
+  const delta = direction === "left" ? -1 : 1;
+  const nextPlacement = allowed[(currentIndex + delta + allowed.length) % allowed.length];
+  const groupSize = placementGroup(items, nextPlacement).length;
+  return { placement: nextPlacement, index: Math.min(slot.index, Math.max(groupSize, 0)) };
 }
 
 /** 当前槽位（键盘移动后重算用）：找不到返回 null。 */
@@ -156,10 +160,17 @@ export type DropRejectReason = "invalid" | "illegalTitle" | "illegalBody" | "sam
 /**
  * 一次落点在**位置层面**是否被拒（与"插完会不会动"无关）。
  *
- * `sectionKind` 缺省 = 普通条目板块；行内板块走 `aligns` 的那套位置集时由调用方传入。
+ * `readOnly` 为真时组内换序也不允许（只读文档不接拖拽）。
  * 返回 null = 位置合法，是否真的换位还要再看 `resolveDropIndex().noop`。
  */
-export function dropRejectReason(item: ResumeItem, placement: Placement): DropRejectReason | null {
+export function dropRejectReason(
+  item: ResumeItem,
+  placement: Placement,
+  readOnly = false,
+): DropRejectReason | null {
+  // 「组内换序」先判：正文块的 `canPlaceItem` 恒为 false，但同组往前挪一格、以及从隐藏区
+  // 拖回正文区都只要求可写（问题 12）。落到当前组之外的判断维持原样。
+  if (canReorderWithin(item, placement, readOnly)) return null;
   if (!canPlaceItem(item, placement)) return "invalid";
   if (!canDropIntoZone(item, placement)) {
     // 「正文块区」与「标题/元信息 + 灰字区」的拒绝出口不一样，文案必须分开。

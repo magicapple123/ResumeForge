@@ -36,6 +36,7 @@ from ..schemas.setting import (
     SearchConfig,
     WebFormRelaxedModeSetting,
 )
+from ..services.api_key_crypto import ApiKeyEncryptionError
 from ..services.api_key_session import clear_session_key, session_key_configured, set_session_key
 from ..services.batch_operation import (
     read_batch_operation_config,
@@ -127,7 +128,11 @@ def read_search_settings(db: Session = Depends(get_db)):
 
 @router.put("/search", response_model=SearchConfig)
 def write_search_settings(payload: SearchConfig, db: Session = Depends(get_db)):
-    return save_search_config(db, payload)
+    """保存搜索设置；DeepSeek key 加密失败时显式报错，不落明文。"""
+    try:
+        return save_search_config(db, payload)
+    except ApiKeyEncryptionError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.get("/reminder-popup", response_model=ReminderPopupSetting)

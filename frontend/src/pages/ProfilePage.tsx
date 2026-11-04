@@ -1,7 +1,7 @@
 /** 我的资料：13 个大字段（定义驱动）+ 当前组 + 网申资料分页，整体保存。 */
 import { Alert, App, Button, Form } from "antd";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import type { PointerEvent as ReactPointerEvent } from "react";
 import ErrorState from "../components/common/ErrorState";
 import PageSkeleton from "../components/common/PageSkeleton";
@@ -18,6 +18,8 @@ import ProfileGroupManagerModal from "../features/profile-groups/ProfileGroupMan
 import { useCurrentProfileGroup } from "../features/profile-groups/useCurrentProfileGroup";
 import ProfilePlacementGuide from "../features/profile-library/ProfilePlacementGuide";
 import ProfileUpgradeNotice from "../features/profile-library/ProfileUpgradeNotice";
+import ProfileDeepLinkNotice from "../features/profile/ProfileDeepLinkNotice";
+import { useProfileDeepLink } from "../features/profile/useProfileDeepLink";
 import {
   buildProfileBaseline,
   ProfileBaselineContext,
@@ -40,6 +42,10 @@ export default function ProfilePage() {
   const { message } = App.useApp();
   const toast = useToast();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  // 深链参数（全局搜索命中资料条目）：只在挂载时读一次，后续仍由用户操作主导。
+  const deepLinkSection = searchParams.get("section") ?? "";
+  const deepLinkEntry = searchParams.get("entry") ?? "";
   const [activeWorkspace, setActiveWorkspace] = useState<ProfileWorkspaceKey>("resume");
   const [dirty, setDirty] = useState(false);
   const markDirty = useCallback(() => setDirty(true), []);
@@ -102,6 +108,16 @@ export default function ProfilePage() {
     () => workspace?.current_group?.participating_keys ?? [],
     [workspace],
   );
+  /** 深链要展开目标板块：从查看态的折叠集合里删掉它，而不是直接把整页展开。 */
+  const deepLink = useProfileDeepLink({
+    workspace,
+    loading: profile.loading,
+    participatingKeys,
+    sectionParam: deepLinkSection,
+    entryParam: deepLinkEntry,
+    setActiveWorkspace,
+    setCollapsedSections,
+  });
   // 离开守卫（R-26）：路由离页 / 取消编辑 / 程序触发切组共用同一个出口；
   // dirty 时先出居中确认卡片，确认放弃才执行动作，继续编辑则原样留下（当前组与草稿不动）。
   const leaveGuard = useProfileLeaveGuard({ dirty });
@@ -410,6 +426,12 @@ export default function ProfilePage() {
               {t("profileGroups.notice.ack")}
             </Button>
           }
+        />
+      ) : null}
+      {deepLink.missingSectionKey ? (
+        <ProfileDeepLinkNotice
+          sectionName={sectionNames[deepLink.missingSectionKey] ?? deepLink.missingSectionKey}
+          onShow={() => void handleSetSectionVisible(deepLink.missingSectionKey, true)}
         />
       ) : null}
       {workspace ? (

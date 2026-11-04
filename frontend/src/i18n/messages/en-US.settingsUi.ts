@@ -72,6 +72,11 @@ const settingsUi = {
   "settingsUi.help.export": "Export diagnostics",
   "settingsUi.help.exported": "Diagnostics bundle exported; it contains no Resume data or keys",
   "settingsUi.help.exportFailed": "Could not export the diagnostics bundle",
+  "settingsUi.help.reload": "Reload interface",
+  "settingsUi.help.reloadHint":
+    "Reloads the interface only and changes no data; save any unsaved work first.",
+  "settingsUi.help.reloadBlocked":
+    "There is unsaved work. Save or discard it before reloading the interface.",
   "settingsUi.help.previewSummary": "About {count} redacted events in the bundle{files}. {note}",
   "settingsUi.help.previewFiles": " ({files})",
   "settingsUi.help.previewSeparator": ", ",

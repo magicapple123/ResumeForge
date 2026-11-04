@@ -28,6 +28,28 @@ function toText(value: unknown): string {
 }
 
 /**
+ * 反向优化一次最多提交的条目数：与后端 `MAX_OPTIMIZE_ITEMS`（`schemas/interview.py`）一致。
+ * 超出时后端直接 422，所以前端在提交前截断并提示，不能让"看起来能填"变成"提交必败"。
+ */
+export const OPTIMIZE_ITEM_LIMIT = 20;
+
+/**
+ * 多行文本框 → 逐行原文。**保留空行**：受控 TextArea 的显示值必须与用户输入逐字对上，
+ * 否则在末尾敲回车会被吃掉。trim / 丢空行 / 截断都在 `normalizeOptimizeItems` 里做。
+ */
+export function splitOptimizeLines(text: string): string[] {
+  return text.split("\n");
+}
+
+/** 逐行原文 → 提交值：去首尾空白、丢掉空行、截断到 `OPTIMIZE_ITEM_LIMIT`。 */
+export function normalizeOptimizeItems(lines: readonly string[]): string[] {
+  return lines
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0)
+    .slice(0, OPTIMIZE_ITEM_LIMIT);
+}
+
+/**
  * 把任意来源的 `analysis` 归一化成可安全渲染的答题思路。
  *
  * 返回 `null` 表示**没有可展示的分析**——三种情况都算：

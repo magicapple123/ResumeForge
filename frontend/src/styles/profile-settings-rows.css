@@ -1,0 +1,173 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/*
+ * 「方案与板块」三层列表的统一节奏（问题 18，2026-11-03）。
+ *
+ * 为什么单独成片：profile-layout.css 已经 500 行顶格，而这一批是纯增量
+ * （行首选择 / ⋯ 动作 / 底部创建区 / 字段位置控件）。与 tracker.css、
+ * profile-card.css 同一做法：聚合文件 profile.css 按 @import 顺序生效。
+ *
+ * 三层共同的节奏是「左侧选择 + 右侧 ⋯」：方案行用 Radio、板块行用 Checkbox、
+ * 字段行把位置控件常驻、编辑/删除进 ⋯。三层各写一套才会出现"同一件事三种控件"，
+ * 所以这些规则集中在这里，组件里不再写 inline 间距。
+ */
+
+/* 行首选择控件：不参与压缩。 */
+.profile-settings-row-lead,
+.profile-participation {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+}
+
+/* 方案行 48px：行里有一颗 Radio + 可能有「默认方案」小字，比板块行高 4px。 */
+.profile-plan-row {
+  min-height: 48px;
+  cursor: pointer;
+}
+
+/* 字段行：头部一行（名称 + ⋯）+ 位置控件一行。
+ * 此前位置控件是行外的兄弟节点、带 inline margin（4px 0 8px），整行 ~86px；
+ * 现在收进行内、只留 2px 行内间距，整行 ~56px。 */
+.profile-field-row {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 2px;
+  padding: 4px 12px;
+}
+
+.profile-field-row-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 24px;
+}
+
+/* 纸面位置 + 仅素材：三个控件垂直居中、间距 8px。
+ * `flex-wrap` 负责窄档：抽屉宽度由用户拖动（380–640），不能写视口断点——
+ * 视口没变、只把抽屉拖窄时媒体查询不会触发，结果只会溢出。 */
+.profile-field-placement {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 0;
+  padding-left: 2px;
+}
+
+/* 位置下拉的宽度下限走样式表，不再写 inline style（原来是 `style={{ minWidth: 132 }}`）。 */
+.profile-field-placement-select {
+  min-width: 132px;
+}
+
+/* 「仅素材」开关 + 可见文字：此前只有 aria-label，屏幕上是一个孤立圆点，
+ * 且紧挨「纸面位置：正文」，被读成那段文案的开关（问题 18 的 A 段）。 */
+.profile-field-material {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--rf-text-description);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+/* 文字与 22px 的 Switch 同基线：不给行高的话 span 按 1.57 撑到 19px，与开关错开 1px。 */
+.profile-field-material-label {
+  line-height: 22px;
+}
+
+/* 结果文案靠右（`margin-left: auto`），不再占着开关标签的位置；
+ * 换行时它整体掉到下一行并仍靠右，不会挤在控件之间。 */
+.profile-field-placement-hint {
+  margin-left: auto;
+  color: var(--rf-text-secondary);
+  font-size: 12px;
+}
+
+.profile-field-material-hint {
+  margin-left: auto;
+  color: var(--rf-text-description);
+  font-size: 12px;
+}
+
+/* 创建区：输入框吃掉剩余宽度、按钮固定宽；三层都放在列表底部（问题 18 的 ④）。 */
+.profile-settings-add-bottom {
+  margin-top: 12px;
+}
+
+.profile-settings-add-grow {
+  flex: 1 1 180px;
+  min-width: 0;
+}
+
+.profile-settings-add-action {
+  flex: 0 0 auto;
+}
+
+.profile-settings-add-type {
+  flex: 0 0 140px;
+}
+
+.profile-settings-add-placement {
+  flex: 0 0 150px;
+}
+
+.profile-settings-add-hint {
+  margin: 8px 0 0;
+}
+
+/* 行内改名输入：与行标题同一宽度上限，窄档自动收缩而不是把动作簇挤出行外。 */
+.profile-settings-rename-input {
+  flex: 1 1 160px;
+  max-width: 240px;
+  min-width: 0;
+}
+
+/* 卡片标题右侧的数量 Tag（「13 个恒在」）：跟标题同一行，不再单起一行说明。 */
+.profile-settings-card-count {
+  margin: 0 0 0 8px;
+  font-weight: 400;
+}
+
+/* 字段设置视图的面包屑：替代「← 返回 字段设置」两个词，返回目标一眼可见。 */
+.profile-settings-breadcrumb {
+  margin-bottom: 8px;
+}
+
+/* ===== 自建板块的「参与岗位相关性筛选」开关（需求 6） =====
+ * 与字段行同一做法：行头（勾选 + 名称 + ⋯）+ 第二行控件，行高只多出一行 22px。
+ * 不用第二个勾选框：它和行首的「参与当前方案」是两个不同概念，形态相似会被读成同一件事。 */
+.profile-settings-row-stacked {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 2px;
+}
+
+.profile-settings-row-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 32px;
+}
+
+/* 开关 + 名称 + 一句人话说明同一行；说明过长时换行而不是把开关挤扁。 */
+.profile-settings-job-filter {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  padding-left: 2px;
+}
+
+/* 文字与 22px 的 Switch 同基线（同 profile-field-material-label）。 */
+.profile-settings-job-filter-label {
+  color: var(--rf-text-body);
+  font-size: 12px;
+  line-height: 22px;
+  white-space: nowrap;
+}
+
+.profile-settings-job-filter-hint {
+  color: var(--rf-text-description);
+  font-size: 12px;
+  line-height: 22px;
+}

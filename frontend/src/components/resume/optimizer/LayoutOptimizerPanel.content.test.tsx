@@ -80,17 +80,31 @@ afterEach(() => {
 });
 
 describe("LayoutOptimizerPanel 内容精简候选", () => {
-  it("没有版面诊断但有正文：生成按钮可用，点击后出内容候选", () => {
+  it("没有版面诊断但有正文：勾着「保持条目完整」时连删条目候选都不给", () => {
     renderPanel();
     const generate = screen.getByRole("button", { name: ot("optimizer.generate") });
     expect(generate).toBeEnabled();
     fireEvent.click(generate);
+    // 这份正文唯一可精简的点就是"重复条目"。开关默认勾着 → 没有候选可给，
+    // 不能一边承诺保持条目完整、一边把删条目的方案端上来（问题 17）。
+    expect(screen.queryByText(ot("optimizer.content.title"))).toBeNull();
+    expect(screen.queryByText(ot("optimizer.content.kind.duplicate-entries"))).toBeNull();
+    // 但也不能一片空白：要说清"是开关挡住了 1 条建议"，而不是"没建议"。
+    expect(
+      screen.getByText(ot("optimizer.content.filteredByKeepEntries", { count: 1 })),
+    ).toBeInTheDocument();
+    // 更不能拿"没量到版面"顶替真正的原因。
+    expect(screen.queryByText(ot("optimizer.noMeasure"))).toBeNull();
+    // 取消勾选后重新出现。
+    fireEvent.click(screen.getByRole("checkbox", { name: ot("optimizer.keepEntries") }));
+    fireEvent.click(screen.getByRole("button", { name: ot("optimizer.generate") }));
     expect(screen.getByText(ot("optimizer.content.title"))).toBeInTheDocument();
     expect(screen.getByText(ot("optimizer.content.kind.duplicate-entries"))).toBeInTheDocument();
   });
 
   it("应用内容候选：把新 content 交给宿主（不直接写库）", async () => {
     const { onApplyContent } = renderPanel();
+    fireEvent.click(screen.getByRole("checkbox", { name: ot("optimizer.keepEntries") }));
     fireEvent.click(screen.getByRole("button", { name: ot("optimizer.generate") }));
     fireEvent.click(
       screen.getByRole("button", { name: ot("optimizer.content.apply.aria", { index: 1 }) }),

@@ -151,6 +151,55 @@ describe("完成提醒的真实呈现", () => {
     registerTaskNavigate(null);
   });
 
+  it("动作区落在 footer：查看在前、知道了在后，type 各就各位", async () => {
+    renderHost();
+
+    notifyTaskDone({
+      modal: true,
+      title: "风险扫描完成",
+      description: "回到简历详情打开「质量检测」即可看到这次的风险点。",
+      deepLink: "/resumes?resume_id=42",
+      viewLabel: "查看简历",
+    });
+
+    // 主体只放说明：按钮不能再参与文本排版（否则会像改前那样把一句话挤断）。
+    const body = await waitFor(() => {
+      const node = document.querySelector(".ant-modal-confirm-content");
+      expect(node).not.toBeNull();
+      return node as HTMLElement;
+    });
+    expect(body.querySelector("button")).toBeNull();
+    expect(body.textContent).toContain("回到简历详情");
+
+    // footer 是 `.task-notice-footer`（有真实样式，见 styles/base-tasks.css）：
+    // 顺序 = 主操作 → 确认，主操作 primary、确认 default，页面上不会出现两个主按钮。
+    const footer = document.querySelector(".task-notice-footer");
+    expect(footer).not.toBeNull();
+    const buttons = [...footer!.querySelectorAll("button")];
+    expect(buttons.map((button) => button.textContent)).toEqual(["查看简历", "知道了"]);
+    expect(buttons[0].className).toContain("ant-btn-primary");
+    expect(buttons[1].className).not.toContain("ant-btn-primary");
+  });
+
+  it("没有 deepLink 时 footer 只有「知道了」，不留空位", async () => {
+    renderHost();
+
+    notifyTaskDone({
+      modal: true,
+      title: "生成失败",
+      description: "没有可以跳转的结果。",
+    });
+
+    const footer = await waitFor(() => {
+      const node = document.querySelector(".task-notice-footer");
+      expect(node).not.toBeNull();
+      return node as HTMLElement;
+    });
+    expect([...footer.querySelectorAll("button")].map((button) => button.textContent)).toEqual([
+      "知道了",
+    ]);
+  });
+
   it("右上角卡片同样给出「去查看」", async () => {
     const visited: string[] = [];
     registerTaskNavigate((path) => visited.push(path));

@@ -2,6 +2,8 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { t } from "../../i18n";
+import { ContextMenuHost } from "../context-menu/ContextMenuHost";
+import { resetContextMenuForTests } from "../context-menu/contextMenuStore";
 import SelectionContextMenu from "./SelectionContextMenu";
 import type { SelectionTarget } from "./selectionTarget";
 
@@ -30,16 +32,22 @@ function makeTarget(field: HTMLTextAreaElement): SelectionTarget {
 function renderMenu(target: SelectionTarget | null, onWriting: (() => void) | null = null) {
   const onClose = vi.fn();
   const onAiPolish = vi.fn();
+  // 提示单例 store 复位：同一用例里第二次 render 时要看到"这一份"，不是上一份残留。
+  resetContextMenuForTests();
   render(
-    <SelectionContextMenu
-      x={40}
-      y={60}
-      target={target}
-      text={TEXT}
-      onClose={onClose}
-      onAiPolish={onAiPolish}
-      onWriting={onWriting}
-    />,
+    <>
+      <SelectionContextMenu
+        x={40}
+        y={60}
+        target={target}
+        text={TEXT}
+        onClose={onClose}
+        onAiPolish={onAiPolish}
+        onWriting={onWriting}
+      />
+      {/* 浮层由全局唯一宿主渲染（组件本身只调用 store）。 */}
+      <ContextMenuHost />
+    </>,
   );
   return { onClose, onAiPolish };
 }
@@ -47,6 +55,7 @@ function renderMenu(target: SelectionTarget | null, onWriting: (() => void) | nu
 afterEach(() => {
   cleanup();
   document.body.innerHTML = "";
+  resetContextMenuForTests();
 });
 
 describe("SelectionContextMenu", () => {
@@ -86,15 +95,22 @@ describe("SelectionContextMenu", () => {
     expect(screen.getByRole("menuitem", { name: "AI 润色" })).toHaveFocus();
   });
 
-  it("Esc 与点击外部都通知关闭", () => {
+  it("Esc 关闭菜单（浮层当场卸载）", () => {
     const field = makeField(TEXT);
     const { onClose } = renderMenu(makeTarget(field));
 
     fireEvent.keyDown(document, { key: "Escape" });
     expect(onClose).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("menu")).toBeNull();
+  });
+
+  it("点击外部关闭菜单", () => {
+    const field = makeField(TEXT);
+    const { onClose } = renderMenu(makeTarget(field));
 
     fireEvent.pointerDown(document.body);
-    expect(onClose).toHaveBeenCalledTimes(2);
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("menu")).toBeNull();
   });
 
   it("点 AI 润色先收起菜单再交给浮层开卡片", () => {

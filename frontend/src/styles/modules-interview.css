@@ -71,8 +71,8 @@
   margin-bottom: 4px;
 }
 
+/* 正文由 MarkdownBlock 块级渲染：段落间距它自带，再留 `pre-wrap` 会双倍空行。 */
 .interview-message-body {
-  white-space: pre-wrap;
   word-break: break-word;
 }
 
@@ -472,4 +472,29 @@
   display: block;
   margin-top: 8px;
   font-size: 12px;
+}
+
+/* 材料来源（#41）：三个类名此前零命中，间距全靠行盒缝隙；grid + gap 管住三段。 */
+.interview-material-source {
+  display: grid;
+  gap: 8px;
+}
+
+.interview-material-file {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.interview-material-warning {
+  margin-top: 4px;
+}
+/* antd-override: 布局无 token——只作用于面试材料字段，不动全局 extra 间距。 */
+.interview-material-field .ant-form-item-extra {
+  margin-top: 8px;
+}
+
+.interview-setup-hint {
+  grid-column: 1 / -1;
 }

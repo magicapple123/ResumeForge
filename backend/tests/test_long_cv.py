@@ -16,6 +16,7 @@ from app.schemas.resume_generation import (
     LONG_CV_MAX_PAGES,
     MODE_PAGE_LIMITS,
     RESUME_MODES,
+    UNLIMITED_RENDER_MAX_PAGES,
     mode_page_limit,
 )
 from test_pdf_exporter import needs_font
@@ -53,7 +54,11 @@ def test_mode_constants_are_the_frozen_contract():
     assert mode_page_limit(10, "long_cv") == 10
     assert mode_page_limit(11, "long_cv") == 10
     assert mode_page_limit(4, "resume") == 3
-    assert mode_page_limit(0, "resume") == 1
+    # 需求 7B：0 不再是"非法输入回落到最小页数"，而是「不限篇幅」——
+    # 渲染侧要一个 max_pages，所以映射到长 CV 的上限（10），生成侧的"不裁剪"
+    # 由调用方按 page_limit == 0 判断。
+    assert mode_page_limit(0, "resume") == UNLIMITED_RENDER_MAX_PAGES
+    assert mode_page_limit(0, "long_cv") == UNLIMITED_RENDER_MAX_PAGES
     assert mode_page_limit("garbage", "resume") == 1
 
 

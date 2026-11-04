@@ -1,0 +1,52 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/* 追问区（#41）的排版。截图里三处问题：标题与说明贴在一起、两边消息看不出谁在说话、
+   列表与输入框紧贴。类名全部由 FollowUpCard 提供，这里只补视觉、不改结构。
+   独立成片的原因：modules-interview.css 已贴 500 行预算（不为塞这几条去压存量注释）。 */
+
+/* 标题 14px/500；「停止追问」在 extra 里，靠 align-items 与标题垂直居中。 */
+.interview-followup .ant-card-head {
+  align-items: center;
+}
+
+.interview-followup .ant-card-head-title {
+  font-size: 14px;
+  font-weight: 500;
+}
+
+/* 说明文字 12px 次要色（颜色由 type="secondary" 给），与列表拉开 8px。 */
+.interview-followup .ant-card-body > .ant-typography-secondary {
+  display: block;
+  margin-bottom: 8px;
+  font-size: 12px;
+}
+
+/* 消息两侧区分：面试官左对齐无底色，候选人右对齐浅底——与正式对话区同一套视觉。 */
+.interview-followup-line {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: fit-content;
+  max-width: 88%;
+}
+
+.interview-followup-line--user {
+  margin-left: auto;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: var(--rf-brand-wash);
+}
+
+/* 角色名与正文 12px：追问是"考完再问"，密度比正式问答低一档。 */
+.interview-followup-line > .ant-typography:first-child {
+  font-size: 12px;
+}
+
+.interview-followup-list {
+  font-size: 12px;
+}
+
+/* 列表与输入区：1px 上边框分隔 + 12px 呼吸（间距只从 padding 出，不叠 margin）。 */
+.interview-followup .ant-card-body > .ant-space-compact {
+  padding-top: 12px;
+  border-top: 1px solid var(--rf-border-subtle);
+}

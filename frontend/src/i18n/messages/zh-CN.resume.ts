@@ -34,6 +34,24 @@ const resume = {
   /** 关联岗位链接行：跳到该岗位的模拟面试。 */
   "resume.detail.link.interview": "模拟面试",
 
+  // ── 详情顶部「诊断与说明」一行（ResumeDiagnosticsBar，问题 8）──────────
+  /** 入口文案：版面诊断（弹出原诊断卡）。 */
+  "resume.diagnostics.entry.diagnosis": "版面诊断",
+  /** 入口文案：未收录资料条数（与 `resume.coverage.title` 同一件事的短标签）。 */
+  "resume.diagnostics.entry.coverage": "未收录",
+  /** 入口文案：内容来源说明条数。 */
+  "resume.diagnostics.entry.evidence": "来源",
+  /** 入口文案：生成说明。 */
+  "resume.diagnostics.entry.rationale": "生成说明",
+  /** 无障碍名：版面诊断入口（{label} 是"偏空 · 占用 81%"这类状态，没算出来时为空）。 */
+  "resume.diagnostics.aria.diagnosis": "版面诊断详情：{label}",
+  /** 无障碍名：未收录入口，必须带条数（视觉徽标读屏拿不到）。 */
+  "resume.diagnostics.aria.coverage": "这些资料内容没有写进这份简历，共 {count} 条",
+  /** 无障碍名：内容来源入口，必须带条数。 */
+  "resume.diagnostics.aria.evidence": "内容来源说明，共 {count} 条",
+  /** 无障碍名：生成说明入口。 */
+  "resume.diagnostics.aria.rationale": "为什么是这样一份简历（生成说明）",
+
   // ── 底部动作条（ResumeDetailFooter）────────────────────────────
   /** 打开「手动调整简历内容」弹窗；中栏有未保存内容时禁用。 */
   "resume.footer.edit": "手动调整",
@@ -51,6 +69,8 @@ const resume = {
   "resume.footer.quality": "质量检测",
   /** 打开离线分享包。 */
   "resume.footer.share": "离线分享",
+  /** 导出按钮上的琥珀点说明：{count} 条核对项还没展开看过（问题 8 的配套）。 */
+  "resume.footer.exportPending": "还有 {count} 条内容待人工核对",
 
   // ── 版面诊断（ResumeLayoutDiagnosisCard）───────────────────────
   /** 面板标题。 */
@@ -125,19 +145,49 @@ const resume = {
   // ── 未写进简历的资料提示（ResumeCoverageNotes）─────────────────
   /** 提示块标题。 */
   "resume.coverage.title": "这些资料内容没有写进这份简历",
+  /** 折叠头的条数徽标：{count} 是各分区 total 之和（不是 names 的条数）。 */
+  "resume.coverage.summary": "共 {count} 条",
   /** 说明这是岗位导向筛选的正常结果，资料本身没有丢。 */
   "resume.coverage.intro":
     "这是岗位导向筛选的正常结果：与岗位关键词交集不足的内容不会进入生成，资料本身没有任何丢失。",
-  /** 分区行：{label} 是分区名（后端下发），{count} 是条数。 */
-  "resume.coverage.sectionCount": "{label}（{count} 条）：",
-  /** 单个资料名：引号口径与提示块正文一致。 */
+  /** 分组标题：{label} 是分区名（后端下发），{count} 是条数（5-A：`分区名 · N 条`）。 */
+  "resume.coverage.sectionCount": "{label} · {count} 条",
+  /** 单个资料名：引号口径与提示块正文一致（一条一行，见 CoverageItemRow）。 */
   "resume.coverage.item": "「{name}」",
-  /** 多个资料名之间的分隔符。 */
+  /** 多个资料名之间的分隔符（修订指令与旧版拼接文案共用）。 */
   "resume.coverage.itemSeparator": "、",
   /** 按分区补写的按钮（把指令交给修订弹窗）。 */
   "resume.coverage.revise": "AI 补上这段",
   /** 打开手动调整的按钮。 */
   "resume.coverage.openEditor": "打开手动调整",
+  /** 5-A 原因名：与岗位关键词交集不足，没进候选资料。 */
+  "resume.coverage.reason.filtered": "与岗位无关",
+  /** 5-A 原因名：单栏目条数上限裁掉，不是不相关。 */
+  "resume.coverage.reason.capacity": "超出名额",
+  /** 5-A 原因名：进了候选，模型没采用。 */
+  "resume.coverage.reason.model": "模型未采用",
+  /** 5-A 原因名：三轴都不命中（旧记录或后端未说明），宁可不解释也不硬猜。 */
+  "resume.coverage.reason.unknown": "未说明",
+  /** 组头原因汇总里各原因之间的分隔符。 */
+  "resume.coverage.reasonSeparator": " · ",
+  /** 组头里单个原因 + 条数：{label} 是原因名，{count} 是条数。 */
+  "resume.coverage.reasonCount": "{label} {count}",
+  /** 展开该组剩余条目的按钮：{count} 是该组总条数。 */
+  "resume.coverage.expandAll": "展开全部 {count} 条",
+  /** 收起回到默认的前 5 条。 */
+  "resume.coverage.collapse": "收起",
+  /** 3-A：把资料条目确定性补进简历（不调模型）。 */
+  "resume.coverage.append": "补进简历",
+  /** 3-A：需要新增条目/分区的分区只能去制作台手动添加。 */
+  "resume.coverage.goWorkbench": "去制作台添加",
+  /** 3-A：「去制作台添加」的悬停说明（说清 AI 修订的能力边界）。 */
+  "resume.coverage.goWorkbenchHint": "AI 修改只能改写已有内容，不能新增条目",
+  /** 补入成功的 Toast：{count} 是实际写进正文的条数。 */
+  "resume.coverage.appended": "已补入 {count} 条",
+  /** 有重复条目被跳过时的提示：{count} 是已在正文里的条数。 */
+  "resume.coverage.skipped": "已存在 {count} 条，未重复添加",
+  /** 补入失败的兜底文案（后端报错优先）。 */
+  "resume.coverage.appendFailed": "补入失败，请稍后重试",
 
   // ── AI 修改简历弹窗（ResumeReviseModal）────────────────────────
   /** 弹窗标题。 */
@@ -160,6 +210,15 @@ const resume = {
   "resume.revise.successFull": "已重新生成简历内容",
   /** 修订失败的兜底（后端报错优先）。 */
   "resume.revise.failed": "修订简历失败，请稍后重试",
+  /** 模型没有执行这条要求时的标题（正文一个字都没改）。 */
+  "resume.revise.notAppliedTitle": "这条要求没有被执行",
+  /** 逐条列出被事实锁挡下的字段。 */
+  "resume.revise.notAppliedFields": "涉及的事实字段：",
+  /** 单条被挡下的字段：{label} 是字段名，{value} 是当前值。 */
+  "resume.revise.blockedField": "{label}：{value}",
+  /** 没执行时的下一步。 */
+  "resume.revise.notAppliedAction":
+    "改写表达的要求可以直接重试；要改事实，先在事实锁里解锁对应字段",
 
   // ── 版本对比的字段级差异（resumeFieldDiff）─────────────────────
   /** 照片字段的占位：不把 base64 展示给用户。 */

@@ -12,10 +12,11 @@
  * ## 三条诚实约束
  *
  * 1. **不动字号**是硬过滤：候选只要改了 `font_scale_adjust` 就排除（不是"改了再提醒"）。
- * 2. **最小页边距**是硬过滤：候选的 `page_padding` 低于下限就排除。
- * 3. **保持条目完整**不在这里过滤：阶梯只改间距与字号，本来就不动条目结构；草稿预览是
- *    近似分页，真实分页以精确预览为准（W08）。这里把它标成"约束已声明、不产生过滤"，
- *    不让用户以为它改了什么实际没改的东西。
+ * 2. **最小页边距**按"这一档新引入的改动"判：只拒绝把页边距**第一次**压到阈值以下的那档，
+ *    后面承接同一 padding 的档不再连带被排掉（问题 17，见 `filterCandidates`）。
+ * 3. **保持条目完整**不在**参数候选**这一层过滤：阶梯只改间距与字号，本来就不动条目结构。
+ *    它约束的是内容候选（`buildContentCandidates` 据此剔除"删条目"这类方案）——
+ *    两件事必须分开说，混成一句就会出现"开关勾着，却给出删条目的方案"。
  */
 import type { ResumeFitCandidate } from "../../types/resumeLayout";
 import type { LayoutMeasure } from "../../utils/resumeLayoutMeasure";
@@ -105,7 +106,18 @@ export interface FilterResult {
   rejectedByMargin: number;
 }
 
-/** 按用户约束过滤候选（顺序保持后端阶梯顺序）。 */
+/**
+ * 按用户约束过滤候选（顺序保持后端阶梯顺序）。
+ *
+ * 阶梯是**累积覆盖**（每档都带着前面所有收紧），而「最小页边距」约束的是**用户要不要
+ * 把页边距压到阈值以下**。若按累积值判，一旦某一档越过阈值，后面所有档（区块间距 /
+ * 行高 / 字号）都会连带被排掉——用户明明只锁了页边距，却看到"所有候选都被排除"（问题 17）。
+ * 所以这里只拒绝**把 page_padding 第一次压到阈值以下**的那一档，承接同一 padding 的
+ * 后续档不再重复计一次。
+ *
+ * 注：后续档的 config 仍带着那一档的 padding（后端是完整覆盖），界面上每个候选都会如实
+ * 列出"页边距 14 → 12"这类变化，不隐藏。
+ */
 export function filterCandidates(
   ladder: readonly ResumeFitCandidate[],
   current: OptimizerCurrentValues,
@@ -114,22 +126,49 @@ export function filterCandidates(
   const views: OptimizerCandidateView[] = [];
   let rejectedByFontLock = 0;
   let rejectedByMargin = 0;
+  // 上一档的累积配置（第一档与"当前值"比较）。只用来判断"这一档有没有**新**压页边距"。
+  let previousConfig: ResumeFitCandidate["config"] | null = null;
   for (const candidate of ladder) {
     const view = toCandidateView(candidate, current);
     if (constraints.lockFont && view.changes.some((change) => change.key === "font_scale_adjust")) {
       rejectedByFontLock += 1;
+      previousConfig = candidate.config;
       continue;
     }
     if (constraints.minMarginMm !== null) {
-      const padding = candidateValue(candidate.config, "page_padding", current);
-      if (padding < constraints.minMarginMm - EPSILON) {
+      const padded = candidateValue(candidate.config, "page_padding", current);
+      const previousPadded = previousConfig
+        ? candidateValue(previousConfig, "page_padding", current)
+        : current.page_padding;
+      const tightensBelowLimit =
+        padded < constraints.minMarginMm - EPSILON && padded < previousPadded - EPSILON;
+      if (tightensBelowLimit) {
         rejectedByMargin += 1;
+        previousConfig = candidate.config;
         continue;
       }
     }
+    previousConfig = candidate.config;
     views.push(view);
   }
   return { views, rejectedByFontLock, rejectedByMargin };
+}
+
+/** 目标篇幅选项：1、2，加上用户真正选的那一档（3 页 / 长 CV 的 10 页）。 */
+export function targetOptionsFor(pageLimit: number | undefined): number[] {
+  const limit = Math.max(0, Math.floor(Number(pageLimit) || 0));
+  if (limit <= 2) return [1, 2];
+  return [1, 2, limit];
+}
+
+/**
+ * 收敛目标 = 用户选的 `page_limit`（不是固定"塞进 1 页"）；未选/非法回落到 1 页。
+ *
+ * `0` 是「不限篇幅」：没有"要收到几页"这回事，调用方据此跳过版式收敛（7B）。
+ */
+export function defaultTargetPages(pageLimit: number | undefined): number {
+  const limit = Math.max(0, Math.floor(Number(pageLimit) || 0));
+  return limit >= 1 ? limit : 1;
 }
 
 /**

@@ -9,11 +9,12 @@ from .job import JobListOut
 from .resume import ResumeBrief
 
 # 全局搜索"更多结果"覆盖的数据域：每一类对应一个真实前端路由（见 api/search.py）。
-SearchHitType = Literal["referral", "reminder", "experience", "claim", "material", "skill"]
+# 2026-11 起 ``skill`` 下线、``profile``（我的资料条目）接替：同一件事只保留一个来源。
+SearchHitType = Literal["referral", "reminder", "experience", "claim", "material", "profile"]
 
 
 class SearchHit(BaseModel):
-    """一类扩展数据域（内推/提醒/面经/台账/资料/技能）里的一条命中结果。
+    """一类扩展数据域（内推/提醒/面经/台账/资料/我的资料）里的一条命中结果。
 
     与 ``jobs`` / ``resumes`` 分开放在 ``SearchResult.more`` 里：既让旧调用方（只读
     ``jobs`` / ``resumes``）完全不感知，也避免为每个新数据域各造一个字段。
@@ -24,8 +25,11 @@ class SearchHit(BaseModel):
     title: str
     subtitle: str = ""
     # 指向真实前端路由，前端据此跳转（内推→/apply、提醒→/tracker、面经→/interview、
-    # 台账→/claims、资料→/materials、技能→/skills）。
+    # 台账→/claims、资料→/materials、我的资料→/profile?section=…&entry=…）。
     path: str
+    # 只对 ``profile`` 域填：命中条目所在的板块 key（内置 key 或 ``custom:<id>``）。
+    # 资料页深链据此切工作区、展开板块并定位条目；其余域为 None，旧字段不受影响。
+    section_key: str | None = None
 
 
 class SearchResult(BaseModel):

@@ -94,15 +94,44 @@ describe("ResumeProfileUsage 本次使用（R-33）", () => {
 });
 
 describe("ResumeProfileUsage 需重新生成提示（R-36 相邻口径）", () => {
-  it("资料/组定义已变：显示内联提示，说明纸面不会自动变化", async () => {
+  it("资料/组定义已变：压成一行警告，完整原文在 Tooltip 里", async () => {
     apiMocks.getResumeProfileUsage.mockResolvedValue({
       ...makeResponse(),
       freshness: { changed: true, reasons: ["content_changed"] },
     });
     renderBlock();
 
-    expect(await screen.findByText(t("resume.detail.group-usage.stale-title"))).toBeInTheDocument();
-    expect(screen.getByText(t("resume.detail.group-usage.stale-body"))).toBeInTheDocument();
+    // 2026-11 问题 8：正文不再占第二行，标题与一句「需重新生成」并成一行。
+    const line = await screen.findByText(
+      new RegExp(t("resume.detail.group-usage.stale-title")),
+    );
+    expect(line.textContent).toContain(t("resume.detail.group-usage.stale-action"));
+    // 仍然是琥珀警告条（不能退化成纯文本）。
+    expect(line.closest(".ant-alert")).not.toBeNull();
+    // 原文一个字没丢：悬停（以及键盘聚焦，见下一条）都能看到。
+    fireEvent.mouseEnter(line);
+    expect(await screen.findByRole("tooltip")).toHaveTextContent(
+      t("resume.detail.group-usage.stale-body"),
+    );
+  });
+
+  it("「资料已更新」的完整原文也能用键盘聚焦触发", async () => {
+    apiMocks.getResumeProfileUsage.mockResolvedValue({
+      ...makeResponse(),
+      freshness: { changed: true, reasons: ["content_changed"] },
+    });
+    renderBlock();
+
+    const line = await screen.findByText(
+      new RegExp(t("resume.detail.group-usage.stale-title")),
+    );
+    // 原生 title 键盘用户拿不到，所以这一行必须可聚焦并走 Tooltip。
+    // React 18 把 `onFocus` 接在 focusin 上，所以这里派发 focusin（fireEvent.focus 不冒泡）。
+    expect(line).toHaveAttribute("tabindex", "0");
+    fireEvent.focusIn(line);
+    expect(await screen.findByRole("tooltip")).toHaveTextContent(
+      t("resume.detail.group-usage.stale-body"),
+    );
   });
 
   it("没有变化：不显示提示", async () => {

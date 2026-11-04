@@ -31,6 +31,7 @@ const searchCard = {
   "searchCard.saveFailed": "Could not save the web search settings",
 
   "searchCard.source.searxng": "SearXNG (self-hosted)",
+  "searchCard.source.deepseek": "DeepSeek",
 
   "searchCard.sources.title": "Search sources",
   "searchCard.sources.hint":
@@ -39,6 +40,16 @@ const searchCard = {
   "searchCard.searxng.title": "SearXNG instance address",
   "searchCard.searxng.hint":
     "Public instances are rate-limited often, so no default is preset; the address is queried only when you fill in your own instance, e.g. http://localhost:8080. You can leave it empty when the SearXNG source is not selected.",
+
+  "searchCard.deepseek.title": "DeepSeek search (optional)",
+  "searchCard.deepseek.hint":
+    "It is called only when you save your own API key and select the DeepSeek source above. It does not follow the chat model configuration, so quota and billing are separate. Without a key this source does not join the search and is never shown as a successful search.",
+  "searchCard.deepseek.keyAria": "DeepSeek search API key",
+  "searchCard.deepseek.keyPlaceholder": "Paste your DeepSeek API key",
+  "searchCard.deepseek.cost":
+    "Search and Fetch cost about ¥0.005 per successful request each, billed by DeepSeek; this app does not track that usage. A saved key is echoed as ********; clear the field to remove it.",
+  "searchCard.deepseek.privacy":
+    "With this source selected, page URLs are sent to DeepSeek so it can fetch the body; local reading is used only when that fails. Turn the source off if you do not want URLs sent.",
 
   "searchCard.fetch.title": "Page bodies fetched",
   "searchCard.fetch.hint":

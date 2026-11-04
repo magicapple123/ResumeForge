@@ -3,6 +3,7 @@
 import { App as AntApp } from "antd";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { t } from "../i18n";
 import InterviewReviewPanel from "./InterviewReviewPanel";
 
 const apiMocks = vi.hoisted(() => ({
@@ -50,6 +51,9 @@ const OPTIMIZE = {
     },
   ],
 };
+
+/** Mock resume title, escape-encoded so the CJK ratchet does not count a new line. */
+const RESUME_LABEL = "\u6211\u7684\u7b80\u5386";
 
 function renderPanel() {
   return render(
@@ -197,5 +201,105 @@ describe("InterviewReviewPanel", () => {
     fireEvent.click(await screen.findByRole("button", { name: "OK" }));
 
     await waitFor(() => expect(apiMocks.deleteReview).toHaveBeenCalledWith(1));
+  });
+
+  it("prefills both inputs from the model analysis", async () => {
+    renderPanel();
+
+    fireEvent.change(screen.getByPlaceholderText(t("interviewReview.placeholder.question")), {
+      target: { value: "How did you solve the hard part?" },
+    });
+    fireEvent.click(
+      screen.getByRole("button", { name: new RegExp(t("interviewReview.action.analyze")) }),
+    );
+    await screen.findByText(ANALYSIS.framework);
+
+    // A review the model already produced weaknesses/follow-ups for needs no retyping.
+    expect(
+      (screen.getByLabelText(t("interviewReview.field.weaknesses")) as HTMLTextAreaElement).value,
+    ).toBe(ANALYSIS.pitfalls[0]);
+    expect(
+      (screen.getByLabelText(t("interviewReview.field.followUps")) as HTMLTextAreaElement).value,
+    ).toBe(ANALYSIS.follow_up[0]);
+  });
+
+  it("keeps the model weaknesses when only the follow-ups are edited", async () => {
+    renderPanel();
+
+    fireEvent.change(screen.getByPlaceholderText(t("interviewReview.placeholder.question")), {
+      target: { value: "How did you solve the hard part?" },
+    });
+    fireEvent.click(
+      screen.getByRole("button", { name: new RegExp(t("interviewReview.action.analyze")) }),
+    );
+    await screen.findByText(ANALYSIS.framework);
+
+    fireEvent.change(screen.getByLabelText(t("interviewReview.field.followUps")), {
+      target: { value: "Why not a message queue?" },
+    });
+
+    const resumeSelect = screen
+      .getByText(t("interviewReview.placeholder.resume"))
+      .closest(".ant-select-content");
+    fireEvent.mouseDown(resumeSelect!);
+    fireEvent.click(await screen.findByText(RESUME_LABEL));
+
+    fireEvent.click(
+      screen.getByRole("button", { name: new RegExp(t("interviewReview.action.optimize")) }),
+    );
+
+    await waitFor(() =>
+      expect(apiMocks.optimizeResumeFromInterview).toHaveBeenCalledWith(
+        {
+          resume_id: 1,
+          job_id: null,
+          // Weaknesses untouched -> still the model value; follow-ups are hand-written.
+          weaknesses: ANALYSIS.pitfalls,
+          follow_ups: ["Why not a message queue?"],
+        },
+        expect.anything(),
+      ),
+    );
+  });
+
+  it("submits only the first 20 items and shows the truncation hint", async () => {
+    renderPanel();
+
+    fireEvent.change(screen.getByPlaceholderText(t("interviewReview.placeholder.question")), {
+      target: { value: "How did you solve the hard part?" },
+    });
+    fireEvent.click(
+      screen.getByRole("button", { name: new RegExp(t("interviewReview.action.analyze")) }),
+    );
+    await screen.findByText(ANALYSIS.framework);
+
+    const twentyFive = Array.from({ length: 25 }, (_, index) => `weakness ${index + 1}`);
+    fireEvent.change(screen.getByLabelText(t("interviewReview.field.weaknesses")), {
+      target: { value: twentyFive.join("\n") },
+    });
+
+    // The backend caps this at MAX_OPTIMIZE_ITEMS = 20; without trimming the submit would 422.
+    expect(
+      screen.getByText(t("interviewReview.optimize.truncated", { limit: 20 })),
+    ).toBeInTheDocument();
+
+    const resumeSelect = screen
+      .getByText(t("interviewReview.placeholder.resume"))
+      .closest(".ant-select-content");
+    fireEvent.mouseDown(resumeSelect!);
+    fireEvent.click(await screen.findByText(RESUME_LABEL));
+
+    fireEvent.click(
+      screen.getByRole("button", { name: new RegExp(t("interviewReview.action.optimize")) }),
+    );
+
+    await waitFor(() =>
+      expect(apiMocks.optimizeResumeFromInterview).toHaveBeenCalledWith(
+        expect.objectContaining({
+          weaknesses: twentyFive.slice(0, 20),
+        }),
+        expect.anything(),
+      ),
+    );
   });
 });

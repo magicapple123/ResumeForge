@@ -2,9 +2,10 @@
 /** 统一导出面板：格式多选（含照片）+ 水印 + 脱敏。排版设置与页边距都在预览的排版栏（T5）。 */
 import { PrinterOutlined } from "@ant-design/icons";
 import { Alert, App, Button, Checkbox, Input, Modal, Space, Switch, Typography } from "antd";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ApiError } from "../api/client";
 import { exportResumeWithOptions } from "../api/resumes";
+import type { PreflightRequest } from "../features/resume-preflight/types";
 import type { ResumeFontScale, ResumeLanguage } from "../types";
 import type { ResumeFormatConfig } from "../types/resumeFormat";
 import {
@@ -19,6 +20,7 @@ import {
 import { t } from "../i18n";
 import { useLocale } from "../i18n/i18nContext";
 import { downloadBlob, printHtml } from "../utils/download";
+import { useExportPreflightGate } from "./resume/exportPreflightGate";
 
 interface Props {
   recordId: number;
@@ -93,6 +95,33 @@ export default function ExportOptionsModal({
     format_config: initialFormatConfig,
     language: initialLanguage ?? null,
     include_photo: includePhoto,
+  });
+
+  /**
+   * 预检请求体（问题 3）：只跑**产物层**——"内容需要几页"只有真渲染一次 PDF 才知道，
+   * 内容层/排版层在这里拿不到新信息，白等约 400ms。
+   *
+   * 版式与页数上限必须与导出**同一份草稿**（`page_limit` / `font_scale` / `language` /
+   * `format_config` 全部原样透传）：用记录里的旧值去问，问出来的页数和导出的不是一份。
+   */
+  const buildPreflightRequest = useCallback(
+    (): PreflightRequest => ({
+      layers: ["product"],
+      product_formats: ["pdf"],
+      layout: {
+        page_limit: initialPageLimit ?? undefined,
+        font_scale: initialFontScale,
+        language: initialLanguage,
+        format_config: initialFormatConfig as Record<string, unknown> | undefined,
+      },
+    }),
+    [initialFontScale, initialFormatConfig, initialLanguage, initialPageLimit],
+  );
+
+  // 导出闸门：点「导出」时才发请求（不在 open 时发），失败放行，确认条是面板内的 Alert。
+  const preflightGate = useExportPreflightGate({
+    recordId,
+    buildRequest: buildPreflightRequest,
   });
 
   /**
@@ -192,6 +221,9 @@ export default function ExportOptionsModal({
     }
     setExporting(true);
     try {
+      // 问题 3：真正发导出请求前跑一次预检。有 blocker（含超页）先问一句，
+      // 用户选「先调整」就整批停手——以前这里直接调后端，超页内容被静默截断。
+      if (!(await preflightGate.confirm())) return;
       for (const format of formats) {
         if (format === "png") {
           if ((await exportAsPng()) === "cancelled") return; // 用户选择先去改简历
@@ -208,7 +240,16 @@ export default function ExportOptionsModal({
         if (result.savedTo) {
           message.success(t("exportPanel.toast.savedBoth", { path: result.savedTo }));
         }
-        if (result.pages && result.pageLimit && result.pages > result.pageLimit) {
+        if (result.truncated) {
+          // 1-D：文件里**确实**少了内容。这句话与「超过上限」分开说——裁过的文件页数
+          // 通常正好等于上限，只报页数会让用户以为内容齐全。
+          message.warning(
+            t("exportPanel.toast.truncated", {
+              format,
+              limit: result.pageLimit ?? "",
+            }),
+          );
+        } else if (result.pages && result.pageLimit && result.pages > result.pageLimit) {
           message.warning(
             t("exportPanel.toast.overLimit", {
               format,
@@ -280,6 +321,7 @@ export default function ExportOptionsModal({
       ]}
     >
       <Space orientation="vertical" style={{ width: "100%" }} size="middle">
+        {preflightGate.node}
         {incompleteAsk ? (
           <Alert
             type="warning"
@@ -324,6 +366,15 @@ export default function ExportOptionsModal({
           <Typography.Text type="secondary" style={{ fontSize: 12 }}>
             {t("exportPanel.format.pdfNote")}
           </Typography.Text>
+          {formats.includes("json") && (
+            // 1-D：JSON 是数据交付物，**不裁**。标在格式旁，免得用户以为"选了 1 页"
+            // 连 JSON 也只剩一页的数据。
+            <div style={{ marginTop: 6 }}>
+              <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                {t("exportPanel.format.jsonNote")}
+              </Typography.Text>
+            </div>
+          )}
           {formats.includes("png") && (
             <div style={{ marginTop: 6 }}>
               <Typography.Text type="secondary" style={{ fontSize: 12 }}>

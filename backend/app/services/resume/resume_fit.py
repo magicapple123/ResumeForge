@@ -148,14 +148,63 @@ def _font_scale_probe_css(font_scale: str, adjust: float) -> str:
     return f":root {{ --fs: {round(base_px * adjust, 2)}px; }}"
 
 
+def _padding_floor(current_padding: float, min_padding_mm: float | None) -> float:
+    """页边距阶梯的下界：渲染下限与用户下限取更严的那个。
+
+    「最小页边距」是**排版参数的下界**，不是候选筛选条件（问题 17）：把阶梯在阈值处
+    截断，后面的档从阈值处继续累积，用户就不会拿到一份"只改行高、却顺手把页边距压到
+    承诺以下"的方案——否则前端只能整档整档地丢，最后报"全部被排除"。
+
+    两个边界：
+    - 不低于 ``MIN_PADDING_MM``（渲染器自己的下限，再小就不像同一份简历）；
+    - 不**高于**当前值：阶梯只承诺"更紧、不反弹"，用户把下限设得比当前值还大时，
+      不能为了"遵守下限"反而把页边距放大（那是变松，不是优化）。
+    """
+    floor = float(MIN_PADDING_MM)
+    if min_padding_mm is None:
+        return floor
+    requested = float(min_padding_mm)
+    if requested <= floor:
+        return floor
+    return min(requested, float(current_padding))
+
+
+# ⚠️ **生成期刻意不做服务端版式收敛**（需求 7A 的边界，2026-11-03 定稿）。
+#
+# 本模块的"逐档试版"流程是：**先真实渲染，再由客户端逐档测量高度，够放下就停**。
+# 它没有 `target_pages` 参数，因为阶梯本身与页数无关——收敛目标是调用方在拿到实测高度后
+# 才决定的（优化器面板把 `targetPages` 交给 `overflowForTarget` 判 `fits`；「自动一页」
+# 固定按 1 页判）。把这条流程搬进生成链路（`resume_generator` / `resume_space_gate`）被
+# 明确否决，原因有二：
+#   1. **渲染成本**：每档都要 `build_resume_pdf` 一次，一次生成要跑 N 次渲染，长 CV 会直接
+#      撞上 `LONG_CV_RESOURCE_BUDGET["max_render_seconds"] = 20` 的硬预算（AGENTS 红线：
+#      超时明确失败，不静默截断、不缩字号）。
+#   2. **失败回滚不确定**：生成链路走到这里内容已定稿、版式即将落库；"试到哪一档没装下"
+#      没有确定的回退版本可退（退回原版式 = 明知超页还保存，退回最紧档 = 未经用户同意
+#      把简历缩到看不清）。所以生成期只做"内容裁剪 + 如实警告"，版式收敛留给用户在预览
+#      里显式触发（「自动一页」/ 优化器面板），那一步有真实测量、也看得见改动。
+#
+# 因此 `build_fit_ladder` 只负责**按用户下限生成候选**（`min_padding_mm`），不判断页数。
+
+
 def build_fit_ladder(
-    template: str, font_scale: str, format_config: dict | None
+    template: str,
+    font_scale: str,
+    format_config: dict | None,
+    *,
+    min_padding_mm: float | None = None,
 ) -> list[FitCandidate]:
     """生成"自动一页"要依次尝试的版式清单。
 
     顺序是**页边距 → 区块间距 → 行高 → 字号**：越靠前的旋钮对可读性的影响越小。
     每一档都是相对原配置的**完整覆盖**，所以客户端试出哪一档就原样保存哪一档，
     不需要自己算增量。
+
+    ``min_padding_mm`` 是用户设的页边距下限（``None`` = 不限制，行为与引入该参数前
+    逐字一致）：页边距阶梯在此处截断，后续档带着阈值处的边距继续收紧其它旋钮。
+
+    为什么没有 ``target_pages``：见上方「生成期刻意不做服务端版式收敛」的注释——
+    目标页数由调用方按实测高度决定。
     """
     current = _effective_layout(template, format_config)
     floor_adjust = font_adjust_floor(font_scale)
@@ -178,8 +227,10 @@ def build_fit_ladder(
         ladder.append(FitCandidate(key=key, label=label, config=config, css=css))
 
     padding = current["page_padding"]
+    # 用户下限决定 padding 阶梯能走到哪一档（问题 17：边距是下界，不是筛选条件）。
+    padding_floor = _padding_floor(padding, min_padding_mm)
     while True:
-        target = _next_target(padding, MIN_PADDING_MM, _PADDING_STEP_MM)
+        target = _next_target(padding, padding_floor, _PADDING_STEP_MM)
         if target is None:
             break
         add("padding", f"页边距收到 {target:g}mm", {"page_padding": target})
@@ -218,9 +269,20 @@ def build_fit_ladder(
     return ladder
 
 
-def fit_room_report(template: str, font_scale: str, format_config: dict | None) -> dict[str, Any]:
-    """还有没有可收紧的余地，以及下限说明。给界面用来决定要不要显示「自动一页」。"""
-    ladder = build_fit_ladder(template, font_scale, format_config)
+def fit_room_report(
+    template: str,
+    font_scale: str,
+    format_config: dict | None,
+    *,
+    min_padding_mm: float | None = None,
+) -> dict[str, Any]:
+    """还有没有可收紧的余地，以及下限说明。给界面用来决定要不要显示「自动一页」。
+
+    ``min_padding_mm`` 与 ``build_fit_ladder`` 同一个口径：用户设了页边距下限时，
+    `has_room` 与 `steps` 必须按**截断后**的阶梯算，否则会出现"报告还有余地、
+    点开却只有被下限挡掉的档位"。
+    """
+    ladder = build_fit_ladder(template, font_scale, format_config, min_padding_mm=min_padding_mm)
     adjust_floor = font_adjust_floor(font_scale)
     return {
         "has_room": bool(ladder),

@@ -83,6 +83,19 @@ describe("buildContentCandidates", () => {
     ]);
   });
 
+  it("保持条目完整：勾选时不再给「删条目」类候选，取消后重新出现（问题 17）", () => {
+    const kinds = (keepEntriesWhole: boolean) =>
+      buildContentCandidates(content(), [], { keepEntriesWhole }).map(
+        (candidate) => candidate.kind,
+      );
+    const whole = kinds(true);
+    expect(whole).not.toContain("duplicate-entries");
+    // 删重复要点 / 合并短要点不动条目结构，仍然保留。
+    expect(whole).toContain("duplicate-points");
+    expect(whole).toContain("merge-short-points");
+    expect(kinds(false)).toContain("duplicate-entries");
+  });
+
   it("同标题 + 同元信息的条目只保留第一条，删掉的副本带 measureCss", () => {
     const candidate = byKind("duplicate-entries");
     expect(candidate).not.toBeNull();

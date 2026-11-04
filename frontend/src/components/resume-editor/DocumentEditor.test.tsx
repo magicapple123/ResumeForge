@@ -233,6 +233,72 @@ describe("DocumentEditor 三区卡", () => {
     expect(main).toHaveAttribute("draggable", "true");
   });
 
+  it("正文块的 draggable 只挂把手，主按钮不拖（问题 12）", () => {
+    const { container } = renderEducation();
+    const chip = container.querySelector('[data-item-kind="text"]') as HTMLElement;
+    const [handle, main] = within(chip).getAllByRole("button");
+    expect(handle).toHaveAttribute("draggable", "true");
+    expect(handle).toHaveAccessibleName(t("document.item.drag"));
+    // 正文块的主体是可编辑文本的入口：整块可拖会把「拖选一句话里几个字」变成「拖走整块」。
+    expect(main).toHaveAttribute("draggable", "false");
+  });
+
+  it("chip 里不许起选区，但字段值输入框照旧能选中文字", () => {
+    // 「松开鼠标以搜索文本」只由选区触发：chip 上任何一段文字能选出选区，拖动就会被
+    // 浏览器判成"拖动选中文字"。容器上的 selectstart 拦截必须生效，而且**只**在 chip 里；
+    // 字段值 textarea 属于"要打字的地方"，必须放行（否则拖选几个字改都没法改）。
+    const { container } = renderEducation(makeDocument());
+    const chip = container.querySelector(".document-chip") as HTMLElement;
+    expect(chip).not.toBeNull();
+
+    const chipSelect = new Event("selectstart", { bubbles: true, cancelable: true });
+    chip.dispatchEvent(chipSelect);
+    expect(chipSelect.defaultPrevented).toBe(true);
+
+    // F2 = 键盘展开字段编辑器（与双击同路），拿到 chip 下方的值输入框。
+    const school = screen.getByRole("group", {
+      name: chipName("editor.field.school", "Tsinghua University"),
+    });
+    fireEvent.keyDown(within(school).getAllByRole("button")[0], { key: "F2" });
+    const editor = screen.getByLabelText(t("document.field.value"));
+    const inputSelect = new Event("selectstart", { bubbles: true, cancelable: true });
+    editor.dispatchEvent(inputSelect);
+    expect(inputSelect.defaultPrevented).toBe(false);
+  });
+
+  it("按住把手**不**拦 mousedown 默认行为，拖拽载荷仍是 move", () => {
+    // 2026-11-04 用户实测「正文块拖不动」：上一版在把手 `mousedown` 里
+    // `preventDefault()`，Chrome 连 HTML5 拖拽的起点一起吃掉——`dragstart` 根本不触发
+    // （自动化实测 dragstart 计数 0）。防选区不能靠它：`user-select: none` 加容器上的
+    // `selectstart` 拦截已经够了，且不碰默认拖拽。
+    const { container } = renderEducation();
+    const chip = container.querySelector('[data-item-kind="text"]') as HTMLElement;
+    const [handle] = within(chip).getAllByRole("button");
+
+    const down = new MouseEvent("mousedown", { bubbles: true, cancelable: true });
+    handle.dispatchEvent(down);
+    expect(down.defaultPrevented).toBe(false);
+
+    const setData = vi.fn();
+    const dragStart = new Event("dragstart", { bubbles: true, cancelable: true });
+    Object.defineProperty(dragStart, "dataTransfer", {
+      value: { setData, effectAllowed: "none" },
+    });
+    handle.dispatchEvent(dragStart);
+    expect(setData).toHaveBeenCalledWith("text/plain", expect.any(String));
+    expect(
+      (dragStart as unknown as { dataTransfer: { effectAllowed: string } }).dataTransfer
+        .effectAllowed,
+    ).toBe("move");
+  });
+
+  it("只读模式下正文块没有拖拽把手（问题 12）", () => {
+    const { container } = renderEducation(makeDocument(), { readOnly: true });
+    const chip = container.querySelector('[data-item-kind="text"]') as HTMLElement;
+    const buttons = within(chip).getAllByRole("button");
+    expect(buttons.some((button) => button.getAttribute("draggable") === "true")).toBe(false);
+  });
+
   it("拖到非法位置（list item → 标题行）给提示且不改文档", () => {
     const { onChange } = renderEducation();
     const titleZone = document.querySelector('[data-document-zone="title"]') as HTMLElement;

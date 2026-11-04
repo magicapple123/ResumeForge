@@ -1,0 +1,108 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/*
+ * 统一右键浮层（问题 25）。
+ *
+ * 皮肤从 `styles/aiPolish.css` 的 `.rf-ai-polish-menu*` 四条规则搬来改名（那份只剩
+ * AI 润色卡片）。只用主题 token（`--rf-*`），颜色守卫会扫这个目录。
+ *
+ * 定位由组件写 inline `left/top`（`features/context-menu/positioning.ts` 算好并夹进视口），
+ * 层级也由组件按 `layer.*` 注入——这里不写死任何一个数。
+ */
+
+.rf-ctx-menu {
+  position: fixed;
+  /* 长菜单（行操作 + 删除）在矮视口里要能滚，不能被裁掉。 */
+  max-height: calc(100vh - 16px);
+  min-width: 132px;
+  overflow-y: auto;
+  padding: 4px;
+  border: 1px solid var(--rf-border);
+  border-radius: 8px;
+  background: var(--rf-surface);
+  box-shadow: 0 6px 18px color-mix(in srgb, var(--rf-brand) 16%, transparent);
+  outline: none;
+}
+
+.rf-ctx-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 6px 10px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--rf-text-body);
+  font-size: 13px;
+  line-height: 18px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.rf-ctx-menu-item:hover:enabled,
+.rf-ctx-menu-item:focus-visible {
+  background: var(--rf-surface-alt);
+}
+
+.rf-ctx-menu-item:focus-visible {
+  outline: 2px solid var(--rf-focus-ring);
+  outline-offset: -2px;
+}
+
+.rf-ctx-menu-item:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* 删除类动作：文字与图标一起变红，避免"和普通项长得一样"的误点。 */
+.rf-ctx-menu-item.is-danger {
+  color: var(--rf-danger);
+}
+
+.rf-ctx-menu-item.is-danger:hover:enabled {
+  background: color-mix(in srgb, var(--rf-danger) 12%, transparent);
+}
+
+.rf-ctx-menu-icon {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+}
+
+.rf-ctx-menu-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 「AI 润色」「写作增强」这类不属于系统菜单的动作与上面的文本操作隔开。 */
+.rf-ctx-menu-separator {
+  height: 1px;
+  margin: 4px 2px;
+  background: var(--rf-border);
+}
+
+/* 不支持二级菜单：`children` 退化成"分组标题 + 平铺子项"（见 ContextMenuSurface）。 */
+.rf-ctx-menu-group-label {
+  padding: 4px 10px 2px;
+  color: var(--rf-text-secondary);
+  font-size: 12px;
+}
+
+/*
+ * 行级右键菜单的键盘容器（`RowContextMenu` 包在不可聚焦子元素外面的一层）。
+ *
+ * `display: block` 而不是 `contents`：antd 的浮层要靠这一层的 `getBoundingClientRect`
+ * 定位，`contents` 的元素量不到盒子，菜单会跑到左上角。`min-width: 0` 让它在 flex/grid
+ * 父容器里仍可收缩（卡片网格的列宽不会被撑开）。
+ */
+.rf-row-ctx-trigger {
+  display: block;
+  min-width: 0;
+}
+
+.rf-row-ctx-trigger:focus-visible {
+  outline: 2px solid var(--rf-focus-ring);
+  outline-offset: 2px;
+}

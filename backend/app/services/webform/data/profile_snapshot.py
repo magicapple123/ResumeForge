@@ -42,22 +42,70 @@ ConsumedLoader = Callable[[Session, Any], ConsumedProfile]
 AllConsumedLoader = Callable[[Session], ConsumedProfile]
 WebformExtraLoader = Callable[[Session], Mapping[str, str]]
 
+# 取数范围：`group` = 仅当前方案（默认，升级无感）；`all` = 全部资料。
+SCOPE_GROUP = "group"
+SCOPE_ALL = "all"
+_SCOPES = (SCOPE_GROUP, SCOPE_ALL)
+
+
+def normalize_scope(value: object) -> str:
+    """把外部传进来的范围收敛成两个合法值；认不出的一律按默认（仅当前方案）。"""
+    text = str(value or "").strip().lower()
+    return text if text in _SCOPES else SCOPE_GROUP
+
 
 @dataclass(frozen=True)
 class WebformProfileSnapshot:
-    """一次网申取数的冻结快照；三处入口共用，禁止各自再查当前组/资料。"""
+    """一次网申取数的冻结快照；三处入口共用，禁止各自再查当前组/资料。
+
+    ``scope`` 是**取数范围**，不是"当前组"：``group`` = 只取当前方案参与的板块（默认，
+    与改造前逐字节一致），``all`` = 全部资料。它进快照构造而不是各入口各传一个——整页预填、
+    实时建议、人工清单都只从 ``defined_fields()`` 派生，因此三处不可能按不同范围取数。
+    """
 
     consumed: ConsumedProfile
     all_consumed: ConsumedProfile
     webform_extra: Mapping[str, str]
     overlaps: Mapping[str, ResolvedValue]
+    scope: str = SCOPE_GROUP
+    # 被当前方案过滤掉的板块（`all_consumed` 有、`consumed` 没有）：[{"key","name"}]。
+    # 只为空态说清原因而存在——数据层按组裁剪之后，"组外板块不存在"与"资料为空"在
+    # 返回结构上完全等价，不额外下发这份差异，下游就只能给一句通用的话。
+    filtered_sections: tuple[dict[str, str], ...] = ()
+
+    def active_consumed(self) -> ConsumedProfile:
+        """当前范围实际使用的消费视图（`all` 时用全量）。"""
+        return self.all_consumed if self.scope == SCOPE_ALL else self.consumed
 
     def defined_fields(self, *, job_title: str = "") -> DefinedFields:
-        """简历侧三份输出（data/catalog/custom_labels 同源）——只含当前组参与分区。"""
-        return build_defined_fields(self.consumed, job_title=job_title)
+        """简历侧三份输出（data/catalog/custom_labels 同源）——按快照范围取数。"""
+        return build_defined_fields(
+            self.active_consumed(),
+            job_title=job_title,
+            out_of_scope_keys=self.out_of_scope_keys,
+        )
+
+    @property
+    def out_of_scope_keys(self) -> frozenset[str]:
+        """只在「全部资料」范围下非空：这些板块的条目来自当前方案之外。"""
+        if self.scope != SCOPE_ALL:
+            return frozenset()
+        return frozenset(item["key"] for item in self.filtered_sections)
 
     def warnings(self) -> tuple[str, ...]:
         return tuple(dict.fromkeys(item.warning for item in self.overlaps.values() if item.warning))
+
+    def filtered_catalog_rows(self, *, job_title: str = "") -> tuple[dict[str, str], ...]:
+        """被当前方案过滤掉的板块的清单行（"全部资料"范围下为空）。
+
+        跳过清单与面板的「方案外」映射都从这里取：它只在 `group` 范围、且确实存在被过滤
+        板块时才算一遍全量目录，正常路径（没有组外内容）不付这份成本。
+        """
+        if self.scope != SCOPE_GROUP or not self.filtered_sections:
+            return ()
+        keys = {item["key"] for item in self.filtered_sections}
+        rows = build_defined_fields(self.all_consumed, job_title=job_title).catalog
+        return tuple(row for row in rows if str(row.get("group_key") or "") in keys)
 
 
 def _default_scope_loader(db: Session) -> Any:
@@ -126,10 +174,32 @@ def _default_webform_extra_loader(db: Session) -> Mapping[str, str]:
     return values
 
 
+def _filtered_sections(
+    consumed: ConsumedProfile, all_consumed: ConsumedProfile
+) -> tuple[dict[str, str], ...]:
+    """`all_consumed` 里有内容、`consumed` 里整键不出现的板块（按资料顺序）。
+
+    只收**真有条目**的板块：组外板块一条记录都没有时，"被过滤"和"本来就没填"对用户是
+    同一件事，说出来只会让人以为方案藏了东西。
+    """
+    group_keys = set(consumed.participating_keys)
+    result: list[dict[str, str]] = []
+    for section_key in all_consumed.participating_keys:
+        if section_key in group_keys:
+            continue
+        section = all_consumed.sections.get(section_key)
+        if section is None or not section.entries:
+            continue
+        result.append({"key": section.key, "name": section.name})
+    return tuple(result)
+
+
 def snapshot_from_profiles(
     consumed: ConsumedProfile,
     all_consumed: ConsumedProfile,
     webform_extra: Mapping[str, str],
+    *,
+    scope: str = SCOPE_GROUP,
 ) -> WebformProfileSnapshot:
     """不查库直接组快照（测试/F2 已提供消费视图的调用方用）。"""
     return WebformProfileSnapshot(
@@ -137,12 +207,15 @@ def snapshot_from_profiles(
         all_consumed=all_consumed,
         webform_extra={str(key): str(value) for key, value in webform_extra.items()},
         overlaps=resolve_overlap_values(consumed, all_consumed, webform_extra),
+        scope=normalize_scope(scope),
+        filtered_sections=_filtered_sections(consumed, all_consumed),
     )
 
 
 def load_webform_profile_snapshot(
     db: Session,
     *,
+    scope: str = SCOPE_GROUP,
     scope_loader: ScopeLoader | None = None,
     consumed_loader: ConsumedLoader | None = None,
     all_consumed_loader: AllConsumedLoader | None = None,
@@ -153,11 +226,18 @@ def load_webform_profile_snapshot(
     loader 可注入是为了在 F2 读取层并行交付期间就能对"组裁剪 + 专用项 + R-75"做端到端
     测试；生产路径一律用默认 loader（F2 唯一 resolver + reader），不接受请求体指定组。
     """
-    scope = (scope_loader or _default_scope_loader)(db)
-    consumed = (consumed_loader or _default_consumed_loader)(db, scope)
-    all_consumed = (all_consumed_loader or _default_all_consumed_loader)(db)
+    resolved_scope = normalize_scope(scope)
+    resolved_consumed = (consumed_loader or _default_consumed_loader)(
+        db, (scope_loader or _default_scope_loader)(db)
+    )
+    resolved_all = (all_consumed_loader or _default_all_consumed_loader)(db)
     webform_extra = (webform_extra_loader or _default_webform_extra_loader)(db)
-    return snapshot_from_profiles(consumed, all_consumed, webform_extra)
+    return snapshot_from_profiles(
+        resolved_consumed,
+        resolved_all,
+        webform_extra,
+        scope=resolved_scope,
+    )
 
 
 def snapshot_form_data(
@@ -180,8 +260,11 @@ def snapshot_form_data(
 
 
 __all__ = [
+    "SCOPE_ALL",
+    "SCOPE_GROUP",
     "WebformProfileSnapshot",
     "load_webform_profile_snapshot",
+    "normalize_scope",
     "snapshot_form_data",
     "snapshot_from_profiles",
 ]

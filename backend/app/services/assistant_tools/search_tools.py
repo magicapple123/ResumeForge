@@ -25,7 +25,7 @@ async def _tool_web_search(
     """
     from ..assistant.assistant_web_search import AssistantSearchError
     from ..search import aggregate_search
-    from ..settings_service import get_search_config
+    from ..settings_service import get_search_config_with_secrets
 
     query = str(arguments.get("query") or "").strip()
     if not query:
@@ -39,7 +39,7 @@ async def _tool_web_search(
             summary="这是简历通本身的使用问题，未进行无关联网搜索",
         )
     try:
-        results = await aggregate_search(query, get_search_config(db))
+        results = await aggregate_search(query, get_search_config_with_secrets(db))
     except AssistantSearchError as exc:
         return ToolResult(
             text=f"[联网搜索失败] {exc}",

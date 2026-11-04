@@ -29,8 +29,15 @@ const atsCheck = {
   "atsCheck.action.retry": "Run check again",
   "atsCheck.action.copyImprovements": "Copy improvement list",
 
+  "atsCheck.emptyHint.withJd":
+    "The JD is ready — select “Run check” to see format risks and keyword coverage",
+  "atsCheck.emptyHint.withoutJd": "Paste a JD or link a Job, then run the check",
+
   "atsCheck.score.label": "ATS reference score",
+  "atsCheck.score.noJd": "No JD provided — cannot compute a reference score",
+  "atsCheck.subscore.needsJd": "JD required",
   "atsCheck.coverage": "Keyword coverage {percent}%",
+  "atsCheck.coverage.none": "No comparable keywords found",
   "atsCheck.keywords.matched": "Matched keywords:",
   "atsCheck.keywords.missing": "Missing keywords:",
   "atsCheck.empty": "No obvious issues found",

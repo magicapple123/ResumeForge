@@ -67,7 +67,9 @@ async def preview(payload: WebFormPreviewIn, db: Session = Depends(get_db)):
         # 下沉线程池避免阻塞事件循环；db 会话按 resume_template_import 的既有
         # 模式直接作为参数传入线程池。
         # 一次取数冻结一份快照：data / 自定义标签同源（F5 契约 §2），旧补充事实已退出取数。
-        view = await run_in_threadpool(webform_service.build_webform_view, db)
+        view = await run_in_threadpool(
+            webform_service.build_webform_view, db, scope=payload.scope
+        )
         data = view.data
         custom_labels = view.custom_labels
         # 「放宽模式」是用户设置（默认关）：开着时，点选类控件若匹配到字段+值会以

@@ -215,6 +215,10 @@ def _validate_catalog(sections: tuple[SectionSpec, ...]) -> None:
 
 _validate_catalog(BUILTIN_SECTIONS)
 
+# 导入期自检已断言「目录里 private=True 的字段集合 == PRIVATE_FIELD_IDS」，所以这里直接
+# 冻结目录常量：private_field_ids() 不必每次调用都扫 106 个字段。
+_PRIVATE_FIELD_ID_SET: frozenset[str] = frozenset(PRIVATE_FIELD_IDS)
+
 
 def get_section(key: str) -> SectionSpec | None:
     return SECTION_BY_KEY.get(str(key))
@@ -236,6 +240,20 @@ def default_field_ids(section_key: str) -> tuple[str, ...]:
     """该分区默认小字段的稳定 id（顺序即展示顺序）；未知 key 返回空元组。"""
     spec = get_section(section_key)
     return tuple(field.field_id for field in spec.fields) if spec else ()
+
+
+def private_field_ids() -> frozenset[str]:
+    """默认字段里标记 ``private`` 的稳定 id 集合（只读，frozenset 便于求并集）。
+
+    私密字段（如 ``credentials.credential_number``）可以本地录入与备份，但永不进模型 /
+    网申 / 纸面；**全局搜索**也不该把它们搜出来（问题清单 7-B）。判据只从这里取——
+    调用方不得按字段名或字段后缀硬编码，否则目录一改就漂移。
+
+    自建字段恒非私密（``_custom_field`` 里 ``private=False``），所以本集合与用户自建
+    字段无关；"用户主动隐藏"是另一份判据（``field_preferences.hidden_field_ids``），
+    两者在 ``field_preferences.search_excluded_field_ids`` 里合并。
+    """
+    return _PRIVATE_FIELD_ID_SET
 
 
 def is_singleton(section_key: str) -> bool:

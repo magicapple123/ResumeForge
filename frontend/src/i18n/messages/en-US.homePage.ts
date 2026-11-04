@@ -115,8 +115,8 @@ const homePage = {
   "homePage.search.more.claim": "Fact ledger",
   /** Search area display name: materials. */
   "homePage.search.more.material": "Materials",
-  /** Search area display name: skills. */
-  "homePage.search.more.skill": "Skills",
+  /** Search area display name: entries inside My Profile. */
+  "homePage.search.more.profile": "My profile",
 } as const;
 
 export default homePage;

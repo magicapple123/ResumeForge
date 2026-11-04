@@ -15,6 +15,7 @@ import { t } from "../../i18n";
 import * as api from "./api";
 import { profileErrorMessage } from "../profile-library/errors";
 import { invalidateProjectionCache } from "../profile-library/projectionCache";
+import { setSectionJobFilter as patchSectionJobFilter } from "../profile-library/api";
 import { restoreRecentlyDeleted } from "../profile-library/trashUndo";
 import type { GroupBriefOut, GroupDeleteResult, GroupOut } from "./types";
 import type { WorkspaceOut } from "../profile-library/types";
@@ -37,6 +38,8 @@ export interface CurrentProfileGroupApi {
   ) => Promise<boolean>;
   /** 当前组内某大字段「在资料页显示」开关；写参与清单后刷新 workspace。 */
   setSectionVisible: (sectionKey: string, visible: boolean) => Promise<boolean>;
+  /** 需求 6：自建板块「参与岗位相关性筛选」；内置分区没有这个开关（服务端也会拒）。 */
+  setSectionJobFilter: (sectionKey: string, enabled: boolean) => Promise<boolean>;
   acknowledge: (noticeId: string) => Promise<void>;
 }
 
@@ -155,6 +158,23 @@ export function useCurrentProfileGroup(
     [run, workspace],
   );
 
+  /**
+   * 需求 6：自建板块是否参与岗位相关性筛选（板块级，跟随方案存在定义表上）。
+   * 已经是要改的值时不发请求；内置分区与不存在的 key 直接拒绝（服务端同样会拒）。
+   */
+  const setSectionJobFilter = useCallback(
+    (sectionKey: string, enabled: boolean) => {
+      const section = workspace?.sections.find((item) => item.key === sectionKey);
+      if (!section || section.is_builtin) return Promise.resolve(false);
+      if (section.filter_by_job === enabled) return Promise.resolve(true);
+      return run(async () => {
+        await patchSectionJobFilter(sectionKey, enabled, section.revision);
+        return true;
+      }).then((result) => result === true);
+    },
+    [run, workspace],
+  );
+
   const acknowledge = useCallback(
     async (noticeId: string): Promise<void> => {
       try {
@@ -177,6 +197,7 @@ export function useCurrentProfileGroup(
     remove,
     setMembers,
     setSectionVisible,
+    setSectionJobFilter,
     acknowledge,
   };
 }

@@ -94,9 +94,37 @@ def test_autofill_failure_is_published_as_terminal_error(monkeypatch):
     session._run_autofill(1)
 
     assert any(
-        "rf:autofill-status" in expression and '"state": "error"' in expression
+        "rf:autofill-status" in expression
+        and '"state": "error"' in expression
+        # 页面类失败带自己的稳定码，界面上可以说"刷新重试"。
+        and '"reason": "page_unreadable"' in expression
         for expression in client.expressions
     )
+
+
+def test_autofill_programming_error_is_not_disguised_as_a_page_problem(monkeypatch, caplog):
+    """签名漂移 / 属性改名这类**我们自己的**错误，不能报「请刷新页面重试」。
+
+    这次 `fill_current_page` 缺 `filtered_fields` 形参就是这么被埋掉的：TypeError 被
+    `except Exception` 接住，用户只看到一句"读取当前页面失败"，照着刷一辈子也不会好。
+    """
+    client = FakeLiveClient()
+    session = LiveSession(client, {"name": "张三"})
+
+    def broken(*_args, **_kwargs):
+        raise TypeError("fill_current_page() got an unexpected keyword argument 'filtered_fields'")
+
+    monkeypatch.setattr(live_module, "fill_current_page", broken)
+    with caplog.at_level("ERROR", logger="app.services.webform.live"):
+        session._run_autofill(1)
+
+    published = [item for item in client.expressions if "rf:autofill-status" in item]
+    assert published
+    assert '"reason": "internal_error"' in published[-1]
+    assert "内部错误" in published[-1]
+    assert "读取当前页面失败" not in published[-1]
+    # 全栈必须留痕：只留一句 warning 正是这次排查绕远路的原因。
+    assert any(record.exc_info for record in caplog.records)
 
 
 def test_autofill_uses_the_batch_data_loader(monkeypatch):

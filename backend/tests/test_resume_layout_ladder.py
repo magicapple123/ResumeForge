@@ -195,3 +195,48 @@ def test_ladder_keeps_the_users_photo_scale():
     for item in ladder:
         assert item.config["photo_scale"] == 1.5
 
+
+# ===== 最小页边距是**下界**，不是候选筛选条件（问题 17）=====
+#
+# 阶梯是累积覆盖：一旦某一档把 padding 压到用户阈值以下，后面所有档都会带着这个超限值。
+# 若把这个值当筛选条件，用户只锁了页边距，却会看到"行高/字号候选也全被排除了"。
+# 正确做法是在**生成阶梯时**就截断 padding，后面从阈值处继续收紧其它旋钮。
+
+
+def test_ladder_truncates_padding_at_the_user_minimum():
+    ladder = build_fit_ladder("classic", "standard", {}, min_padding_mm=13)
+    assert ladder
+    # 一档 13mm 就停：不会出现 12mm（用户下限 13）的档位，后续档也不会带着 12mm。
+    assert min(item.config["page_padding"] for item in ladder) == 13
+    # 关键：其它旋钮仍然有候选——不是"为了保住边距把候选整体砍掉"。
+    keys = {item.key for item in ladder}
+    assert {"section_gap", "line_height", "font_scale_adjust"} <= keys
+
+
+def test_ladder_never_inflates_padding_when_the_minimum_exceeds_current():
+    """用户下限 20mm、当前 14mm：阶梯不能为了"遵守下限"反而把边距**放大**。
+
+    放大是变松，与"只紧不松"的契约相反；这里直接跳过 padding 档，从间距开始。
+    """
+    ladder = build_fit_ladder("classic", "standard", {}, min_padding_mm=20)
+    assert ladder
+    assert all("page_padding" not in item.config for item in ladder)
+
+
+def test_ladder_default_is_unchanged_without_a_minimum():
+    """不传下限时逐字沿用旧阶梯（「自动一页」不受本次改动影响）。"""
+    omitted = [item.config for item in build_fit_ladder("classic", "standard", {})]
+    explicit = [
+        item.config for item in build_fit_ladder("classic", "standard", {}, min_padding_mm=None)
+    ]
+    assert omitted == explicit
+    assert omitted[0]["page_padding"] == 12
+
+
+def test_room_report_counts_only_rungs_above_the_user_minimum():
+    room = fit_room_report("classic", "standard", {})
+    # 下限等于当前页边距（14mm）：页边距档没有可收的，阶梯必须少一档。
+    capped = fit_room_report("classic", "standard", {}, min_padding_mm=14)
+    assert capped["has_room"] is True
+    assert capped["steps"] < room["steps"]
+

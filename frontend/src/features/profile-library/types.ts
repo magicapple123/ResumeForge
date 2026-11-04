@@ -61,6 +61,8 @@ export interface SectionOut {
   fields: FieldOut[];
   revision: number;
   deleted_at?: string | null;
+  /** 需求 6：板块是否参与岗位相关性筛选。内置分区恒 false（不可改）。 */
+  filter_by_job: boolean;
 }
 
 export interface EntryOut {

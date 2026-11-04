@@ -30,10 +30,13 @@ from ...schemas.profile_projection import (
     ConsumedProfile,
     PaperProjectionOut,
     ProjectionCandidateOut,
+    ProjectionHeaderFieldOut,
     ProjectionWarningOut,
 )
 from ...schemas.resume import ResumeContent
 from ..resume import document_io
+from ..resume.document_catalog import HEADER_FIELDS
+from ..resume.resume_labels import field_labels, normalize_language
 from . import paper_policy
 from .paper_content_builder import clean_values, is_http_url, project_content
 from .paper_limits import PhotoResolver
@@ -194,6 +197,44 @@ def _custom_field_hints(consumed: ConsumedProfile) -> dict[str, list[dict]]:
     return hints
 
 
+def header_field_options(
+    consumed: ConsumedProfile, language: str | None = None
+) -> list[ProjectionHeaderFieldOut]:
+    """6-A：制作台「添加页眉字段」的可选字段（15 个基本信息字段 + 当前值）。
+
+    值**只从资料侧取**（``consumed.section("basic_info")`` 的第一条 singleton 条目），
+    不经过 v1 ``ResumeContent``——那 5 个字段在 v1 内容里根本没有属性，走内容永远取不到。
+    三条约束：
+
+    - 分组不参与（``basic_info`` 不在参与清单里）→ 返回空表，下拉回落到目录；
+    - 隐藏字段已被 ``profile_reader`` 在消费快照里裁掉，这里天然看不到；
+    - 私密字段（``private=True``）不下发值——页眉是纸面内容，不能借这条路把私密值送出去。
+
+    照片是**资源引用**而不是可编辑文本：键保留（用户仍可加「照片」字段），值一律留空，
+    真正取图由制作台的照片裁剪器负责，避免把资源引用串当正文写进 chip。
+    """
+    section = consumed.section("basic_info")
+    if section is None:
+        return []
+    labels = field_labels(normalize_language(language))
+    values = clean_values(section.entries[0].values) if section.entries else {}
+    private_ids = {spec.field_id for spec in section.fields if spec.private}
+    rows: list[ProjectionHeaderFieldOut] = []
+    for spec in HEADER_FIELDS:
+        if spec.profile_key in private_ids:
+            continue
+        value = "" if spec.key == "photo" else values.get(spec.profile_key, "")
+        rows.append(
+            ProjectionHeaderFieldOut(
+                key=spec.key,
+                label=labels.get(spec.label_key, spec.key),
+                value=value,
+                placement=spec.placement,
+            )
+        )
+    return rows
+
+
 def build_projection(
     consumed: ConsumedProfile,
     *,
@@ -256,6 +297,8 @@ def build_projection(
         candidates=candidate_rows,
         source_layout=source_layout(consumed),
         editor_schema=editor_schema(consumed),
+        # 6-A：页眉可选字段（值来自资料，不经过 v1 内容）。
+        header_fields=header_field_options(consumed, language),
         warnings=warnings,
         snapshot_token=snapshot_token(consumed, legacy),
     )
@@ -286,6 +329,7 @@ __all__ = [
     "PhotoResolver",
     "build_projection",
     "ensure_custom_field_lines",
+    "header_field_options",
     "normalize_for_match",
     "project_carrier_text",
     "project_paper_content",

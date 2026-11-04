@@ -29,8 +29,10 @@ from .. import extra_profile, repeated_profile
 from ..fields import FIELD_SYNONYMS, FORM_FIELDS, SOURCE_EXTRA
 from .catalog import build_catalog
 from .profile_snapshot import (
+    SCOPE_GROUP,
     WebformProfileSnapshot,
     load_webform_profile_snapshot,
+    normalize_scope,
     snapshot_form_data,
 )
 
@@ -46,6 +48,12 @@ class WebformDataView:
     catalog: list[dict[str, str]]
     custom_labels: dict[str, str]
     warnings: tuple[str, ...] = ()
+    # 取数范围（group / all）。三处入口都从 view 拿，不允许各传一个。
+    scope: str = SCOPE_GROUP
+    # 被当前方案过滤掉的板块：[{"key","name"}]；空 = 没有组外内容（升级前就是这个形状）。
+    filtered_sections: tuple[dict[str, str], ...] = ()
+    # 这些板块里的清单行（跳过清单与「方案外」映射用），只在 `group` 范围下非空。
+    filtered_rows: tuple[dict[str, str], ...] = ()
 
 
 def _log_warnings(warnings: tuple[str, ...]) -> None:
@@ -71,9 +79,10 @@ def _combine_profile_and_extra_data(
     job_title: str,
     reusable_only: bool,
     snapshot: WebformProfileSnapshot | None = None,
+    scope: str = SCOPE_GROUP,
 ) -> dict[str, str]:
     """合并简历侧与网申资料；由调用方明确选择走批量（reusable）还是实时口径。"""
-    snap = snapshot or load_webform_profile_snapshot(db)
+    snap = snapshot or load_webform_profile_snapshot(db, scope=scope)
     data, warnings = _merged_data(db, snap, job_title=job_title)
     _log_warnings(warnings)
     if reusable_only:
@@ -86,13 +95,18 @@ def build_form_data(
     *,
     job_title: str = "",
     snapshot: WebformProfileSnapshot | None = None,
+    scope: str = SCOPE_GROUP,
 ) -> dict[str, str]:
     """整页批量预填使用的资料：当前组简历侧 + 网申专用项 + 网申资料（通用档）。
 
     「一次性」值（内推码、某家的申请编号）不出现在历史接口语义里，这里保持旧口径不变。
     """
     return _combine_profile_and_extra_data(
-        db, job_title=job_title, reusable_only=True, snapshot=snapshot
+        db,
+        job_title=job_title,
+        reusable_only=True,
+        snapshot=snapshot,
+        scope=scope,
     )
 
 
@@ -101,10 +115,15 @@ def build_live_form_data(
     *,
     job_title: str = "",
     snapshot: WebformProfileSnapshot | None = None,
+    scope: str = SCOPE_GROUP,
 ) -> dict[str, str]:
     """「点哪个填哪个」实时资料：与批量同源，额外允许唯一自定义标签的精确别名。"""
     return _combine_profile_and_extra_data(
-        db, job_title=job_title, reusable_only=False, snapshot=snapshot
+        db,
+        job_title=job_title,
+        reusable_only=False,
+        snapshot=snapshot,
+        scope=scope,
     )
 
 
@@ -124,12 +143,16 @@ def build_webform_view(
     job_title: str = "",
     live: bool = False,
     snapshot: WebformProfileSnapshot | None = None,
+    scope: str = SCOPE_GROUP,
 ) -> WebformDataView:
     """一次刷新只冻结一份快照，产出 data + catalog + custom_labels（三处同源）。
 
     live_routes 的初始取数与每次聚焦刷新、fill_routes 的预览都走它；不接受调用方指定组。
+    ``scope`` 在这里进**快照构造**：data / catalog / custom_labels 都从同一份快照派生，
+    所以「整页预填按全部、清单按当前组」这种裂缝在结构上不可能出现。
     """
-    snap = snapshot or load_webform_profile_snapshot(db)
+    resolved_scope = normalize_scope(scope)
+    snap = snapshot or load_webform_profile_snapshot(db, scope=resolved_scope)
     data, warnings = _merged_data(db, snap, job_title=job_title)
     _log_warnings(warnings)
     if live:
@@ -145,6 +168,9 @@ def build_webform_view(
         catalog=build_catalog(db, job_title=job_title, snapshot=snap),
         custom_labels=custom_labels,
         warnings=warnings,
+        scope=snap.scope,
+        filtered_sections=snap.filtered_sections,
+        filtered_rows=snap.filtered_catalog_rows(job_title=job_title),
     )
 
 

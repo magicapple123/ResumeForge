@@ -7,7 +7,8 @@
 * 条目头 split：左标题加粗、右侧元信息用定在版心右缘的右制表位；
 * lead / trail：equal 用无框表格（solo 行横向合并单元格），flow 用一行段落（分隔符已由
   planner 写进 segments）；
-* body：bullet 走悬挂缩进列表，paragraph 走普通段落；inline 板块用一段多 run 文本；
+* body：bullet 走悬挂缩进列表，paragraph 走普通段落；inline 板块（技能 / 语言）走
+  `docx_skill_tags` 的"一行一个标签块"（run 级底纹 / 边框，形状读模板的 `tag_*`）；
 * 分页：section.start_on_new_page 落成 Word 分页符；keep_together 交给 Word 自然分页
   （导出侧只标记 overflow、不截断内容）。
 
@@ -33,8 +34,8 @@ from .docx_document_parts import (
     plain_text,
     style_of,
 )
+from .docx_skill_tags import draw_inline_section
 from .pdf_exporter import _PX_TO_MM
-from .resume.document_html import CELL_JOIN, cell_needs_separator
 
 
 def _head_line(
@@ -326,41 +327,20 @@ def _draw_section(
             _bump_space_before(following, base * _PX_TO_MM * 0.4)
 
     if section.kind == "inline":
-        # inline 板块是**一段**多 run 文本（条目内字段用 · 连接、条目之间用 planner 的
-        # row_separator），与 HTML 的一个 div / Markdown 的一行同构。
+        # inline 板块（专业技能 / 语言能力）：**一行一个标签块**，形状由模板的 `tag_*` 决定
+        # （1-B）。此前是把所有行拼进同一个 paragraph 的一段连续文字，`tag_*` 零消费，
+        # 预览里的浅灰色块在 Word 里完全消失。实现放在 `docx_skill_tags`（两个调用方模块
+        # 都贴着 500 行预算），与 PDF 的 `pdf_exporter/skill_tags.py` 对称。
         block_start = len(doc.paragraphs)
-        node = paragraph(doc)
-        for row_index, row in enumerate(section.rows):
-            if row_index and section.row_separator:
-                add_segments(
-                    node,
-                    [Inline(text=section.row_separator, role="meta")],
-                    base=base,
-                    layout=layout,
-                    theme=theme,
-                    role_style=role_style,
-                    default_role="meta",
-                )
-            for index, cell in enumerate(row):
-                if index and cell_needs_separator(cell):
-                    add_segments(
-                        node,
-                        [Inline(text=CELL_JOIN, role="meta")],
-                        base=base,
-                        layout=layout,
-                        theme=theme,
-                        role_style=role_style,
-                        default_role="meta",
-                    )
-                add_segments(
-                    node,
-                    cell.segments,
-                    base=base,
-                    layout=layout,
-                    theme=theme,
-                    role_style=role_style,
-                    default_role="body",
-                )
+        draw_inline_section(
+            doc,
+            section,
+            base=base,
+            layout=layout,
+            theme=theme,
+            role_style=role_style,
+            accent=accent,
+        )
         if page_break:
             _mark_page_break(doc, block_start)
         if keep:

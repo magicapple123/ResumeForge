@@ -159,37 +159,66 @@ def expected_lines(content: ResumeContent | dict, *, language: str | None = None
 
 
 _LATIN_SEGMENT = re.compile(r"[A-Za-z0-9]+")
+_SPACE_RE = re.compile(r"\s")
+
+# 一个 token 与它在**原文**（未经归一化的页文本）里的字符区间：`(token, start, end)`。
+_TokenSpan = tuple[str, int, int]
+
+# ===== 偏移基准（22b，硬口径，前后端必须同一个）=====
+#
+# `start` / `end` 是**该页 `machine_text[i].text` 的 Python 码点偏移**（`end` 不含）。
+# 为什么写死成码点：Python 的 `str` 索引就是码点，本模块自然算出来的也是码点；而 JS 的
+# `String.slice` 按 UTF-16 码元走，BMP 之外的字（emoji、生僻字）两侧会差位。所以前端拿到
+# 偏移后**必须先 `Array.from(text)` 按码点切分**再按本偏移取（`machineText.sliceByHighlights`），
+# 不许直接 `text.slice(start, end)`。
+#
+# 这条口径由两侧各一条 emoji 用例钉住：`tests/test_product_text.py` 与
+# `features/resume-preflight/machineText.test.ts`。改成 UTF-16 偏移会同时红掉这两条，
+# 但**不要只改一侧**——那样前端会把高亮涂到相邻的字上，而且不会报错。
 
 
-def _sequence(text: str) -> list[str]:
-    """比较用的 token 序列：拉丁词整体、CJK **逐字**。
+def _sequence(text: str) -> list[_TokenSpan]:
+    """比较用的 token 序列：拉丁词整体、CJK **逐字**，每项带原文里的字符区间。
 
     为什么 CJK 不能整段当一个 token：PDF 会在任意字之间换行，归一化后的"连续 CJK 串"
     边界取决于排版，同一句话在两种版式下会得到不同的串（假差异）。逐字比较才与换行无关；
     缺失/乱序再按连续片段聚合，读起来仍是词。
+
+    归一化会删空白，所以 token 在归一化串里的位置**不能直接当原文偏移**用：这里一边扫
+    原文一边记"归一化后的第 i 个字来自原文的第几位"，再把区间换算回原文。前端就是拿
+    `page.text` 的这个区间去切的。
     """
-    normalized = normalize_text(text)
-    tokens: list[str] = []
+    normalized_chars: list[str] = []
+    origin: list[int] = []
+    for position, char in enumerate(text):
+        if _SPACE_RE.match(char):
+            continue
+        normalized_chars.append(char)
+        origin.append(position)
+    normalized = "".join(normalized_chars)
+    spans: list[_TokenSpan] = []
     index = 0
     while index < len(normalized):
         char = normalized[index]
         if "\u4e00" <= char <= "\u9fff":
-            tokens.append(char)
+            spans.append((char, origin[index], origin[index] + 1))
             index += 1
             continue
         match = _LATIN_SEGMENT.match(normalized, index)
         if match:
-            tokens.append(match.group())
+            # 拉丁词可能被空白切开（"Py thon" 归一化后是一个词）：区间从首字到末字，
+            # 中间的空白一起算进高亮区间，纸面上本来就是一个词。
+            spans.append((match.group(), origin[index], origin[match.end() - 1] + 1))
             index = match.end()
             continue
         index += 1
-    return tokens
+    return spans
 
 
 def compare_text_order(expected_lines: list[str], extracted: list[tuple[int, str]]) -> list[dict]:
-    """比较结构化正文与产物文本。
+    """比较结构化正文与产物文本，只返回差异列表（`{kind, token, page, expected_index}`）。
 
-    返回 `[{kind, token, page, expected_index}]`，`kind ∈ missing / out_of_order / garbled`：
+    `kind ∈ missing / out_of_order / garbled`：
 
     * `missing`：产物里找不到这段文字（真丢内容，blocker）；
     * `out_of_order`：这段文字存在但出现在已确认位置的更前面（顺序差异，verify）；
@@ -199,40 +228,65 @@ def compare_text_order(expected_lines: list[str], extracted: list[tuple[int, str
     两字词会变成两条相邻的差异，前端把它们渲染成两个紧挨着的黄块——用户看到的是
     "黄色断断续续"。现在相邻且同类的差异会合并成一段（`_merge_runs`）：
     「日更看板」是一个片段，单字缺失（他/申/请）仍是一个字的片段，照样能定位。
+
+    需要"高亮画在哪"的调用方（22b 的检查面板）用 `compare_text_order_with_highlights`；
+    本函数保持返回列表，否则 ATS 的 `_order_issue` 与现有断言都会拿到一个元组。
     """
-    expected_tokens: list[str] = []
+    return compare_text_order_with_highlights(expected_lines, extracted)[0]
+
+
+def compare_text_order_with_highlights(
+    expected_lines: list[str], extracted: list[tuple[int, str]]
+) -> tuple[list[dict], list[dict]]:
+    """同 `compare_text_order`，额外返回**产物里的高亮区间**。
+
+    区间只由 `out_of_order` 产生：`missing` 的片段在产物里根本不存在，无处可涂；
+    `garbled` 是整页抽空，也没有字可以画。`_merge_runs` 只合并"在产物里也相邻"的区间，
+    于是前端可以纯按区间切片，不必再拿子串去全页搜（子串搜索会把每一个同名字都涂上）。
+    """
+    expected_spans: list[_TokenSpan] = []
     # 每个 token 属于哪一行（`expected_lines` 的第几条）。合并片段时要求**同一行**：
     # 两行在归一化后是首尾相连的，跨行合并会拼出「激活用户日更看板」这种不存在的词。
     expected_line_of: list[int] = []
     for line_index, line in enumerate(expected_lines):
-        for token in _sequence(line):
-            expected_tokens.append(token)
+        for span in _sequence(line):
+            expected_spans.append(span)
             expected_line_of.append(line_index)
-    if not expected_tokens:
-        return []
+    if not expected_spans:
+        return [], []
+    expected_tokens = [token for token, _start, _end in expected_spans]
     expected_index: dict[str, int] = {}
     for position, token in enumerate(expected_tokens):
         expected_index.setdefault(token, position)
 
     page_of_token: dict[str, int] = {}
     extracted_tokens: list[str] = []
+    extracted_spans: list[tuple[int, int, int]] = []
     for page, text in extracted:
-        for token in _sequence(text):
+        for token, start, end in _sequence(text):
             extracted_tokens.append(token)
+            extracted_spans.append((page, start, end))
             page_of_token.setdefault(token, page)
+    # 乱序要涂的是"产物里实际出现的那一处"：取第一次出现（与 `page_of_token` 同源）。
+    first_position: dict[str, int] = {}
+    for position, token in enumerate(extracted_tokens):
+        first_position.setdefault(token, position)
 
     if not extracted_tokens and any(text for _page, text in extracted):
-        return [
-            {
-                "kind": "garbled",
-                "token": expected_tokens[0],
-                "page": None,
-                "expected_index": 0,
-            }
-        ]
+        return (
+            [
+                {
+                    "kind": "garbled",
+                    "token": expected_tokens[0],
+                    "page": None,
+                    "expected_index": 0,
+                }
+            ],
+            [],
+        )
 
     extracted_set = set(extracted_tokens)
-    raw: list[tuple[dict, int | None]] = []
+    raw: list[tuple[dict, dict | None]] = []
     pointer = 0
     for token in expected_tokens:
         if len(raw) >= _MAX_DIFFS:
@@ -245,51 +299,56 @@ def compare_text_order(expected_lines: list[str], extracted: list[tuple[int, str
         if found_at is not None:
             pointer = found_at + 1
             continue
+        common = {
+            "token": token,
+            "expected_index": expected_index[token],
+            "line": expected_line_of[expected_index[token]],
+        }
         if token in extracted_set:
+            highlight = None
+            position = first_position.get(token)
+            if position is not None:
+                page, start, end = extracted_spans[position]
+                highlight = {
+                    "page": page,
+                    "start": start,
+                    "end": end,
+                    "kind": "out_of_order",
+                }
             raw.append(
                 (
-                    {
-                        "kind": "out_of_order",
-                        "token": token,
-                        "page": page_of_token.get(token),
-                        "expected_index": expected_index[token],
-                        "line": expected_line_of[expected_index[token]],
-                    },
-                    None,
+                    {"kind": "out_of_order", "page": page_of_token.get(token), **common},
+                    highlight,
                 )
             )
         else:
-            raw.append(
-                (
-                    {
-                        "kind": "missing",
-                        "token": token,
-                        "page": None,
-                        "expected_index": expected_index[token],
-                        "line": expected_line_of[expected_index[token]],
-                    },
-                    None,
-                )
-            )
+            # 刻意不给 missing 造区间：产物里没有这几个字，任何区间都是假的。
+            raw.append(({"kind": "missing", "page": None, **common}, None))
     return _merge_runs(raw)
 
 
-def _merge_runs(raw: list[tuple[dict, int | None]]) -> list[dict]:
-    """把**相邻且同类**的差异合并成一个片段（R-25）。
+def _merge_runs(raw: list[tuple[dict, dict | None]]) -> tuple[list[dict], list[dict]]:
+    """把**相邻且同类**的差异合并成一个片段（R-25），并同步合并高亮区间。
 
-    合并条件三条，缺一不可：
+    合并条件四条，缺一不可：
     1. 同类（missing 不和 out_of_order 合并——两者的严重级别与颜色都不同）；
     2. 在**期望序列**里相邻（`expected_index` 连续）且属于**同一行**（跨行合并会拼出
        并不存在的词：`expected_lines` 归一化后是首尾相连的）；
     3. `out_of_order` 还要求落在**同一页**：跨页的两段在纸面上根本不是一处，
        合并会让用户在一页里找一个不在这一页的词。
+    4. `out_of_order` 还要求**产物里的区间相邻**（`prev.end == next.start`）：
+       缺少这一条会合出一个没有连续区间可涂的片段，前端只能整段涂或整段不涂。
+       `missing` 没有区间，不受这一条约束（它的合并只影响问题清单的措辞）。
+
     `missing` 的 page 恒为 None，天然满足第 3 条。
     """
     merged: list[dict] = []
+    highlights: list[dict] = []
     # 需要记"这一段最后一个字在期望序列里的位置"：合并后 `expected_index` 保持段首值
     # （前端用它定位），如果直接拿它 +1 去比，段最多只能长到两个字。
     last_expected: int | None = None
-    for diff, _ in raw:
+    last_highlight: dict | None = None
+    for diff, highlight in raw:
         previous = merged[-1] if merged else None
         same_kind = previous is not None and previous["kind"] == diff["kind"]
         adjacent = (
@@ -302,17 +361,38 @@ def _merge_runs(raw: list[tuple[dict, int | None]]) -> list[dict]:
         same_line = previous is not None and previous.get("line") == diff.get("line")
         # 片段长度上限：`TextOrderDiff.token` 是 `max_length=200`，超了会被 pydantic 丢掉。
         fits = previous is not None and len(previous["token"]) + len(diff["token"]) <= _MAX_FRAGMENT
-        if previous is not None and same_kind and adjacent and same_page and same_line and fits:
+        contiguous = diff["kind"] != "out_of_order" or (
+            last_highlight is not None
+            and highlight is not None
+            and last_highlight["end"] == highlight["start"]
+        )
+        if (
+            previous is not None
+            and same_kind
+            and adjacent
+            and same_page
+            and same_line
+            and fits
+            and contiguous
+        ):
             previous["token"] += diff["token"]
             last_expected = diff["expected_index"]
+            if last_highlight is not None and highlight is not None:
+                last_highlight["end"] = highlight["end"]
             continue
         merged.append(dict(diff))
         last_expected = diff["expected_index"]
-    return merged
+        if highlight is None:
+            last_highlight = None
+        else:
+            last_highlight = dict(highlight)
+            highlights.append(last_highlight)
+    return merged, highlights
 
 
 __all__ = [
     "compare_text_order",
+    "compare_text_order_with_highlights",
     "expected_lines",
     "extract_docx_text",
     "extract_pdf_text",

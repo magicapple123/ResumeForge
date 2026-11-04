@@ -220,7 +220,9 @@ def test_field_placement_catalog_lists_builtin_and_custom_fields(client):
         if field["source_field_id"] == material.json()["field_id"]
     )
     assert hidden["material_only"] is True and hidden["default_placement"] == "hidden"
-    # 页眉目录：契约名 header_fields，10 个内置页眉字段。
+    # 页眉目录：契约名 header_fields，15 个内置页眉字段（10 个生成时自动投影的槽位
+    # + 制作台可加的 5 个基本信息字段，见问题 6-A）。
     header_keys = [field["key"] for field in catalog["header_fields"]]
     assert {"name", "phone", "email", "job_intent"} <= set(header_keys)
+    assert {"target_city", "portfolio_url", "political_status"} <= set(header_keys)
     assert catalog["header"] == catalog["header_fields"]

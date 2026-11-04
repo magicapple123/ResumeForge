@@ -20,16 +20,18 @@ import AiPolishCard from "./AiPolishCard";
 import SelectionContextMenu from "./SelectionContextMenu";
 import { useActiveWritingResume } from "../resume-writing/activeResume";
 import ResumeWritingModal from "../resume-writing/ResumeWritingModal";
-import { cardAnchor, clamp, VIEWPORT_MARGIN } from "./overlayGeometry";
+import { cardAnchor } from "./overlayGeometry";
 import type { Anchor, MenuState } from "./overlayGeometry";
 import { replaceSelection } from "./replaceSelection";
 import { getSelectionTarget, type SelectionTarget } from "./selectionTarget";
 import "../../styles/aiPolish.css";
 
-/** 菜单尺寸的估算值：只用于"不要整块掉出视口"的夹取（6 项 ≈ 160×252）。 */
-const MENU_WIDTH = 160;
-/** 右键菜单的高度估算：只用于把菜单本身夹进视口。 */
-const MENU_HEIGHT = 252;
+/**
+ * antd 自己的弹层里右键（下拉菜单、二次确认、消息框）：那些地方的原生菜单（粘贴、
+ * 检查元素）归用户，别抢（问题 25）。浮层是 portal 到 body 的，只能按选择器判断。
+ */
+const ANTD_POPUP_SELECTOR =
+  ".ant-dropdown, .ant-select-dropdown, .ant-picker-dropdown, .ant-modal-confirm, .ant-message, .ant-notification, .ant-popover";
 
 /**
  * 当前打开的 antd 弹窗里，卡片应该挂到哪一层。
@@ -84,6 +86,8 @@ export default function AiPolishLayer() {
       const node = event.target;
       // 卡片自己的输入框里右键是用户在写字：放行原生菜单。
       if (node instanceof Node && cardRef.current?.contains(node)) return;
+      // antd 弹层里右键：放行（那里没有"润色这段"的上下文）。
+      if (node instanceof Element && node.closest(ANTD_POPUP_SELECTOR)) return;
 
       const selection = window.getSelection();
       const target = getSelectionTarget();
@@ -94,16 +98,9 @@ export default function AiPolishLayer() {
       if (!text.trim()) return;
 
       event.preventDefault();
-      setMenu({
-        x: clamp(event.clientX, VIEWPORT_MARGIN, window.innerWidth - MENU_WIDTH - VIEWPORT_MARGIN),
-        y: clamp(
-          event.clientY,
-          VIEWPORT_MARGIN,
-          window.innerHeight - MENU_HEIGHT - VIEWPORT_MARGIN,
-        ),
-        target,
-        text,
-      });
+      // 落位交给统一浮层（`features/context-menu`）：贴指针、下方放不下翻上、
+      // 四个角都夹进视口。这里只负责把指针位置带过去。
+      setMenu({ x: event.clientX, y: event.clientY, target, text });
     };
 
     document.addEventListener("contextmenu", onContextMenu);

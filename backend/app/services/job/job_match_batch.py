@@ -170,11 +170,13 @@ async def run_batch_match(
     inputs: list[BatchMatchInput],
     config: Any,
     *,
+    on_item_start: Callable[[BatchMatchInput], None] | None = None,
     on_item_complete: Callable[[JobMatchBatchItem], None] | None = None,
     should_cancel: Callable[[], bool] | None = None,
 ) -> BatchMatchRun:
     """逐岗位分析并保留部分成功结果；单个模型失败不吞掉整批结果。"""
     configured = _configured(config)
+    model_name = str(getattr(config, "model", "")) if configured else ""
     provider = None
     provider_error = ""
     if configured:
@@ -187,9 +189,11 @@ async def run_batch_match(
     items: list[JobMatchBatchItem] = []
     for item in inputs:
         if should_cancel is not None and should_cancel():
-            raise BatchMatchCancelled(
-                sort_batch_items(items), str(getattr(config, "model", "")) if configured else ""
-            )
+            raise BatchMatchCancelled(sort_batch_items(items), model_name)
+        # 「正在分析」必须是**当前**这一项：计数仍在完成后写（见 on_item_complete），
+        # 这个回调只更新当前岗位，所以 1/3 → 2/3 的进度不会提前跳。
+        if on_item_start is not None:
+            on_item_start(item)
         if item.existing_result is not None:
             result = finalize_match_result(item.existing_result)
             source = "existing"
@@ -234,6 +238,10 @@ async def run_batch_match(
         items.append(completed_item)
         if on_item_complete is not None:
             on_item_complete(completed_item)
+        # 模型调用**返回之后**再看一次取消：用户是在这次调用期间按的取消，结果已经
+        # 拿到了就留着，但绝不能再发起下一个岗位的请求。
+        if should_cancel is not None and should_cancel():
+            raise BatchMatchCancelled(sort_batch_items(items), model_name)
     return BatchMatchRun(
         items=sort_batch_items(items), model=str(getattr(config, "model", "")) if configured else ""
     )

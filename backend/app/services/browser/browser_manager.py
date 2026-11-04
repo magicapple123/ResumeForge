@@ -34,6 +34,7 @@ import httpx
 from ...config import DATA_DIR, DEFAULT_BROWSER_PORT
 from ...schemas.apply.base import BrowserState
 from .browser_inputs import BrowserError, validated_browser_url
+from .browser_shutdown import request_browser_close, shutdown_browser
 from .cdp_client import DEFAULT_HOST, WebsocketCdpClient
 
 logger = logging.getLogger(__name__)
@@ -394,23 +395,28 @@ class BrowserManager:
         self._started_at = None
 
     def stop(self) -> None:
-        """终止**本管理器拉起的**浏览器进程；没有拉起过就什么都不做。
+        """关闭**本管理器拉起的**浏览器进程；没有拉起过就什么都不做。
 
-        没有句柄时静默返回是**故意的**：后端重启后会丢掉句柄，而浏览器仍在运行，
-        此时这里是关不掉它的。绝不按 PID 去猜进程——那会误杀用户自己的浏览器。
-        调用方要靠 :attr:`BrowserStatus.owned` 如实告诉用户"请自己关掉那个窗口"，
-        而不是假装关成功了。
+        没有句柄时静默返回是**故意的**：后端重启后句柄就没了，而绝不按 PID 猜进程——那会
+        误杀用户自己的浏览器；调用方要靠 :attr:`BrowserStatus.owned` 让用户自己关窗口。
+        顺序是「CDP Browser.close → 等 → terminate/kill」：Windows 上 terminate() 是
+        TerminateProcess，浏览器没机会 flush Cookie，"登录后立刻关闭"就会偶发丢登录态。
+        原因与 5 秒预算见 :mod:`browser_shutdown`。
         """
-        process = self._process
-        if process is None:
+        if (process := self._process) is None:
             return
         try:
-            if process.poll() is None:
-                process.terminate()
-                try:
-                    process.wait(timeout=10)
-                except Exception:  # noqa: BLE001 - 超时后再强杀
-                    process.kill()
+            outcome = shutdown_browser(
+                process,
+                port_alive=self._probe_ready,
+                request_close=lambda: request_browser_close(
+                    client_factory=self._client_factory,
+                    host=self._host,
+                    port=self._port,
+                    http_transport=self._http_transport,
+                ),
+            )
+            logger.info("投递专用浏览器已关闭 way=%s", outcome)
         except Exception as exc:  # noqa: BLE001 - 关闭失败也要复位，不能卡住进程状态
             logger.warning("关闭投递专用浏览器时出错：%s", type(exc).__name__)
         finally:

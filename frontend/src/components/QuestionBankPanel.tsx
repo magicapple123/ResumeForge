@@ -31,6 +31,7 @@ import { useJobSearchSelect, useResumeSearchSelect } from "../hooks/remoteSearch
 import type { QuestionBankOut, QuestionBankRecord } from "../types";
 import { t } from "../i18n";
 import { useLocale } from "../i18n/i18nContext";
+import { formatServerTime } from "../utils/serverTime";
 import QuestionGroupCards from "./questionbank/QuestionGroupCards";
 import BankHistoryCard from "./questionbank/BankHistoryCard";
 
@@ -230,7 +231,7 @@ export default function QuestionBankPanel({
           showIcon
           title={t("questionBankPanel.history.viewingTitle", {
             id: record.id,
-            time: record.created_at.replace("T", " ").slice(0, 16),
+            time: formatServerTime(record.created_at),
           })}
           action={
             onCloseRecord && (

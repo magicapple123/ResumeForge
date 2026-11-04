@@ -16,6 +16,7 @@ import { getSnapshot } from "../../i18n/localeStore";
 // 只用它当"哪些内置字段有文案"的**登记表**：键就是完整的 message key，
 // 因此不必再维护一份 id → key 的映射（两份表迟早会不同步）。
 import profileFieldPack from "../../i18n/messages/zh-CN.profileField";
+import type { ProfileFieldType } from "./types";
 
 /**
  * 源语言：后端下发的字段名/分区名就是中文，中文界面直接用**后端原文**。
@@ -53,6 +54,28 @@ export function profileSectionLabel(section: {
   if (!section.is_builtin || getSnapshot().locale === SOURCE_LOCALE) return section.name;
   const key = SECTION_LABEL_KEYS[section.key];
   return key ? t(key) : section.name;
+}
+
+/**
+ * 仅凭板块 key 取内置板块展示名（搜索命中等拿不到 `SectionOut` 的场景）。
+ *
+ * 自建板块（`custom:` 前缀）与未知 key 返回 null，由调用方回落后端下发的名字。
+ */
+export function builtinSectionLabel(sectionKey: string): string | null {
+  const key = SECTION_LABEL_KEYS[sectionKey];
+  return key ? t(key) : null;
+}
+
+/**
+ * 字段类型展示名（单行 / 多行 / 日期）。
+ *
+ * 放在这里而不是某个组件里：字段行（`profileFieldRow`）与默认字段行（
+ * `ProfileFieldSettings`）都要显示类型，两边各写一份迟早会漂移。
+ */
+export function profileFieldTypeLabel(field: { field_type: ProfileFieldType }): string {
+  if (field.field_type === "multi_line") return t("profileLibrary.fieldSettings.typeMulti");
+  if (field.field_type === "date_text") return t("profileLibrary.fieldSettings.typeDate");
+  return t("profileLibrary.fieldSettings.typeSingle");
 }
 
 /** 字段展示名：内置字段按 `field_id` 查表，自建字段显示用户填的名字。 */

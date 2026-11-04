@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * 全局搜索卡：跨岗位/简历/内推/提醒/面经/台账/资料/技能的统一搜索入口。
+ * 全局搜索卡：跨岗位/简历/内推/提醒/面经/台账/资料/我的资料 的统一搜索入口。
  * （自 HomePage 拆出：搜索 state×7、searchVersion ref、onSearch、
  * MORE_ORDER/MORE_HIT_META 随唯一消费者下沉。）
  */
@@ -8,9 +8,9 @@ import {
   AuditOutlined,
   CalendarOutlined,
   InboxOutlined,
+  ProfileOutlined,
   SolutionOutlined,
   TeamOutlined,
-  ToolOutlined,
 } from "@ant-design/icons";
 import { Alert, Card, Empty, Input, Listy, Space, Tag, Typography } from "antd";
 import { ListyItem } from "../../components/common/ListyItem";
@@ -30,7 +30,7 @@ const MORE_ORDER: SearchHitType[] = [
   "experience",
   "claim",
   "material",
-  "skill",
+  "profile",
 ];
 
 const MORE_HIT_META: Record<SearchHitType, { icon: ReactNode; labelKey: MessageKey }> = {
@@ -39,7 +39,7 @@ const MORE_HIT_META: Record<SearchHitType, { icon: ReactNode; labelKey: MessageK
   experience: { icon: <SolutionOutlined />, labelKey: "homePage.search.more.experience" },
   claim: { icon: <AuditOutlined />, labelKey: "homePage.search.more.claim" },
   material: { icon: <InboxOutlined />, labelKey: "homePage.search.more.material" },
-  skill: { icon: <ToolOutlined />, labelKey: "homePage.search.more.skill" },
+  profile: { icon: <ProfileOutlined />, labelKey: "homePage.search.more.profile" },
 };
 
 export function SearchCard() {

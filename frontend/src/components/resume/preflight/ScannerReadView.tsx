@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * D11「机器读到的正文」视图：逐页展示导出产物里**实际能读到的文字**，并把
- * `order_diffs` 点名的 token 高亮出来（缺失 / 顺序不同 / 乱码）。
+ * D11「机器读到的正文」视图：逐页展示导出产物里**实际能读到的文字**，并把后端给出的
+ * 高亮区间（`order_highlights`，22b）标出来；差异本身仍由图例（`order_diffs`）说明。
  *
  * 读取口径以产物为准（后端 `product_text`），前端不做第二次抽取、不重新排序：
  * 这个视图存在的意义就是"让用户看到 ATS 会读成什么样"，任何前端加工都会失真。
+ * 高亮也只按后端给的字符区间切，**不拿 token 去全页搜**——那会把每一个同名字都涂上。
  */
 import { CopyOutlined } from "@ant-design/icons";
 import { App, Button, Space, Tag, Typography } from "antd";
@@ -14,13 +15,13 @@ import { t } from "../../../i18n";
 import { useLocale } from "../../../i18n/i18nContext";
 import {
   diffKindsPresent,
-  highlightSegments,
-  tokensFromOrderDiffs,
+  sliceByHighlights,
 } from "../../../features/resume-preflight/machineText";
 import type {
   MachineTextPage,
   OrderDiff,
   OrderDiffKind,
+  TextOrderHighlight,
 } from "../../../features/resume-preflight/types";
 import { copyText } from "../../../utils/clipboard";
 
@@ -39,17 +40,20 @@ const KIND_STYLE: Record<OrderDiffKind, { backgroundColor: string; color: string
 
 interface Props {
   pages?: MachineTextPage[] | null;
+  /** 差异列表：只用于图例与"与结构化内容一致"的判定，不再参与涂色。 */
   diffs?: OrderDiff[] | null;
+  /** 22b：产物正文里该涂色的字符区间（缺省/老响应 = 不涂色，不报错）。 */
+  highlights?: TextOrderHighlight[] | null;
 }
 
-export default function ScannerReadView({ pages = [], diffs = [] }: Props) {
+export default function ScannerReadView({ pages = [], diffs = [], highlights = [] }: Props) {
   useLocale();
   const { message } = App.useApp();
   const usablePages = (pages ?? []).filter((page) => page.text.trim().length > 0);
   if (usablePages.length === 0) {
     return <EmptyState inline description={t("preflight.scanner.empty")} />;
   }
-  const tokens = tokensFromOrderDiffs(diffs);
+  // 图例只看"哪些差异类型出现过"：missing / out_of_order 都照旧列出来（计数在问题清单里）。
   const kinds = diffKindsPresent(diffs);
   const plainText = usablePages.map((page) => page.text).join("\n\n");
 
@@ -91,28 +95,31 @@ export default function ScannerReadView({ pages = [], diffs = [] }: Props) {
           borderRadius: "var(--rf-radius-control)",
         }}
       >
-        {usablePages.map((page) => (
-          <section key={page.page} style={{ marginBottom: 10 }}>
-            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-              {t("preflight.scanner.page", { page: page.page })}
-            </Typography.Text>
-            <Typography.Paragraph style={{ marginBottom: 0, whiteSpace: "pre-wrap" }}>
-              {highlightSegments(page.text, tokens).map((segment, index) =>
-                segment.kind === "normal" ? (
-                  <span key={index}>{segment.text}</span>
-                ) : (
-                  <span
-                    key={index}
-                    data-proview-diff={segment.kind}
-                    style={KIND_STYLE[segment.kind]}
-                  >
-                    {segment.text}
-                  </span>
-                ),
-              )}
-            </Typography.Paragraph>
-          </section>
-        ))}
+        {usablePages.map((page) => {
+          const pageRanges = (highlights ?? []).filter((range) => range.page === page.page);
+          return (
+            <section key={page.page} style={{ marginBottom: 10 }}>
+              <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                {t("preflight.scanner.page", { page: page.page })}
+              </Typography.Text>
+              <Typography.Paragraph style={{ marginBottom: 0, whiteSpace: "pre-wrap" }}>
+                {sliceByHighlights(page.text, pageRanges).map((segment, index) =>
+                  segment.kind === "normal" ? (
+                    <span key={index}>{segment.text}</span>
+                  ) : (
+                    <span
+                      key={index}
+                      data-proview-diff={segment.kind}
+                      style={KIND_STYLE[segment.kind]}
+                    >
+                      {segment.text}
+                    </span>
+                  ),
+                )}
+              </Typography.Paragraph>
+            </section>
+          );
+        })}
       </div>
       <Typography.Text type="secondary" style={{ fontSize: 12 }}>
         {t("preflight.scanner.hint")}

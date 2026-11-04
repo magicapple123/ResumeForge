@@ -3,7 +3,7 @@
  * 全站搜索（R6）：页头右上角的放大镜 + ⌘/Ctrl+K，在**任何页面**都能搜。
  *
  * 此前搜索只存在于首页那张卡片里：人在简历页想找一条面经，得先回首页。
- * 这里复用既有 `GET /api/search`（七个数据域，FTS5），只做一个弹层，不另造检索逻辑。
+ * 这里复用既有 `GET /api/search`（扩展数据域 + 岗位/简历），只做一个弹层，不另造检索逻辑。
  *
  * 交互上只有四条规矩：输入 250ms 防抖（连打不连发请求）、结果按"岗位 / 简历 / 其它"
  * 分组、点一条（或用 ↑↓ 选中后回车）就跳转并关掉浮层、Esc 关闭。空输入不请求——
@@ -23,8 +23,9 @@ import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent }
 import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import { searchAll } from "../api/search";
+import { builtinSectionLabel } from "../features/profile-library/profileLabels";
 import { useShortcut } from "../features/shortcuts/useShortcutKeymap";
-import type { SearchHitType, SearchResult } from "../types";
+import type { SearchHit, SearchHitType, SearchResult } from "../types";
 
 const DEBOUNCE_MS = 250;
 
@@ -38,12 +39,21 @@ const HIT_TYPE_KEYS: Record<SearchHitType, MessageKey> = {
   experience: "globalSearch.type.experience",
   claim: "globalSearch.type.claim",
   material: "globalSearch.type.material",
-  skill: "globalSearch.type.skill",
+  profile: "globalSearch.type.profile",
 };
 
 function hitTypeLabel(type: SearchHitType): string {
   const key = HIT_TYPE_KEYS[type];
   return key ? t(key) : type;
+}
+
+/**
+ * 命中的板块名：「我的资料」的内置板块按 `section_key` 取语言包（后端刻意不下发
+ * 中文名，避免同一板块名两份翻译）；自建板块后端把用户起的名字放在 `subtitle`。
+ */
+function hitSubtitle(hit: SearchHit): string {
+  if (hit.type !== "profile" || !hit.section_key) return hit.subtitle;
+  return builtinSectionLabel(hit.section_key) ?? hit.subtitle;
 }
 
 interface Props {
@@ -345,7 +355,9 @@ export default function GlobalSearch({ showTrigger = true }: Props) {
                               <Tag>{hitTypeLabel(hit.type)}</Tag>
                               {hit.title}
                             </span>
-                            <Typography.Text type="secondary">{hit.subtitle}</Typography.Text>
+                            <Typography.Text type="secondary">
+                              {hitSubtitle(hit)}
+                            </Typography.Text>
                           </button>
                         ))}
                       </div>

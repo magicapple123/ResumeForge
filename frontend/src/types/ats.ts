@@ -28,18 +28,24 @@ export interface AtsCheckResult {
   issues: AtsIssue[];
   matched_keywords: string[];
   missing_keywords: string[];
-  /** 0~100 的粗略估计分，仅作参考。 */
-  score: number;
+  /**
+   * 0~100 的粗略估计分，仅作参考。
+   *
+   * `null` = 没有 JD（或 JD 抽不出目标词）：关键词分项不参与计分，总分算不出来。
+   * 这种情况必须显示「—」，不能用 0 分冒充"未检测"。
+   */
+  score?: number | null;
   /** 免责声明，必须展示给用户。 */
   disclaimer: string;
   summary: Record<string, number>;
   /**
-   * 三个分项的分数（键与 issue 类别一致：format / keyword / position）。
+   * 分项的分数（键与 issue 类别一致：format / keyword / position）。
    * 三项加权（0.4/0.4/0.2）后才等于总分，别把它们直接相加。
+   * 没有 JD 时**不含 `keyword` 键**——这一项没有分母，不参与计分。
    */
   subscores?: Record<string, number>;
-  /** 关键词覆盖率（0~1）。 */
-  coverage_ratio?: number;
+  /** 关键词覆盖率（0~1）；`null`/缺省 = 没有可比对的目标词（需要 JD）。 */
+  coverage_ratio?: number | null;
   /** 每个目标词的命中情况；有值时前端按次数排序展示。 */
   keyword_hits?: AtsKeywordHit[];
 }

@@ -146,6 +146,13 @@ def test_product_layer_extracts_machine_text_and_keeps_hidden_out(client):
     codes = {issue["code"] for issue in payload["issues"]}
     assert "product_hidden_leak" not in codes
     assert payload["font_coverage"] is not None
+    # 22b：高亮区间随响应下发（可以是空——顺序差异取决于模板），但每一条都必须落在
+    # **下发的那一页文本**里，且按码点切出来是真实文字。
+    assert "order_highlights" in payload
+    page_texts = {page["page"]: page["text"] for page in payload["machine_text"]}
+    for highlight in payload["order_highlights"]:
+        assert highlight["kind"] == "out_of_order"
+        assert page_texts[highlight["page"]][highlight["start"] : highlight["end"]].strip()
 
 
 def test_ats_severity_mapping_uses_verify_not_blocker(client):

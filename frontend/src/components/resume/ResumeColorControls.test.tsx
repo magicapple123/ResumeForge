@@ -200,9 +200,31 @@ describe("ResumeColorControls · 写入语义", () => {
   it("配置里存着非法颜色（手工请求写坏的）时按「没设过」处理", () => {
     renderGroup({ layout: { ...BASE, format_config: { accent: "red" } } });
 
-    // 读数是占位符而不是 `red`：非法值不进入探针，也不当成用户的选择。
-    expect(screen.getAllByText(t("workbench.color.followTemplate")).length).toBeGreaterThan(0);
+    const accentRow = document.querySelectorAll<HTMLElement>(".resume-wb-color-row")[0];
+    // 读数是**空的**而不是 `red`：非法值不进入探针，也不当成用户的选择。
+    // 2026-11 问题 23 起读数格也不再回落成「随模板」——那句话只由来源胶囊说一次。
+    expect(accentRow.querySelector(".resume-measure-value")?.textContent).toBe("");
+    expect(accentRow.querySelector(".resume-measure-source")?.textContent).toBe(
+      t("resume.measure.hintTemplate"),
+    );
     expect(firstRowSwatches()[0]).toHaveAttribute("aria-pressed", "false");
+  });
+
+  it("每行只有一个「随模板」：读数格不再重复来源胶囊的状态词（问题 23）", () => {
+    renderGroup();
+
+    const rows = [...document.querySelectorAll<HTMLElement>(".resume-wb-color-row")];
+    expect(rows).toHaveLength(4);
+    for (const row of rows) {
+      // 读数格：无覆盖时为空（有覆盖时才是色值）。
+      expect(row.querySelector(".resume-measure-value")?.textContent).toBe("");
+      // 整行里「随模板」只出现一次，且就在来源胶囊里。
+      const hits = (row.textContent ?? "").split(t("resume.measure.hintTemplate")).length - 1;
+      expect(hits).toBe(1);
+      expect(row.querySelector(".resume-measure-source")?.textContent).toBe(
+        t("resume.measure.hintTemplate"),
+      );
+    }
   });
 
   it("四个颜色键各自一行，标签优先取目录 `format_fields`", () => {

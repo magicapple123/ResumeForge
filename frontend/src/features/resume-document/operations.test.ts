@@ -6,6 +6,7 @@ import {
   fieldItem,
   listItem,
   makeDocument,
+  section,
   textItem,
 } from "./documentFixtures";
 import {
@@ -192,6 +193,70 @@ describe("moveItem / setPlacement / reorderItems", () => {
     ).toEqual(["ob_item0001", "ob_item0002"]);
     expect(reorderItems(document, "education.ob_entry001.ob_item0001", -1)).toBe(document);
     expect(reorderItems(document, "education.ob_entry001.ob_item0003", 1)).toBe(document);
+  });
+
+  it("正文块（text）放行同组换序，跨位置仍拒绝（问题 12）", () => {
+    // body 组：[ob_text0001, ob_text0002]——两条正文块互不换位置、只换顺序。
+    const document = makeDocument({
+      sections: [
+        section({
+          entries: [
+            entry({
+              id: "ob_entry001",
+              items: [
+                textItem({ id: "ob_text0001", text: "First bullet" }),
+                textItem({ id: "ob_text0002", text: "Second bullet" }),
+              ],
+            }),
+          ],
+        }),
+      ],
+    });
+    const moved = moveItem(document, "education.ob_entry001.ob_text0002", { toIndex: 0 });
+    expect(moved).not.toBe(document);
+    expect(moved.sections[0].entries[0].items.map((item) => item.id)).toEqual([
+      "ob_text0002",
+      "ob_text0001",
+    ]);
+    // 原文档不被就地修改（不可变契约）。
+    expect(document.sections[0].entries[0].items[0].id).toBe("ob_text0001");
+    // 键盘等价物同样放行。
+    const up = reorderItems(moved, "education.ob_entry001.ob_text0001", -1);
+    expect(up.sections[0].entries[0].items.map((item) => item.id)).toEqual([
+      "ob_text0001",
+      "ob_text0002",
+    ]);
+    // 换位置仍然拒绝：正文块没有可选位置（这条与 `canPlaceItem(text, "body") === false` 一致）。
+    expect(moveItem(document, "education.ob_entry001.ob_text0001", { placement: "lead" })).toBe(
+      document,
+    );
+    expect(moveItem(document, "education.ob_entry001.ob_text0001", { placement: "title" })).toBe(
+      document,
+    );
+    expect(canPlaceItem(textItem(), "body")).toBe(false);
+  });
+
+  it("隐藏态的正文块可以拖回正文区（问题 12）", () => {
+    const document = makeDocument({
+      sections: [
+        section({
+          entries: [
+            entry({
+              id: "ob_entry001",
+              items: [
+                textItem({ id: "ob_text0001", text: "Visible bullet" }),
+                textItem({ id: "ob_text0002", text: "Hidden bullet", hidden: true }),
+              ],
+            }),
+          ],
+        }),
+      ],
+    });
+    const restored = moveItem(document, "education.ob_entry001.ob_text0002", { placement: "body" });
+    const items = restored.sections[0].entries[0].items;
+    expect(items.find((item) => item.id === "ob_text0002")).toMatchObject({ hidden: false });
+    // 落到 body 组末尾：可见正文仍是第一条。
+    expect(items.map((item) => item.id)).toEqual(["ob_text0001", "ob_text0002"]);
   });
 });
 

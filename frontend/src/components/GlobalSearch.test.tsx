@@ -36,6 +36,7 @@ function renderSearch() {
         <Routes>
           <Route path="*" element={<div>当前页面</div>} />
           <Route path="/jobs" element={<div>岗位页已打开</div>} />
+          <Route path="/profile" element={<div>资料页已打开</div>} />
         </Routes>
       </AntdApp>
     </MemoryRouter>,
@@ -98,6 +99,35 @@ describe("GlobalSearch", () => {
     fireEvent.change(screen.getByLabelText("搜索关键词"), { target: { value: "不存在" } });
 
     expect(await screen.findByText("没有匹配的内容")).toBeInTheDocument();
+  });
+
+  it("我的资料命中：标签走语言包、板块名按 section_key 翻译、点击进深链", async () => {
+    apiMocks.searchAll.mockResolvedValue({
+      jobs: [],
+      resumes: [],
+      more: [
+        {
+          type: "profile",
+          id: 11,
+          title: "Python",
+          subtitle: "",
+          path: "/profile?section=skills&entry=entry-1",
+          section_key: "skills",
+        },
+      ],
+    });
+    renderSearch();
+    fireEvent.click(screen.getByRole("button", { name: "全站搜索" }));
+    fireEvent.change(screen.getByLabelText("搜索关键词"), { target: { value: "Python" } });
+
+    // 数据域标签是「我的资料」，不是旧的「技能」。
+    await waitFor(() => expect(document.body.textContent).toContain("我的资料"));
+    // 内置板块名由 section_key 走语言包，而不是后端拼好的中文。
+    expect(document.body.textContent).toContain("专业技能");
+
+    fireEvent.click(screen.getByText("Python"));
+
+    await waitFor(() => expect(document.body.textContent).toContain("资料页已打开"));
   });
 
   /** 结果项：`data-hit-index` 是跨分组扁平化后的下标，`aria-selected` 标记当前高亮。 */

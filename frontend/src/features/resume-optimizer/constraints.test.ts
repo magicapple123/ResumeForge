@@ -5,6 +5,7 @@ import type { ResumeFitCandidate } from "../../types/resumeLayout";
 import type { LayoutMeasure } from "../../utils/resumeLayoutMeasure";
 import {
   changesBetween,
+  defaultTargetPages,
   evaluateCandidate,
   filterCandidates,
   fitsAlready,
@@ -14,6 +15,7 @@ import {
   overflowForTarget,
   pickCandidateSamples,
   readabilityImpact,
+  targetOptionsFor,
   toCandidateView,
 } from "./constraints";
 import type { OptimizerConstraints, OptimizerCurrentValues } from "./types";
@@ -80,13 +82,26 @@ describe("约束过滤", () => {
     expect(result.rejectedByFontLock).toBe(1);
   });
 
-  it("最小页边距：低于下限的候选被排除并计数", () => {
+  it("最小页边距：只排掉把页边距压到阈值以下的那一档，后续档不再连带", () => {
+    // 阶梯是累积覆盖：第一档把 padding 从 14 压到 12（< 13）→ 只拒这一档；
+    // 「区块间距 / 行高 / 字号」这三档本身没有再压页边距，不该被一起排掉。
     const result = filterCandidates(LADDER, CURRENT, { ...CONSTRAINTS, minMarginMm: 13 });
-    expect(result.views).toEqual([]);
-    expect(result.rejectedByMargin).toBe(4);
+    expect(result.views.map((view) => view.key)).toEqual(["gap", "line", "font"]);
+    expect(result.rejectedByMargin).toBe(1);
   });
 
-  it("保持条目完整不过滤候选（阶梯本来就不动结构）", () => {
+  it("最小页边距 20mm：仍能拿到只改行高 / 字号的候选（问题 17）", () => {
+    const result = filterCandidates(LADDER, CURRENT, { ...CONSTRAINTS, minMarginMm: 20 });
+    const keys = result.views.map((view) => view.key);
+    expect(keys).toContain("line");
+    expect(keys).toContain("font");
+    // 每档都**新**压一次页边距时才会逐个被拒（见下一个用例），这里只有第一档算"新压"。
+    expect(result.rejectedByMargin).toBe(1);
+  });
+
+  it("保持条目完整对参数候选无差别（它约束的是内容候选）", () => {
+    // 这一层阶梯只动 padding / 间距 / 行高 / 字号，本来就不动条目结构——两件事要分开断言：
+    // 「参数候选无差别」在这里，「内容候选有差别」在 contentCandidates.test.ts。
     const on = filterCandidates(LADDER, CURRENT, { ...CONSTRAINTS, keepEntriesWhole: true });
     const off = filterCandidates(LADDER, CURRENT, { ...CONSTRAINTS, keepEntriesWhole: false });
     expect(on.views.map((view) => view.key)).toEqual(off.views.map((view) => view.key));
@@ -113,6 +128,24 @@ describe("取样", () => {
 
   it("空列表返回空", () => {
     expect(pickCandidateSamples([])).toEqual([]);
+  });
+});
+
+describe("收敛目标 = 用户选的篇幅", () => {
+  it("默认目标取 page_limit，不再是写死的 1 页", () => {
+    expect(defaultTargetPages(1)).toBe(1);
+    expect(defaultTargetPages(2)).toBe(2);
+    expect(defaultTargetPages(3)).toBe(3);
+    // 0 = 不限篇幅：没有收敛目标，调用方据此跳过版式收敛。
+    expect(defaultTargetPages(0)).toBe(1);
+    expect(defaultTargetPages(undefined)).toBe(1);
+  });
+
+  it("选项包含用户真正选的那一档（3 页 / 长 CV）", () => {
+    expect(targetOptionsFor(1)).toEqual([1, 2]);
+    expect(targetOptionsFor(2)).toEqual([1, 2]);
+    expect(targetOptionsFor(3)).toEqual([1, 2, 3]);
+    expect(targetOptionsFor(10)).toEqual([1, 2, 10]);
   });
 });
 
@@ -160,7 +193,13 @@ describe("不可行原因", () => {
     expect(
       noFeasibleReason({ hasBefore: true, ladderLength: 0, filter: filterOk, measured: [] }),
     ).toBe("no_ladder");
-    const locked = filterCandidates(LADDER, CURRENT, { ...CONSTRAINTS, minMarginMm: 20 });
+    const locked = filterCandidates(
+      // 每档都**新**压一次页边距（10 → 8），阈值 12 → 两档都被拒 → 真的排空了。
+      [candidate("p10", { page_padding: 10 }), candidate("p8", { page_padding: 8 })],
+      CURRENT,
+      { ...CONSTRAINTS, minMarginMm: 12 },
+    );
+    expect(locked.views).toEqual([]);
     expect(
       noFeasibleReason({ hasBefore: true, ladderLength: 4, filter: locked, measured: [] }),
     ).toBe("locked_out");

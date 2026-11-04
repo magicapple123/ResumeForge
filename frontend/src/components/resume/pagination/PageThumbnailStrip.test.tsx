@@ -44,6 +44,22 @@ const OVERFLOW = parsePaginationReport({
   snapshot: { content_sha256: "a".repeat(64), render_config_sha256: "b".repeat(64) },
 });
 
+/**
+ * 「不限篇幅」：后端回 `page_limit=10` 是**渲染保护上限**，语义在 `page_limit_is_unlimited`。
+ * 解析层把 `pageLimit` 映射成 null，缩略图才能说「实际 3 页」。
+ */
+const UNLIMITED = parsePaginationReport({
+  pages: 3,
+  pages_needed: 3,
+  overflow: false,
+  page_limit: 10,
+  page_limit_is_unlimited: true,
+  truncated_at: null,
+  manual_breaks: [],
+  warnings: [],
+  snapshot: { content_sha256: "a".repeat(64), render_config_sha256: "b".repeat(64) },
+});
+
 function renderStrip(report?: ReturnType<typeof parsePaginationReport>) {
   return render(
     <AntdApp>
@@ -137,5 +153,19 @@ describe("PageThumbnailStrip", () => {
     expect(document.querySelector(".resume-page-thumbnails-hint")?.textContent).toContain(
       t("pagination.thumbnails.empty"),
     );
+  });
+
+  it("「不限篇幅」说实际页数，不说上限 10 页（缺陷 B）", () => {
+    renderStrip(UNLIMITED);
+    expect(screen.getAllByRole("listitem")).toHaveLength(3);
+    // 正确文案：没有上限，只说实际几页。
+    expect(
+      screen.getByText(t("pagination.thumbnails.summaryNoLimit", { pages: 3 })),
+    ).toBeInTheDocument();
+    // 反例：把渲染保护上限当成用户上限会出现的两句文案，这里一个都不许有。
+    expect(
+      screen.queryByText(t("pagination.thumbnails.summary", { pages: 3, limit: 10 })),
+    ).toBeNull();
+    expect(screen.queryByText(t("pagination.thumbnails.limitReached", { limit: 10 }))).toBeNull();
   });
 });

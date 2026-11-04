@@ -108,8 +108,13 @@
   --rf-diff-removed-border: #ffccc7;
   --rf-diff-removed-text: #a8071a;
   /* A4 纸面：**两种主题下都是白纸**。导出与打印看到的就是屏幕上这张纸，
-     纸不跟着外壳变暗——所以它只能是常量，不是 --rf-surface。 */
+     纸不跟着外壳变暗——所以它只能是常量，不是 --rf-surface。
+     模板画廊与结构示例用它，这两处也不跟随主题（问题 19 的范围之外）。 */
   --rf-paper: #ffffff;
+  /* 草稿画布（预览 iframe）的纸面容器底色：浅色与 `--rf-paper` 同值，深色下变黑——
+     草稿纸在深色下**整体反色显示**（`resume-canvas.css` 的 `.resume-iframe.is-dark-paper`）。
+     它与 `--rf-paper` 分开住：后者仍表示"导出与打印看到的那张纸"，导出链路只认它。 */
+  --rf-preview-paper: #ffffff;
   --rf-space-1: 4px;
   --rf-space-2: 8px;
   --rf-space-3: 16px;

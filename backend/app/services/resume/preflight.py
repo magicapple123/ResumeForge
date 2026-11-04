@@ -30,6 +30,7 @@ from ...schemas.preflight import (
     PreflightRequestLayer,
     PreflightSnapshot,
     TextOrderDiff,
+    TextOrderHighlight,
 )
 from ...schemas.resume import ResumeContent
 from . import document_io
@@ -94,6 +95,7 @@ def run_preflight(
     font_coverage: FontCoverageOut | None = None
     machine_text: list[MachineTextPage] = []
     order_diffs: list[TextOrderDiff] = []
+    order_highlights: list[TextOrderHighlight] = []
     layers_run: list[PreflightRequestLayer] = []
 
     if "content" in layers:
@@ -137,7 +139,7 @@ def run_preflight(
         layers_run.append("layout")
 
     if "product" in layers:
-        product_list, raw_machine_text, raw_order_diffs = product_issues(
+        product_list, raw_machine_text, raw_order_diffs, raw_order_highlights = product_issues(
             analyzed_content,
             template=template,
             page_limit=page_limit,
@@ -151,6 +153,7 @@ def run_preflight(
         issues.extend(product_list)
         machine_text = cast("list[MachineTextPage]", raw_machine_text)
         order_diffs = cast("list[TextOrderDiff]", raw_order_diffs)
+        order_highlights = cast("list[TextOrderHighlight]", raw_order_highlights)
         layers_run.append("product")
 
     finalized = _finalize(issues)
@@ -172,6 +175,7 @@ def run_preflight(
         machine_text=machine_text,
         font_coverage=font_coverage,
         order_diffs=order_diffs,
+        order_highlights=order_highlights,
     )
 
 

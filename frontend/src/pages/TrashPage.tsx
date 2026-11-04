@@ -27,6 +27,7 @@ import { useApi } from "../hooks/useApi";
 import type { TrashBatchItem, TrashItem } from "../types";
 import { t } from "../i18n";
 import { useLocale } from "../i18n/i18nContext";
+import { formatServerTime } from "../utils/serverTime";
 
 const ALL = "__all__";
 
@@ -84,10 +85,10 @@ function ContextMenuRow({
   );
 }
 
-/** 把后端的 ISO 时间显示成"到分钟"的本地时间。 */
+/** 把后端的 naive UTC 时间显示成"到分钟"的本设备时间。 */
 function deletedAtText(value: string | null): string {
   if (!value) return "—";
-  return value.replace("T", " ").slice(0, 16);
+  return formatServerTime(value);
 }
 
 export default function TrashPage() {
@@ -101,6 +102,8 @@ export default function TrashPage() {
   const { data, loading, error, reload } = useApi(
     () => getTrash(type === ALL ? {} : { type }),
     [type],
+    // 回到前台静默重拉（问题 27a）：回收站是第四个开启的列表页。
+    { refetchOnFocus: {} },
   );
 
   const labels = data?.labels ?? {};

@@ -42,10 +42,21 @@ const atsCheck = {
   /** 结果区的按钮：把问题与建议复制成可粘贴的清单。 */
   "atsCheck.action.copyImprovements": "复制改进清单",
 
+  /** 空态（还没点检测）：JD 已经在框里，指向同一行的「开始检测」。 */
+  "atsCheck.emptyHint.withJd": "JD 已就绪，点「开始检测」查看格式风险与关键词覆盖",
+  /** 空态（还没点检测）：输入框还是空的。 */
+  "atsCheck.emptyHint.withoutJd": "填入岗位 JD 或关联岗位后开始检测",
+
   /** 总分的标签。 */
   "atsCheck.score.label": "ATS 参考分",
+  /** 没有 JD 时有话直说：参考分算不出来，而不是给 0 分。 */
+  "atsCheck.score.noJd": "未提供 JD，无法给出参考分",
+  /** 关键词分项在没有 JD 时的占位：这一项不参与计分。 */
+  "atsCheck.subscore.needsJd": "需要 JD",
   /** 关键词覆盖率；{percent} 是 0~100 的整数。 */
   "atsCheck.coverage": "关键词覆盖率 {percent}%",
+  /** 没有可比对的关键词时的口径说明：不能说成 100%，只能说没识别到。 */
+  "atsCheck.coverage.none": "未识别到可比对的关键词",
   /** 已命中关键词列表的标题。 */
   "atsCheck.keywords.matched": "已命中关键词：",
   /** 未命中关键词列表的标题。 */

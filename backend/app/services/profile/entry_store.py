@@ -23,8 +23,9 @@ from ...models.profile import utcnow
 from ...models.profile_entry import ProfileEntry
 from . import value_validation, workspace_bootstrap
 from .definition_catalog import SECTION_BY_KEY, is_singleton
+from .entry_store_fields import _field_snapshot, _validated_values
 from .errors import Conflict, LimitReached, NotFound, RevisionConflict, ValidationError
-from .field_preferences import active_custom_section, custom_field_rows
+from .field_preferences import active_custom_section
 
 _MAX_ENTRIES = value_validation.MAX_ENTRIES_PER_SECTION
 _ENTRY_MISSING = "记录不存在或已删除：请刷新页面后重试"
@@ -51,60 +52,6 @@ def _require_active_section(db: Session, section_key: str) -> str:
     if key in SECTION_BY_KEY or active_custom_section(db, key) is not None:
         return key
     raise NotFound(f"板块「{key or '空'}」不存在或已删除：请刷新页面后重试")
-
-
-def _field_types(db: Session, section_key: str) -> dict[str, str]:
-    """该分区当前允许写入的字段类型：默认字段（目录）+ 活动自定义字段（DB）。"""
-    types: dict[str, str] = {}
-    spec = SECTION_BY_KEY.get(section_key)
-    if spec is not None:
-        types.update({field.field_id: field.field_type for field in spec.fields})
-    for row in custom_field_rows(db, section_key=section_key):
-        types[row.field_id] = row.field_type
-    return types
-
-
-def _validated_values(db: Session, section_key: str, values: dict[str, Any]) -> dict[str, str]:
-    try:
-        return value_validation.validate_values_with_types(
-            section_key, values, _field_types(db, section_key)
-        )
-    except value_validation.ValidationFailure as failure:
-        raise ValidationError(failure.detail, code=failure.code) from failure
-
-
-def _field_snapshot(
-    db: Session, section_key: str, previous: Any, values: dict[str, str]
-) -> list[dict[str, str]]:
-    """保存时同步历史快照：当前定义顺序在前，已删除字段沿用旧快照里的标签/类型。"""
-    ordered: list[tuple[str, str, str]] = []
-    spec = SECTION_BY_KEY.get(section_key)
-    if spec is not None:
-        ordered += [(f.field_id, f.label, f.field_type) for f in spec.fields]
-    ordered += [
-        (row.field_id, row.label, row.field_type)
-        for row in custom_field_rows(db, section_key=section_key)
-    ]
-    snapshot: list[dict[str, str]] = []
-    known: set[str] = set()
-    for field_id, label, field_type in ordered:
-        if field_id in values:
-            snapshot.append({"field_id": field_id, "label": label, "field_type": field_type})
-            known.add(field_id)
-    for item in previous if isinstance(previous, list) else []:
-        if not isinstance(item, dict):
-            continue
-        field_id = str(item.get("field_id") or "")
-        if field_id and field_id not in known and field_id in values:
-            snapshot.append(
-                {
-                    "field_id": field_id,
-                    "label": str(item.get("label") or field_id),
-                    "field_type": str(item.get("field_type") or "multi_line"),
-                }
-            )
-            known.add(field_id)
-    return snapshot
 
 
 def _active_entry(db: Session, section_key: str, entry_id: str) -> ProfileEntry | None:

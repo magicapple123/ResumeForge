@@ -90,9 +90,11 @@
 .tracker-funnel-step {
   display: grid;
   grid-template-columns: 38px minmax(0, 1fr) auto;
+  /* 第二行只有 index 与 meter：条横跨原来 percent 占的那一列，一直延伸到卡片右缘。
+     删掉百分比之后右侧空了 40px，条不延伸就会让视觉重心全压在计数上（问题 2-A）。 */
   grid-template-areas:
     "index label count"
-    "index meter percent";
+    "index meter meter";
   gap: 4px 10px;
   align-items: center;
   width: 100%;
@@ -203,13 +205,6 @@
   border-radius: inherit;
   opacity: 1;
   transition: width 0.25s ease;
-}
-
-.tracker-funnel-percent {
-  grid-area: percent;
-  color: var(--rf-text-description);
-  font-size: 11px;
-  font-variant-numeric: tabular-nums;
 }
 
 .tracker-filters {

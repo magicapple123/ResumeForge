@@ -73,6 +73,9 @@ const workbench = {
   "resume.measure.fontSizeSliderAria": "Font size (drag to adjust, arrow keys for fine adjustment)",
   "resume.measure.fontTooSmall": "Sizes below {px}px may be hard to read in print",
   "resume.measure.fontLabel": "Font",
+  "resume.measure.more": "More typography",
+  "resume.measure.moreHint": "Line spacing, page margins, font size and font",
+  "resume.measure.moreAria": "More typography settings (line spacing, page margins, font size, font)",
   "draft.diff.show": "Show differences",
   "draft.diff.hide": "Hide differences",
   "draft.diff.before": "Current",
@@ -147,6 +150,7 @@ const workbench = {
   "resume.detail.group-usage.stale-title": "Profile content or Plan definition has changed",
   "resume.detail.group-usage.stale-body":
     "Saved Resumes do not change automatically. Generate again to reflect updates in the document",
+  "resume.detail.group-usage.stale-action": "Regenerate to apply",
   "editor.credentials.name-required": "Enter a credential name",
   "editor.custom-sections.empty": "No custom Sections yet",
   "editor.custom-sections.add-entry": "Add Entry",

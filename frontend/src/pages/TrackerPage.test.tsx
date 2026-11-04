@@ -12,6 +12,7 @@
 import { fireEvent, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { t } from "../i18n";
+import { TRACK_STATUS_LABEL_KEYS } from "../i18n/enum/tracker";
 import {
   cleanupTrackerPage,
   makePage,
@@ -113,6 +114,38 @@ describe("TrackerPage", () => {
     for (const label of ["已投递", "筛选中", "测评/笔试", "面试", "Offer"]) {
       expect(screen.getAllByText(label).length).toBeGreaterThan(0);
     }
+  });
+
+  it("漏斗只画条、不印百分比：条长是相对数量的视觉辅助（2-A 裁定 B）", async () => {
+    // 五个状态是互斥快照，不是漏斗的上下级——"面试 33% > 筛选 17%"必然会出现。
+    // 所以数字一律不印，只留条；条长按"占最大那一级"归一，纯视觉。
+    const tracks = [
+      makeTrack({ id: 1, status: "applied" }),
+      makeTrack({ id: 2, status: "interview", title: "算法实习生" }),
+      makeTrack({ id: 3, status: "interview", title: "前端实习生" }),
+    ];
+    apiMocks.listTracksPage.mockResolvedValue(makePage(tracks));
+    apiMocks.listTrackStats.mockResolvedValue(makeStats(tracks));
+    renderPage();
+
+    // 漏斗出现即数据到位（用选择器等，别用中文文案定位——cjkRatchet 会数 ByText 里的中文）。
+    await waitFor(() => expect(document.querySelector(".tracker-funnel")).not.toBeNull());
+    const funnel = document.querySelector<HTMLElement>(".tracker-funnel");
+    // 页面上任何一处百分号都会被读成转化率——这正是 2-A 要消掉的东西。
+    expect(funnel?.textContent ?? "").not.toContain("%");
+    expect(document.querySelector(".tracker-funnel-percent")).toBeNull();
+
+    // 条长仍按 funnelMax 归一：已投递 1 / 面试 2 → 50% 与 100%（纯宽度，不是文案）。
+    // 顺序即 FUNNEL_STATUSES：已投递 / 筛选中 / 测评 / 面试 / Offer。
+    const bars = Array.from(document.querySelectorAll<HTMLElement>(".tracker-funnel-bar"));
+    expect(bars.map((bar) => bar.style.width)).toEqual(["50%", "0%", "0%", "100%", "0%"]);
+
+    // 无障碍：序号是 aria-hidden，可访问名仍以阶段名开头（点击筛选靠这个）。
+    // 阶段名从语言包取，不在测试里写死中文。
+    const interviewLabel = t(TRACK_STATUS_LABEL_KEYS.interview);
+    expect(
+      screen.getByRole("button", { name: new RegExp(`^${interviewLabel}`, "u") }),
+    ).toBeInTheDocument();
   });
 
   it("filters by status when a funnel step is clicked", async () => {

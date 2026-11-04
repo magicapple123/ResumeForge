@@ -103,6 +103,7 @@ $RequiredFiles = @(
     "backend/app/prompts/interview_analysis.md",
     "backend/app/prompts/interview_answer.md",
     "backend/app/prompts/interview_answer_review.md",
+    "backend/app/prompts/interview_closing.md",
     "backend/app/prompts/interview_followup.md",
     "backend/app/prompts/interview_material_image.md",
     "backend/app/prompts/interview_optimize_resume.md",

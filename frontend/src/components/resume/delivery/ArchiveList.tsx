@@ -15,6 +15,7 @@ import { t } from "../../../i18n";
 import { useLocale } from "../../../i18n/i18nContext";
 import type { ExportArtifactRecord, ExportDeliveryApi } from "../../../features/resume-delivery";
 import { formatBytes } from "../../../utils/format";
+import { formatServerTime } from "../../../utils/serverTime";
 import "./delivery.css";
 
 export interface ArchiveListProps {
@@ -106,7 +107,8 @@ export default function ArchiveList({ api, resumeId, refreshToken = 0 }: Archive
                 {t("delivery.archive.size")}: {formatBytes(artifact.size_bytes)}
               </span>
               <span className="resume-delivery-hint" title={artifact.created_at}>
-                {t("delivery.archive.created")}: {artifact.created_at.slice(0, 10)}
+                {t("delivery.archive.created")}:{" "}
+                {formatServerTime(artifact.created_at, { dateOnly: true })}
               </span>
               <Popconfirm
                 title={t("delivery.archive.deleteTitle")}

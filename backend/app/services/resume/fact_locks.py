@@ -99,6 +99,20 @@ def infer_fact_lock_kind(path: str) -> str:
     return FACT_LOCK_NUMBER
 
 
+def is_fact_bearing_field(field: str) -> bool:
+    """这个字段名是否属于事实锁覆盖的范围（机构/时间/数字/标识/署名/状态/职责/姓名）。
+
+    与 :func:`infer_fact_lock_kind` 的区别：那个有兜底值（任何字段都能猜出一个类型），
+    这里只回答"是不是事实字段"。「模型没执行这条要求」要列出**可能被事实锁挡住的字段**，
+    用兜底类型去判断会把普通正文段落也算成事实，清单就失去意义了。
+
+    传的是**字段名**（v2 的 item key，如 ``company``），不是文档路径：v2 路径的最后一段是
+    稳定 id（``fd0000001``），拿它比对字段名永远不命中。
+    """
+    leaf = (field or "").strip().lower()
+    return any(leaf in names for names, _kind in _FIELD_KIND_HINTS)
+
+
 FACT_LOCK_CONFLICT_CODE = "fact_lock_conflict"
 # 同时覆盖事实锁与 W06 正文锁；detail 用同一句话，前端只处理一种业务码。
 FACT_LOCK_CONFLICT_DETAIL = "本次修改会改动已锁定的事实或正文，已拒绝写入"

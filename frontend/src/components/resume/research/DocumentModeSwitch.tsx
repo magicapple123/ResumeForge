@@ -25,6 +25,8 @@ import {
   normalizeDocumentMode,
   type DocumentMode,
 } from "../../../features/resume-research/documentMode";
+import { UNLIMITED_PAGE_LIMIT } from "../../../types";
+import { t } from "../../../i18n";
 import { useLocale } from "../../../i18n/i18nContext";
 
 interface Props {
@@ -65,6 +67,9 @@ export default function DocumentModeSwitch({
     limits?.[target] ?? MODE_PAGE_LIMITS[target];
 
   const clampFor = (target: DocumentMode, value: number): number => {
+    // 「不限篇幅」（0）是合法取值，不是"没选"：夹成 min 就等于用户一选「不限」就被打回
+    // 1 页（与 `clampPageLimit` 的 7B 规则一致，两处同一语义）。
+    if (value === UNLIMITED_PAGE_LIMIT) return UNLIMITED_PAGE_LIMIT;
     const [min, max] = rangeFor(target);
     if (!Number.isFinite(value)) {
       return defaultLongCvPageLimit !== undefined && target === "long_cv"
@@ -76,10 +81,19 @@ export default function DocumentModeSwitch({
 
   const limitOptions = (() => {
     const [min, max] = rangeFor(current);
-    return Array.from({ length: max - min + 1 }, (_unused, index) => {
-      const value = min + index;
-      return { value, label: rt("research.mode.limitOption", { count: value }) };
-    });
+    const values = [
+      ...Array.from({ length: max - min + 1 }, (_unused, index) => min + index),
+      // 末尾的「不限」（0）：没有这一档，用户在这份控件里根本选不到「不限篇幅」。
+      UNLIMITED_PAGE_LIMIT,
+    ];
+    return values.map((value) => ({
+      value,
+      // 0 必须单独一条文案，否则会渲染成「0 页」。
+      label:
+        value === UNLIMITED_PAGE_LIMIT
+          ? t("sections.templateControls.pageLimitUnlimited")
+          : rt("research.mode.limitOption", { count: value }),
+    }));
   })();
 
   const handleMode = (value: string | number) => {

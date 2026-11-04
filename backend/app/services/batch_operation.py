@@ -100,9 +100,12 @@ def read_batch_operation_config(db: Session) -> BatchOperationConfigOut:
     )
 
 
-def _validate_template(db: Session, template: str) -> None:
-    # 允许内置模板（含已隐藏但老简历仍在用的 3 套）与用户自制模板；其余名字拒绝，
-    # 避免一条写错的参数把之后每一批都静默回落成"经典"。
+def validate_batch_template(db: Session, template: str) -> None:
+    """版式模板白名单校验：设置页保存与「本次参数」导出共用这一份。
+
+    允许内置模板（含已隐藏但老简历仍在用的 3 套）与用户自制模板；其余名字拒绝，
+    避免一条写错的参数把之后每一批都静默回落成"经典"。
+    """
     allowed = set(RESUME_TEMPLATES)
     allowed.update(str(option.get("name", "")) for option in custom_template_options(db))
     if template not in allowed:
@@ -133,7 +136,7 @@ def _save_section(
     section: BatchSection,
     config: BatchGenerationConfig | BatchExportConfig,
 ) -> BatchGenerationConfigOut | BatchExportConfigOut:
-    _validate_template(db, config.template)
+    validate_batch_template(db, config.template)
     payload = _read_payload(db)
     payload[section] = {**config.model_dump(), "updated_at": utcnow().isoformat()}
     serialized = json.dumps(payload, ensure_ascii=False)
@@ -163,4 +166,5 @@ __all__ = [
     "read_batch_operation_config",
     "save_batch_export_config",
     "save_batch_generation_config",
+    "validate_batch_template",
 ]

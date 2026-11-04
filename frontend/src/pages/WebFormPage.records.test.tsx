@@ -349,7 +349,10 @@ describe("读到的表单存在 URL 里", () => {
     renderPage(["/webform?snapshot=snap-1&ai=1"]);
 
     // 自动重放：没有点任何按钮，预览接口就被调用了。
-    await waitFor(() => expect(apiMocks.previewWebForm).toHaveBeenCalledWith("snap-1", true));
+    // 第三个参数是重放用的取数范围，未选择过时为默认的「仅当前方案」。
+    await waitFor(() =>
+      expect(apiMocks.previewWebForm).toHaveBeenCalledWith("snap-1", true, "group"),
+    );
     // 并且界面真的铺开了预览（出现"填充到页面"这一步）。
     await waitFor(() =>
       expect(screen.getByRole("button", { name: /填充到页面/ })).toBeInTheDocument(),
@@ -368,7 +371,9 @@ describe("读到的表单存在 URL 里", () => {
   it("重放时按当初那次的值决定要不要用 AI（不是看当前开关）", async () => {
     renderPage(["/webform?snapshot=snap-1&ai=0"]);
 
-    await waitFor(() => expect(apiMocks.previewWebForm).toHaveBeenCalledWith("snap-1", false));
+    await waitFor(() =>
+      expect(apiMocks.previewWebForm).toHaveBeenCalledWith("snap-1", false, "group"),
+    );
   });
 
   it("快照过期时原样转述后端那句话，并清掉参数——不是留一个空白页", async () => {

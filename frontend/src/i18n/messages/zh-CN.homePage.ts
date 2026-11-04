@@ -117,8 +117,8 @@ const homePage = {
   "homePage.search.more.claim": "事实台账",
   /** 更多结果的数据域显示名：资料。 */
   "homePage.search.more.material": "资料",
-  /** 更多结果的数据域显示名：技能。 */
-  "homePage.search.more.skill": "技能",
+  /** 更多结果的数据域显示名：我的资料（资料页的条目）。 */
+  "homePage.search.more.profile": "我的资料",
 } as const;
 
 export default homePage;

@@ -10,6 +10,7 @@
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
 from app.api import resumes as _api  # patch 锚点：调用期从包命名空间读取
@@ -23,16 +24,28 @@ from ...schemas.resume import (
     ResumeReviseRequest,
     ResumeSuggestionsOut,
 )
+from ...schemas.resume_append import (
+    AppendProfileEntriesOut,
+    AppendProfileEntriesRequest,
+)
 from ...services import trash
 from ...services.llm import usage_ledger
 from ...services.llm.base import LLMError
 from ...services.profile.ai_profile import load_ai_profile
 from ...services.resume import document_io, fact_locks
 from ...services.resume.document_identity import sanitize_document_ids
+from ...services.resume.document_revision import (
+    REVISION_NOT_APPLIED_CODE,
+    RevisionNotApplied,
+)
 from ...services.resume.document_save import (
     RevisionConflict,
     revision_conflict_response,
     save_ai_revision,
+)
+from ...services.resume.resume_profile_append import (
+    AppendError,
+    append_profile_entries,
 )
 from ...services.resume.resume_revision import revise_resume
 from ...services.resume.resume_suggestions import generate_suggestions
@@ -89,6 +102,51 @@ async def suggest_resume_edits(resume_id: int, db: Session = Depends(get_db)):
     )
 
 
+REVISION_NOT_APPLIED_DETAIL = "模型没有执行这条修改要求，正文未改动"
+
+
+def _blocked_fields(
+    db: Session, record: ResumeRecord, instruction: str, targets: list[dict]
+) -> list[dict]:
+    """把"用户点名的事实值"与"这份简历上已有的事实锁"合并成一份可展示清单。
+
+    两路合并的原因：前者说明用户想改什么（模型没说，只能从要求里认出来），后者说明
+    服务端确实锁了什么。只给其中一路，用户都会觉得"列出来的不是我提的那一项"。
+    """
+    fields = list(targets)
+    seen = {str(item.get("path") or "") for item in fields}
+    for lock in fact_locks.list_fact_locks(db, record.id):
+        if not lock.locked_value or lock.locked_value not in instruction:
+            continue
+        if lock.path in seen:
+            continue
+        seen.add(lock.path)
+        fields.append(
+            {
+                "path": lock.path,
+                "label": lock.label or lock.field,
+                "value": lock.locked_value[:200],
+                "kind": lock.lock_kind,
+            }
+        )
+    return fields
+
+
+def _not_applied_response(fields: list[dict]) -> JSONResponse:
+    """「模型没有执行」的明确响应：409 + 业务码 + 被挡住的字段。
+
+    不能回 200：正文一个字都没改却报成功，用户无法判断是"被拦了"还是"没生效"。
+    """
+    return JSONResponse(
+        status_code=409,
+        content={
+            "detail": REVISION_NOT_APPLIED_DETAIL,
+            "code": REVISION_NOT_APPLIED_CODE,
+            "blocked_fields": fields,
+        },
+    )
+
+
 @router.post("/{resume_id}/revise", response_model=ResumeOut)
 async def revise_existing_resume(
     resume_id: int, payload: ResumeReviseRequest, db: Session = Depends(get_db)
@@ -121,6 +179,12 @@ async def revise_existing_resume(
         # 这里**不**像建议接口那样先 close：修订要更新这条记录，模型返回后还要
         # 用同一个 session 落库；先关再重取反而容易拿到过期的对象状态。
         revised = await revise_resume(provider, resume, job_out, payload.instructions)
+    except RevisionNotApplied as exc:
+        # 模型回了一堆空 updates（或原值不动）——不能再当成"没什么要改的"落库并报成功。
+        logger.info("AI 修订未执行 record_id=%s fields=%s", resume_id, len(exc.targets))
+        return _not_applied_response(
+            _blocked_fields(db, record, payload.instructions, exc.targets)
+        )
     except fact_locks.FactLockError as exc:
         return fact_locks.fact_lock_conflict_response(exc.violations)
     except ValueError as exc:
@@ -196,3 +260,45 @@ async def revise_existing_resume(
     except Exception:  # noqa: BLE001 - 账本不能反向破坏保存成功的结果
         logger.warning("模型用量记录失败 record_id=%s", record.id, exc_info=True)
     return _to_resume_out(outcome.record, db)
+
+
+@router.post("/{resume_id}/append-profile-entries", response_model=AppendProfileEntriesOut)
+def append_entries_to_resume(
+    resume_id: int,
+    payload: AppendProfileEntriesRequest,
+    db: Session = Depends(get_db),
+):
+    """3-A：把覆盖度清单里点名的资料条目**确定性**补进目标分区（不调模型）。
+
+    与 ``/revise`` 的分工：修订协议只能改写**已有字段的值**，不能新增条目或分区，所以
+    "整条资料没写进简历"这一类要求必须走这里。做法见 ``resume_profile_append``：
+    按生成时同一份投影写出条目、按身份名去重、走 ``save_content`` 推进版本，再把刚补入
+    的几条从 ``coverage_notes`` 里摘掉（不清空 rationale / fact_annotations）。
+
+    同步端点：全程没有模型调用，纯本地读投影 + 一次条件写，不需要 async。
+    """
+    try:
+        outcome = append_profile_entries(
+            db,
+            record_id=resume_id,
+            section_key=payload.section_key,
+            entry_ids=payload.entry_ids,
+            expected_revision=payload.base_revision,
+        )
+    except AppendError as exc:
+        # 可解释的失败（资料已删除 / 组不匹配 / 分区不在当前组 / 结构校验失败）：
+        # 回业务码而不是 500，前端才能给出"去制作台"或"切回资料组"的具体引导。
+        logger.info(
+            "补入资料条目被拒绝 record_id=%s code=%s detail=%s", resume_id, exc.code, exc.detail
+        )
+        return JSONResponse(
+            status_code=exc.status_code,
+            content={"detail": exc.detail, "code": exc.code},
+        )
+    except RevisionConflict as exc:
+        return revision_conflict_response(exc.current_revision)
+    return AppendProfileEntriesOut(
+        resume=_to_resume_out(outcome.record, db),
+        appended=outcome.appended,
+        skipped=outcome.skipped,
+    )

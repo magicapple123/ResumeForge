@@ -55,7 +55,10 @@ export function layoutFromDetail(detail: ResumeDetail): ResumeLayout {
     // 必须带上按简历的覆盖：后面每次重渲染都从这份 layout 出发，
     // 漏了它就会出现"导出用新方案、预览用旧方案"这种最难看的不一致。
     format_config: detail.format_config ?? {},
-    page_limit: detail.page_limit || DEFAULT_RESUME_LAYOUT.page_limit,
+    // 判空必须用 `??`：`0` 是「不限篇幅」这个**语义值**，写成 `||` 会让一份"不限"的简历
+    // 一打开就被显示成 1 页（随后任何一次保存都把 0 真的写回成 1）。只有 null/undefined
+    // 才该回落到默认值。
+    page_limit: detail.page_limit ?? DEFAULT_RESUME_LAYOUT.page_limit,
     font_scale: detail.font_scale || DEFAULT_RESUME_LAYOUT.font_scale,
     language: detail.language ?? DEFAULT_RESUME_LAYOUT.language,
   };

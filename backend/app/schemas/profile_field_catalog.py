@@ -22,13 +22,20 @@ __all__ = [
 
 
 class HeaderCatalogFieldOut(BaseModel):
-    """页眉字段目录项：placement 是 header 位置（name/name_meta/subtitle/contact/photo）。"""
+    """页眉字段目录项：placement 是 header 位置（name/name_meta/subtitle/contact/photo）。
+
+    ``value`` 是**当前值的只读拷贝**（6-A · B 方案）：取自当前组 ``basic_info`` 那条
+    singleton 条目，用于「添加页眉字段」时直接把值带进新的 header item。它是拷贝不是
+    活链接——写进 HeaderItem 之后资料再改不会回写；私密字段 / 照片 / 没填的字段一律
+    空串（见 ``services/profile/header_field_values.py``）。旧前端可以完全忽略它。
+    """
 
     key: str
     label: str = ""
     placement: str = "contact"
     format: str = "text"
     source_field_id: str = ""
+    value: str = ""
 
 
 class CatalogFieldOut(BaseModel):

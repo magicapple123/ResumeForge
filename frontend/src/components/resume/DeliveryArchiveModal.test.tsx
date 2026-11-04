@@ -4,6 +4,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { expectNoUnfocusableScroller } from "../../test/a11yScrollRegion";
 import type { DeliverySummary } from "../../types";
+import { t } from "../../i18n";
 
 const apiMocks = vi.hoisted(() => ({
   listDeliveryArchive: vi.fn(),
@@ -117,14 +118,73 @@ describe("DeliveryArchiveModal 横向滚动区（a11y）", () => {
     expectNoUnfocusableScroller(document);
   });
 
-  it("有存档时保持原行为：600px 定宽 + 横向滚动，区内有「下载存档」按钮可聚焦", async () => {
+  it("有存档时保持原行为：770px 定宽 + 横向滚动，区内有「下载存档」按钮可聚焦", async () => {
     renderModal();
     // 用 role 定位等待首屏落地，不用中文文案做 ByText 断言（i18n 棘轮只降不升）。
     await screen.findByRole("button", { name: "下载存档" });
 
     const content = document.querySelector<HTMLElement>(".ant-table-content");
     expect(content?.style.overflowX).toBe("auto");
-    expect(document.querySelector<HTMLElement>(".ant-table table")?.style.width).toBe("600px");
+    expect(document.querySelector<HTMLElement>(".ant-table table")?.style.width).toBe("770px");
     expect(screen.getByRole("button", { name: "下载存档" })).toBeEnabled();
+  });
+});
+
+/**
+ * 排版（问题 17）。
+ *
+ * 三条都要守住：说明条只占一行（默认收起）、五列定宽合计 770（否则长文本重新把行高
+ * 撑回 200px）、单页不出分页器。列宽那条用 `colgroup` 的实测宽度而不是读源码，
+ * 防止以后有人删掉 `width` 又退回自动布局。
+ */
+describe("DeliveryArchiveModal 排版（问题 17）", () => {
+  async function ready() {
+    renderModal();
+    await screen.findByRole("button", { name: t("delivery.archive.download") });
+    await waitFor(() => expect(document.querySelector(".ant-table-row")).not.toBeNull());
+  }
+
+  it("说明条默认收起，点开后才渲染正文", async () => {
+    await ready();
+    const noticeBody = t("delivery.archive.noticeBody");
+    expect(screen.queryByText(noticeBody)).toBeNull();
+
+    // antd 的 Collapse 头部不是 button role，按类名点它（标题文本已经断言在上面）。
+    const header = document.querySelector<HTMLElement>(".ant-collapse-header");
+    expect(header?.textContent).toContain(t("delivery.archive.noticeTitle"));
+    fireEvent.click(header as HTMLElement);
+
+    expect(await screen.findByText(noticeBody)).toBeTruthy();
+  });
+
+  it("五列定宽合计 770，与 scroll.x 一致", async () => {
+    await ready();
+    const widths = Array.from(
+      document.querySelectorAll<HTMLTableColElement>(".ant-table colgroup col"),
+    )
+      .slice(0, 5)
+      .map((col) => col.style.width);
+    expect(widths).toEqual(["210px", "250px", "90px", "110px", "110px"]);
+    expect(document.querySelector<HTMLElement>(".ant-table table")?.style.width).toBe("770px");
+  });
+
+  it("只有 1 页时不显示分页器，多于 1 页时显示", async () => {
+    await ready();
+    expect(document.querySelector(".ant-pagination")).toBeNull();
+
+    cleanup();
+    document.body.innerHTML = "";
+    apiMocks.listDeliveryArchive.mockResolvedValue({ items: [ITEM], total: 25 });
+    await ready();
+    expect(document.querySelector(".ant-pagination")).not.toBeNull();
+  });
+
+  it("导出存档行显示「本地导出（未投递）」，不再拼两个「未记录」", async () => {
+    apiMocks.listDeliveryArchive.mockResolvedValue({
+      items: [{ ...ITEM, source: "export", company: "", job_title: "" }],
+      total: 1,
+    });
+    await ready();
+    expect(screen.getByText(t("delivery.archive.destination.exportOnly"))).toBeTruthy();
   });
 });

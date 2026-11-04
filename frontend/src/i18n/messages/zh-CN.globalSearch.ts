@@ -46,7 +46,8 @@ const globalSearch = {
   "globalSearch.type.experience": "面经",
   "globalSearch.type.claim": "事实台账",
   "globalSearch.type.material": "资料",
-  "globalSearch.type.skill": "技能",
+  /** 我的资料（profile_entry）的命中：点进去落在资料页对应板块。 */
+  "globalSearch.type.profile": "我的资料",
 } as const;
 
 export default globalSearch;

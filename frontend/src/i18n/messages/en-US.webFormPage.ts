@@ -20,6 +20,11 @@ const webFormPage = {
   "webFormPage.stagedAi.apply": "Apply",
   "webFormPage.card.pending": "This page also asks for",
   "webFormPage.card.records": "Fill records",
+  "webFormPage.scope.title": "Data range",
+  "webFormPage.scope.group": "Current plan only",
+  "webFormPage.scope.all": "All data",
+  "webFormPage.scope.hint":
+    "By default only the current plan's data is used. Switch to All data and the preview, the picker list and the autofill all read that same data.",
   "webFormPage.toast.targetOpened":
     "The target web form is open; existing pages are left untouched",
   "webFormPage.toast.browserStarted":

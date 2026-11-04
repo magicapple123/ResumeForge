@@ -10,6 +10,7 @@ import { App as AntdApp } from "antd";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { TrashSummary } from "../types";
+import { formatServerTime } from "../utils/serverTime";
 import TrashPage from "./TrashPage";
 
 const apiMocks = vi.hoisted(() => ({
@@ -92,7 +93,12 @@ describe("TrashPage", () => {
     expect(screen.getByText("资料箱材料")).toBeInTheDocument();
     expect(screen.getByText("天津云际")).toBeInTheDocument();
     // 删除时间要能看见：用户来这儿找的往往是"我前几天删的那个"。
-    expect(screen.getByText("2026-09-18 16:20")).toBeInTheDocument();
+    // 后端给的是 naive UTC，显示口径必须走 `formatServerTime`（设备时区）；
+    // 这里用同一个函数算期望值，时区语义本身由 `utils/serverTime.test.ts` 用显式
+    // timeZone 钉住（含跨日样例），本文件只守住"回收站确实接上了这个口径"。
+    const expectedDeletedAt = formatServerTime("2026-09-18T16:20:00");
+    expect(expectedDeletedAt).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/);
+    expect(screen.getByText(expectedDeletedAt)).toBeInTheDocument();
   });
 
   it("恢复不需要二次确认，一键就恢复", async () => {

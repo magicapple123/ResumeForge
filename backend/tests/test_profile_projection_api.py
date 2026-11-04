@@ -92,6 +92,36 @@ def test_projection_scope_follows_current_group(client, db_session):
     ]
 
 
+def test_projection_returns_addable_header_fields_with_profile_values(client):
+    """6-A：页眉可选字段（15 个）随投影下发，值取自资料，不靠 v1 内容的槽位。
+
+    这 5 个字段在 v1 ``ResumeContent`` 上没有属性，所以「制作台能加进页眉」只能由资料侧
+    供值——端点必须把它们一起返回，否则下拉里永远只有 10 个。
+    """
+    _create_entry(
+        client,
+        "basic_info",
+        {
+            "basic_info.name": "张三",
+            "basic_info.target_city": "上海 / 杭州",
+            "basic_info.political_status": "群众",
+        },
+    )
+    body = _projection(client)
+    rows = {row["key"]: row for row in body["header_fields"]}
+    assert len(rows) == 15
+    assert rows["target_city"] == {
+        "key": "target_city",
+        "label": "意向城市",
+        "value": "上海 / 杭州",
+        "placement": "contact",
+    }
+    assert rows["political_status"]["value"] == "群众"
+    assert rows["driver_license"]["value"] == ""
+    # 纸面本身不因为多出目录项而变化：页眉仍然只有真的填了值的那几个槽位。
+    assert header_value(body["content"], "target_city") == ""
+
+
 def test_projection_resolves_photo_resource_id_and_warns_when_unresolved(client, db_session):
     """照片资源引用：能经 profile_photos 解析则落到 content.photo，解析不了留空 + warning。"""
     profile = UserProfile()

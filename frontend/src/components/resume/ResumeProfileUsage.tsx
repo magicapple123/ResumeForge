@@ -10,7 +10,7 @@
  * 读取失败**静默降级**（返回 null，不阻断简历详情）：这条是辅助信息，不是主内容；
  * 请求在 effect 里发出，换一份简历/关弹窗后回来的旧响应会被 cancelled 标志丢弃。
  */
-import { Alert, Space, Tag, Tooltip, Typography } from "antd";
+import { Alert, Tag, Tooltip, Typography } from "antd";
 import { useEffect, useState } from "react";
 import { getResumeProfileUsage } from "../../api/resumes";
 import type { ProfileUsageFreshness, ResumeProfileUsageSnapshot } from "../../types";
@@ -63,9 +63,12 @@ export default function ResumeProfileUsage({ recordId }: Props) {
 
   if (!snapshot) return null;
   const deleted = snapshot.group_deleted;
+  // 形态（2026-11 问题 8）：这一块现在住在详情顶部的**元信息一行**里，所以根节点是
+  // 行内的 `<span>`；「资料已更新」也不再是两行的 Alert——标题与一句"需重新生成"并成
+  // 一行，完整原文（stale-body）仍可通过 Tooltip 看到（悬停与键盘聚焦都可触发）。
   return (
-    <div style={{ marginBottom: 12 }}>
-      <Space size={8} wrap>
+    <>
+      <span className="resume-profile-usage">
         <Tooltip title={fieldNamesText(snapshot)}>
           {/* tabIndex：键盘聚焦也能展开字段名（Tooltip 的键盘等价入口）。 */}
           <Typography.Text tabIndex={0} style={{ cursor: "help" }}>
@@ -82,16 +85,28 @@ export default function ResumeProfileUsage({ recordId }: Props) {
             </Tag>
           </Tooltip>
         ) : null}
-      </Space>
+      </span>
       {freshness?.changed ? (
         <Alert
-          style={{ marginTop: 8 }}
+          className="resume-profile-usage-stale"
           type="warning"
           showIcon
-          title={t("resume.detail.group-usage.stale-title")}
-          description={t("resume.detail.group-usage.stale-body")}
+          title={
+            <Tooltip
+              // 显式带上 focus：antd 的缺省 trigger 只有 hover，键盘用户就永远看不到原文。
+              trigger={["hover", "focus"]}
+              title={t("resume.detail.group-usage.stale-body")}
+            >
+              {/* 正文进 Tooltip，标题压成一行；`tabIndex` 让读屏/键盘用户也能拿到原文。 */}
+              <span tabIndex={0} style={{ cursor: "help" }}>
+                {t("resume.detail.group-usage.stale-title")}
+                {" · "}
+                {t("resume.detail.group-usage.stale-action")}
+              </span>
+            </Tooltip>
+          }
         />
       ) : null}
-    </div>
+    </>
   );
 }

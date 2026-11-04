@@ -2,10 +2,18 @@
 /**
  * 简历中心「批量导出」：一次请求换回一个 zip。
  *
- * 参数（格式 / 字号 / 页数 / 语言 / 版式）不由调用方传：服务端读「设置 → 批量操作」里
- * 保存的那一套。未配置时服务端返回 409，前端在点击前也会先拦一次（避免白等）。
+ * 参数（格式 / 字号 / 页数 / 语言 / 版式）有两种来源，**本次优先**：
+ * - 传了 `config`：按这一份导出（来自触发点的弹窗，只作用于这一批）；
+ * - 没传：服务端读「设置 → 批量操作」里保存的那一套默认值，未配置时返回 409。
  */
 import { getFilenameFromDisposition, requestRaw } from "./client";
+import type { BatchExportConfig } from "./settingsBatch";
+
+/**
+ * 一次最多导出 50 份：与后端 `batch_export_routes.MAX_BATCH_EXPORT` 同一个数值
+ * （请求体 `Field(max_length=50)` 会直接 422）。前端在弹窗里先拦，别让用户白等一次失败。
+ */
+export const MAX_BATCH_EXPORT = 50;
 
 export interface BatchExportResult {
   blob: Blob;
@@ -21,11 +29,15 @@ function readCount(value: string | null): number {
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : 0;
 }
 
-export async function batchExportResumes(resumeIds: number[]): Promise<BatchExportResult> {
+export async function batchExportResumes(
+  resumeIds: number[],
+  config?: BatchExportConfig | null,
+): Promise<BatchExportResult> {
   const response = await requestRaw("/resumes/batch-export", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ resume_ids: resumeIds }),
+    // 不传 config 时保持旧请求体逐字不变（老调用方 / 老后端都还能对上）。
+    body: JSON.stringify(config ? { resume_ids: resumeIds, config } : { resume_ids: resumeIds }),
     // 服务端逐份同步渲染，份数多时要几分钟：走导出预算，而不是默认 15s。
     budget: "export",
   });

@@ -89,9 +89,11 @@ const interviewPage = {
   "interviewPage.setup.material.sourceLabel": "Source",
   "interviewPage.setup.material.fromRecord": "Pick a record",
   "interviewPage.setup.material.fromFile": "Import a file",
-  "interviewPage.setup.material.jobFileHint": "PDF or TXT job description",
-  "interviewPage.setup.material.resumeFileHint":
-    "PNG or JPEG screenshot; the interviewer reads the text in the image",
+  // One hint for both sides (issue 6): the accepted types no longer depend on the side.
+  "interviewPage.setup.material.fileHint":
+    "Images, PDF, TXT, Word or Markdown; images go through OCR, while text files are faster and more accurate",
+  "interviewPage.setup.material.legacyDoc":
+    "Legacy .doc from Word 2003 cannot be read - save it as .docx first",
   "interviewPage.setup.material.pickFile": "Choose file",
   "interviewPage.setup.material.repickFile": "Choose another",
   "interviewPage.setup.material.parsing": "Reading the file...",
@@ -101,7 +103,7 @@ const interviewPage = {
   "interviewPage.setup.material.jobRequired":
     "Job material is required: pick a record or import a job description file",
   "interviewPage.setup.material.resumeRequired":
-    "Resume material is required: pick a record or import a screenshot",
+    "Resume material is required: pick a record or import a resume file",
   "interviewPage.setup.material.parseFailed": "This file could not be read",
   "interviewPage.setup.material.emptyFile": "This file is empty - try another one",
   "interviewPage.setup.material.tooLarge": "The file is over 10 MB and cannot be imported",
@@ -126,6 +128,17 @@ const interviewPage = {
   "interviewPage.followUp.stoppedToast": "Follow-ups stopped",
   "interviewPage.followUp.resumedToast": "Follow-ups resumed",
   "interviewPage.followUp.stateFailed": "Could not switch the follow-up state",
+
+  // ===== Decision card after the formal Q&A (req 4): ask before generating the report =====
+  "interviewPage.closing.fallback":
+    "That's all for today. I've noted your last answer and we'll follow up about next steps; feel free to ask follow-ups about it any time.",
+  "interviewPage.decision.title": "The formal Q&A is over",
+  "interviewPage.decision.hint":
+    "The report has not been generated yet. Ask a few follow-ups first, then generate it whenever you like",
+  "interviewPage.decision.continue": "Ask follow-ups",
+  "interviewPage.decision.finish": "Finish and generate report",
+  "interviewPage.decision.finishing": "Generating the report, one moment",
+  "interviewPage.decision.failed": "The report could not be generated",
 
   // Display names for interview type / difficulty / interviewer style (keys are protocol values).
   "interviewPage.setup.type.technical": "Technical",

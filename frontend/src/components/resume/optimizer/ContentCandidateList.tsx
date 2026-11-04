@@ -33,7 +33,7 @@ interface Props {
   /** 真实测量入口（宿主预览句柄）；不传 = 只显示省下多少，不声称页数。 */
   probe?: (css: string) => LayoutMeasure | null;
   before?: LayoutMeasure | null;
-  targetPages: 1 | 2;
+  targetPages: number;
   disabled?: boolean;
   applying?: boolean;
   onApply?: (candidate: OptimizerContentCandidate) => void | Promise<void>;

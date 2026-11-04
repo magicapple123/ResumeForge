@@ -37,6 +37,7 @@ import type { WebFormFillRecord, WebFormRecordItem, WebFormRecordSummary } from 
 import { t } from "../../i18n";
 import type { MessageKey } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
+import { formatServerTime } from "../../utils/serverTime";
 
 /** 每页条数：与迁移前「最近 20 条」的口径一致（迁移后翻页可达全部历史记录）。 */
 const RECORD_PAGE_SIZE = 20;
@@ -56,7 +57,7 @@ const ITEM_STATUS_META: Record<string, { color: string; labelKey: MessageKey }> 
 };
 
 function shortTime(value: string): string {
-  return (value || "").replace("T", " ").slice(0, 16);
+  return value ? formatServerTime(value) : "";
 }
 
 interface Props {

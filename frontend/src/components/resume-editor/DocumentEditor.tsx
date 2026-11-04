@@ -40,6 +40,7 @@ import DocumentHeaderPanel from "./DocumentHeaderPanel";
 import DocumentSectionTabs, { type DocumentSectionTabItem } from "./DocumentSectionTabs";
 import SectionEditor from "./SectionEditor";
 import { DocumentDragContext, useDocumentDragHost } from "./documentDragContext";
+import { hasActiveTextSelection } from "../../features/context-menu/selectionGuard";
 import { DocumentChipMenuContext, type ChipMenuRequest } from "./documentChipMenuContext";
 import "./document-editor.css";
 import "./chip-menu.css";
@@ -303,6 +304,12 @@ export default function DocumentEditor({
     const node = (event.target as HTMLElement | null)?.closest?.("[data-document-path]");
     const path = node?.getAttribute("data-document-path");
     if (!path) return;
+    /**
+     * 选中了文字就让位给选区菜单（AI 润色那一层）：两套监听都处理同一个 `contextmenu`
+     * 时，屏幕上会叠出两张卡片（2026-11-04 用户实测）。字段动作（收藏/排版/隐藏/移除）
+     * 是"没选字时对整块的操作"，选字后用户要的是剪切/复制/润色。
+     */
+    if (hasActiveTextSelection()) return;
     event.preventDefault();
     setChipMenu({ path, x: event.clientX, y: event.clientY });
   };

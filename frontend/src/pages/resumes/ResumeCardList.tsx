@@ -11,16 +11,21 @@
  * 这里只做"把一条记录画成一张卡"。
  */
 import { MoreOutlined, StarFilled, StarOutlined } from "@ant-design/icons";
-import { Button, Checkbox, Dropdown, Empty, Pagination, Popconfirm, Select, Space } from "antd";
+import { Button, Checkbox, Dropdown, Empty, Pagination, Select, Space } from "antd";
 import type { Dispatch, SetStateAction } from "react";
+import { useMemo } from "react";
 import LoadingBlock from "../../components/common/LoadingBlock";
+import { RowContextMenu } from "../../components/common/RowActions";
+import { useRowActionMenu } from "../../components/common/rowActionMenu";
 import type { BatchSelection } from "../../hooks/useBatchSelection";
 import { t } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
 import type { Page } from "../../types";
 import type { ResumeBrief } from "../../types";
+import type { DiffViewData } from "../../types/resumeFieldDiff";
 import { formatDateTime } from "../../utils/format";
 import type { ResumeSortField, ResumeSortState } from "../../utils/resumeSort";
+import { secondaryActionsFor, type RowActionDeps } from "./resumeTableActions";
 
 interface Props {
   data: Page<ResumeBrief> | undefined;
@@ -38,6 +43,10 @@ interface Props {
   setRenameValue: (value: string) => void;
   setNoteTarget: (target: ResumeBrief | null) => void;
   setNoteValue: (value: string) => void;
+  /** 「对比」等动作与表格视图共用同一份依赖（问题 26a：卡片视图不再自己维护一份清单）。 */
+  setDiffBase: (target: ResumeBrief | null) => void;
+  setDiffAgainstId: (id: number | null) => void;
+  setDiffResult: (result: DiffViewData | null) => void;
   sortState: ResumeSortState;
   onSortChange: (next: ResumeSortState) => void;
 }
@@ -77,10 +86,45 @@ export default function ResumeCardList({
   setRenameValue,
   setNoteTarget,
   setNoteValue,
+  setDiffBase,
+  setDiffAgainstId,
+  setDiffResult,
   sortState,
   onSortChange,
 }: Props) {
   useLocale();
+  const buildMenu = useRowActionMenu();
+  /**
+   * 卡片视图的 `⋯` 与整卡右键共用表格视图那一份动作清单（问题 26a）。
+   * 原来这里手写了 3 项（重命名 / 备注 / 收藏），少了「对比」、删除也是另一套 Popconfirm，
+   * 两个视图从加进来那天起就在各自演化。现在只在 `resumeTableActions` 里维护一份。
+   */
+  const deps = useMemo<RowActionDeps>(
+    () => ({
+      setPreviewId,
+      setRenameTarget,
+      setRenameValue,
+      setNoteTarget,
+      setNoteValue,
+      setDiffBase,
+      setDiffAgainstId,
+      setDiffResult,
+      toggleFavorite,
+      remove,
+    }),
+    [
+      setPreviewId,
+      setRenameTarget,
+      setRenameValue,
+      setNoteTarget,
+      setNoteValue,
+      setDiffBase,
+      setDiffAgainstId,
+      setDiffResult,
+      toggleFavorite,
+      remove,
+    ],
+  );
   const items = data?.items ?? [];
   const total = data?.total ?? 0;
 
@@ -140,101 +184,71 @@ export default function ResumeCardList({
           <Empty description={t("responsive.resumes.empty")} />
         ) : (
           <ul className="resume-card-grid">
-            {items.map((record) => (
-              <li key={record.id} className="resume-card">
-                <div className="resume-card-head">
-                  {batch.selecting ? (
-                    <Checkbox
-                      checked={batch.isSelected(record.id)}
-                      aria-label={t("responsive.resumes.select.one")}
-                      onChange={() => batch.toggle(record.id)}
-                    />
-                  ) : null}
-                  <button
-                    type="button"
-                    className="resume-card-title"
-                    onClick={() => setPreviewId(record.id)}
-                  >
-                    {record.title}
-                  </button>
-                  <Button
-                    size="small"
-                    type="text"
-                    aria-label={
-                      record.favorite
-                        ? t("responsive.resumes.unfavorite")
-                        : t("responsive.resumes.favorite")
-                    }
-                    disabled={favoriteResumeId === record.id}
-                    icon={record.favorite ? <StarFilled /> : <StarOutlined />}
-                    onClick={() => void toggleFavorite(record)}
-                  />
-                </div>
-                <div className="resume-card-meta">
-                  <span>{record.job_title || t("responsive.resumes.general")}</span>
-                  {record.company ? <span>· {record.company}</span> : null}
-                </div>
-                <div className="resume-card-meta">
-                  {t("responsive.resumes.card.meta", {
-                    time: record.updated_at ? formatDateTime(record.updated_at) : "—",
-                  })}
-                </div>
-                <div className="resume-card-actions">
-                  <Button size="small" type="primary" ghost onClick={() => setPreviewId(record.id)}>
-                    {t("responsive.resumes.preview")}
-                  </Button>
-                  <Dropdown
-                    trigger={["click"]}
-                    menu={{
-                      items: [
-                        {
-                          key: "rename",
-                          label: t("responsive.resumes.rename"),
-                          onClick: () => {
-                            setRenameTarget(record);
-                            setRenameValue(record.title);
-                          },
-                        },
-                        {
-                          key: "note",
-                          label: t("responsive.resumes.note"),
-                          onClick: () => {
-                            setNoteTarget(record);
-                            setNoteValue(record.note ?? "");
-                          },
-                        },
-                        {
-                          key: "favorite",
-                          label: t("responsive.resumes.favorite"),
-                          onClick: () => void toggleFavorite(record),
-                        },
-                      ],
-                    }}
-                  >
-                    <Button
-                      size="small"
-                      icon={<MoreOutlined />}
-                      aria-label={t("responsive.resumes.more")}
-                    />
-                  </Dropdown>
-                  {/* 删除走就地确认（不用 modal.confirm：`popupStackGuard` 禁止同层再叠一层）。 */}
-                  <Popconfirm
-                    title={t("responsive.resumes.remove.confirm")}
-                    description={t("responsive.resumes.remove.body", {
-                      note: t("common.note.trashRecovery"),
-                    })}
-                    okText={t("responsive.resumes.remove")}
-                    cancelText={t("common.action.cancel")}
-                    okButtonProps={{ danger: true }}
-                    onConfirm={() => void remove(record.id)}
-                  >
-                    <Button size="small" danger type="text">
-                      {t("responsive.resumes.remove")}
-                    </Button>
-                  </Popconfirm>
-                </div>
-              </li>
-            ))}
+            {items.map((record) => {
+              // 多选态下不接管右键：批量入口在工具栏，右键容易让人以为"只作用于这一张"。
+              const actions = secondaryActionsFor(record, deps);
+              return (
+                <RowContextMenu key={record.id} items={actions} disabled={batch.selecting}>
+                  <li className="resume-card">
+                    <div className="resume-card-head">
+                      {batch.selecting ? (
+                        <Checkbox
+                          checked={batch.isSelected(record.id)}
+                          aria-label={t("responsive.resumes.select.one")}
+                          onChange={() => batch.toggle(record.id)}
+                        />
+                      ) : null}
+                      <button
+                        type="button"
+                        className="resume-card-title"
+                        onClick={() => setPreviewId(record.id)}
+                      >
+                        {record.title}
+                      </button>
+                      <Button
+                        size="small"
+                        type="text"
+                        aria-label={
+                          record.favorite
+                            ? t("responsive.resumes.unfavorite")
+                            : t("responsive.resumes.favorite")
+                        }
+                        disabled={favoriteResumeId === record.id}
+                        icon={record.favorite ? <StarFilled /> : <StarOutlined />}
+                        onClick={() => void toggleFavorite(record)}
+                      />
+                    </div>
+                    <div className="resume-card-meta">
+                      <span>{record.job_title || t("responsive.resumes.general")}</span>
+                      {record.company ? <span>· {record.company}</span> : null}
+                    </div>
+                    <div className="resume-card-meta">
+                      {t("responsive.resumes.card.meta", {
+                        time: record.updated_at ? formatDateTime(record.updated_at) : "—",
+                      })}
+                    </div>
+                    <div className="resume-card-actions">
+                      <Button
+                        size="small"
+                        type="primary"
+                        ghost
+                        onClick={() => setPreviewId(record.id)}
+                      >
+                        {t("responsive.resumes.preview")}
+                      </Button>
+                      {/* 与表格视图同一份菜单项（含「对比」与带二次确认的「删除」）。 */}
+                      <Dropdown trigger={["click"]} menu={{ items: buildMenu(actions) }}>
+                        <Button
+                          size="small"
+                          icon={<MoreOutlined />}
+                          aria-label={t("responsive.resumes.more")}
+                        />
+                      </Dropdown>
+                    </div>
+                  </li>
+                </RowContextMenu>
+              );
+            })}
           </ul>
         )}
       </LoadingBlock>

@@ -100,6 +100,9 @@ const interview = {
     "No suggestions produced — add more weaknesses or follow-ups the interview exposed",
   "interview.suggestions.evidence": "Evidence: {evidence}",
   "interview.suggestions.goToResume": "Compare and edit in the Resume center →",
+  "interview.suggestions.priority.high": "High",
+  "interview.suggestions.priority.medium": "Medium",
+  "interview.suggestions.priority.low": "Low",
 } as const;
 
 export default interview;

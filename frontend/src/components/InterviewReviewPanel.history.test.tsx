@@ -176,6 +176,107 @@ describe("InterviewReviewPanel 自动保存与历史富还原", () => {
   });
 });
 
+describe("InterviewReviewPanel optimize preconditions (issue 12)", () => {
+  // Mock resume title, escape-encoded so the CJK ratchet does not count a new line.
+  const RESUME_LABEL = "\u6211\u7684\u7b80\u5386";
+
+  /** The online record from 2026-10-23: framework only, both arrays never persisted. */
+  const OLD_RECORD = {
+    ...RECORD,
+    id: 11,
+    resume_id: 1,
+    analysis: { ...ANALYSIS, key_points: [], follow_up: [], pitfalls: [] },
+  };
+
+  /** The saved-review resume select: optimize() bails out without a resume id. */
+  async function pickResume() {
+    const resumeSelect = screen
+      .getByText(t("interviewReview.placeholder.resume"))
+      .closest(".ant-select-content");
+    fireEvent.mouseDown(resumeSelect!);
+    fireEvent.click(await screen.findByText(RESUME_LABEL));
+  }
+
+  it("disables the button and explains what to type when both lists are empty", async () => {
+    renderPanel({ record: OLD_RECORD });
+
+    const button = await screen.findByRole("button", {
+      name: new RegExp(t("interviewReview.action.optimize")),
+    });
+    expect(button).toBeDisabled();
+    // A disabled button with nowhere to type was the dead end this issue is about.
+    expect(screen.getByText(t("interviewReview.optimize.needInput"))).toBeInTheDocument();
+    expect(apiMocks.optimizeResumeFromInterview).not.toHaveBeenCalled();
+  });
+
+  it("enables the button once one weakness is typed, and sends exactly that", async () => {
+    renderPanel({ record: OLD_RECORD });
+
+    const weaknesses = screen.getByLabelText(
+      t("interviewReview.field.weaknesses"),
+    ) as HTMLTextAreaElement;
+    expect(weaknesses.value).toBe("");
+
+    fireEvent.change(weaknesses, { target: { value: "Could not explain the metric" } });
+
+    const button = screen.getByRole("button", {
+      name: new RegExp(t("interviewReview.action.optimize")),
+    });
+    expect(button).toBeEnabled();
+    expect(screen.queryByText(t("interviewReview.optimize.needInput"))).toBeNull();
+
+    await pickResume();
+    fireEvent.click(button);
+
+    await waitFor(() =>
+      expect(apiMocks.optimizeResumeFromInterview).toHaveBeenCalledWith(
+        {
+          resume_id: 1,
+          job_id: null,
+          weaknesses: ["Could not explain the metric"],
+          follow_ups: [],
+        },
+        expect.anything(),
+      ),
+    );
+
+    // The hand-written lists are written back into `analysis`, so reopening the record shows them.
+    await waitFor(() =>
+      expect(apiMocks.updateReview).toHaveBeenCalledWith(
+        11,
+        expect.objectContaining({
+          analysis: expect.objectContaining({
+            pitfalls: ["Could not explain the metric"],
+            follow_up: [],
+          }),
+        }),
+      ),
+    );
+  });
+
+  it("submits with follow-ups only when weaknesses stay empty", async () => {
+    renderPanel({ record: OLD_RECORD });
+
+    fireEvent.change(screen.getByLabelText(t("interviewReview.field.followUps")), {
+      target: { value: "How is this metric calculated?" },
+    });
+    await pickResume();
+    fireEvent.click(
+      screen.getByRole("button", { name: new RegExp(t("interviewReview.action.optimize")) }),
+    );
+
+    await waitFor(() =>
+      expect(apiMocks.optimizeResumeFromInterview).toHaveBeenCalledWith(
+        expect.objectContaining({
+          weaknesses: [],
+          follow_ups: ["How is this metric calculated?"],
+        }),
+        expect.anything(),
+      ),
+    );
+  });
+});
+
 describe("InterviewReviewPanel 半成品历史记录不再白屏", () => {
   it("analysis 只有 framework：不抛错，framework 照常显示", async () => {
     // 线上真实记录：模型只写了 framework，没有 key_points / follow_up / pitfalls。

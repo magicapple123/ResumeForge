@@ -13,6 +13,7 @@ import { MessageOutlined, SendOutlined, StopOutlined } from "@ant-design/icons";
 import { App, Button, Card, Empty, Input, Space, Typography } from "antd";
 import { useState } from "react";
 import { submitInterviewFollowUp, updateInterviewFollowUpState } from "../../api/interview";
+import MarkdownBlock from "../../components/common/MarkdownBlock";
 import { t } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
 import type { InterviewDetail, InterviewMessage } from "../../types";
@@ -29,9 +30,9 @@ function FollowUpLine({ message }: { message: InterviewMessage }) {
       <Typography.Text strong>
         {mine ? t("interviewPage.followUp.role.user") : t("interviewPage.interviewerName")}
       </Typography.Text>
-      <Typography.Paragraph style={{ marginBottom: 8, whiteSpace: "pre-wrap" }}>
-        {message.content}
-      </Typography.Paragraph>
+      {/* 与正式问答区同一个渲染器（`MarkdownBlock`）：两处回答的呈现才一致。那条
+          `whiteSpace: pre-wrap` 随之撤掉——块级渲染自带段落间距，留着会双倍空行。 */}
+      <MarkdownBlock content={message.content} />
     </div>
   );
 }
@@ -116,7 +117,13 @@ export function FollowUpCard({
             description={t("interviewPage.followUp.empty")}
           />
         ) : (
-          lines.map((item) => <FollowUpLine key={item.id} message={item} />)
+          // 一问一答之间留 8px：`.interview-followup-line` 自己没有间距，原先靠
+          // 段落自带的 margin-bottom，改成块级渲染后就没有了。
+          <Space orientation="vertical" size={8} style={{ width: "100%" }}>
+            {lines.map((item) => (
+              <FollowUpLine key={item.id} message={item} />
+            ))}
+          </Space>
         )}
       </div>
       {asking ? (

@@ -30,11 +30,15 @@ from ...models.versions import (
     VERSION_SOURCE_RESTORE,
     ResumeVersion,
 )
-from ...schemas.resume_generation import mode_page_limit
+from ...schemas.resume_generation import UNLIMITED_PAGE_LIMIT, mode_page_limit
 from . import document_io
 from .document_save import _conditional_update
 from .document_versions_diff import build_field_changes
-from .resume_delivery import canonical_content_sha256, default_render_context
+from .resume_delivery import (
+    canonical_content_sha256,
+    default_render_context,
+    page_limit_or_default,
+)
 from .resume_diff import build_resume_diff
 
 
@@ -48,7 +52,12 @@ def _sha256_payload(payload: Any) -> str:
 
 
 def layout_snapshot(db: Session, record: ResumeRecord) -> dict[str, Any]:
-    """当前简历的排版/渲染上下文快照（复用投递存档的同一解析口径）。"""
+    """当前简历的排版/渲染上下文快照（复用投递存档的同一解析口径）。
+
+    ``page_limit`` 存**语义值**：``0`` = 用户选了「不限篇幅」。这里若写成
+    ``or 1``，快照一次就把「不限」记成 1 页——之后从这版恢复出来的简历会莫名其妙
+    只剩一页，而用户从未这样选过。只有 ``None``（老快照/NULL 列）才回落 1。
+    """
     context = default_render_context(db, record)
     return {
         "template": record.template,
@@ -56,7 +65,7 @@ def layout_snapshot(db: Session, record: ResumeRecord) -> dict[str, Any]:
         "format_config": context.get("format_config") or {},
         "export_template": context.get("template") or record.template,
         "style_config": context.get("style_config") or {},
-        "page_limit": int(context.get("page_limit") or 1),
+        "page_limit": page_limit_or_default(context.get("page_limit")),
         "font_scale": context.get("font_scale") or "standard",
         "language": context.get("language") or "zh-CN",
         "document_mode": getattr(record, "document_mode", "resume") or "resume",
@@ -311,10 +320,14 @@ def _restore_values(version: ResumeVersion, record: ResumeRecord) -> dict[str, A
         context.get("document_mode") or getattr(record, "document_mode", None) or "resume"
     )
     page_limit = context.get("page_limit")
-    if isinstance(page_limit, int):
+    if isinstance(page_limit, int) and page_limit == UNLIMITED_PAGE_LIMIT:
+        # 「不限篇幅」是**语义值**，不是待渲染的上限：交给 mode_page_limit 会被折成
+        # 渲染保护上限 10，恢复一次就等于替用户把「不限」改成「最多 10 页」。
+        page_limit = UNLIMITED_PAGE_LIMIT
+    elif isinstance(page_limit, int):
         page_limit = mode_page_limit(page_limit, document_mode)
     else:
-        page_limit = int(record.page_limit or 1)
+        page_limit = page_limit_or_default(record.page_limit)
     return {
         # 恢复写回的永远是 v2：旧版本快照（v1）在这里一次性转换，避免把 v1 写进库。
         "content": document_io.prepare_document_for_save(

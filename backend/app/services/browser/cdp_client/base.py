@@ -14,6 +14,9 @@ DEFAULT_HOST = "127.0.0.1"
 DEFAULT_CONNECT_TIMEOUT = 5.0
 DEFAULT_COMMAND_TIMEOUT = 30.0
 DEFAULT_HTTP_TIMEOUT = 5.0
+# ``Browser.close`` 的回执预算。浏览器收到命令就自己退出，正常几百毫秒就断开；
+# 给太久会拖慢关闭流程（总预算见 browser_shutdown），给太短又会误判成"没送到"。
+DEFAULT_BROWSER_CLOSE_TIMEOUT = 2.0
 _MAX_FRAMES_PER_COMMAND = 5000
 
 
@@ -78,3 +81,15 @@ class CdpClient(ABC):
 
     def close(self) -> None:  # noqa: B027 - 可选钩子：子类按需覆写资源释放，基类故意留空
         """关闭底层连接（不关闭浏览器进程）。"""
+
+    def close_browser(self, *, timeout: float | None = None) -> None:
+        """让**浏览器进程自己退出**（CDP ``Browser.close``）。
+
+        与 :meth:`close` 是两件事：``close`` 只断开这条连接，``close_browser`` 让 Chromium
+        走正常退出流程（flush Cookie 等落盘）。关闭专用浏览器必须走这个能力——Windows 上
+        ``Popen.terminate()`` 走 ``TerminateProcess``，浏览器收不到任何关闭信号。
+
+        与导航/上传同一取舍：不支持该能力的实现**大声失败**而不是安静返回，否则调用方会
+        以为"已经请浏览器退出了"，然后才发现 Cookie 又丢了一次。
+        """
+        raise CdpError("当前 CDP 客户端不支持关闭浏览器")

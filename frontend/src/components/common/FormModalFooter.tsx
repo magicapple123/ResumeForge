@@ -18,6 +18,8 @@ export interface FormModalFooterProps {
   danger: boolean;
   okText: string;
   okIcon?: ReactNode;
+  /** 主按钮不可点（调用方已在正文写清原因）。 */
+  okDisabled?: boolean;
   cancelText?: string;
   /** 安全项的焦点落点（确认条出现时移过去）。 */
   keepRef: RefObject<HTMLButtonElement | null>;
@@ -33,6 +35,7 @@ export default function FormModalFooter({
   danger,
   okText,
   okIcon,
+  okDisabled = false,
   cancelText,
   keepRef,
   onRequestClose,
@@ -63,7 +66,14 @@ export default function FormModalFooter({
       <Button onClick={onRequestClose} disabled={busy || undefined}>
         {cancelText ?? t("common.action.cancel")}
       </Button>
-      <Button type="primary" danger={danger} loading={busy} icon={okIcon} onClick={onSubmit}>
+      <Button
+        type="primary"
+        danger={danger}
+        loading={busy}
+        disabled={okDisabled || undefined}
+        icon={okIcon}
+        onClick={onSubmit}
+      >
         {okText}
       </Button>
     </Space>

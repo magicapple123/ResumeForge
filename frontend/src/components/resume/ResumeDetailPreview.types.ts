@@ -56,6 +56,13 @@ export interface Props {
   showReviseAction?: boolean;
   /** 额外操作（如生成弹窗里的「重新生成 / 去简历中心 / 完成」）插在底部按钮区。 */
   extraActions?: ReactNode;
+  /**
+   * 元信息一行的追加内容（2026-11 问题 8）：详情弹窗把「关联岗位链接 / 本次使用 / 版本血缘
+   * 与投递记录」塞进来，与 Tag、模型与时间排成**同一行**。
+   *
+   * 生成预览不传（它对着一份刚生成、还没落库的简历，没有投递记录可谈），行为不变。
+   */
+  metaExtra?: ReactNode;
 
   /** 服务端已有新版本（表达资产插入等）：宿主刷新 detail/html/revision。 */
   onDocumentSynced?: (detail: ResumeDetail) => void;

@@ -4,11 +4,13 @@
 导出前会先拉一次预览摘要（RF-20）：把包里的条数、时间范围与文件体积展示在
 按钮旁，让用户导出前就知道里面有什么、没有什么（不含简历内容）。 */
 
-import { App, Button, Card, Space, Typography } from "antd";
+import { App, Button, Card, Space, Tooltip, Typography } from "antd";
 import { useEffect, useState } from "react";
 import { exportDiagnostics, getDiagnosticsPreview } from "../../api/system";
 import type { DiagnosticsPreview } from "../../api/system";
+import { useUnsavedDrafts } from "../../hooks/unsavedDrafts";
 import { downloadBlob } from "../../utils/download";
+import { reloadPage } from "../../utils/navigation";
 import { t } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
 
@@ -25,6 +27,9 @@ export default function HelpDiagnosticsCard() {
   const { message } = App.useApp();
   const [exporting, setExporting] = useState(false);
   const [preview, setPreview] = useState<DiagnosticsPreview | null>(null);
+  // 有未保存草稿（制作台 / 资料页脏了）时整页重载等于丢稿，按钮必须灰掉并说明原因。
+  const hasUnsavedDraft = useUnsavedDrafts();
+  const [reloading, setReloading] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -51,6 +56,18 @@ export default function HelpDiagnosticsCard() {
     } finally {
       setExporting(false);
     }
+  };
+
+  /**
+   * 「重新加载界面」：只用于界面卡在怪状态（单例 store 脏了）的救急。
+   *
+   * 不做二次确认——它不是危险操作，弹确认反而让人以为会丢数据；代价是必须挡住
+   * "真有草稿"的那一种情况，所以有未保存内容时按钮直接禁用（Tooltip 说明原因）。
+   */
+  const runReload = () => {
+    if (hasUnsavedDraft || reloading) return;
+    setReloading(true);
+    reloadPage();
   };
 
   return (
@@ -80,6 +97,27 @@ export default function HelpDiagnosticsCard() {
             })}
           </Typography.Text>
         )}
+        <Space orientation="vertical" size={4}>
+          <Tooltip
+            title={
+              hasUnsavedDraft
+                ? t("settingsUi.help.reloadBlocked")
+                : t("settingsUi.help.reloadHint")
+            }
+          >
+            {/* 禁用的 Button 不接收鼠标事件，套一层 span 才能出 Tooltip。 */}
+            <span style={{ display: "inline-block" }}>
+              <Button
+                loading={reloading}
+                disabled={hasUnsavedDraft || reloading}
+                onClick={runReload}
+              >
+                {t("settingsUi.help.reload")}
+              </Button>
+            </span>
+          </Tooltip>
+          <Typography.Text type="secondary">{t("settingsUi.help.reloadHint")}</Typography.Text>
+        </Space>
         <Typography.Text type="secondary">
           {t("settingsUi.help.feedbackLead")}
           <Typography.Link

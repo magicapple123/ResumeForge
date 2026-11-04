@@ -43,6 +43,34 @@ def test_analyze_offers_a_ladder_when_the_content_overflows(client):
     assert body["fit_ladder"][0]["config"]["page_padding"] < 14
 
 
+def test_analyze_truncates_the_padding_rung_at_the_user_minimum(client):
+    """问题 17：最小页边距是阶梯下界——越线的档位不生成，后续档不再带着超限值。"""
+    resume_id = _make_resume(client)
+    body = client.post(
+        f"/api/resumes/{resume_id}/layout/analyze",
+        json={
+            "measure": {
+                "used_height": PAGE * 1.3,
+                "page_content_height": PAGE,
+                "page_limit": 1,
+            },
+            "min_padding_mm": 13,
+        },
+    ).json()
+    assert body["fit_ladder"]
+    paddings = [
+        item["config"]["page_padding"]
+        for item in body["fit_ladder"]
+        if "page_padding" in item["config"]
+    ]
+    assert paddings, "13mm 仍应有一档可收紧"
+    assert min(paddings) == 13
+    # 其它旋钮还在：不能因为保边距就把候选整体砍掉。
+    assert {"section_gap", "line_height", "font_scale_adjust"} <= {
+        item["key"] for item in body["fit_ladder"]
+    }
+
+
 def test_analyze_returns_no_ladder_when_it_already_fits(client):
     """放得下时给一堆"再收紧一点"只会让人白改一轮。"""
     resume_id = _make_resume(client)

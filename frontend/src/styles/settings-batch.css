@@ -87,6 +87,40 @@
   font-size: 12px;
 }
 
+/* 弹窗里的同一份字段组：可用宽度只有 640 的弹窗 body，三列会挤成一条窄缝，改两列。 */
+.batch-config-rows.is-modal {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  max-width: none;
+}
+
+.batch-config-rows.is-modal .batch-config-row.is-wide {
+  grid-column: 1 / -1;
+}
+
+/* 弹窗里的提示条（默认参数 / 份数上限）与正文之间留一口气。 */
+.batch-config-modal-note {
+  margin-bottom: 12px;
+}
+
+/* 份数那句话：确认前的最后一眼，比字段区更醒目。 */
+.batch-config-modal-count {
+  margin: 12px 0 4px;
+  font-size: 14px;
+}
+
+/* 「只作用于这一批」的说明：次要信息，进正文末尾。 */
+.batch-config-modal-scope {
+  margin-bottom: 0;
+  font-size: 12px;
+}
+
+/* 手机上单列（问题 15 的弹窗形态）：560 不是六个标准断点之一，改用 phone 档 767。 */
+@media (max-width: 767px) {
+  .batch-config-rows.is-modal {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 @media (max-width: 1092px) {
   .batch-config-rows {
     grid-template-columns: minmax(0, 1fr);

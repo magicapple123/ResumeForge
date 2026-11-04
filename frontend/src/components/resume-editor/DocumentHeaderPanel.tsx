@@ -208,9 +208,16 @@ export default function DocumentHeaderPanel({
             onChange={(key: string) => {
               const field = addable.find((candidate) => candidate.key === key);
               if (!field) return;
+              // 6-A：加入时把资料里的**当前值**一起拷贝进来（页眉 chip 立刻有内容可看，
+              // 不是一条空壳）。值是拷贝不是活链接——之后改资料不会回写这里。
+              // label 也一并落库：纸面渲染 contact 位置时按 `item.label：值` 出字，
+              // 新建的 5 个目录字段（期望城市 / 作品集 / 政治面貌…）后端没有标签表项，
+              // 不写 label 纸面上就只剩裸值，看不出这一项是什么。
               addItem(
                 defaultHeaderItem({
                   key: field.key,
+                  label: field.label,
+                  value: field.value ?? "",
                   placement: field.placement,
                   format: field.format,
                 }),
@@ -238,6 +245,10 @@ export default function DocumentHeaderPanel({
             {t("document.basic.customAdd")}
           </Button>
         </div>
+      ) : null}
+      {/* 6-A：把「值是拷贝」这件事如实说清——用户不会以为改资料就能同步这里。 */}
+      {!readOnly ? (
+        <span className="document-section-hint">{t("document.basic.addedValueHint")}</span>
       ) : null}
       {document.header.items.some((item) => isCustomHeaderItem(item)) ? (
         <span className="document-section-hint">{t("document.basic.customHint")}</span>

@@ -10,6 +10,7 @@ import { App as AntdApp } from "antd";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ApplyQueueItem } from "../../types";
+import { ContextMenuHost } from "../../features/context-menu/ContextMenuHost";
 import ApplyQueuePanel from "./ApplyQueuePanel";
 
 const apiMocks = vi.hoisted(() => ({
@@ -85,7 +86,9 @@ describe("ApplyQueuePanel 准入徽标", () => {
 
     render(
       <AntdApp>
-        <ApplyQueuePanel disabled={false} onStarted={vi.fn()} />
+        <ContextMenuHost>
+          <ApplyQueuePanel disabled={false} onStarted={vi.fn()} />
+        </ContextMenuHost>
       </AntdApp>,
     );
 
@@ -100,7 +103,9 @@ describe("ApplyQueuePanel 准入徽标", () => {
 
     render(
       <AntdApp>
-        <ApplyQueuePanel disabled={false} onStarted={vi.fn()} />
+        <ContextMenuHost>
+          <ApplyQueuePanel disabled={false} onStarted={vi.fn()} />
+        </ContextMenuHost>
       </AntdApp>,
     );
 
@@ -115,7 +120,9 @@ describe("ApplyQueuePanel 准入徽标", () => {
 
     render(
       <AntdApp>
-        <ApplyQueuePanel disabled={false} onStarted={vi.fn()} />
+        <ContextMenuHost>
+          <ApplyQueuePanel disabled={false} onStarted={vi.fn()} />
+        </ContextMenuHost>
       </AntdApp>,
     );
 
@@ -133,7 +140,9 @@ describe("ApplyQueuePanel 准入徽标", () => {
 
     render(
       <AntdApp>
-        <ApplyQueuePanel disabled={false} onStarted={vi.fn()} />
+        <ContextMenuHost>
+          <ApplyQueuePanel disabled={false} onStarted={vi.fn()} />
+        </ContextMenuHost>
       </AntdApp>,
     );
 
@@ -147,7 +156,9 @@ describe("ApplyQueuePanel 准入徽标", () => {
 
     render(
       <AntdApp>
-        <ApplyQueuePanel disabled={false} onStarted={vi.fn()} />
+        <ContextMenuHost>
+          <ApplyQueuePanel disabled={false} onStarted={vi.fn()} />
+        </ContextMenuHost>
       </AntdApp>,
     );
 
@@ -175,7 +186,9 @@ describe("ApplyQueuePanel 来源闸门", () => {
 
     render(
       <AntdApp>
-        <ApplyQueuePanel disabled={false} onStarted={vi.fn()} />
+        <ContextMenuHost>
+          <ApplyQueuePanel disabled={false} onStarted={vi.fn()} />
+        </ContextMenuHost>
       </AntdApp>,
     );
 
@@ -199,7 +212,9 @@ describe("ApplyQueuePanel 来源闸门", () => {
 
     render(
       <AntdApp>
-        <ApplyQueuePanel disabled={false} onStarted={vi.fn()} />
+        <ContextMenuHost>
+          <ApplyQueuePanel disabled={false} onStarted={vi.fn()} />
+        </ContextMenuHost>
       </AntdApp>,
     );
 
@@ -213,7 +228,9 @@ describe("ApplyQueuePanel 来源闸门", () => {
 
     render(
       <AntdApp>
-        <ApplyQueuePanel disabled={false} onStarted={vi.fn()} />
+        <ContextMenuHost>
+          <ApplyQueuePanel disabled={false} onStarted={vi.fn()} />
+        </ContextMenuHost>
       </AntdApp>,
     );
 
@@ -230,7 +247,9 @@ describe("ApplyQueuePanel 使用指引与详情", () => {
 
     render(
       <AntdApp>
-        <ApplyQueuePanel disabled={false} onStarted={vi.fn()} />
+        <ContextMenuHost>
+          <ApplyQueuePanel disabled={false} onStarted={vi.fn()} />
+        </ContextMenuHost>
       </AntdApp>,
     );
 
@@ -250,7 +269,9 @@ describe("ApplyQueuePanel 使用指引与详情", () => {
 
     render(
       <AntdApp>
-        <ApplyQueuePanel disabled={false} onStarted={vi.fn()} />
+        <ContextMenuHost>
+          <ApplyQueuePanel disabled={false} onStarted={vi.fn()} />
+        </ContextMenuHost>
       </AntdApp>,
     );
 
@@ -267,7 +288,9 @@ describe("ApplyQueuePanel 使用指引与详情", () => {
 
     render(
       <AntdApp>
-        <ApplyQueuePanel disabled={false} onStarted={vi.fn()} />
+        <ContextMenuHost>
+          <ApplyQueuePanel disabled={false} onStarted={vi.fn()} />
+        </ContextMenuHost>
       </AntdApp>,
     );
 
@@ -287,7 +310,9 @@ describe("ApplyQueuePanel 右键菜单与操作按钮位置", () => {
 
     render(
       <AntdApp>
-        <ApplyQueuePanel disabled={false} onStarted={vi.fn()} />
+        <ContextMenuHost>
+          <ApplyQueuePanel disabled={false} onStarted={vi.fn()} />
+        </ContextMenuHost>
       </AntdApp>,
     );
 
@@ -307,7 +332,9 @@ describe("ApplyQueuePanel 右键菜单与操作按钮位置", () => {
 
     render(
       <AntdApp>
-        <ApplyQueuePanel disabled={false} onStarted={vi.fn()} />
+        <ContextMenuHost>
+          <ApplyQueuePanel disabled={false} onStarted={vi.fn()} />
+        </ContextMenuHost>
       </AntdApp>,
     );
 
@@ -331,7 +358,9 @@ describe("ApplyQueuePanel 右键菜单与操作按钮位置", () => {
 
     render(
       <AntdApp>
-        <ApplyQueuePanel disabled={false} onStarted={vi.fn()} />
+        <ContextMenuHost>
+          <ApplyQueuePanel disabled={false} onStarted={vi.fn()} />
+        </ContextMenuHost>
       </AntdApp>,
     );
 
@@ -358,7 +387,9 @@ describe("ApplyQueuePanel 分页与刷新", () => {
 
     render(
       <AntdApp>
-        <ApplyQueuePanel disabled={false} onStarted={vi.fn()} />
+        <ContextMenuHost>
+          <ApplyQueuePanel disabled={false} onStarted={vi.fn()} />
+        </ContextMenuHost>
       </AntdApp>,
     );
 
@@ -378,7 +409,9 @@ describe("ApplyQueuePanel 分页与刷新", () => {
 
     render(
       <AntdApp>
-        <ApplyQueuePanel disabled={false} onStarted={vi.fn()} />
+        <ContextMenuHost>
+          <ApplyQueuePanel disabled={false} onStarted={vi.fn()} />
+        </ContextMenuHost>
       </AntdApp>,
     );
 

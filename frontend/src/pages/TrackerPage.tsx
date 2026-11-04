@@ -90,6 +90,8 @@ export default function TrackerPage() {
   const { data, loading, error, reload } = useApi(
     () => listTracksPage({ status, keyword, jobId: jobId ?? undefined }, page, TRACK_PAGE_SIZE),
     [status, keyword, page, jobId],
+    // 回到前台静默重拉（问题 27a）：投递队列与岗位/简历列表同一批开启。
+    { refetchOnFocus: {} },
   );
   // 漏斗与统计字段走专用统计端点（P1-2）：不再为拉统计整表取回，
   // 记录数上万后页面开销从"全量 items"降到"几十个数字"。
@@ -316,7 +318,11 @@ export default function TrackerPage() {
           {FUNNEL_STATUSES.map((key) => {
             const value = counts[key] ?? 0;
             const stageIndex = FUNNEL_STATUSES.indexOf(key);
-            const percentage = funnelMax > 0 ? Math.round((value / funnelMax) * 100) : 0;
+            // 条长是**纯视觉辅助**：把这一级的数量按"最大那一级"归一，好让五条并排时有
+            // 长短可比的形状。它不是转化率——五个状态是互斥快照（一条记录只属于一级），
+            // 跳级改状态很常见，所以"面试 > 筛选"随时可能发生。正因如此页面上不印 %，
+            // 只在 tooltip 里说明条长的含义（问题 2-A，裁定 B）。
+            const barFill = Math.round((value / funnelMax) * 100);
             return (
               <Tooltip
                 key={key}
@@ -337,9 +343,8 @@ export default function TrackerPage() {
                   <span className="tracker-funnel-label">{t(TRACK_STATUS_LABEL_KEYS[key])}</span>
                   <span className="tracker-funnel-count">{value}</span>
                   <span className="tracker-funnel-meter" aria-hidden="true">
-                    <span className="tracker-funnel-bar" style={{ width: `${percentage}%` }} />
+                    <span className="tracker-funnel-bar" style={{ width: `${barFill}%` }} />
                   </span>
-                  <span className="tracker-funnel-percent">{percentage}%</span>
                 </button>
               </Tooltip>
             );

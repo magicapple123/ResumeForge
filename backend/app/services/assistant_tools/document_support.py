@@ -19,7 +19,7 @@ from sqlalchemy.orm import Session
 from ...models.resume import ResumeRecord
 from ...models.versions import VERSION_SOURCE_ASSISTANT, ResumeVersion
 from ...schemas.resume_document import new_object_id
-from ...schemas.resume_generation import mode_page_limit
+from ...schemas.resume_generation import UNLIMITED_PAGE_LIMIT, mode_page_limit
 from .. import trash
 from ..resume import document_io
 from ..resume.document_catalog import SECTION_CATALOG
@@ -27,7 +27,7 @@ from ..resume.document_paths import resolve_document_path
 from ..resume.document_save import save_content
 from ..resume.document_versions import layout_snapshot, params_sha256
 from ..resume.document_view import entry_texts
-from ..resume.resume_delivery import canonical_content_sha256
+from ..resume.resume_delivery import canonical_content_sha256, page_limit_or_default
 from ..resume.resume_labels import (
     DEFAULT_RESUME_LANGUAGE,
     field_labels,
@@ -60,11 +60,21 @@ def document_for(db: Session, record: ResumeRecord) -> dict:
 
 
 def render_settings(db: Session, record: ResumeRecord) -> dict:
+    """助手工具看到的渲染设置。
+
+    ``page_limit`` 在这里是**渲染上限**（``mode_page_limit`` 的结果，pdf_exporter 要一个
+    正数 max_pages），``page_limit_is_unlimited`` 单独带出"用户选的是不限"这个语义：
+    ``render_settings(record.page_limit or 1)`` 会把不限折成 1 页——助手于是告诉用户
+    "上限 1 页"并把 PDF 真的裁到 1 页，这正好与用户的选择相反。
+    """
     template, _html = resolve_style_template(db, record.template)
+    page_limit_value = page_limit_or_default(record.page_limit)
     return {
         "template": template or record.template or "classic",
         "format_config": record_format_config(db, record) or {},
-        "page_limit": mode_page_limit(record.page_limit or 1, record.document_mode or "resume"),
+        "page_limit": mode_page_limit(page_limit_value, record.document_mode or "resume"),
+        # 「不限篇幅」的语义（0）与折出来的渲染上限（10）是两件事，分开传。
+        "page_limit_is_unlimited": page_limit_value == UNLIMITED_PAGE_LIMIT,
         "font_scale": record.font_scale or "standard",
         "language": normalize_language(record.language),
     }

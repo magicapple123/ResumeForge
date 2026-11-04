@@ -178,14 +178,8 @@ def test_resolved_order_reads_format_config_and_falls_back():
 
 
 def test_profile_keys_map_onto_every_resume_section():
-    """映射覆盖资料页可排的分区；W14 科研三栏目**故意不在映射里**（资料页无对应子表）。"""
-    assert set(PROFILE_SECTION_TO_RESUME.values()) <= set(DEFAULT_SECTION_ORDER)
-    assert set(DEFAULT_SECTION_ORDER) - set(PROFILE_SECTION_TO_RESUME.values()) == {
-        "publications",
-        "research_projects",
-        "patents",
-        "credentials",
-    }
+    """映射覆盖**全部**正文分区（2026-11-04 起补上科研四栏）。"""
+    assert set(PROFILE_SECTION_TO_RESUME.values()) == set(DEFAULT_SECTION_ORDER)
     for profile_key, resume_key in PROFILE_SECTION_TO_RESUME.items():
         assert isinstance(profile_key, str) and profile_key, "资料侧的键不能为空"
         assert resume_key in DEFAULT_SECTION_ORDER, resume_key
@@ -254,9 +248,7 @@ def test_profile_order_falls_back_on_dirty_input():
 def _set_workspace_section_order(db_session, order: list[str]) -> None:
     """资料顺序的唯一来源是新模型的全局顺序（旧 user_profile.section_order 已退役）。"""
     state = group_store.read_state(db_session)
-    group_store.set_section_order(
-        db_session, order, expected_revision=int(state.revision or 1)
-    )
+    group_store.set_section_order(db_session, order, expected_revision=int(state.revision or 1))
 
 
 # ===== 新建简历时"物化"的默认顺序（P0-5）=====
@@ -291,11 +283,11 @@ def test_profile_order_to_section_order_appends_missing_at_the_end():
     assert sorted(order) == sorted(DEFAULT_SECTION_ORDER)
 
 
-def test_default_section_order_config_appends_research_after_old_sections(db_session):
-    """W14 后资料页仍只有旧七分区：补齐的三项科研板块**落在末尾**（契约 §5.3）。
+def test_default_section_order_config_follows_the_profile_order(db_session):
+    """资料页排好的 13 个分区**原样翻译**（2026-11-04 起科研四栏也跟随资料顺序）。
 
-    因此"资料顺序 = 旧默认顺序"不再等于 10 键内置默认，会物化一份显式 section_order——
-    这是刻意的：科研板块不插进用户已排好的七项中间，旧记录的视觉顺序不变。
+    此前映射表缺这四栏，它们被一律补到末尾；现在映射齐全，落库片段与资料页的先后一致——
+    空板块所有渲染器都不产生节点，所以"有内容的四栏跟随用户排序"是唯一可见的变化。
     """
     _set_workspace_section_order(
         db_session,
@@ -325,11 +317,11 @@ def test_default_section_order_config_appends_research_after_old_sections(db_ses
             "campus_experience",
             "awards",
             "summary",
-            "languages",
             "publications",
             "research_projects",
             "patents",
             "credentials",
+            "languages",
         ]
     }
 
@@ -371,11 +363,11 @@ def test_default_section_order_config_materializes_profile_order(db_session):
             "skills",
             "campus_experience",
             "awards",
-            "languages",
             "publications",
             "research_projects",
             "patents",
             "credentials",
+            "languages",
         ]
     }
 
@@ -411,15 +403,13 @@ def test_a_saved_custom_order_is_only_rewritten_by_an_explicit_put(client):
         "projects",
         "campus_experience",
         "summary",
-        "languages",
         "publications",
         "research_projects",
         "patents",
         "credentials",
+        "languages",
     ]
 
     # PUT 的整体替换语义（既有契约）：不带 section_order 时落回**默认值**。
     assert client.put("/api/profile", json={"name": "李四"}).status_code == 200
     assert client.get("/api/profile").json()["section_order"] == list(PROFILE_SECTION_KEYS)
-
-

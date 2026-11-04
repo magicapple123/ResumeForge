@@ -18,6 +18,7 @@ import { t } from "../../../i18n";
 import type { ReviewAnnotationRecord, ReviewResolution } from "../../../features/resume-review";
 import { STATUS_LABEL_KEY } from "./reviewLabels";
 import { useLocale } from "../../../i18n/i18nContext";
+import { formatServerTime } from "../../../utils/serverTime";
 
 export interface ReattachOption {
   value: string;
@@ -41,14 +42,9 @@ export interface ReviewAnnotationRowProps {
   onPickReattach: (value: string) => void;
 }
 
-/** 时间的可读截断：ISO 串只显示到分钟（完整值放 title，用于截断文本提示）。 */
+/** 时间的可读文本：只显示到分钟（完整值放 title，用于截断文本提示）。 */
 function shortTime(value: string): string {
-  if (!value) return "";
-  return value
-    .replace("T", " ")
-    .replace(/\.\d+Z?$/, "")
-    .replace(/Z$/, "")
-    .slice(0, 16);
+  return formatServerTime(value);
 }
 
 export default function ReviewAnnotationRow({

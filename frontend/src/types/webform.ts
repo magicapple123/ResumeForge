@@ -167,6 +167,16 @@ export interface WebFormPendingItem {
   field_label: string;
 }
 
+/**
+ * Which profile data the form-filling paths read.
+ *
+ * `group` = only the current resume plan (the default, byte-identical to the behaviour
+ * before this switch existed); `all` = every section of the profile, including the ones
+ * the current plan leaves out. It must reach the snapshot, so the picker list, the batch
+ * preview and the floating-ball autofill always read the same data.
+ */
+export type WebFormScope = "group" | "all";
+
 export interface WebFormPreview {
   snapshot_id: string;
   page: WebFormPage;

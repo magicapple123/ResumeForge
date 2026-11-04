@@ -29,18 +29,24 @@ from ..schemas.resume import ResumeContent
 
 # re-export：关键词域（词库 / 抽取 / 覆盖率）。
 from .ats_keywords import (  # noqa: F401  (对外的兼容导入面)
+    _ALIASES,
     _ATS_KEYWORDS_PATH,
     _CHINESE_PHRASE_RE,
     _CHINESE_SUFFIXES,
+    _GENERIC_ABBREVIATIONS,
     _JD_STOPWORDS,
     _JD_TOKEN_RE,
     _MAX_JD_PHRASES,
     _MAX_JD_TOKENS,
     _MAX_TARGET_KEYWORDS,
+    _MISSING_HIGH_RATIO,
+    _MISSING_MEDIUM_RATIO,
+    _NOISE_WORDS,
     _PHRASE_NOISE_CHARS,
     _PHRASE_NOISE_PREFIXES,
     _SECTION_ORDER,
     _STUFFING_COUNT,
+    _STUFFING_TITLE,
     KeywordAnalysis,
     _dedupe_words,
     _header_text,
@@ -50,12 +56,24 @@ from .ats_keywords import (  # noqa: F401  (对外的兼容导入面)
     _join_parts,
     _keyword_analysis,
     _keyword_issues,
+    _missing_severity,
     _resume_text,
     _section_texts,
     _strip_phrase_noise,
     _target_keywords,
+    _target_tiers,
+    is_jd_token_allowed,
+    jd_keyword_tiers,
+    keyword_count,
     load_keywords,
+    normalize_alias,
+    normalize_phrase_aliases,
+    required_jd_text,
+    split_compound,
 )
+
+# re-export：产物解析检查（真实 PDF 能否被读出来）。
+from .ats_parse_check import parse_check_issues  # noqa: F401  (对外的兼容导入面)
 
 # re-export：规则与评分域。
 from .ats_rules import (  # noqa: F401  (对外的兼容导入面)
@@ -94,8 +112,24 @@ from .ats_rules import (  # noqa: F401  (对外的兼容导入面)
 )
 
 
-def check_ats(resume: ResumeContent | dict, jd_text: str = "", *, resume_id: int = 0) -> AtsCheckOut:
-    """ATS 本地检测：三类结论 + 分项分数 + 免责声明。纯本地计算，不调用模型。"""
+def check_ats(
+    resume: ResumeContent | dict,
+    jd_text: str = "",
+    *,
+    resume_id: int = 0,
+    parse_check: bool = False,
+) -> AtsCheckOut:
+    """ATS 本地检测：三类结论 + 分项分数 + 免责声明。纯本地计算，不调用模型。
+
+    没有 JD（或 JD 抽不出任何目标词）时**不计关键词分项**，``score`` 为 ``None``：
+    覆盖率是关键词分项的唯一来源，没有分母就没有这一项，"没有这一项"必须能被表达，
+    不能拿通用词库顶替（那会对非技术岗位给出系统性误判的分）。
+
+    ``parse_check`` 打开时额外真渲染一遍 PDF、抽回文本做**产物解析检查**
+    （``ats_parse_check.parse_check_issues``）：多一条 format 类问题，但**不加新分项、
+    不改 0.4/0.4/0.2 的加权口径**。默认关闭——渲染有成本，只有 ATS 面板这个面向用户的
+    出口需要，简历检查（preflight）已经自己渲染过一次，不应该再付一次。
+    """
     analysis = _keyword_analysis(resume, jd_text)
     issues = (
         _format_issues(resume)
@@ -105,13 +139,22 @@ def check_ats(resume: ResumeContent | dict, jd_text: str = "", *, resume_id: int
         + _keyword_issues(analysis)
         + _position_issues(resume)
     )
+    if parse_check:
+        issues += parse_check_issues(resume)
     ratio = quantified_ratio(resume)
     subscores = {
-        "format": _subscore_format(issues),
-        "keyword": _subscore_keyword(issues, ratio),
+        # 量化加分落在格式分项（"描述带数字的比例"描述的是格式/量化，不是关键词）。
+        "format": _subscore_format(issues, ratio),
         "position": _subscore_position(issues),
     }
-    summary: dict[str, int] = {}
+    # 关键词分项直接由覆盖率决定：覆盖率就是用户的"匹配度"。覆盖率缺失 = 没有目标词 →
+    # 这一项不参与计分（也因此总分返回 None），而不是按满分 100 计。
+    if analysis.coverage_ratio is not None:
+        subscores["keyword"] = _subscore_keyword(issues, analysis.coverage_ratio)
+    # 三个类别即使一条问题都没有也保留 0 计数：前端按固定 key 渲染，"0 条"与"缺 key"
+    # 是两件事。注意条数口径与计分口径不同——没有 JD 时关键词**不参与计分**（不出现在
+    # subscores），但它仍然是一个已知类别，条数恒为 0，不需要从 summary 里一起消失。
+    summary: dict[str, int] = {category: 0 for category in ("format", "keyword", "position")}
     for issue in issues:
         summary[issue.category] = summary.get(issue.category, 0) + 1
     return AtsCheckOut(
@@ -124,6 +167,7 @@ def check_ats(resume: ResumeContent | dict, jd_text: str = "", *, resume_id: int
         summary=summary,
         subscores=subscores,
         coverage_ratio=analysis.coverage_ratio,
+        supplementary_coverage_ratio=analysis.supplementary_coverage_ratio,
         keyword_hits=analysis.hits,
     )
 
@@ -133,5 +177,6 @@ __all__ = [
     "KeywordAnalysis",
     "check_ats",
     "load_keywords",
+    "parse_check_issues",
     "quantified_ratio",
 ]

@@ -24,7 +24,7 @@ from ...models.resume import ResumeRecord
 from ...schemas.job import JobOut
 from ...schemas.resume import ResumeContent
 from ...schemas.resume_document import DocumentValidationError
-from ...schemas.resume_generation import RESUME_MODES, ResumeLanguage
+from ...schemas.resume_generation import RESUME_MODES, UNLIMITED_PAGE_LIMIT, ResumeLanguage
 from ..exporter import normalize_page_limit
 from . import document_io
 from .document_conversion_types import ConversionError
@@ -149,6 +149,14 @@ def save_record(
         title = f"{name}-{company}-{job_title}-{timestamp}"
     title = requested_title.strip()[:256] or title
     mode = document_mode if document_mode in RESUME_MODES else "resume"
+    # 需求 7B：``0`` = 「不限篇幅」，是**语义值**，原样落库。交给 ``normalize_page_limit``
+    # 会被折成渲染保护上限 10，于是"用户选了不限"在库里变成"最多 10 页"——读回来、
+    # 存档、重放全都按 10 页走，用户再也找不回自己选的那一项。只有真正的页数才夹紧。
+    stored_page_limit = (
+        UNLIMITED_PAGE_LIMIT
+        if page_limit is not None and int(page_limit) == UNLIMITED_PAGE_LIMIT
+        else normalize_page_limit(page_limit, mode)
+    )
     # 落库的永远是 v2：生成链路内部仍按 v1（模型只写值），在唯一落库点一次性转换。
     # 标题/岗位意图在上面已按 v1 视图取过，不受影响；自定义字段位置来自当前方案定义。
     # document 参数供 SSE 复用**同一个转换结果**（done 事件与落库内容 id 一致）。
@@ -175,7 +183,7 @@ def save_record(
         enhancement_level=enhancement_level,
         template=resolved_style_name(db, template),
         format_name=resolved_format_name(db, format_name),
-        page_limit=normalize_page_limit(page_limit, mode),
+        page_limit=stored_page_limit,
         document_mode=mode,
         font_scale=font_scale_spec(font_scale)["name"],
         # T7：section_order 只服务本次 v1→v2 转换（上面已用它排出 document.sections），

@@ -157,13 +157,14 @@
   flex-direction: column;
 }
 
+/* 行高 44px（问题 18 的 ⑥）：此前 52px + 上下各 8px 内边距，13 个板块一屏只能看到 5–6 个。 */
 .profile-settings-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  min-height: 52px;
-  padding: 8px 12px;
+  min-height: 44px;
+  padding: 6px 12px;
   border-bottom: 1px solid var(--rf-border-subtle);
   border-radius: 6px;
 }
@@ -198,7 +199,9 @@
   font-size: 12px;
 }
 
-/* 动作组：固定最小宽度 + 右对齐，三处列表（方案 / 板块 / 字段）共用同一套。 */
+/* 动作组：右对齐，三处列表（方案 / 板块 / 字段）共用同一套。
+ * 常驻动作收进 ⋯ 之后每个动作组只剩一颗 24×24 按钮，最小宽度从 88px 降到 32px，
+ * 把省下的宽度还给名称列（问题 18 的 ②）。 */
 .profile-settings-row-actions {
   display: flex;
   flex: 0 0 auto;
@@ -206,7 +209,7 @@
   align-items: center;
   justify-content: flex-end;
   gap: 4px;
-  min-width: 88px;
+  min-width: 32px;
 }
 
 /* 行内图标动作与卡片级标题都是「外观」，在 profile-card.css 里（本文件只管摆位）。 */
@@ -217,6 +220,9 @@
   align-items: center;
   gap: 8px;
 }
+
+/* 三层共用的行首选择 / ⋯ / 底部创建区 / 字段位置控件见 `profile-settings-rows.css`
+ * （问题 18 的增量规则单独成片，本文件已接近 500 行预算）。 */
 
 .profile-settings-header {
   display: flex;

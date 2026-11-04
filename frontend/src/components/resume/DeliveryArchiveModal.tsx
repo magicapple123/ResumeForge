@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
-import { Alert, App, Button, Input, Modal, Select, Space, Table, Tag } from "antd";
+import { Alert, App, Button, Collapse, Input, Modal, Select, Space, Table, Tag } from "antd";
+import { InfoCircleOutlined } from "@ant-design/icons";
 import { useState } from "react";
 import { t } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
@@ -7,12 +8,27 @@ import { downloadDelivery, listDeliveryArchive } from "../../api/resumes";
 import { useApi } from "../../hooks/useApi";
 import type { DeliverySummary } from "../../types";
 import { downloadBlob } from "../../utils/download";
+import { formatServerTime } from "../../utils/serverTime";
 import { createExportDeliveryApi } from "../../features/resume-delivery";
 import type { ExportDeliveryApi } from "../../features/resume-delivery";
 import ArchiveList from "./delivery/ArchiveList";
 
 /** 归档原件接口（模块级单例：列表 effect 以 api 为依赖，每次渲染新建会反复拉取）。 */
 const defaultArchiveApi = createExportDeliveryApi();
+
+/**
+ * 「投递去向」单元格：**只按 `source` 分派**。
+ *
+ * 为什么不用"两个字段是否为空"来判断：那会把"投给了一家没记录公司名的岗位"误判成
+ * 导出存档。导出存档本来就只是下载到本地磁盘，没有去向；`apply` / `track` 才是有
+ * 投递动作的那两种，字段缺了就是缺了，如实写"未记录"。
+ */
+function destinationText(item: DeliverySummary): string {
+  if (item.source === "export") return t("delivery.archive.destination.exportOnly");
+  return `${item.company || t("delivery.archive.companyUnknown")} · ${
+    item.job_title || t("delivery.archive.jobUnknown")
+  }`;
+}
 
 interface Props {
   onClose: () => void;
@@ -78,18 +94,29 @@ export default function DeliveryArchiveModal({
       footer={null}
       width={850}
     >
-      <Alert
-        type="info"
-        showIcon
-        title={t("delivery.archive.noticeTitle")}
-        description={t("delivery.archive.noticeBody")}
-        style={{ marginBottom: 16 }}
+      {/* 这条只是"解释规则"，不是要立刻处理的警告：压成一行、默认收起，省掉约 90px。 */}
+      <Collapse
+        size="small"
+        style={{ marginBottom: 12 }}
+        items={[
+          {
+            key: "notice",
+            label: (
+              <Space size={8}>
+                <InfoCircleOutlined />
+                <span>{t("delivery.archive.noticeTitle")}</span>
+              </Space>
+            ),
+            children: <span>{t("delivery.archive.noticeBody")}</span>,
+          },
+        ]}
       />
-      <Space wrap style={{ marginBottom: 16 }}>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 16 }}>
         <Input.Search
           aria-label={t("delivery.archive.search")}
           placeholder={t("delivery.archive.searchPlaceholder")}
           allowClear
+          style={{ width: 280 }}
           onSearch={(value) => {
             setKeyword(value);
             setPage(1);
@@ -110,8 +137,11 @@ export default function DeliveryArchiveModal({
             { value: "export", label: t("delivery.archive.source.export") },
           ]}
         />
-        <Button onClick={() => void reload()}>{t("delivery.archive.refresh")}</Button>
-      </Space>
+        {/* 刷新是次要动作：靠右，别夹在筛选器里制造一个"第四个筛选项"的错觉。 */}
+        <Button style={{ marginLeft: "auto" }} onClick={() => void reload()}>
+          {t("delivery.archive.refresh")}
+        </Button>
+      </div>
       {error && (
         <Alert
           type="error"
@@ -127,23 +157,33 @@ export default function DeliveryArchiveModal({
         // 条件与 `dataSource` 同一口径：空表不启用横向滚动，否则 `.ant-table-content`
         // 会成为"可横滚、区域内没有任何可聚焦元素"的容器（axe
         // `scrollable-region-focusable`，serious）。有行时照旧按列宽固定横滚。
-        scroll={data?.items?.length ? { x: 600 } : undefined}
+        scroll={data?.items?.length ? { x: 770 } : undefined}
         pagination={{
           current: page,
           pageSize: 10,
           total: data?.total ?? 0,
           showSizeChanger: false,
+          // 只有一页时右下角那个分页器没有任何可做的事，只会占高度。
+          hideOnSinglePage: true,
           onChange: setPage,
         }}
         columns={[
-          { title: t("delivery.archive.table.resume"), dataIndex: "resume_title", ellipsis: true },
+          {
+            title: t("delivery.archive.table.resume"),
+            dataIndex: "resume_title",
+            width: 210,
+            ellipsis: { showTitle: true },
+          },
           {
             title: t("delivery.archive.table.destination"),
-            render: (_, item) =>
-              `${item.company || t("delivery.archive.companyUnknown")} · ${item.job_title || t("delivery.archive.jobUnknown")}`,
+            width: 250,
+            ellipsis: { showTitle: true },
+            render: (_, item) => destinationText(item),
           },
           {
             title: t("delivery.archive.table.source"),
+            width: 90,
+            align: "center",
             render: (_, item) => (
               <Tag>
                 {(
@@ -158,10 +198,13 @@ export default function DeliveryArchiveModal({
           },
           {
             title: t("delivery.archive.table.date"),
-            render: (_, item) => new Date(item.created_at).toLocaleDateString(),
+            width: 110,
+            render: (_, item) => formatServerTime(item.created_at, { dateOnly: true }),
           },
           {
             title: t("delivery.archive.table.actions"),
+            width: 110,
+            align: "right",
             render: (_, item) => (
               <Button
                 size="small"
@@ -175,8 +218,17 @@ export default function DeliveryArchiveModal({
         ]}
       />
       {resumeOptions && resumeOptions.length > 0 ? (
-        <Space wrap style={{ marginTop: 16 }}>
-          <span>{t("delivery.archive.resumePicker")}</span>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            marginTop: 12,
+            paddingTop: 12,
+            borderTop: "1px solid var(--rf-border-subtle)",
+          }}
+        >
+          <span style={{ whiteSpace: "nowrap" }}>{t("delivery.archive.resumePicker")}</span>
           <Select
             aria-label={t("delivery.archive.resumePicker")}
             style={{ minWidth: 240 }}
@@ -186,7 +238,7 @@ export default function DeliveryArchiveModal({
             options={resumeOptions}
             onChange={(value?: number) => setSelectedResumeId(value ?? null)}
           />
-        </Space>
+        </div>
       ) : null}
       {selectedResumeId !== null ? (
         <div style={{ marginTop: 16 }}>

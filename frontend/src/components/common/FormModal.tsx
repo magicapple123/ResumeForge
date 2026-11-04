@@ -40,6 +40,11 @@ export interface FormModalProps {
   cancelText?: string;
   /** 主按钮是否为危险操作（红色）。 */
   danger?: boolean;
+  /**
+   * 主按钮不可点（如"份数超上限"这类前端先拦的硬约束）。
+   * 只禁用按钮、不改 onSubmit：拦住的原因由调用方在 body 里写清楚。
+   */
+  okDisabled?: boolean;
   /** 提交中：主按钮 loading、取消按钮 disabled、× 隐藏、Esc 忽略。 */
   submitting?: boolean;
   /** 内容里是否已有未提交的修改。缺省视为 false（不问，直接关）。 */
@@ -69,6 +74,7 @@ export default function FormModal({
   okIcon,
   cancelText,
   danger = false,
+  okDisabled = false,
   submitting = false,
   dirty = false,
   hasDraft = false,
@@ -133,6 +139,7 @@ export default function FormModal({
           danger={danger}
           okText={okText}
           okIcon={okIcon}
+          okDisabled={okDisabled}
           cancelText={cancelText}
           keepRef={keepRef}
           onRequestClose={guard.requestClose}

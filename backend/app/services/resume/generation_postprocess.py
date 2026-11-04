@@ -36,16 +36,14 @@ from ..profile.paper_policy import (
     carrier_field_id,
     is_material_only,
 )
-from ..profile.paper_projection import (
-    ensure_custom_field_lines,
-    normalize_for_match,
-    project_paper_content,
-)
+from ..profile.paper_projection import ensure_custom_field_lines, normalize_for_match
 from .generation_normalize import (
+    dedupe_skills,
     merge_missing_consumed_fields,
     normalize_generated_content,
     strip_markdown_prefix,
 )
+from .resume_custom_sections import attach_custom_sections  # noqa: F401  (re-export)
 from .resume_grounding_helpers import _similar, _similar_skill
 
 logger = logging.getLogger(__name__)
@@ -233,17 +231,6 @@ def ensure_custom_field_lines_in_resume(
     if not updates:
         return resume, []
     return resume.model_copy(update=updates), annotations
-
-
-def attach_custom_sections(resume: ResumeContent, consumed: ConsumedProfile) -> ResumeContent:
-    """C2：用服务端确定性投影写入 content.custom_sections（顺序/标题/行都由投影冻结）。
-
-    R-37 单源：自建分区的「主文本 / 标签行」判定只在 paper_policy.custom_section_text_field，
-    生成链与填充链共用同一份投影（不做第二套生成期映射）。
-    """
-    projected = project_paper_content(consumed)
-    custom_sections = list(getattr(projected, "custom_sections", None) or [])
-    return resume.model_copy(update={"custom_sections": custom_sections})
 
 
 # ===== C6/R-43/R-76：仅素材字段的保存前回声阻断 =====
@@ -487,6 +474,7 @@ __all__ = [
     "apply_profile_field_backfill",
     "attach_custom_sections",
     "block_material_only_echo",
+    "dedupe_skills",
     "enforce_material_only_echo",
     "ensure_custom_field_lines_in_resume",
     "merge_missing_consumed_fields",

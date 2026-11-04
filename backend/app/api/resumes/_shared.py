@@ -76,15 +76,31 @@ PDF_ENGINE_NAME = "fpdf2"
 RESUME_OVERFLOW_HEADER = "X-Resume-Overflow"
 
 
+def page_limit_header_value(page_limit: int | None, *, is_unlimited: bool) -> str | None:
+    """``X-Resume-Page-Limit`` 的值：**「不限篇幅」回 0**，其余回真实上限。
+
+    为什么不直接回 ``artifact.page_limit``：用户选「不限」时记录里存的是 0，而
+    ``mode_page_limit(0)`` 会把它折成 10 页——那 10 是给 PDF 的**渲染保护上限**，不是
+    用户选的篇幅。把 10 写进这个头，界面就会显示"上限 10 页"，与用户刚才选的「不限」
+    自相矛盾（也答不出"这份文件到底有没有篇幅约束"）。
+
+    回 0 与记录里的语义值一致；前端 ``readCountHeader`` 把 0 当"没有上限"（null），
+    正好是「不限」该有的展示。
+
+    ``page_limit`` 为 ``None``（渲染器不报上限、也没裁剪）时不发这个头。
+    """
+    if page_limit is None:
+        return None
+    return "0" if is_unlimited else str(page_limit)
+
+
 def _format_sse(payload: dict) -> str:
     """把事件转成 SSE 数据帧。"""
     return f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
 
 
 # v1 内容的 pydantic 校验错误（尤其照片 data URL）对用户没有可读性：这里统一翻成人话。
-_UNSUPPORTED_PHOTO_DETAIL = (
-    "简历照片格式不受支持：照片必须是 JPEG、PNG 或 WebP 格式的 base64 data URL，请重新上传后再预览或导出"
-)
+_UNSUPPORTED_PHOTO_DETAIL = "简历照片格式不受支持：照片必须是 JPEG、PNG 或 WebP 格式的 base64 data URL，请重新上传后再预览或导出"
 
 
 def conversion_error_detail(exc: Exception) -> str:
@@ -115,7 +131,6 @@ def document_or_422(
         )
     except (ConversionError, DocumentValidationError) as exc:
         raise HTTPException(status_code=422, detail=conversion_error_detail(exc)) from exc
-
 
 
 def _validated_content(
@@ -175,7 +190,10 @@ def _to_resume_out(
         format_name=record.format_name or "",
         # 这个字段漏了不会报错，只会让保存成功却读不回来——界面上表现为"按了没反应"。
         format_config=record.format_config or {},
-        page_limit=record.page_limit or 1,
+        # 语义值原样回传：``0`` = 「不限篇幅」（前端按 ``=== 0`` 判定）。写成
+        # ``or 1`` 会让 API 把「不限」答成"1 页"，编辑器立刻显示最严的篇幅——用户
+        # 明明选了不限，界面却告诉他只能写一页。只有 NULL 列（老数据）才回落 1。
+        page_limit=record.page_limit if record.page_limit is not None else 1,
         font_scale=_as_font_scale(record.font_scale or DEFAULT_FONT_SCALE),
         # 读取侧收口而不是直接透传：库里的值被外部工具改成 "fr" 或空串时按 zh-CN 读，
         # 否则 schema 的 Literal 校验会让整份简历列表 500（见 resume_labels 的说明）。

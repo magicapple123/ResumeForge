@@ -9,6 +9,7 @@ import { Button, Layout, Menu, Tooltip, Typography } from "antd";
 import AppHeaderActions from "../../components/AppHeaderActions";
 import AnnouncementBar from "../../components/common/AnnouncementBar";
 import BackgroundTaskBar from "../../components/BackgroundTaskBar";
+import BulkAiFloatingBar from "./BulkAiFloatingBar";
 import { useUpdateAnnouncement } from "../../features/announcements/useUpdateAnnouncement";
 import StarPromptModal from "../../components/StarPromptModal";
 import PageSkeleton from "../../components/common/PageSkeleton";
@@ -30,6 +31,7 @@ import { t } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
 import GlobalOverlays from "../../components/GlobalOverlays";
 import AiPolishLayer from "../../features/ai-polish/AiPolishLayer";
+import { ContextMenuHost } from "../../features/context-menu/ContextMenuHost";
 import ShortcutProvider from "../../features/shortcuts/ShortcutProvider";
 import { useShortcut } from "../../features/shortcuts/useShortcutKeymap";
 import { triggerJobCreate } from "../../features/shortcuts/runtimeTargets";
@@ -267,6 +269,9 @@ export default function AppShell() {
             同一件事响两次，正是本轮在收敛的"有的地方响、有的地方不响"。 */}
         {/* 全局 AI 润色：文档级监听，任何输入框里选中一段文字都能就地改写。 */}
         <AiPolishLayer />
+        {/* 全局**唯一**右键浮层宿主（问题 25）：只订阅模块级 store，不需要 children，
+            也不向下提供任何 context。全站只此一处，多放一份就会叠出两张菜单。 */}
+        <ContextMenuHost />
 
         {/* 快捷键：唯一的 keydown 监听挂载点；动作由各页面用 useShortcut 自己认领。 */}
         <ShortcutProvider />
@@ -415,6 +420,8 @@ export default function AppShell() {
             <AnnouncementBar />
             {/* 常驻任务条：无任务时组件自身 return null，不占位。 */}
             <BackgroundTaskBar />
+            {/* 批量生成/解读的跨页浮条：与任务条同级；只在非岗位页出现（岗位页有内联进度）。 */}
+            <BulkAiFloatingBar />
             <Content className="app-content" id="main-content" role="main" tabIndex={-1}>
               <Suspense fallback={<PageSkeleton rows={8} />}>
                 <Outlet />

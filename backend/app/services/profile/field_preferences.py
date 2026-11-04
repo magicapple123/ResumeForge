@@ -36,6 +36,7 @@ from .definition_catalog import (
     BUILTIN_SECTIONS,
     FIELD_BY_ID,
     SECTION_BY_KEY,
+    private_field_ids,
 )
 from .errors import RevisionConflict, ValidationError
 
@@ -90,6 +91,8 @@ class MergedSection:
     provenance: tuple[str, ...]
     fields: tuple[MergedField, ...]
     revision: int
+    # 需求 6：板块是否参与岗位相关性筛选（内置分区恒 False，只有自建板块可开）。
+    filter_by_job: bool = False
 
 
 def _pref_parts(pref: Any) -> tuple[bool, bool | None, int]:
@@ -185,6 +188,7 @@ def _merge_custom_section(
         (),
         fields,
         int(row.revision or 1),
+        bool(getattr(row, "filter_by_job", False)),
     )
 
 
@@ -295,6 +299,36 @@ def preference_map(db: Session) -> dict[str, dict[str, Any]]:
     }
 
 
+def hidden_field_ids(db: Session) -> frozenset[str]:
+    """用户主动隐藏的字段 id 集合（hidden 偏好的**唯一**读取入口）。
+
+    本函数此前是 ``profile_reader._hidden_field_ids`` 的私有实现，只有消费层在用。
+    7-B 让「全局搜索」也按同一份判据裁字段，于是上移到这里：hidden 的**写入**
+    （``patch_preference``）与**读取**从此同源，任何出口都不许再写一份查询。
+
+    偏好行缺失 = 没隐藏，所以空库返回空集合；返回值是 frozenset，调用方只做 ``in``
+    判断或求并集，不需要顺序。
+    """
+    return frozenset(
+        field_id
+        for field_id, preference in load_preferences(db).items()
+        if preference.hidden
+    )
+
+
+def search_excluded_field_ids(db: Session) -> frozenset[str]:
+    """全局搜索的「不可见字段」判据：``hidden ∪ private``（7-B 的唯一口径）。
+
+    - ``hidden``：用户主动隐藏（``hidden_field_ids``，与写入同源）；
+    - ``private``：定义里标记私密的默认字段（``definition_catalog.private_field_ids``，
+      如 ``credentials.credential_number``）。判据从定义取，**不在搜索层按字段名硬编码**。
+
+    **刻意不含 ``material_only``**：仅素材是"不上纸面"，它的值仍会进模型 / 网申，
+    所以照常可搜；把它算进来会让"仅素材"在搜索里彻底消失，那不是它的定义。
+    """
+    return hidden_field_ids(db) | private_field_ids()
+
+
 def _field_in_section(db: Session, field_id: str, section_key: str) -> bool:
     """字段必须属于声明的大字段：内置字段查目录，自定义字段查活动定义（R-67）。"""
     builtin = FIELD_BY_ID.get(field_id)
@@ -399,9 +433,11 @@ __all__ = [
     "build_section",
     "build_sections",
     "custom_field_rows",
+    "hidden_field_ids",
     "load_preferences",
     "merged_custom_field",
     "merged_custom_section",
     "patch_preference",
     "preference_map",
+    "search_excluded_field_ids",
 ]

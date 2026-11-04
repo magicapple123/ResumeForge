@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * 简历中心批量导出：未配置时先引导去设置；已配置时把所选 id 交给接口并提示份数。
+ * 简历中心批量导出：点动作先弹「本次参数」卡片（不跳设置页），确认后按这一份参数导出。
  *
- * 单独成文件（而不是并入 ResumesPage.test.tsx）：那个文件已经贴着 500 行预算，而这两个
+ * 单独成文件（而不是并入 ResumesPage.test.tsx）：那个文件已经贴着 500 行预算，而这里的
  * 用例要额外桩掉导出接口、批量参数接口与浏览器下载。
  */
 
@@ -35,7 +35,10 @@ vi.mock("../api/jobs", async (importOriginal) => ({
   listJobs: jobMocks.listJobs,
   getJob: jobMocks.getJob,
 }));
-vi.mock("../api/resumeBatchExport", () => batchExportMocks);
+vi.mock("../api/resumeBatchExport", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../api/resumeBatchExport")>()),
+  batchExportResumes: batchExportMocks.batchExportResumes,
+}));
 vi.mock("../api/settingsBatch", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../api/settingsBatch")>()),
   getBatchOperationConfig: batchSettingsMocks.getBatchOperationConfig,
@@ -66,6 +69,33 @@ const RESUME: ResumeBrief = {
   updated_at: "2026-08-21T09:30:00",
 };
 
+const GENERATION = {
+  template: "classic",
+  format_name: "",
+  font_scale: "standard",
+  page_limit: 1,
+  language: "zh-CN",
+  enhance: false,
+  enhancement_level: "balanced",
+  custom_instruction: "",
+};
+
+const EXPORT = {
+  template: "scholar",
+  format_name: "",
+  font_scale: "large",
+  page_limit: 2,
+  language: "zh-CN",
+  export_format: "docx",
+};
+
+function sections(exportConfigured: boolean) {
+  return {
+    generation: { ...GENERATION, configured: false, updated_at: null },
+    export: { ...EXPORT, configured: exportConfigured, updated_at: null },
+  };
+}
+
 function renderPage() {
   return render(
     <MemoryRouter initialEntries={["/resumes"]}>
@@ -83,7 +113,14 @@ async function enterSelectingAndPickOne() {
   fireEvent.click(screen.getAllByRole("checkbox")[1]!);
 }
 
+async function openBatchExportModal() {
+  fireEvent.click(screen.getByRole("button", { name: "批量操作" }));
+  fireEvent.click(await screen.findByRole("menuitem", { name: /批量导出/ }));
+  return screen.findByRole("dialog");
+}
+
 beforeEach(() => {
+  window.sessionStorage.clear();
   batchSettingsMocks.getBatchOperationConfig.mockReset();
   batchExportMocks.batchExportResumes.mockReset();
   downloadMocks.downloadBlob.mockReset();
@@ -96,40 +133,21 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("ResumesPage 批量导出", () => {
-  it("未配置批量参数时先弹设置引导，不发导出请求", async () => {
-    batchSettingsMocks.getBatchOperationConfig.mockResolvedValue({
-      generation: { configured: false },
-      export: { configured: false },
-    });
+  it("点批量导出直接弹「本次参数」，不跳页面、不发请求", async () => {
+    batchSettingsMocks.getBatchOperationConfig.mockResolvedValue(sections(false));
     renderPage();
 
     await enterSelectingAndPickOne();
-    fireEvent.click(screen.getByRole("button", { name: "批量操作" }));
-    fireEvent.click(await screen.findByRole("menuitem", { name: /批量导出/ }));
+    const dialog = await openBatchExportModal();
 
-    const confirmRoot = await waitFor(() => {
-      const root = document.querySelector(".ant-modal-confirm");
-      expect(root).not.toBeNull();
-      return root as HTMLElement;
-    });
-    expect(confirmRoot.textContent).toContain(t("batchOperation.guard.title"));
+    // 未配置时用默认值开局，并说明"可直接开始"——不能是空白或"去设置"。
+    expect(dialog.textContent).toContain(t("batchOperation.modal.defaults"));
+    expect(dialog.textContent).toContain(t("batchOperation.modal.count.export", { count: 1 }));
     expect(batchExportMocks.batchExportResumes).not.toHaveBeenCalled();
   });
 
-  it("已配置时把所选 id 交给接口并提示导出的份数", async () => {
-    batchSettingsMocks.getBatchOperationConfig.mockResolvedValue({
-      generation: { configured: false },
-      export: {
-        configured: true,
-        template: "classic",
-        format_name: "",
-        font_scale: "standard",
-        page_limit: 1,
-        language: "zh-CN",
-        export_format: "pdf",
-        updated_at: null,
-      },
-    });
+  it("已配置时弹窗预填全局参数，确认后按弹窗里的那份导出", async () => {
+    batchSettingsMocks.getBatchOperationConfig.mockResolvedValue(sections(true));
     batchExportMocks.batchExportResumes.mockResolvedValue({
       blob: new Blob(["zip"]),
       filename: "简历批量导出.zip",
@@ -140,11 +158,16 @@ describe("ResumesPage 批量导出", () => {
     renderPage();
 
     await enterSelectingAndPickOne();
-    fireEvent.click(screen.getByRole("button", { name: "批量操作" }));
-    fireEvent.click(await screen.findByRole("menuitem", { name: /批量导出/ }));
+    await openBatchExportModal();
+    fireEvent.click(
+      await screen.findByRole("button", { name: t("batchOperation.modal.start.export") }),
+    );
 
     await waitFor(() =>
-      expect(batchExportMocks.batchExportResumes).toHaveBeenCalledWith([RESUME.id]),
+      expect(batchExportMocks.batchExportResumes).toHaveBeenCalledWith(
+        [RESUME.id],
+        expect.objectContaining({ template: "scholar", page_limit: 2, export_format: "docx" }),
+      ),
     );
     expect(
       await screen.findByText(t("batchOperation.export.done", { count: 1 })),

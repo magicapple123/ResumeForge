@@ -52,13 +52,16 @@ antdOverrideGuard 的非递归扫描能看见它；规则内容与顺序不变�
   top: calc(100% + 12px);
   bottom: auto;
   left: 50%;
-  transform: translateX(-50%);
+  /* 水平居中仍走 translateX(-50%)（兜底/首帧用）；hook 算好精确 left 之后把
+     --tt-tip-shift-x 写成 0，两种摆法不会叠加。夹取不能直接写 transform —— 那会
+     把这条规则覆盖掉，球贴左/贴右时的 translateY 也会一起失效。 */
+  transform: translateX(var(--tt-tip-shift-x, -50%));
 }
 
 .tt-shell.is-edge-bottom .tt-tip {
   bottom: calc(100% + 12px);
   left: 50%;
-  transform: translateX(-50%);
+  transform: translateX(var(--tt-tip-shift-x, -50%));
 }
 
 .tt {

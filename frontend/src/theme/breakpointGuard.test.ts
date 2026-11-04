@@ -179,6 +179,11 @@ describe("断点单一事实源", () => {
       "styles/workbench-narrow.css",
       "styles/resume-workbench-tabs.css",
       "styles/bilingual.css",
+      // resume-panels.css —— 简历详情弹窗（问题 8）：`container-type` 挂在
+      // `.resume-detail-preview`（弹窗内容根），只用来让诊断条在窄档换行。
+      // 该根节点内部没有 position:fixed 后代（antd 的 Dropdown/Popover 都 portal 到 body），
+      // 按方案 §3.5 的判据安全。
+      "styles/resume-panels.css",
     ]);
     const offenders: string[] = [];
     for (const absolute of collectCssFiles()) {

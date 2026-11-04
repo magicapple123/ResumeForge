@@ -79,6 +79,8 @@ export function useJobsPageState() {
         page_size: pageSize,
       }),
     [keyword, jobType, status, sourceKind, sortState, page, pageSize],
+    // 回到前台静默重拉（问题 27a）：岗位列表是第二个开启的列表页。
+    { refetchOnFocus: {} },
   );
 
   // 筛选 / 分页写回 URL（replace 语义）。effect 只依赖这些状态本身，不依赖 searchParams：

@@ -1,57 +1,13 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 /*
- * 全局 AI 润色浮层（R17）：右键菜单 + 改写卡片。
+ * 全局 AI 润色浮层（R17）：改写卡片。
  *
  * 只用主题 token（design-tokens.css 的 --rf-*），不写死颜色；视觉目标是"贴着指针
- * 的一张系统菜单"和"贴着菜单的一张卡片"，比 antd 的 Modal 轻，用户可以边看原文边改。
+ * 的一张卡片"，比 antd 的 Modal 轻，用户可以边看原文边改。
+ *
+ * 右键菜单本身的皮肤已搬到 `styles/context-menu.css`（`.rf-ctx-menu*`，问题 25）：
+ * 纸面加粗菜单与选区菜单共用同一个浮层，样式不该留在 ai-polish 里。
  */
-
-/* 右键菜单：刻意长得像系统菜单，用户不必学新的交互。 */
-.rf-ai-polish-menu {
-  position: fixed;
-  /* z-index 由组件按 layer.aiPolish（3710）注入：CSS 里的层级常量只做说明。 */
-  min-width: 132px;
-  padding: 4px;
-  border: 1px solid var(--rf-border);
-  border-radius: 8px;
-  background: var(--rf-surface);
-  box-shadow: 0 6px 18px color-mix(in srgb, var(--rf-brand) 16%, transparent);
-  outline: none;
-}
-
-.rf-ai-polish-menu-item {
-  display: block;
-  width: 100%;
-  padding: 6px 10px;
-  border: 0;
-  background: transparent;
-  color: var(--rf-text-body);
-  font-size: 13px;
-  line-height: 18px;
-  text-align: left;
-  cursor: pointer;
-}
-
-.rf-ai-polish-menu-item:hover:enabled {
-  background: var(--rf-surface-alt);
-}
-
-.rf-ai-polish-menu-item:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-}
-
-.rf-ai-polish-menu-item:focus-visible {
-  outline: 2px solid var(--rf-focus-ring);
-  outline-offset: -2px;
-}
-
-/* 「AI 润色」与上面的通用文本操作隔开：它不是系统菜单的一部分。 */
-.rf-ai-polish-menu-separator {
-  height: 1px;
-  margin: 4px 2px;
-  background: var(--rf-border);
-}
 
 .rf-ai-polish-host {
   position: fixed;

@@ -4,6 +4,7 @@ import { App as AntdApp } from "antd";
 import * as antd from "antd";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
+import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ResumeDetail, ResumeLayout } from "../types";
 import { makeResumeDocument } from "../test/documentHarness";
@@ -29,11 +30,16 @@ vi.mock("./resume/ResumeDetailPreview", () => ({
   default: ({
     layout,
     onApplyLayout,
+    metaExtra,
   }: {
     layout: ResumeLayout;
     onApplyLayout: (next: ResumeLayout) => void;
+    // 2026-11 问题 8：关联岗位 / 本次使用 / 版本血缘都从 `metaExtra` 插槽进来，
+    // 桩必须把它渲染出来，否则"弹窗有没有把这三块接上"就再也测不到了。
+    metaExtra?: ReactNode;
   }) => (
     <div data-testid="resume-preview-stub" data-page-limit={layout.page_limit}>
+      <div data-testid="resume-preview-meta-extra">{metaExtra}</div>
       <button type="button" onClick={() => onApplyLayout({ ...layout, page_limit: 2 })}>
         改版式·2 页
       </button>

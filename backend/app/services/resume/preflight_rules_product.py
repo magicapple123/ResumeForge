@@ -19,7 +19,7 @@ from ..docx_exporter import build_resume_docx
 from ..pdf_exporter import ResumePDFError
 from ..pdf_exporter.fit import build_resume_pdf
 from .product_text import (
-    compare_text_order,
+    compare_text_order_with_highlights,
     expected_lines,
     extract_docx_text,
     extract_pdf_text,
@@ -33,6 +33,12 @@ _MAX_EVIDENCE = 20
 _MAX_PAGE_CHARS = 50_000
 # 隐藏内容的"整值比对"下限（R-24 A）：单字 / 单个数字没有区分度。
 _MIN_HIDDEN_LEAK_CHARS = 2
+
+
+def _fits_page(highlight: dict, lengths: dict[int, int]) -> bool:
+    """区间必须落在**下发的那一页文本**里（页文本可能被 `_MAX_PAGE_CHARS` 截断）。"""
+    start, end = highlight["start"], highlight["end"]
+    return 0 <= start < end <= lengths.get(highlight["page"], 0)
 
 
 def _hidden_lines(content: ResumeContent | dict) -> list[str]:
@@ -127,8 +133,11 @@ def _text_diff_issues(
     extracted: list[tuple[int, str]],
     skip_missing: bool = False,
     font_missing: set[str] | None = None,
-) -> tuple[list[CheckIssue], list[dict]]:
+) -> tuple[list[CheckIssue], list[dict], list[dict]]:
     """文本缺失 / 抽不到文本 / 顺序差异三类产物问题。
+
+    返回 `(问题, 差异列表, 高亮区间)`：第三项只由 `out_of_order` 产生（22b），
+    供前端按区间涂色；差异列表的条数与文案**不受**区间合并的影响。
 
     两个由 R-24 引入的口径：
     · `skip_missing=True`（PDF 已超页）：正文本来就**被截断**了，此时再报"缺少 N 处正文"
@@ -138,9 +147,9 @@ def _text_diff_issues(
       是文本层问题（纸面可能是好的），降到 verify 并让用户去看精确预览；只有字体里
       也没有的字才是"纸面上就是个空白"的 blocker。
     """
-    diffs = compare_text_order(expected, extracted)
+    diffs, highlights = compare_text_order_with_highlights(expected, extracted)
     if not diffs:
-        return [], []
+        return [], [], []
     missing = [] if skip_missing else [diff for diff in diffs if diff["kind"] == "missing"]
     issues: list[CheckIssue] = []
     if missing:
@@ -223,7 +232,7 @@ def _text_diff_issues(
                 ),
             )
         )
-    return issues, diffs
+    return issues, diffs, highlights
 
 
 def product_issues(
@@ -236,12 +245,15 @@ def product_issues(
     language: str,
     formats: list[str],
     font_coverage: dict | None = None,
-) -> tuple[list[CheckIssue], list[dict], list[dict]]:
-    """产物层：返回 (问题, machine_text, order_diffs)。只处理被点名的格式。
+) -> tuple[list[CheckIssue], list[dict], list[dict], list[dict]]:
+    """产物层：返回 (问题, machine_text, order_diffs, order_highlights)。只处理被点名的格式。
 
     `font_coverage` 是**版面层**已经算好的字体覆盖结果（`{"missing": {role: [chars]}}`）。
     产物层用它区分"纸面缺字"与"文本层抽不出"（R-24 D）：传 None = 没检查过，
     按老口径一律当缺字处理。
+
+    高亮区间只取 **PDF** 的：`machine_text` 本身就是 PDF 页文本，Word 的区间没有对应的
+    页面可涂（`order_diffs` 仍照旧两种格式都收）。
     """
     font_missing: set[str] | None = None
     if isinstance(font_coverage, dict) and font_coverage.get("checked"):
@@ -252,6 +264,7 @@ def product_issues(
     issues: list[CheckIssue] = []
     machine_text: list[dict] = []
     order_diffs: list[dict] = []
+    order_highlights: list[dict] = []
 
     if "pdf" in formats:
         try:
@@ -307,7 +320,7 @@ def product_issues(
                         ),
                     )
                 )
-            text_issues, diffs = _text_diff_issues(
+            text_issues, diffs, highlights = _text_diff_issues(
                 format_name="pdf",
                 expected=expected,
                 extracted=pages,
@@ -317,7 +330,14 @@ def product_issues(
             )
             issues.extend(text_issues)
             order_diffs.extend(diffs)
-            machine_text = [{"page": page, "text": text[:_MAX_PAGE_CHARS]} for page, text in pages]
+            # 页面文本超过上限时下发的只有前 `_MAX_PAGE_CHARS` 个字符：区间必须按**下发的**
+            # 那一份判断，否则前端会拿到越界区间（切出来是空串，看起来像"高亮丢了"）。
+            clipped = [(page, text[:_MAX_PAGE_CHARS]) for page, text in pages]
+            machine_text = [{"page": page, "text": text} for page, text in clipped]
+            kept_chars = {page: len(text) for page, text in clipped}
+            order_highlights.extend(
+                highlight for highlight in highlights if _fits_page(highlight, kept_chars)
+            )
 
     if "docx" in formats:
         try:
@@ -349,7 +369,7 @@ def product_issues(
             )
         else:
             text = extract_docx_text(docx.content)
-            docx_issues, _diffs = _text_diff_issues(
+            docx_issues, _diffs, _docx_highlights = _text_diff_issues(
                 format_name="docx",
                 expected=expected,
                 extracted=[(1, text)],
@@ -375,7 +395,7 @@ def product_issues(
                         ),
                     )
                 )
-    return issues, machine_text, order_diffs
+    return issues, machine_text, order_diffs, order_highlights
 
 
 __all__ = ["product_issues"]

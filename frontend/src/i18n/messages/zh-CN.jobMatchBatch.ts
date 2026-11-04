@@ -28,6 +28,8 @@ const jobMatchBatch = {
   "jobMatchBatch.running.progress": "已完成 {done} / {total} 个岗位",
   "jobMatchBatch.running.failed": "（失败 {count}）",
   "jobMatchBatch.running.current": "正在分析：{title}",
+  /** 计数已满但任务仍在跑（落库 + 生成横向对比）：此时没有"正在分析"的岗位。 */
+  "jobMatchBatch.running.finalizing": "正在收尾：保存结果并生成对比…",
   "jobMatchBatch.running.waiting": "等待后台任务启动…",
   "jobMatchBatch.setup.title": "将为 {count} 个勾选的岗位逐一分析匹配度",
   "jobMatchBatch.setup.body":

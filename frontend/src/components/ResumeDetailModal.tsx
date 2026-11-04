@@ -328,45 +328,46 @@ export default function ResumeDetailModal({ recordId, onClose, autoOpenWorkbench
       ) : !detail || !html ? (
         <PageSkeleton rows={8} card={false} />
       ) : (
-        <>
-          {/* 关联上下文（RF-11）：这份简历对着哪个岗位，投递进度与模拟面试都带着
-              job_id 直达，不必到对应模块再找一遍岗位。纯 Link 行、零新增请求；
-              通用简历（无 job_id）没有这行（预览头部的「通用简历」标签照旧）。 */}
-          {detail.job_id ? (
-            <Space size={12} wrap style={{ marginBottom: 12 }}>
-              <Link to={`/jobs?job_id=${detail.job_id}`}>{t("resume.detail.link.job")}</Link>
-              <Typography.Text type="secondary">·</Typography.Text>
-              <Link to={`/tracker?job_id=${detail.job_id}`}>
-                {t("resume.detail.link.progress")}
-              </Link>
-              <Typography.Text type="secondary">·</Typography.Text>
-              <Link to={`/interview?job_id=${detail.job_id}`}>
-                {t("resume.detail.link.interview")}
-              </Link>
-            </Space>
-          ) : null}
-          {/* 本次使用（R-33）：保存/生成时的组与参与大字段；资料/定义变了提示需重新生成。
-              纯只读，读取失败时整块隐藏（不阻断下面的正文预览）。 */}
-          <ResumeProfileUsage recordId={detail.id} />
-          {/* 版本信息位（RF-17）：血缘 + 投递记录，弹窗打开时按需拉取一次。 */}
-          <div style={{ marginBottom: 12 }}>
-            <ResumeDeliveryInfo
-              recordId={detail.id}
-              parentRevisionId={detail.parent_revision_id ?? null}
-            />
-          </div>
-          <ResumeDetailPreview
-            detail={detail}
-            html={html}
-            layout={layout}
-            autoOpenWorkbench={autoOpenWorkbench}
-            layoutStatus={layoutStatus}
-            measure={measure}
-            pdfDirectAvailable={pdfDirectAvailable}
-            relayouting={relayouting}
-            previewRef={previewRef}
-            onLayoutStatus={setLayoutStatus}
-            onMeasure={setMeasure}
+        <ResumeDetailPreview
+          detail={detail}
+          html={html}
+          layout={layout}
+          autoOpenWorkbench={autoOpenWorkbench}
+          layoutStatus={layoutStatus}
+          measure={measure}
+          pdfDirectAvailable={pdfDirectAvailable}
+          relayouting={relayouting}
+          previewRef={previewRef}
+          // 关联上下文（RF-11）+ 本次使用（R-33）+ 版本血缘 / 投递记录（RF-17）全部并进
+          // 顶部**同一行元信息**（2026-11 问题 8）：原来这三块各占一段，把纸面推到首屏之外。
+          // 只换形态，三块内容与它们各自的取数逻辑都没动。
+          metaExtra={
+            <div className="resume-detail-meta-extra">
+              {detail.job_id ? (
+                <Space size={8}>
+                  <Link to={`/jobs?job_id=${detail.job_id}`}>{t("resume.detail.link.job")}</Link>
+                  <Typography.Text type="secondary">·</Typography.Text>
+                  <Link to={`/tracker?job_id=${detail.job_id}`}>
+                    {t("resume.detail.link.progress")}
+                  </Link>
+                  <Typography.Text type="secondary">·</Typography.Text>
+                  <Link to={`/interview?job_id=${detail.job_id}`}>
+                    {t("resume.detail.link.interview")}
+                  </Link>
+                </Space>
+              ) : null}
+              {/* 本次使用（R-33）：保存/生成时的组与参与大字段；资料/定义变了提示需重新生成。
+                  纯只读，读取失败时整块隐藏（不阻断下面的正文预览）。 */}
+              <ResumeProfileUsage recordId={detail.id} />
+              {/* 版本信息位（RF-17）：血缘 + 投递记录，弹窗打开时按需拉取一次。 */}
+              <ResumeDeliveryInfo
+                recordId={detail.id}
+                parentRevisionId={detail.parent_revision_id ?? null}
+              />
+            </div>
+          }
+          onLayoutStatus={setLayoutStatus}
+          onMeasure={setMeasure}
             onApplyLayout={(next) => requestLayout(next)}
             // 制作台顶部「保存修改」要落库版式：把这条已有的 PATCH 链路直接交给它。
             // 底部那颗「保存」按钮仍在（定位不同：它只存版式，不动内容），两者共用本函数
@@ -409,7 +410,6 @@ export default function ResumeDetailModal({ recordId, onClose, autoOpenWorkbench
             suggestionsResetKey={suggestionsResetKey}
             onSuggestionsGenerated={() => setSuggestionsGenerated(true)}
           />
-        </>
       )}
     </Modal>
   );

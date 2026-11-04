@@ -22,7 +22,7 @@ import {
 } from "../../types";
 import { formatDateTime } from "../../utils/format";
 import { RecordDetailDrawer } from "../common/RecordDetail";
-import { useRowActionMenu } from "../common/rowActionMenu";
+import { type RowMenuItem } from "../common/rowActionMenu";
 import { AdmissionTag } from "./queue/AdmissionTag";
 import { QueueFilterBar } from "./queue/QueueFilterBar";
 import { UNANALYZED_FILTER, type AdmissionFilterValue } from "./queue/filterOptions";
@@ -56,7 +56,6 @@ export default function ApplyQueuePanel({ disabled, onStarted, onChanged }: Prop
     undefined,
   );
   const [batchRemoving, setBatchRemoving] = useState(false);
-  const buildMenu = useRowActionMenu();
 
   useEffect(() => {
     if (error) message.error(error);
@@ -109,37 +108,34 @@ export default function ApplyQueuePanel({ disabled, onStarted, onChanged }: Prop
   };
 
   /**
-   * 右键菜单项：与「···」菜单一致（编辑 / 移出队列）。移出队列走 Modal.confirm。
-   */
-  /**
    * 行操作的唯一清单：右键菜单与「···」下拉都从这里取，避免两处慢慢长歪。
-   * 「移出队列」走 Modal.confirm（由 buildMenu 统一加二次确认）。
+   * 「移出队列」走 Modal.confirm——由 `useRowActionMenu` / `useRowActionRunner` 统一加二次确认，
+   * 这里只声明 `confirm` + `confirmBody`，不自己调 `modal.confirm`。
    */
-  const rowMenuItems = (record: ApplyQueueItem) =>
-    buildMenu([
-      {
-        key: "detail",
-        label: t("applyQueue.action.viewDetail"),
-        icon: <EyeOutlined />,
-        onClick: () => setDetail(record),
-      },
-      {
-        key: "edit",
-        label: t("applyQueue.action.edit"),
-        icon: <EditOutlined />,
-        onClick: () => setEditing(record),
-      },
-      {
-        key: "remove",
-        label: t("applyQueue.action.remove"),
-        danger: true,
-        icon: <DeleteOutlined />,
-        confirm: t("applyQueue.confirm.removeTitle"),
-        // 与「删除」区别开：移出队列不动数据，正文要说清"岗位与投递记录都还在"。
-        confirmBody: t("applyQueue.confirm.removeBody"),
-        onClick: () => void remove(record),
-      },
-    ]);
+  const rowMenuItems = (record: ApplyQueueItem): RowMenuItem[] => [
+    {
+      key: "detail",
+      label: t("applyQueue.action.viewDetail"),
+      icon: <EyeOutlined />,
+      onClick: () => setDetail(record),
+    },
+    {
+      key: "edit",
+      label: t("applyQueue.action.edit"),
+      icon: <EditOutlined />,
+      onClick: () => setEditing(record),
+    },
+    {
+      key: "remove",
+      label: t("applyQueue.action.remove"),
+      danger: true,
+      icon: <DeleteOutlined />,
+      confirm: t("applyQueue.confirm.removeTitle"),
+      // 与「删除」区别开：移出队列不动数据，正文要说清"岗位与投递记录都还在"。
+      confirmBody: t("applyQueue.confirm.removeBody"),
+      onClick: () => void remove(record),
+    },
+  ];
 
   const remove = async (item: ApplyQueueItem) => {
     setBusy(true);

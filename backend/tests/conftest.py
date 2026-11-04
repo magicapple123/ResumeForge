@@ -229,6 +229,8 @@ def no_real_search_network(monkeypatch):
     monkeypatch.setattr("app.services.search.aggregate.bing_search", empty_results)
     monkeypatch.setattr("app.services.search.aggregate.search_duckduckgo", empty_results)
     monkeypatch.setattr("app.services.search.aggregate.search_searxng", empty_results)
+    monkeypatch.setattr("app.services.search.aggregate.search_deepseek", empty_results)
+    monkeypatch.setattr("app.services.search.aggregate.fetch_deepseek_text", empty_page)
     monkeypatch.setattr("app.services.search.aggregate.fetch_page_text", empty_page)
     monkeypatch.setattr("app.services.assistant.assistant_web_search.fetch_bing_rss", empty_rss)
 

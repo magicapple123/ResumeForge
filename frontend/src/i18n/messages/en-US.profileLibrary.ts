@@ -35,6 +35,9 @@ const profileLibrary = {
   "profileLibrary.load.error": "Could not load My Profile: {detail}",
   "profileLibrary.load.retry": "Retry",
   "profileLibrary.load.empty": "No Profile content yet",
+  // Deep link (from a global-search hit): never fail silently when the section is outside the scheme.
+  "profileLibrary.deepLink.hiddenTitle": "The current scheme does not include this Section: {name}",
+  "profileLibrary.deepLink.showInScheme": "Show this Section in the current scheme",
   "profileLibrary.save.success": "Profile saved",
   "profileLibrary.save.invalid":
     "Complete the required Resume Profile Fields before saving all Profile data",
@@ -78,21 +81,25 @@ const profileLibrary = {
   "profileLibrary.sectionSettings.title": "Sections and Fields",
   "profileLibrary.sectionSettings.customTitle": "Custom Sections",
   "profileLibrary.sectionSettings.customHint":
-    "The 13 system Sections remain available; custom Sections can be deleted while retaining their content",
+    "Custom Sections can be deleted while retaining their content",
   "profileLibrary.sectionSettings.new": "New Section",
   "profileLibrary.sectionSettings.nameLabel": "Name",
   "profileLibrary.sectionSettings.nameHint": "1-40 characters; always supports multiple Entries",
   "profileLibrary.sectionSettings.create": "Create Section",
   "profileLibrary.sectionSettings.createFailed": "Could not create the Section: {detail}",
   "profileLibrary.sectionSettings.rename": "Rename",
+  "profileLibrary.sectionSettings.renameMenu": "Rename this Section",
+  "profileLibrary.sectionSettings.more": "Section actions",
   "profileLibrary.sectionSettings.saveName": "Save",
   "profileLibrary.sectionSettings.delete": "Delete",
+  "profileLibrary.sectionSettings.deleteMenu": "Delete this Section",
   "profileLibrary.sectionSettings.fields": "Field settings",
   "profileLibrary.sectionSettings.fieldsCount": "{count} Fields",
   "profileLibrary.sectionSettings.entriesCount": "{count} Entries",
-  "profileLibrary.sectionSettings.visibilityLegend":
-    "Each switch controls whether its Section is shown in the current Plan",
+  "profileLibrary.sectionSettings.participationLegend":
+    "Select the box on the left to include a Section in the current Plan",
   "profileLibrary.sectionSettings.builtin": "System Section",
+  "profileLibrary.sectionSettings.builtinCount": "{count} always on",
   "profileLibrary.sectionSettings.builtinHint": "Fields can only be hidden, not renamed or deleted",
   "profileLibrary.sectionSettings.empty": "No custom Sections yet",
   "profileLibrary.sectionSettings.emptyHint":
@@ -105,7 +112,13 @@ const profileLibrary = {
     "Restore it from Trash; recreating the same name will not link to the old content.",
   "profileLibrary.sectionSettings.deleteConfirm": 'Delete "{name}"',
   "profileLibrary.sectionSettings.impactFailed": "Could not load the deletion impact: {detail}",
+  "profileLibrary.sectionSettings.jobFilter": "Match job keywords",
+  "profileLibrary.sectionSettings.jobFilterHint":
+    "Entries that don't match the job may be left out; your data is kept",
+  "profileLibrary.sectionSettings.jobFilterAria": "Toggle job keyword matching for {name}",
   "profileLibrary.fieldSettings.title": "Field settings",
+  "profileLibrary.fieldSettings.titleWithSection": "{name} · Field settings",
+  "profileLibrary.fieldSettings.more": "Field actions",
   "profileLibrary.fieldSettings.defaultTitle": "Default Fields",
   "profileLibrary.fieldSettings.customTitle": "Custom Fields",
   "profileLibrary.fieldSettings.label": "Field name",
@@ -117,14 +130,21 @@ const profileLibrary = {
   "profileLibrary.fieldSettings.limit": "Up to 20 custom Fields per Section",
   "profileLibrary.fieldSettings.empty": "No custom Fields yet",
   "profileLibrary.fieldSettings.rename": "Rename",
+  "profileLibrary.fieldSettings.renameMenu": "Rename this Field",
   "profileLibrary.fieldSettings.saveName": "Save",
   "profileLibrary.fieldSettings.delete": "Delete",
+  "profileLibrary.fieldSettings.deleteMenu": "Delete this Field",
   "profileLibrary.fieldSettings.defaultHint":
     "Default Fields cannot be renamed or deleted, only hidden",
   "profileLibrary.fieldSettings.hide": "Hide",
   "profileLibrary.fieldSettings.show": "Show again",
   "profileLibrary.fieldSettings.hideAria": "Hide Field: {label}",
   "profileLibrary.fieldSettings.showAria": "Show Field again: {label}",
+  "profileLibrary.fieldSettings.customHiddenHint":
+    "Hide and Material only are different: Material only keeps the Field out of the printed resume but still lets it reach AI and web forms; hiding takes it out of everything (display, generation, search).",
+  "profileLibrary.fieldSettings.primaryTextField": "Main text Field",
+  "profileLibrary.fieldSettings.primaryTextFieldHint":
+    "This is the Section's main text Field. Hiding it keeps every value as a Label: Value line, but the paragraph form goes away.",
   "profileLibrary.fieldSettings.deleteTitle": 'Delete Field "{label}"?',
   "profileLibrary.fieldSettings.deleteBody":
     "This Field has values in {count} Entries; after deletion it will no longer be shown, but entered content is retained.",

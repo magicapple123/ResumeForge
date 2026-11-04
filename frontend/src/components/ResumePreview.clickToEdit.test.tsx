@@ -17,6 +17,7 @@
  */
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { ContextMenuHost } from "../features/context-menu/ContextMenuHost";
 import ResumePreview from "./ResumePreview";
 import { t } from "../i18n";
 import { CLICK_TO_EDIT_CLASS, CLICK_TO_EDIT_STYLE_ID } from "./resume-preview/clickToEdit";
@@ -189,7 +190,13 @@ describe("ResumePreview · 草稿模式编辑的组件接线", () => {
 describe("ResumePreview · 右键加粗的放行场景", () => {
   it("未勾选「草稿模式编辑」：右键交给浏览器", () => {
     const rich = richAdapter();
-    render(<ResumePreview html={HTML} warnings={[]} onPickField={vi.fn()} richEdit={rich} />);
+    // 右键菜单走全局单例宿主（`features/context-menu`）：生产里由 `AppShell` 挂一份，
+    // 这里单独渲染 `ResumePreview` 时要自己带上，否则菜单无处渲染。
+    render(
+      <ContextMenuHost>
+        <ResumePreview html={HTML} warnings={[]} onPickField={vi.fn()} richEdit={rich} />
+      </ContextMenuHost>,
+    );
 
     const iframe = getPreviewFrame();
     const field = paperField(iframe);
@@ -228,7 +235,13 @@ describe("ResumePreview · 右键加粗的放行场景", () => {
 
   it("选区不在带路径的文字里：右键交给浏览器", () => {
     const rich = richAdapter();
-    render(<ResumePreview html={HTML} warnings={[]} onPickField={vi.fn()} richEdit={rich} />);
+    // 右键菜单走全局单例宿主（`features/context-menu`）：生产里由 `AppShell` 挂一份，
+    // 这里单独渲染 `ResumePreview` 时要自己带上，否则菜单无处渲染。
+    render(
+      <ContextMenuHost>
+        <ResumePreview html={HTML} warnings={[]} onPickField={vi.fn()} richEdit={rich} />
+      </ContextMenuHost>,
+    );
     fireEvent.click(screen.getByRole("checkbox"));
 
     const doc = paperBody(getPreviewFrame(), "<p class='plain'>not a field</p>");
@@ -243,7 +256,13 @@ describe("ResumePreview · 右键加粗的放行场景", () => {
 
   it("原生 textarea 里的选区：右键交给浏览器", () => {
     const rich = richAdapter();
-    render(<ResumePreview html={HTML} warnings={[]} onPickField={vi.fn()} richEdit={rich} />);
+    // 右键菜单走全局单例宿主（`features/context-menu`）：生产里由 `AppShell` 挂一份，
+    // 这里单独渲染 `ResumePreview` 时要自己带上，否则菜单无处渲染。
+    render(
+      <ContextMenuHost>
+        <ResumePreview html={HTML} warnings={[]} onPickField={vi.fn()} richEdit={rich} />
+      </ContextMenuHost>,
+    );
     fireEvent.click(screen.getByRole("checkbox"));
 
     const doc = paperBody(
@@ -263,7 +282,13 @@ describe("ResumePreview · 右键加粗的放行场景", () => {
 describe("ResumePreview · 右键加粗的接管路径", () => {
   it("选中字段内的一段文字后右键：菜单出现，点「加粗」写入标记并即时改纸面", () => {
     const rich = richAdapter();
-    render(<ResumePreview html={HTML} warnings={[]} onPickField={vi.fn()} richEdit={rich} />);
+    // 右键菜单走全局单例宿主（`features/context-menu`）：生产里由 `AppShell` 挂一份，
+    // 这里单独渲染 `ResumePreview` 时要自己带上，否则菜单无处渲染。
+    render(
+      <ContextMenuHost>
+        <ResumePreview html={HTML} warnings={[]} onPickField={vi.fn()} richEdit={rich} />
+      </ContextMenuHost>,
+    );
     fireEvent.click(screen.getByRole("checkbox"));
 
     const iframe = getPreviewFrame();
@@ -285,7 +310,13 @@ describe("ResumePreview · 右键加粗的接管路径", () => {
 
   it("选区已经整段加粗：菜单第一项变成「取消加粗」", () => {
     const rich = richAdapter("**Alex**");
-    render(<ResumePreview html={HTML} warnings={[]} onPickField={vi.fn()} richEdit={rich} />);
+    // 右键菜单走全局单例宿主（`features/context-menu`）：生产里由 `AppShell` 挂一份，
+    // 这里单独渲染 `ResumePreview` 时要自己带上，否则菜单无处渲染。
+    render(
+      <ContextMenuHost>
+        <ResumePreview html={HTML} warnings={[]} onPickField={vi.fn()} richEdit={rich} />
+      </ContextMenuHost>,
+    );
     fireEvent.click(screen.getByRole("checkbox"));
 
     const iframe = getPreviewFrame();

@@ -14,6 +14,7 @@ from ...schemas.webform import (
     WebFormLiveEnabledIn,
     WebFormLiveIn,
     WebFormLiveOut,
+    WebFormLiveScopeIn,
     WebFormRememberIn,
     WebFormRememberOut,
 )
@@ -87,10 +88,27 @@ def set_browser_target_live(
 
 @router.post("/live/start", response_model=WebFormLiveOut)
 def live_start(payload: WebFormLiveIn | None = None, db: Session = Depends(get_db)):
-    return _start_live_session(db, want_ai=payload.ai if payload is not None else None)
+    return _start_live_session(
+        db,
+        want_ai=payload.ai if payload is not None else None,
+        scope=payload.scope if payload is not None else None,
+    )
 
 
-def _start_live_session(db: Session, want_ai: bool | None = None, *, close_db: bool = True) -> dict:
+@router.post("/live/scope", response_model=WebFormLiveOut)
+def live_scope(payload: WebFormLiveScopeIn):
+    """运行中切换取数范围（面板顶部的开关也会走这条路的同一份逻辑）。"""
+    webform_service.request_live_scope(payload.scope)
+    return webform_service.live_status()
+
+
+def _start_live_session(
+    db: Session,
+    want_ai: bool | None = None,
+    *,
+    scope: str | None = None,
+    close_db: bool = True,
+) -> dict:
     """开启（或复用正在跑的）实时填表会话；浏览器与页面路由共用这段主体。
 
     ``start_live`` 本身是幂等的：已在跑的会话只刷新资料与客户端，不会重复注入、
@@ -108,24 +126,45 @@ def _start_live_session(db: Session, want_ai: bool | None = None, *, close_db: b
     use_ai = True if want_ai is None else want_ai
     provider = webform_service.ai.build_provider(db) if use_ai else None
     # 一份快照同时产出 data 与 catalog：两者必须来自同一次组/资料解析（F5 契约 §2）。
-    view = webform_service.build_webform_view(db, live=True)
+    # 范围持有者：面板/页面切一次开关只改这里，下一次 loader 读到的就是新范围，所以
+    # 「整页预填按全部、清单按当前组」这种裂缝在结构上不成立（需求 3 硬约束）。
+    scope_holder = {"value": webform_service.normalize_scope(scope or "group")}
+
+    def set_scope(next_scope: str) -> None:
+        scope_holder["value"] = webform_service.normalize_scope(next_scope)
+
+    view = webform_service.build_webform_view(db, live=True, scope=scope_holder["value"])
     data, catalog = view.data, view.catalog
     memory_targets = webform_service.profile_targets.build_memory_targets(db)
 
-    def load_live_data() -> tuple[dict[str, str], list[dict[str, str]]]:
-        """每次聚焦新控件时读取最新资料，避免实时会话持有旧快照。"""
+    def load_live_data() -> tuple[dict[str, str], list[dict[str, str]], dict[str, Any]]:
+        """每次聚焦新控件时读取最新资料，避免实时会话持有旧快照。
+
+        第三个返回值是范围与被组过滤的板块——三者出自同一次取数，面板开关、空态原因
+        与清单内容才不会互相矛盾。
+        """
         session = SessionLocal()
         try:
-            view = webform_service.build_webform_view(session, live=True)
-            return view.data, view.catalog
+            view = webform_service.build_webform_view(
+                session, live=True, scope=scope_holder["value"]
+            )
+            return (
+                view.data,
+                view.catalog,
+                {
+                    "scope": view.scope,
+                    "filtered_sections": list(view.filtered_sections),
+                    "filtered_rows": list(view.filtered_rows),
+                },
+            )
         finally:
             session.close()
 
     def load_autofill_data() -> dict[str, str]:
-        """快捷整页填充复用主界面的批量资料口径。"""
+        """快捷整页填充复用主界面的批量资料口径（同一个范围）。"""
         session = SessionLocal()
         try:
-            return webform_service.build_form_data(session)
+            return webform_service.build_form_data(session, scope=scope_holder["value"])
         finally:
             session.close()
 
@@ -237,6 +276,8 @@ def _start_live_session(db: Session, want_ai: bool | None = None, *, close_db: b
             relaxed_mode_loader=load_relaxed_mode,
             ui_locale_loader=load_ui_locale,
             ui_locale=ui_locale,
+            scope=scope_holder["value"],
+            scope_setter=set_scope,
         )
     except webform_service.WebFormError as exc:
         _raise(exc)

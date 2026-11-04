@@ -48,6 +48,10 @@ from sqlalchemy.orm import Session
 
 from ...models.resume import ResumeRecord
 from ...models.resume_delivery import ResumeDeliveryRecord
+from ...schemas.resume_generation import (
+    UNLIMITED_PAGE_LIMIT,
+    UNLIMITED_RENDER_MAX_PAGES,
+)
 from ..export_pipeline import (
     ExportArtifact,
     ExportRequest,
@@ -70,15 +74,45 @@ def canonical_content_sha256(content: dict) -> str:
     return hashlib.sha256(_canonical_json(content or {}).encode("utf-8")).hexdigest()
 
 
+def page_limit_or_default(value: object) -> int:
+    """语义页数上限：``0``（``UNLIMITED_PAGE_LIMIT``）是一个**值**，不是"没配置"。
+
+    只有 ``None`` / 空串 / 无法解析才回落 1（老数据、NULL 列、旧快照缺这个键）。
+    **禁止写成 ``value or 1``**：那会把「不限篇幅」悄悄折成 1 页，而 1 页是最**严**的
+    上限——用户选了"不限"，拿回来却是最紧的那一档，且任何一层都看不出发生过折换。
+    """
+    if value is None or value == "":
+        return 1
+    try:
+        return int(value)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return 1
+
+
+def render_page_limit(page_limit: int) -> int:
+    """把语义页数上限折成**渲染入口**要的正数上限（``0`` → 渲染保护上限，绝不折成 1）。
+
+    ``pdf_exporter.fit`` 内部是 ``max(1, page_limit)``：把 0 原样交给渲染器，等于把
+    "不限篇幅"变成"1 页"。所以渲染侧必须先折成 ``UNLIMITED_RENDER_MAX_PAGES``；
+    而"这份文件一个字都不许裁"由 ``RenderContext.page_limit_is_unlimited`` 表达——
+    数字是保护上限，语义才是用户的承诺，两者**不能混成一个字段**。
+    """
+    return UNLIMITED_RENDER_MAX_PAGES if page_limit <= UNLIMITED_PAGE_LIMIT else page_limit
+
+
 def default_render_context(db: Session, record: ResumeRecord) -> dict:
-    """从简历记录解析出的渲染上下文（apply/track 路径的存档口径，与旧行为一致）。"""
+    """从简历记录解析出的渲染上下文（apply/track 路径的存档口径，与旧行为一致）。
+
+    ``page_limit`` 存**语义值**：用户选「不限」时这里就是 ``0``。存档是"当初那一版的
+    证据"，存 1 页或 10 页都是替用户改口。
+    """
     export_template, export_html = resolve_style_template(db, record.template)
     return {
         "template": export_template,
         "template_html": export_html,
         "style_config": resolve_style_config(db, record.template) or {},
         "format_config": record_format_config(db, record) or {},
-        "page_limit": record.page_limit or 1,
+        "page_limit": page_limit_or_default(record.page_limit),
         "font_scale": record.font_scale or "standard",
         # 标题语言也进存档：快照要能还原出"当初那份文件"的字面。
         "language": record.language or DEFAULT_RESUME_LANGUAGE,
@@ -143,16 +177,21 @@ def freeze_delivery(
         dict(render_context) if render_context is not None else default_render_context(db, record)
     )
     fingerprint_request = ExportRequest(format=export_format or "pdf")
+    # 存档里的 page_limit 是**语义值**（0 = 不限），指纹上下文要的是**渲染值**：
+    # 0 折成渲染保护上限（10）+ ``page_limit_is_unlimited=True``，与导出路由传进来的
+    # 那份 context 同口径——否则"投递快照"和"导出快照"对同一份文件算出两个指纹。
+    archived_page_limit = page_limit_or_default(effective_render_context.get("page_limit"))
     context = RenderContext(
         template=effective_render_context.get("template", "classic"),
         template_html=effective_render_context.get("template_html", ""),
         style_config=effective_render_context.get("style_config") or {},
-        page_limit=effective_render_context.get("page_limit") or 1,
+        page_limit=render_page_limit(archived_page_limit),
         font_scale=effective_render_context.get("font_scale") or "standard",
         format_config=effective_render_context.get("format_config") or {},
         # 旧快照里没有 language 这个键 → 回落 zh-CN。而旧快照本来就是中文，
         # 所以这是**保真**（还原当初那两个字），不是降级。
         language=effective_render_context.get("language") or DEFAULT_RESUME_LANGUAGE,
+        page_limit_is_unlimited=archived_page_limit == UNLIMITED_PAGE_LIMIT,
     )
     delivery = ResumeDeliveryRecord(
         resume_id=record.id,
@@ -222,17 +261,20 @@ def replay_delivery_export(delivery: ResumeDeliveryRecord) -> ExportArtifact:
     if not delivery.export_format or not params:
         raise ValueError("该快照没有可重放的导出请求参数（旧存档不可还原）")
     context_data = delivery.render_context or {}
+    # 存档里的 0 = 「不限篇幅」，重放时必须还按不限排：折成 1 页就是"重下的文件比当初少"。
+    replayed_page_limit = page_limit_or_default(context_data.get("page_limit"))
     context = RenderContext(
         template=context_data.get("template", "classic"),
         template_html=context_data.get("template_html", ""),
         style_config=context_data.get("style_config") or {},
-        page_limit=context_data.get("page_limit") or 1,
+        page_limit=render_page_limit(replayed_page_limit),
         font_scale=context_data.get("font_scale") or "standard",
         format_config=context_data.get("format_config") or {},
         margin_mm=params.get("margin_mm"),
         include_photo=bool(params.get("include_photo", True)),
         # 同 freeze_delivery：旧快照缺 language 就回落 zh-CN，那是保真而非降级。
         language=context_data.get("language") or DEFAULT_RESUME_LANGUAGE,
+        page_limit_is_unlimited=replayed_page_limit == UNLIMITED_PAGE_LIMIT,
     )
     # T4b：存档 content 就是 v2 文档，导出管线（build_export）v2 直通，不再折 v1 分析视图。
     resume = delivery.content
@@ -260,5 +302,7 @@ __all__ = [
     "get_delivery",
     "list_deliveries",
     "list_track_deliveries",
+    "page_limit_or_default",
+    "render_page_limit",
     "replay_delivery_export",
 ]

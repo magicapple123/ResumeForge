@@ -38,6 +38,8 @@ const generate = {
     "e.g. Highlight backend performance work; avoid vague phrases like 'responsible for...'; put internships before education.",
   "generate.config.extraHint":
     "This requirement is appended to the generation prompt and only steers wording; fact anchoring, the page limit and the no-fabrication rules stay unchanged.",
+  "generate.config.extraHintNoEnhance":
+    "With content enhancement off, body text is restored verbatim from your profile, so extra requirements change nothing. Turn on enhancement above to make them take effect.",
   "generate.config.start": "Start generating",
 } as const;
 

@@ -27,8 +27,9 @@ import { EllipsisOutlined } from "@ant-design/icons";
 import { Button, Dropdown, Tooltip } from "antd";
 import type { MenuProps } from "antd";
 import type { MouseEvent as ReactMouseEvent } from "react";
-import { useRef, useState } from "react";
+import { useRef } from "react";
 import { useI18n } from "../../i18n/i18nContext";
+import { useDropdownContextMenu } from "../../features/context-menu/useDropdownContextMenu";
 import type { ResumeDocument, ResumeEntry, ResumeSection } from "../../types/resumeDocument";
 import {
   copyEntry,
@@ -65,7 +66,8 @@ export default function EntryCardHead({
 }: Props) {
   const { t } = useI18n();
   const { requestStyle } = useDocumentChipMenu();
-  const [menuOpen, setMenuOpen] = useState(false);
+  /** 受控打开 + 键盘等价物（问题 25）：键盘打开回落到元素锚点，指针打开贴鼠标。 */
+  const menuState = useDropdownContextMenu();
   const headRef = useRef<HTMLDivElement>(null);
   /**
    * 「排版整条…」要一个浮层锚点。#7 的两种入口各有一个落点：
@@ -129,19 +131,13 @@ export default function EntryCardHead({
   const menu: MenuProps = {
     items: entryMenuItems,
     onClick: ({ key }) => {
-      setMenuOpen(false);
+      menuState.close();
       runAction(key);
     },
   };
 
   return (
-    <Dropdown
-      menu={menu}
-      trigger={["contextMenu"]}
-      disabled={readOnly}
-      open={menuOpen}
-      onOpenChange={setMenuOpen}
-    >
+    <Dropdown {...menuState.dropdownProps} menu={menu} disabled={readOnly}>
       <div
         ref={headRef}
         className="document-entry-head"
@@ -152,9 +148,9 @@ export default function EntryCardHead({
           // 不抢内部按钮（`⋯`）的按键。
           if (event.target !== event.currentTarget) return;
           if (event.key === "ContextMenu" || (event.shiftKey && event.key === "F10")) {
-            event.preventDefault();
+            // 键盘没有鼠标落点：先记下条目头右下角，给「排版整条…」的浮层当锚点。
             rememberHeadCorner();
-            setMenuOpen(true);
+            menuState.handleKeyDown(event);
           }
         }}
       >

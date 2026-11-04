@@ -74,6 +74,8 @@ const sections = {
     "简历内容最多排几页 A4；内容少时会自然留白，不会硬撑满",
   /** 段控的每一项：2 页。 */
   "sections.templateControls.pageLimitPages": "{count} 页",
+  // 需求 7B：0 = 不限篇幅。单独一条文案，不能复用「{count} 页」（会渲染成「0 页」）。
+  "sections.templateControls.pageLimitUnlimited": "不限",
 } as const;
 
 export default sections;

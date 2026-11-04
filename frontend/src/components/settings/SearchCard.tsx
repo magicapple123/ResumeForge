@@ -27,6 +27,7 @@ const DEFAULT_CONFIG: SearchConfig = {
   searxng_url: "",
   fetch_pages: 0,
   max_results: 8,
+  deepseek_api_key: "",
 };
 
 /**
@@ -46,6 +47,8 @@ const SOURCE_OPTIONS: SourceOption[] = [
   { value: "bing", label: "Bing" },
   { value: "duckduckgo", label: "DuckDuckGo" },
   { value: "searxng", labelKey: "searchCard.source.searxng" },
+  // DeepSeek 也是品牌名：两种语言写法相同，走词表 + 等值豁免（与模型预设同一口径）。
+  { value: "deepseek", labelKey: "searchCard.source.deepseek" },
 ];
 
 /**
@@ -99,8 +102,10 @@ export default function SearchCard() {
       const result = await fetchConfig();
       if (cancelled) return;
       if ("config" in result) {
-        setConfig(result.config);
-        latest.current = result.config;
+        // 用默认值补齐：旧后端没有新字段时，受控输入不能拿到 undefined。
+        const loaded = { ...DEFAULT_CONFIG, ...result.config };
+        setConfig(loaded);
+        latest.current = loaded;
       } else {
         setLoadError(result.error);
       }
@@ -113,7 +118,11 @@ export default function SearchCard() {
 
   /** 真正发请求；校验失败时只更新状态，不发请求。 */
   const persist = useCallback(async (next: SearchConfig) => {
-    const trimmed = { ...next, searxng_url: next.searxng_url.trim() };
+    const trimmed = {
+      ...next,
+      searxng_url: next.searxng_url.trim(),
+      deepseek_api_key: next.deepseek_api_key.trim(),
+    };
     if (trimmed.sources.length === 0) {
       setSaveStatus("error");
       setSaveError(t("searchCard.needSource"));
@@ -164,6 +173,7 @@ export default function SearchCard() {
   );
 
   const usesSearxng = config.sources.includes("searxng");
+  const usesDeepseek = config.sources.includes("deepseek");
 
   return (
     <Card title={t("searchCard.title")} className="settings-card">
@@ -211,6 +221,29 @@ export default function SearchCard() {
               disabled={!usesSearxng}
               allowClear
             />
+          </div>
+
+          <div>
+            <Typography.Text strong>{t("searchCard.deepseek.title")}</Typography.Text>
+            <Typography.Paragraph type="secondary" style={{ marginBottom: 8 }}>
+              {t("searchCard.deepseek.hint")}
+            </Typography.Paragraph>
+            <Input.Password
+              aria-label={t("searchCard.deepseek.keyAria")}
+              value={config.deepseek_api_key}
+              onChange={(event) => patch({ deepseek_api_key: event.target.value })}
+              placeholder={t("searchCard.deepseek.keyPlaceholder")}
+              // 只有勾了 DeepSeek 才需要密钥：未勾选时禁用，避免"必须先填"的误解。
+              disabled={!usesDeepseek || undefined}
+              allowClear
+              autoComplete="off"
+            />
+            <Typography.Paragraph type="secondary" style={{ marginTop: 8, marginBottom: 8 }}>
+              {t("searchCard.deepseek.cost")}
+            </Typography.Paragraph>
+            {usesDeepseek ? (
+              <Alert type="warning" showIcon title={t("searchCard.deepseek.privacy")} />
+            ) : null}
           </div>
 
           <div>

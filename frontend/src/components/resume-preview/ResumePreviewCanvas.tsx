@@ -1,8 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
-import type { RefObject, SyntheticEvent } from "react";
+import { useEffect, type RefObject, type SyntheticEvent } from "react";
 import { t } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
+import { useResolvedTheme } from "../../features/theme/themeStore";
 import { A4_HEIGHT_PX, A4_WIDTH_PX, OVERFLOW_PAGE_LABEL_KEY, PAGE_STACK_GAP_PX } from "./config";
+import { UNLIMITED_PAGE_LIMIT } from "../../types";
+import { paintLoadedPaperFrames, paintPaperTheme } from "./paperTheme";
 
 interface Props {
   isPanning: boolean;
@@ -15,8 +18,9 @@ interface Props {
   /**
    * 用户设定的页数上限（导出按它截断）。
    *
-   * 第 `pageLimit + 1` 页起是**超额页**：照样画出来，但页角标「超出上限，不计入导出」、
-   * 纸边加淡红虚线，让"这一页在导出里不存在"这件事在纸面上自己说清楚（问题 2）。
+   * 第 `pageLimit + 1` 页起是**超额页**：照样画出来，但纸边是 2px 红实线、页脚下方一条
+   * 通栏红带写着「超出上限，不计入导出」，让"这一页在导出里不存在"这件事在纸面上自己说清楚
+   * （问题 2 的现象、问题 24 的强度）。
    */
   pageLimit: number;
   html: string;
@@ -63,6 +67,21 @@ export default function ResumePreviewCanvas({
   clickToEdit = false,
 }: Props) {
   useLocale();
+  /**
+   * 草稿纸跟随主题（问题 19 方案 A）：深色下 iframe 整体反色，证件照由注入的样式抵消一次。
+   *
+   * **只作用于预览**：导出走服务端渲染，`--rf-paper` 与模板一行没动；`@media print` 里把
+   * 滤镜关掉，`Ctrl+P` 打出来仍是白纸。这里用 `useResolvedTheme` 而不是 `useThemeMode`：
+   * 「跟随系统」时前者已经解析成实际生效的深浅。
+   */
+  const darkPaper = useResolvedTheme() === "dark";
+  // 切主题**不重载 iframe**（重载会闪白、丢滚动位置与缩放档位）：只把已加载的文档刷一遍。
+  useEffect(() => {
+    paintLoadedPaperFrames(containerRef.current, darkPaper);
+  }, [containerRef, darkPaper]);
+  // 「不限篇幅」（`pageLimit === 0`）没有上限，因此**没有任何一页是"超额页"**：
+  // 画上红实线 + 「超出上限，不计入导出」是假话——那时导出一个字节都不裁。
+  const unlimited = pageLimit === UNLIMITED_PAGE_LIMIT;
   const limit = Math.max(1, Math.round(pageLimit));
   return (
     <>
@@ -82,26 +101,17 @@ export default function ResumePreviewCanvas({
             style={{ gap: PAGE_STACK_GAP_PX, transform: `scale(${scale})` }}
           >
             {Array.from({ length: totalVisualPages }, (_, index) => {
-              // 第 limit + 1 页起不计入导出（问题 2）：角标 + 纸边淡红虚线，
-              // 颜色走 `--rf-danger` 并与纸边同宽（outline 不参与布局，不会让纸变大）。
-              const overLimit = index + 1 > limit;
+              // 第 limit + 1 页起不计入导出（问题 2）：红实线包边 + 页脚通栏红带，
+              // 两条规则都在 `resume-canvas.css` 的 `.is-over-limit` 上——**不能写进 JSX**，
+              // 内联样式优先级更高，会把样式表里的规则整条盖掉（问题 24）。
+              const overLimit = !unlimited && index + 1 > limit;
               return (
                 <div
                   key={index}
                   className={`resume-preview-page${overLimit ? " is-over-limit" : ""}`}
                   data-page-index={index + 1}
                   data-over-limit={overLimit ? "1" : undefined}
-                  style={{
-                    width: A4_WIDTH_PX,
-                    height: A4_HEIGHT_PX,
-                    ...(overLimit
-                      ? {
-                          outline:
-                            "1px dashed color-mix(in srgb, var(--rf-danger) 55%, transparent)",
-                          outlineOffset: "-1px",
-                        }
-                      : null),
-                  }}
+                  style={{ width: A4_WIDTH_PX, height: A4_HEIGHT_PX }}
                 >
                   <iframe
                     // 第 1 页挂外部 ref：版面测量与"字号 / 行距"探针只需要一份权威结果。
@@ -111,28 +121,24 @@ export default function ResumePreviewCanvas({
                         ? t("preview.canvas.frameTitle")
                         : t("preview.canvas.frameTitlePage", { page: index + 1 })
                     }
-                    className="resume-iframe"
+                    className={`resume-iframe${darkPaper ? " is-dark-paper" : ""}`}
                     width={A4_WIDTH_PX}
                     height={A4_HEIGHT_PX}
                     srcDoc={html}
                     sandbox="allow-same-origin"
                     scrolling="no"
-                    onLoad={(event) => onIframeLoad(event, index)}
+                    onLoad={(event) => {
+                      // 先染色再交给宿主排版 / 测量：这里的 class 只改渲染，不影响任何盒子尺寸。
+                      paintPaperTheme(event.currentTarget.contentDocument, darkPaper);
+                      onIframeLoad(event, index);
+                    }}
                   />
                   {totalVisualPages > 1 ? (
                     <span
                       className={`resume-preview-page-label${overLimit ? " is-over-limit" : ""}`}
-                      // 超额页的角标用错误色系（`--rf-*`，深色模式自动跟着变）；
-                      // 普通页标保持 `resume-canvas.css` 里的次要文字色。
-                      style={
-                        overLimit
-                          ? {
-                              color: "var(--rf-error-text)",
-                              background: "var(--rf-error-bg)",
-                              whiteSpace: "nowrap",
-                            }
-                          : undefined
-                      }
+                      // 外观全部由 `resume-canvas.css` 的两条规则承担（普通页是灰色小胶囊，
+                      // 超额页是通栏红底白字）。**不要往这里加 `style`**：内联样式会盖掉
+                      // 样式表，而且深色主题下没法跟着 `--rf-danger` 变。
                     >
                       {overLimit
                         ? t(OVERFLOW_PAGE_LABEL_KEY, { page: index + 1 })

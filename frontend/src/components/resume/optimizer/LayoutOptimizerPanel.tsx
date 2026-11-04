@@ -33,15 +33,24 @@ import EmptyState from "../../common/EmptyState";
 import ContentCandidateList from "./ContentCandidateList";
 import { ot } from "../../../features/resume-optimizer/i18n";
 import { useLocale } from "../../../i18n/i18nContext";
-import { buildContentCandidates } from "../../../features/resume-optimizer/contentCandidates";
+import { buildContentCandidatesWithFilterSummary } from "../../../features/resume-optimizer/contentCandidates";
 import {
+  defaultTargetPages,
   evaluateCandidate,
   filterCandidates,
   fitsAlready,
   keepImproved,
   noFeasibleReason,
   pickCandidateSamples,
+  targetOptionsFor,
 } from "../../../features/resume-optimizer/constraints";
+import {
+  changeText,
+  DEFAULT_CONSTRAINTS,
+  READABILITY_COLORS,
+  READABILITY_KEYS,
+  REASON_KEYS,
+} from "../../../features/resume-optimizer/uiCopy";
 import type {
   MeasuredCandidate,
   NoFeasibleReason,
@@ -50,7 +59,6 @@ import type {
   OptimizerContentCandidate,
   OptimizerContentHint,
   OptimizerCurrentValues,
-  ParameterChange,
 } from "../../../features/resume-optimizer/types";
 import type { ResumeContent } from "../../../types/resume";
 import type { LayoutMeasure } from "../../../utils/resumeLayoutMeasure";
@@ -79,47 +87,16 @@ interface Props {
   contentHints?: readonly OptimizerContentHint[];
   /** 应用内容候选：宿主写回正文并记为一步历史（撤销可整体回退）。 */
   onApplyContent?: (next: ResumeContent) => void | Promise<void>;
-}
-
-const DEFAULT_CONSTRAINTS: OptimizerConstraints = {
-  lockFont: false,
-  minMarginMm: null,
-  keepEntriesWhole: true,
-  targetPages: 1,
-};
-
-const REASON_KEYS: Record<NoFeasibleReason, Parameters<typeof ot>[0]> = {
-  no_ladder: "optimizer.empty",
-  locked_out: "optimizer.noFeasible.locked",
-  still_overflow: "optimizer.noFeasible.stillOverflow",
-  no_room: "optimizer.noFeasible.noRoom",
-  no_measure: "optimizer.noMeasure",
-};
-
-const READABILITY_KEYS = {
-  none: "optimizer.candidate.readability.none",
-  mild: "optimizer.candidate.readability.mild",
-  noticeable: "optimizer.candidate.readability.noticeable",
-} as const;
-
-const READABILITY_COLORS: Record<string, string> = {
-  none: "green",
-  mild: "blue",
-  noticeable: "orange",
-};
-
-function formatValue(key: ParameterChange["key"], value: number): string {
-  if (key === "page_padding") return String(Math.round(value * 100) / 100);
-  return String(Math.round(value * 1000) / 1000);
-}
-
-function changeText(change: ParameterChange): string {
-  const from = formatValue(change.key, change.from);
-  const to = formatValue(change.key, change.to);
-  if (change.key === "page_padding") return ot("optimizer.change.padding", { from, to });
-  if (change.key === "section_gap") return ot("optimizer.change.sectionGap", { from, to });
-  if (change.key === "line_height") return ot("optimizer.change.lineHeight", { from, to });
-  return ot("optimizer.change.fontScale", { from, to });
+  /**
+   * 简历的篇幅上限（0 = 不限）：**收敛目标跟随用户选的页数**，而不是固定"塞进 1 页"。
+   * 0 时没有收敛目标，本面板只给内容候选（A 需求：不限篇幅不做版式收敛）。
+   */
+  pageLimit?: number;
+  /**
+   * 「最小页边距」变化：宿主据此重算诊断（后端把页边距阶梯截断在下界处，见问题 17）。
+   * 不传 = 只在本地过滤，宿主不重算。
+   */
+  onMinMarginChange?: (value: number | null) => void;
 }
 
 export default function LayoutOptimizerPanel({
@@ -134,10 +111,15 @@ export default function LayoutOptimizerPanel({
   content = null,
   contentHints = [],
   onApplyContent,
+  pageLimit,
+  onMinMarginChange,
 }: Props) {
   useLocale();
   const { message } = App.useApp();
-  const [constraints, setConstraints] = useState<OptimizerConstraints>(DEFAULT_CONSTRAINTS);
+  const [constraints, setConstraints] = useState<OptimizerConstraints>(() => ({
+    ...DEFAULT_CONSTRAINTS,
+    targetPages: defaultTargetPages(pageLimit),
+  }));
   const [candidates, setCandidates] = useState<MeasuredCandidate[] | null>(null);
   const [noReason, setNoReason] = useState<NoFeasibleReason | null>(null);
   const [alreadyFits, setAlreadyFits] = useState(false);
@@ -146,15 +128,36 @@ export default function LayoutOptimizerPanel({
   const [appliedKey, setAppliedKey] = useState<string | null>(null);
   const [applyingKey, setApplyingKey] = useState<string | null>(null);
   const [contentCandidates, setContentCandidates] = useState<OptimizerContentCandidate[]>([]);
+  /** 被「保持条目完整」挡掉的候选数：让用户知道"是开关挡住了"，不是"没建议"。 */
+  const [filteredByKeep, setFilteredByKeep] = useState(0);
+  /** 试过的候选里最好的实测页数（提示文案要如实写"目标 N 页、实际 M 页"）。 */
+  const [bestPages, setBestPages] = useState<number | null>(null);
+
+  // 用户改了简历的篇幅上限：收敛目标跟着走（A1）。这是渲染期调整，不另开一轮 effect。
+  const [prevPageLimit, setPrevPageLimit] = useState(pageLimit);
+  if (prevPageLimit !== pageLimit) {
+    setPrevPageLimit(pageLimit);
+    setConstraints((values) => ({ ...values, targetPages: defaultTargetPages(pageLimit) }));
+    // 目标变了，旧候选是按旧目标判的"够不够"，不能继续摆着。
+    setCandidates(null);
+    setNoReason(null);
+    setAlreadyFits(false);
+    setBestPages(null);
+    setFilteredByKeep(0);
+  }
 
   const patch = (next: Partial<OptimizerConstraints>) => {
     setConstraints((values) => ({ ...values, ...next }));
     // 约束一变，旧候选就不再代表当前条件——清掉，避免用户按旧结论应用。
     setCandidates(null);
     setContentCandidates([]);
+    setFilteredByKeep(0);
     setNoReason(null);
     setAlreadyFits(false);
     setAppliedKey(null);
+    setBestPages(null);
+    // 最小页边距要**参与阶梯生成**（后端在阈值处截断），不能只在本地丢档。
+    if (next.minMarginMm !== undefined) onMinMarginChange?.(next.minMarginMm);
   };
 
   const generate = () => {
@@ -162,16 +165,28 @@ export default function LayoutOptimizerPanel({
     setNoReason(null);
     setAlreadyFits(false);
     setAppliedKey(null);
+    setBestPages(null);
     // 内容精简候选只依赖正文本身；没有版面诊断也能生成（无法预量时界面如实说明）。
-    const trims = buildContentCandidates(content, contentHints);
+    // 「保持条目完整」在这里生效：勾上就不给"删条目"类候选（问题 17）。
+    const { candidates: trims, filteredByKeepEntries: filtered } =
+      buildContentCandidatesWithFilterSummary(content, contentHints, {
+        keepEntriesWhole: constraints.keepEntriesWhole,
+      });
     setContentCandidates(trims);
+    setFilteredByKeep(filtered);
+    if (typeof pageLimit === "number" && pageLimit <= 0) {
+      // 不限篇幅：没有"要收敛到几页"这回事，不做版式收敛（A1/7B）。
+      return;
+    }
     if (!analysis || !before || !probe) {
-      if (trims.length === 0) setNoReason("no_measure");
+      // 候选被开关挡光时，如实说"是开关挡的"，不要用"没量到"顶替（静默/误导同类问题）。
+      if (trims.length === 0 && filtered === 0) setNoReason("no_measure");
       return;
     }
     if (fitsAlready(before, constraints.targetPages)) {
       // 已经放得下就不建议删内容；只剩参数候选没有意义。
       setContentCandidates([]);
+      setFilteredByKeep(0);
       setAlreadyFits(true);
       return;
     }
@@ -184,10 +199,18 @@ export default function LayoutOptimizerPanel({
       for (const view of samples) {
         const after = probe(view.css);
         if (!after) continue;
-        measured.push(evaluateCandidate(view, before, after, constraints.targetPages));
+        const result = evaluateCandidate(view, before, after, constraints.targetPages);
+        measured.push(result);
+        // 目标篇幅参与阶梯（问题 17）：已经能装进目标页数就停——选 2 页时不必再试
+        // "收到 1 页"的更紧档位，避免过度收紧。
+        if (result.fits) break;
       }
       const improved = keepImproved(measured);
       setCandidates(improved);
+      // "目标 N 页、实际 M 页"里的 M：取试过的最小页数（最乐观的一档）。
+      setBestPages(
+        measured.length > 0 ? Math.min(...measured.map((item) => item.pagesAfter)) : null,
+      );
       setNoReason(
         noFeasibleReason({
           hasBefore: true,
@@ -219,6 +242,16 @@ export default function LayoutOptimizerPanel({
   // 有正文就能生成内容精简候选；参数候选仍要求诊断 + 实测。
   const canGenerate =
     !disabled && (hasAnalysis && Boolean(before) && Boolean(probe) ? true : Boolean(content));
+  // 失败提示必须给出"目标几页、实际几页"，不能只说"超出"（A4）。
+  const reasonTitle = !noReason
+    ? ""
+    : noReason === "still_overflow" && bestPages !== null
+      ? ot("optimizer.noFeasible.stillOverflowNumbered", {
+          target: constraints.targetPages,
+          pages: bestPages,
+        })
+      : ot(REASON_KEYS[noReason]);
+  const targetOptions = targetOptionsFor(pageLimit);
 
   return (
     <div data-layout-optimizer="1" className="resume-optimizer">
@@ -297,11 +330,11 @@ export default function LayoutOptimizerPanel({
                 value={constraints.targetPages}
                 disabled={disabled || undefined}
                 aria-label={ot("optimizer.target")}
-                options={[
-                  { value: 1, label: ot("optimizer.target.pages", { count: 1 }) },
-                  { value: 2, label: ot("optimizer.target.pages", { count: 2 }) },
-                ]}
-                onChange={(value) => patch({ targetPages: value === 2 ? 2 : 1 })}
+                options={targetOptions.map((count) => ({
+                  value: count,
+                  label: ot("optimizer.target.pages", { count }),
+                }))}
+                onChange={(value) => patch({ targetPages: Number(value) >= 1 ? Number(value) : 1 })}
               />
             </div>
           </div>
@@ -326,7 +359,7 @@ export default function LayoutOptimizerPanel({
           type="warning"
           showIcon
           style={{ marginBottom: 8 }}
-          title={ot(REASON_KEYS[noReason])}
+          title={reasonTitle}
           description={
             tried > 0 ? ot("optimizer.tried", { count: tried }) : ot("optimizer.noFeasible.locked")
           }
@@ -422,6 +455,12 @@ export default function LayoutOptimizerPanel({
             }
           />
         </div>
+      ) : null}
+      {/* 候选被「保持条目完整」挡光时别呈空白：让用户知道是开关在拦，不是"没建议"。 */}
+      {contentCandidates.length === 0 && filteredByKeep > 0 ? (
+        <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+          {ot("optimizer.content.filteredByKeepEntries", { count: filteredByKeep })}
+        </Typography.Text>
       ) : null}
     </div>
   );

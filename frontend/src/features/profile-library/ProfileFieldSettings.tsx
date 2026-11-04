@@ -5,11 +5,13 @@
  * 结构定义删除必须二次确认（动作 + 条数 + 保留后果 + 恢复位置）；默认字段没有
  * 改名/删除入口，只能隐藏——隐藏后不显示、不进生成与导出，但值仍保留。
  * 不叠 modal.confirm：确认条就在本视图内联展示（宿主弹层是单 Modal 多视图）。
+ *
+ * 问题 18 整改后本文件只保留「页头 + 默认字段卡 + 自定义字段卡 + 添加行」：
+ * 单行字段拆到 `profileFieldRow`，位置控件组拆到 `columnStrategySelect`，
+ * 导航从「← 返回 字段设置」换成面包屑。
  */
-import { App, Button, Input, Select, Switch, Tag, Tooltip } from "antd";
-import { ArrowLeftOutlined, DeleteOutlined, EditOutlined } from "@ant-design/icons";
+import { App, Breadcrumb, Button, Input, Select, Switch, Tag, Tooltip } from "antd";
 import { Fragment, useState } from "react";
-import SectionVisibilitySwitch from "../../components/profile/SectionVisibilitySwitch";
 import { t } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
 import {
@@ -20,7 +22,7 @@ import {
   updateField,
 } from "./api";
 import { profileErrorMessage } from "./errors";
-import { profileFieldLabel, profileSectionLabel } from "./profileLabels";
+import { profileFieldLabel, profileFieldTypeLabel, profileSectionLabel } from "./profileLabels";
 import { invalidateProjectionCache } from "./projectionCache";
 import {
   catalogPlacementOf,
@@ -30,6 +32,9 @@ import {
   PROFILE_PLACEMENT_OPTIONS,
   useFieldPlacementCatalog,
 } from "./fieldPlacement";
+import { MaterialOnlyToggle } from "./columnStrategySelect";
+import ParticipationCheckbox from "./participationCheckbox";
+import ProfileFieldRow from "./profileFieldRow";
 import type { DocumentFieldCatalog, Placement } from "../../types/resumeDocument";
 import type { CustomFieldType, FieldDeletionImpactOut, FieldOut, SectionOut } from "./types";
 
@@ -45,12 +50,6 @@ interface Props {
   visibilityBusy?: boolean;
   onChanged: () => Promise<void>;
   onBack: () => void;
-}
-
-function typeLabel(field: FieldOut): string {
-  if (field.field_type === "multi_line") return t("profileLibrary.fieldSettings.typeMulti");
-  if (field.field_type === "date_text") return t("profileLibrary.fieldSettings.typeDate");
-  return t("profileLibrary.fieldSettings.typeSingle");
 }
 
 export default function ProfileFieldSettings({
@@ -72,8 +71,6 @@ export default function ProfileFieldSettings({
   const [addPlacement, setAddPlacement] = useState<Placement | "">("");
   const [addMaterialOnly, setAddMaterialOnly] = useState(false);
   const placementCatalog = useFieldPlacementCatalog();
-  const [renamingId, setRenamingId] = useState("");
-  const [renameDraft, setRenameDraft] = useState("");
   const [deleting, setDeleting] = useState<{
     field: FieldOut;
     impact: FieldDeletionImpactOut;
@@ -81,6 +78,7 @@ export default function ProfileFieldSettings({
 
   const builtinFields = section.fields.filter((field) => field.is_builtin);
   const customFields = section.fields.filter((field) => !field.is_builtin);
+  const atLimit = customFields.length >= maxCustomFields;
 
   async function run(action: () => Promise<void>): Promise<void> {
     if (busy) return;
@@ -128,73 +126,33 @@ export default function ProfileFieldSettings({
     });
   };
 
-  /** 自定义字段的纸面位置/仅素材行内编辑（只写 0069 的两个定义列，不碰值）。 */
-  const renderPlacementEditor = (field: FieldOut) => {
-    const materialOnly = field.material_only === true;
-    const placement = (field.effective_placement ?? field.default_placement ?? "") as
-      Placement | "";
-    return (
-      <div className="profile-field-placement" style={{ margin: "4px 0 8px 0" }}>
-        <Select
-          size="small"
-          style={{ minWidth: 132 }}
-          value={materialOnly ? "hidden" : (field.default_placement ?? "")}
-          aria-label={t("structure.profile.editPlacement")}
-          disabled={busy || materialOnly}
-          onChange={(value) => {
-            void run(async () => {
-              await updateField(section.key, field.field_id, {
-                default_placement: value === "" ? null : (value as string),
-                expected_revision: field.revision,
-              });
-            });
-          }}
-          options={[
-            { value: "", label: t("structure.profile.placementAuto") },
-            ...PROFILE_PLACEMENT_OPTIONS.map((value) => ({
-              value,
-              label: t(PLACEMENT_LABEL_KEYS[value]),
-            })),
-          ]}
-        />
-        <Switch
-          size="small"
-          checked={materialOnly}
-          aria-label={t("structure.profile.materialOnlyToggle")}
-          disabled={busy}
-          onChange={(checked) => {
-            void run(async () => {
-              await updateField(section.key, field.field_id, {
-                material_only: checked,
-                // 仅素材恒 hidden；恢复素材时回到"按类型自动"，避免沿用旧的 hidden 显式值。
-                default_placement: checked ? "hidden" : null,
-                expected_revision: field.revision,
-              });
-            });
-          }}
-        />
-        <span
-          className={materialOnly ? "profile-field-material-hint" : "profile-field-placement-hint"}
-        >
-          {materialOnly
-            ? t("structure.profile.materialOnlyHint")
-            : t("structure.profile.placementBadge", {
-                placement: profilePlacementLabel(placement),
-              })}
-        </span>
-      </div>
-    );
-  };
-
-  const submitRename = (field: FieldOut) => {
-    const label = renameDraft.trim();
-    if (!label) return;
+  const submitRename = (field: FieldOut, label: string) => {
     void run(async () => {
       await updateField(section.key, field.field_id, {
         label,
         expected_revision: field.revision,
       });
-      setRenamingId("");
+    });
+  };
+
+  /** 自定义字段的纸面位置/仅素材行内编辑（只写 0069 的两个定义列，不碰值）。 */
+  const updatePlacement = (field: FieldOut, value: string) => {
+    void run(async () => {
+      await updateField(section.key, field.field_id, {
+        default_placement: value === "" ? null : value,
+        expected_revision: field.revision,
+      });
+    });
+  };
+
+  const updateMaterialOnly = (field: FieldOut, checked: boolean) => {
+    void run(async () => {
+      await updateField(section.key, field.field_id, {
+        material_only: checked,
+        // 仅素材恒 hidden；恢复素材时回到"按类型自动"，避免沿用旧的 hidden 显式值。
+        default_placement: checked ? "hidden" : null,
+        expected_revision: field.revision,
+      });
     });
   };
 
@@ -202,6 +160,15 @@ export default function ProfileFieldSettings({
     void run(async () => {
       const impact = await getFieldDeletionImpact(section.key, field.field_id);
       setDeleting({ field, impact });
+    });
+  };
+
+  const confirmDelete = () => {
+    if (!deleting) return;
+    const target = deleting.field;
+    void run(async () => {
+      await deleteField(section.key, target.field_id, target.revision, true);
+      setDeleting(null);
     });
   };
 
@@ -233,42 +200,37 @@ export default function ProfileFieldSettings({
     );
   };
 
-  const confirmDelete = () => {
-    if (!deleting) return;
-    const target = deleting.field;
-    void run(async () => {
-      await deleteField(section.key, target.field_id, target.revision, true);
-      setDeleting(null);
-    });
-  };
-
   return (
     <div className="profile-field-settings">
-      <div className="profile-settings-header">
-        <Button type="text" size="small" icon={<ArrowLeftOutlined />} onClick={onBack}>
-          {t("profileGroups.manager.back")}
-        </Button>
-        <span className="profile-settings-card-title">
-          {t("profileLibrary.fieldSettings.title")}
-        </span>
-      </div>
+      {/* 导航压成面包屑：层级「板块与字段 / 当前板块」一眼可见，比「← 返回 字段设置」
+          更清楚返回到哪一层（标题里的「板块名 · 字段设置」由宿主弹层给出）。 */}
+      <Breadcrumb
+        className="profile-settings-breadcrumb"
+        items={[
+          {
+            title: (
+              <Button type="link" size="small" onClick={onBack}>
+                {t("profileGroups.manager.sectionsTab")}
+              </Button>
+            ),
+          },
+          { title: profileSectionLabel(section) },
+        ]}
+      />
 
-      <div className="profile-settings-row profile-field-settings-visibility">
+      <div className="profile-settings-row">
+        <ParticipationCheckbox
+          sectionName={profileSectionLabel(section)}
+          checked={section.key === "basic_info" || sectionVisible}
+          locked={section.key === "basic_info"}
+          busy={visibilityBusy}
+          onChange={onSetSectionVisible}
+        />
         <span className="profile-settings-row-main">
           <span className="profile-settings-row-title">{profileSectionLabel(section)}</span>
           <span className="profile-settings-row-meta">
             {t("profileLibrary.section.visibleHint")}
           </span>
-        </span>
-        <span className="profile-settings-row-actions">
-          <SectionVisibilitySwitch
-            sectionName={profileSectionLabel(section)}
-            visible={section.key === "basic_info" || sectionVisible}
-            locked={section.key === "basic_info"}
-            busy={visibilityBusy}
-            hideLabel
-            onChange={onSetSectionVisible}
-          />
         </span>
       </div>
 
@@ -284,7 +246,7 @@ export default function ProfileFieldSettings({
             <div key={field.field_id} className="profile-settings-row">
               <span className="profile-settings-row-main">
                 <span className="profile-settings-row-title">{profileFieldLabel(field)}</span>
-                <span className="profile-settings-row-meta">{typeLabel(field)}</span>
+                <span className="profile-settings-row-meta">{profileFieldTypeLabel(field)}</span>
                 <BuiltinPlacementBadge
                   catalog={placementCatalog.catalog}
                   section={section}
@@ -307,7 +269,7 @@ export default function ProfileFieldSettings({
                           label: profileFieldLabel(field),
                         })
                   }
-                  disabled={busy}
+                  disabled={busy || undefined}
                   onChange={(checked) => toggleHidden(field, !checked)}
                 />
               </span>
@@ -321,74 +283,30 @@ export default function ProfileFieldSettings({
           {t("profileLibrary.fieldSettings.customTitle")}
         </h3>
         <p className="profile-settings-card-hint">{t("profileLibrary.fieldSettings.limit")}</p>
+        {/* 7-A：自定义字段也能隐藏。这里必须点明「隐藏」与「仅素材」是两件事，
+            否则两行控件叠在一起，用户会以为其中一个是重复的。 */}
+        <p className="profile-settings-card-hint">
+          {t("profileLibrary.fieldSettings.customHiddenHint")}
+        </p>
         {customFields.length === 0 ? (
           <p className="profile-settings-card-hint">{t("profileLibrary.fieldSettings.empty")}</p>
         ) : null}
         <div className="profile-settings-list">
           {customFields.map((field) => (
             <Fragment key={field.field_id}>
-              <div className="profile-settings-row">
-                {renamingId === field.field_id ? (
-                  <Input
-                    value={renameDraft}
-                    maxLength={40}
-                    aria-label={t("profileLibrary.fieldSettings.rename")}
-                    onChange={(event) => setRenameDraft(event.target.value)}
-                    onPressEnter={() => submitRename(field)}
-                    style={{ maxWidth: 260 }}
-                  />
-                ) : (
-                  <span className="profile-settings-row-main">
-                    <span className="profile-settings-row-title">{profileFieldLabel(field)}</span>
-                    <span className="profile-settings-row-meta">{typeLabel(field)}</span>
-                    <Tag>
-                      {profilePlacementLabel(field.effective_placement ?? field.default_placement)}
-                    </Tag>
-                    {field.material_only ? (
-                      <Tag color="red">{t("structure.profile.materialOnlyShort")}</Tag>
-                    ) : null}
-                  </span>
-                )}
-                <span className="profile-settings-row-actions">
-                  {renamingId === field.field_id ? (
-                    <Button
-                      size="small"
-                      type="primary"
-                      loading={busy}
-                      onClick={() => submitRename(field)}
-                    >
-                      {t("profileLibrary.fieldSettings.saveName")}
-                    </Button>
-                  ) : (
-                    <Tooltip title={t("profileLibrary.fieldSettings.rename")}>
-                      <Button
-                        className="profile-settings-action"
-                        size="small"
-                        type="text"
-                        icon={<EditOutlined />}
-                        aria-label={t("profileLibrary.fieldSettings.rename")}
-                        onClick={() => {
-                          setRenamingId(field.field_id);
-                          setRenameDraft(field.label);
-                        }}
-                      />
-                    </Tooltip>
-                  )}
-                  <Tooltip title={t("profileLibrary.fieldSettings.delete")}>
-                    <Button
-                      className="profile-settings-action"
-                      size="small"
-                      type="text"
-                      danger
-                      icon={<DeleteOutlined />}
-                      aria-label={t("profileLibrary.fieldSettings.delete")}
-                      disabled={busy}
-                      onClick={() => requestDelete(field)}
-                    />
-                  </Tooltip>
-                </span>
-              </div>
-              {renderPlacementEditor(field)}
+              <ProfileFieldRow
+                field={field}
+                busy={busy}
+                onRename={(label) => submitRename(field, label)}
+                onDelete={() => requestDelete(field)}
+                onChangePlacement={(value) => updatePlacement(field, value)}
+                onChangeMaterialOnly={(checked) => updateMaterialOnly(field, checked)}
+                onToggleHidden={(hidden) => toggleHidden(field, hidden)}
+                /* 自建板块的 carrier_field_id 就是 primary_field_id（后端 _merge_custom_section），
+                   即 paper_policy.custom_section_text_field 的同一判定；内置板块的
+                   carrier_field_id 是「标签：值」承载区，不是主文本，所以只对自建板块标注。 */
+                primaryText={!section.is_builtin && field.field_id === section.carrier_field_id}
+              />
               {deleting?.field.field_id === field.field_id ? renderDeleteConfirm() : null}
             </Fragment>
           ))}
@@ -396,21 +314,21 @@ export default function ProfileFieldSettings({
 
         {/* 添加字段并入「自定义字段」这一张卡：不再单起「添加字段」小标题与分隔线，
             否则同一个模块被切成两段，用户要滚动两次才看清「这里能加字段」。 */}
-        <div className="profile-settings-add" style={{ marginTop: 12 }}>
+        <div className="profile-settings-add profile-settings-add-bottom">
           <Input
+            className="profile-settings-add-grow"
             value={addLabel}
             maxLength={40}
             placeholder={t("profileLibrary.fieldSettings.label")}
             onChange={(event) => setAddLabel(event.target.value)}
             onPressEnter={submitAdd}
-            style={{ maxWidth: 240 }}
-            disabled={customFields.length >= maxCustomFields}
+            disabled={atLimit || undefined}
           />
           <Select
+            className="profile-settings-add-type"
             value={addType}
-            style={{ width: 140 }}
             aria-label={t("profileLibrary.fieldSettings.type")}
-            disabled={customFields.length >= maxCustomFields}
+            disabled={atLimit || undefined}
             onChange={(value) => setAddType(value as CustomFieldType)}
             options={[
               { value: "single_line", label: t("profileLibrary.fieldSettings.typeSingle") },
@@ -419,10 +337,10 @@ export default function ProfileFieldSettings({
             ]}
           />
           <Select
+            className="profile-settings-add-placement"
             value={addMaterialOnly ? "hidden" : addPlacement}
-            style={{ width: 150 }}
             aria-label={t("structure.profile.placement")}
-            disabled={customFields.length >= maxCustomFields || addMaterialOnly}
+            disabled={atLimit || addMaterialOnly || undefined}
             onChange={(value) => setAddPlacement(value as Placement | "")}
             options={[
               { value: "", label: t("structure.profile.placementAuto") },
@@ -432,31 +350,26 @@ export default function ProfileFieldSettings({
               })),
             ]}
           />
-          <Tooltip title={t("structure.profile.materialOnlyToggle")}>
-            <Switch
-              size="small"
-              checked={addMaterialOnly}
-              aria-label={t("structure.profile.materialOnlyToggle")}
-              disabled={customFields.length >= maxCustomFields}
-              onChange={(checked) => {
-                setAddMaterialOnly(checked);
-                if (checked) setAddPlacement("hidden");
-              }}
-            />
-          </Tooltip>
+          <MaterialOnlyToggle
+            checked={addMaterialOnly}
+            disabled={atLimit}
+            onChange={(checked) => {
+              setAddMaterialOnly(checked);
+              if (checked) setAddPlacement("hidden");
+            }}
+          />
           <Button
+            className="profile-settings-add-action"
             type="primary"
             loading={busy}
-            disabled={customFields.length >= maxCustomFields}
+            disabled={atLimit || undefined}
             onClick={submitAdd}
           >
             {t("profileLibrary.fieldSettings.create")}
           </Button>
         </div>
         {addMaterialOnly ? (
-          <p className="profile-field-material-hint" style={{ marginTop: 4 }}>
-            {t("structure.profile.materialOnlyHint")}
-          </p>
+          <p className="profile-field-material-hint">{t("structure.profile.materialOnlyHint")}</p>
         ) : null}
       </section>
     </div>

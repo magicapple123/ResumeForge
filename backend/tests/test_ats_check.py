@@ -2,8 +2,18 @@
 """ATS 本地检测：词库可加载、三类结论、免责声明、接口。"""
 
 from app.models.resume import ResumeRecord
+from app.schemas.ats import AtsIssue
 from app.schemas.resume import ResumeContent, ResumeEducation, ResumeExperience, ResumeSkill
-from app.services.ats_check import ATS_DISCLAIMER, check_ats, load_keywords
+from app.services.ats_check import (
+    _QUANTIFY_BONUS_MAX,
+    _SEVERITY_PENALTY,
+    _STUFFING_TITLE,
+    ATS_DISCLAIMER,
+    _subscore_format,
+    _subscore_keyword,
+    check_ats,
+    load_keywords,
+)
 
 
 def _resume_record(db_session, **kwargs):
@@ -67,13 +77,14 @@ def test_ats_check_matched_keyword():
 
 def test_ats_check_covers_all_three_categories_for_empty_resume():
     resume = ResumeContent()
-    result = check_ats(resume)
+    result = check_ats(resume, jd_text="要求熟悉 Python")
     categories = {issue.category for issue in result.issues}
     assert categories == {"format", "keyword", "position"}
 
 
 def test_ats_check_score_is_bounded():
-    result = check_ats(ResumeContent())
+    result = check_ats(ResumeContent(), jd_text="要求熟悉 Python")
+    assert result.score is not None
     assert 0 <= result.score <= 100
 
 
@@ -139,20 +150,24 @@ def test_subscores_weighted_sum_matches_total_score():
 
 
 def test_subscores_are_bounded_integers():
-    result = check_ats(ResumeContent())
+    result = check_ats(ResumeContent(), jd_text="要求熟悉 Python")
     for value in result.subscores.values():
         assert isinstance(value, int)
         assert 0 <= value <= 100
 
 
-def test_ats_check_without_jd_uses_library_keywords():
+def test_ats_check_without_jd_has_no_keyword_score():
+    """没有 JD → 没有目标词：不出关键词条目、覆盖率与总分都是 None。"""
     result = check_ats(_full_resume())
-    library = load_keywords()
-    assert len(result.keyword_hits) == len(library)
-    assert result.matched_keywords
-    assert 0.0 <= result.coverage_ratio <= 1.0
-    # 覆盖率就是命中数 / 目标词数（无 JD 时目标词 = 词库）。
-    assert abs(result.coverage_ratio - len(result.matched_keywords) / len(library)) < 1e-9
+    assert result.keyword_hits == []
+    assert result.matched_keywords == []
+    assert result.missing_keywords == []
+    assert result.coverage_ratio is None
+    assert result.score is None
+    # 关键词分项没有分母，不参与计分；另外两项照常。
+    assert "keyword" not in result.subscores
+    assert set(result.subscores) == {"format", "position"}
+    assert "关键词覆盖不足" not in {issue.title for issue in result.issues}
 
 
 def test_keyword_hits_report_count_and_sections():
@@ -243,11 +258,11 @@ def test_missing_quantification_is_reported_when_enough_items():
     )
     result = check_ats(resume)
     assert "描述缺少量化" in _titles(result)
-    # 量化不足时关键词分项拿不到加分：不应因为"有描述"就白送 10 分。
-    assert result.subscores["keyword"] <= 100
+    # 量化不足时拿不到量化加分：格式分项只剩扣分，不应因为"有描述"就白送 10 分。
+    assert result.subscores["format"] < 100
 
 
-def test_quantified_descriptions_bonus_keyword_subscore():
+def test_quantified_descriptions_bonus_lands_in_format_subscore():
     resume = _full_resume(
         experience=[
             ResumeExperience(
@@ -258,8 +273,32 @@ def test_quantified_descriptions_bonus_keyword_subscore():
     )
     result = check_ats(resume)
     assert "描述缺少量化" not in _titles(result)
-    # 3/3 条带数字 → 量化加分拉满，关键词分项至少比"只有扣分"时高 10 分。
-    assert result.subscores["keyword"] >= 90
+    # 3/3 条带数字 → 量化加分拉满（最多 10 分），加在**格式**分项而不是关键词分项。
+    assert result.subscores["format"] == 100
+
+
+def test_subscore_keyword_is_coverage_only():
+    """关键词分项 = round(100 × 覆盖率) − 堆砌扣分，与量化比例无关。"""
+    assert _subscore_keyword([], 0.0) == 0
+    assert _subscore_keyword([], 0.5) == 50
+    assert _subscore_keyword([], 1.0) == 100
+    stuffing = AtsIssue(category="keyword", severity="low", title=_STUFFING_TITLE)
+    assert _subscore_keyword([stuffing], 1.0) == 100 - _SEVERITY_PENALTY["low"]
+    # 覆盖率问题不再额外交给"严重程度扣分"：覆盖率本身就是这一项的分数。
+    coverage = AtsIssue(category="keyword", severity="high", title="关键词覆盖不足")
+    assert _subscore_keyword([coverage], 0.5) == 50
+
+
+def test_subscore_format_carries_the_quantify_bonus():
+    """量化加分（`_QUANTIFY_BONUS_MAX`）挪到格式分项后仍然生效。"""
+    medium = AtsIssue(category="format", severity="medium", title="占位")
+    assert _subscore_format([medium]) == 100 - _SEVERITY_PENALTY["medium"]
+    assert _subscore_format([medium], 0.0) == 100 - _SEVERITY_PENALTY["medium"]
+    assert (
+        _subscore_format([medium], 1.0)
+        == 100 - _SEVERITY_PENALTY["medium"] + _QUANTIFY_BONUS_MAX
+    )
+    assert _subscore_format([medium], 0.5) == 100 - _SEVERITY_PENALTY["medium"] + 5
 
 
 def test_keyword_stuffing_is_reported_as_low():
@@ -287,9 +326,37 @@ def test_keyword_coverage_ratio_for_jd_path_is_fraction_of_target():
 
 
 def test_check_ats_never_returns_negative_scores_even_with_many_issues():
-    result = check_ats(ResumeContent(phone="123", email="bad"), jd_text="")
+    result = check_ats(
+        ResumeContent(phone="123", email="bad"),
+        jd_text="要求熟悉 Python 与 MySQL，负责后端服务开发与性能优化",
+    )
+    assert result.score is not None
     assert result.score >= 0
     assert all(value >= 0 for value in result.subscores.values())
+
+
+# ===== 问题 9：没有 JD 就没有目标词，也没有分（不是通用词库兜底） =====
+
+
+def test_jd_path_score_matches_pre_change_baseline():
+    """有 JD 时的分数/分项/问题与改动前逐值一致（回归基线）。"""
+    result = check_ats(
+        _full_resume(),
+        jd_text="要求熟悉 Python 与 MySQL，负责后端服务开发与性能优化",
+    )
+    assert result.subscores == {"format": 100, "position": 100, "keyword": 67}
+    assert result.score == 87
+    assert result.summary == {"format": 0, "keyword": 1, "position": 0}
+    assert {issue.title for issue in result.issues} == {"关键词覆盖不足"}
+
+
+def test_jd_without_extractable_keywords_has_no_keyword_score():
+    """JD 抽不出任何目标词（不只是"没填"）时同样不出关键词分项。"""
+    result = check_ats(_full_resume(), jd_text="1-2 秒内响应")
+    assert result.keyword_hits == []
+    assert result.coverage_ratio is None
+    assert result.score is None
+    assert "keyword" not in result.subscores
 
 
 def test_endpoint_exposes_subscores_and_keyword_hits(client, db_session):

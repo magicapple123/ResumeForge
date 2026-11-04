@@ -231,9 +231,17 @@ def data_from_consumed(consumed: ConsumedProfile, *, job_title: str = "") -> dic
 
 
 def catalog_from_consumed(
-    consumed: ConsumedProfile, *, job_title: str = ""
+    consumed: ConsumedProfile,
+    *,
+    job_title: str = "",
+    out_of_scope_keys: frozenset[str] = frozenset(),
 ) -> list[dict[str, str]]:
-    """当前组内的简历侧资料 → 人工挑选清单（与 data 同一次遍历的同源产物）。"""
+    """当前组内的简历侧资料 → 人工挑选清单（与 data 同一次遍历的同源产物）。
+
+    ``out_of_scope_keys`` 是"当前方案外"的板块 key（只在「全部资料」范围下非空）：
+    命中的行多一个 ``out_of_scope="1"``，面板据此打「方案外」角标。**默认空集**，
+    即「仅当前方案」范围下产出的清单与改造前逐字节一致。
+    """
     rows: list[dict[str, str]] = []
     title = str(job_title or "").strip()
     for section, position, spec, text, base in _iter_fields(consumed):
@@ -248,20 +256,21 @@ def catalog_from_consumed(
         value = _flatten(text) if spec.field_type == "multi_line" else text
         if key == "job_intent" and title:
             value = title
-        rows.append(
-            {
-                "group": group,
-                "label": label,
-                "value": value,
-                "key": key,
-                # **只服务显示层**的稳定 key（``panel_labels`` 按它查英文显示名）：
-                # `group` / `label` 的语义不变——它们被「填入」回传、被 `dataset.group`
-                # 用于定位/折叠/配色。自建板块的 key 是 `custom:…`，查不到就原样显示。
-                "group_key": section.key,
-                "group_index": "" if section.form == "singleton" else str(position),
-                "label_key": spec.field_id,
-            }
-        )
+        row = {
+            "group": group,
+            "label": label,
+            "value": value,
+            "key": key,
+            # **只服务显示层**的稳定 key（``panel_labels`` 按它查英文显示名）：
+            # `group` / `label` 的语义不变——它们被「填入」回传、被 `dataset.group`
+            # 用于定位/折叠/配色。自建板块的 key 是 `custom:…`，查不到就原样显示。
+            "group_key": section.key,
+            "group_index": "" if section.form == "singleton" else str(position),
+            "label_key": spec.field_id,
+        }
+        if section.key in out_of_scope_keys:
+            row["out_of_scope"] = "1"
+        rows.append(row)
     return rows
 
 
@@ -274,11 +283,22 @@ def custom_labels_from_consumed(consumed: ConsumedProfile) -> dict[str, str]:
     return labels
 
 
-def build_defined_fields(consumed: ConsumedProfile, *, job_title: str = "") -> DefinedFields:
+def build_defined_fields(
+    consumed: ConsumedProfile,
+    *,
+    job_title: str = "",
+    out_of_scope_keys: frozenset[str] = frozenset(),
+) -> DefinedFields:
     """一次遍历视角的三份输出；调用方（source/catalog）必须整体使用，不各自再拼。"""
     return DefinedFields(
         data=data_from_consumed(consumed, job_title=job_title),
-        catalog=tuple(catalog_from_consumed(consumed, job_title=job_title)),
+        catalog=tuple(
+            catalog_from_consumed(
+                consumed,
+                job_title=job_title,
+                out_of_scope_keys=out_of_scope_keys,
+            )
+        ),
         custom_labels=custom_labels_from_consumed(consumed),
     )
 

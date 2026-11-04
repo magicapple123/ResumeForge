@@ -74,6 +74,37 @@ def test_normalize_generated_content_strips_prefix_and_dedupes_cross_slots():
     assert custom.lines[0].value == "https://example.com/repo"
 
 
+def test_normalize_generated_content_dedupes_skills_by_rank_and_keeps_order():
+    """问题 14：同一技能被补两次只留一条，等级取高的一条，顺序按首次出现。"""
+    resume = ResumeContent(
+        skills=[
+            {"name": "MySQL", "level": "掌握"},
+            {"name": "Spring Boot", "level": "熟练"},
+            {"name": "MySQL ", "level": "熟练"},  # 空白差别的同一条，等级更高
+            {"name": "Redis", "level": ""},
+            {"name": "mysql", "level": "了解"},  # 大小写不同，等级更低 → 不得降档
+        ]
+    )
+
+    normalized = normalize_generated_content(resume)
+
+    assert [(skill.name, skill.level) for skill in normalized.skills] == [
+        ("MySQL ", "熟练"),
+        ("Spring Boot", "熟练"),
+        ("Redis", ""),
+    ]
+
+
+def test_skill_dedupe_does_not_touch_distinct_skills():
+    """去重不能误删不同技能（数据岗 13 条那种体量不能被压成几条）。"""
+    names = ["SQL", "MySQL", "PostgreSQL", "Python", "Pandas", "Spark", "Hive"]
+    resume = ResumeContent(skills=[{"name": name, "level": "掌握"} for name in names])
+
+    normalized = normalize_generated_content(resume)
+
+    assert [skill.name for skill in normalized.skills] == names
+
+
 def test_custom_section_multi_line_field_converts_to_field_item_with_source():
     section_key = "custom:abc12345"
     resume = ResumeContent(

@@ -1,7 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 /** ATS 本地检测面板：格式风险 / 关键词覆盖 / 信息位置。
  *
- * 提供可选的 JD 文本输入，按 JD 抽出的关键词检查覆盖；不填 JD 时做通用关键词覆盖。
+ * 提供可选的 JD 文本输入，按 JD 抽出的关键词检查覆盖。**不自动检测**：挂载与 JD 自动
+ * 载入都只准备输入，检测必须由用户点「开始检测」触发——首屏先给一套结论会误导用户
+ * （尤其是非技术岗位：通用词库里没有行业词，覆盖率会被算成 0）。
+ *
+ * 不填 JD（或 JD 抽不出词）时没有目标词：后端不返回关键词分项与总分，前端如实显示
+ * 「需要 JD」与「—」，不拿 0 分冒充"未检测"。
+ *
  * 结果带免责声明（本地规则估计，不代表真实 ATS 解析结果），必须展示给用户。
  *
  * R13 起结果不再只有一个笼统的总分：三个分项（格式/关键词/位置）+ 关键词覆盖率一起展示，
@@ -18,6 +24,7 @@ import { MAX_JOB_TEXT_CHARS } from "../config";
 import { useApi } from "../hooks/useApi";
 import type { AtsIssue, AtsIssueCategory, AtsKeywordHit, AtsSeverity } from "../types/ats";
 import { copyText } from "../utils/clipboard";
+import { priorityMeta } from "../utils/priorityMeta";
 import { MaxLengthHint } from "./common/MaxLengthHint";
 import { t } from "../i18n";
 import type { MessageKey } from "../i18n";
@@ -49,11 +56,12 @@ const CATEGORY_ORDER: {
   },
 ];
 
-const SEVERITY: Record<AtsSeverity, { labelKey: MessageKey; color: string }> = {
-  high: { labelKey: "atsCheck.severity.high", color: "red" },
-  medium: { labelKey: "atsCheck.severity.medium", color: "orange" },
-  low: { labelKey: "atsCheck.severity.low", color: "blue" },
-};
+/** 严重程度：标签 + 颜色走共享映射（`utils/priorityMeta`），文案 key 是本面板的命名空间。 */
+const SEVERITY = priorityMeta({
+  high: "atsCheck.severity.high",
+  medium: "atsCheck.severity.medium",
+  low: "atsCheck.severity.low",
+});
 
 /** 严重程度的显示名；未知取值返回 undefined，由调用处决定怎么兜底。 */
 function severityLabel(severity: AtsSeverity): string | undefined {
@@ -120,9 +128,12 @@ export default function AtsCheckPanel({ resumeId, jobId }: Props) {
   /** 自动载入过的岗位 id：同一个岗位只自动填一次（用户手动清空后不再填回）。 */
   const autoLoadedJobId = useRef<number | null>(null);
   const jdTextRef = useRef("");
+  // 不自动检测：JD 是异步载入的，挂载即请求必然赶在 JD 之前，等于"用户还没点就开始打分"。
+  // 只有「开始检测」走 reload()（版本守卫与 deps 无关，按钮路径照常工作）。
   const { data, loading, error, reload } = useApi(
     () => runAtsCheck(resumeId, jdTextRef.current),
     [resumeId],
+    { enabled: false },
   );
 
   const run = () => {
@@ -230,21 +241,24 @@ export default function AtsCheckPanel({ resumeId, jobId }: Props) {
   return (
     <Space orientation="vertical" style={{ width: "100%" }} size="middle">
       <Space orientation="vertical" style={{ width: "100%" }} size="small">
-        <Space.Compact style={{ width: "100%" }}>
-          <Input.TextArea
-            rows={2}
-            maxLength={MAX_JOB_TEXT_CHARS}
-            value={jdText}
-            placeholder={t("atsCheck.jd.placeholder")}
-            aria-label={t("atsCheck.jd.label")}
-            onChange={(event) => handleJdInput(event.target.value)}
-          />
-          <Button type="primary" loading={loading} onClick={run}>
-            {t("atsCheck.action.run")}
-          </Button>
-        </Space.Compact>
-        {jobId != null && (
-          <Space wrap size="small">
+        {/* 多行输入不放进 Space.Compact：连体控件假设的是单行输入，按钮只会贴住顶部一小段、
+            左圆角被压平，还永久吃掉输入框右侧约 90px。 */}
+        <Input.TextArea
+          rows={2}
+          maxLength={MAX_JOB_TEXT_CHARS}
+          value={jdText}
+          style={{ width: "100%" }}
+          placeholder={t("atsCheck.jd.placeholder")}
+          aria-label={t("atsCheck.jd.label")}
+          onChange={(event) => handleJdInput(event.target.value)}
+        />
+        {/* 操作行常驻：「开始检测」是这一屏唯一的入口，没有关联岗位时也必须在这里。
+            DOM 顺序 = 视觉顺序（输入框 → 重新载入 → 开始检测），Tab 才不会跳序。 */}
+        <div
+          style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}
+          data-ats-actions
+        >
+          {jobId != null && (
             <Button
               size="small"
               icon={<DownloadOutlined />}
@@ -253,19 +267,32 @@ export default function AtsCheckPanel({ resumeId, jobId }: Props) {
             >
               {t("atsCheck.action.reloadJd")}
             </Button>
-            {notice === "auto" && (
-              <Typography.Text type="secondary">{t("atsCheck.jd.autoLoaded")}</Typography.Text>
-            )}
-            {notice === "failed" && (
-              <Typography.Text type="secondary">{t("atsCheck.jd.autoFailed")}</Typography.Text>
-            )}
-          </Space>
-        )}
+          )}
+          {notice === "auto" && (
+            <Typography.Text type="secondary">{t("atsCheck.jd.autoLoaded")}</Typography.Text>
+          )}
+          {notice === "failed" && (
+            <Typography.Text type="secondary">{t("atsCheck.jd.autoFailed")}</Typography.Text>
+          )}
+          <Button type="primary" loading={loading} onClick={run} style={{ marginLeft: "auto" }}>
+            {t("atsCheck.action.run")}
+          </Button>
+        </div>
       </Space>
       {/* 硬上限交给 maxLength；提示统一走 MaxLengthHint（全仓禁用 antd showCount）。 */}
       <MaxLengthHint value={jdText} maxLength={MAX_JOB_TEXT_CHARS} />
 
       {error && <Alert type="error" showIcon title={error} />}
+
+      {/* 空态：还没点「开始检测」（或检测尚未返回）。绝不在这里渲染分数与关键词清单——
+          没有 JD 时后端不再拿通用词库兜底，前端也不该先给一套结论。 */}
+      {!data && !loading && !error && (
+        <Typography.Text type="secondary">
+          {jdText.trim() !== ""
+            ? t("atsCheck.emptyHint.withJd")
+            : t("atsCheck.emptyHint.withoutJd")}
+        </Typography.Text>
+      )}
 
       {data && !loading && (
         <>
@@ -273,29 +300,47 @@ export default function AtsCheckPanel({ resumeId, jobId }: Props) {
           <Space wrap align="center" size="large">
             <Space orientation="vertical" size={0} align="center">
               <Typography.Text strong>{t("atsCheck.score.label")}</Typography.Text>
-              <Progress
-                type="circle"
-                size={64}
-                percent={data.score}
-                format={(value) => `${value ?? 0}`}
-              />
+              {/* 没有 JD = 没有参考分。显示「—」并说明原因，不能拿 0 分冒充"未检测"。 */}
+              {data.score == null ? (
+                <>
+                  <Typography.Text strong style={{ fontSize: 28, lineHeight: 1.4 }}>
+                    —
+                  </Typography.Text>
+                  <Typography.Text type="secondary">{t("atsCheck.score.noJd")}</Typography.Text>
+                </>
+              ) : (
+                <Progress
+                  type="circle"
+                  size={64}
+                  percent={data.score}
+                  format={(value) => `${value ?? 0}`}
+                />
+              )}
             </Space>
             <Space orientation="vertical" size={4} style={{ minWidth: 180 }}>
               {CATEGORY_ORDER.map((item) => (
                 <div key={item.key}>
                   <Typography.Text type="secondary">{t(item.labelKey)}</Typography.Text>
-                  <Progress
-                    percent={data.subscores?.[item.key] ?? 0}
-                    size="small"
-                    format={(value) => `${value ?? 0}`}
-                  />
+                  {/* 关键词分项没有分母就不参与计分：如实说"需要 JD"，不用 0 分表达。 */}
+                  {item.key === "keyword" && data.coverage_ratio == null ? (
+                    <Tag>{t("atsCheck.subscore.needsJd")}</Tag>
+                  ) : (
+                    <Progress
+                      percent={data.subscores?.[item.key] ?? 0}
+                      size="small"
+                      format={(value) => `${value ?? 0}`}
+                    />
+                  )}
                 </div>
               ))}
             </Space>
-            {data.coverage_ratio != null && (
+            {data.coverage_ratio != null ? (
               <Tag color="geekblue">
                 {t("atsCheck.coverage", { percent: Math.round(data.coverage_ratio * 100) })}
               </Tag>
+            ) : (
+              // 没有可比对的关键词：显示"未识别到"，绝不显示 100%（旧后端的满分假象）。
+              <Tag color="default">{t("atsCheck.coverage.none")}</Tag>
             )}
             {CATEGORY_ORDER.map((item) => {
               const count = data.summary?.[item.key] ?? 0;

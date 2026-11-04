@@ -1,33 +1,41 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * 「这些资料内容没有写进这份简历」的中性提示块（#3 / #5）。
+ * 「这些资料内容没有写进这份简历」的中性提示块（#3 / #5 / 5-A / 3-A）。
  *
  * **为什么单独成文件**：宿主 `ResumeDetailPreview` 贴着 500 行预算，而这一块是**派生数据
- * 的纯展示**——它只读 `coverage_notes` 与那几条从 `warnings` 里拆出来的旧版警告，两个动作
- * 都是"把用户带到能处理它的地方"（修订弹窗 / 手动调整）。没有任何自己的状态。
+ * 的纯展示**——它只读 `coverage_notes` 与那几条从 `warnings` 里拆出来的旧版警告，动作
+ * 都是"把用户带到能处理它的地方"（确定性补入 / 修订弹窗 / 制作台）。
  *
  * 与「疑似虚构」分开呈现是刻意的：岗位导向筛选把与岗位关键词交集不足的内容挡在生成之外，
  * 这是**正常结果**，资料本身一条都没丢；把它和虚构混成一面红色的墙，用户会以为数据坏了。
  *
- * 搬运时行为一字未改：文案、顺序、每条分区下面的「AI 补上这段」，以及底部的
- * 「打开手动调整」都留在原位。
+ * 形态与上方「生成说明」一致（2026-11 问题 1）：`Collapse` + **不传 `defaultActiveKey`**，
+ * 默认收起。这条提示是补充说明，展开态曾把真正的简历挤到首屏之外。折叠头用条数 `Tag`
+ * 保留"还有 N 条没写进去"这一信息，`InfoCircleOutlined` 顶替原 `Alert` 的 `showIcon`。
+ * 展开状态刻意不记忆（不落 localStorage）：每次打开都收起才符合"默认折叠"的语义。
+ *
+ * 2026-11（问题 8）：详情顶部把这块收进诊断条的 `Popover`，折叠外壳由诊断条承担，
+ * 于是正文抽成 `ResumeCoverageNotesBody`——同一份渲染，只是不再自带一层 `Collapse`
+ * （弹层里再套一层折叠＝要点两次）。聚合规则搬去 `coverageGroups.ts`（诊断条也要那个条数）。
+ *
+ * 5-A：一组内的多个名字不再拼成一段文字，改为一条一行（`CoverageGroupCard`），组头写
+ * 原因汇总；分组键改成 `(section, section_label)`。
+ * 3-A：按钮按 `resolveCoverageAction` 分三支——能确定性补入的自建板块「补进简历」，
+ * 有可写字段的分区「AI 补上这段」，其余「去制作台添加」（AI 修订不能新增条目）。
  */
-import { Alert, Button, Space, Typography } from "antd";
+import { InfoCircleOutlined } from "@ant-design/icons";
+import { App, Button, Collapse, Space, Tag, Typography } from "antd";
+import { useState } from "react";
+import { appendProfileEntries } from "../../api/resumes";
 import { useI18n } from "../../i18n/i18nContext";
-import { RESUME_CATALOG_SECTION_LABEL_KEYS } from "../../i18n/enum/resumeCatalog";
-import type { ResumeCoverageNote } from "../../types";
-
-/**
- * `coverage_notes[].section` 是**资料分区键**（后端 `resume_coverage._SECTION_MAP`）：
- * 其中三个分区在资料侧是复数（`experiences` / `educations` / `campus_experiences`），
- * 与简历分区键不同名。显示前先归一到简历分区键，再查语言包（其余分区同名，不需要别名）。
- * 不归一的话，这三个分区在英文界面仍会回退后端中文。
- */
-const PROFILE_SECTION_KEY_ALIASES: Record<string, string> = {
-  experiences: "experience",
-  educations: "education",
-  campus_experiences: "campus_experience",
-};
+import type { ResumeCoverageNote, ResumeDetail } from "../../types";
+import CoverageGroupCard from "./CoverageGroupCard";
+import {
+  coverageSummaryCount,
+  groupCoverageNotes,
+  resolveCoverageAction,
+  type CoverageGroup,
+} from "./coverageGroups";
 
 interface Props {
   /** 结构化的分区级清单（新生成的记录才有）。 */
@@ -36,87 +44,132 @@ interface Props {
   legacyWarnings: string[];
   /** 「AI 补上这段」：把拼好的指令交给宿主的修订弹窗。 */
   onRevise: (instructions: string) => void;
-  /** 「打开手动调整」：宿主负责关掉目标定位、打开编辑器。 */
+  /** 「去制作台添加」/「打开手动调整」：宿主负责关掉目标定位、打开编辑器。 */
   onOpenEditor: () => void;
+  /** 3-A：当前简历 id（缺省时"补进简历"降级为"去制作台添加"）。 */
+  resumeId?: number;
+  /** 3-A：点按钮时的那一版，用于条件写（期间别处保存过就 409）。 */
+  baseRevision?: number | null;
+  /** 3-A：补入成功后的新简历，宿主据此刷新预览与清单。 */
+  onAppended?: (detail: ResumeDetail) => void;
 }
 
-export default function ResumeCoverageNotes({
+/**
+ * 正文（不带折叠外壳）：诊断条的弹层直接用它。
+ * 两类数据都空时返回 null——空壳会在弹层里留一块什么都没有的区域。
+ */
+export function ResumeCoverageNotesBody({
   notes,
   legacyWarnings,
   onRevise,
   onOpenEditor,
+  resumeId,
+  baseRevision = null,
+  onAppended,
 }: Props) {
   const { t } = useI18n();
-  // 两类数据都空时整块不渲染：空壳会在每份简历的弹窗里多出一条什么都没有的提示条。
+  const { message } = App.useApp();
+  /** 正在补入的那一组（`group.key`）：只锁这一组的按钮，别的组仍可操作。 */
+  const [appendingKey, setAppendingKey] = useState<string | null>(null);
   if (notes.length === 0 && legacyWarnings.length === 0) return null;
 
+  const groups = groupCoverageNotes(notes);
+  // 没有 resumeId 或没有刷新回调时，"补进简历"点了也落不了库 → 一律降级成"去制作台添加"。
+  const canAppend = resumeId !== undefined && onAppended !== undefined;
+
   /** 一句话把这条分区清单变成"只补这些、其余不动"的修订指令。 */
-  const reviseInstructions = (note: ResumeCoverageNote): string =>
+  const reviseInstructions = (group: CoverageGroup): string =>
     // i18n-ok: 喂给模型的修订指令（作为 prompt 保持中文，初值会带进修订弹窗）
-    `请把资料中的以下内容补进这份简历的${note.section_label}（只新增这些内容，其余部分保持不变）：` +
-    note.names.map((name) => `「${name}」`).join("、") + // i18n-ok: 同上，模型 prompt 里的中文引号与顿号
+    `请把资料中的以下内容补进这份简历的${group.sectionLabel}（只新增这些内容，其余部分保持不变）：` +
+    group.names.map((name) => `「${name}」`).join("、") + // i18n-ok: 同上，模型 prompt 里的中文引号与顿号
     "。补充时使用这些条目在个人资料中的原文事实，不要虚构细节。"; // i18n-ok: 同上，模型 prompt
 
-  /** 把多个资料名排成一行：引号与分隔符随界面语言（提示块正文用）。 */
-  const formatNames = (names: string[]): string =>
-    names
-      .map((name) => t("resume.coverage.item", { name }))
-      .join(t("resume.coverage.itemSeparator"));
+  /** 3-A：确定性补入。成功后宿主刷新简历，清单由后端修剪，不需要前端自己删条目。 */
+  const handleAppend = async (group: CoverageGroup): Promise<void> => {
+    if (resumeId === undefined || !onAppended) return;
+    setAppendingKey(group.key);
+    try {
+      const result = await appendProfileEntries(resumeId, {
+        sectionKey: group.rawSection,
+        entryIds: group.entryIds,
+        baseRevision,
+      });
+      if (result.appended.length > 0) {
+        message.success(t("resume.coverage.appended", { count: result.appended.length }));
+      }
+      if (result.skipped.length > 0) {
+        message.info(t("resume.coverage.skipped", { count: result.skipped.length }));
+      }
+      onAppended(result.resume);
+    } catch (error) {
+      // 后端给了可解释的失败（资料已删除 / 不在当前组 / 版本冲突）：ApiError.message 已是人话。
+      message.error(
+        error instanceof Error && error.message ? error.message : t("resume.coverage.appendFailed"),
+      );
+    } finally {
+      setAppendingKey(null);
+    }
+  };
 
   return (
-    <Alert
-      type="info"
-      showIcon
+    <div style={{ display: "grid", gap: 4 }}>
+      <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+        {t("resume.coverage.intro")}
+      </Typography.Text>
+      {groups.map((group) => (
+        <CoverageGroupCard
+          key={group.key}
+          group={group}
+          action={resolveCoverageAction(group, canAppend)}
+          appendPending={appendingKey === group.key}
+          onAppend={(target) => {
+            void handleAppend(target);
+          }}
+          onRevise={(target) => onRevise(reviseInstructions(target))}
+          onOpenEditor={onOpenEditor}
+        />
+      ))}
+      {legacyWarnings.map((warning) => (
+        <Typography.Paragraph key={warning} style={{ margin: 0, fontSize: 13 }}>
+          {warning}
+        </Typography.Paragraph>
+      ))}
+      {notes.length > 0 && (
+        <Space size={8} wrap>
+          <Button size="small" onClick={onOpenEditor}>
+            {t("resume.coverage.openEditor")}
+          </Button>
+        </Space>
+      )}
+    </div>
+  );
+}
+
+export default function ResumeCoverageNotes(props: Props) {
+  const { t } = useI18n();
+  const summaryCount = coverageSummaryCount(props.notes, props.legacyWarnings);
+  // 两类数据都空时整块不渲染：空壳会在每份简历的弹窗里多出一条什么都没有的提示条。
+  if (props.notes.length === 0 && props.legacyWarnings.length === 0) return null;
+
+  return (
+    <Collapse
+      size="small"
       style={{ marginBottom: 12 }}
-      title={t("resume.coverage.title")}
-      description={
-        <div style={{ display: "grid", gap: 10 }}>
-          <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-            {t("resume.coverage.intro")}
-          </Typography.Text>
-          {notes.map((note) => {
-            // 分区名走语言包（按稳定的 `section` 键，先归一对资料侧的复数键），
-            // 后端下发的原文只作未知分区的回退；喂给模型的修订指令仍用后端原文，不本地化。
-            const section = PROFILE_SECTION_KEY_ALIASES[note.section] ?? note.section;
-            const sectionKey = RESUME_CATALOG_SECTION_LABEL_KEYS[section];
-            return (
-              <div key={note.section}>
-                <Typography.Text strong style={{ fontSize: 13 }}>
-                  {t("resume.coverage.sectionCount", {
-                    label: sectionKey ? t(sectionKey) : note.section_label,
-                    count: note.total,
-                  })}
-                </Typography.Text>
-                <Typography.Text style={{ fontSize: 13 }}>
-                  {formatNames(note.names)}
-                </Typography.Text>
-                <Space size={8} style={{ marginTop: 6 }} wrap>
-                  <Button
-                    size="small"
-                    type="primary"
-                    ghost
-                    onClick={() => onRevise(reviseInstructions(note))}
-                  >
-                    {t("resume.coverage.revise")}
-                  </Button>
-                </Space>
-              </div>
-            );
-          })}
-          {legacyWarnings.map((warning) => (
-            <Typography.Paragraph key={warning} style={{ margin: 0, fontSize: 13 }}>
-              {warning}
-            </Typography.Paragraph>
-          ))}
-          {notes.length > 0 && (
-            <Space size={8} wrap>
-              <Button size="small" onClick={onOpenEditor}>
-                {t("resume.coverage.openEditor")}
-              </Button>
+      items={[
+        {
+          key: "coverage",
+          label: (
+            <Space size={8}>
+              <InfoCircleOutlined />
+              <span>{t("resume.coverage.title")}</span>
+              <Tag style={{ marginInlineEnd: 0 }}>
+                {t("resume.coverage.summary", { count: summaryCount })}
+              </Tag>
             </Space>
-          )}
-        </div>
-      }
+          ),
+          children: <ResumeCoverageNotesBody {...props} />,
+        },
+      ]}
     />
   );
 }

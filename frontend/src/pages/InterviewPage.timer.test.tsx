@@ -231,9 +231,10 @@ describe("InterviewPage 计时器与「准备好了」闸门", () => {
     ).toBeTruthy();
   });
 
-  it("最后一答提交后：气泡说「本场面试结束，正在生成报告」，不再说正在思考下一题", async () => {
-    // 固定 6 轮、已答 5 轮 → 这一次就是最后一答。流式请求故意不返回，
-    // 好让界面停在"等待"状态上被断言（真实场景等的是报告生成）。
+  it("最后一答提交后不再提前宣称「正在生成报告」（报告改为等用户在决策卡上确认）", async () => {
+    // 固定 6 轮、已答 5 轮 → 这一次就是最后一答。流式请求故意不返回，好让界面停在
+    // "等待"状态上被断言。需求 4 起轮数用尽**只收盘**，报告要在决策卡上点才生成，
+    // 所以这里绝不能再按轮数预测出「本场面试结束，正在生成报告」——那句话此刻不成立。
     streamMocks.consumeSSE.mockImplementation(() => new Promise(() => undefined as never));
     apiMocks.createInterview.mockResolvedValue(makeDetail({ answered_rounds: 5 }));
 
@@ -251,7 +252,7 @@ describe("InterviewPage 计时器与「准备好了」闸门", () => {
     });
     await flushPromises();
 
-    expect(screen.getByText(t("interviewPage.thinkingFinishReport"))).toBeTruthy();
-    expect(screen.queryByText(t("interview.thinking"))).toBeNull();
+    expect(screen.queryByText(t("interviewPage.thinkingFinishReport"))).toBeNull();
+    expect(screen.getByText(t("interview.thinking"))).toBeTruthy();
   });
 });

@@ -164,6 +164,12 @@ const workbench = {
   "resume.measure.fontTooSmall": "小于 {px}px 打印可能看不清",
   /** 「字体」这一行的标签（`ResumeFontControl` 的自有文案不动）。 */
   "resume.measure.fontLabel": "字体",
+  /** 主预览工具栏的「更多排版」：把行距 / 页边距 / 字号 / 字体收进一个弹出面板（问题 8）。 */
+  "resume.measure.more": "更多排版",
+  /** 「更多排版」的悬停说明：一句话说清里面有什么。 */
+  "resume.measure.moreHint": "行距、页边距、字号与字体",
+  /** 弹出面板的无障碍标签。 */
+  "resume.measure.moreAria": "更多排版设置（行距、页边距、字号、字体）",
 
   // ── 草稿差异（「上次没提交的内容」展开区）──────────────────────
   /** 草稿条上的入口：展开/收起差异清单。 */
@@ -278,6 +284,8 @@ const workbench = {
   "resume.detail.group-usage.deleted-hint": "该方案已删除；以下信息来自这份简历保存时的快照",
   "resume.detail.group-usage.stale-title": "资料或方案定义已更新",
   "resume.detail.group-usage.stale-body": "已保存简历不会自动变化，需重新生成才会体现在纸面上",
+  /** 「资料已更新」压成一行后的尾段（正文进了 Tooltip，见 stale-body）。 */
+  "resume.detail.group-usage.stale-action": "需重新生成",
   "editor.credentials.name-required": "请填写证照名称",
   "editor.custom-sections.empty": "还没有自建板块",
   "editor.custom-sections.add-entry": "添加条目",

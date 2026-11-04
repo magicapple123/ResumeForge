@@ -1,30 +1,27 @@
 # SPDX-License-Identifier: Apache-2.0
-"""W07-BE：format_config 域协议 + 角色/对象覆盖 + 分页/照片裁剪域的解析与 HTML 产出。
+"""W07-BE：format_config 域协议 + 角色/对象覆盖 + 分页的解析与 HTML 产出。
 
 覆盖（契约第 1 册 §1.2/§1.4/§1.6、第 2 册 §3.2、第 3 册 §7.1）：
 
 * 域分派：合法域写入、空域不落库（R3）、version>1 整域丢弃（R2）、越界/未知键丢弃；
 * 角色/对象解析：六层次序（对象 > 角色）、来源三态、空覆盖零 CSS；
 * HTML 唯一 CSS 产出：角色规则逐字、分页 @media print、默认空串；
-* 照片裁剪：派生数据（非破坏）+ 哈希失效；
 * prune：指向不存在对象的覆盖与失效裁剪域被裁掉、幂等、无需改动返回 None；
 * catalog：role_fields / template_role_defaults / style_props 与后端表同源。
+
+照片裁剪域（派生数据 / 哈希失效 / prune 保留 / HTML+Word 消费）见
+``test_resume_photo_crop_render.py``——2026-11-04 按 500 行预算拆分，纯搬迁。
 """
 
 from __future__ import annotations
 
-import base64
-import io
 import re
 
 import pytest
-from app.schemas.resume import ResumeContent
-from app.services.resume import resume_photo_crop
 from app.services.resume.format_capabilities import CAPABILITY_KEYS
 from app.services.resume.resume_config_domains import DOMAIN_KEYS, is_supported
 from app.services.resume.resume_pagination import SECTION_KEYS as PAGINATION_SECTION_KEYS
 from app.services.resume.resume_pagination import pagination_css, resolve_pagination
-from app.services.resume.resume_photo_crop import photo_sha256
 from app.services.resume.resume_render_overrides import (
     prune_overrides,
     render_overrides_css,
@@ -42,21 +39,8 @@ from app.services.resume.resume_style_schema import (
     validate_roles_domain,
 )
 from app.services.resume.resume_template_format import FONT_KEY, validated_format_config
-from PIL import Image
+from resume_render_fixtures import PHOTO, _render_resume, photo_sha256
 from test_pdf_exporter import _text_runs, needs_font
-
-PHOTO = (
-    "data:image/png;base64,"
-    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk"
-    "YAAAAAYAAjCB0C8AAAAASUVORK5CYII="
-)
-
-
-def _png(width: int = 8, height: int = 8) -> str:
-    buffer = io.BytesIO()
-    Image.new("RGB", (width, height), (10, 120, 200)).save(buffer, format="PNG")
-    return "data:image/png;base64," + base64.b64encode(buffer.getvalue()).decode("ascii")
-
 
 # ===== 1. 域机制 =====
 
@@ -159,21 +143,8 @@ def test_pagination_section_keys_match_the_renderer_order():
     assert tuple(PAGINATION_SECTION_KEYS) == tuple(DEFAULT_SECTION_ORDER)
 
 
-def test_photo_crop_domain_validates_rect_and_source():
-    good = {
-        "version": 1,
-        "source": {"sha256": "a" * 64, "width": 100, "height": 200},
-        "rect": {"x": 0.1, "y": 0.2, "w": 0.5, "h": 0.6},
-        "aspect": "3:4",
-    }
-    assert resume_photo_crop.validate_photo_crop_domain(good) is not None
-    for broken in (
-        {**good, "source": {"sha256": "A" * 64, "width": 100, "height": 200}},
-        {**good, "rect": {"x": 0.8, "y": 0.2, "w": 0.5, "h": 0.6}},
-        {**good, "rect": {"x": 0.1, "y": 0.2, "w": 0, "h": 0.6}},
-    ):
-        assert resume_photo_crop.validate_photo_crop_domain(broken) is None
-
+# 照片裁剪域的用例（域校验 / 非破坏派生 / prune 保留 / HTML+Word 消费）见
+# test_resume_photo_crop_render.py——按 500 行预算拆分，用例与断言原样搬迁。
 
 # ===== 2. 角色/对象解析 =====
 
@@ -251,46 +222,7 @@ def test_pagination_css_is_print_only_and_empty_by_default():
     assert plan.repeat_name is True
 
 
-# ===== 3. 照片裁剪（非破坏派生） =====
-
-
-def test_photo_crop_renders_a_derived_image_and_keeps_the_source_intact():
-    source = _png(40, 20)
-    sha = photo_sha256(source)
-    config = {
-        "photo_crop": {
-            "version": 1,
-            "source": {"sha256": sha, "width": 40, "height": 20},
-            "rect": {"x": 0.0, "y": 0.0, "w": 0.5, "h": 1.0},
-            "aspect": "free",
-        }
-    }
-    overrides = resolve_render_overrides(template="classic", format_config=config, photo=source)
-    assert overrides.photo_crop is not None
-    derived = overrides.photo_for_render(source)
-    assert derived != source
-    payload = base64.b64decode(derived.partition(",")[2])
-    with Image.open(io.BytesIO(payload)) as image:
-        assert image.size == (20, 20)  # 水平一半
-    # 原图字符串一个字节都没改（非破坏）。
-    assert source.startswith("data:image/png;base64,")
-
-
-def test_photo_crop_is_ignored_when_the_photo_changed():
-    config = {
-        "photo_crop": {
-            "version": 1,
-            "source": {"sha256": "f" * 64, "width": 10, "height": 10},
-            "rect": {"x": 0, "y": 0, "w": 1, "h": 1},
-            "aspect": "free",
-        }
-    }
-    overrides = resolve_render_overrides(template="classic", format_config=config, photo=PHOTO)
-    assert overrides.photo_crop is None
-    assert overrides.photo_for_render(PHOTO) == PHOTO
-
-
-# ===== 4. prune（保存时裁掉死数据） =====
+# ===== 3. prune（保存时裁掉死数据） =====
 
 
 def test_prune_drops_dead_object_overrides_and_stale_photo_crop():
@@ -327,76 +259,7 @@ def test_prune_drops_dead_object_overrides_and_stale_photo_crop():
     assert prune_overrides(content, None) is None
 
 
-def test_photo_sha256_is_the_hash_of_the_data_url_string():
-    assert len(photo_sha256(PHOTO)) == 64
-    assert photo_sha256(None) == ""
-    assert photo_sha256(PHOTO) == photo_sha256(PHOTO)
-
-
-def _v2_content_with_photo(photo: str) -> dict:
-    """v2 文档骨架：照片在 ``header.items`` 里（**没有**顶层 ``photo`` 键）。"""
-    return {
-        "version": 2,
-        "header": {
-            "items": [
-                {
-                    "kind": "field",
-                    "id": "ob_head0001",
-                    "key": "name",
-                    "label": "",
-                    "value": "张三",
-                    "placement": "name",
-                    "format": "text",
-                },
-                {
-                    "kind": "field",
-                    "id": "ob_head0002",
-                    "key": "photo",
-                    "label": "",
-                    "value": photo,
-                    "placement": "photo",
-                    "format": "text",
-                },
-            ]
-        },
-        "sections": [],
-    }
-
-
-def _crop_config_for(photo: str) -> dict:
-    return {
-        "photo_crop": {
-            "version": 1,
-            "source": {"sha256": photo_sha256(photo), "width": 10, "height": 10},
-            "rect": {"x": 0.1, "y": 0.1, "w": 0.8, "h": 0.8},
-            "aspect": "free",
-        }
-    }
-
-
-def test_prune_keeps_photo_crop_when_v2_header_photo_matches():
-    """v2 的照片在 header.items 里：只按顶层 ``photo`` 读会把刚存的裁剪当死数据删掉。"""
-    content = _v2_content_with_photo(PHOTO)
-    config = _crop_config_for(PHOTO)
-    # 没有需要裁的东西 → 返回 None（不写库、也不动 photo_crop）。
-    assert prune_overrides(content, config) is None
-    # 换一张照片 → sha 不再匹配，裁剪必须被裁掉。
-    swapped = _v2_content_with_photo(PHOTO + "x")
-    pruned = prune_overrides(swapped, config)
-    assert pruned is not None
-    assert "photo_crop" not in pruned
-
-
-def test_prune_still_reads_v1_top_level_photo():
-    """v1 兼容路径：顶层 ``photo`` 与 header 并存时仍按原口径比对。"""
-    content = {"version": 1, "name": "张三", "photo": PHOTO}
-    assert prune_overrides(content, _crop_config_for(PHOTO)) is None
-    pruned = prune_overrides({**content, "photo": ""}, _crop_config_for(PHOTO))
-    assert pruned is not None
-    assert "photo_crop" not in pruned
-
-
-# ===== 5. catalog 三字段 =====
+# ===== 4. catalog 三字段 =====
 
 
 def test_templates_catalog_exposes_role_contract(client):
@@ -430,29 +293,7 @@ def test_visible_style_config_roundtrip_keeps_domains_and_font():
     assert re.search(r'\[data-role="meta"\]', role_style_css(style)) is None
 
 
-# ===== 6. 三个渲染器消费同一份 RenderOverrides（HTML / PDF / Word） =====
-
-
-def _render_resume() -> ResumeContent:
-    return ResumeContent(
-        name="张三",
-        job_intent="后端工程师",
-        summary="一段总结。",
-        experience=[
-            {
-                "company": "甲公司",
-                "role": "工程师",
-                "description": ["做了甲。"],
-                "id": "exp_12345678",
-            },
-            {
-                "company": "乙公司",
-                "role": "工程师",
-                "description": ["做了乙。"],
-                "id": "exp_87654321",
-            },
-        ],
-    )
+# ===== 5. 三个渲染器消费同一份 RenderOverrides（HTML / PDF / Word） =====
 
 
 def test_html_consumes_role_and_object_overrides():
@@ -517,33 +358,3 @@ def test_word_consumes_role_overrides():
     with zipfile.ZipFile(_io.BytesIO(document.content)) as bundle:
         xml = bundle.read("word/document.xml").decode("utf-8")
     assert "123C69" in xml, "Word 区块标题应使用角色覆盖色"
-
-
-def test_photo_crop_reaches_html_and_word():
-    import io as _io
-    import zipfile
-
-    from app.services.docx_exporter import build_resume_docx
-    from app.services.exporter import render_html
-
-    photo = _png(40, 20)
-    config = {
-        "photo_crop": {
-            "version": 1,
-            "source": {"sha256": photo_sha256(photo), "width": 40, "height": 20},
-            "rect": {"x": 0.0, "y": 0.0, "w": 0.5, "h": 1.0},
-            "aspect": "free",
-        }
-    }
-    resume = _render_resume().model_copy(update={"photo": photo})
-    html = render_html(resume, format_config=config)
-    cropped = re.search(r'<img class="profile-photo" src="data:image/png;base64,([^"]+)"', html)
-    assert cropped, "HTML 里应有照片"
-    from PIL import Image
-
-    with Image.open(_io.BytesIO(base64.b64decode(cropped.group(1)))) as image:
-        assert image.size == (20, 20), "HTML 用的是按 rect 派生的裁剪图"
-
-    document = build_resume_docx(resume, template="classic", page_limit=1, format_config=config)
-    with zipfile.ZipFile(_io.BytesIO(document.content)) as bundle:
-        assert any(name.startswith("word/media/") for name in bundle.namelist())

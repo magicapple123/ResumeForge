@@ -82,9 +82,11 @@ describe("dropRejectReason", () => {
     expect(dropRejectReason(field("x", "hidden"), "title")).toBeNull();
   });
 
-  it("TextItem 不参与拖拽（位置集为空），任何落点都是位置不允许", () => {
-    // 正文块的显示/隐藏走右键菜单，没有"拖到隐藏组"这条路（canMove 也不给它 draggable）。
+  it("TextItem 不参与换位置，但落在正文组是合法的（问题 12）", () => {
+    // 正文块的显示/隐藏走右键菜单，没有"拖到隐藏组"这条路（draggable 也只挂在把手上）。
     expect(dropRejectReason(textItem("t"), "title")).toBe("invalid");
     expect(dropRejectReason(textItem("t"), "hidden")).toBe("invalid");
+    // 落在正文组 = 组内换序（或从隐藏区恢复），不是"换位置"。
+    expect(dropRejectReason(textItem("t"), "body")).toBeNull();
   });
 });

@@ -80,13 +80,56 @@ def _dedupe_lines(values: list[Any]) -> list[str]:
     return deduped
 
 
+#: 熟练度从高到低（与资料页「熟练度」选项同源：catalog_experience 的 精通/熟练/掌握/了解）。
+#: 未知非空值排在最末的实质档位之上、空串之下——去重时只允许升档，绝不允许降档。
+_SKILL_LEVEL_RANK: dict[str, int] = {"精通": 4, "熟练": 3, "掌握": 2, "了解": 1}
+
+
+def _skill_key(name: str) -> str:
+    """归一键 = 去空白 + casefold（与 _similar_skill 的归一同一口径）。"""
+    return "".join(str(name or "").split()).casefold()
+
+
+def _skill_level_rank(level: str) -> int:
+    text = str(level or "").strip()
+    return _SKILL_LEVEL_RANK.get(text, 1 if text else 0)
+
+
+def dedupe_skills(skills: list[Any]) -> list[Any]:
+    """技能按名称归一去重：保留等级更高的一条，位置沿用首次出现（问题 14）。
+
+    技能有两条来源——模型自己写的，与 `merge_missing_consumed_fields` 从资料补回的；
+    合并阶段各补一次就会出现「MySQL、Spring Boot、MySQL、Redis」。去重只放在这里
+    （落库前唯一的最终清洗），不在每个合并函数里各打一次补丁。
+    """
+    positions: dict[str, int] = {}
+    result: list[Any] = []
+    for skill in skills:
+        key = _skill_key(getattr(skill, "name", ""))
+        if not key:
+            # 没有名字的条目不在去重范围内，原样保留在原位置。
+            result.append(skill)
+            continue
+        index = positions.get(key)
+        if index is None:
+            positions[key] = len(result)
+            result.append(skill)
+            continue
+        if _skill_level_rank(getattr(skill, "level", "")) > _skill_level_rank(
+            getattr(result[index], "level", "")
+        ):
+            result[index] = skill
+    return result
+
+
 def normalize_generated_content(resume: ResumeContent) -> ResumeContent:
     """生成内容的确定性归一化（R1-A/R1-B）。
 
     - 正文行行首 markdown 列表标记统一剥掉（来源可能是资料行本身或模型自己写）；
     - projects / research_projects 的 description 与 highlights/outcomes 在资料里可能
       高度重叠：同一句被两个槽位写进正文会在纸面上重复，这里按规范化文本保序去重；
-    - summary / 自建分区文本同样逐行剥前缀。
+    - summary / 自建分区文本同样逐行剥前缀；
+    - 技能按名称归一去重（保留高等级、位置沿用首次出现），见 :func:`dedupe_skills`。
     """
     updates: dict[str, Any] = {}
     for field, attrs in _LINE_FIELDS.items():
@@ -121,6 +164,10 @@ def normalize_generated_content(resume: ResumeContent) -> ResumeContent:
         )
         if cleaned_summary != summary:
             updates["summary"] = cleaned_summary
+    # 技能归一去重（问题 14）：必须最后做——前面的 grounding 与按 key 合并都会追加技能。
+    deduped_skills = dedupe_skills(list(resume.skills or []))
+    if deduped_skills != list(resume.skills):
+        updates["skills"] = deduped_skills
     if resume.custom_sections:
         sections: list[ResumeCustomSection] = []
         custom_changed = False

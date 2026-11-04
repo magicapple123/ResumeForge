@@ -35,7 +35,8 @@ const globalSearch = {
   "globalSearch.type.experience": "Interview notes",
   "globalSearch.type.claim": "Fact ledger",
   "globalSearch.type.material": "Material",
-  "globalSearch.type.skill": "Skill",
+  /** Hit inside My Profile: the click lands on the matching section. */
+  "globalSearch.type.profile": "My profile",
 } as const;
 
 export default globalSearch;

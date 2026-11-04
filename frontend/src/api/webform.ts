@@ -20,6 +20,7 @@ import type {
   WebFormSnapshot,
   WebFormUrlHistoryList,
   WebFormBrowserTargetList,
+  WebFormScope,
 } from "../types";
 import type { Page } from "../types/common";
 import { buildQuery, request, uploadWithProgress } from "./client";
@@ -135,18 +136,36 @@ export function takeWebFormSnapshot(): Promise<WebFormSnapshot> {
  * `ai` 为真时，规则认不出的控件会交给模型识别（**只有配了模型才会真的调用**），
  * 命中的行会带上 `source: "ai"` 并且默认不勾选。
  */
-export function previewWebForm(snapshotId: string, ai = true): Promise<WebFormPreview> {
+export function previewWebForm(
+  snapshotId: string,
+  ai = true,
+  scope: WebFormScope = "group",
+): Promise<WebFormPreview> {
   return request("/webform/preview", {
     method: "POST",
-    body: JSON.stringify({ snapshot_id: snapshotId, ai }),
+    body: JSON.stringify({ snapshot_id: snapshotId, ai, scope }),
   });
 }
 
 /** 智能逐项填表：聚焦页面字段时，在字段旁给出对应资料建议。 */
-export function startWebFormLive(ai = true): Promise<WebFormLive> {
+export function startWebFormLive(ai = true, scope: WebFormScope = "group"): Promise<WebFormLive> {
   return request("/webform/live/start", {
     method: "POST",
-    body: JSON.stringify({ ai }),
+    body: JSON.stringify({ ai, scope }),
+  });
+}
+
+/**
+ * Switch the data range of a **running** live session (same semantics as the segmented
+ * switch at the top of the picker inside the browser panel).
+ *
+ * Routed here rather than to the panel-only global so the picker list, the batch preview
+ * and the floating-ball autofill keep reading one shared range holder.
+ */
+export function setWebFormLiveScope(scope: WebFormScope): Promise<WebFormLive> {
+  return request("/webform/live/scope", {
+    method: "POST",
+    body: JSON.stringify({ scope }),
   });
 }
 

@@ -31,6 +31,7 @@ import ConfigPreviewPanel from "./ConfigPreviewPanel";
 import VariantPicker, { type VariantOption } from "./VariantPicker";
 import { useExportBundle } from "../../../features/resume-delivery/useExportBundle";
 import { useExportPresets } from "../../../features/resume-delivery/useExportPresets";
+import { productPreflightRequest, useExportPreflightGate } from "../exportPreflightGate";
 import "./delivery.css";
 
 function todayStamp(): string {
@@ -115,6 +116,18 @@ export default function ExportConfigModal({
     variantId: selectedVariantId,
   });
   const [today] = useState(todayStamp);
+  // 导出闸门（问题 3 主路径）：点导出时才预检，选中 pdf/docx 才有页数结论可问；
+  // bundle 与单文件共用同一次 confirm（同一读数不二问，见 gate 模块）。
+  const preflightGate = useExportPreflightGate({
+    recordId: resumeId,
+    buildRequest: () =>
+      productPreflightRequest(bundle.config.formats, {
+        page_limit: pageLimit,
+        font_scale: fontScale,
+        language: language || undefined,
+        format_config: formatConfig,
+      }),
+  });
   // 打开弹层就按"导出同一快照"取一次服务端核对（后端未就绪时自动回退本地并标注）。
   // 用 ref 持有 refreshCheck，避免把它（随输入变化的 useCallback）放进 effect 依赖导致循环刷新。
   const refreshCheckRef = useRef(bundle.refreshCheck);
@@ -261,6 +274,11 @@ export default function ExportConfigModal({
       message.warning(t("delivery.export.emptyFormats"));
       return;
     }
+    // 问题 3：发导出请求前预检一次；超页先问一句，选「先调整」就整批停手。
+    const needsPreflight =
+      resumeId !== null &&
+      bundle.config.formats.some((format) => format === "pdf" || format === "docx");
+    if (needsPreflight && !(await preflightGate.confirm())) return;
     if (mode === "single") {
       await runSingleExport();
       return;
@@ -452,6 +470,7 @@ export default function ExportConfigModal({
           />
         ) : null}
 
+        {preflightGate.node}
         <ExportCheckCard
           summary={bundle.summary}
           source={bundle.checkSource}

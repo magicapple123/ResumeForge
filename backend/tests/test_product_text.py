@@ -10,6 +10,7 @@ from __future__ import annotations
 import pytest
 from app.services.resume.product_text import (
     compare_text_order,
+    compare_text_order_with_highlights,
     extract_docx_text,
     extract_pdf_text,
     normalize_text,
@@ -101,3 +102,66 @@ def test_missing_diffs_do_not_merge_across_pages_for_order():
     out_of_order = [diff for diff in diffs if diff["kind"] == "out_of_order"]
     # 甲在第 2 页、乙在第 1 页：同类但不连续、不同页 → 各自成条。
     assert all(len(diff["token"]) == 1 for diff in out_of_order)
+
+
+def test_highlights_point_at_the_single_actual_occurrence():
+    """22b：一个字在正文出现多次，只涂真正错位的那一处。
+
+    期望序列第一个字是「与」，产物里却有 5 个「与」；旧前端拿 token 去 `indexOf`，会把
+    每一个「与」都涂上。区间由后端算出，正好一个。
+    """
+    expected = ["与甲"]
+    extracted = [(1, "甲与与与与与")]
+
+    diffs, highlights = compare_text_order_with_highlights(expected, extracted)
+
+    assert [diff["kind"] for diff in diffs] == ["out_of_order"]
+    assert highlights == [{"page": 1, "start": 0, "end": 1, "kind": "out_of_order"}]
+    assert "甲与与与与与"[highlights[0]["start"] : highlights[0]["end"]] == "甲"
+
+
+def test_missing_only_diff_produces_no_highlight():
+    """missing 的字在产物里根本不存在：不许造区间（那会把同名的别处的字涂红）。"""
+    _diffs, highlights = compare_text_order_with_highlights(["甲", "乙"], [(1, "乙")])
+
+    assert highlights == []
+
+
+def test_out_of_order_runs_merge_only_when_product_ranges_touch():
+    """`_merge_runs` 新增条件：产物区间必须相邻，否则合出来的片段没有连续区间可涂。"""
+    # 产物顺序：丙 x 丁 甲 乙 —— 丙、丁在期望序列里相邻，但产物里被 x 隔开。
+    expected = ["甲乙丙丁"]
+    split = compare_text_order_with_highlights(expected, [(1, "丙 x 丁 甲 乙")])
+    # 产物顺序：丙 丁 甲 乙 —— 区间相邻，可以合并成「丙丁」。
+    touching = compare_text_order_with_highlights(expected, [(1, "丙丁甲乙")])
+
+    assert [diff["token"] for diff in split[0]] == ["丙", "丁"]
+    assert len(split[1]) == 2
+    assert [diff["token"] for diff in touching[0]] == ["丙丁"]
+    assert touching[1] == [{"page": 1, "start": 0, "end": 2, "kind": "out_of_order"}]
+
+
+def test_no_highlights_for_empty_documents_or_empty_extraction():
+    """空文档 / 整页抽空都产不出区间（没有可涂的字）。"""
+    assert compare_text_order_with_highlights([], [(1, "随便")]) == ([], [])
+    _diffs, highlights = compare_text_order_with_highlights(["甲乙"], [(1, "")])
+    assert highlights == []
+
+
+def test_offset_basis_is_code_point_not_utf16():
+    """偏移基准钉死：Python 码点。
+
+    「😀」在 Python 里是 1 个字符、在 JS 里是 2 个 UTF-16 码元。若后端改成 UTF-16 偏移，
+    这里的 start 会变成 2（3 也不对），前端按码点切就会涂到字外。
+    """
+    expected = ["甲乙"]
+    extracted = [(1, "😀乙甲")]
+
+    _diffs, highlights = compare_text_order_with_highlights(expected, extracted)
+
+    assert len(highlights) == 1
+    highlight = highlights[0]
+    assert (highlight["start"], highlight["end"]) == (1, 2)
+    page_text = "😀乙甲"
+    assert page_text[highlight["start"] : highlight["end"]] == "乙"
+

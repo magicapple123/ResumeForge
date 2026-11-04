@@ -11,6 +11,7 @@ import { normalizeSuggestions } from "../../features/interview/normalizeReview";
 import type { InterviewOptimizeResult } from "../../types";
 import { t } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
+import { priorityMeta } from "../../utils/priorityMeta";
 
 interface Props {
   suggestions: InterviewOptimizeResult["suggestions"];
@@ -18,8 +19,16 @@ interface Props {
   onGoToResume?: () => void;
 }
 
-const priorityColor = (priority: string) =>
-  priority === "high" ? "red" : priority === "medium" ? "gold" : "default";
+/**
+ * 三档优先级的标签与颜色走共享映射（`utils/priorityMeta`）：颜色与其它三个面板一致，
+ * 文案用本面板自己的命名空间。旧实现只有 `priorityColor()`、没有文案，于是标签直接把
+ * `high / medium / low` 原文打在了中文界面上。
+ */
+const PRIORITY = priorityMeta({
+  high: "interview.suggestions.priority.high",
+  medium: "interview.suggestions.priority.medium",
+  low: "interview.suggestions.priority.low",
+});
 
 export default function SuggestionsCard({ suggestions, onGoToResume }: Props) {
   // 本组件用模块级 t()：必须订阅语言变化，否则切语言后这一块不重渲染。
@@ -40,7 +49,9 @@ export default function SuggestionsCard({ suggestions, onGoToResume }: Props) {
               <ListyMeta
                 title={
                   <Space size={6} wrap>
-                    <Tag color={priorityColor(item.priority)}>{item.priority}</Tag>
+                    <Tag color={PRIORITY[item.priority].color}>
+                      {t(PRIORITY[item.priority].labelKey)}
+                    </Tag>
                     <span>{item.section}</span>
                     <Typography.Text type="secondary">{item.issue}</Typography.Text>
                   </Space>

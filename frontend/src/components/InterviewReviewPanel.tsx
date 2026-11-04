@@ -23,8 +23,11 @@ import ReviewHistoryCard from "./interview/ReviewHistoryCard";
 import SuggestionsCard from "./interview/SuggestionsCard";
 import AbortButton from "./common/AbortButton";
 import {
+  normalizeOptimizeItems,
   normalizeReviewAnalysis,
   normalizeSuggestions,
+  OPTIMIZE_ITEM_LIMIT,
+  splitOptimizeLines,
 } from "../features/interview/normalizeReview";
 import { errorText, useAbortableRequest } from "../hooks/useAbortableRequest";
 import { useApi } from "../hooks/useApi";
@@ -32,6 +35,7 @@ import { useJobSearchSelect, useResumeSearchSelect } from "../hooks/remoteSearch
 import type { InterviewAnalysis, InterviewOptimizeResult, InterviewReviewRecord } from "../types";
 import { t } from "../i18n";
 import { useLocale } from "../i18n/i18nContext";
+import { formatServerTime } from "../utils/serverTime";
 
 interface Props {
   onGoToResume?: () => void;
@@ -72,6 +76,10 @@ export default function InterviewReviewPanel({
   const optimizing = optimizeRequest.loading;
   const [analysis, setAnalysis] = useState<InterviewAnalysis | null>(null);
   const [optimizeResult, setOptimizeResult] = useState<InterviewOptimizeResult | null>(null);
+  // 反向优化的两个可编辑输入（问题 12）：`null` = 用户没改过 → 回落到模型分析值。
+  // 不用「props 灌 state」：那会把编辑值混进 `viewAnalysis`（record.analysis 的派生只读视图）。
+  const [weaknesses, setWeaknesses] = useState<string[] | null>(null);
+  const [followUps, setFollowUps] = useState<string[] | null>(null);
   const [saving, setSaving] = useState(false);
   const reviews = useApi(listReviews, []);
 
@@ -98,6 +106,9 @@ export default function InterviewReviewPanel({
   const [prevRecord, setPrevRecord] = useState<InterviewReviewRecord | null | undefined>(record);
   if (prevRecord !== record) {
     setPrevRecord(record);
+    // 切换记录（含关闭历史视图）时丢掉上一条手填的内容，避免串味。
+    setWeaknesses(null);
+    setFollowUps(null);
     if (record) {
       // 归一化后再进 state：否则后续「反向优化」会把缺字段的对象原样写回服务端。
       setAnalysis(normalizeReviewAnalysis(record.analysis));
@@ -125,6 +136,18 @@ export default function InterviewReviewPanel({
     // hook 的回调引用稳定，只跟随历史记录变化。
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [record]);
+
+  // 反向优化的提交值（问题 12）：手填值优先，未编辑则回落到模型分析。
+  // 两者都空时按钮禁用——**可点条件必须等于后端的 `require_some_input`**，否则又会撞 422。
+  const rawWeaknesses = weaknesses ?? viewAnalysis?.pitfalls ?? [];
+  const rawFollowUps = followUps ?? viewAnalysis?.follow_up ?? [];
+  const effectiveWeaknesses = normalizeOptimizeItems(rawWeaknesses);
+  const effectiveFollowUps = normalizeOptimizeItems(rawFollowUps);
+  const canOptimize = effectiveWeaknesses.length > 0 || effectiveFollowUps.length > 0;
+  // 后端 `MAX_OPTIMIZE_ITEMS = 20`：超出的部分提交前截断，并明确告诉用户，而不是等 422。
+  const optimizeTruncated =
+    rawWeaknesses.filter((line) => line.trim()).length > OPTIMIZE_ITEM_LIMIT ||
+    rawFollowUps.filter((line) => line.trim()).length > OPTIMIZE_ITEM_LIMIT;
 
   const analyze = async () => {
     if (!record && !question.trim()) {
@@ -195,13 +218,18 @@ export default function InterviewReviewPanel({
       message.error(t("interviewReview.error.needAnalysis"));
       return;
     }
+    // 兜底：按钮已禁用，但键盘/程序化触发仍可能走到这里；发请求必然 422。
+    if (!canOptimize) {
+      message.error(t("interviewReview.optimize.needInput"));
+      return;
+    }
     const outcome = await optimizeRequest.run((signal) =>
       optimizeResumeFromInterview(
         {
           resume_id: resumeId,
           job_id: jobId ?? null,
-          weaknesses: viewAnalysis.pitfalls,
-          follow_ups: viewAnalysis.follow_up,
+          weaknesses: effectiveWeaknesses,
+          follow_ups: effectiveFollowUps,
         },
         signal,
       ),
@@ -212,11 +240,16 @@ export default function InterviewReviewPanel({
     }
     if (outcome.status === "aborted") return;
     setOptimizeResult(outcome.data);
-    // 历史记录富还原：把新生成的建议写回同一条记录。
+    // 历史记录富还原：把新生成的建议**和手填的短板/追问**写回同一条记录。
+    // `analysis` 是 JSON 列，写回即"重开还在"，零迁移、零契约变更。
     if (record) {
       try {
         await updateReview(record.id, {
-          analysis: viewAnalysis,
+          analysis: {
+            ...viewAnalysis,
+            pitfalls: effectiveWeaknesses,
+            follow_up: effectiveFollowUps,
+          },
           suggestions: outcome.data.suggestions,
         });
       } catch (error) {
@@ -248,7 +281,7 @@ export default function InterviewReviewPanel({
           title={t("interviewReview.alert.viewing", {
             id: record.id,
             // 格式化逻辑留在代码里：`{time}` 只接格式化后的结果。
-            time: record.created_at.replace("T", " ").slice(0, 16),
+            time: formatServerTime(record.created_at),
           })}
           action={
             onCloseRecord && (
@@ -313,26 +346,36 @@ export default function InterviewReviewPanel({
               </ul>
             </>
           )}
-          {viewAnalysis.follow_up.length > 0 && (
-            <>
-              <Typography.Text strong>{t("interviewReview.section.followUp")}</Typography.Text>
-              <ul>
-                {viewAnalysis.follow_up.map((item) => (
-                  <li key={item}>{item}</li>
-                ))}
-              </ul>
-            </>
-          )}
-          {viewAnalysis.pitfalls.length > 0 && (
-            <>
-              <Typography.Text strong>{t("interviewReview.section.pitfalls")}</Typography.Text>
-              <ul>
-                {viewAnalysis.pitfalls.map((item) => (
-                  <li key={item}>{item}</li>
-                ))}
-              </ul>
-            </>
-          )}
+          {/* 问题 12：这里是**唯一**的短板/追问入口（历史模式下也一样）。
+              以前是只读 `<ul>`，用户看得见却改不了，点「反向优化」只会撞 422。
+              用 `key` 让切记录时重挂载：TextBox 的自动高度等内部状态不跨记录。 */}
+          <div key={record?.id ?? "live"} style={{ marginTop: 8 }}>
+            <Typography.Text strong>{t("interviewReview.field.weaknesses")}</Typography.Text>
+            <Input.TextArea
+              aria-label={t("interviewReview.field.weaknesses")}
+              value={rawWeaknesses.join("\n")}
+              autoSize={{ minRows: 2, maxRows: 6 }}
+              placeholder={t("interviewReview.placeholder.weaknesses")}
+              onChange={(event) => setWeaknesses(splitOptimizeLines(event.target.value))}
+              style={{ marginTop: 4, marginBottom: 12 }}
+            />
+            <Typography.Text strong>{t("interviewReview.field.followUps")}</Typography.Text>
+            <Input.TextArea
+              aria-label={t("interviewReview.field.followUps")}
+              value={rawFollowUps.join("\n")}
+              autoSize={{ minRows: 2, maxRows: 6 }}
+              placeholder={t("interviewReview.placeholder.followUps")}
+              onChange={(event) => setFollowUps(splitOptimizeLines(event.target.value))}
+              style={{ marginTop: 4 }}
+            />
+            {optimizeTruncated && (
+              <div style={{ marginTop: 8 }}>
+                <Typography.Text type="warning">
+                  {t("interviewReview.optimize.truncated", { limit: OPTIMIZE_ITEM_LIMIT })}
+                </Typography.Text>
+              </div>
+            )}
+          </div>
           <Space wrap style={{ marginTop: 12 }}>
             {record && (
               <Select
@@ -347,6 +390,7 @@ export default function InterviewReviewPanel({
             <Button
               icon={<ThunderboltOutlined />}
               loading={optimizing}
+              disabled={!canOptimize}
               onClick={() => void optimize()}
             >
               {t("interviewReview.action.optimize")}
@@ -363,6 +407,15 @@ export default function InterviewReviewPanel({
             )}
             <Typography.Text type="secondary">{t("interviewReview.optimize.note")}</Typography.Text>
           </Space>
+          {!canOptimize && (
+            // 三档数据过去只由模型产出，历史记录里常常两个数组都空；
+            // 说清"该怎么让它变可点"，而不是让用户对着灰按钮猜。
+            <div style={{ marginTop: 8 }}>
+              <Typography.Text type="secondary">
+                {t("interviewReview.optimize.needInput")}
+              </Typography.Text>
+            </div>
+          )}
         </Card>
       ) : (
         !record && <EmptyState description={t("interviewReview.empty")} />

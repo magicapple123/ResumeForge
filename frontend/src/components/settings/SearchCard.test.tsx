@@ -28,6 +28,7 @@ const stored = {
   searxng_url: "",
   fetch_pages: 0,
   max_results: 8,
+  deepseek_api_key: "",
 };
 
 function renderCard() {
@@ -181,5 +182,66 @@ describe("SearchCard", () => {
     // 取不到就退回默认值可以，但不能让人以为屏幕上这份就是自己存过的设置。
     expect(await screen.findByText(t("searchCard.loadErrorTitle"))).toBeInTheDocument();
     expect(screen.getByText(/后端没有响应/)).toBeInTheDocument();
+  });
+
+  it("keeps the DeepSeek key field disabled until that source is checked", async () => {
+    renderCard();
+    await waitLoaded();
+
+    const field = screen.getByLabelText(t("searchCard.deepseek.keyAria"));
+    expect(field).toBeDisabled();
+    fireEvent.click(screen.getByRole("checkbox", { name: "DeepSeek" }));
+    expect(field).toBeEnabled();
+  });
+
+  it("echoes the saved key as a mask and sends it back unchanged", async () => {
+    apiMocks.getSearchConfig.mockResolvedValue({
+      ...stored,
+      sources: ["bing", "deepseek"],
+      deepseek_api_key: "********",
+    });
+    renderCard();
+    await waitLoaded();
+
+    // 掩码是服务端唯一会回传的形态；回传时保持原值，后端据此判断"不修改"。
+    const field = screen.getByLabelText(t("searchCard.deepseek.keyAria"));
+    expect(field).toHaveValue("********");
+
+    fireEvent.click(screen.getByRole("checkbox", { name: "抓前 1 条正文" }));
+    await waitFor(
+      () =>
+        expect(apiMocks.saveSearchConfig).toHaveBeenCalledWith(
+          expect.objectContaining({ deepseek_api_key: "********" }),
+        ),
+      { timeout: 2500 },
+    );
+  });
+
+  it("sends a newly typed key to the backend without surrounding spaces", async () => {
+    renderCard();
+    await waitLoaded();
+
+    fireEvent.click(screen.getByRole("checkbox", { name: "DeepSeek" }));
+    fireEvent.change(screen.getByLabelText(t("searchCard.deepseek.keyAria")), {
+      target: { value: "  sk-live-key  " },
+    });
+
+    await waitFor(
+      () =>
+        expect(apiMocks.saveSearchConfig).toHaveBeenCalledWith(
+          expect.objectContaining({ deepseek_api_key: "sk-live-key" }),
+        ),
+      { timeout: 2500 },
+    );
+  });
+
+  it("explains billing and the URL sharing next to the DeepSeek key", async () => {
+    renderCard();
+    await waitLoaded();
+
+    fireEvent.click(screen.getByRole("checkbox", { name: "DeepSeek" }));
+
+    expect(screen.getByText(t("searchCard.deepseek.cost"))).toBeInTheDocument();
+    expect(screen.getByText(t("searchCard.deepseek.privacy"))).toBeInTheDocument();
   });
 });

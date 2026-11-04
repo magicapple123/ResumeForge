@@ -16,6 +16,7 @@ import type { RefObject } from "react";
 import { Button, Space, Typography } from "antd";
 import { ReloadOutlined } from "@ant-design/icons";
 import LoadingBlock from "../../components/common/LoadingBlock";
+import MarkdownBlock from "../../components/common/MarkdownBlock";
 import type { InterviewMessage } from "../../types";
 import { formatDateTime } from "../../utils/format";
 import { t } from "../../i18n";
@@ -49,6 +50,7 @@ export function InterviewMessageList({
   pendingInterrupted,
   retryDisabled,
   onRetry,
+  finished,
   thinking,
   finishing,
   streamingQuestion,
@@ -64,6 +66,11 @@ export function InterviewMessageList({
   retryDisabled: boolean;
   /** 重答某一轮（重走原来的提问链路）。 */
   onRetry: (content: string) => void;
+  /**
+   * 正式问答是否已经结束。收尾气泡要等面试官说完告别才出现——判断放在这里而不是页面里：
+   * 页面已经贴着 500 行预算，而"有没有收尾消息"本来就是消息列表自己的事。
+   */
+  finished: boolean;
   /** 面试官是否正在生成（`submitting && !finished`）。 */
   thinking: boolean;
   /** 这一轮之后要出报告：气泡文案换成「本场面试结束，正在生成报告」。 */
@@ -104,7 +111,11 @@ export function InterviewMessageList({
                 {formatDateTime(item.created_at)}
               </Typography.Text>
             </div>
-            <div className="interview-message-body">{item.content}</div>
+            {/* 面试官的回答是模型输出，本身就是 Markdown（分点、加粗、表格）：
+                交给公共渲染器，正文里的 `**` / `-` 才不会是裸露的字符。 */}
+            <div className="interview-message-body">
+              <MarkdownBlock content={item.content} />
+            </div>
             {item.context.feedback ? (
               <div className="interview-feedback">
                 <b>{t("interview.role.comment")}</b>
@@ -128,13 +139,28 @@ export function InterviewMessageList({
           <div className="interview-message-head">
             <b>{t("interview.role.you")}</b>
           </div>
-          <div className="interview-message-body">{pendingAnswer}</div>
+          {/* 占位气泡也走同一渲染器：`pre-wrap` 已随块级渲染撤掉，不切过来多行回答会先挤成一行。 */}
+          <div className="interview-message-body">
+            <MarkdownBlock content={pendingAnswer} />
+          </div>
           {pendingInterrupted ? (
             <InterruptedNotice
               retryDisabled={retryDisabled}
               onRetry={() => onRetry(pendingAnswer)}
             />
           ) : null}
+        </div>
+      ) : null}
+      {finished && !messages.some((item) => item.context?.closing) ? (
+        // 服务端那次"收尾回应"没生成出来：用本地化的一句话补上。语气保持中性——
+        // 编不出他对最后一答的具体点评，就不假装有。
+        <div className="interview-message interview-message--interviewer">
+          <div className="interview-message-head">
+            <b>{t("interviewPage.interviewerName")}</b>
+          </div>
+          <div className="interview-message-body">
+            <MarkdownBlock content={t("interviewPage.closing.fallback")} />
+          </div>
         </div>
       ) : null}
       {thinking ? (

@@ -1,20 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 /** 岗位详情抽屉：JD 全文、技能标签、投递链接与操作入口。 */
 import {
-  BulbOutlined,
   CheckCircleOutlined,
   EditOutlined,
   FileTextOutlined,
   FolderOpenOutlined,
-  FunnelPlotOutlined,
   InfoCircleOutlined,
-  LinkOutlined,
-  MessageOutlined,
   PictureOutlined,
-  PlayCircleOutlined,
   PushpinOutlined,
-  RobotOutlined,
-  SendOutlined,
   StarFilled,
   StarOutlined,
 } from "@ant-design/icons";
@@ -130,83 +123,96 @@ export default function JobDetailDrawer({
       onClose={onClose}
       // 操作栏交给抽屉的 footer 插槽：它由抽屉布局常驻底部，内容不足一屏时
       // 也不会浮在正文中间；正文仍由 body 独立滚动。
+      // 分两行是负载问题：主行承载会改变当前页状态的动作（生成 / 编写 / 查看简历），
+      // 辅助行承载分析、投递与纯跳页。新增按钮请先判断它属于哪一行，别再往主行塞。
       styles={{ footer: { padding: "12px 24px" } }}
       footer={
         job && (
-          <Space className="job-detail-actions" wrap>
-            <Button type="primary" icon={<FileTextOutlined />} onClick={() => onGenerate(job)}>
-              {t("jobDetail.action.generate")}
-            </Button>
-            <Button icon={<EditOutlined />} onClick={() => onWrite(job)}>
-              {t("jobDetail.action.write")}
-            </Button>
-            <Button icon={<FolderOpenOutlined />} onClick={() => onViewResumes(job)}>
-              {t("jobDetail.action.viewResume")}
-            </Button>
-            {/* 两个"解读"性质不同，按钮相邻但用 Tooltip 讲清区别：需求解读只读 JD，
-                匹配分析会读取你的资料与简历。 */}
-            <Tooltip title={t("jobDetail.hint.readRequirement")}>
-              <Button icon={<BulbOutlined />} onClick={() => onAnalyze(job)}>
-                {t("jobDetail.action.readRequirement")}
+          <div className="job-detail-actions">
+            <Space className="job-detail-actions-primary" wrap>
+              <Button type="primary" icon={<FileTextOutlined />} onClick={() => onGenerate(job)}>
+                {t("jobDetail.action.generate")}
               </Button>
-            </Tooltip>
-            <Tooltip
-              title={
-                matchAnalyzing ? t("jobDetail.hint.matchRunning") : t("jobDetail.hint.matchIdle")
-              }
-            >
-              <Button
-                icon={<RobotOutlined />}
-                loading={matchAnalyzing}
-                onClick={() => onMatch(job)}
+              <Button icon={<EditOutlined />} onClick={() => onWrite(job)}>
+                {t("jobDetail.action.write")}
+              </Button>
+              <Button icon={<FolderOpenOutlined />} onClick={() => onViewResumes(job)}>
+                {t("jobDetail.action.viewResume")}
+              </Button>
+            </Space>
+            {/* 辅助行统一 size="small" type="text" 且不带图标：6 个入口才放得下一行，
+                也避免和主行抢注意力。「加入投递台」禁用时只剩灰字，不再像一个坏按钮。 */}
+            <div className="job-detail-actions-secondary">
+              {/* 两个"解读"性质不同，按钮相邻但用 Tooltip 讲清区别：需求解读只读 JD，
+                  匹配分析会读取你的资料与简历。 */}
+              <Tooltip title={t("jobDetail.hint.readRequirement")}>
+                <Button size="small" type="text" onClick={() => onAnalyze(job)}>
+                  {t("jobDetail.action.readRequirement")}
+                </Button>
+              </Tooltip>
+              <Tooltip
+                title={
+                  matchAnalyzing ? t("jobDetail.hint.matchRunning") : t("jobDetail.hint.matchIdle")
+                }
               >
-                {matchAnalyzing ? t("jobDetail.action.analyzing") : t("jobDetail.action.match")}
-              </Button>
-            </Tooltip>
-            <Tooltip
-              title={
-                job.apply_supported === false
-                  ? t("jobDetail.hint.unsupported")
-                  : t("jobDetail.hint.applyDesk")
-              }
-            >
-              <Button
-                icon={<SendOutlined />}
-                loading={queueLoading}
-                disabled={queueLoading || job.apply_supported === false}
-                onClick={() => onAddToQueue(job)}
+                <Button
+                  size="small"
+                  type="text"
+                  loading={matchAnalyzing}
+                  onClick={() => onMatch(job)}
+                >
+                  {matchAnalyzing ? t("jobDetail.action.analyzing") : t("jobDetail.action.match")}
+                </Button>
+              </Tooltip>
+              <Tooltip
+                title={
+                  job.apply_supported === false
+                    ? t("jobDetail.hint.unsupported")
+                    : t("jobDetail.hint.applyDesk")
+                }
               >
-                {t("jobDetail.action.applyDesk")}
+                <Button
+                  size="small"
+                  type="text"
+                  loading={queueLoading}
+                  disabled={queueLoading || job.apply_supported === false}
+                  onClick={() => onAddToQueue(job)}
+                >
+                  {t("jobDetail.action.applyDesk")}
+                </Button>
+              </Tooltip>
+              <Button size="small" type="text" onClick={() => onAskAssistant(job)}>
+                {t("jobDetail.action.askAssistant")}
               </Button>
-            </Tooltip>
-            <Button icon={<MessageOutlined />} onClick={() => onAskAssistant(job)}>
-              {t("jobDetail.action.askAssistant")}
-            </Button>
-            {/* 带 id 的跨模块动作（RF-11）：目标页按 job_id 自行过滤/预填，
-                不必到了那边再选一遍岗位。纯跳页，无回调 prop。 */}
-            <Button
-              icon={<FunnelPlotOutlined />}
-              onClick={() => navigate(`/tracker?job_id=${job.id}`)}
-            >
-              {t("jobDetail.section.progress")}
-            </Button>
-            <Button
-              icon={<PlayCircleOutlined />}
-              onClick={() => navigate(`/interview?job_id=${job.id}`)}
-            >
-              {t("jobDetail.action.interview")}
-            </Button>
-            {job.source_url && (
+              {/* 带 id 的跨模块动作（RF-11）：目标页按 job_id 自行过滤/预填，
+                  不必到了那边再选一遍岗位。纯跳页，无回调 prop。 */}
               <Button
-                icon={<LinkOutlined />}
-                loading={webFormLoading}
-                disabled={webFormLoading}
-                onClick={() => onOpenWebForm(job)}
+                size="small"
+                type="text"
+                onClick={() => navigate(`/tracker?job_id=${job.id}`)}
               >
-                {t("jobDetail.action.goApply")}
+                {t("jobDetail.section.progress")}
               </Button>
-            )}
-          </Space>
+              <Button
+                size="small"
+                type="text"
+                onClick={() => navigate(`/interview?job_id=${job.id}`)}
+              >
+                {t("jobDetail.action.interview")}
+              </Button>
+              {job.source_url && (
+                <Button
+                  size="small"
+                  type="text"
+                  loading={webFormLoading}
+                  disabled={webFormLoading}
+                  onClick={() => onOpenWebForm(job)}
+                >
+                  {t("jobDetail.action.goApply")}
+                </Button>
+              )}
+            </div>
+          </div>
         )
       }
     >

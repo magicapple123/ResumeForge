@@ -127,6 +127,14 @@ export function updateResumeFavorite(id: number, favorite: boolean): Promise<Res
 }
 
 /**
+ * 3-A 确定性补入（`POST /resumes/{id}/append-profile-entries`）：实现见 `resumeAppend.ts`
+ * ——本文件贴着 500 行预算，与 `resumeCreation` / `resumeLayout` 同一个拆法。
+ * re-export 保持调用方 `import { appendProfileEntries } from "../../api/resumes"` 不变。
+ */
+export { appendProfileEntries } from "./resumeAppend";
+export type { AppendProfileEntriesResult } from "./resumeAppend";
+
+/**
  * 生成岗位化修改建议（调用一次大模型，10–60 秒）。
  *
  * 预算是借用的 ``recognition``（90s）：这条接口**非流式、要等完整 JSON**，``default``
@@ -282,7 +290,12 @@ export async function exportResumeWithOptions(
   blob: Blob;
   filename: string;
   pages: number | null;
+  pagesNeeded: number | null;
   pageLimit: number | null;
+  /** 文件里**确实**按「最大篇幅」裁掉了内容（1-D）。与 `overflow` 不是一件事。 */
+  truncated: boolean;
+  /** 裁点 `section/object_id`：从这一段起的内容没有进文件。 */
+  truncatedAt: string | null;
   savedTo?: string;
 }> {
   const resp = await requestRaw(`/resumes/${id}/export`, {
@@ -297,7 +310,14 @@ export async function exportResumeWithOptions(
       getFilenameFromDisposition(resp.headers.get("Content-Disposition")) ??
       `resume.${options.format}`,
     pages: readCountHeader(resp.headers.get("X-Resume-Pages")),
+    // 五格式共用「最大篇幅」（1-D）：html/md/txt 没有分页引擎、没有 `pages`，但这次
+    // 测量知道真实需求页数，界面才能说"约需 N 页"而不是只丢一句"已裁剪"。
+    pagesNeeded: readCountHeader(resp.headers.get("X-Resume-Pages-Needed")),
     pageLimit: readCountHeader(resp.headers.get("X-Resume-Page-Limit")),
+    // 裁过的文件页数通常正好等于上限（overflow=false），所以"少了东西"必须单独标记，
+    // 否则界面会以为一切都好。后端只在真的裁过时才发这个头。
+    truncated: resp.headers.get("X-Resume-Truncated") === "true",
+    truncatedAt: resp.headers.get("X-Resume-Truncated-At"),
     savedTo: readSavedToHeader(resp.headers.get("X-Saved-To")),
   };
 }

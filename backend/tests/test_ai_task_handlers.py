@@ -325,7 +325,7 @@ def _patch_webform(monkeypatch, *, enrich) -> None:
     monkeypatch.setattr("app.services.webform.get_snapshot_store", lambda: store)
     monkeypatch.setattr(
         "app.services.webform.build_webform_view",
-        lambda _db: SimpleNamespace(data={}, custom_labels={}),
+        lambda _db, **_kwargs: SimpleNamespace(data={}, custom_labels={}),
     )
     monkeypatch.setattr(
         "app.services.webform.build_preview",

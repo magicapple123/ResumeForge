@@ -28,9 +28,11 @@ import InterviewExperiencePanel from "../components/InterviewExperiencePanel";
 import InterviewReviewPanel from "../components/InterviewReviewPanel";
 import QuestionBankPanel from "../components/QuestionBankPanel";
 import { useBatchSelection } from "../hooks/useBatchSelection";
+import { toMaterialPayload } from "../features/interview/materialPayload";
 import { useInterviewTimer } from "../features/interview/useInterviewTimer";
-import { useInterviewTurn } from "../features/interview/useInterviewTurn";
+import { hasInterviewReport, useInterviewTurn } from "../features/interview/useInterviewTurn";
 import { Composer } from "./interview/Composer";
+import { FinishDecisionCard } from "./interview/FinishDecisionCard";
 import { FollowUpCard } from "./interview/FollowUpCard";
 import { HistoryCard } from "./interview/HistoryCard";
 import { InterviewMessageList } from "./interview/MessageList";
@@ -75,6 +77,8 @@ export default function InterviewPage() {
   const [activeTab, setActiveTab] = useState("session");
   const [form] = Form.useForm<SetupForm>();
   const endRef = useRef<HTMLDivElement>(null);
+  // 追问区的定位锚点：决策卡的「继续追问」要把焦点送到这里的输入框。
+  const followUpRef = useRef<HTMLDivElement>(null);
   // 历史记录富还原：从「历史题库 / 历史复盘」打开某条记录后，把它传给面板用相同渲染路径展示。
   const [bankRecord, setBankRecord] = useState<QuestionBankRecord | null>(null);
   const [reviewRecord, setReviewRecord] = useState<InterviewReviewRecord | null>(null);
@@ -121,11 +125,9 @@ export default function InterviewPage() {
   const activeId = active?.id ?? null;
   const finished = active?.status === "finished";
   const answered = active?.answered_rounds ?? 0;
-  // 固定轮数模式：这一答就是最后一答，报告马上要出——不必等后端的 phase 事件，
-  // 界面立刻换成「本场面试结束，正在生成报告」。自动收尾模式判不出来，只能等事件。
-  const predictingFinish = Boolean(
-    active && active.rounds_min == null && answered + 1 >= active.rounds,
-  );
+  // 报告有没有生成是**另一件事**（需求 4）：自动收尾只收盘，报告等用户在决策卡上确认。
+  const hasReport = hasInterviewReport(active);
+
   /**
    * 上报累计有效时长（绝对值；服务端取大值）。
    *
@@ -161,9 +163,13 @@ export default function InterviewPage() {
 
   // 「正在生成这一轮」与「正在出报告」对界面是同一件事：作答区与其它操作都该按忙处理。
   const busy = turn.submitting || ending;
+  /**
+   * 等用户决定要不要出报告：`turn.awaitingReport` 是刚走完这一轮，`finished && !hasReport`
+   * 覆盖**刷新恢复**——重开一场已收盘但没报告的面试，必须仍显示决策卡而不是空白报告。
+   */
+  const awaitingReport = turn.awaitingReport || (finished && !hasReport);
 
-  // 新消息进来后滚到底部，用户不用自己找。
-  // `pendingAnswer` 进依赖：用户刚发的那条是本地气泡，消息数没变但确实新增了一行。
+  // 新消息进来后滚到底部；`pendingAnswer` 进依赖：刚发的那条是本地气泡，消息数没变但多了一行。
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [active?.messages.length, turn.submitting, turn.pendingAnswer]);
@@ -179,13 +185,14 @@ export default function InterviewPage() {
   const start = async (values: SetupForm) => {
     setStarting(true);
     try {
-      // 每一侧材料都是"从记录选 / 导入文件"二选一（#41）：给了文件就不再传 id，
-      // 后端据此只读文件里提取出的文本。
+      // 每一侧材料都是"从记录选 / 导入文件"二选一（#41）：给了文件就不再传 id。
+      // 材料一律走 `toMaterialPayload` 投影（问题 5）：上传接口的返回值带 `warnings`，
+      // 而写端点 `extra="forbid"`，整份回传会让两侧各报一条「包含不支持的字段」。
       const session = await createInterview({
         job_id: values.jobMaterial ? undefined : values.jobId!,
         resume_id: values.resumeMaterial ? undefined : values.resumeId!,
-        job_material: values.jobMaterial ?? undefined,
-        resume_material: values.resumeMaterial ?? undefined,
+        job_material: toMaterialPayload(values.jobMaterial),
+        resume_material: toMaterialPayload(values.resumeMaterial),
         interview_type: values.interviewType,
         difficulty: values.difficulty,
         interviewer_style: values.interviewerStyle,
@@ -217,6 +224,33 @@ export default function InterviewPage() {
       setReady(false);
     } catch (error) {
       message.error(error instanceof Error ? error.message : t("interview.toast.openFailed"));
+    }
+  };
+
+  /** 决策卡的「继续追问」：把视线与焦点送到下方的追问输入区（此时追问已可用，不发请求）。 */
+  const goToFollowUp = () => {
+    const node = followUpRef.current;
+    if (!node) return;
+    node.scrollIntoView({ behavior: "smooth", block: "start" });
+    node.querySelector("input")?.focus();
+  };
+
+  /** 决策卡上点「结束并生成报告」：调 /finish，报告回来后页面自然切到报告卡 + 追问区。 */
+  const finishWithReport = async () => {
+    if (!active || ending) return;
+    setEnding(true);
+    // 报告要带"本次用了多久"，而结束之后计时会停——先把时长存住。
+    timer.flush();
+    try {
+      setActive(await finishInterview(active.id));
+      // 报告已经有了，决策卡必须让位；不清掉这面旗会一直挂在报告卡上面。
+      turn.clearAwaitingReport();
+      message.success(t("interview.toast.reportReady"));
+      await loadList();
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : t("interviewPage.decision.failed"));
+    } finally {
+      setEnding(false);
     }
   };
 
@@ -409,8 +443,12 @@ export default function InterviewPage() {
               pendingInterrupted={turn.pendingInterrupted}
               retryDisabled={busy}
               onRetry={turn.retry}
+              /* 收尾气泡由列表按 `context.closing` 自己判断，页面只报结束状态。 */
+              finished={finished}
               thinking={turn.submitting && !finished}
-              finishing={turn.finishing || predictingFinish}
+              /* "正在生成报告"只在真的调 /finish 那段时间（ending）成立：答完最后一题后
+                 不再自动出报告（需求 4），按轮数预测或等 phase 事件都会显示假信息。 */
+              finishing={ending}
               streamingQuestion={turn.streamingQuestion}
               endRef={endRef}
             />
@@ -418,12 +456,26 @@ export default function InterviewPage() {
 
           {finished ? (
             <>
-              <ReportCard
-                session={active}
-                onSaveToMaterial={() => void saveReport()}
-                saving={savingReport}
-              />
-              <FollowUpCard session={active} onSession={setActive} />
+              {/* 正式问答已结束但报告还没生成（需求 4）：先给决策卡，不直接出空白报告。
+                  刷新恢复也走这条（finished && !hasReport），所以重开一场自动收尾的面试
+                  不会落到"报告为空"的界面。 */}
+              {awaitingReport ? (
+                <FinishDecisionCard
+                  onContinueFollowUp={goToFollowUp}
+                  onFinish={() => void finishWithReport()}
+                  finishing={ending}
+                />
+              ) : (
+                <ReportCard
+                  session={active}
+                  onSaveToMaterial={() => void saveReport()}
+                  saving={savingReport}
+                />
+              )}
+              {/* 追问区在报告生成前后都可用：这正是"先问是否追问，再出报告"的意义。 */}
+              <div ref={followUpRef}>
+                <FollowUpCard session={active} onSession={setActive} />
+              </div>
             </>
           ) : !ready ? (
             // 还没点「准备好了」：**整块不渲染作答区**（不是禁用）——计时从点下按钮开始，

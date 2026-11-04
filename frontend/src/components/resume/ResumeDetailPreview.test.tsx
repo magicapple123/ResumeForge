@@ -117,23 +117,31 @@ describe("ResumeDetailPreview 不再提供手动编辑", () => {
 describe("ResumeDetailPreview 的工具栏两行插槽", () => {
   /**
    * 断链守卫（与文件头同一个理由）：`ResumePreview` 的两个插槽是**具名的**，调用点漏传
-   * 一个不会有任何报错——用户只是发现"字号调不了"或"页数改不了"。所以这里钉住两条线都通。
+   * 一个不会有任何报错——用户只是发现"字号调不了"或"页数改不了"。
+   *
+   * 2026-11 问题 8 起第二行不再是常驻行：行距 / 页边距 / 字号 / 字体收进「更多排版」弹层，
+   * 所以这里要点开弹层才能看到度量控件——控件本身与它的接线（`showMarginSides` 等）不变。
    */
-  it("结构类与度量类两组控件都被喂进各自的插槽", () => {
+  it("结构类控件在第一行，「更多排版」点开后是度量类控件", async () => {
     renderPreview();
 
     expect(
       within(screen.getByTestId("toolbar-template-slot")).getByText("结构类版式控件"),
     ).toBeInTheDocument();
-    expect(
-      within(screen.getByTestId("toolbar-measure-slot")).getByText("度量类版式控件"),
-    ).toBeInTheDocument();
+    // 收起时第二行整行不渲染：这正是纸面上移 40px 的来源。
+    expect(screen.queryByTestId("measure-controls")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: t("resume.measure.moreAria") }));
+    expect(await screen.findByTestId("measure-controls")).toBeInTheDocument();
   });
 
-  it("主预览显式关掉分边页边距控件（P0-6：它只在制作台里出现）", () => {
+  it("主预览显式关掉分边页边距控件（P0-6：它只在制作台里出现）", async () => {
     renderPreview();
 
-    // 能力不删、只在制作台提供：主预览的工具栏是两行紧凑形态，多一行折叠标题就会顶宽。
+    fireEvent.click(screen.getByRole("button", { name: t("resume.measure.moreAria") }));
+    await screen.findByTestId("measure-controls");
+
+    // 能力不删、只在制作台提供：主预览的工具栏是紧凑形态，多一行折叠标题就会顶宽。
     // 缺省值虽然是 false，但调用点必须**显式**写出来——否则将来把缺省改成 true 时，
     // 这里会静默地多出四行滑杆。
     expect(mockMeasureProps.current?.showMarginSides).toBe(false);
@@ -141,20 +149,85 @@ describe("ResumeDetailPreview 的工具栏两行插槽", () => {
 });
 
 describe("生成说明与警告分级", () => {
-  it("shows the generation rationale in a collapsible section", async () => {
+  it("shows the generation rationale behind the diagnostics entry", async () => {
     renderPreviewWith({ rationale: "目标岗位「产品运营」：候选资料组成：项目 2 条。" });
 
-    fireEvent.click(await screen.findByText("为什么是这样一份简历（生成说明）"));
+    // 2026-11 问题 8：四段并成一行入口，点开弹层才是原来那块内容。
+    fireEvent.click(
+      await screen.findByRole("button", { name: t("resume.diagnostics.aria.rationale") }),
+    );
 
     expect(await screen.findByText(/候选资料组成：项目 2 条/)).toBeInTheDocument();
+  });
+
+  it("splits the rationale into paragraphs and bolds heading-like ones", async () => {
+    renderPreviewWith({
+      // Legacy record shape: several paragraphs with one blank line between them.
+      rationale: [
+        "Target role Product Operations; JD skill signals: analytics, growth.",
+        "",
+        "Candidate set: 2 projects, 5 skills.",
+        "事实约束：",
+      ].join("\n"),
+    });
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: t("resume.diagnostics.aria.rationale") }),
+    );
+
+    // 旧记录的形态：多段、含一个空行；段间距与行高在 CSS 里生效。
+    const body = document.querySelector(".resume-rationale-body") as HTMLElement;
+    expect(body).not.toBeNull();
+    const paragraphs = [...body.querySelectorAll("p")];
+    // 空行不渲染成一个只占间距的空段落。
+    expect(paragraphs).toHaveLength(3);
+    expect(paragraphs[0].className).not.toContain("resume-rationale-heading");
+    // 以「：」结尾且不含「。」＝标题式段落，加粗到 500。
+    expect(paragraphs[2].className).toContain("resume-rationale-heading");
+
+    // 段间距与行高落在 resume-panels.css（问题 11 的验收口径是 8–10px / 1.7）。
+    const css = readFileSync(
+      [process.cwd(), "src", "styles", "resume-panels.css"].join("/"),
+      "utf8",
+    );
+    const rule = cssDeclarations(css, ".resume-rationale-body");
+    expect(rule).toContain("gap: 10px");
+    expect(rule).toContain("line-height: 1.7");
+  });
+
+  it("bolds only the label of a real 「label：body」 paragraph", async () => {
+    // 2026-11-03：真实 rationale 是「事实约束：模型只能…。」这种一行带句号的形态，
+    // 只加粗到冒号为止，正文必须保持常规字重（旧实现整段不粗或整段粗）。
+    renderPreviewWith({
+      rationale: [
+        "目标岗位「产品运营」：候选资料组成：项目 2 条。",
+        "事实约束：模型只能使用候选资料中出现过的经历。",
+      ].join("\n"),
+    });
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: t("resume.diagnostics.aria.rationale") }),
+    );
+
+    const body = document.querySelector(".resume-rationale-body") as HTMLElement;
+    const strong = body.querySelector("strong") as HTMLElement | null;
+    expect(strong).not.toBeNull();
+    // 标签 + 全角冒号在 <strong> 内，正文在外面。
+    expect(strong?.textContent).toBe("事实约束：");
+    const labeled = strong?.closest("p") as HTMLElement;
+    expect(labeled.textContent).toBe("事实约束：模型只能使用候选资料中出现过的经历。");
+    expect(strong?.textContent).not.toContain("模型只能使用");
   });
 
   it("renders structured coverage notes as a neutral group with an action button", async () => {
     renderPreviewWith({
       coverage_notes: [
         {
-          section: "projects",
-          section_label: "项目经历",
+          // 3-A：条目级分区（projects）已改出「去制作台添加」——AI 修订不能新增条目。
+          // 这里要验的是"修订指令预填"这条链路，所以用**已有可写字段**的分区（skills），
+          // 它仍然出「AI 补上这段」。
+          section: "skills",
+          section_label: "专业技能",
           names: ["Amazon ESG"],
           filtered: ["Amazon ESG"],
           model_omitted: [],
@@ -163,14 +236,43 @@ describe("生成说明与警告分级", () => {
       ],
     });
 
-    expect(await screen.findByText("这些资料内容没有写进这份简历")).toBeInTheDocument();
-    expect(screen.getByText(/「Amazon ESG」/)).toBeInTheDocument();
+    // 2026-11 问题 1：提示块默认收起，内容要先点开折叠头才渲染。
+    fireEvent.click(
+      await screen.findByRole("button", { name: new RegExp(t("resume.coverage.title")) }),
+    );
+    expect(await screen.findByText(/「Amazon ESG」/)).toBeInTheDocument();
 
     // 「AI 补上这段」打开修订弹窗，并把这条内容的补充指令预填好。
     fireEvent.click(screen.getByRole("button", { name: "AI 补上这段" }));
     const box = await screen.findByPlaceholderText(/留空则整体重新生成/);
     expect((box as HTMLTextAreaElement).value).toContain("Amazon ESG");
-    expect((box as HTMLTextAreaElement).value).toContain("项目经历");
+    expect((box as HTMLTextAreaElement).value).toContain("专业技能");
+  });
+
+  it("collapses the coverage hint by default; item names appear only after opening the entry", async () => {
+    renderPreviewWith({
+      coverage_notes: [
+        {
+          section: "projects",
+          section_label: "PROJECTS",
+          names: ["Amazon ESG"],
+          filtered: ["Amazon ESG"],
+          model_omitted: [],
+          total: 1,
+        },
+      ],
+    });
+
+    // 2026-11 问题 8：这块从「一整段折叠条」变成诊断条上的一个入口。
+    // 条数仍在无障碍名里（读屏能读到"共 1 条"），视觉上是入口旁的小徽标。
+    const entry = await screen.findByRole("button", {
+      name: t("resume.diagnostics.aria.coverage", { count: 1 }),
+    });
+    // 折叠态：正文不渲染（不是渲染后隐藏）。
+    expect(screen.queryByText(/「Amazon ESG」/)).toBeNull();
+
+    fireEvent.click(entry);
+    expect(await screen.findByText(/「Amazon ESG」/)).toBeInTheDocument();
   });
 
   it("覆盖提示里的「打开手动调整」改为打开简历制作台", async () => {
@@ -187,13 +289,18 @@ describe("生成说明与警告分级", () => {
       ],
     });
 
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: t("resume.diagnostics.aria.coverage", { count: 1 }),
+      }),
+    );
     // 入口还在（它是"这条没写进去，去哪儿改"的唯一指路），但改成打开制作台，
     // 不再就地弹编辑器。
     fireEvent.click(await screen.findByRole("button", { name: "打开手动调整" }));
     expect(screen.queryByText("手动调整简历内容")).toBeNull();
   });
 
-  it("routes legacy plain-text coverage warnings away from the fabrication group", () => {
+  it("routes legacy plain-text coverage warnings away from the fabrication group", async () => {
     renderPreviewWith({
       warnings: [
         "专业技能中出现本岗位候选资料未包含的技能「Excel」，请核对是否为虚构",
@@ -201,9 +308,14 @@ describe("生成说明与警告分级", () => {
       ],
     });
 
-    // 旧记录的未收录文本归入中性组，不再顶在"疑似虚构"的红色警告下。
-    expect(screen.getByText("这些资料内容没有写进这份简历")).toBeInTheDocument();
-    expect(screen.getByText(/项目经历中有 1 条没有出现在这份简历里/)).toBeInTheDocument();
+    // 旧记录的未收录文本归入中性组（诊断条上的「未收录」入口），
+    // 不再顶在"疑似虚构"的红色警告下。
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: t("resume.diagnostics.aria.coverage", { count: 1 }),
+      }),
+    );
+    expect(await screen.findByText(/项目经历中有 1 条没有出现在这份简历里/)).toBeInTheDocument();
   });
 });
 

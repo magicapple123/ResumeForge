@@ -19,6 +19,7 @@ import { useLocale } from "../../i18n/i18nContext";
 import { downloadDelivery, listResumeDeliveries } from "../../api/resumes";
 import type { DeliverySummary } from "../../types";
 import { downloadBlob } from "../../utils/download";
+import { formatServerTime } from "../../utils/serverTime";
 
 const DELIVERY_SOURCE_LABELS: Record<string, MessageKey> = {
   apply: "resumeDeliveryInfo.source.apply",
@@ -161,7 +162,8 @@ export default function ResumeDeliveryInfo({ recordId, parentRevisionId }: Props
                 ? t("resumeDeliveryInfo.destination.missing")
                 : `${item.company || t("resumeDeliveryInfo.destination.companyUnknown")} · ${item.job_title || t("resumeDeliveryInfo.destination.jobUnknown")}`}{" "}
               · {sourceLabelKey ? t(sourceLabelKey) : item.source} ·{" "}
-              {new Date(item.created_at).toLocaleDateString()} · {item.content_sha256.slice(0, 8)}
+              {formatServerTime(item.created_at, { dateOnly: true })} ·{" "}
+              {item.content_sha256.slice(0, 8)}
               {suffixKey ? t(suffixKey) : null}
               <Button
                 type="link"

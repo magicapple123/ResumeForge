@@ -1,10 +1,15 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * ProfileGroupManagerModal（F6/I + F9）：单弹层多视图、默认组保护、删除三段式与切当前组。
+ * ProfileGroupManagerModal（F6/I + F9 + 问题 18）：单弹层多视图、默认组保护、删除三段式与切当前组。
  * 不叠 modal.confirm：确认条在本视图内联展示；删除是软删 + 5 秒撤销（hook 内发 toast）。
  *
- * F9 新增覆盖：
- * - 「大字段与字段」每个大字段行的「在资料页显示」开关写当前组参与清单（基本信息禁用）；
+ * 问题 18（2026-11-03）改造后的交互契约：
+ * - 方案行首是 Radio（点整行即切换），重命名/删除收进 ⋯，删除走行下内联确认条；
+ * - 板块行首是 Checkbox（参与当前方案），字段设置/改名/删除收进 ⋯；
+ * - 字段设置视图标题为「板块名 · 字段设置」，面包屑可退回板块列表。
+ *
+ * F9 覆盖：
+ * - 「大字段与字段」每个大字段行的参与勾选写当前组参与清单（基本信息禁用）；
  * - 新建组：创建即只含基本信息（大字段默认隐藏）；非编辑态自动设为当前组，
  *   编辑态不切组（R-26 未保存改动不能被绕过）；
  * - 字段设置添加自定义字段带 workspace revision（回归：曾经传 section.revision=0 必 409）。
@@ -92,20 +97,19 @@ function findButton(label: string): HTMLElement {
   return found;
 }
 
-/**
- * 行内图标动作（编辑 / 删除 / 字段设置）按钮里没有文字，可访问名来自 aria-label，
- * 所以按 role + name 找，而不是按 textContent。
- */
-function findIconButton(label: string): HTMLElement {
-  const found = screen.getAllByRole("button", { name: label })[0];
-  if (!found) throw new Error("icon button not found: " + label);
-  return found;
+/** 方案行：按方案名定位整行（行首是 Radio，动作收在 ⋯ 里）。 */
+function groupRow(name: string): HTMLElement {
+  const row = screen
+    .getAllByTestId("group-row")
+    .find((item) => (item.textContent ?? "").includes(name));
+  if (!row) throw new Error("group row not found: " + name);
+  return row;
 }
 
-function findIconButtonIn(container: HTMLElement, label: string): HTMLElement {
-  const found = within(container).getByRole("button", { name: label });
-  if (!found) throw new Error("icon button not found in row: " + label);
-  return found;
+/** 打开某一行的 ⋯ 菜单并点其中一项（antd Dropdown 的菜单挂在 portal 上）。 */
+async function chooseRowAction(row: HTMLElement, menuName: string, itemLabel: string) {
+  fireEvent.click(within(row).getByRole("button", { name: menuName }));
+  fireEvent.click(await screen.findByRole("menuitem", { name: itemLabel }));
 }
 
 function renderManager(onChanged = vi.fn().mockResolvedValue(undefined), editing = false) {
@@ -135,19 +139,30 @@ function sectionRow(name: string): HTMLElement {
 }
 
 describe("ProfileGroupManagerModal", () => {
-  it("列出活动组，默认组受保护（不可删除）", () => {
+  it("列出活动方案，默认方案不可删除（⋯ 里的删除项禁用）", async () => {
     renderManager();
     expect(screen.getAllByTestId("group-row")).toHaveLength(2);
-    // 默认组不给删除按钮；非默认组有一颗。
-    expect(findIconButton(t("profileGroups.manager.delete"))).toBeInTheDocument();
-    expect(screen.getByText(t("profileGroups.manager.defaultProtected"))).toBeInTheDocument();
-    // 默认组之外的那一个才有「设为当前组」。
-    expect(findButton(t("profileGroups.manager.setCurrent"))).toBeInTheDocument();
+    // 每个方案行首一颗 Radio：当前方案那颗是选中的（这里是默认方案）。
+    const radios = screen.getAllByRole("radio");
+    expect(radios).toHaveLength(2);
+    expect(radios[0]).toBeChecked();
+    expect(radios[1]).not.toBeChecked();
+    fireEvent.click(
+      within(groupRow("Default")).getByRole("button", { name: t("profileGroups.manager.more") }),
+    );
+    const protectedItem = await screen.findByRole("menuitem", {
+      name: t("profileGroups.manager.defaultProtected"),
+    });
+    expect(protectedItem).toHaveAttribute("aria-disabled", "true");
   });
 
-  it("删除组先出三段式确认，确认后带 revision 调接口并刷新", async () => {
+  it("删除方案先出三段式确认，确认后带 revision 调接口并刷新", async () => {
     const { onChanged } = renderManager();
-    fireEvent.click(findIconButton(t("profileGroups.manager.delete")));
+    await chooseRowAction(
+      groupRow("Research"),
+      t("profileGroups.manager.more"),
+      t("profileGroups.manager.deleteMenu"),
+    );
     expect(
       screen.getByText(t("profileGroups.manager.deleteTitle", { name: "Research" })),
     ).toBeInTheDocument();
@@ -158,7 +173,22 @@ describe("ProfileGroupManagerModal", () => {
     await waitFor(() => expect(onChanged).toHaveBeenCalled());
   });
 
-  it("切换当前组使用 workspace revision；组编辑视图用改名返回的新 revision 保存参与清单", async () => {
+  it("点整行（行首 Radio）切换当前方案，使用 workspace revision", async () => {
+    renderManager();
+    fireEvent.click(
+      screen.getByRole("radio", {
+        name: t("profileGroups.manager.setCurrentAria", { name: "Research" }),
+      }),
+    );
+    await waitFor(() =>
+      expect(api.switchCurrentGroup).toHaveBeenCalledWith(
+        RESEARCH_GROUP.group_id,
+        WORKSPACE.workspace_revision,
+      ),
+    );
+  });
+
+  it("重命名在 ⋯ 里：改名后用返回的新 revision 保存参与清单", async () => {
     // 回归 D1：改名成功会让 revision+1。若随后用 workspace 里的旧 revision 写 members，
     // 后端必然 409 revision_conflict（「内容已在其他窗口修改」），用户在同一弹层里
     // 改的参与清单会丢。这里让 rename 返回 revision=2，断言 members 也用 2。
@@ -168,19 +198,11 @@ describe("ProfileGroupManagerModal", () => {
       revision: 2,
     });
     renderManager();
-    fireEvent.click(findButton(t("profileGroups.manager.setCurrent")));
-    await waitFor(() =>
-      expect(api.switchCurrentGroup).toHaveBeenCalledWith(
-        RESEARCH_GROUP.group_id,
-        WORKSPACE.workspace_revision,
-      ),
+    await chooseRowAction(
+      groupRow("Research"),
+      t("profileGroups.manager.more"),
+      t("profileGroups.manager.renameMenu"),
     );
-
-    const researchRow = screen
-      .getAllByTestId("group-row")
-      .find((row) => (row.textContent ?? "").includes("Research"));
-    if (!researchRow) throw new Error("research group row not found");
-    fireEvent.click(findIconButtonIn(researchRow, t("profileGroups.manager.rename")));
     await waitFor(() =>
       expect(screen.getByRole("checkbox", { name: "Education" })).toBeInTheDocument(),
     );
@@ -206,11 +228,11 @@ describe("ProfileGroupManagerModal", () => {
 
   it("只改参与清单不改名时，用 workspace 里的当前 revision 保存（不触发多余改名）", async () => {
     renderManager();
-    const researchRow = screen
-      .getAllByTestId("group-row")
-      .find((row) => (row.textContent ?? "").includes("Research"));
-    if (!researchRow) throw new Error("research group row not found");
-    fireEvent.click(findIconButtonIn(researchRow, t("profileGroups.manager.rename")));
+    await chooseRowAction(
+      groupRow("Research"),
+      t("profileGroups.manager.more"),
+      t("profileGroups.manager.renameMenu"),
+    );
     await waitFor(() =>
       expect(screen.getByRole("checkbox", { name: "Education" })).toBeInTheDocument(),
     );
@@ -226,7 +248,7 @@ describe("ProfileGroupManagerModal", () => {
     expect(api.renameGroup).not.toHaveBeenCalled();
   });
 
-  it("新建组（非编辑态）自动设为当前组，并说明大字段默认隐藏", async () => {
+  it("新建方案（非编辑态）自动设为当前方案，并说明板块默认隐藏", async () => {
     renderManager();
     fireEvent.change(screen.getByLabelText(t("profileGroups.manager.nameLabel")), {
       target: { value: "Teaching" },
@@ -244,7 +266,7 @@ describe("ProfileGroupManagerModal", () => {
     ).toBeInTheDocument();
   });
 
-  it("编辑态新建组不自动切组（未保存改动不能被绕过），提示先保存或取消", async () => {
+  it("编辑态新建方案不自动切组（未保存改动不能被绕过），提示先保存或取消", async () => {
     renderManager(vi.fn().mockResolvedValue(undefined), true);
     fireEvent.change(screen.getByLabelText(t("profileGroups.manager.nameLabel")), {
       target: { value: "Teaching" },
@@ -257,7 +279,7 @@ describe("ProfileGroupManagerModal", () => {
     ).toBeInTheDocument();
   });
 
-  it("可切到大字段与字段视图（单弹层多视图，不新开弹层）", () => {
+  it("可切到「板块与字段」视图（单弹层多视图，不新开弹层）", () => {
     renderManager();
     openSectionsView();
     expect(screen.getByText(t("profileLibrary.sectionSettings.customTitle"))).toBeInTheDocument();
@@ -284,19 +306,19 @@ describe("ProfileGroupManagerModal", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("大字段行开关写当前组参与清单；基本信息开关禁用", async () => {
+  it("板块行首勾选写当前方案参与清单；基本信息勾选框禁用", async () => {
     renderManager();
     openSectionsView();
-    const basicSwitch = screen.getByRole("switch", {
+    const basicBox = screen.getByRole("checkbox", {
       name: t("profileLibrary.section.visibleAria", { name: "Basic Info" }),
     });
-    expect(basicSwitch).toBeDisabled();
+    expect(basicBox).toBeDisabled();
 
-    const educationSwitch = screen.getByRole("switch", {
+    const educationBox = screen.getByRole("checkbox", {
       name: t("profileLibrary.section.visibleAria", { name: "Education" }),
     });
-    expect(educationSwitch).toBeChecked();
-    fireEvent.click(educationSwitch);
+    expect(educationBox).toBeChecked();
+    fireEvent.click(educationBox);
     await waitFor(() =>
       expect(api.setGroupMembers).toHaveBeenCalledWith(
         DEFAULT_GROUP.group_id,
@@ -306,11 +328,28 @@ describe("ProfileGroupManagerModal", () => {
     );
   });
 
+  it("字段设置标题带板块名，面包屑可退回板块列表", async () => {
+    renderManager();
+    openSectionsView();
+    await chooseRowAction(
+      sectionRow("Education"),
+      t("profileLibrary.sectionSettings.more"),
+      t("profileLibrary.sectionSettings.fields"),
+    );
+    expect(
+      screen.getByText(t("profileLibrary.fieldSettings.titleWithSection", { name: "Education" })),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: t("profileGroups.manager.sectionsTab") }));
+    expect(screen.getByText(t("profileLibrary.sectionSettings.customTitle"))).toBeInTheDocument();
+  });
+
   it("字段设置添加自定义字段带 workspace revision（不再 409 revision_conflict）", async () => {
     renderManager();
     openSectionsView();
-    fireEvent.click(
-      findIconButtonIn(sectionRow("Education"), t("profileLibrary.sectionSettings.fields")),
+    await chooseRowAction(
+      sectionRow("Education"),
+      t("profileLibrary.sectionSettings.more"),
+      t("profileLibrary.sectionSettings.fields"),
     );
     fireEvent.change(screen.getByPlaceholderText(t("profileLibrary.fieldSettings.label")), {
       target: { value: "Research" },

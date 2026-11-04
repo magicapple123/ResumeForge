@@ -76,7 +76,8 @@ class Exemption:
 _STRUCTURED_BACKSTOP = "2027-06-30"
 # 本会话多 PR 叠加增长导致的过线：拆分与行为修改必须分补丁，本批只豁免；
 # 到期日 2026-11-15，届时拆分或续期（续期需要新理由）。
-_PR18_MULTI_PR_GROWTH = "2026-11-15"
+# 已按 2026-11-15 到期日执行拆分：两条测试豁免（test_resume_render_overrides.py /
+# DocumentEditor.header.test.tsx）已拆分并删除，常量随之移除。
 # CSS 历史存量（S1，2026-10-22）的豁免已于 2026-12-31 到期日执行拆分并全部删除，
 # 因此不再需要 `_CSS_BUDGET_BACKSTOP` 常量——CSS 现在与 .py/.ts/.tsx 同档，零豁免。
 
@@ -89,18 +90,10 @@ _TEST_EXEMPTIONS: dict[str, Exemption] = {
     "backend/tests/test_webform_live.py": Exemption(
         "过线 27 行，monkeypatch 哨兵与脚手架耦合", _STRUCTURED_BACKSTOP
     ),
-    # 2026-11-02 界面修复批（任务 1 / 任务 6）的用例追加在既有文件末尾：
-    # 后端 549 行（超 49）、前端 523 行（超 23）。两处都不是"该拆的类没拆"，而是
-    # 拆分前得先把脚手架抽成共享 helper——后端是 `_png` / `PHOTO` / `photo_sha256` 一族，
-    # 前端是 `renderWithLayout` / `withPhoto` / `croppedConfig` 这一套 chip 编辑器夹具。
-    # 抽 helper 是独立补丁（会动到 3 个既有测试文件的 import），本批只豁免；
-    # 到期日 2026-11-15，届时按上述预案拆分或带新理由续期。
-    "backend/tests/test_resume_render_overrides.py": Exemption(
-        "任务 6 照片裁剪用例过线 49 行，拆分需先抽照片测试脚手架", "2026-11-15"
-    ),
-    "frontend/src/components/resume-editor/DocumentEditor.header.test.tsx": Exemption(
-        "任务 1/6 用例过线 23 行，拆分需先抽 chip 编辑器测试脚手架", "2026-11-15"
-    ),
+    # 2026-11-02 界面修复批（任务 1 / 任务 6）的两条豁免（后端 549 行 / 前端 523 行）
+    # 已按 2026-11-15 到期日执行拆分并删除：后端拆出 test_resume_photo_crop_render.py +
+    # resume_render_fixtures.py，前端拆出 DocumentEditor.photoCrop.test.tsx +
+    # src/test/documentEditorHeaderHarness.tsx——均为纯搬迁，用例数与断言逐条不变。
     # TrackerPage.test.tsx 的豁免（2026-10-13 PR-13 批新增用例后 517 行，超线 17 行）
     # 已于 2026-10-22 到期执行：按其自身预案拆出 TrackerPage.import-modal.test.tsx
     # （导入预览/深链域）+ src/test/trackerPageHarness.tsx，不再豁免。

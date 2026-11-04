@@ -134,6 +134,8 @@ class WebFormPreviewIn(BaseModel):
     snapshot_id: str
     # 认不出的控件要不要交给模型识别。没配模型时后端会忽略它（拿不到 provider）。
     ai: bool = True
+    # 取数范围：group = 仅当前方案（默认，与改造前逐字节一致）；all = 全部资料。
+    scope: str = "group"
 
 
 class WebFormFillItemIn(BaseModel):
@@ -170,6 +172,14 @@ class WebFormLiveAlternativeOut(BaseModel):
 class WebFormLiveIn(BaseModel):
     # 规则认不出来时要不要交给模型识别。没配模型时后端会忽略它（拿不到 provider）。
     ai: bool = True
+    # 取数范围：group = 仅当前方案（默认）；all = 全部资料。
+    scope: str = "group"
+
+
+class WebFormLiveScopeIn(BaseModel):
+    """运行中切换取数范围（面板/清单顶部那个开关）。"""
+
+    scope: str = "group"
 
 
 class WebFormLiveEnabledIn(BaseModel):
@@ -209,6 +219,11 @@ class WebFormLiveOut(BaseModel):
     # 会话结束原因：空串 = 正常；browser_closed = 浏览器被关闭后自动结束（界面给中性
     # 提示，不按故障处理）。
     stop_reason: str = ""
+    # 当前取数范围与"自动填写时因范围被跳过"的统计（面板/页面的范围开关与跳过清单用）。
+    scope: str = "group"
+    skipped_count: int = 0
+    # 被跳过的板块显示名（多板块时取第一个；空串 = 没有因范围跳过任何一项）。
+    skipped_section: str = ""
 
 
 class WebFormMemoryTargetOut(BaseModel):

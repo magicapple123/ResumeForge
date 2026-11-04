@@ -28,6 +28,8 @@ const jobMatchBatch = {
   "jobMatchBatch.running.progress": "{done} / {total} jobs done",
   "jobMatchBatch.running.failed": " ({count} failed)",
   "jobMatchBatch.running.current": "Analyzing: {title}",
+  /** All counted but still running (saving + building the comparison): no job is being analyzed. */
+  "jobMatchBatch.running.finalizing": "Wrapping up: saving results and building the comparison…",
   "jobMatchBatch.running.waiting": "Waiting for the background task to start…",
   "jobMatchBatch.setup.title": "Each of the {count} selected jobs is analyzed one by one",
   "jobMatchBatch.setup.body":

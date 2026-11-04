@@ -7,22 +7,23 @@
  * 就是「把这段文字改一改」。所以这里自己画一份最小可用的菜单——只做文本操作，
  * 不做开发者工具、不做「检查元素」，不假装自己是一个完整的右键菜单。
  *
- * 两条容易踩的细节：
- * 1. 菜单容器与每个按钮都拦掉 `mousedown` 的默认行为，否则点击会让选区先消失，
- *    「要改的那段文字」就没了。
- * 2. 关闭时机交给 document 级监听（菜单外按下、Esc、滚动/缩放、窗口失焦），
- *    而不是 `onBlur`——焦点会移到被操作的输入框上，那不代表用户想关菜单。
+ * 渲染、定位、键盘、焦点与关闭全部交给全局唯一宿主 `ContextMenuHost`（问题 25）：
+ * 原来 Bold / Selection 两个菜单各渲染一份 `ContextMenuSurface`，同一次右键会叠出
+ * 两张卡片。现在这里**只声明"这份菜单有哪些项、每项做什么"**，交给 `openContextMenu`；
+ * 后开的那份直接替换前一份，天然只有一层。
+ *
+ * `keepSelection` 必须开：否则按下按钮的一瞬间选区消失，"要改的那段文字"就没了。
  */
-import { useCallback, useEffect, useRef } from "react";
-import type { KeyboardEvent as ReactKeyboardEvent, MouseEvent as ReactMouseEvent } from "react";
+import { useCallback, useEffect, useMemo } from "react";
 import { t } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
-import { layer } from "../../theme/tokens";
+import { openContextMenu } from "../context-menu/contextMenuStore";
+import type { RowMenuItem } from "../../components/common/rowActionMenu";
 import { replaceSelection } from "./replaceSelection";
 import { elementRect, getCaretInsertion, type SelectionTarget } from "./selectionTarget";
 
 export interface SelectionContextMenuProps {
-  /** 菜单左上角（相对视口），由浮层按指针位置算好并已夹进可视区。 */
+  /** 指针位置（视口坐标），浮层会据此贴边落位并夹进视口。 */
   x: number;
   y: number;
   /** 选区落在可编辑元素里时才有；没有它就只能复制/全选。 */
@@ -87,41 +88,7 @@ export default function SelectionContextMenu({
   onAiPolish,
   onWriting,
 }: SelectionContextMenuProps) {
-  useLocale();
-  const menuRef = useRef<HTMLDivElement | null>(null);
-
-  // 打开即接管焦点：Esc 与方向键才有落点。
-  useEffect(() => {
-    menuRef.current?.focus();
-  }, []);
-
-  useEffect(() => {
-    const onPointerDown = (event: PointerEvent) => {
-      const node = event.target;
-      if (node instanceof Node && menuRef.current?.contains(node)) return;
-      onClose();
-    };
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
-      event.stopPropagation();
-      onClose();
-    };
-    const onViewportChange = () => onClose();
-
-    document.addEventListener("pointerdown", onPointerDown, true);
-    document.addEventListener("keydown", onKeyDown, true);
-    // 捕获阶段：卡片、输入框自己的滚动同样会挪走菜单，不能只监听 window。
-    document.addEventListener("scroll", onViewportChange, true);
-    window.addEventListener("resize", onViewportChange);
-    window.addEventListener("blur", onViewportChange);
-    return () => {
-      document.removeEventListener("pointerdown", onPointerDown, true);
-      document.removeEventListener("keydown", onKeyDown, true);
-      document.removeEventListener("scroll", onViewportChange, true);
-      window.removeEventListener("resize", onViewportChange);
-      window.removeEventListener("blur", onViewportChange);
-    };
-  }, [onClose]);
+  const locale = useLocale();
 
   const copyText = useCallback(async () => {
     if (!text) return;
@@ -130,17 +97,15 @@ export default function SelectionContextMenu({
 
   const handleCut = useCallback(() => {
     if (!target) return;
-    onClose();
     void (async () => {
       // 先写剪贴板再删：万一复制被拒，用户至少还有原文。
       await writeClipboard(text);
       replaceSelection(target, "");
     })();
-  }, [onClose, target, text]);
+  }, [target, text]);
 
   const handlePaste = useCallback(() => {
     if (!target) return;
-    onClose();
     void (async () => {
       const clip = await readClipboard();
       if (!clip) return;
@@ -154,10 +119,9 @@ export default function SelectionContextMenu({
         : target;
       replaceSelection(caretTarget, clip);
     })();
-  }, [onClose, target]);
+  }, [target]);
 
   const handleSelectAll = useCallback(() => {
-    onClose();
     const element = target?.element ?? null;
     if (element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement) {
       element.focus();
@@ -170,117 +134,70 @@ export default function SelectionContextMenu({
       return;
     }
     execCommand("selectAll");
-  }, [onClose, target]);
+  }, [target]);
 
-  // 点按钮同样不许动选区：`preventDefault` 把「按下鼠标 → 清选区」这一步堵掉。
-  const keepSelection = useCallback((event: ReactMouseEvent<HTMLElement>) => {
-    event.preventDefault();
-  }, []);
+  const items = useMemo<RowMenuItem[]>(() => {
+    const base: RowMenuItem[] = [
+      {
+        key: "cut",
+        label: t("writing.contextMenu.cut"),
+        disabled: !target,
+        onClick: handleCut,
+      },
+      {
+        key: "copy",
+        label: t("writing.contextMenu.copy"),
+        disabled: !text.trim(),
+        onClick: () => void copyText(),
+      },
+      {
+        key: "paste",
+        label: t("writing.contextMenu.paste"),
+        disabled: !target,
+        onClick: handlePaste,
+      },
+      { key: "selectAll", label: t("writing.contextMenu.selectAll"), onClick: handleSelectAll },
+    ];
 
-  const handleKeyDown = useCallback((event: ReactKeyboardEvent<HTMLDivElement>) => {
-    if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
-    event.preventDefault();
-    const items = Array.from(
-      menuRef.current?.querySelectorAll<HTMLButtonElement>("button:not([disabled])") ?? [],
-    );
-    if (items.length === 0) return;
-    const current = items.indexOf(document.activeElement as HTMLButtonElement);
-    const step = event.key === "ArrowDown" ? 1 : -1;
-    const next =
-      current < 0
-        ? step > 0
-          ? 0
-          : items.length - 1
-        : (current + step + items.length) % items.length;
-    items[next].focus();
-  }, []);
+    if (target) {
+      base.push({ key: "divider", type: "divider" });
+      // 写作增强排在 AI 润色前面：它是一组**有明确产物**的动作（STAR / 话术 /
+      // 风格 / 翻译），用户更常来点它；AI 润色是"按一句话要求随便改改"。
+      if (onWriting) {
+        base.push({ key: "writing", label: t("writing.menu.entry"), onClick: onWriting });
+      }
+      base.push({
+        key: "aiPolish",
+        label: t("writing.contextMenu.aiPolish"),
+        onClick: onAiPolish,
+      });
+    }
+    return base;
+    // `locale` 只为在切语言后重建文案；`t()` 本身是模块级的。
+  }, [
+    target,
+    text,
+    handleCut,
+    copyText,
+    handlePaste,
+    handleSelectAll,
+    onWriting,
+    onAiPolish,
+    locale,
+  ]);
 
-  return (
-    <div
-      ref={menuRef}
-      className="rf-ai-polish-menu"
-      role="menu"
-      aria-label={t("writing.contextMenu.ariaLabel")}
-      tabIndex={-1}
-      style={{ left: x, top: y, zIndex: layer.aiPolish }}
-      onMouseDown={keepSelection}
-      onKeyDown={handleKeyDown}
-    >
-      <button
-        type="button"
-        role="menuitem"
-        className="rf-ai-polish-menu-item"
-        disabled={!target}
-        onMouseDown={keepSelection}
-        onClick={handleCut}
-      >
-        {t("writing.contextMenu.cut")}
-      </button>
-      <button
-        type="button"
-        role="menuitem"
-        className="rf-ai-polish-menu-item"
-        disabled={!text.trim()}
-        onMouseDown={keepSelection}
-        onClick={() => {
-          onClose();
-          void copyText();
-        }}
-      >
-        {t("writing.contextMenu.copy")}
-      </button>
-      <button
-        type="button"
-        role="menuitem"
-        className="rf-ai-polish-menu-item"
-        disabled={!target}
-        onMouseDown={keepSelection}
-        onClick={handlePaste}
-      >
-        {t("writing.contextMenu.paste")}
-      </button>
-      <button
-        type="button"
-        role="menuitem"
-        className="rf-ai-polish-menu-item"
-        onMouseDown={keepSelection}
-        onClick={handleSelectAll}
-      >
-        {t("writing.contextMenu.selectAll")}
-      </button>
-      {target && (
-        <>
-          <div className="rf-ai-polish-menu-separator" role="separator" />
-          {/* 写作增强排在 AI 润色前面：它是一组**有明确产物**的动作（STAR / 话术 /
-              风格 / 翻译），用户更常来点它；AI 润色是"按一句话要求随便改改"。 */}
-          {onWriting && (
-            <button
-              type="button"
-              role="menuitem"
-              className="rf-ai-polish-menu-item"
-              onMouseDown={keepSelection}
-              onClick={() => {
-                onClose();
-                onWriting();
-              }}
-            >
-              {t("writing.menu.entry")}
-            </button>
-          )}
-          <button
-            type="button"
-            role="menuitem"
-            className="rf-ai-polish-menu-item"
-            onMouseDown={keepSelection}
-            onClick={() => {
-              onClose();
-              onAiPolish();
-            }}
-          >
-            {t("writing.contextMenu.aiPolish")}
-          </button>
-        </>
-      )}
-    </div>
-  );
+  // 只把菜单交给全局唯一宿主（`ContextMenuHost`）：这里不再渲染浮层，
+  // 于是"同一次右键被两个监听都处理"只会得到最后一份，不会叠出两张卡片。
+  useEffect(() => {
+    openContextMenu({
+      x,
+      y,
+      items,
+      ariaLabel: t("writing.contextMenu.ariaLabel"),
+      keepSelection: true,
+      onClose,
+    });
+  }, [x, y, items, onClose]);
+
+  return null;
 }

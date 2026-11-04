@@ -53,6 +53,12 @@ export interface InterviewMessage {
     rounds?: number;
     feedback?: string;
     persona?: string;
+    /**
+     * 这条面试官消息就是**收尾语**（轮数用尽时的收尾回应，或模型提前 `done` 的那句）。
+     *
+     * 用途只有一个：页面据此判断"有没有收尾消息"，没有时才补本地化兜底气泡。
+     */
+    closing?: boolean;
   };
   status: string;
   error: string;
@@ -62,7 +68,7 @@ export interface InterviewMessage {
 /** 消息所属阶段。历史消息（0071 之前）一律是 `interview`，服务端已补齐默认值。 */
 export type InterviewMessagePhase = "interview" | "followup";
 
-/** 材料来源（#41）：岗位侧导入 JD 文件，简历侧导入截图。 */
+/** 材料来源（#41）：`kind` 只表示"放哪一侧"（界面左右栏），**不决定接受什么格式**。 */
 export type InterviewMaterialKind = "job" | "resume";
 
 /** 开面试时随请求带上的、**已提取**的材料（文件名 + 正文）。 */
@@ -76,6 +82,13 @@ export interface InterviewMaterialExtract {
   name: string;
   text: string;
   warnings: string[];
+  /**
+   * 正文是怎么来的（问题 6）：`text` = 本机提取，`vision` = 视觉识别（图片 / 扫描件 PDF）。
+   *
+   * 两侧接受同一组格式，"从截图识别出 N 字"只能按**实际解析路径**说，不能按左右侧说。
+   * 后端总会带上它；可选是因为按旧结构构造的测试数据里没有这一项。
+   */
+  parser?: "text" | "vision";
 }
 
 export interface InterviewReportDimension {
@@ -142,9 +155,9 @@ export interface InterviewCreatePayload {
   job_id?: number;
   /** 关联简历：与 `resume_material` 二选一。 */
   resume_id?: number;
-  /** 导入的 JD 文件（已提取的文本）。 */
+  /** 导入的岗位材料（已提取的文本）。 */
   job_material?: InterviewMaterialPayload;
-  /** 导入的简历截图（已识别出的文本）。 */
+  /** 导入的简历材料（已提取的文本）。 */
   resume_material?: InterviewMaterialPayload;
   interview_type: InterviewType;
   difficulty: InterviewDifficulty;
@@ -159,6 +172,8 @@ export interface InterviewAnswerResult {
   session: InterviewDetail;
   feedback: string;
   finished: boolean;
+  /** 正式问答已收尾但报告还没生成：界面据此显示决策卡（需求 4）。 */
+  needs_report?: boolean;
 }
 
 /** 一次追问的结果（#41）：面试官的回答 + 刷新后的整场会话。 */

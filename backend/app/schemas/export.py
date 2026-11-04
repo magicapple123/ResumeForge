@@ -57,7 +57,12 @@ class ExportRequest(BaseModel):
     # 字号 / 页数覆盖：None 表示沿用记录里存的值。
     font_scale: ResumeFontScale | None = None
     # W14：页数上限由文档模式决定（普通 1–3 / 长 CV 1–10）；路由用 mode_page_limit 夹紧。
-    page_limit: int | None = Field(default=None, ge=1, le=LONG_CV_MAX_PAGES)
+    #
+    # **``ge=0``：0 = 不限篇幅**。导出路由 `_export_record` 早就按 `raw_page_limit == 0`
+    # 算 ``page_limit_is_unlimited``（并把 0 折成渲染保护上限），但 schema 写死 ``ge=1``
+    # 让它根本收不到 0：用户在制作台选了「不限」，点导出直接 422——而记录里存的、
+    # 前端发出来的正是 0。
+    page_limit: int | None = Field(default=None, ge=0, le=LONG_CV_MAX_PAGES)
     # 这次导出用的版式覆盖（字号系数 / 行距 / 页边距 / 区块间距 / 强调色等）。
     # **缺省 = 沿用记录里存的版式**（旧前端兼容）；给值时按
     # ``validated_format_config`` 白名单化后**叠加**在记录值之上。这是"预览里把字号拖到
@@ -114,7 +119,12 @@ class PreviewPdfRequest(BaseModel):
     template: str | None = Field(default=None, max_length=64)
     format_name: str | None = Field(default=None, max_length=64)
     # W14：同上，长 CV 允许到 10 页；普通模式由记录 document_mode 夹紧。
-    page_limit: int | None = Field(default=None, ge=1, le=LONG_CV_MAX_PAGES)
+    #
+    # **``ge=0``：0 = 不限篇幅（不限页数）**。上限仍然是 ``LONG_CV_MAX_PAGES``——多出来的
+    # 页只可能来自 0 这个语义值，而 0 会被 ``mode_page_limit`` 折成渲染保护上限（10 页）。
+    # 曾经写死 ``ge=1``：用户选「不限」时精确预览与分页报告收到 0 直接 422，前端只好把它
+    # 记成 1 页——屏幕上是 1 页、导出却按不裁剪排，两边永远对不上。
+    page_limit: int | None = Field(default=None, ge=0, le=LONG_CV_MAX_PAGES)
     font_scale: ResumeFontScale | None = None
     # 纸面固定文案的语言（小节标题 / 字段前缀）。``None`` = 用记录里的语言。
     # 与上面几个字段同理：**必须收下**，否则草稿里选了英文、精确预览还是中文。

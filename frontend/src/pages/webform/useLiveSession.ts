@@ -11,7 +11,7 @@ import { useEffect, useRef, useState } from "react";
 import type { App } from "antd";
 import { getWebFormLiveStatus, getWebFormMemoryTargets, startWebFormLive } from "../../api/webform";
 import { t } from "../../i18n";
-import type { WebFormLive, WebFormMemoryTarget } from "../../types";
+import type { WebFormLive, WebFormMemoryTarget, WebFormScope } from "../../types";
 import { isDocumentHidden, onVisibilityChange } from "../../utils/visibility";
 
 /**
@@ -31,6 +31,7 @@ export function useLiveSession({
   running,
   aiAvailable,
   aiOn,
+  scope,
   setSessionActive,
   message,
 }: {
@@ -39,6 +40,8 @@ export function useLiveSession({
   running: boolean;
   aiAvailable: boolean | null;
   aiOn: boolean;
+  /** Data range the autofill session starts with; kept in sync by the page. */
+  scope: WebFormScope;
   setSessionActive: (active: boolean) => void;
   message: ReturnType<typeof App.useApp>["message"];
 }): {
@@ -152,7 +155,7 @@ export function useLiveSession({
     }
     liveStarting.current = true;
     void getWebFormLiveStatus()
-      .then((current) => (current?.running ? current : startWebFormLive(aiOn)))
+      .then((current) => (current?.running ? current : startWebFormLive(aiOn, scope)))
       .then((next) => {
         setLive(next ?? null);
         if (next?.running) setSessionActive(true);
@@ -162,7 +165,7 @@ export function useLiveSession({
         liveStarting.current = false;
       });
     // eslint-disable-next-line react-hooks/exhaustive-deps -- 自启动只在上述五个外部输入变化时触发一次，liveStarting 守卫防重入
-  }, [aiAvailable, aiOn, live?.running, liveOptOut, running]);
+  }, [aiAvailable, aiOn, live?.running, liveOptOut, running, scope]);
 
   // 浏览器被用户在窗口里直接关掉时，状态轮询会把本地活动标记立即收拢；
   // 关闭浏览器后复位会话状态，并回到默认开启（再次打开不用重新勾）。

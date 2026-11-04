@@ -421,6 +421,20 @@ function lowRelevanceCandidate(
   };
 }
 
+/** 内容候选的取舍开关（来自面板上的约束）。 */
+export interface ContentCandidateOptions {
+  /**
+   * 「保持条目完整」：为 true 时**不生成"删条目"类候选**（问题 17）。
+   *
+   * 这个开关以前是死开关（只在界面上记着一个布尔），而内容候选照样给"删掉这些重复条目"——
+   * 用户勾着它却收到明确不想要的方案。参数候选（`filterCandidates`）不受它影响：
+   * 那条阶梯只动间距与字号，本来就不动结构。
+   *
+   * 缺省 false = 保持旧行为（不剔除），调用方要显式传。
+   */
+  keepEntriesWhole?: boolean;
+}
+
 /**
  * 生成内容精简候选（最多 3 个）。顺序 = 用户价值：岗位低相关 > 重复条目 > 重复要点 >
  * 合并短要点；后端 hints 缺省时自动跳过第一类（fail-soft）。
@@ -430,14 +444,41 @@ function lowRelevanceCandidate(
 export function buildContentCandidates(
   content: ResumeContent | null | undefined,
   hints: readonly OptimizerContentHint[] = [],
+  options: ContentCandidateOptions = {},
 ): OptimizerContentCandidate[] {
   if (!content) return [];
   return [
     lowRelevanceCandidate(content, hints),
-    duplicateEntriesCandidate(content),
+    options.keepEntriesWhole ? null : duplicateEntriesCandidate(content),
     duplicatePointsCandidate(content),
     mergeShortPointsCandidate(content),
   ]
     .filter((candidate): candidate is OptimizerContentCandidate => candidate !== null)
     .slice(0, MAX_CONTENT_CANDIDATES);
+}
+
+/**
+ * 面板要的两个数：当前开关下可见的候选，以及被「保持条目完整」挡掉的条数。
+ *
+ * 挡掉的条数也要说给用户听——勾着开关导致候选全被过滤时，界面不能呈空白，
+ * 否则用户读成"没有建议"，而不是"开关在拦"（与"静默无操作"同一类问题）。
+ *
+ * 判据仍然只有 `buildContentCandidates` 里那一处 if：这里只是把同一份纯函数
+ * 用 `keepEntriesWhole: false` 再跑一次做差集，不复制任何规则。
+ */
+export function buildContentCandidatesWithFilterSummary(
+  content: ResumeContent | null | undefined,
+  hints: readonly OptimizerContentHint[] = [],
+  options: ContentCandidateOptions = {},
+): { candidates: OptimizerContentCandidate[]; filteredByKeepEntries: number } {
+  const candidates = buildContentCandidates(content, hints, options);
+  if (!options.keepEntriesWhole) return { candidates, filteredByKeepEntries: 0 };
+  const all = buildContentCandidates(content, hints, {
+    ...options,
+    keepEntriesWhole: false,
+  });
+  return {
+    candidates,
+    filteredByKeepEntries: Math.max(0, all.length - candidates.length),
+  };
 }

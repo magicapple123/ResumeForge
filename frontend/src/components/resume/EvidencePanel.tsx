@@ -45,9 +45,16 @@ const SECTION_TITLES: Record<string, MessageKey> = {
 interface Props {
   annotations: FactAnnotation[] | undefined;
   content: ResumeContent;
+  /**
+   * 只渲染正文、不套 `Collapse`（2026-11 问题 8）。
+   *
+   * 详情顶部的诊断条已经把「来源 24」做成一个入口，点开是弹层——弹层里再放一层折叠
+   * 就是"点两次才看到内容"。缺省 false 时行为与之前逐字一致（制作台等其它宿主仍走折叠）。
+   */
+  embedded?: boolean;
 }
 
-export default function EvidencePanel({ annotations, content }: Props) {
+export default function EvidencePanel({ annotations, content, embedded = false }: Props) {
   const { t } = useI18n();
   const grouped = useMemo(() => {
     const result: { section: string; items: FactAnnotation[] }[] = [];
@@ -79,6 +86,95 @@ export default function EvidencePanel({ annotations, content }: Props) {
 
   // 默认折叠（R8）：这份说明是"想核对时再看"的辅助信息，但一段简历动辄十几条标注，
   // 平铺展开会把预览正文挤到屏幕外。折叠成一行标题 + 条数徽标，需要时一点即开。
+  const body = (
+    <>
+      <Typography.Paragraph type="secondary" style={{ fontSize: 12, marginBottom: 8 }}>
+        {t("resume.evidence.hint")}
+      </Typography.Paragraph>
+      <div style={{ display: "grid", gap: 8 }}>
+        {grouped.map((group) => {
+          const titleKey = SECTION_TITLES[group.section];
+          return (
+            <div key={group.section}>
+              <Typography.Text strong style={{ fontSize: 13 }}>
+                {titleKey ? t(titleKey) : group.section}
+              </Typography.Text>
+              <div style={{ display: "grid", gap: 6, marginTop: 4 }}>
+                {group.items.map((annotation) => {
+                  const verified = canShowVerified(annotation)
+                    ? annotation.verification_status
+                    : null;
+                  // 标注里的状态/承担程度是后端下发的协议值：映射到语言包，
+                  // 认不出的取值回退原样显示（不丢信息）。
+                  const verifiedKey = verified ? claimStatusLabelKey(verified) : undefined;
+                  const responsibilityKey = claimResponsibilityLabelKey(
+                    annotation.responsibility ?? "",
+                  );
+                  const originKey = ORIGIN_LABELS[annotation.origin];
+                  return (
+                    <div
+                      key={`${annotation.path}:${annotation.origin}`}
+                      style={{ fontSize: 13, lineHeight: 1.7 }}
+                    >
+                      <Space size={6} wrap>
+                        <Typography.Text style={{ fontSize: 13 }}>
+                          {describeResumeFieldPath(annotation.path, content)}
+                        </Typography.Text>
+                        <Tag
+                          color={ORIGIN_COLORS[annotation.origin] ?? "default"}
+                          style={{ marginInlineEnd: 0 }}
+                        >
+                          {originKey ? t(originKey) : annotation.origin}
+                        </Tag>
+                        {verified && (
+                          <Tag color={claimStatusColor(verified)}>
+                            {verifiedKey ? t(verifiedKey) : verified}
+                          </Tag>
+                        )}
+                        {annotation.responsibility && (
+                          <Tag color={claimResponsibilityColor(annotation.responsibility)}>
+                            {responsibilityKey ? t(responsibilityKey) : annotation.responsibility}
+                          </Tag>
+                        )}
+                      </Space>
+                      {annotation.source_fact && (
+                        <Typography.Paragraph
+                          type="secondary"
+                          style={{ fontSize: 12, margin: "2px 0 0" }}
+                        >
+                          {t("resume.evidence.basis", { fact: annotation.source_fact })}
+                        </Typography.Paragraph>
+                      )}
+                      {annotation.boundary && (
+                        <Typography.Paragraph
+                          type="secondary"
+                          style={{ fontSize: 12, margin: "2px 0 0" }}
+                        >
+                          {t("resume.evidence.boundary", {
+                            boundary: annotation.boundary,
+                          })}
+                        </Typography.Paragraph>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </>
+  );
+
+  // 弹层里（诊断条）只要正文：再套一层折叠就成了"点两次才看到内容"。
+  if (embedded) {
+    return (
+      <div className="resume-evidence-panel" data-testid="evidence-panel">
+        {body}
+      </div>
+    );
+  }
+
   return (
     <div className="resume-evidence-panel" data-testid="evidence-panel">
       <Collapse
@@ -92,91 +188,7 @@ export default function EvidencePanel({ annotations, content }: Props) {
                 {t("resume.evidence.title", { count: annotations.length })}
               </Typography.Text>
             ),
-            children: (
-              <>
-                <Typography.Paragraph type="secondary" style={{ fontSize: 12, marginBottom: 8 }}>
-                  {t("resume.evidence.hint")}
-                </Typography.Paragraph>
-                <div style={{ display: "grid", gap: 8 }}>
-                  {grouped.map((group) => {
-                    const titleKey = SECTION_TITLES[group.section];
-                    return (
-                      <div key={group.section}>
-                        <Typography.Text strong style={{ fontSize: 13 }}>
-                          {titleKey ? t(titleKey) : group.section}
-                        </Typography.Text>
-                        <div style={{ display: "grid", gap: 6, marginTop: 4 }}>
-                          {group.items.map((annotation) => {
-                            const verified = canShowVerified(annotation)
-                              ? annotation.verification_status
-                              : null;
-                            // 标注里的状态/承担程度是后端下发的协议值：映射到语言包，
-                            // 认不出的取值回退原样显示（不丢信息）。
-                            const verifiedKey = verified
-                              ? claimStatusLabelKey(verified)
-                              : undefined;
-                            const responsibilityKey = claimResponsibilityLabelKey(
-                              annotation.responsibility ?? "",
-                            );
-                            const originKey = ORIGIN_LABELS[annotation.origin];
-                            return (
-                              <div
-                                key={`${annotation.path}:${annotation.origin}`}
-                                style={{ fontSize: 13, lineHeight: 1.7 }}
-                              >
-                                <Space size={6} wrap>
-                                  <Typography.Text style={{ fontSize: 13 }}>
-                                    {describeResumeFieldPath(annotation.path, content)}
-                                  </Typography.Text>
-                                  <Tag
-                                    color={ORIGIN_COLORS[annotation.origin] ?? "default"}
-                                    style={{ marginInlineEnd: 0 }}
-                                  >
-                                    {originKey ? t(originKey) : annotation.origin}
-                                  </Tag>
-                                  {verified && (
-                                    <Tag color={claimStatusColor(verified)}>
-                                      {verifiedKey ? t(verifiedKey) : verified}
-                                    </Tag>
-                                  )}
-                                  {annotation.responsibility && (
-                                    <Tag
-                                      color={claimResponsibilityColor(annotation.responsibility)}
-                                    >
-                                      {responsibilityKey
-                                        ? t(responsibilityKey)
-                                        : annotation.responsibility}
-                                    </Tag>
-                                  )}
-                                </Space>
-                                {annotation.source_fact && (
-                                  <Typography.Paragraph
-                                    type="secondary"
-                                    style={{ fontSize: 12, margin: "2px 0 0" }}
-                                  >
-                                    {t("resume.evidence.basis", { fact: annotation.source_fact })}
-                                  </Typography.Paragraph>
-                                )}
-                                {annotation.boundary && (
-                                  <Typography.Paragraph
-                                    type="secondary"
-                                    style={{ fontSize: 12, margin: "2px 0 0" }}
-                                  >
-                                    {t("resume.evidence.boundary", {
-                                      boundary: annotation.boundary,
-                                    })}
-                                  </Typography.Paragraph>
-                                )}
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </>
-            ),
+            children: body,
           },
         ]}
       />

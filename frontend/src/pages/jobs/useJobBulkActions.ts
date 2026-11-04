@@ -5,13 +5,16 @@
  * 六个动作都**逐个执行原来的单项操作**：删除走软删撤销、导出 CSV 一次导出所选、
  * 生成简历与岗位解读交给 `jobBulkAiRunner` 串行执行、匹配度分析仍打开逐岗面板
  * （横向对比是筛选条另一个入口），加入队列沿用既有批量入队（含双确认与来源校验）。
+ *
+ * 「批量生成简历」不再跳设置页：改为打开「本次参数」弹窗（`configModal`），确认后
+ * 才开跑，页面不被跳转、勾选不丢。
  */
 import { App } from "antd";
 import dayjs from "dayjs";
 import { useState } from "react";
 import { exportJobsCsv } from "../../api/jobs";
 import { startBulkAi, stopBulkAi, useBulkAiState } from "../../features/jobs/jobBulkAiRunner";
-import type { BatchGenerationConfig } from "../../api/settingsBatch";
+import type { BatchConfigValues } from "../../components/batch/BatchConfigModal";
 import { t } from "../../i18n";
 import type { JobList, Page } from "../../types";
 import { downloadBlob } from "../../utils/download";
@@ -23,18 +26,24 @@ export function useJobBulkActions({
   removeSelectedJobs,
   enqueueSelectedJobs,
   openMatchBatch,
-  ensureBatchConfig,
 }: {
   jobs: Page<JobList> | undefined;
   selectedJobIds: number[];
   removeSelectedJobs: () => Promise<void>;
   enqueueSelectedJobs: () => Promise<void>;
   openMatchBatch: (view?: "setup" | "history", mode?: "match" | "compare") => void;
-  /** 批量生成简历前必须确认「设置 → 批量操作」已保存；返回 null = 已提示并中止。 */
-  ensureBatchConfig: () => Promise<BatchGenerationConfig | null>;
 }) {
   const { message } = App.useApp();
   const [exporting, setExporting] = useState(false);
+  /** 非 null = 弹窗打开，值就是本次要生成的那几个岗位（确认时才开跑）。 */
+  const [generateTargets, setGenerateTargets] = useState<
+    | {
+        id: number;
+        title: string;
+        company: string;
+      }[]
+    | null
+  >(null);
   const bulkAi = useBulkAiState();
 
   const selectedJobs = () => {
@@ -79,18 +88,28 @@ export function useJobBulkActions({
       case "matchAnalysis":
         openMatchBatch("setup", "match");
         return;
-      case "generateResume": {
-        // 先确认批量参数：未配置时给"去设置"的弹窗，绝不拿默认值偷偷跑一批。
-        const config = await ensureBatchConfig();
-        if (!config) return;
-        startBulkAi("resume", selectedJobs(), config);
+      case "generateResume":
+        // 先把人留在原地：弹一张卡片当场确认本次参数，确认后才开跑。
+        setGenerateTargets(selectedJobs());
         return;
-      }
       case "analyzeJob":
         startBulkAi("analysis", selectedJobs());
         return;
     }
   };
 
-  return { handleBulkAction, exporting, bulkAi, stopBulkAi };
+  /** 传给 `BatchConfigModal`（mode="generation"）的打开态与两个回调。 */
+  const configModal = {
+    open: generateTargets !== null,
+    count: generateTargets?.length ?? 0,
+    onCancel: () => setGenerateTargets(null),
+    onConfirm: (config: BatchConfigValues) => {
+      const targets = generateTargets;
+      setGenerateTargets(null);
+      if (!targets || !("enhance" in config)) return;
+      startBulkAi("resume", targets, config);
+    },
+  };
+
+  return { handleBulkAction, exporting, bulkAi, stopBulkAi, configModal };
 }

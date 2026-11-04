@@ -226,3 +226,207 @@ async def test_aggregate_sends_the_rewritten_query_to_every_source(monkeypatch):
     )
 
     assert captured == {"bing": expected, "ddg": expected, "searxng": expected}
+
+
+# ===== DeepSeek 作为第四个来源（需求 5） =====
+
+
+@pytest.mark.asyncio
+async def test_deepseek_source_is_skipped_without_a_key(monkeypatch):
+    """没配 key 时它不参与并发——不发请求，也不返回"成功但没有结果"。"""
+    called: list[str] = []
+
+    async def fake_deepseek(*_args, **_kwargs):
+        from app.services.search.deepseek import DeepSeekResults
+
+        called.append("deepseek")
+        return DeepSeekResults()
+
+    async def fake_bing(_query: str):
+        return [_result("后端工程师招聘官网", "https://careers.example.com/jobs/2")]
+
+    monkeypatch.setattr(aggregate_module, "search_deepseek", fake_deepseek)
+    monkeypatch.setattr(aggregate_module, "bing_search", fake_bing)
+
+    results = await aggregate_search(
+        "后端 招聘", SearchConfig(sources=["bing", "deepseek"], max_results=8)
+    )
+    assert called == []
+    assert [item["url"] for item in results] == ["https://careers.example.com/jobs/2"]
+
+
+@pytest.mark.asyncio
+async def test_deepseek_failure_keeps_other_sources(monkeypatch):
+    """401 / 429 这类失败只让这一个来源缺席，其它来源结果照常返回。"""
+    from app.services.search.deepseek import DeepSeekResults
+
+    async def failing_deepseek(*_args, **_kwargs):
+        return DeepSeekResults(failure="unauthorized")
+
+    async def fake_bing(_query: str):
+        return [_result("后端工程师招聘官网", "https://careers.example.com/jobs/2")]
+
+    monkeypatch.setattr(aggregate_module, "search_deepseek", failing_deepseek)
+    monkeypatch.setattr(aggregate_module, "bing_search", fake_bing)
+
+    results = await aggregate_search(
+        "后端 招聘",
+        SearchConfig(sources=["bing", "deepseek"], deepseek_api_key="sk-test"),
+    )
+    assert [item["url"] for item in results] == ["https://careers.example.com/jobs/2"]
+
+
+@pytest.mark.asyncio
+async def test_deepseek_402_with_no_other_results_tells_the_user(monkeypatch):
+    from app.services.search.deepseek import DeepSeekResults
+
+    async def broke_deepseek(*_args, **_kwargs):
+        return DeepSeekResults(failure="insufficient_balance")
+
+    async def empty_bing(_query: str):
+        return []
+
+    monkeypatch.setattr(aggregate_module, "search_deepseek", broke_deepseek)
+    monkeypatch.setattr(aggregate_module, "bing_search", empty_bing)
+
+    with pytest.raises(AssistantSearchError, match="余额不足"):
+        await aggregate_search(
+            "后端 招聘",
+            SearchConfig(sources=["bing", "deepseek"], deepseek_api_key="sk-test"),
+        )
+
+
+@pytest.mark.asyncio
+async def test_deepseek_receives_operators_verbatim(monkeypatch):
+    """``site:`` / ``after:`` 不能被改写成关键词，否则操作符会退化成普通词。"""
+    captured: dict[str, str] = {}
+
+    async def fake_deepseek(query, count=10, need_content=False, ori_question="", *, api_key=""):
+        from app.services.search.deepseek import DeepSeekResults
+
+        captured.update(query=query, ori_question=ori_question, api_key=api_key)
+        return DeepSeekResults()
+
+    async def fake_bing(_query: str):
+        return [_result("后端工程师招聘官网", "https://careers.example.com/jobs/2")]
+
+    monkeypatch.setattr(aggregate_module, "search_deepseek", fake_deepseek)
+    monkeypatch.setattr(aggregate_module, "bing_search", fake_bing)
+
+    question = "site:zhipin.com after:2025 后端 招聘"
+    await aggregate_search(
+        question,
+        SearchConfig(sources=["bing", "deepseek"], deepseek_api_key="sk-test"),
+    )
+    assert captured["query"] == question  # 原样，一个字符都没改
+    assert captured["ori_question"] == question
+    assert captured["api_key"] == "sk-test"
+
+
+@pytest.mark.asyncio
+async def test_deepseek_receives_rewritten_keywords_without_operators(monkeypatch):
+    captured: dict[str, str] = {}
+
+    async def fake_deepseek(query, count=10, need_content=False, ori_question="", *, api_key=""):
+        from app.services.search.deepseek import DeepSeekResults
+
+        captured.update(query=query, ori_question=ori_question)
+        return DeepSeekResults()
+
+    async def fake_bing(_query: str):
+        return [_result("后端工程师招聘官网", "https://careers.example.com/jobs/2")]
+
+    monkeypatch.setattr(aggregate_module, "search_deepseek", fake_deepseek)
+    monkeypatch.setattr(aggregate_module, "bing_search", fake_bing)
+
+    question = "帮我把后端招聘信息整理一下"
+    await aggregate_search(
+        question,
+        SearchConfig(sources=["bing", "deepseek"], deepseek_api_key="sk-test"),
+    )
+    assert captured["query"] == build_search_query(question)
+    assert captured["query"] != question
+    assert captured["ori_question"] == question  # 整句仍交给接口理解意图
+
+
+@pytest.mark.asyncio
+async def test_deepseek_fetch_falls_back_per_item(monkeypatch):
+    """一条 /tools/fetch 失败只回落那一条，另一条的 DeepSeek 正文要保留。"""
+    from app.services.search.deepseek import DeepSeekResults
+
+    async def fake_deepseek(*_args, **_kwargs):
+        return DeepSeekResults(
+            [
+                _result("后端工程师招聘 1", "https://careers.example.com/jobs/1"),
+                _result("后端工程师招聘 2", "https://careers.example.com/jobs/2"),
+            ]
+        )
+
+    fetched_deepseek: list[str] = []
+    fetched_local: list[str] = []
+
+    async def fake_deepseek_fetch(url: str, api_key: str):
+        fetched_deepseek.append(url)
+        return "DeepSeek 正文" if url.endswith("/1") else ""
+
+    async def fake_local_fetch(url: str, max_chars: int = 0):
+        fetched_local.append(url)
+        return "本地正文"
+
+    monkeypatch.setattr(aggregate_module, "search_deepseek", fake_deepseek)
+    monkeypatch.setattr(aggregate_module, "fetch_deepseek_text", fake_deepseek_fetch)
+    monkeypatch.setattr(aggregate_module, "fetch_page_text", fake_local_fetch)
+
+    results = await aggregate_search(
+        "后端 招聘",
+        SearchConfig(
+            sources=["deepseek"], deepseek_api_key="sk-test", fetch_pages=2, max_results=8
+        ),
+    )
+
+    assert fetched_deepseek == [
+        "https://careers.example.com/jobs/1",
+        "https://careers.example.com/jobs/2",
+    ]
+    assert fetched_local == ["https://careers.example.com/jobs/2"]
+    assert results[0]["text"] == "DeepSeek 正文"
+    assert results[1]["text"] == "本地正文"
+
+
+@pytest.mark.asyncio
+async def test_deepseek_account_unavailable_falls_back_entirely_to_local(monkeypatch):
+    from app.services.search.deepseek import DeepSeekResults, DeepSeekUnavailable
+
+    async def fake_deepseek(*_args, **_kwargs):
+        return DeepSeekResults(
+            [
+                _result("后端工程师招聘 1", "https://careers.example.com/jobs/1"),
+                _result("后端工程师招聘 2", "https://careers.example.com/jobs/2"),
+            ]
+        )
+
+    async def unavailable_fetch(url: str, api_key: str):
+        raise DeepSeekUnavailable("insufficient_balance")
+
+    fetched_local: list[str] = []
+
+    async def fake_local_fetch(url: str, max_chars: int = 0):
+        fetched_local.append(url)
+        return "本地正文"
+
+    monkeypatch.setattr(aggregate_module, "search_deepseek", fake_deepseek)
+    monkeypatch.setattr(aggregate_module, "fetch_deepseek_text", unavailable_fetch)
+    monkeypatch.setattr(aggregate_module, "fetch_page_text", fake_local_fetch)
+
+    results = await aggregate_search(
+        "后端 招聘",
+        SearchConfig(
+            sources=["deepseek"], deepseek_api_key="sk-test", fetch_pages=2, max_results=8
+        ),
+    )
+
+    assert fetched_local == [
+        "https://careers.example.com/jobs/1",
+        "https://careers.example.com/jobs/2",
+    ]
+    assert all(item["text"] == "本地正文" for item in results)

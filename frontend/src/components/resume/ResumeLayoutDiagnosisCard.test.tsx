@@ -175,6 +175,20 @@ describe("ResumeLayoutDiagnosisCard", () => {
     });
   });
 
+  it("最小页边距参与阶梯生成：改了它要带着 min_padding_mm 重算诊断（问题 17）", async () => {
+    apiMocks.analyzeResumeLayout.mockResolvedValue(analysis());
+    renderCard();
+    await waitFor(() => expect(apiMocks.analyzeResumeLayout).toHaveBeenCalledTimes(1));
+    // 边距是**阶梯下界**（后端据此截断页边距档位），不能只在面板本地丢档。
+    fireEvent.change(screen.getByLabelText(t("optimizer.minMargin")), {
+      target: { value: "20" },
+    });
+    await waitFor(() => expect(apiMocks.analyzeResumeLayout).toHaveBeenCalledTimes(2), {
+      timeout: 3000,
+    });
+    expect(apiMocks.analyzeResumeLayout.mock.calls[1][3]).toBe(20);
+  });
+
   it("默认收起详情：标题与占用率可见，结论正文要点一下才出来", async () => {
     const healthy = analysis();
     apiMocks.analyzeResumeLayout.mockResolvedValue({

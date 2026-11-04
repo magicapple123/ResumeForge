@@ -291,23 +291,44 @@ def create_custom_section(
 
 
 @_atomic
+def update_custom_section(
+    db: Session,
+    key: str,
+    *,
+    name: str | None = None,
+    filter_by_job: bool | None = None,
+    expected_revision: int,
+) -> MergedSection:
+    """改名与「参与岗位相关性筛选」开关共用一次条件写（需求 6）。
+
+    两个参数都是"None = 不改"：开关切换不会顺手把名字清空，改名也不会把开关重置回
+    false（前端只发变的那一项）。纯开关变更**不推** 工作区 revision——它不改变任何
+    资料的顺序/成员，推高 revision 只会让别的窗口的条件写无故 409。
+    """
+    row, current = _prepare_section_change(db, key, expected_revision)
+    values: dict[str, Any] = {}
+    if name is not None:
+        clean_name, name_key = _validate_section_name(db, name, exclude_pk=int(row.id))
+        values.update({"name": clean_name, "name_key": name_key})
+    if filter_by_job is not None:
+        values["filter_by_job"] = bool(filter_by_job)
+    if values:
+        _conditional_update(db, ProfileCustomSection, int(row.id), current, values)
+        if name is not None:
+            _touch_state(db, workspace_bootstrap.ensure_workspace(db))
+        db.commit()
+        db.refresh(row)
+    return merged_custom_section(db, row)
+
+
 def rename_custom_section(
     db: Session, key: str, name: str, *, expected_revision: int
 ) -> MergedSection:
-    """改名（内置分区拒改）；条件写成功后返回最新编辑 DTO。"""
-    row, current = _prepare_section_change(db, key, expected_revision)
-    clean_name, name_key = _validate_section_name(db, name, exclude_pk=int(row.id))
-    _conditional_update(
-        db,
-        ProfileCustomSection,
-        int(row.id),
-        current,
-        {"name": clean_name, "name_key": name_key},
-    )
-    _touch_state(db, workspace_bootstrap.ensure_workspace(db))
-    db.commit()
-    db.refresh(row)
-    return merged_custom_section(db, row)
+    """改名（内置分区拒改）；条件写成功后返回最新编辑 DTO。
+
+    事务边界由 ``update_custom_section`` 的 ``@_atomic`` 收口，这里不再套一层。
+    """
+    return update_custom_section(db, key, name=name, expected_revision=expected_revision)
 
 
 @_atomic
@@ -377,5 +398,6 @@ __all__ = [
     "list_sections",
     "rename_custom_section",
     "section_deletion_impact",
+    "update_custom_section",
     "update_custom_field",
 ]

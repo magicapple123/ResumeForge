@@ -102,6 +102,10 @@ interface Props {
   content?: ResumeContent | null;
   /** 应用内容候选：宿主写回正文（成功后才 toast；失败不假装成功）。 */
   onApplyContent?: (next: ResumeContent) => void | Promise<void>;
+  /** 诊断结论回调（问题 8）：阈值只在后端，诊断条只做展示；ref 持有避免重打接口。 */
+  onDiagnosisChange?: (
+    info: { status: ResumeLayoutStatus; statusLabel: string; fill: number } | null,
+  ) => void;
 }
 
 export default function ResumeLayoutDiagnosisCard({
@@ -115,19 +119,30 @@ export default function ResumeLayoutDiagnosisCard({
   onAddPage,
   content = null,
   onApplyContent,
+  onDiagnosisChange,
 }: Props) {
   useLocale();
   const { message } = App.useApp();
+  // 诊断条消费结论：用 ref 持有回调，回调身份不进 effect 依赖（否则接口会被反复重打）。
+  const diagnosisListener = useRef(onDiagnosisChange);
+  useEffect(() => {
+    diagnosisListener.current = onDiagnosisChange;
+  });
   const [analysis, setAnalysis] = useState<ResumeLayoutAnalysis | null>(null);
   /**
    * `analysis` 是**基于哪一版版式**算出来的（`draftLayoutKey` 的结果）。
    *
-   * 没有它就会出现 2026-10-24 那个 bug：用户拖完滑杆立刻点「自动一页」，而 effect 里
-   * 那份 `fit_ladder` 还是 250ms 防抖之前那一版 layout 算出来的——照着陈旧清单逐档试、
-   * 再把试出来的 `candidate.config` 落库，落库的参数与实测的那一版根本不是同一套，
-   * 用户看到的就是"点了没变"。所以这里记下基准，对不上就**先重新诊断**再试。
+   * 没有它就会出现 2026-10-24 那个 bug：用户拖完滑杆立刻点「自动一页」，而 effect 里那份
+   * `fit_ladder` 还是防抖前那一版 layout 算出来的——照着陈旧清单逐档试、再把结果落库。
    */
   const [analysisKey, setAnalysisKey] = useState<string | null>(null);
+  /**
+   * 优化器面板上的「最小页边距」。提升到这里的原因：它是**阶梯生成参数**（后端在阈值处
+   * 截断页边距档位，问题 17），不是面板本地过滤；诊断按它重算，并且要能判断
+   * "这份 analysis 是不是按当前下限算的"（`analysisMargin`）。
+   */
+  const [optimizerMinMargin, setOptimizerMinMargin] = useState<number | null>(null);
+  const [analysisMargin, setAnalysisMargin] = useState<number | null>(null);
   // 详情默认收起（2026-10-28 用户要求）：标题行的状态与占用率仍然一直可见，
   // 收起的只是"结论正文 + 优化候选"，把首屏留给简历本身。
   const [bodyOpen, setBodyOpen] = useState(false);
@@ -169,12 +184,20 @@ export default function ResumeLayoutDiagnosisCard({
           page_limit: measure.pageLimit,
         },
         layout,
+        optimizerMinMargin,
       )
         .then((result) => {
           if (current === requestId.current) {
             setAnalysis(result);
             // 记下这份清单的基准：`autoFit` 要拿它判断"是不是上一版算出来的"。
             setAnalysisKey(layoutKey);
+            setAnalysisMargin(optimizerMinMargin);
+            const diagnosis = result?.diagnosis;
+            diagnosisListener.current?.(
+              diagnosis
+                ? { status: diagnosis.status, statusLabel: diagnosis.status_label, fill: diagnosis.fill }
+                : null,
+            );
           }
         })
         .catch(() => {
@@ -182,6 +205,7 @@ export default function ResumeLayoutDiagnosisCard({
           if (current === requestId.current) {
             setAnalysis(null);
             setAnalysisKey(null);
+            diagnosisListener.current?.(null);
           }
         })
         .finally(() => {
@@ -197,8 +221,9 @@ export default function ResumeLayoutDiagnosisCard({
     // layoutKey 管另一件事——高度没动但版式动了（换模板/换预设/手动改间距）时，
     // `fit_room` 与「自动一页」清单都必须重算，否则用户改完参数看到的还是上一版结论。
     // layout 与 measure 都随各自的 key 变化，key 不变就说明送的还是同一份，无需重跑。
+    // 优化器的「最小页边距」也是阶梯的输入（后端据此截断页边距档位），必须一起重算。
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [resumeId, measureKey, layoutKey]);
+  }, [resumeId, measureKey, layoutKey, optimizerMinMargin]);
 
   /**
    * 「自动一页」：从**当前这一版**版式出发逐档收紧，够放下就停。
@@ -436,7 +461,9 @@ export default function ResumeLayoutDiagnosisCard({
 
           {/* W09：按条件优化版面的候选方案（挂在诊断结论下方；应用=写回滑杆）。 */}
           <LayoutOptimizerPanel
-            analysis={analysisKey === layoutKey ? analysis : null}
+            analysis={
+              analysisKey === layoutKey && analysisMargin === optimizerMinMargin ? analysis : null
+            }
             current={optimizerCurrentOf(layout)}
             probe={(css) => previewRef.current?.measureWithProbe(css) ?? null}
             before={measure}
@@ -447,6 +474,8 @@ export default function ResumeLayoutDiagnosisCard({
             content={content}
             contentHints={contentHints}
             onApplyContent={onApplyContent ? applyContent : undefined}
+            pageLimit={layout.page_limit}
+            onMinMarginChange={setOptimizerMinMargin}
           />
 
           {fitRoom && diagnosis?.status === "overflow" && (

@@ -14,7 +14,7 @@
 import { PictureOutlined } from "@ant-design/icons";
 import { Button, Segmented, Select, Space, Tooltip, Typography } from "antd";
 import { useState } from "react";
-import { RESUME_PAGE_LIMITS } from "../../types";
+import { RESUME_PAGE_LIMITS, UNLIMITED_PAGE_LIMIT } from "../../types";
 import type { ResumeFormatPreset, ResumeLayout, ResumeTemplateCatalog } from "../../types";
 import type { ResumeDocument } from "../../types/resumeDocument";
 import type { ResumeFormatConfig } from "../../types/resumeFormat";
@@ -243,7 +243,11 @@ export default function ResumeTemplateControls({
               disabled={disabled}
               options={(pageLimitOptions ?? RESUME_PAGE_LIMITS).map((value) => ({
                 value,
-                label: t("sections.templateControls.pageLimitPages", { count: value }),
+                // 需求 7B：0 = 不限篇幅，必须单独一条文案（否则会渲染成「0 页」）。
+                label:
+                  value === UNLIMITED_PAGE_LIMIT
+                    ? t("sections.templateControls.pageLimitUnlimited")
+                    : t("sections.templateControls.pageLimitPages", { count: value }),
               }))}
               onChange={(value) => onChange({ ...layout, page_limit: value as number })}
             />

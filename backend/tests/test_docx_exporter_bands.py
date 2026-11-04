@@ -34,6 +34,26 @@ def _header_resume() -> ResumeContent:
     )
 
 
+def _classic_section_title_paragraphs(document) -> list:
+    """`classic` 模板里**分节标题**那几段（判定依据：段边框带 `w:left`）。
+
+    不能用"有 `w:pBdr`"来选标题：页头那一行也合法地带一条**下边框**（1-A 的分隔线），
+    它既不是实心标题块、也不该受标题段的间距约束。分节标题的"左侧竖条"是它唯一的边框，
+    所以以 `w:left` 作为判别式。
+    """
+    titles = []
+    for paragraph in document.paragraphs:
+        p_pr = paragraph._p.pPr
+        if p_pr is None:
+            continue
+        p_bdr = p_pr.find(qn("w:pBdr"))
+        if p_bdr is None:
+            continue
+        if p_bdr.find(qn("w:left")) is not None:
+            titles.append(paragraph)
+    return titles
+
+
 def test_modern_word_gets_the_soft_green_bands():
     """modern：页头三段 + 区块标题都要有浅绿底纹（`--accent-soft`）。"""
     from app.services.resume.resume_templates import TEMPLATE_LAYOUT_DEFAULTS
@@ -68,10 +88,18 @@ def test_classic_word_section_title_has_a_left_bar_and_no_fill():
     document = Document(BytesIO(build_resume_docx(_header_resume(), template="classic").content))
 
     assert _shading_fills(document) == []
-    xml = document.element.body.xml
-    assert '<w:left w:val="single"' in xml
-    # 竖条是"只画左边"：不连底边一起画，否则会变成一条下划线。
-    assert "<w:bottom w:val" not in xml
+    titles = _classic_section_title_paragraphs(document)
+    assert titles, "classic 的区块标题应该有左边框"
+    for title in titles:
+        # 断言只在**分节标题段内**：页头的下边框是合法的（1-A 的分隔线），
+        # 用整篇 document.xml 扫描会把页头的下边框误算到标题头上。
+        p_bdr = title._p.pPr.find(qn("w:pBdr"))
+        left = p_bdr.find(qn("w:left"))
+        assert left.get(qn("w:val")) == "single", title.text
+        # 竖条是"只画左边"：不连底边一起画，否则会变成一条下划线。
+        assert p_bdr.find(qn("w:bottom")) is None, title.text
+        # 标题块不许有底色：底纹会把左侧竖条的效果盖掉。
+        assert title._p.pPr.find(qn("w:shd")) is None, title.text
 
 
 def test_classic_word_section_title_bar_only_spans_the_line_box():
@@ -83,11 +111,7 @@ def test_classic_word_section_title_bar_only_spans_the_line_box():
     **下一段段前**——这里只钉住标题段自己那半边（相邻段的增量在 q09 对拍脚本里验）。
     """
     document = Document(BytesIO(build_resume_docx(_header_resume(), template="classic").content))
-    titles = [
-        paragraph
-        for paragraph in document.paragraphs
-        if paragraph._p.pPr is not None and paragraph._p.pPr.find(qn("w:pBdr")) is not None
-    ]
+    titles = _classic_section_title_paragraphs(document)
     assert titles, "classic 的区块标题应该有左边框"
     for title in titles:
         spacing = title._p.pPr.find(qn("w:spacing"))

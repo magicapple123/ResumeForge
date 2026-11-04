@@ -38,8 +38,9 @@ import {
   useSuggestionScan,
 } from "../features/resume/suggestionScanStore";
 import type { ResumeDetail, ResumeSuggestion, ResumeSuggestions } from "../types";
-import { t, type MessageKey } from "../i18n";
+import { t } from "../i18n";
 import { useLocale } from "../i18n/i18nContext";
+import { priorityMeta } from "../utils/priorityMeta";
 
 interface Props {
   open: boolean;
@@ -53,18 +54,16 @@ interface Props {
 }
 
 /**
- * 三档优先级的显示名与颜色。
+ * 三档优先级的显示名与颜色，走共享映射 `utils/priorityMeta`（少一个 key 就是编译错误）。
  *
  * `labelKey` 而不是 `label`：模块作用域里调 `t()` 会把语言固定在模块求值那一刻
  * （交接单 §8.1），所以常量里只存 key，`t()` 留在渲染处。
- * `color` 是 antd Tag 的色板名，与语言无关，不进词表。
  */
-const PRIORITY_META: Record<ResumeSuggestion["priority"], { labelKey: MessageKey; color: string }> =
-  {
-    high: { labelKey: "resumeSuggestions.priority.high", color: "red" },
-    medium: { labelKey: "resumeSuggestions.priority.medium", color: "orange" },
-    low: { labelKey: "resumeSuggestions.priority.low", color: "blue" },
-  };
+const PRIORITY_META = priorityMeta({
+  high: "resumeSuggestions.priority.high",
+  medium: "resumeSuggestions.priority.medium",
+  low: "resumeSuggestions.priority.low",
+});
 
 export default function ResumeSuggestionsModal({
   open,

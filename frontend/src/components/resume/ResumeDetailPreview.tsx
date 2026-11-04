@@ -7,12 +7,11 @@
  * 只依赖子组件与 `api/resumes`，不 import 两个宿主 Modal，避免循环依赖（设计 §9 ⑨）。
  */
 import type { Props } from "./ResumeDetailPreview.types";
-import { Collapse, Space, Tag, Tooltip, Typography } from "antd";
+import { Button, Popover, Space, Tooltip, Typography } from "antd";
 import { useCallback, useMemo, useRef, useState } from "react";
 import { t } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
 import { useNavigate } from "react-router-dom";
-import { RESUME_ENHANCEMENT_LEVELS } from "../../config";
 import { contentSignature } from "../../utils/contentSignature";
 import { pagesNeededFor } from "../../utils/resumeLayoutMeasure";
 import ExportOptionsModal from "../ExportOptionsModal";
@@ -23,6 +22,10 @@ import ResumeWorkbenchV2 from "./ResumeWorkbenchV2";
 import { useResumeTemplateCatalog } from "../../hooks/useResumeTemplateCatalog";
 import ResumeMeasureControls from "./ResumeMeasureControls";
 import ResumeTemplateControls from "./ResumeTemplateControls";
+import {
+  normalizeDocumentMode,
+  pageLimitOptions,
+} from "../../features/resume-research/documentMode";
 import { useShortcut } from "../../features/shortcuts/useShortcutKeymap";
 import ResumeQualityModal from "../ResumeQualityModal";
 import ResumeSuggestionsModal from "../ResumeSuggestionsModal";
@@ -34,10 +37,8 @@ import ResumePreview, {
 } from "../ResumePreview";
 import type { PreviewMode } from "../resume-preview/config";
 import { buildExactPreviewOptions } from "../resume-preview/exactPreviewOptions";
-import ResumeLayoutDiagnosisCard from "./ResumeLayoutDiagnosisCard";
-import ResumeCoverageNotes from "./ResumeCoverageNotes";
 import ResumeDetailFooter from "./ResumeDetailFooter";
-import EvidencePanel from "./EvidencePanel";
+import ResumeDetailHead from "./ResumeDetailHead";
 import { documentHasPhoto } from "../../features/resume-document/view";
 import { useFieldPlacementCatalog } from "../../features/profile-library/fieldPlacement";
 import { useVariants } from "../../features/resume-versions/useVariants";
@@ -68,6 +69,7 @@ export default function ResumeDetailPreview({
   onResumeRevised,
   showReviseAction,
   extraActions,
+  metaExtra,
   exportFlow = "delivery",
   onDocumentSynced,
   onReplaceDocument,
@@ -135,15 +137,6 @@ export default function ResumeDetailPreview({
   const variantsState = useVariants({ resumeId: detail.id }); // W16 导出变体选择器数据源
   // 缺省跟随 onResumeRevised：能刷新预览就有意义，不能刷新就不该摆出这个入口。
   const showRevise = showReviseAction ?? Boolean(onResumeRevised);
-  const enhancementLabelKey = RESUME_ENHANCEMENT_LEVELS.find(
-    (item) => item.value === detail.enhancement_level,
-  )?.labelKey;
-  /** 美化拓展那一格的取值：没开启就写「未开启」，开了但没记录档位就只写「已开启」。 */
-  const enhancementLevelText = !detail.enhancement_enabled
-    ? t("resumes.list.off")
-    : enhancementLabelKey
-      ? t(enhancementLabelKey)
-      : t("resumes.list.on");
   // 风险扫描的"内容签名"：只随 content 变化重算，用来判断"扫描之后正文是不是改过了"。
   const riskContentSignature = useMemo(() => contentSignature(detail.content), [detail.content]);
   /** 警告分级（#3）：疑似虚构与岗位未选上性质不同；新记录用 coverage_notes，旧记录按特征句拆。 */
@@ -164,88 +157,33 @@ export default function ResumeDetailPreview({
   // 事实来源标注（RF-13）：证据面板用它列出"这条内容从哪来"；预览上的悬停角标随编辑模式一起去掉了（2026-10-21），标注数据本身仍然有效。
   const factAnnotations = useMemo(() => detail.fact_annotations ?? [], [detail.fact_annotations]);
   return (
-    <div>
-      <Space style={{ marginBottom: 12 }} wrap>
-        <Tag color={detail.source === "manual" ? "purple" : "blue"}>
-          {detail.source === "manual" ? t("resumes.list.sourceManual") : t("resumes.list.sourceAi")}
-        </Tag>
-        {detail.job_id ? (
-          <Tag color="blue">
-            {t("appConfig.detail.targetJob", { job: detail.job_title || "-" })}
-          </Tag>
-        ) : (
-          // 通用简历没有岗位；job_title 里存的是求职意向。
-          <>
-            <Tooltip title={t("resumes.list.generalHint")}>
-              <Tag color="purple">{t("resumes.list.general")}</Tag>
-            </Tooltip>
-            <Tag>
-              {t("resumes.list.intent", {
-                job: detail.job_title || t("appConfig.detail.notFilled"),
-              })}
-            </Tag>
-          </>
-        )}
-        {detail.company && <Tag>{detail.company}</Tag>}
-        <Tag>{t("appConfig.detail.model", { model: detail.model || "-" })}</Tag>
-        <Tag color={detail.enhancement_enabled ? "green" : undefined}>
-          {t("appConfig.detail.enhancement", { level: enhancementLevelText })}
-        </Tag>
-        <Typography.Text type="secondary" style={{ fontSize: 13 }}>
-          {t("appConfig.detail.createdAt", {
-            time: detail.created_at.replace("T", " ").slice(0, 16),
-          })}
-        </Typography.Text>
-      </Space>
-      {/* 生成说明（折叠）：回答"为什么是这样一份简历"。 */}
-      {detail.rationale ? (
-        <Collapse
-          size="small"
-          items={[
-            {
-              key: "rationale",
-              label: t("appConfig.detail.rationale"),
-              children: (
-                <Typography.Paragraph
-                  style={{ margin: 0, whiteSpace: "pre-wrap", fontSize: 13 }}
-                  type="secondary"
-                >
-                  {detail.rationale}
-                </Typography.Paragraph>
-              ),
-            },
-          ]}
-          style={{ marginBottom: 12 }}
-        />
-      ) : null}
-      {/* W09：诊断卡在制作台弹层背后，正文取这一页看到的版本；应用走宿主写入链路。 */}
-      <ResumeLayoutDiagnosisCard
-        resumeId={detail.id}
+    <div className="resume-detail-preview">
+      {/* 元信息一行 + 诊断条一行（问题 8）：12 段元信息压成两行，纸面回到首屏。
+          内容一块没删——次要项降级成小字，四段诊断进弹层（详见 ResumeDetailHead）。 */}
+      <ResumeDetailHead
+        detail={detail}
         measure={measure}
-        overflow={layoutStatus?.overflow ?? false}
-        previewRef={resolvedPreviewRef}
+        layoutStatus={layoutStatus}
         layout={layout}
-        disabled={relayouting}
-        onApplied={(formatConfig) => onApplyFittedFormat(formatConfig)}
-        onAddPage={() => onApplyLayout({ ...layout, page_limit: layout.page_limit + 1 })}
-        // v2 下「按诊断建议改正文」的入口先关掉：它写回的是 v1 分区结构，会把 v2 文档
-        // 打回旧模型。等版面优化器迁到 v2 item 后再接回来。
-      />
-      {/* 「没写进这份简历」的中性分组（#3/#5）：与"疑似虚构"分开；细节在 ResumeCoverageNotes。 */}
-      <ResumeCoverageNotes
-        notes={coverageNotes}
-        legacyWarnings={legacyCoverageWarnings}
+        relayouting={relayouting}
+        previewRef={resolvedPreviewRef}
+        metaExtra={metaExtra}
+        coverageNotes={coverageNotes}
+        legacyCoverageWarnings={legacyCoverageWarnings}
+        factAnnotations={factAnnotations}
+        onApplyLayout={onApplyLayout}
+        onApplyFittedFormat={onApplyFittedFormat}
         onRevise={(instructions) => {
           setReviseInstructions(instructions);
           setReviseOpen(true);
         }}
         // 预览里不再提供手动编辑：这条提示指向「简历制作台」，详细编辑都在那边做。
         onOpenEditor={() => setZoomOpen(true)}
+        // 3-A：覆盖度清单的「补进简历」要简历 id；补入成功后按"简历已修订"同一条路刷新
+        // （服务端已修剪 coverage_notes，刷新后这一条自然消失）。
+        resumeId={detail.id}
+        onAppended={(next) => onResumeRevised?.(next)}
       />
-      {/* 事实来源展示（RF-13）：回答"写进去的内容从哪来"，挂在 coverage Alert 之后、预览之前。 */}
-      {factAnnotations.length > 0 && (
-        <EvidencePanel annotations={factAnnotations} content={detail.content as never} />
-      )}
       <ResumePreview
         ref={resolvedPreviewRef}
         // 2026-10-28：预览里不再提供「草稿模式编辑」，详细编辑去制作台。
@@ -253,45 +191,65 @@ export default function ResumeDetailPreview({
         // 具名插槽（P2/D4）：结构类第一行、度量类第二行；目录本组件取一次两组共用。
         // 渲染中不禁用（D12）：禁用会让用户以为坏了；边距合并保证最后一次生效。
         templateControls={
-          // 与「岗位详情 → AI 生成」同一套控件（非 compact）：分组/尺寸/排布必须一致。
-          <ResumeTemplateControls
-            layout={layout}
-            catalog={catalog}
-            // R-03：模板试用通道与制作台同一套接线（「我的内容」/「采用模板默认」）。
-            // 这里是「预览 / 导出」入口，没有撤销栈——采纳一次即写 layout，由宿主保存。
-            resumeId={detail.id}
-            content={detail.content}
-            onTrialAdopt={({ template, formatConfig }) =>
-              onApplyLayout({ ...layout, template, format_config: formatConfig })
-            }
-            onChange={(next) => onApplyLayout(next)}
-          />
-        }
-        measureControls={
-          <>
-            <ResumeMeasureControls
+          <Space size={8} wrap>
+            {/* 与「岗位详情 → AI 生成」同一套控件（非 compact）：分组/尺寸/排布必须一致。 */}
+            <ResumeTemplateControls
               layout={layout}
               catalog={catalog}
-              previewRef={resolvedPreviewRef}
-              // 没有照片时照片滑杆禁用并说明原因：photo_scale 在没有照片时完全惰性，
-              // 让用户拖一个"什么都没发生"的滑杆是最差的反馈。
-              hasPhoto={documentHasPhoto(detail.content)}
-              // 显式写 false：分边页边距只在「简历制作台」里出现（那一栏有纵向空间），
-              // 主预览的工具栏是两行紧凑形态，多一行折叠标题会把它顶宽。
-              showMarginSides={false}
-              // 照片大小滑杆只留在简历制作台：主预览这一栏只放"改一下就能在纸面上看出
-              // 差别"的高频项（2026-10-23 用户口径："预览界面只展示部分功能"）。
-              showPhotoScale={false}
+              // 篇幅上限的选项按记录/草稿的文档模式给全：普通 1–3 + 不限、长 CV 1–10 + 不限。
+              // 缺省的 `RESUME_PAGE_LIMITS`（1–3）没有「不限」档——用户在这条工具栏上
+              // 根本选不到 0，而"选不到"看起来就像"这个功能没做"。
+              pageLimitOptions={pageLimitOptions(normalizeDocumentMode(detail.document_mode))}
+              // R-03：模板试用通道与制作台同一套接线（「我的内容」/「采用模板默认」）。
+              // 这里是「预览 / 导出」入口，没有撤销栈——采纳一次即写 layout，由宿主保存。
+              resumeId={detail.id}
+              content={detail.content}
+              onTrialAdopt={({ template, formatConfig }) =>
+                onApplyLayout({ ...layout, template, format_config: formatConfig })
+              }
               onChange={(next) => onApplyLayout(next)}
             />
-            {/* 「正在按新设置重新排版…」留在度量这一行：它说明的是"你刚拖的那个值正在生效"，
-                回到第一行会与"改版式"的按钮混在一起。 */}
-            {relayouting ? (
-              <Typography.Text type="secondary">
-                {t("appConfig.detail.relayouting")}
-              </Typography.Text>
-            ) : null}
-          </>
+            {/* 「更多排版」（问题 8）：行距 / 页边距 / 字号 / 字体收进弹层，工具栏从两行
+                （≈90px）降到一行。控件本身一行没改，只是换了挂载位置——弹层一打开就是
+                原来那一整块。 */}
+            <Tooltip title={t("resume.measure.moreHint")}>
+              <span className="resume-more-typography">
+                <Popover
+                  trigger="click"
+                  placement="bottomRight"
+                  content={
+                    <div className="resume-more-typography-body">
+                      <ResumeMeasureControls
+                        layout={layout}
+                        catalog={catalog}
+                        previewRef={resolvedPreviewRef}
+                        // 没有照片时照片滑杆禁用并说明原因：photo_scale 在没有照片时完全惰性，
+                        // 让用户拖一个"什么都没发生"的滑杆是最差的反馈。
+                        hasPhoto={documentHasPhoto(detail.content)}
+                        // 显式写 false：分边页边距只在「简历制作台」里出现（那一栏有纵向空间）。
+                        showMarginSides={false}
+                        // 照片大小滑杆只留在简历制作台：主预览这一栏只放"改一下就能在纸面上
+                        // 看出差别"的高频项（2026-10-23 用户口径："预览界面只展示部分功能"）。
+                        showPhotoScale={false}
+                        onChange={(next) => onApplyLayout(next)}
+                      />
+                      {/* 「正在按新设置重新排版…」跟着控件留在弹层里：它说明的是"你刚拖的
+                          那个值正在生效"，离开控件就没有指代对象了。 */}
+                      {relayouting ? (
+                        <Typography.Text type="secondary">
+                          {t("appConfig.detail.relayouting")}
+                        </Typography.Text>
+                      ) : null}
+                    </div>
+                  }
+                >
+                  <Button size="small" aria-label={t("resume.measure.moreAria")}>
+                    {t("resume.measure.more")}
+                  </Button>
+                </Popover>
+              </span>
+            </Tooltip>
+          </Space>
         }
         html={html}
         pages={layout.page_limit}
@@ -326,6 +284,9 @@ export default function ResumeDetailPreview({
         onOpenQuality={() => setQualityOpen(true)}
         onOpenSharePackage={() => setSharePackageOpen(true)}
         onOpenExportOptions={openExportByFlow}
+        // 问题 8 的配套：核对项压成一行后，用户可能不展开就直接导出——导出按钮上的
+        // 琥珀点把"还有东西没看"留在视野里。
+        pendingReview={fabricationWarnings.length}
       />
 
       <ResumeSuggestionsModal

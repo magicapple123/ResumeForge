@@ -4,9 +4,10 @@
 两个端点，一条共同的原则：**材料在进会话之前就要拿到结果，追问在面试结束之后才开放**。
 
 * ``POST /api/interview/materials``（multipart）：上传一份材料，立刻提取成文本返回。
-  岗位侧收 PDF / TXT（本地提取），简历侧收截图（视觉模型逐字识别）。开面试时只把
-  提取结果带进会话，所以用户在上传那一刻就能看到"识别出多少字 / 有没有警告"，而不是
-  等开场那十几秒里再冒出一个错误。
+  **两侧接受同一组格式**（图片 / PDF / TXT / Word / Markdown），解析路径由**文件类型**
+  决定而不是 ``kind``：``kind`` 只表示"放哪一侧"（界面左右栏）。文本类走本机提取，
+  图片与扫描件 PDF 走视觉模型。开面试时只把提取结果带进会话，所以用户在上传那一刻
+  就能看到"识别出多少字 / 有没有警告"，而不是等开场那十几秒里再冒出一个错误。
 * ``POST /api/interview/{id}/followups``：面试结束后的答疑，写入 ``phase="followup"``
   的消息——**不占正式轮次**，也不会让一场 ``finished`` 的会话重新变回 ``active``。
 
@@ -28,14 +29,16 @@ from ..schemas.interview import (
     InterviewFollowUpCreate,
     InterviewFollowUpResult,
     InterviewFollowUpStateUpdate,
-    InterviewMaterialExtract,
-    MaterialKind,
 )
+from ..schemas.interview_material import InterviewMaterialExtract, MaterialKind
+from ..services.document_text import material_suffix
 from ..services.interview.interview import add_message
 from ..services.interview.interview_followup import generate_followup
 from ..services.interview.interview_material import (
-    extract_job_material,
-    extract_resume_material,
+    IMAGE_MATERIAL_SUFFIXES,
+    extract_image_material,
+    extract_text_material,
+    recognize_material_scans,
 )
 from ..services.llm.base import LLMError
 from .interview_shared import (
@@ -52,6 +55,7 @@ MAX_MATERIAL_UPLOAD_BYTES = 10 * 1024 * 1024
 _TOO_LARGE_DETAIL = "文件超过 10 MB，无法导入"
 _EMPTY_DETAIL = "文件是空的"
 _IMAGE_FAILED_DETAIL = "视觉模型暂时无法识别这张图"
+_SCAN_FAILED_DETAIL = "视觉模型暂时无法识别这份 PDF 的扫描页"
 _FOLLOWUP_NOT_FINISHED_DETAIL = "这场面试还没结束，追问只在面试结束后开放"
 _FOLLOWUP_CLOSED_DETAIL = "追问已停止，先点「继续追问」再发问"
 _FOLLOWUP_FAILED_DETAIL = "面试助手暂时无法回答这次追问"
@@ -64,35 +68,56 @@ def register_material_routes(router, require_provider) -> None:
         file: UploadFile = File(...),
         db: Session = Depends(get_db),
     ):
-        """把上传的材料提取成文本；``kind`` 决定接受什么格式、走哪条识别链。"""
+        """把上传的材料提取成文本；**文件类型**决定走哪条识别链，``kind`` 只表示放哪一侧。"""
         raw = await file.read()
         name = file.filename or ""
         if not raw:
             raise HTTPException(status_code=422, detail=_EMPTY_DETAIL)
         if len(raw) > MAX_MATERIAL_UPLOAD_BYTES:
             raise HTTPException(status_code=413, detail=_TOO_LARGE_DETAIL)
+        suffix = material_suffix(name)
 
-        if kind == "job":
+        if suffix in IMAGE_MATERIAL_SUFFIXES:
+            # 图片必须走视觉模型：没配置模型时给的是"去设置里配"这个前因，而不是一个坏文件。
+            provider, _model = require_provider(db)
             try:
-                # PDF 解析是同步 CPU/IO 重活（pypdf），下沉线程池，别占住事件循环。
-                extracted = await run_in_threadpool(extract_job_material, name, raw)
+                extracted = await extract_image_material(provider, name, raw)
             except ValueError as exc:
-                # detail 只写原因：动作（换文件 / 重试）由前端按场景补。
                 raise HTTPException(status_code=422, detail=str(exc)) from exc
+            except LLMError as exc:
+                raise HTTPException(status_code=502, detail=_IMAGE_FAILED_DETAIL) from exc
             return InterviewMaterialExtract(
-                name=extracted.name, text=extracted.text, warnings=list(extracted.warnings)
+                name=extracted.name,
+                text=extracted.text,
+                warnings=list(extracted.warnings),
+                parser="vision",
             )
 
-        # 截图必须走视觉模型：没配置模型时给的是"去设置里配"这个前因，而不是一个坏文件。
-        provider, _model = require_provider(db)
         try:
-            extracted = await extract_resume_material(provider, name, raw)
+            # PDF 解析是同步 CPU/IO 重活（pypdf），下沉线程池，别占住事件循环。
+            extracted = await run_in_threadpool(extract_text_material, name, raw)
         except ValueError as exc:
+            # detail 只写原因：动作（换文件 / 重试）由前端按场景补。
             raise HTTPException(status_code=422, detail=str(exc)) from exc
-        except LLMError as exc:
-            raise HTTPException(status_code=502, detail=_IMAGE_FAILED_DETAIL) from exc
+
+        parser = "text"
+        if extracted.scan_images:
+            # 扫描件兜底：**只有真的拿到渲染页**才向模型要能力。有文字层的 PDF
+            # 永远走不到这里，所以未配置模型不会挡住 pdf / txt / md / docx。
+            provider, _model = require_provider(db)
+            parser = "vision"
+            try:
+                extracted = await recognize_material_scans(provider, extracted)
+            except ValueError as exc:
+                raise HTTPException(status_code=422, detail=str(exc)) from exc
+            except LLMError as exc:
+                raise HTTPException(status_code=502, detail=_SCAN_FAILED_DETAIL) from exc
+
         return InterviewMaterialExtract(
-            name=extracted.name, text=extracted.text, warnings=list(extracted.warnings)
+            name=extracted.name,
+            text=extracted.text,
+            warnings=list(extracted.warnings),
+            parser=parser,
         )
 
 
@@ -108,6 +133,11 @@ def register_followup_routes(router, require_provider) -> None:
         为什么要求 ``finished``：追问的语义是"考完再问"。放行 ``active`` 会话的话，这条
         消息会落在一条还在推进的面试里，而它既不算轮次也不该被当成回答——两套状态混在
         一起，下一次提交回答时"复用被中断的那条"就会认错消息。
+
+        需求 4 起"收盘"与"出报告"是两件事：自动收尾后 ``finished`` 但 ``report`` 还空着，
+        这期间**本来就是追问的窗口**（决策卡上的「继续追问」），所以这条判据一个字都不用
+        改——报告有没有生成与能不能追问无关。报告的转录只取 ``phase="interview"``，
+        追问不会进评分（见 ``build_report_messages``）。
         """
         session = _session_or_404(db, session_id)
         if session.status != INTERVIEW_STATUS_FINISHED:

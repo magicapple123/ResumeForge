@@ -43,7 +43,7 @@ from ...models.profile import utcnow
 from ...runtime import dataset_scope
 from ...runtime.dataset_scope import DatasetLease, DatasetScopeError
 from ...runtime.log_context import run_with_bound_context
-from ..browser.cdp_client import CdpClient
+from ..browser.cdp_client import CdpClient, CdpError
 from . import task_apply, task_collect, task_config
 
 logger = logging.getLogger(__name__)
@@ -144,6 +144,19 @@ class StopAwareCdpClient(CdpClient):
         if switch is None:
             return False
         return switch(target_id)
+
+    def close_browser(self, *, timeout: float | None = None) -> None:
+        """转发放到**浏览器自己退出**这一步（问题 10）。
+
+        与 :meth:`close` 的区别：``close`` 只断连接、``close_browser`` 让 Chromium 走正常
+        退出流程把 Cookie 落盘。这里**不插停止检查点**——用户点「停止」恰恰是希望在收尾时
+        优雅关掉浏览器；若此时 checkpoint 抛 StopRequested，关闭会被跳过一个版本，
+        又退回成进程被强杀。异常照常向调用方抛（关不掉要让用户知道，不能静默）。
+        """
+        closer = getattr(self._inner, "close_browser", None)
+        if closer is None:
+            raise CdpError("当前 CDP 客户端不支持关闭浏览器")
+        closer(timeout=timeout)
 
     def close(self) -> None:
         self._inner.close()

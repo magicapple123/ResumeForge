@@ -5,9 +5,9 @@
  * 草稿一律带「待确认」状态入库，所以这里的核对环节不是走过场：用户至少要看一眼
  * 原始事实有没有被曲解。候选表述允许就地改，因为那是最常需要调整的一栏。
  */
-import { App, Button, Checkbox, Input, Modal, Select, Space, Typography } from "antd";
-import EmptyState from "../common/EmptyState";
+import { App, Button, Checkbox, Input, Modal, Popconfirm, Select, Space, Typography } from "antd";
 import { useState } from "react";
+import EmptyState from "../common/EmptyState";
 import { createClaim, draftClaims } from "../../api/claims";
 import { t } from "../../i18n";
 import { CLAIM_CATEGORY_LABEL_KEYS } from "../../i18n/enum/claims";
@@ -41,11 +41,16 @@ export default function ClaimDraftModal({ open, onClose, onSaved }: Props) {
   const [subject, setSubject] = useState("");
   const [rows, setRows] = useState<DraftRow[]>([]);
   const [notes, setNotes] = useState<string[]>([]);
+  // 「生成过」与「生成出 0 条」是两种状态：只有前者为真时，0 条才值得显示空态；
+  // 打开弹窗还没点生成时什么都不该显示。
+  const [generated, setGenerated] = useState(false);
   const [busy, setBusy] = useState(false);
 
   const reset = () => {
     setRows([]);
     setNotes([]);
+    // 必须一起清掉：否则关掉再开会立刻说「没提取到事实」，把一次正常启动说成失败。
+    setGenerated(false);
   };
 
   const generate = async () => {
@@ -58,6 +63,7 @@ export default function ClaimDraftModal({ open, onClose, onSaved }: Props) {
       const result = await draftClaims({ category, subject, raw_text: rawText });
       setRows(result.drafts.map((payload, index) => ({ key: index, checked: true, payload })));
       setNotes(result.notes);
+      setGenerated(true);
       if (result.drafts.length === 0) message.info(t("claimDraftModal.toast.noDrafts"));
     } catch (error) {
       message.error(
@@ -129,11 +135,17 @@ export default function ClaimDraftModal({ open, onClose, onSaved }: Props) {
           >
             {t("common.action.cancel")}
           </Button>
-          {rows.length > 0 && (
+          {/* 主操作随阶段切换：没草稿时是「生成草稿」，有草稿时才是「保存选中」。
+              两者都放 footer，用户不用回正文里找下一步。 */}
+          {rows.length > 0 ? (
             <Button type="primary" loading={busy} onClick={() => void save()}>
               {t("claimDraftModal.action.saveSelected", {
                 count: rows.filter((row) => row.checked).length,
               })}
+            </Button>
+          ) : (
+            <Button type="primary" loading={busy} onClick={() => void generate()}>
+              {t("claimDraftModal.action.generate")}
             </Button>
           )}
         </Space>
@@ -141,32 +153,58 @@ export default function ClaimDraftModal({ open, onClose, onSaved }: Props) {
     >
       <Space orientation="vertical" size={12} style={{ width: "100%" }}>
         <Typography.Text type="secondary">{t("claimDraftModal.intro")}</Typography.Text>
-        <Space size={12}>
-          <Select
-            value={category}
-            onChange={setCategory}
-            style={{ width: 160 }}
-            options={CLAIM_CATEGORIES.map((value) => ({
-              value,
-              label: t(CLAIM_CATEGORY_LABEL_KEYS[value]),
-            }))}
-          />
-          <Input
-            value={subject}
-            onChange={(event) => setSubject(event.target.value)}
-            placeholder={t("claimDraftModal.placeholder.subject")}
-            style={{ width: 260 }}
-          />
-        </Space>
+        {/* 标签各占一行：只有 placeholder 的话，一旦输入就再也看不出这一栏是什么。 */}
+        <div className="claim-draft-input-row">
+          <div className="claim-draft-field claim-draft-field--fixed">
+            <label className="claim-draft-label" htmlFor="claim-draft-category">
+              <Typography.Text type="secondary">
+                {t("claimDraftModal.label.category")}
+              </Typography.Text>
+            </label>
+            <Select
+              id="claim-draft-category"
+              value={category}
+              onChange={setCategory}
+              style={{ width: "100%" }}
+              options={CLAIM_CATEGORIES.map((value) => ({
+                value,
+                label: t(CLAIM_CATEGORY_LABEL_KEYS[value]),
+              }))}
+            />
+          </div>
+          <div className="claim-draft-field claim-draft-field--grow">
+            <label className="claim-draft-label" htmlFor="claim-draft-subject">
+              <Typography.Text type="secondary">
+                {t("claimDraftModal.label.subject")}
+              </Typography.Text>
+            </label>
+            <Input
+              id="claim-draft-subject"
+              value={subject}
+              onChange={(event) => setSubject(event.target.value)}
+              placeholder={t("claimDraftModal.placeholder.subjectExample")}
+            />
+          </div>
+        </div>
         <Input.TextArea
           rows={6}
           value={rawText}
           onChange={(event) => setRawText(event.target.value)}
           placeholder={t("claimDraftModal.placeholder.rawText")}
         />
-        <Button type="primary" loading={busy} onClick={() => void generate()}>
-          {t("claimDraftModal.action.generate")}
-        </Button>
+        {/* 重新生成会整体覆盖草稿（含用户已改的内容），所以降为次要文字按钮并先确认。 */}
+        {rows.length > 0 && (
+          <div className="claim-draft-regenerate">
+            <Popconfirm
+              title={t("claimDraftModal.regenerate.confirm")}
+              onConfirm={() => void generate()}
+            >
+              <Button type="text" size="small" loading={busy}>
+                {t("claimDraftModal.action.regenerate")}
+              </Button>
+            </Popconfirm>
+          </div>
+        )}
 
         {notes.map((note) => (
           <Typography.Text key={note} type="secondary">
@@ -174,9 +212,11 @@ export default function ClaimDraftModal({ open, onClose, onSaved }: Props) {
           </Typography.Text>
         ))}
 
-        {rows.length === 0 ? (
-          <EmptyState inline description={t("claimDraftModal.empty.noDrafts")} />
-        ) : (
+        {generated && rows.length === 0 && (
+          <EmptyState inline description={t("claimDraftModal.empty.nothingExtracted")} />
+        )}
+
+        {rows.length > 0 && (
           <div className="claim-draft-list">
             {rows.map((row) => (
               <div key={row.key} className="claim-draft-row">

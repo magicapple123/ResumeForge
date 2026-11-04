@@ -71,9 +71,52 @@ interface BuildOptions {
   onDone?: () => void;
 }
 
+/**
+ * 把一条菜单项的点击语义（`undo` / `confirm` / 普通动作）变成一个可执行函数。
+ *
+ * 独立出来是为了让**自绘浮层**（`features/context-menu`）与 antd Dropdown 共用同一套
+ * 二次确认：否则自绘菜单里的「删除」会绕过 `confirmBody`，两处菜单迟早变成两种行为。
+ */
+export function useRowActionRunner() {
+  const { modal } = App.useApp();
+  return (item: RowActionItem, onDone?: () => void): (() => void) => {
+    const { onClick, confirm, confirmBody, confirmOkText, confirmCancelText, undo, danger } = item;
+    return () => {
+      if (undo) {
+        // 直接执行：撤销入口由调用方在 Toast 上给（见 useDeleteUndo）。
+        onClick?.();
+        onDone?.();
+        return;
+      }
+      if (confirm) {
+        modal.confirm({
+          title: confirm,
+          // 正文放后果与可逆性（§4.4 三段式的第三段）；没有就不传，别输出空段落。
+          content: confirmBody,
+          // 按钮写具体动作（AGENTS 禁用「确定/取消」泛动词）；未指定时沿用 antd 默认。
+          okText: confirmOkText,
+          cancelText: confirmCancelText,
+          // confirm 的 holder 挂在根 <AntdApp>，不经过卡片内的局部 ConfigProvider，
+          // 默认 z（3100）落在投投卡（3400/3500）与简历编辑器 Modal（3110）之后，
+          // 看起来就是"点了删除没反应"。统一抬到卡片内弹层基准 3550。
+          zIndex: layer.cardPopup,
+          okButtonProps: { danger },
+          onOk: () => {
+            onClick?.();
+            onDone?.();
+          },
+        });
+        return;
+      }
+      onClick?.();
+      onDone?.();
+    };
+  };
+}
+
 /** 把 `RowMenuItem` 列表转成 antd 菜单项（含二次确认；divider 原样透传）。 */
 export function useRowActionMenu() {
-  const { modal } = App.useApp();
+  const run = useRowActionRunner();
   /**
    * 递归构造菜单项：`children` 支持一层子菜单（见 `RowActionItem.children`）。
    * 子项与顶层共用同一套语义（二次确认、danger、disabled），所以两边必须是同一段代码——
@@ -87,20 +130,7 @@ export function useRowActionMenu() {
       return { key: item.key, type: "divider" as const };
     }
     // 解构成 const：嵌套 onClick 闭包里拿不到参数的收窄类型，解构后没问题。
-    const {
-      key,
-      danger,
-      disabled,
-      icon,
-      label,
-      confirm,
-      confirmBody,
-      confirmOkText,
-      confirmCancelText,
-      undo,
-      onClick,
-      children,
-    } = item;
+    const { key, danger, disabled, icon, label, children } = item;
     return {
       key,
       danger,
@@ -110,36 +140,7 @@ export function useRowActionMenu() {
       ...(children && children.length > 0
         ? { children: children.map((child) => toMenuItem(child, options)) }
         : {}),
-      onClick: () => {
-        if (undo) {
-          // 直接执行：撤销入口由调用方在 Toast 上给（见 useDeleteUndo）。
-          onClick?.();
-          options.onDone?.();
-          return;
-        }
-        if (confirm) {
-          modal.confirm({
-            title: confirm,
-            // 正文放后果与可逆性（§4.4 三段式的第三段）；没有就不传，别输出空段落。
-            content: confirmBody,
-            // 按钮写具体动作（AGENTS 禁用「确定/取消」泛动词）；未指定时沿用 antd 默认。
-            okText: confirmOkText,
-            cancelText: confirmCancelText,
-            // confirm 的 holder 挂在根 <AntdApp>，不经过卡片内的局部 ConfigProvider，
-            // 默认 z（3100）落在投投卡（3400/3500）与简历编辑器 Modal（3110）之后，
-            // 看起来就是"点了删除没反应"。统一抬到卡片内弹层基准 3550。
-            zIndex: layer.cardPopup,
-            okButtonProps: { danger },
-            onOk: () => {
-              onClick?.();
-              options.onDone?.();
-            },
-          });
-          return;
-        }
-        onClick?.();
-        options.onDone?.();
-      },
+      onClick: run(item, options.onDone),
     };
   };
   return (items: RowMenuItem[], options: BuildOptions = {}): MenuProps["items"] =>

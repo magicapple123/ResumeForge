@@ -117,12 +117,20 @@ def build_pagination_report(
     template: str,
     format_config: dict | None,
     page_limit: int,
+    page_limit_is_unlimited: bool = False,
     font_scale: str = "standard",
     include_photo: bool = True,
     language: str = DEFAULT_RESUME_LANGUAGE,
     snapshot: dict[str, str] | None = None,
 ) -> dict[str, Any]:
-    """渲染一次 PDF 并汇总页数/截断位置/手动分页/警告（纯读，不落库、不冻结交付）。"""
+    """渲染一次 PDF 并汇总页数/截断位置/手动分页/警告（纯读，不落库、不冻结交付）。
+
+    ``page_limit`` 是**渲染保护上限**（``pdf_exporter.fit`` 要一个正数 max_pages），
+    用户选「不限篇幅」时它等于 ``UNLIMITED_RENDER_MAX_PAGES``（10）。数字字段因此不能说
+    "用户要 10 页"，那一层语义由 ``page_limit_is_unlimited`` 单独带出：前端按这个布尔
+    决定说「实际 N 页」还是「实际 N 页（上限 M 页）」。**不要**把 ``page_limit`` 改写成
+    0 ——页标记按它过滤截断点，0 会让整份报告失去页码基准。
+    """
     from .resume_layout import PageMeasure  # noqa: F401  (仅为类型/语义对照，运行期不依赖)
 
     pdf = build_resume_pdf(
@@ -152,6 +160,9 @@ def build_pagination_report(
         # 换成「已达上限」——占用数字比重复页数更有信息量。
         "last_page_fill": _last_page_fill(pdf, layout),
         "page_limit": page_limit,
+        # 「用户选的是不限」与"上限正好 10 页"是两种语义，数字字段分不开，所以单独带一位。
+        # 报告里 ``truncated_at`` 也不会因为保护上限而误报：不限时不裁剪。
+        "page_limit_is_unlimited": bool(page_limit_is_unlimited),
         "truncated_at": _truncated_at(pdf.spans, page_limit),
         "manual_breaks": _merge_manual_breaks(
             _manual_breaks(legacy_plan, pdf.spans),

@@ -119,6 +119,40 @@
   overflow-y: auto;
 }
 
+/* 生成草稿弹窗的输入区：类别固定宽、主体撑满。用普通 flex 而不是 Space——
+   Space 会再包一层 `.ant-space-item`，flex 宽度落在内层就管不到真正的 flex 子项。 */
+.claim-draft-input-row {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  width: 100%;
+}
+
+.claim-draft-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.claim-draft-field--fixed {
+  flex: 0 0 180px;
+}
+
+/* 主体一栏吃掉剩余宽度；`min-width: 0` 让它在窄窗口下可以真的缩，而不是撑出横向滚动。 */
+.claim-draft-field--grow {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.claim-draft-label {
+  line-height: 1;
+}
+
+.claim-draft-regenerate {
+  display: flex;
+  justify-content: flex-end;
+}
+
 .claim-draft-row {
   display: flex;
   gap: 10px;

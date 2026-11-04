@@ -12,7 +12,7 @@
 1. **条目头的辅助信息（时间）右对齐**。预览用 ``justify-content: space-between``；
    Word 没有 flex，改用"定在版心右边缘的右对齐制表位"。此前是"标题 + 全角空格 + 日期"，
    日期会跟着标题长度左右浮动——这是"Word 版和预览差别很大"里最直观的一条。
-2. **项目符号悬挂缩进**。只写 ``· 文字`` 不设 ``first_line_indent``，折行的第二行会退回
+2. **项目符号悬挂缩进**。只写 ``• 文字`` 不设 ``first_line_indent``，折行的第二行会退回
    版心左边缘，看起来像另起一段；预览里折行永远对齐正文起点。
 3. **字体必须显式声明 east-asian**。python-docx 只写 ``w:rFonts/@w:ascii``，中文会回退到
    Word 的默认中文字体，同一份简历在 Word 里的字形与 PDF 完全不同。
@@ -99,6 +99,7 @@ def _style_color(style, fallback: tuple[int, int, int]) -> tuple[int, int, int]:
     except ValueError:
         return fallback
 
+
 def _style_bool(style, prop: str, default: bool = False) -> bool:
     """角色覆盖里的布尔项；未设置（None）时用默认值。"""
     value = getattr(style, prop, None) if style is not None else None
@@ -149,6 +150,7 @@ def paragraph(
     if keep_with_next:
         result.paragraph_format.keep_with_next = True
     return result
+
 
 def _title_text_color(
     layout, accent: tuple[int, int, int], theme: DocxTheme
@@ -212,9 +214,7 @@ def section_title(
     node = paragraph(
         doc,
         space_before_mm=gap_mm if space_before_mm is None else space_before_mm,
-        space_after_mm=(
-            base * _PX_TO_MM * 0.4 if space_after_mm is None else space_after_mm
-        ),
+        space_after_mm=(base * _PX_TO_MM * 0.4 if space_after_mm is None else space_after_mm),
         keep_with_next=True,
     )
 
@@ -267,7 +267,9 @@ def bullets(
 
     Q11：缩进读角色/对象覆盖的 ``style.indent``（此前固定用模板 ``li_indent``，用户在
     「正文 → 缩进」里调了 Word 不动）、正文对齐落到段落、加粗/斜体/字距落到 run、符号字形
-    与 PDF/HTML 统一为「· / – / 空」。
+    与 PDF/HTML 统一为「• / – / 空」（1-C：``dot`` 是 **U+2022**，此前误写成 U+00B7「·」——
+    中点只有 ≈0.15em，比 PDF 的矢量圆（直径 0.32em）和浏览器的 ``disc`` 小一圈，正是
+    "Word 里的点明显比预览小"的根因）。
     """
     size = base * _style_scale(style)
     color = _style_color(style, theme.body_text)
@@ -279,8 +281,11 @@ def bullets(
     align = _ALIGN.get(str(style.align)) if style is not None and style.align else None
     bold = _style_bool(style, "bold")
     letter_spacing_pt = _style_letter_spacing_pt(base, style)
-    bullet = {"dot": "·", "dash": "–", "none": ""}.get(
-        style.bullet if style is not None and style.bullet else "dot", "·"
+    # `dot` = U+2022「•」（≈0.3em），与 PDF 的 `bullet_dot.DOT_RADIUS_RATIO = 0.16`
+    # （直径 0.32em）和 HTML 的 `disc` 同一量级。**不给符号单独放大字号**：符号与正文共用
+    # 一个 run 的字号，单独放大符号会改变悬挂缩进的对齐基准（折行第二行的起点会跑）。
+    bullet = {"dot": "•", "dash": "–", "none": ""}.get(
+        style.bullet if style is not None and style.bullet else "dot", "•"
     )
     for item in items:
         text = str(item).strip()

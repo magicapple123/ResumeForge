@@ -59,6 +59,7 @@ export function makeSection(
     fields,
     revision: 0,
     deleted_at: null,
+    filter_by_job: false,
     ...extra,
   };
 }

@@ -247,7 +247,7 @@ describe("ResumePreview 溢出时的多页视图", () => {
     expect(container.querySelector(".resume-preview-page-separator")).toBeNull();
 
     // ③ 第 2 页起才是超额页：角标说清"这页在导出里不存在"，第 1 页不误标。
-    const pages = container.querySelectorAll(".resume-preview-page");
+    const pages = container.querySelectorAll<HTMLElement>(".resume-preview-page");
     expect(pages).toHaveLength(2);
     expect(pages[0].getAttribute("data-over-limit")).toBeNull();
     expect(pages[1].getAttribute("data-over-limit")).toBe("1");
@@ -259,6 +259,13 @@ describe("ResumePreview 溢出时的多页视图", () => {
       t(OVERFLOW_PAGE_LABEL_KEY, { page: 2 }),
     ]);
     expect(container.querySelectorAll(".resume-preview-page-label.is-over-limit")).toHaveLength(1);
+
+    // 问题 24：超限页的外观全部来自样式表。内联 `style` 的优先级更高，一写回 JSX 就会把
+    // `.is-over-limit` 那两条规则整条盖掉（旧实现正是一圈 1px 半透明虚线 + 内容宽小胶囊，
+    // 所以"看不出来"）。这里既查标签没有内联 style，也查纸边不再有内联 outline。
+    expect(pages[1].style.outline).toBe("");
+    expect(pageLabels[1].getAttribute("style")).toBeNull();
+    expect(pageLabels[0].getAttribute("style")).toBeNull();
 
     // ④ 提示条：页数口径（2 页）与导出截断线（第 2 页起）必须写在同一句里，
     //    并且仍要声明"不会自动缩小"——否则用户会以为纸面上的字是被缩过的。

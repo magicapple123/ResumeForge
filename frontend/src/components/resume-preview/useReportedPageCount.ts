@@ -35,6 +35,17 @@ const CACHE_LIMIT = 32;
 /** 页数缓存：签名 → `pages_needed`（只存成功结果）。 */
 const pageCountCache = new Map<string, number>();
 
+/**
+ * 进请求体 / 进指纹的页数上限：**0（不限）原样发 0**，其余夹到 ≥1。
+ *
+ * 为什么不能一律 `Math.max(1, …)`：0 是"不限篇幅"这个**语义值**，折成 1 就等于让用户
+ * 选了最严的一页——报告会按 1 页排、`truncated_at` 还会指向被裁掉的内容。
+ * 指纹同样要区分 0 与 1：两者在服务端的排版结论完全不同，共用一个 key 会互相污染缓存。
+ */
+function requestPageLimit(pageLimit: number): number {
+  return pageLimit === 0 ? 0 : Math.max(1, Math.round(pageLimit));
+}
+
 /** 32 位字符串散列：只需要"不同内容不同 key"，不用于安全用途。 */
 function hashText(text: string): string {
   let hash = 5381;
@@ -59,7 +70,11 @@ function writeCache(signature: string, pages: number): void {
 export interface ReportedPageCountOptions {
   /** 已构造好的精确预览上下文：`resumeId` 与全部版式字段都在里面（唯一构造处）。 */
   exactPreview?: ExactPreviewOptions | null;
-  /** 当前的页数上限（进请求体，也进指纹——上限变了服务端会重排一次）。 */
+  /**
+   * 当前的页数上限（进请求体，也进指纹——上限变了服务端会重排一次）。
+   *
+   * `0` = 「不限篇幅」：原样发 0（服务端按不裁剪排），不要夹成 1 页。
+   */
   pageLimit: number;
 }
 
@@ -83,7 +98,7 @@ export function useReportedPageCount({
     if (!exactPreview) return "";
     const parts = [
       String(exactPreview.resumeId),
-      String(Math.max(1, Math.round(pageLimit))),
+      String(requestPageLimit(pageLimit)),
       exactPreview.template,
       exactPreview.formatName,
       exactPreview.fontScale,
@@ -109,7 +124,9 @@ export function useReportedPageCount({
     if (!exactPreview) return null;
     const request: PaginationReportRequest = {
       template: exactPreview.template,
-      page_limit: Math.max(1, Math.round(pageLimit)),
+      // 「不限」发 0（后端 `PreviewPdfRequest.page_limit` 的 `ge=0` 就是为它开的）；
+      // 其余仍夹到 ≥1，别把"上限 0 页"这种不可能的值发出去。
+      page_limit: requestPageLimit(pageLimit),
       font_scale: exactPreview.fontScale,
       language: exactPreview.language,
       format_config: exactPreview.formatConfig,

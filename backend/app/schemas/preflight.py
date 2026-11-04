@@ -51,7 +51,9 @@ class PreflightLayoutInput(BaseModel):
     format_name: str | None = Field(default=None, max_length=64)
     # A4 长 CV：上限由文档模式决定（普通 1–3 / 长 CV 1–10）；路由按记录/变体的
     # document_mode 用 mode_page_limit 夹紧。这里放宽到 10，否则长 CV 草稿预检会 422。
-    page_limit: int | None = Field(default=None, ge=1, le=LONG_CV_MAX_PAGES)
+    # **``ge=0``：0 = 不限篇幅**（与导出请求同一投影，前端把草稿的 page_limit 原样发来；
+    # 卡在 ge=1 会让"选了不限"的草稿一开导出面板就吃一个 422）。
+    page_limit: int | None = Field(default=None, ge=0, le=LONG_CV_MAX_PAGES)
     font_scale: ResumeFontScale | None = None
     language: Literal["zh-CN", "en-US"] | None = None
     # 形状/键数上限与生成、保存两条路径共用同一个校验（不重写一份规则）。
@@ -118,7 +120,8 @@ class PreflightRequest(BaseModel):
     strict_revision: bool = False
     margin_mm: float | None = Field(default=None, ge=4, le=40)
     font_scale: ResumeFontScale | None = None
-    page_limit: int | None = Field(default=None, ge=1, le=LONG_CV_MAX_PAGES)
+    # 同 ``PreflightLayoutInput.page_limit``：0 = 不限篇幅必须收得下。
+    page_limit: int | None = Field(default=None, ge=0, le=LONG_CV_MAX_PAGES)
     format_config: dict | None = None
     language: ResumeLanguage | None = None
     allow_incomplete: bool = False
@@ -214,6 +217,25 @@ class TextOrderDiff(BaseModel):
     expected_index: int | None = None
 
 
+class TextOrderHighlight(BaseModel):
+    """产物正文里**该涂色**的一处字符区间（22b）。
+
+    为什么不把区间挂到 `TextOrderDiff` 上：一个片段合并了几个 token 后，它们在产物里的
+    位置未必连续，一个 `[start, end]` 说不清；差异列表（问题清单/计数）与高亮区间是
+    两份用途不同的数据。
+
+    **偏移基准（前后端同一个，改一侧必须同时改另一侧）**：`start` / `end` 是该页
+    `machine_text[i].text` 的 **Python 码点偏移**（`end` 不含）。前端用 `Array.from(text)`
+    按码点切分后再取区间——直接 `String.slice` 是 UTF-16 码元，BMP 之外的字会差位。
+    """
+
+    page: int = Field(ge=1)
+    start: int = Field(ge=0)
+    end: int = Field(ge=0)
+    # 目前只有顺序差异会涂色：missing 在产物里没有字，garbled 是整页抽空。
+    kind: Literal["out_of_order"] = "out_of_order"
+
+
 class ExportCheckSummary(BaseModel):
     """D20 导出前核对摘要（purpose=export 时随 preflight 响应返回）。
 
@@ -258,6 +280,9 @@ class PreflightOut(BaseModel):
     font_coverage: FontCoverageOut | None = None
     # D11：结构化正文与产物文本的差异（missing / out_of_order / garbled）。
     order_diffs: list[TextOrderDiff] = Field(default_factory=list, max_length=50)
+    # 22b：差异在**产物正文**里对应的字符区间（只由 out_of_order 产生）。缺省空数组：
+    # 旧客户端读不到这个键也不受影响，老响应进来时前端也不涂色。
+    order_highlights: list[TextOrderHighlight] = Field(default_factory=list, max_length=50)
     # D20：导出前核对摘要；只有 purpose=export 时才有值（编辑态检查为 None，
     # 旧客户端读不到这个键也不受影响）。
     export_summary: ExportCheckSummary | None = None
@@ -271,6 +296,7 @@ __all__ = [
     "FontCoverageOut",
     "MachineTextPage",
     "TextOrderDiff",
+    "TextOrderHighlight",
     "PreflightLayoutInput",
     "PreflightLayer",
     "PreflightMeasure",

@@ -9,14 +9,15 @@
  * 列头、空值兜底、提示与 aria-label 走 applyQueue 包。
  */
 import { MoreOutlined } from "@ant-design/icons";
-import { Button, Dropdown, Menu, Space, Table, Tag, Tooltip, Typography } from "antd";
-import type { MenuProps } from "antd";
+import { Button, Dropdown, Space, Table, Tag, Tooltip, Typography } from "antd";
 import type { TableColumnsType } from "antd";
 import type { TableRowSelection } from "antd/es/table/interface";
-import { useEffect, useRef, useState } from "react";
+import type { KeyboardEvent as ReactKeyboardEvent } from "react";
 import { t } from "../../../i18n";
 import { QUEUE_STATUS_LABEL_KEYS } from "../../../i18n/enum/apply";
 import { useLocale } from "../../../i18n/i18nContext";
+import { useContextMenu } from "../../../features/context-menu/contextMenuContext";
+import { useRowActionMenu, useRowActionRunner, type RowMenuItem } from "../../common/rowActionMenu";
 import type { ApplyQueueItem } from "../../../types";
 import { QUEUE_STATUS_META } from "../../../types";
 import { formatDateTime } from "../../../utils/format";
@@ -35,35 +36,42 @@ export function QueueTable({
   selectedIds: number[];
   setSelectedIds: (ids: number[]) => void;
   setDetail: (item: ApplyQueueItem) => void;
-  rowMenuItems: (record: ApplyQueueItem) => MenuProps["items"];
+  rowMenuItems: (record: ApplyQueueItem) => RowMenuItem[];
 }) {
   // 本组件用模块级 t()：必须订阅语言变化，否则切语言后列头停在旧文案。
   useLocale();
-  // 右键菜单：记录鼠标位置与目标行，用定位式 Menu 渲染（避免把 <tr> 包进 Dropdown 造成行重建竞态）。
-  const [contextMenu, setContextMenu] = useState<{
-    x: number;
-    y: number;
-    record: ApplyQueueItem;
-  } | null>(null);
-  // 打开菜单时记下当时的焦点元素，关闭时还回去（Esc 关闭也不能把焦点丢在 body 上）。
-  const restoreFocusRef = useRef<HTMLElement | null>(null);
+  const buildMenu = useRowActionMenu();
+  const run = useRowActionRunner();
+  /** 右键菜单走全局单实例浮层（问题 25）：贴鼠标、夹进视口、层级取 `layer.aiPolish`。 */
+  const contextMenu = useContextMenu();
 
-  const closeContextMenu = () => {
-    setContextMenu(null);
-    const restoreTo = restoreFocusRef.current;
-    restoreFocusRef.current = null;
-    restoreTo?.focus({ preventScroll: true });
+  /**
+   * 打开某一行的右键菜单：菜单项与「···」下拉同源，二次确认也走同一套（`run`）。
+   * `source` 决定首项是否聚焦——键盘打开才聚焦第一个可用项。
+   */
+  const openRowMenu = (
+    record: ApplyQueueItem,
+    point: { x: number; y: number },
+    source: "pointer" | "keyboard",
+  ) => {
+    contextMenu.open({
+      x: point.x,
+      y: point.y,
+      source,
+      ariaLabel: t("applyQueue.table.moreActionsAria", { job: record.job_title }),
+      items: rowMenuItems(record).map((item) =>
+        item.type === "divider" ? item : { ...item, onClick: run(item) },
+      ),
+    });
   };
 
-  // Esc 关闭：遮罩层收不到键盘事件（焦点不在它上面），挂 window 监听并随菜单开关装卸。
-  useEffect(() => {
-    if (!contextMenu) return;
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") closeContextMenu();
-    };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [contextMenu]);
+  const handleRowKeyDown = (event: ReactKeyboardEvent<HTMLElement>, record: ApplyQueueItem) => {
+    if (event.key !== "ContextMenu" && !(event.shiftKey && event.key === "F10")) return;
+    event.preventDefault();
+    const rect = event.currentTarget.getBoundingClientRect();
+    // 键盘没有指针落点：用行右下角兜底（与指针打开的落位方向一致）。
+    openRowMenu(record, { x: rect.right, y: rect.bottom }, "keyboard");
+  };
 
   /**
    * 列宽全部写死、`tableLayout="fixed"`：
@@ -160,7 +168,7 @@ export function QueueTable({
           className="apply-queue-actions"
           style={{ display: "flex", justifyContent: "flex-end", marginLeft: "auto" }}
         >
-          <Dropdown trigger={["click"]} menu={{ items: rowMenuItems(item) }}>
+          <Dropdown trigger={["click"]} menu={{ items: buildMenu(rowMenuItems(item)) }}>
             <Button
               size="small"
               aria-label={t("applyQueue.table.moreActionsAria", { job: item.job_title })}
@@ -204,38 +212,15 @@ export function QueueTable({
         // `scrollable-region-focusable`（serious）。有数据时照旧按列宽固定横滚。
         scroll={items.length ? { x: 880 } : undefined}
         onRow={(record) => ({
+          // 行本身可聚焦：键盘用户要能按 Shift+F10 / 菜单键打开这一行的操作菜单。
+          tabIndex: 0,
+          onKeyDown: (event) => handleRowKeyDown(event, record),
           onContextMenu: (event) => {
             event.preventDefault();
-            restoreFocusRef.current =
-              document.activeElement instanceof HTMLElement ? document.activeElement : null;
-            setContextMenu({ x: event.clientX, y: event.clientY, record });
+            openRowMenu(record, { x: event.clientX, y: event.clientY }, "pointer");
           },
         })}
       />
-      {contextMenu && (
-        <>
-          <div
-            style={{ position: "fixed", inset: 0, zIndex: 1050 }}
-            onClick={closeContextMenu}
-            onContextMenu={(event) => {
-              event.preventDefault();
-              closeContextMenu();
-            }}
-          />
-          <Menu
-            style={{
-              position: "fixed",
-              left: contextMenu.x,
-              top: contextMenu.y,
-              zIndex: 1060,
-              minWidth: 150,
-              boxShadow: "0 2px 8px rgba(0, 0, 0, 0.15)",
-            }}
-            items={rowMenuItems(contextMenu.record)}
-            onClick={closeContextMenu}
-          />
-        </>
-      )}
     </>
   );
 }

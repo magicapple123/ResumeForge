@@ -4,6 +4,8 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testi
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter } from "react-router-dom";
 import { t } from "../../i18n";
+import { ContextMenuHost } from "../context-menu/ContextMenuHost";
+import { resetContextMenuForTests } from "../context-menu/contextMenuStore";
 import { setActiveWritingResume } from "../resume-writing/activeResume";
 import AiPolishLayer from "./AiPolishLayer";
 import { getLLMConfig } from "../../api/settings";
@@ -80,6 +82,8 @@ function renderLayer() {
   return render(
     <MemoryRouter>
       <AiPolishLayer />
+      {/* 浮层由全局唯一宿主渲染（与 `AppShell` 里的挂法一致）。 */}
+      <ContextMenuHost />
     </MemoryRouter>,
   );
 }
@@ -110,6 +114,8 @@ afterEach(() => {
   });
   cleanup();
   document.body.innerHTML = "";
+  // 菜单状态住在模块级 store 里：不清空会把上一用例的浮层带到下一用例。
+  resetContextMenuForTests();
   Reflect.deleteProperty(navigator, "clipboard");
   Reflect.deleteProperty(document, "execCommand");
 });
@@ -219,6 +225,20 @@ describe("AiPolishLayer 右键菜单", () => {
     expect(menuItem("剪切")).toBeDisabled();
     expect(menuItem("粘贴")).toBeDisabled();
     expect(screen.queryByRole("menuitem", { name: "AI 润色" })).toBeNull();
+  });
+
+  it("有选区时右键只出现一张菜单（多个监听不会各画一份）", async () => {
+    const field = mountTextarea(ORIGINAL);
+    renderLayer();
+    selectField(field, 0, ORIGINAL.length);
+
+    // 连续右键两次（模拟"两个 document 监听都处理"以及重复打开）：
+    // 浮层由全局唯一宿主渲染，后开的那份替换前一份。
+    openMenuOn(field);
+    openMenuOn(field, { clientX: 80, clientY: 100 });
+
+    await screen.findByRole("menu", { name: "文本操作" });
+    expect(document.querySelectorAll(".rf-ctx-menu")).toHaveLength(1);
   });
 
   it("没有选中文字时右键交给浏览器原生菜单", async () => {
@@ -373,6 +393,7 @@ function renderLayerWithApp() {
     <AntdApp>
       <MemoryRouter>
         <AiPolishLayer />
+        <ContextMenuHost />
       </MemoryRouter>
     </AntdApp>,
   );
@@ -421,8 +442,13 @@ describe("AiPolishLayer 右键菜单里的写作增强", () => {
     fireEvent.click(await screen.findByRole("menuitem", { name: t("writing.menu.entry") }));
     const dialog = await screen.findByRole("dialog");
 
-    fireEvent.click(within(dialog).getByRole("button", { name: /生\s*成/ }));
-    fireEvent.click(await within(dialog).findByRole("button", { name: /回\s*填/ }));
+    // 精确匹配「生成」按钮：面板里的用法提示标题也含"生成"二字（"…→ 生成后点「回填」"），
+    // 非锚定的 /生\s*成/ 会同时命中那个折叠按钮。
+    fireEvent.click(within(dialog).getByRole("button", { name: /^生\s*成$/ }));
+    // 结果出来之前「回填」是禁用态（点它等于没点），先等结果落进结果框。
+    await within(dialog).findByDisplayValue(REWRITTEN);
+    // 同样要锚定：用法提示标题里也写了「回填」。
+    fireEvent.click(await within(dialog).findByRole("button", { name: /^回\s*填$/ }));
 
     // 选中的那段被整段替换 = 回填成功（不是追加、也不是复制）。
     await waitFor(() => expect(field.value).toBe(REWRITTEN));

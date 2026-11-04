@@ -22,6 +22,7 @@ import { headerSlotOf, keyboardHeaderMoveTarget } from "../../features/resume-do
 import { enumLabelOf } from "../../features/resume-document/fieldCatalog";
 import { useDocumentChipMenu } from "./documentChipMenuContext";
 import { useDocumentDrag } from "./documentDragContext";
+import { useBlockSelectStart } from "./useBlockSelectStart";
 import { useChipExpandGesture } from "./useChipExpandGesture";
 import CroppedPhotoThumb from "./CroppedPhotoThumb";
 import type { PhotoCropParams } from "../../features/resume-proview/photoCrop";
@@ -69,6 +70,8 @@ export default function HeaderChip({
 }: Props) {
   const { t } = useI18n();
   const drag = useDocumentDrag();
+  // 同 ItemChip：页眉 chip 里也不许起选区，否则拖动会被判成"拖动选中文字"。
+  const chipRef = useBlockSelectStart<HTMLDivElement>();
   const chipMenuHost = useDocumentChipMenu();
   // #10：双击的第二下 click 自己就是展开/收起（不再依赖 dblclick 是否送达），
   // 原因见 useChipExpandGesture 的文件注释。
@@ -217,6 +220,7 @@ export default function HeaderChip({
   return (
     <>
       <div
+        ref={chipRef}
         className={[
           "document-chip",
           "document-chip-header",

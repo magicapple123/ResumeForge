@@ -67,6 +67,10 @@ const preview = {
   // ── 草稿画布（ResumePreviewCanvas）────────────────────────────
   /** 警告条标题：AI 生成的内容需要人工核对。 */
   "preview.canvas.warningsTitle": "发现以下内容需要人工核对（可能存在 AI 虚构）",
+  /** 警告条默认折叠（问题 8）：展开按钮带条数。 */
+  "preview.canvas.warningsExpand": "展开 {count} 条",
+  /** 收起警告正文。 */
+  "preview.canvas.warningsCollapse": "收起",
   /** 溢出正文：先声明不自动缩字号，再拼上超出量与分页口径说明。 */
   "preview.canvas.overflowBody":
     "字号、行距、页边距都按你设定的值原样渲染，不会自动缩小；{amount}{note}",

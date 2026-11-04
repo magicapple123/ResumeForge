@@ -19,13 +19,17 @@ const claimDraftModal = {
   "claimDraftModal.category.awards": "荣誉奖项",
   "claimDraftModal.category.other": "其他",
 
-  "claimDraftModal.placeholder.subject": "主体（可留空，例如项目名）",
+  "claimDraftModal.placeholder.subjectExample": "例如：项目名",
   "claimDraftModal.placeholder.rawText":
     "把资料原文贴在这里，越具体越好；没写到的东西不会被补出来。",
+  "claimDraftModal.label.category": "类别",
+  "claimDraftModal.label.subject": "主体",
   "claimDraftModal.action.generate": "生成草稿",
+  "claimDraftModal.action.regenerate": "重新生成",
   "claimDraftModal.action.saveSelected": "保存勾选的 {count} 条",
+  "claimDraftModal.regenerate.confirm": "重新生成会覆盖当前草稿的修改",
 
-  "claimDraftModal.empty.noDrafts": "还没有草稿",
+  "claimDraftModal.empty.nothingExtracted": "这段资料里没有提取到可入库的事实…",
   "claimDraftModal.placeholder.title": "标题",
   "claimDraftModal.placeholder.sourceFact": "原始事实",
   "claimDraftModal.placeholder.candidateWording": "简历表述（未核实的内容请保留【待补】标记）",

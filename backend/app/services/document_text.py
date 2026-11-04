@@ -128,8 +128,22 @@ def _pdf_page_texts(raw: bytes) -> list[str]:
         raise ValueError("文件无法解析，可能已损坏或不是真正的 PDF") from exc
 
 
+def _pdf_page_split(page_texts: list[str]) -> tuple[str, list[int]]:
+    """逐页切分：返回（文字页的正文, 文字层过少、按扫描页处理的页码）。"""
+    image_page_numbers = [
+        number
+        for number, text in enumerate(page_texts, start=1)
+        if len(text.strip()) < IMAGE_PAGE_MIN_CHARS
+    ]
+    scanned = set(image_page_numbers)
+    text = "\n".join(
+        page_text for number, page_text in enumerate(page_texts, start=1) if number not in scanned
+    )
+    return text, image_page_numbers
+
+
 def _pdf_extract_with_images(
-    raw: bytes, image_budget_bytes: int
+    raw: bytes, image_budget_bytes: int, page_texts: list[str] | None = None
 ) -> tuple[str, list[tuple[str, int]], list[str]]:
     """PDF 逐页提取：文本页贡献文字，图片页（扫描页）渲染成位图走图片识别。
 
@@ -137,20 +151,13 @@ def _pdf_extract_with_images(
     **按页跳过并警告**，不做静默丢弃。渲染整体失败时回退为纯文字行为（没有文字
     则由调用方按原有的空文本报错处理）。
 
+    ``page_texts`` 允许调用方把已经解析好的逐页文本传进来，避免同一份 PDF 解析两遍。
+
     返回 ``(文字, [(图片 data URL, 字节数)], 警告)``。
     """
-    page_texts = _pdf_page_texts(raw)
-    image_page_numbers = [
-        number
-        for number, text in enumerate(page_texts, start=1)
-        if len(text.strip()) < IMAGE_PAGE_MIN_CHARS
-    ]
-    image_page_set = set(image_page_numbers)
-    text = "\n".join(
-        page_text
-        for number, page_text in enumerate(page_texts, start=1)
-        if number not in image_page_set
-    )
+    if page_texts is None:
+        page_texts = _pdf_page_texts(raw)
+    text, image_page_numbers = _pdf_page_split(page_texts)
 
     warnings: list[str] = []
     if image_page_numbers:
@@ -310,42 +317,123 @@ def _decode_plain_text(raw: bytes) -> str:
     return raw.decode("utf-8", errors="replace")
 
 
-# 面试材料导入（#41）接受的文件：岗位侧的 JD 只能是能稳定抽出文本的两种格式。
-# 图片不走这里（截图识别在 ``services/interview/interview_material.py``）。
-MATERIAL_TEXT_SUFFIXES = frozenset({"pdf", "txt"})
-# 单份材料文件上限：10 MB。JD 与简历截图都在这个量级以内，超过它的基本是整本手册。
+# 面试材料导入（#41，问题 6）接受的**文本类**文件：两侧统一，解析路径由扩展名决定，
+# ``kind`` 只表示"放哪一侧"（界面左右栏），不再决定收什么格式。
+# 图片不走这里（图片识别在 ``services/interview/interview_material.py``）。
+MATERIAL_TEXT_SUFFIXES = frozenset({"pdf", "txt", "md", "markdown", "docx"})
+# 单份材料文件上限：10 MB。JD 与简历都在这个量级以内，超过它的基本是整本手册。
 MAX_MATERIAL_FILE_BYTES = 10 * 1024 * 1024
+# 文字层少于这个字数就按"扫描件"处理：渲染前 8 页走图片识别。
+# 正常带文字层的 JD / 简历哪怕只有几行也远超 200 字，而扫描件经 pypdf 只能拿到空串
+# 或页码水印。阈值写死是为了让**正常 PDF 不会每次都多花一次模型调用**——
+# 有文字层的文件永远走不到视觉分支，未配置模型也照常可用。
+MATERIAL_SCAN_TEXT_THRESHOLD = 200
 
 _MATERIAL_TOO_LARGE = "文件超过 10 MB，无法导入"
-_MATERIAL_UNSUPPORTED = "岗位材料只接受 PDF 或 TXT 文件"
+# 两侧共用同一句：类型不再按侧别区分，写死"岗位材料 / 简历截图"会撒谎。
+MATERIAL_UNSUPPORTED = "这份文件不支持导入，可换成图片 / PDF / TXT / Word / Markdown"
+MATERIAL_LEGACY_DOC = "Word 2003 的 .doc 格式读不了，另存为 .docx 后再导入"
 _MATERIAL_NO_TEXT = "这份文件没有可提取的文字，可能是扫描件"
+_MATERIAL_DOCX_NO_TEXT = "这份 Word 里没有可提取的文字"
 _MATERIAL_EMPTY_FILE = "文件是空的"
+# 文本类与图片类共用同一句截断警告（上限已拉平到同一个数，见 MAX_DOCUMENT_TEXT_CHARS）。
+MATERIAL_TRUNCATED_WARNING = "内容较长，本次只读取了前一部分"
 
 
-def extract_material_text(name: str, raw: bytes) -> tuple[str, list[str]]:
-    """把用户导入的材料文件（PDF / TXT）提取成纯文本；返回 ``(正文, 警告)``。
+class MaterialText(NamedTuple):
+    """一份面试材料的本地提取结果。
+
+    ``images`` 非空表示这是**扫描件 PDF**：文字层几乎空白，需要调用方拿这些页面走一次
+    视觉识别。``scan_warnings`` 只在那件事真的做成之后才成立，所以与 ``warnings`` 分开
+    存——识别失败时不能对用户说"已按图片识别"。
+    """
+
+    text: str
+    warnings: list[str]
+    images: tuple[str, ...] = ()
+    scan_warnings: tuple[str, ...] = ()
+
+
+def material_suffix(name: str) -> str:
+    """材料文件的扩展名（小写、带点）；无扩展名返回空串。"""
+    base = (name or "").strip().rsplit("/", 1)[-1].rsplit("\\", 1)[-1]
+    return f".{base.rsplit('.', 1)[-1].lower()}" if "." in base else ""
+
+
+def _truncate_material(text: str) -> tuple[str, list[str]]:
+    if len(text) <= MAX_DOCUMENT_TEXT_CHARS:
+        return text, []
+    return text[:MAX_DOCUMENT_TEXT_CHARS], [MATERIAL_TRUNCATED_WARNING]
+
+
+def _extract_pdf_material(raw: bytes) -> MaterialText:
+    """PDF 材料：文字层够用就只返回文字，几乎空白且存在扫描页才渲染图片交给调用方识别。"""
+    page_texts = _pdf_page_texts(raw)
+    layer, image_pages = _pdf_page_split(page_texts)
+    body = layer.strip()
+    if not image_pages or len(body) >= MATERIAL_SCAN_TEXT_THRESHOLD:
+        if not body:
+            raise ValueError(_MATERIAL_NO_TEXT)
+        truncated, warnings = _truncate_material(body)
+        return MaterialText(truncated, warnings)
+
+    # 文字层几乎空白 + 存在扫描页：渲染（复用已解析的逐页文本，不再二次解析 PDF）。
+    _, rendered, scan_warnings = _pdf_extract_with_images(
+        raw, MAX_ATTACHMENTS_TOTAL_BYTES, page_texts
+    )
+    images = tuple(data_url for data_url, _ in rendered)
+    truncated, warnings = _truncate_material(body)
+    if not images:
+        # 渲染失败 / 附件体积不够：只能退回文字层，一句都没有就是失败。
+        if not body:
+            raise ValueError(_MATERIAL_NO_TEXT)
+        # 既然没真的识别过，就不能留下"已按图片识别"这类说法（渲染失败、预算不足的
+        # 告警仍然有用，必须留着）。
+        kept = [item for item in scan_warnings if "按图片识别" not in item]
+        return MaterialText(truncated, [*warnings, *kept])
+    return MaterialText(truncated, warnings, images, tuple(scan_warnings))
+
+
+def extract_material_text(name: str, raw: bytes) -> MaterialText:
+    """把用户导入的材料文件（PDF / TXT / Markdown / Word）提取成纯文本。
 
     与 :func:`preview_text_of_file` 的区别是**用途不同所以口径不同**：这里是"用户主动
-    上传的一份新材料"，所以要卡体积（10 MB）、只认 PDF / TXT、并且把"没提到文字"说成
-    "可能是扫描件"——那是用户真正需要知道的事，而不是笼统一的"文件格式不支持"。
+    上传的一份新材料"，所以要卡体积（10 MB）、只认上面那组扩展名、并且把"没提到文字"
+    说成"可能是扫描件"——那是用户真正需要知道的事。
+
+    ``.doc``（Word 2003 二进制格式）单独给一句"另存为 .docx"：读不了就不假装能读。
 
     失败一律抛 ``ValueError``，文案是面向用户的**原因**（动作由前端补）。
     """
-    safe_name = (name or "").strip().rsplit("/", 1)[-1].rsplit("\\", 1)[-1]
-    suffix = safe_name.rsplit(".", 1)[-1].lower() if "." in safe_name else ""
-    if suffix not in MATERIAL_TEXT_SUFFIXES:
-        raise ValueError(_MATERIAL_UNSUPPORTED)
+    suffix = material_suffix(name)
+    if suffix == ".doc":
+        raise ValueError(MATERIAL_LEGACY_DOC)
+    if suffix.lstrip(".") not in MATERIAL_TEXT_SUFFIXES:
+        raise ValueError(MATERIAL_UNSUPPORTED)
     if not raw:
         raise ValueError(_MATERIAL_EMPTY_FILE)
     if len(raw) > MAX_MATERIAL_FILE_BYTES:
         raise ValueError(_MATERIAL_TOO_LARGE)
 
-    text = _pdf_text(raw) if suffix == "pdf" else _decode_plain_text(raw)
-    body = strip_markers(text).strip()
+    if suffix == ".pdf":
+        return _extract_pdf_material(raw)
+
+    if suffix == ".docx":
+        body = strip_markers(_docx_text(raw)).strip()
+        if not body:
+            raise ValueError(_MATERIAL_DOCX_NO_TEXT)
+        truncated, warnings = _truncate_material(body)
+        return MaterialText(truncated, warnings)
+
+    # .txt / .md / .markdown：Markdown 的标记（`#`、表格、代码围栏）**原样保留**——
+    # 本机提取不做渲染，而 JD 常常就是 md 原文；TXT 仍按既有口径剥掉 `**加粗**`
+    # 与链接 URL（那不是纯文本里的可见字符）。
+    text = _decode_plain_text(raw)
+    body = (text if suffix in {".md", ".markdown"} else strip_markers(text)).strip()
     if not body:
         raise ValueError(_MATERIAL_NO_TEXT)
-    truncated, warnings = _truncate(body)
-    return truncated, list(warnings)
+    truncated, warnings = _truncate_material(body)
+    return MaterialText(truncated, warnings)
 
 
 def preview_text_of_file(name: str, mime_type: str, raw: bytes) -> tuple[str, list[str]]:

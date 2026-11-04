@@ -12,9 +12,10 @@
  */
 
 import Button from "antd/es/button";
-import { useEffect, useRef } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import ObjectStylePanel from "../resume/typography/ObjectStylePanel";
 import { useChipMenuDismiss } from "./useChipMenuDismiss";
+import { placeMenu } from "../../features/context-menu/positioning";
 import { useI18n } from "../../i18n/i18nContext";
 import {
   ENTRY_STYLE_SCOPE_LABELS,
@@ -56,7 +57,20 @@ export default function ChipStylePopover({
 }: Props) {
   const { t } = useI18n();
   const rootRef = useRef<HTMLDivElement>(null);
+  /**
+   * 落位（问题 25）：浮层与右键菜单共用 `placeMenu`——贴着命中点、下方放不下翻上、
+   * 四边夹进视口。原来是裸 `left/top`，靠右/靠下的字段一点就有一半在屏幕外。
+   * 尺寸先测量后定位；量不到（jsdom/首帧）按浮层 CSS 的 300×420 估算。
+   */
+  const [size, setSize] = useState<{ width: number; height: number } | null>(null);
   useChipMenuDismiss(state !== null, onClose);
+  useLayoutEffect(() => {
+    if (!state) return;
+    const rect = rootRef.current?.getBoundingClientRect();
+    if (rect && rect.width > 0 && rect.height > 0) {
+      setSize({ width: rect.width, height: rect.height });
+    }
+  }, [state]);
   // Escape 收起：浮层自己处理（chip 的 Esc 语义是收起编辑器，不归这里）。
   useEffect(() => {
     if (!state) return;
@@ -77,12 +91,13 @@ export default function ChipStylePopover({
     .map((item) => (item.kind === "field" ? item.value : ""))
     .find((value) => value?.trim());
   const label = titleValue?.trim();
+  const placement = placeMenu({ x: state.x, y: state.y }, size ?? { width: 300, height: 420 });
 
   return (
     <div
       ref={rootRef}
       className="document-chip-style-popover"
-      style={{ left: state.x, top: state.y }}
+      style={{ left: placement.left, top: placement.top }}
       role="dialog"
       aria-label={t("typography.entryStyle.status", {
         name: label || t("typography.object.untitled"),

@@ -27,6 +27,9 @@ _STATE_SCRIPT = (
     ", autofill: window.__rfAutoFillRequest || null"
     ", autofill_status: window.__rfAutoFillStatus || null"
     ", assistant_ask: window.__rfAssistantAsk || null"
+    # 面板顶部的范围开关只置请求全局；**必须**并进这条已有探测，否则 Python 侧
+    # ``payload.get("scope_request")`` 恒为 None，点了开关什么都不会发生。
+    ", scope_request: window.__rfScopeRequest || null"
     " }); })()"
 )
 
@@ -78,4 +81,46 @@ _ACK_AUTOFILL_SCRIPT = (
 _ACK_ASSISTANT_ASK_SCRIPT = (
     "(() => { /* rf:assistant-ack */ window.__rfAssistantAsk = null; return '1'; })()"
 )
+
+# ── 取数范围（需求 3：仅当前方案 / 全部资料）────────────────────────────
+# 面板顶部那个分段开关只置一个请求全局 `__rfScopeRequest`，由 Python 侧消费并立刻换代
+# ——范围参数必须进**快照构造**，不能让面板自己按另一份数据渲染（"清单按全部、预填按
+# 当前组"正是要避免的形态）。回执清掉请求，避免 350ms 轮询里重复触发。
+_ACK_SCOPE_SCRIPT = (
+    "(() => { /* rf:scope-ack */ window.__rfScopeRequest = null; return '1'; })()"
+)
+
+
+def _scope_script(scope: str, sections: list[dict[str, str]]) -> str:
+    """把当前范围与「被组过滤的板块」推给页面（面板开关状态 + 空态原因都靠它）。
+
+    **用 JSON 转义**：板块名来自用户自建板块，带引号也不会破坏脚本。
+    优先调用页面实现的 ``__rfSetScope``；页面还没装监听时退回写全局，下一轮面板
+    重新渲染仍能读到同一份数据（不会出现"开关显示了、数据没换"的错位）。
+    """
+    payload = json.dumps(
+        {"scope": scope, "filtered_sections": list(sections)}, ensure_ascii=False
+    )
+    return (
+        "(() => { /* rf:live-scope */"
+        f" const payload = {payload};"
+        " window.__rfScope = payload.scope;"
+        " window.__rfFilteredSections = payload.filtered_sections;"
+        " if (window.__rfSetScope) window.__rfSetScope(payload.scope, payload.filtered_sections);"
+        " return '1'; })()"
+    )
+
+
+def _filtered_script(payload: dict[str, Any]) -> str:
+    """只推送「被组过滤的板块」清单（范围没变、板块成员变了时用）。
+
+    与 ``_scope_script`` 分开：范围切换要换整份资料，而成员变化只需要让空态换一句
+    话——把两者合成一条会让"改了一个板块的开关"触发一次全量重取。
+    """
+    sections = json.dumps(list(payload.get("filtered_sections") or []), ensure_ascii=False)
+    return (
+        "(() => { /* rf:live-filtered */"
+        f" window.__rfFilteredSections = {sections};"
+        " return '1'; })()"
+    )
 

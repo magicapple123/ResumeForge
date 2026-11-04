@@ -4,9 +4,15 @@
  *
  * 挂载由 shell 完成（发过接入单）；本组件自带请求编排（usePreflight）与三个只读视图，
  * **不渲染第二层容器**（弹窗内不再开 Modal.confirm；修复动作交回宿主既有入口）。
+ *
+ * **不自动跑检查**是刻意的：一次检查要渲染 PDF、抽文本、跑规则，代价远高于一次读取；
+ * 而且用户可能只是打开面板看一眼就关掉。但这不等于"打开就得是空态"——结果由
+ * `features/resume-preflight/preflightCache` 跨页面保留（22a）：关掉弹窗、退出制作台、
+ * 再进同一份简历，面板直接显示上次的清单（内容改过则叠加「结果基于上一版」提示）。
+ * 所以这里**不要**在关闭时 `clear()`：那会把缓存里的那份也删掉，回到"必须再点一次"。
  */
 import { Modal, Tabs } from "antd";
-import { useEffect, useMemo } from "react";
+import { useMemo } from "react";
 import { t } from "../../../i18n";
 import { useLocale } from "../../../i18n/i18nContext";
 import type { runPreflight } from "../../../features/resume-preflight/preflightApi";
@@ -51,18 +57,13 @@ export default function PreflightModal({
   fetcher,
 }: Props) {
   useLocale();
+  // `resumeId` 不随 `open` 置空：缓存按简历身份存，关着的时候也要能认出"这是哪一份"。
   const preflight = usePreflight({
-    resumeId: open ? resumeId : null,
+    resumeId,
     currentKey,
     buildRequest,
     fetcher,
   });
-  const { clear } = preflight;
-
-  // 关掉面板就清空结果：下次打开是"新的一次检查"，不展示上一轮（可能已过时）的清单。
-  useEffect(() => {
-    if (!open) clear();
-  }, [clear, open]);
 
   const items = useMemo(
     () => [
@@ -91,6 +92,7 @@ export default function PreflightModal({
           <ScannerReadView
             pages={preflight.result?.machine_text}
             diffs={preflight.result?.order_diffs}
+            highlights={preflight.result?.order_highlights}
           />
         ),
       },

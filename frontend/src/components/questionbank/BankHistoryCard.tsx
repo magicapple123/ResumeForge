@@ -16,6 +16,7 @@ import { useClientPagination } from "../../hooks/useClientPagination";
 import { t, type MessageKey } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
 import type { QuestionBankRecord } from "../../types";
+import { formatServerTime } from "../../utils/serverTime";
 
 type BanksState = ReturnType<typeof useApi<QuestionBankRecord[]>>;
 
@@ -87,7 +88,7 @@ export default function BankHistoryCard({
             {bank.resume_title || bank.job_title || t("questionBankPanel.history.fallbackTitle")}
           </span>
           <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-            {bank.created_at.replace("T", " ").slice(0, 16)}
+            {formatServerTime(bank.created_at)}
           </Typography.Text>
         </Space>
       </RowContextMenu>

@@ -57,7 +57,7 @@ from ..services.search import aggregate_search
 from ..services.settings_service import (
     get_assistant_relaxed_mode,
     get_llm_config,
-    get_search_config,
+    get_search_config_with_secrets,
 )
 from ..services.ui_locale import get_ui_locale
 from ..services.user_files import save_from_data_url
@@ -415,7 +415,8 @@ async def send_message(
     history = history_snapshot(db, conversation_id)
     had_messages = bool(history)
     # 搜索设置在这里读出来并绑进闭包：流式响应期间请求会话已经关闭。
-    search_config = get_search_config(db)
+    # 用 `_with_secrets` 才拿得到解密的 DeepSeek key；设置页走的是掩码版。
+    search_config = get_search_config_with_secrets(db)
     # 「引用追问」：只允许引用同一会话里的消息，并把被引用内容的快照存进 context——
     # 这样即使那条消息之后被删掉，引用块仍然可读。
     quoted_snapshot: dict[str, Any] | None = None

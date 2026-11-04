@@ -11,6 +11,7 @@ import { RowActions } from "../common/RowActions";
 import type { InterviewReviewRecord } from "../../types";
 import { t } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
+import { formatServerTime } from "../../utils/serverTime";
 
 interface Props {
   /** ``null`` 表示尚未加载完成（与父组件 useApi 的 data 语义对齐）。 */
@@ -39,7 +40,7 @@ export default function ReviewHistoryCard({
           {review.resume_title || review.job_title || t("interview.reviewHistory.fallbackTitle")}
         </span>
         <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-          {review.created_at.replace("T", " ").slice(0, 16)}
+          {formatServerTime(review.created_at)}
         </Typography.Text>
       </Space>
     ),

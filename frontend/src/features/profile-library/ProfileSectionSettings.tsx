@@ -9,26 +9,37 @@
  * 层级（2026-10-27 整改）：弹层标题 > 卡片标题 > 行标题 > 说明。此前「自建板块」与
  * 「系统板块」都是 20px 粗体的 Typography.Title 紧贴 24px 的弹层标题，看起来像三个
  * 并列标题；现在每一组是一张卡，卡片标题 14px/600 + 12px 说明（样式在 profile-card.css）。
+ *
+ * 问题 18 整改（2026-11-03）：行首 Checkbox 负责「参与当前方案」，改名/字段设置/删除
+ * 收进 ⋯；两张卡片不再各写一遍同一句开关说明（语义图例在列表上方只出现一次），
+ * 「N 个系统板块恒在」挪到系统板块卡片标题右侧的 Tag；创建区统一在列表底部。
+ *
+ * 需求 6（2026-11-03）：自建板块行多一行「参与岗位筛选」开关 + 一句人话说明。
+ * 它是**板块级**开关（同一板块所有条目共用一个判据），与行首的「参与当前方案」是两件事，
+ * 因此用 Switch + 常驻说明，而不是第二个 Checkbox。
  */
-import { App, Button, Input, Tooltip } from "antd";
-import { DeleteOutlined, EditOutlined, SettingOutlined } from "@ant-design/icons";
-import { useState } from "react";
-import SectionVisibilitySwitch from "../../components/profile/SectionVisibilitySwitch";
+import { App, Button, Input, Tag } from "antd";
+import { Fragment, useState } from "react";
 import { t } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
 import { createSection, deleteSection, getSectionDeletionImpact, renameSection } from "./api";
 import { profileErrorMessage } from "./errors";
 import { profileSectionLabel } from "./profileLabels";
 import { invalidateProjectionCache } from "./projectionCache";
+import ParticipationCheckbox from "./participationCheckbox";
+import SectionJobFilterSwitch from "./sectionJobFilterSwitch";
+import SettingsMoreMenu from "./settingsMoreMenu";
 import type { SectionDeletionImpactOut, WorkspaceOut } from "./types";
 
 interface Props {
   workspace: WorkspaceOut;
   onChanged: () => Promise<void>;
   onOpenFields: (sectionKey: string) => void;
-  /** 「在资料页显示」开关：写当前组参与清单（F9）。 */
+  /** 「在资料页显示」勾选：写当前组参与清单（F9）。 */
   onSetSectionVisible: (sectionKey: string, visible: boolean) => void;
-  /** 参与清单写请求进行中：禁用本视图全部开关，避免连续点击互相覆盖。 */
+  /** 需求 6：「参与岗位相关性筛选」板块级开关（自建板块才有）。 */
+  onSetSectionJobFilter: (sectionKey: string, enabled: boolean) => void;
+  /** 参与清单写请求进行中：禁用本视图全部勾选框，避免连续点击互相覆盖。 */
   visibilityBusy?: boolean;
 }
 
@@ -37,6 +48,7 @@ export default function ProfileSectionSettings({
   onChanged,
   onOpenFields,
   onSetSectionVisible,
+  onSetSectionJobFilter,
   visibilityBusy = false,
 }: Props) {
   useLocale();
@@ -111,68 +123,15 @@ export default function ProfileSectionSettings({
     });
   };
 
-  /** 行内右侧的动作组：自建大字段（显示开关 / 改名 / 字段设置 / 删除）与系统大字段（开关 / 字段设置）共用。 */
-  const renderActions = (section: WorkspaceOut["sections"][number]) => (
-    <span className="profile-settings-row-actions">
-      <SectionVisibilitySwitch
-        sectionName={profileSectionLabel(section)}
-        visible={section.key === "basic_info" || visibleKeys.has(section.key)}
-        locked={section.key === "basic_info"}
-        busy={visibilityBusy}
-        hideLabel
-        onChange={(visible) => onSetSectionVisible(section.key, visible)}
-      />
-      {!section.is_builtin ? (
-        renamingKey === section.key ? (
-          <Button
-            size="small"
-            type="primary"
-            loading={busy}
-            onClick={() => submitRename(section.key)}
-          >
-            {t("profileLibrary.sectionSettings.saveName")}
-          </Button>
-        ) : (
-          <Tooltip title={t("profileLibrary.sectionSettings.rename")}>
-            <Button
-              className="profile-settings-action"
-              size="small"
-              type="text"
-              icon={<EditOutlined />}
-              aria-label={t("profileLibrary.sectionSettings.rename")}
-              onClick={() => {
-                setRenamingKey(section.key);
-                setRenameDraft(section.name);
-              }}
-            />
-          </Tooltip>
-        )
-      ) : null}
-      <Tooltip title={t("profileLibrary.sectionSettings.fields")}>
-        <Button
-          className="profile-settings-action"
-          size="small"
-          type="text"
-          icon={<SettingOutlined />}
-          aria-label={t("profileLibrary.sectionSettings.fields")}
-          onClick={() => onOpenFields(section.key)}
-        />
-      </Tooltip>
-      {!section.is_builtin ? (
-        <Tooltip title={t("profileLibrary.sectionSettings.delete")}>
-          <Button
-            className="profile-settings-action"
-            size="small"
-            type="text"
-            danger
-            icon={<DeleteOutlined />}
-            aria-label={t("profileLibrary.sectionSettings.delete")}
-            disabled={busy}
-            onClick={() => requestDelete(section.key, profileSectionLabel(section))}
-          />
-        </Tooltip>
-      ) : null}
-    </span>
+  /** 行首勾选：三层统一「左侧选择」的位置与形态（问题 18 的 ①）。 */
+  const renderParticipation = (section: WorkspaceOut["sections"][number]) => (
+    <ParticipationCheckbox
+      sectionName={profileSectionLabel(section)}
+      checked={section.key === "basic_info" || visibleKeys.has(section.key)}
+      locked={section.key === "basic_info"}
+      busy={visibilityBusy}
+      onChange={(visible) => onSetSectionVisible(section.key, visible)}
+    />
   );
 
   const renderRowMain = (section: WorkspaceOut["sections"][number]) => (
@@ -191,6 +150,11 @@ export default function ProfileSectionSettings({
 
   return (
     <div className="profile-section-settings">
+      {/* 语义图例全视图只出现一次：两张卡片各写一遍「开关控制…」正是问题 18 的重复来源。 */}
+      <p className="profile-settings-legend">
+        {t("profileLibrary.sectionSettings.participationLegend")}
+      </p>
+
       <section className="profile-settings-card">
         <h3 className="profile-settings-card-title">
           {t("profileLibrary.sectionSettings.customTitle")}
@@ -198,42 +162,92 @@ export default function ProfileSectionSettings({
         <p className="profile-settings-card-hint">
           {t("profileLibrary.sectionSettings.customHint")}
         </p>
-        {/* 每行只剩开关后「在资料页显示」这句话没了着落：收成一条图例，两个列表各一次。 */}
-        <div className="profile-settings-legend">
-          {t("profileLibrary.sectionSettings.visibilityLegend")}
-        </div>
         {customSections.length === 0 ? (
           <p className="profile-settings-card-hint">{t("profileLibrary.sectionSettings.empty")}</p>
         ) : null}
         <div className="profile-settings-list">
           {customSections.map((section) => (
-            <div key={section.key} className="profile-settings-row">
-              {renamingKey === section.key ? (
-                <Input
-                  value={renameDraft}
-                  maxLength={40}
-                  aria-label={t("profileLibrary.sectionSettings.rename")}
-                  onChange={(event) => setRenameDraft(event.target.value)}
-                  onPressEnter={() => submitRename(section.key)}
-                  style={{ maxWidth: 240 }}
-                />
-              ) : (
-                renderRowMain(section)
-              )}
-              {renderActions(section)}
+            <div key={section.key} className="profile-settings-row profile-settings-row-stacked">
+              <div className="profile-settings-row-head">
+                {renderParticipation(section)}
+                {renamingKey === section.key ? (
+                  <Input
+                    className="profile-settings-rename-input"
+                    value={renameDraft}
+                    maxLength={40}
+                    aria-label={t("profileLibrary.sectionSettings.rename")}
+                    onChange={(event) => setRenameDraft(event.target.value)}
+                    onPressEnter={() => submitRename(section.key)}
+                  />
+                ) : (
+                  renderRowMain(section)
+                )}
+                <span className="profile-settings-row-actions">
+                  {renamingKey === section.key ? (
+                    <Button
+                      size="small"
+                      type="primary"
+                      loading={busy}
+                      onClick={() => submitRename(section.key)}
+                    >
+                      {t("profileLibrary.sectionSettings.saveName")}
+                    </Button>
+                  ) : (
+                    <SettingsMoreMenu
+                      label={t("profileLibrary.sectionSettings.more")}
+                      disabled={busy}
+                      actions={[
+                        {
+                          key: "rename",
+                          label: t("profileLibrary.sectionSettings.renameMenu"),
+                          onSelect: () => {
+                            setRenamingKey(section.key);
+                            setRenameDraft(section.name);
+                          },
+                        },
+                        {
+                          key: "fields",
+                          label: t("profileLibrary.sectionSettings.fields"),
+                          onSelect: () => onOpenFields(section.key),
+                        },
+                        {
+                          key: "delete",
+                          label: t("profileLibrary.sectionSettings.deleteMenu"),
+                          danger: true,
+                          onSelect: () => requestDelete(section.key, profileSectionLabel(section)),
+                        },
+                      ]}
+                    />
+                  )}
+                </span>
+              </div>
+              {/* 需求 6：板块级「参与岗位相关性筛选」——不是字段级，也不与行首的
+                  「参与当前方案」勾选混用同一种控件。 */}
+              <SectionJobFilterSwitch
+                sectionName={profileSectionLabel(section)}
+                checked={section.filter_by_job}
+                busy={visibilityBusy}
+                onChange={(enabled) => onSetSectionJobFilter(section.key, enabled)}
+              />
             </div>
           ))}
         </div>
-        <div className="profile-settings-add" style={{ marginTop: 12 }}>
+        {/* 创建区与「方案」页一致：放在列表底部，输入框 flex:1、按钮固定宽。 */}
+        <div className="profile-settings-add profile-settings-add-bottom">
           <Input
+            className="profile-settings-add-grow"
             value={newName}
             maxLength={40}
             placeholder={t("profileLibrary.sectionSettings.nameLabel")}
             onChange={(event) => setNewName(event.target.value)}
             onPressEnter={submitCreate}
-            style={{ maxWidth: 240 }}
           />
-          <Button type="primary" loading={busy} onClick={submitCreate}>
+          <Button
+            className="profile-settings-add-action"
+            type="primary"
+            loading={busy}
+            onClick={submitCreate}
+          >
             {t("profileLibrary.sectionSettings.create")}
           </Button>
         </div>
@@ -264,19 +278,34 @@ export default function ProfileSectionSettings({
       <section className="profile-settings-card">
         <h3 className="profile-settings-card-title">
           {t("profileLibrary.sectionSettings.builtin")}
+          <Tag className="profile-settings-card-count">
+            {t("profileLibrary.sectionSettings.builtinCount", { count: builtinSections.length })}
+          </Tag>
         </h3>
         <p className="profile-settings-card-hint">
           {t("profileLibrary.sectionSettings.builtinHint")}
         </p>
-        <div className="profile-settings-legend">
-          {t("profileLibrary.sectionSettings.visibilityLegend")}
-        </div>
         <div className="profile-settings-list">
           {builtinSections.map((section) => (
-            <div key={section.key} className="profile-settings-row">
-              {renderRowMain(section)}
-              {renderActions(section)}
-            </div>
+            <Fragment key={section.key}>
+              <div className="profile-settings-row">
+                {renderParticipation(section)}
+                {renderRowMain(section)}
+                <span className="profile-settings-row-actions">
+                  <SettingsMoreMenu
+                    label={t("profileLibrary.sectionSettings.more")}
+                    disabled={busy}
+                    actions={[
+                      {
+                        key: "fields",
+                        label: t("profileLibrary.sectionSettings.fields"),
+                        onSelect: () => onOpenFields(section.key),
+                      },
+                    ]}
+                  />
+                </span>
+              </div>
+            </Fragment>
           ))}
         </div>
       </section>

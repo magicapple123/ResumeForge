@@ -27,9 +27,11 @@ from .docx_blocks import (
     paragraph,
     set_run_font,
 )
+from .docx_decorate import border_sz_from_px
 from .docx_rich import add_rich_runs
 from .docx_text_measure import make_text_measure
 from .pdf_exporter import _PX_TO_MM, _PX_TO_PT, PAGE_WIDTH_MM, _photo_bytes, fit_photo_size
+from .pdf_exporter.theme import _hex_to_rgb
 from .resume.column_geometry import resolved_column_geometry
 from .resume.resume_contact import WORD_SEPARATOR, pack_contact_lines
 from .resume.resume_style import RoleStyle
@@ -266,6 +268,20 @@ def draw_header(
                 border_sz=4,
                 space_pt=6,
             )
+
+    # 页头底边线（1-A）：`header_border_width` / `header_border_color` / `header_pad_bottom`
+    # 早就在 `resolve_layout()` 的返回值里，PDF 画了、Word 没读（同一份简历，PDF 在联系方式
+    # 下方有一条 2px 强调色横线，Word 直接接到「实习/工作经历」）。2px ≈ 1.5pt ≈ `w:sz=12`。
+    # `soft_accent` 色块（modern / split）不叠线：它们的 `header_border_width` 本来就是 0。
+    border_width_px = float(getattr(layout, "header_border_width", 0.0) or 0.0)
+    if border_width_px > 0 and getattr(layout, "header_bg", "none") != "soft_accent":
+        decorate_paragraph(
+            header_paragraphs[-1],
+            edges=("bottom",),
+            border_color=_hex_to_rgb(str(getattr(layout, "header_border_color", ""))) or accent,
+            border_sz=border_sz_from_px(border_width_px),
+            space_pt=base * float(getattr(layout, "header_pad_bottom", 0.0) or 0.0) * _PX_TO_PT,
+        )
 
 
 def draw_blocks(

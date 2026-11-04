@@ -48,7 +48,9 @@ export const APPROXIMATE_PAGINATION_NOTE_KEY: MessageKey = "preview.canvas.note.
  *   「已显示全部 N 页，其中第 M 页起不计入导出」。
  * - **导出链路一行不动**：仍按页数上限截断，产物逐字节不变。
  *
- * 这段行为对应的提示文案是 `preview.canvas.note.overflow`（渲染处 `t(OVERFLOW_NOTE_KEY)`）。
+ * 这段行为对应的提示文案是 `preview.canvas.note.overflow`：渲染点在 `PreviewAlerts.tsx`
+ * 的溢出说明里（`t(OVERFLOW_NOTE_KEY)`）。**它不是死常量**——删掉它会让那条提示失去
+ * 唯一来源（`ResumePreview.test.tsx` 也按这个 key 断言文案与数字）。
  */
 export const OVERFLOW_NOTE_KEY: MessageKey = "preview.canvas.note.overflow";
 

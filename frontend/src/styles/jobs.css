@@ -122,9 +122,27 @@
 }
 
 /* 操作栏位于 Drawer 的 footer 插槽内，常驻底部：抽屉负责分隔线和内边距，
-   这里只处理换行排布。 */
+   这里只负责两行分档（主行承载会改变状态的动作，辅助行承载分析/投递/跳页）。 */
 .job-detail-actions {
   display: flex;
+  flex-direction: column;
+  gap: 0;
+  width: 100%;
+}
+
+/* 主行：保持原尺寸与图标；窄窗口下三个按钮仍可折行。 */
+.job-detail-actions-primary {
+  width: 100%;
+}
+
+/* 辅助行：小号无边框文字按钮，一行放得下 6 个；多出「前往投递」时允许折行。 */
+.job-detail-actions-secondary {
+  display: flex;
   flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+  justify-content: flex-start;
+  padding-top: 8px;
+  border-top: 1px solid var(--rf-border-subtle);
   width: 100%;
 }

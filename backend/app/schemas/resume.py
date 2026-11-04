@@ -411,7 +411,7 @@ class ResumeRenderRequest(BaseModel):
     format_name: str = Field(default="", max_length=64)
     # W14：无记录的即时预览也要知道文档模式，否则长 CV 草稿的 10 页请求会被 422。
     document_mode: ResumeMode = "resume"
-    page_limit: int = Field(default=1, ge=1)  # 路由按模式夹紧（W14）
+    page_limit: int = Field(default=1, ge=0)  # 路由按模式夹紧（W14；0 = 不限篇幅）
     font_scale: ResumeFontScale = "standard"
     # 版式语言：只影响小节标题与字段前缀。None = 这次不涉及（用记录里的值）。
     # **必须收下这个字段**：本 schema 是 extra="forbid"，漏了它前端草稿渲染会直接 422。
@@ -430,7 +430,7 @@ class ResumeLayoutUpdate(BaseModel):
     format_name: str = Field(default="", max_length=64)
     # W14：页数上限随文档模式变化；真正的夹紧在路由里用 mode_page_limit(value, mode)。
     document_mode: ResumeMode | None = None
-    page_limit: int = Field(default=1, ge=1)  # 路由按模式夹紧（W14：4→3、11→10）
+    page_limit: int = Field(default=1, ge=0)  # 路由按模式夹紧（W14：4→3、11→10；0 = 不限）
     font_scale: ResumeFontScale = "standard"
     # 语言：**None = 这次不涉及**，绝不能给 "zh-CN" 默认值——本接口是整体替换，
     # 带默认值就等于"拖动一次字号滑杆"静默把英文简历改回中文，而用户看不出发生了什么。

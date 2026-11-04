@@ -49,6 +49,7 @@ const document = {
   "document.zone.body": "正文",
   "document.zone.detail": "灰色短字段",
   "document.zone.detailHint": "短字段在正文前后按列排布，同一行放得下就并排显示",
+  "document.zone.bodyHint": "拖动 ⠿ 或选中后按 ↑ ↓ 调整顺序",
   "document.zone.emptyLead": "还没有正文前的灰色字段",
   "document.zone.emptyTrail": "还没有正文后的灰色字段",
   "document.zone.emptyBody": "还没有正文内容",
@@ -104,8 +105,6 @@ const document = {
   "document.item.showLabel": "显示标签",
   "document.item.hideLabel": "隐藏标签",
   "document.item.wrap": "值加括号",
-  "document.item.moveUp": "上移字段",
-  "document.item.moveDown": "下移字段",
   "document.item.format": "格式",
   "document.item.bodyStyle": "正文样式",
   "document.item.bodyStyle.bullet": "要点",
@@ -199,6 +198,9 @@ const document = {
   "document.basic.customField": "自定义字段名",
   "document.basic.customAdd": "添加字段",
   "document.basic.customHint": "自定义字段的名字只在制作台显示，纸面按位置排值",
+  // 6-A：加进页眉的目录字段带着资料里的当前值（值拷贝，不是活链接）
+  "document.basic.addedValueHint":
+    "加进来的字段会带上资料里的当前值，双击即可在制作台直接编辑；之后改资料不会自动同步",
   // #25：照片 chip 与裁剪
   "document.photo.chipValue": "照片",
   "document.photo.thumbnail": "照片缩略图",

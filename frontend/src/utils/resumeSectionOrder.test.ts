@@ -1,53 +1,16 @@
 // SPDX-License-Identifier: Apache-2.0
-/** 分区顺序的前端归一化：与后端 `resume_sections.py` 同一套规则的两份实现，
- *  这里钉住前端这份的行为（补齐、去重、调序边界）。 */
+/** 简历分区顺序：调序边界与版式覆盖的写入规则。
+ *
+ * 默认顺序本身的跨端一致性由 `backend/tests/test_resume_section_order_parity.py` 钉住，
+ * 这里只钉前端工具函数的行为（越界、不可变、覆盖项写入/删除）。
+ */
 
 import { describe, expect, it } from "vitest";
 import {
   buildSectionOrderConfig,
   DEFAULT_RESUME_SECTION_ORDER,
   moveSection,
-  normalizeSectionOrder,
 } from "./resumeSectionOrder";
-
-describe("normalizeSectionOrder", () => {
-  it("缺失的键按默认顺序补齐——用户只调前两项，其余五项不该消失", () => {
-    expect(normalizeSectionOrder(["projects", "experience"])).toEqual([
-      "projects",
-      "experience",
-      "education",
-      "skills",
-      "campus_experience",
-      "awards",
-      "summary",
-    ]);
-  });
-
-  it("未知键丢弃、重复键去重，而不是让整份版式配置报错", () => {
-    expect(normalizeSectionOrder(["projects", "nope", "projects", "summary"])).toEqual([
-      "projects",
-      "summary",
-      "education",
-      "experience",
-      "skills",
-      "campus_experience",
-      "awards",
-    ]);
-  });
-
-  it("空值与非数组输入回到默认顺序", () => {
-    expect(normalizeSectionOrder(undefined)).toEqual(DEFAULT_RESUME_SECTION_ORDER);
-    expect(normalizeSectionOrder(null)).toEqual(DEFAULT_RESUME_SECTION_ORDER);
-    expect(normalizeSectionOrder("projects")).toEqual(DEFAULT_RESUME_SECTION_ORDER);
-    expect(normalizeSectionOrder({})).toEqual(DEFAULT_RESUME_SECTION_ORDER);
-  });
-
-  it("结果永远覆盖默认顺序的全部键", () => {
-    expect(normalizeSectionOrder(["awards"]).slice().sort()).toEqual(
-      [...DEFAULT_RESUME_SECTION_ORDER].sort(),
-    );
-  });
-});
 
 describe("moveSection", () => {
   const order = ["a", "b", "c"];

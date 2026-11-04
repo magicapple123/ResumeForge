@@ -17,6 +17,9 @@
  * - 长 CV 默认 2 页（lead 2026-10-24 拍板）。
  */
 
+// 需求 7B：0 = 不限篇幅。常量只在 `types/resume.ts` 定义一次，这里引用而不是复制字面量。
+import { UNLIMITED_PAGE_LIMIT } from "../../types/resume";
+
 /** 文档模式。与后端 `document_mode` 列的取值逐字一致。 */
 export type DocumentMode = "resume" | "long_cv";
 
@@ -47,15 +50,20 @@ export function pageLimitRange(mode: DocumentMode): readonly [number, number] {
 /** 把页数夹进模式的区间。非整数按四舍五入取整；NaN 落回该模式默认值。 */
 export function clampPageLimit(mode: DocumentMode, value: number): number {
   const [min, max] = pageLimitRange(mode);
+  // 需求 7B：0 = 不限篇幅，是合法取值，不能被夹成 min（否则用户一选「不限」就被打回 1 页）。
+  if (value === UNLIMITED_PAGE_LIMIT) return UNLIMITED_PAGE_LIMIT;
   if (!Number.isFinite(value)) return defaultPageLimit(mode);
   const rounded = Math.round(value);
   return Math.min(max, Math.max(min, rounded));
 }
 
-/** 某模式可选的页数列表（控件用）。 */
+/** 某模式可选的页数列表（控件用）。末尾追加「不限」（0）。 */
 export function pageLimitOptions(mode: DocumentMode): number[] {
   const [min, max] = pageLimitRange(mode);
-  return Array.from({ length: max - min + 1 }, (_unused, index) => min + index);
+  return [
+    ...Array.from({ length: max - min + 1 }, (_unused, index) => min + index),
+    UNLIMITED_PAGE_LIMIT,
+  ];
 }
 
 /** 新建/切换时的默认页数：普通 1 页、长 CV 2 页。 */
@@ -74,5 +82,8 @@ export function pageLimitOnModeSwitch(
 
 /** 排版结果是否超过当前上限（"约需 N 页（上限 M 页）"的判据）。 */
 export function isOverBudget(pagesNeeded: number | null | undefined, pageLimit: number): boolean {
+  // 「不限篇幅」（0）永远不超预算：上限不存在，"需要 5 页 > 0"这种比较毫无意义，
+  // 拿它当判据会让选了「不限」的人反而看到"超出上限"的警告。
+  if (pageLimit === UNLIMITED_PAGE_LIMIT) return false;
   return typeof pagesNeeded === "number" && Number.isFinite(pagesNeeded) && pagesNeeded > pageLimit;
 }

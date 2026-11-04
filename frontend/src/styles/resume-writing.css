@@ -1,0 +1,116 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/* 「写作增强」面板的样式（用法提示折叠、动作行、结果区、微调区）。
+   2026-11 从 resume-panels.css 切出：那边正好顶到 500 行预算，而这一块随
+   "结果可迭代 / 结果可编辑"重写，是重写而不是纯搬迁，所以单独成片。
+   由 resume-panels.css 顶部 @import 引入，类名前缀 `.resume-writing-` 与其它片不相交。 */
+
+/* 用法提示默认只占一行：整块常驻时它把结果区挤出首屏（用户口径"这块太占地方"）。
+   标题行本身就是一句话总结，展开后才显示完整说明。 */
+.resume-writing-hint {
+  padding: 6px 10px;
+  border: 1px solid var(--rf-info-bg);
+  border-radius: 8px;
+  background: var(--rf-brand-wash);
+}
+
+.resume-writing-hint-toggle {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 6px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--rf-info-strong);
+  font: inherit;
+  font-size: 12px;
+  line-height: 1.6;
+  text-align: left;
+  cursor: pointer;
+}
+
+.resume-writing-hint-toggle:focus-visible {
+  outline: 2px solid var(--rf-info);
+  outline-offset: 2px;
+}
+
+.resume-writing-hint-toggle-text {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.resume-writing-hint-toggle-action {
+  flex: 0 0 auto;
+  color: var(--rf-text-secondary);
+}
+
+.resume-writing-hint-body {
+  margin: 6px 0 0;
+  color: var(--rf-text-description);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+/* 动作说明与「生成」同一行：说明占满剩余宽度、按钮贴右。 */
+.resume-writing-actions-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+/* 动作切换后那一句用途说明：与说明块同字号，紧贴它触发的那颗按钮。 */
+.resume-writing-hint-line {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+/* 结果区：版本条 + 可编辑结果 + 迭代 chip，共用同一张卡片边框。 */
+.resume-writing-result {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--rf-border);
+  border-radius: 8px;
+}
+
+.resume-writing-result-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.resume-writing-versions {
+  align-items: center;
+}
+
+/* 结果默认是"可读的一段文字"而不是表单：底色淡、边框透明，悬停/聚焦才浮出来；
+   点进去就能直接改（改完的文本留在版本栈里）。 */
+.resume-writing-result-input {
+  border-color: transparent;
+  background: var(--rf-surface-alt);
+}
+
+.resume-writing-result-input:hover {
+  border-color: var(--rf-border-strong);
+}
+
+.resume-writing-result-input:focus {
+  border-color: var(--rf-info);
+}
+
+.resume-writing-refine {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.resume-writing-refine-label {
+  font-size: 12px;
+  line-height: 20px;
+}

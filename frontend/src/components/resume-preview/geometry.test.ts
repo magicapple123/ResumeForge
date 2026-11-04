@@ -19,8 +19,8 @@ function geometry(
 ) {
   return calculatePreviewGeometry({
     availableSpace: { width: A4_WIDTH_PX, height: A4_HEIGHT_PX },
-    paperHeight: A4_HEIGHT_PX * pageCount,
-    pageCount,
+    paperHeight: A4_HEIGHT_PX * Math.max(1, pageCount),
+    pageLimit: pageCount,
     zoom: 1,
     overflow: options.overflow ?? false,
     naturalWidth: options.naturalWidth ?? A4_WIDTH_PX * pageCount,
@@ -107,7 +107,7 @@ function fitIn(width: number, height: number, extra: { zoom?: number; maxFitScal
   return calculatePreviewGeometry({
     availableSpace: { width, height },
     paperHeight: A4_HEIGHT_PX,
-    pageCount: 1,
+    pageLimit: 1,
     zoom: extra.zoom ?? 1,
     overflow: false,
     naturalWidth: A4_WIDTH_PX,
@@ -122,7 +122,7 @@ describe("制作台按宽度适应（Q21）", () => {
     return calculatePreviewGeometry({
       availableSpace: { width, height },
       paperHeight: A4_HEIGHT_PX,
-      pageCount: 1,
+      pageLimit: 1,
       zoom: 1,
       overflow: false,
       naturalWidth: A4_WIDTH_PX,

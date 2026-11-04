@@ -243,12 +243,20 @@
 .resume-preview-page {
   position: relative;
   flex: 0 0 auto;
-  background: #fff;
+  /* 纸面容器底色（问题 19）：浅色 = 白（与 `--rf-paper` 同值），深色 = 黑。
+     **这不影响导出**：导出的纸由服务端模板绘制，`--rf-paper` 仍是"导出与打印看到的那张纸"。
+     加载瞬间 iframe 还没画出来时，这一层就是纸的颜色——不先用深色打底就会闪一下白边。 */
+  background: var(--rf-preview-paper);
   border: 1px solid var(--rf-border-subtle);
   border-radius: 2px;
   box-shadow: 0 1px 4px rgb(15 40 80 / 0.12);
   /* 不能 `overflow: hidden`：页标挂在页脚**下方**那条空隙里（`bottom: -20px`），
      裁掉就再也看不见了。iframe 自身就是 A4 尺寸，不会溢出这张纸。 */
+}
+
+/* 深色下纸是接近纯黑的：浅色投影落在黑纸上只会显脏，直接去掉。 */
+[data-theme="dark"] .resume-preview-page {
+  box-shadow: none;
 }
 
 /* 页标放在页脚下方那条空隙里（`PAGE_STACK_GAP_PX` = 24px 够放 12px 的字），
@@ -266,6 +274,33 @@
   pointer-events: none;
 }
 
+/* 超限页（第「页数上限 + 1」页起）不属于导出（2026-11 问题 24）：**2px 实红线**包边，
+   纸下方一条**通栏红带**。旧版是 1px 半透明虚线 + 内容宽的小胶囊，在浅色下几乎与纸边
+   重影，翻到这一页时看不出它和正常页有什么区别。
+
+   **必须写在样式表里而不是 JSX 内联样式里**：内联优先级更高，一写回 JSX 这两条就永远
+   不生效（测试里有一条专门盯着"超限页标没有内联 style"）。
+
+   **继续用 outline 而不是 border**：outline 不参与布局，纸高与页间距（`PAGE_STACK_GAP_PX`）
+   一个像素都不变，`layoutFrame` 的高度测量也不会跟着抖。 */
+.resume-preview-page.is-over-limit {
+  outline: 2px solid var(--rf-danger);
+  outline-offset: -2px;
+}
+
+/* 通栏红带：宽度从"内容宽"改成撑满纸宽（`left: 0` 来自基类，这里补 `right: 0`），
+   位置仍在页脚下方那 24px 间隙里（`bottom: -20px`），所以不压正文、也不改页间距。
+   白字是颜色守卫里唯一的字面量例外——它压在 `--rf-danger` 实底上，深浅两套都是浅色。 */
+.resume-preview-page-label.is-over-limit {
+  right: 0;
+  padding: 0 8px;
+  background: var(--rf-danger);
+  color: #fff;
+  font-weight: 500;
+  text-align: center;
+  white-space: nowrap;
+}
+
 .resume-iframe {
   display: block;
   border: none;
@@ -274,6 +309,22 @@
      父页面就收不到 pointerup，拖拽平移会卡在"正在拖"（与制作台分隔条同一个坑）。
      代价是纸面本身不可点——那正是「草稿模式编辑」要打开的一扇门，见下面那条覆盖。 */
   pointer-events: none;
+}
+
+/* 深色主题的草稿纸（问题 19 方案 A）：整张纸反色，照片/图标由 iframe 内部注入的样式
+   抵消一次（见 `components/resume-preview/paperTheme.ts`）。为什么是滤镜而不是改模板
+   的 `--bg`：那会覆盖用户自选的「页面背景色」，且要给 9 个模板各写一套深色映射。
+   **这里只影响屏幕**——导出走服务端渲染，打印另有 `@media print` 关闭。 */
+.resume-iframe.is-dark-paper {
+  filter: invert(1) hue-rotate(180deg);
+}
+
+/* 打印预览里纸必须是白的：滤镜像一层"显示偏好"，绝不能让它跟着 `Ctrl+P` 打出来。
+   （导出 PDF / DOCX / HTML 走服务端渲染，本来就不经过这条规则。） */
+@media print {
+  .resume-iframe.is-dark-paper {
+    filter: none;
+  }
 }
 
 /* 「草稿模式编辑」：把指针还给 iframe。

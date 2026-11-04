@@ -24,13 +24,23 @@ const interviewReview = {
 
   "interviewReview.card.analysis": "Answer approach",
   "interviewReview.section.keyPoints": "Key points",
-  "interviewReview.section.followUp": "Likely follow-up questions",
-  "interviewReview.section.pitfalls": "Common pitfalls",
+  /** Weaknesses and follow-ups are editable inputs now, so the labels say what to type. */
+  "interviewReview.field.weaknesses": "Weaknesses the interview exposed",
+  "interviewReview.field.followUps": "Questions the interviewer kept asking",
+  "interviewReview.placeholder.weaknesses":
+    "One per line, e.g. could not explain how the metric was calculated; leave it empty if you fill in the follow-ups",
+  "interviewReview.placeholder.followUps":
+    "One per line, e.g. how exactly is this metric calculated",
 
   "interviewReview.action.optimize": "Optimize resume from this",
   "interviewReview.action.save": "Save review",
   "interviewReview.optimize.note":
     "Only a suggestion list is produced; the resume text itself is not edited.",
+  /** Shown when both inputs are empty, and the reason the button is disabled. */
+  "interviewReview.optimize.needInput":
+    "Write one thing the interview caught you on, or a question the interviewer kept asking",
+  /** The backend caps this at 20 items; the frontend trims and says so before submitting. */
+  "interviewReview.optimize.truncated": "At most {limit} items are sent; the first {limit} are kept",
   "interviewReview.empty": "Enter a question, then analyze the answer approach",
 
   "interviewReview.card.legacy": "Saved review",

@@ -59,15 +59,6 @@ _ENTRY_VALUE_EXISTS_SQL = text(
 )
 
 
-def _hidden_field_ids(db: Session) -> frozenset[str]:
-    """用户隐藏的字段：R-67 让它们既不参与取数也不上纸面（值仍留在库内）。"""
-    return frozenset(
-        field_id
-        for field_id, preference in field_preferences.load_preferences(db).items()
-        if preference.hidden
-    )
-
-
 def _custom_fields_by_section(db: Session) -> dict[str, list[ProfileCustomField]]:
     """活动自定义字段按分区归组；custom_field_rows 已按 (sort_order, id) 稳定排序。"""
     grouped: dict[str, list[ProfileCustomField]] = {}
@@ -154,12 +145,15 @@ def _custom_section(
         fields=_custom_specs(custom_fields, hidden, start_order=1),
         entries=(),
         revision=int(row.revision or 1),
+        # 需求 6：板块级开关随定义读入消费快照，生成链据此决定是否按 JD 关键词筛条目。
+        filter_by_job=bool(getattr(row, "filter_by_job", False)),
     )
 
 
 def _sections(db: Session, scope: ProfileScope) -> dict[str, ConsumedSection]:
     """按 scope 顺序建分区骨架：每个参与 key 都有 ConsumedSection（C1）。"""
-    hidden = _hidden_field_ids(db)
+    # hidden 的唯一读取入口在 field_preferences（与写入同源），全局搜索复用同一份判据。
+    hidden = field_preferences.hidden_field_ids(db)
     custom_rows = {row.key: row for row in workspace_bootstrap.active_custom_sections(db)}
     custom_fields = _custom_fields_by_section(db)
     sections: dict[str, ConsumedSection] = {}
@@ -231,7 +225,21 @@ def load_consumed_profile(db: Session, scope: ProfileScope) -> ConsumedProfile:
 
 
 def load_all_consumed_profile(db: Session) -> ConsumedProfile:
-    """三链外全量读：不按当前方案裁剪（R-64 非目标：助手/评分/审阅仍读全部资料）。"""
+    """三链外全量读：不按当前方案裁剪（R-64 非目标：助手/评分/审阅仍读全部资料）。
+
+    **使用契约（禁止事项）**：本函数是全项目**唯一**会带出"用户已隐藏板块"的取数入口，
+    语义就是"不按组裁剪"。因此：
+
+    - **禁止**用于任何面向用户或模型的展示 / 生成 / 改写链路（资料页、简历生成、求职助手、
+      岗位匹配、简历修订与审阅一律走 ``load_ai_consumed_profile`` / ``load_consumed_profile``）；
+    - 仅限与"不按组裁剪"语义相同的**裁决**场景。当前唯一允许的调用点是网申快照的重叠
+      字段裁决（``webform/data/profile_snapshot.py``），而且它只取政治面貌 / 出生 / 导师 /
+      研究方向等专用字段，碰不到板块内容。
+
+    误用的后果是隐藏板块直接泄露，而这类改动看起来非常无害（"我只是想拿完整资料"）。
+    ``tests/test_all_consumed_callers.py`` 用 AST 静态扫描守住这条契约：新增调用点必须
+    显式登记并写明理由，否则测试变红并报出文件与行号。
+    """
     return load_consumed_profile(db, all_sections_scope(db))
 
 

@@ -55,9 +55,9 @@ export interface SetupForm {
   jobId?: number;
   /** 关联简历：与 `resumeMaterial` 二选一。 */
   resumeId?: number;
-  /** 导入的 JD 文件（#41）：已在上传时解析成文本，非空表示这一侧用文件。 */
+  /** 导入的岗位材料（#41）：已在上传时提取成文本，非空表示这一侧用文件。 */
   jobMaterial?: InterviewMaterialExtract | null;
-  /** 导入的简历截图（#41）：已在上传时识别成文本。 */
+  /** 导入的简历材料（#41）：已在上传时提取成文本。 */
   resumeMaterial?: InterviewMaterialExtract | null;
   interviewType: InterviewType;
   difficulty: InterviewDifficulty;
@@ -177,48 +177,56 @@ export function SetupTab({
         }}
       >
         <div className="interview-setup-grid">
-          {/* 岗位材料（#41）：从记录选 / 导入 PDF·TXT 二选一。切到"导入文件"时下拉框
-              禁用且不再校验（材料由文件提供），文件区在 extra 里显示解析结果。 */}
-          <Form.Item
-            label={t("interviewPage.setup.jobLabel")}
-            name="jobId"
-            rules={
-              jobSource === "record"
-                ? [{ required: true, message: t("interviewPage.setup.jobRequired") }]
-                : []
-            }
-            extra={
-              <MaterialSourceField
-                kind="job"
-                mode={jobSource}
-                material={jobMaterial}
-                disabled={starting}
-                onModeChange={(mode) => {
-                  setJobSource(mode);
-                  if (mode === "file") form.setFieldValue("jobId", undefined);
-                }}
-                onMaterialChange={setJobMaterial}
+          {/* 材料行（问题 7）：两个材料字段单独成组并横跨整行。容器自己也是 auto-fit
+              栅格（宽屏两等分、窄屏塌成一列），外侧栅格因此不再为这一行留空位；
+              不包这层容器时，首行只有两个字段、其余格子空着，窗口越宽空白越大。 */}
+          <div className="interview-setup-materials">
+            {/* 岗位材料（#41）：从记录选 / 导入文件二选一，两侧接受同一组格式
+                （问题 6：图片 / PDF / TXT / Word / Markdown）。切到"导入文件"时下拉框
+                禁用且不再校验（材料由文件提供），文件区在 extra 里显示解析结果。 */}
+            <Form.Item
+              label={t("interviewPage.setup.jobLabel")}
+              name="jobId"
+              className="interview-material-field"
+              rules={
+                jobSource === "record"
+                  ? [{ required: true, message: t("interviewPage.setup.jobRequired") }]
+                  : []
+              }
+              extra={
+                <MaterialSourceField
+                  kind="job"
+                  mode={jobSource}
+                  material={jobMaterial}
+                  disabled={starting}
+                  onModeChange={(mode) => {
+                    setJobSource(mode);
+                    if (mode === "file") form.setFieldValue("jobId", undefined);
+                  }}
+                  onMaterialChange={setJobMaterial}
+                />
+              }
+            >
+              <Select
+                allowClear
+                disabled={jobSource === "file"}
+                placeholder={t("interviewPage.setup.jobPlaceholder")}
+                {...jobSelect.selectProps}
               />
-            }
-          >
-            <Select
-              allowClear
-              disabled={jobSource === "file"}
-              placeholder={t("interviewPage.setup.jobPlaceholder")}
-              {...jobSelect.selectProps}
-            />
-          </Form.Item>
-          {/* 简历材料（#41）：从记录选 / 导入截图二选一。 */}
-          <Form.Item
-            label={t("interviewPage.setup.resumeLabel")}
-            name="resumeId"
-            rules={
-              resumeSource === "record"
-                ? [{ required: true, message: t("interviewPage.setup.resumeRequired") }]
-                : []
-            }
-            extra={
-              <div>
+            </Form.Item>
+            {/* 简历材料（#41）：从记录选 / 导入文件二选一（与岗位侧同一组格式）。
+                extra 与左列**同结构**（都只有 `MaterialSourceField`），两侧 extra 的起点与
+                底部才能对齐；边界文案因此移到两列之外，见下方 `.interview-setup-hint`。 */}
+            <Form.Item
+              label={t("interviewPage.setup.resumeLabel")}
+              name="resumeId"
+              className="interview-material-field"
+              rules={
+                resumeSource === "record"
+                  ? [{ required: true, message: t("interviewPage.setup.resumeRequired") }]
+                  : []
+              }
+              extra={
                 <MaterialSourceField
                   kind="resume"
                   mode={resumeSource}
@@ -230,28 +238,28 @@ export function SetupTab({
                   }}
                   onMaterialChange={setResumeMaterial}
                 />
-                {/* #41：边界文案对两种材料来源都成立——不管这一侧是从记录选来的还是
-                    导入的文件，面试官看到的都只是"这两份"。所以它不能挂在"从记录选"
-                    那个分支里（文件态下曾经整句消失）。 */}
-                <Typography.Text type="secondary">
-                  {t("interviewPage.setup.scopeHint")}
-                </Typography.Text>
-              </div>
-            }
-          >
-            <Select
-              allowClear
-              disabled={
-                resumeSource === "file" || watchedJobId === undefined || watchedJobId === null
               }
-              placeholder={
-                watchedJobId === undefined || watchedJobId === null
-                  ? t("interviewPage.setup.resumePlaceholderNoJob")
-                  : t("interviewPage.setup.resumePlaceholder")
-              }
-              {...resumeSelect.selectProps}
-            />
-          </Form.Item>
+            >
+              <Select
+                allowClear
+                disabled={
+                  resumeSource === "file" || watchedJobId === undefined || watchedJobId === null
+                }
+                placeholder={
+                  watchedJobId === undefined || watchedJobId === null
+                    ? t("interviewPage.setup.resumePlaceholderNoJob")
+                    : t("interviewPage.setup.resumePlaceholder")
+                }
+                {...resumeSelect.selectProps}
+              />
+            </Form.Item>
+          </div>
+          {/* #41：边界文案对两种材料来源都成立——不管这一侧是从记录选来的还是导入的文件，
+              面试官看到的都只是"这两份"。放在两列之外并横跨整行：留在某一列的 extra 里
+              会让两侧底部不齐，也容易被读成只针对简历。 */}
+          <Typography.Text type="secondary" className="interview-setup-hint">
+            {t("interviewPage.setup.scopeHint")}
+          </Typography.Text>
           <Form.Item label={t("interviewPage.setup.typeLabel")} name="interviewType">
             <Select
               options={INTERVIEW_TYPES.map((value) => ({

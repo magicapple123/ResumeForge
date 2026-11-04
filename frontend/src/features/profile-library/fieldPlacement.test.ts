@@ -53,6 +53,7 @@ function section(): SectionOut {
     provenance: [],
     fields: [],
     revision: 1,
+    filter_by_job: false,
   };
 }
 

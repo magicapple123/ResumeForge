@@ -22,7 +22,7 @@ def _control(
     )
 
 
-def _run_with_controls(monkeypatch, controls, *, stop=None):
+def _run_with_controls(monkeypatch, controls, *, stop=None, filtered_fields=None):
     writes = []
     monkeypatch.setattr(FormEngine, "read_controls", lambda self, _client: controls)
 
@@ -39,6 +39,7 @@ def _run_with_controls(monkeypatch, controls, *, stop=None):
         on_progress=progress.append,
         should_stop=(lambda: stop(writes)) if stop is not None else None,
         delay_seconds=0,
+        filtered_fields=filtered_fields,
     )
     return result, writes, progress
 
@@ -115,3 +116,32 @@ def test_current_page_fill_uses_the_main_page_date_components(monkeypatch):
         ("education_end", "06"),
     ]
     assert result.filled == 2
+
+
+def test_skipped_fields_carry_the_section_name_not_a_blank_silence(monkeypatch):
+    """「当前方案没包含这个板块」与「资料里没填」必须给出**不同**的账。
+
+    这里的控制是「实验室」（简历侧字段）。资料里没有值、板块又落在组外时，
+    跳过清单要能说出板块名；若两者混成一笔，用户只会看到"没填"三个字，
+    进而去「我的资料」白找一遍（需求 3 的静默漏填验收项 / 问题 8）。
+    """
+    result, writes, _progress = _run_with_controls(
+        monkeypatch,
+        [_control(0, "实验室")],
+        filtered_fields={"laboratory": "教育经历"},
+    )
+
+    assert writes == []
+    assert result.filtered_skipped == 1
+    assert result.filtered_section == "教育经历"
+
+
+def test_a_field_that_is_merely_empty_is_not_counted_as_scope_skipped(monkeypatch):
+    """反例：资料里没填、但板块在方案里 → 不计入「因范围跳过」。
+
+    少了这一条，把 ``filtered_skipped`` 写成"所有没填的字段数"也能让上一条变绿。
+    """
+    result, _writes, _progress = _run_with_controls(monkeypatch, [_control(0, "实验室")])
+
+    assert result.filtered_skipped == 0
+    assert result.filtered_section == ""

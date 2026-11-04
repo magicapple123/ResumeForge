@@ -15,7 +15,7 @@
  * 跳转按钮，点击统一走 `navigateForTask`。这样"点了通知但没跳到那条记录"只剩一个出错点。
  */
 import { Button, Space } from "antd";
-import { createElement, Fragment } from "react";
+import { createElement } from "react";
 import type { ReactNode } from "react";
 import { t } from "../i18n";
 import { playDoneSound } from "./notifySound";
@@ -33,8 +33,9 @@ export interface TaskDoneNotice {
   /**
    * 完成后该跳去哪（由 `utils/taskDeepLinks` 生成，未知类型或缺 id 时是 `null`）。
    *
-   * 给了就多渲染一颗「去查看」按钮：卡片模式挂在 `actions` 后面；弹窗模式放进正文下方，
-   * 点击顺手把弹窗收掉。`null` / 不给 = 不渲染跳转入口（例如生成失败，本来就没有落点）。
+   * 给了就多渲染一颗「去查看」按钮：卡片模式挂在 `actions` 后面；弹窗模式进 `footer`、
+   * 排在「知道了」左边，点击顺手把弹窗收掉。`null` / 不给 = 不渲染跳转入口（例如生成失败，
+   * 本来就没有落点）。
    */
   deepLink?: string | null;
   /** 「去查看」那颗按钮的文案（例如「查看简历」）；缺省用通用那句。 */
@@ -61,6 +62,8 @@ interface NotificationPayload {
 interface ModalPayload {
   title: ReactNode;
   content?: ReactNode;
+  /** 自定义动作区：给了它，`okText` / `onOk` 就不再渲染（确认键要自己画）。 */
+  footer?: ReactNode;
   okText?: string;
   onOk?: () => void;
 }
@@ -128,9 +131,9 @@ function viewButton(
 }
 
 /** 把若干动作按钮排成一行；只有一颗时也套一层，两种呈现的间距才一致。 */
-function actionRow(nodes: ReactNode[]): ReactNode | null {
+function actionRow(nodes: ReactNode[], className?: string): ReactNode | null {
   if (nodes.length === 0) return null;
-  return createElement(Space, { size: 8, wrap: true, className: "task-notice-actions" }, ...nodes);
+  return createElement(Space, { size: 8, wrap: true, className }, ...nodes);
 }
 
 /** 从 `modal.info` 的返回值里取关闭函数；返回形状不可信时返回 `null`（不关就是了）。 */
@@ -142,15 +145,36 @@ function destroyOf(instance: unknown): (() => void) | null {
 }
 
 /**
- * 弹窗正文：说明 + 一行动作按钮。
+ * 弹窗动作区：「调用方动作 → 去查看(primary) → 知道了(default)」。
  *
- * 单独成函数而不是内联进 `content:` 里，且用 `Fragment` 而不是 `"div"`：
- * `createElement("div", …)` 的标签名是个字符串字面量，会被 i18n 的"产品文案"扫描器当成
- * 一句待翻译的文案（它确实是字符串，只是不是给人看的）。用 Fragment 连这个歧义都没有。
+ * 曾经把这批按钮并进 `content`，因为误以为 `modal.info` 没有动作区；结果是按钮作为
+ * 行内元素嵌在说明句子里，把一句话挤断，而确认键又单独待在右下角。`footer` 是 antd
+ * 的公开属性，动作区本来就该在那儿。
+ *
+ * 顺序是刻意的：主操作靠左、确认靠右，与 antd 弹窗惯例一致，也不会出现两个"主按钮"。
+ * 自定义 `footer` 之后 `okText` / `onOk` 不再渲染，所以「知道了」要自己画，并在点击时
+ * 补上 `onConfirm`（顺序与原 `onOk` 相同：先回调，再关闭）。
  */
-function noticeContent(description: ReactNode, actions: ReactNode | null): ReactNode | undefined {
-  if (!description && !actions) return undefined;
-  return createElement(Fragment, null, description, actions);
+function modalFooter(notice: TaskDoneNotice, close: () => void): ReactNode {
+  const gotIt = createElement(
+    Button,
+    {
+      onClick: () => {
+        notice.onConfirm?.();
+        close();
+      },
+    },
+    notice.confirmLabel ?? t("backgroundTasks.confirm.gotIt"),
+  );
+  const deepLink = notice.deepLink ?? null;
+  return actionRow(
+    [
+      ...(notice.actions ? [notice.actions] : []),
+      ...(deepLink ? [viewButton(deepLink, notice.viewLabel, close)] : []),
+      gotIt,
+    ],
+    "task-notice-footer",
+  );
 }
 
 /**
@@ -168,16 +192,11 @@ export function notifyTaskDone(notice: TaskDoneNotice): void {
     // `modal.info` 的返回值要等调用之后才知道，所以先留一个可变的关闭句柄：
     // 用户真点到「去查看」时它已经被赋值了。
     let close: (() => void) | null = null;
-    const actions = actionRow([
-      ...(notice.actions ? [notice.actions] : []),
-      ...(deepLink ? [viewButton(deepLink, notice.viewLabel, () => close?.())] : []),
-    ]);
     const instance = host.modal.info({
       title,
-      // 弹窗没有独立的"动作区"，把动作按钮并进正文，别让它悄悄丢掉。
-      content: noticeContent(notice.description, actions),
-      okText: notice.confirmLabel ?? t("backgroundTasks.confirm.gotIt"),
-      onOk: notice.onConfirm,
+      // 正文只放说明，动作全在 footer：混在一起会把句子挤断（见 modalFooter 注释）。
+      content: notice.description,
+      footer: modalFooter(notice, () => close?.()),
     });
     close = destroyOf(instance);
     return;

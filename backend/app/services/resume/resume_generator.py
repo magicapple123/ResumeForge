@@ -49,7 +49,6 @@ from .resume_generator_prompts import (
     ENHANCEMENT_LEVEL_GUIDES,
     MAX_JD_CHARS,
     MAX_PROFILE_CHARS,
-    append_generation_warnings,
     build_profile_selection,
     build_progress_events,
     build_rationale,
@@ -84,6 +83,7 @@ from .resume_quality import (
     _quality_reference_points,
     _quality_shortfalls,
 )
+from .resume_warnings import finalize_generation_warnings
 from .resume_wording import cliche_shortfalls
 
 PROMPTS_DIR = Path(__file__).resolve().parent.parent.parent / "prompts"
@@ -342,9 +342,7 @@ class ResumeGenerator:
                 selection.data,
                 source_label="完整资料" if general else None,
             )
-        warnings = append_generation_warnings(
-            warnings, resume, selection_data, general=general, wording_enabled=wording_enabled
-        )
+        previous_resume = resume  # grounding 前快照：警告文案要按"删了什么"改写（问题 4）
         # 后处理顺序（F3 §3 / store-owner 定稿）：grounding → 扩展栏目回填 → C5-B →
         # C2 自建分区 → R-73 语言补位 → 诊断 → done。
         if scoped:
@@ -383,7 +381,7 @@ class ResumeGenerator:
             resume, custom_field_annotations = ensure_custom_field_lines_in_resume(
                 resume, consumed
             )
-            resume = attach_custom_sections(resume, consumed)
+            resume = attach_custom_sections(resume, consumed, selection.focus, selection_data)
             # F8（R-81）：资料有值、结果槽位空 → 确定性回填；不改 AI 已写值、不阻断保存。
             resume = apply_profile_field_backfill(resume, consumed)
             # R1-G：条目内被模型写空的字段（tech_stack / 技能水平等）按 key 合并回来。
@@ -408,10 +406,12 @@ class ResumeGenerator:
                 resume, profile, job, selection_data, options
             )
             annotations = annotation_items
+        warnings = finalize_generation_warnings(
+            warnings, previous_resume, resume, selection_data, options, general=general
+        )
         # #23 后半段 + #34 可观测：内容定稿后的确定性裁剪与如实警告（下沉到
         # resume_space_gate.finalize_page_budget——生成器守 500 行预算，也便于单测）。
-        # 自定义字段回填行（C5-B "标签：值"）不参与篇幅裁剪——它们是确定性回填的
-        # 用户数据，删掉等于把资料里的非空字段又弄丢。
+        # 自定义字段回填行（C5-B "标签：值"）不参与篇幅裁剪：它们是确定性回填的用户数据。
         protected = frozenset(
             line.strip()
             for annotation in annotations
@@ -433,7 +433,8 @@ class ResumeGenerator:
             [
                 *find_unwritten_details(resume, consumed, selection_data),
                 # R1-G：条目内字段/技能/总结层面的遗漏也要如实记录（不是只说整条）。
-                *find_unwritten_field_details(resume, consumed),
+                # 传本次候选快照：技能名额裁掉的不能记成"模型没写"。
+                *find_unwritten_field_details(resume, consumed, selection_data),
             ]
             if scoped
             else find_unwritten_details(resume, selection.entry_names, selection.data)

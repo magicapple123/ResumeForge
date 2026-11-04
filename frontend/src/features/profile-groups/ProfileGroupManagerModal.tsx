@@ -7,14 +7,15 @@
  * 定义用内联确认条（动作 + 条数 + 保留后果 + 恢复位置）。表单型弹层禁蒙层关闭
  * （mask.closable=false）；提交中禁 Esc/×，其余 Esc 与 × 同义（子视图先退一层）。
  */
-import { App, Button, Input, Modal, Popconfirm, Tabs, Tag, Tooltip, Typography } from "antd";
-import { DeleteOutlined, EditOutlined } from "@ant-design/icons";
+import { App, Button, Input, Modal, Radio, Tabs, Tooltip, Typography } from "antd";
 import { Fragment, useState } from "react";
 import { t } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
 import { profileGroupDisplayName } from "../../utils/displayNames";
 import ProfileFieldSettings from "../profile-library/ProfileFieldSettings";
 import ProfileSectionSettings from "../profile-library/ProfileSectionSettings";
+import { profileSectionLabel } from "../profile-library/profileLabels";
+import SettingsMoreMenu from "../profile-library/settingsMoreMenu";
 import type { WorkspaceOut } from "../profile-library/types";
 import ProfileGroupForm from "./ProfileGroupForm";
 import { useCurrentProfileGroup } from "./useCurrentProfileGroup";
@@ -128,26 +129,124 @@ export default function ProfileGroupManagerModal({
     if (ok) setDeletingGroupId("");
   };
 
+  /** 删除确认条：内联在本行下方（本弹层内禁止再开 modal.confirm，见文件头）。 */
+  const renderGroupDeleteConfirm = (name: string) => (
+    <div className="profile-settings-confirm" role="alertdialog">
+      <span className="profile-settings-card-title">
+        {t("profileGroups.manager.deleteTitle", { name })}
+      </span>
+      <p className="profile-settings-card-hint">{t("profileGroups.manager.deleteBody")}</p>
+      <p className="profile-settings-card-hint">{t("profileGroups.manager.deleteRestore")}</p>
+      <div className="profile-settings-confirm-actions">
+        <Button danger loading={groupApi.busy} onClick={() => void confirmDeleteGroup()}>
+          {t("profileGroups.manager.deleteConfirm", { name })}
+        </Button>
+        <Button onClick={() => setDeletingGroupId("")}>{t("profileGroups.manager.back")}</Button>
+      </div>
+    </div>
+  );
+
   const renderGroups = () => (
     <div className="profile-group-manager-groups">
       {/* 与「板块与字段」视图同一套卡片外观（.profile-settings-card）：同一个弹层里
           两个视图的容器形态不该不一样。此处不再给卡片标题——弹层标题已经是「方案」。 */}
       <section className="profile-settings-card">
-        <div className="profile-settings-add">
+        {/* 一行一个方案：行首 Radio 就是「当前方案」，点整行即切换（问题 18 的 ①②）。
+            名字/Tag 在左，动作收进 ⋯；删除是红色常驻图标的那一版已移除。 */}
+        <div className="profile-settings-list">
+          {groupApi.groups.map((group) => {
+            const isCurrent = groupApi.current?.group_id === group.group_id;
+            const name = profileGroupDisplayName(group);
+            return (
+              <Fragment key={group.group_id}>
+                <div
+                  className="profile-settings-row profile-plan-row"
+                  data-testid="group-row"
+                  onClick={() => {
+                    if (!isCurrent && !groupApi.busy) void groupApi.switchTo(group.group_id);
+                  }}
+                >
+                  {/* 单选控件自己吞掉点击：否则 onChange 与整行 onClick 会各发一次切换。 */}
+                  <span
+                    className="profile-settings-row-lead"
+                    onClick={(event) => event.stopPropagation()}
+                  >
+                    <Tooltip title={isCurrent ? undefined : t("profileGroups.manager.setCurrent")}>
+                      <Radio
+                        checked={isCurrent}
+                        aria-label={t("profileGroups.manager.setCurrentAria", { name })}
+                        disabled={groupApi.busy || undefined}
+                        onChange={() => {
+                          if (!isCurrent) void groupApi.switchTo(group.group_id);
+                        }}
+                      />
+                    </Tooltip>
+                  </span>
+                  <span className="profile-settings-row-main">
+                    <span className="profile-settings-row-title">{name}</span>
+                    {/* 名字已经被翻成「默认方案」时不再重复挂一个同名 Tag；改过名的
+                        默认组名字是用户数据，保留 Tag 说明它仍是默认组。 */}
+                    {group.is_default && !group.name_is_default ? (
+                      <span className="profile-settings-row-meta">
+                        {t("profileGroups.manager.default")}
+                      </span>
+                    ) : null}
+                  </span>
+                  <span
+                    className="profile-settings-row-actions"
+                    onClick={(event) => event.stopPropagation()}
+                  >
+                    <SettingsMoreMenu
+                      label={t("profileGroups.manager.more")}
+                      disabled={groupApi.busy}
+                      actions={[
+                        {
+                          key: "rename",
+                          label: t("profileGroups.manager.renameMenu"),
+                          onSelect: () => {
+                            setEditingGroupId(group.group_id);
+                            setView("group-edit");
+                          },
+                        },
+                        group.is_default
+                          ? {
+                              key: "delete",
+                              label: t("profileGroups.manager.defaultProtected"),
+                              disabled: true,
+                              onSelect: () => undefined,
+                            }
+                          : {
+                              key: "delete",
+                              label: t("profileGroups.manager.deleteMenu"),
+                              danger: true,
+                              onSelect: () => setDeletingGroupId(group.group_id),
+                            },
+                      ]}
+                    />
+                  </span>
+                </div>
+                {deletingGroupId === group.group_id ? renderGroupDeleteConfirm(name) : null}
+              </Fragment>
+            );
+          })}
+        </div>
+        {/* 创建区与「板块与字段」视图一致：列表底部、输入框 flex:1、按钮固定宽。 */}
+        <div className="profile-settings-add profile-settings-add-bottom">
           <Input
+            className="profile-settings-add-grow"
             value={newGroupName}
             maxLength={40}
             placeholder={t("profileGroups.manager.createHint")}
             aria-label={t("profileGroups.manager.nameLabel")}
             onChange={(event) => setNewGroupName(event.target.value)}
             onPressEnter={() => void submitCreate()}
-            disabled={groupApi.busy || atLimit}
-            style={{ maxWidth: 260 }}
+            disabled={groupApi.busy || atLimit || undefined}
           />
           <Button
+            className="profile-settings-add-action"
             type="primary"
             loading={groupApi.busy}
-            disabled={atLimit}
+            disabled={atLimit || undefined}
             onClick={() => void submitCreate()}
           >
             {t("profileGroups.manager.create")}
@@ -158,114 +257,23 @@ export default function ProfileGroupManagerModal({
             </span>
           ) : null}
         </div>
-        <p className="profile-settings-card-hint" style={{ marginTop: 8 }}>
+        <p className="profile-settings-card-hint profile-settings-add-hint">
           {t("profileGroups.manager.createVisibilityHint")}
         </p>
-        {/* 一行一个方案：名称/Tag 在左，动作按钮在右（.profile-settings-* 见 profile-layout.css）。
-          删除确认是行**之外**的兄弟节点——行本身是 flex 横排，塞第三个子元素会被压扁。
-          动作簇与「板块与字段」视图共用同一套类名：24×24 图标按钮 + Tooltip + aria-label。 */}
-        <div className="profile-settings-list">
-          {groupApi.groups.map((group) => {
-            const isCurrent = groupApi.current?.group_id === group.group_id;
-            const isDeleting = deletingGroupId === group.group_id;
-            return (
-              <Fragment key={group.group_id}>
-                <div className="profile-settings-row" data-testid="group-row">
-                  <span className="profile-settings-row-main">
-                    <span className="profile-settings-row-title">
-                      {profileGroupDisplayName(group)}
-                    </span>
-                    {/* 名字已经被翻成「默认方案」时不再重复挂一个同名 Tag；改过名的
-                        默认组名字是用户数据，保留 Tag 说明它仍是默认组。 */}
-                    {group.is_default && !group.name_is_default ? (
-                      <span className="profile-settings-row-meta">
-                        {t("profileGroups.manager.default")}
-                      </span>
-                    ) : null}
-                    {isCurrent ? (
-                      <Tag color="blue">{t("profileGroups.manager.current")}</Tag>
-                    ) : null}
-                  </span>
-                  <span className="profile-settings-row-actions">
-                    {isCurrent ? null : (
-                      <Button
-                        size="small"
-                        type="text"
-                        disabled={groupApi.busy}
-                        onClick={() => void groupApi.switchTo(group.group_id)}
-                      >
-                        {t("profileGroups.manager.setCurrent")}
-                      </Button>
-                    )}
-                    <Tooltip title={t("profileGroups.manager.rename")}>
-                      <Button
-                        className="profile-settings-action"
-                        size="small"
-                        type="text"
-                        icon={<EditOutlined />}
-                        aria-label={t("profileGroups.manager.rename")}
-                        disabled={groupApi.busy}
-                        onClick={() => {
-                          setEditingGroupId(group.group_id);
-                          setView("group-edit");
-                        }}
-                      />
-                    </Tooltip>
-                    {group.is_default ? (
-                      <Tooltip title={t("profileGroups.manager.defaultProtected")}>
-                        <span className="profile-settings-row-meta">
-                          {t("profileGroups.manager.defaultProtected")}
-                        </span>
-                      </Tooltip>
-                    ) : (
-                      <Popconfirm
-                        open={isDeleting}
-                        title={t("profileGroups.manager.deleteTitle", { name: group.name })}
-                        description={
-                          <div>
-                            <p className="profile-settings-card-hint">
-                              {t("profileGroups.manager.deleteBody")}
-                            </p>
-                            <p className="profile-settings-card-hint">
-                              {t("profileGroups.manager.deleteRestore")}
-                            </p>
-                          </div>
-                        }
-                        okText={t("profileGroups.manager.deleteConfirm", { name: group.name })}
-                        okButtonProps={{ danger: true, loading: groupApi.busy }}
-                        cancelText={t("profileGroups.manager.back")}
-                        onConfirm={() => void confirmDeleteGroup()}
-                        onCancel={() => setDeletingGroupId("")}
-                      >
-                        {/* 删除按钮不叠 Tooltip：确认气泡本身就是说明（Tooltip 与 Popconfirm
-                          共用同一个 trigger，叠在一起会互相抢悬停）。 */}
-                        <Button
-                          className="profile-settings-action"
-                          size="small"
-                          type="text"
-                          danger
-                          icon={<DeleteOutlined />}
-                          aria-label={t("profileGroups.manager.delete")}
-                          disabled={groupApi.busy}
-                          onClick={() => setDeletingGroupId(group.group_id)}
-                        />
-                      </Popconfirm>
-                    )}
-                  </span>
-                </div>
-              </Fragment>
-            );
-          })}
-        </div>
       </section>
     </div>
   );
 
   // 页签负责区分「方案 / 板块与字段」，所以两个列表视图共用同一个弹层标题；
   // 下钻层（编辑方案 / 字段设置）各有自己的标题与返回入口。
+  // 字段设置的标题带上板块名（「作品集 · 字段设置」）：弹层标题是唯一说清"我在哪一层"的位置。
   const viewTitle =
     view === "fields"
-      ? t("profileLibrary.sectionSettings.title")
+      ? fieldsSection
+        ? t("profileLibrary.fieldSettings.titleWithSection", {
+            name: profileSectionLabel(fieldsSection),
+          })
+        : t("profileLibrary.fieldSettings.title")
       : view === "group-edit"
         ? t("profileGroups.manager.editTitle")
         : t("profileGroups.manager.title");
@@ -324,6 +332,9 @@ export default function ProfileGroupManagerModal({
           }}
           onSetSectionVisible={(sectionKey, visible) => {
             void groupApi.setSectionVisible(sectionKey, visible);
+          }}
+          onSetSectionJobFilter={(sectionKey, enabled) => {
+            void groupApi.setSectionJobFilter(sectionKey, enabled);
           }}
           visibilityBusy={groupApi.busy}
         />

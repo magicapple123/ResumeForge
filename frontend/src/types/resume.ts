@@ -35,6 +35,9 @@ export type ResumeLanguage = "zh-CN" | "en-US";
 /** 最大篇幅：A4 页数，与后端 MAX_RESUME_PAGES 一致。 */
 export const RESUME_PAGE_LIMITS = [1, 2, 3] as const;
 
+// 需求 7B：`page_limit === 0` = 不限篇幅（非零页/缺省值）；后端同名常量在 resume_generation.py。
+export const UNLIMITED_PAGE_LIMIT = 0;
+
 export type ResumePageLimit = (typeof RESUME_PAGE_LIMITS)[number];
 
 export interface ResumeTemplateOption {

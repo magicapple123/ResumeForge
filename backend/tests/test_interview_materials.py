@@ -1,18 +1,20 @@
 # SPDX-License-Identifier: Apache-2.0
-"""面试材料导入（#41）：岗位侧 PDF / TXT、简历侧截图，都要能真的进到提示词里。
+"""面试材料导入（#41，问题 6）：两侧统一接受 图片 / PDF / TXT / Word / Markdown。
 
 三条硬约束钉在这里：
 
 1. **提取在进会话之前**：上传端点当场返回文本与警告，用户在开面试前就能看到结果；
 2. **文件里的话要能进提示词**：开面试后 ``generate_question`` 收到的 ``job_text`` /
    ``resume_text`` 必须就是材料正文（而不是空串或关联记录的内容）；
-3. **识别失败要说得明白**：截图没识别出文字时给的是"换一张更清晰的截图"这个动作前提，
-   而不是让用户拿到一句"请求失败"。
+3. **格式与侧别解耦**：``kind`` 只表示"放哪一侧"，同一组扩展名在两侧都能用；
+   图片与扫描件 PDF 才需要模型，文本类（pdf 有文字层 / txt / md / docx）永远不需要。
 """
 
 from __future__ import annotations
 
 import base64
+import io
+import zipfile
 
 import pytest
 from app.main import app  # noqa: F401 - 保证路由已装配
@@ -23,9 +25,17 @@ _PNG_1X1 = base64.b64decode(
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8AAAwAB/AL+"
     "0cSzdAAAAABJRU5ErkJggg=="
 )
+# 最小的 WebP 容器（RIFF....WEBP）：只为过文件头校验，不会被真的解码。
+_WEBP_1X1 = b"RIFF\x24\x00\x00\x00WEBPVP8 " + b"\x00" * 16
 
 _JOB_TEXT = "后端开发工程师\n负责服务端接口与稳定性，要求熟悉 Python 与 SQL。"
 _RESUME_TEXT = "张三\n3 年后端经验，做过高并发订单系统。"
+_MARKDOWN = "# 后端 JD\n\n| 技能 | 要求 |\n| --- | --- |\n| Python | 熟练 |\n"
+# PDF 用 ASCII：fpdf2 的内置 Helvetica 编不了中文。正文必须超过
+# ``MATERIAL_SCAN_TEXT_THRESHOLD``（200 字），否则会被当成扫描件走视觉兜底。
+_LONG_JD = "Backend Engineer JD. " + "Own the service APIs and keep them stable. " * 8
+
+_DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 
 
 def _pdf_bytes(text: str) -> bytes:
@@ -37,6 +47,31 @@ def _pdf_bytes(text: str) -> bytes:
     pdf.set_font("Helvetica", size=12)
     pdf.multi_cell(0, 8, text)
     return bytes(pdf.output())
+
+
+def _docx_bytes(text: str) -> bytes:
+    """造一份只含 ``word/document.xml`` 的 .docx（与 ``_docx_text`` 的白名单口径一致）。"""
+    escaped = text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+    xml = (
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
+        f"<w:body><w:p><w:r><w:t>{escaped}</w:t></w:r></w:p></w:body></w:document>"
+    )
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w") as archive:
+        archive.writestr("word/document.xml", xml)
+    return buffer.getvalue()
+
+
+# 两侧 × {pdf, txt, md, docx, png, webp}：``parser`` 是期望的解析路径（本机提取 / 视觉识别）。
+_MATERIAL_FIXTURES: dict[str, tuple[str, bytes, str, str]] = {
+    "pdf": ("material.pdf", _pdf_bytes(_LONG_JD), "application/pdf", "text"),
+    "txt": ("material.txt", _JOB_TEXT.encode("utf-8"), "text/plain", "text"),
+    "md": ("material.md", _MARKDOWN.encode("utf-8"), "text/markdown", "text"),
+    "docx": ("material.docx", _docx_bytes("Backend Engineer JD"), _DOCX_MIME, "text"),
+    "png": ("material.png", _PNG_1X1, "image/png", "vision"),
+    "webp": ("material.webp", _WEBP_1X1, "image/webp", "vision"),
+}
 
 
 def _upload(client, kind: str, name: str, data: bytes, mime: str):
@@ -76,30 +111,64 @@ def _configure(monkeypatch, *, recognize: str | None = None) -> dict[str, object
     return captured
 
 
-def test_txt_job_material_is_extracted(client):
-    """岗位侧 TXT：直接读出文字，文件名原样带回。"""
-    created = _upload(client, "job", "jd.txt", _JOB_TEXT.encode("utf-8"), "text/plain")
+@pytest.mark.parametrize("kind", ["job", "resume"])
+@pytest.mark.parametrize("key", sorted(_MATERIAL_FIXTURES))
+def test_both_sides_accept_every_supported_type(client, monkeypatch, kind, key):
+    """问题 6 的矩阵：同一组格式在两侧都能导入，文件名与正文原样带回。"""
+    _configure(monkeypatch, recognize=_RESUME_TEXT)
+    name, data, mime, parser = _MATERIAL_FIXTURES[key]
+    created = _upload(client, kind, name, data, mime)
     assert created.status_code == 200, created.text
     body = created.json()
-    assert body["name"] == "jd.txt"
+    assert body["name"] == name
+    assert body["text"].strip()
+    # "从截图识别出 N 字"这句话只能按实际解析路径说，不能按左右侧说。
+    assert body["parser"] == parser
+
+
+def test_txt_material_is_extracted(client, monkeypatch):
+    _configure(monkeypatch, recognize=_RESUME_TEXT)
+    body = _upload(client, "job", "jd.txt", _JOB_TEXT.encode("utf-8"), "text/plain").json()
     assert "服务端接口" in body["text"]
     assert body["warnings"] == []
 
 
-def test_pdf_job_material_is_extracted(client):
-    """岗位侧 PDF：走 pypdf 抽文字（JD 多数是 PDF）。"""
-    created = _upload(client, "job", "jd.pdf", _pdf_bytes("Backend Engineer JD"), "application/pdf")
+def test_markdown_keeps_its_markers(client):
+    """Markdown 的标题与表格原样保留：本机提取不做渲染，JD 常常就是 md 原文。"""
+    created = _upload(client, "job", "jd.md", _MARKDOWN.encode("utf-8"), "text/markdown")
     assert created.status_code == 200, created.text
-    body = created.json()
-    assert body["name"] == "jd.pdf"
-    assert "Backend Engineer JD" in body["text"]
+    text = created.json()["text"]
+    assert "# 后端 JD" in text
+    assert "| Python | 熟练 |" in text
 
 
-def test_job_material_rejects_unsupported_format(client):
-    """岗位材料只收 PDF / TXT：docx 要给一句能照做的原因，而不是静默接受。"""
-    rejected = _upload(client, "job", "jd.docx", b"PK\x03\x04", "application/vnd.ms-word")
+def test_word_document_is_read_through_the_whitelist(client):
+    created = _upload(client, "resume", "resume.docx", _docx_bytes("Alex 3 years"), _DOCX_MIME)
+    assert created.status_code == 200, created.text
+    assert "Alex 3 years" in created.json()["text"]
+
+
+def test_empty_word_is_reported(client):
+    """空 Word：明说"这份 Word 里没有可提取的文字"，不返回一段空正文。"""
+    created = _upload(client, "job", "empty.docx", _docx_bytes("   "), _DOCX_MIME)
+    assert created.status_code == 422
+    assert "Word" in created.json()["detail"]
+
+
+def test_legacy_doc_is_rejected_with_a_rename_hint(client):
+    """Word 2003 的 .doc 读不了就不假装能读：文案要指向 .docx。"""
+    rejected = _upload(client, "job", "old.doc", b"\xd0\xcf\x11\xe0", "application/msword")
     assert rejected.status_code == 422
-    assert "PDF" in rejected.json()["detail"]
+    assert ".docx" in rejected.json()["detail"]
+
+
+def test_unsupported_format_is_rejected_without_naming_a_side(client):
+    """类型不再按侧别区分，错误文案也不能再写死"岗位材料 / 简历截图"。"""
+    rejected = _upload(client, "resume", "sheet.xlsx", b"PK\x03\x04", "application/vnd.ms-excel")
+    assert rejected.status_code == 422
+    detail = rejected.json()["detail"]
+    assert "PDF" in detail and "Markdown" in detail
+    assert "岗位材料" not in detail and "简历截图" not in detail
 
 
 def test_job_material_rejects_oversized_file(client):
@@ -108,17 +177,14 @@ def test_job_material_rejects_oversized_file(client):
     assert rejected.status_code == 413
 
 
-def test_resume_image_is_recognized(client, monkeypatch):
-    """简历侧截图：交给视觉模型逐字识别，结果直接当材料正文。"""
+def test_image_is_recognized(client, monkeypatch):
     _configure(monkeypatch, recognize=_RESUME_TEXT)
     created = _upload(client, "resume", "resume.png", _PNG_1X1, "image/png")
     assert created.status_code == 200, created.text
-    body = created.json()
-    assert body["name"] == "resume.png"
-    assert "高并发订单系统" in body["text"]
+    assert "高并发订单系统" in created.json()["text"]
 
 
-def test_resume_image_without_text_tells_user_what_to_do(client, monkeypatch):
+def test_image_without_text_tells_user_what_to_do(client, monkeypatch):
     """识别不出文字时不能装作成功：要说清"换一张更清晰的截图"。"""
     _configure(monkeypatch, recognize="NO_TEXT")
     rejected = _upload(client, "resume", "blur.png", _PNG_1X1, "image/png")
@@ -126,15 +192,36 @@ def test_resume_image_without_text_tells_user_what_to_do(client, monkeypatch):
     assert "换更清晰的截图" in rejected.json()["detail"]
 
 
-def test_resume_material_rejects_non_image(client, monkeypatch):
-    _configure(monkeypatch, recognize=_RESUME_TEXT)
-    rejected = _upload(client, "resume", "resume.pdf", b"%PDF-1.4", "application/pdf")
-    assert rejected.status_code == 422
+@pytest.mark.parametrize("kind", ["job", "resume"])
+def test_image_upload_requires_model_configuration(client, kind):
+    """没配模型时图片走不通（两侧一致）：前因是"还没配置模型"，不是一个坏文件。"""
+    rejected = _upload(client, kind, "shot.png", _PNG_1X1, "image/png")
+    assert rejected.status_code == 400
 
 
-def test_image_upload_requires_model_configuration(client):
-    """没配模型时截图这条路走不通：前因是"还没配置模型"，不是一个坏文件。"""
-    rejected = _upload(client, "resume", "resume.png", _PNG_1X1, "image/png")
+def test_text_pdf_needs_no_model_configuration(client):
+    """有文字层的 PDF **不因为扫描兜底而要求配置模型**（放宽类型没把纯文本路径拖下水）。"""
+    created = _upload(client, "job", "jd.pdf", _pdf_bytes(_LONG_JD), "application/pdf")
+    assert created.status_code == 200, created.text
+    body = created.json()
+    assert "Backend Engineer JD" in body["text"]
+    assert body["parser"] == "text"
+
+
+def test_scanned_pdf_falls_back_to_vision(client, monkeypatch):
+    """扫描件 PDF（没有文字层）：渲染页面走视觉识别，并明确告知"已按图片识别"。"""
+    _configure(monkeypatch, recognize="扫描页里的一行字")
+    created = _upload(client, "resume", "scan.pdf", _pdf_bytes(""), "application/pdf")
+    assert created.status_code == 200, created.text
+    body = created.json()
+    assert "扫描页里的一行字" in body["text"]
+    assert body["parser"] == "vision"
+    assert any("按图片识别" in warning for warning in body["warnings"])
+
+
+def test_scanned_pdf_without_model_is_reported_as_a_model_problem(client):
+    """扫描件要模型：没配置时给的是"去配置"这个前因，而不是"文件坏了"。"""
+    rejected = _upload(client, "job", "scan.pdf", _pdf_bytes(""), "application/pdf")
     assert rejected.status_code == 400
 
 
@@ -212,17 +299,20 @@ def test_empty_file_is_rejected(client):
     assert rejected.status_code == 422
 
 
-def test_pdf_without_text_layer_is_reported(client):
-    """扫描件 PDF 提不出文字：明说"可能是扫描件"，不要让用户对着空材料开面试。"""
-    empty_pdf = _pdf_bytes("")
-    rejected = _upload(client, "job", "scan.pdf", empty_pdf, "application/pdf")
-    # 空 PDF 也可能连文字层都没有；两种情况都该是 422 + 一句原因。
-    assert rejected.status_code == 422
-    assert rejected.json()["detail"]
+def test_txt_and_image_share_the_same_length_cap(client, monkeypatch):
+    """同一份 3 万字内容存成 .txt 与 .png，导入后字数**相同**（上限已拉平）。"""
+    long_text = "岗位要求 " * 8000  # 约 4 万字，超过任何一侧的上限
+    _configure(monkeypatch, recognize=long_text)
+    from_txt = _upload(client, "job", "jd.txt", long_text.encode("utf-8"), "text/plain").json()
+    from_png = _upload(client, "resume", "jd.png", _PNG_1X1, "image/png").json()
+    assert len(from_txt["text"]) == len(from_png["text"])
+    assert any("只读取了前一部分" in warning for warning in from_png["warnings"])
 
 
 def test_extracted_len_is_bounded():
-    """材料正文上限与 schema 一致：前端不会因为"文件太大"在开场时被 422 打回。"""
-    from app.schemas.interview import MAX_MATERIAL_TEXT_CHARS
+    """材料正文上限只有一个值：schema 那道闸与提取端的截断不能各自漂。"""
+    from app.schemas.interview_material import MAX_MATERIAL_TEXT_CHARS
+    from app.services.document_text import MAX_DOCUMENT_TEXT_CHARS
 
+    assert MAX_MATERIAL_TEXT_CHARS == MAX_DOCUMENT_TEXT_CHARS
     assert MAX_MATERIAL_TEXT_CHARS >= 10_000

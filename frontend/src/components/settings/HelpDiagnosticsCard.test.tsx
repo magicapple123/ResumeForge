@@ -2,6 +2,7 @@
 import { App as AntdApp } from "antd";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { t } from "../../i18n";
 import HelpDiagnosticsCard from "./HelpDiagnosticsCard";
 
 const apiMocks = vi.hoisted(() => ({
@@ -11,9 +12,17 @@ const apiMocks = vi.hoisted(() => ({
 const downloadMocks = vi.hoisted(() => ({
   downloadBlob: vi.fn(),
 }));
+const navMocks = vi.hoisted(() => ({
+  reloadPage: vi.fn(),
+}));
+const unsavedState = vi.hoisted(() => ({ value: false }));
 
 vi.mock("../../api/system", () => apiMocks);
 vi.mock("../../utils/download", () => downloadMocks);
+vi.mock("../../utils/navigation", () => navMocks);
+vi.mock("../../hooks/unsavedDrafts", () => ({
+  useUnsavedDrafts: () => unsavedState.value,
+}));
 
 afterEach(() => cleanup());
 
@@ -29,6 +38,8 @@ beforeEach(() => {
     note: "诊断包只包含脱敏运行事件、系统信息与近期后端日志尾部，不包含简历全文、表单填写值。",
   });
   downloadMocks.downloadBlob.mockReset();
+  navMocks.reloadPage.mockReset();
+  unsavedState.value = false;
   apiMocks.exportDiagnostics.mockResolvedValue({
     blob: new Blob(["zip"], { type: "application/zip" }),
     filename: "resumeforge-diagnostics-20261007-000000.zip",
@@ -90,5 +101,48 @@ describe("HelpDiagnosticsCard", () => {
     await waitFor(() => expect(apiMocks.getDiagnosticsPreview).toHaveBeenCalled());
     expect(screen.queryByTestId("diagnostics-preview-summary")).toBeNull();
     expect(screen.getByRole("button", { name: "导出诊断包" })).toBeTruthy();
+  });
+
+  it("reloads the interface through reloadPage()", async () => {
+    renderCard();
+
+    const button = await screen.findByRole("button", { name: t("settingsUi.help.reload") });
+    expect(button).toHaveProperty("disabled", false);
+    fireEvent.click(button);
+
+    expect(navMocks.reloadPage).toHaveBeenCalledTimes(1);
+  });
+
+  it("disables the reload button while there is unsaved work", async () => {
+    unsavedState.value = true;
+    renderCard();
+
+    const button = await screen.findByRole("button", { name: t("settingsUi.help.reload") });
+    expect(button).toHaveProperty("disabled", true);
+    fireEvent.click(button);
+    expect(navMocks.reloadPage).not.toHaveBeenCalled();
+  });
+
+  it("explains why the reload button is disabled", async () => {
+    unsavedState.value = true;
+    renderCard();
+
+    const button = await screen.findByRole("button", { name: t("settingsUi.help.reload") });
+    // 禁用的 Button 不接收鼠标事件，Tooltip 挂在包着它的 span 上。
+    fireEvent.mouseEnter(button.parentElement as HTMLElement);
+
+    await waitFor(() =>
+      expect(
+        screen.getByText(t("settingsUi.help.reloadBlocked")),
+      ).toBeTruthy(),
+    );
+  });
+
+  it("shows the consequence hint next to the reload button", () => {
+    renderCard();
+
+    expect(
+      screen.getByText(t("settingsUi.help.reloadHint")),
+    ).toBeTruthy();
   });
 });

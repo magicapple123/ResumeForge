@@ -14,6 +14,7 @@ from ..models.interview import (
     INTERVIEWER_STYLES,
     MESSAGE_PHASE_INTERVIEW,
 )
+from .interview_material import InterviewMaterialIn
 from .resume import ResumeSuggestion
 
 MAX_INTERVIEW_ROUNDS = 12
@@ -21,10 +22,6 @@ MIN_INTERVIEW_ROUNDS = 3
 MAX_ANSWER_CHARS = 8000
 MAX_PERSONA_CHARS = 2000
 MAX_FOCUS_CHARS = 255
-# 导入材料的正文上限（#41）：从 PDF / TXT / 截图里提取出来的文字会原样进提示词，
-# 与 ``MAX_RESUME_CONTEXT_CHARS`` 同一量级即可；超出部分在提取端就已截断并告知用户，
-# 这里的上限是防"前端塞一大段进来"的最后一道闸。
-MAX_MATERIAL_TEXT_CHARS = 24_000
 
 InterviewType = Literal[
     "技术面",
@@ -39,40 +36,6 @@ InterviewType = Literal[
 InterviewDifficulty = Literal["初级", "中级", "高级"]
 InterviewerStyle = Literal["严谨专业", "温和引导", "持续追问", "压力质询"]
 InterviewStatus = Literal["active", "finished"]
-
-# 材料来源（#41）：岗位侧导入 JD 文件（PDF / TXT），简历侧导入截图（视觉识别）。
-MaterialKind = Literal["job", "resume"]
-
-
-class InterviewMaterialIn(BaseModel):
-    """一份**已提取**的导入材料：文件名 + 正文。
-
-    为什么提交的是提取后的文本、而不是再传一次文件：提取发生在 ``/interview/materials``
-    上传那一刻，用户当场就能看到"解析成功 / 识别出多少字 / 有哪些警告"；开面试时只把
-    结果带进会话（快照），不需要为同一份文件解析两遍，也不会在开场那十几秒里再插入一次
-    可能失败的 OCR。
-    """
-
-    model_config = ConfigDict(extra="forbid")
-
-    name: str = Field(default="", max_length=256)
-    text: str = Field(min_length=1, max_length=MAX_MATERIAL_TEXT_CHARS)
-
-    @field_validator("text")
-    @classmethod
-    def text_must_not_be_blank(cls, value: str) -> str:
-        cleaned = value.strip()
-        if not cleaned:
-            raise ValueError("导入的材料没有可用的文字内容")
-        return cleaned
-
-
-class InterviewMaterialExtract(BaseModel):
-    """上传端点（multipart）的返回：提取出的文件名、正文与面向用户的警告。"""
-
-    name: str
-    text: str
-    warnings: list[str] = Field(default_factory=list)
 
 
 class InterviewCreate(BaseModel):
@@ -221,8 +184,11 @@ class InterviewAnswerResult(BaseModel):
 
     session: InterviewDetail
     feedback: str = ""
-    # 为真表示这场面试已经结束（达到计划轮数或候选人要求收尾），此时应生成报告。
+    # 为真表示**正式问答**已经结束（达到计划轮数，或模型/候选人要求收尾）。
     finished: bool = False
+    # 为真表示正式问答已收尾但**报告还没生成**：由用户在决策卡上决定"继续追问"还是
+    # "结束并生成报告"。默认 False，旧调用方（不涉及自动收尾的产物）形状不变。
+    needs_report: bool = False
 
 
 class InterviewFollowUpCreate(BaseModel):

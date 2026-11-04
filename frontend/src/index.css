@@ -15,6 +15,7 @@
 @import "./styles/trash.css";
 @import "./styles/modules.css";
 @import "./styles/overlay.css";
+@import "./styles/context-menu.css";
 @import "./styles/announcement.css";
 @import "./styles/settings-batch.css";
 @import "./styles/settings-update.css";

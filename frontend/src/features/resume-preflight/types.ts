@@ -99,6 +99,24 @@ export interface OrderDiff {
 }
 
 /**
+ * 22b：产物正文里该涂色的一处字符区间（与后端 `TextOrderHighlight` 逐字对齐）。
+ *
+ * **偏移基准**：`start` / `end` 是该页 `machine_text[i].text` 的 **Python 码点偏移**
+ * （`end` 不含）。渲染时**必须**先用 `Array.from(text)` 按码点切分再取区间——直接
+ * `String.slice` 是 UTF-16 码元，emoji/生僻字会差位（见 `machineText.sliceByHighlights`）。
+ *
+ * 差异列表（`OrderDiff`）与区间是两份数据：一个片段合并了几个 token 后，它们在产物里的
+ * 位置未必连续，一个区间说不清；条数与文案仍以 `order_diffs` 为准。
+ */
+export interface TextOrderHighlight {
+  page: number;
+  start: number;
+  end: number;
+  /** 目前只有顺序差异涂色（missing 在产物里没有字，garbled 是整页抽空）。 */
+  kind: "out_of_order";
+}
+
+/**
  * D08：缺字与粗体可用性（W11-BE 冻结字段）。
  *
  * `null` = **未检查**（没跑排版层，或没有中文字体）；`checked=false` 时不得显示"通过"。
@@ -139,6 +157,11 @@ export interface PreflightOut {
   machine_text?: MachineTextPage[];
   /** D11 文本顺序差异（W11-BE 冻结；未跑产物层时为空数组）。 */
   order_diffs?: OrderDiff[];
+  /**
+   * 22b：差异在产物正文里的字符区间（只由 `out_of_order` 产生；缺省 = 老响应，不涂色）。
+   * `order_diffs` 继续保留：问题清单/计数/图例读它。
+   */
+  order_highlights?: TextOrderHighlight[];
   /** D08 缺字与粗体（null = 未检查）。 */
   font_coverage?: FontCoveragePayload | null;
 }

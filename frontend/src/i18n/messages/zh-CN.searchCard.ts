@@ -54,6 +54,8 @@ const searchCard = {
   "searchCard.saveFailed": "保存联网搜索设置失败",
 
   "searchCard.source.searxng": "SearXNG（自建实例）",
+  /** 品牌名：两种语言写法相同，登记在 equalityExemptions。 */
+  "searchCard.source.deepseek": "DeepSeek",
 
   "searchCard.sources.title": "搜索来源",
   "searchCard.sources.hint": "多个来源会并发查询后合并去重，至少选一个。",
@@ -61,6 +63,17 @@ const searchCard = {
   "searchCard.searxng.title": "SearXNG 实例地址",
   "searchCard.searxng.hint":
     "公共实例经常限流，所以不预置默认值；填了自己的实例地址才会去查它，例如 http://localhost:8080。不选 SearXNG 来源时可以留空。",
+
+  "searchCard.deepseek.title": "DeepSeek 搜索（可选）",
+  "searchCard.deepseek.hint":
+    "填了自己的 API Key 并勾选上面的 DeepSeek 来源后才会调用它。它不跟随大模型的对话配置，额度与账单是分开的；没填 Key 时这个来源不参与搜索，也不会显示为「搜索成功」。",
+  "searchCard.deepseek.keyAria": "DeepSeek 搜索 API Key",
+  /** 占位符不能写成纯 ASCII（`sk-...` 会被判成"源文是英文"），所以给一句中文。 */
+  "searchCard.deepseek.keyPlaceholder": "粘贴 DeepSeek API Key",
+  "searchCard.deepseek.cost":
+    "Search 与 Fetch 各约 ¥0.005 次成功请求，由 DeepSeek 计费；本应用不统计这部分用量。已保存的 Key 回显为 ********，清空输入框即移除。",
+  "searchCard.deepseek.privacy":
+    "勾选这个来源后，抓取正文时网页地址会发送给 DeepSeek 由它读取；只有它失败时才回落到本机读取。不想发送地址就关掉这个来源。",
 
   "searchCard.fetch.title": "抓取正文的条数",
   "searchCard.fetch.hint": "对排序最靠前的几条结果打开页面读取正文。关闭时助手只能看到搜索摘要。",

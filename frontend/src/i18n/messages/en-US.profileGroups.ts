@@ -22,10 +22,13 @@ const profileGroups = {
     "Basic information is always included; select a Section to show it in this Plan",
   "profileGroups.manager.saveMembers": "Save Section list",
   "profileGroups.manager.setCurrent": "Set as current Plan",
+  "profileGroups.manager.setCurrentAria": "Set as current Plan: {name}",
   "profileGroups.manager.current": "Current Plan",
   "profileGroups.manager.default": "Default Plan",
   "profileGroups.manager.editTitle": "Edit Plan",
   "profileGroups.manager.rename": "Edit",
+  "profileGroups.manager.renameMenu": "Rename this Plan",
+  "profileGroups.manager.more": "Plan actions",
   "profileGroups.manager.membersVisibilityHint":
     "Deselect a Section to hide it from this Plan's Profile page; hidden Sections are excluded from generation and application forms",
   "profileGroups.manager.createVisibilityHint":
@@ -35,6 +38,7 @@ const profileGroups = {
   "profileGroups.manager.createdKeepEditing":
     'Created Plan "{name}"; save or cancel your edits before setting it as the current Plan',
   "profileGroups.manager.delete": "Delete Plan",
+  "profileGroups.manager.deleteMenu": "Delete this Plan",
   "profileGroups.manager.defaultProtected": "The default Plan cannot be deleted",
   "profileGroups.manager.groupCount": "Up to 20 Plans",
   "profileGroups.manager.membersRequired": "Basic information must remain included",

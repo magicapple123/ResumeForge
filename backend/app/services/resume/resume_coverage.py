@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import difflib
 import json
+import re
 from collections.abc import Mapping, Sequence
 from typing import Any
 
@@ -31,6 +32,12 @@ from ...schemas.claim import ClaimDigestOut
 from ...schemas.profile_projection import ConsumedProfile
 from ...schemas.resume import ResumeContent
 from ..profile.paper_projection import project_paper_content
+from ..profile.profile_relevance_constants import section_limit
+from .resume_coverage_notes import (
+    builtin_entry_ids,
+    custom_entry_ids,
+    with_reasons,
+)
 from .resume_grounding_helpers import _similar, _similar_skill
 
 # 简历字段 ↔ 资料分区的对应关系：
@@ -94,6 +101,12 @@ def find_unwritten_items(
         if note["filtered"]:
             preview = _preview_names(note["filtered"])
             parts.append(f"{preview}与这个岗位的关键词交集不足，没有进入本次生成使用的候选资料")
+        # 受条数上限（如技能最多 14 条）裁掉的：原因与"交集不足"不同，文案必须分开说，
+        # 否则用户会以为自己的技能与岗位不相关。
+        capacity = note.get("capacity_omitted") or []
+        if capacity:
+            preview = _preview_names(capacity)
+            parts.append(f"{preview}超出了本次生成的单栏目条数上限，没有进入候选资料")
         if note["model_omitted"]:
             preview = _preview_names(note["model_omitted"])
             parts.append(f"{preview}在候选资料里，但模型没有把它写进简历")
@@ -123,17 +136,30 @@ def find_unwritten_details(
     """find_unwritten_items 的结构化版本，供前端按分组渲染与生成说明引用。
 
     返回的每项：section_label（用户可读的分区名）、names（全部未写入条目）、
-    filtered（被岗位筛选/预算拦下的）、model_omitted（进了候选但模型没写的）、
-    total。文案组装留在调用方。
+    filtered（被岗位筛选/预算拦下的）、capacity_omitted（被单栏目名额裁掉的）、
+    model_omitted（进了候选但模型没写的）、total，以及 5-A 新增的两项可选字段：
+    ``reasons``（每条名字的显式原因，见 :func:`resume_coverage_notes.reasons_for`）
+    与 ``entry_ids``（能唯一定位到资料条目的那些名字的 id，供 3-A 确定性补入）。
+    文案组装留在调用方。
 
     F3 新入口：第二参传 ConsumedProfile 时，entry_names / candidates 都从
     selection_data 取（entry_names 只含参与分区；data 是本次候选）。
     """
+    # 显式类型收窄：`consumed = entry_names if isinstance(...) else None` 的窄化只在三元
+    # 表达式内部生效，后面 `if consumed is not None` 无法反推 entry_names 的类型（union
+    # 原样保留，`.get` 就会报到 ConsumedProfile 头上）。所以直接把 isinstance 当分支条件，
+    # 两个形态各自落到已标注的局部变量上，运行期逻辑与原来逐字等价。
+    consumed: ConsumedProfile | None
+    names_by_section: Mapping[str, Sequence[str]]
+    candidates: Mapping[str, Any]
     if isinstance(entry_names, ConsumedProfile):
+        consumed = entry_names
         selection = selection_data if isinstance(selection_data, dict) else {}
         names_by_section = selection.get("entry_names") or {}
         candidates = selection.get("data") or {}
     else:
+        consumed = None
+        # 旧入口：dict[str, tuple[str, ...]] / dict[str, list[str]]，只读协议两边都装得下。
         names_by_section = entry_names or {}
         candidates = selection_data if isinstance(selection_data, dict) else {}
     details: list[dict[str, Any]] = []
@@ -152,16 +178,48 @@ def find_unwritten_details(
         model_omitted = sorted(missing & in_candidates)
         if not filtered and not model_omitted:
             continue
+        missing_names = sorted(missing)
         details.append(
-            {
-                "section": section,
-                "section_label": label,
-                "names": sorted(missing),
-                "filtered": filtered,
-                "model_omitted": model_omitted,
-                "total": len(missing),
-            }
+            with_reasons(
+                {
+                    "section": section,
+                    "section_label": label,
+                    "names": missing_names,
+                    "filtered": filtered,
+                    "model_omitted": model_omitted,
+                    "total": len(missing),
+                },
+                # 3-A：只有能从消费快照唯一定位到条目的名字才给 entry_ids；旧入口
+                # （只带身份名）拿不到，于是这个键缺席，前端退回"去制作台添加"。
+                entry_ids=(
+                    builtin_entry_ids(consumed, section, identity_field, missing_names)
+                    if consumed is not None
+                    else None
+                ),
+            )
         )
+    # 需求 6：自建板块的未收录明细由生成链在投影后算好（条目由服务端确定性写入，
+    # 模型没有取舍权），随 selection_data 传进来；这里只负责合并进同一份清单。
+    if consumed is not None:
+        selection = selection_data if isinstance(selection_data, dict) else {}
+        precomputed = selection.get("custom_section_coverage")
+        if isinstance(precomputed, list):
+            for item in precomputed:
+                if not isinstance(item, dict):
+                    continue
+                note = dict(item)
+                # 5-A：自建板块的原因与内置分区同一套口径（这里是它唯一的补口——
+                # 明细由 profile_custom_filter 按同一份计划算好，这里只加显式原因与
+                # entry_ids，不改它的判定结果）。
+                names = [str(name) for name in (note.get("names") or []) if str(name)]
+                details.append(
+                    with_reasons(
+                        note,
+                        entry_ids=custom_entry_ids(
+                            consumed, str(note.get("section") or ""), names
+                        ),
+                    )
+                )
     return details
 
 
@@ -174,15 +232,27 @@ _LIST_FIELD_LABELS: tuple[tuple[tuple[str, str], str], ...] = (
 )
 
 
+# 行首列表标记：`- ` / `* ` / `• ` / `· ` 与 `1. ` / `2) `。**只锚行首**，且标记后必须
+# 跟空白——这一条是刻意的：「1-2 秒」「2024-08」「2024.03」是正文，不能被当成列表前缀剥掉。
+# 资料侧常是多行 Markdown 字符串、简历侧是已清洗的列表，两侧口径不一致会把每一条都判成
+# "没写进简历"，用户照着提示再补一遍就变成重复内容（问题 15）。
+_LIST_MARKER_RE = re.compile(r"^\s*(?:[-*•·]|\d{1,3}[.)])\s+")
+
+
+def _strip_list_marker(value: str) -> str:
+    return _LIST_MARKER_RE.sub("", value, count=1)
+
+
 def _normalized_values(raw: Any) -> list[str]:
     if isinstance(raw, (list, tuple)):
-        values = [str(value or "").strip() for value in raw]
+        values = [_strip_list_marker(str(value or "")).strip() for value in raw]
     else:
         values = [
-            part.strip()
+            _strip_list_marker(part).strip()
             for line in str(raw or "").splitlines()
             for part in line.split("，")
         ]
+    # 剥完标记后为空的行（原来只是一个 `- `）直接丢弃，不参与比对。
     return [value for value in values if value]
 
 
@@ -190,14 +260,36 @@ def _normalize_field_text(value: Any) -> str:
     return "".join(str(value or "").split()).casefold()
 
 
+def _candidate_names(
+    selection_data: dict[str, Any] | None, section: str, identity_field: str
+) -> set[str]:
+    """本次候选资料里某分区"都有谁"（没有候选快照时返回空集合）。
+
+    条目级检查（``find_unwritten_details``）与技能检查共用同一套交集判断：
+    **进了候选**才谈得上"模型取舍"，没进候选就是关卡 1（相关性 / 名额 / 预算）拦的。
+    """
+    selection = selection_data if isinstance(selection_data, dict) else {}
+    data = selection.get("data")
+    if not isinstance(data, dict):
+        return set()
+    return _entry_names(data.get(section), identity_field)
+
+
 def find_unwritten_field_details(
-    resume: ResumeContent, consumed: ConsumedProfile
+    resume: ResumeContent,
+    consumed: ConsumedProfile,
+    selection_data: dict[str, Any] | None = None,
 ) -> list[dict[str, Any]]:
     """R1-G：条目内字段/技能/总结层面“资料里有、简历里没写”的结构化明细。
 
     与 find_unwritten_details 互补：后者按**条目**比对（整条没写），这里补上
     “条目在、但字段值被丢掉”（项目 tech_stack/亮点、技能条目、个人总结只写一部分）
     的情况，供 coverage_notes 如实告知用户。只做确定性集合比对，不猜语义。
+
+    ``selection_data`` 是本次发给模型的候选料（``{"entry_names": …, "data": …}``）：
+    技能那一档必须用它判断"这条技能到底有没有进过候选"，否则名额（
+    ``SECTION_LIMITS["skills"]``）裁掉的那些会被误记成"模型没写"——模型一条都没漏。
+    不传时无法区分，按旧口径全部记 model_omitted（生成链路必须传，见 resume_generator）。
     """
     fallback = project_paper_content(consumed)
     details: list[dict[str, Any]] = []
@@ -235,16 +327,25 @@ def find_unwritten_field_details(
                 continue
             prefix = "项目" if section_key == "projects" else "科研项目"
             details.append(
-                {
-                    "section": section_key,
-                    "section_label": f"{prefix}「{name}」的{label}",
-                    "names": missing,
-                    "filtered": [],
-                    "model_omitted": missing,
-                    "total": len(missing),
-                }
+                with_reasons(
+                    {
+                        "section": section_key,
+                        "section_label": f"{prefix}「{name}」的{label}",
+                        "names": missing,
+                        "filtered": [],
+                        "model_omitted": missing,
+                        "total": len(missing),
+                    }
+                )
             )
-    # 2) 技能条目：整条没写的技能单列（说明是模型取舍，不是资料里没有）。
+    # 2) 技能条目：整条没写的技能单列，并按"有没有进过候选"分开归因。
+    #
+    # 以前这里把没写进去的一律记 model_omitted、`filtered` 硬编码成空数组。但技能的名额
+    # 在 SECTION_LIMITS["skills"]=14 就压掉了：候选 14 条、实写 14 条时模型一条没漏，
+    # 用户却读到"模型没有把它写进简历"。归因口径与条目级（第 149-153 行）保持一致：
+    #   - 没进候选 + 候选已满名额 → capacity_omitted（受条数上限限制）
+    #   - 没进候选 + 候选没满     → filtered（相关性 / 预算拦下）
+    #   - 进了候选               → model_omitted（模型取舍）
     written_skills = [
         str(skill.name or "").strip()
         for skill in resume.skills
@@ -257,15 +358,30 @@ def find_unwritten_field_details(
         and not any(_similar_skill(str(skill.name or ""), name) for name in written_skills)
     ]
     if missing_skills:
+        has_snapshot = selection_data is not None
+        in_candidates = _candidate_names(selection_data, "skills", "name")
+        # 候选条数顶到名额上限：没进候选的那些是被名额裁掉的，不是"交集不足"。
+        at_capacity = len(in_candidates) >= section_limit("skills")
+        # 没有候选快照就无法判断（旧口径）：不谎称是名额裁的，也不谎称被筛掉。
+        outside = [name for name in missing_skills if name not in in_candidates]
+        capacity_omitted = outside if has_snapshot and at_capacity else []
+        filtered_skills = outside if has_snapshot and not at_capacity else []
         details.append(
-            {
-                "section": "skills",
-                "section_label": "专业技能",
-                "names": missing_skills,
-                "filtered": [],
-                "model_omitted": missing_skills,
-                "total": len(missing_skills),
-            }
+            with_reasons(
+                {
+                    "section": "skills",
+                    "section_label": "专业技能",
+                    "names": missing_skills,
+                    "filtered": filtered_skills,
+                    "capacity_omitted": capacity_omitted,
+                    "model_omitted": [
+                        name
+                        for name in missing_skills
+                        if name in in_candidates or not has_snapshot
+                    ],
+                    "total": len(missing_skills),
+                }
+            )
         )
     # 3) 个人总结：资料有总结、简历只写一小部分时如实提示（不要求逐字）。
     source_summary = str(fallback.summary or "").strip()
@@ -275,15 +391,21 @@ def find_unwritten_field_details(
             None, _normalize_field_text(written_summary), _normalize_field_text(source_summary)
         ).ratio()
         if ratio < 0.5:
+            # 5-A 顺带修既有不一致：原来 ``names`` 是「个人总结（与资料原文相似度 68%）」
+            # 而 ``model_omitted`` 只有「个人总结」，两条按名字对不上 → 原因整条丢掉
+            # （前端只能显示「未说明」）。现在两处共用**同一个**标签，相似度仍然可见。
+            label = f"个人总结（与资料原文相似度 {ratio:.0%}）"
             details.append(
-                {
-                    "section": "summary",
-                    "section_label": "个人总结",
-                    "names": [f"个人总结（与资料原文相似度 {ratio:.0%}）"],
-                    "filtered": [],
-                    "model_omitted": ["个人总结"],
-                    "total": 1,
-                }
+                with_reasons(
+                    {
+                        "section": "summary",
+                        "section_label": "个人总结",
+                        "names": [label],
+                        "filtered": [],
+                        "model_omitted": [label],
+                        "total": 1,
+                    }
+                )
             )
     return details
 

@@ -79,6 +79,9 @@ def page_overage(
     language: str = "zh-CN",
 ) -> int:
     """渲染页数超出上限几页；未超限或无法测量返回 0。"""
+    if int(page_limit) <= 0:
+        # 0 = 不限篇幅：没有"超出"这个概念，直接判为不超页（不裁剪、不发警告）。
+        return 0
     pages = rendered_page_count(resume, template=template, font_scale=font_scale, language=language)
     if pages <= 0:
         return 0
@@ -227,6 +230,16 @@ def finalize_page_budget(
         resume, page_limit=page_limit, font_scale=font_scale, language=language
     )
     if final_overage <= 0:
+        # 含"不限篇幅"（page_limit <= 0）：不裁剪、不发超页/删减警告，但**仍做覆盖度检查**
+        # ——"这个板块一条都没留下"和篇幅无关，用户需要知道。
+        if int(page_limit) <= 0:
+            final_gaps = coverage_gaps(resume if isinstance(resume, dict) else resume.model_dump())
+            if final_gaps:
+                warnings.append(
+                    "以下核心板块在生成结果中没有保留任何条目："
+                    + "、".join(final_gaps)
+                    + "。可核对资料后手动补充，或重新生成。"
+                )
         return resume
     raw = resume if isinstance(resume, dict) else resume.model_dump()
     trimmed, removed = trim_to_page_limit(
@@ -259,7 +272,8 @@ def finalize_page_budget(
     )
     if remaining > 0:
         warnings.append(
-            f"按「最多 {page_limit} 页」生成后实际渲染仍超出 {remaining} 页："
+            f"按「最多 {page_limit} 页」生成后实际渲染仍超出 {remaining} 页"
+            f"（目标 {page_limit} 页、实际 {max(1, int(page_limit)) + remaining} 页）："
             "内容会按页数上限截断展示，建议手动精简或提高页数上限后重新生成。"
         )
     final_gaps = coverage_gaps(resume if isinstance(resume, dict) else resume.model_dump())

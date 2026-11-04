@@ -1,0 +1,117 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/* 简历面板（4/4）：版面诊断与「自动一页」、「顺序」弹层、预览缩放提示。
+   2026-11 问题 20 同批：resume-panels.css 正好顶到 500 行预算，页脚按钮的折行兜底
+   规则没地方放，于是按分段标题把这一整块**机械切出**（纯搬迁——选择器、声明、
+   媒体查询与层叠顺序逐字不变）。由 resume-panels.css 顶部的 @import 引入，
+   对外入口仍是 `resume.css` 里那一条，没有第二套入口。 */
+
+/* ===== 版面诊断与「自动一页」 ===== */
+
+.resume-diagnosis {
+  padding: 10px 12px;
+  margin-bottom: 12px;
+  background: var(--rf-surface, var(--rf-surface));
+  border: 1px solid var(--rf-border, var(--rf-border));
+  border-radius: 8px;
+}
+
+.resume-diagnosis-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.resume-diagnosis-progress {
+  display: block;
+  margin-top: 6px;
+  font-size: 12px;
+}
+
+.resume-diagnosis-summary {
+  margin: 8px 0 0;
+  font-size: 13px;
+}
+
+.resume-diagnosis-list {
+  margin: 8px 0 0;
+  padding-left: 20px;
+  font-size: 13px;
+  /* 建议可能有 5~6 条，整块展开会把下方的简历预览挤到很矮（预览区高度以前是跟随
+     上方内容算的）。这里给列表一个固定上限、超出内部滚动：诊断仍然完整可读，
+     但永远不会因为"建议条数多"而占掉预览的空间。 */
+  max-height: 176px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.resume-diagnosis-list li {
+  margin-bottom: 4px;
+}
+
+.resume-diagnosis-floor {
+  margin-top: 10px;
+}
+
+/* ── 板块顺序（预览工具条里的「顺序」弹层） ───────────────────────────── */
+/* 弹层里的每行是「序号 + 名称 + 上下移」，宽度固定是为了让 7 行的上下按钮
+   竖向对齐——用 auto 宽度时按钮会跟着名称长短左右跳，点起来很费劲。 */
+.resume-section-order-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.resume-section-order-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 232px;
+}
+
+.resume-section-order-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 4px;
+  border-radius: 6px;
+}
+
+.resume-section-order-row:hover {
+  background: var(--rf-surface-alt);
+}
+
+.resume-section-order-index {
+  flex: 0 0 18px;
+  text-align: center;
+  font-size: 12px;
+  color: var(--rf-text-tertiary);
+  font-variant-numeric: tabular-nums;
+}
+
+.resume-section-order-label {
+  flex: 1 1 auto;
+  font-size: 13px;
+}
+
+.resume-section-order-hint {
+  margin: 10px 0 0 !important;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+/* 「按住 Ctrl 滚滚轮可缩放」：与缩放百分比同一行、字号更小。
+   窄屏（预览区被压扁）时隐藏——那一行会被挤到换行，反而更乱。 */
+.resume-preview-zoom-hint {
+  margin-left: 2px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+@media (max-width: 1092px) {
+  .resume-preview-zoom-hint {
+    display: none;
+  }
+}

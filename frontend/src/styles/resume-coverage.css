@@ -1,0 +1,81 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/* 未收录资料提示块（5-A / 3-A）：一条一行 + 组间分隔线 + 组底部右对齐的按钮。
+   独立成片的原因与 `resume-panels-diagnostics.css` 同源：`resume-panels.css` 已 403 行，
+   而这一块的排版规则（省略 / 折叠 / 三分支按钮）与本文件其余部分没有交集。
+   由 `resume-panels.css` 顶部的 @import 引入——`@import` 必须先于任何规则，
+   所以不要把这些规则搬回父文件的中段。 */
+
+/* 一组：组间靠上边框分隔（首组不画，它紧跟说明文字）。
+   弹层本身已限高 360px（见 `.resume-diagnostics-popover`），这里只管每一行收敛。 */
+.resume-coverage-group {
+  padding-block: 8px;
+  border-top: 1px solid var(--rf-border, #f0f0f0);
+}
+
+.resume-coverage-group:first-child {
+  border-top: none;
+  padding-top: 2px;
+}
+
+/* 组头：`分区名 · N 条` + 原因汇总，14px/600（与正文 12.5px 拉出层级）。 */
+.resume-coverage-group-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+/* 原因汇总徽标：纯色小字，不占底色（不要给组头加一块大色块）。 */
+.resume-coverage-reasons {
+  font-size: 12px;
+  font-weight: 400;
+  color: rgba(0, 0, 0, 0.45);
+}
+
+/* 正文：一条一行；12.5px / 行高 1.6（长句不再折三行）。 */
+.resume-coverage-items {
+  margin: 4px 0 0;
+  padding-inline-start: 18px;
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
+/* 长英文 / URL 不撑破弹层：`anywhere` 比 break-word 更狠，可在任意字符处断行。 */
+.resume-coverage-items > li {
+  overflow-wrap: anywhere;
+}
+
+/* 长条目单行省略（阈值见 `LONG_ITEM_CHARS`），全文在 Tooltip 里。 */
+.resume-coverage-item {
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: bottom;
+}
+
+/* 混合原因组才出现的逐条小徽标：纯色小字，与正文同基线。 */
+.resume-coverage-item-reason {
+  margin-inline-start: 6px;
+  font-size: 11px;
+  color: rgba(0, 0, 0, 0.45);
+  white-space: nowrap;
+}
+
+/* 「展开全部 N 条 / 收起」：紧贴列表，不额外撑高一行。 */
+.resume-coverage-more {
+  padding-inline: 0;
+  height: 22px;
+}
+
+/* 组底部右对齐的操作按钮（3-A 三分支）：不再跟在最后一条正文后面当"正文的一部分"。 */
+.resume-coverage-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 2px;
+}

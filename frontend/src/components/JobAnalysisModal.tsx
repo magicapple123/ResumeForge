@@ -14,22 +14,23 @@ import {
   startJobAnalysis,
   useJobAnalysis,
 } from "../features/jobs/jobAnalysisStore";
-import type { Job, JobAnalysisPriority, JobAnalysisResult } from "../types";
+import type { Job, JobAnalysisResult } from "../types";
 import { t } from "../i18n";
-import type { MessageKey } from "../i18n";
 import { useLocale } from "../i18n/i18nContext";
+import { priorityMeta } from "../utils/priorityMeta";
+import { formatServerTime } from "../utils/serverTime";
 
 interface Props {
   job: Job | null;
   onClose: () => void;
 }
 
-/** 优先级 → 显示名（labelKey）+ Tag 颜色；显示名在使用处 `t()`，颜色与语言无关。 */
-const PRIORITY_META: Record<JobAnalysisPriority, { labelKey: MessageKey; color: string }> = {
-  high: { labelKey: "jobAnalysis.priority.high", color: "red" },
-  medium: { labelKey: "jobAnalysis.priority.medium", color: "orange" },
-  low: { labelKey: "jobAnalysis.priority.low", color: "blue" },
-};
+/** 优先级 → 显示名（labelKey）+ Tag 颜色；颜色与结构走 `utils/priorityMeta`，文案 key 不变。 */
+const PRIORITY_META = priorityMeta({
+  high: "jobAnalysis.priority.high",
+  medium: "jobAnalysis.priority.medium",
+  low: "jobAnalysis.priority.low",
+});
 
 /** 服务端缓存里读到的那一份（只作为"没有新结果时"的展示来源）。 */
 interface CachedAnalysis {
@@ -199,7 +200,7 @@ export default function JobAnalysisModal({ job, onClose }: Props) {
               description={
                 generatedAt
                   ? t("jobAnalysis.stale.body", {
-                      time: new Date(generatedAt).toLocaleString(),
+                      time: formatServerTime(generatedAt),
                     })
                   : t("jobAnalysis.stale.bodyNoTime")
               }

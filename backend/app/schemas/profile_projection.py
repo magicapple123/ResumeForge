@@ -30,6 +30,7 @@ from dataclasses import dataclass
 from pydantic import BaseModel, Field
 
 from .profile_editor import EditorSchemaOut
+from .resume_document import HeaderPlacement
 
 
 @dataclass(frozen=True)
@@ -76,6 +77,9 @@ class ConsumedSection:
     fields: tuple[ConsumedFieldSpec, ...]
     entries: tuple[ConsumedEntry, ...]
     revision: int = 0
+    # 需求 6：板块是否参与岗位相关性筛选（只有自建板块可为 True）。
+    # 默认 False = 历史行为：条目无条件进候选/纸面，不因岗位关键词被筛掉。
+    filter_by_job: bool = False
 
 
 @dataclass(frozen=True)
@@ -141,6 +145,21 @@ class ProjectionWarningOut(BaseModel):
     message: str = ""
 
 
+class ProjectionHeaderFieldOut(BaseModel):
+    """一条「可以加进页眉」的基本信息字段（6-A）。
+
+    目录项（key/label/placement）来自 ``services/resume/document_catalog.HEADER_FIELDS``，
+    ``value`` 取自当前组消费快照的 ``basic_info``（隐藏字段在读快照时已被裁掉，所以这里
+    天然遵守「隐藏」语义）。**值是拷贝**：前端把它写进 ``HeaderItem.value``，之后资料再改
+    不会自动回写（``HeaderItem`` 没有 source，本轮不引入活性链接）。
+    """
+
+    key: str
+    label: str
+    value: str = ""
+    placement: HeaderPlacement = "contact"
+
+
 class PaperProjectionOut(BaseModel):
     """GET /api/profile/current/projection 的响应：确定性纸面内容 + 候选 + 布局 + 警告。
 
@@ -153,6 +172,9 @@ class PaperProjectionOut(BaseModel):
     content: dict
     candidates: list[ProjectionCandidateOut] = Field(default_factory=list)
     source_layout: list[ProjectionSourceSectionOut] = Field(default_factory=list)
+    # 6-A：制作台「添加页眉字段」下拉的数据源（15 个基本信息字段 + 当前值）。
+    # 与 content 无关：这里取的是**资料**里的值，不受 v1 内容里有没有槽位影响。
+    header_fields: list[ProjectionHeaderFieldOut] = Field(default_factory=list)
     # F10/R-82 编辑器视图：参与分区的可见板块 + 每个板块的可见字段（按当前方案投影）。
     # 新建简历时由快照冻结一份副本；之后方案再改不影响已保存简历。
     editor_schema: EditorSchemaOut | None = None
@@ -183,6 +205,7 @@ __all__ = [
     "ConsumedSection",
     "PaperProjectionOut",
     "ProjectionCandidateOut",
+    "ProjectionHeaderFieldOut",
     "ProjectionScopeOut",
     "ProjectionSourceSectionOut",
     "ProjectionWarningOut",

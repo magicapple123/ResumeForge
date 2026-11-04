@@ -95,6 +95,10 @@ class LayoutAnalyzeRequest(BaseModel):
     format_name: str | None = Field(default=None, max_length=64)
     font_scale: ResumeFontScale | None = None
     format_config: dict | None = None
+    # 用户设的页边距下限（mm）。问题 17：它是**排版参数的下界**——页边距阶梯到此为止，
+    # 后续档从这个值继续收紧其它旋钮，而不是把越线的候选整档丢掉。
+    # None = 不限制（旧客户端行为逐字不变）。
+    min_padding_mm: float | None = Field(default=None, ge=0, le=100)
 
 
 class ContentHint(BaseModel):

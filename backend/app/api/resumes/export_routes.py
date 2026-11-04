@@ -24,6 +24,7 @@ from ...schemas.export import (
     PreviewPdfRequest,
 )
 from ...schemas.resume import mode_page_limit
+from ...schemas.resume_generation import UNLIMITED_PAGE_LIMIT
 from ...services.export_pipeline import (
     ExportRequest,
     RenderContext,
@@ -43,6 +44,7 @@ from ...services.resume.resume_completeness import find_incomplete_document, inc
 from ...services.resume.resume_delivery import (
     canonical_content_sha256,
     freeze_delivery,
+    page_limit_or_default,
 )
 from ...services.resume.resume_labels import DEFAULT_RESUME_LANGUAGE
 from ...services.resume.resume_record import record_format_config
@@ -64,11 +66,20 @@ from ._shared import (
     RESUME_OVERFLOW_HEADER,
     _get_live_resume,
     document_or_422,
+    page_limit_header_value,
 )
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+# 1-D：这份文件按「最大篇幅」裁过没有、从哪一块开始没有进去（``section/object_id``）。
+# 与 ``X-Resume-Overflow`` 分开：后者是"裁完还超限"，前者是"文件里确实少了东西"——
+# 裁过的文件页数通常正好等于上限，只看 overflow 的话用户以为一切都好。
+# 必须同时出现在 CORS 的 expose_headers 里（见 application.py），否则跨源部署下前端
+# 读到的是 null。
+RESUME_TRUNCATED_HEADER = "X-Resume-Truncated"
+RESUME_TRUNCATED_AT_HEADER = "X-Resume-Truncated-At"
 
 
 def _require_local_export_request(request: HTTPRequest) -> None:
@@ -77,9 +88,7 @@ def _require_local_export_request(request: HTTPRequest) -> None:
         raise HTTPException(status_code=403, detail="简历导出仅允许从本机前端访问")
 
 
-def _document_for_request(
-    db: Session, record: ResumeRecord, content_override: dict | None
-) -> dict:
+def _document_for_request(db: Session, record: ResumeRecord, content_override: dict | None) -> dict:
     """导出输入的版本收口：v2 直通；旧记录/旧草稿一次性转换（不写库）。
 
     结构不合法（例如非法照片 data URL）统一 422 + 可读提示，不冒泡成 500。
@@ -133,9 +142,12 @@ def _export_record(
             raise HTTPException(status_code=409, detail=incomplete_detail(incomplete))
     # W14：页数上限按文档模式夹紧（普通 1–3 / 长 CV 1–10）；请求给了就用请求值。
     document_mode = getattr(record, "document_mode", "resume") or "resume"
-    page_limit = mode_page_limit(
-        request.page_limit if request.page_limit is not None else record.page_limit, document_mode
-    )
+    raw_page_limit = request.page_limit if request.page_limit is not None else record.page_limit
+    page_limit = mode_page_limit(raw_page_limit, document_mode)
+    # 1-D：「不限篇幅」的语义必须单独带下去。``mode_page_limit(0)`` 折成 10 页只是给
+    # PDF 一个渲染保护上限，若只传数字，10 页就会被当成"用户要 10 页"的裁剪预算——
+    # 于是选「不限」反而在 Word/HTML/TXT/Markdown 里被裁到 10 页。
+    page_limit_is_unlimited = int(raw_page_limit or 0) == UNLIMITED_PAGE_LIMIT
     # 模板解析一次，json/md 用不到也不多查一次查询；html/pdf/docx 复用同一份解析结果。
     effective_style = template_override or record.template
     export_template, export_html = resolve_style_template(db, effective_style)
@@ -158,14 +170,15 @@ def _export_record(
         format_config=base_format_config,
         # 纸面固定文案的语言。旧记录该列为空时按 zh-CN 读（与历史输出逐字一致）。
         language=record.language or DEFAULT_RESUME_LANGUAGE,
+        # 「不限篇幅」（原始值 0）与"上限 10 页"是两种语义，必须分开传（见上）。
+        page_limit_is_unlimited=page_limit_is_unlimited,
     )
     # 预览的重复请求在**渲染之前**就短路：来回切口径、开大图、拖回原值问的都是同一份。
     # 键 = 内容指纹 + 渲染配置指纹（两者本来就要进响应头，这里只是提前算）。
     cache_key: str | None = None
     if cache_result and not save_copy:
         cache_key = (
-            f"{canonical_content_sha256(document)}:"
-            f"{render_config_fingerprint(request, context)}"
+            f"{canonical_content_sha256(document)}:{render_config_fingerprint(request, context)}"
         )
         cached = get_cached_preview(cache_key)
         if cached is not None:
@@ -199,9 +212,12 @@ def _export_record(
     # 把实际页数带回去，让界面能提示，而不是让用户下载完才发现。
     if artifact.pages is not None:
         headers[PDF_PAGES_HEADER] = str(artifact.pages)
-        # 真实需要几页（未截断）：界面用它说"按当前设置约需 N 页"，与草稿预览同一措辞。
-        if artifact.pages_needed is not None:
-            headers[PDF_PAGES_NEEDED_HEADER] = str(artifact.pages_needed)
+    # 真实需要几页（未截断）：界面用它说"按当前设置约需 N 页"，与草稿预览同一措辞。
+    # 1-D 起 html/md/txt 也会带回这个数（它们没有分页引擎、没有 ``pages``，但这次测量
+    # 知道真实需求页数）——否则用户只会看到一句"已裁剪"，不知道差多少。
+    if artifact.pages_needed is not None:
+        headers[PDF_PAGES_NEEDED_HEADER] = str(artifact.pages_needed)
+    if artifact.pages is not None:
         if request.format == "pdf":
             # 只有真的由 PDF 引擎渲染时才声称引擎名：html/json/md/txt 根本没有 PDF 引擎，
             # 给它们也回一个 "fpdf2" 是假话。
@@ -209,8 +225,18 @@ def _export_record(
         # overflow 只在"有分页引擎"的格式（pdf/docx）里有意义，而 artifact.pages 非空
         # 正是这一条件。标志不许说谎：它必须与 ``pages_needed`` / 上限的结论一致。
         headers[RESUME_OVERFLOW_HEADER] = "true" if artifact.overflow else "false"
-    if artifact.page_limit is not None:
-        headers[PDF_PAGE_LIMIT_HEADER] = str(artifact.page_limit)
+    if artifact.truncated:
+        # 1-D：文件里**确实**少了内容（按篇幅上限整块裁掉）。与 overflow 分开说：
+        # 裁完通常已经不超限（overflow=false），但少掉的部分必须让用户知道。
+        headers[RESUME_TRUNCATED_HEADER] = "true"
+        if artifact.truncated_at:
+            headers[RESUME_TRUNCATED_AT_HEADER] = artifact.truncated_at
+    page_limit_header = page_limit_header_value(
+        artifact.page_limit, is_unlimited=page_limit_is_unlimited
+    )
+    if page_limit_header is not None:
+        # 「不限篇幅」回 0 而不是 ``mode_page_limit(0)`` 折出来的渲染保护上限 10（见 helper）。
+        headers[PDF_PAGE_LIMIT_HEADER] = page_limit_header
     # 「生成内容保存位置」：设置非空且目录合法时，把同一份产物再落盘一份。**best-effort**：
     # 写失败只记日志、不阻断下载——用户已经等了一次生成，不能因为本地磁盘的问题白等。
     # 预览（``save_copy=False``）跳过这一段：它不是"用户要的文件"，只是屏幕上的一个视图。
@@ -239,9 +265,11 @@ def _export_record(
             "style_config": context.style_config or {},
             # 生效后的版式：记录值 + 本次请求的草稿覆盖，与 build_export 渲染用的是同一份。
             "format_config": effective_format_config(request, context),
+            # 语义值原样入档（``0`` = 不限篇幅）：存档是"当初那次交付"的证据，
+            # 写成 ``or 1`` 等于把用户选的不限改成"最多 1 页"，重放时按 1 页裁。
             "page_limit": request.page_limit
             if request.page_limit is not None
-            else (record.page_limit or 1),
+            else page_limit_or_default(record.page_limit),
             "font_scale": request.font_scale or context.font_scale or "standard",
             # 语言同样是"生效后的版式"：请求覆盖优先，否则记录值。存档要能重放出同一份
             # 文件（`replay_delivery_export`），漏记它就会在重下存档时把英文简历印成中文。
@@ -430,6 +458,3 @@ def preview_resume_pdf(
         # 中栏还没保存的正文（W04）：预览与"点保存后导出的那份"因此是同一份内容。
         content_override=variant_options.get("content") if variant_options else explicit_content,
     )
-
-
-
