@@ -44,6 +44,8 @@ RUNTIME_ONLY = frozenset(
         "backups",
         "auto-backups",
         "pre-update",
+        # 升级时的一次性归档：ARCHIVE-README 已说明"不进包、不要删"，不应长期告警。
+        "legacy-archive",
         ".trash",
     }
 )

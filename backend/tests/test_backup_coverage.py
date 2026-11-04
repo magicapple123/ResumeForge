@@ -136,6 +136,17 @@ def test_scan_reports_unknown_directory(tmp_path):
     assert report["truncated"] is False
 
 
+def test_scan_ignores_legacy_archive_directory(tmp_path):
+    """legacy-archive 是升级时的一次性归档：文档要求保留且不进包，不应长期告警。"""
+    legacy_archive = tmp_path / "legacy-archive"
+    (legacy_archive / "20261104-000000" / "package").mkdir(parents=True)
+    (legacy_archive / "20261104-000000" / "README.txt").write_text("archive", encoding="utf-8")
+
+    report = scan_uncovered(tmp_path)
+
+    assert [item["name"] for item in report["items"]] == []
+
+
 def test_scan_is_depth_limited_and_skips_symlinks(tmp_path):
     """只到 3 层：更深处的内容不统计（避免扫描变成全盘遍历），符号链接一律跳过。"""
     deep = tmp_path / "mystery" / "a" / "b" / "c"
