@@ -217,29 +217,88 @@ jobs:
 
       # SignPath 回传的是重签后的产物压缩包，解压保留构建时的相对路径
       # （desktop/out/ResumeForge-Setup-*.exe），所以递归找，不能假设平铺。
+      #
+      # 这一步是签名的门禁，严格度必须随「演练」还是「真发版」变化。
+      # 当前项目用的是 test-signing 策略：证书是 SignPath 的**测试证书**，根证书
+      # 不在 Windows 信任列表里，于是 Get-AuthenticodeSignature 在干净的 runner 上
+      # 报 UnknownError（消息为 "A certificate chain processed, but terminated in a
+      # root certificate which is not trusted..."）。这是 test-signing 的**预期形态**，
+      # 不是签名失败：文件里确实有签名块，主体也对，只是这条链在别处无法被信任到根。
+      # 所以白名单只认 Valid 的老写法会把合法的测试签名也拦下，把演练彻底卡死。
+      #
+      # 分层的依据是「这个错误是否说明产物本身是废的」：
+      #   * 结构性错误——没签上（NotSigned）、签完内容被改（HashMismatch）、签错
+      #     主体——产物在任何模式下都是废的，演练也必须当场失败，否则演练会得出
+      #     「签名链路通了」的错误结论；
+      #   * 仅仅是「这条链在本机不被信任」（UnknownError / NotTrusted /
+      #     Incompatible）——演练放行但必须留痕；真发版仍然只认 Valid，因为那时
+      #     用的是生产证书，用户拿到手必须能验成 Valid，否则官网 #verify 页教用户
+      #     核对的那一行就成了空话。
       - name: Apply signed installer
         if: ${{ vars.SIGNPATH_ORGANIZATION_ID != '' }}
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
+          # workflow_dispatch 的 boolean 输入在 pwsh 里渲染成字符串 'true'/'false'，
+          # 直接写 if ($x) 会因为非空字符串恒为真而永远走进「放行」分支。必须显式
+          # 和 'true' 比较一次，再把结论当布尔用。
+          $isDryRun = ('${{ inputs.dry_run }}' -eq 'true')
           $signed = Get-ChildItem "desktop/out/signed" -Recurse -Filter "ResumeForge-Setup-*.exe" |
             Select-Object -First 1
           if (-not $signed) { throw "签名没回传安装包：desktop\out\signed 下递归找不到 ResumeForge-Setup-*.exe" }
           $sig = Get-AuthenticodeSignature $signed.FullName
           Write-Host "signature status: $($sig.Status)"
-          # 白名单而不是黑名单：Authenticode 的状态枚举不止 NotSigned 一个，
-          # 「不是 NotSigned」并不等于「签名有效」。HashMismatch 意味着签名后文件被
-          # 改过（签名块里翻一个字节就是这样），Incompatible / NotTrusted 同样不可发。
-          # 这种包发出去，用户按官网 #verify 核对时会先过 Get-FileHash、再在
-          # Authenticode 这关发现对不上，属于最坏的一种「以为签好了」。
-          if ($sig.Status -ne 'Valid') {
-            throw "签名无效：$($signed.Name) 的 Authenticode 状态为 $($sig.Status)（$($sig.StatusMessage)），拒绝发布。"
+          Write-Host "status message  : $($sig.StatusMessage)"
+          # 时间戳证书只打印、不判定。官网政策页向用户承诺了 RFC 3161 时间戳，而
+          # 签名参数由 SignPath 侧的签名策略附加（工作流不传），这里是我们唯一能
+          # 亲眼看到它的地方——把它打出来，下一次 CI 日志就是可引用的证据。
+          # 缺失时**不** throw：时间戳决定的是「签名证书过期之后签名是否仍然有效」，
+          # 不影响本次构建能不能发布，不该让一条信息性输出阻断整条流水线。
+          if ($sig.TimeStamperCertificate) {
+            Write-Host "timestamper     : $($sig.TimeStamperCertificate.Subject)"
+          } else {
+            Write-Host "timestamper     : (no timestamp certificate)"
           }
-          # 状态确定有效之后再读主体：其他状态下 SignerCertificate 可能是 null，
-          # 先判状态才不至于在 null 上抛出含糊的错误。
-          Write-Host "signer subject  : $($sig.SignerCertificate.Subject)"
-          if ($sig.SignerCertificate.Subject -notlike '*SignPath Foundation*') {
-            throw "签的不是预期主体：$($signed.Name) 的签名主体为 '$($sig.SignerCertificate.Subject)'，不含 SignPath Foundation。"
+
+          # ① 签名根本没进文件：任何模式都硬失败。演练放行的只是「链不受信任」，
+          #    不是「压根没签」——判定必须排在下面的 dry_run 放行之前。
+          if ($sig.Status -eq 'NotSigned') {
+            throw "签名未写入文件：$($signed.Name) 的 Authenticode 状态为 NotSigned（$($sig.StatusMessage)），拒绝继续。"
+          }
+          # ② 签名后文件被改过（在签名覆盖的区间里翻一个字节就是这个状态）：
+          #    同样任何模式都硬失败，同样排在 dry_run 放行之前。
+          if ($sig.Status -eq 'HashMismatch') {
+            throw "签名与文件内容不符：$($signed.Name) 的 Authenticode 状态为 HashMismatch（$($sig.StatusMessage)），签名后被修改过，拒绝继续。"
+          }
+          # ③ 主体必须对上，且与状态无关：其他状态下 SignerCertificate 可能是 null，
+          #    所以先把 null 归一成空串，报错里也写清「没有签名者证书」，避免在 null
+          #    上抛出含糊的成员访问错误。签错主体在演练里同样不可接受。
+          $subject = if ($sig.SignerCertificate) { $sig.SignerCertificate.Subject } else { '' }
+          Write-Host "signer subject  : $subject"
+          if ($subject -notlike '*SignPath Foundation*') {
+            throw "签的不是预期主体：$($signed.Name) 的签名主体为 '$subject'（没有签名者证书时为空字符串），不含 SignPath Foundation，拒绝继续。"
+          }
+          # ④ Valid：干净通过。这也是真发版唯一接受的状态。
+          if ($sig.Status -eq 'Valid') {
+            Write-Host "signature verified: Valid"
+          }
+          elseif ($isDryRun) {
+            # ⑤ 其他状态（UnknownError / NotTrusted / Incompatible …）且是演练：
+            #    test-signing 的测试证书根不在 runner 的信任列表里，本机必然报
+            #    UnknownError，属预期行为，放行。但必须留下醒目痕迹——只在日志里
+            #    滚过去的话，下次真发版忘了把 dry_run 关掉，就会把演练口径当成发版口径。
+            Write-Warning "演练模式放行：$($signed.Name) 的 Authenticode 状态为 $($sig.Status)（$($sig.StatusMessage)）。test-signing 的测试证书根不在本机信任列表，属预期行为；正式发版要求 Valid。"
+            if ($env:GITHUB_STEP_SUMMARY) {
+              # 用 AppendAllText + 无 BOM 的 UTF8，而不是 Add-Content：这份 summary
+              # 由多个 step 依次追加，中途插入 BOM 会让后面的中文渲染成乱码。
+              $line = "- 演练模式：签名链不受信任（test-signing 测试证书，预期行为），正式发版要求 Valid。状态：$($sig.Status)；StatusMessage：$($sig.StatusMessage)"
+              [System.IO.File]::AppendAllText($env:GITHUB_STEP_SUMMARY, "$line`n", [System.Text.UTF8Encoding]::new($false))
+            }
+          }
+          else {
+            # ⑥ 其他状态且不是演练：真发版只接受 Valid。消息里必须带上当前状态与
+            #    StatusMessage，否则维护者只能回 SignPath 后台翻才知道为什么被拦。
+            throw "签名不可信，拒绝发版：$($signed.Name) 的 Authenticode 状态为 $($sig.Status)（$($sig.StatusMessage)）。dry_run=false 时只接受 Valid；若这是 test-signing 的测试证书，请改用 dry_run=true 演练。"
           }
           Copy-Item -LiteralPath $signed.FullName -Destination "desktop\out\$($signed.Name)" -Force
           Write-Host "signed installer applied: $($signed.Name)"
