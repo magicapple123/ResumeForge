@@ -129,8 +129,17 @@ describe("导出前预检闸门", () => {
     expect(apiMocks.exportResumeWithOptions).toHaveBeenCalledTimes(1);
 
     // 再点一次导出：同一份读数已经确认过，不再打断。
-    clickExport();
-    await waitFor(() => expect(apiMocks.exportResumeWithOptions).toHaveBeenCalledTimes(2));
+    //
+    // 点击必须等第一批导出落定：`exportAll` 开头有 `if (exporting) return`，而
+    // `downloadBlob` 被调用时 `finally setExporting(false)` 还没执行——测试若在此刻
+    // 立刻点第二次，会被那个守卫吞掉，断言就变成"只调用了 1 次"。本地快机器上这个
+    // 窗口通常已被 microtask 抹平，CI 的覆盖率插桩 + `--maxWorkers=2` 会把它放大
+    // （2026-11-06 的 CI 因此红过一次，同一用例耗时 15s）。这里改成在重试里点击：
+    // 守卫还在时点击无副作用，守卫一放开断言立即通过，要验证的语义不变。
+    await waitFor(() => {
+      clickExport();
+      expect(apiMocks.exportResumeWithOptions).toHaveBeenCalledTimes(2);
+    });
     expect(
       screen.queryByRole("button", { name: t("exportPanel.preflight.exportAnyway") }),
     ).toBeNull();
