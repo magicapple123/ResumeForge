@@ -23,7 +23,7 @@ PLATFORM_NOTE = """【启动与升级（平台事实）】
 - Windows：在项目根目录双击 `start.cmd` 启动、`stop.cmd` 停止、`update.cmd` 更新，都是零依赖一键脚本，首次启动会自动准备环境。
 - macOS：双击 `start.command` 启动、`stop.command` 停止、`update.command` 更新；首次打开若被系统拦截，在 Finder 里右键点它 → 打开（只需一次）。
 - 一键启动的页面地址默认是 http://127.0.0.1:8005（后端端口 8005）。发布包自带 frontend/dist，由后端同源提供页面，运行期不需要 Node；5173 只是显式 dev 模式（--frontend-mode dev）下 Vite 的端口，不要把"手动 npm run dev"当作用户的启动方式。
-- 检查更新：页头「使用指南」旁的刷新图标，或设置 → 应用 → 软件更新。应用内覆盖安装目前只支持 Windows；macOS 用 `update.command`（同样是下载新包 → 只覆盖程序文件），Linux 按升级文档手动操作。
+- 检查更新：页头「使用指南」旁的刷新图标，或设置 → 更新与帮助 → 软件更新。应用内覆盖安装目前只支持 Windows；macOS 用 `update.command`（同样是下载新包 → 只覆盖程序文件），Linux 按升级文档手动操作。
 - Linux：没有一键启动 / 更新脚本，也未经过兼容验证。被问到时如实说明"未官方支持"，可以介绍 docs/upgrading.md 的手动流程（自建 .venv 启动后端、npm 启动前端），但不要承诺一键体验或应用内覆盖安装。"""
 
 

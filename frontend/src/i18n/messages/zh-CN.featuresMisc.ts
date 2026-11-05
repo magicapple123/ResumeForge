@@ -40,6 +40,8 @@ const featuresMisc = {
 
   /** 设置页技能列表读取失败的兜底。 */
   "featuresMisc.settingsSkills.loadFailed": "加载技能失败",
+  /** 在线体验（演示模式）没有录到这条接口：英文演示里同样要说英文。 */
+  "featuresMisc.demo.missingRoute": "在线体验版未包含这个接口的数据。",
 } as const;
 
 export default featuresMisc;

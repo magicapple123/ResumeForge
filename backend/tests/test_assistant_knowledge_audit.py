@@ -39,7 +39,9 @@ GUIDE_STEPS_TS = FRONTEND_DIR / "src" / "components" / "userGuideSteps.ts"
 # ≤100 行门面（类型再导出 + 组装）。标题从分域模块提取；门面里已没有 title 字面量。
 GUIDE_MODULES_DIR = FRONTEND_DIR / "src" / "components" / "user-guide"
 ZH_MESSAGES_DIR = FRONTEND_DIR / "src" / "i18n" / "messages"
-README_MD = REPO_ROOT / "README.md"
+# GitHub 默认展示英文 README（README.md）；能力清单与功能 key 的对应关系写在中文版，
+# 审计对象因此是 README.zh-CN.md（两版功能表逐行同构，英文版由人工镜像）。
+README_MD = REPO_ROOT / "README.zh-CN.md"
 
 # README「功能特性」表每一行 → 目录里覆盖它的功能 key（可一对多）。
 #
@@ -51,45 +53,55 @@ README_FEATURE_KEYS: dict[str, tuple[str, ...]] = {
     "岗位管理": ("job_manage",),
     "备选岗位": ("candidate_jobs",),
     "拖拽导入": ("drag_drop",),
-    "模拟面试": ("interview",),
-    "个性化题库": ("question_bank", "interview_review"),
-    "工作台": ("skills", "style_format_template", "template_import"),
-    "试用与对比": ("template_trial",),
-    "个人资料库": ("profile", "profile_library"),
-    "简历照片": ("profile_photo",),
-    "资料方案与当前方案": ("profile_groups",),
-    "旧资料升级说明": ("profile_upgrade_notice",),
-    "职业场景": ("career_scenario",),
-    "事实台账": ("claims",),
-    "面试深挖": ("drill",),
-    "资料箱": ("materials",),
-    "文件副本库": ("user_files",),
     "批量设置状态": ("job_batch_status",),
-    "保存位置": ("export_save_location",),
-    "导出形式": ("export_bundle_delivery",),
-    "助手放宽模式": ("assistant_relaxed_mode",),
-    "AI 定制简历": ("resume_generate",),
-    "自行编写简历": ("resume_manual",),
-    "简历写作增强": ("writing_enhance", "version_diff"),
-    "AI 修改简历": ("resume_revise",),
-    "生成说明": ("resume_generation_notes",),
-    "质量与合规检查": ("quality_check",),
-    "简历历史": ("resume_history",),
-    "岗位关联": ("job_resume_link",),
-    "收藏夹": ("favorites",),
     "岗位需求解读": ("job_analysis",),
     "岗位匹配度分析": ("job_match",),
+    "匹配度参考分": ("match_reference_score",),
     "批量岗位适配度分析": ("job_match_batch",),
     # AI 对比选岗（横向对比 2–12 个岗位）与批量逐一分析共用 job_match_batch 这张批次表
     # （对比结论也挂在批次行上），所以映射到同一个 key。
     "AI 对比选岗": ("job_match_batch",),
-    "匹配度参考分": ("match_reference_score",),
-    "求职进度": ("tracker", "tracker_import"),
-    "日历提醒": ("reminders",),
-    "内推管理": ("referral",),
-    "求职数据看板": ("analytics",),
-    "面经知识库": ("interview_experience",),
-    "知识库": ("knowledge",),
+    "个人资料库": ("profile", "profile_library"),
+    "资料方案与当前方案": ("profile_groups",),
+    "旧资料升级说明": ("profile_upgrade_notice",),
+    "职业场景": ("career_scenario",),
+    "网申资料": ("web_form_extra_profile",),
+    "网申专用资料": ("web_form_fields",),
+    "简历照片": ("profile_photo",),
+    "事实台账": ("claims",),
+    "资料箱": ("materials",),
+    "文件副本库": ("user_files",),
+    "截图与文档识别": ("recognition",),
+    "AI 定制简历": ("resume_generate",),
+    "自行编写简历": ("resume_manual",),
+    "简历写作增强": ("writing_enhance", "version_diff"),
+    "AI 修改简历": ("resume_revise",),
+    "科研简历": ("research_sections", "long_cv"),
+    "通用简历": ("general_resume",),
+    "表达资产库": ("resume_assets",),
+    "来源核对与事实锁": ("provenance", "fact_locks"),
+    "防虚构校验": ("consistency_check",),
+    "质量与合规检查": ("quality_check",),
+    "生成说明": ("resume_generation_notes",),
+    "简历历史": ("resume_history",),
+    "岗位关联": ("job_resume_link",),
+    "工作台": ("skills", "style_format_template", "template_import"),
+    "试用与对比": ("template_trial",),
+    "文档大纲": ("outline",),
+    "专业视图": ("proview",),
+    "局部排版": ("typography",),
+    "分页控制": ("pagination",),
+    "版面优化": ("layout_optimizer",),
+    "制作台检查": ("preflight",),
+    "保存冲突三选一": ("save_conflict",),
+    "撤销与恢复": ("history",),
+    "命名版本与岗位变体": ("named_versions", "job_variants"),
+    "双语版本与术语表": ("bilingual_variants", "glossary"),
+    "导出形式": ("export_bundle_delivery",),
+    "多格式导出": ("export_formats", "watermark", "redact", "resume_exact_preview"),
+    "导出交付包": ("export_bundle_delivery",),
+    "保存位置": ("export_save_location",),
+    "离线分享包": ("share_package", "review_annotations"),
     "自动投递台": (
         "collect",
         "apply_queue",
@@ -100,55 +112,56 @@ README_FEATURE_KEYS: dict[str, tuple[str, ...]] = {
     ),
     "网申填表": ("web_form_fill", "web_form_browser", "web_form_records"),
     "放宽模式": ("web_form_fill",),
-    "网申专用资料": ("web_form_fields",),
-    "网申资料": ("web_form_extra_profile",),
     "填表时学到的": ("web_form_learning",),
+    "求职进度": ("tracker", "tracker_import"),
+    "日历提醒": ("reminders",),
+    "内推管理": ("referral",),
+    "求职数据看板": ("analytics",),
+    "收藏夹": ("favorites",),
+    "模拟面试": ("interview",),
+    "个性化题库": ("question_bank", "interview_review"),
+    "面试深挖": ("drill",),
+    "面经知识库": ("interview_experience",),
+    "知识库": ("knowledge",),
     "AI 求职助手": ("assistant_chat",),
+    "助手放宽模式": ("assistant_relaxed_mode",),
     "技能": ("skills",),
     "会话管理": ("conversation_manage",),
     "投投剪贴板": ("tou_tou_clipboard",),
-    "批量选择与批量删除": ("batch_selection",),
-    "通用简历": ("general_resume",),
-    "截图与文档识别": ("recognition",),
-    "多格式导出": ("export_formats", "watermark", "redact", "resume_exact_preview"),
-    "导出交付包": ("export_bundle_delivery",),
-    "离线分享包": ("share_package", "review_annotations"),
     "首页": ("home_shortcuts", "home_todo"),
     "界面细节": ("ui_details", "navigation_visibility"),
     "全局搜索": ("global_search",),
-    "防虚构校验": ("consistency_check",),
+    "外发预览与用量": ("outbound_preview", "usage_summary"),
+    "批量选择与批量删除": ("batch_selection",),
     "检查与更新": ("update_check", "dataset"),
     "回收站": ("trash",),
     "你的 Key 你做主": ("own_api_key", "llm_config"),
-    "保存冲突三选一": ("save_conflict",),
-    "文档大纲": ("outline",),
-    "制作台检查": ("preflight",),
-    "专业视图": ("proview",),
-    "局部排版": ("typography",),
-    "分页控制": ("pagination",),
-    "表达资产库": ("resume_assets",),
-    "撤销与恢复": ("history",),
-    "命名版本与岗位变体": ("named_versions", "job_variants"),
-    "科研简历": ("research_sections", "long_cv"),
-    "版面优化": ("layout_optimizer",),
-    "来源核对与事实锁": ("provenance", "fact_locks"),
-    "外发预览与用量": ("outbound_preview", "usage_summary"),
-    "双语版本与术语表": ("bilingual_variants", "glossary"),
 }
 
 
 def _readme_feature_names() -> set[str]:
-    """从 README「功能特性」表的第一列取出功能名（去掉行首 emoji）。"""
+    """从 README「功能特性」表的第一列取出功能名（去掉首列 markdown 链接与 emoji）。
+
+    要先剥掉 **WORD JOINER（U+2060）**：表格第一列里合法的中文名会被浏览器压成
+    「每行一个字」（中文在表格里可以逐字断行，第一列会被压到 min-content），所以在
+    最长的那个模块名里插了零宽 word joiner 当"锚"，把列宽撑到能单行显示。它不可见、
+    也不改变任何字符，取名字时必须剔掉，否则 77 个名字会整体对不上。
+    """
     text = README_MD.read_text(encoding="utf-8")
     section = text.split("## ✨ 功能特性", 1)[1].split("\n## ", 1)[0]
     names: set[str] = set()
     for line in section.splitlines():
         if not line.startswith("|"):
             continue
-        cell = line.split("|")[1].strip()
+        cell = line.split("|")[1].replace("\u2060", "").replace("\u00a0", "").strip()
         if not cell or set(cell) <= set("-: "):
             continue
-        cleaned = re.sub(r"^[^\w]+", "", cell).strip()
+        # 2.0 文档改版（2026-11-06）把首列从纯文本改成官网链接
+        # `[📋 岗位管理](https://…#jobs-manual)`；解析得跟格式走，只取链接文字。
+        # 否则 `^[^\w]+` 只剥掉 `[📋 `，`](url)` 会留在名字里，77 个名字整体对不上。
+        # 非链接单元格原样返回（将来改回纯文本不会解析成空串，也不会静默跳过）。
+        link = re.fullmatch(r"\[([^\]]+)\]\([^)]*\)", cell)
+        cleaned = re.sub(r"^[^\w]+", "", link.group(1) if link else cell).strip()
         if cleaned and cleaned != "模块":
             names.add(cleaned)
     return names
@@ -209,9 +222,7 @@ def _zh_copy() -> dict[str, str]:
     return copy
 
 
-def _resolve_copy(
-    copy: dict[str, str], keys: list[str], literals: list[str]
-) -> set[str]:
+def _resolve_copy(copy: dict[str, str], keys: list[str], literals: list[str]) -> set[str]:
     """key 还原成 zh 文案；同时兼容尚未迁走的字面量写法。"""
     resolved = {copy[key] for key in keys if key in copy}
     resolved.update(literals)

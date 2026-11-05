@@ -390,9 +390,13 @@ export default function ExactPreviewPanel({
   const paperWidth = scalable ? Math.round(frameWidth * scale) : 0;
   const paperHeight = scalable ? Math.round(baseHeight * scale) : frameHeight;
   /** 缩放走查看器自己的 `#zoom=<百分比>`（唯一既真缩放又清晰的路径，见 `zoomedPdfUrl`），
-   *  每换一档都换一个新 objectURL；iframe 至少与相框同宽，放大时的横向滚动交给 `.is-zoomed`。 */
+   *  每换一档都换一个新 objectURL。**纸列宽度跟着纸走**（旧实现是"至少与相框同宽"）：
+   *  缩到 100% 以下时查看器把纸排在这一层的**左边**，若这层仍是相框宽，纸就贴左、右侧空
+   *  一大截（2026-11-05 用户："右方和下方明显缺失"）。收窄后由
+   *  `.exact-preview-paper-column { margin: 0 auto }` 居中；放大时纸比相框宽，横向滚动交给
+   *  `.is-zoomed`。 */
   const zoomPct = scalable ? Math.max(10, Math.round((100 * paperWidth) / A4_WIDTH_PX)) : null;
-  const viewWidth = Math.max(frameWidth, paperWidth);
+  const viewWidth = Math.max(1, paperWidth);
   // 缩放 URL 只在 effect 里创建（禁止渲染期造 blob URL，见 `useZoomedPdfUrl` 文件头）：
   // 两个 iframe 各一份，旧的由 hook 在换档时释放、卸载由上面的 urlsRef 单点清空。
   const framedUrl = useZoomedPdfUrl(current, zoomPct, keep, release);

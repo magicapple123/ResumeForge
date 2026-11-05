@@ -132,6 +132,8 @@ const research = {
   "research.mode.hint": "长 CV 用于科研简历，上限 10 页；普通简历仍为 1–3 页",
   "research.mode.limitLabel": "篇幅上限",
   "research.mode.limitOption": "{count} 页",
+  // 单数孪生键：英文 count === 1 时用 `1 page`；中文无单复数，两条同句。见 i18n/countMessage.ts。
+  "research.mode.limitOptionOne": "{count} 页",
   "research.mode.budget": "长 CV 最多 10 页；装不下时提示并截断，不自动缩小字号",
   "research.mode.overBudget": "按当前设置需要 {pages} 页，超过上限 {limit} 页",
   "research.mode.clampedToResume": "已按普通简历上限调整为 3 页",

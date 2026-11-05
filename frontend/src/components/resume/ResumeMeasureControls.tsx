@@ -421,7 +421,7 @@ export default function ResumeMeasureControls({
       )}
       <div className="resume-measure-cell">
         <span className="resume-measure-label">{t("resume.measure.fontLabel")}</span>
-        {/* 字体（项 14）：它写的是**这一份简历**的 `format_config.font`，与「设置 → 应用 →
+        {/* 字体（项 14）：它写的是**这一份简历**的 `format_config.font`，与「设置 → 外观与交互 →
             简历字体」那个设备级选择是两件事（见 ResumeFontControl 头注释）。
             `alignWithSlider` 只在弹窗里开：上面那一行就是页边距滑杆，
             下拉要与它同宽、同起点，两行才像一组控件。 */}

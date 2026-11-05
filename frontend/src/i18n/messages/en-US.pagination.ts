@@ -90,6 +90,8 @@ const pagination = {
   "pagination.thumbnails.pageIssues": ", {count} issues",
   "pagination.thumbnails.ariaJoin": ", ",
   "pagination.thumbnails.limitReached": "Page limit reached ({limit} pages)",
+  /** Singular twin of the line above: English needs a different noun at exactly 1. */
+  "pagination.thumbnails.limitReachedOne": "Page limit reached ({limit} page)",
   "pagination.report.title": "Pagination report",
   "pagination.report.pages": "Current settings need about {pages} pages (limit: {limit} pages)",
   "pagination.report.overflow": "Page limit exceeded. Exports will be truncated to the limit",

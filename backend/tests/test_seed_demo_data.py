@@ -253,10 +253,7 @@ def test_new_profile_model_is_populated(demo_db: Path):
     # 用 hostname 等值判断而不是子串匹配：CodeQL py/incomplete-url-substring-sanitization
     # 会把任何 `"example.com" in <文本>` 当成不完整的 URL 校验（即使这里只是测试断言）。
     custom_links = [
-        str(value)
-        for values in custom_entries
-        for value in values.values()
-        if "://" in str(value)
+        str(value) for values in custom_entries for value in values.values() if "://" in str(value)
     ]
     assert custom_links, custom_entries
     custom_hosts = [urlsplit(link).hostname for link in custom_links]
@@ -281,6 +278,7 @@ def test_profiles_two_models_share_the_same_fictional_persona(demo_db: Path):
         str(value) for key, values in entries if key == "experiences" for value in values.values()
     )
     assert "示例科技有限公司" in experience_text
+
 
 # ── v2 演示内容的守卫（2026-10-30 字段级文档模型）──────────────────────────────
 
@@ -436,3 +434,61 @@ def test_profile_custom_fields_carry_v2_placement(demo_db: Path):
     }
     assert {"作品名称", "作品链接", "作品说明"} <= set(custom_fields)
 
+
+def test_demo_db_is_built_by_the_migration_chain(demo_db: Path):
+    """演示库必须由**真实迁移链**建出来，而不是 ``create_all``。
+
+    这条守卫来自一个在测试里隐形的真实故障：``scripts/demo_data/base.py::init_db()``
+    曾经是 ``drop_all`` + ``create_all``。``create_all`` 只建表，不播种基线迁移写下的
+    ``app_schema_epoch(epoch=2)`` 那一行，也不建 ``alembic_version``；于是它造出来的库
+    在启动闸门（``app/services/schema_epoch.py::decide()``）里落进"表在但取不到 epoch"
+    那一支，判成 ``REFUSE_UNKNOWN``，而 ``app/application.py`` 的 lifespan 会
+    ``startup_gate.enforce()`` ——用这份演示库起后端**直接拒绝启动**。
+
+    为什么以前没人发现：``--check`` 用的是**不用上下文管理器**的 TestClient，lifespan
+    根本不触发，所以脚本一路全绿。演示库是 README / 官网截图的唯一来源，起不来等于对外
+    展示的那一面整体失守。下面三条断言分别钉住那三个缺口。
+    """
+    revisions = _rows(demo_db, "select version_num from alembic_version")
+    assert revisions, "演示库没有 alembic_version 表（说明它不是由 alembic 建出来的）"
+    version_num = str(revisions[0][0] or "").strip()
+    assert version_num, f"演示库的 alembic_version.version_num 是空的：{revisions!r}"
+
+    epochs = [row[0] for row in _rows(demo_db, "select epoch from app_schema_epoch")]
+    assert epochs == [2], f"app_schema_epoch 必须恰好一行且 epoch=2，实际读到 {epochs!r}"
+
+    # decide() 是纯只读的（sqlite 以 mode=ro 打开、不建文件），可以在测试进程内直接 import；
+    # 必须走子进程的只有会写库的脚本本体（见文件头）。
+    from app.services.schema_epoch import EpochDecision, decide
+
+    decision = decide(demo_db)
+    assert decision is EpochDecision.UPGRADE, (
+        f"启动闸门会把这份演示库判成 {decision.name}（revision={version_num}），"
+        f"用它起 uvicorn 会被拒绝；正确的库必须判成 UPGRADE"
+    )
+
+
+def test_demo_values_use_protocol_enums_and_a_current_anchor(demo_db: Path):
+    """取值必须落在「协议值」上，锚点必须是**最近的运行日**。
+
+    两个都是"截图看起来像数据坏了"、却不让任何接口报错的真实故障：岗位状态写历史值
+    `active` 时表格仍显示「开放中」（前端有归一化），但 `api/stats.py` 精确比较协议值，
+    首页显示「开放中岗位 0」；锚点写死成 `2026-10-06` 后，日子一久「近 7 天生成」变成 0、
+    提醒全摊成「已逾期」红色。
+    """
+    from app.models.job import JOB_STATUSES
+
+    statuses = {row[0] for row in _rows(demo_db, "select distinct status from job")}
+    assert statuses <= set(JOB_STATUSES), (
+        f"演示岗位用了协议值之外的状态：{sorted(statuses - set(JOB_STATUSES))}"
+    )
+
+    # 锚点是"运行日的昨天 08:30"；最新一条岗位的 created_at 就是锚点本身。
+    from datetime import datetime, timedelta
+
+    (latest,) = _rows(demo_db, "select max(created_at) from job")[0]
+    created = datetime.fromisoformat(str(latest))
+    assert abs(datetime.now() - created) <= timedelta(days=3), (
+        f"演示库的锚点停在 {created}（距今超过 3 天），"
+        f"重跑一次脚本让锚点跟随运行日：截图前必须是最新的"
+    )

@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
+import { t } from "../i18n";
 /**
  * 在线体验模式（demo mode）的请求拦截层。
  *
@@ -318,7 +319,7 @@ export function installDemoFetch(): () => void {
             hit.status,
           );
         }
-        return jsonResponse({ detail: "在线体验版未包含这个接口的数据。" }, 404);
+        return jsonResponse({ detail: t("featuresMisc.demo.missingRoute") }, 404);
       }
       // 会话列表：把本轮虚拟出来的会话插到最前面（真实列表仍是快照回放）。
       if (path === "/api/assistant/conversations" && demoConversations.size > 0) {
@@ -338,13 +339,13 @@ export function installDemoFetch(): () => void {
       const hit = lookup(key);
       if (hit) return jsonResponse(hit.body, hit.status);
       // 未命中的只读接口：回空态而不是报错。页面据此走自己的空分支文案。
-      return jsonResponse({ detail: "在线体验版未包含这个接口的数据。" }, 404);
+      return jsonResponse({ detail: t("featuresMisc.demo.missingRoute") }, 404);
     }
 
     if (READ_ONLY_EXEMPT.has(path)) {
       const hit = lookup(key);
       if (hit) return jsonResponse(hit.body, hit.status);
-      return jsonResponse({ detail: "在线体验版未包含这个接口的数据。" }, 404);
+      return jsonResponse({ detail: t("featuresMisc.demo.missingRoute") }, 404);
     }
 
     // 新建会话：虚拟成功。随后的消息发送会落进流式回放（isStreamPath 只看路径形状）。

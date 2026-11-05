@@ -37,7 +37,7 @@
     <text x="245" y="223" text-anchor="middle">求职进度</text>
 
     <rect x="52" y="244" width="118" height="36" rx="8" fill="#ffffff" stroke="#cfdcec"/>
-    <text x="111" y="267" text-anchor="middle">求职统计</text>
+    <text x="111" y="267" text-anchor="middle">网申填表</text>
     <rect x="186" y="244" width="118" height="36" rx="8" fill="#ffffff" stroke="#cfdcec"/>
     <text x="245" y="267" text-anchor="middle">模拟面试</text>
 
@@ -46,9 +46,9 @@
     <rect x="186" y="288" width="118" height="36" rx="8" fill="#ffffff" stroke="#cfdcec"/>
     <text x="245" y="311" text-anchor="middle">事实台账</text>
   </g>
-  <text class="t" x="52" y="352" font-size="12.5" fill="#7b8794">Ant Design 5 + TypeScript（strict）</text>
+  <text class="t" x="52" y="352" font-size="12.5" fill="#7b8794">Ant Design 6 + TypeScript（strict）</text>
   <text class="t" x="52" y="372" font-size="12.5" fill="#7b8794">无全局状态库，状态在页面内</text>
-  <text class="t" x="52" y="392" font-size="12.5" fill="#7b8794">路由懒加载，16 个入口</text>
+  <text class="t" x="52" y="392" font-size="12.5" fill="#7b8794">路由懒加载，17 个入口</text>
 
   <!-- 连接 -->
   <text class="t" x="400" y="178" font-size="13" font-weight="700" fill="#16365c" text-anchor="middle">同源 /api</text>
@@ -73,7 +73,7 @@
 
     <rect x="726" y="172" width="222" height="72" rx="8" fill="#ffffff" stroke="#cfdcec"/>
     <text class="t" x="738" y="196" font-size="13.5" font-weight="700" fill="#16365c">简历生成与渲染</text>
-    <text class="t" x="738" y="216" font-size="11.5" fill="#64748b">Jinja2 模板，8 种样式</text>
+    <text class="t" x="738" y="216" font-size="11.5" fill="#64748b">Jinja2 模板，6 套可选</text>
     <text class="t" x="738" y="232" font-size="11.5" fill="#64748b">版式诊断与自动一页</text>
 
     <rect x="496" y="250" width="222" height="72" rx="8" fill="#ffffff" stroke="#cfdcec"/>
@@ -92,7 +92,7 @@
     <text class="t" x="508" y="388" font-size="11.5" fill="#64748b">能力地图运行时渲染</text>
 
     <rect x="726" y="328" width="222" height="72" rx="8" fill="#ffffff" stroke="#cfdcec"/>
-    <text class="t" x="738" y="352" font-size="13.5" font-weight="700" fill="#16365c">投递台</text>
+    <text class="t" x="738" y="352" font-size="13.5" font-weight="700" fill="#16365c">投递台 · 网申填表</text>
     <text class="t" x="738" y="372" font-size="11.5" fill="#64748b">CDP 驱动本机浏览器</text>
     <text class="t" x="738" y="388" font-size="11.5" fill="#64748b">必须由你显式发起</text>
   </g>
@@ -123,7 +123,7 @@
 
   <rect x="668" y="436" width="296" height="164" rx="12" fill="#fffbf5" stroke="#f0dcbc" filter="url(#soft)"/>
   <text class="t" x="684" y="466" font-size="15.5" font-weight="700" fill="#b45309">本机 Chrome / Edge</text>
-  <text class="t" x="684" y="492" font-size="12" fill="#6b7280">仅「投递台」使用，CDP 连接</text>
+  <text class="t" x="684" y="492" font-size="12" fill="#6b7280">投递台、网申填表使用，CDP 连接</text>
   <text class="t" x="684" y="511" font-size="12" fill="#6b7280">登录在你自己浏览器里完成</text>
   <text class="t" x="684" y="530" font-size="12" fill="#6b7280">不保存密码、Cookie、令牌</text>
   <rect x="684" y="548" width="166" height="28" rx="14" fill="#fdf1dd" stroke="#eccfa0"/>

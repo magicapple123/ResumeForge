@@ -264,7 +264,12 @@ describe("DrillPage", () => {
     );
     apiMocks.listDrillSessions.mockResolvedValue([{ ...BRIEF, status: "finished" }]);
     apiMocks.listRehearsal.mockResolvedValue([
-      { claim_title: "数据清洗", kind: "evidence", why: "说不清口径", kind_label: "证据题" },
+      {
+        claim_title: "数据清洗",
+        kind: "evidence",
+        why: "说不清口径",
+        kind_label: "证据题：说明代码、数据、日志或统计口径",
+      },
     ]);
 
     renderPage();
@@ -275,7 +280,8 @@ describe("DrillPage", () => {
     expect(screen.getByText("补上数据来源与规模")).toBeInTheDocument();
     // 行动项要写清"这一类该怎么做"，否则"补事实"三个字等于没说。
     expect(screen.getByText(/去把当时的决策、难点、口径补上/)).toBeInTheDocument();
-    expect(await screen.findByText("证据题")).toBeInTheDocument();
+    // 题型名走界面语言映射（后端下发的 kind_label 是中文常量，英文界面不能直接用）。
+    expect(await screen.findByText("证据题：说明代码、数据、日志或统计口径")).toBeInTheDocument();
   });
 
   it("generates a fresh rehearsal question without recording it", async () => {

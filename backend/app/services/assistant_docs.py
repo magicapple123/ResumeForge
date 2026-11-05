@@ -17,6 +17,9 @@ _I18N_MESSAGES = DOC_ROOT / "frontend" / "src" / "i18n" / "messages"
 #   docs，回答"按钮叫什么/提示语怎么写"时只能靠模型记忆，于是说出旧说法。
 DOC_PATHS: tuple[Path, ...] = (
     DOC_ROOT / "README.md",
+    # GitHub 默认展示英文版；中文版另存一份。**两份都要索引**：中文提问靠 zh 版命中功能
+    # 清单与安装说明，英文提问靠默认版，缺一份就会"同一个问题只答得出一半"。
+    DOC_ROOT / "README.zh-CN.md",
     DOC_ROOT / "CHANGELOG.md",
     *sorted((DOC_ROOT / "docs").rglob("*.md")),
     *sorted(_I18N_MESSAGES.glob("zh-CN.*.ts")),
@@ -101,7 +104,7 @@ def doc_index_summary() -> str:
     counts = {"docs": 0, "README.md": 0, "CHANGELOG.md": 0, "i18n": 0}
     for path in DOC_PATHS:
         relative = path.relative_to(DOC_ROOT).as_posix()
-        if relative == "README.md":
+        if relative.startswith("README"):
             counts["README.md"] += 1
         elif relative == "CHANGELOG.md":
             counts["CHANGELOG.md"] += 1

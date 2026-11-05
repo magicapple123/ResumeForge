@@ -7,6 +7,7 @@ const requestMock = vi.hoisted(() => vi.fn());
 vi.mock("../../api/client", () => ({ request: requestMock }));
 
 import { t } from "../../i18n";
+import { pageLimitOptionLabel } from "../../i18n/countMessage";
 import { rt } from "../../features/resume-research/i18n";
 import type { ResumeDetail, ResumeLayout } from "../../types";
 import DocumentModePanel from "./DocumentModePanel";
@@ -155,9 +156,8 @@ describe("DocumentModePanel · 「不限篇幅」档", () => {
     expect(combobox.closest(".ant-select")).toHaveTextContent(
       t("sections.templateControls.pageLimitUnlimited"),
     );
-    expect(combobox.closest(".ant-select")).not.toHaveTextContent(
-      t("sections.templateControls.pageLimitPages", { count: 1 }),
-    );
+    // 否的是「停在 1 页」时那一条选项文案；单数由 countMessage 统一决定（1 page）。
+    expect(combobox.closest(".ant-select")).not.toHaveTextContent(pageLimitOptionLabel(1));
   });
 
   it("选了「不限」不会触发超出上限的警告（0 没有上限可比）", async () => {

@@ -163,6 +163,41 @@ TRASH_SPECS: tuple[TrashSpec, ...] = (
     ),
 )
 
+# 英文界面下的类型名。键是 ``TrashSpec.key``（与语言无关），中文名仍是 ``spec.label``——
+# 后者被日志、测试与中文界面直接引用，不能动。前端把这一份当"标签表"渲染筛选器，
+# 所以只有在这里给出英文，en-US 下的筛选器才不会露中文。
+TRASH_LABELS_EN: dict[str, str] = {
+    "job": "Jobs",
+    "candidate_job": "Candidate jobs",
+    "resume": "Resumes",
+    "track": "Applications",
+    "claim": "Fact ledger",
+    "material": "Material library",
+    "conversation": "Assistant chats",
+    "interview_experience": "Interview notes",
+    "referral": "Referrals",
+    "reminder": "Reminders",
+    "share_package": "Share packages",
+    "question_bank_record": "Question bank history",
+    "interview_review_record": "Review history",
+    "knowledge_entry": "Knowledge base",
+    "apply_record": "Apply records",
+    "web_form_record": "Form fill records",
+    "phrase": "Phrase assets",
+    "glossary_term": "Glossary",
+    "profile_group": "Profile plans",
+    "profile_custom_section": "Custom Sections",
+    "profile_custom_field": "Custom Fields",
+    "profile_entry": "Profile entries",
+}
+
+
+def labels(locale: str | None) -> dict[str, str]:
+    """回收站类型名：en-US 用英文表，其余（含未设置）保持中文原文。"""
+    if locale == "en-US":
+        return {spec.key: TRASH_LABELS_EN.get(spec.key, spec.label) for spec in TRASH_SPECS}
+    return {spec.key: spec.label for spec in TRASH_SPECS}
+
 TRASH_SPEC_BY_KEY: dict[str, TrashSpec] = {spec.key: spec for spec in TRASH_SPECS}
 
 # 注册表里的表名。**由注册表推导**而不是再写一份清单：迁移（``0016``）也要声明"给哪些表加了

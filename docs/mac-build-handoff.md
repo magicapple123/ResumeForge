@@ -53,12 +53,12 @@ curl -sI https://www.python.org | head -1           # 首次启动装配 Python 
 ## 三、步骤（逐条执行，别跳）
 
 ```bash
-# 1. 克隆（公开仓库，无需凭据）。用 main：包含 mac 构建脚本与 1.0.1 版本号
+# 1. 克隆（公开仓库，无需凭据）。用 main：包含 mac 构建脚本；版本号以 `desktop/package.json` 为准
 git clone https://github.com/magicapple123/ResumeForge.git
 cd ResumeForge
 git log --oneline -1            # 记录 commit，写入汇报
 
-# 2. 前端：安装依赖 + 构建生产资产（产出 frontend/dist，版本号应等于 1.0.1）
+# 2. 前端：安装依赖 + 构建生产资产（产出 frontend/dist；version.json 必须与 desktop/package.json 一致）
 cd frontend
 npm ci --no-audit --no-fund
 npm run build
@@ -122,7 +122,7 @@ open /Applications/ResumeForge.app
 | 5 | App 双击无反应/提示"无法验证开发者" | 未签名所致：右键→打开；或 `xattr -dr com.apple.quarantine /Applications/ResumeForge.app` |
 | 6 | 首启装配失败（下载/python.org 不可达） | 检查网络；重试一次；仍失败则记录报错原文 |
 | 7 | 磁盘不足 | 至少预留 15GB（node_modules + electron + dmg 产物） |
-| 8 | 打包结果里版本号不对 | 确认 `frontend/dist/version.json` 与 `desktop/package.json` 都是 1.0.1（脚本会拦截不一致） |
+| 8 | 打包结果里版本号不对 | 版本号以 `desktop/package.json` 为准，`frontend/dist/version.json` 必须与它一致（不一致脚本会拦截；不要按某个写死的数字核对） |
 
 ## 六、交付物与汇报格式
 

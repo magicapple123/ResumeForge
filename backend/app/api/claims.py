@@ -43,6 +43,7 @@ from ..services.claims import (
     update_claim,
 )
 from ..services.llm.base import LLMError
+from ..services.ui_locale import get_ui_locale
 
 router = APIRouter(prefix="/api/claims", tags=["claims"])
 logger = logging.getLogger(__name__)
@@ -61,15 +62,16 @@ def read_claims(
     if status and status not in VERIFICATION_STATUSES:
         raise HTTPException(status_code=422, detail="未知的核实状态")
     records = list_claims(db, category=category, status=status, keyword=keyword)
+    locale = get_ui_locale(db)
     return ClaimListOut(
-        items=[claim_out(record) for record in records],
+        items=[claim_out(record, locale) for record in records],
         **summarize(records),
     )
 
 
 @router.post("", response_model=ClaimOut, status_code=201)
 def create_claim_entry(payload: ClaimCreate, db: Session = Depends(get_db)):
-    return claim_out(create_claim(db, payload))
+    return claim_out(create_claim(db, payload), get_ui_locale(db))
 
 
 @router.get("/baseline", response_model=ClaimDigestOut)
@@ -88,7 +90,7 @@ async def draft_claims(payload: ClaimDraftRequest, db: Session = Depends(get_db)
         raise HTTPException(status_code=502, detail=f"提取台账草稿失败：{exc}") from exc
 
 
-def _claim_summary(record) -> ClaimSummary:
+def _claim_summary(record, locale: str | None = None) -> ClaimSummary:
     """分页列表行摘要：长文本只带 200 字截断，改进建议仍由服务端算出。"""
     return ClaimSummary(
         id=record.id,
@@ -100,7 +102,7 @@ def _claim_summary(record) -> ClaimSummary:
         responsibility_level=record.responsibility_level,
         verification_status=record.verification_status,
         last_verified=record.last_verified,
-        warnings=claim_warnings(record),
+        warnings=claim_warnings(record, locale),
         created_at=record.created_at,
         updated_at=record.updated_at,
     )
@@ -131,8 +133,9 @@ def read_claims_page(
         db, category=category, status=status, keyword=keyword, page=page, page_size=page_size
     )
     summary = summarize_query(db, category=category, status=status, keyword=keyword)
+    locale = get_ui_locale(db)
     return ClaimPageListOut(
-        items=[_claim_summary(record) for record in records],
+        items=[_claim_summary(record, locale) for record in records],
         **summary,
     )
 
@@ -169,7 +172,7 @@ def read_claim(claim_id: int, db: Session = Depends(get_db)):
     record = claim_or_none(db, claim_id)
     if record is None:
         raise HTTPException(status_code=404, detail="台账条目不存在或已被删除")
-    return claim_out(record)
+    return claim_out(record, get_ui_locale(db))
 
 
 @router.put("/{claim_id}", response_model=ClaimOut)
@@ -177,7 +180,7 @@ def save_claim(claim_id: int, payload: ClaimUpdate, db: Session = Depends(get_db
     record = claim_or_none(db, claim_id)
     if record is None:
         raise HTTPException(status_code=404, detail="台账条目不存在或已被删除")
-    return claim_out(update_claim(db, record, payload))
+    return claim_out(update_claim(db, record, payload), get_ui_locale(db))
 
 
 @router.delete("/{claim_id}", status_code=204)

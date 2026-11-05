@@ -35,8 +35,16 @@
 - 目录按功能或领域组织，避免继续扩大上帝类、循环依赖和跨层直接耦合。
 - 优先使用依赖注入、接口隔离和现有本地抽象，以便替换实现和编写离线测试。
 - 复用已有工具、组件和类型；只有在确实减少复杂度或重复时才新增抽象。
-- 默认使用 ASCII 编辑文件；项目已有 UTF-8 中文文档时，保持其编码并避免因终端编码造成无意义的文件重写。
+- 代码文件默认 ASCII；`docs/**`、`README*.md`、语言包等**既有中文文件用 UTF-8 读写**——不要转义成 `\uXXXX`、不要整文件重新编码（会产生全文件 diff，也会让中文变成不可读的转义串）。
 - 使用 `apply_patch` 进行手工编辑，不用脚本覆盖无关文件，不提交构建产物、虚拟环境、数据库和个人资料。
+
+## 规模约束（CI 硬闸门）
+
+### 文件行数预算
+
+`backend/tests/test_file_size_budget.py` 是硬闸门：`backend/app` 与 `frontend/src` 的单文件 **500 行**（含 `.css`），`scripts/*.py` **800 行**，**测试文件同样计入**。加代码前先看余量——贴线等于"下次改动必须先拆"。
+
+确实拆不了，要在 `_EXEMPTIONS` / `_TEST_EXEMPTIONS` 登记**书面理由 + 到期日**；豁免对象已低于预算或已不存在会单独变红（幽灵豁免）。拆分时注意：`autouse` 夹具是模块级的，拆文件要跟着走；被 `monkeypatch` 的符号必须留在原模块命名空间，否则用例会静默失去约束力。
 
 ## 工作流程
 
@@ -50,6 +58,17 @@
 6. 汇总修改文件、行为变化、数据库/配置迁移、验证结果和后续建议。除非用户明确要求，不创建 Git commit、不推送远程、不删除用户数据。
 
 不确定的架构决策如果会改变公共接口、数据模型、部署方式或用户工作流，应先向用户确认；低风险、可回滚且与现有模式一致的实现可以直接推进，但要在交付摘要中说明假设。
+
+## 多会话 / 多代理并行（同一工作区）
+
+本仓库经常有多条会话同时改同一个工作区。**并行的唯一边界是文件不重叠，不是任务不相关。**
+
+- **开工先记基线三件套**：`git rev-parse --short HEAD`、脏改动条数（`git status --porcelain` 的行数：bash 用 `| wc -l`，PowerShell 用 `(git status --porcelain).Count`，并分清哪些是别人的）、相关测试的 `passed/failed`。基线红要写明归属，否则会被算成本次引入。
+- **禁止用 `git checkout -- <file>` / `git stash` / `git restore` 做"回红实验"或回滚**：它们会连带回滚他人未提交的改动。返工用改前快照——把要改的文件复制到**仓库外**的目录并保持相对路径（bash：`mkdir -p <snap>/<task> && cp --parents <文件> <snap>/<task>/`；PowerShell：对每个文件先 `New-Item -ItemType Directory -Force (Split-Path $dst)` 再 `Copy-Item`），回退时按文件覆盖；同一文件多轮改动叠加时，先 `git diff -U0` 看清 hunk 分布再按段回退。
+- **同一文件只能有一个写入者**。共享文件（i18n 语言包、路由表、schema 索引、`CHANGELOG.md`、`docs/**`）由一个人统一落，其他人只提交"需要什么"，不直接改。
+- **子任务回报"完成"不等于磁盘上真的有**：核对文件存在、静态检查 0 错、它声称跑过的命令确有输出。三者缺一就退回。
+- **回报固定一行**：`[任务 N] 状态 | 改动文件 | 证据（路径或命令） | 返工次数 | 需协调的事`。
+- 提交前用 `git show --stat HEAD` 与 `git status --porcelain <自己的文件>` 复核，别把他人的半成品带上去。
 
 ## 本项目验证命令
 
@@ -65,76 +84,30 @@ $env:PYTHONUTF8 = "1"
 ```
 
 `-n auto` 走 `pytest-xdist`（在 `requirements-dev.txt` 里）并行执行。**这不是可选的美化**：全量
-1000+ 个用例串行要 ~8 分钟，并行后降到 ~3 分钟，而"改一次要等八分钟"正是协作最贵的一环。
-`conftest.py` 的测试库与数据集目录按 PID 隔离，因此 worker 之间本来就不会互相踩；**新增测试时
-不要引入跨进程共享的固定路径**（写进仓库目录、固定临时文件名、`os.chdir`），那会让并行从
-"更快"变成"偶发不可复现的失败"。
+七千余个用例串行要十几分钟，并行后降到几分钟，而"改一次要等十几分钟"正是协作最贵的一环。
+内存受限的环境（本机沙箱、2C4G 容器）改用 `-n 4`：`-n auto` 按核数开满，容易 OOM 后 worker
+猝死，失败信息看起来像用例坏了。
+`conftest.py` 的测试库与数据集目录按 PID 隔离，worker 之间本来就不会互相踩；**新增测试时不要
+引入跨进程共享的固定路径**（写进仓库目录、固定临时文件名、`os.chdir`），那会让并行从"更快"
+变成"偶发不可复现的失败"。
 
-并行有两个已经踩过的坑，改这块配置时别退回去：
+**判绿看三样，缺一不可**：汇总行的 `failed = 0`、前端还要看 `Errors` 行、以及覆盖率报告真的打印
+出来并过 80%。只看退出码会误判——本机沙箱的批量删除守卫会让 worker 或 `cov.combine()` 半路
+`SystemExit`，此时用例可能全过，而覆盖率那一步根本没跑。
 
-- **`[tool.coverage.run] parallel = true` 是必需的**。否则每个 worker 抢写同一个 `.coverage`
-  文件，会在**所有用例都通过之后**的收尾阶段抛 `attempt to write a readonly database`
-  ——最坏的一类失败位置（看起来像测试挂了，其实是覆盖率写盘冲突）。
-- **退出码不能单独作为判据，而且并行跑可能根本没检查覆盖率门槛**。本机沙箱的
-  `sitecustomize.py` 包装了 `shutil.rmtree`，pytest 清理自己的临时目录时会触发它的
-  "批量删除守卫"并 `SystemExit(1)`——worker 猝死，xdist 控制器随之抛
-  `INTERNALERROR ... KeyError: <WorkerController>`。此时**汇总行仍然是 `N passed, 0 failed`**，
-  但**覆盖率报告那一步还没跑到**，所以 80% 的门槛在并行跑里可能压根没执行。
-  因此分清楚用途：**日常内循环**用并行，看汇总行的失败数（必须为 0）；**交付判定**必须再跑
-  一次全量，确认覆盖率报告与门槛真的过了——但注意**串行的退出码同样可能被污染**，见下一条。
-  反过来，汇总行出现 failed 就一定是真的坏了，不要用"可能是并行的问题"搪塞过去。
+覆盖率必须**串行、显式指定根配置**：
 
-- **但"串行就没事"这个结论并不成立**（2026-09-18 实测）：本机沙箱下**串行** `pytest --cov`
-  同样会在 `pytest-cov` 收尾的 `cov.combine()` 删 `.coverage.*` 时命中批量删除守卫 →
-  `SystemExit(1)`、**退出码 3，而且覆盖率报告那一步整段跑不到**。**拿到干净覆盖率的办法**
-  是绕开 pytest-cov——注意 coverage **只从 cwd 找配置**（`.coveragerc`/`pyproject.toml`），
-  **不会**向上层目录搜索；在 `backend/` 下裸跑会拿到"连 tests/ 一起统计"的假百分比
-  （2026-10-10 实测：假 41% vs 真实 86%），必须显式传 `--rcfile` 指向仓库根配置：
+```powershell
+.venv\Scripts\python.exe -m coverage run --rcfile=..\pyproject.toml -m pytest -q
+.venv\Scripts\python.exe -m coverage combine --keep
+.venv\Scripts\python.exe -m coverage report --rcfile=..\pyproject.toml --fail-under=80
+```
 
-  ```powershell
-  .venv\Scripts\python.exe -m coverage run --rcfile=..\pyproject.toml -m pytest -q
-  .venv\Scripts\python.exe -m coverage combine --keep
-  .venv\Scripts\python.exe -m coverage report --rcfile=..\pyproject.toml --fail-under=80
-  ```
+**覆盖率与并行不能写进同一条命令**（worker 是子进程，实测 28% vs 真 88%）；**`--cov` 也不能和
+"只跑几个文件"混用**（子集必然低于门槛，那是假失败，不是代码坏了）。
 
-  判定时**以汇总行 + 覆盖率报告为准**；只有两者都正常打印，退出码才可信。
-
-- **"并行跑"和"覆盖率"不能写进同一条命令**（2026-10-27 实测）：`coverage run ... -m pytest -n 4`
-  会因为 xdist 的 worker 是**子进程**而统计不到它们——`[tool.coverage.run] parallel = true`
-  只让被测进程各写一份 `.coverage.*`，plain `coverage run` 不追子进程，控制器进程本身又几乎
-  不执行被测代码。结果 `combine` + `report` 出来是 **28%**（真值 88%），`--fail-under=80` 直接
-  红。**要覆盖率就串行跑上面那三条；要速度就并行跑 pytest 但别开 coverage**，两者分开。
-
-- **`vite build` 在本机沙箱下会以 exit 1 失败**，但**不是构建错误**：模块已经全部 transform 成功，
-  死在 `prepareOutDir/emptyDir` 清理 `frontend/dist/assets` 时被同一个批量删除守卫拦下
-  （日志形如 `SAFE_DELETE_BULK_CONFIRM_REQUIRED count=170 threshold=100`）。
-  指定一个**仓库外**的输出目录即可正常跑通：
-
-  ```powershell
-  npx vite build --outDir D:\rf_build_tmp --emptyOutDir
-  ```
-
-- **webform canary 的本地跑法与 CI skip 契约**：canary 家族（`backend/tests/test_webform_js_canary*.py`）
-  只在**本机有可控的 CDP 浏览器**时才有意义——并行跑与 CI 下按契约恒 **skip**，它不是 CI 门禁；也
-  别指向用户日常浏览器窗口（canary 共用同一浏览器，会互相抢标签页）。一次性跑法（起独立 headless
-  Chrome → 跑家族 → 只杀自己启动的进程树）：
-
-  ```powershell
-  python runtime/investigation/phase5/canary-local.py   # 默认 9344；--port 可改；脚本是本地证据工具，不进源码
-  ```
-
-  等价手工命令：`chrome --headless=new --remote-debugging-port=9344 --user-data-dir=<临时目录> about:blank`
-  + `cd backend` 后 `RF_WEBFORM_CDP_PORT=9344 PYTHONUTF8=1 .venv\Scripts\python.exe -m pytest -q tests/test_webform_js_canary*.py`。
-
-- **测试里的等待预算要分两档，别用同一个很小的值。** 期望**超时**的用例需要预算真的到期，
-  所以越小越快；期望**成功**的用例就绪即刻返回，预算大小不影响耗时，它只是安全网。
-  2026-09-23 修过一处：`tests/test_boss_apply.py` 里两类共用 `timeout=0.02`，于是
-  "成功"用例的成败取决于**真实墙钟**——单跑必过、`-n auto` 下偶发失败（一次调度抖动就超过
-  20ms）。修法是给成功路径单独一档 2s 的预算（`READY_WAIT`），既不多花时间，也不会误伤。
-  判断标准很简单：**用例的成败是否取决于"等了多久"**，如果是，它的预算就不该是个位数毫秒。
-
-另外别忘了一条：**`--cov` 不能和"只跑几个文件"混用**。覆盖率门槛是 80%，子集跑出来必然只有
-二三十，于是 pytest 以失败退出——那是个假失败，不是代码坏了。子集只跑不加 `--cov` 的命令。
+> 并行写盘冲突、`vite build` 被清理守卫拦下、webform canary 的本地跑法、等待预算两档——
+> 这四类坑的现象、原因与命令见 [`docs/maintenance.md`](docs/maintenance.md) §5.1；改相关配置前先看那一节。
 
 ### 分层验证（改动时按此顺序，最后一步不能省）
 
@@ -144,6 +117,10 @@ $env:PYTHONUTF8 = "1"
    ——`--cov` 自身有明显开销，在只跑几个文件的第 1 步加它没有意义。
 4. 前端同理：改动相关的 `.test.tsx` 先跑，`prettier --check` / `eslint` / `tsc --noEmit` /
    `vite build` 在全量前跑。
+5. **新增或修改守卫（守卫测试、检查脚本、CI 步骤）时先做反证**：临时把实现改坏 → 目标用例必须
+   **精确**变红（失败信息指向目标断言，不是导入错误）→ 逐字节复原（sha256 一致、临时标记零残留）
+   → 复跑仍绿。没有反证的守卫只能证明"当前产物长这样"，证明不了它守得住回归；
+   方法与模板见 `docs/verification-playbook.md` §3。
 
 **提速只能来自流程，不能来自降低标准**：不许为了跑得快而跳过全量、跳过 `pip check`、
 降低覆盖率门槛、删掉"跑得慢但守着关键性质"的用例、或把断言改松。慢的用例要**优化**（拆出
@@ -165,16 +142,15 @@ $env:PYTHONUTF8 = "1"
   几分钟内就能看出来的错误，代价只是看一眼；而它们若溜进测试运行，会表现成"语法错/某个用例
   莫名消失"，排查成本高得多。
 
-涉及数据库结构时，还要检查 Alembic 升级/降级、旧库兼容、备份完整性和关键记录数；不得直接用 `create_all` 掩盖迁移问题。数据库迁移前应保留可恢复备份。
+### 数据库结构与迁移
 
-**新增一个迁移后，先 grep 上一个 revision 号再跑测试**：
+涉及数据库结构时，先读 `backend/tests/migration_refs.py` 的模块注释。2.0 的迁移链只有一条基线 `0001_baseline_v2`，库的世代由单行表 `app_schema_epoch` 判定：
 
-```powershell
-# 在 backend 目录执行：把 00XX_xxx 换成**上一个** head 的 revision 字面量
-Select-String -Path tests\*.py -Pattern "00XX_xxx" | Select-Object Path, LineNumber
-```
-
-具体地：把新迁移的 `revision` 写进 `migrations/versions/` 之后，搜一下**旧 head 的字面量**在测试里出现过几次——至少 `tests/test_database.py`、`tests/test_backup_apply_tables.py`、`tests/test_apply_migration_qa.py`、`tests/test_assistant_search.py` 各钉着一处 "head revision 应当是 X"。不更新它们，一次纯加列的迁移就会带出十几个失败，而失败信息（`assert '0015_…' == '0014_…'`）看起来像迁移本身坏了。新增迁移的情形还要确认：**只加表 / 只加列**（这是"旧备份仍可导入"成立的前提，`test_migration_00XX.py` 里要有"表集合前后不变"的断言）、**表不存在时跳过而不是报错**（迁移链也会跑在"只有部分业务表"的历史库上）、以及**完整可用的 `downgrade`**。
+- **新增迁移接在当前 head 之后，测试里不要写死 revision 字面量。** `backend/tests` 下唯一允许出现 `"0001_…"` 这类字面量的文件是 `migration_refs.py`，其余一律用 `BASELINE_REVISION` / `head_revision()`。守卫命令：`grep -rnE '"[0-9]{4}_[a-z0-9_]+"' backend/tests --include=*.py`（只应命中该文件）。
+- **升级与降级都要能跑**；表或列不存在时跳过而不是报错（迁移会跑在"只有部分业务表"的库上）。减表类迁移还要验证"降级能把表按原样建回来"，列、索引、外键的 `ondelete` 与建表那次逐字一致。
+- **epoch 闸门不可绕过**：缺 `app_schema_epoch` 且库里有业务表 = pre-2.0 库，走整包归档后建空库；`epoch > 2` 拒绝启动。相关守卫：`test_epoch_gate_matrix.py`、`test_baseline_schema.py`、`test_legacy_archive_flow.py`、`test_backup_reject_legacy.py`。
+- **单基线一旦随版本发布就不得改写**：`0001_baseline_v2` 只代表"这一刻的结构"，任何变化都写新迁移接在它后面。
+- 不得用 `create_all` 掩盖迁移问题；迁移前保留可恢复备份。
 
 ### 前端
 
@@ -205,9 +181,9 @@ bash -n start.command scripts/macos/start.sh       # 只做语法检查，几毫
 
 Windows 侧对应的是 `windows-end-to-end`（从干净检出走完整启动链路，并真的取一次前端入口模块）。它和 macOS 那个作业一样，捕的是"新下载的包在这台机器上起不来"——**端口活着不等于页面能用**：Vite 的入口模块取不到时浏览器就是一片空白（2026-09-29 用户在虚拟机上遇到的正是这个形态）。改了启动链、发布包或前端入口要跑它。
 
-### macOS 桌面安装包与发布资产（v1.0.1 起）
+### macOS 桌面安装包与发布资产
 
-- **mac 安装包（dmg）**：在 macOS 上构建 `bash scripts/build-desktop-mac.sh --arch both`（或 `--arch x64|arm64|universal`），产物为 `desktop/out/ResumeForge-<ver>-{x64,arm64}.dmg` + 同名 `.sha256`。**未签名**（无 Apple 开发者证书），发布说明里必须写清右键→打开 / `xattr -dr com.apple.quarantine` 的打开方式。
+- **mac 安装包（dmg，v1.0.1 起提供）**：在 macOS 上构建 `bash scripts/build-desktop-mac.sh --arch both`（或 `--arch x64|arm64|universal`），产物为 `desktop/out/ResumeForge-<ver>-{x64,arm64}.dmg` + 同名 `.sha256`。**未签名**（无 Apple 开发者证书），发布说明里必须写清右键→打开 / `xattr -dr com.apple.quarantine` 的打开方式。
 - **日常发版优先走 CI**：`gh workflow run release-assets.yml -f tag=<tag> -f dry_run=true|false`——Windows `Setup.exe` 与 mac 双架构 dmg 一并构建并挂到对应 Release（`dry_run=false` 才上传）。构建源默认=该 tag（产物与发行严格对应）；流程与已知坑见 `docs/mac-build-handoff.md`。
 - **桌面运行时缓存**：`desktop/python-runtime.zip` 由依赖清单守卫自动管理——requirements 指纹或 Python 版本不匹配时 `Build-Desktop.ps1` 会自动重建（`scripts/PythonRuntimeManifest.ps1`，测试 `scripts/tests/Test-PythonRuntimeGuard.ps1` 随 CI 运行）。不要手工复用陈旧 zip。
 
@@ -427,6 +403,12 @@ Windows 侧对应的是 `windows-end-to-end`（从干净检出走完整启动链
 新包成员不升格式号；把"只有新版本认识"的数据塞进既有段；删除或改名 `disk_name` / `format` /
 `api_key_included` / `asset_manifest.manifest_version`。
 
+## 文档与个人信息
+
+- 新增/改动 `docs/**`、`README*.md`、`CONTRIBUTING.md` 或 `.github/**` 后跑 `python scripts/check_docs_pii.py`（CI 作业 `docs-guards`）：拦密钥、私钥块、平台令牌、手机号、邮箱、带用户名的家目录（含中文用户名）。占位符（`example.com`、`138-0000-0000`）与带 `pii-ok` 注释的行自动放过；**不要用删日志的方式绕过**。
+- 方法论文档（改代码前后各看哪篇）：[验证手册](docs/verification-playbook.md)、[协作规程](docs/ai-collaboration-sop.md)、[缺陷模式](docs/defect-patterns.md)、[环境排查](docs/troubleshooting-stale-build.md)；任务书与交付报告模板在 `docs/templates/`。
+- 提交里出现真实姓名、手机号、邮箱或简历原文即视为事故：按 `docs/operations.md` 的 P1 处置，**先吊销/轮换，再清理**——删掉明文撤不回已经扩散的副本；替换时用完整占位符（如 `<REDACTED-ROTATE-ME>`），不要只打码中间几位。
+
 ## 变更记录要求
 
 以下变更必须更新 `CHANGELOG.md`，必要时同时更新 README 或架构文档：
@@ -443,7 +425,7 @@ Windows 侧对应的是 `windows-end-to-end`（从干净检出走完整启动链
 
 - 新增**用户可见的能力**时，先问"用户会不会因为不知道而用错或用不上"：会，就要更新 `userGuideSteps.ts`；不会（纯重构、内部性能、开发流程、只影响开发者的配置）则不必，但在交付说明里写清楚为什么不必。
 - 已存在对应步骤的功能，**就地改那一步的措辞**，不要为新功能随手加一步——这是一个流程向导，不是发行说明。加一步的前提是它确实是一个新的阶段（例如"数据备份"）。
-- 指南里每一步的 `path` 必须指向 `App.tsx` 中真实存在的路由；改路由名时 `UserGuideModal.test.tsx` 会失败并指出是哪一步，照着改。
+- 指南里每一步的 `path` 必须指向 `frontend/src/appRoutes.tsx` 中真实存在的路由（菜单项另见 `components/navigation/navigationConfig.ts`）；改路由名时 `UserGuideModal.test.tsx` 会失败并指出是哪一步，照着改。
 - `docs/user-guide.md` 的对应章节与「常见问题排查」要一起改：两者讲的是同一批功能，只改一处会互相矛盾。
 
 ## README（项目主页）与截图
@@ -527,9 +509,9 @@ README 是这个仓库的门面，也是对用户可见功能的**权威清单**
 - **不要手工逐个文件改版本号。** 在仓库根目录执行 `python scripts/bump_version.py`：它按自上一个 `v*` 标签以来的提交类型判定幅度，并同步全部位置。加 `--dry-run` 只预览不改文件；自动判定不满意时用 `--bump major|minor|patch` 覆盖。
 - 幅度规则：标题带 `!`（如 `feat!:`）或正文含 `BREAKING CHANGE` → major；`feat` → minor；`fix` → patch；`docs`/`chore`/`test`/`refactor`/`style`/`ci` 不推动版本号。**提交前缀写错会让发版幅度算错**，请继续遵循 Conventional Commits。
 - 版本号有 5 处必须一致：`backend/app/config.py` 的 `app_version`、`frontend/package.json` 的 `version`、`frontend/package-lock.json` 的根包版本、`README.md` 顶部的"当前版本"、`CHANGELOG.md` 的最新条目。`backend/tests/test_version_consistency.py` 会在 CI 上校验前四处。
-- 本仓库**从未使用过 `BREAKING CHANGE` 标记**，所以自动判定实际上只能产出 minor/patch。改动涉及破坏性变更（如删除已发布功能、不可逆的数据库迁移）时**必须显式传 `--bump` 覆盖**——但传哪一个取决于是否已经 1.0：
+- 本仓库**从未使用过 `BREAKING CHANGE` 标记**，所以自动判定实际上只能产出 minor/patch。改动涉及破坏性变更（如删除已发布功能、不可逆的数据库迁移）时**必须显式传 `--bump` 覆盖**——传哪个由"是否已经 1.0"决定：
 
-  **当前还在 0.x，破坏性变更传 `--bump minor`。** 这是 semver 对 0.x 的惯例：0.x 阶段本来就不承诺兼容，破坏性变更只让 minor 前进（0.12.0 → 0.13.0），major 位留给"这个项目已经稳定"这个宣告本身。2026-09-26 发 0.13.0 时（删掉「官网采集」与「按岗位找公司」两个已发布功能）就是这么定的，维护者明确选择不借一次删功能冲进 1.0。等正式发布 1.0 之后，破坏性变更才改用 `--bump major`。
+  **项目已发布 1.0、当前是 2.0，破坏性变更传 `--bump major`。** 2.0 本身就是一次 major（迁移链折成单基线、补充事实整套下线、1.x 备份包不再导入）。0.x 阶段的旧口径（破坏性变更只进 minor、major 位留给"项目已稳定"的宣告）已经失效——2026-09-26 发 0.13.0 时删掉「官网采集」与「按岗位找公司」还是按 0.x 惯例走的 minor，那是历史，不要再照抄。
 
   脚本检测到新增 migration 会提醒复核，但不会替你判断——**`remove:` 不是脚本认的前缀，删功能的提交它一律算"不推动版本号"**，所以这类发版别信自动判定，直接看本节。
 - 脚本**只改文件，不 commit、不打 tag**——发布由用户发起（见"工作流程"第 6 条）。跑完按它打印的命令手动提交与打标签。

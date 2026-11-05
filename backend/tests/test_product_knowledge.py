@@ -10,9 +10,10 @@
 - 启动：双击 ``start.cmd``（Windows）/ ``start.command``（macOS）零依赖一键启动；
   发布包自带 ``frontend/dist`` 由后端同源提供页面，运行期不需要 Node；5173 仅 dev 模式。
 - 升级：``update.cmd`` / ``update.command``；检查更新入口是页头「使用指南」旁的刷新
-  图标或设置 → 应用 → 软件更新；应用内覆盖安装目前只支持 Windows。
+  图标或设置 → 更新与帮助 → 软件更新；应用内覆盖安装目前只支持 Windows。
 - Linux：没有一键脚本、未做兼容验证，知识源必须如实说明。
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -26,7 +27,7 @@ from app.services.product_knowledge import (
 )
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-README_MD = REPO_ROOT / "README.md"
+README_MD = REPO_ROOT / "README.zh-CN.md"
 UPGRADING_MD = REPO_ROOT / "docs" / "upgrading.md"
 ASSISTANT_SYSTEM_MD = REPO_ROOT / "backend" / "app" / "prompts" / "assistant_system.md"
 
@@ -52,7 +53,9 @@ def _read(path: Path) -> str:
 
 def test_all_one_click_launcher_scripts_exist():
     for name in ONE_CLICK_SCRIPTS:
-        assert (REPO_ROOT / name).is_file(), f"缺少一键脚本 {name}；若确已改名，同步改 product_knowledge.py 与本测试"
+        assert (REPO_ROOT / name).is_file(), (
+            f"缺少一键脚本 {name}；若确已改名，同步改 product_knowledge.py 与本测试"
+        )
 
 
 # ===== 知识源的端口 / 模式事实与启动器脚本一致 =====

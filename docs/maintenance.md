@@ -1,7 +1,8 @@
 # 项目维护手册
 
-> 规则的权威来源是 [`AGENTS.md`](../AGENTS.md)；本文是按它整理的**操作速查**，两者冲突时以 AGENTS.md 为准。
-> 最后更新：2026-10-11。规模数字随开发变动，以 CI 汇总为准（本文件刻意不写精确规模，防止漂移）。
+> 分工：**红线与禁止事项以 [`AGENTS.md`](../AGENTS.md) 为准；命令细节、环境坑与操作步骤以本文为准。**
+> 两者冲突时按这个分工判定——规则看 AGENTS.md，执行看这里。
+> 最后更新：2026-11-05。规模数字随开发变动，以 CI 汇总为准（本文件刻意不写精确规模，防止漂移）。
 
 ## 1. 项目结构
 
@@ -16,12 +17,13 @@ ResumeForge/
 │   ├── app/schemas/            Pydantic 请求/响应模型
 │   ├── app/prompts/            提示词目录
 │   ├── app/templates/          Jinja 简历模板
-│   ├── migrations/versions/    Alembic 迁移链（head 以目录内最大序号为准；
-│   │                           改迁移前先 grep 上一 head 的字面量，见 §4.1）
+│   ├── migrations/versions/    Alembic 迁移链（2.0 只有单基线 0001_baseline_v2，
+│   │                           新增迁移接在它之后；改迁移前先 grep 旧 head 的字面量，见 §4.1）
 │   ├── tests/                  测试（文件数 / 用例数以 pytest 汇总行为准）
-│   └── data/                   ★ 运行时数据：数据集、备份、浏览器登录态（.gitignore）
-├── frontend/                 React 19 + AntD 5 + Vite
-│   ├── src/pages/              页面（路由在 App.tsx 的 MENU_ITEMS）
+│   └── data/                   ★ 运行时数据：数据集、备份、浏览器登录态、legacy-archive（.gitignore）
+├── frontend/                 React 19.3 + antd 6 + Vite 8（Rolldown）
+│   ├── src/pages/              页面（菜单在 components/navigation/navigationConfig.ts，
+│   │                           路由表在 src/appRoutes.tsx；App.tsx 只 re-export MENU_ITEMS）
 │   ├── src/components/         组件（跨模块交互原语在 common/）
 │   ├── src/api/  src/types/    接口封装与类型
 │   ├── src/utils/  src/hooks/  纯工具与 hooks（测试与被测文件同目录）
@@ -36,7 +38,7 @@ ResumeForge/
 ├── docs/                     architecture / user-guide / PROJECT_MAP / 本文
 ├── runtime/demo/             演示数据与截图工具链
 ├── AGENTS.md                 ★ 所有协作代理的入口规则
-├── CHANGELOG.md              用户可见变更（Unreleased 段累积）
+├── CHANGELOG.md              用户可见变更（最新版本段 + Unreleased）
 └── README.md                 项目主页（功能表第一列锁定）
 ```
 
@@ -61,14 +63,17 @@ ResumeForge/
 |---|---|---|
 | 相关子集 | `pytest -q tests/test_xxx.py`（backend 目录） | 秒级确认方向 |
 | 静态 | `ruff check .`；前端 `tsc --noEmit` / `eslint` / `prettier --check` | 秒级 |
-| 全量后端 | `pytest -n auto --cov=app --cov-config=..\pyproject.toml` | 3 分钟，覆盖率门槛 80% |
+| 全量后端（日常） | `pytest -n auto` | 3 分钟，只看通过 / 失败，**不带覆盖率** |
+| 全量后端（交付前覆盖率） | 见下方三条 `coverage run/combine/report` | 覆盖率门槛 80%，**必须串行** |
 | 全量前端 | `vitest run` | ~7 分钟 |
 | macOS 链 | `bash scripts/tests/test-macos-launcher.sh` | 任何平台可跑 |
 | UI 实测 | 起服务 + Playwright 脚本 | 视觉问题必须眼见为实 |
 
 注意：
 
-- **`--cov` 不能配子集**（80% 门槛必然假失败）。
+- **`--cov` 不能配子集，也不能配 `-n auto`**：配子集 80% 门槛必然假失败；配并行则覆盖率统计不到
+  子进程（每个 worker 各写一份，汇总数是错的）。日常用 `pytest -n auto` 跑通过性，交付前用下面
+  三条 `coverage` 命令串行取覆盖率。
 - 交付判定**必须跑一次全量 + 覆盖率**（AGENTS.md：提速只能来自流程，不能来自跳过全量）；
   相关子集 + 静态检查只是第 1 步，用来快速定位方向。
 - 本机沙箱会让 pytest-cov 收尾的 `.coverage` 写盘被批量删除守卫拦下（并行报
@@ -102,9 +107,8 @@ ResumeForge/
 
 ### ⑥ 发布
 
-1. `python scripts/bump_version.py`（5 处版本号一次同步；**当前还在 0.x，破坏性变更
-   显式 `--bump minor`**——semver 对 0.x 的惯例，major 位留给"项目已经稳定"的宣告；
-   正式发布 1.0 之后破坏性变更才改用 `--bump major`。`remove:` 前缀不推动版本号，
+1. `python scripts/bump_version.py`（5 处版本号一次同步；**项目已发布 1.0、现在 2.0，破坏性变更
+   显式 `--bump major`**——2.0 本身就是一次 major。`remove:` 前缀不推动版本号，
    删功能的发版别信自动判定）。
 2. `scripts/Build-Release.ps1`：**三个包**，`-Platform windows`、`-Platform macos`，以及
    默认的 `-Platform all`（各带一份 `.sha256`，共 6 个资产）。
@@ -119,7 +123,78 @@ ResumeForge/
      默认关；macOS 桌面（dmg）仍需真 Mac，未接线。
 3. 官网仓库：更新文案 → `node tools/audit.js` 全绿 → 重采截图 / 重建 demo-app → 提交推送。
 4. 打 tag、建 GitHub Release（附双平台包与校验文件）。
-5. 更新公告图：写清**怎么更新**与**旧数据怎么导入**（导出数据集 → 新版导入为新数据集）。
+5. 更新公告图：写清**怎么更新**与**旧数据怎么导入**（1.x → 2.0 不搬数据，旧库整包归档到
+   `legacy-archive/<时间戳>/`，需要旧数据时用 1.0.2 打开归档；同 major 内的更新照旧
+   导出数据集 → 新版导入为新数据集）。
+
+## 2.5 手动启动与冒烟
+
+不用启动器、自己起服务时（排错、只改后端、跑浏览器冒烟）走这一节；日常开发仍然双击启动器最快。
+
+```powershell
+cd backend
+
+# 创建虚拟环境并安装运行依赖
+py -3 -m venv .venv
+$env:PYTHONUTF8 = "1"
+.venv\Scripts\python.exe -m pip install -r requirements.txt
+
+# 启动服务（默认 http://127.0.0.1:8000，接口文档见 /docs）
+.venv\Scripts\python.exe -m uvicorn app.main:app --reload --port 8000
+```
+
+macOS / Linux 用 `.venv/bin/python` 替换上面的 Windows 路径；Git Bash 用 `export PYTHONUTF8=1`。
+
+```powershell
+cd frontend
+npm ci
+npm run dev        # http://localhost:5173，已配置 /api 代理到 8000 端口
+```
+
+运行测试：
+
+```powershell
+cd backend
+.venv\Scripts\python.exe -m ruff check .
+
+# 日常内循环：并行跑，快
+.venv\Scripts\python.exe -m pytest -n auto
+
+# 交付前：串行跑一次覆盖率（并行与覆盖率不能写在同一条命令里，否则统计不到子进程）
+.venv\Scripts\python.exe -m coverage run --rcfile=..\pyproject.toml -m pytest -q
+.venv\Scripts\python.exe -m coverage report --rcfile=..\pyproject.toml --fail-under=80
+
+cd ../frontend
+npm test && npm run lint && npm run typecheck && npm run build
+```
+
+浏览器冒烟（Playwright，`frontend/tests/smoke/`）需要应用先跑起来，用例不对抗启动链——两种形态任选其一：
+
+```powershell
+# 形态一：发布形态（后端同源，默认 smoke 口 8123）
+npm run build
+cd ..
+powershell -File scripts\Start-ResumeForge.ps1 -NoBrowser -BackendPort 8123
+cd frontend
+
+# 形态二：开发形态（Vite 5173 + 后端 8000）
+cd backend
+.venv\Scripts\python.exe -m uvicorn app.main:app --port 8000
+cd ../frontend
+npm run dev
+```
+
+然后跑冒烟（发布形态零配置；开发形态把两个地址分别指给前端页面与 API）：
+
+```powershell
+cd frontend
+npm run smoke                                   # 发布形态（默认 http://127.0.0.1:8123）
+$env:SMOKE_FRONTEND_URL = "http://127.0.0.1:5173"; $env:SMOKE_BACKEND_URL = "http://127.0.0.1:8000"
+npm run smoke                                   # 开发形态
+```
+
+当前规模：后端与前端合计 **11,000+ 个测试用例**（后端约 7,100 个、前端约 4,700 个；后端覆盖率门槛 80%；确切数字以每次 CI 的汇总行为准）。GitHub Actions 在 Linux、Windows 与 macOS 上重复执行关键检查——macOS 那几个作业是刻意加的：它们会真下载便携运行时、从干净检出走完整启动链，并做浏览器冒烟，是 macOS 链路的持续把关；macOS 桌面安装包（dmg）自 v1.0.1 起同样由 CI 构建产出。
+
 
 ## 3. 守卫与红线
 
@@ -152,15 +227,21 @@ ResumeForge/
 
 ### 4.1 数据库迁移
 
-1. 新迁移文件放 `backend/migrations/versions/`，链上 `down_revision`。
-2. **先 grep 上一版 head 的字面量**：`test_database.py`、`test_backup_apply_tables.py`、
+1. 新迁移文件放 `backend/migrations/versions/`，链上 `down_revision`。**2.0 的迁移链只有一条基线
+   `0001_baseline_v2`**，新迁移一律接在它（或更新的 head）之后。
+2. **先 grep 旧版 head 的字面量**：`test_database.py`、`test_backup_apply_tables.py`、
    `test_apply_migration_qa.py`、`test_assistant_search.py` 各钉一处，需同步更新。
-3. 约束：`upgrade`/`downgrade` 都要可用；**表/列不存在时跳过而不是报错**（迁移链会跑在
-   "只有部分业务表"的历史库上）；加表/加列类迁移要保证"旧备份仍可导入"（表集合前后一致）。
-4. 新增 `tests/test_migration_00XX.py` 钉住行为。
+3. 约束：`upgrade`/`downgrade` 都要可用；**表/列不存在时跳过而不是报错**（迁移可能在"部分业务表"
+   的库上被调用，例如导入候选库与测试夹具）；加表/加列类迁移要保证"旧备份仍可导入"（表集合前后一致）。
+4. 新增 `tests/test_migration_00XX.py` 钉住行为（2.0 基线本身的往返与 epoch 断言见
+   `test_database.py`）。
 5. **减表类迁移**要额外验证"降级能把表按原样建回来"——列、索引、外键的 `ondelete` 都要与
    建表那次逐字一致。`0025` 删官网采集遗留的三张表时就是这么做的（`sa.inspect` 比对
    表名 / 列名 / 索引名集合）。
+6. **单基线一旦随 2.0 发布就不得改写**：`0001_baseline_v2` 只代表"2.0 此刻的结构"，任何结构变化
+   （加/删列、改类型、约束、数据回填）都只能**新增**迁移，不能编辑已发布的基线。启动闸门按
+   `app_schema_epoch`（单行 `epoch=2`）判，不按 revision 判；epoch 升级必须同时新增迁移并把
+   闸门逻辑一起改。
 
 ### 4.2 macOS 启动链
 
@@ -184,8 +265,12 @@ ResumeForge/
   数据库做一致性快照到 `backend/data/auto-backups/`，按 `AUTO_BACKUP_KEEP`（默认 5）轮转；
   `AUTO_BACKUP_ENABLED=false` 整体关闭。标记文件按"上次尝试"节流，连续失败不会每次
   启动都重撞。
-- **更新前快照**：两条更新器在覆盖程序文件前把 `backend/data/*.db` + `datasets/*.db`
-  快照到 `backend/data/pre-update/`（保留 3 份，连同 `-wal` / `-shm` / `-journal` 边车）。
+- **更新前快照**：两条更新器在覆盖程序文件前先跑 `backend/scripts/create_user_data_snapshot.py`
+  ——复用「导出全部数据集」链路把数据库 + 按引用收集的附件 + 字体 + 全局模型配置打成一个 zip 整包
+  并用 `verify_archive` 校验（失败即中止更新，不再覆盖程序文件），随后仍把
+  `backend/data/*.db` + `datasets/*.db` 拷进 `backend/data/pre-update/` 作兜底（保留 3 份，连同
+  `-wal` / `-shm` / `-journal` 边车）。跨 major 的整包快照目录标 `pre-major-<时间戳>` 且永不被
+  轮转清理。
   Windows 三条覆盖路径都在停应用之后（直接拷文件即一致快照）；macOS 优先用
   `sqlite3 .backup` 在线快照。
 - **文件日志**：`data/logs/backend.log`（5MB×5 滚动，`LOG_FILE_ENABLED` / `LOG_LEVEL`
@@ -204,3 +289,25 @@ ResumeForge/
 | `vite build` exit 1（清 dist 被拦） | 沙箱批量删除守卫 | `--outDir D:\rf_build_tmp --emptyOutDir` |
 | PowerShell 工具拿不到 stdout | 环境限制 | 重定向到文件再读 |
 | 删除文件被拦 | 沙箱删除守卫 | python ctypes 调 `SHFileOperationW`（进回收站） |
+
+### 5.1 并行、覆盖率与构建的细节（改这块配置前看）
+
+这一节从 `AGENTS.md` 下沉而来：AGENTS 只留判据，现象与命令放这里。
+
+- **`[tool.coverage.run] parallel = true` 是必需的**。否则每个 worker 抢写同一个 `.coverage` 文件，会在**所有用例都通过之后**的收尾阶段抛 `attempt to write a readonly database`——最坏的一类失败位置（看起来像测试挂了，其实是覆盖率写盘冲突）。
+- **退出码不能单独作为判据**。本机沙箱的 `sitecustomize.py` 包装了 `shutil.rmtree`，pytest 清理临时目录时触发"批量删除守卫"并 `SystemExit(1)`：worker 猝死、xdist 控制器抛 `INTERNALERROR ... KeyError: <WorkerController>`，而**汇总行仍是 `N passed, 0 failed`**，覆盖率那一步却没跑到。串行也不安全——`pytest-cov` 收尾的 `cov.combine()` 删 `.coverage.*` 时同样会命中守卫，退出码 3、覆盖率报告整段跳过。**判据是"汇总行 + 覆盖率报告都正常打印"**，不是退出码。
+- **coverage 只从 cwd 找配置**（`.coveragerc` / `pyproject.toml`），不会向上层目录搜索。在 `backend/` 下裸跑会把 `tests/` 一起统计：2026-10-10 实测假 41% vs 真 86%。必须显式 `--rcfile=..\pyproject.toml`，并走"run → combine → report"三段式。
+- **覆盖率与并行不能写进同一条命令**（2026-10-27 实测）：worker 是子进程，plain `coverage run` 追不到，`combine` 出来 28%（真值 88%），`--fail-under=80` 直接红。要覆盖率就串行，要速度就并行但别开 coverage。
+- **`vite build` 在本机沙箱下 exit 1 不是构建错误**：模块已全部 transform 成功，死在清理 `frontend/dist/assets` 时被批量删除守卫拦下（日志形如 `SAFE_DELETE_BULK_CONFIRM_REQUIRED count=170 threshold=100`）。指定仓库外输出目录即可：`npx vite build --outDir D:\rf_build_tmp --emptyOutDir`。
+- **webform canary 只在有可控 CDP 浏览器时有意义**：并行跑与 CI 下按契约恒 skip，它不是 CI 门禁；也别指向日常浏览器窗口（会互相抢标签页）。一次性跑法：`python runtime/investigation/phase5/canary-local.py`（默认 9344，`--port` 可改；脚本是本地证据工具，不进源码）。
+- **测试的等待预算分两档**：期望**超时**的用例预算越小越快；期望**成功**的用例就绪即返回，预算只是安全网。2026-09-23 修过一处——两类共用 `timeout=0.02`，于是"成功"用例的成败取决于真实墙钟，单跑必过、`-n auto` 下偶发失败。判断标准：**用例的成败是否取决于"等了多久"**，是就不该用个位数毫秒。
+
+## 6. 方法论索引（改代码之前/之后各看哪篇）
+
+| 场景 | 看哪篇 |
+|---|---|
+| 要证明"真的改好了"、判断测试是否假绿 | [验证手册](verification-playbook.md) |
+| 把一批任务交给别人/AI 执行，或需要交接、续跑 | [协作规程](ai-collaboration-sop.md) |
+| 提 issue、写验收、code review 时对照缺陷类型 | [缺陷模式](defect-patterns.md) |
+| "代码改了但界面/接口没变" | [环境排查](troubleshooting-stale-build.md) |
+| 文档里不能出现密钥/手机号/家目录 | `python scripts/check_docs_pii.py`（CI 的 `docs-guards` 作业） |

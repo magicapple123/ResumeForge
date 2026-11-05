@@ -38,7 +38,8 @@ v2 把**每个字段变成一等公民，位置变成数据**：一个统一的 
 
 - v2 文档仍是**一个 JSON**，存在 `resume_record.content` 列里——文档结构本身不新增表 / 列。
   资料侧新增的自定义字段纸面属性（`default_placement` / `material_only`）随迁移 `0069`
-  **只加两列**（旧库兼容、可降级，见 `services/profile/field_placement.py`）。
+  **只加两列**（旧库兼容、可降级，见 `services/profile/field_placement.py`）。2.0 起这两列由基线
+  `0001_baseline_v2` 直接创建，`0069` 是 1.x 历史号。
 - 顶层带 `version: 2` 作为判定依据。读写边界只有一道门（`services/resume/document_io.py`）：
   **读**走 `ensure_document_version(content)`——`version == 2` 直通并归一化，否则交给 converter
   转成 v2（**只在内存里转，不写库**）；**写**走 `prepare_document_for_save(content)`，落库永远是 v2。
@@ -345,7 +346,8 @@ class HeaderFieldSpec:
   default_placement / material_only），用于识别承载区里的「标签：值」行。
 - 系统字段与自定义字段的纸面属性由 `GET /api/profile/field-placement-catalog` 下发（`schemas/profile_field_catalog.py`：
   标签 / 格式 / 默认位置 / 仅素材 / 资料字段 id），资料页与制作台共用，**前端不复制一份映射**；
-  自定义字段的默认位置来自迁移 `0069` 的两列，仅素材字段的 placement 恒为 `hidden`。
+  自定义字段的默认位置来自迁移 `0069` 的两列（2.0 起由基线 `0001_baseline_v2` 直接创建，
+  `0069` 是 1.x 历史号），仅素材字段的 placement 恒为 `hidden`。
 - 新增一个系统字段 = 目录里加一行 `FieldSpec` + `resume_labels` 加标签（若上纸面还要给
   `default_placement`）；不允许在渲染器或模板里再写一份「哪个字段放哪」。
 
@@ -552,6 +554,8 @@ class DocumentPlan(BaseModel):
   entry_title / body / meta）、`data-resume-path`（v2 路径）、`data-object-id`（条目 id）。
 - 9 套内置模板改成「`:root` 变量 + 主题 CSS + `{% include "_resume_document.j2" %}`」，只负责外壳与
   配色字号；`_resume_sections.j2` 保留为一行别名（历史自制模板的稳定契约，preflight 必需文件不变）。
+  2.0 起可选的**只有 6 套**（经典 / 现代 / 精简 / 优雅 / 极简 / 学术），`technical` / `editorial` / `split`
+  已从选择器下线，但注册表仍保留它们、旧简历与自制模板仍可渲染。
 - 灰字段列间距兜底 `equal=1.6 / flow=1.2`（字号倍数）由 `document_html.default_cell_gap()` 统一给出，
   四出口共用同一默认值。
 - 链接只放行 `http(s)` / `mailto`（其余按纯文本渲染，防 XSS）；自动转义开启。

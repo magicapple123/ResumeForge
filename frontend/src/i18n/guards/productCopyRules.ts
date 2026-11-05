@@ -46,6 +46,26 @@ const NOTIFICATION_METHODS = new Set([
 ]);
 const NAMESPACE_TRANSLATION_HELPERS = new Set(["at", "bt", "ot", "pt", "rt"]);
 
+/**
+ * 实参全是"消息 key 与占位符名"的翻译门面，**不是**命名空间前缀包装器。
+ *
+ * 为什么不并入 `NAMESPACE_TRANSLATION_HELPERS`：那一组的语义是"在模块级 `t()` 前面
+ * 拼命名空间前缀"（`at`/`bt`/`ot`/`pt`/`rt`），只吃一个 key；而这一组是**多参数**门面，
+ * 参数类型是 `MessageKey` 与占位符名混排。混在一起会让后来的人误以为二者可互换。
+ *
+ * 为什么要单独列出来：`countMessage(oneKey, otherKey, placeholder, count)`
+ * （`src/i18n/countMessage.ts`）的四个入参**没有一个是界面文案**——第 3 个参数是句子里
+ * 计数的占位符名，`pageLimitOptionLabel` 传的就是裸词 `"count"`。
+ * 2026-11-06 把 `DocumentModeSwitch.tsx` 的页数选项从 `rt(...)` 改成 `countMessage(...)`
+ * 时，`"count"` 既过不了 `LOCALE_KEY`（单段词、无点分/连字符），又满足 `hasCopyText()`
+ * 的"含字母即文案"，于是被判成一条新增产品文案，棘轮报
+ * `unregistered product copy b4d9b563…` / `product copy count increased`。
+ *
+ * 边界：仅在**裸标识符调用**（`parts.length === 1`）时豁免，与上一组一致，
+ * 避免把 `obj.countMessage(...)` 这类成员调用也算进来。
+ */
+const TRANSLATION_WRAPPERS = new Set(["countMessage"]);
+
 function accessParts(expression: ts.Expression): string[] {
   if (ts.isIdentifier(expression)) return [expression.text];
   if (ts.isPropertyAccessExpression(expression)) {
@@ -80,9 +100,12 @@ export function isTranslationCall(expression: ts.Expression): boolean {
   const parts = accessParts(expression);
   const name = parts[parts.length - 1];
   if (name === "t" || name === "translate") return true;
+  if (parts.length !== 1) return false;
   // Namespace helpers are thin wrappers around module-level t(). Their first
   // argument is a compile-time message key, never product copy.
-  return parts.length === 1 && NAMESPACE_TRANSLATION_HELPERS.has(name ?? "");
+  // Translation wrappers take several keys plus a placeholder name; none of the
+  // arguments is copy either (see TRANSLATION_WRAPPERS).
+  return NAMESPACE_TRANSLATION_HELPERS.has(name ?? "") || TRANSLATION_WRAPPERS.has(name ?? "");
 }
 
 /**

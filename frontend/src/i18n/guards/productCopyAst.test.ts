@@ -134,6 +134,36 @@ describe("technical syntax is not a translation task", () => {
     expect(scan('<Button>{at("assets.editor.save") || "Save"}</Button>')).toEqual(["Save"]);
   });
 
+  it("does not count the placeholder name of a countMessage wrapper as product copy", () => {
+    // DocumentModeSwitch.tsx 的页数选项形态：第 3 个参数是句子里计数的占位符名
+    // （裸词 "count"），既不是点分 key 也不是界面文案。2026-11-06 的改动把它从
+    // rt(...) 换成 countMessage(...)，守卫曾把 "count" 登记成一条新增产品文案。
+    const pageLimitOption = [
+      "const options = [",
+      "  {",
+      "    value: 3,",
+      "    label: countMessage(",
+      '      "research.mode.limitOptionOne",',
+      '      "research.mode.limitOption",',
+      '      "count",',
+      "      3,",
+      "    ),",
+      "  },",
+      "];",
+    ].join("\n");
+    expect(scan(pageLimitOption)).toEqual([]);
+    // 豁免只覆盖 countMessage 自己的实参，不覆盖同文件里相邻的拷贝：
+    // 页数选项旁边的说明文案仍然必须被抓到（否则这次修复就把守卫改松了）。
+    expect(scan('<span>{countMessage("a.bOne", "a.b", "count", 3)} 每页字数</span>')).toEqual([
+      "每页字数",
+    ]);
+    // 成员调用 `obj.countMessage(...)` 不在豁免范围内——与块内 `t`/`translate` 的
+    // 裸标识符口径一致，避免借同名成员方法把真文案洗成技术串。
+    expect(scan('<span title={log.countMessage("a.bOne", "a.b", "打印设置", 3)} />;')).toEqual([
+      "打印设置",
+    ]);
+  });
+
   it("ignores string operands used only to compute boolean output", () => {
     expect(scan('<span>{state === "ready"}</span>')).toEqual([]);
     expect(scan('<span>{state !== "ready"}</span>')).toEqual([]);

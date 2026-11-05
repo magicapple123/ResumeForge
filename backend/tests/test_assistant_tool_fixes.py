@@ -44,7 +44,7 @@ def test_capability_map_describes_the_relaxed_mode():
     rendered = build_capability_map()
     assert "放宽模式" in rendered
     assert "默认关闭" in rendered, "必须说明默认是关的"
-    assert "设置 → 应用" in rendered, "必须说明在哪里开"
+    assert "设置 → 助手与 AI 行为" in rendered, "必须说明在哪里开"
     assert "回读" in rendered, "必须提到代点后回读验证"
     assert "逐条确认" in rendered, "同意/声明类勾选必须说明确认制"
     assert "日期选择器" in rendered and "文件上传" in rendered, "必须说明日期与文件仍不代做"

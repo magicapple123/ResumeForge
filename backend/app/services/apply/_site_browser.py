@@ -27,10 +27,12 @@ from ..browser.browser_manager import (
     BrowserError,
     BrowserManager,
     BrowserStatus,
+    login_hint,
 )
 from ..browser.cdp_client import CdpError
 from ..sites.base import SOURCE_SESSION, SiteAdapter
 from ..sites.registry import get_registry
+from ..ui_locale import get_ui_locale
 from ._base import ApplyConflict
 from ._config import get_apply_config
 
@@ -48,6 +50,20 @@ def _as_browser_state(value: str) -> BrowserState:
     if value not in _BROWSER_STATE_VALUES:
         raise ValueError(f"未知的浏览器状态：{value!r}")
     return value
+
+
+def _display_name(adapter: SiteAdapter, locale: str | None) -> str:
+    """取**展示用**站点名。
+
+    ``display_name_for`` 是站点适配器上的可选扩展点（默认继承自 ``SiteAdapter``，
+    多语言站点覆盖它）。这里用 ``getattr`` 兜一层：测试替身与将来第三方注册的轻量适配器
+    可能只声明了 ``display_name``，不该因为缺一个展示方法就让整个接口 500。
+    """
+    getter = getattr(adapter, "display_name_for", None)
+    if callable(getter):
+        # getattr 探测得到的可调用对象在类型上只保证返回 ``object``，出口处收口成 ``str``。
+        return str(getter(locale))
+    return adapter.display_name
 
 
 def collect_filter_options(db: Session) -> CollectFilterOptionsOut:
@@ -85,7 +101,7 @@ def collect_filter_options(db: Session) -> CollectFilterOptionsOut:
 
     return CollectFilterOptionsOut(
         site_key=adapter.key,
-        display_name=adapter.display_name,
+        display_name=_display_name(adapter, get_ui_locale(db)),
         groups=[_filter_group_out(group) for group in groups],
         session_read=any(getattr(group, "source", "") == SOURCE_SESSION for group in groups),
     )
@@ -125,10 +141,11 @@ def current_site_key(db: Session) -> str:
     return adapter.key if adapter is not None else ""
 
 
-def _site_option_out(adapter: SiteAdapter) -> SiteOptionOut:
+def _site_option_out(adapter: SiteAdapter, locale: str | None = None) -> SiteOptionOut:
     return SiteOptionOut(
         key=adapter.key,
-        display_name=adapter.display_name,
+        # 只取"展示用"名字：``display_name`` 是站点识别用的协议值（见 SiteAdapter）。
+        display_name=_display_name(adapter, locale),
         host=adapter.hosts[0] if adapter.hosts else "",
         entry_url=adapter.entry_url,
         supports_collect=adapter.supports_collect,
@@ -143,9 +160,10 @@ def list_sites(db: Session) -> SiteListOut:
     界面自动多出一个站点可选。
     """
     registry = get_registry()
+    locale = get_ui_locale(db)
     return SiteListOut(
         current=current_site_key(db),
-        sites=[_site_option_out(adapter) for adapter in registry.all()],
+        sites=[_site_option_out(adapter, locale) for adapter in registry.all()],
     )
 
 
@@ -209,7 +227,7 @@ def _browser_status_out(status: BrowserStatus, db: Session) -> BrowserStatusOut:
         browser_path=status.browser_path,
         browser_name=status.browser_name,
         entry_url=default_entry_url(db),
-        logged_in_hint=status.logged_in_hint,
+        logged_in_hint=login_hint(get_ui_locale(db)),
         owned=status.owned,
     )
 

@@ -101,6 +101,8 @@ const research = {
     "Long CV supports research Resumes up to 10 pages; standard Resumes remain 1-3 pages",
   "research.mode.limitLabel": "Page limit",
   "research.mode.limitOption": "{count} pages",
+  /** Singular twin (English noun agreement at exactly 1). */
+  "research.mode.limitOptionOne": "{count} page",
   "research.mode.budget":
     "Long CV allows up to 10 pages; overflow is reported and truncated without automatically shrinking the font",
   "research.mode.overBudget":

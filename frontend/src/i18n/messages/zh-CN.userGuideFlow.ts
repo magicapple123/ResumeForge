@@ -108,7 +108,7 @@ const userGuideFlow = {
     "在「手动调整」里**选中要改的那段文字 → 右键 →「AI 润色」**：写下要求 → 生成 → 结果先给你看，点「替换选中」才写回；只把选中的那一段发给模型。不满意可以直接关掉，原文一字不动。",
   "userGuideFlow.resume.step1.point30.lead": "生成完会提醒你",
   "userGuideFlow.resume.step1.point30.text":
-    "简历生成、岗位解读、匹配度分析、岗位优化建议这类要等模型的任务都先说明再开跑，生成中给「后台继续」——关掉窗口也能跑完（建议生成可随时取消），结束**弹窗提醒并响一声**（声音可在设置 → 提醒与提示音里关）。",
+    "简历生成、岗位解读、匹配度分析、岗位优化建议这类要等模型的任务都先说明再开跑，生成中给「后台继续」——关掉窗口也能跑完（建议生成可随时取消），结束**弹窗提醒并响一声**（声音可在设置 → 更新与帮助 → 提醒与提示音里关）。",
   "userGuideFlow.resume.step1.point31.lead": "写作增强",
   "userGuideFlow.resume.step1.point31.text":
     "编辑简历时**选中一段文字 → 右键 →「写作增强」**：可做 STAR 量化改写、话术生成器（简历版 / STAR 版 / 口述版）、多风格润色、中英互译。结果**写回你刚选中的那一段**（右键落在不可编辑的位置时动作变成「复制」）；还能任选两份简历做「版本对比」（纯本地计算、不调模型）。",
@@ -256,19 +256,19 @@ const userGuideFlow = {
     "导入默认新建一份，不碰当前正在用的那份；也能**新建一份空白数据集**从头开始记录。导入前先检查整包附件（校验和/同名冲突），有问题整次拒绝且本机原文件不动；确认后可选择跳过有问题的附件只导入库内容。",
   "userGuideFlow.dataBackup.step1.point7.lead": "存储与备份",
   "userGuideFlow.dataBackup.step1.point7.text":
-    "设置 → 数据底部能看到数据目录各分项占了多少磁盘；迁移时留在 backups/ 里的数据库快照也会列出来——不需要的可以逐份确认后移到本地数据目录下的回收目录，随时能在文件管理器里找回来，系统不会自动清理。",
+    "设置 → 数据与导出底部能看到数据目录各分项占了多少磁盘；迁移时留在 backups/ 里的数据库快照也会列出来——不需要的可以逐份确认后移到本地数据目录下的回收目录，随时能在文件管理器里找回来，系统不会自动清理。",
   "userGuideFlow.dataBackup.step1.point8.lead": "Key 去留",
   "userGuideFlow.dataBackup.step1.point8.text":
     "备份默认包含大模型 API Key，不需要时可在导出前取消勾选「备份中包含大模型 API Key」；恢复后建议到模型配置测试连接；旧版本导出的备份仍可导入，含 Key / 含字体（格式 5 与 6）的新包被旧版导入时会提示升级——跨大版本迁移请在同版本之间导出/导入。",
   "userGuideFlow.dataBackup.step1.point9.lead": "精简侧栏",
   "userGuideFlow.dataBackup.step1.point9.text":
-    "设置 → 应用 → 「界面与导航」里可以关掉侧栏里用不到的模块，卡片标题栏的「恢复默认显示」一键还原。隐藏只收起入口——不删数据，首页、岗位广场、简历中心、我的资料、投递台与设置始终保留。",
+    "设置 → 外观与交互 → 「界面与导航」里可以关掉侧栏里用不到的模块，卡片标题栏的「恢复默认显示」一键还原。隐藏只收起入口——不删数据，首页、岗位广场、简历中心、我的资料、投递台与设置始终保留。",
   "userGuideFlow.dataBackup.step1.point10.lead": "窄屏与键盘",
   "userGuideFlow.dataBackup.step1.point10.text":
-    "窄窗口点**「打开导航」**切换页面，「我的空间」仍在页头；键盘按 Tab 可先到「跳到主要内容」，按回车直接进入正文。常用动作有快捷键：Ctrl/⌘+K 搜索、Ctrl/⌘+S 保存、Ctrl/⌘+Z 撤回、Ctrl/⌘+J 开关助手；「设置 → 应用 → 快捷键」可改键。",
+    "窄窗口点**「打开导航」**切换页面，「我的空间」仍在页头；键盘按 Tab 可先到「跳到主要内容」，按回车直接进入正文。常用动作有快捷键：Ctrl/⌘+K 搜索、Ctrl/⌘+S 保存、Ctrl/⌘+Z 撤回、Ctrl/⌘+J 开关助手；「设置 → 外观与交互 → 快捷键」可改键。",
   "userGuideFlow.dataBackup.step1.point11.lead": "检查更新",
   "userGuideFlow.dataBackup.step1.point11.text":
-    "页头刷新图标可检查更新。设置 → 应用支持下载、进度与后台下载；读取失败先点「重试读取状态」。Windows 确认「重启并安装」，macOS 用 update.command；只换程序，保留 data/、.env 与备份，结果以实际版本和日志为准。",
+    "页头刷新图标可检查更新。设置 → 更新与帮助支持下载、进度与后台下载；读取失败先点「重试读取状态」。Windows 确认「重启并安装」，macOS 用 update.command；只换程序，保留 data/、.env 与备份，结果以实际版本和日志为准。",
   "userGuideFlow.dataBackup.step1.point12.lead": "想卸载",
   "userGuideFlow.dataBackup.step1.point12.text":
     "Windows 双击项目目录里的 uninstall.cmd：默认只删启动器生成的环境与缓存，保留 data/ 与 .env；确认连数据一起删用 uninstall.cmd -Purge。macOS 不需要卸载脚本——直接删掉项目文件夹就是干净卸载。",

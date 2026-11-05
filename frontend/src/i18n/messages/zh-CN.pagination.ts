@@ -169,6 +169,9 @@ const pagination = {
   /** 读屏名多段拼接用的分隔符（全角逗号；放在语言包里，源码里不写中文标点）。 */
   "pagination.thumbnails.ariaJoin": "，",
   "pagination.thumbnails.limitReached": "已达页数上限（{limit} 页）",
+  // 单数孪生键：英文在 limit === 1 时要换名词（1 page），中文没有单复数，两条指向同一句话。
+  // 保留双键是为了让 `MessageKey` 两侧同名，选择逻辑收在 `i18n/countMessage.ts` 一处。
+  "pagination.thumbnails.limitReachedOne": "已达页数上限（{limit} 页）",
 
   // ── 分页报告与溢出定位 ──────────────────────────────────────
   /** 报告区的标题。 */

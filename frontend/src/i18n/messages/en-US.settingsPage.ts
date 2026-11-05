@@ -25,7 +25,7 @@ const settingsPage = {
   "settings.appearance.group.hint":
     "Switch themes in the header; the three cards below are independent and apply immediately",
   "settings.app.theme.note":
-    "Switch themes with the Theme toggle; dark mode affects the app interface only — Resume preview, exported PDF and printing stay on white paper.",
+    "Switch themes with the Theme toggle; dark mode covers the app interface and the resume preview (the page turns dark too), while exported PDF / Word files and printing stay on white paper.",
   "settings.data.intro":
     "Jobs, Resumes and Profile content all live in the current dataset, which can be exported as a backup or switched.",
   "settings.backup.intro":

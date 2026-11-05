@@ -1,5 +1,7 @@
 # 增量批次系统设计（P0-1 ~ P0-8 / P1-1 ~ P1-2）
 
+> **历史文档（2.0 已复核）**：这是 2026-09 一批增量需求的系统设计记录，**不是 2.0 的现状**。文中的迁移号（`00XX_*`）、模板数量、路由落点（`App.tsx` 的 `MENU_ITEMS` / `Routes`）都是当时的快照：2.0 的迁移链只有 `0001_baseline_v2`，菜单在 `components/navigation/navigationConfig.ts`、路由在 `appRoutes.tsx`。要查当前架构请看 [architecture.md](architecture.md) 与 [PROJECT_MAP.md](PROJECT_MAP.md)。
+
 > 角色：架构（Bob）· 输入：PM 的第 N 批增量 PRD · 约束：渐进改造、不重写、不删文件、主仓库不 commit
 > 本文只给设计与任务分解，不含实现代码。所有"事实"都标了出处（`文件:行`），未经验证的推测会明确写成推测。
 

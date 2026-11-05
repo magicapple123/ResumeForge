@@ -4,6 +4,7 @@
 前端界面不显示版本，所以不一致不会在界面上暴露，只会出现在 README、Releases 页、
 `/api/health` 和备份 manifest 四处。这条测试让"发版时改漏一处"在 CI 上立刻失败。
 """
+
 import json
 from pathlib import Path
 
@@ -13,6 +14,8 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 PACKAGE_JSON = REPO_ROOT / "frontend" / "package.json"
 PACKAGE_LOCK = REPO_ROOT / "frontend" / "package-lock.json"
 README = REPO_ROOT / "README.md"
+# GitHub 默认展示英文版；中文版是 README.zh-CN.md，两处版本号必须同步。
+README_ZH = REPO_ROOT / "README.zh-CN.md"
 
 
 def test_backend_and_frontend_versions_match():
@@ -33,4 +36,5 @@ def test_lockfile_root_version_matches_package_json():
 def test_readme_states_the_current_version():
     package_version = json.loads(PACKAGE_JSON.read_text(encoding="utf-8"))["version"]
 
-    assert f"当前版本：`{package_version}`" in README.read_text(encoding="utf-8")
+    assert f"Version: `{package_version}`" in README.read_text(encoding="utf-8")
+    assert f"当前版本：`{package_version}`" in README_ZH.read_text(encoding="utf-8")

@@ -1,622 +1,422 @@
 <div align="center">
 
-<img src="docs/images/icon.png" width="88" alt="简历通 ResumeForge 图标" />
+<img src="docs/images/icon.png" width="88" alt="ResumeForge icon" />
 
-# 简历通 ResumeForge
+# ResumeForge
 
 [![CI](https://github.com/magicapple123/ResumeForge/actions/workflows/ci.yml/badge.svg)](https://github.com/magicapple123/ResumeForge/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/magicapple123/ResumeForge?label=release&color=2f81f7)](https://github.com/magicapple123/ResumeForge/releases)
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 [![GitHub stars](https://img.shields.io/github/stars/magicapple123/ResumeForge?style=flat&logo=github)](https://github.com/magicapple123/ResumeForge/stargazers)
+[![Downloads](https://img.shields.io/github/downloads/magicapple123/ResumeForge/total?style=flat&label=downloads&color=2f81f7)](https://github.com/magicapple123/ResumeForge/releases)
 [![Python](https://img.shields.io/badge/Python-3.11--3.13-3776AB?logo=python&logoColor=white)](docs/user-guide.md)
 [![Node.js](https://img.shields.io/badge/Node.js-20.19%2B-339933?logo=nodedotjs&logoColor=white)](docs/user-guide.md)
-[![Tests](https://img.shields.io/badge/tests-4%2C000%2B%20passing-success)](.github/workflows/ci.yml)
+[![Tests](https://img.shields.io/badge/tests-11%2C000%2B%20passing-success)](.github/workflows/ci.yml)
 
-**本地优先的 AI 简历工作台：不注册、不登录，数据只存在你自己的电脑上。**
+**A local-first AI resume workbench: no account, no sign-in, and all data stays on your machine.**
 
 <h3>
-<a href="https://magicapple123.github.io/ResumeForge-official/demo.html">▶ 在线体验（免安装）</a>
-　·　
-<a href="https://magicapple123.github.io/ResumeForge-official/docs.html">📖 使用文档</a>
-　·　
-<a href="https://magicapple123.github.io/ResumeForge-official/">🏠 官网</a>
+<a href="https://magicapple123.github.io/ResumeForge-official/demo.html">Live demo (no install)</a>
+ · 
+<a href="https://magicapple123.github.io/ResumeForge-official/docs.html">User guide</a>
+ · 
+<a href="https://magicapple123.github.io/ResumeForge-official/">Website</a>
 </h3>
 
-当前版本：`2.0.0` · [Release 页面](https://github.com/magicapple123/ResumeForge/releases) · [完整使用指南](docs/user-guide.md) · [架构设计](docs/architecture.md)
+<p align="center"><a href="README.zh-CN.md">简体中文</a> · <b>English</b></p>
+
+Version: `2.0.0` · [Releases](https://github.com/magicapple123/ResumeForge/releases) · [Full user guide](docs/user-guide.md) · [Architecture](docs/architecture.md)
 
 <p>
-<a href="#-交流与反馈"><b>💬 来群里聊：QQ <code>922830167</code></b></a>
+<a href="#-community-and-feedback"><b>QQ group: <code>922830167</code></b></a>
 <br>
-<sub>装不上、跑不起来、想让 AI 更懂你的岗位，都可以在群里问；<b>群文件里也备了安装包</b>，GitHub 下载慢时可以直接从群里取。<a href="#-交流与反馈">看群二维码 ↓</a></sub>
-</p>
-
-<p>
-<b>不会用 GitHub？把链接交给 AI 就行。</b>
-<br>
-<sub>打不开 Release 页面、不知道点哪个文件，都可以把仓库地址 <code>https://github.com/magicapple123/ResumeForge</code> 发给任意 AI 助手（ChatGPT / DeepSeek / 豆包…），说一句「我想用这个软件，请一步步教我怎么装」；<b>已经下载好的压缩包也一样</b>——直接把它交给 AI，让它带你解压、找到该双击的那个文件。<a href="#-快速开始">看快速开始 ↓</a></sub>
+<sub>Use the group for installation and usage questions, feature requests and bug reports. <b>The installers are also mirrored in the group files</b> for when GitHub downloads are slow or interrupted. <a href="#-community-and-feedback">Group QR code</a></sub>
 </p>
 
 </div>
 
-> 在线体验是一个**只读演示版**：界面是真的、数据是虚构的、AI 输出是预录回放。想真的生成、真的导出、真的投递，按下面的[快速开始](#-快速开始)在本机跑起来——Windows 第一次双击 `start.cmd`、macOS 第一次双击 `start.command`，都会自动装好环境；也可以到[官网](https://magicapple123.github.io/ResumeForge-official/)直接下载对应平台的安装包或压缩包（Windows 安装版 / macOS dmg 安装版 / 双平台便携包），不用经过 GitHub。
+> The live demo is a **read-only build**: the interface is the real one, the data is fictional and the AI output is a pre-recorded replay. To generate, export and apply for real, follow [Installation](#-installation) and run the app locally: on first launch, `start.cmd` on Windows or `start.command` on macOS prepares the environment automatically. The installer or archive for your platform can also be downloaded from the [website](https://magicapple123.github.io/ResumeForge-official/) (Windows installer / macOS dmg / portable archive for both platforms), without going through GitHub.
 
 ---
 
-## 简历通能干什么
+## A look at the interface
 
-一条完整的链路，从看岗位到拿到 offer，每一步都有对应功能，每一步的产出都能回头修正上一步：
+All screenshots are taken from the **shipped desktop build**; the content is the **fictional sample data** bundled with it and contains no real user material.
 
-<p align="center">
-  <img src="docs/images/what-it-does.png" alt="简历通能干什么：找到并读懂岗位 → 判断匹不匹配 → 写出站得住的简历 → 导出与交付 → 投递与跟进 → 面试与复盘" width="1000">
-</p>
-
-它解决的是一类很具体的问题：**求职期间的资料是散的**。JD 躺在浏览器收藏夹里，简历文件有七八个版本叫 `简历-最终版2.docx`，投递进度记在备忘录，面试问到的问题面试完就忘了，改了三遍简历也不记得哪一版投给了哪家公司。
-
-更要紧的是另一个问题：**AI 会替你把简历写得很漂亮，也会替你编。** 简历工具最危险的行为不是排版难看，而是把你没做过的事写进去——面试官追问两句就露馅。所以 ResumeForge 把「事实」从「表述」里拆出来单独管：生成结果里的学校 / 公司 / 项目名会与资料库逐条比对，不一致时给**防虚构警告**；正文还留着【待补】标记时导出会被拦下并指出具体位置。
-
-## 为什么值得用
-
-市面上的简历工具大多要你先交出账号和数据，再决定要不要收你钱。简历通反过来：
-
-| | 简历通 ResumeForge | 常见的在线简历工具 |
-| --- | --- | --- |
-| **要不要注册登录** | 不要。装完即用，没有账号体系 | 先注册、先登录、先绑定手机 |
-| **简历和资料存在哪** | 你自己电脑上的本地数据目录（SQLite + 附件），可随时整份拷走 | 对方的服务器，导出要走会员 |
-| **要不要钱** | 永久开源免费（Apache-2.0），**没有会员、没有付费墙、没有导出次数限制** | 免费版限制模板 / 导出 / AI 次数 |
-| **AI 怎么用** | 按**每个岗位的 JD** 单独筛选事实、单独生成一版 | 通用模板 + 套话，一份改多处用 |
-| **会不会替你编** | 有「事实台账」挡着：只有你确认过的事实才参与生成 | 无 |
-| **投递要不要管** | 内置自动投递台 + 求职进度 + 提醒 + 内推 + 统计 | 基本不管，投完靠自己记 |
-| **断网能不能用** | 解析、检查、预览、全部导出都离线可用；不配模型也能用大部分功能 | 必须联网 |
-| **能不能自己改** | 源码开放，可自建、可改、可二次开发 | 闭源 |
-
-还有几件同样重要、但不太好放进表格的事：
-
-- **不访问招聘网站，除非你亲手点了那个按钮。** 默认全部在本机完成；「投递台」是唯一会主动访问外部站点的链路，必须由你显式配置 + 显式点击开始，**不做无人值守运行**。
-- **不保存招聘网站密码、Cookie、令牌或验证码。** 扫码登录在你自己打开的浏览器窗口里完成，应用不读取也不落盘登录态。
-- **匹配度结论不带百分比，投递准入也不看分数。** 结论只有五类：`已匹配 / 表达缺口 / 证据不足 / 真实缺口 / 待确认`，每一类都能直接指导你改简历；结论区之后另有 0–100 的「匹配度参考分」（本地规则估算），仅作展示辅助、**不参与投递准入**，并始终带免责说明。
-- **还在维护。** 有 CI、有 4,000+ 个用例、有数据库迁移链与升级方案——见[更新而不丢失数据](#-更新而不丢失数据)。
-
-## 界面速览
-
-截图全部来自**真实运行的桌面版**应用，数据是内置的**纯虚构演示数据**（求职者「林晚晴」与一批虚构公司，邮箱统一 `example.com`），不含任何真实用户资料。
-
-**两级导航跟着真实使用顺序走**——侧栏保留高频主流程七个入口，其余八个（我的资料、收藏夹、资料箱、知识库、工作台、求职统计、事实台账、回收站）收进页头「我的空间」下拉：
+**Home**: a progress checklist, Job and Resume counts and upcoming reminders color-coded by urgency — the current workload on a single screen.
 
 <p align="center">
-  <img src="docs/images/anim-nav.webp" alt="依次切换侧栏主入口（岗位广场、简历中心、投递台、网申填表、求职进度、模拟面试、求职助手）与页头「我的空间」下拉里的求职统计、事实台账、知识库与工作台" width="820">
+  <img src="docs/images/home-en.png" alt="ResumeForge home: a from-zero-to-deliverable checklist with step status, counts of total and open Jobs plus generated Resumes, and a list of upcoming reminders color-coded by urgency" width="900">
 </p>
 
-**首页**：从零到交付的进度清单、岗位/简历统计、按紧急度分色的近期提醒，一屏知道自己该干什么：
+**Resume workbench**: typography settings and page overview on the left (page limit, pagination report), Resume content in the middle and the A4 preview on the right in exact mode, rendering the exported PDF itself; any parameter change updates all three.
 
 <p align="center">
-  <img src="docs/images/home.png" alt="简历通首页：从零到一份可交付简历的进度清单、岗位与简历统计、按紧急度分色的近期提醒列表" width="900">
+  <img src="docs/images/workbench-en.png" alt="Resume workbench: Template set to Classic and Layout preset to Standard on the left with a Page overview showing a single page at 97% full, Resume content editing in the middle with Basic info, Education, Experience, Projects and Skills tabs, and the Resume preview in exact mode (the exported PDF itself, zoomable) on the right" width="900">
 </p>
 
-**AI 是按岗位生成的，不是套模板**。挑一个岗位，定美化档位、篇幅与模板；生成时会从你的资料与经历总结里按 JD 筛选排序，**原始资料不会被修改**：
+The remaining screens (Job Square, apply desk, Web form, mock interview, Fact ledger), together with preview zoom, layout diagnosis and the export panel, are reachable from the sidebar after [Installation](#-installation). More screenshots are in the [gallery on the website](https://magicapple123.github.io/ResumeForge-official/en/#gallery).
+
+## What ResumeForge does
+
+An end-to-end pipeline from screening a job posting to interview review; the output of each stage can be revised and fed back into earlier stages.
 
 <p align="center">
-  <img src="docs/images/crop-ai-resume-options.png" alt="为「用户增长运营」生成简历的弹窗：当前模型 qwen-max、岗位适配与内容美化档位（轻度 / 均衡 / 深度）、篇幅与版式、字号与补充要求" width="900">
+  <img src="docs/images/what-it-does-en.png" alt="What ResumeForge does: find and understand Jobs → judge the fit → write a Resume that holds up → export and deliver → apply and follow up → interview and review" width="1000">
 </p>
 
-生成完它会自动做两件事。一是**版面诊断**：下面这张图里内容超出所选页数（占用 154%），它直接给出按优先级排好的收紧顺序与一键「自动一页」。二是**来源与核对**：每个区块标注「回填原文 / 资料原文」，生成结果可以逐段溯源到你的资料库——模型编出来的东西不会悄悄留在简历里：
+It addresses a specific problem: **job-search material is fragmented.** JDs live in browser bookmarks, the resume exists as several “final” files, application progress is kept in notes, interview questions are forgotten afterwards, and after multiple revisions it is hard to tell which version went to which company.
 
-<p align="center">
-  <img src="docs/images/crop-ai-resume-result.png" alt="AI 生成简历的预览弹窗：版面诊断提示内容超出所选页数（占用 154%）并给出五步收紧顺序与「自动一页」；内容来源说明逐区块标注回填原文与资料原文；底部提供 AI 修改、质量检测、导出选项、一键脱敏等操作" width="900">
-</p>
+A second problem matters more: **generative models polish wording and also fabricate.** The greatest risk in a resume tool is not poor typography but writing content that never happened, which surfaces at the first follow-up question. ResumeForge therefore separates **facts** from **wording** and manages them independently: school, company and project names in generated output are compared entry by entry against the Profile library, and any mismatch raises an **anti-fabrication warning**; if the body still contains unfilled 【待补】 (“to fill”) markers, the export is blocked with the exact positions listed.
 
-**AI 定制简历的 A4 成品**（服务端用系统中文字体渲染，一页排版，PDF 可直接下载，也可以走浏览器打印）：
-
-<p align="center">
-  <img src="docs/images/resume-a4.png" alt="A4 简历成品：页眉带形象照，单页版式、区块标题带强调色、技能标签带框" width="600">
-</p>
-
-**岗位广场**：手动录入、粘贴原文、贴截图、传 pdf/docx 都能识别成可编辑草稿；技能标签保存时自动提取：
-
-<p align="center">
-  <img src="docs/images/jobs.png" alt="岗位广场：16 个在招岗位的列表，收藏星标、技能标签、来源角标、状态与备注，顶部提供搜索、筛选与批量工具" width="900">
-</p>
-
-**岗位详情的匹配度分析**：逐条对照 JD 给出五类结论，每条都附 JD 原文与你自己的证据；找不到依据时如实写「资料中未提供」。五类结论本身不带百分比；结论区之后另有 0–100 的「匹配度参考分」（本地规则估算、带免责、不参与投递准入）：
-
-<p align="center">
-  <img src="docs/images/job-detail.png" alt="岗位详情抽屉：职位描述、任职要求、技能标签，与底部动作条「用 AI 生成简历 / 自行编写简历 / 岗位需求解读 / 匹配度分析 / 投递进度」" width="900">
-</p>
-
-<p align="center">
-  <img src="docs/images/crop-job-match.png" alt="岗位匹配度分析结果：准入结论「需确认」、硬性门槛「硬性条件已满足」，硬性条件与核心能力逐条给出已匹配 / 证据不足等结论、招聘原文与依据，顶部提示含待确认条目时加入投递台需逐条确认" width="900">
-</p>
-
-<table>
-<tr>
-<td width="50%"><img src="docs/images/resumes.png" alt="简历中心"><br><sub><b>简历中心</b>：多份简历、来源区分（AI 生成 / 用户编写）、收藏、备注、版式与篇幅控制</sub></td>
-<td width="50%"><img src="docs/images/apply.png" alt="自动投递台"><br><sub><b>自动投递台</b>：采集 → 匹配 → 显式确认 → 自动投递，四步流程写在页面顶部</sub></td>
-</tr>
-<tr>
-<td width="50%"><img src="docs/images/tracker.png" alt="求职进度"><br><sub><b>求职进度</b>：一家公司一个岗位一条记录，粘邮件 / 截图识别进展，先预览再写入</sub></td>
-<td width="50%"><img src="docs/images/analytics.png" alt="求职统计"><br><sub><b>求职统计</b>：转化与卡点、时间与节奏、渠道与去向、简历与健康度</sub></td>
-</tr>
-<tr>
-<td width="50%"><img src="docs/images/claims.png" alt="事实台账"><br><sub><b>事实台账</b>：18 条主张的核实状态、承担程度与最近核实日期一屏总览</sub></td>
-<td width="50%"><img src="docs/images/interview.png" alt="模拟面试"><br><sub><b>模拟面试</b>：逐轮追问，结束后给维度评分与改进建议</sub></td>
-</tr>
-<tr>
-<td width="50%"><img src="docs/images/assistant.png" alt="求职助手"><br><sub><b>求职助手</b>：能查库、能引用资料、只在明确要求时写数据</sub></td>
-<td width="50%"><img src="docs/images/settings.png" alt="设置"><br><sub><b>设置</b>：16 个模型预设、数据集与软件更新</sub></td>
-</tr>
-</table>
-
-**导出与脱敏**：PDF / Word / Markdown / 纯文本 / JSON / HTML 任选，可加水印；一键脱敏遮住姓名、电话、邮箱、公司与学校后再导出（面板见下方折叠区）。
-
-**投递台操作动图**——勾选岗位 → 点「开始投递」→ 确认本批次范围。**在你点下去之前，它不会打开任何招聘网站**：
-
-<p align="center">
-  <img src="docs/images/anim-apply.webp" alt="在投递台勾选岗位、点开始投递并看到批次确认，再切到自动采集页" width="880">
-</p>
-
-**网申填表**：用应用里的**专用浏览器**打开公司官网的网申页，整页读取后智能逐项填表。它**只往文本框写值**——下拉、单选、日期控件不代做，认不出的会如实列出来让你自己点（「只填不交」，提交永远在你手里）。填充完成会显示成功率（成功填写数 / 页面可读框总数），也能导出**不含简历值的脱敏诊断**，方便反馈认不出的字段：
-
-<p align="center">
-  <img src="docs/images/webform.png" alt="网申填表页：左侧专用浏览器与网址记录管理，中间为批量读取的当前表单字段与智能逐项填充结果，右侧是放宽模式卡片与填充记录" width="900">
-</p>
+## ✨ Features
 
 <details>
-<summary><b>更多界面</b>（点击展开：全局搜索、求职助手、导出面板、简历预览、资料箱、知识库、工作台、回收站、内置指南与更多细节图）</summary>
+<summary><b>All features at a glance (77 items, click to expand)</b></summary>
+
+<p>Every feature name below links to its section in the official docs; the sections that were missing have been written in this pass.</p>
 
 <br>
 
-**一个框搜遍全站**：岗位、简历、内推、提醒、面经、事实台账、资料箱与技能一起搜，不用先想「这东西在哪个模块」：
-
-<p align="center">
-  <img src="docs/images/anim-search.webp" alt="在首页全局搜索框输入「用户增长」，同时列出匹配的岗位、简历、内推、提醒、面经、资料箱与技能" width="880">
-</p>
-
-**助手会先查你的库再回答**——台账里的主张、面经、面试深挖记录都查得到，而且**未经你同意不改任何数据**：
-
-<p align="center">
-  <img src="docs/images/anim-assistant.webp" alt="在求职助手里问「我这份简历里，哪条说法最容易被面试官追问？」，助手逐字流式回答并引用事实台账、面经与面试深挖记录" width="880">
-</p>
-
-**导出选项面板**：
-
-<p align="center">
-  <img src="docs/images/crop-resume-export.png" alt="简历预览的导出选项面板：六种格式多选、自定义水印、一键隐私脱敏" width="880">
-</p>
-
-**匹配度分析动图**（从打开抽屉到逐条结论与参考分）：
-
-<p align="center">
-  <img src="docs/images/anim-match.webp" alt="打开岗位详情抽屉、滚动查看匹配度结论并打开匹配度分析弹窗" width="880">
-</p>
-
-<table>
-<tr>
-<td width="50%"><img src="docs/images/resume-preview.png" alt="简历预览与导出"><br><sub><b>简历预览</b>：A4 版式可缩放拖动，版面诊断给单页占用率与建议顺序</sub></td>
-<td width="50%"><img src="docs/images/materials.png" alt="资料箱"><br><sub><b>资料箱</b>：证书、作品、链接与笔记，可带附件，点卡片看详情</sub></td>
-</tr>
-<tr>
-<td width="50%"><img src="docs/images/knowledge.png" alt="知识库"><br><sub><b>知识库</b>：面经总结、简历技巧与求职策略，正文支持 Markdown 预览</sub></td>
-<td width="50%"><img src="docs/images/skills.png" alt="工作台"><br><sub><b>工作台</b>：技能与版式，版式只填参数就能压进一页（截图为旧版界面，当前工作台只剩「版式」页签）</sub></td>
-</tr>
-<tr>
-<td width="50%"><img src="docs/images/trash.png" alt="回收站"><br><sub><b>回收站</b>：十六类内容删除后先进回收站，可多选批量恢复或彻底删除</sub></td>
-<td width="50%"><img src="docs/images/guide.png" alt="内置使用指南"><br><sub><b>使用指南</b>：首次启动自动弹出，之后随时可查</sub></td>
-</tr>
-</table>
-
-**细节裁切**：
-
-<table>
-<tr>
-<td width="50%"><img src="docs/images/crop-jobs-row.png" alt="岗位表格一行"><br><sub>行内操作收进「更多操作」，一屏能多看几行</sub></td>
-<td width="50%"><img src="docs/images/crop-home-search.png" alt="全局搜索结果"><br><sub>搜索一次命中八个模块</sub></td>
-</tr>
-<tr>
-<td width="50%"><img src="docs/images/crop-claims-row.png" alt="事实台账一条"><br><sub>台账一条：原始事实、简历表述、承担程度与个人边界</sub></td>
-<td width="50%"><img src="docs/images/crop-tracker-parse.png" alt="从通知导入进展"><br><sub>粘邮件 / 截图识别进展，先预览「会发生什么」再确认写入</sub></td>
-</tr>
-</table>
-
-</details>
-
-## ✨ 功能特性
-
-<details>
-<summary><b>全部功能一览（77 项，点击展开）</b></summary>
-
-<br>
-
-| 模块 | 说明 |
+| Area | Description |
 | --- | --- |
-| 📋 岗位管理 | 粘贴招聘信息自动解析成草稿；**一次粘贴多份会拆分并逐条确认**；技能标签与来源自动标注 |
-| 🗂 备选岗位 | 还没核对的招聘信息先存这里，之后一键导入正式岗位（助手也能代导） |
-| 📥 拖拽导入 | 岗位识别、附件、照片、模板 HTML、数据集备份等都能从资源管理器直接拖进来 |
-| 🎤 模拟面试 | 设定岗位、难度与面试官风格后逐轮作答，会点评追问；结束给维度评分与改进建议；**报告下方可继续追问或停止追问**（追问不占正式轮次）；材料可从记录选或导入文件（岗位侧吃 PDF / TXT，简历侧吃截图，解析失败给明确原因） |
-| 🎯 个性化题库 | 按岗位生成**基础 / 项目深挖 / 反问 HR** 三类题，可单题出参考答案；真实面试题可反推改简历 |
-| 🧰 工作台 | 「技能」与「版式」两页；版式只填参数（行高 / 页边距 / 强调色等）就能压进一页，也可以让助手代劳。自制模板与导入 HTML 入口已下线，旧模板仍按原样渲染 |
-| 🎨 试用与对比 | 制作台模板图库「试用与对比」：用**我的内容**并排比较两套模板并显示真实页数与溢出；排版覆盖可选「保留当前排版覆盖」或「采用模板默认」（清空字号/行距/颜色/页边距与局部排版，点它先弹二次确认，保存前可撤销一次）；退出试用不改原方案，采纳才进历史 |
-| 👤 个人资料库 | 13 个板块（基本信息 / 教育经历 / 实习工作经历 / 项目经历 / 专业技能 / 校园经历 / 荣誉奖项 / 个人总结 / 学术成果 / 科研项目 / 知识产权 / 证书资质 / 语言能力）统一成资料库：**当前方案参与的分区才出现**，没数据的分区显示空态；基本信息与个人总结只有一条，其余可增删并拖动排序；点标题可单独**收起**（收起字段有值照常进 AI 与纸面），**隐藏**才排除且值保留、可恢复。可自建板块（如开源贡献），也可在任意分区（含 13 个内置分区）新增自定义字段：添加时可选「纸面位置」（标题行 / 元信息 / 正文前灰字 / 正文 / 正文后灰字 / 不上纸面；短字段默认正文后灰字、多行默认正文）与「仅素材」（只进 AI 生成与网申、不上纸面）；自建板块上纸面时独立成栏、同样可按位置编排。**每个板块都能在资料页单独显示 / 隐藏**（隐藏 = 从当前方案移出，不参与生成、导出与网申；基本信息不可隐藏），顶部「已隐藏的板块」可逐项恢复；字段改为响应式多列、不再是每字段一行 |
-| 🗂 资料方案与当前方案 | 方案只记录「名称 + 参与哪些板块」，**不复制资料**——任何方案内编辑立刻对所有方案可见；资料页标题区「当前方案」下拉 + 「管理方案」，切换只影响此后新建 / 生成 / 网申取数，已保存的简历与正在编辑的草稿不变。页头「资料设置」是同一个弹层的总入口，顶部 **方案 / 板块与字段** 两个页签统管方案、板块与字段；单卡齿轮与「管理方案」照常保留。生成 / 新建 / 网申三条链路都按当前方案取数，方案只**减少**、不增加可发送资料；默认方案恒存在且不可删除，删当前方案会自动回落到默认方案并提示。**新建方案默认隐藏全部板块**（基本信息除外），非编辑态创建后自动切到新方案、可逐项显示；自建板块在资料页标题旁带「自建」标记 |
-| 🧭 旧资料升级说明 | 1.0 的资料库升级到 2.0 时整包归档到 `backend/data/legacy-archive/`，2.0 使用空库；1.0 系列只提示、没有搬数据 |
-| 🌐 职业场景 | 页头「职业场景」可选职业阶段、目标行业/职能、就业状态、使用目的等组合（内置转行、科研申请、职业回归等快捷场景，也可自定义）。**切换只改本窗口的引导与建议，不改资料、岗位、已有简历、投递设置或后台任务**；生成简历时需显式开启「用于本次生成」（默认关闭，就业状态默认不发送），服务端冻结本次采用的场景快照 |
-| 📝 网申资料 | 「我的资料」中与简历资料横向切换的**统一网申补充板块**：证件、家庭、学籍、健康与到岗信息等；教育、实习和工作、项目、学术成果、证书、作品和社交账号等可新增多条。**可粘贴文本识别**：把网申页面上一屏栏目整段粘进来（也可给截图或 PDF/Word），能归到已有栏目的直接填好，目录外的新栏目先列成待确认项、逐条勾选才新增，**识别结果先校对再填入、识别中可取消**。网申填表合并读取简历基础信息与网申补充信息；**生成简历不读网申资料**。附件说明只存文字，文件须手动上传 |
-| 🖼 简历照片 | 最多存 8 张，点缩略图切换用哪张；**留在本机，不发送给模型** |
-| 🧾 事实台账 | 每条说法记下事实、表述、承担程度与边界；**只有「已确认」的参与生成**，未确认的显式避开 |
-| 🔎 面试深挖 | 按台账逐条压力测试，**标准在你看到问题之前就定下**；用「已验证 / 部分验证 / 未验证 / 存在矛盾」代替分数 |
-| 📦 资料箱 | 证书、作品、链接与笔记集中管理，可带附件，点卡片看详情；助手可读取引用 |
-| 📁 文件副本库 | 资料箱「文件副本」页签集中查看所有存入文件的副本（图片 / PDF 可直接预览，其它类型可一键调用系统程序打开）；副本统一存本机应用数据目录并随数据集切换 / 迁移自动重建；助手可查询副本清单 |
-| 🖱 批量设置状态 | 岗位广场条目上右键「批量选择」进入多选后，可用批量工具栏对勾选岗位**批量设置状态**或批量删除 |
-| 🤖 AI 定制简历 | 按 JD 筛选事实流式生成；可选美化强度、篇幅（1–3 页 A4）、字号与模板（内置 5 种）；**字体可选已下载 / 已导入的字体，仅影响预览 / HTML / PDF**（Word、Markdown 不跟着变；内置思源黑体约 32MB，在设置里按需下载）；**板块顺序可调**（预览里调，PDF / Word / Markdown 导出同步生效）；**联系方式可指定字段前强制换行**（每个字段整体不拆行，长网址不会被截断） |
-| ✍️ 自行编写简历 | 从个人资料预填后自由修改，编辑时旁边保留岗位职责与要求供对照；**页签与可见字段跟随「我的资料」当前方案**（创建时冻结），自建板块与系统板块同一套三区卡编辑（标题与元信息 / 正文前后灰字 / 正文）；每个字段都是一个可拖动的独立内容，位置可选标题行 / 元信息 / 正文前灰字 / 正文 / 正文后灰字 / 隐藏；自定义字段与默认字段一样按纸面位置落位，不再以「标签：值」写进承载区；**「新建简历」弹窗已与制作台共用新编辑器**（三区卡 + 字段位置，初始内容整份来自当前方案投影）；语言能力是独立页签；**中栏顶部「从资料填入」菜单按来源去重、只补空字段**，不覆盖手写内容；字段点开后再点收起，字段 / 条目的隐藏与删除在右键菜单，字段显示后回到隐藏前的位置；「本份简历结构」只有一个折叠开关（全展开时是「收起全部」，收起后变「展开全部」），并用「顺序」面板逐项上移 / 下移板块；新建简历与 AI 生成默认按「我的资料」顺序，可手动调或一键同步，通用新建支持清空所有内容；页签末尾「+」可新建**仅本份简历**的板块（资料库里不会多出来），自建板块可在页签右键删除、Ctrl+Z 撤销 |
-| ✍️ 简历写作增强 | **STAR 量化改写**、**话术生成器**、**多风格润色**、**中英互译**、**版本差异对比**（本地计算）；在「手动调整」里选中一段文字右键「AI 润色」即可**只改那一段**（结果先给你看，确认才写入） |
-| 🎓 科研简历 | 制作台中栏「学术成果 / 科研项目 / 知识产权 / 证书资质」四栏：题目、作者顺序与本人标记、发表状态（**在投 ≠ 已发表**，含在投 / 预印本等六值）、DOI / 链接、证照颁发机构/日期/状态；空栏位不写入内容。「版面」组的「文档模式」可切**普通简历 / 长 CV**（普通 1–3 页、长 CV 上限 10 页，切回普通时超页自动夹紧并提示）；生成弹窗里也能显式选（不自动切换）；分页可按分区或条目设置（见「分页控制」行） |
-| 🔗 来源核对与事实锁 | 制作台左栏「来源核对」：选中一条内容，看它来自哪条资料、关联时是哪一版、来源是否已更新；**未关联就明说未关联（不按文字相似度猜）**。可按选中内容建立 / 解除来源关联、新建手工来源、查看影响面与修订，并在来源更新后**采纳最新来源写回正文**（带 revision 条件写与冲突提示）；事实锁锁定姓名 / 机构 / 时间 / 数字 / 职责边界，AI 改写想动它们会被拒并**逐条列出会改哪个值**——锁只约束 AI，你手动编辑不受限 |
-| 📤 外发预览与用量 | 设置页：把资料发给模型或其它服务前，先看「这次要发什么」（目标服务、资料类别、附件、已排除字段、是否抓取正文以及正文本身）；「模型用量」按任务 / 模型列调用数与 token——**未知 token 不显示成 0**、未配置单价不估算费用。预览正文只存在内存、不落盘；用量可按任务 / 模型 / 数据集看**结束原因与重试**，费用只在配置单价时估算 |
-| 🎛 版面优化 | 预览「版面诊断」卡下方「按条件优化版面」：先设约束（不动字号 / 最小页边距 / 目标 1–2 页），再给最多 3 个**有差异**候选（改了哪些参数 / 减少多少溢出 / 可读性影响），应用后数值写回滑杆；无可行方案时明确说原因，**不偷偷缩字号**；另有**内容精简差异候选**（合并重复条目 / 去重要点 / 精简低相关），逐项确认后应用 |
-| ⚡ AI 修改简历 | 简历预览底部「AI 修改 / 重新生成」：填修改要求则**只改提出的部分**（其余逐字保留），留空则整体重新生成（事实不变、表达重写）；岗位优化建议可**逐条采纳**并直接更新当前简历 |
-| 🏷 保存冲突三选一 | 在「简历制作台」保存时，如果同一份简历已在别的窗口改过，会先让你选「用最新的」「比较差异」「另存副本」；**不会默默覆盖**别人的改动 |
-| 🧭 文档大纲 | 制作台左栏「本份简历结构」（原「文档大纲」）按 页 / 栏 → 板块 → 条目 → 位置分组（标题行 / 元信息 / 正文前灰字 / 正文 / 正文后灰字 / 隐藏）列内容：可拖动排序、把字段拖到别的位置分组即改变纸面去向，可复制、**隐藏**（正式导出不含）、锁内容或锁排版；支持**结构搜索**（过滤高亮、键盘定位），点「在纸面定位」可直接滚到那一处，字段与要点可单独隐藏或复制。拖动时结构树与右侧预览**实时跟随**（窄屏把编辑内容收进抽屉时同样生效，并计入保存修改），松手才记一步历史 |
-| ✅ 制作台检查 | 制作台动作条「检查简历」：内容 / 排版 / 导出产物三层一起查，问题分「必须解决 / 需核对 / 排版建议」，给位置与修复入口，修完可复检 |
-| 🖥 专业视图 | 预览工具条：整页 / 适宽 / 100% 缩放、页导航、辅助线、灰度校样；动作条「命令」或 Cmd/Ctrl+Shift+P 打开命令面板，工作区预设只切面板可见性；「照片裁剪」只改取景（**原图不动**，可恢复原图），三种导出按同一份派生裁剪；**没裁剪时按原图比例展示**，不会被强制裁成方框或拉伸变形 |
-| 🔠 局部排版 | 制作台左栏「样式」组调**全局字体字号、字距行距、页边距与外观颜色**；没单独设过的属性跟随模板并标出来源，可逐项恢复继承（数值可直接输入或步进，Shift 单击五倍）；按字段 / 角色的局部排版在中栏字段上**右键 →「调整排版」**：作用范围按所选字段自动推断，可就地改颜色、行距、缩进、项目符号、对齐、字距，日期与元信息字段另有「日期位置」（日期靠右 / 日期紧随标题，草稿与精确 PDF 同口径）；正文输入框的文本工具区提供**加粗**与**链接**（HTML 可点击，PDF / Word 以「文字 (URL)」可见文本呈现），斜体入口已移除；项目符号三出口统一为「· / – / 不显示」；「条目字段排版」面板按板块或单条条目调整正文前后灰字段的 1–3 列、对齐方式、列间距、顺序与独占整行，多列默认等宽对齐，两列以上还可以**逐列设宽度**（百分比，合计 100 才能应用）与**逐间隔**，HTML / PDF / Word / Markdown 共用同一份装箱结果 |
-| 📄 分页控制 | 制作台左栏「排版参数 → 分页」：**分区**可设「从新页开始 / 整块不跨页」，**条目**也能在「本份简历结构」选中后单独设「从新页开始 / 整块不跨页」，随简历保存，HTML / PDF / Word 同口径。**页面概览与「获取分页报告」**：按真实 PDF 同一条管线测量页数/末页占用/溢出与手动分页标记，两页格子等宽排布、页数用满时显示「已达页数上限」；草稿预览不显示真实分页、不画假分页线 |
-| 🗂 表达资产库 | 收藏好用的表达（成果 / 方法 / 结果 / 总结），按关键词、类型、语言与岗位标签检索；换简历时一键插入（生成新对象身份），插入后仍可继续改 |
-| ↪ 撤销与恢复 | 制作台左栏「历史」：内容、排版、结构操作每一步都能撤销或恢复（连续输入合并成一步）；**每一步直接写清「改了什么」**（板块增删排序 / 条目增删隐藏 / 字段增删移动 / 段落文字改了几处 / 版式参数），姓名·条目数·页数挂在悬停提示上，点一步可回到那一步；改坏一处能直接退回去，**⌘/Ctrl+Z 与 ⇧⌘/Ctrl+Z 同样可用** |
-| 🗃 命名版本与岗位变体 | 制作台顶部「版本」：把当前内容与排版存成**不可变快照**（创建（名称可留空自动命名）/ 冻结标记 / 默认与上一版逐字段比较「旧值 → 新值」/ 恢复）；恢复会生成**新的当前版本**，历史版本与已投递记录不变。岗位变体独立编辑（创建入口二选一：从当前简历派生 / 从职业场景派生，点「创建变体」），可按勾选的内容路径**选择性同步**，不覆盖其它岗位定制；变体可保存**独立排版**并按变体直接导出 |
-| 🌐 双语版本与术语表 | 制作台「双语版本」：中英字段对照、逐字段生成翻译候选并**逐项采纳**（只写入选中的语言变体，不覆盖当前简历）；数据集级术语表可锁定固定译法（人名、公司名、技能等），删除进回收站可恢复。翻译候选按批生成，**不会在大简历上 15 秒误报超时**；「在工作台查看这份译文」打开只读预览（不改主稿、不产生脏值） |
-| 📦 导出形式 | 制作台导出弹窗顶部先选**交付包**或**单独文件**：交付包把所选格式打成一个 zip（可另存归档原件与哈希清单）；单独文件可多选格式**逐个导出**，进度显示「正在导出 2/3」，某一项失败会说明已完成几个。两者共用同一份排版结果与导出配置 |
-| 🧭 生成说明 | 预览里折叠展示「为什么是这样一份简历」：岗位信号、候选组成与省略原因；「没写进这份简历」的资料内容以**中性清单**分组列出（与"疑似虚构"警告分开），每组可一键 **AI 补上这段**；生成会读取资料里的 GitHub 主页与个人主页写入简历 |
-| 🛡 质量与合规检查 | 查重 / 敏感词 / 夸大风险 / 深挖风险 / 合规 / ATS 本地检测，与事实台账联动 |
-| 📚 简历历史 | 生成与手写的简历都自动留存，可收藏、按来源筛选、加备注、重新导出 |
-| 🔗 岗位关联 | 一个岗位可关联多份简历，岗位与简历之间双向可跳转 |
-| ⭐ 收藏夹 | 分页集中查看收藏的岗位与简历，可跳详情或取消收藏 |
-| 💡 岗位需求解读 | 依据招聘原文生成结构化需求总结、原文证据与通用准备建议 |
-| 🎯 岗位匹配度分析 | 逐条对照 JD 给五类结论与投递建议，附原文与证据；五类结论**不带百分比**，投递准入只看结论 |
-| 📈 批量岗位适配度分析 | 岗位广场进入「选择」模式勾选多个岗位后「AI 分析适配度」：结合个人资料**逐一分析**，按匹配度参考分从高到低展示；可选立即运行或后台运行，结果保存到「分析记录」供回看 |
-| 🤖 AI 对比选岗 | 在岗位广场勾选 2–12 个岗位，AI 先逐个核对匹配情况，再横向排出适合程度并解释原因；后台运行，结果保存到「分析记录」 |
-| 📊 匹配度参考分 | 0–100 参考分与 5 个分项，**仅作展示辅助、不参与投递准入**，带免责说明 |
-| 🎯 求职进度 | 一家公司一条记录走完「已投递 → 筛选中 → 测评 → 面试 → Offer」；粘邮件 / 截图识别进展，先预览再写入 |
-| 🗓 日历提醒 | 投递、面试、内推等日程可设提醒，按**紧急度分色**（逾期 / 24 小时 / 3 天），支持列表与月历 |
-| 🤝 内推管理 | 记录内推人、内推码与备注图片，按状态跟进并统计**内推转化率** |
-| 📈 求职数据看板 | 四个主题：转化与卡点、时间与节奏、渠道与去向、简历与健康度；**每张图各自成块、各有标题与口径**；趋势可选近 1 / 3 / 6 月 |
-| 🧠 面经知识库 | 沉淀真实面试经验（公司 / 岗位 / 题目 / 复盘），可检索、点卡片看全文 |
-| 📖 知识库 | 面经总结、简历技巧、求职策略等成文内容，带分类标签与 Markdown 预览；助手可检索增改 |
-| 🚀 自动投递台 | 按关键词 / 城市自动采集（站点筛选条件整条搬进来，后台跑）；确认过的岗位排队后驱动本机浏览器投递，**只接纳来源在招聘网站内的岗位** |
-| 🧠 填表时学到的 | 填表时碰到**简历通里没有**的字段，**两个入口**都能记：批量模式填完弹一条汇总提示（**默认全勾、默认「通用」**，可取消其中几条）；「点哪个填哪个」模式里**每个框旁边**都有「记住这条」，**当场就能记**——**认得出但资料里没值的框也能记**（就地补上，不用跳去别的页面）。记住后下次遇到同一字段**自动预填**。每条可选档位：**通用**（换哪家公司都成立）/ **场景**（与投递渠道有关）/ **本次**（只记下来、下次不自动填，内推码这类一次性的值用它）。来源和档位在「网申资料」里随时可改可删——**AI 认出来的值单独标「AI 认的」**，因为它比规则更可能认错字段。**清单外的自定义字段**（如「导师姓名」「实验室」）也可参与网申填表：普通模式只接受唯一精确对应，开启放宽模式后可按标签/上下文匹配并标记低置信度；有歧义或安全否决时不猜，填后请核对。**落点只有「网申资料」**：简历资料字段永不会被学走（程序里没有能改简历资料的那段代码）；密码、验证码、他人信息走拦截，学不到。只存本机，**生成简历时不读** |
-| 📝 网申填表 | 用**独立专用浏览器**填写官网网申表单，输入网址可直接打开新标签页并管理网址记录，不覆盖已有网页；各页面可单独开关「点哪个填哪个」。整页读取后逐条核对再填充，或点输入框时在框旁确认建议；规则认不出的框可交给 AI 识别，**只发页面文字与字段名，不发资料值**。浏览器型号与投递台共用配置，但使用独立窗口；填充记录含真实值、只存本机。**只填不交**，密码与验证码永不自动填；**只往文本类控件里写值**——下拉、单选、复选、日期控件不代选，如实列成「需要你自己点选」；可另开**放宽模式**尝试文本标签/上下文匹配并代点下拉与弹层选项（见下一行）。填充完成展示**成功率**（成功填写数 / 页面可读框总数），可导出**不含简历值的脱敏诊断信息**，方便反馈认不出的字段 |
-| 🟢 放宽模式 | 「网申填表」的**可选例外，默认关闭**：显式开启后，会尝试用字段标签/上下文匹配未识别的文本框（含自定义字段），并代点下拉与弹层选项（**严格选项匹配 + 回读验证**）；放宽文本匹配中只靠弱上下文的低置信度候选默认不勾、需要你确认，重复经历仅在记录数与页面顺序可配对时补齐。同意 / 声明类勾选仍需逐条确认；日期选择器与文件上传不代做。求职助手没有开关它的工具，要开请到页面或设置里开。放宽匹配可能选错，填完请核对；弹层多值须全部命中才动手 |
-| 🪪 网申专用资料 | 原「网申专用资料」中的国家和地区、证件、出生日期、政治面貌、籍贯、家庭信息等已并入统一「网申资料」；旧值仍可读取，**只用于填表，不进简历导出** |
-| 💬 AI 求职助手 | 流式问答，可关联岗位 / 简历 / 资料与联网搜索；能查提醒、内推、面经、统计等，**只在明确要求时写数据**；回答前会拿到本地时间与星期（深夜提醒早点休息）；工具集覆盖投递失败诊断、查询版式、面经与内推录入；任意页面都可从「投投」悬浮球打开；侧栏与浮窗聊天记录分开保存，浮窗只展示联网和思考强度控制 |
-| 🧩 技能 | 新建、导入、编辑技能（提示词 + 知识文件），启用后约束助手作答风格 |
-| 🗒 会话管理 | 会话可重命名 / 置顶 / 收藏 / 分组 / 归档，可导出 Markdown 或存进资料箱 |
-| 📌 投投剪贴板 | **双击投投悬浮球**打开：把要反复粘贴的资料存成片段，一键复制；只存本机浏览器，不上传（单击悬浮球仍是打开助手） |
-| ✅ 批量选择与批量删除 | 简历中心、助手历史对话、历史面试、深挖历史、日历提醒、历史题库、网申填充记录等列表支持**批量选择**：「批量选择」→ 勾选 → 「删除所选」统一确认后删除（均进回收站可恢复） |
-| 🌐 通用简历 | 简历中心页头「AI 生成」生成或「新建简历」手写**不针对任何岗位**的跨行业简历：完整使用资料、不按方向筛选，各方向经历都保留，可多份；生成时可选普通简历或长 CV。新建简历的页签、页签名与每个板块的**可见字段**跟随**当前方案**（自建板块显示你起的名字，资料里隐藏的字段不出现；当前方案没有的分区不显示输入框，已有正文分区始终保留），并在创建时冻结进这份简历——之后改方案只影响新建的简历；资料改动 / 切换方案后自动刷新 |
-| 🖼 截图与文档识别 | 岗位与资料识别支持截图与 pdf / docx（Ctrl+V 贴图，最多 4 个、合计 ≤ 5 MB），文字在本机提取；**识别结果先列成清单供校对，确认后才填入，识别中可随时取消** |
-| 📄 多格式导出 | PDF **可直接下载**（服务端渲染）；Word / HTML / Markdown / txt / JSON 均可导出；带版面的 HTML / PDF / Word / Markdown **由服务端同一份排版结果渲染**——同字段、同顺序，JSON 输出新版文档结构（含每条内容的纸面位置与版式）；支持水印与**一键脱敏**。预览工具栏可切**「精确」**——那显示的就是导出引擎排出的同一份 PDF，与下载到的文件逐点相同；配置水印 / 脱敏后可先**预览真实产物**再导出。超出页数上限时**不自动缩字号**，按上限截断并如实提示 |
-| 📦 导出交付包 | 简历详情「导出交付包」：格式与命名规则、水印 / 脱敏、**真实产物配置预览**，可保存为导出配置；成套导出 zip + manifest（逐项哈希），可选归档**交付原件**（哈希与字体 / 渲染版本清单，可查看与删除） |
-| 💾 保存位置 | 设置 → 「数据」页签「保存位置」卡片：默认只存到浏览器默认下载目录，通过本机原生选择器选定文件夹后，本机前端导出简历会**同时落盘一份**到那里；远程/跨站导出会被拒绝 |
-| 🔓 助手放宽模式 | 设置 → 「AI 模型」页签「助手放宽模式」卡片：默认关；开启并**提前告知**后求职助手可读取完整资料（含姓名电话等敏感字段、网申填写值、历史对话），API 密钥等凭据任何模式下都不发送 |
-| 📦 离线分享包 | 打包成脱敏 HTML / PDF + 只读快照 + 评论回传文件，可选「只读 / 可评论」；可评论的包支持**对象批注**：导入回传的 `annotations.json` 后逐条标记已解决 / 忽略，对象变了的批注需重新关联（批注不进任何投递产物） |
-| 🏠 首页 | 快捷入口按使用顺序组织成 7 个去处；近期提醒卡片内嵌紧凑月历 |
-| 🖱 界面细节 | 行操作收进「更多操作」；列表与卡片**点一下就看详情**（Enter 同样可开）；日期改为日历点选；**侧栏里用不到的模块可在 设置 → 应用 → 「界面与导航」里关掉**（只收入口，不删数据；首页、设置等始终保留） |
-| 🔍 全局搜索 | 一个框同时搜岗位、简历、内推、提醒、面经、台账、资料箱与技能 |
-| 🛡 防虚构校验 | 生成结果里的学校 / 公司 / 项目名自动与资料库比对，不一致时给出警告 |
-| 🔄 检查与更新 | 设置页可检查新版本、新建 / 导出 / 导入数据集；数据集备份**默认包含大模型 API Key**（可取消勾选；Windows 上以 DPAPI 加密形态随包）；**Windows 双击 `start.cmd` / `stop.cmd` / `update.cmd`，macOS 双击 `start.command` / `stop.command` / `update.command`**，都是零依赖一键启动，`uninstall.cmd` 可清理本机环境 |
-| ♻️ 回收站 | 23 类内容删除后先进回收站，可批量恢复或彻底删除；只有二次确认才真正销毁。2026-10 起新增「方案 / 自建板块 / 自建字段 / 资料条目」四类；历史遗留的补充事实仍可在这里看到与恢复 |
-| 🔑 你的 Key 你做主 | 内置 16 个服务预设（DeepSeek / Claude / 豆包 / OpenAI / Ollama …），可取可用模型、调高级参数，并可切换接口协议 |
+| [📋 Job management](https://magicapple123.github.io/ResumeForge-official/en/docs.html#jobs-manual) | Paste a posting and it is parsed into a draft; **paste several at once and each is split out and confirmed one by one**; skill tags and their sources are labeled automatically |
+| [🗂 Candidate jobs](https://magicapple123.github.io/ResumeForge-official/en/docs.html#jobs-pool) | Park postings you have not vetted yet, then import them into Jobs in one click (the assistant can import them for you too) |
+| [📥 Drag and drop](https://magicapple123.github.io/ResumeForge-official/en/docs.html#jobs-drag) | Job parsing, attachments, photos and dataset backups can all be dragged in from your file manager; drop anywhere in the window and the extension routes it: `.zip` imports a dataset, `.csv` imports a job sheet, `.json` starts a hand-written Resume |
+| [🖱 Batch status changes](https://magicapple123.github.io/ResumeForge-official/en/docs.html#jobs-batch) | Right-click a row in Job Square and choose “Batch select” to enter multi-select, then use the batch toolbar to **set the status** of the ticked Jobs in one go, or delete them |
+| [💡 JD breakdown](https://magicapple123.github.io/ResumeForge-official/en/docs.html#match-reading) | Generates a structured summary of the requirements, the supporting quotes from the original posting, and general preparation advice |
+| [🎯 Match analysis](https://magicapple123.github.io/ResumeForge-official/en/docs.html#match-five) | Compares your Profile against the JD line by line and returns five verdict types plus an applying recommendation, with quotes and evidence; the verdicts **carry no percentage**, and admission looks only at the verdict |
+| [📊 Reference score](https://magicapple123.github.io/ResumeForge-official/en/docs.html#match-score) | A 0–100 score with 5 sub-scores, **display-only and never part of admission**, always shown with a disclaimer |
+| [📈 Batch match analysis](https://magicapple123.github.io/ResumeForge-official/en/docs.html#match-batch) | In Job Square, switch to selection mode, tick several Jobs and choose “AI analyse fit”: each Job is analysed **one by one** against your Profile and listed from the highest reference score down; run it now or in the background, and results are saved to Analysis history for later |
+| [🤖 AI Job comparison](https://magicapple123.github.io/ResumeForge-official/en/docs.html#match-compare) | Tick 2–12 Jobs in Job Square and the AI first checks each match, then ranks them side by side and explains why; it runs in the background and saves the result to Analysis history |
+| [👤 Profile library](https://magicapple123.github.io/ResumeForge-official/en/docs.html#profile-sections) | Thirteen Sections (Basic information / Education / Experience / Projects / Skills / Campus activities / Honors & awards / Summary / Academic achievements / Research Projects / Intellectual Property / Certifications & Qualifications / Language proficiency) unified into one Profile library: **only the Sections in the Current Plan appear**, empty Sections show an empty state; Basic information and Summary are single entries, everything else can be added, removed and drag-reordered; click a heading to **collapse** it (collapsed Fields with values still reach the AI and the paper), and only **Hidden** excludes it, keeps the value and can be restored. You can add Custom Sections (open-source contributions, say) and add Custom Fields to any Section, including the 13 built-in ones: when adding, choose a **Paper placement** (Title line / Metadata / Gray fields before body / Body / Gray fields after body / not on paper; short fields default to gray-after-body, multi-line fields to body) and **Material only** (feeds AI generation and Web form, never printed); a Custom Section prints as its own block and can be laid out the same way. **Every Section can be shown or hidden on the Profile page individually** (hidden = removed from the Current Plan, excluded from generation, export and Web form; Basic information cannot be hidden), and “Hidden Sections” at the top restores them one at a time; Fields are now a responsive multi-column grid rather than one field per row |
+| [🗂 Plans and the Current Plan](https://magicapple123.github.io/ResumeForge-official/en/docs.html#profile-plans) | A Plan records only “a name plus which Sections take part” and **copies no Profile data** — any edit inside a Plan is immediately visible in every Plan; the “Current Plan” dropdown and “Manage Plans” sit in the Profile page header, and switching only affects what later creations, generations and Web form runs read: saved Resumes and drafts in progress are untouched. “Profile settings” in the page header opens the same panel, whose **Plan / Sections and fields** tabs manage Plans, Sections and Fields; the per-card gear and “Manage Plans” remain. Generation, creation and Web form all read through the Current Plan, and a Plan can only **remove** material, never add to what may be sent; the default Plan always exists and cannot be deleted, so deleting the current one falls back to it with a notice. **A new Plan starts with every Section hidden** except Basic information; when created outside the editor you are switched to it and can reveal Sections one by one; Custom Sections carry a “Custom” badge next to their heading on the Profile page |
+| [🧭 Legacy Profile upgrade notes](https://magicapple123.github.io/ResumeForge-official/en/docs.html#upgrade-legacy) | Upgrading a 1.0 Profile library to 2.0 archives the whole package under `backend/data/legacy-archive/` and starts 2.0 on an empty database; 1.0 releases only warned and never moved data |
+| [🌐 Career scenarios](https://magicapple123.github.io/ResumeForge-official/en/docs.html#profile-scenario) | The “Career scenario” menu in the app header combines career stage, target industry and function, employment status and purpose (with built-in shortcuts such as career change, research applications and returning to work, plus your own). **Switching only changes the guidance and suggestions in this window — never your Profile, Jobs, existing Resumes, applying settings or background tasks**; when generating you must explicitly turn on “Use for this generation” (off by default, and employment status is not sent by default), and the server freezes a snapshot of the scenario used for that run |
+| [📝 Web form profile](https://magicapple123.github.io/ResumeForge-official/en/docs.html#webform-data) | The **unified Web form supplement** inside My Profile, sitting next to the Resume material: ID and certificates, family, student status, health and availability; Education, Experience, Projects, Academic achievements, Certifications & Qualifications, portfolio and social accounts can all hold several entries. **Text recognition**: paste a whole screen of fields from a Web form (or hand over a screenshot or a PDF/Word file) and anything that maps to an existing field is filled in; fields outside the catalogue are listed as pending items and only added once you tick them, and **recognition results are proofread before they are written, and can be cancelled while running**. Web form filling reads Resume basics and the Web form supplement together; **Resume generation does not read the Web form profile**. Attachment notes are text only — files must be uploaded by hand |
+| [🪪 Web form-only material](https://magicapple123.github.io/ResumeForge-official/en/docs.html#webform-data) | The old “Web form-only material” — country and region, ID, date of birth, political affiliation, native place, family details — is folded into the unified Web form profile; old values are still readable and are **used for filling only, never printed in an export** |
+| [🖼 Resume photos](https://magicapple123.github.io/ResumeForge-official/en/docs.html#profile-photo) | Up to 8 photos; click a thumbnail to pick which one is used; **they stay on your machine and are never sent to a model** |
+| [🧾 Fact ledger](https://magicapple123.github.io/ResumeForge-official/en/docs.html#claims-status) | Every claim records the fact, the wording, how strongly you own it and its boundary; **only “confirmed” entries take part in generation**, and unconfirmed ones are explicitly avoided |
+| [📦 Material library](https://magicapple123.github.io/ResumeForge-official/en/docs.html#materials) | Certificates, portfolio items, links and notes in one place, with attachments, and a card view for details; the assistant can read and cite them |
+| [📁 File copy store](https://magicapple123.github.io/ResumeForge-official/en/docs.html#materials-copies) | The “File copies” tab in the Material library shows a copy of every file you stored (images and PDFs preview inline, anything else opens in its system app in one click); copies live in the application data directory and are rebuilt automatically when you switch datasets or migrate; the assistant can list them |
+| [🖼 Screenshot and document recognition](https://magicapple123.github.io/ResumeForge-official/en/docs.html#recognition-input) | Job and Profile recognition accept screenshots and pdf / docx (paste an image with Ctrl+V, up to 4 files, ≤2 MB each and ≤5 MB in total) and extract the text locally; **results are listed as a checklist for proofreading and only written after you confirm, and recognition can be cancelled at any point** |
+| [🤖 AI-tailored Resume](https://magicapple123.github.io/ResumeForge-official/en/docs.html#generate) | Streams a Resume generated from facts filtered by the JD; you choose the enhancement strength, length (1–3 A4 pages), font size and Template (6 built in); **the font can be the bundled Source Han Sans (about 32 MB, downloaded on demand in Settings) or any font you uploaded before, and only affects preview / HTML / PDF** (Word and Markdown do not follow it); **Section order is adjustable** (in the preview, and PDF / Word / Markdown exports follow); **the contact block can force a line break before any field** (each field stays whole, so long URLs are never truncated) |
+| [✍️ Write the Resume yourself](https://magicapple123.github.io/ResumeForge-official/en/docs.html#write-editor) | Pre-fill from your Profile and then edit freely, with the JD's responsibilities and requirements kept alongside for reference; **the tabs and visible Fields follow the Current Plan of My Profile** (frozen at creation), and Custom Sections use the same three-zone card editor as system Sections (title and metadata / gray text before and after the body / body); every Field is an independent draggable block that can sit on the Title line / Metadata / Gray fields before body / Body / Gray fields after body / Hidden; Custom Fields land by Paper placement just like default Fields instead of being written into a carrier as “label: value”; **the “New Resume” dialog now shares the workbench editor** (three-zone cards plus Field placement, with the initial content projected from the Current Plan); Language proficiency is a separate tab; **the “Fill from My Profile” menu at the top of the middle column groups sources and only fills empty Fields**, never overwriting what you typed; open a Field and click again to collapse it, hide or delete Fields and Entries from the context menu, and a Field you reveal returns to where it was; “Resume structure” has a single collapse toggle (it reads “Collapse all” when expanded and “Expand all” when collapsed) and a “Order” panel for moving Sections up and down; new Resumes and AI generation follow the My Profile order by default, which you can adjust by hand or sync in one click, and a general creation can clear everything; the “+” at the end of the tab strip creates a Section **for this Resume only** (it does not appear in the Profile library), and a Custom Section can be deleted from its tab with Ctrl+Z to undo |
+| [✍️ Resume writing aids](https://magicapple123.github.io/ResumeForge-official/en/docs.html#write-transforms) | **STAR quantification**, a **phrasing generator**, **multi-style polishing**, **translation between Chinese and English** and **version diffing** (computed locally); in “Adjust resume content” select a passage, right-click “AI polish”, and **only that passage changes** (you see the result before it is written) |
+| [⚡ Revise with AI](https://magicapple123.github.io/ResumeForge-official/en/docs.html#generate-revise) | “Revise / regenerate with AI” at the bottom of the preview: give instructions and **only what you asked about changes** (the rest is preserved word for word); leave it empty and the whole Resume is regenerated (same facts, new wording); Job suggestions can be **accepted one by one** and update the current Resume directly |
+| [🎓 Research Resume](https://magicapple123.github.io/ResumeForge-official/en/docs.html#write-academic) | Four columns in the middle of the workbench — Academic achievements / Research Projects / Intellectual Property / Certifications & Qualifications — with title, author order and your own position, publication status (**under review is not the same as published**; six values including under review and preprint), DOI or link, and issuer / date / status for credentials; empty rows write nothing. “Document mode” under “Layout” switches between **Standard Resume and Long CV** (standard is 1–3 pages, Long CV allows up to 10, and switching back clamps and warns); the generation dialog can set it explicitly too (it never switches on its own); page breaks can be set per Section or per Entry (see the pagination row) |
+| [🌐 General Resume](https://magicapple123.github.io/ResumeForge-official/en/docs.html#generate-general) | “Generate with AI” in the Resume Center header, or a hand-written “New resume”, produces a cross-industry Resume **aimed at no particular Job**: the whole Profile is used, nothing is filtered by direction, experience in every direction is kept, and you can have as many as you like; generation can pick Standard Resume or Long CV. A new Resume's tabs, tab names and each Section's **visible Fields** follow the **Current Plan** (Custom Sections show the name you gave them, Fields hidden in the Profile do not appear, Sections missing from the Current Plan have no inputs, and Sections that already hold body text always stay), and are frozen into that Resume at creation — later Plan changes only affect Resumes created afterwards; changes to the Profile or a Plan switch refresh it automatically |
+| [🗂 Expression library](https://magicapple123.github.io/ResumeForge-official/en/docs.html#write-assets) | Save wording you like (results / methods / outcomes / summaries) and search it by keyword, type, language and Job tag; insert one into another Resume in one click (it becomes a new object) and keep editing afterwards |
+| [🔗 Source verification and fact locks](https://magicapple123.github.io/ResumeForge-official/en/docs.html#claims-source) | “Source verification” in the left column: select a piece of content and see which Profile entry it came from, which revision it was linked at, and whether the source has since changed; **if it is not linked, it says so — it never guesses from textual similarity**. You can create or break a source link for the selected content, add a manual source, inspect the impact surface and revisions, and after a source changes **adopt the latest source back into the body** (conditional write on revision, with conflict prompts); fact locks pin name / organisation / dates / numbers / responsibility boundaries, and an AI rewrite that tries to move them is rejected with **a value-by-value list of what would change** — the locks constrain the AI only, never your own edits |
+| [🛡 Anti-fabrication check](https://magicapple123.github.io/ResumeForge-official/en/docs.html#generate-fabrication) | The school, company and project names in generated output are compared against your Profile library and any mismatch raises a warning |
+| [🛡 Quality and compliance checks](https://magicapple123.github.io/ResumeForge-official/en/docs.html#quality) | Duplicate detection, sensitive words, exaggeration risk, deep-dive risk, compliance and ATS checks, all local and all wired to the Fact ledger |
+| [🧭 Generation notes](https://magicapple123.github.io/ResumeForge-official/en/docs.html#generate-notes) | A collapsible “why this Resume looks like this” in the preview: Job signals, what the generation was composed of and why things were left out; material that did **not** make it in is listed as a **neutral checklist** grouped by Section (kept apart from “possible fabrication” warnings), and each group offers **“Let AI write this part”**; generation reads the GitHub profile and personal site from your Profile and prints them on the Resume |
+| [📚 Resume history](https://magicapple123.github.io/ResumeForge-official/en/docs.html#generate-center) | Every generated and hand-written Resume is kept; favorite it, filter by source, add a Note and export it again |
+| [🔗 Job links](https://magicapple123.github.io/ResumeForge-official/en/docs.html#jobs-related) | One Job can link several Resumes, and you can jump between the Job and the Resume in both directions |
+| [🧰 Workbench](https://magicapple123.github.io/ResumeForge-official/en/docs.html#skills) | Two pages, “Skills” and “Layout”: fill in the parameters (line height / page margins / accent color and so on) and the Resume is compressed onto one page, or let the assistant do it. Custom-template authoring and HTML import are retired; old templates still render as they are |
+| [🎨 Try and compare](https://magicapple123.github.io/ResumeForge-official/en/docs.html#templates-trial) | “Try and compare” in the workbench template gallery: compare two Templates side by side **using my content**, with real page counts and overflow; the layout override can “keep the current layout override” or “adopt the Template default” (which clears font size, line spacing, colors, page margins and local typography and asks for confirmation first, with one undo before saving); leaving the trial does not touch the Plan, and only adopting writes to history |
+| [🧭 Resume structure](https://magicapple123.github.io/ResumeForge-official/en/docs.html#write-outline) | “Resume structure” in the left column (formerly “Document outline”) groups content by page / column → Section → Entry → placement (Title line / Metadata / Gray fields before body / Body / Gray fields after body / Hidden): drag to reorder, drag a Field into another placement group to change where it prints, copy it, **hide** it (excluded from the real export), or lock its content or its typography; it supports **structure search** (filter and highlight, keyboard navigation) and hovering a Field on the paper locates it directly, and Fields and bullet points can be hidden or copied individually. While you drag, the tree and the preview on the right **follow in real time** (also when a narrow window tucks the editor into a drawer, where the change still counts as unsaved work), and a single history step is recorded only when you let go |
+| [🖥 Professional view](https://magicapple123.github.io/ResumeForge-official/en/docs.html#layout-pro) | Preview toolbar: whole page / fit width / 100% zoom, page navigation, guides and a grayscale proof; the action bar's “Commands”, or Cmd/Ctrl+Shift+P, opens the command palette, and a workspace preset only toggles panel visibility; “Crop photo” only changes the framing (**the original is untouched** and can be restored), and all three exports use the same derived crop; **without a crop the photo is shown at its own aspect ratio** and is never forced into a square or stretched |
+| [🔠 Local typography](https://magicapple123.github.io/ResumeForge-official/en/docs.html#write-field-layout) | The “Styles” group in the left column sets **global font size, tracking and line spacing, page margins and the appearance colors**; anything you have not overridden follows the Template and is labeled with where it comes from, and can be reset to inherited item by item (type a value or step it, Shift-click for five steps); per-Field and per-role local typography lives in the middle column under **right-click → “Adjust typography”**: the scope is inferred from the selected Field, and color, line spacing, indent, bullets, alignment and tracking can be changed in place, date and metadata Fields also offer a “Date position” (date on the right / date right after the title, with the draft and the exact PDF agreeing); the text tools above the body input offer **bold** and **links** (clickable in HTML, rendered as the visible text “text (URL)” in PDF and Word) while the italic entry is gone; the three bullet outlets are unified as “· / – / none”; the “Entry field typography” panel sets, per Section or per Entry, the 1–3 columns, alignment, column gap, order and full-row span of the gray fields before and after the body, columns are equal-width by default, and with two or more you can **set each column's width** (as a percentage that must add up to 100 before it applies) and **each gap**; HTML / PDF / Word / Markdown all share the same packing result |
+| [📄 Pagination control](https://magicapple123.github.io/ResumeForge-official/en/docs.html#layout-paging) | “Typography settings → Pagination” in the left column: **Sections** can be set to “start on a new page / keep together”, and **Entries** selected in “Resume structure” can be set the same way, saved with the Resume and honoured identically by HTML / PDF / Word. **The page overview and “Get pagination report”** measure page count, last-page usage, overflow and manual breaks through the same pipeline as the real PDF; the page cells are laid out at equal width and “Page limit reached” appears once the limit is used up; the draft preview never fakes pagination and never draws fake page breaks |
+| [🎛 Layout optimization](https://magicapple123.github.io/ResumeForge-official/en/docs.html#write-optimize) | “Optimize under constraints” below the layout diagnosis card in the preview: set the constraints first (do not change font size / minimum page margins / target 1–2 pages), then get up to 3 **different** candidates (which parameters changed, how much overflow was removed, the readability cost); applying writes the values back into the sliders; when nothing is feasible it says why and **never shrinks the font size silently**; there are also **content reduction candidates** (merge duplicate entries, deduplicate bullet points, trim low-relevance material) which you confirm item by item |
+| [✅ Workbench checks](https://magicapple123.github.io/ResumeForge-official/en/docs.html#write-check) | “Check Resume” in the action bar examines content, typography and the exported artifact together, sorts problems into “must fix / worth checking / typography suggestion”, points at the location and the way to fix it, and can be re-run afterwards |
+| [🏷 Save-conflict choice](https://magicapple123.github.io/ResumeForge-official/en/docs.html#write-conflict) | When you save in the Resume workbench and the same Resume was changed in another window, you are asked to “use the latest”, “compare the differences” or “save a copy”; **your changes never silently overwrite someone else's** |
+| [↪ Undo and redo](https://magicapple123.github.io/ResumeForge-official/en/docs.html#write-history) | “History” in the left column: every content, typography and structure action can be undone or redone (consecutive typing collapses into one step); **each step spells out what changed** (Sections added, removed or reordered / Entries added, removed or hidden / Fields added, moved or removed / how many passages changed / typography parameters), with name, Entry count and page count on hover, and clicking a step returns you to it; a bad edit is one click away from being undone, and **⌘/Ctrl+Z and ⇧⌘/Ctrl+Z work too** |
+| [🗃 Named versions and Job variants](https://magicapple123.github.io/ResumeForge-official/en/docs.html#write-versions) | “Versions” at the top of the workbench: store the current content and typography as an **immutable snapshot** (create, with an optional name that is generated when left blank / freeze a marker / compare the default and the previous version Field by Field as “old → new” / restore); restoring produces **a new current version** while past versions and records already applied with stay as they are. Job variants are edited independently (create from the current Resume or from a career scenario, then “Create variant”), can **selectively sync** the content paths you tick without overwriting other Job tailoring, and can hold **their own typography** and be exported straight from the variant |
+| [🌐 Bilingual versions and glossary](https://magicapple123.github.io/ResumeForge-official/en/docs.html#write-bilingual) | “Bilingual versions” in the workbench: field-by-field Chinese/English comparison, translation candidates generated per Field and **accepted item by item** (only the language variant you pick is written, and the current Resume is never overwritten); a dataset-level glossary pins fixed translations (people, companies, skills and so on), and deleting an entry moves it to the trash where it can be restored. Candidates are generated in batches, so **a large Resume no longer times out mid-run**, and “Translation preview” opens a read-only preview that leaves the master document untouched and creates no dirty values |
+| [📦 Export shape](https://magicapple123.github.io/ResumeForge-official/en/docs.html#export-forms) | The export dialog starts by choosing a **delivery pack** or **individual files**: a delivery pack wraps the chosen formats into one zip (optionally archiving the originals and a hash manifest), while individual files let you multi-select formats and **export them one by one** with a progress indicator showing how many are done, and when one fails it tells you how many already succeeded. Both share the same typography result and export configuration |
+| [📄 Multi-format export](https://magicapple123.github.io/ResumeForge-official/en/docs.html#export-formats) | PDF **downloads directly** (rendered on the server); Word / HTML / Markdown / txt / JSON all export; HTML / PDF / Word and Markdown with typography are **rendered from one and the same layout result on the server** — same fields, same order — and JSON emits the new document structure (including each item's paper placement and typography); watermarks and **one-click redaction** are supported. The preview toolbar can switch to **“Exact”**, which shows exactly the PDF the export engine lays out, point for point identical to the file you download; after configuring a watermark or redaction you can **preview the real artifact** before exporting. Past the page limit it **never shrinks the font size**: it truncates at the limit and says so |
+| [📦 Delivery pack export](https://magicapple123.github.io/ResumeForge-official/en/docs.html#export-archive) | “Export delivery pack” on the Resume detail: formats and naming rules, watermark / redaction, **a preview of the real artifact configuration**, savable as an export configuration; exports a zip plus a manifest (hashed item by item) and can archive the **delivery originals** (hashes and the font / render versions used, which you can inspect and delete) |
+| [💾 Save location](https://magicapple123.github.io/ResumeForge-official/en/docs.html#privacy-save) | Settings → the “Data & export” tab → the “Save location” card: by default exports only go to the browser's download directory, and once you pick a folder with the native picker, exports from the local front end **also land a copy there**; remote or cross-site exports are refused |
+| [📦 Offline share pack](https://magicapple123.github.io/ResumeForge-official/en/docs.html#share) | Packs a redacted HTML / PDF plus a read-only snapshot and a comment-return file, and can be “read-only” or “commentable”; a commentable pack supports **annotations on objects**: import the returned `annotations.json` and mark each annotation resolved or ignored, and annotations whose object changed must be re-linked (annotations never enter any applying artifact) |
+| [🚀 Automatic apply desk](https://magicapple123.github.io/ResumeForge-official/en/docs.html#apply) | Collect automatically by keyword and city (site filters are carried over wholesale and it runs in the background); confirmed Jobs queue up and drive your local browser to apply, and **only Jobs whose source is inside a recruiting site are accepted** |
+| [📝 Web form](https://magicapple123.github.io/ResumeForge-official/en/docs.html#webform) | Fills corporate application forms in a **separate dedicated browser**: type a URL to open it in a new tab and manage the URL history without clobbering pages you already have open; each page can be switched between batch and point-and-fill. It reads the whole page and checks each value before filling, or confirms a suggestion next to the input you click; fields the rules cannot recognise can be handed to the AI, which **only receives page text and field names, never your Profile values**. The browser model is shared with the apply desk but runs in its own window; fill records contain real values and stay local. **It fills, it never submits**, and passwords and verification codes are never filled automatically; **it only writes into text-like controls** — dropdowns, radio buttons, checkboxes and date pickers are left alone and honestly listed as “needs your click”; a separate **relaxed mode** can try label and context matching and click dropdown and popover options (see the next row). When filling finishes it shows the **success rate** (fields filled / readable fields on the page) and can export **redacted diagnostics that contain no Resume values**, which makes it easy to report a field it could not recognise |
+| [🟢 Relaxed mode](https://magicapple123.github.io/ResumeForge-official/en/docs.html#webform-relaxed) | The Web form's **optional exception, off by default**: once you explicitly switch it on, it tries to match unrecognised text inputs (including Custom Fields) by label and context and clicks dropdown and popover options itself (**strict option matching plus read-back verification**); in relaxed text matching, low-confidence candidates backed only by weak context are left unticked for you to confirm, and repeated experience entries are only filled when the record count and the page order can be paired. Consent and declaration checkboxes still need item-by-item confirmation; date pickers and file uploads are never touched. The Job assistant has no tool to switch it on — do it on the page or in Settings. Relaxed matching can pick wrong, so proofread after filling; a multi-value popover only acts when every value matches |
+| [🧠 Learnt while filling](https://magicapple123.github.io/ResumeForge-official/en/docs.html#webform-learned) | When you hit a field **ResumeForge does not know**, **both entry points** can record it: batch mode shows one summary prompt when it finishes (**everything ticked, everything “General” by default**, and you can untick individual items), and point-and-fill puts a “Remember this” next to **every box**, so you can **record it on the spot** — **even a box it recognised but has no value for** (fill it in place without jumping to another page). Once remembered, the same field is **pre-filled automatically** next time. Each entry picks a scope: **General** (true wherever you apply) / **Scenario** (tied to an applying channel) / **This time** (recorded but never auto-filled, for one-off values such as a referral code). Source and scope can be edited or removed in the Web form profile at any time, and **values the AI recognised are labeled “AI recognised”** because it is likelier than the rules to misread a field. **Custom Fields outside the catalogue** (a supervisor's name, a lab, say) can take part in Web form filling too: normal mode accepts only a unique exact match, and relaxed mode matches by label or context and flags low confidence; when something is ambiguous or fails a safety veto it does not guess, so proofread after filling. **There is exactly one destination, the Web form profile**: Resume fields are never learnt (the code that could modify them does not exist), and passwords, verification codes and other people's details are intercepted and cannot be learnt. Everything stays local and **is never read during Resume generation** |
+| [🎯 Job tracker](https://magicapple123.github.io/ResumeForge-official/en/docs.html#tracker) | One record per company walks from “applied → screening → assessment → interview → offer”; paste an email or a screenshot to recognise progress, and preview it before it is written |
+| [🗓 Calendar reminders](https://magicapple123.github.io/ResumeForge-official/en/docs.html#reminder) | Set reminders for applications, interviews, referrals and so on, **color-coded by urgency** (overdue / within 24 hours / within 3 days / later), with a list and a month view |
+| [🤝 Referral management](https://magicapple123.github.io/ResumeForge-official/en/docs.html#referral) | Record the referrer, the referral code and note images, follow up by status and compute a **referral conversion rate** |
+| [📈 Job search analytics](https://magicapple123.github.io/ResumeForge-official/en/docs.html#analytics) | Four themes — conversion and blockers, timing and pace, channels and destinations, Resume and health; **every chart is its own block with its own title and its own definition**, and trends cover the last 1 / 3 / 6 months |
+| [⭐ Favorites](https://magicapple123.github.io/ResumeForge-official/en/docs.html#jobs-favorites) | Browse favorited Jobs and Resumes on pages, jump to a detail view or remove the favorite |
+| [🎤 Mock interview](https://magicapple123.github.io/ResumeForge-official/en/docs.html#interview) | Set the Job, the difficulty and the interviewer's style, then answer round by round while the interviewer comments and probes; the session closes with per-dimension scores and improvement advice; **you can keep probing below the report, or stop** (probing does not consume official rounds); material can be picked from records or imported as files (the Job side takes PDF / TXT, the Resume side takes screenshots, and a parse failure says why) |
+| [🎯 Personalized question bank](https://magicapple123.github.io/ResumeForge-official/en/docs.html#bank-questions) | Generates three kinds of question per Job — **basics / project deep dive / questions for HR** — with a reference answer available for any single question; real interview questions can be used to reverse-engineer edits to the Resume |
+| [🔎 Interview deep dive](https://magicapple123.github.io/ResumeForge-official/en/docs.html#drill) | Stress-tests the Fact ledger entry by entry, with **the criteria fixed before you ever see the question**; instead of a score it reports “verified / partly verified / unverified / contradictory” |
+| [🧠 Interview notes base](https://magicapple123.github.io/ResumeForge-official/en/docs.html#bank-exp) | Captures real interview experience (company / Job / questions / retrospective) and makes it searchable, with cards that open the full text |
+| [📖 Knowledge base](https://magicapple123.github.io/ResumeForge-official/en/docs.html#materials) | Written material such as interview summaries, Resume tips and search strategy, with category tags and Markdown previews; the assistant can search, add and edit it |
+| [💬 AI Job assistant](https://magicapple123.github.io/ResumeForge-official/en/docs.html#assistant) | Streaming chat that can be linked to a Job / Resume / Profile and to web search; it can look up reminders, referrals, interview notes and analytics and **only writes data when you explicitly ask**; before answering it is given the local time and weekday (late at night it suggests going to bed); its tool set covers applying-failure diagnosis, typography queries, and recording interview notes and referrals; open it from the Toutou bubble on any page; the sidebar and the floating chat keep separate histories, and the floating one only exposes web search and reasoning effort |
+| [🔓 Assistant relaxed mode](https://magicapple123.github.io/ResumeForge-official/en/docs.html#assistant-relaxed) | Settings → the “Assistant & AI behaviour” tab → the “Assistant relaxed mode” card: off by default; once on and **announced in advance**, the assistant may read the full Profile (including sensitive fields such as name and phone number, Web form values and past conversations), while credentials such as API keys are never sent in any mode |
+| [🧩 Skills](https://magicapple123.github.io/ResumeForge-official/en/docs.html#skills) | Create, import and edit skills (a prompt plus knowledge files); once enabled they constrain how the assistant answers |
+| [🗒 Conversation management](https://magicapple123.github.io/ResumeForge-official/en/docs.html#assistant-sessions) | Rename, pin, favorite, group and archive conversations, and export them as Markdown or save them to the Material library |
+| [📌 Toutou clipboard](https://magicapple123.github.io/ResumeForge-official/en/docs.html#assistant-clipboard) | **Double-click the Toutou bubble** to open it: store snippets you paste repeatedly and copy them in one click; they only live in your local browser and are never uploaded (a single click still opens the assistant) |
+| [🏠 Home](https://magicapple123.github.io/ResumeForge-official/en/docs.html#home) | Quick entries in the order you use them, across 7 destinations; the upcoming-reminders card embeds a compact month calendar |
+| [🖱 Interface details](https://magicapple123.github.io/ResumeForge-official/en/docs.html#shortcuts) | Row actions collapse into “More actions”; lists and cards **open their detail view on a single click** (Enter works too); dates are picked from a calendar; **modules you do not use can be switched off in Settings → “Appearance & interaction” → “Interface and navigation”** (only the entry is hidden, no data is deleted, and Home and Settings always remain) |
+| [🔍 Global search](https://magicapple123.github.io/ResumeForge-official/en/docs.html#search) | One box that searches Jobs, Resumes, referrals, reminders, interview notes, the Fact ledger, the Material library and Skills at once |
+| [📤 Outbound preview and usage](https://magicapple123.github.io/ResumeForge-official/en/docs.html#privacy-outbound) | Settings page: before you send Profile material to a model or another service, see **what is about to go out** (target service, categories of material, attachments, excluded fields, whether page text is fetched and the text itself); “Model usage” lists calls and tokens per task / model — **an unknown token count is never shown as 0**, and no cost is estimated without a configured price. The preview text exists in memory only and is never written to disk; usage can be broken down per task / model / dataset with **end reasons and retries**, and cost is only estimated when a unit price is configured |
+| [✅ Batch select and delete](https://magicapple123.github.io/ResumeForge-official/en/docs.html#shortcuts-batch) | Resume Center, assistant conversation history, past interviews, deep-dive history, calendar reminders, question bank history and Web form fill records all support **batch selection**: “Batch select” → tick → “Delete selected” with one confirmation (everything goes to the trash and can be restored) |
+| [🔄 Check and update](https://magicapple123.github.io/ResumeForge-official/en/docs.html#upgrade-check) | Settings can check for a new version and create, export and import datasets; a dataset backup **includes the model API key by default** (you can untick it; on Windows it is carried DPAPI-encrypted); **on Windows double-click `start.cmd` / `stop.cmd` / `update.cmd`, on macOS double-click `start.command` / `stop.command` / `update.command`** — all zero-dependency one-click scripts — and `uninstall.cmd` cleans up the local environment |
+| [♻️ Trash](https://magicapple123.github.io/ResumeForge-official/en/docs.html#trash) | 22 kinds of content go to the trash first and can be restored or destroyed in bulk; only a second confirmation really destroys anything. Since 2026-10 the four kinds “Plans / Custom Sections / Custom Fields / Profile entries” are included |
+| [🔑 Your key, your call](https://magicapple123.github.io/ResumeForge-official/en/docs.html#model-presets) | 16 built-in service presets (DeepSeek / Claude / Doubao / OpenAI / Ollama …) with model discovery, advanced parameters and a switchable API protocol |
 
 </details>
 
-## 🛡 下载后被杀软或系统提示「有风险」怎么办
+## 📦 Installation
 
-先说结论：**这个包里没有任何可执行文件**。解压后是源码、启动脚本（`.cmd` / `.command` / `.ps1`）和文档——没有 `.exe`、`.msi`、`.dll`，所以静态查杀命中的可能性很低，Windows 的「未知发布者 / SmartScreen」提示也**只针对 .exe / .msi，zip 本身不弹**。
+**The release build is the recommended option**: no repository clone and no Python or Node.js to install. All packages are on the [Release page](https://github.com/magicapple123/ResumeForge/releases), each with a matching `.sha256`; they can also be downloaded from the [website](https://magicapple123.github.io/ResumeForge-official/) if GitHub is slow.
 
-真正可能触发提示的是**首次启动时的行为**：它会联网下载 Python 与 Node.js 的便携版（放在项目自己的 `runtime/` 里，不装进系统）。"下载并执行运行时"是所有杀毒软件的启发式引擎都会多看一眼的模式。它之所以这么做，是为了让你**不需要预装任何环境**：不装 Python、不装 Node、macOS 上也不用 Homebrew。
+Supported: **Windows 10/11 (x64)** and **macOS 13+ (Intel, and Apple Silicon via Rosetta 2)**. No Linux release build yet.
 
-- 下载来源都是官方地址（python.org / nodejs.org），走 HTTPS，并且**校验官方提供的 SHA256 摘要**后才解压使用。整个过程在终端里可见，不做隐藏执行。
-- 已经装好 Python 与 Node 的话，启动器会直接用现成的，不会重复下载。
-- **想核对文件是否被动过**：每次发布都随包提供一个 `.sha256` 校验文件（与压缩包同名，例如 `ResumeForge-1.0.1-windows.zip.sha256`）。Windows 上 `Get-FileHash .\ResumeForge-1.0.1-windows.zip -Algorithm SHA256`，macOS / Linux 上 `shasum -a 256 ResumeForge-1.0.1-windows.zip`，与文件里的值对一下即可。
-- **不建议**为了装它而关闭杀毒软件或加白名单。先核对上面的摘要；若校验一致却仍被拦截，把拦截的具体文件名与日志发到 [Issues](https://github.com/magicapple123/ResumeForge/issues) 或群里，那是需要修的问题，不是让你去关防护的理由。
+### Choosing a build
 
-## 🚀 快速开始
+| Build | Form | Use case |
+| --- | --- | --- |
+| `ResumeForge-Setup-<version>.exe` | Windows installer: installs and adds a shortcut | Most Windows users |
+| `ResumeForge-<version>-x64.dmg` / `-arm64.dmg` | macOS installer: drag “简历通” into Applications | Most macOS users |
+| `ResumeForge-<version>-windows.zip` / `-macos.zip` | Portable archive: unzip and run, writes nothing outside its folder | No installation; easy to carry on a USB drive |
+| `ResumeForge-<version>-all.zip` | Both portable archives in one file | One Windows and one macOS machine |
+| Source (`git clone`) | Run it yourself; needs Python and Node.js | Reading or modifying the source |
+
+> The installers are **unsigned and not notarised**: if Windows reports an unknown publisher or macOS cannot verify the developer, **right-click → Open** allows it. The cause and how to verify a download are covered in the [FAQ](#-faq).
+
+### Let an AI assistant install it
+
+If you would rather not pick a package yourself, hand the prompt below to **Codex, Claude Code, DeepSeek or another AI assistant that can run commands**: it detects the OS, picks the matching build, verifies it and starts the app. An archive you have already downloaded works too — give the assistant its path. 展开后整段复制，粘贴给助手即可。
+
+<details>
+<summary><b>Copy this prompt (click to expand)</b></summary>
+
+<br>
+
+```text
+Install ResumeForge on this machine. It is a local-first resume tool.
+
+Repository: https://github.com/magicapple123/ResumeForge
+Releases: https://github.com/magicapple123/ResumeForge/releases/latest
+
+Work through the steps below and report the result of each one:
+1. Identify the OS and architecture (Windows 10/11 x64; macOS 13+ on Intel or Apple Silicon) and pick the matching build:
+   Windows → ResumeForge-Setup-<version>.exe (installer) or ResumeForge-<version>-windows.zip (portable)
+   macOS → ResumeForge-<version>-x64.dmg / -arm64.dmg (installer) or -macos.zip (portable)
+2. Download it and verify it against the matching .sha256 from the same page; stop and tell me if they differ.
+3. Install it in the default location, or unpack the portable archive to a sensible directory (tell me the path).
+4. Start it: the installer from the Start menu / Applications; the portable build via start.cmd (Windows) or start.command (macOS).
+5. Confirm that http://127.0.0.1:8005 loads in the browser, then report the install path, version and checksum result.
+
+Note: the packages are unsigned, so Windows may warn about an unknown publisher and macOS may say it cannot verify the developer; right-click → Open allows it. Do not disable security software or change system security settings for this.
+```
+
+</details>
+
+### Starting the app
+
+| Install form | Start | Stop |
+| --- | --- | --- |
+| Windows installer (`.exe`) | Start menu → “ResumeForge” | Closing the window sends it to the tray; choose “Exit” from the tray menu to quit completely |
+| macOS installer (`.dmg`) | Applications → “ResumeForge” | Same: closing the window leaves it in the menu bar — quit from there |
+| Portable archive / source | Double-click `start.cmd` (Windows) / `start.command` (macOS) | Double-click `stop.cmd` / `stop.command` |
+
+**The desktop installers** open a native window with the back end built in: no shell commands and no address to remember.
+
+**Portable archives and source checkouts** create the virtual environment and install dependencies on first run, then open the back-end address in your browser (a release build already contains the compiled front end in `frontend/dist`, served same-origin, so Node is not needed at runtime):
+
+```text
+http://127.0.0.1:8005
+```
+
+After that, use the start / stop scripts; **Exit** in the page header stops both processes.
+
+### Running from source
 
 ```powershell
 git clone https://github.com/magicapple123/ResumeForge.git
 cd ResumeForge
 ```
 
-**环境要求**：Windows 10/11 或 macOS 13+；Python 3.11 – 3.13、Node.js ≥ 20.19.0。后两项**没装也行**——一键启动器会自动准备（Windows 用 `winget` 或经过校验的便携包，macOS 下载便携版解压进 `runtime/tools/`，**不需要 Homebrew，也不会要管理员密码**）。
+Requirements (Python 3.11 – 3.13, Node.js ≥ 20.19; the launcher installs them if missing), handling a blocked first launch on macOS, changing ports and uninstalling are documented in the [user guide](docs/user-guide.md) under “Startup and platforms” and “Uninstall”; the development loop, tests and smoke commands are in the [maintenance handbook](docs/maintenance.md).
 
-> Python 3.14 暂不支持：锁定的后端依赖还没有对应的 cp314 轮子，装的时候会退化成源码编译并失败。
+### Configure a model (optional)
 
-### 一键启动（推荐）
+Open **Settings → “AI models”** in the sidebar, choose a built-in preset (which fills in the endpoint and model name) or “Custom model (OpenAI-compatible)”, enter the API key and click “Test connection”. The 16 built-in presets cover DeepSeek, Claude (native Anthropic protocol), Doubao, Kimi, Qwen, Zhipu, MiniMax, SiliconFlow, OpenRouter, OpenAI, Gemini, Grok, Groq, Mistral, Ollama and LM Studio.
 
-| 你的系统 | 双击这个文件启动 | 双击这个文件关闭 |
-| --- | --- | --- |
-| Windows 10 / 11 | `start.cmd` | `stop.cmd` |
-| macOS | `start.command` | `stop.command` |
+> **A model is optional**: Job parsing, Profile parsing, the five match verdicts, version diffing in the writing aids, quality and compliance checks and every export format are **local rules** and work offline. Only generation actions (AI-tailored Resume, JD breakdown, mock interview, Job assistant, interview deep dive) require a model; with a local model such as Ollama or LM Studio, even generation stays on your machine.
 
-首次运行会自动创建虚拟环境、装齐依赖并打开浏览器。发布包自带构建好的前端页面（`frontend/dist`），由后端同源提供，因此**打开的是后端地址**，运行期不再需要 Node：
+For the full field reference, privacy boundaries, upgrades and rollback, and AI troubleshooting, see the [official user docs](https://magicapple123.github.io/ResumeForge-official/docs.html).
 
-```text
-http://127.0.0.1:8005
-```
+## 🔐 Data, privacy and boundaries
 
-之后每次双击开始/停止即可，不需要分别启动前后端；也可以点页头的**退出**，把前后端进程一起停掉。
+The app handles ID and phone numbers, company names and Resume text, so the boundaries are stated first:
 
-<details>
-<summary><b>macOS 安装版（.dmg，v1.0.1 起提供）</b></summary>
+- **Everything stays on your machine by default.** Resumes, Jobs, the Fact ledger, settings, attachments and photos all live in the local data directory (the main database is `backend/data/resume_forge.db`; the desktop build uses `%APPDATA%\ResumeForge\data`); exporting, rendering and PDF generation also happen locally, with no third party involved.
+- **Requests only leave when you configure a target and trigger the action yourself.** The target is a model provider whose endpoint and key you entered, and the content is limited to the minimum this generation needs; **photos are never sent to a model**.
+- **No recruiting-site password, cookie, token or verification code is stored.** Applying and Web form connect over CDP to a browser you signed into yourself, and you complete any QR-code sign-in.
+- **No hard-coded keys.** `.env`, the database, photos and export files are all ignored by `.gitignore`; on Windows the API key is stored DPAPI-encrypted.
+- **One-click redaction when sharing**: an offline share pack contains only redacted HTML/PDF plus a read-only snapshot.
+- **It listens on the loopback address only.** This is a single-user local deployment with no account system; exposing it to the internet is equivalent to publishing the local database.
 
-<br>
+If you believe you have found a security problem, please follow [SECURITY.md](SECURITY.md).
 
-不想用源码包？macOS 现在也有与 Windows 安装版同形态的桌面安装包：到 [Release 页面](https://github.com/magicapple123/ResumeForge/releases) 下载 `ResumeForge-<版本>-x64.dmg`（Apple Silicon 机型经 Rosetta 2 运行），双击安装后从「应用程序」打开「简历通」。
+## 🔄 Updating without losing data
 
-- **安装包未签名/未公证**：首次打开若提示「无法验证开发者」，右键 →「打开」即可；或在终端执行一次 `xattr -dr com.apple.quarantine /Applications/ResumeForge.app`。
-- **首次启动需要联网**：应用会在首次启动时在线装配 Python 运行时（下载依赖，数分钟），之后启动即快。
-- **数据位置**：用户数据放在 `~/Library/Application Support/ResumeForge/`，覆盖安装新版本不会丢数据。
+Jobs, Profile, Resumes, assistant history and model configuration are stored in `backend/data/resume_forge.db`; server environment variables are stored in `backend/.env`. Both are ignored by Git, so `git pull` never overwrites them.
 
-</details>
+- **Backup**: **Settings → “Data & export” → Datasets → Export current dataset**. The package holds a full database snapshot of that dataset, its attachments, fonts and the global model configuration (**the model API key is included by default and you can untick it**) but no login state; on a new computer, “Import backup as new dataset” restores it — details in [docs/upgrading.md](docs/upgrading.md).
+- **Migrate between versions, not across them**: format 5 and later carry the global model configuration, format 6 and later also carry fonts; older versions (≤1.0.2) refuse the package and ask you to upgrade. **The other direction is limited too: 2.0 will not import a 1.x backup package** — a database inside the package without `app_schema_epoch` is refused outright, with a pointer to open it in ResumeForge 1.0.2; packages exported by 2.0 itself import normally.
+- **Delivery archive**: after the original Resume is deleted you can still find past deliveries by title, company, Job and source; what you download is a replayed snapshot and is not guaranteed to be byte-identical to the original file.
+- **One-click update**: double-click `update.cmd` on Windows or `update.command` on macOS; only program files are replaced, and `data/`, `.env` and `runtime/` stay as they are.
+- **An update within the same major version never touches the database**: migrations run on the next start and are backed up to `backend/data/backups/` beforehand. **1.x → 2.0 is the exception**: the old database is archived wholesale into `legacy-archive/<timestamp>/` and a new empty one is created, starting from blank (the archive keeps all the old data and can be opened with 1.0.2; **nothing is migrated across**). **Settings → “Updates & help” → Software updates** checks, downloads and shows progress; the update package is verified against its `.sha256`, and **success is determined by the version actually running**.
 
-<details>
-<summary><b>macOS 用源码包看这里：第一次打开需要多一步</b></summary>
-
-<br>
-
-macOS 会拦下所有"从网上下载、又没有经过 Apple 签名"的程序，这个项目也在其中。所以第一次双击 `start.command` 时，可能提示 **「无法打开，因为 Apple 无法检查它是否包含恶意软件」**——这不是代码有问题，是系统的下载隔离机制。
-
-处置办法（任选一种，**只需做一次**）：
-
-1. 在 Finder 里**右键点 `start.command` → 选「打开」**，再在弹窗里点一次「打开」；
-2. 或者在「终端」里进入项目目录，执行一次：
-
-```bash
-xattr -dr com.apple.quarantine .
-```
-
-如果双击**完全没反应**（某些解压工具会丢掉可执行位），在「终端」里进入项目目录后执行下面这行，效果与双击完全相同：
-
-```bash
-bash start.command
-```
-
-首次运行会自动下载便携版 Python 3.12 与 Node.js 24 到 `runtime/tools/`（合计约 70 MB），所以第一次启动比之后慢。它们都放在项目目录里：**不写 `/usr/local`、不动你已有的 Homebrew / nvm**，删掉项目目录就等于卸载干净。
-
-想换端口或不开浏览器：`bash scripts/macos/start.sh --backend-port 8010 --frontend-port 5180 --no-browser`，`--help` 有全部选项。更新用 `update.command`（只替换程序文件，`data/` 与 `.env` 不动）。
-
-</details>
-
-> 首次启动最常见的问题是依赖装不上，**基本都是网络原因**（默认走官方 PyPI / npm，国内经常超时）。启动器会在失败时用中文写明原因和下一步，照它说的做即可；最快的一条是换国内镜像重装后端依赖：
->
-> ```powershell
-> backend\.venv\Scripts\python.exe -m pip install -i https://mirrors.aliyun.com/pypi/simple -r backend\requirements.txt
-> ```
->
-> 前端同理，在 `frontend` 目录执行 `npm install --registry=https://registry.npmmirror.com`。启动失败时窗口**不会**自动关，可以从容读完提示再截图反馈。
-
-想把应用从这台电脑上清掉，双击 `uninstall.cmd`：它删除启动器生成的东西（`.venv`、`node_modules`、`dist`、`runtime/` 与各类缓存），**保留** `backend\data` 与 `backend\.env`，并且**不会删源码和文档**。macOS 上不需要卸载脚本：这个项目从不往项目目录之外写任何东西，**直接删掉整个文件夹就是干净卸载**（想保留数据就先导出数据集）。
-
-### 配置大模型（可选）
-
-打开左侧 **设置 → 编辑设置**，选一个内置预设（自动填好接口地址与模型名）或「自定义模型（OpenAI 兼容）」，填 API Key 后点「测试连接」即可。内置 16 个预设，覆盖 DeepSeek、Claude（Anthropic 原生协议）、豆包、Kimi、通义、智谱、MiniMax、硅基流动、OpenRouter、OpenAI、Gemini、Grok、Groq、Mistral、Ollama、LM Studio。
-
-> **不配模型也能用**：岗位解析、资料解析、匹配度五类结论、写作增强里的版本对比、质量与合规检查、全部导出格式都是**本地规则**，离线可用。只有需要「生成」的动作（AI 定制简历、岗位解读、模拟面试、求职助手、面试深挖）才需要模型；用 Ollama / LM Studio 这类本地模型时，连生成也不出本机。
-
-### 手动启动（开发与排错）
-
-<details>
-<summary>展开：后端 / 前端的分步命令与测试命令</summary>
-
-<br>
-
-```powershell
-cd backend
-
-# 创建虚拟环境并安装运行依赖
-py -3 -m venv .venv
-$env:PYTHONUTF8 = "1"
-.venv\Scripts\python.exe -m pip install -r requirements.txt
-
-# 启动服务（默认 http://127.0.0.1:8000，接口文档见 /docs）
-.venv\Scripts\python.exe -m uvicorn app.main:app --reload --port 8000
-```
-
-macOS / Linux 用 `.venv/bin/python` 替换上面的 Windows 路径；Git Bash 用 `export PYTHONUTF8=1`。
-
-```powershell
-cd frontend
-npm ci
-npm run dev        # http://localhost:5173，已配置 /api 代理到 8000 端口
-```
-
-运行测试：
-
-```powershell
-cd backend
-.venv\Scripts\python.exe -m ruff check .
-.venv\Scripts\python.exe -m pytest --cov=app --cov-config=../pyproject.toml
-
-cd ../frontend
-npm test && npm run lint && npm run typecheck && npm run build
-```
-
-浏览器冒烟（Playwright，`frontend/tests/smoke/`）需要应用先跑起来，用例不对抗启动链——两种形态任选其一：
-
-```powershell
-# 形态一：发布形态（后端同源，默认 smoke 口 8123）
-npm run build
-cd ..
-powershell -File scripts\Start-ResumeForge.ps1 -NoBrowser -BackendPort 8123
-cd frontend
-
-# 形态二：开发形态（Vite 5173 + 后端 8000）
-cd backend
-.venv\Scripts\python.exe -m uvicorn app.main:app --port 8000
-cd ../frontend
-npm run dev
-```
-
-然后跑冒烟（发布形态零配置；开发形态把两个地址分别指给前端页面与 API）：
-
-```powershell
-cd frontend
-npm run smoke                                   # 发布形态（默认 http://127.0.0.1:8123）
-$env:SMOKE_FRONTEND_URL = "http://127.0.0.1:5173"; $env:SMOKE_BACKEND_URL = "http://127.0.0.1:8000"
-npm run smoke                                   # 开发形态
-```
-
-当前规模：后端与前端合计 **5,000+ 个测试用例**（后端覆盖率门槛 80%，后端单次全量约 4,200 个用例；确切数字以每次 CI 的汇总行为准）。GitHub Actions 在 Linux、Windows 与 macOS 上重复执行关键检查——macOS 那几个作业是刻意加的：它们会真下载便携运行时、从干净检出走完整启动链，并做浏览器冒烟，是 macOS 链路的持续把关；macOS 桌面安装包（dmg）自 v1.0.1 起同样由 CI 构建产出。
-
-</details>
-
-更完整的字段说明、隐私边界、升级与回滚、AI 故障排查，见[官网使用文档](https://magicapple123.github.io/ResumeForge-official/docs.html)。
-
-## 🏗 架构与数据边界
-
-前后端分离，前端统一通过同源 `/api` 访问后端（开发由 Vite 代理，生产需要由 Web 服务器托管 `frontend/dist`，把 `/api` 反向代理到 FastAPI，并把非静态文件的前端路由回退到 `index.html`）：
-
-<p align="center">
-  <img src="docs/images/architecture.png" alt="简历通架构图：React 前端 → 同源 /api → FastAPI 后端 → 本地 SQLite / 你配置的模型服务商 / 本机浏览器" width="1000">
-</p>
-
-几条贯穿全项目的设计取舍，读代码前先知道可以少走弯路：
-
-- **一个逻辑只有一份实现**：投递准入只有 `models/apply.py::admission_of`，行操作菜单只有 `components/common/RowActions`，卡片详情只有 `RecordDetail`，助手的能力地图由 `services/feature_catalog.py` 门面在运行时渲染（功能数据按原始顺序拆在 `feature_catalog_{profile,resume,workflow}.py`，守卫测试保证与 README 功能表、菜单和指南双向对齐）。
-- **并发守卫下沉到 SQL**：批次状态用条件 `UPDATE ... WHERE status = ?` 原子推进，不用「先读后判再写」。
-- **外部输入一律不可信**：岗位描述、粘贴文本与上传文件都按不可信输入处理，不做系统指令执行。
-- **不用 `create_all` 掩盖迁移问题**：数据库由 Alembic revision 管理，新增表 / 列必须写迁移与降级脚本。
-
-完整设计（含决策记录、扩展点与数据模型）见 [docs/architecture.md](docs/architecture.md)，另有[项目导航图](docs/PROJECT_MAP.md)用于从功能倒查代码位置。
-
-## 🔐 数据、隐私与边界
-
-这个工具会碰到你的身份证号、手机号、公司名和简历原文，所以边界写在最前面：
-
-- **默认全部留在本机。** 业务数据存在本机数据目录里：主库 `backend/data/resume_forge.db`（简历、岗位、台账、设置等；照片与部分历史字段以 base64 存库内），外加同目录的**副本目录**（`user_files/` 按内容寻址保存"我的文件"，`referral_images/` 保存内推备注图）、`datasets/` 下的其余数据集、自动备份与导出产物。不经过任何第三方服务；导出、渲染、PDF 生成都在本机完成。桌面版这些文件位于 `%APPDATA%\ResumeForge\data`。
-- **只有你主动配置并触发的动作才会发出请求。** 发送对象是「你自己填地址和密钥」的模型服务商，内容仅限完成该次生成所需的最小资料；**照片不会发送给模型**。
-- **不保存招聘网站密码、Cookie、令牌或验证码。** 自动投递走 CDP 连接你自己登录的浏览器（独立用户目录），扫码登录由你在浏览器窗口里完成。
-- **不硬编码密钥。** 仓库、`.env.example` 与代码里没有任何真实密钥；`.env`、数据库、照片、简历与导出文件都被 `.gitignore` 忽略。Windows 上 API Key 用系统 DPAPI 加密后落库（密文绑定当前用户与机器）。
-- **分享给别人时可一键脱敏。** 离线分享包只包含脱敏 HTML/PDF + 只读快照，不含真实敏感信息。
-- **默认只监听回环地址。** 这是一个**单用户**本地工具，不要把它暴露到局域网或公网——它没有账号体系，暴露即等于把数据库交给别人。
-
-发现疑似安全问题时请遵循 [SECURITY.md](SECURITY.md)，不要在公开 Issue 中披露可利用细节。
-
-## 🔄 更新而不丢失数据
-
-岗位、资料、简历、助手历史与模型配置默认保存在 `backend/data/resume_forge.db`，可选的服务端环境变量在 `backend/.env`，两者都被 Git 忽略，`git pull` 不会覆盖。
-
-- **最省事的备份**：**设置 → 数据集 → 导出当前数据集**（要连其余几份数据集一起带走就选「导出全部数据集」）。一份备份包**包含**：该数据集的整库快照（简历、岗位、资料、助手会话、台账与设置）、它引用到的磁盘附件（`user_files/`、`referral_images/`）、全部自定义字体（`data/fonts/`），以及全局模型配置（可取消勾选）。包内逐文件记 size 与 SHA-256，并写明各表行数；源库已缺附件或磁盘字节与登记哈希不一致时，界面会明确标为“不完整”。**不包含**：登录态（`browser-profile/`、`webform-browser-profile/`）、可重建的缓存与运行产物（`captures/`、`share_packages/`、`logs/`、`exports/`、`restore/`、`backups/`、`auto-backups/`），以及没选「导出全部」时其余数据集的库。数据目录里出现不属于以上任何一类的顶层项时，导出会提示“另有 N 项未纳入备份”——这条提示是**故意可见**的，避免新功能写到新目录的文件被静默漏掉。**资料板块 / 自定义字段 / 条目 / 方案 / 当前方案 / 字段偏好**等表都在这份整库快照里。2.0 起旧资料的数据不再迁入新库：从 1.0 升级时旧库已整包归档到 `backend/data/legacy-archive/`，新库里同名的旧结构只是空表（不再承载新内容），需要旧内容时按归档包里的说明处理。换电脑时在新装的应用里「导入备份为新数据集」还原即可（备份默认包含 API Key，可取消勾选；Windows 上密文绑定本机，换机恢复可能仍需重填；本机已有同名字体时保留本机版本）。
-- **跨版本迁移请在同版本之间导**：格式 5 起包内带全局模型配置、格式 6 起再带上字体。更早的版本（≤1.0.2）遇到这两种包会明确拒收并提示升级，而不是安静地只恢复数据库。
-- **交付存档**：简历中心的「交付存档」可以在原简历删除后按标题、公司、岗位和来源查找历史交付。下载的是按快照重放的文件或冻结内容 JSON，不能承诺与原始下载文件字节一致；源记录 purge 不会自动清掉快照、附件和备份副本。
-- **一键更新**：Windows 双击 `update.cmd`，macOS 双击 `update.command`（或 `bash scripts/macos/update.sh`）。两者都只替换程序文件，`data/`、`.env`、`runtime/` 一律不动；Windows 侧还有 `-DryRun` 只预览、`-SkipDependencies` 只拉代码不装依赖。
-- **更新不会动数据库**：Alembic 迁移在下次启动时自动执行，迁移前会在 `backend/data/backups/` 写一份备份。应用内**设置 → 应用 → 软件更新**可直接检查、下载并显示进度；Windows 下载完成后可确认重启安装，程序会原地覆盖并自动重启，`data/`、`.env` 与 `runtime/` 不动。macOS 源码包走上面的 `update.command`（同样是"下载新包 → 只覆盖程序文件"）；用 `.dmg` 安装版的用户下载新 dmg 覆盖安装即可（数据在 `~/Library/Application Support/ResumeForge/`，不随安装目录覆盖）。更新包按当前平台挑选并核对发布方给的 `.sha256`；**成没成以"现在跑的是哪个版本"为准**——没起来会说出失败原因与日志位置（`runtime/update.log`），不会一律弹"已更新"。
-
-不要使用 `git clean -fdx`，也不要删除整个项目目录后直接覆盖。完整的升级、压缩包更新与回滚步骤见 [docs/upgrading.md](docs/upgrading.md)。
+Do not use `git clean -fdx`, and do not delete the whole project directory and copy a new one over the top. The full procedure is in [docs/upgrading.md](docs/upgrading.md).
 
 ## ❓ FAQ
 
-**必须联网才能用吗？**
-不需要。除「投递台」的采集 / 投递链路与你主动触发的 AI 生成外，其余功能全部离线可用；用 Ollama / LM Studio 这类本地模型时，连 AI 生成也不出本机。
+<details>
+<summary><b>Do I need an internet connection?</b></summary>
 
-**支持哪些岗位？只有 IT 岗吗？**
-面向所有岗位。示例数据刻意用的是市场运营，技能词表覆盖跨行业专业能力、办公与业务工具、证书资质等分类。
+No. Apart from the apply desk's collection and applying, the Web form — the only two paths that visit recruiting sites — and the AI generation you trigger yourself (including the assistant's web search), every feature works offline; with a local model such as Ollama or LM Studio, even AI generation never leaves your machine.
 
-**AI 会不会把我的简历写飞？**
-三道闸：事实台账里只有「已确认」的条目会作为事实参与生成；未确认的说法会被显式避开；生成结果里的学校 / 公司 / 项目名会与资料库比对，不一致时给出警告。正文还留着【待补】标记时导出会被直接拦下并指出位置。
-
-**匹配度怎么算？为什么说它只是参考？**
-因为分数会让人误以为它能决定投递结果。五类结论说明的是「为什么」，可以直接指导改简历；0–100 的「匹配度参考分」只是展示辅助，**不参与投递准入**，并且带免责说明。
-
-**多个岗位、多份简历会不会乱？**
-一个岗位可以关联多份简历，一份简历也能看到它的目标岗位；简历中心可按来源（AI 生成 / 用户编写）与「有无岗位」筛选，收藏夹集中放重点，回收站兜住误删。
-
-**为什么只能本机用？**
-因为它没有账号体系与权限模型，业务数据（含身份证号、手机号这类个人信息）也没有加密存储。要多人共用需要先补上认证、TLS 与审计，这不是当前版本的目标。
-
-## 💬 交流与反馈
-
-- **QQ 群 `922830167`** —— 交流使用体验、提需求、报问题，欢迎来聊。
-  **群文件里也放了安装包**：GitHub 下载慢（或下载总是中断）的时候可以直接从群里取。
-
-<p align="center">
-  <img src="docs/images/qq-group.png" alt="简历通 QQ 群 922830167 二维码" width="300">
-</p>
-
-- **Bug 与需求**：用 [Issue 模板](.github/ISSUE_TEMPLATE) 提交，附上版本号、系统与复现步骤。
-- **安全问题**：请走私密渠道（见 [SECURITY.md](SECURITY.md)），不要在公开 Issue 里披露可利用细节。
-
-## ☕ 赞赏支持
-
-简历通**永久免费开源**，不打赏也完全不影响任何功能。如果它帮你拿到了面试或 offer，想请作者喝杯咖啡的话，点下面展开即可：
+</details>
 
 <details>
-<summary><b>👉 请作者喝杯咖啡（微信 / 支付宝）</b></summary>
+<summary><b>Which Jobs are supported? Technical roles only?</b></summary>
+
+Every kind of Job. The sample data deliberately uses marketing operations, and the skill vocabulary has 10 categories and over 200 terms covering, besides programming / front end / back end / databases / cloud native, office and business tools, cross-industry professional skills (financial analysis, HR, user operations…), certifications and qualifications, and general abilities — so non-technical roles get skill tags just as well.
+
+</details>
+
+<details>
+<summary><b>Can the AI fabricate content in my Resume?</b></summary>
+
+Three safeguards apply: only entries marked “confirmed” in the Fact ledger participate as facts; unconfirmed claims are explicitly avoided; and the school, company and project names in the output are compared against your Profile library, with a warning on any mismatch. If the body still holds unfilled 【待补】 (“to fill”) placeholders, the export is blocked outright and the locations are named.
+
+</details>
+
+<details>
+<summary><b>How is the match calculated, and why is it only a reference?</b></summary>
+
+Because a score makes people believe it can predict the outcome of an application. The five verdicts explain the “why” and tell you directly what to change in the Resume; the 0–100 **reference score** is display-only, **never feeds into admission**, and carries a disclaimer.
+
+</details>
+
+<details>
+<summary><b>How are multiple Jobs and Resumes organised?</b></summary>
+
+One Job can link several Resumes, and a Resume shows the Job it targets; the Resume Center filters by source (AI-generated / written by you), by keyword and by “has a Job or not”, Favorites keeps the important ones together, and the trash catches accidental deletions.
+
+</details>
+
+<details>
+<summary><b>Where is the data stored, and how do I move it to another computer?</b></summary>
+
+All of it in the local data directory: the main database is `backend/data/resume_forge.db` (the desktop build uses `%APPDATA%\ResumeForge\data`), and attachments, photos, custom fonts and backups sit in the same directory, with no third party involved. To move, use “Settings → Data & export → Export current dataset”, then “Import backup as new dataset” on the new machine; details in [Updating without losing data](#-updating-without-losing-data).
+
+</details>
+
+<details>
+<summary><b>Which operating systems are supported?</b></summary>
+
+Officially there are launchers for Windows 10/11 and macOS 13+ (`start.cmd` / `start.command`) and installers (a Windows installer and a macOS dmg); Linux has no official support and is neither packaged nor accepted. Python and Node do not need to be installed: the first start prepares portable runtimes.
+
+</details>
+
+<details>
+<summary><b>What should I do if security software blocks the download?</b></summary>
+
+The package contains **no executable files**: it unpacks to source code, launcher scripts (`.cmd` / `.command` / `.ps1`) and documentation, with no `.exe` / `.msi` / `.dll`, so static scanning rarely flags it; Windows' “unknown publisher / SmartScreen” warning applies only to `.exe` / `.msi`, not to the archive itself.
+
+What can genuinely be intercepted is **the first launch**: it downloads portable Python and Node from python.org / nodejs.org into the project's own `runtime/` (nothing is installed system-wide, and macOS needs no Homebrew) — and downloading then executing a runtime is a pattern heuristic scanning examines closely. The download runs over HTTPS and is **verified against the official SHA256** before anything is unpacked; if Python and Node are already installed, those are used as they are and nothing is downloaded twice.
+
+To verify that a file has not been altered: every release ships a matching `.sha256` — on Windows use `Get-FileHash .\ResumeForge-<version>-windows.zip -Algorithm SHA256`, on macOS / Linux use `shasum -a 256 …`, and compare it with the value in the file.
+
+**Disabling security software or adding an exclusion is not recommended.** If the hash matches and the file is still blocked, report the blocked file name and the log via [Issues](https://github.com/magicapple123/ResumeForge/issues) or the group; this indicates a problem that needs fixing.
+
+</details>
+
+<details>
+<summary><b>Why is local-only operation required?</b></summary>
+
+The app has no account system or permission model, and business data (including personal details such as ID and phone numbers) is not encrypted at rest. Multi-user access would require authentication, TLS and auditing first, which is outside the scope of this release.
+
+</details>
+
+## 💬 Community and feedback
+
+- **QQ group `922830167`**: for usage questions, feature requests and bug reports.
+  **The installers are also mirrored in the group files**, for when GitHub downloads are slow or interrupted.
+
+<p align="center">
+  <img src="docs/images/qq-group-en.png" alt="QR code for the ResumeForge QQ group 922830167" width="300">
+</p>
+
+- **Bugs and feature requests**: file them through the [issue templates](.github/ISSUE_TEMPLATE) with the version number, your system and the steps to reproduce.
+- **Security issues**: please use a private channel (see [SECURITY.md](SECURITY.md)) and do not disclose exploitable details in a public issue.
+
+## ☕ Support the project
+
+ResumeForge is **free and open source, permanently**, and donations do not affect any feature. If the project has been useful, voluntary support is welcome:
+
+<details>
+<summary><b>Support options (WeChat Pay / Alipay)</b></summary>
 
 <br>
 
 <p align="center">
-  <img src="docs/images/appreciate-card.png" alt="赞赏码：微信支付与支付宝，金额随意；不打赏也完全不影响使用，点个 Star 同样是对作者的支持" width="640">
+  <img src="docs/images/appreciate-card-en.png" alt="Donation codes: WeChat Pay and Alipay, any amount; not donating affects nothing, and a Star supports the author just as much" width="640">
 </p>
 
 <p align="center">
-  <sub>金额随意，一杯奶茶也感激不尽。没空的话，去上面给个 <b>Star</b> 一样开心 ⭐</sub>
+  <sub>Any amount is appreciated; a <b>Star</b> above is equally welcome.</sub>
 </p>
 
 </details>
 
-## 📖 文档
+## 📖 Documentation
 
-**普通用户**直接看官网的[使用文档界面](https://magicapple123.github.io/ResumeForge-official/docs.html)（排版友好、可搜索）；**开发者**看仓库里的源码文档：
+End users should begin with the [user guide on the website](https://magicapple123.github.io/ResumeForge-official/docs.html) (well formatted and searchable); developers should refer to the source documentation in this repository:
 
-| 文档 | 内容 |
+| Document | Contents |
 | ---- | ---- |
-| [使用指南](docs/user-guide.md) | 每个功能的字段说明、操作步骤与隐私边界（最完整的一份） |
-| [项目导航图](docs/PROJECT_MAP.md) | 从功能倒查代码位置的地图，想改某功能先看这份 |
-| [面试讲解指南](docs/INTERVIEW_GUIDE.md) | 怎么把项目讲清楚、讲出深度（亮点与高频追问） |
-| [架构设计](docs/architecture.md) | 分层、数据模型、决策记录、扩展点 |
-| [界面质量规范](docs/ui-quality.md) | 设计令牌、窄屏交互、键盘与可访问性验收标准 |
-| [升级与回滚](docs/upgrading.md) | 版本升级、压缩包更新、数据备份与回滚 |
-| [AI 故障排查](docs/ai-troubleshooting.md) | 模型连接、超时、输出异常与常见报错 |
-| [提示词调优](docs/prompt-tuning.md) | 各生成链路用的提示词与调整方法 |
-| [变更记录](CHANGELOG.md) | 每个版本改了什么 |
-| [贡献指南](CONTRIBUTING.md) | 开发环境、提交规范、测试要求 |
+| [User guide](docs/user-guide.md) | Field reference, step-by-step instructions and privacy boundaries (the most complete document) |
+| [Project map](docs/PROJECT_MAP.md) | Index from a feature to its implementation |
+| [Architecture](docs/architecture.md) | Layering, data model, decision records, extension points |
+| [Resume document model](docs/resume-document-model.md) | The v2 contract for Resume objects and fields, placement and layout planning, and the front-end contract |
+| [Interview guide](docs/INTERVIEW_GUIDE.md) | Talking points and likely follow-up questions |
+| [Maintenance handbook](docs/maintenance.md) | The six-step development loop, guards and red lines, manual start and smoke, known local pitfalls |
+| [Copy style guide](docs/ui-copy-guide.md) | Canonical names and banned aliases; consult before changing UI copy |
+| [UI quality spec](docs/ui-quality.md) | Design tokens, narrow-window interactions, keyboard and accessibility acceptance criteria |
+| [Upgrade and rollback](docs/upgrading.md) | Version upgrades, archive updates, data backup and rollback |
+| [AI troubleshooting](docs/ai-troubleshooting.md) | Model connection, timeouts, odd output and common errors |
+| [Prompt tuning](docs/prompt-tuning.md) | The prompts used by each generation path and how to adjust them |
+| [Verification playbook](docs/verification-playbook.md) | Evidence levels, counterproof and false-green detection: how to prove a change really took effect |
+| [Collaboration SOP](docs/ai-collaboration-sop.md) | Task-brief skeleton, file ownership, hand-off and delivery-report structure |
+| [Defect patterns](docs/defect-patterns.md) | 31 recurring defect patterns: how to spot them, why they are missed, and how to guard them |
+| [Stale-build troubleshooting](docs/troubleshooting-stale-build.md) | The “my change did nothing” decision chain: process, artefact, cache, address family |
+| [Task brief and report templates](docs/templates/) | Copy-ready skeletons for task briefs and delivery reports |
+| [Changelog](CHANGELOG.md) | What changed in every version |
+| [Contributing](CONTRIBUTING.md) | Development environment, commit conventions, testing requirements |
 
-## 🧪 第六阶段验收证据（简历制作台 Q01–Q27）
+## 🤝 Contributing
 
-本轮「简历制作台」修复的真机验证、截图、日志与逐项记录存放在 `runtime/investigation/phase6/`（本机证据目录，不随源码提交）：
+Issues and pull requests are welcome. Before starting, read [CONTRIBUTING.md](CONTRIBUTING.md) and [AGENTS.md](AGENTS.md); the latter defines the repository's long-term maintenance rules, including conventions such as “one implementation per piece of logic” and “a new migration must update the tests”, which directly determine whether a pull request can be merged.
 
-| 任务组 | 任务 | 证据 |
-|---|---|---|
-| 制作台核心 / 后端文档链路 | Q01–Q04、Q19、Q26、Q27 | [results.md](runtime/investigation/phase6/results.md)、[results-backend.md](runtime/investigation/phase6/results-backend.md)、`shots/Q01-*`…`Q27-*` |
-| 预览 / 编辑器 | Q05、Q06、Q16、Q17、Q18、Q21、Q22 | [results-workbench.md](runtime/investigation/phase6/results-workbench.md)、`shots/Q05-*`…`Q22-*` |
-| 面板 / 结构 / 小样式 | Q07–Q10、Q20、Q23–Q25 | [results-panels.md](runtime/investigation/phase6/results-panels.md)、`shots/Q07-*`…`Q25-*` |
-| 局部排版四出口 | Q11–Q15 | [results-style.md](runtime/investigation/phase6/results-style.md)、`shots/Q11-*`…`Q15-*` |
-| 后续修复 | 字段 chip 收起 / 字段与条目右键菜单 / 隐藏恢复位置 / 结构面板性能 / 结构定位横向错位 / 结构悬停抖动 / 收起条目 / 板块顺序 / 新建与 AI 顺序 / 清空内容 | [results-followup-chip-collapse.md](runtime/investigation/phase6/results-followup-chip-collapse.md)、[results-followup-editor-perf.md](runtime/investigation/phase6/results-followup-editor-perf.md) | [results-followup-chip-collapse.md](runtime/investigation/phase6/results-followup-chip-collapse.md)、`shots/Q28-chip-collapse/` |
-| 索引与复现脚本 | — | [phase6/README.md](runtime/investigation/phase6/README.md)、`tools/browser.cjs` |
+- For a bug fix, add a test that reproduces it first, then change the implementation;
+- A user-visible behaviour change should update the README, `docs/user-guide.md`, the in-app user guide and `CHANGELOG.md` together;
+- A new table or column requires an Alembic migration and a downgrade script, plus an assertion that “the set of tables is unchanged before and after”;
+- Commit messages follow Conventional Commits (`feat:` / `fix:` / `docs:` …).
 
-> 证据全部来自隔离演示库（`runtime/demo/demo.db` 与各成员副本），未读写真实用户数据。
+This project adopts the [Contributor Covenant](CODE_OF_CONDUCT.md) code of conduct.
 
-## 🤝 参与贡献
+## 📄 License
 
-欢迎 Issue 与 Pull Request。开始之前请读 [CONTRIBUTING.md](CONTRIBUTING.md) 与 [AGENTS.md](AGENTS.md)（后者是仓库的长期维护规则，包含「一处逻辑只留一份实现」「新增迁移要同步更新测试」这类会直接影响你 PR 能否通过的约定）。
+Licensed under the [Apache License 2.0](LICENSE), © 2026 magicapple123.
 
-- 修 bug 请先补一个能复现的测试，再改实现；
-- 用户可见的行为变化请同步更新 README、`docs/user-guide.md`、应用内使用指南与 `CHANGELOG.md`；
-- 新增数据表或列必须写 Alembic 迁移与降级脚本，并补「表集合前后不变」的断言；
-- 提交信息遵循 Conventional Commits（`feat:` / `fix:` / `docs:` …）。
+- You may use it commercially, modify it, distribute it closed-source or relicense it, as long as you keep the copyright and license notices, mark the changes in modified files, and ship a copy of the license when distributing.
+- The software is provided “as is”, without warranty of any kind, express or implied.
+- **The code license does not include a trademark license**: the name “ResumeForge”, the icon and the logo are not licensed with it — use your own name and marks when redistributing.
+- Versions 1.0.2 and earlier were released under MIT, and that license remains valid and irrevocable for those versions; Apache-2.0 applies to later versions.
+- The Windows installer is built and signed in CI through the [SignPath Foundation](https://signpath.org) free code signing program for open source projects, so once the certificate is issued Windows will show the publisher as **SignPath Foundation** rather than the repository owner. As of this writing the test-signing pipeline is wired up and the production certificate is still pending, so the packages currently on the releases page remain unsigned (see the download section above). What is signed, where a signing request comes from and who approves it are documented in the [code signing policy](https://magicapple123.github.io/ResumeForge-official/en/code-signing.html).
 
-这个项目采用 [Contributor Covenant](CODE_OF_CONDUCT.md) 行为准则。
+## ⭐ Star history
 
-## 📄 许可证
-
-本项目采用 [Apache License 2.0](LICENSE) 授权，© 2026 magicapple123。
-
-- 你可以自由商用、修改、闭源分发或再许可，只需保留版权与许可声明、在修改过的文件中标注变更，并在分发时附带许可证副本。
-- 软件按「原样」提供，不附带任何明示或暗示的担保。
-- **代码授权不包含商标授权**：项目名称「简历通 ResumeForge」、图标与 logo 不随许可证一并授权，二次分发请使用自己的名称与标识。
-- 1.0.2 及更早版本以 MIT 授权发布，该授权对这些版本持续有效且不可撤销；Apache-2.0 适用于之后的版本。
-
-## ⭐ Star 历史
-
-如果这个项目帮你少踩了一个坑，给个 Star 会让我知道它值得继续维护。
+If this project has been useful, a Star supports continued maintenance.
 
 [![Star History Chart](https://api.star-history.com/svg?repos=magicapple123/ResumeForge&type=Date)](https://star-history.com/#magicapple123/ResumeForge&Date)

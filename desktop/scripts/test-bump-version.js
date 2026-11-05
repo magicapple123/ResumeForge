@@ -63,7 +63,8 @@ function buildFixtureRepo(root) {
     "desktop/package-lock.json",
     JSON.stringify({ name: "resumeforge-desktop", version: old, packages: { "": { version: old } } }, null, 2) + "\n",
   );
-  write("README.md", "# ResumeForge\n\n当前版本：`0.18.0`\n");
+  write("README.md", "# ResumeForge\n\nVersion: `0.18.0`\n");
+  write("README.zh-CN.md", "# 简历通 ResumeForge\n\n当前版本：`0.18.0`\n");
   write("CHANGELOG.md", "# 变更记录\n\n## Unreleased\n\n### Fixed\n\n- test entry\n");
 
   execFileSync("git", ["init", "-q"], { cwd: root });
@@ -98,6 +99,7 @@ test("bump_version keeps desktop/package.json and its lockfile in lockstep", () 
     const frontendLock = readJson(path.join(root, "frontend", "package-lock.json"));
     const config = fs.readFileSync(path.join(root, "backend", "app", "config.py"), "utf-8");
     const readme = fs.readFileSync(path.join(root, "README.md"), "utf-8");
+    const readmeZh = fs.readFileSync(path.join(root, "README.zh-CN.md"), "utf-8");
 
     assert.strictEqual(desktop.version, expected,
       "desktop/package.json must be bumped in lockstep");
@@ -108,7 +110,9 @@ test("bump_version keeps desktop/package.json and its lockfile in lockstep", () 
     assert.strictEqual(frontend.version, expected);
     assert.strictEqual(frontendLock.version, expected);
     assert.ok(config.includes(`app_version: str = "${expected}"`));
-    assert.ok(readme.includes(`当前版本：\`${expected}\``));
+    assert.ok(readme.includes(`Version: \`${expected}\``));
+    assert.ok(readmeZh.includes(`当前版本：\`${expected}\``),
+      "README.zh-CN.md must be bumped together with the English README");
 
     // Cross-file consistency self-check: the desktop version (what the
     // packaged shell / payload reports as app.getVersion) must equal the

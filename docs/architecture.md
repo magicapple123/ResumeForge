@@ -1,8 +1,10 @@
 # 架构设计
 
+> **迁移号说明**：本文出现的 `00XX_*` 迁移号（如 `0003`–`0075`）均为 **1.x 历史号**；2.0 起迁移链只有一条基线 `0001_baseline_v2`，新增迁移接在它之后。
+
 ## 总体架构
 
-前后端分离：React（Vite + TypeScript + Ant Design）+ FastAPI（Python），本地 SQLite 存储，单用户本地部署。除用户主动配置的大模型 API 外，不依赖额外的数据库或业务服务。自动投递链路额外通过**浏览器桥接层**驱动一个由应用自己拉起的「投递专用浏览器」访问招聘网站——这是项目里唯一会主动访问外部站点的地方，且只在用户显式触发时运行。
+前后端分离：React（Vite + TypeScript + Ant Design）+ FastAPI（Python），本地 SQLite 存储，单用户本地部署。除用户主动配置的大模型 API 外，不依赖额外的数据库或业务服务。自动投递链路与网申填表链路额外通过**浏览器桥接层**驱动一个由应用自己拉起的专用浏览器访问招聘网站——**投递台（采集 / 投递）与网申填表是项目里仅有的两条会主动访问外部站点的链路**，两者都只在用户显式触发时运行。
 
 ```mermaid
 flowchart LR
@@ -40,6 +42,26 @@ flowchart LR
     SVC --> PROMPTS
     ROUTES --> DB
 ```
+
+### 部署拓扑与工程约束
+
+前后端分离，但**前端统一走同源 `/api`**，三种形态的接法不同：
+
+- **开发**：Vite dev server（5173）把 `/api` 代理到 FastAPI（默认 8000）；
+- **生产**：由 Web 服务器托管 `frontend/dist`，把 `/api` 反向代理到 FastAPI，并把非静态文件的前端路由回退到 `index.html`（SPA 回退）；
+- **发布包 / 桌面版**：后端同源托管 `frontend/dist`，运行期不再需要 Node。
+
+![架构与数据边界：React 前端 → 同源 /api → FastAPI 后端 → 本地 SQLite / 你配置的模型服务商 / 本机浏览器](images/architecture.png)
+
+一张图看清数据边界：绿色那块「默认不出网」，橙色的两块（你配置的模型服务商、本机 Chrome / Edge）是**唯一**可能出网的位置，且都必须由用户显式配置并显式触发。
+
+几条贯穿全项目的工程约束，读代码前先知道可以少走弯路：
+
+- **一个逻辑只有一份实现**：投递准入只有 `models/apply.py::admission_of`（见下文「关键设计决策」），行操作菜单只有 `components/common/RowActions`，卡片详情只有 `RecordDetail`；助手的能力地图由 `services/feature_catalog.py` 门面在运行时渲染（功能数据按原始顺序拆在 `feature_catalog_{profile,resume,workflow}.py`，守卫测试保证与 README 功能表双向对齐）。
+- **并发守卫下沉到 SQL**：批次状态用条件 `UPDATE ... WHERE status = ?` 原子推进，不用「先读后判再写」。
+- **外部输入一律不可信**：岗位描述、粘贴文本与上传文件都按不可信输入处理，不做系统指令执行；解析侧对页数 / 字符数 / 像素数封顶，DOCX 只读白名单成员。
+- **不用 `create_all` 掩盖迁移问题**：数据库由 Alembic revision 管理，新增表 / 列必须写迁移与降级脚本。
+
 
 ## 目录结构
 
@@ -116,13 +138,21 @@ backend/app/
 
 个人资料粘贴解析采用 `profile_text_parser.py` 兼容门面，具体规则按常量、规范化、分区识别、基本字段、条目头部、技能字段和结果边界拆分到 `services/profile_parser/`。岗位文本规则同样由 `job_text_parser.py` 门面和 `services/job_parser/` 组成。两个粘贴接口会先运行本地规则，再在已配置模型时调用 `text_extraction.py` 的结构化 Prompt 纠正字段分类；模型失败、超时或输出非法 JSON 时自动返回本地草稿，并通过 `recognition_source` 和 warnings 告知前端。门面继续导出原有符号，因此 API 层和外部调用方无需改变导入路径；内部模块不反向依赖门面。
 
-SQLite 启动升级以 Alembic 为唯一结构来源：空库执行完整 revision 链，已版本化数据库只执行待应用 revision。仅当检测到早期未版本化业务表时，才先执行 `create_all` 和 `ensure_sqlite_columns` 补齐历史兼容结构，再标记为基线并交给 `run_database_migrations`。有用户数据且存在待执行 revision 时，使用 SQLite backup API 在数据库同级 `backups/` 目录创建一致性备份，然后升级到 `head`。`0003_job_additional_info`、`0004_resume_favorite`、`0005_chat_assistant`、`0006_chat_conversation_flags`、`0007_assistant_skills` 依次增加岗位其他信息、简历收藏状态、助手会话/消息表、会话置顶和收藏字段以及助手技能表；`0006` 使用原生新增列操作，避免 SQLite 重建会话父表时触发外键级联并删除消息。升级保留既有业务记录并为新增字段提供默认值。降级会按 revision 移除对应的新字段或表，因此执行降级前必须另外备份。后续新增/删除列、改类型、约束变化和数据回填都必须新增 revision，不再扩大临时兼容层。
+SQLite 启动升级以 Alembic 为唯一结构来源，但 2.0 把「版本闸门」从 revision 换成 **epoch**。2.0 的迁移链只有一条基线 `0001_baseline_v2`：空库执行一次 `upgrade head` 即建全 2.0 的表 / 列 / 索引，不再有"逐版本演进"的兼容分支。基线迁移同时创建单行表 `app_schema_epoch` 并写入唯一一行 `epoch=2`，启动顺序因此是：
 
-## 核心数据流：职业场景与补充事实（A1–A5）
+1. **先读 epoch**（不先看 revision）：`app_schema_epoch` 缺表且库里存在业务表 → 判为 pre-2.0 库，走「整包归档 → 校验 → 移走旧库 → 建空库 → 迁移」；`epoch > 2` → 拒绝启动（库来自更高版本）；`epoch == 2` → 进入第 2 步。
+2. **epoch==2 时才用 revision 判断"在不在链上"**：`current` 与 `head` 不一致就执行待应用的 revision。这样"老库的 revision 不在新链上"不会再被误判成库损坏。
+3. **升级前仍走一致性备份**：有用户数据且存在待执行 revision 时，用 SQLite backup API 在数据库同级 `backups/` 目录创建备份，然后升级到 `head`。
 
-> **2026-10-25 更新**：补充事实（`profile_fact` / `profile_fact_field_pref`）已按 v3 裁决**从界面下线**
-> （R-54）。旧表与旧数据继续保留、继续进备份、回收站里仍可见历史条目，但新的资料页不再读取它们；
-> 论文/科研/专利/证照/语言等改由「资料板块」录入，培训不再提供内置入口。本节的映射描述只作为历史实现记录。
+pre-2.0 库的归档落在数据目录的 `legacy-archive/<时间戳>/`（`package/` 内是与「导出全部数据集」同格式的 zip，`files/` 内是原库与数据集文件，另附 `ARCHIVE-README.txt`）；归档校验通过才移走旧库并建空库，任一步失败都中止启动、原库原样保留。**1.x → 2.0 不搬数据**：1.0 系列只提示、不回填，新库从空白开始。库结构后续发生变化仍必须新增 revision，不能改写已发布的基线。
+
+## 核心数据流：职业场景（A1–A5）
+
+> **1.x 历史实现（2.0 已下线）**：补充事实（`profile_fact` / `profile_fact_field_pref`）在 2.0 已整套删除——
+> 模型、表、路由、服务与前端模块全部移除，2.0 基线不再创建这两张表，回收站里也没有这一类。
+> 论文 / 科研 / 专利 / 证照 / 语言等改由「资料板块」录入（见下节 F1–F3），培训不再提供内置入口。
+> 本节以下关于 `fact_context.py` / `fact_mapping.py` / `services/webform/facts.py` 的映射描述只作为
+> 1.x 的历史记录，**不代表当前代码**。
 
 职业场景（`career_scenario`）与简历排版对象的 `ROLES`（姓名/正文/元信息等渲染分区）、面试 persona、
 工作区预设、数据集是**五个互不相干的层**。场景只回答"本窗口给什么引导与可选表达建议"，不能写简历正文；
@@ -163,18 +193,7 @@ flowchart LR
 实现见 `services/resume/scenario_variant.py`、`api/resumes/scenario_variant_routes.py`，
 前端 `components/resume/versions/ScenarioVariantSection.tsx`。
 
-补充事实（`profile_fact`，0062；2026-10-25 灵活化）是**九类补充资料容器**，与旧资料表隔离：旧
-`PUT /api/profile` 是"整体替换"，新事实只由 `/api/profile/facts` 写入，因此旧客户端保存资料不会清空它们。
-每条事实有稳定 `fact_id` 与 `revision`（条件写），`deleted_at` 软删并登记回收站。
-
-**字段设置（`profile_fact_field_pref`，0063）**：每类事实可隐藏默认字段、增加自定义字段定义；事实 payload
-里保存 `custom_fields` 值快照（key+label+value）。隐藏字段只在读写/导出层剔除，旧值保留在 payload，
-恢复默认后重新出现。生成入口用 `fact_context.py` 读快照 + `fact_field_schema.mapping_payload` 剔除隐藏/未定义
-自定义字段；`fact_mapping.py` 纯映射：论文/科研项目/专利/资格证照独立栏目，作品项目并入 `projects`、实践
-并入 `experiences`，荣誉并入 `awards`、语言并入 `skills`、培训并入 `projects`（artifact_type=培训）；
-资格证照编号永不进候选，链接只留 http(s)。网申侧 `services/webform/facts.py` 把可见字段作为
-`CUSTOM_FACT_` 条目并入 catalog/data/custom_labels（私密与隐藏字段排除，已有资料优先），供人工挑选、
-批量预填与放宽匹配使用。
+**补充事实容器（1.x 历史，2.0 已下线）**：1.x 曾用 `profile_fact`（九类补充资料容器）与 `profile_fact_field_pref`（字段设置：隐藏默认字段、自定义字段定义）承载论文 / 科研 / 专利 / 证照 / 语言 / 培训等资料，并由 `fact_context.py` / `fact_mapping.py` 把它们映射进生成候选、由 `services/webform/facts.py` 以 `CUSTOM_FACT_` 条目并入网申候选。2.0 已把这条链整套删除（模型 / 表 / 路由 / 服务 / 前端模块），能力由「资料板块」承担（见下节）。本节不再描述其当前行为。
 
 **跨行业筛选兜底（A4/§8.5）**：非技术岗位（DOMAIN_SIGNALS 未识别）且没有任何条目直接命中时，
 `profile_matching` 会按资料顺序保留少量真实经历/项目/技能作为候选，并在生成说明里如实标注
@@ -245,10 +264,13 @@ C1 空字段不产生 item；自建板块**独立成 section**（排在系统板
 HTML / PDF / Word / Markdown / TXT 五条产物都渲染独立「语言能力」小节。证书编号等私密字段在投影前
 就被跳过；`material_only` 字段投影成 hidden item，资料页与制作台都标注「不上纸面，仅生成素材」。
 
-**升级与旧数据**：旧六表 / `profile_fact` / `profile_fact_field_pref` 不删、不迁、也不再被新界面读取
-（R-46）；`services/profile/legacy_status.py` 用 `SELECT 1 ... LIMIT 1` 只探测「旧表里是否还有实际内容」，
-`GET /api/profile/upgrade-status` 与 `GET /api/profile/workspace` 的 `upgrade` 槽位据此提示「旧资料不再显示、
-可从备份取出后手动重填」（R-47）；表存在性按进程缓存，读取异常如实报错而不是冒充「没有旧资料」。
+**升级与旧数据**：2.0 基线**仍创建旧六表**（`user_profile` / `education` / `experience` / `project` /
+`skill` / `award` / `campus_experience` / `profile_photo`，因为 `models/profile.py` 还在），但新库里它们是
+**空表、不被新界面读取**，仍随备份导出；**`profile_fact` / `profile_fact_field_pref` 不再创建**
+（补充事实整套下线）。1.x → 2.0 时旧库整包归档到 `legacy-archive/<时间戳>/`、**不原地迁移**，所以这些旧表里
+不会有 1.x 的数据。`GET /api/profile/upgrade-status` 仍保留，但
+`load_workspace_upgrade_status()` 在 2.0 **已不再探测旧表**，直接返回 `has_legacy_data=False`
+（字段只为前端契约保留）；`new_profile_has_entries` 照实报告新资料模型有没有内容。
 
 API 增量：`/api/profile/workspace`（编辑视图）、`/api/profile/sections[...]`（自建板块/字段/条目光标）、
 `/api/profile/section-order`、`/api/profile/groups` + `/api/profile/current-group`、`/api/profile/field-preferences`、
@@ -430,7 +452,7 @@ sequenceDiagram
 
 ## 核心数据流：采集、匹配分析与自动投递
 
-自动投递是项目里**唯一会主动访问外部招聘网站**的链路，且**只在用户显式触发时**运行（默认不访问，见「关键设计决策」）。它把最不可控的两件事——驱动真实浏览器、理解陌生表单——封在**浏览器桥接层**与**站点适配器层**之后，业务层只调用「站点无关」的接口，两层都能用假传输层离线测试。
+自动投递与网申填表是项目里**仅有的两条会主动访问外部招聘网站**的链路，且都**只在用户显式触发时**运行（默认不访问，见「关键设计决策」）。它们把最不可控的两件事——驱动真实浏览器、理解陌生表单——封在**浏览器桥接层**与**站点适配器层**之后，业务层只调用「站点无关」的接口，两层都能用假传输层离线测试。
 
 ```mermaid
 sequenceDiagram
@@ -646,6 +668,9 @@ flowchart LR
   ——`document_html.coerce_document()`（v1 → v2，读时转换）与 `document_html.paper_document()`
   （剔除 hidden 条目 / 文本块 / placement=hidden，纸面视角的唯一过滤点）——然后消费同一份
   `DocumentPlan`；纯文本走 `txt_exporter`（由 Markdown 展平），JSON 直接输出 v2 document + layout。
+  用户可见的导出还有第 7 种「图片（PNG）」：前端用 pdfjs 把精确 PDF 逐页光栅化
+  （`frontend/src/utils/pdfToPng.ts` + `pngExport.ts`），单页出 `.png`、多页用 jszip 打 `.zip`；
+  它不新增后端 `ExportFormat` 枚举，页数上限继承 PDF 的截断结果。
 - **字段拼装只发生在 planner**：日期范围 / 枚举 / 作者 / 列表 / 标签都在 planner 格式化好，渲染器只画
   `Inline` 段；模板只负责外壳与 CSS。四格式「同字段、同顺序」由文本对拍测试守住。
 - **水印是后处理**（`services/watermark.py`）：输入已经是渲染好的字节，输出加水印后的字节；
@@ -817,10 +842,10 @@ flowchart LR
 | 离线分享包不带敏感信息         | 分享包由脱敏 HTML/PDF + 只读快照 + 评论回传文件 + 本地 token 组成，token 仅离线校验、不做在线鉴权；删除走回收站软删除、磁盘产物不清理 |
 | ATS 检测带免责                 | `ats_check` 只做格式 / JD 关键词覆盖 / 信息位置三类静态规则检查，**不连接、不模拟真实招聘系统**，结果仅供参考、不构成通过保证 |
 | 内推转化口径派生               | `referral.converted` 是迁移 0018 的历史占位列；真实口径由关联 `ApplicationTrack` 后置位派生（进入面试及以上才算转化），写入侧不接受 `converted`、读取侧覆盖，避免表里手算第二份口径 |
-| 回收站覆盖二十三类内容         | 岗位 / 备选岗位 / 简历 / 投递 / 台账 / 资料 / 会话 + 内推 / 提醒 / 面经 / 分享包 / 题库 / 复盘 / 知识库 / 网申填充 / 表达资产 / 术语表 / 补充事实历史，以及 0064 起新增的方案 / 自建板块 / 自建字段 / 资料条目，全部由 `trash.TRASH_SPECS` 注册表描述；新增一类只加一行，注册表驱动的 `live_only` / `trash_only` 让"哪张表用哪个列名"只写一次 |
+| 回收站覆盖二十二类内容         | 岗位 / 备选岗位 / 简历 / 投递 / 台账 / 资料 / 会话 + 内推 / 提醒 / 面经 / 分享包 / 题库 / 复盘 / 知识库 / 网申填充 / 表达资产 / 术语表，以及 0064 起新增的方案 / 自建板块 / 自建字段 / 资料条目，全部由 `trash.TRASH_SPECS` 注册表描述；新增一类只加一行，注册表驱动的 `live_only` / `trash_only` 让"哪张表用哪个列名"只写一次。**2.0 起是 22 类**：补充事实（`profile_fact`）这一类随整套模块下线一并移除，基线也不再创建对应表 |
 | 方案不拥有数据 / 当前方案唯一       | 方案只记「名称 + 板块清单」，共享同一份 `profile_entry`；当前方案是单行状态表 + `CHECK(id = 1)`，默认方案由 CHECK 保证不可软删。这样"每个方案一份副本"与"无当前方案"在结构上就写不进库，不靠调用方自觉（R-17/R-24/R-25） |
 | 消费 DTO 与折叠态物理隔离       | 资料页编辑 DTO 含 hidden / collapsed_override；投影、生成、网申只吃 `ConsumedProfile`（类型里没有 collapsed）。否则"收起"迟早被某条取数链当成"不参与"，而它只该影响输入框展不展示（R-66/R-67） |
-| 旧资料不迁移、不删除           | 迁移 0064 只加表；旧六表与旧事实表继续存在并进备份，新界面不读；资料页用"旧表有内容且新模型为空"的探测给出重填说明。迁移工具看起来省事，但会改写用户历史且无法回退（R-46/R-47/R-49） |
+| 1.x 资料不原地迁移、整包归档 | 1.x 旧库在首次启动时整包归档到 `legacy-archive/<时间戳>/`，2.0 用空库，**不搬数据、不回填**；2.0 基线仍建旧六表（空表、新界面不读、仍进备份），但**不建 `profile_fact` / `profile_fact_field_pref`**。不原地迁移是为了不改写用户历史，并且保住"回到 1.0.2 还能打开"的路（R-46/R-47/R-49） |
 | 字段默认位置只有一份定义       | 字段目录 `document_catalog.py` 是标签、format、默认位置、仅素材标志的唯一来源；`paper_projection.py` 与生成链路共用它。第二份映射必然漂移成"生成有、填充没有"（R-37/R-42/R-77） |
 | 字段位置是数据                 | v2 把 title / meta / lead / trail / body / hidden 存在 item 上，拖拽 = 改顺序 + 改 placement；「看起来都能调、实际很多调不了」从模型层消失（D1–D5） |
 | 唯一 planner / 四出口同源      | `document_plan.py` 产出 `DocumentPlan`，HTML / PDF / Word / Markdown 只消费它；模板只负责外壳与 CSS。字段拼装与列装箱只写一次（D10） |
@@ -1097,7 +1122,7 @@ flowchart LR
 - 文档与新增图片格式另有三层测试：`test_document_text.py` 钉住提取行为与失败形态（扫描件、加密 PDF、损坏文件、超长截断、预算耗尽后仍校验后续文件），测试用的 PDF/DOCX 由测试自己拼字节——生成库造出来的 PDF 往往没有文字层，恰好测不到提取逻辑；`test_attachment_formats.py` 钉住转码与拒绝文案（bmp/tiff 转 PNG、照片型内容退到 JPEG 且不超限、HEIC/旧版 `.doc` 给可执行的提示）；`test_extraction_documents.py` 钉住接口面（无模型时文档仍能被本地规则解析、文档与文本合并、图片与文档共享 4 个/5 MB 额度、损坏文档在模型调用之前就失败）。
 - API 层有冒烟测试（TestClient），覆盖岗位文本草稿、岗位备注与其他信息搜索、收藏过滤、批量操作原子性、简历收藏、岗位分析、助手会话/SSE、照片往返与其他核心链路。
 - 自动投递链路按层拆测试且**不真的连网或驱动真实浏览器**：`test_apply_cdp_client.py` 用假传输层钉住 CDP 请求 / 响应与超时错误；`test_apply_browser_manager.py` 用假 `subprocess` 钉住拉起 / 关闭 / 健康检查、「只关闭自己拉起的那个进程」与「指定浏览器不静默回退」；`test_apply_boss_adapter.py` 喂脚本化假客户端钉住采集解析、就绪等待、「页面已加载但匹配 0 个必须失败」与「真的没结果才返回空」；`test_boss_network.py` 钉住「网络优先、DOM 兜底」这条链路的两个方向——**走得通时必须用网络结果**（DOM 脚本故意返回另一份数据，用到它说明走错了路）、**走不通时必须安静退回 DOM**，外加只取目标接口的响应体、订阅透传不被包装层吞掉；`test_page_ready.py` 直接驱动等待原语（就绪 / 拦截 / 超时 / 可中断）；`test_apply_collect_guard.py` 钉住「采集抓不到要让任务失败」「真没搜到才完成」与「采集遵循当前站点」；`test_apply_queue_and_api.py` 钉住 HTTP 面（准入冲突 409、入队去重、错误码、显式开始的强制校验、记录与单条重投、站点列表与配置往返）。
-- SQLite 升级测试使用临时旧库验证兼容补列、`0003` 至 `0007` revision 链、索引/外键迁移、幂等执行、备份和原数据保留，不接触真实用户数据库。
+- SQLite 升级测试使用临时库验证 2.0 基线的往返（`upgrade head` → `downgrade base` → `upgrade head` 均可用）、表集合与模型注册表一致、`app_schema_epoch` 恰好单行且 `epoch=2`、幂等执行，以及 pre-2.0 库的「整包归档 → 建空库」分支；不接触真实用户数据库。
 - 备份测试里有一条**旧备份回归闸门**（`test_inspect_accepts_a_backup_exported_before_the_skill_tables`）：伪造一份"技能表出现之前"的备份（少两张表、revision 与清单一起退回旧版），断言它仍能通过校验。新增数据表会静默拒收所有旧备份，只有这条测试能拦住它。
 - 面试深挖按层拆测试：`test_drill.py` 钉住核心规则（状态只能凭新证据前进、矛盾可覆盖、"没有证据的通过"在任何起点都不成立、契约与复盘解析的兜底），`test_drill_api.py` 钉住 HTTP 面（**契约在返回问题之前落库**、状态不能由调用方指定、真实模拟模式不在每题后念判定、下一题失败时提前收尾且保留已有判定、复练不落库），`test_migration_0014.py` 钉住迁移的建表 / 级联 / "主张删了契约仍可读"。前端 `DrillPage.test.tsx` 钉住三条信任基础：契约对用户可见、真实模拟模式不念判定、**界面里不出现任何分数**。
 - 版面诊断按层拆测试：`test_resume_layout.py` 钉住规则（状态边界、建议顺序、字号下限按绝对像素、阶梯只收紧不反弹、**版式默认值与模板文件逐项一致**），`test_resume_layout_api.py` 钉住接口面（溢出才给方案、`PATCH` 的三态语义、**导出与预览用同一份版式配置**），前端 `resumeLayoutMeasure.test.ts` 钉住测量（元素筛选、减去 padding、除以页数、测量期间摘掉 transform），`ResumeLayoutDiagnosisCard.test.tsx` 钉住「够放下就停」与「保存时原样回传版式参数」。

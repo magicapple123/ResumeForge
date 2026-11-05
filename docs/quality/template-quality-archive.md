@@ -1,5 +1,7 @@
 # 模板质量档案（ResumeForge 内置模板）
 
+> **历史文档（2.0 已复核）**：本文是 1.0.2 时期（`380d5bed`）的模板质量归档、含已下线模板，评分与截图不作为 2.0 依据（2.0 可选 6 套，`technical` / `editorial` / `split` 已下线仍可渲染）。
+
 版本：v1 · 2026-10-24
 依据代码版本：`380d5bed` / `app_version 1.0.2`
 配套资料：`docs/quality/resume-quality-standard.md`（判据）、

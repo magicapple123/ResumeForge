@@ -22,7 +22,8 @@ from ..schemas.trash import (
     TrashRestoreBatchOut,
     TrashSummaryOut,
 )
-from ..services import trash
+from ..services import trash, trash_i18n
+from ..services.ui_locale import get_ui_locale, is_english
 
 logger = logging.getLogger(__name__)
 
@@ -34,6 +35,16 @@ def _require_spec(type_key: str) -> trash.TrashSpec:
     if spec is None:
         raise HTTPException(status_code=404, detail="未知的内容类型")
     return spec
+
+
+def _subtitle(item: dict, locale: str | None) -> str:
+    """列表行副标题：资料箱的分类值在英文界面换成英文标签，其余原样返回。
+
+    只碰 ``material``：别的内容类型的 subtitle 是标题/时间之类的自由文本，不是协议值。
+    """
+    if item.get("type") != "material" or not is_english(locale):
+        return str(item.get("subtitle") or "")
+    return trash_i18n.material_subtitle(str(item.get("subtitle") or ""))
 
 
 def _restore_conflict_response(exc: trash.RestoreConflict) -> JSONResponse:
@@ -57,10 +68,26 @@ def read_trash(
     if type:
         _require_spec(type)
     counted = trash.counts(db)
+    locale = get_ui_locale(db)
+    labels = trash.labels(locale)
+    # 条目行上的 ``type_label`` 也是给人看的类型名（表格「类型」列直接渲染），
+    # 跟筛选器用同一份 labels，否则英文界面里筛选项是英文、行内标签还是中文。
+    # ``subtitle``（目前只有资料箱会填成分类的协议值）同样要过一层展示映射，
+    # 但**绝不改动库里的 category**：资料箱页面还靠它查语言包与图标。
+    items = [
+        TrashItemOut(
+            **{
+                **item,
+                "type_label": labels.get(item["type"], item["type_label"]),
+                "subtitle": _subtitle(item, locale),
+            }
+        )
+        for item in trash.list_trashed(db, key=type)
+    ]
     return TrashSummaryOut(
         counts=counted,
-        labels={spec.key: spec.label for spec in trash.TRASH_SPECS},
-        items=[TrashItemOut(**item) for item in trash.list_trashed(db, key=type)],
+        labels=labels,
+        items=items,
         total=sum(counted.values()),
     )
 

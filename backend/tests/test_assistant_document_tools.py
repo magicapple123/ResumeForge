@@ -147,7 +147,10 @@ def test_docs_index_covers_changelog_docs_subdirs_and_i18n():
     assert any(path.startswith("docs/adr/") for path in paths)
     assert any(path.startswith("frontend/src/i18n/messages/zh-CN.") for path in paths)
     # 界面文案的唯一真相在语言包里：搜当前按钮名必须命中 i18n 文件。
-    hits = search_product_docs("页面概览", limit=8)
+    # 用「获取分页报告」而不是「页面概览」：前者是分页面板上真实存在的按钮名，只出现在
+    # 语言包那一段；后者是长词，docs/README 里都提到过，文档措辞一改（多写一次、或换个
+    # 小节）它就会被同分挤出 top-8，把这条断言变成对文案排版的约束。
+    hits = search_product_docs("获取分页报告", limit=8)
     assert any("i18n/messages/zh-CN." in hit.path for hit in hits)
 
 

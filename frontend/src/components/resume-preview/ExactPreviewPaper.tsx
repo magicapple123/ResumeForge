@@ -13,6 +13,7 @@ import { t } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
 import type { PreviewShot } from "./exactPreviewCache";
 import { withPageWidthZoom } from "./pdfViewerSupport";
+import { VIEWER_CHROME_PX } from "./useExactPreviewFrameHeight";
 
 interface Props {
   /** 当前可见的那一份（旧图，双缓冲里留在下面）。 */
@@ -60,6 +61,21 @@ export default function ExactPreviewPaper({
   onSwapIn,
 }: Props) {
   useLocale();
+  /**
+   * iframe 只吃"纸"这一段高度，不吃查看器工具栏的预留。
+   *
+   * 相框高度里那 `VIEWER_CHROME_PX` 是给**查看器自己的工具栏**留的；我们请求 PDF 时带了
+   * `#toolbar=0`，当前 Chrome / Edge 认这个参数、根本不画工具栏（2026-11-05 实测：不带
+   * `toolbar=0` 时顶部有 56px 深色条，带了就没有）。预留区留在 iframe 里就变成纸面下方
+   * 一条深色横带——缩小到能看见整页时特别刺眼（用户截图反馈"下方明显缺失"）。
+   *
+   * 所以：iframe 高度 = 纸高，预留的 56px 留在纸列里（透明，露出相框底色）。若某个查看器
+   * 仍画工具栏，它会占掉 iframe 顶部、纸的下沿被裁掉一点——这与工具栏挡住纸是同一种观感，
+   * 不会比让所有 Chromium 用户看见黑带更糟。
+   */
+  const viewHeight = scalable
+    ? Math.max(1, paperHeight - Math.round(VIEWER_CHROME_PX * scale))
+    : frameHeight;
   return (
     /* 只画**实际排出来的页**（2026-10-24 用户口径）：PDF 里没有的页这里也不补，预览与下载到的文件永远一致。 */
     <div
@@ -68,7 +84,7 @@ export default function ExactPreviewPaper({
     >
       <div
         className="exact-preview-stack"
-        style={scalable ? { width: viewWidth, height: paperHeight } : { height: frameHeight }}
+        style={scalable ? { width: viewWidth, height: viewHeight } : { height: frameHeight }}
         // jsdom 量不出像素，把"这版实际几页 / 相框多高"写进 data 属性供测试断言。
         data-pages={renderedPages}
         data-frame-height={frameHeight}

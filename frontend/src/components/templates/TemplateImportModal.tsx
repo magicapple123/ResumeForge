@@ -23,6 +23,7 @@ import AbortButton from "../common/AbortButton";
 import { errorText, useAbortableRequest } from "../../hooks/useAbortableRequest";
 import { t } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
+import { formatFieldLabelOf } from "../../utils/resumeFormatLabels";
 
 interface Props {
   open: boolean;
@@ -47,7 +48,7 @@ export default function TemplateImportModal({
   styleFields = [],
 }: Props) {
   // 本组件用模块级 t()：必须订阅语言变化，否则切语言后弹窗文案不重渲染。
-  useLocale();
+  const locale = useLocale();
   const { message } = App.useApp();
   const [fileList, setFileList] = useState<UploadFile[]>([]);
   const [name, setName] = useState("");
@@ -292,7 +293,7 @@ export default function TemplateImportModal({
               {Object.entries(draft.confidence).length ? (
                 <Space wrap size={[4, 4]}>
                   {Object.entries(draft.confidence).map(([key, confidence]) => {
-                    const label = styleFields.find((field) => field.key === key)?.label ?? key;
+                    const label = formatFieldLabelOf(styleFields, key, locale, key);
                     return (
                       <Tag key={key} color={confidence < 0.65 ? "orange" : "blue"}>
                         {label} {Math.round(confidence * 100)}%

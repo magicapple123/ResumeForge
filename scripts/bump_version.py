@@ -48,6 +48,9 @@ PACKAGE_LOCK = REPO_ROOT / "frontend" / "package-lock.json"
 DESKTOP_PACKAGE_JSON = REPO_ROOT / "desktop" / "package.json"
 DESKTOP_PACKAGE_LOCK = REPO_ROOT / "desktop" / "package-lock.json"
 README = REPO_ROOT / "README.md"
+# GitHub 默认展示英文版（README.md），中文版是 README.zh-CN.md；两处版本号必须同步前进，
+# 否则"英文页写着旧版本、中文页写着新版本"。
+README_ZH = REPO_ROOT / "README.zh-CN.md"
 CHANGELOG = REPO_ROOT / "CHANGELOG.md"
 MIGRATIONS_DIR = REPO_ROOT / "backend" / "migrations" / "versions"
 
@@ -189,7 +192,7 @@ def read_versions() -> tuple[str, str, str, str]:
     config_match = re.search(r'app_version:\s*str\s*=\s*"([^"]+)"', CONFIG_PY.read_text("utf-8"))
     package_version = json.loads(PACKAGE_JSON.read_text("utf-8"))["version"]
     desktop_version = json.loads(DESKTOP_PACKAGE_JSON.read_text("utf-8"))["version"]
-    readme_match = re.search(r"当前版本：`([^`]+)`", README.read_text("utf-8"))
+    readme_match = re.search(r"(?:当前版本：|Version: )`([^`]+)`", README.read_text("utf-8"))
     if config_match is None or readme_match is None:
         raise BumpError("找不到 config.py 或 README 里的版本号")
     return config_match.group(1), package_version, desktop_version, readme_match.group(1)
@@ -251,15 +254,16 @@ def apply_version(new_version: str, released_on: str) -> list[str]:
     DESKTOP_PACKAGE_JSON.write_text(updated, encoding="utf-8", newline="\n")
     touched.append(str(DESKTOP_PACKAGE_JSON.relative_to(REPO_ROOT)))
 
-    readme_text = README.read_text("utf-8")
-    updated = replace_exact(
-        readme_text,
-        r"(当前版本：`)[^`]+(`)",
-        f"\\g<1>{new_version}\\g<2>",
-        "README.md",
-    )
-    README.write_text(updated, encoding="utf-8", newline="\n")
-    touched.append(str(README.relative_to(REPO_ROOT)))
+    for readme in (README, README_ZH):
+        readme_text = readme.read_text("utf-8")
+        updated = replace_exact(
+            readme_text,
+            r"((?:当前版本：|Version: )`)[^`]+(`)",
+            f"\\g<1>{new_version}\\g<2>",
+            readme.name,
+        )
+        readme.write_text(updated, encoding="utf-8", newline="\n")
+        touched.append(str(readme.relative_to(REPO_ROOT)))
 
     changelog_text = CHANGELOG.read_text("utf-8")
     CHANGELOG.write_text(

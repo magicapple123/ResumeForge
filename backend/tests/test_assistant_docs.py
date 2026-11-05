@@ -6,7 +6,10 @@ from app.services.assistant_tools import execute_tool, tool_names
 def test_product_docs_search_finds_resume_preview_guidance():
     results = search_product_docs("简历预览", limit=5)
     assert results
-    assert any(item.path.endswith("user-guide.md") or item.path == "README.md" for item in results)
+    # README 有两份：默认的英文版 README.md 与中文版 README.zh-CN.md，中文提问命中的是后者。
+    assert any(
+        item.path.endswith("user-guide.md") or item.path.startswith("README") for item in results
+    )
 
 
 def test_product_docs_tool_is_registered_and_offline(db_session):

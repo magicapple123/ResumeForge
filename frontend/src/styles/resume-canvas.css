@@ -428,6 +428,17 @@
   height: 100%;
 }
 
+/* 盖掉查看器给页面画的那圈深色外框：Chromium 内嵌 PDF 查看器会在纸四周画 1–4px 深色描边，
+   缩小看整页时就是一道"黑框"（PDF 本身四边纯白，已用 pypdfium2 渲染验证）。这圈边画在
+   查看器内部、外层 CSS 改不到，只能用 4px 白色内描边压住——只压纸边留白，不碰正文。 */
+.exact-preview-stack::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  box-shadow: inset 0 0 0 4px #fff;
+}
+
 /* 预加载层：`onLoad` 之前谁也看不见它，但浏览器已经在解析新 PDF。 */
 .exact-preview-frame-pending {
   opacity: 0;

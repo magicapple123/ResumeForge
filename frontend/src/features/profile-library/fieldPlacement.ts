@@ -13,6 +13,7 @@ import { useEffect, useState } from "react";
 import { request } from "../../api/client";
 import type { MessageKey } from "../../i18n";
 import { t } from "../../i18n";
+import { useLocale } from "../../i18n/i18nContext";
 import type {
   DocumentFieldCatalog,
   FieldCatalogField,
@@ -52,28 +53,39 @@ export function isMaterialOnlyField(field: FieldOut): boolean {
 }
 
 let cached: DocumentFieldCatalog | null = null;
+/** 缓存对应的语言：切语言必须重取，否则中栏页签会停在上一门语言。 */
+let cachedLanguage: string | null = null;
 let inflight: Promise<DocumentFieldCatalog> | null = null;
+let inflightLanguage: string | null = null;
 
-/** 读字段位置目录（会话级缓存；失败不缓存，下次访问重试）。 */
+/** 读字段位置目录（会话级缓存、按语言缓存；失败不缓存，下次访问重试）。 */
 export function getFieldPlacementCatalog(language = "zh-CN"): Promise<DocumentFieldCatalog> {
-  if (cached) return Promise.resolve(cached);
-  if (inflight) return inflight;
-  inflight = request<DocumentFieldCatalog>(
+  if (cached && cachedLanguage === language) return Promise.resolve(cached);
+  if (inflight && inflightLanguage === language) return inflight;
+  inflightLanguage = language;
+  const pending = request<DocumentFieldCatalog>(
     "/profile/field-placement-catalog?language=" + encodeURIComponent(language),
   )
     .then((catalog) => {
       cached = catalog;
+      cachedLanguage = language;
       return catalog;
     })
     .finally(() => {
-      inflight = null;
+      // 只清掉自己那一份：期间若已经为另一门语言发了新请求，别把它的句柄也抹掉。
+      if (inflight === pending) {
+        inflight = null;
+        inflightLanguage = null;
+      }
     });
-  return inflight;
+  inflight = pending;
+  return pending;
 }
 
 /** 字段定义变化（新建 / 删除自定义字段）后丢弃缓存，让下次读取带回新位置。 */
 export function invalidateFieldPlacementCatalog(): void {
   cached = null;
+  cachedLanguage = null;
 }
 
 export interface FieldPlacementCatalogState {
@@ -84,12 +96,19 @@ export interface FieldPlacementCatalogState {
 
 const EMPTY: FieldPlacementCatalogState = { catalog: null, loading: true, error: false };
 
-/** 组件用的目录 hook；目录取不到时加载态结束、error=true，界面退回"无徽标"。 */
+/**
+ * 组件用的目录 hook；目录取不到时加载态结束、error=true，界面退回"无徽标"。
+ *
+ * 语言走 `useLocale()`（与页面其它请求同一口径，不另写一套读取逻辑）：中文界面请求
+ * `?language=zh-CN`、英文界面 `?language=en-US`，切换语言后重新取一份——否则制作台
+ * 中栏的板块页签与字段名会一直停在上一门语言。
+ */
 export function useFieldPlacementCatalog(): FieldPlacementCatalogState {
+  const locale = useLocale();
   const [state, setState] = useState<FieldPlacementCatalogState>(EMPTY);
   useEffect(() => {
     let cancelled = false;
-    void getFieldPlacementCatalog()
+    void getFieldPlacementCatalog(locale)
       .then((catalog) => {
         if (!cancelled) setState({ catalog, loading: false, error: false });
       })
@@ -99,7 +118,7 @@ export function useFieldPlacementCatalog(): FieldPlacementCatalogState {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [locale]);
   return state;
 }
 

@@ -1,5 +1,7 @@
 # ADR-0004: 桌面端五类路径的固定策略（程序目录 / 用户数据 / 日志 / 运行时 / 缓存）
 
+> **2.0 已复核，结论仍适用**（"用户数据永远不落 `resources/payload`"仍是不变量）；文中提到的迁移号均为 **1.x 历史号**。
+
 - 状态：Accepted（2026-10-13，2026-10-13 生产审计 PR-05）
 - 关联：`desktop/backend-manager.js`、`desktop/main.js`、`backend/app/config.py`（`RF_DATA_DIR`）、`docs/desktop-supply-chain-audit.md`（PR-06 供应链基线）
 

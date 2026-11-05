@@ -85,6 +85,14 @@ npm run build
 
 涉及界面交互时，还应手动验证对应流程及常见空状态、错误状态和窄屏布局。涉及用户可见行为、依赖、配置或数据库兼容性的改动，请同步更新 `README.md`、相关 `docs/` 文档及 `CHANGELOG.md`。
 
+改动 `docs/**`、`README*.md`、`CONTRIBUTING.md` 或 `.github/` 下的文件时，再跑一次文档巡检：
+
+```powershell
+python scripts/check_docs_pii.py
+```
+
+它会拦下误带进文档的密钥、私钥块、令牌、手机号、邮箱与家目录路径；占位符（`example.com`、`138-0000-0000` 等）和带 `pii-ok` 注释的行会自动放过。写文档时可参考[验证手册](docs/verification-playbook.md)（怎样写可判真假的验收）与[协作规程](docs/ai-collaboration-sop.md)（任务书与交付报告的结构）。
+
 ## 演示数据与截图
 
 `README.md` 与 `docs/` 里的截图必须来自**真实运行**的应用，而截图里的数据必须**全是虚构的**。两件事各有一个入口：

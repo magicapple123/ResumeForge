@@ -19,6 +19,7 @@ import type { ResumeFormatPreset, ResumeLayout, ResumeTemplateCatalog } from "..
 import type { ResumeDocument } from "../../types/resumeDocument";
 import type { ResumeFormatConfig } from "../../types/resumeFormat";
 import { useI18n } from "../../i18n/i18nContext";
+import { pageLimitOptionLabel } from "../../i18n/countMessage";
 import {
   RESUME_CATALOG_FORMAT_DESCRIPTION_KEYS,
   resumeTemplateDescription,
@@ -247,7 +248,7 @@ export default function ResumeTemplateControls({
                 label:
                   value === UNLIMITED_PAGE_LIMIT
                     ? t("sections.templateControls.pageLimitUnlimited")
-                    : t("sections.templateControls.pageLimitPages", { count: value }),
+                    : pageLimitOptionLabel(value),
               }))}
               onChange={(value) => onChange({ ...layout, page_limit: value as number })}
             />

@@ -207,6 +207,15 @@ class SiteAdapter(ABC):
             return True
         return any(host and host.casefold() in target for host in self.hosts)
 
+    def display_name_for(self, locale: str | None = None) -> str:
+        """**展示用**站点名。默认与 ``display_name`` 相同，多语言站点在这里覆盖。
+
+        为什么不直接改 ``display_name``：它还参与 :meth:`matches` 的站点识别
+        （用站点名去匹配 ``job.source`` 文本），把它换成英文会让中文库里的
+        "BOSS直聘" 认不出来。所以语言只走这个出口，识别逻辑一个字不动。
+        """
+        return self.display_name
+
     @abstractmethod
     def risk_profile(self) -> RiskProfile:
         """本站点的风控参数。"""

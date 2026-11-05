@@ -45,13 +45,32 @@ FONT_KEY = "font"
 SYSTEM_FONT = "__system__"
 
 FORMAT_FIELDS: tuple[dict, ...] = (
-    {"key": "accent", "label": "强调色", "type": "color", "css": "--accent"},
-    {"key": "text_color", "label": "正文", "type": "color", "css": "--text"},
-    {"key": "muted_color", "label": "次要文字", "type": "color", "css": "--muted"},
-    {"key": "line_color", "label": "分隔线", "type": "color", "css": "--line"},
+    {"key": "accent", "label": "强调色", "label_en": "Accent", "type": "color", "css": "--accent"},
+    {
+        "key": "text_color",
+        "label": "正文",
+        "label_en": "Body text",
+        "type": "color",
+        "css": "--text",
+    },
+    {
+        "key": "muted_color",
+        "label": "次要文字",
+        "label_en": "Secondary text",
+        "type": "color",
+        "css": "--muted",
+    },
+    {
+        "key": "line_color",
+        "label": "分隔线",
+        "label_en": "Dividers",
+        "type": "color",
+        "css": "--line",
+    },
     {
         "key": "font_scale_adjust",
         "label": "字号系数",
+        "label_en": "Font scale",
         "type": "number",
         # 下限 0.35：无级字号滑块允许小到 5px（最小档 11px 时系数 5/11≈0.455），
         # 所以字段范围必须能装下它，否则用户拖到 5px 会被 `validated_format_config`
@@ -62,10 +81,12 @@ FORMAT_FIELDS: tuple[dict, ...] = (
         "max": 1.16,
         "step": 0.02,
         "description": "在所选字号档位上再乘一个系数",
+        "description_en": "Multiplies the selected font size",
     },
     {
         "key": "line_height",
         "label": "行高",
+        "label_en": "Line height",
         "type": "number",
         "min": 1.2,
         "max": 2.2,
@@ -77,6 +98,7 @@ FORMAT_FIELDS: tuple[dict, ...] = (
     {
         "key": "page_padding",
         "label": "页边距（mm）",
+        "label_en": "Page margin (mm)",
         "type": "number",
         # 下限 8 → 0（2026-10-22 用户要求）：要"正文铺满整张纸"时 8mm 是硬墙，
         # 而模板本来就可能自带 0。上限 26 不变：再宽正文就只剩一条窄条。
@@ -90,6 +112,7 @@ FORMAT_FIELDS: tuple[dict, ...] = (
     {
         "key": "section_gap",
         "label": "区块间距",
+        "label_en": "Section spacing",
         "type": "number",
         "min": 0.6,
         "max": 2.2,
@@ -266,10 +289,17 @@ def format_css(config: dict | None) -> str:
 
 
 def format_field_options() -> list[dict]:
+    """版式字段清单（喂「版式」编辑器的输入控件）。
+
+    ``label`` / ``description`` 是中文正名，**保持原样**；``label_en`` /
+    ``description_en`` 是同一项的英文名，只是附加键：zh 侧读法不变，旧前端忽略即可。
+    英文为空串时前端回落 ``label``（见 ``frontend/src/utils/resumeFormatLabels.ts``）。
+    """
     return [
         {
             "key": field["key"],
             "label": field["label"],
+            "label_en": field.get("label_en", ""),
             "type": field["type"],
             **(
                 {"min": field["min"], "max": field["max"], "step": field.get("step", 0.1)}
@@ -277,6 +307,7 @@ def format_field_options() -> list[dict]:
                 else {}
             ),
             "description": field.get("description", ""),
+            "description_en": field.get("description_en", ""),
         }
         for field in FORMAT_FIELDS
     ]

@@ -41,6 +41,7 @@ import {
   type ScaleKey,
 } from "../../utils/resumeScaleParams";
 import { scaleProbeCss, sectionGapProbeCss } from "../../utils/resumeFormatProbe";
+import { formatFieldLabelOf } from "../../utils/resumeFormatLabels";
 import { formatKeysDiffer, restoreFormatKeys } from "../../utils/paramRestore";
 import ParamResetButton from "./ParamResetButton";
 import { useLocale } from "../../i18n/i18nContext";
@@ -217,7 +218,8 @@ export default function ResumeSpacingControls({
   previewRef,
   onChange,
 }: Props) {
-  useLocale();
+  // 区块间距的行名与它身上的 `aria-label`（`Decrease {label}`）读同一个 `locale`。
+  const locale = useLocale();
   // 与 `ResumeMeasureControls` 同一个理由：防抖回调在松手之后才跑，提交时必须读
   // "提交那一刻"的 layout，否则会把这段时间里父组件改的其它版式（页数、模板）覆盖回去。
   const layoutRef = useRef(layout);
@@ -249,9 +251,12 @@ export default function ResumeSpacingControls({
   const ownGap = typeof config?.["section_gap"] === "number" ? Number(config["section_gap"]) : null;
   const gapValue =
     ownGap ?? presetNumber("section_gap") ?? templateSectionGap(catalog, layout.template);
-  const gapLabel =
-    catalog?.format_fields?.find((field) => field.key === "section_gap")?.label ??
-    t("workbench.param.section-gap");
+  const gapLabel = formatFieldLabelOf(
+    catalog?.format_fields,
+    "section_gap",
+    locale,
+    t("workbench.param.section-gap"),
+  );
 
   /** 写区块间距：`null` = 删键（回到随模板）；否则夹紧后落库。 */
   const writeGap = (next: number | null) => {

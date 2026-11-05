@@ -28,6 +28,7 @@ import type { ResumeLayout, ResumeTemplateCatalog } from "../../types";
 import type { ResumePreviewHandle } from "../ResumePreview";
 import { t, type MessageKey } from "../../i18n";
 import { colorProbeCss } from "../../utils/resumeFormatProbe";
+import { formatFieldLabelOf } from "../../utils/resumeFormatLabels";
 import { formatKeysDiffer, restoreFormatKeys } from "../../utils/paramRestore";
 import ParamResetButton from "./ParamResetButton";
 import { useLocale } from "../../i18n/i18nContext";
@@ -73,7 +74,9 @@ export default function ResumeColorControls({
   previewRef,
   onChange,
 }: Props) {
-  useLocale();
+  // 外观四行的行名与 `aria-label` 都读这一个 `locale`：英文界面取目录的 `label_en`，
+  // 取不到回落 `label`（中文界面输出与改动前逐字相同）。
+  const locale = useLocale();
   // #12：色板手风琴——一次只展开一行，**默认全部收起**（规格：四行总高 ≤120px、先选行才
   // 出色板）。四行各挂一排色块时外观组高得离谱且视觉噪音大；点这一行任意位置或行头箭头
   // 展开它，展开新行时自动收起旧行。初值刻意不是 "accent"：默认展开一行会让"外观"一进来
@@ -152,7 +155,7 @@ export default function ResumeColorControls({
   return (
     <div className="resume-wb-rows">
       {COLOR_KEYS.map((key) => {
-        const label = catalog?.format_fields?.find((field) => field.key === key)?.label ?? key;
+        const label = formatFieldLabelOf(catalog?.format_fields, key, locale, key);
         const current = effectiveColor(key);
         const customized = ownColor(key) !== null;
         // 与打开时不同才长出 ↺：这一格本来就是"来源说明"的位置，两者互斥。

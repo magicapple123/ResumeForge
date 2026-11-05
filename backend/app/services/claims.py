@@ -35,7 +35,8 @@ from ..models.claim import (
     verification_label,
 )
 from ..schemas.claim import ClaimCreate, ClaimDigestOut, ClaimOut, ClaimUpdate
-from . import trash
+from . import claims_i18n, trash
+from .ui_locale import is_english
 
 logger = logging.getLogger(__name__)
 
@@ -187,49 +188,77 @@ def _wording_strength_conflict(record: ClaimRecord) -> bool:
     return record.responsibility_level == RESPONSIBILITY_PARTICIPATED
 
 
-def claim_warnings(record: ClaimRecord) -> list[str]:
-    """把"这样写会在面试里出问题"的规则集中在这里。返回面向用户的中文建议。"""
+def claim_warnings(record: ClaimRecord, locale: str | None = None) -> list[str]:
+    """把"这样写会在面试里出问题"的规则集中在这里。
+
+    中文是原文，逐字不动（日志、测试、中文界面都引用它）；``locale`` 是英文时改取
+    ``claims_i18n`` 里的同义文案——每条规则**都要有英文分支**，否则英文界面会漏出中文。
+    规则本身的判断条件只有一份，翻译只发生在"往数组里塞哪句话"这一步。
+    """
     warnings: list[str] = []
+    english = is_english(locale)
     status = record.verification_status
 
     if record.responsibility_level in STRONG_RESPONSIBILITY_LEVELS and not _has_interview_details(
         record.interview_details
     ):
         warnings.append(
-            f"承担程度是「{record.responsibility_level}」，这类强主张面试时一定会被追问；"
-            "建议补上当时的决策、难点、怎么验证和结果"
+            claims_i18n.STRONG_RESPONSIBILITY_WARNING.format(
+                level=claims_i18n.responsibility_label(record.responsibility_level)
+            )
+            if english
+            else (
+                f"承担程度是「{record.responsibility_level}」，这类强主张面试时一定会被追问；"
+                "建议补上当时的决策、难点、怎么验证和结果"
+            )
         )
     if status == VERIFICATION_CONFIRMED and not (record.boundary or "").strip():
         warnings.append(
-            "这条会进入正式简历，但没写个人边界；"
-            "建议写清团队做了什么、你做了什么，避免把团队成果说成个人成果"
+            claims_i18n.NO_BOUNDARY_WARNING
+            if english
+            else (
+                "这条会进入正式简历，但没写个人边界；"
+                "建议写清团队做了什么、你做了什么，避免把团队成果说成个人成果"
+            )
         )
     if status == VERIFICATION_CONFIRMED and not record.sources:
-        warnings.append("已确认但没有留下证据来源，之后需要复核时将无从回溯")
+        warnings.append(
+            claims_i18n.NO_SOURCES_WARNING if english else "已确认但没有留下证据来源，之后需要复核时将无从回溯"
+        )
     if (
         status == VERIFICATION_PENDING
         and (record.candidate_wording or "").strip()
         and not has_placeholder(record.candidate_wording)
     ):
         warnings.append(
-            "待确认的表述没有加【待补】占位符；导出终稿时会因为看不出它还没核实而被误用"
+            claims_i18n.PENDING_PLACEHOLDER_WARNING
+            if english
+            else "待确认的表述没有加【待补】占位符；导出终稿时会因为看不出它还没核实而被误用"
         )
     if status == VERIFICATION_EXPIRED:
-        warnings.append("这条已标记为过期，使用前请更新内容并重新核实")
+        warnings.append(
+            claims_i18n.EXPIRED_WARNING if english else "这条已标记为过期，使用前请更新内容并重新核实"
+        )
     if status == VERIFICATION_REJECTED and (record.candidate_wording or "").strip():
-        warnings.append("已标记为不采用，生成简历时会显式避开这条表述")
+        warnings.append(
+            claims_i18n.REJECTED_WARNING if english else "已标记为不采用，生成简历时会显式避开这条表述"
+        )
     if _wording_strength_conflict(record):
         warnings.append(
-            "表述里出现了「主导 / 独立完成 / 负责」这类强措辞，"
-            "但承担程度填的是「参与」——两者不一致，面试时容易被问穿"
+            claims_i18n.WORDING_CONFLICT_WARNING
+            if english
+            else (
+                "表述里出现了「主导 / 独立完成 / 负责」这类强措辞，"
+                "但承担程度填的是「参与」——两者不一致，面试时容易被问穿"
+            )
         )
     return warnings
 
 
-def claim_out(record: ClaimRecord) -> ClaimOut:
+def claim_out(record: ClaimRecord, locale: str | None = None) -> ClaimOut:
     """ORM 记录 → 对外结构，并附上服务端算出的改进建议。"""
     payload = ClaimOut.model_validate(record)
-    payload.warnings = claim_warnings(record)
+    payload.warnings = claim_warnings(record, locale)
     return payload
 
 

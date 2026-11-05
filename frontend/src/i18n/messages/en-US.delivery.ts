@@ -102,6 +102,8 @@ const delivery = {
   "delivery.preview.overflow": "The page limit is exceeded; content will be truncated",
   "delivery.preview.hide": "Collapse preview",
   "delivery.preview.limitReached": "Page limit reached ({limit} pages)",
+  /** Singular twin of the line above (English noun agreement at exactly 1). */
+  "delivery.preview.limitReachedOne": "Page limit reached ({limit} page)",
   "delivery.variant.label": "Job variant",
   "delivery.variant.none": "Current Resume (no variant selected)",
   "delivery.variant.hint": "Export uses the selected variant's content and layout",

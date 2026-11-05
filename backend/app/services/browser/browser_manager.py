@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-"""投递专用浏览器管理器：定位、拉起、健康检查、只关闭自己拉起的那个进程。
+"""投递专用浏览器管理器：定位、拉起、健康检查、只关闭自己拉起的那个进程。**本文件已贴 500 行预算，新增内容请放 browser_manager_i18n。**
 
 为什么必须另起一个"专用浏览器"（而不是连用户日常浏览器）：
 Chrome 自 136 起**禁止在默认用户数据目录上开启远程调试**，``--remote-debugging-port``
@@ -33,7 +33,10 @@ import httpx
 
 from ...config import DATA_DIR, DEFAULT_BROWSER_PORT
 from ...schemas.apply.base import BrowserState
+from .browser_discovery import _CHROME_RELATIVE, _EDGE_RELATIVE, browser_display_name
 from .browser_inputs import BrowserError, validated_browser_url
+from .browser_manager_i18n import LOGIN_HINT as _LOGIN_HINT
+from .browser_manager_i18n import login_hint
 from .browser_shutdown import request_browser_close, shutdown_browser
 from .cdp_client import DEFAULT_HOST, WebsocketCdpClient
 
@@ -49,21 +52,6 @@ READY_TIMEOUT_SECONDS = 45.0
 READY_POLL_INTERVAL = 0.4
 PROFILE_DIR_NAME = "browser-profile"
 
-# 常见安装位置（按"优先 Chrome、其次 Edge"的顺序排列）。用环境变量拼，避免把某个
-# 用户的绝对路径写死；Windows 之外的平台退回 PATH 查找。
-_CHROME_RELATIVE = (
-    ("PROGRAMFILES", r"Google\Chrome\Application\chrome.exe"),
-    ("PROGRAMFILES(X86)", r"Google\Chrome\Application\chrome.exe"),
-    ("LOCALAPPDATA", r"Google\Chrome\Application\chrome.exe"),
-)
-_EDGE_RELATIVE = (
-    ("PROGRAMFILES(X86)", r"Microsoft\Edge\Application\msedge.exe"),
-    ("PROGRAMFILES", r"Microsoft\Edge\Application\msedge.exe"),
-    ("LOCALAPPDATA", r"Microsoft\Edge\Application\msedge.exe"),
-)
-
-_LOGIN_HINT = "首次使用请在弹出的浏览器窗口里扫码登录一次；登录态会保存在专用目录里，下次自动沿用。"
-
 BROWSER_CHOICE_AUTO = "auto"
 BROWSER_CHOICE_CHROME = "chrome"
 BROWSER_CHOICE_EDGE = "edge"
@@ -74,24 +62,6 @@ BROWSER_CHOICES = (
     BROWSER_CHOICE_EDGE,
     BROWSER_CHOICE_CUSTOM,
 )
-
-# 中文名，供界面展示"实际用的是哪个浏览器"（别只给路径）。
-_CHROME_NAME = "Google Chrome"
-_EDGE_NAME = "Microsoft Edge"
-_CUSTOM_NAME = "自定义浏览器"
-
-
-def browser_display_name(path: str | Path | None) -> str:
-    """由可执行文件路径推断人类可读的浏览器名。"""
-    if not path:
-        return ""
-    name = Path(path).name.casefold()
-    if "msedge" in name or "edge" in name:
-        return _EDGE_NAME
-    if "chrome" in name:
-        return _CHROME_NAME
-    return _CUSTOM_NAME
-
 
 # ``BrowserStatus.state`` 的取值之一：调试端口在答，采集/投递都能用。
 # 定义成常量是因为调用方要拿它做判断（例如"浏览器在跑才去读登录态清单"），
@@ -497,4 +467,5 @@ __all__ = [
     "DEFAULT_PORT",
     "browser_display_name",
     "default_profile_dir",
+    "login_hint",
 ]

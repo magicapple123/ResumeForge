@@ -10,6 +10,7 @@ from collections.abc import Callable
 from typing import Any
 
 from ..browser.page_ready import ReadyWait
+from ..ui_locale import is_english
 from .base import RiskProfile, SiteAdapter
 from .boss_apply import (
     BossApplyMixin,
@@ -80,11 +81,16 @@ from .boss_search import (
     parse_search_payload,
 )
 
+# 英文界面下的站点名。品牌在这里是**展示文案**：BOSS 直聘的官方英文写法是 BOSS Zhipin。
+# 只用于界面（见 ``SiteAdapter.display_name_for``），不参与站点识别，也不写进 job.source。
+BOSS_DISPLAY_NAME_EN = "BOSS Zhipin"
+
 
 class BossAdapter(BossSearchMixin, BossScrollMixin, BossApplyMixin, BossPageMixin, SiteAdapter):
     """BOSS 直聘适配器。"""
 
     key = BOSS_KEY
+    # 中文品牌名是**识别与协议值**：``matches()`` 用它匹配 job.source，测试也钉着它原样保留。
     display_name = BOSS_DISPLAY_NAME
     # 首个带版本标识的适配器：可信点击 + 跨页聊天页 + startchat 对话框形态这一代实现记为 1。
     version = "1"
@@ -99,6 +105,10 @@ class BossAdapter(BossSearchMixin, BossScrollMixin, BossApplyMixin, BossPageMixi
     # education / job_type 因此不再参与筛选（schema 字段保留以兼容旧请求）。
     post_filter_conditions: tuple[str, ...] = ()
     sample_markers = (("search", SEARCH_MARKERS), ("detail", DETAIL_MARKERS))
+
+    def display_name_for(self, locale: str | None = None) -> str:
+        """英文界面显示 BOSS Zhipin，其余保持中文品牌名（识别用值不变）。"""
+        return BOSS_DISPLAY_NAME_EN if is_english(locale) else BOSS_DISPLAY_NAME
 
     def __init__(
         self,

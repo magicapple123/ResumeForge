@@ -39,6 +39,7 @@ const sections = {
   "sections.templateControls.pageLimitHint":
     "Maximum number of A4 pages for the Resume; short content leaves natural whitespace instead of stretching",
   "sections.templateControls.pageLimitPages": "{count} pages",
+  "sections.templateControls.pageLimitPagesOne": "{count} page",
   "sections.templateControls.pageLimitUnlimited": "No limit",
 } as const;
 

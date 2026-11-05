@@ -10,6 +10,8 @@ from __future__ import annotations
 
 from datetime import timedelta
 
+from app.models.job import JOB_STATUS_OPEN
+
 from demo_data.base import NOW, ins, keywords_of, recognition_source_of, row
 
 JOBS = [
@@ -251,7 +253,11 @@ def seed() -> None:
                 source=j["source"],
                 source_url=j["source_url"],
                 posted_at=j["posted_at"],
-                status="active",
+                # 必须是 `models/job.py` 的协议值 `开放中`，不能写历史值 `active`：
+                # 岗位表格有历史值归一化，看起来仍是「开放中」，但 `api/stats.py` 的
+                # `open_job_count` 是 `Job.status == JOB_STATUS_OPEN` 精确比较——写 `active`
+                # 会让首页统计显示「开放中岗位 0」。用常量而不是字面量，改协议值时这里自动跟随。
+                status=JOB_STATUS_OPEN,
                 note=j["note"],
                 note_images=[],
                 favorite=j["favorite"],
@@ -278,7 +284,10 @@ def seed() -> None:
                 raw_text="市场专员 / 示例供应链有限公司 / 上海 / 13-18K",
                 images=[],
                 note="从招聘信息里复制的，还没核对",
-                source="manual",
+                # 备选岗位的来源是 `CandidateJobCreate.source` 的协议值（手动添加 / 粘贴文本 /
+                # 招聘截图 / 招聘文档 / 助手录入 / CSV 导入）。写历史值 "manual" 时前端查不到
+                # 标签会按原值兜底，卡片上就露出英文 "manual"。
+                source="手动添加",
                 job_type="社招",
                 location="上海",
                 salary="13-18K",
@@ -299,7 +308,7 @@ def seed() -> None:
                 raw_text="运营助理 / 示例贸易有限公司 / 苏州 / 8-12K",
                 images=[],
                 note="招聘会现场拍的展板，待整理",
-                source="manual",
+                source="手动添加",
                 job_type="社招",
                 location="苏州",
                 salary="8-12K",

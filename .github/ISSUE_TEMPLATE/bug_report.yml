@@ -1,46 +1,94 @@
 name: 🐛 Bug 反馈
-description: 提交你遇到的问题，帮助我们改进
+description: 提交你遇到的问题，帮助我们快速定位
 title: "[Bug] "
 labels: ["bug"]
 body:
   - type: markdown
     attributes:
       value: |
-        感谢反馈！请尽量提供完整信息，方便我们快速定位问题。
+        感谢反馈！请尽量填完整。**现象 + 复现步骤 + 证据**三项齐全时，定位时间通常能从几天缩短到几分钟。
+
+        > ⚠️ 提交前请确认：日志、截图、配置片段里**不要包含 API Key、真实简历内容、手机号或邮箱**。需要贴配置时用 `<your-key>` 占位。
+  - type: checkboxes
+    id: precheck
+    attributes:
+      label: 提交前自查
+      options:
+        - label: 我已升级到最新版本后仍然复现
+          required: true
+        - label: 我已搜索过现有 issue，没有重复
+          required: true
+  - type: input
+    id: version
+    attributes:
+      label: 版本号
+      description: 应用内「设置 → 关于」或安装包文件名里的版本
+      placeholder: 例如 2.0.0
+    validations:
+      required: true
   - type: textarea
     id: description
     attributes:
-      label: 问题描述
-      description: 发生了什么？预期行为是什么？
-      placeholder: 请清晰描述问题现象与预期行为
+      label: 现象
+      description: 发生了什么？能量化就量化（页数、条数、耗时、报错文案）
+      placeholder: |
+        点「导出 PDF」后……
+        期望：……
+        实际：……
     validations:
       required: true
   - type: textarea
     id: reproduce
     attributes:
       label: 复现步骤
-      description: 一步步描述如何复现该问题
+      description: 从打开应用开始，一步步写；能稳定复现请注明"必现"，偶发请注明大概频率
       placeholder: |
-        1. 打开 xx 页面
-        2. 点击 xx 按钮
-        3. 出现 xx 报错
+        1. 打开 ……
+        2. 点击 ……
+        3. 看到 ……
+        频率：必现 / 约 3 次出现 1 次
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: 期望行为
+      description: 你认为正确的表现是什么？如果与其他软件/旧版本不同，请说明
+      placeholder: 期望导出后是 1 页，且页脚显示……
     validations:
       required: true
   - type: textarea
     id: environment
     attributes:
       label: 运行环境
-      description: 操作系统、Python 版本、Node 版本、浏览器等
+      description: 操作系统、安装方式（安装包/源码）、Python 与 Node 版本（源码运行时）
       placeholder: |
-        - OS: Windows 11 / macOS / Linux
-        - Python: 3.12
-        - Node: 20
-        - 浏览器: Chrome 120
+        - OS: Windows 11 / macOS 14 / Ubuntu 24.04
+        - 安装方式: 安装包 / 源码
+        - Python: 3.12（源码运行时填）
+        - Node: 20（源码运行时填）
+        - 浏览器: Chrome 130（界面问题时填）
     validations:
       required: true
   - type: textarea
-    id: logs
+    id: evidence
     attributes:
-      label: 日志与截图
-      description: 后端终端输出、浏览器控制台报错、截图等
-      placeholder: 粘贴相关日志或截图（注意：不要泄露你的 API Key！）
+      label: 证据（日志 / 截图 / 请求）
+      description: |
+        后端终端输出、浏览器控制台报错、截图。
+        界面问题建议附"改前/改后"或"期望/实际"两张图；接口问题请附请求路径、关键请求头与响应状态。
+      placeholder: |
+        ```text
+        <粘贴日志，删除其中的密钥与个人信息>
+        ```
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: 怎样算修好（可选）
+      description: 一条可判真假的判据，能显著减少来回确认
+      placeholder: 例如：同一份简历导出 PDF 后页数为 1，且第 2 页不再出现
+  - type: textarea
+    id: extra
+    attributes:
+      label: 补充信息（可选）
+      description: 最近是否改过数据目录、导入过备份、切换过主题/语言；是否只在特定数据集出现

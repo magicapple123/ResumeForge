@@ -27,6 +27,7 @@ import {
 } from "../../../features/resume-research/documentMode";
 import { UNLIMITED_PAGE_LIMIT } from "../../../types";
 import { t } from "../../../i18n";
+import { countMessage } from "../../../i18n/countMessage";
 import { useLocale } from "../../../i18n/i18nContext";
 
 interface Props {
@@ -92,7 +93,13 @@ export default function DocumentModeSwitch({
       label:
         value === UNLIMITED_PAGE_LIMIT
           ? t("sections.templateControls.pageLimitUnlimited")
-          : rt("research.mode.limitOption", { count: value }),
+          : // 单数由 countMessage 统一决定（1 page / 3 pages）。
+            countMessage(
+              "research.mode.limitOptionOne",
+              "research.mode.limitOption",
+              "count",
+              value,
+            ),
     }));
   })();
 

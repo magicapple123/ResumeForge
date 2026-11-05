@@ -23,6 +23,8 @@ export type {
 import type { ResumeDocument } from "./resumeDocument";
 import type { DocumentConversionSummary } from "./resumeConversion";
 import type { ResumeCoverageNote } from "./resumeCoverage";
+// 本文件（`ResumeDetail.fact_annotations`）要用到它，所以除了末尾的 re-export 还要 import。
+import type { FactAnnotation } from "./resumeReview";
 
 export type EnhancementLevel = "light" | "balanced" | "strong";
 
@@ -72,22 +74,35 @@ export interface ResumeFontScaleOption {
 export interface ResumeFormatField {
   key: string;
   label: string;
+  /**
+   * 英文显示名（后端附加键，旧目录没有）。
+   *
+   * 只在英文界面用，取不到回落 `label`——判断只有一处，见
+   * `utils/resumeFormatLabels.ts::formatFieldLabel`。
+   */
+  label_en?: string;
   type: "color" | "number";
   min?: number;
   max?: number;
   step?: number;
   description?: string;
+  /** `description` 的英文版，规则同 `label_en`。 */
+  description_en?: string;
 }
 
 export interface ResumeStyleField {
   key: string;
   label: string;
+  /** 英文显示名，规则同 `ResumeFormatField.label_en`。 */
+  label_en?: string;
   type: "color" | "number" | "select";
   min?: number;
   max?: number;
   step?: number;
   options?: { value: string; label: string }[];
   description?: string;
+  /** `description` 的英文版，规则同 `label_en`。 */
+  description_en?: string;
 }
 
 export interface ResumeFormatPreset {
@@ -337,60 +352,16 @@ export interface ResumeDetail extends ResumeBrief {
 /** 分区级覆盖清单：定义在 `types/resumeCoverage`，此处 re-export 保持导入路径不变。 */
 export type { ResumeCoverageNote } from "./resumeCoverage";
 
-export type ResumeSuggestionPriority = "high" | "medium" | "low";
-
-/** 一条内容的事实来源标注（RF-13，与后端 FactAnnotation 逐字对齐）。 */
-export type FactAnnotationOrigin =
-  "grounded" | "restored" | "enhanced_kept" | "ai_rewrite" | "user_added";
-
-export interface FactAnnotation {
-  path: string;
-  origin: FactAnnotationOrigin;
-  claim_id?: number | null;
-  source_subject?: string | null;
-  source_fact?: string | null;
-  responsibility?: string | null;
-  boundary?: string | null;
-  verification_status?: string | null;
-}
-
-/**
- * 一条待审变更（RF-13）：编辑器的 AI 改写 / 手填在落表单前的预检单位。
- * ``before`` / ``after`` 是该栏的完整文本（多行用 \n 连接）。
- */
-export interface ResumePendingChange {
-  path: string;
-  before: string;
-  after: string;
-  origin: "ai_rewrite" | "user_added";
-  instruction?: string;
-  /** 变更所属条目的主体名（公司 / 项目名），用于 fact_check_needed 时的台账跳转链接。 */
-  subject?: string;
-  verdict?: "ok" | "fact_check_needed" | "blocked";
-  reasons?: string[];
-}
-
-/** 预检结论（RF-13，与后端 ReviewChangeVerdictOut 对齐）。 */
-export interface ResumeReviewResult {
-  path: string;
-  verdict: "ok" | "fact_check_needed" | "blocked";
-  reasons: string[];
-}
-
-export interface ResumeSuggestion {
-  priority: ResumeSuggestionPriority;
-  section: string;
-  issue: string;
-  suggestion: string;
-  evidence: string[];
-}
-
-export interface ResumeSuggestions {
-  job_id: number;
-  job_title: string;
-  company: string;
-  suggestions: ResumeSuggestion[];
-}
+// 内容审校与反馈类型单列 resumeReview.ts 守住 500 行预算；既有导入路径由 re-export 保持不变。
+export type {
+  ResumeSuggestionPriority,
+  FactAnnotationOrigin,
+  FactAnnotation,
+  ResumePendingChange,
+  ResumeReviewResult,
+  ResumeSuggestion,
+  ResumeSuggestions,
+} from "./resumeReview";
 
 /**
  * 「用于本次生成」的职业场景上下文（契约 §2.5，字段名与后端逐字一致）。

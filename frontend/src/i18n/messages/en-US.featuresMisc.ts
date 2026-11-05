@@ -38,6 +38,8 @@ const featuresMisc = {
   "featuresMisc.webformParse.failed": "Could not recognize the web form details",
 
   "featuresMisc.settingsSkills.loadFailed": "Could not load skills",
+  /** The live demo did not record this endpoint. */
+  "featuresMisc.demo.missingRoute": "This endpoint is not part of the live demo data.",
 } as const;
 
 export default featuresMisc;

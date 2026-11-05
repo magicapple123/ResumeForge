@@ -115,6 +115,8 @@ const delivery = {
   "delivery.preview.overflow": "超出页数上限，内容会被截断",
   "delivery.preview.hide": "收起预览",
   "delivery.preview.limitReached": "已达页数上限（{limit} 页）",
+  // 单数孪生键：英文 limit === 1 时用 `1 page`；中文无单复数，两条同句。见 i18n/countMessage.ts。
+  "delivery.preview.limitReachedOne": "已达页数上限（{limit} 页）",
 
   // ── 岗位变体（W16：按变体导出）─────────────────────────────
   "delivery.variant.label": "岗位变体",

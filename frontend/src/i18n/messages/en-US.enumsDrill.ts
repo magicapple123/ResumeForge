@@ -10,11 +10,12 @@
 const enumsDrill = {
   "enumsDrill.feedbackPolicy.deferred": "Simulation: feedback at the end",
   "enumsDrill.feedbackPolicy.immediate": "Practice: feedback after each question",
-  "enumsDrill.rehearseKind.variant": "Variant",
-  "enumsDrill.rehearseKind.counterfactual": "Counterfactual",
-  "enumsDrill.rehearseKind.failure": "Failure case",
-  "enumsDrill.rehearseKind.evidence": "Evidence",
-  "enumsDrill.rehearseKind.compress": "Compressed answer",
+  "enumsDrill.rehearseKind.variant": "Variant: change one input or constraint",
+  "enumsDrill.rehearseKind.counterfactual":
+    "Counterfactual: would the plan still hold if the conditions changed?",
+  "enumsDrill.rehearseKind.failure": "Failure case: given a symptom, find the cause",
+  "enumsDrill.rehearseKind.evidence": "Evidence: explain the code, data, logs or metric definition",
+  "enumsDrill.rehearseKind.compress": "Compressed answer: make the same claim in 60 seconds",
   "enumsDrill.actionKind.addFact": "Add facts",
   "enumsDrill.actionKind.addKnowledge": "Fill knowledge gaps",
   "enumsDrill.actionKind.downgradeClaim": "Soften the claim",

@@ -1,5 +1,7 @@
 # ADR-0002：可信交付账本——revision / artifact / attempt 三态关联与幂等键
 
+> **2.0 已复核，结论仍适用**；文中迁移号 `0045_delivery_ledger` 是 **1.x 历史号**，2.0 已把该表折进基线 `0001_baseline_v2`。
+
 日期：2026-10-13（生产审计 PR-09）
 状态：已采纳（最小增量方案）
 关联：`backend/app/models/resume_delivery.py`、`backend/app/services/resume/resume_delivery.py`、迁移 `0045_delivery_ledger`

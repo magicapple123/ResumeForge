@@ -121,7 +121,9 @@ export function RehearsalPanel({ sessionId }: { sessionId: number }) {
             <Space orientation="vertical" size={2} style={{ width: "100%" }}>
               <Space size={6} wrap>
                 <Typography.Text strong>{row.claim_title}</Typography.Text>
-                <Tag>{row.kind_label || rehearseKindLabel(row.kind) || row.kind}</Tag>
+                {/* 题型名先走 i18n：后端 `kind_label` 是中文常量，英文界面直接渲染它会露中文
+                    （2026-11-05 在英文站截图里抓到「证据题：说明代码…」）。映射不到的题型才回落。 */}
+                <Tag>{rehearseKindLabel(row.kind) || row.kind_label || row.kind}</Tag>
               </Space>
               {row.why && (
                 <Typography.Text type="secondary" style={{ fontSize: 12 }}>

@@ -856,3 +856,17 @@ jobs:
             desktop/out/smoke-port.txt
           retention-days: 7
           if-no-files-found: ignore
+
+  docs-guards:
+    name: Docs guards
+    # 只读文档、只用标准库，几秒即可跑完；独立作业是为了让它在 PR 列表里
+    # 一眼可见，而不是埋在某台矩阵机的第 7 步里。
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Scan docs for credentials and personal data
+        # 判定口径与豁免写法见 docs/verification-playbook.md 与脚本模块注释。
+        run: python3 scripts/check_docs_pii.py

@@ -29,6 +29,7 @@ import {
   type PageThumbnailModel,
 } from "../../../features/resume-pagination/pageThumbnails";
 import { usePaginationReportSnapshot } from "../../../features/resume-pagination/paginationReportStore";
+import { paginationLimitReachedLabel } from "../../../i18n/countMessage";
 import {
   triggerPaginationReportRefresh,
   usePaginationReportRefresh,
@@ -64,7 +65,7 @@ function summary(model: PageThumbnailModel): string {
     model.pageLimit !== null &&
     model.pagesNeeded === model.pageLimit
   ) {
-    return t("pagination.thumbnails.limitReached", { limit: model.pageLimit });
+    return paginationLimitReachedLabel(model.pageLimit);
   }
   return t("pagination.thumbnails.summary", {
     pages: model.totalPages,

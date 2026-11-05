@@ -9,6 +9,7 @@ import { Button } from "antd";
 import { useEffect, useRef, useState } from "react";
 import { t } from "../../../i18n";
 import { useLocale } from "../../../i18n/i18nContext";
+import { deliveryLimitReachedLabel } from "../../../i18n/countMessage";
 import {
   ConfigPreviewUnsupportedError,
   previewExportConfig,
@@ -111,7 +112,7 @@ export default function ConfigPreviewPanel({
               {state.result.pagesNeeded !== null && state.result.pageLimit !== null
                 ? state.result.pagesNeeded === state.result.pageLimit
                   ? // #2：页数正好用满上限，说「已达上限」比重复两个相同数字有用。
-                    t("delivery.preview.limitReached", { limit: state.result.pageLimit })
+                    deliveryLimitReachedLabel(state.result.pageLimit)
                   : t("delivery.preview.pages", {
                       pages: state.result.pagesNeeded,
                       limit: state.result.pageLimit,

@@ -31,7 +31,7 @@ const settingsPage = {
   "settings.appearance.group.title": "语言、字体与导航",
   "settings.appearance.group.hint": "主题在页头切换；以下三项同级，改动即时生效",
   "settings.app.theme.note":
-    "主题用「主题」开关切换；深色只作用于应用界面，简历预览、导出 PDF 与打印结果仍是白纸。",
+    "主题用「主题」开关切换；深色作用于应用界面与简历预览（纸面一起变深），导出的 PDF / Word 与打印结果仍是白纸。",
   "settings.data.intro": "岗位、简历与资料都存放在当前数据集里，可以整份导出备份或切换。",
   "settings.backup.intro":
     "自动备份、手动快照与隐私相关的行为。这些设置管的是「数据怎么保、哪些不发出去」，与数据集本身无关。",
