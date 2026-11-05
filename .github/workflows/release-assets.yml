@@ -227,9 +227,10 @@ jobs:
       # 所以白名单只认 Valid 的老写法会把合法的测试签名也拦下，把演练彻底卡死。
       #
       # 分层的依据是「这个错误是否说明产物本身是废的」：
-      #   * 结构性错误——没签上（NotSigned）、签完内容被改（HashMismatch）、签错
-      #     主体——产物在任何模式下都是废的，演练也必须当场失败，否则演练会得出
-      #     「签名链路通了」的错误结论；
+      #   * 结构性错误——没签上（NotSigned）、签完内容被改（HashMismatch）、主体
+      #     不在白名单里——产物在任何模式下都是废的，演练也必须当场失败，否则演练
+      #     会得出「签名链路通了」的错误结论。主体白名单本身按模式分两种形态（生产
+      #     证书的 SignPath Foundation / 测试证书的 Test certificate for ...），见 ③；
       #   * 仅仅是「这条链在本机不被信任」（UnknownError / NotTrusted /
       #     Incompatible）——演练放行但必须留痕；真发版仍然只认 Valid，因为那时
       #     用的是生产证书，用户拿到手必须能验成 Valid，否则官网 #verify 页教用户
@@ -270,13 +271,25 @@ jobs:
           if ($sig.Status -eq 'HashMismatch') {
             throw "签名与文件内容不符：$($signed.Name) 的 Authenticode 状态为 HashMismatch（$($sig.StatusMessage)），签名后被修改过，拒绝继续。"
           }
-          # ③ 主体必须对上，且与状态无关：其他状态下 SignerCertificate 可能是 null，
-          #    所以先把 null 归一成空串，报错里也写清「没有签名者证书」，避免在 null
-          #    上抛出含糊的成员访问错误。签错主体在演练里同样不可接受。
+          # ③ 主体必须先对上，再谈状态是否可放行（这一顺序不变）：状态不可信时
+          #    SignerCertificate 可能是 null，所以先把 null 归一成空串，避免在 null
+          #    上抛出含糊的成员访问错误。
+          #    白名单分两条，因为两类证书签发给完全不同的主体：
+          #      * 生产证书签发给基金会——SignPath 后台 Release certificate 2026 的
+          #        Subject 是 CN=SignPath Foundation, O=SignPath Foundation, ...；
+          #      * test-signing 用的是按**项目名**签发的测试证书，Subject 形如
+          #        CN=Test certificate for '<项目名>'，压根不含 "SignPath Foundation"
+          #        （run 42076202085 的 CI 日志实测就是这个形态）。
+          #    所以生产规则不能套到演练上，否则合法的测试签名永远过不了主体这一关。
+          #    但测试主体**只在演练里认**：真发版必须见到生产主体，否则等于允许拿
+          #    测试证书去发布——用户那边验不过，而官网 #verify 又教他们查 Valid，
+          #    等于自己打自己。
           $subject = if ($sig.SignerCertificate) { $sig.SignerCertificate.Subject } else { '' }
           Write-Host "signer subject  : $subject"
-          if ($subject -notlike '*SignPath Foundation*') {
-            throw "签的不是预期主体：$($signed.Name) 的签名主体为 '$subject'（没有签名者证书时为空字符串），不含 SignPath Foundation，拒绝继续。"
+          $isProdSubject = $subject -like '*SignPath Foundation*'
+          $isTestSubject = $subject -like '*Test certificate for*'
+          if (-not ($isProdSubject -or ($isDryRun -and $isTestSubject))) {
+            throw "签的不是预期主体：$($signed.Name) 的签名主体为 '$subject'。期望包含 'SignPath Foundation'（生产证书）；演练模式（dry_run=true）下也接受 'Test certificate for ...'（test-signing 测试证书）。"
           }
           # ④ Valid：干净通过。这也是真发版唯一接受的状态。
           if ($sig.Status -eq 'Valid') {
