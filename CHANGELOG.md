@@ -2,11 +2,25 @@
 
 所有值得关注的项目变化都会记录在此。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## Unreleased
+
+### Added
+
+- **开发者文档新增四篇方法论，并与「提交前检查」串起来。** [验证手册](docs/verification-playbook.md) 给出证据六级阶梯、反证三件套与四类假绿判据；[协作规程](docs/ai-collaboration-sop.md) 固化任务书九节、按文件所有权的并行边界、脏工作区纪律与交付报告结构；[缺陷模式](docs/defect-patterns.md) 归纳 31 类高频缺陷的判据与守卫方式；[环境排查](docs/troubleshooting-stale-build.md) 给出「改了没用」的固定判定链。另附[任务书与交付报告模板](docs/templates/)。README 文档表与 CONTRIBUTING 已同步索引。
+- **文档 PII 巡检进 CI（`docs-guards` 作业）。** 新增 `scripts/check_docs_pii.py`，扫描 `docs/`、README、CONTRIBUTING 与 `.github/`，拦下密钥、私钥块、平台令牌、手机号、邮箱与带用户名的家目录路径（含中文用户名）；占位符与带 `pii-ok` 注释的行自动放过。配套 `backend/tests/test_docs_pii_guard.py` 用正例/反例/空目录/打码四组用例做反证，避免"正则失效→恒绿"。
+- **Bug 反馈模板升级为七字段。** `.github/ISSUE_TEMPLATE/bug_report.yml` 增加版本号、期望行为、证据与「怎样算修好」，并在提交前自查里要求先升级到最新版本、先搜重复 issue。
+- **Windows 安装包接入 SignPath Foundation 的免费代码签名计划（代码已接入，首次 test-signing 待执行；生产证书待签发）。** `release-assets.yml` 的 `windows-installer` 作业在打包后把安装包作为本次 run 的 artifact 上传，经 SignPath 校验来源（origin verification）后签名并取回，再用**签名后**的文件写 `.sha256`——先算哈希会与发布文件对不上，所以写哈希的步骤整体后移。`SIGNPATH_ORGANIZATION_ID` 未配置时整段跳过，产物、哈希与 Release 附件与接入前完全一致；配了它但其余必需项（Variable `SIGNPATH_PROJECT_SLUG` / `SIGNPATH_ARTIFACT_CONFIGURATION_SLUG`、Secret `SIGNPATH_API_TOKEN`）不全则直接报错终止，不做静默降级。官网新增中英《代码签名策略》页（签名覆盖范围、签名请求来源、Authors / Reviewers / Approvers 角色与隐私说明）。
+
+### Changed
+
+- **运营手册补充「凭据泄露的处置顺序」。** 明确"先吊销再清理"、历史与产物一起查、替换为占位符而不是部分打码，并指向新增的扫描守卫。
+- **`AGENTS.md` 校正 2.0 后的过期口径，并补四条规则。** 迁移章节从"grep 旧 head revision"改为"单基线 `0001_baseline_v2` + `app_schema_epoch` 闸门 + 测试统一从 `migration_refs` 取常量"；用例规模与耗时改为不写精确数字；`-n auto` 补"内存受限用 `-n 4`"。新增「多会话/多代理并行」（文件所有权、禁 `checkout`/`stash`/`restore`、改前快照、基线三件套、回报格式）、「规模约束（500/800 行预算与豁免规则）」、「文档与个人信息」（PII 巡检与事故处置）、以及"新增守卫必须反证"一条；并把"并行/覆盖率/构建"的历史叙事下沉到 `docs/maintenance.md` §5.1，同步写清两边的权威分工（**红线看 AGENTS.md，执行看 maintenance.md**）。
+
 ## 2.0.0 - 2026-11-05
 
 ### Changed
 
-- **2.0 以全新库为起点：迁移链只保留一条基线迁移。** 原 74 条历史迁移全部下线，空库执行一次 `upgrade head` 即建全 2.0 的表 / 列 / 索引；数据库只由这条基线代表当前结构，不再有"逐版本演进"的兼容分支。
+- **2.0 以全新库为起点：迁移链只保留一条基线迁移。** 原 74 条历史迁移（v1.0.2 已发行的 46 条 + 2.0 开发期新增的 28 条）全部下线，空库执行一次 `upgrade head` 即建全 2.0 的表 / 列 / 索引；数据库只由这条基线代表当前结构，不再有"逐版本演进"的兼容分支。
 - **库版本闸门按 epoch 判定，不再按 revision 判定。** 新增单行表 `app_schema_epoch`（由基线迁移写入唯一一行 `epoch=2`）。启动时先读 epoch：缺失 epoch 表且库里有业务表 → 视为 pre-2.0 库，整包归档后建空库；epoch > 2 → 拒绝启动；epoch == 2 时 revision 才用于判断"在不在迁移链上"。这样"老库的 revision 不在新链上"不会再被误判成库损坏。
 - **1.x → 2.0 的启动顺序改为「判定 → 整包归档 → 校验 → 移走旧库 → 建空库 → 迁移」。** 任一步失败都中止启动、原库原样保留（不移动、不建库）。
 - **文档与界面文案同步到 2.0 口径。** README 版本号改 `2.0.0`、「旧资料升级说明」整行改为归档说明（功能条目数与表格行数一致）；`docs/upgrading.md` 新增「从 1.x 到 2.0：整包归档 + 全新库」；「我的资料」升级说明与使用指南改为"已归档、2.0 使用空库"。
@@ -15,7 +29,7 @@
 ### Removed
 
 - **补充事实（`profile_facts`）整套下线。** 删除后端路由 / schema / 服务 / 模型与前端 `features/profile-facts/` 模块；2.0 基线不再创建 `profile_fact`、`profile_fact_field_pref`。
-- **74 条历史迁移与 57 个迁移测试文件下线。** 它们守住的不变量改由 2.0 基线 schema 测试重建：`upgrade → downgrade base → upgrade` 往返可用、表集合与模型注册表一致、`app_schema_epoch` 单行 = 2。
+- **57 个迁移测试文件随历史迁移一并下线。** 它们守住的不变量改由 2.0 基线 schema 测试重建：`upgrade → downgrade base → upgrade` 往返可用、表集合与模型注册表一致、`app_schema_epoch` 单行 = 2。
 
 ### Migration
 
@@ -160,6 +174,7 @@
 - **自建板块的每条条目也能「从资料填入本条」。** 自建板块此前的条目级填入被跳过（正文形状是「主文本 + 标签行」，没有可按字段合并的结构）；现在按「只补空值」合并：主文本为空才填，标签行按标签名补空值、缺失的按资料顺序追加到末尾，已有非空内容与行顺序一字不动，也不复制资料条目的稳定身份。同一板块内复用「当前条目 / 已在其他条目」禁用语义；候选仍来自当前方案投影，跨板块互不影响。
 - **英文界面补齐枚举与后端下发标签的翻译（阶段 0.5，前端收尾）。** 岗位类型/状态、投递队列与批次状态、准入与匹配结论、失败分类与步骤、浏览器状态、事实台账的分类/核实状态/承担程度/证据来源、求职进度状态与来源、内推与提醒状态、面试类型/难度/风格、面经来源与轮次、知识库与资料箱分类、深挖反馈/演练/行动类型、简历目录的版式预设与板块名——这些原先直接渲染后端/类型层中文的展示点，现在都在页面层通过「协议值 → 语言包 key」映射（映射不到时回退原文，协议值本身一个未改）；数据看板的漏斗阶段、趋势月份、周内分布、记录来源，以及简历目录下发的板块名、版式名/说明、字号档位也一并接入。英文界面下这些位置不再露出中文，中文渲染逐字不变。
 - **英文文案统一第一轮 + 英文术语表。** 修正 71 处大小写/标点/美式拼写/跨页小节名不一致（Target job、Honors & awards、Campus activities 等），并新增 `docs/ui-copy-guide-en.md`（246 行：九组术语正名、大小写与拼写规则、语境差异判据、未收口清单）。同一中文含义对应多译文的分组由 259 组降到 242 组，其余为刻意的语境差异。
+- **英文界面最后三处「后端直接下发的中文」按语言收口。** ① 回收站的类型筛选与列表行：新增 `TRASH_LABELS_EN`，按与语言无关的 `TrashSpec.key` 取英文名，中文名仍是 `spec.label`（日志、测试与中文界面照旧）；② 事实台账的黄色提示：`claim_warnings(record, locale)` 的 7 条规则全部有英文分支，承担程度的英文用词与前端 `en-US.enumsClaims.ts` 逐字对齐（徽标与建议同词）；③ 投递浏览器首次登录提示：`login_hint(locale)`（中文原文留在 `browser_manager_i18n.py`）。站点显示名另加可选扩展点 `display_name_for(locale)`，英文界面显示 `BOSS Zhipin`、中文仍是 `BOSS直聘`，`BOSS_DISPLAY_NAME` 常量与 `matches()` 识别路径未动。协议值与中文文案逐字未变，未设置语言时一律回落中文。
 
 - **排版参数新增「联系方式换行」，并把联系方式默认改为"整字段不拆行"。** 页眉里的手机 / 邮箱 / 城市 / 出生年 / GitHub / 个人主页现在每个字段整体不拆行、字段之间自动换行——长网址不会再被从中间截成两行；可以在「排版参数」里指定在哪个字段前强制换行（例如让个人主页单独一行）。设置写进这份简历的 `format_config.contact_breaks` 并随简历保存，草稿预览、精确预览 PDF、Word、HTML 导出读同一份取值；旧简历没有这项设置时保持默认（不强制换行、每个字段整体不拆行）。
 - **简历制作台新增「文字级别」。** 在「局部排版」里选中内容后，可套用一级标题 / 二级标题 / 三级标题 / 正文 / 次要说明五个固定级别（类似 Word 的标题级别）；级别只写一组对象级样式覆盖（字号系数、加粗、段前段后），颜色 / 缩进 / 项目符号等其它局部设置不动，可多选批量应用、可「恢复跟随模板」只清掉级别，每次应用在历史里算一步、可撤销。为让草稿 HTML 与精确预览 / 导出观感一致，对象级覆盖现在同时作用于条目内部的角色元素（标题 / 元信息 / 要点），HTML 与 PDF / Word 按同一份模板基准比例投影（默认路径与无对象覆盖的简历产物不变）。
@@ -1158,6 +1173,8 @@
 ### Added
 
 ### Fixed
+
+- **官网与 README 的演示数据脚本在 2.0 上重新可用。** `scripts/demo_data/base.py::init_db()` 原来用 `Base.metadata.create_all` 建库，而 2.0 的 `app_schema_epoch` 那一行由基线迁移播种——造出来的库既没有 epoch 行也没有 `alembic_version`，启动闸门判成 `REFUSE_UNKNOWN`，用 `uvicorn` 起服务直接拒绝启动；原有测试因为 `TestClient` 不触发 lifespan 而一直是绿的。现在改为跑真实 `alembic upgrade head`，并在脚本内硬断言「恰好一行 epoch=2 且 revision 非空」。同时把演示岗位状态从旧值 `active` 改成规范值 `开放中`（首页「开放中岗位」不再恒为 0），时间锚点改为「运行日的昨天 08:30」（需要字节级复现时用 `RF_DEMO_NOW` 钉住），首页「近 7 天生成」与提醒分色不再依赖某个固定月份。
 
 ### Changed
 

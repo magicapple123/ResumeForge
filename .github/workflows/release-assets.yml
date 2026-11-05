@@ -72,6 +72,12 @@ jobs:
     needs: target
     runs-on: windows-latest
     timeout-minutes: 60
+    # 顶层只写了 contents: write，GitHub 会把没列出来的权限一律清零。SignPath 的
+    # action 要通过 GitHub API 回读本次 run 的 artifact（origin verification 的
+    # 依据），所以这里必须显式补上 actions: read，否则运行时 403。
+    permissions:
+      contents: write
+      actions: read
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -111,7 +117,9 @@ jobs:
         # scripts/PythonRuntimeManifest.ps1) -- exactly the CI case here.
         run: pwsh -NoProfile -ExecutionPolicy Bypass -File scripts\Build-Desktop.ps1 -Target win
 
-      - name: Verify packaging outputs and write checksum sidecar
+      # 这里只做断言与「打出来给人看」，不写 .sha256——安装包马上要送去签名，
+      # 签名会改变文件字节，哈希必须对签名后的文件算（见下面的 Write checksum sidecar）。
+      - name: Verify packaging outputs
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
@@ -121,8 +129,134 @@ jobs:
                            "desktop\out\win-unpacked\resources\payload\python-runtime.zip")) {
             if (-not (Test-Path $f)) { throw "packaging output missing: $f" }
           }
-          $setup = Get-ChildItem "desktop\out\ResumeForge-Setup-*.exe" | Select-Object -First 1
-          if (-not $setup) { throw "installer artifact not found in desktop/out" }
+          # 计数断言而不是「取第一个」：有第二个安装包时，后面按名字覆盖 / 通配上传
+          # 都可能作用在错的那个上，而这条早期哨兵是唯一能提前喊出来的地方。
+          $setups = @(Get-ChildItem "desktop\out\ResumeForge-Setup-*.exe")
+          if ($setups.Count -ne 1) {
+            throw "desktop\out 顶层应恰好有 1 个安装包，实际 $($setups.Count) 个：$($setups.Name -join ', ')。"
+          }
+          $setup = $setups[0]
+          Write-Host "installer: $($setup.Name) ($([math]::Round($setup.Length / 1MB, 1)) MB)"
+
+      # 配置检查排在上传之前：它只是表达式 + bash 判空，不依赖任何前置产物；
+      # 放在上传之后意味着「配错了」也会先留下一个 7 天的 artifact 才失败。
+      # 开关只由 SIGNPATH_ORGANIZATION_ID 决定；配了它但其余必需项不全时这里硬失败，
+      # 不做静默降级。注意 secrets 在 if 里不可用，所以 token 只能进 env、在 bash 里判空。
+      - name: Check SignPath configuration
+        if: ${{ vars.SIGNPATH_ORGANIZATION_ID != '' }}
+        shell: bash
+        env:
+          ORGANIZATION_ID: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          PROJECT_SLUG: ${{ vars.SIGNPATH_PROJECT_SLUG }}
+          ARTIFACT_CONFIGURATION_SLUG: ${{ vars.SIGNPATH_ARTIFACT_CONFIGURATION_SLUG }}
+          API_TOKEN: ${{ secrets.SIGNPATH_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          missing=()
+          [ -n "${ORGANIZATION_ID}" ] || missing+=("Repository Variable SIGNPATH_ORGANIZATION_ID")
+          [ -n "${PROJECT_SLUG}" ] || missing+=("Repository Variable SIGNPATH_PROJECT_SLUG")
+          [ -n "${ARTIFACT_CONFIGURATION_SLUG}" ] || missing+=("Repository Variable SIGNPATH_ARTIFACT_CONFIGURATION_SLUG")
+          [ -n "${API_TOKEN}" ] || missing+=("Repository Secret SIGNPATH_API_TOKEN")
+          if [ ${#missing[@]} -gt 0 ]; then
+            echo "::error::SignPath 已启用（SIGNPATH_ORGANIZATION_ID 非空）但配置不全，缺少：$(IFS='、'; echo "${missing[*]}")。请到 Settings → Secrets and variables → Actions 补齐；临时不需要签名时把 SIGNPATH_ORGANIZATION_ID 清空即可整体跳过签名。"
+            exit 1
+          fi
+
+      # SignPath 只接受「同一次 workflow run 上传的 artifact」，所以未签名的安装包
+      # 必须先作为 artifact 落盘，而不是直接从磁盘递给签名服务。
+      # 与签名各步同款条件：开关关掉时连这个中间 artifact 也不上传，否则每次发布
+      # 都会多挂一个没人用的 windows-installer-unsigned，与「跳过时与接入前完全
+      # 一致」的承诺矛盾，还白占 7 天 artifact 存储。
+      - name: Upload unsigned installer for signing
+        id: upload-unsigned
+        if: ${{ vars.SIGNPATH_ORGANIZATION_ID != '' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: windows-installer-unsigned
+          path: desktop/out/ResumeForge-Setup-*.exe
+          retention-days: 7
+          if-no-files-found: error
+
+      - name: Submit SignPath signing request
+        id: signpath
+        if: ${{ vars.SIGNPATH_ORGANIZATION_ID != '' }}
+        uses: signpath/github-action-submit-signing-request@f6d04783b4569d051e0c80105fe66e82819d0092 # v3.0
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG }}
+          signing-policy-slug: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG || 'test-signing' }}
+          artifact-configuration-slug: ${{ vars.SIGNPATH_ARTIFACT_CONFIGURATION_SLUG }}
+          github-artifact-id: ${{ steps.upload-unsigned.outputs.artifact-id }}
+          wait-for-completion: true
+          # 默认等待上限是 600 秒（10 分钟），从请求提交起算。但 SignPath Foundation
+          # 要求每一次签名请求都由 Approver 在后台手工批准，人还没来得及点就已经超时，
+          # 表现是「莫名其妙的超时」而不是可操作的错误。放到 1800 秒（仍在 job 的
+          # 60 分钟 timeout 之内），留出足够的人工批准窗口。
+          wait-for-completion-timeout-in-seconds: 1800
+          output-artifact-directory: desktop/out/signed
+
+      # 这一步产出的正是要回信给 SignPath 的两个链接，所以紧跟在提交之后：
+      # 放到 job 末尾的话，后面任何一步失败（比如 release 附件上传），Step Summary
+      # 里就一个字都没有，还得回 SignPath 后台翻。
+      - name: Record signing request link
+        if: ${{ vars.SIGNPATH_ORGANIZATION_ID != '' }}
+        shell: bash
+        env:
+          REQUEST_URL: ${{ steps.signpath.outputs.signing-request-web-url }}
+          REQUEST_ID: ${{ steps.signpath.outputs.signing-request-id }}
+        run: |
+          set -euo pipefail
+          {
+            echo "### SignPath signing request"
+            echo ""
+            echo "- Signing request: ${REQUEST_URL:-（未返回）}"
+            echo "- Request id: ${REQUEST_ID:-（未返回）}"
+            echo "- Workflow run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # SignPath 回传的是重签后的产物压缩包，解压保留构建时的相对路径
+      # （desktop/out/ResumeForge-Setup-*.exe），所以递归找，不能假设平铺。
+      - name: Apply signed installer
+        if: ${{ vars.SIGNPATH_ORGANIZATION_ID != '' }}
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $signed = Get-ChildItem "desktop/out/signed" -Recurse -Filter "ResumeForge-Setup-*.exe" |
+            Select-Object -First 1
+          if (-not $signed) { throw "签名没回传安装包：desktop\out\signed 下递归找不到 ResumeForge-Setup-*.exe" }
+          $sig = Get-AuthenticodeSignature $signed.FullName
+          Write-Host "signature status: $($sig.Status)"
+          # 白名单而不是黑名单：Authenticode 的状态枚举不止 NotSigned 一个，
+          # 「不是 NotSigned」并不等于「签名有效」。HashMismatch 意味着签名后文件被
+          # 改过（签名块里翻一个字节就是这样），Incompatible / NotTrusted 同样不可发。
+          # 这种包发出去，用户按官网 #verify 核对时会先过 Get-FileHash、再在
+          # Authenticode 这关发现对不上，属于最坏的一种「以为签好了」。
+          if ($sig.Status -ne 'Valid') {
+            throw "签名无效：$($signed.Name) 的 Authenticode 状态为 $($sig.Status)（$($sig.StatusMessage)），拒绝发布。"
+          }
+          # 状态确定有效之后再读主体：其他状态下 SignerCertificate 可能是 null，
+          # 先判状态才不至于在 null 上抛出含糊的错误。
+          Write-Host "signer subject  : $($sig.SignerCertificate.Subject)"
+          if ($sig.SignerCertificate.Subject -notlike '*SignPath Foundation*') {
+            throw "签的不是预期主体：$($signed.Name) 的签名主体为 '$($sig.SignerCertificate.Subject)'，不含 SignPath Foundation。"
+          }
+          Copy-Item -LiteralPath $signed.FullName -Destination "desktop\out\$($signed.Name)" -Force
+          Write-Host "signed installer applied: $($signed.Name)"
+
+      # 逐字沿用接入签名前的写法（含 LF 的 WriteAllText）：.sha256 与安装包同处
+      # desktop/out，`sha256sum -c` 依赖那一个换行。
+      - name: Write checksum sidecar
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          # 必须恰好一个：回签文件名若与未签名不同，顶层会并存两个 exe，「取第一个」
+          # 可能拿到未签名那个——哈希就算错了文件，而 Attach 又用 *.exe 把两个都传上去。
+          $setups = @(Get-ChildItem "desktop\out\ResumeForge-Setup-*.exe")
+          if ($setups.Count -ne 1) {
+            throw "desktop\out 顶层应恰好有 1 个安装包，实际 $($setups.Count) 个：$($setups.Name -join ', ')。可能存在回签文件名不一致，请人工确认后再发布。"
+          }
+          $setup = $setups[0]
           $sha = (Get-FileHash $setup.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
           # LF line ending so `sha256sum -c` works on macOS/Linux (Set-Content
           # would append CRLF and break the cross-platform check).

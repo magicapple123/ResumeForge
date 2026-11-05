@@ -11,11 +11,11 @@
 | 步骤 | 动作 | 自动化程度 |
 | --- | --- | --- |
 | ① 版本号 | 仓库根目录跑 `python scripts/bump_version.py`（按 Conventional Commits 判定幅度；破坏性变更显式传 `--bump`）。5 处版本号（backend config / frontend package.json + lock / README / CHANGELOG）由 `backend/tests/test_version_consistency.py` 钉住 | 脚本改文件，**提交与打 tag 由维护者手动执行**（脚本不 commit） |
-| ② 全量验证 | 后端 `pytest -n auto --cov`（80% 门槛）+ `pip check` + `ruff check`；前端 `npm test` / `lint` / `typecheck` / `format:check` / `vite build`；macOS 启动链 `bash scripts/tests/test-macos-launcher.sh`、Windows `scripts/tests/Test-Start-ResumeForge.ps1` | 全部本地命令，CI 同样跑（三个 macOS 作业 + `windows-end-to-end`） |
+| ② 全量验证 | 后端 `pytest -n auto`（日常，不看覆盖率）+ **交付前覆盖率三步**：`coverage run --rcfile=..\pyproject.toml -m pytest -q` → `coverage combine --keep` → `coverage report --rcfile=..\pyproject.toml --fail-under=80`；`pip check` + `ruff check`；前端 `npm test` / `lint` / `typecheck` / `format:check` / `vite build`；macOS 启动链 `bash scripts/tests/test-macos-launcher.sh`、Windows `scripts/tests/Test-Start-ResumeForge.ps1`。**`--cov` 不能与 `-n auto` 同时用**：并行下覆盖率统计不到子进程，报出来的数字是错的 | 全部本地命令，CI 同样跑（三个 macOS 作业 + `windows-end-to-end`） |
 | ③ 构建 | `scripts/Build-Release.ps1 -Ref <tag>`：`git archive` 打包受追踪文件 → 复开归档校验"必需文件都在、敏感文件绝不在" → 产物 `dist/ResumeForge-<version>.zip`。**校验失败的归档会被脚本直接删除，不进入发布** | ✅ 打包与内容校验自动化 |
 | ④ 依赖清单（SBOM 性质） | `scripts/Generate-Sbom.ps1`：pip-licenses 产出 `THIRD-PARTY-NOTICES.txt` 与 `requirements-frozen.txt` 到 `runtime/sbom/`，随 CI 依赖审计作业上传 | ✅ 生成自动化；**只是第三方许可与锁定清单，不是 CycloneDX/SPDX 格式 SBOM**——如需标准格式需另接工具，当前未做 |
 | ⑤ 校验和 | 计算发布 zip 的 SHA-256 并随发布说明公布，供用户下载后核对 | **手动**（无自动发布流水线） |
-| ⑥ 签名 | **未做。** 发布 zip 无代码签名、无 GPG 签名，tag 亦无签名。完整性核对只能依赖 ⑤ 的 checksum（见 §7 威胁模型备注） | ❌ 未自动化、也未人工执行 |
+| ⑥ 签名 | **Windows 安装包签名已接入 CI。** `release-assets.yml` 的 `windows-installer` 作业把 NSIS 安装包作为本次 run 的 artifact 上传，由 SignPath 校验来源（origin verification）后签名（SHA-256 Authenticode；RFC 3161 时间戳由 SignPath 侧的签名策略一并附加——工作流不传签名参数，该项依据在 SignPath 后台），`.sha256` 对**签名后**的文件计算。macOS dmg **仍未签名、也未公证**（用户需右键→打开）；源码 zip 无代码签名、无 GPG 签名，tag 亦无签名，完整性只能依赖 ⑤ 的 checksum（见 §7 威胁模型备注）。签名政策见官网 `code-signing.html`（中英各一份） | ⚠️ Windows 已接入（代码已接入，首次 test-signing 待执行；生产证书待 SignPath 签发，当前线上包仍为未签名）；其余仍无签名 |
 | ⑦ 冒烟 | 干净检出/解包走一遍启动链：CI 的 `windows-end-to-end` / `macos-end-to-end` 从干净检出走完整启动并真的取一次前端入口模块；本地可用隔离演示库（`scripts/seed_demo_data.py --check` → 指定 `DATABASE_URL` 启动前后端）人工点一遍核心页面 | CI 自动 + **人工抽查靠自觉**，无强制冒烟关卡 |
 | ⑧ 发布 | 在 GitHub 上以 tag 发 Release，附 zip 与 SHA-256 | **手动** |
 
@@ -37,6 +37,13 @@
 1. 确认泄漏通道与影响面（哪些版本、哪些数据类型）。
 2. **可利用细节不在公开 Issue 披露**，遵循 `SECURITY.md` 的私下报告流程；补丁先行，公告后发。
 3. 修复后补一类守卫测试（如日志脱敏测试见 `backend/tests/test_log_redact.py` 的先例），同类调用点全量排查而不是只修被报告的那一处。
+
+**凭据泄露的处置顺序**（密钥/令牌出现在文档、日志、截图或提交里）：
+
+1. **先吊销，再清理。** 轮换优先于删除：删掉明文只改变量，撤不回已经扩散的副本；确认旧凭据在服务商侧失效之前，不要把"已清理"当成"已处置"。
+2. **工作区与历史一起查。** 当前文件 grep、`git log -S` 查历史提交、Issue/PR 评论、构建产物与截图；`.gitignore` 只能挡住未跟踪目录，挡不住"人工复制进文档"。
+3. **替换为完整占位符，不要部分打码。** 用 `<REDACTED-ROTATE-ME>`；保留前后几位仍有被还原的风险。
+4. **新凭据只走环境变量或密钥管理**，不落盘、不进日志、不进报告；补一条扫描守卫（`scripts/check_docs_pii.py`，CI 的 `docs-guards` 作业）防止复发。
 
 ### P2 — 功能不可用
 **定义**：核心流程（简历生成、投递、备份导入导出）在正常配置下失败。
@@ -70,9 +77,9 @@
 
 ## 4. 备份恢复步骤
 
-对应 PR-15 之后的备份包格式：包内 `manifest.json` 带版本链、各表行数与附件清单（逐文件 SHA-256）。日常恢复用**应用内「设置 → 数据 → 导入备份」**；以下是在应用打不开时的手动恢复流程。
+对应 PR-15 之后的备份包格式：包内 `manifest.json` 带版本链、各表行数与附件清单（逐文件 SHA-256）。日常恢复用**应用内「设置 → 数据与导出 → 导入备份」**；以下是在应用打不开时的手动恢复流程。
 
-**两种包形态（format 4 起，R16）**：单份数据集的包仍是平铺结构（`resume_forge.db` + `datasets/<id>.db` + `manifest.json`，format 1/2/3，带密钥时是 3）。「导出全部数据集」改成**嵌套整包**：外层 `manifest.json`（`format: 4`、`type: "collection"`）+ `README.txt` + `datasets/<id>.zip`，每个子 zip 就是一份完整的单数据集包，并在外层清单里登记 `sha256` 与 `size_bytes`。导入时逐份校验 SHA-256：坏一份只跳过那一份并在界面点名原因，其余照常恢复；至少一份成功即返回 200，全部失败才报错。**旧版本（≤1.0.2）会明确拒收 format 4**（提示先升级），format 1/2/3 的旧包仍可正常导入。外层 zip 不能再套第二层嵌套。
+**包形态与格式号（当前 `BACKUP_FORMAT_VERSION = 6`）**：单份数据集的包是平铺结构（`resume_forge.db` + `datasets/<id>.db` + `manifest.json`）——format 1 / 2 是早期单数据集包，**format 3 表示单数据集但含密钥**（大模型 API Key）。format 4 起「导出全部数据集」改成**嵌套整包**：外层 `manifest.json`（`format: 4`、`type: "collection"`）+ `README.txt` + `datasets/<id>.zip`，每个子 zip 就是一份完整的单数据集包，并在外层清单里登记 `sha256` 与 `size_bytes`；**format 5 额外带上 `global_llm.json`**（全局模型配置），**format 6 再加上字体**（自定义字体文件）。导入时逐份校验 SHA-256：坏一份只跳过那一份并在界面点名原因，其余照常恢复；至少一份成功即返回 200，全部失败才报错。**旧版本（≤1.0.2）会明确拒收 format 4 及更高格式**（提示先升级），format 1/2/3 的旧包仍可正常导入。**反过来，2.0 不导入 1.x 的备份包**：包内库没有 `app_schema_epoch` 会被直接拒收并提示用 ResumeForge 1.0.2 打开。外层 zip 不能再套第二层嵌套。
 
 **应用内导入现在的语义（RR-03，2026-10-14 起）**：
 
