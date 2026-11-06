@@ -166,6 +166,10 @@ For boundary questions you cannot answer yourself, start with the channel in [SE
 
 When you change anything under `scripts/macos/**` or `start.command`, run `bash scripts/tests/test-macos-launcher.sh`. The launcher and release-package layer is additionally verified by the CI jobs `macos-launcher-guards`, `macos-runtimes`, `macos-end-to-end` and `windows-end-to-end`; the maintainers have no Mac, so those jobs are the only real-machine verification available. **A live port is not the same as a usable page** — probe the actual page, not just the listening socket.
 
+## Licensing of contributions
+
+ResumeForge is released under the [Apache License 2.0](LICENSE). By submitting a pull request you agree that your contribution is licensed under the same terms, without any additional terms or conditions. No CLA and no copyright assignment is required.
+
 ## Pull requests
 
 - One topic per PR: explain the reason, the blast radius and the verification results.

@@ -169,6 +169,10 @@ backend\.venv\Scripts\python.exe scripts\seed_demo_data.py --check
 
 改 `scripts/macos/**` 或 `start.command` 时要跑 `bash scripts/tests/test-macos-launcher.sh`。启动链与发布包的另一层验证是 CI 的 `macos-launcher-guards`、`macos-runtimes`、`macos-end-to-end`、`windows-end-to-end` 作业；维护者没有 Mac，这几个作业是真机验证的唯一途径。**端口活着不等于页面能用**——要探实际页面，不能只看监听套接字。
 
+## 贡献的许可
+
+ResumeForge 以 [Apache License 2.0](LICENSE) 发布。提交 Pull Request 即表示你同意自己的贡献按同一许可授权，不附加任何额外条款；不需要签署 CLA，也不需要转让版权。
+
 ## Pull Request
 
 - 一个 PR 聚焦一个主题，并说明原因、影响范围和验证结果。
