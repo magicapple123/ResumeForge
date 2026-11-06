@@ -9,7 +9,7 @@
 - 新增模型表却没进 ``manifest["tables"]`` → ``test_backup_table_coverage``。
 
 格式矩阵（§12.3）用 ``backend/tests/fixtures/backup-formats/`` 下冻结的样本包：它们由
-``scripts/make_backup_format_fixtures.py`` 以纯合成数据生成，逐个导入一次，防止
+``backend/scripts/make_backup_format_fixtures.py`` 以纯合成数据生成，逐个导入一次，防止
 "升级一次就悄悄读不回旧包"。
 """
 
@@ -362,7 +362,8 @@ def test_backup_format_matrix(version, tmp_path):
     """每个历史格式号的样本包都必须**仍可导入**（或按语义明确拒收）。"""
     archive = FIXTURE_DIR / f"format-{version}.zip"
     assert archive.is_file(), (
-        f"缺少格式样本包：{archive}（跑 scripts/make_backup_format_fixtures.py）"
+        f"缺少格式样本包：{archive}"
+        "（在 backend 目录跑 python scripts/make_backup_format_fixtures.py）"
     )
     manifest = _read_manifest(archive)
     assert manifest["format"] == version

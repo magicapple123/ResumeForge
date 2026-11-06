@@ -396,8 +396,8 @@ Windows 侧对应的是 `windows-end-to-end`（从干净检出走完整启动链
 
 改包结构时**四处同改**，缺一处视为未完成：`CHANGELOG.md`（用户可见变化）→ `README.md`
 （备份章节的"包含/不包含"清单）→ 本文件 → `deliverables/software-company/resumeforge-backup-coverage-plan-20261020.md`
-的附录 A。新增格式号还要：用 `scripts/make_backup_format_fixtures.py` 重新生成
-`backend/tests/fixtures/backup-formats/` 的样本（`test_backup_format_matrix` 逐个导入）。
+的附录 A。新增格式号还要：在 `backend` 目录跑 `python scripts/make_backup_format_fixtures.py`
+重新生成 `backend/tests/fixtures/backup-formats/` 的样本（`test_backup_format_matrix` 逐个导入）。
 
 反模式（明确禁止）：在 `data_backup` 里手写第二份表/资产清单；用 `try/except: pass` 吞掉附件失败；
 新包成员不升格式号；把"只有新版本认识"的数据塞进既有段；删除或改名 `disk_name` / `format` /

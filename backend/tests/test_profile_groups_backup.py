@@ -81,7 +81,9 @@ def test_new_profile_tables_are_covered_by_the_backup_manifest(tmp_path, db_sess
 def test_frozen_backup_format_sample_imports_with_empty_new_tables(tmp_path):
     """仓库冻结的备份格式样本仍可导入；样本里新模型表为空、旧表行数与清单一致。"""
     fixture = FIXTURE_DIR / "format-6.zip"
-    assert fixture.is_file(), "缺少格式样本包，请跑 scripts/make_backup_format_fixtures.py"
+    assert fixture.is_file(), (
+        "缺少格式样本包，请在 backend 目录跑 python scripts/make_backup_format_fixtures.py"
+    )
 
     preview = inspect_archive(fixture, database.engine, tmp_path / "staging")
     counts = preview["database"]["tables"]
