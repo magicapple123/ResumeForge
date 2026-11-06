@@ -14,7 +14,7 @@ GET    /llm/records     全部记录（首次调用触发从数据集的一次�
 POST   /llm/records     按名称 upsert 一条记录
 DELETE /llm/records/{id} 删除记录
 POST   /llm/records/{id}/activate  设为「使用中」
-POST   /llm/api-key/reveal         本机查看当前密钥（不缓存）
+POST   /llm/api-key/reveal         本机直连客户端读取当前密钥（界面无入口，不缓存）
 ======================  ============================================================
 
 `/llm/models`、`/llm/test`、`/llm/thinking/check` 仍留在 `api/settings.py`：它们只做
@@ -234,7 +234,7 @@ def reveal_llm_api_key(
     response: Response,
     db: Session = Depends(get_db),
 ) -> LLMApiKeyRevealResult:
-    """仅在用户点击显示时临时返回**生效**配置的密钥，禁止缓存。"""
+    """供本机直连客户端显式读取**生效**配置的密钥；界面不提供该入口，禁止缓存。"""
     _guard_loopback(request, "API Key 只能在运行后端的本机查看")
     response.headers["Cache-Control"] = "no-store, private"
     response.headers["Pragma"] = "no-cache"
