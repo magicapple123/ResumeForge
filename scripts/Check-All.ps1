@@ -24,8 +24,42 @@ function Step($name) { Write-Host "`n=== [$name] ===" -ForegroundColor Cyan }
 Step "1/6 ruff (backend)"
 & $ruff check backend/app backend/tests
 if ($LASTEXITCODE -ne 0) { $failed += "ruff" }
-& $ruff format --check backend/app backend/tests
-if ($LASTEXITCODE -ne 0) { $failed += "ruff-format" }
+
+# Format check covers only the Python files this checkout touches, never the whole tree:
+# a large share of the existing files is not `ruff format` clean (measured 2026-11-06 over
+# backend/app + backend/tests: 501 would be reformatted, 979 already formatted), so a
+# directory-wide check is red on an untouched checkout and says nothing about the change.
+# The pre-commit hook applies the same idea to staged files; here we cover the working
+# tree, i.e. everything that differs from HEAD plus the untracked files.
+$changedPy = @()
+$gitCmd = Get-Command git -ErrorAction SilentlyContinue
+if ($null -eq $gitCmd) {
+    Write-Host "git not found; skipping the changed-file format check" -ForegroundColor Yellow
+} else {
+    $inTree = & git rev-parse --is-inside-work-tree 2>$null
+    if ($LASTEXITCODE -ne 0 -or ([string]$inTree).Trim() -ne "true") {
+        Write-Host "not a git work tree; skipping the changed-file format check" -ForegroundColor Yellow
+    } else {
+        # Tracked changes (added, copied, modified, renamed) against HEAD, plus untracked files.
+        $trackedPy = @(& git diff --name-only --diff-filter=ACMR HEAD -- backend/app backend/tests)
+        $untrackedPy = @(& git ls-files --others --exclude-standard -- backend/app backend/tests)
+        foreach ($entry in (@($trackedPy) + @($untrackedPy))) {
+            if ($null -eq $entry) { continue }
+            $name = ([string]$entry).Trim()
+            if ($name -eq "") { continue }
+            if ($name -notmatch '\.py$') { continue }
+            if ($changedPy -notcontains $name) { $changedPy += $name }
+        }
+        $changedPy = @($changedPy | Sort-Object)
+        if ($changedPy.Count -eq 0) {
+            Write-Host "no changed Python files under backend/app, backend/tests; format check skipped"
+        } else {
+            Write-Host ("format --check on " + $changedPy.Count + " changed Python file(s)")
+            & $ruff format --check @changedPy
+            if ($LASTEXITCODE -ne 0) { $failed += "ruff-format" }
+        }
+    }
+}
 
 # ---- Backend: full pytest (exclude canary tests that need live app on 9333) ----
 Step "2/6 pytest (backend full, canary excluded)"
