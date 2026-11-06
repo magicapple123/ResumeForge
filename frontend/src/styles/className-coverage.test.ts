@@ -118,10 +118,6 @@ const EXEMPTIONS: Record<string, Exemption> = {
     reason: "行内容容器，行本身由 .profile-list-item 承担",
     expires: REVIEW_DATE,
   },
-  "profile-reference-field": {
-    reason: "FileDropZone 透传的定位类，拖拽区样式由 FileDropZone 自身承担",
-    expires: REVIEW_DATE,
-  },
   "profile-section-empty-actions": {
     reason: "空态动作条容器，按钮由 antd Button 与父级空态布局承担",
     expires: REVIEW_DATE,

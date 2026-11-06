@@ -16,6 +16,11 @@
 - **运营手册补充「凭据泄露的处置顺序」。** 明确"先吊销再清理"、历史与产物一起查、替换为占位符而不是部分打码，并指向新增的扫描守卫。
 - **`AGENTS.md` 校正 2.0 后的过期口径，并补四条规则。** 迁移章节从"grep 旧 head revision"改为"单基线 `0001_baseline_v2` + `app_schema_epoch` 闸门 + 测试统一从 `migration_refs` 取常量"；用例规模与耗时改为不写精确数字；`-n auto` 补"内存受限用 `-n 4`"。新增「多会话/多代理并行」（文件所有权、禁 `checkout`/`stash`/`restore`、改前快照、基线三件套、回报格式）、「规模约束（500/800 行预算与豁免规则）」、「文档与个人信息」（PII 巡检与事故处置）、以及"新增守卫必须反证"一条；并把"并行/覆盖率/构建"的历史叙事下沉到 `docs/maintenance.md` §5.1，同步写清两边的权威分工（**红线看 AGENTS.md，执行看 maintenance.md**）。
 
+### Removed
+
+- **清理 20 个零引用源码文件（1,945 行），全部为重构或功能下线后的残留。** 判定方式不是"看着像没用"，而是建立导入图逐条验证：前端 18 个 TS/TSX + 1 个 CSS 在整仓（含测试）0 处真实 import，后端 1 个 API 模块在自身文件头就写着"已下线、不再注册路由"。具体为：`StyleTemplateEditorModal.tsx`、`ReferenceFileField.tsx`、`useWorkbenchInlineMarks.ts`、`entryReorder.ts`、`RiskScanWatcher.tsx`、`SuggestionScanWatcher.tsx`、`UpdateCheckButton.tsx`、`WebFormTargetFloatingBalls.tsx`、`CurrentGroupSummary.tsx`、`paginationDomain.ts`（re-export 兼容层，实现在 `features/resume-pagination/`）、单数版 `utils/backgroundTask.ts`（现役是 `backgroundTasks.ts`）、`api/resumeRisk.ts`、`styles/resume-structure-example.css`，以及被通用板块渲染器取代的 7 个资料页组件（`AwardSection` / `SkillSection` / `ProjectSection` / `ExperienceSection` / `CampusExperienceSection` / `SectionVisibilitySwitch` / 见上 `CurrentGroupSummary`）；后端为 `app/api/resume_template_import.py`。**这与 1.0 时"文件保留、只在文件头标注已下线"的口径相反**——2.0 换了全新基线，回滚价值已由 git 历史承担，留着只会让导入图和代码搜索持续失真。同时删掉 `AppShell.test.tsx` 与 `ResumeRiskPanel.test.tsx` 中三行指向这些模块的 `vi.mock`（模块不存在时它们会直接报解析失败）。
+- **`docs/ui-copy-guide.md` 标记对应条目的定位失效。** 映射表第 7 / 8 / 23 条以 `StyleTemplateEditorModal.tsx` 的行号定位，组件删除后不再可查，就地加注说明作废，保留编号以免破坏历史索引。
+
 ## 2.0.0 - 2026-11-05
 
 ### Changed

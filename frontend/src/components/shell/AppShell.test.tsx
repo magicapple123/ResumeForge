@@ -92,8 +92,6 @@ vi.mock("../AppHeaderActions", () => ({ default: () => null }));
 vi.mock("../common/AnnouncementBar", () => ({ default: () => null }));
 vi.mock("../BackgroundTaskBar", () => ({ default: () => null }));
 vi.mock("../StarPromptModal", () => ({ default: () => null }));
-vi.mock("../RiskScanWatcher", () => ({ default: () => null }));
-vi.mock("../SuggestionScanWatcher", () => ({ default: () => null }));
 vi.mock("../TaskCompletionNotifier", () => ({ default: () => null }));
 vi.mock("../GlobalOverlays", () => ({ default: () => null }));
 vi.mock("../navigation/MobileNavigation", () => ({ default: () => null }));

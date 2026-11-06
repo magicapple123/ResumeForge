@@ -8,8 +8,6 @@ import ResumeRiskPanel from "./ResumeRiskPanel";
 
 const apiMocks = vi.hoisted(() => ({ scanResumeRisks: vi.fn() }));
 
-vi.mock("../api/resumeRisk", () => apiMocks);
-
 /**
  * 任务地基的替身（见 `src/test/aiTaskEntryBridge.ts`）：面板验的是界面语义，
  * 轮询与通知出口由 `utils/backgroundTasks*.test.ts` 负责。
