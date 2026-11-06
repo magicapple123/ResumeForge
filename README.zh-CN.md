@@ -253,7 +253,7 @@ cd ResumeForge
 - **分享时可一键脱敏**：离线分享包只含脱敏 HTML/PDF 与只读快照。
 - **默认仅监听回环地址。** 本工具为单用户本地部署、无账号体系，暴露至公网等同于公开本机数据库。
 
-发现疑似安全问题请遵循 [SECURITY.md](SECURITY.md)。
+发现疑似安全问题请遵循 [SECURITY.md](SECURITY.zh-CN.md)。
 
 ## 🔄 更新而不丢失数据
 
@@ -348,7 +348,7 @@ cd ResumeForge
 </p>
 
 - **Bug 与需求**：用 [Issue 模板](.github/ISSUE_TEMPLATE) 提交，附上版本号、系统与复现步骤。
-- **安全问题**：请走私密渠道（见 [SECURITY.md](SECURITY.md)），不要在公开 Issue 里披露可利用细节。
+- **安全问题**：请走私密渠道（见 [SECURITY.md](SECURITY.zh-CN.md)），不要在公开 Issue 里披露可利用细节。
 
 ## ☕ 赞赏支持
 
@@ -392,18 +392,18 @@ cd ResumeForge
 | [环境排查](docs/troubleshooting-stale-build.md) | "改了没用"的判定链：进程、产物、缓存、地址族 |
 | [任务书与报告模板](docs/templates/) | 可直接复制的任务书与交付报告骨架 |
 | [变更记录](CHANGELOG.md) | 每个版本改了什么 |
-| [贡献指南](CONTRIBUTING.md) | 开发环境、提交规范、测试要求 |
+| [贡献指南](CONTRIBUTING.zh-CN.md) | 开发环境、提交规范、测试要求 |
 
 ## 🤝 参与贡献
 
-欢迎提交 Issue 与 Pull Request。开始前请阅读 [CONTRIBUTING.md](CONTRIBUTING.md) 与 [AGENTS.md](AGENTS.md)：后者为仓库长期维护规则，包含「一处逻辑只保留一份实现」「新增迁移需同步更新测试」等直接影响 PR 能否通过的约定。
+欢迎提交 Issue 与 Pull Request。开始前请阅读 [CONTRIBUTING.md](CONTRIBUTING.zh-CN.md) 与 [AGENTS.md](AGENTS.md)：后者为仓库长期维护规则，包含「一处逻辑只保留一份实现」「新增迁移需同步更新测试」等直接影响 PR 能否通过的约定。
 
 - 修 bug 请先补一个能复现的测试，再改实现；
 - 用户可见的行为变化请同步更新 README、`docs/user-guide.md`、应用内使用指南与 `CHANGELOG.md`；
 - 新增数据表或列必须写 Alembic 迁移与降级脚本，并补「表集合前后不变」的断言；
 - 提交信息遵循 Conventional Commits（`feat:` / `fix:` / `docs:` …）。
 
-这个项目采用 [Contributor Covenant](CODE_OF_CONDUCT.md) 行为准则。
+这个项目采用 [Contributor Covenant](CODE_OF_CONDUCT.zh-CN.md) 行为准则。
 
 ## 📄 许可证
 

@@ -5,7 +5,8 @@
 ``docs/``"。这类事故的共同点是**没有报错**——密钥格式合法、手机号格式合法，
 只有等到被人扫到才发现。所以把它做成一条可执行检查，而不是一条规范。
 
-检查范围（默认）：``docs/``、``README*.md``、``CONTRIBUTING.md``、``SECURITY.md``、``AGENTS.md``、
+检查范围（默认）：``docs/``、``README*.md``、``CODE_OF_CONDUCT.md``、``CODE_OF_CONDUCT.zh-CN.md``、
+``CONTRIBUTING.md``、``CONTRIBUTING.zh-CN.md``、``SECURITY.md``、``SECURITY.zh-CN.md``、``AGENTS.md``、
 ``CLAUDE.md``、``.github/``。判定为**错误**：服务商密钥、私钥块、平台令牌、中国大陆手机号、邮箱、
 带用户名的家目录路径。
 
@@ -38,8 +39,12 @@ DEFAULT_TARGETS = (
     "docs",
     "README.md",
     "README.zh-CN.md",
+    "CODE_OF_CONDUCT.md",
+    "CODE_OF_CONDUCT.zh-CN.md",
     "CONTRIBUTING.md",
+    "CONTRIBUTING.zh-CN.md",
     "SECURITY.md",
+    "SECURITY.zh-CN.md",
     "AGENTS.md",
     "CLAUDE.md",
     ".github",
