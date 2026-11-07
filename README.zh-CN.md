@@ -378,6 +378,7 @@ cd ResumeForge
 | [使用指南](docs/user-guide.md) | 功能字段说明、操作步骤与隐私边界（最完整） |
 | [项目导航图](docs/PROJECT_MAP.md) | 由功能定位代码的索引 |
 | [架构设计](docs/architecture.md) | 分层、数据模型、决策记录、扩展点 |
+| [Agent 原生化建议](docs/agent-native-roadmap.md) | 现有基础、分阶段路线、开源框架与安全边界 |
 | [简历文档模型](docs/resume-document-model.md) | 简历对象与字段的 v2 契约、位置与布局规划、前端契约 |
 | [面试讲解指南](docs/INTERVIEW_GUIDE.md) | 项目讲解要点与高频追问 |
 | [维护手册](docs/maintenance.md) | 六步开发循环、守卫与红线、手动启动与冒烟、本机环境已知坑 |

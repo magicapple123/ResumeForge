@@ -84,7 +84,9 @@ $env:PYTHONUTF8 = "1"
 ```
 
 `-n auto` 走 `pytest-xdist`（在 `requirements-dev.txt` 里）并行执行。**这不是可选的美化**：全量
-七千余个用例串行要十几分钟，并行后降到几分钟，而"改一次要等十几分钟"正是协作最贵的一环。
+7689 个用例的实测口径是——`-n auto` 约 **2.7 分钟**（164.69s，多核开发机）、`-n 4` 约 **9 分钟**
+（548.27s，本机沙箱/2C4G）、**串行带覆盖率**约 **43 分钟**（2578.20s）。三个数字的测量条件不同
+（并行度、是否开 `--cov`、机器核数），引用时必须带上条件，别混着比。
 内存受限的环境（本机沙箱、2C4G 容器）改用 `-n 4`：`-n auto` 按核数开满，容易 OOM 后 worker
 猝死，失败信息看起来像用例坏了。
 `conftest.py` 的测试库与数据集目录按 PID 隔离，worker 之间本来就不会互相踩；**新增测试时不要
@@ -386,11 +388,11 @@ Windows 侧对应的是 `windows-end-to-end`（从干净检出走完整启动链
 | 数据库里**引用附件的那一列** | `asset_manifest.collect_referenced_names` | 文件在磁盘上但永远不进包 |
 | 新增 **base64 原件来源**（业务列） | `user_files._backfill_*` 与 `_lookup_original` 加一支 | 副本丢了补不回来，预览 404、导出永久报缺失 |
 | 包内**新增成员/字段语义** | 升 `BACKUP_FORMAT_*` + 导入侧 fail-closed 校验 | 老版本安静地只恢复数据库，用户以为都回来了 |
-| 后端**新增模型表** | 无需手工登记：清单从 `Base.metadata` 推导 | `test_backup_table_coverage` 会红 |
+| 后端**新增模型表** | 清单从 `Base.metadata` 推导，但 `backend/tests/fixtures/backup_table_snapshot.json` 的冻结表名要**手工更新** | `test_backup_table_coverage` 会红并点名缺/多的表 |
 
 三条永久红灯（写错就红，不需要谁记得去查文档）：
 
-- `test_backup_table_coverage`：`manifest["tables"]` 的表集合 == `application_tables()`；
+- `test_backup_table_coverage`：`manifest["tables"]` 与 `application_tables()` 都等于冻结快照 `backend/tests/fixtures/backup_table_snapshot.json` 的表名（加/删表必须手工更新它）；
 - `test_new_data_directory_is_never_silent`：磁盘上不允许存在"既不在清单、也不在 uncovered"的顶层项；
 - `test_asset_categories_and_coverage_agree`：资产类别与覆盖名单同一份，且与 `RUNTIME_ONLY` 不相交。
 

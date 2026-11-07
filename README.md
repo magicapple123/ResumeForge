@@ -378,6 +378,7 @@ End users should begin with the [user guide on the website](https://magicapple12
 | [User guide](docs/user-guide.md) | Field reference, step-by-step instructions and privacy boundaries (the most complete document) |
 | [Project map](docs/PROJECT_MAP.md) | Index from a feature to its implementation |
 | [Architecture](docs/architecture.md) | Layering, data model, decision records, extension points |
+| [Agent-native roadmap](docs/agent-native-roadmap.md) | Existing foundations, phased roadmap, open-source frameworks and safety boundaries |
 | [Resume document model](docs/resume-document-model.md) | The v2 contract for Resume objects and fields, placement and layout planning, and the front-end contract |
 | [Interview guide](docs/INTERVIEW_GUIDE.md) | Talking points and likely follow-up questions |
 | [Maintenance handbook](docs/maintenance.md) | The six-step development loop, guards and red lines, manual start and smoke, known local pitfalls |

@@ -6,6 +6,43 @@
 
 ### Added
 
+- **求职助手写操作状态可跨轮、跨重启如实回答（P0）。** 写入提案从进程内存改为数据库单一事实源
+  （新表 `assistant_write_proposal`，迁移 `0002`）：新增 `pending/approved/executed/failed/unknown/rejected/expired`
+  状态机（TTL 30 分钟）、创建时记录目标版本指纹并在批准前重查（目标被改过返回 409，不用旧快照写库）、
+  终态写一条 `kind=proposal_result` 的派生消息（幂等、写失败不影响状态）、下一轮系统提示注入本会话最近 10 条
+  写操作状态（以此为准）。启动时把上一次进程遗留的 pending/approved 置为失效并清理 24 小时前过期提案的参数与预览。
+- **助手页新增「任务」区块与任务层（`agent_task` / `agent_task_step`）。** 任务支持
+  `draft/running/paused/waiting_approval/done/failed/cancelled` 跨轮推进、等待人工确认不自动放行、
+  重启后变「已暂停」可继续、同一步幂等重试只产生一次副作用；新增 `/api/agent-tasks` REST 与助手页任务区。
+- **设置 →「助手与 AI 行为」新增「提醒到期生成任务卡」开关（默认关闭）。** 打开后到期的日历提醒自动生成
+  「准备：<提醒标题>」任务卡；去重键为 `(reminder_id, occurrence_due_at)`，只补最近 24 小时，关闭后不再生成、
+  已生成的卡保留；不自动执行任何写操作、不发消息、不弹窗。
+- **助手可感知当前界面上下文（shared application state）。** 聊天请求新增可选 `client_context`
+  （route/view + 选中对象 type/id）；后端按当前数据集重查对象并取服务端标题（截断 40 字），查不到时如实
+  注入「选中项已失效」，前端输入一律视为不可信线索。
+- **助手新增 4 个只读工具 + 1 个错误诊断工具。** 简历质量检测（只跑本地规则，不触发远端增强）、
+  岗位 ATS 匹配估计（强制免责文案）、导出预检、简历版本对比，以及 `diagnose_recent_errors`
+  （只回白名单结构化字段：时间/级别/logger/异常类/HTTP 状态/路由模板/request_id，日志原文不出进程）。
+- **文档检索质量重做。** 切块从 `##` 降到 `###`（保留父级面包屑），打分改为「标题命中 > 正文密度 > 次数」，
+  步骤类片段上限 1500 字，返回结构新增 `source`（相对路径 + 标题路径）；20 问标注集 top1 命中率 1/20 → 20/20。
+- **action 契约层内核与 3 个试点。** 新增 `services/actions/`（ActionSpec/Registry/tool_adapter/route_adapter）：
+  参数 schema、权限级别、确认预览与实现收成一份定义；路由注册顺序仍由 `application_routers.ROUTERS` 显式决定。
+- **action 契约层按域迁移（T28）完成：64/79 个助手工具收成一份 ActionSpec。** 覆盖 jobs / materials /
+  claims / profile / tracker / referrals / reminders / knowledge / interview-experiences / candidate jobs /
+  skills / format templates / resumes（列表与版本/版式）/ interview / drill / apply / analytics / share
+  packages / chat / webform / match analyses / ATS / 版本对比等域的读写动作（新增
+  services/actions/domains/ 与自动聚合的 actions/catalog.py；路由 path/method/响应模型/状态码与工具
+  name/description/permission/preview 保持不变）。新增五个兼容机制：tool_defaults（仅工具侧默认值）、
+  ignore_unknown_arguments（旧路由忽略未知字段）、run_tool（路由与工具既有写语义不同时让工具侧复用旧
+  read-modify-write 实现）、tool_fields（工具侧字段投影，路由专属字段不暴露给模型）、
+  tool_argument_aliases（旧工具参数名与路由路径参数名不同时对齐）。路由与工具统一由「旧实现委托」kit
+  （actions/legacy.py）生成，零业务逻辑复制；工具 schema 增加 compact 模式，去掉
+  default/maxLength/additionalProperties 等模型侧装饰，prompt 固定成本从 46k 降到约 41k 字符。
+  剩余 15 个静态声明逐个登记在 backend/tests/fixtures/actions_legacy_allowlist.json（含 reason 与
+  review_after；删除/新增都会让守卫变红），新增工具一律必须走 define_action + as_tool。
+- **工具权限四级化。** `Tool.permission` 取代单一 `writes` 布尔：read_only / reversible_write / irreversible_write /
+  external_side_effect（当前无 external_side_effect 工具），守卫要求每个工具显式声明。
+- **安全验收清单。** 新增 `docs/security-agent-checklist.md`（OWASP Agentic / NIST AI RMF / OTel GenAI 落点）。
 - **开发者文档新增四篇方法论，并与「提交前检查」串起来。** [验证手册](docs/verification-playbook.md) 给出证据六级阶梯、反证三件套与四类假绿判据；[协作规程](docs/ai-collaboration-sop.md) 固化任务书九节、按文件所有权的并行边界、脏工作区纪律与交付报告结构；[缺陷模式](docs/defect-patterns.md) 归纳 31 类高频缺陷的判据与守卫方式；[环境排查](docs/troubleshooting-stale-build.md) 给出「改了没用」的固定判定链。另附[任务书与交付报告模板](docs/templates/)。README 文档表与 CONTRIBUTING 已同步索引。
 - **文档 PII 巡检进 CI（`docs-guards` 作业）。** 新增 `scripts/check_docs_pii.py`，扫描 `docs/`、README、CONTRIBUTING 与 `.github/`，拦下密钥、私钥块、平台令牌、手机号、邮箱与带用户名的家目录路径（含中文用户名）；占位符与带 `pii-ok` 注释的行自动放过。配套 `backend/tests/test_docs_pii_guard.py` 用正例/反例/空目录/打码四组用例做反证，避免"正则失效→恒绿"。
 - **Bug 反馈模板升级为七字段。** `.github/ISSUE_TEMPLATE/bug_report.yml` 增加版本号、期望行为、证据与「怎样算修好」，并在提交前自查里要求先升级到最新版本、先搜重复 issue。
@@ -13,6 +50,18 @@
 
 ### Changed
 
+- **能力地图（助手功能目录）纠偏 8 处。** 简历照片上限改为 5MB；回收站类别改为 22 类并注明「求职进度」与
+  「投递记录」在回收站里同名；全局搜索第 8 域改为「我的资料」（技能域已下线）；面试深挖补第 5 档「未覆盖」；
+  日历提醒补第 4 档「稍后（later）」；快捷入口改为「默认 7 个，可自定义」；知识库入口改「新建知识」；
+  「导入参考模板」补「当前界面不可达（已下线）」前缀。新增内容护栏（文案里的 N 类/N 套/N 个/N 档必须能从
+  同句清单数出来）。
+- **写操作提案有效期从 5 分钟改为 30 分钟**；token 仍只在服务端内存流转、同一请求内核销。
+- **助手运行轨迹进入消息 context。** run id/step/tool/起止时间/状态/模型与用量/授权决策/脱敏摘要随助手消息
+  `context.run_trace` 落库，不含简历正文、附件、Key、思维链与提示词原文。
+- **新增「路由+工具」对必须走 define_action**，存量在 allowlist 登记、只减不增（T28 已迁移 64/79，
+  静态声明剩 15 个、逐名登记 reason 与 review_after）；路由注册顺序仍由 application_routers.ROUTERS
+  显式决定。
+- **多代理/多会话协作纪律。** AGENTS.md 补充文件所有权、禁止回滚命令、改前快照与反证要求等规则。
 - **运营手册补充「凭据泄露的处置顺序」。** 明确"先吊销再清理"、历史与产物一起查、替换为占位符而不是部分打码，并指向新增的扫描守卫。
 - **`AGENTS.md` 校正 2.0 后的过期口径，并补四条规则。** 迁移章节从"grep 旧 head revision"改为"单基线 `0001_baseline_v2` + `app_schema_epoch` 闸门 + 测试统一从 `migration_refs` 取常量"；用例规模与耗时改为不写精确数字；`-n auto` 补"内存受限用 `-n 4`"。新增「多会话/多代理并行」（文件所有权、禁 `checkout`/`stash`/`restore`、改前快照、基线三件套、回报格式）、「规模约束（500/800 行预算与豁免规则）」、「文档与个人信息」（PII 巡检与事故处置）、以及"新增守卫必须反证"一条；并把"并行/覆盖率/构建"的历史叙事下沉到 `docs/maintenance.md` §5.1，同步写清两边的权威分工（**红线看 AGENTS.md，执行看 maintenance.md**）。
 
@@ -20,6 +69,16 @@
 
 - **清理 20 个零引用源码文件（1,945 行），全部为重构或功能下线后的残留。** 判定方式不是"看着像没用"，而是建立导入图逐条验证：前端 18 个 TS/TSX + 1 个 CSS 在整仓（含测试）0 处真实 import，后端 1 个 API 模块在自身文件头就写着"已下线、不再注册路由"。具体为：`StyleTemplateEditorModal.tsx`、`ReferenceFileField.tsx`、`useWorkbenchInlineMarks.ts`、`entryReorder.ts`、`RiskScanWatcher.tsx`、`SuggestionScanWatcher.tsx`、`UpdateCheckButton.tsx`、`WebFormTargetFloatingBalls.tsx`、`CurrentGroupSummary.tsx`、`paginationDomain.ts`（re-export 兼容层，实现在 `features/resume-pagination/`）、单数版 `utils/backgroundTask.ts`（现役是 `backgroundTasks.ts`）、`api/resumeRisk.ts`、`styles/resume-structure-example.css`，以及被通用板块渲染器取代的 7 个资料页组件（`AwardSection` / `SkillSection` / `ProjectSection` / `ExperienceSection` / `CampusExperienceSection` / `SectionVisibilitySwitch` / 见上 `CurrentGroupSummary`）；后端为 `app/api/resume_template_import.py`。**这与 1.0 时"文件保留、只在文件头标注已下线"的口径相反**——2.0 换了全新基线，回滚价值已由 git 历史承担，留着只会让导入图和代码搜索持续失真。同时删掉 `AppShell.test.tsx` 与 `ResumeRiskPanel.test.tsx` 中三行指向这些模块的 `vi.mock`（模块不存在时它们会直接报解析失败）。
 - **`docs/ui-copy-guide.md` 标记对应条目的定位失效。** 映射表第 7 / 8 / 23 条以 `StyleTemplateEditorModal.tsx` 的行号定位，组件删除后不再可查，就地加注说明作废，保留编号以免破坏历史索引。
+
+### Fixed
+
+- **确认执行写操作后，助手仍说"等待确认"（P0 + 任务/界面上下文/诊断等本轮修复；逐条证据见交付报告）。**
+  P0 根因是提案状态只存进程内存、执行成功后不回写会话、下一轮上下文也不读提案表；现在状态以数据库为准并在
+  下一轮注入权威状态块——已执行仍回答已执行，重启后未确认的显示已失效。
+- **助手工具调用轨迹与对话内容错位**：轨迹按消息 context 持久化，历史回看能看到每一步的工具与授权决策。
+- **清理过期 xfail、备份表覆盖守卫同源恒等、文档耗时数字失真**  （详见 T12/T15 证据）。
+- **官网与 README 的演示数据脚本在 2.0 上重新可用。** `scripts/demo_data/base.py::init_db()` 原来用 `Base.metadata.create_all` 建库，而 2.0 的 `app_schema_epoch` 那一行由基线迁移播种——造出来的库既没有 epoch 行也没有 `alembic_version`，启动闸门判成 `REFUSE_UNKNOWN`，用 `uvicorn` 起服务直接拒绝启动；原有测试因为 `TestClient` 不触发 lifespan 而一直是绿的。现在改为跑真实 `alembic upgrade head`，并在脚本内硬断言「恰好一行 epoch=2 且 revision 非空」。同时把演示岗位状态从旧值 `active` 改成规范值 `开放中`（首页「开放中岗位」不再恒为 0），时间锚点改为「运行日的昨天 08:30」（需要字节级复现时用 `RF_DEMO_NOW` 钉住），首页「近 7 天生成」与提醒分色不再依赖某个固定月份。
+- **官网在线体验站的 ATS 检测不再被当成「写操作」拒掉。** `frontend/src/demo/demoFetch.ts` 的只读豁免清单里还留着早已不存在的旧路径 `/api/ats/check`，而真实接口是 `POST /api/resumes/{id}/ats-check`——演示站里点「ATS 检测」拿到的是 403「这是在线体验版，无法真正保存改动」，看起来像功能坏了。现在豁免按路径形状匹配 `/api/resumes/{数字}/ats-check`，该形状走快照回放；其它写操作照旧 403。
 
 ## 2.0.0 - 2026-11-05
 
@@ -1172,16 +1231,6 @@
 - **已知限制二：Word 页眉仍只印姓名与求职意向，不含 GitHub 与个人主页。** 这是本次改动之前就存在的链路差异（PDF 与 HTML 的联系方式行有这两个字段，Markdown 与 Word 没有），本次只换文案、不新增字段，因此保持原样。
 
 - **已知限制三：生成链路（大模型）不消费这个字段。** 选英文只改变纸面固定文案，**不会**让已经生成好的中文内容变成英文；它也不是"下次生成时用英文写"的开关。让生成链路感知语言是下一个需求。
-
-## Unreleased
-
-### Added
-
-### Fixed
-
-- **官网与 README 的演示数据脚本在 2.0 上重新可用。** `scripts/demo_data/base.py::init_db()` 原来用 `Base.metadata.create_all` 建库，而 2.0 的 `app_schema_epoch` 那一行由基线迁移播种——造出来的库既没有 epoch 行也没有 `alembic_version`，启动闸门判成 `REFUSE_UNKNOWN`，用 `uvicorn` 起服务直接拒绝启动；原有测试因为 `TestClient` 不触发 lifespan 而一直是绿的。现在改为跑真实 `alembic upgrade head`，并在脚本内硬断言「恰好一行 epoch=2 且 revision 非空」。同时把演示岗位状态从旧值 `active` 改成规范值 `开放中`（首页「开放中岗位」不再恒为 0），时间锚点改为「运行日的昨天 08:30」（需要字节级复现时用 `RF_DEMO_NOW` 钉住），首页「近 7 天生成」与提醒分色不再依赖某个固定月份。
-
-### Changed
 
 ## 1.0.2 - 2026-10-18
 
