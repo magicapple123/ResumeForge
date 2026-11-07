@@ -18,12 +18,13 @@ from ..database import get_db
 from ..schemas.share_package import (
     ShareCommentsImport,
     ShareCommentsOut,
-    SharePackageBrief,
     SharePackageCreate,
     SharePackageOut,
     ShareRevealOut,
 )
 from ..services import trash
+from ..services.actions import add_action_route
+from ..services.actions.catalog import all_actions
 from ..services.data_backup.asset_safety import safe_asset_path
 from ..services.data_backup.paths import BackupError
 from ..services.privacy import RedactionOptions as PrivacyRedactionOptions
@@ -42,6 +43,9 @@ from ..services.share_package import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+
 
 router = APIRouter(prefix="/api/share-packages", tags=["share-packages"])
 
@@ -84,7 +88,7 @@ def create_share_package_entry(payload: SharePackageCreate, db: Session = Depend
     return share_package_out(package)
 
 
-@router.get("", response_model=list[SharePackageBrief])
+add_action_route(router, all_actions()["list_share_packages"], route_path="")
 def read_share_packages(
     keyword: str = Query(default=""),
     limit: int = Query(default=200, ge=1, le=500),

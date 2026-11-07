@@ -15,8 +15,8 @@
  * - 版式预览（`TemplatePreviewModal`，它同时服务模板与版式，所以 `previewTemplate` 还在）。
  *
  * 撤掉的东西：`StyleTemplateEditorModal`、`TemplateImportModal`、`BuiltinStyleGallery`、
- * `FileDropZone` 的引用。**组件文件本身没有删除**（文件头有"已下线"标注）——历史测试仍能
- * 独立跑，真要回滚时不必从 git 里捞。
+ * `FileDropZone` 的引用。2026-11-07 起后两者及其单测、`templateImport` /
+ * `styleTemplateEditor` 语言包已从工作树删除（回滚从 git 历史取）。
  *
  * 接口层一行没删：`api/resumeTemplates.ts` 里的导出仍被 `tsc` 检查，删函数只会换来编译失败，
  * 而"没有 UI 入口"已经足够表达下线。旧简历引用的自制模板仍按原样渲染，只是不再能新建。

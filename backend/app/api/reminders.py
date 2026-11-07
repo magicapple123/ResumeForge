@@ -13,34 +13,23 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from ..database import get_db
-from ..models.reminder import REMINDER_KINDS, REMINDER_STATUSES
-from ..schemas.reminder import ReminderCreate, ReminderOut, ReminderUpcomingOut, ReminderUpdate
+from ..schemas.reminder import ReminderUpcomingOut
+from ..services.actions import add_action_route
+from ..services.actions.domains.reminders import reminder_actions
+from ..services.actions.pilots import pilot_actions
 from ..services.reminder_service import (
-    create_reminder,
     delete_reminder,
-    list_reminders,
-    reminder_or_none,
     upcoming_reminders_out,
-    update_reminder,
 )
 
 logger = logging.getLogger(__name__)
 
+
 router = APIRouter(prefix="/api/reminders", tags=["reminders"])
 
 
-@router.get("", response_model=list[ReminderOut])
-def read_reminders(
-    kind: str = Query(default=""),
-    status: str = Query(default=""),
-    limit: int = Query(default=200, ge=1, le=500),
-    db: Session = Depends(get_db),
-):
-    if kind and kind not in REMINDER_KINDS:
-        raise HTTPException(status_code=422, detail="未知的提醒类型")
-    if status and status not in REMINDER_STATUSES:
-        raise HTTPException(status_code=422, detail="未知的提醒状态")
-    return list_reminders(db, kind=kind, status=status, limit=limit)
+# T28 Batch B：GET /api/reminders 由契约层生成（注册位置/顺序保持原装饰器位置）。
+add_action_route(router, reminder_actions()["list_reminders"])
 
 
 @router.get("/upcoming", response_model=list[ReminderUpcomingOut])
@@ -49,17 +38,13 @@ def read_upcoming(limit: int = Query(default=50, ge=1, le=500), db: Session = De
     return upcoming_reminders_out(db, limit=limit)
 
 
-@router.post("", response_model=ReminderOut, status_code=201)
-def create_reminder_entry(payload: ReminderCreate, db: Session = Depends(get_db)):
-    return create_reminder(db, payload)
+# T27 试点 2：POST /api/reminders 由契约层生成（写操作带 preview；参数/权限唯一真源）。
+# 注册位置仍由本文件里的调用点显式决定（原来的装饰器位置，保持注册顺序）。
+add_action_route(router, pilot_actions()["create_reminder"])
 
 
-@router.patch("/{reminder_id}", response_model=ReminderOut)
-def patch_reminder(reminder_id: int, payload: ReminderUpdate, db: Session = Depends(get_db)):
-    reminder = reminder_or_none(db, reminder_id)
-    if reminder is None:
-        raise HTTPException(status_code=404, detail="提醒不存在或已被删除")
-    return update_reminder(db, reminder, payload)
+# T28 Batch B：PATCH /api/reminders/{reminder_id} 由契约层生成（可逆写，带 preview）。
+add_action_route(router, reminder_actions()["update_reminder"])
 
 
 @router.delete("/{reminder_id}", status_code=204)

@@ -97,6 +97,11 @@ const TOOL_LABELS: Record<string, MessageKey> = {
   add_resume_entry: "toolLabel.add_resume_entry",
   reorder_sections: "toolLabel.reorder_sections",
   set_entry_layout: "toolLabel.set_entry_layout",
+  run_resume_quality_check: "toolLabel.run_resume_quality_check",
+  check_ats_match: "toolLabel.check_ats_match",
+  get_resume_preflight: "toolLabel.get_resume_preflight",
+  compare_resume_versions: "toolLabel.compare_resume_versions",
+  diagnose_recent_errors: "toolLabel.diagnose_recent_errors",
 };
 
 export function MessageToolCalls({ calls }: { calls: AssistantToolCall[] }) {

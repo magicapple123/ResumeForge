@@ -38,6 +38,8 @@ from ..schemas.drill import (
     DrillSessionOut,
     DrillTurnOut,
 )
+from ..services.actions import add_action_route
+from ..services.actions.catalog import all_actions
 from ..services.drill import (
     apply_verdict,
     current_question,
@@ -101,7 +103,7 @@ def _session_out(record: DrillSession) -> DrillSessionOut:
     )
 
 
-@router.get("", response_model=list[DrillSessionBrief])
+add_action_route(router, all_actions()["list_drill_sessions"], route_path="")
 def list_sessions(
     status: str = Query(default=""),
     db: Session = Depends(get_db),
@@ -209,7 +211,7 @@ async def create_session(payload: DrillCreate, request: Request, db: Session = D
         return _session_out(stored)
 
 
-@router.get("/{session_id}", response_model=DrillSessionOut)
+add_action_route(router, all_actions()["get_drill_report"], route_path="/{session_id}")
 def read_session(session_id: int, db: Session = Depends(get_db)):
     return _session_out(_session_or_404(db, session_id))
 

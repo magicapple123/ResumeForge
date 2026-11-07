@@ -17,19 +17,18 @@ from ..schemas.common import Page
 from ..schemas.referral import (
     ReferralBatchDeleteResult,
     ReferralBatchRequest,
-    ReferralCreate,
     ReferralImageUploadOut,
     ReferralOut,
     ReferralStatsOut,
     ReferralUpdate,
 )
 from ..services import trash
+from ..services.actions import add_action_route
+from ..services.actions.domains.referrals import referral_actions
 from ..services.data_backup.asset_safety import safe_asset_path
 from ..services.data_backup.paths import BackupError
 from ..services.referral_service import (
-    create_referral,
     delete_referral,
-    list_referrals,
     list_referrals_page,
     referral_images_dir,
     referral_or_none,
@@ -41,6 +40,7 @@ from ..services.referral_service import (
 )
 
 logger = logging.getLogger(__name__)
+
 
 router = APIRouter(prefix="/api/referrals", tags=["referrals"])
 
@@ -56,18 +56,9 @@ _IMAGE_MEDIA_TYPES = {
 }
 
 
-@router.get("", response_model=list[ReferralOut])
-def read_referrals(
-    status: str = Query(default=""),
-    keyword: str = Query(default=""),
-    limit: int = Query(default=200, ge=1, le=500),
-    db: Session = Depends(get_db),
-):
-    if status and status not in REFERRAL_STATUSES:
-        raise HTTPException(status_code=422, detail="未知的内推状态")
-    rows = list_referrals(db, status=status, keyword=keyword, limit=limit)
-    # P2-1：批量预取 track 派生 converted，替代逐行点查（200 条 = 201 查询 → 2 查询）。
-    return referrals_out(db, rows)
+# T28 Batch B：GET /api/referrals 由契约层生成（ActionSpec 是参数/权限唯一真源）。
+# 注册位置仍由本文件里的调用点显式决定（原来的装饰器位置，保持注册顺序）。
+add_action_route(router, referral_actions()["list_referrals"])
 
 
 @router.get("/stats", response_model=ReferralStatsOut)
@@ -122,9 +113,7 @@ def read_referral_image(filename: str, db: Session = Depends(get_db)):
     return FileResponse(path, media_type=media_type)
 
 
-@router.post("", response_model=ReferralOut, status_code=201)
-def create_referral_entry(payload: ReferralCreate, db: Session = Depends(get_db)):
-    return referral_out(db, create_referral(db, payload))
+add_action_route(router, referral_actions()["create_referral"])
 
 
 @router.post("/batch-delete", response_model=ReferralBatchDeleteResult)

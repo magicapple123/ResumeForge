@@ -23,14 +23,19 @@ from ..schemas.interview_history import (
     QuestionBankRecordOut,
     QuestionBankRecordUpdate,
 )
+from ..services.actions import add_action_route
+from ..services.actions.catalog import all_actions
 from ..services.interview import interview_history
 
 logger = logging.getLogger(__name__)
 
+
+
+
 router = APIRouter(prefix="/api/interview", tags=["interview-history"])
 
 
-@router.get("/question-banks", response_model=list[QuestionBankRecordOut])
+add_action_route(router, all_actions()["list_question_banks"], route_path="/question-banks")
 def read_question_banks(
     limit: int = Query(default=100, ge=1, le=200), db: Session = Depends(get_db)
 ):
@@ -69,7 +74,7 @@ def update_question_bank_entry(
     return record
 
 
-@router.get("/reviews", response_model=list[InterviewReviewRecordOut])
+add_action_route(router, all_actions()["list_reviews"], route_path="/reviews")
 def read_reviews(limit: int = Query(default=100, ge=1, le=200), db: Session = Depends(get_db)):
     """复盘历史列表（只含未删除的，最近更新的在前）。"""
     return interview_history.list_reviews(db, limit=limit)

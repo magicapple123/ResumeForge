@@ -1,4 +1,3 @@
-# SPDX-License-Identifier: Apache-2.0
 """AI 求职助手：会话历史、显式上下文和流式模型回复。"""
 
 import logging
@@ -34,11 +33,14 @@ from ..schemas.material import (
     MaterialCreate,
     MaterialOut,
 )
+from ..services.actions import add_action_route
+from ..services.actions.catalog import all_actions
 from ..services.assistant.assistant_service import (
     conversation_title,
     normalize_attachments,
 )
 from ..services.assistant.assistant_skills import build_skill_prompt
+from ..services.assistant_tools.proposal_store import status_block as _proposal_status_block
 from ..services.conversation_export import (
     EXPORT_FORMATS,
     build_conversation_filename,
@@ -61,6 +63,7 @@ from ..services.settings_service import (
 )
 from ..services.ui_locale import get_ui_locale
 from ..services.user_files import save_from_data_url
+from .assistant_client_context import build_client_context_block
 from .assistant_context import load_local_context
 from .assistant_conversations import (
     DEFAULT_TITLE,
@@ -131,7 +134,6 @@ _WEB_SEARCH_ADDENDUM_HEAD = (
     "- 需要最新的招聘信息、公司官方招聘页、行业/政策等你不确定的公开事实时，先搜索再回答。\n"
     "- 查询词要具体（公司名 + 岗位名 + 招聘），一次没有有用结果就换关键词再搜。\n"
 )
-# 能不能看到正文由「设置 → 联网搜索 → 抓取正文的条数」决定（0 = 只取摘要）。
 # 这句话必须跟着设置走：开着抓正文却告诉模型"不得声称已打开网页"，等于让它放着拿到的
 # 正文不用，回头跟用户说"我只能看到摘要"。
 _WEB_SEARCH_ADDENDUM_SUMMARIES = (
@@ -154,9 +156,8 @@ def _web_search_addendum(fetch_pages: int = 0) -> str:
 def _local_time_note() -> str:
     """用户本地时间行：本应用是本地单用户，服务器本地时间即用户时间。
 
-    每次请求实时生成（``_system_prompt`` 本就不缓存），模型据此才能给出时段化建议
-    （例如深夜/凌晨提醒休息）；用 ``astimezone`` 取本地时区，与 data_backup/datasets
-    的既有写法一致，不用存库用的 ``utcnow``。
+    每次请求实时生成（``_system_prompt`` 本就不缓存），模型据此才能给出时段化建议；
+    用 ``astimezone`` 取本地时区，与 data_backup/datasets 的既有写法一致。
     """
     now = datetime.now().astimezone()
     weekday = "星期" + "一二三四五六日"[now.weekday()]
@@ -171,13 +172,14 @@ _RELAXED_MODE_NOTE = """【放宽模式已开启】用户已在设置里知情�
 
 
 def _system_prompt(
-    db: Session, *, web_search: bool = False, fetch_pages: int = 0, relaxed: bool = False
+    db: Session,
+    *,
+    web_search: bool = False, fetch_pages: int = 0, relaxed: bool = False,
+    conversation_id: int | None = None, client_context: Any = None,
 ) -> str:
-    """基础系统提示 + 用户启用的技能 + 联网工具说明 + 放宽模式说明。
+    """基础系统提示 + 技能/联网/放宽模式说明 + 写操作状态 + 当前界面上下文（T25）。
 
-    每次请求重读、并按要求拼接技能，而不是在导入时固化成常量——否则改提示词要重启，
-    启用的技能也不会即时生效。联网说明只在工具真的下发给模型时才拼，避免提示模型
-    去调用一个不存在的工具；放宽模式说明同理。
+    每次请求重读：改提示词不必重启，启用的技能与新状态即时生效。
     """
     base = _PROMPT_PATH.read_text(encoding="utf-8")
     # 能力地图改为每次请求从 feature_catalog 动态渲染：新增功能只需登记目录，
@@ -190,11 +192,16 @@ def _system_prompt(
         build_capability_map(),
         _web_search_addendum(fetch_pages) if web_search else "",
         _RELAXED_MODE_NOTE if relaxed else "",
+        _proposal_status_block(db, conversation_id),
     ]
     parts.append(_local_time_note())
     skill_prompt = build_skill_prompt(db)
     if skill_prompt:
         parts.append(skill_prompt)
+    # T25：界面上下文（route/view/选中对象）——后端重查后的线索，不是用户指令。
+    client_note = build_client_context_block(db, client_context)
+    if client_note:
+        parts.append(client_note)
     return "\n\n".join(part for part in parts if part)
 
 
@@ -203,7 +210,7 @@ def create_conversation(payload: ChatConversationCreate, db: Session = Depends(g
     return create_conversation_record(payload, db)
 
 
-@router.get("/conversations", response_model=list[ChatConversationBrief])
+add_action_route(router, all_actions()["list_chat_conversations"], route_path="/conversations")
 def list_conversations(
     limit: int = Query(default=100, ge=1, le=500),
     keyword: str = Query(default="", max_length=200),
@@ -214,7 +221,7 @@ def list_conversations(
     return list_conversation_records(limit, db, surface, keyword=keyword)
 
 
-@router.get("/conversations/{conversation_id}", response_model=ChatConversationDetail)
+add_action_route(router, all_actions()["get_chat_conversation"], route_path="/conversations/{conversation_id}")
 def read_conversation(
     conversation_id: int,
     surface: ConversationSurface = Query(default="page"),
@@ -417,8 +424,7 @@ async def send_message(
     # 搜索设置在这里读出来并绑进闭包：流式响应期间请求会话已经关闭。
     # 用 `_with_secrets` 才拿得到解密的 DeepSeek key；设置页走的是掩码版。
     search_config = get_search_config_with_secrets(db)
-    # 「引用追问」：只允许引用同一会话里的消息，并把被引用内容的快照存进 context——
-    # 这样即使那条消息之后被删掉，引用块仍然可读。
+    # 「引用追问」：只允许引用同一会话的消息，并把快照存进 context（原消息删了仍可读）。
     quoted_snapshot: dict[str, Any] | None = None
     if payload.quoted_message_id is not None:
         quoted = db.get(ChatMessage, payload.quoted_message_id)
@@ -482,10 +488,12 @@ async def send_message(
                 web_search=payload.web_search,
                 fetch_pages=search_config.fetch_pages,
                 relaxed=relaxed_mode,
+                conversation_id=conversation_id,
+                client_context=payload.client_context,
             ),
-            # 多来源聚合（Bing + DuckDuckGo + 可选自建 SearXNG），按设置决定是否抓正文。
             search_web_fn=lambda query: aggregate_search(query, search_config),
             quoted=quoted_snapshot,
+            conversation_id=conversation_id,
         ),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},

@@ -151,27 +151,10 @@ export function getJobAnalysis(id: number): Promise<JobAnalysisCache> {
   return request(`/jobs/${id}/analysis`);
 }
 
-export function generateJobAnalysis(
-  id: number,
-  signal?: AbortSignal,
-  force = false,
-): Promise<JobAnalysisResult> {
-  // signal 保留给"真正需要中断"的调用方（T1 起「取消」会真的 abort）。
-  // force（R2-a）：后端默认先读缓存、命中就直接返回；只有点「重新生成」才带它，
-  // 明确表示"这次愿意再付一次 token"。
-  // 预算走 analysis（180s）：岗位解读要整段生成，default 的 15s 必然超时——超时那次
-  // 前端已经放弃，后端却还在烧 token，用户只看到「请求超时，请重试」。
-  return request(`/jobs/${id}/analysis${force ? "?force=true" : ""}`, {
-    method: "POST",
-    signal,
-    budget: "analysis",
-  });
-}
-
 /**
  * 岗位匹配度分析：读取个人资料与简历，逐条对照 JD 并落库。
  *
- * 与 `generateJobAnalysis`（岗位需求解读，只读 JD）是两条不同的链路——这里会读取用户资料，
+ * 与岗位需求解读（只读 JD 那条）是两条不同的链路——这里会读取用户资料，
  * 因此生成的是"我够不够"的结论；`force` 为真时忽略已有结论强制重算。
  */
 export function generateJobMatch(id: number, force = false): Promise<JobMatchResult> {

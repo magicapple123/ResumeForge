@@ -56,6 +56,21 @@ const settingsUi = {
   "settingsUi.assistantRelaxed.neverSent":
     "任何模式下都不会发送：API 密钥等凭据与全局配置、简历照片的图片内容；助手也永远没有删除类工具。",
 
+  // ── 提醒到期生成任务卡（T26）─────────────────────────────────
+  "settingsUi.agentTaskEvents.title": "提醒到期 · 生成任务卡",
+  "settingsUi.agentTaskEvents.intro":
+    "开启后，提醒到期会自动生成一张「准备：提醒标题」任务卡。只生成任务卡，不会自动执行任何写操作、不发消息、不弹窗。",
+  "settingsUi.agentTaskEvents.toggleAria": "提醒到期生成任务卡",
+  "settingsUi.agentTaskEvents.enableToast": "已开启：提醒到期会生成任务卡",
+  "settingsUi.agentTaskEvents.disableToast": "已关闭：不再生成新任务卡",
+  "settingsUi.agentTaskEvents.saveFailed": "保存提醒任务卡设置失败",
+  "settingsUi.agentTaskEvents.stateOn":
+    "已开启：提醒到期会生成一张待你确认的任务卡，它不会自动执行任何写操作。",
+  "settingsUi.agentTaskEvents.stateOff":
+    "已关闭：提醒到期不再生成新任务卡；已经生成的任务卡会保留。",
+  "settingsUi.agentTaskEvents.keepCards": "无论开关如何，已生成的任务卡都不会被删除。",
+  "settingsUi.agentTaskEvents.loadFailed": "读取提醒任务卡设置失败，请重试。",
+
   // ── 生成内容保存位置卡 ───────────────────────────────────────
   "settingsUi.exportSave.title": "生成内容保存位置",
   "settingsUi.exportSave.intro":

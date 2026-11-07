@@ -44,6 +44,23 @@ const settingsUi = {
   "settingsUi.assistantRelaxed.neverSent":
     "Never sent in any mode: credentials such as the API key or the global configuration, or the image content of Resume photos; the assistant also never has delete tools.",
 
+  // ── Reminder-to-task-card events (T26) ──────────────────────
+  "settingsUi.agentTaskEvents.title": "Reminders · Create task cards",
+  "settingsUi.agentTaskEvents.intro":
+    "When on, a due reminder automatically creates a task card titled Prepare: <reminder title>. It only creates the card: no write action is executed automatically, no message is sent and no popup appears.",
+  "settingsUi.agentTaskEvents.toggleAria": "Create a task card when a reminder is due",
+  "settingsUi.agentTaskEvents.enableToast": "On: due reminders create task cards",
+  "settingsUi.agentTaskEvents.disableToast": "Off: no new task cards",
+  "settingsUi.agentTaskEvents.saveFailed": "Could not save the reminder task card setting",
+  "settingsUi.agentTaskEvents.stateOn":
+    "On: a due reminder creates a task card for you to confirm; no write action runs automatically.",
+  "settingsUi.agentTaskEvents.stateOff":
+    "Off: due reminders no longer create task cards; task cards already created are kept.",
+  "settingsUi.agentTaskEvents.keepCards":
+    "Existing task cards are never deleted when you turn this off.",
+  "settingsUi.agentTaskEvents.loadFailed":
+    "Could not load the reminder task card setting. Please retry.",
+
   // ── Export save location card ───────────────────────────────
   "settingsUi.exportSave.title": "Generated content save location",
   "settingsUi.exportSave.intro":

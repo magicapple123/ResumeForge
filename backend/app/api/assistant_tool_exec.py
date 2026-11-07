@@ -13,6 +13,14 @@ import json
 import logging
 from typing import Any
 
+from ..services.assistant_run_trace import (
+    MAX_TRACE_STEPS,
+    ModelUsage,
+    RunTraceRecorder,
+    authorization_decision,
+    message_context_payload,
+    utcnow,
+)
 from ..services.assistant_tools import (
     execute_tool_async,
     get_tool,
@@ -20,6 +28,7 @@ from ..services.assistant_tools import (
 )
 from ..services.assistant_tools import policy as tool_policy
 from ..services.assistant_tools.authorization import create_proposal
+from .assistant_persistence import update_message_context
 
 logger = logging.getLogger(__name__)
 
@@ -45,6 +54,9 @@ async def run_tool_call(
     numberer: Any,
     factory: Any,
     ctx: tool_policy.ToolExecutionContext,
+    *,
+    conversation_id: int | None = None,
+    message_id: int | None = None,
 ) -> dict[str, Any]:
     """执行一次工具调用。
 
@@ -79,13 +91,23 @@ async def run_tool_call(
                 preview = None
                 if tool is not None and tool.preview is not None:
                     preview = tool.preview(db, arguments)
-            if preview is None:
-                record["ok"] = False
-                record["error"] = "该写入工具没有预览能力"
-                record["result_text"] = f"写入工具 {name} 无法生成确认预览，已拒绝执行。"
-                logger.warning("助手写工具 %s 缺少 preview，已拒绝", name)
-                return record
-            proposal = create_proposal(ctx, name, arguments, preview)
+                if preview is None:
+                    record["ok"] = False
+                    record["error"] = "该写入工具没有预览能力"
+                    record["result_text"] = f"写入工具 {name} 无法生成确认预览，已拒绝执行。"
+                    logger.warning("助手写工具 %s 缺少 preview，已拒绝", name)
+                    return record
+                # T01：提案落库并记下会话/消息归属，终态回写与下一轮状态注入都要用到。
+                proposal = create_proposal(
+                    ctx,
+                    name,
+                    arguments,
+                    preview,
+                    conversation_id=conversation_id,
+                    message_id=message_id,
+                    db=db,
+                    factory=factory,
+                )
             record["proposal"] = proposal.model_dump(mode="json")
             record["summary"] = f"待确认：{preview.target}"
             record["result_text"] = (
@@ -110,4 +132,91 @@ async def run_tool_call(
     return record
 
 
-__all__ = ["is_web_search", "run_tool_call"]
+# ---------------------------------------------------------------------------
+# T21 运行轨迹接线（内存记录 + 收尾写进助手消息 context；不新建表）
+# ---------------------------------------------------------------------------
+
+
+def _trace_model(provider: Any) -> str:
+    return str(getattr(getattr(provider, "config", None), "model", "") or "")
+
+
+def begin_run_trace(
+    provider: Any, assistant_message_id: int, conversation_id: int | None = None
+) -> RunTraceRecorder:
+    """一次助手回复建一个内存 run：run_id 用消息 id + 毫秒时间，request_id 取中间件。"""
+    from ..middleware.request_context import get_request_id  # 局部导入：服务层不长期依赖中间件
+
+    trace = RunTraceRecorder(
+        max_runs=1,
+        max_steps_per_run=MAX_TRACE_STEPS,
+        default_model=_trace_model(provider),
+    )
+    trace.begin_run(
+        run_id=f"run-{assistant_message_id}-{int(utcnow().timestamp() * 1000)}",
+        conversation_id=conversation_id,
+        request_id=get_request_id(),
+    )
+    return trace
+
+
+def _trace_authorization(record: dict[str, Any], ctx: tool_policy.ToolExecutionContext) -> str:
+    """只读 / 直接执行 / 转提案 / 执行层拒绝，四种授权结果。"""
+    name = str(record.get("name") or "")
+    writes = tool_writes(name)
+    if not tool_policy.is_allowed(ctx, name):
+        return authorization_decision(writes=writes, writable=ctx.writable, allowed=False)
+    if record.get("proposal"):
+        return "pending_approval"
+    return authorization_decision(writes=writes, writable=ctx.writable)
+
+
+def record_run_trace_step(
+    trace: RunTraceRecorder,
+    record: dict[str, Any],
+    ctx: tool_policy.ToolExecutionContext,
+    started_at: Any,
+    provider: Any,
+) -> None:
+    """把一次已完成的工具调用记成轨迹步（只读派生；不复制参数/结果正文）。"""
+    usage = getattr(provider, "last_usage", None)
+    trace.record_step(
+        record,
+        started_at=started_at,
+        finished_at=utcnow(),
+        authorization=_trace_authorization(record, ctx),
+        usage=ModelUsage.from_llm_usage(usage) if usage is not None else None,
+    )
+
+
+def run_trace_payload(trace: RunTraceRecorder) -> dict[str, Any]:
+    """进行中 run 的白名单视图（每轮工具循环后先落一次，断流也留得住已经发生的步）。"""
+    return message_context_payload(trace.current_run() or {})
+
+
+def close_run_trace(
+    trace: RunTraceRecorder,
+    context: dict[str, Any],
+    message_id: int,
+    factory: Any,
+    status: str | None = None,
+) -> None:
+    """收尾：结束 run 并把白名单视图写进消息 context（幂等，失败不影响消息落库）。"""
+    if not trace.is_open:
+        return
+    final_status = status or "cancelled"
+    try:
+        context["run_trace"] = message_context_payload(trace.end_run(status=final_status))
+        update_message_context(message_id, dict(context), factory=factory)
+    except (RuntimeError, ValueError):
+        logger.warning("T21 运行轨迹收尾失败（不影响消息落库）", exc_info=True)
+
+
+__all__ = [
+    "begin_run_trace",
+    "close_run_trace",
+    "is_web_search",
+    "record_run_trace_step",
+    "run_tool_call",
+    "run_trace_payload",
+]

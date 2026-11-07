@@ -1,48 +1,25 @@
 # SPDX-License-Identifier: Apache-2.0
 """版式（format templates）工具声明：新建 / 修改 / 列出自制版式。
 
-从 ``_tools_specs_data.py`` 按工具域纯搬出（声明体逐字未改）。参数项清单由
-``data_tools._format_tool_properties()`` 给出，两个写工具共用同一份。
+T28 收尾批：create/list 两对迁入 action 契约层（``actions/domains/format_templates.py``）；
+``update_format_template`` **保留静态声明**——路由路径参数 ``template_id`` 必须必填，
+而旧工具允许只给 ``template_name`` 按名定位，同一份 input_model 无法同时表达（见域模块
+docstring 与 T28 汇报的跳过原因）。参数项清单仍由 ``data_tools._format_tool_properties()``
+给出。
 """
 
 from __future__ import annotations
 
+from ..actions.domains.format_templates import format_template_actions
+from ..actions.tool_adapter import as_tool
 from . import previews
-from ._types import Tool
-from .data_tools import (
-    _format_tool_properties,
-    _tool_create_format_template,
-    _tool_list_format_templates,
-    _tool_update_format_template,
-)
+from ._types import Tool, ToolPermission
+from .data_tools import _format_tool_properties, _tool_update_format_template
+
+_ACTIONS = format_template_actions()
 
 FORMAT_TEMPLATE_TOOLS: tuple[Tool, ...] = (
-    Tool(
-        name="create_format_template",
-        description=(
-            "新建一个「版式」——只调排版参数（强调色/行高/页边距/区块间距/字号系数），不写 HTML。"
-            "用户说「版式太挤」「帮我压进一页」「换个强调色」「做一个版式」时用它。"
-            "至少设置一项参数。名称限 1-40 个字符、只能含中文/字母/数字/空格/下划线/连字符，"
-            "且不能与内置或已有的模板、版式重名；自制模板与版式的总数上限 40 个。"
-            "注意：**模板（外观骨架、完整 HTML）这一层不能用工具创建**，那需要用户到「工作台」页操作；"
-            "版式这一层可以，本工具就是做这个的。"
-        ),
-        parameters={
-            "type": "object",
-            "properties": {
-                "name": {
-                    "type": "string",
-                    "description": "版式名称（1-40 字符，中文/字母/数字/空格/下划线/连字符）",
-                },
-                "description": {"type": "string", "description": "可选，一句话说明用途"},
-                **_format_tool_properties(),
-            },
-            "required": ["name"],
-        },
-        handler=_tool_create_format_template,
-        preview=previews.preview_create_format_template,
-        writes=True,
-    ),
+    as_tool(_ACTIONS["create_format_template"]),
     Tool(
         name="update_format_template",
         description=(
@@ -69,18 +46,12 @@ FORMAT_TEMPLATE_TOOLS: tuple[Tool, ...] = (
             "required": [],
         },
         handler=_tool_update_format_template,
+        service_entry="resume.resume_template_store.update_user_template",
+        permission=ToolPermission.REVERSIBLE_WRITE,
         preview=previews.preview_update_format_template,
-        writes=True,
     ),
-    Tool(
-        name="list_format_templates",
-        description=(
-            "列出用户自制的版式（id、名称、说明、排版参数如强调色/行高/页边距）。"
-            "用户问「我有哪些版式」「之前那个版式设了哪些参数」时用它，"
-            "也用于在 update_format_template 之前确认要改哪一个。"
-            "内置版式与模板（完整 HTML）不在此列，它们只能在「工作台」页查看。"
-        ),
-        parameters={"type": "object", "properties": {}, "required": []},
-        handler=_tool_list_format_templates,
-    ),
+    as_tool(_ACTIONS["list_format_templates"]),
 )
+
+__all__ = ["FORMAT_TEMPLATE_TOOLS"]
+

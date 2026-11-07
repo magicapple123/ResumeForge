@@ -15,6 +15,8 @@ import { useLocale } from "../i18n/i18nContext";
 import { mqMax } from "../theme/breakpoints";
 import { readStoredReasoningEffort } from "../features/assistant/readStoredReasoningEffort";
 import type { StarterPrompt } from "../features/assistant/assistantTypes";
+import AgentTaskPanel from "../features/assistant/tasks/AgentTaskPanel";
+import { useAgentTasks } from "../features/assistant/tasks/useAgentTasks";
 import { positiveId } from "../features/assistant/assistantUtils";
 import { useAssistantAttachments } from "../features/assistant/hooks/useAssistantAttachments";
 import { useAssistantAutoScroll } from "../features/assistant/hooks/useAssistantAutoScroll";
@@ -110,6 +112,8 @@ export default function AssistantPage({
     useAssistantMessageSelection({ activeId, loadDetail, message, surface });
 
   const messageCount = detail?.messages.length ?? 0;
+  // T20：当前会话的 Agent 任务（多步计划）。没有会话时不轮询，任务区块也不渲染。
+  const agentTasks = useAgentTasks(activeId);
 
   const stream = useAssistantStream({
     activeIdRef,
@@ -345,6 +349,15 @@ export default function AssistantPage({
           exitSelecting={exitSelecting}
           title={detail?.title || t("responsive.assistant.defaultTitle")}
         />
+        {!compact && activeId !== null ? (
+          <AgentTaskPanel
+            tasks={agentTasks.tasks}
+            error={agentTasks.error}
+            onStart={(taskId) => void agentTasks.start(taskId)}
+            onResume={(taskId) => void agentTasks.resume(taskId)}
+            onCancel={(taskId) => void agentTasks.cancel(taskId)}
+          />
+        ) : null}
         <AssistantMessageList
           detail={detail}
           showLoading={awaitingConversation}

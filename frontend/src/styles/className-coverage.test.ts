@@ -248,10 +248,6 @@ const EXEMPTIONS: Record<string, Exemption> = {
     reason: "Typography.Text type=secondary，颜色与字号由 antd token 承担",
     expires: REVIEW_DATE,
   },
-  "template-recognition-confidence": {
-    reason: "识别置信度条容器，文字由 Typography 承担",
-    expires: REVIEW_DATE,
-  },
 };
 
 function expiredExemptions(exemptions: Record<string, Exemption>, today = new Date()): string[] {

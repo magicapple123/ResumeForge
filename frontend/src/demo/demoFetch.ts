@@ -37,7 +37,6 @@ const READ_ONLY_EXEMPT = new Set<string>([
   "/api/profile/parse-text",
   "/api/claims/draft",
   "/api/apply/greeting/preview",
-  "/api/ats/check",
   "/api/resume-templates/preview",
 ]);
 
@@ -342,7 +341,9 @@ export function installDemoFetch(): () => void {
       return jsonResponse({ detail: t("featuresMisc.demo.missingRoute") }, 404);
     }
 
-    if (READ_ONLY_EXEMPT.has(path)) {
+    // ATS 检测按简历 id 走（POST /api/resumes/{id}/ats-check）：同样只做计算、不落库，
+    // 但路径带动态 id，进不了上面的精确集合，只能按形状匹配。
+    if (READ_ONLY_EXEMPT.has(path) || /^\/api\/resumes\/\d+\/ats-check$/.test(path)) {
       const hit = lookup(key);
       if (hit) return jsonResponse(hit.body, hit.status);
       return jsonResponse({ detail: t("featuresMisc.demo.missingRoute") }, 404);

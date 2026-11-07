@@ -21,27 +21,25 @@ from ..database import get_db, session_engine
 from ..models.assistant import AssistantSkill
 from ..schemas.skill import (
     MAX_SKILL_DETAIL_FILE_CHARS,
-    AssistantSkillCreate,
     AssistantSkillDetail,
     AssistantSkillOut,
     AssistantSkillUpdate,
 )
-from ..services.assistant.assistant_skills import (
-    create_skill as create_skill_record,
-)
+from ..services.actions import add_action_route
+from ..services.actions.catalog import all_actions
+from ..services.actions.pilots import pilot_actions
 from ..services.assistant.assistant_skills import (
     delete_skill,
-    list_skills,
     set_skill_enabled,
     upsert_skill,
-)
-from ..services.assistant.assistant_skills import (
-    update_skill as update_skill_record,
 )
 from ..services.data_backup import restore_directory
 from ..services.skill_archive import SkillImportError, parse_markdown_skill, parse_zip_skill
 
 logger = logging.getLogger(__name__)
+
+
+
 
 router = APIRouter(prefix="/api/assistant/skills", tags=["assistant"])
 
@@ -103,16 +101,7 @@ def _to_detail(skill: AssistantSkill) -> AssistantSkillDetail:
     )
 
 
-def _skill_or_404(db: Session, skill_id: int) -> AssistantSkill:
-    skill = db.get(AssistantSkill, skill_id)
-    if skill is None:
-        raise HTTPException(status_code=404, detail="技能不存在或已被删除")
-    return skill
-
-
-@router.get("", response_model=list[AssistantSkillOut])
-def read_skills(db: Session = Depends(get_db)):
-    return [_to_out(skill) for skill in list_skills(db)]
+add_action_route(router, all_actions()["list_skills"], route_path="")
 
 
 @router.post("/import", response_model=AssistantSkillOut)
@@ -148,63 +137,15 @@ async def import_skill(request: Request, db: Session = Depends(get_db)):
     return _to_out(skill)
 
 
-@router.post("", response_model=AssistantSkillDetail, status_code=201)
-def create_skill(payload: AssistantSkillCreate, db: Session = Depends(get_db)):
-    """在工作台手动创建技能。"""
-    try:
-        payload.require_prompt()
-        skill = create_skill_record(
-            db,
-            name=payload.name,
-            description=payload.description,
-            prompt=payload.prompt,
-            enabled=payload.enabled,
-            files=[(item.path, item.content) for item in payload.files],
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    return _to_detail(skill)
+add_action_route(router, all_actions()["create_skill"], route_path="")
 
 
-@router.get("/{skill_id}", response_model=AssistantSkillDetail)
-def read_skill(skill_id: int, db: Session = Depends(get_db)):
-    """查看技能详情：提示词正文与知识文件清单。"""
-    return _to_detail(_skill_or_404(db, skill_id))
+add_action_route(router, all_actions()["get_skill"], route_path="/{skill_id}")
 
 
-@router.put("/{skill_id}", response_model=AssistantSkillDetail)
-def update_skill(skill_id: int, payload: AssistantSkillUpdate, db: Session = Depends(get_db)):
-    """更新技能（只提交要改的字段）；``files`` 提交时整体替换知识文件。"""
-    if all(
-        value is None
-        for value in (
-            payload.name,
-            payload.description,
-            payload.prompt,
-            payload.enabled,
-            payload.files,
-        )
-    ):
-        raise HTTPException(status_code=422, detail="至少提供一个要修改的技能字段")
-    try:
-        skill = update_skill_record(
-            db,
-            skill_id,
-            name=payload.name,
-            description=payload.description,
-            prompt=payload.prompt,
-            enabled=payload.enabled,
-            files=(
-                [(item.path, item.content) for item in payload.files]
-                if payload.files is not None
-                else None
-            ),
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    if skill is None:
-        raise HTTPException(status_code=404, detail="技能不存在或已被删除")
-    return _to_detail(skill)
+# T27 试点 3：PUT /api/assistant/skills/{skill_id} 由契约层生成（不可逆写，带 preview）。
+# 注册位置仍由本文件里的调用点显式决定（原来的装饰器位置，保持注册顺序）。
+add_action_route(router, pilot_actions()["update_skill"])
 
 
 @router.patch("/{skill_id}", response_model=AssistantSkillOut)

@@ -8,19 +8,19 @@
 import logging
 import re
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Response
+from fastapi import APIRouter, Depends, HTTPException, Response
 from sqlalchemy.orm import Session
 
 from ..database import get_db
 from ..models.resume import ResumeRecord
 from ..schemas.resume import ResumeContent
 from ..schemas.resume_template import (
-    ResumeTemplateCreate,
     ResumeTemplateDetail,
-    ResumeTemplateOut,
     ResumeTemplateUpdate,
     TemplatePreviewRequest,
 )
+from ..services.actions import add_action_route
+from ..services.actions.catalog import all_actions
 from ..services.document_text import (
     extract_document_text,  # noqa: F401 - legacy monkeypatch surface
 )
@@ -29,10 +29,8 @@ from ..services.llm import create_provider  # noqa: F401 - legacy monkeypatch su
 from ..services.resume.resume_sample import sample_resume_content
 from ..services.resume.resume_template_store import (
     TemplateError,
-    create_user_template,
     delete_user_template,
     get_user_template,
-    list_user_templates,
     resolve_format_config,
     update_user_template,
 )
@@ -45,6 +43,9 @@ from ..services.resume.resume_templates import (
 from ..services.settings_service import get_llm_config  # noqa: F401 - legacy monkeypatch surface
 
 logger = logging.getLogger(__name__)
+
+
+
 
 router = APIRouter(prefix="/api/resume-templates", tags=["resume-templates"])
 
@@ -94,37 +95,10 @@ def read_builtin_templates():
     return template_options()
 
 
-@router.get("", response_model=list[ResumeTemplateOut])
-def read_user_templates(
-    kind: str | None = Query(default=None, pattern="^(style|format)$"),
-    db: Session = Depends(get_db),
-):
-    """自制模板列表（可按类型筛选）。内置模板不在这里，见 ``/api/resumes/templates``。"""
-    return [ResumeTemplateOut.model_validate(item) for item in list_user_templates(db, kind)]
+add_action_route(router, all_actions()["list_format_templates"], route_path="")
 
 
-@router.post("", response_model=ResumeTemplateDetail, status_code=201)
-def create_template(payload: ResumeTemplateCreate, db: Session = Depends(get_db)):
-    """新建**版式**模板（``kind='format'``）。
-
-    自制样式模板（自己写 HTML 的那类）已下线，``kind='style'`` 直接 400。已存在的
-    style 行不删：它们只是不再被读取，用户可以在列表里看到并删除。
-    """
-    if payload.kind != "format":
-        raise HTTPException(status_code=400, detail=STYLE_OFFLINE_DETAIL)
-    try:
-        template = create_user_template(
-            db,
-            name=payload.name,
-            kind=payload.kind,
-            description=payload.description,
-            html=payload.html,
-            config=payload.config,
-            source_name=payload.source_name,
-        )
-    except TemplateError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    return _to_detail(template)
+add_action_route(router, all_actions()["create_format_template"], route_path="")
 
 
 @router.get("/{template_id}", response_model=ResumeTemplateDetail)

@@ -23,6 +23,7 @@ import { formatDateTime } from "../../../utils/format";
 import { RowContextMenu, type RowActionItem } from "../../../components/common/RowActions";
 import PageSkeleton from "../../../components/common/PageSkeleton";
 import AssistantEmptyState from "./AssistantEmptyState";
+import ProposalResultNote from "./ProposalResultNote";
 import {
   AssistantMessageContent,
   MessageAttachments,
@@ -112,6 +113,13 @@ const AssistantMessageBubble = memo(function AssistantMessageBubble({
 }: BubbleProps) {
   useLocale();
   const { message } = App.useApp();
+
+  // T01-A：写操作终态的派生回写渲染成一行状态提示，不再是普通助手气泡——
+  // 它不代表模型说话，只代表"那次写入最后怎么样了"。
+  const proposalResult = item.context.proposal_result;
+  if (item.kind === "proposal_result" && proposalResult) {
+    return <ProposalResultNote result={proposalResult} />;
+  }
 
   /** 每条消息的操作：整块右键即可唤出（和岗位卡片、会话列表一致）。 */
   const actionsFor = (): RowActionItem[] => [

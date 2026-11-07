@@ -2,7 +2,6 @@
 """简历内容手工修改的 API 测试。"""
 import html
 
-import pytest
 from app.models.resume import ResumeRecord
 from tests.document_helpers import header_value, items, values
 from tests.document_test_support import make_document
@@ -84,10 +83,6 @@ def test_update_resume_returns_404_for_missing_record(client):
     assert response.status_code == 404
 
 
-@pytest.mark.xfail(
-    reason="backend-exports 导出层仍在切换（旧 v1 模板桥）：data-resume-path 暂时是 v1 下标路径；切完后恢复 v2 断言",
-    strict=False,
-)
 def test_rendered_resume_exposes_structured_edit_paths(client):
     """v2 的编辑定位路径 = section.entry.item 的对象 id（替换 v1 的下标路径）。"""
     content = make_document(

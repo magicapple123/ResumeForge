@@ -53,6 +53,47 @@ def normalize_reasoning_effort(value: str) -> str:
     return effort
 
 
+#: T25 界面上下文里 selected.type 的白名单（与后端重查表一一对应）。
+CLIENT_SELECTION_TYPES = (
+    "job",
+    "resume",
+    "material",
+    "claim",
+    "knowledge",
+    "tracker",
+    "reminder",
+    "interview_experience",
+)
+
+
+class AssistantClientSelection(BaseModel):
+    """用户选中对象的**结构化标识**：只收 type+id，不收标题/正文（T25）。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    type: Literal[
+        "job",
+        "resume",
+        "material",
+        "claim",
+        "knowledge",
+        "tracker",
+        "reminder",
+        "interview_experience",
+    ]
+    id: int = Field(ge=1)
+
+
+class AssistantClientContext(BaseModel):
+    """当前界面上下文（T25）：route/view 也只是线索，标题一律由服务端重查。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    route: str = Field(default="", max_length=160)
+    view: str = Field(default="", max_length=64)
+    selected: AssistantClientSelection | None = None
+
+
 class AssistantMessageCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -84,6 +125,9 @@ class AssistantMessageCreate(BaseModel):
     # `language` 一列；权威值仍是用户显式保存的界面语言（`PUT /api/settings/locale`），
     # 这里只是"用户还没保存过界面语言"时的一次补充。
     locale: str = Field(default="", max_length=16)
+    # T25 共享应用状态：用户在哪一页、选中了哪条记录。**前端输入不可信**——后端会按
+    # 当前数据集重查对象并取服务端标题（见 api/assistant_client_context.py）。
+    client_context: AssistantClientContext | None = None
 
     @field_validator("locale")
     @classmethod
@@ -208,6 +252,11 @@ class ChatMessageOut(BaseModel):
     status: Literal["pending", "complete", "error", "cancelled"]
     error: str = ""
     model: str = ""
+    # 消息类别（T01）：normal = 普通对话；proposal_result = 写操作终态的派生回写。
+    # 回写消息只是历史记录，状态以 assistant_write_proposal 表为准（见系统提示的状态块）。
+    kind: Literal["normal", "proposal_result"] = "normal"
+    # 派生回写关联的提案 id（普通消息为 None）。
+    proposal_id: str | None = None
     created_at: datetime
 
 

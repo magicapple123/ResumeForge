@@ -6,6 +6,7 @@ import logging
 import time
 
 from fastapi import APIRouter, Depends, HTTPException, Request
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from ..database import get_db, session_engine
@@ -61,6 +62,7 @@ from ..services.llm.usage_tasks import (
     set_ambient_task,
 )
 from ..services.settings_service import (
+    get_agent_task_events_enabled,
     get_assistant_orb_setting,
     get_assistant_relaxed_mode,
     get_auto_backup_interval_days,
@@ -70,6 +72,7 @@ from ..services.settings_service import (
     get_search_config,
     get_webform_relaxed_mode,
     resolve_llm_config_api_key,
+    save_agent_task_events_enabled,
     save_assistant_orb_setting,
     save_assistant_relaxed_mode,
     save_auto_backup_interval_days,
@@ -84,6 +87,12 @@ from ..services.ui_locale import get_ui_locale
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/settings", tags=["settings"])
+
+
+class AgentTaskEventsSetting(BaseModel):
+    """提醒到期自动生成任务卡开关（默认关；只建卡、不执行任何写操作）。"""
+
+    enabled: bool = False
 
 
 def _is_loopback_request(request: Request) -> bool:
@@ -183,6 +192,25 @@ def write_assistant_relaxed_mode(
     payload: AssistantRelaxedModeSetting, db: Session = Depends(get_db)
 ):
     return AssistantRelaxedModeSetting(enabled=save_assistant_relaxed_mode(db, payload.enabled))
+
+
+@router.get("/agent-task-events", response_model=AgentTaskEventsSetting)
+def read_agent_task_events(db: Session = Depends(get_db)):
+    """提醒到期自动生成任务卡（默认关）：只建卡、不执行任何写操作、不发消息、不弹窗。"""
+    return AgentTaskEventsSetting(enabled=get_agent_task_events_enabled(db))
+
+
+@router.put("/agent-task-events", response_model=AgentTaskEventsSetting)
+def write_agent_task_events(
+    payload: AgentTaskEventsSetting, db: Session = Depends(get_db)
+):
+    """保存开关；打开时立即启动后台扫描并补扫一次最近 24h 内的到期提醒。"""
+    enabled = save_agent_task_events_enabled(db, payload.enabled)
+    # 函数级导入：避免设置路由模块加载期就拉起后台调度服务依赖。
+    from ..services import agent_task_events
+
+    agent_task_events.on_enabled_setting_changed(enabled)
+    return AgentTaskEventsSetting(enabled=enabled)
 
 
 @router.get("/export-save-location", response_model=ExportSaveLocationOut)

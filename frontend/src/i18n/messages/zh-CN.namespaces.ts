@@ -70,7 +70,6 @@ import llmRecord from "./zh-CN.llmRecord";
 import educationSection from "./zh-CN.educationSection";
 import jobTable from "./zh-CN.jobTable";
 import jobAnalysis from "./zh-CN.jobAnalysis";
-import templateImport from "./zh-CN.templateImport";
 import webFormRecords from "./zh-CN.webFormRecords";
 import claimsPage from "./zh-CN.claimsPage";
 import browserStatus from "./zh-CN.browserStatus";
@@ -126,7 +125,6 @@ import resumeFieldDiffView from "./zh-CN.resumeFieldDiffView";
 import resumes from "./zh-CN.resumes";
 import resumesPage from "./zh-CN.resumesPage";
 import sections from "./zh-CN.sections";
-import styleTemplateEditor from "./zh-CN.styleTemplateEditor";
 import trackerImport from "./zh-CN.trackerImport";
 import writing from "./zh-CN.writing";
 import activationUi from "./zh-CN.activationUi";
@@ -268,8 +266,6 @@ const namespaces = {
   ...jobTable,
   /** 岗位需求解读弹窗（2026-10-27）。 */
   ...jobAnalysis,
-  /** 导入参考模板弹窗（2026-10-27）。 */
-  ...templateImport,
   /** 网申填充记录面板（2026-10-27）。 */
   ...webFormRecords,
   /** 事实台账页（2026-10-27）。 */
@@ -355,7 +351,6 @@ const namespaces = {
   ...resumes,
   ...resumesPage,
   ...sections,
-  ...styleTemplateEditor,
   ...trackerImport,
   ...writing,
   ...activationUi,

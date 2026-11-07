@@ -19,13 +19,11 @@ from ..schemas.material import (
     CandidateCsvRow,
     CandidateJobBulkImportOut,
     CandidateJobBulkImportRequest,
-    CandidateJobCreate,
-    CandidateJobDetailOut,
-    CandidateJobImportRequest,
     CandidateJobOut,
-    CandidateJobUpdate,
 )
 from ..services import trash
+from ..services.actions import add_action_route
+from ..services.actions.catalog import all_actions
 from ..services.candidate_csv import (
     candidates_to_csv_text,
     decode_csv_bytes,
@@ -33,21 +31,18 @@ from ..services.candidate_csv import (
     parse_candidate_csv,
 )
 from ..services.candidate_jobs import (
-    MAX_CANDIDATE_LIST,
-    candidate_or_none,
-    create_candidate_job,
     delete_candidate_job,
     import_candidates,
     list_candidate_job_ids,
-    list_candidate_jobs,
     list_candidate_jobs_page,
-    mark_candidate_imported,
-    update_candidate_job,
 )
 from ..services.csv_io import MAX_IMPORT_FILE_CHARS
 from ..services.user_files import save_from_data_url
 
 logger = logging.getLogger(__name__)
+
+
+
 
 router = APIRouter(prefix="/api/candidate-jobs", tags=["candidate-jobs"])
 
@@ -86,29 +81,7 @@ def _parse_collect_task_ids(raw: str) -> list[int]:
     return list(dict.fromkeys(parsed))
 
 
-@router.get("", response_model=list[CandidateJobOut])
-def read_candidate_jobs(
-    status: str = Query(default=""),
-    keyword: str = Query(default=""),
-    collect_task_id: int | None = Query(default=None, ge=1),
-    collect_task_ids: str = Query(default=""),
-    limit: int = Query(default=MAX_CANDIDATE_LIST, ge=1, le=MAX_CANDIDATE_LIST),
-    db: Session = Depends(get_db),
-):
-    """列出备选岗位；``status`` 可选 pending / imported。
-
-    ``collect_task_id`` 用于「本次采集结果」——按批次看这次采到了什么。
-    """
-    if status and status not in CANDIDATE_JOB_STATUSES:
-        raise HTTPException(status_code=422, detail="无效的备选岗位状态")
-    return list_candidate_jobs(
-        db,
-        status=status,
-        keyword=keyword,
-        collect_task_id=collect_task_id,
-        collect_task_ids=_parse_collect_task_ids(collect_task_ids),
-        limit=limit,
-    )
+add_action_route(router, all_actions()["list_candidate_jobs"], route_path="")
 
 
 @router.get("/page", response_model=Page[CandidateJobOut])
@@ -142,11 +115,7 @@ def read_candidate_jobs_page(
     return Page(items=items, total=total)
 
 
-@router.post("", response_model=CandidateJobOut, status_code=201)
-def create_candidate_job_entry(payload: CandidateJobCreate, db: Session = Depends(get_db)):
-    candidate = create_candidate_job(db, payload)
-    _save_image_copies(db, candidate.id, payload.images)
-    return candidate
+add_action_route(router, all_actions()["create_candidate_job"], route_path="")
 
 
 @router.post("/import", response_model=CandidateJobBulkImportOut)
@@ -257,36 +226,13 @@ def _get_candidates_or_404(db: Session, candidate_ids: list[int]) -> list:
     return candidates
 
 
-@router.get("/{candidate_id}", response_model=CandidateJobDetailOut)
-def read_candidate_job(candidate_id: int, db: Session = Depends(get_db)):
-    candidate = candidate_or_none(db, candidate_id)
-    if candidate is None:
-        raise HTTPException(status_code=404, detail="备选岗位不存在或已被删除")
-    return candidate
+add_action_route(router, all_actions()["get_candidate_job"], route_path="/{candidate_id}")
 
 
-@router.put("/{candidate_id}", response_model=CandidateJobOut)
-def save_candidate_job(
-    candidate_id: int, payload: CandidateJobUpdate, db: Session = Depends(get_db)
-):
-    candidate = candidate_or_none(db, candidate_id)
-    if candidate is None:
-        raise HTTPException(status_code=404, detail="备选岗位不存在或已被删除")
-    updated = update_candidate_job(db, candidate, payload)
-    if "images" in payload.model_fields_set:
-        _save_image_copies(db, candidate.id, payload.images)
-    return updated
+add_action_route(router, all_actions()["update_candidate_job"], route_path="/{candidate_id}")
 
 
-@router.post("/{candidate_id}/imported", response_model=CandidateJobOut)
-def mark_imported(
-    candidate_id: int, payload: CandidateJobImportRequest, db: Session = Depends(get_db)
-):
-    """标记为已导入正式岗位（岗位由用户在前端确认保存后传入 id）。"""
-    candidate = candidate_or_none(db, candidate_id)
-    if candidate is None:
-        raise HTTPException(status_code=404, detail="备选岗位不存在或已被删除")
-    return mark_candidate_imported(db, candidate, payload.job_id)
+add_action_route(router, all_actions()["import_candidate_job"], route_path="/{candidate_id}/imported")
 
 
 @router.delete("/{candidate_id}", status_code=204)

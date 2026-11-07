@@ -9,7 +9,6 @@ import type {
   AssistantOrbSetting,
   AssistantRelaxedModeSetting,
   ExportSaveLocation,
-  LLMApiKeyRevealResult,
   LLMConfig,
   LLMConfigRecord,
   LLMModelsResult,
@@ -28,10 +27,6 @@ import type { RequestBudgetKind } from "./client";
 
 export function getLLMConfig(): Promise<LLMConfig> {
   return request("/settings/llm");
-}
-
-export function saveLLMConfig(config: LLMConfig): Promise<LLMConfig> {
-  return request("/settings/llm", { method: "PUT", body: JSON.stringify(config) });
 }
 
 /**
@@ -105,30 +100,6 @@ export function getUpdateInstallResult(): Promise<UpdateInstallResult | null> {
 /** 用户看过结果之后清掉标记，避免每次打开设置都弹一遍。 */
 export function acknowledgeUpdateInstallResult(): Promise<void> {
   return request("/update/install-result", { method: "DELETE" });
-}
-
-export function revealLLMApiKey(): Promise<LLMApiKeyRevealResult> {
-  return request("/settings/llm/api-key/reveal", { method: "POST" });
-}
-
-/**
- * 「仅本会话使用」的临时密钥通道（RF-24）：密钥只进后端进程内存，
- * 进程重启即失，不写数据库、不进日志与备份。状态接口只回是否已设置，
- * 密钥本体永不回传。
- */
-export function getLLMSessionKeyStatus(): Promise<{ configured: boolean }> {
-  return request("/settings/llm/session-key");
-}
-
-export function setLLMSessionKey(apiKey: string): Promise<{ configured: boolean }> {
-  return request("/settings/llm/session-key", {
-    method: "PUT",
-    body: JSON.stringify({ api_key: apiKey }),
-  });
-}
-
-export function clearLLMSessionKey(): Promise<void> {
-  return request("/settings/llm/session-key", { method: "DELETE" });
 }
 
 /**
@@ -212,6 +183,29 @@ export function saveAssistantRelaxedMode(
   setting: AssistantRelaxedModeSetting,
 ): Promise<AssistantRelaxedModeSetting> {
   return request("/settings/assistant-relaxed-mode", {
+    method: "PUT",
+    body: JSON.stringify(setting),
+  });
+}
+
+/**
+ * 提醒到期时自动生成任务卡的开关（T26）。
+ *
+ * 默认关。开启后后台扫描会为 24 小时内到期的提醒生成一张「准备：<提醒标题>」任务卡；
+ * 只建卡、不执行任何写操作，也不发消息或弹窗。关闭后不再生成，已生成的卡保留。
+ */
+export interface AgentTaskEventsSetting {
+  enabled: boolean;
+}
+
+export function getAgentTaskEvents(): Promise<AgentTaskEventsSetting> {
+  return request("/settings/agent-task-events");
+}
+
+export function setAgentTaskEvents(
+  setting: AgentTaskEventsSetting,
+): Promise<AgentTaskEventsSetting> {
+  return request("/settings/agent-task-events", {
     method: "PUT",
     body: JSON.stringify(setting),
   });
@@ -312,11 +306,6 @@ export type { ArchiveDownload, BackupAssetIssues, BackupCoverage } from "./datas
 /** 当前数据集的自动备份保护摘要（RF-05）。 */
 export function getBackupStatus(signal?: AbortSignal): Promise<BackupStatus> {
   return request<BackupStatus>("/settings/backup-status", { signal });
-}
-
-/** 自动备份间隔（天）：用户保存的运行时值，缺失时后端回退环境配置默认。 */
-export function getAutoBackupInterval(): Promise<AutoBackupIntervalSetting> {
-  return request("/settings/auto-backup-interval");
 }
 
 /** 保存自动备份间隔（1..365 天）；调度线程下次到期检查时读取，无需重启。 */

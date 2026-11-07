@@ -38,6 +38,8 @@ from ...schemas.versions import (
     VersionRestoreRequest,
 )
 from ...services import trash
+from ...services.actions import add_action_route
+from ...services.actions.catalog import all_actions
 from ...services.llm.base import LLMError
 from ...services.resume import bilingual_variants, fact_locks
 from ...services.resume import document_variants as variants
@@ -81,7 +83,7 @@ def create_version(
     return VersionOut.model_validate(versions.version_brief(version))
 
 
-@router.get("/{resume_id}/versions", response_model=VersionListOut)
+add_action_route(router, all_actions()["list_versions"], route_path="/{resume_id}/versions")
 def list_versions(resume_id: int, db: Session = Depends(get_db)) -> VersionListOut:
     record = _resume_or_404(db, resume_id)
     return VersionListOut(
@@ -118,7 +120,7 @@ def freeze_version(
     return VersionOut.model_validate(versions.version_brief(version))
 
 
-@router.get("/{resume_id}/versions/{base_id}/compare/{against}", response_model=VersionCompareOut)
+add_action_route(router, all_actions()["compare_resume_versions"], route_path="/{resume_id}/versions/{base_id}/compare/{against}")
 def compare_versions(
     resume_id: int, base_id: int, against: str, db: Session = Depends(get_db)
 ) -> VersionCompareOut:
@@ -207,7 +209,7 @@ def sync_variants(
     )
 
 
-@router.get("/{resume_id}/variants", response_model=VariantListOut)
+add_action_route(router, all_actions()["list_variants"], route_path="/{resume_id}/variants")
 def list_variants(resume_id: int, db: Session = Depends(get_db)) -> VariantListOut:
     record = _resume_or_404(db, resume_id)
     return VariantListOut(

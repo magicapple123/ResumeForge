@@ -23,12 +23,13 @@ from ...schemas.resume import (
     LayoutPageOut,
     LayoutSuggestionOut,
     ResumeLayoutUpdate,
-    ResumeOut,
     ResumeRenderRequest,
     mode_page_limit,
 )
 from ...schemas.resume_generation import UNLIMITED_PAGE_LIMIT
 from ...services import trash
+from ...services.actions import add_action_route
+from ...services.actions.catalog import all_actions
 from ...services.export_pipeline import ExportRequest, RenderContext, render_config_fingerprint
 from ...services.exporter import normalize_page_limit, render_html
 from ...services.resume.content_relevance_hints import build_content_hints
@@ -72,10 +73,11 @@ from ._shared import (
 
 logger = logging.getLogger(__name__)
 
+
 router = APIRouter()
 
 
-@router.patch("/{resume_id}/layout", response_model=ResumeOut)
+add_action_route(router, all_actions()["update_resume_layout"], route_path="/{resume_id}/layout")
 def update_resume_layout(
     resume_id: int, payload: ResumeLayoutUpdate, db: Session = Depends(get_db)
 ):
@@ -285,7 +287,7 @@ def render_resume(payload: ResumeRenderRequest, db: Session = Depends(get_db)):
     )
 
 
-@router.post("/{resume_id}/pagination/report")
+add_action_route(router, all_actions()["get_resume_status"], route_path="/{resume_id}/pagination/report")
 def pagination_report(resume_id: int, payload: PreviewPdfRequest, db: Session = Depends(get_db)):
     """分页报告（W08 §3.6）：复用真实 PDF 渲染的绘制日志，回答页数/截断定位/手动分页。
 

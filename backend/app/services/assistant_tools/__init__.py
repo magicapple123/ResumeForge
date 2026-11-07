@@ -1,9 +1,13 @@
 # SPDX-License-Identifier: Apache-2.0
 """求职助手可调用的工具：读项目数据，以及新增/修改。
 
-**边界（用户已确认）**：助手能新增和修改，但**不提供任何删除类工具**——模型无论
-如何都造不成不可逆损失。设置里的模型配置与数据集管理也不在工具里：那两个端点有
-回环强制校验，工具化等于绕过它。
+**边界（用户已确认）**：助手能新增和修改，但**不提供任何删除类工具**。设置里的模型
+配置与数据集管理也不在工具里：那两个端点有回环强制校验，工具化等于绕过它。
+
+**权限分级（T17）**：每个工具在注册处显式声明 `ToolPermission` 四级之一（read_only /
+reversible_write / irreversible_write / external_side_effect）。当前唯一不可逆的是
+`update_skill` 传 files 时整体替换知识文件（旧文件没有版本可恢复），执行前仍需用户
+在写入提案上确认；外部副作用级没有任何工具（助手不能代为投递、发消息或填网申）。
 
 写工具的参数一律交给现成的 Pydantic schema 校验（`JobCreate` / `JobUpdate` /
 `ProfileUpdate`），与 HTTP 接口共用同一套约束，不另写一份。
@@ -26,11 +30,12 @@ from ._shared import (  # noqa: F401 - 历史导出，测试经 assistant_tools.
     MAX_ASSISTANT_SKILL_FILES,
     MAX_ASSISTANT_SKILL_TOTAL_CHARS,
 )
-from ._types import Tool, ToolResult, web_search_description
+from ._types import Tool, ToolPermission, ToolResult, web_search_description
 
 __all__ = [
     "ToolResult",
     "Tool",
+    "ToolPermission",
     "_TOOLS",
     "execute_tool",
     "execute_tool_async",

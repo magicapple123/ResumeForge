@@ -31,7 +31,12 @@ _ARGUMENTS = {"title": "复盘", "remind_at": "2026-10-12T10:00:00"}
 
 
 def _preview() -> WritePreview:
-    return WritePreview(target="日历提醒新提醒", scope="新增 1 条", changes=[])
+    """真实预览：T01 批准前会重算预览并比对目标指纹，手写预览会变成"目标已变化"。"""
+    from app.services.assistant_tools import get_tool
+
+    tool = get_tool(_TARGET_TOOL)
+    with database.SessionLocal() as session:
+        return tool.preview(session, dict(_ARGUMENTS))
 
 
 def _proposal(writable: bool = True):
@@ -130,7 +135,9 @@ def test_commit_failure_returns_explicit_uncertain_state(client, monkeypatch):
 
     def flaky_commit(self):
         calls["n"] += 1
-        if calls["n"] >= 2:
+        # 计数：1=建提案，2=批准落库，3=handler 内部提交，4=端点收尾提交。只让收尾那次
+        # 失败，mark_unknown 的后续提交才能正常落库（模拟"提交阶段失败"）。
+        if calls["n"] == 4:
             raise OSError("模拟：提交时磁盘写入失败")
         return real_commit(self)
 
@@ -183,9 +190,11 @@ def test_stale_proposal_after_a_b_a_switch_is_rejected(client):
     response = client.post(_APPROVE.format(proposal_on_b.proposal_id))
     assert response.status_code == 409, response.text
     assert _reminder_count() == 0  # B 库没有串入旧提案的写入
-    # 主数据上的旧提案同样失效。
+    # 主数据上的旧提案在 B 的库里根本不存在：提案行随各自数据集的库走，按 id 查不到
+    # 返回 404（同样不会执行、不泄露内容）。T01 把提案从"进程内存"改为"库内单一事实源"
+    # 后，跨数据集的隔离由"各自库文件"保证，比旧的进程内作用域表更硬。
     response_a = client.post(_APPROVE.format(proposal_on_a.proposal_id))
-    assert response_a.status_code == 409
+    assert response_a.status_code == 404
 
 
 def test_get_proposal_hides_details_of_other_scope(client):
@@ -195,7 +204,8 @@ def test_get_proposal_hides_details_of_other_scope(client):
     other = _create_dataset(client, "别的作用域")
     assert _activate(client, other).status_code == 200
     hidden = client.get(_GET.format(proposal.proposal_id))
-    assert hidden.status_code == 409
+    # 提案行在各自数据集的库里：切到别的作用域后按 id 查不到 → 404，同样不暴露详情。
+    assert hidden.status_code == 404
     assert "proposal" not in hidden.json()
 
 
@@ -361,7 +371,7 @@ def test_real_tool_failure_after_its_own_commit_is_reported_as_unknown(client, m
     提交之后抛一次错，复现"数据已落库、但 handler 抛异常"的真实形态。
     """
     from app.models.material import CandidateJob
-    from app.services.assistant_tools.authorization import WritePreview, create_proposal
+    from app.services.assistant_tools.authorization import create_proposal
     from sqlalchemy.orm import Session as OrmSession
 
     real_refresh = OrmSession.refresh
@@ -374,11 +384,18 @@ def test_real_tool_failure_after_its_own_commit_is_reported_as_unknown(client, m
     monkeypatch.setattr(OrmSession, "refresh", exploding_refresh)
 
     ctx = tool_policy.build_context(writable=True)
+    from app.services.assistant_tools import get_tool
+
+    candidate_arguments = {"title": "后端开发（虚构）", "company": "示例科技"}
+    with database.SessionLocal() as session:
+        candidate_preview = get_tool("create_candidate_job").preview(
+            session, dict(candidate_arguments)
+        )
     proposal = create_proposal(
         ctx,
         "create_candidate_job",
-        {"title": "后端开发（虚构）", "company": "示例科技"},
-        WritePreview(target="备选岗位新条目", scope="新增 1 条", changes=[]),
+        candidate_arguments,
+        candidate_preview,
     )
 
     response = client.post(_APPROVE.format(proposal.proposal_id))

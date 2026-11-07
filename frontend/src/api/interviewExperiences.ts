@@ -16,10 +16,6 @@ export function listInterviewExperiences(
   return request(`/interview-experiences${buildQuery(params)}`);
 }
 
-export function getInterviewExperience(id: number): Promise<InterviewExperience> {
-  return request(`/interview-experiences/${id}`);
-}
-
 export function createInterviewExperience(
   payload: InterviewExperiencePayload,
 ): Promise<InterviewExperience> {

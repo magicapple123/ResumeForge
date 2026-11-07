@@ -23,9 +23,10 @@ from ..schemas.job_match_background import JobMatchBackgroundTask
 from ..schemas.job_match_batch import (
     JobMatchBatchOut,
     JobMatchBatchRequest,
-    JobMatchBatchSummary,
 )
 from ..services import trash
+from ..services.actions import add_action_route
+from ..services.actions.catalog import all_actions
 from ..services.apply import apply_service
 from ..services.job.job_comparison import MAX_COMPARISON_JOBS
 from ..services.job.job_comparison_store import load_comparison
@@ -178,7 +179,7 @@ def cancel_match_batch_task(task_id: str, db: Session = Depends(get_db)):
     return refreshed or task
 
 
-@router.get("/match-batches", response_model=list[JobMatchBatchSummary])
+add_action_route(router, all_actions()["list_match_analyses"], route_path="/match-batches")
 def get_match_batch_history(
     limit: int = Query(default=30, ge=1, le=100),
     db: Session = Depends(get_db),

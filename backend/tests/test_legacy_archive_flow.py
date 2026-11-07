@@ -17,7 +17,7 @@ from pathlib import Path
 from alembic import command
 from app import database
 from app.database_migrations import build_alembic_config
-from tests.migration_refs import BASELINE_REVISION
+from tests.migration_refs import head_revision
 from tests.upgrade_matrix_support import snapshot_state
 
 BACKEND_DIR = Path(__file__).resolve().parents[1]
@@ -89,7 +89,7 @@ def test_fresh_install_starts_and_builds_2_0_database(tmp_path) -> None:
     with sqlite3.connect(database_file) as connection:
         assert connection.execute("SELECT epoch FROM app_schema_epoch").fetchall() == [(2,)]
         revision = connection.execute("SELECT version_num FROM alembic_version").fetchone()[0]
-    assert revision == BASELINE_REVISION
+    assert revision == head_revision()
 
 
 def test_1x_library_is_archived_then_starts_on_empty_2_0_database(tmp_path) -> None:

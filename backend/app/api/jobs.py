@@ -11,7 +11,6 @@ from starlette.responses import Response
 
 from ..database import get_db
 from ..models.job import JOB_STATUSES, Job
-from ..schemas.common import Page
 from ..schemas.job import (
     RECOGNITION_SOURCE_AUTO,
     RECOGNITION_SOURCE_OFFICIAL,
@@ -29,9 +28,11 @@ from ..schemas.job import (
     JobOut,
     JobTextParseRequest,
     JobTextParseResult,
-    JobUpdate,
 )
 from ..services import trash
+from ..services.actions import add_action_route
+from ..services.actions.domains.jobs import job_actions
+from ..services.actions.pilots import pilot_actions
 from ..services.attachments import (
     assert_attachment_budget,
     image_data_urls,
@@ -47,7 +48,7 @@ from ..services.job.job_csv import (
     row_to_payload,
 )
 from ..services.job.job_multi_parser import extract_multiple_jobs, local_multi_drafts
-from ..services.job.job_service import create_job_record, find_job_by_identity, update_job_record
+from ..services.job.job_service import create_job_record, find_job_by_identity
 from ..services.job.job_sorting import JobSort, JobSortOrder, job_order_by
 from ..services.job_text_parser import parse_job_text
 from ..services.llm import create_provider
@@ -157,37 +158,7 @@ def _filtered_query(
     return query
 
 
-@router.get("", response_model=Page[JobListOut])
-def list_jobs(
-    db: Session = Depends(get_db),
-    keyword: str = Query(default="", description="按标题/公司/城市/描述/其他信息/备注模糊匹配"),
-    job_type: str = Query(default=""),
-    status: str = Query(default=""),
-    favorite: bool | None = Query(default=None),
-    # 按录入方式粗筛：collected=任一自动采集链路，manual=其余（手动填写/粘贴/截图/文档/助手等）。
-    # 兼容历史库里的两种来源值，也兼容旧官网导入把 `官网采集` 写进 source、但没有写入
-    # recognition_source 的记录。
-    source_kind: str = Query(default=""),
-    # 排序（R14）：键自带方向（created_desc / title_asc…），``order`` 只用于覆盖方向。
-    # 非法值由 Literal 拦成 422（不静默回落默认值——"改了参数却毫无变化"更难排查）。
-    sort: JobSort = Query(
-        default="created_desc", description="排序键：最近导入/最近修改/标题/公司"
-    ),
-    order: JobSortOrder | None = Query(
-        default=None, description="方向覆盖：asc / desc；不传则用 sort 自带方向"
-    ),
-    page: int = Query(default=1, ge=1),
-    page_size: int = Query(default=20, ge=1, le=100),
-):
-    query = _filtered_query(db, keyword, job_type, status, favorite, source_kind)
-    total = query.count()
-    jobs = (
-        query.order_by(*job_order_by(sort, order))
-        .offset((page - 1) * page_size)
-        .limit(page_size)
-        .all()
-    )
-    return Page(items=[_to_list_out(job) for job in jobs], total=total)
+add_action_route(router, job_actions()["list_jobs"])
 
 
 @router.get("/ids", response_model=list[int])
@@ -218,11 +189,7 @@ def list_job_ids(
     ]
 
 
-@router.post("", response_model=JobOut, status_code=201)
-def create_job(payload: JobCreate, db: Session = Depends(get_db)):
-    job = create_job_record(db, payload)
-    _save_note_image_copies(db, job.id, payload.note_images)
-    return _to_out(job)
+add_action_route(router, job_actions()["create_job"])
 
 
 @router.post("/parse-text", response_model=JobTextParseResult)
@@ -430,23 +397,12 @@ def import_jobs_csv(payload: JobImportRequest, db: Session = Depends(get_db)):
     return JobImportResult(imported=imported, failed=failed)
 
 
-@router.get("/{job_id}", response_model=JobOut)
-def get_job(job_id: int, db: Session = Depends(get_db)):
-    job = db.get(Job, job_id)
-    if job is None or trash.is_deleted(job):
-        raise HTTPException(status_code=404, detail="岗位不存在或已被删除")
-    return _to_out(job)
+# T28 首批：GET /api/jobs/{job_id} 由契约层生成（ActionSpec 是参数/权限唯一真源）。
+# 注册位置仍由本文件里的调用点显式决定（原来的装饰器位置，保持注册顺序）。
+add_action_route(router, pilot_actions()["get_job"])
 
 
-@router.put("/{job_id}", response_model=JobOut)
-def update_job(job_id: int, payload: JobUpdate, db: Session = Depends(get_db)):
-    job = db.get(Job, job_id)
-    if job is None or trash.is_deleted(job):
-        raise HTTPException(status_code=404, detail="岗位不存在或已被删除")
-    updated = update_job_record(db, job, payload)
-    if "note_images" in payload.model_fields_set:
-        _save_note_image_copies(db, job.id, payload.note_images)
-    return _to_out(updated)
+add_action_route(router, job_actions()["update_job"])
 
 
 @router.delete("/{job_id}", status_code=204)

@@ -25,6 +25,7 @@ import SettingsProvenanceSection from "./SettingsProvenanceSection";
 import SearchCard from "./SearchCard";
 import BatchOperationCard from "./BatchOperationCard";
 import AssistantRelaxedModeCard from "./AssistantRelaxedModeCard";
+import AgentTaskEventsCard from "./AgentTaskEventsCard";
 import SkillsCard from "./SkillsCard";
 import AssistantOrbCard from "./AssistantOrbCard";
 import WebFormRelaxedModeCard from "./WebFormRelaxedModeCard";
@@ -105,6 +106,8 @@ export function AssistantPanel({ skillsCard }: AssistantPanelProps) {
       <SearchCard />
       {/* 助手的数据可见范围开关：放宽模式（默认关，开启前有明确告知）。 */}
       <AssistantRelaxedModeCard />
+      {/* 提醒到期自动生成任务卡（T26，默认关：只建卡、不执行写操作）。 */}
+      <AgentTaskEventsCard />
       <SkillsCard {...skillsCard} />
       <AssistantOrbCard />
       {/* 网申填表的 AI 行为边界：与网申填表页顶部的快捷入口是同一个开关。 */}

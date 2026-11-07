@@ -96,14 +96,6 @@ export function openBrowserSite(): Promise<BrowserStatus> {
   return request("/apply/browser/open", { method: "POST" });
 }
 
-export function refreshBrowser(): Promise<BrowserStatus> {
-  return request("/apply/browser/refresh", { method: "POST" });
-}
-
-export function restartBrowser(): Promise<BrowserStatus> {
-  return request("/apply/browser/restart", { method: "POST" });
-}
-
 export function stopBrowser(): Promise<void> {
   return request("/apply/browser/stop", { method: "POST" });
 }
@@ -145,10 +137,6 @@ export async function addToQueue(items: ApplyQueueAddItem[]): Promise<ApplyQueue
   }
   if (!resp.ok) throw new ApiError(await extractError(resp), resp.status);
   return (await resp.json()) as ApplyQueueItem[];
-}
-
-export function reorderQueue(order: number[]): Promise<ApplyQueueItem[]> {
-  return request("/apply/queue/reorder", { method: "PATCH", body: JSON.stringify({ order }) });
 }
 
 export function updateQueueItem(
@@ -218,10 +206,6 @@ export interface ApplyRecordParams {
   page_size?: number;
   /** false = 轻量分页：批次不带明细，只返回 matched_count（B4 按需加载）。 */
   include_items?: boolean;
-}
-
-export function listRecords(params: ApplyRecordParams = {}): Promise<Page<ApplyRecord>> {
-  return request(`/apply/records${buildQuery(params)}`);
 }
 
 /**

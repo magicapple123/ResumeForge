@@ -205,7 +205,6 @@ const profileLibrary = {
   "profileLibrary.photo.hint":
     "Only the active photo is shown; open Photo Library to change or delete it",
   "profileLibrary.photo.formatError": "Select a JPG, PNG or WebP photo",
-  "profileLibrary.photo.tooLarge": "Photos must not exceed 2 MB",
   "profileLibrary.photo.readFailed": "Could not read the photo",
   "profileLibrary.webform.customGroupName": "Custom",
   "profileLibrary.webform.rememberTitle": "Remember this value: choose a Field to update",

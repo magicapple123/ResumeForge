@@ -2,7 +2,7 @@
 """联网搜索工具声明（``_TOOLS`` 最后 1 条）。"""
 from __future__ import annotations
 
-from ._types import _WEB_SEARCH_DESC_SUMMARIES, Tool
+from ._types import _WEB_SEARCH_DESC_SUMMARIES, Tool, ToolPermission
 from .search_tools import _tool_web_search
 
 SEARCH_TOOLS: tuple[Tool, ...] = (
@@ -20,6 +20,8 @@ SEARCH_TOOLS: tuple[Tool, ...] = (
             "required": ["query"],
         },
         handler=_tool_web_search,
+        service_entry="search.aggregate_search",
+        permission=ToolPermission.READ_ONLY,
         requires_web_search=True,
     ),
 )

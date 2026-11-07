@@ -15,10 +15,12 @@ from __future__ import annotations
 from fastapi import FastAPI
 
 from .api import (
+    agent_tasks,
     ai_tasks,
     analytics,
     apply,
     assistant,
+    assistant_proposal_status,
     assistant_proposals,
     assistant_tools_api,
     ats,
@@ -101,6 +103,7 @@ ROUTERS = (
     job_match.router,
     # 通用 AI 任务（0068）：独立前缀 /api/ai-tasks，不与其他前缀抢路径。
     ai_tasks.router,
+    agent_tasks.router,  # T19：Agent 任务多步计划（独立前缀 /api/agent-tasks）。
     jobs.router,
     jobs_analysis.router,
     resumes.router,
@@ -162,6 +165,9 @@ ROUTERS = (
     glossary_api.router,
     assistant.router,
     assistant_proposals.router,
+    # T01：写操作提案状态列表（前缀同 /api/assistant，路径 /write-proposals 与
+    # /write-proposals/{id} 不冲突）。
+    assistant_proposal_status.router,
     # #38 工具清单：`GET /api/assistant/tools` 单独一个模块（assistant.py 已贴 500 行预算），
     # 前缀同 /api/assistant，路径 /tools 与既有 /conversations/* 不重叠。
     assistant_tools_api.router,

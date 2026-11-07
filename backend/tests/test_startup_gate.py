@@ -22,7 +22,7 @@ from app.services.data_backup.legacy_archive import (
     verify_archive,
 )
 from app.services.data_backup.paths import DATABASE_MEMBER
-from tests.migration_refs import BASELINE_REVISION
+from tests.migration_refs import head_revision
 
 LEGACY_FIXTURE = Path(__file__).parent / "fixtures" / "legacy-1x" / "backup-1.0.2.zip"
 
@@ -146,7 +146,7 @@ def test_enforce_archives_legacy_and_reopens_empty_2_0_database(tmp_path, monkey
             assert connection.execute("SELECT epoch FROM app_schema_epoch").fetchall() == [(2,)]
             assert (
                 connection.execute("SELECT version_num FROM alembic_version").fetchone()[0]
-                == BASELINE_REVISION
+                == head_revision()
             )
             for table in ("profile_entry", "resume_record", "user_profile", "education"):
                 assert connection.execute(f'SELECT COUNT(*) FROM "{table}"').fetchone()[0] == 0

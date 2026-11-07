@@ -1,11 +1,12 @@
 {
   "version": 2,
-  "generatedAt": "2026-11-04",
+  "generatedAt": "2026-11-07",
   "rule": "Legacy CJK ceilings plus language-independent AST product-copy fingerprints",
   "src": {
     "total": 195,
     "files": {
       "App.tsx": 0,
+      "api/agentTasks.ts": 0,
       "api/aiTasks.ts": 0,
       "api/analytics.ts": 0,
       "api/apiError.ts": 0,
@@ -36,7 +37,6 @@
       "api/resumeCreation.ts": 0,
       "api/resumeDocument.ts": 0,
       "api/resumeLayout.ts": 0,
-      "api/resumeRisk.ts": 0,
       "api/resumeTemplates.ts": 0,
       "api/resumeWriting.ts": 0,
       "api/resumes.ts": 0,
@@ -98,15 +98,12 @@
       "components/ResumeRiskPanel.tsx": 0,
       "components/ResumeSuggestionsModal.tsx": 0,
       "components/ResumeWritingPanel.tsx": 0,
-      "components/RiskScanWatcher.tsx": 0,
       "components/SharePackageModal.tsx": 0,
       "components/SkillTags.tsx": 7,
       "components/StarPromptModal.tsx": 0,
-      "components/SuggestionScanWatcher.tsx": 0,
       "components/TaskCompletionNotifier.tsx": 0,
       "components/ThemeProvider.tsx": 0,
       "components/ThemeSwitch.tsx": 0,
-      "components/UpdateCheckButton.tsx": 0,
       "components/UserGuideModal.tsx": 0,
       "components/analytics/BarChart.tsx": 0,
       "components/analytics/ChartBlock.tsx": 0,
@@ -209,10 +206,7 @@
       "components/navigation/MySpaceMenu.tsx": 0,
       "components/navigation/RouteAccessibility.tsx": 0,
       "components/navigation/navigationConfig.ts": 0,
-      "components/profile/AwardSection.tsx": 0,
-      "components/profile/CampusExperienceSection.tsx": 0,
       "components/profile/EducationSection.tsx": 12,
-      "components/profile/ExperienceSection.tsx": 0,
       "components/profile/PartialDateSelect.tsx": 0,
       "components/profile/ProfileBasicSection.tsx": 0,
       "components/profile/ProfileEditActionBar.tsx": 0,
@@ -226,11 +220,7 @@
       "components/profile/ProfileSectionStack.tsx": 0,
       "components/profile/ProfileTextModal.tsx": 0,
       "components/profile/ProfileWorkspaceTabs.tsx": 0,
-      "components/profile/ProjectSection.tsx": 0,
       "components/profile/RecognitionReviewList.tsx": 0,
-      "components/profile/ReferenceFileField.tsx": 0,
-      "components/profile/SectionVisibilitySwitch.tsx": 0,
-      "components/profile/SkillSection.tsx": 0,
       "components/profile/WebFormCustomFieldControls.tsx": 0,
       "components/profile/WebFormProfileCustomFieldAdder.tsx": 0,
       "components/profile/WebFormProfileCustomGroupFooter.tsx": 0,
@@ -485,7 +475,6 @@
       "components/resume/useDebouncedValue.ts": 0,
       "components/resume/useWorkbenchCloseGuard.ts": 0,
       "components/resume/useWorkbenchColumns.ts": 0,
-      "components/resume/useWorkbenchInlineMarks.ts": 0,
       "components/resume/useWorkbenchSelectionSync.ts": 0,
       "components/resume/useWorkbenchV2History.ts": 0,
       "components/resume/useWorkbenchV2Preflight.ts": 0,
@@ -498,6 +487,7 @@
       "components/resume/versions/VersionList.tsx": 0,
       "components/resume/versions/VersionsModal.tsx": 0,
       "components/resumeGenerationStages.ts": 0,
+      "components/settings/AgentTaskEventsCard.tsx": 0,
       "components/settings/AnnouncementSettingsCard.tsx": 0,
       "components/settings/AssistantOrbCard.tsx": 0,
       "components/settings/AssistantRelaxedModeCard.tsx": 0,
@@ -545,11 +535,8 @@
       "components/shell/RootLayout.tsx": 0,
       "components/skills/SkillEditorModal.tsx": 0,
       "components/templates/A4PreviewFrame.tsx": 0,
-      "components/templates/BuiltinStyleGallery.tsx": 0,
       "components/templates/FormatTemplateEditorModal.tsx": 0,
-      "components/templates/StyleTemplateEditorModal.tsx": 0,
       "components/templates/TemplateCustomTable.tsx": 0,
-      "components/templates/TemplateImportModal.tsx": 0,
       "components/templates/TemplatePreviewModal.tsx": 0,
       "components/templates/TemplateStyleControls.tsx": 0,
       "components/templates/TemplateWorkbench.tsx": 0,
@@ -572,7 +559,6 @@
       "components/webform/WebFormPendingPanel.tsx": 0,
       "components/webform/WebFormPreviewTable.tsx": 0,
       "components/webform/WebFormRecordsPanel.tsx": 0,
-      "components/webform/WebFormTargetFloatingBalls.tsx": 0,
       "components/webform/webFormGroupTones.ts": 0,
       "components/writing/WritingRefineChips.tsx": 0,
       "components/writing/WritingResultPane.tsx": 0,
@@ -594,6 +580,7 @@
       "features/announcements/useUpdateAnnouncement.ts": 0,
       "features/assistant/assistantTypes.ts": 0,
       "features/assistant/assistantUtils.ts": 1,
+      "features/assistant/clientContext.ts": 0,
       "features/assistant/components/ActionProposalCard.tsx": 0,
       "features/assistant/components/AssistantComposer.tsx": 0,
       "features/assistant/components/AssistantEmptyState.tsx": 0,
@@ -605,6 +592,7 @@
       "features/assistant/components/ConversationSidebar.tsx": 0,
       "features/assistant/components/ConversationSidebar.types.ts": 0,
       "features/assistant/components/MessageToolCalls.tsx": 0,
+      "features/assistant/components/ProposalResultNote.tsx": 0,
       "features/assistant/greetingText.ts": 0,
       "features/assistant/hooks/assistantStreamStore.ts": 0,
       "features/assistant/hooks/useAssistantAttachments.ts": 0,
@@ -619,6 +607,10 @@
       "features/assistant/hooks/useRestoreStreamingConversation.ts": 0,
       "features/assistant/hooks/useThrottledStreamingText.ts": 0,
       "features/assistant/readStoredReasoningEffort.ts": 0,
+      "features/assistant/tasks/AgentTaskPanel.tsx": 0,
+      "features/assistant/tasks/AgentTaskRow.tsx": 0,
+      "features/assistant/tasks/agentTaskView.ts": 0,
+      "features/assistant/tasks/useAgentTasks.ts": 0,
       "features/assistant/welcomeGate.ts": 0,
       "features/career-scenarios/GenerationScenarioControl.tsx": 0,
       "features/career-scenarios/ResumeCenterAiEntry.tsx": 0,
@@ -651,7 +643,6 @@
       "features/interview/useQuestionBankAnswers.ts": 0,
       "features/jobs/jobAnalysisStore.ts": 0,
       "features/jobs/jobBulkAiRunner.ts": 0,
-      "features/profile-groups/CurrentGroupSummary.tsx": 0,
       "features/profile-groups/ProfileGroupControl.tsx": 0,
       "features/profile-groups/ProfileGroupForm.tsx": 0,
       "features/profile-groups/ProfileGroupManagerModal.tsx": 0,
@@ -756,7 +747,6 @@
       "features/resume-layout/duplicateEntries.ts": 0,
       "features/resume-layout/entryLayoutModel.ts": 0,
       "features/resume-layout/entryOptions.ts": 0,
-      "features/resume-layout/entryReorder.ts": 0,
       "features/resume-layout/entryRowLayout.ts": 0,
       "features/resume-layout/entryStyleScopes.ts": 0,
       "features/resume-layout/fieldLayout.ts": 0,
@@ -764,7 +754,6 @@
       "features/resume-layout/fieldMetaPosition.ts": 0,
       "features/resume-layout/formatDomains.ts": 0,
       "features/resume-layout/inlineMarks.ts": 0,
-      "features/resume-layout/paginationDomain.ts": 0,
       "features/resume-layout/styleCatalog.ts": 0,
       "features/resume-layout/styleCatalogExtensions.ts": 0,
       "features/resume-layout/styleFreeze.ts": 0,
@@ -944,6 +933,7 @@
       "i18n/LocaleBootstrap.tsx": 0,
       "i18n/antdLocale.ts": 0,
       "i18n/cjkScan.ts": 0,
+      "i18n/countMessage.ts": 0,
       "i18n/enum/analytics.ts": 0,
       "i18n/enum/apply.ts": 0,
       "i18n/enum/assistant.ts": 0,
@@ -1100,6 +1090,7 @@
       "types/resumeGroupScope.ts": 0,
       "types/resumeLayout.ts": 0,
       "types/resumeProfileUsage.ts": 0,
+      "types/resumeReview.ts": 0,
       "types/resumeRisk.ts": 0,
       "types/resumeTemplate.ts": 0,
       "types/resumeWriting.ts": 0,
@@ -1114,7 +1105,6 @@
       "utils/aiTaskEntry.ts": 0,
       "utils/aiTaskResultSink.ts": 0,
       "utils/attachments.ts": 0,
-      "utils/backgroundTask.ts": 0,
       "utils/backgroundTasks.adapters.ts": 0,
       "utils/backgroundTasks.persist.ts": 0,
       "utils/backgroundTasks.ts": 0,
@@ -1153,6 +1143,7 @@
       "utils/resumeFieldDiff.ts": 0,
       "utils/resumeFieldPath.ts": 0,
       "utils/resumeFontScale.ts": 2,
+      "utils/resumeFormatLabels.ts": 0,
       "utils/resumeFormatProbe.ts": 0,
       "utils/resumeLayoutMeasure.ts": 0,
       "utils/resumeScaleParams.ts": 0,
@@ -1171,7 +1162,7 @@
     }
   },
   "tests": {
-    "total": 1443,
+    "total": 1441,
     "files": {
       "App.shortcuts.test.tsx": 8,
       "App.test.tsx": 11,
@@ -1476,6 +1467,7 @@
       "components/resume/versions/VersionsModal.test.tsx": 0,
       "components/resume/workbenchLayoutContract.test.ts": 0,
       "components/resumeGenerationStages.test.ts": 0,
+      "components/settings/AgentTaskEventsCard.test.tsx": 0,
       "components/settings/AnnouncementSettingsCard.test.tsx": 0,
       "components/settings/AssistantOrbCard.test.tsx": 0,
       "components/settings/AssistantRelaxedModeCard.test.tsx": 5,
@@ -1502,8 +1494,6 @@
       "components/settings/llm/ModelCatalogField.test.tsx": 0,
       "components/shell/AppShell.test.tsx": 0,
       "components/shell/BulkAiFloatingBar.test.tsx": 0,
-      "components/templates/BuiltinStyleGallery.test.tsx": 1,
-      "components/templates/TemplateImportModal.test.tsx": 1,
       "components/templates/TemplateWorkbench.test.tsx": 5,
       "components/tracker/CalendarView.test.tsx": 4,
       "components/tracker/TrackFormModal.test.tsx": 5,
@@ -1525,11 +1515,14 @@
       "features/announcements/announcementMute.test.ts": 0,
       "features/announcements/announcementStore.test.ts": 0,
       "features/assistant/assistantUtils.test.ts": 0,
+      "features/assistant/clientContext.test.tsx": 0,
       "features/assistant/components/ActionProposalCard.test.tsx": 9,
       "features/assistant/components/AssistantComposer.test.tsx": 4,
       "features/assistant/components/AssistantEmptyState.test.tsx": 0,
       "features/assistant/components/ConversationSidebar.test.tsx": 11,
+      "features/assistant/components/ProposalResultNote.test.tsx": 0,
       "features/assistant/greetingText.test.ts": 0,
+      "features/assistant/tasks/AgentTaskPanel.test.tsx": 0,
       "features/career-scenarios/GenerationScenarioControl.test.tsx": 0,
       "features/career-scenarios/ScenarioEditor.test.tsx": 0,
       "features/career-scenarios/ScenarioSelector.test.tsx": 0,
@@ -1726,10 +1719,12 @@
       "pages/DrillPage.test.tsx": 30,
       "pages/FavoritesPage.test.tsx": 12,
       "pages/HomePage.test.tsx": 35,
+      "pages/HomePage.todo.test.tsx": 0,
       "pages/InterviewPage.decision.test.tsx": 0,
       "pages/InterviewPage.interrupt.test.tsx": 0,
       "pages/InterviewPage.test.tsx": 10,
       "pages/InterviewPage.timer.test.tsx": 0,
+      "pages/JobsPage.batchStatus.test.tsx": 0,
       "pages/JobsPage.candidateImport.test.tsx": 12,
       "pages/JobsPage.sourceFilter.test.tsx": 0,
       "pages/JobsPage.test.tsx": 19,
@@ -1839,6 +1834,7 @@
       "utils/resumeFieldDiff.f8.test.ts": 0,
       "utils/resumeFieldPath.test.ts": 0,
       "utils/resumeFontScale.test.ts": 0,
+      "utils/resumeFormatLabels.test.ts": 0,
       "utils/resumeFormatProbe.test.ts": 0,
       "utils/resumeLayoutMeasure.test.ts": 0,
       "utils/resumeScaleParams.test.ts": 0,
@@ -1858,8 +1854,12 @@
     }
   },
   "productCopy": {
-    "total": 119,
+    "total": 118,
     "files": {
+      "api/agentTasks.ts": {
+        "count": 0,
+        "fingerprints": {}
+      },
       "api/aiTasks.ts": {
         "count": 0,
         "fingerprints": {}
@@ -1984,10 +1984,6 @@
         "fingerprints": {}
       },
       "api/resumeLayout.ts": {
-        "count": 0,
-        "fingerprints": {}
-      },
-      "api/resumeRisk.ts": {
         "count": 0,
         "fingerprints": {}
       },
@@ -2577,14 +2573,6 @@
         "count": 0,
         "fingerprints": {}
       },
-      "components/profile/AwardSection.tsx": {
-        "count": 0,
-        "fingerprints": {}
-      },
-      "components/profile/CampusExperienceSection.tsx": {
-        "count": 0,
-        "fingerprints": {}
-      },
       "components/profile/dragAutoScroll.ts": {
         "count": 0,
         "fingerprints": {}
@@ -2594,10 +2582,6 @@
         "fingerprints": {}
       },
       "components/profile/EducationSection.tsx": {
-        "count": 0,
-        "fingerprints": {}
-      },
-      "components/profile/ExperienceSection.tsx": {
         "count": 0,
         "fingerprints": {}
       },
@@ -2660,25 +2644,7 @@
         "count": 0,
         "fingerprints": {}
       },
-      "components/profile/ProjectSection.tsx": {
-        "count": 0,
-        "fingerprints": {}
-      },
       "components/profile/RecognitionReviewList.tsx": {
-        "count": 0,
-        "fingerprints": {}
-      },
-      "components/profile/ReferenceFileField.tsx": {
-        "count": 1,
-        "fingerprints": {
-          "b993f0efc636f0f72aecccf64ffdfea8e3900fb0e9d669005a6dad68a0ef8807": 1
-        }
-      },
-      "components/profile/SectionVisibilitySwitch.tsx": {
-        "count": 0,
-        "fingerprints": {}
-      },
-      "components/profile/SkillSection.tsx": {
         "count": 0,
         "fingerprints": {}
       },
@@ -3456,10 +3422,6 @@
         "count": 0,
         "fingerprints": {}
       },
-      "components/resume/useWorkbenchInlineMarks.ts": {
-        "count": 0,
-        "fingerprints": {}
-      },
       "components/resume/useWorkbenchSelectionSync.ts": {
         "count": 0,
         "fingerprints": {}
@@ -3824,7 +3786,7 @@
         "count": 0,
         "fingerprints": {}
       },
-      "components/RiskScanWatcher.tsx": {
+      "components/settings/AgentTaskEventsCard.tsx": {
         "count": 0,
         "fingerprints": {}
       },
@@ -4068,10 +4030,6 @@
         "count": 0,
         "fingerprints": {}
       },
-      "components/SuggestionScanWatcher.tsx": {
-        "count": 0,
-        "fingerprints": {}
-      },
       "components/TaskCompletionNotifier.tsx": {
         "count": 0,
         "fingerprints": {}
@@ -4080,23 +4038,11 @@
         "count": 0,
         "fingerprints": {}
       },
-      "components/templates/BuiltinStyleGallery.tsx": {
-        "count": 0,
-        "fingerprints": {}
-      },
       "components/templates/FormatTemplateEditorModal.tsx": {
         "count": 0,
         "fingerprints": {}
       },
-      "components/templates/StyleTemplateEditorModal.tsx": {
-        "count": 0,
-        "fingerprints": {}
-      },
       "components/templates/TemplateCustomTable.tsx": {
-        "count": 0,
-        "fingerprints": {}
-      },
-      "components/templates/TemplateImportModal.tsx": {
         "count": 0,
         "fingerprints": {}
       },
@@ -4144,10 +4090,6 @@
         "fingerprints": {}
       },
       "components/tracker/TrackImportModal.tsx": {
-        "count": 0,
-        "fingerprints": {}
-      },
-      "components/UpdateCheckButton.tsx": {
         "count": 0,
         "fingerprints": {}
       },
@@ -4208,10 +4150,6 @@
         "fingerprints": {}
       },
       "components/webform/WebFormRecordsPanel.tsx": {
-        "count": 0,
-        "fingerprints": {}
-      },
-      "components/webform/WebFormTargetFloatingBalls.tsx": {
         "count": 0,
         "fingerprints": {}
       },
@@ -4303,6 +4241,10 @@
         "count": 0,
         "fingerprints": {}
       },
+      "features/assistant/clientContext.ts": {
+        "count": 0,
+        "fingerprints": {}
+      },
       "features/assistant/components/ActionProposalCard.tsx": {
         "count": 0,
         "fingerprints": {}
@@ -4344,6 +4286,10 @@
         "fingerprints": {}
       },
       "features/assistant/components/MessageToolCalls.tsx": {
+        "count": 0,
+        "fingerprints": {}
+      },
+      "features/assistant/components/ProposalResultNote.tsx": {
         "count": 0,
         "fingerprints": {}
       },
@@ -4400,6 +4346,22 @@
         "fingerprints": {}
       },
       "features/assistant/readStoredReasoningEffort.ts": {
+        "count": 0,
+        "fingerprints": {}
+      },
+      "features/assistant/tasks/AgentTaskPanel.tsx": {
+        "count": 0,
+        "fingerprints": {}
+      },
+      "features/assistant/tasks/AgentTaskRow.tsx": {
+        "count": 0,
+        "fingerprints": {}
+      },
+      "features/assistant/tasks/agentTaskView.ts": {
+        "count": 0,
+        "fingerprints": {}
+      },
+      "features/assistant/tasks/useAgentTasks.ts": {
         "count": 0,
         "fingerprints": {}
       },
@@ -4608,10 +4570,6 @@
         "fingerprints": {}
       },
       "features/profile-groups/api.ts": {
-        "count": 0,
-        "fingerprints": {}
-      },
-      "features/profile-groups/CurrentGroupSummary.tsx": {
         "count": 0,
         "fingerprints": {}
       },
@@ -4980,10 +4938,6 @@
         "count": 0,
         "fingerprints": {}
       },
-      "features/resume-layout/entryReorder.ts": {
-        "count": 0,
-        "fingerprints": {}
-      },
       "features/resume-layout/entryRowLayout.ts": {
         "count": 0,
         "fingerprints": {}
@@ -5009,10 +4963,6 @@
         "fingerprints": {}
       },
       "features/resume-layout/inlineMarks.ts": {
-        "count": 0,
-        "fingerprints": {}
-      },
-      "features/resume-layout/paginationDomain.ts": {
         "count": 0,
         "fingerprints": {}
       },
@@ -5723,6 +5673,10 @@
         "count": 0,
         "fingerprints": {}
       },
+      "i18n/countMessage.ts": {
+        "count": 0,
+        "fingerprints": {}
+      },
       "i18n/enum/analytics.ts": {
         "count": 0,
         "fingerprints": {}
@@ -6403,6 +6357,10 @@
         "count": 0,
         "fingerprints": {}
       },
+      "types/resumeReview.ts": {
+        "count": 0,
+        "fingerprints": {}
+      },
       "types/resumeRisk.ts": {
         "count": 0,
         "fingerprints": {}
@@ -6456,10 +6414,6 @@
         "fingerprints": {}
       },
       "utils/attachments.ts": {
-        "count": 0,
-        "fingerprints": {}
-      },
-      "utils/backgroundTask.ts": {
         "count": 0,
         "fingerprints": {}
       },
@@ -6612,6 +6566,10 @@
         "fingerprints": {}
       },
       "utils/resumeFontScale.ts": {
+        "count": 0,
+        "fingerprints": {}
+      },
+      "utils/resumeFormatLabels.ts": {
         "count": 0,
         "fingerprints": {}
       },

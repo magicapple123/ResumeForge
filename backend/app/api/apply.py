@@ -23,7 +23,6 @@ from ..models.job import Job
 from ..schemas.apply import (
     ApplyConfigIn,
     ApplyConfigOut,
-    ApplyRecordBatchOut,
     ApplyRecordOut,
     ApplyTaskCreate,
     ApplyTaskDetailOut,
@@ -44,6 +43,8 @@ from ..schemas.apply import (
 )
 from ..schemas.common import Page
 from ..services import trash
+from ..services.actions import add_action_route
+from ..services.actions.catalog import all_actions
 from ..services.apply import apply_service, task_runner
 from ..services.job.job_match import generate_greeting, job_payload
 from ..services.llm import create_provider
@@ -57,6 +58,9 @@ from .apply_tasks_page import router as apply_tasks_page_router
 from .webform.records_page import router as webform_records_page_router
 
 logger = logging.getLogger(__name__)
+
+
+
 
 router = APIRouter(prefix="/api/apply", tags=["apply"])
 collect_router = APIRouter(prefix="/api/collect", tags=["collect"])
@@ -385,7 +389,7 @@ def list_records(
     return Page(items=items, total=total)
 
 
-@router.get("/records/grouped", response_model=Page[ApplyRecordBatchOut])
+add_action_route(router, all_actions()["list_apply_records"], route_path="/records/grouped")
 def list_record_batches(
     keyword: str = Query(default=""),
     result: str = Query(default="", description="success / failed / skipped"),

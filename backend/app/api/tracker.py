@@ -28,14 +28,15 @@ from ..schemas.tracker import (
     TRACK_NOTE_PREVIEW_CHARS,
     TrackApplyOut,
     TrackApplyRequest,
-    TrackCreate,
-    TrackListOut,
     TrackOut,
     TrackParseOut,
     TrackParseRequest,
     TrackStatsOut,
     TrackUpdate,
 )
+from ..services.actions import add_action_route
+from ..services.actions.catalog import all_actions
+from ..services.actions.domains.tracker import tracker_actions
 from ..services.attachments import (
     assert_attachment_budget,
     image_data_urls,
@@ -50,7 +51,6 @@ from ..services.text_extraction import llm_is_configured
 from ..services.tracker import (
     apply_merges,
     count_tracks,
-    create_track,
     delete_track,
     iter_csv_chunks,
     iter_tracks,
@@ -89,21 +89,9 @@ def _track_brief(record: ApplicationTrack) -> TrackOut:
     return item
 
 
-@router.get("", response_model=TrackListOut)
-def read_tracks(
-    status: str = Query(default=""),
-    keyword: str = Query(default=""),
-    db: Session = Depends(get_db),
-):
-    """列出求职进度；可按状态与关键词过滤，统计随列表一起返回。"""
-    if status and status not in STATUSES:
-        raise HTTPException(status_code=422, detail="未知的进度状态")
-    records = list_tracks(db, status=status, keyword=keyword)
-    # 统计走 SQL 聚合（全量口径）：列表被 MAX_LIST_LIMIT 截断时漏斗数字仍准确。
-    return TrackListOut(
-        items=[_track_brief(item) for item in records],
-        **summarize(db, status=status, keyword=keyword),
-    )
+# T28 Batch B：GET /api/tracker 由契约层生成（ActionSpec 是参数/权限的唯一真源）。
+# 注册位置仍在原装饰器处：它必须在 /page /stats /export 之前，路由顺序是行为契约。
+add_action_route(router, tracker_actions()["list_application_tracks"])
 
 
 @router.get("/page", response_model=Page[TrackOut])
@@ -150,9 +138,7 @@ def read_track_stats(
     return TrackStatsOut(**summarize(db, status=status, keyword=keyword, job_id=job_id))
 
 
-@router.post("", response_model=TrackOut, status_code=201)
-def create_track_entry(payload: TrackCreate, db: Session = Depends(get_db)):
-    return track_out(create_track(db, payload))
+add_action_route(router, tracker_actions()["create_application_track"])
 
 
 @router.get("/export")
@@ -274,12 +260,7 @@ def apply_tracks(payload: TrackApplyRequest, db: Session = Depends(get_db)):
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
-@router.get("/{track_id}", response_model=TrackOut)
-def read_track(track_id: int, db: Session = Depends(get_db)):
-    record = track_or_none(db, track_id)
-    if record is None:
-        raise HTTPException(status_code=404, detail="进度记录不存在或已被删除")
-    return track_out(record)
+add_action_route(router, tracker_actions()["get_application_track"])
 
 
 @router.get("/{track_id}/deliveries", response_model=list[DeliverySummary])
@@ -297,7 +278,7 @@ def list_track_deliveries(track_id: int, db: Session = Depends(get_db)):
     ]
 
 
-@router.put("/{track_id}", response_model=TrackOut)
+add_action_route(router, all_actions()["update_application_track"], route_path="/{track_id}")
 def save_track(track_id: int, payload: TrackUpdate, db: Session = Depends(get_db)):
     record = track_or_none(db, track_id)
     if record is None:

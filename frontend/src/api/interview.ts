@@ -272,10 +272,6 @@ export function listQuestionBanks(): Promise<QuestionBankRecord[]> {
   return request("/interview/question-banks");
 }
 
-export function getQuestionBank(id: number): Promise<QuestionBankRecord> {
-  return request(`/interview/question-banks/${id}`);
-}
-
 /** 删除题库历史（软删，彻底删除在回收站）。 */
 export function deleteQuestionBank(id: number): Promise<void> {
   return request(`/interview/question-banks/${id}`, { method: "DELETE" });
@@ -302,10 +298,6 @@ export function saveReview(payload: InterviewReviewRecordPayload): Promise<Inter
 
 export function listReviews(): Promise<InterviewReviewRecord[]> {
   return request("/interview/reviews");
-}
-
-export function getReview(id: number): Promise<InterviewReviewRecord> {
-  return request(`/interview/reviews/${id}`);
 }
 
 /** 删除复盘历史（软删，彻底删除在回收站）。 */

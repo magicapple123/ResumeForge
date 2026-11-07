@@ -27,6 +27,8 @@ from ...schemas.resume import (
     ResumeTitleUpdate,
 )
 from ...services import trash
+from ...services.actions import add_action_route
+from ...services.actions.catalog import all_actions
 from ...services.resume.document_save import (
     RevisionConflict,
     revision_conflict_response,
@@ -42,6 +44,7 @@ from ...services.resume.resume_labels import normalize_language
 from ._shared import _get_live_resume, _mark_saved, _to_resume_out, _validated_content
 
 logger = logging.getLogger(__name__)
+
 
 router = APIRouter()
 
@@ -186,7 +189,7 @@ RESUME_SORT_ORDERS = {
 }
 
 
-@router.get("", response_model=Page[ResumeBrief])
+add_action_route(router, all_actions()["list_resumes"], route_path="")
 def list_resumes(
     db: Session = Depends(get_db),
     keyword: str = Query(default=""),
@@ -273,7 +276,7 @@ def list_resume_ids(
     ]
 
 
-@router.get("/{resume_id}", response_model=ResumeOut)
+add_action_route(router, all_actions()["get_resume"], route_path="/{resume_id}")
 def get_resume(resume_id: int, db: Session = Depends(get_db)):
     record = db.get(ResumeRecord, resume_id)
     if record is None or trash.is_deleted(record):

@@ -109,8 +109,9 @@ def test_token_mismatch_is_rejected():
 
 def test_cross_dataset_proposal_is_rejected(monkeypatch):
     proposal = _proposal()
+    # T01 起作用域校验在持久化层（proposal_store），patch 同一份 dataset_scope 模块。
     monkeypatch.setattr(
-        "app.services.assistant_tools.authorization.dataset_scope.current_dataset_id",
+        "app.services.assistant_tools.proposal_store.dataset_scope.current_dataset_id",
         lambda: "0123456789abcdef",
     )
     with pytest.raises(WriteProposalError) as excinfo:

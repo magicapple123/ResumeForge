@@ -213,7 +213,6 @@ const profileLibrary = {
   "profileLibrary.photo.title": "简历照片",
   "profileLibrary.photo.hint": "只显示正在使用的那一张；换或删点「照片库」",
   "profileLibrary.photo.formatError": "请选择 JPG、PNG 或 WebP 格式的照片",
-  "profileLibrary.photo.tooLarge": "照片不能超过 2 MB",
   "profileLibrary.photo.readFailed": "读取照片失败",
   /** 网申资料目录里「自定义」分组的名字（与后端 WebFormExtraProfile.groups 的值一致，不是界面文案）。 */
   "profileLibrary.webform.customGroupName": "自定义",

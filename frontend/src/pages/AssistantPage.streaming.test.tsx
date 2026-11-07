@@ -38,6 +38,9 @@ const apiMocks = vi.hoisted(() => ({
   listResumes: vi.fn(),
 }));
 const skillApiMocks = vi.hoisted(() => ({ listSkills: vi.fn() }));
+// T20：助手页会在打开会话后按会话轮询 Agent 任务；这里只替换列表，动作函数保留真实
+// 导出（page 用例不点任务按钮），避免未 mock 的 fetch 在 jsdom 里抛不可归因的错误。
+const agentTaskApiMocks = vi.hoisted(() => ({ listAgentTasks: vi.fn() }));
 const scrollIntoViewMock = vi.fn();
 
 // 先把真实导出铺开再覆盖要断言的那几个：只列名字的话，页面一旦导入新函数（比如批量删除），
@@ -59,6 +62,10 @@ vi.mock("../api/jobs", () => ({ listJobs: apiMocks.listJobs }));
 vi.mock("../api/resumes", () => ({ listResumes: apiMocks.listResumes }));
 // 页头会取一次技能列表；不拦掉的话 jsdom 里没有 fetch，会走到真实请求上。
 vi.mock("../api/skill", () => ({ listSkills: skillApiMocks.listSkills }));
+vi.mock("../api/agentTasks", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../api/agentTasks")>()),
+  listAgentTasks: agentTaskApiMocks.listAgentTasks,
+}));
 
 beforeEach(() => {
   // 流式会话状态是模块级全局 store（问题 B）：部分用例会把流挂起不结束，
@@ -86,6 +93,7 @@ beforeEach(() => {
   apiMocks.listJobs.mockReset().mockResolvedValue({ items: [], total: 0 });
   apiMocks.listResumes.mockReset().mockResolvedValue({ items: [], total: 0 });
   skillApiMocks.listSkills.mockReset().mockResolvedValue([]);
+  agentTaskApiMocks.listAgentTasks.mockReset().mockResolvedValue([]);
 });
 
 afterEach(() => {

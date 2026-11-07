@@ -434,3 +434,25 @@
 .assistant-write-proposal-actions {
   margin-top: 2px;
 }
+
+/* T01-A：写操作终态回写——一行状态提示，安静但可读（不是普通助手气泡）。 */
+.assistant-proposal-result {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: var(--rf-radius-control);
+  background: var(--rf-surface-alt);
+  color: var(--rf-text-secondary);
+  font-size: 12px;
+}
+
+.assistant-proposal-result-icon {
+  display: inline-flex;
+  color: var(--rf-success-text);
+}
+
+.assistant-proposal-result-summary {
+  font-size: 12px;
+}

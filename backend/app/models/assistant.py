@@ -4,7 +4,7 @@
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, Index, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from ..database import Base
@@ -63,8 +63,16 @@ class ChatMessage(Base):
     error: Mapped[str] = mapped_column(Text, default="")
     model: Mapped[str] = mapped_column(String(128), default="")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True)
+    kind: Mapped[str] = mapped_column(
+        String(16), default="normal", nullable=False, server_default="normal"
+    )
+    proposal_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
 
     conversation: Mapped[ChatConversation] = relationship(back_populates="messages")
+
+    __table_args__ = (
+        Index("uq_chat_message_proposal_kind", "proposal_id", "kind", unique=True),
+    )
 
 
 class AssistantSkill(Base):
@@ -107,3 +115,55 @@ class AssistantSkillFile(Base):
     size_bytes: Mapped[int] = mapped_column(Integer, default=0)
 
     skill: Mapped[AssistantSkill] = relationship(back_populates="files")
+
+
+class AssistantWriteProposal(Base):
+    """助手写操作提案（T01 单一事实源）。
+
+    为什么落库：提案状态必须能被「下一轮对话」与「重启后的下一轮对话」如实读到——
+    状态只存内存，重启即丢，模型只能复述历史消息里的旧说法（P0 根因）。
+
+    状态机：pending / approved / executed / failed / unknown / rejected / expired。
+
+    三个刻意的设计：
+    - **不持久化 token**：token 仍在批准时签发、同一请求内消费，只在服务端内存流转；
+    - ``dataset_key`` 是**稳定**的数据集标识（main / 16 位 hex id），不是进程内代次；
+      跨重启判定只认它。``dataset_generation`` 只用于同一进程内 A→B→A 的旧提案拦截，
+      且启动时 pending/approved 一律置 expired，所以代次不会成为跨重启语义的一部分；
+    - ``target_fingerprint`` 是创建时写入预览的摘要（预览里带着目标对象的版本证据，
+      如简历 revision / 记录 updated_at）。批准前重算预览再比对，目标已变就 409，
+      绝不用 30 分钟前的快照执行。
+    """
+
+    __tablename__ = "assistant_write_proposal"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    proposal_id: Mapped[str] = mapped_column(String(32), unique=True, index=True)
+    # 提案归属的会话与触发它的助手消息。会话可能被删、消息也可能被删，所以不建外键，
+    # 只保留线索；派生回写按 best-effort 处理（失败不影响状态正确性）。
+    conversation_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
+    message_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    dataset_key: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    dataset_generation: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+    tool_name: Mapped[str] = mapped_column(String(64), nullable=False)
+    arguments: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
+    arguments_digest: Mapped[str] = mapped_column(
+        String(64), default="", nullable=False, server_default=""
+    )
+    preview: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
+    target_fingerprint: Mapped[str] = mapped_column(
+        String(64), default="", nullable=False, server_default=""
+    )
+    status: Mapped[str] = mapped_column(
+        String(16), default="pending", nullable=False, index=True, server_default="pending"
+    )
+    result_summary: Mapped[str] = mapped_column(
+        Text, default="", nullable=False, server_default=""
+    )
+    error: Mapped[str] = mapped_column(Text, default="", nullable=False, server_default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime, index=True)
+    executed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    batch_id: Mapped[str | None] = mapped_column(String(32), nullable=True)

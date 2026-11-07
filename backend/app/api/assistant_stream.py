@@ -19,6 +19,7 @@ from ..services.assistant.assistant_web_search import (
     AssistantSearchError,
     is_local_resume_forge_question,
 )
+from ..services.assistant_run_trace import utcnow
 from ..services.assistant_tools import policy as tool_policy
 from ..services.assistant_tools import tool_definitions
 from ..services.llm.base import BaseLLMProvider, LLMError
@@ -34,7 +35,14 @@ from .assistant_persistence import (
     history_snapshot,
     update_message_context,
 )
-from .assistant_tool_exec import is_web_search, run_tool_call
+from .assistant_tool_exec import (
+    begin_run_trace,
+    close_run_trace,
+    is_web_search,
+    record_run_trace_step,
+    run_tool_call,
+    run_trace_payload,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -75,6 +83,7 @@ async def _stream_message_events(
     system_prompt: str,
     search_web_fn: Callable[[str], Awaitable[list[dict[str, str]]]],
     quoted: dict[str, Any] | None = None,
+    conversation_id: int | None = None,
 ) -> AsyncGenerator[str, None]:
     parts: list[str] = []
     metadata = dict(context_metadata)
@@ -90,6 +99,8 @@ async def _stream_message_events(
     numberer = SourceNumberer()
     # RF-14 §2.1.b/§2.2/§2.5：整链预算与用量遥测的协调器（assistant_budget）。
     budget = AssistantStreamBudget()
+    # T21 运行轨迹：进程内记录，收尾把白名单视图写进助手消息 context（JSON 列，零迁移）。
+    trace = begin_run_trace(provider, assistant_message_id, conversation_id)
     # 活预算硬墙钟接线（审计 PR-07-3）：provider 的每次传输尝试以整链剩余预算做
     # asyncio.timeout 上限——首字前静默、只发心跳帧的流也会被硬切；finally 复位。
     provider.request_budget = budget.operation_budget
@@ -235,7 +246,16 @@ async def _stream_message_events(
                     web_searches_used += 1
                 # RF-14 §2.1.b 检查点 2：每个工具调用发起前（运行中的工具不强制中断）。
                 budget.check()
-                record = await run_tool_call(call, numberer, factory, ctx)
+                step_started = utcnow()
+                record = await run_tool_call(
+                    call,
+                    numberer,
+                    factory,
+                    ctx,
+                    conversation_id=conversation_id,
+                    message_id=assistant_message_id,
+                )
+                record_run_trace_step(trace, record, ctx, step_started, provider)
                 tool_records.append(record)
                 messages.append(
                     {
@@ -284,6 +304,7 @@ async def _stream_message_events(
             # 工具记录属于**助手这条消息**：它描述的是助手做了什么，历史回看时挂在
             # 助手回复下最自然（来源则属于用户那条消息，见上面的联网分支）。
             assistant_context["tool_calls"] = tool_records
+            assistant_context["run_trace"] = run_trace_payload(trace)
             update_message_context(assistant_message_id, dict(assistant_context), factory=factory)
         else:
             # 到达轮次上限：停止继续调用工具，让用户看到已经做了什么。
@@ -310,6 +331,7 @@ async def _stream_message_events(
         # 用量总口径（§2.2-5）：token 缺失是 null（「未知」）不是 0；estimated_* 只在
         # 估算开启时存在。
         usage_payload = budget.usage_summary(provider=provider)
+        close_run_trace(trace, assistant_context, assistant_message_id, factory, status="ok")
         saved = finish_assistant_message(
             assistant_message_id,
             content=content,
@@ -326,6 +348,7 @@ async def _stream_message_events(
         # RF-14 §2.1.b-4：整链预算到期按 error 收尾，结束原因如实记 budget_exhausted——
         # 不冒充网络错误，也不归入用户取消分支（cancelled）。
         logger.warning("AI 助手回复超出时间预算，已中止：%s", exc)
+        close_run_trace(trace, assistant_context, assistant_message_id, factory, "failed")
         message = "回复超出时间预算，已中止"
         # 失败路径也收集最后一轮 usage（PR-07-6）：轮循环的 record_round 因异常
         # 被跳过，provider 的 last_usage 在上面的 aclose finally 里已写好。
@@ -344,6 +367,7 @@ async def _stream_message_events(
         yield format_sse({"type": "error", "message": message})
     except asyncio.CancelledError:
         # 用户断开（浏览器取消）路径同样收集最后一轮 usage：能拿到多少算多少。
+        close_run_trace(trace, assistant_context, assistant_message_id, factory, "cancelled")
         budget.record_round(provider)
         finish_assistant_message(
             assistant_message_id,
@@ -356,6 +380,7 @@ async def _stream_message_events(
         raise
     except LLMError:
         logger.warning("AI 助手模型调用失败（用户可见错误已固定脱敏）")
+        close_run_trace(trace, assistant_context, assistant_message_id, factory, "failed")
         budget.record_round(provider)
         finish_assistant_message(
             assistant_message_id,
@@ -368,6 +393,7 @@ async def _stream_message_events(
         yield format_sse({"type": "error", "message": "模型服务暂时无法处理本次请求，请稍后重试"})
     except Exception:  # noqa: BLE001 - 流式响应必须转换内部异常
         logger.exception("AI 助手流式回复发生内部错误")
+        close_run_trace(trace, assistant_context, assistant_message_id, factory, "failed")
         message = "回复过程中发生内部错误，请查看后端日志"
         budget.record_round(provider)
         finish_assistant_message(
@@ -383,6 +409,8 @@ async def _stream_message_events(
         # 活预算接线复位（防御性纪律，provider 实例不复用）；GeneratorExit（浏览器
         # 断开）也可能走这里，cancel_pending 在任何路径上都要把 pending 消息收尾。
         provider.request_budget = None
+        # T21：正常/异常/断流都在这里收尾（成功路径已在 finish 前写过，重复调用是幂等的）。
+        close_run_trace(trace, assistant_context, assistant_message_id, factory)
         # Closing an async generator can bypass CancelledError when the browser断开。
         cancel_pending_assistant_message(assistant_message_id, "".join(parts), factory=factory)
 
@@ -401,6 +429,7 @@ async def stream_message_events(
     system_prompt: str,
     search_web_fn: Callable[[str], Awaitable[list[dict[str, str]]]],
     quoted: dict[str, Any] | None = None,
+    conversation_id: int | None = None,
 ) -> AsyncIterator[str]:
     """流级租约入口（RF-03）：建流先取租约，切换持锁期间给出可读的 error 事件。
 
@@ -431,6 +460,7 @@ async def stream_message_events(
         system_prompt=system_prompt,
         search_web_fn=search_web_fn,
         quoted=quoted,
+        conversation_id=conversation_id,
     )
     try:
         async for event in inner:

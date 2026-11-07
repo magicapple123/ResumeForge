@@ -4,18 +4,20 @@
 单独成一个分片（而不是塞进 REPORT_TOOLS）的原因：这批工具是**同一份 v2 文档**上的
 读写，参数口径（path / section / entry / layout）与版本语义（revision +1、自动留档）
 共享一套约定，放一处才能保持描述一致；同时 REPORT_TOOLS 已到行数上限。
+
+T28 最后一批：get_resume_status / list_versions / list_variants 三条**只读**工具与真实
+GET/POST 路由成对存在，声明改由 action 契约层生成（as_tool(ActionSpec)）；其余五条
+（get_entry + 四个写工具）没有可安全等价迁移的路由（原因见
+app/services/actions/domains/resume_document.py 模块 docstring），保留原静态声明。
 """
 
 from __future__ import annotations
 
+from ..actions.domains.resume_document import resume_document_actions
+from ..actions.tool_adapter import as_tool
 from . import previews_document
-from ._types import Tool
-from .document_tools import (
-    _tool_get_entry,
-    _tool_get_resume_status,
-    _tool_list_variants,
-    _tool_list_versions,
-)
+from ._types import Tool, ToolPermission
+from .document_tools import _tool_get_entry
 from .document_write_tools import (
     _tool_add_resume_entry,
     _tool_reorder_sections,
@@ -29,58 +31,9 @@ _STATELESS_READ_NOTE = (
 )
 
 DOCUMENT_TOOLS: tuple[Tool, ...] = (
-    Tool(
-        name="get_resume_status",
-        description=(
-            "读取一份简历的**版面状态**：按当前正文与版式真实排一遍 PDF，返回实际页数、"
-            "是否需要更多页（pages_needed）、是否溢出（overflow）、页数上限、末页占用、"
-            "被截断的位置（哪一段/哪一条）与手动断页，并附带内容+排版预检的告警计数。"
-            "用户问「这版几页」「有没有溢出/超页」「分页里断页在哪」「版面有没有问题」时用它。"
-            "返回值里的 pagination_panel 是界面上看断页的面板与按钮，回答时指过去。"
-        ),
-        parameters={
-            "type": "object",
-            "properties": {
-                "resume_id": {"type": "integer", "description": "简历 id（先用 list_resumes 查）"}
-            },
-            "required": ["resume_id"],
-        },
-        handler=_tool_get_resume_status,
-    ),
-    Tool(
-        name="list_versions",
-        description=(
-            "列出某份简历保存过的命名版本（名称、改动摘要、是否冻结、来自第几版、创建时间）。"
-            "用户问「有哪些历史版本」「上次保存的那版叫什么」时用它。"
-            "恢复版本要由用户在制作台「版本」里操作，这里只读。"
-        ),
-        parameters={
-            "type": "object",
-            "properties": {
-                "resume_id": {"type": "integer", "description": "简历 id"},
-                "limit": {"type": "integer", "description": "可选，默认 50"},
-            },
-            "required": ["resume_id"],
-        },
-        handler=_tool_list_versions,
-    ),
-    Tool(
-        name="list_variants",
-        description=(
-            "列出某份简历派生过的岗位变体（名称、目标岗位/公司、语言、基于哪版派生、最近同步时间）。"
-            "用户问「有没有为这个岗位单独做过变体」「变体有哪些」时用它。变体的派生与同步只在"
-            "制作台「版本」里操作。"
-        ),
-        parameters={
-            "type": "object",
-            "properties": {
-                "resume_id": {"type": "integer", "description": "简历 id"},
-                "limit": {"type": "integer", "description": "可选，默认 50"},
-            },
-            "required": ["resume_id"],
-        },
-        handler=_tool_list_variants,
-    ),
+    as_tool(resume_document_actions()["get_resume_status"]),
+    as_tool(resume_document_actions()["list_versions"]),
+    as_tool(resume_document_actions()["list_variants"]),
     Tool(
         name="get_entry",
         description=(
@@ -101,6 +54,9 @@ DOCUMENT_TOOLS: tuple[Tool, ...] = (
             "required": ["resume_id", "path"],
         },
         handler=_tool_get_entry,
+        service_entry=None,
+        service_reason="经 assistant_tools.document_support 读写 v2 文档（内部唯一收口，无 services 符号）",
+        permission=ToolPermission.READ_ONLY,
     ),
     Tool(
         name="update_resume_field",
@@ -124,8 +80,9 @@ DOCUMENT_TOOLS: tuple[Tool, ...] = (
             "required": ["resume_id", "path", "value"],
         },
         handler=_tool_update_resume_field,
+        service_entry="resume.document_paths.write_document_value",
+        permission=ToolPermission.REVERSIBLE_WRITE,
         preview=previews_document.preview_update_resume_field,
-        writes=True,
     ),
     Tool(
         name="add_resume_entry",
@@ -162,8 +119,10 @@ DOCUMENT_TOOLS: tuple[Tool, ...] = (
             "required": ["resume_id", "section", "entry"],
         },
         handler=_tool_add_resume_entry,
+        service_entry=None,
+        service_reason="经 assistant_tools.document_support 读写 v2 文档（内部唯一收口，无 services 符号）",
+        permission=ToolPermission.REVERSIBLE_WRITE,
         preview=previews_document.preview_add_resume_entry,
-        writes=True,
     ),
     Tool(
         name="reorder_sections",
@@ -185,8 +144,10 @@ DOCUMENT_TOOLS: tuple[Tool, ...] = (
             "required": ["resume_id", "order"],
         },
         handler=_tool_reorder_sections,
+        service_entry=None,
+        service_reason="经 assistant_tools.document_support 读写 v2 文档（内部唯一收口，无 services 符号）",
+        permission=ToolPermission.REVERSIBLE_WRITE,
         preview=previews_document.preview_reorder_sections,
-        writes=True,
     ),
     Tool(
         name="set_entry_layout",
@@ -210,7 +171,9 @@ DOCUMENT_TOOLS: tuple[Tool, ...] = (
             "required": ["resume_id", "path", "layout"],
         },
         handler=_tool_set_entry_layout,
+        service_entry=None,
+        service_reason="经 assistant_tools.document_support 读写 v2 文档（内部唯一收口，无 services 符号）",
+        permission=ToolPermission.REVERSIBLE_WRITE,
         preview=previews_document.preview_set_entry_layout,
-        writes=True,
     ),
 )

@@ -17,6 +17,7 @@
 
 import type { RefObject } from "react";
 import { sendAssistantMessage } from "../../../api/assistant";
+import { buildAssistantClientContext } from "../clientContext";
 import { t } from "../../../i18n";
 import type {
   AssistantSource,
@@ -316,6 +317,13 @@ export async function sendAssistantStreamMessage(
         reasoning_effort: options.reasoningEffort,
         quoted_message_id: options.quotedMessageId,
         attachments: attachmentPayload,
+        // T25：带上"用户在哪一页、选中了哪条"的结构化线索；标题由后端按当前数据集重查。
+        // 查询串只用于白名单参数（`/jobs?job_id=N` 这类抽屉选中），路由表全是静态页，
+        // 不给它 selected 会一直是 undefined。
+        client_context: buildAssistantClientContext(
+          typeof window === "undefined" ? "" : window.location.pathname,
+          typeof window === "undefined" ? "" : window.location.search,
+        ),
       },
       handleEvent,
       controller.signal,

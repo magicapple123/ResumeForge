@@ -15,6 +15,34 @@ import type { Material } from "../types";
 import { getFilenameFromDisposition, request, requestRaw } from "./client";
 import { consumeSSE } from "./stream";
 
+/**
+ * 当前界面上下文（T25）：只送结构化标识，**标题一律由服务端按当前数据集重查**。
+ * 后端的 `AssistantClientContext` 是 `extra="forbid"`，多传字段会 422，所以这里只列三个字段。
+ */
+export type AssistantClientSelectionType =
+  | "job"
+  | "resume"
+  | "material"
+  | "claim"
+  | "knowledge"
+  | "tracker"
+  | "reminder"
+  | "interview_experience";
+
+export interface AssistantClientSelection {
+  type: AssistantClientSelectionType;
+  id: number;
+}
+
+export interface AssistantClientContext {
+  /** 路径形状的当前页面（不含查询串/片段）。 */
+  route: string;
+  /** 稳定视图标识（如 jobs / resume_detail）；解析不到时不编造，留空串。 */
+  view: string;
+  /** 从路径里确定性解析出的选中对象；解析不到就不传。 */
+  selected?: AssistantClientSelection;
+}
+
 function surfaceQuery(surface: AssistantSurface): string {
   return `surface=${encodeURIComponent(surface)}`;
 }
@@ -212,6 +240,8 @@ export function sendAssistantMessage(
     /** 引用某条历史消息追问；被引用内容的快照会存进消息里。 */
     quoted_message_id?: number | null;
     attachments?: AssistantAttachmentInput[];
+    /** T25：当前界面上下文；后端会重查选中对象，标题不由前端提供。 */
+    client_context?: AssistantClientContext;
   },
   onEvent: (event: AssistantStreamEvent) => void,
   signal?: AbortSignal,

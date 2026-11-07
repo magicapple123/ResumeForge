@@ -8,7 +8,6 @@
 import type {
   TrashBatchItem,
   TrashEmptyResult,
-  TrashPurgeBatchResult,
   TrashRestoreBatchResult,
   TrashSummary,
 } from "../types";
@@ -35,9 +34,4 @@ export function emptyTrash(type = ""): Promise<TrashEmptyResult> {
 /** 批量恢复（安全，无需二次确认）。逐条反馈哪几条成功。 */
 export function restoreTrashItems(items: TrashBatchItem[]): Promise<TrashRestoreBatchResult> {
   return request(`/trash/restore`, { method: "POST", body: JSON.stringify({ items }) });
-}
-
-/** 批量**彻底删除**（不可恢复；二次确认由前端负责）。逐条反馈哪几条成功。 */
-export function purgeTrashItems(items: TrashBatchItem[]): Promise<TrashPurgeBatchResult> {
-  return request(`/trash/purge`, { method: "POST", body: JSON.stringify({ items }) });
 }

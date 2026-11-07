@@ -14,42 +14,28 @@ from ..schemas.knowledge import (
     KNOWLEDGE_CONTENT_EXCERPT_CHARS,
     KnowledgeBatchDeleteResult,
     KnowledgeBatchRequest,
-    KnowledgeCreate,
     KnowledgeEntrySummary,
-    KnowledgeOut,
     KnowledgeTagsOut,
-    KnowledgeUpdate,
 )
 from ..services import trash
+from ..services.actions import add_action_route
+from ..services.actions.domains.knowledge import knowledge_actions
 from ..services.knowledge_service import (
-    create_knowledge,
     delete_knowledge,
     knowledge_categories,
-    knowledge_or_none,
-    list_knowledge,
     list_knowledge_page,
     list_knowledge_tags,
-    update_knowledge,
 )
 
 logger = logging.getLogger(__name__)
 
+
 router = APIRouter(prefix="/api/knowledge", tags=["knowledge"])
 
 
-@router.get("", response_model=list[KnowledgeEntrySummary])
-def read_knowledge(
-    q: str = Query(default=""),
-    category: str = Query(default=""),
-    db: Session = Depends(get_db),
-):
-    """旧全量列表端点（P1-6）：改用摘要 DTO，``content`` 只带 200 字截断。
-
-    搜索（``q``）与分类过滤的语义不变；全文仍走 ``GET /{knowledge_id}``。条目数千
-    之后全量正文会把响应拖到 MB 级，而列表消费方（历史前端、助手工具）只需要标题、
-    分类、标签与摘要——QA 实测同一份压力数据下搜索响应从 2.12MB 降到 KB 级。
-    """
-    return [_knowledge_summary(entry) for entry in list_knowledge(db, q=q, category=category)]
+# T28 Batch B：GET /api/knowledge 由契约层生成（ActionSpec 是参数/权限唯一真源）。
+# 注册位置仍由本文件里的调用点显式决定（原来的装饰器位置，保持注册顺序）。
+add_action_route(router, knowledge_actions()["list_knowledge"])
 
 
 def _knowledge_summary(entry: KnowledgeEntry) -> KnowledgeEntrySummary:
@@ -116,9 +102,8 @@ def read_knowledge_tags(db: Session = Depends(get_db)):
     return KnowledgeTagsOut(tags=list_knowledge_tags(db))
 
 
-@router.post("", response_model=KnowledgeOut, status_code=201)
-def create_knowledge_entry(payload: KnowledgeCreate, db: Session = Depends(get_db)):
-    return create_knowledge(db, payload)
+# T28 Batch B：POST /api/knowledge 由契约层生成（可逆写，带 preview）。
+add_action_route(router, knowledge_actions()["create_knowledge"])
 
 
 @router.post("/batch-delete", response_model=KnowledgeBatchDeleteResult)
@@ -148,22 +133,12 @@ def batch_delete_knowledge(payload: KnowledgeBatchRequest, db: Session = Depends
     return KnowledgeBatchDeleteResult(deleted=len(entries))
 
 
-@router.get("/{knowledge_id}", response_model=KnowledgeOut)
-def read_knowledge_entry(knowledge_id: int, db: Session = Depends(get_db)):
-    entry = knowledge_or_none(db, knowledge_id)
-    if entry is None:
-        raise HTTPException(status_code=404, detail="知识库条目不存在或已被删除")
-    return entry
+# T28 Batch B：GET /api/knowledge/{knowledge_id} 由契约层生成（只读）。
+add_action_route(router, knowledge_actions()["get_knowledge"])
 
 
-@router.put("/{knowledge_id}", response_model=KnowledgeOut)
-def save_knowledge_entry(
-    knowledge_id: int, payload: KnowledgeUpdate, db: Session = Depends(get_db)
-):
-    entry = knowledge_or_none(db, knowledge_id)
-    if entry is None:
-        raise HTTPException(status_code=404, detail="知识库条目不存在或已被删除")
-    return update_knowledge(db, entry, payload)
+# T28 Batch B：PUT /api/knowledge/{knowledge_id} 由契约层生成（可逆写，带 preview）。
+add_action_route(router, knowledge_actions()["update_knowledge"])
 
 
 @router.delete("/{knowledge_id}", status_code=204)

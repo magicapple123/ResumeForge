@@ -10,8 +10,10 @@ from sqlalchemy.orm import Session
 
 from ..database import get_db
 from ..models.resume import ResumeRecord
-from ..schemas.ats import AtsCheckOut, AtsCheckRequest
+from ..schemas.ats import AtsCheckRequest
 from ..services import trash
+from ..services.actions import add_action_route
+from ..services.actions.catalog import all_actions
 from ..services.ats_check import check_ats
 from ..services.resume import document_io
 
@@ -25,7 +27,7 @@ def _load_record(db: Session, resume_id: int) -> ResumeRecord:
     return record
 
 
-@router.post("/{resume_id}/ats-check", response_model=AtsCheckOut)
+add_action_route(router, all_actions()["check_ats_match"], route_path="/{resume_id}/ats-check")
 def ats_check(resume_id: int, payload: AtsCheckRequest, db: Session = Depends(get_db)):
     record = _load_record(db, resume_id)
     content, _conversion = document_io.document_for_record(db, record)

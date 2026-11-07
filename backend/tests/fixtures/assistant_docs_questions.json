@@ -1,0 +1,353 @@
+{
+  "meta": {
+    "task": "T30 文档检索质量：20 个真实问题与人工标注的期望命中标题",
+    "method": "期望标题由人工按文档正文语义标注：阅读 backend 索引的 docs/** 后，为每个问题指定唯一（或等价）的答案小节标题。howto 类要求 top1 命中带编号/列表的步骤小节；legacy 类覆盖“以前叫什么”。",
+    "notes": [
+      "所有期望小节都来自 docs/user-guide.md 与 docs/ui-copy-guide.md（不在 README/CHANGELOG 上做 top1 断言，避免文档改版把检索质量守卫变成排版约束）。",
+      "accepted_headings 是人工认可的等价答案小节（同一事实的权威出处只有一处时只列一处）。",
+      "expected_path_contains 用于区分同名小节（例如「怎么用」必须属于「6.5 网申填表」）。",
+      "answer_phrases 是第二指标（答案是否真的出现在 top1 摘要里），不参与“top1 命中”计数。"
+    ]
+  },
+  "questions": [
+    {
+      "id": "Q01",
+      "kind": "where",
+      "question": "「检查简历」面板在哪、会改我的简历吗？",
+      "expected_heading": "「检查简历」面板在哪、会改我的简历吗？",
+      "accepted_headings": [
+        "「检查简历」面板在哪、会改我的简历吗？"
+      ],
+      "answer_phrases": [
+        "只读",
+        "不会自动改稿"
+      ]
+    },
+    {
+      "id": "Q02",
+      "kind": "where",
+      "question": "简历照片在哪里设置？",
+      "expected_heading": "简历照片：存多张，选一张",
+      "accepted_headings": [
+        "简历照片：存多张，选一张"
+      ],
+      "answer_phrases": [
+        "照片库"
+      ]
+    },
+    {
+      "id": "Q03",
+      "kind": "where",
+      "question": "手动备份在哪里设置？",
+      "expected_heading": "手动备份与存储占用",
+      "accepted_headings": [
+        "手动备份与存储占用"
+      ],
+      "answer_phrases": [
+        "设置 → 备份与隐私",
+        "手动备份"
+      ]
+    },
+    {
+      "id": "Q04",
+      "kind": "where",
+      "question": "投投悬浮球在哪里打开？",
+      "expected_heading": "投投悬浮球：随时问助手",
+      "accepted_headings": [
+        "投投悬浮球：随时问助手"
+      ],
+      "answer_phrases": [
+        "设置 → 助手与 AI 行为 → 投投悬浮球"
+      ]
+    },
+    {
+      "id": "Q05",
+      "kind": "where",
+      "question": "数据集在哪里管理？",
+      "expected_heading": "数据集：多份数据与备份",
+      "accepted_headings": [
+        "数据集：多份数据与备份"
+      ],
+      "answer_phrases": [
+        "设置 → 数据与导出 → 数据集"
+      ]
+    },
+    {
+      "id": "Q06",
+      "kind": "howto",
+      "question": "网申填表怎么用？",
+      "expected_heading": "怎么用",
+      "accepted_headings": [
+        "怎么用"
+      ],
+      "expected_path_contains": [
+        "6.5 网申填表"
+      ],
+      "expect_steps": true,
+      "answer_phrases": [
+        "读取当前表单"
+      ]
+    },
+    {
+      "id": "Q07",
+      "kind": "howto",
+      "question": "简历怎么导出成PDF文件？",
+      "expected_heading": "导出：格式、水印与脱敏",
+      "accepted_headings": [
+        "导出：格式、水印与脱敏"
+      ],
+      "expect_steps": true,
+      "answer_phrases": [
+        "水印"
+      ]
+    },
+    {
+      "id": "Q08",
+      "kind": "howto",
+      "question": "删除的内容怎么恢复？",
+      "expected_heading": "回收站：删除不等于销毁",
+      "accepted_headings": [
+        "回收站：删除不等于销毁",
+        "我删掉的东西还能找回来吗？"
+      ],
+      "expect_steps": true,
+      "answer_phrases": [
+        "回收站",
+        "恢复"
+      ]
+    },
+    {
+      "id": "Q09",
+      "kind": "howto",
+      "question": "怎么新建数据集或者导入备份？",
+      "expected_heading": "数据集：多份数据与备份",
+      "accepted_headings": [
+        "数据集：多份数据与备份"
+      ],
+      "expect_steps": true,
+      "answer_phrases": [
+        "导入备份为新数据集"
+      ]
+    },
+    {
+      "id": "Q10",
+      "kind": "howto",
+      "question": "怎么把岗位加入投递队列并投递？",
+      "expected_heading": "加入队列并投递",
+      "accepted_headings": [
+        "加入队列并投递"
+      ],
+      "expect_steps": true,
+      "answer_phrases": [
+        "开始投递"
+      ]
+    },
+    {
+      "id": "Q11",
+      "kind": "howto",
+      "question": "怎么开一场模拟面试？",
+      "expected_heading": "开一场面试",
+      "accepted_headings": [
+        "开一场面试"
+      ],
+      "expect_steps": true,
+      "answer_phrases": [
+        "面试类型"
+      ]
+    },
+    {
+      "id": "Q12",
+      "kind": "rule",
+      "question": "同一段经历只能填一处是什么规则？",
+      "expected_heading": "判定规则：同一段经历只填一处",
+      "accepted_headings": [
+        "判定规则：同一段经历只填一处"
+      ],
+      "answer_phrases": [
+        "只填一处"
+      ]
+    },
+    {
+      "id": "Q13",
+      "kind": "rule",
+      "question": "求职进度的合并规则是什么？",
+      "expected_heading": "合并规则（两条是硬性的）",
+      "accepted_headings": [
+        "合并规则（两条是硬性的）"
+      ],
+      "answer_phrases": [
+        "合并"
+      ]
+    },
+    {
+      "id": "Q14",
+      "kind": "rule",
+      "question": "ATS 本地检测的结果代表真实招聘系统吗？",
+      "expected_heading": "ATS 本地检测的结果代表真实招聘系统吗？",
+      "accepted_headings": [
+        "ATS 本地检测的结果代表真实招聘系统吗？"
+      ],
+      "answer_phrases": [
+        "不代表"
+      ]
+    },
+    {
+      "id": "Q15",
+      "kind": "rule",
+      "question": "从1.x升级到2.0，旧库数据怎么处理？",
+      "expected_heading": "从 1.x 升级到 2.0：旧库整包归档，新库从空白开始",
+      "accepted_headings": [
+        "从 1.x 升级到 2.0：旧库整包归档，新库从空白开始"
+      ],
+      "answer_phrases": [
+        "legacy-archive"
+      ]
+    },
+    {
+      "id": "Q16",
+      "kind": "rule",
+      "question": "手动备份的包里默认包含密钥吗？",
+      "expected_heading": "手动备份与存储占用",
+      "accepted_headings": [
+        "手动备份与存储占用"
+      ],
+      "answer_phrases": [
+        "API Key"
+      ]
+    },
+    {
+      "id": "Q17",
+      "kind": "legacy",
+      "question": "「补充事实」去哪了？",
+      "expected_heading": "「补充事实」去哪了？",
+      "accepted_headings": [
+        "「补充事实」去哪了？"
+      ],
+      "answer_phrases": [
+        "已下线"
+      ]
+    },
+    {
+      "id": "Q18",
+      "kind": "legacy",
+      "question": "「文档大纲」去哪了？",
+      "expected_heading": "「文档大纲」去哪了？",
+      "accepted_headings": [
+        "「文档大纲」去哪了？"
+      ],
+      "answer_phrases": [
+        "本份简历结构"
+      ]
+    },
+    {
+      "id": "Q19",
+      "kind": "legacy",
+      "question": "论文发表和专利现在改叫哪个板块了？",
+      "expected_heading": "13 个板块：资料库现在按什么组织",
+      "accepted_headings": [
+        "13 个板块：资料库现在按什么组织"
+      ],
+      "answer_phrases": [
+        "学术成果",
+        "知识产权"
+      ]
+    },
+    {
+      "id": "Q20",
+      "kind": "legacy",
+      "question": "界面文案旧叫法改成正名的替换映射表在哪？",
+      "expected_heading": "2.2 三层定名（裁决）+ 替换映射表",
+      "accepted_headings": [
+        "2.2 三层定名（裁决）+ 替换映射表",
+        "替换映射表（执行方照此改）"
+      ],
+      "answer_phrases": [
+        "正名",
+        "模板",
+        "版式"
+      ]
+    }
+  ],
+  "spaced_questions": [
+    {
+      "id": "S01",
+      "kind": "howto",
+      "question": "怎么把简历导出成 PDF",
+      "expected_heading": "导出：格式、水印与脱敏",
+      "accepted_headings": [
+        "导出：格式、水印与脱敏"
+      ],
+      "expected_path_contains": [
+        "4. 制作、编辑和导出简历"
+      ],
+      "expect_steps": true,
+      "answer_phrases": [
+        "水印",
+        "PDF"
+      ]
+    },
+    {
+      "id": "S02",
+      "kind": "howto",
+      "question": "怎么 导入 CSV 岗位",
+      "expected_heading": "CSV 导入与导出",
+      "accepted_headings": [
+        "CSV 导入与导出"
+      ],
+      "expected_path_contains": [
+        "3. 录入和管理岗位"
+      ],
+      "expect_steps": true,
+      "answer_phrases": [
+        "CSV",
+        "导入"
+      ]
+    },
+    {
+      "id": "S03",
+      "kind": "where",
+      "question": "检查简历 会 改 我的简历 吗",
+      "expected_heading": "「检查简历」面板在哪、会改我的简历吗？",
+      "accepted_headings": [
+        "「检查简历」面板在哪、会改我的简历吗？"
+      ],
+      "expected_path_contains": [
+        "常见问题排查"
+      ],
+      "answer_phrases": [
+        "只读",
+        "不会自动改稿"
+      ]
+    },
+    {
+      "id": "S04",
+      "kind": "where",
+      "question": "找不到 中文字体 PDF 导出",
+      "expected_heading": "点「下载 PDF」提示找不到中文字体",
+      "accepted_headings": [
+        "点「下载 PDF」提示找不到中文字体"
+      ],
+      "expected_path_contains": [
+        "常见问题排查"
+      ],
+      "answer_phrases": [
+        "字体"
+      ]
+    },
+    {
+      "id": "S05",
+      "kind": "where",
+      "question": "手动备份 与 存储占用",
+      "expected_heading": "手动备份与存储占用",
+      "accepted_headings": [
+        "手动备份与存储占用"
+      ],
+      "expected_path_contains": [
+        "数据、备份与隐私"
+      ],
+      "answer_phrases": [
+        "手动备份"
+      ]
+    }
+  ]
+}

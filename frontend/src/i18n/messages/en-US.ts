@@ -62,7 +62,6 @@ import llmRecord from "./en-US.llmRecord";
 import educationSection from "./en-US.educationSection";
 import jobTable from "./en-US.jobTable";
 import jobAnalysis from "./en-US.jobAnalysis";
-import templateImport from "./en-US.templateImport";
 import webFormRecords from "./en-US.webFormRecords";
 import claimsPage from "./en-US.claimsPage";
 import browserStatus from "./en-US.browserStatus";
@@ -118,7 +117,6 @@ import resumeFieldDiffView from "./en-US.resumeFieldDiffView";
 import resumes from "./en-US.resumes";
 import resumesPage from "./en-US.resumesPage";
 import sections from "./en-US.sections";
-import styleTemplateEditor from "./en-US.styleTemplateEditor";
 import trackerImport from "./en-US.trackerImport";
 import writing from "./en-US.writing";
 import activationUi from "./en-US.activationUi";
@@ -229,7 +227,6 @@ const enUS = {
   ...educationSection,
   ...jobTable,
   ...jobAnalysis,
-  ...templateImport,
   ...webFormRecords,
   ...claimsPage,
   ...browserStatus,
@@ -285,7 +282,6 @@ const enUS = {
   ...resumes,
   ...resumesPage,
   ...sections,
-  ...styleTemplateEditor,
   ...trackerImport,
   ...writing,
   ...activationUi,

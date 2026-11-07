@@ -10,14 +10,19 @@ from sqlalchemy.orm import Session
 
 from ..database import get_db
 from ..schemas.analytics import DashboardOut
+from ..services.actions import add_action_route
+from ..services.actions.catalog import all_actions
 from ..services.analytics import build_dashboard
 
 logger = logging.getLogger(__name__)
 
+
+
+
 router = APIRouter(prefix="/api/analytics", tags=["analytics"])
 
 
-@router.get("/dashboard", response_model=DashboardOut)
+add_action_route(router, all_actions()["get_analytics_overview"], route_path="/dashboard")
 def read_dashboard(
     trend_months: int = Query(default=6, ge=1, le=24, description="趋势统计的自然月数（1..24）"),
     db: Session = Depends(get_db),

@@ -20,7 +20,10 @@ import re
 
 from sqlalchemy.orm import Session
 
-from . import previews
+from ..actions.domains.interview_experiences import interview_experience_actions
+from ..actions.domains.match_analyses import match_analysis_actions
+from ..actions.domains.referrals import referral_actions
+from ..actions.tool_adapter import as_tool
 from ._shared import MAX_PROFILE_RESULT_CHARS, _trim
 from ._types import Tool, ToolResult
 
@@ -219,99 +222,10 @@ def _tool_create_referral(db: Session, arguments: dict) -> ToolResult:
 # ===== 工具声明（整段由 _tools_specs_report 用 *P3_TOOLS 追加到 report 段尾）=====
 
 P3_TOOLS: tuple[Tool, ...] = (
-    Tool(
-        name="list_match_analyses",
-        description=(
-            "查看历史批量岗位适配度分析记录（岗位/状态/硬性门槛/准入结论/建议要点）。"
-            "用户问「之前的匹配分析怎么说」「分析记录里有什么」时用它。"
-            "注意：匹配度只有五类定性结论，没有分数或百分比，回答里也不要编数字评分。"
-        ),
-        parameters={
-            "type": "object",
-            "properties": {
-                "limit": {
-                    "type": "integer",
-                    "description": "可选，最多看多少个批次（每批含全部岗位），默认 5",
-                },
-            },
-            "required": [],
-        },
-        handler=_tool_list_match_analyses,
-    ),
-    Tool(
-        name="create_interview_experience",
-        description=(
-            "把一条真实面经记进面经知识库（公司/岗位/来源/被问到的真实问题/难度/轮次/日期）。"
-            "用户说「记个面经」「把这次面试经历存下来」时调用；"
-            "至少要有标题、公司、正文或问题清单之一，否则记不成。"
-        ),
-        parameters={
-            "type": "object",
-            "properties": {
-                "title": {"type": "string", "description": "标题，可选"},
-                "company": {"type": "string", "description": "公司名"},
-                "position": {"type": "string", "description": "岗位名"},
-                "content": {"type": "string", "description": "面经正文（过程、体验、怎么答的）"},
-                "questions": {
-                    "type": "array",
-                    "items": {"type": "string"},
-                    "description": "被问到的真实问题清单",
-                },
-                "tags": {"type": "array", "items": {"type": "string"}, "description": "标签，可选"},
-                "source": {
-                    "type": "string",
-                    "enum": ["self", "peer", "public"],
-                    "description": "来源：self 自己（默认）/ peer 同行 / public 公开",
-                },
-                "difficulty": {"type": "string", "description": "难度感受，如 简单/中等/困难"},
-                "round_type": {"type": "string", "description": "轮次，如 一面/二面/HR面/笔试"},
-                "interview_date": {
-                    "type": "string",
-                    "description": "面试日期，YYYY-MM-DD，未知留空",
-                },
-                "job_id": {"type": "integer", "description": "可选，关联岗位 id"},
-            },
-            "required": [],
-        },
-        handler=_tool_create_interview_experience,
-        preview=previews.preview_create_interview_experience,
-        writes=True,
-    ),
-    Tool(
-        name="create_referral",
-        description=(
-            "新增一条内推记录（公司/岗位/内推人/关系/渠道/状态）。"
-            "用户说「记一条内推」「XX 帮我内推了」时调用，至少要给公司或内推人之一；"
-            "状态默认进行中。内推码与备注图片等完整编辑请在「投递台」页做。"
-        ),
-        parameters={
-            "type": "object",
-            "properties": {
-                "company": {"type": "string", "description": "公司名"},
-                "position": {"type": "string", "description": "内推岗位名"},
-                "referrer_name": {"type": "string", "description": "内推人姓名"},
-                "referrer_contact": {"type": "string", "description": "内推人联系方式"},
-                "relation": {"type": "string", "description": "与内推人的关系，如 前同事/朋友"},
-                "channel": {"type": "string", "description": "渠道，如 牛客/脉脉/熟人直推"},
-                "status": {
-                    "type": "string",
-                    "enum": ["active", "submitted", "closed", "invalid"],
-                    "description": "状态，默认 active（进行中）",
-                },
-                "referral_code": {"type": "string", "description": "内推码，可选"},
-                "submitted_at": {
-                    "type": "string",
-                    "description": "内推提交日期，YYYY-MM-DD，未知留空",
-                },
-                "note": {"type": "string", "description": "备注"},
-                "job_id": {"type": "integer", "description": "可选，关联岗位 id（自动回填公司/岗位快照）"},
-            },
-            "required": [],
-        },
-        handler=_tool_create_referral,
-        preview=previews.preview_create_referral,
-        writes=True,
-    ),
+    # T28 收尾：路由（GET /api/jobs/match-batches）与工具成对，改由 action 契约层生成。
+    as_tool(match_analysis_actions()["list_match_analyses"]),
+    as_tool(interview_experience_actions()["create_interview_experience"]),
+    as_tool(referral_actions()["create_referral"]),
 )
 
 

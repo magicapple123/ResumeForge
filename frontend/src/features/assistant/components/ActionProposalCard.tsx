@@ -166,9 +166,11 @@ export default function ActionProposalCard({ proposal: initial }: Props) {
           {proposal.result_summary}
         </Typography.Text>
       )}
-      <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-        {t("assistantUi.actionProposal.notice")}
-      </Typography.Text>
+      {pending && (
+        <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+          {t("assistantUi.actionProposal.notice")}
+        </Typography.Text>
+      )}
       {pending && (
         <div className="assistant-write-proposal-actions">
           <Space>

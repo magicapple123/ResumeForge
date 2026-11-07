@@ -46,6 +46,8 @@ from app.services.datasets import create_dataset, import_dataset, list_datasets
 
 FIXTURE_DIR = Path(__file__).parent / "fixtures" / "backup-formats"
 FORMAT_FIXTURES = {1: "dataset", 3: "dataset", 4: "collection", 5: "dataset", 6: "dataset"}
+# 「表覆盖」的冻结快照：独立于 Base.metadata 的第二份事实，见 test_backup_table_coverage。
+TABLE_SNAPSHOT = Path(__file__).parent / "fixtures" / "backup_table_snapshot.json"
 
 
 def _read_manifest(archive: Path) -> dict:
@@ -56,6 +58,14 @@ def _read_manifest(archive: Path) -> dict:
 def _members(archive: Path) -> set[str]:
     with zipfile.ZipFile(archive) as handle:
         return set(handle.namelist())
+
+
+def _frozen_tables() -> set[str]:
+    """读冻结的表名快照（不从模型注册表推导，否则断言又是恒等式）。"""
+    payload = json.loads(TABLE_SNAPSHOT.read_text(encoding="utf-8"))
+    tables = payload["tables"]
+    assert len(tables) == len(set(tables)), "冻结快照里有重复表名"
+    return set(tables)
 
 
 def _rewrite_manifest(archive: Path, mutate) -> Path:
@@ -241,11 +251,33 @@ def test_uncovered_section_is_absent_when_nothing_is_left_out(data_dir, tmp_path
 
 
 def test_backup_table_coverage(tmp_path):
-    """新增模型表却没进清单 → 这里红。清单的表集合必须等于模型注册表。"""
+    """新增模型表却没进清单 → 这里红。清单的表集合必须等于**冻结快照**。
+
+    不能直接拿 ``manifest["tables"]`` 与 ``application_tables()`` 比：清单由
+    ``_APPLICATION_TABLES``（``application_tables()`` 的模块级快照）推导，两边同源，
+    比出来是恒等式——真加了表却漏进备份时它照样绿。冻结快照
+    ``fixtures/backup_table_snapshot.json`` 是独立于代码的第二份事实，新增/删除模型表
+    （含新迁移建表）时必须手工更新它；这一步就是「显式确认备份覆盖面」。
+    """
+    frozen = _frozen_tables()
     archive = create_backup_archive(engine, tmp_path / "staging")
     manifest = _read_manifest(archive)
+    listed = set(manifest["tables"])
 
-    assert set(manifest["tables"]) == set(application_tables())
+    missing = sorted(frozen - listed)
+    extra = sorted(listed - frozen)
+    assert not missing and not extra, (
+        "备份表清单与冻结快照不一致："
+        f"清单缺少 {missing}，多出 {extra}。"
+        "新增/删除模型表时请同步 backend/tests/fixtures/backup_table_snapshot.json，"
+        "并确认新表真的随备份导出，否则恢复时会丢数据。"
+    )
+    model_tables = set(application_tables())
+    assert model_tables == frozen, (
+        "模型注册表（application_tables()）与冻结快照不一致："
+        f"新增 {sorted(model_tables - frozen)}，消失 {sorted(frozen - model_tables)}。"
+        "新增/删除模型表时请同步 backend/tests/fixtures/backup_table_snapshot.json。"
+    )
 
 
 # ---------------------------------------------------------------------------

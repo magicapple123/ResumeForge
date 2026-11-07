@@ -1,9 +1,12 @@
 # SPDX-License-Identifier: Apache-2.0
 """事实台账接口。
 
-路由顺序有讲究：``/baseline`` 与 ``/draft`` 必须注册在 ``/{claim_id}`` **之前**，
-否则 FastAPI 会先匹配到带路径参数的那条，把 ``baseline`` 当成 claim_id 去解析成整数，
+路由顺序有讲究：`/baseline` 与 `/draft` 必须注册在 `/{claim_id}` **之前**，
+否则 FastAPI 会先匹配到带路径参数的那条，把 `baseline` 当成 claim_id 去解析成整数，
 返回一个和"路由不存在"很像的 422。
+
+T28 Batch B 起，列表/单条读取/新建/修改四条由 action 契约层生成（一份 ActionSpec 同时是
+工具与路由的唯一真源）；生成路由都注册在原装饰器位置，注册顺序不变。
 """
 
 import logging
@@ -17,30 +20,23 @@ from ..schemas.claim import (
     MAX_CLAIM_LIST_EXCERPT_CHARS,
     ClaimBatchDeleteResult,
     ClaimBatchRequest,
-    ClaimCreate,
     ClaimDigestOut,
     ClaimDraftOut,
     ClaimDraftRequest,
-    ClaimListOut,
-    ClaimOut,
     ClaimPageListOut,
     ClaimSummary,
-    ClaimUpdate,
 )
 from ..services import trash
+from ..services.actions import add_action_route
+from ..services.actions.domains.claims import claim_actions
+from ..services.actions.pilots import pilot_actions
 from ..services.claim_draft import draft_from_text
 from ..services.claims import (
     build_baseline,
-    claim_or_none,
-    claim_out,
     claim_warnings,
-    create_claim,
     delete_claim,
-    list_claims,
     list_claims_page,
-    summarize,
     summarize_query,
-    update_claim,
 )
 from ..services.llm.base import LLMError
 from ..services.ui_locale import get_ui_locale
@@ -49,29 +45,13 @@ router = APIRouter(prefix="/api/claims", tags=["claims"])
 logger = logging.getLogger(__name__)
 
 
-@router.get("", response_model=ClaimListOut)
-def read_claims(
-    category: str = Query(default=""),
-    status: str = Query(default=""),
-    keyword: str = Query(default=""),
-    db: Session = Depends(get_db),
-):
-    """列出事实台账条目；可按分类、核实状态与关键词过滤。"""
-    if category and category not in CLAIM_CATEGORIES:
-        raise HTTPException(status_code=422, detail="未知的台账分类")
-    if status and status not in VERIFICATION_STATUSES:
-        raise HTTPException(status_code=422, detail="未知的核实状态")
-    records = list_claims(db, category=category, status=status, keyword=keyword)
-    locale = get_ui_locale(db)
-    return ClaimListOut(
-        items=[claim_out(record, locale) for record in records],
-        **summarize(records),
-    )
+# T27 试点 1：GET /api/claims 由契约层生成（ActionSpec 是参数/权限/描述的唯一真源）。
+# 注册位置仍由本文件里的调用点显式决定（原来的装饰器位置，保持注册顺序）。
+add_action_route(router, pilot_actions()["list_claims"])
 
 
-@router.post("", response_model=ClaimOut, status_code=201)
-def create_claim_entry(payload: ClaimCreate, db: Session = Depends(get_db)):
-    return claim_out(create_claim(db, payload), get_ui_locale(db))
+# T28 Batch B：POST /api/claims 由契约层生成（原 create_claim_entry 位置）。
+add_action_route(router, claim_actions()["create_claim"])
 
 
 @router.get("/baseline", response_model=ClaimDigestOut)
@@ -119,11 +99,11 @@ def read_claims_page(
 ):
     """分页列出事实台账（RF-08 续）：过滤语义与旧端点一致，汇总改 SQL 计数。
 
-    旧端点 ``GET /api/claims`` 一次返回**全量**条目（DTO 还带 8_000 字符级的原文
+    旧端点 `GET /api/claims` 一次返回**全量**条目（DTO 还带 8_000 字符级的原文
     与表述全文），千级台账时既拖响应也拖渲染；本端点按页取摘要行，汇总
     （total/confirmed/pending/category_counts）对**同一份过滤集合**用 SQL 计数，
-    口径与旧端点的内存汇总一致（一致性由测试钉住）。**声明在 ``/{claim_id}``
-    之前**（同 ``/baseline`` 的理由）。
+    口径与旧端点的内存汇总一致（一致性由测试钉住）。**声明在 `/{claim_id}`
+    之前**（同 `/baseline` 的理由）。
     """
     if category and category not in CLAIM_CATEGORIES:
         raise HTTPException(status_code=422, detail="未知的台账分类")
@@ -144,9 +124,9 @@ def read_claims_page(
 def batch_delete_claims(payload: ClaimBatchRequest, db: Session = Depends(get_db)):
     """批量移入回收站（软删除）：单次上限 500，与简历批量删除同一口径。
 
-    语义对齐单条 ``DELETE /{claim_id}``：任何一条 id 不存在或已在回收站里即整体
-    404 并附缺失 id 清单，不做"删一半"。**声明在 ``/{claim_id}`` 之前**（同
-    ``/baseline`` 的理由）。
+    语义对齐单条 `DELETE /{claim_id}`：任何一条 id 不存在或已在回收站里即整体
+    404 并附缺失 id 清单，不做"删一半"。**声明在 `/{claim_id}` 之前**（同
+    `/baseline` 的理由）。
     """
     records: list[ClaimRecord] = []
     missing: list[int] = []
@@ -167,20 +147,12 @@ def batch_delete_claims(payload: ClaimBatchRequest, db: Session = Depends(get_db
     return ClaimBatchDeleteResult(deleted=len(records))
 
 
-@router.get("/{claim_id}", response_model=ClaimOut)
-def read_claim(claim_id: int, db: Session = Depends(get_db)):
-    record = claim_or_none(db, claim_id)
-    if record is None:
-        raise HTTPException(status_code=404, detail="台账条目不存在或已被删除")
-    return claim_out(record, get_ui_locale(db))
+# T28 Batch B：GET /api/claims/{claim_id} 由契约层生成（原 read_claim 位置）。
+add_action_route(router, claim_actions()["get_claim"])
 
 
-@router.put("/{claim_id}", response_model=ClaimOut)
-def save_claim(claim_id: int, payload: ClaimUpdate, db: Session = Depends(get_db)):
-    record = claim_or_none(db, claim_id)
-    if record is None:
-        raise HTTPException(status_code=404, detail="台账条目不存在或已被删除")
-    return claim_out(update_claim(db, record, payload), get_ui_locale(db))
+# T28 Batch B：PUT /api/claims/{claim_id} 由契约层生成（原 save_claim 位置）。
+add_action_route(router, claim_actions()["update_claim"])
 
 
 @router.delete("/{claim_id}", status_code=204)

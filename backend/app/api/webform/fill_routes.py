@@ -16,13 +16,14 @@ from ...models.web_form_record import SOURCE_BATCH
 from ...schemas.webform import (
     WebFormFillIn,
     WebFormFillOut,
-    WebFormFillRecordOut,
     WebFormPreviewIn,
     WebFormPreviewOut,
     WebFormSnapshotOut,
 )
 from ...services import diagnostics
 from ...services import webform as webform_service
+from ...services.actions import add_action_route
+from ...services.actions.catalog import all_actions
 from ...services.settings_service import get_webform_relaxed_mode
 from ._shared import _raise, logger
 
@@ -244,7 +245,7 @@ def _record_fill(
 # 回看用：每次「填充到页面」落一条。删除走回收站（软删），彻底删除在回收站里另做。
 
 
-@router.get("/records", response_model=list[WebFormFillRecordOut])
+add_action_route(router, all_actions()["list_web_form_fills"], route_path="/records")
 def list_records(
     limit: int = Query(
         default=webform_service.history.DEFAULT_LIST_LIMIT,
@@ -257,7 +258,7 @@ def list_records(
     return webform_service.history.list_records(db, limit=limit)
 
 
-@router.get("/records/{record_id}", response_model=WebFormFillRecordOut)
+add_action_route(router, all_actions()["get_web_form_fill"], route_path="/records/{record_id}")
 def read_record(record_id: int, db: Session = Depends(get_db)):
     record = webform_service.history.record_or_none(db, record_id)
     if record is None:

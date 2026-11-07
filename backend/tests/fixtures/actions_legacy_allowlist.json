@@ -1,0 +1,82 @@
+{
+  "version": 1,
+  "review_after": "2027-02-28",
+  "note": "T28 迁移完成后的存量静态 Tool(...) 逐名 allowlist：每项必须写 reason 与迁移/评审说明，review_after 到期前必须重新评审。新增工具必须走 define_action + as_tool；迁移一个存量工具就从本文件删除对应条目（幽灵条目会让守卫变红）。",
+  "tools": {
+    "add_profile_entry": {
+      "reason": "no_http_route",
+      "note": "助手专属的『往资料里追加一条经历/技能』聚合写入口，没有独立 HTTP 端点；等价写操作是 PUT/PATCH /api/profile，入参与副作用不同，需先设计条目级契约。",
+      "review_after": "2027-02-28"
+    },
+    "add_resume_entry": {
+      "reason": "no_http_route",
+      "note": "没有通用『往简历某板块追加条目』路由；/append-profile-entries 入参是资料条目 id 列表，无法与工具的 {section, fields, body, layout} 共用同一个 input_model。",
+      "review_after": "2027-02-28"
+    },
+    "diagnose_recent_errors": {
+      "reason": "assistant_only_aggregate",
+      "note": "只聚合本机任务/投递/网申失败枚举与日志白名单字段，是助手诊断专属读能力，没有对应 HTTP 端点（且刻意不返回日志原文）。",
+      "review_after": "2027-02-28"
+    },
+    "get_entry": {
+      "reason": "no_http_route",
+      "note": "没有单条读取路由（只有整份 GET /api/resumes/{id}）；单独读取是助手侧按 id 定位的读能力。",
+      "review_after": "2027-02-28"
+    },
+    "get_overview": {
+      "reason": "assistant_only_aggregate",
+      "note": "首页/分析概览由 GET /api/jobs、/api/resumes、/api/profile 多个接口组合而成，没有单一等价路由。",
+      "review_after": "2027-02-28"
+    },
+    "get_resume_preflight": {
+      "reason": "special_route_dependency",
+      "note": "对应 POST /api/resumes/{id}/preflight 需要注入 Request 做本地仅访问校验，同步 ActionSpec.run 无法安全委托；保留静态声明。",
+      "review_after": "2027-02-28"
+    },
+    "read_skill_knowledge": {
+      "reason": "assistant_only_aggregate",
+      "note": "读取助手技能的知识文件是模型上下文能力，没有等价 HTTP 端点（技能 CRUD 另有路由）。",
+      "review_after": "2027-02-28"
+    },
+    "reorder_sections": {
+      "reason": "no_http_route",
+      "note": "没有『重排简历板块/条目』路由；PUT /api/profile/section-order 是资料板块（另一对象），PUT content 是整份替换。",
+      "review_after": "2027-02-28"
+    },
+    "run_resume_quality_check": {
+      "reason": "async_or_streaming",
+      "note": "对应 POST /api/resumes/{id}/risk-scan 是 async handler（可能做可选远端增强），同步 ActionSpec.run 无法直接委托；工具侧本地规则语义见 T29。",
+      "review_after": "2027-02-28"
+    },
+    "search_product_docs": {
+      "reason": "assistant_only_aggregate",
+      "note": "检索本地产品文档是助手专属只读能力，没有 HTTP 端点。",
+      "review_after": "2027-02-28"
+    },
+    "set_entry_layout": {
+      "reason": "no_http_route",
+      "note": "没有条目级布局路由；PATCH /api/resumes/{id}/layout 是简历级版式参数（另一个对象）。",
+      "review_after": "2027-02-28"
+    },
+    "update_format_template": {
+      "reason": "semantic_conflict_pending_design",
+      "note": "HttpRoute 要求路径参数 template_id 必填，而旧工具允许『只给 template_name 按名定位』；同一 input_model 无法同时表达两种必填语义，硬迁会让工具失去按名修改能力。",
+      "review_after": "2027-02-28"
+    },
+    "update_resume": {
+      "reason": "semantic_conflict_pending_design",
+      "note": "工具只改收藏/备注两个标记字段，对应路由是 PATCH /api/resumes/{id}/favorite 与 /note；PATCH /api/resumes/{id} 是改名且 title 必填，单 http 无法安全表达。",
+      "review_after": "2027-02-28"
+    },
+    "update_resume_field": {
+      "reason": "async_or_streaming",
+      "note": "最接近的 /writing/rewrite-field 是 async + Request + 模型调用、只返回建议不落库，与『确定性写字段』语义不同。",
+      "review_after": "2027-02-28"
+    },
+    "web_search": {
+      "reason": "no_http_route",
+      "note": "助手联网检索能力（external_side_effect 四级权限刻意留空），没有 HTTP 端点。",
+      "review_after": "2027-02-28"
+    }
+  }
+}

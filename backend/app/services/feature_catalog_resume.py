@@ -39,6 +39,7 @@ RESUME_SECTION: tuple[FeatureEntry, ...] = (
         "简历中心",
         "版本对比",
         "简历中心 → 列表行「更多操作」→「版本对比」（**不在简历详情里**；对比对象只能选当前页的简历；本地 difflib 计算，不调模型）",
+        ("compare_resume_versions",),
     ),
     FeatureEntry(
         "export_formats",
@@ -69,6 +70,7 @@ RESUME_SECTION: tuple[FeatureEntry, ...] = (
         "简历中心",
         "质量检测",
         "简历详情 → 「质量检测」，两个页签：「风险扫描」（查重 / 敏感词 / 夸大风险 / 面试深挖风险点 / 合规校验，只提示不改正文）与「ATS 检测」（可贴 JD，结果**强制带免责**：本地规则估计，不代表真实 ATS 解析结果）",
+        ("run_resume_quality_check", "check_ats_match"),
     ),
     FeatureEntry(
         "consistency_check",
@@ -119,6 +121,7 @@ RESUME_SECTION: tuple[FeatureEntry, ...] = (
         "制作台检查",
         "简历中心 → 简历制作台 → 顶部动作条「检查简历」：一次检查内容 / 排版 / 导出产物三层，"
         "问题按「必须解决 / 需核对 / 排版建议」分组，给位置与修复入口，修完点「重新检查」复检；全程只读不改稿",
+        ("get_resume_preflight",),
     ),
     FeatureEntry(
         "proview",

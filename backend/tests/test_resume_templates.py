@@ -240,7 +240,8 @@ def test_style_template_cannot_be_created_or_copied(client, db_session):
         json={"name": "我的深色模板", "kind": "style", "html": CUSTOM_STYLE, "description": "测试"},
     )
     assert created.status_code == 400
-    assert created.json()["detail"] == "自制模板已下线，只能创建版式"
+    detail = created.json()["detail"]
+    assert (detail["message"] if isinstance(detail, dict) else detail) == "自制模板已下线，只能创建版式"
 
     catalog = client.get("/api/resumes/templates").json()
     assert [item for item in catalog["templates"] if item["custom"]] == []

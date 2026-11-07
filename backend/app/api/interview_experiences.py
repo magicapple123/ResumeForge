@@ -17,35 +17,29 @@ from ..schemas.interview_experience import (
     MAX_EXPERIENCE_EXCERPT_CHARS,
     InterviewExperienceBatchDeleteResult,
     InterviewExperienceBatchRequest,
-    InterviewExperienceCreate,
     InterviewExperienceOut,
     InterviewExperienceSummary,
     InterviewExperienceUpdate,
 )
 from ..services import trash
+from ..services.actions import add_action_route
+from ..services.actions.domains.interview_experiences import interview_experience_actions
 from ..services.interview.interview_experience_service import (
-    create_experience,
     delete_experience,
     experience_or_none,
-    list_experiences,
     list_experiences_page,
     update_experience,
 )
 
 logger = logging.getLogger(__name__)
 
+
 router = APIRouter(prefix="/api/interview-experiences", tags=["interview-experiences"])
 
 
-@router.get("", response_model=list[InterviewExperienceOut])
-def read_experiences(
-    keyword: str = Query(default=""),
-    company: str = Query(default=""),
-    source: str = Query(default=""),
-    limit: int = Query(default=100, ge=1, le=500),
-    db: Session = Depends(get_db),
-):
-    return list_experiences(db, keyword=keyword, company=company, source=source, limit=limit)
+# T28 Batch B：GET /api/interview-experiences 由契约层生成（ActionSpec 是唯一真源）。
+# 注册位置仍由本文件里的调用点显式决定（原来的装饰器位置，保持注册顺序）。
+add_action_route(router, interview_experience_actions()["list_interview_experiences"])
 
 
 @router.get("/sources", response_model=list[str])
@@ -95,9 +89,7 @@ def read_experiences_page(
     return Page(items=[_experience_summary(row) for row in rows], total=total)
 
 
-@router.post("", response_model=InterviewExperienceOut, status_code=201)
-def create_experience_entry(payload: InterviewExperienceCreate, db: Session = Depends(get_db)):
-    return create_experience(db, payload)
+add_action_route(router, interview_experience_actions()["create_interview_experience"])
 
 
 @router.post("/batch-delete", response_model=InterviewExperienceBatchDeleteResult)

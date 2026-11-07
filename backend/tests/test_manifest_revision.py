@@ -13,7 +13,7 @@ from alembic import command
 from app.database_migrations import build_alembic_config
 from app.services.data_backup.manifest import build_manifest, current_head_revision
 from sqlalchemy import create_engine
-from tests.migration_refs import BASELINE_REVISION
+from tests.migration_refs import head_revision
 
 _OLD_LIBRARY_REVISION = "0075_profile_section_job_filter"
 
@@ -68,8 +68,8 @@ def test_manifest_without_snapshot_keeps_code_head(tmp_path) -> None:
     assert manifest["alembic_revision"] == expected
 
 
-def test_current_2_0_library_snapshot_reports_baseline_revision(tmp_path) -> None:
-    """回归确认：2.0 自己导出的包，外层清单的 revision 仍是新基线。"""
+def test_current_2_0_library_snapshot_reports_current_head_revision(tmp_path) -> None:
+    """回归确认：当前版本的库导出的包，外层清单的 revision 是真实迁移 head。"""
     database_file = tmp_path / "resume_forge.db"
     engine = create_engine(f"sqlite:///{database_file.as_posix()}")
     try:
@@ -81,4 +81,4 @@ def test_current_2_0_library_snapshot_reports_baseline_revision(tmp_path) -> Non
         manifest = build_manifest(bind, snapshot=database_file)
     finally:
         bind.dispose()
-    assert manifest["alembic_revision"] == BASELINE_REVISION
+    assert manifest["alembic_revision"] == head_revision()

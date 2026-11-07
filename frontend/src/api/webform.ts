@@ -19,7 +19,6 @@ import type {
   WebFormRepeatedRecord,
   WebFormSnapshot,
   WebFormUrlHistoryList,
-  WebFormBrowserTargetList,
   WebFormScope,
 } from "../types";
 import type { Page } from "../types/common";
@@ -105,20 +104,6 @@ export function listWebFormUrlHistory(): Promise<WebFormUrlHistoryList> {
 
 export function deleteWebFormUrlHistory(id: number): Promise<void> {
   return request(`/webform/url-history/${id}`, { method: "DELETE" });
-}
-
-export function listWebFormBrowserTargets(): Promise<WebFormBrowserTargetList> {
-  return request("/webform/browser/targets");
-}
-
-export function setWebFormBrowserTargetLive(
-  targetId: string,
-  enabled: boolean,
-): Promise<{ target_id: string; live_enabled: boolean }> {
-  return request(`/webform/browser/targets/${encodeURIComponent(targetId)}/live`, {
-    method: "POST",
-    body: JSON.stringify({ enabled }),
-  });
 }
 
 export function stopWebFormBrowser(): Promise<void> {

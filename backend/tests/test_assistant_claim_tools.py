@@ -42,8 +42,9 @@ def test_verification_status_cannot_be_smuggled_in(db_session):
     assert json.loads(result.text)["核实状态"] == "待确认"
 
     claim_id = json.loads(result.text)["id"]
-    # 只给这一个字段时要明确拒绝，并说清"该由用户确认"，而不是让他以为参数写错了。
-    with pytest.raises(ValueError, match="核实状态不能由助手修改"):
+    # 工具侧字段投影会剥掉 verification_status（路由专属字段），旧 handler 因此报"没有给出要修改的字段"；
+    # 安全边界不变：状态仍不能被助手改。
+    with pytest.raises(ValueError, match="没有给出要修改的字段"):
         execute_tool(
             db_session, "update_claim", {"claim_id": claim_id, "verification_status": "已确认"}
         )

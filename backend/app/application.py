@@ -7,7 +7,6 @@ import sys
 from contextlib import asynccontextmanager
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
-from typing import Any
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
@@ -32,7 +31,12 @@ from .middleware import (
 from .middleware.dataset_request import DatasetRequestMiddleware
 from .runtime.log_context import LogContextFilter
 from .runtime.log_redact import RedactExceptionFilter
+
+# 422 中文文案的唯一映射表放在中立层：HTTP 出口（本文件）与 action 契约层
+# （``services.actions.spec.validate_input``）共用同一份，避免两侧文案分叉。
+from .runtime.validation_copy import VALIDATION_MESSAGE_MAX_CHARS, validation_message
 from .services import startup_gate
+from .services.agent_task_recovery import recover_running_tasks
 from .services.ai_task_recovery import fail_orphaned_ai_tasks
 from .services.apply import apply_service
 from .services.apply.task_runner import get_task_runner
@@ -219,6 +223,22 @@ async def lifespan(_app: FastAPI):
             fail_orphaned_ai_tasks(session)
         except Exception:  # noqa: BLE001 - 清理失败不应阻断启动
             startup_logger.warning("清理中断的 AI 任务失败", exc_info=True)
+        try:
+            # T19：Agent 任务跨重启语义是 running → paused（不是 failed）：用户确认后
+            # 从 resume_cursor 继续，已完成的步骤不重跑；等待审批的任务不在这里收尾。
+            recover_running_tasks(session)
+        except Exception:  # noqa: BLE001 - 恢复失败不应阻断启动
+            startup_logger.warning("恢复中断的 Agent 任务失败", exc_info=True)
+    # T01：写操作提案跨重启语义——内存 token 已随进程丢失，pending/approved 必须
+    # 一律置 expired（否则会出现"界面上还能确认、后端却执行不了"的假象）；同时按
+    # 隐私最小化清理过期提案的参数与预览。失败不阻断启动（最坏是多留几条旧状态）。
+    from .services.assistant_tools import proposal_store
+
+    try:
+        proposal_store.expire_stale()
+        proposal_store.purge_expired_payloads()
+    except Exception:  # noqa: BLE001 - 清理失败不应阻断启动
+        startup_logger.warning("清理未完成的写操作提案失败", exc_info=True)
     startup_logger.info("启动自检完成，开始接收请求")
     # 自动备份放后台调度线程（RF-05）：启动时先检查一次"是否到期"，之后每个
     # check_seconds 周期再查；快照可能几百 MB，不能让它卡住"开始接收请求"这一行。
@@ -229,6 +249,10 @@ async def lifespan(_app: FastAPI):
         auto_backup_scheduler.start_scheduler(runtime_settings.auto_backup_check_seconds)
         # 唤醒一次：启动时立即做首轮到期检查（与旧行为一致），之后按周期调度。
         auto_backup_scheduler.trigger_check()
+    # T26：提醒到期 → 任务卡（默认关；开启时启动低频扫描并唤醒一次补扫最近 24h）。
+    from .services.agent_task_events import start_scheduler_if_enabled
+
+    start_scheduler_if_enabled()
     # 关闭时不创建空线程：它没有备份工作，却会在请求/数据集切换时短暂争抢租约。
     # 用户文件副本的启动回填同样放后台：扫描的是 base64 大字段，但 best-effort、
     # 幂等，失败只记日志，绝不阻断启动或请求。
@@ -259,63 +283,7 @@ async def _store_error_handler(_request: Request, exc: Exception) -> JSONRespons
     return JSONResponse(status_code=int(getattr(exc, "status_code", 400)), content=content)
 
 
-# 422 参数校验的中文化词表：只翻译 Pydantic 的内置英文文案，自定义校验器写的中文原样保留。
-# 文案口径：说清"哪里错 + 限制是多少"，不回显输入原文（超长正文不该出现在错误响应里）。
-_VALIDATION_TYPE_MESSAGES = {
-    "missing": "缺少必填字段",
-    "string_type": "应为文本",
-    "int_type": "应为整数",
-    "float_type": "应为数字",
-    "bool_type": "应为布尔值",
-    "list_type": "应为列表",
-    "dict_type": "应为对象",
-    "string_too_short": "内容太短",
-    "string_too_long": "内容过长",
-    "too_short": "数量太少",
-    "too_long": "数量太多",
-    "literal_error": "取值不在允许范围内",
-    "enum": "取值不在允许范围内",
-    "extra_forbidden": "包含不支持的字段",
-    "json_invalid": "请求体不是合法的 JSON",
-    "bool_parsing": "布尔值格式不正确",
-    "int_parsing": "整数格式不正确",
-    "float_parsing": "数字格式不正确",
-    "date_parsing": "日期格式不正确",
-    "datetime_parsing": "日期时间格式不正确",
-    "time_parsing": "时间格式不正确",
-    "url_parsing": "链接格式不正确",
-    "string_pattern_mismatch": "格式不符合要求",
-}
-_VALIDATION_MESSAGE_MAX_CHARS = 300
-
-
-def _validation_message(error: dict[str, Any]) -> str:
-    """单条校验错误的中文文案；自定义校验器（value_error）保留其原始中文。"""
-    type_ = str(error.get("type") or "")
-    context = error.get("ctx") or {}
-    raw_message = str(error.get("msg") or "").strip()
-    if type_ in {"value_error", "assertion_error"}:
-        message = raw_message.removeprefix("Value error, ").strip()
-        return message or "参数不合法"
-    if type_ == "string_too_short":
-        minimum = context.get("min_length")
-        return f"内容至少需要 {minimum} 个字符" if minimum else "内容不能为空"
-    if type_ == "string_too_long":
-        maximum = context.get("max_length")
-        return f"内容不能超过 {maximum} 个字符" if maximum else "内容超出长度上限"
-    if type_ == "too_short":
-        minimum = context.get("min_length")
-        return f"至少需要 {minimum} 项" if minimum else "数量太少"
-    if type_ == "too_long":
-        maximum = context.get("max_length")
-        return f"最多允许 {maximum} 项" if maximum else "数量太多"
-    if type_ in {"literal_error", "enum"}:
-        expected = str(context.get("expected") or "").strip()
-        return f"取值不在允许范围内（可选值：{expected}）" if expected else "取值不在允许范围内"
-    return _VALIDATION_TYPE_MESSAGES.get(type_) or "参数格式不正确"
-
-
-async def _validation_error_handler(_request: Request, exc: Exception) -> JSONResponse:
+async def _validation_error_handler(request: Request, exc: Exception) -> JSONResponse:
     """把 422 校验错误统一成中文、且**不回显输入原文**的 {detail: [...]} 契约。
 
     为什么用全局 handler：AI 与其它写入端点共享同一套 Pydantic 校验，逐端点翻译必然漏；
@@ -331,10 +299,14 @@ async def _validation_error_handler(_request: Request, exc: Exception) -> JSONRe
         {
             "type": str(error.get("type") or ""),
             "loc": list(error.get("loc") or ()),
-            "msg": _validation_message(error)[:_VALIDATION_MESSAGE_MAX_CHARS],
+            "msg": validation_message(error)[:VALIDATION_MESSAGE_MAX_CHARS],
         }
         for error in exc.errors()
     ]
+    # 422 也要落日志（T31 诊断才查得到）：只记状态码/原路径/首个错误类型，不记输入原文与请求体。
+    logging.getLogger(__name__).warning(
+        "校验失败 status=422 path=%s type=%s", request.url.path, items[0]["type"] if items else "-"
+    )
     return JSONResponse(status_code=422, content={"detail": items})
 
 

@@ -50,6 +50,9 @@ _AUTO_BACKUP_INTERVAL_KEY = "auto_backup_interval_days"
 # 求职助手放宽模式：开启后助手可读取完整资料（含姓名、电话等敏感字段）与
 # 网申填写记录、历史对话。默认必须**关**——它扩大的是发往模型的个人信息面。
 _ASSISTANT_RELAXED_MODE_KEY = "assistant_relaxed_mode"
+# T26 事件触发：提醒到期时自动生成"准备"任务卡。默认**关**——用户主动开启，
+# 避免"助手自作主张"的观感；关闭后不再生成，已生成的卡保留（不追删）。
+_AGENT_TASK_EVENTS_KEY = "agent_task_events_enabled"
 
 
 # ===== 联网搜索设置 =====
@@ -259,6 +262,38 @@ def save_assistant_relaxed_mode(db: Session, enabled: bool) -> bool:
     serialized = json.dumps(bool(enabled))
     if row is None:
         db.add(AppSetting(key=_ASSISTANT_RELAXED_MODE_KEY, value=serialized))
+    else:
+        row.value = serialized
+    db.commit()
+    return bool(enabled)
+
+
+# ===== Agent 任务事件触发（T26：提醒到期 → 生成任务卡）=====
+
+
+def get_agent_task_events_enabled(db: Session) -> bool:
+    """读取「提醒到期自动生成任务卡」开关；缺失或脏数据退回默认**关**。
+
+    它会让后台扫描在没有用户提问的情况下新建任务卡（只建卡、不执行任何写操作），
+    因此与其它"助手主动行为"一样默认保守，由用户在设置里显式开启。
+    """
+    row = db.get(AppSetting, _AGENT_TASK_EVENTS_KEY)
+    if row is None:
+        return False
+    try:
+        value = json.loads(row.value)
+    except (json.JSONDecodeError, TypeError):
+        logger.warning("提醒任务事件开关设置数据损坏，已重置为默认关闭")
+        return False
+    return value if isinstance(value, bool) else False
+
+
+def save_agent_task_events_enabled(db: Session, enabled: bool) -> bool:
+    """持久化「提醒到期自动生成任务卡」开关。"""
+    row = db.get(AppSetting, _AGENT_TASK_EVENTS_KEY)
+    serialized = json.dumps(bool(enabled))
+    if row is None:
+        db.add(AppSetting(key=_AGENT_TASK_EVENTS_KEY, value=serialized))
     else:
         row.value = serialized
     db.commit()

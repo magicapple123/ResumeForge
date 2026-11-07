@@ -19,10 +19,6 @@ export function createSharePackage(
   return request("/share-packages", { method: "POST", body: JSON.stringify(payload) });
 }
 
-export function getSharePackage(id: number): Promise<SharePackageDetail> {
-  return request(`/share-packages/${id}`);
-}
-
 /** 移入回收站（软删除）；彻底删除在「回收站」里另做。 */
 export function deleteSharePackage(id: number): Promise<void> {
   return request(`/share-packages/${id}`, { method: "DELETE" });

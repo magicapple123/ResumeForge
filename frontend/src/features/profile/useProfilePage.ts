@@ -11,8 +11,7 @@
  *   409 保留输入不重试）；本 hook 只提供 collectChanges/getSectionOrder/reloadWorkspace；
  * - 识别状态机在 useProfileRecognition；离开拦截（useProfileLeaveGuard）由页面接线。
  */
-import { App, Form, Upload } from "antd";
-import type { UploadProps } from "antd";
+import { App, Form } from "antd";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { normalizeSectionOrder } from "../../components/profile/ProfileSectionConfig";
 import { useToast } from "../../hooks/useToast";
@@ -57,18 +56,6 @@ export {
   toFormValues,
 } from "./profileFormData";
 
-const PHOTO_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
-const PHOTO_MAX_BYTES = 2 * 1024 * 1024;
-
-function readAsDataUrl(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(typeof reader.result === "string" ? reader.result : "");
-    reader.onerror = () => reject(new Error(t("profileLibrary.photo.readFailed")));
-    reader.readAsDataURL(file);
-  });
-}
-
 interface Options {
   activateResumeWorkspace?: () => void;
   onProfileParsed?: () => void;
@@ -94,8 +81,12 @@ export function useProfilePage(options: Options) {
   const [loadError, setLoadError] = useState("");
   const [loadToken, setLoadToken] = useState(0);
   const [editing, setEditing] = useState(false);
-  const [photoReading, setPhotoReading] = useState(false);
-  const photoReadId = useRef(0);
+  /**
+   * 照片读取进行中的标记：真正的照片选择/读取/上传在 `components/profile/ProfilePhotoPanel.tsx`
+   * （5 MB 口径），本 hook 只负责把选中的照片回填进表单（`setPhoto`），不再自己读文件，
+   * 因此恒为 `false`。字段保留是因为页面拿它做按钮 disabled 与拖拽阻塞判据。
+   */
+  const photoReading: boolean = false;
   const reorderRef = useRef<ReturnType<typeof useProfileSectionReorder> | null>(null);
   const reloadRef = useRef<(options?: WorkspaceReloadOptions) => Promise<void>>(
     async () => undefined,
@@ -223,51 +214,12 @@ export function useProfilePage(options: Options) {
     activateResumeWorkspace: options.activateResumeWorkspace,
   });
 
-  useEffect(
-    () => () => {
-      photoReadId.current += 1;
-    },
-    [],
-  );
-
   const setPhoto = useCallback(
     (dataUrl: string) => {
       form.setFieldValue(["sections", "basic_info", 0, "values", "basic_info.photo"], dataUrl);
       optionsRef.current.onDirty();
     },
     [form],
-  );
-
-  const beforePhotoUpload: UploadProps["beforeUpload"] = useCallback(
-    (file) => {
-      if (!editingRef.current) return Upload.LIST_IGNORE;
-      if (!PHOTO_TYPES.has(file.type)) {
-        message.error(t("profileLibrary.photo.formatError"));
-        return Upload.LIST_IGNORE;
-      }
-      if (file.size > PHOTO_MAX_BYTES) {
-        message.error(t("profileLibrary.photo.tooLarge"));
-        return Upload.LIST_IGNORE;
-      }
-      const readId = ++photoReadId.current;
-      setPhotoReading(true);
-      void readAsDataUrl(file)
-        .then((dataUrl) => {
-          if (photoReadId.current === readId) setPhoto(dataUrl);
-        })
-        .catch((err) => {
-          if (photoReadId.current === readId) {
-            message.error(
-              err instanceof Error ? err.message : t("profileLibrary.photo.readFailed"),
-            );
-          }
-        })
-        .finally(() => {
-          if (photoReadId.current === readId) setPhotoReading(false);
-        });
-      return false;
-    },
-    [message, setPhoto],
   );
 
   const addEntry = useCallback(
@@ -409,7 +361,6 @@ export function useProfilePage(options: Options) {
     handleSectionPointerDown,
     moveSectionByOffset,
     recognition,
-    beforePhotoUpload,
     setPhoto,
     addEntry,
     removeEntry,

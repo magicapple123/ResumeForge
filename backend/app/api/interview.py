@@ -36,6 +36,8 @@ from ..schemas.interview import (
 )
 from ..schemas.material import MaterialCreate, MaterialOut
 from ..services import trash
+from ..services.actions import add_action_route
+from ..services.actions.catalog import all_actions
 from ..services.interview import interview_questions as interview_questions_service  # noqa: F401
 from ..services.interview.interview import (
     add_message,
@@ -71,6 +73,9 @@ from .interview_stream import _QuestionDeltaExtractor as _QuestionDeltaExtractor
 from .interview_stream import make_answer_stream
 
 logger = logging.getLogger(__name__)
+
+
+
 
 router = APIRouter(prefix="/api/interview", tags=["interview"])
 
@@ -159,7 +164,7 @@ def _has_closing_remark(session: InterviewSession) -> bool:
 # ===== R-11 题库 / 答题思路 / 反向优化 的共用读取（实现见 ``interview_shared``）=====
 
 
-@router.get("", response_model=list[InterviewBrief])
+add_action_route(router, all_actions()["list_interview_sessions"], route_path="")
 def list_sessions(limit: int = Query(default=50, ge=1, le=200), db: Session = Depends(get_db)):
     sessions = (
         db.query(InterviewSession).order_by(InterviewSession.created_at.desc()).limit(limit).all()
@@ -247,7 +252,7 @@ async def create_session(payload: InterviewCreate, request: Request, db: Session
     return _to_detail(session)
 
 
-@router.get("/{session_id}", response_model=InterviewDetail)
+add_action_route(router, all_actions()["get_interview_report"], route_path="/{session_id}")
 def read_session(session_id: int, db: Session = Depends(get_db)):
     return _to_detail(_session_or_404(db, session_id))
 

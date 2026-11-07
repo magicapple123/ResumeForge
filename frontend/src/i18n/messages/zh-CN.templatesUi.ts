@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * 「版式」工作台这一批（内置模板画廊 · 版式编辑器 · 自制版式列表 · 版式预览 ·
+ * 「版式」工作台这一批（版式编辑器 · 自制版式列表 · 版式预览 ·
  * 可视化调节器 · 工作台卡片）的界面文案。
  *
  * 口径与既有领域包一致：扁平点分 key、一个默认导出、`as const`。文案**逐字**沿用迁移前
@@ -8,18 +8,6 @@
  * 的预填提问）与随模板配置落库的徽章 alt——它们都在组件里就地标了 `i18n-ok`。
  */
 const templatesUi = {
-  // ── 内置模板缩略图墙（BuiltinStyleGallery）─────────────────────
-  /** 缩略图卡片的无障碍名；`label` 是后端下发的内置模板名。 */
-  "templatesUi.gallery.thumbAria": "预览「{label}」样式效果",
-  /** 缩略图 iframe 的无障碍名（同时被测试用来定位）。 */
-  "templatesUi.gallery.thumbTitle": "{label} 样式缩略图",
-  /** 大图弹窗标题：没有打开任何一项时的兜底。 */
-  "templatesUi.gallery.modalTitle": "内置模板预览",
-  /** 大图弹窗标题：带上当前模板名。 */
-  "templatesUi.gallery.modalTitleWithLabel": "内置模板预览 · {label}",
-  /** 大图弹窗里 A4 画布的无障碍名。 */
-  "templatesUi.gallery.previewTitle": "内置模板大图预览",
-
   // ── 版式编辑器（FormatTemplateEditorModal）──────────────────────
   "templatesUi.formatEditor.title.edit": "编辑版式",
   "templatesUi.formatEditor.title.create": "自制版式",

@@ -21,6 +21,8 @@ from sqlalchemy.orm import Session
 
 from ..database import get_db
 from ..models.user_file import UserFile
+from ..services.actions import add_action_route
+from ..services.actions.catalog import all_actions
 from ..services.document_text import preview_text_of_file
 from ..services.user_files import user_files_dir
 
@@ -46,7 +48,7 @@ def _file_out(row: UserFile) -> dict:
     }
 
 
-@router.get("")
+add_action_route(router, all_actions()["list_user_files"], route_path="")
 def list_user_files(
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=_MAX_PAGE_SIZE),

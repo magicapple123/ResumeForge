@@ -156,6 +156,20 @@ export interface AssistantToolCall {
   proposal?: AssistantWriteProposal;
 }
 
+/**
+ * 写操作终态回写的结构化摘要（T01-A）。
+ *
+ * 后端在每条提案进入终态时补一条 kind=proposal_result 的消息，context 里带这份摘要：
+ * 前端据此渲染成一行状态提示（而不是一句普通的助手回复），也能本地化文案。
+ */
+export interface AssistantProposalResult {
+  proposal_id: string;
+  tool_name: string;
+  status: "executed" | "failed" | "unknown" | "rejected" | "expired";
+  target: string;
+  summary: string;
+}
+
 /** 被引用的那条消息的快照：原消息删掉之后这里仍然可读。 */
 export interface AssistantQuotedMessage {
   id: number;
@@ -190,8 +204,17 @@ export interface AssistantMessage {
     /** 上面的思考过程是否因超过存储上限被截断。 */
     reasoning_truncated?: boolean;
     quoted?: AssistantQuotedMessage;
+    /** 写操作终态回写的结构化摘要（只有 kind=proposal_result 的消息才有）。 */
+    proposal_result?: AssistantProposalResult;
   };
   status: "pending" | "complete" | "error" | "cancelled";
+  /**
+   * 消息类别（T01）：normal = 普通对话；proposal_result = 写操作终态的派生回写。
+   * 可选：更早存下的历史消息没有这个字段，按 normal 处理。
+   */
+  kind?: "normal" | "proposal_result";
+  /** 派生回写关联的提案 id（普通消息为 null/缺失）。 */
+  proposal_id?: string | null;
   error: string;
   model: string;
   created_at: string;

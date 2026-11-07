@@ -34,7 +34,9 @@
   // - 第三方标注缺口：`fontTools` 的 `name_IDs`/`name_languages`、`pypdfium2` 的
   //   `scale`（默认值 1 ⇒ 静态推成 int）与 `fpdf2` 的 `multi_cell` 联合返回类型，
   //   四处用 `cast` / `isinstance` 收窄并就地写明"上游标注与运行时不一致"。
-  // 剩余：0 error；1 warning（`previews.py` 的 `__all__` 动态导出，pyright 自身限制）。
+  // 剩余：0 error；1 warning（`services/actions/__init__.py` 的 `__all__` 里 `Permission`
+  // 走 PEP 562 惰性导出，pyright 自身限制——为了不在 import 期拉起 assistant_tools，
+  // 它不能出现在显式 import 列表里）。
   "include": [
     "app"
   ],

@@ -1,6 +1,15 @@
 # SPDX-License-Identifier: Apache-2.0
 """集中导入全部模型，保证 Base.metadata 注册完整（create_all 依赖此注册）。"""
 
+from .agent_task import (
+    AGENT_TASK_RUNNING_STATUSES,
+    AGENT_TASK_SOURCES,
+    AGENT_TASK_STATUSES,
+    AGENT_TASK_STEP_STATUSES,
+    AGENT_TASK_TERMINAL_STATUSES,
+    AgentTask,
+    AgentTaskStep,
+)
 from .ai_task import (
     AI_TASK_ACTIVE_STATUSES,
     AI_TASK_KINDS,
@@ -30,7 +39,13 @@ from .apply import (
     ApplyTaskItem,
     JobMatchAnalysis,
 )
-from .assistant import AssistantSkill, AssistantSkillFile, ChatConversation, ChatMessage
+from .assistant import (
+    AssistantSkill,
+    AssistantSkillFile,
+    AssistantWriteProposal,
+    ChatConversation,
+    ChatMessage,
+)
 from .career_scenario import CareerScenario
 from .claim import (
     CLAIM_CATEGORIES,
@@ -159,6 +174,14 @@ from .web_form_record import SOURCE_BATCH, SOURCE_LIVE, WebFormFillRecord
 from .web_form_url_history import WebFormUrlHistory
 
 __all__ = [
+    # T19 Agent 任务层：多步计划 + 每步状态 + 等待审批 + 跨重启恢复。
+    "AgentTask",
+    "AgentTaskStep",
+    "AGENT_TASK_STATUSES",
+    "AGENT_TASK_STEP_STATUSES",
+    "AGENT_TASK_TERMINAL_STATUSES",
+    "AGENT_TASK_RUNNING_STATUSES",
+    "AGENT_TASK_SOURCES",
     # 通用 AI 任务（0068）：所有 AI 入口统一登记，前端只有一个状态出口。
     "AiTask",
     "AI_TASK_KINDS",
@@ -176,6 +199,7 @@ __all__ = [
     "JobMatchBatch",
     "ChatConversation",
     "ChatMessage",
+    "AssistantWriteProposal",
     "AssistantSkill",
     "AssistantSkillFile",
     "UserProfile",

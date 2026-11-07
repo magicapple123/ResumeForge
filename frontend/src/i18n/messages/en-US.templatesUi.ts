@@ -1,8 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * Copy for the layout-preset workbench batch: the built-in template gallery, the layout
- * preset editor, the custom preset table, the preset preview, the visual controls and the
- * workbench card.
+ * Copy for the layout-preset workbench batch: the layout preset editor, the custom
+ * preset table, the preset preview, the visual controls and the workbench card.
  *
  * Terminology follows the existing packs: "layout preset" for the parameter presets and
  * "template" for the visual skeleton. The assistant prompts and the persisted badge alt text
@@ -10,13 +9,6 @@
  * are model input and stored data rather than UI copy.
  */
 const templatesUi = {
-  // ── Built-in template thumbnail wall (BuiltinStyleGallery) ─────
-  "templatesUi.gallery.thumbAria": 'Preview the "{label}" style',
-  "templatesUi.gallery.thumbTitle": "{label} style thumbnail",
-  "templatesUi.gallery.modalTitle": "Built-in template preview",
-  "templatesUi.gallery.modalTitleWithLabel": "Built-in template preview · {label}",
-  "templatesUi.gallery.previewTitle": "Built-in template full-size preview",
-
   // ── Layout preset editor (FormatTemplateEditorModal) ───────────
   "templatesUi.formatEditor.title.edit": "Edit layout preset",
   "templatesUi.formatEditor.title.create": "Create layout preset",

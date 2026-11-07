@@ -17,6 +17,9 @@ from ..schemas.profile import (
     ProfileTextParseResult,
     ProfileUpdate,
 )
+from ..services.actions import add_action_route
+from ..services.actions.catalog import all_actions
+from ..services.actions.domains.profile import profile_actions
 from ..services.attachments import (
     assert_attachment_budget,
     image_data_urls,
@@ -35,7 +38,6 @@ from ..services.profile.profile_photos import (
 )
 from ..services.profile.profile_service import (
     patch_profile,
-    project_legacy_profile,
     update_profile,
 )
 from ..services.profile_catalog_draft import build_profile_draft_sections
@@ -106,13 +108,12 @@ def _save_photo_copy(db: Session, data_url: str, source_ref: str, fallback_name:
         logger.warning("个人照片磁盘副本保存失败 ref=%s", source_ref, exc_info=True)
 
 
-@router.get("", response_model=ProfileOut)
-def get_profile(db: Session = Depends(get_db)):
-    """旧协议读：从新模型条目全量投影出旧 ProfileOut（形状不变，不读旧六表）。"""
-    return project_legacy_profile(db)
+# T28 Batch B：GET /api/profile 由契约层生成（ActionSpec 是参数/权限的唯一真源）。
+# 注册位置仍在原装饰器处，保持路由顺序不变；响应模型仍是 ProfileOut（编辑视图全量）。
+add_action_route(router, profile_actions()["get_profile"])
 
 
-@router.put("", response_model=ProfileOut)
+add_action_route(router, all_actions()["update_profile"], route_path="")
 def save_profile(payload: ProfileUpdate, db: Session = Depends(get_db)):
     """旧协议 PUT：映射后整体替换新模型条目，不再重建旧六表（F2 契约 §5.1）。"""
     profile = update_profile(db, payload)

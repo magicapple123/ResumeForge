@@ -2,383 +2,59 @@
 """报告域工具声明（``_TOOLS`` 中 21 条：面试/深挖/复盘/提醒/投递台/知识库/统计等）。"""
 from __future__ import annotations
 
-from ..resume.resume_templates import FONT_SCALES, RESUME_TEMPLATES
+from ..actions.domains.analytics import analytics_actions
+from ..actions.domains.apply import apply_actions
+from ..actions.domains.drill import drill_actions
+from ..actions.domains.interview import interview_actions
+from ..actions.domains.interview_experiences import interview_experience_actions
+from ..actions.domains.knowledge import knowledge_actions
+from ..actions.domains.question_banks import question_bank_actions
+from ..actions.domains.referrals import referral_actions
+from ..actions.domains.reminders import reminder_actions
+from ..actions.domains.resumes_write import resumes_write_actions
+from ..actions.domains.reviews import review_actions
+from ..actions.domains.share_packages import share_package_actions
+from ..actions.pilots import pilot_actions
+from ..actions.tool_adapter import as_tool
 from . import previews
-from ._types import Tool
-from .apply_tools import _tool_list_apply_queue, _tool_list_apply_records
-from .data_tools import _tool_get_drill_report, _tool_list_drill_sessions
+from ._types import Tool, ToolPermission
 from .job_tools import _tool_update_resume
 from .p3_tools import P3_TOOLS
-from .reminder_tools import _tool_update_reminder
-from .report_tools import (
-    _tool_create_knowledge,
-    _tool_create_reminder,
-    _tool_get_analytics_overview,
-    _tool_get_interview_report,
-    _tool_get_knowledge,
-    _tool_list_interview_experiences,
-    _tool_list_interview_sessions,
-    _tool_list_knowledge,
-    _tool_list_question_banks,
-    _tool_list_referrals,
-    _tool_list_reminders,
-    _tool_list_reviews,
-    _tool_list_share_packages,
-    _tool_update_knowledge,
-    _tool_update_resume_layout,
-)
 
 REPORT_TOOLS: tuple[Tool, ...] = (
-    Tool(
-        name="list_interview_sessions",
-        description=(
-            "列出用户做过的模拟面试（类型、难度、轮数、状态与总分）。"
-            "用户问「我之前的面试练得怎么样」时用它。"
-        ),
-        parameters={
-            "type": "object",
-            "properties": {
-                "limit": {"type": "integer", "description": "可选，默认 20"},
-                "status": {
-                    "type": "string",
-                    "enum": ["active", "finished"],
-                    "description": "可选：active 进行中，finished 已结束",
-                },
-            },
-            "required": [],
-        },
-        handler=_tool_list_interview_sessions,
-    ),
-    Tool(
-        name="get_interview_report",
-        description=(
-            "读取某场模拟面试的问答记录与评分报告（用于复盘、总结薄弱点）。"
-            "用户说「帮我看看上次面试哪里答得不好」时用它。"
-        ),
-        parameters={
-            "type": "object",
-            "properties": {
-                "session_id": {"type": "integer", "description": "面试 id（先用 list_interview_sessions 查）"}
-            },
-            "required": ["session_id"],
-        },
-        handler=_tool_get_interview_report,
-    ),
-    Tool(
-        name="list_drill_sessions",
-        description=(
-            "列出按事实台账做的面试深挖记录（一条主张一道题、用证据状态判定讲不讲得清）。"
-            "用户说「我练过的那些」「上次深挖练了什么」时用它。注意它与「模拟面试」不同："
-            "模拟面试给四维度评分报告，深挖不给分数。"
-        ),
-        parameters={
-            "type": "object",
-            "properties": {
-                "status": {
-                    "type": "string",
-                    "enum": ["active", "finished"],
-                    "description": "可选：active 进行中，finished 已结束",
-                },
-                "limit": {"type": "integer", "description": "可选，默认 20"},
-            },
-            "required": [],
-        },
-        handler=_tool_list_drill_sessions,
-    ),
-    Tool(
-        name="get_drill_report",
-        description=(
-            "读取某场面试深挖的逐题判定、行动清单与复练队列（用于复盘薄弱点）。"
-            "用户的某条主张「讲不讲得清」「该补什么」都在这份记录里。"
-        ),
-        parameters={
-            "type": "object",
-            "properties": {
-                "session_id": {"type": "integer", "description": "深挖记录 id（先用 list_drill_sessions 查）"}
-            },
-            "required": ["session_id"],
-        },
-        handler=_tool_get_drill_report,
-    ),
-    Tool(
-        name="update_resume_layout",
-        description=(
-            "调整某份简历的版式：模板（classic 经典 / modern 现代 / compact 精简）、"
-            "最大页数（1-3）与字号（small 小 / standard 标准 / large 大）。"
-            "用户抱怨「内容太多排不下」「字太小」或要求换模板时用它。"
-        ),
-        parameters={
-            "type": "object",
-            "properties": {
-                "resume_id": {"type": "integer", "description": "简历 id"},
-                "template": {"type": "string", "enum": list(RESUME_TEMPLATES)},
-                "page_limit": {"type": "integer", "description": "最大页数 1-3"},
-                "font_scale": {"type": "string", "enum": list(FONT_SCALES)},
-            },
-            "required": ["resume_id"],
-        },
-        handler=_tool_update_resume_layout,
-        preview=previews.preview_update_resume_layout,
-        writes=True,
-    ),
-    Tool(
-        name="list_reminders",
-        description=(
-            "列出日历提醒（面试、测评截止、催 HR 回复、其他），可按类型或状态筛选。"
-            "用户问「我接下来要做什么」「我有几个提醒」时用它。"
-        ),
-        parameters={
-            "type": "object",
-            "properties": {
-                "kind": {
-                    "type": "string",
-                    "enum": ["interview", "assessment_deadline", "hr_reply", "other"],
-                    "description": "可选，提醒类型",
-                },
-                "status": {
-                    "type": "string",
-                    "enum": ["pending", "done", "dismissed"],
-                    "description": "可选，提醒状态（pending 待办）",
-                },
-                "limit": {"type": "integer", "description": "可选，最多返回多少条，默认 20"},
-            },
-            "required": [],
-        },
-        handler=_tool_list_reminders,
-    ),
-    Tool(
-        name="list_apply_queue",
-        description=(
-            "查看「投递台」的队列状态：每个待投递/已投递/失败的岗位、对应简历、"
-            "是否支持自动投递以及最近一次匹配结论。用户问「队列里还有什么」「那家公司投出去了吗」时用它。"
-            "**助手不代为发起投递**——那一步必须由用户在投递台上点击确认。"
-        ),
-        parameters={
-            "type": "object",
-            "properties": {
-                "limit": {"type": "integer", "description": "可选，最多返回多少条，默认 20"},
-            },
-            "required": [],
-        },
-        handler=_tool_list_apply_queue,
-    ),
-    Tool(
-        name="list_referrals",
-        description=(
-            "列出内推记录（公司/岗位/内推人/关系/状态/是否已转化）。"
-            "用户问「我有几个内推」「内推进展怎么样」时用它。"
-        ),
-        parameters={
-            "type": "object",
-            "properties": {
-                "status": {
-                    "type": "string",
-                    "enum": ["active", "submitted", "closed", "invalid"],
-                    "description": "可选，内推状态",
-                },
-                "keyword": {"type": "string", "description": "可选，公司/岗位/内推人关键词"},
-                "limit": {"type": "integer", "description": "可选，最多返回多少条，默认 20"},
-            },
-            "required": [],
-        },
-        handler=_tool_list_referrals,
-    ),
-    Tool(
-        name="list_interview_experiences",
-        description=(
-            "列出真实面经（公司/岗位/来源/难度/被问问题数），可按关键词、公司或来源筛选。"
-            "用户问「有没有 XX 公司的面经」「我记过哪些面经」时用它。"
-        ),
-        parameters={
-            "type": "object",
-            "properties": {
-                "keyword": {"type": "string", "description": "可选，标题/岗位/正文里的关键词"},
-                "company": {"type": "string", "description": "可选，公司名"},
-                "source": {
-                    "type": "string",
-                    "enum": ["self", "peer", "public"],
-                    "description": "可选：self 自己 / peer 同行 / public 公开",
-                },
-                "limit": {"type": "integer", "description": "可选，最多返回多少条，默认 20"},
-            },
-            "required": [],
-        },
-        handler=_tool_list_interview_experiences,
-    ),
-    Tool(
-        name="list_question_banks",
-        description=(
-            "列出保存过的题库历史（针对某岗位/简历生成并保存的题目分组）。"
-            "用户问「我之前生成过哪些题库」时用它。"
-        ),
-        parameters={
-            "type": "object",
-            "properties": {"limit": {"type": "integer", "description": "可选，默认 20"}},
-            "required": [],
-        },
-        handler=_tool_list_question_banks,
-    ),
-    Tool(
-        name="list_reviews",
-        description=(
-            "列出保存过的面试复盘历史（真实被问问题清单 + 答题思路 + 反向优化建议）。"
-            "用户问「我之前的复盘」时用它。"
-        ),
-        parameters={
-            "type": "object",
-            "properties": {"limit": {"type": "integer", "description": "可选，默认 20"}},
-            "required": [],
-        },
-        handler=_tool_list_reviews,
-    ),
-    Tool(
-        name="list_knowledge",
-        description=(
-            "列出知识库条目（面经总结/简历技巧/求职策略等成文内容），可按关键词或分类筛选。"
-            "用户问「知识库里有什么」「有没有关于 XX 的笔记」时用它。"
-        ),
-        parameters={
-            "type": "object",
-            "properties": {
-                "q": {"type": "string", "description": "可选，标题/正文里的关键词"},
-                "category": {"type": "string", "description": "可选，分类，如 面经/简历技巧/求职策略"},
-                "limit": {"type": "integer", "description": "可选，最多返回多少条，默认 20"},
-            },
-            "required": [],
-        },
-        handler=_tool_list_knowledge,
-    ),
-    Tool(
-        name="get_knowledge",
-        description="按 id 读取知识库里某一条的完整正文（支持 Markdown）。",
-        parameters={
-            "type": "object",
-            "properties": {"knowledge_id": {"type": "integer", "description": "知识库条目 id"}},
-            "required": ["knowledge_id"],
-        },
-        handler=_tool_get_knowledge,
-    ),
-    Tool(
-        name="create_knowledge",
-        description=(
-            "把一段成文内容新增进知识库（标题必填，正文支持 Markdown）。"
-            "只在用户明确要求保存/记录时调用。"
-        ),
-        parameters={
-            "type": "object",
-            "properties": {
-                "title": {"type": "string", "description": "标题，必填"},
-                "category": {"type": "string", "description": "分类，如 面经/简历技巧/求职策略/其他"},
-                "tags": {"type": "array", "items": {"type": "string"}, "description": "标签，可选"},
-                "content": {"type": "string", "description": "正文（Markdown），可选"},
-                "source": {"type": "string", "description": "来源，默认「助手录入」"},
-            },
-            "required": ["title"],
-        },
-        handler=_tool_create_knowledge,
-        preview=previews.preview_create_knowledge,
-        writes=True,
-    ),
-    Tool(
-        name="update_knowledge",
-        description="修改知识库里已有的一条（只传要改的字段，其余保持不变）。",
-        parameters={
-            "type": "object",
-            "properties": {
-                "knowledge_id": {"type": "integer", "description": "知识库条目 id"},
-                "title": {"type": "string"},
-                "category": {"type": "string"},
-                "tags": {"type": "array", "items": {"type": "string"}},
-                "content": {"type": "string"},
-                "source": {"type": "string"},
-            },
-            "required": ["knowledge_id"],
-        },
-        handler=_tool_update_knowledge,
-        preview=previews.preview_update_knowledge,
-        writes=True,
-    ),
-    Tool(
-        name="get_analytics_overview",
-        description=(
-            "查看求职统计看板：投递总量、有效投递、面试率、Offer 数、六阶段漏斗与月度趋势。"
-            "用户问「我投了多少」「我的求职数据怎么样」时用它。"
-        ),
-        parameters={"type": "object", "properties": {}, "required": []},
-        handler=_tool_get_analytics_overview,
-    ),
-    Tool(
-        name="list_share_packages",
-        description=(
-            "列出已生成的离线分享包（脱敏后的简历快照，含标题/权限/文件数/生成时间）。"
-            "用户问「我发过哪些分享包」时用它。"
-        ),
-        parameters={
-            "type": "object",
-            "properties": {
-                "keyword": {"type": "string", "description": "可选，标题关键词"},
-                "limit": {"type": "integer", "description": "可选，默认 20"},
-            },
-            "required": [],
-        },
-        handler=_tool_list_share_packages,
-    ),
-    Tool(
-        name="create_reminder",
-        description=(
-            "新增一条日历提醒（面试、测评截止、催 HR 回复等）。"
-            "只在用户明确要求「帮我记个提醒」时调用；remind_at 必填，ISO 格式。"
-        ),
-        parameters={
-            "type": "object",
-            "properties": {
-                "title": {"type": "string", "description": "提醒内容，必填"},
-                "remind_at": {
-                    "type": "string",
-                    "description": "提醒时间，ISO 格式，如 2026-09-20T10:00:00，必填",
-                },
-                "kind": {
-                    "type": "string",
-                    "enum": ["interview", "assessment_deadline", "hr_reply", "other"],
-                    "description": "提醒类型，默认 other",
-                },
-                "job_id": {"type": "integer", "description": "可选，关联岗位 id"},
-                "resume_id": {"type": "integer", "description": "可选，关联简历 id"},
-                "track_id": {"type": "integer", "description": "可选，关联求职进度记录 id"},
-                "note": {"type": "string", "description": "备注，可选"},
-            },
-            "required": ["title", "remind_at"],
-        },
-        handler=_tool_create_reminder,
-        preview=previews.preview_create_reminder,
-        writes=True,
-    ),
-    Tool(
-        name="list_apply_records",
-        description=(
-            "查看投递记录（按投递批次分组）：每个批次的状态与成功/失败/跳过计数，"
-            "以及批次里每个岗位的投递结果、失败分类与可操作诊断。"
-            "用户问「上次投递结果怎么样」「为什么投失败」时用它。"
-            "重投要在投递台上操作，助手不代为投递。"
-        ),
-        parameters={
-            "type": "object",
-            "properties": {
-                "keyword": {"type": "string", "description": "可选，岗位/公司关键词"},
-                "result": {
-                    "type": "string",
-                    "enum": ["pending", "running", "success", "failed", "skipped"],
-                    "description": "可选，按每条记录的结果筛选",
-                },
-                "limit": {
-                    "type": "integer",
-                    "description": "可选，最多返回多少个批次（组内岗位不截断），默认 10",
-                },
-            },
-            "required": [],
-        },
-        handler=_tool_list_apply_records,
-    ),
+    # T28 收尾批：interview 域契约层 single source（旧实现委托）。
+    as_tool(interview_actions()["list_interview_sessions"]),
+    as_tool(interview_actions()["get_interview_report"]),
+    # T28 收尾批：drill 域契约层 single source（旧实现委托）。
+    as_tool(drill_actions()["list_drill_sessions"]),
+    as_tool(drill_actions()["get_drill_report"]),
+    # T28 收尾批：resumes_write 域契约层 single source（可逆写，带 preview）。
+    as_tool(resumes_write_actions()["update_resume_layout"]),
+    # T28 Batch B：reminders 域契约层 single source（参数/权限/描述/profile 由 ActionSpec 生成）。
+    as_tool(reminder_actions()["list_reminders"]),
+    # T28 收尾批：apply 域契约层 single source（旧实现委托）。
+    as_tool(apply_actions()["list_apply_queue"]),
+    # T28 Batch B：referrals 域契约层 single source。
+    as_tool(referral_actions()["list_referrals"]),
+    # T28 Batch B：interview_experiences 域契约层 single source。
+    as_tool(interview_experience_actions()["list_interview_experiences"]),
+    # T28 收尾批：question_banks 域契约层 single source。
+    as_tool(question_bank_actions()["list_question_banks"]),
+    # T28 收尾批：reviews 域契约层 single source。
+    as_tool(review_actions()["list_reviews"]),
+    # T28 Batch B：knowledge 域契约层 single source。
+    as_tool(knowledge_actions()["list_knowledge"]),
+    as_tool(knowledge_actions()["get_knowledge"]),
+    as_tool(knowledge_actions()["create_knowledge"]),
+    as_tool(knowledge_actions()["update_knowledge"]),
+    # T28 收尾批：analytics 域契约层 single source。
+    as_tool(analytics_actions()["get_analytics_overview"]),
+    # T28 收尾批：share_packages 域契约层 single source。
+    as_tool(share_package_actions()["list_share_packages"]),
+    # T27 试点：契约层 single source —— 参数/权限/描述/预览/service_entry 都由 ActionSpec 生成。
+    as_tool(pilot_actions()["create_reminder"]),
+    # T28 收尾批：apply 域契约层 single source（list_apply_records）。
+    as_tool(apply_actions()["list_apply_records"]),
     Tool(
         name="update_resume",
         description=(
@@ -396,32 +72,12 @@ REPORT_TOOLS: tuple[Tool, ...] = (
             "required": ["resume_id"],
         },
         handler=_tool_update_resume,
+        service_entry=None,
+        service_reason="内联 ORM 写入，无 services 收口（T27 收口候选）",
+        permission=ToolPermission.REVERSIBLE_WRITE,
         preview=previews.preview_update_resume,
-        writes=True,
     ),
-    Tool(
-        name="update_reminder",
-        description=(
-            "把一条日历提醒标记为 done（已完成）或 dismissed（已忽略），也可改回 pending。"
-            "用户说「那个提醒我弄完了」「这条不用管了」时先用 list_reminders 找到 id 再调用。"
-            "提醒时间、绑定与备注的修改请在「求职进度 → 提醒」页做。"
-        ),
-        parameters={
-            "type": "object",
-            "properties": {
-                "reminder_id": {"type": "integer", "description": "提醒 id"},
-                "status": {
-                    "type": "string",
-                    "enum": ["pending", "done", "dismissed"],
-                    "description": "目标状态：done 已完成 / dismissed 已忽略 / pending 改回待办",
-                },
-            },
-            "required": ["reminder_id", "status"],
-        },
-        handler=_tool_update_reminder,
-        preview=previews.preview_update_reminder,
-        writes=True,
-    ),
+    as_tool(reminder_actions()["update_reminder"]),
     # P3 工具批（handlers 与声明同住 p3_tools.py，report spec 文件已到行数上限）。
     *P3_TOOLS,
 )

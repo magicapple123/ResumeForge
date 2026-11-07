@@ -53,7 +53,8 @@ def test_style_template_is_offline_for_writes(client, db_session):
         json={"name": "自定义A", "kind": "style", "html": STYLE_HTML},
     )
     assert created.status_code == 400
-    assert created.json()["detail"] == "自制模板已下线，只能创建版式"
+    detail = created.json()["detail"]
+    assert (detail["message"] if isinstance(detail, dict) else detail) == "自制模板已下线，只能创建版式"
 
     # 读不到也不该抛异常：记录里可能还存着这个名字。
     assert resolve_style_template(db_session, "自定义A") == ("classic", "")
