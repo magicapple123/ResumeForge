@@ -146,7 +146,7 @@
 | [📖 知识库](https://magicapple123.github.io/ResumeForge-official/docs.html#materials) | 面经总结、简历技巧、求职策略等成文内容，带分类标签与 Markdown 预览；助手可检索增改 |
 | [💬 AI 求职助手](https://magicapple123.github.io/ResumeForge-official/docs.html#assistant) | 流式问答，可关联岗位 / 简历 / 资料与联网搜索；能查提醒、内推、面经、统计等，**只在明确要求时写数据**；回答前会拿到本地时间与星期（深夜提醒早点休息）；工具集覆盖投递失败诊断、查询版式、面经与内推录入；任意页面都可从「投投」悬浮球打开；侧栏与浮窗聊天记录分开保存，浮窗只展示联网和思考强度控制 |
 | [🔓 助手放宽模式](https://magicapple123.github.io/ResumeForge-official/docs.html#assistant-relaxed) | 设置 → 「助手与 AI 行为」页签「助手放宽模式」卡片：默认关；开启并**提前告知**后求职助手可读取完整资料（含姓名电话等敏感字段、网申填写值、历史对话），API 密钥等凭据任何模式下都不发送 |
-| [🧩 技能](https://magicapple123.github.io/ResumeForge-official/docs.html#skills) | 新建、导入、编辑技能（提示词 + 知识文件），启用后约束助手作答风格 |
+| [🧩 技能](https://magicapple123.github.io/ResumeForge-official/docs.html#skills) | 新建、导入、编辑技能（提示词 + 知识文件），在对话里启用后约束该对话的作答风格 |
 | [🗒 会话管理](https://magicapple123.github.io/ResumeForge-official/docs.html#assistant-sessions) | 会话可重命名 / 置顶 / 收藏 / 分组 / 归档，可导出 Markdown 或存进资料箱 |
 | [📌 投投剪贴板](https://magicapple123.github.io/ResumeForge-official/docs.html#assistant-clipboard) | **双击投投悬浮球**打开：把要反复粘贴的资料存成片段，一键复制；只存本机浏览器，不上传（单击悬浮球仍是打开助手） |
 | [🏠 首页](https://magicapple123.github.io/ResumeForge-official/docs.html#home) | 快捷入口按使用顺序组织成 7 个去处；近期提醒卡片内嵌紧凑月历 |
@@ -154,9 +154,9 @@
 | [🔍 全局搜索](https://magicapple123.github.io/ResumeForge-official/docs.html#search) | 一个框同时搜岗位、简历、内推、提醒、面经、台账、资料箱与技能 |
 | [📤 外发预览与用量](https://magicapple123.github.io/ResumeForge-official/docs.html#privacy-outbound) | 设置页：把资料发给模型或其它服务前，先看「这次要发什么」（目标服务、资料类别、附件、已排除字段、是否抓取正文以及正文本身）；「模型用量」按任务 / 模型列调用数与 token——**未知 token 不显示成 0**、未配置单价不估算费用。预览正文只存在内存、不落盘；用量可按任务 / 模型 / 数据集看**结束原因与重试**，费用只在配置单价时估算 |
 | [✅ 批量选择与批量删除](https://magicapple123.github.io/ResumeForge-official/docs.html#shortcuts-batch) | 简历中心、助手历史对话、历史面试、深挖历史、日历提醒、历史题库、网申填充记录等列表支持**批量选择**：「批量选择」→ 勾选 → 「删除所选」统一确认后删除（均进回收站可恢复） |
-| [🔄 检查与更新](https://magicapple123.github.io/ResumeForge-official/docs.html#upgrade-check) | 设置页可检查新版本、新建 / 导出 / 导入数据集；数据集备份**默认包含大模型 API Key**（可取消勾选；Windows 上以 DPAPI 加密形态随包）；**Windows 双击 `start.cmd` / `stop.cmd` / `update.cmd`，macOS 双击 `start.command` / `stop.command` / `update.command`**，都是零依赖一键启动，`uninstall.cmd` 可清理本机环境 |
-| [♻️ 回收站](https://magicapple123.github.io/ResumeForge-official/docs.html#trash) | 22 类内容删除后先进回收站，可批量恢复或彻底删除；只有二次确认才真正销毁。2026-10 起新增「方案 / 自建板块 / 自建字段 / 资料条目」四类 |
-| [🔑 你的 Key 你做主](https://magicapple123.github.io/ResumeForge-official/docs.html#model-presets) | 内置 16 个服务预设（DeepSeek / Claude / 豆包 / OpenAI / Ollama …），可取可用模型、调高级参数，并可切换接口协议 |
+| [🔄 检查与更新](https://magicapple123.github.io/ResumeForge-official/docs.html#upgrade-check) | 设置页可检查新版本、新建 / 导出 / 导入数据集；数据集备份**默认包含大模型 API Key**（可取消勾选；Windows 上以 DPAPI 加密形态随包）；**Windows 双击 `start.cmd` / `stop.cmd` / `update.cmd`，macOS 双击 `start.command` / `stop.command` / `update.command`，Linux 在项目根目录执行 `bash start.sh` / `stop.sh` / `update.sh`**，都是零依赖一键启动，`uninstall.cmd` 可清理本机环境 |
+| [♻️ 回收站](https://magicapple123.github.io/ResumeForge-official/docs.html#trash) | 23 类内容删除后先进回收站，可批量恢复或彻底删除；只有二次确认才真正销毁。2026-10 起新增「方案 / 自建板块 / 自建字段 / 资料条目」四类，2026-11 起新增「求职偏好」 |
+| [🔑 你的 Key 你做主](https://magicapple123.github.io/ResumeForge-official/docs.html#model-presets) | 内置 22 个服务预设（DeepSeek / Claude / 豆包 / OpenAI / Ollama …），可取可用模型、调高级参数，并可切换接口协议 |
 
 </details>
 
@@ -164,7 +164,7 @@
 
 **推荐使用发行版**：无需克隆仓库，无需预装 Python 与 Node.js。所有安装包见 [Release 页面](https://github.com/magicapple123/ResumeForge/releases)，每个文件均附同名 `.sha256`；也可从[官网](https://magicapple123.github.io/ResumeForge-official/)直接下载，内容一致。
 
-支持 **Windows 10/11（x64）** 与 **macOS 13+（Intel 与 Apple Silicon，后者经 Rosetta 2 运行）**；暂无 Linux 发行包。
+支持 **Windows 10/11（x64）**、**macOS 14+（Apple Silicon 原生；Intel Mac 可运行应用本身，但可选的本地语义检索模型需要 Apple Silicon）** 与 **Linux（x86_64 / aarch64，glibc ≥ 2.31，即 Ubuntu 22.04+ / Debian 12+ / Fedora 38+ 一类发行版）**。
 
 ### 发行包选择
 
@@ -172,8 +172,9 @@
 | --- | --- | --- |
 | `ResumeForge-Setup-<版本>.exe` | Windows 安装版：双击安装，自动建快捷方式 | 大多数 Windows 用户 |
 | `ResumeForge-<版本>-x64.dmg` / `-arm64.dmg` | macOS 安装版：把「简历通」拖进「应用程序」 | 大多数 macOS 用户 |
-| `ResumeForge-<版本>-windows.zip` / `-macos.zip` | 便携包：解压即用，不写入系统目录 | 无需安装，便于 U 盘携带或迁移 |
-| `ResumeForge-<版本>-all.zip` | 两个平台的便携包合集 | 需在 Windows 与 macOS 各部署一份 |
+| `ResumeForge-<版本>-windows.zip` / `-macos.zip` / `-linux.zip` | 便携包：解压即用，不写入系统目录 | 无需安装，便于 U 盘携带或迁移 |
+| `ResumeForge-<版本>-linux-x64.AppImage` / `-linux-arm64.AppImage` | Linux 单文件便携应用：赋予可执行位后双击运行，不装系统包 | 大多数 Linux 用户 |
+| `ResumeForge-<版本>-all.zip` | 三个平台的便携包合集 | 需在 Windows、macOS 与 Linux 各部署一份 |
 | 源码（`git clone`） | 自行运行，需要 Python 与 Node.js | 需要阅读或修改源码 |
 
 > 安装包**未签名、未公证**：Windows 提示「未知发布者」或 macOS 提示「无法验证开发者」时，**右键 →「打开」**即可放行；原因与文件校验方法见 [FAQ](#-faq)。
@@ -194,7 +195,7 @@
 发行包：https://github.com/magicapple123/ResumeForge/releases/latest
 
 请按步骤执行，每一步完成后告诉我结果：
-1. 确认操作系统与架构（Windows 10/11 x64；macOS 13+ 的 Intel 或 Apple Silicon），据此选择发行包：
+1. 确认操作系统与架构（Windows 10/11 x64；macOS 14+ 的 Apple Silicon 或 Intel；Intel Mac 可运行应用，但可选的本地语义检索模型不可用），据此选择发行包：
    Windows → ResumeForge-Setup-<版本>.exe（安装版）或 ResumeForge-<版本>-windows.zip（便携包）
    macOS → ResumeForge-<版本>-x64.dmg / -arm64.dmg（安装版）或 ResumeForge-<版本>-macos.zip（便携包）
 2. 下载该文件，并用同页提供的 .sha256 校验；不一致立即停止并告诉我。
@@ -236,9 +237,24 @@ cd ResumeForge
 
 ### 配置大模型（可选）
 
-在左侧**设置 →「AI 模型」**中选择内置预设（自动填充接口地址与模型名）或「自定义模型（OpenAI 兼容）」，填入 API Key 后点击「测试连接」。内置 16 个预设，覆盖 DeepSeek、Claude（Anthropic 原生协议）、豆包、Kimi、通义、智谱、MiniMax、硅基流动、OpenRouter、OpenAI、Gemini、Grok、Groq、Mistral、Ollama、LM Studio。
+在左侧**设置 →「AI 模型」**中选择内置预设（自动填充接口地址与模型名）或「自定义模型（OpenAI 兼容）」，填入 API Key 后点击「测试连接」。内置 **22 个**预设，覆盖 DeepSeek、Claude（Anthropic 原生）、豆包、Kimi、通义千问、智谱 GLM、MiniMax、硅基流动、OpenRouter、OpenAI、Google Gemini、xAI Grok、Groq、Mistral、Ollama、LM Studio，以及腾讯混元、百度千帆、讯飞星火、阶跃星辰、Together AI、Perplexity。
+
+接口协议可选 **OpenAI 兼容（Chat Completions，默认）/ Anthropic 原生（Messages）/ OpenAI Responses（实验性）** 三种：Responses 默认不启用、已保存配置不受影响，拿不准时展开设置页的「各服务商协议支持」矩阵查一下（表尾写明核对日期）。
 
 > **未配置模型亦可使用**：岗位解析、资料解析、匹配度五类结论、写作增强中的版本对比、质量与合规检查、全部导出格式均为**本地规则**，可离线运行。仅「生成」类操作（AI 定制简历、岗位解读、模拟面试、求职助手、面试深挖）需要模型；使用 Ollama / LM Studio 等本地模型时，生成过程同样不出本机。
+
+### 配置语音转写（可选）
+
+在**设置 →「助手与 AI 行为」→「语音转写」**里填一个 OpenAI 兼容的转写服务（OpenAI、Groq、硅基流动等；DeepSeek 没有转写能力，要单独配一家。服务地址如 `https://api.openai.com/v1`、模型如 `whisper-1`、该服务的 API Key）后，助手输入框、模拟面试答题框与面试复盘「追问」输入框都可以**语音听写**：识别出的文字**先填进输入框**，你确认（可以改）后再自己发送，**不会自动发送**；追问同样只填不发、不提交。单段上限：助手与答题框 3 分钟、复盘追问 1 分钟（音频超过 10 MB 也会被拒）。**音频会发送到你配置的这个语音服务商，本应用不保存音频文件。**
+
+### 配置语义检索（可选）
+
+生成简历时可以选择启用**语义检索**，把「说法不同、意思相同」的资料条目也召回进候选（设计与边界见[架构设计](docs/architecture.md)，字段说明见[使用指南](docs/user-guide.md)）。**默认关闭**，在**设置 →「AI 模型」→「语义检索」**里二选一（「检索方式」为**本地模型**或**远程服务**）。**启用方式只有设置页**——启用本地或远程 provider 即等于启用语义检索，不需要改环境变量（`RAG_RETRIEVAL_ENABLED` 只是开发/评测总闸）：
+
+- **本地模型（推荐；首次下载约 110–126MB（按平台：Windows 111MB、macOS 110MB、Linux 122–126MB，均为资产清单里的 zip 传输体积，设置页显示本机实际值）；仅 Windows x64 / macOS 14+ Apple Silicon / Linux x86_64、aarch64）**：点「下载本地模型」后下载打包的嵌入模型（约 74.6MB zip）与隔离运行时（按平台约 35–51MB zip），各自校验 SHA-256 后解压到 `backend/data/rag-model/` 与 `backend/data/rag-runtime/`（解压后模型 + 运行时合计约 237–280MB，按平台），再点「启用本地模型」启用；点「删除已下载文件」回到未下载。权重与运行时**不进安装包、不进发布压缩包、不进备份包**，**资料正文不出本机**；只有首次下载需要联网。
+- **远程服务（0 下载；任意 64 位平台，含 Intel Mac）**：选「服务商」预设（阿里云百炼 / OpenAI 官方 / 智谱 AI / SiliconFlow 官方 / 本机 Ollama）或「自定义」，填 OpenAI 兼容的「接口地址」、模型名与「API 密钥」，点「测试连接」（自动探测维度，界面不出现 dim 字段）后点「启用远程检索」。首次为某个地址启用会弹「隐私确认」——正文「将把资料条目文本发送到 <host>」、「姓名、电话与邮箱不会发送」；换地址要重新确认。请求体**只含资料条目的白名单文本**；「高级」里另有开关允许 loopback / 内网地址，供本机 Ollama / LM Studio 使用。
+
+**任何失败都会自动回退到关键词检索**——下载失败、校验不符、断网、Key 无效、HTTP 401/429/5xx、维度不符都一样。启用语义检索不会让生成失败；点「关闭语义检索」或「清除密钥」后会与启用前完全一致。Intel Mac **没有本地模型可用的 onnxruntime wheel**，本地选项不可用，走远程正常。
 
 更完整的字段说明、隐私边界、升级与回滚、AI 故障排查，见[官网使用文档](https://magicapple123.github.io/ResumeForge-official/docs.html)。
 
@@ -247,6 +263,7 @@ cd ResumeForge
 本项目会接触身份证号、手机号、公司名与简历原文，边界如下：
 
 - **默认全部留在本机。** 简历、岗位、台账、设置、附件与照片都在本机数据目录（主库 `backend/data/resume_forge.db`，桌面版在 `%APPDATA%\ResumeForge\data`）；导出、渲染、PDF 生成也在本机完成，不经过第三方。
+- **语义检索同样遵守这条边界。** 本地模型不出本机；远程只把资料条目的白名单文本（不含姓名、电话、邮箱与私密链接）发给你配置的 host，且首次按 host 确认。
 - **只有你主动配置并触发的动作才会发出请求。** 对象是你自己填地址和密钥的模型服务商，内容仅限本次生成所需的最小资料；**照片不发送给模型**。
 - **不保存招聘网站密码、Cookie、令牌或验证码。** 投递与网申走 CDP 连接你自己登录的浏览器，扫码由你完成。
 - **不硬编码密钥。** `.env`、数据库、照片与导出文件都被 `.gitignore` 忽略；Windows 上 API Key 用 DPAPI 加密后落库。
@@ -262,7 +279,7 @@ cd ResumeForge
 - **备份**：**设置 → 「数据与导出」→ 数据集 → 导出当前数据集**。包里是该数据集的整库快照、附件、字体与全局模型配置（**默认包含大模型 API Key，可取消勾选**），不含登录态；换电脑时「导入备份为新数据集」还原即可，细则见 [docs/upgrading.md](docs/upgrading.md)。
 - **跨版本迁移请在同版本之间导**：格式 5 起带全局模型配置、格式 6 起再带字体；更早的版本（≤1.0.2）会拒收并提示升级。**反方向也有限制：2.0 不导入 1.x 的备份包**——包内库没有 `app_schema_epoch` 会被直接拒收并提示用 ResumeForge 1.0.2 打开；2.0 自己导出的包照常可导入。
 - **交付存档**：原简历删除后仍可按标题、公司、岗位与来源找回历史交付；下载的是快照重放结果，不保证与原始文件字节一致。
-- **一键更新**：Windows 双击 `update.cmd`，macOS 双击 `update.command`；只替换程序文件，`data/`、`.env`、`runtime/` 不动。
+- **一键更新**：Windows 双击 `update.cmd`，macOS 双击 `update.command`，Linux 执行 `bash update.sh`；只替换程序文件，`data/`、`.env`、`runtime/` 不动。
 - **同 major 内更新不会动数据库**：迁移在下次启动时执行，迁移前自动备份到 `backend/data/backups/`。**1.x → 2.0 是例外**：旧库整包归档到 `legacy-archive/<时间戳>/` 后建空库，新库从空白开始（归档里保留全部旧数据、可用 1.0.2 打开；**不搬数据**）。应用内**设置 → 「更新与帮助」→ 软件更新**可检查、下载并看进度；更新包校验 `.sha256`，**是否成功以"实际运行的版本"为准**。
 
 不要使用 `git clean -fdx`，也不要删掉整个项目目录后直接覆盖。完整步骤见 [docs/upgrading.md](docs/upgrading.md)。
@@ -272,7 +289,7 @@ cd ResumeForge
 <details>
 <summary><b>是否需要联网？</b></summary>
 
-不需要。除「投递台」的采集与投递、「网申填表」这两条会访问招聘网站的链路，以及你主动触发的 AI 生成（含助手的联网搜索）之外，其余功能全部离线可用；用 Ollama / LM Studio 这类本地模型时，连 AI 生成也不出本机。
+不需要。除「投递台」的采集与投递、「网申填表」这两条会访问招聘网站的链路，以及你主动触发的 AI 生成（含助手的联网搜索）之外，其余功能全部离线可用；用 Ollama / LM Studio 这类本地模型时，连 AI 生成也不出本机。可选的**本地**语义检索首次需要下载约 111MB（Windows zip 实测），之后同样离线可用。
 
 </details>
 
@@ -305,6 +322,20 @@ cd ResumeForge
 </details>
 
 <details>
+<summary><b>「任务」卡在哪里看？关掉会怎样？</b></summary>
+
+在**首页**（近期提醒卡下方、待办卡上方）：待确认在前、进行中在后，合计最多 3 条，「已结束」默认收起；点「查看步骤」就地展开，同一时间只展开一条，并标出「当前这步」。提醒到期自动生成的「准备：…」卡也在这里（带「来源：提醒」徽标）。没有可显示的任务时整张卡不出现。总开关在**设置 →「助手与 AI 行为」→「任务卡」**：关闭后不再生成、首页也不再显示，已生成的记录会保留，重新打开即恢复。
+
+</details>
+
+<details>
+<summary><b>语音输入怎么用？会不会自动发送？</b></summary>
+
+先在**设置 →「助手与 AI 行为」→「语音转写」**配置 OpenAI 兼容的转写服务（地址 / 模型 / Key）。之后在助手输入框、模拟面试答题框或复盘「追问」框点麦克风说话，识别结果只填进输入框，**要你自己确认后发送**，不会自动提交。音频会发送到你配置的服务商，本应用不保存音频；单段上限 3 分钟（追问 1 分钟）。
+
+</details>
+
+<details>
 <summary><b>数据存放在哪里？更换电脑如何迁移？</b></summary>
 
 全部在本机的数据目录里：主库 `backend/data/resume_forge.db`（桌面版在 `%APPDATA%\ResumeForge\data`），附件、照片、自定义字体与备份都在同一目录下，不经过任何第三方。换电脑时用「设置 → 数据与导出 → 导出当前数据集」打一份包，在新机器上「导入备份为新数据集」即可；细节见[更新而不丢失数据](#-更新而不丢失数据)。
@@ -314,7 +345,7 @@ cd ResumeForge
 <details>
 <summary><b>支持哪些操作系统？</b></summary>
 
-官方提供 Windows 10/11 与 macOS 13+ 的启动器（`start.cmd` / `start.command`）和安装包（Windows 安装版、macOS dmg）；Linux 没有官方支持，也没有打包与验收。没装 Python / Node 也能用：首次启动会准备便携运行时。
+官方提供 Windows 10/11、**macOS 14+** 与 Linux 的启动器（`start.cmd` / `start.command` / `start.sh`）和安装包（Windows 安装版、macOS dmg、Linux AppImage）。**macOS 13 及更早版本不再获得官方支持**：本版本为可选的本地语义检索运行时把地板抬到 macOS 14（更老系统可能仍能启动，但不再测试、也不提供支持）。Intel Mac 可运行应用并使用**远程**语义检索，不能用本地模型。Linux 按 **x86_64 / aarch64、glibc ≥ 2.31**（Ubuntu 22.04+ / Debian 12+ / Fedora 38+ 一类）验收，更老的发行版与其它架构未经验证。没装 Python / Node 也能用：首次启动会准备便携运行时。
 
 </details>
 
@@ -404,8 +435,6 @@ cd ResumeForge
 - 新增数据表或列必须写 Alembic 迁移与降级脚本，并补「表集合前后不变」的断言；
 - 提交信息遵循 Conventional Commits（`feat:` / `fix:` / `docs:` …）。
 
-这个项目采用 [Contributor Covenant](CODE_OF_CONDUCT.zh-CN.md) 行为准则。
-
 ## 📄 许可证
 
 本项目采用 [Apache License 2.0](LICENSE) 授权，© 2026 magicapple123。
@@ -414,6 +443,7 @@ cd ResumeForge
 - 软件按「原样」提供，不附带任何明示或暗示的担保。
 - **代码授权不包含商标授权**：项目名称「简历通 ResumeForge」、图标与 logo 不随许可证一并授权，二次分发请使用自己的名称与标识。
 - 1.0.2 及更早版本以 MIT 授权发布，该授权对这些版本持续有效且不可撤销；Apache-2.0 适用于之后的版本。
+- **第三方组件**：可选的语义检索模型权重与隔离运行时**不随应用分发**，首次使用时按需下载并按仓库钉死的 SHA-256 校验。它们的许可证（IBM Granite 嵌入模型：Apache-2.0；onnxruntime：MIT；tokenizers：Apache-2.0；numpy：BSD-3-Clause）列在 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
 - Windows 安装包在 CI 中经 [SignPath Foundation](https://signpath.org) 的开源项目免费代码签名计划签名，证书签发后 Windows 显示的发布者是 **SignPath Foundation**，不是仓库作者本人。截至目前 test-signing 链路已接通、生产证书仍在等待签发，因此 Release 上现有的安装包**仍是未签名包**（见上面的下载说明）。签名覆盖哪些文件、签名请求从哪来、由谁批准，见[代码签名策略](https://magicapple123.github.io/ResumeForge-official/code-signing.html)。
 
 ## ⭐ Star 历史

@@ -6,6 +6,8 @@
 
 提交修改前请先阅读项目根目录的 [AGENTS.md](AGENTS.md)，其中包含长期维护原则、Windows 环境约定、验证命令和安全边界。
 
+参与本项目（Issue、Pull Request、讨论）即表示你同意遵守[行为准则](CODE_OF_CONDUCT.zh-CN.md)；如何报告不当行为见其中「执行范围与报告」一节。
+
 ## 开始之前
 
 - Python 3.11–3.13（CI 覆盖 3.11 / 3.12 / 3.13；`pyproject.toml` 的 `target-version = "py311"`）。

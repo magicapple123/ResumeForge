@@ -6,18 +6,19 @@ ResumeForge 是本地单用户应用。代码、Python/Node 依赖和本地业�
 
 不论哪种安装方式，都要满足三条：**代码换成新的、依赖跟着装、`data/` 与 `.env` 原地不动**。
 
-升级前先关闭正在运行的后端和前端进程。在项目目录双击 `update.cmd`（Windows）或 `update.command`（macOS）
-会自动完成前两条：Git 检出走 `git pull --ff-only` + 依赖同步，压缩包安装的目录则下载最新源码并覆盖程序文件，
+升级前先关闭正在运行的后端和前端进程。在项目目录双击 `update.cmd`（Windows）、`update.command`（macOS），
+或在终端执行 `bash update.sh`（Linux），会自动完成前两条：Git 检出走 `git pull --ff-only` + 依赖同步，
+压缩包安装的目录则下载最新源码并覆盖程序文件，
 `backend/data/`、`backend/.env`、`runtime/`、`backend/.venv/`、`frontend/node_modules/` 一律保持原样。
 先预览而不改文件：Windows 用 `powershell -File scripts\Update-ResumeForge.ps1 -DryRun`，
-macOS 用 `bash scripts/macos/update.sh --dry-run`。
+macOS 用 `bash scripts/macos/update.sh --dry-run`，Linux 用 `bash scripts/linux/update.sh --check`。
 
 数据库结构由 Alembic 在下次启动时自动升级，升级前会在 `backend/data/backups/` 留一份快照。
 应用内 **设置 → 更新与帮助 → 软件更新** 可以直接检查有没有新版本；Windows 还可以在应用内下载并查看进度，选择后台下载，
 下载完成后确认「重启并安装」原地覆盖程序并自动重启。**应用内覆盖安装目前只支持 Windows**；macOS 请用
-`update.command`（同样是"下载新包 → 只覆盖程序文件"），Linux 请继续按本文件的手动流程操作。
+`update.command`、Linux 请用 `update.sh`（同样是"下载新包 → 只覆盖程序文件"，`data/` 与 `.env` 原地不动）。
 
-更新包会按**当前平台**挑选（发行版同时挂了 Windows 与 macOS 的包），下载完还会核对发布时一并上传的
+更新包会按**当前平台**挑选（发行版同时挂了 Windows、macOS 与 Linux 的包），下载完还会核对发布时一并上传的
 `.sha256`——两者对不上就停下，不会拿一个可能被截断的包去覆盖程序文件。
 
 **更新成没成，看"现在跑的是哪个版本"，不是看它有没有打印"完成"。** 更新器会把这次安装的经过写进
@@ -27,6 +28,36 @@ macOS 用 `bash scripts/macos/update.sh --dry-run`。
 无论更新在哪一步失败，`backend/data/` 与 `.env` 都不会被改动。
 
 Windows 更新器在覆盖程序文件之前会给用户数据拍一份快照，放在 `backend/data/pre-update/<时间戳>/`。2.0 起里面除旧的 `*.db` 兜底拷贝外，还有一份由 `backend/scripts/create_user_data_snapshot.py` 生成的完整 zip（与「导出全部数据集」同格式：数据库 + 附件 + 字体 + 全局模型配置），并且已经过归档校验确认能恢复；快照失败会直接中止更新，不会继续覆盖程序文件。**跨 major 升级**的那一份目录名是 `pre-major-<时间戳>`，不会被后续轮转清理；普通快照保留最近 3 份。
+
+## 升级到含「语义检索」的版本（macOS 14 / 本地 + 远程 provider）
+
+这个版本把**可选**的语义检索（RAG）接成了产品能力，并因此调整了 macOS 兼容性声明；升级流程本身不变，没有数据库迁移。
+
+### macOS 13 不再获得官方支持
+
+- 官方支持的地板从 **macOS 13 抬到 macOS 14**：macOS 13 及更早版本上的应用可能仍能启动，但**不再测试、不再提供官方支持**；遇到问题请先升级系统。
+- 原因：本地语义检索的隔离运行时 onnxruntime 1.31.1 只发布 `macosx_14_0_arm64`（以及 Windows / Linux 的 wheel），**没有 macOS x86_64 wheel**。因此 **Intel Mac 可以运行应用本身**（dmg 仍出 x64 / arm64 两份，启动链不做版本闸门），但**不能使用本地语义检索**，只能用远程 provider。
+- 升级不会因此改动任何用户数据；`start.command` / `start.cmd` 等启动链没有新增版本闸门。
+
+### 语义检索默认关闭，旧配置无需迁移
+
+**默认关闭、旧配置无需迁移**：升级后语义检索保持关闭，生成行为与升级前完全一致；没有任何数据迁移或必填配置。启用入口只有设置页：启用本地或远程 provider 即等于启用语义检索，不需要改 `.env`；`RAG_RETRIEVAL_ENABLED` 保留为开发 / 评测总闸。
+
+想启用：**设置 →「AI 模型」→「语义检索」**，二选一：
+
+- **本地模型**：点「下载本地模型」（首次约 110–126MB：打包模型约 74.6MB + 运行时按平台约 35–51MB，均为资产清单里的 zip 传输体积；校验 sha256 后解压到数据目录下的 `rag-model/` 与 `rag-runtime/`，解压后模型 + 运行时合计约 237–280MB；仅首次需要联网），完成后点「启用本地模型」，之后本机编码。设置页显示本机平台的实际值。
+- **远程服务**：选「服务商」预设或「自定义」，填 OpenAI 兼容的「接口地址」+ 模型名 +「API 密钥」，首次按地址弹「隐私确认」，点「测试连接」自动探测维度，通过后点「启用远程检索」（0 下载，任何 64 位平台可用）。
+
+失败、断网、Key 失效、校验不符都会自动回退关键词检索，不影响生成。详见[使用指南](user-guide.md)的「语义检索」一节。
+
+### 备份、安装包与回滚
+
+**备份与安装包体积**：备份包不会变大——权重与运行时登记为运行期可重建资源（`RUNTIME_ONLY`），不进备份；`global_settings.json`（含语义检索配置与按机加密保存的密钥）本来就不在备份成员里，所以密钥也不会随备份走。安装包同样不会变大——权重与运行时都按需下载，不随任何安装包 / 发布压缩包分发。升级前导出的旧备份照常导入；只用远程的用户不产生任何下载。
+
+**怎么回退**：
+  1. 设置页「语义检索」点「关闭语义检索」即回到关键词检索；要清远程配置就点「清除密钥」（清除后立即停用，后端不再向该地址发请求）。
+  2. 想连本地文件一起清掉：关闭应用后删除数据目录下的 `rag-model/` 与 `rag-runtime/` 两个目录，重新打开会回到「未下载」，没有残留告警。
+  3. 回到旧版本代码：语义检索没有数据库表 / 迁移，旧版本不认识这些配置只会忽略；删掉两个下载目录即可，不需要降级数据库；历史版本的备份兼容规则见下一节。
 
 ## 从 1.x 到 2.0：整包归档 + 全新库
 
@@ -93,9 +124,9 @@ cd ../frontend
 npm ci
 ```
 
-依赖安装完成后，Windows 用户可在项目根目录双击 `start.cmd`、macOS 用户双击 `start.command`，它会启动前后端并自动打开页面。需要关闭服务时双击 `stop.cmd` / `stop.command`。停止时优先按启动记录（PID、命令行与启动时刻签名三者对得上才动手）；**没有启动记录时**（实例被别的窗口/脚本直接拉起、记录被清理等）会按「监听端口 + 启动命令特征 + 健康检查自报 ResumeForge」识别当前实例再停，所以不会再出现「双击 stop 没反应、端口仍被占」的情况；身份对不上的进程一律不碰。
+依赖安装完成后，Windows 用户可在项目根目录双击 `start.cmd`、macOS 用户双击 `start.command`，Linux 用户在项目根目录执行 `bash start.sh`（先 `chmod +x start.sh` 也可以 `./start.sh`），它会启动前后端并自动打开页面。需要关闭服务时双击 `stop.cmd` / `stop.command`，或执行 `bash stop.sh`。停止时优先按启动记录（PID、命令行与启动时刻签名三者对得上才动手）；**没有启动记录时**（实例被别的窗口/脚本直接拉起、记录被清理等）会按「监听端口 + 启动命令特征 + 健康检查自报 ResumeForge」识别当前实例再停，所以不会再出现「双击 stop 没反应、端口仍被占」的情况；身份对不上的进程一律不碰。
 
-一键启动器默认使用后端端口 8005，页面地址就是它（发布包自带 `frontend/dist`，由后端同源提供，运行期不需要 Node）；只有显式以 dev 模式启动（`--frontend-mode dev`，Windows 为 `-FrontendMode dev`）时才需要前端端口 5173。若端口冲突，Windows 用 `-BackendPort`（`start.cmd -BackendPort 8010`，参数用空格分隔），macOS 用 `--backend-port`（`bash scripts/macos/start.sh --backend-port 8010`）。手动启动示例中的后端端口 8000 是开发默认值，与一键启动器互不冲突。
+一键启动器默认使用后端端口 8005，页面地址就是它（发布包自带 `frontend/dist`，由后端同源提供，运行期不需要 Node）；只有显式以 dev 模式启动（`--frontend-mode dev`，Windows 为 `-FrontendMode dev`）时才需要前端端口 5173。若端口冲突，Windows 用 `-BackendPort`（`start.cmd -BackendPort 8010`，参数用空格分隔），macOS 用 `--backend-port`（`bash scripts/macos/start.sh --backend-port 8010`），Linux 用 `bash start.sh --backend-port 8010`。手动启动示例中的后端端口 8000 是开发默认值，与一键启动器互不冲突。
 
 启动器会在 `frontend/` 目录执行 npm 安装，因此从资源管理器双击启动时不会因为当前工作目录不同而误报缺少 `package-lock.json`。仓库包含锁文件时使用 `npm ci`；旧压缩包缺少锁文件时会回退到一次 `npm install`。
 
@@ -104,6 +135,8 @@ npm ci
 **只装了 Python 3.14 的电脑会被当成"没有可用 Python"**：锁定的后端依赖（尤其是 `pydantic-core==2.33.1`）还没有 cp314 轮子，装的时候会退化成源码编译并失败。启动器会明确提示版本窗口，然后走自动准备装一个 3.12；已有的 3.14 不受影响。若 `.venv` 是早前用超出窗口的解释器建的，启动时会把它移到 `runtime/venv-unsupported-<时间戳>/` 后重建，而不是反复用同一个坏环境失败。
 
 **macOS 侧的自动准备与 Windows 不同，这是有意的**：macOS 没有 `winget`，而 python.org 的 `.pkg` 安装器**必须用 `sudo`**——一个"双击就能用"的启动器不该在最开头弹管理员授权。所以 macOS 上缺少运行时会直接下载**便携版**并解压进 `runtime/tools/`：Python 用 python-build-standalone 的 `install_only` 包，Node.js 用官方 darwin 压缩包。两者都**先试国内镜像、官方放最后**（`nodejs.org` 在国内经常连不上），但**每个候选都必须通过仓库里钉死的 SHA-256**——摘要常量在仓库里，不来自镜像，所以镜像只能"慢或旧"，不能替换内容。同样地，它**不写 `/usr/local`、不碰 Homebrew / nvm、不需要管理员密码**，删掉项目目录就等于卸载干净。
+
+**Linux 侧同样走便携版，但多一道预检**：Linux 没有 `winget`，而发行版自带的 Python 常缺 `venv` / `ensurepip`（Debian/Ubuntu 把它们拆成了独立的 `python3-venv` 包），直接建虚拟环境会失败。所以 Linux 启动器先探测系统解释器、**实测 `venv` 与 `ensurepip` 真的可用**，可用就直接复用；不可用时提示一句 `sudo apt install python3-venv`（Fedora 系为 `sudo dnf install python3`），然后回落到 python-build-standalone 的 `install_only_stripped` 包（x86_64 约 34MB、aarch64 约 29MB，比默认包小三分之二）。摘要常量同样钉在仓库里，镜像只能"帮你搬"不能替换内容。Linux 上运行期不需要 Node：发布包自带 `frontend/dist`，页面由后端同源提供。
 
 开发与排错时（Windows / macOS / Linux 都一样）仍可分别启动后端与前端，并确认健康检查正常：
 

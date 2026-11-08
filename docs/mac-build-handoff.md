@@ -16,6 +16,8 @@
    - `ResumeForge-Setup-<ver>.exe` + `.sha256`（Windows）
    - `ResumeForge-<ver>-x64.dmg` / `ResumeForge-<ver>-arm64.dmg` + `.sha256`（mac 双架构，Intel 与 Apple Silicon 原生各一份）
 
+  > 说明：dmg 仍出双架构、Intel Mac 可安装并运行应用；但 **Intel Mac 不能使用本地语义检索**（onnxruntime 没有 macOS x86_64 wheel），只能走远程 provider。这与 dmg 构建无关，构建/启动链不做版本闸门。
+
 命令行等价操作：
 
 ```bash
@@ -41,7 +43,7 @@ gh run watch
 ## 二、前置条件（先逐条检查，缺什么补什么）
 
 ```bash
-sw_vers                       # 期望 macOS 13+（Sequoia 15.x 更佳）
+sw_vers                       # 期望 macOS 14+（Sequoia 15.x 更佳；macOS 13 已不再获得官方支持）
 uname -m                      # 期望 x86_64（VMware 虚拟机）；arm64 亦可
 df -h /                       # 期望 ≥15GB 空闲
 xcode-select -p               # 若无输出：xcode-select --install（弹出安装，约 10-20 分钟）

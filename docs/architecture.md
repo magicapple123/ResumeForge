@@ -389,6 +389,192 @@ placement / format 由字段目录补；**渲染与导出链路不再有「承�
 辅助函数（`ensure_custom_field_lines_in_resume` 等）仍服务生成中间态并按 T5 审计保留；
 已存 v2 文档的分析、修订与来源采纳不经过该中间态。
 
+## 核心数据流：RAG 语义补召回（RAG v2/v3，默认关闭）
+
+RAG 是**候选选择层**的可选增强，不是把生成链改成向量问答：它只决定「哪些资料条目进入候选」，
+不改变候选的字段形状 / 键序 / 文本内容（`build_llm_profile_prompt_data()` 的逐字节历史约束），
+也仍要经过既有的分区名额、预算、grounding 与一致性检查。两个开关**默认 `false`**且相互独立：
+`rag_retrieval_enabled`（向量补召回 + 加权融合，**开发 / 评测总闸**）与
+`rag_query_expansion_enabled`（Phase 0 查询扩展）。**产品形态下语义检索由设置页启用的 provider 驱动**：
+在设置页启用本地 / 远程 provider 即等于启用语义检索（不需要改环境变量），`rag_retrieval_enabled`
+只是开发 / 评测总闸——两者**任一为真即生效**（`_retrieval_enabled()`，见「真实 provider 接入」）。
+两者都未启用时（默认）`prepare_selection_boost()` 返回空作用域，`_select_entries()` /
+`build_job_focus()` 走与改造前一致的路径——**生成链行为与改造前逐字节一致**。
+
+v3 起 embedding provider 有真实实现（本地 `local-onnx` / 远程 `openai-http`），由设置页持久化配置驱动；
+配置与资产全部按需获取，默认不下载任何东西（见「真实 provider 接入」）。
+
+```mermaid
+flowchart LR
+    CP["冻结的 ConsumedProfile"] --> CH["rag_chunking.build_chunks<br/>chunk + canonical_item_hash 桥接表"]
+    CH --> IX["rag_index<br/>进程内 LRU 向量缓存"]
+    CH --> HY["rag_hybrid<br/>关键词分 + 10×cosine 加权融合"]
+    IX --> HY
+    JOB["JobOut"] --> QE["rag_query_expansion<br/>Phase 0 扩展词"]
+    QE --> FOCUS["build_job_focus<br/>扩展词只并入 terms"]
+    JOB --> FOCUS
+    CH --> RS["rag_service.prepare_selection_boost<br/>请求级编排，失败即空作用域"]
+    HY --> RS
+    RS --> SEAM["rag_seam.selection_scope<br/>请求内 ContextVar"]
+    SEAM --> FOCUS
+    SEAM --> SEL["_select_entries(boost)<br/>内置四分区 + filter_by_job=True 自建板块"]
+    FOCUS --> SEL
+    SEL --> OUT["既有分区名额 / 预算 / grounding / 一致性检查"]
+```
+
+一条请求内的数据流：① `generate_routes.generate_resume` 在冻结 `ConsumedProfile` 之后调用
+`prepare_selection_boost()`；② `rag_service` 用快照构造 chunk（`display_text` 只来自
+`build_consumed_data()` → `build_llm_profile_prompt_data()` 的白名单投影），逐条查 / 填
+`rag_index`（未命中时 `embed_documents()`，文本只来自投影），再 `embed_query(JD)` 并交给
+`rag_hybrid` 做关键词 + 向量加权融合（向量分量 `10×cosine`）；③ 结果装进 `SelectionBoost`，由 `rag_seam.selection_scope`
+在「构造候选」的生成迭代外层激活；④ `profile_matching._select_entries(..., boost)` 把 boost
+加进 `_score_item()` 分数（先 `round(..., 4)` 再比较），`build_job_focus()` 把扩展词并入
+`terms`；⑤ 之后仍按既有分区名额截断、走预算压缩、grounding 与一致性检查。
+
+| 模块 | 职责 |
+|---|---|
+| `rag_types.py` / `rag_chunking.py` | 由冻结消费快照构造稳定 chunk 与 `(section_key, entry_id) ⇄ canonical_item_hash` 双向桥接表；`canonical_item_hash` 取**下游实际 item** 的 `canonical_json`（不是 `display_text`），主字段为空的条目按下游口径过滤，避免下标错位；自建板块主文本只认 `paper_policy.custom_section_text_field()` |
+| `llm/embeddings.py` | embedding 能力与工厂（复用 `llm/` 的 retry / net_policy / operation_budget / usage）；`EmbeddingModelSpec` 携带 provider / model / dim / pooling / query_prefix / doc_prefix / normalize 与指纹，任一项变化即视为新索引；`resolve_embedding_spec()` 持久化配置优先，`create_embedding_provider()` 按 provider 派发 fake / local-onnx / openai-http，构造失败统一收敛为可回退的 `EmbeddingError` |
+| `rag_policy.py` | 数据范围与白名单：`llm_allowed` / `private` 字段过滤、`filter_by_job` 规则、boost 分区白名单（与 `profile_relevance._CONSUMED_VALUE_SECTIONS` 逐字一致）、`(dataset_id, group_id)` 精确同域 |
+| `rag_index.py` | 按 entry 粒度的有界 LRU 向量缓存（默认 4096 条）；缓存键含 `content_hash`，改一条只失效那条；`workspace_revision` 不进键（只作诊断 / 整库重建判断） |
+| `rag_hybrid.py` | 纯 Python cosine（语料上限约 320 条，检索不是瓶颈）+ 加权融合（`boost=VECTOR_WEIGHT(10)×cosine`，10 < 技能权重 12 以保留硬优先级；RRF `K=60` 作为免调权基线保留）；分先定点化，平局回落原顺序；同一 entry 跨 chunk 去重 |
+| `rag_seam.py` | RAG → 生成链的唯一适配层：`selection_scope` / `active_boost` / `active_extra_terms`；空作用域 = 完全回退 |
+| `rag_service.py` | 请求级编排：读冻结快照 → 查询扩展 → 编码 / 索引 → 融合 → `SelectionBoost`；**永不抛异常**，任何失败返回可用空作用域。受 `rag_request_budget_seconds` 硬墙钟约束，超预算回退并登记 `rag_index_warmup` 后台预热；`generate_with_scope()` 只覆盖候选构造段（以 `mark_selection_done()` 为界） |
+| `rag_query_expansion.py` | Phase 0：用已配置 LLM 把 JD 提炼成 10–20 个中文近义 / 上位词，只并进 `JobFocus.terms`；缓存复用 `job_analysis_cache` 的同一列与同一 fingerprint |
+| `rag_observability.py` | 日志唯一出口：`RagEvent` 只有 provider / 模型 / 候选数 / 命中来源 / 耗时 / 回退原因 / 哈希前缀 7 个字段（结构上放不下正文），字符串统一过 `runtime/log_redact.py` |
+
+**数据边界**：索引输入只能是生成请求已经冻结的 `ConsumedProfile`（`sections[key].entries`
+带 `entry_id`）；不读 `profile_entry` 全表、不调用 `load_all_consumed_profile()`、不在生成中途
+重读数据库；只使用模型输入白名单投影，`private` / `llm_allowed=False` 的字段值不会进入 chunk、
+embedding 或日志。
+
+**不新增数据库表 / 迁移 / 数据目录**：向量只存在有上限的进程内缓存，重启后允许重算，属于
+**可重建派生数据、不进备份**；备份导入后没有索引也能正常生成（回退关键词链）。Phase 0 的扩展词
+写回岗位已有的 `analysis_cache` 列，同样不新增表或迁移。
+
+### 配置项
+
+环境变量名为字段名的大写形式（pydantic-settings 大小写不敏感），也可写进 `backend/.env`；
+业务代码只读配置，不出现具体模型字符串。默认值按 `backend/app/config.py` 的字面量填写（字符串带引号）。
+
+| 配置项（环境变量） | 默认值 | 说明 |
+|---|---|---|
+| `RAG_RETRIEVAL_ENABLED`（`rag_retrieval_enabled`） | `False` | **开发 / 评测总闸**（产品形态由设置页启用的 provider 驱动，任一为真即生效）；未启用时生成链与改造前逐字节一致 |
+| `RAG_QUERY_EXPANSION_ENABLED`（`rag_query_expansion_enabled`） | `False` | Phase 0 查询扩展开关，与总开关相互独立 |
+| `RAG_QUERY_EXPANSION_TIMEOUT_SECONDS`（`rag_query_expansion_timeout_seconds`） | `8.0` | 扩展调用超时（秒，1–60） |
+| `RAG_EMBEDDING_PROVIDER`（`rag_embedding_provider`） | `"fake"` | 环境变量配置只接 `fake`（测试 / 老路径）；真实 provider 由设置页持久化配置驱动（见「真实 provider 接入」） |
+| `RAG_EMBEDDING_MODEL`（`rag_embedding_model`） | `"fake-embedding-v1"` | 模型名；换模型必须同时改 dim / pooling / 前缀并重跑离线评测 |
+| `RAG_EMBEDDING_DIM`（`rag_embedding_dim`） | `64` | 向量维度（8–8192） |
+| `RAG_EMBEDDING_POOLING`（`rag_embedding_pooling`） | `"mean"` | `cls` / `mean` / `last-token`，由模型决定，换模型必须一起改 |
+| `RAG_EMBEDDING_QUERY_PREFIX`（`rag_embedding_query_prefix`） | `""` | 查询侧指令前缀 |
+| `RAG_EMBEDDING_DOC_PREFIX`（`rag_embedding_doc_prefix`） | `""` | 文档侧指令前缀 |
+| `RAG_EMBEDDING_NORMALIZE`（`rag_embedding_normalize`） | `True` | 输出是否已 L2 归一（cosine 下只影响分数尺度，不影响排序） |
+| `RAG_EMBEDDING_TIMEOUT_SECONDS`（`rag_embedding_timeout_seconds`） | `10.0` | **远程 HTTP 单次请求超时上限**（秒，1–120），构造 `OpenAIHttpEmbeddingProvider` 时传入；每次生成请求另有 `rag_request_budget_seconds`（默认 1.5s）硬闸。本地 provider 不用该字段 |
+| `RAG_EMBEDDING_MAX_CANDIDATES`（`rag_embedding_max_candidates`） | `40` | 进入融合的向量候选上限（1–500），防止失败时把整库塞进融合 |
+| `RAG_EMBEDDING_ALLOW_FAKE`（`rag_embedding_allow_fake`） | `False` | 是否允许 fake provider（确定性 hash 向量，与语义无关）参与排序；默认 false 时打开总开关也只回退（`fallback=fake_provider`） |
+| `RAG_REQUEST_BUDGET_SECONDS`（`rag_request_budget_seconds`） | `1.5` | 单次生成请求内算 boost 的墙钟预算（0.1–30 秒）；超预算立即回退（`fallback=budget_exceeded`）并登记后台 `rag_index_warmup` 预热 |
+| `RAG_ASSET_BASE_URL`（`rag_asset_base_url`） | `"https://github.com/magicapple123/ResumeForge/releases/download/rag-assets-v1"` | 本地权重 / 运行时 zip 的第一下载源（可整体替换成镜像 / 自托管） |
+| `RAG_ASSET_HF_BASE_URL`（`rag_asset_hf_base_url`） | `"https://huggingface.co/ibm-granite/granite-embedding-97m-multilingual-r2/resolve/main"` | 备用下载源；每个源都各自校验 sha256，不用第一个源的校验结果替代 |
+| `RAG_LOCAL_MODEL_DIRNAME`（`rag_local_model_dirname`） | `"rag-model"` | 数据目录下本地权重的版本化子目录名（测试可覆盖） |
+| `RAG_LOCAL_RUNTIME_DIRNAME`（`rag_local_runtime_dirname`） | `"rag-runtime"` | 数据目录下隔离运行时的版本化子目录名（测试可覆盖） |
+| `RAG_EMBEDDING_ALLOW_PRIVATE_ENDPOINT`（`rag_embedding_allow_private_endpoint`） | `False` | 是否允许回环 / RFC1918 端点（本机 Ollama / LM Studio）；默认拒绝，公网端点不受影响 |
+
+### 真实 provider 接入（本地 + 远程，RAG v3）
+
+embedding provider 只允许三个值（`embedding_settings.EMBEDDING_PROVIDERS`）：
+
+- `fake`：确定性 hash 向量，**只供测试 / 链路对比**，默认被 `rag_embedding_allow_fake` 守卫（打开总开关也只回退 `fake_provider`）；
+- `local-onnx`：本地权重 + 隔离 onnxruntime 运行时，数据不出本机；
+- `openai-http`：任意 OpenAI 兼容 `/embeddings`（云端厂商、自建网关、本机 Ollama / LM Studio），以及「高级」自定义端点模板。
+
+**启用语义**：设置页**启用**一个真实 provider（打开 `enabled` 且 provider 为 `local-onnx` / `openai-http`）就等价于启用语义检索；`RAG_RETRIEVAL_ENABLED` 保留为开发 / 评测总闸，两者任一为真即生效（`rag_service._retrieval_enabled()`）。**生效顺序**（`resolve_embedding_spec()`）：设置页持久化配置（`DATA_DIR/global_settings.json` 的 `embedding` 段，`enabled` 且 `provider` / `model` / `dim` 齐备）优先；没有时才回退环境变量配置（测试 / 老路径，只支持 `fake`）。持久化字段：`provider / enabled / model / dim / pooling / query_prefix / doc_prefix / normalize / variant / base_url / api_key / batch_size / endpoint_mode / request_url / headers / body_template / response_path / allow_private / confirmed_hosts / last_error / updated_at`。`api_key` **按机加密保存**，HTTP 响应一律掩码（`********`），清除后立即停用；明文只在进程内构造 provider 时短暂存在。
+
+**本地路（`local-onnx`）**
+
+| 组件 | 职责 |
+|---|---|
+| `backend/app/data/rag-assets.json` | 资产清单（唯一事实源）：文件名、字节数、sha256、适用平台、onnxruntime 精确版本、模型 id 与上游 revision |
+| `rag_asset_manifest.py` | 读清单、按平台 / 架构选资产（`windows-x64` / `macos-arm64` / `linux-x64` / `linux-arm64`；macOS x64 无资产 → 本地不可用）、`verify_file()` 校验 |
+| `rag_model_download.py` | 下载状态机：状态 / 已下载字节 / 错误 / 取消；字节数与 sha256 双校验；先 GitHub Releases 再 HuggingFace，**每个源各自校验** |
+| `rag_runtime_loader.py` | 解包、`sys.path` 注入、`import onnxruntime` 版本探测、卸载回退 |
+| `rag_local_setup.py` | 设置页本地状态的唯一入口（下载 / 取消 / 删除 / 激活自检） |
+| `llm/embeddings_local.py` | `LocalOnnxEmbeddingProvider`：tokenizers + onnxruntime 推理（pooling / 前缀 / 归一化沿用 spec），沿用 `EmbeddingModelSpec.fingerprint()`；模型为 granite-embedding-97m-multilingual-r2 的 `int8_avx2` ONNX（dim 384 / pooling cls / normalize true，上游 revision 记在资产清单） |
+
+- **目录与备份**：权重在 `DATA_DIR/rag-model/<model-id>-<variant>/`、运行时在 `DATA_DIR/rag-runtime/ort-<version>/`，都带版本子目录（升 ORT / 换模型自动切目录，旧目录可清理）；两者登记进 `data_backup/coverage.py` 的 `RUNTIME_ONLY`——**不进备份、不触发 uncovered 告警**。
+- **不成为全局依赖**：`import onnxruntime / tokenizers / numpy` 只出现在 `ensure_runtime()` 成功后的函数体内；模块顶层导入即违反红线。`requirements.txt` 不变。
+- **平台矩阵**（onnxruntime 1.31.1）：Windows x64 / macOS 14+ arm64 / Linux x86_64 / Linux aarch64 可用本地；**Intel Mac（macOS x64）与 Windows arm64 没有对应资产，本地不可用、只能用远程**（Intel Mac 应用本身仍可运行，dmg 仍出双架构）。首次下载（zip 传输体积）Windows 约 111MB / macOS 约 110MB / Linux 约 122–126MB，解压后合计约 237–280MB；设置页按清单显示本机实际值。
+
+**远程路（`openai-http`）**
+
+- `POST {base_url}/embeddings`，`{"model":..., "input":[...]}`，读 `data[].embedding`；**按 `batch_size`（默认 25）切片**（厂商相关值、配置化，不硬编码；该实测模型 30 条会 HTTP 400）。切片失败只重试该片，不重发整批。
+- **维度自动探测**：首次「测试连接」发一条短文本、读回向量长度并落库，界面**不出现 dim 字段**；首次调用时维度不符即停用该 provider 并回退，不允许脏索引继续用。
+- 预设（`REMOTE_PRESETS`：百炼 / OpenAI / 智谱 / SiliconFlow / 本机 Ollama）**只提供默认值、不新增代码路径**；启用仍走真实探测（HTTP 200 + 维度自检）。已知无 `/embeddings` 的 host（DeepSeek / Groq / OpenRouter / Together / xAI 等）映射成「该服务商不提供 embeddings 接口」的可读文案，而不是裸 404——名单有时效性，不写成不可配置的白名单。
+- **自定义端点模板**：`request_url`、`headers`（值可用 `{api_key}` 占位）、`body_template`（只允许 `{texts}` / `{model}`）、`response_path`（极简 `a.b[*].c` 子集，自写解析，不引入 jsonpath）、`batch_size`。模板只做**字面量替换**，禁止 `eval` / `exec` / 任何表达式；模板 ≤ 8KB、响应体 ≤ 16MB、返回条数必须与请求一致；渲染后的 header 与完整 URL 不进日志 / 异常 / 报告。
+- **私网与回环**：`net_policy` 默认拒绝 IP 字面量的非公网地址；`RAG_EMBEDDING_ALLOW_PRIVATE_ENDPOINT`（或设置页 `allow_private`）显式开启后放行 RFC1918 / loopback，日志记 `endpoint_class=private`。主机名与 IP 字面量走同一判定函数。
+- **隐私确认**：按 host 记录（`confirmed_hosts`），首次为某 host 启用弹一次确认（「将把资料条目文本发送到 <host>」），**换 host 重新确认**、可撤销；撤销 / 关闭 / 清 Key 后立即回退关键词链。请求体仍只含 chunk 的白名单投影（姓名 / 电话 / 邮箱 / 私密链接不出现）。
+
+**请求预算、预热与索引清理**
+
+- 单次请求的 boost 计算受 `rag_request_budget_seconds`（默认 1.5s）硬墙钟约束：超预算立即回退 `budget_exceeded`，缺失向量交给后台 `ai_task` 的 `rag_index_warmup` kind 预热（复用现成执行器，不自己起线程）；暖缓存后第二次生成命中。首次远程请求因分批可能正好卡在预算边缘，**这是预期行为**，不靠调大预算掩盖。
+- 作用域只覆盖「构造候选」段（`generate_with_scope()` + `mark_selection_done()`），不覆盖整条流式生成。
+- 切换 provider / 模型 / 维度：设置页端点主动 `get_rag_index().clear()` 并记 `rag_event provider_switched`；`rag_service` 另按 spec 指纹变化兜底清一次（旧向量既不会被命中、又会占着有界 LRU）。
+
+**备份 / 安装包 / 密钥**：权重与运行时按需下载，**不进安装包、不进发布压缩包、不进备份**；`global_settings.json` 不在备份成员里（`KNOWN_FILES`），所以 provider 配置与加密后的 key 也不随备份走。只用远程的用户不产生任何下载。日志只记 provider / host / 候选数 / 耗时 / 回退原因 / 哈希前缀，不记正文、key 与完整 URL。
+
+### 回退与可观测性
+
+| 情况 | 行为 |
+|---|---|
+| 未启用（无环境总闸且无已启用 provider）/ 无冻结快照 / 无岗位 | 空作用域；不写 RAG 主链路日志（关闭是常态，不产生噪音） |
+| provider 未配置 / 持久化配置未启用 / host 未确认 / 本地运行时未下载 | 空作用域 + 回退原因 `not_configured`；错误短句不含 key 与完整 URL |
+| 总开关打开但 provider=`fake`（默认守卫） | 空作用域 + `fake_provider`；不会用噪声向量改写候选顺序 |
+| 单次请求超过 `rag_request_budget_seconds` | 空作用域 + `budget_exceeded`；登记后台 `rag_index_warmup` 预热，第二次生成命中 |
+| 本地下载失败 / sha256 不符 / 解包损坏 / 运行时导入失败 | 下载状态机记录原因（设置页可见）；provider 构造失败回退关键词链，**不显示为已启用** |
+| 远程超时 / 401 / 429 / 5xx / 坏 JSON / 维度不符 / 不兼容厂商 404 | 空作用域 + `timeout` / `provider_error` / 可读文案；生成链继续走关键词链 |
+| 索引为空（没有 chunk） | 空作用域；不影响生成 |
+| 查询扩展失败（未配置 LLM / 超时 / 坏 JSON / 空结果） | 返回空扩展词，`JobFocus` 保持原样 |
+
+RAG 主链路日志只允许 7 类元数据（provider / 模型 / 候选数 / 命中来源 / 耗时 / 回退原因 /
+哈希前缀）：`RagEvent` 没有自由文本字段，传 dict 时未知键被丢弃，字符串先脱敏再截断、哈希只
+保留前缀；**不含 JD 原文、简历条目正文、embedding 数组与密钥**。查询扩展日志同样只记类别 /
+词数 / 模型 / 指纹前缀。
+
+### 已知偏差与工程边界（以代码为准，详见交付报告）
+
+- **接缝用请求内 ContextVar 作用域，而不是给 `build_targeted_consumed_profile_context()`
+  加透传参数**：`profile_relevance.py` 与 `resume_generator.py` 已分别到约 490 / 500 行
+  （按 `test_file_size_budget.py` 的 LF 计数口径），且都被测试用 `monkeypatch` 钉死模块
+  命名空间（`test_profile_group_budget` 直接 patch `profile_relevance._select_entries` 等
+  符号），拆分或加参数都会改变既有契约。显式入口仍是 `_select_entries(..., boost=...)`；
+  作用域只在「构造候选」的同步代码里打开，不跨 `await`、不跨请求。
+- **两条生成入口都已接 RAG**（2026-11-08 返工 P0）：SSE 入口在请求线程算 scope 后由
+  `rag_service.generate_with_scope()` 包住消费；后台任务入口在 `resume_generate_runner`
+  自己的事件循环/消费协程内算 scope（ContextVar 不跨线程，不能放到 handler 线程）。
+  `resume_generate_runner.py` 曾 499/500 行，因此把输入重建搬到 `resume_generate_inputs.py`
+  （纯搬家，原模块 re-export 且把 `create_provider` 作为注入参数，保住既有
+  `monkeypatch.setattr("…resume_generate_runner.create_provider")` 锚点）。
+- **fake provider 默认被守卫**：`FakeEmbeddingProvider` 的向量是确定性 hash、与语义无关，
+  默认配置下打开 `RAG_RETRIEVAL_ENABLED` 只回退（`fallback=fake_provider`），不会用噪声改写
+  候选顺序；只有显式 `RAG_EMBEDDING_ALLOW_FAKE=true`（测试/链路对比）才生效。
+- **请求预算与后台预热**：编码不在请求路径上硬等——单次请求受 `RAG_REQUEST_BUDGET_SECONDS`
+  （默认 1.5s）限制，超预算回退并在 `db` 可达时登记 `ai_task` 的 `rag_index_warmup` kind
+  补齐缺失向量（复用现成执行器，不自己起线程）。作用域只覆盖生成器**首个事件**
+  （候选构造段），第二事件起 ContextVar 必须为 None（有单测钉住）。
+- **本地 provider 已接产品运行时，但验证边界要说清**：本地 `local-onnx` 走真实
+  granite-embedding-97m-multilingual-r2 int8 ONNX（离线 60 组实测 Recall@10 0.4056 → 0.6361，
+  详见交付报告）；**真实远程端点未做端到端验证**——本机没有 `EMBEDDING_API_KEY`，只有
+  mock transport 的协议证据，报告按「未验证（缺 key）」记录并给出将来验证命令；
+  **ARM 平台（Linux aarch64 / macOS arm64）的 int8 变体未真机验证**，若只能退到 fp32
+  必须停下来上报，不自行接受体积变化。`FakeEmbeddingProvider` 仍不得用于质量指标
+  （评测脚本会拒绝拿它算 Recall / nDCG）。Qwen3-Embedding-0.6B / harrier-oss-v1-270m
+  未下载未验证（报告 §8）。
+- **方案模块表之外的文件**：v2 的 `rag_service.py`（请求级编排）与 `rag_query_expansion.py`
+  （Phase 0）不在方案 §3.4 的模块表里；v3 另新增 `embedding_settings.py` / `embeddings_local.py` /
+  `embeddings_http.py` / `rag_asset_manifest.py` / `rag_model_download.py` /
+  `rag_runtime_loader.py` / `rag_local_setup.py` / `rag_remote_setup.py` /
+  `rag_embedding_endpoint.py` 与 `api/settings_embedding.py`（职责见「真实 provider 接入」）。
+  `rag_hybrid.py` 在表内，但实际职责扩展为含 `build_boost()` 的完整融合入口。
+
 ## 核心数据流：用户编写简历
 
 ```mermaid
@@ -842,7 +1028,7 @@ flowchart LR
 | 离线分享包不带敏感信息         | 分享包由脱敏 HTML/PDF + 只读快照 + 评论回传文件 + 本地 token 组成，token 仅离线校验、不做在线鉴权；删除走回收站软删除、磁盘产物不清理 |
 | ATS 检测带免责                 | `ats_check` 只做格式 / JD 关键词覆盖 / 信息位置三类静态规则检查，**不连接、不模拟真实招聘系统**，结果仅供参考、不构成通过保证 |
 | 内推转化口径派生               | `referral.converted` 是迁移 0018 的历史占位列；真实口径由关联 `ApplicationTrack` 后置位派生（进入面试及以上才算转化），写入侧不接受 `converted`、读取侧覆盖，避免表里手算第二份口径 |
-| 回收站覆盖二十二类内容         | 岗位 / 备选岗位 / 简历 / 投递 / 台账 / 资料 / 会话 + 内推 / 提醒 / 面经 / 分享包 / 题库 / 复盘 / 知识库 / 网申填充 / 表达资产 / 术语表，以及 0064 起新增的方案 / 自建板块 / 自建字段 / 资料条目，全部由 `trash.TRASH_SPECS` 注册表描述；新增一类只加一行，注册表驱动的 `live_only` / `trash_only` 让"哪张表用哪个列名"只写一次。**2.0 起是 22 类**：补充事实（`profile_fact`）这一类随整套模块下线一并移除，基线也不再创建对应表 |
+| 回收站覆盖二十三类内容         | 岗位 / 备选岗位 / 简历 / 投递 / 台账 / 资料 / 会话 + 内推 / 提醒 / 面经 / 分享包 / 题库 / 复盘 / 知识库 / 网申填充 / 表达资产 / 术语表，以及 0064 起新增的方案 / 自建板块 / 自建字段 / 资料条目、0008 起新增的求职偏好，全部由 `trash.TRASH_SPECS` 注册表描述；新增一类只加一行，注册表驱动的 `live_only` / `trash_only` 让"哪张表用哪个列名"只写一次。**2.0 + 期二起是 23 类**：补充事实（`profile_fact`）这一类随整套模块下线一并移除，基线也不再创建对应表 |
 | 方案不拥有数据 / 当前方案唯一       | 方案只记「名称 + 板块清单」，共享同一份 `profile_entry`；当前方案是单行状态表 + `CHECK(id = 1)`，默认方案由 CHECK 保证不可软删。这样"每个方案一份副本"与"无当前方案"在结构上就写不进库，不靠调用方自觉（R-17/R-24/R-25） |
 | 消费 DTO 与折叠态物理隔离       | 资料页编辑 DTO 含 hidden / collapsed_override；投影、生成、网申只吃 `ConsumedProfile`（类型里没有 collapsed）。否则"收起"迟早被某条取数链当成"不参与"，而它只该影响输入框展不展示（R-66/R-67） |
 | 1.x 资料不原地迁移、整包归档 | 1.x 旧库在首次启动时整包归档到 `legacy-archive/<时间戳>/`，2.0 用空库，**不搬数据、不回填**；2.0 基线仍建旧六表（空表、新界面不读、仍进备份），但**不建 `profile_fact` / `profile_fact_field_pref`**。不原地迁移是为了不改写用户历史，并且保住"回到 1.0.2 还能打开"的路（R-46/R-47/R-49） |
@@ -852,6 +1038,7 @@ flowchart LR
 | 旧简历读取时转换、保存写 v2    | `ensure_document_version` 在内存里把 v1 转 v2、不写库；转换规则只在 converter 里，文字不丢、条目数不丢、顺序可解释（D11/D12） |
 | 六个位置是产品边界             | 不做自由画布 / 任意嵌套 / 逐字符排版；位置只有六个抽屉，装不下就换行 + 按页数上限截断，不自动缩字号 |
 | 库版本闸门按 epoch 判，不按 revision 判 | epoch 表（`app_schema_epoch`，单行 `epoch=2`）由基线迁移创建；启动时先读 epoch 决定「升级 / 归档重置 / 拒绝」，只在 epoch==2 时才用 revision 判断是否在迁移链上。按 revision 判会把"老库 revision 不在新链上"误判成库损坏，也会让每次新增迁移天然变成一次不可升级变更 |
+| RAG 默认关闭、只在候选选择层加 boost | 生成链的 prompt 字节、候选字段形状与分区名额都有逐字节 / 逐条历史约束，RAG 若参与其中就等于同时改质量口径与事实边界。收敛成「可空作用域 + 回退关键词链」后：关闭时行为与改造前逐字节一致；评测不合格可整体停用而不回滚数据；排序可复现（融合分定点化、平局回落原顺序） |
 
 ## 部署与安全边界
 
@@ -1129,6 +1316,7 @@ flowchart LR
 - 求职进度按层拆测试：`test_tracker.py` 钉住核心规则（归一只做不会误合并的事、状态只能前进、拒信覆盖、同批折叠、合并不抹掉用户填过的字段、投递台回写不把进度打回去），`test_tracker_extract.py` 钉住解析与本地降级（缺公司或岗位就丢掉、「感谢投递」不会被读成面试、公司名取更完整的那一个），`test_tracker_api.py` 钉住 HTTP 面（固定路径不被 `/{id}` 吃掉、**预览不写库**、预览与执行一致、导出与筛选），`test_migration_0012.py` 钉住迁移的建表 / 唯一约束 / 幂等 / downgrade，`test_apply_task_runner.py` 里有一条钉住"投递成功会落一条进度记录"。
 - 事实台账按层拆测试：`test_claims.py` 钉住校验规则（已确认不得含占位符、枚举、日历日、建议规则的"该报才报"），`test_claims_api.py` 钉住 HTTP 面（固定路径不被 `/{id}` 吃掉、422/502、草拟的两条路径与"模型给未知承担程度时退回最保守取值"），`test_migration_0011.py` 钉住迁移的建表 / 幂等 / downgrade / 与模型常量的默认值一致，`test_resume_completeness.py` 钉住每个区块都被扫到与"不误报"，`test_claim_integration.py` 钉住两个接合点（台账为空时提示词逐字节不变、导出闸门与它的显式出路），`test_assistant_claim_tools.py` 钉住"助手改不了核实状态"。
 - 本批新增模块同样按层拆测试：`test_resume_writing.py` 钉住写作增强（STAR 改写注入 claim 事实边界、纯空白在 schema 层 422、未配置模型降级、提示词登记）；`test_match_scoring.py` 钉住参考分（五维加权、中性分、**不改变准入结论**）；`test_resume_diff.py` 钉住版本对比三态；`test_resume_risk.py` / `test_ats.py` 钉住质量合规与 ATS 免责；`test_watermark.py` 钉住水印后处理（HTML 转义、PDF 页数不变、空文本透传、不支持格式报错）；`test_share_package.py` 钉住离线分享包（脱敏快照、文件清单、token 校验、删除→回收站→恢复→再删→彻底删除闭环）；`test_referral.py` 钉住内推转化派生口径；`test_migration_0018.py` 钉住四张新表的建表 / 幂等 / downgrade。
+- RAG（默认关闭；v2 检索链路 + v3 真实 provider）按层拆测试：`test_rag_chunking.py` 钉住 chunk 身份与桥接（`canonical_item_hash` 对下游 item 的键序 / JSON 空白稳定、改值必变，主字段为空被过滤后 boost 仍命中正确条目，同条目跨 chunk 去重，自建板块主文本单源）；`test_rag_policy.py` 钉住白名单与 boost 范围（`llm_allowed` / private 过滤、`filter_by_job` 规则、boost 分区名单与 `profile_relevance._CONSUMED_VALUE_SECTIONS` 逐字一致、数据集 / 资料组同域、日志 7 字段白名单与脱敏）；`test_rag_hybrid.py` 钉住融合与作用域（融合分定点化与平局回落原顺序、加权向量分量截断负相似度、跨 chunk 去重、只改可 boost 分区、`selection_scope` 只在作用域内生效、关闭时 `prepare_selection_boost` 是 no-op、同输入两次融合一致）；`test_rag_query_expansion.py` 钉住 Phase 0（扩展词只进 `terms`、坏 JSON / 超时 / 空结果静默回退、缓存指纹失效）；`test_rag_guards.py` 钉住 2026-11-08 返工的关键性质（fake provider 默认被守卫且候选与关闭态逐字节相同、显式允许时才生效；请求预算超时回退并登记后台预热、预热幂等且第二次命中缓存；作用域只在候选构造段有效、`mark_selection_done()` 作用域外 no-op；两条入口的 runner 搬移不破坏 `create_provider` monkeypatch 锚点；SSE 入口首字节与 budget 证据）；`test_llm_embeddings.py` 钉住 provider 契约（前缀 / 归一化 / 维度 / 指纹、429 / 5xx / 坏 JSON / 超时 / 取消、fake 确定性）；v3 新增：`test_rag_embedding_settings.py`（持久化配置 / 掩码 / host 确认 / 清除后的停用语义）、`test_rag_settings_api.py`（`/status` 状态机、回环写保护、启用 / 关闭 / 清除时清索引）、`test_rag_local_assets.py`（清单与平台选择、sha256、下载状态机 / 取消、解包安全、运行时注入）、`test_rag_local_provider.py`（本地 provider 编码契约）、`test_rag_remote_provider.py`（25 条切片 / 401·429·5xx / 维度校验 / 404 文案）、`test_rag_endpoint_template.py`（模板字面替换、`response_path` 极简子集、8KB 模板 / 16MB 响应上限、渲染后 header 不泄漏）、`test_rag_remote_setup.py`（探测 / 模型列表 / 私网开关 / host 确认）、`test_rag_v3_backup.py`（权重运行时 `RUNTIME_ONLY` 不进备份）。集成与备份用例（冻结快照后切组不漂移、数据集 A 不命中 B、只失效改动的那条、`filter_by_job=True` 自建板块可被 boost 召回而 `False` 顺序不变、`selected_counts` / `entry_names` / `fallback_sections` 语义不失真、无向量结构时仍可导出 / 导入 / 启动）见 T3-D 交付的 `test_rag_integration.py` / `test_rag_backup.py`。
 - 网申填表按层拆测试，**并且刻意补上旧实现缺失的那类覆盖**：`test_webform_matching.py` 穷举取值决策（占位项永不选、别名、多候选判 `ambiguous` 不猜、日期只有年份时拒绝、`至今` 不算日期），`test_webform_engine.py` 钉住控件识别、负向词挡住"紧急联系人姓名"、`file` 控件永不被映射，以及**对着真实缺陷的回归守卫**（`select` 必须用 `HTMLSelectElement` 的 setter 而不是 `HTMLInputElement` 的；`test_webform_engine_*` 另外钉住「只填不点」——下拉 / 单选 / 复选 / 日期控件一律进 `skipped`、显式填充那条路照常能写），`test_webform_data.py` 钉住"取最高学历而不是第一条"，`test_webform_service.py` 钉住冲突项默认不勾选与快照过期语义，`test_webform_api.py` 钉住 HTTP 面。另有两条**机械守卫**把产品边界变成不变量：`test_webform_no_submit.py`（源码里出现 `.submit(` / `requestSubmit` 即红；快照脚本必须跳过提交类控件）与 `test_stop_aware_client_forwarding.py`（反射 `CdpClient` 与 `WindowAwareMixin` 的每个公开方法，断言包装层都转发了——漏转发不报错，只会让该能力在生产里静默失效）。前端 `WebFormPage.test.tsx` 钉住「界面上不存在文案含『提交』的按钮」与「冲突行默认不勾选」。AI 兜底另有四层：`test_webform_ai.py` 钉住**提示词里不含任何资料值**、目录外的字段名被丢弃、`__none__` 与自相矛盾的答案怎么收敛、模型挂了要降级、语义缓存与配额、**一次抖动要重试而"都不像"不重试**；`test_webform_ai_guard.py` 钉住采纳前的共用否决（亲属 / 跨族）；`test_webform_live.py` 钉住触发条件（**只对真正认不出的问**）、**不阻塞轮询**、过期答案丢弃、`skip_reason` 优先于模型；`test_webform_js_canary.py` 在真浏览器里钉住面板**不盖住输入框、离它够近、跟得住页面重排**、拖动保留的是相对偏移、备选逐条可点，以及卸载要停掉重排定时器。另有**离线评测语料**把准确率变成数字：`tests/fixtures/webform/pages/*.json`（一 incident 一文件：真实页面的控件清单 + 人工确认的期望映射，`scripts/collect_webform_sample.py` 从真机采样并自动剥值），`test_webform_match_corpus.py` 跑分回归（**错填为零**、基线单调不可回退——只许变好），`scripts/webform_match_report.py` 出人读报告；执行侧对应 `fixtures/webform/execution/*.json` + `test_webform_execution_corpus.py` 与 `test_webform_engine_recovery.py`（按调用顺序应答的 `ScriptedCdpClient` 钉住重试阶梯：写几次、回读几次、有没有多余的点击）。新增真机 incident 的流程是**先落语料、再补单测**：没有 case 背书的规则不加。
 - 思考模式按层拆测试：`test_llm_thinking.py` 钉住形态解析、档位归一化（换模型后残留的档位不照发）、请求体片段与探测的四种判定（真的生效 / 被静默忽略 / 被上游拒绝 / 压根没跑起来）；`test_openai_compat.py` 与 `test_llm_anthropic.py` 各自钉住**默认关闭时请求体逐字节不变**与 400 降级重试；`test_api_settings.py` 钉住 `/llm/thinking/check` 的两种模式以及"测试连接不受思考设置影响"；`test_assistant.py` 钉住助手不继承设置页的开关；`test_custom_settings_actually_apply.py` 从保存配置一路断到真实请求体。
 - 前端使用 Vitest 覆盖关键请求封装和核心交互（含投递台的队列准入拦截、暂停 / 停止、采集条件「未生效」、空态与错误态，以及匹配分析的五类结论展示（结论区不带百分比）与匹配度参考分区块（总分 + 分项 + 免责文案）），TypeScript strict、ESLint、Prettier 与生产构建提供静态门禁；复杂用户链路仍需按风险逐步补齐组件或端到端测试。

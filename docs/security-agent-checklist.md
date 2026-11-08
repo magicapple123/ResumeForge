@@ -78,7 +78,7 @@
 - [ ] **E5 默认不采集原文**：trace/span **不得**默认记录 prompt 正文、模型回复、工具入参/出参、用户生成内容；需要排障时用合成数据 + 显式 opt-in。
   落点（未来）：span 属性白名单 + 与 `A6` 同一套 `safe_log_text` 口径。T21 已给出可复用的内存版实现：`backend/app/services/assistant_run_trace.py` 的 `STEP_FIELDS` 白名单 + `redact_summary()`（26 条反例测试，含越界键检测）。
 - [ ] **E6 保留与清除**：trace 保留期、日志轮转、会话删除、数据集删除必须能真正清掉。
-  落点：`DELETE /api/assistant/conversations/{id}`、`DELETE /api/assistant/conversations/{id}/messages/{message_id}`、`POST .../messages/delete`、回收站（`services/trash*`，软删 22 类）、桌面日志轮转（`desktop/lib/backend-manager.js` 区段）；**trace 保留期尚未定义 → 🔲 待决策**（接入 OTel 时先定 N 天 + 删除入口，再写 CHANGELOG）。T21 的轨迹已接线：存在 `chat_message.context["run_trace"]`（JSON 列，随消息/会话删除自然清除，零迁移、零独立保留期）；`backend/app/services/assistant_run_trace.py` 的 recorder 本身仍是内存缓冲。若日后改为独立表，保留期/删除入口必须同步实现并回填本条。
+  落点：`DELETE /api/assistant/conversations/{id}`、`DELETE /api/assistant/conversations/{id}/messages/{message_id}`、`POST .../messages/delete`、回收站（`services/trash*`，软删 23 类）、桌面日志轮转（`desktop/lib/backend-manager.js` 区段）；**trace 保留期尚未定义 → 🔲 待决策**（接入 OTel 时先定 N 天 + 删除入口，再写 CHANGELOG）。T21 的轨迹已接线：存在 `chat_message.context["run_trace"]`（JSON 列，随消息/会话删除自然清除，零迁移、零独立保留期）；`backend/app/services/assistant_run_trace.py` 的 recorder 本身仍是内存缓冲。若日后改为独立表，保留期/删除入口必须同步实现并回填本条。
 - [ ] **E7 观测面不外发**：健康检查/诊断接口不泄露密钥、隐私或内部堆栈。
   落点：`GET /api/system/diagnostics/*`、`backend/app/preflight.py`。
 - [ ] **E8 事件可审计**：写操作（提案执行、数据集导出/导入、数据集切换）有结构化日志与 request_id；助手每次运行的 tool/授权/状态/用量可回看。

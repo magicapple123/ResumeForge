@@ -6,6 +6,8 @@ Thanks for helping improve ResumeForge. The project is maintained incrementally:
 
 Before you send a change, read [AGENTS.md](AGENTS.md) in the repository root. It covers the long-term maintenance principles, Windows environment conventions, verification commands and security boundaries.
 
+By taking part — issues, pull requests, discussions — you agree to follow the [Code of Conduct](CODE_OF_CONDUCT.md); its “Scope and enforcement” section explains how to report unacceptable behavior.
+
 ## Before you start
 
 - Python 3.11–3.13 (CI covers 3.11, 3.12 and 3.13; `pyproject.toml` targets `py311`).

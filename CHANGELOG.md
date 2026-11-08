@@ -6,6 +6,107 @@
 
 ### Added
 
+- **求职 Agent 三步落地：跟进巡检 ·「我已提交」+ 投递交付单 · 求职偏好档（2026-11，迁移 `0006`–`0008`）。** 把「投出去之后」这一段接上，全部本地运行、不新增账号/云依赖，**不自动提交、不自动发消息、不读邮箱、不保存招聘网站凭据**。
+  - **跟进巡检（期一）**：复用「任务卡」总开关与同一后台节拍，扫描「进行中且超过 7 天没有任何更新」的投递——>7 天且 ≤21 天生成**跟进清单卡**，>21 天生成**确认状态卡**（两桶互斥）；每桶最多 5 家、按最久未更新优先，同一桶同一 ISO 周只生成一张卡（`agent_task` 新增 `source_ref` / `occurrence_key` + 唯一索引，旧提醒卡去重语义不变）；「投出后 7 天」提醒 7 天内出过卡的让位，近期已决策（`contacted`/`replied`）与 `stopped`（永久）不再入选；文案只由确定性模板产出、不调模型，禁词 + 必备要素双向守卫。新增 `POST /api/followups/decisions`（整卡一事务、乱序可提交、幂等；**只记录决策，不改投递记录的状态与更新时间**）与新表 `application_follow_up`。
+  - **「我已提交」+ 交付单（期一）**：`POST /api/apply/records/{id}/submitted` 把成功的投递记录补成一条「已投递」进度（合并键去重、已到更后阶段不降级）、挂一条 +7 天的 `hr_reply` 提醒（同 track 待办提醒复用，幂等）、冻结投递快照（复用既有 `freeze_delivery` 与幂等键 `apply_task_item:{id}`），并维护一次性引导键；`apply_task_item` 新增 `receipt_acked_at`（迁移 `0007`）。`GET /api/apply/records/{id}/receipt` 把既有快照读成可验收单据：投递版本/目的地/导出产物/填充字段统计/事实台账疑点/待人工步骤/跟进计划，三态优先级 **卡在人手上 > 有疑点 > 可验收**；「投出后简历又改过」只展示、不参与三态；填充记录按 URL 精确匹配、匹配不上标「未知」而不是缺件。`POST .../receipt/ack` 只写验收时间（幂等、不碰漏斗状态）。
+  - **求职偏好档（期二，迁移 `0008`）**：新表 `job_preference` 存 12 类闭集偏好（城市 / 行业与公司排除 / 薪资底线 / 工作方式 / 写作红线 / 可到岗时间 / 仅本次对话等），一行 = 一次确认的完整取值；版本状态 `state`（active/superseded/undone）与 `deleted_at`（只表示用户删除）分离，活动行唯一用条件索引 `(dataset_key, kind) WHERE state='active' AND deleted_at IS NULL`。写入必须经用户确认的提案（`create_job_preference` / `update_job_preference` 登记为永远走提案的写工具；绕过提案直写会被服务层拒绝）；「以后都这样」落长期偏好，「只在这次对话」落 `session_note`。偏好块以「不是发生过的事实」的显式格式注入系统提示（24 条 / 单值 120 字符 / 列表 8 项 / 整块 900 字符，先省来源时间再按优先级裁尾；四档数据权限全注入），**永不进入简历生成、纸面渲染、网申取数与事实台账**（有隔离反证测试）。设置页新增偏好管理：编辑 / 撤销到上一版 / 删除进回收站 / 恢复；恢复撞同 kind 活动行返回 409 `trash_restore_conflict`。
+  - **回收站 22 → 23 类**（新增「求职偏好」）：`TRASH_SPECS` 仍为唯一注册表（拆到 `services/trash_registry.py` 以守住 500 行预算，`trash.py` 原样重导出全部符号）；能力地图、README 与用户指南同步为 23 类。
+  - **接口与迁移**：新增 `POST /api/followups/decisions`、`POST /api/apply/records/{id}/submitted`、`GET /api/apply/records/{id}/receipt`、`POST /api/apply/records/{id}/receipt/ack`、`GET/POST/PATCH/DELETE /api/job-preferences[/{pref_id}]`、`POST /api/job-preferences/{pref_id}/undo`、`POST /api/job-preferences/proposals/{id}/session`；迁移链保持单线 `0005 → 0006 → 0007 → 0008`，旧数据零破坏（`agent_task` 旧行 NULL 不受新唯一约束影响、`receipt_acked_at` 旧行 NULL = 未验收、`job_preference` 空表起步不回填）。
+
+### Changed
+
+- **助手提示词预算守卫阈值显式调整（2026-11）**：`test_assistant_prompt_budget` 的系统提示固定成本上限 23,800 → 24,100。原因是工作树里**既有**（非本批）的助手装配 / 平台事实改动已把基线推到约 23,824（本批之前即已超 23,800 共 24 字符），本批偏好能力点名再 +174 字符（`test_assistant_prompt_surface` 要求每个写工具名出现在静态提示里）；真正的成本闸门 `MAX_PROMPT_TOKENS_ESTIMATE = 60,000` 未动，测试注释记录了实测数字与"既有基线"归属。
+
+- **新增 RAG 语义补召回（默认关闭；v2 检索链路 + v3 真实本地 / 远程 provider）。** 给简历生成链加一条**候选选择层的可选增强**，两个开关**默认都是 `false`**：`rag_retrieval_enabled`（向量补召回 + 加权融合）与 `rag_query_expansion_enabled`（Phase 0 查询扩展）。**都关闭时（默认）** `prepare_selection_boost()` 返回空作用域，生成链行为与改造前逐字节一致——RAG 只决定「哪些条目进入候选」，**不碰 prompt 字节**（候选的字段形状、键序与文本不变）。**不新增数据库表 / 迁移 / 数据目录**：向量索引是进程内 LRU 缓存（可重建派生数据，重启重算、不进备份，备份导入后没有索引也能正常生成）。
+  - **链路**：冻结的 `ConsumedProfile` → 模型输入白名单投影出的 chunk（`canonical_item_hash` 桥接回下游候选字典，下游候选里已经没有 `entry_id`）→ 进程内向量索引 → 关键词分 + `10 × cosine` 加权融合（向量权值 10 < 技能命中权重 12，保留精确命中的硬优先级；融合分先 `round(4)` 再比较、平局回落原顺序）→ `rag_seam.selection_scope` 作用域 → `_select_entries()` 的 boost / `build_job_focus()` 的扩展词。boost 只对教育 / 工作 / 校园 / 项目四个内置分区与 `filter_by_job=True` 的自建板块改变顺序；`skills` 走独立硬优先级路径，`awards` 与其它分区不受影响。SSE 与后台任务两个生成入口都已接入。
+  - **Phase 0 查询扩展**复用已配置的大模型与岗位已有的 `analysis_cache` 列做缓存（岗位内容一改指纹即失效，不需要第二张缓存表），扩展词**只进 `JobFocus.terms`、不进 `skills`**；未配置模型 / 超时 / 坏 JSON / 空结果一律静默回退。
+  - **fake provider 守卫**：`FakeEmbeddingProvider` 是确定性 hash 向量、与语义无关；默认配置下即使打开 `RAG_RETRIEVAL_ENABLED` 也只回退（`fallback=fake_provider`），只有显式 `RAG_EMBEDDING_ALLOW_FAKE=true`（测试/链路对比）才参与排序。
+  - **请求预算与后台预热**：单次请求最多花 `RAG_REQUEST_BUDGET_SECONDS`（默认 1.5s）算 boost；冷缓存超预算立即回退（`fallback=budget_exceeded`），缺失向量由 `ai_task` 的 `rag_index_warmup` kind 在后台补齐（复用现成执行器，不阻塞首字节）。作用域只覆盖**候选构造段**（以 `mark_selection_done()` 为界），不再覆盖整条流。
+  - **真实 provider（v3）**：设置页「AI 模型 → 语义检索」二选一——**本地模型**（按需下载约 110–126MB（按平台 zip 传输体积：Windows 111MB / macOS 110MB / Linux 122–126MB；打包模型约 74.6MB + 运行时按平台约 35–51MB，解压后合计约 237–280MB；设置页显示本机实际值）；按平台选资产、每个下载源各自 sha256 校验、目录带版本；数据不出本机）与**远程服务**（任意 OpenAI 兼容 `/embeddings`，0 下载；首次按 host 弹隐私确认、维度自动探测、按 `batch_size=25` 切片；内置百炼 / OpenAI / 智谱 / SiliconFlow / 本机 Ollama 预设与自定义端点模板）。**在设置页启用任一真实 provider 即等于启用语义检索**（无需改环境变量；`RAG_RETRIEVAL_ENABLED` 保留为开发 / 评测总闸）。配置持久化在 `global_settings.json` 的 `embedding` 段（不进备份），切换 provider / 模型 / 维度会清空索引并记 `provider_switched`；请求体只含 chunk 的白名单投影，姓名 / 电话 / 邮箱 / 私密链接不出现。
+  - **回退语义**：未配置 provider / fake 未允许 / 超预算 / 超时 / 坏响应 / 空索引 / 本地下载或校验失败 / 运行时不可用 / 远程 401·429·维度不符 → 一律空作用域并回退关键词链；设置页如实显示失败原因，**不伪装成已启用**。日志只记 provider、host、候选数、命中来源、耗时、回退原因、哈希前缀 7 类元数据，**不含 JD / 简历正文、向量、密钥或完整 URL**。
+  - **配置项**：v2 的开关与模型属性继续可用（`RAG_RETRIEVAL_ENABLED=false`、`RAG_QUERY_EXPANSION_ENABLED=false`、`RAG_EMBEDDING_PROVIDER=fake`、`RAG_EMBEDDING_*` 等，见 `backend/app/config.py`）；v3 新增 `RAG_ASSET_BASE_URL`（默认 `https://github.com/magicapple123/ResumeForge/releases/download/rag-assets-v1`）、`RAG_ASSET_HF_BASE_URL`（HuggingFace 备用源）、`RAG_LOCAL_MODEL_DIRNAME=rag-model`、`RAG_LOCAL_RUNTIME_DIRNAME=rag-runtime`、`RAG_EMBEDDING_ALLOW_PRIVATE_ENDPOINT=false`（本机 Ollama / LM Studio 等回环 / 内网地址默认拒绝，需在「高级」显式允许）。
+  - **平台矩阵与体积**：本地模型统一 onnxruntime **1.31.1**，支持 Windows x64 / macOS **14+** arm64 / Linux x86_64 / Linux aarch64；**Intel Mac 没有 onnxruntime macOS x86_64 wheel，本地模型不可用，只能用远程**（应用本身仍可运行，dmg 仍出 x64 / arm64）。权重与运行时按需下载，**不进安装包、发布压缩包与备份**（登记为 `RUNTIME_ONLY`）；只用远程的用户 0 下载。因此备份包与安装包体积不变；`global_settings.json` 不在备份成员里，provider 配置与加密密钥不随备份走。
+  - **未验证项（如实记录）**：真实远程端点**未做端到端验证**——本机没有 `EMBEDDING_API_KEY`，只有 mock transport 的协议证据，报告给出将来验证命令；**ARM 平台（macOS arm64 / Linux aarch64）的本地量化变体未真机验证**（若只能退到 fp32 必须回给用户决策）；Qwen3-Embedding / harrier 等其它模型未下载未验证；`FakeEmbeddingProvider` 不得用于质量指标。
+  - **已知边界**：接缝用请求内 ContextVar 作用域而不是给 `build_targeted_consumed_profile_context()` 加透传参数（两个候选接入文件已贴 500 行硬闸门且被 `monkeypatch` 钉死模块命名空间，详见交付报告）；本机 / 内网地址需显式允许；不兼容厂商（DeepSeek / Groq / OpenRouter / Together / xAI 等）没有 `/embeddings`，界面给可读提示而不是裸 404（名单有时效性，不写成不可配置的白名单）。
+  - **离线评测**：`scripts/rag_eval_dataset.py` 生成 60 组「同义改写型 JD × 种子条目」评测集；`scripts/rag_eval_run.py --mode keyword|expanded` 量 baseline / Phase 0，`scripts/rag_eval_embedding_spike.py` 用隔离 venv 的真实 ONNX 量 Phase 3（v2 实测 Recall@10 0.4056 → 0.6361）；v3 接入产品路径后的本地 / 远程 60 组对照、平台矩阵与失败矩阵数据见交付报告。
+
+- **新增 Linux 发行版（x86_64 / aarch64）。** 三种形态并存：`start.sh` / `stop.sh` / `update.sh`
+  一键脚本（零依赖，首次启动自备便携运行时）、`ResumeForge-<版本>-linux.zip` 便携包、
+  `ResumeForge-<版本>-linux-<arch>.AppImage` 单文件。验收基线 **glibc ≥ 2.31**
+  （Ubuntu 22.04+ / Debian 12+ / Fedora 38+ 一类），更老的发行版与其它架构未经验证。
+  - **便携 Python 换成 `install_only_stripped`**：默认的 `install_only` 包 106MB，精简包
+    x86_64 34MB / aarch64 29MB，与 macOS 的 25MB 同一量级。摘要钉在仓库里，镜像只能加速。
+    Linux 上运行期**不需要 Node**——发布包自带 `frontend/dist`，页面由后端同源提供。
+  - **多一道 venv 预检**：Debian/Ubuntu 把 `venv` 与 `ensurepip` 拆进了单独的 `python3-venv`
+    包，系统里有 `python3` 也照样建不出虚拟环境，而报错指向 `ensurepip` 完全不解释原因。
+    启动器会实测这两者可用性，缺了先给 `sudo apt install python3-venv` 提示，再回落便携版。
+  - **修复退出时在 Linux 上跑错停止脚本**：`_stop_command()` 此前把所有非 Windows 平台一律
+    指向 `scripts/macos/stop.sh`，而那个脚本把状态目录写死成 `~/Library/Application Support`，
+    于是 Linux 上「点退出」会去一个不存在的路径找记录、静默地什么都不停。现在按
+    `sys.platform` 分流到 `scripts/linux/stop.sh`，并让「脚本存在性守卫」与「实际执行」
+    从同一个函数取路径（此前两处各写一份 `if`，守卫看 A、执行 B）。
+  - **修复 Electron 壳在 Linux 上调用 macOS 启动器**：`backend-manager.js` 的
+    `launcherCommand()` 同样只判了 `win32`，其余平台一律走 `scripts/macos/start.sh`；
+    现在按平台在 `macos` / `linux` 之间选择。
+  - **PDF 中文字体补上兜底**：`_FONT_CANDIDATES` 里的 Linux 条目（Noto CJK / 文泉驿 /
+    arphic）没有任何主流发行版默认安装，此前 Linux 上探测必然返回空、导出直接 409。
+    现在系统字体缺失时回落到**已下载的内置思源黑体**（`resume_font_builtin` 按需下载的
+    那两个字重）；两边都没有时仍如实返回 409 并保留浏览器打印，界面给出下载入口。
+    兜底**排在系统字体之后**，Windows/macOS 上「用系统字体」的语义不变。
+  - **测试隔离补齐**：`conftest.py` 此前只把 `user_fonts.DATA_DIR` 指到测试目录，没有隔离
+    `resume_font_builtin.DATA_DIR`。字体兜底上线后，开发机上真下载过 33MB 字体就会让
+    「缺字体」类断言随机器状态漂移，所以同批隔离并纳入每个用例的清空夹具。
+  - **`update.sh` 支持「下载新包 → 校验 `.sha256` → 只覆盖程序文件」**：`backend/data/`、
+    `backend/.env`、`runtime/`、`desktop/` 一律不动；覆盖前把将被替换的内容复制到
+    `runtime/backup-<时间戳>/`（本机没有回收站，禁止硬删），失败可回滚；`--check` 只检查。
+  - **新增 CI 三道 Linux 把关**：`linux-launcher-guards`（跑守卫测试，并断言输出里确有
+    `ok` 行，防止脚本空转而"绿得没有内容"）、`linux-runtimes`（真下载两架构运行时、验
+    sha256 与字节数，并实际验证 `venv` + `ensurepip` 可用）、`linux-end-to-end`（干净检出
+    走完整启动链、浏览器冒烟、只读安装根状态外落、停止脚本）；`release-assets` 新增
+    `linux-appimage` 作业产出双架构 AppImage 并附 `.sha256`。
+  - **已知边界**：`scripts/tests/Test-Build-Release.ps1` 的平台清单仍是 `windows|macos`，
+    `-Platform linux` 要等根目录启动脚本进 git（`git archive` 只打包已跟踪文件）之后才能加上；
+    `desktop/main.js` 与 `desktop/backend-manager.js` 现为**恰好 500 行**，再到这两个文件里
+    加代码必须先外移一段。
+
+- **求职助手输入区重做：四档数据权限 + 只读模型 chip（T11）。** 输入框旁新增四档权限——
+  **仅查看 / 放宽读取 / 可修改 / 完全权限**，一档同时决定「读」（是否看姓名、电话等真实资料）与「写」
+  （是否直接改数据）。设置页「求职助手 · 数据权限」存全局默认；输入框下拉只覆盖**当前对话**
+  （本机 localStorage、按会话保存，刷新/切页保留、**换设备不同步**）；选放宽读取 / 完全权限时输入框上方
+  出现可关闭的琥珀色提示，**首次**切到写档位有一次确认。请求体发送解算后的两轴值
+  （新可选字段 `relaxed_mode`，缺省沿用全局，旧客户端零改动）。输入框发送键左侧新增**只读模型 chip**
+  （显示模型名，悬停「记录名 · 模型名 / 在顶部切换」，无记录不显示、<480px 隐藏；顶栏切模型后跟随更新）。
+  **安全边界**：完全权限下写操作不再逐条出提案、直接执行；**技能的新建与修改仍永远走确认**。
+- **接口：`GET/PUT /api/assistant/permission`。** 读写全局默认档位；写入时同步写旧键
+  `assistant_relaxed_mode`（兼容其它读取点），旧键不删。
+- **设置页新增第三种接口协议 OpenAI Responses（实验性，T09/T09.1）。** 默认仍是 Chat Completions，
+  **已保存配置零影响**——只有用户主动切到 Responses 才走新链路；Claude / Gemini / 硅基流动 不支持该协议
+  （MiniMax 自 2026-11 起已支持，见下方 Fixed）。切换协议时只有声明支持 Responses 的预设才改 `Base URL`
+  （智谱→`https://open.bigmodel.cn/api/v1`，其余在预设地址后追加 `/responses`；DeepSeek 实测可用）。
+  设置页「模型配置」区新增可展开的**「各服务商协议支持矩阵」**（23 行，含核对日期列；表尾
+  「核对日期 2026-11-08」，2026-11-08 逐家复核后重写），并新增 6 家预设（腾讯混元 / 百度千帆 /
+  讯飞星火 / 阶跃星辰 / Together AI /
+  Perplexity），**预设总数 16 → 22**。同时修正 MiniMax 域名（`api.minimaxi.com/v1` + MiniMax-M3.1-Flash）、
+  Gemini（`gemini-3.8-flash`）、xAI（`grok-4.7`）等预设，标签缩短为「Claude（Anthropic 原生）」
+  「Google Gemini」。**没有各厂商的真实 Key，新协议与预设按接口文档实现，未逐家真机验证。**
+- **助手输入框、模拟面试答题框与面试复盘「追问」支持语音听写（T12/T13）。** 说话→文字先填进输入框，
+  由用户确认后提交，**不自动发送**；面试追问同样只填入、不触发发送。设置页新增「语音转写」卡
+  （OpenAI 兼容 `/audio/transcriptions`：base_url / model / Key，Key 掩码回读，可测试连接）。
+  单段上限：助手与答题框 **3 分钟**、复盘追问 **1 分钟**（音频超过 10 MB 也会被拒）；音频会发送到
+  用户配置的语音服务商，本应用不保存音频。**真实识别质量未验证（无 ASR 服务商 Key，本地假 ASR
+  服务器只验证了管道与交互）。**
+
+- **首页新增「任务」卡，任务卡从助手页搬来（T02/T03）。** 待确认在前、进行中在后，两者合计最多 3 条
+  （超出收成「还有 N 条」，点一下就地展开）；「已结束（N）」默认收起，展开先看最近 5 条 + 「查看全部」；
+  折叠状态不记忆（D4）。不按会话过滤（提醒到期生成的卡没有会话归属）；没有可显示任务时整卡不渲染，
+  空壳任务（无步骤的草稿 / 已取消）不显示也不计入任何计数；轮询仍为 5s，页面隐藏时暂停。查看步骤改成
+  手风琴（同一时间只展开一条），展开后第一个未完成的步骤加粗并标「当前」。
+- **提醒列表新增逾期红标与「时间范围」筛选（T06）。** 列表接口在原有字段外补 `urgency` / `days_until`
+  （复用 `reminder_service` 的唯一实现，前端不按小时重算）；pending 且 `days_until < 0` 的行显示红色
+  「已逾期 N 天」标签。新增「全部 / 已逾期 / 今天 / 以后」筛选，筛选后回到第 1 页并重算总数。
+- **提醒新建弹层 5 处改进（T05）。** 默认时间改为「1 小时后」；新建时校验「提醒时间需要晚于当前时间」
+  （编辑时放行，只改备注不被旧时间卡住）；时间只显示到分钟；时间字段下方按「任务卡」开关状态提示到期
+  会不会生成卡片；进度 / 岗位 / 简历三个关联字段收进「关联（选填）」折叠区，默认收起并显示「已关联 N 项」。
 - **求职助手写操作状态可跨轮、跨重启如实回答（P0）。** 写入提案从进程内存改为数据库单一事实源
   （新表 `assistant_write_proposal`，迁移 `0002`）：新增 `pending/approved/executed/failed/unknown/rejected/expired`
   状态机（TTL 30 分钟）、创建时记录目标版本指纹并在批准前重查（目标被改过返回 409，不用旧快照写库）、
@@ -50,6 +151,51 @@
 
 ### Changed
 
+- **macOS 兼容性地板从 13 抬到 14（行为变更）。** 官方支持改为 **macOS 14+**，**macOS 13 及更早不再获得官方支持**（应用可能仍能启动，但不再测试、也不提供支持）。原因：本地语义检索的隔离运行时 onnxruntime 1.31.1 只发布 `macosx_14_0_arm64` 等 wheel，**没有 macOS x86_64 wheel**。README（中英）、`docs/upgrading.md`、`docs/user-guide.md`、`docs/mac-build-handoff.md` 同批更新；**启动链没有版本闸门、脚本不改**。Intel Mac 可运行应用并使用远程语义检索，但不能用本地模型。
+- **README 删除过期说法「Apple Silicon via Rosetta 2」。** 启动链按 `uname -m` 下载原生 `aarch64-apple-darwin` 的 python-build-standalone，Apple Silicon 一直是原生 arm64；dmg 也提供 x64 / arm64 两份（见 README 中英与使用指南）。
+
+- **打开联网搜索不再先自动搜一次（R08，行为变更）。** 打开输入框下方的「联网搜索」现在只等于
+  **允许联网**：`web_search` 工具随之下发，搜不搜、搜什么、换几次关键词都由模型自己判断；**开箱不再有
+  「开场资料」**——此前每条消息都会先用用户原话自动搜一遍，模型还没看到问题、网络请求就已经发出去了，
+  看到"帮我把某项目整理成条目"这类问题时还会被带偏成查某个字的字典解释。搜索次数上限仍是 **3 次**，现在
+  这 3 次**全部由工具发起**（此前那次自动预搜也占一次额度，所以模型自己实际只剩 2 次）。系统提示里随附的
+  「这次回答已经自动搜过一次……你自己最多还能搜 2 次」整段删除：联网工具的完整度口径（只看摘要 / 会抓正文）
+  本来就写在工具描述里，跟设置里的「抓取正文条数」走，不需要在系统提示里重复一份会漂移的副本。
+  「简历通自身的使用问题不搜公开网页」这条保留，拦截改由工具完成（工具直接回本地指引、不打网络）。
+  使用指南与助手页内嵌引导的联网搜索一节同步改写（含英文文案）。
+
+- **技能由「全局启用」改为「按对话启用」（T14，行为变更）。** 新增表 `assistant_conversation_skill`
+  （迁移 `0005`，含完整 downgrade；备份表快照 73→74）：一段对话启用哪些技能成为唯一真源。
+  **新对话默认不启用任何技能**，在助手输入区用 chip /「+ 技能」菜单勾选，**只对当前对话生效、换对话各有一套**；
+  空态可以先勾，发第一条消息时随创建会话一次写入；fork 对话时技能一并复制。单个对话**最多 8 个技能**，
+  注入预算仍是 12,000 字，靠后技能超预算会被截断并在菜单 / chip 上提示（不再悄悄少加载）。
+  **技能库（工作台 → 技能）里的「启用」列与开关已移除**，技能只在对话里启用；旧 `AssistantSkill.enabled`
+  列保留但不再参与注入（数据不迁移、不回填）。新增对话技能接口
+  `GET/PUT /api/assistant/conversations/{id}/skills`（整体替换，最多 8 个）与创建会话时的可选 `skill_ids`。
+- **技能上限统一并收紧（T14）。** 提示词 4,000 字 / 最多 10 个知识文件 / 单文件 20,000 字 / 合计 60,000 字
+  （此前后端校验口径是 200,000 字、50 个文件，与工具描述、注入预算三处打架）；新建/编辑弹层去掉「启用」开关，
+  提示词输入框带 4,000 字上限与字数反馈，知识文件区显示个数与合计字数。
+- **技能的新建与修改永远走确认（T14）。** 即使把数据权限切到「完全权限」，`create_skill` / `update_skill`
+  仍逐次出提案（提示词下一轮就进系统提示，不能让模型自己放开）；助手消息 context 记录本轮用到的技能名
+  （只记名字、不记正文），运行轨迹显示「本轮技能」。
+- **助手的数据权限从「放宽模式」改为四档控件（T11，行为变更）。** 设置页「助手放宽模式」卡片升级为
+  「求职助手 · 数据权限」四档（仅查看 / 放宽读取 / 可修改 / 完全权限），**「放宽模式」在助手侧成为历史名**；
+  网申填表页的「放宽模式」是另一个开关，仍按原样工作，两者不再混用。旧键 `assistant_relaxed_mode` 保留且
+  与新键同步写，不做迁移。
+- **Anthropic 协议升级到 2026-10-21（T10）。** 官方 Claude 4.7 及以后改用自适应思考
+  （`thinking: adaptive` + `output_config.effort`），不再发送 `temperature` / `top_p` / `top_k`；
+  思考强度 minimal→low、high 档 `max_tokens` 至少 16k。**更早的 Claude 模型与第三方 Anthropic 兼容
+  网关保持 2023-06-01 行为不变**。没有官方 Anthropic Key，本轮以假服务器验证请求体与分支，**未真机验证**
+  上游真实响应。
+- **任务卡位置与开关语义变化（行为变更，T01/T04）。** 助手页的任务区整块移除——它原本是
+  `.assistant-workspace` 的第 4 个直接子元素，会把消息区那一行顶替成 320px 高，表现为标题下方一大片
+  空白、消息区失去滚动；工作区同时改成 flex 布局加固，以后再加直接子元素不会再错位。任务统一在首页
+  「任务」卡查看。设置里「提醒到期 · 生成任务卡」更名为「任务卡」并升级为**总开关**：**关闭 = 不再生成 +
+  首页不再显示**（旧版关闭只停止生成，已生成的卡仍显示），数据保留、重新打开即恢复；关闭前若还有未完成
+  任务（未开始 / 进行中 / 已暂停 / 待确认）会先弹确认。配置键 `agent_task_events` 不变、不做迁移；
+  后端列表接口不按开关返回空数组（显示层由前端 gate）。
+- **术语「绑定漏斗」改为「关联求职进度」。** 提醒表单与详情抽屉统一为「关联求职进度 / 关联岗位 /
+  关联简历」，动作统一叫「关联」；`docs/ui-copy-guide.md` 新增术语 #66，并停用「绑定漏斗」。
 - **能力地图（助手功能目录）纠偏 8 处。** 简历照片上限改为 5MB；回收站类别改为 22 类并注明「求职进度」与
   「投递记录」在回收站里同名；全局搜索第 8 域改为「我的资料」（技能域已下线）；面试深挖补第 5 档「未覆盖」；
   日历提醒补第 4 档「稍后（later）」；快捷入口改为「默认 7 个，可自定义」；知识库入口改「新建知识」；
@@ -72,6 +218,37 @@
 
 ### Fixed
 
+- **切到 Responses / Anthropic 协议后被判「Base URL 与配置记录不一致」，且 Anthropic 入口此前根本走不通（用户反馈）。**
+  两处根因：① 密钥引用与 Base URL 的绑定用的是**完整地址（含 path）**——切协议时前端把
+  `https://api.deepseek.com` 改写成 `https://api.deepseek.com/responses`，path 变了就判「不一致」，
+  用户手里没有第二个 Key，只能卡死。现在按 **origin（scheme + host + port，默认端口归一）** 绑定：
+  同一主机上换 path（`/responses`、`/anthropic/v1`、`/v1`）照常解析已保存的密钥；**换主机仍旧拒绝**
+  （含 `api.deepseek.com.evil.example.com` 这类子域伪装），安全底线不变。② 「获取可用模型」只剥离
+  `/chat/completions`，切到协议专用地址后请求打到 `.../responses/models`、`.../messages/models`
+  返回 404；现已一并剥离 `/responses` 与 `/messages`。
+- **「各服务商协议支持」矩阵与预设逐家重核（核对日期 2026-11-08），并让协议切换真正落到可用地址。**
+  原表把 DeepSeek、豆包、通义千问、百度千帆、讯飞星火、阶跃星辰、OpenRouter、Together、Ollama
+  （≥ 0.14.0）、LM Studio（≥ 0.4.1）的 Anthropic Messages 入口全标成「不支持」，MiniMax 的
+  Responses 也标成不支持——后者还被 `responses_unsupported_hint` **硬拦截**（连接测试直接返回失败、
+  一个请求都不发），用户永远测不通。现在：矩阵按官方文档重写 23 行；预设新增
+  `supports_anthropic` / `anthropic_base_url`，切协议时按预设自动改写为该服务商的专用地址
+  （DeepSeek → `.../anthropic/v1`、豆包 → `.../api/compatible/v1`、Kimi → `.../anthropic/v1`、
+  通义千问 → `.../apps/anthropic/v1`、智谱 → `.../api/anthropic/v1`、MiniMax → `.../anthropic/v1`、
+  千帆 → `.../anthropic/v1`、星火 → `.../anthropic/v1`；硅基流动 / OpenRouter / 混元 / 阶跃 /
+  Together / Ollama / LM Studio 与 chat 同址），切回 Chat Completions 自动还原；`matchingPreset`
+  也认这三条地址，编辑已切过协议的记录不会掉成「自定义」。预设同步更新：豆包
+  `doubao-seed-2-1-pro-260915`、混元 `hy3`、星火 `spark-x2.6`（换到新 MaaS 域名
+  `maas-api.cn-huabei-1.xf-yun.com`）、阶跃 `step-5-preview`、Together `zai-org/GLM-5.3`、
+  Mistral `mistral-large-4`、硅基流动 `deepseek-ai/DeepSeek-V4-Pro-0813`、OpenAI `gpt-6-astra`
+  （模型名一以各家控制台为准）。**DeepSeek Responses（`POST /responses`）与 Anthropic
+  （`POST /anthropic/v1/messages`）已用真实 Key 各发一次最小请求，均返回 200；其余厂商仍按官方文档
+  实现，未逐家真机验证。**
+- **联网搜索失败时工具会把异常原文回给模型（R08 顺带修复）。** `assistant_tools/search_tools.py` 的失败
+
+  分支直接拼了 `{exc}`，而 `AssistantSearchError` 的 `str()` 就是构造时传进来的原文——只有白名单里的
+  公开文案才允许进 SSE、模型上下文与落库历史（`search_errors.py` 的既有约定）。现在改用
+  `exc.public_message`，并补上"请勿声称已获得联网资料"的提示；回归用例见
+  `test_codeql_error_privacy.py::test_search_error_does_not_enter_sse_history_or_model_context`。
 - **确认执行写操作后，助手仍说"等待确认"（P0 + 任务/界面上下文/诊断等本轮修复；逐条证据见交付报告）。**
   P0 根因是提案状态只存进程内存、执行成功后不回写会话、下一轮上下文也不读提案表；现在状态以数据库为准并在
   下一轮注入权威状态块——已执行仍回答已执行，重启后未确认的显示已失效。
