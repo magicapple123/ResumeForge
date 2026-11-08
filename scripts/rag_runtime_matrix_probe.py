@@ -176,7 +176,9 @@ def main(argv: list[str] | None = None) -> int:
     output = Path(args.output) if args.output else default_output_path(result)
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps(result, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
-    print(json.dumps(result, ensure_ascii=False, sort_keys=True))
+    # 控制台走 ASCII 转义：Windows 的 cp1252 控制台打不出 fixed_text 里的中文，
+    # 而落盘 JSON 仍保留原文（下面 write_text 用 ensure_ascii=False）。
+    print(json.dumps(result, ensure_ascii=True, sort_keys=True))
     print(f"written: {output}")
     if not result["stable"]:
         print(

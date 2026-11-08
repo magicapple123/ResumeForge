@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import sys
 from types import SimpleNamespace
 
 import pytest
@@ -199,7 +200,12 @@ def test_remote_enable_requires_host_confirmation(client, remote_api, index_spy)
     assert body["remote"]["dim"] == 16 and body["remote"]["host"] == "api.example.com"
     assert body["config"]["api_key"] == KEY_MASK
     raw = global_settings.path().read_text(encoding="utf-8")
-    assert SECRET not in raw
+    # 落盘形态随平台：Windows 走 DPAPI 密文，其它平台（无 DPAPI）按设计就是明文
+    # （api_key_crypto 模块文档 §RF-24，与 test_global_llm 同一口径）。
+    if sys.platform == "win32":
+        assert SECRET not in raw
+    else:
+        assert SECRET in raw
     assert index_spy.cleared >= 1
 
 

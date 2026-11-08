@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import sys
 
 import pytest
 from app.config import Settings
@@ -65,7 +66,12 @@ def test_write_read_mask_and_secret_never_plaintext_on_disk():
     assert mask_embedding_config(revealed)["api_key"] == KEY_MASK
 
     raw = global_settings.path().read_text(encoding="utf-8")
-    assert SECRET not in raw, "明文密钥绝不能出现在 global_settings.json 里"
+    # 落盘形态随平台：Windows 走 DPAPI 密文，其它平台（无 DPAPI）按设计就是明文
+    # （api_key_crypto 模块文档 §RF-24，与 test_global_llm 同一口径）。
+    if sys.platform == "win32":
+        assert SECRET not in raw, "Windows 上明文密钥绝不能出现在 global_settings.json 里"
+    else:
+        assert SECRET in raw, "非 Windows 平台按设计保持明文，改了就同步 CHANGELOG"
 
 
 def test_write_with_mask_keeps_existing_secret():

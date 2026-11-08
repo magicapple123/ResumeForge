@@ -16,9 +16,11 @@ jobs:
   backend:
     name: Backend (${{ matrix.os }}, Python ${{ matrix.python-version }})
     runs-on: ${{ matrix.os }}
-    # 测试走 pytest-xdist 并行（-n auto），正常 ~5 分钟；30 分钟是给慢速
-    # 共享 runner 与 coverage 收尾留的宽裕上限，而不是常规耗时。
-    timeout-minutes: 30
+    # 测试走 pytest-xdist 并行（-n auto）。实测（2026-11-09，suite 8226 个用例）：
+    # ubuntu 3.11 / 3.13 约 24–25 分钟（含装依赖与 coverage 收尾），Windows 更慢。
+    # 30 分钟在 3.11 上只剩 5 分钟余量，一次 runner 抖动就会表现为超时取消——那不是
+    # 代码坏了。上限给到 45 分钟，同时保留"真挂住时止损"。
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
@@ -103,6 +105,7 @@ jobs:
           RESUMEFORGE_PDF_FONT: /usr/share/fonts/truetype/wqy/wqy-zenhei.ttc
         run: >-
           python -m pytest -n auto
+          --durations=25
           --cov=app
           --cov-config=../pyproject.toml
           --cov-report=term-missing
@@ -697,6 +700,12 @@ jobs:
     name: Linux end-to-end (clean checkout)
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    env:
+      # 与 backend 作业同一口径：PDF 侧钉 TrueType 的 wqy-zenhei。这个作业的
+      # Playwright 冒烟会真实导出交付包（含 PDF），而 ubuntu runner 同时装了
+      # fonts-noto-cjk（CFF 轮廓）——不钉住的话，候选顺序会先命中 Noto，fpdf2 的
+      # CFF 子集化既丢提取文本、又明显更慢（2026-11-09 首次运行在导出用例上超时）。
+      RESUMEFORGE_PDF_FONT: /usr/share/fonts/truetype/wqy/wqy-zenhei.ttc
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -945,6 +954,39 @@ jobs:
           pgrep -af 'uvicorn|vite' || echo "没有 uvicorn / vite 进程"
           echo "===== 健康探针 ====="
           curl -v --max-time 5 http://127.0.0.1:8005/api/health || echo "8005 健康检查失败"
+      - name: Collect failure diagnostics
+        # Playwright 的 test-results 里有 trace.zip 与 error-context.md（失败那一屏的
+        # 页面快照），是"按钮点了但没下载"这类故障唯一能定位的证据；启动器日志则在
+        # 工作区 runtime/ 或 XDG 状态目录两处之一。统一收进 runtime/e2e-failure/ 再上传。
+        # 不改变任何断言，只在失败路径上多留证据。
+        if: failure()
+        run: |
+          set -u
+          mkdir -p runtime/e2e-failure
+          if [ -d frontend/test-results ]; then
+            cp -R frontend/test-results runtime/e2e-failure/playwright-test-results || true
+          fi
+          if [ -d frontend/playwright-report ]; then
+            cp -R frontend/playwright-report runtime/e2e-failure/playwright-report || true
+          fi
+          for f in runtime/*.log; do
+            [ -f "$f" ] || continue
+            cp "$f" "runtime/e2e-failure/$(basename "$f")" || true
+          done
+          state_root="${XDG_DATA_HOME:-$HOME/.local/share}/ResumeForge"
+          if [ -d "$state_root" ]; then
+            find "$state_root" -type f -name '*.log' -exec sh -c 'cp "$1" "runtime/e2e-failure/$(basename "$1")"' _ {} \; 2>/dev/null || true
+          fi
+          echo "===== 诊断文件 ====="
+          find runtime/e2e-failure -maxdepth 3 -type f | head -60 || true
+      - name: Upload failure diagnostics
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: linux-e2e-failure-${{ github.run_id }}-${{ github.run_attempt }}
+          path: runtime/e2e-failure/
+          retention-days: 7
+          if-no-files-found: ignore
 
   frontend:
     name: Frontend (Node 22)
@@ -1334,6 +1376,10 @@ jobs:
     runs-on: ${{ matrix.os }}
     # 安装 + 探针是分钟级；15 分钟足够慢速共享 runner，不算正常耗时。
     timeout-minutes: 15
+    env:
+      # Windows runner 的控制台是 cp1252：探针 JSON 里的固定文本含中文，
+      # 不开 UTF-8 模式时 print 会 UnicodeEncodeError（2026-11-09 首次运行实测）。
+      PYTHONUTF8: "1"
     strategy:
       fail-fast: false
       matrix:
