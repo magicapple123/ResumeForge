@@ -883,6 +883,11 @@ jobs:
           # Linux 的状态目录按 XDG 基目录规范落点。把 XDG_DATA_HOME 指到临时目录，
           # 既让断言有确定的落点，也保证用例不往 runner 的用户目录里留垃圾。
           export XDG_DATA_HOME="$xdg"
+          # 后端数据目录（数据库/附件/导出）在打包态由桌面壳通过 RF_DATA_DIR 指定
+          # （ADR-0004），启动器不负责这件事；这里照壳的做法给一个可写目录，否则
+          # sqlite 会试着在只读安装目录里读写 backend/data——那是另一个层面的问题，
+          # 不该混进「安装目录不被写入」这条用例。macOS 的同款用例也是这么做的。
+          export RF_DATA_DIR="$xdg/data"
           export RF_UVICORN_LOG_LEVEL=info
 
           bash "$ro_root/start.sh" --no-browser
