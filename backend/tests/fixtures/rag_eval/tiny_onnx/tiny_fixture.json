@@ -1,0 +1,14 @@
+{
+  "dim": 8,
+  "vocab_size": 48,
+  "tokenizer": {
+    "file": "tokenizer.json",
+    "bytes": 1971,
+    "sha256": "6fc806f987608ac167b520fdbb1e6c2a7e80577d7b5790048e0c4e953f53d162"
+  },
+  "model": {
+    "file": "tiny_embed.onnx",
+    "bytes": 2206,
+    "sha256": "6559f684bfbaa5c322901edbf4af54f54005c611bbe1a62ec24b272ecc4125f6"
+  }
+}

@@ -9,7 +9,12 @@
  * props 钻透。后端重启后 pending 提案查询 404，按"已失效"展示，不假装还能确认。
  */
 
-import { CheckOutlined, CloseOutlined, ExclamationCircleOutlined } from "@ant-design/icons";
+import {
+  CheckOutlined,
+  ClockCircleOutlined,
+  CloseOutlined,
+  ExclamationCircleOutlined,
+} from "@ant-design/icons";
 import { App, Button, Space, Spin, Tag, Typography } from "antd";
 import { useEffect, useState } from "react";
 import {
@@ -17,6 +22,10 @@ import {
   getWriteProposal,
   rejectWriteProposal,
 } from "../../../api/assistant";
+import {
+  isJobPreferenceProposalTool,
+  saveJobPreferenceForSession,
+} from "../../../api/jobPreferences";
 import type { AssistantWriteProposal } from "../../../types";
 import { formatErrorGuidance } from "../../../api/errorGuidance";
 import { t, type MessageKey } from "../../../i18n";
@@ -43,6 +52,23 @@ const FALLBACK_STATUS_META = {
   labelKey: "assistantUi.actionProposal.status.fallback",
   color: "default",
 } as const;
+
+/** 「只在这次对话」响应里的 proposal_status 是字符串：认识才采用，不认识按已执行展示。 */
+const PROPOSAL_STATUSES: readonly AssistantWriteProposal["status"][] = [
+  "pending",
+  "approved",
+  "executed",
+  "expired",
+  "rejected",
+  "failed",
+  "unknown",
+];
+
+function resolveProposalStatus(status: string): AssistantWriteProposal["status"] {
+  return (PROPOSAL_STATUSES as readonly string[]).includes(status)
+    ? (status as AssistantWriteProposal["status"])
+    : "executed";
+}
 
 interface Props {
   proposal: AssistantWriteProposal;
@@ -72,7 +98,7 @@ export default function ActionProposalCard({ proposal: initial }: Props) {
     };
   }, [initial]);
 
-  const act = async (action: "approve" | "reject") => {
+  const act = async (action: "approve" | "reject" | "session") => {
     setBusy(true);
     try {
       if (action === "approve") {
@@ -83,6 +109,15 @@ export default function ActionProposalCard({ proposal: initial }: Props) {
             ? t("assistantUi.actionProposal.toast.done")
             : t("assistantUi.actionProposal.toast.executed"),
         );
+      } else if (action === "session") {
+        // 「只在这次对话」= 把提案转成一行 session_note（不长期生效）；提案同时置 executed。
+        const result = await saveJobPreferenceForSession(proposal.proposal_id);
+        setProposal({
+          ...proposal,
+          status: resolveProposalStatus(result.proposal_status),
+          result_summary: result.summary,
+        });
+        message.success(t("assistantUi.actionProposal.toast.sessionOnly"));
       } else {
         const result = await rejectWriteProposal(proposal.proposal_id);
         setProposal(result.proposal);
@@ -90,7 +125,11 @@ export default function ActionProposalCard({ proposal: initial }: Props) {
     } catch (error) {
       // 兜底不再是「操作失败」：统一走 errorGuidance 的「原因 · 建议 · 编号」三段，
       // 用户能照着「建议」做，也能把「编号」报给维护者（§4.6）。
-      message.error(formatErrorGuidance(error, t("assistantUi.actionProposal.error.fallback")));
+      const fallbackKey =
+        action === "session"
+          ? "assistantUi.actionProposal.error.sessionOnly"
+          : "assistantUi.actionProposal.error.fallback";
+      message.error(formatErrorGuidance(error, t(fallbackKey)));
       // 404/409（失效、已执行、跨数据集等）后刷新一次真实状态，卡片不再可操作。
       try {
         const result = await getWriteProposal(proposal.proposal_id);
@@ -105,6 +144,9 @@ export default function ActionProposalCard({ proposal: initial }: Props) {
 
   const meta = STATUS_META[proposal.status] ?? FALLBACK_STATUS_META;
   const pending = proposal.status === "pending";
+  // 求职偏好提案（T14）：两个按钮分别对应「以后都这样」与「只在这次对话」；
+  // 其它工具的确认卡保持原来的批准/拒绝不变。
+  const preferenceProposal = isJobPreferenceProposalTool(proposal.tool_name);
   const { preview } = proposal;
 
   return (
@@ -168,10 +210,35 @@ export default function ActionProposalCard({ proposal: initial }: Props) {
       )}
       {pending && (
         <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-          {t("assistantUi.actionProposal.notice")}
+          {preferenceProposal
+            ? t("assistantUi.actionProposal.notice.preference")
+            : t("assistantUi.actionProposal.notice")}
         </Typography.Text>
       )}
-      {pending && (
+      {pending && preferenceProposal && (
+        <div className="assistant-write-proposal-actions">
+          <Space>
+            <Button
+              type="primary"
+              size="small"
+              icon={<CheckOutlined />}
+              loading={busy}
+              onClick={() => act("approve")}
+            >
+              {t("assistantUi.actionProposal.action.rememberLongTerm")}
+            </Button>
+            <Button
+              size="small"
+              icon={<ClockCircleOutlined />}
+              disabled={busy}
+              onClick={() => act("session")}
+            >
+              {t("assistantUi.actionProposal.action.sessionOnly")}
+            </Button>
+          </Space>
+        </div>
+      )}
+      {pending && !preferenceProposal && (
         <div className="assistant-write-proposal-actions">
           <Space>
             <Button

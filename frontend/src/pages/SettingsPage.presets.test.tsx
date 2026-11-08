@@ -326,7 +326,7 @@ describe("SettingsPage model presets", () => {
     await waitFor(() => expect(screen.getByLabelText("Base URL")).toHaveValue(""));
 
     fireEvent.change(screen.getByLabelText("配置名称"), { target: { value: "Claude 原生" } });
-    await choosePreset("Claude（Anthropic 原生协议）");
+    await choosePreset("Claude（Anthropic 原生）");
     fireEvent.click(screen.getByRole("button", { name: "保存记录" }));
 
     // 只填地址不改协议的话，用户会拿着一整套 Messages 协议的配置去发 Chat

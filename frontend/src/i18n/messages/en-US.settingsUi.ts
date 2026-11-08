@@ -44,22 +44,26 @@ const settingsUi = {
   "settingsUi.assistantRelaxed.neverSent":
     "Never sent in any mode: credentials such as the API key or the global configuration, or the image content of Resume photos; the assistant also never has delete tools.",
 
-  // ── Reminder-to-task-card events (T26) ──────────────────────
-  "settingsUi.agentTaskEvents.title": "Reminders · Create task cards",
+  // ── Task cards master switch (T04; the agent_task_events key is unchanged) ──
+  "settingsUi.agentTaskEvents.title": "Task cards",
   "settingsUi.agentTaskEvents.intro":
-    "When on, a due reminder automatically creates a task card titled Prepare: <reminder title>. It only creates the card: no write action is executed automatically, no message is sent and no popup appears.",
-  "settingsUi.agentTaskEvents.toggleAria": "Create a task card when a reminder is due",
-  "settingsUi.agentTaskEvents.enableToast": "On: due reminders create task cards",
-  "settingsUi.agentTaskEvents.disableToast": "Off: no new task cards",
-  "settingsUi.agentTaskEvents.saveFailed": "Could not save the reminder task card setting",
+    "When on, a due reminder creates a task card titled Prepare: <reminder title>, shown on the Home page. When off, no new cards are created and none are shown; existing records are kept and come back when you turn it on again.",
+  "settingsUi.agentTaskEvents.toggleAria": "Task cards",
+  "settingsUi.agentTaskEvents.enableToast": "On: task cards appear on Home",
+  "settingsUi.agentTaskEvents.disableToast": "Off: task cards are hidden from Home",
+  "settingsUi.agentTaskEvents.saveFailed": "Could not save the task card setting",
+  /** On-state explanation: due reminders create the card, shown on Home, no write action. */
   "settingsUi.agentTaskEvents.stateOn":
-    "On: a due reminder creates a task card for you to confirm; no write action runs automatically.",
+    "On: due reminders create a task card for you to confirm; it is shown on the Home page and never executes a write action.",
+  /** Off-state explanation (T04 semantics: no new cards and nothing shown on Home). */
   "settingsUi.agentTaskEvents.stateOff":
-    "Off: due reminders no longer create task cards; task cards already created are kept.",
-  "settingsUi.agentTaskEvents.keepCards":
-    "Existing task cards are never deleted when you turn this off.",
-  "settingsUi.agentTaskEvents.loadFailed":
-    "Could not load the reminder task card setting. Please retry.",
+    "Off: task cards are hidden from Home and no new ones are created; existing records are kept and come back when you turn it on again.",
+  "settingsUi.agentTaskEvents.loadFailed": "Could not load the task card setting. Please retry.",
+  /** Confirmation when turning it off while unfinished tasks exist (D8). */
+  "settingsUi.agentTaskEvents.confirmTitle": "Turn off task cards",
+  "settingsUi.agentTaskEvents.confirmBody":
+    "{count} tasks are still unfinished. Turning task cards off hides them from Home; existing records are not deleted.",
+  "settingsUi.agentTaskEvents.confirmOk": "Turn off anyway",
 
   // ── Export save location card ───────────────────────────────
   "settingsUi.exportSave.title": "Generated content save location",
@@ -141,12 +145,10 @@ const settingsUi = {
   "settingsUi.skills.introMiddle": ", or bundled with ",
   "settingsUi.skills.introKnowledge": "knowledge files",
   "settingsUi.skills.introTail":
-    " (.md / .txt). Enabled skills tell the assistant how to answer, while knowledge files are read on demand instead of being stuffed into the conversation. To create a skill or fine-tune one, ",
+    " (.md / .txt). **Skills are enabled inside a conversation, not globally in the skills library**: tick them in the assistant input's skills menu, and they apply to that conversation only; knowledge files are read on demand instead of being stuffed into the conversation. To create a skill or fine-tune one, ",
   "settingsUi.skills.manageLink": "manage them in the workbench",
   "settingsUi.skills.manageTail": ".",
   "settingsUi.skills.empty": "No skills yet",
-  "settingsUi.skills.tagEnabled": "Enabled",
-  "settingsUi.skills.tagDisabled": "Disabled",
   "settingsUi.skills.files": "{count} knowledge files",
   "settingsUi.skills.promptOnly": "Prompt only",
   "settingsUi.skills.noDescription": "No use case described",

@@ -26,6 +26,14 @@ const reminder = {
   "reminder.selectMode": "批量选择",
   "reminder.card.title": "日历提醒",
   "reminder.filter.placeholder": "按类型筛选",
+  /** 时间范围筛选（T06）：全部 / 已逾期 / 今天 / 以后。 */
+  "reminder.filter.range.placeholder": "时间范围",
+  "reminder.filter.range.all": "全部",
+  "reminder.filter.range.overdue": "已逾期",
+  "reminder.filter.range.today": "今天",
+  "reminder.filter.range.future": "以后",
+  /** 当前筛选下一条都没有时的空态（与"还没有提醒"分开）。 */
+  "reminder.emptyFiltered": "当前筛选下没有提醒",
   "reminder.action.create": "新建提醒",
   "reminder.view.list": "列表",
   "reminder.view.calendar": "月历",
@@ -40,20 +48,30 @@ const reminder = {
   "reminder.placeholder.content": "例如：参加某司二面",
   "reminder.field.time": "提醒时间",
   "reminder.required.time": "请选择提醒时间",
+  /** 新建时不允许过去时间；编辑时放行（只改备注不该被卡）。 */
+  "reminder.required.futureTime": "提醒时间需要晚于当前时间",
+  /** 时间字段下方的任务卡提示：开关开启。 */
+  "reminder.hint.taskCardOn": "到期会生成一张「准备：提醒内容」任务卡，在首页查看",
+  /** 时间字段下方的任务卡提示：开关关闭。 */
+  "reminder.hint.taskCardOff": "任务卡已关闭，到期只提醒、不生成卡片",
   "reminder.field.kind": "类型",
-  "reminder.field.track": "绑定漏斗（选填）",
-  "reminder.placeholder.track": "输入关键词搜索进度",
-  "reminder.field.job": "绑定岗位（选填）",
+  /** 三个关联字段的总标题（收进折叠区，默认收起）。 */
+  "reminder.field.linkSection": "关联（选填）",
+  /** 折叠区收起时标题旁的计数；`{count}` 是已填的关联项数。 */
+  "reminder.field.linkedCount": "已关联 {count} 项",
+  "reminder.field.track": "关联求职进度（选填）",
+  "reminder.placeholder.track": "输入关键词搜索求职进度",
+  "reminder.field.job": "关联岗位（选填）",
   "reminder.placeholder.job": "输入关键词搜索岗位",
-  "reminder.field.resume": "绑定简历（选填）",
+  "reminder.field.resume": "关联简历（选填）",
   "reminder.placeholder.resume": "输入关键词搜索简历",
   "reminder.field.note": "备注",
   "reminder.placeholder.note": "补充说明（选填）",
 
   "reminder.detail.title": "提醒详情",
-  "reminder.detail.track": "绑定漏斗",
-  "reminder.detail.job": "绑定岗位",
-  "reminder.detail.resume": "绑定简历",
+  "reminder.detail.track": "关联求职进度",
+  "reminder.detail.job": "关联岗位",
+  "reminder.detail.resume": "关联简历",
   "reminder.detail.createdAt": "创建时间",
   "reminder.detail.updatedAt": "更新时间",
   "reminder.detail.none": "（无）",

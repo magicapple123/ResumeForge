@@ -86,9 +86,22 @@ AGENT_TASK_STEP_STATUSES: tuple[str, ...] = (
 # ===== 任务来源（开放标签：新入口登记一个常量即可，不影响既有取值） =====
 AGENT_TASK_SOURCE_MANUAL = "manual"
 AGENT_TASK_SOURCE_REMINDER = "reminder"
+# 期一跟进巡检：卡由"沉默超过阈值的求职进度"生成，不是某条提醒的到期扫描。
+AGENT_TASK_SOURCE_FOLLOWUP = "followup"
 AGENT_TASK_SOURCES: tuple[str, ...] = (
     AGENT_TASK_SOURCE_MANUAL,
     AGENT_TASK_SOURCE_REMINDER,
+    AGENT_TASK_SOURCE_FOLLOWUP,
+)
+
+# ===== 跟进巡检卡的去重维度（与 source=followup 配套使用） =====
+# ``source_ref``：同一 source 下的"桶"标识。两类卡各一个桶——>7 天出跟进卡、
+# >21 天出确认卡，二者互斥但同周可并存，所以必须分开去重。
+AGENT_TASK_SOURCE_REF_STALLED_FOLLOWUP = "stalled_followup"
+AGENT_TASK_SOURCE_REF_STALLED_CONFIRM = "stalled_confirm"
+AGENT_TASK_SOURCE_REFS: tuple[str, ...] = (
+    AGENT_TASK_SOURCE_REF_STALLED_FOLLOWUP,
+    AGENT_TASK_SOURCE_REF_STALLED_CONFIRM,
 )
 
 
@@ -122,6 +135,13 @@ class AgentTask(Base):
     # 刻意不加外键：提醒被删后任务卡仍要留下解释"从哪来"，与 conversation_id 同一取舍。
     reminder_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
     occurrence_due_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    # 期一跟进巡检的去重键（NULL 行不参与唯一约束）：
+    # - ``source_ref``：卡属于哪个桶（stalled_followup / stalled_confirm）；
+    # - ``occurrence_key``：本地日期所在 ISO 周（如 2026-W45）。
+    # 提醒卡两列为 NULL，仍由 (reminder_id, occurrence_due_at) 去重；手动卡同样两列
+    # 为 NULL、SQLite 视 NULL 互不相同，所以它们照旧不受任何唯一约束影响。
+    source_ref: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    occurrence_key: Mapped[str | None] = mapped_column(String(32), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
     finished_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
@@ -142,6 +162,15 @@ class AgentTask(Base):
             "reminder_id",
             "occurrence_due_at",
             name="uq_agent_task_reminder_occurrence",
+        ),
+        # 跟进巡检去重键：同一 source + 桶 + 周只生成一张卡；两类卡各一个桶。
+        # 两列都为 NULL 的行（提醒卡/手动卡）不参与本约束——SQLite 的 UNIQUE 允许多个
+        # NULL，所以既有卡一张不丢、不重，语义与 0006 之前逐字一致。
+        UniqueConstraint(
+            "source",
+            "source_ref",
+            "occurrence_key",
+            name="uq_agent_task_source_occurrence",
         ),
     )
 
@@ -186,7 +215,11 @@ __all__ = [
     "AGENT_TASK_ACTIVE_STATUSES",
     "AGENT_TASK_RUNNING_STATUSES",
     "AGENT_TASK_SOURCES",
+    "AGENT_TASK_SOURCE_FOLLOWUP",
     "AGENT_TASK_SOURCE_MANUAL",
+    "AGENT_TASK_SOURCE_REFS",
+    "AGENT_TASK_SOURCE_REF_STALLED_CONFIRM",
+    "AGENT_TASK_SOURCE_REF_STALLED_FOLLOWUP",
     "AGENT_TASK_SOURCE_REMINDER",
     "AGENT_TASK_STATUSES",
     "AGENT_TASK_STATUS_CANCELLED",

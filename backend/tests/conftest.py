@@ -30,6 +30,11 @@ os.environ["LOG_FILE_ENABLED"] = "false"  # noqa: E402
 # 那份瞬态租约会让任何断言"租约已清零"的用例（test_dataset_scope_stream 等）
 # 变成看运气的竞态。需要验证备份行为的用例都自己注入 settings 或直接调用函数。
 os.environ["AUTO_BACKUP_ENABLED"] = "false"  # noqa: E402
+# RAG（2026-11-08 返工）：生产默认 `RAG_EMBEDDING_ALLOW_FAKE=false`（fake 向量与语义
+# 无关，不得进排序）。既有 RAG 用例用 Settings(...) 显式开过 `rag_retrieval_enabled`
+# 但当时没有 fake 守卫；测试进程统一允许 fake，避免逐文件改断言。**守卫用例自己显式
+# 传 `rag_embedding_allow_fake=False`**，所以它验的仍是生产默认行为。
+os.environ.setdefault("RAG_EMBEDDING_ALLOW_FAKE", "true")  # noqa: E402
 
 import pytest  # noqa: E402
 from app import database  # noqa: E402
@@ -68,6 +73,16 @@ _FONTS_ROOT = _TEST_DIR / "fonts_root"
 _FONTS_ROOT.mkdir(parents=True, exist_ok=True)
 _user_fonts.DATA_DIR = str(_FONTS_ROOT)
 
+# 内置思源黑体落在同一片 ``data/fonts/``，但它从**自己的**模块常量取路径
+# （``resume_font_builtin.DATA_DIR``，同样是导入期快照）。PDF 导出在系统字体缺失时
+# 会拿"已下载的内置字体"兜底，所以不隔离的话：开发机上真下载过 33MB 字体时，
+# 「缺字体 → 返回 None / 409」这类断言会随机器状态漂移（本机绿、CI 红，或反过来）。
+from app.services import resume_font_builtin as _resume_font_builtin  # noqa: E402
+
+_BUILTIN_FONTS_ROOT = _TEST_DIR / "builtin_fonts_root"
+_BUILTIN_FONTS_ROOT.mkdir(parents=True, exist_ok=True)
+_resume_font_builtin.DATA_DIR = str(_BUILTIN_FONTS_ROOT)
+
 
 @pytest.fixture(autouse=True)
 def _clean_fonts_dir():
@@ -78,6 +93,8 @@ def _clean_fonts_dir():
     """
     shutil.rmtree(_FONTS_ROOT, ignore_errors=True)
     _FONTS_ROOT.mkdir(parents=True, exist_ok=True)
+    shutil.rmtree(_BUILTIN_FONTS_ROOT, ignore_errors=True)
+    _BUILTIN_FONTS_ROOT.mkdir(parents=True, exist_ok=True)
     yield
 
 

@@ -203,23 +203,27 @@ export function useAssistantConversations({ message, surface = "page" }: Options
     }
   }, [detail, message, surface]);
 
-  const createConversation = useCallback(async () => {
-    try {
-      const created =
-        surface === "page"
-          ? await createAssistantConversation()
-          : await createAssistantConversation("", { surface });
-      selectConversation(created.id);
-      setDetail({ ...created, messages: [] });
-      await reloadConversations();
-      return created.id;
-    } catch (error) {
-      message.error(
-        error instanceof Error ? error.message : t("assistantHooks.conversations.error.create"),
-      );
-      return null;
-    }
-  }, [message, reloadConversations, selectConversation, surface]);
+  const createConversation = useCallback(
+    async (skillIds: number[] = []) => {
+      try {
+        // T14：草稿态挑好的技能随建会话一起提交（空数组 = 新对话默认空，符合"新对话技能全关"）。
+        const created =
+          surface === "page"
+            ? await createAssistantConversation("", { skillIds })
+            : await createAssistantConversation("", { surface, skillIds });
+        selectConversation(created.id);
+        setDetail({ ...created, messages: [] });
+        await reloadConversations();
+        return created.id;
+      } catch (error) {
+        message.error(
+          error instanceof Error ? error.message : t("assistantHooks.conversations.error.create"),
+        );
+        return null;
+      }
+    },
+    [message, reloadConversations, selectConversation, surface],
+  );
 
   /**
    * 内置引导对话：**第一次**用助手且一条会话都没有时，自动建一条带欢迎消息的会话。

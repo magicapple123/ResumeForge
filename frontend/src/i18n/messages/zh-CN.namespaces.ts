@@ -52,6 +52,7 @@ import materials from "./zh-CN.materials";
 import applyQueue from "./zh-CN.applyQueue";
 import claimForm from "./zh-CN.claimForm";
 import skills from "./zh-CN.skills";
+import conversationSkills from "./zh-CN.conversationSkills";
 import toolCalls from "./zh-CN.toolCalls";
 import datasets from "./zh-CN.datasets";
 import jobImport from "./zh-CN.jobImport";
@@ -77,6 +78,10 @@ import trackerForm from "./zh-CN.trackerForm";
 import interviewExperience from "./zh-CN.interviewExperience";
 import jobMatchBatch from "./zh-CN.jobMatchBatch";
 import assistantComposer from "./zh-CN.assistantComposer";
+import assistantPermission from "./zh-CN.assistantPermission";
+import composerAddMenu from "./zh-CN.composerAddMenu";
+import reasoningChip from "./zh-CN.reasoningChip";
+import voiceInput from "./zh-CN.voiceInput";
 import webFormPage from "./zh-CN.webFormPage";
 import collectResult from "./zh-CN.collectResult";
 import webFormLegacy from "./zh-CN.webFormLegacy";
@@ -102,6 +107,7 @@ import profilePhoto from "./zh-CN.profilePhoto";
 import favorites from "./zh-CN.favorites";
 import atsCheck from "./zh-CN.atsCheck";
 import advancedParams from "./zh-CN.advancedParams";
+import embeddingSearch from "./zh-CN.embeddingSearch";
 import appHeader from "./zh-CN.appHeader";
 import backupStatus from "./zh-CN.backupStatus";
 import claimCard from "./zh-CN.claimCard";
@@ -115,6 +121,7 @@ import knowledgePage from "./zh-CN.knowledgePage";
 import liveModeCard from "./zh-CN.liveModeCard";
 import llmConfigCard from "./zh-CN.llmConfigCard";
 import llmRecordView from "./zh-CN.llmRecordView";
+import llmProtocol from "./zh-CN.llmProtocol";
 import profileTextModal from "./zh-CN.profileTextModal";
 import questionBankPanel from "./zh-CN.questionBankPanel";
 import referralDetail from "./zh-CN.referralDetail";
@@ -157,11 +164,18 @@ import profileUi from "./zh-CN.profileUi";
 import referralUi from "./zh-CN.referralUi";
 import settingsDatasets from "./zh-CN.settingsDatasets";
 import settingsUi from "./zh-CN.settingsUi";
+import tasksCard from "./zh-CN.tasksCard";
 import templatesUi from "./zh-CN.templatesUi";
 import touTou from "./zh-CN.touTou";
 import trackerUi from "./zh-CN.trackerUi";
 import userGuide from "./zh-CN.userGuide";
 import userGuideFlow from "./zh-CN.userGuideFlow";
+/** 跟进巡检卡（T06）。 */
+import followupSweep from "./zh-CN.followupSweep";
+/** 投递交付单（T09）。 */
+import deliveryReceipt from "./zh-CN.deliveryReceipt";
+/** 求职偏好档（T14）。 */
+import jobPreference from "./zh-CN.jobPreference";
 import enumsApply from "./zh-CN.enumsApply";
 import enumsAssistant from "./zh-CN.enumsAssistant";
 import enumsClaims from "./zh-CN.enumsClaims";
@@ -245,6 +259,7 @@ const namespaces = {
   ...applyQueue,
   ...claimForm,
   ...skills,
+  ...conversationSkills,
   ...toolCalls,
   ...datasets,
   ...jobImport,
@@ -280,6 +295,12 @@ const namespaces = {
   ...jobMatchBatch,
   /** 求职助手输入区（2026-10-27）。 */
   ...assistantComposer,
+  ...assistantPermission,
+  /** 输入区左侧「+」面板（R06-A）。 */
+  ...composerAddMenu,
+  /** 输入区右侧「模型 · 推理等级」chip（R06-B）。 */
+  ...reasoningChip,
+  ...voiceInput,
   /** 网申填表页（2026-10-27）。 */
   ...webFormPage,
   /** 「本次采集结果」面板（2026-10-27）。 */
@@ -328,6 +349,8 @@ const namespaces = {
   ...atsCheck,
   /** 模型高级参数（2026-10-27）。 */
   ...advancedParams,
+  /** 设置页「语义检索」卡片（RAG v3，本地/远程二选一）。 */
+  ...embeddingSearch,
   ...appHeader,
   ...backupStatus,
   ...claimCard,
@@ -341,6 +364,8 @@ const namespaces = {
   ...liveModeCard,
   ...llmConfigCard,
   ...llmRecordView,
+  /** 模型协议：Responses 实验性选项与他家支持矩阵（2026-11-07）。 */
+  ...llmProtocol,
   ...profileTextModal,
   ...questionBankPanel,
   ...referralDetail,
@@ -384,10 +409,14 @@ const namespaces = {
   ...settingsDatasets,
   ...settingsUi,
   ...templatesUi,
+  ...tasksCard,
   ...touTou,
   ...trackerUi,
   ...userGuide,
   ...userGuideFlow,
+  ...followupSweep,
+  ...deliveryReceipt,
+  ...jobPreference,
   ...enumsApply,
   ...enumsAssistant,
   ...enumsClaims,

@@ -93,6 +93,29 @@ describe("searchOutline：过滤与命中顺序", () => {
     expect(upper.matchCount).toBe(1);
   });
 
+  it("条目 id 不参与搜索：查询命中 id 子串时 matchCount 不变", () => {
+    // 缺陷现场：`entryTexts()` 曾把 `Object.values(entry)` 里的所有字符串都当可搜文本，
+    // `id` 也在其中。id 形如 `ob_` + 12 位 base36 随机串，含 "go"/"ai" 这类二字词的概率
+    // 约 0.85% / 条，于是搜 "go" 会莫名多出一条命不中任何可见文字的条目（高亮无处可落）。
+    // 这里把 id 显式做成含查询词，把"偶发"变成"必然"，缺陷不修就必红。
+    const poisoned: ResumeContent = {
+      ...content,
+      projects: [
+        { ...content.projects[0], id: "ob_go00000000" },
+        { ...content.projects[1], id: "ob_go11111111" },
+      ],
+    };
+    const poisonedModel = buildOutline(poisoned);
+    const result = searchOutline(poisonedModel, poisoned, "GO", { sectionLabel });
+
+    // 唯一命中来自 tech_stack 里的可见文本 "Go"（projects 的要点字段之一），共 1 条；
+    // 两条项目的 id 都含 "go"，但它们不该额外产生任何"看不见的命中"。
+    expect(result.matchCount).toBe(1);
+    expect(result.matches.map((match) => match.kind)).toEqual(["point"]);
+    // 每条命中的 text 都必须真的是用户能看到的、含查询词的文字。
+    expect(result.matches.every((match) => match.text.toLowerCase().includes("go"))).toBe(true);
+  });
+
   it("命中顺序 = 树行顺序（条目在它的要点之前）", () => {
     const result = searchOutline(model, content, "支付网关", { sectionLabel });
     expect(result.matches.map((match) => match.kind)).toEqual(["entry"]);

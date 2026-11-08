@@ -3,8 +3,8 @@
 
 拆分说明：工具调用回路用例已迁至 test_assistant_tool_calls.py；提示表面
 （思考开关隔离 / 技能注入 / 联网承诺 / 提示守卫）已迁至 test_assistant_prompt_surface.py。
-跨文件共用的 helper（_FakeProvider / _ScriptedProvider / _tool_call / _empty_search /
-_import_skill 等）按契约留在本文件，新文件单向导入。
+跨文件共用的 helper（_FakeProvider / _ScriptedProvider / _tool_call / _import_skill 等）
+按契约留在本文件，新文件单向导入。
 """
 
 import io
@@ -92,11 +92,6 @@ class _ScriptedProvider(_FakeProvider):
         async for delta in self.stream_chat_events(messages):
             if delta.text:
                 yield delta.text
-
-
-async def _empty_search(_query: str, _config) -> list[dict[str, str]]:
-    """自动预搜的空替身：只为让预搜别去打真实网络，不关心它返回什么。"""
-    return []
 
 
 def _tool_call(name, arguments, call_id="call_1"):

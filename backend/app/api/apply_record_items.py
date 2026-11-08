@@ -25,8 +25,11 @@ from ..schemas.apply import (
     ApplyTaskOut,
 )
 from ..schemas.common import Page
-from ..services import trash
+from ..schemas.delivery_receipt import DeliveryReceiptOut, ReceiptAckOut
+from ..schemas.followup import SubmitConfirmationOut
+from ..services import submit_confirmation, trash
 from ..services.apply import apply_service, task_runner
+from ..services.delivery_receipt import ReceiptNotFound, ack_receipt, build_receipt
 
 router = APIRouter(tags=["apply"])
 
@@ -88,9 +91,7 @@ def retry_batch_records(payload: ApplyRecordRetryBatchRequest, db: Session = Dep
         raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
     except task_runner.TaskRunnerError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
-    return ApplyRecordRetryBatchResult(
-        retried=len(job_ids), task=ApplyTaskOut.model_validate(task)
-    )
+    return ApplyRecordRetryBatchResult(retried=len(job_ids), task=ApplyTaskOut.model_validate(task))
 
 
 @router.post("/records/batch-delete", response_model=ApplyRecordBatchDeleteResult)
@@ -122,3 +123,52 @@ def batch_delete_apply_records(
         trash.soft_delete(db, "apply_record", item)
     db.commit()
     return ApplyRecordBatchDeleteResult(deleted=len(items))
+
+
+@router.post("/records/{record_id}/submitted", response_model=SubmitConfirmationOut)
+def mark_apply_record_submitted(record_id: int, db: Session = Depends(get_db)):
+    """「我已提交」（期一 T05）：成功投递记录 → 求职进度 + 7 天后跟进提醒。
+
+    幂等：连点多次行数不变（record_applied 的幂等键 + 同 track pending 提醒复用）。
+    只在用户亲手确认时调用，**不碰**记录状态与批次计数。
+    """
+    try:
+        return submit_confirmation.mark_submitted(db, record_id)
+    except submit_confirmation.SubmitConfirmationError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
+
+
+@router.get("/records/{record_id}/receipt", response_model=DeliveryReceiptOut)
+def get_delivery_receipt(record_id: int, db: Session = Depends(get_db)):
+    """投递交付单读视图（T08）：三态 waiting_human / has_doubts / ready。
+
+    只读聚合：既有投递快照 + 按 URL 匹配的填充记录 + 事实台账疑点 + hr_reply 提醒，
+    不重算历史、不 live 导出、不写库。失败记录同样可读（没有快照时 delivery=null、
+    state=waiting_human 且 state_reasons 含 snapshot_missing，不 500）。
+
+    记录不存在/已软删 → 404。
+    """
+    try:
+        return build_receipt(db, record_id)
+    except ReceiptNotFound as exc:
+        raise HTTPException(status_code=404, detail="投递记录不存在或已被删除") from exc
+
+
+@router.post("/records/{record_id}/receipt/ack", response_model=ReceiptAckOut)
+def ack_delivery_receipt(record_id: int, db: Session = Depends(get_db)):
+    """验收交付单：只写 apply_task_item.receipt_acked_at（已有值不覆盖 = 幂等）。
+
+    **不碰 application_track / status**：验收单据不等于推进流程（计划 §6.2.4）。
+    失败/跳过记录也可 ack（用户可以对「卡在人手上」的单据点头）。
+    记录不存在/已软删 → 404。
+    """
+    try:
+        receipt = ack_receipt(db, record_id)
+    except ReceiptNotFound as exc:
+        raise HTTPException(status_code=404, detail="投递记录不存在或已被删除") from exc
+    # ack_receipt 保证返回时 receipt_acked_at 非空；这里显式收窄类型，
+    # 响应只回契约 C 的两个字段。
+    acked_at = receipt.receipt_acked_at
+    if acked_at is None:  # pragma: no cover - 只有不变式被破坏才会走到
+        raise HTTPException(status_code=500, detail="验收时间未能写入")
+    return ReceiptAckOut(receipt_acked_at=acked_at, acked=True)

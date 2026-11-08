@@ -76,6 +76,13 @@ const assistantUi = {
   "assistantUi.actionProposal.action.approve": "确认执行",
   "assistantUi.actionProposal.action.reject": "拒绝",
   "assistantUi.actionProposal.toast.done": "写入已完成",
+  /** 求职偏好提案专用：两个按钮 + 生效范围说明 + 结果（T14）。 */
+  "assistantUi.actionProposal.action.rememberLongTerm": "以后都这样",
+  "assistantUi.actionProposal.action.sessionOnly": "只在这次对话",
+  "assistantUi.actionProposal.notice.preference":
+    "选一种生效范围：「以后都这样」长期生效；「只在这次对话」只影响当前对话。助手不会把偏好写进简历正文或经历。",
+  "assistantUi.actionProposal.toast.sessionOnly": "已记住，只在这次对话生效",
+  "assistantUi.actionProposal.error.sessionOnly": "这次对话的偏好没有记住，请重试一次",
   "assistantUi.actionProposal.toast.executed": "提案已执行",
   "assistantUi.actionProposal.error.fallback": "执行提案失败",
   "assistantUi.sidebar.newConversation": "新对话",
@@ -122,7 +129,7 @@ const assistantUi = {
   "assistantUi.proposalResult.target": "对象：{target}",
   "assistantUi.proposalResult.aria": "写操作结果：{target}",
   "assistantUi.tasks.title": "任务",
-  "assistantUi.tasks.aria.panel": "当前会话的任务",
+  "assistantUi.tasks.aria.panel": "助手任务",
   "assistantUi.tasks.count": "{count} 个任务",
   "assistantUi.tasks.loading": "正在加载任务…",
   "assistantUi.tasks.error": "任务加载失败，稍后自动重试",
@@ -151,6 +158,8 @@ const assistantUi = {
   "assistantUi.tasks.actionFailed": "任务操作失败",
   "assistantUi.tasks.waitingHint": "助手在等你确认后继续",
   "assistantUi.tasks.steps": "步骤",
+  /** 展开步骤后标在「当前这步」后面的小标签（全部完成时不出现）。 */
+  "assistantUi.tasks.current": "当前",
   "assistantUi.tasks.source.reminder": "来源：提醒",
   "assistantUi.tasks.source.other": "来源：{source}",
   "toolLabel.run_resume_quality_check": "质量检测",

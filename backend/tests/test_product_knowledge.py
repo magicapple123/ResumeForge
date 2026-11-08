@@ -11,7 +11,8 @@
   发布包自带 ``frontend/dist`` 由后端同源提供页面，运行期不需要 Node；5173 仅 dev 模式。
 - 升级：``update.cmd`` / ``update.command``；检查更新入口是页头「使用指南」旁的刷新
   图标或设置 → 更新与帮助 → 软件更新；应用内覆盖安装目前只支持 Windows。
-- Linux：没有一键脚本、未做兼容验证，知识源必须如实说明。
+- Linux：``start.sh`` / ``stop.sh`` / ``update.sh``（bash 一键脚本），验收基线为
+  x86_64 / aarch64、glibc ≥ 2.31；更老的发行版与其它架构未经验证，知识源必须如实说明。
 """
 
 from __future__ import annotations
@@ -40,6 +41,9 @@ ONE_CLICK_SCRIPTS = (
     "start.command",
     "stop.command",
     "update.command",
+    "start.sh",
+    "stop.sh",
+    "update.sh",
 )
 
 
@@ -75,15 +79,24 @@ def test_default_backend_port_matches_macos_launcher():
     )
 
 
-def test_auto_frontend_mode_is_the_default_on_both_platforms():
+def test_default_backend_port_matches_linux_launcher():
+    start_sh = _read(REPO_ROOT / "scripts" / "linux" / "start.sh")
+    assert f"RF_BACKEND_PORT={DEFAULT_BACKEND_PORT}" in start_sh, (
+        "Linux 启动器的默认端口与 product_knowledge.DEFAULT_BACKEND_PORT 不一致"
+    )
+
+
+def test_auto_frontend_mode_is_the_default_on_every_platform():
     """auto 模式 = 发布包自带 dist 时由后端同源提供页面（运行期不需要 Node）。
 
-    这是"5173 只是 dev 端口"这条知识成立的前提；两个平台必须都默认 auto。
+    这是"5173 只是 dev 端口"这条知识成立的前提；三个平台必须都默认 auto。
     """
     ps1 = _read(REPO_ROOT / "scripts" / "Start-ResumeForge.ps1")
     start_sh = _read(REPO_ROOT / "scripts" / "macos" / "start.sh")
+    linux_sh = _read(REPO_ROOT / "scripts" / "linux" / "start.sh")
     assert '$FrontendMode = "auto"' in ps1
     assert "RF_FRONTEND_MODE=auto" in start_sh
+    assert "RF_FRONTEND_MODE=auto" in linux_sh
     assert str(DEV_ONLY_FRONTEND_PORT) in PLATFORM_NOTE, (
         "知识源必须说明 5173 仅用于 dev 模式，防止助手把 npm run dev 当作用户启动方式"
     )
@@ -101,19 +114,22 @@ def test_platform_note_names_every_one_click_entry():
     assert f"http://127.0.0.1:{DEFAULT_BACKEND_PORT}" in PLATFORM_NOTE
 
 
-def test_platform_note_states_in_app_update_scope_and_linux_honestly():
+def test_platform_note_states_in_app_update_scope_and_linux_baseline():
     assert "应用内覆盖安装目前只支持 Windows" in PLATFORM_NOTE
-    assert "未经过兼容验证" in PLATFORM_NOTE or "未官方支持" in PLATFORM_NOTE, (
-        "Linux 未验证这一点必须如实写，不能暗示它有一键体验"
+    # Linux 自 2.1 起有官方一键脚本，所以不再断言"未官方支持"；但验收基线必须写清楚，
+    # 且更老的发行版仍要如实说"未经验证"，不能因为加了一键入口就暗示普遍可用。
+    assert "glibc ≥ 2.31" in PLATFORM_NOTE, "知识源必须写明 Linux 的 glibc 验收基线"
+    assert "未经验证" in PLATFORM_NOTE, (
+        "超出验收基线的发行版必须如实说明未经验证，不能暗示一定可用"
     )
 
 
 def test_platform_note_agrees_with_readme_quick_start():
     """README（用户会读的权威文档）与知识源关键句对拍——宽松包含，不逐字。"""
     readme = _read(README_MD)
-    for needle in ("start.cmd", "start.command", f"http://127.0.0.1:{DEFAULT_BACKEND_PORT}"):
+    for needle in ("start.cmd", "start.command", "start.sh", f"http://127.0.0.1:{DEFAULT_BACKEND_PORT}"):
         assert needle in readme, f"README 缺少知识源关键句：{needle}"
-    for needle in ("update.cmd", "update.command"):
+    for needle in ("update.cmd", "update.command", "update.sh"):
         assert needle in readme, f"README 更新段缺少一键更新入口：{needle}"
 
 
@@ -123,6 +139,7 @@ def test_platform_note_agrees_with_upgrading_doc():
         "docs/upgrading.md 与 product_knowledge 的覆盖安装口径必须一致（都是只支持 Windows）"
     )
     assert "update.command" in upgrading and "update.cmd" in upgrading
+    assert "update.sh" in upgrading, "docs/upgrading.md 必须写明 Linux 的一键更新入口"
 
 
 # ===== 助手系统提示面 =====
@@ -131,7 +148,7 @@ def test_platform_note_agrees_with_upgrading_doc():
 def test_system_prompt_carries_platform_note(db_session):
     prompt = _system_prompt(db_session)
     assert "【启动与升级（平台事实）】" in prompt, "系统提示必须拼入平台知识段"
-    for needle in ("start.command", "update.command", "应用内覆盖安装目前只支持 Windows"):
+    for needle in ("start.command", "start.sh", "update.command", "应用内覆盖安装目前只支持 Windows"):
         assert needle in prompt
     # 知识段来自单一来源：build_platform_note() 与常量必须一致
     assert build_platform_note() == PLATFORM_NOTE

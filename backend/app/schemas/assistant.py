@@ -108,6 +108,9 @@ class AssistantMessageCreate(BaseModel):
     # （只读问答，行为与历史版本一致）。True 时写工具直接执行；False 时写工具转为
     # 待确认提案（REST 端点批准后才执行）。模型文本声称"用户已确认"改变不了它。
     allow_write: bool = False
+    # T11 数据权限的「读」轴请求级覆盖：None = 沿用全局设置（旧客户端零改动），
+    # True/False = 本次请求覆盖。流式路径每轮工具循环必须认这个覆盖，否则覆盖会被静默忽略。
+    relaxed_mode: bool | None = None
     # 有思考模式的大模型可以在这里调整推理强度；不支持该参数的服务商会被忽略。
     # 取值可以自定义（各家档位词汇不同），格式见 `normalize_reasoning_effort`。
     reasoning_effort: str = Field(default="", max_length=MAX_REASONING_EFFORT_CHARS)
@@ -144,6 +147,21 @@ class AssistantMessageCreate(BaseModel):
         return self
 
 
+AssistantPermissionLevel = Literal["read_only", "read_full", "write_confirm", "write_full"]
+
+
+class AssistantPermissionSetting(BaseModel):
+    """求职助手数据权限档位（T11）：一档同时决定读、写两轴。
+
+    默认「仅查看」，与旧版 assistant_relaxed_mode=False 等价；写新键时同步写旧键，
+    仍在读旧键的路径不会与四档分叉。四档 → 两轴的映射在 services/settings_service.py。
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    permission: AssistantPermissionLevel = "read_only"
+
+
 class ChatConversationCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -151,6 +169,10 @@ class ChatConversationCreate(BaseModel):
     surface: ConversationSurface = "page"
     # 为真时自动附上一条引导消息（介绍助手功能与用法），用于首次进入创建默认会话。
     welcome: bool = False
+    # T14：新建对话时一次事务写入要启用的技能（空态先勾技能、发第一条消息时带上）。
+    # 上限由服务层校验（>8 → 422 中文提示，见 services/assistant/assistant_skills.py）。
+    # 这里只留一个防滥用的硬上限（200 远大于 8，路由仍会给出中文错误）。
+    skill_ids: list[int] = Field(default_factory=list, max_length=200)
 
 
 class ChatConversationUpdate(BaseModel):
@@ -188,6 +210,54 @@ class ChatConversationUpdate(BaseModel):
         if value is None:
             return None
         return " ".join(value.split())[:64]
+
+
+class ConversationSkillOut(BaseModel):
+    """对话里已启用的一项技能（菜单一次拿全：名称 + 一句话适用场景）。"""
+
+    id: int
+    name: str
+    description: str = ""
+
+
+class ConversationSkillLoadOut(BaseModel):
+    """单个技能在本对话里的加载明细（R05）：完整块多长、实际拼进去多长。
+
+    ``loaded_chars == requested_chars`` 未截断；``0 < loaded < requested`` 被截断；
+    ``loaded_chars == 0`` 整块因预算跳过。前端只用它显示，不自己重算预算。
+    """
+
+    skill_id: int
+    requested_chars: int = 0
+    loaded_chars: int = 0
+
+
+class ConversationSkillBudgetOut(BaseModel):
+    """本对话的技能注入预算（前端菜单右侧显示"X / 12,000 字"并给截断 chip 标黄）。"""
+
+    used_chars: int = 0
+    loaded_chars: int = 0
+    limit_chars: int = 12_000
+    # 提示词被截断、或因预算整块未加载的技能 id：界面上两者都算"没完整加载"。
+    truncated_skill_ids: list[int] = Field(default_factory=list)
+    # 逐技能明细（R05）；默认空列表——不含该字段的旧响应照样能通过校验。
+    per_skill: list[ConversationSkillLoadOut] = Field(default_factory=list)
+
+
+class ConversationSkillsOut(BaseModel):
+    """`GET/PUT /api/assistant/conversations/{id}/skills` 的统一载荷。"""
+
+    skill_ids: list[int] = Field(default_factory=list)
+    skills: list[ConversationSkillOut] = Field(default_factory=list)
+    budget: ConversationSkillBudgetOut = Field(default_factory=ConversationSkillBudgetOut)
+
+
+class ConversationSkillsUpdate(BaseModel):
+    """整体替换一个对话启用的技能。上限（8 个）在服务层校验，以便返回中文提示。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    skill_ids: list[int] = Field(default_factory=list, max_length=200)
 
 
 class ChatConversationForkRequest(BaseModel):

@@ -195,6 +195,11 @@ export interface AssistantMessage {
     source_map?: AssistantSourceNumber[];
     tool_calls?: AssistantToolCall[];
     /**
+     * 本轮启用了哪些技能（T14，只记名字不记提示词正文）。没有启用技能时后端不落这个
+     * 字段——空数组与"没启用"语义不同，所以按可选处理。
+     */
+    skills?: string[];
+    /**
      * 模型的思考过程（开启思考强度时才有），供用户点开查看。
      *
      * 后端对它有存储上限，超限会截断并把 `reasoning_truncated` 置真——界面据此在

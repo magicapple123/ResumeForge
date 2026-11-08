@@ -15,7 +15,7 @@ const appConfig = {
 
   // ── Model presets (fill Base URL and model name) ─────────────
   "appConfig.preset.deepseek": "DeepSeek",
-  "appConfig.preset.anthropic": "Claude (Anthropic native protocol)",
+  "appConfig.preset.anthropic": "Claude (Anthropic native)",
   "appConfig.preset.doubao": "Doubao (Volcengine Ark)",
   "appConfig.preset.kimi": "Kimi (Moonshot)",
   "appConfig.preset.qwen": "Qwen (Alibaba Cloud Bailian)",
@@ -24,7 +24,7 @@ const appConfig = {
   "appConfig.preset.siliconflow": "SiliconFlow",
   "appConfig.preset.openrouter": "OpenRouter (aggregator)",
   "appConfig.preset.openai": "OpenAI",
-  "appConfig.preset.gemini": "Google Gemini (OpenAI compatible)",
+  "appConfig.preset.gemini": "Google Gemini",
   "appConfig.preset.xai": "xAI Grok",
   "appConfig.preset.groq": "Groq (fast inference)",
   "appConfig.preset.mistral": "Mistral AI",

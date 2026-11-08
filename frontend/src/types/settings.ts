@@ -1,8 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
 /** 大模型设置、数据集与更新检查类型。 */
 
-/** 接口协议：Claude 也能走 OpenAI 兼容层（openai），或原生 Messages 协议（anthropic）。 */
-export type LLMApiStyle = "openai" | "anthropic";
+/**
+ * 接口协议：Claude 也能走 OpenAI 兼容层（openai），或原生 Messages 协议（anthropic）；
+ * responses = OpenAI Responses（实验性，只有用户主动选择才走，默认仍是 openai）。
+ */
+export type LLMApiStyle = "openai" | "anthropic" | "responses";
 
 /** 额外请求体字段允许的值：任意 JSON 值（对象与数组都算 object）。 */
 export type LLMExtraBodyValue = string | number | boolean | object;

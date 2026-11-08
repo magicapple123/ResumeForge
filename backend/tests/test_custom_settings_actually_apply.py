@@ -6,7 +6,7 @@
 
 所以这里的每一条都断言到**最终产物**上：
 - 简历自定义样式 → 渲染出来的 HTML；
-- 联网搜索的开关与"抓正文条数" → 下发给模型的**工具描述 + 系统提示**；
+- 联网搜索的开关与"抓正文条数" → 下发给模型的**工具定义 + 工具描述**；
 - 面试的难度 / 轮数 / 考察重点 / 人设 → 发给模型的 **system 消息**；
 - 投递招呼语 → 适配器**实际收到**的那一条（见 ``test_apply_task_runner`` 里的同名用例）。
 
@@ -18,7 +18,7 @@ import json
 
 import httpx
 import pytest
-from app.api.assistant import _system_prompt, _web_search_addendum
+from app.api.assistant import _system_prompt
 from app.models.interview import InterviewSession
 from app.services.assistant_tools import tool_definitions
 from app.services.exporter import render_html
@@ -114,16 +114,20 @@ def test_a_custom_style_template_reaches_the_rendered_html():
 # ===== 助手：联网搜索配置 =====
 
 
-def test_web_search_off_removes_both_the_tool_and_the_addendum(db_session):
-    """关掉联网开关就是不希望助手联网：工具不下发，系统提示里也不该出现那套说明。
+def test_web_search_off_removes_the_tool_and_leaves_no_web_search_promise(db_session):
+    """关掉联网开关就是不希望助手联网：工具不下发，提示里也不该出现联网承诺。
 
     只删工具、留着"你拥有 web_search 工具"的说明，会让模型去调用一个不存在的工具。
+    R08 起系统提示**完全不随开关变化**（联网说明随自动预搜一起删掉了），所以这里
+    除了"没有联网承诺"，还要钉住"开着开关时系统提示与关着时逐字相同"。
     """
     definitions = tool_definitions(web_search=False)
     assert all("web_search" not in item["function"]["name"] for item in definitions)
 
-    prompt = _system_prompt(db_session, web_search=False)
+    prompt = _system_prompt(db_session)
     assert "联网搜索工具已开启" not in prompt
+    # 系统提示里不再有任何"已经自动搜过"的承诺。
+    assert "自动搜过一次" not in prompt
 
 
 def test_web_search_on_without_page_fetching_says_it_only_sees_summaries(db_session):
@@ -131,25 +135,18 @@ def test_web_search_on_without_page_fetching_says_it_only_sees_summaries(db_sess
 
     否则它会以为手里有完整正文，引用时就会编出正文里没有的要求。
 
-    注意断言范围：基础系统提示里**本来就有**一句"（只有摘要，还是也含正文节选）由下方的联网
-    工具说明给出，以那一节为准"——那是刻意的设计（基础提示不写死答案，交给动态那一节）。
-    所以"两版说明互斥"这条只能在**附加说明本身**上验，而不是整份系统提示。
+    断言范围：R08 之后"能拿到多完整"只在**工具描述**里说（原先系统提示里另有一段附加说明，
+    已随自动预搜删除）；基础提示里只有一句"由下方的联网工具说明给出，以那一节为准"。
+    所以"两版说明互斥"这条只能验工具描述本身，验整份系统提示会被那句引用说明干扰。
     """
     definitions = tool_definitions(web_search=True, fetch_pages=0)
     search_tool = next(item for item in definitions if item["function"]["name"] == "web_search")
     assert "不打开网页" in search_tool["function"]["description"]
-
-    addendum = _web_search_addendum(fetch_pages=0)
-    assert "不得声称已打开网页" in addendum
-    assert "正文节选" not in addendum
-
-    prompt = _system_prompt(db_session, web_search=True, fetch_pages=0)
-    assert "联网搜索工具已开启" in prompt
-    assert addendum in prompt
+    assert "正文节选" not in search_tool["function"]["description"]
 
 
 def test_web_search_on_with_page_fetching_stops_claiming_it_cannot_open_pages(db_session):
-    """用户把"抓取正文条数"调大之后，说明必须跟着改口。
+    """用户把"抓取正文条数"调大之后，工具描述必须跟着改口。
 
     反过来（开着抓正文却告诉模型"不得声称已打开网页"）会让它放着拿到的正文不用，
     回头跟用户说"我只能看到摘要"——用户于是以为这个设置没用。这正是"设了没反应"的典型。
@@ -159,12 +156,6 @@ def test_web_search_on_with_page_fetching_stops_claiming_it_cannot_open_pages(db
     description = search_tool["function"]["description"]
     assert "抓取正文" in description
     assert "不打开网页" not in description
-
-    addendum = _web_search_addendum(fetch_pages=3)
-    assert "正文节选" in addendum
-    assert "不得声称已打开网页" not in addendum
-
-    assert addendum in _system_prompt(db_session, web_search=True, fetch_pages=3)
 
 
 # ===== 模拟面试：设定项进 system 消息 =====

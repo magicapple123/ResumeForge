@@ -20,6 +20,7 @@ from .api import (
     analytics,
     apply,
     assistant,
+    assistant_permission,
     assistant_proposal_status,
     assistant_proposals,
     assistant_tools_api,
@@ -30,11 +31,13 @@ from .api import (
     claims,
     datasets,
     drill,
+    followups,
     interview,
     interview_answer_review,
     interview_experiences,
     interview_history,
     job_match,
+    job_preferences,
     jobs,
     jobs_analysis,
     knowledge,
@@ -50,12 +53,14 @@ from .api import (
     resume_writing,
     resumes,
     search,
+    settings_embedding,
     settings_llm_global,
     settings_locale,
     share_packages,
     skills,
     stats,
     tracker,
+    transcribe,
     trash,
     user_files,
     webform,
@@ -104,6 +109,8 @@ ROUTERS = (
     # 通用 AI 任务（0068）：独立前缀 /api/ai-tasks，不与其他前缀抢路径。
     ai_tasks.router,
     agent_tasks.router,  # T19：Agent 任务多步计划（独立前缀 /api/agent-tasks）。
+    # 期一 T04：跟进巡检决策（独立前缀 /api/followups，不与 /api/agent-tasks 抢路径）。
+    followups.router,
     jobs.router,
     jobs_analysis.router,
     resumes.router,
@@ -140,6 +147,8 @@ ROUTERS = (
     webform.router,
     tracker.router,
     settings_api.router,
+    # RAG v3：语义检索 provider 配置（/api/settings/embedding/*，独立前缀）。
+    settings_embedding.router,
     settings_llm_global.router,
     settings_locale.router,
     # 必须排在 fonts_api 之前：fonts_api 有 DELETE/PATCH /fonts/{name} 的参数段，
@@ -164,6 +173,8 @@ ROUTERS = (
     # W16 数据集级术语表：独立前缀 /api/glossary-terms。
     glossary_api.router,
     assistant.router,
+    # T11 数据权限全局默认（前缀同 /api/assistant，路径 /permission）。
+    assistant_permission.router,
     assistant_proposals.router,
     # T01：写操作提案状态列表（前缀同 /api/assistant，路径 /write-proposals 与
     # /write-proposals/{id} 不冲突）。
@@ -171,11 +182,15 @@ ROUTERS = (
     # #38 工具清单：`GET /api/assistant/tools` 单独一个模块（assistant.py 已贴 500 行预算），
     # 前缀同 /api/assistant，路径 /tools 与既有 /conversations/* 不重叠。
     assistant_tools_api.router,
+    # 期二 求职偏好档（/api/job-preferences，独立前缀；与 /api/assistant 不抢路径）。
+    job_preferences.router,
     trash.router,
     # 附件预览（PDF 首页渲染）：独立前缀 /api/attachments，与识别链路无耦合。
     attachments.router,
     user_files.router,
     manual_backups.router,
+    # W4 语音听写：独立前缀 /api/transcribe 与 /api/settings/asr（配置 + 转写 + 状态）。
+    transcribe.router,
 )
 
 

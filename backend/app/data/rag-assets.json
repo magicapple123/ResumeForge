@@ -1,0 +1,189 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-11-08",
+  "model": {
+    "id": "granite-embedding-97m-multilingual-r2",
+    "upstream_revision": "835ad14087e140460703cf0fae09f97d469d65c2",
+    "variant": "int8_avx2",
+    "dim": 384,
+    "pooling": "cls",
+    "normalize": true,
+    "file": "rag-model-granite-embedding-97m-multilingual-r2-int8_avx2.zip",
+    "bytes": 74559870,
+    "sha256": "61f84d7a1d0747f8eef307f2b3586bf46f4fa553ce6c87edaaea38b0470b7fd9",
+    "unpacked_bytes": 123564870,
+    "files": [
+      {
+        "path": "onnx/model_quint8_avx2.onnx",
+        "target": "onnx_model_quint8_avx2.onnx",
+        "bytes": 98247878,
+        "sha256": "a6022dd8220ea6f6595562a1328ee216f4a94faa55362f2f4747c80f1e78772e"
+      },
+      {
+        "path": "tokenizer.json",
+        "target": "tokenizer.json",
+        "bytes": 25301672,
+        "sha256": "4f2842d568e2724370aec203652a42ac783c7937f8347a1a2cc7506d71f1582f"
+      },
+      {
+        "path": "config.json",
+        "target": "config.json",
+        "bytes": 1216,
+        "sha256": "de948b0bdc6f356afad7a84b276d8dd7e7fe10fb9add1bb5e610621c28e41ebc"
+      },
+      {
+        "path": "tokenizer_config.json",
+        "target": "tokenizer_config.json",
+        "bytes": 12860,
+        "sha256": "6ed69389e30a8ecabfce2f9ebcdf0c908b34056f24d994340f2f216521c057d5"
+      },
+      {
+        "path": "special_tokens_map.json",
+        "target": "special_tokens_map.json",
+        "bytes": 871,
+        "sha256": "013787ee251ff611722479197c00853b62113ad303cb0a36524231783c676c69"
+      },
+      {
+        "path": "sentence_bert_config.json",
+        "target": "sentence_bert_config.json",
+        "bytes": 60,
+        "sha256": "967ef958285e4a7a37d8ff1832473d967edd913b4e48572f31c3d3ea361d5327"
+      },
+      {
+        "path": "1_Pooling/config.json",
+        "target": "1_Pooling/config.json",
+        "bytes": 313,
+        "sha256": "8bc5c9a40814fcf48d2fbe7cfeff4bee6736c3c2a823ba0ce098985c59d12ab7"
+      }
+    ]
+  },
+  "runtime": {
+    "version": "1.31.1",
+    "packages": {
+      "onnxruntime": "1.31.1",
+      "numpy": "2.5.4",
+      "tokenizers": "0.23.3"
+    },
+    "platforms": {
+      "windows-x64": {
+        "file": "rag-runtime-win-x64-ort1.31.1.zip",
+        "bytes": 36748949,
+        "sha256": "ba6107c5047ae0042a6cd7c1960d170c371dc881404161a409849630ef8782a1",
+        "unpacked_bytes": 113843810,
+        "wheels": [
+          "anyio-4.16.0-py3-none-any.whl",
+          "click-8.5.1-py3-none-any.whl",
+          "colorama-0.4.6-py2.py3-none-any.whl",
+          "filelock-4.2.9-py3-none-any.whl",
+          "flatbuffers-25.12.19-py2.py3-none-any.whl",
+          "fsspec-2026.9.0-py3-none-any.whl",
+          "h11-0.16.0-py3-none-any.whl",
+          "hf_xet-1.8.0-cp38-abi3-win_amd64.whl",
+          "httpcore2-2.16.0-py3-none-any.whl",
+          "httpx2-2.16.0-py3-none-any.whl",
+          "huggingface_hub-2.4.0-py3-none-any.whl",
+          "idna-3.20-py3-none-any.whl",
+          "numpy-2.5.4-cp312-cp312-win_amd64.whl",
+          "onnxruntime-1.31.1-cp312-cp312-win_amd64.whl",
+          "packaging-26.3-py3-none-any.whl",
+          "protobuf-7.36.2-cp310-abi3-win_amd64.whl",
+          "pyyaml-6.0.3-cp312-cp312-win_amd64.whl",
+          "tokenizers-0.23.3-cp310-abi3-win_amd64.whl",
+          "tqdm-4.70.1-py3-none-any.whl",
+          "truststore-0.10.5-py3-none-any.whl",
+          "typing_extensions-4.16.0-py3-none-any.whl"
+        ]
+      },
+      "macos-arm64": {
+        "file": "rag-runtime-macos-arm64-ort1.31.1.zip",
+        "bytes": 35563184,
+        "sha256": "418bf69c3bd8e0f4045031894a396b76b956f3b4a2e8de8c39889913fe1188f9",
+        "unpacked_bytes": 126706087,
+        "wheels": [
+          "anyio-4.16.0-py3-none-any.whl",
+          "click-8.5.1-py3-none-any.whl",
+          "colorama-0.4.6-py2.py3-none-any.whl",
+          "filelock-4.2.9-py3-none-any.whl",
+          "flatbuffers-25.12.19-py2.py3-none-any.whl",
+          "fsspec-2026.9.0-py3-none-any.whl",
+          "h11-0.16.0-py3-none-any.whl",
+          "hf_xet-1.8.0-cp38-abi3-macosx_11_0_arm64.whl",
+          "httpcore2-2.16.0-py3-none-any.whl",
+          "httpx2-2.16.0-py3-none-any.whl",
+          "huggingface_hub-2.4.0-py3-none-any.whl",
+          "idna-3.20-py3-none-any.whl",
+          "numpy-2.5.4-cp312-cp312-macosx_14_0_arm64.whl",
+          "onnxruntime-1.31.1-cp312-cp312-macosx_14_0_arm64.whl",
+          "packaging-26.3-py3-none-any.whl",
+          "protobuf-7.36.2-cp310-abi3-macosx_10_9_universal2.whl",
+          "pyyaml-6.0.3-cp312-cp312-macosx_11_0_arm64.whl",
+          "tokenizers-0.23.3-cp310-abi3-macosx_11_0_arm64.whl",
+          "tqdm-4.70.1-py3-none-any.whl",
+          "truststore-0.10.5-py3-none-any.whl",
+          "typing_extensions-4.16.0-py3-none-any.whl"
+        ]
+      },
+      "linux-x64": {
+        "file": "rag-runtime-linux-x64-ort1.31.1.zip",
+        "bytes": 51392402,
+        "sha256": "9bdf0cc9fae0879c9b544f7faf1e6d7bdd594bf60227c1cd1a528c4198b7d6f2",
+        "unpacked_bytes": 156672224,
+        "wheels": [
+          "anyio-4.16.0-py3-none-any.whl",
+          "click-8.5.1-py3-none-any.whl",
+          "colorama-0.4.6-py2.py3-none-any.whl",
+          "filelock-4.2.9-py3-none-any.whl",
+          "flatbuffers-25.12.19-py2.py3-none-any.whl",
+          "fsspec-2026.9.0-py3-none-any.whl",
+          "h11-0.16.0-py3-none-any.whl",
+          "hf_xet-1.8.0-cp38-abi3-manylinux2014_x86_64.manylinux_2_17_x86_64.whl",
+          "httpcore2-2.16.0-py3-none-any.whl",
+          "httpx2-2.16.0-py3-none-any.whl",
+          "huggingface_hub-2.4.0-py3-none-any.whl",
+          "idna-3.20-py3-none-any.whl",
+          "numpy-2.5.4-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl",
+          "onnxruntime-1.31.1-cp312-cp312-manylinux_2_28_x86_64.whl",
+          "packaging-26.3-py3-none-any.whl",
+          "protobuf-7.36.2-cp310-abi3-manylinux2014_x86_64.whl",
+          "pyyaml-6.0.3-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl",
+          "tokenizers-0.23.3-cp310-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl",
+          "tqdm-4.70.1-py3-none-any.whl",
+          "truststore-0.10.5-py3-none-any.whl",
+          "typing_extensions-4.16.0-py3-none-any.whl"
+        ]
+      },
+      "linux-arm64": {
+        "file": "rag-runtime-linux-arm64-ort1.31.1.zip",
+        "bytes": 47865858,
+        "sha256": "e44fec0084959b26470acae67a4626377e6d2b8fd78e3267f7d013d7a6d37740",
+        "unpacked_bytes": 145658446,
+        "wheels": [
+          "anyio-4.16.0-py3-none-any.whl",
+          "click-8.5.1-py3-none-any.whl",
+          "colorama-0.4.6-py2.py3-none-any.whl",
+          "filelock-4.2.9-py3-none-any.whl",
+          "flatbuffers-25.12.19-py2.py3-none-any.whl",
+          "fsspec-2026.9.0-py3-none-any.whl",
+          "h11-0.16.0-py3-none-any.whl",
+          "hf_xet-1.8.0-cp38-abi3-manylinux_2_28_aarch64.whl",
+          "httpcore2-2.16.0-py3-none-any.whl",
+          "httpx2-2.16.0-py3-none-any.whl",
+          "huggingface_hub-2.4.0-py3-none-any.whl",
+          "idna-3.20-py3-none-any.whl",
+          "numpy-2.5.4-cp312-cp312-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl",
+          "onnxruntime-1.31.1-cp312-cp312-manylinux_2_28_aarch64.whl",
+          "packaging-26.3-py3-none-any.whl",
+          "protobuf-7.36.2-cp310-abi3-manylinux2014_aarch64.whl",
+          "pyyaml-6.0.3-cp312-cp312-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl",
+          "tokenizers-0.23.3-cp310-abi3-manylinux_2_17_aarch64.manylinux2014_aarch64.whl",
+          "tqdm-4.70.1-py3-none-any.whl",
+          "truststore-0.10.5-py3-none-any.whl",
+          "typing_extensions-4.16.0-py3-none-any.whl"
+        ]
+      }
+    }
+  },
+  "unsupported_platforms": {
+    "macos-x64": "onnxruntime 1.31.1 不再发布 macOS x86_64 wheel（1.24.1 起停发）；Intel Mac 没有本地运行时，只能用远程 provider"
+  }
+}

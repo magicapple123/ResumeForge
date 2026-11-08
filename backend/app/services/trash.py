@@ -5,9 +5,9 @@
 字段、去重判据全部要重建一遍，而这些现在都是好的。软删除只多一句"什么时候删的"，列表查询加
 ``IS NULL``、回收站看非 NULL、恢复就是清空时间戳——三处都极难写错。
 
-**范围克制**：只覆盖用户真正会心疼的二十二类——岗位、备选岗位、简历记录、投递记录、事实台账
+**范围克制**：只覆盖用户真正会心疼的二十三类——岗位、备选岗位、简历记录、投递记录、事实台账
 条目、资料箱材料、助手会话、面经、内推、提醒、分享包、题库历史、复盘历史、知识库、网申填充
-记录、资料组/自建大字段/自建小字段/资料条目。列级别、模板副本、数据集这类要么有明确的沿用
+记录、资料组/自建大字段/自建小字段/资料条目、求职偏好。列级别、模板副本、数据集这类要么有明确的沿用
 关系、要么本来就能重建，不做回收站；每个可删项都进回收站，只会让回收站自己变成垃圾场。
 
 **完整性红线**：凡是模型里带 ``deleted_at`` 列的表，都必须在这里登记（``TRASH_SPECS``），否则
@@ -34,35 +34,22 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Callable
-from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
 from sqlalchemy.orm import Session
 
-from ..models.apply import ApplyTaskItem
-from ..models.assistant import ChatConversation
-from ..models.claim import ClaimRecord
-from ..models.glossary import ResumeGlossaryTerm
-from ..models.interview_experience import InterviewExperience
-from ..models.interview_review_record import InterviewReviewRecord
-from ..models.job import Job
-from ..models.knowledge_entry import KnowledgeEntry
-from ..models.material import CandidateJob, Material
-from ..models.phrase import ResumePhrase
 from ..models.profile import utcnow
-from ..models.profile_definition import ProfileCustomField, ProfileCustomSection
-from ..models.profile_entry import ProfileEntry
-from ..models.profile_group import ProfileGroup
-from ..models.question_bank_record import QuestionBankRecord
-from ..models.referral import Referral
-from ..models.reminder import Reminder
-from ..models.resume import ResumeRecord
-from ..models.share_package import SharePackage
-from ..models.tracker import ApplicationTrack
-from ..models.web_form_record import WebFormFillRecord
 from ..runtime.log_fields import safe_log_text
+from .trash_registry import (
+    TRASH_SPEC_BY_KEY,
+    TRASH_SPECS,
+    TRASHED_TABLES,
+    TrashSpec,
+)
+from .trash_registry import (
+    labels as labels,
+)
 from .trash_snapshot_refs import release_snapshot_references
 
 logger = logging.getLogger(__name__)
@@ -71,139 +58,10 @@ logger = logging.getLogger(__name__)
 # 给上限也让"我不小心清空了"不至于变成一次巨大的响应。
 MAX_TRASH_ITEMS = 500
 
-
-@dataclass(frozen=True)
-class TrashSpec:
-    """一类可回收内容的描述。新增一类只需要在这里加一行。
-
-    大多数类型的标题就是某个字段（``title_field``）；个别类型（如内推）的标题由多个字段拼成，
-    用 ``title_builder`` 给一个纯函数即可（优先于 ``title_field``）。
-    """
-
-    key: str
-    label: str
-    model: Any
-    title_field: str
-    subtitle_field: str = ""
-    title_builder: Callable[[Any], str] | None = None
-
-
-def _profile_entry_title(item: Any) -> str:
-    """条目的展示标题：values 里第一个非空文本（条目没有固定的"标题列"）。
-
-    用保存顺序（JSON 对象的插入顺序）而不是字段定义顺序：回收站只需要"让我认出这是哪一条"，
-    用户填的第一项通常最能认出它；全部为空时如实显示无标题，不猜内容。
-    """
-    values = item.values if isinstance(item.values, dict) else {}
-    for value in values.values():
-        text = str(value or "").strip()
-        if text:
-            return text
-    return "（无标题）"
-
-
-def _referral_title(item: Any) -> str:
-    """内推的展示标题：内推人 · 岗位（缺项时逐段省略）。"""
-    parts = [
-        str(getattr(item, "referrer_name", "") or "").strip(),
-        str(getattr(item, "position", "") or "").strip(),
-    ]
-    return " · ".join(part for part in parts if part) or "（无标题）"
-
-
-# 顺序即回收站的展示顺序（越靠前越常用）。
-# 前六类来自迁移 0016，中四类来自迁移 0018，后三类来自迁移 0019，再两类来自迁移 0027
-# （``apply_record`` / ``web_form_record``），最后是 0050 的 ``candidate_job`` 与
-# 0064 的资料组/自建定义/条目——**全部含 ``deleted_at`` 列**，缺一类就是"半软删"。
-TRASH_SPECS: tuple[TrashSpec, ...] = (
-    TrashSpec("job", "岗位", Job, "title", "company"),
-    # 备选岗位紧挨着岗位：两者只差一步导入，用户在回收站里找它们时想的是同一件事
-    # （"我刚才删的那个岗位去哪了"），中间夹一堆别的类型只会让它更难找。
-    TrashSpec("candidate_job", "备选岗位", CandidateJob, "title", "company"),
-    TrashSpec("resume", "简历记录", ResumeRecord, "title", "company"),
-    TrashSpec("track", "投递记录", ApplicationTrack, "title", "company"),
-    TrashSpec("claim", "事实台账", ClaimRecord, "title", "category"),
-    TrashSpec("material", "资料箱材料", Material, "title", "category"),
-    TrashSpec("conversation", "助手会话", ChatConversation, "title"),
-    TrashSpec("interview_experience", "面经", InterviewExperience, "title", "company"),
-    TrashSpec(
-        "referral", "内推", Referral, "referrer_name", "company", title_builder=_referral_title
-    ),
-    TrashSpec("reminder", "提醒", Reminder, "title"),
-    TrashSpec("share_package", "分享包", SharePackage, "title"),
-    TrashSpec("question_bank_record", "题库历史", QuestionBankRecord, "resume_title", "company"),
-    TrashSpec(
-        "interview_review_record",
-        "复盘历史",
-        InterviewReviewRecord,
-        "resume_title",
-        "company",
-    ),
-    TrashSpec("knowledge_entry", "知识库", KnowledgeEntry, "title"),
-    # 投递记录：一条 = 批次内的一个岗位。界面上按批次折叠，整批删就是逐条软删该批次的记录
-    # （批次 ``ApplyTask`` 本身不删——删了列表会缺组、统计会跳变）。
-    TrashSpec("apply_record", "投递记录", ApplyTaskItem, "job_title", "company"),
-    TrashSpec("web_form_record", "网申填充记录", WebFormFillRecord, "page_title", "url"),
-    # 0056（W17）：私有表达资产。标题取正文首段，副标题是类型。
-    TrashSpec("phrase", "表达资产", ResumePhrase, "text", "kind"),
-    # 0058（W16）：数据集级术语表。标题取原文词，副标题是目标语言。
-    TrashSpec("glossary_term", "术语表", ResumeGlossaryTerm, "source_term", "language_to"),
-    # 0064（F1）：新资料模型的四类用户内容。组名/自建大字段名/自建字段标签直接取列；
-    # 条目没有固定标题列，取 values 里第一个非空文本（``_profile_entry_title``）。
-    TrashSpec("profile_group", "组", ProfileGroup, "name"),
-    TrashSpec("profile_custom_section", "自建大字段", ProfileCustomSection, "name"),
-    TrashSpec("profile_custom_field", "自建小字段", ProfileCustomField, "label", "section_key"),
-    TrashSpec(
-        "profile_entry",
-        "资料条目",
-        ProfileEntry,
-        "entry_id",
-        "section_key",
-        title_builder=_profile_entry_title,
-    ),
-)
-
-# 英文界面下的类型名。键是 ``TrashSpec.key``（与语言无关），中文名仍是 ``spec.label``——
-# 后者被日志、测试与中文界面直接引用，不能动。前端把这一份当"标签表"渲染筛选器，
-# 所以只有在这里给出英文，en-US 下的筛选器才不会露中文。
-TRASH_LABELS_EN: dict[str, str] = {
-    "job": "Jobs",
-    "candidate_job": "Candidate jobs",
-    "resume": "Resumes",
-    "track": "Applications",
-    "claim": "Fact ledger",
-    "material": "Material library",
-    "conversation": "Assistant chats",
-    "interview_experience": "Interview notes",
-    "referral": "Referrals",
-    "reminder": "Reminders",
-    "share_package": "Share packages",
-    "question_bank_record": "Question bank history",
-    "interview_review_record": "Review history",
-    "knowledge_entry": "Knowledge base",
-    "apply_record": "Apply records",
-    "web_form_record": "Form fill records",
-    "phrase": "Phrase assets",
-    "glossary_term": "Glossary",
-    "profile_group": "Profile plans",
-    "profile_custom_section": "Custom Sections",
-    "profile_custom_field": "Custom Fields",
-    "profile_entry": "Profile entries",
-}
-
-
-def labels(locale: str | None) -> dict[str, str]:
-    """回收站类型名：en-US 用英文表，其余（含未设置）保持中文原文。"""
-    if locale == "en-US":
-        return {spec.key: TRASH_LABELS_EN.get(spec.key, spec.label) for spec in TRASH_SPECS}
-    return {spec.key: spec.label for spec in TRASH_SPECS}
-
-TRASH_SPEC_BY_KEY: dict[str, TrashSpec] = {spec.key: spec for spec in TRASH_SPECS}
-
-# 注册表里的表名。**由注册表推导**而不是再写一份清单：迁移（``0016``）也要声明"给哪些表加了
-# deleted_at"，两处各写一份必然漂移——漂移的后果是某张表有列却没进回收站（删了就直接消失），
-# 或者进了回收站却没有列（一删就报错）。有测试把两边对齐。
-TRASHED_TABLES: tuple[str, ...] = tuple(spec.model.__tablename__ for spec in TRASH_SPECS)
+# 活动行判据里的 state 取值：偏好档的 state 是"版本状态"，与 deleted_at 分开表达。
+# 用字面量而不是 import 模型常量，是为了让这个鸭子类型分支保持"按列语义"而不是
+# 绑定具体模型（以后同类表只要也有 state='active' 这一约定就自动适用）。
+_ACTIVE_STATE = "active"
 
 
 def spec_or_none(key: str) -> TrashSpec | None:
@@ -323,8 +181,9 @@ def _restore_conflict_detail(db: Session, spec: TrashSpec, item: Any) -> str | N
 
     **鸭子类型**判断（不按具体模型 isinstance 分支）：有 `name_key` 的是"活动名称唯一"
     类（组 / 自建大字段）；有 `label_key` 的是"同分区活动标签唯一"类（自建小字段）；
-    有 `values` 的是条目，靠 `(section_key, sort_order)` 活动位唯一。以后同类软删表
-    只要列语义一致就自动获得守卫，不必在恢复路径里再加分支。
+    有 `values` 的是条目，靠 `(section_key, sort_order)` 活动位唯一；有
+    `dataset_key` 且有 `kind` 的是偏好档，靠 `(dataset_key, kind)` 的活动行唯一。
+    以后同类软删表只要列语义一致就自动获得守卫，不必在恢复路径里再加分支。
     """
     model = type(item)
     active = db.query(model).filter(model.deleted_at.is_(None))
@@ -354,6 +213,25 @@ def _restore_conflict_detail(db: Session, spec: TrashSpec, item: Any) -> str | N
             return (
                 f"这一条原来的位置（第 {item.sort_order + 1} 位）已被其他条目占用，"
                 "请先调整排序或删除占位条目，再恢复这条"
+            )
+    # 求职偏好（0008）：活动行唯一性是 (dataset_key, kind) 上的 partial unique index。
+    # 用鸭子类型而不是 isinstance 分支：以后同类"按 dataset_key + kind 单值"的软删表
+    # 自动获得守卫。恢复意味着这条要重新生效，而"让旧那条让位"是另一个动词（版本回退走
+    # state 的 undone / superseded 路径），所以这里不替用户猜，直接给出可读的 409 原因。
+    dataset_key = getattr(item, "dataset_key", None)
+    kind = getattr(item, "kind", None)
+    state = getattr(item, "state", None)
+    if dataset_key is not None and kind is not None and state is not None:
+        same = active.filter(
+            model.dataset_key == dataset_key,
+            model.kind == kind,
+            model.state == _ACTIVE_STATE,
+            model.id != item.id,
+        ).first()
+        if same is not None:
+            return (
+                f"回收站外已有同类的{spec.label}，"
+                "请先撤销或删除它，再恢复这条"
             )
     return None
 

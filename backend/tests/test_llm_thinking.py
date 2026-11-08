@@ -45,7 +45,12 @@ def _config(**overrides) -> LLMConfig:
 
 @pytest.mark.parametrize(
     ("api_style", "expected"),
-    [("openai", "reasoning_effort"), ("anthropic", "budget")],
+    [
+        ("openai", "reasoning_effort"),
+        ("anthropic", "budget"),
+        # Responses 的思考是 reasoning:{effort}，形态仍是"档位"不是预算（T09）。
+        ("responses", "reasoning_effort"),
+    ],
 )
 def test_auto_style_follows_the_protocol(api_style, expected):
     assert resolve_style(_config(api_style=api_style)) == expected

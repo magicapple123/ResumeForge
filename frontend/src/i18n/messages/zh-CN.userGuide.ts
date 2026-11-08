@@ -17,10 +17,10 @@ const userGuide = {
     "手动管理岗位、资料和自行编写简历**不需要**模型；AI 生成、岗位需求解读、优化建议、截图识别和求职助手需要一个。",
   "userGuide.setupProfile.step1.point2.lead": "快速预设",
   "userGuide.setupProfile.step1.point2.text":
-    "覆盖常见服务商，选中即填好地址与模型名；DeepSeek 预设使用账号模型列表中的 `deepseek-flash`。",
+    "覆盖 22 家常见服务商（含腾讯混元、百度千帆、讯飞星火、阶跃星辰、Together AI、Perplexity），选中即填好地址与模型名；DeepSeek 预设使用账号模型列表中的 `deepseek-flash`。",
   "userGuide.setupProfile.step1.point3.lead": "直连官方",
   "userGuide.setupProfile.step1.point3.text":
-    "选「Claude（Anthropic 原生协议）」这个预设，会把地址、模型名和接口协议一次填好。",
+    "选「Claude（Anthropic 原生）」这个预设，会把地址、模型名和接口协议一次填好。",
   "userGuide.setupProfile.step1.point4.lead": "自定义",
   "userGuide.setupProfile.step1.point4.text":
     "「自定义模型」保留已填内容；**纯手动配置** 会清空 Base URL 与模型名称，适合中转站或公司网关。",
@@ -29,16 +29,16 @@ const userGuide = {
     "点「模型名称」旁的「获取可用模型」按账号拉取列表；没有返回时可重试，或按服务商文档手动填写模型名。",
   "userGuide.setupProfile.step1.point6.lead": "接口协议",
   "userGuide.setupProfile.step1.point6.text":
-    "走 OpenAI 兼容接口的服务商选「OpenAI 兼容」，直连 Claude 官方接口选「Anthropic 原生」并把 Base URL 填成 https://api.anthropic.com/v1；选错会报 404 或 400。",
+    "协议三项：默认「OpenAI 兼容」；直连 Claude 选「Anthropic 原生」并把 Base URL 填成 https://api.anthropic.com/v1；「OpenAI Responses（实验性）」多数支持，Claude、Gemini 等不支持。拿不准可展开「查看各服务商协议支持」查表。",
   "userGuide.setupProfile.step1.point7.lead": "测完再存",
   "userGuide.setupProfile.step1.point7.text":
     "配置弹窗里可以直接「测试连接」；确认成功后再保存。常用配置可命名保存为记录，点记录卡上的「使用」一键切换。",
   "userGuide.setupProfile.step1.point8.lead": "配置记录",
   "userGuide.setupProfile.step1.point8.text":
-    "设置页分「AI 模型 / 数据 / 应用」三页。已保存的配置以记录卡片列出：点 **新建配置** 或记录卡上的「编辑」在弹窗中填写，点卡片本体查看详情，带「使用中」标记的是当前生效的那份；其余两页始终可直接操作。「应用」页还可以随时开启或关闭投投悬浮球，不喜欢它的提示标语也可以单独关掉。",
+    "在设置 → AI 模型页的「语义检索」卡里二选一：本地首次下载约 111 MB 后数据不出本机，远程填 OpenAI 兼容地址与密钥即可；关闭或失败时自动回退关键词检索。大模型配置以记录卡片列出：点 **新建配置** 或记录卡上的「编辑」在弹窗中填写，点卡片本体查看详情，带「使用中」标记的是当前生效的那份。",
   "userGuide.setupProfile.step1.point9.lead": "API Key",
   "userGuide.setupProfile.step1.point9.text":
-    "保存在本机数据库；模型请求仍会发送到你选择的服务商。编辑记录时密钥留空即沿用原密钥。",
+    "保存在本机数据库；模型请求仍会发送到你选择的服务商。编辑记录时密钥留空即沿用原密钥。设置页「助手与 AI 行为」另有「语音转写」卡：填好地址、模型与 Key 后可**语音听写**，文字只填进输入框；音频发给该服务商。",
   "userGuide.setupProfile.step1.actionLabel": "前往设置",
   // ── 第 2 步 · 完善资料（setupProfileSteps.ts） ──
   "userGuide.setupProfile.step2.title": "完善资料",
@@ -244,7 +244,7 @@ const userGuide = {
   "userGuide.workflow.step2.point9.text": "可以按当前筛选导出 CSV（可直接用 Excel 打开）或 JSON。",
   "userGuide.workflow.step2.point10.lead": "提醒与内推",
   "userGuide.workflow.step2.point10.text":
-    "「提醒」给投递、面试、内推设到点提醒，可切**列表 / 月历**（月历里点某一天能看到当天的全部安排，首页的月历同理），首页也会按紧急度分色展示；「内推」记录人脉带来的推荐机会并统计转化率，点卡片可看联系方式、内推码与备注图。",
+    "「提醒」设到点提醒，可切**列表 / 月历**，按紧急度分色；新建默认 1 小时后、不能选过去（编辑不受限），逾期项带红标，还能按「时间范围」筛选，关联字段收在折叠区。「内推」记录推荐机会并统计转化率。首页「任务」卡汇总助手在做的事（含提醒到期生成的任务卡），开关在「设置 → 助手与 AI 行为 → 任务卡」。",
   "userGuide.workflow.step2.point11.lead": "面试准备",
   "userGuide.workflow.step2.point11.text":
     "用「个性化题库」（基础 / 项目深挖 / 反问 HR）刷题，或走「面试复盘」把真实被问的问题录进来做分析；面完可沉淀进「面经」。",

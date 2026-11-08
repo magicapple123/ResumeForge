@@ -124,6 +124,71 @@ def test_a_failed_stop_is_reported_not_swallowed(monkeypatch, caplog):
     assert any("记录对不上" in message for message in messages), messages
 
 
+# ===== 停止命令按平台选脚本（macOS / Linux 各一份）=====
+
+
+def test_stop_command_uses_the_linux_script_on_linux(monkeypatch):
+    """Linux 必须走仓库里那份 **Linux** 停止脚本，不能借 macOS 的。
+
+    macOS 脚本把状态目录写死成 ``$HOME/Library/Application Support/ResumeForge``，
+    Linux 上按那个路径去找启动记录永远找不到，于是「点退出」会静默地什么都不停
+    ——前端还活着，页面却已经没有后端了。
+
+    这里只能用 ``sys.platform`` 模拟：``os.name`` 是只读的（Windows 上恒为 ``nt``）。
+    ``_stop_script()`` 因此把 linux 判定排在 windows 之前，否则这条断言在 CI 的
+    Windows 机上永远绿不了（也就永远测不到）。
+    """
+    monkeypatch.setattr(system_api.sys, "platform", "linux")
+
+    assert system_api._stop_command() == [
+        "/bin/bash",
+        str(system_api._LINUX_STOP_SCRIPT),
+        "--skip-backend",
+    ]
+
+
+def test_the_linux_script_lives_under_the_repo_root():
+    """路径按 ``_MACOS_STOP_SCRIPT`` 那一套从仓库根推出，而不是一个相对路径。"""
+    assert system_api._LINUX_STOP_SCRIPT == (
+        system_api._PROJECT_ROOT / "scripts" / "linux" / "stop.sh"
+    )
+
+
+def test_stop_command_keeps_the_macos_script_as_the_fallback(monkeypatch):
+    """非 win32、非 linux（darwin）仍然走 macOS 脚本：兜底一个字都没变。"""
+    if system_api.os.name == "nt":
+        pytest.skip("Windows 上 os.name 恒为 nt，模拟不出 macOS 分支")
+    monkeypatch.setattr(system_api.sys, "platform", "darwin")
+
+    assert system_api._stop_command() == [
+        "/bin/bash",
+        str(system_api._MACOS_STOP_SCRIPT),
+        "--skip-backend",
+    ]
+
+
+def test_a_missing_linux_script_only_warns(monkeypatch, tmp_path, caplog):
+    """``scripts/linux/stop.sh`` 还没落盘时：只记一条警告，**不**去执行 bash。
+
+    存在性守卫与停止命令必须看同一个文件。守卫看 macOS 脚本、实际执行的却是 Linux
+    脚本时，Linux 上会一路走到 bash 报 "No such file"，日志里留下一条与真实原因无关
+    的失败；而退出本身还得继续（前端没停掉也要让后端正常退出）。
+    """
+    monkeypatch.setattr(system_api.sys, "platform", "linux")
+    monkeypatch.setattr(system_api, "_LINUX_STOP_SCRIPT", tmp_path / "stop.sh")
+    commands: list[list[str]] = []
+    monkeypatch.setattr(
+        system_api.subprocess, "run", lambda *args, **_kwargs: commands.append(args[0])
+    )
+
+    with caplog.at_level("WARNING"):
+        system_api._stop_frontend_process()
+
+    assert commands == []
+    messages = [record.getMessage() for record in caplog.records]
+    assert any("找不到停止脚本" in message for message in messages), messages
+
+
 def test_stop_output_from_a_console_codepage_can_be_read_back():
     """按控制台代码页编码的输出要能读出来——**候选表由用例给出，不靠这台机器**。
 

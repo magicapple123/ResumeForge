@@ -46,6 +46,11 @@ _SHUTDOWN_DELAY_SECONDS = 0.6
 _PROJECT_ROOT = Path(__file__).resolve().parents[3]
 _WINDOWS_STOP_SCRIPT = _PROJECT_ROOT / "scripts" / "Stop-ResumeForge.ps1"
 _MACOS_STOP_SCRIPT = _PROJECT_ROOT / "scripts" / "macos" / "stop.sh"
+# Linux 有**自己的**那套停止脚本：不能借用 macOS 的。那个脚本把状态目录写死成
+# `$HOME/Library/Application Support/ResumeForge`，在 Linux 上按那个路径去找记录
+# 一定找不到（用户的真实状态在 `~/.local/share/resumeforge` 之类的地方），于是
+# 「点退出」会静默地什么都不停。
+_LINUX_STOP_SCRIPT = _PROJECT_ROOT / "scripts" / "linux" / "stop.sh"
 
 # 等停止脚本的预算：正常一两秒就完了，给太长的例外是"等待期间后端还活着"——用户这时
 # 双击 start.cmd，启动器会看到后端仍在监听、判定"已经在运行"而跳过启动，几秒后它却死了。
@@ -70,9 +75,33 @@ def _is_loopback_request(request: Request) -> bool:
     return mapped is not None and mapped.is_loopback
 
 
-def _stop_command() -> list[str]:
-    """按平台给出"只停前端"的命令；两个平台都是启动器那套按记录停止的脚本。"""
+def _stop_script() -> Path:
+    """当前平台该用哪个停止脚本。
+
+    **唯一判断点**：``_stop_command()`` 与 `_stop_frontend_process` 里的"脚本在不在"
+    守卫都从这里取。两处各写一份 ``if`` 的结果是守卫看 macOS 脚本、执行的却是 Linux
+    脚本——在 Linux 上会一路走到 bash 报 "No such file"，日志里留下的失败原因与真实
+    情况完全无关。
+
+    判定顺序是**先 linux 再 windows**：`sys.platform` 在测试里可以被打掉，`os.name`
+    是只读的（Windows 上恒为 ``nt``）。linux 在后的话，"Linux 走 Linux 脚本"这条断言
+    在 CI 的 Windows 机上永远绿不了（也就永远测不到）。真机的 ``sys.platform`` 在
+    Windows 上是 ``win32``，不会误入 linux 分支。
+    """
+    if sys.platform.startswith("linux"):
+        return _LINUX_STOP_SCRIPT
     if os.name == "nt":
+        return _WINDOWS_STOP_SCRIPT
+    # 兜底给 macOS：非 win32、非 linux 的常见情形就是 darwin。
+    return _MACOS_STOP_SCRIPT
+
+
+def _stop_command() -> list[str]:
+    """按平台给出"只停前端"的命令；三个平台都是启动器那套按记录停止的脚本。"""
+    script = _stop_script()
+    if script.suffix == ".ps1":
+        # 用脚本类型分流而不是再判一次平台：命令与上面的守卫因此**必然**指向同一个
+        # 文件，不会再出现"守卫看 A、执行 B"。
         return [
             "powershell.exe",
             "-NoProfile",
@@ -80,10 +109,10 @@ def _stop_command() -> list[str]:
             "-ExecutionPolicy",
             "Bypass",
             "-File",
-            str(_WINDOWS_STOP_SCRIPT),
+            str(script),
             "-SkipBackend",
         ]
-    return ["/bin/bash", str(_MACOS_STOP_SCRIPT), "--skip-backend"]
+    return ["/bin/bash", str(script), "--skip-backend"]
 
 
 def _stop_output_encodings() -> tuple[str, ...]:
@@ -138,7 +167,7 @@ def _stop_frontend_process() -> None:
 
     失败/超时都只记警告——前端没停掉也要让后端正常退出，不能倒过来卡住用户。
     """
-    script = _WINDOWS_STOP_SCRIPT if os.name == "nt" else _MACOS_STOP_SCRIPT
+    script = _stop_script()
     if not script.is_file():
         logger.warning("找不到停止脚本 %s，退出时无法自动停止前端", script)
         return

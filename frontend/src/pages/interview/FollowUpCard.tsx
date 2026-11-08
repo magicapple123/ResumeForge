@@ -11,12 +11,16 @@
  */
 import { MessageOutlined, SendOutlined, StopOutlined } from "@ant-design/icons";
 import { App, Button, Card, Empty, Input, Space, Typography } from "antd";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { submitInterviewFollowUp, updateInterviewFollowUpState } from "../../api/interview";
 import MarkdownBlock from "../../components/common/MarkdownBlock";
+import { appendTranscript } from "../../components/voice/appendTranscript";
+import { VoiceButton } from "../../components/voice/VoiceButton";
+import { useVoiceInput } from "../../hooks/useVoiceInput";
 import { t } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
 import type { InterviewDetail, InterviewMessage } from "../../types";
+import "../../styles/interview-voice.css";
 
 /** 追问区里的一条消息：候选人提问在前、面试官回答在后。 */
 function FollowUpLine({ message }: { message: InterviewMessage }) {
@@ -50,6 +54,21 @@ export function FollowUpCard({
   const [draft, setDraft] = useState("");
   const [asking, setAsking] = useState(false);
 
+  // 追问的语音（T13）：单段上限 1 分钟；转写结果只写进受控 state，绝不自动发送。
+  // 回调里读 draftRef 而不是 draft：转写是异步的，闭包里的 draft 可能是点击"结束"前的旧值。
+  const draftRef = useRef(draft);
+  useEffect(() => {
+    draftRef.current = draft;
+  }, [draft]);
+  const voice = useVoiceInput({
+    maxSeconds: 60,
+    // 追问是单行 Input（DOM 会吃掉 value 里的换行），所以分隔符用空格而不是换行，
+    // 否则两句话在输入框里会黏成一句。
+    onTranscribed: (text) =>
+      setDraft(appendTranscript(draftRef.current, text, { separator: "space" })),
+  });
+  const recording = voice.status === "recording";
+
   // 只取追问阶段的消息：正式问答已经在对话区里，不能在这里重复一遍。
   const lines = session.messages.filter((item) => item.phase === "followup");
   // 上一条追问还在等回答时也禁用提交：追问是**一问一答**，攒着一堆问题同时发会让
@@ -77,7 +96,18 @@ export function FollowUpCard({
     }
   };
 
+  // 切场次/收起时停掉录音：父组件换 session 或本卡卸载都不能让麦克风一直开着。
+  const cancelVoiceRef = useRef(voice.cancel);
+  useEffect(() => {
+    cancelVoiceRef.current = voice.cancel;
+  });
+  useEffect(() => {
+    cancelVoiceRef.current();
+  }, [session.id]);
+
   const submit = async () => {
+    // 录音中不发送：转写还没回来，此时发出去的只是写了一半的问题。
+    if (recording) return;
     const content = draft.trim();
     if (!content || asking) return;
     setAsking(true);
@@ -139,19 +169,50 @@ export function FollowUpCard({
             disabled={asking || pending}
             placeholder={t("interviewPage.followUp.placeholder")}
             onChange={(event) => setDraft(event.target.value)}
-            onPressEnter={() => void submit()}
+            onPressEnter={() => {
+              // 录音中禁 Enter 发送（计划 §7）：此刻输入框里还没有这次说的话。
+              if (recording) return;
+              void submit();
+            }}
+          />
+          {/* 录音中/识别中的按钮直接拼在 Compact 里，与输入框、发送同高。 */}
+          <VoiceButton
+            variant="compact"
+            voice={voice}
+            maxSeconds={60}
+            disabled={asking || pending}
+            onTranscribed={(text) =>
+              setDraft(appendTranscript(draftRef.current, text, { separator: "space" }))
+            }
           />
           <Button
             type="primary"
             icon={<SendOutlined />}
             loading={asking}
-            disabled={asking || pending || !draft.trim()}
+            disabled={asking || pending || !draft.trim() || recording}
             onClick={() => void submit()}
           >
             {t("interviewPage.followUp.submit")}
           </Button>
         </Space.Compact>
       )}
+      {/* 追问的输入区是紧凑条，放不下按钮自带的提示行，所以提示在这里出：录音中告知
+          音频会发到哪台主机；未配置时指路设置页；出错时给具体原因。 */}
+      {recording && voice.providerHost ? (
+        <Typography.Text type="secondary" className="voice-input-hint">
+          {t("voiceInput.hint.privacy", { host: voice.providerHost })}
+        </Typography.Text>
+      ) : null}
+      {!recording && !voice.error && voice.configured === false ? (
+        <Typography.Text type="secondary" className="voice-input-hint">
+          {t("voiceInput.hint.notConfigured")} · {t("voiceInput.hint.notConfiguredHelp")}
+        </Typography.Text>
+      ) : null}
+      {voice.error ? (
+        <Typography.Text type="danger" className="voice-input-hint">
+          {voice.error.message}
+        </Typography.Text>
+      ) : null}
     </Card>
   );
 }

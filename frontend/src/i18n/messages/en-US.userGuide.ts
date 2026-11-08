@@ -18,10 +18,10 @@ const userGuide = {
     "Managing Jobs, the Profile and writing a Resume by hand **does not** need a model; AI generation, Job requirement reading, improvement suggestions, screenshot recognition and the assistant do need one.",
   "userGuide.setupProfile.step1.point2.lead": "Quick presets",
   "userGuide.setupProfile.step1.point2.text":
-    "Covers the common providers — picking one fills in the endpoint and model name; the DeepSeek preset uses `deepseek-flash` from your account's model list.",
+    "Covers 22 common providers (including Tencent Hunyuan, Baidu Qianfan, iFlytek Spark, StepFun, Together AI and Perplexity) — picking one fills in the endpoint and model name; the DeepSeek preset uses `deepseek-flash` from your account's model list.",
   "userGuide.setupProfile.step1.point3.lead": "Official endpoint",
   "userGuide.setupProfile.step1.point3.text":
-    "Choose the “Claude (Anthropic native protocol)” preset to fill in the endpoint, model name and API protocol in one step.",
+    "Choose the “Claude (Anthropic native)” preset to fill in the endpoint, model name and API protocol in one step.",
   "userGuide.setupProfile.step1.point4.lead": "Custom",
   "userGuide.setupProfile.step1.point4.text":
     "“Custom model” keeps what you have already filled in; **Manual only** clears the Base URL and model name, which suits a relay or a company gateway.",
@@ -30,16 +30,16 @@ const userGuide = {
     "Click “Fetch available models” next to “Model name” to pull the list for the account; if nothing comes back, retry or type the model name from the provider's docs.",
   "userGuide.setupProfile.step1.point6.lead": "API protocol",
   "userGuide.setupProfile.step1.point6.text":
-    "Providers on an OpenAI-compatible API: choose “OpenAI compatible”. Direct Claude access: choose “Anthropic native” and set the Base URL to https://api.anthropic.com/v1. A wrong choice returns 404 or 400.",
+    "There are three protocols: the default “OpenAI compatible (Chat Completions)” fits most providers; for direct Claude access choose “Anthropic native (Messages)” and set the Base URL to https://api.anthropic.com/v1; the third option “OpenAI Responses (experimental)” is optional, but Claude, Gemini, SiliconFlow and MiniMax do not support it and the form tells you to switch back — a wrong choice returns 404 or 400. When unsure, expand the provider support matrix on the Settings page (its footer carries the verification date, 2026-11-07).",
   "userGuide.setupProfile.step1.point7.lead": "Test before saving",
   "userGuide.setupProfile.step1.point7.text":
     "The configuration dialog has “Test connection” built in; save only after it succeeds. You can name and save frequently used settings as a record, then click “Use” on the card to switch in one step.",
   "userGuide.setupProfile.step1.point8.lead": "Saved configurations",
   "userGuide.setupProfile.step1.point8.text":
-    "Settings has three pages: AI model / Data / App. Saved configurations are listed as record cards: click **New configuration** or “Edit” on a card to fill the dialog in, click the card itself for details, and the one marked “In use” is the active one; the other two pages always work immediately. On the App page you can also turn the Toutou floating ball on or off at any time, and hide its tagline separately if you do not want it.",
+    "On Settings → AI model, the “Semantic search” card offers a local model or a remote service: the local model downloads about 111 MB once and keeps your data on this machine, while the remote service needs only an OpenAI-compatible address and API key; turning it off or hitting a failure falls back to keyword search. Model configurations are listed as record cards: click **New configuration** or “Edit” on a card to fill the dialog in, click the card itself for details, and the one marked “In use” is the active one.",
   "userGuide.setupProfile.step1.point9.lead": "API key",
   "userGuide.setupProfile.step1.point9.text":
-    "Stored in the local database; model requests still go to the provider you chose. When editing a record, leave the key blank to keep the existing one.",
+    "Stored in the local database; model requests still go to the provider you chose. When editing a record, leave the key blank to keep the existing one. Settings → Assistant & AI behavior also has a “Voice transcription” card: set the endpoint, model and key, and the assistant and interview inputs can **dictate** — recognized text only fills the input; audio goes to that provider.",
   "userGuide.setupProfile.step1.actionLabel": "Go to Settings",
   // ── Step 2 · Fill in the Profile (setupProfileSteps.ts) ──
   "userGuide.setupProfile.step2.title": "Fill in the Profile",
@@ -250,7 +250,7 @@ const userGuide = {
     "Export the current filter as CSV (opens straight in Excel) or JSON.",
   "userGuide.workflow.step2.point10.lead": "Reminders and referrals",
   "userGuide.workflow.step2.point10.text":
-    "“Reminders” sets due-time alerts for applications, interviews and referrals, switchable between **list / month view** (clicking a day in the month view shows everything scheduled that day, and the home month view works the same), and the home page colors them by urgency; “Referrals” records opportunities that came from your network and tracks the conversion rate — click a card for contact details, referral code and note images.",
+    "“Reminders” sets due-time alerts for applications, interviews and referrals, switchable between **list / month view** (clicking a day in the month view shows everything scheduled that day, and the home month view works the same), and the home page colors them by urgency; **new reminders default to one hour from now and cannot be set in the past** (editing is exempt), overdue pending items carry a red overdue-days tag, and the time-range filter narrows them to all / overdue / today / later; the linked application progress, job and resume fields sit in the collapsed optional-links section, whose header shows how many are linked. “Referrals” records opportunities that came from your network and tracks the conversion rate — click a card for contact details, referral code and note images. The home Tasks card collects what the assistant is working on (due reminders create a task card there, labelled as coming from a reminder); its master switch lives in Settings → Assistant & AI behavior → Task cards.",
   "userGuide.workflow.step2.point11.lead": "Interview prep",
   "userGuide.workflow.step2.point11.text":
     "Practice with “Personalized question bank” (basics / project deep dive / questions for HR), or run an “Interview retrospective” to record the real questions and analyze them; afterwards you can keep it as an “Interview experience”.",

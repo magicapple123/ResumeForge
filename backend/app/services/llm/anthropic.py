@@ -8,12 +8,16 @@
 - 工具调用是 ``tool_use`` / ``tool_result`` 内容块，和 OpenAI 的
   ``tool_calls`` 不是同一种结构，转换放在这里比塞进兼容层更清楚。
 
-协议要点（按 2026-09 的官方文档口径）：
-- 端点 ``POST {base_url}/messages``，鉴权头 ``x-api-key``，另有
-  ``anthropic-version: 2023-06-01``；部分第三方网关只认 ``Authorization: Bearer``，
-  所以两个头都发（官方会忽略多余的那个）。
+协议要点（按 2026-10 的官方文档口径）：
+- 端点 ``POST {base_url}/messages``，鉴权头 ``x-api-key``；部分第三方网关只认
+  ``Authorization: Bearer``，所以两个头都发（官方会忽略多余的那个）。
 - ``max_tokens`` 必填。用户选了「不限制」时用一个足够大的默认值，而不是省略。
-- 开启扩展思考时 ``temperature`` 必须为 1，且预算要小于 ``max_tokens``。
+- **协议版本按 host + 模型代际分轨**（2026-10-21 迁移，判定在 ``anthropic_messages``）：
+  - 老代际 / 第三方兼容网关：``anthropic-version: 2023-06-01``，扩展思考用
+    ``{"type":"enabled","budget_tokens":N}``，且思考开启时 ``temperature`` 必须为 1；
+  - 新代际（官方 Claude 4.7+/5.x）：``anthropic-version: 2026-10-21``，思考用
+    ``{"type":"adaptive"}`` + ``output_config.effort``；**不发送** temperature /
+    top_p / top_k（新协议已移除，发任何一个都会 400）。
 """
 
 from __future__ import annotations
@@ -21,6 +25,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import re
 import time
 from collections.abc import AsyncGenerator, AsyncIterator
 from typing import Any
@@ -42,6 +47,12 @@ from .anthropic_messages import (
 from .anthropic_messages import (
     _has_tool_history as _has_tool_history,
 )
+from .anthropic_messages import (
+    anthropic_api_version as anthropic_api_version,
+)
+from .anthropic_messages import (
+    uses_adaptive_thinking as uses_adaptive_thinking,
+)
 from .base import (
     BaseLLMProvider,
     LLMDelta,
@@ -51,7 +62,7 @@ from .base import (
 )
 from .client_pool import get_shared_client
 from .openai_compat import http_error_message, validated_base_url
-from .thinking import DEFAULT_EFFORT, EFFORT_BUDGETS, thinking_budget
+from .thinking import DEFAULT_EFFORT, EFFORT_BUDGETS, normalize_effort, thinking_budget
 from .usage import FINISH_CANCELLED, FINISH_ERROR, FINISH_STOP
 
 logger = logging.getLogger(__name__)
@@ -80,6 +91,55 @@ def _normalize_stop_reason(stop_reason: str | None) -> str | None:
 
 # 思考强度 → 思考预算（tokens）的映射只有一份，在 `thinking.py`：设置页的「思考模式」
 # 与助手页的「思考强度」在原生协议下走的是同一张表。
+
+# ===== 2026-10-21 新代际：effort 映射与「没有关闭开关」的模型 =====
+
+# effort 档位 → max_tokens 下限。思考内容会吃输出预算，档位越高需要越多余量，否则
+# 「思考把输出预算吃光、正文被挤空」。xhigh/max 应用内不新增 UI，但用户可在高级参数里
+# 自定义填写，这里一并兜住（任务书 §4 T10 第 5 条）。
+_ADAPTIVE_MAX_TOKENS_FLOORS: dict[str, int] = {
+    "high": 16_384,
+    "xhigh": 65_536,
+    "max": 65_536,
+}
+
+# 「没有关闭开关」的模型：省略 thinking 等于沿用默认（还在思考），所以用户选
+# 「不思考」时只能把 effort 降到 low，不能发 {"type":"disabled"}（新协议不接受）。
+_OFF_SWITCHLESS_MODEL_PATTERN = re.compile(r"^claude-(?:opus-5-5|fable-5)")
+
+
+def map_effort_to_anthropic(effort: str) -> str:
+    """把应用内的思考强度映射成 Anthropic 的 ``output_config.effort``。
+
+    规则（任务书 §4 T10）：``minimal → low``，low/medium/high 同名直传；xhigh/max
+    原样（用户自己填的值）；数字按阈值归到最近档（≥16384 → high）；认不得的词按
+    ``low``——宁可想得浅一点，也不要发一个服务端不认识的档位吃 400。
+    """
+    text = (effort or "").strip().casefold()
+    if text.isdigit():
+        return budget_to_anthropic_effort(int(text))
+    if text in {"low", "medium", "high", "xhigh", "max"}:
+        return text
+    return "low"
+
+
+def budget_to_anthropic_effort(budget: int) -> str:
+    """思考预算（tokens）→ 最近的 effort 档位（老字段「思考预算」的兼容换算）。"""
+    if budget >= EFFORT_BUDGETS["high"]:
+        return "high"
+    if budget >= EFFORT_BUDGETS["medium"]:
+        return "medium"
+    return "low"
+
+
+def adaptive_max_tokens_floor(effort: str) -> int:
+    """该档位要求的 ``max_tokens`` 下限（0 = 不设下限）。"""
+    return _ADAPTIVE_MAX_TOKENS_FLOORS.get((effort or "").strip().casefold(), 0)
+
+
+def is_off_switchless_model(model: str | None) -> bool:
+    """模型是否有「关不掉思考」的已知限制（Opus 5.5 / Fable 5.x）。"""
+    return bool(_OFF_SWITCHLESS_MODEL_PATTERN.match(str(model or "").strip().casefold()))
 
 
 class AnthropicProvider(BaseLLMProvider):
@@ -423,7 +483,8 @@ class AnthropicProvider(BaseLLMProvider):
     def _headers(self) -> dict[str, str]:
         headers = {
             "Content-Type": "application/json",
-            "anthropic-version": ANTHROPIC_VERSION,
+            # 版本头按 host + 模型代际分轨：新代际 2026-10-21，老代际/第三方网关 2023-06-01。
+            "anthropic-version": anthropic_api_version(self.config),
         }
         if self.config.api_key:
             headers["x-api-key"] = self.config.api_key
@@ -490,17 +551,40 @@ class AnthropicProvider(BaseLLMProvider):
         thinking: bool = True,
     ) -> dict[str, Any]:
         system_text, converted = _convert_messages(messages)
-        max_tokens = self._max_tokens()
         payload: dict[str, Any] = {
             "model": self.config.model,
-            "max_tokens": max_tokens,
+            "max_tokens": self._max_tokens(),
             "messages": converted,
             "stream": stream,
         }
         if system_text:
             payload["system"] = system_text[:60_000]
 
-        # thinking=False（结构化输出类调用）：跳过思考注入，哪怕用户全局开了。
+        # 两条协议轨道：新代际（自适应思考 + effort、不发采样参数）与老形态（现状）。
+        if uses_adaptive_thinking(self.config):
+            self._apply_adaptive_thinking(payload, thinking=thinking)
+        else:
+            self._apply_legacy_thinking(payload, thinking=thinking)
+
+        if self.config.stop:
+            payload["stop_sequences"] = list(self.config.stop)
+        # 「额外请求体」在两种形态下同样有效（用户自己知道目标服务支持什么）。
+        extra = getattr(self.config, "extra_body", None)
+        if isinstance(extra, dict):
+            for key, value in extra.items():
+                payload.setdefault(key, value)
+
+        tool_payload = _convert_tools(tools)
+        if tool_payload:
+            payload["tools"] = tool_payload
+        return payload
+
+    def _apply_legacy_thinking(self, payload: dict[str, Any], *, thinking: bool) -> None:
+        """2023-06-01 形态的思考与采样参数（与改动前逐字段一致）。
+
+        thinking=False（结构化输出类调用）：跳过思考注入，哪怕用户全局开了。
+        """
+        max_tokens = int(payload["max_tokens"])
         budget = 0 if not thinking else self._thinking_budget()
         if budget > 0:
             # 协议要求：开启思考时 temperature 必须为 1，预算要小于 max_tokens。
@@ -517,18 +601,47 @@ class AnthropicProvider(BaseLLMProvider):
             payload["top_p"] = self.config.top_p
         if self.config.top_k is not None:
             payload["top_k"] = self.config.top_k
-        if self.config.stop:
-            payload["stop_sequences"] = list(self.config.stop)
-        # 「额外请求体」在原生协议下同样有效（用户自己知道目标服务支持什么）。
-        extra = getattr(self.config, "extra_body", None)
-        if isinstance(extra, dict):
-            for key, value in extra.items():
-                payload.setdefault(key, value)
 
-        tool_payload = _convert_tools(tools)
-        if tool_payload:
-            payload["tools"] = tool_payload
-        return payload
+    def _apply_adaptive_thinking(self, payload: dict[str, Any], *, thinking: bool) -> None:
+        """2026-10-21 形态：自适应思考 + ``output_config.effort``。
+
+        新协议**不再发送** temperature / top_p / top_k（传任何一个都 400）；
+        ``thinking=False`` 或用户选「不思考」时：普通模型直接省略 ``thinking``
+        （adaptive 是 opt-in，省略即不思考）；Opus 5.5 / Fable 5.x 没有关闭开关，
+        只能把 effort 降到 low（见 :func:`is_off_switchless_model`）。
+        """
+        effort = self._adaptive_effort() if thinking else ""
+        if effort:
+            payload["thinking"] = {"type": "adaptive"}
+            payload["output_config"] = {"effort": effort}
+            # effort 越高，思考吃掉输出预算的风险越大：按档位托底 max_tokens。
+            payload["max_tokens"] = max(
+                int(payload["max_tokens"]), adaptive_max_tokens_floor(effort)
+            )
+            return
+        if is_off_switchless_model(self.config.model):
+            payload["thinking"] = {"type": "adaptive"}
+            payload["output_config"] = {"effort": "low"}
+
+    def _adaptive_effort(self) -> str:
+        """本次请求的 Anthropic effort 档位；空串 = 不指定（即不思考）。
+
+        优先级与 :meth:`_thinking_budget` 同一套：请求级「思考强度」（助手页）> 配置里
+        显式填的「思考预算」（按阈值换算成最近的档）> 设置页的「思考模式」开关。
+        """
+        effort = str(self.request_overrides.get("reasoning_effort") or "").strip()
+        if effort:
+            if effort.casefold() == "none":
+                return ""
+            return map_effort_to_anthropic(effort)
+        configured = getattr(self.config, "thinking_budget", None)
+        if configured is not None:
+            if int(configured) <= 0:
+                return ""
+            return budget_to_anthropic_effort(int(configured))
+        if not getattr(self.config, "thinking_enabled", False):
+            return ""
+        return map_effort_to_anthropic(normalize_effort(self.config) or DEFAULT_EFFORT)
 
     @staticmethod
     def _extract_text(data: dict) -> str:
@@ -548,6 +661,15 @@ class AnthropicProvider(BaseLLMProvider):
         status = response.status_code
         logger.warning("Anthropic 调用失败 status=%s", status)
         if status == 400:
+            if uses_adaptive_thinking(self.config):
+                # 新代际的 400 有两类常见原因，文案里要把它们分开说：
+                # ① 模型名/端点不对（普通 400）；② 所选 effort 该模型不接受（参数问题）。
+                # 采样参数已被新协议移除——不要再提示用户去改 temperature/top_p/top_k。
+                return LLMError(
+                    "请求格式错误：新版 Claude 只接受思考强度（effort），temperature/top_p/"
+                    "top_k 已从接口移除。请先确认模型名称；若服务端提示参数不被支持，请把"
+                    "思考强度调到 low 或关闭后重试（HTTP 400）"
+                )
             # 原生协议的 400 有两类，先区分再给提示。**开了思考又在多轮工具调用中**时，
             # 400 几乎必然是"上一轮的 thinking 块没原样回传"（官方对 extended thinking 的
             # 硬要求，本实现尚未支持，见 ``_convert_messages``）。此时若回通用文案

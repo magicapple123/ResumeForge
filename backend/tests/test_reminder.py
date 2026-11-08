@@ -4,7 +4,7 @@
 重点验证：
 1. 增删改查完整可用，删除走软删除（列表不可见、行仍在）；
 2. ``upcoming`` 只返回 pending 且按 ``remind_at`` 升序；
-3. 绑定漏斗/岗位/简历后，被绑对象删除不连坐（外键 SET NULL）。
+3. 关联求职进度/岗位/简历后，被绑对象删除不连坐（外键 SET NULL）。
 """
 from datetime import UTC, timedelta
 
@@ -200,6 +200,64 @@ def test_upcoming_enriches_urgency_and_sorts(client):
     assert by_title["soon"]["days_until"] in {0, 1}
     assert by_title["upcoming"]["days_until"] == 2
     assert by_title["later"]["days_until"] == 5
+
+
+def test_list_route_enriches_urgency_and_days_until(client):
+    """T06：列表接口在 ReminderOut 之外补 urgency / days_until（只给列表用）。
+
+    逾期口径与首页「近期提醒」同一份实现（reminder_service）：刚过 2 小时也算
+    「已逾期 1 天」，列表红标与筛选都靠这个 -1，不能在前端按小时重算。
+    """
+    now = utcnow()
+    just_overdue = client.post(
+        "/api/reminders",
+        json={"title": "刚过两小时", "remind_at": (now - timedelta(hours=2)).isoformat()},
+    ).json()
+    future = client.post(
+        "/api/reminders",
+        json={"title": "五天后", "remind_at": (now + timedelta(days=5)).isoformat()},
+    ).json()
+    done = client.post(
+        "/api/reminders",
+        json={"title": "已完成", "remind_at": (now - timedelta(days=2)).isoformat()},
+    ).json()
+    client.patch(f"/api/reminders/{done['id']}", json={"status": "done"})
+
+    listed = client.get("/api/reminders").json()
+    by_id = {item["id"]: item for item in listed}
+
+    # 每条列表项都带两个派生字段（不是只给逾期项）。
+    for item in listed:
+        assert "urgency" in item and "days_until" in item
+        assert isinstance(item["days_until"], int)
+
+    # 边界：刚过 2 小时 → 逾期 1 天（不足 24 小时也按 1 天，与「已逾期 1 天」逐字一致）。
+    assert by_id[just_overdue["id"]]["urgency"] == "overdue"
+    assert by_id[just_overdue["id"]]["days_until"] == -1
+    # 已完成的历史提醒仍如实回显天数为负，但前端只在 pending 上标红（见 ReminderListItem）。
+    assert by_id[done["id"]]["days_until"] == -2
+    assert by_id[future["id"]]["urgency"] in {"soon", "upcoming", "later"}
+    assert by_id[future["id"]]["days_until"] == 5
+
+    # 与首页 /upcoming 的口径逐条一致（两处不能各算一套）。
+    upcoming = {item["id"]: item for item in client.get("/api/reminders/upcoming").json()}
+    assert upcoming[just_overdue["id"]]["urgency"] == "overdue"
+    assert upcoming[just_overdue["id"]]["days_until"] == -1
+
+
+def test_write_echo_does_not_gain_list_only_fields(client):
+    """写操作回显仍是 ReminderOut：创建 / PATCH 不应多出 urgency / days_until。"""
+    created = client.post(
+        "/api/reminders",
+        json={"title": "写回显", "remind_at": "2026-11-08T10:00:00"},
+    )
+    assert created.status_code == 201, created.text
+    body = created.json()
+    assert "urgency" not in body and "days_until" not in body
+
+    patched = client.patch(f"/api/reminders/{body['id']}", json={"note": "补备注"})
+    assert patched.status_code == 200, patched.text
+    assert "urgency" not in patched.json() and "days_until" not in patched.json()
 
 
 def test_reminder_popup_setting_default_and_toggle(client):

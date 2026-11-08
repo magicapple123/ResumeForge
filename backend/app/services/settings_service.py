@@ -23,6 +23,39 @@ from ..schemas.setting import (
 # 对外兼容面：API_KEY_MASK 的取用点是 test_api_settings.py:8 / test_llm_session_key.py:12 /
 # data_backup/api_keys.py:16，它们都从本模块 import；值本身由 llm_key_refs 定义。
 from .api_key_crypto import decrypt_key, encrypt_key
+
+# 对外兼容面：求职助手「数据权限」四档与旧放宽开关的实现在 assistant_permission；
+# 48 处既有调用点（api/settings.py、api/assistant.py、api/assistant_stream.py、助手工具）
+# 仍按本模块取符号，故逐个 ``as`` 同名重导出。
+from .assistant_permission import (
+    ASSISTANT_PERMISSION_DEFAULT as ASSISTANT_PERMISSION_DEFAULT,
+)
+from .assistant_permission import (
+    ASSISTANT_PERMISSION_LEVELS as ASSISTANT_PERMISSION_LEVELS,
+)
+from .assistant_permission import (
+    get_assistant_permission as get_assistant_permission,
+)
+from .assistant_permission import (
+    get_assistant_relaxed_mode as get_assistant_relaxed_mode,
+)
+from .assistant_permission import permission_axes as permission_axes
+from .assistant_permission import permission_from_axes as permission_from_axes
+from .assistant_permission import (
+    reset_runtime_relaxed_override as reset_runtime_relaxed_override,
+)
+from .assistant_permission import (
+    resolve_assistant_relaxed_mode as resolve_assistant_relaxed_mode,
+)
+from .assistant_permission import (
+    save_assistant_permission as save_assistant_permission,
+)
+from .assistant_permission import (
+    save_assistant_relaxed_mode as save_assistant_relaxed_mode,
+)
+from .assistant_permission import (
+    set_runtime_relaxed_override as set_runtime_relaxed_override,
+)
 from .llm_key_refs import API_KEY_MASK  # noqa: F401
 
 # 对外兼容面：48 处调用方与测试按本模块取符号，逐个 ``as`` 同名重导出（走 llm_settings）。
@@ -47,9 +80,6 @@ _WEBFORM_RELAXED_MODE_KEY = "webform_relaxed_mode"
 _EXPORT_SAVE_LOCATION_KEY = "export_save_location"
 # 自动备份间隔（天）的运行时设置：调度线程每次到期检查时读取，保存后下次检查生效。
 _AUTO_BACKUP_INTERVAL_KEY = "auto_backup_interval_days"
-# 求职助手放宽模式：开启后助手可读取完整资料（含姓名、电话等敏感字段）与
-# 网申填写记录、历史对话。默认必须**关**——它扩大的是发往模型的个人信息面。
-_ASSISTANT_RELAXED_MODE_KEY = "assistant_relaxed_mode"
 # T26 事件触发：提醒到期时自动生成"准备"任务卡。默认**关**——用户主动开启，
 # 避免"助手自作主张"的观感；关闭后不再生成，已生成的卡保留（不追删）。
 _AGENT_TASK_EVENTS_KEY = "agent_task_events_enabled"
@@ -234,39 +264,10 @@ def save_webform_relaxed_mode(db: Session, enabled: bool) -> bool:
     return bool(enabled)
 
 
-# ===== 求职助手放宽模式 =====
-
-
-def get_assistant_relaxed_mode(db: Session) -> bool:
-    """读取「求职助手放宽模式」开关；缺失或脏数据退回默认**关**。
-
-    放宽模式会把助手的可读范围从"岗位筛选需要的资料"扩大到**全部资料**：姓名、
-    电话等敏感身份字段、网申填表的真实填写值、历史对话。它改变的是"发往模型的
-    个人信息面"，与网申放宽模式一样默认保守，由用户在知情的前提下显式开启。
-    API 密钥等凭据无论如何都不在解锁范围内。
-    """
-    row = db.get(AppSetting, _ASSISTANT_RELAXED_MODE_KEY)
-    if row is None:
-        return False
-    try:
-        value = json.loads(row.value)
-    except (json.JSONDecodeError, TypeError):
-        logger.warning("助手放宽模式设置数据损坏，已重置为默认关闭")
-        return False
-    return value if isinstance(value, bool) else False
-
-
-def save_assistant_relaxed_mode(db: Session, enabled: bool) -> bool:
-    """持久化「求职助手放宽模式」开关。"""
-    row = db.get(AppSetting, _ASSISTANT_RELAXED_MODE_KEY)
-    serialized = json.dumps(bool(enabled))
-    if row is None:
-        db.add(AppSetting(key=_ASSISTANT_RELAXED_MODE_KEY, value=serialized))
-    else:
-        row.value = serialized
-    db.commit()
-    return bool(enabled)
-
+# ===== 求职助手放宽模式 / 数据权限（T11） =====
+# 实现在 services/assistant_permission.py：四档 → (relaxed, allow_write) 的唯一映射口径、
+# 新旧键的写穿、以及请求级「读」轴覆盖的 ContextVar。本模块只按原名再导出（见文件顶部），
+# 既有调用点（api/settings.py、助手路由、助手工具）取符号的路径不变。
 
 # ===== Agent 任务事件触发（T26：提醒到期 → 生成任务卡）=====
 

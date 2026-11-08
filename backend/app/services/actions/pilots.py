@@ -346,9 +346,10 @@ def pilot_actions() -> dict[str, ActionSpec]:
         ActionSpec(
             name="update_skill",
             description=(
-                "修改一个技能的提示词、名称、适用场景、启用状态或知识文件（只传要改的字段）。"
+                "修改一个技能的提示词、名称、适用场景或知识文件（只传要改的字段）。"
                 "传 files 会**整体替换**该技能现有的知识文件（不是追加）；不传 files 则不动已有文件。"
-                "files 限制：最多 10 个文件、单文件 ≤ 20000 字符、合计 ≤ 60000 字符。"
+                "限制：提示词不超过 4000 字符；知识文件最多 10 个文件、单文件不超过 20000 字符、"
+                "合计不超过 60000 字符。"
             ),
             input_model=UpdateSkillInput,
             permission=Permission.IRREVERSIBLE_WRITE,

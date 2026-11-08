@@ -162,12 +162,30 @@ COVERAGE: dict[str, tuple[str, ...] | str] = {
     "drill_session": ("list_drill_sessions", "get_drill_report"),
     "drill_contract": ("get_drill_report",),
     "drill_turn": ("get_drill_report",),
+    # ===== 期一跟进巡检 / 期二求职偏好（2026-11） =====
+    "application_follow_up": "不暴露：跟进决策是用户对巡检卡（已联系 / 对方已回 / 不跟了）"
+    "的显式动作，由用户在首页任务卡里逐条选择后落库；助手不代做跟进决策、也不读它，"
+    "巡检候选与文案由服务端确定性生成，不需要模型参与。",
+    # 偏好档刻意**只开三个工具**：读全量 + 两个必须走提案的写工具；没有删除/撤销工具
+    # （那两类是用户在设置页的显式动作，与「没有删除类工具」的既有口径一致）。
+    "job_preference": (
+        "get_job_preferences",
+        "create_job_preference",
+        "update_job_preference",
+    ),
     # ===== 助手自身的会话与技能 =====
     # 历史对话默认不暴露（内容就在上下文里）；放宽模式（用户知情开启）下开放只读回看。
     "chat_conversation": ("list_chat_conversations",),
     "chat_message": ("get_chat_conversation",),
     "assistant_skill": ("read_skill_knowledge",),
     "assistant_skill_file": ("read_skill_knowledge",),
+    # T14：一个对话启用了哪些技能。注入由服务端按当前会话读取（系统提示里的技能块），
+    # 给模型读写这张关联表只会让它自行"启用/停用"技能、改变自己的指令——这必须由用户
+    # 在界面上点，和写入提案同级。技能内容本身经 read_skill_knowledge 可达。
+    "assistant_conversation_skill": "不暴露：这是「对话 × 技能」的启用关联行，助手按当前对话"
+    "被服务端注入，不需要也不应该自读自写；启用/停用是用户在输入区技能菜单里的显式动作，"
+    "允许模型改它等于让它给自己换指令。",
+
     # T01：写操作提案是**授权状态**（待确认参数 + 目标指纹 + 终态），不是业务数据。
     # 模型只通过系统提示里的状态块得知结果；给它读写工具等于让它查参数甚至自批，
     # 会破坏"用户是唯一确认人"的边界。状态只由服务端批准/拒绝/清理推进。

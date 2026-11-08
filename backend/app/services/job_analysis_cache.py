@@ -66,8 +66,45 @@ def store_analysis(db: Session, job: Job, result: dict[str, Any]) -> None:
     db.commit()
 
 
+# ===== Phase 0：查询扩展缓存（RAG）=====
+# 复用同一个 analysis_cache 列与同一套 fingerprint 机制：岗位内容一改指纹就变，
+# 旧扩展词自然失效，不需要第二张缓存表、也不需要迁移。
+RAG_EXPANSION_KEY = "rag_query_expansion"
+
+
+def read_cached_rag_expansion(job: Job) -> tuple[str, ...] | None:
+    """读取岗位的查询扩展词；没有缓存或岗位内容已变时返回 None（调用方回退）。"""
+    cache = getattr(job, "analysis_cache", None)
+    if not isinstance(cache, dict):
+        return None
+    slot = cache.get(RAG_EXPANSION_KEY)
+    if not isinstance(slot, dict):
+        return None
+    if str(slot.get("fingerprint") or "") != analysis_fingerprint(job):
+        return None
+    terms = slot.get("terms")
+    if not isinstance(terms, list):
+        return None
+    return tuple(str(term) for term in terms if str(term).strip())
+
+
+def store_rag_expansion(db: Session | None, job: Job, terms: list[str]) -> None:
+    """写入查询扩展词（保留同一列里既有的岗位解读缓存）。失败不应影响生成。"""
+    cache = dict(job.analysis_cache) if isinstance(job.analysis_cache, dict) else {}
+    cache[RAG_EXPANSION_KEY] = {
+        "fingerprint": analysis_fingerprint(job),
+        "generated_at": datetime.now().astimezone().isoformat(timespec="seconds"),
+        "terms": [str(term).strip() for term in terms if str(term).strip()],
+    }
+    job.analysis_cache = cache
+    if db is not None:
+        db.commit()
+
+
 __all__ = [
     "analysis_fingerprint",
     "read_cached_analysis",
+    "read_cached_rag_expansion",
     "store_analysis",
+    "store_rag_expansion",
 ]

@@ -36,6 +36,7 @@ from .profile_matching import (
     _item_text,
     _job_text,
     _matched_skills,
+    _no_relevance_signal,
     _prioritize_item_details,
     _score_item,
     _select_entries,
@@ -151,7 +152,9 @@ def build_targeted_profile_context(
         fallback_sections = tuple(
             section
             for section in ("experiences", "projects")
-            if any(_score_item(item, section, focus) == 0 for item in selected.get(section) or [])
+            if any(
+                _no_relevance_signal(item, section, focus) for item in selected.get(section) or []
+            )
         )
     return _assemble_selection(
         full, selected, focus, max_chars, fallback_sections=fallback_sections
@@ -371,7 +374,7 @@ def build_targeted_consumed_profile_context(
             section
             for section in _FALLBACK_ENTRY_SECTIONS
             if section in selected
-            and any(_score_item(item, section, focus) == 0 for item in selected[section])
+            and any(_no_relevance_signal(item, section, focus) for item in selected[section])
         )
     return _assemble_selection(
         full,

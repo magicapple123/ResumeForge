@@ -201,15 +201,31 @@ def test_create_skill_tool_attaches_knowledge_files(db_session):
 
 
 def test_create_skill_tool_rejects_oversized_knowledge_file(db_session):
+    """超大知识文件必须被拒绝（单文件上限 20,000，唯一真源是 schemas/skill.py）。
+
+    T14 统一上限后，工具入参先经 ActionSpec 的 input_model 校验，再由契约层抛
+    ``ActionError("invalid_input", "files.0.content: 内容不能超过 20000 个字符")``——
+    不再走到旧 handler 里那句「超过单文件上限」。两条消息描述的是同一件事（同一条
+    上限），这里按**新的真实契约**断言：错误码是 invalid_input、消息点名 20,000、
+    且拒绝之后库里没有留下半成品技能。仍然验证"超大文件会被拒绝"这一性质。
+    """
+    from app.models.assistant import AssistantSkill
+    from app.services.actions import ActionError
     from app.services.assistant_tools import MAX_ASSISTANT_SKILL_FILE_CHARS
 
     too_long = "x" * (MAX_ASSISTANT_SKILL_FILE_CHARS + 1)
-    with pytest.raises(ValueError, match="超过单文件上限"):
+    with pytest.raises(ActionError) as info:
         execute_tool(
             db_session,
             "create_skill",
             {"name": "太大的技能", "prompt": "规则", "files": [{"path": "大.md", "content": too_long}]},
         )
+
+    # 错误形态与文案：契约层 invalid_input，且把具体的上限数字告诉模型/用户。
+    assert info.value.tool_error == "invalid_input"
+    assert "20000" in str(info.value)
+    # 「被拒绝」的实质是没有落库：不能只断言抛异常而放过半成品。
+    assert db_session.query(AssistantSkill).count() == 0
 
 
 def test_update_skill_tool_without_files_keeps_existing_files(db_session):

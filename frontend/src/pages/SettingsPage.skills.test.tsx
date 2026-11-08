@@ -170,12 +170,14 @@ describe("SettingsPage skills", () => {
     return view;
   }
 
-  it("lists skills with their status and knowledge file count", async () => {
+  it("lists skills with knowledge file count and no global enabled status (T14)", async () => {
     await renderPage([interviewSkill, disabledSkill]);
 
     expect(await screen.findByText("面试模拟官")).toBeInTheDocument();
-    expect(screen.getByText("启用中")).toBeInTheDocument();
-    expect(screen.getByText("已停用")).toBeInTheDocument();
+    // T14 起技能按对话启用：设置页不再展示全局「启用中/已停用」，改为一句说明。
+    expect(screen.queryByText("启用中")).toBeNull();
+    expect(screen.queryByText("已停用")).toBeNull();
+    expect(document.body).toHaveTextContent("在对话里启用");
     expect(screen.getByText(/2 份知识文件/)).toBeInTheDocument();
     expect(screen.getByText(/仅提示词/)).toBeInTheDocument();
   });

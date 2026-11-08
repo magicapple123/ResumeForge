@@ -21,6 +21,7 @@ import { LatestCards } from "./home/LatestCards";
 import { ReminderPopup } from "./home/ReminderPopup";
 import { RemindersCard } from "./home/RemindersCard";
 import { SearchCard } from "./home/SearchCard";
+import { TasksCard } from "./home/TasksCard";
 import { ShortcutsCard } from "./home/ShortcutsCard";
 import { StatsCards } from "./home/StatsCards";
 import { t } from "../i18n";
@@ -129,6 +130,9 @@ export default function HomePage() {
         remindersLoading={remindersLoading}
         onOpenPopup={() => setPopupVisible(true)}
       />
+
+      {/* D11 首页顺序：统计 → 提醒 → 任务 → 待办 → 快捷入口。任务卡自己 gate 总开关与空态。 */}
+      <TasksCard />
 
       <Card
         style={{ marginTop: 16 }}

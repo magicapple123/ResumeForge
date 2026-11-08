@@ -10,7 +10,7 @@
 import json
 import logging
 from typing import TypeVar
-from urllib.parse import urlsplit, urlunsplit
+from urllib.parse import urlsplit
 
 from pydantic import ValidationError
 from sqlalchemy.orm import Session
@@ -47,7 +47,9 @@ def resolve_llm_config_api_key(db: Session, config: _ConfigT) -> _ConfigT:
     api_key = config.api_key
     if api_key == API_KEY_MASK:
         current = get_llm_config(db)
-        if _normalized_base_url(config.base_url) != _normalized_base_url(current.base_url):
+        if base_url_binding_identity(config.base_url) != base_url_binding_identity(
+            current.base_url
+        ):
             raise ValueError("Base URL 已修改，请重新填写 API Key 后再保存或测试")
         resolved_key = current.api_key
     elif api_key.startswith(RECORD_API_KEY_PREFIX):
@@ -57,7 +59,9 @@ def resolve_llm_config_api_key(db: Session, config: _ConfigT) -> _ConfigT:
         record = db.get(LLMConfigRecord, int(record_id_text))
         if record is None:
             raise ValueError("API Key 配置记录已不存在，请刷新设置后再试")
-        if _normalized_base_url(config.base_url) != _normalized_base_url(record.base_url):
+        if base_url_binding_identity(config.base_url) != base_url_binding_identity(
+            record.base_url
+        ):
             raise ValueError("Base URL 与配置记录不一致，请刷新记录后再试")
         resolved_key = decrypt_key(record.api_key)
     elif api_key.startswith(PROFILE_API_KEY_PREFIX):
@@ -68,7 +72,9 @@ def resolve_llm_config_api_key(db: Session, config: _ConfigT) -> _ConfigT:
         profile_config = read_profile_config(profile_id)
         if profile_config is None:
             raise ValueError("API Key 配置记录已不存在，请刷新设置后再试")
-        if _normalized_base_url(config.base_url) != _normalized_base_url(profile_config.base_url):
+        if base_url_binding_identity(config.base_url) != base_url_binding_identity(
+            profile_config.base_url
+        ):
             raise ValueError("Base URL 与配置记录不一致，请重新填写 API Key 后再试")
         resolved_key = profile_config.api_key
     else:
@@ -76,30 +82,58 @@ def resolve_llm_config_api_key(db: Session, config: _ConfigT) -> _ConfigT:
     return config.model_copy(update={"api_key": resolved_key})
 
 
-def _normalized_base_url(value: str) -> str:
-    """绑定密钥引用与服务地址，避免占位符把密钥转发到其他主机。"""
-    stripped = value.strip().rstrip("/")
+# 默认端口不入绑定身份：`https://h:443/x` 与 `https://h/x` 是同一台主机。
+_DEFAULT_PORTS = {("http", 80), ("https", 443)}
+
+
+def base_url_binding_identity(value: str) -> str:
+    """密钥引用与服务地址的**绑定身份**：``scheme://host[:port]``。
+
+    为什么只绑到 origin（2026-11 DeepSeek 切换协议后"连不上"的根因）
+    -----------------------------------------------------------
+    原先这里把**完整 URL（含 path）**当身份。设置页切协议时，前端会把 base_url 从
+    ``https://api.deepseek.com`` 改写成 ``https://api.deepseek.com/responses``——
+    path 变了、主机没变、用户没换 Key 也没换服务商，却被告知「Base URL 与配置记录
+    不一致，请重新填写 API Key」，而他手里根本没有第二个 Key。
+
+    安全意图只有一条（旧注释原话）：**避免占位符把密钥转发到其他主机**。同一主机上的
+    path 变化不会把密钥送到别处，所以绑定粒度是 origin：
+    scheme/host 小写、默认端口（http:80 / https:443）不参与比较、IPv6 补方括号、
+    host 里不可能含 userinfo（urlsplit 已分开）。查询串与片段同样不参与。
+
+    换主机仍然报错——这是本条底线的**唯一**判据：``api.deepseek.com`` 的密钥不能用于
+    ``evil.example.com``，也不能用于 ``api.deepseek.com.evil.example.com``（不同 host）。
+
+    解析不出 scheme+host 的取值（相对串、缺 scheme 的 ``localhost:11434`` 写法）没有
+    可靠的主机边界，退回 ``opaque_base_url_identity`` 的整串比较。
+    """
+    stripped = (value or "").strip().rstrip("/")
     try:
         parsed = urlsplit(stripped)
         hostname = parsed.hostname
         port = parsed.port
     except ValueError:
-        return stripped
+        return opaque_base_url_identity(stripped)
+    # 带 userinfo 的地址仍是"同一台主机"，但既然调用方给了账号密码这种不规范写法，
+    # 就退回整串比较：宁可判不一致让人重填，也不要替用户猜他指的是哪台机器。
     if not parsed.scheme or not hostname or parsed.username or parsed.password:
-        return stripped
-    normalized_host = hostname.casefold()
-    if ":" in normalized_host:
-        normalized_host = f"[{normalized_host}]"
-    netloc = f"{normalized_host}:{port}" if port is not None else normalized_host
-    return urlunsplit(
-        (
-            parsed.scheme.casefold(),
-            netloc,
-            parsed.path.rstrip("/"),
-            parsed.query,
-            parsed.fragment,
-        )
-    )
+        return opaque_base_url_identity(stripped)
+    scheme = parsed.scheme.casefold()
+    host = hostname.casefold()
+    if ":" in host:
+        host = f"[{host}]"
+    if port is None or (scheme, port) in _DEFAULT_PORTS:
+        return f"{scheme}://{host}"
+    return f"{scheme}://{host}:{port}"
+
+
+def opaque_base_url_identity(value: str) -> str:
+    """兜底身份：URL 解析不出 scheme+host 时，按「去尾斜杠的整串」比较。
+
+    只服务相对串/缺 scheme 这类边缘输入，语义与拆分前的 ``_normalized_base_url``
+    在这条分支上逐字一致。
+    """
+    return (value or "").strip().rstrip("/")
 
 
 def mask_llm_config(db: Session, config: LLMConfig) -> LLMConfig:

@@ -1,0 +1,122 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/* 语音听写（T12）的麦克风按钮与提示行：全站共用控件。
+   面试页的布局（录音中禁提交、追问 Compact 里的位置）放在 interview-voice.css。
+   voice-input.css 由 components/voice/VoiceButton.tsx 直接 import，不进 index.css
+   聚合（那两处聚合点是共享文件，语音线别去动）。 */
+
+/* R06-C：提示行**脱离文档流**。
+   此前 `.voice-input` 是 `inline-flex; flex-direction: column`，提示行作为第二个子元素把
+   整个包裹撑高，而工具栏是 `align-items: center` → 麦克风被顶起来，看起来比同级控件高一截。
+   改成绝对定位后包裹的高度只由按钮决定；`pointer-events: none` 让它不挡下方控件的点击。 */
+.voice-input {
+  position: relative;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  min-width: 0;
+}
+
+/* 提示行 12px 次要色：颜色由 antd 的 type="secondary" / "danger" 给，这里只管字号。
+   R06-C 修正：**贴右缘锚定 + 单行优先**。
+   只写 `left: 0` 时，绝对定位元素按"左侧到包含块右缘的可用空间"收缩，
+   而 `.voice-input` 紧贴视口右缘 → 可用宽度只剩几十像素，长句被压成每行四五个字的竖条，
+   还会盖住左边的发送键。改成 `right: 0` 让它向左生长，`width: max-content` 先按单行排，
+   只有超过 `max-width`（窄栏）时才折行。 */
+.voice-input-hint {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  width: max-content;
+  max-width: min(340px, calc(100vw - 16px));
+  text-align: right;
+  font-size: 12px;
+  line-height: 1.4;
+  pointer-events: none;
+}
+
+/* 提示行落在卡片底边之外 8px（按钮底 859 / 卡片底 872 / 提示行高 16.8）。
+   `:has()` 只在**真的有提示行时**给卡片多留一条的位置：没有提示行时输入区高度一点不变，
+   有提示行时文字落在卡片内、不压在页面背景上。
+   浏览器不支持 `:has()` 时会退回上面的 12px 内边距——结果是提示行略微溢出卡片，
+   仍然单行、不遮挡发送键，属于可接受的降级。 */
+.assistant-composer:has(.voice-input-hint) {
+  padding-bottom: 26px;
+}
+
+/* 空闲态是文字型控件（R06-C）：无边框、透明底，hover 才给浅底——它挨着无边框的
+   ReasoningChip 与圆形发送键，带边框的按钮在那排里格格不入。
+   录音态不走这里（见下方 .voice-recording-button），那颗红描边胶囊必须保留。 */
+.voice-input-button {
+  display: inline-flex;
+  align-items: center;
+  border: none;
+  background: transparent;
+  box-shadow: none;
+}
+
+.voice-input-button:hover {
+  background: var(--rf-surface-alt);
+}
+
+/* 录音中的控件刻意不是 antd Button（计划 §6）：红描边 + 红色脉冲，点它结束录音。
+   用原生 button 保留键盘可达与焦点环，外观全部由这里给。 */
+.voice-recording-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--rf-danger);
+  border-radius: var(--rf-radius-control);
+  background: var(--rf-surface);
+  color: var(--rf-error-text);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+
+.voice-recording-button:hover {
+  background: var(--rf-error-bg);
+}
+
+.voice-recording-button:focus-visible {
+  outline: 2px solid var(--rf-focus-visible);
+  outline-offset: 2px;
+}
+
+/* 红色脉冲：只动透明度与尺寸，不触发页面重排。 */
+.voice-recording-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--rf-danger);
+  animation: voice-recording-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes voice-recording-pulse {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.35;
+    transform: scale(0.8);
+  }
+}
+
+.voice-recording-time {
+  font-weight: 600;
+}
+
+.voice-recording-stop {
+  font-size: 12px;
+}
+
+/* 面试追问的 Space.Compact 里与输入框同高（antd middle = 32px），左右不留额外外边距，
+   紧凑条本身负责拼接边框。 */
+.voice-recording-button--compact,
+.voice-input-button--compact {
+  height: 32px;
+}

@@ -66,6 +66,10 @@ EXPECTED_DATA_TOOL_ORDER = (
     "list_format_templates",
     # 文件副本库
     "list_user_files",
+    # 求职偏好（期二 T12）：只读查询 + 两个必走提案的写工具（追加在 DATA_TOOLS 末尾）。
+    "get_job_preferences",
+    "create_job_preference",
+    "update_job_preference",
 )
 
 # 全量注册表顺序（CORE → DATA → RELAXED → REPORT → SEARCH → DOCUMENT → QUALITY → DIAGNOSIS）。

@@ -9,9 +9,14 @@ from app.runtime.dataset_scope import DatasetScopeError
 from app.schemas.resume import GenerateOptions
 from app.services import storage_stats
 from app.services.assistant.assistant_web_search import AssistantSearchError
-from app.services.llm.base import LLMError
+from app.services.llm.base import LLMDelta, LLMError
 from app.services.resume.resume_generator import ResumeGenerator
-from tests.test_assistant import _configure_llm, _create_conversation, _events, _successful_provider
+from tests.test_assistant import (
+    _configure_llm,
+    _create_conversation,
+    _ScriptedProvider,
+    _tool_call,
+)
 from tests.test_resume_generator import FakeProvider, collect_events, make_job, make_profile
 
 PRIVATE_ERROR = "SYNTHETIC_PRIVATE_EXCEPTION_TOKEN_DO_NOT_ECHO"
@@ -46,25 +51,41 @@ def test_storage_warning_does_not_return_raw_os_error(tmp_path, monkeypatch):
 
 
 def test_search_error_does_not_enter_sse_history_or_model_context(client, monkeypatch):
+    """联网搜索失败的**异常原文**不得进入 SSE、模型上下文或落库历史。
+
+    R08 之后联网只有 ``web_search`` 工具一个入口（不再有打开开关就自动预搜那一步），
+    所以这条从工具失败这条真实路径验：工具结果会进模型上下文与历史，异常原文一旦漏出去
+    就会被写进数据库、也会被回显给模型。只有白名单化的 ``public_message`` 允许出现。
+    """
     _configure_llm(client)
-    captured = {}
-    _successful_provider(monkeypatch, captured)
 
     async def fail(_query, _config):
         raise AssistantSearchError(PRIVATE_ERROR)
 
-    monkeypatch.setattr("app.api.assistant.aggregate_search", fail)
+    monkeypatch.setattr("app.services.search.aggregate_search", fail)
+    provider = _ScriptedProvider(
+        [
+            [_tool_call("web_search", {"query": "岗位 招聘"})],
+            [LLMDelta(text="没能搜到。")],
+        ]
+    )
+    monkeypatch.setattr("app.api.assistant.create_provider", lambda _config: provider)
     conversation = _create_conversation(client)
     response = client.post(
         f"/api/assistant/conversations/{conversation['id']}/messages",
         json={"content": "搜索岗位", "web_search": True},
     )
-    event = next(item for item in _events(response) if item["type"] == "sources")
-    assert event["sources"] == [] and event["error"]
+    assert response.status_code == 200
+    # 工具失败仍以可读文案回给模型（换关键词重试比整轮中断有用）。
+    assert any(
+        "联网搜索服务暂时不可用" in str(message.get("content", ""))
+        for request in provider.requests
+        for message in request["messages"]
+    )
     assert PRIVATE_ERROR not in response.text
-    assert PRIVATE_ERROR not in json.dumps(captured)
+    assert PRIVATE_ERROR not in json.dumps(provider.requests, ensure_ascii=False)
     history = client.get(f"/api/assistant/conversations/{conversation['id']}").json()
-    assert PRIVATE_ERROR not in json.dumps(history)
+    assert PRIVATE_ERROR not in json.dumps(history, ensure_ascii=False)
 
 
 def test_generate_lease_error_does_not_return_raw_exception(client, monkeypatch):

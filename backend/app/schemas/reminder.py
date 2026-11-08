@@ -137,11 +137,27 @@ class ReminderUpcomingOut(ReminderOut):
     due_label: str = ""
 
 
+class ReminderListItemOut(ReminderOut):
+    """提醒列表的单条回显：在 ReminderOut 之外补紧急度与结构化倒计时（**只给列表用**）。
+
+    列表是"接下来要做什么"的全集，逾期项也需要在列表里一眼看出（首页「近期提醒」卡
+    已有同样口径，两处必须一致）。写操作（创建 / PATCH）仍回显 ``ReminderOut``：它们
+    不需要这两个派生字段，回显口径不跟着列表走。
+
+    两个字段**必填**（无默认值）：列表路由必须显式经过 ``reminder_list_items_out`` 计算，
+    漏接时会直接序列化失败，而不是悄悄下发 ``later / 0`` 这种假值。
+    """
+
+    urgency: ReminderUrgency
+    days_until: int
+
+
 __all__ = [
     "MAX_REMINDER_NOTE_CHARS",
     "MAX_REMINDER_TITLE_CHARS",
     "ReminderCreate",
     "ReminderKind",
+    "ReminderListItemOut",
     "ReminderOut",
     "ReminderStatus",
     "ReminderUpcomingOut",

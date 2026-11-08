@@ -153,8 +153,10 @@ def test_hardcoded_limits_match_shared_constants():
     assert list_action.input_model.model_fields["limit"].default == DEFAULT_LIST_LIMIT
     description = _pilots()["update_skill"].description
     assert f"最多 {MAX_ASSISTANT_SKILL_FILES} 个文件" in description
-    assert f"单文件 ≤ {MAX_ASSISTANT_SKILL_FILE_CHARS} 字符" in description
-    assert f"合计 ≤ {MAX_ASSISTANT_SKILL_TOTAL_CHARS} 字符" in description
+    assert f"单文件不超过 {MAX_ASSISTANT_SKILL_FILE_CHARS} 字符" in description
+    assert f"合计不超过 {MAX_ASSISTANT_SKILL_TOTAL_CHARS} 字符" in description
+    # T14：提示词也有上限，且必须与 schemas/skill.py 一致（test_skill_limits_guard 复核）。
+    assert "提示词不超过 4000 字符" in description
 
 
 # ----------------------------- a. 非法输入：两侧同表 -----------------------------

@@ -22,9 +22,17 @@ const reminderApiMocks = vi.hoisted(() => ({
 
 vi.mock("../api/reminders", () => reminderApiMocks);
 
-const settingsApiMocks = vi.hoisted(() => ({ getReminderPopupSetting: vi.fn() }));
+const settingsApiMocks = vi.hoisted(() => ({
+  getReminderPopupSetting: vi.fn(),
+  // 首页「任务」卡读总开关（T04）：关着时整卡不渲染，既有用例不受影响。
+  getAgentTaskEvents: vi.fn(),
+}));
 
 vi.mock("../api/settings", () => settingsApiMocks);
+
+const agentTaskApiMocks = vi.hoisted(() => ({ listAgentTasks: vi.fn() }));
+
+vi.mock("../api/agentTasks", () => agentTaskApiMocks);
 
 const STATS = {
   job_count: 3,
@@ -107,6 +115,8 @@ beforeEach(() => {
   reminderApiMocks.listUpcomingReminders.mockReset().mockResolvedValue([]);
   reminderApiMocks.listReminders.mockReset().mockResolvedValue([]);
   settingsApiMocks.getReminderPopupSetting.mockReset().mockResolvedValue({ enabled: false });
+  settingsApiMocks.getAgentTaskEvents.mockReset().mockResolvedValue({ enabled: false });
+  agentTaskApiMocks.listAgentTasks.mockReset().mockResolvedValue([]);
 });
 
 afterEach(() => {

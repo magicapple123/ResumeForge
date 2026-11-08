@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 /** 求职助手输入区：引用追问的「×」清除引用（只清上下文、不发送）。 */
 import { App as AntdApp } from "antd";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { useState } from "react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import AssistantComposer from "./AssistantComposer";
+import { t } from "../../../i18n";
 import { MAX_ATTACHMENT_COUNT } from "../assistantUtils";
 import type { AssistantQuotedMessage } from "../../../types";
 
@@ -18,11 +18,11 @@ function composerProps(overrides: Partial<Parameters<typeof AssistantComposer>[0
     resumeId: undefined,
     webSearch: false,
     reasoningEffort: "" as const,
-    skills: [],
+    skillCatalog: [],
+    selectedSkills: [],
+    skillBudget: null,
     skillsLoaded: true,
     togglingSkillId: null,
-    jobOptions: [],
-    resumeOptions: [],
     onContentChange: vi.fn(),
     onJobChange: vi.fn(),
     onResumeChange: vi.fn(),
@@ -50,33 +50,6 @@ function renderComposer(overrides: Partial<Parameters<typeof AssistantComposer>[
       </AntdApp>,
     ),
   };
-}
-
-/**
- * 带状态的壳：思考强度由**真实 state** 驱动。
- *
- * 与页面里一样——父组件收到 onChange 会回填，受控输入框才拿得到新值。把 onChange 换成
- * `vi.fn()` 的裸渲染测不了"清空后回到预设"这类行为：输入框的值会被 React 回滚成旧值。
- */
-function renderComposerWithEffort(initial: string) {
-  const onReasoningEffortChange = vi.fn();
-  function Harness() {
-    const [effort, setEffort] = useState(initial);
-    return (
-      <AntdApp>
-        <AssistantComposer
-          {...composerProps({
-            reasoningEffort: effort,
-            onReasoningEffortChange: (value: string) => {
-              onReasoningEffortChange(value);
-              setEffort(value);
-            },
-          })}
-        />
-      </AntdApp>
-    );
-  }
-  return { onReasoningEffortChange, ...render(<Harness />) };
 }
 
 afterEach(() => {
@@ -180,9 +153,15 @@ describe("AssistantComposer 粘贴与附件", () => {
     expect(props.onRemoveAttachment).toHaveBeenCalledWith(3);
   });
 
-  it("浮窗里保留「附件」入口，选满 4 个后不可再选", () => {
+  it("附件入口收在 + 面板里；选满 4 个后不可再选", async () => {
+    // R06-A：附件不再是工具栏上的一枚独立按钮，点 `+` 才看得到（限制照旧）。
+    const openAttach = async () => {
+      fireEvent.click(screen.getByRole("button", { name: t("composerAddMenu.aria.trigger") }));
+      return screen.findByRole("button", { name: "添加附件" });
+    };
+
     renderComposer({ compact: true });
-    expect(screen.getByRole("button", { name: "添加附件" })).toBeEnabled();
+    expect(await openAttach()).toBeEnabled();
 
     cleanup();
     const four = Array.from({ length: MAX_ATTACHMENT_COUNT }, (_, index) => ({
@@ -195,7 +174,7 @@ describe("AssistantComposer 粘贴与附件", () => {
     }));
     renderComposer({ compact: true, attachments: four });
 
-    expect(screen.getByRole("button", { name: "添加附件" })).toBeDisabled();
+    expect(await openAttach()).toBeDisabled();
   });
 });
 
@@ -203,74 +182,187 @@ describe("AssistantComposer 附件 Tooltip", () => {
   it("浮窗里使用短文案，并限宽抬层避免被卡片盖住或溢出视口", async () => {
     renderComposer({ compact: true });
 
-    fireEvent.mouseEnter(screen.getByRole("button", { name: "添加附件" }));
-    const tooltip = await screen.findByRole("tooltip");
-    expect(tooltip).toHaveTextContent("添加图片或文档附件");
+    fireEvent.click(screen.getByRole("button", { name: t("composerAddMenu.aria.trigger") }));
+    fireEvent.mouseEnter(await screen.findByRole("button", { name: "添加附件" }));
+    // 用文案定位这一条 tooltip：点过 `+` 之后它自己的提示也可能挂在 DOM 里。
+    const content = await screen.findByText(t("assistantComposer.tooltip.attachCompact"));
+    const tooltip = content.closest(".ant-tooltip") as HTMLElement;
     // 卡片（3400）高于 antd Tooltip 默认 1070 会被盖住，显式抬到卡片内弹层基准
     // 3550 才稳在卡片之上；maxWidth 保证换行不水平溢出。
-    // overlayStyle 落在 .ant-tooltip 根节点上（role=tooltip 的是内层内容节点）。
-    const overlay = tooltip.closest(".ant-tooltip") as HTMLElement;
-    expect(overlay.style.zIndex).toBe("3550");
-    expect(overlay.style.maxWidth).toBe("240px");
+    expect(tooltip.style.zIndex).toBe("3550");
+    expect(tooltip.style.maxWidth).toBe("240px");
   });
 
   it("整页分支保留完整文案", async () => {
     renderComposer();
 
-    fireEvent.mouseEnter(screen.getByRole("button", { name: "添加附件" }));
-    const tooltip = await screen.findByRole("tooltip");
-    expect(tooltip).toHaveTextContent("添加文本、图片或文档附件（也可以直接粘贴截图）");
+    fireEvent.click(screen.getByRole("button", { name: t("composerAddMenu.aria.trigger") }));
+    fireEvent.mouseEnter(await screen.findByRole("button", { name: "添加附件" }));
+    expect(await screen.findByText(t("assistantComposer.tooltip.attach"))).toBeInTheDocument();
   });
 });
 
-describe("AssistantComposer 思考强度", () => {
-  it("说明挂在文字旁的问号图标上，悬停「思考强度」文字本身不再弹 tooltip", async () => {
+describe("AssistantComposer 输入区上方", () => {
+  it("不再有常驻的虚线按钮行（关联 / 技能都收进工具栏的 +）", () => {
     renderComposer();
 
-    fireEvent.mouseEnter(screen.getByText("思考强度"));
-    expect(screen.queryByRole("tooltip")).toBeNull();
-
-    fireEvent.mouseEnter(screen.getByLabelText("思考强度说明"));
-    expect(await screen.findByRole("tooltip")).toHaveTextContent("推理强度");
+    // 两枚旧的空态入口都不在了
+    expect(screen.queryByRole("button", { name: t("assistantComposer.context.add") })).toBeNull();
+    expect(screen.queryByRole("button", { name: t("conversationSkills.action.add") })).toBeNull();
+    // 取而代之的是工具栏最左的 +（空对话里它是仅有的入口）
+    expect(
+      screen.getByRole("button", { name: t("composerAddMenu.aria.trigger") }),
+    ).toBeInTheDocument();
   });
 
-  /** 打开下拉并选中某一项（antd 的下拉是虚拟列表，用键盘回车选更稳）。 */
-  function chooseEffort(label: string) {
-    const combobox = screen.getByRole("combobox", { name: "思考强度" });
-    fireEvent.mouseDown(combobox);
-    fireEvent.change(combobox, { target: { value: label } });
-    fireEvent.keyDown(combobox, { key: "Enter", code: "Enter", keyCode: 13 });
-  }
-
-  it("选「自定义…」后出现输入框，输入的值原样上抛", () => {
-    const { props } = renderComposer();
-
-    chooseEffort("自定义…");
-
-    // 下拉换成输入框：档位词汇各家不同（xhigh / max / adaptive），只能自己填。
-    const input = screen.getByLabelText("自定义思考强度");
-    fireEvent.change(input, { target: { value: "xhigh" } });
-
-    expect(props.onReasoningEffortChange).toHaveBeenCalledWith("xhigh");
+  it("空的关联 / 技能行不占位（不渲染空容器）", () => {
+    const { container } = renderComposer();
+    expect(container.querySelector(".assistant-context-chips")).toBeNull();
+    expect(container.querySelector(".assistant-skill-chips")).toBeNull();
   });
 
-  it("把本地存下来的自定义值直接显示在输入框里", () => {
-    // 打开页面时读回的是自定义值——不该退化成下拉里的空白项。
-    renderComposer({ reasoningEffort: "xhigh" });
-
-    expect(screen.getByLabelText("自定义思考强度")).toHaveValue("xhigh");
-    expect(screen.queryByRole("combobox", { name: "思考强度" })).toBeNull();
+  it("思考强度不再单独占一行：左侧没有标签、没有下拉", () => {
+    renderComposer();
+    expect(screen.queryByText(t("assistantComposer.effort.label"))).toBeNull();
+    expect(
+      screen.queryByRole("combobox", { name: t("assistantComposer.effort.label") }),
+    ).toBeNull();
   });
 
-  it("自定义值清空后回到预设下拉，不留下一个空输入框", () => {
-    const { onReasoningEffortChange } = renderComposerWithEffort("xhigh");
-    const input = screen.getByLabelText("自定义思考强度");
+  it("麦克风在发送键左边（语音挪到右侧组）", () => {
+    renderComposer();
+    const mic = screen.getByRole("button", { name: t("voiceInput.aria.start") });
+    const send = screen.getByRole("button", { name: t("assistantComposer.aria.send") });
+    expect(mic.compareDocumentPosition(send) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+});
 
-    fireEvent.change(input, { target: { value: "" } });
-    fireEvent.blur(input);
+// ---------------------------------------------------------------------------
+// T14：对话技能 chip 行（按对话启用后的输入区入口）
+// ---------------------------------------------------------------------------
 
-    expect(onReasoningEffortChange).toHaveBeenCalledWith("");
-    expect(screen.getByRole("combobox", { name: "思考强度" })).toBeInTheDocument();
-    expect(screen.queryByLabelText("自定义思考强度")).toBeNull();
+function catalogSkill(id: number, name: string) {
+  return {
+    id,
+    name,
+    description: "",
+    enabled: true,
+    source_name: "",
+    prompt_chars: 30,
+    files: [],
+    updated_at: "2026-11-07T00:00:00",
+  };
+}
+
+function selectedSkill(id: number, name: string) {
+  return { id, name, description: "" };
+}
+
+// 断言文案走变量 / t() 派生：中文 ByText 字面量会推高 i18n 棘轮（只降不升）。
+const INTERVIEW_SKILL = "面试官追问";
+const RESUME_SKILL = "简历诊断";
+
+describe("AssistantComposer 对话技能 chip", () => {
+  it("已启用技能逐个显示为 chip；点 × 只停用当个，其它 chip 不动", () => {
+    const onToggleSkill = vi.fn();
+    renderComposer({
+      skillCatalog: [catalogSkill(1, "面试官追问"), catalogSkill(2, "简历诊断")],
+      selectedSkills: [selectedSkill(1, "面试官追问"), selectedSkill(2, "简历诊断")],
+      onToggleSkill,
+    });
+
+    expect(screen.getByText(INTERVIEW_SKILL)).toBeInTheDocument();
+    expect(screen.getByText(RESUME_SKILL)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "停用技能「面试官追问」" }));
+
+    expect(onToggleSkill).toHaveBeenCalledTimes(1);
+    expect(onToggleSkill.mock.calls[0][0].id).toBe(1);
+    expect(onToggleSkill.mock.calls[0][1]).toBe(false);
+    // "不改其它"：第二枚 chip 仍在。
+    expect(screen.getByText(RESUME_SKILL)).toBeInTheDocument();
+  });
+
+  it("一个都没启用时不渲染任何 chip（入口在工具栏的 + 面板里）", () => {
+    renderComposer({ skillCatalog: [catalogSkill(1, "面试官追问")] });
+
+    expect(screen.queryByText(INTERVIEW_SKILL)).toBeNull();
+    expect(screen.queryByRole("group", { name: t("composerAddMenu.section.skills") })).toBeNull();
+    expect(
+      screen.getByRole("button", { name: t("composerAddMenu.aria.trigger") }),
+    ).toBeInTheDocument();
+  });
+
+  it("菜单与 chip 同一数据源：已选的在菜单里是勾上的，点一下回传停用", async () => {
+    const onToggleSkill = vi.fn();
+    renderComposer({
+      skillCatalog: [catalogSkill(1, "面试官追问")],
+      selectedSkills: [selectedSkill(1, "面试官追问")],
+      onToggleSkill,
+    });
+
+    // 入口现在是 `+` → 技能（二级面板与 chip 同一数据源）
+    fireEvent.click(screen.getByRole("button", { name: t("composerAddMenu.aria.trigger") }));
+    fireEvent.click(await screen.findByText(t("assistantComposer.skills.count", { count: 1 })));
+    expect(await screen.findByRole("checkbox")).toBeChecked();
+    // chip 与列表项同名：要点列表里的那个文本，不能点 chip 上的名字。
+    const picker = await screen.findByRole("group", {
+      name: t("composerAddMenu.section.skills"),
+    });
+    fireEvent.click(within(picker).getByText(INTERVIEW_SKILL));
+
+    expect(onToggleSkill).toHaveBeenCalledWith(expect.objectContaining({ id: 1 }), false);
+  });
+
+  it("菜单底部显示本对话预算（个 / 字数）", async () => {
+    renderComposer({
+      selectedSkills: [selectedSkill(1, "面试官追问")],
+      skillCatalog: [catalogSkill(1, "面试官追问")],
+      skillBudget: {
+        used_chars: 1_200,
+        loaded_chars: 1_200,
+        limit_chars: 12_000,
+        truncated_skill_ids: [],
+      },
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: t("composerAddMenu.aria.trigger") }));
+    fireEvent.click(await screen.findByText(t("assistantComposer.skills.count", { count: 1 })));
+
+    expect(
+      await screen.findByText(
+        t("conversationSkills.menu.budget", { count: 1, used: "1,200", limit: "12,000" }),
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("被截断的技能 chip 用琥珀描边，并有说明 tooltip", async () => {
+    renderComposer({
+      selectedSkills: [selectedSkill(1, "面试官追问")],
+      skillCatalog: [catalogSkill(1, "面试官追问")],
+      skillBudget: {
+        used_chars: 13_000,
+        loaded_chars: 12_000,
+        limit_chars: 12_000,
+        truncated_skill_ids: [1],
+      },
+    });
+
+    const chip = screen.getByText(INTERVIEW_SKILL).closest(".assistant-skill-chip");
+    expect(chip).toHaveClass("is-truncated");
+    fireEvent.mouseEnter(screen.getByText(INTERVIEW_SKILL));
+    expect(await screen.findByRole("tooltip")).toHaveTextContent("提示词超出本对话预算");
+  });
+
+  it("浮窗（compact）里也渲染技能 chip 行", () => {
+    renderComposer({
+      compact: true,
+      selectedSkills: [selectedSkill(1, "面试官追问")],
+      skillCatalog: [catalogSkill(1, "面试官追问")],
+    });
+
+    expect(screen.getByText(INTERVIEW_SKILL)).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: t("composerAddMenu.aria.trigger") }),
+    ).toBeInTheDocument();
   });
 });

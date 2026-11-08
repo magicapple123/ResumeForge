@@ -1,0 +1,43 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/* 投递交付单（T09）：徽标行 + 分区 + 验收行。类名由 features/apply/receipt/DeliveryReceipt.tsx
+   提供；颜色一律走 --rf-*；不用媒体查询（抽屉宽度已由 size= 控制）。 */
+.delivery-receipt {
+  display: grid;
+  gap: 10px;
+}
+
+.delivery-receipt-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.delivery-receipt-section {
+  display: grid;
+  gap: 6px;
+}
+
+/* 分区标题收紧：Drawer 里嵌套的 h5 不需要 antd 默认的大段上下留白。 */
+.delivery-receipt-section h5 {
+  margin: 0;
+  font-size: 13px;
+}
+
+.delivery-receipt-steps {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding-left: 18px;
+  font-size: 13px;
+}
+
+.delivery-receipt-ack {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--rf-border-subtle);
+}

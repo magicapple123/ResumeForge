@@ -14,7 +14,7 @@ const appConfig = {
 
   // ── 大模型预设（选择后自动填充 Base URL 与模型名）────────────
   "appConfig.preset.deepseek": "DeepSeek（深度求索）",
-  "appConfig.preset.anthropic": "Claude（Anthropic 原生协议）",
+  "appConfig.preset.anthropic": "Claude（Anthropic 原生）",
   "appConfig.preset.doubao": "豆包（火山方舟）",
   "appConfig.preset.kimi": "Kimi（月之暗面）",
   "appConfig.preset.qwen": "通义千问（阿里云百炼）",
@@ -23,7 +23,7 @@ const appConfig = {
   "appConfig.preset.siliconflow": "硅基流动 SiliconFlow",
   "appConfig.preset.openrouter": "OpenRouter（聚合网关）",
   "appConfig.preset.openai": "OpenAI",
-  "appConfig.preset.gemini": "Google Gemini（OpenAI 兼容）",
+  "appConfig.preset.gemini": "Google Gemini（谷歌）",
   "appConfig.preset.xai": "xAI Grok",
   "appConfig.preset.groq": "Groq（推理加速）",
   "appConfig.preset.mistral": "Mistral AI",

@@ -1,23 +1,32 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * 求职助手「放宽模式」卡（设置页 · AI 模型）。
+ * 设置页「求职助手 · 数据权限」卡（T11）。
  *
- * 默认关。开启后助手可读取**完整资料**——姓名、电话、邮箱等身份字段，网申填表的
- * 真实填写值，以及历史对话。开启前把解锁范围与始终不解锁的边界说清楚（提前告知
- * 是这个功能成立的前提）：API 密钥等凭据任何模式都不发给模型，简历照片二进制不发送，
- * 也没有删除类工具。
+ * 四档同时决定读、写两轴：仅查看 / 放宽读取 / 可修改 / 完全权限。这里保存的是**全局默认**；
+ * 输入框旁的下拉按会话覆盖（本机 localStorage）。扩权前把解锁范围与始终不解锁的边界
+ * 说清楚——提前告知是这个功能成立的前提：API 密钥等凭据任何档位都不发给模型，简历照片
+ * 二进制不发送，助手也没有删除类工具。
  */
-import { App, Card, Space, Switch, Typography } from "antd";
-import LoadingBlock from "../common/LoadingBlock";
+import { App, Card, Radio, Space, Typography } from "antd";
 import { useEffect, useState } from "react";
-import { getAssistantRelaxedMode, saveAssistantRelaxedMode } from "../../api/settings";
+import LoadingBlock from "../common/LoadingBlock";
+import { getAssistantPermission, saveAssistantPermission } from "../../api/assistantPermission";
+import type { AssistantPermissionLevel } from "../../api/assistantPermission";
+import {
+  ASSISTANT_PERMISSION_DESC_KEYS,
+  ASSISTANT_PERMISSION_LABEL_KEYS,
+  ASSISTANT_PERMISSION_LEVELS,
+  bumpAssistantPermission,
+  isWriteLevel,
+} from "../../features/assistant/assistantPermission";
 import { t } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
 
 export default function AssistantRelaxedModeCard() {
+  // 本组件用模块级 t()：必须订阅语言变化。
   useLocale();
   const { message } = App.useApp();
-  const [enabled, setEnabled] = useState(false);
+  const [permission, setPermission] = useState<AssistantPermissionLevel>("read_only");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
@@ -26,11 +35,11 @@ export default function AssistantRelaxedModeCard() {
     let cancelled = false;
     void (async () => {
       try {
-        const saved = await getAssistantRelaxedMode();
-        if (!cancelled) setEnabled(saved.enabled);
+        const saved = await getAssistantPermission();
+        if (!cancelled) setPermission(saved.permission);
       } catch {
-        // 读不到按默认关处理：这是扩权开关，保守显示比假装开着安全。
-        if (!cancelled) setEnabled(false);
+        // 读不到按默认「仅查看」处理：这是扩权设置，保守显示比假装开着安全。
+        if (!cancelled) setPermission("read_only");
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -40,22 +49,25 @@ export default function AssistantRelaxedModeCard() {
     };
   }, []);
 
-  const onChange = async (checked: boolean) => {
-    if (saving) return;
+  const onChange = async (next: AssistantPermissionLevel) => {
+    if (saving || next === permission) return;
+    const previous = permission;
     setSaving(true);
-    setEnabled(checked);
+    setPermission(next);
     try {
-      const saved = await saveAssistantRelaxedMode({ enabled: checked });
-      setEnabled(saved.enabled);
+      const saved = await saveAssistantPermission({ permission: next });
+      setPermission(saved.permission);
+      // 输入区那块下拉的「跟随全局」立刻跟着变：清掉进程内缓存并通知订阅方重取。
+      bumpAssistantPermission();
       message.success(
-        checked
-          ? t("settingsUi.assistantRelaxed.enableToast")
-          : t("settingsUi.assistantRelaxed.disableToast"),
+        t("assistantPermission.settings.saveToast", {
+          level: t(ASSISTANT_PERMISSION_LABEL_KEYS[saved.permission]),
+        }),
       );
     } catch (err) {
-      setEnabled(!checked);
+      setPermission(previous);
       message.error(
-        err instanceof Error ? err.message : t("settingsUi.assistantRelaxed.saveFailed"),
+        err instanceof Error ? err.message : t("assistantPermission.settings.saveFailed"),
       );
     } finally {
       setSaving(false);
@@ -63,27 +75,45 @@ export default function AssistantRelaxedModeCard() {
   };
 
   return (
-    <Card title={t("settingsUi.assistantRelaxed.title")} className="settings-card">
+    <Card title={t("assistantPermission.settings.title")} className="settings-card">
       <Typography.Paragraph type="secondary" style={{ marginBottom: 16 }}>
-        {t("settingsUi.assistantRelaxed.intro")}
+        {t("assistantPermission.settings.intro")}
       </Typography.Paragraph>
       <LoadingBlock spinning={loading}>
-        <Space orientation="vertical" size={4}>
-          <Switch
-            checked={enabled}
-            loading={saving}
-            checkedChildren={t("settingsUi.switch.on")}
-            unCheckedChildren={t("settingsUi.switch.off")}
-            aria-label={t("settingsUi.assistantRelaxed.toggleAria")}
-            onChange={(checked) => void onChange(checked)}
-          />
-          <Typography.Text type={enabled ? "warning" : "secondary"}>
-            {enabled
-              ? t("settingsUi.assistantRelaxed.stateOn")
-              : t("settingsUi.assistantRelaxed.stateOff")}
-          </Typography.Text>
+        <Space orientation="vertical" size={12}>
+          <Radio.Group
+            aria-label={t("assistantPermission.settings.aria")}
+            value={permission}
+            disabled={saving}
+            onChange={(event) => void onChange(event.target.value as AssistantPermissionLevel)}
+          >
+            <Space orientation="vertical" size={8}>
+              {ASSISTANT_PERMISSION_LEVELS.map((level) => (
+                <Radio key={level} value={level}>
+                  <span className="assistant-permission-option">
+                    <span className="assistant-permission-option-name">
+                      {t(ASSISTANT_PERMISSION_LABEL_KEYS[level])}
+                    </span>
+                    <span className="assistant-permission-option-desc">
+                      {t(ASSISTANT_PERMISSION_DESC_KEYS[level])}
+                    </span>
+                  </span>
+                </Radio>
+              ))}
+            </Space>
+          </Radio.Group>
           <Typography.Text type="secondary">
-            {t("settingsUi.assistantRelaxed.neverSent")}
+            {t("assistantPermission.settings.state", {
+              level: t(ASSISTANT_PERMISSION_LABEL_KEYS[permission]),
+            })}
+          </Typography.Text>
+          {isWriteLevel(permission) ? (
+            <Typography.Text type="warning">
+              {t("assistantPermission.settings.writeHint")}
+            </Typography.Text>
+          ) : null}
+          <Typography.Text type="secondary">
+            {t("assistantPermission.settings.neverSent")}
           </Typography.Text>
         </Space>
       </LoadingBlock>

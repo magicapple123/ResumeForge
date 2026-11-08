@@ -35,6 +35,7 @@ import type { RecordFormValues } from "../../features/settings/useLLMRecordTools
 import { useCollapsedList } from "../common/useCollapsedList";
 import LLMRecordModal from "./LLMRecordModal";
 import LLMRecordViewModal from "./LLMRecordViewModal";
+import LLMProtocolSupportMatrix from "./LLMProtocolSupportMatrix";
 import { t } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
 
@@ -167,6 +168,10 @@ export default function LLMConfigCard({
           style={{ marginBottom: 16 }}
           title={t("llmConfigCard.hint.intro")}
         />
+        {/* 各服务商协议支持：静态核对表，可展开（不探测、不发请求）。 */}
+        <div style={{ marginBottom: 16 }}>
+          <LLMProtocolSupportMatrix />
+        </div>
         <LoadingBlock spinning={recordsLoading}>
           {records.length === 0 ? (
             <EmptyState

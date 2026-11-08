@@ -1,12 +1,13 @@
 # SPDX-License-Identifier: Apache-2.0
 """技能的持久化、系统提示拼装与知识读取。"""
 import pytest
-from app.models.assistant import AssistantSkill, AssistantSkillFile
+from app.models.assistant import AssistantSkill, AssistantSkillFile, ChatConversation
 from app.services.assistant.assistant_skills import (
     build_skill_prompt,
     delete_skill,
     list_skills,
     read_skill_knowledge,
+    set_conversation_skills,
     set_skill_enabled,
     upsert_skill,
 )
@@ -51,7 +52,16 @@ def test_overwriting_replaces_knowledge_files_instead_of_appending(db_session):
     assert db_session.query(AssistantSkillFile).count() == 1
 
 
-def test_overwriting_keeps_the_enabled_state(db_session):
+def _conversation(db_session) -> ChatConversation:
+    conversation = ChatConversation(title="测试对话")
+    db_session.add(conversation)
+    db_session.commit()
+    db_session.refresh(conversation)
+    return conversation
+
+
+def test_overwriting_keeps_the_deprecated_enabled_column(db_session):
+    """enabled 列已废弃但保留：重导入不得悄悄把它重置（兼容旧数据，避免惊吓）。"""
     skill = upsert_skill(db_session, _parsed())
     set_skill_enabled(db_session, skill.id, False)
 
@@ -73,32 +83,40 @@ def test_toggle_and_delete(db_session):
     assert db_session.query(AssistantSkillFile).count() == 0
 
 
-def test_skill_prompt_only_includes_enabled_skills(db_session):
-    upsert_skill(db_session, _parsed(name="启用的技能", prompt="按我要求做。"))
-    disabled = upsert_skill(db_session, _parsed(name="停用的技能", prompt="不要出现。"))
-    set_skill_enabled(db_session, disabled.id, False)
+def test_skill_prompt_only_includes_skills_enabled_in_that_conversation(db_session):
+    """T14：注入只看**当前对话**的关联行，不再看全局 enabled。"""
+    wanted = upsert_skill(db_session, _parsed(name="启用的技能", prompt="按我要求做。"))
+    other = upsert_skill(db_session, _parsed(name="没选的技能", prompt="不要出现。"))
+    # 旧全局开关现在是死字段：即便 enabled=False，只要对话启用了它就会注入。
+    set_skill_enabled(db_session, wanted.id, False)
+    conversation = _conversation(db_session)
+    set_conversation_skills(db_session, conversation.id, [wanted.id])
 
-    text = build_skill_prompt(db_session)
+    text = build_skill_prompt(db_session, conversation.id)
 
     assert "启用的技能" in text and "按我要求做。" in text
-    assert "停用的技能" not in text
+    assert "没选的技能" not in text
     assert "不要出现" not in text
+    assert other.id != wanted.id
 
 
-def test_skill_prompt_is_empty_without_any_enabled_skill(db_session):
-    upsert_skill(db_session, _parsed())  # 默认是启用的
+def test_skill_prompt_is_empty_without_any_selected_skill(db_session):
+    upsert_skill(db_session, _parsed())
+    conversation = _conversation(db_session)
 
-    assert build_skill_prompt(db_session) != ""
+    assert build_skill_prompt(db_session, conversation.id) == ""
 
     for skill in list_skills(db_session):
-        set_skill_enabled(db_session, skill.id, False)
-    assert build_skill_prompt(db_session) == ""
+        set_conversation_skills(db_session, conversation.id, [skill.id])
+    assert build_skill_prompt(db_session, conversation.id) != ""
 
 
 def test_skill_prompt_lists_knowledge_files_and_marks_them_untrusted(db_session):
-    upsert_skill(db_session, _parsed(files=[("题库.md", "第一题")]))
+    skill = upsert_skill(db_session, _parsed(files=[("题库.md", "第一题")]))
+    conversation = _conversation(db_session)
+    set_conversation_skills(db_session, conversation.id, [skill.id])
 
-    text = build_skill_prompt(db_session)
+    text = build_skill_prompt(db_session, conversation.id)
 
     assert "题库.md" in text
     # 提示词是指令、知识是不可信资料，这个区分必须出现在提示里
@@ -106,10 +124,14 @@ def test_skill_prompt_lists_knowledge_files_and_marks_them_untrusted(db_session)
 
 
 def test_skill_prompt_reports_skills_dropped_by_the_budget(db_session):
-    for name in ("甲技能", "乙技能", "丙技能", "丁技能"):
+    skills = [
         upsert_skill(db_session, _parsed(name=name, prompt=name[0] * 4000))
+        for name in ("甲技能", "乙技能", "丙技能", "丁技能")
+    ]
+    conversation = _conversation(db_session)
+    set_conversation_skills(db_session, conversation.id, [skill.id for skill in skills])
 
-    text = build_skill_prompt(db_session, max_chars=3000)
+    text = build_skill_prompt(db_session, conversation.id, max_chars=3000)
 
     # 装不下的技能被丢掉，而且必须在提示里点名，否则用户只看到"少了一个技能"。
     assert "超出长度预算未加载" in text
@@ -124,9 +146,11 @@ def test_skill_prompt_reports_a_truncated_prompt(db_session):
     只加载半个提示词会让助手表现得很奇怪，而用户完全看不到原因——静默截断比
     直接不加载更难排查。
     """
-    upsert_skill(db_session, _parsed(name="超长技能", prompt="甲" * 4000))
+    skill = upsert_skill(db_session, _parsed(name="超长技能", prompt="甲" * 4000))
+    conversation = _conversation(db_session)
+    set_conversation_skills(db_session, conversation.id, [skill.id])
 
-    text = build_skill_prompt(db_session, max_chars=3000)
+    text = build_skill_prompt(db_session, conversation.id, max_chars=3000)
 
     assert "已被截断" in text
     assert "超出长度预算未加载" not in text

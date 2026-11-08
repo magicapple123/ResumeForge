@@ -43,6 +43,9 @@ AI_TASK_KIND_RESUME_RISK = "resume_risk"
 #: ``services/ai_task_handlers_ai_entries.py`` 的模块 docstring。
 AI_TASK_KIND_RESUME_REWRITE = "resume_rewrite"
 AI_TASK_KIND_WEBFORM_FILL = "webform_fill"
+#: RAG 语义检索索引的**后台预热**（不是用户可见的生成/分析任务）：生成请求内编码
+#: 超预算时登记它，把缺失向量交给现成 ai_task 执行器补齐；无用户可见产物。
+AI_TASK_KIND_RAG_WARMUP = "rag_index_warmup"
 
 AI_TASK_KINDS: tuple[str, ...] = (
     AI_TASK_KIND_RESUME_GENERATE,
@@ -51,6 +54,7 @@ AI_TASK_KINDS: tuple[str, ...] = (
     AI_TASK_KIND_RESUME_RISK,
     AI_TASK_KIND_RESUME_REWRITE,
     AI_TASK_KIND_WEBFORM_FILL,
+    AI_TASK_KIND_RAG_WARMUP,
 )
 
 # ===== 状态机 =====
@@ -128,6 +132,7 @@ __all__ = [
     "AI_TASK_ACTIVE_STATUSES",
     "AI_TASK_KIND_JOB_ANALYSIS",
     "AI_TASK_KIND_JOB_MATCH",
+    "AI_TASK_KIND_RAG_WARMUP",
     "AI_TASK_KIND_RESUME_GENERATE",
     "AI_TASK_KIND_RESUME_REWRITE",
     "AI_TASK_KIND_RESUME_RISK",

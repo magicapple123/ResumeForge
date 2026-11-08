@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
-/** AI 求职助手：流式对话、历史记录、技能开关、附件与项目上下文联动。 */
+/** AI 求职助手：流式对话、历史记录、按对话启用的技能、附件与项目上下文联动。 */
 import { ArrowDownOutlined } from "@ant-design/icons";
 import { App, Drawer } from "antd";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import AssistantComposer from "../features/assistant/components/AssistantComposer";
 import AssistantGroupModal from "../features/assistant/components/AssistantGroupModal";
@@ -15,8 +15,6 @@ import { useLocale } from "../i18n/i18nContext";
 import { mqMax } from "../theme/breakpoints";
 import { readStoredReasoningEffort } from "../features/assistant/readStoredReasoningEffort";
 import type { StarterPrompt } from "../features/assistant/assistantTypes";
-import AgentTaskPanel from "../features/assistant/tasks/AgentTaskPanel";
-import { useAgentTasks } from "../features/assistant/tasks/useAgentTasks";
 import { positiveId } from "../features/assistant/assistantUtils";
 import { useAssistantAttachments } from "../features/assistant/hooks/useAssistantAttachments";
 import { useAssistantAutoScroll } from "../features/assistant/hooks/useAssistantAutoScroll";
@@ -27,7 +25,7 @@ import {
 } from "../features/assistant/hooks/useAssistantMessageActions";
 import { useAssistantMessageSelection } from "../features/assistant/hooks/useAssistantMessageSelection";
 import { useAssistantSidebarActions } from "../features/assistant/hooks/useAssistantSidebarActions";
-import { useAssistantSkills } from "../features/assistant/hooks/useAssistantSkills";
+import { useConversationSkills } from "../features/assistant/hooks/useConversationSkills";
 import { useAssistantStream } from "../features/assistant/hooks/useAssistantStream";
 import { useAssistantUrlBootstrap } from "../features/assistant/hooks/useAssistantUrlBootstrap";
 import { useRestoreStreamingConversation } from "../features/assistant/hooks/useRestoreStreamingConversation";
@@ -92,9 +90,23 @@ export default function AssistantPage({
     createConversation,
     ensureWelcomeConversation,
   } = conversationsState;
-  const { skills, enabledSkills, skillsLoaded, togglingSkillId, toggleSkill, reloadSkills } =
-    useAssistantSkills();
+  // T14：技能按对话启用——已建会话走服务端（GET/PUT .../skills），草稿先暂存选择。
+  const {
+    catalog: skillCatalog,
+    selectedSkills,
+    budget: skillBudget,
+    loaded: skillsLoaded,
+    togglingSkillId,
+    pendingSkillIdsRef,
+    toggleSkill,
+    reload: reloadSkills,
+  } = useConversationSkills(activeId, surface);
   const openSkillWorkbench = () => navigate("/skills");
+  // 草稿态先勾了技能时，第一次发消息建会话要把暂存的选择一起带上（服务端同事务写入）。
+  const createConversationWithSkills = useCallback(
+    () => createConversation(pendingSkillIdsRef.current),
+    [createConversation, pendingSkillIdsRef],
+  );
   const attachmentsState = useAssistantAttachments({ mountedRef });
   const {
     attachments,
@@ -112,14 +124,14 @@ export default function AssistantPage({
     useAssistantMessageSelection({ activeId, loadDetail, message, surface });
 
   const messageCount = detail?.messages.length ?? 0;
-  // T20：当前会话的 Agent 任务（多步计划）。没有会话时不轮询，任务区块也不渲染。
-  const agentTasks = useAgentTasks(activeId);
+  // T01（任务卡搬首页）：助手页不再有任务区块——Agent 任务统一在首页「任务」卡展示，
+  // 这里不拉列表也不轮询。activeId 仍用于会话详情 / 流式恢复等既有逻辑。
 
   const stream = useAssistantStream({
     activeIdRef,
     reloadConversations,
     loadDetail,
-    createConversation,
+    createConversation: createConversationWithSkills,
     clearAttachments,
     attachmentReadsRef,
     attachmentsRef,
@@ -349,15 +361,6 @@ export default function AssistantPage({
           exitSelecting={exitSelecting}
           title={detail?.title || t("responsive.assistant.defaultTitle")}
         />
-        {!compact && activeId !== null ? (
-          <AgentTaskPanel
-            tasks={agentTasks.tasks}
-            error={agentTasks.error}
-            onStart={(taskId) => void agentTasks.start(taskId)}
-            onResume={(taskId) => void agentTasks.resume(taskId)}
-            onCancel={(taskId) => void agentTasks.cancel(taskId)}
-          />
-        ) : null}
         <AssistantMessageList
           detail={detail}
           showLoading={awaitingConversation}
@@ -378,7 +381,7 @@ export default function AssistantPage({
           earlierLoading={earlierLoading}
           onLoadEarlier={() => void handleLoadEarlier()}
           messagesTotal={detail?.messages_total ?? 0}
-          enabledSkillCount={enabledSkills.length}
+          enabledSkillCount={selectedSkills.length}
           skillsLoaded={skillsLoaded}
           assistantLabel={
             compact ? t("responsive.assistant.shortLabel") : t("responsive.assistant.label")
@@ -411,6 +414,7 @@ export default function AssistantPage({
         )}
         <AssistantComposer
           compact={compact}
+          conversationId={activeId}
           content={content}
           attachments={attachments}
           sending={sending}
@@ -419,7 +423,9 @@ export default function AssistantPage({
           resumeId={resumeId}
           webSearch={webSearch}
           reasoningEffort={reasoningEffort}
-          skills={skills}
+          skillCatalog={skillCatalog}
+          selectedSkills={selectedSkills}
+          skillBudget={skillBudget}
           skillsLoaded={skillsLoaded}
           togglingSkillId={togglingSkillId}
           onContentChange={setContent}

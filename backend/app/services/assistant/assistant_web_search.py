@@ -171,7 +171,8 @@ def is_local_resume_forge_question(value: str) -> bool:
 
     这类问题的权威资料在本地能力地图、README 和使用指南里。即使用户打开了联网开关，
     也不应把「简历通怎么用」送进公开搜索，否则很容易拿到无关的同名产品或通用简历文章。
-    该判断只用于跳过自动预搜/拦截模型误用搜索，不影响用户查询外部招聘信息。
+    该判断只用于拦截模型误用搜索（``web_search`` 工具会直接回一段本地指引、不打网络），
+    不影响用户查询外部招聘信息。
     """
     normalized = _normalized_query(value).casefold()
     if not normalized:

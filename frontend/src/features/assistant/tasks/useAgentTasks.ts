@@ -1,13 +1,16 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * 助手页「任务」区块的取数与轮询（T20）。
+ * 首页「任务」卡的取数与轮询（T02/T04；原 T20 助手页任务区搬来）。
  *
- * 后端 Agent 任务与对话绑定：本 hook 按当前会话 id 拉列表，每 `AGENT_TASK_POLL_MS`
- * 轮询一次（任务可能由助手后台推进、也可能在别的标签页变化，不轮询就会看到旧状态）。
+ * 不按会话过滤：任务卡是"助手正在推进的事"的全局视图，调用
+ * `listAgentTasks(undefined)` 取当前数据集全部任务（含提醒到期生成的、没有会话归属的卡）。
+ * 每 `AGENT_TASK_POLL_MS` 轮询一次，页面隐藏（`document.hidden`）时跳过本轮——
+ * 后台标签页不必持续打接口，回到前台后的下一轮会自动追上。
+ *
  * 三个必须处理的并发窗口：
- * - **会话切换**：旧会话的慢响应不得覆盖新会话的列表（`requestSeq` 单调递增，过期即丢）；
- * - **页面卸载**：清理 interval，卸载后不再 setState；
- * - **写操作**：成功后立刻重拉一次（不等下一轮轮询），失败用 toast 提示并保留旧列表。
+ * - **开关/会话变化**：旧请求的慢响应不得覆盖新列表（`requestSeq` 单调递增，过期即丢）；
+ * - **总开关关闭**（`enabled=false`）：不请求、不轮询、清空列表；
+ * - **页面卸载**：清理 interval，卸载后不再 setState。
  */
 import { App } from "antd";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -34,7 +37,17 @@ export interface AgentTaskController {
   cancel: (taskId: number) => Promise<void>;
 }
 
-export function useAgentTasks(conversationId: number | null | undefined): AgentTaskController {
+export interface AgentTaskQuery {
+  /** 是否启用：false = 不请求、不轮询（首页「任务卡」总开关关闭时传 false）。 */
+  enabled?: boolean;
+  /** 可选的会话过滤；不传 = 当前数据集全部任务。 */
+  conversationId?: number | null;
+}
+
+export function useAgentTasks({
+  enabled = true,
+  conversationId,
+}: AgentTaskQuery = {}): AgentTaskController {
   useLocale();
   const { message } = App.useApp();
   const [tasks, setTasks] = useState<AgentTask[]>([]);
@@ -42,7 +55,7 @@ export function useAgentTasks(conversationId: number | null | undefined): AgentT
   const [error, setError] = useState<string | null>(null);
   const requestSeq = useRef(0);
 
-  const load = useCallback(async (id: number) => {
+  const load = useCallback(async (id: number | null | undefined) => {
     const seq = ++requestSeq.current;
     try {
       const items = await listAgentTasks(id);
@@ -58,27 +71,29 @@ export function useAgentTasks(conversationId: number | null | undefined): AgentT
   }, []);
 
   useEffect(() => {
-    // 会话切换先清空：不能在新会话下先闪一遍旧会话的任务。
+    // 开关切换/会话切换先清空：不能在新状态下先闪一遍旧列表。
     requestSeq.current += 1;
     setTasks([]);
     setError(null);
-    if (!conversationId) {
+    if (!enabled) {
       setLoading(false);
       return;
     }
     setLoading(true);
     void load(conversationId);
-    const timer = window.setInterval(() => void load(conversationId), AGENT_TASK_POLL_MS);
+    const timer = window.setInterval(() => {
+      // 页面隐藏时暂停本轮（省一次接口；可见性变化不影响状态正确性）。
+      if (!document.hidden) void load(conversationId);
+    }, AGENT_TASK_POLL_MS);
     return () => {
       // 卸载/切换：在途请求作废，轮询停止。
       requestSeq.current += 1;
       window.clearInterval(timer);
     };
-  }, [conversationId, load]);
+  }, [enabled, conversationId, load]);
 
   const runAction = useCallback(
     async (taskId: number, action: (id: number) => Promise<AgentTask>) => {
-      if (!conversationId) return;
       try {
         await action(taskId);
         await load(conversationId);

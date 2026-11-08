@@ -3,6 +3,10 @@
 
 from .agent_task import (
     AGENT_TASK_RUNNING_STATUSES,
+    AGENT_TASK_SOURCE_FOLLOWUP,
+    AGENT_TASK_SOURCE_REF_STALLED_CONFIRM,
+    AGENT_TASK_SOURCE_REF_STALLED_FOLLOWUP,
+    AGENT_TASK_SOURCE_REFS,
     AGENT_TASK_SOURCES,
     AGENT_TASK_STATUSES,
     AGENT_TASK_STEP_STATUSES,
@@ -62,6 +66,13 @@ from .drill import (
     DrillSession,
     DrillTurn,
 )
+from .followup import (
+    FOLLOWUP_DECISION_CONTACTED,
+    FOLLOWUP_DECISION_REPLIED,
+    FOLLOWUP_DECISION_STOPPED,
+    FOLLOWUP_DECISIONS,
+    ApplicationFollowUp,
+)
 from .glossary import (
     GLOSSARY_CATEGORIES,
     GLOSSARY_LANGUAGES,
@@ -84,6 +95,20 @@ from .interview_experience import (
 from .interview_review_record import InterviewReviewRecord
 from .job import Job
 from .job_match_batch import JobMatchBatch
+from .job_preference import (
+    PREF_SOURCE_IMPORTED,
+    PREF_SOURCE_USER_EDITED,
+    PREF_SOURCE_USER_STATED,
+    PREF_SOURCES,
+    PREF_STATE_ACTIVE,
+    PREF_STATE_SUPERSEDED,
+    PREF_STATE_UNDONE,
+    PREF_STATES,
+    PREF_VALUE_KIND_LIST,
+    PREF_VALUE_KIND_SCALAR,
+    PREF_VALUE_KINDS,
+    JobPreference,
+)
 from .knowledge_entry import KnowledgeEntry
 from .llm_usage import LLMUsageRecord
 from .material import MATERIAL_CATEGORIES, CandidateJob, Material
@@ -152,7 +177,9 @@ from .setting import AppSetting, LLMConfigRecord
 from .share_package import SHARE_PERMISSIONS, SharePackage
 from .tracker import (
     CHANNELS,
+    CONFIRM_SILENCE_DAYS,
     EVENT_SOURCES,
+    FOLLOWUP_SILENCE_DAYS,
     SOURCES,
     STATUSES,
     ApplicationTrack,
@@ -182,6 +209,16 @@ __all__ = [
     "AGENT_TASK_TERMINAL_STATUSES",
     "AGENT_TASK_RUNNING_STATUSES",
     "AGENT_TASK_SOURCES",
+    "AGENT_TASK_SOURCE_FOLLOWUP",
+    "AGENT_TASK_SOURCE_REFS",
+    "AGENT_TASK_SOURCE_REF_STALLED_CONFIRM",
+    "AGENT_TASK_SOURCE_REF_STALLED_FOLLOWUP",
+    # 期一跟进巡检：应用跟进决策（0006）。
+    "ApplicationFollowUp",
+    "FOLLOWUP_DECISIONS",
+    "FOLLOWUP_DECISION_CONTACTED",
+    "FOLLOWUP_DECISION_REPLIED",
+    "FOLLOWUP_DECISION_STOPPED",
     # 通用 AI 任务（0068）：所有 AI 入口统一登记，前端只有一个状态出口。
     "AiTask",
     "AI_TASK_KINDS",
@@ -197,6 +234,19 @@ __all__ = [
     "AppSchemaEpoch",
     "Job",
     "JobMatchBatch",
+    # T10 求职偏好档（0008）：状态 / 来源 / 值形态三轴常量 + 模型。
+    "JobPreference",
+    "PREF_STATES",
+    "PREF_STATE_ACTIVE",
+    "PREF_STATE_SUPERSEDED",
+    "PREF_STATE_UNDONE",
+    "PREF_SOURCES",
+    "PREF_SOURCE_USER_STATED",
+    "PREF_SOURCE_USER_EDITED",
+    "PREF_SOURCE_IMPORTED",
+    "PREF_VALUE_KINDS",
+    "PREF_VALUE_KIND_LIST",
+    "PREF_VALUE_KIND_SCALAR",
     "ChatConversation",
     "ChatMessage",
     "AssistantWriteProposal",
@@ -265,6 +315,9 @@ __all__ = [
     "VERIFICATION_STATUSES",
     "ApplicationTrack",
     "ApplicationTrackEvent",
+    # 期一跟进巡检的两个沉默阈值（FOLLOWUP_SILENCE_DAYS 是 STALLED_DAYS 的别名）。
+    "FOLLOWUP_SILENCE_DAYS",
+    "CONFIRM_SILENCE_DAYS",
     "CHANNELS",
     "EVENT_SOURCES",
     "STATUSES",

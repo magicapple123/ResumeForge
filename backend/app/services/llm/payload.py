@@ -103,12 +103,22 @@ def validated_base_url(value: str) -> str:
 def models_endpoint(base_url: str) -> str:
     """由 Base URL 推导模型列表地址。
 
-    兼容用户填 ``https://api.x.com``、``https://api.x.com/v1`` 或完整
-    ``.../chat/completions`` 三种情况。
+    兼容用户填 ``https://api.x.com``、``https://api.x.com/v1``，以及被"切换协议"
+    改写过的地址：``.../chat/completions``、``.../responses``（OpenAI Responses）和
+    ``.../messages``（Anthropic 原生，provider 拼的是 ``{base_url}/messages``）。
+
+    不剥后缀的直接后果（2026-11 用户反馈）：切到 DeepSeek 的 Responses 后点「获取可用
+    模型」，请求打到 ``https://api.deepseek.com/responses/models`` → 404 → 界面说
+    "该服务商没有提供模型列表接口"。
+
+    剥离顺序：先是用途最明确的一整段 ``/chat/completions``，再是单段协议后缀
+    ``/responses`` / ``/messages``。``.../v1/messages`` 剥完是 ``.../v1``，正确。
     """
     base = validated_base_url(base_url)
-    if base.endswith("/chat/completions"):
-        base = base[: -len("/chat/completions")]
+    for suffix in ("/chat/completions", "/responses", "/messages"):
+        if base.endswith(suffix):
+            base = base[: -len(suffix)]
+            break
     return f"{base}/models"
 
 

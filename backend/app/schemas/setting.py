@@ -11,12 +11,15 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 UNLIMITED_MAX_TOKENS = 0
 MIN_MAX_TOKENS = 256
 
-# 接口协议：openai = Chat Completions 兼容（默认），anthropic = Claude Messages 原生。
-API_STYLES = ("openai", "anthropic")
+# 接口协议：openai = Chat Completions 兼容（**默认**），anthropic = Claude Messages 原生，
+# responses = OpenAI Responses（实验性；不改变任何默认值，只有用户主动选择才走）。
+# "responses" 共 9 个字符，数据库列是 String(16)，不需要迁移。
+API_STYLES = ("openai", "anthropic", "responses")
 
 # 思考参数的形态（=请求体里"开启思考"长什么样）。上游没有统一标准，所以由能力表按
 # 服务商/模型推断，必要时用户可手工指定：
-# - auto             按 api_style 推断（openai→reasoning_effort，anthropic→budget）
+# - auto             按 api_style 推断（openai→reasoning_effort，anthropic→budget，
+#                    responses→reasoning.effort）
 # - reasoning_effort 顶层 `reasoning_effort`（OpenAI o/gpt-5、xAI、Groq、OpenRouter）
 # - thinking_object  `thinking:{type:"enabled"}`（智谱 GLM-4.5+、部分 Claude 网关）
 # - enable_thinking  `enable_thinking:true`（通义 qwen3 走 dashscope 兼容模式）
@@ -55,8 +58,10 @@ class LLMConfig(BaseModel):
     # 不会因为一次升级就被改写（改动存量等于替用户改他未必想改的东西）。
     max_tokens: int = Field(default=UNLIMITED_MAX_TOKENS, ge=UNLIMITED_MAX_TOKENS, le=65536)
     # 接口协议。Claude 既能用官方的 OpenAI 兼容层（选 openai），也能走原生 Messages
-    # 协议（选 anthropic，支持扩展思考与独立的 system 字段）。
-    api_style: Literal["openai", "anthropic"] = "openai"
+    # 协议（选 anthropic，支持扩展思考与独立的 system 字段）；responses 是实验性的
+    # OpenAI Responses 协议（input items + 语义事件流），**默认仍是 openai**——
+    # 已保存配置一行不改（D13），只有用户主动切过去才走新链路。
+    api_style: Literal["openai", "anthropic", "responses"] = "openai"
     # 高级调整（可选）：None 表示请求体里不发送该字段，沿用服务商默认值。
     # 这些参数各家支持度不一，所以默认全部关闭，由用户在设置页显式开启。
     top_p: float | None = Field(default=None, ge=0, le=1)

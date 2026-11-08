@@ -12,7 +12,8 @@ def create_provider(config: LLMConfig, *, request_overrides: dict | None = None)
 
     默认走 OpenAI 兼容协议（DeepSeek/豆包/Kimi/智谱/Ollama 等）；``api_style``
     为 ``anthropic`` 时走 Claude 的 Messages 原生协议（独立的 system 字段、
-    扩展思考预算、Anthropic 的工具格式）。
+    扩展思考预算、Anthropic 的工具格式）；为 ``responses`` 时走 OpenAI Responses
+    协议（input items、语义事件流；实验性，默认不选）。
 
     ``request_overrides`` 是**单次请求**的附加参数（例如助手页选的思考强度），
     不落库、不影响其它调用；provider 只会采纳白名单里的键。
@@ -24,4 +25,10 @@ def create_provider(config: LLMConfig, *, request_overrides: dict | None = None)
         from .anthropic import AnthropicProvider
 
         return AnthropicProvider(config, request_overrides=request_overrides)
+    if (config.api_style or "openai") == "responses":
+        # 实验性协议：只有用户主动把 api_style 存成 responses 才会走到这里；
+        # 默认值与所有已保存配置仍是 openai（D13）。
+        from .responses import ResponsesProvider
+
+        return ResponsesProvider(config, request_overrides=request_overrides)
     return OpenAICompatProvider(config, request_overrides=request_overrides)

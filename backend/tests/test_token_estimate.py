@@ -95,15 +95,16 @@ def test_estimate_disabled_by_default_no_estimated_field(client, monkeypatch):
 
 def test_estimate_enabled_adds_estimated_field_with_labelled_naming(client, monkeypatch):
     """开启：估算字段存在且带 estimated_* 命名；真实 tokens 字段不受影响。"""
-    from app.api import assistant_budget
+    from app.services.assistant import assistant_stream_budget
 
     class _Settings:
         assistant_stream_budget_seconds = 600
         llm_token_estimate_enabled = True
 
-    # 估算开关的读取点在 assistant_budget.AssistantStreamBudget.estimate_prompt_tokens，
-    # 锚点随实现下沉同步迁移（assistant_stream 命名空间已无 get_settings）。
-    monkeypatch.setattr(assistant_budget, "get_settings", lambda: _Settings())
+    # 估算开关的读取点在 AssistantStreamBudget.estimate_prompt_tokens，类随实现下沉到
+    # app/services/assistant/assistant_stream_budget.py，锚点必须跟着走（patch 旧命名空间
+    # 会让注入静默失效）。
+    monkeypatch.setattr(assistant_stream_budget, "get_settings", lambda: _Settings())
 
     _configure_llm(client)
     _done, assistant = _send_message(client, monkeypatch)

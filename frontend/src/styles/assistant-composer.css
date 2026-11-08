@@ -54,20 +54,40 @@
   background: var(--rf-surface);
   border: 1px solid var(--rf-border-subtle);
   border-radius: 20px;
+  /* 左栏可拖到 380px：`@container` 按输入区**实际宽度**判窄栏（视口媒体查询看不出左栏变窄），
+     只读模型 chip 在 < 480px 时隐藏（D22/D.5）。 */
+  container-type: inline-size;
 }
 
-.assistant-context-controls {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
+/* 关联上下文 chip 行：已选才显示 chip，未选只留「关联」入口。 */
+.assistant-context-chips {
+  display: flex;
+  flex-wrap: wrap;
   align-items: center;
-}
-
-.assistant-context-selects {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(180px, 1fr));
-  gap: 12px;
+  gap: 8px;
   min-width: 0;
 }
+
+.assistant-context-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  max-width: 100%;
+  margin-inline-end: 0;
+}
+
+.assistant-context-chip-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.assistant-context-chip-close {
+  flex: 0 0 auto;
+}
+
+/* R06-A：原来的「+ 关联岗位或简历」气泡（`.assistant-context-popover*`）随虚线按钮一起
+   删掉了——两个下拉现在在工具栏 `+` 面板里（`.composer-add-panel`），chip 行只留反馈。 */
 
 .assistant-context-toggles {
   display: flex;
@@ -107,6 +127,11 @@
 
 .assistant-composer-actions {
   display: flex;
+  /* 375px 窄栏实测：左侧 utility（+ / 权限 / 联网）与右侧提交组的最小内容宽之和为 338px，
+     而输入区内容宽只有 331px；本行不允许换行时，网格 auto 列被 min-content 撑到 338px，
+     发送键右缘超出 main 2px（smoke「375px: all pages keep content...」失败项）。
+     允许换行后，放不下时提交组整体落到下一行、列宽回到可用宽度，放得下时布局不变。 */
+  flex-wrap: wrap;
   justify-content: space-between;
   align-items: center;
   gap: 8px;
@@ -121,8 +146,273 @@
   min-width: 0;
 }
 
+/*
+ * 左侧「+」入口（R06-A）：一枚图标按钮 + 一个自定义面板。
+ *
+ * 旋转只给**包住图标的 span**：直接转按钮会把 `:focus-visible` 的焦点环和点击水波纹
+ * 一起转过去。顺时针 45° = `rotate(45deg)`（写 `-45deg` 会逆时针，与预期相反）。
+ * 展开时视觉上是 `×`，收起转回 `+`。
+ */
+.composer-add-wrap {
+  display: inline-flex;
+  align-items: center;
+}
+
+.composer-add-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+}
+
+.composer-add-icon {
+  display: inline-flex;
+  transition: transform 160ms ease;
+}
+
+.composer-add-icon.is-open {
+  transform: rotate(45deg);
+}
+
+/* 状态提示不是装饰：减弱动效时只去掉过渡，旋转本身保留。 */
+@media (prefers-reduced-motion: reduce) {
+  .composer-add-icon {
+    transition: none;
+  }
+}
+
+/* 面板：外观仍是菜单，但内容是自定义的（Select 不能塞进 Menu 的 item）。
+   宽度封顶 320px（沿用 ModelProfileSelect 的经验），380px 窄栏不横向溢出。 */
+.composer-add-panel {
+  display: grid;
+  width: 320px;
+  max-width: 320px;
+  gap: 8px;
+  padding: 8px;
+  border: 1px solid var(--rf-border-subtle);
+  border-radius: var(--rf-radius-panel);
+  background: var(--rf-surface);
+  box-shadow: 0 10px 30px color-mix(in srgb, var(--rf-brand) 18%, transparent);
+}
+
+.composer-add-row {
+  display: grid;
+  gap: 4px;
+}
+
+.composer-add-row-label {
+  color: var(--rf-text-secondary);
+  font-size: 12px;
+}
+
+.composer-add-select {
+  width: 100%;
+}
+
+/* 面板里的两行动作（添加附件 / 技能）铺满一行，左侧图标 + 文字，技能行右侧还有箭头。
+   Upload 会套三层（wrapper / select / button），加上 Tooltip 的包裹 span 一共四层，
+   逐层撑满才是一条整行的菜单项。 */
+.composer-add-upload,
+.composer-add-panel .ant-upload-wrapper,
+.composer-add-panel .ant-upload-select,
+.composer-add-panel .ant-upload {
+  display: block;
+  width: 100%;
+}
+
+.composer-add-action {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  height: 32px;
+  padding-inline: 8px;
+  text-align: left;
+}
+
+/* antd Button 的正文那一层：让它撑满，技能行的箭头才能靠右。 */
+.composer-add-action > span:last-child {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 8px;
+}
+
+.composer-add-action-row {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.composer-add-caret {
+  margin-left: auto;
+  color: var(--rf-text-secondary);
+  font-size: 10px;
+}
+
+.composer-add-head {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.composer-add-head-title {
+  color: var(--rf-text-secondary);
+  font-size: 12px;
+}
+
 @keyframes assistant-conversation-title-scroll {
   to {
     transform: translateX(var(--assistant-title-scroll-distance));
   }
+}
+
+.assistant-composer-submit {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 8px;
+  /* 换行后仍要保证自身内容不溢出；min-width 让 flex 计算以内容为准而不是 auto 下限。 */
+  min-width: 0;
+}
+
+/*
+ * 发送 / 停止：图标化（R06-D）。
+ *
+ * 外层 span 是必需的：disabled 的 antd Button 不派发鼠标事件，不包一层 Tooltip 在
+ * 空输入（常态）时永远不出现。`display: inline-flex` 也是必需的——否则 span 会带来
+ * 基线间隙，把工具栏顶高。
+ *
+ * 直径由 `shape="circle"` + Button 尺寸决定，**不要**在这里硬写 width/height：会和
+ * size 打架（「发送」与「停止」两态的四个 rect 数值必须完全相等）。
+ */
+.assistant-composer-send-wrap {
+  display: inline-flex;
+}
+
+/* 禁用态不能只靠颜色：去掉文字后，灰色小圆点几乎看不出"不可点"。
+   降不透明度 + not-allowed + 保留 Tooltip（见上面的外层 span），三样一起。 */
+.assistant-composer-send:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+/*
+ * 「模型 · 推理等级」合并 chip（R06-B）：一枚可点的胶囊，点开是两行面板。
+ * 它不再是"只读文字"——顶栏仍能切模型，这里管"想多深"，所以有 hover 与 caret。
+ */
+.assistant-model-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 24px;
+  padding: 2px 10px;
+  border: 1px solid var(--rf-border-subtle);
+  border-radius: 999px;
+  color: var(--rf-text-secondary);
+  font-size: 12px;
+  line-height: 18px;
+  white-space: nowrap;
+  user-select: none;
+}
+
+.assistant-model-chip:hover {
+  color: var(--rf-text-body);
+  border-color: var(--rf-brand);
+}
+
+.assistant-reasoning-chip-model {
+  overflow: hidden;
+  max-width: 140px;
+  text-overflow: ellipsis;
+}
+
+.assistant-reasoning-chip-caret {
+  font-size: 9px;
+}
+
+/* chip 原地的自定义档位输入框（R06-B）：宽一点才放得下 xhigh / 4096 这类值。 */
+.assistant-reasoning-chip-editing {
+  display: inline-flex;
+  align-items: center;
+}
+
+.assistant-reasoning-chip-editing .assistant-reasoning-input {
+  width: 132px;
+}
+
+/* 面板里的两行：左侧固定标签，右侧当前值；行高与菜单项一致。 */
+.assistant-reasoning-chip-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 24px;
+  min-width: 176px;
+  justify-content: space-between;
+}
+
+.assistant-reasoning-chip-row-label {
+  color: var(--rf-text-secondary);
+  font-size: 12px;
+}
+
+.assistant-reasoning-chip-row-value {
+  font-size: 12px;
+  /* disabled 的菜单项上挂 Tooltip 需要这一行自己收事件。 */
+  pointer-events: auto;
+}
+
+/* 窄栏（左栏拖到 380）：模型名收进档位里，只留档位——三个控件（chip / 麦克风 / 发送）
+   仍要并排放得下，不能靠隐藏整枚 chip 来腾地方（那样窄栏里就改不了推理等级了）。 */
+@container (max-width: 479px) {
+  .assistant-reasoning-chip-model,
+  .assistant-reasoning-chip-sep {
+    display: none;
+  }
+}
+
+/* 四档权限下拉的触发区与选项：选项两行（档位名 + 一句话说明）。 */
+.assistant-permission-trigger {
+  max-width: 240px;
+  overflow: hidden;
+}
+
+.assistant-permission-caret {
+  font-size: 10px;
+}
+
+.assistant-permission-disabled {
+  display: inline-flex;
+}
+
+.assistant-permission-menu-hint {
+  color: var(--rf-text-secondary);
+  font-size: 12px;
+}
+
+.assistant-permission-option {
+  display: grid;
+  max-width: 280px;
+  gap: 2px;
+}
+
+.assistant-permission-option-name {
+  font-weight: 500;
+}
+
+.assistant-permission-option-desc {
+  color: var(--rf-text-secondary);
+  font-size: 12px;
+  line-height: 1.4;
+  white-space: normal;
+}
+
+/* 语音按钮槽位（T12）：占位不画任何东西，语音线填入后由 voice-input.css 接管外观。 */
+.composer-voice-slot {
+  display: inline-flex;
+  align-items: center;
 }

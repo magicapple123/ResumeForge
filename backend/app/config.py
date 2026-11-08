@@ -124,6 +124,54 @@ class Settings(BaseSettings):
     # 属于 RF-13/RF-17 的产品决策）。
     llm_token_estimate_enabled: bool = False
 
+    # ===== RAG（语义补召回，默认关闭）=====
+    # 总开关：关闭时生成链与改造前逐字节一致（RAG 只在候选选择层加 boost，不碰
+    # prompt 字节）。打开后仍需 embedding provider 可用，否则自动回退关键词链。
+    rag_retrieval_enabled: bool = False
+    # Phase 0 查询扩展（零依赖：用已配置的 LLM 把 JD 提炼成中文近义/上位词，只进
+    # JobFocus.terms）。与总开关相互独立：它是单独可度量的实验路径。
+    rag_query_expansion_enabled: bool = False
+    rag_query_expansion_timeout_seconds: float = Field(default=8.0, ge=1.0, le=60.0)
+    # embedding provider 与"换模型就会掉分"的四个模型属性（计划 §2.3）。业务代码
+    # 只读这里，不出现具体模型字符串。
+    rag_embedding_provider: str = "fake"
+    rag_embedding_model: str = "fake-embedding-v1"
+    rag_embedding_dim: int = Field(default=64, ge=8, le=8192)
+    # cls | mean | last-token：pooling 方式由模型决定，换模型必须一起改。
+    rag_embedding_pooling: str = "mean"
+    rag_embedding_query_prefix: str = ""
+    rag_embedding_doc_prefix: str = ""
+    # 输出是否已 L2 归一（cosine 检索下归一化只影响分数尺度，不影响排序）。
+    rag_embedding_normalize: bool = True
+    rag_embedding_timeout_seconds: float = Field(default=10.0, ge=1.0, le=120.0)
+    # 向量补召回的最大候选数（防止失败时把整库塞进融合）。
+    rag_embedding_max_candidates: int = Field(default=40, ge=1, le=500)
+    # fake provider 只是 CI/评测用的确定性 hash 向量（与语义无关）。**默认禁止**它参与
+    # 生产排序：否则只把 RAG_RETRIEVAL_ENABLED 打开就会得到"语义随机"的候选顺序，
+    # 看不出坏也没有任何意义。只有测试/链路对比显式置 true 才允许。
+    rag_embedding_allow_fake: bool = False
+    # 单次生成请求内允许花在"算 boost"上的墙钟预算（秒）。冷启动需要编码整库时，
+    # 超出预算立即回退关键词链（fallback=budget_exceeded），缺失向量交给后台
+    # ai_task 预热；编码不阻塞首字节（方案 §2.2）。
+    rag_request_budget_seconds: float = Field(default=1.5, ge=0.1, le=30.0)
+
+    # ===== RAG 真实 embedding provider（本地 + 远程；默认关闭，设置页启用）=====
+    # 本地权重与 runtime 按需下载到数据目录（都不是安装包内容、不进备份）。GitHub
+    # Releases 是第一个下载源，HuggingFace 备用；文件名/sha256 由资产清单钉死，地址
+    # 可整体替换（镜像/自托管）。
+    rag_asset_base_url: str = (
+        "https://github.com/magicapple123/ResumeForge/releases/download/rag-assets-v1"
+    )
+    rag_asset_hf_base_url: str = (
+        "https://huggingface.co/ibm-granite/granite-embedding-97m-multilingual-r2/resolve/main"
+    )
+    # 数据目录下的两个版本化子目录名（测试可覆盖；生产用默认值）。
+    rag_local_model_dirname: str = "rag-model"
+    rag_local_runtime_dirname: str = "rag-runtime"
+    # 本机 Ollama / LM Studio 一类回环或私网端点默认拒绝；只有用户显式开启
+    # （设置页 allow_private 或此环境变量）才放行。公网端点不受影响。
+    rag_embedding_allow_private_endpoint: bool = False
+
     # 应用内更新允许的发布源主机名（英文逗号分隔）。下载包、checksum 与重定向的
     # **每一跳**都必须命中这里的主机或其子域，否则在发出请求前就拒绝（RF-26 §12.5）。
     # 默认只放行 GitHub Releases 发行链上的域名；自托管发行源在这里追加。

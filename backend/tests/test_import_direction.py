@@ -164,17 +164,13 @@ ALLOW_MODELS_SCHEMAS: dict[tuple[str, str], str] = {
 
 # 规则 api-cross-module-imports（app/api 内跨子模块复用，须经公共层）
 ALLOW_API_CROSS: dict[tuple[str, str], str] = {
-    # --- assistant 子域：SSE 编排（assistant_stream）与各辅助模块（context/
-    # conversations/budget/persistence/tool_exec）的兄弟模块间复用。
-    # 全部是模块级公开符号；收敛方向是把这些公共实现下沉到 services/assistant，
-    # 届时整组删除。
+    # --- assistant 子域：SSE 编排与文件/上下文/预算/持久化/工具执行等公共实现已下沉到
+    # services/assistant（assistant_stream.py 现在只是再导出壳，零 api 兄弟依赖），
+    # 原先为它们登记的 4 条豁免已整组删除。仅剩 api/assistant.py → 兄弟模块这一组：
+    # 主路由仍在 api 层装配各子模块，属"路由装配"形态，留待后续批次继续收敛。
     ("api/assistant.py", "app.api.assistant_context"): "assistant 子域兄弟模块复用（公开符号）",
     ("api/assistant.py", "app.api.assistant_conversations"): "assistant 子域兄弟模块复用（公开符号）",
     ("api/assistant.py", "app.api.assistant_stream"): "assistant 子域兄弟模块复用（公开符号）",
-    ("api/assistant_stream.py", "app.api.assistant_budget"): "assistant 子域兄弟模块复用（公开符号）",
-    ("api/assistant_stream.py", "app.api.assistant_context"): "assistant 子域兄弟模块复用（公开符号）",
-    ("api/assistant_stream.py", "app.api.assistant_persistence"): "assistant 子域兄弟模块复用（公开符号）",
-    ("api/assistant_stream.py", "app.api.assistant_tool_exec"): "assistant 子域兄弟模块复用（公开符号）",
     # --- resumes 子包：各 *_routes 模块从子包共享层 resumes/_shared 复用
     # 序列化/探活/SSE 帮助函数——_shared 就是该子包的"公共层"，这是合规形态，
     # 登记是为了让"新增绕过 _shared 的导入"现形。

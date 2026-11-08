@@ -175,20 +175,21 @@ const userGuideFlow = {
   "userGuideFlow.assistant.step1.point6.lead": "一眼可见",
   "userGuideFlow.assistant.step1.point6.text":
     "每次改动记在回复里的「助手做了什么」，标题**直接写明「改动了 N 项」或「N 项失败」**，不展开也知道。",
-  "userGuideFlow.assistant.step1.point7.lead": "读取范围",
+  "userGuideFlow.assistant.step1.point7.lead": "读取与权限",
   "userGuideFlow.assistant.step1.point7.text":
-    "会**自动带上当前数据集里的个人资料**，但发送给模型前会去掉姓名、电话、邮箱和照片；岗位与简历仍由你按需关联。",
+    "默认「仅查看」只给脱敏资料（去掉姓名、电话、邮箱、照片）。要让助手读真实资料，把输入框旁的数据权限切到「放宽读取」或「完全权限」——这些内容会随提问发给你配置的服务商；设置页存全局默认，下拉只覆盖当前对话、换设备不同步。「完全权限」直接改数据、不逐条确认（技能新建/修改仍需确认）。",
   "userGuideFlow.assistant.step1.point8.lead": "贴图提问",
   "userGuideFlow.assistant.step1.point8.text":
     "输入框里可以**直接粘贴截图**（Ctrl+V）或点「附件」选文件（最多 4 个、单个 ≤ 2 MB）；贴着图的那一步问完，紧接的下一句里这张图还会再带上一次，再往后就不重复发了。悬浮球卡片里一样能用。",
-  "userGuideFlow.assistant.step1.point9.lead": "联网搜索",
+  "userGuideFlow.assistant.step1.point9.lead": "允许联网",
   "userGuideFlow.assistant.step1.point9.text":
-    "打开后助手会先自动搜一次，还能自己换关键词多搜（一轮合计最多 3 次），来源收在回答下方「参考来源（N）」，点标题可开原网页。",
-  "userGuideFlow.assistant.step1.point10.lead": "技能开关",
+    "打开后助手拿到一个搜索工具，由它自己决定搜什么、换关键词多搜（一轮合计最多 3 次，全部由工具发起，开箱没有开场资料）；来源收在回答下方「参考来源（N）」，点标题可开原网页。",
+  "userGuideFlow.assistant.step1.point10.lead": "对话技能",
   "userGuideFlow.assistant.step1.point10.text":
-    "输入框下方工具条里的「技能」按钮可以直接开关已启用的技能。",
+    "输入框顶部的技能 chip 显示**本对话已启用的技能**，点 chip 上的 × 停用该个；行末的「技能」按钮打开菜单勾选。**只对当前对话生效，换对话各有一套**；新对话默认不启用，一个对话最多 8 个，超出注入预算的靠后技能会被截断并标出来。",
   "userGuideFlow.assistant.step1.point11.lead": "新建技能",
-  "userGuideFlow.assistant.step1.point11.text": "要新建或改提示词，去侧栏的「**工作台 → 技能**」。",
+  "userGuideFlow.assistant.step1.point11.text":
+    "要新建或改提示词，去侧栏的「**工作台 → 技能**」；技能库里不再有启用开关——启用改为在对话输入区勾选。",
   "userGuideFlow.assistant.step1.point12.lead": "会话管理",
   "userGuideFlow.assistant.step1.point12.text":
     "左侧会话列表的「⋮」或右键可重命名、置顶、复制分享链接、在新对话中继续、归档与删除，也能导出 Markdown 或存进资料箱。",
@@ -197,7 +198,7 @@ const userGuideFlow = {
     "右键任意一条消息可以「引用这条继续问」、复制或删除；要一次删掉几条，右键任意一条消息选「批量选择」，勾好后点「删除所选」。",
   "userGuideFlow.assistant.step1.point14.lead": "思考过程",
   "userGuideFlow.assistant.step1.point14.text":
-    "有思考模式的模型可以在输入框右侧调「思考强度」，开启后回复下方会出现默认折叠的「思考过程」。",
+    "有思考模式的模型可以在输入框右侧调「思考强度」，开启后回复下方会出现默认折叠的「思考过程」。发送键左边还会显示**当前模型名（只读）**：鼠标悬停能看到记录名与「在顶部切换」；切模型请用页头下拉，切完这里会跟着更新。",
   "userGuideFlow.assistant.step1.actionLabel": "打开求职助手",
   // ── 第 2 步 · 资料箱、知识库与工作台（assistantSteps.ts） ──
   "userGuideFlow.assistant.step2.title": "资料箱、知识库与工作台",
@@ -224,7 +225,7 @@ const userGuideFlow = {
     "助手对话右侧的「⋮」可以把这段对话导出成 Markdown，或一键存进资料箱。",
   "userGuideFlow.assistant.step2.point7.lead": "技能",
   "userGuideFlow.assistant.step2.point7.text":
-    "工作台的「技能」是一段长期生效的提示词，勾选后就对之后每次对话生效；也能带上知识文件。",
+    "工作台的「技能」是提示词 + 可带的知识文件，新建、编辑、导入都在这里；**启用改为在对话里做**（只对那个对话生效，新对话默认不启用，最多 8 个）。提示词上限 4,000 字，知识文件最多 10 个、单文件 20,000 字、合计 60,000 字。",
   "userGuideFlow.assistant.step2.point8.lead": "版式",
   "userGuideFlow.assistant.step2.point8.text":
     "工作台「版式」里内置版式直接列出来，点「自制版式」只填参数（行高、页边距、区块间距、强调色），不用写代码；想压进一页时这是最快的办法。自制模板与导入 HTML 的入口已下线，已有模板仍按原样渲染。",
@@ -268,13 +269,13 @@ const userGuideFlow = {
     "窄窗口点**「打开导航」**切换页面，「我的空间」仍在页头；键盘按 Tab 可先到「跳到主要内容」，按回车直接进入正文。常用动作有快捷键：Ctrl/⌘+K 搜索、Ctrl/⌘+S 保存、Ctrl/⌘+Z 撤回、Ctrl/⌘+J 开关助手；「设置 → 外观与交互 → 快捷键」可改键。",
   "userGuideFlow.dataBackup.step1.point11.lead": "检查更新",
   "userGuideFlow.dataBackup.step1.point11.text":
-    "页头刷新图标可检查更新。设置 → 更新与帮助支持下载、进度与后台下载；读取失败先点「重试读取状态」。Windows 确认「重启并安装」，macOS 用 update.command；只换程序，保留 data/、.env 与备份，结果以实际版本和日志为准。",
+    "页头刷新图标可检查更新。设置 → 更新与帮助支持下载、进度与后台下载；读取失败先点「重试读取状态」。Windows 确认「重启并安装」，macOS 用 update.command、Linux 用 update.sh；只换程序，保留 data/、.env 与备份，结果以实际版本和日志为准。",
   "userGuideFlow.dataBackup.step1.point12.lead": "想卸载",
   "userGuideFlow.dataBackup.step1.point12.text":
     "Windows 双击项目目录里的 uninstall.cmd：默认只删启动器生成的环境与缓存，保留 data/ 与 .env；确认连数据一起删用 uninstall.cmd -Purge。macOS 不需要卸载脚本——直接删掉项目文件夹就是干净卸载。",
   "userGuideFlow.dataBackup.step1.point13.lead": "开始与停止",
   "userGuideFlow.dataBackup.step1.point13.text":
-    "Windows 双击 start.cmd / stop.cmd，macOS 双击 start.command / stop.command；两边都是零依赖一键启动。macOS 上第一次打开可能被系统拦一次，**右键点它 → 打开**即可，只需一次。",
+    "Windows 双击 start.cmd / stop.cmd，macOS 双击 start.command / stop.command；零依赖一键启动。macOS 首次打开可能被拦一次，**右键点它 → 打开**。Linux 执行 bash start.sh / stop.sh（AppImage 需赋执行位）。",
   "userGuideFlow.dataBackup.step1.point14.lead": "看源码",
   "userGuideFlow.dataBackup.step1.point14.text":
     "**页头「退出」左边**是 GitHub 图标，点开就是源码与 Issue 页面；更靠左那个标签显示**当前数据集**（点它直接打开菜单切换，菜单底部的「新建数据集…」还能就地再建一份）。**头像左边的「我的空间」** 是「我的资料」等私人页面的入口，头像本身则是你资料里当前用的那张照片。",

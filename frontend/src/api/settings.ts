@@ -364,3 +364,35 @@ export {
   uploadResumeFont,
 } from "./fonts";
 export type { BuiltinFontStatus, ResumeFont, ResumeFonts } from "./fonts";
+
+// 语义检索（RAG v3）的请求层单独成模块：本文件已 360+ 行，整组接口加进来会顶到 500 行
+// 零豁免预算。按上面 fonts.ts 的既有做法只做转发，调用点仍从 "../api/settings" 取。
+export {
+  cancelEmbeddingLocalDownload,
+  clearEmbedding,
+  confirmEmbeddingHost,
+  disableEmbedding,
+  embeddingProgressPercent,
+  enableEmbeddingLocal,
+  enableEmbeddingRemote,
+  fetchEmbeddingModels,
+  getEmbeddingStatus,
+  removeEmbeddingLocalAssets,
+  revokeEmbeddingHost,
+  startEmbeddingLocalDownload,
+  testEmbeddingRemote,
+} from "./embeddingSettings";
+export type {
+  EmbeddingEndpointMode,
+  EmbeddingHeaderRow,
+  EmbeddingMaskedConfig,
+  EmbeddingLocalState,
+  EmbeddingLocalStatus,
+  EmbeddingModelsResult,
+  EmbeddingProbeResult,
+  EmbeddingProviderId,
+  EmbeddingRemoteConfig,
+  EmbeddingRemoteStatus,
+  EmbeddingState,
+  EmbeddingStatus,
+} from "./embeddingSettings";

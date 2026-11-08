@@ -209,3 +209,83 @@ def test_import_path_is_registered():
     from app.application import create_app
 
     assert skills_api.IMPORT_PATH in set(create_app().openapi()["paths"])
+
+
+# ---------------------------------------------------------------------------
+# T14 统一上限：工作台（JSON）与导入（.md/.zip）两条入口必须受同一组约束
+# ---------------------------------------------------------------------------
+
+
+def _create(client, payload: dict):
+    return client.post("/api/assistant/skills", json=payload)
+
+
+def test_create_rejects_a_prompt_over_4000_chars(client):
+    response = _create(client, {"name": "超长提示词", "prompt": "甲" * 4_001})
+
+    assert response.status_code == 422, response.text
+
+
+def test_create_rejects_more_than_ten_knowledge_files(client):
+    payload = {
+        "name": "文件太多",
+        "prompt": "按我要求做。",
+        "files": [{"path": f"文件{index}.md", "content": "内容"} for index in range(11)],
+    }
+
+    assert _create(client, payload).status_code == 422
+
+
+def test_create_rejects_total_file_chars_over_60000(client):
+    payload = {
+        "name": "合计超限",
+        "prompt": "按我要求做。",
+        # 单文件 16,000 <= 20,000，但 4 个加起来 64,000 > 60,000：合计校验必须生效。
+        "files": [
+            {"path": f"文件{index}.md", "content": "甲" * 16_000} for index in range(4)
+        ],
+    }
+
+    response = _create(client, payload)
+
+    assert response.status_code == 422, response.text
+    assert "60,000" in response.text
+
+
+def test_update_rejects_total_file_chars_over_60000(client):
+    created = _create(client, {"name": "待更新", "prompt": "按我要求做。"}).json()
+    payload = {
+        "files": [{"path": f"文件{index}.md", "content": "甲" * 16_000} for index in range(4)]
+    }
+
+    response = client.put(f"/api/assistant/skills/{created['id']}", json=payload)
+
+    assert response.status_code == 422, response.text
+    assert "60,000" in response.text
+
+
+def test_import_rejects_a_prompt_longer_than_4000_chars(client):
+    response = _import(client, _md(body="甲" * 4_001), content_type="text/markdown")
+
+    assert response.status_code == 400, response.text
+    assert "4,000" in response.json()["detail"]
+
+
+def test_import_rejects_more_than_ten_files(client):
+    members = {"SKILL.md": FRONTMATTER}
+    members.update({f"文件{index}.md": "内容" for index in range(10)})
+
+    response = _import(client, _zip_bytes(members))
+
+    assert response.status_code == 400, response.text
+    assert "最多包含 10 个文件" in response.json()["detail"]
+
+
+def test_import_rejects_a_total_over_60000_chars(client):
+    members = {"SKILL.md": FRONTMATTER}
+    members.update({f"文件{index}.md": "甲" * 16_000 for index in range(4)})
+
+    response = _import(client, _zip_bytes(members))
+
+    assert response.status_code == 400, response.text
+    assert "60,000" in response.json()["detail"]

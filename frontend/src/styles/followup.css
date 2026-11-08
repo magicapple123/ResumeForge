@@ -1,0 +1,53 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/* 跟进巡检卡（T06）：紧凑列表 + 提交行。类名由 features/followup/FollowupCard.tsx 提供，
+   颜色一律走 --rf-*（深色主题自动适配）；不写媒体查询，窄屏靠 flex-wrap 换行。 */
+.followup-card {
+  display: grid;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.followup-card-head {
+  display: flex;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.followup-card-steps {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.followup-card-step {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 6px 8px;
+  border: 1px solid var(--rf-border-subtle);
+  border-radius: 8px;
+  background: var(--rf-surface-alt);
+}
+
+.followup-card-step-title {
+  flex: 1 1 220px;
+  min-width: 0;
+  font-size: 13px;
+}
+
+.followup-card-decisions {
+  flex: 0 0 auto;
+}
+
+.followup-card-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+}

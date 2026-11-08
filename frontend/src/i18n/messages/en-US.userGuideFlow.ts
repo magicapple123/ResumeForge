@@ -176,21 +176,21 @@ const userGuideFlow = {
   "userGuideFlow.assistant.step1.point6.lead": "Visible at a glance",
   "userGuideFlow.assistant.step1.point6.text":
     "Every change is recorded under “What the assistant did” in the reply, with the title **stating “changed N items” or “N items failed”** so you know without expanding it.",
-  "userGuideFlow.assistant.step1.point7.lead": "What it reads",
+  "userGuideFlow.assistant.step1.point7.lead": "What it reads and data permission",
   "userGuideFlow.assistant.step1.point7.text":
-    "It **automatically includes the Profile from the current dataset**, but strips name, phone, email and photo before sending to the model; Jobs and Resumes are still linked only when you ask.",
+    "By default (“View only”) it **automatically includes the Profile from the current dataset**, but strips name, phone, email and photo before sending to the model; Jobs and Resumes are still linked only when you ask. To let it read real data (name / phone / Web form values), switch the data permission next to the input to “Relaxed read” or “Full access” — that content is sent to the provider you configured along with your question. The Settings page stores the global default; the input dropdown only overrides the current conversation and does not sync across devices. Under “Full access” the assistant edits data directly without asking each time (creating or editing Skills still always asks for confirmation).",
   "userGuideFlow.assistant.step1.point8.lead": "Ask with an image",
   "userGuideFlow.assistant.step1.point8.text":
     "You can **paste a screenshot straight into the input** (Ctrl+V) or click “Attachment” to pick a file (up to 4, each ≤ 2 MB); after the question with the image, the image is carried once more in the very next message and not again after that. The floating-ball card works the same way.",
-  "userGuideFlow.assistant.step1.point9.lead": "Web search",
+  "userGuideFlow.assistant.step1.point9.lead": "Allow web access",
   "userGuideFlow.assistant.step1.point9.text":
-    "When on, the assistant searches once automatically and can search again with different keywords (at most 3 searches per turn); sources are collected under “Sources (N)” below the answer, and clicking a title opens the original page.",
-  "userGuideFlow.assistant.step1.point10.lead": "Skills switch",
+    "When on, the assistant gets a search tool and decides for itself what to search and which keywords to try (at most 3 searches per turn, all tool-initiated — nothing is pre-searched for you); sources are collected under “Sources (N)” below the answer, and clicking a title opens the original page.",
+  "userGuideFlow.assistant.step1.point10.lead": "Skills (this conversation only)",
   "userGuideFlow.assistant.step1.point10.text":
-    "The “Skills” button in the toolbar under the input turns enabled skills on and off directly.",
+    "Skill chips at the top of the input show the skills **enabled for this conversation**; click the × on a chip to disable that one, or the “Skills” button at the end of the row to open the menu and tick more. They **apply to this conversation only — each conversation has its own set**; a new conversation starts with none, at most 8 can be enabled, and skills beyond the injection budget are truncated and marked.",
   "userGuideFlow.assistant.step1.point11.lead": "New skills",
   "userGuideFlow.assistant.step1.point11.text":
-    "To create or edit a prompt, go to “**Workbench → Skills**” in the sidebar.",
+    "To create or edit a prompt, go to “**Workbench → Skills**” in the sidebar; the Skills library no longer has an enable switch — enabling now happens in the conversation input.",
   "userGuideFlow.assistant.step1.point12.lead": "Conversations",
   "userGuideFlow.assistant.step1.point12.text":
     "The “⋮” on a conversation in the left list (or a right-click) renames it, pins it, copies a share link, continues it in a new conversation, archives or deletes it, and exports it as Markdown or saves it to the material library.",
@@ -199,7 +199,7 @@ const userGuideFlow = {
     "Right-click any message to “Quote this and keep asking”, copy or delete it; to delete several at once, right-click any message, choose “Batch select”, tick them and click “Delete selected”.",
   "userGuideFlow.assistant.step1.point14.lead": "Thinking",
   "userGuideFlow.assistant.step1.point14.text":
-    "Models with a thinking mode let you set “Thinking effort” on the right of the input; when it is on, a collapsed “Thinking process” appears below the reply.",
+    "Models with a thinking mode let you set “Thinking effort” on the right of the input; when it is on, a collapsed “Thinking process” appears below the reply. The current **model name (read-only)** is also shown left of the send button: hover it to see the record name and “switch at the top”; use the header dropdown to change models and this label follows.",
   "userGuideFlow.assistant.step1.actionLabel": "Open the Job assistant",
   // ── Step 2 · Material library, knowledge base and Workbench (assistantSteps.ts) ──
   "userGuideFlow.assistant.step2.title": "Material library, knowledge base and Workbench",
@@ -227,7 +227,7 @@ const userGuideFlow = {
     "The “⋮” on the right of an assistant conversation exports it as Markdown or saves the whole conversation to the material library in one click.",
   "userGuideFlow.assistant.step2.point7.lead": "Skills",
   "userGuideFlow.assistant.step2.point7.text":
-    "A “Skill” in the Workbench is a prompt that stays in effect: once ticked it applies to every later conversation; it can carry knowledge files too.",
+    "A “Skill” in the Workbench is a prompt plus optional knowledge files; create, edit and import them here. **Enabling moved into the conversation** (it applies to that conversation only; a new conversation starts with none; at most 8). Prompts are capped at 4,000 characters, and knowledge files at 10 files / 20,000 characters each / 60,000 characters in total.",
   "userGuideFlow.assistant.step2.point8.lead": "Layout presets",
   "userGuideFlow.assistant.step2.point8.text":
     "The Workbench's “Layout presets” lists the built-in presets; “Custom preset” only asks for parameters (line height, page margins, block spacing, accent color) — no code; this is the fastest way to squeeze into one page. The entry points for custom templates and importing HTML are gone, and existing templates still render as they are.",
@@ -272,13 +272,13 @@ const userGuideFlow = {
     "On a narrow window click **“Open navigation”** to switch pages; “My space” stays in the header. Tab reaches “Skip to main content” first, and Enter takes you straight into the body. Common actions have shortcuts: Ctrl/⌘+K search, Ctrl/⌘+S save, Ctrl/⌘+Z undo, Ctrl/⌘+J toggle the assistant; “Settings → Appearance & interaction → Shortcuts” changes the keys.",
   "userGuideFlow.dataBackup.step1.point11.lead": "Check for updates",
   "userGuideFlow.dataBackup.step1.point11.text":
-    "The refresh icon in the header checks for updates. Settings → Updates & help supports downloading, progress and background download; if reading the status fails, click “Retry reading status” first. Windows confirms with “Restart and install”, macOS uses update.command; only the program is replaced — data/, .env and backups stay — and the real version and logs are the source of truth.",
+    "The refresh icon in the header checks for updates. Settings → Updates & help supports downloading, progress and background download; if reading the status fails, click “Retry reading status” first. Windows confirms with “Restart and install”, macOS uses update.command, Linux uses update.sh; only the program is replaced — data/, .env and backups stay — and the real version and logs are the source of truth.",
   "userGuideFlow.dataBackup.step1.point12.lead": "Uninstalling",
   "userGuideFlow.dataBackup.step1.point12.text":
     "On Windows double-click uninstall.cmd in the project folder: by default it removes only the environment and caches the launcher created, keeping data/ and .env; use uninstall.cmd -Purge to delete the data too. macOS needs no uninstall script — deleting the project folder is a clean uninstall.",
   "userGuideFlow.dataBackup.step1.point13.lead": "Start and stop",
   "userGuideFlow.dataBackup.step1.point13.text":
-    "On Windows double-click start.cmd / stop.cmd, on macOS start.command / stop.command; both are one-click startup with no extra dependencies. The first launch on macOS may be blocked once — **right-click it → Open** is enough, once.",
+    "On Windows double-click start.cmd / stop.cmd, on macOS start.command / stop.command; both are one-click startup with no extra dependencies. The first launch on macOS may be blocked once — **right-click it → Open** is enough, once. On Linux run bash start.sh / stop.sh in the project folder, or mark the AppImage executable and double-click it.",
   "userGuideFlow.dataBackup.step1.point14.lead": "Source code",
   "userGuideFlow.dataBackup.step1.point14.text":
     "**Left of “Sign out” in the header** is the GitHub icon; clicking it opens the source and issue pages. The chip further left shows the **current dataset** (click it to switch from a menu, and “New dataset…” at the bottom of that menu creates another one right there). **“My space”, left of the avatar**, is the entry to private pages such as “My Profile”, and the avatar itself is the photo currently in use in your Profile.",

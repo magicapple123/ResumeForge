@@ -10,7 +10,6 @@ from app.services.llm.base import LLMDelta
 from test_assistant import (
     _configure_llm,
     _create_conversation,
-    _empty_search,
     _FakeProvider,
     _import_skill,
     _ScriptedProvider,
@@ -93,13 +92,22 @@ def test_a_malformed_reasoning_effort_is_rejected(client):
         assert response.status_code == 422, bad
 
 
-def test_enabled_skills_reach_the_system_prompt(client, monkeypatch):
-    """技能提示词必须真的进到发给模型的 system 消息里，而不是只躺在库里。"""
+def _enable_skills(client, conversation_id: int, skill_ids: list[int]) -> None:
+    response = client.put(
+        f"/api/assistant/conversations/{conversation_id}/skills",
+        json={"skill_ids": skill_ids},
+    )
+    assert response.status_code == 200, response.text
+
+
+def test_selected_skills_reach_the_system_prompt(client, monkeypatch):
+    """T14：只有**本对话启用**的技能提示词才进 system 消息，而不是全局 enabled 的那些。"""
     _configure_llm(client)
     provider = _ScriptedProvider([[LLMDelta(text="好。")]])
     monkeypatch.setattr("app.api.assistant.create_provider", lambda _config: provider)
     conversation = _create_conversation(client)
     skill = _import_skill(client, "面试模拟官", "先连问三道八股题，再逐条点评。")
+    _enable_skills(client, conversation["id"], [skill["id"]])
     _send(client, conversation["id"], "我们开始吧")
 
     system = provider.requests[0]["messages"][0]
@@ -107,8 +115,8 @@ def test_enabled_skills_reach_the_system_prompt(client, monkeypatch):
     assert "面试模拟官" in system["content"]
     assert "先连问三道八股题，再逐条点评。" in system["content"]
 
-    # 停用之后下一轮就不再注入：系统提示是每条消息现拼的，改技能不需要重启应用。
-    client.patch(f"/api/assistant/skills/{skill['id']}", json={"enabled": False})
+    # 在这个对话里取消勾选后，下一轮就不再注入：系统提示是每条消息现拼的。
+    _enable_skills(client, conversation["id"], [])
     _send(client, conversation["id"], "继续")
 
     assert "面试模拟官" not in provider.requests[1]["messages"][0]["content"]
@@ -120,7 +128,10 @@ def test_knowledge_files_are_listed_but_not_preloaded(client, monkeypatch):
     provider = _ScriptedProvider([[LLMDelta(text="好。")]])
     monkeypatch.setattr("app.api.assistant.create_provider", lambda _config: provider)
     conversation = _create_conversation(client)
-    _import_skill(client, "面试模拟官", "照题库提问。", files={"题库.md": "压舱石级别的独特句子"})
+    skill = _import_skill(
+        client, "面试模拟官", "照题库提问。", files={"题库.md": "压舱石级别的独特句子"}
+    )
+    _enable_skills(client, conversation["id"], [skill["id"]])
     _send(client, conversation["id"], "开始")
 
     system = provider.requests[0]["messages"][0]["content"]
@@ -134,8 +145,8 @@ def test_web_search_never_exceeds_the_documented_limit(client, monkeypatch):
     此前那句话只活在提示词里：代码侧真正的约束是 5 轮工具调用，而且每轮可以并行发多个
     搜索请求，用户按 3 次的预期可能会多花几倍。
 
-    这个 3 次是**总数**，包含打开联网开关时那次自动预搜——它同样真的发了请求。此前那个
-    计数从 0 起算，所以两个入口加起来实际是 4 次。
+    R08 起这 3 次**全部来自工具调用**：打开开关不再先自动预搜一次（替身只替换工具路径，
+    预搜那条路径已经不存在了），所以这里的计数就是从 0 起算的纯工具上限。
     """
     from app.api.assistant_stream import MAX_TOOL_ROUNDS, MAX_WEB_SEARCHES
 
@@ -148,11 +159,8 @@ def test_web_search_never_exceeds_the_documented_limit(client, monkeypatch):
         index = len(executed)
         return [{"title": f"招聘 {index}", "url": f"https://example.com/{index}", "snippet": "摘要"}]
 
-    # 两个入口要分别替换：工具内部是"每次调用现取"（函数内 import），改包上的属性即可；
-    # 自动预搜走的是 api 模块导入时就绑好的名字。以前只替换了前者，于是预搜那次真的去打
-    # 了网络——不仅让这个测试依赖外网，它的那次搜索也没被算进断言里。
+    # 工具内部是"每次调用现取"（函数内 import），改包上的属性即可。
     monkeypatch.setattr("app.services.search.aggregate_search", fake_search)
-    monkeypatch.setattr("app.api.assistant.aggregate_search", fake_search)
     # 每一轮都要搜索，永不收敛：没有上限就会一直搜到工具轮次用尽。
     provider = _ScriptedProvider([[_tool_call("web_search", {"query": "后端 招聘"})]])
     monkeypatch.setattr("app.api.assistant.create_provider", lambda _config: provider)
@@ -164,7 +172,7 @@ def test_web_search_never_exceeds_the_documented_limit(client, monkeypatch):
     )
 
     assert response.status_code == 200
-    # 第 1 次是自动预搜，剩 2 次留给工具。
+    # 3 次全部是工具发起的搜索，没有一步是"打开开关就先搜"。
     assert len(executed) == MAX_WEB_SEARCHES
     # 确实是被搜索上限拦下的，而不是因为工具轮次用尽才停。
     assert MAX_WEB_SEARCHES < MAX_TOOL_ROUNDS
@@ -188,7 +196,6 @@ def test_web_search_tool_description_follows_the_page_fetch_setting(client, monk
     隔了三层，只能靠端到端断言拴住。
     """
     _configure_llm(client)
-    monkeypatch.setattr("app.api.assistant.aggregate_search", _empty_search)
     provider = _ScriptedProvider([[LLMDelta(text="好的。")]])
     monkeypatch.setattr("app.api.assistant.create_provider", lambda _config: provider)
     conversation = _create_conversation(client)
@@ -211,7 +218,9 @@ def test_web_search_tool_description_follows_the_page_fetch_setting(client, monk
             for item in tools
             if item["function"]["name"] == "web_search"
         )
-        # 系统提示同样是"关于这个工具能做什么"的说明，两处必须一致。
+        # R08 起"能拿到多完整"只在工具描述里说（原先系统提示里还有一段联网说明，
+        # 已随自动预搜一起删除）；系统提示只留一句"以工具说明那一节为准"，所以这里把
+        # 两者拼起来验，两处口径必须一致。
         return f"{request['messages'][0]['content']}\n{tool_description}"
 
     only_summaries = prompt_for(0)

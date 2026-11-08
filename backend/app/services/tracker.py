@@ -205,6 +205,7 @@ def record_applied(
     resume_id: int | None = None,
     resume_title: str = "",
     attempt_key: str | None = None,
+    user_confirmed: bool = False,
 ) -> None:
     """投递成功后落一条「已投递」。
 
@@ -222,6 +223,10 @@ def record_applied(
     真实第二次投递拿到不同的键——**不会被 company+title 合并吞掉**。
 
     目的地快照（PR-09）：公司/岗位取实参（实际投递目标），不从原简历反推。
+
+    ``user_confirmed``（期一「我已提交」）：用户在界面上亲手确认"我已经投出去了"时传
+    True，只影响**新建记录**时首个状态事件的 ``user_confirmed`` 标记。既有调用方
+    （投递台自动回写、识别合并）不传，默认 False，行为与之前逐字一致。
     """
     if not company.strip() or not title.strip():
         # 快照字段为空时无从合并，宁可不记也不要造一条"(空) · (空)"。
@@ -250,7 +255,7 @@ def record_applied(
             to_status=STATUS_APPLIED,
             status_date=payload.applied_at,
             source=write_source(manual=False),
-            user_confirmed=False,
+            user_confirmed=user_confirmed,
         )
         if resume_id is not None:
             resume = db.get(ResumeRecord, resume_id)

@@ -1,0 +1,126 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/*
+ * 对话技能（T14）：输入区 chip 行、技能菜单底部预算与助手消息里的「本轮技能」。
+ *
+ * 与关联上下文 chip（assistant-composer.css 的 .assistant-context-chip，灰底）视觉分组：
+ * 技能 chip 用浅蓝底，两行之间靠容器的 8px 间距分隔；窄栏（输入区 @container <480px）
+ * 靠 flex-wrap 折行，不出现横向滚动。
+ */
+
+.assistant-skill-chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.assistant-skill-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  max-width: 100%;
+  margin-inline-end: 0;
+  color: var(--rf-info-strong);
+  background: var(--rf-info-bg);
+  border-color: var(--rf-brand-tint);
+}
+
+.assistant-skill-chip svg {
+  color: var(--rf-info-strong);
+}
+
+.assistant-skill-chip-text {
+  overflow: hidden;
+  max-width: 200px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 提示词超出本对话预算：琥珀描边 + tooltip 说明"没有完整加载"（颜色走 warning token）。 */
+.assistant-skill-chip.is-truncated {
+  color: var(--rf-warning-text);
+  background: var(--rf-warning-bg);
+  border-color: var(--rf-warning-border);
+}
+
+.assistant-skill-chip.is-truncated svg {
+  color: var(--rf-warning-text);
+}
+
+.assistant-skill-chip-close {
+  flex: 0 0 auto;
+}
+
+.assistant-skill-menu-footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px 16px;
+  /* 不写死最小宽度：窄栏（380px）下菜单要能收进视口，桌面宽度由菜单项内容自然撑开。 */
+  min-width: 220px;
+}
+
+.assistant-skill-budget {
+  color: var(--rf-text-secondary);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+/* >80% 黄、>100% 红：颜色是"预算状态"的提示，数值本身由 t() 拼好。 */
+.assistant-skill-budget.is-near {
+  color: var(--rf-warning-text);
+}
+
+.assistant-skill-budget.is-over {
+  color: var(--rf-danger);
+}
+
+/* 助手消息气泡里的「本轮技能：X、Y」——一行轻量说明，不抢正文注意力。 */
+.assistant-message-skills {
+  margin-top: 6px;
+}
+
+/*
+ * 技能二级面板（R06-A）：`+` → 技能。
+ *
+ * 与 chip 行同一份数据源、同一套预算口径（预算行仍由 `.assistant-skill-menu-footer` 渲染）。
+ * 这里只管排版：勾选列表可滚动（技能多了不把面板撑出视口）。
+ */
+.assistant-skill-picker {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.assistant-skill-picker-list {
+  display: grid;
+  gap: 2px;
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.assistant-skill-picker-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 4px 2px;
+  border-radius: var(--rf-radius-control);
+  cursor: pointer;
+}
+
+.assistant-skill-picker-option:hover {
+  background: var(--rf-surface-alt);
+}
+
+.assistant-message-skills-line {
+  font-size: 12px;
+}
+
+/* 窄栏（左栏拖到 380px）：chip 名称更早截断，整体折行而不是横向溢出。 */
+@container (max-width: 479px) {
+  .assistant-skill-chip-text {
+    max-width: 120px;
+  }
+}

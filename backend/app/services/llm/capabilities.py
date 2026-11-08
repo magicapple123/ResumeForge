@@ -16,8 +16,10 @@ tools  静态能力表          与 ``thinking.py`` 的 ``_VendorRule`` 同构�
 structured_output 静态能力表，默认 False  现状没有任何调用发送 response_format（§2.6 立场条款），结构化全靠 prompt + 容错解析
 vision 静态能力表，默认 False  当前无任何调用路径向模型发送图像；未来增强须先落能力表再落请求构造
 reasoning 委托权威实现     ``thinking.thinking_support(config)``，不另立第二张思考表
+embeddings 静态能力表，默认 False  RAG v2 刚具备 embedding provider 能力、尚未接线；未收录端点一律 False
 ==== ==================== =======================================================
 """
+
 from __future__ import annotations
 
 import re
@@ -36,6 +38,7 @@ class ProviderCapabilities:
     stream: bool
     vision: bool
     reasoning: bool
+    embeddings: bool = False
 
 
 @dataclass(frozen=True)
@@ -45,6 +48,7 @@ class _CapabilityRule:
     host: str
     model_pattern: re.Pattern[str] | None
     tools: bool = True
+    embeddings: bool = False
 
 
 # 能力表。未收录的 (host, model) 默认 tools=True：现状已有 400 降级兜底
@@ -91,6 +95,8 @@ def resolve_capabilities(config: LLMConfig) -> ProviderCapabilities:
         vision=False,
         # 委托现有权威实现（能力表 + 实测探测），不另立第二张思考表。
         reasoning=thinking_support(config).supported,
+        # 现状没有任何调用路径使用 embedding（RAG v2 只落了 provider 能力）：False 是现状。
+        embeddings=rule.embeddings if rule is not None else False,
     )
 
 

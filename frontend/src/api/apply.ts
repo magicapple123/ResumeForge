@@ -269,6 +269,35 @@ export function batchDeleteRecords(recordIds: number[]): Promise<{ deleted: numb
   });
 }
 
+/**
+ * 「我已提交」的响应（契约 B 节）。
+ *
+ * 后端复用 record_applied 的写路径（track 合并键去重、投递快照自动留下），并挂/复用一条
+ * 7 天后的 hr_reply 提醒。`show_followup_hint` 是后端 gate 过的**一次性引导**开关：
+ * 总开关关着时它恒为 false（既不弹也不标记已弹），所以前端只按这个字段显示引导，
+ * 不自己判断开关状态。
+ */
+export interface ApplyRecordSubmittedResponse {
+  record_id: number;
+  track_id: number;
+  reminder_id: number;
+  /** 跟进提醒到期时间（ISO）。界面要把它显示给用户，而不是只说"7 天后"。 */
+  reminder_due_at: string;
+  created_track: boolean;
+  created_reminder: boolean;
+  show_followup_hint: boolean;
+}
+
+/**
+ * 把一条成功的投递记录标为「我已提交」。
+ *
+ * 幂等：连点多次后端行数不变；前置条件是 item.status === "success"（否则 409），
+ * 所以按钮只在成功记录上出现。
+ */
+export function markRecordSubmitted(recordId: number): Promise<ApplyRecordSubmittedResponse> {
+  return request(`/apply/records/${recordId}/submitted`, { method: "POST" });
+}
+
 // ===== 采集 =====
 
 /**

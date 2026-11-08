@@ -13,8 +13,8 @@ b. ``writes`` 兼容语义：``writes`` 与 permission 一致（``READ_ONLY`` �
    ``tool_writes()`` 与 ``policy.tools_for_turn()`` 的过滤结果仍是只读工具集合
    （T17 要求保留既有调用方语义，见 ``_types.Tool.writes`` 的派生实现）。
 c. 写工具仍有 ``preview``（RF-01 契约：未确认写入时执行层只跑预览）；只读工具不挂。
-d. 79 个工具逐项定级符合 ``EXPECTED_PERMISSIONS``（逐项 parametrize，失败点名工具；
-   T29 新增的 4 个只读质检工具也在清单里）。
+d. 82 个工具逐项定级符合 ``EXPECTED_PERMISSIONS``（逐项 parametrize，失败点名工具；
+   T29 新增的 4 个只读质检工具、期二 T12 的 3 个求职偏好工具也在清单里）。
 
 维护方法：新增工具时在注册处的 ``Tool(...)`` 里写 ``permission=ToolPermission.X``，
 再把名字补进下面对应的集合。``update_skill`` 是目前唯一的 irreversible_write
@@ -43,7 +43,7 @@ IRREVERSIBLE_WRITE = ToolPermission.IRREVERSIBLE_WRITE
 EXTERNAL_SIDE_EFFECT = ToolPermission.EXTERNAL_SIDE_EFFECT
 PERMISSION_LEVELS = (READ_ONLY, REVERSIBLE_WRITE, IRREVERSIBLE_WRITE, EXTERNAL_SIDE_EFFECT)
 
-# ===== 79 个工具的逐项定级（T17/T29/T31 的验收清单，改级别必须同批改这里）=====
+# ===== 82 个工具的逐项定级（T17/T29/T31/T12 的验收清单，改级别必须同批改这里）=====
 
 # 只读：只读查询/检索/读取，不写任何数据。
 _READ_ONLY_TOOLS = (
@@ -105,6 +105,8 @@ _READ_ONLY_TOOLS = (
     "compare_resume_versions",
     # T31 只读错误诊断（聚合失败枚举与日志白名单字段，不返回日志原文）
     "diagnose_recent_errors",
+    # 期二 T12 求职偏好只读查询（与 GET /api/job-preferences 同源）
+    "get_job_preferences",
 )
 
 # 可撤销写入：新建或局部修改记录，事后能删除、改回或从撤销点恢复。
@@ -139,6 +141,9 @@ _REVERSIBLE_WRITE_TOOLS = (
     "add_resume_entry",
     "reorder_sections",
     "set_entry_layout",
+    # 期二 T12：偏好是"下一轮就进系统提示"的用户设定，必须始终由用户确认（同技能）。
+    "create_job_preference",
+    "update_job_preference",
 )
 
 # 不可逆写入：整份覆盖、清空类，事后收不回来。目前只有 update_skill：
@@ -157,7 +162,7 @@ EXPECTED_PERMISSIONS: dict[str, ToolPermission] = {
     **{name: EXTERNAL_SIDE_EFFECT for name in _EXTERNAL_SIDE_EFFECT_TOOLS},
 }
 
-EXPECTED_TOOL_COUNT = 79
+EXPECTED_TOOL_COUNT = 82
 
 
 def _tool_constructions() -> list[tuple[Path, ast.Call]]:
@@ -214,7 +219,7 @@ def test_permission_enum_has_exactly_the_four_levels():
 
 
 def test_expected_list_covers_every_registered_tool_exactly_once():
-    """清单与注册表双向一致：新增/改名/漏登记都会在这里红（79 个工具逐个定级）。"""
+    """清单与注册表双向一致：新增/改名/漏登记都会在这里红（82 个工具逐个定级）。"""
     registered = [tool.name for tool in _TOOLS]
     assert len(registered) == EXPECTED_TOOL_COUNT, (
         f"注册表里有 {len(registered)} 个工具，T17/T29 定级清单按 {EXPECTED_TOOL_COUNT} 个编写；"
@@ -231,7 +236,7 @@ def test_expected_list_covers_every_registered_tool_exactly_once():
 
 @pytest.mark.parametrize("name", sorted(EXPECTED_PERMISSIONS))
 def test_expected_permission_per_tool(name: str):
-    """d. 逐项断言 79 个工具的定级（失败信息点名工具，不靠汇总差异猜）。"""
+    """d. 逐项断言 82 个工具的定级（失败信息点名工具，不靠汇总差异猜）。"""
     tool = _registry_by_name().get(name)
     assert tool is not None, f"注册表里没有工具 {name}（清单过期或工具被删）"
     expected = EXPECTED_PERMISSIONS[name]
@@ -242,7 +247,7 @@ def test_expected_permission_per_tool(name: str):
 
 
 def test_every_tool_declares_one_of_the_four_levels():
-    """a. 运行时核验：79 个工具的 permission 都是四类之一且不是缺省 None。"""
+    """a. 运行时核验：82 个工具的 permission 都是四类之一且不是缺省 None。"""
     problems: list[str] = []
     for tool in _TOOLS:
         if tool.permission is None:
@@ -255,13 +260,13 @@ def test_every_tool_declares_one_of_the_four_levels():
 
 
 def test_permission_distribution_is_the_expected_one():
-    """分布快照：50 只读 / 28 可撤销 / 1 不可逆 / 0 外部副作用（T17 + T29 + T31 结论）。"""
+    """分布快照：51 只读 / 30 可撤销 / 1 不可逆 / 0 外部副作用（T17 + T29 + T31 + T12 结论）。"""
     counts = {
         level: sum(1 for tool in _TOOLS if tool.permission is level) for level in PERMISSION_LEVELS
     }
     assert counts == {
-        READ_ONLY: 50,
-        REVERSIBLE_WRITE: 28,
+        READ_ONLY: 51,
+        REVERSIBLE_WRITE: 30,
         IRREVERSIBLE_WRITE: 1,
         EXTERNAL_SIDE_EFFECT: 0,
     }

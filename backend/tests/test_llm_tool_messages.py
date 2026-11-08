@@ -12,6 +12,8 @@ from app.services.llm.tool_messages import assistant_tool_call_message
         ("https://api.example.com/v1", "openai", "deepseek-flash"),
         ("https://api.deepseek.com.example.org", "openai", "deepseek-flash"),
         ("https://api.deepseek.com", "anthropic", "deepseek-flash"),
+        # Responses 是第三条链路：DeepSeek 的 reasoning_content 只属于 Chat Completions。
+        ("https://api.deepseek.com", "responses", "deepseek-flash"),
         ("https://api.deepseek.com", "openai", "other-model"),
     ],
 )

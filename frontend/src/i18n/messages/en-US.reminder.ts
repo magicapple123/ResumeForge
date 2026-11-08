@@ -23,6 +23,14 @@ const reminder = {
   "reminder.selectMode": "Select",
   "reminder.card.title": "Calendar reminders",
   "reminder.filter.placeholder": "Filter by type",
+  /** Time-range filter (T06): All / Overdue / Today / Later. */
+  "reminder.filter.range.placeholder": "Time range",
+  "reminder.filter.range.all": "All",
+  "reminder.filter.range.overdue": "Overdue",
+  "reminder.filter.range.today": "Today",
+  "reminder.filter.range.future": "Later",
+  /** Empty state when the current filter matches nothing (distinct from "no reminders yet"). */
+  "reminder.emptyFiltered": "No reminders match the current filters",
   "reminder.action.create": "New reminder",
   "reminder.view.list": "List",
   "reminder.view.calendar": "Month",
@@ -37,9 +45,20 @@ const reminder = {
   "reminder.placeholder.content": "e.g. Second-round interview at Acme",
   "reminder.field.time": "When",
   "reminder.required.time": "Choose a time",
+  /** New reminders must be in the future; edits are exempt (fixing notes must not be blocked). */
+  "reminder.required.futureTime": "The reminder time must be later than now",
+  /** Task-card hint under the time field: switch is on. */
+  "reminder.hint.taskCardOn":
+    "A task card titled Prepare: <reminder> will appear on the Home page when it is due",
+  /** Task-card hint under the time field: switch is off. */
+  "reminder.hint.taskCardOff": "Task cards are off — you will be reminded, but no card is created",
   "reminder.field.kind": "Type",
-  "reminder.field.track": "Pipeline (optional)",
-  "reminder.placeholder.track": "Search pipelines by keyword",
+  /** Header of the three link fields (collapsed by default). */
+  "reminder.field.linkSection": "Links (optional)",
+  /** Count next to the collapsed header; `{count}` is how many links are filled. */
+  "reminder.field.linkedCount": "{count} linked",
+  "reminder.field.track": "Application progress (optional)",
+  "reminder.placeholder.track": "Search application progress by keyword",
   "reminder.field.job": "Job (optional)",
   "reminder.placeholder.job": "Search Jobs by keyword",
   "reminder.field.resume": "Resume (optional)",
@@ -48,7 +67,7 @@ const reminder = {
   "reminder.placeholder.note": "Optional notes",
 
   "reminder.detail.title": "Reminder details",
-  "reminder.detail.track": "Pipeline",
+  "reminder.detail.track": "Application progress",
   "reminder.detail.job": "Job",
   "reminder.detail.resume": "Resume",
   "reminder.detail.createdAt": "Created",

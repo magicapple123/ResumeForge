@@ -1,0 +1,33 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/* 模拟面试的语音排版（T13）：作答框的录音按钮、追问 Compact 里的位置与提示行。
+   modules-interview.css 恰好 500 行（预算顶格），所以单独成片；由 Composer 与
+   FollowUpCard 直接 import（index.css / modules.css 是共享聚合点，语音线不动）。 */
+
+/* 作答框底部一行：说明在左，麦克风与提交在右；麦克风自带提示行时底部对齐。 */
+.interview-composer-actions .voice-input {
+  align-items: flex-end;
+}
+
+/* 追问的紧凑条：语音按钮直接拼在 Input 与发送按钮之间，去掉自己的圆角由 Compact 管。 */
+.interview-followup .voice-input-button--compact,
+.interview-followup .voice-recording-button--compact {
+  border-radius: 0;
+}
+
+/* 追问录音中/未配置/出错的提示行：紧贴紧凑条下方一行 12px 灰字。 */
+.interview-followup .voice-input-hint {
+  display: block;
+  margin-top: 8px;
+}
+
+/* R06 把基类 `.voice-input-hint` 改成了**绝对定位**（输入区工具栏那一排需要它不撑高）。
+   面试这两处不是那一排：作答框底行靠 `align-items: flex-end` 对齐、追问是 Compact 紧凑条，
+   它们的提示行本来就该**在流里**——绝对定位会让长句浮到卡片外、盖住下一行。
+   这里显式恢复成 R06 之前的排版，面试页的行为一行没变。 */
+.interview-composer-actions .voice-input-hint,
+.interview-followup .voice-input-hint {
+  position: static;
+  width: auto;
+  max-width: none;
+  text-align: left;
+}

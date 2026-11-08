@@ -1,0 +1,43 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/* 求职偏好卡（T14）：列表行 + 编辑弹窗字段。颜色一律走 --rf-*；无媒体查询。 */
+.job-preference-list {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.job-preference-row {
+  display: grid;
+  gap: 4px;
+  padding: 8px 10px;
+  border: 1px solid var(--rf-border-subtle);
+  border-radius: 8px;
+}
+
+.job-preference-row-head,
+.job-preference-row-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.job-preference-row-meta {
+  justify-content: space-between;
+}
+
+.job-preference-row-note {
+  font-size: 12px;
+}
+
+.job-preference-form {
+  display: grid;
+  gap: 12px;
+}
+
+.job-preference-field {
+  display: grid;
+  gap: 4px;
+}

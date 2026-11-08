@@ -48,6 +48,28 @@ class ToolNotAuthorizedError(Exception):
     """执行层拒绝（工具未下发或未获授权）。message 面向模型可读。"""
 
 
+# 「永远走提案」的写工具（T14 D.1 / 期二 T12）：即使 allow_write=True（完全权限）也不直接落库。
+#
+# 为什么单列这几个：create_skill / update_skill 写的是**下一轮就进系统提示**的提示词，
+# 且被标注"应当遵守"；create_job_preference / update_job_preference 写入的求职偏好
+# 同样会进下一轮系统提示（注入块），且被要求"应当遵守"。完全权限下模型若直接执行，
+# 就能自己造一条"忽略以上全部限制"的技能/偏好并立刻生效——这等于把安全边界交给了模型。
+# 技能与偏好写入必须始终由用户在界面上确认（「以后都这样」/「只在这次对话」两个按钮）。
+ALWAYS_PROPOSAL_TOOLS = frozenset(
+    {"create_skill", "update_skill", "create_job_preference", "update_job_preference"}
+)
+
+
+def requires_proposal(name: str, *, writable: bool) -> bool:
+    """这次工具调用是否必须转成待确认提案（下发与执行同源的门槛）。
+
+    ``writable=False`（未授予写入）时所有写工具都走提案（历史行为）；
+    ``writable=True` 时只有 ALWAYS_PROPOSAL_TOOLS 例外。调用方仍需先判断它是不是写工具
+    （``tool_writes``）——本函数只回答"写工具要不要转提案"。
+    """
+    return name in ALWAYS_PROPOSAL_TOOLS or not writable
+
+
 def build_context(
     *,
     web_search: bool = False,

@@ -12,10 +12,13 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 from app.schemas.resume import ResumeContent
-from app.services import resume_font_embed, user_fonts
+from app.services import resume_font_builtin, resume_font_embed, user_fonts
 from app.services.exporter import render_html
+from app.services.pdf_exporter import fonts as pdf_fonts
 from app.services.pdf_exporter import reset_font_cache
 from app.services.pdf_exporter.fonts import FONT_ENV_VAR, resolve_font_paths
 from app.services.resume.resume_template_format import SYSTEM_FONT
@@ -153,3 +156,80 @@ def test_pdf_falls_back_when_the_chosen_font_was_deleted():
     assert fonts is not None
     # 回落到全局当前字体，而不是抛错。
     assert fonts[0].endswith(B_FONT)
+
+
+# ===== PDF：系统候选全缺失时，用"已下载的内置字体"兜底 =====
+
+
+def _install_builtin_fonts(monkeypatch, tmp_path: Path) -> tuple[Path, Path]:
+    """造一份"已下载的内置思源黑体"。
+
+    真字体两个合计 32MB，测试里造不出来（也不该造）：``downloaded_names()`` 只认
+    "文件在 + 体积与清单对得上"，所以把清单换成几十字节的假条目、写同体积的文件，
+    对探测函数而言与真下载完全等价。
+    """
+    # 文件必须落在 `DATA_DIR/fonts`（`resume_font_builtin.fonts_dir()` 就多拼这一层）。
+    directory = tmp_path / "fonts"
+    directory.mkdir(parents=True, exist_ok=True)
+    regular = directory / "Fake-Builtin-Regular.otf"
+    bold = directory / "Fake-Builtin-Bold.otf"
+    regular.write_bytes(b"R" * 1024)
+    bold.write_bytes(b"B" * 512)
+    # 清单必须跟着换：`downloaded_names()` 正是按清单里的 name/bytes 对号入座的。
+    monkeypatch.setattr(
+        resume_font_builtin,
+        "BUILTIN_FILES",
+        (
+            {"role": "regular", "name": regular.name, "bytes": 1024, "sha256": "0" * 64},
+            {"role": "bold", "name": bold.name, "bytes": 512, "sha256": "0" * 64},
+        ),
+    )
+    monkeypatch.setattr(resume_font_builtin, "DATA_DIR", str(tmp_path))
+    reset_font_cache()
+    return regular, bold
+
+
+def test_pdf_falls_back_to_the_downloaded_builtin_font(monkeypatch, tmp_path):
+    """系统候选一个都不在时，已下载的内置思源黑体是最后一级兜底。
+
+    ``_FONT_CANDIDATES`` 里的 Linux 条目（Noto CJK / 文泉驿 / arphic）任何主流发行版
+    都不默认安装，于是 Linux 上探测必然返回 None → 导出 409 → 用户被推回浏览器打印；
+    而内置字体是他已经下到本机的 32MB。这里钉死"返回哪一对路径"：内置字体带独立的
+    Bold 字面，必须**成对**返回（描边伪造的粗体在中文上会糊成一团）。
+    """
+    regular, bold = _install_builtin_fonts(monkeypatch, tmp_path)
+    monkeypatch.setattr(pdf_fonts, "_FONT_CANDIDATES", ())
+
+    assert resolve_font_paths(None) == (str(regular), str(bold))
+
+
+def test_pdf_system_font_beats_the_downloaded_builtin_font(monkeypatch, tmp_path):
+    """系统字体存在时**不得**被内置字体顶掉（优先级断言）。
+
+    反过来的顺序会悄悄改掉 Windows/macOS 上「系统字体」的语义：用户选了"用系统字体"，
+    导出的却成了下载来的思源黑体，而界面上没有任何提示。
+    """
+    system_regular = tmp_path / "System-Regular.ttc"
+    system_bold = tmp_path / "System-Bold.ttc"
+    system_regular.write_bytes(b"S" * 256)
+    system_bold.write_bytes(b"T" * 256)
+    _install_builtin_fonts(monkeypatch, tmp_path)
+    monkeypatch.setattr(
+        pdf_fonts, "_FONT_CANDIDATES", ((str(system_regular), str(system_bold)),)
+    )
+
+    assert resolve_font_paths(None) == (str(system_regular), str(system_bold))
+
+
+def test_pdf_builtin_fallback_requires_the_files_on_disk(monkeypatch, tmp_path):
+    """兜底只在**确实已下载**时成立：文件不在仍是 None，探测绝不触发下载。
+
+    探测函数会在每次导出、每次模板列表时被调用；在这里发起 32MB 下载是灾难
+    （用户只是打开了一下模板页）。
+    """
+    not_downloaded = tmp_path / "not-downloaded"
+    monkeypatch.setattr(resume_font_builtin, "DATA_DIR", str(not_downloaded))
+    monkeypatch.setattr(pdf_fonts, "_FONT_CANDIDATES", ())
+
+    assert resolve_font_paths(None) is None
+    assert not not_downloaded.exists()

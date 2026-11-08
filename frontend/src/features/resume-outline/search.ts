@@ -61,9 +61,23 @@ function personalTexts(content: ResumeContent | null | undefined): string[] {
   ].filter((value): value is string => typeof value === "string" && value.trim() !== "");
 }
 
+/**
+ * 不参与文本搜索的条目字段。
+ *
+ * 为什么要把 `id` 排除在外：`entryTexts` 遍历的是条目的**全部**字符串字段，而 `id` 是
+ * `ob_` + 12 位 base36 的随机串（见 `resume-document/identity.ts`）。随机串里出现 "go"、
+ * "ai" 这类二字词的概率约 0.85% / 条，于是搜 "go" 会偶发多出一条条目，界面上又找不到任何
+ * 可高亮的文字——像是"搜到了一条空的"。id 是身份不是内容，用户的搜索意图永远不是它。
+ *
+ * 后续如果有 `created_at` 一类纯元数据字段（时间戳、迁移标记）也加到这个集合里。
+ */
+const NON_SEARCHABLE_KEYS = new Set(["id"]);
+
 function entryTexts(entry: Record<string, unknown>): string[] {
   const texts: string[] = [];
-  for (const value of Object.values(entry)) {
+  for (const [key, value] of Object.entries(entry)) {
+    // 跳过身份/元数据字段：它们不是用户写下的内容，命中它们等于制造"看不见的命中"。
+    if (NON_SEARCHABLE_KEYS.has(key)) continue;
     if (typeof value === "string" && value.trim() !== "") texts.push(value);
   }
   return texts;

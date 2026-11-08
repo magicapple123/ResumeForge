@@ -53,6 +53,7 @@ from ..services.llm import create_provider
 from ..services.llm.base import LLMError
 from ..services.llm.connection_probe import connection_probe_config
 from ..services.llm.model_catalog import list_available_models
+from ..services.llm.responses import ResponsesProvider, responses_unsupported_hint
 from ..services.llm.thinking import probe_thinking, thinking_support
 from ..services.llm.usage_tasks import (
     DEFAULT_AUDIT_LANGUAGE,
@@ -354,10 +355,30 @@ async def test_llm(payload: LLMTestRequest, db: Session = Depends(get_db)):
         language=get_ui_locale(db) or DEFAULT_AUDIT_LANGUAGE,
         budget=SETTINGS_PROBE_TOKEN_BUDGET,
     )
+    # Responses 的已知不支持名单（Claude / Gemini / 硅基流动）先拦一道：
+    # 直接给出"切回 Chat Completions"的出路，而不是让用户看到一个裸 404。
+    if (probe_config.api_style or "openai") == "responses":
+        unsupported = responses_unsupported_hint(probe_config.base_url)
+        if unsupported is not None:
+            return LLMTestResult(ok=False, message=unsupported)
     started = time.perf_counter()
     try:
         provider = create_provider(probe_config)
-        reply = await provider.chat([{"role": "user", "content": "请只回复两个字：正常"}])
+        if isinstance(provider, ResponsesProvider):
+            # 按协议分支发最小请求：Responses 用 input:"hi" + max_output_tokens:16
+            # （任务书 §4 T09-7）；两条老链路的请求逐字节不变。
+            reply = await provider.probe_chat()
+            if not reply.strip():
+                # 实测（DeepSeek Responses）：思考模型会把 16 token 的探针预算全用在
+                # 思考上，正文为空但请求本身 200——配置是**可用**的，如实说明而非报失败。
+                latency_ms = int((time.perf_counter() - started) * 1000)
+                return LLMTestResult(
+                    ok=True,
+                    latency_ms=latency_ms,
+                    message="连接成功：服务商已响应（思考模型用完了最小输出预算，未返回正文）",
+                )
+        else:
+            reply = await provider.chat([{"role": "user", "content": "请只回复两个字：正常"}])
     except LLMError as exc:
         logger.warning("LLM 连接测试失败：%s", exc)
         return LLMTestResult(ok=False, message=str(exc))

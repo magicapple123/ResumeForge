@@ -192,6 +192,16 @@ const AssistantMessageBubble = memo(function AssistantMessageBubble({
         <MessageAttachments attachments={item.attachments} />
         <MessageSources sources={item.context.sources ?? []} />
         <MessageToolCalls calls={item.context.tool_calls ?? []} />
+        {/* T14 可追溯：这一轮实际注入了哪些技能（只记名字，不含提示词正文）。 */}
+        {item.context.skills && item.context.skills.length > 0 ? (
+          <div className="assistant-message-skills">
+            <Typography.Text type="secondary" className="assistant-message-skills-line">
+              {t("conversationSkills.message.used", {
+                names: item.context.skills.join(t("conversationSkills.message.separator")),
+              })}
+            </Typography.Text>
+          </div>
+        ) : null}
         {item.status === "error" && item.error && <Alert type="error" title={item.error} />}
       </article>
     </RowContextMenu>

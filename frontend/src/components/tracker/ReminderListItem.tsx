@@ -146,6 +146,18 @@ export default function ReminderListItem({
               >
                 {statusLabelKey ? t(statusLabelKey) : item.status}
               </Tag>
+              {/*
+                T06 逾期红标：只在 pending 且后端下发的 days_until < 0 时出现。
+                天数直接用后端口径（不按小时重算）——与首页「近期提醒」的「已逾期 N 天」
+                逐字一致；完成一单后 status 变 done，红标自然消失。
+              */}
+              {item.status === "pending" &&
+              typeof item.days_until === "number" &&
+              item.days_until < 0 ? (
+                <Tag color="red" data-testid={`reminder-overdue-${item.id}`}>
+                  {t("reminderItem.tag.overdue", { days: -item.days_until })}
+                </Tag>
+              ) : null}
             </Space>
           }
           description={

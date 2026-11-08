@@ -36,6 +36,7 @@ import { AdvancedParamsSection } from "./llm/AdvancedParamsSection";
 import { ThinkingSection } from "./llm/ThinkingSection";
 import { useUnlimitedTokens } from "./llm/useUnlimitedTokens";
 import { MAX_MAX_TOKENS, MIN_MAX_TOKENS, PRESET_OPTIONS } from "./SettingsConfig";
+import LLMProtocolField from "./LLMProtocolField";
 import type { RecordFormValues } from "../../features/settings/useLLMRecordTools";
 import { t } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
@@ -261,18 +262,7 @@ export default function LLMRecordModal({
             optionFilterProp="label"
           />
         </Form.Item>
-        <Form.Item
-          name="api_style"
-          label={t("llmRecord.field.protocol")}
-          tooltip={t("llmRecord.hint.protocol")}
-        >
-          <Select
-            options={[
-              { value: "openai", label: t("llmRecord.protocol.openai") },
-              { value: "anthropic", label: t("llmRecord.protocol.anthropic") },
-            ]}
-          />
-        </Form.Item>
+        <LLMProtocolField form={form} />
         <Form.Item
           name="base_url"
           label="Base URL"

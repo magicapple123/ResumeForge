@@ -210,6 +210,8 @@ def test_apply_tables_match_the_design_contract():
         "sort_order",
         "started_at",
         "finished_at",
+        # 0007：交付单验收时刻（用户点「我看过了」才写；不碰 status）。
+        "receipt_acked_at",
         "created_at",
         # 投递记录可删：软删标记进回收站，删掉的记录不再计入统计与每日上限。
         "deleted_at",

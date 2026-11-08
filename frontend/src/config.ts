@@ -34,9 +34,9 @@ export const GITHUB_REPO =
  */
 export const MAX_JOB_TEXT_CHARS = 50_000;
 
-/** 大模型预设：选择后自动填充 Base URL 与模型名，省去查文档的麻烦 */
+/** 大模型预设：选择后自动填充 Base URL 与模型名 */
 export interface LLMPreset {
-  /** 预设显示名（语言包 key；渲染处 `t(preset.labelKey)`）。 */
+  /** 预设显示名（语言包 key；渲染处 t(preset.labelKey)）。 */
   labelKey: MessageKey;
   provider: string;
   base_url: string;
@@ -44,142 +44,325 @@ export interface LLMPreset {
   /**
    * 这个预设要走的接口协议，省略即 OpenAI 兼容。
    *
-   * 预设是协议的入口：选了 Anthropic 原生那条就必须把 `api_style` 一起切过去。
+   * 预设是协议的入口：选了 Anthropic 原生那条就必须把 api_style 一起切过去。
    * 只填地址不改协议的话，用户会拿着一整套 Messages 协议的配置去发 Chat Completions
    * 请求，而错误信息只会说"接口返回 404"，看不出是协议选错了。
    *
-   * 类型写联合类型而不是 `LLMApiStyle`：本文件**不引入 `types/`**，原因见
-   * `enhancementLevelDescriptionKey` 上方的说明。
+   * **这里永远不写 "responses"**：那等于让新配置默认走 Responses（D13/D14 明确禁止，
+   * Claude / Gemini / 硅基流动 没有 Responses，默认一切就坏）。只有用户主动把协议切到
+   * Responses 时，才按 supports_responses 决定是否改写地址。
+   *
+   * 类型写联合类型而不是 LLMApiStyle：本文件不引入 types/，原因见
+   * enhancementLevelDescriptionKey 上方的说明。
    */
   api_style?: "openai" | "anthropic";
+  /**
+   * 该服务商是否提供 Responses 协议（2026-11-08 核对）。
+   *
+   * 只影响"用户主动切到 Responses 时要不要换地址"，**不改变新建配置的默认协议**。
+   * 未核对的服务商一律不标（宁可不动地址，也不要猜）。
+   */
+  supports_responses?: boolean;
+  /**
+   * Responses 专用地址（只有与 chat 地址不同才填）。
+   * 未填 = 在 base_url 后追加 /responses，见 presetResponsesBaseUrl。
+   */
+  responses_base_url?: string;
+  /**
+   * 该服务商是否有 Anthropic Messages 原生协议入口（2026-11-08 核对）。
+   *
+   * 与 supports_responses 同一口径：只影响"用户主动把协议切到 Anthropic 时要不要换
+   * 地址"，**不改变新建配置的默认协议**。未核对的服务商一律不标。
+   */
+  supports_anthropic?: boolean;
+  /**
+   * Anthropic Messages 专用地址：**SDK 语义的 base**，即 `{它} + /messages` 就是真实端点。
+   *
+   * 只有与 chat 地址不同才填；未填 = 在 `base_url` 后追加 `/messages`（见
+   * `presetAnthropicBaseUrl`）。本应用 provider 拼的是 `{base_url}/messages`，所以凡官方
+   * 的 ANTHROPIC_BASE_URL 不带 `/v1` 的，这里必须补到 `/v1`——例如 DeepSeek 的真实端点
+   * 是 `/anthropic/v1/messages`，本字段就填 `https://api.deepseek.com/anthropic/v1`。
+   *
+   * 不靠"在 chat 地址后追加 /anthropic"这类推断：各家路径前缀形状不同（有的在 chat
+   * 路径下、有的是根域名、有的带 `/api`），猜出来的地址只会让用户看到一个 404。
+   */
+  anthropic_base_url?: string;
 }
 
 /**
  * 大模型预设：选择后自动填充 Base URL 与模型名。
  *
  * 绝大多数条目是**提供 OpenAI 兼容接口**的服务商；Claude 另有一条走 Messages 原生协议
- * （扩展思考、独立 system 字段），所以预设里带了 `api_style`。
+ * （扩展思考、独立 system 字段），所以预设里带了 api_style。
  *
  * 模型名只作为起点：各家迭代很快，旧名称可能下线，也可能作为兼容别名继续映射。
  * 界面上因此提供了「获取可用模型」按钮，按当前账号实际可用的模型覆盖这里的预填值。
  *
- * **最后一次核对：2026-10-01**（依据各家官方文档/下线公告）。下一次核对时重点看：
- * `deepseek-flash`、`kimi-k3`、`doubao-seed-2.1-pro`、`glm-5.3`、`MiniMax-M3`、
- * `gemini-3.6-flash`、`grok-4.3`、`gpt-5.1` 是否还在售。
+ * **最后一次核对：2026-11-08**（逐家对官方文档/控制台示例核对，产品同学复核）。
+ * 本次改动：豆包模型 ID 改成文档里的连字符写法、通义保持 qwen-plus 档位别名、OpenAI 升到
+ * gpt-6-astra、Mistral 升到 mistral-large-4、硅基流动升到 DeepSeek-V4-Pro-0813、混元改用
+ * TokenHub 可用的 hy3、星火整体迁到新 MaaS 平台（旧 spark-api-open 是上一代）、
+ * MiniMax / 千帆 / 星火 / 阶跃补齐 Responses 支持，并给 13 家补上 Anthropic 入口声明。
  *
- * **改这里的模型名时，记得同步后端 `services/llm/thinking.py` 的能力表**：那张表按
- * 「主机 + 模型名」判断该用哪种思考写法，两处脱节过一次（预设用 `qwen-plus`、表里只认
- * `^qwen3`，于是通义用户看到的是一句"未收录"）。
+ * **改这里的模型名时，记得同步两处**：
+ * 1. 设置页的「各服务商协议支持」矩阵（components/settings/LLMProtocolSupportMatrix.tsx）；
+ * 2. 后端 services/llm/thinking.py 的能力表（它按主机 + 模型名判断思考写法）。
  */
 export const LLM_PRESETS: LLMPreset[] = [
   {
-    // 2026-10-16 核对：模型列表使用 deepseek-flash / deepseek-v4-pro。
-    // deepseek-v4-flash 仍是兼容别名；思考由 thinking 参数控制，默认开启。
+    // 最后核对：2026-11-08。官方文档：Chat Completions 在 api.deepseek.com；Responses 同址
+    // 打 /responses；Anthropic 兼容入口在独立前缀下，真实端点是 /anthropic/v1/messages。
     labelKey: "appConfig.preset.deepseek",
     provider: "deepseek",
     base_url: "https://api.deepseek.com",
     model: "deepseek-flash",
+    supports_responses: true,
+    supports_anthropic: true,
+    anthropic_base_url: "https://api.deepseek.com/anthropic/v1",
   },
   {
-    // 地址必须带 /v1：provider 拼的是 `{base_url}/messages`，少了这一段会打到
-    // https://api.anthropic.com/messages，那是官方根本不存在的路径。
+    // 最后核对：2026-11-08。地址必须带 /v1：provider 拼的是 base_url + /messages。
+    // Claude 走 Anthropic 原生协议；Claude 4.7 及以后改用自适应思考（effort），不再发预算。
+    // Responses 不支持（走原生 Messages 即可）。
     labelKey: "appConfig.preset.anthropic",
     provider: "anthropic",
     base_url: "https://api.anthropic.com/v1",
     model: "claude-sonnet-5-5",
     api_style: "anthropic",
+    supports_anthropic: true,
   },
   {
+    // 最后核对：2026-11-08。官方文档的模型 ID 是连字符 + 日期写法
+    // （doubao-seed-2-1-pro-260915），点号写法只是别名，以文档写法为准。
+    // Anthropic 兼容层在 /api/compatible 下，拼 /v1 后才是 /messages 的前一层。
     labelKey: "appConfig.preset.doubao",
     provider: "doubao",
     base_url: "https://ark.cn-beijing.volces.com/api/v3",
-    model: "doubao-seed-2.1-pro",
+    model: "doubao-seed-2-1-pro-260915",
+    supports_responses: true,
+    supports_anthropic: true,
+    anthropic_base_url: "https://ark.cn-beijing.volces.com/api/compatible/v1",
   },
   {
-    // kimi-k2 系列已于 2026-05-25 下线（含 kimi-k2-0711-preview），moonshot-v1 与
-    // kimi-k2.5 于 2026-08-31 下线；当前主推 kimi-k3（思考常开）。
+    // 最后核对：2026-11-08。kimi-k2 系列已于 2026-05-25 下线，moonshot-v1 与 kimi-k2.5
+    // 于 2026-08-31 下线；当前主推 kimi-k3（思考常开）。Anthropic 兼容入口在 /anthropic 下。
     labelKey: "appConfig.preset.kimi",
     provider: "kimi",
     base_url: "https://api.moonshot.cn/v1",
     model: "kimi-k3",
+    supports_responses: true,
+    supports_anthropic: true,
+    anthropic_base_url: "https://api.moonshot.cn/anthropic/v1",
   },
   {
-    // `qwen-plus` 是官方长期保留的档位别名（指向当前的中端模型），比钉死某个版本稳。
+    // 最后核对：2026-11-08。qwen-plus 是官方长期保留的档位别名（指向当前中端模型），
+    // 比钉死某个版本稳。Anthropic 兼容入口在 /apps/anthropic 下。
     labelKey: "appConfig.preset.qwen",
     provider: "qwen",
     base_url: "https://dashscope.aliyuncs.com/compatible-mode/v1",
     model: "qwen-plus",
+    supports_responses: true,
+    supports_anthropic: true,
+    anthropic_base_url: "https://dashscope.aliyuncs.com/apps/anthropic/v1",
   },
   {
+    // 最后核对：2026-11-08。智谱两条专用地址都与 chat 不同：Responses 换到 /api/v1；
+    // Anthropic 兼容入口在 /api/anthropic 下（不是在 paas/v4 后追加）。
     labelKey: "appConfig.preset.zhipu",
     provider: "zhipu",
     base_url: "https://open.bigmodel.cn/api/paas/v4",
     model: "glm-5.3",
+    supports_responses: true,
+    responses_base_url: "https://open.bigmodel.cn/api/v1",
+    supports_anthropic: true,
+    anthropic_base_url: "https://open.bigmodel.cn/api/anthropic/v1",
   },
   {
+    // 最后核对：2026-11-08。域名已换：旧 api.minimax.chat 不再作为默认（现行文档只出现
+    // 新域名）；国内 api.minimaxi.com，海外 api.minimax.io。Responses（POST /v1/responses）
+    // 与 Anthropic 兼容入口（/anthropic 下）官方都已支持。
     labelKey: "appConfig.preset.minimax",
     provider: "minimax",
-    base_url: "https://api.minimax.chat/v1",
-    model: "MiniMax-M3",
+    base_url: "https://api.minimaxi.com/v1",
+    model: "MiniMax-M3.1-Flash",
+    supports_responses: true,
+    supports_anthropic: true,
+    anthropic_base_url: "https://api.minimaxi.com/anthropic/v1",
   },
   {
+    // 最后核对：2026-11-08。官方只写 chat + Anthropic 兼容，**没有 Responses**。
+    // Anthropic 入口与 chat 同址（根域名 + /v1/messages），所以不填专用地址。
     labelKey: "appConfig.preset.siliconflow",
     provider: "siliconflow",
     base_url: "https://api.siliconflow.cn/v1",
-    model: "deepseek-ai/DeepSeek-V3",
+    model: "deepseek-ai/DeepSeek-V4-Pro-0813",
+    supports_anthropic: true,
   },
   {
+    // 最后核对：2026-11-08。聚合网关：Responses 在现有地址后追加 /responses；
+    // Anthropic 入口与 chat 同址（/v1/messages）。
     labelKey: "appConfig.preset.openrouter",
     provider: "openrouter",
     base_url: "https://openrouter.ai/api/v1",
     model: "openai/gpt-4o-mini",
+    supports_responses: true,
+    supports_anthropic: true,
   },
   {
-    // gpt-4o 这代已陆续下线，推理模型用 reasoning_effort 分档（各代档位不同，
-    // 详见后端 services/llm/thinking.py 的能力表）。
+    // 最后核对：2026-11-08。gpt-4o 这代已陆续下线，当前旗舰是 gpt-6-astra；推理模型用
+    // reasoning_effort 分档（各代档位不同，详见后端 services/llm/thinking.py 的能力表）。
+    // OpenAI 没有 Anthropic 入口。
     labelKey: "appConfig.preset.openai",
     provider: "openai",
     base_url: "https://api.openai.com/v1",
-    model: "gpt-5.1",
+    model: "gpt-6-astra",
+    supports_responses: true,
   },
   {
-    // gemini-2.5 系列已于 2026-06-17 停机，当前的 Flash 是 3.6。
+    // 最后核对：2026-11-08。gemini-2.5 系列已于 2026-06-17 停机，当前 Flash 是 3.8。
+    // Gemini 的 OpenAI 兼容层只有 chat，**没有 Responses**（走原生 SDK 才有）。
     labelKey: "appConfig.preset.gemini",
     provider: "gemini",
     base_url: "https://generativelanguage.googleapis.com/v1beta/openai",
-    model: "gemini-3.6-flash",
+    model: "gemini-3.8-flash",
   },
   {
+    // 最后核对：2026-11-08。xAI 文档当前示例是 grok-4.7；Responses 按官方兼容层补
+    // /responses，没有 Anthropic 入口。
     labelKey: "appConfig.preset.xai",
     provider: "xai",
     base_url: "https://api.x.ai/v1",
-    model: "grok-4.3",
+    model: "grok-4.7",
+    supports_responses: true,
   },
   {
+    // 最后核对：2026-11-08。Groq 走 OpenAI 兼容 chat；Responses 仍是 Beta（矩阵里有标注），
+    // 没有 Anthropic 入口。
     labelKey: "appConfig.preset.groq",
     provider: "groq",
     base_url: "https://api.groq.com/openai/v1",
     model: "llama-3.3-70b-versatile",
+    supports_responses: true,
   },
   {
+    // 最后核对：2026-11-08。当前旗舰 mistral-large-4；Responses 仍是 Public Preview（矩阵
+    // 里有标注），没有 Anthropic 入口。
     labelKey: "appConfig.preset.mistral",
     provider: "mistral",
     base_url: "https://api.mistral.ai/v1",
-    model: "mistral-large-latest",
+    model: "mistral-large-4",
+    supports_responses: true,
   },
   {
+    // 最后核对：2026-11-08。本机端点；Responses 需 Ollama 0.13.3+，Anthropic 入口需
+    // 0.14.0+，两者都与 chat 同址（/v1/messages）。
     labelKey: "appConfig.preset.ollama",
     provider: "ollama",
     base_url: "http://localhost:11434/v1",
-    model: "qwen2.5:7b",
+    model: "gpt-oss:20b",
+    supports_responses: true,
+    supports_anthropic: true,
   },
   {
+    // 最后核对：2026-11-08。本机端点；Responses 需 LM Studio 0.3.29+，Anthropic 入口需
+    // 0.4.1+，两者都与 chat 同址（/v1/messages）。
     labelKey: "appConfig.preset.lmstudio",
     provider: "lmstudio",
     base_url: "http://localhost:1234/v1",
     model: "qwen2.5-7b-instruct",
+    supports_responses: true,
+    supports_anthropic: true,
+  },
+  {
+    // 最后核对：2026-11-08。TokenHub 当前可用的是 hy3 / hy4（turbos-latest 在 TokenHub
+    // 不可用）；base 自带 /v1，所以 Responses 与 Anthropic 都与 chat 同址。
+    // 境外入口：https://tokenhub-intl.tencentmaas.com/v1。
+    labelKey: "llmProtocol.preset.hunyuan",
+    provider: "hunyuan",
+    base_url: "https://tokenhub.tencentmaas.com/v1",
+    model: "hy3",
+    supports_responses: true,
+    supports_anthropic: true,
+  },
+  {
+    // 最后核对：2026-11-08。百度千帆（文心）chat 走 /v2；Responses 与 Anthropic 入口
+    // 官方都已提供，Anthropic 在 /anthropic 下（拼 /v1/messages）。
+    labelKey: "llmProtocol.preset.qianfan",
+    provider: "qianfan",
+    base_url: "https://qianfan.baidubce.com/v2",
+    model: "ernie-4.5-turbo-128k",
+    supports_responses: true,
+    supports_anthropic: true,
+    anthropic_base_url: "https://qianfan.baidubce.com/anthropic/v1",
+  },
+  {
+    // 最后核对：2026-11-08。**已迁到新 MaaS 平台**：chat 打 /v2（旧的 spark-api-open
+    // 域名是上一代，不再作为默认）。Responses 换到同主机的 /v1；Anthropic 在 /anthropic 下。
+    labelKey: "llmProtocol.preset.spark",
+    provider: "spark",
+    base_url: "https://maas-api.cn-huabei-1.xf-yun.com/v2",
+    model: "spark-x2.6",
+    supports_responses: true,
+    responses_base_url: "https://maas-api.cn-huabei-1.xf-yun.com/v1",
+    supports_anthropic: true,
+    anthropic_base_url: "https://maas-api.cn-huabei-1.xf-yun.com/anthropic/v1",
+  },
+  {
+    // 最后核对：2026-11-08。Anthropic 走同一 Base URL 的 /v1/messages；Step Plan 是另一条
+    // /step_plan 通道（见支持矩阵的说明），不作为默认。
+    labelKey: "llmProtocol.preset.stepfun",
+    provider: "stepfun",
+    base_url: "https://api.stepfun.com/v1",
+    model: "step-5-preview",
+    supports_responses: true,
+    supports_anthropic: true,
+  },
+  {
+    // 最后核对：2026-11-08。官方 Responses 文档：POST /v1/responses（现有地址后追加）；
+    // Anthropic 入口同址（/v1/messages），但只覆盖部分 serverless 模型（矩阵里有标注）。
+    labelKey: "llmProtocol.preset.together",
+    provider: "together",
+    base_url: "https://api.together.ai/v1",
+    model: "zai-org/GLM-5.3",
+    supports_responses: true,
+    supports_anthropic: true,
+  },
+  {
+    // 最后核对：2026-11-08。对话补全已迁 Agent API（Sonar Chat Completions 于 2026-09-27
+    // 停止），/v1/responses 可用；Anthropic 只有 Router private preview，需申请，故不声明。
+    labelKey: "llmProtocol.preset.perplexity",
+    provider: "perplexity",
+    base_url: "https://api.perplexity.ai/v1",
+    model: "sonar-pro",
+    supports_responses: true,
   },
 ];
+
+/** 该预设切到 Responses 时使用的地址；null = 未声明支持（地址不动，避免瞎猜）。 */
+export function presetResponsesBaseUrl(preset: LLMPreset): string | null {
+  if (!preset.supports_responses) return null;
+  if (preset.responses_base_url) return preset.responses_base_url;
+  return preset.base_url.replace(/\/+$/, "") + "/responses";
+}
+
+/**
+ * 该预设切到 Anthropic 原生协议时使用的地址；null = 未声明（地址不动，避免瞎猜）。
+ *
+ * 语义与 `presetResponsesBaseUrl` 对齐：未填 `anthropic_base_url` 就在 base_url 后追加
+ * `/messages`（provider 拼的也正是 `{base_url}/messages`，已带 `/messages` 的地址不会
+ * 被重复追加，见后端 anthropic.py 的同名判定）。所以 `anthropic_base_url` 只在两种情况下
+ * 需要填：入口与 chat 不同址，或官方 base 不带 `/v1` 而端点带。
+ */
+export function presetAnthropicBaseUrl(preset: LLMPreset): string | null {
+  if (!preset.supports_anthropic) return null;
+  if (preset.anthropic_base_url) return preset.anthropic_base_url;
+  return preset.base_url.replace(/\/+$/, "") + "/messages";
+}
+
+/** 从 Responses / Anthropic 切回其它协议时要还原的 chat 地址（预设的常规 Base URL）。 */
+export function presetChatBaseUrl(preset: LLMPreset): string {
+  return preset.base_url;
+}
 
 /** 经历美化程度（与后端 GenerateOptions.enhancement_level 对应）。 */
 export const RESUME_ENHANCEMENT_LEVELS = [

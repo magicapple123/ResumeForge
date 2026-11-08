@@ -21,7 +21,14 @@ from ..models.profile import utcnow
 from ..models.reminder import REMINDER_STATUS_PENDING, Reminder
 from ..models.resume import ResumeRecord
 from ..models.tracker import ApplicationTrack
-from ..schemas.reminder import ReminderCreate, ReminderUpcomingOut, ReminderUpdate, ReminderUrgency
+from ..schemas.reminder import (
+    ReminderCreate,
+    ReminderListItemOut,
+    ReminderOut,
+    ReminderUpcomingOut,
+    ReminderUpdate,
+    ReminderUrgency,
+)
 from . import trash
 
 logger = logging.getLogger(__name__)
@@ -165,6 +172,33 @@ def upcoming_reminder_out(reminder: Reminder, now: datetime) -> ReminderUpcoming
     return out
 
 
+def reminder_list_item_out(reminder: Reminder, now: datetime) -> ReminderListItemOut:
+    """把一条提醒转成列表回显结构（补紧急度与结构化倒计时）。
+
+    口径**只走** :func:`reminder_urgency` / :func:`reminder_days_until`（两处已有唯一实现），
+    不在这里重算天数——列表与首页「近期提醒」卡的「已逾期 N 天」必须逐字一致。
+
+    两个派生字段在 ``ReminderListItemOut`` 里是必填的：先由 ``ReminderOut`` 校验 ORM 行，
+    再显式补上派生值。直接 ``model_validate(reminder)`` 会因 ORM 上没有这两个属性而失败。
+    """
+    base = ReminderOut.model_validate(reminder).model_dump()
+    urgency, _label = reminder_urgency(reminder.remind_at, now)
+    return ReminderListItemOut(
+        **base,
+        urgency=urgency,
+        days_until=reminder_days_until(reminder.remind_at, now),
+    )
+
+
+def reminder_list_items_out(
+    db: Session, *, kind: str = "", status: str = "", limit: int = 200, now: datetime | None = None
+) -> list[ReminderListItemOut]:
+    """列表接口的完整回显：在 ``list_reminders`` 的筛选/排序之上补两个派生字段。"""
+    rows = list_reminders(db, kind=kind, status=status, limit=limit)
+    moment = now or utcnow()
+    return [reminder_list_item_out(row, moment) for row in rows]
+
+
 def upcoming_reminders_out(db: Session, *, limit: int = 50) -> list[ReminderUpcomingOut]:
     """待办提醒的首页回显：只返回 pending，按紧急度+时间升序。"""
     rows = upcoming_reminders(db, limit=limit)
@@ -238,6 +272,8 @@ __all__ = [
     "list_reminders",
     "reminder_or_none",
     "reminder_days_until",
+    "reminder_list_item_out",
+    "reminder_list_items_out",
     "reminder_urgency",
     "reminder_urgency_counts",
     "upcoming_reminder_out",

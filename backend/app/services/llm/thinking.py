@@ -166,12 +166,14 @@ _TABLE: tuple[_VendorRule, ...] = (
     ),
     _VendorRule(
         "api.openai.com",
-        re.compile(r"^gpt-5\.[2-9]|^gpt-5\.\d\d"),
+        # 预设自 2026-11-08 起用 gpt-6-astra，所以这条要同时覆盖 5.2+ 与 6 代：
+        # 只写 ^gpt-5 会让预设模型掉进「未收录」，设置页给不出一句可用的档位说明。
+        re.compile(r"^gpt-6|^gpt-5\.[2-9]|^gpt-5\.\d\d"),
         STYLE_REASONING_EFFORT,
         ("none", "low", "medium", "high", "xhigh"),
         True,
-        "GPT-5.2 及以后用 reasoning_effort 分档（含 none 与 xhigh）；档位不被支持时，"
-        "上游会直接报错并列出可用的值。",
+        "GPT-5.2 及以后（含 GPT-6 代）用 reasoning_effort 分档（含 none 与 xhigh）；"
+        "档位不被支持时，上游会直接报错并列出可用的值，以「检测支持」的实测结果为准。",
     ),
     _VendorRule(
         "api.openai.com",
@@ -246,6 +248,10 @@ def resolve_style(config: LLMConfig) -> str:
         # 原生 Messages 协议只认预算写法：``reasoning_effort``/``enable_thinking`` 都是
         # Chat Completions 的顶层字段，发到 /messages 上只会 400。
         return STYLE_BUDGET
+    if (config.api_style or "openai") == "responses":
+        # Responses 的思考是 reasoning:{effort}（形态上仍是"档位"，不是预算），
+        # 由 responses provider 自己组装；这里只决定设置页给哪些档位选项。
+        return STYLE_REASONING_EFFORT
     rule = _match_rule(config)
     return rule.style if rule is not None else STYLE_REASONING_EFFORT
 

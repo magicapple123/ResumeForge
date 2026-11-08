@@ -9,7 +9,9 @@ import pytest
 from app.models.assistant import ChatConversation
 from app.models.claim import ClaimRecord
 from app.models.job import Job
+from app.models.job_preference import JobPreference
 from app.models.material import CandidateJob, Material
+from app.models.profile import utcnow
 from app.models.question_bank_record import QuestionBankRecord
 from app.models.resume import ResumeRecord
 from app.models.tracker import ApplicationTrack
@@ -337,15 +339,22 @@ def test_every_deleted_at_table_is_registered():
     assert soft_deleted == set(trash.TRASHED_TABLES)
     # 6（0016）+ 4（0018）+ 3（0019）+ 2（0027）+ 1（0050，备选岗位）
     # + 1（0056，私有表达资产）+ 1（0058，术语表）+ 1（0062，补充事实）
-    # + 4（0064，资料组/自建大字段/自建小字段/资料条目）= 22 类
+    # + 4（0064，资料组/自建大字段/自建小字段/资料条目）
+    # + 1（0008 求职偏好）= 23 类
     # （0062 的 profile_fact 已随 2.0 删除补充事实一并移除）。
-    assert len(trash.TRASHED_TABLES) == 22
+    assert len(trash.TRASHED_TABLES) == 23
     assert "job" in trash.TRASHED_TABLES and "chat_conversation" in trash.TRASHED_TABLES
     # 0050：备选岗位也进回收站，而且**必须紧挨着岗位**（回收站的展示顺序即注册表顺序，
     # 用户在回收站里找"刚才删的那个岗位"时这两类想的是同一件事）。
     assert "candidate_job" in trash.TRASHED_TABLES
     assert trash.TRASHED_TABLES.index("candidate_job") == (
         trash.TRASHED_TABLES.index("job") + 1
+    )
+    # 0008：求职偏好也进回收站，且展示顺序紧挨事实台账之后（两者都是"一行一条设定/
+    # 事实"）；它**不得**插进岗位与备选岗位之间（那两类的相邻关系是刻意的）。
+    assert "job_preference" in trash.TRASHED_TABLES
+    assert trash.TRASHED_TABLES.index("job_preference") == (
+        trash.TRASHED_TABLES.index("claim_record") + 1
     )
     assert {
         "interview_experience",
@@ -444,3 +453,46 @@ def test_question_bank_history_full_trash_cycle(db_session):
     assert trash.purge(db_session, "question_bank_record", record.id)
     db_session.expunge_all()
     assert db_session.get(QuestionBankRecord, record.id) is None
+
+
+def test_job_preference_restore_conflicts_with_an_active_kind(db_session):
+    """同一 (dataset_key, kind) 已有活动行时，恢复必须给出可读冲突而不是 500。
+
+    活动行唯一性是 partial unique index（state='active' AND deleted_at IS NULL），
+    所以回收站里的同 kind 行可以存在；不同 kind 不是冲突。
+    """
+    from app.models.job_preference import PREF_SOURCE_USER_EDITED, PREF_STATE_ACTIVE
+
+    def _pref(pref_id: str, kind: str, *, trashed: bool) -> JobPreference:
+        return JobPreference(
+            pref_id=pref_id,
+            dataset_key="main",
+            kind=kind,
+            value_kind="list",
+            value=["杭州"],
+            value_digest=pref_id,
+            source=PREF_SOURCE_USER_EDITED,
+            state=PREF_STATE_ACTIVE,
+            deleted_at=utcnow() if trashed else None,
+        )
+
+    rows = [
+        _pref("p-active", "target_city", trashed=False),
+        _pref("p-doomed", "target_city", trashed=True),
+        _pref("p-other", "exclude_industry", trashed=True),
+    ]
+    db_session.add_all(rows)
+    db_session.commit()
+    doomed = db_session.query(JobPreference).filter(JobPreference.pref_id == "p-doomed").one()
+    other = db_session.query(JobPreference).filter(JobPreference.pref_id == "p-other").one()
+
+    with pytest.raises(trash.RestoreConflict) as excinfo:
+        trash.restore(db_session, "job_preference", doomed.id)
+
+    assert "求职偏好" in excinfo.value.detail
+    assert "撤销" in excinfo.value.detail or "删除" in excinfo.value.detail
+    # 冲突时不能先把时间戳清掉（否则会出现"删得掉、恢复不回来"的死角）。
+    db_session.expire_all()
+    assert trash.is_deleted(db_session.get(JobPreference, doomed.id))
+    # 不同 kind 不是冲突：唯一性轴是 (dataset_key, kind) 两列。
+    assert trash.restore(db_session, "job_preference", other.id)

@@ -23,6 +23,7 @@ _BACKEND_ROOT: Final = Path(__file__).resolve().parent.parent
 _REQUIRED_FILES: Final[tuple[tuple[str, str], ...]] = (
     ("app/data/skills.json", "内置技能词典，岗位解析与匹配要用"),
     ("app/data/ats_keywords.json", "ATS 本地检测的通用关键词词库"),
+    ("app/data/rag-assets.json", "本地语义检索的资产清单（文件名/大小/sha256/平台矩阵）"),
     ("app/prompts/apply_greeting.md", "自动投递招呼语生成提示词"),
     ("app/prompts/assistant_system.md", "AI 助手系统提示词"),
     ("app/services/feature_catalog.py", "助手功能目录（能力地图动态生成依赖）"),

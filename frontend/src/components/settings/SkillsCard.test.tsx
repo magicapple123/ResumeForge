@@ -58,16 +58,17 @@ describe("SkillsCard", () => {
     expect(document.querySelector('input[type="file"]')).toBeNull();
   });
 
-  it("不再提供启用开关，状态只用 Tag 展示", () => {
+  it("不再展示全局启用状态，改为说明技能在对话里启用（T14）", () => {
     renderCard({
       skills: [skill({ enabled: true }), skill({ id: 2, name: "简历诊断", enabled: false })],
     });
 
     expect(screen.queryByRole("switch")).toBeNull();
-    // 只读摘要仍然要说清现在开着还是关着（用文本内容断言，而不是 ByText 查询：
-    // 这是状态说明，不是一个可按文案定位的控件）。
-    expect(document.body).toHaveTextContent("启用中");
-    expect(document.body).toHaveTextContent("已停用");
+    // 技能表上的 enabled 已不参与注入：设置页不许再显示"启用中/已停用"，
+    // 否则会出现"设置页说启用中、对话里其实没启用"的矛盾。
+    expect(document.body).not.toHaveTextContent("启用中");
+    expect(document.body).not.toHaveTextContent("已停用");
+    expect(document.body).toHaveTextContent("在对话里启用");
   });
 
   it("不再提供删除入口（行菜单与删除按钮都已移除）", () => {

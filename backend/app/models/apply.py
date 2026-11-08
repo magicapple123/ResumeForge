@@ -312,6 +312,9 @@ class ApplyTaskItem(Base):
     sort_order: Mapped[int] = mapped_column(Integer, default=0)
     started_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     finished_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    # 交付单验收时刻（迁移 0007）：用户在交付单上点"我看过了"才写，NULL = 未验收。
+    # **不碰 status**：验收单据不等于推进流程。旧行 NULL 如实呈现，不回填。
+    receipt_acked_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     # 软删除时间戳：NULL 表示「没删」。用户能删掉某条投递记录（或整批），删后进回收站。
     #

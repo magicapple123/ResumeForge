@@ -31,6 +31,7 @@ from typing import Any
 
 from ...schemas.profile_projection import ConsumedEntry, ConsumedProfile, ConsumedSection
 from ...schemas.resume import ResumeContent
+from ..rag import rag_seam as _rag_seam
 from .paper_policy import custom_section_text_field
 from .profile_matching import _score_item
 from .profile_relevance_constants import JobFocus
@@ -109,6 +110,18 @@ def custom_entry_corpus(section: ConsumedSection, entry: ConsumedEntry) -> dict[
     return corpus
 
 
+def _boosted_by_rag(
+    section: ConsumedSection, entry: ConsumedEntry, boost: Mapping[str, float] | None
+) -> bool:
+    """该自建条目是否有 RAG boost 命中（canonical hash 与 chunk 侧同一实现）。"""
+    if not boost:
+        return False
+    from ..rag.rag_chunking import canonical_item_hash
+
+    value = boost.get(canonical_item_hash(section.key, custom_entry_corpus(section, entry)), 0.0)
+    return float(value) > 0.0
+
+
 def plan_custom_section_filter(
     consumed: ConsumedProfile | None, focus: JobFocus | None
 ) -> CustomSectionFilter:
@@ -134,10 +147,14 @@ def plan_custom_section_filter(
         entries = [entry for entry in section.entries if custom_entry_label(section, entry)]
         if not entries:
             continue
+        boost = _rag_seam.active_boost()
         selected = [
             entry
             for entry in entries
             if _score_item(custom_entry_corpus(section, entry), _CUSTOM_PREFIX, focus) > 0
+            # Phase 3：只有 filter_by_job=True 的自建板块会走到这里；boost 让"用词不同
+            # 但语义相关"的条目也能被召回，不改变板块/条目的原始顺序。
+            or _boosted_by_rag(section, entry, boost)
         ]
         keys.append(key)
         names[key] = section.name

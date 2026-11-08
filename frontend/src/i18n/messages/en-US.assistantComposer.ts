@@ -36,7 +36,9 @@ const assistantComposer = {
   "assistantComposer.skills.hint": "Tick the skills to enable",
   "assistantComposer.skills.manage": "Open the workbench",
   "assistantComposer.skills.toggleHint": "Click to toggle assistant skills; a tick means enabled",
-  "assistantComposer.toggle.webSearch": "Web search",
+  "assistantComposer.toggle.webSearch": "Allow web access",
+  "assistantComposer.toggle.webSearchHint":
+    "Search only when public information is needed; this lets the assistant go online, it does not search on every message",
   "assistantComposer.effort.label": "Reasoning effort",
   "assistantComposer.effort.hint":
     "Models with a thinking mode let you set the reasoning effort here. Providers name the levels differently (low/medium/high, minimal, xhigh, max…); Custom lets you type your own. Providers that do not support the parameter ignore it, and it is dropped and retried once when rejected",
@@ -54,6 +56,14 @@ const assistantComposer = {
   "assistantComposer.aria.stop": "Stop generating",
   "assistantComposer.action.send": "Send",
   "assistantComposer.aria.send": "Send message",
+  "assistantComposer.context.add": "Link a job or resume",
+  "assistantComposer.context.jobFallback": "Job #{id}",
+  "assistantComposer.context.resumeFallback": "Resume #{id}",
+  "assistantComposer.context.removeJob": "Unlink the job",
+  "assistantComposer.context.removeResume": "Unlink the resume",
+  "assistantComposer.context.popoverTitle": "Link context to this conversation",
+  "assistantComposer.modelChip.aria": "Current model: {model}",
+  "assistantComposer.modelChip.hoverHint": "Switch at the top",
 } as const;
 
 export default assistantComposer;

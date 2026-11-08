@@ -10,6 +10,8 @@ const reminderItem = {
   "reminderItem.action.edit": "编辑",
   "reminderItem.action.delete": "删除",
   "reminderItem.confirm.delete": "删除这条提醒？",
+  /** 逾期红标（T06）：只在 pending 且 days_until < 0 时出现；`{days}` 是逾期天数。 */
+  "reminderItem.tag.overdue": "已逾期 {days} 天",
 } as const;
 
 export default reminderItem;

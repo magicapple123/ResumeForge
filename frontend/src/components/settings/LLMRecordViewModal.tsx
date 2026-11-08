@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 /** 配置记录的只读详情弹窗：点记录卡本体查看。密钥只显示脱敏占位，不回显本体。 */
 import { Descriptions, Modal, Tag } from "antd";
+import type { MessageKey } from "../../i18n";
 import { t } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
-import type { LLMConfigRecord } from "../../types";
+import type { LLMApiStyle, LLMConfigRecord } from "../../types";
 import { API_KEY_MASK, CUSTOM_PRESET_LABEL_KEY, matchingPreset } from "./SettingsConfig";
 import { llmRecordDisplayName } from "../../utils/displayNames";
 
@@ -12,6 +13,13 @@ interface Props {
   record: LLMConfigRecord | null;
   onClose: () => void;
 }
+
+/** 协议值的显示名 key（协议值是协议层枚举，永远不翻；显示名走语言包）。 */
+const PROTOCOL_LABEL_KEYS: Record<LLMApiStyle, MessageKey> = {
+  openai: "llmRecordView.protocol.openai",
+  anthropic: "llmRecordView.protocol.anthropic",
+  responses: "llmProtocol.protocol.responses",
+};
 
 /** 有值才算"配置过"的高级参数行：全部为空时不渲染这一节，避免整屏 null。 */
 function advancedLines(record: LLMConfigRecord): string[] {
@@ -56,9 +64,7 @@ export default function LLMRecordViewModal({ open, record, onClose }: Props) {
           {t(matchingPreset(record)?.labelKey ?? CUSTOM_PRESET_LABEL_KEY)}
         </Descriptions.Item>
         <Descriptions.Item label={t("llmRecordView.field.protocol")}>
-          {record.api_style === "anthropic"
-            ? t("llmRecordView.protocol.anthropic")
-            : t("llmRecordView.protocol.openai")}
+          {t(PROTOCOL_LABEL_KEYS[record.api_style] ?? PROTOCOL_LABEL_KEYS.openai)}
         </Descriptions.Item>
         <Descriptions.Item label="Base URL">
           {record.base_url || t("llmRecordView.value.empty")}

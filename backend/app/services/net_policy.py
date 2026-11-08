@@ -97,6 +97,30 @@ def non_public_address_reason(address: str) -> str | None:
     return None
 
 
+def endpoint_class(host: str) -> str | None:
+    """用户填写的 endpoint 主机属于哪一类地址（公网/普通域名返回 None）。
+
+    **主机名与 IP 字面量走同一个入口**：localhost 与 *.localhost 归为 loopback
+    （与 payload.is_loopback_host 同一口径），其余主机名不在本层做 DNS 解析（DNS 与
+    建连地址的绑定是出网策略层的职责，见模块 docstring 的已知边界）；IP 字面量复用
+    non_public_address_reason，所以私网/回环/链路本地/CGNAT 等键与网页抓取、更新下载
+    完全一致，不再出现"同一件事两种判定"。
+
+    返回原因键而不是布尔值：调用方要区分"回环（本机 Ollama）"与"私网（内网服务）"
+    写日志/文案，但放不放行只由调用方的显式开关决定。
+    """
+    normalized = str(host or "").strip().rstrip(".").casefold()
+    if not normalized:
+        return ADDRESS_INVALID
+    if normalized == "localhost" or normalized.endswith(".localhost"):
+        return ADDRESS_LOOPBACK
+    try:
+        ipaddress.ip_address(normalized)
+    except ValueError:
+        return None  # 普通域名：本层不解析，也不凭后缀猜内网
+    return non_public_address_reason(normalized)
+
+
 __all__ = [
     "ADDRESS_INVALID",
     "ADDRESS_LINK_LOCAL",
@@ -107,5 +131,6 @@ __all__ = [
     "ADDRESS_SHARED",
     "NON_PUBLIC_REASONS",
     "SHARED_IPV4_SPACE",
+    "endpoint_class",
     "non_public_address_reason",
 ]

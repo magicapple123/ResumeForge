@@ -10,6 +10,8 @@ const reminderItem = {
   "reminderItem.action.edit": "Edit",
   "reminderItem.action.delete": "Delete",
   "reminderItem.confirm.delete": "Delete this reminder?",
+  /** Overdue tag (T06): only when pending and days_until < 0; `{days}` is the overdue days. */
+  "reminderItem.tag.overdue": "{days}d overdue",
 } as const;
 
 export default reminderItem;

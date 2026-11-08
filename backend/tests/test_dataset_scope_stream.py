@@ -94,7 +94,7 @@ def test_assistant_stream_holds_a_lease_and_freezes_tool_sessions(client, monkey
         binds.append(str(db.get_bind().url))
         return SimpleNamespace(summary="已搜索", link="", text="无结果", changed=False, sources=[])
 
-    monkeypatch.setattr("app.api.assistant_tool_exec.execute_tool_async", fake_execute)
+    monkeypatch.setattr("app.services.assistant.assistant_tool_exec.execute_tool_async", fake_execute)
 
     with database.SessionLocal() as session:
         conversation = ChatConversation(title="租约会话")
@@ -110,9 +110,6 @@ def test_assistant_stream_holds_a_lease_and_freezes_tool_sessions(client, monkey
         session.commit()
         user_id, assistant_id = user_message.id, assistant_message.id
 
-    async def fake_search(_query: str):
-        return []
-
     async def _consume() -> list[str]:
         events = []
         async for event in stream_message_events(
@@ -126,7 +123,6 @@ def test_assistant_stream_holds_a_lease_and_freezes_tool_sessions(client, monkey
             assistant_message_id=assistant_id,
             generated_title="标题",
             system_prompt="系统提示",
-            search_web_fn=fake_search,
         ):
             events.append(event)
         return events
@@ -145,9 +141,6 @@ def test_assistant_stream_reports_switch_in_progress_instead_of_crashing(client)
     from app.api.assistant_stream import stream_message_events
     from app.schemas.assistant import AssistantMessageCreate
 
-    async def fake_search(_query: str):
-        return []
-
     async def _consume() -> list[str]:
         events = []
         async for event in stream_message_events(
@@ -161,7 +154,6 @@ def test_assistant_stream_reports_switch_in_progress_instead_of_crashing(client)
             assistant_message_id=2,
             generated_title="标题",
             system_prompt="系统提示",
-            search_web_fn=fake_search,
         ):
             events.append(event)
         return events

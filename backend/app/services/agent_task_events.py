@@ -42,6 +42,7 @@ from ..models.agent_task import (
 )
 from ..models.profile import utcnow
 from ..models.reminder import REMINDER_STATUS_PENDING, Reminder
+from .followup_sweep import scan_stalled_tracks
 from .settings_service import get_agent_task_events_enabled
 
 logger = logging.getLogger(__name__)
@@ -199,7 +200,14 @@ def run_for_current_dataset(*, now: datetime | None = None) -> dict[str, Any] | 
             bound_context(dataset_id=getattr(identity, "dataset_id", "-")),
             SessionLocal(bind=identity.engine) as db,
         ):
-            return scan_due_reminders(db, now=now)
+            result = scan_due_reminders(db, now=now)
+            # 期一跟进巡检：与提醒扫描共用同一 Session / 租约 / 开关（计划 §6.1.1）。
+            # 单独 try 包住：巡检失败不能改变提醒扫描的既有返回值与卡（T03 边界）。
+            try:
+                scan_stalled_tracks(db, now=now)
+            except Exception:  # noqa: BLE001 - 巡检是旁路，绝不拖垮提醒通道
+                logger.warning("跟进巡检扫描失败", exc_info=True)
+            return result
     except Exception:  # noqa: BLE001 - 调度线程绝不能把服务拖垮
         logger.warning("提醒到期任务扫描失败", exc_info=True)
         return None

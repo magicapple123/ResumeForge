@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-"""字体解析（系统中文字体查找 + 环境变量兜底）。"""
+"""字体解析（系统中文字体查找 + 环境变量兜底 + 已下载的内置字体兜底）。"""
 
 from __future__ import annotations
 
@@ -62,8 +62,11 @@ def resolve_font_paths(font_name: str | None = None) -> tuple[str, str] | None:
 
     ``font_name``：
 
-    * ``None`` —— 没设过/不指定：环境变量 → **当前全局字体** → 系统候选（历史行为）；
-    * ``SYSTEM_FONT`` —— 显式要求系统字体：跳过全局字体，只走环境变量 + 系统候选；
+    * ``None`` —— 没设过/不指定：环境变量 → **当前全局字体** → 系统候选 → **已下载的
+      内置字体**（Linux 上没有系统中文字体时的唯一出路）→ ``None``；
+    * ``SYSTEM_FONT`` —— 显式要求系统字体：跳过全局字体，只走环境变量 + 系统候选
+      （仍然保留内置字体兜底：Linux 上系统字体不存在时，"系统字体"退到思源黑体
+      也好过让导出直接 409）；
     * 其它 —— 该上传字体文件；文件已被删则回落到 ``None`` 那一套（同一份简历不该因为
       一个被删掉的字体文件而导不出 PDF）。
     """
@@ -105,7 +108,7 @@ def _probe_font_paths(font_name: str | None = None) -> tuple[str, str] | None:
     if font_name == SYSTEM_FONT:
         # 显式系统字体：**不**读全局当前字体——否则"这份简历不用自定义字体"这个选项
         # 会被设备上的全局选择悄悄推翻。
-        return _probe_system_font_paths()
+        return _probe_fallback_paths()
     if font_name:
         try:
             from ..user_fonts import FontError, font_path
@@ -130,7 +133,22 @@ def _probe_font_paths(font_name: str | None = None) -> tuple[str, str] | None:
         pair = None
     if pair is not None:
         return str(pair[0]), str(pair[1])
-    return _probe_system_font_paths()
+    return _probe_fallback_paths()
+
+
+def _probe_fallback_paths() -> tuple[str, str] | None:
+    """没有任何"用户选择"时的最后两级：**系统候选 → 已下载的内置字体**。
+
+    优先级写在一处而不是散在两个调用点上：内置字体**必须**排在系统字体后面，否则
+    Windows/macOS 上「系统字体」这个选项的语义会被悄悄改掉——用户选了"用系统字体"，
+    导出的却成了下载来的思源黑体。
+
+    为什么需要第二级：``_FONT_CANDIDATES`` 里的 Linux 条目（Noto CJK / 文泉驿 /
+    arphic）**没有任何主流发行版默认安装**，于是 Linux 上探测必然返回 ``None``，
+    导出接口回 409、用户被推回浏览器打印；而内置思源黑体是用户已经花 30 秒下到本机
+    的 32MB，本机明明有这个字体，没有理由不给用。
+    """
+    return _probe_system_font_paths() or _probe_builtin_font_paths()
 
 
 def _probe_system_font_paths() -> tuple[str, str] | None:
@@ -141,11 +159,65 @@ def _probe_system_font_paths() -> tuple[str, str] | None:
     return None
 
 
+def _probe_builtin_font_paths() -> tuple[str, str] | None:
+    """已下载的内置思源黑体 ``(常规, 粗体)``；没下载全就 ``None``。
+
+    **无副作用**：只读磁盘，绝不触发下载——下载是用户在前端点"下载"才发生的动作，
+    而本函数会在每次导出、每次模板列表时被调用。在这里发起 32MB 下载是灾难。
+
+    判定用 ``resume_font_builtin.downloaded_names()``：它已经做了"两个文件都在、
+    且体积与清单对得上"的双重确认（清单见 ``BUILTIN_FILES``），比单独拼路径可靠。
+
+    **成对返回**：内置字体带独立的 Bold 字面。只给常规字面会让 fpdf2 用描边伪造粗体，
+    中文笔画密、描边后糊成一团（"PDF 里加粗不明显"的根因，见 ``_pair_paths``）。
+
+    模块内 import 沿用既有写法（``_pair_paths`` / ``active_font_paths`` 同一模式）：
+    ``resume_font_builtin`` 是被明确声明为"叶子"的模块（它不 import ``user_fonts``），
+    此处调它不成环；但顶层 import 会把"字体探测"与"下载模块"在导入期绑死，任何一侧
+    的 import 期异常都会让整个导出链路起不来，所以放进函数里并整体兜住。
+
+    缓存提醒：内置字体是**运行期**才落盘的，而 ``_font_paths_cache`` 会记住 ``None``。
+    下载完成后的刷新由 API 层负责（``api/font_builtin._ensure_active`` →
+    ``api/fonts._invalidate_render_caches`` → ``reset_font_cache``），这里不挂钩子——
+    探测函数保持纯粹。
+
+    **测试隔离注意**：本函数读 ``resume_font_builtin`` 自己的 ``DATA_DIR``，而
+    ``tests/conftest.py`` 只隔离了 ``user_fonts.DATA_DIR``。两者在生产里是同一个
+    ``DATA_DIR/fonts``；开发机上装了真字体时，本函数只在"系统候选全缺失"时才被用到。
+    """
+    try:
+        from .. import resume_font_builtin
+
+        entries = resume_font_builtin.BUILTIN_FILES
+        # 顺序有意义：第一个是 Regular，第二个是它的 Bold 字面（见该模块的注释）。
+        if len(entries) < 2:
+            return None
+        regular_name = str(entries[0]["name"])
+        bold_name = str(entries[1]["name"])
+        downloaded = set(resume_font_builtin.downloaded_names())
+        if regular_name not in downloaded or bold_name not in downloaded:
+            return None
+        directory = resume_font_builtin.fonts_dir()
+    except Exception:  # noqa: BLE001 - 字体探测失败不该让导出整条链路崩掉
+        logger.warning("内置字体探测失败，按没有字体处理", exc_info=True)
+        return None
+    return str(directory / regular_name), str(directory / bold_name)
+
+
 def font_available() -> bool:
     """前端据此决定是否展示「下载 PDF」主按钮。"""
     return resolve_font_paths(None) is not None
 
 
 def reset_font_cache() -> None:
-    """字体设置变更后调用：下一次探测重新走一遍候选（含用户字体）。"""
+    """字体设置变更后调用：下一次探测重新走一遍候选（含用户字体与已下载的内置字体）。
+
+    **只清 ``_font_paths_cache`` 就够**：那张表存的是"上一次探测的结论"（含 ``None``），
+    而字体文件本身每次探测都现读磁盘。所以清表就等于让下一次探测重新问一遍磁盘，
+    不需要额外给内置字体做失效钩子——下载完成后调一次本函数即可看到新文件。
+
+    真实的调用方是 ``api/fonts._invalidate_render_caches``（字体增删改都走它）；
+    内置字体下载完成的路径也接得通：``api/font_builtin._ensure_active`` 在设为当前
+    字体后会调它，所以下一次导出就能用上新下载的字体。
+    """
     _font_paths_cache.clear()

@@ -15,6 +15,7 @@ import {
   openFirstConversation as harnessOpenFirstConversation,
   renderPage,
 } from "../test/assistantPageHarness";
+import { t } from "../i18n";
 
 // harness 的 openFirstConversation 把 apiMocks 参数化（mock 对象必须留在各测试文件内）；
 // 这里包一层，保持原用例的调用形状逐字不变。
@@ -38,6 +39,11 @@ const apiMocks = vi.hoisted(() => ({
   listResumes: vi.fn(),
 }));
 const skillApiMocks = vi.hoisted(() => ({ listSkills: vi.fn() }));
+// T14：对话技能按会话读取/整体替换；不拦掉会走真实 fetch。
+const conversationSkillApiMocks = vi.hoisted(() => ({
+  getConversationSkills: vi.fn(),
+  setConversationSkills: vi.fn(),
+}));
 // T20：助手页会在打开会话后按会话轮询 Agent 任务；这里只替换列表，动作函数保留真实
 // 导出（page 用例不点任务按钮），避免未 mock 的 fetch 在 jsdom 里抛不可归因的错误。
 const agentTaskApiMocks = vi.hoisted(() => ({ listAgentTasks: vi.fn() }));
@@ -62,6 +68,11 @@ vi.mock("../api/jobs", () => ({ listJobs: apiMocks.listJobs }));
 vi.mock("../api/resumes", () => ({ listResumes: apiMocks.listResumes }));
 // 页头会取一次技能列表；不拦掉的话 jsdom 里没有 fetch，会走到真实请求上。
 vi.mock("../api/skill", () => ({ listSkills: skillApiMocks.listSkills }));
+vi.mock("../api/conversationSkills", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../api/conversationSkills")>()),
+  getConversationSkills: conversationSkillApiMocks.getConversationSkills,
+  setConversationSkills: conversationSkillApiMocks.setConversationSkills,
+}));
 vi.mock("../api/agentTasks", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../api/agentTasks")>()),
   listAgentTasks: agentTaskApiMocks.listAgentTasks,
@@ -93,6 +104,12 @@ beforeEach(() => {
   apiMocks.listJobs.mockReset().mockResolvedValue({ items: [], total: 0 });
   apiMocks.listResumes.mockReset().mockResolvedValue({ items: [], total: 0 });
   skillApiMocks.listSkills.mockReset().mockResolvedValue([]);
+  conversationSkillApiMocks.getConversationSkills.mockReset().mockResolvedValue({
+    skill_ids: [],
+    skills: [],
+    budget: { used_chars: 0, loaded_chars: 0, limit_chars: 12_000, truncated_skill_ids: [] },
+  });
+  conversationSkillApiMocks.setConversationSkills.mockReset();
   agentTaskApiMocks.listAgentTasks.mockReset().mockResolvedValue([]);
 });
 
@@ -211,7 +228,9 @@ describe("AssistantPage", () => {
     fireEvent.click(sendButton);
     fireEvent.click(sendButton);
 
-    expect(apiMocks.sendAssistantMessage).toHaveBeenCalledOnce();
+    // T11：发送前要先解算本次的数据权限两轴（跟随全局时需要读一次全局默认），
+    // 所以请求会在微任务之后发出。断言强度不变——仍然必须**只发一次**（重复点击被互斥挡住）。
+    await waitFor(() => expect(apiMocks.sendAssistantMessage).toHaveBeenCalledOnce());
     fireEvent.click(await screen.findByRole("button", { name: "停止生成" }));
     expect(signal?.aborted).toBe(true);
     await waitFor(() =>
@@ -272,12 +291,14 @@ describe("AssistantPage", () => {
       return file;
     });
 
-    const view = renderPage();
+    renderPage();
     fireEvent.change(screen.getByPlaceholderText("输入求职、岗位、简历或项目经历相关问题"), {
       target: { value: "分析附件" },
     });
     expect(screen.getByRole("button", { name: "发送消息" })).toBeEnabled();
-    fireEvent.change(view.container.querySelector('input[type="file"]') as HTMLInputElement, {
+    // R06-A：附件输入框搬进了工具栏 `+` 面板（弹层挂在 body 上），先点开再喂文件。
+    fireEvent.click(screen.getByRole("button", { name: t("composerAddMenu.aria.trigger") }));
+    fireEvent.change(document.querySelector('input[type="file"]') as HTMLInputElement, {
       target: { files },
     });
 
@@ -292,10 +313,11 @@ describe("AssistantPage", () => {
   });
 
   it("rejects a supported MIME type when its filename extension is unsafe", async () => {
-    const view = renderPage();
+    renderPage();
     const disguisedFile = new File(["not executable"], "resume.exe", { type: "text/plain" });
 
-    fireEvent.change(view.container.querySelector('input[type="file"]') as HTMLInputElement, {
+    fireEvent.click(screen.getByRole("button", { name: t("composerAddMenu.aria.trigger") }));
+    fireEvent.change(document.querySelector('input[type="file"]') as HTMLInputElement, {
       target: { files: [disguisedFile] },
     });
 

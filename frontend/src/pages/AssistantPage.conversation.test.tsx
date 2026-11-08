@@ -18,7 +18,6 @@ import {
   CREATED_AT,
   conversationDetail,
   deferred,
-  makeSkill,
   openFirstConversation as harnessOpenFirstConversation,
   renderPage,
   renderPageWithLocationProbe,
@@ -48,6 +47,11 @@ const apiMocks = vi.hoisted(() => ({
   listResumes: vi.fn(),
 }));
 const skillApiMocks = vi.hoisted(() => ({ listSkills: vi.fn() }));
+// T14：对话技能按会话读取/整体替换；不拦掉会走真实 fetch。
+const conversationSkillApiMocks = vi.hoisted(() => ({
+  getConversationSkills: vi.fn(),
+  setConversationSkills: vi.fn(),
+}));
 // T20：助手页会在打开会话后按会话轮询 Agent 任务；这里只替换列表，动作函数保留真实
 // 导出（page 用例不点任务按钮），避免未 mock 的 fetch 在 jsdom 里抛不可归因的错误。
 const agentTaskApiMocks = vi.hoisted(() => ({ listAgentTasks: vi.fn() }));
@@ -73,6 +77,11 @@ vi.mock("../api/jobs", () => ({ listJobs: apiMocks.listJobs }));
 vi.mock("../api/resumes", () => ({ listResumes: apiMocks.listResumes }));
 // 页头会取一次技能列表；不拦掉的话 jsdom 里没有 fetch，会走到真实请求上。
 vi.mock("../api/skill", () => ({ listSkills: skillApiMocks.listSkills }));
+vi.mock("../api/conversationSkills", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../api/conversationSkills")>()),
+  getConversationSkills: conversationSkillApiMocks.getConversationSkills,
+  setConversationSkills: conversationSkillApiMocks.setConversationSkills,
+}));
 vi.mock("../api/agentTasks", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../api/agentTasks")>()),
   listAgentTasks: agentTaskApiMocks.listAgentTasks,
@@ -104,6 +113,12 @@ beforeEach(() => {
   apiMocks.listJobs.mockReset().mockResolvedValue({ items: [], total: 0 });
   apiMocks.listResumes.mockReset().mockResolvedValue({ items: [], total: 0 });
   skillApiMocks.listSkills.mockReset().mockResolvedValue([]);
+  conversationSkillApiMocks.getConversationSkills.mockReset().mockResolvedValue({
+    skill_ids: [],
+    skills: [],
+    budget: { used_chars: 0, loaded_chars: 0, limit_chars: 12_000, truncated_skill_ids: [] },
+  });
+  conversationSkillApiMocks.setConversationSkills.mockReset();
   agentTaskApiMocks.listAgentTasks.mockReset().mockResolvedValue([]);
 });
 
@@ -145,7 +160,8 @@ describe("AssistantPage", () => {
     expect(screen.getByPlaceholderText("输入求职、岗位、简历或项目经历相关问题")).toHaveValue(
       "请帮我查找与目标方向相关的招聘信息，并优先给出官网链接。",
     );
-    expect(screen.getByRole("switch", { name: "联网搜索" })).toBeChecked();
+    // 开关文案是「允许联网」（许可，不是每次搜索这个动作）
+    expect(screen.getByRole("switch", { name: "允许联网" })).toBeChecked();
   });
 
   it("does not flash the empty state while the conversation is still loading", async () => {
@@ -167,25 +183,6 @@ describe("AssistantPage", () => {
     const events = stopWatching();
     expect(events.filter((kind) => kind === "remove")).toEqual([]);
     expect(events.length).toBeLessThanOrEqual(1);
-  });
-
-  it("shows how many skills are shaping the reply", async () => {
-    skillApiMocks.listSkills.mockResolvedValue([
-      makeSkill(1, "面试官追问", true),
-      makeSkill(2, "简历诊断", true),
-      makeSkill(3, "暂时不用", false),
-    ]);
-
-    renderPage();
-
-    // 页头那枚常驻提示已经去掉了（截图反馈：右上角不需要技能模块），数量改由输入框
-    // 旁的技能按钮承担——它同时也是一键开关的入口。
-    // CI 慢机上按钮挂载和技能列表响应都可能超过默认 1s：找到按钮时它可能还在 loading、
-    // 文本还是「技能」。两段等待都放宽预算——等的就是正确值出现，就绪即返回不增加耗时。
-    const control = await screen.findByRole("button", { name: "技能" }, { timeout: 5000 });
-    await waitFor(() => expect(control).toHaveTextContent("技能（2）"), { timeout: 5000 });
-    // 没有启用的技能不参与作答，因此不计入数量。
-    expect(control).not.toHaveTextContent("3");
   });
 
   it("takes the user to the workbench that manages skills", async () => {

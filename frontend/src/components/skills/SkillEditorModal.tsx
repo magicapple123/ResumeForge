@@ -2,11 +2,20 @@
 /** 技能详情 / 编辑：提示词与知识文件都在这一个弹窗里查看和修改。 */
 
 import { DeleteOutlined, PlusOutlined } from "@ant-design/icons";
-import { Alert, App, Button, Form, Input, Modal, Space, Spin, Switch, Typography } from "antd";
+import { Alert, App, Button, Form, Input, Modal, Space, Spin, Typography } from "antd";
 import { useEffect, useState } from "react";
 import { createSkill, getSkill, updateSkill } from "../../api/skill";
 import { t } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
+import {
+  SKILL_PROMPT_BUDGET_CHARS,
+  MAX_SKILL_FILE_CHARS,
+  MAX_SKILL_FILES,
+  MAX_SKILL_PROMPT_CHARS,
+  MAX_SKILL_TOTAL_FILE_CHARS,
+  SKILL_PROMPT_WARN_CHARS,
+  formatCount,
+} from "./skillLimits";
 import type { AssistantSkillFileInput } from "../../types";
 
 /** 新建技能时用的预填内容（来自工作台的模板）。 */
@@ -49,9 +58,10 @@ export default function SkillEditorModal({
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [prompt, setPrompt] = useState("");
-  const [enabled, setEnabled] = useState(true);
   const [files, setFiles] = useState<AssistantSkillFileInput[]>([]);
   const [filesTruncated, setFilesTruncated] = useState(false);
+  // 知识文件合计字数：标题旁与超限提示共用，避免两处各算一遍。
+  const filesTotalChars = files.reduce((total, file) => total + file.content.length, 0);
 
   // Compiler 规范：随输入变化的表单回填用渲染期守卫式调整（新建分支）；异步加载
   // 留在 effect。原实现 draft 变化会在编辑既有技能时整单重取——那属于误触发，
@@ -63,7 +73,6 @@ export default function SkillEditorModal({
       setName(draft?.name ?? "");
       setDescription(draft?.description ?? "");
       setPrompt(draft?.prompt ?? "");
-      setEnabled(true);
       setFiles([]);
       setFilesTruncated(false);
     }
@@ -78,7 +87,6 @@ export default function SkillEditorModal({
         setName(detail.name);
         setDescription(detail.description);
         setPrompt(detail.prompt);
-        setEnabled(detail.enabled);
         setFiles(detail.file_details.map((item) => ({ path: item.path, content: item.content })));
         setFilesTruncated(detail.files_truncated);
       })
@@ -99,7 +107,8 @@ export default function SkillEditorModal({
     }
     setSaving(true);
     try {
-      const base = { name: name.trim(), description: description.trim(), prompt, enabled };
+      // T14：不再提交 enabled（全局开关已废弃，技能按对话启用）。
+      const base = { name: name.trim(), description: description.trim(), prompt };
       if (skillId === null) {
         const created = await createSkill({ ...base, files });
         message.success(t("skills.editor.created", { name: created.name }));
@@ -162,8 +171,7 @@ export default function SkillEditorModal({
         <Spin />
       ) : (
         <div className="skill-editor-body">
-          {/* 只读查看时 Form 的 disabled 会把全部控件（含「启用」开关）置灰，
-              让这条链路在视觉上也明确「只能看」。 */}
+          {/* 只读查看时 Form 的 disabled 会把全部控件置灰，让这条链路在视觉上也明确「只能看」。 */}
           <Form layout="vertical" disabled={readOnly}>
             <Alert
               type="info"
@@ -179,7 +187,16 @@ export default function SkillEditorModal({
                 onChange={(event) => setName(event.target.value)}
               />
             </Form.Item>
-            <Form.Item label={t("skills.editor.scenario")}>
+            <Form.Item
+              label={
+                <Space orientation="vertical" size={0}>
+                  <span>{t("skills.editor.scenario")}</span>
+                  <Typography.Text type="secondary" style={{ fontSize: 12, fontWeight: 400 }}>
+                    {t("skills.editor.scenarioHint")}
+                  </Typography.Text>
+                </Space>
+              }
+            >
               <Input
                 value={description}
                 maxLength={255}
@@ -187,27 +204,53 @@ export default function SkillEditorModal({
                 onChange={(event) => setDescription(event.target.value)}
               />
             </Form.Item>
-            <Form.Item label={t("skills.editor.enabled")}>
-              <Switch checked={enabled} onChange={setEnabled} />
-            </Form.Item>
             <Form.Item label={t("skills.editor.prompt")} required>
               <Input.TextArea
                 value={prompt}
+                // 与后端 MAX_SKILL_PROMPT_CHARS 同一个常量：前端先截断，用户不会写完才撞 422。
+                maxLength={MAX_SKILL_PROMPT_CHARS}
+                showCount
                 autoSize={{ minRows: 8, maxRows: 20 }}
                 placeholder={t("skills.editor.promptPlaceholder")}
                 onChange={(event) => setPrompt(event.target.value)}
               />
+              {prompt.length > SKILL_PROMPT_WARN_CHARS ? (
+                <Typography.Text type="warning" style={{ fontSize: 12 }}>
+                  {t("skills.editor.promptLong", {
+                    budget: formatCount(SKILL_PROMPT_BUDGET_CHARS),
+                  })}
+                </Typography.Text>
+              ) : null}
             </Form.Item>
             <Form.Item
               label={
-                <Space>
+                <Space wrap>
                   <span>{t("skills.editor.files")}</span>
+                  <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                    {t("skills.editor.filesBudget", {
+                      count: files.length,
+                      chars: formatCount(filesTotalChars),
+                      maxCount: MAX_SKILL_FILES,
+                      maxChars: formatCount(MAX_SKILL_TOTAL_FILE_CHARS),
+                    })}
+                  </Typography.Text>
                   <Typography.Text type="secondary" style={{ fontSize: 12 }}>
                     {t("skills.editor.filesHint")}
                   </Typography.Text>
                 </Space>
               }
             >
+              {filesTotalChars > MAX_SKILL_TOTAL_FILE_CHARS ? (
+                // 前端先给出"已经超了"的提示；保存时后端还会再校验一次（422 中文说明）。
+                <Alert
+                  type="warning"
+                  showIcon
+                  style={{ marginBottom: 12 }}
+                  title={t("skills.editor.filesOverBudget", {
+                    maxChars: formatCount(MAX_SKILL_TOTAL_FILE_CHARS),
+                  })}
+                />
+              ) : null}
               {filesTruncated && (
                 <Alert
                   type="warning"
@@ -248,6 +291,8 @@ export default function SkillEditorModal({
                     </Space>
                     <Input.TextArea
                       value={file.content}
+                      maxLength={MAX_SKILL_FILE_CHARS}
+                      showCount
                       autoSize={{ minRows: 3, maxRows: 10 }}
                       placeholder={t("skills.editor.fileContentPlaceholder")}
                       onChange={(event) =>
@@ -261,12 +306,20 @@ export default function SkillEditorModal({
                   </div>
                 ))}
                 {!readOnly && (
-                  <Button
-                    icon={<PlusOutlined />}
-                    onClick={() => setFiles((current) => [...current, { path: "", content: "" }])}
-                  >
-                    {t("skills.editor.addFile")}
-                  </Button>
+                  <Space orientation="vertical" size={2}>
+                    <Button
+                      icon={<PlusOutlined />}
+                      disabled={files.length >= MAX_SKILL_FILES}
+                      onClick={() => setFiles((current) => [...current, { path: "", content: "" }])}
+                    >
+                      {t("skills.editor.addFile")}
+                    </Button>
+                    {files.length >= MAX_SKILL_FILES ? (
+                      <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                        {t("skills.editor.filesFull", { maxCount: MAX_SKILL_FILES })}
+                      </Typography.Text>
+                    ) : null}
+                  </Space>
                 )}
               </Space>
             </Form.Item>

@@ -20,7 +20,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useLocation } from "react-router-dom";
 import { t } from "../i18n";
 import { useLocale } from "../i18n/i18nContext";
-import { subscribeLLMConfig } from "../features/settings/llmConfigEvents";
+import { bumpLLMConfig, subscribeLLMConfig } from "../features/settings/llmConfigEvents";
 import { getLLMConfig, listLLMConfigRecords, activateLLMRecord, testLLM } from "../api/settings";
 import { configFromRecord } from "./settings/SettingsConfig";
 import { llmRecordDisplayName } from "../utils/displayNames";
@@ -103,6 +103,9 @@ export default function ModelProfileSelect() {
     try {
       const activated = await activateLLMRecord(id);
       setActiveId(activated.id);
+      // 输入区还有一块**只读**模型 chip（T11 D22）：不广播的话顶栏换了模型、chip 仍显示
+      // 旧名字——两处显示同一个东西却不一致，正是最差的那种状态。顶栏自己也会跟着重取一次。
+      bumpLLMConfig();
       message.success(t("componentsMisc2.modelProfile.switched", { name: activated.name }));
     } catch (error) {
       message.error(

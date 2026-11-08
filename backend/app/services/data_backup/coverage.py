@@ -44,6 +44,10 @@ RUNTIME_ONLY = frozenset(
         "backups",
         "auto-backups",
         "pre-update",
+        # RAG v3：语义检索的权重与隔离运行时是**按需下载、可重建**的派生产物
+        # （换机/重装后从资产清单重新下载），体积 160MB 量级，绝不进备份。
+        "rag-model",
+        "rag-runtime",
         # 升级时的一次性归档：ARCHIVE-README 已说明"不进包、不要删"，不应长期告警。
         "legacy-archive",
         ".trash",

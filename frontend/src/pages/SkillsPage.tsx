@@ -13,7 +13,6 @@ import {
   Card,
   Empty,
   Space,
-  Switch,
   Table,
   Tabs,
   Tag,
@@ -27,7 +26,7 @@ import type { HTMLAttributes } from "react";
 import { useState } from "react";
 import { useApi } from "../hooks/useApi";
 import ErrorState from "../components/common/ErrorState";
-import { deleteSkill, importSkill, listSkills, setSkillEnabled } from "../api/skill";
+import { deleteSkill, importSkill, listSkills } from "../api/skill";
 import { RowActions, RowContextMenu } from "../components/common/RowActions";
 import SkillEditorModal, { type SkillDraft } from "../components/skills/SkillEditorModal";
 import TemplateWorkbench from "../components/templates/TemplateWorkbench";
@@ -107,28 +106,12 @@ export default function SkillsPage() {
   useLocale();
   const { message } = App.useApp();
   const [tab, setTab] = useState<"skills" | "templates">("skills");
-  const { data, loading, error, reload: load, setData: setSkills } = useApi(listSkills);
+  const { data, loading, error, reload: load } = useApi(listSkills);
   const skills = data ?? [];
   const [importing, setImporting] = useState(false);
-  const [togglingId, setTogglingId] = useState<number | null>(null);
   const [editorOpen, setEditorOpen] = useState(false);
   const [editorSkillId, setEditorSkillId] = useState<number | null>(null);
   const [editorDraft, setEditorDraft] = useState<SkillDraft | null>(null);
-
-  const toggle = async (skill: AssistantSkill, enabled: boolean) => {
-    if (togglingId !== null) return;
-    setTogglingId(skill.id);
-    try {
-      const updated = await setSkillEnabled(skill.id, enabled);
-      setSkills((current) =>
-        (current ?? []).map((item) => (item.id === updated.id ? updated : item)),
-      );
-    } catch (error) {
-      message.error(error instanceof Error ? error.message : t("skills.toast.toggleFailed"));
-    } finally {
-      setTogglingId(null);
-    }
-  };
 
   const remove = async (skill: AssistantSkill) => {
     try {
@@ -201,24 +184,6 @@ export default function SkillsPage() {
       ),
     },
     {
-      title: t("skills.column.enabled"),
-      key: "enabled",
-      width: 90,
-      render: (_, skill) => (
-        <Switch
-          aria-label={
-            skill.enabled
-              ? t("skills.aria.disable", { name: skill.name })
-              : t("skills.aria.enable", { name: skill.name })
-          }
-          size="small"
-          checked={skill.enabled}
-          loading={togglingId === skill.id}
-          onChange={(checked) => void toggle(skill, checked)}
-        />
-      ),
-    },
-    {
       title: t("skills.column.prompt"),
       dataIndex: "prompt_chars",
       width: 110,
@@ -265,6 +230,10 @@ export default function SkillsPage() {
             {t("skills.breadcrumb")}
           </Typography.Title>
           <Typography.Text type="secondary">{t("skills.page.subtitle")}</Typography.Text>
+          {/* T14：启用入口搬进对话，技能库不再有全局开关——这句要写在页头，否则用户会找「启用」。 */}
+          <Typography.Paragraph type="secondary" style={{ margin: "4px 0 0" }}>
+            {t("conversationSkills.page.intro")}
+          </Typography.Paragraph>
         </div>
         {tab === "skills" && (
           <Space>

@@ -5,13 +5,14 @@ from __future__ import annotations
 
 import json
 import re
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from copy import deepcopy
 from typing import Any
 
 from ...schemas.job import JobOut
 from ...schemas.profile import ProfileOut
 from ..jd_parser import parse_jd
+from ..rag import rag_seam as _rag_seam
 from .profile_relevance_constants import (
     _ASCII_TERM_RE,
     _LIST_DETAIL_FIELDS,
@@ -112,7 +113,9 @@ def build_job_focus(
         signal for domain in domains for signal in DOMAIN_SIGNALS[domain] if _contains(text, signal)
     ]
     terms = _unique(skills + title_terms + domain_terms)
-    return JobFocus(skills=tuple(skills), domains=tuple(domains), terms=tuple(terms))
+    focus = JobFocus(skills=tuple(skills), domains=tuple(domains), terms=tuple(terms))
+    # Phase 0 查询扩展只在 RAG 作用域打开时生效：只并进 terms，skills/domains 不动。
+    return _rag_seam.apply_extra_terms(focus)
 
 
 def _item_text(item: dict[str, Any]) -> str:
@@ -157,7 +160,7 @@ def _matched_skills(item: dict[str, Any], focus: JobFocus) -> set[str]:
 
 
 def _select_ranked_items(
-    ranked: list[tuple[int, dict[str, Any], int, set[str]]], limit: int
+    ranked: list[tuple[int, dict[str, Any], float, set[str]]], limit: int
 ) -> list[dict[str, Any]]:
     """先用有限名额覆盖更多直接技能，再按总相关度补齐。"""
     selected_indexes: set[int] = set()
@@ -213,12 +216,40 @@ def _select_summary(summary: str, focus: JobFocus) -> str:
     return " ".join(matching[:2])
 
 
+def _ranked_score(
+    item: dict[str, Any], section: str, focus: JobFocus, boost: Mapping[str, float] | None
+) -> float:
+    """候选排序分：关键词分 + RAG boost；先 round(4) 再比较（计划 §3.3）。
+
+    `boost` 的键是 `canonical_item_hash`（与 chunk 侧同一实现）；未命中按 0 分处理，
+    等价于没有补召回，而不是抛错。定点化是排序可复现的硬要求：cosine 的 float 末位
+    在不同平台累加顺序不同，不 round 会让"同分"变成"偶发选中不同条目"。
+    """
+    score = _score_item(item, section, focus)
+    if not boost:
+        return float(score)
+    return round(score + _rag_seam.boost_for_item(section, item, boost), 4)
+
+
+def _no_relevance_signal(item: dict[str, Any], section: str, focus: JobFocus) -> bool:
+    """fallback 判据：关键词零分**且**没有 RAG boost 命中。
+
+    只按关键词判会把"向量/扩展词补召回进来的条目"误标成"信号不足兜底保留"，
+    让用户可见的 fallback_sections 诊断失真。
+    """
+    if _score_item(item, section, focus) != 0:
+        return False
+    boost = _rag_seam.active_boost()
+    return not (boost and _rag_seam.boost_for_item(section, item, boost))
+
+
 def _select_entries(
     items: list[dict[str, Any]],
     section: str,
     focus: JobFocus,
     *,
     fallback_allowed: bool = False,
+    boost: Mapping[str, float] | None = None,
 ) -> list[dict[str, Any]]:
     primary_field = SECTION_PRIMARY_FIELDS[section]
     valid_items = [item for item in items if str(item.get(primary_field, "")).strip()]
@@ -229,9 +260,17 @@ def _select_entries(
         # 励志奖学金"里没有任何岗位技能词，按相关度打分等于每份定向简历都静默丢掉全部
         # 奖项。按资料录入顺序取到栏目上限；超出上限的部分交给用户自己排序决定去留。
         return valid_items[: section_limit(section)]
+    # 候选构造入口：通知 generate_with_scope 可以退出 RAG 作用域了（作用域外 no-op）。
+    _rag_seam.mark_selection_done()
+    active_boost = boost if boost is not None else _rag_seam.active_boost()
     ranked = sorted(
         (
-            (index, item, _score_item(item, section, focus), _matched_skills(item, focus))
+            (
+                index,
+                item,
+                _ranked_score(item, section, focus, active_boost),
+                _matched_skills(item, focus),
+            )
             for index, item in enumerate(valid_items)
         ),
         key=lambda item: (-item[2], item[0]),

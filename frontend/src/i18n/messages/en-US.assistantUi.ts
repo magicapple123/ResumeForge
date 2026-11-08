@@ -80,6 +80,13 @@ const assistantUi = {
   "assistantUi.actionProposal.action.approve": "Confirm and run",
   "assistantUi.actionProposal.action.reject": "Reject",
   "assistantUi.actionProposal.toast.done": "Write completed",
+  "assistantUi.actionProposal.action.rememberLongTerm": "Always",
+  "assistantUi.actionProposal.action.sessionOnly": "This conversation only",
+  "assistantUi.actionProposal.notice.preference":
+    "Choose the scope: 'Always' keeps it long term; 'This conversation only' affects just this chat. The assistant never writes preferences into resume text or experience.",
+  "assistantUi.actionProposal.toast.sessionOnly": "Saved for this conversation only",
+  "assistantUi.actionProposal.error.sessionOnly":
+    "Could not save the preference for this conversation. Try again.",
   "assistantUi.actionProposal.toast.executed": "Proposal executed",
   "assistantUi.actionProposal.error.fallback": "Could not run the proposal",
   "assistantUi.sidebar.newConversation": "New conversation",
@@ -127,7 +134,7 @@ const assistantUi = {
   "assistantUi.proposalResult.target": "Target: {target}",
   "assistantUi.proposalResult.aria": "Write result: {target}",
   "assistantUi.tasks.title": "Tasks",
-  "assistantUi.tasks.aria.panel": "Tasks in this conversation",
+  "assistantUi.tasks.aria.panel": "Assistant tasks",
   "assistantUi.tasks.count": "{count} tasks",
   "assistantUi.tasks.loading": "Loading tasks…",
   "assistantUi.tasks.error": "Couldn't load tasks — retrying automatically",
@@ -156,6 +163,8 @@ const assistantUi = {
   "assistantUi.tasks.actionFailed": "Couldn't update the task",
   "assistantUi.tasks.waitingHint": "The assistant is waiting for your approval",
   "assistantUi.tasks.steps": "Steps",
+  /** Tag after the step currently in progress (absent when every step is done). */
+  "assistantUi.tasks.current": "Current",
   "assistantUi.tasks.source.reminder": "From: reminder",
   "assistantUi.tasks.source.other": "From: {source}",
   "toolLabel.run_resume_quality_check": "Quality check",

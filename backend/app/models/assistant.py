@@ -4,7 +4,17 @@
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, Index, Integer, String, Text
+from sqlalchemy import (
+    JSON,
+    Boolean,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from ..database import Base
@@ -88,6 +98,8 @@ class AssistantSkill(Base):
     name: Mapped[str] = mapped_column(String(64), unique=True, index=True)
     description: Mapped[str] = mapped_column(String(255), default="")
     prompt: Mapped[str] = mapped_column(Text, default="")
+    # deprecated（T14）：技能改为**按对话启用**（见 AssistantConversationSkill），这一列
+    # 不再参与系统提示注入。保留列是为了避免破坏性迁移，也不回填历史值；新对话一律为空。
     enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     source_name: Mapped[str] = mapped_column(String(255), default="")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
@@ -115,6 +127,33 @@ class AssistantSkillFile(Base):
     size_bytes: Mapped[int] = mapped_column(Integer, default=0)
 
     skill: Mapped[AssistantSkill] = relationship(back_populates="files")
+
+
+class AssistantConversationSkill(Base):
+    """「这个对话启用了哪些技能」（T14）：技能从全局开关改成按会话启用。
+
+    一行 = 一次启用。AssistantSkill.enabled 列已废弃、不读；新对话默认没有任何行
+    （技能全关）。两个外键都 ON DELETE CASCADE：会话进回收站是软删除（行保留，恢复后
+    技能还在），彻底删除会话或删除技能时关联行自动消失，不留幽灵引用。
+    """
+
+    __tablename__ = "assistant_conversation_skill"
+    __table_args__ = (
+        UniqueConstraint(
+            "conversation_id",
+            "skill_id",
+            name="uq_assistant_conversation_skill_conversation_id_skill_id",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    conversation_id: Mapped[int] = mapped_column(
+        ForeignKey("chat_conversation.id", ondelete="CASCADE"), index=True
+    )
+    skill_id: Mapped[int] = mapped_column(
+        ForeignKey("assistant_skill.id", ondelete="CASCADE"), index=True
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True)
 
 
 class AssistantWriteProposal(Base):

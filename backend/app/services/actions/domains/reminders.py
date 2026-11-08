@@ -21,7 +21,7 @@ from typing import TYPE_CHECKING, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from ....schemas.reminder import ReminderOut, ReminderUpdate
+from ....schemas.reminder import ReminderListItemOut, ReminderOut, ReminderUpdate
 from ..registry import define_action
 from ..spec import ActionError, ActionOutcome, ActionSpec, HttpRoute, permission_enum
 
@@ -58,9 +58,13 @@ class UpdateReminderInput(ReminderUpdate):
 
 def _run_list_reminders(db: Session, payload: ListRemindersInput) -> ActionOutcome:
     from ...assistant_tools.report_tools import _tool_list_reminders
-    from ...reminder_service import list_reminders
+    from ...reminder_service import reminder_list_items_out
 
-    rows = list_reminders(db, kind=payload.kind, status=payload.status, limit=payload.limit)
+    # 路由返回体走列表专属回显（补 urgency / days_until）；工具侧只吃 text/summary，
+    # ``data`` 对它不生效（见 tool_adapter.handler），所以两侧仍是同一份筛选与文案。
+    rows = reminder_list_items_out(
+        db, kind=payload.kind, status=payload.status, limit=payload.limit
+    )
     legacy = _tool_list_reminders(
         db,
         {"kind": payload.kind, "status": payload.status, "limit": payload.limit},
@@ -142,7 +146,9 @@ def reminder_actions() -> dict[str, ActionSpec]:
             run=_run_list_reminders,
             service_entry="reminder_service.list_reminders",
             tool_defaults=(("limit", _DEFAULT_TOOL_LIST_LIMIT),),
-            http=HttpRoute("GET", "/api/reminders", list[ReminderOut], tags=("reminders",)),
+            http=HttpRoute(
+                "GET", "/api/reminders", list[ReminderListItemOut], tags=("reminders",)
+            ),
         )
     )
     update_reminder = define_action(

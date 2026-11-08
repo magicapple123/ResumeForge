@@ -1,33 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
-/** 求职助手消息输入、上下文选择、技能开关与附件预览。 */
+/** 求职助手消息输入区：关联上下文 chip、引用、附件、数据权限提示与工具栏。 */
 
-import { useEffect, useState } from "react";
-import { layer } from "../../../theme/tokens";
 import {
   CloseOutlined,
-  ExperimentOutlined,
   FilePdfOutlined,
   FileTextOutlined,
   FileWordOutlined,
-  PaperClipOutlined,
-  QuestionCircleOutlined,
-  SendOutlined,
-  StopOutlined,
 } from "@ant-design/icons";
-import {
-  Alert,
-  App,
-  Button,
-  Checkbox,
-  Dropdown,
-  Image,
-  Input,
-  Select,
-  Switch,
-  Tag,
-  Tooltip,
-  Upload,
-} from "antd";
+import { Alert, App, Button, Image, Input, Tag, Tooltip } from "antd";
 import {
   ASSISTANT_ACCEPT,
   MAX_ATTACHMENT_COUNT,
@@ -36,18 +16,21 @@ import {
   type PendingAttachment,
 } from "../assistantUtils";
 import type { AssistantQuotedMessage, AssistantSkill } from "../../../types";
-import {
-  CUSTOM_EFFORT_OPTION,
-  MAX_REASONING_EFFORT_CHARS,
-  REASONING_EFFORT_OPTIONS,
-  isValidReasoningEffort,
-  type ReasoningEffort,
-} from "../../../types/assistant";
-import { useJobSearchSelect, useResumeSearchSelect } from "../../../hooks/remoteSearchOptions";
+import type { ReasoningEffort } from "../../../types/assistant";
+import type {
+  ConversationSkillBudget,
+  ConversationSkillItem,
+} from "../../../api/conversationSkills";
 import FileDropZone from "../../../components/common/FileDropZone";
+import { appendTranscript } from "../../../components/voice/appendTranscript";
+import { VoiceButton } from "../../../components/voice/VoiceButton";
 import { t } from "../../../i18n";
-import { REASONING_EFFORT_LABEL_KEYS } from "../../../i18n/enum/assistant";
 import { useLocale } from "../../../i18n/i18nContext";
+import { useAssistantPermission } from "../assistantPermission";
+import ComposerToolbar from "./composer/ComposerToolbar";
+import ContextChips from "./composer/ContextChips";
+import { PermissionNotice } from "./composer/PermissionMenu";
+import SkillChips from "./composer/SkillChips";
 
 /** 文档按扩展名区分图标：pdf 和 docx 混在一串标签里时，图标比文件名更好认。 */
 function attachmentIcon(attachment: PendingAttachment) {
@@ -61,6 +44,8 @@ function attachmentIcon(attachment: PendingAttachment) {
 
 interface Props {
   compact?: boolean;
+  /** 当前会话 id；新会话还没有 id（数据权限覆盖按会话存本机）。 */
+  conversationId?: number | null;
   content: string;
   attachments: PendingAttachment[];
   sending: boolean;
@@ -69,8 +54,12 @@ interface Props {
   resumeId: number | undefined;
   webSearch: boolean;
   reasoningEffort: ReasoningEffort;
-  /** 全部技能（含停用的），用于在下拉里直接开关。 */
-  skills: AssistantSkill[];
+  /** 技能库（菜单候选）：新建/导入技能后由页面重挂载刷新。 */
+  skillCatalog: AssistantSkill[];
+  /** 本对话已启用（草稿态 = 暂存）的技能，按启用顺序。 */
+  selectedSkills: ConversationSkillItem[];
+  /** 本对话的技能注入预算；草稿态为 null。 */
+  skillBudget: ConversationSkillBudget | null;
   skillsLoaded: boolean;
   togglingSkillId: number | null;
   onContentChange: (value: string) => void;
@@ -91,6 +80,7 @@ interface Props {
 
 export default function AssistantComposer({
   compact = false,
+  conversationId,
   content,
   attachments,
   sending,
@@ -99,7 +89,9 @@ export default function AssistantComposer({
   resumeId,
   webSearch,
   reasoningEffort,
-  skills,
+  skillCatalog,
+  selectedSkills,
+  skillBudget,
   skillsLoaded,
   togglingSkillId,
   onContentChange,
@@ -119,33 +111,8 @@ export default function AssistantComposer({
   // 本组件用模块级 t()：必须订阅语言变化，否则切语言后输入区不重渲染。
   useLocale();
   const { message } = App.useApp();
-  // 关联岗位 / 简历下拉改为远程搜索（P0-1）：不再由页面预拉"前 100 条"当全量。
-  const jobSelect = useJobSearchSelect();
-  const resumeSelect = useResumeSearchSelect();
-  // 深链 / 页面侧带入的已选值保显示（P0-1）：按 id 回查补进候选。
-  useEffect(() => {
-    void jobSelect.ensure(jobId);
-    // hook 的回调引用稳定，只跟随已选值变化。
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [jobId]);
-  useEffect(() => {
-    void resumeSelect.ensure(resumeId);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [resumeId]);
-  // 页面态下拉常驻可见：挂载即预拉第一页候选（compact 卡不显示上下文选择，跳过）。
-  useEffect(() => {
-    if (compact) return;
-    void jobSelect.reload();
-    void resumeSelect.reload();
-    // hook 的回调引用稳定，只在挂载时执行一次。
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [compact]);
-  const enabledSkills = skills.filter((skill) => skill.enabled);
-  // 自定义档位是**界面态**（值本身仍然由页面受控）：从本地存回来的自定义值一打开就
-  // 直接落在输入框里，而不是让下拉把它当未知值空着显示。
-  const [customEffort, setCustomEffort] = useState(
-    () => !REASONING_EFFORT_OPTIONS.some((option) => option.value === reasoningEffort),
-  );
+  // 数据权限（D19/D20）：默认「跟随全局」，有会话时按会话覆盖。
+  const permission = useAssistantPermission(conversationId ?? null);
 
   /**
    * 直接往输入框里粘贴截图。
@@ -174,28 +141,24 @@ export default function AssistantComposer({
       onRejected={(count) => message.warning(t("assistantComposer.toast.rejectedCount", { count }))}
     >
       <div className="assistant-composer">
+        {/* 关联上下文 chip 行（R06-A）：只在已选时出现，入口在工具栏的 `+` 面板里。 */}
         {!compact && (
-          <div className="assistant-context-controls">
-            <div className="assistant-context-selects">
-              <Select
-                aria-label={t("assistantComposer.aria.jobSelect")}
-                allowClear
-                placeholder={t("assistantComposer.placeholder.job")}
-                value={jobId}
-                onChange={onJobChange}
-                {...jobSelect.selectProps}
-              />
-              <Select
-                aria-label={t("assistantComposer.aria.resumeSelect")}
-                allowClear
-                placeholder={t("assistantComposer.placeholder.resume")}
-                value={resumeId}
-                onChange={onResumeChange}
-                {...resumeSelect.selectProps}
-              />
-            </div>
-          </div>
+          <ContextChips
+            jobId={jobId}
+            resumeId={resumeId}
+            onJobChange={onJobChange}
+            onResumeChange={onResumeChange}
+          />
         )}
+        {/* 对话技能 chip 行（T14）：只在已选时出现（空态入口同样收进 `+`）。 */}
+        <SkillChips
+          catalog={skillCatalog}
+          selected={selectedSkills}
+          budget={skillBudget}
+          togglingId={togglingSkillId}
+          disabled={sending}
+          onToggle={onToggleSkill}
+        />
         {quoted ? (
           <div className="assistant-quote-chip">
             <span className="assistant-quote-chip-label">
@@ -253,6 +216,10 @@ export default function AssistantComposer({
             )}
           </div>
         )}
+        {/* 放宽读取 / 完全权限生效时的琥珀提示条（可关闭，换档位后重新出现）。 */}
+        {permission.noticeVisible ? (
+          <PermissionNotice level={permission.effectiveLevel} onClose={permission.dismissNotice} />
+        ) : null}
         <Input.TextArea
           value={content}
           autoSize={{ minRows: compact ? 2 : 3, maxRows: 8 }}
@@ -267,219 +234,56 @@ export default function AssistantComposer({
             }
           }}
         />
-        <div className="assistant-composer-actions">
-          <div className="assistant-composer-utility">
-            <Upload
-              accept={ASSISTANT_ACCEPT}
-              multiple
-              showUploadList={false}
-              disabled={
-                sending || attachmentReads > 0 || attachments.length >= MAX_ATTACHMENT_COUNT
-              }
-              beforeUpload={(file) => {
-                onAddAttachment(file as File);
-                return Upload.LIST_IGNORE;
-              }}
-            >
-              {/*
-                compact 卡片里用短文案 + 限宽 + 显式抬层：
-                - 卡片（3200）高于 antd Tooltip 默认的 1070，不抬层会被卡片盖住；
-                  抬到卡片内弹层基准 layer.cardPopup（3310）才稳在卡片之上；
-                - maxWidth 240 让长文案换行，贴近视口边缘时 autoAdjustOverflow 翻转，
-                  Tooltip 不会水平溢出；保持挂 body（挂进卡片会被 overflow: hidden 裁掉）。
-              */}
-              <Tooltip
-                title={
-                  compact
-                    ? t("assistantComposer.tooltip.attachCompact")
-                    : t("assistantComposer.tooltip.attach")
-                }
-                placement="top"
-                styles={compact ? { root: { maxWidth: 240, zIndex: layer.cardPopup } } : undefined}
-              >
-                <Button
-                  aria-label={t("assistantComposer.aria.attach")}
-                  icon={<PaperClipOutlined />}
-                  loading={attachmentReads > 0}
-                  // 选满时 Upload 自己会吞掉点击，但按钮还亮着——看起来能点却没反应。
-                  // 把同一个条件写全，界面上才是"真的不能点"。
-                  disabled={
-                    sending || attachmentReads > 0 || attachments.length >= MAX_ATTACHMENT_COUNT
-                  }
-                >
-                  {t("assistantComposer.action.attach")}
-                </Button>
-              </Tooltip>
-            </Upload>
-            {!compact && (
-              <Dropdown
-                trigger={["click"]}
-                placement="topLeft"
-                menu={{
-                  // 用真实的 Checkbox 表达"已启用"：菜单自带的高亮在浅色主题下几乎看不出来，
-                  // 用户会以为点击没生效。这里每项左侧都是可勾选的方框，点整行即切换。
-                  items: [
-                    {
-                      key: "hint",
-                      label: (
-                        <span className="assistant-skill-menu-hint">
-                          {t("assistantComposer.skills.hint")}
-                        </span>
-                      ),
-                      disabled: true,
-                    },
-                    { type: "divider" as const },
-                    ...skills.map((skill) => ({
-                      key: String(skill.id),
-                      label: (
-                        <span className="assistant-skill-option">
-                          <Checkbox
-                            checked={skill.enabled}
-                            disabled={togglingSkillId === skill.id}
-                          />
-                          <span className="assistant-skill-option-text">
-                            <span className="assistant-skill-option-name">{skill.name}</span>
-                            {skill.description ? (
-                              <span className="assistant-skill-option-desc">
-                                {skill.description}
-                              </span>
-                            ) : null}
-                          </span>
-                        </span>
-                      ),
-                      disabled: togglingSkillId === skill.id,
-                    })),
-                    { type: "divider" as const },
-                    { key: "manage", label: t("assistantComposer.skills.manage") },
-                  ],
-                  onClick: ({ key }) => {
-                    if (key === "manage") {
-                      onManageSkills();
-                      return;
-                    }
-                    const skill = skills.find((item) => String(item.id) === key);
-                    if (skill) onToggleSkill(skill, !skill.enabled);
-                  },
-                }}
+        <ComposerToolbar
+          compact={compact}
+          content={content}
+          sending={sending}
+          attachmentsCount={attachments.length}
+          attachmentReads={attachmentReads}
+          webSearch={webSearch}
+          reasoningEffort={reasoningEffort}
+          permission={{
+            conversationId: conversationId ?? null,
+            choice: permission.choice,
+            effectiveLevel: permission.effectiveLevel,
+            editable: permission.editable,
+            onChange: permission.requestChoice,
+          }}
+          // 左侧「+」面板（R06-A）：附件 / 关联岗位 / 关联简历 / 技能 四组一个入口。
+          addMenu={{
+            compact,
+            sending,
+            attachmentReads,
+            attachmentsCount: attachments.length,
+            jobId,
+            resumeId,
+            skillCatalog,
+            selectedSkills,
+            skillBudget,
+            skillsLoaded,
+            togglingSkillId,
+            onJobChange,
+            onResumeChange,
+            onToggleSkill,
+            onManageSkills,
+            onAddAttachment,
+          }}
+          // 语音槽位（T12）：录音 → 转写 → 追加到已输入文字后面；只写 state，绝不自动发送。
+          // R06-C：它渲染在右侧组里（ReasoningChip → 语音 → 发送），仍由语音线填。
+          voiceSlot={
+            <div className="composer-voice-slot">
+              <VoiceButton
+                maxSeconds={180}
                 disabled={sending}
-              >
-                <Tooltip title={t("assistantComposer.skills.toggleHint")}>
-                  <Button
-                    aria-label={t("assistantComposer.skills.label")}
-                    icon={<ExperimentOutlined />}
-                    loading={!skillsLoaded}
-                    disabled={sending}
-                  >
-                    {enabledSkills.length > 0
-                      ? t("assistantComposer.skills.count", { count: enabledSkills.length })
-                      : t("assistantComposer.skills.label")}
-                  </Button>
-                </Tooltip>
-              </Dropdown>
-            )}
-            <div className="assistant-context-toggles">
-              <label className="assistant-context-toggle">
-                <Switch size="small" checked={webSearch} onChange={onWebSearchChange} />
-                <span>{t("assistantComposer.toggle.webSearch")}</span>
-              </label>
-              {/* 带文字标签：只放一个「默认」下拉，用户看不出这是在调什么（截图反馈）。
-                  说明挂在文字旁的问号图标上——此前整块套 Tooltip，悬停「思考强度」四个字
-                  就弹出一大条提示，太重；文字标签本身不再触发。 */}
-              <span className="assistant-reasoning-control">
-                <span className="assistant-reasoning-label">
-                  {t("assistantComposer.effort.label")}
-                </span>
-                <Tooltip title={t("assistantComposer.effort.hint")}>
-                  <QuestionCircleOutlined
-                    className="assistant-reasoning-help"
-                    aria-label={t("assistantComposer.aria.effortHint")}
-                  />
-                </Tooltip>
-                {customEffort ? (
-                  <span className="assistant-reasoning-custom">
-                    <Input
-                      size="small"
-                      className="assistant-reasoning-input"
-                      value={reasoningEffort}
-                      maxLength={MAX_REASONING_EFFORT_CHARS}
-                      placeholder={t("assistantComposer.placeholder.customEffort")}
-                      disabled={sending}
-                      status={isValidReasoningEffort(reasoningEffort) ? undefined : "error"}
-                      onChange={(event) => onReasoningEffortChange(event.target.value)}
-                      onBlur={(event) => {
-                        // 填了空就退回预设：留一个空输入框在工具条上只会让人以为是坏了。
-                        // 看**输入框当前的值**而不是 prop——父组件不一定同步回填。
-                        if (!event.target.value.trim()) {
-                          setCustomEffort(false);
-                          onReasoningEffortChange("");
-                        }
-                      }}
-                      aria-label={t("assistantComposer.aria.customEffort")}
-                    />
-                    <Button
-                      type="link"
-                      size="small"
-                      className="assistant-reasoning-back"
-                      disabled={sending}
-                      onClick={() => {
-                        setCustomEffort(false);
-                        onReasoningEffortChange("");
-                      }}
-                    >
-                      {t("assistantComposer.action.usePreset")}
-                    </Button>
-                  </span>
-                ) : (
-                  <Select
-                    size="small"
-                    showSearch
-                    optionFilterProp="label"
-                    className="assistant-reasoning-select"
-                    value={reasoningEffort}
-                    options={[
-                      ...REASONING_EFFORT_OPTIONS.map((option) => ({
-                        value: option.value,
-                        // 清单仍由 types 表提供（协议层），只有显示名走 enum 映射 + t()。
-                        label: t(REASONING_EFFORT_LABEL_KEYS[option.value]),
-                      })),
-                      { value: CUSTOM_EFFORT_OPTION, label: t("assistantComposer.effort.custom") },
-                    ]}
-                    disabled={sending}
-                    onChange={(value) => {
-                      if (value === CUSTOM_EFFORT_OPTION) {
-                        setCustomEffort(true);
-                        onReasoningEffortChange("");
-                        return;
-                      }
-                      onReasoningEffortChange(value);
-                    }}
-                    aria-label={t("assistantComposer.effort.label")}
-                  />
-                )}
-              </span>
+                onTranscribed={(text) => onContentChange(appendTranscript(content, text))}
+              />
             </div>
-          </div>
-          {sending ? (
-            <Button
-              danger
-              aria-label={t("assistantComposer.aria.stop")}
-              icon={<StopOutlined />}
-              onClick={onStop}
-            >
-              {t("assistantComposer.action.stop")}
-            </Button>
-          ) : (
-            <Button
-              type="primary"
-              aria-label={t("assistantComposer.aria.send")}
-              icon={<SendOutlined />}
-              disabled={attachmentReads > 0 || (!content.trim() && attachments.length === 0)}
-              onClick={onSend}
-            >
-              {t("assistantComposer.action.send")}
-            </Button>
-          )}
-        </div>
+          }
+          onWebSearchChange={onWebSearchChange}
+          onReasoningEffortChange={onReasoningEffortChange}
+          onSend={onSend}
+          onStop={onStop}
+        />
       </div>
     </FileDropZone>
   );

@@ -17,6 +17,7 @@
 
 import type { RefObject } from "react";
 import { sendAssistantMessage } from "../../../api/assistant";
+import { resolvePermissionAxes } from "../assistantPermission";
 import { buildAssistantClientContext } from "../clientContext";
 import { t } from "../../../i18n";
 import type {
@@ -224,6 +225,9 @@ export async function sendAssistantStreamMessage(
     options.setTouTouStatus("error");
     return;
   }
+  // T11 四档权限：请求体永远发送**解算后的两轴布尔**（跟随全局在这里解算成具体档位），
+  // 不发中间态——后端只认布尔。解算所需的全局默认取不到时按「仅查看」处理（少发安全）。
+  const permissionAxes = await resolvePermissionAxes(conversationId);
   const attachmentPayload = options.attachmentsRef.current.map(({ name, mime_type, data }) => ({
     name,
     mime_type,
@@ -314,6 +318,9 @@ export async function sendAssistantStreamMessage(
         // 后端保留这个字段只是兼容旧客户端；助手现在始终读取本地个人资料。
         include_profile: true,
         web_search: options.webSearch,
+        // T11：四档权限解算后的两轴（relaxed_mode = 读真实资料，allow_write = 直接写库）。
+        relaxed_mode: permissionAxes.relaxed,
+        allow_write: permissionAxes.allowWrite,
         reasoning_effort: options.reasoningEffort,
         quoted_message_id: options.quotedMessageId,
         attachments: attachmentPayload,

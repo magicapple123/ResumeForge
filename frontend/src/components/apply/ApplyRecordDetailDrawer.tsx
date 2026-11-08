@@ -12,8 +12,16 @@
  * site_changed 和 render_timeout 给的是两条不同的建议，这正是 #39 要的"建议与子码对应"。
  *
  * 没失败的记录（成功 / 跳过）只渲染第一段（含时间与批次），不显示空的三段标题。
+ *
+ * T07「我已提交」：**投递成功**的记录多一段「记录投递结果」——点一次按钮即复用后端的
+ * record_applied 写路径（track 去重 + 投递快照 + 7 天后 hr_reply 提醒），成功后把提醒
+ * 日期如实显示出来。一次性引导只在后端返回 `show_followup_hint=true` 时出现：总开关关着
+ * 时后端既不弹也不标记已弹，前端不自己判断开关（否则两处 gate 会漂）。
  */
-import { Alert, Descriptions, Space, Tag, Typography, Drawer } from "antd";
+import { Alert, App, Button, Collapse, Descriptions, Space, Tag, Typography, Drawer } from "antd";
+import { useState } from "react";
+import { markRecordSubmitted, type ApplyRecordSubmittedResponse } from "../../api/apply";
+import DeliveryReceipt from "../../features/apply/receipt/DeliveryReceipt";
 import { failureLabel, type ApplyRecord } from "../../types";
 import { formatDateTime } from "../../utils/format";
 import { t, type MessageKey } from "../../i18n";
@@ -63,6 +71,37 @@ function adviceKey(reason: string): MessageKey | undefined {
 export default function ApplyRecordDetailDrawer({ record, onClose }: Props) {
   // 本组件用模块级 t()：必须订阅语言变化，否则切语言后抽屉停在旧文案。
   useLocale();
+  const { message } = App.useApp();
+  // 「我已提交」的本地结果按记录 id 存：抽屉开着换记录时不能把上一条的提醒日期带过来。
+  const [submitting, setSubmitting] = useState(false);
+  const [submission, setSubmission] = useState<{
+    recordId: number;
+    result: ApplyRecordSubmittedResponse;
+  } | null>(null);
+  // 交付单是展开才读的（GET .../receipt），收起时不发请求、不占首屏。
+  const [receiptOpen, setReceiptOpen] = useState(false);
+  const submissionResult =
+    record !== null && submission !== null && submission.recordId === record.id
+      ? submission.result
+      : null;
+
+  const markSubmitted = async () => {
+    if (!record || submitting) return;
+    setSubmitting(true);
+    try {
+      const result = await markRecordSubmitted(record.id);
+      setSubmission({ recordId: record.id, result });
+      message.success(t("applyUi.recordDetail.submitted.toast"));
+    } catch (error) {
+      message.error(
+        error instanceof Error && error.message.trim()
+          ? error.message
+          : t("applyUi.recordDetail.submitted.error"),
+      );
+    } finally {
+      setSubmitting(false);
+    }
+  };
   // 已知失败分类走语言包；后端新增、尚未登记的分类回退后端文案 / 原码（旧行为）。
   const failureText = (item: ApplyRecord): string => {
     if (!item.failure_category) return "-";
@@ -139,6 +178,50 @@ export default function ApplyRecordDetailDrawer({ record, onClose }: Props) {
             </Descriptions>
           </section>
 
+          {/* ===== T07：记录投递结果（仅投递成功的记录）===== */}
+          {record.status === "success" ? (
+            <section data-testid="apply-record-submit-section">
+              <Typography.Title level={5} style={{ marginTop: 0 }}>
+                {t("applyUi.recordDetail.submitted.section")}
+              </Typography.Title>
+              {submissionResult ? (
+                <Space orientation="vertical" size={8} style={{ width: "100%" }}>
+                  <Tag color="success">{t("applyUi.recordDetail.submitted.done")}</Tag>
+                  <Typography.Text type="secondary">
+                    {t("applyUi.recordDetail.submitted.reminder", {
+                      date: formatDateTime(submissionResult.reminder_due_at),
+                    })}
+                  </Typography.Text>
+                  {/* 一次性引导由后端 gate（show_followup_hint）：关掉任务卡总开关后恒为 false。 */}
+                  {submissionResult.show_followup_hint ? (
+                    <div data-testid="apply-record-followup-hint">
+                      <Alert
+                        type="info"
+                        showIcon
+                        title={t("applyUi.recordDetail.submitted.hintTitle")}
+                        description={t("applyUi.recordDetail.submitted.hintBody")}
+                      />
+                    </div>
+                  ) : null}
+                </Space>
+              ) : (
+                <Space orientation="vertical" size={8} style={{ width: "100%" }}>
+                  <Typography.Text type="secondary">
+                    {t("applyUi.recordDetail.submitted.hint")}
+                  </Typography.Text>
+                  <Button
+                    type="primary"
+                    loading={submitting}
+                    onClick={() => void markSubmitted()}
+                    data-testid="apply-record-mark-submitted"
+                  >
+                    {t("applyUi.recordDetail.submitted.action")}
+                  </Button>
+                </Space>
+              )}
+            </section>
+          ) : null}
+
           {/* ===== 第二段：在哪一步（阶段 + 环节 + 时间 + 批次）===== */}
           <section>
             <Typography.Title level={5} style={{ marginTop: 0 }}>
@@ -166,6 +249,22 @@ export default function ApplyRecordDetailDrawer({ record, onClose }: Props) {
               </Descriptions.Item>
             </Descriptions>
           </section>
+
+          {/* ===== T09：投递交付单（展开才读取；失败记录也可读，用于解释"卡在人手上"）===== */}
+          <Collapse
+            size="small"
+            items={[
+              {
+                key: "receipt",
+                label: t("deliveryReceipt.title"),
+                children: receiptOpen ? <DeliveryReceipt recordId={record.id} /> : null,
+              },
+            ]}
+            activeKey={receiptOpen ? ["receipt"] : []}
+            onChange={(keys) =>
+              setReceiptOpen((Array.isArray(keys) ? keys : [keys]).includes("receipt"))
+            }
+          />
 
           {/* ===== 第三段：你该怎么做（建议由子码决定）===== */}
           {failed ? (

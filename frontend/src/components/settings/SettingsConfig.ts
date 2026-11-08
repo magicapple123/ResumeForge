@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 /** 设置页的预设、脱敏和表单值转换逻辑。 */
 
-import { LLM_PRESETS } from "../../config";
+import { LLM_PRESETS, presetAnthropicBaseUrl, presetResponsesBaseUrl } from "../../config";
 import type { MessageKey } from "../../i18n";
 import type { LLMConfig, LLMConfigRecord } from "../../types";
 
@@ -58,16 +58,32 @@ export function normalizePresetBaseUrl(value: string): string {
   }
 }
 
+/**
+ * 该地址是否属于这个预设——chat 地址，或它声明过的协议专用地址（Responses / Anthropic）。
+ *
+ * 为什么要看专用地址：切协议会把记录的 base_url 改写成 `.../responses` 或
+ * `.../anthropic/v1`。只比 chat 地址的话，这条记录再打开就匹配不到预设，表单会回落成
+ * 「自定义」——而"切回 chat 地址"恰恰要靠预设给出改写目标，用户于是被卡在专用地址上。
+ */
+function presetOwnsBaseUrl(preset: (typeof LLM_PRESETS)[number], normalizedUrl: string): boolean {
+  const candidates = [
+    preset.base_url,
+    presetResponsesBaseUrl(preset),
+    presetAnthropicBaseUrl(preset),
+  ];
+  return candidates.some(
+    (candidate) => candidate !== null && normalizePresetBaseUrl(candidate) === normalizedUrl,
+  );
+}
+
 export function matchingPreset(config: Pick<LLMConfig, "provider" | "base_url">) {
   const normalizedUrl = normalizePresetBaseUrl(config.base_url);
   const exact = LLM_PRESETS.find(
-    (preset) =>
-      preset.provider === config.provider &&
-      normalizePresetBaseUrl(preset.base_url) === normalizedUrl,
+    (preset) => preset.provider === config.provider && presetOwnsBaseUrl(preset, normalizedUrl),
   );
   if (exact || config.provider !== CUSTOM_PRESET) return exact;
   // 早期自定义配置没有保存正确的展示标识；官方地址足以无歧义地恢复预设名称。
-  return LLM_PRESETS.find((preset) => normalizePresetBaseUrl(preset.base_url) === normalizedUrl);
+  return LLM_PRESETS.find((preset) => presetOwnsBaseUrl(preset, normalizedUrl));
 }
 
 export function configFromRecord(record: LLMConfigRecord): LLMConfig {

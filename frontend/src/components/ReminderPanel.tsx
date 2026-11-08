@@ -2,30 +2,23 @@
 /** 日历提醒（R-12）：待办列表、新建、完成、忽略与删除。
  *
  * 提醒列表按 ``remind_at`` 升序展示"接下来要做什么"；pending 的提醒可一键标记完成或忽略，
- * 删除走软删除（进回收站）。可绑定漏斗 / 岗位 / 简历，三个都是选填。
+ * 删除走软删除（进回收站）。可关联求职进度 / 岗位 / 简历，三个都是选填（T05 收进折叠区）。
+ *
+ * T06：列表多了一个「时间范围」筛选（全部 / 已逾期 / 今天 / 以后），逾期判定用后端下发的
+ * ``days_until``——前端不按小时重算。列表是客户端分页，筛选变化时重置到第 1 页。
+ *
+ * 详情抽屉与表单字段分别拆在 `tracker/ReminderDetailDrawer` / `tracker/ReminderFormFields`
+ * （单文件 500 行硬预算；本文件只保留数据、弹层开关与列表交互）。
  */
-import { CheckOutlined, CheckSquareOutlined, EditOutlined, PlusOutlined } from "@ant-design/icons";
-import {
-  App,
-  Button,
-  Card,
-  DatePicker,
-  Empty,
-  Form,
-  Input,
-  Listy,
-  Pagination,
-  Segmented,
-  Select,
-  Space,
-  Tag,
-} from "antd";
+import { CheckSquareOutlined, PlusOutlined } from "@ant-design/icons";
+import { App, Button, Card, Empty, Form, Listy, Pagination, Segmented, Select, Space } from "antd";
 import FormModal from "./common/FormModal";
 import LoadingBlock from "./common/LoadingBlock";
 import { useClientPagination } from "../hooks/useClientPagination";
-import dayjs, { type Dayjs } from "dayjs";
+import dayjs from "dayjs";
 import { useCallback, useEffect, useState } from "react";
 import { createReminder, deleteReminder, listReminders, updateReminder } from "../api/reminders";
+import { getAgentTaskEvents } from "../api/settings";
 import {
   useJobSearchSelect,
   useResumeSearchSelect,
@@ -33,55 +26,69 @@ import {
 } from "../hooks/remoteSearchOptions";
 import { REMINDER_KINDS } from "../types";
 import type { Reminder, ReminderKind } from "../types";
-import { formatDateTime } from "../utils/format";
-import { RecordDetailDrawer } from "./common/RecordDetail";
 import { LISTY_ITEM_PADDING_DEFAULT } from "./common/listyPadding";
 import type { RowActionItem } from "./common/RowActions";
 import BatchActionBar from "./common/BatchActionBar";
 import { useBatchSelection } from "../hooks/useBatchSelection";
 import CalendarView from "./tracker/CalendarView";
+import ReminderDetailDrawer from "./tracker/ReminderDetailDrawer";
+import ReminderFormFields, { type ReminderForm } from "./tracker/ReminderFormFields";
+import { defaultRemindAt } from "./tracker/reminderFormDefaults";
 import ReminderListItem from "./tracker/ReminderListItem";
-import { t } from "../i18n";
 import {
-  REMINDER_KIND_LABEL_KEYS,
-  reminderKindLabelKey,
-  reminderStatusLabelKey,
-} from "../i18n/enum/reminder";
+  REMINDER_TIME_RANGES,
+  REMINDER_TIME_RANGE_LABEL_KEYS,
+  filterByTimeRange,
+} from "./tracker/reminderTimeRange";
+import type { ReminderTimeRange } from "./tracker/reminderTimeRange";
+import { t } from "../i18n";
+import { REMINDER_KIND_LABEL_KEYS } from "../i18n/enum/reminder";
 import { useLocale } from "../i18n/i18nContext";
-
-interface ReminderForm {
-  title: string;
-  remind_at: Dayjs;
-  kind: ReminderKind;
-  note?: string;
-  track_id?: number;
-  job_id?: number;
-  resume_id?: number;
-}
 
 export default function ReminderPanel() {
   useLocale();
   const { message, modal } = App.useApp();
-  // 绑定目标下拉改为远程搜索（P0-1）：不再由页面预拉"前 100 条"当全量。
+  // 关联目标下拉改为远程搜索（P0-1）：不再由页面预拉"前 100 条"当全量。
   const trackSelect = useTrackSearchSelect();
   const jobSelect = useJobSearchSelect();
   const resumeSelect = useResumeSearchSelect();
   const [items, setItems] = useState<Reminder[]>([]);
+  const [kind, setKind] = useState<string | undefined>();
+  // T06 时间范围：客户端筛选（列表本来就是客户端分页），不影响服务端的类型筛选。
+  const [range, setRange] = useState<ReminderTimeRange>("all");
+  const rangedItems = filterByTimeRange(items, range);
   // 提醒持续累积，一页 10 条（Listy 无内建分页，走通用客户端分页）。
+  // resetKey = 类型 + 时间范围：任一筛选变化都回第 1 页，不会停在越界页码上。
   const {
     page,
     setPage,
     paged: pagedReminders,
     total: reminderTotal,
-  } = useClientPagination(items, 10);
+  } = useClientPagination(rangedItems, 10, `${kind ?? ""}|${range}`);
   const [loading, setLoading] = useState(true);
-  const [kind, setKind] = useState<string | undefined>();
   const [view, setView] = useState<"list" | "calendar">("list");
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<Reminder | null>(null);
   const [detail, setDetail] = useState<Reminder | null>(null);
   const [saving, setSaving] = useState(false);
+  // T05：时间字段下方的任务卡提示要读总开关（读不到就不提示，不阻断新建提醒）。
+  const [taskCardsEnabled, setTaskCardsEnabled] = useState<boolean | null>(null);
   const [form] = Form.useForm<ReminderForm>();
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const saved = await getAgentTaskEvents();
+        if (!cancelled) setTaskCardsEnabled(saved.enabled);
+      } catch {
+        if (!cancelled) setTaskCardsEnabled(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const fetchList = useCallback(async () => {
     try {
@@ -102,9 +109,9 @@ export default function ReminderPanel() {
 
   useEffect(() => {
     let cancelled = false;
-    void fetchList().then((items) => {
+    void fetchList().then((nextItems) => {
       if (cancelled) return;
-      if (items !== null) setItems(items);
+      if (nextItems !== null) setItems(nextItems);
       setLoading(false);
     });
     return () => {
@@ -115,14 +122,16 @@ export default function ReminderPanel() {
   // 事件路径（保存/删除后的整表重拉，含 loading 翻动）。
   const loadList = useCallback(async () => {
     setLoading(true);
-    const items = await fetchList();
-    if (items !== null) setItems(items);
+    const nextItems = await fetchList();
+    if (nextItems !== null) setItems(nextItems);
     setLoading(false);
   }, [fetchList]);
 
   const openCreate = () => {
     setEditing(null);
     form.resetFields();
+    // 每次打开都重置到"未来 1 小时后"（T05：默认值本身必须合法，不能是此刻）。
+    form.setFieldsValue({ kind: "other", remind_at: defaultRemindAt() });
     // 每次打开都重置一次候选列表（P0-1）：远程搜索结果随上次输入残留。
     void trackSelect.reload();
     void jobSelect.reload();
@@ -152,7 +161,16 @@ export default function ReminderPanel() {
   };
 
   const save = async () => {
-    const values = await form.validateFields();
+    // 关联三字段默认收起（T05）：折叠时 Form.Item 可能从未挂载，validateFields 只返回
+    // 已注册字段。getFieldsValue(true) 读完整 store，保证"收起状态下保存不丢已有关联"。
+    let values: ReminderForm;
+    try {
+      values = { ...form.getFieldsValue(true), ...(await form.validateFields()) };
+    } catch {
+      // 校验失败：错误已就地显示在字段下方，静默返回即可——把 rejected promise 放出去会变成
+      // 一条 unhandled rejection（控制台报错，且测试汇总里多出 Errors 行）。
+      return;
+    }
     setSaving(true);
     const payload = {
       title: values.title,
@@ -188,8 +206,8 @@ export default function ReminderPanel() {
 
   const batch = useBatchSelection<number>();
 
-  // 详情抽屉要展示绑定目标的名称（P0-1）：打开时按 id 回查补进候选，
-  // 否则第 101 条之后的绑定在抽屉里只能显示 "-"。
+  // 详情抽屉要展示关联目标的名称（P0-1）：打开时按 id 回查补进候选，
+  // 否则第 101 条之后的关联在抽屉里只能显示 "-"。
   useEffect(() => {
     if (!detail) return;
     void trackSelect.ensure(detail.track_id);
@@ -250,9 +268,9 @@ export default function ReminderPanel() {
     },
   ];
 
-  // 详情抽屉的 Tag：协议值先映到语言包 key；未知取值回退成后端下发的原值（不丢信息）。
-  const detailKindLabelKey = detail ? reminderKindLabelKey(detail.kind) : undefined;
-  const detailStatusLabelKey = detail ? reminderStatusLabelKey(detail.status) : undefined;
+  /** 关联对象在下拉里查不到时的占位（与列表同口径：不猜、显示 "-"）。 */
+  const labelOf = (options: { value: number; label: string }[], id: number | null | undefined) =>
+    id == null ? "-" : (options.find((option) => option.value === id)?.label ?? "-");
 
   return (
     <Space orientation="vertical" style={{ width: "100%" }} size="middle">
@@ -267,6 +285,16 @@ export default function ReminderPanel() {
             options={REMINDER_KINDS.map((value) => ({
               value,
               label: t(REMINDER_KIND_LABEL_KEYS[value]),
+            }))}
+          />
+          <Select
+            aria-label={t("reminder.filter.range.placeholder")}
+            style={{ minWidth: 120 }}
+            value={range}
+            onChange={(value) => setRange(value)}
+            options={REMINDER_TIME_RANGES.map((value) => ({
+              value,
+              label: t(REMINDER_TIME_RANGE_LABEL_KEYS[value]),
             }))}
           />
           <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
@@ -285,11 +313,13 @@ export default function ReminderPanel() {
       </Card>
 
       {view === "calendar" ? (
-        <CalendarView reminders={items} loading={loading} />
+        <CalendarView reminders={rangedItems} loading={loading} />
       ) : loading ? (
         <LoadingBlock />
-      ) : items.length === 0 ? (
-        <Empty description={t("reminder.empty")} />
+      ) : rangedItems.length === 0 ? (
+        <Empty
+          description={items.length === 0 ? t("reminder.empty") : t("reminder.emptyFiltered")}
+        />
       ) : (
         <>
           {batch.selecting && (
@@ -355,144 +385,31 @@ export default function ReminderPanel() {
         okText={t("reminder.modal.save")}
         width={520}
       >
-        <Form form={form} layout="vertical" initialValues={{ kind: "other", remind_at: dayjs() }}>
-          <Form.Item
-            label={t("reminder.field.content")}
-            name="title"
-            rules={[{ required: true, message: t("reminder.required.content") }]}
-          >
-            <Input maxLength={200} placeholder={t("reminder.placeholder.content")} />
-          </Form.Item>
-          <Form.Item
-            label={t("reminder.field.time")}
-            name="remind_at"
-            rules={[{ required: true, message: t("reminder.required.time") }]}
-          >
-            <DatePicker showTime style={{ width: "100%" }} />
-          </Form.Item>
-          <Form.Item label={t("reminder.field.kind")} name="kind">
-            <Select
-              options={REMINDER_KINDS.map((value) => ({
-                value,
-                label: t(REMINDER_KIND_LABEL_KEYS[value]),
-              }))}
-            />
-          </Form.Item>
-          <Form.Item label={t("reminder.field.track")} name="track_id">
-            <Select
-              allowClear
-              placeholder={t("reminder.placeholder.track")}
-              {...trackSelect.selectProps}
-            />
-          </Form.Item>
-          <Form.Item label={t("reminder.field.job")} name="job_id">
-            <Select
-              allowClear
-              placeholder={t("reminder.placeholder.job")}
-              {...jobSelect.selectProps}
-            />
-          </Form.Item>
-          <Form.Item label={t("reminder.field.resume")} name="resume_id">
-            <Select
-              allowClear
-              placeholder={t("reminder.placeholder.resume")}
-              {...resumeSelect.selectProps}
-            />
-          </Form.Item>
-          <Form.Item label={t("reminder.field.note")} name="note">
-            <Input.TextArea
-              autoSize={{ minRows: 2, maxRows: 4 }}
-              placeholder={t("reminder.placeholder.note")}
-            />
-          </Form.Item>
-        </Form>
+        <ReminderFormFields
+          form={form}
+          editing={editing}
+          taskCardsEnabled={taskCardsEnabled}
+          trackSelect={trackSelect}
+          jobSelect={jobSelect}
+          resumeSelect={resumeSelect}
+        />
       </FormModal>
 
-      <RecordDetailDrawer
-        open={detail !== null}
-        title={detail?.title || t("reminder.detail.title")}
-        tags={
-          detail && (
-            <Space size={6} wrap>
-              <Tag>{detailKindLabelKey ? t(detailKindLabelKey) : detail.kind}</Tag>
-              <Tag
-                color={
-                  detail.status === "pending"
-                    ? "blue"
-                    : detail.status === "done"
-                      ? "green"
-                      : "default"
-                }
-              >
-                {detailStatusLabelKey ? t(detailStatusLabelKey) : detail.status}
-              </Tag>
-            </Space>
-          )
-        }
-        fields={
-          detail
-            ? [
-                { label: t("reminder.field.time"), value: formatDateTime(detail.remind_at) },
-                {
-                  label: t("reminder.detail.track"),
-                  value:
-                    trackSelect.options.find((option) => option.value === detail.track_id)?.label ??
-                    "-",
-                },
-                {
-                  label: t("reminder.detail.job"),
-                  value:
-                    jobSelect.options.find((option) => option.value === detail.job_id)?.label ??
-                    "-",
-                },
-                {
-                  label: t("reminder.detail.resume"),
-                  value:
-                    resumeSelect.options.find((option) => option.value === detail.resume_id)
-                      ?.label ?? "-",
-                },
-                { label: t("reminder.detail.createdAt"), value: formatDateTime(detail.created_at) },
-                { label: t("reminder.detail.updatedAt"), value: formatDateTime(detail.updated_at) },
-              ]
-            : []
-        }
-        sections={
-          detail
-            ? [
-                {
-                  title: t("reminder.field.note"),
-                  content: detail.note || t("reminder.detail.none"),
-                },
-              ]
-            : []
-        }
-        actions={
-          detail && (
-            <Space>
-              {detail.status === "pending" && (
-                <Button
-                  icon={<CheckOutlined />}
-                  onClick={() => {
-                    void setStatus(detail, "done");
-                    setDetail(null);
-                  }}
-                >
-                  {t("reminder.action.markDone")}
-                </Button>
-              )}
-              <Button
-                type="primary"
-                icon={<EditOutlined />}
-                onClick={() => {
-                  openEdit(detail);
-                  setDetail(null);
-                }}
-              >
-                {t("reminder.action.edit")}
-              </Button>
-            </Space>
-          )
-        }
+      <ReminderDetailDrawer
+        detail={detail}
+        trackLabel={labelOf(trackSelect.options, detail?.track_id)}
+        jobLabel={labelOf(jobSelect.options, detail?.job_id)}
+        resumeLabel={labelOf(resumeSelect.options, detail?.resume_id)}
+        onMarkDone={() => {
+          if (!detail) return;
+          void setStatus(detail, "done");
+          setDetail(null);
+        }}
+        onEdit={() => {
+          if (!detail) return;
+          openEdit(detail);
+          setDetail(null);
+        }}
         onClose={() => setDetail(null)}
       />
     </Space>

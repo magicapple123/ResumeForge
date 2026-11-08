@@ -24,7 +24,11 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from ..models.ai_task import AI_TASK_KIND_JOB_MATCH, AI_TASK_KIND_RESUME_GENERATE
+from ..models.ai_task import (
+    AI_TASK_KIND_JOB_MATCH,
+    AI_TASK_KIND_RAG_WARMUP,
+    AI_TASK_KIND_RESUME_GENERATE,
+)
 from ..models.job import Job
 from ..models.resume import (
     GENERATE_STATUS_CANCELLED,
@@ -216,10 +220,49 @@ def handle_resume_generate(ctx: Any) -> None:
         ctx.sleep(_WATCH_INTERVAL_SECONDS)
 
 
+# ===== 自跑型：RAG 向量索引后台预热 =====
+
+
+def handle_rag_warmup(ctx: Any) -> None:
+    """后台预热语义检索的进程内向量索引（无用户可见产物）。
+
+    为什么单独成任务：冷启动编码可能几十秒（真实模型），不能放在生成请求路径上
+    （方案 §2.2 / 报告 D14）。生成请求超预算时只登记本任务并回退关键词链；
+    本 handler 复用现成 ai_task 执行器补齐缺失向量，下一次生成直接命中缓存。
+
+    只读当前组消费快照（`load_ai_consumed_profile`，与 AI 生成同一边界），
+    **不读** `profile_entry` 全表、不把任何资料正文写日志/结果。
+    """
+    from ..runtime.dataset_scope import current_dataset_id
+    from .profile.ai_profile import load_ai_consumed_profile
+    from .rag import rag_service
+
+    ctx.set_progress(10, "正在准备语义检索索引")
+    consumed = load_ai_consumed_profile(ctx.session)
+    ctx.check_canceled()
+    ctx.set_progress(40, "正在编码资料条目")
+    box: dict[str, Any] = {}
+
+    async def run() -> None:
+        try:
+            box["stats"] = await rag_service.warm_rag_index(
+                consumed, dataset_id=current_dataset_id()
+            )
+        finally:
+            # 本任务线程的事件循环即将关闭：先关掉属于它的 HTTP 客户端。
+            await aclose_clients_for_current_loop()
+
+    ctx.drive(run())
+    ctx.check_canceled()
+    ctx.set_progress(100, "语义检索索引已就绪")
+    ctx.set_result(dict(box.get("stats") or {}))
+
+
 # ===== 注册（导入即生效，见 ai_task_registry._ensure_handlers_loaded） =====
 
 register_ai_task_handler(AI_TASK_KIND_JOB_MATCH, handle_job_match)
 register_ai_task_handler(AI_TASK_KIND_RESUME_GENERATE, handle_resume_generate)
+register_ai_task_handler(AI_TASK_KIND_RAG_WARMUP, handle_rag_warmup)
 
 # 本轮接入的另外四个入口（岗位解读 / 风险扫描 / 岗位化修改建议 / 网申字段识别）在
 # 兄弟模块里——它们全是**自跑型**，按本文件的范本写，只是各占五六十行，放一起会把
@@ -228,4 +271,4 @@ from . import ai_task_handlers_ai_entries as _ai_entries  # noqa: E402,F401
 
 _ = _ai_entries  # 显式引用：导入的副作用（注册）才是本行存在的理由。
 
-__all__ = ["handle_job_match", "handle_resume_generate"]
+__all__ = ["handle_job_match", "handle_rag_warmup", "handle_resume_generate"]

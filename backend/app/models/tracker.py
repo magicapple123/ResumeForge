@@ -185,6 +185,14 @@ def is_active(status: str) -> bool:
 # 钉住两处结论一致）。
 STALLED_DAYS = 7
 
+# 期一跟进巡检的两个阈值（与 STALLED_DAYS 同源放在领域模型层，服务层只引用不复制）：
+# - 跟进卡：>7 天没有更新 = 与 is_stalled 同一判据，所以**别名引用**而非复制字面量；
+#   改了 STALLED_DAYS，看板、/api/stats 与巡检候选必须一起变（有守卫钉住）。
+# - 确认状态卡：>21 天没有更新。长期不更新多半是用户忘了维护，这时催跟进是拿旧数据
+#   制造噪音，先说"请确认状态"才是对的；两类卡互斥（>21 天只出确认卡）。
+FOLLOWUP_SILENCE_DAYS = STALLED_DAYS
+CONFIRM_SILENCE_DAYS = 21
+
 
 def is_stalled(
     status: str, updated_at: datetime | None, now: datetime, *, days: int = STALLED_DAYS
@@ -303,6 +311,8 @@ class ApplicationTrackEvent(Base):
 __all__ = [
     "ACTIVE_STATUSES",
     "ApplicationTrack",
+    "CONFIRM_SILENCE_DAYS",
+    "FOLLOWUP_SILENCE_DAYS",
     "ApplicationTrackEvent",
     "CHANNELS",
     "CHANNEL_HEADHUNTER",

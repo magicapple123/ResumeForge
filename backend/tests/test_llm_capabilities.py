@@ -129,8 +129,12 @@ def test_openai_stream_options_is_gated_by_default_off_config(monkeypatch):
 
 
 def test_anthropic_default_payload_has_no_new_fields():
-    """Anthropic 原生协议的默认 payload 同样不接受任何新增字段。"""
-    config = _config("https://api.anthropic.com", "claude-x").model_copy(
+    """Anthropic 原生协议的默认 payload 同样不接受任何新增字段。
+
+    模型名必须写成**已知老代际**（claude-sonnet-4-5）：官方 host 上未知模型自 T10 起
+    按新代际处理（2026-10-21，不发 temperature），那条轨道另有专门用例。
+    """
+    config = _config("https://api.anthropic.com", "claude-sonnet-4-5").model_copy(
         update={"api_style": "anthropic"}
     )
     provider = AnthropicProvider(config)

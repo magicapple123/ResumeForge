@@ -184,6 +184,12 @@ describe("断点单一事实源", () => {
       // 该根节点内部没有 position:fixed 后代（antd 的 Dropdown/Popover 都 portal 到 body），
       // 按方案 §3.5 的判据安全。
       "styles/resume-panels.css",
+      // assistant-composer.css —— 助手输入区（T11）：`container-type` 挂在 `.assistant-composer`
+      // （输入区单容器）。左栏可拖拽/窗口变窄时输入区宽度与视口宽度不是一回事，模型 chip
+      // 的隐藏（<480px）必须按**容器宽**判断，视口媒体查询在这里语义是错的。
+      // 该容器内部没有 position:fixed 后代（相机/浮球/弹层都 portal 到 body 或在页面级容器），
+      // 按方案 §3.5 判据安全。
+      "styles/assistant-composer.css",
     ]);
     const offenders: string[] = [];
     for (const absolute of collectCssFiles()) {

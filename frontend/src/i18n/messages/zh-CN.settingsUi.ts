@@ -56,20 +56,26 @@ const settingsUi = {
   "settingsUi.assistantRelaxed.neverSent":
     "任何模式下都不会发送：API 密钥等凭据与全局配置、简历照片的图片内容；助手也永远没有删除类工具。",
 
-  // ── 提醒到期生成任务卡（T26）─────────────────────────────────
-  "settingsUi.agentTaskEvents.title": "提醒到期 · 生成任务卡",
+  // ── 任务卡总开关（T04；键名 agent_task_events 不变）────────────
+  "settingsUi.agentTaskEvents.title": "任务卡",
   "settingsUi.agentTaskEvents.intro":
-    "开启后，提醒到期会自动生成一张「准备：提醒标题」任务卡。只生成任务卡，不会自动执行任何写操作、不发消息、不弹窗。",
-  "settingsUi.agentTaskEvents.toggleAria": "提醒到期生成任务卡",
-  "settingsUi.agentTaskEvents.enableToast": "已开启：提醒到期会生成任务卡",
-  "settingsUi.agentTaskEvents.disableToast": "已关闭：不再生成新任务卡",
-  "settingsUi.agentTaskEvents.saveFailed": "保存提醒任务卡设置失败",
+    "开启后，提醒到期会生成一张「准备：<提醒标题>」任务卡，显示在首页。关闭后不再生成、首页也不再显示；已生成的记录会保留，重新打开即可恢复。",
+  "settingsUi.agentTaskEvents.toggleAria": "任务卡",
+  "settingsUi.agentTaskEvents.enableToast": "已开启：首页会显示任务卡",
+  "settingsUi.agentTaskEvents.disableToast": "已关闭：首页不再显示任务卡",
+  "settingsUi.agentTaskEvents.saveFailed": "保存任务卡设置失败",
+  /** 开启态说明：到期的提醒生成卡、显示在首页，但不执行写操作。 */
   "settingsUi.agentTaskEvents.stateOn":
-    "已开启：提醒到期会生成一张待你确认的任务卡，它不会自动执行任何写操作。",
+    "已开启：到期的提醒会生成一张待你确认的任务卡，显示在首页；它不会自动执行任何写操作。",
+  /** 关闭态说明（T04 语义变化：关闭不仅不生成，首页也不再显示）。 */
   "settingsUi.agentTaskEvents.stateOff":
-    "已关闭：提醒到期不再生成新任务卡；已经生成的任务卡会保留。",
-  "settingsUi.agentTaskEvents.keepCards": "无论开关如何，已生成的任务卡都不会被删除。",
-  "settingsUi.agentTaskEvents.loadFailed": "读取提醒任务卡设置失败，请重试。",
+    "已关闭：首页不再显示任务卡，提醒到期也不再生成新卡；已生成的记录会保留，重新打开即可恢复。",
+  "settingsUi.agentTaskEvents.loadFailed": "读取任务卡设置失败，请重试。",
+  /** 还有未完成任务时关闭的确认弹窗（D8）。 */
+  "settingsUi.agentTaskEvents.confirmTitle": "关闭任务卡",
+  "settingsUi.agentTaskEvents.confirmBody":
+    "还有 {count} 个任务未完成，关闭后首页将不再显示它们。已生成的记录不会删除。",
+  "settingsUi.agentTaskEvents.confirmOk": "仍要关闭",
 
   // ── 生成内容保存位置卡 ───────────────────────────────────────
   "settingsUi.exportSave.title": "生成内容保存位置",
@@ -172,13 +178,11 @@ const settingsUi = {
   "settingsUi.skills.introKnowledge": "知识文件",
   /** 说明段的收尾：知识文件按需读取，最后引到工作台。 */
   "settingsUi.skills.introTail":
-    "（.md / .txt）。启用的技能会告诉助手「按什么要求作答」，知识文件则由助手在需要时自己去读，不会一次性塞进对话。想新建或改得更细，请",
+    "（.md / .txt）。**技能在对话里启用、不在技能库里全局开启**：在求职助手输入区的技能菜单勾选，只对当前对话生效；知识文件由助手在需要时自己去读，不会一次性塞进对话。想新建或改得更细，请",
   "settingsUi.skills.manageLink": "去工作台管理",
   /** 链接后面的句号（单独一条，免得把标点画进链接下划线）。 */
   "settingsUi.skills.manageTail": "。",
   "settingsUi.skills.empty": "还没有技能",
-  "settingsUi.skills.tagEnabled": "启用中",
-  "settingsUi.skills.tagDisabled": "已停用",
   /** 技能行摘要的片段：知识文件份数 / 只有提示词 / 没写适用场景 / 字数 / 更新时间。 */
   "settingsUi.skills.files": "{count} 份知识文件",
   "settingsUi.skills.promptOnly": "仅提示词",

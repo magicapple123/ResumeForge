@@ -1,0 +1,208 @@
+{
+ "version": 1,
+ "provider": "deepseek",
+ "model": "deepseek-flash",
+ "note": "Phase 0 查询扩展的冻结输出（只含词表与指纹，不含 JD 原文）；由 --live-expand --write-expansions 生成",
+ "source": "llm:deepseek-flash",
+ "groups": {
+  "3283b6aff81c1091ef73367d8e0d0f710c2623550657b9c6c9e42f7c898988b2": {
+   "terms": []
+  },
+  "61a1dedcc6d2d17b3e8fb444e111e27365a77f6cafcc928a3f435f0ff32ba7af": {
+   "terms": []
+  },
+  "1fab3ec912265a9e40c7d68f796e3a48b5d57b6fb4496604024590d149d1155d": {
+   "terms": []
+  },
+  "e83ff022d0abced9bace7edd24340242db47edeb23835ff7e2947f53c3dc20ef": {
+   "terms": []
+  },
+  "3e83d871402b1e6c340efab813fc6fca8fec5634505941bc4e1faf5c909c5499": {
+   "terms": []
+  },
+  "881aa09bd83721fd0ddf284725bf26f385b9a863f78b7d9273e924b5455a4ab0": {
+   "terms": []
+  },
+  "ae8bc0afdd588e49026cb023cac25e9a9f7630e3cc22607f45e2e27565b4dc7b": {
+   "terms": []
+  },
+  "fab134b5783d7fa9b1e7f791227d64ff45b1b5f5931dd00a907010742733d483": {
+   "terms": []
+  },
+  "349a3beca132f22e3595b83f73ab77d5e1dcae444af8461aa74f2b2612e316bb": {
+   "terms": []
+  },
+  "5480fcc785b66bff0d65ba1af0460a9676ee7bd9480ab245482984f0fd0f19e1": {
+   "terms": []
+  },
+  "b73343758bbfa832b88aa366ac456f5bbc0821d73c546ec7ce057d71f38aa011": {
+   "terms": [
+    "用户增长分析",
+    "业务分析",
+    "运营分析",
+    "A/B实验",
+    "因果推断",
+    "增量分析",
+    "转化漏斗",
+    "数据看板",
+    "BI报表",
+    "数据管道",
+    "自动化报表",
+    "SQL取数",
+    "业务指标体系",
+    "数据洞察",
+    "统计检验",
+    "Python脚本",
+    "数据可视化",
+    "指标体系搭建"
+   ]
+  },
+  "28f1a78191fdaa920b631ef5b84d730f23a792dda752da8fd7f373e13527e052": {
+   "terms": []
+  },
+  "0dbf9cb070163b7df3dc21c529c9812d369cc315002496f7b46f7e765bef465b": {
+   "terms": []
+  },
+  "829f2a0b75b555b6fd152c3f9afed659d39080e239fc691cc5321fe27c111f95": {
+   "terms": []
+  },
+  "54c0b58f17da5c5aeae7c2855efc61257b0db61f6a33026abb39e966c1c6fd1b": {
+   "terms": []
+  },
+  "4e58f20d73ee4c2b6383304420c508a801fb65be15d1a9d59c2242ace601e291": {
+   "terms": []
+  },
+  "4c4d9033174f9f1c55d960df63d9d0bf97d0f53404830cb66e1e5b8bc015e9a4": {
+   "terms": []
+  },
+  "2f97fdce06f76cf908b30f7cc3fde617492fd4be790a2d72645ffde1e8637588": {
+   "terms": []
+  },
+  "e63168fc16b3ca03e4ac9f9af1185847d87ff6eaa94a6b53c9a73d6d187e6908": {
+   "terms": []
+  },
+  "8ab4f98d3bfb74fd0d428cd4bdc85b58be0a120b8d341a43d11c0e37a6cab96f": {
+   "terms": []
+  },
+  "202dd338bd41e7cd55afa70c67e887ceb51ef8956815319e4a7dab6b71992923": {
+   "terms": []
+  },
+  "9d68cc5193f0531cfe312f6ceb9e5e69faab6a733f6a8bc575e01d2a991bf209": {
+   "terms": []
+  },
+  "52e917218c4380da35f700541b547162b314ac64a6ac9070b578ec701f55d21b": {
+   "terms": []
+  },
+  "362009c23677ce4954eab1d387d1c68ccb7a59b07c1c2d603034401b244f03f0": {
+   "terms": []
+  },
+  "b19b8b2ca78307a99bef95b422fff00b57f65fc01e7a1999c6d4bfc629848d80": {
+   "terms": []
+  },
+  "0675826c796ddc20fa09f577b1cea6f34e71a167496a4525b5ec44c92333ce17": {
+   "terms": []
+  },
+  "cebae13fc55f0dada281249e1c8b547fc5d08120f5d85fb545c7fa083e3c0889": {
+   "terms": []
+  },
+  "e7da7e15892997b9822d56fef3be977c9c8a69a5689fb5f312d4795ef4cccbde": {
+   "terms": []
+  },
+  "77d4cc7a97b2c90eb8b189973df18126f1d6591820ae37ff6ff480ee124fbbc0": {
+   "terms": []
+  },
+  "7a623290fb823e894396b6858179d39117158c429ee53d6804556ee6f99533cb": {
+   "terms": []
+  },
+  "9dfa6eb040351ee5c0fba23c295a2fe5b922c76d40e2fcf56b53bd17c1f18888": {
+   "terms": []
+  },
+  "4ee7ebebae9c43f9d0c103e4eca1ca519c6f18a9809e4dcdf23c17e9c0a30fdb": {
+   "terms": []
+  },
+  "a0927e6b4fa26598ffd327c025d24d1c3a7dfa8d8ebd3bb66506159b13464c56": {
+   "terms": []
+  },
+  "c1acf31b488a71f9f4fff5466d7c087621aa225540831f786ac1e0068f01c596": {
+   "terms": []
+  },
+  "464787784924efec103b16002fab560fe61dec682aeabb779954cf482bcbbd83": {
+   "terms": []
+  },
+  "7bc122ea143ed8b1d237641231457a158afdf1a6bf65b7bf3c6e92a1a59ce378": {
+   "terms": []
+  },
+  "e25ba853c4b71b8a3d31b32c5fa232d90293fe63fc0aa0436b6cfcbc162d615d": {
+   "terms": []
+  },
+  "7035b87041b82b2c2322c879b9dba2c62ef72fd0b923d360e039f07009c49f05": {
+   "terms": []
+  },
+  "d2311f4cd981b035b268d977bb15998814ca6fa0125c33983279635f70044b64": {
+   "terms": []
+  },
+  "da96105b893fdf24e09c0abfd630c28b0ed3c723088c5a6ca50189ae93576bf4": {
+   "terms": []
+  },
+  "768ffaefcefd2cf9f49d4679e21fc50d0db394a4733c8f0fdd623bdd82d6184a": {
+   "terms": []
+  },
+  "a37510f1dd1a1462c836fcb3ac93f4dc675d7beccad075eac1a94889c9cfa39a": {
+   "terms": []
+  },
+  "79a7721e1eea329777cec3b15d355bbf59cbb0e64af1c9cca5e9168b7193e3a4": {
+   "terms": []
+  },
+  "6dce6c47bb4bd66f81c6ea46a939622b543fbff9616020cd953d40e178f6a7cd": {
+   "terms": []
+  },
+  "db262f209194bbc24463ef34597a607b3dad073833774539dd2d641aba78cdba": {
+   "terms": []
+  },
+  "a5b71f817777924ba3af2f01d977922f8a221701c3a4906ae52a072f72ceeb01": {
+   "terms": []
+  },
+  "d9a61f52b190051f9d99a4f593487ec931e51aae20b2ea89f3e046c708a6d901": {
+   "terms": []
+  },
+  "77c152e3bb21627a2914d1af0bd4abc2f0718dd441af430355c8da32db940c79": {
+   "terms": []
+  },
+  "06b2b28ba841b761ab2e9d5525593712dc6107dc2351ea06b4bff3f23e8f0e5a": {
+   "terms": []
+  },
+  "5b35399aaadad758dbf4a2dba4daf73d2908e3afcfb13b35444ee18dabce59cf": {
+   "terms": []
+  },
+  "b2a78e14fbf781e1fc5ff1d04bce9e86f499bd5bb59e9e0d7199dfed86ca046b": {
+   "terms": []
+  },
+  "cb8fcff83cd33c75d70e44fd5b4d65446690760159be2ab7f9641b097e3f1883": {
+   "terms": []
+  },
+  "2587c9610c4e0f7da6610ed5582bd28d5519fc841be34a85e41c5ba39a416a38": {
+   "terms": []
+  },
+  "d741d4604c841fe9171eb8c1ce7c2e29c7826234d71e16a3e9746247c670b610": {
+   "terms": []
+  },
+  "3563f8f45132c5a31fa2b75fd087f1620cc8c5d3634553d2144c09e48d94341f": {
+   "terms": []
+  },
+  "80682ff5bbd0da69b491ad2ab39dbb084e6fb528ea21e27407911f23c5e42e32": {
+   "terms": []
+  },
+  "2a57b10a46d041c506d4f127dbb2fcaf85370241dc84e0478c0850d157f30c6a": {
+   "terms": []
+  },
+  "8458633e03ff5b3d0696010bb243a86bff96e226e98940107b88b37f364f4ec5": {
+   "terms": []
+  },
+  "83dfde93bfbdbeb1fd9367a43bf06a456357083acccd0d0c9d1f40955add9d9a": {
+   "terms": []
+  },
+  "603d814dc8c79c71a2723d337d025bf6ddadc93c5a9bf695b88da73c8fa6ab71": {
+   "terms": []
+  }
+ }
+}

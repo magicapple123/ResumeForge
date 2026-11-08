@@ -31,6 +31,13 @@ export interface Reminder {
   note: string;
   created_at: string;
   updated_at: string;
+  /**
+   * 列表接口额外下发的紧急度与结构化倒计时（后端 `reminder_service` 计算）。
+   * 可选：写操作回显（创建 / PATCH）仍是 ReminderOut，不带这两个字段；旧后端也没有。
+   * 前端**不重算**天数——「已逾期 N 天」的 N 直接取 `days_until` 的负值。
+   */
+  urgency?: ReminderUrgency;
+  days_until?: number;
 }
 
 /** 首页待办提醒：在 Reminder 之外补紧急度与展示标签（由后端 /upcoming 计算）。 */

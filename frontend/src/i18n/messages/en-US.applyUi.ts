@@ -139,6 +139,19 @@ const applyUi = {
     "Recent collections failed - the site may have changed. Retry once; if it keeps failing, report it in the project repository.",
   "applyUi.siteBar.degradedTag": "Site may have changed",
   "applyUi.siteBar.healthAria": "Site health warning: {reason}",
+
+  // T07 "I submitted it": recording action, reminder date and one-time hint.
+  "applyUi.recordDetail.submitted.section": "Record the submission",
+  "applyUi.recordDetail.submitted.hint":
+    "If the application went through, record it here; a follow-up reminder is added and skipping this does not change existing stats.",
+  "applyUi.recordDetail.submitted.action": "Mark as submitted",
+  "applyUi.recordDetail.submitted.done": "Recorded as submitted",
+  "applyUi.recordDetail.submitted.toast": "This apply record is now marked as submitted",
+  "applyUi.recordDetail.submitted.reminder": "Follow-up reminder: {date}",
+  "applyUi.recordDetail.submitted.error": "This apply record was not saved. Try again.",
+  "applyUi.recordDetail.submitted.hintTitle": "How follow-up works after submitting",
+  "applyUi.recordDetail.submitted.hintBody":
+    "When no status change is recorded for more than 7 days, the home Task cards ask you to follow up. You can switch Task cards off in Settings → Assistant & AI behavior.",
 } as const;
 
 export default applyUi;

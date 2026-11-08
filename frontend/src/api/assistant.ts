@@ -106,7 +106,7 @@ export function conversationToMaterial(
  */
 export function createAssistantConversation(
   title = "",
-  options: { welcome?: boolean; surface?: AssistantSurface } = {},
+  options: { welcome?: boolean; surface?: AssistantSurface; skillIds?: number[] } = {},
 ): Promise<AssistantConversationBrief> {
   return request("/assistant/conversations", {
     method: "POST",
@@ -114,6 +114,8 @@ export function createAssistantConversation(
       title,
       welcome: options.welcome ?? false,
       surface: options.surface ?? "page",
+      // T14：空态先勾了技能时随建会话一起写入（服务端同事务，创建即带技能）。
+      skill_ids: options.skillIds ?? [],
     }),
   });
 }
@@ -236,6 +238,13 @@ export function sendAssistantMessage(
     resume_id?: number | null;
     include_profile?: boolean;
     web_search?: boolean;
+    /**
+     * T11 数据权限解算后的「读」轴：True = 读取真实资料（姓名/电话等）。
+     * 省略或 null = 沿用后端全局设置（旧客户端零改动），前端永远发解算后的具体布尔。
+     */
+    relaxed_mode?: boolean | null;
+    /** T11 数据权限解算后的「写」轴：True = 写工具直接执行，不再逐条确认。 */
+    allow_write?: boolean;
     reasoning_effort?: ReasoningEffort;
     /** 引用某条历史消息追问；被引用内容的快照会存进消息里。 */
     quoted_message_id?: number | null;

@@ -32,7 +32,9 @@ const assistantComposer = {
   "assistantComposer.skills.hint": "勾选要启用的技能",
   "assistantComposer.skills.manage": "打开工作台",
   "assistantComposer.skills.toggleHint": "点击开关助手技能；勾选表示已启用",
-  "assistantComposer.toggle.webSearch": "联网搜索",
+  "assistantComposer.toggle.webSearch": "允许联网",
+  "assistantComposer.toggle.webSearchHint":
+    "只在需要外部公开信息时才搜索；决定助手能不能联网，不代表每问一句都会搜",
   "assistantComposer.effort.label": "思考强度",
   "assistantComposer.effort.hint":
     "有思考模式的大模型可以在这里调推理强度。各家档位词汇不同（low/medium/high、minimal、xhigh、max…），选「自定义…」可以自己填；不支持该参数的服务商会忽略它，被拒绝时还会自动去掉重试一次",
@@ -50,6 +52,14 @@ const assistantComposer = {
   "assistantComposer.aria.stop": "停止生成",
   "assistantComposer.action.send": "发送",
   "assistantComposer.aria.send": "发送消息",
+  "assistantComposer.context.add": "关联岗位或简历",
+  "assistantComposer.context.jobFallback": "岗位 #{id}",
+  "assistantComposer.context.resumeFallback": "简历 #{id}",
+  "assistantComposer.context.removeJob": "取消关联岗位",
+  "assistantComposer.context.removeResume": "取消关联简历",
+  "assistantComposer.context.popoverTitle": "关联当前对话的上下文",
+  "assistantComposer.modelChip.aria": "当前模型：{model}",
+  "assistantComposer.modelChip.hoverHint": "在顶部切换",
 } as const;
 
 export default assistantComposer;

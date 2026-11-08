@@ -17,7 +17,6 @@ from sqlalchemy.orm import sessionmaker
 
 from ...config import get_settings
 from ...database import SessionLocal
-from ...models.job import Job
 from ...models.profile import utcnow
 from ...models.resume import (
     GENERATE_STATUS_CANCELLED,
@@ -29,21 +28,17 @@ from ...runtime import dataset_scope
 from ...runtime.dataset_scope import DatasetLease, DatasetScopeError
 from ...runtime.log_context import run_with_bound_context
 from ...runtime.operation_budget import OperationBudget, OperationCancelled
-from ...schemas.job import JobOut
-from ...schemas.profile_projection import ConsumedProfile
 from ...schemas.resume import GenerateOptions
-from ...services import trash
 from ...services.claims import build_baseline
 from ...services.llm import create_provider
 from ...services.llm.base import LLMError
 from ...services.llm.client_pool import aclose_clients_for_current_loop
-from ...services.profile.profile_service import get_profile_detail, to_profile_out
+from ...services.rag.rag_service import generate_with_scope, prepare_selection_boost
 from ...services.resume.generate_snapshot import (
     GenerationSnapshot,
     attach_snapshot_resume,
-    consumed_has_content,
-    snapshot_entry_ids,
 )
+from ...services.resume.resume_generate_inputs import prepare_generate_inputs
 from ...services.resume.resume_generator import ResumeGenerator
 from ...services.resume.resume_task_state import (
     claim_completed,
@@ -54,7 +49,6 @@ from ...services.resume.scenario_context import (
     build_scenario_prompt_block,
     merge_scenario_order,
 )
-from ...services.settings_service import get_llm_config
 from .resume_generate_support import (
     log_generation_usage,
     material_only_echo_error,
@@ -240,17 +234,32 @@ class ResumeGenerateRunner:
                 async def consume() -> None:
                     nonlocal resume, warnings, coverage_notes, rationale, fact_annotations
                     nonlocal last_char_commit, received_chars_total, estimated_prompt_tokens
+                    # RAG（默认关闭）：在**本任务线程的事件循环**里算 boost/扩展词。
+                    # ContextVar 不跨线程传播，所以作用域必须在消费协程内部打开，
+                    # 不能在 handler/请求线程设置。失败一律空作用域（rag_service 承诺不抛）。
+                    selection = await prepare_selection_boost(
+                        consumed,
+                        job_out,
+                        config=provider.config,
+                        db=session,
+                        dataset_id=(
+                            self._lease.identity.dataset_id if self._lease is not None else ""
+                        ),
+                    )
                     # aclosing 纪律（PR-07-4）：取消/超时/异常路径也显式关闭生成器，让
                     # GeneratorExit 逐层展开、各层 finally（段复位/usage/response）执行。
-                    stream = generator.generate(
-                        profile_out,
-                        job_out,
-                        options,
-                        baseline=baseline,
-                        budget=budget,
-                        career_context_block=career_block,
-                        fact_sections=fact_sections,
-                        consumed=consumed,
+                    stream = generate_with_scope(
+                        generator.generate(
+                            profile_out,
+                            job_out,
+                            options,
+                            baseline=baseline,
+                            budget=budget,
+                            career_context_block=career_block,
+                            fact_sections=fact_sections,
+                            consumed=consumed,
+                        ),
+                        selection,
                     )
                     try:
                         async for event in stream:
@@ -421,30 +430,20 @@ class ResumeGenerateRunner:
                 self._snapshot_id = None
             self._stop.clear()
 
-    def _snapshot(
-        self, session: Any, task: ResumeGenerateTask
-    ) -> tuple[JobOut | None, Any, Any, Any, dict[str, Any] | None, ConsumedProfile | None]:
-        """重建生成输入；有冻结快照时只消费它（F3 §1：worker 不再解析当前组）。"""
-        job = session.get(Job, task.job_id) if task.job_id is not None else None
-        if task.job_id is not None and (job is None or trash.is_deleted(job)):
-            raise ResumeGenerateRunnerError("岗位不存在或已被删除")
-        job_out = JobOut.model_validate(job) if job is not None else None
-        config = get_llm_config(session)
-        if not config.base_url or not config.model:
-            raise ResumeGenerateRunnerError("尚未配置大模型 API")
-        provider = create_provider(config)
-        frozen = self._generation_snapshot
-        if frozen is not None:
-            if not consumed_has_content(frozen.consumed):
-                raise ResumeGenerateRunnerError("个人资料为空，无法生成简历")
-            # F3 契约 §4：台账基线只带入能关联本次快照条目的正向事实。
-            baseline = build_baseline(session, source_entry_ids=snapshot_entry_ids(frozen.consumed))
-            return job_out, None, baseline, provider, None, frozen.consumed
-        # 旧 ProfileOut 路径（legacy 兼容；生产链路始终有冻结快照）。
-        # 补充事实已在 2.0 删除，fact_sections 恒为 None。
-        baseline = build_baseline(session)
-        profile_out = to_profile_out(get_profile_detail(session))
-        return job_out, profile_out, baseline, provider, None, None
+    def _snapshot(self, session: Any, task: ResumeGenerateTask) -> Any:
+        """重建生成输入；实现搬到 `resume_generate_inputs`（rubber 只留薄委托）。
+
+        注入 runner 模块命名空间里的 `create_provider`：既有测试用
+        `monkeypatch.setattr("…resume_generate_runner.create_provider")` 替换假 provider，
+        搬移不得让这些锚点静默失效（AGENTS.md 纪律）。
+        """
+        return prepare_generate_inputs(
+            session,
+            task,
+            generation_snapshot=self._generation_snapshot,
+            provider_factory=create_provider,
+            baseline_builder=build_baseline,
+        )
 
     # ===== 状态写入 =====
     # 终态仲裁三件套拆在 resume_task_state.py；这里保留薄委托（测试 monkeypatch 锚点）。
@@ -495,5 +494,6 @@ __all__ = [
     "ResumeGenerateRunner",
     "ResumeGenerateRunnerError",
     "get_resume_generate_runner",
+    "prepare_generate_inputs",
     "reset_resume_generate_runner",
 ]

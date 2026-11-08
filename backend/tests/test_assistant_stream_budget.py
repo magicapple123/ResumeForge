@@ -35,19 +35,19 @@ def _events(response) -> list[dict]:
 
 
 def _stub_settings(monkeypatch, *, budget_seconds: float, estimate: bool = False) -> None:
-    """毫秒级预算注入：替换 assistant_budget 命名空间里的 get_settings。
+    """毫秒级预算注入：替换 assistant_stream_budget 命名空间里的 get_settings。
 
-    设置读取随横切关注点下沉到了 ``app/api/assistant_budget.py``
-    （AssistantStreamBudget 构造器与 estimate_prompt_tokens 都读那个命名空间），
-    锚点必须跟着走——patch assistant_stream 命名空间早已不存在该符号。
+    ``AssistantStreamBudget`` 的构造器与 ``estimate_prompt_tokens`` 都读**该模块**的
+    ``get_settings``；实现下沉到 ``app/services/assistant/assistant_stream_budget.py``
+    后锚点必须跟着走——patch 旧的 ``app.api.assistant_budget`` 命名空间会让注入静默失效。
     """
-    from app.api import assistant_budget
+    from app.services.assistant import assistant_stream_budget
 
     stub = SimpleNamespace(
         assistant_stream_budget_seconds=budget_seconds,
         llm_token_estimate_enabled=estimate,
     )
-    monkeypatch.setattr(assistant_budget, "get_settings", lambda: stub)
+    monkeypatch.setattr(assistant_stream_budget, "get_settings", lambda: stub)
 
 
 def _conversation(client) -> dict:
@@ -138,7 +138,7 @@ def test_budget_exhausted_between_tool_rounds_blocks_next_model_call(client, mon
         return SimpleNamespace(summary="概览", link="", text="ok", changed=False, sources=[])
 
     monkeypatch.setattr("app.api.assistant.create_provider", lambda _config: provider)
-    monkeypatch.setattr("app.api.assistant_tool_exec.execute_tool_async", slow_tool)
+    monkeypatch.setattr("app.services.assistant.assistant_tool_exec.execute_tool_async", slow_tool)
     conversation = _conversation(client)
 
     response = client.post(
@@ -181,7 +181,7 @@ def test_budget_exhausted_before_second_tool_call(client, monkeypatch):
         return SimpleNamespace(summary="概览", link="", text="ok", changed=False, sources=[])
 
     monkeypatch.setattr("app.api.assistant.create_provider", lambda _config: provider)
-    monkeypatch.setattr("app.api.assistant_tool_exec.execute_tool_async", slow_tool)
+    monkeypatch.setattr("app.services.assistant.assistant_tool_exec.execute_tool_async", slow_tool)
     conversation = _conversation(client)
 
     response = client.post(

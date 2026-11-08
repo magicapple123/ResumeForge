@@ -37,6 +37,7 @@ from ...services.career_scenarios.resolve import CareerContextError, resolve_con
 from ...services.claims import build_baseline
 from ...services.llm.base import LLMError
 from ...services.llm.usage_tasks import set_ambient_scope
+from ...services.rag.rag_service import generate_with_scope, prepare_selection_boost
 from ...services.resume import document_io
 from ...services.resume.generate_snapshot import (
     consumed_has_content,
@@ -201,6 +202,15 @@ async def generate_resume(payload: GenerateRequest, db: Session = Depends(get_db
         # app.api.resumes.create_provider 的 patch 契约。
         generator = ResumeGenerator(_api.create_provider(config))
         job_out = JobOut.model_validate(job) if job is not None else None
+        # RAG（默认关闭）：在冻结快照上旁路算一次 boost / 查询扩展词。任何失败
+        # （未配置/超时/坏响应）都返回空作用域，生成链行为与改造前逐字节一致。
+        retrieval_scope = await prepare_selection_boost(
+            frozen.consumed,
+            job_out,
+            config=config,
+            db=db,
+            dataset_id=lease.identity.dataset_id,
+        )
         # 事实台账里已确认的条目作为事实基线交给模型；台账为空时它就是空基线。
         # F3 契约 §4：只带入能关联到本次快照条目的正向事实（组外/旧资料台账不自动带入）。
         baseline = build_baseline(db, source_entry_ids=snapshot_entry_ids(frozen.consumed))
@@ -223,14 +233,17 @@ async def generate_resume(payload: GenerateRequest, db: Session = Depends(get_db
         warnings: list[str] = []
         done_event: dict | None = None
         try:
-            async for event in generator.generate(
-                None,
-                job_out,
-                payload.options,
-                baseline=baseline,
-                career_context_block=career_block,
-                fact_sections=None,
-                consumed=frozen.consumed,
+            async for event in generate_with_scope(
+                generator.generate(
+                    None,
+                    job_out,
+                    payload.options,
+                    baseline=baseline,
+                    career_context_block=career_block,
+                    fact_sections=None,
+                    consumed=frozen.consumed,
+                ),
+                retrieval_scope,
             ):
                 if event["type"] == "delta":
                     raw_parts.append(event["text"])
@@ -288,9 +301,7 @@ async def generate_resume(payload: GenerateRequest, db: Session = Depends(get_db
                         attach_snapshot_resume,
                     )
 
-                    attach_snapshot_resume(
-                        save_db, snapshot_id=snapshot_pk, resume_id=record.id
-                    )
+                    attach_snapshot_resume(save_db, snapshot_id=snapshot_pk, resume_id=record.id)
                     save_db.commit()
                     save_db.refresh(record)
                 # 只有持久化成功后才宣布完成；断流不会留下“成功但无历史记录”的状态。

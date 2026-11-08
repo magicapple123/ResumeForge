@@ -14,11 +14,16 @@ import zipfile
 from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 
-# 单个知识文件的上限，与经历参考文件保持一致（schemas/profile.py）。
-MAX_SKILL_FILE_CHARS = 200_000
-# 一个技能包的整体上限，避免导入超大技能把上下文与数据库都撑爆。
-MAX_SKILL_TOTAL_CHARS = 600_000
-MAX_SKILL_FILES = 50
+from ..schemas.skill import (
+    MAX_SKILL_FILE_CHARS,
+    MAX_SKILL_FILES,
+    MAX_SKILL_PROMPT_CHARS,
+    MAX_SKILL_TOTAL_FILE_CHARS,
+)
+
+# 上限**只有一份真源**：与工作台新建/编辑共用 schemas.skill 的常量（T14）。
+# 导入曾经自带一套 200k/50 的上限，于是"工作台挡住的技能包，用 ZIP 又能导进来"——
+# 两条入口必须受同一约束，否则收紧上限只是把旁路留下。
 # 压缩比上限：正常文本压缩比在 10 倍上下，超过这个量级基本可以断定是 zip bomb。
 MAX_COMPRESSION_RATIO = 120
 ALLOWED_SUFFIXES = (".md", ".txt")
@@ -112,8 +117,10 @@ def _read_members(archive: zipfile.ZipFile) -> list[tuple[str, str]]:
         if len(content) > MAX_SKILL_FILE_CHARS:
             raise SkillImportError(f"{path} 过大，单个文件不能超过 {MAX_SKILL_FILE_CHARS} 个字符")
         total += len(content)
-        if total > MAX_SKILL_TOTAL_CHARS:
-            raise SkillImportError(f"技能包总长度超过 {MAX_SKILL_TOTAL_CHARS} 个字符，请拆分后再导入")
+        if total > MAX_SKILL_TOTAL_FILE_CHARS:
+            raise SkillImportError(
+                f"技能包总长度超过 {MAX_SKILL_TOTAL_FILE_CHARS:,} 个字符，请拆分后再导入"
+            )
         files.append((path, content))
     return files
 
@@ -142,6 +149,10 @@ def _finish(name: str, description: str, prompt: str, rest, source_name: str, wa
         raise SkillImportError(f"技能名称不能超过 {MAX_NAME_CHARS} 个字符")
     if not prompt.strip():
         raise SkillImportError("技能提示词是空的")
+    if len(prompt) > MAX_SKILL_PROMPT_CHARS:
+        raise SkillImportError(
+            f"技能提示词不能超过 {MAX_SKILL_PROMPT_CHARS:,} 个字符，请精简后再导入"
+        )
     return ParsedSkill(
         name=cleaned_name,
         description=description.strip()[:MAX_DESCRIPTION_CHARS],
@@ -161,7 +172,7 @@ def parse_markdown_skill(path: Path, source_name: str | None = None) -> ParsedSk
     display_name = source_name or path.name
     text = _decode(path.read_bytes(), display_name)
     if len(text) > MAX_SKILL_FILE_CHARS:
-        raise SkillImportError(f"技能提示词不能超过 {MAX_SKILL_FILE_CHARS} 个字符")
+        raise SkillImportError(f"技能提示词文件不能超过 {MAX_SKILL_FILE_CHARS:,} 个字符")
     meta, body = _strip_frontmatter(text)
     warnings = []
     name = meta.get("name", "")

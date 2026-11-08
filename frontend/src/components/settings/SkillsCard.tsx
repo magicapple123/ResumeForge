@@ -10,7 +10,7 @@
  * 以及超过 5 项时的「显示全部」折叠。
  */
 
-import { Button, Card, Listy, Space, Tag, Typography } from "antd";
+import { Button, Card, Listy, Space, Typography } from "antd";
 import { Link } from "react-router-dom";
 import EmptyState from "../common/EmptyState";
 import LoadingBlock from "../common/LoadingBlock";
@@ -76,15 +76,12 @@ export default function SkillsCard({ skills, loading, onOpen }: Props) {
                 <ListyMeta
                   title={
                     <Space size={8} wrap>
-                      {/* 技能名可点击：只读查看提示词全文与知识文件。 */}
+                      {/* 技能名可点击：只读查看提示词全文与知识文件。
+                          T14 起技能按对话启用，技能表上的 enabled 不再参与注入——这里不再展示
+                          全局启用状态（否则会出现"设置页说启用中、对话里其实没启用"的矛盾）。 */}
                       <Button type="link" className="table-text-link" onClick={() => onOpen(skill)}>
                         {skill.name}
                       </Button>
-                      <Tag color={skill.enabled ? "blue" : "default"}>
-                        {skill.enabled
-                          ? t("settingsUi.skills.tagEnabled")
-                          : t("settingsUi.skills.tagDisabled")}
-                      </Tag>
                     </Space>
                   }
                   description={describe(skill)}

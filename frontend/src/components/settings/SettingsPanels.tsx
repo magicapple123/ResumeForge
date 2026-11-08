@@ -21,11 +21,14 @@ import { Typography } from "antd";
 import { t } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
 import LLMConfigCard from "./LLMConfigCard";
+import EmbeddingProviderCard from "./EmbeddingProviderCard";
 import SettingsProvenanceSection from "./SettingsProvenanceSection";
 import SearchCard from "./SearchCard";
 import BatchOperationCard from "./BatchOperationCard";
 import AssistantRelaxedModeCard from "./AssistantRelaxedModeCard";
 import AgentTaskEventsCard from "./AgentTaskEventsCard";
+import JobPreferenceCard from "../../features/job-preference/JobPreferenceCard";
+import AsrSettingsCard from "../voice/AsrSettingsCard";
 import SkillsCard from "./SkillsCard";
 import AssistantOrbCard from "./AssistantOrbCard";
 import WebFormRelaxedModeCard from "./WebFormRelaxedModeCard";
@@ -82,6 +85,8 @@ export function ModelPanel({ llmCard, provenanceTarget }: ModelPanelProps) {
         hint={t("settings.model.group.hint")}
       />
       <LLMConfigCard {...llmCard} />
+      {/* 语义检索（RAG v3）：本地模型 / 远程服务二选一，默认关闭；失败自动回退关键词检索。 */}
+      <EmbeddingProviderCard />
       {/* 外发与用量（R04）：目标服务取当前生效模型配置的摘要；外发预览正文只留在组件
           state，不落盘。 */}
       <SettingsProvenanceSection targetService={provenanceTarget} />
@@ -108,7 +113,11 @@ export function AssistantPanel({ skillsCard }: AssistantPanelProps) {
       <AssistantRelaxedModeCard />
       {/* 提醒到期自动生成任务卡（T26，默认关：只建卡、不执行写操作）。 */}
       <AgentTaskEventsCard />
+      {/* 语音转写（T12）：独立 ASR 服务，地址与 Key 不跟大模型配置共用。 */}
+      <AsrSettingsCard />
       <SkillsCard {...skillsCard} />
+      {/* 求职偏好（T14）：用户亲口设的约束，助手照着做但不当事实；与技能同页（都影响助手行为）。 */}
+      <JobPreferenceCard />
       <AssistantOrbCard />
       {/* 网申填表的 AI 行为边界：与网申填表页顶部的快捷入口是同一个开关。 */}
       <SettingsGroupTitle text={t("settings.webform.title")} hint={t("settings.webform.hint")} />

@@ -23,6 +23,11 @@ from ..schemas.assistant import (
     ConversationSurface,
 )
 from ..services import trash
+from ..services.assistant.assistant_skills import (
+    copy_conversation_skills,
+    replace_conversation_skills,
+    validate_conversation_skill_ids,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -106,9 +111,18 @@ def _to_brief(conversation: ChatConversation, message_count: int = 0) -> ChatCon
 
 def create_conversation(payload: ChatConversationCreate, db: Session) -> ChatConversationBrief:
     title = " ".join(payload.title.split()) or DEFAULT_TITLE
+    # T14：技能先校验（超过 8 个 / id 不存在 → 422），再与会话在同一次 commit 里写入。
+    # 先校验是为了不建出"会话建了、技能没写"的半成品；同事务是为了"创建即带技能"这条
+    # 验收（GET /conversations/{id}/skills 立刻能看到）不依赖第二次请求补写。
+    try:
+        validate_conversation_skill_ids(db, payload.skill_ids)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     conversation = ChatConversation(title=title[:120], surface=payload.surface)
     db.add(conversation)
     db.flush()
+    if payload.skill_ids:
+        replace_conversation_skills(db, conversation.id, payload.skill_ids)
     message_count = 0
     if payload.welcome:
         conversation.title = title[:120] if title != DEFAULT_TITLE else WELCOME_TITLE
@@ -294,6 +308,8 @@ def fork_conversation(
     conversation = ChatConversation(title=title, surface=source.surface)
     db.add(conversation)
     db.flush()
+    # T14：「在新对话中继续」是同一段任务的延续，技能一并复制过去（源会话没有技能就为空）。
+    copy_conversation_skills(db, source.id, conversation.id)
     for row in reversed(rows):
         content = row.content
         attachment_names = [
