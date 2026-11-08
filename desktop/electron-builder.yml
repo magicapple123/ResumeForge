@@ -5,6 +5,8 @@
 # moves it into resources/payload at install time via extraResources. Targets:
 #   win  -> nsis (installer, primary) + dir (portable zip injection)
 #   mac  -> dmg (primary) + dir (zip injection)
+#   linux-> AppImage (single-file, download-and-run; no deb/rpm this round — see
+#           the note above the `linux:` block)
 appId: top.huangcenguo.resumeforge
 productName: ResumeForge
 copyright: ResumeForge
@@ -70,6 +72,7 @@ extraFiles:
     filter:
       - update.cmd
       - update.command
+      - update.sh
 
 extraResources:
   # Assembled by scripts/Build-Desktop.ps1 before electron-builder runs.
@@ -115,3 +118,33 @@ mac:
 
 dmg:
   artifactName: ResumeForge-${version}-${arch}.${ext}
+
+# Linux：只出 AppImage（x86_64 + aarch64），不出 deb/rpm。
+#
+# 为什么是 AppImage：它是「下载即用、不装系统」的单文件形态，语义上最接近 Windows
+# 的 dir target（解开就能跑）——也正好对上本仓库的安装形态契约：AppImage 运行时挂在
+# 只读的 squashfs 上，壳与启动器本来就不往安装根写一个字节（日志/pid/venv/运行时全在
+# 用户目录，见 desktop/lib/shell-paths.js 与 scripts/linux/lib/common.sh）。
+# 换句话说，"安装目录只读"在 Linux 上不是"也可能只读"，而是**恒为只读**，AppImage
+# 是唯一不需要向这个契约让步的包格式。
+#
+# 为什么本期不做 deb/rpm：这两种格式要求维护签名仓库与 glibc 矩阵（Debian 11/12、
+# Ubuntu 22.04/24.04、Fedora/CentOS 各一条），还要一个能长期托管的 apt/yum 源。
+# 先把「下载、运行、能自更新」这条链跑通，仓库化留给下一期。
+#
+# files/extraResources/extraFiles 一概不动：Linux 复用同一份 payload 与同一套
+# lib/*.js，少一个文件在另外两个平台上是同一个崩溃。
+linux:
+  icon: icon.png
+  target:
+    - AppImage
+  # freedesktop 菜单分类。不写会落到 Utility，在多数桌面环境里被收进
+  # "附属应用"，用户装完找不到启动项。
+  category: Office
+  synopsis: 简历通 - 本地简历优化与求职管理
+  description: >-
+    简历通（ResumeForge）：本地运行的简历优化与求职管理工作台。
+    简历诊断、JD 对齐、面试演练与投递跟踪全部在你自己的电脑上完成。
+  # 与 mac 同一套命名体系（ResumeForge-<version>-<arch>），中间多一段 linux：
+  # 三种形态的产物会长在同一个 out/ 目录里，少这段就会互相覆盖。
+  artifactName: ResumeForge-${version}-linux-${arch}.${ext}

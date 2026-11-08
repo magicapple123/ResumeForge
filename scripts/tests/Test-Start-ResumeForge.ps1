@@ -155,6 +155,10 @@ foreach ($source in $launcherSources) {
 # the one where nothing breaks.
 $shellScriptPaths = @(
     Get-ChildItem -LiteralPath $ProjectRoot -Filter "*.command" -File
+    # 根目录的 *.sh 是 Linux 的三个入口（start.sh / stop.sh / update.sh）。它们和
+    # *.command 一样是"双击/直接执行"的入口，CRLF 会让 sudo ./start.sh 报
+    # "bad interpreter"；漏扫等于只保护了 macOS 那一半。
+    Get-ChildItem -LiteralPath $ProjectRoot -Filter "*.sh" -File
     Get-ChildItem -LiteralPath (Join-Path $ProjectRoot "scripts") -Filter "*.sh" -File -Recurse
 )
 Assert-LauncherTest `

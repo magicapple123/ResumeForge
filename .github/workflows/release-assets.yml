@@ -7,8 +7,9 @@
 # Flow after a release is created (see docs/mac-build-handoff.md):
 #   1. bump versions / push / tag / `gh release create <tag>` with notes
 #   2. run this workflow with `tag=<tag>` and `dry_run=false`
-#   3. the run attaches ResumeForge-Setup-<ver>.exe (+.sha256) and
-#      ResumeForge-<ver>-{x64,arm64}.dmg (+.sha256) to the release
+#   3. the run attaches ResumeForge-Setup-<ver>.exe (+.sha256),
+#      ResumeForge-<ver>-{x64,arm64}.dmg (+.sha256) and
+#      ResumeForge-<ver>-linux-{x64,arm64}.AppImage (+.sha256) to the release
 #
 # The build source defaults to the tag itself, so the artifacts correspond
 # exactly to what was released. `source_ref` exists for rehearsal runs
@@ -435,6 +436,158 @@ jobs:
           gh release upload "$TAG" \
             desktop/out/ResumeForge-*.dmg \
             desktop/out/ResumeForge-*.dmg.sha256 \
+            --repo "$GITHUB_REPOSITORY" --clobber
+
+  linux-appimage:
+    name: Linux AppImage (x64 + arm64)
+    needs: target
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    # 与 Windows 作业的分工差异：Linux 产物**不签名**（AppImage 没有 Authenticode
+    # 那一套，Linux 侧的信任链是发行方给的 sha256 + 包管理器），所以这里不需要
+    # SignPath 那几步，也就不需要额外的 actions: read 权限——顶层 contents: write 够用。
+    #
+    # 两个架构都在 x86_64 runner 上打，走 electron-builder 的交叉构建路径：
+    #   * 优先方案本该是 `ubuntu-24.04-arm`（真 arm64 runner，能真跑产物）。但这个
+    #     标签在本仓库**没有任何先例**（见其它 workflow 全是 *-latest），能不能命中
+    #     取决于仓库可见性与账户套餐；命中不了时 job 会卡在排队阶段报
+    #     "no runner matching labels"，而发版是人工触发、容错窗口极小的一次性操作，
+    #     不该把自己的成败押在一个没验证过的标签上。
+    #   * 所以退到交叉构建：AppImage 的打包不需要执行目标架构的二进制（app-builder
+    #     只是把目标架构的运行时与 squashfs 拼装起来，产物本身就是数据），x86_64
+    #     宿主可以产出 arm64 的 AppImage。
+    #   * 交叉构建的验证盲区必须说清楚：这里**不能**证明 arm64 的 AppImage 在真 arm64
+    #     机器上能启动（没有 qemu 执行）。为了不"假装成功"，Verify 步骤会从产物里读
+    #     ELF 的 e_machine，确认真的是 AArch64——若哪天 electron-builder 静默回退到
+    #     宿主架构，那一步会当场失败，而不是把一个 x64 包挂上 arm64 的名字发出去。
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.target.outputs.ref }}
+
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: |
+            frontend/package-lock.json
+            desktop/package-lock.json
+
+      - name: Check the Linux build script exists at this ref
+        # 老 tag 上没有这个脚本，从工作流里直接调只会得到一句 127。这里提前给出
+        # 可操作的错误（和 macOS 作业对 build-desktop-mac.sh 的处理一致）。
+        run: |
+          set -euo pipefail
+          if [ ! -f scripts/build-desktop-linux.sh ]; then
+            echo "::error::scripts/build-desktop-linux.sh missing at ref '${{ needs.target.outputs.ref }}'. 用 source_ref 指向一个带该脚本的 ref 做演练，或在 Linux 上手工打包。"
+            exit 1
+          fi
+
+      - name: Build frontend production assets
+        working-directory: frontend
+        run: |
+          npm ci --no-audit --no-fund --registry=https://registry.npmjs.org
+          npm run build
+
+      - name: Install desktop shell dependencies
+        working-directory: desktop
+        env:
+          ELECTRON_MIRROR: https://npmmirror.com/mirrors/electron/
+        run: npm ci --no-audit --no-fund --registry=https://registry.npmjs.org
+
+      - name: Build the AppImages (x64 + arm64)
+        env:
+          ELECTRON_MIRROR: https://npmmirror.com/mirrors/electron/
+        # 分两次调用而不是一次 `--arch both`：一个架构失败时，日志里能一眼看出是哪
+        # 一个，产物的失败归因不会被另一个架构的构建输出淹掉。
+        # 不传任何签名相关变量——Linux 侧当前没有签名方案（见 job 头注释）。
+        run: |
+          set -euo pipefail
+          bash scripts/build-desktop-linux.sh --arch x64
+          bash scripts/build-desktop-linux.sh --arch arm64
+
+      - name: Verify the artifacts (naming shape + target architecture)
+        # 两条断言，都刻意不用通配符：
+        #   1) 产物名必须**恰好**是 artifactName 的形状
+        #      ResumeForge-<ver>-linux-<arch>.AppImage（版本取自 desktop/package.json）。
+        #      写通配符的话，命名漂移（linux-x86_64、linux-amd64……）会被 *.AppImage
+        #      静默吞下，最后上传一个名字对不上的包，而官网下载按钮按名字取，直接 404。
+        #   2) 文件头里的 ELF e_machine 必须等于目标架构：AppImage 是"目标架构的运行时
+        #      ELF + 追加的 squashfs"，所以读偏移 18 的两个字节就能判断这个包到底是给
+        #      谁的。这是交叉构建唯一的防"静默回退宿主架构"手段。
+        run: |
+          set -euo pipefail
+          version="$(node -p "require('./desktop/package.json').version")"
+          echo "desktop/package.json version: $version"
+
+          check_elf_machine() {
+            file="$1"
+            want="$2"
+            label="$3"
+            # e_machine 是 2 字节小端：x86-64 = 0x3e → "3e00"；AArch64 = 0xb7 → "b700"。
+            machine="$(od -An -tx1 -j18 -N2 "$file" | tr -d ' \n')"
+            case "${want}:${machine}" in
+              x64:3e00|arm64:b700) ;;
+              *)
+                echo "::error::${label} 的 ELF e_machine=${machine}，与目标架构 ${want} 不符（x64 应为 3e00，arm64 应为 b700）。electron-builder 可能静默回退到了宿主架构。"
+                return 1
+                ;;
+            esac
+            echo "${label}：ELF e_machine=${machine}（${want}）✓"
+          }
+
+          for arch in x64 arm64; do
+            artifact="desktop/out/ResumeForge-${version}-linux-${arch}.AppImage"
+            if [ ! -f "$artifact" ]; then
+              echo "::error::缺少产物 $artifact（期望 electron-builder.yml 的 artifactName 形状 ResumeForge-${version}-linux-${arch}.AppImage）。"
+              ls -la desktop/out >&2 || true
+              exit 1
+            fi
+            check_elf_machine "$artifact" "$arch" "$(basename "$artifact")"
+            # 只是留证据、不做断言：AppImage 里应该带着 backend 与前端 dist 的 payload，
+            # 但 payload 的内部布局由并行的打包实现决定，CI 不替它定死路径。
+            if command -v unsquashfs >/dev/null 2>&1; then
+              echo "----- $(basename "$artifact") 的根目录（前 15 项）-----"
+              unsquashfs -l "$artifact" 2>/dev/null | head -n 15 || true
+            fi
+          done
+
+      - name: Write checksum sidecars
+        # 与 Windows/macOS 作业同款写法：`cd` 到产物目录后 sha256sum 只写文件名，
+        # 这样用户在任何目录下 `sha256sum -c <file>.sha256` 都能验（写进相对路径
+        # 就会因为路径前缀不同而失败）。sha256sum 的输出本来就是 LF。
+        run: |
+          set -euo pipefail
+          version="$(node -p "require('./desktop/package.json').version")"
+          cd desktop/out
+          for arch in x64 arm64; do
+            f="ResumeForge-${version}-linux-${arch}.AppImage"
+            sha256sum "$f" >"$f.sha256"
+            cat "$f.sha256"
+          done
+
+      - name: Upload workflow artifacts
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: linux-appimages
+          path: |
+            desktop/out/ResumeForge-*-linux-*.AppImage
+            desktop/out/ResumeForge-*-linux-*.AppImage.sha256
+          retention-days: 7
+          if-no-files-found: error
+
+      - name: Attach AppImages to the release
+        if: ${{ !inputs.dry_run }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          gh release upload "$TAG" \
+            desktop/out/ResumeForge-*-linux-*.AppImage \
+            desktop/out/ResumeForge-*-linux-*.AppImage.sha256 \
             --repo "$GITHUB_REPOSITORY" --clobber
 
   source-zips:

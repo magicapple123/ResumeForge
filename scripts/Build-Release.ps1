@@ -24,19 +24,21 @@ Target directory for ResumeForge-<version>.zip. Defaults to <project>\dist.
 
 .PARAMETER Platform
 Which launcher set the archive should carry. "all" (default) keeps everything and
-is the archive attached to the GitHub release. "windows" / "macos" produce the two
-archives the website offers for direct download: each keeps only its own launcher
-set, so the user who just downloaded one never has to guess between start.cmd and
-start.command. The other platform's launchers are removed AFTER git archive (which
-always emits the whole tree), and verification runs per platform, so a pruning bug
-fails loudly instead of shipping a half archive.
+is the archive attached to the GitHub release. "windows" / "macos" / "linux"
+produce the per-platform archives the website offers for direct download: each
+keeps only its own launcher set, so the user who just downloaded one never has to
+guess between start.cmd, start.command and start.sh. The other platforms'
+launchers are removed AFTER git archive (which always emits the whole tree), and
+verification runs per platform, so a pruning bug fails loudly instead of shipping
+a half archive.
 
 .PARAMETER IncludeDesktop
 Also build the desktop shell (scripts\Build-Desktop.ps1 -Target win) and inject
 the resulting NSIS installer into the archive under desktop/, so a user who
 unzips the portable archive can run the one-click installer without visiting a
-separate download page. Rejected with -Platform macos (no mac desktop target is
-wired: the dmg still needs a real Mac) and with a -Ref other than HEAD
+separate download page. Rejected with -Platform macos and with -Platform linux
+(neither desktop target is wired: the dmg needs a real Mac, the AppImage needs a
+Linux host) and with a -Ref other than HEAD
 (Build-Desktop.ps1 assembles its payload from the working tree's HEAD, so the
 installer would not match the packaged ref). Requires desktop\node_modules.
 
@@ -57,7 +59,7 @@ machine without desktop\node_modules. Never use it for a real release.
 param(
     [string]$Ref = "HEAD",
     [string]$OutputDirectory = "",
-    [ValidateSet("all", "windows", "macos")]
+    [ValidateSet("all", "windows", "macos", "linux")]
     [string]$Platform = "all",
     [switch]$IncludeDesktop,
     [string]$DesktopSetupPath = ""
@@ -90,6 +92,7 @@ $RequiredFiles = @(
     "backend/app/assets/lili/lili-orb-128.png",
     "backend/app/data/skills.json",
     "backend/app/data/ats_keywords.json",
+    "backend/app/data/rag-assets.json",
     "backend/app/prompts/application_status.md",
     "backend/app/prompts/apply_greeting.md",
     "backend/app/prompts/assistant_system.md",
@@ -196,6 +199,29 @@ $PlatformLaunchers = @{
         # that the windows archive deliberately does not carry).
         "scripts/tests/test-macos-launcher.sh"
     )
+    linux = @(
+        # Same three entry points as the other two platforms, one directory down:
+        # the Linux user double-clicks (or runs) start.sh, and the AppImage is
+        # only a fourth way in -- the zip archive has to keep working on its own.
+        "start.sh",
+        "stop.sh",
+        "update.sh",
+        # scripts/linux mirrors the scripts/macos layout file for file, so the
+        # three platform launchers stay comparable one-to-one.
+        "scripts/linux/start.sh",
+        "scripts/linux/stop.sh"
+    )
+}
+
+# Directory-shaped requirements, per platform: the Linux launcher set has no
+# fixed list of library files (scripts/linux/lib/ grows as the launcher needs
+# helpers), but an archive with an EMPTY scripts/linux/ is a launcher-less
+# archive -- start.sh would be there and its library calls would all fail. The
+# prefix check below is the same machinery $RequiredPrefixes already uses.
+$PlatformPrefixes = @{
+    linux = @(
+        "scripts/linux/lib/"
+    )
 }
 
 # What the OTHER platform's launcher set looks like, per platform:
@@ -214,7 +240,11 @@ $PrunePathspecs = @{
         ":(exclude)update.command",
         ":(exclude)scripts/macos",
         ":(exclude)scripts/tests/test-macos-launcher.sh",
-        ":(exclude)branding/resumeforge.icns"
+        ":(exclude)branding/resumeforge.icns",
+        ":(exclude)start.sh",
+        ":(exclude)stop.sh",
+        ":(exclude)update.sh",
+        ":(exclude)scripts/linux"
     )
     macos = @(
         ":(exclude)start.cmd",
@@ -224,7 +254,27 @@ $PrunePathspecs = @{
         ":(exclude)branding/resumeforge.ico",
         ":(exclude)Create-DesktopShortcut.cmd",
         ":(exclude,glob)scripts/*.ps1",
-        ":(exclude,glob)scripts/tests/*.ps1"
+        ":(exclude,glob)scripts/tests/*.ps1",
+        ":(exclude)start.sh",
+        ":(exclude)stop.sh",
+        ":(exclude)update.sh",
+        ":(exclude)scripts/linux"
+    )
+    linux = @(
+        ":(exclude)start.cmd",
+        ":(exclude)stop.cmd",
+        ":(exclude)update.cmd",
+        ":(exclude)uninstall.cmd",
+        ":(exclude)branding/resumeforge.ico",
+        ":(exclude)Create-DesktopShortcut.cmd",
+        ":(exclude,glob)scripts/*.ps1",
+        ":(exclude,glob)scripts/tests/*.ps1",
+        ":(exclude)start.command",
+        ":(exclude)stop.command",
+        ":(exclude)update.command",
+        ":(exclude)scripts/macos",
+        ":(exclude)scripts/tests/test-macos-launcher.sh",
+        ":(exclude)branding/resumeforge.icns"
     )
 }
 
@@ -234,7 +284,11 @@ $PrunePatterns = @{
         "^stop\.command$",
         "^update\.command$",
         "^scripts/macos/",
-        "^branding/resumeforge\.icns$"
+        "^branding/resumeforge\.icns$",
+        "^start\.sh$",
+        "^stop\.sh$",
+        "^update\.sh$",
+        "^scripts/linux/"
     )
     macos = @(
         "^start\.cmd$",
@@ -244,7 +298,26 @@ $PrunePatterns = @{
         "^branding/resumeforge\.ico$",
         "^Create-DesktopShortcut\.cmd$",
         "^scripts/[^/]+\.ps1$",
-        "^scripts/tests/.*\.ps1$"
+        "^scripts/tests/.*\.ps1$",
+        "^start\.sh$",
+        "^stop\.sh$",
+        "^update\.sh$",
+        "^scripts/linux/"
+    )
+    linux = @(
+        "^start\.cmd$",
+        "^stop\.cmd$",
+        "^update\.cmd$",
+        "^uninstall\.cmd$",
+        "^branding/resumeforge\.ico$",
+        "^Create-DesktopShortcut\.cmd$",
+        "^scripts/[^/]+\.ps1$",
+        "^scripts/tests/.*\.ps1$",
+        "^start\.command$",
+        "^stop\.command$",
+        "^update\.command$",
+        "^scripts/macos/",
+        "^branding/resumeforge\.icns$"
     )
 }
 
@@ -345,6 +418,9 @@ if ($IncludeDesktop) {
     if ($Platform -eq "macos") {
         throw "-IncludeDesktop is not supported with -Platform macos: no mac desktop target is wired (the dmg still needs a real Mac)."
     }
+    if ($Platform -eq "linux") {
+        throw "-IncludeDesktop is not supported with -Platform linux: the AppImage is built on a Linux host by scripts/build-desktop-linux.sh, so it cannot be injected into a zip built here."
+    }
     if ($Ref -ne "HEAD") {
         throw "-IncludeDesktop requires -Ref HEAD: Build-Desktop.ps1 assembles its payload from the working tree's HEAD via git archive, so the installer would not match the packaged ref '$Ref'."
     }
@@ -368,22 +444,39 @@ $pendingChanges = @(Invoke-GitCapture -Arguments @("status", "--porcelain"))
 $platformRequired = @($RequiredFiles)
 $activePrunePathspecs = @()
 $activePrunePatterns = @()
+$activePrefixes = @($RequiredPrefixes)
 if ($Platform -eq "all") {
     $platformRequired = @($RequiredFiles) + $PlatformLaunchers["windows"] + $PlatformLaunchers["macos"]
+    # The all-platform archive is never pruned -- it simply carries the tracked
+    # tree, so the Linux launcher set lands in it as soon as those files are
+    # tracked. Requiring them here is therefore conditional on the ref actually
+    # having them: an unconditional requirement would turn every -Platform all
+    # build red on a checkout where scripts/linux has not landed yet, which is
+    # exactly the window in which the Linux port is being written.
+    $linuxLauncherEntries = @(Invoke-GitCapture -Arguments @("ls-tree", "-r", "--name-only", $Ref, "--", "start.sh"))
+    if ($linuxLauncherEntries.Count -gt 0) {
+        $platformRequired += $PlatformLaunchers["linux"]
+        $activePrefixes += @($PlatformPrefixes["linux"])
+    }
 }
 else {
     $platformRequired = @($RequiredFiles) + $PlatformLaunchers[$Platform]
     $activePrunePathspecs = @($PrunePathspecs[$Platform])
     $activePrunePatterns = @($PrunePatterns[$Platform])
+    if ($PlatformPrefixes.ContainsKey($Platform)) {
+        $activePrefixes += @($PlatformPrefixes[$Platform])
+    }
 }
 
 # The all-platform archive's *file name* is load-bearing, not cosmetic. The in-app
 # updater in 0.14.2 and earlier picks the first ".zip" after sorting by name, so
-# "-all.zip" (a < m < w) is what those users download when they press
+# "-all.zip" (a < l < m < w) is what those users download when they press
 # "restart and install" -- a package that actually installs, instead of the macOS
 # one that always fails validation. Renaming it back to ResumeForge-<version>.zip
 # sorts last and turns the in-app update into a button that always errors for
 # every existing user, so Test-Build-Release.ps1 pins the name.
+# Adding the -linux archive keeps that order intact ("-all" still sorts first:
+# a < l < m < w), which is the only property the old updater depends on.
 $suffix = if ($Platform -eq "all") { "-all" } else { "-$Platform" }
 $archiveName = "ResumeForge-$version$suffix.zip"
 $archivePath = Join-Path $OutputDirectory $archiveName
@@ -601,7 +694,7 @@ foreach ($pattern in $activePrunePatterns) {
         $problems += "platform $Platform must not carry: $($leaked[0])"
     }
 }
-foreach ($requiredPrefix in $RequiredPrefixes) {
+foreach ($requiredPrefix in $activePrefixes) {
     # Not $matches: that is the automatic variable -match writes into, and
     # clobbering it makes later -match tests in this scope read stale data.
     $matchedPaths = @($relativePaths | Where-Object { $_.StartsWith($requiredPrefix, [StringComparison]::OrdinalIgnoreCase) })
@@ -652,13 +745,16 @@ if ($desktopSetupEntry) {
 }
 Write-Host "SHA256   : $hash"
 Write-Host "Checksum : $checksumPath"
-Write-Host "Verified : $($platformRequired.Count) required files present, $($RequiredPrefixes.Count) required directories non-empty, $($ForbiddenPatterns.Count) forbidden patterns absent"
+Write-Host "Verified : $($platformRequired.Count) required files present, $($activePrefixes.Count) required directories non-empty, $($ForbiddenPatterns.Count) forbidden patterns absent"
 if ($pendingChanges.Count -gt 0 -and $Ref -eq "HEAD") {
     Write-Warning "The working tree has uncommitted changes. The archive contains the committed state of HEAD only; commit first if you meant to ship them."
 }
 Write-Host ""
 if ($Platform -eq "all") {
-    Write-Host "Next: attach this file to the GitHub release for v$version. The website's two download buttons serve the -Platform windows / -Platform macos archives instead."
+    Write-Host "Next: attach this file to the GitHub release for v$version. The website's download buttons serve the -Platform windows / -Platform macos / -Platform linux archives instead."
+}
+elseif ($Platform -eq "linux") {
+    Write-Host "Next: copy this archive to the website's download/ directory -- that is what the site's linux button serves. The AppImage itself is built separately, on a Linux host: bash scripts/build-desktop-linux.sh."
 }
 else {
     Write-Host "Next: copy this archive to the website's download/ directory -- that is what the site's $Platform button serves."

@@ -220,10 +220,13 @@ class BackendManager {
         cwd: this.projectRoot,
       };
     }
+    // Linux 必须用它自己那套：macOS 的脚本把状态目录写死成 ~/Library/Application
+    // Support，在 Linux 上找不到记录就会去重装依赖、报一堆与本机无关的错。
+    const launcherDir = process.platform === "darwin" ? "macos" : "linux";
     return {
       file: "/bin/bash",
       args: [
-        path.join(this.projectRoot, "scripts", "macos", "start.sh"),
+        path.join(this.projectRoot, "scripts", launcherDir, "start.sh"),
         "--backend-port",
         String(port),
         "--no-browser",

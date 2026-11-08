@@ -18,7 +18,7 @@ const { app, BrowserWindow, Tray, Menu, dialog, ipcMain, screen, shell } = requi
 const path = require("path");
 const { BackendManager } = require("./backend-manager");
 const { createShellLogging, announceDegradedOnReady } = require("./lib/preflight");
-const { resolveLogDir } = require("./lib/shell-paths");
+const { linuxRuntimeDir, resolveLogDir } = require("./lib/shell-paths");
 const {
   clampToWorkArea,
   createWindowStateStore,
@@ -68,8 +68,9 @@ function shellIcon() {
 function runtimeDir() {
   // Windows: %LOCALAPPDATA%\ResumeForge\runtime（安装版与便携版共用）。
   // macOS: userData 已按 productName 分好目录，再拼一次会让桌面壳与
-  // scripts/macos/start.sh（默认 ~/Library/Application Support/ResumeForge/runtime）
-  // 各写一套 pid 记录——壳读不到启动器记的后端，退出后端口仍被占。
+  // scripts/macos/start.sh 各写一套 pid 记录（退出后端口仍被占）。Linux 同理：
+  // userData 是 ~/.config（配置语义），启动器却把日志/pid/venv 放在 $XDG_DATA_HOME/ResumeForge。
+  if (process.platform === "linux") return linuxRuntimeDir();
   const base = process.env.LOCALAPPDATA || app.getPath("userData");
   return process.platform === "darwin"
     ? path.join(base, "runtime")

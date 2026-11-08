@@ -499,6 +499,453 @@ jobs:
           try { Invoke-WebRequest -UseBasicParsing -Uri "http://127.0.0.1:8123/api/health" -TimeoutSec 5 } catch { "8123 健康检查失败：$_" }
 
 
+  linux-launcher-guards:
+    name: Linux launcher guards
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Run the Linux launcher guard tests
+        # 与上方 `macos-launcher-guards` 同构：同一套纯逻辑用例（换行/编码、可执行位、
+        # 自举常量与摘要、版本窗口、进程记录、只读安装根……），这里跑在 Linux runner 上。
+        #
+        # 为什么不满足于"Windows 上那台 Git Bash 顺带跑一遍"：Windows 上 chmod 的语义
+        # 是假的（只读位切不掉）、ps/pgrep 的参数也不全，脚本会 skip 掉**只读根**与
+        # **进程记录**两组用例——而这两组恰恰是 Linux 启动链刚落地时最容易坏的地方。
+        run: |
+          set -euo pipefail
+          log="$RUNNER_TEMP/linux-launcher-guards.log"
+          # 临时目录交给 runner 的 ${RUNNER_TEMP}：Linux 的 /tmp 通常是 tmpfs（内存盘），
+          # 而这份脚本里有真复制、真解压、真 chmod，落在 tmpfs 上会白吃内存。
+          # 位置参数 1 是脚本自己的 tmp 根约定（与 macOS 那份一致），同时导出 TMPDIR，
+          # 让 mktemp 的默认值也指向同一处——两种取法都覆盖，不赌某一版实现用的是哪种。
+          TMPDIR="$RUNNER_TEMP" bash scripts/tests/test-linux-launcher.sh "$RUNNER_TEMP" 2>&1 | tee "$log"
+
+          # 汇总行是脚本自己维护的契约（macOS 那份是「macOS 启动链测试全部通过。」）。
+          # 断言它而不是在这里另算一遍计数：脚本哪天把用例删空、或者提前 exit 0，
+          # 只有这行汇总能抓住。正则留了余量（「全部」二字可有可无），但必须同时出现
+          # 平台名与「通过」——松到只认「通过」就等于什么都没断言。
+          if ! grep -qE 'Linux 启动链测试.*通过' "$log"; then
+            echo "::error::Linux 启动链测试没有给出通过汇总行，见上方的逐条输出。"
+            exit 1
+          fi
+          # 一条 ok 都没有 = 脚本被整体跳过或提前返回。这种"绿色"最危险：
+          # 作业是绿的，Linux 启动链却一个字节都没被验证。
+          ok_count="$(grep -c '^  ok' "$log" || true)"
+          if [ "${ok_count:-0}" -eq 0 ]; then
+            echo "::error::Linux 启动链测试一条用例都没执行（输出里没有 ok 行）。"
+            exit 1
+          fi
+          skip_count="$(grep -c '^  skip' "$log" || true)"
+          {
+            echo "### Linux launcher guards"
+            echo ""
+            echo "- ok: ${ok_count}"
+            echo "- skip: ${skip_count:-0}"
+            echo ""
+            echo 'Linux 上这些用例应当全部真跑；`skip` 不为 0 时看上方逐条输出，确认跳过的是环境相关的用例而不是被平台判断误跳。'
+          } >>"$GITHUB_STEP_SUMMARY"
+
+  linux-runtimes:
+    name: Linux portable runtimes
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Stage the shared download-verification helper
+        # 下面两个步骤都要"下载 + 校验 sha256 与字节数"，所以把这份等价实现落在
+        # $RUNNER_TEMP 再 source，避免在 YAML 里抄两遍同一段逻辑（抄两遍的下场是
+        # 只改了其中一份）。
+        #
+        # 为什么不直接 source scripts/linux/lib/*.sh（macOS 作业就是这么做的）：
+        # Linux 侧的启动器与库由另一条实现工作流并行落地，函数签名还没定；CI 不跟它
+        # 耦合，等那边稳定后再改成 source 并删掉这段注释。
+        run: |
+          set -euo pipefail
+          cat >"$RUNNER_TEMP/rf-download-verified.sh" <<'RF_DOWNLOAD_VERIFIED'
+          # 契约对齐 macOS 侧 scripts/macos/lib/common.sh 的 download_verified：
+          #   download_verified <url> <sha256> <目标路径> <人类可读标签> [期望字节数]
+          # 字节数是第二道闸门：被代理截断、或同名内容被换掉时，单看摘要只会说
+          # "不匹配"，两个一起报才说得清是哪一种错。上游没有公布字节数的包（Node）
+          # 就不传，只校摘要。
+          download_verified() {
+            url="$1"
+            expected_sha="$2"
+            target="$3"
+            label="$4"
+            expected_bytes="${5:-}"
+            echo "正在下载并校验${label}：$url"
+            curl -fsSL --retry 3 --retry-delay 5 --connect-timeout 20 -o "$target" "$url"
+            actual_sha="$(sha256sum "$target" | cut -d' ' -f1)"
+            actual_bytes="$(stat -c '%s' "$target")"
+            if [ "$actual_sha" != "$expected_sha" ]; then
+              echo "::error::${label} 的 sha256 不匹配（期望 ${expected_sha}，实际 ${actual_sha}）。"
+              return 1
+            fi
+            if [ -n "$expected_bytes" ] && [ "$actual_bytes" != "$expected_bytes" ]; then
+              echo "::error::${label} 的字节数不匹配（期望 ${expected_bytes}，实际 ${actual_bytes}）。"
+              return 1
+            fi
+            echo "${label}：sha256 通过${expected_bytes:+，字节数 ${actual_bytes} 通过}。"
+          }
+          RF_DOWNLOAD_VERIFIED
+
+      - name: Download and verify the pinned portable runtimes (x86_64) and really run them
+        # 真正下载一遍便携版 Python 与 Node，用仓库里钉死的 SHA-256（Python 另加字节数）
+        # 校验，解压后把两个包各自真正跑一次。这一步专抓那些在别处一律表现为
+        # "用户下载后启动失败"的错误：地址或摘要抄错一位、上游换了包、精简包缺件。
+        #
+        # 为什么用 install_only_stripped 这种精简包：它是最小的产物（34 MB 对 70+ MB），
+        # 启动器要随包发行就必须瘦。代价是它裁掉了测试与文档，也存在裁掉 venv/ensurepip
+        # 的可能——那两样一缺，启动器"解压 → bin/python3 → python3 -m venv →
+        # pip install"的整条自举链路就断在第二步。所以下面的自检不是可选项。
+        run: |
+          set -euo pipefail
+          . "$RUNNER_TEMP/rf-download-verified.sh"
+          work="$RUNNER_TEMP/linux-runtimes"
+          rm -rf "$work"
+          mkdir -p "$work"
+
+          py_archive='cpython-3.12.14+20260901-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz'
+          node_archive='node-v24.19.0-linux-x64.tar.gz'
+
+          download_verified \
+            "https://github.com/astral-sh/python-build-standalone/releases/download/20260901/${py_archive}" \
+            72748da13197c1fb161e3afeef20a6a385ff24f2165e6e2758e47008e7faba4c \
+            "$work/$py_archive" \
+            "便携版 Python 3.12.14（x86_64，install_only_stripped）" \
+            34143368
+          download_verified \
+            "https://nodejs.org/dist/v24.19.0/${node_archive}" \
+            f625d97cd707df4ff96254916fbc5ff014f09c09effe5a1e0ca8f6d41a8789d4 \
+            "$work/$node_archive" \
+            "便携版 Node.js 24.19.0（x64）"
+
+          # install_only 包的顶层是 python/，剥掉一层之后就是 bin/python3。
+          # 先断言存在再跑：路径形状万一变了，要报"归档布局变了"，而不是一句
+          # 难懂的 "No such file or directory"。
+          mkdir -p "$work/python"
+          tar -xzf "$work/$py_archive" -C "$work/python" --strip-components=1
+          py="$work/python/bin/python3"
+          if [ ! -x "$py" ]; then
+            echo "::error::解压后没有可执行的 bin/python3（归档布局可能与预期不同）。"
+            find "$work/python" -maxdepth 2
+            exit 1
+          fi
+          "$py" -V
+          "$py" -c 'import sqlite3, ssl, ctypes, zlib; print("标准库自检通过")'
+
+          # 需求里的两条硬断言。缺 venv/ensurepip → 启动器建不了虚拟环境；
+          # pip 不可用 → 虚拟环境建起来也装不上 backend/requirements.txt。
+          # 两个都在这里提前失败，而不是等用户第一次双击。
+          if ! "$py" -c 'import venv, ensurepip; print("venv 与 ensurepip 可导入")'; then
+            echo "::error::便携版 Python（install_only_stripped）缺少 venv 或 ensurepip：启动器的自举链路会在建虚拟环境这一步断掉。要么改用 install_only 包，要么由启动器自带 pip 引导。"
+            exit 1
+          fi
+          if ! "$py" -m pip --version; then
+            echo "::error::便携版 Python 里的 pip 不可用（bin/python3 -m pip --version 失败）。"
+            exit 1
+          fi
+          # import 成功不等于能落地：venv 需要 ensurepip 的 wheel 文件真的躺在包里，
+          # 而不是只有模块目录。所以真建一个空虚拟环境并跑一次 pip。
+          "$py" -m venv "$work/venv-probe"
+          "$work/venv-probe/bin/python3" -m pip --version
+          echo "venv 自举自检通过（建虚拟环境 + pip 可用）"
+
+          mkdir -p "$work/node"
+          tar -xzf "$work/$node_archive" -C "$work/node" --strip-components=1
+          "$work/node/bin/node" --version
+          "$work/node/bin/npm" --version
+
+      - name: Verify the pinned digests for the other architecture too
+        # runner 是 x86_64，所以只有 x86_64 那两个包会被真正解压与运行；aarch64 的包
+        # 只下载 + 比对摘要与字节数（x86_64 内核跑不了 aarch64 的 ELF）。
+        # **恰恰这一条最有价值**：两个架构的常量都是人工抄进仓库的，抄错一位在别处
+        # 一律表现成"arm 用户下载后启动失败"，而 arm 机器不会出现在我们的测试矩阵里。
+        run: |
+          set -euo pipefail
+          . "$RUNNER_TEMP/rf-download-verified.sh"
+          work="$RUNNER_TEMP/linux-runtimes-foreign"
+          rm -rf "$work"
+          mkdir -p "$work"
+
+          py_archive='cpython-3.12.14+20260901-aarch64-unknown-linux-gnu-install_only_stripped.tar.gz'
+          node_archive='node-v24.19.0-linux-arm64.tar.gz'
+
+          download_verified \
+            "https://github.com/astral-sh/python-build-standalone/releases/download/20260901/${py_archive}" \
+            577b4bec0793ad1ff0cbff9adbd0df078eddde38a4c41bf5d83ad381a85ee39d \
+            "$work/$py_archive" \
+            "便携版 Python 3.12.14（aarch64，install_only_stripped）" \
+            29199399
+          download_verified \
+            "https://nodejs.org/dist/v24.19.0/${node_archive}" \
+            d28c8a5bf0a808f0ed434a1dce8c54ae98f0371c0bd86ac58abc613f73e6643f \
+            "$work/$node_archive" \
+            "便携版 Node.js 24.19.0（arm64）"
+
+          # 只校验、不解压：在 x86_64 上解压 aarch64 的包拿不到任何额外信息；真想执行
+          # 里面的二进制得装 qemu-user-static 做 binfmt 注册，那是给 CI 加一条与产品
+          # 无关的失败面，收益却只是重复一次 sha256 已经保证过的事。
+          echo "另一架构（aarch64）的摘要与字节数校验通过；按设计未执行 aarch64 二进制。"
+          rm -rf "$work"
+
+  linux-end-to-end:
+    name: Linux end-to-end (clean checkout)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install a CJK font for the PDF/Word export checks
+        # 与 backend 作业同一条理由：fonts-wqy-zenhei 是 TrueType 轮廓，fonts-noto-cjk
+        # 是 CFF 轮廓，fpdf2 对 CFF 的子集化会把提取文本弄丢（2026-10-11 实测）。
+        # 导出用例缺字体不是"少一层字形"，而是整条请求 409——所以字体必须在上游装好。
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y fonts-noto-cjk fonts-wqy-zenhei
+      - name: Build the production frontend assets
+        # RF-09 方案 A：frontend/dist 存在时启动链走"后端同源静态"模式（不起 Vite）。
+        # 这个作业要验证的正是发布形态：先构建出 dist，再走完整启动链，最后从后端
+        # 端口真取一次 index.html 引用的入口模块。
+        working-directory: frontend
+        run: |
+          npm ci --no-audit --no-fund
+          npm run build
+      - name: Start the app the way a Linux user does
+        # 与 macOS/Windows 两个端到端作业同一条纪律：**启动与探活必须在同一个 run 里**。
+        # 分成两个步骤会在间歇性失败上骗人——服务被外部收掉时，事后那一步只能看到
+        # "没有人监听"，分不清"从没起来"和"起来又被杀了"（2026-09-29 在 Windows 上实测）。
+        #
+        # 维护者手上没有 Linux 桌面，这个作业就是"那台 Linux 机器"：从干净检出开始，
+        # 走 start.sh 的完整链路（准备运行时 → 建 venv → 装依赖 → 起 uvicorn →
+        # 等健康检查），最后用 stop.sh 收尾。
+        run: |
+          set -euo pipefail
+          # 让 uvicorn 打全日志：这个作业的失败通常是"服务没起来"，而默认的 warning
+          # 级别只会在 stderr 里留一片空白，没有任何可定位的线索。
+          export RF_UVICORN_LOG_LEVEL=info
+          bash start.sh --no-browser
+
+          # 端口与端点跟 macOS 作业保持一致：后端默认 8005，健康端点是 /api/health。
+          # start.sh 的契约里本来就包含"等到健康后再返回"，这里仍然做一次有界的轮询：
+          # Linux 那份启动器的等待时长还没跟它磨合过，宁可多等几十秒也不要把
+          # "起得慢"误报成"起不来"。
+          healthy=0
+          for _ in $(seq 1 60); do
+            if curl -fsS --max-time 2 http://127.0.0.1:8005/api/health; then
+              healthy=1
+              break
+            fi
+            sleep 2
+          done
+          echo
+          if [ "$healthy" -ne 1 ]; then
+            echo "::error::后端在 120 秒内没有通过 http://127.0.0.1:8005/api/health。"
+            exit 1
+          fi
+
+          # 中文字体预热必须真的打到了接口上。start.sh 里那一步按设计是"失败只提示、
+          # 不挡启动"，所以路径写错（前缀、单复数）在用户那边表现为静默降级——本作业
+          # 没有 Linux 桌面可依赖，只能在这里把静默变响：接口在就一定有 id，状态要么
+          # 正在下要么已下完，且不该带 error。
+          python3 - <<'PY'
+          import json
+          import sys
+          import urllib.request
+
+          url = "http://127.0.0.1:8005/api/settings/fonts/builtin"
+          with urllib.request.urlopen(url, timeout=10) as response:
+              status = json.load(response)
+          if status.get("id") != "source-han-sans-sc":
+              sys.exit(f"字体接口返回了意外的 id：{status.get('id')!r}（预热路径可能写错了）")
+          if status.get("state") not in ("downloading", "done"):
+              sys.exit(f"中文字体预热没有发起，state={status.get('state')!r} error={status.get('error')!r}")
+          print(f"中文字体预热已发起：state={status['state']} downloaded={status['downloaded']}")
+          PY
+
+          # 端口活着不等于页面能用：同源模式下 index.html 与入口模块都由后端提供，
+          # 入口模块 404 就是一片空白。SPA 回退按"浏览器导航语义"判定（Accept 含
+          # text/html 才回落 index.html，程序化请求保持 404 原语义），所以探针必须
+          # 带上浏览器的 Accept 头。
+          entry=$(curl -fsS -H "Accept: text/html" http://127.0.0.1:8005/ | grep -oE 'src="/assets/[^"]+"' | grep -oE '/assets/[^"]+' | tail -n 1)
+          if [ -z "$entry" ]; then
+            echo "::error::同源 index.html 里没有解析到 /assets 入口模块。"
+            curl -fsS -H "Accept: text/html" http://127.0.0.1:8005/ >&2
+            exit 1
+          fi
+          echo "入口模块：$entry"
+          curl -fsS "http://127.0.0.1:8005${entry}" -o /dev/null
+          echo "入口模块取回成功"
+      - name: Browser smoke (Playwright)
+        # 真实 Chromium 冒烟，复用 macOS 作业那套用例。Linux runner 上是裸的，
+        # 所以要用 --with-deps 把 Chromium 需要的系统库一并装上；少了这一步的典型
+        # 症状是 "Host system is missing dependencies to run browsers"。
+        working-directory: frontend
+        env:
+          SMOKE_FRONTEND_URL: "http://127.0.0.1:8005"
+          SMOKE_BACKEND_URL: "http://127.0.0.1:8005"
+        run: |
+          npx playwright install --with-deps chromium
+          npx playwright test
+      - name: Responsive layout gate (8 viewports x 18 routes)
+        # 多分辨率适配的硬指标（R1/R2/R3）：8 个视口 × 18 条路由 = 144 条断言。
+        # 不复用默认配置——那套的 testDir 是 tests/smoke，断言按 1200px 校准过，
+        # 把 144 次导航塞进去会让"冒烟"失去意义（方案 §7.7）。
+        working-directory: frontend
+        env:
+          SMOKE_FRONTEND_URL: "http://127.0.0.1:8005"
+        run: npx playwright test -c playwright.responsive.config.ts
+      - name: Read-only install root (runtime state must leave the payload)
+        # macOS 那份作业的等价用例，Linux 上更硬：用户从 AppImage 拿到的运行时是
+        # 只读挂载里的 squashfs 内容，安装目录同样不该被写。
+        #
+        # 这一步断言三件事：
+        #   1) 从只读副本起的服务真的通过健康检查；
+        #   2) 运行期状态（虚拟环境、日志、pid）落在 XDG 数据目录
+        #      （$XDG_DATA_HOME/ResumeForge，未设时 ~/.local/share/ResumeForge）；
+        #   3) 只读副本**一个条目都没多**（运行期写入没有漏回安装目录）。
+        # 复制时排除 runtime/、node_modules/、backend/.venv：既省时间，也让只读副本
+        # 走一次完整自举——venv 建在错误位置正是要验证的问题之一。
+        run: |
+          set -euo pipefail
+          tmp="$(mktemp -d)"
+          ro_root="$tmp/repo"
+          xdg="$tmp/xdg"
+
+          cleanup() {
+            status=$?
+            # 先停掉这次起的后端（记录在状态目录里，只读副本里没有）。
+            XDG_DATA_HOME="$xdg" bash "$ro_root/stop.sh" >/dev/null 2>&1 || true
+            if [ "$status" -ne 0 ]; then
+              echo "===== 只读根启动失败：状态目录里的日志 =====" >&2
+              if [ -d "$xdg" ]; then
+                while IFS= read -r log; do
+                  echo "----- $log -----" >&2
+                  tail -n 60 "$log" >&2
+                done < <(find "$xdg" -type f -name '*.log' 2>/dev/null)
+              fi
+              echo "===== 端口与进程 =====" >&2
+              ss -ltnp 2>/dev/null | grep -F ':8005' || echo "8005 没有监听者" >&2
+            fi
+            # 只读目录里的 rm -rf 会失败，先恢复写权限。
+            chmod -R u+w "$tmp" 2>/dev/null || true
+            rm -rf "$tmp"
+            exit "$status"
+          }
+          trap cleanup EXIT
+
+          # 先把上一步那个"可写工作树"的实例按用户的方式停掉：只读用例要在同一个
+          # 默认端口 8005 上再起一个实例，而启动器看到后端已在运行时会直接复用，
+          # 不会重新自举——那测的就不是只读根了。stop.sh 是幂等的，停完再确认端口
+          # 真的空了，避免把"端口被占"误判成"只读根起不来"。
+          bash stop.sh || true
+          for _ in $(seq 1 30); do
+            if ! curl -fsS --max-time 1 http://127.0.0.1:8005/api/health >/dev/null 2>&1; then
+              break
+            fi
+            sleep 2
+          done
+
+          mkdir -p "$ro_root"
+          # 排除模式**必须锚定到传输根**：rsync 的 `runtime/` 会匹配任意层级的同名目录，
+          # 而 `backend/app/runtime/` 是业务模块——被一起排掉的后果是
+          # `ModuleNotFoundError: No module named 'app.runtime'`（2026-10-22 在 macOS 作业上实测）。
+          # node_modules 反过来要按任意层级排除（frontend/ 里那份几百 MB，静态模式用不到）。
+          rsync -a \
+            --exclude '/runtime/' \
+            --exclude 'node_modules/' \
+            --exclude '/backend/.venv/' \
+            --exclude '/.git/' \
+            ./ "$ro_root/"
+
+          chmod -R a-w "$ro_root"
+          find "$ro_root" | sort >"$tmp/before.txt"
+
+          # Linux 的状态目录按 XDG 基目录规范落点。把 XDG_DATA_HOME 指到临时目录，
+          # 既让断言有确定的落点，也保证用例不往 runner 的用户目录里留垃圾。
+          export XDG_DATA_HOME="$xdg"
+          export RF_UVICORN_LOG_LEVEL=info
+
+          bash "$ro_root/start.sh" --no-browser
+
+          healthy=0
+          for _ in $(seq 1 60); do
+            if curl -fsS --max-time 2 http://127.0.0.1:8005/api/health; then
+              healthy=1
+              break
+            fi
+            sleep 2
+          done
+          echo
+          if [ "$healthy" -ne 1 ]; then
+            echo "::error::从只读副本起的服务在 120 秒内没有通过健康检查。"
+            exit 1
+          fi
+
+          state_root="$XDG_DATA_HOME/ResumeForge"
+          if [ ! -d "$state_root" ]; then
+            echo "::error::运行期状态目录没有被创建：${state_root}（启动器可能仍把状态写进安装目录）。"
+            ls -la "$XDG_DATA_HOME" >&2 || true
+            exit 1
+          fi
+          # 解释器/虚拟环境必须落在状态目录里：安装目录只读时，这是"自举能不能完成"
+          # 的唯一判据。不钉死具体布局（venv/ 还是 .venv/、python3 还是 python3.12，
+          # 由启动器决定），只要求状态目录下真的存在一个 python 可执行体。
+          if ! find "$state_root" -maxdepth 5 \( -name 'python3' -o -name 'python3.*' \) -print -quit | grep -q .; then
+            echo "::error::状态目录里没有找到 python 解释器：$state_root"
+            find "$state_root" -maxdepth 3 | head -50 >&2
+            exit 1
+          fi
+          echo "运行期状态全部落在 $state_root"
+          find "$state_root" -maxdepth 2 | head -40
+
+          find "$ro_root" | sort >"$tmp/after.txt"
+          if ! diff -u "$tmp/before.txt" "$tmp/after.txt"; then
+            echo "::error::只读副本里出现了新条目：有运行期写入漏回了安装目录。"
+            exit 1
+          fi
+          echo "只读副本没有任何新增文件，安装目录未被改动。"
+      - name: Stop the app
+        # 收尾必须幂等：上一条用例自己起实例、自己收尾（含失败路径），所以在已经
+        # 停过的实例上再调一次 stop.sh 不能报错——否则会把真实故障盖成"收尾失败"。
+        if: always()
+        run: bash stop.sh || true
+      - name: Show the service logs when something failed
+        if: failure()
+        run: |
+          # macOS 作业打印 runtime/*.log。Linux 启动器把日志放在哪一侧还没定死
+          # （安装根下的 runtime/ 与 XDG 状态目录两种都合理），所以两边都找，
+          # 找不到就跳过——不让"日志不存在"变成第二个故障。
+          for f in runtime/*.log logs/*.log; do
+            [ -f "$f" ] || continue
+            echo "===== $f ====="
+            tail -n 60 "$f"
+          done
+          state_root="${XDG_DATA_HOME:-$HOME/.local/share}/ResumeForge"
+          if [ -d "$state_root" ]; then
+            while IFS= read -r log; do
+              echo "===== $log ====="
+              tail -n 60 "$log"
+            done < <(find "$state_root" -type f -name '*.log' 2>/dev/null)
+          fi
+          echo "===== 端口与进程 ====="
+          # 光有日志不够："进程还活着但端口没人监听"和"进程早就死了"是两种不同的
+          # 故障，前者多半卡在自举里，后者要看上面的报错。
+          ss -ltnp 2>/dev/null | grep -F ':8005' || echo "8005 没有监听者"
+          pgrep -af 'uvicorn|vite' || echo "没有 uvicorn / vite 进程"
+          echo "===== 健康探针 ====="
+          curl -v --max-time 5 http://127.0.0.1:8005/api/health || echo "8005 健康检查失败"
+
   frontend:
     name: Frontend (Node 22)
     runs-on: ubuntu-latest
@@ -870,3 +1317,61 @@ jobs:
       - name: Scan docs for credentials and personal data
         # 判定口径与豁免写法见 docs/verification-playbook.md 与脚本模块注释。
         run: python3 scripts/check_docs_pii.py
+
+  # ===== RAG runtime matrix（语义检索本地运行时，任务书 v3 §3.1 / §6）=====
+  # 4 个真实平台作业：Windows x64 / Linux x64 / Linux arm64 / macOS arm64
+  # （GitHub 的 macos-latest 是 Apple Silicon，不是 Intel）。
+  # 本作业只临时安装 pin 版本的推理依赖做探针：onnxruntime==1.31.1 /
+  # numpy==2.5.4 / tokenizers==0.23.3 —— **不进 backend/requirements.txt**。
+  # 产品运行时由 rag-runtime 资产包按平台预解包分发，CI 这里验证的是
+  # "每个目标平台都能加载 tiny ONNX 且数值稳定"。
+  #
+  # 刻意不建 mac-x64 作业：onnxruntime 从 1.24.1 起不再发布 macOS x86_64
+  # wheel（1.31.1 只有 macosx_14_0_arm64），Intel Mac 没有本地推理路径、
+  # 只能走远程 provider。这不是漏配，见任务书 §3.1 的平台矩阵。
+  rag-runtime-matrix:
+    name: RAG runtime matrix (${{ matrix.label }})
+    runs-on: ${{ matrix.os }}
+    # 安装 + 探针是分钟级；15 分钟足够慢速共享 runner，不算正常耗时。
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: windows-x64
+            os: windows-latest
+          - label: linux-x64
+            os: ubuntu-latest
+          - label: linux-arm64
+            os: ubuntu-24.04-arm
+          - label: macos-arm64
+            os: macos-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Python
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+
+      - name: Install pinned inference runtimes
+        # CI 临时安装，不改 requirements.txt；版本与产品 rag-runtime 资产同源。
+        run: >-
+          python -m pip install --disable-pip-version-check
+          onnxruntime==1.31.1 numpy==2.5.4 tokenizers==0.23.3
+
+      - name: Run platform probe (tiny ONNX, ±1e-6 stability)
+        # A 产出的 tiny fixture 在 backend/tests/fixtures/rag_eval/tiny_onnx/；
+        # 探针默认输出 runtime/rag_eval/v3_runtime_matrix_<platform>-<arch>.json。
+        run: >-
+          python scripts/rag_runtime_matrix_probe.py
+          --output runtime/rag_eval/v3_runtime_matrix_${{ matrix.label }}.json
+
+      - name: Upload probe evidence
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: rag-runtime-matrix-${{ matrix.label }}
+          path: runtime/rag_eval/v3_runtime_matrix_${{ matrix.label }}.json
+          retention-days: 7
+          if-no-files-found: error

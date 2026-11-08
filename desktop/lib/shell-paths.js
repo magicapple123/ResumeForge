@@ -104,6 +104,34 @@ function logHint(logPath, degraded = false) {
   return degraded ? `${logPath}（系统临时目录：安装目录不可写）` : logPath;
 }
 
+// Linux 的数据目录：${XDG_DATA_HOME:-$HOME/.local/share}/ResumeForge。
+//
+// 为什么不用 app.getPath("userData")：Electron 在 Linux 上把 userData 解析成
+// ~/.config/<productName>（**配置**语义），而启动器（scripts/linux/lib/common.sh）
+// 把日志、pid 记录、venv、运行时都放进**数据**目录。两者混用的话，"壳启动"和
+// "双击 start.sh 启动"会各写一套状态：壳读不到启动器记的后端，退出应用后端口仍
+// 被占——和 macOS 上那次"多拼一层 ResumeForge"是同一个故障的两个变体。
+//
+// 严格按 XDG Base Directory 规范读 $XDG_DATA_HOME：未设置（或空串）时退回
+// ~/.local/share。Node 不会展开 "~"，所以这里用 os.homedir() 拼，绝不写死波浪号。
+//
+// 导出给 main.js::runtimeDir() 与 launcherStateEnv() 共用：两边读**同一个函数**，
+// "壳的 runtimeDir 的父目录 == 启动器的 RF_STATE_DIR"是构造出来的恒等式，而不是
+// 靠两边的默认值碰巧一致。
+function linuxStateDir(env = process.env, homeDir = os.homedir()) {
+  const xdgDataHome = env.XDG_DATA_HOME;
+  const base =
+    typeof xdgDataHome === "string" && xdgDataHome.trim()
+      ? xdgDataHome
+      : path.join(homeDir, ".local", "share");
+  return path.join(base, "ResumeForge");
+}
+
+// 启动器算的是 "$RF_STATE_DIR/runtime"，所以壳这边的 runtime 必须同层。
+function linuxRuntimeDir() {
+  return path.join(linuxStateDir(), "runtime");
+}
+
 // macOS 打包态要显式把"状态目录"告诉兜底启动器 start.sh（RF_STATE_DIR）：
 // common.sh 的 rf_resolve_runtime_dir 算的是 "$RF_STATE_DIR/runtime"，注入
 // path.dirname(runtimeDir) 之后，启动器算出的路径与壳的 runtimeDir() **恒等**
@@ -113,17 +141,24 @@ function logHint(logPath, degraded = false) {
 // start.sh 的默认值本来就同层（都在 userData/productName 之下），注入只是让两边
 // 不再各自依赖自己的默认值推导，避免哪天一处改了另一处没跟上。
 //
-// 只在 mac + 打包态注入：Windows 的启动器不读这个变量（另一套记录格式），
+// Linux 同理，只是"同层"的那一层由 XDG 数据目录给出（见 linuxStateDir），所以
+// 这里直接取 linuxStateDir()——main.js::runtimeDir() 用的就是它的 /runtime 子目录。
+//
+// 只在 mac / linux 的打包态注入：Windows 的启动器不读这个变量（另一套记录格式），
 // 开发树则根本不走兜底启动器（payload 里带着 python-runtime.zip）。
 function launcherStateEnv({ packaged, runtimeDir, platform = process.platform } = {}) {
-  if (!packaged || platform !== "darwin" || !runtimeDir) return {};
-  return { RF_STATE_DIR: path.dirname(runtimeDir) };
+  if (!packaged || !runtimeDir) return {};
+  if (platform === "darwin") return { RF_STATE_DIR: path.dirname(runtimeDir) };
+  if (platform === "linux") return { RF_STATE_DIR: linuxStateDir() };
+  return {};
 }
 
 module.exports = {
   LOG_DIR_NAME,
   createFileLogger,
   launcherStateEnv,
+  linuxRuntimeDir,
+  linuxStateDir,
   logHint,
   probeWritable,
   resolveLogDir,
