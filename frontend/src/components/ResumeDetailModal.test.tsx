@@ -247,6 +247,14 @@ describe("ResumeDetailModal 版式重排（P3）", () => {
     apiMocks.fetchResumeHtml.mockResolvedValue("<p>预览</p>");
     apiMocks.renderResume.mockRejectedValueOnce(new Error("后端渲染失败"));
 
+    // spy 必须在**首次 render 之前**装：组件在渲染时就 `App.useApp()` 取到 message 实例，
+    // 装晚了就只有「点击恰好触发一次重渲染」时才命中——2026-11-09 CI 那次偶发红
+    // （8s 预算也没救回来）就是这个时序窗口。
+    const errorSpy = vi.fn();
+    const useAppSpy = vi.spyOn(antd.App, "useApp").mockReturnValue({
+      message: { error: errorSpy, success: vi.fn(), info: vi.fn(), warning: vi.fn() },
+    } as unknown as ReturnType<typeof antd.App.useApp>);
+
     renderModal(8);
     await screen.findByTestId("resume-preview-stub");
 
@@ -260,11 +268,8 @@ describe("ResumeDetailModal 版式重排（P3）", () => {
     // 与 `ResumeDetailModal` 的改动无关：那条路径上既没有新增请求，也没有新增 effect）。
     // 所以这里把**下面那个 waitFor** 的预算按上面这段结论对齐到 8s——改的是预算，不是断言：
     // 断言仍是"error 被调用过且原因是后端那条"，一次都不许少。
-    // 注意要 spy `App.useApp` 返回的实例（组件用的不是 antd 的静态 `message`）。
-    const errorSpy = vi.fn();
-    const useAppSpy = vi.spyOn(antd.App, "useApp").mockReturnValue({
-      message: { error: errorSpy, success: vi.fn(), info: vi.fn(), warning: vi.fn() },
-    } as unknown as ReturnType<typeof antd.App.useApp>);
+    // 注意要 spy `App.useApp` 返回的实例（组件用的不是 antd 的静态 `message`），
+    // 且必须在首次 render 之前装——见上方 spy 定义处。
 
     fireEvent.click(screen.getByRole("button", { name: "改版式·2 页" }));
 
