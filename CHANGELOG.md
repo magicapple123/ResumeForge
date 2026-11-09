@@ -15,6 +15,15 @@
 
 ### Changed
 
+- **可用性收口 8 项：列表行「···」、设置页三张 AI 卡对齐、面试轮数与人设互斥、更新公告渲染、清理文件定位（2026-11-09）。** 无数据库迁移、无新增依赖；旧配置与旧数据零破坏。
+  - **列表行操作**：岗位广场与简历中心每行最右侧新增「···」，内容与该行右键菜单一致（不含已平铺的「详情/生成简历」「预览/导出」，也不含右键独有的「复制」子菜单）。**进入选择模式（勾选）后，三点与所有单行操作一并禁用**（含表格收藏星标、窄档卡片的预览、星标与标题），批量勾选框保持可用；窄档卡片补上「批量选择」入口（此前 ≤1092 宽度下进不了选择模式）。岗位广场操作列 170 → 190、`scroll.x` 1330 → 1350。
+  - **设置页三张卡向「大模型 API 配置」看齐**（LLM 卡与其弹窗一行未改）：卡头统一「标题 + 唯一主操作」、说明统一 `Alert info`、字段统一 `SettingsField`、状态统一 `Tag`（蓝=生效中 / 绿=已配置 / 灰=未配置）、测试结果统一 `Alert`。语义检索远程服务由下拉改为厂商卡片网格（6 家，选中态浅色底 + 主色边框，下方展开字段）；语音转写新增 OpenAI / Groq / 硅基流动 / 阿里云百炼 / 自定义预设；联网搜索改为 4 张可多选来源卡 + 下方「通用参数」，**保留 400ms 自动保存与三态提示**；语义检索三处裸的红按钮（删除已下载文件 / 删除本地模型文件 / 清除已保存的密钥）收进「···」并沿用列表同款二次确认。
+  - **语音转写新增调用协议**：`AsrSettings.protocol`（`openai` | `dashscope`，默认 `openai`），配置仍存 `AppSetting.asr_config` JSON，**无需迁移**；`dashscope` 走 `POST {base}/chat/completions` + `messages[0].content=[{type:"input_audio",...}]`（Base64 Data URI、`stream:false`、可选 `asr_options.language`），响应兼容字符串与分段数组，400 时提取上游 `error.message`。新增 `POST /api/settings/asr/models`（`GET {base}/models`，上限 100，失败返回 `[]`），前端「拉取模型列表」按 `whisper|transcribe|asr|audio|speech|sensevoice` 分组、默认只显示疑似转写模型。**旧配置无 `protocol` 时按 `openai` 处理，行为不变。**
+  - **面试设定**：轮数改为「自动 / 指定轮数」两档（**默认自动**，此前默认固定 6 轮），指定时手输 3–12；面试官风格与自定义人设合并为同一分组并纵向排列，**填了人设即禁用风格**且 `extra` 明示原因（值不清空、后端 Literal 仍必填）。
+  - **行为变化（进行中的会话也生效）**：后端提示词从「风格 + 人设叠加」改为**人设优先**——`persona` 非空时 `interviewer_style` 传入占位文案、`behavior_directives_for(..., None)` 跳过风格行为指令，收尾提示词同样不注入具体风格名。老会话下一轮即走新逻辑。
+  - **更新公告渲染**：补齐 `#{1,4}` 标题、表格（首行进 `thead`、列数不齐补空）、`---/***/___` 分隔线、行内代码、`* ` 与 `1. ` 列表、`[文字](地址)` 链接（**只放行 http/https**，其余降级为纯文字）；全程 React 文本节点，不引入 `dangerouslySetInnerHTML` 与 markdown 依赖。容器 `maxHeight` 200 → `min(40vh, 420px)`（1440×900 下实测 360px），保持内部滚动。后端公告截断由「硬切 4000 字符」改为**按行回退**（预算 3986，回退点不早于 60%，末尾追加「……（完整说明见发布页）」），不再把表格或句子从中间切断。
+  - **清理旧文件可定位**：新增 `POST /api/stats/storage/cleanup-reveal`，请求体为清单里的**相对路径**（不下发绝对路径）；拒绝绝对路径与 `..`、`resolve()` 后必须仍在数据目录内、首段白名单 `backups`/`auto-backups`/`logs`、文件不存在返回 404。前端文件行末尾加「打开文件夹」图标按钮（`preventDefault` + `stopPropagation`，点它不会切换勾选）。`reveal_path()` 抽到 `services/system_reveal.py`，与「我的文件」的行内定位共用一份实现（Windows `explorer /select,`、macOS `open -R`、Linux `xdg-open` 目录）。
+
 - **设置页「各服务商协议支持」按 2026-11-09 官方文档复核并重排（热门优先）。** 修正 Qwen / StepFun 的 Responses 判定为部分支持（前者仅基础兼容、后者仅两款模型），xAI 的 Anthropic 判定改为部分支持（官方 OpenAPI 已定义 `/v1/messages`）；Perplexity 的 Anthropic 改为部分支持（Orchestrator 私有预览，需申请）。Groq 预设模型改为 `openai/gpt-oss-120b`（`llama-3.3-70b-versatile` 已于 2026-08-16 对自助层关停），Perplexity 改为 `perplexity/sonar`。23 行按热门度重排，表尾仍标核对日期。
 
 - **助手提示词预算守卫阈值显式调整（2026-11）**：`test_assistant_prompt_budget` 的系统提示固定成本上限 23,800 → 24,100。原因是工作树里**既有**（非本批）的助手装配 / 平台事实改动已把基线推到约 23,824（本批之前即已超 23,800 共 24 字符），本批偏好能力点名再 +174 字符（`test_assistant_prompt_surface` 要求每个写工具名出现在静态提示里）；真正的成本闸门 `MAX_PROMPT_TOKENS_ESTIMATE = 60,000` 未动，测试注释记录了实测数字与"既有基线"归属。
@@ -220,6 +229,13 @@
 
 ### Fixed
 
+- **本地语义检索资产下载的失败原因被混为一谈：`rag-assets-v1` 还没发布时，404 被报成「网络不可用」。**
+  两个整包 URL 都返回 HTTP 404，设置页却提示检查网络，用户只能一直等一个不会出现的包。现在
+  4xx/5xx 与连接失败分开归类（可判定关键词「下载源不可用」/「网络不可用」）。同时修正
+  HuggingFace 备用源的语义：它是**一组必须全部到位的文件**，不是另一个整包——任一文件失败即
+  整体判失败并清掉 `*.tmp*`，不再把「第一个文件下载成功」当成整个资产就绪（否则磁盘上留下
+  一份 88% 的残缺目录，而 `assets_present()` 会把它认作可用）；逐文件下载的进度分母随文件数
+  抬高，不倒退、不中途假到 100%。
 - **切到 Responses / Anthropic 协议后被判「Base URL 与配置记录不一致」，且 Anthropic 入口此前根本走不通（用户反馈）。**
   两处根因：① 密钥引用与 Base URL 的绑定用的是**完整地址（含 path）**——切协议时前端把
   `https://api.deepseek.com` 改写成 `https://api.deepseek.com/responses`，path 变了就判「不一致」，
