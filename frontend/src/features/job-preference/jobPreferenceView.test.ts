@@ -40,8 +40,8 @@ function preference(overrides: Partial<JobPreference> = {}): JobPreference {
 }
 
 describe("展示名映射", () => {
-  it("12 类 kind 都有展示名 key", () => {
-    expect(Object.keys(KIND_LABEL_KEYS)).toHaveLength(12);
+  it("13 类 kind 都有展示名 key", () => {
+    expect(Object.keys(KIND_LABEL_KEYS)).toHaveLength(13);
     for (const value of Object.values(KIND_LABEL_KEYS)) {
       expect(t(value)).not.toBe(value);
     }

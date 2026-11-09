@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-"""求职偏好 12 类闭集目录 + 逐 kind 值校验器（计划 §6.3.2 / §6.3.5 约束 1）。
+"""求职偏好 13 类闭集目录 + 逐 kind 值校验器（计划 §6.3.2 / §6.3.5 约束 1）。
 
 **唯一真源**：kind 的闭集、值形态（list / scalar）、中文目录标签（注入块与工具结果用）、
 注入优先级、枚举选项与每个 kind 的规范化/校验规则都只写在本模块。写入路径
@@ -26,6 +26,8 @@ from typing import Any
 
 from .job_preference_taxonomy import (
     CHINESE_NUMBERS,
+    EMPLOYMENT_TYPE_MAP,
+    EMPLOYMENT_TYPE_OPTIONS,
     OVERTIME_MAP,
     OVERTIME_OPTIONS,
     REDLINE_TONE_OPTIONS,
@@ -224,6 +226,21 @@ def _normalize_work_mode(value: Any) -> str:
     )
 
 
+def _normalize_employment_type(value: Any) -> list[str]:
+    """用工形式：列表，但每一项都必须是闭集里的一个（正职/实习/外包/兼职/劳务派遣）。"""
+    items: list[str] = []
+    allowed = "、".join(name for _, name in EMPLOYMENT_TYPE_OPTIONS)
+    for item in _as_items(value, label="用工形式"):
+        text = _clean_text(item, label="用工形式", max_chars=20)
+        normalized = EMPLOYMENT_TYPE_MAP.get(text) or EMPLOYMENT_TYPE_MAP.get(text.lower())
+        if normalized is None:
+            raise PreferenceValidationError(f"用工形式只能是：{allowed}")
+        items.append(normalized)
+    if not items:
+        raise PreferenceValidationError("用工形式不能为空")
+    return _dedupe(items)
+
+
 def _normalize_overtime(value: Any) -> str:
     return _normalize_enum(
         value, mapping=OVERTIME_MAP, label="加班接受度", options=OVERTIME_OPTIONS
@@ -313,37 +330,40 @@ _KIND_SPECS: tuple[PreferenceKindSpec, ...] = (
         options=WORK_MODE_OPTIONS,
     ),
     PreferenceKindSpec(
-        "exclude_company", "排除公司", PREF_VALUE_KIND_LIST, 5, _normalize_exclude_company
+        "employment_type", "用工形式", PREF_VALUE_KIND_LIST, 5, _normalize_employment_type
     ),
     PreferenceKindSpec(
-        "exclude_industry", "排除行业", PREF_VALUE_KIND_LIST, 6, _normalize_exclude_industry
+        "exclude_company", "排除公司", PREF_VALUE_KIND_LIST, 6, _normalize_exclude_company
+    ),
+    PreferenceKindSpec(
+        "exclude_industry", "排除行业", PREF_VALUE_KIND_LIST, 7, _normalize_exclude_industry
     ),
     PreferenceKindSpec(
         "overtime",
         "加班接受度",
         PREF_VALUE_KIND_SCALAR,
-        7,
+        8,
         _normalize_overtime,
         options=OVERTIME_OPTIONS,
     ),
     PreferenceKindSpec(
-        "available_from", "到岗时间", PREF_VALUE_KIND_SCALAR, 8, _normalize_available_from
+        "available_from", "到岗时间", PREF_VALUE_KIND_SCALAR, 9, _normalize_available_from
     ),
     PreferenceKindSpec(
         "redline_banned_word",
         "写作红线（禁用词）",
         PREF_VALUE_KIND_LIST,
-        9,
+        10,
         _normalize_redline_banned_word,
     ),
     PreferenceKindSpec(
-        "redline_length", "写作红线（篇幅）", PREF_VALUE_KIND_SCALAR, 10, _normalize_redline_length
+        "redline_length", "写作红线（篇幅）", PREF_VALUE_KIND_SCALAR, 11, _normalize_redline_length
     ),
     PreferenceKindSpec(
         "redline_tone",
         "写作红线（语气）",
         PREF_VALUE_KIND_SCALAR,
-        11,
+        12,
         _normalize_redline_tone,
         options=REDLINE_TONE_OPTIONS,
     ),
@@ -368,7 +388,7 @@ _SPEC_BY_KIND: dict[str, PreferenceKindSpec] = {spec.kind: spec for spec in _KIN
 
 
 def kind_specs() -> tuple[PreferenceKindSpec, ...]:
-    """全部 12 类（顺序即列表顺序）。"""
+    """全部 13 类（顺序即列表顺序）。"""
     return _KIND_SPECS
 
 

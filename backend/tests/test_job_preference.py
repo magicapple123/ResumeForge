@@ -3,7 +3,7 @@
 
 覆盖三组性质：
 
-1. 12 类闭集 + 逐 kind 校验器：非法值不进库（422 的来源都在 catalog 里）；
+1. 13 类闭集 + 逐 kind 校验器：非法值不进库（422 的来源都在 catalog 里）；
 2. 服务状态机：active_pref 是唯一读取入口（grep 断言）、同值 no-op、编辑只置
    superseded、撤销只置 undone、删除只写 deleted_at、历史裁剪 20、恢复撞活动行；
 3. **偏好隔离（最重要）**：只设偏好、不设资料的库里，资料提示 / 简历生成候选 /
@@ -77,13 +77,14 @@ def _proposal(
 # ===== 1. 目录与校验器 =====
 
 
-def test_catalog_is_the_closed_set_of_twelve_kinds():
+def test_catalog_is_the_closed_set_of_thirteen_kinds():
     # 顺序 = inject_priority 顺序（注入块与列表都按它排）。
     assert catalog.PREFERENCE_KINDS == (
         "target_role_family",
         "target_city",
         "salary_floor",
         "work_mode",
+        "employment_type",
         "exclude_company",
         "exclude_industry",
         "overtime",
@@ -96,12 +97,18 @@ def test_catalog_is_the_closed_set_of_twelve_kinds():
     kinds = {spec.kind: spec for spec in catalog.kind_specs()}
     assert kinds["target_city"].value_kind == catalog.PREF_VALUE_KIND_LIST
     assert kinds["salary_floor"].value_kind == catalog.PREF_VALUE_KIND_SCALAR
+    # 用工形式是闭集列表：外包既不是行业也不是工作方式，必须能单独表达。
+    assert kinds["employment_type"].value_kind == catalog.PREF_VALUE_KIND_LIST
+    assert catalog.normalize_value("employment_type", ["外包", "实习"]) == [
+        "outsourcing",
+        "internship",
+    ]
     # session_note 只服务「只在这次对话」按钮，永不进注入块。
     assert "session_note" not in catalog.INJECTABLE_KINDS
-    assert len(catalog.INJECTABLE_KINDS) == 11
-    # kind 是协议值，不落库；catalog_items 一次给前端 12 条。
+    assert len(catalog.INJECTABLE_KINDS) == 12
+    # kind 是协议值，不落库；catalog_items 一次给前端 13 条。
     items = catalog.catalog_items()
-    assert len(items) == 12
+    assert len(items) == 13
     assert {item["kind"] for item in items} == set(catalog.PREFERENCE_KINDS)
 
 
@@ -114,6 +121,9 @@ def test_unknown_kind_and_bad_shapes_are_rejected():
         catalog.normalize_value("target_city", [])
     with pytest.raises(catalog.PreferenceValidationError):
         catalog.normalize_value("redline_banned_word", ["赋能", " "])
+    # 用工形式是闭集：自由文本（如「不坐班」）不能被当成一种用工形式。
+    with pytest.raises(catalog.PreferenceValidationError):
+        catalog.normalize_value("employment_type", ["不坐班"])
 
 
 @pytest.mark.parametrize("bad", ["杭州1", "2026", "杭州某公司", "天津工业大学", "5人团队"])

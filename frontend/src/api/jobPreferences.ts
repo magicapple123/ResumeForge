@@ -12,7 +12,7 @@
  */
 import { request } from "./client";
 
-/** 12 类闭集（与后端 job_preference_catalog.py 的 kind 逐字一致）。 */
+/** 13 类闭集（与后端 job_preference_catalog.py 的 kind 逐字一致）。 */
 export type JobPreferenceKind =
   | "target_role_family"
   | "target_city"
@@ -20,6 +20,7 @@ export type JobPreferenceKind =
   | "exclude_industry"
   | "salary_floor"
   | "work_mode"
+  | "employment_type"
   | "overtime"
   | "redline_banned_word"
   | "redline_length"
@@ -111,7 +112,7 @@ export function isJobPreferenceProposalTool(toolName: string): boolean {
   return (JOB_PREFERENCE_PROPOSAL_TOOLS as readonly string[]).includes(toolName);
 }
 
-/** 当前数据集全部 active 偏好 + 12 类目录（一次请求拿全）。 */
+/** 当前数据集全部 active 偏好 + 13 类目录（一次请求拿全）。 */
 export function getJobPreferences(): Promise<JobPreferenceList> {
   return request("/job-preferences");
 }

@@ -76,7 +76,7 @@
 | T07 | 前端「我已提交」按钮 + 一次性引导 | `frontend` |
 | T08 | `0007` + `delivery_receipt`（`human_steps` / `judge_receipt`）+ 两接口 | `schema` + `backend-receipt` |
 | T09 | 前端交付单段 + 契约测试 | `frontend` |
-| T10 | `0008` + `job_preference` 模型 + 12 类目录 + 回收站登记（22→23） | `schema` + `backend-preference` |
+| T10 | `0008` + `job_preference` 模型 + 13 类目录 + 回收站登记（22→23） | `schema` + `backend-preference` |
 | T11 | `job_preference_service`：upsert / undo / 删除恢复 / 裁剪 / 查询 | `backend-preference` |
 | T12 | 两个写工具 + `ALWAYS_PROPOSAL_TOOLS` 登记 + 读工具 | `backend-preference` |
 | T13 | 注入块：渲染 + 预算 + 两段降级 + `parts` 顺序 | `backend-preference` |

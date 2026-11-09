@@ -61,6 +61,9 @@ README_FEATURE_KEYS: dict[str, tuple[str, ...]] = {
     # AI 对比选岗（横向对比 2–12 个岗位）与批量逐一分析共用 job_match_batch 这张批次表
     # （对比结论也挂在批次行上），所以映射到同一个 key。
     "AI 对比选岗": ("job_match_batch",),
+    "我已提交与交付单": ("apply_submitted_receipt",),
+    "跟进巡检": ("followup_sweep",),
+    "求职偏好": ("job_preference",),
     "个人资料库": ("profile", "profile_library"),
     "资料方案与当前方案": ("profile_groups",),
     "旧资料升级说明": ("profile_upgrade_notice",),

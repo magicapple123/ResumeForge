@@ -16,7 +16,7 @@ import type {
 } from "../../api/jobPreferences";
 import { t, type MessageKey } from "../../i18n";
 
-/** 12 类 kind 的展示名（与后端目录一一对应）。 */
+/** 13 类 kind 的展示名（与后端目录一一对应）。 */
 export const KIND_LABEL_KEYS: Record<JobPreferenceKind, MessageKey> = {
   target_role_family: "jobPreference.kind.target_role_family",
   target_city: "jobPreference.kind.target_city",
@@ -24,6 +24,7 @@ export const KIND_LABEL_KEYS: Record<JobPreferenceKind, MessageKey> = {
   exclude_industry: "jobPreference.kind.exclude_industry",
   salary_floor: "jobPreference.kind.salary_floor",
   work_mode: "jobPreference.kind.work_mode",
+  employment_type: "jobPreference.kind.employment_type",
   overtime: "jobPreference.kind.overtime",
   redline_banned_word: "jobPreference.kind.redline_banned_word",
   redline_length: "jobPreference.kind.redline_length",

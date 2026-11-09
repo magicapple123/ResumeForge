@@ -130,6 +130,12 @@ APPLY: tuple[FeatureEntry, ...] = (
         ("list_apply_records",),
     ),
     FeatureEntry(
+        "apply_submitted_receipt",
+        "投递台",
+        "我已提交与交付单",
+        "投递记录详情 → 成功记录点「我已提交」：补一条「已投递」进度、挂 7 天后跟进提醒、冻结投递快照（重复点不重复建行）；同抽屉「交付单」读快照——简历版本/目的地/产物页数/填充字段/台账疑点/待人工步骤，三态 **卡在人手上 > 有疑点 > 可验收**",
+    ),
+    FeatureEntry(
         "browser_setting",
         "投递台",
         "投递浏览器设置",

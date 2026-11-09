@@ -1,8 +1,8 @@
 # 求职 Agent 化三步：跟进巡检 · 投递交付单 · 求职偏好档
 
-> **状态**：已定稿，待实施（本文件不含任何已落地的代码改动）
-> **初稿 2026-11-08 · 复核 2026-11-09**
-> **基线**：HEAD `e5ac0e3c`，但工作树有**未提交**的助手层重构（50+ 个文件改动、10+ 个新增未跟踪文件：`api/assistant.py` 拆分到 `services/assistant/*`，新增 `api/assistant_permission.py`、`api/transcribe.py`、`services/net_policy.py` 等）。**本文的路径与行数按工作树核对，不以 HEAD 为准**；执行前先看 §15。
+> **状态**：**已实施并提交**（`65760524`，2026-11-09）；本文保留为设计、判据与验收记录
+> **初稿 2026-11-08 · 复核 2026-11-09 · 实施 2026-11-09**
+> **基线**：开工时是 HEAD `e5ac0e3c` + 300+ 项未提交改动（助手层重构）；实施结果已合入 `65760524`，之后仓库转入 Linux 发行版分支（当前 HEAD 另算）。**§15 的"脏工作树"描述的是开工时状态，不再代表当前仓库**；设计、判据与风险清单仍然有效。
 > **素材**：《2026年了，好的Agent形态该长什么样子？》（小红书 @不转到大模型不改名，2026-10-14）
 > **外部信息核实日期**：2026-11-08
 > **团队**：产品经理 许清楚 / 架构师 高见远 / 交付总监 齐活林
@@ -271,7 +271,7 @@
 资料库是规范化结构（13 个内置大字段与 106 个默认小字段是**代码里的定义**，用户自建部分在 `profile_custom_section` / `profile_custom_field`，值在 `profile_entry`）。偏好**不能**塞进去：
 
 1. **读取者会串**：`profile_entry` 的下游是纸面渲染、生成取数、网申取数（`paper_policy` / `only_material`）。偏好一旦进这张表，会被这三条管线自动当"素材/事实"取用，要逐一加排除，漏一处就违背"偏好不得被当发生过的事"。
-2. **定义/值分离是为用户自建字段付的成本**，偏好是封闭 12 类，不需要两张定义表。
+2. **定义/值分离是为用户自建字段付的成本**，偏好是封闭 13 类，不需要两张定义表。
 3. **语义错位**：`section_key` 的分区是"简历板块"，偏好根本不上纸面。
 4. **防编造链路**：`claims*` / `resume_risk*` 按条目做事实校验，偏好混进去会让"杭州上海"这种**意图**变成可对外表述的**事实**证据。
 
@@ -282,7 +282,7 @@
 | `id` | INTEGER | PK |
 | `pref_id` | VARCHAR(32) | UNIQUE，`uuid4().hex[:24]`，外部稳定 id |
 | `dataset_key` | VARCHAR(32) | NOT NULL，index |
-| `kind` | VARCHAR(48) | **闭集目录 key**（12 类，见下），定义在代码里不落库 |
+| `kind` | VARCHAR(48) | **闭集目录 key**（13 类，见下），定义在代码里不落库 |
 | `value_kind` | VARCHAR(8) | CHECK IN ('list','scalar') |
 | `value` | JSON | list 存数组，scalar 存小对象 |
 | `value_digest` | VARCHAR(64) | canonical sha256，**幂等键**（复用 `proposal_store.fingerprint_payload`） |
@@ -295,7 +295,7 @@
 | `deleted_at` | DATETIME | **只表示"用户删除了"**，不兼作版本状态 |
 | `created_at` / `updated_at` | DATETIME | 后者带 `onupdate` |
 
-**12 类闭集**：`target_role_family`、`target_city`、`exclude_company`、`exclude_industry`、`salary_floor`、`work_mode`、`overtime`、`redline_banned_word`、`redline_length`、`redline_tone`、`available_from`、`session_note`（**不进注入块**）。
+**13 类闭集**：`target_role_family`、`target_city`、`exclude_company`、`exclude_industry`、`salary_floor`、`work_mode`、`employment_type`（用工形式：正职/实习/外包/兼职/劳务派遣）、`overtime`、`redline_banned_word`、`redline_length`、`redline_tone`、`available_from`、`session_note`（**不进注入块**）。
 
 **一行 = 一次确认写入的完整取值**：一次"记住：杭州上海、别写赋能"落成 2 行（城市 + 禁用词），不是 5 行 5 个 `updated_at`——否则"一键撤销"只能撤一个词。将来若要项级来源，把 `value` 升成 `[{item, added_at, source}]` 并升 `value_schema`，**列不动、不迁移**。
 
@@ -367,7 +367,7 @@ CREATE INDEX ix_job_preference_kind_state ON job_preference (dataset_key, kind, 
 
 标题写"不是发生过的事实"、块尾有结束标记、每条带目录中文标签（不是模型自由文本）。
 
-**预算**：目录仅 12 类 → 天然 ≤12 行；硬上限 24 条，超出写"另有 N 条未列出"；单条值截断 120 字符、列表最多 8 项；整块上限 900 字符。超限两段降级：先省"来源/更新时间"后缀，再按 `inject_priority` 裁尾——**不先丢条目**（丢条目会让助手忘掉用户明确设过的约束，丢时间戳只是少一句废话）。0 条返回空串，不注入空块。
+**预算**：目录仅 13 类 → 天然 ≤13 行；硬上限 24 条，超出写"另有 N 条未列出"；单条值截断 120 字符、列表最多 8 项；整块上限 900 字符。超限两段降级：先省"来源/更新时间"后缀，再按 `inject_priority` 裁尾——**不先丢条目**（丢条目会让助手忘掉用户明确设过的约束，丢时间戳只是少一句废话）。0 条返回空串，不注入空块。
 
 改装配后必须同时跑 `tests/test_assistant_prompt_budget.py`（`MAX_PROMPT_TOKENS_ESTIMATE = 60_000`）与 `tests/test_assistant_prompt_surface.py`（钉着"系统提示不得否认工具已有能力"一类守卫）。
 
@@ -461,7 +461,7 @@ CREATE INDEX ix_job_preference_kind_state ON job_preference (dataset_key, kind, 
 
 | ID | 任务 | 依赖 | 完成判据 |
 | --- | --- | --- | --- |
-| T10 | `0008` 迁移 + `job_preference` 模型 + 12 类目录与校验器 + `TRASH_SPECS` 登记 | T08 | 迁移往返绿；非法 kind / 非法值形状 422；`salary_floor` 解析成结构化对象；`test_every_deleted_at_table_is_registered` 绿（22→23，展示名紧挨 `claim`，`TRASH_LABELS_EN` 补英文，不得插进 `job` 与 `candidate_job` 之间） |
+| T10 | `0008` 迁移 + `job_preference` 模型 + 13 类目录与校验器 + `TRASH_SPECS` 登记 | T08 | 迁移往返绿；非法 kind / 非法值形状 422；`salary_floor` 解析成结构化对象；`test_every_deleted_at_table_is_registered` 绿（22→23，展示名紧挨 `claim`，`TRASH_LABELS_EN` 补英文，不得插进 `job` 与 `candidate_job` 之间） |
 | T11 | `job_preference_service`：upsert / undo / 删除恢复 / 裁剪 / 查询 | T10 | 同值 no-op（`updated_at` 不变）；undo 两次第二次 409；无上一版给空态；`superseded` 行不出现在列表与详情；删除→恢复闭环；恢复撞同 kind → 409 `trash_restore_conflict` |
 | T12 | 两个写工具 + `ALWAYS_PROPOSAL_TOOLS` 登记 + 读工具 | T11 | 绕过提案直写抛错；提案 `rejected` 后执行抛错；`write_full` 下仍走提案 |
 | T13 | 注入块：渲染 + 预算 + 两段降级 + `parts` 顺序 | T11 | 0 条为空串；12 条 ≤900 字符；`read_only` 下仍在；偏好块在 status 块后、技能块前 |

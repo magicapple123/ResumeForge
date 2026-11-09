@@ -70,6 +70,29 @@ TONE_MAP: dict[str, str] = {
     "亲切": "warm",
     "有温度": "warm",
 }
+# 用工形式：外包既不是行业也不是工作方式（现场/远程），必须单列一类，否则「不投外包」
+# 只能被就近塞进「排除行业」，模型自己都会向用户承认"分类是就近选择"。
+EMPLOYMENT_TYPE_MAP: dict[str, str] = {
+    "full_time": "full_time",
+    "fulltime": "full_time",
+    "正式": "full_time",
+    "全职": "full_time",
+    "正职": "full_time",
+    "internship": "internship",
+    "intern": "internship",
+    "实习": "internship",
+    "outsourcing": "outsourcing",
+    "outsourced": "outsourcing",
+    "外包": "outsourcing",
+    "驻场": "outsourcing",
+    "part_time": "part_time",
+    "parttime": "part_time",
+    "兼职": "part_time",
+    "dispatch": "dispatch",
+    "labor_dispatch": "dispatch",
+    "劳务派遣": "dispatch",
+    "派遣": "dispatch",
+}
 
 # ===== 枚举选项（目录与前端共用） =====
 
@@ -88,9 +111,18 @@ REDLINE_TONE_OPTIONS: tuple[tuple[str, str], ...] = (
     ("plain", "平实"),
     ("warm", "温和"),
 )
+EMPLOYMENT_TYPE_OPTIONS: tuple[tuple[str, str], ...] = (
+    ("full_time", "正职"),
+    ("internship", "实习"),
+    ("outsourcing", "外包"),
+    ("part_time", "兼职"),
+    ("dispatch", "劳务派遣"),
+)
 
 __all__ = [
     "CHINESE_NUMBERS",
+    "EMPLOYMENT_TYPE_MAP",
+    "EMPLOYMENT_TYPE_OPTIONS",
     "OVERTIME_MAP",
     "OVERTIME_OPTIONS",
     "REDLINE_TONE_OPTIONS",

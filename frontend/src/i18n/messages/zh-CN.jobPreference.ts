@@ -3,7 +3,7 @@
  * 求职偏好档（T14）：设置页卡片、偏好行、编辑弹窗与确认卡两个按钮。
  *
  * kind / value_kind / source / state 是协议值，**永不翻译**；这里只存展示名。
- * 12 类目录标签与三组枚举选项必须与后端 job_preference_catalog.py 一一对应
+ * 13 类目录标签与三组枚举选项必须与后端 job_preference_catalog.py 一一对应
  * （后端 label 只服务注入块与日志；英文界面不显示后端中文）。
  */
 const jobPreference = {
@@ -24,13 +24,14 @@ const jobPreference = {
   "jobPreference.source.user_stated": "你告诉助手的",
   "jobPreference.source.user_edited": "你手动设置的",
   "jobPreference.source.imported": "导入的",
-  /** 12 类 kind 的展示名（顺序与后端 catalog 一致，但界面按后端列表顺序渲染）。 */
+  /** 13 类 kind 的展示名（顺序与后端 catalog 一致，但界面按后端列表顺序渲染）。 */
   "jobPreference.kind.target_role_family": "期望岗位方向",
   "jobPreference.kind.target_city": "期望城市",
   "jobPreference.kind.exclude_company": "排除公司",
   "jobPreference.kind.exclude_industry": "排除行业",
   "jobPreference.kind.salary_floor": "薪资底线",
   "jobPreference.kind.work_mode": "工作方式",
+  "jobPreference.kind.employment_type": "用工形式",
   "jobPreference.kind.overtime": "加班接受度",
   "jobPreference.kind.redline_banned_word": "写作红线（禁用词）",
   "jobPreference.kind.redline_length": "写作红线（篇幅）",

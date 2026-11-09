@@ -25,6 +25,7 @@ const jobPreference = {
   "jobPreference.kind.exclude_industry": "Excluded industries",
   "jobPreference.kind.salary_floor": "Salary floor",
   "jobPreference.kind.work_mode": "Work mode",
+  "jobPreference.kind.employment_type": "Employment type",
   "jobPreference.kind.overtime": "Overtime tolerance",
   "jobPreference.kind.redline_banned_word": "Writing redline (banned words)",
   "jobPreference.kind.redline_length": "Writing redline (length)",

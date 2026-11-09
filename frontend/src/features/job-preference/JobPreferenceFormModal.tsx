@@ -62,7 +62,7 @@ function kindOptionList(catalog: JobPreferenceCatalogItem[]) {
   if (catalog.length > 0) {
     return catalog.map((item) => ({ value: item.kind, label: t(KIND_LABEL_KEYS[item.kind]) }));
   }
-  // 目录还没加载出来时的兜底：至少能选 12 类（展示名仍在语言包）。
+  // 目录还没加载出来时的兜底：至少能选 13 类（展示名仍在语言包）。
   return (Object.keys(KIND_LABEL_KEYS) as JobPreferenceKind[]).map((kind) => ({
     value: kind,
     label: t(KIND_LABEL_KEYS[kind]),

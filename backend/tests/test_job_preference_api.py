@@ -56,7 +56,7 @@ def test_get_returns_empty_items_and_full_catalog(client):
     assert response.status_code == 200
     body = response.json()
     assert body["items"] == []
-    assert len(body["catalog"]) == 12
+    assert len(body["catalog"]) == 13
     catalog = {item["kind"]: item for item in body["catalog"]}
     assert catalog["work_mode"]["value_kind"] == "scalar"
     assert catalog["work_mode"]["options"] == [

@@ -84,7 +84,7 @@ class CreateJobPreferenceInput(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    kind: str = Field(min_length=1, max_length=48, description="偏好类别（12 类闭集之一）")
+    kind: str = Field(min_length=1, max_length=48, description="偏好类别（13 类闭集之一）")
     value: Any = Field(description="偏好值：list 类传数组，scalar 类传对象或协议串")
     note: str = Field(default="", max_length=MAX_NOTE_CHARS, description="用户原话摘录（可选）")
 

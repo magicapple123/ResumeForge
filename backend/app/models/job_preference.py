@@ -20,7 +20,7 @@
 与活动行并存。恢复撞上活动行时由 services/trash.py 提前翻译成 409，而不是让数据库
 抛 IntegrityError 变成用户看不懂的 500。
 
-**为什么没有 12 类目录**：kind 的闭集目录与逐 kind 值校验器在服务层
+**为什么不在模型里存 13 类目录**：kind 的闭集目录与逐 kind 值校验器在服务层
 （services/job_preference_catalog.py）；本模型只存协议值，不引入第二份目录副本。
 """
 
@@ -99,7 +99,7 @@ class JobPreference(Base):
     pref_id: Mapped[str] = mapped_column(String(32), nullable=False)
     # 数据集隔离键：与 agent_task 等表同一口径（main / 16 位 hex id）。
     dataset_key: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
-    # 闭集目录 key（12 类，定义在服务层，不落库）。
+    # 闭集目录 key（13 类，定义在服务层，不落库）。
     kind: Mapped[str] = mapped_column(String(48), nullable=False)
     # list / scalar（见模块顶部常量），决定 value 的形状。
     value_kind: Mapped[str] = mapped_column(String(8), nullable=False)
