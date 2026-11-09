@@ -46,6 +46,25 @@ MAX_JOB_CONTEXT_CHARS = 6_000
 MAX_TRANSCRIPT_CHARS = 24_000
 MAX_QUESTION_CHARS = 2_000
 MAX_FEEDBACK_CHARS = 1_200
+# 人设与风格互斥（问题 06）：persona 非空时风格那一栏渲染这句。两份提示词共用同一常量。
+STYLE_OVERRIDDEN_BY_PERSONA = "（自定义人设优先，见下）"
+
+
+def persona_and_style(session: InterviewSession) -> tuple[str, str | None]:
+    """拆出 (人设, 该生效的风格)：persona 非空时风格为 ``None``。
+
+    风格为 ``None`` 意味着 ``interviewer_style`` 不渲染风格名，``behavior_directives_for``
+    也不再注入 ``BEHAVIOR_BY_STYLE``——此前是叠加（风格名 + 人设正文 + 风格行为指令），
+    模型拿到三份互相矛盾的输入，混着执行。人设**必须 strip**：Jinja 认为纯空白字符串为真，
+    只打几个空格的人设会渲染出空标题，模型可能自己编一条出来。
+    """
+    persona = (session.persona or "").strip()
+    return persona, (None if persona else session.interviewer_style)
+
+
+def style_label_for(persona: str, style: str | None) -> str:
+    """提示词「你的风格」的值：有 persona 就说明人设优先，不点名任何具体风格。"""
+    return STYLE_OVERRIDDEN_BY_PERSONA if persona else (style or "")
 
 
 def _load_prompt(name: str) -> str:
@@ -181,29 +200,29 @@ def build_interview_messages(
     也只有这两份材料，多喂个人资料会让它问出简历与 JD 之外的东西。
     """
     first_round = index <= 1
+    persona, style = persona_and_style(session)
     system = _render(
         _load_prompt("interview_system.md"),
         {
             "interview_type": session.interview_type,
             "difficulty": session.difficulty,
-            "interviewer_style": session.interviewer_style,
+            # 填了人设就不渲染具体风格名（问题 06）：两份输入同时生效等于都没有生效。
+            "interviewer_style": style_label_for(persona, style),
             "rounds": session.rounds,
             # 自动轮数：非空时提示词改走"AI 按表现判断收尾"的分支（见 interview_system.md）。
             "rounds_min": session.rounds_min,
             "index": index,
             "job_title": session.job_title or "未指定（按面试类型提问）",
             "company": session.company,
-            # **必须 strip**：提示词里是 `{% if persona %}`，而 Jinja 认为纯空白字符串为真，
-            # 于是"只打了几个空格"的人设会渲染出一个空标题——模型看到"面试官人设（用户自定义）"
-            # 下面什么都没有，可能自己编一条出来，比不给更糟。
-            # 收在这里而不是依赖调用方：这是"进提示词"的唯一汇聚点，无论会话怎么创建都成立。
-            # 考察重点同理（纯空白的 focus 会盖掉下面那句"未指定"的兜底文案）。
+            # persona 由 `persona_and_style` 统一 strip（纯空白人设会渲染出空标题，见该函数）。
+            # 考察重点同理设了 strip（纯空白的 focus 会盖掉下面那句"未指定"的兜底文案）。
             "focus": (session.focus or "").strip() or "未指定，按面试类型通用考察点提问",
             # #43：类型/难度/风格的行为定义表——不再是三个只进一行字的标签。
+            # 风格那一段传 `style`（人设非空时为 None）→ 跳过 BEHAVIOR_BY_STYLE。
             "behavior_directives": behavior_directives_for(
-                session.interview_type, session.difficulty, session.interviewer_style
+                session.interview_type, session.difficulty, style
             ),
-            "persona": (session.persona or "").strip(),
+            "persona": persona,
             "first_round": "true" if first_round else "",
         },
     )
@@ -269,15 +288,18 @@ async def close_with_closing_remark(provider: BaseLLMProvider, session: Intervie
 
 def build_closing_messages(session: InterviewSession) -> list[dict[str, str]]:
     """收尾那一轮的提示词：只回应最后一段 + 收尾，不再提问。"""
+    persona, style = persona_and_style(session)
     system = _render(
         _load_prompt("interview_closing.md"),
         {
             "interview_type": session.interview_type,
             "difficulty": session.difficulty,
-            "interviewer_style": session.interviewer_style,
+            # 与提问轮同一口径（问题 06）：人设非空时不点名任何具体风格，
+            # 否则收尾那段的语气会突然切回风格设定，与前面几轮对不上。
+            "interviewer_style": style_label_for(persona, style),
             "job_title": (session.job_title or "").strip() or "未指定",
             "company": (session.company or "").strip(),
-            "persona": (session.persona or "").strip(),
+            "persona": persona,
         },
     )
     payload = {
@@ -457,6 +479,7 @@ __all__ = [
     "MAX_RESUME_CONTEXT_CHARS",
     "MESSAGE_STATUS_COMPLETE",
     "MESSAGE_STATUS_INTERRUPTED",
+    "STYLE_OVERRIDDEN_BY_PERSONA",
     "add_message",
     "answered_rounds",
     "build_interview_messages",
@@ -469,6 +492,8 @@ __all__ = [
     "parse_report",
     "parse_turn",
     "pending_interrupted_answer",
+    "persona_and_style",
     "reuse_interrupted_answer",
     "session_persona",
+    "style_label_for",
 ]

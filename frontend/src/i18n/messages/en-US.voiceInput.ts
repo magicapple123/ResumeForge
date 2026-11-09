@@ -79,6 +79,45 @@ const voiceInput = {
     "Up to 3 minutes / 10 MB per clip; 3 minutes for interview answers and 1 minute for follow-up questions.",
   "voiceInput.settings.privacyNote":
     "After saving, recordings go to {host}; this app does not store audio.",
+
+  "voiceInput.settings.cardHint":
+    "Audio goes only to the provider you pick; this app keeps no recording",
+
+  "voiceInput.settings.provider.label": "Provider",
+  "voiceInput.settings.provider.aria": "Choose a speech provider",
+  "voiceInput.settings.provider.hint":
+    "Picking one fills the address, protocol and default model; you can still edit them",
+  "voiceInput.settings.provider.openai": "OpenAI",
+  "voiceInput.settings.provider.groq": "Groq",
+  "voiceInput.settings.provider.siliconflow": "SiliconFlow",
+  "voiceInput.settings.provider.dashscope": "Alibaba Cloud Bailian",
+  "voiceInput.settings.provider.custom": "Custom",
+  "voiceInput.settings.provider.note.openai": "gpt-transcribe is the official pick",
+  "voiceInput.settings.provider.note.groq": "OpenAI-compatible; 25 MB on the free tier",
+  "voiceInput.settings.provider.note.siliconflow": "Strong Chinese results; 50 MB per file",
+  "voiceInput.settings.provider.note.dashscope": "Qwen-ASR uses the chat API, not whisper",
+  "voiceInput.settings.provider.note.custom": "Fill in the address, protocol and model yourself",
+
+  "voiceInput.settings.protocol.label": "Call protocol",
+  "voiceInput.settings.protocol.aria": "Speech service call protocol",
+  "voiceInput.settings.protocol.openai": "OpenAI-compatible",
+  "voiceInput.settings.protocol.dashscope": "Alibaba Cloud Bailian",
+  "voiceInput.settings.protocol.hint":
+    "Bailian's compatible endpoint rejects whisper-style uploads and keeps returning 400",
+
+  "voiceInput.settings.model.fetch": "Fetch model list",
+  "voiceInput.settings.model.fetched": "Fetched {count} models",
+  "voiceInput.settings.model.fetchEmpty": "No models returned; just type the name",
+  "voiceInput.settings.model.fetchFailed": "Could not fetch models; you can type the name",
+  "voiceInput.settings.model.showAll": "Show all models",
+  "voiceInput.settings.model.retiredOption": "{model} (retires {date})",
+  "voiceInput.settings.model.retiredHint":
+    "This model retires on {date}; new projects should pick gpt-transcribe",
+
+  "voiceInput.settings.badge.active": "In effect",
+  "voiceInput.settings.testOk": "Connected in {ms} ms",
+  "voiceInput.settings.key.clearTitle": "Clear the saved key",
+  "voiceInput.settings.key.clearConfirm": "You must re-enter it before dictation works again",
 } as const;
 
 export default voiceInput;

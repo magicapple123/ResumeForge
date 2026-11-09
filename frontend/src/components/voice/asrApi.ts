@@ -3,11 +3,19 @@
 
 import { request } from "../../api/client";
 
+/**
+ * 调用协议。两套请求体互不兼容（见 `asrPresets.ts` 与后端 `services/asr_client.py`）：
+ * `openai` = whisper 式 multipart；`dashscope` = Qwen-ASR 的 chat + input_audio。
+ */
+export type AsrProtocol = "openai" | "dashscope";
+
 /** 语音服务配置；api_key 只可能是掩码（********）或空串，绝不是原文。 */
 export interface AsrSettings {
   base_url: string;
   api_key: string;
   model: string;
+  /** 后端为旧数据补默认值 `openai`，所以这里按必填读。 */
+  protocol: AsrProtocol;
   configured: boolean;
 }
 
@@ -16,6 +24,19 @@ export interface AsrSettingsPayload {
   base_url: string;
   api_key: string;
   model: string;
+  protocol: AsrProtocol;
+}
+
+/** 拉取模型列表的请求体：不需要模型名，只要有地址、Key 与协议。 */
+export interface AsrModelsPayload {
+  base_url: string;
+  api_key: string;
+  protocol: AsrProtocol;
+}
+
+/** 拉取结果：后端不做关键词过滤，失败时 `models` 为空数组（界面退回手填）。 */
+export interface AsrModelsResult {
+  models: string[];
 }
 
 export interface AsrTestResult {
@@ -29,11 +50,12 @@ export interface TranscribeStatus {
   configured: boolean;
   provider_host: string;
   model: string;
+  protocol?: AsrProtocol;
   max_seconds: number;
   max_bytes: number;
 }
 
-/** 前端「清除已保存的 Key」的哨兵值；与后端 CLEAR_API_KEY 保持一致。 */
+/** 前端「清除 Key」的哨兵值；与后端 CLEAR_API_KEY 保持一致。 */
 export const CLEAR_ASR_KEY = "__clear__";
 
 export function getAsrSettings(): Promise<AsrSettings> {
@@ -49,6 +71,19 @@ export function testAsrSettings(payload: AsrSettingsPayload): Promise<AsrTestRes
   // 后端要给上游 60 秒预算，客户端同样给足（recognition = 90s），否则会出现
   // "客户端先超时、服务端还在等上游"的假失败。
   return request("/settings/asr/test", {
+    method: "POST",
+    body: JSON.stringify(payload),
+    budget: "recognition",
+  });
+}
+
+/**
+ * 拉取上游模型目录（`GET {base}/models`）。
+ *
+ * 失败一律由后端翻成空数组，前端只需要"拿不到就提示、手填照常可用"。
+ */
+export function fetchAsrModels(payload: AsrModelsPayload): Promise<AsrModelsResult> {
+  return request("/settings/asr/models", {
     method: "POST",
     body: JSON.stringify(payload),
     budget: "recognition",

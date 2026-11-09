@@ -373,13 +373,15 @@ export default function UpdateCard() {
                 </span>
               )}
               {result.notes && (
-                /* 版本说明是 markdown（## 标题 / - 列表 / **粗体**），不能当纯文本直出；
-                   容器保留滚动（说明长时不把弹窗撑爆）。 */
+                /* 版本说明是 markdown 子集（标题 / 表格 / 列表 / 行内代码 / 链接），不能当
+                   纯文本直出；容器保留内部滚动，说明再长也不把弹窗撑爆。
+                   高度取 min(40vh, 420px)：2.0 这类长公告至少能看到「要不要升」和「主要
+                   变化」两段，窄屏/矮屏下又不会占满整屏。 */
                 <div
                   style={{
-                    maxHeight: 200,
+                    maxHeight: "min(40vh, 420px)",
                     overflowY: "auto",
-                    overflowX: "hidden",
+                    overflowX: "auto",
                     width: "100%",
                   }}
                 >

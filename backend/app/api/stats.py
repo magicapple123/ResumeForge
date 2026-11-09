@@ -14,7 +14,9 @@ Python 侧按 kind 拆开、按各自口径排序）。
 与合并前的口径逐条一致。
 """
 
+import re
 from datetime import timedelta
+from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -46,6 +48,10 @@ _LATEST_LIMIT = 5
 # UNION ALL 语句的分支判别值：0=待确认台账，1=最近投递结果。
 _CLAIM_BRANCH = 0
 _APPLICATION_BRANCH = 1
+
+# Windows 盘符路径（``C:/…``）在 POSIX 上不算绝对路径，所以单独认一次：
+# 跨平台都不允许它进「在文件夹中显示」的路径参数。
+_WINDOWS_DRIVE_RE = re.compile(r"^[A-Za-z]:")
 
 
 def _live_count(model: type, *filters: Any) -> Any:
@@ -190,6 +196,86 @@ def cleanup_now(body: dict | None = None) -> dict:
         return run_cleanup(older_than_days=days, categories=selected, paths=paths)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+# 「在文件夹中显示」允许定位的首段目录：与 ``cleanup.CATEGORIES`` 的扫描根一致。
+# 清理清单里的相对路径只会落在这三类里，别处（数据库、附件、datasets/）不允许被打开。
+_CLEANUP_REVEAL_ROOTS = ("backups", "auto-backups", "logs")
+
+
+def _bad_path(detail: str) -> HTTPException:
+    """路径校验失败的统一出口：只写原因，引导交给前端的 ``errorGuidance``。"""
+    return HTTPException(status_code=400, detail=detail)
+
+
+def _cleanup_reveal_target(raw: Any) -> Path:
+    """把前端回传的**相对**路径还原成本机绝对路径，并做完所有安全校验。
+
+    校验缺一不可（顺序即先便宜的字符串检查、后碰文件系统）：
+
+    1. 只接受数据目录下的相对路径——绝对路径（含 ``/x``、``C:/x``）一律 400，
+       否则这个端点就变成一个「读任意路径存在性」的探针；
+    2. 拒绝含 ``..`` 的路径：``backups/../../etc/passwd`` 解析后虽可能仍在根内，
+       但「清理清单里不会出现这种路径」本身就该拒绝；
+    3. ``(数据目录 / path).resolve()`` 必须仍在数据目录内：``resolve()`` 会解开
+       符号链接，所以指向目录外的软链在这里被挡下（字符串比较挡不住它）；
+    4. 首段白名单：请求路径与**解析后**路径的首段都必须是
+       ``backups`` / ``auto-backups`` / ``logs``；
+    5. 必须存在且是文件：已被清理掉的文件给 404「文件已被移走或删除」。
+    """
+    from ..services import cleanup
+
+    if not isinstance(raw, str):
+        raise _bad_path("path 必须是字符串")
+    text = raw.strip()
+    if not text:
+        raise _bad_path("缺少要定位的文件路径")
+    # 反斜杠统一成 POSIX 分隔符：后端回传的就是 posix 形式，兼容前端手拼的 Windows 分隔符。
+    posix = text.replace("\\", "/")
+    if posix.startswith("/") or posix.startswith("~") or _WINDOWS_DRIVE_RE.match(posix):
+        raise _bad_path("只接受数据目录下的相对路径")
+    parts = [part for part in posix.split("/") if part not in ("", ".")]
+    if not parts:
+        raise _bad_path("缺少要定位的文件路径")
+    if ".." in parts:
+        raise _bad_path("路径不能包含上级目录引用")
+    if parts[0] not in _CLEANUP_REVEAL_ROOTS:
+        raise _bad_path(f"只能定位这几类文件：{'、'.join(_CLEANUP_REVEAL_ROOTS)}")
+    # 路径基线与 ``services/cleanup.py`` 同一份（同一个可 monkeypatch 的模块属性），
+    # 否则预览里点得到、定位却落到另一个根上。
+    root = cleanup._data_root().resolve()
+    candidate = (root / Path(*parts)).resolve()
+    if not candidate.is_relative_to(root):
+        raise _bad_path("路径不在数据目录内")
+    resolved_parts = candidate.relative_to(root).parts
+    if not resolved_parts or resolved_parts[0] not in _CLEANUP_REVEAL_ROOTS:
+        raise _bad_path(f"只能定位这几类文件：{'、'.join(_CLEANUP_REVEAL_ROOTS)}")
+    if not candidate.is_file():
+        raise HTTPException(status_code=404, detail="文件已被移走或删除")
+    return candidate
+
+
+@router.post("/storage/cleanup-reveal")
+def cleanup_reveal(body: dict | None = None) -> dict:
+    """在系统文件管理器里定位一个清理候选（条目 04）。
+
+    **前端永远不传绝对路径**：``CleanupCandidate.to_dict`` 刻意只回传相对数据目录的
+    POSIX 路径（绝对路径会暴露用户目录结构），这里按同一口径把它还原成本机路径再
+    定位，隐私设计保持不变。
+    """
+    from ..services.system_reveal import reveal_path
+
+    payload = body if isinstance(body, dict) else {}
+    target = _cleanup_reveal_target(payload.get("path"))
+    try:
+        # Popen 发起即成功（explorer /select 成功也常返回非零退出码），这里只关心
+        # 「进程起不来」：可执行文件缺失、没有权限。
+        reveal_path(target)
+    except OSError as exc:
+        raise HTTPException(
+            status_code=400, detail="无法打开系统文件管理器（文件管理器不可用或没有权限）"
+        ) from exc
+    return {"ok": True}
 
 
 @router.get("", response_model=Stats)

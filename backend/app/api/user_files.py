@@ -24,6 +24,7 @@ from ..models.user_file import UserFile
 from ..services.actions import add_action_route
 from ..services.actions.catalog import all_actions
 from ..services.document_text import preview_text_of_file
+from ..services.system_reveal import reveal_path
 from ..services.user_files import user_files_dir
 
 router = APIRouter(prefix="/api/user-files", tags=["user-files"])
@@ -174,23 +175,16 @@ def open_in_system(file_id: int, db: Session = Depends(get_db)) -> dict:
 def reveal_in_folder(file_id: int, db: Session = Depends(get_db)) -> dict:
     """在系统文件管理器里打开副本所在的文件夹并选中该文件。
 
-    与 ``open-in-system`` 的区别：这是"去看文件在哪"，不是"打开文件本身"——
-    Windows 用 ``explorer /select``，macOS 用 ``open -R``，Linux 打开所在目录。
-    explorer 定位成功也常返回非零退出码（文档化行为），所以这里用 Popen
-    发起即成功、不以退出码判失败。
+    与 ``open-in-system`` 的区别：这是"去看文件在哪"，不是"打开文件本身"。
+    平台分支收在 ``services/system_reveal.py``（清理清单里的「在文件夹中显示」用的是
+    同一份实现），这里只负责按 id 反查并守卫路径。
     """
     row = db.get(UserFile, file_id)
     if row is None:
         raise HTTPException(status_code=404, detail="文件副本不存在")
     path = _resolved_copy_path(row, db)
     try:
-        if sys.platform == "win32":
-            # explorer /select, 后面必须紧跟目标路径（逗号是语法的一部分）。
-            subprocess.Popen(["explorer", f"/select,{path}"])  # noqa: S606
-        elif sys.platform == "darwin":
-            subprocess.Popen(["open", "-R", str(path)])  # noqa: S606
-        else:
-            subprocess.Popen(["xdg-open", str(path.parent)])  # noqa: S606
+        reveal_path(path)
     except Exception as exc:  # noqa: BLE001 - 对外只给一句中文原因
         logger.warning(
             "打开副本所在文件夹失败 id=%s error_type=%s", int(file_id), type(exc).__name__

@@ -47,7 +47,6 @@ import type {
   QuestionBankRecord,
 } from "../types";
 import { AUTO_FINISH_MAX_ROUNDS, AUTO_ROUNDS_FLAG } from "../types";
-import { AUTO_ROUNDS_OPTION } from "../pages/interview/SetupTab";
 import { t } from "../i18n";
 import { useLocale } from "../i18n/i18nContext";
 
@@ -196,11 +195,10 @@ export default function InterviewPage() {
         interview_type: values.interviewType,
         difficulty: values.difficulty,
         interviewer_style: values.interviewerStyle,
-        // 「自动」档：何时结束交给 AI（最早第 AUTO_ROUNDS_FLAG 轮起可收尾）；rounds 只是
-        // 服务端的硬性保险，界面与提示词都不展示。
-        rounds:
-          values.rounds === AUTO_ROUNDS_OPTION ? AUTO_FINISH_MAX_ROUNDS : (values.rounds as number),
-        rounds_min: values.rounds === AUTO_ROUNDS_OPTION ? AUTO_ROUNDS_FLAG : null,
+        // 轮数按 `roundsMode` 分流（问题 05）。「自动」档：何时结束交给 AI（最早第
+        // AUTO_ROUNDS_FLAG 轮起可收尾），rounds 只是服务端的硬性保险，界面与提示词都不展示。
+        rounds: values.roundsMode === "auto" ? AUTO_FINISH_MAX_ROUNDS : values.rounds,
+        rounds_min: values.roundsMode === "auto" ? AUTO_ROUNDS_FLAG : null,
         focus: values.focus ?? "",
         persona: values.persona ?? "",
       });

@@ -145,6 +145,7 @@ const embeddingSearch = {
   "embeddingSearch.guidance.network": "检查网络与接口地址后重试",
   "embeddingSearch.guidance.key": "检查 API 密钥是否正确",
   "embeddingSearch.guidance.endpoint": "该服务商不提供 embeddings 接口",
+  "embeddingSearch.guidance.source": "下载源暂不可用，稍后重试",
   "embeddingSearch.guidance.address": "检查接口地址是否以 /v1 结尾",
   "embeddingSearch.guidance.private": "本机地址需要在高级里允许",
   "embeddingSearch.guidance.dimension": "模型维度与已存配置不符，已停用",
@@ -155,6 +156,25 @@ const embeddingSearch = {
   "embeddingSearch.guidance.sha": "文件校验失败，重新下载",
   "embeddingSearch.guidance.disk": "磁盘空间不足，清理后重试",
   "embeddingSearch.guidance.runtime": "运行时无法启动，请改用远程",
+
+  /**
+   * 厂商卡片网格（条目 03）：卡片上除名称外还有 host 与状态。
+   * `host` 不入词表——它是从 Base URL 解析出来的技术常量，两种语言一致。
+   */
+  "embeddingSearch.remote.modelCandidate.label": "候选模型",
+  "embeddingSearch.remote.preset.state.active": "生效中",
+  "embeddingSearch.remote.preset.state.configured": "已配置",
+  "embeddingSearch.remote.preset.state.empty": "未配置",
+  "embeddingSearch.remote.preset.aria": "选择远程服务商",
+  "embeddingSearch.remote.preset.note.dashscope": "国内直连，维度 1024",
+  "embeddingSearch.remote.preset.note.openai": "官方服务，需要海外网络",
+  "embeddingSearch.remote.preset.note.zhipu": "国内直连，按量计费",
+  "embeddingSearch.remote.preset.note.siliconflow": "国产聚合，模型较多",
+  "embeddingSearch.remote.preset.note.ollama": "跑在本机，资料不出本机",
+  "embeddingSearch.remote.preset.note.custom": "地址与模型全部手填",
+  /** 卡头「启用」在主操作不可点时的原因（禁用按钮的说明，不是错误）。 */
+  "embeddingSearch.card.enableHint.remote": "先在下方填好地址、模型与密钥",
+  "embeddingSearch.card.enableHint.local": "先下载本地模型",
 } as const;
 
 export default embeddingSearch;

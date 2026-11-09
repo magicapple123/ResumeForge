@@ -25,7 +25,7 @@ import type { ResumeBrief } from "../../types";
 import type { DiffViewData } from "../../types/resumeFieldDiff";
 import { formatDateTime } from "../../utils/format";
 import type { ResumeSortField, ResumeSortState } from "../../utils/resumeSort";
-import { secondaryActionsFor, type RowActionDeps } from "./resumeTableActions";
+import { batchSelectAction, secondaryActionsFor, type RowActionDeps } from "./resumeTableActions";
 
 interface Props {
   data: Page<ResumeBrief> | undefined;
@@ -185,8 +185,13 @@ export default function ResumeCardList({
         ) : (
           <ul className="resume-card-grid">
             {items.map((record) => {
-              // 多选态下不接管右键：批量入口在工具栏，右键容易让人以为"只作用于这一张"。
-              const actions = secondaryActionsFor(record, deps);
+              // 多选态下不接管右键：此时容易让人以为"只作用于这一张"，批量动作在页面批量工具条上。
+              // 非多选态下第一项固定是「批量选择」——窄档（<1092）没有表格工具栏，
+              // 这里是进入选择模式的唯一入口（与 ResumeTable 的右键/三点完全一致）。
+              const actions = [
+                batchSelectAction(batch.enterSelecting),
+                ...secondaryActionsFor(record, deps),
+              ];
               return (
                 <RowContextMenu key={record.id} items={actions} disabled={batch.selecting}>
                   <li className="resume-card">
@@ -201,7 +206,15 @@ export default function ResumeCardList({
                       <button
                         type="button"
                         className="resume-card-title"
-                        onClick={() => setPreviewId(record.id)}
+                        // 选择模式下标题不再打开预览（条目 01）：改用 `aria-disabled` + 早退，
+                        // 而不是 `disabled`——标题一旦变灰，整张卡片的可读性都会下降；光标同步
+                        // 改回箭头，避免"看起来能点"的假象。勾选框此时是唯一可用控件。
+                        aria-disabled={batch.selecting || undefined}
+                        style={batch.selecting ? { cursor: "default" } : undefined}
+                        onClick={() => {
+                          if (batch.selecting) return;
+                          setPreviewId(record.id);
+                        }}
                       >
                         {record.title}
                       </button>
@@ -213,7 +226,8 @@ export default function ResumeCardList({
                             ? t("responsive.resumes.unfavorite")
                             : t("responsive.resumes.favorite")
                         }
-                        disabled={favoriteResumeId === record.id}
+                        // 选择模式下收藏一并禁用：单条收藏与"对所选批量操作"是两条语义。
+                        disabled={favoriteResumeId === record.id || batch.selecting}
                         icon={record.favorite ? <StarFilled /> : <StarOutlined />}
                         onClick={() => void toggleFavorite(record)}
                       />
@@ -232,16 +246,24 @@ export default function ResumeCardList({
                         size="small"
                         type="primary"
                         ghost
+                        // 选择模式下预览禁用（条目 01）：此时卡片只承担"勾选"这一件事。
+                        disabled={batch.selecting}
                         onClick={() => setPreviewId(record.id)}
                       >
                         {t("responsive.resumes.preview")}
                       </Button>
-                      {/* 与表格视图同一份菜单项（含「对比」与带二次确认的「删除」）。 */}
-                      <Dropdown trigger={["click"]} menu={{ items: buildMenu(actions) }}>
+                      {/* 与表格视图同一份菜单项（含「对比」与带二次确认的「删除」）；
+                          选择模式下与整卡右键一致地禁用（右键已由 RowContextMenu 收起）。 */}
+                      <Dropdown
+                        trigger={["click"]}
+                        menu={{ items: buildMenu(actions) }}
+                        disabled={batch.selecting}
+                      >
                         <Button
                           size="small"
                           icon={<MoreOutlined />}
                           aria-label={t("responsive.resumes.more")}
+                          disabled={batch.selecting}
                         />
                       </Dropdown>
                     </div>

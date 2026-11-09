@@ -40,7 +40,6 @@ vi.mock("../components/InterviewExperiencePanel", () => ({ default: () => <div>�
 vi.mock("../components/InterviewReviewPanel", () => ({ default: () => <div>复盘面板</div> }));
 vi.mock("./interview/ReportCard", () => ({ ReportCard: () => <div>评分报告</div> }));
 vi.mock("./interview/SetupTab", () => ({
-  AUTO_ROUNDS_OPTION: "auto",
   SetupTab: ({ onStart }: { onStart: (values: Record<string, unknown>) => void }) => (
     <button
       type="button"
@@ -53,6 +52,8 @@ vi.mock("./interview/SetupTab", () => ({
           interviewerStyle: "严谨专业",
           focus: "",
           persona: "",
+          // roundsMode: "custom" —— 本文件断言的是固定 6 轮下的中断/重答。
+          roundsMode: "custom",
           rounds: 6,
         })
       }

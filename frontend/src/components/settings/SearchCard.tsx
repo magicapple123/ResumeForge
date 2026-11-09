@@ -1,20 +1,42 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * 联网搜索设置：来源、正文抓取条数、返回条数。
+ * 联网搜索设置：来源（多选卡片）、正文抓取条数、返回条数。
  *
  * 这些参数一直存在于后端，但此前**没有任何界面能改**：`GET/PUT /api/settings/search`
  * 只有接口没有入口，于是「抓取正文的条数」永远是默认的 0，助手拿到的永远只有摘要。
  * 助手页那个开关是"这次要不要联网"，这里配的是"联网时怎么搜"，两者互不替代。
  *
- * 卡片自带取数与保存（与 `UpdateCard` 一致）：它和模型配置是两套独立设置。
+ * ## 统一口径（条目 02 / 03）
  *
- * **没有保存按钮**：字段常驻可编辑，改动合并 400ms 后自动 PUT；离散勾选与数字框
- * 也一样。校验失败（一个来源都没选、地址不是 http(s)）时只在卡片底部说明，不发请求；
- * 改对后自动重试。这样"改完还要记得点保存"不再是一个会丢配置的步骤。
+ * - 卡头：`title` 里显示「已选 N 个」，`extra` 放**自动保存状态**（这张卡没有保存按钮）；
+ * - 说明：`Alert type="info"` 一句话，字段统一走 `SettingsField`；
+ * - 来源：4 张可选卡片（2 列），右上角 `Checkbox`，选中态 1.5px 主色边框；
+ *   只有勾了 SearXNG 才需要实例地址，只有勾了 DeepSeek 才需要 Key —— 输入框就地放在
+ *   对应卡片里（未勾选时禁用），不再单独占两大块；
+ * - 抓取正文 / 返回条数放在卡片区下方的「通用参数」。
+ *
+ * ## 为什么没有保存按钮
+ *
+ * 字段常驻可编辑，改动合并 400ms 后自动 PUT；离散勾选与数字框也一样。校验失败（一个来源
+ * 都没选、地址不是 http(s)）时在卡片里说明，不发请求；改对后自动重试。这样"改完还要记得
+ * 点保存"不再是一个会丢配置的步骤。
  */
 
-import { Alert, Card, Checkbox, Input, InputNumber, Space, Typography } from "antd";
+import {
+  Alert,
+  Card,
+  Checkbox,
+  Flex,
+  Input,
+  InputNumber,
+  Space,
+  Tag,
+  Typography,
+  theme,
+} from "antd";
+import ErrorState from "../common/ErrorState";
 import LoadingBlock from "../common/LoadingBlock";
+import SettingsField from "./SettingsField";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { getSearchConfig, saveSearchConfig } from "../../api/settings";
 import type { SearchConfig, SearchSource } from "../../types";
@@ -31,24 +53,33 @@ const DEFAULT_CONFIG: SearchConfig = {
 };
 
 /**
- * 一条搜索来源的显示名。
+ * 一条搜索来源的显示名与卡片副标题。
  *
  * `label` 给品牌名用（`Bing` / `DuckDuckGo`：两种语言写法相同，进词表会被
  * `source-ascii-english` 判成"源文是英文"），`labelKey` 给需要随语言变化的显示名用。
- * 两者都只影响显示；`value` 是提交给后端的协议值，一个字都不动。
+ * `noteKey` 是卡片副标题（要不要钥匙），两者都只影响显示；`value` 是提交给后端的协议值。
  */
 interface SourceOption {
   value: SearchSource;
   label?: string;
   labelKey?: MessageKey;
+  noteKey: MessageKey;
 }
 
 const SOURCE_OPTIONS: SourceOption[] = [
-  { value: "bing", label: "Bing" },
-  { value: "duckduckgo", label: "DuckDuckGo" },
-  { value: "searxng", labelKey: "searchCard.source.searxng" },
+  { value: "bing", label: "Bing", noteKey: "searchCard.source.note.bing" },
+  { value: "duckduckgo", label: "DuckDuckGo", noteKey: "searchCard.source.note.duckduckgo" },
+  {
+    value: "searxng",
+    labelKey: "searchCard.source.searxng",
+    noteKey: "searchCard.source.note.searxng",
+  },
   // DeepSeek 也是品牌名：两种语言写法相同，走词表 + 等值豁免（与模型预设同一口径）。
-  { value: "deepseek", labelKey: "searchCard.source.deepseek" },
+  {
+    value: "deepseek",
+    labelKey: "searchCard.source.deepseek",
+    noteKey: "searchCard.source.note.deepseek",
+  },
 ];
 
 /**
@@ -74,6 +105,7 @@ function sourceLabel(option: SourceOption): string {
 export default function SearchCard() {
   // 本组件用模块级 t()：必须订阅语言变化，否则切语言后这一块不重渲染。
   useLocale();
+  const { token } = theme.useToken();
   const [config, setConfig] = useState<SearchConfig>(DEFAULT_CONFIG);
   const [loading, setLoading] = useState(true);
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
@@ -115,6 +147,21 @@ export default function SearchCard() {
       cancelled = true;
     };
   }, [fetchConfig]);
+
+  /** 「重新读取」：与挂载那段共用同一份取数逻辑。 */
+  const reload = async () => {
+    setLoading(true);
+    const result = await fetchConfig();
+    if ("config" in result) {
+      const loaded = { ...DEFAULT_CONFIG, ...result.config };
+      setConfig(loaded);
+      latest.current = loaded;
+      setLoadError("");
+    } else {
+      setLoadError(result.error);
+    }
+    setLoading(false);
+  };
 
   /** 真正发请求；校验失败时只更新状态，不发请求。 */
   const persist = useCallback(async (next: SearchConfig) => {
@@ -175,82 +222,158 @@ export default function SearchCard() {
   const usesSearxng = config.sources.includes("searxng");
   const usesDeepseek = config.sources.includes("deepseek");
 
-  return (
-    <Card title={t("searchCard.title")} className="settings-card">
-      <Typography.Paragraph type="secondary" style={{ marginBottom: 16 }}>
-        {t("searchCard.intro")}
-      </Typography.Paragraph>
+  const toggleSource = (value: SearchSource, checked: boolean) => {
+    const sources = checked
+      ? [...config.sources.filter((item) => item !== value), value]
+      : config.sources.filter((item) => item !== value);
+    patch({ sources });
+  };
 
-      {loadError && (
-        <Alert
-          type="warning"
-          showIcon
-          style={{ marginBottom: 16 }}
-          title={t("searchCard.loadErrorTitle")}
-          description={t("searchCard.loadErrorBody", { message: loadError })}
-        />
-      )}
+  // Selected state: brand tint background + 1.5px brand border (same as the provider cards).
+  //
+  // The colours MUST come from the `--rf-*` CSS variables, not from `palette.*` and not from
+  // `token.colorPrimaryBg`:
+  //   - `token.colorPrimaryBg` is derived from the deep brand colour (#16365c) and lands on a
+  //     mid-grey (#92989c), so a selected tile read as "dark grey card";
+  //   - `palette.brandTint` is a *light-theme-only* literal: in dark mode the tile stayed
+  //     white while the label turned light, i.e. white-on-white text (W2 regression #3).
+  // `--rf-brand-tint` / `--rf-brand` / `--rf-border` are defined in design-tokens.css and
+  // overridden in dark-tokens.css, so the same inline style is correct in both themes.
+  //
+  // `borderWidth` must be set on its own: writing `${1.5}px` inside the `border` shorthand
+  // is normalised, so the 1.5px selection border may never render.
+  const tileStyle = (checked: boolean) => ({
+    padding: "10px 12px",
+    height: "100%",
+    borderRadius: token.borderRadiusLG,
+    backgroundColor: checked ? "var(--rf-brand-tint)" : "transparent",
+    borderStyle: "solid",
+    borderWidth: checked ? "1.5px" : "1px",
+    borderColor: checked ? "var(--rf-brand)" : "var(--rf-border)",
+    display: "flex" as const,
+    flexDirection: "column" as const,
+    gap: 8,
+  });
+
+  const saveStatusText =
+    saveStatus === "saving"
+      ? t("searchCard.status.saving")
+      : saveStatus === "saved"
+        ? t("searchCard.status.saved")
+        : saveStatus === "error"
+          ? t("searchCard.status.error")
+          : "";
+
+  return (
+    <Card
+      title={
+        <Flex align="center" gap={8} wrap>
+          <span>{t("searchCard.title")}</span>
+          <Tag color={config.sources.length > 0 ? "green" : undefined}>
+            {t("searchCard.sources.count", { count: config.sources.length })}
+          </Tag>
+        </Flex>
+      }
+      extra={
+        saveStatusText ? (
+          <Typography.Text
+            type={saveStatus === "error" ? "danger" : "secondary"}
+            className="search-save-status"
+          >
+            {saveStatusText}
+          </Typography.Text>
+        ) : undefined
+      }
+      className="settings-card"
+    >
+      <Alert type="info" showIcon style={{ marginBottom: 16 }} title={t("searchCard.intro")} />
+
+      {loadError ? (
+        <div style={{ marginBottom: 16 }}>
+          {/* Same shape as the other two cards: a retryable ErrorState, not the list EmptyState. */}
+          <ErrorState
+            description={
+              <>
+                <div>{t("searchCard.loadErrorTitle")}</div>
+                <Typography.Text type="secondary">
+                  {t("searchCard.loadErrorBody", { message: loadError })}
+                </Typography.Text>
+              </>
+            }
+            onRetry={() => void reload()}
+            retryLabel={t("common.retry")}
+          />
+        </div>
+      ) : null}
 
       <LoadingBlock spinning={loading}>
-        <Space orientation="vertical" size="large" style={{ width: "100%" }}>
-          <div>
-            <Typography.Text strong>{t("searchCard.sources.title")}</Typography.Text>
-            <Typography.Paragraph type="secondary" style={{ marginBottom: 8 }}>
-              {t("searchCard.sources.hint")}
-            </Typography.Paragraph>
-            <Checkbox.Group
-              options={SOURCE_OPTIONS.map((option) => ({
-                value: option.value,
-                label: sourceLabel(option),
-              }))}
-              value={config.sources}
-              onChange={(values) => patch({ sources: values as SearchSource[] })}
-            />
-          </div>
+        <Flex vertical gap={16}>
+          <SettingsField label={t("searchCard.sources.title")} hint={t("searchCard.sources.hint")}>
+            <div
+              role="group"
+              aria-label={t("searchCard.sources.title")}
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+                gap: 8,
+                alignItems: "stretch",
+              }}
+            >
+              {SOURCE_OPTIONS.map((option) => {
+                const checked = config.sources.includes(option.value);
+                return (
+                  <div key={option.value} style={tileStyle(checked)}>
+                    <Flex align="center" justify="space-between" gap={8}>
+                      <Typography.Text strong>{sourceLabel(option)}</Typography.Text>
+                      <Checkbox
+                        aria-label={sourceLabel(option)}
+                        checked={checked}
+                        onChange={(event) => toggleSource(option.value, event.target.checked)}
+                      />
+                    </Flex>
+                    <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                      {t(option.noteKey)}
+                    </Typography.Text>
 
-          <div>
-            <Typography.Text strong>{t("searchCard.searxng.title")}</Typography.Text>
-            <Typography.Paragraph type="secondary" style={{ marginBottom: 8 }}>
-              {t("searchCard.searxng.hint")}
-            </Typography.Paragraph>
-            <Input
-              value={config.searxng_url}
-              onChange={(event) => patch({ searxng_url: event.target.value })}
-              placeholder="http://localhost:8080"
-              // 只有勾了 SearXNG 才需要填地址：未勾选时禁用以免误以为"必须先填"。
-              disabled={!usesSearxng}
-              allowClear
-            />
-          </div>
+                    {option.value === "searxng" ? (
+                      <Input
+                        aria-label={t("searchCard.searxng.title")}
+                        value={config.searxng_url}
+                        onChange={(event) => patch({ searxng_url: event.target.value })}
+                        placeholder={t("searchCard.searxng.placeholder")}
+                        // 只有勾了 SearXNG 才需要填地址：未勾选时禁用以免误以为"必须先填"。
+                        disabled={!usesSearxng}
+                        allowClear
+                      />
+                    ) : null}
 
-          <div>
-            <Typography.Text strong>{t("searchCard.deepseek.title")}</Typography.Text>
-            <Typography.Paragraph type="secondary" style={{ marginBottom: 8 }}>
-              {t("searchCard.deepseek.hint")}
-            </Typography.Paragraph>
-            <Input.Password
-              aria-label={t("searchCard.deepseek.keyAria")}
-              value={config.deepseek_api_key}
-              onChange={(event) => patch({ deepseek_api_key: event.target.value })}
-              placeholder={t("searchCard.deepseek.keyPlaceholder")}
-              // 只有勾了 DeepSeek 才需要密钥：未勾选时禁用，避免"必须先填"的误解。
-              disabled={!usesDeepseek || undefined}
-              allowClear
-              autoComplete="off"
-            />
-            <Typography.Paragraph type="secondary" style={{ marginTop: 8, marginBottom: 8 }}>
-              {t("searchCard.deepseek.cost")}
-            </Typography.Paragraph>
-            {usesDeepseek ? (
-              <Alert type="warning" showIcon title={t("searchCard.deepseek.privacy")} />
-            ) : null}
-          </div>
+                    {option.value === "deepseek" ? (
+                      <>
+                        <Input.Password
+                          aria-label={t("searchCard.deepseek.keyAria")}
+                          value={config.deepseek_api_key}
+                          onChange={(event) => patch({ deepseek_api_key: event.target.value })}
+                          placeholder={t("searchCard.deepseek.keyPlaceholder")}
+                          // 只有勾了 DeepSeek 才需要密钥：未勾选时禁用，避免误解。
+                          disabled={!usesDeepseek || undefined}
+                          allowClear
+                          autoComplete="off"
+                        />
+                        <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                          {t("searchCard.deepseek.cost")}
+                        </Typography.Text>
+                        {usesDeepseek ? (
+                          <Alert type="warning" showIcon title={t("searchCard.deepseek.privacy")} />
+                        ) : null}
+                      </>
+                    ) : null}
+                  </div>
+                );
+              })}
+            </div>
+          </SettingsField>
 
-          <div>
-            <Typography.Text strong>{t("searchCard.fetch.title")}</Typography.Text>
-            <Typography.Paragraph type="secondary" style={{ marginBottom: 8 }}>
-              {t("searchCard.fetch.hint")}
-            </Typography.Paragraph>
+          <SettingsField label={t("searchCard.general.title")} hint={t("searchCard.fetch.hint")}>
             <Space orientation="vertical">
               {FETCH_PAGE_OPTIONS.map((option) => (
                 <Checkbox
@@ -262,14 +385,10 @@ export default function SearchCard() {
                 </Checkbox>
               ))}
             </Space>
-          </div>
+          </SettingsField>
 
-          <div>
-            <Typography.Text strong>{t("searchCard.results.title")}</Typography.Text>
-            <Typography.Paragraph type="secondary" style={{ marginBottom: 8 }}>
-              {t("searchCard.results.hint")}
-            </Typography.Paragraph>
-            {/* addonAfter 已废弃（v6）：按官方指引以 Space.Compact + Space.Addon 重组。 */}
+          <SettingsField label={t("searchCard.results.title")} hint={t("searchCard.results.hint")}>
+            {/* addonAfter is deprecated in antd 6: use Space.Compact + Space.Addon instead. */}
             <Space.Compact>
               <InputNumber
                 aria-label={t("searchCard.results.aria")}
@@ -280,24 +399,12 @@ export default function SearchCard() {
               />
               <Space.Addon>{t("searchCard.results.unit")}</Space.Addon>
             </Space.Compact>
-          </div>
+          </SettingsField>
 
-          {saveStatus === "saving" ? (
-            <Typography.Text type="secondary" className="search-save-status">
-              {t("searchCard.saving")}
-            </Typography.Text>
+          {saveStatus === "error" && saveError ? (
+            <Alert type="error" showIcon title={saveError} />
           ) : null}
-          {saveStatus === "saved" ? (
-            <Typography.Text type="secondary" className="search-save-status">
-              {t("searchCard.saved")}
-            </Typography.Text>
-          ) : null}
-          {saveStatus === "error" ? (
-            <Typography.Text type="danger" className="search-save-status">
-              {saveError}
-            </Typography.Text>
-          ) : null}
-        </Space>
+        </Flex>
       </LoadingBlock>
     </Card>
   );

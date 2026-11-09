@@ -144,6 +144,7 @@ const embeddingSearch = {
   "embeddingSearch.guidance.network": "Check the network and endpoint, then retry",
   "embeddingSearch.guidance.key": "Check whether the API key is correct",
   "embeddingSearch.guidance.endpoint": "This provider does not offer an embeddings API",
+  "embeddingSearch.guidance.source": "Download source unavailable; retry later",
   "embeddingSearch.guidance.address": "Check that the endpoint ends with /v1",
   "embeddingSearch.guidance.private": "Allow local addresses under Advanced",
   "embeddingSearch.guidance.dimension": "Model dimension differs from the saved config",
@@ -154,6 +155,20 @@ const embeddingSearch = {
   "embeddingSearch.guidance.sha": "File verification failed; download again",
   "embeddingSearch.guidance.disk": "Not enough disk space; free some and retry",
   "embeddingSearch.guidance.runtime": "The runtime cannot start; use remote instead",
+
+  "embeddingSearch.remote.modelCandidate.label": "Model candidates",
+  "embeddingSearch.remote.preset.state.active": "In effect",
+  "embeddingSearch.remote.preset.state.configured": "Configured",
+  "embeddingSearch.remote.preset.state.empty": "Not configured",
+  "embeddingSearch.remote.preset.aria": "Pick a remote provider",
+  "embeddingSearch.remote.preset.note.dashscope": "Direct from China; dimension 1024",
+  "embeddingSearch.remote.preset.note.openai": "Official service; needs overseas network",
+  "embeddingSearch.remote.preset.note.zhipu": "Direct from China; pay as you go",
+  "embeddingSearch.remote.preset.note.siliconflow": "Aggregator with many models",
+  "embeddingSearch.remote.preset.note.ollama": "Runs locally; your data stays here",
+  "embeddingSearch.remote.preset.note.custom": "Fill in the address and model yourself",
+  "embeddingSearch.card.enableHint.remote": "Fill in the address, model and key below first",
+  "embeddingSearch.card.enableHint.local": "Download the local model first",
 } as const;
 
 export default embeddingSearch;

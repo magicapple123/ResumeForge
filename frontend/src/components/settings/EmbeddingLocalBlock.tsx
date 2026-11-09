@@ -5,8 +5,19 @@
  * Intel Mac（local.supported=false）**不渲染下载按钮**：1.24 之后没有任何 macOS x86_64
  * 的 onnxruntime wheel，点了只会拿到 404 或解包失败（任务书 §3.1），所以这里直接
  * 说明「该架构不支持本地模型，请使用远程」。
+ *
+ * ## 危险操作收进「···」（条目 08）
+ *
+ * 已下载未启用这个状态原先并排两颗按钮：「启用本地模型」（主操作）+「删除已下载文件」
+ * （裸红按钮 + Popconfirm）。红色按钮紧贴主操作、误触成本高，改后：
+ *
+ * - 主操作只有卡头的「启用」（整张卡唯一主操作，见 `EmbeddingProviderCard`）；
+ * - 「删除已下载文件」进「···」，二次确认复用 `useRowActionMenu`（与列表行同一套），
+ *   不手写第三份 `modal.confirm`；
+ * - `busy !== null` 时「···」禁用，与其它按钮的 disabled 口径一致。
  */
-import { Alert, Button, Flex, Popconfirm, Progress, Typography } from "antd";
+import { Alert, Button, Dropdown, Flex, Progress, Typography } from "antd";
+import { MoreOutlined } from "@ant-design/icons";
 import type { EmbeddingLocalStatus } from "../../api/settings";
 import { embeddingProgressPercent } from "../../api/settings";
 import { embeddingGuidanceKey } from "../../features/settings/embeddingHelpers";
@@ -14,6 +25,7 @@ import type { EmbeddingActionId } from "../../features/settings/useEmbeddingSett
 import { t } from "../../i18n";
 import { useLocale } from "../../i18n/i18nContext";
 import ErrorState from "../common/ErrorState";
+import { useRowActionMenu } from "../common/rowActionMenu";
 
 interface Props {
   local: EmbeddingLocalStatus;
@@ -23,7 +35,6 @@ interface Props {
   onDownload: () => void;
   onCancel: () => void;
   onRetry: () => void;
-  onEnable: () => void;
   onRemove: () => void;
 }
 
@@ -34,10 +45,10 @@ export default function EmbeddingLocalBlock({
   onDownload,
   onCancel,
   onRetry,
-  onEnable,
   onRemove,
 }: Props) {
   useLocale();
+  const buildMenu = useRowActionMenu();
 
   if (!local.supported) {
     return (
@@ -99,25 +110,36 @@ export default function EmbeddingLocalBlock({
     );
   }
 
-  // 下载完成但配置还没启用：单独给一次「启用本地模型」（下载与启用是两段式）。
+  // 下载完成但配置还没启用：启用入口在卡头；这里只留提示与「···」里的清理。
   if (local.state === "ready") {
     return (
       <Flex vertical gap={12}>
-        <Typography.Text strong>{t("embeddingSearch.local.readyHint")}</Typography.Text>
-        <Flex gap={8} wrap>
-          <Button type="primary" loading={busy === "enableLocal"} onClick={onEnable}>
-            {t("embeddingSearch.local.enable")}
-          </Button>
-          <Popconfirm
-            title={t("embeddingSearch.local.removeTitle")}
-            description={t("embeddingSearch.local.removeConfirm")}
-            okText={t("embeddingSearch.local.remove")}
-            cancelText={t("common.action.cancel")}
-            okButtonProps={{ danger: true }}
-            onConfirm={onRemove}
+        <Flex align="center" justify="space-between" gap={8} wrap>
+          <Typography.Text strong>{t("embeddingSearch.local.readyHint")}</Typography.Text>
+          <Dropdown
+            trigger={["click"]}
+            disabled={busy !== null}
+            menu={{
+              items: buildMenu([
+                {
+                  key: "remove-assets",
+                  label: t("embeddingSearch.local.remove"),
+                  danger: true,
+                  confirm: t("embeddingSearch.local.removeTitle"),
+                  confirmBody: t("embeddingSearch.local.removeConfirm"),
+                  confirmOkText: t("embeddingSearch.local.remove"),
+                  confirmCancelText: t("common.action.cancel"),
+                  onClick: onRemove,
+                },
+              ]),
+            }}
           >
-            <Button danger>{t("embeddingSearch.local.remove")}</Button>
-          </Popconfirm>
+            <Button
+              icon={<MoreOutlined />}
+              aria-label={t("common.rowActions.more")}
+              disabled={busy !== null || undefined}
+            />
+          </Dropdown>
         </Flex>
       </Flex>
     );

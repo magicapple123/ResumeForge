@@ -198,16 +198,46 @@ describe("JobTable 空表可访问性", () => {
     expect(content).not.toBeNull();
     // 没有 overflow-x，容器就不是"可滚动区域"——空表不该出现一个没有任何可聚焦元素的滚动区。
     expect(content?.style.overflowX).toBe("");
-    // 表格也不再被钉成固定 1330px 宽；auto 布局会把列宽压回容器宽度，不会反向造成页面级横向溢出。
+    // 表格也不再被钉成固定 1350px 宽；auto 布局会把列宽压回容器宽度，不会反向造成页面级横向溢出。
     expect(container.querySelector<HTMLElement>("table")?.style.width).toBe("");
   });
 
-  it("有数据时保持原行为：列宽固定 1330px + 横向滚动", () => {
+  it("有数据时保持原行为：列宽固定 1350px + 横向滚动", () => {
     const { container } = renderTable([makeJob()]);
 
     const content = container.querySelector<HTMLElement>(".ant-table-content");
     expect(content?.style.overflowX).toBe("auto");
-    expect(container.querySelector<HTMLElement>("table")?.style.width).toBe("1330px");
+    // 操作列 170 → 190（条目 01：多一个三点按钮），列宽和 1344 → 1364，scroll.x 同步 +20。
+    expect(container.querySelector<HTMLElement>("table")?.style.width).toBe("1350px");
+  });
+});
+
+describe("JobTable 行内三点（条目 01）", () => {
+  it("三点存在，点开是次级操作；行内已平铺的主操作与「复制」不在菜单里", async () => {
+    renderTable([makeJob()]);
+
+    fireEvent.click(screen.getByRole("button", { name: "更多操作" }));
+
+    expect(await screen.findByRole("menuitem", { name: "编辑" })).toBeInTheDocument();
+    expect(screen.getByRole("menuitem", { name: "删除" })).toBeInTheDocument();
+    // 「详情 / 生成简历」已经平铺在行上，菜单里重复一遍只会让用户多点一步。
+    expect(screen.queryByRole("menuitem", { name: /详情/ })).toBeNull();
+    expect(screen.queryByRole("menuitem", { name: /生成简历/ })).toBeNull();
+  });
+
+  it("选择模式下三点与行内主操作一并禁用（batchAction 之外的第二个条件）", () => {
+    renderTable([makeJob()], { selectionMode: true });
+
+    expect(screen.getByRole("button", { name: "更多操作" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "详情" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "生成简历" })).toBeDisabled();
+  });
+
+  it("非选择模式下三点与行内主操作都可用", () => {
+    renderTable([makeJob()]);
+
+    expect(screen.getByRole("button", { name: "更多操作" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "详情" })).toBeEnabled();
   });
 });
 

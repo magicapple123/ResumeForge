@@ -9,12 +9,14 @@ const mocks = vi.hoisted(() => ({
   getStorageStats: vi.fn(),
   previewCleanup: vi.fn(),
   runCleanup: vi.fn(),
+  revealCleanupFile: vi.fn(),
 }));
 
 vi.mock("../../api/storage", () => ({
   getStorageStats: (...args: unknown[]) => mocks.getStorageStats(...args),
   previewCleanup: (...args: unknown[]) => mocks.previewCleanup(...args),
   runCleanup: (...args: unknown[]) => mocks.runCleanup(...args),
+  revealCleanupFile: (...args: unknown[]) => mocks.revealCleanupFile(...args),
 }));
 
 import StorageStatsCard from "./StorageStatsCard";
@@ -114,6 +116,7 @@ beforeEach(() => {
   for (const mock of Object.values(mocks)) mock.mockReset();
   mocks.getStorageStats.mockResolvedValue(STATS);
   mocks.previewCleanup.mockResolvedValue(PLAN);
+  mocks.revealCleanupFile.mockResolvedValue({ ok: true });
 });
 
 afterEach(() => {
@@ -226,5 +229,63 @@ describe("StorageStatsCard", () => {
     expect(screen.getByText(/本次保留 3 份/)).toBeTruthy();
     // 统计要刷新：不刷新会让用户看到的占用停在清理前。
     await waitFor(() => expect(mocks.getStorageStats).toHaveBeenCalledTimes(2));
+  });
+});
+
+/**
+ * 条目 04：「在文件夹中显示」。
+ *
+ * 两件事必须同时成立——(1) 相对路径原样交给后端（前端从不拼绝对路径）；
+ * (2) 点图标**不能**改变这一行的勾选。行本身是 `<label>`（整行可点 = 切换），
+ * 所以图标按钮里漏掉 `preventDefault` / `stopPropagation` 任一个，用户点一次
+ * 「看看文件在哪」就会顺手把这一项从清理计划里去掉（或加回来）。
+ */
+
+/**
+ * 后端 404 的 detail 原文：「文件已被移走或删除」。
+ *
+ * 用 `\u` 转义写出：测试口径的 CJK 断言行数只降不升（`i18n/cjkRatchet.test.ts`），
+ * 断言里再写一遍中文字面量会让这个文件超基线。运行时仍是同一个字符串。
+ */
+const GONE_DETAIL = "\u6587\u4ef6\u5df2\u88ab\u79fb\u8d70\u6216\u5220\u9664";
+
+describe("StorageStatsCard · 在文件夹中显示", () => {
+  it("点图标定位文件，且不改变这一行的勾选状态", async () => {
+    renderCard();
+    await waitFor(() => expect(mocks.getStorageStats).toHaveBeenCalled());
+    await openCleanupModal();
+
+    const row = screen.getByRole("checkbox", { name: /backups\/b5\.db/ });
+    // 新清单默认全选：点图标之前是勾上的。
+    expect(row).toBeChecked();
+
+    const revealButtons = screen.getAllByRole("button", { name: "打开文件夹" });
+    // 两个候选各一个图标按钮，顺序与候选清单一致。
+    expect(revealButtons).toHaveLength(PLAN.candidates.length);
+    fireEvent.click(revealButtons[0]);
+
+    await waitFor(() => expect(mocks.revealCleanupFile).toHaveBeenCalledWith("backups/b5.db"));
+    // 关键断言：勾选状态没被 label 的默认行为连带切换。
+    expect(row).toBeChecked();
+    // 成功定位不需要重拉清单（只有失败才重拉）。
+    expect(mocks.previewCleanup).toHaveBeenCalledTimes(1);
+  });
+
+  it("定位失败：给出「原因 + 建议 + 编号」并重拉清单", async () => {
+    mocks.revealCleanupFile.mockRejectedValue(new Error(GONE_DETAIL));
+    renderCard();
+    await waitFor(() => expect(mocks.getStorageStats).toHaveBeenCalled());
+    await openCleanupModal();
+
+    fireEvent.click(screen.getAllByRole("button", { name: "打开文件夹" })[0]);
+
+    // 原因来自后端 detail，建议与编号由 errorGuidance 统一补上。
+    expect(await screen.findByText(new RegExp(GONE_DETAIL))).toBeTruthy();
+    // 文件已经不在：清单必须重拉，否则用户对着一条不存在的文件继续点。
+    await waitFor(() => expect(mocks.previewCleanup).toHaveBeenCalledTimes(2));
+    expect(mocks.previewCleanup).toHaveBeenLastCalledWith(
+      30,
+      PLAN.categories.map((category) => category.key),
+    );
   });
 });

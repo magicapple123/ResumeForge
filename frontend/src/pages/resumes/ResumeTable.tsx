@@ -148,8 +148,9 @@ export default function ResumeTable({
   });
 
   /**
-   * 主操作平铺在行上；其余操作（重命名/备注/对比/收藏/删除）只走整行右键菜单
-   * （三点「更多」下拉已移除），菜单里不重复「预览 / 导出」。
+   * 主操作（预览 / 导出）平铺在行上；其余操作（重命名 / 备注 / 对比 / 收藏 / 删除）既进
+   * 行内「更多」下拉，也进整行右键菜单——两处共用 `secondaryActionsFor` 这一份清单，
+   * 菜单里都不重复「预览 / 导出」，也不含右键独有的「复制」子菜单（那是取数动作）。
    * 动作定义在模块级 builder 里（ContextMenuRow 复用同一份），这里只做绑定。
    */
   const actionDeps = useMemo<RowActionDeps>(
@@ -215,10 +216,20 @@ export default function ResumeTable({
               record.favorite ? t("resumes.list.favoriteRemove") : t("resumes.list.favoriteAdd")
             }
             loading={favoriteResumeId === record.id}
-            disabled={favoriteResumeId !== null}
+            // 选择模式下星标一并禁用（条目 01）：单条收藏与"对所选批量操作"是两条语义，
+            // 勾选态下还能点星标，用户会以为收藏作用于选中的那一批。
+            disabled={favoriteResumeId !== null || batch.selecting}
             icon={
               record.favorite ? (
-                <StarFilled style={{ color: "var(--rf-favorite)" }} />
+                <StarFilled
+                  style={{
+                    // 禁用态不保留强调色：按钮变灰、星还是金黄色，看着仍然像可以点。
+                    color:
+                      favoriteResumeId !== null || batch.selecting
+                        ? undefined
+                        : "var(--rf-favorite)",
+                  }}
+                />
               ) : (
                 <StarOutlined />
               )
@@ -377,11 +388,15 @@ export default function ResumeTable({
       // 而滚动条落在表体底部、首屏根本看不到（AUDIT P1-11）。
       fixed: "right",
       render: (_, record) => (
-        // 三点「更多」下拉已移除：重命名/备注/对比/收藏/删除统一走整行右键菜单，
-        // 键盘用户可用 ContextMenu 键 / Shift+F10 打开（见 RowContextMenu）。
+        // 三点「更多」= 「批量选择」+ 次级操作（与整行右键菜单同一份 builder）；行内已平铺的
+        // 「预览 / 导出」不再进菜单。选择模式下 `batch.selecting` 一处同时禁用主按钮与三点，
+        // 避免勾选与单行操作互相干扰。
         <RowActions
           primary={primaryActions(record)}
-          // 多选模式下收起行内操作，避免勾选与单行操作互相干扰。
+          more={[
+            batchSelectAction(batch.enterSelecting),
+            ...secondaryActionsFor(record, actionDeps),
+          ]}
           disabled={batch.selecting}
         />
       ),

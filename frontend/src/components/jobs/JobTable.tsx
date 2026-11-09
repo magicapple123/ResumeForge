@@ -241,22 +241,28 @@ export default function JobTable({
     {
       title: t("jobTable.column.actions"),
       key: "actions",
-      width: 170,
+      // 190 = 两个主操作按钮 + 一个「更多」三点（原来 170 只放得下两个按钮）。
+      width: 190,
       render: (_, job) => (
-        // 三点「更多」下拉已移除：右键菜单（含同一份次级操作）是唯一入口，
-        // 键盘用户可用 ContextMenu 键 / Shift+F10 打开（见 RowContextMenu）。
-        <RowActions disabled={batchAction !== null} primary={primaryActions(job)} />
+        // 三点与右键菜单共用同一份次级操作（见 secondaryActions）；`disabled` 一处同时
+        // 作用于主按钮和三点——批量任务运行中、以及勾选（选择模式）下都不该对单行动手，
+        // 否则「详情 / 生成简历」会在选择模式下被误点（条目 01）。
+        <RowActions
+          primary={primaryActions(job)}
+          more={secondaryActions(job)}
+          disabled={batchAction !== null || selectionMode}
+        />
       ),
     },
   ];
 
-  /** 主操作直接平铺在行上；其余操作（含删除）统一收进整行右键菜单。 */
+  /** 主操作直接平铺在行上；其余操作（含删除）进行内「更多」下拉与整行右键菜单。 */
   const primaryActions = (job: JobList): RowActionItem[] => [
     { key: "detail", label: t("jobTable.action.detail"), onClick: () => onOpenDetail(job) },
     { key: "generate", label: t("jobTable.action.generate"), onClick: () => onGenerate(job) },
   ];
 
-  /** 次级操作：只出现在整行右键菜单（行内不再有三点下拉）。 */
+  /** 次级操作：行内「更多」下拉与整行右键菜单共用这一份（两处保证完全一致）。 */
   const secondaryActions = (job: JobList): RowActionItem[] => [
     { key: "write", label: t("jobTable.action.write"), onClick: () => onWrite(job) },
     { key: "resumes", label: t("jobTable.action.resumes"), onClick: () => onViewResumes(job) },
@@ -299,7 +305,10 @@ export default function JobTable({
       // 空表（无当前页行）时不启用横向滚动：否则 `.ant-table-content` 会变成
       // "可横滚、区域内却没有任何可聚焦元素"的容器，命中 axe 的
       // `scrollable-region-focusable`（serious）。有数据时照旧按列宽固定横滚。
-      scroll={jobs?.items?.length ? { x: 1330 } : undefined}
+      // 10 列宽度之和 = 64+260+130+90+130+80+90+180+150+190 = 1364；
+      // 沿用「比列宽和少 14px」的历史取值（原来 1330 / 1344），避免操作列加宽后
+      // 表格总宽突然多出一截。
+      scroll={jobs?.items?.length ? { x: 1350 } : undefined}
       components={{
         body: {
           // 整行右键即可编辑/删除；批量模式下不拦截右键，避免和选择操作打架。

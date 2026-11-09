@@ -234,7 +234,9 @@ def test_reveal_opens_the_folder_and_selects_the_file(client, db_session, monkey
     calls: list[list[str]] = []
     monkeypatch.setattr(sys, "platform", "win32")
     monkeypatch.setattr(
-        "app.api.user_files.subprocess",
+        # 平台分支收在 ``services/system_reveal.py``（清理清单共用同一份实现），
+        # 所以补丁要打在它查找 ``subprocess`` 的命名空间上。
+        "app.services.system_reveal.subprocess",
         types.SimpleNamespace(Popen=lambda args: calls.append(list(args))),
     )
 

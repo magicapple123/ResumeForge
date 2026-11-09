@@ -49,11 +49,11 @@ const setupStubs = vi.hoisted(() => {
     focus: "",
     persona: "",
   };
-  return { AUTO_ROUNDS_OPTION: "auto", fixedValues: { ...base, rounds: 6 } };
+  // roundsMode: "custom" —— 本文件断言的是固定轮数（6 轮）下的计时行为。
+  return { fixedValues: { ...base, roundsMode: "custom" as const, rounds: 6 } };
 });
 
 vi.mock("./interview/SetupTab", () => ({
-  AUTO_ROUNDS_OPTION: setupStubs.AUTO_ROUNDS_OPTION,
   SetupTab: ({ onStart }: { onStart: (values: Record<string, unknown>) => void }) => (
     <button type="button" onClick={() => onStart(setupStubs.fixedValues)}>
       start-stub

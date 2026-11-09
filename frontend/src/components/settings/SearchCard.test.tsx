@@ -42,7 +42,7 @@ function renderCard() {
 /** 等首次取数落地：加载中时字段是空的，直接断言会看到默认值。 */
 async function waitLoaded() {
   await waitFor(() => expect(apiMocks.getSearchConfig).toHaveBeenCalledOnce());
-  await screen.findByPlaceholderText("http://localhost:8080");
+  await screen.findByLabelText(t("searchCard.searxng.title"));
 }
 
 beforeEach(() => {
@@ -71,7 +71,7 @@ describe("SearchCard", () => {
     // 抓取正文那组是单选，要看勾中的那一项是不是服务端存的那一项。
     expect(await screen.findByRole("checkbox", { name: "抓前 2 条正文" })).toBeChecked();
     expect(screen.getByRole("checkbox", { name: "只取摘要（最快）" })).not.toBeChecked();
-    expect(screen.getByPlaceholderText("http://localhost:8080")).toHaveValue(
+    expect(screen.getByLabelText(t("searchCard.searxng.title"))).toHaveValue(
       "http://localhost:8080",
     );
   });
@@ -90,7 +90,7 @@ describe("SearchCard", () => {
         ),
       { timeout: 2500 },
     );
-    expect(await screen.findByText(t("searchCard.saved"))).toBeInTheDocument();
+    expect(await screen.findByText(t("searchCard.status.saved"))).toBeInTheDocument();
   });
 
   it("keeps the source list the user checked", async () => {
@@ -126,7 +126,7 @@ describe("SearchCard", () => {
     await waitLoaded();
 
     fireEvent.click(screen.getByRole("checkbox", { name: /SearXNG/ }));
-    fireEvent.change(screen.getByPlaceholderText("http://localhost:8080"), {
+    fireEvent.change(screen.getByLabelText(t("searchCard.searxng.title")), {
       target: { value: "localhost:8080" },
     });
 
@@ -141,7 +141,7 @@ describe("SearchCard", () => {
     await waitLoaded();
 
     fireEvent.click(screen.getByRole("checkbox", { name: /SearXNG/ }));
-    fireEvent.change(screen.getByPlaceholderText("http://localhost:8080"), {
+    fireEvent.change(screen.getByLabelText(t("searchCard.searxng.title")), {
       target: { value: "  http://localhost:8888  " },
     });
 
@@ -169,9 +169,9 @@ describe("SearchCard", () => {
     await waitLoaded();
 
     // 这条不是"编辑门禁"：未勾选 SearXNG 时填地址没有意义，勾上就解锁。
-    expect(screen.getByPlaceholderText("http://localhost:8080")).toBeDisabled();
+    expect(screen.getByLabelText(t("searchCard.searxng.title"))).toBeDisabled();
     fireEvent.click(screen.getByRole("checkbox", { name: /SearXNG/ }));
-    expect(screen.getByPlaceholderText("http://localhost:8080")).toBeEnabled();
+    expect(screen.getByLabelText(t("searchCard.searxng.title"))).toBeEnabled();
   });
 
   it("tells the user when the saved setting could not be read", async () => {
@@ -243,5 +243,78 @@ describe("SearchCard", () => {
 
     expect(screen.getByText(t("searchCard.deepseek.cost"))).toBeInTheDocument();
     expect(screen.getByText(t("searchCard.deepseek.privacy"))).toBeInTheDocument();
+  });
+
+  it("paints the selected source tile with the theme-aware brand tint", async () => {
+    renderCard();
+    await waitLoaded();
+
+    // 回归点 1：选中态曾用 token.colorPrimaryBg（品牌色过深 → antd 算出中灰 #92989c）。
+    // 回归点 2：改成 palette.brandTint 后，深色主题下是白底白字（浅色专用 literal 不随主题变）。
+    // 所以样式必须引用 CSS 变量，由 design-tokens.css / dark-tokens.css 各自给值。
+    const selected = screen
+      .getByRole("checkbox", { name: "Bing" })
+      .closest('div[style*="background-color"]') as HTMLElement;
+    const selectedStyle = selected.getAttribute("style") ?? "";
+    expect(selectedStyle).toContain("var(--rf-brand-tint)");
+    expect(selectedStyle).toContain("var(--rf-brand)");
+    // 反过来钉住：不能再退回浅色专用色值。
+    expect(selectedStyle).not.toMatch(/#eaf1f8|rgb\(234, 241, 248\)/i);
+    // 1.5px 必须真的生效：写进 border 简写会被归一，选中态就看不出来。
+    expect(getComputedStyle(selected).borderTopWidth).toBe("1.5px");
+
+    const unselected = screen
+      .getByRole("checkbox", { name: /SearXNG/ })
+      .closest('div[style*="background-color"]') as HTMLElement;
+    const unselectedStyle = unselected.getAttribute("style") ?? "";
+    expect(unselectedStyle).toContain("var(--rf-border)");
+    expect(getComputedStyle(unselected).borderTopWidth).toBe("1px");
+  });
+
+  it("shows how many sources are selected and keeps it in sync", async () => {
+    renderCard();
+    await waitLoaded();
+
+    // 卡头的「已选 N 个」是多选卡片的唯一汇总：勾掉一个要立刻变。
+    expect(screen.getByText(t("searchCard.sources.count", { count: 2 }))).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("checkbox", { name: "DuckDuckGo" }));
+    expect(
+      await screen.findByText(t("searchCard.sources.count", { count: 1 })),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("checkbox", { name: "DuckDuckGo" })).not.toBeChecked();
+  });
+
+  it("reports the auto-save status in three states: saving, saved, failed", async () => {
+    // 用对象持有 reject：直接把闭包赋值给局部变量，TS 会把它收窄成 never（赋值发生在回调里）。
+    const gate: { reject: ((reason: Error) => void) | null } = { reject: null };
+    apiMocks.saveSearchConfig.mockImplementation(
+      () =>
+        new Promise((_resolve, reject) => {
+          gate.reject = reject;
+        }),
+    );
+    renderCard();
+    await waitLoaded();
+
+    fireEvent.click(screen.getByRole("checkbox", { name: "DeepSeek" }));
+    // 保存中：卡头右上立刻给出反馈（这张卡没有保存按钮，状态就是唯一的反馈）。
+    expect(await screen.findByText(t("searchCard.status.saving"))).toBeInTheDocument();
+
+    gate.reject?.(new Error("save-broken"));
+    expect(await screen.findByText(t("searchCard.status.error"))).toBeInTheDocument();
+    expect(screen.getByText(/save-broken/)).toBeInTheDocument();
+  });
+
+  it("keeps each source's own field inside its card", async () => {
+    renderCard();
+    await waitLoaded();
+
+    // DeepSeek 的 Key 与 SearXNG 的地址各在自己的卡里；没勾选时都禁用。
+    expect(screen.getByLabelText(t("searchCard.deepseek.keyAria"))).toBeDisabled();
+    expect(screen.getByLabelText(t("searchCard.searxng.title"))).toBeDisabled();
+
+    fireEvent.click(screen.getByRole("checkbox", { name: "DeepSeek" }));
+    expect(screen.getByLabelText(t("searchCard.deepseek.keyAria"))).toBeEnabled();
+    expect(screen.getByLabelText(t("searchCard.searxng.title"))).toBeDisabled();
   });
 });

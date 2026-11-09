@@ -290,3 +290,61 @@ describe("ResumeTable 多选态右键", () => {
     expect(onExport).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("ResumeTable 行内三点（条目 01）", () => {
+  it("三点存在：菜单含「批量选择」与次级操作，不含行内已平铺的预览", async () => {
+    render(<Harness item={RESUME} />);
+    await screen.findByRole("button", { name: RESUME.title });
+
+    fireEvent.click(screen.getByRole("button", { name: "更多操作" }));
+
+    expect(await screen.findByRole("menuitem", { name: "重命名" })).toBeInTheDocument();
+    expect(screen.getByRole("menuitem", { name: "删除" })).toBeInTheDocument();
+    expect(screen.getByRole("menuitem", { name: /批量选择/ })).toBeInTheDocument();
+    // 「预览 / 导出」已平铺在行上；「复制」子菜单是右键独有的一次性取数动作，都不进三点。
+    expect(screen.queryByRole("menuitem", { name: /预览/ })).toBeNull();
+    expect(screen.queryByRole("menuitem", { name: /复制/ })).toBeNull();
+  });
+
+  it("选择模式下三点与行内主操作一并禁用", async () => {
+    render(<Harness item={RESUME} selecting />);
+    await screen.findByRole("button", { name: RESUME.title });
+
+    expect(screen.getByRole("button", { name: "更多操作" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "预览 / 导出" })).toBeDisabled();
+  });
+
+  it("非选择模式下三点与行内主操作都可用", async () => {
+    render(<Harness item={RESUME} />);
+    await screen.findByRole("button", { name: RESUME.title });
+
+    expect(screen.getByRole("button", { name: "更多操作" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "预览 / 导出" })).toBeEnabled();
+  });
+
+  it("选择模式下星标也禁用（行内单条收藏不该在勾选态下可用）", async () => {
+    render(<Harness item={RESUME} selecting />);
+    await screen.findByRole("button", { name: RESUME.title });
+
+    expect(screen.getByRole("button", { name: "收藏简历" })).toBeDisabled();
+  });
+
+  it("选择模式下已收藏的星标不保留金黄强调色（否则按钮灰了、星还亮着，看着仍可点）", async () => {
+    const first = render(<Harness item={{ ...RESUME, favorite: true }} />);
+    await screen.findByRole("button", { name: RESUME.title });
+    const liveStar = screen.getByRole("button", { name: "取消收藏简历" });
+    expect(liveStar).toBeEnabled();
+    // 正常态保留强调色（浅色 #f5a623 由 --rf-favorite 提供）。
+    expect(liveStar.querySelector<HTMLElement>(".anticon-star")?.style.color).toBe(
+      "var(--rf-favorite)",
+    );
+    first.unmount();
+
+    render(<Harness item={{ ...RESUME, favorite: true }} selecting />);
+    await screen.findByRole("button", { name: RESUME.title });
+    const dimmedStar = screen.getByRole("button", { name: "取消收藏简历" });
+    expect(dimmedStar).toBeDisabled();
+    // 禁用态把内联色撤掉，交回 antd 的禁用样式（否则内联 color 会盖过它）。
+    expect(dimmedStar.querySelector<HTMLElement>(".anticon-star")?.style.color).toBe("");
+  });
+});

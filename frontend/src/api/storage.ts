@@ -137,3 +137,17 @@ export function runCleanup(
     }),
   });
 }
+
+/**
+ * 在系统文件管理器里定位一个清理候选。
+ *
+ * `path` 就是 `CleanupCandidate.path` 原样回传——后端刻意只下发相对数据目录的
+ * POSIX 路径（绝对路径会暴露用户目录结构），由服务端自己还原成本机路径。
+ * 文件已经被清走时后端给 404，界面据此提示并重拉清单。
+ */
+export function revealCleanupFile(path: string): Promise<{ ok: boolean }> {
+  return request("/stats/storage/cleanup-reveal", {
+    method: "POST",
+    body: JSON.stringify({ path }),
+  });
+}

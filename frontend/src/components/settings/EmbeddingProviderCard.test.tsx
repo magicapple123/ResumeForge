@@ -145,6 +145,22 @@ describe("EmbeddingProviderCard", () => {
     await waitFor(() => expect(apiMocks.startEmbeddingLocalDownload).toHaveBeenCalledTimes(1));
   });
 
+  it("本地下载源 404：引导语是「下载源」而不是「该服务商不提供 embeddings 接口」", async () => {
+    // 真实现场：Release 里的资产从没发布过，后端原因含「下载源」，前端不能归类成远程厂商问题。
+    const sourceError = "本地模型资产下载源不可用（资源未发布或地址失效，HTTP 404）";
+    apiMocks.getEmbeddingStatus.mockResolvedValue(
+      makeStatus({
+        state: "failed",
+        last_error: sourceError,
+        local: { state: "failed", error: sourceError },
+      }),
+    );
+    renderCard();
+    expect(await screen.findByText(sourceError)).toBeInTheDocument();
+    expect(screen.getByText(t("embeddingSearch.guidance.source"))).toBeInTheDocument();
+    expect(screen.queryByText(t("embeddingSearch.guidance.endpoint"))).not.toBeInTheDocument();
+  });
+
   it("远程首次启用：按 host 弹隐私确认，确认后先 confirm 再 enable", async () => {
     renderCard();
     await switchToRemote();
@@ -231,7 +247,7 @@ describe("EmbeddingProviderCard", () => {
     ).toBe("");
   });
 
-  it("就绪（远程）清除密钥：确认后调用 clear", async () => {
+  it("就绪（远程）清除密钥收进「···」：二次确认后才调用 clear", async () => {
     apiMocks.getEmbeddingStatus.mockResolvedValue(
       makeStatus({
         state: "ready",
@@ -248,15 +264,18 @@ describe("EmbeddingProviderCard", () => {
     );
     renderCard();
     expect(await screen.findByText(t("embeddingSearch.state.readyRemote"))).toBeInTheDocument();
-    const clearButtons = await screen.findAllByRole("button", {
-      name: t("embeddingSearch.remote.clear"),
-    });
-    fireEvent.click(clearButtons[0]);
-    // Popconfirm 的确认按钮与触发器同名：取最后一个（弹层里那颗）。
-    const allButtons = await screen.findAllByRole("button", {
-      name: t("embeddingSearch.remote.clear"),
-    });
-    fireEvent.click(allButtons[allButtons.length - 1]);
+
+    // 条目 08：不许再有裸露的红色「清除密钥」按钮。
+    expect(screen.queryByRole("button", { name: t("embeddingSearch.remote.clear") })).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: t("common.rowActions.more") }));
+    fireEvent.click(
+      await screen.findByRole("menuitem", { name: t("embeddingSearch.remote.clear") }),
+    );
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: t("embeddingSearch.remote.clear") }),
+    );
     await waitFor(() => expect(apiMocks.clearEmbedding).toHaveBeenCalledTimes(1));
   });
 
@@ -271,5 +290,153 @@ describe("EmbeddingProviderCard", () => {
     expect(
       screen.queryByRole("button", { name: t("embeddingSearch.local.download") }),
     ).not.toBeInTheDocument();
+  });
+
+  it("远程未填配置时，卡头「启用」是禁用的；填好后可点", async () => {
+    renderCard();
+    await switchToRemote();
+
+    const enableButton = screen.getByRole("button", { name: t("embeddingSearch.remote.enable") });
+    expect(enableButton).toBeDisabled();
+    // 禁用原因必须能读到（Tooltip 的说明），否则用户只看到一个灰按钮。
+    fireEvent.mouseEnter(enableButton.parentElement ?? enableButton);
+    expect(
+      await screen.findByText(t("embeddingSearch.card.enableHint.remote")),
+    ).toBeInTheDocument();
+
+    fillRemoteForm();
+    expect(screen.getByRole("button", { name: t("embeddingSearch.remote.enable") })).toBeEnabled();
+  });
+
+  it("厂商卡片网格：点一张卡就填好地址与候选模型，换取厂商会跟着换", async () => {
+    renderCard();
+    await switchToRemote();
+
+    const grid = screen.getByRole("radiogroup", { name: t("embeddingSearch.remote.preset.aria") });
+    fireEvent.click(
+      within(grid).getByRole("radio", { name: t("embeddingSearch.remote.preset.openai") }),
+    );
+    expect(screen.getByLabelText(t("embeddingSearch.remote.baseUrl.label"))).toHaveValue(
+      "https://api.openai.com/v1",
+    );
+    expect(screen.getByLabelText(t("embeddingSearch.remote.model.label"))).toHaveValue(
+      "text-embedding-3-small",
+    );
+    expect(
+      within(grid)
+        .getByRole("radio", { name: t("embeddingSearch.remote.preset.openai") })
+        .getAttribute("aria-checked"),
+    ).toBe("true");
+
+    fireEvent.click(
+      within(grid).getByRole("radio", { name: t("embeddingSearch.remote.preset.zhipu") }),
+    );
+    expect(screen.getByLabelText(t("embeddingSearch.remote.baseUrl.label"))).toHaveValue(
+      "https://open.bigmodel.cn/api/paas/v4",
+    );
+    // 选中态只该有一张卡（切换而不是叠加）。
+    const checked = within(grid)
+      .getAllByRole("radio")
+      .filter((item) => item.getAttribute("aria-checked") === "true");
+    expect(checked).toHaveLength(1);
+  });
+
+  it("厂商卡片显示 host 与状态（已配置 / 未配置）", async () => {
+    apiMocks.getEmbeddingStatus.mockResolvedValue(
+      makeStatus({
+        state: "disabled",
+        provider: "openai-http",
+        remote: {
+          configured: true,
+          enabled: false,
+          host: "api.openai.com",
+          model: "text-embedding-3-small",
+        },
+      }),
+    );
+    renderCard();
+    await switchToRemote();
+
+    expect(screen.getByText("api.openai.com")).toBeInTheDocument();
+    expect(
+      screen.getByText(t("embeddingSearch.remote.preset.state.configured")),
+    ).toBeInTheDocument();
+    expect(
+      screen.getAllByText(t("embeddingSearch.remote.preset.state.empty")).length,
+    ).toBeGreaterThan(0);
+  });
+
+  it("paints the selected provider card with the theme-aware brand tint and 1.5px border", async () => {
+    renderCard();
+    await switchToRemote();
+
+    const grid = screen.getByRole("radiogroup", { name: t("embeddingSearch.remote.preset.aria") });
+    fireEvent.click(
+      within(grid).getByRole("radio", { name: t("embeddingSearch.remote.preset.openai") }),
+    );
+
+    // 回归点：colorPrimaryBg 是灰的；换成浅色专用 palette.brandTint 后深色主题白底白字。
+    // 所以必须引用 CSS 变量（浅/深两套 token 各自给值）。
+    const selected = within(grid).getByRole("radio", {
+      name: t("embeddingSearch.remote.preset.openai"),
+    });
+    const selectedStyle = selected.getAttribute("style") ?? "";
+    expect(selectedStyle).toContain("var(--rf-brand-tint)");
+    expect(selectedStyle).toContain("var(--rf-brand)");
+    expect(selectedStyle).not.toMatch(/#eaf1f8|rgb\(234, 241, 248\)/i);
+    expect(getComputedStyle(selected).borderTopWidth).toBe("1.5px");
+
+    const other = within(grid).getByRole("radio", {
+      name: t("embeddingSearch.remote.preset.zhipu"),
+    });
+    expect(other.getAttribute("style") ?? "").toContain("var(--rf-border)");
+    expect(getComputedStyle(other).borderTopWidth).toBe("1px");
+  });
+
+  it("就绪（本地）删除模型文件收进「···」：确认后调用 remove", async () => {
+    apiMocks.getEmbeddingStatus.mockResolvedValue(
+      makeStatus({
+        state: "ready",
+        provider: "local-onnx",
+        local: { state: "ready" },
+      }),
+    );
+    renderCard();
+    expect(await screen.findByText(t("embeddingSearch.state.readyLocal"))).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: t("embeddingSearch.local.remove") })).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: t("common.rowActions.more") }));
+    fireEvent.click(
+      await screen.findByRole("menuitem", { name: t("embeddingSearch.local.remove") }),
+    );
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: t("embeddingSearch.local.remove") }),
+    );
+    await waitFor(() => expect(apiMocks.removeEmbeddingLocalAssets).toHaveBeenCalledTimes(1));
+  });
+
+  it("动作进行中时「···」禁用，避免并发改配置", async () => {
+    apiMocks.disableEmbedding.mockImplementation(() => new Promise(() => {}));
+    apiMocks.getEmbeddingStatus.mockResolvedValue(
+      makeStatus({
+        state: "ready",
+        provider: "openai-http",
+        remote: {
+          configured: true,
+          enabled: true,
+          host: "api.example.com",
+          model: "text-embedding-3-small",
+          dim: 1024,
+        },
+      }),
+    );
+    renderCard();
+    await screen.findByText(t("embeddingSearch.state.readyRemote"));
+    fireEvent.click(screen.getByRole("button", { name: t("embeddingSearch.remote.disable") }));
+
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: t("common.rowActions.more") })).toBeDisabled(),
+    );
   });
 });

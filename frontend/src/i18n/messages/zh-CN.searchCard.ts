@@ -61,6 +61,7 @@ const searchCard = {
   "searchCard.sources.hint": "多个来源会并发查询后合并去重，至少选一个。",
 
   "searchCard.searxng.title": "SearXNG 实例地址",
+  "searchCard.searxng.placeholder": "例如 http://localhost:8080",
   "searchCard.searxng.hint":
     "公共实例经常限流，所以不预置默认值；填了自己的实例地址才会去查它，例如 http://localhost:8080。不选 SearXNG 来源时可以留空。",
 
@@ -88,6 +89,21 @@ const searchCard = {
   "searchCard.results.aria": "搜索结果数量",
   /** 数字输入框后面的单位。 */
   "searchCard.results.unit": "条",
+  /**
+   * 多选卡片（条目 03）：4 个来源各一张卡，卡头右上显示已选个数。
+   * 卡片的副标题是"要什么「钥匙」"，不是营销文案：免密钥 / 自建实例 / 按量付费。
+   */
+  "searchCard.sources.count": "已选 {count} 个",
+  "searchCard.source.note.bing": "免密钥，直接可用",
+  "searchCard.source.note.duckduckgo": "免密钥，直接可用",
+  "searchCard.source.note.searxng": "需要自建实例地址",
+  "searchCard.source.note.deepseek": "需要 API Key，按量付费",
+
+  /** 卡片区下方的通用参数与卡头的自动保存状态。 */
+  "searchCard.general.title": "通用参数",
+  "searchCard.status.saved": "已自动保存",
+  "searchCard.status.saving": "保存中…",
+  "searchCard.status.error": "保存失败",
 } as const;
 
 export default searchCard;

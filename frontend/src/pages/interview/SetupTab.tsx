@@ -1,15 +1,33 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * 面试官设定卡：类型/难度/风格/轮数/考察重点/人设，提交后由页面发起面试。
+ * 面试官设定卡：类型/难度/轮数/考察重点 + 面试官风格与人设（二者互斥），提交后由页面发起面试。
  * （自 InterviewPage 拆出：SetupForm 接口随迁，提示语改由语言包
- * `interviewPage.setup.confidenceTip` 提供；form 实例由页面持有，
+ * `interviewPage.setup.*` 提供；form 实例由页面持有，
  * 供题库「开始模拟面试」的 startFromBank 联动写回考察重点。）
+ *
+ * 两处本轮的口径变化：
+ * - **轮数只有两档**（问题 05）：「自动」= AI 按表现决定何时收尾；「指定轮数」才渲染
+ *   输入框（3–12 轮）。**隐藏**而不是禁用——禁用会让人以为自动档还能设轮数。
+ * - **人设与风格互斥**（问题 06）：填了人设就禁用风格下拉，且值**不清空**（后端
+ *   `interviewer_style` 是 Literal 必填）；真正让它失效的是提示词，见
+ *   `backend/app/services/interview/interview.py` 的 `persona_and_style`。
  *
  * 类型/难度/风格的显示名来自 `i18n/enum/interview.ts`（协议值 → 语言包 key），
  * 提交给后端的仍是 `types/interview.ts` 的协议值，不随语言变。
  */
 import { PlayCircleOutlined } from "@ant-design/icons";
-import { App, Button, Card, Form, Input, Select, Space, Typography } from "antd";
+import {
+  App,
+  Button,
+  Card,
+  Form,
+  Input,
+  InputNumber,
+  Segmented,
+  Select,
+  Space,
+  Typography,
+} from "antd";
 import type { FormInstance } from "antd";
 import { useEffect, useState } from "react";
 import type {
@@ -22,7 +40,7 @@ import {
   useJobSearchSelect,
   useResumeSearchSelectForJobOrGeneral,
 } from "../../hooks/remoteSearchOptions";
-import { t, type MessageKey } from "../../i18n";
+import { t } from "../../i18n";
 import {
   INTERVIEW_DIFFICULTY_LABEL_KEYS,
   INTERVIEW_TYPE_LABEL_KEYS,
@@ -39,16 +57,8 @@ import {
   MIN_INTERVIEW_ROUNDS,
 } from "../../types";
 
-/** 轮数选择框的「自动」档值：AI 按表现决定何时收尾（区间不向用户/模型展示）。 */
-export const AUTO_ROUNDS_OPTION = "auto";
-
-const ROUNDS_OPTIONS: { value: number | typeof AUTO_ROUNDS_OPTION; labelKey: MessageKey }[] = [
-  { value: AUTO_ROUNDS_OPTION, labelKey: "interviewPage.setup.roundsAuto" },
-  ...Array.from({ length: MAX_INTERVIEW_ROUNDS - MIN_INTERVIEW_ROUNDS + 1 }, (_, index) => ({
-    value: MIN_INTERVIEW_ROUNDS + index,
-    labelKey: "interviewPage.setup.roundsOption" as const,
-  })),
-];
+/** 轮数档位（问题 05）：自动收尾，或由用户指定的固定轮数。 */
+export type RoundsMode = "auto" | "custom";
 
 export interface SetupForm {
   /** 关联岗位：与 `jobMaterial` 二选一（选了文件时这一项不出现在表单里）。 */
@@ -61,11 +71,22 @@ export interface SetupForm {
   resumeMaterial?: InterviewMaterialExtract | null;
   interviewType: InterviewType;
   difficulty: InterviewDifficulty;
+  /** 面试官风格：填了人设时不参与提示词（值仍保留，后端字段必填）。 */
   interviewerStyle: InterviewerStyle;
-  /** 具体轮数，或 "auto" = 自动收尾（AI 按表现判断何时结束）。 */
-  rounds: number | typeof AUTO_ROUNDS_OPTION;
+  /** 轮数档位：`auto` = 自动收尾（AI 按表现判断何时结束）。 */
+  roundsMode: RoundsMode;
+  /** 固定轮数，只在 `roundsMode === "custom"` 时生效。 */
+  rounds: number;
   focus: string;
   persona: string;
+}
+
+/** 「指定轮数」档的取值是否合法：越界或空值都按默认值附近夹回来，不把 NaN 递给后端。 */
+function clampRounds(value: number | undefined | null): number | null {
+  if (value === undefined || value === null || !Number.isFinite(value)) return null;
+  const rounds = Math.trunc(value);
+  if (rounds < MIN_INTERVIEW_ROUNDS || rounds > MAX_INTERVIEW_ROUNDS) return null;
+  return rounds;
 }
 
 export function SetupTab({
@@ -90,6 +111,13 @@ export function SetupTab({
   // （面试官要读的就是"这份简历 + 那个岗位的 JD"，脱离岗位挑简历没有意义）。
   const watchedJobId = Form.useWatch("jobId", form) as number | undefined;
   const resumeSelect = useResumeSearchSelectForJobOrGeneral(watchedJobId ?? null);
+  // 人设与风格互斥（问题 06）：**看的是实时值**，所以用 useWatch 而不是读 initialValues——
+  // 用户边打人设，风格下拉边变灰，无需先提交或失焦。
+  const persona = Form.useWatch("persona", form) as string | undefined;
+  const hasPersona = (persona ?? "").trim().length > 0;
+  // 轮数两档（问题 05）：只有「指定轮数」才渲染输入框，默认「自动」。
+  const roundsMode = (Form.useWatch("roundsMode", form) as RoundsMode | undefined) ?? "auto";
+  const showRoundsInput = roundsMode === "custom";
   // 材料来源（#41）：每侧都是"从记录选 / 导入文件"二选一。文件与记录是**互斥**的，
   // 所以两者的状态分开存：切到文件时记录那一栏整个不渲染（连校验规则一起消失），
   // 反过来切回记录时也不会把上一份文件悄悄带进面试。
@@ -120,6 +148,9 @@ export function SetupTab({
    * 表单校验只能看到**渲染出来**的字段：切到"导入文件"时那条 `required` 规则随下拉框
    * 一起消失，所以这里必须自己判一次——否则用户能在没选文件的情况下开出一场"没有材料"
    * 的面试（后端会 422，但那时候点的是"开始面试"，体验很差）。
+   *
+   * 轮数同理：输入框与 Segmented 同行（`noStyle`），校验文案没有位置显示，所以空值 /
+   * 越界在这里给一条明确提示，而不是让按钮"点了没反应"。
    */
   const submit = (values: SetupForm) => {
     if (jobSource === "file" && !jobMaterial) {
@@ -130,8 +161,16 @@ export function SetupTab({
       message.error(t("interviewPage.setup.material.resumeRequired"));
       return;
     }
+    const rounds = clampRounds(values.rounds);
+    if (values.roundsMode === "custom" && rounds === null) {
+      message.error(t("interviewPage.setup.roundsRequired"));
+      return;
+    }
     onStart({
       ...values,
+      roundsMode: values.roundsMode === "custom" ? "custom" : "auto",
+      // 自动档下 rounds 只是表单里的占位值（页面按档位改传硬性保险），但不能是 NaN。
+      rounds: rounds ?? 6,
       jobMaterial: jobSource === "file" ? jobMaterial : null,
       resumeMaterial: resumeSource === "file" ? resumeMaterial : null,
     });
@@ -162,6 +201,8 @@ export function SetupTab({
           interviewType: "综合面",
           difficulty: "中级",
           interviewerStyle: "严谨专业",
+          // 轮数默认「自动」（问题 05）：用户实测里"默认固定 6 轮"并不是他想要的口径。
+          roundsMode: "auto",
           rounds: 6,
           focus: "",
           persona: "",
@@ -276,26 +317,39 @@ export function SetupTab({
               }))}
             />
           </Form.Item>
-          <Form.Item label={t("interviewPage.setup.styleLabel")} name="interviewerStyle">
-            <Select
-              options={INTERVIEWER_STYLES.map((value) => ({
-                value,
-                label: t(INTERVIEWER_STYLE_LABEL_KEYS[value]),
-              }))}
-            />
-          </Form.Item>
+          {/* 轮数（问题 05）：两档短文案 + 条件输入框。输入框走 `noStyle`（与 Segmented
+              同行，外面那个 Form.Item 只提供 label 与说明），校验由 submit() 兜。 */}
           <Form.Item
             label={t("interviewPage.setup.roundsLabel")}
-            name="rounds"
             extra={t("interviewPage.setup.roundsExtra")}
           >
-            {/* 「自动」档的文案不含 {round}，多传的参数不会被替换。 */}
-            <Select
-              options={ROUNDS_OPTIONS.map((option) => ({
-                value: option.value,
-                label: t(option.labelKey, { round: option.value }),
-              }))}
-            />
+            <div className="interview-setup-rounds">
+              <Form.Item name="roundsMode" noStyle>
+                <Segmented
+                  disabled={starting}
+                  options={[
+                    { value: "auto", label: t("interviewPage.setup.roundsAuto") },
+                    { value: "custom", label: t("interviewPage.setup.roundsModeCustom") },
+                  ]}
+                />
+              </Form.Item>
+              {/* 「自动」档整块不渲染（不是禁用）：留在那儿会让人以为自动也能设轮数。
+                  单位用 Space.Addon 而不是 InputNumber 的 addonAfter（v6 已废弃，
+                  同 components/settings/SearchCard.tsx 的处理）。 */}
+              {showRoundsInput ? (
+                <Space.Compact>
+                  <Form.Item name="rounds" noStyle>
+                    <InputNumber
+                      min={MIN_INTERVIEW_ROUNDS}
+                      max={MAX_INTERVIEW_ROUNDS}
+                      precision={0}
+                      disabled={starting}
+                    />
+                  </Form.Item>
+                  <Space.Addon>{t("interviewPage.setup.roundsUnit")}</Space.Addon>
+                </Space.Compact>
+              ) : null}
+            </div>
           </Form.Item>
           <Form.Item
             label={t("interviewPage.setup.focusLabel")}
@@ -304,14 +358,44 @@ export function SetupTab({
           >
             <Input maxLength={255} placeholder={t("interviewPage.setup.focusPlaceholder")} />
           </Form.Item>
+          {/* 风格与人设（问题 06）：二者互斥，所以放进同一分组、垂直排列、同宽，
+              从版式上就能读出"填了人设就不用风格"。分组横跨整行，主网格因此只剩 4 项。 */}
+          <div className="interview-setup-persona">
+            <Form.Item
+              label={t("interviewPage.setup.styleLabel")}
+              name="interviewerStyle"
+              // 禁用但**不清空**：后端 `interviewer_style` 是 Literal 必填，清空会 422；
+              // 真正让它不生效的是提示词（persona 非空时风格整条链路都被跳过）。
+              extra={
+                hasPersona ? (
+                  <Typography.Text type="warning">
+                    {t("interviewPage.setup.styleExtraIgnored")}
+                  </Typography.Text>
+                ) : undefined
+              }
+            >
+              <Select
+                disabled={hasPersona || starting}
+                options={INTERVIEWER_STYLES.map((value) => ({
+                  value,
+                  label: t(INTERVIEWER_STYLE_LABEL_KEYS[value]),
+                }))}
+              />
+            </Form.Item>
+            <Form.Item
+              label={t("interviewPage.setup.personaLabel")}
+              name="persona"
+              extra={t("interviewPage.setup.personaExtra")}
+            >
+              <Input.TextArea
+                autoSize={{ minRows: 2, maxRows: 5 }}
+                maxLength={2000}
+                showCount
+                disabled={starting}
+              />
+            </Form.Item>
+          </div>
         </div>
-        <Form.Item
-          label={t("interviewPage.setup.personaLabel")}
-          name="persona"
-          extra={t("interviewPage.setup.personaExtra")}
-        >
-          <Input.TextArea autoSize={{ minRows: 2, maxRows: 5 }} maxLength={2000} />
-        </Form.Item>
         <Space wrap>
           <Button type="primary" htmlType="submit" icon={<PlayCircleOutlined />} loading={starting}>
             {t("interviewPage.setup.start")}

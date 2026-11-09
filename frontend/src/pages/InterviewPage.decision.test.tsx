@@ -43,7 +43,6 @@ vi.mock("./interview/ReportCard", () => ({
   ReportCard: () => <div data-testid="report-card" />,
 }));
 vi.mock("./interview/SetupTab", () => ({
-  AUTO_ROUNDS_OPTION: "auto",
   SetupTab: ({ onStart }: { onStart: (values: Record<string, unknown>) => void }) => (
     <button
       type="button"
@@ -55,6 +54,8 @@ vi.mock("./interview/SetupTab", () => ({
           interviewType: "综合面",
           difficulty: "中级",
           interviewerStyle: "严谨专业",
+          // roundsMode: "custom" —— 本文件要的是固定 3 轮（收尾决策发生在第 3 轮）。
+          roundsMode: "custom",
           rounds: 3,
           focus: "",
           persona: "",

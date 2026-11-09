@@ -10,3 +10,28 @@
   grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
   gap: 0 16px;
 }
+
+/* 轮数（问题 05）：Segmented 与输入框同行——「指定轮数」时输入框在右侧出现。
+   窄屏自动换行，不挤压两档短文案；输入框宽度跟随内容（轮数是 1–2 位数）。 */
+.interview-setup-rounds {
+  display: flex;
+  align-items: center;
+  gap: 8px 12px;
+  flex-wrap: wrap;
+}
+
+/* 风格与人设（问题 06）：二者互斥，放进同一分组后垂直排列、同宽、label 与 extra
+   位置一致，版式上就能读出"填了人设就不用风格"。横跨整行，主网格因此只剩 4 项。 */
+.interview-setup-persona {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+}
+
+/* antd-override: 分组内两项（风格 / 人设）的间距由这里统一，末项不留悬空空白。 */
+.interview-setup-persona .ant-form-item {
+  margin-bottom: 16px;
+}
+.interview-setup-persona .ant-form-item:last-child {
+  margin-bottom: 0;
+}

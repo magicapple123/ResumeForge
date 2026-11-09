@@ -41,6 +41,16 @@ _MAX_RESPONSE_BYTES = 512 * 1024
 _TIMEOUT = httpx.Timeout(connect=5.0, read=10.0, write=5.0, pool=5.0)
 _USER_AGENT = "ResumeForge-update-check"
 
+# 更新说明（Release body）在界面上要渲染成 markdown 子集，太长的正文没必要全带回去：
+# 一来设置页那个滚动区看不了那么远，二来响应体越小越不容易出岔子。`UpdateCheckResult`
+# 里 `notes` 的 schema 上限是 4000，所以**截断后的总长必须 ≤ 4000**——提示语的长度要
+# 从预算里扣掉，否则拼上去就超限，构造结果时会直接抛 ValidationError。
+NOTES_BUDGET = 4000
+NOTES_TRUNCATED_HINT = "……（完整说明见发布页）"
+# 硬截会给用户看半句话或半行表格，只有"最后一个换行"退得太靠前（留存不足预算的
+# 60%，等于白丢一半正文）时才认输硬截。
+_NOTES_MIN_RETAIN_RATIO = 0.6
+
 _cache: dict[str, tuple[float, UpdateCheckResult]] = {}
 
 
@@ -276,6 +286,30 @@ async def _fetch_latest_tag_via_redirect(repo: str) -> str:
     return unquote(location.split(_TAG_MARKER, 1)[1]).strip("/")
 
 
+def _truncate_notes(notes: str, limit: int = NOTES_BUDGET) -> str:
+    """按行截断更新说明，末尾补一句「完整说明见发布页」。
+
+    为什么不直接 ``notes[:4000]``：v2.0.0 的公告里有表格，硬切会把最后一行表格切成
+    半行（前端渲染出来就是一行缺列的残缺表格），也会把句子从中间截断。这里按行退：
+    先取前 ``limit`` 个字符，再退到最后一个换行处；只有换行退得太靠前（保留不足
+    60% 预算）时才认输硬截——那是"整段只有一行"的情况，退回去等于什么都不显示。
+
+    恰好 ``limit`` 或更短时原样返回，不追加提示：没被截断就不该暗示用户去看发布页。
+    """
+    text = notes or ""
+    if len(text) <= limit:
+        return text
+    suffix = f"\n\n{NOTES_TRUNCATED_HINT}"
+    # 提示语占的字符要从预算里让出来，总长才停得在 schema 的 4000 以内。
+    budget = max(limit - len(suffix), 1)
+    head = text[:budget]
+    cut = head.rfind("\n")
+    floor = int(budget * _NOTES_MIN_RETAIN_RATIO)
+    body = head[:cut] if cut >= floor else head
+    # 行尾空格与 ``\r`` 一起清掉，避免留下"看不见的半截"。
+    return f"{body.rstrip()}{suffix}"
+
+
 async def check_for_update(*, refresh: bool = False) -> UpdateCheckResult:
     """返回当前版本与最新版本的对比结果。"""
     current = get_settings().app_version
@@ -359,7 +393,7 @@ async def check_for_update(*, refresh: bool = False) -> UpdateCheckResult:
             release_name=str(data.get("name") or tag)[:256],
             release_url=str(data.get("html_url") or RELEASES_PAGE.format(repo=repo))[:512],
             published_at=str(data.get("published_at") or "")[:64],
-            notes=notes[:4000],
+            notes=_truncate_notes(notes),
             download_url=choice.url[:1024],
             download_size=choice.size,
             asset_name=choice.name,

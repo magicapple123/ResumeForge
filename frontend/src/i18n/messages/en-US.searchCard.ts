@@ -38,6 +38,7 @@ const searchCard = {
     "Multiple sources are queried concurrently, then merged and de-duplicated; pick at least one.",
 
   "searchCard.searxng.title": "SearXNG instance address",
+  "searchCard.searxng.placeholder": "e.g. http://localhost:8080",
   "searchCard.searxng.hint":
     "Public instances are rate-limited often, so no default is preset; the address is queried only when you fill in your own instance, e.g. http://localhost:8080. You can leave it empty when the SearXNG source is not selected.",
 
@@ -64,6 +65,16 @@ const searchCard = {
     "1 to 15. The more results, the more of the model's context they take up.",
   "searchCard.results.aria": "Number of search results",
   "searchCard.results.unit": "results",
+  "searchCard.sources.count": "{count} selected",
+  "searchCard.source.note.bing": "No key needed",
+  "searchCard.source.note.duckduckgo": "No key needed",
+  "searchCard.source.note.searxng": "Needs your own instance URL",
+  "searchCard.source.note.deepseek": "Needs an API key; pay as you go",
+
+  "searchCard.general.title": "Shared parameters",
+  "searchCard.status.saved": "Auto-saved",
+  "searchCard.status.saving": "Saving…",
+  "searchCard.status.error": "Save failed",
 } as const;
 
 export default searchCard;

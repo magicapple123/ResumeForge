@@ -99,6 +99,13 @@ export function embeddingGuidanceKey(reason: string): MessageKey {
   if (/401|403|unauthor|invalid.*key|api key|密钥|鉴权/.test(text)) {
     return "embeddingSearch.guidance.key";
   }
+  // 本地资产的下载地址 404 与「远程厂商没有 embeddings 接口」是两件事：前者要等资产发布/换
+  // 镜像地址，后者要换服务商。后端原因里带「下载源」（见 rag_asset_archive）就先归类，
+  // 否则会被下面的 404 分支吃掉，显示成「该服务商不提供 embeddings 接口」。
+  // i18n-ok: 匹配后端可能返回的中文原因，不是界面文案
+  if (/下载源|资源未发布|download source/.test(text)) {
+    return "embeddingSearch.guidance.source";
+  }
   // i18n-ok: 匹配后端可能返回的中文原因，不是界面文案
   if (/404|not found|no.*embedding|embeddings 接口|嵌入接口/.test(text)) {
     return "embeddingSearch.guidance.endpoint";

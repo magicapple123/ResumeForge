@@ -185,26 +185,113 @@ describe("SetupTab 关联岗位与关联简历都必选（0066）", () => {
   });
 });
 
-describe("SetupTab 轮数选择", () => {
-  it("默认固定轮数：提交带具体轮数值", async () => {
+describe("SetupTab 轮数两档（问题 05）", () => {
+  /** Segmented 的两档是 label 里的 radio：按无障碍名定位，不写死中文。 */
+  function roundsModeOption(label: string) {
+    return screen.getByRole("radio", { name: label });
+  }
+
+  it("默认「自动」：不渲染轮数输入框，提交带 roundsMode=auto", async () => {
     const { onStart } = renderSetup();
 
     await pickJobAndResume();
-    expect(screen.getByLabelText(t("interviewPage.setup.roundsLabel"))).toBeInTheDocument();
+    // 「自动」档下输入框**整块不渲染**（不是禁用）：留着会让人以为自动也能设轮数。
+    expect(screen.queryByRole("spinbutton")).toBeNull();
     await submit();
 
     await waitFor(() => expect(onStart).toHaveBeenCalled());
-    expect(onStart).toHaveBeenCalledWith(expect.objectContaining({ rounds: 6 }));
+    expect(onStart).toHaveBeenCalledWith(
+      expect.objectContaining({ roundsMode: "auto", rounds: 6 }),
+    );
   });
 
-  it("轮数下拉选「自动」：提交带 auto（页面据此改走自动收尾模式）", async () => {
+  it("切到「指定轮数」：右侧出现输入框，改成 9 轮后按固定轮数提交", async () => {
     const { onStart } = renderSetup();
 
     await pickJobAndResume();
-    await pickOption(t("interviewPage.setup.roundsLabel"), t("interviewPage.setup.roundsAuto"));
+    fireEvent.click(roundsModeOption(t("interviewPage.setup.roundsModeCustom")));
+
+    const input = await screen.findByRole("spinbutton");
+    fireEvent.change(input, { target: { value: "9" } });
     await submit();
 
     await waitFor(() => expect(onStart).toHaveBeenCalled());
-    expect(onStart).toHaveBeenCalledWith(expect.objectContaining({ rounds: "auto" }));
+    expect(onStart).toHaveBeenCalledWith(
+      expect.objectContaining({ roundsMode: "custom", rounds: 9 }),
+    );
+  });
+
+  it("切回「自动」：输入框重新隐藏", async () => {
+    renderSetup();
+
+    fireEvent.click(roundsModeOption(t("interviewPage.setup.roundsModeCustom")));
+    expect(await screen.findByRole("spinbutton")).toBeInTheDocument();
+
+    fireEvent.click(roundsModeOption(t("interviewPage.setup.roundsAuto")));
+    await waitFor(() => expect(screen.queryByRole("spinbutton")).toBeNull());
+  });
+
+  it("指定轮数被清空：给出提示且不回调 onStart（不让按钮点了没反应）", async () => {
+    const { onStart } = renderSetup();
+
+    await pickJobAndResume();
+    fireEvent.click(roundsModeOption(t("interviewPage.setup.roundsModeCustom")));
+    const input = await screen.findByRole("spinbutton");
+    fireEvent.change(input, { target: { value: "" } });
+    await submit();
+
+    expect(await screen.findByText(t("interviewPage.setup.roundsRequired"))).toBeInTheDocument();
+    expect(onStart).not.toHaveBeenCalled();
+  });
+});
+
+describe("SetupTab 人设与风格互斥（问题 06）", () => {
+  const PERSONA = "Hiring manager who digs into numbers";
+
+  function styleSelect() {
+    return screen.getByLabelText(t("interviewPage.setup.styleLabel"));
+  }
+
+  function personaInput() {
+    return screen.getByLabelText(t("interviewPage.setup.personaLabel"));
+  }
+
+  it("填了人设：风格下拉禁用并显示原因；清空人设后立刻恢复可用", async () => {
+    renderSetup();
+
+    expect(styleSelect()).not.toBeDisabled();
+    expect(screen.queryByText(t("interviewPage.setup.styleExtraIgnored"))).toBeNull();
+
+    fireEvent.change(personaInput(), { target: { value: PERSONA } });
+
+    await waitFor(() => expect(styleSelect()).toBeDisabled());
+    // 只把控件灰掉不够：必须说清"为什么不生效"（否则用户以为坏了）。
+    expect(screen.getByText(t("interviewPage.setup.styleExtraIgnored"))).toBeInTheDocument();
+
+    fireEvent.change(personaInput(), { target: { value: "" } });
+
+    await waitFor(() => expect(styleSelect()).not.toBeDisabled());
+    expect(screen.queryByText(t("interviewPage.setup.styleExtraIgnored"))).toBeNull();
+  });
+
+  it("只打了空格的人设不算填写：风格保持可用", () => {
+    renderSetup();
+
+    fireEvent.change(personaInput(), { target: { value: "   " } });
+    expect(styleSelect()).not.toBeDisabled();
+  });
+
+  it("禁用**不清空**：提交时风格仍带原值（后端 interviewer_style 必填）", async () => {
+    const { onStart } = renderSetup();
+
+    await pickJobAndResume();
+    fireEvent.change(personaInput(), { target: { value: PERSONA } });
+    await waitFor(() => expect(styleSelect()).toBeDisabled());
+    await submit();
+
+    await waitFor(() => expect(onStart).toHaveBeenCalled());
+    expect(onStart).toHaveBeenCalledWith(
+      expect.objectContaining({ interviewerStyle: "严谨专业", persona: PERSONA }),
+    );
   });
 });

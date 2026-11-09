@@ -228,12 +228,12 @@ describe("ResumesPage 备注列", () => {
   });
 });
 
-describe("ResumesPage 行操作（三点菜单已移除）", () => {
-  it("行内不再有三点「更多操作」按钮；右键菜单仍含全部次级操作", async () => {
+describe("ResumesPage 行操作（三点菜单与右键菜单一致）", () => {
+  it("行内有三点「更多操作」按钮；右键菜单仍含全部次级操作", async () => {
     renderPage();
     const title = await screen.findByText(RESUME.title);
 
-    expect(screen.queryByRole("button", { name: "更多操作" })).not.toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "更多操作" })).toBeInTheDocument();
     fireEvent.contextMenu(title.closest("tr") as HTMLElement);
     expect(await screen.findByRole("menuitem", { name: "重命名" })).toBeInTheDocument();
     expect(screen.getByRole("menuitem", { name: "编辑备注" })).toBeInTheDocument();

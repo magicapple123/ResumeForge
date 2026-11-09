@@ -8,8 +8,13 @@
  *
  * 一条固定事实写在弹窗里：最近 3 份备份不会出现在清单里——它们是"出事了能回滚"的那
  * 几条，保留策略在后端（`services/cleanup.py:KEEP_RECENT_BACKUPS`），这里如实告知。
+ *
+ * 「在文件夹中显示」（条目 04）：每条候选末尾一个图标按钮，把后端给的**相对**路径原样
+ * 回传给 `POST /api/stats/storage/cleanup-reveal`，由服务端还原成本机路径并调用系统
+ * 文件管理器（前端从不拼绝对路径，隐私口径与清单一致）。定位失败（文件已被移走）时
+ * 提示原因并重拉清单，不让用户对着一条已经不存在的文件继续点。
  */
-import { DeleteOutlined, ReloadOutlined } from "@ant-design/icons";
+import { DeleteOutlined, FolderOpenOutlined, ReloadOutlined } from "@ant-design/icons";
 import {
   Alert,
   App,
@@ -27,11 +32,13 @@ import { useCallback, useEffect, useState } from "react";
 import {
   getStorageStats,
   previewCleanup,
+  revealCleanupFile,
   runCleanup,
   type CleanupCategoryKey,
   type CleanupPlan,
   type StorageStats,
 } from "../../api/storage";
+import { formatErrorGuidance } from "../../api/errorGuidance";
 import LoadingBlock from "../common/LoadingBlock";
 import { ListyItem } from "../common/ListyItem";
 import { storageCategoryLabel, storageItemLabel } from "../../features/settings/storageLabels";
@@ -160,6 +167,22 @@ export default function StorageStatsCard() {
       else next.delete(path);
       return next;
     });
+  };
+
+  /**
+   * 在系统文件管理器里定位一个候选（条目 04）。
+   *
+   * 失败最常见的成因是「文件已经被清走/被自己删了」：后端回 404 并只给原因，
+   * 「还能做什么 + 请求编号」由 `errorGuidance` 统一补上；随后重拉清单，
+   * 免得用户对着一条已经不存在的文件继续点。
+   */
+  const revealCandidate = async (path: string) => {
+    try {
+      await revealCleanupFile(path);
+    } catch (err) {
+      message.error(formatErrorGuidance(err, t("materials.files.toast.revealFailed")));
+      await refreshPlan(cleanupDays, selectedCategories);
+    }
   };
 
   const confirmCleanup = async () => {
@@ -390,7 +413,22 @@ export default function StorageStatsCard() {
                   <span className="cleanup-candidate-name" title={item.path}>
                     {item.label}·{item.path}
                   </span>
-                  <Typography.Text type="secondary">{formatSize(item.size)}</Typography.Text>
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+                    <Typography.Text type="secondary">{formatSize(item.size)}</Typography.Text>
+                    {/* 「在文件夹中显示」：行本身是 <label>（整行可点 = 切换勾选），
+                        所以这里必须同时掐掉默认行为与冒泡，否则点图标会连带勾选/取消。 */}
+                    <Button
+                      size="small"
+                      type="text"
+                      icon={<FolderOpenOutlined />}
+                      aria-label={t("materials.files.action.openFolder")}
+                      onClick={(event) => {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        void revealCandidate(item.path);
+                      }}
+                    />
+                  </span>
                 </label>
               ))}
               {listedCandidates.length > CANDIDATE_PREVIEW_LIMIT ? (

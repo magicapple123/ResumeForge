@@ -68,6 +68,44 @@ const voiceInput = {
   "voiceInput.settings.badge.notConfigured": "未配置",
   "voiceInput.settings.limitHint": "单段上限 3 分钟 / 10 MB；面试作答 3 分钟、复盘追问 1 分钟。",
   "voiceInput.settings.privacyNote": "保存后，录音会发送到 {host}；本应用不保存音频。",
+
+  /** 服务商卡片层（条目 03）：预设只填默认值，保存与测试仍走真请求。 */
+  "voiceInput.settings.cardHint": "音频只发给所选服务商，本应用不保存录音",
+
+  "voiceInput.settings.provider.label": "服务商",
+  "voiceInput.settings.provider.aria": "选择语音服务商",
+  "voiceInput.settings.provider.hint": "选一家会填好地址、协议与默认模型，仍可手动改",
+  "voiceInput.settings.provider.openai": "OpenAI 官方",
+  "voiceInput.settings.provider.groq": "Groq 官方",
+  "voiceInput.settings.provider.siliconflow": "SiliconFlow 官方",
+  "voiceInput.settings.provider.dashscope": "阿里云百炼",
+  "voiceInput.settings.provider.custom": "自定义",
+  "voiceInput.settings.provider.note.openai": "官方推荐 gpt-transcribe",
+  "voiceInput.settings.provider.note.groq": "OpenAI 兼容，免费档 25 MB",
+  "voiceInput.settings.provider.note.siliconflow": "中文效果好，单文件 50 MB",
+  "voiceInput.settings.provider.note.dashscope": "Qwen-ASR 走 chat 接口，不是 whisper",
+  "voiceInput.settings.provider.note.custom": "地址、协议与模型全部手填",
+
+  /** 调用协议：两套请求体互不兼容，必须显式选（见后端 asr_client）。 */
+  "voiceInput.settings.protocol.label": "调用协议",
+  "voiceInput.settings.protocol.aria": "语音服务的调用协议",
+  "voiceInput.settings.protocol.openai": "OpenAI 兼容",
+  "voiceInput.settings.protocol.dashscope": "阿里云百炼",
+  "voiceInput.settings.protocol.hint": "百炼的兼容地址不支持 whisper 式上传，选错会一直返回 400",
+
+  /** 模型字段：可输入 + 可拉取候选。 */
+  "voiceInput.settings.model.fetch": "拉取模型列表",
+  "voiceInput.settings.model.fetched": "已拉取 {count} 个模型",
+  "voiceInput.settings.model.fetchEmpty": "没拉到模型，手动填写即可",
+  "voiceInput.settings.model.fetchFailed": "拉取模型列表失败，可手动填写",
+  "voiceInput.settings.model.showAll": "显示全部模型",
+  "voiceInput.settings.model.retiredOption": "{model}（{date} 下线）",
+  "voiceInput.settings.model.retiredHint": "这个模型 {date} 下线，新项目请选 gpt-transcribe",
+
+  "voiceInput.settings.badge.active": "生效中",
+  "voiceInput.settings.testOk": "连接成功，耗时 {ms} 毫秒",
+  "voiceInput.settings.key.clearTitle": "清除已保存的 Key",
+  "voiceInput.settings.key.clearConfirm": "清除后需要重新填写才能语音输入",
 } as const;
 
 export default voiceInput;

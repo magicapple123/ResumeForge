@@ -9,7 +9,7 @@
 import { App as AntdApp } from "antd";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { BatchSelection } from "../../hooks/useBatchSelection";
+import { useBatchSelection, type BatchSelection } from "../../hooks/useBatchSelection";
 import { t } from "../../i18n";
 import type { ResumeBrief } from "../../types";
 import { DEFAULT_RESUME_SORT_STATE } from "../../utils/resumeSort";
@@ -61,16 +61,22 @@ const IDLE_BATCH: BatchSelection<number> = {
 function Harness({
   batch = IDLE_BATCH,
   setPreviewId = vi.fn(),
+  stateful = false,
 }: {
   batch?: BatchSelection<number>;
   setPreviewId?: (id: number | null) => void;
+  /** true 时用真实 useBatchSelection：点「批量选择」能真的切到选择模式（条目 01 入口验证）。 */
+  stateful?: boolean;
 }) {
+  // Hook 必须无条件调用；只有 stateful 模式才把它的结果传给组件。
+  const liveBatch = useBatchSelection<number>();
+  const activeBatch = stateful ? liveBatch : batch;
   return (
     <AntdApp>
       <ResumeCardList
         data={{ items: [RESUME], total: 1 }}
         loading={false}
-        batch={batch}
+        batch={activeBatch}
         favoriteResumeId={null}
         page={1}
         setPage={() => {}}
@@ -93,7 +99,7 @@ function Harness({
   );
 }
 
-/** 与卡片同一份依赖形状：用来算"期望的菜单项文案"。 */
+/** 与卡片同一份依赖形状：用来算"期望的菜单项文案"（第一项固定是「批量选择」）。 */
 function expectedLabels(): string[] {
   const deps: RowActionDeps = {
     setPreviewId: vi.fn(),
@@ -107,7 +113,10 @@ function expectedLabels(): string[] {
     toggleFavorite: async () => {},
     remove: async () => {},
   };
-  return secondaryActionsFor(RESUME, deps).map((item) => item.label);
+  return [
+    t("common.action.batchSelect"),
+    ...secondaryActionsFor(RESUME, deps).map((item) => item.label),
+  ];
 }
 
 const menuLabels = () => screen.getAllByRole("menuitem").map((node) => node.textContent ?? "");
@@ -118,12 +127,26 @@ afterEach(() => {
 });
 
 describe("简历卡片视图与表格视图共用一份动作清单（26a）", () => {
-  it("⋯ 菜单的五项与表格行菜单同源（含「对比」与「删除」）", async () => {
+  it("⋯ 菜单 = 「批量选择」+ 五项与表格同源的次级操作（含「对比」与「删除」）", async () => {
     render(<Harness />);
     fireEvent.click(screen.getByRole("button", { name: t("common.rowActions.more") }));
 
     expect(menuLabels()).toEqual(expectedLabels());
-    expect(menuLabels()).toHaveLength(5);
+    expect(menuLabels()).toHaveLength(6);
+    // 第一项必须是「批量选择」：窄档下这是进入选择模式的唯一入口（条目 01）。
+    expect(menuLabels()[0]).toBe(t("common.action.batchSelect"));
+  });
+
+  it("点「批量选择」真的进入选择模式：卡片上出现勾选框", async () => {
+    render(<Harness stateful />);
+    expect(screen.queryByRole("checkbox", { name: "选择这份简历" })).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: t("common.rowActions.more") }));
+    // 菜单项带图标（antd 图标自身有 aria-label），可访问名是「check-square 批量选择」，
+    // 所以按正则匹配；ResumeTable.test.tsx 里同理。
+    fireEvent.click(await screen.findByRole("menuitem", { name: /批量选择/ }));
+
+    expect(await screen.findByRole("checkbox", { name: "选择这份简历" })).toBeInTheDocument();
   });
 
   it("整卡右键弹出同一份菜单", async () => {
@@ -153,5 +176,39 @@ describe("简历卡片视图与表格视图共用一份动作清单（26a）", (
     // `fireEvent.contextMenu` 返回 false 表示原生菜单被拦掉了。
     expect(fireEvent.contextMenu(card, { clientX: 10, clientY: 10 })).toBe(true);
     expect(screen.queryByRole("menu")).toBeNull();
+  });
+});
+
+describe("简历卡片视图选择模式下的禁用（条目 01）", () => {
+  it("预览、星标、三点都禁用；标题 aria-disabled 且点击不再打开预览；勾选框保持可用", () => {
+    const setPreviewId = vi.fn();
+    render(<Harness batch={SELECTING_BATCH} setPreviewId={setPreviewId} />);
+
+    expect(screen.getByRole("button", { name: "预览 / 导出" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "收藏" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "更多操作" })).toBeDisabled();
+    // 选择模式下唯一该保留的控件就是批量勾选框。
+    expect(screen.getByRole("checkbox", { name: "选择这份简历" })).toBeEnabled();
+
+    const title = screen.getByRole("button", { name: RESUME.title });
+    // 标题用 aria-disabled 而不是 disabled：文字不变灰，只把"能点"的表象去掉。
+    expect(title).toHaveAttribute("aria-disabled", "true");
+    expect(title).toHaveStyle({ cursor: "default" });
+    fireEvent.click(title);
+    expect(setPreviewId).not.toHaveBeenCalled();
+  });
+
+  it("非选择模式下标题照旧打开预览、三个控件都可用", () => {
+    const setPreviewId = vi.fn();
+    render(<Harness setPreviewId={setPreviewId} />);
+
+    const title = screen.getByRole("button", { name: RESUME.title });
+    expect(title).not.toHaveAttribute("aria-disabled");
+    fireEvent.click(title);
+    expect(setPreviewId).toHaveBeenCalledWith(RESUME.id);
+
+    expect(screen.getByRole("button", { name: "预览 / 导出" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "收藏" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "更多操作" })).toBeEnabled();
   });
 });

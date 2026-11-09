@@ -1,12 +1,27 @@
 # SPDX-License-Identifier: Apache-2.0
 """语音转写（ASR）的配置与接口模型。
 
-ASR 走一条**独立**的 OpenAI 兼容 ``/audio/transcriptions`` 服务（计划 §0.1）：
-DeepSeek 官方没有转写能力，两个 Key 通常也不是同一个服务商，所以不复用大模型配置记录。
+ASR 走一条**独立**的转写服务（计划 §0.1）：DeepSeek 官方没有转写能力，两个 Key 通常
+也不是同一个服务商，所以不复用大模型配置记录。
 
 为什么单独一个文件、不放进 ``schemas/setting.py``：那个文件归模型协议线（T09/T10）
 的写入者，语音线只新增自己的文件，避免两个写入者改同一个 500 行预算文件。
+
+## 为什么需要 ``protocol``
+
+语音服务有两套互不兼容的调用口径，**不能靠猜**：
+
+- ``openai``：``POST {base}/audio/transcriptions``，``multipart/form-data``
+  （``file`` + ``model`` + ``language``）。OpenAI / Groq / 硅基流动都是这一套。
+- ``dashscope``：阿里云百炼 Qwen-ASR 走 ``POST {base}/chat/completions``，
+  ``messages[0].content = [{type: "input_audio", input_audio: {data: "data:<mime>;base64,..."}}]``。
+
+同样的 Base URL 前缀（``/compatible-mode/v1``）让"按地址猜协议"必然出错，所以把协议
+显式建模成配置字段。旧数据没有这个字段时取默认 ``openai``，**不需要 Alembic 迁移**
+（配置存在 ``AppSetting.asr_config`` 的 JSON 里，多一个键就能读）。
 """
+
+from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -15,17 +30,21 @@ from pydantic import BaseModel, Field, field_validator
 MAX_AUDIO_BYTES = 10 * 1024 * 1024
 MAX_AUDIO_SECONDS = 180
 
+# 调用协议：openai = whisper 式 multipart；dashscope = Qwen-ASR 的 chat + input_audio。
+AsrProtocol = Literal["openai", "dashscope"]
+DEFAULT_ASR_PROTOCOL: AsrProtocol = "openai"
 
-class AsrSettings(BaseModel):
-    """用户填写的语音服务配置（写入用）。
 
-    ``api_key`` 有三种写入口径（见 ``services/asr_settings.py``）：掩码或空串表示
-    "沿用已保存的 Key"（仅当地址没变），``__clear__`` 表示显式清空，其它字符串是新 Key。
+class AsrEndpoint(BaseModel):
+    """地址 + Key + 协议的公共部分（配置、测试连接、拉模型列表共用同一套校验）。
+
+    抽成基类而不是在每个请求模型里复制 ``field_validator``：三处校验必须逐字一致，
+    否则"保存能过、测试连接 422"这种漂移会立刻发生。
     """
 
     base_url: str = Field(default="", max_length=512)
     api_key: str = Field(default="", max_length=8192)
-    model: str = Field(default="", max_length=128)
+    protocol: AsrProtocol = DEFAULT_ASR_PROTOCOL
 
     @field_validator("base_url")
     @classmethod
@@ -43,6 +62,17 @@ class AsrSettings(BaseModel):
         # 粘贴时常带首尾空白/换行；带着它落库，鉴权必然失败。
         return (value or "").strip()
 
+
+class AsrSettings(AsrEndpoint):
+    """用户填写的语音服务配置（写入用）。
+
+    ``api_key`` 有三种写入口径（见 ``services/asr_settings.py``）：掩码或空串表示
+    "沿用已保存的 Key"（仅当地址与协议都没变），``__clear__`` 表示显式清空，其它字符串
+    是新 Key。
+    """
+
+    model: str = Field(default="", max_length=128)
+
     @field_validator("model")
     @classmethod
     def model_must_be_stripped(cls, value: str) -> str:
@@ -54,6 +84,20 @@ class AsrSettingsOut(AsrSettings):
 
     configured: bool = False
     """地址、模型、Key 三者齐全才算配置完成；前端据此决定显示哪句提示。"""
+
+
+class AsrModelsRequest(AsrEndpoint):
+    """拉取模型列表的请求体：只要地址、Key 与协议，不需要模型名。"""
+
+
+class AsrModelsResult(BaseModel):
+    """拉取到的模型名列表（``data[].id`` 原样，后端不做关键词过滤）。
+
+    过滤交给前端分组：三家服务的目录都混着 LLM / 图像模型，后端按关键词裁剪会误杀
+    自定义服务里的转写模型名。失败一律返回空列表，界面退回手填。
+    """
+
+    models: list[str] = Field(default_factory=list)
 
 
 class AsrSettingsTestResult(BaseModel):
@@ -70,6 +114,7 @@ class AsrStatus(BaseModel):
     configured: bool
     provider_host: str = ""
     model: str = ""
+    protocol: AsrProtocol = DEFAULT_ASR_PROTOCOL
     max_seconds: int = MAX_AUDIO_SECONDS
     max_bytes: int = MAX_AUDIO_BYTES
 
