@@ -65,6 +65,26 @@ def reset() -> None:
         _client = None
 
 
+def _http_failure_reason(exc: Exception) -> str:
+    """HTTP 层异常 → 可展示原因：状态码优先，只有连接/超时/DNS 才叫「网络不可用」。
+
+    「资源没发布」和「网络断了」是两种完全不同的补救动作（等发布 vs 查网络），一律报成
+    后者会让用户去修根本没坏的网络。判定只用**鸭子类型**读 ``exc.response.status_code``：
+    单测用 ``SimpleNamespace`` 替身注入本模块的 ``httpx``（只提供 ``Client`` 与
+    ``HTTPError``），在这里直接引用 ``httpx.HTTPStatusError`` 会让整片用例在导入期就红。
+    """
+    status = getattr(getattr(exc, "response", None), "status_code", None)
+    try:
+        code = int(status) if status is not None else 0
+    except (TypeError, ValueError):
+        code = 0
+    if code in (404, 410):
+        return f"本地模型资产下载源不可用（资源未发布或地址失效，HTTP {code}）"
+    if 400 <= code < 600:
+        return f"本地模型资产下载源返回 HTTP {code}"
+    return "本地模型资产下载失败，网络不可用"
+
+
 def fetch(
     url: str,
     temp: Path,
@@ -78,7 +98,8 @@ def fetch(
 
     Raises:
         Cancelled: 收到取消信号，或连接被 :func:`close_inflight` 打断。
-        AssetArchiveError: 网络失败/响应异常/字节数或 sha256 对不上。
+        AssetArchiveError: 响应异常/字节数或 sha256 对不上；消息按状态码分类，
+            404/410 说「下载源不可用」，其他 4xx/5xx 报状态码，连接类才说「网络不可用」。
     """
     global _client
     temp.parent.mkdir(parents=True, exist_ok=True)
@@ -110,7 +131,7 @@ def fetch(
         raise
     except httpx.HTTPError as exc:
         temp.unlink(missing_ok=True)
-        raise AssetArchiveError("本地模型资产下载失败，网络不可用") from exc
+        raise AssetArchiveError(_http_failure_reason(exc)) from exc
     except OSError as exc:
         temp.unlink(missing_ok=True)
         raise AssetArchiveError("本地模型资产写入失败（磁盘空间或权限不足）") from exc
