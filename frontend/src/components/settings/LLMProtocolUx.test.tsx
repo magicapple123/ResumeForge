@@ -23,6 +23,40 @@ const presetOf = (provider: string) => {
   return preset;
 };
 
+/**
+ * 热门度顺序的唯一期望值（2026-11-09 逐家核对后重排）。
+ *
+ * 矩阵比它多一行 Azure OpenAI（v1 接口，本批不内置），固定落在 LM Studio 之后，
+ * 所以矩阵用例从本数组推导期望顺序，不另抄一份 23 项的名单。
+ */
+const POPULARITY_ORDER = [
+  "deepseek",
+  "qwen",
+  "doubao",
+  "zhipu",
+  "siliconflow",
+  "kimi",
+  "hunyuan",
+  "openai",
+  "anthropic",
+  "gemini",
+  "qianfan",
+  "spark",
+  "minimax",
+  "openrouter",
+  "stepfun",
+  "ollama",
+  "xai",
+  "mistral",
+  "lmstudio",
+  "groq",
+  "together",
+  "perplexity",
+];
+
+/** 矩阵里 Azure 那一行的插入位置（第 20 行，紧跟 LM Studio）。 */
+const AZURE_ROW_INDEX = 19;
+
 describe("T09.1 厂商预设增补", () => {
   it("has 22 presets covering the 16 existing plus the 6 new vendors", () => {
     expect(LLM_PRESETS).toHaveLength(22);
@@ -50,6 +84,16 @@ describe("T09.1 厂商预设增补", () => {
     // 星火：整体迁到新 MaaS 平台（旧的 spark-api-open 是上一代）。
     expect(presetOf("spark").base_url).toBe("https://maas-api.cn-huabei-1.xf-yun.com/v2");
     expect(presetOf("spark").model).toBe("spark-x2.6");
+    // Groq：llama-3.3-70b-versatile 已于 2026-08-16 对 free/developer 层关停，改用官方推荐模型。
+    expect(presetOf("groq").model).toBe("openai/gpt-oss-120b");
+    // Perplexity：Agent API 官方模型表只有 perplexity/sonar（旧 sonar-pro 对应 preset/effort=low）。
+    expect(presetOf("perplexity").model).toBe("perplexity/sonar");
+  });
+
+  it("orders presets by popularity (hot first)", () => {
+    // 断言完整顺序而不是首尾几项：只比较头尾的话，中间 17 项被随意打乱也照样通过，
+    // 而"按热门度排序"恰恰体现在中段（国内厂商在前、聚合/本地/小众在后）。
+    expect(LLM_PRESETS.map((preset) => preset.provider)).toEqual(POPULARITY_ORDER);
   });
 
   it("declares Responses support without rewriting default protocol", () => {
@@ -58,7 +102,7 @@ describe("T09.1 厂商预设增补", () => {
       expect(presetOf(provider).supports_responses).toBeUndefined();
       expect(presetResponsesBaseUrl(presetOf(provider))).toBeNull();
     }
-    // MiniMax / 千帆 / 星火 / 阶跃：官方已支持 POST /v1/responses（2026-11-08 核对）。
+    // MiniMax / 千帆 / 星火 / 阶跃 / Together：官方已支持 POST /v1/responses（2026-11-09 核对）。
     for (const provider of ["minimax", "qianfan", "spark", "stepfun", "together"]) {
       expect(presetOf(provider).supports_responses).toBe(true);
     }
@@ -92,10 +136,14 @@ describe("T09.1 厂商预设增补", () => {
       "https://tokenhub.tencentmaas.com/v1/messages",
     );
     // 没有 Anthropic 入口的一律返回 null（切协议时地址一个字都不动）。
-    for (const provider of ["openai", "gemini", "xai", "groq", "mistral", "perplexity"]) {
+    for (const provider of ["openai", "gemini", "groq", "mistral", "perplexity"]) {
       expect(presetOf(provider).supports_anthropic).toBeUndefined();
       expect(presetAnthropicBaseUrl(presetOf(provider))).toBeNull();
     }
+    // xAI 例外：官方 OpenAPI 已定义 /v1/messages（无使用文档，矩阵标部分支持），
+    // 地址恰好就是 chat 地址 + /messages。
+    expect(presetOf("xai").supports_anthropic).toBe(true);
+    expect(presetAnthropicBaseUrl(presetOf("xai"))).toBe("https://api.x.ai/v1/messages");
     // chat 地址本身不受影响（Anthropic 地址是另一条，不覆盖默认值）。
     expect(presetOf("deepseek").base_url).toBe("https://api.deepseek.com");
   });
@@ -148,7 +196,24 @@ describe("T09.1 各服务商协议支持矩阵", () => {
       expect(screen.getByText(t(key))).toBeInTheDocument();
     }
     // 表尾与列里都有核对日期。
-    expect(screen.getAllByText(/2026-11-08/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/2026-11-09/).length).toBeGreaterThan(0);
     expect(screen.getByText(t("llmProtocol.matrix.footnote"))).toBeInTheDocument();
+  });
+
+  it("keeps the matrix row order aligned with the preset popularity order", () => {
+    renderMatrix();
+
+    fireEvent.click(screen.getByText(t("llmProtocol.matrix.toggle")));
+
+    const rendered = Array.from(document.querySelectorAll("tbody tr.ant-table-row")).map(
+      (row) => row.querySelector("td")?.textContent ?? "",
+    );
+
+    // 期望顺序从预设数组推导，不另抄一份 23 项名单：矩阵 = 预设的热门度顺序 +
+    // Azure OpenAI 插在第 20 行（紧跟 LM Studio）。
+    const expected = LLM_PRESETS.map((preset) => t(preset.labelKey));
+    expected.splice(AZURE_ROW_INDEX, 0, t("llmProtocol.matrix.azure"));
+
+    expect(rendered).toEqual(expected);
   });
 });

@@ -15,6 +15,8 @@
 
 ### Changed
 
+- **设置页「各服务商协议支持」按 2026-11-09 官方文档复核并重排（热门优先）。** 修正 Qwen / StepFun 的 Responses 判定为部分支持（前者仅基础兼容、后者仅两款模型），xAI 的 Anthropic 判定改为部分支持（官方 OpenAPI 已定义 `/v1/messages`）；Perplexity 的 Anthropic 改为部分支持（Orchestrator 私有预览，需申请）。Groq 预设模型改为 `openai/gpt-oss-120b`（`llama-3.3-70b-versatile` 已于 2026-08-16 对自助层关停），Perplexity 改为 `perplexity/sonar`。23 行按热门度重排，表尾仍标核对日期。
+
 - **助手提示词预算守卫阈值显式调整（2026-11）**：`test_assistant_prompt_budget` 的系统提示固定成本上限 23,800 → 24,100。原因是工作树里**既有**（非本批）的助手装配 / 平台事实改动已把基线推到约 23,824（本批之前即已超 23,800 共 24 字符），本批偏好能力点名再 +174 字符（`test_assistant_prompt_surface` 要求每个写工具名出现在静态提示里）；真正的成本闸门 `MAX_PROMPT_TOKENS_ESTIMATE = 60,000` 未动，测试注释记录了实测数字与"既有基线"归属。
 
 - **新增 RAG 语义补召回（默认关闭；v2 检索链路 + v3 真实本地 / 远程 provider）。** 给简历生成链加一条**候选选择层的可选增强**，两个开关**默认都是 `false`**：`rag_retrieval_enabled`（向量补召回 + 加权融合）与 `rag_query_expansion_enabled`（Phase 0 查询扩展）。**都关闭时（默认）** `prepare_selection_boost()` 返回空作用域，生成链行为与改造前逐字节一致——RAG 只决定「哪些条目进入候选」，**不碰 prompt 字节**（候选的字段形状、键序与文本不变）。**不新增数据库表 / 迁移 / 数据目录**：向量索引是进程内 LRU 缓存（可重建派生数据，重启重算、不进备份，备份导入后没有索引也能正常生成）。
@@ -84,7 +86,7 @@
   （MiniMax 自 2026-11 起已支持，见下方 Fixed）。切换协议时只有声明支持 Responses 的预设才改 `Base URL`
   （智谱→`https://open.bigmodel.cn/api/v1`，其余在预设地址后追加 `/responses`；DeepSeek 实测可用）。
   设置页「模型配置」区新增可展开的**「各服务商协议支持矩阵」**（23 行，含核对日期列；表尾
-  「核对日期 2026-11-08」，2026-11-08 逐家复核后重写），并新增 6 家预设（腾讯混元 / 百度千帆 /
+  「核对日期 2026-11-08」，2026-11-08 逐家复核后重写；2026-11-09 再次复核，见本段 Changed 顶部），并新增 6 家预设（腾讯混元 / 百度千帆 /
   讯飞星火 / 阶跃星辰 / Together AI /
   Perplexity），**预设总数 16 → 22**。同时修正 MiniMax 域名（`api.minimaxi.com/v1` + MiniMax-M3.1-Flash）、
   Gemini（`gemini-3.8-flash`）、xAI（`grok-4.7`）等预设，标签缩短为「Claude（Anthropic 原生）」
@@ -226,7 +228,7 @@
   （含 `api.deepseek.com.evil.example.com` 这类子域伪装），安全底线不变。② 「获取可用模型」只剥离
   `/chat/completions`，切到协议专用地址后请求打到 `.../responses/models`、`.../messages/models`
   返回 404；现已一并剥离 `/responses` 与 `/messages`。
-- **「各服务商协议支持」矩阵与预设逐家重核（核对日期 2026-11-08），并让协议切换真正落到可用地址。**
+- **「各服务商协议支持」矩阵与预设逐家重核（首次核对 2026-11-08；2026-11-09 复核见本段 Changed 顶部），并让协议切换真正落到可用地址。**
   原表把 DeepSeek、豆包、通义千问、百度千帆、讯飞星火、阶跃星辰、OpenRouter、Together、Ollama
   （≥ 0.14.0）、LM Studio（≥ 0.4.1）的 Anthropic Messages 入口全标成「不支持」，MiniMax 的
   Responses 也标成不支持——后者还被 `responses_unsupported_hint` **硬拦截**（连接测试直接返回失败、

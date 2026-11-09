@@ -240,7 +240,7 @@ Requirements (Python 3.11 – 3.13, Node.js ≥ 20.19; the launcher installs the
 
 ### Configure a model (optional)
 
-Open **Settings → “AI models”** in the sidebar, choose a built-in preset (which fills in the endpoint and model name) or “Custom model (OpenAI-compatible)”, enter the API key and click “Test connection”. The **22** built-in presets cover DeepSeek, Claude (Anthropic native), Doubao, Kimi, Qwen, Zhipu GLM, MiniMax, SiliconFlow, OpenRouter, OpenAI, Google Gemini, xAI Grok, Groq, Mistral, Ollama and LM Studio, plus Tencent Hunyuan, Baidu Qianfan, iFlytek Spark, StepFun, Together AI and Perplexity.
+Open **Settings → “AI models”** in the sidebar, choose a built-in preset (which fills in the endpoint and model name) or “Custom model (OpenAI-compatible)”, enter the API key and click “Test connection”. The **22** built-in presets cover DeepSeek, Qwen, Doubao, Zhipu GLM, SiliconFlow, Kimi, Tencent Hunyuan, OpenAI, Claude (Anthropic native), Google Gemini, Baidu Qianfan, iFlytek Spark, MiniMax, OpenRouter, StepFun, Ollama, xAI Grok, Mistral, LM Studio, Groq, Together AI and Perplexity.
 
 The API protocol has three options: **OpenAI-compatible (Chat Completions, default) / Anthropic native (Messages) / OpenAI Responses (experimental)**. Responses is off by default and saved configurations are unaffected; when unsure, expand the “provider protocol support” matrix on the Settings page (its footer carries the verification date).
 

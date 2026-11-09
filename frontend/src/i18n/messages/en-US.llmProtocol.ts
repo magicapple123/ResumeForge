@@ -5,7 +5,7 @@
  *
  * The matrix is a static, manually verified table -- it never probes providers at runtime,
  * because doing so on every settings visit would be slow and would trip rate limits. The
- * verification date (2026-11-08) is shown both in the header and in the footnote; model
+ * verification date (2026-11-09) is shown both in the header and in the footnote; model
  * names and endpoints may change.
  *
  * The protocol hint no longer enumerates who does NOT support what: that enumeration always
@@ -54,26 +54,48 @@ const llmProtocol = {
   "llmProtocol.matrix.partial": "Partial",
   /** Table footnote: verification date and disclaimer. */
   "llmProtocol.matrix.footnote":
-    "Verified on 2026-11-08 against each provider's official docs; model names and endpoints may change.",
+    'Verified on 2026-11-09 against each provider\'s official docs; "Not supported" means the provider does not document such an endpoint. Model names and endpoints may change.',
   /** Note on DeepSeek's Anthropic cell: its endpoint sits under a dedicated prefix. */
   "llmProtocol.matrix.deepseekAnthropicNote":
     "Official Anthropic-compatible endpoint: https://api.deepseek.com/anthropic/v1 (append /messages).",
   /** Note on Claude's chat completions cell. */
   "llmProtocol.matrix.claudeChatNote":
-    "OpenAI SDK compatibility layer, for testing only; use the native protocol for full capability.",
+    "OpenAI SDK compatibility layer, documented for testing/comparison only and not production-ready; use the native protocol for full capability.",
+  /** Note on Qwen's Responses cell: qwen-plus is basic compatibility only. */
+  "llmProtocol.matrix.qwenResponsesNote":
+    "The official Responses support list excludes qwen-plus: basic compatibility only, with built-in tools limited. Use qwen3.7-plus / qwen3.8-max for full capability.",
+  /** Note on SiliconFlow's Responses cell: no such endpoint. */
+  "llmProtocol.matrix.siliconflowResponsesNote":
+    "No Responses endpoint is documented; /v1/responses returns 404 in practice.",
   /** Note on SiliconFlow's Anthropic cell. */
   "llmProtocol.matrix.siliconflowAnthropicNote":
     "Official endpoint shares the chat host; path is /v1/messages.",
+  /** Note on Gemini's chat completions cell: the compat layer is beta and has no Responses. */
+  "llmProtocol.matrix.geminiChatNote":
+    "The OpenAI compatibility layer is still beta; it also covers embeddings / images / batches, but has no Responses endpoint.",
+  /** Note on Spark's Anthropic cell: entry lives under /anthropic, unlike chat under /v2. */
+  "llmProtocol.matrix.sparkAnthropicNote":
+    "The Anthropic entry sits under /anthropic on the same host (/anthropic/v1/messages), a different path from chat under /v2.",
   /** Note on Groq's Responses cell. */
-  "llmProtocol.matrix.groqResponsesNote": "Responses is currently in Beta.",
+  "llmProtocol.matrix.groqResponsesNote":
+    "Responses is in Beta; store accepts only false/null and previous_response_id is always null.",
   /** Note on Mistral's Responses cell. */
   "llmProtocol.matrix.mistralResponsesNote": "Responses is currently in Public Preview.",
   /** Note on StepFun's Anthropic cell. */
   "llmProtocol.matrix.stepfunNote":
-    "Anthropic uses /v1/messages on the same Base URL; Step Plan has a separate /step_plan channel.",
+    "Anthropic uses the same host root + /v1/messages; Step Plan is subscription-only and has a separate /step_plan channel.",
+  /** Note on StepFun's Responses cell: only two models are available. */
+  "llmProtocol.matrix.stepfunResponsesNote":
+    "Currently supports only step-5-preview and step-3.7-flash.",
+  /** Note on xAI's Anthropic cell: defined in the OpenAPI, yet undocumented. */
+  "llmProtocol.matrix.xaiAnthropicNote":
+    "The official OpenAPI defines /v1/messages as Anthropic-compatible, but no usage docs exist yet.",
   /** Note on Together AI's Anthropic cell. */
   "llmProtocol.matrix.togetherAnthropicNote":
-    "Messages / Responses currently cover only some serverless models.",
+    "Messages covers only some serverless models such as GLM-5.2 / GLM-5.3; other models may return malformed output.",
+  /** Note on Together AI's Responses cell: stateless. */
+  "llmProtocol.matrix.togetherResponsesNote":
+    "Serverless models only; store / previous_response_id are not supported (stateless).",
   /** Version prerequisite on Ollama's Responses cell. */
   "llmProtocol.matrix.ollamaNote": "Requires Ollama 0.13.3 or later.",
   /** Version prerequisite on Ollama's Anthropic cell. */
@@ -84,9 +106,15 @@ const llmProtocol = {
   "llmProtocol.matrix.lmstudioAnthropicNote": "Requires LM Studio 0.4.1 or later.",
   /** Note on Perplexity's chat completions cell. */
   "llmProtocol.matrix.perplexityNote":
-    "Sonar Chat Completions was retired on 2026-09-27; chat now goes through the Agent API.",
+    "Sonar Chat Completions ended on 2026-09-27; OpenAI-compatible chat now goes through the Agent API (/v1/sonar). Use Responses (/v1/responses) in this app.",
+  /** Note on Perplexity's Anthropic cell: Orchestrator is a private preview. */
+  "llmProtocol.matrix.perplexityAnthropicNote":
+    "Orchestrator API (formerly Router) is in private preview and requires approval; the entry is /orchestrator/v1, not under /v1.",
   /** Azure OpenAI row: Responses works, but the auth header differs, so it is not built in. */
-  "llmProtocol.matrix.azure": "Azure OpenAI (custom auth header; not built in)",
+  "llmProtocol.matrix.azure": "Azure OpenAI (v1 API; not built in)",
+  /** Note on Azure OpenAI's Anthropic cell: the resource itself has no Messages endpoint. */
+  "llmProtocol.matrix.azureAnthropicNote":
+    "Azure OpenAI resources have no Messages endpoint; Claude on Microsoft Foundry has a separate /anthropic/v1/messages.",
 
   // -- Display names for the newly added vendor presets --
   /** Tencent Hunyuan. */

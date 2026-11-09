@@ -4,7 +4,7 @@
  * 「各服务商协议支持」静态矩阵。
  *
  * 矩阵是**静态核对表**，不做实时探测：每次进设置页都发请求既慢又会让服务商限流。
- * 核对日期写在表尾与列里（2026-11-08），模型名与端点可能随厂商迭代变化。
+ * 核对日期写在表尾与列里（2026-11-09），模型名与端点可能随厂商迭代变化。
  *
  * 协议下拉的说明**不再枚举"谁不支持"**：那种枚举总是漏（2026-11-07 那版把 DeepSeek、
  * MiniMax、千帆、星火全写错了），一律指向上面的矩阵。
@@ -51,24 +51,46 @@ const llmProtocol = {
   "llmProtocol.matrix.partial": "部分支持",
   /** 表尾：核对日期与免责说明。 */
   "llmProtocol.matrix.footnote":
-    "核对日期 2026-11-08，以各厂商官方文档为准；模型名与端点可能变化。",
+    "核对日期 2026-11-09，以各厂商官方文档为准；「不支持」指官方文档未提供该协议入口。模型名与端点可能变化。",
   /** DeepSeek Anthropic 单元格的说明：入口在独立前缀下，与 chat 地址不同。 */
   "llmProtocol.matrix.deepseekAnthropicNote":
     "官方 Anthropic 兼容入口：https://api.deepseek.com/anthropic/v1（拼 /messages）。",
   /** Claude 对话补全单元格的说明。 */
-  "llmProtocol.matrix.claudeChatNote": "OpenAI SDK 兼容层，仅供测试；完整能力请用原生协议。",
+  "llmProtocol.matrix.claudeChatNote":
+    "OpenAI SDK 兼容层，官方明确仅供测试/对比、非生产就绪；完整能力请用原生协议。",
+  /** 通义千问 Responses 单元格的说明：qwen-plus 只算基础兼容。 */
+  "llmProtocol.matrix.qwenResponsesNote":
+    "官方 Responses 支持列表未含 qwen-plus：仅基础兼容、内置工具受限；完整能力请改用 qwen3.7-plus / qwen3.8-max。",
+  /** 硅基流动 Responses 单元格的说明：官方无该端点。 */
+  "llmProtocol.matrix.siliconflowResponsesNote":
+    "官方文档未提供 Responses 端点，实测 /v1/responses 返回 404。",
   /** 硅基流动 Anthropic 单元格的说明。 */
   "llmProtocol.matrix.siliconflowAnthropicNote": "官方入口与 chat 同址，路径为 /v1/messages。",
+  /** Gemini 对话补全单元格的说明：兼容层仍是 beta，且没有 Responses。 */
+  "llmProtocol.matrix.geminiChatNote":
+    "OpenAI 兼容层仍为 beta（官方说明）；同一层还覆盖 embeddings / images / batches，但没有 Responses 入口。",
+  /** 星火 Anthropic 单元格的说明：入口在 /anthropic 下，与 chat 的 /v2 不同路径。 */
+  "llmProtocol.matrix.sparkAnthropicNote":
+    "Anthropic 入口在同一主机的 /anthropic 下（/anthropic/v1/messages），与 chat 的 /v2 不同路径。",
   /** Groq Responses 单元格的说明。 */
-  "llmProtocol.matrix.groqResponsesNote": "Responses 目前是 Beta。",
+  "llmProtocol.matrix.groqResponsesNote":
+    "Responses 目前是 Beta；store 仅支持 false/null，previous_response_id 恒为 null。",
   /** Mistral Responses 单元格的说明。 */
   "llmProtocol.matrix.mistralResponsesNote": "Responses 目前是 Public Preview。",
   /** 阶跃星辰 Anthropic 单元格的补充说明。 */
   "llmProtocol.matrix.stepfunNote":
-    "Anthropic 走同一 Base URL 的 /v1/messages；Step Plan 另有 /step_plan 通道。",
+    "Anthropic 走同一主机的根域 + /v1/messages；Step Plan 为订阅制，另有 /step_plan 通道。",
+  /** 阶跃星辰 Responses 单元格的说明：只有两款模型可用。 */
+  "llmProtocol.matrix.stepfunResponsesNote": "当前仅支持 step-5-preview 与 step-3.7-flash。",
+  /** xAI Anthropic 单元格的说明：OpenAPI 已定义但无使用文档。 */
+  "llmProtocol.matrix.xaiAnthropicNote":
+    "官方 OpenAPI 已定义 /v1/messages 并注明兼容 Anthropic，但暂无使用文档。",
   /** Together AI Anthropic 单元格的补充说明。 */
   "llmProtocol.matrix.togetherAnthropicNote":
-    "Messages / Responses 目前仅覆盖部分 serverless 模型。",
+    "Messages 仅覆盖 GLM-5.2 / GLM-5.3 等部分 serverless 模型，其他模型可能返回畸形输出。",
+  /** Together AI Responses 单元格的补充说明：无状态。 */
+  "llmProtocol.matrix.togetherResponsesNote":
+    "仅 serverless 模型；不支持 store / previous_response_id（无状态）。",
   /** Ollama Responses 单元格的版本前置条件。 */
   "llmProtocol.matrix.ollamaNote": "需 Ollama 0.13.3 及以上。",
   /** Ollama Anthropic 单元格的版本前置条件。 */
@@ -79,9 +101,15 @@ const llmProtocol = {
   "llmProtocol.matrix.lmstudioAnthropicNote": "需 LM Studio 0.4.1 及以上。",
   /** Perplexity 对话补全单元格的说明。 */
   "llmProtocol.matrix.perplexityNote":
-    "Sonar Chat Completions 已于 2026-09-27 停止，现走 Agent API。",
+    "Sonar Chat Completions 已于 2026-09-27 停止；OpenAI 兼容的对话补全走 Agent API（/v1/sonar），本应用请改用 Responses（/v1/responses）。",
+  /** Perplexity Anthropic 单元格的说明：Orchestrator 私有预览。 */
+  "llmProtocol.matrix.perplexityAnthropicNote":
+    "Orchestrator API（原 Router）私有预览，需申请；入口在 /orchestrator/v1，不在 /v1 下。",
   /** Azure OpenAI 一行：Responses 可用，但鉴权方式不同、本批不内置。 */
-  "llmProtocol.matrix.azure": "Azure OpenAI（需自定义鉴权头，暂不内置）",
+  "llmProtocol.matrix.azure": "Azure OpenAI（v1 接口，暂不内置）",
+  /** Azure OpenAI Anthropic 单元格的说明：资源本身无 Messages 入口。 */
+  "llmProtocol.matrix.azureAnthropicNote":
+    "Azure OpenAI 资源无 Messages 入口；Microsoft Foundry 的 Claude 另有 /anthropic/v1/messages。",
 
   // ── 新增厂商预设名（其余 16 家的预设名沿用 appConfig.preset.*） ──
   /** 腾讯混元。 */

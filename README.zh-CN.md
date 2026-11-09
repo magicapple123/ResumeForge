@@ -240,7 +240,7 @@ cd ResumeForge
 
 ### 配置大模型（可选）
 
-在左侧**设置 →「AI 模型」**中选择内置预设（自动填充接口地址与模型名）或「自定义模型（OpenAI 兼容）」，填入 API Key 后点击「测试连接」。内置 **22 个**预设，覆盖 DeepSeek、Claude（Anthropic 原生）、豆包、Kimi、通义千问、智谱 GLM、MiniMax、硅基流动、OpenRouter、OpenAI、Google Gemini、xAI Grok、Groq、Mistral、Ollama、LM Studio，以及腾讯混元、百度千帆、讯飞星火、阶跃星辰、Together AI、Perplexity。
+在左侧**设置 →「AI 模型」**中选择内置预设（自动填充接口地址与模型名）或「自定义模型（OpenAI 兼容）」，填入 API Key 后点击「测试连接」。内置 **22 个**预设，覆盖 DeepSeek、通义千问、豆包、智谱 GLM、硅基流动、Kimi、腾讯混元、OpenAI、Claude（Anthropic 原生）、Google Gemini、百度千帆、讯飞星火、MiniMax、OpenRouter、阶跃星辰、Ollama、xAI Grok、Mistral、LM Studio、Groq、Together AI、Perplexity。
 
 接口协议可选 **OpenAI 兼容（Chat Completions，默认）/ Anthropic 原生（Messages）/ OpenAI Responses（实验性）** 三种：Responses 默认不启用、已保存配置不受影响，拿不准时展开设置页的「各服务商协议支持」矩阵查一下（表尾写明核对日期）。
 
