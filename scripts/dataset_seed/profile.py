@@ -114,7 +114,7 @@ def _seed_groups(db) -> None:
     custom_keys = [key for key in _all_section_keys(db) if key.startswith("custom:")]
     plans = [
         (
-            "增长分析师投递方案",
+            "后端开发投递方案",
             [
                 "basic_info",
                 "summary",
@@ -128,7 +128,7 @@ def _seed_groups(db) -> None:
             ],
         ),
         (
-            "商业分析投递方案",
+            "AI Agent 投递方案",
             [
                 "basic_info",
                 "summary",
@@ -142,7 +142,7 @@ def _seed_groups(db) -> None:
             ],
         ),
         (
-            "运营/产品投递方案",
+            "校招通用投递方案",
             [
                 "basic_info",
                 "summary",

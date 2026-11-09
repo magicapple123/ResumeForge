@@ -1,8 +1,11 @@
 # SPDX-License-Identifier: Apache-2.0
 """求职进度、内推、提醒、投递队列、助手会话与技能。
 
-进度记录的 ``applied_at`` 从 5 月铺到 10 月，是为了让「分析看板」的六个月趋势、
+进度记录的 ``applied_at`` 从 7 月铺到 10 月，是为了让「分析看板」的六个月趋势、
 漏斗转化率都有东西可画——全部塞在同一个月里，图会变成一个尖峰。
+
+时间线按 2027 届技术秋招的真实节奏排：8 月起投、9–10 月笔试与面试、10 月底出结果，
+状态覆盖 applied / screening / assessment / interview / offer / rejected 六种。
 """
 
 from __future__ import annotations
@@ -17,9 +20,9 @@ TRACKS = [
     (
         0,
         "interview",
-        "2026-10-20",
+        "2026-09-08",
         "2026-10-24",
-        "准备二面的案例题",
+        "准备二面：手写 LRU + 慢查询排查",
         "2026-10-30",
         "一面已过，等二面",
         "job_platform",
@@ -52,7 +55,7 @@ TRACKS = [
         "interview",
         "2026-10-15",
         "2026-10-26",
-        "准备案例分析",
+        "准备系统设计题",
         "2026-11-01",
         "二面安排在 11/1",
         "headhunter",
@@ -65,7 +68,7 @@ TRACKS = [
         "2026-10-18",
         "",
         "",
-        "HC 冻结",
+        "HC 冻结，岗位下线",
         "job_platform",
         "10/18 收到婉拒邮件",
     ),
@@ -88,8 +91,8 @@ TRACKS = [
         "等简历筛选",
         "2026-10-30",
         "已投递",
-        "official_website",
-        "官网投递成功截图",
+        "job_platform",
+        "猎聘投递成功截图",
     ),
     (
         8,
@@ -98,7 +101,7 @@ TRACKS = [
         "2026-10-09",
         "",
         "",
-        "要求医疗行业背景",
+        "岗位改成长期实习，学期内时间对不上",
         "job_platform",
         "10/9 收到感谢信",
     ),
@@ -113,7 +116,7 @@ TRACKS = [
         "referral",
         "HR 电话沟通薪资",
     ),
-    (9, "applied", "2026-08-19", "2026-08-19", "", "", "朋友转发，投了试试", "other", ""),
+    (9, "applied", "2026-08-19", "2026-08-19", "", "", "实习岗，先投了试试", "other", ""),
     (
         5,
         "rejected",
@@ -121,48 +124,58 @@ TRACKS = [
         "2026-07-22",
         "",
         "",
-        "只招 2027 届",
+        "笔试三道算法题卡在第二道",
         "official_website",
-        "7/22 收到不符合条件通知",
+        "7/22 收到笔试结果通知",
     ),
-    (6, "rejected", "2026-05-20", "2026-05-28", "", "", "实习薪资不匹配", "job_platform", ""),
+    (
+        6,
+        "rejected",
+        "2026-05-20",
+        "2026-05-28",
+        "",
+        "",
+        "社招岗要求 1 年以上经验",
+        "job_platform",
+        "",
+    ),
 ]
 
 REFERRALS = [
     {
         "job_index": 7,
         "referrer_name": "陈立",
-        "referrer_contact": "微信 chenli_pku",
-        "relation": "前同事",
+        "referrer_contact": "微信 chenli_dev",
+        "relation": "学长（同实验室）",
         "channel": "熟人直接递",
         "status": "submitted",
         "converted": True,
         "submitted_at": "2026-09-21",
-        "note": "他把简历直接转给了增长负责人，一周内约面。",
+        "note": "他把简历直接转给了客户端组 leader，一周内约面。",
         "referral_code": "",
     },
     {
         "job_index": 12,
         "referrer_name": "吴穹",
-        "referrer_contact": "wuqiong@example.com",
-        "relation": "研究生同学",
+        "referrer_contact": "wu.qiong@qq.com",
+        "relation": "同队队友（二手平台项目）",
         "channel": "官网内推码",
         "status": "submitted",
         "converted": False,
         "submitted_at": "2026-10-27",
-        "note": "内推码 GX2026-8842，投递时填在备注里。",
-        "referral_code": "GX2026-8842",
+        "note": "内推码 XH2027-1146，投递时填在备注里。",
+        "referral_code": "XH2027-1146",
     },
     {
         "job_index": 0,
         "referrer_name": "周敏华",
-        "referrer_contact": "微信 zhoumh_stat",
-        "relation": "研究生导师",
+        "referrer_contact": "微信 zhoumh_cs",
+        "relation": "国创项目指导老师",
         "channel": "邮箱推荐",
         "status": "active",
         "converted": False,
         "submitted_at": "",
-        "note": "导师说可以先聊聊，还没正式投。",
+        "note": "老师说她和枢云有合作项目，可以先聊聊再走正式流程。",
         "referral_code": "",
     },
 ]
@@ -170,17 +183,17 @@ REFERRALS = [
 # (标题, 相对 NOW 的小时数, 类型, 状态, 关联进度序号, 备注)
 REMINDERS = [
     (
-        "二面：澄川科技 用户增长分析师",
+        "二面：枢云科技 后端开发工程师",
         -30,
         "interview",
         "pending",
         0,
         "线上会议，提前 10 分钟进会议室",
     ),
-    ("提交青禾在线测评", 6, "assessment_deadline", "pending", 5, "测评链接 10/29 23:59 失效"),
-    ("回复火花实验室 offer", 72, "hr_reply", "pending", 8, "先确认薪资结构再答复"),
-    ("跟进弦月 HR 约面", 26, "hr_reply", "pending", 1, ""),
-    ("准备恒野案例分析", 96, "interview", "pending", 3, "案例题会提前一天发"),
+    ("提交云枢在线测评", 6, "assessment_deadline", "pending", 5, "测评链接 10/29 23:59 失效"),
+    ("回复启岸 offer", 72, "hr_reply", "pending", 8, "先确认薪资结构与签约时间再答复"),
+    ("跟进曦和 HR 约面", 26, "hr_reply", "pending", 2, ""),
+    ("准备星河云图系统设计题", 96, "interview", "pending", 3, "大概率考限流与缓存一致性"),
     ("整理 9 月投递复盘", -120, "other", "done", None, "已写完，结论进了知识库"),
     ("取消的宣讲会提醒", -200, "other", "dismissed", None, "岗位已下架"),
 ]
@@ -188,32 +201,37 @@ REMINDERS = [
 QUEUE = [
     (
         0,
-        "您好，我是林知遥，3 年用户增长分析经验，主导过 186 万会员的分层召回，季度召回率从 8.1% 提升到 12.4%。看到贵司在招增长分析师，想具体聊聊会员体系这块的规划。",
+        "您好，我是沈亦舟，计算机本科 2027 届。在枢云做过交易中台接口：订单详情 P95 从 380 ms 降到 95 ms，"
+        "慢查询日均从 2.3 万条降到 900 条。看到贵司在招后端，想聊聊交易域的容量与缓存设计。",
         "pending",
     ),
     (
         1,
-        "您好，我在商业分析与经营复盘上有 3 年经验，做过渠道归因与预算拆解，附上归因看板的作品链接，期待有机会进一步沟通。",
+        "您好，我在灵枢做过 Agent 工具层，9 个 function tool 的调用成功率从 79% 提到 94%，"
+        "也搭过 160 条评测集。想了解贵司 Agent 产品的工具边界是怎么划分的。",
         "pending",
     ),
     (
         12,
-        "您好，我是吴穹推荐的内推候选人，做过会员召回与留存实验，对教育行业的转化链路很感兴趣。",
+        "您好，我是吴穹推荐的内推候选人，做过 Agent 工作台与 RAG 召回优化（Recall@5 61%→84%），"
+        "对大模型应用的评测链路很感兴趣。",
         "done",
     ),
     (
         10,
-        "您好，我有零售行业渠道分析经验，做过门店与线上渠道的 ROI 对比，希望了解这个岗位的分析重点。",
+        "您好，我有 Redis + Lua 限流与短链发号的项目经验，想了解这个岗位更偏长连接网关还是业务服务端。",
         "pending",
     ),
     (
         2,
-        "您好，我在信贷增长分析上有一定经验，熟悉授信到首借的漏斗指标，想了解团队目前的重点。",
+        "您好，我做过 React + FastAPI 的全栈项目（500 并发下 P95 210 ms），"
+        "想了解贵司协同办公产品的前后端分工方式。",
         "skipped",
     ),
     (
         4,
-        "您好，我做过数据看板与归因工具的产品化，想了解数据产品经理这个岗位更偏平台还是偏业务。",
+        "您好，我做过混合检索与重排的对比实验（Recall@5 62%→79%，MRR 0.62→0.79），"
+        "想了解算法岗这边工程与研究的比例。",
         "pending",
     ),
 ]
@@ -250,7 +268,7 @@ def seed() -> None:
                 evidence=evidence,
                 job_id=job_index + 1,
                 resume_id=1 if index == 0 else None,
-                resume_title="用户增长分析师 - 澄川科技（上海）有限公司" if index == 0 else "",
+                resume_title="后端开发工程师 - 杭州枢云信息科技有限公司" if index == 0 else "",
                 channel=channel,
                 source="manual",
                 created_at=NOW - timedelta(days=60 - index * 4),
@@ -273,7 +291,8 @@ def seed() -> None:
                 position=JOBS[item["job_index"]]["title"],
                 channel=item["channel"],
                 status=item["status"],
-                track_id=1 if item["job_index"] == 7 else None,
+                # job 7 的进度记录是 TRACKS 里的第 9 行（列表序号 8），主键从 1 开始。
+                track_id=9 if item["job_index"] == 7 else None,
                 converted=item["converted"],
                 submitted_at=item["submitted_at"],
                 note=item["note"],
@@ -356,7 +375,7 @@ def seed() -> None:
                 skipped=0,
                 current_step="done",
                 stop_reason="",
-                config={"keyword": "用户增长 分析师", "city": "上海"},
+                config={"keyword": "后端开发 校招", "city": "上海"},
                 message="采集 12 条，全部进入备选岗位。",
                 started_at=NOW - timedelta(days=6, minutes=40),
                 finished_at=NOW - timedelta(days=6),
@@ -374,7 +393,7 @@ def seed() -> None:
                 job_title=JOBS[0]["title"],
                 company=JOBS[0]["company"],
                 resume_id=1,
-                resume_title="用户增长分析师 - 澄川科技（上海）有限公司",
+                resume_title="后端开发工程师 - 杭州枢云信息科技有限公司",
                 greeting=QUEUE[0][1],
                 status="success",
                 failure_category="",
@@ -392,7 +411,7 @@ def seed() -> None:
                 job_title=JOBS[1]["title"],
                 company=JOBS[1]["company"],
                 resume_id=1,
-                resume_title="用户增长分析师 - 澄川科技（上海）有限公司",
+                resume_title="后端开发工程师 - 杭州枢云信息科技有限公司",
                 greeting=QUEUE[1][1],
                 status="success",
                 failure_category="",
@@ -410,7 +429,7 @@ def seed() -> None:
                 job_title=JOBS[12]["title"],
                 company=JOBS[12]["company"],
                 resume_id=2,
-                resume_title="增长分析师 - 星桥教育科技有限公司",
+                resume_title="大模型应用开发工程师 - 上海曦和智能科技有限公司",
                 greeting=QUEUE[2][1],
                 status="skipped",
                 failure_category="",
@@ -467,23 +486,23 @@ def seed() -> None:
         "chat_conversation",
         [
             row(
-                title="会员召回策略讨论",
+                title="订单接口缓存与慢查询排查",
                 surface="page",
                 pinned=True,
                 favorite=True,
                 archived=False,
-                group_name="增长",
+                group_name="后端",
                 created_at=NOW - timedelta(days=4, hours=3),
                 updated_at=NOW - timedelta(days=4),
                 deleted_at=None,
             ),
             row(
-                title="归因口径对齐",
+                title="Agent 评测集怎么设计",
                 surface="page",
                 pinned=False,
                 favorite=False,
                 archived=True,
-                group_name="分析",
+                group_name="Agent",
                 created_at=NOW - timedelta(days=15),
                 updated_at=NOW - timedelta(days=14),
                 deleted_at=None,
@@ -497,7 +516,7 @@ def seed() -> None:
             row(
                 conversation_id=1,
                 role="user",
-                content="会员召回第二季度想再提 2 个点，除了加预算还有什么思路？",
+                content="订单详情接口 P95 还在 200 ms 左右，除了继续加缓存还有什么办法？",
                 quoted_message_id=None,
                 attachments=[],
                 context={},
@@ -510,10 +529,12 @@ def seed() -> None:
                 conversation_id=1,
                 role="assistant",
                 content=(
-                    "三个不靠加预算的方向：\n"
-                    "1. 把召回时点前移：现在是在沉默 30 天后触达，可以试 21 天；\n"
-                    "2. 换干预手段：高层级人群改用权益提醒而不是券；\n"
-                    "3. 补二次流失：召回后 60 天二次流失率 41%，做一波召回后 14 天的承接动作。"
+                    "三个方向，按投入从低到高：\n"
+                    "1. 先确认命中率还有没有提升空间：现在是 91%，剩余 9% 多是空值和高基数 key，"
+                    "可以给空结果也加短 TTL；\n"
+                    "2. 再看回源本身：慢查询日志里还有 900 条，若订单详情走了多表 JOIN，"
+                    "把只读字段拆成宽表能省一次 JOIN；\n"
+                    "3. 最后才是并发手段：把详情接口改成异步并行取子资源，注意别把连接池打满。"
                 ),
                 quoted_message_id=None,
                 attachments=[],
@@ -526,7 +547,7 @@ def seed() -> None:
             row(
                 conversation_id=2,
                 role="user",
-                content="末次点击和线性归因差了 32%，应该先信哪个？",
+                content="Agent 评测集的失败样本，要不要按工具类型分层？",
                 quoted_message_id=None,
                 attachments=[],
                 context={},
@@ -539,8 +560,9 @@ def seed() -> None:
                 conversation_id=2,
                 role="assistant",
                 content=(
-                    "差 32% 说明口径本身有问题，先别选边。建议先核对三件事："
-                    "渠道曝光与点击的去重规则、跨设备归因窗口、以及自然流量是否被算进了某个渠道。"
+                    "要分层，但别只按工具分。建议两层：第一层按失败类型（工具选错、参数幻觉、循环调用），"
+                    "第二层按工具或场景抽样，保证长尾工具也有样本。"
+                    "另外留 10% 给「开放提问」，否则评测集会只考你改过的那几种失败。"
                 ),
                 quoted_message_id=None,
                 attachments=[],

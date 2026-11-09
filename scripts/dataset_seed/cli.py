@@ -70,7 +70,7 @@ CHECKS = [
     "/api/interview/reviews",
     "/api/stats",
     "/api/analytics/dashboard?trend_months=6",
-    "/api/search?q=会员",
+    "/api/search?q=Python",
     "/api/trash",
 ]
 

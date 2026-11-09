@@ -3,6 +3,9 @@
 
 简历正文用 ``ResumeContent`` 校验后再落库——JSON 列不会替我们查字段名，
 写错一个键的后果是"这份简历打不开"，而不是"这个字段没显示"。
+
+人设：2027 届计算机科学与技术本科（后端 / AI Agent / 全栈方向）。标题与
+``jobs.py`` 里的岗位名逐字对应，投递进度表引用的是同一批标题。
 """
 
 from __future__ import annotations
@@ -89,9 +92,9 @@ def _skills(limit: int = 8) -> list[dict]:
 
 
 def _content(compact: bool = False, minimal: bool = False, **overrides) -> dict:
-    """默认内容 = 一份"增长分析师"标准版；各份简历只覆盖差异部分。
+    """默认内容 = 一份"后端 / AI Agent 应届生"标准版；各份简历只覆盖差异部分。
 
-    ``compact`` 去掉科研三栏、校园、证书与作品集，只留招聘方最先看的六块——
+    ``compact`` 去掉科研三栏、校园、证书与开源板块，只留招聘方最先看的六块——
     定向投递的简历必须压在一页内，把 13 个板块全塞进去会排成三页（那是「长 CV」的形态，
     由另一份简历专门覆盖）。
     """
@@ -99,7 +102,7 @@ def _content(compact: bool = False, minimal: bool = False, **overrides) -> dict:
         "name": BASIC["name"],
         "photo": "",
         "gender": BASIC["gender"],
-        "birth_year": "1998",
+        "birth_year": "2005",
         "phone": BASIC["phone"],
         "email": BASIC["email"],
         "city": BASIC["city"],
@@ -196,24 +199,31 @@ def _content(compact: bool = False, minimal: bool = False, **overrides) -> dict:
         ],
         "custom_sections": [
             {
-                "key": "custom:portfolio",
-                "title": "作品集",
+                "key": "custom:opensource",
+                "title": "开源贡献",
                 "entries": [
                     {
-                        "entry_id": "p1",
-                        "text": "增长周报模板（Notion 公开版）",
+                        "entry_id": "o1",
+                        "text": "agent-toolkit：Agent 工具调用的重试与结构化输出校验库",
                         "lines": [
                             {
                                 "label": "链接",
-                                "value": "https://zhiyao.example.com/notes/growth-weekly",
+                                "value": "https://github.com/yizhou-shen/agent-toolkit",
+                            },
+                            {
+                                "label": "说明",
+                                "value": "被实验室 3 个项目接入，仓库 186 star",
                             },
                         ],
                     },
                     {
-                        "entry_id": "p2",
-                        "text": "AB 实验复盘清单",
+                        "entry_id": "o2",
+                        "text": "oss-pr-index：向两个 Python 开源项目提交的 5 个 PR 索引",
                         "lines": [
-                            {"label": "说明", "value": "9 个检查点，团队连续使用 11 个月"},
+                            {
+                                "label": "链接",
+                                "value": "https://github.com/yizhou-shen/oss-pr-index",
+                            },
                         ],
                     },
                 ],
@@ -252,110 +262,131 @@ def _content(compact: bool = False, minimal: bool = False, **overrides) -> dict:
 
 
 EN_SUMMARY = (
-    "Growth analyst with 3 years of experience in membership lifecycle and experimentation. "
-    "Led a 5-tier segmentation and win-back program for 1.86M members, lifting quarterly "
-    "reactivation from 8.1% to 12.4% and adding roughly CNY 2.1M incremental GMV. Ran 12 A/B "
-    "tests on new-user retention (D7: 31% to 38%) and built a channel-quality score that cut "
-    "CAC by 17%. Comfortable owning the whole loop: SQL, modeling, experiment design, and "
-    "communicating the result to business stakeholders."
+    "Computer Science undergraduate (class of 2027) working on backend services and LLM agent "
+    "applications. Two internships: business APIs on a trading platform (order-detail p95 from "
+    "380 ms to 95 ms, cache hit rate 43% to 91%, slow queries from 23K to 900 per day) and the "
+    "tool layer of an enterprise knowledge-base agent (tool-call success 79% to 94%, hybrid "
+    "retrieval Recall@5 from 61% to 84%). Built a resume-oriented LLM agent workbench (tool "
+    "calling, structured output, 240-case eval set) and shipped a campus marketplace on React, "
+    "FastAPI and PostgreSQL. I write tests and eval sets before touching code."
 )
 
 EN_EXPERIENCES = [
     {
-        "company": "Lanshi Data Technology (Shanghai) Co., Ltd.",
-        "role": "User Growth Analyst",
-        "start_date": "2023-07",
-        "end_date": "Present",
+        "company": "Shuyun Information Technology (Hangzhou) Co., Ltd.",
+        "role": "Backend Engineering Intern",
+        "start_date": "2026-07",
+        "end_date": "2026-10",
         "description": [
-            "Owned membership lifecycle growth: segmented 1.86M members into five tiers and "
-            "designed three win-back tracks, lifting quarterly reactivation from 8.1% to 12.4%.",
-            "Led 12 A/B tests on new-user retention with product and algorithm teams; the "
-            "shipped incentive bundle moved D7 retention from 31% to 38%.",
-            "Built the daily growth dashboard (SQL + Tableau) covering acquisition, activation, "
-            "retention and monetization, replacing three weekly spreadsheets.",
-            "Co-designed a channel-quality score (CAC, D1 retention, LTV30); cut four low-quality "
-            "channels and reduced CAC by 17% in one quarter.",
+            "Owned four trading-platform APIs (order lookup, refund, stock check, statement "
+            "export) on Python and FastAPI, serving 2.1M requests per day; p95 down from 640 ms "
+            "to 220 ms.",
+            "Added two-level caching (Redis plus in-process LRU) to order detail: hit rate 43% "
+            "to 91%, origin QPS 1800 to 160, p95 from 380 ms to 95 ms.",
+            "Triaged 17 full-table scans with EXPLAIN, added 4 composite indexes and rewrote 3 "
+            "deep-pagination queries; slow queries from 23K to 900 per day.",
+            "Moved statement export to an async Celery task with progress polling; timeout error "
+            "rate from 8.4% to 0.2% and manual retries disappeared.",
         ],
-        "team_size": "8",
-        "experience_kind": "full_time",
-    }
+        "team_size": "12",
+        "experience_kind": "internship",
+    },
+    {
+        "company": "Lingshu Intelligence Technology (Hangzhou) Co., Ltd.",
+        "role": "Agent Development Intern",
+        "start_date": "2026-01",
+        "end_date": "2026-05",
+        "description": [
+            "Built the tool layer of an enterprise knowledge-base agent: 9 function tools with "
+            "schema validation and retry; tool-call success from 79% to 94%.",
+            "Created a 160-case eval set and a pre-release regression run; 21 regressions were "
+            "caught before shipping in three months.",
+            "Reworked retrieval with heading-aware chunking, 512-token windows and BM25 plus "
+            "vector fusion; Recall@5 from 61% to 84%.",
+        ],
+        "team_size": "6",
+        "experience_kind": "internship",
+    },
 ]
 
 EN_PROJECTS = [
     {
-        "name": "Multi-channel Attribution Dashboard",
-        "role": "Sole developer",
-        "start_date": "2025-01",
-        "end_date": "2025-04",
-        "tech_stack": ["SQL", "Metabase", "Python"],
+        "name": "LLM Agent Workbench for Job Applications",
+        "role": "Project owner",
+        "start_date": "2026-03",
+        "end_date": "2026-08",
+        "tech_stack": ["Python", "FastAPI", "LangGraph", "PostgreSQL", "React"],
         "description": [
-            "Marketing teams summed self-reported conversions across seven channels, "
-            "overstating total conversions by 30%.",
+            "Splits resume tailoring into intent parsing, fact retrieval, rewriting and fact "
+            "checking, all chained through tool calls and persisted step by step.",
         ],
         "highlights": [
-            "Rebuilt the funnel as a single event chain and shipped last-click and linear "
-            "attribution side by side; the channel ROI ranking changed materially.",
-            "Saved about 12 hours of manual reconciliation per month.",
+            "Structured output plus a second-pass fact check cut unsupported claims from 11% "
+            "to 1.2% over 240 manually reviewed cases.",
+            "Tool-call success 94%, p95 latency 3.1 s; 61 pytest cases cover tool failures, "
+            "timeouts and invalid JSON.",
+            "Used for five months: 180 tailored resumes, 40 minutes down to 6 minutes each.",
         ],
-        "project_size": "7 channels, 400K events/day",
+        "project_size": "Personal project, 240-case eval set",
         "artifact_type": "Personal project",
     }
 ]
 
 EN_SKILLS = [
-    {"name": "SQL", "level": "Expert", "category": "Programming"},
-    {"name": "Python (pandas)", "level": "Proficient", "category": "Programming"},
-    {"name": "Tableau", "level": "Proficient", "category": "Tools"},
-    {"name": "Experiment design", "level": "Proficient", "category": "Analytics"},
-    {"name": "Segmentation / RFM", "level": "Proficient", "category": "Analytics"},
+    {"name": "Python", "level": "Proficient", "category": "Programming"},
+    {"name": "FastAPI", "level": "Proficient", "category": "Frameworks"},
+    {"name": "PostgreSQL", "level": "Proficient", "category": "Databases"},
+    {"name": "Redis", "level": "Working knowledge", "category": "Databases"},
+    {"name": "LLM tool calling", "level": "Proficient", "category": "AI engineering"},
+    {"name": "RAG / vector search", "level": "Working knowledge", "category": "AI engineering"},
 ]
-
 
 EN_EDUCATION = [
     {
-        "school": "Shanghai University of Finance and Economics",
-        "major": "Applied Statistics",
-        "degree": "Master",
-        "start_date": "2021-09",
-        "end_date": "2023-06",
-        "gpa": "3.8/4.0",
+        "school": "Nanjing University of Science and Technology",
+        "major": "Computer Science and Technology",
+        "degree": "Bachelor",
+        "start_date": "2023-09",
+        "end_date": "2027-06",
+        "gpa": "3.7/4.0",
         "courses": [
-            "Applied Regression",
-            "Causal Inference & Experimental Design",
-            "Time Series Analysis",
-            "Data Mining",
+            "Data Structures and Algorithms",
+            "Operating Systems",
+            "Database Systems",
+            "Computer Networks",
+            "Distributed Systems",
         ],
         "achievements": [
-            "Thesis on member churn prediction nominated for the school's outstanding thesis "
-            "(blind review 88/100).",
+            "Ranked 9/126 in the major; silver award at CCPC Jiangsu Provincial Contest 2024.",
+            "Led a provincial undergraduate innovation project on LLM agent reliability.",
         ],
         "study_form": "Full-time",
-        "degree_type": "Professional Master",
-        "department": "School of Statistics and Management",
-        "rank": "6/48",
+        "degree_type": "Bachelor of Engineering",
+        "department": "School of Computer Science and Engineering",
+        "rank": "9/126",
     }
 ]
 
 EN_CREDENTIALS = [
     {
-        "name": "Google Analytics 4 Certification",
-        "issuer": "Google",
-        "issue_date": "2024-03",
-        "expiry_date": "2026-03",
-        "status": "expired",
-        "verify_url": "https://skillshop.example.com/verify/GA4-2024-088417",
-        "note": "",
-        "credential_type": "Skill certification",
-    },
-    {
-        "name": "Alibaba Cloud ACP Data Analyst",
-        "issuer": "Alibaba Cloud",
-        "issue_date": "2023-11",
-        "expiry_date": "2026-11",
+        "name": "Software Designer (Intermediate Professional Qualification)",
+        "issuer": "MIIT Education and Examination Center",
+        "issue_date": "2026-05",
+        "expiry_date": "",
         "status": "active",
         "verify_url": "",
         "note": "",
-        "credential_type": "Professional certificate",
+        "credential_type": "Professional qualification",
+    },
+    {
+        "name": "Huawei Certified AI Engineer (HCIA-AI)",
+        "issuer": "Huawei",
+        "issue_date": "2025-11",
+        "expiry_date": "2028-11",
+        "status": "active",
+        "verify_url": "",
+        "note": "",
+        "credential_type": "Skill certification",
     },
 ]
 
@@ -364,9 +395,9 @@ EN_LANGUAGES = [
     {
         "name": "English",
         "level": "Professional working proficiency",
-        "certificate": "IELTS",
-        "score": "7.0",
-        "obtained_at": "2022-03",
+        "certificate": "CET-6",
+        "score": "561",
+        "obtained_at": "2025-06",
     },
 ]
 
@@ -375,10 +406,10 @@ def _en_content() -> dict:
     """英文版：连学历、证书、语言也一起换成英文，避免「英文简历里嵌着中文段落」。"""
     return _content(
         minimal=True,
-        name="Zhiyao Lin",
-        gender="Female",
-        city="Shanghai",
-        job_intent="User Growth Analyst",
+        name="Yizhou Shen",
+        gender="Male",
+        city="Nanjing",
+        job_intent="Backend / AI Agent Developer",
         summary=EN_SUMMARY,
         education=EN_EDUCATION,
         experience=EN_EXPERIENCES,
@@ -388,12 +419,12 @@ def _en_content() -> dict:
         languages=EN_LANGUAGES,
         awards=[
             {
-                "name": "National Scholarship",
-                "date": "2020-10",
-                "description": "Top 2% of the major.",
+                "name": "National Inspirational Scholarship",
+                "date": "2025-10",
+                "description": "Top 5% of the major.",
                 "issuer": "Ministry of Education",
                 "level": "National",
-                "ratio": "Top 2%",
+                "ratio": "Top 5%",
             }
         ],
     )
@@ -401,16 +432,17 @@ def _en_content() -> dict:
 
 RESUMES = [
     {
-        "title": "用户增长分析师 - 澄川科技（上海）有限公司",
+        "title": "后端开发工程师 - 杭州枢云信息科技有限公司",
         "job_index": 0,
         "content": lambda: _content(
             compact=True,
-            experience=[_experience(0, bullets=3), _experience(1, bullets=2)],
-            job_intent="用户增长分析师",
+            experience=[_experience(0, bullets=4), _experience(1, bullets=2)],
+            job_intent="后端开发工程师",
             summary=(
-                "3 年用户增长经验，主导 186 万会员的分层召回与 12 组留存实验："
-                "季度召回率 8.1%→12.4%、新客 7 日留存 31%→38%、获客成本下降 17%。"
-                "能独立完成取数、建模、实验设计与复盘汇报。"
+                "计算机本科（2027 届），后端方向：交易中台 4 个接口的迭代与治理，"
+                "订单详情 P95 380 ms→95 ms（缓存命中率 43%→91%），"
+                "慢查询日均 2.3 万→900 条、对账导出 42 s→6 s。熟悉 FastAPI、MySQL 索引优化、"
+                "Redis 缓存与 Celery 异步任务，习惯先补单测再改代码。"
             ),
         ),
         "source": "ai",
@@ -421,27 +453,28 @@ RESUMES = [
         "page_limit": 2,
         "font_scale": "small",
         "language": "zh-CN",
-        "custom_instruction": "突出会员召回与 AB 实验的量化结果",
-        "note": "投澄川科技用，第一页必须出现召回率和留存两个数。",
+        "custom_instruction": "突出接口性能优化与慢查询治理的量化结果",
+        "note": "投枢云用，第一页必须出现 P95 和慢查询两个数。",
         "model": "deepseek-v4-flash",
         "enhancement_enabled": True,
         "enhancement_level": "strong",
-        "rationale": "岗位强调会员体系与 AB 实验，因此把会员分层项目放在项目首位，并保留渠道成本一条作为佐证。",
+        "rationale": "岗位强调接口性能与 MySQL 索引，因此把缓存与慢查询治理放在第一条，并保留 Agent 侧一条作为佐证。",
     },
     {
-        "title": "增长分析师 - 星桥教育科技有限公司",
+        "title": "大模型应用开发工程师 - 上海曦和智能科技有限公司",
         "job_index": 12,
         "content": lambda: _content(
             minimal=True,
-            job_intent="增长分析师",
+            job_intent="大模型应用开发工程师",
             summary=(
-                "3 年增长分析经验，做过会员召回、留存实验与招聘漏斗诊断；"
-                "习惯先把指标口径钉死再谈结论，做过的分析都会落成看板或 SOP。"
+                "计算机本科（2027 届），做过 Agent 工具层与 RAG 召回：9 个 function tool 的"
+                "调用成功率 79%→94%，混合检索 Recall@5 61%→84%；自己写过一套求职场景的"
+                "Agent 工作台（工具调用 + 结构化输出 + 240 条评测集）。"
             ),
-            projects=[_project(4)],
+            projects=[_project(0)],
         ),
         "source": "ai",
-        "favorite": False,
+        "favorite": True,
         "template": "classic",
         "format_name": "compact",
         "format_config": {},
@@ -449,24 +482,25 @@ RESUMES = [
         "font_scale": "small",
         "language": "zh-CN",
         "custom_instruction": "",
-        "note": "",
+        "note": "一页版，只放 Agent 工作台与工具层那条实习。",
         "model": "deepseek-v4-flash",
         "enhancement_enabled": True,
         "enhancement_level": "balanced",
         "rationale": "",
     },
     {
-        "title": "商业分析师 - 弦月网络科技（上海）有限公司",
+        "title": "AI Agent 开发工程师 - 杭州灵枢智能科技有限公司",
         "job_index": 1,
         "content": lambda: _content(
             campus_experience=[],
-            job_intent="商业分析师",
+            job_intent="AI Agent 开发工程师",
             summary=(
-                "统计硕士 + 3 年分析与增长经验，擅长把业务问题拆成可验证的指标与实验；"
-                "做过经营复盘、渠道归因与会员分层，能用业务听得懂的话讲清结论。"
+                "计算机本科 + 人工智能微专业（2027 届），在 Agent 应用组做过工具层与评测："
+                "工具调用成功率 79%→94%、参数格式错误率 12%→1.8%、Recall@5 61%→84%；"
+                "能自己搭评测集并把回归问题拦在发版前。"
             ),
-            experience=[_experience(0, bullets=3), _experience(2, bullets=1)],
-            projects=[_project(4)],
+            experience=[_experience(1, bullets=4), _experience(0, bullets=2)],
+            projects=[_project(2)],
             skills=_skills(8),
         ),
         "source": "manual",
@@ -474,22 +508,22 @@ RESUMES = [
         "template": "elegant",
         "format_name": "compact",
         "format_config": {},
-        "page_limit": 3,
+        "page_limit": 2,
         "font_scale": "small",
         "language": "zh-CN",
         "custom_instruction": "",
-        "note": "偏经营分析方向，项目里多放了招聘漏斗和归因。",
+        "note": "偏 Agent 方向，把实习顺序调成 Agent 在前、后端在后。",
         "model": "",
         "enhancement_enabled": False,
         "enhancement_level": "balanced",
         "rationale": "",
     },
     {
-        "title": "通用简历（数据分析 / 用户增长）",
+        "title": "通用简历（后端 / AI Agent）",
         "job_index": None,
         "content": lambda: _content(
             minimal=True,
-            job_intent="数据分析 / 用户增长",
+            job_intent="后端开发 / AI Agent 开发",
             summary=persona.SUMMARY,
             skills=_skills(8),
         ),
@@ -509,7 +543,7 @@ RESUMES = [
         "rationale": "",
     },
     {
-        "title": "English Resume - Growth Analyst",
+        "title": "English Resume - Backend / AI Agent Developer",
         "job_index": None,
         "content": _en_content,
         "source": "manual",
@@ -528,9 +562,13 @@ RESUMES = [
         "rationale": "",
     },
     {
-        "title": "草稿：增长策略经理 - 木野生活",
+        "title": "草稿：全栈开发工程师 - 南京云枢软件有限公司",
         "job_index": None,
-        "content": lambda: _content(job_intent="增长策略经理", summary=persona.SUMMARY),
+        "content": lambda: _content(
+            job_intent="全栈开发工程师",
+            summary=persona.SUMMARY,
+            experience=[_experience(0, bullets=3), _experience(2, bullets=2)],
+        ),
         "source": "manual",
         "favorite": False,
         "template": "compact",

@@ -1,9 +1,12 @@
 # SPDX-License-Identifier: Apache-2.0
-"""职业场景：四种投递情境，覆盖"在职看机会 / 外企英文 / 校招实习 / 转岗"。
+"""职业场景：四种投递情境，覆盖"后端校招 / Agent 英文版 / 日常实习 / 转测试开发"。
 
 场景只是**一组受限维度 + 推荐栏目**，不写任何业务数据；它的价值在于生成简历时
 能给模型一个明确的取舍口径（比如"校招版把校园经历提到项目前面"）。所以四个场景的
 差异要落在 ``preferred_sections`` 与 ``expression_preferences`` 上，而不是换个名字。
+
+人设是 2027 届在校本科生，因此 ``career_stage`` 用 ``student``、``employment_status``
+用 ``studying``——这两维会进场景卡片的筛选，不该写成 ``experienced/employed``。
 """
 
 from __future__ import annotations
@@ -14,84 +17,91 @@ from app.services.career_scenarios import store
 
 SCENARIOS = [
     {
-        "name": "大厂增长岗（在职看机会）",
+        "name": "后端开发校招（主投）",
         "archived": False,
         "config": {
-            "career_stage": "experienced",
-            "employment_status": "employed",
+            "career_stage": "student",
+            "employment_status": "studying",
             "purpose": "job_search",
-            "target_industries": ["互联网", "消费零售"],
-            "target_function": "用户增长 / 增长分析",
+            "target_industries": ["互联网", "企业服务"],
+            "target_function": "后端开发",
             "cooperation_form": "full_time",
             "content_language": "zh-CN",
-            "work_region": "上海",
+            "work_region": "上海 / 杭州 / 南京",
             "preferred_sections": [
+                "education",
                 "experience",
                 "projects",
                 "skills",
                 "summary",
-                "education",
             ],
             "expression_preferences": (
-                "数字先行：每条先给结果再给做法；不写形容词堆砌，不写「负责…工作」这类空句；"
-                "一段不超过 3 行。"
+                "数字先行：每条先给结果再给做法；接口类成果必须带 P95、慢查询条数这类可比数字；"
+                "不写「负责…工作」这类空句；一条不超过 2 行。"
             ),
         },
     },
     {
-        "name": "外企商业分析（英文版）",
+        "name": "AI Agent 开发（英文版）",
         "archived": False,
         "config": {
-            "career_stage": "experienced",
-            "employment_status": "employed",
+            "career_stage": "student",
+            "employment_status": "studying",
             "purpose": "job_search",
-            "target_industries": ["企业服务", "咨询"],
-            "target_function": "Business Analyst",
+            "target_industries": ["AI 应用", "企业服务"],
+            "target_function": "AI Agent Developer",
             "cooperation_form": "full_time",
             "content_language": "en-US",
             "work_region": "上海 / 远程",
-            "preferred_sections": ["experience", "education", "skills", "languages", "summary"],
+            "preferred_sections": ["experience", "projects", "skills", "languages", "summary"],
             "expression_preferences": (
-                "Use past-tense action verbs, quantify impact, keep bullets under two lines."
+                "Use past-tense action verbs, quantify impact (latency, success rate, Recall@5), "
+                "keep bullets under two lines."
             ),
         },
     },
     {
-        "name": "校招 / 实习版",
+        "name": "日常实习版",
         "archived": False,
         "config": {
-            "career_stage": "entry",
-            "employment_status": "employed",
+            "career_stage": "student",
+            "employment_status": "studying",
             "purpose": "internship",
-            "target_industries": ["互联网", "教育"],
-            "target_function": "数据分析 / 用户研究",
+            "target_industries": ["互联网", "AI 应用"],
+            "target_function": "后端开发 / Agent 开发",
             "cooperation_form": "other",
             "content_language": "zh-CN",
-            "work_region": "上海 / 杭州",
+            "work_region": "南京 / 上海 / 杭州 / 苏州",
             "preferred_sections": [
                 "education",
-                "campus_experience",
                 "projects",
-                "awards",
                 "skills",
+                "campus_experience",
+                "awards",
             ],
-            "expression_preferences": "突出课程项目与校园经历，弱化在职经历的年资感。",
+            "expression_preferences": (
+                "突出课程项目与实验室项目；在开头写清每周可到岗天数与可实习起止时间，"
+                "弱化「实习经历」的年资感。"
+            ),
         },
     },
     {
-        "name": "转岗数据产品（已归档）",
+        "name": "转测试开发（已归档）",
         "archived": True,
         "config": {
-            "career_stage": "experienced",
-            "employment_status": "employed",
+            "career_stage": "student",
+            "employment_status": "studying",
             "purpose": "career_change",
-            "target_industries": ["企业服务", "互联网"],
-            "target_function": "数据产品经理",
+            "target_industries": ["互联网", "企业服务"],
+            "target_function": "测试开发",
             "cooperation_form": "full_time",
             "content_language": "zh-CN",
-            "work_region": "上海",
-            "preferred_sections": ["experience", "projects", "credentials", "summary"],
-            "expression_preferences": "把分析项目改写成「需求—方案—上线—度量」的产品语言。",
+            "work_region": "深圳 / 上海",
+            "preferred_sections": ["experience", "projects", "credentials", "skills"],
+            "expression_preferences": (
+                "把接口治理与评测集经验改写成质量保障语言：可测性、回归效率、拦截率；"
+                "少写「测试用例数量」，多写「拦住了什么」。"
+            ),
         },
     },
 ]
