@@ -14,9 +14,11 @@ ResumeForge 是本地单用户应用。代码、Python/Node 依赖和本地业�
 macOS 用 `bash scripts/macos/update.sh --dry-run`，Linux 用 `bash scripts/linux/update.sh --check`。
 
 数据库结构由 Alembic 在下次启动时自动升级，升级前会在 `backend/data/backups/` 留一份快照。
-应用内 **设置 → 更新与帮助 → 软件更新** 可以直接检查有没有新版本；Windows 还可以在应用内下载并查看进度，选择后台下载，
-下载完成后确认「重启并安装」原地覆盖程序并自动重启。**应用内覆盖安装目前只支持 Windows**；macOS 请用
-`update.command`、Linux 请用 `update.sh`（同样是"下载新包 → 只覆盖程序文件"，`data/` 与 `.env` 原地不动）。
+应用内 **设置 → 更新与帮助 → 软件更新** 在**所有平台**都能检查有没有新版本，并显示这一版的更新说明与
+发布页链接；**应用内覆盖安装目前只支持 Windows**——Windows 可以在应用内下载并查看进度，选择后台下载，
+下载完成后确认「重启并安装」原地覆盖程序并自动重启。macOS / Linux 请按各自启动器的更新脚本或手动下载
+新包：macOS 用 `update.command`、Linux 用 `update.sh`（同样是"下载新包 → 只覆盖程序文件"，
+`data/` 与 `.env` 原地不动）。
 
 更新包会按**当前平台**挑选（发行版同时挂了 Windows、macOS 与 Linux 的包），下载完还会核对发布时一并上传的
 `.sha256`——两者对不上就停下，不会拿一个可能被截断的包去覆盖程序文件。
