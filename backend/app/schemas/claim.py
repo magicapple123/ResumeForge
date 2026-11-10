@@ -184,7 +184,9 @@ class ClaimBase(BaseModel):
             if not text:
                 continue
             if not _ENTRY_ID_RE.match(text):
-                raise ValueError("关联资料条目要用资料库条目的 entry_id（24 位十六进制），不是数据库自增 id")
+                raise ValueError(
+                    "关联资料条目要用资料库条目的 entry_id（24 位十六进制），不是数据库自增 id"
+                )
             if text not in result:
                 result.append(text)
         if len(result) > MAX_CLAIM_ENTRY_IDS:
@@ -281,6 +283,30 @@ class ClaimOut(ClaimBase):
     entry_ids_auto: bool = False
     # 服务端算出的改进建议（不是保存失败）：例如强主张缺面试细节、已确认但没写个人边界。
     warnings: list[str] = Field(default_factory=list)
+
+    # ===== 读取边界：给 0009 加列时留下的 NULL 一个确定的语义 =====
+    #
+    # 迁移 0009 只做**保守**回填（能按主体名匹配上的那部分），其余旧行保持 NULL——
+    # 这是有意为之，不能让"猜"写进历史数据。但 NULL 必须有个确定的读法，否则
+    # ``ClaimOut.model_validate`` 对 ``None`` 校验 ``list[str]`` / ``bool`` 直接失败，
+    # 列表里只要有一条旧行就整页 500、旧行单条详情也 500。
+    #
+    # 语义定在**读取边界**而不是每个路由里 ``or []`` 撒一遍：ORM 列是可空的（``None``），
+    # 对外结构不可空（``[]`` / ``False``），这一处收敛之后所有出口自动一致。
+    # 只放在 ``ClaimOut`` 上——``ClaimCreate`` / ``ClaimUpdate`` 的入参校验一个字不动，
+    # 用户显式传非法值仍然 400。
+
+    @field_validator("entry_ids", mode="before")
+    @classmethod
+    def missing_entry_ids_mean_unlinked(cls, value: Any) -> Any:
+        """NULL / 缺失 = 从未关联，与 ``[]`` 等价（用户主动清空关联也是 ``[]``，两者同义）。"""
+        return [] if value is None else value
+
+    @field_validator("entry_ids_auto", mode="before")
+    @classmethod
+    def missing_auto_flag_means_false(cls, value: Any) -> Any:
+        """NULL = 这条关联不是迁移回填出来的；``True`` 的行必须原样读出来。"""
+        return False if value is None else value
 
 
 class ClaimListOut(BaseModel):

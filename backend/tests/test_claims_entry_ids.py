@@ -204,3 +204,70 @@ def test_explicitly_clearing_links_is_persisted(db_session):
     record = _confirmed_claim(db_session, entry_ids=[ENTRY_A])
     updated = update_claim(db_session, record, ClaimUpdate(**_payload(entry_ids=[])))
     assert updated.entry_ids == []
+
+
+# ===== 升级用户形态：迁移 0009 之后仍是 NULL 的旧行（读取层必须容忍） =====
+
+
+def _legacy_null_claim(db_session) -> ClaimRecord:
+    """造一条 pre-0009 形态的行：两个新列都是 NULL。
+
+    迁移的保守回填只处理能按主体名匹配上的那部分，其余行**保持 NULL**（"不确定就不猜"）。
+    ORM 插入会把 None 当成"未赋值"而套用 Python 默认值，所以 NULL 形态要用一条显式
+    UPDATE 造出来——那正是 0009 加列时旧行的样子（造法同
+    ``tests/test_migration_0009_claim_entry_ids.py``）。
+    """
+    record = _confirmed_claim(db_session, entry_ids=[])
+    db_session.execute(
+        text(
+            "UPDATE claim_record SET entry_ids = NULL, entry_ids_auto = NULL WHERE id = :claim_id"
+        ),
+        {"claim_id": record.id},
+    )
+    db_session.commit()
+    db_session.refresh(record)
+    assert record.entry_ids is None, "前提：NULL 形态没造出来，后面的断言就没有意义"
+    assert record.entry_ids_auto is None
+    return record
+
+
+def test_upgraded_rows_with_null_entry_ids_stay_readable(client, db_session):
+    """2.0.0 升上来的库：NULL 行不能把列表与详情一起打挂（修复前两处都是 500）。
+
+    缺省语义在读取边界收敛：NULL / 缺失 = 从未关联（``entry_ids == []``、
+    ``entry_ids_auto is False``）。写入口径不受影响——这两列不进任何必填校验。
+    """
+    legacy = _legacy_null_claim(db_session)
+    linked = _confirmed_claim(db_session, entry_ids=[ENTRY_A])
+    _set_auto_flag(db_session, linked)
+
+    listed = client.get("/api/claims")
+    assert listed.status_code == 200, listed.text
+    rows = {item["id"]: item for item in listed.json()["items"]}
+    assert rows[legacy.id]["entry_ids"] == []
+    assert rows[legacy.id]["entry_ids_auto"] is False
+    # 已有关联的行一个字都不变：自动回填标记仍要读得出来（界面靠它显示「请核对」）。
+    assert rows[linked.id]["entry_ids"] == [ENTRY_A]
+    assert rows[linked.id]["entry_ids_auto"] is True
+
+    detail = client.get(f"/api/claims/{legacy.id}")
+    assert detail.status_code == 200, detail.text
+    assert detail.json()["entry_ids"] == []
+    assert detail.json()["entry_ids_auto"] is False
+
+    # 界面真正在用的分页端点与事实基线同样不能被一条旧行打挂。
+    page = client.get("/api/claims/page")
+    assert page.status_code == 200, page.text
+    page_rows = {item["id"]: item for item in page.json()["items"]}
+    assert page_rows[legacy.id]["linked"] is False
+    assert page_rows[legacy.id]["linked_auto"] is False
+    assert client.get("/api/claims/baseline").status_code == 200
+
+
+def test_read_defaults_do_not_loosen_the_write_path():
+    """缺省语义只作用于回包：写入口径照旧拒绝 null 与非法 entry_id。"""
+    for schema in (ClaimCreate, ClaimUpdate):
+        with pytest.raises(ValidationError):
+            schema(**_payload(entry_ids=None))
+        with pytest.raises(ValidationError):
+            schema(**_payload(entry_ids=["1"]))
