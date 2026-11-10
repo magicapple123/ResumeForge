@@ -17,6 +17,26 @@ contextBridge.exposeInMainWorld("splash", {
 });
 
 /**
+ * 自绘标题栏桥（问题清单 §19，主进程侧见 desktop/lib/desktop-shell-ipc.js）。
+ *
+ * 只暴露四个**固定**入口，不接收任意通道名：
+ *  - menuAction：发菜单动作 id（编辑 / 视图 / 窗口 / 打开目录 / 关于信息），
+ *    主进程的 desktop-menu.js 是唯一动作白名单；
+ *  - getWindowState：窗口最大化/全屏快照（菜单文案与全屏隐藏标题栏用）；
+ *  - onWindowState：主进程状态变化时推送（最大化 / 还原 / 进出全屏）；
+ *  - setTheme：把实际生效主题告诉主进程，同步系统绘制的标题栏覆盖层颜色。
+ * platform 只用于 macOS 红绿灯的左内边距分支，不暴露进程信息。
+ */
+contextBridge.exposeInMainWorld("desktopShell", {
+  platform: process.platform,
+  menuAction: (action) => ipcRenderer.invoke("desktop:menu-action", { action }),
+  getWindowState: () => ipcRenderer.invoke("desktop:get-window-state"),
+  onWindowState: (callback) =>
+    ipcRenderer.on("desktop:window-state", (_event, state) => callback(state)),
+  setTheme: (theme) => ipcRenderer.send("desktop:set-theme", theme),
+});
+
+/**
  * 简历打印桥（R1）：把**预览用的 HTML** 交给主进程用 Chromium 打成 PDF。
  *
  * 只暴露一个固定通道，不接收任意通道名——contextIsolation 下暴露面越小越好。

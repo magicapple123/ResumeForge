@@ -48,6 +48,11 @@ function loadMain() {
     spawnCalls: [],
     installerChildren: [],
     timers: [],
+    // 自绘标题栏 / 关闭行为（§18 §19）的观测点。
+    sent: [],
+    messageBoxPrompts: [],
+    ipcHandlers: {},
+    themeCalls: [],
   };
 
   const mainTmp = fs.mkdtempSync(path.join(os.tmpdir(), "rf-main-vm-"));
@@ -88,7 +93,13 @@ function loadMain() {
   class BrowserWindowStub {
     constructor() {
       this.webContents = {
-        send: (channel, payload) => events.stages.push(payload),
+        send: (channel, payload) => {
+          events.sent.push({ channel, payload });
+          // 启动图阶段沿用旧观测面（既有用例只看 splash:stage 的 payload）。
+          if (channel === "splash:stage") events.stages.push(payload);
+          // 标题栏窗口状态推送（§19）：渲染层靠它切换"最大化/还原"与全屏隐藏。
+          if (channel === "desktop:window-state") this.windowState = payload;
+        },
         // 2026-10-23：main.js 现在会读缩放系数（Ctrl+± 持久化）并监听 zoom-changed，
         // 桩必须覆盖这两个方法，否则 createWindow 直接抛，整条生命周期链都测不到。
         on: (name, handler) => {
@@ -97,7 +108,21 @@ function loadMain() {
         },
         getZoomFactor: () => 1,
         setZoomFactor: () => undefined,
+        // 编辑菜单（§19）改走这些方法；记录调用即可，不需要真编辑器。
+        undo: () => events.sent.push({ channel: "webContents.undo" }),
+        redo: () => events.sent.push({ channel: "webContents.redo" }),
+        cut: () => events.sent.push({ channel: "webContents.cut" }),
+        copy: () => events.sent.push({ channel: "webContents.copy" }),
+        paste: () => events.sent.push({ channel: "webContents.paste" }),
+        selectAll: () => events.sent.push({ channel: "webContents.selectAll" }),
       };
+      this.destroyed = false;
+      this.maximized = false;
+      this.fullScreen = false;
+      // 关闭流程的观测：Electron 的 win.close() 会触发 close handler；用例据此断言
+      // 菜单「关闭窗口」走的是第 18 条的 handler，而不是 destroy()。
+      this.closeCalls = 0;
+      this.destroyCalls = 0;
       // 记录注册过的窗口事件（close / ready-to-show）：用例要断言"启动失败后
       // 关窗不会被 preventDefault 拦成隐藏到托盘"。
       this.handlers = {};
@@ -117,18 +142,56 @@ function loadMain() {
       this.handlers[name] = handler;
     }
     show() {}
-    hide() {}
+    hide() {
+      this.hidden = (this.hidden ?? 0) + 1;
+    }
     focus() {}
     isDestroyed() {
-      return false;
+      return this.destroyed;
     }
     isMinimized() {
       return false;
     }
     isMaximized() {
-      return false;
+      return this.maximized;
     }
-    maximize() {}
+    maximize() {
+      this.maximized = true;
+      this.handlers.maximize?.();
+    }
+    unmaximize() {
+      this.maximized = false;
+      this.handlers.unmaximize?.();
+    }
+    minimize() {
+      this.minimizedCalls = (this.minimizedCalls ?? 0) + 1;
+    }
+    isFullScreen() {
+      return this.fullScreen;
+    }
+    setFullScreen(value) {
+      this.fullScreen = Boolean(value);
+      this.handlers[value ? "enter-full-screen" : "leave-full-screen"]?.();
+    }
+    setTitleBarOverlay(options) {
+      this.overlay = options;
+      events.themeCalls.push(options);
+    }
+    close() {
+      this.closeCalls += 1;
+      const event = {
+        defaultPrevented: false,
+        preventDefault() {
+          this.defaultPrevented = true;
+        },
+      };
+      this.handlers.close?.(event);
+      if (!event.defaultPrevented) this.destroyed = true;
+    }
+    destroy() {
+      this.destroyCalls += 1;
+      this.destroyed = true;
+    }
     getBounds() {
       return { x: 0, y: 0, width: 1440, height: 900 };
     }
@@ -143,8 +206,12 @@ function loadMain() {
     setToolTip() {}
     setContextMenu(menu) {
       menuHolder.menu = menu;
+      menuHolder.setCount = (menuHolder.setCount ?? 0) + 1;
     }
     on() {}
+    destroy() {
+      events.trayDestroyed = true;
+    }
   }
   const MenuStub = {
     buildFromTemplate: (template) => ({ template }),
@@ -162,6 +229,11 @@ function loadMain() {
     messageBoxThrows: false,
     openPathError: "",
     openPathRejects: null,
+    // 关闭对话框（async showMessageBox）：response / checkbox / 二次确认的响应。
+    closeDialogResponse: 0,
+    closeDialogCheckbox: false,
+    rememberQuitResponse: 1,
+    messageBoxRejects: false,
   };
 
   const dialogStub = {
@@ -174,6 +246,21 @@ function loadMain() {
       if (state.messageBoxThrows) throw new Error("dialog blocked by system policy");
       return state.messageBoxResponse ?? 1;
     },
+    // 关闭行为（§18）的异步模态框：第一个参数是父窗口（必须带，见 §18.5 风险）。
+    showMessageBox(...args) {
+      const parent = args.length > 1 ? args[0] : null;
+      const options = args.length > 1 ? args[1] : args[0];
+      events.messageBoxPrompts.push({ parent, options });
+      if (state.messageBoxRejects) return Promise.reject(new Error("dialog rejected"));
+      // 二次确认（记住退出）与主对话框用不同的字段区分：只有主对话框有 checkboxLabel。
+      if (options.checkboxLabel) {
+        return Promise.resolve({
+          response: state.closeDialogResponse,
+          checkboxChecked: Boolean(state.closeDialogCheckbox),
+        });
+      }
+      return Promise.resolve({ response: state.rememberQuitResponse, checkboxChecked: false });
+    },
   };
 
   const shellStub = {
@@ -185,11 +272,15 @@ function loadMain() {
   };
 
   const ipcMainStub = {
-    handle() {},
-    // main.js registers app:quit-request (the preload quitApp bridge); the
-    // probes capture the handler so tests can assert it funnels into app.quit().
+    // 自绘标题栏（§19）的 invoke 通道：用例直接调用捕获到的 handler 断言行为。
+    handle(name, handler) {
+      events.ipcHandlers[name] = handler;
+    },
+    // main.js registers app:quit-request (the preload quitApp bridge) and the
+    // title bar theme channel; capture both so tests can drive them.
     on(name, handler) {
       if (name === "app:quit-request") events.quitRequestHandler = handler;
+      if (name === "desktop:set-theme") events.setThemeHandler = handler;
     },
   };
 
@@ -328,6 +419,8 @@ function loadMain() {
     windowInstances: browserWindowInstances,
     exports: sandbox.module.exports,
     state,
+    // 关闭行为 / 托盘用例要自己写/删 close-behavior.json，所以把临时 userData 交出去。
+    userDataDir: mainTmp,
     // 「系统里没有这个方法」的边界用例要能把它们删掉（模拟旧版 Electron /
     // 平台不支持），所以把 stub 本体也交出去。
     dialogStub,

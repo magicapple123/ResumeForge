@@ -243,10 +243,11 @@ test("startup failure: a shell without openPath still quits", async () => {
   }
 });
 
-test("control: before any failure, closing the window still hides to tray", async () => {
+test("control: before any failure, closing the window asks instead of hiding silently", async () => {
   // 这条是上面几条的对照组：它证明 close handler **确实**会 preventDefault。
   // 否则"启动失败后 prevented === 0"可能只是因为 handler 根本没接上，而不是
-  // quitting 生效。
+  // quitting 生效。§18 起普通 close 不再直接藏进托盘，而是先弹二选一对话框
+  //（关闭行为本身在 test-close-behavior.js / test-desktop-shell.js 里覆盖）。
   const loaded = loadMain();
   try {
     await waitForShellReady(loaded);
@@ -255,12 +256,23 @@ test("control: before any failure, closing the window still hides to tray", asyn
       "the window close handler must be registered");
 
     let prevented = 0;
-    let hidden = 0;
-    window.hide = () => (hidden += 1);
     window.handlers.close({ preventDefault: () => (prevented += 1) });
+    assert.strictEqual(prevented, 1, "a plain window close must be held for the ask dialog");
 
-    assert.strictEqual(prevented, 1, "a plain window close must be turned into hide-to-tray");
-    assert.strictEqual(hidden, 1);
+    await flush();
+    const prompt = loaded.events.messageBoxPrompts[0];
+    assert.ok(prompt, "a plain window close must open the ask-on-close dialog");
+    // 跨 realm 的数组不能 deepStrictEqual，展开再比。
+    assert.deepStrictEqual([...prompt.options.buttons], ["最小化到托盘", "退出应用"]);
+    // 对话框必须带父窗口（§18.5：不带父窗口在 Windows 上可能出现在主窗口后面）。
+    assert.strictEqual(prompt.parent, window);
+    assert.strictEqual(prompt.options.defaultId, 0);
+    assert.strictEqual(prompt.options.cancelId, 0);
+    assert.strictEqual(prompt.options.checkboxLabel, "记住我的选择");
+    // 默认选「最小化到托盘」：对话框返回默认 response 后窗口被隐藏，应用不退出。
+    assert.strictEqual(window.hidden, 1);
+    assert.strictEqual(loaded.events.quitCalls.length, 0,
+      "the safe default (minimize) must not quit the app");
   } finally {
     loaded.cleanup();
   }

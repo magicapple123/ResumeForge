@@ -13,6 +13,11 @@
 // before-quit, which is the ONE place that stops the backend. The stop is
 // awaited (with a hard cap) and only then is quit allowed to proceed; the
 // update installer is spawned after the stop completes, never before.
+//
+// Window close is not an exit by itself: lib/close-behavior.js asks
+// "minimize to tray / quit" (and can remember the answer), then either hides
+// the window or sets quitting before app.quit(). Window chrome (self-drawn
+// 32px title bar + WCO buttons) lives in lib/titlebar.js + lib/tray-menu.js.
 
 const { app, BrowserWindow, Tray, Menu, dialog, ipcMain, screen, shell } = require("electron");
 const path = require("path");
@@ -25,13 +30,19 @@ const {
   initialBounds,
 } = require("./lib/window-state");
 const { createQuitLifecycle } = require("./lib/quit-lifecycle");
+// 桌面自绘标题栏 / 托盘 / 关闭行为 / 启动失败出口（§18 §19）：决策都在 lib/ 下，
+// 本文件只保留装配与 Electron 事件注册，500 行预算不会被这些分支吃光。
+const { createCloseBehavior, createPreferenceStore } = require("./lib/close-behavior");
+const { createTitleBarController } = require("./lib/titlebar");
+const { createTrayManager } = require("./lib/tray-menu");
+const { registerDesktopShellIpc } = require("./lib/desktop-shell-ipc");
+const { createStartupFailureReporter } = require("./lib/startup-failure");
 const { installerWaitCommand, runManualUpdateCheck, scheduleUpdateCheck, wantsManualUpdateCheck } = require("./updater");
 
 // Lifecycle diagnostics use the controlled runtime log; module imports must not write user profiles.
 
 let mainWindow = null;
 let backend = null;
-let tray = null;
 // True once a quit is actually in progress (vs. a mere window close that
 // hides to tray). Only before-quit sets it.
 let quitting = false;
@@ -82,6 +93,12 @@ function runtimeDir() {
 // Electron's userData is %APPDATA%/<productName> on Windows.
 function userDataDir() {
   return path.join(app.getPath("userData"), "data");
+}
+
+// 「打开数据目录」菜单项：打包态是 ADR-0004 的用户目录；dev 形态后端用的是仓库里的
+// backend/data（真实数据），指到 userData 只会打开一个不存在的空目录。
+function effectiveDataDir() {
+  return app.isPackaged ? userDataDir() : path.join(projectRoot(), "backend", "data");
 }
 
 // 诊断日志只写用户目录（安装 payload 只读，写它只会 ENOENT/EPERM，见 P0）。
@@ -164,42 +181,37 @@ function sendStage(stage, detail) {
   }
 }
 
-function createTray() {
-  // 512px 品牌图缩放在两个平台都够清晰，托盘与窗口共用同一张。
-  tray = new Tray(shellIcon());
-  tray.setToolTip("简历通");
-  const menu = Menu.buildFromTemplate([
-    {
-      label: "打开简历通",
-      click: () => {
-        if (mainWindow) {
-          mainWindow.show();
-          mainWindow.focus();
-        }
-      },
-    },
-    { type: "separator" },
-    {
-      label: "退出",
-      click: () => {
-        // No `quitting` shortcut here: app.quit() fires before-quit, which is
-        // the single place that stops the backend (audit PR-05).
-        app.quit();
-      },
-    },
-  ]);
-  tray.setContextMenu(menu);
-  // Left-click also restores the window (Windows convention).
-  tray.on("click", () => {
-    if (mainWindow) {
-      mainWindow.show();
-      mainWindow.focus();
-    }
-  });
-}
-
 /** 窗口尺寸 / 位置 / 缩放的读写（纯函数在 lib/window-state.js，有离线用例）。 */
 const windowState = createWindowStateStore({ app, getWindow: () => mainWindow });
+
+// 窗口壳（§18 §19）：托盘 / 关闭行为 / 标题栏覆盖层全部在 lib/ 下，决策可离线断言。
+const titleBar = createTitleBarController({ getWindow: () => mainWindow, logLine });
+let trayManager = null;
+const closeBehavior = createCloseBehavior({
+  app,
+  dialog,
+  getWindow: () => mainWindow,
+  isQuitting: () => quitting,
+  setQuitting: (value) => {
+    quitting = value;
+  },
+  store: createPreferenceStore({ app }),
+  logLine,
+  // 记忆变化后刷新托盘「关闭窗口时询问」的勾选态。
+  onPreferenceChanged: () => {
+    if (trayManager) trayManager.refresh();
+  },
+});
+trayManager = createTrayManager({
+  Tray,
+  Menu,
+  iconPath: shellIcon(),
+  app,
+  getWindow: () => mainWindow,
+  getRemembered: () => closeBehavior.getRemembered(),
+  clearRemembered: () => closeBehavior.clearRemembered(),
+  logLine,
+});
 
 function createWindow() {
   const remembered = windowState.read();
@@ -223,6 +235,8 @@ function createWindow() {
     minHeight: 700,
     show: false,
     autoHideMenuBar: true,
+    // §19：系统画三颗按钮（titleBarOverlay），自绘 32px 标题栏由 React 渲染。
+    ...titleBar.windowOptions(),
     backgroundColor: "#f5f7fa",
     icon: shellIcon(),
     webPreferences: {
@@ -262,17 +276,16 @@ function createWindow() {
   mainWindow.loadFile(path.join(__dirname, "splash.html"));
   mainWindow.once("ready-to-show", () => mainWindow.show());
 
-  // Closing the window minimizes to tray; real quits run through before-quit,
-  // which flips `quitting` before the window is destroyed.
+  // × 的关闭行为（§18）：quitting 时放行默认关闭（before-quit 的退出流程）；
+  // 其余情况由 lib/close-behavior.js 决定——弹「最小化到托盘 / 退出应用」并支持
+  // 记住选择。只有真实退出才写窗口状态：隐藏到托盘时窗口还在，值可能是最大化前的。
   mainWindow.on("close", (event) => {
-    if (!quitting) {
-      event.preventDefault();
-      mainWindow.hide();
-      return;
-    }
-    // 只有真实退出才写：hide-to-tray 时窗口还在，值可能是最大化前的。
-    windowState.save();
+    if (closeBehavior.handleClose(event)) windowState.save();
   });
+  // 自绘标题栏（§19）：最大化/还原/全屏变化时通知渲染层（菜单文案切换、全屏隐藏标题栏）。
+  for (const eventName of ["maximize", "unmaximize", "enter-full-screen", "leave-full-screen"]) {
+    mainWindow.on(eventName, () => titleBar.sendWindowState());
+  }
 }
 
 function handleUnexpectedExit(info) {
@@ -359,55 +372,19 @@ function startupLogDir() {
   return resolveLogDir({ runtimeDir: runtimeDir() }).dir;
 }
 
-// 启动失败的可操作出口（日志失效链修复）：启动图上的红框只有一行原因和一个需要
-// 手动复制的路径，用户拿它没办法。这里收尾成一个**带按钮**的原生对话框：
-// 「打开日志目录」/「退出」。刻意不用 dialog.showErrorBox —— 它不能带按钮
-// （崩溃预算那条用它是对的：那条路没有可操作的下一步）。
-//
-// 两个按钮都以退出收尾：「打开日志目录」只是让日志可见，失败本身没有修复，
-// 而留在托盘里的进程会让下一次启动撞上单实例锁、再失败一次。
-function reportStartupFailure(err) {
-  const message = err && err.message ? err.message : String(err);
-  logLine(`startup failed: ${message}`);
-  // 双保险：对话框被系统策略静默掉时，启动图仍然显示错误原因。
-  sendStage("error", message);
-  const logDir = startupLogDir();
-  // 默认取「退出」：连对话框都弹不出来时必须收摊，不能留在半启动状态。
-  let choice = 1;
-  if (typeof dialog.showMessageBoxSync === "function") {
-    try {
-      choice = dialog.showMessageBoxSync({
-        type: "error",
-        title: "简历通",
-        message: "启动失败",
-        detail:
-          `${message}\n\n` +
-          (logDir
-            ? "诊断日志目录：\n" +
-              `${logDir}\n\n` +
-              "把这里的 desktop-main.log 与 desktop-backend.log 提供给维护者，" +
-              "可以定位这次启动失败。"
-            : "本次运行没能写下诊断日志（安装目录与系统临时目录都不可写）。"),
-        buttons: ["打开日志目录", "退出"],
-        defaultId: 0,
-        cancelId: 1,
-        noLink: true,
-      });
-    } catch (dialogError) {
-      logLine(`startup failure dialog unavailable: ${dialogError}`);
-    }
-  }
-  if (choice === 0 && logDir && shell && typeof shell.openPath === "function") {
-    // openPath 用"返回错误字符串"而不是抛异常来报告失败；打不开不改变下面的结论。
-    Promise.resolve(shell.openPath(logDir)).catch((openError) =>
-      logLine(`open log dir failed: ${openError}`),
-    );
-  }
-  // 必须先置 quitting：否则 createWindow 的 close handler 会 preventDefault
-  // 把窗口藏进托盘，app.quit() 就再也走不完（本条正是"退不掉"的成因）。
-  quitting = true;
-  app.quit();
-}
+// 启动失败的可操作出口：失败链的失败路径（对话框弹不出来 / openPath 报错）都在
+// lib/startup-failure.js 里，那里不 require("electron")，离线用例可直接注入假 dialog。
+const reportStartupFailure = createStartupFailureReporter({
+  dialog,
+  shell,
+  logLine,
+  sendStage,
+  getLogDir: startupLogDir,
+  setQuitting: (value) => {
+    quitting = value;
+  },
+  app,
+});
 
 // Quit lifecycle (audit PR-05) now lives in ./lib/quit-lifecycle: the update
 // install entry (requestInstallAndQuit), the backend stop (stopBackendSafely),
@@ -461,7 +438,7 @@ if (!app.requestSingleInstanceLock()) {
       const preflightInfo = shellLogging.preflight();
       logLine("whenReady reached");
       createWindow();
-      createTray();
+      trayManager.create();
       announceDegradedOnReady({ window: mainWindow, dialog, shell, info: preflightInfo });
       await startBackendAndSwap();
       scheduleUpdateCheck(mainWindow, logLine, { installAndQuit: quitLifecycle.requestInstallAndQuit });
@@ -494,6 +471,24 @@ require("./print").registerPrintHandler({ getMainWindow: () => mainWindow });
 // app.quit()，让 before-quit 这个唯一停止点完成"停后端 → 必要时 spawn 安装器"
 // 的既有顺序——绝不从这里另开退出路径。
 ipcMain.on("app:quit-request", () => app.quit());
+
+// 自绘标题栏的 IPC（§19）：动作表在 lib/desktop-menu.js，注册与发送方校验在
+// lib/desktop-shell-ipc.js。动作只认固定 id；「关闭窗口」走 mainWindow.close()，
+// 触发第 18 条那条 close handler，绝不直接 destroy()。
+registerDesktopShellIpc({
+  ipcMain,
+  app,
+  getWindow: () => mainWindow,
+  shell,
+  getDataDir: effectiveDataDir,
+  getLogDir: startupLogDir,
+  runUpdateCheck: () =>
+    runManualUpdateCheck(mainWindow, logLine, {
+      installAndQuit: quitLifecycle.requestInstallAndQuit,
+    }),
+  titleBar,
+  logLine,
+});
 
 // Test hooks for the VM-based lifecycle probes (desktop/scripts/test-lifecycle.js).
 // The packaged app runs main.js as its entry and never imports it as a module, so this is inert.

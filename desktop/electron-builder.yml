@@ -26,6 +26,18 @@ files:
   - lib/shell-paths.js
   # 启动前可写性体检与非阻断提示，main.js 顶层 require。
   - lib/preflight.js
+  # 窗口 × 二选一 + 记住选择的关闭行为（§18）：main.js 顶层 require。
+  - lib/close-behavior.js
+  # 自绘标题栏的窗口壳层（§19）：titleBarStyle / titleBarOverlay 配色与窗口状态推送。
+  - lib/titlebar.js
+  # 标题栏菜单的主进程动作表（§19）：编辑/视图/窗口/目录/外链，只认固定动作 id。
+  - lib/desktop-menu.js
+  # 托盘菜单（§18 的「关闭窗口时询问」恢复入口，§19 保持原生 Menu）。
+  - lib/tray-menu.js
+  # 标题栏 IPC 注册与发送方校验（§19）：main.js 顶层 require。
+  - lib/desktop-shell-ipc.js
+  # 启动失败的可操作对话框（从 main.js 下沉）：main.js 顶层 require。
+  - lib/startup-failure.js
   # Quit lifecycle (before-quit / stop / installer spawn) lifted out of main.js
   # for the 500-line budget; main.js requires it at top level.
   - lib/quit-lifecycle.js
