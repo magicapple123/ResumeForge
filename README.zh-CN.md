@@ -25,7 +25,7 @@
 
 <p align="center"><b>简体中文</b> · <a href="README.md">English</a></p>
 
-当前版本：`2.0.0` · [Release 页面](https://github.com/magicapple123/ResumeForge/releases) · [完整使用指南](docs/user-guide.md) · [架构设计](docs/architecture.md)
+当前版本：`2.1.0` · [Release 页面](https://github.com/magicapple123/ResumeForge/releases) · [完整使用指南](docs/user-guide.md) · [架构设计](docs/architecture.md)
 
 <p>
 <a href="#-交流与反馈"><b>QQ 群：<code>922830167</code></b></a>

@@ -72,7 +72,7 @@ def is_desktop_shell() -> bool:
 
 class Settings(BaseSettings):
     app_name: str = "ResumeForge"
-    app_version: str = "2.0.0"
+    app_version: str = "2.1.0"
 
     # SQLite 文件路径（相对 backend 目录），目录不存在时自动创建
     database_url: str = DEFAULT_DATABASE_URL

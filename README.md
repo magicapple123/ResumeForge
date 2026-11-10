@@ -25,7 +25,7 @@
 
 <p align="center"><a href="README.zh-CN.md">简体中文</a> · <b>English</b></p>
 
-Version: `2.0.0` · [Releases](https://github.com/magicapple123/ResumeForge/releases) · [Full user guide](docs/user-guide.md) · [Architecture](docs/architecture.md)
+Version: `2.1.0` · [Releases](https://github.com/magicapple123/ResumeForge/releases) · [Full user guide](docs/user-guide.md) · [Architecture](docs/architecture.md)
 
 <p>
 <a href="#-community-and-feedback"><b>QQ group: <code>922830167</code></b></a>
