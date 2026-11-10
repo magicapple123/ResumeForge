@@ -16,6 +16,11 @@
     --out <路径>  工作库位置（必须不存在；已存在时直接拒绝，避免覆盖真实数据）
     --zip <路径>  压缩包输出位置
     --check       写完后用 TestClient 把只读接口读一遍（不起服务、不联网）
+
+**产物同时是应用内置的示例数据集**：backend/app/assets/sample/sample_dataset.zip
+（欢迎向导「载入示例数据体验」会导入它，见 backend/app/services/sample_dataset.py）。
+改了 scripts/dataset_seed/** 必须重新生成为那个路径——计数守卫
+backend/tests/test_api_sample_dataset_pack.py 会抓住"改了脚本却忘了重新打包"。
 """
 
 from __future__ import annotations

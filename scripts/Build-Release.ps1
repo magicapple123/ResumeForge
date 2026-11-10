@@ -93,6 +93,7 @@ $RequiredFiles = @(
     "backend/app/data/skills.json",
     "backend/app/data/ats_keywords.json",
     "backend/app/data/rag-assets.json",
+    "backend/app/assets/sample/sample_dataset.zip",
     "backend/app/prompts/application_status.md",
     "backend/app/prompts/apply_greeting.md",
     "backend/app/prompts/assistant_system.md",

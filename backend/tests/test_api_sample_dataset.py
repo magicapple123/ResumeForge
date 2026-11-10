@@ -1,12 +1,25 @@
 # SPDX-License-Identifier: Apache-2.0
 """体验示例数据集端点的守卫：创建、切换、播种、幂等复用与主数据隔离。"""
 
+import pytest
 from app.api import settings as settings_api
 from app.dataset_registry import read_metadata, write_metadata
+from app.services import sample_dataset
 from app.services.sample_dataset import SAMPLE_SEED_VERSION
 
 
-def test_load_sample_creates_switches_and_seeds(client):
+@pytest.fixture
+def no_sample_pack(monkeypatch):
+    """强制走**代码播种**路径。
+
+    仓库里现在带着内置示例包，默认会走导入管线；本文件断言的是旧代码播种的
+    4 岗位 / 2 简历口径，所以显式把包路径置空（包路径的用例见
+    test_api_sample_dataset_pack.py）。
+    """
+    monkeypatch.setattr(sample_dataset, "_sample_pack_path", lambda: None)
+
+
+def test_load_sample_creates_switches_and_seeds(client, no_sample_pack):
     response = client.post("/api/settings/datasets/sample/load")
     assert response.status_code == 200
     payload = response.json()
@@ -79,7 +92,7 @@ def test_load_sample_creates_switches_and_seeds(client):
     }
 
 
-def test_load_sample_is_idempotent_within_the_same_seed_version(client):
+def test_load_sample_is_idempotent_within_the_same_seed_version(client, no_sample_pack):
     """同一播种版本重复载入：切换回同一份示例数据集，不再新建（用户实测缺陷）。"""
     first = client.post("/api/settings/datasets/sample/load")
     assert first.status_code == 200
@@ -97,7 +110,7 @@ def test_load_sample_is_idempotent_within_the_same_seed_version(client):
     assert names.count("体验示例") == 1
 
 
-def test_load_sample_creates_a_new_dataset_when_seed_version_is_older(client):
+def test_load_sample_creates_a_new_dataset_when_seed_version_is_older(client, no_sample_pack):
     """旧版本的示例数据集**原样保留**：丰富化后重新载入走新建流程（reused=False）。"""
     first = client.post("/api/settings/datasets/sample/load").json()
 
@@ -119,7 +132,7 @@ def test_load_sample_creates_a_new_dataset_when_seed_version_is_older(client):
     assert names.count("体验示例") == 2
 
 
-def test_load_sample_never_touches_main_dataset(client):
+def test_load_sample_never_touches_main_dataset(client, no_sample_pack):
     """主数据隔离：先在主数据里放一个岗位，载入示例后主数据原样保留。"""
     created = client.post(
         "/api/jobs",
